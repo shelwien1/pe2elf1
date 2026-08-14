@@ -1,4 +1,4 @@
-// decode_symbol_list.inc -- read back the alphabet an encoder wrote.
+// sym_list_decode.inc -- read back the alphabet an encoder wrote.
 
 int32_t __decode_symbol_list(SymList* syms) {
   struct alignas(16) DecodeSymbolListFrame {

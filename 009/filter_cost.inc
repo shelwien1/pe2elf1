@@ -1,4 +1,4 @@
-// cost_candidate.inc -- what one filter would cost on this image.
+// filter_cost.inc -- what one filter would cost on this image.
 
 int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unread4, int32_t unread5, int32_t unread6, int32_t unread7, uint32_t* costs) {
   struct alignas(16) CostCandidateFrame {

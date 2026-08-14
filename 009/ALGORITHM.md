@@ -32,7 +32,7 @@ The member is:
 
 | bytes | what |
 | --- | --- |
-| 4 | magic `81 8A 32 30` — `\x81\x8A` then `"20"`, the version. `expand_image.inc` computes `((major<<8) - 12288) \| (minor - 48)` and requires 512, i.e. exactly "2.0" |
+| 4 | magic `81 8A 32 30` — `\x81\x8A` then `"20"`, the version. `image_expand.inc` computes `((major<<8) - 12288) \| (minor - 48)` and requires 512, i.e. exactly "2.0" |
 | 16 | the header, which is the in-memory `BmfImage`: `width` u16, `height` u16, `stride` u32, 2 pad, `depth` u8, `flags` u8, `data_size` u32 |
 | n | the coded stream, `data_size` bytes |
 | p | the palette, `3 << depth` bytes, only when `depth & 0x80` |
@@ -60,14 +60,14 @@ never writes one.
 | bit | meaning |
 | --- | --- |
 | `0x02` | the image is stored **transposed** — rows and columns swapped |
-| `0x04` | written in "slow" mode (`-S`). This build **refuses** a stream without it: `expand_image.inc` prints `written in fast mode` and exits 3 |
+| `0x04` | written in "slow" mode (`-S`). This build **refuses** a stream without it: `image_expand.inc` prints `written in fast mode` and exits 3 |
 | `0x08` | **planar**: each plane was coded on its own. Without it the planes are coded interleaved, in one pass |
 | `0x10` | per-plane descriptors are present in the stream (set for depth > 4) |
 | `0x20` | the member is **coded**. Without it the payload is the raw pixels |
 
 ### the raw fallback
 
-After coding, `compress_image.inc` compares the coded length against
+After coding, `image_compress.inc` compares the coded length against
 `data_size` — the size of the **pixel data**, not of the input file. If coding
 did not beat that, the member is rewritten with `0x20` clear and the pixels
 stored verbatim.
@@ -86,7 +86,7 @@ member has no model to undo it.
 
 ## 2. What comes in: the BMP subformats
 
-`read_bmp.inc` accepts a 40-byte `BITMAPINFOHEADER` only, with `biPlanes == 1`,
+`bmp_read.inc` accepts a 40-byte `BITMAPINFOHEADER` only, with `biPlanes == 1`,
 positive dimensions up to 65535, and
 
 - **1, 4, 8, 24 or 32 bits per pixel** — nothing else, and no bitfield formats,
@@ -95,7 +95,7 @@ positive dimensions up to 65535, and
 Both run-length forms are decoded on the way in: the absolute runs, the encoded
 runs, the end-of-line marker, and the delta escape (`00 02 dx dy`) that skips
 forward in both axes. RLE4 additionally tracks a nibble phase across deltas.
-**The run structure is not preserved.** BMF holds pixels, and `write_bmp.inc`
+**The run structure is not preserved.** BMF holds pixels, and `bmp_write.inc`
 re-encodes runs with its own splitting when it writes an RLE file back out. That
 is why the corpus carries `out_rle4.bmp` and `out_rle8.bmp`: the decoded image
 is pixel-identical to the input and byte-different from it, and those two files
@@ -104,7 +104,7 @@ are what the decoder is expected to write.
 Only bottom-up BMPs are accepted — a negative `biHeight` is refused rather
 than read as top-down — and the reader **un-flips them**: it fills the buffer
 from its last row backwards while reading the file forwards, so what BMF holds
-is top row first, in ordinary raster order, and `write_bmp.inc` flips it back.
+is top row first, in ordinary raster order, and `bmp_write.inc` flips it back.
 
 Whatever the depth, the image is held as **`plane_count = (depth + 7) / 8`
 byte planes, interleaved per pixel**, in `__alloc_image`'s single allocation. So 24-bit is 3 planes (B, G, R in file
@@ -120,7 +120,7 @@ Only the encoder runs this; the decoder is told the answers.
 
 ### 3.1 depth ≤ 4 takes the short path
 
-`compress_image.inc` checks `(depth & 0x3F) <= 4` and, if so, sets
+`image_compress.inc` checks `(depth & 0x3F) <= 4` and, if so, sets
 `plane_predictor = 0`, `plane_alt_model = 0` and calls `__model_plane`
 directly. **No search, no transform, no predictor** — a 1- or 4-bit image
 always goes through the main model, raw. There is one plane and it is small
@@ -152,7 +152,7 @@ into `plane_desc`, which is how a candidate becomes the plane order. Every image
 in `testfiles/` except `xform1` and `xform2` picks candidate 0; those two exist
 because the difference between "the table is contiguous" and "the first row
 happens to be where the pointer already points" is invisible until something
-picks 1 or 2. See the header of `choose_plane_coding.inc`.
+picks 1 or 2. See the header of `plane_choose.inc`.
 
 Then the transform itself. For each plane it accumulates **histograms of
 differences** against the reference planes over the whole image:
@@ -281,7 +281,7 @@ is meaningful at any depth.
 
 ### 4.1 alphabet reduction
 
-`reduce_alphabet.inc` runs first. It scans the plane, marks which of the 2^depth
+`sym_reduce.inc` runs first. It scans the plane, marks which of the 2^depth
 symbol values actually occur, and:
 
 1. codes the **count** of distinct symbols with a flat code over the full range;
@@ -431,16 +431,16 @@ every symbol present at count 1, and **sparse** starts empty and grows.
 
 ## 5. Model B — the alternate model for predictor 1
 
-`altp1.inc` holds the block and its context. Selected by flags 5 or 13. This is
+`alt_p1_block.inc` holds the block and its context. Selected by flags 5 or 13. This is
 a *continuous-tone* model: it predicts a value, codes the residual, and
 everything is arithmetic on pixel magnitudes.
 
 It has **two drivers**, and which one runs is the planar/interleaved decision of
 §3.3:
 
-- `p1.inc`'s `__alt_model_p1_d8_*` — **one plane**, one `AltP1Block`, called
+- `alt_p1.inc`'s `__alt_model_p1_d8_*` — **one plane**, one `AltP1Block`, called
   once per plane in planar mode. This is what `t24` and `t32` use.
-- `alt_model_p1.inc`'s `__alt_model_p1` — **all planes at once**, one
+- `alt_p1_code.inc`'s `__alt_model_p1` — **all planes at once**, one
   `AltP1Block` each, walking the interleaved buffer and coding plane 0, 1, 2, 3
   of every pixel before moving on. Each plane's block is given the two planes
   before it as `nb0`/`nb1`, so its context can see what the other planes just
@@ -548,15 +548,15 @@ fire. It is the `-E` near-lossless path, kept because it is what the donor does.
 
 ## 6. Model C — the alternate model for predictor 2
 
-`altp2.inc`, `alt_p2_context.inc`, `alt_p2_model.inc`, `p2.inc`. Selected by
+`alt_p2_block.inc`, `alt_p2_context.inc`, `alt_p2_model.inc`, `alt_p2.inc`. Selected by
 flags 6 or 14, and the most expensive of the three — `alt_p2_model.inc` is the
 largest body in the program. Where model B predicts with a fixed rule, this one
 **learns its predictor**.
 
-It has the same two drivers as model B: `p2.inc`'s `__alt_p2_d8_body` for one
+It has the same two drivers as model B: `alt_p2.inc`'s `__alt_p2_d8_body` for one
 plane at a time (what `t8g`, `t8p` and `rle8` use — a single 8-bit plane is
-this model's home ground), and `alt_model_p2_decode.inc` /
-`alt_model_p2_encode.inc` for all planes at once (`x_ep`).
+this model's home ground), and `alt_p2_decode.inc` /
+`alt_p2_encode.inc` for all planes at once (`x_ep`).
 
 ### 6.1 an NLMS linear predictor
 
@@ -644,7 +644,7 @@ what `__choose_plane_coding` disables while the search is running (§3.3).
 
 ### MED, standalone
 
-`__predict_med` / `__unpredict_med` in `predict.inc` apply the same gradient
+`__predict_med` / `__unpredict_med` in `plane_predict.inc` apply the same gradient
 predictor as §5.1 **in place, over a whole plane**, folding each residual
 zigzag. This is what runs for predictor 1 when the *main* model is coding —
 flags 1 or 9, which only the alt-off interleaved trial in §3.3 produces — and
@@ -668,7 +668,7 @@ walk the interleaved buffer with a stride of `plane_count`.
 
 ## 8. The decoder
 
-`expand_image.inc` mirrors the above with no decisions of its own: read the
+`image_expand.inc` mirrors the above with no decisions of its own: read the
 magic and header, refuse anything that is not version 2.0 slow-mode, allocate
 from the header's dimensions, and
 

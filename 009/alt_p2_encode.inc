@@ -1,4 +1,4 @@
-// alt_model_p2_encode.inc -- deep planes, encoded.
+// alt_p2_encode.inc -- deep planes, encoded.
 
 int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];

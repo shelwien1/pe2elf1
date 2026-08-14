@@ -1,4 +1,4 @@
-// expand_image.inc -- the image out of a `.bmf`.
+// image_expand.inc -- the image out of a `.bmf`.
 
 uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   struct alignas(16) ExpandImageFrame {

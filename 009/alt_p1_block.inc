@@ -1,4 +1,4 @@
-// altp1.inc -- the alternate model for one-bit planes.
+// alt_p1_block.inc -- the alternate model for one-bit planes.
 
 struct CtxWeight {
   int32_t sel;

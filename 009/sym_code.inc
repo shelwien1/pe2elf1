@@ -1,4 +1,4 @@
-// symcode.inc -- the symbol trees: a symbol through a tree of binary counters, both
+// sym_code.inc -- the symbol trees: a symbol through a tree of binary counters, both
 // ways, for both models.
 
 // One symbol out of a level's tree.  The two directions meet at `lvl`, the slot

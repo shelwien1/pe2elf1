@@ -1,4 +1,4 @@
-// compress_image.inc -- one image into one.
+// image_compress.inc -- one image into one.
 
 int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   BmfImage hdr;

@@ -20,7 +20,7 @@ which is `p2_update(d0800, res_c, 2);`.
 take the byte unsigned where `p2_update` takes it signed.  Everywhere else that
 would be a defect; here it is not, because `p2_pred` uses the rate only as two
 shift counts and masks both with `&31`, and the two readings differ by 256.
-This tool does not reason about that -- it is written down in `altp2.inc` beside
+This tool does not reason about that -- it is written down in `alt_p2_block.inc` beside
 the helper, and this comment exists so that a later reader who widens the rule
 knows what the rule was resting on.
 

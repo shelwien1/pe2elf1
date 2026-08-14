@@ -1,4 +1,4 @@
-// symlist.inc -- the symbol list: the alphabet, its weights, and the search that
+// sym_list.inc -- the symbol list: the alphabet, its weights, and the search that
 // codes one symbol of it.
 
 struct FreqRec {

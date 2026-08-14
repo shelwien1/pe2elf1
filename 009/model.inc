@@ -62,7 +62,7 @@ struct ModelBlock {
   uint16_t ctx_id3[712000];
   // The pair AltP1Block and AltP2Block already have as methods: one lays the
   // workspace out over a fresh allocation and returns `this`, the other gives
-  // it back.  Defined out of line in workspace.inc.
+  // it back.  Defined out of line in model_workspace.inc.
   ModelBlock*layout_workspace(int32_t unread_flag, int32_t img_w, int32_t img_h, int32_t img_depth);
   void**free_workspace(int8_t do_free);
 

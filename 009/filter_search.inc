@@ -1,4 +1,4 @@
-// search_filter.inc -- search the filters, which is what -Q9 spends its time on.
+// filter_search.inc -- search the filters, which is what -Q9 spends its time on.
 
 uint32_t __search_filter(BmfImage* img, int8_t mode) {
   struct alignas(16) SearchFilterFrame {

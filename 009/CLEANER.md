@@ -20,8 +20,8 @@ be re-taken. The `after` column is what the tree says now.
 | the counter update, `alt_p2_model.inc` | 115 of 117 | ~345 lines | 115 calls |
 | its temporaries, in one declaration | 230 of 268 | 3 lines of 2,443 chars | 39 names, 296 chars |
 | the inline fold, same file | 21 | 21 lines | `p2_nudge` |
-| the bit packer, `compress_image.inc` | 6 | 67 lines | 6 calls |
-| the bit unpacker, `expand_image.inc` | 6 | 61 lines | 6 calls |
+| the bit packer, `image_compress.inc` | 6 | 67 lines | 6 calls |
+| the bit unpacker, `image_expand.inc` | 6 | 61 lines | 6 calls |
 | `sym0`…`sym31`, both frames | 64 members | 74 lines of union | `sym[32]` |
 | declaration walls over 100 locals | 7 bodies | 1,406 locals | 5 bodies, 745 |
 | lines over 200 characters | 42 | — | 29 |
@@ -146,13 +146,13 @@ the whole decoder-side evidence there is.
 
 ## Phase 2 — `pack_bits` and `unpack_bits`: the header's bit stream
 
-**Taken: all twelve.** `compress_image.inc` 272 -> 210 lines,
-`expand_image.inc` 408 -> 352. Phase 5's first item is done inside this one:
+**Taken: all twelve.** `image_compress.inc` 272 -> 210 lines,
+`image_expand.inc` 408 -> 352. Phase 5's first item is done inside this one:
 the three names for the count are one global now, and nothing has to be kept
 in step. `hdrscan.sh` came back clean -- no report in 8,704 runs, both
 one-byte header fields at every value over 17 streams.
 
-`compress_image.inc` writes the per-plane descriptors a few bits at a time, and
+`image_compress.inc` writes the per-plane descriptors a few bits at a time, and
 each write is this, six times over, 67 lines:
 
 ```c
@@ -170,7 +170,7 @@ if( bits_left<8 ) {
 packer_free_bits = bits_left;
 ```
 
-`expand_image.inc` has the mirror of it six times, 61 lines. Both become one
+`image_expand.inc` has the mirror of it six times, 61 lines. Both become one
 helper each and a call per site: `pack_bits(dc, 8)` and `dc = unpack_bits(8)`.
 
 **What makes this more delicate than it looks.** The six copies are not
@@ -249,8 +249,8 @@ only two of them are work:
   data — a coefficient row is one line because it is one row, and breaking it
   up to fit a column limit makes the table harder to read, not easier. Not
   work;
-- **23 long expressions** elsewhere — `choose_plane_coding.inc:107` and 224–554,
-  `alt_model_p1.inc`'s six, `model.inc:1525`, `altp1.inc:244` and `:282`. Each
+- **23 long expressions** elsewhere — `plane_choose.inc:107` and 224–554,
+  `alt_p1_code.inc`'s six, `model.inc:1525`, `alt_p1_block.inc:244` and `:282`. Each
   is one statement that is genuinely that long, and each would need its own
   judgement about where to break. Not a pass; not this plan.
 
@@ -329,7 +329,7 @@ Three specific ones, all measured:
 
 ## Declined, with the measurement
 
-**Merging the three plane bodies in `alt_model_p1.inc`.** They look like a
+**Merging the three plane bodies in `alt_p1_code.inc`.** They look like a
 three-times-unrolled loop — `blk1`/`blk2`/`blk3`, `err1`/`err2`/`err3`, spans of
 40/34/37 lines — and the reason not to merge them is that the planes genuinely
 differ: the first carries the colour transform, the third the near-lossless
@@ -407,7 +407,7 @@ sitting in the file the whole time.
 
 ## What this round found and did not take
 
-Two things turned up in `search_filter.inc` while Phase 2 was being traced
+Two things turned up in `filter_search.inc` while Phase 2 was being traced
 through the packer's globals. Neither is in this plan, both are measured, and
 the next round should decide about them rather than rediscover them.
 

@@ -1,4 +1,4 @@
-// write_bmp.inc -- write one back.
+// bmp_write.inc -- write one back.
 
 int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   uint32_t off_bits, stride, done;

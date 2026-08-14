@@ -1,4 +1,4 @@
-// rcio.inc -- the range coder's file ends -- what it writes before a stream and what
+// rc_io.inc -- the range coder's file ends -- what it writes before a stream and what
 // it reads after one.  The coder itself is rc.inc.
 
 uint32_t __rc_decode_flat(uint32_t tot) {

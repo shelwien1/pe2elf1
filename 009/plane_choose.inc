@@ -1,4 +1,4 @@
-// choose_plane_coding.inc -- decide how each plane of an image is to be coded.
+// plane_choose.inc -- decide how each plane of an image is to be coded.
 
 int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) {
   struct alignas(16) ChoosePlaneCodingFrame {

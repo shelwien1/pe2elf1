@@ -1,4 +1,4 @@
-// predict.inc -- the predictors and the colour transform -- what is subtracted from
+// plane_predict.inc -- the predictors and the colour transform -- what is subtracted from
 // an image before it is modelled, and added back after.
 
 void __expand_predictor_mode0(uint8_t* unread_src, int32_t i, int32_t unread_h) {

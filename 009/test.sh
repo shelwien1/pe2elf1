@@ -19,7 +19,7 @@
 # the first commit of the tree, before any refactoring round -- because they
 # exist to pin a defect a refactoring round introduced, and a reference taken
 # from the build under test could not have caught it.  See the header of
-# `choose_plane_coding.inc`.  Every other image picks colour transform 0; these
+# `plane_choose.inc`.  Every other image picks colour transform 0; these
 # two are the only ones in the corpus that pick 1 and 2.
 #
 # Six legs, because "the streams match" is a much narrower statement than it

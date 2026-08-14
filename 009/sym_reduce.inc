@@ -1,4 +1,4 @@
-// reduce_alphabet.inc -- drop the symbols an image does not use, and renumber what is left.
+// sym_reduce.inc -- drop the symbols an image does not use, and renumber what is left.
 
 void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
   struct alignas(16) ReduceAlphabetFrame {

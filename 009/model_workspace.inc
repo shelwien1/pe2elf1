@@ -1,4 +1,4 @@
-// workspace.inc -- the main model's workspace: how it is laid out and how it is given
+// model_workspace.inc -- the main model's workspace: how it is laid out and how it is given
 // back.
 
 void**ModelBlock::free_workspace(int8_t do_free) {

@@ -1,4 +1,4 @@
-// p1.inc -- the one-bit plane model, around its block.
+// alt_p1.inc -- the one-bit plane model, around its block.
 
 uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold) {
   uint8_t even, odd;

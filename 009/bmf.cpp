@@ -12,6 +12,20 @@
 // is written in terms of: the decompiler's macros, the allocator, the constant
 // tables and the program's state.
 //
+// The *names* group where that order does not.  Sorted, the directory reads as
+// nine runs, each one subsystem: `alt_p1_*` and `alt_p2_*` are the two
+// alternate models -- each with its block, its parts and its coding bodies --
+// then `bmp_*` the file format, `filter_*` the filter search, `image_*` one
+// image each way, `model_*` the main model, `plane_*` one plane, `rc_*` the
+// range coder, and `sym_*` the alphabet.  The noun comes first and the verb
+// second, so `read_bmp.inc` is `bmp_read.inc` and its partner is beside it
+// rather than fifteen entries away.
+//
+// The eight files that join no run -- `arc`, `bitctr`, `ctxidx`, `decls`,
+// `globals`, `ida`, `memory`, `tables` -- kept their names.  A prefix invented
+// for one file groups nothing, and renaming to a scheme rather than to a
+// neighbour is how a naming convention stops meaning anything.
+//
 // ## the encode/decode pairs
 //
 // Nine of them are one `template<int f_DEC>` each, instantiated as the two
@@ -56,35 +70,35 @@
 #include "globals.inc"
 #include "rc.inc"
 #include "decls.inc"
-#include "symlist.inc"
+#include "sym_list.inc"
 #include "bitctr.inc"
-#include "altp1.inc"
-#include "altp2.inc"
+#include "alt_p1_block.inc"
+#include "alt_p2_block.inc"
 #include "model.inc"
 #include "bmp.inc"
 #include "arc.inc"
-#include "rcio.inc"
-#include "symcode.inc"
-#include "decode_symbol_list.inc"
-#include "workspace.inc"
-#include "reduce_alphabet.inc"
-#include "p1.inc"
-#include "alt_model_p1.inc"
-#include "p2.inc"
+#include "rc_io.inc"
+#include "sym_code.inc"
+#include "sym_list_decode.inc"
+#include "model_workspace.inc"
+#include "sym_reduce.inc"
+#include "alt_p1.inc"
+#include "alt_p1_code.inc"
+#include "alt_p2.inc"
 #include "alt_p2_context.inc"
 #include "alt_p2_model.inc"
-#include "alt_model_p2_encode.inc"
-#include "alt_model_p2_decode.inc"
-#include "predict.inc"
+#include "alt_p2_encode.inc"
+#include "alt_p2_decode.inc"
+#include "plane_predict.inc"
 #include "plane.inc"
 #include "model_plane.inc"
-#include "cost_candidate.inc"
-#include "choose_plane_coding.inc"
-#include "search_filter.inc"
-#include "read_bmp.inc"
-#include "write_bmp.inc"
-#include "expand_image.inc"
-#include "compress_image.inc"
+#include "filter_cost.inc"
+#include "plane_choose.inc"
+#include "filter_search.inc"
+#include "bmp_read.inc"
+#include "bmp_write.inc"
+#include "image_expand.inc"
+#include "image_compress.inc"
 
 void __bmf_compress(const char* InName, const char* OutName) {
   int32_t i;

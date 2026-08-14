@@ -1,4 +1,4 @@
-// p2.inc -- the deep-plane model around its block: the filter, and the two
+// alt_p2.inc -- the deep-plane model around its block: the filter, and the two
 // directions of its eight-bit body.
 
 int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_t mode) {

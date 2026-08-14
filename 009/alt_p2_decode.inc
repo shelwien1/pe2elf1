@@ -1,4 +1,4 @@
-// alt_model_p2_decode.inc -- deep planes, decoded.
+// alt_p2_decode.inc -- deep planes, decoded.
 
 int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   AltP2Block* plane[4], ** w;

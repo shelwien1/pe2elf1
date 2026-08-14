@@ -1,4 +1,4 @@
-// read_bmp.inc -- read a BMP, in every depth and both run-length forms.
+// bmp_read.inc -- read a BMP, in every depth and both run-length forms.
 
 int32_t*__read_bmp(char* path) {
   BmfImage* img_f;

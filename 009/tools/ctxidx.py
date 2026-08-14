@@ -165,6 +165,39 @@ def row(piece):
     return '.bits<%d, 2>(%s)' % (at, inner)
 
 
+def logical(src):
+    """[(first, last, text)] for every statement, continuations folded in.
+
+    Phase 4 of `CLEANER.md` put one masked term per line, `|` leading, with a
+    `// bit N` label on each.  That is the same statement -- but the rule below
+    reads a *line*, so after the wrap this file reported that
+    `alt_p2_context.inc` has no masked context words, which `sweep.sh` counted
+    as "asked about something this repository does not have".  It has six of
+    them.  A zero that a formatting pass can produce is the thing this project
+    keeps finding, so the reader folds the continuations back first.
+    """
+    out, i = [], 0
+    while i < len(src):
+        if '=' not in src[i]:
+            i += 1
+            continue
+        parts, j = [re.sub(r'\s*//.*$', '', src[i]).rstrip()], i
+        while j + 1 < len(src):
+            joined = ''.join(parts)
+            # A leading `|` is the usual continuation; unbalanced parentheses
+            # are the rest.  The sixth word's tail line begins `)|(((` because
+            # its eleven terms sit inside one extra paren, and a rule that only
+            # looked for `|` folded ten lines and dropped the eleventh.
+            if not (re.match(r'^\s*\|', src[j + 1])
+                    or joined.count('(') > joined.count(')')):
+                break
+            j += 1
+            parts.append(re.sub(r'\s*//.*$', '', src[j]).strip())
+        out.append((i, j, parts[0] + ''.join(p for p in parts[1:])))
+        i = j + 1
+    return out
+
+
 def wrap(path, src, do):
     """One masked term per line, bit position first.  CLEANER.md Phase 4.
 
@@ -181,9 +214,8 @@ def wrap(path, src, do):
     original spelling makes you work out by hand, eleven times, per word.
     """
     n = 0
-    for i in range(len(src) - 1, -1, -1):
-        l = src[i]
-        if not re.search(r'&0x[0-9A-F]+\|', l) or '\n' in l:
+    for i, last, l in reversed(logical(src)):
+        if not re.search(r'&0x[0-9A-F]+\|', l):
             continue
         head, rhs = l.split('=', 1)
         rhs = rhs.strip().rstrip(';')
@@ -212,7 +244,7 @@ def wrap(path, src, do):
             out[-1] = re.sub(r'\s+(// bit \d+)$', r';   \1', out[-1])
         n += 1
         if do:
-            src[i:i + 1] = out
+            src[i:last + 1] = out
     return n
 
 
@@ -227,7 +259,8 @@ def main():
         return 0
     want = int(sys.argv[sys.argv.index('--line') + 1]) if '--line' in sys.argv else None
     n_conv = n_raw = seen = 0
-    for i, l in enumerate(src, 1):
+    for at, last, l in logical(src):
+        i = at + 1
         if not re.search(r'&0x[0-9A-F]+\|', l):
             continue
         seen += 1
@@ -267,7 +300,7 @@ def main():
                       ' override)' % (n_bit, n_msk))
                 return 1
             body = [p for _, p in sorted(pieces, reverse=True)]
-            indent = ' ' * (len(l) - len(l.lstrip()))
+            indent = ' ' * (len(src[at]) - len(src[at].lstrip()))
             lead = '%s%s= CtxIdx{}' % (indent, head.strip() + ' ')
             out = [lead + body[0]]
             pad = ' ' * (len(lead) - len('CtxIdx{}'))
@@ -277,7 +310,7 @@ def main():
             text = '\n'.join(out)
             print(text)
             if '--apply' in sys.argv:
-                src[i - 1:i] = out
+                src[at:last + 1] = out
                 open(path, 'w').write('\n'.join(src))
                 print('-- applied to %s:%d' % (path, i))
     if not want:
@@ -286,8 +319,10 @@ def main():
             # include list: no masked context words are in it, and "0 terms
             # convert" from a file that has none reads exactly like a tree with
             # nothing left to do.  Say which it is.
-            print('not applicable: %s has no masked context words -- they are '
-                  'in alt_p2_context.inc' % path)
+            where = 'alt_p2_context.inc'
+            print('not applicable: %s has no masked context words%s'
+                  % (path, '' if path.endswith(where)
+                     else ' -- they are in ' + where))
             return 0
         print('%d terms convert, %d stay masked' % (n_conv, n_raw))
     return 0

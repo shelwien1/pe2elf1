@@ -157,7 +157,7 @@ than methodised, since inlining each at its one or two call sites removes the
 function, its forward declaration and the hop.
 
 `blk->` is 786 → 224. **The 224 are not candidates**: in `model.inc`,
-`model_plane.inc` and `p1.inc`, `blk` is a *local* holding a block the
+`model_plane.inc` and `alt_p1.inc`, `blk` is a *local* holding a block the
 enclosing function does not belong to, and `blk->x` there is an ordinary member
 access on another object.
 
@@ -174,7 +174,7 @@ Two more defects worth keeping:
   correct spelling is `(?<![.\w])(?<!->)` — "not the tail of an identifier, and
   not after an arrow", and nothing about comparisons. Phase 1's renames used
   the buggy version and were audited afterwards; they are clean.
-- **the scope of the strip.** `p2.inc` holds wrappers as well as a body, and
+- **the scope of the strip.** `alt_p2.inc` holds wrappers as well as a body, and
   the wrappers are free functions with a *local* named `blk`; stripping the
   whole file turned `blk->alt_p2_free(1)` into `alt_p2_free(1)`. The strip has
   to be scoped to the body being converted.
@@ -209,7 +209,7 @@ if( !((bpp&0x3Fu)<=4||(flags_b&0x10)) )      // !A && !B
 ```
 
 because `==` binds tighter than `||`, so the `==0` was testing the right
-operand alone. The fifteen streams still matched — it is in `expand_image.inc`,
+operand alone. The fifteen streams still matched — it is in `image_expand.inc`,
 decoder only — and eleven of the fifteen round trips broke, which is the gate
 catching exactly the half of itself that could. The rule now requires the
 operand to be a **primary expression**: a name with member and subscript
@@ -273,7 +273,7 @@ this the lowest-value phase and the first to drop.
 Measured: **none of them qualify.** Not one of the 32 has its break at the top
 at the loop's own nesting level; nineteen have it in the middle, twelve have no
 top-level break at all (they break out of an inner `switch` or return), and the
-one remaining candidate, in `reduce_alphabet.inc`, has a statement *after* its
+one remaining candidate, in `sym_reduce.inc`, has a statement *after* its
 break, so a `do … while` would need that statement duplicated. Which is the
 plan's own criterion for leaving a loop alone: more syntax, not less.
 
