@@ -88,14 +88,14 @@ void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* 
     blk->alt_p1_free(1);
 }
 
-void __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32_t height) {
+void __alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
   AltP1Block *blk;
   AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
   if( raw )
     blk = raw->alt_p1_alloc(i, height, 0);
   else
     blk = nullptr;
-  __rc_begin_decode(unread_flag);
+  __rc_begin_decode();
   if( blk->height>0 ) {
     int32_t y = 0;
     do {
@@ -113,7 +113,7 @@ void __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32
         do {
           ++x;
           blk->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
-          int32_t code = __alt_p1_decode_symbol((uint16_t*)&blk->counters[blk->ctx[0]], 0, blk->ctx[1]);
+          int32_t code = __alt_p1_decode_symbol((uint16_t*)&blk->counters[blk->ctx[0]], blk->ctx[1]);
           int32_t val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
           *out_at = val;
           int32_t err = val-blk->pred;

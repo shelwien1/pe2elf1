@@ -49,7 +49,7 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   int32_t xf0 = plane_desc[plane_desc[2].src_plane+1].flags&8;
   int32_t dc_flag = plane_desc[plane_desc[3].src_plane+1].flags&8;
   int32_t xf4 = (plane_desc[plane_desc[4].src_plane+1].flags)&8;
-  __rc_begin_decode(dc_flag);
+  __rc_begin_decode();
   if( raw>0 ) {
     src2 = 0;
     int32_t back = -i;

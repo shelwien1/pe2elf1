@@ -70,7 +70,7 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_
 // it is told which code was used -- and that asymmetry is the reason these two
 // were written separately in the first place.
 template<int f_DEC>
-void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
+void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
                                 int32_t width, int32_t height) {
   P2Ctx *pix;
   int32_t j;
@@ -83,7 +83,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
   uint8_t* src_end;
   src_end = src;
   if( f_DEC )
-    __rc_begin_decode(unread_flag);
+    __rc_begin_decode();
   else
     __rc_begin_encode();
   pix = cursor[0];
@@ -270,9 +270,9 @@ void __alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   else
     blk = nullptr;
   if( f_DEC )
-    blk->alt_p2_d8_body<1>(nullptr, out, i, i, height);
+    blk->alt_p2_d8_body<1>(nullptr, out, i, height);
   else
-    blk->alt_p2_d8_body<0>(src, out, 0, i, height);
+    blk->alt_p2_d8_body<0>(src, out, i, height);
   if( blk )
     blk->alt_p2_free(1);
 }

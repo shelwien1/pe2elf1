@@ -23,11 +23,11 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   } else {
     void* ws = bmf_new(sizeof(ModelBlock));
     if( ws )
-      blk = ((ModelBlock*)ws)->layout_workspace(p_i->height, p_i->width, p_i->height, p_i->depth&0x3F);
+      blk = ((ModelBlock*)ws)->layout_workspace(p_i->width, p_i->height, p_i->depth&0x3F);
     else
       blk = (ModelBlock*)(0);
     __rc_begin_encode();
-    __reduce_alphabet(blk, 0, pixels);
+    __reduce_alphabet(blk, pixels);
     int32_t bucket = 0;
     int32_t g = 0;
     do {

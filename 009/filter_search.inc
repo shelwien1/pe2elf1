@@ -28,7 +28,6 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   } __frame;
   uint8_t* base2;
   bool deep2;
-  int8_t f4;
   uint16_t w_a, w_d;
   uint8_t f0, f1, f2, f3;
   uint8_t *srcp, *p2, *tile_copy, *tile_a, *p4, *p5, *tile_b, *tile_c, *p12, *p13, *tile_d;
@@ -54,7 +53,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     }
     return 0;
   }
-  __choose_plane_coding(img, tile_h, mode);
+  __choose_plane_coding(img);
   __frame.tile_img = (BmfImage*)__alloc_image(tile_w, tile_h, img->depth&0x3F, 0, 0);
   coded_size = __frame.tile_img->data_size+0x20000;
   coded_buf = (uint8_t*)bmf_new(coded_size);
@@ -72,7 +71,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   // `-Q9`.
   auto probe_plane = [&](int32_t pl, int32_t flags) {
     plane_desc[pl+1].flags = flags;
-    __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl, 0);
+    __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl);
     int32_t cost = 8*(out_cursor-coded_buf);
     *(uint32_t*)packer_word = packer_acc;
     return cost;
@@ -255,7 +254,7 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
       while( 1 ) {
         pl_k = plane_desc[pk+1].src_plane;
         __frame.rows[0] = pl_k;
-        __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl_k, f4);
+        __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl_k);
         bits = 8*(out_cursor-coded_buf);
         *(uint32_t*)packer_word = packer_acc;
         bits_d += bits;
@@ -360,7 +359,7 @@ tile_restored:
           plane_desc[pi3+1].flags = f2;
         } while( plane<plane_count );
       }
-      __transform_planes(__frame.tile_img, 0);
+      __transform_planes(__frame.tile_img);
       bits_e = 8*(out_cursor-coded_buf);
       deep2 = bits_e<=__frame.best_bits;
       *(uint32_t*)packer_word = packer_acc;
@@ -396,7 +395,7 @@ tile_restored:
       if( nplanes_c==__frame.n_hard&&nplanes_c-1==__frame.n_flagged ) {
         cand = 0;
       } else {
-        __transform_planes(__frame.tile_img, 0);
+        __transform_planes(__frame.tile_img);
         bits_a = 8*(out_cursor-coded_buf);
         deep2 = bits_a<=__frame.best_bits;
         __frame.rows[0] = bits_a;
@@ -418,7 +417,7 @@ tile_restored:
                 plane_desc[pi1+1].flags |= 8*(f1!=0);
               } while( pl_b<plane_count );
             }
-            __transform_planes(__frame.tile_img, 0);
+            __transform_planes(__frame.tile_img);
             bits2 = 8*(out_cursor-coded_buf);
             deep2 = bits2<=__frame.rows[0];
             *(uint32_t*)packer_word = packer_acc;
@@ -454,7 +453,7 @@ planes_done:
         plane_desc[pi4+1].flags = f3;
       } while( pl_c<plane_count );
     }
-    __transform_planes(__frame.tile_img, 0);
+    __transform_planes(__frame.tile_img);
     bits_b = 8*(out_cursor-coded_buf);
     __frame.rows[1] = bits_b;
     *(uint32_t*)packer_word = packer_acc;
@@ -476,7 +475,7 @@ planes_done:
         while( pl_d<plane_count );
       }
       memcpy((uint8_t*)__frame.tile_src, tile_copy, __frame.tile_img->data_size);
-      __transform_planes(__frame.tile_img, 0);
+      __transform_planes(__frame.tile_img);
       bits_c = 8*(out_cursor-coded_buf);
       deep2 = bits_c<=__frame.best_bits;
       *(uint32_t*)packer_word = packer_acc;

@@ -2,7 +2,6 @@
 // sample is coded against.
 
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
-  P2Ctx *unused_p;
   CtxWeights weights;
   int32_t ctx15;
   P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2, *row2c;

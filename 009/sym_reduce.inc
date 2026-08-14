@@ -1,6 +1,6 @@
 // sym_reduce.inc -- drop the symbols an image does not use, and renumber what is left.
 
-void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
+void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   struct alignas(16) ReduceAlphabetFrame {
     uint32_t zero_base[15];
     void* tmp;
@@ -40,7 +40,6 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
       };
     };
   } __frame;
-  int8_t mode;
   ModelBlock* blk1, * blk4;
   uint32_t alpha_n, done, done2, off, slot_a, depth_bits;
   bool more, packed;
@@ -309,7 +308,7 @@ lists_ready:
       newbuf = bmf_new(2*blk1->height*blk1->width);
       __frame.tmp = __frame.slot[1];
       blk1->sym_word = (uint16_t*)newbuf;
-      __reduce_alphabet(blk1, mode, (uint8_t*)__frame.tmp);
+      __reduce_alphabet(blk1, (uint8_t*)__frame.tmp);
       free((__frame.slot[1]));
     } else {
       if( 4*n_kids ) {

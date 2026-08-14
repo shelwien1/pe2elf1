@@ -136,7 +136,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   if( (bpp&0x3Fu)<=4||(__frame.flags_b&0x10)==0 ) {
     plane_predictor = 0;
     plane_alt_model = 0;
-    __unmodel_plane(want2, (uint16_t*)img_at, img_at->pixels);
+    __unmodel_plane((uint16_t*)img_at, img_at->pixels);
     goto check_length;
   }
   // The near-lossless nibble, mirroring `image_compress`: present for a single
@@ -192,16 +192,16 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
         plane = plane_desc[plane_i+1].src_plane;
         plane_predictor = plane_desc[plane+1].flags&3;
         plane_alt_model = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
-        __unmodel_plane(plane_i, (uint16_t*)&__frame.img, plane_buf);
+        __unmodel_plane((uint16_t*)&__frame.img, plane_buf);
         if( plane_predictor ) {
           if( plane_predictor==1 ) {
             if( !plane_alt_model )
               __unpredict_med(plane_buf, img_at->width, img_at->height);
           }
         } else {
-          __expand_predictor_mode0(plane_buf, img_at->width, img_at->height);
+          __expand_predictor_mode0(img_at->width);
         }
-        __interleave_plane((uint8_t*)img_at, plane_buf, plane, 0);
+        __interleave_plane((uint8_t*)img_at, plane_buf, plane);
         ++plane_i;
       } while( plane_i<plane_count );
 restore_arc:
@@ -211,7 +211,7 @@ restore_arc:
     plane_predictor = plane_desc[1].flags&3;
     plane_alt_model = (uint8_t)(plane_desc[1].flags&4)>>2;
     {
-      __unmodel_plane(63, (uint16_t*)img_at, img_at->pixels);
+      __unmodel_plane((uint16_t*)img_at, img_at->pixels);
       if( plane_alt_model )
         goto free_plane_buf;
     }
@@ -256,9 +256,9 @@ restore_arc:
             if( pred_s==1 )
               __unpredict_med(plane_buf, img_at->width, img_at->height);
           } else {
-            __expand_predictor_mode0(plane_buf, img_at->width, img_at->height);
+            __expand_predictor_mode0(img_at->width);
           }
-          __interleave_plane((uint8_t*)img_at, plane_buf, plane2, 0);
+          __interleave_plane((uint8_t*)img_at, plane_buf, plane2);
         }
       } while( pl2<plane_count );
       goto restore_arc;

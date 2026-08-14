@@ -121,12 +121,12 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     if( plane_count>0 ) {
       pl2 = 0;
       do
-        __model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2+++1].src_plane, 0);
+        __model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2+++1].src_plane);
       while( pl2<plane_count );
     }
     free(plane_buf);
   } else {
-    __transform_planes(p_i, 0);
+    __transform_planes(p_i);
   }
 // Everything coded; flush the packer's last word and decide whether the coded
 // stream is smaller than the pixels it came from.

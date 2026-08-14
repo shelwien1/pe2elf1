@@ -218,13 +218,13 @@ int32_t __alt_p1_code_symbol(uint16_t* freq, int32_t ctx, int32_t sym) {
   return slot;
 }
 
-// `unread_ctx` and `unread_arg` are the decompiler's names for an argument the
-// donor pushed and neither body reads; the call sites still pass it.
-void __alt_p1_encode_symbol(uint16_t* freq, int32_t unread_ctx, int32_t ctx, int32_t sym) {
+// The donor pushed a third argument neither body reads.  `tools/deadparam.py`
+// took it and the two it was forwarded from.
+void __alt_p1_encode_symbol(uint16_t* freq, int32_t ctx, int32_t sym) {
   __alt_p1_code_symbol<0>(freq, ctx, sym);
 }
 
-int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t unread_arg, int32_t ctx) {
+int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t ctx) {
   return __alt_p1_code_symbol<1>(freq, ctx, 0);
 }
 

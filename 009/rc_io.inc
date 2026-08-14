@@ -134,7 +134,7 @@ uint16_t*__rc_begin_encode() {
 // The flag has never been read.  It is the decompiler's name for an argument
 // the donor pushed and the body ignored, and it is kept in the signature
 // because the call sites pass it.
-void __rc_begin_decode(int8_t unread_flag) {
+void __rc_begin_decode() {
   __rc_begin<1>();
 }
 

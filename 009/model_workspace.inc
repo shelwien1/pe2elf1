@@ -28,7 +28,7 @@ void**ModelBlock::free_workspace(int8_t do_free) {
   return (void**)this;
 }
 
-ModelBlock*ModelBlock::layout_workspace(int32_t unread_flag, int32_t img_w, int32_t img_h, int32_t img_depth) {
+ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth) {
   uint32_t w;
   int32_t j;
   uint32_t k, m, s, n;

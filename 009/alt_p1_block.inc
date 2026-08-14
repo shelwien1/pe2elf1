@@ -202,7 +202,7 @@ struct AltP1Block {
             } else {
               *q = recon;
             }
-            __alt_p1_encode_symbol(&counters[ctx[0]].total, 16*ctx[0], ctx[1], code);
+            __alt_p1_encode_symbol(&counters[ctx[0]].total, ctx[1], code);
             int32_t val = (uint8_t)*q;
             int32_t err = val-pred;
             cursor[0]->sym = val;

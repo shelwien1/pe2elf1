@@ -3,7 +3,7 @@
 // plane and codes here.  MODELS.md section 7.
 
 uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
-  P2Ctx* unused_c, * cursor0;
+  P2Ctx* cursor0;
   int32_t n2_half;
   uint16_t* mir_top;
   P2Freq* grp;
