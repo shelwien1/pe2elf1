@@ -36,7 +36,6 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   p_i->flags |= has_coded<<7;
   hdr_pad8 = *(uint32_t*)&p_i->_pad8;
   hdr.stride = (uint32_t)row_bytes;
-  plane_desc[0].weight0 = 512;
   near_lossless_q = 0;
   *(uint32_t*)&hdr._pad8 = hdr_pad8;
   hdr.data_size = (uint32_t)p_i->data_size;
@@ -95,18 +94,18 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   if( plane_count>0 ) {
     pl = 0;
     do {
-      word_flags = (4*plane_desc[pl+1].flags)|plane_desc[pl+1].nrefs;
+      word_flags = (4*plane_desc[pl].flags)|plane_desc[pl].nrefs;
       pack_bits(word_flags, 6);
-      if( plane_desc[pl+1].flags&8 ) {
-        word_dc = plane_desc[pl+1].dc;
+      if( plane_desc[pl].flags&8 ) {
+        word_dc = plane_desc[pl].dc;
         pack_bits(word_dc, 8);
-        if( plane_desc[pl+1].nrefs>1u ) {
-          word_w4 = plane_desc[pl+1].weight0+64;
+        if( plane_desc[pl].nrefs>1u ) {
+          word_w4 = plane_desc[pl].weight0+64;
           pack_bits(word_w4, 8);
-          word_w8 = plane_desc[pl+1].weight1+64;
+          word_w8 = plane_desc[pl].weight1+64;
           pack_bits(word_w8, 8);
-          if( plane_desc[pl+1].nrefs>2u ) {
-            word_w12 = plane_desc[pl+1].weight2+64;
+          if( plane_desc[pl].nrefs>2u ) {
+            word_w12 = plane_desc[pl].weight2+64;
             pack_bits(word_w12, 8);
           }
         }
@@ -121,7 +120,7 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     if( plane_count>0 ) {
       pl2 = 0;
       do
-        __model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2+++1].src_plane);
+        __model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2++].src_plane);
       while( pl2<plane_count );
     }
     free(plane_buf);

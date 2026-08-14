@@ -52,9 +52,9 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
       plane[pl++] = (AltP2Block*)made;
     } while( pl<plane_count );
   }
-  int32_t xf0 = plane_desc[plane_desc[2].src_plane+1].flags&8;
-  int32_t np = plane_desc[plane_desc[3].src_plane+1].flags&8;
-  int32_t y = (plane_desc[plane_desc[4].src_plane+1].flags)&8;
+  int32_t xf0 = plane_desc[plane_desc[1].src_plane].flags&8;
+  int32_t np = plane_desc[plane_desc[2].src_plane].flags&8;
+  int32_t y = (plane_desc[plane_desc[3].src_plane].flags)&8;
   __rc_begin_encode();
   if( height>0 ) {
     src1 = 0;
@@ -196,13 +196,13 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
         seed0 = 0;
         at0 = 0;
         for( i = 0; i<(uint32_t)row_i; ++i ) {
-          int32_t off0b = plane_desc[1].src_plane;
+          int32_t off0b = plane_desc[0].src_plane;
           ctx_bias[0] = at0>>3;
           ctx_bias[1] = seed0>>3;
           ctx_bias[2] = off0>>3;
           ctx_bias[3] = want0>>3;
           blk0 = (AltP2Block*)(plane[0]);
-          cur0 = out[plane_desc[1].src_plane];
+          cur0 = out[plane_desc[0].src_plane];
           int32_t pred0 = plane[0]->alt_p2_context(plane[2], plane[1]);
           int32_t resid0 = (uint8_t)(cur0-pred0);
           code0 = (uint8_t)blk0->fold[resid0];
@@ -227,13 +227,13 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           ctx_bias[2] += 32*l4a;
           ctx_bias[3] += 32*l5a;
           if( xf0 )
-            seed1 = 16*out[plane_desc[1].src_plane];
+            seed1 = 16*out[plane_desc[0].src_plane];
           else
             seed1 = 0;
           AltP2Block *blk1 = (AltP2Block*)(plane[1]);
           plane[1]->cursor[0]->dval = seed1;
-          int32_t off1 = plane_desc[2].src_plane;
-          cur1 = out[plane_desc[2].src_plane];
+          int32_t off1 = plane_desc[1].src_plane;
+          cur1 = out[plane_desc[1].src_plane];
           int32_t pred1 = blk1->alt_p2_context(plane[0], plane[2]);
           int32_t resid1 = (uint8_t)(cur1-pred1);
           code1 = blk1->fold[resid1];
@@ -258,13 +258,13 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           ctx_bias[2] += 32*l4b;
           ctx_bias[3] += 32*l5b;
           if( np )
-            seed2 = (plane_desc[plane_desc[3].src_plane+1].weight1*out[plane_desc[2].src_plane]+plane_desc[plane_desc[3].src_plane+1].weight0*out[plane_desc[1].src_plane])>>3;
+            seed2 = (plane_desc[plane_desc[2].src_plane].weight1*out[plane_desc[1].src_plane]+plane_desc[plane_desc[2].src_plane].weight0*out[plane_desc[0].src_plane])>>3;
           else
             seed2 = 0;
           AltP2Block *blk2 = (AltP2Block*)(plane[2]);
           plane[2]->cursor[0]->dval = seed2;
-          int32_t off2 = plane_desc[3].src_plane;
-          cur2 = out[plane_desc[3].src_plane];
+          int32_t off2 = plane_desc[2].src_plane;
+          cur2 = out[plane_desc[2].src_plane];
           int32_t pred2 = blk2->alt_p2_context(plane[0], plane[1]);
           int32_t resid2 = (uint8_t)(cur2-pred2);
           code2 = blk2->fold[resid2];
@@ -292,13 +292,13 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             ctx_bias[2] = off0;
             ctx_bias[3] = want0;
             if( y )
-              l7c = (plane_desc[plane_desc[4].src_plane+1].weight2*out[2]+plane_desc[plane_desc[4].src_plane+1].weight1*out[1]+plane_desc[plane_desc[4].src_plane+1].weight0**out)>>3;
+              l7c = (plane_desc[plane_desc[3].src_plane].weight2*out[2]+plane_desc[plane_desc[3].src_plane].weight1*out[1]+plane_desc[plane_desc[3].src_plane].weight0**out)>>3;
             else
               l7c = 0;
             AltP2Block *l4c = (AltP2Block*)(plane[3]);
             plane[3]->cursor[0]->dval = l7c;
-            int32_t alpha_src = plane_desc[4].src_plane;
-            l5c = out[plane_desc[4].src_plane];
+            int32_t alpha_src = plane_desc[3].src_plane;
+            l5c = out[plane_desc[3].src_plane];
             int32_t x = l4c->alt_p2_context(plane[2], plane[0]);
             int32_t w = (uint8_t)(l5c-x);
             seed3 = l4c->fold[w];

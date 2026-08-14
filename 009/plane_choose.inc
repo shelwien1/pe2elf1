@@ -117,11 +117,11 @@ int32_t __choose_plane_coding(BmfImage* img) {
       do {
         uint8_t pl_even = 2*pair;
         row = 2*pair;
-        plane_desc[row+1].src_plane = 2*pair;
+        plane_desc[row].src_plane = 2*pair;
         uint8_t pl_odd = 2*pair+++1;
-        plane_desc[row+1].nrefs = pl_even;
-        plane_desc[row+2].src_plane = pl_odd;
-        plane_desc[row+2].nrefs = pl_odd;
+        plane_desc[row].nrefs = pl_even;
+        plane_desc[row+1].src_plane = pl_odd;
+        plane_desc[row+1].nrefs = pl_odd;
       } while( pair<(uint32_t)(n_planes/2) );
       next_plane = 2*pair+1;
     } else {
@@ -129,8 +129,8 @@ int32_t __choose_plane_coding(BmfImage* img) {
     }
     result = next_plane-1;
     if( (uint32_t)n_planes>(next_plane-1) ) {
-      plane_desc[next_plane].src_plane = result;
-      plane_desc[next_plane].nrefs = result;
+      plane_desc[next_plane-1].src_plane = result;
+      plane_desc[next_plane-1].nrefs = result;
     }
     if( n_planes>=3 ) {
       cost0 = __cost_candidate((uint8_t*)img_a, 0, (uint8_t*)tbl16, unread0, best0, best1, best2, (uint32_t*)&acc0[2]);
@@ -145,21 +145,24 @@ int32_t __choose_plane_coding(BmfImage* img) {
       if( cheaper )
         xform = 2;
       x3[2] = xform;
-      dw = 16;
+      // The winning candidate's four descriptors, copied in.  This was eight
+      // `uint64_t` stores through a `(uint8_t*)&plane_desc[0]+off` accessor,
+      // two turns of a loop counting down by eight: offsets 56, 48, 40, 32
+      // then 24, 16, 8, 0, from `win_row[14]` down to `win_row[0]`.  Bytes
+      // 0..63 of the descriptors from the sixteen words of the row -- which
+      // is 4*sizeof(PlaneDesc), so it is one copy.
+      //
+      // `&tbl16[16*xform]` walks off the end of `tbl16` on purpose: the three
+      // tables are one 3x16 array of candidates that the decompilation gave
+      // three names.
       win_row = &tbl16[16*xform];
-      do {
-        *(uint64_t*)(bmf_plane_desc(dw*4-8)) = *(uint64_t*)&win_row[dw-2];
-        *(uint64_t*)(bmf_plane_desc(dw*4-16)) = *(uint64_t*)&win_row[dw-4];
-        *(uint64_t*)(bmf_plane_desc(dw*4-24)) = *(uint64_t*)&win_row[dw-6];
-        *(uint64_t*)(bmf_plane_desc(dw*4-32)) = *(uint64_t*)&win_row[dw-8];
-        dw -= 8;
-      } while( dw*4 );
+      memcpy(&plane_desc[0], win_row, 4*sizeof(PlaneDesc));
       best_cost = acc0[4*x3[2]+2];
       x3[1] = 16*x3[2];
-      __frame.plane_a = plane_desc[1].src_plane-x3[2];
-      wt8 = plane_desc[x3[2]+1].weight1;
-      __frame.plane_b = plane_desc[2].src_plane-x3[2];
-      wt4 = plane_desc[x3[2]+1].weight0;
+      __frame.plane_a = plane_desc[0].src_plane-x3[2];
+      wt8 = plane_desc[x3[2]].weight1;
+      __frame.plane_b = plane_desc[1].src_plane-x3[2];
+      wt4 = plane_desc[x3[2]].weight0;
       {
         __frame.wt_slot = wt8;
         x5[3] = wt4;
@@ -417,8 +420,8 @@ weights_chosen:
         wt4 = 64;
         wt8 = 64;
       }
-      plane_desc[x3[2]+1].weight0 = wt4;
-      plane_desc[xform_row+1].weight1 = wt8;
+      plane_desc[x3[2]].weight0 = wt4;
+      plane_desc[xform_row].weight1 = wt8;
       hist = &__frame.buf[4096*pred];
       win = (uintptr_t)hist&0xF;
       sum = 0;
@@ -439,7 +442,7 @@ weights_chosen:
         } while( win<1024 );
         n_planes = __frame.nplanes_s;
       }
-      plane_desc[x3[2]+1].dc = pos+1;
+      plane_desc[x3[2]].dc = pos+1;
       best_sum2 = 0;
       for( i = 0; i<0x100; ++i )
         best_sum2 += __frame.hist_c[i+1024];
@@ -452,7 +455,7 @@ weights_chosen:
         }
       }
       result = pos2+1;
-      plane_desc[__frame.plane_b+x3[2]+1].dc = result;
+      plane_desc[__frame.plane_b+x3[2]].dc = result;
       if( n_planes>=4 ) {
         // The alpha plane's weights, by least squares against the other three.
         //
@@ -598,11 +601,11 @@ weights_chosen:
           wb = 0;
           wa_slot = 0;
         }
-        plane_desc[4].weight0 = wa_slot;
-        plane_desc[4].weight1 = wb;
-        plane_desc[4].weight2 = wc;
-        plane_desc[4].src_plane = 3;
-        plane_desc[4].nrefs = 3;
+        plane_desc[3].weight0 = wa_slot;
+        plane_desc[3].weight1 = wb;
+        plane_desc[3].weight2 = wc;
+        plane_desc[3].src_plane = 3;
+        plane_desc[3].nrefs = 3;
         hist2 = &__frame.hist_c[1024*pred4b+1024];
         result = (uintptr_t)hist2&0xF;
         sum3 = 0;
@@ -617,7 +620,7 @@ weights_chosen:
             best_sum3 = sum3;
           }
         }
-        plane_desc[4].dc = pos3+1;
+        plane_desc[3].dc = pos3+1;
       }
     }
   }

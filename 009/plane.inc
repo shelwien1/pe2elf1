@@ -27,8 +27,8 @@ void __unmodel_plane(uint16_t* p_i, uint8_t* out) {
 }
 
 void __model_planes(uint8_t* img, uint8_t* pixels, int32_t plane) {
-  plane_predictor = plane_desc[plane+1].flags&3;
-  plane_alt_model = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
+  plane_predictor = plane_desc[plane].flags&3;
+  plane_alt_model = (uint8_t)(plane_desc[plane].flags&4)>>2;
   __colour_transform(img, pixels, plane);
   // 1,024 bytes.  The original zeroed them as a `memset` of the unaligned head,
   // one aligned 16-byte store at the tail, and a loop of seven more stepping

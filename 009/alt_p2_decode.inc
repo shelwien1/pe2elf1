@@ -46,9 +46,9 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
       plane[pl++] = (AltP2Block*)src1;
     } while( pl<plane_count );
   }
-  int32_t xf0 = plane_desc[plane_desc[2].src_plane+1].flags&8;
-  int32_t dc_flag = plane_desc[plane_desc[3].src_plane+1].flags&8;
-  int32_t xf4 = (plane_desc[plane_desc[4].src_plane+1].flags)&8;
+  int32_t xf0 = plane_desc[plane_desc[1].src_plane].flags&8;
+  int32_t dc_flag = plane_desc[plane_desc[2].src_plane].flags&8;
+  int32_t xf4 = (plane_desc[plane_desc[3].src_plane].flags)&8;
   __rc_begin_decode();
   if( raw>0 ) {
     src2 = 0;
@@ -205,11 +205,11 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
           ctx_bias[2] += 32*cur0[-1].dleft;
           ctx_bias[3] += 32*cur0[-1].dup;
           off = xf0==0;
-          out[plane_desc[1].src_plane] = val0;
+          out[plane_desc[0].src_plane] = val0;
           if( off )
             seed1 = 0;
           else
-            seed1 = 16*out[plane_desc[1].src_plane];
+            seed1 = 16*out[plane_desc[0].src_plane];
           AltP2Block *blk1 = (AltP2Block*)(plane[1]);
           plane[1]->cursor[0]->dval = seed1;
           int32_t pred1 = blk1->alt_p2_context(plane[0], plane[2]);
@@ -225,11 +225,11 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
           ctx_bias[2] += 32*l4a;
           ctx_bias[3] += 32*l5a;
           off = dc_flag==0;
-          out[plane_desc[2].src_plane] = val1;
+          out[plane_desc[1].src_plane] = val1;
           if( off )
             seed2 = 0;
           else
-            seed2 = (plane_desc[plane_desc[3].src_plane+1].weight1*out[plane_desc[2].src_plane]+plane_desc[plane_desc[3].src_plane+1].weight0*out[plane_desc[1].src_plane])>>3;
+            seed2 = (plane_desc[plane_desc[2].src_plane].weight1*out[plane_desc[1].src_plane]+plane_desc[plane_desc[2].src_plane].weight0*out[plane_desc[0].src_plane])>>3;
           AltP2Block *blk2 = (AltP2Block*)(plane[2]);
           plane[2]->cursor[0]->dval = seed2;
           int32_t pred2 = blk2->alt_p2_context(plane[0], plane[1]);
@@ -244,11 +244,11 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
           ctx_bias[1] += 32*l7b;
           ctx_bias[2] += 32*l4b;
           ctx_bias[3] += 32*l5b;
-          out[plane_desc[3].src_plane] = val2;
+          out[plane_desc[2].src_plane] = val2;
           nplanes = plane_count;
           if( plane_count>=4 ) {
             if( xf4 )
-              seed3 = (plane_desc[plane_desc[4].src_plane+1].weight2*out[2]+plane_desc[plane_desc[4].src_plane+1].weight1*out[1]+plane_desc[plane_desc[4].src_plane+1].weight0**out)>>3;
+              seed3 = (plane_desc[plane_desc[3].src_plane].weight2*out[2]+plane_desc[plane_desc[3].src_plane].weight1*out[1]+plane_desc[plane_desc[3].src_plane].weight0**out)>>3;
             else
               seed3 = 0;
             AltP2Block *blk3 = (AltP2Block*)(plane[3]);

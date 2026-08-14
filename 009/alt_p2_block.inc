@@ -275,7 +275,7 @@ struct AltP2Block {
     }
     int32_t dz = 4*near_lossless_q+1;
     int32_t band = 16*near_lossless_q;
-    has_ref = (uint8_t)(plane_desc[plane_desc[plane_idx+1].src_plane+1].flags&8)>>3;
+    has_ref = (uint8_t)(plane_desc[plane_desc[plane_idx].src_plane].flags&8)>>3;
     deadzone_hi = dz;
     deadzone_lo = -dz;
     band_lo = -band-7;

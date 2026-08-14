@@ -36,6 +36,10 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   int32_t pl, nrefs, plane_i, plane, pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes, last_row, at, y, pl_i, left;
   uint16_t img_h, w16;
   uint8_t major_v, minor_v;
+  // The archive version, as a plain local.  The decompilation parked it in
+  // `plane_desc[0].weight0` because the original did: `plane_desc[0]` is a
+  // header slot, not a plane, and its three weight words were free.
+  int32_t version;
   int32_t n_pix;
   uint32_t magic, pal_bytes, want2, desc, desc_flags, got;
   uint8_t* plane_buf;
@@ -61,13 +65,13 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
       break;
     major_v = (uint8_t)(__frame.magic_word>>16);
     minor_v = (uint8_t)(__frame.magic_word>>24);
-    plane_desc[0].weight0 = ((major_v<<8)-12288)|(minor_v-48);
-    if( plane_desc[0].weight0!=512||fread(__frame.hdr, 8u, 1u, arc->fp)!=1 )
+    version = ((major_v<<8)-12288)|(minor_v-48);
+    if( version!=512||fread(__frame.hdr, 8u, 1u, arc->fp)!=1 )
       break;
     fseek(arc->fp, (*(uint32_t*)&__frame.hdr[4]), 1);
     fp1 = arc->fp;
   }
-  if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), plane_desc[0].weight0 = ((major_v<<8)-12288)|(minor_v-48), plane_desc[0].weight0!=512)||fread(__frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
+  if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), version = ((major_v<<8)-12288)|(minor_v-48), version!=512)||fread(__frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
     return arc->fail();
   }
   if( __frame.flags_b<0 ) {
@@ -159,20 +163,20 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
       desc = unpack_bits(6);
       desc_flags = desc>>2;
       nrefs = desc&3;
-      plane_desc[pl+1].flags = desc_flags;
-      plane_desc[pl+1].nrefs = nrefs;
-      plane_desc[nrefs+1].src_plane = pl;
-      if( plane_desc[pl+1].flags&8 ) {
+      plane_desc[pl].flags = desc_flags;
+      plane_desc[pl].nrefs = nrefs;
+      plane_desc[nrefs].src_plane = pl;
+      if( plane_desc[pl].flags&8 ) {
         dc_v = unpack_bits(8);
-        plane_desc[pl+1].dc = dc_v;
+        plane_desc[pl].dc = dc_v;
         if( nrefs>1 ) {
           w4_v = unpack_bits(8);
-          plane_desc[pl+1].weight0 = w4_v-64;
+          plane_desc[pl].weight0 = w4_v-64;
           w8_v = unpack_bits(8);
-          plane_desc[pl+1].weight1 = w8_v-64;
+          plane_desc[pl].weight1 = w8_v-64;
           if( nrefs>2 ) {
             w12_v = unpack_bits(8);
-            plane_desc[pl+1].weight2 = w12_v-64;
+            plane_desc[pl].weight2 = w12_v-64;
           }
         }
       }
@@ -189,9 +193,9 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
       __frame.arc_f = arc;
       plane_i = 0;
       do {
-        plane = plane_desc[plane_i+1].src_plane;
-        plane_predictor = plane_desc[plane+1].flags&3;
-        plane_alt_model = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
+        plane = plane_desc[plane_i].src_plane;
+        plane_predictor = plane_desc[plane].flags&3;
+        plane_alt_model = (uint8_t)(plane_desc[plane].flags&4)>>2;
         __unmodel_plane((uint16_t*)&__frame.img, plane_buf);
         if( plane_predictor ) {
           if( plane_predictor==1 ) {
@@ -208,8 +212,8 @@ restore_arc:
       arc = __frame.arc_f;
     }
   } else {
-    plane_predictor = plane_desc[1].flags&3;
-    plane_alt_model = (uint8_t)(plane_desc[1].flags&4)>>2;
+    plane_predictor = plane_desc[0].flags&3;
+    plane_alt_model = (uint8_t)(plane_desc[0].flags&4)>>2;
     {
       __unmodel_plane((uint16_t*)img_at, img_at->pixels);
       if( plane_alt_model )
@@ -220,10 +224,10 @@ restore_arc:
       pl2 = 0;
       do {
         ++pl2;
-        plane2 = plane_desc[pl2].src_plane;
-        pred = plane_desc[plane2+1].flags&3;
+        plane2 = plane_desc[pl2-1].src_plane;
+        pred = plane_desc[plane2].flags&3;
         plane_predictor = pred;
-        if( (plane_desc[plane2+1].flags&8)!=0||pred ) {
+        if( (plane_desc[plane2].flags&8)!=0||pred ) {
           i = img_at->width;
           __frame.row_step = &((uint8_t*)img_at)[plane2+16];
           n_pix = i*img_at->height;

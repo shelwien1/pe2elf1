@@ -94,7 +94,7 @@ uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
 
 uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
   int32_t to_ref0;
-  if( !(plane_desc[plane+1].flags&8) ) {
+  if( !(plane_desc[plane].flags&8) ) {
     int32_t n_flat = bmf_pixels(img);
     int32_t step = plane_count;
     if( plane_count==1 )
@@ -112,25 +112,25 @@ uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
   bool by_weights;
-  to_ref0 = plane_desc[1].src_plane-plane;
-  int32_t to_ref1 = plane_desc[2].src_plane-plane;
-  int32_t mode = plane_desc[plane+1].nrefs;
-  int32_t dc = plane_desc[plane+1].dc;
+  to_ref0 = plane_desc[0].src_plane-plane;
+  int32_t to_ref1 = plane_desc[1].src_plane-plane;
+  int32_t mode = plane_desc[plane].nrefs;
+  int32_t dc = plane_desc[plane].dc;
   uint8_t *base = &((BmfImage*)img)->pixels[plane];
-  int32_t wgt1 = plane_desc[plane+1].weight1;
-  int32_t wgt0 = plane_desc[plane+1].weight0;
-  int32_t wgt2 = plane_desc[plane+1].weight2;
+  int32_t wgt1 = plane_desc[plane].weight1;
+  int32_t wgt0 = plane_desc[plane].weight0;
+  int32_t wgt2 = plane_desc[plane].weight2;
   by_weights = false;
   if( mode==2&&wgt0+wgt1==128 ) {
     if( !wgt1 ) {
       by_weights = true;
     } else if( !wgt0 ) {
-      to_ref0 = plane_desc[2].src_plane-plane;
+      to_ref0 = plane_desc[1].src_plane-plane;
       by_weights = true;
     }
   }
   if( !by_weights ) {
-    if( plane_desc[plane+1].nrefs!=1 ) {
+    if( plane_desc[plane].nrefs!=1 ) {
       if( mode==2 ) {
         int32_t left2 = bmf_pixels(img);
         uint8_t *p2 = base;
@@ -179,7 +179,7 @@ uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
 // reading only one plane.
 uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
   int32_t to_ref0;
-  if( !(plane_desc[plane+1].flags&8) ) {
+  if( !(plane_desc[plane].flags&8) ) {
     int32_t n_flat = bmf_pixels(img);
     int32_t step = plane_count;
     if( plane_count==1 )
@@ -197,24 +197,24 @@ uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
   bool by_weights;
-  to_ref0 = plane_desc[1].src_plane-plane;
-  int32_t to_ref1 = plane_desc[2].src_plane-plane;
-  int32_t mode = plane_desc[plane+1].nrefs;
-  int32_t dc = plane_desc[plane+1].dc;
+  to_ref0 = plane_desc[0].src_plane-plane;
+  int32_t to_ref1 = plane_desc[1].src_plane-plane;
+  int32_t mode = plane_desc[plane].nrefs;
+  int32_t dc = plane_desc[plane].dc;
   uint8_t *src = &((BmfImage*)img)->pixels[plane];
-  int32_t wgt1 = plane_desc[plane+1].weight1;
-  int32_t wgt0 = plane_desc[plane+1].weight0;
-  int32_t wgt2 = plane_desc[plane+1].weight2;
+  int32_t wgt1 = plane_desc[plane].weight1;
+  int32_t wgt0 = plane_desc[plane].weight0;
+  int32_t wgt2 = plane_desc[plane].weight2;
   by_weights = false;
   if( mode==2&&wgt0+wgt1==128 ) {
     if( !wgt1 ) {
       by_weights = true;
     } else if( !wgt0 ) {
-      to_ref0 = plane_desc[2].src_plane-plane;
+      to_ref0 = plane_desc[1].src_plane-plane;
       by_weights = true;
     }
   }
-  if( by_weights||plane_desc[plane+1].nrefs==1 ) {
+  if( by_weights||plane_desc[plane].nrefs==1 ) {
     img += plane;
     uint8_t* ref = &img[to_ref0];
     int32_t i2 = 0;
@@ -331,12 +331,12 @@ void __transform_planes(BmfImage* p_i) {
     int32_t k = 0;
     do {
       ++k;
-      int32_t plane = plane_desc[k].src_plane;
-      int32_t predictor = plane_desc[plane+1].flags&3;
+      int32_t plane = plane_desc[k-1].src_plane;
+      int32_t predictor = plane_desc[plane].flags&3;
       plane_predictor = predictor;
-      int32_t alt = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
+      int32_t alt = (uint8_t)(plane_desc[plane].flags&4)>>2;
       plane_alt_model = alt;
-      if( ((plane_desc[plane+1].flags&8)!=0||predictor)&&!alt ) {
+      if( ((plane_desc[plane].flags&8)!=0||predictor)&&!alt ) {
         __colour_transform(hdr, tmp, plane);
         if( plane_predictor!=2 ) {
           if( plane_predictor==1 ) {

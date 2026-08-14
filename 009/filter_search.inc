@@ -45,9 +45,9 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     if( plane_count>0 ) {
       int32_t pl = 0;
       do {
-        plane_desc[pl+1].flags = 0;
-        plane_desc[pl+1].src_plane = pl;
-        plane_desc[pl+1].nrefs = pl;
+        plane_desc[pl].flags = 0;
+        plane_desc[pl].src_plane = pl;
+        plane_desc[pl].nrefs = pl;
         ++pl;
       } while( pl<plane_count );
     }
@@ -70,7 +70,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   // makes comparing candidates worth anything -- and is also the whole cost of
   // `-Q9`.
   auto probe_plane = [&](int32_t pl, int32_t flags) {
-    plane_desc[pl+1].flags = flags;
+    plane_desc[pl].flags = flags;
     __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl);
     int32_t cost = 8*(out_cursor-coded_buf);
     *(uint32_t*)packer_word = packer_acc;
@@ -107,7 +107,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     __frame.pi = 0;
     __frame.dims[0] *= 8;
     while( 1 ) {
-      __frame.dims[1] = plane_desc[__frame.pi+1].src_plane;
+      __frame.dims[1] = plane_desc[__frame.pi].src_plane;
       __frame.plane_i = __frame.dims[1];
       if( hard ) {
         best_cost = 0x7FFFFFFF;
@@ -167,7 +167,7 @@ try_flag8:
           pred = f13&3;
           if( pred==2||best_cost+(best_cost>>5)>__frame.rows[0] ) {
             // `dims[1]` and `plane_i` are the same plane -- both were set from
-            // `plane_desc[pi+1].src_plane` at the top of this loop -- and the
+            // `plane_desc[pi].src_plane` at the top of this loop -- and the
             // first `cost_f14` was overwritten by the next line.
             cost_f14 = probe_plane(__frame.plane_i, 14);
             deep2 = cost_f14<best_cost;
@@ -201,7 +201,7 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
       __frame.costs[__frame.dims[1]] = best_cost;
       c3 = __frame.pi;
       __frame.n_flagged += c2!=0;
-      plane_desc[c1+1].flags = (uint8_t)__frame.best_flags;
+      plane_desc[c1].flags = (uint8_t)__frame.best_flags;
       __frame.pi = c3+1;
       if( c3+1>=plane_count ) {
         __frame.n_hard = hard;
@@ -252,7 +252,7 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
     if( plane_count>0 ) {
       pk = 0;
       while( 1 ) {
-        pl_k = plane_desc[pk+1].src_plane;
+        pl_k = plane_desc[pk].src_plane;
         __frame.rows[0] = pl_k;
         __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl_k);
         bits = 8*(out_cursor-coded_buf);
@@ -350,13 +350,13 @@ tile_restored:
   if( plane_count>2 ) {
     if( __frame.bits_total ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
-        __frame.saved[desc_k] = plane_desc[desc_k+1];
+        __frame.saved[desc_k] = plane_desc[desc_k];
       if( plane_count>0 ) {
         plane = 0;
         do {
           pi3 = plane;
-          f2 = plane_desc[plane+++1].flags&8|5;
-          plane_desc[pi3+1].flags = f2;
+          f2 = plane_desc[plane++].flags&8|5;
+          plane_desc[pi3].flags = f2;
         } while( plane<plane_count );
       }
       __transform_planes(__frame.tile_img);
@@ -370,7 +370,7 @@ tile_restored:
         cand = 0;
       } else {
         for( desc_k = 0; desc_k<4; ++desc_k )
-          plane_desc[desc_k+1] = __frame.saved[desc_k];
+          plane_desc[desc_k] = __frame.saved[desc_k];
         nplanes_b = plane_count;
         cand = 1;
       }
@@ -381,14 +381,14 @@ tile_restored:
     }
     if( __frame.n_hard+(cand==0) ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
-        __frame.saved[desc_k] = plane_desc[desc_k+1];
+        __frame.saved[desc_k] = plane_desc[desc_k];
       nplanes_c = plane_count;
       if( plane_count>0 ) {
         pl_a = 0;
         do {
           pi0 = pl_a;
-          f0 = plane_desc[pl_a+++1].flags&8|6;
-          plane_desc[pi0+1].flags = f0;
+          f0 = plane_desc[pl_a++].flags&8|6;
+          plane_desc[pi0].flags = f0;
           nplanes_c = plane_count;
         } while( pl_a<plane_count );
       }
@@ -408,13 +408,13 @@ tile_restored:
             cand = 0;
           } else {
             for( desc_k = 0; desc_k<4; ++desc_k )
-              __frame.saved[desc_k] = plane_desc[desc_k+1];
+              __frame.saved[desc_k] = plane_desc[desc_k];
             if( plane_count>0 ) {
               pl_b = 0;
               do {
                 pi1 = pl_b;
-                f1 = plane_desc[pl_b+++1].nrefs;
-                plane_desc[pi1+1].flags |= 8*(f1!=0);
+                f1 = plane_desc[pl_b++].nrefs;
+                plane_desc[pi1].flags |= 8*(f1!=0);
               } while( pl_b<plane_count );
             }
             __transform_planes(__frame.tile_img);
@@ -426,13 +426,13 @@ tile_restored:
               cand = 0;
             } else {
               for( desc_k = 0; desc_k<4; ++desc_k )
-                plane_desc[desc_k+1] = __frame.saved[desc_k];
+                plane_desc[desc_k] = __frame.saved[desc_k];
               cand = 0;
             }
           }
         } else {
           for( desc_k = 0; desc_k<4; ++desc_k )
-            plane_desc[desc_k+1] = __frame.saved[desc_k];
+            plane_desc[desc_k] = __frame.saved[desc_k];
         }
       }
     }
@@ -444,13 +444,13 @@ planes_done:
     tile_copy = (uint8_t*)bmf_new(__frame.tile_img->data_size);
     memcpy(tile_copy, (uint8_t*)__frame.tile_src, __frame.tile_img->data_size);
     for( desc_k = 0; desc_k<4; ++desc_k )
-      __frame.saved[desc_k] = plane_desc[desc_k+1];
+      __frame.saved[desc_k] = plane_desc[desc_k];
     if( plane_count>0 ) {
       pl_c = 0;
       do {
         pi4 = pl_c;
-        f3 = plane_desc[pl_c+++1].flags&0xFB;
-        plane_desc[pi4+1].flags = f3;
+        f3 = plane_desc[pl_c++].flags&0xFB;
+        plane_desc[pi4].flags = f3;
       } while( pl_c<plane_count );
     }
     __transform_planes(__frame.tile_img);
@@ -460,18 +460,18 @@ planes_done:
     packer_reset();
     if( bits_b>__frame.best_bits ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
-        plane_desc[desc_k+1] = __frame.saved[desc_k];
+        plane_desc[desc_k] = __frame.saved[desc_k];
     } else {
       __frame.best_bits = bits_b;
       cand = 0;
     }
     if( __frame.n_flagged+__frame.bits_total ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
-        __frame.saved[desc_k] = plane_desc[desc_k+1];
+        __frame.saved[desc_k] = plane_desc[desc_k];
       if( plane_count>0 ) {
         pl_d = 0;
         do
-          plane_desc[pl_d+++1].flags = 0;
+          plane_desc[pl_d++].flags = 0;
         while( pl_d<plane_count );
       }
       memcpy((uint8_t*)__frame.tile_src, tile_copy, __frame.tile_img->data_size);
@@ -484,7 +484,7 @@ planes_done:
         cand = 0;
       } else {
         for( desc_k = 0; desc_k<4; ++desc_k )
-          plane_desc[desc_k+1] = __frame.saved[desc_k];
+          plane_desc[desc_k] = __frame.saved[desc_k];
       }
     }
     free(tile_copy);

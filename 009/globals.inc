@@ -71,16 +71,20 @@ struct PlaneDesc {
   int32_t weight2;
 };
 
-// Five descriptors for four planes: `plane_desc[0]` is not a plane, and the
-// original parked two unrelated globals in the weight fields it left free.  The
-// aliases are kept because the *layout* is the program's -- these two names have
-// to occupy those two words, and `weight0` of the same record carries the
-// version check in `image_expand` for the same reason.
-static PlaneDesc plane_desc[5];
+// Four descriptors for four planes.  There were five: slot 0 was a header slot
+// rather than a plane, and the original parked three unrelated things in the
+// weight words it left free -- `plane_count` and `near_lossless_q` were
+// references onto two of them and the archive version word used the third.
+// All three are their own storage now, which is what let the array lose the
+// slot and every access lose its `+1`.
+static PlaneDesc plane_desc[4];
 
-static int32_t &plane_count = *&plane_desc[0].weight1;
+static int32_t plane_count;
 
-static int32_t &near_lossless_q = *&plane_desc[0].weight2;
+// The near-lossless quantiser: the residual bucket width is `2*q+1`, so `q=0`
+// is lossless.  Fully plumbed through both alternate models and never set to
+// anything but zero -- there is no option that reaches it.
+static int32_t near_lossless_q;
 
 static uint8_t model_geometry[128];
 
@@ -163,10 +167,6 @@ static int32_t mode_symbol[5];
 
 static inline void bmf_zero16(void* p) {
   __builtin_memset(p, 0, 16);
-}
-
-static inline uint8_t*bmf_plane_desc(int32_t off) {
-  return (uint8_t*)&plane_desc[1]+off;
 }
 
 __attribute__((noreturn)) void bmf_fatal(int32_t Code, ...);

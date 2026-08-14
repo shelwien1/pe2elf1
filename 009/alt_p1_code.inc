@@ -30,10 +30,10 @@
 template<int f_DEC>
 int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   int32_t cur3;
-  void* plane[4];
-  AltP1Block*&plane1 = (AltP1Block*&)plane[1];
-  AltP1Block*&plane2 = (AltP1Block*&)plane[2];
-  AltP1Block*&plane3 = (AltP1Block*&)plane[3];
+  // `void* plane[4]` with three `AltP1Block*&` aliases onto slots 1..3 -- the
+  // decompiler's way of saying that a `void*` array is read as blocks.  It is
+  // an array of blocks.
+  AltP1Block* plane[4];
   int32_t cur0, cur1, code1;
   uint8_t pred1, pred2, pred3;
   AltP1Block* made;
@@ -52,16 +52,16 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
       plane[k++] = made;
     } while( k<plane_count );
   }
-  int32_t src1 = plane_desc[2].src_plane;
-  int32_t src2 = plane_desc[3].src_plane;
-  int32_t src3 = plane_desc[4].src_plane;
-  uint8_t fl1 = plane_desc[src1+1].flags;
-  uint8_t fl2 = plane_desc[src2+1].flags;
-  uint8_t fl3 = plane_desc[src3+1].flags;
-  int32_t dc2 = plane_desc[src2+1].dc;
-  int32_t dc1 = plane_desc[src1+1].dc;
+  int32_t src1 = plane_desc[1].src_plane;
+  int32_t src2 = plane_desc[2].src_plane;
+  int32_t src3 = plane_desc[3].src_plane;
+  uint8_t fl1 = plane_desc[src1].flags;
+  uint8_t fl2 = plane_desc[src2].flags;
+  uint8_t fl3 = plane_desc[src3].flags;
+  int32_t dc2 = plane_desc[src2].dc;
+  int32_t dc1 = plane_desc[src1].dc;
   int32_t xf1 = fl1&8;
-  int8_t dc3 = plane_desc[src3+1].dc;
+  int8_t dc3 = plane_desc[src3].dc;
   int32_t xf2 = fl2&8;
   int32_t xf3 = fl3&8;
   if( f_DEC )
@@ -77,7 +77,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
         int32_t p = 0;
         do {
           ++p;
-          AltP1Block *blk_k = (AltP1Block*)plane[p-1];
+          AltP1Block* blk_k = plane[p-1];
           blk_k->advance_row();
           P1Ctx *cursor2 = blk_k->cursor[2];
           P1Ctx *cursor4 = blk_k->cursor[4];
@@ -92,13 +92,13 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
       if( w>0 ) {
         uint32_t x = 0;
         do {
-          AltP1Block* blk0 = (AltP1Block*)plane[0];
-          int32_t off0 = plane_desc[1].src_plane;
+          AltP1Block* blk0 = plane[0];
+          int32_t off0 = plane_desc[0].src_plane;
           if( !f_DEC ) {
-            int32_t want0 = *(buf+plane_desc[1].src_plane);
+            int32_t want0 = *(buf+plane_desc[0].src_plane);
             cur0 = want0;
           }
-          ((AltP1Block*)plane[0])->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
+          plane[0]->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
           if( f_DEC ) {
             code0 = __alt_p1_decode_symbol((uint16_t*)&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
             pred0 = (uint8_t)blk0->pred;
@@ -133,17 +133,17 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           ++blk0->cursor[2];
           ++blk0->cursor[3];
           ++blk0->cursor[4];
-          int32_t off1 = plane_desc[2].src_plane;
+          int32_t off1 = plane_desc[1].src_plane;
           if( f_DEC ) {
-            *(plane_desc[1].src_plane+buf) = cur0;
+            *(plane_desc[0].src_plane+buf) = cur0;
           } else {
-            want1 = *(buf+plane_desc[2].src_plane);
+            want1 = *(buf+plane_desc[1].src_plane);
             if( xf1 )
-              want1 = want1-dc1-*(plane_desc[1].src_plane+buf);
+              want1 = want1-dc1-*(plane_desc[0].src_plane+buf);
             cur1 = want1;
           }
-          AltP1Block *blk1 = (AltP1Block*)(plane1);
-          ((AltP1Block*)plane1)->ctx_of((AltP1Block*)plane[0], (AltP1Block*)0);
+          AltP1Block* blk1 = plane[1];
+          plane[1]->ctx_of(plane[0], (AltP1Block*)0);
           if( f_DEC ) {
             code1 = __alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]].total, blk1->ctx[1]);
             pred1 = (uint8_t)blk1->pred;
@@ -177,19 +177,19 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           ++blk1->cursor[2];
           ++blk1->cursor[3];
           ++blk1->cursor[4];
-          int32_t off2 = plane_desc[3].src_plane;
+          int32_t off2 = plane_desc[2].src_plane;
           if( f_DEC ) {
             int32_t val1x = cur1;
             if( xf1 )
-              val1x += dc1+*(plane_desc[1].src_plane+buf);
-            *(buf+plane_desc[2].src_plane) = val1x;
+              val1x += dc1+*(plane_desc[0].src_plane+buf);
+            *(buf+plane_desc[1].src_plane) = val1x;
           } else {
-            want2 = *(plane_desc[3].src_plane+buf);
+            want2 = *(plane_desc[2].src_plane+buf);
             if( xf2 )
-              want2 = (uint8_t)(want2-dc2-((plane_desc[plane_desc[3].src_plane+1].weight0**(plane_desc[1].src_plane+buf)+plane_desc[plane_desc[3].src_plane+1].weight1*(uint32_t)*(plane_desc[2].src_plane+buf)+40)>>7));
+              want2 = (uint8_t)(want2-dc2-((plane_desc[plane_desc[2].src_plane].weight0**(plane_desc[0].src_plane+buf)+plane_desc[plane_desc[2].src_plane].weight1*(uint32_t)*(plane_desc[1].src_plane+buf)+40)>>7));
           }
-          AltP1Block *blk2 = (AltP1Block*)(plane2);
-          ((AltP1Block*)plane2)->ctx_of((AltP1Block*)plane1, (AltP1Block*)plane[0]);
+          AltP1Block* blk2 = plane[2];
+          plane[2]->ctx_of(plane[1], plane[0]);
           if( f_DEC ) {
             code2 = __alt_p1_decode_symbol((uint16_t*)&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1]);
             pred2 = (uint8_t)blk2->pred;
@@ -224,22 +224,22 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           ++blk2->cursor[4];
           if( f_DEC ) {
             if( xf2 )
-              *(plane_desc[3].src_plane+buf) = ((plane_desc[plane_desc[3].src_plane+1].weight0**(plane_desc[1].src_plane+buf)+plane_desc[plane_desc[3].src_plane+1].weight1*(uint32_t)*(plane_desc[2].src_plane+buf)+40)>>7)+dc2+want2;
+              *(plane_desc[2].src_plane+buf) = ((plane_desc[plane_desc[2].src_plane].weight0**(plane_desc[0].src_plane+buf)+plane_desc[plane_desc[2].src_plane].weight1*(uint32_t)*(plane_desc[1].src_plane+buf)+40)>>7)+dc2+want2;
             else
-              *(plane_desc[3].src_plane+buf) = want2;
+              *(plane_desc[2].src_plane+buf) = want2;
           }
           n_planes = plane_count;
           if( plane_count>=4 ) {
-            int32_t off3 = plane_desc[4].src_plane;
+            int32_t off3 = plane_desc[3].src_plane;
             if( !f_DEC ) {
               if( xf3 )
-                want3 = *(plane_desc[4].src_plane+buf)-dc3-((plane_desc[plane_desc[4].src_plane+1].weight1**(plane_desc[4].src_plane+buf-2)+plane_desc[plane_desc[4].src_plane+1].weight0**(plane_desc[4].src_plane+buf-3)+plane_desc[plane_desc[4].src_plane+1].weight2**(plane_desc[4].src_plane+buf-1)+64)>>7);
+                want3 = *(plane_desc[3].src_plane+buf)-dc3-((plane_desc[plane_desc[3].src_plane].weight1**(plane_desc[3].src_plane+buf-2)+plane_desc[plane_desc[3].src_plane].weight0**(plane_desc[3].src_plane+buf-3)+plane_desc[plane_desc[3].src_plane].weight2**(plane_desc[3].src_plane+buf-1)+64)>>7);
               else
-                want3 = *(plane_desc[4].src_plane+buf);
+                want3 = *(plane_desc[3].src_plane+buf);
               cur3 = want3;
             }
-            AltP1Block *blk3 = (AltP1Block*)(plane3);
-            ((AltP1Block*)plane3)->ctx_of((AltP1Block*)plane2, (AltP1Block*)plane1);
+            AltP1Block* blk3 = plane[3];
+            plane[3]->ctx_of(plane[2], plane[1]);
             if( f_DEC ) {
               code3 = __alt_p1_decode_symbol((uint16_t*)&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1]);
               pred3 = (uint8_t)blk3->pred;
@@ -274,8 +274,8 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
             if( f_DEC ) {
               int32_t val3x = cur3;
               if( xf3 )
-                val3x += ((plane_desc[plane_desc[4].src_plane+1].weight1**(plane_desc[4].src_plane+buf-2)+plane_desc[plane_desc[4].src_plane+1].weight0**(plane_desc[4].src_plane+buf-3)+plane_desc[plane_desc[4].src_plane+1].weight2**(plane_desc[4].src_plane+buf-1)+64)>>7)+dc3;
-              *(plane_desc[4].src_plane+buf) = val3x;
+                val3x += ((plane_desc[plane_desc[3].src_plane].weight1**(plane_desc[3].src_plane+buf-2)+plane_desc[plane_desc[3].src_plane].weight0**(plane_desc[3].src_plane+buf-3)+plane_desc[plane_desc[3].src_plane].weight2**(plane_desc[3].src_plane+buf-1)+64)>>7)+dc3;
+              *(plane_desc[3].src_plane+buf) = val3x;
             }
             n_planes = plane_count;
           }
@@ -295,9 +295,9 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   if( plane_count>0 ) {
     int32_t f = 0;
     do {
-      void** q = (void**)plane[f];
+      AltP1Block* q = plane[f];
       if( q ) {
-        ((AltP1Block*)q)->alt_p1_free(1);
+        q->alt_p1_free(1);
         np = plane_count;
       }
       ++f;
