@@ -713,7 +713,7 @@ struct ModelBlock {
     uint8_t g_a, g_b, g_c, g_d, g_e;
     int32_t n2r;
     int16_t s1c, w1s, s3b;
-    int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, state, pair_last, cap, bucket_at, up_m0, m_w1, nb2, all_up, sig1, id1, sig2, id2, s1a, m_up0, idx1, run, bucket, bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, *recw, flags_word, s3c, s3d, s1d, tot, target, cum, w6a, b15a, w5a, msym3, msym1, msym2, pix1, cache0, cache1, c4, c5, c6, c7, h11, h10, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, h31, psym, bit2, msym1b, lsym, s0b, b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a, span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c, s3a;
+    int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, state, pair_last, cap, bucket_at, up_m0, m_w1, nb2, all_up, sig1, id1, sig2, id2, s1a, m_up0, idx1, run, bucket, bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, *recw, flags_word, s3c, s3d, s1d, tot, target, cum, w6a, b15a, w5a, msym3, msym1, msym2, pix1, cache0, cache1, c4, c5, c6, c7, h11, h10, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, h31, psym, bit2, msym1b, lsym, b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a, span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c, s3a;
     PixRec* row;
     SymPair* pair;
     PixRec* cur6;
@@ -721,7 +721,7 @@ struct ModelBlock {
     PixRec* up5, * r8c;
     uint16_t* pixp, * pixr, q1w, tot2, k0;
     uint32_t si, s2a, k2, k2h;
-    uint16_t k1, g4, g3, g2, g1, g0;
+    uint16_t k1;
     uint16_t k4, k3;
     PixRec* up2;
     PixRec* up1;
@@ -1054,40 +1054,9 @@ struct ModelBlock {
       arg_cum = cum-freq_tbl->w[lvl_a];
       w5a = freq_tbl->w[5];
       if( w5a>w6a&&(freq_tbl->w[lvl_a]+b15a+8<w5a||freq_tbl->w[5]>0x4000u) ) {
-        g2 = freq_tbl->w[2];
-        __frame.sym[0] = w6a;
-        g1 = freq_tbl->w[1];
-        g0 = freq_tbl->w[0];
-        __frame.sym[1] = lvl_a;
-        __frame.sym[2] = b15a;
-        g0 = g0-(g0>>1);
-        freq_tbl->w[0] = g0;
-        g1 = g1-(g1>>1);
-        freq_tbl->w[1] = g1;
-        g2 = g2-(g2>>1);
-        g3 = freq_tbl->w[3];
-        freq_tbl->w[2] = g2;
-        g3 = g3-(g3>>1);
-        g4 = freq_tbl->w[4];
-        freq_tbl->w[3] = g3;
-        g4 = g4-(g4>>1);
-        freq_tbl->w[4] = g4;
-        g1 = g3+g2+g1;
-        b15a = __frame.sym[2];
-        g4 = g0+g4;
-        w5a = (uint16_t)(g4+g1);
-        s0b = __frame.sym[0];
-        lvl_a = __frame.sym[1];
-        freq_tbl->w[5] = w5a;
-        if( s0b<256&&!freq_tbl->b14 ) {
-          s0b = 256;
-          freq_tbl->w[6] = 256;
-        }
-        if( w5a>s0b ) {
-          if( b15a<15 )
-            b15a = 15;
-          freq_tbl->b15 = b15a;
-        }
+        uint8_t kick = (uint8_t)b15a;
+        w5a = freq_tbl->rescale((uint16_t)w6a, kick);
+        b15a = kick;
       }
       freq_tbl->w[5] = b15a+w5a;
       freq_tbl->w[lvl_a] += b15a;
@@ -1314,8 +1283,8 @@ struct ModelBlock {
     int32_t bp;
     uint16_t* id3p;
     int16_t s8, w1s, acc2, s3, g0;
-    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2, cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1, msym1b, w6b, *ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
-    uint16_t w5, w1, h4, h3, h2, w1a, w0;
+    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2, cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1, msym1b, *ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
+    uint16_t w5, w1;
     PixRec* cur5, * cur5p1, * cur5p1b, * r6, * r7;
     uint16_t* wq, * cache, w6;
     uint16_t cache0p;
@@ -1662,40 +1631,9 @@ struct ModelBlock {
         w5a = frec->w[5];
         b15a = frec->b15;
         if( w5a>w6a&&(frec->w[lvl_a]+b15a+8<w5a||frec->w[5]>0x4000u) ) {
-          h2 = frec->w[2];
-          __frame.sym[0] = w6a;
-          w1a = frec->w[1];
-          __frame.sym[1] = lvl_a;
-          w0 = frec->w[0];
-          __frame.sym[2] = b15a;
-          w0 = w0-(w0>>1);
-          frec->w[0] = w0;
-          w1a = w1a-(w1a>>1);
-          frec->w[1] = w1a;
-          h2 = h2-(h2>>1);
-          h3 = frec->w[3];
-          frec->w[2] = h2;
-          h3 = h3-(h3>>1);
-          h4 = frec->w[4];
-          frec->w[3] = h3;
-          h4 = h4-(h4>>1);
-          frec->w[4] = h4;
-          w1a = h3+h2+w1a;
-          b15a = __frame.sym[2];
-          w1a = w0+h4+w1a;
-          lvl_a = __frame.sym[1];
-          w5a = w1a;
-          w6b = __frame.sym[0];
-          frec->w[5] = w5a;
-          if( w6b<256&&!frec->b14 ) {
-            w6b = 256;
-            frec->w[6] = 256;
-          }
-          if( w5a>w6b ) {
-            if( b15a<15 )
-              b15a = 15;
-            frec->b15 = b15a;
-          }
+          uint8_t kick = (uint8_t)b15a;
+          w5a = frec->rescale((uint16_t)w6a, kick);
+          b15a = kick;
         }
         frec->w[5] = b15a+w5a;
         frec->w[lvl_a] += b15a;

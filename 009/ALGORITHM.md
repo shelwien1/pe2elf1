@@ -18,7 +18,7 @@ decided partly by the BMP subformat and partly by trial encoding.
 ## 1. The container
 
 A `.bmf` holds **one image**. `bmf c in.bmp out` writes it and `bmf d in
-out.bmp` reads it back; `arc.inc` opens `"wb"` and `"rb"`.
+out.bmp` reads it back; `file.inc` opens `"wb"` and `"rb"`.
 
 The donor's was an archive — several images in one file, because its command
 line took a list of them and appended each to the archive named by `-o`, and

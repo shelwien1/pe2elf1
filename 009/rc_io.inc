@@ -71,37 +71,29 @@ uint16_t*__rc_begin() {
       alt_freq_limit = 16;
       alt_freq_init = 64;
     }
-    level_geom[2].first = 2;
+    // Six levels of a binary symbol tree, laid out end to end.  Level `lvl`
+    // holds `2^(lvl-2)` pairs, starts at `first`, and its frequency table
+    // starts at `first - lvl` -- except level 2, whose base is 0 rather than
+    // -2, and levels 2 and 3, whose `first` the original wrote as constants
+    // because the recurrence has not started yet.  `model_geometry[i]` is the
+    // level that owns slot `i`.
+    //
+    // The decompilation wrote all six out, with `at4`..`at7` naming the running
+    // offset at four of them and the other two folded into constants.
     model_geometry[0] = 0;
     model_geometry[1] = 1;
-    model_geometry[2] = 2;
-    model_geometry[3] = 2;
-    level_geom[2].tbl_base = 0;
     level_geom[2].half = 1;
-    level_geom[3].half = 2;
-    level_geom[3].first = 4;
-    level_geom[3].tbl_base = 1;
-    memset(&model_geometry[4], 3, 4);
-    level_geom[4].half = 4;
-    int32_t at4 = 2*level_geom[3].half+4;
-    level_geom[4].first = 2*level_geom[3].half+4;
-    level_geom[4].tbl_base = 2*level_geom[3].half;
-    memset(&model_geometry[at4], 4, 8);
-    level_geom[5].half = 8;
-    int32_t at5 = at4+2*level_geom[4].half;
-    level_geom[5].first = at5;
-    level_geom[5].tbl_base = at5-5;
-    memset(&model_geometry[at5], 0x05, 16);
-    level_geom[6].half = 16;
-    int32_t at6 = at5+2*level_geom[5].half;
-    level_geom[6].first = (uint8_t)at6;
-    level_geom[6].tbl_base = (uint8_t)at6-6;
-    memset(&model_geometry[at6], 0x06, 32);
-    level_geom[7].half = 32;
-    int32_t at7 = at6+2*level_geom[6].half;
-    level_geom[7].first = (uint8_t)at7;
-    level_geom[7].tbl_base = (uint8_t)at7-7;
-    memset(&model_geometry[at7], 0x07, 64);
+    level_geom[2].first = 2;
+    level_geom[2].tbl_base = 0;
+    memset(&model_geometry[2], 2, 2);
+    int32_t slot = 4;
+    for( int32_t lvl = 3; lvl<8; ++lvl ) {
+      level_geom[lvl].half = 1<<(lvl-2);
+      level_geom[lvl].first = (uint8_t)slot;
+      level_geom[lvl].tbl_base = (uint8_t)slot-lvl;
+      memset(&model_geometry[slot], lvl, 2*level_geom[lvl].half);
+      slot += 2*level_geom[lvl].half;
+    }
     tbl = (uint16_t*)bmf_new(0x7F000u);
     if( tbl ) {
       int32_t k = 0;

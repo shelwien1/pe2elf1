@@ -184,7 +184,7 @@ LAYOUT = [
                      'ModelBlock::code_pixel', 'ModelBlock::expand_alphabet',
                      'ModelBlock::unmodel_plane_slow']),
  ('bmp.inc',        ['BmfImage', 'BmpHeader', 'bmf_pixels', '__alloc_image']),
- ('arc.inc',        ['BmfArc', 'BmfArc::bmf_close_archive', '__bmf_open_archive',
+ ('file.inc',        ['BmfArc', 'BmfArc::bmf_close_archive', '__bmf_open_archive',
                      '__bmf_destroy_archive', '__bytes_left']),
  # the range coder's file-level ends, which are not the coder itself
  ('rc_io.inc',       ['__rc_decode_flat', '__rc_end_decode', '__rc_end_encode',
@@ -337,7 +337,7 @@ WHAT = {
  'alt_p2_block.inc': 'the alternate model for deep planes: its counters, its frequency\nrecords and the block they live in',
  'model.inc': 'the main model.  One pixel in and one pixel out are the two largest\nbodies in the program, and they are methods of the block they read',
  'bmp.inc': 'the BMP file, as this program holds it in memory',
- 'arc.inc': 'the archive: several images in one file, which is what appending a\nmember to an existing output makes',
+ 'file.inc': 'the archive: several images in one file, which is what appending a\nmember to an existing output makes',
  'rc_io.inc': "the range coder's file ends -- what it writes before a stream and what\nit reads after one.  The coder itself is rc.inc",
  'sym_code.inc': 'the symbol trees: a symbol through a tree of binary counters, both\nways, for both models',
  'sym_list_decode.inc': 'read back the alphabet an encoder wrote',

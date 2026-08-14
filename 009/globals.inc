@@ -1,6 +1,11 @@
 // globals.inc -- the program's state, and the exit codes it answers with.  The small
 // structs are here rather than with the classes because globals are declared in
 // terms of them.
+//
+// `alignas(16)` on a scalar is not a request: these sat in BMF.exe's data
+// segment at sixteen-byte boundaries because the code around them loaded them
+// with SSE, and the recovery keeps the alignment so that a build which still
+// does can.
 
 __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...) {
   va_list ap;
@@ -46,6 +51,11 @@ struct PlaneDesc {
   int32_t weight2;
 };
 
+// Five descriptors for four planes: `plane_desc[0]` is not a plane, and the
+// original parked two unrelated globals in the weight fields it left free.  The
+// aliases are kept because the *layout* is the program's -- these two names have
+// to occupy those two words, and `weight0` of the same record carries the
+// version check in `image_expand` for the same reason.
 static PlaneDesc plane_desc[5];
 
 static int32_t &plane_count = *&plane_desc[0].weight1;

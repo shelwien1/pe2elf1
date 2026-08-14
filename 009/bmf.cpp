@@ -21,10 +21,10 @@
 // second, so `read_bmp.inc` is `bmp_read.inc` and its partner is beside it
 // rather than fifteen entries away.
 //
-// The eight files that join no run -- `arc`, `bitctr`, `ctxidx`, `decls`,
-// `globals`, `ida`, `memory`, `tables` -- kept their names.  A prefix invented
-// for one file groups nothing, and renaming to a scheme rather than to a
-// neighbour is how a naming convention stops meaning anything.
+// The eight files that join no run -- `bitctr`, `ctxidx`, `decls`, `file`,
+// `globals`, `ida`, `memory`, `tables` -- have no run to join.  A prefix
+// invented for one file groups nothing, and renaming to a scheme rather than
+// to a neighbour is how a naming convention stops meaning anything.
 //
 // ## the encode/decode pairs
 //
@@ -76,7 +76,7 @@
 #include "alt_p2_block.inc"
 #include "model.inc"
 #include "bmp.inc"
-#include "arc.inc"
+#include "file.inc"
 #include "rc_io.inc"
 #include "sym_code.inc"
 #include "sym_list_decode.inc"
@@ -102,7 +102,7 @@
 
 void __bmf_compress(const char* InName, const char* OutName) {
   int32_t i;
-  BmfArc* Arc;
+  BmfFile* Arc;
   FILE* fp = fopen(InName, "rb");
   if( !fp )
     __exit_402E40(6, InName);
@@ -112,8 +112,8 @@ void __bmf_compress(const char* InName, const char* OutName) {
     __exit_402E40(4);
   BmfImage*const p_i_img = (BmfImage*)p_i;
   printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i_img->width, p_i_img->height, p_i_img->depth&0x3F, p_i_img->data_size);
-  if( void* __nb = bmf_new(sizeof(BmfArc)) )
-    Arc = __bmf_open_archive((BmfArc*)__nb, (char*)OutName, 0);
+  if( void* __nb = bmf_new(sizeof(BmfFile)) )
+    Arc = __bmf_open_file((BmfFile*)__nb, (char*)OutName, 0);
   else
     Arc = nullptr;
   int32_t Flags = p_i_img->depth;
@@ -142,9 +142,9 @@ void __bmf_compress(const char* InName, const char* OutName) {
 }
 
 void __bmf_decompress(const char* InName, const char* OutName) {
-  BmfArc* arc;
-  if( void* __nb = bmf_new(sizeof(BmfArc)) )
-    arc = __bmf_open_archive((BmfArc*)__nb, (char*)InName, 1);
+  BmfFile* arc;
+  if( void* __nb = bmf_new(sizeof(BmfFile)) )
+    arc = __bmf_open_file((BmfFile*)__nb, (char*)InName, 1);
   else
     arc = nullptr;
   uint32_t* p_i = (uint32_t*)__expand_image(arc, &coded_block);
@@ -164,7 +164,7 @@ void __bmf_decompress(const char* InName, const char* OutName) {
   free(coded_block);
   coded_block = nullptr;
   free(p_i);
-  __bmf_destroy_archive(arc, 1);
+  __bmf_close_file(arc, 1);
 }
 
 

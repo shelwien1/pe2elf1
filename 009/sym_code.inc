@@ -269,6 +269,17 @@ int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {
   return tot;
 }
 
+// The histogram's entropy, in bits, as one number:
+//
+//     (N*ln N - sum of n_i*ln n_i) * log2(e)
+//
+// which is `N * H(p)` -- the total cost of coding N symbols with these
+// frequencies, not the per-symbol cost.  Both decision bodies compare
+// candidates through this and nothing else.
+//
+// The two accumulators over even and odd bins are the original's pairing, for
+// a two-lane SSE add that is not here any more; they change the rounding of
+// the sum and nothing else.
 int32_t __estimate_cost(uint8_t* bins, int32_t n) {
   const int32_t* bin = (const int32_t*)bins;
   double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;

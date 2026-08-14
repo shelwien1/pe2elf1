@@ -4,13 +4,13 @@
 // return nullptr;` out, which is ten places a reader has to check that the file
 // was actually closed.  Returning it lets each site say `return
 // __expand_fail(arc);` and be one statement.
-static uint8_t*__expand_fail(BmfArc* arc) {
+static uint8_t*__expand_fail(BmfFile* arc) {
   fclose(arc->fp);
   arc->fp = nullptr;
   return nullptr;
 }
 
-uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
+uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   struct alignas(16) ExpandImageFrame {
     uint8_t* Block;
     union {
@@ -25,7 +25,7 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
     };
     int32_t nplanes_s;
     void* row_step;
-    BmfArc* arc_f;
+    BmfFile* arc_f;
     BmfImage* p_i_2;
     int32_t depth_f;
     uint32_t pal_len;
@@ -37,7 +37,7 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
     uint32_t magic_word;
     uint8_t _pad0[32];
   } __frame;
-  BmfArc* arc;
+  BmfFile* arc;
   FILE* fp1, * fp;
   BmfImage* img_at;
   uint8_t bpp, has_coded, dc_v;

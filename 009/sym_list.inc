@@ -10,6 +10,30 @@ struct FreqRec {
       uint8_t b15;
     };
   };
+
+  // Halve the five selector weights and re-sum them into `w[5]`, raising the
+  // escape floor and the increment if the halving left them too small.
+  //
+  // The two pixel bodies wrote this out, thirty lines each, with the five
+  // halvings interleaved against each other and three of the locals spilled
+  // through the frame -- `__frame.sym[0..2]` held `w[6]`, the level and `b15`
+  // across the middle of it.  Both copies also re-read `w[5]` afterwards to add
+  // `b15`, which is why this returns the new sum instead of only storing it.
+  uint16_t rescale(uint16_t escape_floor, uint8_t& kick) {
+    for( int32_t i = 0; i<5; ++i )
+      w[i] -= w[i]>>1;
+    uint16_t sum = (uint16_t)(w[0]+w[1]+w[2]+w[3]+w[4]);
+    w[5] = sum;
+    if( escape_floor<256&&!b14 ) {
+      escape_floor = 256;
+      w[6] = 256;
+    }
+    if( sum>escape_floor&&kick<15 ) {
+      kick = 15;
+      b15 = kick;
+    }
+    return sum;
+  }
 };
 
 #pragma pack(push, 1)

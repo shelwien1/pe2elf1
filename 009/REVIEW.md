@@ -163,12 +163,12 @@ counter someone can check against a known one.
 
 ## The BMP file
 
-### `arc.inc` — 49 lines
+### `file.inc` — 49 lines
 
 **Everything in it is still named after an archive that no longer exists.** The
 header says so plainly and well — the donor put several images in one file, the
 walk and the append point and the member count are all gone — but the names did
-not follow the explanation: the file is `arc.inc`, the struct is `BmfArc`, and
+not follow the explanation: the file is `file.inc`, the struct is `BmfArc`, and
 the three functions are `__bmf_open_archive`, `__bmf_destroy_archive` and
 `bmf_close_archive`, for a struct that is now
 

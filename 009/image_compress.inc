@@ -1,6 +1,6 @@
 // image_compress.inc -- one image into one.
 
-int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
+int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   BmfImage hdr;
   int32_t plane_n;
   int32_t row_step;
@@ -20,7 +20,7 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   uint16_t w16;
   uint32_t pal_bytes, word_flags, word_dc, word_w4, word_w8, word_w12, n_pix, written;
   uint8_t ok, * dst, ok_raw;
-  BmfArc* arc = arc_in;
+  BmfFile* arc = arc_in;
   if( !arc_in->fp )
     return 0;
   // The walk that was here read every member already in the output and left
