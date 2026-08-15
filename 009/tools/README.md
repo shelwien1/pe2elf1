@@ -485,6 +485,7 @@ them run.
 | `p1bump.py` | Fold `update_model`'s counter bumps into `CounterNode::bump` | yes |
 | `p2freq.py` | Fold `alt_p2_model`'s rescale-then-bump pairs into `p2_freq_add` | yes |
 | `p2update.py` | Fold `alt_p2_model`'s written-out counter updates into `p2_update` | yes |
+| `pairshare.py` | Re-measure the encode/decode pairs bmf.cpp says it declined to merge | yes |
 | `perf.sh` | Gate C: has this change made the program slower? |  |
 | `planedesc.py` | Take `plane_desc`'s header slot out, and re-index the four planes onto zero | yes |
 | `proven.sh` | Which tools' answers depend on the file at all? |  |

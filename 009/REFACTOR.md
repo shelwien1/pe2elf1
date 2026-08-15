@@ -218,10 +218,14 @@ them adds nesting rather than removing it.
     accumulator they read -- so table-driving them needs the per-candidate cost
     body extracted first, and that body reaches six locals of the enclosing
     frame.  It is a real piece of work, not a mechanical one.
+    *(Done later in the round.  What it was waiting on was `deadparam.py`
+    missing four numbered `unread` parameters, not the six locals.)*
   * `alt_p2_model`'s per-bank counter walk and its magnitude coding -- 311 and
     220 of that function's 635 lines.  Both are single loops already; extracting them means threading
     about thirty locals through a signature, and a thirty-parameter method is
     not an improvement over a labelled block.
+    *(Done later in the round.  "About thirty locals" was a guess; the compiler
+    said 33, and not one of them is read after the loop, so they moved.)*
   * the `CodedStream` / session-object consolidation of the coder's globals.
     This is the largest single item left in the plan and the one with the
     widest blast radius; it wants its own round with its own gate budget.
@@ -542,6 +546,18 @@ number names one function, which is the form the tool can check.
 
 ### still open
 
-  * `alt_p2_model`'s magnitude coding is done; nothing named in the plan is
-    left.  What the tools still report is in the sweep, and the sweep is at
-    zero.
+Nothing the plan named is left.  What the tools report is in the sweep, and the
+sweep is at zero.
+
+**A table of measurements that had all gone wrong.**  Five encode/decode pairs
+were measured for shared lines and declined for merging, and the five numbers
+sit in a comment at the top of `bmf.cpp`.  Every one of them had drifted:
+`predict_med`/`unpredict_med` was recorded at 24 shared lines of 152 and is 10
+of 123; `code_pixel`/`decode_pixel` at 179 of 1229 is 144 of 1036.  None of the
+five changes the decision -- they are all still far below anything that would
+argue for a merge -- which is exactly why nobody re-took them.
+
+`tools/pairshare.py` reads that table out of the comment and re-measures it, so
+the next round that shortens one of those bodies is told.  Proved it can report
+before trusting its zero: a one-line perturbation and a renamed body are both
+named, and it goes quiet when they are put back.

@@ -40,13 +40,16 @@
 //
 // Five pairs were measured and declined.  What they share is not the body --
 // it is the declaration block and the loop scaffolding -- and folding them
-// would put two unrelated algorithms behind one `if`:
+// would put two unrelated algorithms behind one `if`.  `tools/pairshare.py`
+// re-measures this table and reports any line of it that has drifted; the
+// numbers below were all wrong by the time it was written, which is why it
+// exists.
 //
-//   alt_model_p2_encode/decode     130 of 646 lines shared (20%)
-//   code_pixel/decode_pixel          179 of 1229 (14%)
-//   predict_med/unpredict_med     24 of 152 (15%)
-//   alt_model_p1_d8_encode/decode    6 of 98 (6%)
-//   model_plane/unmodel_plane     10 of 271 (3%)
+//   alt_model_p2_encode / alt_model_p2_decode        124 of 598 (21%)
+//   code_pixel / decode_pixel                        144 of 1036 (14%)
+//   predict_med / unpredict_med                       10 of 123 (8%)
+//   alt_model_p1_d8_encode / alt_model_p1_d8_decode     8 of 60 (13%)
+//   model_plane / unmodel_plane                       12 of 258 (5%)
 //
 // Every merge was gated on its own -- the fifteen streams byte for byte, at
 // both pointer widths -- and then all nine were instrumented and run over the
