@@ -11,6 +11,24 @@ static constexpr uint8_t depth_palette = 0x80;   // a palette follows the pixels
 static constexpr uint8_t flags_transposed = 0x02;// width and height are swapped
 static constexpr uint8_t flags_packed = 0x40;    // rows are packed sub-byte
 
+// A BMP palette entry is four bytes -- blue, green, red, and a zero reserved
+// byte -- so little-endian makes the word `0x00RRGGBB`.  The image carries its
+// own palette as three-byte BGR triples in that same order, so writing one out
+// is a widening by one zero byte, and the shift chains at the call sites showed
+// that rather than saying it.
+//
+// Taking the three channels by name is the point: `(pal[2]<<16)|*(uint16_t*)&pal[0]`
+// reads as a two-byte load with a byte on top, and which byte is which is left
+// to the reader.
+static inline uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {
+  return (uint32_t)r<<16|(uint32_t)g<<8|b;
+}
+
+// One level of a grey ramp: the same value in all three channels.
+static inline uint32_t bmp_grey_entry(uint8_t level) {
+  return bmp_palette_entry(level, level, level);
+}
+
 struct BmfImage {
   uint16_t width;
   uint16_t height;

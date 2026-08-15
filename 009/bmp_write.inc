@@ -47,8 +47,8 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           uint32_t k = 0;
           int32_t grey = 0;
           do {
-            *(uint32_t*)&out_buf[8*k+54] = ((uint8_t)grey<<16)|(uint8_t)grey|((uint8_t)grey<<8);
-            *(uint32_t*)&out_buf[8*k+58] = ((uint8_t)(grey-levels+2*levels)<<16)|(uint8_t)(grey-levels+2*levels)|((uint8_t)(grey-levels+2*levels)<<8);
+            *(uint32_t*)&out_buf[8*k+54] = bmp_grey_entry((uint8_t)grey);
+            *(uint32_t*)&out_buf[8*k+58] = bmp_grey_entry((uint8_t)(grey+levels));
             grey += 2*levels;
             ++k;
           } while( k<(uint32_t)(ncol/2) );
@@ -57,7 +57,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           at = 1;
         }
         if( (at-1)<(uint32_t)ncol )
-          *(uint32_t*)&out_buf[4*at+50] = ((uint8_t)(levels*(at-1))<<16)|(uint8_t)(levels*(at-1))|((uint8_t)(levels*(at-1))<<8);
+          *(uint32_t*)&out_buf[4*at+50] = bmp_grey_entry((uint8_t)(levels*(at-1)));
       }
       pal_bytes = 4*ncol;
     } else if( depth_flags<0 ) {
@@ -74,10 +74,9 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           const uint8_t *pal = img->palette();
           do {
             uint32_t slot = 2*j;
-            int32_t bgr = *(uint16_t*)&pal[6*j+3];
-            int32_t r = pal[6*j+5];
-            *(uint32_t*)&out_buf[4*slot+54] = (pal[6*j+2]<<16)|*(uint16_t*)&pal[6*j];
-            *(uint32_t*)&out_buf[4*slot+58] = (r<<16)|bgr;
+            const uint8_t *e0 = &pal[6*j], *e1 = &pal[6*j+3];
+            *(uint32_t*)&out_buf[4*slot+54] = bmp_palette_entry(e0[0], e0[1], e0[2]);
+            *(uint32_t*)&out_buf[4*slot+58] = bmp_palette_entry(e1[0], e1[1], e1[2]);
             ++j;
           } while( j<pairs );
           rle_on = want_rle;
@@ -90,9 +89,8 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         if( (at2-1)<(uint32_t)ncol ) {
           // The odd colour the loop above did not reach.  `done` is one past
           // the last pair it wrote, so `3*done-3` is that entry's first byte.
-          const uint8_t *pal2 = img->palette();
-          int32_t bgr2 = *(uint16_t*)&pal2[3*done-3];
-          *(uint32_t*)&out_buf[4*done+50] = ((pal2[3*done-1])<<16)|bgr2;
+          const uint8_t *e = img->palette()+3*done-3;
+          *(uint32_t*)&out_buf[4*done+50] = bmp_palette_entry(e[0], e[1], e[2]);
         }
         pal_bytes = 4*ncol;
       }
