@@ -16,9 +16,12 @@ landed on a tree that had had two cleanup rounds already.  Where the plan
 described something that was no longer there, that is said below rather than
 quietly counted as done.
 
-Every item was gated on the fifteen streams byte for byte at both pointer
-widths -- `./build.sh && ./test.sh`, now 110 checks over 17 images, and
-`tools/x32.sh`, 23 of 23.
+Every item was gated on the streams byte for byte at both pointer widths --
+`./build.sh && ./test.sh`, now 110 checks over 17 images, and `tools/x32.sh`,
+23 of 23.  Re-run at the end over the whole round: ASan clean across 44 runs of
+19 images, `hdrscan.sh` clean across 8,704, `fuzz.sh` 200 mutants with no
+report and no allocator complaint, `tools/sweep.sh` with every counting tool at
+zero, and the compiler at zero warnings -- from four when the plan arrived.
 
 ---
 
