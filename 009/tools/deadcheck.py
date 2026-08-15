@@ -55,7 +55,7 @@ SUBSYSTEM_ROOTS = ('alt_model_p1_encode', 'alt_model_p1_decode',
 # Outside that set but pinned for the same reason: expand_image calls
 # unpredict_med from two places and both guard on the predictor being 1 -- the
 # second through a copy of it stored and reloaded through p_i.
-ALSO_PINNED = ('__unpredict_med', '__sub_410310')
+ALSO_PINNED = ('unpredict_med', '__sub_410310')
 
 
 def call_graph(lines):

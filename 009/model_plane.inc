@@ -1,6 +1,6 @@
 // model_plane.inc -- one plane through the main model.
 
-void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   ModelBlock* blk;
   int16_t w2n;
   uint32_t row_w;
@@ -11,14 +11,14 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   if( plane_alt_model ) {
     if( plane_predictor==1 ) {
       if( (p_i->depth&depth_bits)==8 )
-        __alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
+        alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
-        __alt_model_p1_encode((uint16_t*)p_i, pixels);
+        alt_model_p1_encode((uint16_t*)p_i, pixels);
     } else if( plane_predictor==2 ) {
       if( (p_i->depth&depth_bits)==8 )
-        __alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
+        alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
-        __alt_model_p2_encode(p_i, pixels);
+        alt_model_p2_encode(p_i, pixels);
     }
   } else {
     void* ws = bmf_new(sizeof(ModelBlock));
@@ -26,8 +26,8 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       blk = ((ModelBlock*)ws)->layout_workspace(p_i->width, p_i->height, p_i->depth&depth_bits);
     else
       blk = (ModelBlock*)(0);
-    __rc_begin_encode();
-    __reduce_alphabet(blk, pixels);
+    rc_begin_encode();
+    reduce_alphabet(blk, pixels);
     int32_t bucket = 0;
     int32_t g = 0;
     do {
@@ -236,7 +236,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         }
       } while( (uint32_t)y<*(uint32_t*)&blk->height );
     }
-    __rc_end_encode();
+    rc_end_encode();
     blk->free_workspace(1);
   }
 }

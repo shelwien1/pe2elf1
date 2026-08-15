@@ -7,7 +7,7 @@
 // quantiser: at `E = 0` that is one and the mapping is the plain zigzag above.
 // Nothing else in this build sets `near_lossless_q`, so the bucket arithmetic
 // is present, correct and never exercised with a width above one.
-uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold) {
+uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
   uint8_t even, odd;
   uint32_t done;
   int32_t in_bucket, bucket;
@@ -76,7 +76,7 @@ uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold) {
   return b;
 }
 
-void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   AltP1Block *blk;
   AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
   if( raw )
@@ -88,14 +88,14 @@ void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* 
     blk->alt_p1_free(1);
 }
 
-void __alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
+void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
   AltP1Block *blk;
   AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
   if( raw )
     blk = raw->alt_p1_alloc(i, height, 0);
   else
     blk = nullptr;
-  __rc_begin_decode();
+  rc_begin_decode();
   if( blk->height>0 ) {
     int32_t y = 0;
     do {
@@ -113,7 +113,7 @@ void __alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
         do {
           ++x;
           blk->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
-          int32_t code = __alt_p1_decode_symbol(&blk->counters[blk->ctx[0]], blk->ctx[1]);
+          int32_t code = alt_p1_decode_symbol(&blk->counters[blk->ctx[0]], blk->ctx[1]);
           int32_t val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
           *out_at = val;
           int32_t err = val-blk->pred;
@@ -134,6 +134,6 @@ void __alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
       }
     } while( y<blk->height );
   }
-  __rc_end_decode();
+  rc_end_decode();
   blk->alt_p1_free(1);
 }

@@ -2,7 +2,7 @@
 """Give a frame member the type its readers cast it to.
 
     python3 tools/unmemcast.py subs1.hpp --list
-    python3 tools/unmemcast.py subs1.hpp __read_bmp Size int32_t
+    python3 tools/unmemcast.py subs1.hpp read_bmp Size int32_t
 
 REFACTORING4.md §5 item 2's second half.  Folding the aliases left casts where
 round three had declared a member as storage and the body read a type:

@@ -11,8 +11,8 @@ binary, and a fossil in a C++ program where every one of these functions is
 static and has two or three call sites.
 
 **It has to reach a fixpoint.**  Four of the sixteen are not unused: they are
-*forwarded*.  `__alt_model_p1_d8_decode` reads `unread_flag` exactly once, to
-pass it to `__rc_begin_decode`, which does not read it at all.  Drop the leaf
+*forwarded*.  `alt_model_p1_d8_decode` reads `unread_flag` exactly once, to
+pass it to `rc_begin_decode`, which does not read it at all.  Drop the leaf
 and the forwarder becomes a leaf; drop that and its caller does.  Doing one
 pass over the sixteen removes seven and leaves a chain of nine looking
 load-bearing, which is how a tool talks you out of the work it was written for.
@@ -50,7 +50,7 @@ import glob
 # nothing about while looking like it had checked everything.
 DEF = re.compile(r'^[ \t]*([A-Za-z_][\w:*&<>, ]*?[\s*&:])(\w+)\(([^;{)]*)\)\s*\{', re.M)
 # `unread_flag` and `unread4` alike.  The first version required the
-# underscore and so never saw `__cost_candidate`'s four numbered ones, which is
+# underscore and so never saw `cost_candidate`'s four numbered ones, which is
 # a whole function's worth of fossil the tool reported nothing about.
 DEAD = re.compile(r'\b(unread\w*|unused\w*)\b')
 # A call, an increment, or an assignment.  `(uint8_t*)x` is a cast and not a
@@ -171,7 +171,7 @@ def main():
     # One at a time, re-deriving the list after each.  Dropping a parameter
     # renumbers the ones to its right, so a list computed once and walked is
     # right for its first entry and wrong for the rest -- which cost two of
-    # `__choose_plane_coding`'s and `__expand_predictor_mode0`'s the first time
+    # `choose_plane_coding`'s and `expand_predictor_mode0`'s the first time
     # this was written, silently, because a stale index still points at *an*
     # argument.
     while True:

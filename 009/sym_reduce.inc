@@ -1,6 +1,6 @@
 // sym_reduce.inc -- drop the symbols an image does not use, and renumber what is left.
 
-// The whole of `__reduce_alphabet`'s working set, at file scope so that its two
+// The whole of `reduce_alphabet`'s working set, at file scope so that its two
 // arms can be two functions.  `liftframe.py` has tried lifting this frame and
 // reverted it -- the lifted build aborts on DLRAW while compressing -- so the
 // struct stays exactly as it is; only its scope moves.
@@ -151,7 +151,7 @@ static void reduce_narrow_alphabet(ReduceAlphabetFrame& f, ModelBlock* blk1, uin
   }
 }
 
-void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
+void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   ReduceAlphabetFrame __frame;
   ModelBlock* blk1, * blk4;
   uint32_t alpha_n, done, done2, off, slot_a, sym_bits;
@@ -332,7 +332,7 @@ lists_ready:
       newbuf = bmf_new(2*blk1->height*blk1->width);
       __frame.tmp = __frame.slot[1];
       blk1->sym_word = (uint16_t*)newbuf;
-      __reduce_alphabet(blk1, (uint8_t*)__frame.tmp);
+      reduce_alphabet(blk1, (uint8_t*)__frame.tmp);
       free((__frame.slot[1]));
     } else {
       if( 4*n_kids ) {

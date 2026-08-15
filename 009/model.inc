@@ -277,7 +277,7 @@ struct ModelBlock {
     cap = mask+1;
     if( bits>8 )
       cap = no_symbol+1;
-    uint32_t n_1 = __rc_decode_flat(cap);
+    uint32_t n_1 = rc_decode_flat(cap);
     alphabet = n_1+1;
     if( (int32_t)(n_1+1)<=0x2000 ) {
       void* codes = bmf_new(sizeof(uint32_t)*(n_1+1));
@@ -306,7 +306,7 @@ struct ModelBlock {
             if( nbytes ) {
               uint32_t b = 0;
               do {
-                uint32_t piece = __decode_symbol_list(&lists[4*b+carry]);
+                uint32_t piece = decode_symbol_list(&lists[4*b+carry]);
                 carry = piece>>6;
                 sym_code[s] += piece<<((8*b)&31);
                 ++b;
@@ -323,7 +323,7 @@ struct ModelBlock {
           int32_t run = 0;
           uint32_t s2 = 0;
           do {
-            int32_t gap = __decode_symbol_list(&lists[0]);
+            int32_t gap = decode_symbol_list(&lists[0]);
             sym_code[s2] = gap+run;
             run += gap+1;
             ++s2;
@@ -360,7 +360,7 @@ struct ModelBlock {
     PixRec* lists, * t;
     dst_keep = dst;
     dst_base = &dst[-(depth<8)];
-    __rc_begin_decode();
+    rc_begin_decode();
     expand_alphabet();
     this_1 = this;
     g1 = 0;
@@ -640,7 +640,7 @@ struct ModelBlock {
       goto next_list;
     }
   list_done:
-    __rc_end_decode();
+    rc_end_decode();
     bpp_raw = blk->depth_raw;
     if( (uint32_t)bpp_raw!=blk->depth ) {
       nchunk = (bpp_raw+7)>>3;
@@ -1224,7 +1224,7 @@ struct ModelBlock {
       if( sel_p>&escape_list )
         bmf_fatal(bmf_read_error);
       if( (*sel_p)->live ) {
-        lsym = __decode_symbol_list(*sel_p);
+        lsym = decode_symbol_list(*sel_p);
         row_cur[5]->sym = lsym;
         if( lsym>=0 )
           return idx_t+1;

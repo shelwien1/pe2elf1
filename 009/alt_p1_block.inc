@@ -185,7 +185,7 @@ struct AltP1Block {
 
   void d8_encode_body(uint8_t* src, uint8_t* out) {
     int32_t code;
-    __rc_begin_encode();
+    rc_begin_encode();
     if( height>0 ) {
       int32_t y = 0;
       do {
@@ -214,7 +214,7 @@ struct AltP1Block {
             } else {
               *q = recon;
             }
-            __alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
+            alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
             int32_t val = (uint8_t)*q;
             int32_t err = val-pred;
             cursor[0]->sym = val;
@@ -235,7 +235,7 @@ struct AltP1Block {
         }
       } while( (uint32_t)y<*(uint32_t*)&height );
     }
-    __rc_end_encode();
+    rc_end_encode();
   }
 
   // One selector's counters, and there are nine of them -- `ctx_w[0]` through
@@ -322,14 +322,14 @@ struct AltP1Block {
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, 11);
       if( slot_f>=5 )
-        __update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+node_up[1].escape_bias(slot_f)), (int32_t)(code_f-5)>>1);
+        update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+node_up[1].escape_bias(slot_f)), (int32_t)(code_f-5)>>1);
     }
     if( result&7 ) {
       CounterNode *node_dn = &counters[result];
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, 13);
       if( slot_f>=5 )
-        __update_binary_pair(model_strip(128*(uint32_t)(slot_f&1)+(uint32_t)ctx_dn+node_dn[-1].escape_bias(slot_f)), tree_sym);
+        update_binary_pair(model_strip(128*(uint32_t)(slot_f&1)+(uint32_t)ctx_dn+node_dn[-1].escape_bias(slot_f)), tree_sym);
     }
     if( counters[result].total<0xCCCu ) {
       if( (result&7u)<7 ) {
@@ -341,8 +341,8 @@ struct AltP1Block {
       if( slot_f>=5 ) {
         uint32_t bias = counters[result].escape_bias(slot_f);
         uint32_t key = ctx[1]+bias+((slot_f&1)<<7);
-        if( (key&0x38)>=0x38||(__update_binary_pair(model_strip(128*(slot_f&1)+ctx[1]+bias+8), tree_sym), (key&0x38)!=0) ) {
-          __update_binary_pair(model_strip(key-8), tree_sym);
+        if( (key&0x38)>=0x38||(update_binary_pair(model_strip(128*(slot_f&1)+ctx[1]+bias+8), tree_sym), (key&0x38)!=0) ) {
+          update_binary_pair(model_strip(key-8), tree_sym);
         }
       }
       // The nine selectors.  `update_selector` is what the decompilation
@@ -359,7 +359,7 @@ struct AltP1Block {
     width = img_w;
     height = img_h;
     do
-      __init_counter_node(&counters[ctr++]);
+      init_counter_node(&counters[ctr++]);
     while( ctr<0x99C60 );
     pred = 0;
     lvl = 0;
@@ -418,7 +418,7 @@ struct AltP1Block {
     do
       buf[row++] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+10));
     while( row<5 );
-    __alt_init_tables(fold, (int8_t*)unfold);
+    alt_init_tables(fold, (int8_t*)unfold);
     wid = width;
     if( width>-10 ) {
       int32_t r = 0;
@@ -449,7 +449,7 @@ struct AltP1Block {
   // leaving the object pointer in the return register, not a value anyone
   // wanted -- and after the `free(this)` above it is a dangling pointer that
   // g++ reports under `-Wuse-after-free`.  All three call sites discarded it;
-  // the one that did not, `__alt_model_p1_d8_decode`, only passed it on to
+  // the one that did not, `alt_model_p1_d8_decode`, only passed it on to
   // another caller that did.
   void alt_p1_free(int8_t do_free) {
     for( int32_t k = 0; k<5; ++k )

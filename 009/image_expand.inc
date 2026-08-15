@@ -1,6 +1,6 @@
 // image_expand.inc -- the image out of a `.bmf`.
 
-uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
+uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
   struct alignas(16) ExpandImageFrame {
     uint8_t* Block;
     union {
@@ -78,7 +78,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
     fread(__frame.hdr, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
       int32_t hdr_word = *(int32_t*)&__frame.hdr[0];
-      if( (*(uint32_t*)&__frame.hdr[4])>__bytes_left(arc->fp) ) {
+      if( (*(uint32_t*)&__frame.hdr[4])>bytes_left(arc->fp) ) {
         return arc->fail();
       }
       uint32_t pad_len = ((*(uint32_t*)&__frame.hdr[4])+((*(uint32_t*)&__frame.hdr[4])==0)+3)&0xFFFFFFFC;
@@ -92,7 +92,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
       fseek(arc->fp, (*(uint32_t*)&__frame.hdr[4]), 1);
     }
   }
-  if( __frame.data_len>__bytes_left(arc->fp) ) {
+  if( __frame.data_len>bytes_left(arc->fp) ) {
     return arc->fail();
   }
   pal_bytes = 3<<(__frame.depth_b&31);
@@ -102,7 +102,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   if( !__frame.hdr_words[0]||!__frame.hdr_words[1] ) {
     return arc->fail();
   }
-  img_at = __alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b&0x3F, (uint8_t)(__frame.depth_b&0x80)>>7, 1);
+  img_at = alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b&0x3F, (uint8_t)(__frame.depth_b&0x80)>>7, 1);
   __frame.depth_f = __frame.depth_b;
   img_at->depth = __frame.depth_b;
   has_coded = p_coded_buf&&*p_coded_buf;
@@ -140,7 +140,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   if( (bpp&0x3Fu)<=4||(__frame.flags_b&0x10)==0 ) {
     plane_predictor = 0;
     plane_alt_model = 0;
-    __unmodel_plane((uint16_t*)img_at, img_at->pixels);
+    unmodel_plane((uint16_t*)img_at, img_at->pixels);
     goto check_length;
   }
   // The near-lossless nibble, mirroring `image_compress`: present for a single
@@ -196,16 +196,16 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
         plane = plane_desc[plane_i].src_plane;
         plane_predictor = plane_desc[plane].flags&3;
         plane_alt_model = (uint8_t)(plane_desc[plane].flags&4)>>2;
-        __unmodel_plane((uint16_t*)&__frame.img, plane_buf);
+        unmodel_plane((uint16_t*)&__frame.img, plane_buf);
         if( plane_predictor ) {
           if( plane_predictor==1 ) {
             if( !plane_alt_model )
-              __unpredict_med(plane_buf, img_at->width, img_at->height);
+              unpredict_med(plane_buf, img_at->width, img_at->height);
           }
         } else {
-          __expand_predictor_mode0(img_at->width);
+          expand_predictor_mode0(img_at->width);
         }
-        __interleave_plane((uint8_t*)img_at, plane_buf, plane);
+        interleave_plane((uint8_t*)img_at, plane_buf, plane);
         ++plane_i;
       } while( plane_i<plane_count );
 restore_arc:
@@ -215,7 +215,7 @@ restore_arc:
     plane_predictor = plane_desc[0].flags&3;
     plane_alt_model = (uint8_t)(plane_desc[0].flags&4)>>2;
     {
-      __unmodel_plane((uint16_t*)img_at, img_at->pixels);
+      unmodel_plane((uint16_t*)img_at, img_at->pixels);
       if( plane_alt_model )
         goto free_plane_buf;
     }
@@ -258,11 +258,11 @@ restore_arc:
           }
           if( pred_s ) {
             if( pred_s==1 )
-              __unpredict_med(plane_buf, img_at->width, img_at->height);
+              unpredict_med(plane_buf, img_at->width, img_at->height);
           } else {
-            __expand_predictor_mode0(img_at->width);
+            expand_predictor_mode0(img_at->width);
           }
-          __interleave_plane((uint8_t*)img_at, plane_buf, plane2);
+          interleave_plane((uint8_t*)img_at, plane_buf, plane2);
         }
       } while( pl2<plane_count );
       goto restore_arc;

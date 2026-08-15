@@ -2,7 +2,7 @@
 """Fold a frame alias into the member it binds, REFACTORING4.md §5 item 2.
 
     python3 tools/unalias.py subs1.hpp --list
-    python3 tools/unalias.py subs1.hpp __read_bmp
+    python3 tools/unalias.py subs1.hpp read_bmp
     python3 tools/unalias.py subs1.hpp --all
 
 Round three gave every frame member a reference so the body could keep saying

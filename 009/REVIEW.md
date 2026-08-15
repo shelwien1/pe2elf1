@@ -157,7 +157,7 @@ wrapping the one global it has to share with the packer.
 
 Good shape after the round that put `pack_bits`/`unpack_bits` here. Two notes:
 
-**`__rc_begin` is 90 lines and does three unrelated things** — back the cursor
+**`rc_begin` is 90 lines and does three unrelated things** — back the cursor
 off the packer's partial word, lay out the level geometry, and seed 1,024
 frequency tables. Only the first is about beginning a stream. The middle
 section is 40 lines of `level_geom[n].half = …; level_geom[n].first = …;
@@ -173,7 +173,7 @@ for( int lvl = 2, at = 2; lvl<8; ++lvl ) {
 
 The seeding is a separate concern again and could be its own function.
 
-**`__rc_begin_decode(int8_t unread_flag)`** carries the circular justification
+**`rc_begin_decode(int8_t unread_flag)`** carries the circular justification
 `decls.inc` discusses above.
 
 ### `bitctr.inc` — 166 lines
@@ -212,7 +212,7 @@ returns are the same constant; its one caller discards it. It also leaves
 frees the struct immediately afterwards. Returning `void` and clearing `fp`
 would remove both questions.
 
-**`fseek(f, 0, 2)`** uses the numeric whence where `__bytes_left`, eleven lines
+**`fseek(f, 0, 2)`** uses the numeric whence where `bytes_left`, eleven lines
 below it in the same file, uses `SEEK_END` and `SEEK_SET`. One file, two
 conventions.
 
@@ -220,7 +220,7 @@ conventions.
 
 Small and mostly fine. One thing:
 
-**`__alloc_image` builds the header's `(depth, flags)` word by arithmetic on a
+**`alloc_image` builds the header's `(depth, flags)` word by arithmetic on a
 32-bit integer**, `word2 = ((uint8_t)bpp<<16)|0x40000000` and later
 `word2 |= 0x00800000`. Those are `depth`, `flags & 0x40` (sub-byte packed) and
 `depth & 0x80` (has a palette), written as bit positions in a word rather than
@@ -289,7 +289,7 @@ finds both. `CLEANER.md`'s Phase 5 rule — one name per thing — applies, and
 ### `sym_code.inc` — 298 lines
 
 Clean. Eight bodies, the largest 102 lines, and the two template pairs are the
-merged encode/decode forms. `__estimate_cost` is the one worth a comment it does
+merged encode/decode forms. `estimate_cost` is the one worth a comment it does
 not have: it is exactly the histogram's entropy in bits,
 `(N·ln N − Σ nᵢ·ln nᵢ)·log₂e`, and the two-accumulator split over even and odd
 bins is the original's pairing and changes only the rounding. Nothing in the
@@ -324,7 +324,7 @@ the work list's second slot.
 
 ### `sym_reduce.inc` — 353 lines, 4 gotos, 3 labels, 12 puns
 
-`__reduce_alphabet` is 350 of the 353 lines. Two notes:
+`reduce_alphabet` is 350 of the 353 lines. Two notes:
 
 **Nineteen frame members, of which `slot0`…`slot11` are spill slots** with
 `BMF_SPILL_PAD` between them — the same shape as `sym_list_decode.inc`. Four
@@ -401,15 +401,15 @@ into another and zeroes the source, so they are `f_w4_to_w1`, `f_w4_to_w2`,
 are tested in is the order the folds compose.
 
 Otherwise nothing. The unrolled zeroing a reader might expect to find here is
-in `plane.inc`, in `__model_planes`.
+in `plane.inc`, in `model_planes`.
 
 ### `plane.inc` — 56 lines
 
 Small, and the whole file is the three-way model dispatch, which is exactly
-right — `__unmodel_plane` and `__model_planes` are the two places the three
+right — `unmodel_plane` and `model_planes` are the two places the three
 models are chosen between, and they read as that.
 
-The one thing to change: **`__model_planes` zeroes 1,008 bytes with eight
+The one thing to change: **`model_planes` zeroes 1,008 bytes with eight
 `bmf_zero16` calls** in a loop that steps by 112. That is the original's SSE
 zeroing, it does nothing a `memset` would not, and it runs once per plane rather
 than once per pixel, so the unrolling cannot be paying for itself.
@@ -421,7 +421,7 @@ than once per pixel, so the unrolling cannot be paying for itself.
 
 ### `alt_p1.inc` — 166 lines
 
-Fine. `__alt_init_tables` builds the fold/unfold pair in buckets of
+Fine. `alt_init_tables` builds the fold/unfold pair in buckets of
 `2*near_lossless_q + 1`; at `E = 0` that is one and the mapping is the plain
 zigzag, which nothing says. One sentence would remove the need to trace the
 bucket arithmetic to find that out.
@@ -616,7 +616,7 @@ hist_scratch = coded_buf+coded_size-4096;
 (`hist_scratch`) stops being something you have to remember to include.
 
 **Seven copies of the cost probe**, about fourteen lines each: set the flags,
-call `__model_planes`, measure `8*(out_cursor-coded_buf)`, flush, reset, keep
+call `model_planes`, measure `8*(out_cursor-coded_buf)`, flush, reset, keep
 the flag if it improved. This is the largest repeated block left in the tree
 after `alt_p1_block.inc`'s, and it is a function of two arguments (the flag to
 try, the plane).
@@ -720,8 +720,8 @@ seven numbered steps; the code could be shaped like that list.
 
 ### `plane_predict.inc` — 350 lines
 
-**The MED predictor is written twice**, once in `__predict_med` and once in
-`__unpredict_med`, eight lines each and identical:
+**The MED predictor is written twice**, once in `predict_med` and once in
+`unpredict_med`, eight lines each and identical:
 
 ```c
 if( pred<north ) {
@@ -735,13 +735,13 @@ clearest extraction in the tree: the two copies are byte-identical after
 renaming, the function is pure, and MED is a *named published predictor* whose
 name should appear in the source exactly once.
 
-**`__colour_transform` has four modes in one 74-line body** — no transform,
+**`colour_transform` has four modes in one 74-line body** — no transform,
 by-weights, two-reference and three-reference — each a `do/while` over the
 plane. They share nothing but the loop shape. Four small functions and a
 `switch` would say what the four modes are, which is currently only visible in
 `MODELS.md`.
 
-**`__expand_predictor_mode0` is an empty body.** It is the original's
+**`expand_predictor_mode0` is an empty body.** It is the original's
 counterpart to a predictor this build never selects, and that is worth one line
 of comment rather than the reader wondering whether something was lost.
 

@@ -1,6 +1,6 @@
 // bmp_read.inc -- read a BMP, in every depth and both run-length forms.
 
-int32_t*__read_bmp(char* path) {
+int32_t*read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row, bmp_bgra[4], pix;
   int32_t y8;
@@ -41,7 +41,7 @@ int32_t*__read_bmp(char* path) {
       return nullptr;
     }
   }
-  BmfImage* img = __alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount<=8u, 1);
+  BmfImage* img = alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount<=8u, 1);
   if( !img ) {
     fclose(fp);
     return nullptr;

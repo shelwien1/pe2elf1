@@ -59,7 +59,7 @@ static inline void transpose_image_in_place(BmfImage* img, int32_t planes) {
 // through `result[2]`, because the original wrote it as one store.  The two
 // decision bytes are written as themselves now, which is also what let the
 // return type stop being `int32_t*`.
-BmfImage*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
+BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
   int32_t bits, row_pack, row_bytes, pal_bytes;
   uint16_t row16;
   bool sub_byte_rows = false;

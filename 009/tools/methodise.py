@@ -25,7 +25,7 @@ parameter a receiver is what the body does with it, so the test is that one:
     declares, and
   * **every** use of it in the body is a member access, `p->`.
 
-The second half is what keeps the rule honest.  `__write_bmp(BmfImage *img, …)`
+The second half is what keeps the rule honest.  `write_bmp(BmfImage *img, …)`
 has 23 `img->` and four uses that are not -- it passes `img` on and does
 arithmetic with it -- so it is a function that takes an image, not a method of
 one, and this declines it.  `MINIMAL-SYNTAX.md` §3 is where that widening was

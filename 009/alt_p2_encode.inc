@@ -4,7 +4,7 @@
 // do for the length of one image.  This file's header used to say the encoder
 // did it and the decoder did not; the decoder does, in the same six lines, and
 // the two are one object now.
-int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
+int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];
   uint32_t xf4;
   uint32_t i;
@@ -35,7 +35,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   int32_t xf0 = plane_desc[plane_desc[1].src_plane].flags&8;
   int32_t np = plane_desc[plane_desc[2].src_plane].flags&8;
   int32_t y = (plane_desc[plane_desc[3].src_plane].flags)&8;
-  __rc_begin_encode();
+  rc_begin_encode();
   if( height>0 ) {
     src1 = 0;
     int32_t first = -row_i;
@@ -311,7 +311,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
       ++src1;
     } while( src1<(uint32_t)height );
   }
-  __rc_end_encode();
+  rc_end_encode();
   p2_coef.restore();
   nplanes2 = plane_count;
   if( plane_count>0 ) {

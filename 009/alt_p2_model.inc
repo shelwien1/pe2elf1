@@ -438,7 +438,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
       step10 = (10*(uint32_t)frec[1].step)>>4;
       if( a4 ) {
         bin->f[2-is_dec] += step10;
-        __update_binary_pair(model_strip(pair_ctx+1), (a4-1)>>1);
+        update_binary_pair(model_strip(pair_ctx+1), (a4-1)>>1);
       } else {
         bin->f[0] += step10;
       }
@@ -477,8 +477,8 @@ counters_done:
         if( a4 ) {
           n2_half = (a4-1)>>1;
           hi_nibble = (uint8_t)pair_ctx&0xF0;
-          if( hi_nibble>=0xF0||(__update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
-            __update_binary_pair(model_strip(pair_ctx-16), n2_half);
+          if( hi_nibble>=0xF0||(update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
+            update_binary_pair(model_strip(pair_ctx-16), n2_half);
           }
         }
         prec0 = &p2_rec[0];
@@ -675,7 +675,7 @@ counters_done:
     step13 = (13*(uint32_t)frec[-1].step)>>4;
     if( a4 ) {
       bin->f[2-is_dec] += step13;
-      __update_binary_pair(model_strip(pair_ctx-1), (a4-1)>>1);
+      update_binary_pair(model_strip(pair_ctx-1), (a4-1)>>1);
     } else {
       bin->f[0] += step13;
     }

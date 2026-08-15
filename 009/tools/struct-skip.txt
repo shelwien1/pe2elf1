@@ -3,92 +3,92 @@ __alt_p2_model:n2 __alt_p2_model:n2_1 __alt_p2_model:n2_2 __alt_p2_model:n2_3 __
 __decode_pixel:__decode_pixel_n4_3 __decode_pixel:n4 __decode_pixel:n4_1 __decode_pixel:n4_12 __decode_pixel:n4_13 __decode_pixel:n4_14 __decode_pixel:n4_17 __decode_pixel:n4_5 __decode_pixel:n4_7
 __alt_p2_context:v274 __alt_p2_context:v45
 __alt_p2_alloc:_this
-__search_filter:v178
+search_filter:v178
 __alt_p2_context:v110 __alt_p2_context:v160 __alt_p2_context:v173 __alt_p2_context:v194 __alt_p2_context:v204 __alt_p2_context:v293 __alt_p2_context:v59
-__write_bmp:buf __write_bmp:buf_1 __write_bmp:buf_2 __write_bmp:buf_3
-__search_filter:v179
-__write_bmp:p_i __write_bmp:p_i_1 __write_bmp:p_i_2
-__choose_plane_coding:v202 __choose_plane_coding:v203 __choose_plane_coding:v204 __choose_plane_coding:v205 __choose_plane_coding:v206 __choose_plane_coding:v207 __choose_plane_coding:v21 __choose_plane_coding:v51
-__alt_model_p2_decode:p_i __expand_image:p_i __unmodel_plane:p_i
+write_bmp:buf write_bmp:buf_1 write_bmp:buf_2 write_bmp:buf_3
+search_filter:v179
+write_bmp:p_i write_bmp:p_i_1 write_bmp:p_i_2
+choose_plane_coding:v202 choose_plane_coding:v203 choose_plane_coding:v204 choose_plane_coding:v205 choose_plane_coding:v206 choose_plane_coding:v207 choose_plane_coding:v21 choose_plane_coding:v51
+alt_model_p2_decode:p_i expand_image:p_i unmodel_plane:p_i
 __layout_workspace:a1
 __alt_p2_model:n0x10 __alt_p2_model:n0x10_1 __alt_p2_model:n0x10_2 __alt_p2_model:n0x10_3 __alt_p2_model:n0x10_4
-__decode_symbol_list:a1 __decode_symbol_list:v23 __decode_symbol_list:v32 __decode_symbol_list:v67 __decode_symbol_list:v68 __decode_symbol_list:v9 __expand_alphabet:v28
+decode_symbol_list:a1 decode_symbol_list:v23 decode_symbol_list:v32 decode_symbol_list:v67 decode_symbol_list:v68 decode_symbol_list:v9 __expand_alphabet:v28
 __code_pixel:n15_31 __code_pixel:n15_33 __code_pixel:n15_35 __code_pixel:n15_36 __code_pixel:n15_38 __code_pixel:n15_39 __code_pixel:n15_40 __code_pixel:n15_41 __code_pixel:n15_42
-__alt_model_p1_decode:Block __alt_model_p1_decode:v51 __alt_model_p1_decode:v84
-__colour_transform:Blockb __interleave_plane:p_i __model_planes:Blockb __search_filter:Blockb __search_filter:Blockb_1 __search_filter:Blockb_2 __search_filter:Blockb_3 __search_filter:Blockb_4 __search_filter:Blockb_5 __search_filter:Blockb_6 __search_filter:Blockb_7 __search_filter:Blockb_8 __search_filter:Blockb_9 __transform_planes:p_ia __transform_planes:p_ia_1
-__alt_init_tables:near_lossless_max
+alt_model_p1_decode:Block alt_model_p1_decode:v51 alt_model_p1_decode:v84
+colour_transform:Blockb interleave_plane:p_i model_planes:Blockb search_filter:Blockb search_filter:Blockb_1 search_filter:Blockb_2 search_filter:Blockb_3 search_filter:Blockb_4 search_filter:Blockb_5 search_filter:Blockb_6 search_filter:Blockb_7 search_filter:Blockb_8 search_filter:Blockb_9 transform_planes:p_ia transform_planes:p_ia_1
+alt_init_tables:near_lossless_max
 __alt_p1_context:v3
 __symbol_list_update:n251 __symbol_list_update:n251_1
 __alt_p2_context:v268 __alt_p2_context:v7
 __alt_p2_context:v143 __alt_p2_context:v158 __alt_p2_context:v187 __alt_p2_context:v205 __alt_p2_context:v295
-__write_bmp:Bufferc __write_bmp:Bufferc_1 __write_bmp:Bufferc_2 __write_bmp:Bufferc_3
-__alt_model_p1_encode:Block __alt_model_p1_encode:v50 __alt_p1_context:a2
+write_bmp:Bufferc write_bmp:Bufferc_1 write_bmp:Bufferc_2 write_bmp:Bufferc_3
+alt_model_p1_encode:Block alt_model_p1_encode:v50 __alt_p1_context:a2
 __code_pixel:n2 __code_pixel:n2_1 __code_pixel:n2_10 __code_pixel:n2_15 __code_pixel:n2_16 __code_pixel:n2_3 __code_pixel:n2_5 __code_pixel:n2_7 __code_pixel:n2_9
-__alt_init_tables:a2 __alt_init_tables:v10 __alt_init_tables:v14
-__search_filter:packer_word
+alt_init_tables:a2 alt_init_tables:v10 alt_init_tables:v14
+search_filter:packer_word
 __encode_context_bit:a2
 __decode_context_bit:a2
-__colour_transform:Blockb __model_planes:Blockb __search_filter:Blockb __search_filter:Blockb_1 __search_filter:Blockb_2 __search_filter:Blockb_3 __search_filter:Blockb_4 __search_filter:Blockb_5 __search_filter:Blockb_6 __search_filter:Blockb_7 __search_filter:Blockb_8 __search_filter:Blockb_9 __transform_planes:p_ia __transform_planes:p_ia_1
+colour_transform:Blockb model_planes:Blockb search_filter:Blockb search_filter:Blockb_1 search_filter:Blockb_2 search_filter:Blockb_3 search_filter:Blockb_4 search_filter:Blockb_5 search_filter:Blockb_6 search_filter:Blockb_7 search_filter:Blockb_8 search_filter:Blockb_9 transform_planes:p_ia transform_planes:p_ia_1
 __alt_p2_context:v11 __alt_p2_context:v246 __alt_p2_context:v6
 __code_pixel:this_3 __decode_pixel:this_3 __pixel_context:_this
 __alt_p2_d8_decode_body:v21
 __alt_p2_d8_decode_body:v28
 __alt_p2_d8_decode_body:v58
 __alt_p2_d8_decode_body:v66
-__alt_model_p2_decode:v30
-__alt_model_p2_decode:v38
-__alt_model_p2_decode:v67
-__alt_model_p2_decode:v75
+alt_model_p2_decode:v30
+alt_model_p2_decode:v38
+alt_model_p2_decode:v67
+alt_model_p2_decode:v75
 __alt_p2_d8_encode_body:v23
 __alt_p2_d8_encode_body:v30
 __alt_p2_d8_encode_body:v61
 __alt_p2_d8_encode_body:v69
-__alt_model_p2_encode:v29
-__alt_model_p2_encode:v37
-__alt_model_p2_encode:v66
-__alt_model_p2_encode:v74
-__read_bmp:Src __read_bmp:Src_1 __read_bmp:Src_2 __read_bmp:Src_3 __read_bmp:Src_4 __read_bmp:Src_5 __read_bmp:Src_6
-__expand_image:p_i_1
-__alt_model_p2_encode:a2 __alt_model_p2_encode:v166 __model_plane:a4 __model_plane:a5 __reduce_alphabet:a3 __reduce_alphabet:v10 __reduce_alphabet:v33 __reduce_alphabet:v4 __reduce_alphabet:v60 __reduce_alphabet:v91 __reduce_alphabet:v96 __transform_planes:Srca_1 __transform_planes:Srca_3
-__choose_plane_coding:v214
+alt_model_p2_encode:v29
+alt_model_p2_encode:v37
+alt_model_p2_encode:v66
+alt_model_p2_encode:v74
+read_bmp:Src read_bmp:Src_1 read_bmp:Src_2 read_bmp:Src_3 read_bmp:Src_4 read_bmp:Src_5 read_bmp:Src_6
+expand_image:p_i_1
+alt_model_p2_encode:a2 alt_model_p2_encode:v166 model_plane:a4 model_plane:a5 reduce_alphabet:a3 reduce_alphabet:v10 reduce_alphabet:v33 reduce_alphabet:v4 reduce_alphabet:v60 reduce_alphabet:v91 reduce_alphabet:v96 transform_planes:Srca_1 transform_planes:Srca_3
+choose_plane_coding:v214
 __encode_context_bit:_this
 __decode_context_bit:_this
 __encode_symbol_list:v28
 __encode_symbol_list:v36 __encode_symbol_list:v37 __encode_symbol_list:v49
 __symbol_list_update:v16
 __symbol_list_update:v23 __symbol_list_update:v24 __symbol_list_update:v33
-__alt_p1_decode_symbol:a1
-__decode_symbol_list:v36
+alt_p1_decode_symbol:a1
+decode_symbol_list:v36
 __decode_pixel:v61
 __code_pixel:v98
 __alt_p2_d8_encode_body:v16
-__encode_symbol_tree:v26
-__alt_p1_encode_symbol:a1
-__decode_symbol_tree:v17
+encode_symbol_tree:v26
+alt_p1_encode_symbol:a1
+decode_symbol_tree:v17
 __code_pixel:n15_17 __code_pixel:n2_11 __code_pixel:n2_12 __code_pixel:n2_13 __code_pixel:n2_14 __code_pixel:n2_17 __code_pixel:n2_2 __code_pixel:n2_4 __code_pixel:n2_6 __code_pixel:n2_8 __rescale_counter_pair:_this
 __alt_p1_model:result
 __alt_p1_d8_encode_body:v10
 __alt_p1_d8_encode_body:v11
-__alt_model_p1_d8_decode:v12
-__alt_model_p1_d8_decode:v13
-__alt_model_p1_d8_decode:Src __alt_model_p1_d8_decode:Src_1 __alt_model_p2_d8_decode:Src __alt_model_p2_decode:Src __alt_model_p2_decode:Src_1 __expand_image:Src_1 __unmodel_plane:Src __unmodel_plane_slow:Src __unmodel_plane_slow:Src_1 __unmodel_plane_slow:Src_2
+alt_model_p1_d8_decode:v12
+alt_model_p1_d8_decode:v13
+alt_model_p1_d8_decode:Src alt_model_p1_d8_decode:Src_1 alt_model_p2_d8_decode:Src alt_model_p2_decode:Src alt_model_p2_decode:Src_1 expand_image:Src_1 unmodel_plane:Src __unmodel_plane_slow:Src __unmodel_plane_slow:Src_1 __unmodel_plane_slow:Src_2
 __expand_alphabet:v10 __expand_alphabet:v22 __expand_alphabet:v31
-__expand_image:out_cursor
-__search_filter:__n256_2
+expand_image:out_cursor
+search_filter:__n256_2
 __main:argv
-__predict_med:v31
+predict_med:v31
 __encode_symbol_list:v39
 __symbol_list_update:v26
-__alt_model_p1_decode:__byte_4433BD
+alt_model_p1_decode:__byte_4433BD
 __alt_p2_context:v243 __alt_p2_context:v275 __alt_p2_context:v50 __alt_p2_context:v53
-__cost_candidate:buf_1
+cost_candidate:buf_1
 __decode_pixel:v108
 __code_pixel:v109
 __code_pixel:v41
 __code_pixel:__n15_0 __code_pixel:n15_1 __code_pixel:n15_15 __code_pixel:n15_2 __code_pixel:n15_24 __code_pixel:p_n15 __code_pixel:p_n15_1 __code_pixel:p_n15_11 __code_pixel:p_n15_2 __code_pixel:p_n15_3 __code_pixel:p_n15_4 __code_pixel:p_n15_5 __code_pixel:p_n15_6 __code_pixel:p_n15_8 __code_pixel:p_n15_9
 __unmodel_plane_slow:v49
 __unmodel_plane_slow:v50
-__alt_model_p1_encode:__byte_4433BD
+alt_model_p1_encode:__byte_4433BD
 __alt_p2_d8_decode_body:v73
 __alt_p2_d8_decode_body:v76
 __alt_p2_d8_decode_body:v77
@@ -102,17 +102,17 @@ __alt_p2_d8_decode_body:v86
 __alt_p2_d8_decode_body:v87
 __alt_p2_d8_decode_body:v89
 __alt_p2_d8_decode_body:v90
-__alt_model_p2_decode:v82
-__alt_model_p2_decode:v85
-__alt_model_p2_decode:v86
-__alt_model_p2_decode:v87
-__alt_model_p2_decode:v88
-__alt_model_p2_decode:v90
-__alt_model_p2_decode:v91
-__alt_model_p2_decode:v92
-__alt_model_p1_decode:v30
-__alt_model_p1_decode:v31
-__alt_model_p1_encode:v29
+alt_model_p2_decode:v82
+alt_model_p2_decode:v85
+alt_model_p2_decode:v86
+alt_model_p2_decode:v87
+alt_model_p2_decode:v88
+alt_model_p2_decode:v90
+alt_model_p2_decode:v91
+alt_model_p2_decode:v92
+alt_model_p1_decode:v30
+alt_model_p1_decode:v31
+alt_model_p1_encode:v29
 __alt_p2_model:n0xF0
 __alt_p2_model:v15
 __alt_p2_context:v31
@@ -126,89 +126,89 @@ __alt_p2_context:v282
 __decode_pixel:v97
 __alt_p2_context:v284
 __alt_p2_d8_decode_body:v53
-__alt_model_p2_decode:v62
+alt_model_p2_decode:v62
 __alt_p2_d8_encode_body:v56
-__alt_model_p2_encode:v61
-__alt_model_p1_encode:v30
+alt_model_p2_encode:v61
+alt_model_p1_encode:v30
 __pixel_context:v8
 __pixel_context:v11
-__alloc_image:result
+alloc_image:result
 __decode_pixel:v76
 __code_pixel:v69
-__alt_model_p2_encode:v131
-__alt_model_p2_encode:__byte_4433BD
-__model_plane:v51
-__model_plane:v52
-__search_filter:v181
-__predict_med:v3
-__encode_symbol_tree:_this __encode_symbol_tree:this_2
-__alt_p1_encode_symbol:v27
-__decode_symbol_tree:_this
+alt_model_p2_encode:v131
+alt_model_p2_encode:__byte_4433BD
+model_plane:v51
+model_plane:v52
+search_filter:v181
+predict_med:v3
+encode_symbol_tree:_this encode_symbol_tree:this_2
+alt_p1_encode_symbol:v27
+decode_symbol_tree:_this
 __init_model_tables:v30
 __alt_p1_context:v33
-__update_binary_pair:v8
+update_binary_pair:v8
 __alt_p1_d8_encode_body:v27
-__interleave_plane:p_i
-__unpredict_med:v52
-__alt_model_p1_d8_decode:v29
-__alt_model_p1_decode:v47
-__choose_plane_coding:buf_1
-__read_bmp:Buffer_2
-__decode_symbol_list:v20 __decode_symbol_list:v25 __decode_symbol_list:v43 __decode_symbol_list:v52 __decode_symbol_list:v55 __decode_symbol_list:v66
+interleave_plane:p_i
+unpredict_med:v52
+alt_model_p1_d8_decode:v29
+alt_model_p1_decode:v47
+choose_plane_coding:buf_1
+read_bmp:Buffer_2
+decode_symbol_list:v20 decode_symbol_list:v25 decode_symbol_list:v43 decode_symbol_list:v52 decode_symbol_list:v55 decode_symbol_list:v66
 __decode_pixel:n15_10 __decode_pixel:n15_11 __decode_pixel:n15_13 __decode_pixel:n15_15 __decode_pixel:n15_18 __decode_pixel:n15_2 __decode_pixel:n15_20 __decode_pixel:n15_22 __decode_pixel:n15_24 __decode_pixel:n15_25 __decode_pixel:n15_3 __decode_pixel:n15_4 __decode_pixel:n15_5 __decode_pixel:n15_6 __decode_pixel:n15_9
 __decode_pixel:n15_12 __decode_pixel:n15_14 __decode_pixel:n15_16 __decode_pixel:n15_17 __decode_pixel:n15_19 __decode_pixel:n15_21 __decode_pixel:n15_8 __decode_pixel:n256 __decode_pixel:n256_2 __decode_pixel:n256_3 __decode_pixel:n256_5 __decode_pixel:n4_8
 __decode_pixel:v110
 __code_pixel:v113
-__alt_model_p1_encode:v46
-__alt_model_p1_encode:__byte_4433AD
-__alt_model_p1_encode:__byte_44339D
-__alt_model_p1_d8_encode:a1 __alt_model_p1_d8_encode:a4 __alt_model_p2_d8_encode:a3 __alt_model_p2_d8_encode:a6 __alt_model_p2_encode:a2 __alt_model_p2_encode:v166 __alt_p2_d8_encode_body:a4 __alt_p2_d8_encode_body:a7 __alt_p2_d8_encode_body:v100 __alt_p2_d8_encode_body:v103 __alt_p2_d8_encode_body:v105 __alt_p2_d8_encode_body:v109 __alt_p2_d8_encode_body:v8 __model_plane:a4 __model_plane:a5 __reduce_alphabet:a3 __reduce_alphabet:v10 __reduce_alphabet:v33 __reduce_alphabet:v4 __reduce_alphabet:v60 __reduce_alphabet:v91 __reduce_alphabet:v96 __transform_planes:Srca_1 __transform_planes:Srca_3
-__expand_image:p_i_1 __expand_image:p_i_2
-__read_bmp:bmp_bgra
-__alt_model_p2_decode:v105
-__alt_model_p2_decode:v115
-__alt_model_p2_decode:v124
-__alt_model_p2_decode:v132
-__alt_model_p2_decode:__byte_4433BD
-__alt_model_p2_encode:v109
-__alt_model_p2_encode:v120
-__alt_model_p2_encode:v139
-__alt_model_p2_encode:__byte_4433AD
-__alt_model_p2_encode:__byte_44339D
-__expand_image:__n512
-__decode_symbol_tree:v37 __decode_symbol_tree:v8
-__alt_p1_decode_symbol:v19
+alt_model_p1_encode:v46
+alt_model_p1_encode:__byte_4433AD
+alt_model_p1_encode:__byte_44339D
+alt_model_p1_d8_encode:a1 alt_model_p1_d8_encode:a4 alt_model_p2_d8_encode:a3 alt_model_p2_d8_encode:a6 alt_model_p2_encode:a2 alt_model_p2_encode:v166 __alt_p2_d8_encode_body:a4 __alt_p2_d8_encode_body:a7 __alt_p2_d8_encode_body:v100 __alt_p2_d8_encode_body:v103 __alt_p2_d8_encode_body:v105 __alt_p2_d8_encode_body:v109 __alt_p2_d8_encode_body:v8 model_plane:a4 model_plane:a5 reduce_alphabet:a3 reduce_alphabet:v10 reduce_alphabet:v33 reduce_alphabet:v4 reduce_alphabet:v60 reduce_alphabet:v91 reduce_alphabet:v96 transform_planes:Srca_1 transform_planes:Srca_3
+expand_image:p_i_1 expand_image:p_i_2
+read_bmp:bmp_bgra
+alt_model_p2_decode:v105
+alt_model_p2_decode:v115
+alt_model_p2_decode:v124
+alt_model_p2_decode:v132
+alt_model_p2_decode:__byte_4433BD
+alt_model_p2_encode:v109
+alt_model_p2_encode:v120
+alt_model_p2_encode:v139
+alt_model_p2_encode:__byte_4433AD
+alt_model_p2_encode:__byte_44339D
+expand_image:__n512
+decode_symbol_tree:v37 decode_symbol_tree:v8
+alt_p1_decode_symbol:v19
 __alt_p2_decode_symbol:v9
 __decode_pixel:freq_tbl __decode_pixel:n4 __decode_pixel:n4_1 __decode_pixel:n4_12 __decode_pixel:n4_13 __decode_pixel:n4_14 __decode_pixel:n4_17 __decode_pixel:n4_5 __decode_pixel:n4_7
-__rc_begin_encode:model_geometry
+rc_begin_encode:model_geometry
 __alt_p1_d8_encode_body:a2
 __alt_p1_d8_encode_body:a3 __alt_p1_d8_encode_body:v32
-__rc_begin_decode:model_geometry
-__alt_model_p1_d8_decode:v5
-__alt_model_p1_decode:__byte_4433AD
-__alt_model_p1_decode:__byte_44339D
+rc_begin_decode:model_geometry
+alt_model_p1_d8_decode:v5
+alt_model_p1_decode:__byte_4433AD
+alt_model_p1_decode:__byte_44339D
 __alt_p2_context:v247 __alt_p2_context:v67
-__reduce_alphabet:buf
-__cost_candidate:a3 __cost_candidate:v101 __cost_candidate:v14 __cost_candidate:v64 __cost_candidate:v88
-__choose_plane_coding:v215
-__read_bmp:bmp_info_hdr
+reduce_alphabet:buf
+cost_candidate:a3 cost_candidate:v101 cost_candidate:v14 cost_candidate:v64 cost_candidate:v88
+choose_plane_coding:v215
+read_bmp:bmp_info_hdr
 __unmodel_plane_slow:ArgList __unmodel_plane_slow:ArgList_1 __unmodel_plane_slow:ArgList_10 __unmodel_plane_slow:ArgList_2 __unmodel_plane_slow:ArgList_3 __unmodel_plane_slow:ArgList_4 __unmodel_plane_slow:ArgList_5 __unmodel_plane_slow:ArgList_6 __unmodel_plane_slow:ArgList_7 __unmodel_plane_slow:ArgList_8 __unmodel_plane_slow:ArgList_9
-__alt_model_p2_decode:__byte_4433AD
-__alt_model_p2_decode:__byte_44339D
-__expand_image:Buffer_2
-__expand_image:p_dwLowDateTime
-__expand_predictor_mode0:near_lossless_max
-__predict_med:v4
-__encode_symbol_tree:v51 __encode_symbol_tree:v9
-__alt_p1_encode_symbol:v12 __alt_p1_encode_symbol:v35
-__alt_p1_encode_symbol:v30
-__alt_p1_decode_symbol:v22
+alt_model_p2_decode:__byte_4433AD
+alt_model_p2_decode:__byte_44339D
+expand_image:Buffer_2
+expand_image:p_dwLowDateTime
+expand_predictor_mode0:near_lossless_max
+predict_med:v4
+encode_symbol_tree:v51 encode_symbol_tree:v9
+alt_p1_encode_symbol:v12 alt_p1_encode_symbol:v35
+alt_p1_encode_symbol:v30
+alt_p1_decode_symbol:v22
 __init_model_tables:v28
 __init_model_tables:v29
 __alt_p1_context:v12
 __alt_p1_context:v13
 __alt_p2_alloc:near_lossless_max
-__interleave_plane:__byte_4433AD
-__interleave_plane:Src_2 __interleave_plane:Src_3 __interleave_plane:Src_4
-__colour_transform:__byte_4433AD
-__colour_transform:Src_3 __colour_transform:Src_4 __colour_transform:Src_5
+interleave_plane:__byte_4433AD
+interleave_plane:Src_2 interleave_plane:Src_3 interleave_plane:Src_4
+colour_transform:__byte_4433AD
+colour_transform:Src_3 colour_transform:Src_4 colour_transform:Src_5

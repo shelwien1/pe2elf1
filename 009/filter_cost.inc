@@ -1,6 +1,6 @@
 // filter_cost.inc -- what one filter would cost on this image.
 
-int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, uint32_t* costs) {
+int32_t cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, uint32_t* costs) {
   struct alignas(16) CostCandidateFrame {
     uint8_t buf[4096];
     int32_t hist_y[1024];
@@ -146,15 +146,15 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, uint32_t* co
     __frame.rows = left-1;
   } while( left!=1 );
   pick = __frame.d1_f;
-  int32_t c0 = __estimate_cost((uint8_t*)__frame.buf_1, 512);
+  int32_t c0 = estimate_cost((uint8_t*)__frame.buf_1, 512);
   int32_t rec = 4*__frame.cand_i;
   costs[rec] = c0;
-  costs[rec+1] = __estimate_cost((uint8_t*)__frame.hist_zx, 1024);
-  costs[rec+2] = __estimate_cost((uint8_t*)__frame.hist_zy, 1024);
-  costs[rec+3] = __estimate_cost((uint8_t*)__frame.hist_zp, 1024);
-  cost = __estimate_cost((uint8_t*)__frame.buf, 1024);
-  __frame.d1_f = __estimate_cost((uint8_t*)__frame.hist_y, 1024);
-  c2 = __estimate_cost((uint8_t*)__frame.hist_yx, 1024);
+  costs[rec+1] = estimate_cost((uint8_t*)__frame.hist_zx, 1024);
+  costs[rec+2] = estimate_cost((uint8_t*)__frame.hist_zy, 1024);
+  costs[rec+3] = estimate_cost((uint8_t*)__frame.hist_zp, 1024);
+  cost = estimate_cost((uint8_t*)__frame.buf, 1024);
+  __frame.d1_f = estimate_cost((uint8_t*)__frame.hist_y, 1024);
+  c2 = estimate_cost((uint8_t*)__frame.hist_yx, 1024);
   __frame.rows = c2;
   lo1 = c2;
   if( cost<c2 )

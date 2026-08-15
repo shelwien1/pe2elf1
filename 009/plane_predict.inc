@@ -5,7 +5,7 @@
 // nothing subtracted from it.  The body is empty in BMF.exe too -- the encoder
 // side calls through a table of three, and this is the entry the table needs at
 // index 0.
-void __expand_predictor_mode0(int32_t i) {
+void expand_predictor_mode0(int32_t i) {
 }
 
 // The MED / LOCO-I predictor, which JPEG-LS calls the median edge detector:
@@ -32,7 +32,7 @@ static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest
   return (uint8_t)west;
 }
 
-uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
+uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done;
   uint32_t j, last;
   alignas(16) uint8_t fold[272];
@@ -91,7 +91,7 @@ uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   return last;
 }
 
-uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
+uint8_t*interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
   int32_t to_ref0;
   if( !(plane_desc[plane].flags&8) ) {
     int32_t n_flat = bmf_pixels(img);
@@ -176,7 +176,7 @@ uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
 // is 128 and the other 0, and the code takes that path explicitly -- which is
 // the `by_weights` flag below, and why a two-reference descriptor can end up
 // reading only one plane.
-uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
+uint8_t*colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
   int32_t to_ref0;
   if( !(plane_desc[plane].flags&8) ) {
     int32_t n_flat = bmf_pixels(img);
@@ -250,7 +250,7 @@ uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
   return img;
 }
 
-uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
+uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done;
   int32_t rows_left;
   uint32_t j, row_rest, k, x_left;
@@ -316,7 +316,7 @@ uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   return p;
 }
 
-void __transform_planes(BmfImage* p_i) {
+void transform_planes(BmfImage* p_i) {
   int32_t i;
   memset(hist_scratch, 0, 4096);
   uint8_t *arc = (uint8_t*)stream.buf;
@@ -335,10 +335,10 @@ void __transform_planes(BmfImage* p_i) {
       int32_t alt = (uint8_t)(plane_desc[plane].flags&4)>>2;
       plane_alt_model = alt;
       if( ((plane_desc[plane].flags&8)!=0||predictor)&&!alt ) {
-        __colour_transform(hdr, tmp, plane);
+        colour_transform(hdr, tmp, plane);
         if( plane_predictor!=2 ) {
           if( plane_predictor==1 ) {
-            __predict_med(tmp, p_i->width, p_i->height);
+            predict_med(tmp, p_i->width, p_i->height);
           }
         }
         int32_t n = p_i->width*p_i->height;
@@ -358,6 +358,6 @@ void __transform_planes(BmfImage* p_i) {
   }
   free(tmp);
   {
-    __model_plane(p_i, src_pixels, src_pixels);
+    model_plane(p_i, src_pixels, src_pixels);
   }
 }

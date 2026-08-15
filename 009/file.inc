@@ -30,14 +30,14 @@ struct BmfFile {
   }
 };
 
-BmfFile*__bmf_close_file(BmfFile* arc, int8_t do_free) {
+BmfFile*bmf_close_file(BmfFile* arc, int8_t do_free) {
   arc->close();
   if( do_free&1 )
     free(arc);
   return arc;
 }
 
-static uint32_t __bytes_left(FILE* fp) {
+static uint32_t bytes_left(FILE* fp) {
   long here = ftell(fp);
   if( here<0||fseek(fp, 0, SEEK_END)!=0 )
     return 0;
@@ -47,7 +47,7 @@ static uint32_t __bytes_left(FILE* fp) {
   return (uint32_t)(end-here);
 }
 
-BmfFile*__bmf_open_file(BmfFile* out, char* path, int32_t read_only) {
+BmfFile*bmf_open_file(BmfFile* out, char* path, int32_t read_only) {
   // `wb` to write and `rb` to read.  The donor opened `a+b` -- read *and*
   // append -- because it had members already there to walk past; there is one
   // image in a file now, so writing never reads and reading never writes.

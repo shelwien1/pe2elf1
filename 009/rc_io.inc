@@ -1,14 +1,14 @@
 // rc_io.inc -- the range coder's file ends -- what it writes before a stream and what
 // it reads after one.  The coder itself is rc.inc.
 
-uint32_t __rc_decode_flat(uint32_t tot) {
+uint32_t rc_decode_flat(uint32_t tot) {
   uint32_t sym = rc.get_freq(tot);
   rc.decode(sym, sym+1, tot);
   return sym;
 }
 
 // Give back what `begin_plane_stream` took.  This is the model layer's, not
-// the coder's -- `__rc_end` was doing both jobs and only one of them is range
+// the coder's -- `rc_end` was doing both jobs and only one of them is range
 // coding.
 static void end_plane_stream() {
   if( plane_alt_model )
@@ -18,7 +18,7 @@ static void end_plane_stream() {
 // The two ends differ in one call: the encoder flushes what it still holds and
 // the decoder reads to the marker.  Everything after is the same tear-down.
 template<int f_DEC>
-void __rc_end() {
+void rc_end() {
   if( f_DEC )
     rc.finish();
   else
@@ -26,12 +26,12 @@ void __rc_end() {
   end_plane_stream();
 }
 
-void __rc_end_decode() {
-  __rc_end<1>();
+void rc_end_decode() {
+  rc_end<1>();
 }
 
-void __rc_end_encode() {
-  __rc_end<0>();
+void rc_end_encode() {
+  rc_end<0>();
 }
 
 // Back the output cursor off the packer's partial word.
@@ -59,7 +59,7 @@ static void packer_rewind() {
 
 // Everything an alternate model needs before its first symbol: the residual
 // alphabet's two limits, the symbol tree's level geometry, and 1024 seeded
-// frequency strips.  None of it is range coding -- `__rc_begin` was doing this
+// frequency strips.  None of it is range coding -- `rc_begin` was doing this
 // and the coder's own init in one function, which is why it was 90 lines.
 static uint16_t* begin_plane_stream() {
   if( plane_predictor==2 ) {
@@ -134,7 +134,7 @@ static uint16_t* begin_plane_stream() {
 // returns null there instead: that is what the caller behaves as if it got,
 // and it is not undefined.
 template<int f_DEC>
-uint16_t*__rc_begin() {
+uint16_t*rc_begin() {
   if( !f_DEC )
     *stream.pk.word = stream.pk.acc;
   packer_rewind();
@@ -146,15 +146,15 @@ uint16_t*__rc_begin() {
   return tbl;
 }
 
-uint16_t*__rc_begin_encode() {
-  return __rc_begin<0>();
+uint16_t*rc_begin_encode() {
+  return rc_begin<0>();
 }
 
-void __rc_begin_decode() {
-  __rc_begin<1>();
+void rc_begin_decode() {
+  rc_begin<1>();
 }
 
-static uint32_t __packer_word() {
+static uint32_t packer_word() {
   if( stream.cur+4>stream.buf+stream.size )
     bmf_fatal(bmf_read_error);
   uint32_t w = *(uint32_t*)stream.cur;
@@ -209,7 +209,7 @@ static uint32_t unpack_bits(int32_t n) {
   uint32_t v;
   stream.pk.free_bits -= n;
   if( stream.pk.free_bits<0 ) {
-    const uint32_t w = __packer_word();
+    const uint32_t w = packer_word();
     v = stream.pk.acc|(w<<((stream.pk.free_bits+n)&31))&mask;
     stream.pk.acc = w>>(-stream.pk.free_bits&31);
     stream.pk.free_bits += 32;

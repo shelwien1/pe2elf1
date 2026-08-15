@@ -1,6 +1,6 @@
 // filter_search.inc -- search the filters, which is what -Q9 spends its time on.
 
-uint32_t __search_filter(BmfImage* img, int8_t mode) {
+uint32_t search_filter(BmfImage* img, int8_t mode) {
   struct alignas(16) SearchFilterFrame {
     uint8_t* base;
     uint8_t marks[16];
@@ -50,8 +50,8 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     }
     return 0;
   }
-  __choose_plane_coding(img);
-  __frame.tile_img = __alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
+  choose_plane_coding(img);
+  __frame.tile_img = alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
   stream.size = __frame.tile_img->data_size+0x20000;
   stream.buf = (uint8_t*)bmf_new(stream.size);
   packer_reset();
@@ -68,7 +68,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   // `-Q9`.
   auto probe_plane = [&](int32_t pl, int32_t flags) {
     plane_desc[pl].flags = flags;
-    __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl);
+    model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl);
     int32_t cost = 8*(stream.cur-stream.buf);
     *(uint32_t*)stream.pk.word = stream.pk.acc;
     return cost;
@@ -245,7 +245,7 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
       while( 1 ) {
         pl_k = plane_desc[pk].src_plane;
         __frame.rows[0] = pl_k;
-        __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl_k);
+        model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl_k);
         bits = 8*(stream.cur-stream.buf);
         *(uint32_t*)stream.pk.word = stream.pk.acc;
         bits_d += bits;
@@ -339,7 +339,7 @@ tile_restored:
           plane_desc[pi3].flags = f2;
         } while( plane<plane_count );
       }
-      __transform_planes(__frame.tile_img);
+      transform_planes(__frame.tile_img);
       bits_e = 8*(stream.cur-stream.buf);
       deep2 = bits_e<=__frame.best_bits;
       *(uint32_t*)stream.pk.word = stream.pk.acc;
@@ -375,7 +375,7 @@ tile_restored:
       if( nplanes_c==__frame.n_hard&&nplanes_c-1==__frame.n_flagged ) {
         cand = 0;
       } else {
-        __transform_planes(__frame.tile_img);
+        transform_planes(__frame.tile_img);
         bits_a = 8*(stream.cur-stream.buf);
         deep2 = bits_a<=__frame.best_bits;
         __frame.rows[0] = bits_a;
@@ -397,7 +397,7 @@ tile_restored:
                 plane_desc[pi1].flags |= 8*(f1!=0);
               } while( pl_b<plane_count );
             }
-            __transform_planes(__frame.tile_img);
+            transform_planes(__frame.tile_img);
             bits2 = 8*(stream.cur-stream.buf);
             deep2 = bits2<=__frame.rows[0];
             *(uint32_t*)stream.pk.word = stream.pk.acc;
@@ -433,7 +433,7 @@ planes_done:
         plane_desc[pi4].flags = f3;
       } while( pl_c<plane_count );
     }
-    __transform_planes(__frame.tile_img);
+    transform_planes(__frame.tile_img);
     bits_b = 8*(stream.cur-stream.buf);
     __frame.rows[1] = bits_b;
     *(uint32_t*)stream.pk.word = stream.pk.acc;
@@ -455,7 +455,7 @@ planes_done:
         while( pl_d<plane_count );
       }
       memcpy((uint8_t*)__frame.tile_src, tile_copy, __frame.tile_img->data_size);
-      __transform_planes(__frame.tile_img);
+      transform_planes(__frame.tile_img);
       bits_c = 8*(stream.cur-stream.buf);
       deep2 = bits_c<=__frame.best_bits;
       *(uint32_t*)stream.pk.word = stream.pk.acc;

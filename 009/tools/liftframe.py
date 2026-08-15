@@ -2,7 +2,7 @@
 """Turn one function's frame struct back into ordinary locals.
 
     python3 tools/liftframe.py subs1.hpp --list
-    python3 tools/liftframe.py subs1.hpp __model_planes
+    python3 tools/liftframe.py subs1.hpp model_planes
 
 Bodies that hold their locals in a `struct alignas(16) …{ … } __frame;` --
 seventeen when this was written, nine now -- each carry a comment saying the

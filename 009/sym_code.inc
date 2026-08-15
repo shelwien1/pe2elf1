@@ -9,7 +9,7 @@
 //
 // The guard on the walk reads `lvl >= 2` for both, where the encoder said
 // `sym >= 2`.  They are the same test: `model_geometry` is 0 at 0, 1 at 1 and
-// 2 or more everywhere above -- __rc_begin lays it out that way -- so a symbol
+// 2 or more everywhere above -- rc_begin lays it out that way -- so a symbol
 // below two has its own index as its level, which is also what the decoder
 // returns for those two.
 //
@@ -20,7 +20,7 @@
 // result is stored through a uint16_t, so the orderings agree in the low 16
 // bits, which is all of them that survive.  The encoder's spellings are kept.
 template<int f_DEC>
-int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
+int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
   uint32_t cum;
   int32_t lvl, result, go, path, node, span;
@@ -123,12 +123,12 @@ int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
   }
 }
 
-void __encode_symbol_tree(uint16_t* freq, int32_t sym) {
-  __code_symbol_tree<0>(freq, sym);
+void encode_symbol_tree(uint16_t* freq, int32_t sym) {
+  code_symbol_tree<0>(freq, sym);
 }
 
-int32_t __decode_symbol_tree(uint16_t* freq) {
-  return __code_symbol_tree<1>(freq, 0);
+int32_t decode_symbol_tree(uint16_t* freq) {
+  return code_symbol_tree<1>(freq, 0);
 }
 
 // One symbol of the one-bit model's alphabet.  The two directions meet at the
@@ -198,26 +198,26 @@ int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
         +((((c[0]+(result&0x7FFF)+96-2*(uint32_t)c[slot])>>25)&0xFFFFFFC0)
           +(uint32_t)ctx));
     if( f_DEC )
-      slot += 2*__decode_symbol_tree(strip);
+      slot += 2*decode_symbol_tree(strip);
     else
-      __encode_symbol_tree(strip, (sym-5)>>1);
+      encode_symbol_tree(strip, (sym-5)>>1);
   }
   return slot;
 }
 
 // The donor pushed a third argument neither body reads.  `tools/deadparam.py`
 // took it and the two it was forwarded from.
-void __alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
+void alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
   node->code_symbol<0>(ctx, sym);
 }
 
-int32_t __alt_p1_decode_symbol(CounterNode* node, int32_t ctx) {
+int32_t alt_p1_decode_symbol(CounterNode* node, int32_t ctx) {
   return node->code_symbol<1>(ctx, 0);
 }
 
 
 
-int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {
+int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
   int32_t tot, node;
   uint32_t step, f;
   tot = *_this;
@@ -267,7 +267,7 @@ int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {
 // The two accumulators over even and odd bins are the original's pairing, for
 // a two-lane SSE add that is not here any more; they change the rounding of
 // the sum and nothing else.
-int32_t __estimate_cost(uint8_t* bins, int32_t n) {
+int32_t estimate_cost(uint8_t* bins, int32_t n) {
   const int32_t* bin = (const int32_t*)bins;
   double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
   double total;

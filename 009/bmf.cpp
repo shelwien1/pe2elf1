@@ -32,21 +32,21 @@
 // names their callers use.  What decided which: how many lines the two bodies
 // actually share, measured as a longest common subsequence over the pair.
 //
-//   __rc_end                    5 + 5      CounterNode::code_symbol 53 + 49
-//   __alt_model_p2_d8          11 + 11     __code_symbol_tree     85 + 86
-//   BitCtr::code_context_bit   52 + 50     __alt_p2_d8_body      171 + 147
-//   __rc_begin                 91 + 89     __alt_model_p1        263 + 212
-//   P2Freq::code_three_way        49 + 55
+//   rc_end                       5 + 5     CounterNode::code_symbol      53 + 49
+//   alt_model_p2_d8             11 + 11     code_symbol_tree              85 + 86
+//   BitCtr::code_context_bit    52 + 50     AltP2Block::alt_p2_d8_body   171 + 147
+//   rc_begin                    91 + 89     alt_model_p1                 263 + 212
+//   P2Freq::code_three_way      49 + 55
 //
 // Five pairs were measured and declined.  What they share is not the body --
 // it is the declaration block and the loop scaffolding -- and folding them
 // would put two unrelated algorithms behind one `if`:
 //
-//   __alt_model_p2_encode/decode     130 of 646 lines shared (20%)
+//   alt_model_p2_encode/decode     130 of 646 lines shared (20%)
 //   code_pixel/decode_pixel          179 of 1229 (14%)
-//   __predict_med/__unpredict_med     24 of 152 (15%)
-//   __alt_model_p1_d8_encode/decode    6 of 98 (6%)
-//   __model_plane/__unmodel_plane     10 of 271 (3%)
+//   predict_med/unpredict_med     24 of 152 (15%)
+//   alt_model_p1_d8_encode/decode    6 of 98 (6%)
+//   model_plane/unmodel_plane     10 of 271 (3%)
 //
 // Every merge was gated on its own -- the fifteen streams byte for byte, at
 // both pointer widths -- and then all nine were instrumented and run over the
@@ -101,20 +101,20 @@
 #include "image_expand.inc"
 #include "image_compress.inc"
 
-void __bmf_compress(const char* InName, const char* OutName) {
+void bmf_compress(const char* InName, const char* OutName) {
   int32_t i;
   BmfFile* Arc;
   FILE* fp = fopen(InName, "rb");
   if( !fp )
     bmf_fatal(bmf_no_open, InName);
   fclose(fp);
-  int32_t *p_i = __read_bmp((char*)InName);
+  int32_t *p_i = read_bmp((char*)InName);
   if( !p_i )
     bmf_fatal(bmf_read_error);
   BmfImage*const p_i_img = (BmfImage*)p_i;
   printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i_img->width, p_i_img->height, p_i_img->depth&depth_bits, p_i_img->data_size);
-  if( void* __nb = bmf_new(sizeof(BmfFile)) )
-    Arc = __bmf_open_file((BmfFile*)__nb, (char*)OutName, 0);
+  if( void* nb = bmf_new(sizeof(BmfFile)) )
+    Arc = bmf_open_file((BmfFile*)nb, (char*)OutName, 0);
   else
     Arc = nullptr;
   int32_t Flags = p_i_img->depth;
@@ -135,20 +135,20 @@ void __bmf_compress(const char* InName, const char* OutName) {
         p_i_img->depth = (Flags|depth_grey)^depth_palette;
     }
   }
-  int32_t coded_len = __compress_image(Arc, (BmfImage*)p_i, (void*)coded_block);
+  int32_t coded_len = compress_image(Arc, (BmfImage*)p_i, (void*)coded_block);
   if( !coded_len )
     bmf_fatal(bmf_write_error, OutName);
   printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i_img->height*p_i_img->width));
   free(p_i);
 }
 
-void __bmf_decompress(const char* InName, const char* OutName) {
+void bmf_decompress(const char* InName, const char* OutName) {
   BmfFile* arc;
-  if( void* __nb = bmf_new(sizeof(BmfFile)) )
-    arc = __bmf_open_file((BmfFile*)__nb, (char*)InName, 1);
+  if( void* nb = bmf_new(sizeof(BmfFile)) )
+    arc = bmf_open_file((BmfFile*)nb, (char*)InName, 1);
   else
     arc = nullptr;
-  uint32_t* p_i = (uint32_t*)__expand_image(arc, &coded_block);
+  uint32_t* p_i = (uint32_t*)expand_image(arc, &coded_block);
   // One image in a file: nothing to parse is not the end of a list of members,
   // it is a file that is not one of ours.
   if( !p_i )
@@ -160,19 +160,24 @@ void __bmf_decompress(const char* InName, const char* OutName) {
     printf("%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
     exit(5);
   }
-  if( !__write_bmp((BmfImage*)p_i, (char*)OutName, 1) )
+  if( !write_bmp((BmfImage*)p_i, (char*)OutName, 1) )
     bmf_fatal(bmf_write_error, OutName);
   free(coded_block);
   coded_block = nullptr;
   free(p_i);
-  __bmf_close_file(arc, 1);
+  bmf_close_file(arc, 1);
 }
 
 
-int32_t __main(int32_t argc, const char** argv) {
+// `argv` is `char**` because that is main's signature and `const char**` inside
+// because that is what everything downstream takes.  The donor had two bodies
+// here -- one of them four lines that cast and forwarded -- and the cast is all
+// that was ever between them.
+int32_t main(int32_t argc, char** argv) {
+  const char*const* args = (const char*const*)argv;
   bmf_set_denormal_mode();
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
-  int32_t mode = argc==4&&!argv[1][1] ? toupper(argv[1][0]) : 0;
+  int32_t mode = argc==4&&!args[1][1] ? toupper(args[1][0]) : 0;
   if( mode!='C'&&mode!='D' ) {
     printf("e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
            "Usage: bmf c input.bmp output     compress, always with -S -Q9\n"
@@ -180,12 +185,8 @@ int32_t __main(int32_t argc, const char** argv) {
     return 1;
   }
   if( mode=='C' )
-    __bmf_compress(argv[2], argv[3]);
+    bmf_compress(args[2], args[3]);
   else
-    __bmf_decompress(argv[2], argv[3]);
+    bmf_decompress(args[2], args[3]);
   return 0;
-}
-
-int32_t main(int32_t argc, char** argv) {
-  return __main(argc, (const char**)argv);
 }

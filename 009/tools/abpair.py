@@ -20,7 +20,7 @@ at how they are spelled:
   * `b = a;` or `a = b;` -- one is a copy of the other, or
   * both assigned from the same expression, everywhere they are assigned.
 
-Two survive that and neither is the pattern.  `__search_filter` measures
+Two survive that and neither is the pattern.  `search_filter` measures
 `8*(out_cursor-coded_buf)` into `bits_a` at one point and `bits_b` at another,
 and runs one plane loop with `pl_a` and a second with `pl_b`; the expressions
 match because the measurement is the same measurement, taken twice, of two
@@ -35,8 +35,8 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
 KNOWN = {
-    ('__search_filter', 'bits_'): 'two cost measurements, at two points',
-    ('__search_filter', 'pl_'): 'two plane loops, one counter each',
+    ('search_filter', 'bits_'): 'two cost measurements, at two points',
+    ('search_filter', 'pl_'): 'two plane loops, one counter each',
 }
 
 

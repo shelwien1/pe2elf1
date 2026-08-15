@@ -111,7 +111,7 @@ struct P2Freq {
     *slot = st+f_before;
     int32_t idx = slot-base;
     if( idx )
-      return idx+2*__code_symbol_tree<f_DEC>(model_strip(ctx_pair[idx&1]), (sym-1)>>1);
+      return idx+2*code_symbol_tree<f_DEC>(model_strip(ctx_pair[idx&1]), (sym-1)>>1);
     return 0;
   }
 
@@ -466,7 +466,7 @@ struct AltP2Block {
       len = (2*n+1==p2_len_edges[len1])+len1;
     }
     ctx = 15;
-    __alt_init_tables(fold, unfold);
+    alt_init_tables(fold, unfold);
     ctx_w[4].w[0] = 0;
     ctx_w[0].w[1] = 64;
     ctx_w[3].w[0] = 0;

@@ -1,6 +1,6 @@
 // plane_choose.inc -- decide how each plane of an image is to be coded.
 
-int32_t __choose_plane_coding(BmfImage* img) {
+int32_t choose_plane_coding(BmfImage* img) {
   struct alignas(16) ChoosePlaneCodingFrame {
     uint8_t _pad0[4];
     union {
@@ -88,7 +88,7 @@ int32_t __choose_plane_coding(BmfImage* img) {
   // the image's plane order -- came from whatever the compiler put after
   // `tbl16`, and three planes claimed the same source while two were never
   // coded.  Every image in the corpus picks `xform == 0`, where the row is the
-  // buffer `__cost_candidate` was actually given, so the gate said nothing;
+  // buffer `cost_candidate` was actually given, so the gate said nothing;
   // `testfiles/xform1.bmp` is the image that does not.
   alignas(16) uint8_t scratch[256];
   int32_t(&acc0)[4] = *(int32_t(*)[4])&scratch[0];
@@ -152,10 +152,10 @@ int32_t __choose_plane_coding(BmfImage* img) {
       // same relation for costs that are estimated bit counts and so never
       // negative.  One relation here.
       xform = 0;
-      uint32_t cheapest = __cost_candidate((uint8_t*)img_a, 0, (uint8_t*)tbl16,
+      uint32_t cheapest = cost_candidate((uint8_t*)img_a, 0, (uint8_t*)tbl16,
                                            (uint32_t*)&acc0[2]);
       for( int32_t cand = 1; cand<3; ++cand ) {
-        const uint32_t c = __cost_candidate((uint8_t*)img_a, cand,
+        const uint32_t c = cost_candidate((uint8_t*)img_a, cand,
                                             (uint8_t*)&tbl16[16*cand], (uint32_t*)&acc0[2]);
         if( c<cheapest ) {
           cheapest = c;
@@ -240,7 +240,7 @@ int32_t __choose_plane_coding(BmfImage* img) {
                   } while( n_a );
                   wt8_up = x3[3];
                   wt4_up = x1[0];
-                  uint32_t cost_a = __estimate_cost((uint8_t*)__frame.buf_1, 512);
+                  uint32_t cost_a = estimate_cost((uint8_t*)__frame.buf_1, 512);
                   wt8_up_end = x0[2];
                   wt4_best = x5[3];
                   if( cost_a<best_cost ) {
@@ -278,7 +278,7 @@ int32_t __choose_plane_coding(BmfImage* img) {
                     } while( n_b );
                     wt8_up = x3[3];
                     wt4_up = x1[0];
-                    uint32_t cost_b = __estimate_cost((uint8_t*)buf_2, 512);
+                    uint32_t cost_b = estimate_cost((uint8_t*)buf_2, 512);
                     wt4_up_end = x0[3];
                     wt8_best = __frame.wt_slot;
                     if( cost_b<best_cost ) {
@@ -328,7 +328,7 @@ int32_t __choose_plane_coding(BmfImage* img) {
             } while( n_c!=1 );
             wt8_dn = __frame.s6;
             wt4_dn = __frame.s1;
-            uint32_t cost_c = __estimate_cost((uint8_t*)buf_3, 512);
+            uint32_t cost_c = estimate_cost((uint8_t*)buf_3, 512);
             wt8_dn_end = *(uint32_t*)__frame.buf_1;
             wt4_best_dn = x5[3];
             if( cost_c<best_cost ) {
@@ -373,7 +373,7 @@ int32_t __choose_plane_coding(BmfImage* img) {
               } while( n_d!=1 );
               wt8_dn = __frame.s6;
               wt4_dn = __frame.s1;
-              uint32_t cost_d = __estimate_cost((uint8_t*)buf_4, 512);
+              uint32_t cost_d = estimate_cost((uint8_t*)buf_4, 512);
               wt4_dn_end = __frame.s0;
               wt8_best_dn = __frame.wt_slot;
               if( cost_d<best_cost ) {
@@ -591,9 +591,9 @@ weights_chosen:
           wc = x0[1];
           wb = x0[0];
         }
-        cost_lin = __estimate_cost((uint8_t*)__frame.buf, 1024);
+        cost_lin = estimate_cost((uint8_t*)__frame.buf, 1024);
         best4 = (cost_lin>>7)+cost_lin;
-        cost_c0 = __estimate_cost((uint8_t*)__frame.hist_a, 1024);
+        cost_c0 = estimate_cost((uint8_t*)__frame.hist_a, 1024);
         pick0 = cost_c0<best4;
         if( cost_c0<best4 )
           best4 = cost_c0;
@@ -605,7 +605,7 @@ weights_chosen:
         }
         wa_slot = wa_pick;
         x0[0] = pick0;
-        cost_c1 = __estimate_cost((uint8_t*)__frame.hist_b, 1024);
+        cost_c1 = estimate_cost((uint8_t*)__frame.hist_b, 1024);
         pred4 = x0[0];
         if( cost_c1<best4 ) {
           best4 = cost_c1;
@@ -615,7 +615,7 @@ weights_chosen:
           wa_slot = 0;
         }
         x0[0] = pred4;
-        cost_c2 = __estimate_cost((uint8_t*)__frame.hist_c, 1024);
+        cost_c2 = estimate_cost((uint8_t*)__frame.hist_c, 1024);
         pred4b = x0[0];
         if( cost_c2<best4 ) {
           pred4b = 3;

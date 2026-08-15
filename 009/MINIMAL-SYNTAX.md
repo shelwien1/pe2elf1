@@ -131,7 +131,7 @@ the defect and was deleted.
 
 `::plane_count` and its 180 friends were the decompiler's way of writing "the
 global", not a disambiguation. Two names had to be renamed first and `-Wshadow`
-said exactly which: `__compress_image`'s third parameter was `coded_buf` and
+said exactly which: `compress_image`'s third parameter was `coded_buf` and
 shadowed the global of that name (now `extra_blk`), and `__bmf_open_archive`
 declared an `int32_t rc` shadowing the program's one range coder (now
 `seek_rc`, which is what it holds). After those two, all 181 came out together.
@@ -187,10 +187,10 @@ the reason it is worth naming: for the whole middle of the round the tool
 reported zero, and the zero meant only that the decompiler writes `_this` where
 MSVC used `__thiscall` and not where the receiver was passed on the stack.
 
-The widened rule's second half is what keeps it honest. `__write_bmp` has 23
+The widened rule's second half is what keeps it honest. `write_bmp` has 23
 `img->` and four uses that are not, so it takes an image rather than being a
 method of one, and the rule declines it. One candidate is declined by judgement
-rather than by rule, and the reason is in the tool: `__alt_model_p2_encode`
+rather than by rule, and the reason is in the tool: `alt_model_p2_encode`
 reads two fields of the image and is a 343-line encoder, so a method of
 `BmfImage` would make the image the compressor — and its decode half takes a
 `uint16_t*` and could not be the same kind of method.
@@ -320,12 +320,12 @@ signatures and every call site, to delete arguments the donor pushed — which
 loses the record of what the donor's calling convention was for no reduction in
 what a reader has to hold. The name is already the minimal way of saying it.
 
-**Methodising `__alt_model_p2_encode`, `__write_bmp`, `__model_plane`,
-`__transform_planes`, `__choose_plane_coding`, `__search_filter`,
-`__expand_image`, `__compress_image`, `__reduce_alphabet`.** All take a struct
+**Methodising `alt_model_p2_encode`, `write_bmp`, `model_plane`,
+`transform_planes`, `choose_plane_coding`, `search_filter`,
+`expand_image`, `compress_image`, `reduce_alphabet`.** All take a struct
 pointer first; none is a method. Seven fail the rule outright — they pass the
 pointer on, or do arithmetic with it, so it is an argument and not a receiver —
-and `__alt_model_p2_encode` passes the rule and is declined by judgement, as
+and `alt_model_p2_encode` passes the rule and is declined by judgement, as
 above. `python3 tools/methodise.py bmf.cpp` is what re-derives this list.
 
 ---

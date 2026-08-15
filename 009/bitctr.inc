@@ -6,8 +6,8 @@ struct CounterNode {
   uint16_t c[7];
 
   // Code one symbol against this node.  Defined out of line in sym_code.inc,
-  // beside the tree coder it calls; `__alt_p1_encode_symbol` and
-  // `__alt_p1_decode_symbol` are the two instantiations under their callers'
+  // beside the tree coder it calls; `alt_p1_encode_symbol` and
+  // `alt_p1_decode_symbol` are the two instantiations under their callers'
   // names.
   template<int f_DEC> int32_t code_symbol(int32_t ctx, int32_t sym);
 
@@ -108,7 +108,7 @@ struct BitCtr {
 
   // `BIN_CODER::scaleRare`.  Halve both counts and let the limit climb, so a
   // counter that keeps being right is allowed to get more confident before it
-  // is cut back again.  `__rescale_counter_pair` is this, called from the run
+  // is cut back again.  `rescale_counter_pair` is this, called from the run
   // coder, and is now the same code rather than a second copy of it.
   int32_t scale_rare() {
     n[0] -= n[0]>>1;
@@ -183,7 +183,7 @@ struct BitCtr {
   }
 };
 
-CounterNode*__init_counter_node(CounterNode* node) {
+CounterNode*init_counter_node(CounterNode* node) {
   node->c[0] = 8;
   node->c[1] = 2;
   node->c[2] = 2;

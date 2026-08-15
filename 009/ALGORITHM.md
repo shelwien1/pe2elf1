@@ -47,7 +47,7 @@ never writes one.
 `depth` carries the pixel depth in bits 0–5 and two markers:
 
 - `0x80` — a palette follows the coded data.
-- `0x40` — greyscale. Set by `__bmf_compress` when the palette turns out to be
+- `0x40` — greyscale. Set by `bmf_compress` when the palette turns out to be
   an exact linear grey ramp: it walks the entries checking
   `pal[3i] == pal[3i+1] == pal[3i+2] == i * (256 >> depth)`, and if they all
   are, sets `0x40`, clears `0x80` and **the palette is not stored at all**. The
@@ -107,7 +107,7 @@ from its last row backwards while reading the file forwards, so what BMF holds
 is top row first, in ordinary raster order, and `bmp_write.inc` flips it back.
 
 Whatever the depth, the image is held as **`plane_count = (depth + 7) / 8`
-byte planes, interleaved per pixel**, in `__alloc_image`'s single allocation. So 24-bit is 3 planes (B, G, R in file
+byte planes, interleaved per pixel**, in `alloc_image`'s single allocation. So 24-bit is 3 planes (B, G, R in file
 order), 32-bit is 4, and everything at 8 bits or below is 1 plane — sub-byte
 depths are held unpacked, one byte per pixel, which is what lets the same model
 handle 1-, 4- and 8-bit images.
@@ -121,14 +121,14 @@ Only the encoder runs this; the decoder is told the answers.
 ### 3.1 depth ≤ 4 takes the short path
 
 `image_compress.inc` checks `(depth & 0x3F) <= 4` and, if so, sets
-`plane_predictor = 0`, `plane_alt_model = 0` and calls `__model_plane`
+`plane_predictor = 0`, `plane_alt_model = 0` and calls `model_plane`
 directly. **No search, no transform, no predictor** — a 1- or 4-bit image
 always goes through the main model, raw. There is one plane and it is small
 alphabet; the main model's match and run machinery is what suits it.
 
 Everything below applies to 8, 24 and 32 bits.
 
-### 3.2 `__choose_plane_coding` — plane order, colour transform, DC
+### 3.2 `choose_plane_coding` — plane order, colour transform, DC
 
 The descriptors are the stream's whole record of these decisions, and they are
 indexed two ways, which is easy to get backwards: **`plane_desc[k+1]` describes
@@ -138,7 +138,7 @@ coded last. `t24` codes its planes in the order 2, 1, 0, and it is plane 0 —
 coded last, with both others available — that carries the colour transform.
 
 First the plane order: planes are paired up (`0,1`, `2,3`, …) so a plane can
-reference the one before it. Then, for three or more planes, `__cost_candidate`
+reference the one before it. Then, for three or more planes, `cost_candidate`
 is run over **three** candidate orderings — 0, 1 and 2 — and the cheapest is
 kept. This is what decides whether the green plane or the blue plane is the one
 everything else is predicted from.
@@ -171,7 +171,7 @@ are compared with a `cost + cost/32` slack, and the winner sets
 For a fourth plane (32-bit) the same is done with three references and
 `weight2`, using the three plane values preceding this one within the pixel.
 
-`__colour_transform` then applies it, in `plane_desc[].nrefs` modes:
+`colour_transform` then applies it, in `plane_desc[].nrefs` modes:
 
 ```
 nrefs == 1   d = x - dc - ref
@@ -181,7 +181,7 @@ nrefs == 3   d = x - dc - (w0*p[-3] + w1*p[-2] + w2*p[-1] + 63) / 128
 
 all in 8-bit wraparound arithmetic, which is what makes it exactly invertible.
 
-### 3.3 `__search_filter` — trial encoding
+### 3.3 `search_filter` — trial encoding
 
 This is what `-Q9` spends its time on. It cuts a **tile from the centre of the
 image** — the full width and height if they fit, otherwise centred — and
@@ -220,7 +220,7 @@ Three more decisions follow, each another trial encode of the whole tile:
   other way.
 - **planar or interleaved, alternate models kept.** With three or more planes
   and at least one plane having chosen predictor 1, it re-encodes with every
-  plane forced to `(flags & 8) | 5` through `__transform_planes` — the
+  plane forced to `(flags & 8) | 5` through `transform_planes` — the
   transform decision kept, everything driven by the p1 model — and takes it if
   it is no worse.
 - **planar or interleaved, alternate models dropped.** Then, with more than one
@@ -259,8 +259,8 @@ And **the subformat does not determine the model** above 4 bits — `t8g` and
 `x_ci` are both 8 bpp and land on different models, because the search measures
 them rather than classifying them.
 
-One property worth knowing: `__choose_plane_coding` sets `alphabet_reduced = 1`
-and `__compress_image` sets it back to `0` before the real encode. That flag
+One property worth knowing: `choose_plane_coding` sets `alphabet_reduced = 1`
+and `compress_image` sets it back to `0` before the real encode. That flag
 gates the p2 model's neighbour-context updates (§6.3), so **the search measures
 a cheaper model than the one that finally runs.** The costs it compares are
 consistent with each other, not with the final stream.
@@ -440,7 +440,7 @@ It has **two drivers**, and which one runs is the planar/interleaved decision of
 
 - `alt_p1.inc`'s `__alt_model_p1_d8_*` — **one plane**, one `AltP1Block`, called
   once per plane in planar mode. This is what `t24` and `t32` use.
-- `alt_p1_code.inc`'s `__alt_model_p1` — **all planes at once**, one
+- `alt_p1_code.inc`'s `alt_model_p1` — **all planes at once**, one
   `AltP1Block` each, walking the interleaved buffer and coding plane 0, 1, 2, 3
   of every pixel before moving on. Each plane's block is given the two planes
   before it as `nb0`/`nb1`, so its context can see what the other planes just
@@ -493,7 +493,7 @@ differ only in activity are adjacent — which is what lets the update step
 
 ### 5.3 coding a residual
 
-The residual `sample − pred` is **zigzag folded** by `__alt_init_tables`:
+The residual `sample − pred` is **zigzag folded** by `alt_init_tables`:
 0 → 0, −1 → 1, +1 → 2, −2 → 3, +2 → 4, … so small residuals become small
 codes. The fold and unfold tables are exact inverses.
 
@@ -509,8 +509,8 @@ The folded code is coded in two stages:
    divisor from the *smallest* count in the array — by **halves** if that has
    fallen to 1 or 0, and by **thirds** otherwise. Rescaling by thirds when
    something is already at 1 would round it away.
-2. Slots 5 and 6 **escape into a binary tree**: `__code_symbol_tree` walks
-   `level_geom[]` — a table of per-level spans laid out by `__rc_begin` — coding
+2. Slots 5 and 6 **escape into a binary tree**: `code_symbol_tree` walks
+   `level_geom[]` — a table of per-level spans laid out by `rc_begin` — coding
    one bit per level through `FreqPair` counters, with the level itself chosen by
    `model_geometry[code]`. The tree is what makes large residuals cost
    logarithmically rather than linearly.
@@ -540,7 +540,7 @@ else *dst = out;
 ```
 
 With `-S` — the only mode this build writes — `near_lossless_q` is 0, so
-`__alt_init_tables` builds `fold` as the exact inverse of `unfold`, `recon`
+`alt_init_tables` builds `fold` as the exact inverse of `unfold`, `recon`
 always equals `want`, the drift is always 0 and the `fold_hi` branch cannot
 fire. It is the `-E` near-lossless path, kept because it is what the donor does.
 
@@ -636,7 +636,7 @@ holds a `weighted` accumulator and an adaptive `rate`, and after each sample:
   `ctx ^ 0x7FF0` and a rotated one through `p2_ctx_rotate[]`.
 
 That neighbour smoothing is most of the cost of this model, and it is exactly
-what `__choose_plane_coding` disables while the search is running (§3.3).
+what `choose_plane_coding` disables while the search is running (§3.3).
 
 ---
 
@@ -644,7 +644,7 @@ what `__choose_plane_coding` disables while the search is running (§3.3).
 
 ### MED, standalone
 
-`__predict_med` / `__unpredict_med` in `plane_predict.inc` apply the same gradient
+`predict_med` / `unpredict_med` in `plane_predict.inc` apply the same gradient
 predictor as §5.1 **in place, over a whole plane**, folding each residual
 zigzag. This is what runs for predictor 1 when the *main* model is coding —
 flags 1 or 9, which only the alt-off interleaved trial in §3.3 produces — and
@@ -659,7 +659,7 @@ the corpus image that reaches the second one.
 
 ### interleave and de-interleave
 
-`__interleave_plane` and the loop at the top of `__colour_transform` move a
+`interleave_plane` and the loop at the top of `colour_transform` move a
 plane between the interleaved image and a flat per-plane buffer. In planar mode
 (`flags & 0x08`) every plane makes that trip; in interleaved mode the models
 walk the interleaved buffer with a stride of `plane_count`.
@@ -674,7 +674,7 @@ from the header's dimensions, and
 
 1. if `0x20` is clear, read `data_size` raw bytes and stop;
 2. read the coded stream into memory;
-3. if depth ≤ 4 or `0x10` is clear, call `__unmodel_plane` once on the whole
+3. if depth ≤ 4 or `0x10` is clear, call `unmodel_plane` once on the whole
    image with predictor 0 and the main model;
 4. otherwise unpack the per-plane descriptors — 6 bits of flags and refs, then
    8 bits of DC and up to three 8-bit weights per plane, all through the same
@@ -699,7 +699,7 @@ because the command line is pinned to `-S -Q9`:
 - **fast mode.** `desc_slow_mode` is always 1 and the header's `0x04` always
   set. The decoder refuses streams without it rather than implementing it.
 - **near-lossless (`-E`).** `near_lossless_q` is pinned to 0 (§5.5), so
-  `fold_hi`, the drift checks and the `bucket_size` in `__alt_init_tables` are
+  `fold_hi`, the drift checks and the `bucket_size` in `alt_init_tables` are
   all inert.
 - **quality below 9.** `opt_search_quality` is a `constexpr` 9.
 

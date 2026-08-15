@@ -50,7 +50,7 @@
 # takes a `CounterNode*` instead of the `uint16_t*` eleven callers cast to,
 # `mir_top` is a `P2Count*` and a `P2Freq*` instead of one word pointer doing
 # both jobs, `(int32_t*)&grid[i]` was cast straight back to `FreqRec*` on its
-# next use, the tree nodes in `__reduce_alphabet` are the word pair they are
+# next use, the tree nodes in `reduce_alphabet` are the word pair they are
 # read as, and the one genuine reinterpretation left goes through `memcpy`.
 #
 # The flag stays: it is part of the recipe the reference streams were taken

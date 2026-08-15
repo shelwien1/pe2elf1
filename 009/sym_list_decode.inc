@@ -1,6 +1,6 @@
 // sym_list_decode.inc -- read back the alphabet an encoder wrote.
 
-int32_t __decode_symbol_list(SymList* syms) {
+int32_t decode_symbol_list(SymList* syms) {
   struct alignas(16) DecodeSymbolListFrame {
     union {
       SymEntry* list[8192];

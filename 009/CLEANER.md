@@ -276,7 +276,7 @@ when the gate is being run for something else anyway.
 unions collapsed, `model.inc` 1,961 -> 1,895 lines (and to 1,882 after Phase 3). The `xxxa`/`xxxb` sweep
 is `tools/abpair.py` and **found nothing to do** -- 54 `a`/`b` families are
 left and every one is two genuinely different things. Two are assigned the
-same expression and are still two things: `__search_filter` measures
+same expression and are still two things: `search_filter` measures
 `8*(out_cursor-coded_buf)` into `bits_a` at one point and `bits_b` at
 another, and runs one plane loop with `pl_a` and a second with `pl_b`. The
 tool names both so the judgement is re-takeable instead of re-derived.
@@ -412,7 +412,7 @@ through the packer's globals. Neither is in this plan, both are measured, and
 the next round should decide about them rather than rediscover them.
 
 **The cost probe, 7 sites of about 14 lines.** `search_filter` chooses a filter
-by trying each one: set `plane_desc[…].flags`, call `__model_planes`, measure
+by trying each one: set `plane_desc[…].flags`, call `model_planes`, measure
 `8*(out_cursor-coded_buf)`, flush and reset the packer to `coded_buf`, and keep
 the flag if the cost improved. That is the same block as Phase 1's and Phase
 2's -- a helper written out once per case -- and it is the largest one left.

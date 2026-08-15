@@ -53,7 +53,7 @@ different lines, with a name between them:
 
     pair_ctx = (uintptr_t)h0;                          // __alt_p2_model
     ...
-    __update_binary_pair(model_strip((uint32_t)pair_ctx - 1), ...);
+    update_binary_pair(model_strip((uint32_t)pair_ctx - 1), ...);
 
     step_v = (uintptr_t)p2_rec;                        // step_v is uint32_t
     ...

@@ -1,6 +1,6 @@
 // image_compress.inc -- one image into one.
 
-int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
+int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   BmfImage hdr;
   int32_t plane_n;
   int32_t row_step;
@@ -59,10 +59,10 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     plane_predictor = 0;
     plane_alt_model = 0;
     alphabet_reduced = 0;
-    __model_plane(p_i, p_i->pixels, p_i->pixels);
+    model_plane(p_i, p_i->pixels, p_i->pixels);
     goto write_coded;
   }
-  filtered = __search_filter(p_i, 0);
+  filtered = search_filter(p_i, 0);
   hdr.flags |= 0x10u;
   if( p_i->flags&flags_transposed ) {
     uint32_t img_stride = p_i->stride;
@@ -119,12 +119,12 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     if( plane_count>0 ) {
       int32_t pl2 = 0;
       do
-        __model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2++].src_plane);
+        model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2++].src_plane);
       while( pl2<plane_count );
     }
     free(plane_buf);
   } else {
-    __transform_planes(p_i);
+    transform_planes(p_i);
   }
 // Everything coded; flush the packer's last word and decide whether the coded
 // stream is smaller than the pixels it came from.

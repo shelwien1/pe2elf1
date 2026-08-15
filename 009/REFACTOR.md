@@ -49,7 +49,7 @@ self-comparison from +4.5% to -0.9%; the order swap is there because running
 the candidate second every time reported t24 and t32 decode 6-8% slower for a
 binary compared against a copy of itself.
 
-`alt_p1_free` freed `this` and returned it, and `__alt_model_p1_d8_decode`
+`alt_p1_free` freed `this` and returned it, and `alt_model_p1_d8_decode`
 passed that on to a caller that discards it.  Both return `void`.
 
 ## Phase 1 -- mechanical renames
@@ -66,7 +66,7 @@ renumber the five that are.
 was never a 544-byte object: it is byte 8192 of the exclusion mask, and the
 mask was never 8192 bytes either.  Three measurements say so --
 
-  * the alphabet reaches 8193 symbols: `__rc_decode_flat(8193)` returns 0..8192
+  * the alphabet reaches 8193 symbols: `rc_decode_flat(8193)` returns 0..8192
     and the count is that plus one, so a symbol index reaches 8192;
   * an empty `SymPair` slot holds 8192 and `pixel_context` rejects it by
     finding that byte stamped, so the sentinel and the largest symbol share
@@ -97,7 +97,7 @@ means teaching three tools a new way to find a definition; that is the work,
 and it is not done.
 
 Also: the prefetch that asked for the cache line holding a local the next line
-writes, one `w2 = w2;`, and a pointer `__search_filter` spilled to its frame
+writes, one `w2 = w2;`, and a pointer `search_filter` spilled to its frame
 and reloaded thirteen times -- `p_i_2`, `img_c` and the `img` parameter are one
 pointer.
 
@@ -107,8 +107,8 @@ pointer.
 
 `plane_desc[5]` held four planes.  Slot 0 was a header slot with three
 unrelated things parked in the weight words: `plane_count` and
-`near_lossless_q` were references onto two of them, and `__expand_image` parsed
-the archive version word into the third -- while `__compress_image` wrote 512
+`near_lossless_q` were references onto two of them, and `expand_image` parsed
+the archive version word into the third -- while `compress_image` wrote 512
 there that nothing ever read.  All three are their own storage; the array is
 `[4]` and 207 subscripts lost their `+1`.
 
@@ -158,11 +158,11 @@ with it.
 
 **The split was already done; its two named traps are now handled.**
 
-`__rc_begin` was three jobs in ninety lines.  `packer_rewind` gives the
+`rc_begin` was three jobs in ninety lines.  `packer_rewind` gives the
 packer's spare bytes back (and is where "`packer_free_bits` goes transiently
 negative" is now written down), `begin_plane_stream` sets up the alternate
 model's limits, level geometry and 1024 seeded strips, and the coder's own init
-is the third.  `__rc_end`'s table free is `end_plane_stream`.
+is the third.  `rc_end`'s table free is `end_plane_stream`.
 
 It also returned `tbl` *uninitialised* when no alternate model was named, with
 a comment that the caller reads it only under the same flag.  It returns null:
@@ -206,14 +206,14 @@ copies stay at the call sites: the two mirror different cells from different
 offsets, and folding them in would be one helper with two shapes behind a flag,
 which is not one helper.
 
-`__reduce_alphabet`'s narrow arm is `reduce_narrow_alphabet`.  The wide arm
+`reduce_alphabet`'s narrow arm is `reduce_narrow_alphabet`.  The wide arm
 keeps its two labels, which is what the plan asks for -- `code_dense` and
 `alphabet_done` are a shared fast path and a convergence point, and structuring
 them adds nesting rather than removing it.
 
 **Not done**, and each for a reason rather than for lack of time:
 
-  * `__choose_plane_coding`'s candidate table (582 lines).  The candidates are
+  * `choose_plane_coding`'s candidate table (582 lines).  The candidates are
     not uniform -- they differ in which descriptors they write and which cost
     accumulator they read -- so table-driving them needs the per-candidate cost
     body extracted first, and that body reaches six locals of the enclosing
@@ -258,7 +258,7 @@ said.  Six field puns are casts of the value rather than the pointer.
 `PixRec`'s union names its low word `head4`, so eleven `*(uint32_t*)rec` sites
 stop punning past it, and `pix_cur` with its four aliases is `SymPair*`.
 
-`__alloc_image` returns `BmfImage*`, builds the header's two decision bytes as
+`alloc_image` returns `BmfImage*`, builds the header's two decision bytes as
 themselves, and `palette()` is the accessor four sites spelled by hand.  Its
 palette clear had a guard that could not be false and a `nullptr` that could
 not be passed to `memset`.
@@ -294,7 +294,7 @@ eleven callers were casting to (`CounterNode` *is* `{total, c[7]}`, which is
 what the body walked), `(int32_t*)&grid[i]` was cast straight back to
 `FreqRec*` on its next use, `*(const uint16_t*)&img->stride` and
 `*(int32_t*)&pred_prev` are value casts, `((int16_t*)x1)[0]` is `(int16_t)x1[0]`,
-`free(*(void**)&alpha_map)` is `free(alpha_map)`, and `__reduce_alphabet`'s
+`free(*(void**)&alpha_map)` is `free(alpha_map)`, and `reduce_alphabet`'s
 tree nodes are the `uint16_t` pair the code reads rather than a `uint64_t`.
 
 `tools/alias.sh` gates on that count, with the stream comparison as
@@ -409,9 +409,9 @@ register for a branch it had already decided.
 
 **The warning count is zero**, from four at the start of the plan.
 
-**`__choose_plane_coding`'s candidate table** turned out to be waiting on
+**`choose_plane_coding`'s candidate table** turned out to be waiting on
 `deadparam.py`, which matched `unread_\w+` with the underscore required and so
-never saw `__cost_candidate`'s four numbered `unread4..7`.  With those gone the
+never saw `cost_candidate`'s four numbered `unread4..7`.  With those gone the
 three calls differed in one thing: their descriptor buffers are the three rows
 of one 3x16 table, `&tbl16[16*cand]`, the same walking-off-the-end that selects
 the winning row twenty lines below.  One loop, argmin, ties to the lower index.
@@ -472,7 +472,7 @@ the other twice.
     implementation, so this is more than cosmetic.  The collisions are
     tractable: of eleven apparent ones, nine are comment matches or different
     scopes, `__main` merges into `main` as the plan says, and the one genuine
-    collision -- `__packer_word()` against the `packer_word` global -- stopped
+    collision -- `packer_word()` against the `packer_word` global -- stopped
     existing when that global became `stream.pk.word`.  `addrmap.txt` already
     stores names *without* the prefix, so the map's keys survive untouched.
 

@@ -38,7 +38,7 @@ nothing writes it back — `rle8.bmp` and a flat 8-bit copy of the same image
 produce byte-identical streams, which is why `testfiles/rle8.bmp` and
 `testfiles/out_rle8.bmp` have the same reference size.
 
-**A greyscale ramp loses its palette.** `__bmf_compress` walks the palette
+**A greyscale ramp loses its palette.** `bmf_compress` walks the palette
 before compressing and checks whether entry *i* is exactly `(i·step, i·step,
 i·step)` for `step = 256 >> bpp`. If it is, the palette is dropped and bit 6 of
 `depth` is set instead. `t8g.bmp` goes this way; `t8p.bmp` has the same pixels
@@ -57,7 +57,7 @@ Everything about which model runs is decided in `image_compress.inc`, at two
 if( (p_i->depth&0x3Fu)<=4 ) {
   plane_predictor = 0;
   plane_alt_model = 0;
-  __model_plane(p_i, p_i->pixels, p_i->pixels);
+  model_plane(p_i, p_i->pixels, p_i->pixels);
   goto LABEL_57;
 }
 ```
@@ -67,21 +67,21 @@ anything. One pass of the **main model** over the whole image at its native
 depth. 1-bit and 4-bit images never reach the other two models, and the header
 they get has no descriptor block for the decoder to read.
 
-This is worth stating plainly because it is easy to miss: `__search_filter` and
-`__choose_plane_coding`, which are 1,240 lines between them and most of what the
-encoder spends its time on, **never run for a 1-bit or 4-bit image**.
+This is worth stating plainly because it is easy to miss: `search_filter` at 473
+lines and `choose_plane_coding` at 648 lines -- most of what the encoder spends
+its time on -- **never run for a 1-bit or 4-bit image**.
 
 ### Branch 2 — depth ≥ 8, planar or interleaved
 
-For everything else, `__search_filter` runs (§4) and returns one number,
+For everything else, `search_filter` runs (§4) and returns one number,
 `filtered`:
 
 ```c
 if( filtered ) {
-  for each plane k:  __model_planes(img, buf, plane_desc[k+1].src_plane, 0);
+  for each plane k:  model_planes(img, buf, plane_desc[k+1].src_plane, 0);
 } else {
-  __transform_planes(p_i, 0);          // transform in place, then …
-}                                      // … one __model_plane over everything
+  transform_planes(p_i, 0);          // transform in place, then …
+}                                      // … one model_plane over everything
 ```
 
 * **`filtered != 0` — planar.** One model pass per plane, over that plane's
@@ -125,7 +125,7 @@ Bit 3 is "this plane has a colour transform", which selects whether `dc` and the
 weights are in the stream.
 
 `plane_predictor` and `plane_alt_model` are set from these two fields and read
-by `__model_plane` and `__unmodel_plane`, which is the only place the three
+by `model_plane` and `unmodel_plane`, which is the only place the three
 models are chosen between:
 
 ```c
@@ -167,9 +167,9 @@ worked out about the palette:
 | `0x08` | planar — each plane coded separately |
 | `0x10` | a descriptor block is present; without it the whole image goes to the main model |
 | `0x20` | coded; **clear means the rest of the member is raw pixels** |
-| `0x40` | rows are sub-byte packed. Set by `__alloc_image` for depths below 8, carried into the stream, and never tested on the way back |
+| `0x40` | rows are sub-byte packed. Set by `alloc_image` for depths below 8, carried into the stream, and never tested on the way back |
 
-`0x20` is the raw fallback. `__compress_image` codes the image, compares the
+`0x20` is the raw fallback. `compress_image` codes the image, compares the
 result against `data_size`, and if coding did not shrink it, throws the coded
 buffer away and writes the pixels. `noise24.bmp` is the corpus's example: the p2
 model runs over it interleaved, produces nothing smaller than 24 bpp, and the
@@ -180,7 +180,7 @@ stream that reaches disk is raw.
 ## 4. The decision layer
 
 Two bodies decide, and both work by *estimating cost from a histogram* rather
-than by classifying the image. `__estimate_cost` (`sym_code.inc`) is the common
+than by classifying the image. `estimate_cost` (`sym_code.inc`) is the common
 currency, and it is exactly the histogram's entropy in bits:
 
 ```
@@ -190,12 +190,12 @@ currency, and it is exactly the histogram's entropy in bits:
 summed in two accumulators over even and odd bins, which is the original's
 pairing and changes nothing but the rounding.
 
-### 4.1 `__choose_plane_coding` — transform, weights, DC
+### 4.1 `choose_plane_coding` — transform, weights, DC
 
 Runs first, over the whole image. It picks:
 
 **Which plane predicts which.** Three candidate rotations of the plane order are
-costed by `__cost_candidate`, and the cheapest wins. For each rotation that body
+costed by `cost_candidate`, and the cheapest wins. For each rotation that body
 accumulates the five covariances of the two neighbour-gradient differences,
 solves the 2×2 least-squares system
 
@@ -222,7 +222,7 @@ its own three-variable least-squares solve against the other three, and its own
 choice between four predictors (linear combination, or plain difference from
 each of the three planes).
 
-### 4.2 `__search_filter` — trial encoding
+### 4.2 `search_filter` — trial encoding
 
 Where the actual model choice is made, and what `-Q9` spends its time on.
 
@@ -240,7 +240,7 @@ an estimate. Between trials the packer state is reset and the plane descriptors
 are saved and restored.
 
 > **One property worth knowing before trusting the comparison.**
-> `__choose_plane_coding` sets `alphabet_reduced = 1`, and `__compress_image`
+> `choose_plane_coding` sets `alphabet_reduced = 1`, and `compress_image`
 > sets it back to `0` before the real encode. That flag gates the p2 model's
 > whole neighbour-counter cascade (§7.3). So the search measures a *cheaper*
 > p2 model than the one that finally runs. The trial costs are consistent with
@@ -389,12 +389,12 @@ learned values, not fixed strides.
 ### 6.3 coding the residual
 
 The residual is folded to unsigned by `fold[]`, built once by
-`__alt_init_tables` — `unfold[]` runs 0, −1, +1, −2, +2, … so a small residual
+`alt_init_tables` — `unfold[]` runs 0, −1, +1, −2, +2, … so a small residual
 of either sign gets a small code, and `fold[]` is its inverse. (The table is
 built in buckets of `2*near_lossless_q + 1`; at `E = 0` that is one, and the
 mapping is the plain zigzag.) The folded code is coded by `CounterNode::code_symbol` against a seven-slot frequency table:
 slots 0–4 are the five smallest folded residuals coded directly, and slots 5 and
-6 are escapes by parity into a binary symbol tree (`__code_symbol_tree`) that
+6 are escapes by parity into a binary symbol tree (`code_symbol_tree`) that
 codes `(sym − 5) >> 1`. The table rescales when its total passes 0x2000, with
 the divisor depending on whether any slot has fallen to 1.
 
@@ -508,7 +508,7 @@ it.
 
 ## 8. Measured — what the corpus actually does
 
-Probed by printing the decision at the point `__compress_image` commits to it,
+Probed by printing the decision at the point `compress_image` commits to it,
 so this is the final stream and not what the search tried. Nineteen images.
 
 `depth` and `flags` are read out of the reference streams themselves, at
@@ -566,11 +566,11 @@ both single-plane 8-bit images and land on different models. `t8p` and `t8g`
 are the same pixels under different palettes and land on the same one.
 
 *Coding order is not plane order.* `src_plane` is a permutation chosen by
-`__choose_plane_coding`, so `t24` codes planes 2, 1, 0 and `xform1` codes
+`choose_plane_coding`, so `t24` codes planes 2, 1, 0 and `xform1` codes
 2, 0, 1, 3. The transform for a plane reads planes that have already been coded.
 
 *The p2 model can run and be thrown away.* `noise24` reaches p2, interleaved,
-and produces nothing smaller than the raw pixels, so `__compress_image` writes
+and produces nothing smaller than the raw pixels, so `compress_image` writes
 the pixels and clears flag `0x20`. It is the corpus's only image where the
 coded stream loses.
 
@@ -621,5 +621,5 @@ absence of `-S`. It was not decompiled; the decoder refuses streams without flag
 check that selects it, and the 4-bit nibble in the header are all present and
 wired. With `E = 0` the drift never exceeds 16, so the branch is never taken.
 
-**Predictor mode 0 on the expand side.** `__expand_predictor_mode0` is an empty
+**Predictor mode 0 on the expand side.** `expand_predictor_mode0` is an empty
 body — the original's counterpart to a predictor this build never selects.

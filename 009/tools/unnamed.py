@@ -51,7 +51,7 @@ def bodies_of(src):
     return out
 
 
-def resemblance(path='subs1.hpp'):
+def resemblance(path='bmf.cpp'):
     """(ratio, body) for each joined body: how much of it is still verbatim.
 
     Not a count and never zero -- a short function the decompiler got right
@@ -66,14 +66,14 @@ def resemblance(path='subs1.hpp'):
             ['git', 'show', ORIGIN], stderr=subprocess.DEVNULL).decode())
     except (subprocess.CalledProcessError, OSError):
         return []
-    addr = addresses()
-    lines = open(path).read().split('\n')
+    addr = addresses(path)
+    lines, _origin = structs.splice(path)
 
     def norm(rows):
         return [re.sub(r'\s+', ' ', l.split('//')[0].strip())
                 for l in rows if l.split('//')[0].strip()]
     out = []
-    for a, b, nm, sig in structs.bodies(lines):
+    for a, b, nm, sig, _depth in structs.defs(lines):
         at = addr.get(nm.lstrip('_'))
         if at is None or at not in was:
             continue
@@ -147,8 +147,14 @@ def addresses(path=None):
             # breaks that.  A map that names a function the file does not have
             # is a map about another revision, and the git search is the only
             # thing that can answer for one of those.
-            here = {nm.lstrip('_') for _a, _b, nm, _s in
-                    structs.bodies(open(path).read().split('\n'))}
+            # The unit.  `structs.bodies` over `bmf.cpp` alone sees two
+            # bodies, so every name in the map failed this test, every run
+            # fell through to the two-minute git search, and the answer it
+            # came back with was the empty map.  Reading one file is what
+            # made a fast path that never fired look like a slow one.
+            unit, _origin = structs.splice(path)
+            here = {nm.lstrip('_') for _a, _b, nm, _s, _d in
+                    structs.defs(unit)}
             if all(n in here for n in out):
                 return out
     try:
@@ -159,15 +165,18 @@ def addresses(path=None):
     return parse_map(txt)
 
 
-def survey(path='subs1.hpp'):
+def survey(path='bmf.cpp'):
     """({name: bodies} still Hex-Rays', {name: bodies} kept on purpose, joined)."""
     was, addr = original(), addresses(path)
     if was is None:
         return None, None, 0
-    lines = open(path).read().split('\n')
+    # Every body in the unit, methods included: the sixteen that moved inside a
+    # record since the import are the ones most likely to have been read
+    # carefully, but a check that cannot see them cannot say so.
+    lines, _origin = structs.splice(path)
     live, kept, joined = (collections.defaultdict(set),
                           collections.defaultdict(set), 0)
-    for a, b, nm, sig in structs.bodies(lines):
+    for a, b, nm, sig, _depth in structs.defs(lines):
         fn = nm.lstrip('_')
         at = addr.get(fn)
         if at is None or at not in was:
@@ -189,7 +198,7 @@ if __name__ == '__main__':
         sys.exit(0)
     live, kept, joined = survey(sys.argv[1] if len(sys.argv) > 1
                                 and not sys.argv[1].startswith('--')
-                                else 'subs1.hpp')
+                                else 'bmf.cpp')
     if live is None:
         # This joins against the first commit of the decompilation, which is
         # what makes the answer exact -- and that commit is in the repository

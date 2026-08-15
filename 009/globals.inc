@@ -83,7 +83,7 @@ static PlaneDesc plane_desc[4];
 static int32_t plane_count;
 
 // The near-lossless quantiser: the residual bucket width is `2*q+1`, so `q=0`
-// is lossless.  Three sites read it -- `__alt_init_tables`'s bucket size and
+// is lossless.  Three sites read it -- `alt_init_tables`'s bucket size and
 // two deadzone widths in `AltP2Block` -- and four set it, all four to zero,
 // two on each side of the round trip.  There is no option that reaches it.
 //
@@ -142,7 +142,7 @@ static uint8_t* hist_scratch;
 // and a `__byte_445440[544]` for the tail -- and the split was wrong twice
 // over.  Three things set the real size and none of them is 8192:
 //
-//   * the alphabet reaches 8193 symbols.  `__rc_decode_flat(8193)` returns
+//   * the alphabet reaches 8193 symbols.  `rc_decode_flat(8193)` returns
 //     0..8192 and the count is that plus one (`model.inc`), so a symbol index
 //     reaches 8192 -- one past the end of the array that was named for it.
 //   * a `SymPair` slot with no symbol yet holds 8192 (`model_workspace.inc`

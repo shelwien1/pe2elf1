@@ -1,10 +1,6 @@
 # name -> the address of the body in BMF.exe it was decompiled from.
 # Recovered by tools/addrmap.py from the commits that made each
 # rename; see ALGORITHM.md section 8.
-bmf_destroy_archive        0x00402DF0
-out_of_memory_handler      0x00402E30
-bmf_open_archive           0x00402EF0
-bmf_close_archive          0x00402FB0
 compress_image             0x00402FE0
 expand_image               0x00403820
 search_filter              0x004043E0
@@ -34,8 +30,6 @@ decode_symbol_tree         0x00414060
 encode_symbol              0x00414390
 decode_symbol              0x00414620
 rescale_three_way          0x00414800
-init_symbol_list           0x00414860
-rescale_counter_pair       0x004148F0
 rc_end_decode              0x00414920
 rc_begin_decode            0x004149C0
 rc_end_encode              0x00414CE0
@@ -53,14 +47,11 @@ decode_pixel               0x00418650
 expand_alphabet            0x00419430
 alt_p2_free                0x00419610
 alt_model_p2_d8_encode     0x004197A0
-alt_p2_d8_encode_body      0x00419800
 alt_p2_context             0x0041A130
-alt_p2_filter              0x0041C4B0
 alt_p2_model               0x0041CAB0
 alt_model_p2_encode        0x00421930
 alt_p2_alloc               0x004229E0
 alt_model_p2_d8_decode     0x00422D60
-alt_p2_d8_decode_body      0x00422DB0
 alt_model_p2_decode        0x00423600
 alt_p1_free                0x004244A0
 alt_model_p1_d8_encode     0x00424500
@@ -74,6 +65,37 @@ alt_model_p1_decode        0x00427740
 read_bmp                   0x0042AB20
 write_bmp                  0x0042B0C0
 alloc_image                0x0042B830
-set_new_handler            0x0042CBB0
+#
+# Bodies renamed since the tree was imported, which is past the
+# end of the history this is recovered from.  The address is
+# still the address; the name is the last one the chain proves.
+#   bmf_destroy_archive      0x00402DF0
+#   out_of_memory_handler    0x00402E30
+#   bmf_open_archive         0x00402EF0
+#   bmf_close_archive        0x00402FB0
+#   init_symbol_list         0x00414860
+#   rescale_counter_pair     0x004148F0
+#   alt_p2_d8_encode_body    0x00419800
+#   alt_p2_filter            0x0041C4B0
+#   alt_p2_d8_decode_body    0x00422DB0
+#   set_new_handler          0x0042CBB0
 
-# 74 mapped.  0 named bodies have no recorded address:
+# 64 mapped.  71 named bodies have no recorded address:
+#   abs32                     advance_row               alt_model_p1              alt_model_p2_d8
+#   alt_p2_d8_body            begin_plane_stream        bit                       bits
+#   bmf_arena_init            bmf_bucket_of             bmf_close_file            bmf_fatal
+#   bmf_free                  bmf_malloc                bmf_new                   bmf_open_file
+#   bmf_page_alloc            bmf_page_free             bump                      bytes
+#   bytes_left                close                     code_banks                code_context_bit
+#   code_symbol_tree          code_three_way            dec_get                   dec_init
+#   dec_normalise             decode                    decode_bit                digit
+#   emit                      enc_init                  enc_normalise             encode
+#   encode_bit                end_plane_stream          escape_bias               fail
+#   finish                    flush                     fold                      free_sym_lists
+#   get_freq                  init                      init_parent               init_root
+#   nlms_predict_and_correct  nlms_track_two_rows       operator uint32_t         p
+#   pack_bits                 packer_reset              packer_rewind             packer_word
+#   palette                   predict                   raw                       rc_begin
+#   rc_end                    reduce_narrow_alphabet    restore                   scale_rare
+#   seed_from                 set                       set_p                     summ
+#   sym_flag                  unpack_bits               update_selector
