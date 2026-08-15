@@ -154,18 +154,74 @@ opinions has nothing left for it to correct. It stays off.
 
 `-DRES_NM=1 -DRES_MD=0` recovers the plain order-0 coder of §1.
 
-## 5. Results
+## 5. Per-block statistics
+
+For every 64×64 block (edge = `2**B0_BLKLW` × `2**B0_BLKLH`) and every
+colour component, four numbers: **min**, **max**, the **AND** of all the
+block's bytes (bits that are always 1) and their **OR** (whose complement
+is the bits that are always 0). Those four are four small pictures — one
+pixel per block, `4·n_colors` components — so a second `Raster`, with the
+same mix and the same residual CM, codes them ahead of the raster itself.
+
+Together they name the set of byte values the block can still hold:
+
+```
+legal(v)  =  min <= v <= max  &&  (v & AND) == AND  &&  (v & ~OR) == 0
+```
+
+carried into the alphabet the residual tree actually codes — a 256-bit
+rotation by the prediction (`r = (v-pred)&255`), then the zigzag fold as a
+bit permutation (Morton spread of the low half, plus the reversed high
+half onto the odd positions; ~30 instructions rather than 256 bit tests).
+At each tree node, if only one of the two subtrees still holds a legal
+symbol, **that bit is not coded and not modelled at all** — it carries no
+information. A block whose component is constant costs nothing per pixel.
+The prediction is also clamped into `[min,max]`, which is free.
+
+| | geo | total | note |
+|---|---|---|---|
+| no statistics | 0 | 0 | |
+| 64×64, exclusion + clamp | **−0.30%** | −0.07% | |
+| + the block's range as residual-mixer context | −0.30% | **−0.11%** | helps the large files, where exclusion alone does not pay |
+| 32×32 | −0.47% | +0.03% | small noisy images −1.0%, large smooth ones +0.4% |
+| 16×16 | +0.32% | +1.35% | the picture costs more than it saves |
+| 128×128 | −0.17% | −0.07% | best on the 8 MB image (−1664 B) |
+| coding the planes packed (`max−min`, AND vs `min&max`, OR vs `min\|OR`) | −0.28% | −0.09% | **worse** than raw |
+
+Two things this measured that are worth keeping:
+
+* **the planes want to stay raw.** Packing them against each other is
+  exact and makes every number smaller, and it loses. They are
+  *pictures*: min and max are smooth, and the mix and the CM predict them
+  from their neighbours. The transform trades that structure for
+  magnitudes the coder was not paying much for.
+* **the block edge is a trade with no single answer.** The picture costs
+  `4·n_colors` bytes per block regardless of what the block holds, while
+  the constraint tightens as the block shrinks. Which wins depends on how
+  compressible the raster is, not on how big it is: a noisy 320×240 wants
+  32×32 (−1.0%), a smooth 4096×512 wants 128×128. `B0_BLKLW`/`B0_BLKLH`
+  are therefore frozen out of `IDX/opt.pl` — its corpus is crops, so it
+  would answer that question with a bias it cannot see.
+
+The exclusion is worth less than the raw numbers suggest it should be
+(§ the analysis said 22–39 legal values out of 256 for a median block),
+and the reason is that the residual CM already knows most of it: with the
+activity, the neighbour errors and the predicted byte in its context, it
+had already put nearly all its probability mass inside the legal set. What
+the statistics add is the difference between *nearly* certain and free.
+
+## 6. Results
 
 Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **47093** | 4.84 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46749** | 4.80 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **103854** | 3.61 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **123906** | 3.23 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **359630** | 1.28 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2646067** | 2.52 |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46876** | 4.82 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46532** | 4.78 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **103452** | 3.59 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **123403** | 3.21 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **359192** | 1.27 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2645774** | 2.52 |
 | x_ai.bmp | RLE8 | 887278 | — | — | 285808 | 285808 | fallback |
 | x_ci.bmp | RLE8 | 3278170 | — | — | 1046958 | 1046958 | fallback |
 
@@ -187,10 +243,11 @@ Where it got there, on that file:
 | order-1 (coder0) | 4057586 | |
 | + the LPC mix, order-0 residual | 2912183 | −28.2% |
 | + the 6-model residual mix | 2646464 | −9.1% |
-| + a final `IDX/opt.pl` pass | **2646067** | |
+| + a final `IDX/opt.pl` pass | 2646067 | |
+| + per-block statistics (64×64) | **2645774** | −0.01%; at 128×128, 2644403 |
 | bmf, for reference | 2694740 | |
 
-## 6. Caveats
+## 7. Caveats
 
 * **`-Ofast` makes the folded and unfolded builds differ slightly.** With
   a knob pinned by `-DB0_NW_w=1024` the compiler folds it and reassociates;
@@ -210,9 +267,13 @@ Where it got there, on that file:
   pixel-mix time; `-DRES_NM=3` costs ~4% and roughly halves the residual
   time.
 * Memory is dominated by residual model 5: `n_colors·256·256` counters,
-  ~25 MB at 32bpp.
+  ~25 MB at 32bpp, plus the statistic picture's own model (its 4·n_colors
+  components would be 100 MB at the raster's bucket count, so `BLK_SVQ`
+  cuts it to 16).
+* The encoder now holds the whole pixel array in memory: the block
+  statistics have to be measured before anything is coded.
 
-## 7. Reproducing
+## 8. Reproducing
 
 Model shape (the `#define`s at the top of `bmpc.cpp`) was chosen with
 `sweep.py`, which rebuilds with `-D` overrides and reports the corpus total

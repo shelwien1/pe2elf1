@@ -169,6 +169,44 @@
                          // indexed by (plane, tree node, quantised
                          // stretch(p)), interpolated between two buckets
 #endif
+#ifndef BLK_STAT
+#define BLK_STAT     1   // per-block min / max / always-1 mask / always-0
+                         // mask, per colour component, over B0_BLKLW x
+                         // B0_BLKLH blocks.  The four of them are four small
+                         // pictures, coded by a second Raster with the same
+                         // model, ahead of the raster itself; then every
+                         // pixel knows which of the 256 byte values its
+                         // block can still hold, and a bit of the residual
+                         // that only one of them allows is not coded at all.
+#endif
+#ifndef BLK_SVQ
+#define BLK_SVQ     16   // residual model 5's bucket count for the statistic
+                         // picture; it carries 4x the components, so the
+                         // raster's 256 would be 100 MB of counters for a
+                         // picture a few hundred pixels wide
+#endif
+#ifndef BLK_PACK
+#define BLK_PACK     0   // code the statistic planes relative to each other
+                         // (max-min, and vs min&max, or vs min|max) instead
+                         // of raw.  Exact and it shrinks the numbers -- and
+                         // it loses: the raw planes are *pictures*, smooth
+                         // enough for the mix and the CM to predict, and the
+                         // transform trades that structure for smaller
+                         // magnitudes the coder was not paying much for.
+#endif
+#ifndef BLK_RQ
+#define BLK_RQ       9   // buckets of the block's range (max-min): 0 for a
+                         // constant block, else 1+floor(log2(range))
+#endif
+#ifndef BLK_MCTX
+#define BLK_MCTX     1   // add that bucket to the residual mixer's context.
+                         // The per-pixel activity EMA says how noisy the
+                         // last few pixels were; the block range says how
+                         // noisy this whole region is allowed to be.
+#endif
+#ifndef BLK_CLAMP
+#define BLK_CLAMP    1   // clamp the prediction into the block's [min,max]
+#endif
 #ifndef STATS
 #define STATS        0   // -DSTATS=1: dump predictor diagnostics to stderr
 #endif
@@ -194,6 +232,9 @@ static const int PADL = 4;    // pixels of the bottom row left of x
 static const int PADR = 3;    // unknown pixels right of x
 static const int PADT = BH-1; // known rows above y
 static const int NPIX = (BH-1)*BW + PADL;    // 60 known pixels
+// Components one Raster can carry.  The raster itself needs 4; the block
+// statistics are coded as one picture of 4 planes x 4 components.
+static const uint MAXC = 16;
 
 // MIX_BIAS==2 context: three local gradients, 9 buckets each.
 static const int BQ   = 9;
@@ -279,6 +320,77 @@ static INLINE int qsigned( int d ) {
   return h + s*q;
 }
 
+// -------------------------------------------------------------
+// A 256-bit set of byte values, and the two maps that carry a block's
+// legal-value set into the alphabet the residual tree actually codes.
+// Everything here is exact set algebra -- it changes what is coded, not
+// how likely anything is.
+// -------------------------------------------------------------
+struct VSet {
+  qword m[4];
+  INLINE int has( uint v ) const { return int((m[v>>6]>>(v&63))&1); }
+  // any member in [lo, lo+len)?  len is a power of two and lo a multiple
+  // of it, so the range is either whole words or inside one word.
+  INLINE int any( uint lo, uint len ) const {
+    if( len>=64 ) {
+      qword o = 0;
+      for( uint i=lo>>6, e=(lo+len)>>6; i<e; i++ ) o |= m[i];
+      return o!=0;
+    }
+    return ( m[lo>>6] >> (lo&63) & ((qword(1)<<len)-1) ) != 0;
+  }
+  uint count() const {
+    uint c = 0;
+    for( uint i=0; i<4; i++ ) for( qword w=m[i]; w; w&=w-1 ) c++;
+    return c;
+  }
+};
+
+// bit i of dst = bit (i+n) of src, mod 256.  Turns the set of legal
+// VALUES into the set of legal raw residuals r = (v-pb)&255.
+static INLINE void rotr256( VSet& d, const VSet& s, uint n ) {
+  uint w = (n>>6)&3, b = n&63;
+  if( b==0 ) { for( uint i=0; i<4; i++ ) d.m[i] = s.m[(i+w)&3]; }
+  else for( uint i=0; i<4; i++ )
+    d.m[i] = (s.m[(i+w)&3]>>b) | (s.m[(i+w+1)&3]<<(64-b));
+}
+
+// bit i -> bit 2i (Morton spread), and a 64-bit bit reversal.
+static INLINE qword spread32( uint x ) {
+  qword v = x;
+  v = (v | (v<<16)) & 0x0000FFFF0000FFFFull;
+  v = (v | (v<< 8)) & 0x00FF00FF00FF00FFull;
+  v = (v | (v<< 4)) & 0x0F0F0F0F0F0F0F0Full;
+  v = (v | (v<< 2)) & 0x3333333333333333ull;
+  v = (v | (v<< 1)) & 0x5555555555555555ull;
+  return v;
+}
+static INLINE qword revbits64( qword v ) {
+  v = ((v>> 1)&0x5555555555555555ull) | ((v&0x5555555555555555ull)<< 1);
+  v = ((v>> 2)&0x3333333333333333ull) | ((v&0x3333333333333333ull)<< 2);
+  v = ((v>> 4)&0x0F0F0F0F0F0F0F0Full) | ((v&0x0F0F0F0F0F0F0F0Full)<< 4);
+  v = ((v>> 8)&0x00FF00FF00FF00FFull) | ((v&0x00FF00FF00FF00FFull)<< 8);
+  v = ((v>>16)&0x0000FFFF0000FFFFull) | ((v&0x0000FFFF0000FFFFull)<<16);
+  return (v>>32) | (v<<32);
+}
+
+// The zigzag fold r -> z is a permutation of 0..255, so it permutes the
+// set too:  z=2r for r in [0,127] (e>=0) and z=255-2r' for r'=r-128
+// (e<0).  The first is the low half spread onto the even positions; the
+// second is the high half reversed, spread, and shifted onto the odd
+// ones.  ~30 instructions instead of 256 bit tests.
+static INLINE void zigzagset( VSet& d, const VSet& s ) {
+  qword e0 = spread32(uint(s.m[0])), e1 = spread32(uint(s.m[0]>>32));
+  qword e2 = spread32(uint(s.m[1])), e3 = spread32(uint(s.m[1]>>32));
+  qword h0 = revbits64(s.m[3]),      h1 = revbits64(s.m[2]);
+  qword o0 = spread32(uint(h0)),     o1 = spread32(uint(h0>>32));
+  qword o2 = spread32(uint(h1)),     o3 = spread32(uint(h1>>32));
+  d.m[0] = e0 | (o0<<1);
+  d.m[1] = e1 | (o1<<1) | (o0>>63);
+  d.m[2] = e2 | (o2<<1) | (o1>>63);
+  d.m[3] = e3 | (o3<<1) | (o2>>63);
+}
+
 // One mixer weight vector: RES_NM weights in the logistic domain.
 struct BitMix {
   float w[RES_NM];
@@ -361,6 +473,17 @@ typedef LPCMixT<Config_LW2> LPCMix2;
 // -------------------------------------------------------------
 struct Raster {
   uint W, H, nc, stride;   // pixels, components/pixel, row bytes incl. pad
+  uint vq;                 // buckets of residual model 5 (runtime: the stat
+                           // picture carries 4x the components and cannot
+                           // afford nc*256*256 counters)
+#if BLK_STAT
+  uint blw, blh, nbx;      // log2 block size, blocks per row
+  const VSet* lset;        // [block][component] legal value sets
+  const byte* lrng;        // [block][component][2] its min and max
+  const VSet* lg[MAXC];    // the sets in force at the current pixel
+  const byte* lr[MAXC];
+  int   rq[MAXC];          // its range bucket
+#endif
   byte*  buf;              // bordered raster, nc bytes/pixel
   uint   bstride;          // buffer row in pixels
   int    ni;               // mix taps
@@ -375,23 +498,23 @@ struct Raster {
   // in Gather(); models 3 and 5 key off data that only exists part-way
   // through the pixel (the previous component's error, the predicted byte),
   // so they compute their offset at use.
-  int    rbase[RES_NM][4];
+  int    rbase[RES_NM][MAXC];
   signed char* emap;       // clipped prediction error, same geometry as buf
   BitMix* bmix;            // mixer weights, per (plane, activity[, depth])
   uint   nmix;
-  int    mctx[4];          // which set the current component uses
-  int    cerr[4];          // errors already made on this pixel
-  int    vctx[4];          // predicted-value bucket, per component
+  int    mctx[MAXC];          // which set the current component uses
+  int    cerr[MAXC];          // errors already made on this pixel
+  int    vctx[MAXC];          // predicted-value bucket, per component
 #if RES_SSE
   Ctr*   sse;              // [nc][256 nodes][SSEQ+1] APM
 #endif
   Ctr*   padm;             // order-0 model for the row padding bytes
   float  i2f[256];         // byte -> mix input
-  float  base[4];          // i2f[] of the operating point, per component
-  float  mad[4];           // MIX_LOSS==3: EMA of |e| per component
+  float  base[MAXC];          // i2f[] of the operating point, per component
+  float  mad[MAXC];           // MIX_LOSS==3: EMA of |e| per component
 #if MIX_BIAS==2
   float* bias;             // [nc][NCTX] EMA of the residual
-  int    bctx[4];          // context of the current pixel, per component
+  int    bctx[MAXC];          // context of the current pixel, per component
 #endif
   float  xx;               // |x|^2 of the current input vector
 #if STATS
@@ -412,8 +535,11 @@ struct Raster {
     return buf + (size_t(py+PADT)*bstride + (px+PADL))*nc;
   }
 
-  void Init( uint W_, uint H_, uint nc_, uint stride_ ) {
-    W = W_; H = H_; nc = nc_; stride = stride_;
+  void Init( uint W_, uint H_, uint nc_, uint stride_, uint vq_ = RES_VQ ) {
+    W = W_; H = H_; nc = nc_; stride = stride_; vq = vq_;
+#if BLK_STAT
+    lset = 0; lrng = 0;
+#endif
     bstride = W + PADL + PADR;
     size_t bn = size_t(H+PADT) * bstride * nc;
     buf = new byte[bn];
@@ -468,7 +594,7 @@ struct Raster {
     nrow[4] = nc*RES_JQ*RES_JQ;
 #endif
 #if RES_NM>5
-    nrow[5] = nc*RES_VQ;
+    nrow[5] = nc*vq;
 #endif
     for( uint m=0; m<RES_NM; m++ ) {
       res[m] = new Ctr[256*nrow[m]];
@@ -477,7 +603,7 @@ struct Raster {
     emap = new signed char[bn];
     memset( emap, 0, bn );
 
-    nmix = nc*RES_CTX*(RES_MD?8:1);
+    nmix = nc*RES_CTX*(BLK_MCTX?BLK_RQ:1)*(RES_MD?8:1);
     bmix = new BitMix[nmix];
     for( uint i=0; i<nmix; i++ ) bmix[i].Init();
 #if RES_SSE
@@ -536,6 +662,18 @@ struct Raster {
                 +  qgrad(int(pN[k])-int(pNE[k]));
     }
 #endif
+#if BLK_STAT
+    if( lset ) {
+      size_t b = (size_t(py)>>blh)*nbx + (size_t(px)>>blw);
+      for( uint k=0; k<nc; k++ ) {
+        lg[k] = lset + b*nc + k;
+        lr[k] = lrng + (b*nc+k)*2;
+        uint rg = uint(lr[k][1]) - uint(lr[k][0]);
+        uint q = 0; while( rg ) { q++; rg>>=1; }
+        rq[k] = int(q>=BLK_RQ ? BLK_RQ-1 : q);
+      }
+    } else for( uint k=0; k<nc; k++ ) rq[k] = 0;
+#endif
     {
       size_t o = size_t(At(px,py) - buf);
       const signed char* eW  = emap + o - size_t(nc);
@@ -556,7 +694,11 @@ struct Raster {
 #if RES_NM>4
         rbase[4][k] = (int(k)*RES_JQ*RES_JQ + qjoint(w)*RES_JQ + qjoint(n)) * 256;
 #endif
+#if BLK_STAT && BLK_MCTX
+        mctx[k] = int((k*RES_CTX + q)*BLK_RQ + uint(rq[k]));
+#else
         mctx[k] = int(k*RES_CTX + q);
+#endif
         cerr[k] = 0;
       }
     }
@@ -608,7 +750,16 @@ struct Raster {
     }
 #endif
 
-    vctx[k] = (pb*RES_VQ)>>8;
+#if BLK_STAT && BLK_CLAMP
+    // The block cannot hold anything outside [min,max], so neither can a
+    // sensible prediction.  Free, and it never hurts.
+    if( lset ) {
+      int lo = lr[k][0], hi = lr[k][1];
+      if( pb<lo ) pb = lo; else if( pb>hi ) pb = hi;
+    }
+#endif
+
+    vctx[k] = int((uint(pb)*vq)>>8);
 
     uint r = (v - uint(pb)) & 255;
 #if RES_ZIGZAG
@@ -618,7 +769,7 @@ struct Raster {
 #if STATS
     s_h[r&255]++;
 #endif
-    r = CodeRes( k, r );
+    r = CodeRes( k, r, uint(pb) );
 #if RES_ZIGZAG
     e = (r&1) ? -int((r+1)>>1) : int(r>>1);
     r = uint(e) & 255;
@@ -679,8 +830,23 @@ struct Raster {
   // One residual byte through the RES_NM models, mixed in the logistic
   // domain, optionally refined by the APM.  Encode and decode run the very
   // same instructions; only the bit source differs, inside rc_BProcess.
-  INLINE uint CodeRes( uint k, uint c ) {
+  INLINE uint CodeRes( uint k, uint c, uint pb ) {
     uint cxt, bit;
+#if BLK_STAT
+    // Carry the block's legal VALUE set into the alphabet this tree codes:
+    // first r = (v-pb)&255, then the zigzag fold if it is on.  A subtree
+    // holding no legal symbol is not a choice, so its bit is not coded.
+    VSet ls; uint nls = 256;
+    if( lset ) {
+      VSet t; rotr256( t, lg[k][0], pb );
+#if RES_ZIGZAG
+      zigzagset( ls, t );
+#else
+      ls = t;
+#endif
+      nls = ls.count();
+    }
+#endif
     Ctr* m0 = res[0] + rbase[0][k];
 #if RES_NM>1
     Ctr* m1 = res[1] + rbase[1][k];
@@ -695,15 +861,28 @@ struct Raster {
     Ctr* m4 = res[4] + rbase[4][k];
 #endif
 #if RES_NM>5
-    Ctr* m5 = res[5] + (int(k)*RES_VQ + vctx[k])*256;
+    Ctr* m5 = res[5] + (int(k*vq) + vctx[k])*256;
 #endif
     BitMix* mxb = bmix + size_t(mctx[k])*(RES_MD?8:1);
 #if RES_SSE
     Ctr* ap = sse + size_t(k)*256*(SSEQ+1);
 #endif
 
-    for( cxt=1; cxt<256; ) {
+    cxt = 1;
+    for( uint d=0; cxt<256; d++ ) {
       bit = (c>>7)&1;
+
+#if BLK_STAT
+      if( nls<256 ) {
+        uint len = 128u>>d, lo0 = (cxt - (1u<<d)) << (8-d);
+        int a0 = ls.any(lo0,len), a1 = ls.any(lo0+len,len);
+        if( a0 != a1 ) {                 // only one side is possible
+          bit = uint(a1);
+          c<<=1; cxt += cxt+bit;
+          continue;                      // not coded, not modelled
+        }
+      }
+#endif
 
       float s[RES_NM];
       m0[cxt].Predict();            s[0] = stp( m0[cxt].pK );
@@ -792,7 +971,11 @@ struct Raster {
     return byte(cxt);
   }
 
-  void Row( FILE* f, FILE* g, uint y ) {
+  // The image bytes live in memory: the encoder needs the whole raster up
+  // front to compute the block statistics, and the stat planes are then
+  // coded by a second Raster over an array that was never a file at all.
+  void Row( byte* img, uint y ) {
+    byte* q = img + size_t(y)*stride;
     byte* p = At(0,y);
     // Give pixel 0 a base: its left border mirrors the pixel above it.
     for( int j=-PADL; j<0; j++ ) memcpy( At(j,int(y)), At(0,int(y)-1), nc );
@@ -802,9 +985,8 @@ struct Raster {
       for( uint j=0; j<nc-1; j++ ) x[NPIX*nc+j] = 0.0f;
 #endif
       for( uint k=0; k<nc; k++ ) {
-        uint v = (f_DEC==0) ? uint(getc(f)) : 0;
-        v = Byte( k, p, v );
-        if( f_DEC ) putc( int(v), g );
+        uint v = Byte( k, p, q[px*nc+k] );
+        q[px*nc+k] = byte(v);
       }
       // edge replication: the border columns of this row mirror its
       // outermost pixels, so the block never reads the 128 fill once a
@@ -813,15 +995,11 @@ struct Raster {
       if( px==W-1 ) for( int j=1; j<=PADR; j++ ) memcpy( At(int(W)-1+j,y), p, nc );
     }
     // row padding to the 4-byte boundary
-    for( uint j=W*nc; j<stride; j++ ) {
-      uint c = (f_DEC==0) ? uint(getc(f)) : 0;
-      c = CodeByte( padm, c );
-      if( f_DEC ) putc( int(c), g );
-    }
+    for( uint j=W*nc; j<stride; j++ ) q[j] = byte( CodeByte( padm, q[j] ) );
   }
 
-  void Code( FILE* f, FILE* g ) {
-    for( uint y=0; y<H; y++ ) Row(f,g,y);
+  void Code( byte* img ) {
+    for( uint y=0; y<H; y++ ) Row(img,y);
 #if STATS
     double h0 = 0.0;
     for( int i=0; i<256; i++ ) if( s_h[i] )
@@ -832,6 +1010,124 @@ struct Raster {
 #endif
   }
 };
+
+// -------------------------------------------------------------
+// Per-block statistics
+//
+// For every B x B block and every colour component: the minimum, the
+// maximum, the AND of all its bytes (bits that are always 1) and their OR
+// (whose complement is the bits that are always 0).  Four numbers per
+// block per component -- four small pictures, one pixel per block, so the
+// same Raster that codes the raster codes them, ahead of it.
+//
+// Together they say which of the 256 byte values the block can still
+// hold.  A residual bit that only one of those values allows carries no
+// information and is not coded.
+// -------------------------------------------------------------
+#if BLK_STAT
+
+// IDX-FORMAT sec.5: the pattern is the search space, the clamp is the
+// contract.  A block edge of 1..12 doublings is what the geometry allows.
+static INLINE uint blkl( int v ) { return uint( v<1 ? 1 : (v>12 ? 12 : v) ); }
+
+struct BlkStats {
+  uint nbx, nby, nb, nc, blw, blh;
+  byte* st;                // [nb][4][nc] -- the four planes, as a picture
+  VSet* set;               // [nb][nc]    -- derived legal value sets
+  byte* rng;               // [nb][nc][2] -- and their min/max
+
+  void Init( uint W, uint H, uint nc_ ) {
+    blw = blkl(B0_BLKLW); blh = blkl(B0_BLKLH);
+    nc = nc_;
+    nbx = (W + (1u<<blw) - 1) >> blw;
+    nby = (H + (1u<<blh) - 1) >> blh;
+    nb  = nbx*nby;
+    st  = new byte[size_t(nb)*4*nc];
+    memset( st, 0, size_t(nb)*4*nc );
+    set = new VSet[size_t(nb)*nc];
+    rng = new byte[size_t(nb)*nc*2];
+  }
+
+  // encoder side: measure the raster
+  void Scan( const byte* img, uint W, uint H, uint stride ) {
+    for( size_t i=0; i<size_t(nb)*nc; i++ ) {
+      st[(i/nc)*4*nc + 0*nc + i%nc] = 255;   // min
+      st[(i/nc)*4*nc + 1*nc + i%nc] = 0;     // max
+      st[(i/nc)*4*nc + 2*nc + i%nc] = 255;   // and
+      st[(i/nc)*4*nc + 3*nc + i%nc] = 0;     // or
+    }
+    for( uint y=0; y<H; y++ ) {
+      const byte* q = img + size_t(y)*stride;
+      byte* b = st + (size_t(y>>blh)*nbx)*4*nc;
+      for( uint x=0; x<W; x++ ) {
+        byte* c = b + size_t(x>>blw)*4*nc;
+        for( uint k=0; k<nc; k++ ) {
+          uint v = q[x*nc+k];
+          if( v < c[0*nc+k] ) c[0*nc+k] = byte(v);
+          if( v > c[1*nc+k] ) c[1*nc+k] = byte(v);
+          c[2*nc+k] &= byte(v);
+          c[3*nc+k] |= byte(v);
+        }
+      }
+    }
+  }
+
+  // The four planes are far from independent, and the dependence is exact:
+  //   max >= min                          -> code max-min
+  //   and is a subset of min & max        -> code which of those bits it drops
+  //   or  is a superset of min | max      -> code which bits it adds
+  // so planes 1..3 become mostly-zero pictures.  Undoing it needs only the
+  // same block's min and max, so it costs the coder nothing to unpick.
+  void Pack() {
+    for( size_t b=0; b<nb; b++ ) {
+      byte* c = st + b*4*nc;
+      for( uint k=0; k<nc; k++ ) {
+        uint mn = c[0*nc+k], mx = c[1*nc+k], am = c[2*nc+k], om = c[3*nc+k];
+        // an empty block (the image is not a whole number of blocks) has
+        // min=255,max=0; that survives the round trip as max-min = 1.
+        if( mn>mx ) { c[1*nc+k]=byte((mx-mn)&255); c[2*nc+k]=0; c[3*nc+k]=0; continue; }
+        c[1*nc+k] = byte(mx-mn);
+        c[2*nc+k] = byte((mn&mx) & ~am);
+        c[3*nc+k] = byte(om & ~(mn|mx));
+      }
+    }
+  }
+  void Unpack() {
+    for( size_t b=0; b<nb; b++ ) {
+      byte* c = st + b*4*nc;
+      for( uint k=0; k<nc; k++ ) {
+        uint mn = c[0*nc+k], mx = (mn + c[1*nc+k]) & 255;
+        c[1*nc+k] = byte(mx);
+        c[2*nc+k] = byte((mn&mx) & ~c[2*nc+k]);
+        c[3*nc+k] = byte((mn|mx) |  c[3*nc+k]);
+      }
+    }
+  }
+
+  // both sides: st -> the legal sets.  A block with no pixels in it (the
+  // image is not a whole number of blocks) keeps min=255/max=0, which
+  // yields the empty set; give those every value so nothing is excluded.
+  void Build() {
+    for( size_t b=0; b<nb; b++ ) for( uint k=0; k<nc; k++ ) {
+      const byte* c = st + b*4*nc;
+      uint mn = c[0*nc+k], mx = c[1*nc+k], am = c[2*nc+k], om = c[3*nc+k];
+      VSet& S = set[b*nc+k];
+      if( mn>mx ) {                       // empty block: constrain nothing
+        for( uint i=0; i<4; i++ ) S.m[i] = ~qword(0);
+        byte* R0 = rng + (b*nc+k)*2; R0[0]=0; R0[1]=255; continue;
+      }
+      byte* R = rng + (b*nc+k)*2;
+      for( uint i=0; i<4; i++ ) S.m[i] = 0;
+      for( uint v=mn; v<=mx; v++ )
+        if( (v&am)==am && (v&~om&255)==0 ) S.m[v>>6] |= qword(1)<<(v&63);
+      if( S.count()==0 ) {                    // cannot happen on real data
+        for( uint i=0; i<4; i++ ) S.m[i] = ~qword(0); mn=0; mx=255;
+      }
+      R[0] = byte(mn); R[1] = byte(mx);
+    }
+  }
+};
+#endif
 
 // -------------------------------------------------------------
 // BMP header parsing
@@ -945,9 +1241,33 @@ int main( int argc, char** argv ) {
 
   // -- raster ---------------------------------------------------------
   if( b.ok ) {
+    byte* img = new byte[b.pixbytes];
+    if( f_DEC==0 ) { if( fread(img,1,b.pixbytes,f)!=b.pixbytes ) return 6; }
+    else memset( img, 0, b.pixbytes );
+
     static Raster ras;
     ras.Init( b.W, b.H, b.nc, b.stride );
-    ras.Code( f, g );
+
+#if BLK_STAT
+    // the four statistic planes, as one picture of 4*n_colors components,
+    // coded by its own Raster ahead of the raster it describes
+    static BlkStats bs;
+    bs.Init( b.W, b.H, b.nc );
+    if( f_DEC==0 ) { bs.Scan( img, b.W, b.H, b.stride ); if( BLK_PACK ) bs.Pack(); }
+    {
+      static Raster sras;
+      uint nc2 = 4*b.nc;
+      sras.Init( bs.nbx, bs.nby, nc2, bs.nbx*nc2, BLK_SVQ );
+      sras.Code( bs.st );
+    }
+    if( BLK_PACK ) bs.Unpack();
+    bs.Build();
+    ras.lset = bs.set; ras.lrng = bs.rng;
+    ras.blw = bs.blw;  ras.blh = bs.blh;  ras.nbx = bs.nbx;
+#endif
+
+    ras.Code( img );
+    if( f_DEC ) fwrite( img, 1, b.pixbytes, g );
     f_pos += b.pixbytes;
 
     // -- trailer ------------------------------------------------------

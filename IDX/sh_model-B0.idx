@@ -75,3 +75,15 @@ Number DB,      1, 1!1101111011100
 Number BMW0,    1, 1!0100000000
 # how much of the APM's opinion to take /1024 (frozen: RES_SSE=0)
 !Number SSEW,    1, 1!01011111111
+
+# --- BLK_STAT: block geometry, as log2 of the edge (6 -> 64x64) ---
+# Consumers clamp to 1..12 (blkl()).
+# Frozen, and not because they do not matter: the statistic picture costs
+# 4*n_colors bytes per block whatever the block holds, so the best edge is a
+# trade between how tightly a block constrains its pixels and how much the
+# picture costs -- and it lands differently for a noisy 320x240 (32x32 wins,
+# -1%) than for a smooth 4096x512 (128x128 wins).  opt.pl's corpus is crops,
+# which makes every image small, so it would answer that question with a bias
+# it cannot see.  Tune these against whole files.
+!Number BLKLW,  1, 1!0101
+!Number BLKLH,  1, 1!0101

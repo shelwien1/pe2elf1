@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// B0 -- constants of bmpc's pixel mix and residual mixer.
+// B0 -- constants of bmpc's pixel mix, residual mixer and block statistics.
 //
 // GENERATED from IDX/sh_model-B0.idx by IDX/idx2inc.pl, then wrapped in
 // #ifndef by tools/idxguard.py; regenerate with  GCIDX=1 ./gc.sh.
@@ -153,4 +153,12 @@ static const int B0_BMW0 = B0_BMW0_.value * (1);
 #ifndef B0_SSEW
 mdesc( B0_SSEW_, 1, "01011111111" );
 static const int B0_SSEW = B0_SSEW_.value * (1);
+#endif
+#ifndef B0_BLKLW
+mdesc( B0_BLKLW_, 1, "0101" );
+static const int B0_BLKLW = B0_BLKLW_.value * (1);
+#endif
+#ifndef B0_BLKLH
+mdesc( B0_BLKLH_, 1, "0101" );
+static const int B0_BLKLH = B0_BLKLH_.value * (1);
 #endif
