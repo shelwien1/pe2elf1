@@ -166,7 +166,9 @@ int32_t choose_plane_coding(BmfImage* img) {
                     int32_t ul_a = p_a[ofs_ul_a];
                     int32_t g_a = ul_a+*p_a-p_a[ofs_up_a]-p_a[left_a];
                     int32_t cur_a = *q_a;
-                    int32_t bin_a = ((int16_t)g_a-(uint16_t)((wt4_up*(q_a[ofs_ul_a]+cur_a-q_a[ofs_up_a]-q_a[left_a])+wt_slot*(row_c[ofs_ul_a]+*row_c-row_c[ofs_up_a]-(uint32_t)row_c[left_a])+40)>>7)-256)&0x1FF;
+                    int32_t bin_a = residual_bin(g_a,
+                                wt4_up, q_a[ofs_ul_a]+cur_a-q_a[ofs_up_a]-q_a[left_a],
+                                wt_slot, row_c[ofs_ul_a]+*row_c-row_c[ofs_up_a]-(uint32_t)row_c[left_a]);
                     ++hist_arm_a[bin_a];
                     q_a -= left_a;
                     p_a -= left_a;
@@ -197,7 +199,9 @@ int32_t choose_plane_coding(BmfImage* img) {
                     int32_t ul_b = p_b[ofs_ul_b];
                     int32_t g_b = ul_b+*p_b-p_b[ofs_up_b]-p_b[left_b];
                     int32_t cur_b = *q_b;
-                    int32_t bin_b = ((int16_t)g_b-(uint16_t)((wt4_cur*(q_b[ofs_ul_b]+cur_b-q_b[ofs_up_b]-q_b[left_b])+wt8_up*(row_d[ofs_ul_b]+*row_d-row_d[ofs_up_b]-(uint32_t)row_d[left_b])+40)>>7)-256)&0x1FF;
+                    int32_t bin_b = residual_bin(g_b,
+                                wt4_cur, q_b[ofs_ul_b]+cur_b-q_b[ofs_up_b]-q_b[left_b],
+                                wt8_up, row_d[ofs_ul_b]+*row_d-row_d[ofs_up_b]-(uint32_t)row_d[left_b]);
                     ++hist_arm_b[bin_b];
                     q_b -= left_b;
                     p_b -= left_b;
@@ -233,7 +237,9 @@ int32_t choose_plane_coding(BmfImage* img) {
               int32_t ul_c = p_c[ofs_ul_c];
               int32_t g_c = ul_c+*p_c-p_c[ofs_up_c]-p_c[left_c];
               int32_t cur_c = *q_c;
-              int32_t bin_c = ((uint16_t)g_c-(uint16_t)((wt4_dn*(q_c[ofs_ul_c]+cur_c-q_c[ofs_up_c]-q_c[left_c])+wt_slot*(row_e[ofs_ul_c]+*row_e-row_e[ofs_up_c]-(uint32_t)row_e[left_c])+40)>>7)-256)&0x1FF;
+              int32_t bin_c = residual_bin(g_c,
+                                wt4_dn, q_c[ofs_ul_c]+cur_c-q_c[ofs_up_c]-q_c[left_c],
+                                wt_slot, row_e[ofs_ul_c]+*row_e-row_e[ofs_up_c]-(uint32_t)row_e[left_c]);
               ++hist_arm_c[bin_c];
               q_c -= left_c;
               p_c -= left_c;
@@ -264,7 +270,9 @@ int32_t choose_plane_coding(BmfImage* img) {
               int32_t ul_d = p_d[ofs_ul_d];
               int32_t g_d = ul_d+*p_d-p_d[ofs_up_d]-p_d[left_d];
               int32_t cur_d = *q_d;
-              int32_t bin_d = ((uint16_t)g_d-(uint16_t)((wt4_cur*(q_d[ofs_ul_d]+cur_d-q_d[ofs_up_d]-q_d[left_d])+wt8_dn*(row_f[ofs_ul_d]+*row_f-row_f[ofs_up_d]-(uint32_t)row_f[left_d])+40)>>7)-256)&0x1FF;
+              int32_t bin_d = residual_bin(g_d,
+                                wt4_cur, q_d[ofs_ul_d]+cur_d-q_d[ofs_up_d]-q_d[left_d],
+                                wt8_dn, row_f[ofs_ul_d]+*row_f-row_f[ofs_up_d]-(uint32_t)row_f[left_d]);
               ++hist_arm_d[bin_d];
               q_d -= left_d;
               p_d -= left_d;

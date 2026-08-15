@@ -18,6 +18,37 @@ struct PixRec {
   };
 };
 
+// How many of `n` consecutive records matched their neighbour on `lane`, less
+// `n` -- so 0 when every one of them did and `-n` when none did.  That is what
+// each of the four gradients is seeded with at the start of a row, and `sig1`
+// tests each of the four for zero.
+//
+// Ten copies between `code_pixel`, `decode_pixel`, `model_plane` and
+// `unmodel_plane`, every one of them written out term by term with the terms
+// in scheduler order.
+//
+// Three of the eight terms in one of them were cast to `int8_t`, and the casts
+// say nothing: every write to a `match` byte in this program is a comparison,
+// an `&` of two of those, a copy of another record's byte, or the `0x01010101`
+// two sites store through the union -- so the byte is 0 or 1 and the two
+// readings agree.
+static int32_t match_seed(const PixRec* first, int32_t n, int32_t lane = 0) {
+  int32_t hits = 0;
+  for( int32_t i = 0; i<n; ++i )
+    hits += first[i].match[lane];
+  return hits-n;
+}
+
+// `grad[0]`'s five records are not consecutive: -3, -2, 2, 3, 4, stepping over
+// the three around the one being coded.  Both pixel coders spell them out
+// through a handful of `uint8_t` locals -- five in one and four in the other,
+// with a `g_ab` that is two of them added early -- and none of those locals is
+// read anywhere else.
+static int32_t match_seed_split(const PixRec* at) {
+  return at[-3].match[0]+at[-2].match[0]
+        +at[2].match[0]+at[3].match[0]+at[4].match[0]-5;
+}
+
 struct ModelBlock {
   uint32_t width;
   int32_t height;
@@ -462,7 +493,7 @@ struct ModelBlock {
             rec->w[6] = lvl<<6;
             rec->w[lo1] += lvl;
             rec->w[k] += rec->b15;
-            rec->w[5] = rec->w[0]+rec->w[4]+rec->w[3]+rec->w[2]+rec->w[1];
+            rec->resum();
           } else {
             live = 0;
           }
@@ -562,11 +593,11 @@ struct ModelBlock {
         ++t;
         blk->row_cur[7] = t;
         ++blk->row_cur[9];
-        blk->grad[0] = lists[3].match[0]+lists[2].match[0]+lists[1].match[0]+lists[0].match[0]+lists[4].match[0]-5;
+        blk->grad[0] = match_seed(lists, 5);
         blk->grad[3] = 0;
         blk->grad[2] = 0;
         row_w = blk->width;
-        blk->grad[1] = t[3].match[0]+t[2].match[0]+t[1].match[0]+t[0].match[0]+t[4].match[0]-5;
+        blk->grad[1] = match_seed(t, 5);
         if( row_w<=0 )
           break;
         x2 = 0;
@@ -966,18 +997,12 @@ struct ModelBlock {
           }
           idx_t = idx_s;
           PixRec *cur6c = (PixRec*)row_cur[6];
-          uint8_t g_a = cur6c[-3].match[0];
-          uint8_t g_b = cur6c[-2].match[0];
-          uint8_t g_c = cur6c[2].match[0];
-          uint8_t g_d = cur6c[3].match[0];
-          uint8_t g_ab = g_b+g_a;
-          uint8_t g_e = cur6c[4].match[0];
           PixRec *up3 = (PixRec*)row_cur[7];
-          grad[0] = g_d+g_c+g_ab+g_e-5;
-          grad[1] = up3[3].match[0]+up3[2].match[0]+up3[1].match[0]+up3[0].match[0]+(int8_t)up3[-1].match[0]+(int8_t)up3[-2].match[0]+(int8_t)up3[-3].match[0]+up3[4].match[0]-8;
-          grad[2] = next[-4].match[1]+next[-3].match[1]-2;
+          grad[0] = match_seed_split(cur6c);
+          grad[1] = match_seed(up3-3, 8);
+          grad[2] = match_seed(next-4, 2, 1);
           int32_t s1d = nb_sym[1];
-          grad[3] = next[-5].match[0]+next[-6].match[0]+next[-7].match[0]+next[-4].match[0]-4;
+          grad[3] = match_seed(next-7, 4);
           next[-1].match[4] = s1d==cur6c[1].sym;
           idx_s = idx_t;
           row_cur[5][-1].match[5] = s1d==row_cur[6][2].sym;
@@ -1459,18 +1484,14 @@ struct ModelBlock {
           }
         }
         PixRec *r4 = (PixRec*)row_cur[6];
-        uint8_t m0 = r4[-2].match[0];
-        uint8_t m1 = r4[2].match[0];
-        uint8_t m2 = r4[4].match[0];
         nb_sym[3] = amap;
-        uint8_t m3 = r4[-3].match[0];
         runlen_s = runlen;
         PixRec *up3 = (PixRec*)row_cur[7];
-        grad[0] = r4[3].match[0]+m1+m0+m3+m2-5;
-        grad[1] = up3[3].match[0]+up3[2].match[0]+up3[1].match[0]+up3[0].match[0]+(int8_t)up3[-1].match[0]+(int8_t)up3[-2].match[0]+(int8_t)up3[-3].match[0]+up3[4].match[0]-8;
-        grad[2] = cur2[-4].match[1]+cur2[-3].match[1]-2;
+        grad[0] = match_seed_split(r4);
+        grad[1] = match_seed(up3-3, 8);
+        grad[2] = match_seed(cur2-4, 2, 1);
         int32_t s8b = nb_sym[8];
-        grad[3] = cur2[-5].match[0]+cur2[-6].match[0]+cur2[-7].match[0]+cur2[-4].match[0]-4;
+        grad[3] = match_seed(cur2-7, 4);
         cur2[-1].match[4] = s8b==r4[1].sym;
         amap = nb_sym[3];
         row_cur[5][-1].match[5] = s8b==row_cur[6][2].sym;

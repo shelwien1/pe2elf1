@@ -75,12 +75,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
       err = ((float)row0p[-1].val-(bmf_hsum4(acc)+bias[0]))*2.0999999f;
       floor_ = 7744.0f*wrow->w[14][2];
       for( j = 0; j<7; ++j )
-        for( k = 0; k<4; ++k ) {
-          float x = p2_row[j][k];
-          float ms = wrow->w[7+j][k]+(x*x-wrow->w[7+j][k])*bmf_p2_ms_rate;
-          wrow->w[7+j][k] = ms;
-          wrow->w[j][k] += bmf_p2_rate[j][k]*err*x/(ms+floor_);
-        }
+        for( k = 0; k<4; ++k )
+          nlms_step(wrow, j, k, p2_row[j][k], err, bmf_p2_ms_rate, floor_);
     }
   } else {
     int32_t next_id = nb_id_used;

@@ -11,6 +11,15 @@ struct FreqRec {
     };
   };
 
+  // `w[5]` is the total of the five selector weights.  Three places compute it:
+  // this, and the two `init_tables` bodies that seed a record -- and those two
+  // spelled the five terms in the order 0, 4, 3, 2, 1.
+  uint16_t resum() {
+    uint16_t sum = (uint16_t)(w[0]+w[1]+w[2]+w[3]+w[4]);
+    w[5] = sum;
+    return sum;
+  }
+
   // Halve the five selector weights and re-sum them into `w[5]`, raising the
   // escape floor and the increment if the halving left them too small.
   //
@@ -22,8 +31,7 @@ struct FreqRec {
   uint16_t rescale(uint16_t escape_floor, uint8_t& kick) {
     for( int32_t i = 0; i<5; ++i )
       w[i] -= w[i]>>1;
-    uint16_t sum = (uint16_t)(w[0]+w[1]+w[2]+w[3]+w[4]);
-    w[5] = sum;
+    const uint16_t sum = resum();
     if( escape_floor<256&&!b14 ) {
       escape_floor = 256;
       w[6] = 256;

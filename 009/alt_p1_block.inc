@@ -45,12 +45,11 @@ struct AltP1Block {
   // and in `alt_p1.inc` -- because in the decompilation each of the three
   // callers had its own copy of the loop.
   //
-  // The two activity sums that follow it stay at the call sites, because they
-  // are *not* the same at all three: `alt_p1_code`'s reads the two mirrored
-  // records' magnitudes through `(int8_t)` and the other two read them as the
-  // `uint8_t` they are declared.  Whether that difference can ever show is a
-  // question about how large a residual magnitude gets, and it is not one this
-  // extraction needed to answer.
+  // The two activity sums that follow it are `seed_activity` below, which took
+  // a parameter rather than a fourth copy: the three callers do not agree on
+  // how two of the twenty magnitudes are read.  The question this comment used
+  // to leave open -- whether that difference can ever show -- is answered
+  // there, with the measurement.
   void advance_row() {
     {
       P1Ctx*const here = cursor[0];
@@ -63,6 +62,43 @@ struct AltP1Block {
       P1Ctx*const here = cursor[0];
       P1Ctx*const up = cursor[1];
       for( int32_t i = 0; i<3; ++i ) here[-3+i] = up[2-i];
+    }
+  }
+
+  // The two activity sums the context reads at the start of a row: ten
+  // neighbour magnitudes each, taken from rows 2 and 4 -- even offsets for
+  // `ctx[3]`, odd for `ctx[4]` -- plus two from the row being written.
+  //
+  // Three callers wrote this out, and the third is not quite the same as the
+  // other two: the generic `alt_model_p1` reads the two *mirrored* magnitudes,
+  // the ones `advance_row` copied back past the left edge, through `(int8_t)`
+  // where `d8_encode_body` and `alt_model_p1_d8_decode` read the `uint8_t`
+  // they are declared.  `advance_row`'s comment left that difference standing
+  // as a question about how large a residual magnitude gets.
+  //
+  // It is answered, and the answer is that the difference is exercised and
+  // still does not show.  `mag` is `abs32(val - pred)` of two bytes, so it
+  // reaches 255 and the two readings then differ by 256; instrumented over the
+  // corpus, the generic coder runs this 3,216 times and 70 of those rows carry
+  // a magnitude at or above 128.  Dropping the casts moves no stream even so,
+  // because these two sums are read in exactly one place --
+  // `ctx[3 + ctx[2]] == 0` -- and are only ever tested against zero.
+  //
+  // So the casts stay as the binary has them and the parameter says which
+  // coder is asking, rather than one of the three being quietly changed to
+  // agree with the other two.
+  void seed_activity(bool signed_mirror) {
+    const P1Ctx *const row0 = cursor[0], *const row2 = cursor[2],
+                *const row4 = cursor[4];
+    ctx[2] = 0;
+    for( int32_t lane = 0; lane<2; ++lane ) {
+      const int32_t mirror = lane-2;
+      int32_t sum = signed_mirror
+                  ? (int8_t)row2[mirror].mag+(int8_t)row4[mirror].mag
+                  : row2[mirror].mag+row4[mirror].mag;
+      for( int32_t k = 0; k<3; ++k )
+        sum += row2[lane+2*k].mag+row4[lane+2*k].mag;
+      ctx[3+lane] = sum+row0[lane-4].mag+row0[lane-2].mag;
     }
   }
 
@@ -188,12 +224,7 @@ struct AltP1Block {
       do {
         ++y;
         advance_row();
-        {
-          P1Ctx *row0 = cursor[0], *row2 = cursor[2], *row4 = cursor[4];
-          ctx[2] = 0;
-          ctx[3] = row2[-2].mag+row4[-2].mag+row2[0].mag+row4[0].mag+row2[2].mag+row4[2].mag+row2[4].mag+row4[4].mag+row0[-4].mag+row0[-2].mag;
-          ctx[4] = row2[-1].mag+row4[-1].mag+row2[1].mag+row4[1].mag+row2[3].mag+row4[3].mag+row2[5].mag+row4[5].mag+row0[-3].mag+row0[-1].mag;
-        }
+        seed_activity(false);
         if( !(width<=0) ) {
           uint8_t* q = out;
           int32_t x = 0;

@@ -107,7 +107,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
             rec->w[6] = wt<<6;
             rec->w[lo] += wt;
             rec->w[hi] += rec->b15;
-            rec->w[5] = rec->w[0]+rec->w[4]+rec->w[3]+rec->w[2]+rec->w[1];
+            rec->resum();
           } else {
             live = 0;
           }
@@ -201,12 +201,12 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         ++up2;
         blk->row_cur[7] = up2;
         ++blk->row_cur[9];
-        blk->grad[0] = up1[3].match[0]+up1[2].match[0]+up1[1].match[0]+up1[0].match[0]+up1[4].match[0]-5;
+        blk->grad[0] = match_seed(up1, 5);
         blk->grad[3] = 0;
         blk->grad[2] = 0;
         y = y1;
         row_w = blk->width;
-        blk->grad[1] = up2[3].match[0]+up2[2].match[0]+up2[1].match[0]+up2[0].match[0]+up2[4].match[0]-5;
+        blk->grad[1] = match_seed(up2, 5);
         if( row_w>0 ) {
           int32_t x = 0;
           do {

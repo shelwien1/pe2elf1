@@ -37,6 +37,29 @@
 // `memcpy(…, 4*sizeof(PlaneDesc))` once a candidate wins.  Byte 16*k+0 is
 // `nrefs`, +1 is `src_plane`, +4 and +8 are the two weights, and the whole of
 // this function's output is those four fields.  No cast is left in this file.
+// One residual quantised into the 512-bin histogram the filter search scores.
+// `own` is this plane's gradient at the sample; `a` and `b` are the two
+// reference planes' gradients at the same sample, blended by the candidate's
+// two weights, rounded, and taken as a nine-bit offset from 256.
+//
+// Five copies of a hundred and fifty characters -- this one and four in
+// `choose_plane_coding` -- and two of the differences between them are not
+// what they look like.
+//
+//   * The second gradient carries a `(uint32_t)` on its last term at every one
+//     of the five sites, and it is load-bearing: it makes the blend unsigned,
+//     so the `>> 7` is a logical shift rather than an arithmetic one and a
+//     negative blend rounds the other way.  `b` is `uint32_t` here for that
+//     reason, and the call sites keep the cast that puts it there.
+//   * Two of the five cast `own` to `int16_t` and three to `uint16_t`.  That
+//     one cannot show, for all inputs and not merely on this corpus: the two
+//     readings differ by exactly 65536, which is 128 times 512, so they agree
+//     in the nine bits `& 0x1FF` keeps.
+static inline int32_t residual_bin(int32_t own, int32_t w0, int32_t a,
+                                   int32_t w1, uint32_t b) {
+  return ((uint16_t)own-(uint16_t)((w0*a+w1*b+40)>>7)-256)&0x1FF;
+}
+
 int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
   // Six histograms of a difference, indexed `value + 512`, and a seventh of
   // the second walk's residual, indexed by nine bits.  The first six were one
@@ -137,7 +160,9 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
     int32_t e0 = r0[ofs_nw];
     int32_t e1 = e0+*r0-r0[ofs_n]-r0[ofs_w];
     int32_t e2 = *r1;
-    int32_t bin2 = ((uint16_t)e1-(uint16_t)((wa*(r1[ofs_nw]+e2-r1[ofs_n]-r1[ofs_w])+wb*(r2[ofs_nw]+*r2-r2[ofs_n]-(uint32_t)r2[ofs_w])+40)>>7)-256)&0x1FF;
+    int32_t bin2 = residual_bin(e1,
+                     wa, r1[ofs_nw]+e2-r1[ofs_n]-r1[ofs_w],
+                     wb, r2[ofs_nw]+*r2-r2[ofs_n]-(uint32_t)r2[ofs_w]);
     ++hist_w[bin2];
     r0 += planes;
     r1 += planes;

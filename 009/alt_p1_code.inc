@@ -106,12 +106,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           ++p;
           AltP1Block* blk_k = plane[p-1];
           blk_k->advance_row();
-          P1Ctx *cursor2 = blk_k->cursor[2];
-          P1Ctx *cursor4 = blk_k->cursor[4];
-          P1Ctx *cursor0 = blk_k->cursor[0];
-          blk_k->ctx[2] = 0;
-          blk_k->ctx[3] = (int8_t)cursor2[-2].mag+(int8_t)cursor4[-2].mag+cursor2[0].mag+cursor4[0].mag+cursor2[2].mag+cursor4[2].mag+cursor2[4].mag+cursor4[4].mag+cursor0[-4].mag+cursor0[-2].mag;
-          blk_k->ctx[4] = (int8_t)cursor2[-1].mag+(int8_t)cursor4[-1].mag+cursor2[1].mag+cursor4[1].mag+cursor2[3].mag+cursor4[3].mag+cursor2[5].mag+cursor4[5].mag+cursor0[-3].mag+cursor0[-1].mag;
+          blk_k->seed_activity(true);
           n_planes = plane_count;
         } while( p<plane_count );
         w = width;

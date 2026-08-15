@@ -100,12 +100,7 @@ void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
     do {
       ++y;
       blk->advance_row();
-      P1Ctx *cursor2 = blk->cursor[2];
-      P1Ctx *cursor4 = blk->cursor[4];
-      blk->ctx[2] = 0;
-      P1Ctx *cursor0 = blk->cursor[0];
-      blk->ctx[3] = cursor2[-2].mag+cursor4[-2].mag+cursor2[0].mag+cursor4[0].mag+cursor2[2].mag+cursor4[2].mag+cursor2[4].mag+cursor4[4].mag+cursor0[-4].mag+cursor0[-2].mag;
-      blk->ctx[4] = cursor2[-1].mag+cursor4[-1].mag+cursor2[1].mag+cursor4[1].mag+cursor2[3].mag+cursor4[3].mag+cursor2[5].mag+cursor4[5].mag+cursor0[-3].mag+cursor0[-1].mag;
+      blk->seed_activity(false);
       if( !(blk->width<=0) ) {
         uint8_t* out_at = out;
         int32_t x = 0;

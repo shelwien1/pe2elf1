@@ -332,6 +332,23 @@ struct AltP2Block {
   // that is the shape the original's SSE was in; keeping it is what lets a
   // compiler put it back.
 
+  // One tap of a normalised least-mean-squares step: move the tap's running
+  // mean square toward `x*x` at `ms_rate`, then move the weight by the error
+  // scaled by `x` and divided by that mean square.  Dividing by the running
+  // power is the whole of what "normalised" means here.
+  //
+  // Written out three times -- twice below for the fast and slow rows and once
+  // in `alt_p2_context` -- differing only in the rate and the floor, so what
+  // the three had in common was invisible.  It takes `j` and `k` rather than a
+  // `float&` because the mean square it updates is the same row seven lines
+  // down: `w[j]` and `w[7 + j]` are one tap.
+  void nlms_step(NbRow* row, int32_t j, int32_t k, float x, float err,
+                 float ms_rate, float floor_) {
+    const float ms = row->w[7+j][k]+(x*x-row->w[7+j][k])*ms_rate;
+    row->w[7+j][k] = ms;
+    row->w[j][k] += bmf_p2_rate[j][k]*err*x/(ms+floor_);
+  }
+
   // Track the input energy and step both rows' weights toward their own error.
   // Two rows, not one: `fast` adapts against this sample and `slow` against the
   // confidence-scaled one, and the pair is the mixer.
@@ -343,12 +360,8 @@ struct AltP2Block {
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k ) {
         const float x = p2_row[j][k];
-        float ms = fast->w[7+j][k]+(x*x-fast->w[7+j][k])*0.05f;
-        fast->w[7+j][k] = ms;
-        fast->w[j][k] += bmf_p2_rate[j][k]*err_fast*x/(ms+floor_fast);
-        ms = slow->w[7+j][k]+(x*x-slow->w[7+j][k])*rate_slow;
-        slow->w[7+j][k] = ms;
-        slow->w[j][k] += bmf_p2_rate[j][k]*err_slow*x/(ms+floor_slow);
+        nlms_step(fast, j, k, x, err_fast, 0.05f, floor_fast);
+        nlms_step(slow, j, k, x, err_slow, rate_slow, floor_slow);
       }
   }
 
