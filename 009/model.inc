@@ -263,6 +263,28 @@ struct ModelBlock {
     return result;
   }
 
+  // The two lists a pixel is searched through, loaded, and where that search
+  // resumes.  `sel_cur` walks `sel` and is left wherever the last pixel
+  // stopped, so both coders reload the pair before every search -- the same
+  // three lines in `code_pixel` and `decode_pixel`, and the last thing the two
+  // still had in common.
+  SymList** load_selectors() {
+    sel[0] = &sel0_list[mode_symbol[2]];
+    sel[1] = &sel1_list[mode_symbol[1]];
+    return sel_cur;
+  }
+
+  // Both selector lists, one entry per symbol of the alphabet.  Written out at
+  // the end of `expand_alphabet` and again in `model_plane`'s allocation, the
+  // same seven lines with the same two capacities: 99 for the list that walks
+  // by weight and 33 for the one that walks by symbol.
+  void init_symbol_lists() {
+    for( uint32_t s = 0; s<alphabet; ++s ) {
+      sel1_list[s].init(99, 0);
+      sel0_list[s].init(33, 0);
+    }
+  }
+
   void expand_alphabet() {
     SymList lists[16];
     uint32_t* codes_p;
@@ -493,13 +515,7 @@ struct ModelBlock {
       j = nullptr;
     }
     blk->sel0_list = j;
-    if( !(blk->alphabet<=0) ) {
-      int32_t s = 0;
-      do {
-        blk->sel1_list[s].init(99, 0);
-        blk->sel0_list[s++].init(33, 0);
-      } while( (uint32_t)s<blk->alphabet );
-    }
+    blk->init_symbol_lists();
     jj = blk->depth;
     if( jj==blk->depth_raw ) {
       expand_buf = nullptr;
@@ -705,17 +721,17 @@ struct ModelBlock {
     FreqRec* freq2;
     PixRec* up4;
     FreqRec* freq_tbl;
-    SymList* sel1, ** sel_p;
+    SymList** sel_p;
     int32_t bin_tot;
     int32_t arg_cum, arg_high, arg_tot;
-    uint32_t done, lvl_a, pos1;
+    uint32_t done, lvl_a;
     PixRec* r8, * r7, * rec;
     SymPair* pixq;
     PixRec* r8b, * r7b, * next, * r5, * cur6b;
     uint8_t g_a, g_b, g_c, g_d, g_e;
     int32_t n2r;
     int16_t s1c, w1s, s3b;
-    int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, state, pair_last, cap, bucket_at, up_m0, m_w1, nb2, all_up, sig1, id1, sig2, id2, s1a, m_up0, idx1, run, bucket, bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, flags_word, s3c, s3d, s1d, tot, target, cum, w6a, b15a, w5a, msym3, msym1, msym2, psym, bit2, msym1b, lsym, b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a, span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c, s3a;
+    int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, state, pair_last, cap, bucket_at, up_m0, m_w1, nb2, all_up, sig1, id1, sig2, id2, s1a, m_up0, idx1, run, bucket, bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, flags_word, s3c, s3d, s1d, tot, target, cum, w6a, b15a, w5a, msym3, msym1, msym2, psym, bit2, lsym, b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a, span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c, s3a;
     PixRec* row;
     SymPair* pair;
     PixRec* cur6;
@@ -1225,14 +1241,9 @@ struct ModelBlock {
           return idx_t+1;
         exclusion_mask[psym] = exclusion_gen;
       }
-      pos1 = sym_pos+1;
-      sym_pos = pos1;
-    } while( pos1<32 );
-    msym1b = mode_symbol[1];
-    sel1 = sel1_list;
-    sel[0] = &sel0_list[mode_symbol[2]];
-    sel_p = sel_cur;
-    sel[1] = &sel1[msym1b];
+      ++sym_pos;
+    } while( sym_pos<32 );
+    sel_p = load_selectors();
     while( 1 ) {
       if( sel_p>&escape_list )
         bmf_fatal(bmf_read_error);
@@ -1267,7 +1278,7 @@ struct ModelBlock {
     uint16_t* wr;
     PixRec* up4;
     uint16_t wp, g4, g3;
-    SymList* sel1, ** sel_p;
+    SymList** sel_p;
     uint32_t arg_tot, arg_high, done, rec_word, grid_kind;
     PixRec* r1, * r2, * cur6b, * r3, * r5;
     FreqRec* binp, * binp_s;
@@ -1276,7 +1287,7 @@ struct ModelBlock {
     int32_t bp;
     uint16_t* id3p;
     int16_t s8, w1s, acc2, s3, g0;
-    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, esym, up_hit, pos1, msym1b, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
+    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, esym, up_hit, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
     uint16_t w5, w1;
     PixRec* cur5, * cur5p1, * cur5p1b, * r6, * r7;
     SymPair* wq;
@@ -1772,14 +1783,9 @@ struct ModelBlock {
           return runlen_s+1;
         exclusion_mask[esym] = exclusion_gen;
       }
-      pos1 = sym_pos+1;
-      sym_pos = pos1;
-    } while( pos1<32 );
-    msym1b = mode_symbol[1];
-    sel1 = sel1_list;
-    sel[0] = &sel0_list[mode_symbol[2]];
-    sel_p = sel_cur;
-    sel[1] = &sel1[msym1b];
+      ++sym_pos;
+    } while( sym_pos<32 );
+    sel_p = load_selectors();
     while( 1 ) {
       if( (*sel_p)->live ) {
         if( (*sel_p)->code_symbol(row_cur[5]->sym) )

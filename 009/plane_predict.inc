@@ -112,8 +112,44 @@ static void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane)
     dst[i] = src[ofs];
 }
 
+// What a plane's descriptor says about the transform between it and the planes
+// it references: which plane, the DC offset, and the three weights.
+//
+// `interleave_plane` and `colour_transform` each decoded this in the same
+// nineteen lines, and those nineteen are the whole of what the two share --
+// the loops under them are inverses and have nothing else in common.
+//
+// `by_weights` is the case worth naming.  A two-reference plane whose weights
+// are 128 and 0 reads only one plane after all, and which one depends on which
+// of the two is zero; that is why a descriptor saying `nrefs == 2` can take the
+// one-reference path below.
+struct PlaneTransform {
+  int32_t to_ref0, to_ref1, mode, dc, wgt0, wgt1, wgt2;
+  bool by_weights;
+};
+
+static PlaneTransform plane_transform(int32_t plane) {
+  PlaneTransform t;
+  t.to_ref0 = plane_desc[0].src_plane-plane;
+  t.to_ref1 = plane_desc[1].src_plane-plane;
+  t.mode = plane_desc[plane].nrefs;
+  t.dc = plane_desc[plane].dc;
+  t.wgt1 = plane_desc[plane].weight1;
+  t.wgt0 = plane_desc[plane].weight0;
+  t.wgt2 = plane_desc[plane].weight2;
+  t.by_weights = false;
+  if( t.mode==2&&t.wgt0+t.wgt1==128 ) {
+    if( !t.wgt1 ) {
+      t.by_weights = true;
+    } else if( !t.wgt0 ) {
+      t.to_ref0 = plane_desc[1].src_plane-plane;
+      t.by_weights = true;
+    }
+  }
+  return t;
+}
+
 void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
-  int32_t to_ref0;
   uint8_t* base = &img->pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
     int32_t n_flat = bmf_pixels(img);
@@ -127,40 +163,24 @@ void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
   }
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
-  bool by_weights;
-  to_ref0 = plane_desc[0].src_plane-plane;
-  int32_t to_ref1 = plane_desc[1].src_plane-plane;
-  int32_t mode = plane_desc[plane].nrefs;
-  int32_t dc = plane_desc[plane].dc;
-  int32_t wgt1 = plane_desc[plane].weight1;
-  int32_t wgt0 = plane_desc[plane].weight0;
-  int32_t wgt2 = plane_desc[plane].weight2;
-  by_weights = false;
-  if( mode==2&&wgt0+wgt1==128 ) {
-    if( !wgt1 ) {
-      by_weights = true;
-    } else if( !wgt0 ) {
-      to_ref0 = plane_desc[1].src_plane-plane;
-      by_weights = true;
-    }
-  }
-  if( !by_weights ) {
+  const PlaneTransform t = plane_transform(plane);
+  if( !t.by_weights ) {
     if( plane_desc[plane].nrefs!=1 ) {
-      if( mode==2 ) {
+      if( t.mode==2 ) {
         int32_t left2 = bmf_pixels(img);
         uint8_t *p2 = base;
         do {
-          int32_t x2 = dc+(uint8_t)*src++;
-          *p2 = (uint8_t)(((wgt0*p2[to_ref0]+wgt1*(uint32_t)p2[to_ref1]+40)>>7)+x2);
+          int32_t x2 = t.dc+(uint8_t)*src++;
+          *p2 = (uint8_t)(((t.wgt0*p2[t.to_ref0]+t.wgt1*(uint32_t)p2[t.to_ref1]+40)>>7)+x2);
           p2 += stride;
           --left2;
         } while( left2 );
-      } else if( mode==3 ) {
+      } else if( t.mode==3 ) {
         int32_t left3 = bmf_pixels(img);
         uint8_t *p3 = base;
         do {
-          int32_t x3 = dc+(uint8_t)*src++;
-          *p3 = (uint8_t)(((wgt1*(uint8_t)*(p3-2)+wgt0*(uint8_t)*(p3-3)+wgt2*(uint32_t)(uint8_t)*(p3-1)+63)>>7)+x3);
+          int32_t x3 = t.dc+(uint8_t)*src++;
+          *p3 = (uint8_t)(((t.wgt1*(uint8_t)*(p3-2)+t.wgt0*(uint8_t)*(p3-3)+t.wgt2*(uint32_t)(uint8_t)*(p3-1)+63)>>7)+x3);
           p3 += stride;
           --left3;
         } while( left3 );
@@ -168,11 +188,11 @@ void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
       return;
     }
   }
-  uint8_t *ref = base+to_ref0;
+  uint8_t *ref = base+t.to_ref0;
   int32_t i2 = 0;
   int32_t ofs2 = 0;
   do {
-    base[ofs2] = ref[ofs2]+dc+src[i2];
+    base[ofs2] = ref[ofs2]+t.dc+src[i2];
     ofs2 += stride;
     ++i2;
   } while( i2<n );
@@ -191,7 +211,6 @@ void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
 // the `by_weights` flag below, and why a two-reference descriptor can end up
 // reading only one plane.
 void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
-  int32_t to_ref0;
   uint8_t *src = &img->pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
     deinterleave_plane(img, dst, plane);
@@ -199,51 +218,35 @@ void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
   }
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
-  bool by_weights;
-  to_ref0 = plane_desc[0].src_plane-plane;
-  int32_t to_ref1 = plane_desc[1].src_plane-plane;
-  int32_t mode = plane_desc[plane].nrefs;
-  int32_t dc = plane_desc[plane].dc;
-  int32_t wgt1 = plane_desc[plane].weight1;
-  int32_t wgt0 = plane_desc[plane].weight0;
-  int32_t wgt2 = plane_desc[plane].weight2;
-  by_weights = false;
-  if( mode==2&&wgt0+wgt1==128 ) {
-    if( !wgt1 ) {
-      by_weights = true;
-    } else if( !wgt0 ) {
-      to_ref0 = plane_desc[1].src_plane-plane;
-      by_weights = true;
-    }
-  }
-  if( by_weights||plane_desc[plane].nrefs==1 ) {
-    uint8_t* ref = src+to_ref0;
+  const PlaneTransform t = plane_transform(plane);
+  if( t.by_weights||plane_desc[plane].nrefs==1 ) {
+    uint8_t* ref = src+t.to_ref0;
     int32_t i2 = 0;
     int32_t ofs2 = 0;
     do {
-      uint8_t d = src[ofs2]-dc-ref[ofs2];
+      uint8_t d = src[ofs2]-t.dc-ref[ofs2];
       ofs2 += stride;
       dst[i2++] = d;
     } while( i2<n );
     return;
   }
-  if( mode==2 ) {
+  if( t.mode==2 ) {
     int32_t left2 = bmf_pixels(img);
     uint8_t *p2 = src;
     do {
-      int32_t x2 = *p2-dc;
-      uint32_t blend = wgt0*p2[to_ref0]+wgt1*p2[to_ref1]+40;
+      int32_t x2 = *p2-t.dc;
+      uint32_t blend = t.wgt0*p2[t.to_ref0]+t.wgt1*p2[t.to_ref1]+40;
       p2 += stride;
       *dst++ = (uint8_t)(x2-(blend>>7));
       --left2;
     } while( left2 );
-  } else if( mode==3 ) {
+  } else if( t.mode==3 ) {
     int32_t left3 = bmf_pixels(img);
     uint8_t *p3 = src;
     do {
-      int32_t x3 = *p3-dc;
-      int32_t wsum = wgt1**(p3-2)+wgt0**(p3-3);
-      int32_t w12sum = wgt2**(p3-1);
+      int32_t x3 = *p3-t.dc;
+      int32_t wsum = t.wgt1**(p3-2)+t.wgt0**(p3-3);
+      int32_t w12sum = t.wgt2**(p3-1);
       p3 += stride;
       *dst++ = (uint8_t)(x3-((uint32_t)(wsum+w12sum+63)>>7));
       --left3;

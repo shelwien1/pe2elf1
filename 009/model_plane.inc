@@ -157,13 +157,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       lists0 = nullptr;
     }
     blk->sel0_list = lists0;
-    if( !(blk->alphabet<=0) ) {
-      int32_t s = 0;
-      do {
-        blk->sel1_list[s].init(99, 0);
-        blk->sel0_list[s++].init(33, 0);
-      } while( (uint32_t)s<blk->alphabet );
-    }
+    blk->init_symbol_lists();
     if( blk->height>0 ) {
       uint16_t* word = blk->sym_word;
       y = 0;

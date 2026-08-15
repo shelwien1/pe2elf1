@@ -45,11 +45,18 @@
 // numbers below were all wrong by the time it was written, which is why it
 // exists.
 //
-//   alt_model_p2_encode / alt_model_p2_decode        123 of 586 (21%)
-//   code_pixel / decode_pixel                        147 of 1044 (14%)
+//   alt_model_p2_encode / alt_model_p2_decode         39 of 385 (10%)
+//   code_pixel / decode_pixel                        141 of 1034 (14%)
 //   predict_med / unpredict_med                       10 of 123 (8%)
-//   alt_model_p1_d8_encode / alt_model_p1_d8_decode     8 of 60 (13%)
-//   model_plane / unmodel_plane                       15 of 258 (6%)
+//   alt_model_p1_d8_encode / alt_model_p1_d8_decode     3 of 50 (6%)
+//   model_plane / unmodel_plane                       15 of 252 (6%)
+//
+// Four of the five moved when the duplicated blocks came out, and every one of
+// them moved the same way: what the two halves shared was never the algorithm,
+// so naming it and calling it from both leaves less behind, not more.  The p2
+// pair fell from 123 of 586 to 39 of 385 -- `AltP2Block::start_row`,
+// `alt_p2_planes_alloc` and `alt_p2_planes_free` are the difference -- and the
+// p1 pair from 8 of 60 to 3 of 50.  The decline is stronger than it was.
 //
 // Every merge was gated on its own -- the fifteen streams byte for byte, at
 // both pointer widths -- and then all nine were instrumented and run over the

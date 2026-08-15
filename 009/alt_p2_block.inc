@@ -382,6 +382,44 @@ struct AltP2Block {
   int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb);
   uint32_t alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in);
 
+  // Roll this plane forward by one row: carry the last neighbour of the row
+  // just finished into both seams of the next, swap the two neighbour rows and
+  // step them past their margins, clear the filter's row and its four biases,
+  // and rotate the five context rings so the oldest becomes the new row.
+  //
+  // Three copies of this, forty-seven lines apiece.  `alt_p2_model` had it on
+  // its own members; `alt_model_p2_encode` and `alt_model_p2_decode` each had
+  // it written out on `blk_r->`, with the ring rotation spelled through five
+  // named temporaries rather than the `ring_advance` next door -- which is why
+  // the three did not look alike at a glance even though they are one thing.
+  void start_row() {
+    NbRow*const last = cur[-1];
+    cur[1] = last;
+    cur[0] = last;
+    NbRow**const was_row0 = row0;
+    row0 = row1;
+    row1 = was_row0;
+    cur = row0+2;
+    above = row1+2;
+    cur[-1] = *above;
+    cur[-2] = *above;
+    memset(p2_row, 0, 15);
+    for( int32_t i = 0; i<4; ++i ) bias[i] = 0.0f;
+    __builtin_memset(p2_row, 0, sizeof p2_row);
+    {
+      P2Ctx*const here = cursor[0];
+      for( int32_t i = 0; i<5; ++i ) here[i] = here[-1-i];
+    }
+    ring_advance(buf, cursor, 8);
+    cursor[0][-1] = cursor[1][0];
+    {
+      P2Ctx*const here = cursor[0];
+      P2Ctx*const up = cursor[1];
+      for( int32_t i = 0; i<7; ++i ) here[-2-i] = up[1+i];
+    }
+    cursor[0]->dval = 0;
+  }
+
   AltP2Block*alt_p2_alloc(int32_t img_w, int32_t plane) {
     uint32_t done;
     int32_t lvl, len;
@@ -491,6 +529,28 @@ struct AltP2Block {
     return this;
   }
 };
+
+// The planes both directions of the p2 model work through.  Each of
+// `alt_model_p2_encode` and `alt_model_p2_decode` opened with the first of
+// these and closed with the second, written out, and the closing one is the
+// longer of the two duplicated blocks left in this pair after `start_row` came
+// out -- thirteen lines that re-read `plane_count` from the global on every
+// turn of a loop it is also the bound of.  Nothing in `alt_p2_alloc` or
+// `alt_p2_free` writes `plane_count`, which is what makes the re-read say
+// nothing and the `for` say the same thing as the `do`.
+static void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
+  for( int32_t pl = 0; pl<plane_count; ++pl ) {
+    AltP2Block* page = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
+    plane[pl] = page ? page->alt_p2_alloc(width, pl) : nullptr;
+  }
+}
+
+static int32_t alt_p2_planes_free(AltP2Block** plane) {
+  for( int32_t pl = 0; pl<plane_count; ++pl )
+    if( plane[pl] )
+      plane[pl]->alt_p2_free(1);
+  return plane_count;
+}
 
 // `NbRow::predict` writes `nb[7][0..2]` where `nb` is `p2_row`, a `[7][4]`.
 // That is `bias`, and this says so in a form the compiler checks.

@@ -85,8 +85,6 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
   P2Ctx *pix;
   int32_t j, code0, code;
   uint8_t *outp, code2;
-  NbRow **cur_at, **r1;
-  NbRow *last, **r0;
   uint32_t k;
   uint8_t* src_end;
   src_end = src;
@@ -158,36 +156,8 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
     outp = out;
     uint32_t y = 0;
     do {
-      cur_at = cur;
-      last = cur_at[-1];
       uint8_t *srcp = src_end;
-      cur_at[1] = last;
-      *cur = last;
-      r0 = row0;
-      r1 = row1;
-      row0 = r1;
-      row1 = r0;
-      r1 += 2;
-      cur = r1;
-      r0 += 2;
-      above = r0;
-      r1[-1] = *r0;
-      cur[-2] = *r0;
-      memset(p2_row, 0, 15);
-      for( int32_t i = 0; i<4; ++i ) bias[i] = 0.0f;
-      __builtin_memset(p2_row, 0, sizeof p2_row);
-      {
-        P2Ctx*const here = cursor[0];
-        for( int32_t i = 0; i<5; ++i ) here[i] = here[-1-i];
-      }
-      ring_advance(buf, cursor, 8);
-      cursor[0][-1] = cursor[1][0];
-      {
-        P2Ctx*const here = cursor[0];
-        P2Ctx*const up = cursor[1];
-        for( int32_t i = 0; i<7; ++i ) here[-2-i] = up[1+i];
-      }
-      cursor[0]->dval = 0;
+      start_row();
       if( width>0 ) {
         for( k = 0; k<(uint32_t)width; ++k ) {
           int32_t pred = alt_p2_context(nullptr, nullptr);

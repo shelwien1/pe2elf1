@@ -21,6 +21,34 @@ enum : int32_t {
   try_refs_p2  = desc_has_refs|pred_p2|desc_alt_model,       // 14
 };
 
+// The four descriptors, kept and put back.  Every whole-image trial below
+// edits `plane_desc` in place, measures the result, and either keeps it or
+// undoes it -- ten copies of these three lines between them, each with its own
+// spelling of the loop index.
+static void save_descriptors(PlaneDesc* saved) {
+  for( int32_t k = 0; k<4; ++k )
+    saved[k] = plane_desc[k];
+}
+
+static void restore_descriptors(const PlaneDesc* saved) {
+  for( int32_t k = 0; k<4; ++k )
+    plane_desc[k] = saved[k];
+}
+
+// Transform the planes the way the descriptors currently say, and answer what
+// that cost in bits.  Written out five times, and the order is the whole of
+// it: the count has to be taken before the packer is flushed, and the packer
+// has to be reset before the next trial.  Four of the five spelled the answer
+// into a differently-named local and then into `deep2` as well, so the five
+// did not look like one thing.
+static int32_t transform_cost(BmfImage* tile_img) {
+  transform_planes(tile_img);
+  const int32_t bits = 8*(stream.cur-stream.buf);
+  packer_flush();
+  packer_reset();
+  return bits;
+}
+
 uint32_t search_filter(BmfImage* img, int8_t mode) {
   // The frame was one union of two arms and 36 bytes of pad, and the two arms
   // never overlap: everything in the scalar arm is dead by the `free(tile_buf)`
@@ -50,7 +78,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint8_t f0, f1, f2, f3;
   uint8_t *srcp, *tile_copy;
   int32_t hard, bits_a, bits_b;
-  int32_t flags_s, desc_k;
+  int32_t flags_s;
   int32_t tile_w, tile_h, nplanes, y0, dx, off_y, best_cost, bits_f5, f5, pred, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, bits_d, pk, pl_k, bits, bits_f8, f8, bits_f13, f13, cost_f14, f14, bits_f6, f6;
   tile_w = img->width;
   tile_h = img->height;
@@ -245,8 +273,7 @@ tile_restored:
   free(tile_buf);
   if( plane_count>2 ) {
     if( bits_total ) {
-      for( desc_k = 0; desc_k<4; ++desc_k )
-        saved[desc_k] = plane_desc[desc_k];
+      save_descriptors(saved);
       if( plane_count>0 ) {
         plane = 0;
         do {
@@ -255,18 +282,14 @@ tile_restored:
           plane_desc[pi3].flags = f2;
         } while( plane<plane_count );
       }
-      transform_planes(tile_img);
-      bits_e = 8*(stream.cur-stream.buf);
+      bits_e = transform_cost(tile_img);
       deep2 = bits_e<=best_bits;
-      packer_flush();
-      packer_reset();
       if( deep2 ) {
         best_bits = bits_e;
         nplanes_b = plane_count;
         cand = 0;
       } else {
-        for( desc_k = 0; desc_k<4; ++desc_k )
-          plane_desc[desc_k] = saved[desc_k];
+        restore_descriptors(saved);
         nplanes_b = plane_count;
         cand = 1;
       }
@@ -276,8 +299,7 @@ tile_restored:
       cand = 1;
     }
     if( n_hard+(cand==0) ) {
-      for( desc_k = 0; desc_k<4; ++desc_k )
-        saved[desc_k] = plane_desc[desc_k];
+      save_descriptors(saved);
       nplanes_c = plane_count;
       if( plane_count>0 ) {
         pl_a = 0;
@@ -291,19 +313,15 @@ tile_restored:
       if( nplanes_c==n_hard&&nplanes_c-1==n_flagged ) {
         cand = 0;
       } else {
-        transform_planes(tile_img);
-        bits_a = 8*(stream.cur-stream.buf);
+        bits_a = transform_cost(tile_img);
         deep2 = bits_a<=best_bits;
-        packer_flush();
-        packer_reset();
         if( deep2 ) {
           best_bits = bits_a;
           n_hard = bits_a;
           if( plane_count-1==n_flagged ) {
             cand = 0;
           } else {
-            for( desc_k = 0; desc_k<4; ++desc_k )
-              saved[desc_k] = plane_desc[desc_k];
+            save_descriptors(saved);
             if( plane_count>0 ) {
               pl_b = 0;
               do {
@@ -312,22 +330,17 @@ tile_restored:
                 plane_desc[pi1].flags |= f1!=0 ? desc_has_refs : 0;
               } while( pl_b<plane_count );
             }
-            transform_planes(tile_img);
-            bits2 = 8*(stream.cur-stream.buf);
+            bits2 = transform_cost(tile_img);
             deep2 = bits2<=bits_a;
-            packer_flush();
-            packer_reset();
             if( deep2 ) {
               cand = 0;
             } else {
-              for( desc_k = 0; desc_k<4; ++desc_k )
-                plane_desc[desc_k] = saved[desc_k];
+              restore_descriptors(saved);
               cand = 0;
             }
           }
         } else {
-          for( desc_k = 0; desc_k<4; ++desc_k )
-            plane_desc[desc_k] = saved[desc_k];
+          restore_descriptors(saved);
         }
       }
     }
@@ -338,8 +351,7 @@ planes_done:
   if( !n_hard&&plane_count>1 ) {
     tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
     memcpy(tile_copy, tile_src, tile_img->data_size);
-    for( desc_k = 0; desc_k<4; ++desc_k )
-      saved[desc_k] = plane_desc[desc_k];
+    save_descriptors(saved);
     if( plane_count>0 ) {
       pl_c = 0;
       do {
@@ -348,20 +360,15 @@ planes_done:
         plane_desc[pi4].flags = f3;
       } while( pl_c<plane_count );
     }
-    transform_planes(tile_img);
-    bits_b = 8*(stream.cur-stream.buf);
-    packer_flush();
-    packer_reset();
+    bits_b = transform_cost(tile_img);
     if( bits_b>best_bits ) {
-      for( desc_k = 0; desc_k<4; ++desc_k )
-        plane_desc[desc_k] = saved[desc_k];
+      restore_descriptors(saved);
     } else {
       best_bits = bits_b;
       cand = 0;
     }
     if( n_flagged+bits_total ) {
-      for( desc_k = 0; desc_k<4; ++desc_k )
-        saved[desc_k] = plane_desc[desc_k];
+      save_descriptors(saved);
       if( plane_count>0 ) {
         pl_d = 0;
         do
@@ -369,16 +376,12 @@ planes_done:
         while( pl_d<plane_count );
       }
       memcpy(tile_src, tile_copy, tile_img->data_size);
-      transform_planes(tile_img);
-      bits_c = 8*(stream.cur-stream.buf);
+      bits_c = transform_cost(tile_img);
       deep2 = bits_c<=best_bits;
-      packer_flush();
-      packer_reset();
       if( deep2 ) {
         cand = 0;
       } else {
-        for( desc_k = 0; desc_k<4; ++desc_k )
-          plane_desc[desc_k] = saved[desc_k];
+        restore_descriptors(saved);
       }
     }
     free(tile_copy);

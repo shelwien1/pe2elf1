@@ -14,22 +14,13 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   uint32_t i, src2;
   int16_t seed3, seed2;
   AltP2Block** planep;
-  NbRow **cur, **r1;
   bool xf3, off;
-  NbRow *b4, **b0;
-  int32_t nplanes, nplanes2;
+  int32_t nplanes;
   P2Coef p2_coef;
   p2_coef.fold();
   i = p_i->width;
   int32_t raw = p_i->height;
-  if( plane_count>0 ) {
-    int32_t pl = 0;
-    do {
-      AltP2Block* page = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
-      plane[pl] = page ? page->alt_p2_alloc(i, pl) : nullptr;
-      ++pl;
-    } while( pl<plane_count );
-  }
+  alt_p2_planes_alloc(plane, i);
   int32_t xf0 = plane_desc[plane_desc[1].src_plane].flags&desc_has_refs;
   int32_t dc_flag = plane_desc[plane_desc[2].src_plane].flags&desc_has_refs;
   int32_t xf4 = (plane_desc[plane_desc[3].src_plane].flags)&desc_has_refs;
@@ -82,51 +73,7 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
             for( int32_t j = 0; j<5; ++j ) src3->cursor[j] = src3->buf[j]+i+8;
           }
           AltP2Block *blk_r = (AltP2Block*)(*(planep-1));
-          cur = blk_r->cur;
-          b4 = cur[-1];
-          cur[1] = b4;
-          *blk_r->cur = b4;
-          b0 = blk_r->row0;
-          r1 = blk_r->row1;
-          blk_r->row0 = r1;
-          blk_r->row1 = b0;
-          r1 += 2;
-          blk_r->cur = r1;
-          b0 += 2;
-          blk_r->above = b0;
-          r1[-1] = *b0;
-          blk_r->cur[-2] = *b0;
-          memset(blk_r->p2_row, 0, 15);
-          for( int32_t j = 0; j<4; ++j ) blk_r->bias[j] = 0.0f;
-          __builtin_memset(blk_r->p2_row, 0, sizeof blk_r->p2_row);
-          {
-            P2Ctx*const here = blk_r->cursor[0];
-            for( int32_t j = 0; j<5; ++j ) here[j] = here[-1-j];
-          }
-          P2Ctx *buf3 = blk_r->buf[3];
-          P2Ctx *bb4 = blk_r->buf[4];
-          P2Ctx *buf2 = blk_r->buf[2];
-          P2Ctx *buf1 = blk_r->buf[1];
-          P2Ctx *bb0 = blk_r->buf[0];
-          blk_r->buf[4] = buf3;
-          blk_r->buf[3] = buf2;
-          blk_r->buf[2] = buf1;
-          blk_r->buf[0] = bb4;
-          blk_r->buf[1] = bb0;
-          bb4 += 8;
-          blk_r->cursor[0] = bb4;
-          bb0 += 8;
-          blk_r->cursor[1] = bb0;
-          blk_r->cursor[2] = buf1+8;
-          blk_r->cursor[3] = buf2+8;
-          blk_r->cursor[4] = buf3+8;
-          (bb4)[-1] = (bb0)[0];
-          {
-            P2Ctx*const here = blk_r->cursor[0];
-            P2Ctx*const up = blk_r->cursor[1];
-            for( int32_t j = 0; j<7; ++j ) here[-2-j] = up[1+j];
-          }
-          blk_r->cursor[0]->dval = 0;
+          blk_r->start_row();
           nplanes = plane_count;
         } while( plane_count>pl2 );
         src2 = first;
@@ -225,16 +172,5 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   }
   rc_end_decode();
   p2_coef.restore();
-  nplanes2 = plane_count;
-  if( plane_count>0 ) {
-    int32_t pl3 = 0;
-    do {
-      if( plane[pl3] ) {
-        plane[pl3]->alt_p2_free(1);
-        nplanes2 = plane_count;
-      }
-      ++pl3;
-    } while( pl3<nplanes2 );
-  }
-  return nplanes2;
+  return alt_p2_planes_free(plane);
 }
