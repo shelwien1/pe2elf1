@@ -4,7 +4,7 @@
     python3 tools/pairshare.py bmf.cpp
     python3 tools/pairshare.py bmf.cpp --all    # print every pair, drifted or not
 
-Nine encode/decode pairs in this program are one `template<int f_DEC>` and five
+Nine encode/decode pairs in this program are one `template<int32_t f_DEC>` and five
 are two bodies.  What decided each was how much of the two bodies is actually
 the same, measured as a longest common subsequence over their non-comment
 lines, and the five declines carry that measurement in a comment at the top of
@@ -32,6 +32,18 @@ import structs                                                    # noqa: E402
 
 ROW = re.compile(r'^//\s+(\w+)\s*/\s*(\w+)\s+(\d+) of (\d+) \((\d+)%\)\s*$')
 
+# The nine that *were* merged, named in the table above the declines as
+# `name  a + b`.  Their two bodies no longer exist, so there is nothing to
+# re-measure -- but the claim that each is still one template is checkable, and
+# it is the half of that comment most likely to go quietly wrong: the tree spelt
+# them `template<int f_DEC>` until a type-vocabulary pass made it `int32_t`, and
+# the prose said `int` for a round afterwards.
+# Two entries per line -- the table is two columns -- so this is `findall` over
+# each line and not a match against it.  Anchored to end-of-line first, it found
+# one of the nine: the only row that has no second column.
+MERGED = re.compile(r'(?:(\w+)::)?(\w+)\s+\d+ \+ \d+')
+TEMPLATE = re.compile(r'template\s*<\s*int(?:32_t)?\s+f_DEC\s*>')
+
 
 def claims(path):
     """(a, b, shared, total, percent) for every row of the table."""
@@ -41,6 +53,29 @@ def claims(path):
         if m:
             out.append((m.group(1), m.group(2), int(m.group(3)),
                         int(m.group(4)), int(m.group(5))))
+    return out
+
+
+def merged(path):
+    """The names the table says are one template each."""
+    out = []
+    for l in open(path).read().split('\n'):
+        if l.startswith('//'):
+            out.extend(MERGED.findall(l))
+    return out
+
+
+def templates(lines):
+    """Every body introduced by a `template<int32_t f_DEC>`, by its name."""
+    out = set()
+    for i, l in enumerate(lines):
+        if not TEMPLATE.search(l):
+            continue
+        for j in range(i, min(i + 3, len(lines))):
+            m = re.search(r'\b(\w+)\s*\(', lines[j].replace('template', ''))
+            if m:
+                out.add(m.group(1))
+                break
     return out
 
 
@@ -69,6 +104,11 @@ def main():
               % path)
         return
     lines, _origin = structs.splice(path)
+    tmpl = templates(lines)
+    lost = [(o, n) for o, n in merged(path) if n not in tmpl]
+    for owner, n in lost:
+        print('  %-24s the table says one template, and it is not one'
+              % ('%s::%s' % (owner, n) if owner else n))
     bodies = {}
     for a, b, n, _sig, _d in structs.defs(lines):
         bodies.setdefault(n, lines[a:b + 1])
@@ -87,8 +127,9 @@ def main():
         elif '--all' in sys.argv:
             print('  %-24s/%-24s  %d of %d (%d%%)'
                   % (a, b, got[0], got[1], got[2]))
-    print('%d of %d declined pairs have drifted, %d named but not found'
-          % (drift, len(rows), missing))
+    print('%d of %d declined pairs have drifted, %d named but not found; '
+          '%d of %d merged pairs are no longer one template'
+          % (drift, len(rows), missing, len(lost), len(merged(path))))
 
 
 if __name__ == '__main__':

@@ -685,7 +685,7 @@ from the header's dimensions, and
 7. rebuild the greyscale palette if `depth & 0x40`, or read the stored one.
 
 The decoder's per-plane work is the same code as the encoder's — nine
-encode/decode pairs in this tree are one `template<int f_DEC>` each, so the two
+encode/decode pairs in this tree are one `template<int32_t f_DEC>` each, so the two
 directions of the counter updates, the context computation and the tree walk are
 literally the same lines.
 

@@ -350,7 +350,7 @@ def apply_tree(path, origin, nm, rec, ret, rest, a, b, p):
     src, first = origin[a]
     # A `template<...>` body is out of scope, and half-applying one is worse
     # than not trying: the first attempt on `__alt_p1_code_symbol` dropped the
-    # `template<int f_DEC>` line, declared a non-template method, and reported
+    # `template<int32_t f_DEC>` line, declared a non-template method, and reported
     # "0 call sites" because the calls read `__f<0>(...)` and the call pattern
     # has no `<0>` in it.  The tree did not compile, and the tool said it had
     # succeeded.  Refuse instead; the conversion is four lines by hand.

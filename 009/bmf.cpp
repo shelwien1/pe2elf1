@@ -28,7 +28,7 @@
 //
 // ## the encode/decode pairs
 //
-// Nine of them are one `template<int f_DEC>` each, instantiated as the two
+// Nine of them are one `template<int32_t f_DEC>` each, instantiated as the two
 // names their callers use.  What decided which: how many lines the two bodies
 // actually share, measured as a longest common subsequence over the pair.
 //
@@ -45,11 +45,11 @@
 // numbers below were all wrong by the time it was written, which is why it
 // exists.
 //
-//   alt_model_p2_encode / alt_model_p2_decode        123 of 596 (21%)
-//   code_pixel / decode_pixel                        144 of 1036 (14%)
+//   alt_model_p2_encode / alt_model_p2_decode        123 of 586 (21%)
+//   code_pixel / decode_pixel                        147 of 1036 (14%)
 //   predict_med / unpredict_med                       10 of 123 (8%)
 //   alt_model_p1_d8_encode / alt_model_p1_d8_decode     8 of 60 (13%)
-//   model_plane / unmodel_plane                       14 of 258 (5%)
+//   model_plane / unmodel_plane                       15 of 258 (6%)
 //
 // Every merge was gated on its own -- the fifteen streams byte for byte, at
 // both pointer widths -- and then all nine were instrumented and run over the
