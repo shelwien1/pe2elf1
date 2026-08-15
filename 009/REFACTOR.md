@@ -748,6 +748,18 @@ on the pointer `blk1`, and nine field reads looked like pointers squeezed
 through a 32-bit integer -- which `tools/x32.sh` had been saying there were
 none of, and was right.
 
+**And one of my own passes made four comments stale within the hour.**
+Applying `unify_types.py` rewrote eleven `template<int f_DEC>` to `int32_t` --
+a spelling change no gate can see, since the object file is identical -- and
+left `bmf.cpp`, `ALGORITHM.md`, `methodise.py` and `pairshare.py`'s own
+docstring saying `int`.  `pairshare.py` reads both halves of that table now:
+the merged nine have no two bodies left to measure, but "each is one
+`template<int32_t f_DEC>`" is checkable, and it is the half most likely to rot
+quietly.  All nine still are.
+
+That tool has now caught four separate numbers I moved without noticing, which
+is more than it was written for and is the argument for it.
+
 Typing four coders made `methodise.py` propose them, and all four are declined
 with the reason written down: a method of `BmfImage` would make the image the
 compressor, the model or the BMP writer, and the image is what these read
