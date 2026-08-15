@@ -55,7 +55,11 @@ SUBSYSTEM_ROOTS = ('alt_model_p1_encode', 'alt_model_p1_decode',
 # Outside that set but pinned for the same reason: expand_image calls
 # unpredict_med from two places and both guard on the predictor being 1 -- the
 # second through a copy of it stored and reloaded through p_i.
-ALSO_PINNED = ('unpredict_med', '__sub_410310')
+# `__sub_410310` was the same body under the name it had before it was
+# `unpredict_med`, kept so the pin held across the rename.  Both spellings were
+# in the list for four rounds after the rename made the second one dead; the
+# address it names is `unpredict_med`'s own, which `tools/addrmap.txt` records.
+ALSO_PINNED = ('unpredict_med',)
 
 
 def call_graph(lines):
@@ -136,8 +140,14 @@ def call_graph(lines):
 
 
 def closed_under(callers, roots):
-    """Bodies reachable only from `roots` and from each other."""
-    out = {'__' + r for r in roots}
+    """Bodies reachable only from `roots` and from each other.
+
+    The seed used to be `'__' + r`, from when every recovered body carried the
+    prefix.  With the prefix gone that made a set of eight names nothing
+    answers to, so nothing was ever closed under it and the predictor-test
+    check below silently stopped looking at any body at all.
+    """
+    out = set(roots)
     for _ in range(8):
         for t, cs in callers.items():
             if cs and cs <= out:
@@ -160,14 +170,21 @@ def main():
             return '%s:%d' % origin[i - 1]
     path = Where()
 
+    # A label with no `goto` left is a block that reads as a jump target and is
+    # not one.  This matched `LABEL_\d+` only, which is the decompiler's
+    # spelling and has not been in the tree for two rounds, so it was looking
+    # for nothing among 30 labels.  Named labels, and the statement may sit on
+    # the same line as the colon -- `keep_flag8: { … }` does.
+    LAB = re.compile(r'^\s*(?!default\b|public\b|private\b|protected\b)'
+                     r'([A-Za-z_]\w*):(?!:)')
     labels = {}
     for i, l in enumerate(lines):
-        m = re.match(r'^\s*(LABEL_\d+):\s*$', l)
+        m = LAB.match(l)
         if m:
             labels.setdefault(m.group(1), []).append(i)
     sources = {}
     for i, l in enumerate(lines):
-        for m in re.finditer(r'goto (LABEL_\d+);', l.split('//')[0]):
+        for m in re.finditer(r'goto (\w+);', l.split('//')[0]):
             sources.setdefault(m.group(1), []).append(i)
     for name, at in sorted(labels.items()):
         if name not in sources:

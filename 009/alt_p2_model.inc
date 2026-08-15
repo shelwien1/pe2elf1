@@ -354,7 +354,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   int32_t hi_nibble;
   P2Freq* p2_rec;
   uint32_t pair_ctx;
-  int32_t fold_sel2, is_dec;
+  int32_t is_dec;
   uint32_t idx0;
   float sample, d_bias2;
   P2Freq* frecg2, * frecg1, * frecg0, * frecg3, * gtop, * frec;
@@ -459,20 +459,19 @@ code_residual:
         fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
         if( !fold[(uint8_t)-resid_in] )
           fold_sel = fold[(uint8_t)-resid_in];
-        fold_sel2 = fold_sel;
         step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
         frec_step = &freq[step_v];
         p2_rec = frec_step;
         if( ctx15<15 ) {
           frec2 = &frec_step[1];
           bin = frec2;
-          p2_freq_add(frec2, fold_sel2, 4);
+          p2_freq_add(frec2, fold_sel, 4);
           if( ctx15<=0 )
             goto counters_done;
         } else {
         }
         bin = &p2_rec[-1];
-        p2_freq_add(&p2_rec[-1], fold_sel2, 4);
+        p2_freq_add(&p2_rec[-1], fold_sel, 4);
 counters_done:
         if( a4 ) {
           n2_half = (a4-1)>>1;
@@ -482,7 +481,7 @@ counters_done:
           }
         }
         prec0 = &p2_rec[0];
-        p2_freq_add(&p2_rec[0], fold_sel2, 6);
+        p2_freq_add(&p2_rec[0], fold_sel, 6);
         if( !plane_idx||freq[ctx].step>0x100u ) {
           sel_alt = 2-is_dec;
           if( !a4 )
@@ -491,7 +490,7 @@ counters_done:
           is_dec = sel_alt;
           if( sel0==1 ) {
             h0 = &freq[ctx_w[0].w[0]+step_v-ctx_w[0].w[1]];
-            p2_freq_add(h0, fold_sel2, 4);
+            p2_freq_add(h0, fold_sel, 4);
             off0 = ctx-ctx_w[0].w[1];
             frecg0 = &freq[off0+ctx_w[0].w[0]];
             idx0 = ctx_w[0].w[2]+off0;
@@ -511,7 +510,7 @@ counters_done:
             }
           } else {
             g0 = &freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]];
-            p2_freq_add(g0, fold_sel2, 7);
+            p2_freq_add(g0, fold_sel, 7);
             grp = (&freq[ctx_w[0].w[1]+(ctx-ctx_w[0].w[ctx_w[0].sel])]);
             bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
@@ -528,7 +527,7 @@ counters_done:
           if( sel1==1 ) {
             frec4b = &freq[ctx_w[1].w[0]+step_v-ctx_w[1].w[1]];
             bin = frec4b;
-            p2_freq_add(frec4b, fold_sel2, 4);
+            p2_freq_add(frec4b, fold_sel, 4);
             off1 = ctx-ctx_w[1].w[1];
             frecg1 = &freq[off1+ctx_w[1].w[0]];
             idx0 = ctx_w[1].w[2]+off1;
@@ -547,7 +546,7 @@ counters_done:
             }
           } else {
             g1 = &freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]];
-            p2_freq_add(g1, fold_sel2, 7);
+            p2_freq_add(g1, fold_sel, 7);
             grp = (&freq[ctx_w[1].w[1]+(ctx-ctx_w[1].w[ctx_w[1].sel])]);
             bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
@@ -564,7 +563,7 @@ counters_done:
           if( sel2==1 ) {
             frec5 = &freq[ctx_w[2].w[0]+step_v-ctx_w[2].w[1]];
             bin = frec5;
-            p2_freq_add(frec5, fold_sel2, 4);
+            p2_freq_add(frec5, fold_sel, 4);
             off2 = ctx-ctx_w[2].w[1];
             frecg2 = &freq[off2+ctx_w[2].w[0]];
             idx0 = ctx_w[2].w[2]+off2;
@@ -583,7 +582,7 @@ counters_done:
             }
           } else {
             g2 = &freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]];
-            p2_freq_add(g2, fold_sel2, 7);
+            p2_freq_add(g2, fold_sel, 7);
             grp = (&freq[ctx_w[2].w[1]+(ctx-ctx_w[2].w[ctx_w[2].sel])]);
             bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
@@ -600,7 +599,7 @@ counters_done:
           if( sel3==1 ) {
             frec6 = &freq[ctx_w[3].w[0]+step_v-ctx_w[3].w[1]];
             bin = frec6;
-            p2_freq_add(frec6, fold_sel2, 4);
+            p2_freq_add(frec6, fold_sel, 4);
             off3 = ctx-ctx_w[3].w[1];
             frecg3 = &freq[off3+ctx_w[3].w[0]];
             idx0 = ctx_w[3].w[2]+off3;
@@ -619,7 +618,7 @@ counters_done:
             }
           } else {
             g3 = &freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]];
-            p2_freq_add(g3, fold_sel2, 7);
+            p2_freq_add(g3, fold_sel, 7);
             grp = (&freq[ctx_w[3].w[1]+(ctx-ctx_w[3].w[ctx_w[3].sel])]);
             bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
@@ -636,7 +635,7 @@ counters_done:
           if( sel4==1 ) {
             frec7 = &freq[ctx_w[4].w[0]+step_v-ctx_w[4].w[1]];
             bin = frec7;
-            p2_freq_add(frec7, fold_sel2, 4);
+            p2_freq_add(frec7, fold_sel, 4);
             off4 = ctx-ctx_w[4].w[1];
             frec4c = &freq[off4+ctx_w[4].w[0]];
             rec_idx = ctx_w[4].w[2]+off4;
@@ -655,7 +654,7 @@ counters_done:
             }
           } else {
             g4 = &freq[step_v+ctx_w[4].w[1]-ctx_w[4].w[2-sel4]];
-            p2_freq_add(g4, fold_sel2, 7);
+            p2_freq_add(g4, fold_sel, 7);
             gtop = (&freq[ctx_w[4].w[1]+(ctx-ctx_w[4].w[ctx_w[4].sel])]);
             p2_freq_add(&gtop[0], is_dec, 7);
             if( ctx15<15 ) {

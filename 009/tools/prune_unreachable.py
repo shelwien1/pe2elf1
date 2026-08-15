@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Delete the functions in subs1.hpp that nothing can reach any more.
+"""Delete the functions in a flat C file that nothing can reach any more.
 
 Reachability, not heuristics: the file is split into its top-level function
 definitions, each one's body is scanned for identifiers, and everything not
 reachable from the entry points is removed.  A function pointer counts as a
 reference, so a body that only ever has its address taken survives.
+
+**Top-level bodies only, and it now says so instead of guessing.**  A class
+body is a single top-level `{ … }` whose head has no parameter list, so the
+whole block -- methods, and every identifier they mention -- fell out of the
+graph, and nine bodies this program calls only from a method came back
+unreachable.  In a tool that deletes what it names, that is not a report.
+Given a unit with classes in it this declines, and `deadcheck.py` is the check
+that answers.
 
     python3 tools/prune_unreachable.py subs1.hpp            # report only
     python3 tools/prune_unreachable.py subs1.hpp --apply    # rewrite the file
@@ -115,6 +123,25 @@ def main():
     path = sys.argv[1]
     apply_it = '--apply' in sys.argv[2:]
     src = open(path).read()
+    # A class body is one top-level `{ … }` and its head has no parameter list,
+    # so `parse` finds no name for it and drops the block -- with every method
+    # in it, and with every identifier those methods mention.  The graph then
+    # has no edge from a method to anything, and the nine bodies this program
+    # calls only from a method came back as unreachable.  `sym_in_top` is one,
+    # and `model.inc` calls it four times.
+    #
+    # That is a false positive in a tool whose `--apply` deletes what it names,
+    # which is not a thing to leave running while it is wrong.  The same
+    # question is asked correctly by `deadcheck.py`, which reads the unit with
+    # `structs.defs` and so opens a body at any depth; this declines rather
+    # than answers.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import structs
+    if any(d for _a, _b, _n, _s, d in structs.defs(src.split('\n'))):
+        print('not applicable: %s defines methods, and this reads only '
+              'top-level bodies -- deadcheck.py is the reachability check for '
+              'a unit with classes in it' % os.path.basename(path))
+        return
     funcs = parse(src)
     names = {}
     for f in funcs:

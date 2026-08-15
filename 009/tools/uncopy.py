@@ -175,7 +175,14 @@ def main():
     for k in sorted({i for _n, i, _j, _d, _s, _c in found}, reverse=True):
         del lines[k]
     open(path, 'w').write('\n'.join(lines))
-    print('%d copies folded onto what they copy' % len(found))
+    # The assignment goes; the *declaration* does not, and it is usually a name
+    # in the middle of a shared comma list two hundred lines up.  So a fold
+    # leaves an unused local behind, which `BMF_WARN=1 ./build.sh` names one
+    # per line -- that is the intended second step, not an oversight, and the
+    # six folded when this note was written left six warnings that said exactly
+    # which names to drop.
+    print('%d copies folded onto what they copy; the build will name the '
+          'declarations left behind' % len(found))
     return 0
 
 

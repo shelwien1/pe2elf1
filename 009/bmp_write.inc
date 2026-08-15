@@ -2,7 +2,7 @@
 
 int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   uint32_t off_bits, stride, done;
-  uint8_t *buf_2, *end, *out;
+  uint8_t *buf_2, *end;
   int32_t rows2;
   int32_t pal_bytes;
   uint8_t *buf;
@@ -108,7 +108,6 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     data_ofs2 = img->data_size;
   }
   stride = img->stride;
-  out = out_buf;
   off_bits = (uint32_t)(buf-out_buf);
   pix = (uint16_t*)img;
   rle_mode = rle_on;
@@ -290,18 +289,18 @@ write_rows:
     coded_bytes = out_at-buf;
     if( data_len>(uint32_t)(out_at-buf) ) {
       bmp->biSizeImage = (uint32_t)coded_bytes;
-      n_bytes = (uint32_t)(out_at-out);
+      n_bytes = (uint32_t)(out_at-out_buf);
       bmp->bfSize = n_bytes;
-      if( fwrite(out, 1u, n_bytes, fp)!=bmp->bfSize )
+      if( fwrite(out_buf, 1u, n_bytes, fp)!=bmp->bfSize )
         return 0;
-      free(out);
+      free(out_buf);
       fclose(fp);
       return 1;
     }
     rle_mode = 0;
   }
   fp2 = fp;
-  out2 = out;
+  out2 = out_buf;
   bmp->biCompression = 0;
   if( rows2<=0 ) {
     coded_bytes = 0;
@@ -320,7 +319,7 @@ write_rows:
       }
       ++y;
     } while( y<img->height );
-    out2 = out;
+    out2 = out_buf;
     fp2 = fp;
     coded_bytes = out_at-buf;
   }

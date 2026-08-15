@@ -30,10 +30,10 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   bool deep2;
   uint8_t f0, f1, f2, f3;
   uint8_t *srcp, *p2, *tile_copy, *tile_a, *p4, *p5, *tile_c, *p12, *p13;
-  int32_t hard, bits_a, bits_b, cost_f13;
+  int32_t hard, bits_a, bits_b;
   int32_t p3, p6, p7, p10, p11, p14;
   int32_t flags_s, desc_k;
-  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, cost_f5, f5, pred, c0, c1, c2, c3, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, img_h1, y1, off1, x1, bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3, bits_f13, f13, cost_f14, f14, pl0, bits_f6, cost_f6, f6;
+  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, f5, pred, c0, c1, c2, c3, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, img_h1, y1, off1, x1, bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, y2, off2, x2, pl2, bits_f8, f8, pl3, bits_f13, f13, cost_f14, f14, pl0, bits_f6, f6;
   uint16_t img_h3b, img_h2, img_h1b;
   uint8_t* p8, * p9;
   tile_w = img->width;
@@ -117,22 +117,20 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
         frame.best_flags = flags_s;
       }
       bits_f5 = probe_plane(frame.dims[1], 5);
-      cost_f5 = bits_f5;
       packer_reset();
       f5 = frame.best_flags;
-      if( cost_f5<best_cost ) {
-        best_cost = cost_f5;
+      if( bits_f5<best_cost ) {
+        best_cost = bits_f5;
         f5 = 5;
       }
       frame.best_flags = f5;
-      if( cost_f5<best_cost+(best_cost>>5)||hard ) {
+      if( bits_f5<best_cost+(best_cost>>5)||hard ) {
         pl0 = frame.dims[1];
         bits_f6 = probe_plane(pl0, 6);
-        cost_f6 = bits_f6;
         f6 = frame.best_flags;
         packer_reset();
-        if( cost_f6<best_cost ) {
-          best_cost = cost_f6;
+        if( bits_f6<best_cost ) {
+          best_cost = bits_f6;
           f6 = 6;
         }
         frame.best_flags = f6;
@@ -141,23 +139,21 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
 try_flag8:
             pl2 = frame.dims[1];
             bits_f8 = probe_plane(pl2, 8);
-            cost_f8 = bits_f8;
             f8 = frame.best_flags;
             packer_reset();
-            if( cost_f8<best_cost ) {
-              best_cost = cost_f8;
+            if( bits_f8<best_cost ) {
+              best_cost = bits_f8;
               f8 = 8;
             }
             frame.best_flags = f8;
           }
           pl3 = frame.dims[1];
           bits_f13 = probe_plane(pl3, 13);
-          cost_f13 = bits_f13;
-          frame.rows[0] = cost_f13;
+          frame.rows[0] = bits_f13;
           f13 = frame.best_flags;
           packer_reset();
-          if( cost_f13<best_cost ) {
-            best_cost = (int32_t)cost_f13;
+          if( bits_f13<best_cost ) {
+            best_cost = (int32_t)bits_f13;
             f13 = 13;
           }
           frame.best_flags = f13;
