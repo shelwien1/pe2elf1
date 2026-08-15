@@ -1,6 +1,6 @@
 // image_expand.inc -- the image out of a `.bmf`.
 
-uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
+BmfImage* expand_image(BmfFile* arc_in, void** p_coded_buf) {
   struct alignas(16) ExpandImageFrame {
     uint8_t* Block;
     union {
@@ -139,7 +139,7 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
   if( (bpp&0x3Fu)<=4||(frame.flags_b&0x10)==0 ) {
     plane_predictor = 0;
     plane_alt_model = 0;
-    unmodel_plane((uint16_t*)img_at, img_at->pixels);
+    unmodel_plane(img_at, img_at->pixels);
     goto check_length;
   }
   // The near-lossless nibble, mirroring `image_compress`: present for a single
@@ -195,7 +195,7 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
         plane = plane_desc[plane_i].src_plane;
         plane_predictor = plane_desc[plane].flags&3;
         plane_alt_model = (uint8_t)(plane_desc[plane].flags&4)>>2;
-        unmodel_plane((uint16_t*)&frame.img, plane_buf);
+        unmodel_plane(&frame.img, plane_buf);
         if( plane_predictor ) {
           if( plane_predictor==1 ) {
             if( !plane_alt_model )
@@ -214,7 +214,7 @@ restore_arc:
     plane_predictor = plane_desc[0].flags&3;
     plane_alt_model = (uint8_t)(plane_desc[0].flags&4)>>2;
     {
-      unmodel_plane((uint16_t*)img_at, img_at->pixels);
+      unmodel_plane(img_at, img_at->pixels);
       if( plane_alt_model )
         goto free_plane_buf;
     }
@@ -318,5 +318,5 @@ read_palette:
     transpose_image_in_place(img_at, n_planes);
     free(copy);
   }
-  return (uint8_t*)img_at;
+  return img_at;
 }

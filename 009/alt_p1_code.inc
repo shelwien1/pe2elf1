@@ -55,7 +55,7 @@ static inline int32_t plane_mix3(const PlaneDesc& d, const uint8_t* p) {
 }
 
 template<int32_t f_DEC>
-int32_t alt_model_p1(uint16_t* hdr, uint8_t* buf) {
+int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   int32_t cur3;
   // `void* plane[4]` with three `AltP1Block*&` aliases onto slots 1..3 -- the
   // decompiler's way of saying that a `void*` array is read as blocks.  It is
@@ -66,8 +66,8 @@ int32_t alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   AltP1Block* made;
   int32_t w, n_planes, keep0, code0, code1x, want2, code2, code3, np;
   uint8_t pred0, want1, want3;
-  int32_t width = *hdr;
-  int32_t height = hdr[1];
+  int32_t width = hdr->width;
+  int32_t height = hdr->height;
   if( plane_count>0 ) {
     int32_t k = 0;
     do {
@@ -333,10 +333,10 @@ int32_t alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   return np;
 }
 
-int32_t alt_model_p1_encode(uint16_t* hdr, uint8_t* src) {
+int32_t alt_model_p1_encode(BmfImage* hdr, uint8_t* src) {
   return alt_model_p1<0>(hdr, src);
 }
 
-int32_t alt_model_p1_decode(uint16_t* hdr, uint8_t* out) {
+int32_t alt_model_p1_decode(BmfImage* hdr, uint8_t* out) {
   return alt_model_p1<1>(hdr, out);
 }

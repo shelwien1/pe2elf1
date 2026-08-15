@@ -1,6 +1,6 @@
 // bmp_read.inc -- read a BMP, in every depth and both run-length forms.
 
-int32_t*read_bmp(char* path) {
+BmfImage* read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row, bmp_bgra[4], pix;
   int32_t y8, run4;
@@ -266,5 +266,5 @@ next_opcode:
 done:
   fclose(fp);
   free(pal_buf);
-  return (int32_t*)img;
+  return img;
 }

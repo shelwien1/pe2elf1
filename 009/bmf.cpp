@@ -111,23 +111,22 @@ void bmf_compress(const char* InName, const char* OutName) {
   if( !fp )
     bmf_fatal(bmf_no_open, InName);
   fclose(fp);
-  int32_t *p_i = read_bmp((char*)InName);
+  BmfImage *p_i = read_bmp((char*)InName);
   if( !p_i )
     bmf_fatal(bmf_read_error);
-  BmfImage*const p_i_img = (BmfImage*)p_i;
-  printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i_img->width, p_i_img->height, p_i_img->depth&depth_bits, p_i_img->data_size);
+  printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i->width, p_i->height, p_i->depth&depth_bits, p_i->data_size);
   if( void* nb = bmf_new(sizeof(BmfFile)) )
     Arc = bmf_open_file((BmfFile*)nb, (char*)OutName, 0);
   else
     Arc = nullptr;
-  int32_t Flags = p_i_img->depth;
+  int32_t Flags = p_i->depth;
   if( Flags&depth_palette ) {
     if( Flags&depth_grey ) {
-      p_i_img->depth = Flags^depth_palette;
+      p_i->depth = Flags^depth_palette;
     } else {
       int32_t Colours = 1<<(Flags&depth_bits);
       int32_t Step = 0x100u>>(Flags&depth_bits);
-      const uint8_t* Palette = p_i_img->palette();
+      const uint8_t* Palette = p_i->palette();
       int32_t Grey = 0;
       for( i = 0; i<Colours; ++i ) {
         if( Palette[3*i]!=Grey||Palette[3*i+1]!=Grey||Palette[3*i+2]!=Grey )
@@ -135,13 +134,13 @@ void bmf_compress(const char* InName, const char* OutName) {
         Grey += Step;
       }
       if( i>=Colours )
-        p_i_img->depth = (Flags|depth_grey)^depth_palette;
+        p_i->depth = (Flags|depth_grey)^depth_palette;
     }
   }
-  int32_t coded_len = compress_image(Arc, (BmfImage*)p_i, (void*)coded_block);
+  int32_t coded_len = compress_image(Arc, p_i, (void*)coded_block);
   if( !coded_len )
     bmf_fatal(bmf_write_error, OutName);
-  printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i_img->height*p_i_img->width));
+  printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i->height*p_i->width));
   free(p_i);
 }
 
@@ -151,19 +150,18 @@ void bmf_decompress(const char* InName, const char* OutName) {
     arc = bmf_open_file((BmfFile*)nb, (char*)InName, 1);
   else
     arc = nullptr;
-  uint32_t* p_i = (uint32_t*)expand_image(arc, &coded_block);
+  BmfImage* p_i = expand_image(arc, &coded_block);
   // One image in a file: nothing to parse is not the end of a list of members,
   // it is a file that is not one of ours.
   if( !p_i )
     bmf_fatal(bmf_bad_file, InName);
-  BmfImage*const p_i_img = (BmfImage*)p_i;
-  printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i_img->width, p_i_img->height, p_i_img->depth&depth_bits, p_i_img->data_size);
-  int32_t Depth = p_i_img->depth&depth_bits;
+  printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i->width, p_i->height, p_i->depth&depth_bits, p_i->data_size);
+  int32_t Depth = p_i->depth&depth_bits;
   if( Depth==2||Depth==15||Depth==16 ) {
     printf("%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
     exit(5);
   }
-  if( !write_bmp((BmfImage*)p_i, (char*)OutName, 1) )
+  if( !write_bmp(p_i, (char*)OutName, 1) )
     bmf_fatal(bmf_write_error, OutName);
   free(coded_block);
   coded_block = nullptr;

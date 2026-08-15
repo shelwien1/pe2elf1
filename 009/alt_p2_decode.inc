@@ -7,7 +7,7 @@
 // borrow.  That was wrong: this function did the borrow too, in six lines
 // identical to the encoder's, 260 lines from the six that undo them.  Both are
 // `P2Coef::fold`/`restore` now, which is also how the claim got checked.
-int32_t alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
+int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   AltP2Block* plane[4], ** w;
   uint32_t i_1, first;
   int16_t seed1;
@@ -21,8 +21,8 @@ int32_t alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   void* made, * src1, ** plane_p;
   P2Coef p2_coef;
   p2_coef.fold();
-  i = *p_i;
-  int32_t raw = p_i[1];
+  i = p_i->width;
+  int32_t raw = p_i->height;
   if( plane_count>0 ) {
     int32_t pl = 0;
     do {

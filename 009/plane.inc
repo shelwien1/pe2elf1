@@ -1,23 +1,23 @@
 // plane.inc -- one plane in and out of the model, whichever model the header names.
 
-void unmodel_plane(uint16_t* p_i, uint8_t* out) {
+void unmodel_plane(BmfImage* p_i, uint8_t* out) {
   ModelBlock* blk;
   if( plane_alt_model ) {
     if( plane_predictor==1 ) {
-      if( (p_i[5]&0x3F)==8 )
-        alt_model_p1_d8_decode(out, *p_i, p_i[1]);
+      if( (p_i->depth&depth_bits)==8 )
+        alt_model_p1_d8_decode(out, p_i->width, p_i->height);
       else
         alt_model_p1_decode(p_i, out);
     } else if( plane_predictor==2 ) {
-      if( (p_i[5]&0x3F)==8 )
-        alt_model_p2_d8_decode(out, *p_i, p_i[1]);
+      if( (p_i->depth&depth_bits)==8 )
+        alt_model_p2_d8_decode(out, p_i->width, p_i->height);
       else
         alt_model_p2_decode(p_i, out);
     }
   } else {
     void* raw = bmf_new(sizeof(ModelBlock));
     if( raw )
-      blk = ((ModelBlock*)raw)->layout_workspace(*p_i, p_i[1], p_i[5]&0x3F);
+      blk = ((ModelBlock*)raw)->layout_workspace(p_i->width, p_i->height, p_i->depth&depth_bits);
     else
       blk = (ModelBlock*)(nullptr);
     (blk)->unmodel_plane_slow(out);

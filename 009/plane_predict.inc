@@ -320,7 +320,7 @@ void transform_planes(BmfImage* p_i) {
   uint8_t *arc = (uint8_t*)stream.buf;
   BmfImage *hdr = (BmfImage*)(stream.buf+16);
   *hdr = *p_i;
-  uint8_t* src_pixels = (uint8_t*)((uint16_t*)p_i->pixels);
+  uint8_t* src_pixels = p_i->pixels;
   memcpy(arc+32, p_i->pixels, p_i->data_size);
   uint8_t *tmp = (uint8_t*)bmf_new(p_i->width*p_i->height);
   if( plane_count>0 ) {

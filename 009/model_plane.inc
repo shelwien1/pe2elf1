@@ -13,7 +13,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       if( (p_i->depth&depth_bits)==8 )
         alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
-        alt_model_p1_encode((uint16_t*)p_i, pixels);
+        alt_model_p1_encode(p_i, pixels);
     } else if( plane_predictor==2 ) {
       if( (p_i->depth&depth_bits)==8 )
         alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);

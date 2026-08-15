@@ -16,7 +16,7 @@ struct BmfFile {
   // Close the input and give up.  Eleven sites in `image_expand` wrote
   // `fclose(arc->fp); arc->fp = 0; return nullptr;` out, which is eleven places
   // a reader had to check the file was actually closed.
-  uint8_t*fail() {
+  BmfImage* fail() {
     close();
     return nullptr;
   }
