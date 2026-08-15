@@ -760,6 +760,39 @@ quietly.  All nine still are.
 That tool has now caught four separate numbers I moved without noticing, which
 is more than it was written for and is the argument for it.
 
+## The four frames that were tried and reverted
+
+`liftframe.py` keeps a table of frames whose lift failed the gate, and its own
+docstring says an entry there is a measurement of *the body as it stands* --
+the way to clear one is to change what made it true.  Re-taken against a tree
+three thousand lines further on, three of the four had stopped describing
+anything the tool can still do:
+
+  * **`cost_candidate`** is declined structurally now, before any build:
+    `buf[4*dx+2048]` indexes out of one member into the one after it.  That is
+    a permanent reason and a better one than the gate failure it replaced.
+  * **`reduce_alphabet`**'s frame is declared at file scope -- an earlier round
+    moved it there so its two arms could split -- and `frame_of` only looks
+    inside the body.  Lifting a shared declaration is a different operation.
+  * **`search_filter` cleared.**  The entry recorded a *whole*-frame lift; what
+    the tool offers now is the ten members outside the union, and the union is
+    MSVC's slot sharing and stays.  ASan is the check that answers here, not
+    `test.sh`: the recorded failure was a stack-buffer-overflow, and the streams
+    can be byte-identical while one is happening.  110 checks, 23 of 23 at the
+    other width, and no ASan report over 44 runs.
+  * **`expand_image` still fails**, and wider than its entry said: seventeen of
+    nineteen images then fail to expand at all, `expand exits 3`.  Not one
+    image and not a stream that moved -- the header parse stops working, which
+    is what says the frame's layout is what the parse reads through.  The entry
+    stays, with today's measurement.
+
+The lift then exposed storage the frame had been hiding: `marks[16]` has no
+reader anywhere, and a *member* can never be reported unused.  Two silences in
+the tool were its own documented defect one code path over -- asking for a
+single frame answered "no frame this can lift" whatever the reason, and a
+file-scope frame was neither offered nor declined.  And `shape.py`'s row read
+"declined, every member in a union" while counting three different reasons.
+
 Typing four coders made `methodise.py` propose them, and all four are declined
 with the reason written down: a method of `BmfImage` would make the image the
 compressor, the model or the BMP writer, and the image is what these read
