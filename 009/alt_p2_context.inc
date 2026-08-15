@@ -29,10 +29,9 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   P2Ctx* cx2;
   P2Ctx *nb0, *nb1;
   bool in_band, no_ref;
-  int32_t in63, c_lo, mode, c_mid, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, magsum, run_s2, flat_a, flat_b, ctx_idx;
+  int32_t in63, c_lo, mode, c_mid, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, magsum, run, flat_a, flat_b, ctx_idx;
   uint32_t ctx0_lo;
-  int32_t run, run4;
-  int32_t magsum_s;
+  int32_t run4, magsum_s;
   P2Ctx *row0p = cursor[0];
   P2Ctx *cursor1 = cursor[1];
   P2Ctx *sub0_row = cursor[2];
@@ -462,7 +461,6 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   ctx_w[4].sel = cx0[-1].sign;
   magsum = magsum_s;
   int32_t magu = cx2[0].mag+cx1->mag;
-  run_s2 = run;
   int32_t magl = cx0[-1].mag+cx0[-2].mag;
   if( refa ) {
     int32_t mag = rb0->mag;
@@ -470,7 +468,6 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     int32_t mag_ref0 = mag+ra0->mag;
     magsum = mag_ref1+magsum_s+4*mag_ref0+2*(ra0[-1].mag+rb0[-1].mag);
     flat_a = mag_ref0+magl+rb0[-2].mag+rb0[-1].mag+ra0[-2].mag+ra0[-1].mag;
-    run_s2 = run;
     if( has_ref ) {
       int32_t d_run4b = run4-cx1->dval-cx0[0].dval;
       if( d_run4b<lo_band||d_run4b>hi_band ) {
@@ -488,7 +485,6 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
       ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
       int32_t d_ra_left = ra0->val-ra0[-1].val;
       magsum = magsum_s;
-      run_s2 = run;
       ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
     } else if( (int32_t)plane_idx>1 ) {
       magsum_s = magsum;
@@ -501,7 +497,6 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
       int32_t ra0_val = ra0->val;
       int32_t d_ra_ra1b = ra0_val-((P2Ctx*)(ra1))->val;
       in_band = lo_band<=d_ra_ra1b;
-      run_s2 = run;
       if( in_band&&d_ra_ra1b<=hi_band ) {
         flat_a = 1;
       } else {
@@ -520,7 +515,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ctx15 = nb_ctx[magsum>>3];
     ctx = ctx15;
   }
-  ctx_idx = (run_s2+pred4+7)>>4;
+  ctx_idx = (run+pred4+7)>>4;
   if( ctx_idx>=255 )
     ctx_idx = 255;
   if( ctx_idx<0 )

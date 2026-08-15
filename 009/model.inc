@@ -361,7 +361,7 @@ struct ModelBlock {
     uint32_t* x6;
     uint8_t* dst_base, * dst_buf, * buf, * expand_buf, * out_bits, * row_at, * interleave_at, * p, * out8;
     PixRec* kk, * row_cur3, * row_cur2, * row_cur1, * n_syms;
-    int32_t g, lo, w2, w4, w2n, lvl_n, live, bucket, x, x2, step, x7, x3, x4, bits, bpp, bpp_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
+    int32_t g, lo, w2, w4, w2n, lvl_n, live, bucket, x2, step, x7, x3, x4, bits, bpp, bpp_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
     SymListBlock* has3, * alpha;
     SymList *i, *j;
     PixRec* lists, * t;
@@ -565,7 +565,6 @@ struct ModelBlock {
         blk->grad[2] = 0;
         row_w = blk->width;
         blk->grad[1] = t[3].match[0]+t[2].match[0]+t[1].match[0]+t[0].match[0]+t[4].match[0]-5;
-        x = bucket;
         if( row_w<=0 )
           break;
         x2 = 0;
@@ -575,7 +574,6 @@ struct ModelBlock {
           row_w = blk->width;
           x2 += y;
         } while( (uint32_t)x2<blk->width );
-        x = bucket;
         if( nbytes!=4 )
           goto list_ready;
         if( row_w>0 ) {
@@ -588,7 +586,7 @@ struct ModelBlock {
           goto next_list;
         }
   next_list:
-        bucket = x+1;
+        bucket = bucket+1;
         // `height` is `int32_t` and this side is already `uint32_t`, so C
         // converts the right operand too.  Written where it happens.
         if( (uint32_t)bucket>=(uint32_t)blk->height )

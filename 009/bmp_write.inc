@@ -2,17 +2,17 @@
 
 int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   uint32_t off_bits, stride, done;
-  uint8_t *buf_2, *end;
+  uint8_t* end;
   int32_t rows2, pal_bytes;
   uint8_t *buf;
-  int32_t row_i2, run_max, nib;
+  int32_t row_i, run_max, nib;
   FILE* fp, * fp2;
   bool can_rle;
-  uint32_t stride1, at, at2;
+  uint32_t at, at2;
   uint8_t *out_buf, *out_at, *p, *q, *out2;
-  int32_t rle_on, i, rows, bits, rle_mode, src_bits, rle_kind, rows3, row_i, lit_len, run, coded_bytes, y;
+  int32_t rle_on, i, rows, bits, rle_mode, src_bits, rle_kind, lit_len, run, coded_bytes, y;
   uint8_t byte;
-  uint32_t data_len, stride3, n_bytes, pad;
+  uint32_t data_len, n_bytes, pad;
   rle_on = want_rle;
   fp = fopen(path, "wb");
   if( !fp )
@@ -130,16 +130,46 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     // than 255.  Both were `rle_kind-1`, arithmetic on a format constant.
     nib = rle_kind==bmp_rle4;
     run_max = (0x100u>>(nib&31))-1;
+    // Flush the literal run that ends at `run_end`: an escape byte, the count,
+    // the bytes themselves, and a pad byte when the count is odd -- or, for a
+    // run too short to be worth the two-byte header, one or two encoded pairs
+    // instead.
+    //
+    // Written out three times, and the three differ only in whether the run
+    // ends at `p` or at `q` (which are the same pointer at each of the two
+    // sites that use `q`) and in which of the output cursor's two names they
+    // advanced.  The pair was `buf_2` and `out_at`, the register and the stack
+    // slot MSVC spilled it to at every exit of this five-deep nest; there is
+    // one cursor now.
+    auto flush_literal = [&](const uint8_t* run_end) {
+      if( nib ? lit_len!=1 : lit_len>=3 ) {
+        *out_at = 0;
+        out_at[1] = lit_len<<(nib&31);
+        memcpy(out_at+2, run_end-lit_len, lit_len);
+        if( lit_len&1 )
+          out_at[lit_len+2] = 0;
+        out_at += lit_len+2+(lit_len&1);
+      } else if( nib ) {
+        *out_at = 2;
+        out_at[1] = run_end[-1];
+        out_at += 2;
+      } else {
+        if( lit_len==2 ) {
+          *out_at = 1;
+          out_at[1] = run_end[-2];
+          out_at += 2;
+        }
+        *out_at = 1;
+        out_at[1] = run_end[-1];
+        out_at += 2;
+      }
+    };
     if( rows2>0 ) {
-      rows3 = rows2;
-      stride3 = stride;
       row_i = 0;
       while( 1 ) {
-        if( p>=&p[stride3] )
+        if( p>=&p[stride] )
           goto write_rows;
-        buf_2 = out_at;
-        end = &p[stride3];
-        row_i2 = row_i;
+        end = &p[stride];
         lit_len = 0;
         do {
           while( 1 ) {
@@ -159,123 +189,41 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
               if( run_max<run )
                 run = run_max;
               if( lit_len ) {
-                if( nib ? lit_len!=1 : lit_len>=3 ) {
-                  *buf_2 = 0;
-                  uint8_t *abs_end2 = buf_2+2;
-                  buf_2[1] = lit_len<<(nib&31);
-                  memcpy(buf_2+2, &p[-lit_len], lit_len);
-                  buf_2 += lit_len+2;
-                  if( lit_len&1 ) {
-                    abs_end2[lit_len] = 0;
-                    ++buf_2;
-                  }
-                } else if( nib ) {
-                  *buf_2 = 2;
-                  buf_2[1] = *(p-1);
-                  buf_2 += 2;
-                } else {
-                  if( lit_len==2 ) {
-                    *buf_2 = 1;
-                    buf_2[1] = *(p-2);
-                    buf_2 += 2;
-                  }
-                  *buf_2 = 1;
-                  buf_2[1] = *(p-1);
-                  buf_2 += 2;
-                }
+                flush_literal(p);
                 lit_len = 0;
                 byte = *p;
               }
-              buf_2[1] = byte;
+              out_at[1] = byte;
               p += run;
-              *buf_2 = run<<(nib&31);
-              uint8_t *out_end = buf_2+2;
-              buf_2 += 2;
-              if( p>=end ) {
-                out_at = out_end;
-                row_i = row_i2;
-                rows3 = img->height;
-                stride3 = img->stride;
+              *out_at = run<<(nib&31);
+              out_at += 2;
+              if( p>=end )
                 goto write_rows;
-              }
             }
             ++p;
             if( ++lit_len!=run_max )
               break;
-            if( nib ? lit_len!=1 : lit_len>=3 ) {
-              *buf_2 = 0;
-              uint8_t *abs_end = buf_2+2;
-              buf_2[1] = lit_len<<(nib&31);
-              memcpy(buf_2+2, &q[-lit_len], lit_len);
-              buf_2 += lit_len+2;
-              if( lit_len&1 ) {
-                abs_end[lit_len] = 0;
-                ++buf_2;
-              }
-            } else if( nib ) {
-              *buf_2 = 2;
-              buf_2[1] = *(q-1);
-              buf_2 += 2;
-            } else {
-              if( lit_len==2 ) {
-                *buf_2 = 1;
-                buf_2[1] = *(q-2);
-                buf_2 += 2;
-              }
-              *buf_2 = 1;
-              buf_2[1] = *(q-1);
-              buf_2 += 2;
-            }
-            if( q>=end ) {
-              out_at = buf_2;
-              row_i = row_i2;
-              rows3 = img->height;
-              stride3 = img->stride;
+            flush_literal(q);
+            if( q>=end )
               goto write_rows;
-            }
             lit_len = 0;
           }
         } while( q<end );
-        out_at = buf_2;
-        row_i = row_i2;
-        if( lit_len&&(nib ? lit_len!=1 : lit_len>=3) ) {
-          *buf_2 = 0;
-          buf_2[1] = lit_len<<(nib&31);
-          memcpy(buf_2+2, &q[-lit_len], lit_len);
-          row_i = row_i2;
-          out_at = &buf_2[lit_len+2];
-          if( lit_len&1 ) {
-            buf_2[lit_len+2] = 0;
-            ++out_at;
-          }
-        } else if( lit_len&&nib ) {
-          buf_2[1] = *(q-1);
-          *buf_2 = 2;
-          out_at = buf_2+2;
-        } else if( lit_len ) {
-          if( lit_len==2 ) {
-            *buf_2 = 1;
-            buf_2[1] = *(q-2);
-            out_at = buf_2+2;
-          }
-          out_at[1] = *(q-1);
-          *out_at = 1;
-          out_at += 2;
-        }
-        rows3 = img->height;
-        stride3 = img->stride;
-// The row-writing loop.  Three paths reach it, each setting `row_i`, `rows3`
-// and `stride3` first -- which is the loop's three arguments, passed by
-// assignment because the decompiler had no function to pass them to.
+        if( lit_len )
+          flush_literal(q);
+// The row-writing loop.  Three paths reach it and each used to set `row_i`,
+// `rows3` and `stride3` first -- the loop's three arguments, passed by
+// assignment because the decompiler had no function to pass them to.  Two of
+// the three were `img->height` and `img->stride` re-read under another name,
+// and nothing in this body writes either field, so eight assignments across
+// four exits said nothing.  `row_i` is the one that carries.
 write_rows:
         *out_at = 0;
         out_at[1] = 0;
         out_at += 2;
         ++row_i;
-        p -= 2*stride3;
-        if( row_i>=rows3 ) {
-          rows2 = rows3;
-          stride = stride3;
+        p -= 2*stride;
+        if( row_i>=rows2 ) {
           data_len = img->data_size;
           break;
         }
@@ -304,13 +252,11 @@ write_rows:
     coded_bytes = 0;
   } else {
     pad = ((stride+3)&0xFFFFFFFC)-stride;
-    stride1 = stride;
     y = 0;
     do {
-      memcpy(out_at, p, stride1);
-      stride1 = img->stride;
-      out_at += stride1;
-      p -= stride1;
+      memcpy(out_at, p, stride);
+      out_at += stride;
+      p -= stride;
       if( pad ) {
         *(uint32_t*)out_at = 0;
         out_at += pad;
