@@ -17,13 +17,8 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
     uint8_t _pad1[36];
   } frame;
   uint8_t* base;
-  int32_t rows[2];
-  int32_t dims[2];
+  int32_t rows[2], dims[2], n_hard, bits_total, n_flagged, best_bits;
   uint8_t* tile_src;
-  int32_t n_hard;
-  int32_t bits_total;
-  int32_t n_flagged;
-  int32_t best_bits;
   BmfImage* tile_img;
   uint8_t* base2;
   bool deep2;
