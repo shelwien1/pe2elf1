@@ -83,12 +83,10 @@ template<int32_t f_DEC>
 void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
                                 int32_t width, int32_t height) {
   P2Ctx *pix;
-  int32_t j;
-  int32_t code0;
+  int32_t j, code0, code;
   uint8_t *outp, code2;
   NbRow **cur_at, **r1;
   NbRow *last, **r0;
-  int32_t code;
   uint32_t k;
   uint8_t* src_end;
   src_end = src;

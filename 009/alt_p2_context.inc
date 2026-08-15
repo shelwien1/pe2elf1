@@ -20,17 +20,11 @@ static inline int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2,
 
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
-  int32_t ctx15;
+  int32_t ctx15, sum_all, nb_slot;
   P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2, *row2c;
-  int32_t sum_all;
-  NbRow** up_row;
-  int32_t nb_slot;
   P2Ctx* cx2;
-  P2Ctx *nb0;
-  NbRow* wrow;
+  P2Ctx *nb0, *nb1;
   bool in_band, no_ref;
-  P2Ctx *nb1;
-  NbRow** cur_l;
   int32_t in63, c_lo, mode, c_mid, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, magsum, run_s2, flat_a, flat_b, ctx_idx;
   uint32_t ctx0_lo;
   int32_t run, run4;
@@ -66,7 +60,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .digit<64, 5>(gA).digit<320, 6>(band);
   int32_t nb_at = nb_id[(uint32_t)nb_slot];
   if( nb_id[(uint32_t)nb_slot] ) {
-    wrow = &nb_weights[nb_at];
+    NbRow *wrow = &nb_weights[nb_at];
     nb_cur = wrow;
     {
       float acc[4], err, floor_;
@@ -222,9 +216,9 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ra1 = (P2Ctx*)(nullptr);
     ra0 = nullptr;
   }
-  cur_l = cur;
+  NbRow **cur_l = cur;
   weights.f0[0] = cur_l[-1];
-  up_row = above;
+  NbRow **up_row = above;
   weights.f0[1] = up_row[1];
   weights.f0[2] = up_row[2];
   weights.f0[3] = cur_l[-2];

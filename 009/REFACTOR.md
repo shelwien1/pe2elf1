@@ -595,3 +595,62 @@ declarator list, so a local declared *with* an initialiser had no type at all,
 which since the decompiler's output was cleaned up is most of them.  It reads
 those now, additively -- only filling in names the existing pass left out, so
 no answer any other tool already gets can move -- and all eight are `int32_t`.
+
+**Then the sweep itself was asking about the include list.**  Eleven of the
+eighty-eight tools splice the unit for themselves; each learned to only after
+it reported something impossible, and this round taught three of them.  The
+other 77 read the path they are handed, and the path the sweep hands them is
+`bmf.cpp` -- 195 lines of `#include` with two bodies in it.  So "every counting
+tool reports zero", the sentence the sweep ends with and every round quotes,
+was for 77 of them a statement about an include list.
+
+The copy the sweep runs against is the spliced unit now.  One place instead of
+77, and a tool that splices for itself is unaffected -- `structs.splice` finds
+no `#include` left and hands the file straight back.
+
+What that turned up, none of it visible before, and all of it now done:
+
+  * **six locals that were only a copy of another**, 28 reads between them --
+    `bits_f5 = probe_plane(…); cost_f5 = bits_f5;` four times over in
+    `search_filter`, `fold_sel2 = fold_sel`, `out = out_buf`.  Folding leaves
+    the declaration behind in a shared comma list two hundred lines up, and the
+    build names each one; `uncopy.py` says so now instead of leaving it as a
+    surprise.
+  * **a save across a region that cannot change the value.**  `x0[0..1] = wb,
+    wc` before a forty-line loop and `wc, wb = x0[1], x0[0]` after it, with the
+    loop reading the slots rather than the names.  One 64-bit store in the
+    original, which is why it is a pair.  Nothing writes those two slots
+    between, and no other line in the function reads them, so the spill is the
+    two names.
+  * **four locals declared at the top of a body and first assigned hundreds of
+    lines down**, and **eleven declaration lines** that were runs of the same
+    type on consecutive lines.
+  * **a live hazard.**  `unify_types.py` rewrote the sweep's copy -- the one
+    thing the sweep exists to notice -- and what it wanted was `size_t` ->
+    `uint32_t`.  True when the only target was i386; false since x64 became the
+    default; and applied to `bmf_malloc(size_t)`, `bmf_arena_used` and the
+    bucket index at `((size_t *)p)[-2]`, it halves a pointer-sized header and
+    corrupts the free list.  `size_t` is out of its table with the rule stated:
+    a type it maps has to be fixed-width at both widths.  The rest of what it
+    wanted was genuine drift and is applied.
+  * **`prune_unreachable.py` reporting nine live bodies as unreachable**,
+    `sym_in_top` among them with four call sites.  A class body is one
+    top-level `{ … }` whose head has no parameter list, so the whole block --
+    methods, and every identifier they mention -- fell out of its graph.  In a
+    tool whose `--apply` deletes what it names that is not a report; it
+    declines a unit with classes and points at `deadcheck.py`.  Checked that
+    the decline is not a blanket refusal: on a flat file it still finds the
+    dead function.
+  * **three checks in `deadcheck.py` that had stopped matching anything** --
+    `closed_under` seeding with `'__' + root` after the prefix drop, so the
+    predictor test it guards was looking at no bodies at all (61 now); the
+    label check matching `LABEL_\d+`, which has not been in the tree for two
+    rounds; and a pin list carrying a name and the name it used to have.  All
+    three proved by injection before being trusted.
+  * **`ctxidx.py` counting terms where only lines are actionable.**  Its own
+    rule refuses a line where fewer than half the masked terms convert, and it
+    refuses all nine; "2 terms convert" was a count of work nobody can do.
+
+And the sweep names the tool that wrote, rather than only that one did: it
+could say the copy had changed and never which of the eighty-eight changed it,
+which made the answer a bisection by hand every time.

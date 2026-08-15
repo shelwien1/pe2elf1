@@ -12,7 +12,6 @@
 // nothing it touches is read after it; the compiler was asked rather than a
 // regex, twice, because the regex undercounted both times.
 void AltP2Block::code_banks(int32_t sample16) {
-  P2Count* mir;
   uint8_t b_top3;
   bool go;
   int32_t bctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010, neg,
@@ -59,7 +58,7 @@ void AltP2Block::code_banks(int32_t sample16) {
           // assignment, which asks for the cache line holding a local the
           // function is about to write anyway.  Every other prefetch below is of
           // the counter the next few lines will read; this one is now too.
-          mir = &p2_ctr[32768*bank+(ctxw^0x7FF0)];
+          P2Count *mir = &p2_ctr[32768*bank+(ctxw^0x7FF0)];
           __builtin_prefetch(mir, 0, 1);
           res2 = (nb_sum[2*bank+1])+res;
           int32_t lowbits = ctxw&3;

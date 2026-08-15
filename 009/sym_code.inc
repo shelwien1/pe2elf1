@@ -22,10 +22,9 @@
 template<int32_t f_DEC>
 int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
-  uint32_t cum;
+  uint32_t cum, j;
   int32_t lvl, result, go, path, node, span;
   uint16_t fq, *slot;
-  uint32_t j;
   uint16_t h9, acc8, acc6, acc;
   uint16_t *f0 = freq+2;
   uint32_t tot = *freq;

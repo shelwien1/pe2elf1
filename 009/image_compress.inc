@@ -2,8 +2,7 @@
 
 int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   BmfImage hdr;
-  int32_t plane_n;
-  int32_t row_step;
+  int32_t plane_n, row_step;
   uint32_t filtered;
   void* pixels;
   int32_t coded_bytes;
@@ -11,8 +10,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   uint32_t coded_len;
   bool fits;
   uint32_t data_bytes, row_bytes;
-  uint8_t has_coded;
-  uint8_t *row_at;
+  uint8_t has_coded, *row_at;
   uint32_t hdr_pad8;
   int32_t ok_all, y, pl_i, countdown, data_size, row_y;
   uint16_t img_h;

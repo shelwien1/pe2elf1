@@ -489,7 +489,7 @@ them run.
 | `perf.sh` | Gate C: has this change made the program slower? |  |
 | `planedesc.py` | Take `plane_desc`'s header slot out, and re-index the four planes onto zero | yes |
 | `proven.sh` | Which tools' answers depend on the file at all? |  |
-| `prune_unreachable.py` | Delete the functions in subs1.hpp that nothing can reach any more | yes |
+| `prune_unreachable.py` | Delete the functions in a flat C file that nothing can reach any more | yes |
 | `ptrwidth.py` | Classify the pointers this file still puts through a 32-bit integer | yes |
 | `rawoffset.py` | Find numbers in the code that are a struct member's byte offset | yes |
 | `readme.py` | Check that README.md lists every script in this directory, and what it is | yes |
@@ -522,7 +522,7 @@ them run.
 | `undup.py` | Collapse an `if`/`else` whose two arms are the same code | yes |
 | `unframe.py` | Turn one function's `__hexrays_frame` buffer back into ordinary locals | yes |
 | `unhoist.py` | Put back a load the compiler hoisted out of the expression that uses it | yes |
-| `unify_types.py` | Rewrite subs1.hpp's type vocabulary onto <cstdint> | yes |
+| `unify_types.py` | Rewrite the decompiler's type vocabulary onto <cstdint> | yes |
 | `unindex.py` | Turn `((T *)p)[expr + K]` into the array member of `p` that `K` lands in | yes |
 | `unjump.py` | Turn a `goto` into the block it jumps into | yes |
 | `unlane.py` | Turn `p->f278528[i].m128_XX[k]` into the member of `Obj11` at that offset | yes |

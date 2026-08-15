@@ -11,9 +11,8 @@ int32_t alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   AltP2Block* plane[4], ** w;
   uint32_t i_1, first;
   int16_t seed1;
-  uint32_t i;
+  uint32_t i, src2;
   int16_t seed3, seed2;
-  uint32_t src2;
   AltP2Block** planep;
   NbRow **cur, **r1;
   bool xf3, off;

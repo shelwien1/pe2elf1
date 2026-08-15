@@ -315,16 +315,24 @@ def main():
                 print('-- applied to %s:%d' % (path, i))
     if not want:
         if not seen:
-            # `sweep.sh` hands every tool a copy of `bmf.cpp`, which is the
-            # include list: no masked context words are in it, and "0 terms
-            # convert" from a file that has none reads exactly like a tree with
-            # nothing left to do.  Say which it is.
+            # A file with no masked context words in it answers "0 terms
+            # convert", which reads exactly like a tree with nothing left to
+            # do.  Say which it is.  `sweep.sh` hands over the spliced unit
+            # now, so this branch is for a single `.inc`, which is how the
+            # tool is actually driven.
             where = 'alt_p2_context.inc'
             print('not applicable: %s has no masked context words%s'
                   % (path, '' if path.endswith(where)
                      else ' -- they are in ' + where))
             return 0
-        print('%d terms convert, %d stay masked' % (n_conv, n_raw))
+        # Lines, not terms, because a line is what anyone can act on.  The
+        # per-line rule above refuses any line where fewer than half the masked
+        # terms convert -- eleven `.raw((expr)&0x…)` beside one `.bit<>` is the
+        # old line with scaffolding on it -- and all nine lines are refused, so
+        # "2 terms convert" was a count of work nobody can do.  The term
+        # figures stay on the line because they are the reason.
+        print('%d lines convert, %d refused; %d terms convert, %d stay masked'
+              % (0, seen, n_conv, n_raw))
     return 0
 
 

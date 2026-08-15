@@ -543,11 +543,13 @@ weights_chosen:
         if( wc<-64 )
           wc = -64;
         if( end_px<data_end ) {
-          // Two 32-bit stores, which is what the one 64-bit store was: the
-          // original wrote `x0[0..1]` as a pair because MSVC had both halves
-          // in registers, and `__PAIR64__` is the decompiler's name for that.
-          x0[0] = wb;
-          x0[1] = wc;
+          // `x0[0..1]` used to be written here and read back forty lines
+          // below -- one 64-bit store, which the decompiler wrote as a pair
+          // because MSVC had both halves in registers, and `__PAIR64__` is its
+          // name for that.  The two slots are `wb` and `wc` and nothing
+          // between the store and the reload writes either: the loop assigns
+          // `x0[2]` and `x0[3]`, and those two slots have no other reader in
+          // the function at all.  So the spill is the two names.
           uu = n_quads;
           quad = 0;
           do {
@@ -568,8 +570,8 @@ weights_chosen:
             g1w = (uint16_t)(((uint8_t*)img_a)[4*quad+19]+pp[4*quad+23]-pp[4*quad+19]-((uint8_t*)img_a)[4*quad+23]);
             g1_lo = (int16_t)x1[0];
             g1w = g1w-512;
-            pa = x1[0]*x0[0]+x0[3]*wa_slot;
-            pb = g2*x0[1];
+            pa = x1[0]*wb+x0[3]*wa_slot;
+            pb = g2*wc;
             ++frame.hist_a[(g1w-(int16_t)x0[3])&0x3FF];
             bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
             ++*(uint32_t*)&frame.buf[4*bin_lin];
@@ -578,7 +580,7 @@ weights_chosen:
             quad_r = x0[2];
             ++frame.hist_c[g1w&0x3FF];
             alpha = pp[4*quad_r+23]+256;
-            bin_lin2 = ((uint16_t)alpha-(uint16_t)((x0[0]*pp[4*quad_r+21]+wa_slot*pp[4*quad_r+20]+x0[1]*(uint32_t)pp[4*quad_r+22]+63)>>7)+256)&0x3FF;
+            bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad_r+21]+wa_slot*pp[4*quad_r+20]+wc*(uint32_t)pp[4*quad_r+22]+63)>>7)+256)&0x3FF;
             ++frame.hist_c[bin_lin2+1024];
             r0 = alpha-pp[4*quad_r+20];
             ++frame.hist_c[r0+2048];
@@ -588,8 +590,6 @@ weights_chosen:
             ++frame.hist_c[r2+4096];
             quad = quad_r+1;
           } while( quad<uu );
-          wc = x0[1];
-          wb = x0[0];
         }
         cost_lin = estimate_cost((uint8_t*)frame.buf, 1024);
         best4 = (cost_lin>>7)+cost_lin;

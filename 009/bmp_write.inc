@@ -3,8 +3,7 @@
 int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   uint32_t off_bits, stride, done;
   uint8_t *buf_2, *end;
-  int32_t rows2;
-  int32_t pal_bytes;
+  int32_t rows2, pal_bytes;
   uint8_t *buf;
   int32_t row_i2, run_max, nib;
   FILE* fp, * fp2;

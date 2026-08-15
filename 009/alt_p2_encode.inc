@@ -6,8 +6,7 @@
 // the two are one object now.
 int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];
-  uint32_t xf4;
-  uint32_t i;
+  uint32_t xf4, i;
   bool xf2;
   int16_t seed1, l7c, seed2;
   uint32_t src1;

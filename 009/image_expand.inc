@@ -39,8 +39,7 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
   // The archive version, as a plain local.  The decompilation parked it in
   // `plane_desc[0].weight0` because the original did: `plane_desc[0]` is a
   // header slot, not a plane, and its three weight words were free.
-  int32_t version;
-  int32_t n_pix;
+  int32_t version, n_pix;
   uint32_t magic, pal_bytes, want2, got;
   uint8_t* plane_buf;
   arc = arc_in;

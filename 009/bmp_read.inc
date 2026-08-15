@@ -3,8 +3,7 @@
 int32_t*read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row, bmp_bgra[4], pix;
-  int32_t y8;
-  int32_t run4;
+  int32_t y8, run4;
   uint8_t* row_at;
   uint8_t* pal, * pal2, * pal3;
   uint8_t lo;
