@@ -117,7 +117,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     if( plane_count>0 ) {
       int32_t pl2 = 0;
       do
-        model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2++].src_plane);
+        model_planes(p_i, plane_buf, plane_desc[pl2++].src_plane);
       while( pl2<plane_count );
     }
     free(plane_buf);

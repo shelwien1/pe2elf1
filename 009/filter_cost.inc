@@ -1,6 +1,6 @@
 // filter_cost.inc -- what one filter would cost on this image.
 
-int32_t cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, uint32_t* costs) {
+int32_t cost_candidate(BmfImage* img, int32_t cand, uint8_t* desc, uint32_t* costs) {
   struct alignas(16) CostCandidateFrame {
     uint8_t buf[4096];
     int32_t hist_y[1024];
@@ -46,9 +46,9 @@ int32_t cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, uint32_t* cost
   // `*(const uint16_t*)&img->stride` -- the low half of a `uint32_t`, which
   // is a truncation on a little-endian machine and a different field on any
   // other.  Cast the value.
-  int32_t row_b = (uint16_t)((const BmfImage*)img)->stride;
+  int32_t row_b = (uint16_t)img->stride;
   frame.cand_i = cand;
-  frame.img_f = (BmfImage*)img;
+  frame.img_f = img;
   frame.d1_f = (cand+1)%3-cand;
   frame.d2_f = (cand+2)%3-cand;
   frame.img_end = &frame.img_f->pixels[frame.img_f->data_size];

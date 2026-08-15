@@ -29,7 +29,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint8_t* base2;
   bool deep2;
   uint8_t f0, f1, f2, f3;
-  uint8_t *srcp, *p2, *tile_copy, *tile_a, *p4, *p5, *tile_c, *p12, *p13;
+  uint8_t *srcp, *p2, *tile_copy, *p4, *p5, *p12, *p13;
   int32_t hard, bits_a, bits_b;
   int32_t p3, p6, p7, p10, p11, p14;
   int32_t flags_s, desc_k;
@@ -68,7 +68,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   // `-Q9`.
   auto probe_plane = [&](int32_t pl, int32_t flags) {
     plane_desc[pl].flags = flags;
-    model_planes((uint8_t*)frame.tile_img, (uint8_t*)frame.tile_buf, pl);
+    model_planes(frame.tile_img, (uint8_t*)frame.tile_buf, pl);
     int32_t cost = 8*(stream.cur-stream.buf);
     *(uint32_t*)stream.pk.word = stream.pk.acc;
     return cost;
@@ -213,11 +213,10 @@ keep_flag8: { frame.flag8 = (uint8_t)frame.best_flags&8; }
       p5 = p2;
       p3 = frame.rows[1];
       y1 = 0;
-      tile_a = (uint8_t*)frame.tile_img;
       off1 = 0;
       do {
-        x1 = ((const BmfImage*)tile_a)->width;
-        p4 = &tile_a[off1+16];
+        x1 = frame.tile_img->width;
+        p4 = &frame.tile_img->pixels[off1];
         do {
           p6 = p3;
           do {
@@ -227,7 +226,6 @@ keep_flag8: { frame.flag8 = (uint8_t)frame.best_flags&8; }
           p4 += frame.pi;
           --x1;
         } while( x1 );
-        tile_a = (uint8_t*)frame.tile_img;
         img_h1b = frame.tile_img->height;
         off1 += p3;
         ++y1;
@@ -241,7 +239,7 @@ keep_flag8: { frame.flag8 = (uint8_t)frame.best_flags&8; }
       while( 1 ) {
         pl_k = plane_desc[pk].src_plane;
         frame.rows[0] = pl_k;
-        model_planes((uint8_t*)frame.tile_img, (uint8_t*)frame.tile_buf, pl_k);
+        model_planes(frame.tile_img, (uint8_t*)frame.tile_buf, pl_k);
         bits = 8*(stream.cur-stream.buf);
         *(uint32_t*)stream.pk.word = stream.pk.acc;
         bits_d += bits;
@@ -265,12 +263,11 @@ tile_restored:
         frame.costs[0] = rows_x_planes;
         p11 = frame.rows[1];
         y2 = 0;
-        tile_c = (uint8_t*)frame.tile_img;
         off2 = 0;
         p13 = base2;
         do {
-          x2 = ((const BmfImage*)tile_c)->width;
-          p12 = &tile_c[off2+16];
+          x2 = frame.tile_img->width;
+          p12 = &frame.tile_img->pixels[off2];
           do {
             p14 = p11;
             do {
@@ -280,7 +277,6 @@ tile_restored:
             p12 += frame.costs[0];
             --x2;
           } while( x2 );
-          tile_c = (uint8_t*)frame.tile_img;
           img_h2 = frame.tile_img->height;
           off2 += p11;
           ++y2;

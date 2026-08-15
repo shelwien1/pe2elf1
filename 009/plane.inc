@@ -26,7 +26,7 @@ void unmodel_plane(uint16_t* p_i, uint8_t* out) {
   }
 }
 
-void model_planes(uint8_t* img, uint8_t* pixels, int32_t plane) {
+void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
   plane_predictor = plane_desc[plane].flags&3;
   plane_alt_model = (uint8_t)(plane_desc[plane].flags&4)>>2;
   colour_transform(img, pixels, plane);
@@ -39,10 +39,10 @@ void model_planes(uint8_t* img, uint8_t* pixels, int32_t plane) {
   // the loop's own offset pushed past the end.  This runs once per plane.
   memset(hist_scratch, 0, 1024);
   {
-    BmfImage hdr = *(BmfImage*)img;
+    BmfImage hdr = *img;
     hdr.depth = 72;
     if( plane_predictor==1&&!plane_alt_model )
-      predict_med(pixels, ((const BmfImage*)img)->width, ((const BmfImage*)img)->height);
+      predict_med(pixels, img->width, img->height);
     model_plane(&hdr, pixels, pixels);
   }
 }

@@ -108,7 +108,6 @@ int32_t choose_plane_coding(BmfImage* img) {
   uint8_t *px, *end_px, *r_c, *p_c, *r_d, *p_d;
   n_planes = plane_count;
   data_size = img->data_size;
-  BmfImage* img_a = (BmfImage*)((uint8_t*)img);
   alphabet_reduced = 1;
   frame.row_stride = (uint16_t)img->stride;
   const uint8_t* data_end = &img->pixels[data_size];
@@ -152,10 +151,10 @@ int32_t choose_plane_coding(BmfImage* img) {
       // same relation for costs that are estimated bit counts and so never
       // negative.  One relation here.
       xform = 0;
-      uint32_t cheapest = cost_candidate((uint8_t*)img_a, 0, (uint8_t*)tbl16,
+      uint32_t cheapest = cost_candidate(img, 0, (uint8_t*)tbl16,
                                            (uint32_t*)&acc0[2]);
       for( int32_t cand = 1; cand<3; ++cand ) {
-        const uint32_t c = cost_candidate((uint8_t*)img_a, cand,
+        const uint32_t c = cost_candidate(img, cand,
                                             (uint8_t*)&tbl16[16*cand], (uint32_t*)&acc0[2]);
         if( c<cheapest ) {
           cheapest = c;
@@ -193,7 +192,7 @@ int32_t choose_plane_coding(BmfImage* img) {
         frame.s0 = wt4-wt_step;
         wt4_dn_end = frame.s0;
         *(uint32_t*)frame.buf_1 = wt8-wt_step;
-        uint8_t *plane0 = &img_a->pixels[x3[2]];
+        uint8_t *plane0 = &img->pixels[x3[2]];
         wt8_dn_end = wt8-wt_step;
         while( 1 ) {
           if( wt4_dn<=wt4_dn_end ) {
@@ -216,8 +215,8 @@ int32_t choose_plane_coding(BmfImage* img) {
                 if( wt4_up<wt4_up_end&&wt4_up<192 ) {
                   x0[2] = wt8_up_end;
                   memset(frame.buf_1, 0, 2048);
-                  int32_t npix_a = img_a->width*(img_a->height-1);
-                  int32_t stride_a = (uint16_t)img_a->stride;
+                  int32_t npix_a = img->width*(img->height-1);
+                  int32_t stride_a = (uint16_t)img->stride;
                   x3[3] = wt8_up;
                   x1[0] = wt4_up;
                   int32_t n_a = npix_a-1;
@@ -254,8 +253,8 @@ int32_t choose_plane_coding(BmfImage* img) {
                   {
                     x0[3] = wt4_up_end;
                     memset(buf_2, 0, 2048);
-                    int32_t npix_b = img_a->width*(img_a->height-1);
-                    int32_t stride_b = (uint16_t)img_a->stride;
+                    int32_t npix_b = img->width*(img->height-1);
+                    int32_t stride_b = (uint16_t)img->stride;
                     x3[3] = wt8_up;
                     x1[0] = wt4_up;
                     int32_t n_b = npix_b-1;
@@ -297,8 +296,8 @@ int32_t choose_plane_coding(BmfImage* img) {
           if( wt4_dn>wt4_dn_end&&wt4_dn>=-64 ) {
             *(uint32_t*)frame.buf_1 = wt8_dn_end;
             memset(buf_3, 0, 2048);
-            int32_t npix_c = img_a->width*(img_a->height-1);
-            int32_t stride_c = (uint16_t)img_a->stride;
+            int32_t npix_c = img->width*(img->height-1);
+            int32_t stride_c = (uint16_t)img->stride;
             frame.s6 = wt8_dn;
             frame.s1 = wt4_dn;
             frame.s2 = npix_c-1;
@@ -342,8 +341,8 @@ int32_t choose_plane_coding(BmfImage* img) {
             {
               frame.s0 = wt4_dn_end;
               memset(buf_4, 0, 2048);
-              int32_t npix_d = img_a->width*(img_a->height-1);
-              int32_t stride_d = (uint16_t)img_a->stride;
+              int32_t npix_d = img->width*(img->height-1);
+              int32_t stride_d = (uint16_t)img->stride;
               frame.s6 = wt8_dn;
               frame.s1 = wt4_dn;
               frame.s7 = npix_d-1;
@@ -389,7 +388,7 @@ int32_t choose_plane_coding(BmfImage* img) {
         }
       }
 weights_chosen:
-      px = &((uint8_t*)img_a)[frame.row_stride+16+n_planes+x3[2]];
+      px = &img->pixels[frame.row_stride+n_planes+x3[2]];
       if( px<data_end ) {
         frame.wt_slot = wt8;
         x5[3] = wt4;
@@ -494,17 +493,17 @@ weights_chosen:
         double Syy = 0.0, Syz = 0.0, Szz = 0.0;
         double Sxw = 0.0, Syw = 0.0, Szw = 0.0;
         memset(frame.buf, 0, 0x8000);
-        pp = &((uint8_t*)img_a)[frame.row_stride];
-        n_quads = (data_end-17-pp)/4;
-        end_px = &((uint8_t*)img_a)[frame.row_stride+20];
+        pp = &img->pixels[frame.row_stride];
+        n_quads = (data_end-1-pp)/4;
+        end_px = &img->pixels[frame.row_stride+4];
         if( end_px<data_end ) {
           i4 = 0;
-          uu = (data_end-17-pp)/4;
+          uu = (data_end-1-pp)/4;
           do {
-            dv0 = (double)(((uint8_t*)img_a)[4*i4+16]+pp[4*i4+20]-(((uint8_t*)img_a)[4*i4+20]+pp[4*i4+16]));
-            dv1 = (double)(((uint8_t*)img_a)[4*i4+17]+pp[4*i4+21]-(((uint8_t*)img_a)[4*i4+21]+pp[4*i4+17]));
-            dv2 = (double)(((uint8_t*)img_a)[4*i4+18]+pp[4*i4+22]-(((uint8_t*)img_a)[4*i4+22]+pp[4*i4+18]));
-            dv3 = ((uint8_t*)img_a)[4*i4+19]+pp[4*i4+23]-(((uint8_t*)img_a)[4*i4+23]+pp[4*i4+19]);
+            dv0 = (double)(img->pixels[4*i4]+pp[4*i4+4]-(img->pixels[4*i4+4]+pp[4*i4]));
+            dv1 = (double)(img->pixels[4*i4+1]+pp[4*i4+5]-(img->pixels[4*i4+5]+pp[4*i4+1]));
+            dv2 = (double)(img->pixels[4*i4+2]+pp[4*i4+6]-(img->pixels[4*i4+6]+pp[4*i4+2]));
+            dv3 = img->pixels[4*i4+3]+pp[4*i4+7]-(img->pixels[4*i4+7]+pp[4*i4+3]);
             Sxx += dv0*dv0;
             ++i4;
             Sxy += dv0*dv1;
@@ -553,21 +552,21 @@ weights_chosen:
           uu = n_quads;
           quad = 0;
           do {
-            nx0 = ((uint8_t*)img_a)[4*quad+20];
-            dg0 = ((uint8_t*)img_a)[4*quad+16]+pp[4*quad+20];
-            dn0 = pp[4*quad+16];
+            nx0 = img->pixels[4*quad+4];
+            dg0 = img->pixels[4*quad]+pp[4*quad+4];
+            dn0 = pp[4*quad];
             x0[2] = quad;
             ad0 = nx0+dn0;
-            dnx1 = pp[4*quad+21];
+            dnx1 = pp[4*quad+5];
             g0 = dg0-ad0;
-            dn1 = pp[4*quad+17];
+            dn1 = pp[4*quad+1];
             x0[3] = g0;
-            nx2 = ((uint8_t*)img_a)[4*quad+22];
-            g1 = ((uint8_t*)img_a)[4*quad+17]+dnx1-(((uint8_t*)img_a)[4*quad+21]+dn1);
-            dnx2 = pp[4*quad+22];
+            nx2 = img->pixels[4*quad+6];
+            g1 = img->pixels[4*quad+1]+dnx1-(img->pixels[4*quad+5]+dn1);
+            dnx2 = pp[4*quad+6];
             x1[0] = g1;
-            g2 = ((uint8_t*)img_a)[4*quad+18]+dnx2-(nx2+pp[4*quad+18]);
-            g1w = (uint16_t)(((uint8_t*)img_a)[4*quad+19]+pp[4*quad+23]-pp[4*quad+19]-((uint8_t*)img_a)[4*quad+23]);
+            g2 = img->pixels[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
+            g1w = (uint16_t)(img->pixels[4*quad+3]+pp[4*quad+7]-pp[4*quad+3]-img->pixels[4*quad+7]);
             g1_lo = (int16_t)x1[0];
             g1w = g1w-512;
             pa = x1[0]*wb+x0[3]*wa_slot;
@@ -579,14 +578,14 @@ weights_chosen:
             g1w = g1w-g2;
             quad_r = x0[2];
             ++frame.hist_c[g1w&0x3FF];
-            alpha = pp[4*quad_r+23]+256;
-            bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad_r+21]+wa_slot*pp[4*quad_r+20]+wc*(uint32_t)pp[4*quad_r+22]+63)>>7)+256)&0x3FF;
+            alpha = pp[4*quad_r+7]+256;
+            bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad_r+5]+wa_slot*pp[4*quad_r+4]+wc*(uint32_t)pp[4*quad_r+6]+63)>>7)+256)&0x3FF;
             ++frame.hist_c[bin_lin2+1024];
-            r0 = alpha-pp[4*quad_r+20];
+            r0 = alpha-pp[4*quad_r+4];
             ++frame.hist_c[r0+2048];
-            r1 = alpha-pp[4*quad_r+21];
+            r1 = alpha-pp[4*quad_r+5];
             ++frame.hist_c[r1+3072];
-            r2 = alpha-pp[4*quad_r+22];
+            r2 = alpha-pp[4*quad_r+6];
             ++frame.hist_c[r2+4096];
             quad = quad_r+1;
           } while( quad<uu );

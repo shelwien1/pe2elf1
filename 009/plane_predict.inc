@@ -91,22 +91,24 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   return last;
 }
 
-uint8_t*interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
+void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
   int32_t to_ref0;
+  uint8_t* base = &img->pixels[plane];
   if( !(plane_desc[plane].flags&8) ) {
     int32_t n_flat = bmf_pixels(img);
     int32_t step = plane_count;
-    if( plane_count==1 )
-      return (uint8_t*)memcpy(&((BmfImage*)img)->pixels[plane], src, n_flat);
-    img += plane;
+    if( plane_count==1 ) {
+      memcpy(base, src, n_flat);
+      return;
+    }
     int32_t i = 0;
     int32_t ofs = 0;
     do {
-      img[ofs+16] = src[i];
+      base[ofs] = src[i];
       ofs += step;
       ++i;
     } while( i<n_flat );
-    return img;
+    return;
   }
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
@@ -115,7 +117,6 @@ uint8_t*interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
   int32_t to_ref1 = plane_desc[1].src_plane-plane;
   int32_t mode = plane_desc[plane].nrefs;
   int32_t dc = plane_desc[plane].dc;
-  uint8_t *base = &((BmfImage*)img)->pixels[plane];
   int32_t wgt1 = plane_desc[plane].weight1;
   int32_t wgt0 = plane_desc[plane].weight0;
   int32_t wgt2 = plane_desc[plane].weight2;
@@ -149,19 +150,17 @@ uint8_t*interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
           --left3;
         } while( left3 );
       }
-      return img;
+      return;
     }
   }
-  img += plane;
-  uint8_t *ref = &img[to_ref0];
+  uint8_t *ref = base+to_ref0;
   int32_t i2 = 0;
   int32_t ofs2 = 0;
   do {
-    img[ofs2+16] = ref[ofs2+16]+dc+src[i2];
+    base[ofs2] = ref[ofs2]+dc+src[i2];
     ofs2 += stride;
     ++i2;
   } while( i2<n );
-  return img;
 }
 
 // Subtract from one plane whatever the other planes predict of it, and write
@@ -176,22 +175,24 @@ uint8_t*interleave_plane(uint8_t* img, uint8_t* src, int32_t plane) {
 // is 128 and the other 0, and the code takes that path explicitly -- which is
 // the `by_weights` flag below, and why a two-reference descriptor can end up
 // reading only one plane.
-uint8_t*colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
+void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
   int32_t to_ref0;
+  uint8_t *src = &img->pixels[plane];
   if( !(plane_desc[plane].flags&8) ) {
     int32_t n_flat = bmf_pixels(img);
     int32_t step = plane_count;
-    if( plane_count==1 )
-      return (uint8_t*)memcpy(dst, &((const BmfImage*)img)->pixels[plane], n_flat);
-    img += plane;
+    if( plane_count==1 ) {
+      memcpy(dst, src, n_flat);
+      return;
+    }
     int32_t i = 0;
     int32_t ofs = 0;
     do {
-      dst[i] = img[ofs+16];
+      dst[i] = src[ofs];
       ofs += step;
       ++i;
     } while( i<n_flat );
-    return img;
+    return;
   }
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
@@ -200,7 +201,6 @@ uint8_t*colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
   int32_t to_ref1 = plane_desc[1].src_plane-plane;
   int32_t mode = plane_desc[plane].nrefs;
   int32_t dc = plane_desc[plane].dc;
-  uint8_t *src = &((BmfImage*)img)->pixels[plane];
   int32_t wgt1 = plane_desc[plane].weight1;
   int32_t wgt0 = plane_desc[plane].weight0;
   int32_t wgt2 = plane_desc[plane].weight2;
@@ -214,16 +214,15 @@ uint8_t*colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
     }
   }
   if( by_weights||plane_desc[plane].nrefs==1 ) {
-    img += plane;
-    uint8_t* ref = &img[to_ref0];
+    uint8_t* ref = src+to_ref0;
     int32_t i2 = 0;
     int32_t ofs2 = 0;
     do {
-      uint8_t d = img[ofs2+16]-dc-ref[ofs2+16];
+      uint8_t d = src[ofs2]-dc-ref[ofs2];
       ofs2 += stride;
       dst[i2++] = d;
     } while( i2<n );
-    return img;
+    return;
   }
   if( mode==2 ) {
     int32_t left2 = bmf_pixels(img);
@@ -247,7 +246,6 @@ uint8_t*colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
       --left3;
     } while( left3 );
   }
-  return img;
 }
 
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
@@ -320,8 +318,8 @@ void transform_planes(BmfImage* p_i) {
   int32_t i;
   memset(hist_scratch, 0, 4096);
   uint8_t *arc = (uint8_t*)stream.buf;
-  uint8_t *hdr = (uint8_t*)stream.buf+16;
-  *(BmfImage*)hdr = *p_i;
+  BmfImage *hdr = (BmfImage*)(stream.buf+16);
+  *hdr = *p_i;
   uint8_t* src_pixels = (uint8_t*)((uint16_t*)p_i->pixels);
   memcpy(arc+32, p_i->pixels, p_i->data_size);
   uint8_t *tmp = (uint8_t*)bmf_new(p_i->width*p_i->height);

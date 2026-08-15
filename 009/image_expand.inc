@@ -204,7 +204,7 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
         } else {
           expand_predictor_mode0(img_at->width);
         }
-        interleave_plane((uint8_t*)img_at, plane_buf, plane);
+        interleave_plane(img_at, plane_buf, plane);
         ++plane_i;
       } while( plane_i<plane_count );
 restore_arc:
@@ -228,7 +228,7 @@ restore_arc:
         plane_predictor = pred;
         if( (plane_desc[plane2].flags&8)!=0||pred ) {
           i = img_at->width;
-          frame.row_step = &((uint8_t*)img_at)[plane2+16];
+          frame.row_step = &img_at->pixels[plane2];
           n_pix = i*img_at->height;
           frame.nplanes_s = plane_count;
           frame.s12 = n_pix;
@@ -236,7 +236,7 @@ restore_arc:
             memcpy(plane_buf, (uint8_t*)frame.row_step, frame.s12);
             pred_s = plane_predictor;
           } else {
-            frame.Block = &((uint8_t*)img_at)[plane2];
+            frame.Block = &img_at->pixels[plane2];
             frame.s0 = pred;
             frame.s4 = plane2;
             frame.s8 = pl2;
@@ -246,7 +246,7 @@ restore_arc:
             nplanes_c = frame.nplanes_s;
             i2 = 0;
             do {
-              plane_buf[pix_at] = frame.Block[i2+16];
+              plane_buf[pix_at] = frame.Block[i2];
               i2 += nplanes_c;
               ++pix_at;
             } while( pix_at<n_pix2 );
@@ -261,7 +261,7 @@ restore_arc:
           } else {
             expand_predictor_mode0(img_at->width);
           }
-          interleave_plane((uint8_t*)img_at, plane_buf, plane2);
+          interleave_plane(img_at, plane_buf, plane2);
         }
       } while( pl2<plane_count );
       goto restore_arc;

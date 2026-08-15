@@ -145,7 +145,6 @@ struct BmpHeader {
 };
 #pragma pack(pop)
 
-static inline int32_t bmf_pixels(const uint8_t* p) {
-  const BmfImage* img = (const BmfImage*)p;
+static inline int32_t bmf_pixels(const BmfImage* img) {
   return img->width*img->height;
 }
