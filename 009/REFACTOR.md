@@ -328,3 +328,88 @@ zero.
 would need a cast at the boundary and every comparison rewritten, to make two
 comparisons against 1 and 2 read as two comparisons against names.  Low value,
 and the plan files it as optional.
+
+---
+
+## After the plan
+
+The plan ran out before the tree did.  What the following rounds found, in the
+order the tools reported it.
+
+**Three tools had stopped working, and one of them looked like a defect in the
+tree.**  `sweep.sh`'s contract is that every counting tool reports zero, so a
+tool that crashes or that keeps finding work is indistinguishable from a
+program that still has work in it.
+
+  * `p1bump.py` anchored on the string `int32_t update_model()` and walked
+    forward from it.  The round above collapsed that function and made it
+    return `void`, so `next()` raised `StopIteration` and the sweep reported
+    the tool as *failing*.  It scans the whole file now -- a counter and its
+    total on consecutive lines needs no function to sit in.
+  * `planedesc.py` is a one-shot rewrite and had no guard.  With the shift
+    applied, `plane_desc[1]` is a plane and a second run would make it
+    `plane_desc[0]`, silently, everywhere.  The guard is the declaration: five
+    descriptors means the header slot is still there, four means it is out.
+  * `readme.py`'s generated table was three tools behind.
+
+**The comparisons written as shifts.**  `(uint32_t)(a-b)>>31` is `a<b`, which
+is what MSVC emits when a branchless 0/1 beats a `setcc` mid-expression.
+`tools/signshift.py` found sixteen, in three spellings, and will not rewrite
+one without a recorded reason why the subtraction cannot overflow -- that being
+a fact about the values and not the syntax.  Fifteen rewritten; the sixteenth
+is `bmp.inc`'s, which is the bias term of a signed division by two and not a
+predicate at all.
+
+One recorded reason was wrong on the first pass, which is why the reasons are
+in the tool and not in a commit message: `guess` is not 0..255.  It is a MED
+prediction, `guess+west-northwest` of three `uint8_t`, so -255..510.  The
+rewrite is still exact -- what it needs is that `216-guess` fits in an int32 --
+but "it is a pixel so it is 0..255" was the wrong reason for the right answer.
+
+Downstream: `alt_p2_context`'s six bank tails are one `ctx_quant`, which is
+where the two spellings met -- four sites wrote `sum_all>K` and two wrote
+`(uint32_t)(K-sum_all)>>31`, the same predicate, in the same file, for the same
+field.  `alt_p1_code`'s two 300-character prediction expressions are
+`plane_mix2` and `plane_mix3` -- two functions and not one with a bias
+parameter, because the two-plane form's `uint32_t` cast makes its `>>7`
+logical while the three-plane form's is arithmetic, and with a negative weight
+those differ.
+
+**`mir_top` was two variables.**  One `uint16_t*` walked `P2Count` from line
+115 and `P2Freq` from line 420, a hundred lines apart, in one function.  Both
+are the pointer they were.
+
+**The type punning is gone, and the check that says so is not the obvious
+one.**  `build.sh` recorded that `-fstrict-aliasing` made three streams differ.
+Re-measured: all seventeen match.  That looked like a finish line and was not:
+nine `*(uint32_t*)` casts on a `PixRec` were put back deliberately and all
+seventeen *still* matched, because gcc is entitled to exploit them and at `-O2`
+on this code does not.  Comparing streams says "the compiler is not currently
+taking the opportunity", which is a different claim from "there is no
+opportunity".
+
+`-Wstrict-aliasing=2` on an *optimising* build is the one with teeth -- under
+`-fsyntax-only` the analysis never runs and the count is the same whatever the
+code says.  It named 22 sites and all 22 are gone; the largest was the p1
+symbol coder, which took a `uint16_t*` that eleven callers made by casting
+`&counters[ctx]` when `CounterNode` *is* the `{total, c[7]}` its body walked.
+`tools/alias.sh` gates on that count, with the stream comparison as
+corroboration rather than as the test.
+
+Retyping the coder also exposed dead scaffolding inside it: the rescale was
+guarded by `freq+7 < base` and `freq+7 >= base` with `base = freq+1`, which are
+`false` and `true` for any pointer, and the `done` flag between them was MSVC's
+register for a branch it had already decided.
+
+**The warning count is zero**, from four at the start of the plan.
+
+### still open
+
+  * `__choose_plane_coding`'s candidate table, `alt_p2_model`'s per-bank walk
+    and magnitude coding, and the `CodedStream` session consolidation -- the
+    three the plan named and this did not reach, for the reasons above.
+  * the `__` prefix, which needs three tools taught a new way to recognise a
+    definition before it can move.
+  * the weight row's struct.  A use counter still lives in a `float` slot; it
+    goes through `memcpy` now, so it is defined rather than undefined, but the
+    row wants a type with a `uint32_t` member at that offset.

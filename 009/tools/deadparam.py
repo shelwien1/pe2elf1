@@ -49,7 +49,10 @@ import glob
 # `::`.  Between them those two were the two parameters this tool reported
 # nothing about while looking like it had checked everything.
 DEF = re.compile(r'^[ \t]*([A-Za-z_][\w:*&<>, ]*?[\s*&:])(\w+)\(([^;{)]*)\)\s*\{', re.M)
-DEAD = re.compile(r'\b(unread_\w+|unused_\w+)\b')
+# `unread_flag` and `unread4` alike.  The first version required the
+# underscore and so never saw `__cost_candidate`'s four numbered ones, which is
+# a whole function's worth of fossil the tool reported nothing about.
+DEAD = re.compile(r'\b(unread\w*|unused\w*)\b')
 # A call, an increment, or an assignment.  `(uint8_t*)x` is a cast and not a
 # call, which is why the call test wants a word character before the paren.
 EFFECT = re.compile(r'\w\s*\(|\+\+|--|(?<![=!<>+\-*/%&|^])=(?!=)')

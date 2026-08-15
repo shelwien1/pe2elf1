@@ -94,7 +94,7 @@ void __alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
 int32_t __alt_model_p1_decode(uint16_t* hdr, uint8_t* out);
 int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_t mode);
 void __reduce_alphabet(ModelBlock* blk, uint8_t* src);
-int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unread4, int32_t unread5, int32_t unread6, int32_t unread7, uint32_t* costs);
+int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, uint32_t* costs);
 int32_t __choose_plane_coding(BmfImage* img);
 int32_t*__read_bmp(char* path);
 int32_t __decode_symbol_list(SymList* syms);
