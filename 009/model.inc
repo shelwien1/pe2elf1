@@ -577,7 +577,9 @@ struct ModelBlock {
         }
   next_list:
         bucket = x+1;
-        if( (uint32_t)bucket>=blk->height )
+        // `height` is `int32_t` and this side is already `uint32_t`, so C
+        // converts the right operand too.  Written where it happens.
+        if( (uint32_t)bucket>=(uint32_t)blk->height )
           goto list_done;
       }
       if( nbytes==4 )

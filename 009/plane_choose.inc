@@ -73,6 +73,11 @@ int32_t __choose_plane_coding(BmfImage* img) {
   //   192   tbl64b[64]  end of the first, and the loop above zeroes all 192
   //                     bytes of it as one block -- `scratch[64..255]`
   //
+  // `acc1` is not bound below.  Nothing reads that region through a name --
+  // `acc0[4*xform+2]` reaches rows 1 and 2 of the cost table from inside it,
+  // which is the whole of its traffic -- so a reference there was a comment
+  // the compiler had to be told to ignore.  The map above is the comment.
+  //
   // `acc0` and `acc1` were bound here when the frame was lifted; the tables
   // were left as separate locals, and `tbl16` was placed 8 bytes early, over
   // `d4`.  So for `xform != 0` the 64 bytes this copies into `plane_desc` --
@@ -83,7 +88,6 @@ int32_t __choose_plane_coding(BmfImage* img) {
   // `testfiles/xform1.bmp` is the image that does not.
   alignas(16) uint8_t scratch[256];
   int32_t(&acc0)[4] = *(int32_t(*)[4])&scratch[0];
-  uint64_t(&acc1)[5] = *(uint64_t(*)[5])&scratch[16];
   int32_t(&tbl16)[16] = *(int32_t(*)[16])&scratch[64];
   uint8_t(&tbl64a)[64] = *(uint8_t(*)[64])&scratch[128];
   uint8_t(&tbl64b)[64] = *(uint8_t(*)[64])&scratch[192];
