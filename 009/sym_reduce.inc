@@ -281,6 +281,8 @@ alphabet_done:
               break;
             rp = srcp;
           }
+// Two loops out at once, which is all the `goto` is for: the row ran out
+// mid-component.  The `break` above lands here too.
 lists_ready:
           ;
         }
