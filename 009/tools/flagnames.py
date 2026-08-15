@@ -4,12 +4,13 @@
     python3 tools/flagnames.py bmf.cpp
     python3 tools/flagnames.py bmf.cpp --all   # also list the names in force
 
-This program has five bytes that are bit fields, and until they were given
-enums every one of them was read as a literal: `depth & 0x40` and `flags & 0x40`
-are different questions about different bytes, and the source said `0x40`
-twice.  Four enums name them now -- `depth_*` and `flags_*` in `bmp.inc`,
-`desc_*` and `pred_*` beside `PlaneDesc`, `ctx_*` beside `ctx_group_flags` --
-and this is the check that they stay named.
+This program has five bit fields, and until they were given enums every one of
+them was read as a literal: `depth & 0x40` and `flags & 0x40` are different
+questions about different bytes, and the source said `0x40` twice.  Enums name
+them now -- `depth_*` and `flags_*` in `bmp.inc`, `desc_*` and `pred_*` beside
+`PlaneDesc`, `ctx_*` beside `ctx_group_flags` -- and this is the check that they
+stay named.  `--all` prints the value-to-name table it works from, where that
+0x40 collision is one row with two names in it.
 
 **The rule.**  An identifier whose name carries `flag` or `depth` may not be
 combined with a numeric literal by `&`, `|` or `^`.  That is deliberately about
