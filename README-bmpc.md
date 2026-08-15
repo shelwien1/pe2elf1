@@ -196,6 +196,14 @@ constant block. Worth −0.07% by itself, but the real effect is that it
 made *small* blocks affordable: at 32×32 the statistics went from +0.14%
 (a net loss) to −0.09%.
 
+`max >= min` is in there too, and isolating it says it is worth **21
+bytes** across the seven test rasters (+0.001%). That is not a bug in the
+constraint, it is the same ceiling the whole idea runs into: `min` is a
+direct intra-pixel tap for the mix and `max−min` is small and smooth, so
+the counters had already put almost no probability below `min`. Making
+that exactly zero recovers the rounding and nothing else. The masks paid
+because the masks are the part that is *not* well predicted.
+
 The obvious-looking alternative — coding the planes packed against each
 other as plain numbers (`max−min`, `mask1` vs `min&max`, …) — is exact and
 makes every number smaller, and it **loses** (`BLK_PACK`, +0.02%). They are
