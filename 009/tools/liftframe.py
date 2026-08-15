@@ -222,9 +222,13 @@ def indexed_out(lines, a, b, got):
 # answers here: the recorded failure was a stack-buffer-overflow and `test.sh`
 # cannot see one.
 PROVEN = {
-    # Offers only the members outside its union, and even that much moves what
-    # the body writes past.
-    'expand_image':   'DLRAW exits 3 while decompressing',
+    # Re-taken with the rest: still fails, and wider than the entry said.  The
+    # thirteen members outside the union lift, and seventeen of the nineteen
+    # images then fail to expand at all -- `expand exits 3`, the bad-file code,
+    # on DLRAW, altp1, f05_200, med32, noise24, rle4 and eleven more.  Not one
+    # image, and not a stream that moved: the header parse stops working, which
+    # is what says the frame's layout is what the parse is reading through.
+    'expand_image':   'expand exits 3 on 17 of 19 images',
 }
 
 
