@@ -155,15 +155,15 @@ they are.
 Two are worth noting, and the second is a small piece of work rather than a
 remark:
 
-- **1503**, `sig3 = CtxIdx{}.bits<0,4>(__frame.sym10).raw(16*id2)` — a four-bit
+- **1503**, `sig3 = CtxIdx{}.bits<0,4>(frame.sym10).raw(16*id2)` — a four-bit
   field with a lazily allocated context id above it. `id2` has no static bound
   (it is handed out on first sight of a signature), so `raw` is right and
   `bits` would be a claim the code cannot make.
 - **873** *(done)*, in the decoder, was that same context unconverted:
-  `__frame.sym1 = 16*id2+(__frame.sym1&0xF);` — the same four-bit field and the
+  `frame.sym1 = 16*id2+(frame.sym1&0xF);` — the same four-bit field and the
   same `16*id2`, written as a multiply and a mask, in place. The encoder's half
   said what it is and the decoder's did not, which was the one asymmetry in
-  these ten. It is `CtxIdx{}.bits<0, 4>(__frame.sym1).raw(16*id2)` now.
+  these ten. It is `CtxIdx{}.bits<0, 4>(frame.sym1).raw(16*id2)` now.
 
 No change proposed for the other nine.
 

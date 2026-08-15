@@ -152,7 +152,7 @@ static void reduce_narrow_alphabet(ReduceAlphabetFrame& f, ModelBlock* blk1, uin
 }
 
 void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
-  ReduceAlphabetFrame __frame;
+  ReduceAlphabetFrame frame;
   ModelBlock* blk1, * blk4;
   uint32_t alpha_n, done, done2, off, slot_a, sym_bits;
   bool more;
@@ -164,82 +164,82 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   uint8_t *srcp, *p, *rp, *dst_a, *dst_b, *dst_c;
   uint32_t val;
   void* newbuf;
-  __frame.slot11 = (ModelBlock*)(blk);
+  frame.slot11 = (ModelBlock*)(blk);
   srcp = src;
   sym_bits = blk->depth;
-  __frame.slot2 = src;
-  __frame.slot7 = (ModelBlock*)(blk);
-  __frame.slot4 = 0xFFFFFFFF>>(-sym_bits&31);
+  frame.slot2 = src;
+  frame.slot7 = (ModelBlock*)(blk);
+  frame.slot4 = 0xFFFFFFFF>>(-sym_bits&31);
   n_kids = (sym_bits+7)>>3;
   for( i = 0; i<8; ++i ) {
-    __frame.lists[2*i].ent = nullptr;
-    __frame.lists[2*i+1].ent = nullptr;
+    frame.lists[2*i].ent = nullptr;
+    frame.lists[2*i+1].ent = nullptr;
   }
-  blk1 = __frame.slot7;
+  blk1 = frame.slot7;
   if( sym_bits<=8 ) {
-    reduce_narrow_alphabet(__frame, blk1, src);
+    reduce_narrow_alphabet(frame, blk1, src);
   } else {
-    memset(__frame.buf, 0, 0x10000);
+    memset(frame.buf, 0, 0x10000);
     blk1->alphabet = 1;
-    *(uint32_t*)__frame.buf = __frame.slot4&*(uint32_t*)src;
+    *(uint32_t*)frame.buf = frame.slot4&*(uint32_t*)src;
     blk1->sym_word[0] = 0;
     if( (uint32_t)(blk1->height**(int32_t*)&blk1->width)>1 ) {
-      __frame.slot8 = src;
-      __frame.slot9 = n_kids;
-      __frame.slot7 = (ModelBlock*)(blk1);
-      p = __frame.slot2;
+      frame.slot8 = src;
+      frame.slot9 = n_kids;
+      frame.slot7 = (ModelBlock*)(blk1);
+      p = frame.slot2;
       node = 0;
       written = 1;
       while( 1 ) {
-        p += __frame.slot9;
-        val = __frame.slot4&*(uint32_t*)p;
-        if( val!=*(uint32_t*)&__frame.buf[8*node] ) {
+        p += frame.slot9;
+        val = frame.slot4&*(uint32_t*)p;
+        if( val!=*(uint32_t*)&frame.buf[8*node] ) {
           node = 0;
-          if( val!=*(uint32_t*)__frame.buf ) {
-            __frame.slot3 = written;
-            __frame.slot2 = p;
+          if( val!=*(uint32_t*)frame.buf ) {
+            frame.slot3 = written;
+            frame.slot2 = p;
             while( 1 ) {
-              side = *(uint32_t*)&__frame.buf[8*node]<val;
-              kidp = __frame.kids[node];
+              side = *(uint32_t*)&frame.buf[8*node]<val;
+              kidp = frame.kids[node];
               node = kidp[side];
               if( !kidp[side] )
                 break;
-              if( val==*(uint32_t*)&__frame.buf[8*node] ) {
-                written = __frame.slot3;
-                p = __frame.slot2;
+              if( val==*(uint32_t*)&frame.buf[8*node] ) {
+                written = frame.slot3;
+                p = frame.slot2;
                 mode_symbol[1] = side;
                 goto code_dense;
               }
             }
-            p = __frame.slot2;
-            __frame.slot0 = side;
-            ModelBlock *blk2 = (ModelBlock*)(__frame.slot7);
-            int32_t alphabet = __frame.slot7->alphabet;
+            p = frame.slot2;
+            frame.slot0 = side;
+            ModelBlock *blk2 = (ModelBlock*)(frame.slot7);
+            int32_t alphabet = frame.slot7->alphabet;
             mode_symbol[1] = side;
             node = (uint16_t)alphabet;
             int32_t alpha = alphabet+1;
             kidp[side] = node;
-            written = __frame.slot3;
+            written = frame.slot3;
             blk2->alphabet = alpha;
             if( alpha>0x2000 ) {
-              srcp = __frame.slot8;
+              srcp = frame.slot8;
               alpha_n = alpha;
-              n_kids = __frame.slot9;
-              blk1 = __frame.slot7;
+              n_kids = frame.slot9;
+              blk1 = frame.slot7;
               goto alphabet_done;
             }
-            *(uint32_t*)&__frame.buf[8*node] = val;
+            *(uint32_t*)&frame.buf[8*node] = val;
           }
         }
 // The alphabet is dense enough to code as a run of flags.
 code_dense:
-        blk3 = __frame.slot7;
-        __frame.slot7->sym_word[written++] = node;
+        blk3 = frame.slot7;
+        frame.slot7->sym_word[written++] = node;
         if( written>=blk3->height*blk3->width ) {
-          srcp = __frame.slot8;
-          n_kids = __frame.slot9;
-          blk1 = __frame.slot7;
-          alpha_n = __frame.slot7->alphabet;
+          srcp = frame.slot8;
+          n_kids = frame.slot9;
+          blk1 = frame.slot7;
+          alpha_n = frame.slot7->alphabet;
           goto alphabet_done;
         }
       }
@@ -250,100 +250,100 @@ alphabet_done:
     rc.encode(alpha_n-1, alpha_n, 0x2001u);
     alpha_m = blk1->alphabet;
     if( alpha_m>0x2000 ) {
-      (__frame.slot[1]) = bmf_new(blk1->height*n_kids*blk1->width);
+      (frame.slot[1]) = bmf_new(blk1->height*n_kids*blk1->width);
       img_w = blk1->width;
       img_h = blk1->height;
-      __frame.kids_i = blk1->width;
-      __frame.slot0 = img_h;
+      frame.kids_i = blk1->width;
+      frame.slot0 = img_h;
       if( n_kids ) {
-        __frame.slot6 = __frame.slot0*img_w;
+        frame.slot6 = frame.slot0*img_w;
         if( n_kids>>1 ) {
-          half = (uint8_t*)(__frame.slot[1])+__frame.slot0*__frame.kids_i;
-          __frame.slot8 = srcp;
-          __frame.slot9 = n_kids;
-          __frame.slot7 = (ModelBlock*)(blk1);
+          half = (uint8_t*)(frame.slot[1])+frame.slot0*frame.kids_i;
+          frame.slot8 = srcp;
+          frame.slot9 = n_kids;
+          frame.slot7 = (ModelBlock*)(blk1);
           pairs = 0;
           do {
             slot_a = 2*pairs;
-            off = 2*pairs++*__frame.slot6;
-            __frame.slot[slot_a+2] = (uint8_t*)(__frame.slot[1])+off;
-            __frame.slot[slot_a+3] = (void*)&half[off];
+            off = 2*pairs++*frame.slot6;
+            frame.slot[slot_a+2] = (uint8_t*)(frame.slot[1])+off;
+            frame.slot[slot_a+3] = (void*)&half[off];
           } while( pairs<n_kids>>1 );
-          srcp = __frame.slot8;
-          n_kids = __frame.slot9;
-          blk1 = __frame.slot7;
+          srcp = frame.slot8;
+          n_kids = frame.slot9;
+          blk1 = frame.slot7;
           done = 2*pairs+1;
         } else {
           done = 1;
         }
         if( n_kids>(done-1) )
-          __frame.slot[done+1] = (uint8_t*)(__frame.slot[1])+__frame.slot0* -__frame.kids_i+__frame.slot6*done;
+          frame.slot[done+1] = (uint8_t*)(frame.slot[1])+frame.slot0* -frame.kids_i+frame.slot6*done;
       } else {
-        __frame.slot6 = __frame.slot0*img_w;
+        frame.slot6 = frame.slot0*img_w;
       }
-      if( __frame.slot6 ) {
+      if( frame.slot6 ) {
         rp = src;
         if( n_kids ) {
-          __frame.slot9 = n_kids;
-          __frame.slot7 = (ModelBlock*)(blk1);
-          __frame.kids_i = 0;
+          frame.slot9 = n_kids;
+          frame.slot7 = (ModelBlock*)(blk1);
+          frame.kids_i = 0;
           n_moved = 0;
           n_pairs = n_kids>>1;
           while( 1 ) {
             while( 1 ) {
               if( n_pairs ) {
                 for( j = 0; j<n_pairs; ++j ) {
-                  dst_a = (uint8_t*)(__frame.slot[2*j+2]);
+                  dst_a = (uint8_t*)(frame.slot[2*j+2]);
                   *dst_a = rp[2*j];
-                  dst_b = (uint8_t*)__frame.slot[2*j+3];
-                  __frame.slot[2*j+2] = dst_a+1;
+                  dst_b = (uint8_t*)frame.slot[2*j+3];
+                  frame.slot[2*j+2] = dst_a+1;
                   *dst_b = rp[2*j+1];
-                  __frame.slot[2*j+3] = dst_b+1;
+                  frame.slot[2*j+3] = dst_b+1;
                 }
                 done2 = 2*j+1;
                 srcp = &rp[2*j];
               } else {
                 done2 = 1;
               }
-              if( (done2-1)>=__frame.slot9 )
+              if( (done2-1)>=frame.slot9 )
                 break;
-              dst_c = (uint8_t*)__frame.slot[done2+1];
+              dst_c = (uint8_t*)frame.slot[done2+1];
               srcp = &rp[done2];
               *dst_c = rp[done2-1];
-              more = (uint32_t)(++n_moved)<__frame.slot6;
-              __frame.slot[done2+1] = dst_c+1;
+              more = (uint32_t)(++n_moved)<frame.slot6;
+              frame.slot[done2+1] = dst_c+1;
               if( !more )
                 goto lists_ready;
               rp += done2;
             }
-            if( (uint32_t)(++n_moved)>=__frame.slot6 )
+            if( (uint32_t)(++n_moved)>=frame.slot6 )
               break;
             rp = srcp;
           }
 lists_ready:
-          n_kids = __frame.slot9;
-          blk1 = __frame.slot7;
+          n_kids = frame.slot9;
+          blk1 = frame.slot7;
         }
       }
-      __frame.tmp = blk1->sym_word;
-      blk1->height = n_kids*__frame.slot0;
+      frame.tmp = blk1->sym_word;
+      blk1->height = n_kids*frame.slot0;
       blk1->depth = 8;
-      free(__frame.tmp);
+      free(frame.tmp);
       newbuf = bmf_new(2*blk1->height*blk1->width);
-      __frame.tmp = __frame.slot[1];
+      frame.tmp = frame.slot[1];
       blk1->sym_word = (uint16_t*)newbuf;
-      reduce_alphabet(blk1, (uint8_t*)__frame.tmp);
-      free((__frame.slot[1]));
+      reduce_alphabet(blk1, (uint8_t*)frame.tmp);
+      free((frame.slot[1]));
     } else {
       if( 4*n_kids ) {
-        __frame.slot7 = (ModelBlock*)(blk1);
+        frame.slot7 = (ModelBlock*)(blk1);
         li = 0;
         do {
-          __frame.lists[li].init(256, 1);
+          frame.lists[li].init(256, 1);
           ++li;
         } while( li<4*n_kids );
-        blk1 = __frame.slot7;
-        alpha_m = __frame.slot7->alphabet;
+        blk1 = frame.slot7;
+        alpha_m = frame.slot7->alphabet;
       }
       if( alpha_m ) {
         carry = 0;
@@ -351,27 +351,27 @@ lists_ready:
         si_end = alpha_m;
         blk4 = (ModelBlock*)(blk1);
         do {
-          word = *(uint32_t*)&__frame.buf[8*si];
+          word = *(uint32_t*)&frame.buf[8*si];
           if( n_kids ) {
-            __frame.kids_i = si;
-            __frame.slot9 = n_kids;
-            __frame.slot7 = (ModelBlock*)(blk4);
-            for( k = 0; k<__frame.slot9; ++k ) {
-              __frame.lists[4*k+carry].code_symbol((uint8_t)word);
+            frame.kids_i = si;
+            frame.slot9 = n_kids;
+            frame.slot7 = (ModelBlock*)(blk4);
+            for( k = 0; k<frame.slot9; ++k ) {
+              frame.lists[4*k+carry].code_symbol((uint8_t)word);
               carry = (uint8_t)word>>6;
               word >>= 8;
             }
-            si = __frame.kids_i;
-            n_kids = __frame.slot9;
-            blk4 = (ModelBlock*)(__frame.slot7);
-            word = *(uint32_t*)&__frame.buf[8*__frame.kids_i];
-            si_end = __frame.slot7->alphabet;
+            si = frame.kids_i;
+            n_kids = frame.slot9;
+            blk4 = (ModelBlock*)(frame.slot7);
+            word = *(uint32_t*)&frame.buf[8*frame.kids_i];
+            si_end = frame.slot7->alphabet;
           }
           carry = (uint8_t)word>>7;
           ++si;
         } while( si<si_end );
       }
     }
-    free_sym_entries(__frame.lists, 16);
+    free_sym_entries(frame.lists, 16);
   }
 }

@@ -135,7 +135,7 @@ turns of a countdown loop, at offsets 56 down to 0.  That is
 `DecodePixelFrame` and `CodePixelFrame` dissolve.  An earlier round had already
 recovered the neighbour array out of them, and what was left was that array,
 four bytes of gap, thirty-two of pad, and no other member -- 212 uses of
-`__frame.sym` are now `nb_sym`.
+`frame.sym` are now `nb_sym`.
 
 The other six are `tools/liftframe.py`'s recorded results, and they are results
 rather than an absence of effort: four were tried and reverted (`cost_candidate`
@@ -450,52 +450,96 @@ easy kind of wide: 126 mechanical substitutions the compiler checks, not 126
 judgements.  Breadth is not the same as risk, and this round mistook one for
 the other twice.
 
+**`alt_p2_model`'s magnitude coding.**  Its per-bank walk was on the declined
+list with "threading about thirty locals through a signature" as the reason, and
+that reason was a guess.  Measured: 33 names, and not one of them read after the
+loop -- so they move rather than thread, and the walk is
+`AltP2Block::code_banks`, 330 lines, one parameter.  Two regex measurements
+answered 4 and 6 before the compiler answered 33; a regex over declarations
+undercounts, and undercounting here argues *for* the work rather than against
+it, which is how it went unnoticed.
+
+The extraction then failed the gate at 10 of 110, because the loop body ends in
+`++bank;` and I had wrapped it in a `for` that also increments.  Three of five
+banks of counters never moved.  It built, it ran, it compressed every image --
+only the byte comparison saw it.
+
+**The `__` prefix is gone, and the obstacle was not the one recorded.**  Fifty-one
+names carried it, and `__`-prefixed identifiers are reserved to the
+implementation at every scope, so this was never cosmetic.  Two rounds declined
+it -- first "three tools key on it", then a longer entry in this file about
+`addrmap.py`'s `real_bodies` -- and both reasons were wrong, in the same way:
+they described the tool's *pattern* rather than what the tool reads.
+
+`real_bodies` is applied to `git show <rev>:003/subs1.hpp`, never to the tree.
+Dropping the prefix today cannot change what a 2019 revision of the donor file
+says, so the pattern that requires `__name(` is still exactly right where it
+runs.  The genuine collision was real and evaporated on its own: `packer_word()`
+against the `packer_word` global, which stopped existing when that global became
+`stream.pk.word`.  Of the other ten apparent collisions, nine are comment
+matches or different scopes, and `__main` merged into `main` -- the two were the
+same body behind a `const char**` cast.
+
+**What was actually broken was `addrmap.py`, and nothing could see it.**  Going
+to check the recorded obstacle is what found this.  The tool asks the history of
+the file it is handed; the file it is handed became `bmf.cpp`; and the renames
+are in `003/subs1.hpp`, on commits that are not ancestors of this branch -- 79
+commits here, 748 in the repository.  Both searches therefore matched nothing
+and it printed an empty map under a header saying the map was recovered from the
+commits that made each rename.
+
+`sweep.sh` exempts it from the every-count-is-zero rule, because it reports a
+map rather than a count, so the empty map was the one shape of wrong answer the
+harness could not see.  `unnamed.py` -- the check for names still spelled the way
+Hex-Rays spelled them, and the only one that is exact rather than a pattern --
+then declined itself for want of a map.  A check that had been honestly saying
+"not applicable" was reading as a clean tree.
+
+Named the donor path, passed `--all`, and read the unit with `structs.splice`
+instead of one file: 64 bodies mapped, and every one of the 64 agrees with the
+committed map to the address.  That agreement is what says the re-derivation is
+sound rather than merely non-empty.  Ten entries the old map had are bodies
+renamed since the import -- `alt_p2_filter` became `NbRow::predict` an hour
+earlier -- and the chain cannot reach past the import to follow them, so they
+are kept in a commented block below the map rather than in it: an address is
+still an address, and a map that names a body the tree does not have is one
+`unnamed.py` correctly refuses.
+
+`unnamed.py` now joins 65 bodies and reports zero.  Proved it can report before
+trusting that: emptying its `KEPT` set makes it name six.
+
+**And fixing it exposed a hole in `sweep.sh`.**  A working `addrmap.py` is a
+slow one -- 93 names at two `git log -S` searches over 748 commits -- and it
+went past the sweep's three-minute timeout.  The sweep has a check for exactly
+that, `[ "$rc" = 124 ]`, and the check could not fire: `rc=$?` after a pipeline
+is `tail`'s status, and `tail` succeeds on a truncated stream as readily as on a
+complete one.  So the sweep read the last surviving line of a killed tool as its
+answer.  `exit "${PIPESTATUS[0]}"` inside the substitution; proved by pointing
+it at `timeout 1 sleep 5`, which now reports 124 and used to report 0.
+
+The tool itself is five seconds now.  The committed map is a memo for *both* of
+its answers -- the addresses it found and, the expensive half, the 76 names it
+searched for and did not find.  `--rederive` walks all 93, and that is the mode
+in which the agreement with the previous map means anything.
+
+**`__frame` too** -- 617 uses across six functions, the last identifier in the
+program that was not the compiler's to give.  It is `frame`, in the tree, the
+documents and the twenty-three tools whose
+patterns spell it.  What is left with
+the prefix is `__builtin_*` and `__attribute__`, which are the compiler's, and
+four comments naming Hex-Rays vocabulary -- `__OFSUB__`, `__PAIR64__`,
+`__byte_445440` -- where the prefixed spelling *is* the name of the thing under
+discussion.
+
+**Dropping the prefix turned a check back on.**  `unstale.py` compares the line
+counts documents claim against the bodies they name, and it had been skipping
+one: MODELS.md said two functions were 1,240 lines between them and they are
+1,121.  It could not say so while the document named `__choose_plane_coding` and
+the program had no such name to measure.  The sentence is reworded so each
+number names one function, which is the form the tool can check.
+
 ### still open
 
-  * `alt_p2_model`'s magnitude coding.  Its per-bank walk *was* on this list,
-    with "threading about thirty locals through a signature" as the reason,
-    and that reason was a guess.  Measured: 33 names, and not one of them read
-    after the loop -- so they move rather than thread, and the walk is
-    `AltP2Block::code_banks`, 330 lines, one parameter.  Two regex
-    measurements answered 4 and 6 before the compiler answered 33; a regex over
-    declarations undercounts, and undercounting here argues *for* the work
-    rather than against it, which is how it went unnoticed.
-
-    The extraction then failed the gate at 10 of 110, because the loop body
-    ends in `++bank;` and I had wrapped it in a `for` that also increments.
-    Three of five banks of counters never moved.  It built, it ran, it
-    compressed every image -- only the byte comparison saw it.
-  * the `__` prefix.  "Three tools key on it" was the recorded reason and it
-    is not the real one; here is the real one.
-
-    60 names carry it, and `__`-prefixed identifiers are reserved to the
-    implementation, so this is more than cosmetic.  The collisions are
-    tractable: of eleven apparent ones, nine are comment matches or different
-    scopes, `__main` merges into `main` as the plan says, and the one genuine
-    collision -- `packer_word()` against the `packer_word` global -- stopped
-    existing when that global became `stream.pk.word`.  `addrmap.txt` already
-    stores names *without* the prefix, so the map's keys survive untouched.
-
-    What does not survive is `addrmap.py`'s `real_bodies`.  It reads like "every
-    definition in file order" and is not: its pattern stops at the `(`, so it
-    matches `decls.inc`'s declarations too -- 106 entries, 60 distinct, 46 of
-    them the same name twice.  `from_commits` then pairs the k-th entry before
-    a renaming commit with the k-th after, so what the list actually is, is a
-    stable ordered fingerprint that `rename.py` preserves.  The `__` is doing
-    a second job there: it means "recovered from BMF.exe", which is why the
-    project's own helpers -- `abs32`, `bmf_malloc`, `bmf_bucket_of` -- are not
-    in it.
-
-    Any pattern that stops requiring the prefix changes that list, and changing
-    it changes every index.  A stricter pattern that correctly excludes
-    declarations was written and measured: it finds all 60 and 18 helpers
-    besides, 79 entries where there were 106.  More accurate, and it would pair
-    names with the wrong addresses the moment the tool walks back through
-    history.
-
-    So the rename needs a decision about what `addrmap.py` is *for* -- whether
-    it re-derives the map from the git log each time, or whether
-    `tools/addrmap.txt` is now the recovered answer and the tool's job is to
-    check it.  That is a design question, not a pattern to fix, and guessing at
-    it would silently break the one thing that lets a disagreement with the
-    binary be traced back to an address.
+  * `alt_p2_model`'s magnitude coding is done; nothing named in the plan is
+    left.  What the tools still report is in the sweep, and the sweep is at
+    zero.

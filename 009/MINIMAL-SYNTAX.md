@@ -35,7 +35,7 @@ Lines 12,187 → 12,071 at the round's end. Warnings 4 → 4, shadows 0, and
 nothing to do with it: a bug report against `choose_plane_coding`'s plane-order
 table (see that file's header). Every count in the table above is unchanged —
 `this->` 0, `::` 0, `blk->` 224, `!= 0` 11, `= (x);` 0, `while( 1 )` 32,
-`__frame.` 972 — the warning count is still 4 with no shadows, and
+`frame.` 972 — the warning count is still 4 with no shadows, and
 `deadcheck`, `methodise`, `unstale` and `liftframe` all still answer zero over
 a unit they can read. The tree is 12,091 lines now; the twenty are that fix's
 comment.
@@ -292,7 +292,7 @@ re-proposes them.
 It is the house style of a lot of C++ and it is the opposite of this round's
 rule. Declined on the round's own terms.
 
-**Dissolving the eight `__frame` structs, 972 `__frame.` prefixes.** The single
+**Dissolving the eight `frame` structs, 972 `frame.` prefixes.** The single
 largest remaining class, and the one that must not be touched. Eight frames are
 left — in `choose_plane_coding`, `cost_candidate`, `decode_symbol_list`,
 `expand_image`, `model.inc` (two), `reduce_alphabet` and `search_filter` — and
@@ -303,9 +303,9 @@ taken of one member pins the whole frame. These bodies index off the ends of
 their locals deliberately; the frame is what makes the neighbours theirs to
 index.
 
-**Renaming `__frame` to something short.** 972 sites, six characters each, and
+**Renaming `frame` to something short.** 972 sites, six characters each, and
 no semantic risk at all — but `defram.py`, `reframe.py`, `unalias.py`,
-`unslot.py`, `unspill.py` and `liftframe.py` all key on the name `__frame`.
+`unslot.py`, `unspill.py` and `liftframe.py` all key on the name `frame`.
 The saving is cosmetic and the cost is six tools. Declined unless those tools
 are being revised anyway.
 

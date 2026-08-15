@@ -13,7 +13,7 @@ existed since Phase 2.1.
 The list comes from `g++ -Wunused-variable` rather than from a pattern here.
 That matters more than it sounds: a declaration in this file can span three
 lines, share a type with names that *are* used, be an array, a pointer, an
-`alignas(16)` buffer or a reference to a `__frame` member, and a scanner that
+`alignas(16)` buffer or a reference to a `frame` member, and a scanner that
 gets any of those wrong deletes something live.  The compiler already has the
 answer and cannot be wrong about it, so this reads the warnings and edits
 exactly what they point at.

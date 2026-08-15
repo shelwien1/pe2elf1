@@ -8,9 +8,9 @@ REFACTORING5.md §5.1.  Round three declared these as arrays because a byte
 range is what they looked like:
 
     uint32_t sym[32];
-    ((ModelBlock * &)__frame.sym[5]) = (ModelBlock *)(_this);
-    v14 = *((uint16_t *)((ModelBlock * &)__frame.sym[5]) + n4_8 + 3029720);
-    ((int32_t &)__frame.sym[0]) = n4_8;
+    ((ModelBlock * &)frame.sym[5]) = (ModelBlock *)(_this);
+    v14 = *((uint16_t *)((ModelBlock * &)frame.sym[5]) + n4_8 + 3029720);
+    ((int32_t &)frame.sym[0]) = n4_8;
 
 An array whose every subscript is a constant and whose elements have four
 different types is not an array; it is the stack area MSVC packed several
@@ -50,12 +50,12 @@ def spills(lines):
         bare, sub = collections.Counter(), collections.defaultdict(set)
         for i in range(fr[1] + 1, b + 1):
             code = lines[i].split('//')[0]
-            for m in re.finditer(r'\(\(([\w ]+\**)\s*&\)__frame\.(\w+)\[(\d+)\]\)', code):
+            for m in re.finditer(r'\(\(([\w ]+\**)\s*&\)frame\.(\w+)\[(\d+)\]\)', code):
                 use[m.group(2)][int(m.group(3))][m.group(1).strip()] += 1
-            for m in re.finditer(r'__frame\.(\w+)\[([^\]]*)\]', code):
+            for m in re.finditer(r'frame\.(\w+)\[([^\]]*)\]', code):
                 if not m.group(2).strip().isdigit():
                     sub[m.group(1)].add(m.group(2))
-            for m in re.finditer(r'__frame\.(\w+)(?![\[\w])', code):
+            for m in re.finditer(r'frame\.(\w+)(?![\[\w])', code):
                 bare[m.group(1)] += 1
         g = {}
         for mem, (i, n) in decl.items():
@@ -81,7 +81,7 @@ def split(lines, fn, mem, found):
                 print('%s[%d] is read as %s, not %d bytes' % (mem, slot, ty, width))
                 return None
     pick = {k: v.most_common(1)[0][0] for k, v in use.items()}
-    # A union rather than a replacement: `pixel_context(this, __frame.sym)`
+    # A union rather than a replacement: `pixel_context(this, frame.sym)`
     # takes the array whole, so the array has to stay.  The named layer is the
     # same bytes under the names the spilled locals are read by.
     decl = [indent + 'union {', '    ' + lines[i]]
@@ -106,13 +106,13 @@ def split(lines, fn, mem, found):
     decl += [indent + '    };', indent + '};']
 
     sites = 0
-    rx = re.compile(r'\(\(([\w ]+\**)\s*&\)__frame\.%s\[(\d+)\]\)' % re.escape(mem))
+    rx = re.compile(r'\(\(([\w ]+\**)\s*&\)frame\.%s\[(\d+)\]\)' % re.escape(mem))
 
     def rep(g):
         nonlocal sites
         sites += 1
         ty, k = g.group(1).strip(), int(g.group(2))
-        name = '__frame.%s%d' % (mem, k)
+        name = 'frame.%s%d' % (mem, k)
         return name if ty == pick.get(k) else '(*(%s *)&%s)' % (ty, name)
 
     for j in range(span[0], span[1] + 1):

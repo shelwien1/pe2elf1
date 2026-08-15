@@ -21,10 +21,13 @@
 // sixteen were not unread but *forwarded*, and a single pass over the list
 // removes the leaves and leaves the chain above them looking load-bearing.
 //
-// The `__` prefix is a different question and still has the answer this note
-// used to give wrongly for parameters: `deadcheck.py`, `unnamed.py` and
-// `addrmap.py` all match on it, and there the claim holds -- `DEF` requires
-// either `__name(` or `Type::name(` to recognise a definition at all.
+// The `__` prefix is gone as well, and the reason given for keeping it -- that
+// `deadcheck.py`, `unnamed.py` and `addrmap.py` all match on it -- was true of
+// the tools and not of the names.  `addrmap.txt` never stored the prefix, so
+// the map's keys did not move; `addrmap.py`'s `DEF` pattern still requires
+// `__name(`, because what it reads is the donor file's history and that is
+// where the prefixed spelling lives.  Only `deadcheck.py`'s pin list and
+// `abpair.py`'s pair table named a body directly, and both are one edit.
 
 struct CtxWeight;
 struct CounterNode;

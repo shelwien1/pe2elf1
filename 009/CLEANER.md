@@ -192,9 +192,9 @@ edit rather than after. The spill branch computes the new count and the
 carry-out shift from `packer_free_bits` while the guard tested `bits_left` or
 `free_bits`; that is only correct because the preceding `packer_free_bits = …`
 leaves the two equal at every one of the six. And the decoder's mask comes from
-`__frame.mask`, a frame member holding 255, used for the 8-bit reads while the
+`frame.mask`, a frame member holding 255, used for the 8-bit reads while the
 4- and 6-bit reads write `0xF` and `0x3F` inline. A helper takes `(1u<<n)-1`
-and `__frame.mask` goes with it — one more constant that had acquired a name.
+and `frame.mask` goes with it — one more constant that had acquired a name.
 
 **Gate.** The streams, and `tools/hdrscan.sh`: this is the code that writes and
 reads the two header bytes that script enumerates completely.
@@ -288,7 +288,7 @@ Three specific ones, all measured:
 - **`q10a`, `q10b`** were the same shape in `alt_p2_context.inc` and are gone;
   the pattern is worth a sweep of the other files for `xxxa`/`xxxb` pairs that
   are one value saved across a call;
-- **`__frame.sym0` … `sym31`** in `model.inc` do not merely *look* like a
+- **`frame.sym0` … `sym31`** in `model.inc` do not merely *look* like a
   32-entry array. They are one, and the source already says so:
 
   ```c
@@ -299,7 +299,7 @@ Three specific ones, all measured:
   ```
 
   Both bodies fill the members one at a time and then hand the array off whole
-  — `psym = pixel_context((uint32_t*)__frame.sym);` at `model.inc:1303`, and
+  — `psym = pixel_context((uint32_t*)frame.sym);` at `model.inc:1303`, and
   the same call at `:1936`. `pixel_context` reads `nb[sym_pos]`, a run-time
   index. So the 32 writes are an unrolled fill of a neighbour array, and the
   array half of the union is already declared and already used.
@@ -320,7 +320,7 @@ Three specific ones, all measured:
   get used directly, the rest only through the index. They read as `sym[0]`,
   `sym[3]` and so on with nothing lost.
 
-  So the work here is the lift, not a naming pass: `__frame.sym[N] = x` at the
+  So the work here is the lift, not a naming pass: `frame.sym[N] = x` at the
   fill sites, then delete the named half of the union. Naming the 32
   individually — which is what this entry said to do — would have been work
   spent making a fill loop harder to see.
@@ -363,7 +363,7 @@ answers zero. The ones worth taking are the handful where the pun is of a
 *local* whose declared type could simply be changed, and `tools/retype_locals.py`
 is the rule for that; it reports zero too.
 
-**The eight `__frame` structs, 970 prefixes.** Declined twice with reasons, and
+**The eight `frame` structs, 970 prefixes.** Declined twice with reasons, and
 now declined by measurement: `tools/liftframe.py` offers zero of them. It is
 worth reading its reasons rather than summarising them, because they are not
 all the same reason. It declines `choose_plane_coding` and `decode_symbol_list`

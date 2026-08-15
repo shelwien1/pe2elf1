@@ -594,7 +594,7 @@ def declaration(text):
     return None
 
 
-# `__m128 *&v275 = __frame.v275;` -- a name that is a reference into one of the
+# `__m128 *&v275 = frame.v275;` -- a name that is a reference into one of the
 # frame structures, not a variable of its own.
 ALIAS = re.compile(r'^\s*(?:const\s+)?[A-Za-z_][A-Za-z0-9_]*[\s\*]*&\s*'
                    r'([A-Za-z_][A-Za-z0-9_]*)\s*=')
@@ -907,7 +907,7 @@ def main():
         # three lines is still one expression.
         # only the statements: a declaration holds the characters of a
         # dereference and of an assignment without being either, and rewriting
-        # one turns `__m128 *&v275 = __frame.v275;` into something that is not
+        # one turns `__m128 *&v275 = frame.v275;` into something that is not
         # a declaration at all
         code = code_start(out, a, b)
         keep = out[s:code]

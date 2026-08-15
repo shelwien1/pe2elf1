@@ -72,7 +72,7 @@ def cast_span(line, col):
         return None
     inner = line[i + 1:j]
     # a cast, not a parenthesised expression: a type name, stars, and an
-    # optional `&` -- the frame aliases are spelled `(int16_t *&)__frame.v282`,
+    # optional `&` -- the frame aliases are spelled `(int16_t *&)frame.v282`,
     # and leaving that form out skipped five of the seventy
     if not re.fullmatch(r'\s*(?:const\s+|unsigned\s+|signed\s+)*'
                         r'[A-Za-z_][A-Za-z0-9_]*(?:\s*::\s*[A-Za-z_][A-Za-z0-9_]*)*'

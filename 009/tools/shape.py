@@ -39,7 +39,7 @@ T = r'[A-Za-z_]\w*\s*\**'
 # scaled; P3 is the reversed form Hex-Rays emits when the index came first,
 # `*(uint8_t *)(idx + (char *)base + 984)`.
 # The base of the arithmetic.  A bare name was all this matched for six
-# rounds, so `(uint8_t *)__frame.acc1 + result` -- a byte offset off a frame
+# rounds, so `(uint8_t *)frame.acc1 + result` -- a byte offset off a frame
 # member -- was not a raw offset as far as the row was concerned, and neither
 # was one off any struct member.  Lifting six frames in round nine turned seven
 # such sites into `(uint8_t *)acc1 + result` and the row went from 5 to 12
@@ -57,7 +57,7 @@ FRAME = re.compile(r'struct alignas\(16\) \w* ?\{   // (\d+) bytes')
 # scalar and `T (&v)[N] = …` for an array member -- missing the second is how
 # this file's first alias count came out 38 short.
 ALIAS = re.compile(r'(?:&\s*|\(&)([A-Za-z_]\w*)\)?(?:\[\d+\])?\s*=\s*'
-                   r'(?:.*?)__frame\.(\w+(?:\[\d+\])?)')
+                   r'(?:.*?)frame\.(\w+(?:\[\d+\])?)')
 RUN = re.compile(r'\(\s*&(\w+)\s*\+\s*')
 BSS = re.compile(r'^static (t_\w+)& (\w+) = \*\(t_\w+\*\)\(bmf_bss \+ (0x[0-9A-F]+)', re.M)
 TYPEDEF = re.compile(r'^typedef\s+(.+?)\s+(t_\w+)\s*(\[[^\]]*\])?\s*;', re.M)

@@ -111,10 +111,10 @@ def build(size, slots, types, used):
             owner, own_ty = ty[1:], arr
             oty = types.get(owner, ('int32_t', '', 0))[0]
             if own_ty and own_ty != oty:
-                refs.append('  %s &%s = *(%s *)((char *)&__frame.%s);'
+                refs.append('  %s &%s = *(%s *)((char *)&frame.%s);'
                             % (own_ty, nm, own_ty, owner))
             else:
-                refs.append('  %s &%s = __frame.%s;' % (oty, nm, owner))
+                refs.append('  %s &%s = frame.%s;' % (oty, nm, owner))
             continue
         w = structs.width(ty)
         if w is None:
@@ -125,7 +125,7 @@ def build(size, slots, types, used):
         if off > at:
             members.append('      uint8_t   _pad%d[%d];' % (len(members), off - at))
         members.append('      %-9s %s%s;' % (ty, nm, arr))
-        refs.append('  %s %s%s = __frame.%s;'
+        refs.append('  %s %s%s = frame.%s;'
                     % (ty, '(&%s)%s' % (nm, arr) if arr else '&' + nm,
                        '', nm))
         at = off + w * n
@@ -139,11 +139,11 @@ def build(size, slots, types, used):
                        % (pad, at))
         at += pad
     body = ('  struct alignas(16) {   // %d bytes, the frame Hex-Rays could not name\n'
-            '%s\n  } __frame;\n'
-            '  static_assert(sizeof(void *) != 4 || sizeof(__frame) == %d,\n'
+            '%s\n  } frame;\n'
+            '  static_assert(sizeof(void *) != 4 || sizeof(frame) == %d,\n'
             '                "frame layout moved");\n'
             '  static_assert(sizeof(void *) != 4\n'
-            '                || __builtin_offsetof(__typeof__(__frame), _pad%d) == %d,\n'
+            '                || __builtin_offsetof(__typeof__(frame), _pad%d) == %d,\n'
             '                "the named part of the frame moved");\n'
             % (size, '\n'.join(members), at,
                len(members) - (2 if pad and size > named else 1), named))
@@ -177,7 +177,7 @@ def main():
     if '--list' in sys.argv:
         have = {n for a, b, n, sig in structs.bodies(now)
                 if 'static inline' not in sig
-                and any('} __frame;' in l for l in now[a:b + 1])}
+                and any('} frame;' in l for l in now[a:b + 1])}
         for nm in sorted(framed):
             old, size = framed[nm]
             print('%-26s %6d bytes   %s' % (nm.lstrip('_'), size,

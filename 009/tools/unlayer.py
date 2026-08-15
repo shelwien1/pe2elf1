@@ -4,7 +4,7 @@
     python3 tools/unlayer.py subs1.hpp
     python3 tools/unlayer.py subs1.hpp --all
 
-    transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, ...)
+    transform_planes((BmfImage *)(uint16_t *)frame.tile_img, ...)
     __alt_p1_context((AltP1Block *)(uint8_t **)_this, ...)
     __bmf_destroy_archive((BmfArc *)(FILE **)arc, 1)
 

@@ -144,7 +144,7 @@ def fits(rhs, w, types, mem, rec=None, name=None):
     # `BmfImage *`.
     #
     # Only the last two components of a chain matter, which is what makes this
-    # cheap: `__frame.p_i_2->height` needs `p_i_2`'s type and nothing before it,
+    # cheap: `frame.p_i_2->height` needs `p_i_2`'s type and nothing before it,
     # and `structs.decl_types` already reports a frame's members as if they were
     # locals -- so `p_i_2` is a `BmfImage *` there without this having to know
     # what a frame is.
@@ -312,7 +312,7 @@ def survey(lines):
                     if re.match(r'\s*=[^=]', after):
                         # A full write is only harmless if the value it stores
                         # still fits once the local narrows.  A pointer never
-                        # does: `wp = (uint16_t *)__frame.sym9` is a register
+                        # does: `wp = (uint16_t *)frame.sym9` is a register
                         # holding an address in one lifetime and a symbol in
                         # the next, and narrowing it around the address turned
                         # a green build into an `-fpermissive` conversion --

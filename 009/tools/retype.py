@@ -118,7 +118,7 @@ def int_decls(body):
         l = body[i]
         if re.match(r'^\s*struct alignas\(\d+\) \{', l):
             in_frame = True
-        elif in_frame and re.match(r'^\s*\} __frame;', l):
+        elif in_frame and re.match(r'^\s*\} frame;', l):
             in_frame = False
             i += 1
             continue

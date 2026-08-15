@@ -8,10 +8,10 @@
 Round three gave every frame member a reference so the body could keep saying
 what Hex-Rays called it:
 
-    int32_t (&v72)[1024] = __frame.v72;
-    int32_t &v57 = (int32_t &)__frame.list[2];
+    int32_t (&v72)[1024] = frame.v72;
+    int32_t &v57 = (int32_t &)frame.list[2];
 
-The declaration goes and the body says the member: `v72` becomes `__frame.v72`,
+The declaration goes and the body says the member: `v72` becomes `frame.v72`,
 and an alias that carries a cast becomes the parenthesised cast, because `->`
 and `[]` bind tighter than a cast-expression and a bare substitution would
 change what the line means.
@@ -33,7 +33,7 @@ import structs                                                  # noqa: E402
 
 ALIAS = re.compile(r'^(\s*)(.+?)\s*\(?&\s*(\w+)\)?(\[\d+\])?\s*=\s*(.+?);\s*(//.*)?$')
 MEMBER = re.compile(r'^(\s*)([A-Za-z_][\w ]*?\s*\**)\s*(\w+)\s*(\[(\d+)\])?\s*;(.*)$')
-PLAIN = re.compile(r'^__frame\.\w+(\[\d+\])?$')
+PLAIN = re.compile(r'^frame\.\w+(\[\d+\])?$')
 
 
 def frame_of(lines, a, b):
@@ -41,7 +41,7 @@ def frame_of(lines, a, b):
     for i in range(a, b + 1):
         if shape.FRAME.search(lines[i]):
             j = i
-            while j <= b and not lines[j].lstrip().startswith('} __frame;'):
+            while j <= b and not lines[j].lstrip().startswith('} frame;'):
                 j += 1
             return i, j
     return None
@@ -56,7 +56,7 @@ def aliases(lines, a, b, close):
         m = ALIAS.match(lines[i])
         if not m:
             continue
-        mem = re.search(r'__frame\.(\w+(?:\[\d+\])?)', m.group(5))
+        mem = re.search(r'frame\.(\w+(?:\[\d+\])?)', m.group(5))
         out.append((i, m.group(3), mem.group(1), m.group(2).strip(), m.group(5)))
     return out
 
@@ -65,7 +65,7 @@ def fold(lines, a, b, al, keep):
     """Pass B: delete the declarations, put the member where the name was.
 
     `keep` is the struct's own line range: a member called `buf` inside it is
-    the declaration of `__frame.buf`, not a use of the alias.
+    the declaration of `frame.buf`, not a use of the alias.
     """
     drop, sub = set(), {}
     for i, name, mem, ty, rhs in al:

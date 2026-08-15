@@ -4,7 +4,7 @@
     python3 tools/liftframe.py subs1.hpp --list
     python3 tools/liftframe.py subs1.hpp model_planes
 
-Bodies that hold their locals in a `struct alignas(16) …{ … } __frame;` --
+Bodies that hold their locals in a `struct alignas(16) …{ … } frame;` --
 seventeen when this was written, nine now -- each carry a comment saying the
 frame is a layout rather than a bag of locals, with the exact failure that
 proved it: "altp1 segfaults while compressing", "five streams move, no signal".
@@ -19,7 +19,7 @@ prints "0 kept, 0 reverted".  That is a green line meaning *nothing was tried*,
 under seventeen claims that rest on it having been.
 
 So this is the same experiment against the shape the file has now: each
-non-padding member becomes a plain declaration, `__frame.X` becomes `X`, and
+non-padding member becomes a plain declaration, `frame.X` becomes `X`, and
 the `static_assert`s that pin the layout go with it.  It proposes; the gate
 decides, one frame at a time, and a frame that fails goes back exactly as it
 was.
@@ -37,7 +37,7 @@ Four things it declines rather than guesses at:
     dissolved when the gate was asked;
   * **a member whose name is already a local** of that body -- the two would
     become one variable;
-  * **any use of `__frame` that is not `__frame.X`**, which after the asserts
+  * **any use of `frame` that is not `frame.X`**, which after the asserts
     are removed should be none.  If one is left, the frame is doing something
     this does not model and it stays;
   * **a member the body indexes out of.**  `&tbl16[16*xform]` on an
@@ -79,7 +79,7 @@ def frame_of(lines, a, b):
     for i in range(start, b + 1):
         c = lines[i].split('//')[0]
         depth += c.count('{') - c.count('}')
-        if depth <= 0 and '__frame' in c:
+        if depth <= 0 and 'frame' in c:
             end = i
             break
     if end is None:
@@ -144,11 +144,11 @@ def indexed_out(lines, a, b, got):
         if not m:
             continue
         bound = int(m.group(1))
-        # `__frame.tbl16[16*xform]` before the lift, `tbl16[16*xform]` after
+        # `frame.tbl16[16*xform]` before the lift, `tbl16[16*xform]` after
         # -- the question is asked of a frame that still exists, so the prefix
         # is the spelling that matters.  Written without it, this rule found
         # nothing anywhere and reported a clean tree.
-        for use in re.finditer(r'(?<![\w.>])(?:__frame\.)?%s\s*\[([^\]\n]+)\]'
+        for use in re.finditer(r'(?<![\w.>])(?:frame\.)?%s\s*\[([^\]\n]+)\]'
                                % re.escape(name), body):
             idx = use.group(1).strip()
             if '*' in idx:
@@ -240,14 +240,14 @@ def candidates(lines):
 def apply(lines, nm, a, b, got, indent='  '):
     start, end, members, keep = got
     body = '\n'.join(lines[a:b + 1])
-    # `__frame` must only ever be `__frame.X` once the asserts are gone.
-    rest = re.sub(r'\}\s*__frame\s*;', '', re.sub(
-        r'__frame\.\w+', '', re.sub(
-            r'static_assert\([^;]*?__frame[^;]*?\);', '', body, flags=re.S)))
-    if '__frame' in rest:
-        return False, '%s: `__frame` is used other than as a member' % nm.lstrip('_')
+    # `frame` must only ever be `frame.X` once the asserts are gone.
+    rest = re.sub(r'\}\s*frame\s*;', '', re.sub(
+        r'frame\.\w+', '', re.sub(
+            r'static_assert\([^;]*?frame[^;]*?\);', '', body, flags=re.S)))
+    if 'frame' in rest:
+        return False, '%s: `frame` is used other than as a member' % nm.lstrip('_')
 
-    text = re.sub(r'[ \t]*static_assert\([^;]*?__frame[^;]*?\);\n', '',
+    text = re.sub(r'[ \t]*static_assert\([^;]*?frame[^;]*?\);\n', '',
                   body, flags=re.S)
     rows = text.split('\n')
     s2 = next(i for i, l in enumerate(rows)
@@ -257,7 +257,7 @@ def apply(lines, nm, a, b, got, indent='  '):
     for i in range(s2, len(rows)):
         c = rows[i].split('//')[0]
         depth += c.count('{') - c.count('}')
-        if depth <= 0 and '__frame' in c:
+        if depth <= 0 and 'frame' in c:
             e2 = i
             break
     decls = ['%s%s %s;' % (indent, t, d) for t, d, _, _src in members]
@@ -286,7 +286,7 @@ def apply(lines, nm, a, b, got, indent='  '):
     # Only the lifted names lose the prefix; the ones still in the struct keep
     # it, which is what makes a partial lift a rewrite rather than a guess.
     for _, _, n, _src in members:
-        text = re.sub(r'__frame\.%s\b' % re.escape(n), n, text)
+        text = re.sub(r'frame\.%s\b' % re.escape(n), n, text)
     lines[a:b + 1] = text.split('\n')
     return True, '%s: %d members lifted, %d left in the frame' % (
         nm.lstrip('_'), len(members), len(real))

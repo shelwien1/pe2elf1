@@ -116,7 +116,7 @@ def split_block(lines, start):
         # The frame struct is a declaration too, and it sits in the middle of
         # the block with the locals that outlived it on both sides.  Stepped
         # over as one unit, braces and all: it is `struct alignas(16) …{ … }
-        # __frame;` and nothing inside it is a local.
+        # frame;` and nothing inside it is a local.
         if re.match(r'\s*(?:struct|union)\b', bare):
             depth = 0
             while i < len(lines):

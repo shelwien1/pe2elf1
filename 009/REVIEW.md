@@ -307,18 +307,18 @@ the slots.
 
 **`corrected`: left alone, and here is why.** `tools/liftframe.py` declined it
 with the right reason — *every member is inside its union* — and looking closer
-says the union is load-bearing rather than incidental. `__frame.list` is
-genuinely used as an array: `w = __frame.list`, `rd = &__frame.list[1]`, a work
+says the union is load-bearing rather than incidental. `frame.list` is
+genuinely used as an array: `w = frame.list`, `rd = &frame.list[1]`, a work
 list of `SymEntry*` written and read through two cursors. The eight slots
-overlay its first words, and both are live in the same region — `__frame.list[1]`
-is written at line 148 and read at 158 while `__frame.list0` is written at 149
+overlay its first words, and both are live in the same region — `frame.list[1]`
+is written at line 148 and read at 158 while `frame.list0` is written at 149
 and read at 159, and at 64 bits `list[1]` *is* `list1`, the same word under two
 spellings.
 
 So this is not a spill area with an array bolted on; it is one buffer the
 original reuses, and separating the two needs a liveness proof about when the
 work list stops being needed. That is a real piece of work and not a cleanup.
-The one free improvement — spelling `__frame.list[1]` and `__frame.list1` the
+The one free improvement — spelling `frame.list[1]` and `frame.list1` the
 same way — is left too, because the array spelling is what shows that word is
 the work list's second slot.
 
@@ -340,7 +340,7 @@ gaps, or code the flags* — visible at the top instead of at line 211.
 
 ## The main model
 
-### `model.inc` — 1,883 lines, 11 gotos, 7 labels, 248 `__frame.`
+### `model.inc` — 1,883 lines, 11 gotos, 7 labels, 248 `frame.`
 
 The largest file, and the one with the most left in it.
 
@@ -582,7 +582,7 @@ merged are merged because their difference really was one call.
 
 ## The decision layer
 
-### `filter_cost.inc` — 203 lines, 128 `__frame.` uses
+### `filter_cost.inc` — 203 lines, 128 `frame.` uses
 
 **Thirty frame members for a 203-line function**, six of them written and read
 within eight lines — `off_a0`, `off_a1`, `off_b0`, `off_b1`, `r1_f`, `step_d`.
@@ -600,7 +600,7 @@ But the nine offsets are not frame *state* at all, they are loop invariants, and
 eight `const` locals took them out without touching the frame. Thirty members
 for a 203-line function was the complaint; nine of them were never state.
 
-### `filter_search.inc` — 585 lines, 4 gotos, 186 `__frame.`
+### `filter_search.inc` — 585 lines, 4 gotos, 186 `frame.`
 
 **Six copies of the packer reset**, four lines each:
 
@@ -638,7 +638,7 @@ than one assigned a constant three lines up. **Widening that rule is worth more
 than deleting the six lines** — a folder that only sees `if( 0 )` will keep
 saying zero here.
 
-### `plane_choose.inc` — 657 lines, 157 `__frame.`, 53 puns
+### `plane_choose.inc` — 657 lines, 157 `frame.`, 53 puns
 
 **The worst spill storage in the tree.** Six `alignas(16) int32_t x0[4]` …
 `x5[4]` arrays, written 28 times by subscript and read as `double` **40 times**
@@ -646,7 +646,7 @@ and as `int64_t` 6 times:
 
 ```c
 d1 = d4**(double*)x4-sum02_c*sum02;
-wa = (int32_t)(((sum02**(double*)&__frame.q0-sum01**(double*)x4)**(double*)x5 + …
+wa = (int32_t)(((sum02**(double*)&frame.q0-sum01**(double*)x4)**(double*)x5 + …
 ```
 
 These are not arrays. They are twelve `double` accumulators — the covariances of
@@ -696,7 +696,7 @@ that differ only in whether the transpose has to be undone first.
 one store. That is why the written header carries `0x40` and a greyscale bit
 nobody assigned. It is correct and it is invisible; one comment.
 
-### `image_expand.inc` — 353 lines, 6 gotos, 5 labels, 79 `__frame.`
+### `image_expand.inc` — 353 lines, 6 gotos, 5 labels, 79 `frame.`
 
 **Ten copies of the failure exit:**
 

@@ -2,6 +2,7 @@
 """Recover which address in BMF.exe each named function came from.
 
     python3 tools/addrmap.py bmf.cpp > tools/addrmap.txt
+    python3 tools/addrmap.py bmf.cpp --rederive     # walk every name again
 
 `ALGORITHM.md` opens by saying function names are the donor's addresses, and
 that was true when everything was `__sub_402FE0`.  Every rename since is a
@@ -27,6 +28,15 @@ today; and those commits are not ancestors of this branch, because the tree was
 imported into a fresh line of history -- 79 commits here, 748 in the
 repository.  So the searches name the donor path and pass `--all`.  See
 `HISTORY` below.
+
+Once it worked it was too slow to run: 93 names at two `git log -S` searches
+over 748 commits each, past `sweep.sh`'s three-minute timeout -- and the sweep
+could not see that it had been killed, because `rc=$?` after a pipeline is
+`tail`'s status.  Both are fixed.  Here, the previous map is a memo for *both*
+of its answers: the addresses it found and the names it searched for and did
+not find, which is the expensive half.  Six names are outside both lists and
+are walked every run; `--rederive` walks all 93 and is what makes the
+comparison against the previous map mean anything.
 """
 import difflib
 import os
@@ -192,8 +202,38 @@ def from_log(root):
     return out
 
 
+def previous():
+    """({name: address}, {names a previous run searched for and did not find}).
+
+    Both halves of the committed map are read, because both are answers this
+    tool paid for.  The addresses are the obvious half.  The other is the list
+    under "N named bodies have no recorded address": each of those cost two
+    `git log -S` searches over 748 commits to establish, and re-establishing
+    them on every run is what took this past `sweep.sh`'s three-minute timeout.
+    """
+    addr, missing, in_missing = {}, set(), False
+    try:
+        fh = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'addrmap.txt'))
+    except IOError:
+        return addr, missing
+    for l in fh:
+        m = re.fullmatch(r'(?:#\s+)?(\w+)\s+0x00([0-9A-F]{6})\s*', l)
+        if m:
+            addr[m.group(1)] = m.group(2)
+            continue
+        if 'no recorded address' in l:
+            in_missing = True
+        elif in_missing and l.startswith('#'):
+            missing.update(l.lstrip('# ').split())
+        elif in_missing and not l.strip():
+            in_missing = False
+    return addr, missing
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'bmf.cpp'
+    rederive = '--rederive' in sys.argv
     root, rel = repo_path(path)
     if rel is None:
         print('not applicable: %s, where these bodies were renamed, is not in '
@@ -222,18 +262,29 @@ def main():
             continue
         pairs[name] = addr
 
+    old, known_missing = previous()
     unmapped = {n for n in defined if not n.startswith('sub_')} - set(pairs)
-    for name, addr in from_commits(sorted(unmapped), root, rel).items():
+    # Every name the previous map has already answered for, either way, unless
+    # this run is here to check the answers.  93 names went to the walk and 76
+    # of them were bodies with no address at all -- two searches each, for a
+    # result that cannot change until the body is renamed.
+    todo = sorted(unmapped if rederive else unmapped - set(old) - known_missing)
+    memo = len(unmapped) - len(todo)
+    for name, addr in from_commits(todo, root, rel).items():
         if 'sub_%s' % addr not in text:
             pairs[name] = addr
+    if not rederive:
+        for name in unmapped & set(old):
+            pairs[name] = old[name]
 
-    # What the previous run of this tool wrote, if it is beside us.  Two
-    # different things can be read off it and only one of them is an error.
+    # Two different things can be read off the previous map and only one of them
+    # is an error.
     #
     # A name both agree on and give *different* addresses to is a defect in one
     # of them and the run should not be trusted -- so it is reported and the
-    # exit is non-zero.  Zero of the 64 in common disagreed the first time this
-    # comparison was made, which is what says the re-derivation is sound.
+    # exit is non-zero.  Under `--rederive` that comparison has teeth, because
+    # nothing was taken from the old map: zero of the 64 in common disagreed the
+    # first time it was made, which is what says the re-derivation is sound.
     #
     # A name only the old map has is not a defect.  This tool follows a rename
     # through `HISTORY`'s log, and that log ends at the import: ten bodies have
@@ -242,25 +293,20 @@ def main():
     # over the donor path reaches them.  Their addresses are still facts.  They
     # are kept below the map rather than in it, because a map that names a body
     # this tree does not have is one `unnamed.py` correctly refuses to use, and
-    # refusing it is what silently turned that check off.
-    # The commented block below is read back as well as written: an orphan that
-    # stayed an orphan has to survive the next regeneration, and a parser that
-    # only sees the live entries would drop one on every run.
-    old = {}
-    try:
-        for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   'addrmap.txt')):
-            m = re.fullmatch(r'(?:#\s+)?(\w+)\s+0x00([0-9A-F]{6})\s*', l)
-            if m:
-                old[m.group(1)] = m.group(2)
-    except IOError:
-        pass
+    # refusing it is what silently turned that check off.  The commented block
+    # is read back as well as written: an orphan that stayed an orphan has to
+    # survive the next regeneration.
     clash = sorted(n for n in set(old) & set(pairs) if old[n] != pairs[n])
     orphan = sorted(set(old) - set(pairs), key=old.get)
 
     print('# name -> the address of the body in BMF.exe it was decompiled from.')
     print('# Recovered by tools/addrmap.py from the commits that made each')
     print('# rename; see ALGORITHM.md section 8.')
+    print('# %s' % ('re-derived in full: every name walked back through the log'
+                    if rederive else
+                    '%d names walked back through the log, %d taken from the '
+                    'previous map (--rederive to walk them all)'
+                    % (len(todo), memo)))
     for name in sorted(pairs, key=lambda n: pairs[n]):
         print('%-26s 0x00%s' % (name, pairs[name]))
     if orphan:

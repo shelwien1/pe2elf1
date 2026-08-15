@@ -8,8 +8,8 @@ REFACTORING4.md §5 item 3.  MSVC reused one stack slot for several variables
 whose live ranges do not overlap, and Hex-Rays named each use, so round three's
 frame reconstruction ended with
 
-    int32_t &v246 = *(int32_t *)((char *)__frame.slot0);
-    int32_t &v248 = *(int32_t *)((char *)__frame.slot0);
+    int32_t &v246 = *(int32_t *)((char *)frame.slot0);
+    int32_t &v248 = *(int32_t *)((char *)frame.slot0);
 
 -- eight names for four bytes in `alt_p2_context` alone.  Where the names
 really are separate variables, each can have its own storage and the reader
@@ -28,12 +28,12 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                  # noqa: E402
 
 # Every alias spelling round three left, because the extra names on one slot
-# rarely share a type: `T &x = __frame.m;`, `T *&x = *(T **)((char *)&__frame.m);`
-# and `T &x = *(T *)&__frame.m[0];` are all one name bound to one member.  The
+# rarely share a type: `T &x = frame.m;`, `T *&x = *(T **)((char *)&frame.m);`
+# and `T &x = *(T *)&frame.m[0];` are all one name bound to one member.  The
 # reference declaration's own type is the one to keep -- it is what the body
 # reads through.
 ALIAS = re.compile(r'^  ((?:const )?[\w]+(?: ?\*)*) ?& ?(\w+) = '
-                   r'[^;]*__frame\.(\w+(?:\[\d+\])?)[^;]*;\s*(?://.*)?$')
+                   r'[^;]*frame\.(\w+(?:\[\d+\])?)[^;]*;\s*(?://.*)?$')
 
 
 def slots(lines):
@@ -74,7 +74,7 @@ def main():
         return 1
     for name, ty, i in al[1:]:                 # the first keeps the slot
         sep = '' if ty.endswith('*') else ' '
-        lines[i] = '  %s%s%s;   // was a second name for __frame.%s' % (ty, sep, name, slot)
+        lines[i] = '  %s%s%s;   // was a second name for frame.%s' % (ty, sep, name, slot)
     open(path, 'w').write('\n'.join(lines))
     print('%s %s: %d names got their own storage' % (fn, slot, len(al) - 1))
     return 0

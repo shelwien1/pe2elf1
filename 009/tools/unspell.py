@@ -47,7 +47,7 @@ PLUS = re.compile(r'\b([A-Za-z_]\w*)\s*\+\s*([^;,)]+?)\s*[);,]')
 # linear offset, a call is not a value this can key on, and `k++` inside an
 # index means the site is not a pure address at all.
 BAD = re.compile(r'\+\+|--|\?|<<|>>|[&|^~%/]|\b[A-Za-z_]\w*\s*\(')
-# `level_geom[lvl].tbl_base` and `__frame.kids_i` are variables as far as an
+# `level_geom[lvl].tbl_base` and `frame.kids_i` are variables as far as an
 # address is concerned: one name for one value, whatever it took to reach it.
 PATH = re.compile(r'[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*|\[[^\[\]]*\])*\Z')
 

@@ -16,7 +16,7 @@ struct FreqRec {
   //
   // The two pixel bodies wrote this out, thirty lines each, with the five
   // halvings interleaved against each other and three of the locals spilled
-  // through the frame -- `__frame.sym[0..2]` held `w[6]`, the level and `b15`
+  // through the frame -- `frame.sym[0..2]` held `w[6]`, the level and `b15`
   // across the middle of it.  Both copies also re-read `w[5]` afterwards to add
   // `b15`, which is why this returns the new sum instead of only storing it.
   uint16_t rescale(uint16_t escape_floor, uint8_t& kick) {

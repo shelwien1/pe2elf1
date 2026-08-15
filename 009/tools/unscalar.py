@@ -68,7 +68,7 @@ def rewrite(lines, name, at):
               for m in re.finditer(r'\b%s \*(\w+)' % name, lines[i].split('//')[0])}
         vs |= {m.group(1) for m in re.finditer(r'\b%s \*(\w+)' % name, sig)}
         # a frame member is a variable too, and its name carries the prefix
-        vs |= {'__frame.' + m.group(1) for i in range(a, b + 1)
+        vs |= {'frame.' + m.group(1) for i in range(a, b + 1)
                for m in re.finditer(r'\b%s \*(\w+)' % name, lines[i].split('//')[0])}
         for v in vs:
             for i in range(a, b + 1):

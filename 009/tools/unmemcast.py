@@ -7,13 +7,13 @@
 REFACTORING4.md §5 item 2's second half.  Folding the aliases left casts where
 round three had declared a member as storage and the body read a type:
 
-    uint8_t Size[4];        ...   (*(int32_t *)((char *)__frame.Size))
-    uint8_t *v226;          ...   ((Obj97 *&)__frame.v226)
+    uint8_t Size[4];        ...   (*(int32_t *)((char *)frame.Size))
+    uint8_t *v226;          ...   ((Obj97 *&)frame.v226)
 
 Where every reader agrees on one type of the member's own width, the member can
 *be* that type and the cast has nothing left to do.  Two things say no before
 the gate does: a member whose offset is not aligned for the new type moves the
-tail of the frame, and the `static_assert` on `sizeof(__frame)` catches that; a
+tail of the frame, and the `static_assert` on `sizeof(frame)` catches that; a
 member whose readers disagree keeps its casts.
 
 Retyping is not free even when the width matches -- §7's third hazard is that
@@ -30,8 +30,8 @@ import merge                                                    # noqa: E402
 import structs                                                  # noqa: E402
 import unalias                                                  # noqa: E402
 
-PTR = re.compile(r'\(\*\(([\w ]+\**)\s*\*\)(?:\(\(char \*\))?&?__frame\.(\w+)\)?\)')
-REF = re.compile(r'\(\(([\w ]+\**)\s*&\)__frame\.(\w+)\)')
+PTR = re.compile(r'\(\*\(([\w ]+\**)\s*\*\)(?:\(\(char \*\))?&?frame\.(\w+)\)?\)')
+REF = re.compile(r'\(\(([\w ]+\**)\s*&\)frame\.(\w+)\)')
 
 
 def readers(lines, a, b, close):
@@ -101,7 +101,7 @@ def main():
         for i in range(fr[1] + 1, b + 1):
             for rx in (PTR, REF):
                 lines[i], k = rx.subn(
-                    lambda x: ('__frame.%s' % mem
+                    lambda x: ('frame.%s' % mem
                                if x.group(2) == mem and x.group(1).strip() == ty
                                else x.group(0)), lines[i])
                 n += k

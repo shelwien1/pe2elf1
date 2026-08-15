@@ -41,12 +41,12 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import shape                                                      # noqa: E402
 import structs                                                    # noqa: E402
 
-SCALAR = re.compile(r'^(\s*)(.+?)\s*&\s*(\w+)\s*=\s*(.*?)__frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
-ARRAY = re.compile(r'^(\s*)(.+?)\s*\(&(\w+)\)(\[\d+\])\s*=\s*(.*?)__frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
+SCALAR = re.compile(r'^(\s*)(.+?)\s*&\s*(\w+)\s*=\s*(.*?)frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
+ARRAY = re.compile(r'^(\s*)(.+?)\s*\(&(\w+)\)(\[\d+\])\s*=\s*(.*?)frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
 # The tag came with REFACTORING4.md §5 item 1.
 OPEN = re.compile(r'^(\s*)struct alignas\(16\) \w* ?\{\s*// (\d+) bytes')
 MEMBER = re.compile(r'^(\s*)([A-Za-z_][\w ]*?\s*\**)\s*(\w+)\s*(\[(\d+)\])?\s*;(.*)$')
-ANYALIAS = re.compile(r'^\s*[^=;]*&\s*\(?\w+\)?(?:\[\d+\])?\s*=[^;]*__frame\.\w+[^;]*;\s*$')
+ANYALIAS = re.compile(r'^\s*[^=;]*&\s*\(?\w+\)?(?:\[\d+\])?\s*=[^;]*frame\.\w+[^;]*;\s*$')
 ASSERT = re.compile(r'^\s*(static_assert|"|\|\||==)')
 
 # -m32, which the file is pinned to; see build.sh.
@@ -124,7 +124,7 @@ def parse(lines, a, b):
     if start is None:
         return None
     close = start
-    while close <= b and not lines[close].lstrip().startswith('} __frame;'):
+    while close <= b and not lines[close].lstrip().startswith('} frame;'):
         close += 1
     members = [dict(line=i, ind=m.group(1), ty=m.group(2).strip(),
                     name=m.group(3), count=m.group(5))
@@ -154,7 +154,7 @@ def parse(lines, a, b):
 def split(lines, a, b, fr, runs):
     """The aliases that can leave, and the ones that stay, with the reason."""
     # Every alias declaration, including the forms the two regexes above do not
-    # parse -- `int32_t &v61 = *(int32_t *)((char *)&__frame.Blocka_5);` is
+    # parse -- `int32_t &v61 = *(int32_t *)((char *)&frame.Blocka_5);` is
     # `model_plane` giving one slot a second name and a second type.  A member
     # named by one of those is shared; the line itself is a declaration and not
     # evidence that anything walks the frame.
@@ -166,7 +166,7 @@ def split(lines, a, b, fr, runs):
         if i in parsed or not ANYALIAS.match(lines[i]):
             continue
         decl.add(i)
-        for m in re.finditer(r'__frame\.(\w+)', lines[i]):
+        for m in re.finditer(r'frame\.(\w+)', lines[i]):
             shared.add(m.group(1))
     text = '\n'.join(lines[i].split('//')[0]
                      for i in range(a, b + 1) if i not in decl)
@@ -186,10 +186,10 @@ def split(lines, a, b, fr, runs):
               or (addr_taken(text, x['name'])
                   and not bounded_io(text, x['name'],
                                      wide.get(x['member'].split('[')[0], 0)))]
-    # `&__frame` is the struct itself; `&__frame.hdr[8]` is an element of a
+    # `&frame` is the struct itself; `&frame.hdr[8]` is an element of a
     # member and says nothing about the members around it.
-    if re.search(r'&__frame\b(?!\s*\.)', text):
-        frozen.append('&__frame')
+    if re.search(r'&frame\b(?!\s*\.)', text):
+        frozen.append('&frame')
     if frozen:
         why = 'frame pinned by ' + ', '.join(sorted(set(frozen))[:3])
         return [], [dict(x, why=why) for x in fr['aliases']]

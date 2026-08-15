@@ -122,16 +122,16 @@ def survey(lines):
                 # a body, so `records()` above never sees them -- but
                 # `structs.decl_types` reports their members as if they were
                 # locals, which is exactly the answer wanted here.  Gated on the
-                # chain starting at `__frame` so that a local sharing a name
+                # chain starting at `frame` so that a local sharing a name
                 # with some record's member cannot answer for it.
-                if mt is None and own and own[0] == '__frame':
+                if mt is None and own and own[0] == 'frame':
                     mt = types.get(mem)
                 if mt is None:
                     mt = any_.get(mem)
                 # A member reached *with a subscript* is an array read,
                 # whatever `decl_types` says its type is -- and what it says
                 # is `uint8_t *` for every one of them, because it decays
-                # arrays.  Eighteen `*(uint32_t *)&__frame.buf[8 * node]`
+                # arrays.  Eighteen `*(uint32_t *)&frame.buf[8 * node]`
                 # rows sat in the `ptr-member` column for that reason: a
                 # 32-bit word read out of a byte buffer, filed under "a
                 # member that holds an address".
@@ -144,7 +144,7 @@ def survey(lines):
                 if mt is None or ct not in SIZE or mt not in SIZE:
                     out.append((i + 1, 'untyped', ct, mt, c.strip()))
                 elif (ct in FLOAT) != (mt in FLOAT):
-                    # Same width, different *kind*.  `*(double *)&__frame.q0`
+                    # Same width, different *kind*.  `*(double *)&frame.q0`
                     # on an `int64_t` member is not a signedness cast -- it
                     # stores the double's bits in an integer slot, and deleting
                     # it turns a reinterpretation into a conversion.

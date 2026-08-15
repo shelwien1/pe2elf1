@@ -75,7 +75,13 @@ for t in tools/*.py; do
         report=1; reported="$reported ${n%.py}" ;;
     *)  report=0 ;;
   esac
-  line=$(timeout 300 python3 "$t" "$work" 2>&1 | tail -1)
+  # `rc=$?` after a pipeline is `tail`'s status, not the tool's, and `tail`
+  # succeeds on a truncated stream as readily as on a complete one.  So the
+  # timeout check below could not fire: `addrmap.py` was killed at 300 seconds
+  # mid-run and the sweep read its last surviving line as an answer.  A tool
+  # this kills has to be seen to have been killed, or the timeout is a way of
+  # turning a slow tool into a quiet one.
+  line=$(timeout 300 python3 "$t" "$work" 2>&1 | tail -1; exit "${PIPESTATUS[0]}")
   rc=$?
   case $line in
     *'python3 '*)      usage=$((usage + 1)); line='(needs more arguments)' ;;

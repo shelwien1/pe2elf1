@@ -31,10 +31,10 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
-# The name is the *last* component: `p[-__frame.nplanes]` is typed by
+# The name is the *last* component: `p[-frame.nplanes]` is typed by
 # `nplanes`, and `structs.decl_types` reports a frame's members as if they
 # were locals, which is the answer wanted here.  Matching the head of the
-# chain reported `__frame` as untyped and buried the real row in a `?`.
+# chain reported `frame` as untyped and buried the real row in a `?`.
 INDEX = re.compile(r'\[\s*-\s*'
                    r'(?P<cast>\(\s*[A-Za-z_]\w*\s*\**\s*\)\s*)?\**\s*'
                    r'(?:[A-Za-z_]\w*\s*(?:->|\.)\s*)*(?P<name>[A-Za-z_]\w*)')

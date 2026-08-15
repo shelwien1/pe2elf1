@@ -88,7 +88,7 @@ def convert(lines, a, b, fr, base, name):
                                 ', '.join(names))]
     for m in run[1:]:
         edits[m['line']] = []
-    edits[alias[names[0]]['line']] = ['%s%s (&%s)[%d] = __frame.%s;'
+    edits[alias[names[0]]['line']] = ['%s%s (&%s)[%d] = frame.%s;'
                                       % (alias[names[0]]['ind'], ty, name,
                                          len(run), name)]
     for n in names[1:]:

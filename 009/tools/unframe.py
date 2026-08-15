@@ -42,8 +42,8 @@ running off the end of the alias next door.  Splitting takes that slack away.
 
 `--struct` is the fallback for those, and it preserves the layout exactly:
 
-    struct { char buf[4096]; int32_t v72[1024]; uint8_t _pad0[36]; ... } __frame;
-    char (&buf)[4096] = __frame.buf;
+    struct { char buf[4096]; int32_t v72[1024]; uint8_t _pad0[36]; ... } frame;
+    char (&buf)[4096] = frame.buf;
 
 Same order, same offsets, gaps spelled out as padding, and every use site
 unchanged.  It does not shorten the declarations, but it removes every
@@ -279,19 +279,19 @@ def convert_struct(lines, a, b):
             star = '' if ty.endswith('*') else ' '
             members.append('%s    %s%s%s%s;' % (ind, ty, star, nm,
                                                 '[%d]' % n if is_arr else ''))
-            mem, base = nm, '(char *)&__frame.%s' % nm
+            mem, base = nm, '(char *)&frame.%s' % nm
         else:
             mem = 'slot%d' % lo
             members.append('%s    uint8_t %s[%d];' % (ind, mem, hi - lo))
-            base = '(char *)__frame.%s' % mem
+            base = '(char *)frame.%s' % mem
         for x in g:
             _, is_arr, _, ty, nm, n, off, _ = x
             star = '' if ty.endswith('*') else ' '
             if owner is not None and len(g) == 1 and lo % alignof(ty) == 0:
                 # A member of its own: bind the name the body already uses.
-                binds.append('%s%s%s(&%s)[%d] = __frame.%s;'
+                binds.append('%s%s%s(&%s)[%d] = frame.%s;'
                              % (ind, ty, star, nm, n, nm) if is_arr
-                             else '%s%s%s&%s = __frame.%s;' % (ind, ty, star, nm, nm))
+                             else '%s%s%s&%s = frame.%s;' % (ind, ty, star, nm, nm))
                 continue
             delta = off - lo
             expr = base if delta == 0 else '%s + %d' % (base, delta)
@@ -309,8 +309,8 @@ def convert_struct(lines, a, b):
     new = ([('%sstruct alignas(%s) {   // %d bytes, the frame Hex-Rays could '
              'not name' % (ind, align, size))]
            + members
-           + ['%s} __frame;' % ind,
-              '%sstatic_assert(sizeof(__frame) == %d, "frame layout moved");'
+           + ['%s} frame;' % ind,
+              '%sstatic_assert(sizeof(frame) == %d, "frame layout moved");'
               % (ind, rounded)]
            + binds)
     drop = {k for k, *_ in aliases}

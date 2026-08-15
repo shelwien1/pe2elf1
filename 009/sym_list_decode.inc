@@ -23,7 +23,7 @@ int32_t decode_symbol_list(SymList* syms) {
       };
     };
     uint8_t _pad1[32];
-  } __frame;
+  } frame;
   int32_t tot, tot0;
   SymEntry *ent, *p, *q, *head, *cur, *prev, *up, *back;
   SymEntry** w, ** rd, ** rd2;
@@ -34,7 +34,7 @@ int32_t decode_symbol_list(SymList* syms) {
   uint32_t list5_s, rescale_at, limit20, running, since_rescale;
   live = syms->live;
   ent = syms->ent;
-  w = __frame.list;
+  w = frame.list;
   uint32_t gen = (uint8_t)exclusion_gen;
   SymList* owner = syms;
   cum = 0;
@@ -57,9 +57,9 @@ int32_t decode_symbol_list(SymList* syms) {
   tot_all = cum+tot0;
   target = rc.get_freq(tot_all);
   tot = cum+tot0;
-  p = __frame.list[0];
-  rd = &__frame.list[1];
-  SymEntry* first = __frame.list[0];
+  p = frame.list[0];
+  rd = &frame.list[1];
+  SymEntry* first = frame.list[0];
   cum_lo = 0;
   while( 1 ) {
     cum_lo += p->cnt;
@@ -72,22 +72,22 @@ int32_t decode_symbol_list(SymList* syms) {
       cum_hi = tot;
       sym_high = tot;
       q = first;
-      rd2 = &__frame.list[1];
+      rd2 = &frame.list[1];
       do {
         exclusion_mask[q->sym] = gen_b;
         q = *rd2++;
       } while( q );
       tot_1 = tot;
-      __frame.list7 = -1;
+      frame.list7 = -1;
       {
         rc.decode(cum_lo, cum_hi, tot_1);
-        return __frame.list7;
+        return frame.list7;
       }
     }
   }
   sym_high = cum_lo;
   sym_cum = cum_lo-p->cnt;
-  __frame.list7 = p->sym;
+  frame.list7 = p->sym;
   p->cnt += 4;
   head = owner->ent;
   owner->since_rescale += 4;
@@ -103,7 +103,7 @@ int32_t decode_symbol_list(SymList* syms) {
     if( q2==head ) {
       top = q2->cnt;
     } else {
-      __frame.list5 = list5_s;
+      frame.list5 = list5_s;
       while( 1 ) {
         top = q2->cnt;
         SymEntry *r = q2-1;
@@ -116,37 +116,37 @@ int32_t decode_symbol_list(SymList* syms) {
         head = owner->ent;
         --q2;
         if( r==head ) {
-          list5_s = __frame.list5;
+          list5_s = frame.list5;
           top = r->cnt;
           goto next_symbol;
         }
       }
-      list5_s = __frame.list5;
+      list5_s = frame.list5;
     }
   }
 next_symbol:
   rescale_at = owner->rescale_at;
   if( top>251||rescale_at<owner->since_rescale ) {
-    __frame.list0 = owner->live;
+    frame.list0 = owner->live;
     limit20 = 20*owner->n;
-    n_left = __frame.list0;
-    __frame.list5 = list5_s;
-    __frame.list4 = rescale_at<limit20;
+    n_left = frame.list0;
+    frame.list5 = list5_s;
+    frame.list4 = rescale_at<limit20;
     cur = head-1;
     do {
       prev = cur;
       ++cur;
-      half = (__frame.list4+(uint32_t)cur->cnt)>>1;
+      half = (frame.list4+(uint32_t)cur->cnt)>>1;
       cur->cnt = half;
       if( cur!=owner->ent ) {
         up = cur-1;
-        __frame.list3 = up->cnt;
-        if( half>__frame.list3 ) {
-          __frame.list2 = cur->sym;
-          cur->set(up->sym, __frame.list3);
+        frame.list3 = up->cnt;
+        if( half>frame.list3 ) {
+          frame.list2 = cur->sym;
+          cur->set(up->sym, frame.list3);
           if( up!=owner->ent ) {
-            (__frame.list[1]) = cur;
-            __frame.list0 = n_left;
+            (frame.list[1]) = cur;
+            frame.list0 = n_left;
             do {
               back = up-1;
               back_cnt = back->cnt;
@@ -155,26 +155,26 @@ next_symbol:
               up->set(back->sym, back_cnt);
               --up;
             } while( back!=owner->ent );
-            cur = __frame.list[1];
-            n_left = __frame.list0;
+            cur = frame.list[1];
+            n_left = frame.list0;
           }
-          up->set(__frame.list2, half);
+          up->set(frame.list2, half);
         }
       }
       --n_left;
     } while( n_left );
-    list5_s = __frame.list5;
+    list5_s = frame.list5;
     running = owner->tot;
-    __frame.list0 = 0;
+    frame.list0 = 0;
     if( !cur->cnt ) {
-      zeros = __frame.list0;
+      zeros = frame.list0;
       do {
         ++zeros;
         owner->tot = ++running;
         last_cnt = prev->cnt;
         --prev;
       } while( !last_cnt );
-      __frame.list0 = zeros;
+      frame.list0 = zeros;
       owner->live -= zeros;
     }
     since_rescale = owner->since_rescale;
@@ -189,5 +189,5 @@ next_symbol:
     cum_hi = sym_high;
   }
   rc.decode(cum_lo, cum_hi, tot_1);
-  return __frame.list7;
+  return frame.list7;
 }

@@ -26,7 +26,7 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
     uint8_t hdr[8];
     uint32_t magic_word;
     uint8_t _pad0[32];
-  } __frame;
+  } frame;
   BmfFile* arc;
   FILE *fp1;
   BmfImage* img_at;
@@ -50,7 +50,7 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
   if( !fp1 )
     return nullptr;
   while( 1 ) {
-    if( fread(&__frame.magic_word, 4u, 1u, fp1)!=1 ) {
+    if( fread(&frame.magic_word, 4u, 1u, fp1)!=1 ) {
       FILE *fp = arc->fp;
       if( feof(fp) )
         return nullptr;
@@ -60,64 +60,64 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
         return nullptr;
       }
     }
-    magic = __frame.magic_word;
-    if( (uint16_t)__frame.magic_word!=0x9081 )
+    magic = frame.magic_word;
+    if( (uint16_t)frame.magic_word!=0x9081 )
       break;
-    major_v = (uint8_t)(__frame.magic_word>>16);
-    minor_v = (uint8_t)(__frame.magic_word>>24);
+    major_v = (uint8_t)(frame.magic_word>>16);
+    minor_v = (uint8_t)(frame.magic_word>>24);
     version = ((major_v<<8)-12288)|(minor_v-48);
-    if( version!=512||fread(__frame.hdr, 8u, 1u, arc->fp)!=1 )
+    if( version!=512||fread(frame.hdr, 8u, 1u, arc->fp)!=1 )
       break;
-    fseek(arc->fp, (*(uint32_t*)&__frame.hdr[4]), 1);
+    fseek(arc->fp, (*(uint32_t*)&frame.hdr[4]), 1);
     fp1 = arc->fp;
   }
-  if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), version = ((major_v<<8)-12288)|(minor_v-48), version!=512)||fread(__frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
+  if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), version = ((major_v<<8)-12288)|(minor_v-48), version!=512)||fread(frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
     return arc->fail();
   }
-  if( __frame.flags_b<0 ) {
-    fread(__frame.hdr, 8u, 1u, arc->fp);
+  if( frame.flags_b<0 ) {
+    fread(frame.hdr, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
-      int32_t hdr_word = *(int32_t*)&__frame.hdr[0];
-      if( (*(uint32_t*)&__frame.hdr[4])>bytes_left(arc->fp) ) {
+      int32_t hdr_word = *(int32_t*)&frame.hdr[0];
+      if( (*(uint32_t*)&frame.hdr[4])>bytes_left(arc->fp) ) {
         return arc->fail();
       }
-      uint32_t pad_len = ((*(uint32_t*)&__frame.hdr[4])+((*(uint32_t*)&__frame.hdr[4])==0)+3)&0xFFFFFFFC;
+      uint32_t pad_len = ((*(uint32_t*)&frame.hdr[4])+((*(uint32_t*)&frame.hdr[4])==0)+3)&0xFFFFFFFC;
       uint32_t *blk = (uint32_t*)bmf_new(pad_len+8);
       *blk = hdr_word;
       blk[1] = pad_len;
       blk[pad_len/4+1] = 0;
       *p_coded_buf = blk;
-      fread(blk+2, (*(uint32_t*)&__frame.hdr[4]), 1u, arc->fp);
+      fread(blk+2, (*(uint32_t*)&frame.hdr[4]), 1u, arc->fp);
     } else {
-      fseek(arc->fp, (*(uint32_t*)&__frame.hdr[4]), 1);
+      fseek(arc->fp, (*(uint32_t*)&frame.hdr[4]), 1);
     }
   }
-  if( __frame.data_len>bytes_left(arc->fp) ) {
+  if( frame.data_len>bytes_left(arc->fp) ) {
     return arc->fail();
   }
-  pal_bytes = 3<<(__frame.depth_b&31);
-  if( !(__frame.depth_b&0x80) )
-    pal_bytes = __frame.depth_b&0x80;
-  __frame.pal_len = pal_bytes;
-  if( !__frame.hdr_words[0]||!__frame.hdr_words[1] ) {
+  pal_bytes = 3<<(frame.depth_b&31);
+  if( !(frame.depth_b&0x80) )
+    pal_bytes = frame.depth_b&0x80;
+  frame.pal_len = pal_bytes;
+  if( !frame.hdr_words[0]||!frame.hdr_words[1] ) {
     return arc->fail();
   }
-  img_at = alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b&0x3F, (uint8_t)(__frame.depth_b&0x80)>>7, 1);
-  __frame.depth_f = __frame.depth_b;
-  img_at->depth = __frame.depth_b;
+  img_at = alloc_image(frame.hdr_words[0], frame.hdr_words[1], frame.depth_b&0x3F, (uint8_t)(frame.depth_b&0x80)>>7, 1);
+  frame.depth_f = frame.depth_b;
+  img_at->depth = frame.depth_b;
   has_coded = p_coded_buf&&*p_coded_buf;
-  int8_t hdr_flags = __frame.flags_b;
-  img_at->flags |= __frame.flags_b&2|(has_coded<<7);
-  plane_count = ((__frame.depth_f&0x3Fu)+7)>>3;
+  int8_t hdr_flags = frame.flags_b;
+  img_at->flags |= frame.flags_b&2|(has_coded<<7);
+  plane_count = ((frame.depth_f&0x3Fu)+7)>>3;
   if( plane_count<1||plane_count>4 ) {
     return arc->fail();
   }
   if( !(hdr_flags&0x20) ) {
-    if( __frame.data_len>img_at->data_size ) {
+    if( frame.data_len>img_at->data_size ) {
       return arc->fail();
     }
-    uint32_t want = __frame.data_len;
-    if( fread(img_at->pixels, 1u, __frame.data_len, arc->fp)!=want ) {
+    uint32_t want = frame.data_len;
+    if( fread(img_at->pixels, 1u, frame.data_len, arc->fp)!=want ) {
       return arc->fail();
     }
     goto read_palette;
@@ -129,15 +129,15 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
     exit(3);
   }
   desc_slow_mode = 1;
-  stream.size = __frame.data_len;
-  stream.buf = (uint8_t*)bmf_new(__frame.data_len);
+  stream.size = frame.data_len;
+  stream.buf = (uint8_t*)bmf_new(frame.data_len);
   packer_reset();
-  want2 = __frame.data_len;
-  if( fread(stream.buf, 1u, __frame.data_len, arc->fp)!=want2 ) {
+  want2 = frame.data_len;
+  if( fread(stream.buf, 1u, frame.data_len, arc->fp)!=want2 ) {
     return arc->fail();
   }
   bpp = img_at->depth;
-  if( (bpp&0x3Fu)<=4||(__frame.flags_b&0x10)==0 ) {
+  if( (bpp&0x3Fu)<=4||(frame.flags_b&0x10)==0 ) {
     plane_predictor = 0;
     plane_alt_model = 0;
     unmodel_plane((uint16_t*)img_at, img_at->pixels);
@@ -155,9 +155,9 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
     near_lossless_q = 0;
   }
   if( plane_count>0 ) {
-    __frame.mask = 255;
-    __frame.p_i_2 = img_at;
-    __frame.arc_f = arc;
+    frame.mask = 255;
+    frame.p_i_2 = img_at;
+    frame.arc_f = arc;
     int32_t pl = 0;
     do {
       uint32_t desc = unpack_bits(6);
@@ -182,21 +182,21 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
       }
       ++pl;
     } while( pl<plane_count );
-    img_at = __frame.p_i_2;
-    arc = __frame.arc_f;
+    img_at = frame.p_i_2;
+    arc = frame.arc_f;
   }
   plane_buf = (uint8_t*)bmf_new(img_at->width*img_at->height);
-  if( __frame.flags_b&8 ) {
-    __frame.img = *img_at;
-    __frame.img.depth = 72;
+  if( frame.flags_b&8 ) {
+    frame.img = *img_at;
+    frame.img.depth = 72;
     if( plane_count>0 ) {
-      __frame.arc_f = arc;
+      frame.arc_f = arc;
       plane_i = 0;
       do {
         plane = plane_desc[plane_i].src_plane;
         plane_predictor = plane_desc[plane].flags&3;
         plane_alt_model = (uint8_t)(plane_desc[plane].flags&4)>>2;
-        unmodel_plane((uint16_t*)&__frame.img, plane_buf);
+        unmodel_plane((uint16_t*)&frame.img, plane_buf);
         if( plane_predictor ) {
           if( plane_predictor==1 ) {
             if( !plane_alt_model )
@@ -209,7 +209,7 @@ uint8_t*expand_image(BmfFile* arc_in, void** p_coded_buf) {
         ++plane_i;
       } while( plane_i<plane_count );
 restore_arc:
-      arc = __frame.arc_f;
+      arc = frame.arc_f;
     }
   } else {
     plane_predictor = plane_desc[0].flags&3;
@@ -220,7 +220,7 @@ restore_arc:
         goto free_plane_buf;
     }
     if( plane_count>0 ) {
-      __frame.arc_f = arc;
+      frame.arc_f = arc;
       pl2 = 0;
       do {
         ++pl2;
@@ -229,32 +229,32 @@ restore_arc:
         plane_predictor = pred;
         if( (plane_desc[plane2].flags&8)!=0||pred ) {
           i = img_at->width;
-          __frame.row_step = &((uint8_t*)img_at)[plane2+16];
+          frame.row_step = &((uint8_t*)img_at)[plane2+16];
           n_pix = i*img_at->height;
-          __frame.nplanes_s = plane_count;
-          __frame.s12 = n_pix;
+          frame.nplanes_s = plane_count;
+          frame.s12 = n_pix;
           if( plane_count==1 ) {
-            memcpy(plane_buf, (uint8_t*)__frame.row_step, __frame.s12);
+            memcpy(plane_buf, (uint8_t*)frame.row_step, frame.s12);
             pred_s = plane_predictor;
           } else {
-            __frame.Block = &((uint8_t*)img_at)[plane2];
-            __frame.s0 = pred;
-            __frame.s4 = plane2;
-            __frame.s8 = pl2;
-            n_pix2 = __frame.s12;
-            __frame.p_i_2 = img_at;
+            frame.Block = &((uint8_t*)img_at)[plane2];
+            frame.s0 = pred;
+            frame.s4 = plane2;
+            frame.s8 = pl2;
+            n_pix2 = frame.s12;
+            frame.p_i_2 = img_at;
             pix_at = 0;
-            nplanes_c = __frame.nplanes_s;
+            nplanes_c = frame.nplanes_s;
             i2 = 0;
             do {
-              plane_buf[pix_at] = __frame.Block[i2+16];
+              plane_buf[pix_at] = frame.Block[i2+16];
               i2 += nplanes_c;
               ++pix_at;
             } while( pix_at<n_pix2 );
-            pred_s = __frame.s0;
-            plane2 = __frame.s4;
-            pl2 = __frame.s8;
-            img_at = __frame.p_i_2;
+            pred_s = frame.s0;
+            plane2 = frame.s4;
+            pl2 = frame.s8;
+            img_at = frame.p_i_2;
           }
           if( pred_s ) {
             if( pred_s==1 )
@@ -271,16 +271,16 @@ restore_arc:
 free_plane_buf:
   free(plane_buf);
 check_length:
-  if( stream.buf+__frame.data_len!=stream.cur ) {
+  if( stream.buf+frame.data_len!=stream.cur ) {
     return arc->fail();
   }
   free(stream.buf);
-  __frame.depth_f = __frame.depth_b;
+  frame.depth_f = frame.depth_b;
 read_palette:
-  if( __frame.depth_f&0x80 ) {
+  if( frame.depth_f&0x80 ) {
     pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
-    got = fread(pal_at, 1u, __frame.pal_len, arc->fp);
-    if( got!=__frame.pal_len ) {
+    got = fread(pal_at, 1u, frame.pal_len, arc->fp);
+    if( got!=frame.pal_len ) {
       return arc->fail();
     }
   }
@@ -299,7 +299,7 @@ read_palette:
       y = 0;
       do {
         pl_i = img_at->width;
-        __frame.p_i_2 = img_at;
+        frame.p_i_2 = img_at;
         dst = &img_at->pixels[at];
         do {
           left = n_planes;
@@ -310,8 +310,8 @@ read_palette:
           dst += last_row;
           --pl_i;
         } while( pl_i );
-        img_at = __frame.p_i_2;
-        img_h = __frame.p_i_2->height;
+        img_at = frame.p_i_2;
+        img_h = frame.p_i_2->height;
         at += n_planes;
         ++y;
       } while( y<img_h );

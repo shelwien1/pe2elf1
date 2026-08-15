@@ -37,7 +37,7 @@ One shape gcc will not report, and so is counted here by text: a cast chain
 through `uintptr_t`.
 
     return (int32_t)(uintptr_t)out_cursor;      // rc_begin_decode
-    __frame.off_up = (int32_t)(uintptr_t)desc;  // cost_candidate
+    frame.off_up = (int32_t)(uintptr_t)desc;  // cost_candidate
 
 `(uintptr_t)p` is exact on every target and `(int32_t)` of it is an ordinary
 narrowing of an integer, so no diagnostic fires on either target -- the hop

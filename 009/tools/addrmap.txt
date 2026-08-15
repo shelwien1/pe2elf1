@@ -1,6 +1,7 @@
 # name -> the address of the body in BMF.exe it was decompiled from.
 # Recovered by tools/addrmap.py from the commits that made each
 # rename; see ALGORITHM.md section 8.
+# 6 names walked back through the log, 87 taken from the previous map (--rederive to walk them all)
 compress_image             0x00402FE0
 expand_image               0x00403820
 search_filter              0x004043E0

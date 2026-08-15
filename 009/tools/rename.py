@@ -93,7 +93,7 @@ def rename_in(path, fn, pairs):
     total = 0
     for old, new in pairs:
         # `--member` renames a *frame* member, which is reached as
-        # `__frame.X` -- the member-safe pattern excludes exactly that, so
+        # `frame.X` -- the member-safe pattern excludes exactly that, so
         # without the flag a frame member's declaration renames and its uses do
         # not, and the build stops.
         pat = (r'\b%s\b' if '--member' in sys.argv else NAMED)
@@ -124,7 +124,7 @@ def locals_named(text, name):
 def frame_lines(text):
     """Line indexes inside a frame struct's body.
 
-    A frame member is reached as `__frame.X`, which the member-safe pattern
+    A frame member is reached as `frame.X`, which the member-safe pattern
     excludes -- but its *declaration* is a bare `X` and gets renamed anyway.
     So a body that has both a local and a frame member called `Buffera` had the
     member's declaration moved and its uses left, and the build stopped.  These
@@ -148,7 +148,7 @@ def frame_lines(text):
 def frames_declaring(text, name):
     """Every frame struct that declares a member called `name`.
 
-    Reached as `__frame.name`, which the member-safe rename pattern excludes on
+    Reached as `frame.name`, which the member-safe rename pattern excludes on
     purpose -- so these are exactly the declarations a whole-file rename would
     move without their uses.
     """
@@ -260,7 +260,7 @@ def main():
             sys.exit('%s -> %s: %d bodies already declare a local called %s'
                      % (old, new, n, new))
         # The name being renamed *away from* matters too, and only here.
-        # `--member` above says a frame member's uses are `__frame.X`, which
+        # `--member` above says a frame member's uses are `frame.X`, which
         # the member-safe pattern excludes -- so a whole-file rename of a name
         # that is *also* some frame's member moves that member's declaration
         # and leaves its uses behind.  It compiles right up until it does not:
