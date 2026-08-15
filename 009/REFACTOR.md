@@ -1145,6 +1145,12 @@ checked written down beside it. What made it worth finding is that it was
 silent in both directions: an earlier round changing `_pad0`'s size would have
 moved it, and nothing would have said so.
 
+**The plan for what is left is `REFACTOR2.md`.** This document's classes are
+finished; what that one is about is the shape a 1997 MSVC build leaves behind
+once the decompiler's own inventions are gone — one value under two names, a
+loop written out, a block written out — with the counts measured before the
+phases were proposed.
+
 ## The last two frames, and what the encoder already had
 
 `decode_symbol_list`'s frame was a `union` of the candidate array with eight
