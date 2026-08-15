@@ -169,6 +169,52 @@
                          // indexed by (plane, tree node, quantised
                          // stretch(p)), interpolated between two buckets
 #endif
+#ifndef CT_ON
+#define CT_ON        1   // reorder the colour components before coding.
+                         // The raster is stored permuted: position j holds
+                         // component ord[j].  Nothing else changes -- it is
+                         // a permutation, so it is trivially invertible and
+                         // the stream carries only the order.
+                         //
+                         // What it buys is entirely in the models: the mix's
+                         // intra-pixel taps let position j see positions
+                         // 0..j-1 of the same pixel (worth -9.6% on its own),
+                         // and residual model 3 keys on the error just made
+                         // on position j-1.  Both want the component that
+                         // best explains the others to be coded FIRST.
+#endif
+#ifndef CT_METRIC
+#define CT_METRIC    3   // how the order is chosen, over all n! of them:
+                         //  0 = LMS on the raw values -- sum over positions
+                         //      of Var(v_j | v_0..v_{j-1})
+                         //  2 = the same in the gradient domain
+                         //  3 = trial-code a sample of the raster under each
+                         //      order and keep the cheapest
+                         //
+                         // 0 and 2 are cheap and both LOSE (+0.13%, +0.15%).
+                         // They have to: reordering changes no plane's
+                         // content, so any sum of conditional log variances
+                         // is log det(Cov) -- identical for every order --
+                         // and the LMS sum that does vary is measuring
+                         // variance, while the order only matters through
+                         // things variance cannot see (the mix's intra-pixel
+                         // taps, and residual model 3 keying on the error
+                         // just made on the previous position, which for
+                         // position 0 has no previous).  Exhaustively coding
+                         // t32 under all 24 orders spans 117353..126763, a
+                         // 4.8% spread, and LMS picks 124436.  So measure it.
+#endif
+#ifndef CT_ROWS
+#define CT_ROWS     32   // rows per sample band
+#endif
+#ifndef CT_FRAC
+#define CT_FRAC     32   // sample about 1/CT_FRAC of the rows, but never
+                         // less than one band -- so the trial cost is
+                         // bounded by n! * CT_ROWS rows however big the
+                         // image is.  A larger sample buys nothing here
+                         // (1/8 and 1/32 pick the same order everywhere)
+                         // and costs several times the encode.
+#endif
 #ifndef BLK_STAT
 #define BLK_STAT     1   // per-block min / max / always-1 mask / always-0
                          // mask, per colour component, over B0_BLKLW x
@@ -283,6 +329,26 @@ static INLINE int qgrad( int d ) {
 ALIGN(64) Rangecoder rc;
 static uint f_DEC;
 
+// Measure mode.  Everything above the arithmetic coder is unchanged -- the
+// models predict and adapt exactly as they would -- but instead of emitting
+// the bit we add its codelength to a counter.  That makes it possible to
+// ask what a coding decision would actually cost without coding anything,
+// which is the only honest way to choose between things the model reacts
+// to.  Encoder side only, obviously: it needs to know the bit.
+static uint   g_measure = 0;
+static double g_bits    = 0.0;
+
+static INLINE uint Process( uint p, uint bit ) {
+  if( g_measure ) {
+    // p is P(bit==0) scaled by SCALE, as rc_BProcess wants it
+    double pr = double(bit ? (SCALE-p) : p) / double(SCALE);
+    if( pr < 1e-9 ) pr = 1e-9;
+    g_bits -= log2(pr);
+    return bit;
+  }
+  return rc.rc_BProcess( p, bit );
+}
+
 typedef Counter Ctr;
 
 // Order-1 model for the header, the palette and the fallback path --
@@ -299,7 +365,7 @@ static INLINE uint CodeByte( Ctr* m, uint c ) {
   for( cxt=1; cxt<256; ) {
     bit = (c>>7)&1;
     p   = m[cxt].Predict();
-    bit = rc.rc_BProcess( p, bit );
+    bit = Process( p, bit );
     m[cxt].C_Update( bit );
     c<<=1; cxt += cxt+bit;
   }
@@ -1016,7 +1082,7 @@ struct Raster {
 #endif
       uint pi = uint( clamp( p*float(SCALE) ) );
 
-      bit = rc.rc_BProcess( pi, bit );
+      bit = Process( pi, bit );
 
       m0[cxt].C_Update( bit );
 #if RES_NM>1
@@ -1087,6 +1153,21 @@ struct Raster {
     for( uint j=W*nc; j<stride; j++ ) q[j] = byte( CodeByte( padm, q[j] ) );
   }
 
+  void Free() {
+    delete[] buf; delete[] x; delete[] mix; delete[] emap;
+    delete[] bmix; delete[] padm;
+    for( uint m=0; m<RES_NM; m++ ) delete[] res[m];
+#if MIX_DUAL
+    delete[] mix2; delete[] lam;
+#endif
+#if RES_SSE
+    delete[] sse;
+#endif
+#if MIX_BIAS==2
+    delete[] bias;
+#endif
+  }
+
   void Code( byte* img ) {
     for( uint y=0; y<H; y++ ) Row(img,y);
 #if STATS
@@ -1099,6 +1180,251 @@ struct Raster {
 #endif
   }
 };
+
+// -------------------------------------------------------------
+// Colour component order
+//
+// One permutation for the whole image, chosen by enumerating all n! of
+// them and scoring each by LMS: the sum over coding positions of the
+// residual variance of that component given the ones before it.  Least
+// squares needs only the (n+1)x(n+1) matrix of second moments, so one pass
+// over the raster serves every order and every position.
+// -------------------------------------------------------------
+#if CT_ON
+
+struct ColorOrder {
+  static const uint CTC = 4;     // components this can order
+  uint nc, on;
+  byte ord[MAXC];                // ord[j] = original component coded j-th
+
+  void Reset( uint nc_ ) {
+    nc = nc_; on = 0;
+    for( uint j=0; j<nc; j++ ) ord[j] = byte(j);
+  }
+  INLINE uint N() const { return nc>CTC ? CTC : nc; }
+
+  // The permutation itself.  n, not nc, bounds the loops: left to infer
+  // `nc <= 4` from the size of a local int[4], clang at -Ofast
+  // -march=haswell -flto vectorises the q[ord[j]] gather into something
+  // that returns garbage in lane 0.  The bound is real, so state it.
+  void Forward( byte* img, uint W, uint H, uint stride ) const {
+    if( !on ) return;
+    const uint n = N();
+    for( uint y=0; y<H; y++ ) {
+      byte* q = img + size_t(y)*stride;
+      for( uint x=0; x<W; x++, q+=nc ) {
+        int v[MAXC]; const byte* o = ord;
+        for( uint j=0; j<n; j++ ) v[j] = q[o[j]];
+        for( uint j=0; j<n; j++ ) q[j] = byte(v[j]);
+      }
+    }
+  }
+  void Inverse( byte* img, uint W, uint H, uint stride ) const {
+    if( !on ) return;
+    const uint n = N();
+    for( uint y=0; y<H; y++ ) {
+      byte* q = img + size_t(y)*stride;
+      for( uint x=0; x<W; x++, q+=nc ) {
+        int v[MAXC]; const byte* o = ord;
+        for( uint j=0; j<n; j++ ) v[j] = q[j];
+        for( uint j=0; j<n; j++ ) q[o[j]] = byte(v[j]);
+      }
+    }
+  }
+
+  // M[a][b] = sum of x_a*x_b, index nc standing for the constant 1.  x is
+  // the pixel value, or its horizontal/vertical difference when CT_METRIC
+  // is 2 -- the codec codes a spatial residual, so which component best
+  // explains the others is a question about their *gradients*.
+  static void Moments( const byte* img, uint W, uint H, uint stride, uint nc,
+                       double M[5][5] ) {
+    for( uint a=0; a<=nc; a++ ) for( uint b=0; b<=nc; b++ ) M[a][b] = 0.0;
+    double n = 0.0;
+#if CT_METRIC==2
+    uint ylim = (H>1) ? H-1 : 0;                 // needs the row below
+#else
+    uint ylim = H;
+#endif
+    for( uint y=0; y<ylim; y++ ) {
+      const byte* q = img + size_t(y)*stride;
+      const byte* r = q + stride;
+      for( uint x=0; x<W; x++, q+=nc, r+=nc ) {
+        double x0[4];
+#if CT_METRIC==2
+        if( x==0 ) continue;                     // needs the pixel to the left
+        for( uint a=0; a<nc; a++ ) {
+          int dx = int(q[a]) - int((q-nc)[a]);   // horizontal difference
+          int dy = int(r[a]) - int(q[a]);        // vertical difference
+          x0[a] = double(dx + dy);
+        }
+#else
+        for( uint a=0; a<nc; a++ ) x0[a] = q[a];
+#endif
+        for( uint a=0; a<nc; a++ ) {
+          for( uint b=a; b<nc; b++ ) M[a][b] += x0[a]*x0[b];
+          M[a][nc] += x0[a];          // upper triangle only; the mirror
+        }                             // below would otherwise wipe these
+        n += 1.0;
+      }
+    }
+    M[nc][nc] = n;
+    for( uint a=0; a<=nc; a++ ) for( uint b=0; b<a; b++ ) M[a][b] = M[b][a];
+  }
+
+  // residual variance of component o[j] on o[0..j-1] plus a constant
+  static double Solve( const double M[5][5], uint nc, const byte* o, uint j ) {
+    uint n = j+1;
+    double A[5][6];
+    for( uint a=0; a<n; a++ ) {
+      uint ia = (a<j) ? o[a] : nc;
+      for( uint b=0; b<n; b++ ) A[a][b] = M[ia][(b<j)?o[b]:nc];
+      A[a][n] = M[ia][o[j]];
+    }
+    for( uint c=0; c<n; c++ ) {
+      uint p = c; double best = fabs(A[c][c]);
+      for( uint r=c+1; r<n; r++ ) if( fabs(A[r][c])>best ) { best=fabs(A[r][c]); p=r; }
+      if( best < 1e-6 ) { for( uint a=0; a<n; a++ ) A[a][n] = 0.0; break; }
+      if( p!=c ) for( uint b=c; b<=n; b++ ) { double t=A[c][b]; A[c][b]=A[p][b]; A[p][b]=t; }
+      for( uint r=0; r<n; r++ ) if( r!=c ) {
+        double f = A[r][c]/A[c][c];
+        for( uint b=c; b<=n; b++ ) A[r][b] -= f*A[c][b];
+      }
+    }
+    double sse = M[o[j]][o[j]];
+    for( uint a=0; a<n; a++ ) {
+      double v = (fabs(A[a][a])<1e-12) ? 0.0 : A[a][n]/A[a][a];
+      sse -= v * ((a<j) ? M[o[a]][o[j]] : M[nc][o[j]]);
+    }
+    return sse<0.0 ? 0.0 : sse;
+  }
+
+#if CT_METRIC==3
+  // Cost of coding `sub` (W x rows, no padding) under the order in ord[],
+  // in bits, with a model that starts cold exactly as the real one does.
+  static double Trial( const byte* sub, uint W, uint rows, uint nc,
+                       const byte* o );
+
+  // Pick the order by trial coding a sample.  The sample is contiguous
+  // bands, not scattered rows: the mix reaches seven rows up, so scattered
+  // rows would measure a model that never sees a vertical neighbour.
+  void Search( const byte* img, uint W, uint H, uint stride ) {
+    uint band = CT_ROWS, want = H/CT_FRAC;
+    if( want < band ) want = (H<band) ? H : band;
+    uint nb = (want + band - 1)/band; if( nb<1 ) nb = 1;
+    uint rows = 0;
+    byte* sub = new byte[size_t(nb)*band*W*nc];
+    for( uint b=0; b<nb; b++ ) {
+      uint y0 = (H>band) ? uint((qword(b)*(H-band))/((nb>1)?(nb-1):1)) : 0;
+      for( uint k=0; k<band && y0+k<H; k++ )
+        memcpy( sub + size_t(rows++)*W*nc, img + size_t(y0+k)*stride, W*nc );
+    }
+
+    byte perm[MAXC], best[MAXC];
+    for( uint i=0; i<nc; i++ ) best[i] = byte(i);
+    double bestcost = 1e300, identcost = 1e300;
+    uint fact = 1; for( uint i=2; i<=nc; i++ ) fact *= i;
+    for( uint p=0; p<fact; p++ ) {
+      byte pool[MAXC]; uint m = p;
+      for( uint i=0; i<nc; i++ ) pool[i] = byte(i);
+      for( uint i=0, left=nc; i<nc; i++, left-- ) {
+        uint d = m % left; m /= left;
+        perm[i] = pool[d];
+        for( uint t=d; t+1<left; t++ ) pool[t] = pool[t+1];
+      }
+      double c = Trial( sub, W, rows, nc, perm );
+      if( p==0 ) identcost = c;                  // permutation 0 is identity
+      if( c < bestcost ) { bestcost = c; for( uint i=0; i<nc; i++ ) best[i]=perm[i]; }
+    }
+    delete[] sub;
+    // Only move off the identity for a margin.  The sample is one band; a
+    // real win is 4-5% and shows up on any band, while a tie decided by
+    // sampling noise costs a couple of tenths on the whole file.
+    if( !(bestcost < identcost*(double(B0_CTM)/1024.0)) )
+      for( uint i=0; i<nc; i++ ) best[i] = byte(i);
+    for( uint i=0; i<nc; i++ ) ord[i] = best[i];
+  }
+#endif
+
+  void Fit( const byte* img, uint W, uint H, uint stride, uint nc_ ) {
+    Reset(nc_);
+    if( nc<2 || nc>CTC ) return;
+#ifdef CT_FORCE
+    {   // experiment: pin the order to the CT_FORCE'th permutation
+      byte pool[MAXC]; uint m = CT_FORCE;
+      for( uint i=0; i<nc; i++ ) pool[i] = byte(i);
+      for( uint i=0, left=nc; i<nc; i++, left-- ) {
+        uint d = m % left; m /= left;
+        ord[i] = pool[d];
+        for( uint t=d; t+1<left; t++ ) pool[t] = pool[t+1];
+      }
+      on = 1;
+      return;
+    }
+#endif
+#if CT_METRIC==3
+    Search( img, W, H, stride );
+    on = 1;
+    for( uint i=0; i<nc; i++ ) if( ord[i]!=byte(i) ) return;
+    on = 0;
+    return;
+#else
+    double M[5][5]; Moments( img, W, H, stride, nc, M );
+    double N = M[nc][nc];
+    if( N<16.0 ) return;
+
+    byte perm[MAXC], best[MAXC];
+    for( uint i=0; i<nc; i++ ) best[i] = byte(i);
+    double bestcost = 1e300;
+    uint fact = 1; for( uint i=2; i<=nc; i++ ) fact *= i;
+    for( uint p=0; p<fact; p++ ) {
+      byte pool[MAXC]; uint m = p;                 // factorial number system
+      for( uint i=0; i<nc; i++ ) pool[i] = byte(i);
+      for( uint i=0, left=nc; i<nc; i++, left-- ) {
+        uint d = m % left; m /= left;
+        perm[i] = pool[d];
+        for( uint t=d; t+1<left; t++ ) pool[t] = pool[t+1];
+      }
+      double cost = M[perm[0]][perm[0]] - M[nc][perm[0]]*M[nc][perm[0]]/N;
+      for( uint j=1; j<nc; j++ ) cost += Solve( M, nc, perm, j );
+      if( cost < bestcost ) { bestcost = cost; for( uint i=0; i<nc; i++ ) best[i]=perm[i]; }
+    }
+    for( uint i=0; i<nc; i++ ) ord[i] = best[i];
+    on = 1;
+    for( uint i=0; i<nc; i++ ) if( ord[i]!=byte(i) ) return;
+    on = 0;                                        // identity: say nothing
+#endif
+  }
+
+  void Code( void ) {
+    on = CodeByte( o1[1], on ) & 1;
+    if( !on ) { Reset(nc); return; }
+    for( uint j=0; j<nc; j++ ) ord[j] = byte( CodeByte( o1[2], ord[j] ) % nc );
+  }
+};
+#endif
+
+#if CT_ON && CT_METRIC==3
+double ColorOrder::Trial( const byte* sub, uint W, uint rows, uint nc,
+                          const byte* o ) {
+  uint sz = W*nc;
+  byte* t = new byte[size_t(rows)*sz];
+  for( uint y=0; y<rows; y++ ) {
+    const byte* q = sub + size_t(y)*sz;
+    byte* d = t + size_t(y)*sz;
+    for( uint x=0; x<W; x++, q+=nc, d+=nc )
+      for( uint j=0; j<nc; j++ ) d[j] = q[o[j]];
+  }
+  Raster* r = new Raster;
+  r->Init( W, rows, nc, sz );
+  double save = g_bits; uint sm = g_measure;
+  g_measure = 1; g_bits = 0.0;
+  r->Code( t );
+  double cost = g_bits;
+  g_measure = sm; g_bits = save;
+  r->Free(); delete r; delete[] t;
+  return cost;
+}
+#endif
 
 // -------------------------------------------------------------
 // Per-block statistics
@@ -1377,6 +1703,14 @@ int main( int argc, char** argv ) {
     if( f_DEC==0 ) { if( fread(img,1,b.pixbytes,f)!=b.pixbytes ) return 6; }
     else memset( img, 0, b.pixbytes );
 
+#if CT_ON
+    static ColorOrder ct;
+    ct.Reset( b.nc );
+    if( f_DEC==0 ) ct.Fit( img, b.W, b.H, b.stride, b.nc );
+    ct.Code();
+    if( f_DEC==0 ) ct.Forward( img, b.W, b.H, b.stride );
+#endif
+
     static Raster ras;
     ras.Init( b.W, b.H, b.nc, b.stride );
 
@@ -1409,6 +1743,9 @@ int main( int argc, char** argv ) {
 #endif
 
     ras.Code( img );
+#if CT_ON
+    if( f_DEC ) ct.Inverse( img, b.W, b.H, b.stride );
+#endif
     if( f_DEC ) fwrite( img, 1, b.pixbytes, g );
     f_pos += b.pixbytes;
 

@@ -1,14 +1,8 @@
 // -------------------------------------------------------------
-// B0 -- constants of bmpc's pixel mix, residual mixer and block statistics.
-//
-// GENERATED from IDX/sh_model-B0.idx by IDX/idx2inc.pl, then wrapped in
-// #ifndef by tools/idxguard.py; regenerate with  GCIDX=1 ./gc.sh.
-// Edit the .idx, not this file -- the comments live there.
-//
-// The guards let sweep.py pin a knob with -DB0_NW_w=1024; left alone each
-// one is a live `mapping` object whose pattern carries the !MAP! marker, so
-// IDX/opt.pl hill-climbs it straight in the binary.  mdesc lines are the
-// frozen ones ('!' in the .idx) -- same value, no marker.
+// B0 -- constants of bmpc's component order, pixel mix, residual mixer and
+// block statistics.  GENERATED from IDX/sh_model-B0.idx by IDX/idx2inc.pl,
+// then wrapped in #ifndef by tools/idxguard.py; regenerate with
+// GCIDX=1 ./gc.sh.  Edit the .idx -- the comments live there.
 // -------------------------------------------------------------
 #ifndef B0_M1_w
 pdesc( B0_M1_w_, 0, "0000" );
@@ -161,4 +155,8 @@ static const int B0_BLKLW = B0_BLKLW_.value * (1);
 #ifndef B0_BLKLH
 mdesc( B0_BLKLH_, 1, "0101" );
 static const int B0_BLKLH = B0_BLKLH_.value * (1);
+#endif
+#ifndef B0_CTM
+pdesc( B0_CTM_, 1, "01111111111" );
+static const int B0_CTM = B0_CTM_.value * (1);
 #endif

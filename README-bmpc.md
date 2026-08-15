@@ -154,7 +154,57 @@ opinions has nothing left for it to correct. It stays off.
 
 `-DRES_NM=1 -DRES_MD=0` recovers the plain order-0 coder of §1.
 
-## 5. Per-block statistics
+## 5. Colour component order
+
+Before anything else, the raster is stored **permuted**: coding position j
+holds component `ord[j]`, one order for the whole image, chosen from all
+`n_colors!` of them. Nothing else changes — it is a permutation, so it
+inverts trivially and the stream carries only the order.
+
+What it buys is entirely in the models. The mix's intra-pixel taps let
+position j see positions 0..j-1 of the same pixel (§3, worth −9.6% on its
+own), and residual model 3 keys on the error just made on position j−1 —
+which for position 0 has no previous. Both want the component that best
+explains the others coded **first**.
+
+### Choosing it: everything cheap is degenerate
+
+| criterion | corpus |
+|---|---|
+| LMS on the raw values, `sum_j Var(v_j | v_0..v_{j-1})` | **+0.13%** |
+| the same in the gradient domain | **+0.15%** |
+| trial-code a sample under each order | **−0.85%** (geo −1.55%) |
+
+The first two lose, and they had to. Reordering changes no plane's
+*content*, so any sum of conditional **log** variances is `log det(Cov)` —
+provably identical for every order. (Measured: all six orders of a 3-plane
+image score 19.0517 and the winner is decided by float noise.) That leaves
+the LMS sum, which does vary — but it varies with *variance*, while the
+order only matters through the things variance cannot see.
+
+So the third option measures the actual objective. `Process()` puts the
+model in a mode where it predicts and adapts exactly as it would but adds
+`-log2 p(bit)` to a counter instead of emitting anything, and the encoder
+codes one 32-row band under each of the `n_colors!` orders and keeps the
+cheapest. Coding `t32` exhaustively under all 24 orders spans
+117353..126763 — a **4.8% spread** — and LMS picks 124436.
+
+Two details the sample needs:
+
+* **contiguous bands, not scattered rows.** The mix reaches seven rows up;
+  scattered rows measure a model that never sees a vertical neighbour.
+  A 16-row band is already too short — it picks the identity everywhere
+  and the gain vanishes.
+* **one band is enough, and the cost is then bounded.** `CT_FRAC` asks for
+  1/32 of the rows but never less than one band, so the trial costs
+  `n_colors!` × 32 rows however big the image is. Sampling 1/8 instead
+  picks the same order everywhere and costs several times the encode.
+
+It is not free: the encoder does ~24 extra band-encodes, which is 1.5×–4×
+its old time depending on the image. The **decoder is untouched** — it
+reads the order.
+
+## 6. Per-block statistics
 
 For every 64×64 block (edge = `2**B0_BLKLW` × `2**B0_BLKLH`) and every
 colour component, four numbers: **min**, **max**, the **AND** of all the
@@ -260,18 +310,18 @@ predicted byte in its context, nearly all its probability mass was already
 inside the legal set. What the statistics add is the difference between
 *nearly* certain and free.
 
-## 6. Results
+## 7. Results
 
 Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46861** | 4.81 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46513** | 4.78 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **103361** | 3.59 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **123282** | 3.21 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **358602** | 1.27 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2643530** | 2.52 |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46862** | 4.81 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46514** | 4.78 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **99261** | 3.45 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **117353** | 3.06 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **357764** | 1.27 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2643708** | 2.52 |
 | x_ai.bmp | RLE8 | 887278 | — | — | 285808 | 285808 | fallback |
 | x_ci.bmp | RLE8 | 3278170 | — | — | 1046958 | 1046958 | fallback |
 
@@ -294,10 +344,11 @@ Where it got there, on that file:
 | + the LPC mix, order-0 residual | 2912183 | −28.2% |
 | + the 6-model residual mix | 2646464 | −9.1% |
 | + a final `IDX/opt.pl` pass | 2646067 | |
-| + per-block statistics (64×64) | **2643530** | −0.10% |
+| + per-block statistics (64×64) | 2643530 | −0.10% |
+| + trial-chosen component order | **2643708** | +0.007% here; −4.8% on t32 |
 | bmf, for reference | 2694740 | |
 
-## 7. Caveats
+## 8. Caveats
 
 * **`-Ofast` makes the folded and unfolded builds differ slightly.** With
   a knob pinned by `-DB0_NW_w=1024` the compiler folds it and reassociates;
@@ -322,8 +373,21 @@ Where it got there, on that file:
   cuts it to 16).
 * The encoder now holds the whole pixel array in memory: the block
   statistics have to be measured before anything is coded.
+* The encoder also trial-codes `n_colors!` × 32 rows to pick the component
+  order, which is 1.5×–4× its old time. `-DCT_ON=0` removes it. The
+  decoder is unaffected either way.
+* A **static colour transform** — fit a linear predictor of each component
+  from the ones before it and store residuals — was built and dropped.
+  It is exactly invertible for any quantised weights (a lifting scheme),
+  and it loses badly, up to **+44%**: LMS minimises global variance, but
+  the codec is paid in *local gradient*, and those disagree. On x_ep it
+  took plane 2's σ from 15.0 to 1.8 while its mean |dx| went 1.79 → 0.87
+  (a real win), and plane 3's σ from 75.2 to 42.8 while its mean |dx| went
+  1.38 → **8.51** (a rout). Scoring candidate transforms on the gradient
+  instead did turn it into a small net win (−0.33%), but the reorder alone
+  is worth −0.85% and costs nothing at decode, so the transform is gone.
 
-## 8. Reproducing
+## 9. Reproducing
 
 Model shape (the `#define`s at the top of `bmpc.cpp`) was chosen with
 `sweep.py`, which rebuilds with `-D` overrides and reports the corpus total

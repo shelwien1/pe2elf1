@@ -87,3 +87,11 @@ Number BMW0,    1, 1!0100000000
 # it cannot see.  Tune these against whole files.
 !Number BLKLW,  1, 1!0101
 !Number BLKLH,  1, 1!0101
+
+# --- CT_ON: colour component order ---
+# CTM/1024: a non-identity order is only taken if its trial cost is below
+# this fraction of the identity's.  1024 = no margin, take the best sample.
+# A 0.4% margin was tried to stop sampling noise flipping near-ties: it
+# protects the odd file by a couple of tenths and costs more than that
+# elsewhere (corpus -0.70% with it, -0.85% without), so it is off.
+Number CTM,     1, 1!01111111111
