@@ -128,10 +128,10 @@ BmfImage* read_bmp(char* path) {
       while( 1 ) {
         while( 1 ) {
 // The top of the run-length opcode loop.  Five paths jump here and this is
-          // not a `continue`: the label sits at brace depth 5 and the five jumps at
-          // depths 8, 8, 5, 5 and 4, so three of them are inside nested loops or
-          // outside this one.  Substituting `continue` compiles, passes the corpus,
-          // and sends two of the five to the wrong loop.
+// not a `continue`: the label sits at brace depth 5 and the five jumps at
+// depths 8, 8, 5, 5 and 4, so three of them are inside nested loops or
+// outside this one.  Substituting `continue` compiles, passes the corpus,
+// and sends two of the five to the wrong loop.
 next_opcode:
           if( ferror(fp) )
             return nullptr;
