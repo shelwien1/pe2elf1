@@ -19,9 +19,17 @@ quietly counted as done.
 Every item was gated on the streams byte for byte at both pointer widths --
 `./build.sh && ./test.sh`, now 110 checks over 17 images, and `tools/x32.sh`,
 23 of 23.  Re-run at the end over the whole round: ASan clean across 44 runs of
-19 images, `hdrscan.sh` clean across 8,704, `fuzz.sh` 200 mutants with no
-report and no allocator complaint, `tools/sweep.sh` with every counting tool at
-zero, and the compiler at zero warnings -- from four when the plan arrived.
+19 images, `hdrscan.sh` clean across 8,704, `fuzz.sh` clean across 400 mutants
+of 36 seed files with no report and no allocator complaint, `tools/sweep.sh`
+with every counting tool at zero -- and that last one means something different
+now than it did when this paragraph was first written, because the sweep was
+measuring the include list.  The compiler is at zero warnings, from four when
+the plan arrived.
+
+One number in this paragraph was wrong for most of the round: `fuzz.sh` runs
+400 mutants and not 200, which is its documented default and what every run of
+it printed.  Recorded here rather than quietly corrected, because a gate
+paragraph that misstates its own gate is the thing this document is against.
 
 ---
 
