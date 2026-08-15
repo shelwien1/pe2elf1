@@ -1,52 +1,62 @@
 // alt_p2.inc -- the predictor-2 model around its block: the filter, and the two
 // directions of its eight-bit body.
 
-int32_t __alt_p2_filter(NbRow* _this, float (*a2)[4], CtxWeights* w, int32_t mode) {
+// Predict one sample from the seven neighbourhood vectors, and answer with
+// three numbers rather than one.  `nb[7][0..2]` receive the centre, this row's
+// own prediction and the mixed one; the return value is what the coder uses.
+// That third row is one past the `[7][4]` the caller passes -- see the
+// `offsetof` assertion beside `p2_row` in alt_p2_block.inc, which is what pins
+// the two together.
+//
+// The first call on a row has no weights of its own to predict with, so it
+// seeds them from the mixture instead and returns the mixed prediction
+// unchanged.  `uses` is what tells the two apart.
+inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
   const float* mix = bmf_p2_mix[mode];
   float acc[4], mixed[7][4], centre, prediction, own;
   int32_t i, j, k;
   for( k = 0; k<4; k++ ) {
-    acc[k] = bmf_p2_coef[0][k]*a2[0][k];
+    acc[k] = bmf_p2_coef[0][k]*nb[0][k];
     for( j = 1; j<7; j++ )
-      acc[k] += bmf_p2_coef[j][k]*a2[j][k];
+      acc[k] += bmf_p2_coef[j][k]*nb[j][k];
   }
   centre = bmf_hsum4(acc);
-  a2[7][0] = centre;
+  nb[7][0] = centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ )
-      a2[j][k] -= centre;
+      nb[j][k] -= centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
-      mixed[j][k] = mix[0]*w->f0[0]->w[j][k];
+      mixed[j][k] = mix[0]*sets->f0[0]->w[j][k];
       for( i = 1; i<6; i++ )
-        mixed[j][k] += mix[i]*w->f0[i]->w[j][k];
+        mixed[j][k] += mix[i]*sets->f0[i]->w[j][k];
     }
   for( k = 0; k<4; k++ ) {
-    acc[k] = mixed[0][k]*a2[0][k];
+    acc[k] = mixed[0][k]*nb[0][k];
     for( j = 1; j<7; j++ )
-      acc[k] += mixed[j][k]*a2[j][k];
+      acc[k] += mixed[j][k]*nb[j][k];
   }
   prediction = bmf_hsum4(acc)+centre;
-  a2[7][2] = prediction;
-  if( _this->uses ) {
+  nb[7][2] = prediction;
+  if( uses ) {
     for( k = 0; k<4; k++ ) {
-      acc[k] = _this->w[0][k]*a2[0][k];
+      acc[k] = w[0][k]*nb[0][k];
       for( j = 1; j<7; j++ )
-        acc[k] += _this->w[j][k]*a2[j][k];
+        acc[k] += w[j][k]*nb[j][k];
     }
     own = centre+bmf_hsum4(acc);
-    a2[7][1] = own;
-    return (int32_t)(prediction+((own-prediction)*_this->w[14][0])/_this->w[14][1]);
+    nb[7][1] = own;
+    return (int32_t)(prediction+((own-prediction)*w[14][0])/w[14][1]);
   }
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
-      _this->w[j][k] = mixed[j][k]*bmf_p2_decay;
-      _this->w[j+7][k] = w->f0[0]->w[j+7][k]*bmf_p2_seed;
+      w[j][k] = mixed[j][k]*bmf_p2_decay;
+      w[j+7][k] = sets->f0[0]->w[j+7][k]*bmf_p2_seed;
     }
-  _this->w[14][0] = 47.0f;
-  _this->w[14][1] = 169.2f;
-  _this->w[14][2] = 1.0f;
-  a2[7][1] = prediction;
+  w[14][0] = 47.0f;
+  w[14][1] = 169.2f;
+  w[14][2] = 1.0f;
+  nb[7][1] = prediction;
   return (int32_t)prediction;
 }
 

@@ -243,7 +243,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     c_mid = c_lo;
   if( c_mid>11*sum_ul )
     mode = 3;
-  int32_t filt = __alt_p2_filter(nb_cur, (float (*)[4]) p2_row, &weights, mode);
+  int32_t filt = nb_cur->predict((float (*)[4]) p2_row, &weights, mode);
   P2Ctx* cx0 = (P2Ctx*)cursor[0];
   P2Ctx *cx1 = (P2Ctx*)cursor[1];
   // A 32-bit store at `&pred_prev`, which is a `uint16_t` followed by two

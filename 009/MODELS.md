@@ -392,7 +392,7 @@ The residual is folded to unsigned by `fold[]`, built once by
 `__alt_init_tables` — `unfold[]` runs 0, −1, +1, −2, +2, … so a small residual
 of either sign gets a small code, and `fold[]` is its inverse. (The table is
 built in buckets of `2*near_lossless_q + 1`; at `E = 0` that is one, and the
-mapping is the plain zigzag.) The folded code is coded by `__alt_p1_code_symbol` against a seven-slot frequency table:
+mapping is the plain zigzag.) The folded code is coded by `CounterNode::code_symbol` against a seven-slot frequency table:
 slots 0–4 are the five smallest folded residuals coded directly, and slots 5 and
 6 are escapes by parity into a binary symbol tree (`__code_symbol_tree`) that
 codes `(sym − 5) >> 1`. The table rescales when its total passes 0x2000, with
@@ -429,7 +429,7 @@ for each coefficient:
     w += rate[j][k] * err * x / (ms + floor);       // normalised step
 ```
 
-`__alt_p2_filter` adds a second layer: a fixed mixture of six weight sets forms
+`NbRow::predict` adds a second layer: a fixed mixture of six weight sets forms
 a *reference* prediction, the block's own adapted weights form another, and the
 output is the reference plus a scaled difference between them, with the scale
 itself decaying from 47/169.2.

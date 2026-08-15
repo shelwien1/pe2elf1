@@ -93,7 +93,6 @@ uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height);
 int32_t __estimate_cost(uint8_t* bins, int32_t n);
 void __alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
 int32_t __alt_model_p1_decode(uint16_t* hdr, uint8_t* out);
-int32_t __alt_p2_filter(NbRow* _this, float (*a2)[4], CtxWeights* w, int32_t mode);
 void __reduce_alphabet(ModelBlock* blk, uint8_t* src);
 int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, uint32_t* costs);
 int32_t __choose_plane_coding(BmfImage* img);

@@ -32,10 +32,16 @@ one, and this declines it.  `MINIMAL-SYNTAX.md` §3 is where that widening was
 asked for; the two bodies it was asked for were done by hand before the tool
 could, and the tool is what answers for the rest.
 
-Two bodies still carry a `_this` and both are honest declines, because there
-is no type for either to be a method of: `update_binary_pair` takes a
-`uint16_t *` into a counter block, and `alt_p2_filter` takes a `float (*)[4]`
--- a weight block, which wants a name rather than a receiver.
+One body still carries a `_this` and it is an honest decline, because there is
+no type for it to be a method of: `update_binary_pair` takes a `uint16_t *`
+into a counter block.
+
+`alt_p2_filter` was the second, declined here for a round on the same grounds
+-- a `float (*)[4]`, a weight block wanting a name rather than a receiver.
+Giving that block a name is what settled it: once the weight row was `NbRow`,
+the rule accepted the body without being changed, and it is `NbRow::predict`.
+A decline recorded as "there is no type for this" is a decline with an
+expiry date, and this one expired.
 
 The unit is 37 files, so a candidate's body, its struct and its call sites are
 usually in three different ones.  Analysis runs over the unit as the compiler
@@ -124,9 +130,11 @@ def candidates(lines):
         #
         # The control is the whole classification and not one body: the
         # candidate set must grow by exactly those three and change in no other
-        # way, and the two correct declines below (`update_binary_pair`, a
-        # `uint16_t *`, and `alt_p2_filter`, a `float (*)[4]`) must still
-        # decline.  The obvious control was not available -- this file's own
+        # way, and the correct decline below (`update_binary_pair`, a
+        # `uint16_t *`) must still decline.  `alt_p2_filter` was a second such
+        # control when this was written and has since become a method, so the
+        # control is one body rather than two.
+        # The obvious control was not available -- this file's own
         # docstring example, `__rescale_three_way`, was methodised rounds ago
         # and has no `_this` left to match, which is the same trap one level up.
         #

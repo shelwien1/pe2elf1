@@ -225,6 +225,9 @@ them adds nesting rather than removing it.
   * the `CodedStream` / session-object consolidation of the coder's globals.
     This is the largest single item left in the plan and the one with the
     widest blast radius; it wants its own round with its own gate budget.
+    *(Done later in the round -- see the Phase 7 record.  The blast radius was
+    126 substitutions the compiler checks, which is not the same as 126
+    risks.)*
 
 ## Phase 6 -- layout and punning
 
@@ -435,6 +438,18 @@ The first attempt used a regex for the subscripts and rewrote the struct's own
 this round a broad pattern over these files was the wrong tool; the working
 method is explicit replacements plus the compiler.
 
+**The output stream and its bit packer are two objects.**  Six globals --
+`coded_buf`, `out_cursor`, `coded_size`, `packer_word`, `packer_acc`,
+`packer_free_bits` -- and the grouping says which three are the byte stream and
+which three are the bit packer riding on the same bytes.  126 references, one
+`alignas(16)` where three had been inherited from the donor's data segment, and
+`free_bits`'s transient negative excursion in `packer_rewind` now has a struct
+to be documented on.  This was the plan's largest named item and the reason
+recorded for deferring it -- "the widest blast radius" -- turned out to be the
+easy kind of wide: 126 mechanical substitutions the compiler checks, not 126
+judgements.  Breadth is not the same as risk, and this round mistook one for
+the other twice.
+
 ### still open
 
   * `alt_p2_model`'s magnitude coding.  Its per-bank walk *was* on this list,
@@ -450,19 +465,16 @@ method is explicit replacements plus the compiler.
     ends in `++bank;` and I had wrapped it in a `for` that also increments.
     Three of five banks of counters never moved.  It built, it ran, it
     compressed every image -- only the byte comparison saw it.
-  * the `CodedStream` session consolidation -- the largest item the plan named,
-    and the one with the widest blast radius.  It wants its own round.
   * the `__` prefix.  "Three tools key on it" was the recorded reason and it
     is not the real one; here is the real one.
 
     60 names carry it, and `__`-prefixed identifiers are reserved to the
     implementation, so this is more than cosmetic.  The collisions are
     tractable: of eleven apparent ones, nine are comment matches or different
-    scopes, `__main` merges into `main` as the plan says, and only
-    `__packer_word()` genuinely collides -- with the `packer_word` global,
-    which is the packer's write cursor while the function reads the next word.
-    `addrmap.txt` already stores names *without* the prefix, so the map's keys
-    survive untouched.
+    scopes, `__main` merges into `main` as the plan says, and the one genuine
+    collision -- `__packer_word()` against the `packer_word` global -- stopped
+    existing when that global became `stream.pk.word`.  `addrmap.txt` already
+    stores names *without* the prefix, so the map's keys survive untouched.
 
     What does not survive is `addrmap.py`'s `real_bodies`.  It reads like "every
     definition in file order" and is not: its pattern stops at the `(`, so it

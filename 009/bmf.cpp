@@ -32,7 +32,7 @@
 // names their callers use.  What decided which: how many lines the two bodies
 // actually share, measured as a longest common subsequence over the pair.
 //
-//   __rc_end                    5 + 5      __alt_p1_code_symbol   53 + 49
+//   __rc_end                    5 + 5      CounterNode::code_symbol 53 + 49
 //   __alt_model_p2_d8          11 + 11     __code_symbol_tree     85 + 86
 //   BitCtr::code_context_bit   52 + 50     __alt_p2_d8_body      171 + 147
 //   __rc_begin                 91 + 89     __alt_model_p1        263 + 212

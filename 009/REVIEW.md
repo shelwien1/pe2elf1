@@ -470,7 +470,7 @@ issue.
 
 ### `alt_p2.inc` — 287 lines
 
-`__alt_p2_filter` is 48 lines of clean nested loops and is the best-reading code
+`NbRow::predict` is 48 lines of clean nested loops and is the best-reading code
 in the tree's model files. `alt_p2_d8_body` is the merged pair.
 
 **Sixteen levels of indentation** at the deepest point, the most in any file.

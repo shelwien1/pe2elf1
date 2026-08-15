@@ -499,7 +499,7 @@ codes. The fold and unfold tables are exact inverses.
 
 The folded code is coded in two stages:
 
-1. **`__alt_p1_code_symbol`** codes the code's *slot* against a seven-way
+1. **`CounterNode::code_symbol`** codes the code's *slot* against a seven-way
    frequency array — slots 0–4 are the codes 0–4 directly, and slots 5 and 6
    are "an odd code ≥ 5" and "an even code ≥ 5".
 
@@ -598,7 +598,7 @@ quantiser itself depends on the band**. The slot is
 `320*band + 64*gA + 16*gB + 4*gC + gD`, and `nb_id[]` maps slots to weight sets
 lazily, allocating on first use.
 
-A second linear stage, `__alt_p2_filter`, blends **six** weight sets — the six
+A second linear stage, `NbRow::predict`, blends **six** weight sets — the six
 pointers in `CtxWeights::f0`, each a 7×4 matrix like the one above — using the
 six coefficients of `bmf_p2_mix[mode]`, one row of a 4×6 table. `bmf_p2_coef`
 is separate and earlier: it makes the centre value the features are measured
