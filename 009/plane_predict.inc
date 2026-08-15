@@ -317,11 +317,14 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
 void transform_planes(BmfImage* p_i) {
   int32_t i;
   memset(hist_scratch, 0, 4096);
-  uint8_t *arc = (uint8_t*)stream.buf;
+  // A scratch image in the coded buffer: sixteen bytes reserved, then a copy
+  // of the header, then the pixels.  `BmfImage` is sixteen bytes, so the
+  // second 16 and the 32 are the same offset said twice -- `hdr->pixels` is
+  // `stream.buf+32`, which is what the copy below was addressing by number.
   BmfImage *hdr = (BmfImage*)(stream.buf+16);
   *hdr = *p_i;
   uint8_t* src_pixels = p_i->pixels;
-  memcpy(arc+32, p_i->pixels, p_i->data_size);
+  memcpy(hdr->pixels, p_i->pixels, p_i->data_size);
   uint8_t *tmp = (uint8_t*)bmf_new(p_i->width*p_i->height);
   if( plane_count>0 ) {
     int32_t k = 0;
