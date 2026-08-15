@@ -717,11 +717,20 @@ then read it back through `void**` to free it -- while `alt_p2_alloc` has
 returned `AltP2Block*` since an earlier round.  And 15 casts of a null pointer
 constant, `(AltP1Block*)0` and `(P2Ctx*)(nullptr)`, are `nullptr`.
 
-Pointer casts across the unit: 374 to 258.  The commit that finished that count
-says 268, which is wrong -- I read the census before the last file was written.
-Corrected here rather than by rewriting the pushed message, and recorded rather
-than quietly fixed, because a number in a record that nobody re-took is the
-defect this round found five times over.
+`ModelBlock::free_workspace` returned `(void**)this` after `free(this)` on the
+path that takes it -- a dangling pointer neither caller reads -- and returns
+`void`, third of its kind after `alt_p1_free` and `alt_model_p1_d8_decode`.
+Four frame members were `void*` holding one type each and are typed;
+`ReduceAlphabetFrame::tmp` stays `void*`, honestly, because it holds a
+`uint16_t*` on one path and a union slot on another.
+
+**Pointer casts across the unit: 374 at the start of this pass, and
+`shape.py` reports the current figure.**  That sentence used to carry the
+number, and I got it wrong twice in two commit messages -- 268 and 250 for
+counts that were 258 and 249 -- the second time in the same command that had
+just printed the right one.  Writing a measurement into prose beside a tool
+that re-derives it is how the five stale numbers this round found got there,
+and the fix is not to be more careful; it is to stop writing it down twice.
 
 Typing four coders made `methodise.py` propose them, and all four are declined
 with the reason written down: a method of `BmfImage` would make the image the
