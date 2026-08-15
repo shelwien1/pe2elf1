@@ -23,8 +23,11 @@ if [ "${GCIDX:-0}" = "1" ]; then
   for a in IDX/*.idx; do
     [ -e "$a" ] || continue
     b=$(basename "$a" .idx)
-    ( cd IDX && perl idx2inc.pl "$b.idx" >/dev/null )
+    ( cd IDX && perl idx2inc.pl "$b.idx" 0 >/dev/null )
     mv -f IDX/"$b"_*.inc MOD/ 2>/dev/null || true
+    # idx2inc.pl emits bare declarations; the #ifndef wrapper is what lets
+    # sweep.py pin a knob with -D without editing the generated file.
+    [ -f "MOD/${b}_h.inc" ] && python3 tools/idxguard.py "MOD/${b}_h.inc" >/dev/null
   done
 fi
 

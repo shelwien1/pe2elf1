@@ -3,6 +3,12 @@
 # compressed size over a corpus.  Used to pick the model shape and the B0
 # constants; every number in README-bmpc.md came out of this.
 #
+# The first config listed is the reference: later ones report both the total
+# byte delta and 'geo', the geometric mean of the per-file size ratios.  The
+# total is dominated by whichever corpus file is biggest, so a config that
+# wins the total can still be a large regression on the small files -- geo is
+# the number to steer by, the total the one to report.
+#
 #   ./sweep.py                          run the built-in experiment list
 #   ./sweep.py 'MIX_LOGISTIC=1 W_LOGIT=1' ...   run specific configs
 #   CORPUS=big ./sweep.py ...           add the full 8 MB BMP
@@ -90,14 +96,18 @@ def main():
     with ThreadPoolExecutor(max_workers=NJOBS) as ex:
         results = list(ex.map(one, args))
 
-    base = None
+    import math
+    base = None; ref = None
     for a, ti, to, per, dt in results:
-        if base is None: base = to
-        d = '' if to == base else '  %+d (%+.3f%%)' % (to - base, 100.0 * (to - base) / base)
-        print('%9d  %6.4f bpc  %5.1fs  %-58s%s' % (to, to * 8.0 / ti, dt, a or '(defaults)', d))
+        if base is None: base = to; ref = [o for _, _, o in per]
+        d = '' if to == base else ' %+d(%+.2f%%)' % (to - base, 100.0 * (to - base) / base)
+        geo = math.exp(sum(math.log(o / float(r)) for (_, _, o), r in zip(per, ref)) / len(per))
+        print('%9d %6.4f bpc  geo %+7.3f%%  %5.1fs  %-56s%s'
+              % (to, to * 8.0 / ti, 100.0 * (geo - 1.0), dt, a or '(defaults)', d))
         if detail:
-            for n, i, o in per:
-                print('           %-20s %9d -> %9d  %6.4f bpc' % (n, i, o, o * 8.0 / i))
+            for (n, i, o), r in zip(per, ref):
+                print('           %-20s %9d -> %9d  %6.4f bpc  %+.2f%%'
+                      % (n, i, o, o * 8.0 / i, 100.0 * (o - r) / r))
     sys.stdout.flush()
 
 if __name__ == '__main__':

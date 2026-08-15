@@ -1,5 +1,12 @@
 
-$UseNew = 0;
+# $UseNew=1 -> Table() members are pointers, allocated in %M%_Init()
+# $UseNew=0 -> Table() members are fixed-size arrays (needs const-expression
+#              sizes, i.e. the Const build).  Override per invocation with
+#              IDX_USENEW=0 in the environment or a second argument:
+#                perl idx2inc.pl foo.idx 0
+$UseNew = 1;
+$UseNew = $ENV{IDX_USENEW} if defined $ENV{IDX_USENEW};
+$UseNew = $ARGV[1]         if defined $ARGV[1];
 $NoConst = 0;
 $SizeOut= 0; # =1 with UseNew=1 only
 $Verify = 0; # =1 with UseNew=0 only
@@ -106,7 +113,8 @@ while( <I1> ) {
         }
         $volume{$index} .= "* $k";
         $count{$index} *= $k;
-        $code{$index} .= "\n$index = ($index*$k) + ${prefix}_${tag}[$var]; // $map";
+        $sz1 = $sz-1;
+        $code{$index} .= "\n$index = ($index*$k) + ${prefix}_${tag}[($var)<1?1:(($var)>$sz1?$sz1:($var))]; // $map"; # clamped == masking_b::map
 
         $j = 0; 
         $q = sprintf( "static const %s ${prefix}_${tag}[$sz]={ ", (($k<256)?"byte":"uint") );
@@ -119,7 +127,8 @@ while( <I1> ) {
       } else {
         $volume{$index} .= "* $sz";
         $count{$index} *= $k;
-        $code{$index} .= "\n$index = ($index*$sz) + ($var); // $map";
+        $sz1 = $sz-1;
+        $code{$index} .= "\n$index = ($index*$sz) + (($var)<1?1:(($var)>$sz1?$sz1:($var))); // $map"; # clamped == masking_b::map
       }
     }
   } elsif( /^\s*(.*?):\s*(.*?),\s*\&(.*?)\s*$/ ) {
@@ -135,47 +144,30 @@ while( <I1> ) {
         $volume{$index} .= "* (1<<$ccount)";
         $count{$index} = $count{$index} << $ccount;
         $lmap = length($map);
-        $j = index( $map, '1' x $ccount );
-        if( $j>=0 ) {
-          $q = (1 << $ccount);
-          $q1 = $q-1;
-          $j = $lmap-($j+$ccount);
-          if( $j>0 ) {
-            $code{$index} .= "\n$index = ($index<<$ccount) + ((($var)>>$j)&$q1); // $map";
-          } else {
-            $code{$index} .= "\n$index = ($index<<$ccount) + (($var)&$q1); // $map";
-          }
-        } else {
-          ($map1=$map) =~ s/0+//; $map1=~ s/1+//;
-          if( $map1 eq '' ) {
-            $lmap = length($map);
-            $j = index( $map, '0' );
-            $c0c = $lmap-$ccount; $c11 = $lmap-($j+$c0c);
-            $q = (1 << $c11);
-            $q1 = $q-1;
-            $volume{$index} .= "* (1<<$ccount)";
-            $count{$index} = $count{$index} << $ccount;
-            $code{$index} .= "\n$index = ($index<<$ccount) + ((($var)>>$c0c)&~$q1) + (($var)&$q1); // $map";
-          } else {
-            $sz = 1 << $lmap;
-            $sz1 = $sz-1;
-  #          $code{$index} .= "\n$index = ($index<<$ccount) + ${prefix}_${tag}[__min($sz1,__max(0,$var))];";
-            $code{$index} .= "\n$index = ($index<<$ccount) + ${prefix}_${tag}[$var]; // $map";
-            $j = 0; 
-            $q = sprintf( "static const %s ${prefix}_${tag}[$sz]={ ", (($ccount<8)?"byte":"uint") );
-            $c = "";
-            for( $i=0; $i<$sz; $i++ ) {
-              $j = -1;
-              $k = 0; $n=$ccount-1;
-              while( ($j=index($map,'1',1+$j))>=0 ) {
-                $k |= (($i >> ($lmap-1-$j))&1) << $n--;
-              }
-              $c .= sprintf "$q%i",$k; $q=',';
-            }
-            $c .= " };\n";
-            $maps{$index} .= $c;
-          }
+        # Decompose the mask into runs of ones and emit shift/mask/or code.
+        # The old general path built a lookup table of 2^length($map) entries,
+        # so a wide declaration -- even one that is mostly zeros, e.g. a history
+        # mask widened to give the optimizer room -- put megabytes of const data
+        # in the binary (byte table under 8 selected bits, uint at or above).
+        # Runs cost a couple of ALU ops instead and are faster than a table that
+        # misses cache. Each term masks to its own width, so bits of $var above
+        # the pattern cannot leak in -- same bound as masking::inc.
+        @terms = (); $rem = $ccount; $p = 0;
+        while( $p < $lmap ) {
+          if( substr($map,$p,1) eq '1' ) {
+            $a = $p;
+            $p++ while( $p < $lmap && substr($map,$p,1) eq '1' );
+            $b = $p-1;                  # run spans map[$a..$b]
+            $w = $b-$a+1;               # width in bits
+            $lo = $lmap-1-$b;           # variable bit holding the run's LSB
+            $rem -= $w;
+            $m = (1 << $w) - 1;
+            $e = $lo ? "((($var)>>$lo)&$m)" : "(($var)&$m)";
+            $e = "($e<<$rem)" if( $rem );
+            push @terms, $e;
+          } else { $p++; }
         }
+        $code{$index} .= "\n$index = ($index<<$ccount) + (" . join(' + ', @terms) . "); // $map";
       }
     }
   } elsif( /^\s*(.*?):\s*(.*?),\s*(.*?)!(.*?)\s*$/ ) {
@@ -245,6 +237,7 @@ $hdr .= "$xdesc\n";
 $body = "";
 
 $t_dat = $t_sta = $t_ptr = $t_con = $t_des = "";
+$t_siz = "";   # per-table byte counts, summed into ${prefix}_Size
 
 $f_init=0;
 $init_code = "";
@@ -277,7 +270,20 @@ while( <I2> ) {
     $t =~ s/\|/,/g; # for template support like SSE<6|6|2>
     $t_sta .= "$t ${v}[${sz}];\n";
     $t_ptr .= "$t* $v;\n";
-    $t_con .= "  $v = new ${t}[${sz}];\n";
+    # tbl_n() bounds-checks the count so the compiler can prove the byte size
+    # cannot overflow -- without it every one of these lines draws a
+    # -Walloc-size-larger-than from GCC 13+ about its own overflow guard.
+    # No () on the new[]: every table is filled by Codec::init() before it is
+    # read, and value-initializing here would just be a second pass over a few
+    # hundred MiB.  It also keeps the Debug build's semantics identical to the
+    # Const build, where these are array members of a default-initialized
+    # object and are equally indeterminate until init() fills them.
+    $t_con .= "  $v = new ${t}[ tbl_n(${sz}) ];\n";
+    # Running total of this module's table bytes.  Const mode can fold the sum
+    # at compile time; Debug cannot, because the counts come from the mapping
+    # objects opt.pl patches at load, so there it accumulates in _Init().
+    $t_con .= "  ${prefix}_Size += (unsigned long long)sizeof(${t}) * (unsigned long long)tbl_n(${sz});\n";
+    $t_siz .= "\n                              + (unsigned long long)sizeof(${t}) * (unsigned long long)(${sz})";
 
 $t_sta1 .= <<TEXT;
   $t ${v}__[${sz}];
@@ -292,10 +298,10 @@ TEXT
 
 #printf( "sizeof("#Type" "#Name"[%i]) = %i\n", Size, sizeof( Type[Size] )
     if( $SizeOut==1 ) {
-      $t_con .= "printf( \"sizeof($t ${v}[%i]) = %i\\n\", ${sz}, sizeof( ${t}[${sz}] ) );\n";
+      #$t_con .= "printf( \"sizeof($t ${v}[%i]) = %i\\n\", ${sz}, sizeof( ${t}[${sz}] ) );\n";
     }
 
-    $t_des .= "  delete $v;\n";
+    $t_des .= "  delete[] $v;\n";
     next;
   }
   if( /^(\s*)MakeIndex\s+([^\s]+)/ ) {
@@ -343,7 +349,11 @@ print O1 <<TEXT;
 struct ${prefix}_T { \n#undef USE_NEW\n#define USE_NEW 1\n
 $t_dat
 $t_ptr
+  /* Total bytes this module's Table() members occupy.  Accumulated in _Init()
+   * because the counts are load-time values here. */
+  unsigned long long ${prefix}_Size = 0;
   void ${prefix}_Init( void ) {
+    ${prefix}_Size = 0;
 $t_con
 $init_code
   }
@@ -359,6 +369,9 @@ TEXT
 struct ${prefix}_T { \n#undef USE_NEW\n#define USE_NEW 0\n
 $t_dat
 $t_sta
+  /* Total bytes this module's Table() members occupy -- a constant here, since
+   * Const mode has already folded every count. */
+  static constexpr unsigned long long ${prefix}_Size = 0$t_siz;
   void ${prefix}_Init( void ) {
 $init_code
   }

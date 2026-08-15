@@ -48,39 +48,87 @@
                          // gives every one of the n_colors*60 correlated taps
                          // its own full step and overshoots by ~n_taps.
 #endif
-#ifndef MIX_CENTER
-#define MIX_CENTER   1   // inputs and output measured from the left
-                         // neighbour instead of from 128; pred = L + mix,
-                         // which is the same affine family reparameterised
-                         // around an operating point that is actually close
-                         // to the answer.  Without it the taps all spike
-                         // together in dark/bright regions and the diagonal
-                         // Newton step overshoots.
+#ifndef MIX_BASE
+#define MIX_BASE     3   // operating point the mix is measured from:
+                         //  0 = none (inputs are absolute, output is 128+mix)
+                         //  1 = W    pixel to the left
+                         //  2 = N    pixel above
+                         //  3 = (W+N)/2
+                         //  4 = MED(W,N,NW), the LOCO-I/JPEG-LS predictor
+                         // pred = base + mix is the same affine family as a
+                         // bare linear mix, reparameterised around a point
+                         // that is already close to the answer.  With base 0
+                         // every tap spikes together in dark/bright regions
+                         // and the step overshoots.
+#endif
+#define MIX_CENTER (MIX_BASE!=0)
+#ifndef MIX_DUAL
+#define MIX_DUAL     1   // 1 = run two mixes over the same inputs at
+                         // different rates and combine them convexly,
+                         //   pred = base + dotA + L*(dotB-dotA),
+                         // with L = sigma(z) and z driven by ParamUpdater
+                         // -- i.e. the combination weight lives in the
+                         // logistic domain.  Each mix is updated on its own
+                         // error, z on the combined one (the standard
+                         // combination-of-adaptive-filters scheme: a fast
+                         // filter tracks, a slow one is accurate, and the
+                         // combination is at least as good as either).
+#endif
+#ifndef MIX_LOSS
+#define MIX_LOSS     1   // loss the weights descend:
+                         //  0 = L2      gdot = e
+                         //  1 = Huber   gdot = clip(e,HUB)
+                         //  2 = L1      gdot = HUB*sign(e)
+                         //  3 = Huber with the knee at HUBA * an EMA of
+                         //      |e| for that component.  A fixed knee is
+                         //      not scale free: 8bpp images want it ~4x
+                         //      wider than 24/32bpp ones (and the wider
+                         //      the mix, the more one outlier costs), so
+                         //      the right knee is a multiple of how big
+                         //      the errors actually are here.
+                         // Image residuals are heavy-tailed: one edge can
+                         // move 240 weights by the amount a hundred smooth
+                         // pixels move them back.
 #endif
 #ifndef MIX_LOGISTIC
 #define MIX_LOGISTIC 0   // inputs stretched, output squashed, CE loss
 #endif
 #ifndef MIX_BIAS
-#define MIX_BIAS     0   // extra constant-1 input
+#define MIX_BIAS     0   // bias added to the mix:
+                         //  0 = none
+                         //  1 = an extra constant-1 input, so the mix learns
+                         //      one global offset through ParamUpdater
+                         //  2 = a per-context offset: an EMA of the residual
+                         //      indexed by the quantised local gradients
+                         //      (W-NW, NW-N, N-NE), one table per component.
+                         //      Catches what a *linear* mix structurally
+                         //      cannot -- the offset a texture class leaves
+                         //      behind.  Same loss, so the mix is updated
+                         //      with the error after correction.
 #endif
 #ifndef W_LOGIT
 #define W_LOGIT      0   // w = LO + SPAN*sigma(z), optimise z
 #endif
 #ifndef LPC_INTRA
-#define LPC_INTRA    0   // also feed the already-coded components of the
+#define LPC_INTRA    1   // also feed the already-coded components of the
                          // current pixel (0..n_colors-1 extra inputs)
 #endif
 #ifndef RES_ZIGZAG
-#define RES_ZIGZAG   0   // fold the residual to |e|*2-(e<0) before coding
+#define RES_ZIGZAG   1   // fold the residual to |e|*2-(e<0) before coding
 #endif
 #ifndef RES_PLANE
-#define RES_PLANE    0   // one order-0 residual model per colour component
+#define RES_PLANE    1   // one order-0 residual model per colour component
 #endif
 #ifndef STATS
 #define STATS        0   // -DSTATS=1: dump predictor diagnostics to stderr
 #endif
 
 #include "sh_common.inc"
+
+// coder0's counter constants come along frozen: they are shared with
+// coder0.cpp and were tuned on book1, so IDX/opt.pl runs against bmpc must
+// not move them.  Only the B0 block below is in the search space.
+#define FREEZE_C0 1
 #include "sh_counter0.inc"
 #include "MOD/sh_model-B0_h.inc"
 #include "config_b.hpp"
@@ -96,6 +144,19 @@ static const int PADL = 4;    // pixels of the bottom row left of x
 static const int PADR = 3;    // unknown pixels right of x
 static const int PADT = BH-1; // known rows above y
 static const int NPIX = (BH-1)*BW + PADL;    // 60 known pixels
+
+// MIX_BIAS==2 context: three local gradients, 9 buckets each.
+static const int BQ   = 9;
+static const int NCTX = BQ*BQ*BQ;
+static INLINE int qgrad( int d ) {
+  int T1 = B0_BT1, T2 = B0_BT2, T3 = B0_BT3;
+  int s = d<0 ? -1 : 1; if( d<0 ) d = -d;
+  if( d==0 ) return 4;
+  if( d<T1 ) return 4+s;
+  if( d<T2 ) return 4+2*s;
+  if( d<T3 ) return 4+3*s;
+  return 4+4*s;
+}
 
 // -------------------------------------------------------------
 // Shared coding state
@@ -131,18 +192,34 @@ static INLINE uint CodeByte( Ctr* m, uint c ) {
 // -------------------------------------------------------------
 typedef ParamUpdater<1,Config_LW> WUpd;
 
+// dL/d(dot) for the three losses; hdot stays 1 (Gauss-Newton), so the
+// step is NW*LossG(e)/|x|^2 * x -- the Huber/L1 forms just bound how far
+// one outlier is allowed to drag the whole tap vector.
+static INLINE float LossG( float e, float knee ) {
+#if   MIX_LOSS==1 || MIX_LOSS==3
+  return clip( e, knee );
+#elif MIX_LOSS==2
+  return (e<0.0f) ? -knee : knee;
+#else
+  (void)knee;
+  return e;
+#endif
+}
+
 static INLINE float squash( float x ) { return 1.0f/(1.0f+expf(-x)); }
 static INLINE float stretch( float p ) { return logf(p/(1.0f-p)); }
 
-struct LPCMix {
+template<class cfg>
+struct LPCMixT {
+  typedef ParamUpdater<1,cfg> U;
   int    n;      // taps
   float* w;      // effective weights, dense -> the dot product vectorises
-  WUpd*  u;      // one ParamUpdater per tap (val = w, or z when W_LOGIT)
+  U*     u;      // one ParamUpdater per tap (val = w, or z when W_LOGIT)
 
   void Init( int n_, int seed_tap ) {
     n = n_;
     w = new float[n];
-    u = new WUpd[n];
+    u = new U[n];
     for( int i=0; i<n; i++ ) {
       float w0 = (i==seed_tap) ? LW_W0 : 0.0f;
 #if W_LOGIT
@@ -189,12 +266,15 @@ struct LPCMix {
       w[i] = LW_LO + LW_SPAN/(1.0f+expf(-u[i].val));
 #else
       u[i].AccumGH( g, h );
-      u[i].Apply( u[i].StepRaw(), Config_LW::minVal, Config_LW::maxVal );
+      u[i].Apply( u[i].StepRaw(), cfg::minVal, cfg::maxVal );
       w[i] = u[i].val;
 #endif
     }
   }
 };
+
+typedef LPCMixT<Config_LW>  LPCMix;
+typedef LPCMixT<Config_LW2> LPCMix2;
 
 // -------------------------------------------------------------
 // Raster codec
@@ -206,16 +286,33 @@ struct Raster {
   int    ni;               // mix taps
   float* x;                // input vector
   LPCMix* mix;             // one per component
+#if MIX_DUAL
+  LPCMix2* mix2;           // the second, differently-paced mix
+  ParamUpdater<1,Config_LM>* lam;   // z of the convex combination
+#endif
   Ctr*   res;              // order-0 residual model(s)
   Ctr*   padm;             // order-0 model for the row padding bytes
   float  i2f[256];         // byte -> mix input
-  float  base[4];          // MIX_CENTER: i2f[left neighbour], per component
+  float  base[4];          // i2f[] of the operating point, per component
+  float  mad[4];           // MIX_LOSS==3: EMA of |e| per component
+#if MIX_BIAS==2
+  float* bias;             // [nc][NCTX] EMA of the residual
+  int    bctx[4];          // context of the current pixel, per component
+#endif
   float  xx;               // |x|^2 of the current input vector
 #if STATS
   double s_mix, s_left;    // sum |error| of the mix / of the left neighbour
   qword  s_n;
   qword  s_h[256];         // residual histogram, for its order-0 entropy
 #endif
+
+  INLINE float Knee( uint k ) const {
+#if MIX_LOSS==3
+    return LW_HUBA * mad[k];
+#else
+    (void)k; return LW_HUB;
+#endif
+  }
 
   byte* At( int px, int py ) {
     return buf + (size_t(py+PADT)*bstride + (px+PADL))*nc;
@@ -232,7 +329,7 @@ struct Raster {
 #if LPC_INTRA
     ni += nc-1;                 // components of this pixel already coded
 #endif
-#if MIX_BIAS
+#if MIX_BIAS==1
     ni += 1;
 #endif
     x   = new float[ni+8];
@@ -244,10 +341,22 @@ struct Raster {
     // every tap seeds at 0.
     for( uint k=0; k<nc; k++ )
       mix[k].Init( ni, MIX_CENTER ? -1 : int((NPIX-1)*nc + k) );
-#if MIX_BIAS
+#if MIX_DUAL
+    mix2 = new LPCMix2[nc];
+    lam  = new ParamUpdater<1,Config_LM>[nc];
+    for( uint k=0; k<nc; k++ ) {
+      mix2[k].Init( ni, MIX_CENTER ? -1 : int((NPIX-1)*nc + k) );
+      lam[k].Init( 0.0f );          // sigma(0) = 1/2, an even blend
+    }
+#endif
+#if MIX_BIAS==1
     x[ni-1] = 1.0f;
 #endif
 
+#if MIX_BIAS==2
+    bias = new float[nc*NCTX];
+    for( uint i=0; i<nc*NCTX; i++ ) bias[i] = 0.0f;
+#endif
     res = new Ctr[256 * (RES_PLANE ? nc : 1)];
     InitCtr( res, 256 * (RES_PLANE ? nc : 1) );
     padm = new Ctr[256];
@@ -256,6 +365,8 @@ struct Raster {
 #if STATS
     s_mix = s_left = 0.0; s_n = 0; memset( s_h, 0, sizeof(s_h) );
 #endif
+
+    for( uint k=0; k<4; k++ ) mad[k] = LW_MAD0;
 
     for( int v=0; v<256; v++ ) {
 #if MIX_LOGISTIC
@@ -268,11 +379,37 @@ struct Raster {
 
   // Gather the 60 known pixels of the block into x[].
   INLINE void Gather( int px, int py ) {
-#if MIX_CENTER
-    const byte* L = At( px-1, py );
-    for( uint k=0; k<nc; k++ ) base[k] = i2f[L[k]];
-#else
+#if MIX_BASE==0
     for( uint k=0; k<nc; k++ ) base[k] = 0.0f;
+#else
+    const byte* pW = At( px-1, py );
+    const byte* pN = At( px,   py-1 );
+    const byte* pNW = At( px-1, py-1 );
+    for( uint k=0; k<nc; k++ ) {
+#if   MIX_BASE==1
+      int b = pW[k];
+#elif MIX_BASE==2
+      int b = pN[k];
+#elif MIX_BASE==3
+      int b = (int(pW[k]) + int(pN[k])) >> 1;
+#else
+      int a = pW[k], c = pN[k], d = pNW[k], b;
+      if( d >= (a>c?a:c) )      b = (a<c?a:c);
+      else if( d <= (a<c?a:c) ) b = (a>c?a:c);
+      else                      b = a + c - d;
+#endif
+      base[k] = i2f[b];
+    }
+#endif
+#if MIX_BIAS==2
+    {
+      const byte* pNE = At( px+1, py-1 );
+      for( uint k=0; k<nc; k++ )
+        bctx[k] = int(k)*NCTX
+                + (qgrad(int(pW[k])-int(pNW[k]))*BQ
+                +  qgrad(int(pNW[k])-int(pN[k])))*BQ
+                +  qgrad(int(pN[k])-int(pNE[k]));
+    }
 #endif
     int i = 0;
     float s = 0.0f;
@@ -282,7 +419,7 @@ struct Raster {
     }
     const byte* r = At( px-PADL, py );
     for( uint j=0; j<PADL*nc; j++ ) { float t = i2f[r[j]] - base[j%nc]; x[i++] = t; s += t*t; }
-#if MIX_BIAS
+#if MIX_BIAS==1
     s += 1.0f;
 #endif
     xx = s;
@@ -291,7 +428,17 @@ struct Raster {
   // One byte: predict, code the residual, update the mix.
   INLINE uint Byte( uint k, byte* p, uint v ) {
     LPCMix& m = mix[k];
-    float dot = m.Dot(x) + base[k];
+    float dotA = m.Dot(x);
+    float dot  = dotA + base[k];
+#if MIX_DUAL
+    float dotB = mix2[k].Dot(x);
+    float lm   = squash( lam[k].val );
+    float dd   = dotB - dotA;
+    dot += lm*dd;
+#endif
+#if MIX_BIAS==2
+    dot += bias[bctx[k]];
+#endif
 
     int pb;
 #if MIX_LOGISTIC
@@ -334,11 +481,35 @@ struct Raster {
     // cross-entropy against the target's position in [0,1]:
     // dL/ddot = p-t, d2L/ddot2 = p(1-p).
     float t = (float(v)+0.5f)*(1.0f/256.0f);
-    m.Update( x, pp-t, pp*(1.0f-pp), xx );
+    float ew = pp-t;
+    m.Update( x, LossG(ew, Knee(k)), pp*(1.0f-pp), xx );
+    mad[k] += (fabsf(ew)-mad[k]) * MAD_R;
+#if MIX_BIAS==2
+    bias[bctx[k]] += (t-dot) * BIAS_R;
+#endif
 #else
     // squared error: dL/ddot = dot-t, d2L/ddot2 = 1.
     float t = (float(v)-128.0f)*(1.0f/128.0f);
-    m.Update( x, dot-t, 1.0f, xx );
+    float ew = dot-t;
+#if MIX_DUAL
+    // each mix descends its own error, the blend descends the joint one
+    m.Update( x, LossG(dotA+base[k]-t, Knee(k)), 1.0f, xx );
+    mix2[k].Update( x, LossG(dotB+base[k]-t, LW_HUB2), 1.0f, xx );
+    {
+      float f1 = lm*(1.0f-lm);            // dL/dz = gdot*dd*f1
+      float u1 = dd*f1;
+      float gz = LossG(ew, Knee(k)) * u1;
+      float hz = u1*u1 + LossG(ew,Knee(k))*dd*f1*(1.0f-2.0f*lm);
+      lam[k].AccumGH( gz, hz );
+      lam[k].Apply( lam[k].StepRaw(), Config_LM::minVal, Config_LM::maxVal );
+    }
+#else
+    m.Update( x, LossG(ew, Knee(k)), 1.0f, xx );
+#endif
+    mad[k] += (fabsf(ew)-mad[k]) * MAD_R;
+#if MIX_BIAS==2
+    bias[bctx[k]] += (t-dot) * BIAS_R;
+#endif
 #endif
 
 #if LPC_INTRA

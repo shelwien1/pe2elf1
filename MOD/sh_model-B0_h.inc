@@ -1,92 +1,132 @@
 // -------------------------------------------------------------
-// B0 -- constants of bmpc's LPC mixer, in sh_model-C0_h.inc style.
-// Source of record: IDX/sh_model-B0.idx.
+// B0 -- constants of bmpc's LPC mixer.
 //
-// Every knob is wrapped in #ifndef so a sweep can pin it from the
-// command line (-DB0_NW_w=900) without touching the file; left alone
-// it is a live `mapping` object whose pattern carries the !MAP! marker,
-// so IDX/auto_opt2.pl can hill-climb it in the binary.
+// GENERATED from IDX/sh_model-B0.idx by IDX/idx2inc.pl, then wrapped in
+// #ifndef by tools/idxguard.py; regenerate with  GCIDX=1 ./gc.sh.
+// Edit the .idx, not this file -- the comments live there.
+//
+// The guards let sweep.py pin a knob with -DB0_NW_w=1024; left alone each
+// one is a live `mapping` object whose pattern carries the !MAP! marker, so
+// IDX/opt.pl hill-climbs it straight in the binary.  mdesc lines are the
+// frozen ones ('!' in the .idx) -- same value, no marker.
 // -------------------------------------------------------------
-
-// ---- Config_LW: one updater per linear-mix weight ----
-
-// momentum_D  = B0_M1_w/1024        gradient EMA
 #ifndef B0_M1_w
-pdesc( B0_M1_w_, 1, "01110011001" );
+pdesc( B0_M1_w_, 0, "0000" );
 static const int B0_M1_w = B0_M1_w_.value * (1);
 #endif
-// momentum_R  = B0_M2_w/65536       curvature EMA
 #ifndef B0_M2_w
-pdesc( B0_M2_w_, 1, "01111110101110000" );
+pdesc( B0_M2_w_, 0, "0000" );
 static const int B0_M2_w = B0_M2_w_.value * (1);
 #endif
-// NW          = B0_NW_w/4096        newton step gain
 #ifndef B0_NW_w
-pdesc( B0_NW_w_, 1, "0111111111111" );
+pdesc( B0_NW_w_, 1, "01111111111" );
 static const int B0_NW_w = B0_NW_w_.value * (1);
 #endif
-// inc         = B0_INC_w/(1<<20)    denominator floor
 #ifndef B0_INC_w
-pdesc( B0_INC_w_, 1, "01111111111" );
+pdesc( B0_INC_w_, 1, "0111111111111111111" );
 static const int B0_INC_w = B0_INC_w_.value * (1);
 #endif
-// stepMax     = B0_STEP_w/65536     trust region
 #ifndef B0_STEP_w
 pdesc( B0_STEP_w_, 1, "0110011001100" );
 static const int B0_STEP_w = B0_STEP_w_.value * (1);
 #endif
-// maxVal      = B0_WMAX_w/1024      |w| box (minVal = -maxVal)
 #ifndef B0_WMAX_w
 pdesc( B0_WMAX_w_, 1, "0111111111111" );
 static const int B0_WMAX_w = B0_WMAX_w_.value * (1);
 #endif
-// grad1_clip  = B0_G1_w/1024        (ParamUpdater does not read it)
-#ifndef B0_G1_w
-pdesc( B0_G1_w_, 1, "0111111111111" );
-static const int B0_G1_w = B0_G1_w_.value * (1);
-#endif
-// grad2_clip  = B0_G2_w/1024        per-input curvature clip
 #ifndef B0_G2_w
-pdesc( B0_G2_w_, 1, "01111111111111111" );
+pdesc( B0_G2_w_, 1, "10011100000111101" );
 static const int B0_G2_w = B0_G2_w_.value * (1);
 #endif
-// D_clip      = B0_D_w/64
 #ifndef B0_D_w
-pdesc( B0_D_w_, 1, "0111111111111" );
+pdesc( B0_D_w_, 1, "0000000000010" );
 static const int B0_D_w = B0_D_w_.value * (1);
 #endif
-// R_clip      = B0_R_w
 #ifndef B0_R_w
 pdesc( B0_R_w_, 1, "011110100001000111111" );
 static const int B0_R_w = B0_R_w_.value * (1);
 #endif
-// R0          = B0_R0_w/(1<<20)     seed curvature
 #ifndef B0_R0_w
 pdesc( B0_R0_w_, 0, "0000" );
 static const int B0_R0_w = B0_R0_w_.value * (1);
 #endif
-
-// ---- mixer shape ----
-
-// WLO/WHI: the box the logistic weight parameterisation maps onto,
-// w = WLO + (WHI-WLO)*sigma(z).  Only read when W_LOGIT=1.
+#ifndef B0_G1_w
+mdesc( B0_G1_w_, 1, "0111111111111" );
+static const int B0_G1_w = B0_G1_w_.value * (1);
+#endif
+#ifndef B0_HUB
+pdesc( B0_HUB_, 1, "0110010" );
+static const int B0_HUB = B0_HUB_.value * (1);
+#endif
+#ifndef B0_NW2_w
+pdesc( B0_NW2_w_, 1, "0111111111111" );
+static const int B0_NW2_w = B0_NW2_w_.value * (1);
+#endif
+#ifndef B0_INC2_w
+pdesc( B0_INC2_w_, 1, "0100010001000110100" );
+static const int B0_INC2_w = B0_INC2_w_.value * (1);
+#endif
+#ifndef B0_HUB2
+pdesc( B0_HUB2_, 1, "011111" );
+static const int B0_HUB2 = B0_HUB2_.value * (1);
+#endif
+#ifndef B0_NWL
+pdesc( B0_NWL_, 1, "011111111111111" );
+static const int B0_NWL = B0_NWL_.value * (1);
+#endif
+#ifndef B0_INCL
+pdesc( B0_INCL_, 1, "000000000000000" );
+static const int B0_INCL = B0_INCL_.value * (1);
+#endif
+#ifndef B0_STEPL
+pdesc( B0_STEPL_, 1, "01111111111111111" );
+static const int B0_STEPL = B0_STEPL_.value * (1);
+#endif
+#ifndef B0_MM2
+pdesc( B0_MM2_, 0, "0000" );
+static const int B0_MM2 = B0_MM2_.value * (1);
+#endif
 #ifndef B0_WLO
-pdesc( B0_WLO_, -4096, "00000000000000" );   // -4.0 * 1024
+mdesc( B0_WLO_, -4096, "00000000000000" );
 static const int B0_WLO = B0_WLO_.value * (1);
 #endif
 #ifndef B0_WHI
-pdesc( B0_WHI_, 1, "0111111111111" );        //  4.0 * 1024
+mdesc( B0_WHI_, 1, "0111111111111" );
 static const int B0_WHI = B0_WHI_.value * (1);
 #endif
-// W0: seed weight of the "same component, pixel to the left" input,
-// scaled by 1024.  Every other weight seeds at 0.
 #ifndef B0_W0
-pdesc( B0_W0_, 1, "01111111111" );           //  1.0 * 1024
+mdesc( B0_W0_, 1, "01111111111" );
 static const int B0_W0 = B0_W0_.value * (1);
 #endif
-// SQC: stretch() clamp for the logistic mix, scaled by 1024; the byte
-// value v enters as stretch((v+0.5)/256) clipped to +-SQC/1024.
 #ifndef B0_SQC
-pdesc( B0_SQC_, 1, "01111111111111" );       //  8.0 * 1024
+mdesc( B0_SQC_, 1, "01111111111111" );
 static const int B0_SQC = B0_SQC_.value * (1);
+#endif
+#ifndef B0_HUBA
+mdesc( B0_HUBA_, 1, "0111111111" );
+static const int B0_HUBA = B0_HUBA_.value * (1);
+#endif
+#ifndef B0_MADR
+mdesc( B0_MADR_, 1, "00001111" );
+static const int B0_MADR = B0_MADR_.value * (1);
+#endif
+#ifndef B0_MAD0
+mdesc( B0_MAD0_, 1, "00011111" );
+static const int B0_MAD0 = B0_MAD0_.value * (1);
+#endif
+#ifndef B0_BT1
+mdesc( B0_BT1_, 1, "0010" );
+static const int B0_BT1 = B0_BT1_.value * (1);
+#endif
+#ifndef B0_BT2
+mdesc( B0_BT2_, 1, "000110" );
+static const int B0_BT2 = B0_BT2_.value * (1);
+#endif
+#ifndef B0_BT3
+mdesc( B0_BT3_, 1, "0010100" );
+static const int B0_BT3 = B0_BT3_.value * (1);
+#endif
+#ifndef B0_BR
+mdesc( B0_BR_, 1, "00011111" );
+static const int B0_BR = B0_BR_.value * (1);
 #endif

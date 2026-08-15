@@ -1,168 +1,338 @@
 
 
+#ifndef C0_LWw
 static const int C0_LWw = (6147+1) * (1);
+#endif
+#ifndef C0_LWk
 static const int C0_LWk = (32740+1) * (1);
+#endif
+#ifndef C0_LWm
 static const int C0_LWm = (4128+1) * (1);
+#endif
+#ifndef C0_mwMax
 static const int C0_mwMax = (32767+1) * (1);
+#endif
+#ifndef C0_G1_m
 static const int C0_G1_m = (5000+0) * (1);
+#endif
+#ifndef C0_G1_k
 static const int C0_G1_k = (5000+0) * (1);
+#endif
+#ifndef C0_G3_m
 static const int C0_G3_m = (262144+0) * (1);
+#endif
+#ifndef C0_P0
 pdesc( C0_P0_, 1, "100101000001000" );
 static const int C0_P0 = C0_P0_.value * (1);
+#endif
+#ifndef C0_P1
 pdesc( C0_P1_, 0, "01010000010001" );
 static const int C0_P1 = C0_P1_.value * (1);
+#endif
+#ifndef C0_wr
 pdesc( C0_wr_, 1, "01110110000110" );
 static const int C0_wr = C0_wr_.value * (1);
+#endif
+#ifndef C0_wr1
 pdesc( C0_wr1_, 0, "101111000000" );
 static const int C0_wr1 = C0_wr1_.value * (1);
+#endif
+#ifndef C0_mw
 pdesc( C0_mw_, 1, "0101000000000" );
 static const int C0_mw = C0_mw_.value * (1);
+#endif
+#ifndef C0_K
 pdesc( C0_K_, 0, "0101111001100000" );
 static const int C0_K = C0_K_.value * (1);
+#endif
+#ifndef C0_NWk
 pdesc( C0_NWk_, 1, "1111111111000000" );
 static const int C0_NWk = C0_NWk_.value * (1);
+#endif
+#ifndef C0_RKinc
 pdesc( C0_RKinc_, 1, "000000001100111" );
 static const int C0_RKinc = C0_RKinc_.value * (1);
+#endif
+#ifndef C0_kStep
 pdesc( C0_kStep_, 1, "11111100001000000" );
 static const int C0_kStep = C0_kStep_.value * (1);
+#endif
+#ifndef C0_kMin
 pdesc( C0_kMin_, 1, "1111100100000000000001" );
 static const int C0_kMin = C0_kMin_.value * (1);
+#endif
+#ifndef C0_kMax
 pdesc( C0_kMax_, 1, "001111000001000" );
 static const int C0_kMax = C0_kMax_.value * (1);
+#endif
+#ifndef C0_NWm
 pdesc( C0_NWm_, 1, "111111101111000101" );
 static const int C0_NWm = C0_NWm_.value * (1);
+#endif
+#ifndef C0_MWinc
 pdesc( C0_MWinc_, 1, "110100000000010" );
 static const int C0_MWinc = C0_MWinc_.value * (1);
+#endif
+#ifndef C0_mwStep
 pdesc( C0_mwStep_, 1, "111111111101000001" );
 static const int C0_mwStep = C0_mwStep_.value * (1);
+#endif
+#ifndef C0_mwMin
 pdesc( C0_mwMin_, 1, "000000000010000" );
 static const int C0_mwMin = C0_mwMin_.value * (1);
+#endif
+#ifndef C0_M1_m
 pdesc( C0_M1_m_, 1, "111111111010000000" );
 static const int C0_M1_m = C0_M1_m_.value * (1);
+#endif
+#ifndef C0_M2_m
 pdesc( C0_M2_m_, 1, "001100101000000" );
 static const int C0_M2_m = C0_M2_m_.value * (1);
+#endif
+#ifndef C0_M1_k
 pdesc( C0_M1_k_, 1, "10000000010000000000" );
 static const int C0_M1_k = C0_M1_k_.value * (1);
+#endif
+#ifndef C0_M2_k
 pdesc( C0_M2_k_, 1, "101111000000010010" );
 static const int C0_M2_k = C0_M2_k_.value * (1);
+#endif
+#ifndef C0_G2_m
 pdesc( C0_G2_m_, 0, "0000000100001" );
 static const int C0_G2_m = C0_G2_m_.value * (1);
+#endif
+#ifndef C0_G2_k
 pdesc( C0_G2_k_, 0, "000110010000000" );
 static const int C0_G2_k = C0_G2_k_.value * (1);
+#endif
+#ifndef C0_stP_min
 pdesc( C0_stP_min_, 1, "000000000000000" );
 static const int C0_stP_min = C0_stP_min_.value * (1);
+#endif
+#ifndef C0_leak1
 pdesc( C0_leak1_, 1, "0111110011111100" );
 static const int C0_leak1 = C0_leak1_.value * (1);
+#endif
+#ifndef C0_leak2
 pdesc( C0_leak2_, 1, "0111111111010000" );
 static const int C0_leak2 = C0_leak2_.value * (1);
+#endif
+#ifndef C0_mwP0
 pdesc( C0_mwP0_, 1, "101000101001010" );
 static const int C0_mwP0 = C0_mwP0_.value * (1);
+#endif
+#ifndef C0_G3_k
 pdesc( C0_G3_k_, 0, "0010010001100000111" );
 static const int C0_G3_k = C0_G3_k_.value * (1);
+#endif
+#ifndef C0_G4_m
 pdesc( C0_G4_m_, 0, "0100000000110100010" );
 static const int C0_G4_m = C0_G4_m_.value * (1);
+#endif
+#ifndef C0_G4_k
 pdesc( C0_G4_k_, 0, "0000000000000010100" );
 static const int C0_G4_k = C0_G4_k_.value * (1);
+#endif
+#ifndef C0_M1_u
 pdesc( C0_M1_u_, 0, "111111001100000000" );
 static const int C0_M1_u = C0_M1_u_.value * (1);
+#endif
+#ifndef C0_M2_u
 pdesc( C0_M2_u_, 0, "11001100110" );
 static const int C0_M2_u = C0_M2_u_.value * (1);
+#endif
+#ifndef C0_NWu
 pdesc( C0_NWu_, 0, "1101111000001000000" );
 static const int C0_NWu = C0_NWu_.value * (1);
+#endif
+#ifndef C0_RUinc
 pdesc( C0_RUinc_, 0, "110011100101100000" );
 static const int C0_RUinc = C0_RUinc_.value * (1);
+#endif
+#ifndef C0_uStep
 pdesc( C0_uStep_, 0, "11011111100110000" );
 static const int C0_uStep = C0_uStep_.value * (1);
+#endif
+#ifndef C0_uMin
 pdesc( C0_uMin_, 0, "1100000000" );
 static const int C0_uMin = C0_uMin_.value * (1);
+#endif
+#ifndef C0_uMax
 pdesc( C0_uMax_, 0, "01011000100000000000000" );
 static const int C0_uMax = C0_uMax_.value * (1);
+#endif
+#ifndef C0_G1_u
 pdesc( C0_G1_u_, 0, "01001110001000" );
 static const int C0_G1_u = C0_G1_u_.value * (1);
+#endif
+#ifndef C0_G2_u
 pdesc( C0_G2_u_, 0, "000000000" );
 static const int C0_G2_u = C0_G2_u_.value * (1);
+#endif
+#ifndef C0_G3_u
 pdesc( C0_G3_u_, 0, "01000000000000000000" );
 static const int C0_G3_u = C0_G3_u_.value * (1);
+#endif
+#ifndef C0_G4_u
 pdesc( C0_G4_u_, 0, "00000110011" );
 static const int C0_G4_u = C0_G4_u_.value * (1);
+#endif
+#ifndef C0_R0_u
 pdesc( C0_R0_u_, 0, "10010000" );
 static const int C0_R0_u = C0_R0_u_.value * (1);
+#endif
+#ifndef C0_M1_v
 pdesc( C0_M1_v_, 0, "101011001000010001" );
 static const int C0_M1_v = C0_M1_v_.value * (1);
+#endif
+#ifndef C0_M2_v
 pdesc( C0_M2_v_, 0, "000011001" );
 static const int C0_M2_v = C0_M2_v_.value * (1);
+#endif
+#ifndef C0_NWv
 pdesc( C0_NWv_, 0, "111111111100010000" );
 static const int C0_NWv = C0_NWv_.value * (1);
+#endif
+#ifndef C0_RVinc
 pdesc( C0_RVinc_, 0, "10100100100000111111" );
 static const int C0_RVinc = C0_RVinc_.value * (1);
+#endif
+#ifndef C0_vStep
 pdesc( C0_vStep_, 0, "1111000010000000" );
 static const int C0_vStep = C0_vStep_.value * (1);
+#endif
+#ifndef C0_G1_v
 pdesc( C0_G1_v_, 0, "01001110001000" );
 static const int C0_G1_v = C0_G1_v_.value * (1);
+#endif
+#ifndef C0_G2_v
 pdesc( C0_G2_v_, 0, "000000000" );
 static const int C0_G2_v = C0_G2_v_.value * (1);
+#endif
+#ifndef C0_G3_v
 pdesc( C0_G3_v_, 0, "01000000000000000000" );
 static const int C0_G3_v = C0_G3_v_.value * (1);
+#endif
+#ifndef C0_G4_v
 pdesc( C0_G4_v_, 0, "00011010000" );
 static const int C0_G4_v = C0_G4_v_.value * (1);
+#endif
+#ifndef C0_R0_v
 pdesc( C0_R0_v_, 0, "10101000" );
 static const int C0_R0_v = C0_R0_v_.value * (1);
+#endif
+#ifndef C0_UVH
 pdesc( C0_UVH_, 0, "101001001001" );
 static const int C0_UVH = C0_UVH_.value * (1);
+#endif
+#ifndef C0_AWF
 pdesc( C0_AWF_, 0, "010000000000" );
 static const int C0_AWF = C0_AWF_.value * (1);
+#endif
+#ifndef C0_AWFo
 pdesc( C0_AWFo_, 0, "010000000000" );
 static const int C0_AWFo = C0_AWFo_.value * (1);
+#endif
+#ifndef C0_HB_u
 pdesc( C0_HB_u_, 0, "01000000000" );
 static const int C0_HB_u = C0_HB_u_.value * (1);
+#endif
+#ifndef C0_HB_v
 pdesc( C0_HB_v_, 0, "01000000000" );
 static const int C0_HB_v = C0_HB_v_.value * (1);
+#endif
+#ifndef C0_HB_m
 pdesc( C0_HB_m_, 0, "01000000000" );
 static const int C0_HB_m = C0_HB_m_.value * (1);
+#endif
+#ifndef C0_HB_k
 pdesc( C0_HB_k_, 0, "01000000000" );
 static const int C0_HB_k = C0_HB_k_.value * (1);
+#endif
+#ifndef C0_EFW_u
 pdesc( C0_EFW_u_, 0, "000000000" );
 static const int C0_EFW_u = C0_EFW_u_.value * (1);
+#endif
+#ifndef C0_EFW_v
 pdesc( C0_EFW_v_, 0, "000000000" );
 static const int C0_EFW_v = C0_EFW_v_.value * (1);
+#endif
+#ifndef C0_EFW_m
 pdesc( C0_EFW_m_, 0, "000000000" );
 static const int C0_EFW_m = C0_EFW_m_.value * (1);
+#endif
+#ifndef C0_EFW_k
 pdesc( C0_EFW_k_, 0, "000000000" );
 static const int C0_EFW_k = C0_EFW_k_.value * (1);
+#endif
+#ifndef C0_CXW
 pdesc( C0_CXW_, 0, "01011110011" );
 static const int C0_CXW = C0_CXW_.value * (1);
+#endif
+#ifndef C0_XHW
 pdesc( C0_XHW_, 0, "01010000000" );
 static const int C0_XHW = C0_XHW_.value * (1);
+#endif
+#ifndef C0_UVDET
 pdesc( C0_UVDET_, 0, "011001101" );
 static const int C0_UVDET = C0_UVDET_.value * (1);
+#endif
+#ifndef C0_XHC
 pdesc( C0_XHC_, 0, "0110010000000" );
 static const int C0_XHC = C0_XHC_.value * (1);
+#endif
+#ifndef C0_LKA
 pdesc( C0_LKA_, 0, "000000000" );
 static const int C0_LKA = C0_LKA_.value * (1);
+#endif
+#ifndef C0_LKB
 pdesc( C0_LKB_, 0, "0100111111100" );
 static const int C0_LKB = C0_LKB_.value * (1);
+#endif
+#ifndef C0_LKlo
 pdesc( C0_LKlo_, 0, "000000000" );
 static const int C0_LKlo = C0_LKlo_.value * (1);
+#endif
+#ifndef C0_LKhi
 pdesc( C0_LKhi_, 0, "01111010111000" );
 static const int C0_LKhi = C0_LKhi_.value * (1);
+#endif
+#ifndef C0_SMWm
 pdesc( C0_SMWm_, 0, "010000000000000" );
 static const int C0_SMWm = C0_SMWm_.value * (1);
+#endif
+#ifndef C0_SMWk
 pdesc( C0_SMWk_, 0, "010000000000000" );
 static const int C0_SMWk = C0_SMWk_.value * (1);
+#endif
+#ifndef C0_SM0
 pdesc( C0_SM0_, 0, "010100000000000" );
 static const int C0_SM0 = C0_SM0_.value * (1);
+#endif
+#ifndef C0_MPW
 pdesc( C0_MPW_, 0, "010000000000" );
 static const int C0_MPW = C0_MPW_.value * (1);
+#endif
+#ifndef C0_CMK
 pdesc( C0_CMK_, 0, "01000000000" );
 static const int C0_CMK = C0_CMK_.value * (1);
+#endif
+#ifndef C0_MKDET
 pdesc( C0_MKDET_, 0, "011001101" );
 static const int C0_MKDET = C0_MKDET_.value * (1);
+#endif
+#ifndef C0_mwXlo
 pdesc( C0_mwXlo_, 0, "111000000" );
 static const int C0_mwXlo = C0_mwXlo_.value * (1);
+#endif
+#ifndef C0_mwXhi
 pdesc( C0_mwXhi_, 0, "0100000000000000" );
 static const int C0_mwXhi = C0_mwXhi_.value * (1);
+#endif
+#ifndef C0_BWT
 pdesc( C0_BWT_, 0, "000000000" );
 static const int C0_BWT = C0_BWT_.value * (1);
+#endif
 
 
 
@@ -172,6 +342,9 @@ struct C0_T {
 
 
   
+  /* Total bytes this module's Table() members occupy -- a constant here, since
+   * Const mode has already folded every count. */
+  static constexpr unsigned long long C0_Size = 0;
   void C0_Init( void ) {
   
   }

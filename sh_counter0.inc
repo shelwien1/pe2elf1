@@ -58,7 +58,20 @@
 #define OPT_MKCPL 0  // P10: coupled 2x2 (mw,K) solve, R_mk EMA cross (+1 float)
 #endif
 
+// FREEZE_C0: build the C0 constants as frozen knobs (no !MAP! marker), so
+// an optimizer run on a consumer of this file cannot move parameters that
+// belong to coder0 and were tuned on text.  See IDX-FORMAT.md sec.10.
+#if FREEZE_C0
+#undef pdesc
+#define pdesc(D,O,M) mdesc(D,O,M)
+#endif
+
 #include "MOD/sh_model-C0_h.inc"
+
+#if FREEZE_C0
+#undef pdesc
+#define pdesc(D,O,M) pdesc_live(D,O,M)
+#endif
 
 #include "config.hpp"
 

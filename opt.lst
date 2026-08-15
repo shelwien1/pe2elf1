@@ -1,0 +1,6 @@
+# bmpc optimizer corpus: 8bpp, 24bpp and 32bpp all represented, cropped so
+# one measure() pass is a couple of seconds (tools/bmpcrop.py).
+work/opt/t8g.bmp
+work/opt/t24.bmp
+work/opt/ep64.bmp
+work/opt/big24.bmp

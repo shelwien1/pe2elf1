@@ -122,10 +122,28 @@ struct masking_b {
 #define GCCBUG1(X) #X
 #define GCCBUG2(X,Y) X##Y
 
-// Profiling version: Safely refactored string concatenation
-#define pdesc(Desc, Ofs, Map) mapping Desc(Ofs, "!MAP!" #Desc "!" #Ofs "\x00" Map)
+// Tunable: the descriptor starts with "!MAP!", so IDX/opt.pl's scan of the
+// executable finds the pattern and hill-climbs it in place.
+#define pdesc_live(Desc, Ofs, Map) mapping Desc(Ofs, "!MAP!" #Desc "!" #Ofs "\x00" Map)
+#define pmask_live(Desc, Map) masking Desc("!MAP!" #Desc "!0\x00" Map)
+#define pmask2_live(Desc, Map) masking_b Desc("!MAP!" #Desc "!0\x00" Map)
 
-#define pmask(Desc, Map) masking Desc("!MAP!" #Desc "!0\x00" Map)
+// Frozen (IDX-FORMAT.md sec.10): the same object built from the same
+// pattern, but the descriptor carries no "!MAP!" marker, so the optimizer's
+// scan never finds it and the value compiles in exactly as written.  The
+// pattern has to stay a separate literal after the "\x00" -- \x escapes are
+// greedy in hex digits, so one merged literal would swallow its leading
+// zeroes -- and the constructor still steps over the descriptor with
+// S += strlen(S)+1, so both strings must be there.
+#define mdesc(Desc, Ofs, Map) mapping Desc(Ofs, #Desc "!" #Ofs "\x00" Map)
+#define mmask(Desc, Map) masking Desc(#Desc "!0\x00" Map)
+#define mmask2(Desc, Map) masking_b Desc(#Desc "!0\x00" Map)
 
-#define pmask2(Desc, Map) masking_b Desc("!MAP!" #Desc "!0\x00" Map)
+// The indirection lets a consumer freeze a whole generated header without
+// editing it: #undef pdesc / #define pdesc(D,O,M) mdesc(D,O,M) around the
+// #include, then point it back at pdesc_live.  bmpc does that to coder0's
+// C0 block, which is shared and was tuned on text.
+#define pdesc(Desc, Ofs, Map) pdesc_live(Desc, Ofs, Map)
+#define pmask(Desc, Map) pmask_live(Desc, Map)
+#define pmask2(Desc, Map) pmask2_live(Desc, Map)
 

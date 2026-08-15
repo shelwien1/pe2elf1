@@ -1,8 +1,10 @@
-*.o
 *.exe
-coder0
-bmpc
+*.o
 /1
 /2
-/work/
+/export.!!!
+/opttimes.!!!
 /out/
+/work/
+bmpc
+coder0

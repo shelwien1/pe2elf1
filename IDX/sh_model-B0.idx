@@ -1,0 +1,65 @@
+# bmpc's LPC mixer parameters -- the source of record for
+# MOD/sh_model-B0_h.inc.  Regenerate with:  GCIDX=1 ./gc.sh
+#
+# Values are the corpus optimum; README-bmpc.md says what each one measured.
+# A leading '!' freezes the line (IDX-FORMAT.md sec.10): same object, same
+# value, but the descriptor carries no !MAP! marker so IDX/opt.pl's scan
+# skips it.  Everything only reachable through a model toggle that is off in
+# the shipped build is frozen, which takes the search from 1387 bits to 215.
+
+Prefix B0
+Debug 1
+Const 0
+
+# --- Config_LW: one ParamUpdater per mix weight ---
+# momentum_D = M1_w/1024, momentum_R = M2_w/65536.  Both 0: the Newton
+# denominator is the instantaneous hdot*|x|^2, and an EMA cannot track a
+# 1000:1 swing in it.
+Number M1_w,    1, 0!0000
+Number M2_w,    1, 0!0000
+# NW/4096: damping on the exact rank-1 Newton step.
+Number NW_w,    1, 1!01111111111
+# inc/(1<<20): NLMS epsilon.  0 costs +19%.
+Number INC_w,   1, 1!0111111111111111111
+# stepMax/65536 and the |w| box /1024.  Measured non-binding, kept live in
+# case a future model shape needs them.
+Number STEP_w,  1, 1!0110011001100
+Number WMAX_w,  1, 1!0111111111111
+# grad2_clip/1024 and D_clip/64.
+Number G2_w,    1, 1!10011100000111101
+Number D_w,     1, 1!0000000000010
+Number R_w,     1, 1!011110100001000111111
+Number R0_w,    1, 0!0000
+# ParamUpdater never reads grad1_clip.
+!Number G1_w,   1, 1!0111111111111
+
+# --- loss ---
+# MIX_LOSS knee /1024; 48 == 6 byte levels.
+Number HUB,     1, 1!0110010
+
+# --- MIX_DUAL: the second mix and the blend coordinate z ---
+Number NW2_w,   1, 1!0111111111111
+Number INC2_w,  1, 1!0100010001000110100
+Number HUB2,    1, 1!011111
+Number NWL,     1, 1!011111111111111
+Number INCL,    1, 1!000000000000000
+Number STEPL,   1, 1!01111111111111111
+Number MM2,     1, 0!0000
+
+# --- reachable only through a model toggle that is off ---
+# W_LOGIT: weight box lo/hi /1024.
+!Number WLO,    1, -4096!00000000000000
+!Number WHI,    1, 1!0111111111111
+# MIX_BASE=0: seed of the left-neighbour tap /1024.
+!Number W0,     1, 1!01111111111
+# MIX_LOGISTIC: stretch clamp /1024.
+!Number SQC,    1, 1!01111111111111
+# MIX_LOSS=3: knee as a multiple of EMA(|e|) /256, its rate and seed /1024.
+!Number HUBA,   1, 1!0111111111
+!Number MADR,   1, 1!00001111
+!Number MAD0,   1, 1!00011111
+# MIX_BIAS=2: gradient quantiser thresholds and the offset EMA rate /1024.
+!Number BT1,    1, 1!0010
+!Number BT2,    1, 1!000110
+!Number BT3,    1, 1!0010100
+!Number BR,     1, 1!00011111
