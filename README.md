@@ -75,6 +75,20 @@ compensating for LZMA's weak context model rather than removing real
 redundancy — so the raw values are kept, and a context-mixing model can exploit
 the same correlation directly.
 
+Nor is there a second dimension to exploit. Scalefactors form a natural image —
+subband across, time down — so `tests/sfimg.cpp` dumps exactly that as a BMP to
+try image codecs on it. Every arrangement loses to the plain byte stream's
+284 452: the best, a dense reshape through PNG's Up filter, is 315 541, WebP
+lossless is 389 782, and the true subband-by-time grid is 393 676 even with the
+best predictor and LZMA behind it. A left (cross-subband) residual is the worst
+of the lot and 2D prediction is worse than vertical alone, which says neighbour
+subbands tell you nothing a subband's own past does not — the correlation here
+is one-dimensional, and the slot-major stream already lies along it. The grid
+also has to be 3.6× larger than the data, since scfsi transmits only 1 to 3 of
+each subband's 3 scalefactors and most subbands are unallocated; the dense
+reshape that avoids that is just this stream delta-coded, where deflate and WebP
+both lose to LZMA.
+
 On the supplied sample (`xz -9e` per section, as a proxy for what a real model
 would find):
 
