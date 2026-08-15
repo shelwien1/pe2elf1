@@ -164,6 +164,52 @@ Scalefactors in the mp3 are given zero length (`scalefac_compress = 0`), so
 Frames use the bit reservoir and pick the smallest bitrate index that fits each
 frame (ordinary VBR), which keeps stuffing near zero.
 
+### Nothing else belongs in the mp3 either
+
+The mp3 has room to spare — constant side-info fields, and whole regions of the
+spectrum that are structurally zero — so it is natural to try moving part of the
+meta into it. Four attempts, all measured against mp3zip, all losses:
+
+| what was moved into the mp3 | mp3zip charges | meta gives back | net |
+| --- | ---: | ---: | ---: |
+| `global_gain` set from granule magnitude | 9 899 | 0 | −9 899 |
+| scalefactors, high 3 bits, into the mp3 scalefactor field | 106 052 | 52 956 | −53 096 |
+| the same, granule-aligned for maximum correlation | 127 603 | 52 956 | −74 647 |
+| scalefactors, all 6 bits, into free high-frequency spectral lines | 411 808 | 284 452 | −127 356 |
+
+The scalefactor-field attempt splits the 6-bit values 3/3 and carries the high —
+slowly varying, most compressible — half in the mp3, with `scalefac_compress`
+fixed so every granule has 21 three-bit scalefactors. It costs 1.36 bits per
+value there against 1.14 in the meta. Rearranging so a subband lands in the same
+band index of *both* granules, which makes the two granules carry identical
+values, costs **more** rather than less: whatever mp3zip does with scalefactors,
+it is not a granule-to-granule predictor this data could feed. The 4/2 split is
+closest to viable — the meta gives back 128 664 there — but it extrapolates to
+about 141 000 in the mp3, and 4-bit values only fit 11 of the 21 bands, 44 slots
+per frame against the ~45 values a frame carries.
+
+The spectral-line attempt is the most appealing on paper, because the
+coefficients it displaces cost *nothing* to store: which lines are structurally
+zero follows from the bit allocation, which the unpacker reconstructs before it
+touches the mp3, so it simply knows to read scalefactors there instead. There is
+plenty of room — 360 always-free lines per frame above the last subband alone,
+against the 90 needed, before counting unallocated subbands or the 828 lines the
+joint-stereo bound frees in the second channel. It still loses badly: 2.64 bits
+per line, 5.3 bits to carry a 6-bit scalefactor, against 3.65 in the meta. Those
+lines were zeros that cost nearly nothing, and a nonzero value at the top of the
+spectrum is the last thing an mp3 model expects.
+
+The pattern is consistent enough to state as a rule: **the mp3 container is a
+good home for spectral data and a bad home for everything else.** A recompressor
+models a spectral value from its neighbours, its band, and the same place in the
+previous granule. Anything smuggled in loses that context and gains none, while
+in the meta it sits next to the same subband's value from the neighbouring
+frame — which is the best context this data has. Moving bits between the two
+files never removes information; only giving the modeller better context does.
+
+These numbers are mp3zip's. A recompressor with a stronger scalefactor model
+could flip the closest of them, and each encoder change is small.
+
 ## Results on `Creditsmix_Comp.mp2`
 
 160 kbit/s, 44.1 kHz, joint stereo, 13 827 frames:
@@ -206,47 +252,6 @@ The generated mp3 parses cleanly end to end with the reference decoder:
 $ tests/mp3chk output.mp3
 frames 13827 layer 3 ch 2 sr 44100 consumed 6539103/6539103 skipped 0 failed 0
 ```
-
-### Why the scalefactors do not live in the mp3's scalefactor field
-
-The tempting one: Layer II scalefactors are 6-bit per-band gains, Layer III has a
-per-band scalefactor field, and an mp3 recompressor has a model built for exactly
-that kind of data. The values do not fit whole — the widest mp3 scalefactor is
-4 bits — but the *high* bits are the slowly varying part, so those could go into
-the mp3 and the noisy low bits stay behind.
-
-Measured, it loses. Splitting the 6-bit values 3/3 and carrying the high half in
-the mp3 (`scalefac_compress` fixed so every granule has 21 three-bit
-scalefactors) costs mp3zip **106 052 bytes**, while the meta only gives back
-**52 956** — 1.36 bits per value in the mp3 against 1.14 in the meta, where the
-value sits next to the same subband's value from the neighbouring frame. Net
-53 096 bytes worse.
-
-Nor is that an artefact of how the values were laid into the bands. Rearranging
-them so a subband lands in the *same band index of both granules* — making the
-two granules carry identical values, the strongest correlation available — costs
-**more**, not less (127 603). Whatever mp3zip does with scalefactors, it is not a
-granule-to-granule predictor that this data could feed.
-
-The 4/2 split is the closest to viable, since the meta gives back 128 664 there,
-but it extrapolates to about 141 000 in the mp3 — and 4-bit values only fit in
-11 of the 21 bands, which is 44 slots per frame against the ~45 values a frame
-carries. It does not fit and it would still lose.
-
-### Why the meta does not live in spare mp3 header fields
-
-The mp3 side info has room to spare: `global_gain`, `scalefac_compress`,
-`preflag`, `scalefac_scale`, `count1table_select`, `scfsi` and the private bits
-are all constant here, 71 bits per frame, 123 KB over this file. Filling them
-shrinks the raw total but costs on both sides of the measurement. Under `xz`,
-the ~164 000 scalefactors that would fit there cost about 75 KB inside the meta,
-next to their neighbours from the same subband, and close to their full raw
-123 KB once scattered one per granule through fixed-width fields. Under mp3zip
-the direct experiment says the same thing: putting a magnitude hint in
-`global_gain` — data it could actually use — made the packed mp3 10 KB *larger*.
-Moving bits between the two files does not remove information; only giving the
-modeller better context does, which is what the meta layout and the uniform
-side info are for.
 
 ## Coverage
 
