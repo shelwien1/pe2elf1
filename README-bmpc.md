@@ -348,7 +348,65 @@ Where it got there, on that file:
 | + trial-chosen component order | **2643708** | +0.007% here; −4.8% on t32 |
 | bmf, for reference | 2694740 | |
 
-## 8. Caveats
+## 8. Speed
+
+Best-of-N timings (`./bench.sh`), clang 18, `-Ofast -march=haswell -flto`:
+
+| | before | after | |
+|---|---|---|---|
+| x_ep decode | 11.48s | **7.90s** | 1.45× |
+| x_ep encode | 28.48s | **20.13s** | 1.41× |
+| big_crop decode | 13.46s | **9.43s** | 1.43× |
+| big_crop encode | 112.74s | **78.27s** | 1.44× |
+
+Ablation says where the time is, and it is not where SIMD usually helps:
+turning off the counter's three `ParamUpdater`s takes decode from 9.84s to
+3.39s, so **66% of decode is the adaptive parameter machinery**, and
+shrinking residual model 5's table from 25 MB to 1.5 MB (`RES_VQ=16`) saves
+0.13s — it is **not** memory bound. What worked:
+
+* **Stop computing things twice** (−7%, *bit-identical*). `Predict()` and
+  `C_Update()` are always called as a pair on the same counter and the
+  second recomputed two exponentials, a logarithm and the mix that the
+  first had already produced. Carrying six floats across is the same
+  arithmetic, once.
+* **The rank-1 curvature makes the Newton denominator loop-invariant**
+  (−9%). With `momentum_D = momentum_R = 0` — which is where the tuning
+  landed (§2) — the per-tap `D` and `R` are pure temporaries, and since
+  `h` is the same for every tap, `k = NW/(R+inc)` leaves the loop. The
+  mix update collapses from three interleaved arrays with a divide per tap
+  to one array and `w = clamp(w - clip(k·clip(g,Dc),step))` — a clean
+  8-wide AVX2 FMA loop (`MIX_LEAN`). The same collapse on the residual
+  mixer takes `RES_NM` divides *per bit* down to one.
+* **The input gather had an integer division per input** (`base[j % nc]`,
+  240 per pixel) and a 256-entry table lookup. With linear inputs the
+  byte→float map is affine, so the bytes convert directly and the
+  operating point folds into the same FMA against a pre-replicated base;
+  `‖x‖²` accumulates in the same pass. `8·n_colors` is a multiple of 8 for
+  every depth, so the row runs vectorise whole.
+* **Fast `exp`/`log`** (−11%, +0.09% size). Exponent-field constructions
+  with a minimax polynomial, ~1e-5 relative. Consistency is what the codec
+  needs, not correct rounding — both sides run the same instructions.
+  `-DFASTM=0` restores libm.
+* **Prefetch** the first three tree nodes of all six models at the top of
+  `CodeRes` (they are in six tables up to 25 MB apart), the next raster
+  row in the gather, and ahead of the weight vector in the dot product.
+  Worth little on its own, consistent with not being memory bound.
+
+Two things measured and **rejected**: rewriting the eight RTRL trace
+updates as an `R[]`/`C[]` vector pair was *slower* (9.42 → 9.73s) because
+building the two vectors in memory costs more than the FMAs it saves —
+clang already keeps those eight in registers. And vectorising across the
+six models, the one place with real 6-wide parallelism, needs a gather per
+field from six scattered tables; on Haswell (no AVX-512 scatter, ~15-cycle
+gathers) the transpose costs about what the scalar work does.
+
+`CT_KEEP=8` screens the component orders on a quarter band before scoring
+the survivors in full — ~1.9× encode for 0.12–0.37% size. Off by default;
+the screen is a weak signal and this project has been trading the other
+way throughout.
+
+## 9. Caveats
 
 * **`-Ofast` makes the folded and unfolded builds differ slightly.** With
   a knob pinned by `-DB0_NW_w=1024` the compiler folds it and reassociates;
@@ -361,10 +419,9 @@ Where it got there, on that file:
 * 8bpp **palette** images are predicted on the index, which is only
   meaningful when the palette is ordered. t8p (paletted) and t8g
   (greyscale ramp) happen to land within 1% of each other here.
-* It is slow: `n_colors·60` multiply-adds plus that many `ParamUpdater`
-  steps per byte, twice over (`MIX_DUAL`), and then six `Counter`
-  predict/update pairs and a mixer step per *bit* — about 145 KB/s each
-  way, symmetric. `-DMIX_DUAL=0` costs 0.7% and buys back ~30% of the
+* It is slow: `n_colors·60` multiply-adds plus that many weight updates
+  per byte, twice over (`MIX_DUAL`), and then six `Counter` predict/update
+  pairs and a mixer step per *bit* — about 220 KB/s decode (§8). `-DMIX_DUAL=0` costs 0.7% and buys back ~30% of the
   pixel-mix time; `-DRES_NM=3` costs ~4% and roughly halves the residual
   time.
 * Memory is dominated by residual model 5: `n_colors·256·256` counters,
@@ -387,7 +444,7 @@ Where it got there, on that file:
   instead did turn it into a small net win (−0.33%), but the reorder alone
   is worth −0.85% and costs nothing at decode, so the transform is gone.
 
-## 9. Reproducing
+## 10. Reproducing
 
 Model shape (the `#define`s at the top of `bmpc.cpp`) was chosen with
 `sweep.py`, which rebuilds with `-D` overrides and reports the corpus total

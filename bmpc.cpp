@@ -35,6 +35,21 @@
 // Model shape toggles.  All-zero is the plain linear mix of part 2;
 // see README-bmpc.md for what each one measured.
 // -------------------------------------------------------------
+#ifndef MIX_LEAN
+#define MIX_LEAN     1   // Requires momentum_D = momentum_R = 0 (B0_M1_w and
+                         // B0_M2_w, which the tuning drove to zero -- see
+                         // README sec.2).  With no momentum the per-tap D and
+                         // R that ParamUpdater carries are pure temporaries,
+                         // and because the curvature is rank-1 the Newton
+                         // denominator is the SAME for every tap.  So the
+                         // whole update collapses to
+                         //   w[i] = clamp( w[i] - clip(k*clip(gdot*x[i],Dc),
+                         //                             stepMax), lo, hi )
+                         // with k = NW/(R+inc) loop-invariant: one array
+                         // instead of three, no per-tap divide, and a clean
+                         // 8-wide AVX2 loop.  Set to 0 to go back through
+                         // ParamUpdater tap by tap.
+#endif
 #ifndef MIX_NEWTON
 #define MIX_NEWTON   1   // curvature fed to ParamUpdater::AccumGH:
                          //  0 = per-tap diagonal  h_i = hdot*x_i^2
@@ -207,6 +222,23 @@
 #ifndef CT_ROWS
 #define CT_ROWS     32   // rows per sample band
 #endif
+#ifndef CT_SCR
+#define CT_SCR       2   // screen band = full band / CT_SCR
+#endif
+#ifndef CT_KEEP
+#define CT_KEEP      0   // Two-stage search: score every order on a short
+                         // screen band, keep the best CT_KEEP, then score
+                         // those on the full band.  n!*rows row-encodes
+                         // become n!*rows/4 + CT_KEEP*rows, ~2.4x less work
+                         // for the same answer -- a short band is unreliable
+                         // for *picking* the winner (16 rows already picks
+                         // the identity everywhere) but fine for throwing
+                         // away the clearly bad ones.  0 = no screen, score
+                         // every order on the full band -- the default,
+                         // because the screen is a weak signal and pruning
+                         // costs 0.12-0.37% for ~1.9x encode.  Set it to 8
+                         // if encode time matters more than that.
+#endif
 #ifndef CT_FRAC
 #define CT_FRAC     32   // sample about 1/CT_FRAC of the rows, but never
                          // less than one band -- so the trial cost is
@@ -291,6 +323,9 @@
 // coder0.cpp and were tuned on book1, so IDX/opt.pl runs against bmpc must
 // not move them.  Only the B0 block below is in the search space.
 #define FREEZE_C0 1
+#ifndef FASTM
+#define FASTM     1      // fast exp/log in the counter; see sh_common.inc
+#endif
 #include "sh_counter0.inc"
 #include "MOD/sh_model-B0_h.inc"
 #include "config_b.hpp"
@@ -507,11 +542,24 @@ static INLINE void set_sup( VSet& S, uint m ) {          // { v : v & m == m }
 }
 
 // One mixer weight vector: RES_NM weights in the logistic domain.
+// Config_BM has both momenta at zero, so as with the pixel mix (MIX_LEAN)
+// the per-weight D and R are temporaries and the Newton denominator is
+// shared -- which matters here because this runs per *bit*: it takes
+// RES_NM divisions per bit down to one, and the struct from 4*RES_NM
+// floats to RES_NM.
 struct BitMix {
   float w[RES_NM];
-  ParamUpdater<1,Config_BM> u[RES_NM];
-  void Init() {
-    for( uint i=0; i<RES_NM; i++ ) { w[i] = BM_W0; u[i].Init(BM_W0); }
+  void Init() { for( uint i=0; i<RES_NM; i++ ) w[i] = BM_W0; }
+
+  INLINE void Update( const float* s, float gdot, float hc ) {
+    float R = clamp( clip( hc, Config_BM::grad2_clip ), 0.0f, Config_BM::R_clip )
+            + Config_BM::inc;
+    float k = Config_BM::NW / R;
+    for( uint i=0; i<RES_NM; i++ ) {
+      float g = clip( gdot*s[i], Config_BM::D_clip );
+      w[i] = clamp( w[i] - clip( k*g, Config_BM::stepMax ),
+                    Config_BM::minVal, Config_BM::maxVal );
+    }
   }
 };
 static INLINE float stretch( float p ) { return logf(p/(1.0f-p)); }
@@ -524,8 +572,16 @@ struct LPCMixT {
   U*     u;      // one ParamUpdater per tap (val = w, or z when W_LOGIT)
 
   void Init( int n_, int seed_tap ) {
+    // Padded to a whole AVX2 lane group and 32-byte aligned: Dot() and the
+    // lean Update() load eight at a time.
+    int na = (n_+7)&~7;
+    w = (float*)aligned_alloc( 32, size_t(na)*sizeof(float) );
+    for( int i=0; i<na; i++ ) w[i] = 0.0f;
     n = n_;
-    w = new float[n];
+    u = 0;
+#if MIX_LEAN && MIX_NEWTON && !W_LOGIT
+    for( int i=0; i<n; i++ ) w[i] = (i==seed_tap) ? LW_W0 : 0.0f;
+#else
     u = new U[n];
     for( int i=0; i<n; i++ ) {
       float w0 = (i==seed_tap) ? LW_W0 : 0.0f;
@@ -539,12 +595,43 @@ struct LPCMixT {
 #endif
       w[i] = w0;
     }
+#endif
+  }
+
+  // w comes from aligned_alloc, so it goes back through free(), not
+  // delete[] -- the trial coder builds and tears down a Raster per order.
+  void Free() {
+    if( w ) { ::free(w); w = 0; }
+    if( u ) { delete[] u; u = 0; }
   }
 
   INLINE float Dot( const float* restrict x ) const {
+#if defined(__AVX2__)
+    // Four accumulators so the FMA latency (4-5 cycles) is covered by
+    // independent chains rather than serialised on one.
+    __m256 a0 = _mm256_setzero_ps(), a1 = a0, a2 = a0, a3 = a0;
+    int i = 0;
+    for( ; i+32<=n; i+=32 ) {
+      _mm_prefetch( (const char*)(w+i+64), _MM_HINT_T0 );
+      a0 = _mm256_fmadd_ps( _mm256_load_ps(w+i   ), _mm256_load_ps(x+i   ), a0 );
+      a1 = _mm256_fmadd_ps( _mm256_load_ps(w+i+ 8), _mm256_load_ps(x+i+ 8), a1 );
+      a2 = _mm256_fmadd_ps( _mm256_load_ps(w+i+16), _mm256_load_ps(x+i+16), a2 );
+      a3 = _mm256_fmadd_ps( _mm256_load_ps(w+i+24), _mm256_load_ps(x+i+24), a3 );
+    }
+    for( ; i+8<=n; i+=8 )
+      a0 = _mm256_fmadd_ps( _mm256_load_ps(w+i), _mm256_load_ps(x+i), a0 );
+    a0 = _mm256_add_ps( _mm256_add_ps(a0,a1), _mm256_add_ps(a2,a3) );
+    __m128 h = _mm_add_ps( _mm256_castps256_ps128(a0), _mm256_extractf128_ps(a0,1) );
+    h = _mm_add_ps( h, _mm_movehl_ps(h,h) );
+    h = _mm_add_ss( h, _mm_shuffle_ps(h,h,1) );
+    float s = _mm_cvtss_f32(h);
+    for( ; i<n; i++ ) s += w[i]*x[i];
+    return s;
+#else
     float s = 0.0f;
     for( int i=0; i<n; i++ ) s += w[i]*x[i];
     return s;
+#endif
   }
 
   // gdot = dL/d(dot), hdot = d2L/d(dot)2; the per-tap chain is
@@ -552,6 +639,42 @@ struct LPCMixT {
   INLINE void Update( const float* restrict x, float gdot, float hdot, float xx ) {
 #if MIX_NEWTON
     const float hc = hdot * xx;
+#endif
+#if MIX_LEAN && MIX_NEWTON && !W_LOGIT
+    {
+      // R is the same for every tap, so the Newton denominator leaves the
+      // loop entirely and what is left is two clips and an FMA per tap.
+      float R = clip( hc, cfg::grad2_clip );
+      R = clamp( R, 0.0f, cfg::R_clip ) + cfg::inc;
+      float k = cfg::NW / R;
+#if defined(__AVX2__)
+      const __m256 vg = _mm256_set1_ps(gdot);
+      const __m256 vk = _mm256_set1_ps(k);
+      const __m256 vD = _mm256_set1_ps(cfg::D_clip);
+      const __m256 vS = _mm256_set1_ps(cfg::stepMax);
+      const __m256 vlo = _mm256_set1_ps(cfg::minVal);
+      const __m256 vhi = _mm256_set1_ps(cfg::maxVal);
+      int i = 0;
+      for( ; i+8<=n; i+=8 ) {
+        __m256 g = _mm256_mul_ps( vg, _mm256_load_ps(x+i) );
+        g = _mm256_min_ps( _mm256_max_ps( g, _mm256_sub_ps(_mm256_setzero_ps(),vD) ), vD );
+        __m256 st = _mm256_mul_ps( vk, g );
+        st = _mm256_min_ps( _mm256_max_ps( st, _mm256_sub_ps(_mm256_setzero_ps(),vS) ), vS );
+        __m256 nw = _mm256_sub_ps( _mm256_load_ps(w+i), st );
+        _mm256_store_ps( w+i, _mm256_min_ps( _mm256_max_ps(nw,vlo), vhi ) );
+      }
+      for( ; i<n; i++ ) {
+        float g = clip( gdot*x[i], cfg::D_clip );
+        w[i] = clamp( w[i] - clip( k*g, cfg::stepMax ), cfg::minVal, cfg::maxVal );
+      }
+#else
+      for( int i=0; i<n; i++ ) {
+        float g = clip( gdot*x[i], cfg::D_clip );
+        w[i] = clamp( w[i] - clip( k*g, cfg::stepMax ), cfg::minVal, cfg::maxVal );
+      }
+#endif
+      return;
+    }
 #endif
     for( int i=0; i<n; i++ ) {
       float xi = x[i];
@@ -698,7 +821,9 @@ struct Raster {
 #if MIX_BIAS==1
     ni += 1;
 #endif
-    x   = new float[ni+8];
+    // 32-byte aligned and padded: Dot/Update load it eight at a time
+    x   = (float*)aligned_alloc( 32, size_t((ni+15)&~7)*sizeof(float) );
+    for( int i=0; i<((ni+15)&~7); i++ ) x[i] = 0.0f;
     mix = new LPCMix[nc];
     // Seed each mix on "same component of the pixel to the left", which
     // is input (NPIX-1)*nc + k -- the last of the bottom-row group.
@@ -850,12 +975,53 @@ struct Raster {
     }
     int i = 0;
     float s = 0.0f;
-    for( int dy=-PADT; dy<0; dy++ ) {
-      const byte* r = At( px-PADL, py+dy );
-      for( uint j=0; j<BW*nc; j++ ) { float t = i2f[r[j]] - base[j%nc]; x[i++] = t; s += t*t; }
+#if !MIX_LOGISTIC && defined(__AVX2__)
+    // Fast path.  Two things the generic loop below does per input that it
+    // does not need to: a `% nc` (an integer division, 240 of them per
+    // pixel) and a 256-entry table lookup.  With linear inputs the map is
+    // affine -- i2f[v] = v/128 - 1 -- so the byte converts straight to
+    // float, and the operating point folds into the same FMA if the base
+    // is pre-replicated over a lane group.  8*nc is a multiple of 8 for
+    // every nc we support (8, 24, 32), so the row runs vectorise whole.
+    {
+      ALIGN(32) float bv[BW*MAXC];
+      for( uint j=0; j<BW*nc; j++ ) bv[j] = 1.0f + base[j%nc];
+      const __m256 vs = _mm256_set1_ps(1.0f/128.0f);
+      __m256 acc = _mm256_setzero_ps();
+      for( int dy=-PADT; dy<=0; dy++ ) {
+        const byte* r = At( px-PADL, py+dy );
+        uint nb = (dy<0) ? BW*nc : PADL*nc;
+        _mm_prefetch( (const char*)(r+bstride*nc), _MM_HINT_T0 );
+        uint j = 0;
+        for( ; j+8<=nb; j+=8 ) {
+          __m256i b8 = _mm256_cvtepu8_epi32( _mm_loadl_epi64((const __m128i*)(r+j)) );
+          __m256  t  = _mm256_fmsub_ps( _mm256_cvtepi32_ps(b8), vs,
+                                        _mm256_load_ps(bv+j) );
+          _mm256_store_ps( x+i, t );
+          acc = _mm256_fmadd_ps( t, t, acc );
+          i += 8;
+        }
+        for( ; j<nb; j++ ) {           // only the 4*nc bottom-row tail
+          float t = float(r[j])*(1.0f/128.0f) - bv[j];
+          x[i++] = t; s += t*t;
+        }
+      }
+      __m128 h = _mm_add_ps( _mm256_castps256_ps128(acc), _mm256_extractf128_ps(acc,1) );
+      h = _mm_add_ps( h, _mm_movehl_ps(h,h) );
+      h = _mm_add_ss( h, _mm_shuffle_ps(h,h,1) );
+      s += _mm_cvtss_f32(h);
     }
-    const byte* r = At( px-PADL, py );
-    for( uint j=0; j<PADL*nc; j++ ) { float t = i2f[r[j]] - base[j%nc]; x[i++] = t; s += t*t; }
+#else
+    {   // generic path: pre-replicate the base so there is no % in the loop
+      ALIGN(32) float bg[BW*MAXC];
+      for( uint j=0; j<BW*nc; j++ ) bg[j] = base[j%nc];
+      for( int dy=-PADT; dy<=0; dy++ ) {
+        const byte* r = At( px-PADL, py+dy );
+        uint nb = (dy<0) ? BW*nc : PADL*nc;
+        for( uint j=0; j<nb; j++ ) { float t = i2f[r[j]] - bg[j]; x[i++] = t; s += t*t; }
+      }
+    }
+#endif
 #if MIX_BIAS==1
     s += 1.0f;
 #endif
@@ -1023,6 +1189,33 @@ struct Raster {
     Ctr* ap = sse + size_t(k)*256*(SSEQ+1);
 #endif
 
+    // The tree walks node 1, then 2 or 3, then 4..7.  Those first three are
+    // known before the walk starts and live in six different tables, up to
+    // 25 MB apart, so pull them in now rather than stalling on each in turn.
+    // Deeper nodes depend on bits not yet coded and are left alone.
+#if defined(__SSE2__)
+    #define PF3(m) do { _mm_prefetch((const char*)((m)+1),_MM_HINT_T0); \
+                        _mm_prefetch((const char*)((m)+2),_MM_HINT_T0); \
+                        _mm_prefetch((const char*)((m)+3),_MM_HINT_T0); } while(0)
+    PF3(m0);
+#if RES_NM>1
+    PF3(m1);
+#endif
+#if RES_NM>2
+    PF3(m2);
+#endif
+#if RES_NM>3
+    PF3(m3);
+#endif
+#if RES_NM>4
+    PF3(m4);
+#endif
+#if RES_NM>5
+    PF3(m5);
+#endif
+    #undef PF3
+#endif
+
     cxt = 1;
     for( uint d=0; cxt<256; d++ ) {
       bit = (c>>7)&1;
@@ -1114,11 +1307,7 @@ struct Raster {
 #else
         float hc   = xx;
 #endif
-        for( uint i=0; i<RES_NM; i++ ) {
-          mx.u[i].AccumGH( gdot*s[i], hc );
-          mx.u[i].Apply( mx.u[i].StepRaw(), Config_BM::minVal, Config_BM::maxVal );
-          mx.w[i] = mx.u[i].val;
-        }
+        mx.Update( s, gdot, hc );
       }
 
       c<<=1; cxt += cxt+bit;
@@ -1154,7 +1343,11 @@ struct Raster {
   }
 
   void Free() {
-    delete[] buf; delete[] x; delete[] mix; delete[] emap;
+    for( uint k=0; k<nc; k++ ) mix[k].Free();
+#if MIX_DUAL
+    for( uint k=0; k<nc; k++ ) mix2[k].Free();
+#endif
+    delete[] buf; ::free(x); delete[] mix; delete[] emap;
     delete[] bmix; delete[] padm;
     for( uint m=0; m<RES_NM; m++ ) delete[] res[m];
 #if MIX_DUAL
@@ -1323,6 +1516,9 @@ struct ColorOrder {
     for( uint i=0; i<nc; i++ ) best[i] = byte(i);
     double bestcost = 1e300, identcost = 1e300;
     uint fact = 1; for( uint i=2; i<=nc; i++ ) fact *= i;
+    uint nkeep = (CT_KEEP<=0 || CT_KEEP>=int(fact)) ? fact : uint(CT_KEEP);
+    uint screen = (nkeep<fact && rows>16) ? (rows/CT_SCR) : rows;
+    double cand[24], cscr[24]; byte pv[24*MAXC];
     for( uint p=0; p<fact; p++ ) {
       byte pool[MAXC]; uint m = p;
       for( uint i=0; i<nc; i++ ) pool[i] = byte(i);
@@ -1331,7 +1527,24 @@ struct ColorOrder {
         perm[i] = pool[d];
         for( uint t=d; t+1<left; t++ ) pool[t] = pool[t+1];
       }
-      double c = Trial( sub, W, rows, nc, perm );
+      cand[p] = cscr[p] = Trial( sub, W, screen, nc, perm );
+      for( uint i=0; i<nc; i++ ) pv[p*MAXC+i] = perm[i];
+    }
+    // keep the CT_KEEP cheapest of the screen, always including the identity
+    uint keep[24], nk = 0;
+    for( uint t=0; t<fact && nk<nkeep; t++ ) {
+      uint bi = 0; double bc = 1e300;
+      for( uint p=0; p<fact; p++ ) if( cand[p]<bc ) { bc=cand[p]; bi=p; }
+      cand[bi] = 1e300; keep[nk++] = bi;
+    }
+    int has0 = 0;
+    for( uint t=0; t<nk; t++ ) if( keep[t]==0 ) has0 = 1;
+    if( !has0 ) keep[nk++] = 0;
+
+    for( uint t=0; t<nk; t++ ) {
+      uint p = keep[t];
+      for( uint i=0; i<nc; i++ ) perm[i] = pv[p*MAXC+i];
+      double c = (screen==rows) ? cscr[p] : Trial( sub, W, rows, nc, perm );
       if( p==0 ) identcost = c;                  // permutation 0 is identity
       if( c < bestcost ) { bestcost = c; for( uint i=0; i<nc; i++ ) best[i]=perm[i]; }
     }
