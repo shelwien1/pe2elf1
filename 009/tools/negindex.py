@@ -41,9 +41,13 @@ INDEX = re.compile(r'\[\s*-\s*'
 
 
 def survey(lines):
-    """[(line, body, name, type, text)] for every `x[-name]`."""
+    """[(line, body, name, type, text)] for every `x[-name]`.
+
+    `defs`, not `bodies`: a method's body sits one level in and was invisible
+    here, along with every negative index in it.
+    """
     out = []
-    for a, b, nm, sig in structs.bodies(lines):
+    for a, b, nm, sig, _depth in structs.defs(lines):
         types = structs.decl_types(sig, lines, a, b)
         for i in range(a, b + 1):
             for m in INDEX.finditer(lines[i].split('//')[0]):
@@ -57,8 +61,13 @@ def survey(lines):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
-    lines = open(path).read().split('\n')
+    # The unit, not the file.  `bmf.cpp` is an include list, so this reported
+    # "0 of 0" -- no sites and nothing to have missed -- while eight sites sat
+    # one `#include` away.  A zero over zero is the answer this directory
+    # exists to refuse, and `shape.py` reading the same rows through `survey`
+    # is what made the disagreement visible.
+    path = sys.argv[1] if len(sys.argv) > 1 else 'bmf.cpp'
+    lines, _origin = structs.splice(path)
     rows = survey(lines)
     # `?` counts as suspect: a name this cannot type is exactly the one whose
     # signedness nobody has checked, and reporting it as clean would be the

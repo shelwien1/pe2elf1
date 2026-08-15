@@ -345,6 +345,26 @@ def decl_types(sig, lines, a, b):
                     types[nm.group(1)] = base + '*' * (p.count('*')
                                                        + p.count('['))
         i = j + 1
+    # A declaration with an initialiser.  `DECL` stops at the `;` that follows
+    # the declarator list, so `int32_t nstep = -plane_count;` was not a
+    # declaration as far as this was concerned and `nstep` had no type -- along
+    # with every other local this program initialises where it declares one,
+    # which since the decompiler's output was cleaned up is most of them.
+    # `negindex.py` reported eight negative indices on names it could not type
+    # and all eight are `int32_t`.
+    #
+    # Additive on purpose: it only fills in names the pass above left out, so
+    # no answer any tool already gets can move.  `DECL` itself is not widened,
+    # because the tools that rewrite declarations match on it and an
+    # initialiser is not a thing they know how to move.
+    for i in range(a, b + 1):
+        m = DECL_INIT.match(lines[i].split('//')[0])
+        if m and m.group(1).split()[-1] not in NOT_A_TYPE:
+            base = re.sub(r'\s+', '', m.group(1))
+            for p in split_commas(m.group(2)):
+                nm = re.match(r'\s*([\*\s]*)([A-Za-z_]\w*)', p)
+                if nm and nm.group(2) not in types:
+                    types[nm.group(2)] = base + '*' * nm.group(1).count('*')
     return types
 
 
@@ -584,6 +604,12 @@ DECL = re.compile(r'^\s*(?:static\s+|extern\s+)?(%s)((?:[\s\*]+[A-Za-z_][A-Za-z0
 
 
 DECL_HEAD = re.compile(r'^\s*(?:static\s+|extern\s+)?(%s)[\s\*]+[A-Za-z_]' % TYPE)
+
+# `const int32_t planes = frame.nplanes;` -- a declaration whose declarator
+# list is cut short by an initialiser.  Read only for the types it names; see
+# `decl_types`.
+DECL_INIT = re.compile(r'^\s*(?:static\s+|extern\s+)?(?:const\s+)?(%s)'
+                       r'((?:[\s\*]+[A-Za-z_]\w*\s*=[^;]*?)+)\s*;\s*$' % TYPE)
 
 
 def declaration(text):

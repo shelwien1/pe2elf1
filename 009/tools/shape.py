@@ -51,8 +51,19 @@ P1 = re.compile(r'\(\s*%s\s*\*\s*\)\s*\(\s*(?:\(\s*%s\s*\*\s*\)\s*)?'
 P2 = re.compile(r'\(\s*\(\s*%s\s*\*\s*\)\s*%s\s*\+' % (T, B))
 P3 = re.compile(r'\+\s*\(\s*%s\s*\*\s*\)\s*%s\b' % (T, B))
 
-# The tag came with REFACTORING4.md §5 item 1; the byte count is what counts.
-FRAME = re.compile(r'struct alignas\(16\) \w* ?\{   // (\d+) bytes')
+# A frame, by its declaration.  This used to key on a `// NNN bytes` tag the
+# decompiler's output carried and every frame since has been given a name
+# instead, so the tag went and took all six frame rows to zero with it.  The
+# byte count went with it: two of the six hold a union this cannot size, and a
+# census that guessed at those two would be worse than one that counts members.
+FRAME = re.compile(r'struct alignas\(16\) (\w+Frame)\s*\{')
+
+# A label, told apart from the other things that end in a colon at the start of
+# a line: an access specifier, a `default:` arm, a `::` qualification.
+LABEL = (r'(?!default\b|public\b|private\b|protected\b)'
+         r'([A-Za-z_]\w*):(?!:)')
+FRAME_MEMBER = re.compile(
+    r'^\s*(?:const\s+)?[A-Za-z_][\w ]*?\s*\**\s*\w+\s*(?:\[[^\]]*\])*\s*;\s*$')
 # An alias binds one name to one frame member.  Two spellings: `T &v = …` for a
 # scalar and `T (&v)[N] = …` for an array member -- missing the second is how
 # this file's first alias count came out 38 short.
@@ -63,10 +74,34 @@ BSS = re.compile(r'^static (t_\w+)& (\w+) = \*\(t_\w+\*\)\(bmf_bss \+ (0x[0-9A-F
 TYPEDEF = re.compile(r'^typedef\s+(.+?)\s+(t_\w+)\s*(\[[^\]]*\])?\s*;', re.M)
 
 
+_UNIT = {}
+
+
+def unit():
+    """The whole translation unit, as the compiler reads it.
+
+    This read one file for as long as there was one file to read, and it kept
+    doing it after the split: `bmf.cpp` is 195 lines of include list with two
+    bodies in it, so every row below counted a program that was not there.  The
+    census said zero frames while six are declared, zero gotos while there are
+    45, and `sweep.sh` exempts this tool from the every-count-is-zero rule --
+    it reports a table rather than a count -- so a table of zeroes about the
+    wrong file was the shape of wrong answer nothing here could see.  The same
+    defect `addrmap.py` had, found the same way, on the same afternoon.
+    """
+    if SRC not in _UNIT:
+        lines, origin = structs.splice(SRC)
+        _UNIT[SRC] = (lines, '\n'.join(lines), origin)
+    return _UNIT[SRC]
+
+
 def load():
-    lines = open(SRC).read().split('\n')
+    lines, _text, _origin = unit()
     span, sigs = {}, {}
-    for a, b, nm, sig in structs.bodies(lines):
+    # `defs`, not `bodies`: a method sits one level in, and the sixteen bodies
+    # that moved inside a record would otherwise be in no function's span at
+    # all -- every site in them attributed to whatever body came before.
+    for a, b, nm, sig, _depth in structs.defs(lines):
         sigs[nm] = (a, b, sig)
         for ln in range(a, b + 1):
             span[ln] = nm
@@ -95,13 +130,43 @@ def rawoffsets(lines, span):
 
 
 def frames(lines):
-    """One dict per function that has a frame."""
+    """One dict per function that has a frame.
+
+    A frame declared at file scope belongs to the body that declares one --
+    `ReduceAlphabetFrame` moved out so its two arms could split, and it is
+    still one function's frame.  Found by the declaration of the variable, not
+    of the type.
+    """
     out = []
-    for a, b, nm, sig in structs.bodies(lines):
+    ftype = {}
+    for i, l in enumerate(lines):
+        m = FRAME.search(l)
+        if m:
+            depth, mem = 0, 0
+            for l2 in lines[i:]:
+                c = l2.split('//')[0]
+                depth += c.count('{') - c.count('}')
+                # Every leaf declaration, at any depth, and not the padding.
+                # Counting only depth 1 said `decode_symbol_list` holds one
+                # member: its whole frame is a union of an array and the eight
+                # spill slots that overlay it, and the row for the frame this
+                # tree cares most about read 1.
+                if FRAME_MEMBER.match(c) and not re.search(
+                        r'\b(?:_\w*pad\w*|BMF_SPILL_PAD)', c):
+                    mem += 1
+                if depth <= 0 and l2 is not lines[i]:
+                    break
+            ftype[m.group(1)] = mem
+    for a, b, nm, sig, _depth in structs.defs(lines):
         body = lines[a:b + 1]
-        sizes = [int(m.group(1)) for m in map(FRAME.search, body) if m]
-        if not sizes:
+        held = [ftype[t] for l in body
+                for t in re.findall(r'\b(\w+Frame)\b\s+\w+\s*;', l)
+                if t in ftype]
+        held += [ftype[m.group(1)] for m in map(FRAME.search, body)
+                 if m and m.group(1) in ftype]
+        if not held:
             continue
+        sizes = held
         aliases, names = [], set()
         for l in body:
             m = ALIAS.search(l)
@@ -132,7 +197,7 @@ BUFFERS = {'exclusion_mask', '__byte_445440', 'model_geometry'}
 
 
 def bss():
-    src = open(SRC).read()
+    src = unit()[1]
     ty = {m.group(2): m.group(1) + (m.group(3) or '') for m in TYPEDEF.finditer(src)}
     out = []
     for m in BSS.finditer(src):
@@ -154,7 +219,7 @@ MEMBER = re.compile(r'^\s*([A-Za-z_][\w ]*?\s*\**)\s*(\w+)\s*(\[[^\]]*\])?\s*;',
 
 def fields():
     """{struct: ({offset: type} for fNN members, [named members])}."""
-    src = open(SRC).read()
+    src = unit()[1]
     out = {}
     for m in re.finditer(r'^struct\s+(\w+)\s*\{(.*?)^\};', src, re.S | re.M):
         got, named = {}, []
@@ -249,8 +314,10 @@ def summary():
     # which `sweep.sh` and `proven.sh` both do -- the label carried the whole
     # of `/tmp/tmp.XXXX/subs1.hpp`, and `checktable.py` then found no row by
     # the name section 1 quotes.
-    row('%s lines' % SRC.rsplit('/', 1)[-1], len(lines) - 1)
-    row('bmf.cpp lines', len(open('bmf.cpp').read().split('\n')) - 1)
+    # One row, not two.  These were the file and the unit when they were two
+    # different things; the argument is the unit's root now and the second row
+    # was a copy of the first.
+    row('%s, spliced' % SRC.rsplit('/', 1)[-1], len(lines) - 1)
     row('raw-offset sites', len(raw))
     row('  off `_this`', len(this))
     row('  in functions', len(set(r[1] for r in this)))
@@ -306,7 +373,7 @@ def summary():
     # frame figure at all -- the one thing the round was asked about was the
     # one thing the checked table could not say.
     row('frames', len(fr))
-    row('  bytes they hold', sum(f['size'] for f in fr))
+    row('  members they hold', sum(f['size'] for f in fr))
     row('  aliases left in them', sum(f['alias'] for f in fr))
     row('  slots carrying two names', sum(len(f['slots']) for f in fr))
     row('  extra names on those slots',
@@ -441,18 +508,22 @@ def summary():
     def jumpshapes():
         out = collections.Counter()
         STOP = re.compile(r'(?:goto\s+\w+|return\b[^;]*|break|continue)\s*;\s*$')
-        for a, b, _nm, _sig in structs.bodies(lines):
+        for a, b, _nm, _sig, _d in structs.defs(lines):
             labs, depth, at = {}, 0, {}
             for i in range(a, b + 1):
                 c = lines[i].split('//')[0]
                 at[i] = depth
-                m = re.match(r'\s*(LABEL_\d+):', c)
+                # Not `name:$`: `keep_flag8: { … }` puts its statement on the
+                # same line, and requiring end-of-line left one `goto` in
+                # `search_filter` with no target to classify -- 44 of 45
+                # accounted for, and nothing said which one was missing.
+                m = re.match(r'\s*%s' % LABEL, c)
                 if m:
                     labs[m.group(1)] = i
                 depth += c.count('{') - c.count('}')
             preds = collections.Counter()
             for i in range(a, b + 1):
-                for m in re.finditer(r'goto (LABEL_\d+)', lines[i].split('//')[0]):
+                for m in re.finditer(r'goto (\w+)', lines[i].split('//')[0]):
                     preds[m.group(1)] += 1
             for name, tgt in labs.items():
                 j = tgt - 1
@@ -461,7 +532,7 @@ def summary():
                 if not STOP.search(lines[j].split('//')[0].strip()):
                     preds[name] += 1          # also reached by falling into it
             for i in range(a, b + 1):
-                for m in re.finditer(r'goto (LABEL_\d+)', lines[i].split('//')[0]):
+                for m in re.finditer(r'goto (\w+)', lines[i].split('//')[0]):
                     tgt = labs.get(m.group(1))
                     if tgt is None:
                         continue
@@ -471,9 +542,17 @@ def summary():
                         'join' if preds[m.group(1)] > 1 else 'same'] += 1
         return out
     shapes = jumpshapes()
-    row('goto / LABEL_n:',
-        '%d / %d' % (len(re.findall(r'goto LABEL_\d+;', code)),
-                     len(re.findall(r'^\s*LABEL_\d+:', code, re.M))))
+    # Named, not `LABEL_n`.  This counted the decompiler's numbered labels and
+    # nothing else, and every one of them has had a name for two rounds -- so
+    # it read `0 / 0` over 45 jumps, and the four rows under it, which do the
+    # real work of saying what shape each jump is, read zero with it.  A row
+    # that can only ever count something the tree no longer has is a row that
+    # reports the rename rather than the jumps.
+    row('goto / label:',
+        '%d / %d' % (len(re.findall(r'goto \w+;', code)),
+                     len(re.findall(r'^\s*%s' % LABEL, code, re.M))))
+    row('  still spelled LABEL_n',
+        len(re.findall(r'^\s*LABEL_\d+:', code, re.M)))
     row('  restart a loop / exit N blocks',
         '%d / %d' % (shapes['back'], shapes['out']))
     row('  sideways to a join / to neither',
@@ -503,12 +582,23 @@ def narrowings():
     those is a declaration's mistake either, but they are not one group and
     saying they were was a guess.
     """
-    lines = open(SRC).read().split('\n')
+    # A warning names the file the line is *in*, which since the split is one of
+    # the thirty-seven includes and never `bmf.cpp`.  Matching only `SRC` meant
+    # this row could not see a warning at all; it reads zero today because the
+    # build has no warnings, which is the one condition under which a broken
+    # reader and a correct one agree.
+    lines, _text, origin = unit()
+    at = {}
+    for i, (fn, ln) in enumerate(origin):
+        at.setdefault((fn, ln), i)
     out, ex = collections.Counter(), collections.defaultdict(list)
     for l in buildlog.read('warn.log', SRC)[0]:
-        m = re.match(r'%s:(\d+):(\d+): (.*)' % re.escape(SRC), l)
-        if not m:
+        m = re.match(r'(?:.*/)?([\w.\-]+):(\d+):(\d+): (.*)', l)
+        if not m or (m.group(1), int(m.group(2))) not in at:
             continue
+        m = type('M', (), {'group': staticmethod(
+            lambda k, _m=m: {1: str(at[(_m.group(1), int(_m.group(2)))] + 1),
+                             2: _m.group(3), 3: _m.group(4)}[k])})
         c = CONV.search(m.group(3))
         if not c:
             continue
@@ -556,8 +646,8 @@ def main():
             m = re.search(r'\(\s*([^,)]*?)\s*_this', sig)
             print('%-28s %4d   %s' % (fn.lstrip('_'), n, m.group(1) if m else '?'))
     elif '--frames' in sys.argv:
-        for f in sorted(frames(open(SRC).read().split('\n')), key=lambda f: -f['size']):
-            print('%-26s %7d B  %3d aliases  %2d shared slots  %2d run sites'
+        for f in sorted(frames(unit()[0]), key=lambda f: -f['size']):
+            print('%-26s %4d members  %3d aliases  %2d shared slots  %2d run sites'
                   % (f['fn'], f['size'], f['alias'], len(f['slots']),
                      sum(f['runs'].values())))
     elif '--bss' in sys.argv:

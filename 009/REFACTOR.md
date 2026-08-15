@@ -561,3 +561,37 @@ argue for a merge -- which is exactly why nobody re-took them.
 the next round that shortens one of those bodies is told.  Proved it can report
 before trusting its zero: a one-line perturbation and a renamed body are both
 named, and it goes quiet when they are put back.
+
+**`shape.py` is the tree's census and it was measuring `bmf.cpp`.**  Same
+defect as `addrmap.py`, found the same afternoon, and the same reason nothing
+saw it: the sweep exempts a tool that reports a table from the
+every-count-is-zero rule.  195 lines instead of 11,437, and the rows read
+accordingly -- 12 pointer casts instead of 374, zero structs instead of 29,
+zero frames while six are declared.
+
+Two of its rows were also measuring things the tree stopped having.  The frame
+rows keyed on a `// NNN bytes` tag the decompiler's output carried, and every
+frame has had a name instead for two rounds, so all six rows read zero; they
+count members now, and the count for `cost_candidate` comes out at 30, which is
+the number REVIEW.md arrived at by hand.  The goto row counted `LABEL_n:`
+specifically, and every label has had a name for two rounds, so it read `0 / 0`
+over 45 jumps and took the four rows under it -- the ones that say what shape
+each jump is -- to zero with it.  It reads 45 gotos and 30 labels: 14 restart a
+loop, 29 exit N blocks, 2 go sideways to a join, none jumps into a block.  That
+is every jump classified, and every one of them a shape `goto` is for in C.
+
+Getting to "every one" took two more corrections.  The label pattern required
+end-of-line, so `keep_flag8: { … }` was not a label and one goto had no target
+to classify -- 44 of 45, with nothing saying which was missing.  And the
+pattern counted `public:` and `private:` as labels, which is where the extra
+one came from.
+
+**`negindex.py` was reading one file too**, and answered "0 of 0" -- no sites,
+and nothing to have missed -- with eight one `#include` away.  `shape.py` calls
+its `survey` and so reported 8 where the tool reported 0; two tools disagreeing
+is what made it visible.  All eight were untyped, which the tool counts as
+suspect, and none of them is: `structs.decl_types` stops at the `;` that ends a
+declarator list, so a local declared *with* an initialiser had no type at all,
+which since the decompiler's output was cleaned up is most of them.  It reads
+those now, additively -- only filling in names the existing pass left out, so
+no answer any other tool already gets can move -- and all eight are `int32_t`.
