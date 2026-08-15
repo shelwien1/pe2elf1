@@ -61,7 +61,11 @@ def run(case):
     src = os.path.join(tmp, "a.mp2")
     mp3 = os.path.join(tmp, "a.mp3")
     meta = os.path.join(tmp, "a.meta")
+    bmp = os.path.join(tmp, "a.bmp")
     out = os.path.join(tmp, "b.mp2")
+    # exercise both the in-meta and the bmp scalefactor paths
+    use_bmp = (abs(hash(name)) % 2) == 0
+    extra = [bmp] if use_bmp else []
     try:
         r = subprocess.run([MKMP2, src, "%02x" % b1, "%02x" % b2, "%02x" % b3,
                             str(nframes), str(abs(hash(name)) % 100000), str(junk)],
@@ -72,7 +76,7 @@ def run(case):
         if r.returncode != 0:
             return (name, "mkmp2 failed: " + r.stderr.decode()[:200])
 
-        r = subprocess.run([MP2, "c", src, mp3, meta], capture_output=True)
+        r = subprocess.run([MP2, "c", src, mp3, meta] + extra, capture_output=True)
         if r.returncode != 0:
             return (name, "pack failed: " + r.stderr.decode()[:200])
         info = dict(l.split(":", 1) for l in r.stdout.decode().splitlines() if ":" in l)
@@ -86,17 +90,17 @@ def run(case):
         if got != nmp3:
             return (name, "mp3 frame count %d != %d (%s)" % (got, nmp3, chk))
 
-        r = subprocess.run([MP2, "d", mp3, meta, out], capture_output=True)
+        r = subprocess.run([MP2, "d", mp3, meta, out] + extra, capture_output=True)
         if r.returncode != 0:
             return (name, "unpack failed: " + r.stderr.decode()[:200])
 
         a = open(src, "rb").read()
         b = open(out, "rb").read()
         if a != b:
-            return (name, "MISMATCH (%d vs %d bytes)" % (len(a), len(b)))
+            return (name, "MISMATCH%s (%d vs %d bytes)" % (" [bmp]" if use_bmp else "", len(a), len(b)))
         return None
     finally:
-        for f in (src, mp3, meta, out):
+        for f in (src, mp3, meta, bmp, out):
             try:
                 os.unlink(f)
             except OSError:

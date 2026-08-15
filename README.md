@@ -6,9 +6,12 @@ no place in the mp3 syntax into a small side file. The transform is exactly
 invertible: `c` followed by `d` reproduces the input byte for byte.
 
 ```
-mp2 c input.mp2 output.mp3 output.meta     pack
-mp2 d input.mp3 input.meta output.mp2      unpack
+mp2 c input.mp2 output.mp3 output.meta [output.bmp]     pack
+mp2 d input.mp3 input.meta output.mp2  [input.bmp]      unpack
 ```
+
+With the optional fourth file, the scalefactors go out as an 8-bit BMP for an
+image compressor to take instead of sitting in the meta — see below.
 
 The mp3 is not meant to sound like the source — it is a container. It *is*
 a real mp3 though: every frame parses with an ordinary decoder, with correct
@@ -75,20 +78,6 @@ compensating for LZMA's weak context model rather than removing real
 redundancy — so the raw values are kept, and a context-mixing model can exploit
 the same correlation directly.
 
-Nor is there a second dimension to exploit. Scalefactors form a natural image —
-subband across, time down — so `tests/sfimg.cpp` dumps exactly that as a BMP to
-try image codecs on it. Every arrangement loses to the plain byte stream's
-284 452: the best, a dense reshape through PNG's Up filter, is 315 541, WebP
-lossless is 389 782, and the true subband-by-time grid is 393 676 even with the
-best predictor and LZMA behind it. A left (cross-subband) residual is the worst
-of the lot and 2D prediction is worse than vertical alone, which says neighbour
-subbands tell you nothing a subband's own past does not — the correlation here
-is one-dimensional, and the slot-major stream already lies along it. The grid
-also has to be 3.6× larger than the data, since scfsi transmits only 1 to 3 of
-each subband's 3 scalefactors and most subbands are unallocated; the dense
-reshape that avoids that is just this stream delta-coded, where deflate and WebP
-both lose to LZMA.
-
 On the supplied sample (`xz -9e` per section, as a proxy for what a real model
 would find):
 
@@ -104,6 +93,35 @@ would find):
 Against a single raw bit region for the same data — 922 669 bytes raw,
 632 632 compressed — the restructured meta is 23 % larger raw and **29 %
 smaller compressed**.
+
+### The scalefactors can go out as an image
+
+Give `mp2 c` a fourth filename and the scalefactor stream is written there as an
+8-bit BMP instead of into the meta. The layout is the same slot-major order
+folded into columns — value `i` at `(i/H, i%H)`, so down a column is one subband
+through time, the direction the correlation runs. Width is read back from the
+header; 2048 measured best and the choice is worth well under a percent.
+
+The point is not the image format, it is that this hands the stream to a
+compressor built to model it. **BMF** (Shkarin's, a context model) gets it to
+**246 612** against 284 452 for `xz` on the same bytes, 13 % better, and 38 160
+off the pipeline total. Ordinary image codecs do not: PNG's Up filter gives
+315 541 and WebP lossless 389 782, both worse than `xz`, and WebP additionally
+caps each dimension at 16 383 pixels. `mp2 d` reads the BMP back either plain or
+RLE8, since BMF re-emits it run-length coded when that is smaller.
+
+The gain is the model, not the second dimension. `tests/sfimg.cpp` dumps the
+*true* subband-by-time grid — one column per subband, three rows per frame — and
+it is worse than the folded stream at every setting: 393 676 with the best
+predictor and LZMA behind it, 486 343 through PNG. A left (cross-subband)
+residual is the worst of four and 2D prediction is worse than vertical alone,
+which says neighbouring subbands tell you nothing a subband's own past does not.
+The real grid also has to be 3.6× larger than the data, since scfsi transmits
+only 1 to 3 of each subband's 3 scalefactors and most subbands are unallocated.
+
+The same test on the other sections: BMF also wins on `ALLOC` (84 780 against
+90 056) and `HDRS` (1 992 against 2 132), and loses on `SCFSI` (72 520 against
+69 760). Only the scalefactors are externalised, being much the largest.
 
 ## How the samples map onto mp3 spectral lines
 
@@ -265,11 +283,12 @@ with `mp3zip` and the meta with `xz -9e`:
 | --- | ---: |
 | `xz -9e` of the original mp2 | 6 936 752 |
 | `mp3zip(output.mp3)` | 5 707 362 |
-| `xz -9e (output.meta)` | 447 100 |
-| **total** | **6 154 462** |
+| `xz -9e (output.meta)` | 162 328 |
+| `bmf(output.bmp)` | 246 612 |
+| **total** | **6 116 302** |
 
-**782 290 bytes, 11.3 %, below compressing the mp2 directly.** The whole chain
-`mp2 → mp3+meta → mp3zip → mp3 → mp2` is byte-exact, and mp3zip is confirmed
+**820 450 bytes, 11.8 %, below compressing the mp2 directly.** The whole chain
+`mp2 → mp3+meta+bmp → mp3zip/xz/bmf → mp2` is byte-exact, and mp3zip is confirmed
 lossless on this mp3 (it is an unusual one — zero-length scalefactors, constant
 side info, wide VBR swings).
 
