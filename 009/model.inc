@@ -1361,7 +1361,7 @@ struct ModelBlock {
       ctx_id1[sig1] = ctx_id1_used;
       cur6b = row_cur[6];
       cur5 = row_cur[5];
-      ++*(int32_t*)&ctx_id1_used;
+      ++ctx_id1_used;
       id1 = ctx_id1[sig1];
       nb_sym[0] = cur6b->match[0];
     }
@@ -1372,7 +1372,7 @@ struct ModelBlock {
       ctx_id2[sig2] = (ctx_id2_used)++;
       id2 = ctx_id2[sig2];
     }
-    if( *(int32_t*)&alphabet<32 ) {
+    if( (int32_t)alphabet<32 ) {
       int32_t id3_used = ctx_id3_used;
       int32_t sig3 = CtxIdx{}.bits<0, 4>(nb_sym[10]).raw(16*id2);
       id3p = &ctx_id3[sig3];
@@ -1385,7 +1385,7 @@ struct ModelBlock {
       }
       if( id2>=id3_used ) {
         *id3p = id3_used;
-        ++*(int32_t*)&ctx_id3_used;
+        ++ctx_id3_used;
         id2 = *id3p;
       }
     }
@@ -1536,7 +1536,7 @@ struct ModelBlock {
         } while( bit5 );
         runlen = runlen_s;
       }
-      if( *(int32_t*)&hit )
+      if( hit )
         return runlen;
     } else {
       binp = &grid[bucket_idx];
@@ -1754,7 +1754,7 @@ struct ModelBlock {
       esym = pixel_context((uint32_t*)nb_sym);
       if( esym>=0 ) {
         up_hit = esym==row_cur[5]->sym;
-        (&bit_node[*(int32_t*)&ctr_node])->encode_context_bit(&bit_root[*(int32_t*)&ctr_fallback], up_hit);
+        (&bit_node[(int32_t)ctr_node])->encode_context_bit(&bit_root[(int32_t)ctr_fallback], up_hit);
         if( up_hit )
           return runlen_s+1;
         exclusion_mask[esym] = exclusion_gen;

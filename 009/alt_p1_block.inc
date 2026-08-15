@@ -233,7 +233,7 @@ struct AltP1Block {
           } while( x<width );
           out = q;
         }
-      } while( (uint32_t)y<*(uint32_t*)&height );
+      } while( (uint32_t)y<(uint32_t)height );
     }
     rc_end_encode();
   }

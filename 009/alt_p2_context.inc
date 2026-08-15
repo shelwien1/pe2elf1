@@ -486,7 +486,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
       magsum = magsum_s;
       run_s2 = run;
       ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
-    } else if( *(int32_t*)&plane_idx>1 ) {
+    } else if( (int32_t)plane_idx>1 ) {
       magsum_s = magsum;
       int32_t d_rb_rb1 = rb0->val-rb1->val;
       ctx_w[3].sel = (d_rb_rb1<=hi_band)+(d_rb_rb1<lo_band);
