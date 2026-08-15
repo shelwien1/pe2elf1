@@ -68,6 +68,21 @@ BIN=${1:-./bmf}
 T=${BMF_TIMEOUT:-300}
 [ -x "$BIN" ] || { echo "no $BIN (run ./build.sh)"; echo "FAILED: nothing to test"; exit 2; }
 
+# The binary has to be newer than the source, or this is a gate on the previous
+# build.  It has happened three times: twice by rebuilding in one shell while
+# this ran in another, and once because `./build.sh 2>&1 | tail -4` reports the
+# pipe's exit status and not the compiler's, so a build that failed with an
+# undeclared name read as a build that finished with zero warnings -- and the
+# 110 checks that followed passed, against the binary from before the edit.
+# The message says which file, because "stale" without a name is a hunt.
+newer=$(find . -maxdepth 1 \( -name '*.inc' -o -name '*.cpp' \) -newer "$BIN" \
+        -printf '%f ' 2>/dev/null)
+[ -z "$newer" ] || {
+  echo "$BIN is older than: $newer"
+  echo "FAILED: the binary does not include the source (run ./build.sh)"
+  exit 2
+}
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 

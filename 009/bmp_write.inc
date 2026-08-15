@@ -9,9 +9,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   FILE* fp, * fp2;
   bool can_rle;
   uint32_t stride1, at, at2;
-  uint16_t* pix;
   uint8_t *out_buf, *out_at, *p, *q, *out2;
-  uint32_t data_ofs2;
   int32_t rle_on, i, rows, bits, rle_mode, src_bits, rle_kind, rows3, row_i, lit_len, run, coded_bytes, y;
   uint8_t byte;
   uint32_t data_len, stride3, n_bytes, pad;
@@ -61,27 +59,27 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         if( (at-1)<(uint32_t)ncol )
           *(uint32_t*)&out_buf[4*at+50] = ((uint8_t)(levels*(at-1))<<16)|(uint8_t)(levels*(at-1))|((uint8_t)(levels*(at-1))<<8);
       }
-      data_ofs2 = img->data_size;
       pal_bytes = 4*ncol;
     } else if( depth_flags<0 ) {
-      data_ofs2 = img->data_size;
       if( ncol<=0 ) {
         pal_bytes = 4*ncolours;
       } else {
         uint32_t pairs = ncolours/2;
         if( ncolours/2 ) {
-          uint32_t data_ofs = img->data_size;
           uint32_t j = 0;
-          uint8_t *pal = (uint8_t*)img+data_ofs2;
+          // `data_ofs2` is `img->data_size` on every path that reaches here,
+          // and the palette sits immediately after the pixels -- so this was
+          // `img->palette()` with `sizeof(BmfImage)` spelled as a 16 inside
+          // each subscript.  Two BGR triples per turn, six bytes.
+          const uint8_t *pal = img->palette();
           do {
             uint32_t slot = 2*j;
-            int32_t bgr = *(uint16_t*)&pal[6*j+19];
-            int32_t r = (uint8_t)pal[6*j+21];
-            *(uint32_t*)&out_buf[4*slot+54] = ((uint8_t)pal[6*j+18]<<16)|*(uint16_t*)&pal[6*j+16];
+            int32_t bgr = *(uint16_t*)&pal[6*j+3];
+            int32_t r = (uint8_t)pal[6*j+5];
+            *(uint32_t*)&out_buf[4*slot+54] = ((uint8_t)pal[6*j+2]<<16)|*(uint16_t*)&pal[6*j];
             *(uint32_t*)&out_buf[4*slot+58] = (r<<16)|bgr;
             ++j;
           } while( j<pairs );
-          data_ofs2 = data_ofs;
           rle_on = want_rle;
           at2 = 2*j+1;
           done = at2;
@@ -90,34 +88,32 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           done = 1;
         }
         if( (at2-1)<(uint32_t)ncol ) {
-          uint8_t *pal2 = (uint8_t*)img+data_ofs2;
-          int32_t bgr2 = *(uint16_t*)&pal2[3*done+13];
-          *(uint32_t*)&out_buf[4*done+50] = (((uint8_t)pal2[3*done+15])<<16)|bgr2;
+          // The odd colour the loop above did not reach.  `done` is one past
+          // the last pair it wrote, so `3*done-3` is that entry's first byte.
+          const uint8_t *pal2 = img->palette();
+          int32_t bgr2 = *(uint16_t*)&pal2[3*done-3];
+          *(uint32_t*)&out_buf[4*done+50] = (((uint8_t)pal2[3*done-1])<<16)|bgr2;
         }
         pal_bytes = 4*ncol;
       }
     } else {
       pal_bytes = 4*ncolours;
       memset(buf, 0, 4*ncolours);
-      data_ofs2 = img->data_size;
       rows2 = img->height;
     }
     buf = &out_buf[pal_bytes+54];
-  } else {
-    data_ofs2 = img->data_size;
   }
   stride = img->stride;
   off_bits = (uint32_t)(buf-out_buf);
-  pix = (uint16_t*)img;
   rle_mode = rle_on;
-  data_len = data_ofs2;
+  data_len = img->data_size;
   while( 1 ) {
     out_at = buf;
-    p = (uint8_t*)pix+data_len-stride+16;
+    p = &img->pixels[data_len-stride];
     bmp->bfOffBits = off_bits;
     if( !rle_mode )
       break;
-    src_bits = pix[5]&0x3F;
+    src_bits = img->depth&depth_bits;
     can_rle = src_bits==4;
     if( src_bits!=4 ) {
       if( src_bits!=8 )
@@ -276,7 +272,6 @@ write_rows:
         if( row_i>=rows3 ) {
           rows2 = rows3;
           stride = stride3;
-          pix = (uint16_t*)img;
           data_len = img->data_size;
           break;
         }

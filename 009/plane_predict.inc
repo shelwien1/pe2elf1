@@ -344,10 +344,10 @@ void transform_planes(BmfImage* p_i) {
         if( plane_count==1 ) {
           memcpy(&p_i->pixels[plane], tmp, n);
         } else {
-          uint8_t *dst = (uint8_t*)p_i+plane;
+          uint8_t *dst = &p_i->pixels[plane];
           int32_t ofs = 0;
           for( i = 0; i<n; ++i ) {
-            dst[ofs+16] = tmp[i];
+            dst[ofs] = tmp[i];
             ofs += stride;
           }
         }
