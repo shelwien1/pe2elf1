@@ -60,9 +60,12 @@ int32_t choose_plane_coding(BmfImage* img) {
   } frame;
   // Three 512-entry histograms of `bin` values, one per candidate arm.
   // They were `uint8_t[2048]` written as `*(uint32_t*)&buf[4*bin]` and
-  // read by `estimate_cost`, which takes bytes -- so the byte array was
-  // the parameter's type reaching back into the declaration.
-  uint32_t hist_arm_b[512], hist_arm_c[512], hist_arm_d[512];
+  // read by `estimate_cost`, which took bytes -- so the byte array was the
+  // parameter's type reaching back into the declaration.  That parameter is
+  // `const int32_t *` now, which is what these are; the two casts left in this
+  // file are the frame's own `buf` and `buf_1`, still byte arrays because the
+  // frame around them is.
+  int32_t hist_arm_b[512], hist_arm_c[512], hist_arm_d[512];
   // What is left of the spill area: five values the nested weight search
   // carries, each the working copy of the local it is read into.  The
   // arrays are gone -- nothing crossed between their slots, so they were
@@ -249,7 +252,7 @@ int32_t choose_plane_coding(BmfImage* img) {
                   } while( n_a );
                   wt8_up = wt8_up_cur;
                   wt4_up = wt4_up_cur;
-                  uint32_t cost_a = estimate_cost((uint8_t*)frame.buf_1, 512);
+                  uint32_t cost_a = estimate_cost((const int32_t*)frame.buf_1, 512);
                   wt8_up_end = wt8_up_end_cur;
                   wt4_best = wt4_cur;
                   if( cost_a<best_cost ) {
@@ -287,7 +290,7 @@ int32_t choose_plane_coding(BmfImage* img) {
                     } while( n_b );
                     wt8_up = wt8_up_cur;
                     wt4_up = wt4_up_cur;
-                    uint32_t cost_b = estimate_cost((uint8_t*)hist_arm_b, 512);
+                    uint32_t cost_b = estimate_cost(hist_arm_b, 512);
                     wt4_up_end = wt4_up_end_cur;
                     wt8_best = frame.wt_slot;
                     if( cost_b<best_cost ) {
@@ -337,7 +340,7 @@ int32_t choose_plane_coding(BmfImage* img) {
             } while( n_c!=1 );
             wt8_dn = frame.s6;
             wt4_dn = frame.s1;
-            uint32_t cost_c = estimate_cost((uint8_t*)hist_arm_c, 512);
+            uint32_t cost_c = estimate_cost(hist_arm_c, 512);
             wt8_dn_end = *(uint32_t*)frame.buf_1;
             wt4_best_dn = wt4_cur;
             if( cost_c<best_cost ) {
@@ -382,7 +385,7 @@ int32_t choose_plane_coding(BmfImage* img) {
               } while( n_d!=1 );
               wt8_dn = frame.s6;
               wt4_dn = frame.s1;
-              uint32_t cost_d = estimate_cost((uint8_t*)hist_arm_d, 512);
+              uint32_t cost_d = estimate_cost(hist_arm_d, 512);
               wt4_dn_end = frame.s0;
               wt8_best_dn = frame.wt_slot;
               if( cost_d<best_cost ) {
@@ -598,9 +601,9 @@ weights_chosen:
             quad = quad+1;
           } while( quad<uu );
         }
-        cost_lin = estimate_cost((uint8_t*)frame.buf, 1024);
+        cost_lin = estimate_cost((const int32_t*)frame.buf, 1024);
         best4 = (cost_lin>>7)+cost_lin;
-        cost_c0 = estimate_cost((uint8_t*)frame.hist_a, 1024);
+        cost_c0 = estimate_cost(frame.hist_a, 1024);
         pick0 = cost_c0<best4;
         if( cost_c0<best4 )
           best4 = cost_c0;
@@ -614,7 +617,7 @@ weights_chosen:
         // `x0[0] = pick0;` before this call and `pred4 = x0[0];` after it was
         // MSVC spilling the register across the call, and `estimate_cost`
         // cannot reach a local of this body.  Same shape twice more below.
-        cost_c1 = estimate_cost((uint8_t*)frame.hist_b, 1024);
+        cost_c1 = estimate_cost(frame.hist_b, 1024);
         pred4 = pick0;
         if( cost_c1<best4 ) {
           best4 = cost_c1;
@@ -623,7 +626,7 @@ weights_chosen:
           wc = 0;
           wa_slot = 0;
         }
-        cost_c2 = estimate_cost((uint8_t*)frame.hist_c, 1024);
+        cost_c2 = estimate_cost(frame.hist_c, 1024);
         pred4b = pred4;
         if( cost_c2<best4 ) {
           pred4b = 3;

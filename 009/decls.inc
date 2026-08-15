@@ -93,7 +93,7 @@ void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane);
 void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane);
 void rc_begin_decode();
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height);
-int32_t estimate_cost(uint8_t* bins, int32_t n);
+int32_t estimate_cost(const int32_t* bin, int32_t n);
 void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
 int32_t alt_model_p1_decode(BmfImage* hdr, uint8_t* out);
 void reduce_alphabet(ModelBlock* blk, uint8_t* src);

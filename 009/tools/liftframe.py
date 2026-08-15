@@ -144,6 +144,17 @@ def indexed_out(lines, a, b, got):
     any index carrying a `*`, which is how a row of a flattened table is
     reached.  A false positive costs a frame that is not offered and says why;
     a false negative costs what this one did.
+
+    **The two shapes do not establish the same thing, and the message used to
+    claim they did.**  A constant at or past the bound is a demonstration.  A
+    computed index is a refusal to guess -- this cannot bound `4*dx+2048`, and
+    saying so is the whole of the answer.  Both were reported as "what it
+    reaches is the member after it", and `cost_candidate` was declined and
+    written up under that sentence for two rounds; `dx` is a difference of two
+    byte sums, so `4*dx+2048` is 8..4088 and the member is 4096 bytes.  The
+    decline was right and its stated reason was not, which is the worse of the
+    two ways to be wrong here: a reason nobody can check is a reason nobody
+    re-takes.  Each shape says which it is now.
     """
     start, end, members = got[0], got[1], got[2]
     if not members:
@@ -166,9 +177,13 @@ def indexed_out(lines, a, b, got):
                                % re.escape(name), body):
             idx = use.group(1).strip()
             if '*' in idx:
-                return name, '%s[%s]' % (name, idx)
+                return (name, '%s[%s]' % (name, idx),
+                        'with an index this cannot bound, so whether it '
+                        'reaches the member after it is not established')
             if re.fullmatch(r'\d+', idx) and int(idx) >= bound:
-                return name, '%s[%s]' % (name, idx)
+                return (name, '%s[%s]' % (name, idx),
+                        'past its bound of %d, so what it reaches is the '
+                        'member after it' % bound)
     return None
 
 
@@ -206,14 +221,22 @@ def indexed_out(lines, a, b, got):
 # four entries were describing an experiment this tool can no longer run:
 #
 #   * `cost_candidate` is declined structurally now, before any build --
-#     `buf[4*dx+2048]` indexes out of one member into the one after it, which
-#     is a permanent reason and a better one than a gate failure;
+#     `buf[4*dx+2048]` is an index this cannot bound;
 #   * `reduce_alphabet`'s frame is at file scope, moved there by an earlier
 #     round so its two arms could split, and `frame_of` only looks inside the
 #     body.  Lifting a shared declaration is a different operation.
 #
 # Both are in `candidates`' decline list rather than here, which is where a
 # reason that holds without running anything belongs.
+#
+# **`cost_candidate` is gone from both lists, and its decline was overstated
+# while it lasted.**  The reason above was written as "indexes out of one
+# member into the one after it", which is what this printed for a computed
+# index and is not what a computed index shows.  It shows nothing about the
+# index; that is the point of declining.  Taken by hand, `dx` is a difference
+# of two byte sums, so `4*dx+2048` is 8..4088 in a 4096-byte member and the
+# frame was seven histograms and padding.  `indexed_out`'s two shapes say which
+# one they are now, and the function has no frame to ask about.
 #
 # `search_filter` cleared.  The entry below recorded a *whole*-frame lift, and
 # what this offers now is the ten members outside the union -- the union is
@@ -264,9 +287,8 @@ def candidates(lines):
         elif not got[2]:
             declined.append((nm, 'every member is inside its union'))
         elif crossed:
-            declined.append((nm, 'the body indexes out of %s -- `%s`, and %s'
-                             % (crossed[0], crossed[1], 'what it reaches is '
-                                'the member after it')))
+            declined.append((nm, 'the body indexes %s -- `%s` -- %s'
+                             % (crossed[0], crossed[1], crossed[2])))
         else:
             types = structs.decl_types(sig, lines, a, b)
             clash = [n for _, _, n, _src in got[2]

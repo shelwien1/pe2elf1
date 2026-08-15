@@ -590,7 +590,8 @@ Two of its rows were also measuring things the tree stopped having.  The frame
 rows keyed on a `// NNN bytes` tag the decompiler's output carried, and every
 frame has had a name instead for two rounds, so all six rows read zero; they
 count members now, and the count for `cost_candidate` comes out at 30, which is
-the number REVIEW.md arrived at by hand.  The goto row counted `LABEL_n:`
+the number REVIEW.md arrived at by hand.  (That frame is gone; the row that
+checked the fix was the one it was taken on.)  The goto row counted `LABEL_n:`
 specifically, and every label has had a name for two rounds, so it read `0 / 0`
 over 45 jumps and took the four rows under it -- the ones that say what shape
 each jump is -- to zero with it.  It reads 45 gotos and 30 labels: 14 restart a
@@ -780,6 +781,8 @@ anything the tool can still do:
   * **`cost_candidate`** is declined structurally now, before any build:
     `buf[4*dx+2048]` indexes out of one member into the one after it.  That is
     a permanent reason and a better one than the gate failure it replaced.
+    **It was neither permanent nor a reason** -- see "The frame that was seven
+    histograms" below.
   * **`reduce_alphabet`**'s frame is declared at file scope -- an earlier round
     moved it there so its two arms could split -- and `frame_of` only looks
     inside the body.  Lifting a shared declaration is a different operation.
@@ -913,3 +916,61 @@ complement.  Its first rule was half a rule -- the name pattern needed a
 character in front of the word it was looking for, so `hdr_flags` matched and
 `frame.depth_f` did not, and it reported one of the two sites put back.  A gate
 that finds half of what it is for reads exactly like a gate that works.
+
+## The frame that was seven histograms
+
+`cost_candidate`'s frame was 26,752 bytes and 34 members, and the whole of it
+was seven histograms and padding.  Two members were the wrong size and the
+wrong type, and each was written through a `uint32_t *` because of it:
+
+  * **`uint8_t buf[4096]` is `int32_t hist_x[1024]`.**
+    `*(uint32_t *)&buf[4*dx+2048]` is `hist_x[dx+512]`.
+  * **`uint8_t buf_1[4]` is `int32_t hist_w[512]`, 2048 bytes.**
+    `memset(buf_1, 0, 2048)` and `estimate_cost(buf_1, 512)` both said so, and
+    what the four-byte declaration made of the other 2,044 bytes was the eleven
+    members after it -- `img_end`, eight offset slots, and the head of a
+    2,008-byte pad.
+
+That second one is the whole frame.  Nothing read those eleven after the
+`memset` -- `img_end` is a local, `nplanes` is `plane_count`, and the eight
+offsets were spill slots for neighbour offsets that have been `const` locals in
+the walk for several rounds -- so clearing them was invisible, and the members
+were padding with names on.  Measured at both widths rather than reasoned
+about: the cleared region is 24576..26623 either way, and at 32 bits it stops
+one byte short of the next live member, which is what `_pad0[2008]` was sized
+for.  Everything past it was the second walk's cursors and the cost arithmetic,
+each a local now.
+
+**The decline that held for two rounds was overstated, and that is the finding
+worth keeping.**  `liftframe.py` refuses a frame whose body indexes a member
+with a computed index, because it cannot bound one; it printed that refusal as
+"the body indexes out of `buf` -- `buf[4*dx+2048]`, and what it reaches is the
+member after it", and this document copied the sentence.  `dx` is a difference
+of two byte sums, so it is -510..510 and the index is 8..4088 in a 4096-byte
+member: it never leaves.  The decline was right and its stated reason was a
+claim nothing had checked, which is the worse of the two ways to be wrong --
+a reason nobody can check is a reason nobody re-takes.  `indexed_out` now says
+which of its two shapes fired, a demonstration or a refusal, and both messages
+were proved on a three-body probe file before the change was trusted.
+
+**ASan is what makes the lift honest.**  Six contiguous histograms in one
+struct cannot report an index that walks from one into the next; six separate
+arrays can, and that is the check the analytic bound above is worth nothing
+without.  44 runs over 19 images, no report, and `hdrscan` and `fuzz` over the
+same tree.
+
+**`estimate_cost` took `uint8_t *` and cast to `const int32_t *` on its first
+line**, and that byte pointer reached back into every caller: fifteen call
+sites cast an array of counters to hand one over, and two arrays in
+`choose_plane_coding` were *declared* `uint8_t[2048]` and written through
+`*(uint32_t *)&buf[4*bin]` because that is what fits a byte pointer -- a
+comment there had already named the parameter as the cause.  The parameter is
+`const int32_t *`; thirteen of the fifteen casts are gone, and the two left are
+that function's own frame, still byte arrays because the frame around them is.
+
+**And it put a proposal on `methodise.py`'s list.**  Dissolving the frame took
+every use of `img` that was not a member access with it, so a function the rule
+had been rejecting became a clean receiver.  Declined, with the same judgement
+as the four coders and `write_bmp`: what acts here is the filter search, and
+`BmfImage::cost_candidate(cand, desc, costs)` would put the descriptor table
+and the cost array on the image.

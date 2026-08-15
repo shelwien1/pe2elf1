@@ -115,6 +115,17 @@ DECLINED = {
         '`node->alt_p1_encode_symbol` in front of `node->code_symbol<0>`',
     'alt_p1_decode_symbol':
         'the decode half of the pair above, and declined for the same reason',
+    # New to the list, and it arrived by the same route the round that added it
+    # was watching for: dissolving `cost_candidate`'s frame took every use of
+    # `img` that was not a member access with it, and a function the rule had
+    # been rejecting on `frame.img_f` became a clean receiver overnight.  The
+    # judgement is the one above, not a new one.
+    'cost_candidate':
+        'scores one filter candidate over the image, 163 lines.  What acts '
+        'here is the filter search -- `search_filter` and '
+        '`choose_plane_coding` call this to compare candidates -- and the '
+        'image is what it reads; `BmfImage::cost_candidate(cand, desc, costs)` '
+        'would put the descriptor table and the cost array on the image',
 }
 
 

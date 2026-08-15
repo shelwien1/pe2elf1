@@ -266,8 +266,13 @@ int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
 // The two accumulators over even and odd bins are the original's pairing, for
 // a two-lane SSE add that is not here any more; they change the rounding of
 // the sum and nothing else.
-int32_t estimate_cost(uint8_t* bins, int32_t n) {
-  const int32_t* bin = (const int32_t*)bins;
+// `n` is a count of bins and not of bytes.  The parameter was `uint8_t *` with
+// the cast to `const int32_t *` on the first line, and the byte pointer reached
+// back into every caller: two histogram arrays were *declared* `uint8_t[2048]`
+// and written through `*(uint32_t *)&buf[4*bin]` because that is what fits a
+// byte pointer, and the thirteen that were declared as counters all the way
+// through had to cast to hand one over.
+int32_t estimate_cost(const int32_t* bin, int32_t n) {
   double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
   double total;
   int32_t i;
