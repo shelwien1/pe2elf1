@@ -137,7 +137,7 @@ void bmf_compress(const char* InName, const char* OutName) {
         p_i->depth = (Flags|depth_grey)^depth_palette;
     }
   }
-  int32_t coded_len = compress_image(Arc, p_i, (void*)coded_block);
+  int32_t coded_len = compress_image(Arc, p_i, coded_block);
   if( !coded_len )
     bmf_fatal(bmf_write_error, OutName);
   printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i->height*p_i->width));

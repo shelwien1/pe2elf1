@@ -1,6 +1,6 @@
 // image_expand.inc -- the image out of a `.bmf`.
 
-BmfImage* expand_image(BmfFile* arc_in, void** p_coded_buf) {
+BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   struct alignas(16) ExpandImageFrame {
     uint8_t* Block;
     union {
@@ -23,7 +23,7 @@ BmfImage* expand_image(BmfFile* arc_in, void** p_coded_buf) {
     uint8_t depth_b;
     int8_t flags_b;
     uint32_t data_len;
-    uint8_t hdr[8];
+    CodedTail head;
     uint32_t magic_word;
     uint8_t _pad0[32];
   } frame;
@@ -65,30 +65,33 @@ BmfImage* expand_image(BmfFile* arc_in, void** p_coded_buf) {
     major_v = (uint8_t)(frame.magic_word>>16);
     minor_v = (uint8_t)(frame.magic_word>>24);
     version = ((major_v<<8)-12288)|(minor_v-48);
-    if( version!=512||fread(frame.hdr, 8u, 1u, arc->fp)!=1 )
+    if( version!=512||fread(&frame.head, 8u, 1u, arc->fp)!=1 )
       break;
-    fseek(arc->fp, (*(uint32_t*)&frame.hdr[4]), 1);
+    fseek(arc->fp, frame.head.len, 1);
     fp1 = arc->fp;
   }
   if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), version = ((major_v<<8)-12288)|(minor_v-48), version!=512)||fread(frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
     return arc->fail();
   }
   if( frame.flags_b<0 ) {
-    fread(frame.hdr, 8u, 1u, arc->fp);
+    fread(&frame.head, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
-      int32_t hdr_word = *(int32_t*)&frame.hdr[0];
-      if( (*(uint32_t*)&frame.hdr[4])>bytes_left(arc->fp) ) {
+      if( frame.head.len>bytes_left(arc->fp) ) {
         return arc->fail();
       }
-      uint32_t pad_len = ((*(uint32_t*)&frame.hdr[4])+((*(uint32_t*)&frame.hdr[4])==0)+3)&0xFFFFFFFC;
-      uint32_t *blk = (uint32_t*)bmf_new(pad_len+8);
-      *blk = hdr_word;
-      blk[1] = pad_len;
-      blk[pad_len/4+1] = 0;
+      // Up to a word, and up from zero to four: `(len==0)` is what makes an
+      // empty tail one word rather than none, and the last word is cleared
+      // because the read below stops at `len` and leaves the padding it wrote
+      // nothing into.
+      uint32_t pad_len = (frame.head.len+(frame.head.len==0)+3)&0xFFFFFFFC;
+      CodedTail *blk = (CodedTail*)bmf_new(pad_len+sizeof(CodedTail));
+      blk->tag = frame.head.tag;
+      blk->len = pad_len;
+      blk->data[pad_len/4-1] = 0;
       *p_coded_buf = blk;
-      fread(blk+2, (*(uint32_t*)&frame.hdr[4]), 1u, arc->fp);
+      fread(blk->data, frame.head.len, 1u, arc->fp);
     } else {
-      fseek(arc->fp, (*(uint32_t*)&frame.hdr[4]), 1);
+      fseek(arc->fp, frame.head.len, 1);
     }
   }
   if( frame.data_len>bytes_left(arc->fp) ) {

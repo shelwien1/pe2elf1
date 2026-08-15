@@ -1,6 +1,6 @@
 // image_compress.inc -- one image into one.
 
-int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
+int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
   BmfImage hdr;
   int32_t plane_n, row_step;
   uint32_t filtered;
@@ -134,8 +134,8 @@ write_coded:
   if( fits ) {
     ok = fwrite(&hdr, 1u, 0x10u, arc->fp)==16;
     if( extra_blk ) {
-      coded_len = ((const uint32_t*)extra_blk)[1];
-      ok &= fwrite(extra_blk, 1u, coded_len+8, arc->fp)==coded_len+8;
+      coded_len = extra_blk->len;
+      ok &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc->fp)==coded_len+sizeof(CodedTail);
     }
     ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc->fp)==(uint32_t)coded_bytes)&ok;
     free(stream.buf);
@@ -187,8 +187,8 @@ write_raw:
   pixels = (uint16_t*)p_i->pixels;
   ok_raw = fwrite(img, 1u, 0x10u, arc->fp)==16;
   if( extra_blk ) {
-    coded_len = ((const uint32_t*)extra_blk)[1];
-    ok_raw &= fwrite(extra_blk, 1u, coded_len+8, arc->fp)==coded_len+8;
+    coded_len = extra_blk->len;
+    ok_raw &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc->fp)==coded_len+sizeof(CodedTail);
   }
   written = fwrite(pixels, 1u, pal_bytes+img->data_size, arc->fp);
   data_size = img->data_size;

@@ -20,7 +20,25 @@ __attribute__((noreturn)) void bmf_fatal(int32_t Code, ...) {
   __builtin_unreachable();
 }
 
-alignas(16) static void* coded_block = nullptr;
+// One more member after the image, which a BMF file may or may not carry.
+// Eight bytes of header and then its bytes; `expand_image` reads it and
+// `compress_image` writes it back out unread, so what is in `data` is this
+// program's business only insofar as it copies it.  `len` is the byte count
+// from the file, rounded up to a word when the block is allocated -- and
+// rounded up from *zero* to four, which is why an empty tail still costs a
+// word.
+//
+// `data[0]` rather than `data[]`, for the same reason `BmfImage::pixels` is:
+// a flexible array member may not be followed by anything, and this record is
+// also a member of `expand_image`'s frame, where the eight bytes are read
+// before the block they describe is allocated.
+struct CodedTail {
+  int32_t tag;
+  uint32_t len;
+  uint32_t data[0];
+};
+
+alignas(16) static CodedTail* coded_block = nullptr;
 
 alignas(16) static int32_t plane_predictor = 0;
 
