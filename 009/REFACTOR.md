@@ -421,10 +421,19 @@ restates a *dependency*.
 
 ### still open
 
-  * `alt_p2_model`'s per-bank walk and its magnitude coding.  Both are single
-    loops already and extracting either means threading about thirty locals
-    through a signature; a thirty-parameter method is not an improvement over a
-    labelled block.
+  * `alt_p2_model`'s magnitude coding.  Its per-bank walk *was* on this list,
+    with "threading about thirty locals through a signature" as the reason,
+    and that reason was a guess.  Measured: 33 names, and not one of them read
+    after the loop -- so they move rather than thread, and the walk is
+    `AltP2Block::code_banks`, 330 lines, one parameter.  Two regex
+    measurements answered 4 and 6 before the compiler answered 33; a regex over
+    declarations undercounts, and undercounting here argues *for* the work
+    rather than against it, which is how it went unnoticed.
+
+    The extraction then failed the gate at 10 of 110, because the loop body
+    ends in `++bank;` and I had wrapped it in a `for` that also increments.
+    Three of five banks of counters never moved.  It built, it ran, it
+    compressed every image -- only the byte comparison saw it.
   * the `CodedStream` session consolidation -- the largest item the plan named,
     and the one with the widest blast radius.  It wants its own round.
   * the `__` prefix, which needs three tools taught a new way to recognise a
