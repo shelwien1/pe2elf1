@@ -708,7 +708,20 @@ that no caller reads -- four call sites, every one a statement -- so both
 return `void`.  `img_a = (BmfImage*)((uint8_t*)img)` was a cast to bytes and
 straight back; `tile_a` and `tile_c` were `(uint8_t*)frame.tile_img` re-taken
 inside two loops; `(uint8_t*)((uint16_t*)p_i->pixels)` was a cast to words and
-straight back.  Pointer casts across the unit: 374 to 313.
+straight back.
+
+The block arrays were the same shape one level down: `alt_model_p2_encode` and
+its decode twin allocated a page, called `alt_p2_alloc` on it and stored the
+result through three `void*` locals into an array that is `AltP2Block*[4]`,
+then read it back through `void**` to free it -- while `alt_p2_alloc` has
+returned `AltP2Block*` since an earlier round.  And 15 casts of a null pointer
+constant, `(AltP1Block*)0` and `(P2Ctx*)(nullptr)`, are `nullptr`.
+
+Pointer casts across the unit: 374 to 258.  The commit that finished that count
+says 268, which is wrong -- I read the census before the last file was written.
+Corrected here rather than by rewriting the pushed message, and recorded rather
+than quietly fixed, because a number in a record that nobody re-took is the
+defect this round found five times over.
 
 Typing four coders made `methodise.py` propose them, and all four are declined
 with the reason written down: a method of `BmfImage` would make the image the
