@@ -638,21 +638,34 @@ static void put_section(std::vector<byte> &meta, const byte* p, size_t n) {
 //---------------------------------------------------------------------------
 // scalefactor image
 //
-// The scalefactor stream is the biggest thing in the meta and the one with the
-// most structure, so it can optionally go out as an 8-bit BMP for an image
-// compressor to take instead.  BMF gets it to 246 612 bytes against 284 452 for
-// xz on the same bytes - 13 % - because it is a context model and xz is not.
+// The bit allocation and scalefactor streams are the two biggest things in the
+// meta and the two with the most structure, so they can optionally go out as an
+// 8-bit BMP for an image compressor to take instead.  BMF, being a context
+// model where xz is not, gets them to 332 788 bytes against 374 508 - 11 %.
 //
 // Layout is the meta's own slot-major order folded into columns: value i sits
 // at (i/H, i%H), so going down a column steps through one subband in time,
 // which is the direction the correlation runs.  The width is arbitrary and read
 // back from the header; 2048 measured best and the choice is worth well under
 // a percent.
+//
+// Allocations come first because their count follows from the frame headers
+// alone, while the scalefactor count needs the allocations and the scfsi
+// values - so the reader can find both without anything being stored.  One
+// image beats two files by 160 bytes here and both beat carrying the
+// allocations in the meta by about 4.5 KB.  The frame headers were measured
+// too and do not belong: appending them costs 8 388 bytes in the image against
+// the 1 992 they compress to on their own, so they stay in the meta.
 //---------------------------------------------------------------------------
 
 static const int SCF_BMP_WIDTH = 2048;
 
-static int write_scf_bmp(const char* path, const std::vector<byte> &v) {
+static int write_scf_bmp(const char* path, const std::vector<byte> &alloc,
+                         const std::vector<byte> &scf) {
+  std::vector<byte> v;
+  v.reserve(alloc.size()+scf.size());
+  v.insert(v.end(), alloc.begin(), alloc.end());
+  v.insert(v.end(), scf.begin(), scf.end());
   int W = SCF_BMP_WIDTH;
   qword N = v.size();
   int H = (int)((N+(qword)W-1)/(qword)W);
@@ -682,7 +695,7 @@ static int write_scf_bmp(const char* path, const std::vector<byte> &v) {
 
 // reads back both plain and RLE8 BMPs - an image compressor may re-emit the
 // file run-length coded, and the round trip has to survive that
-static int read_scf_bmp(const char* path, qword count, std::vector<byte> &out) {
+static int read_scf_bmp(const char* path, std::vector<byte> &out) {
   Buf b;
   if( !read_file(path, b) ) return 0;
   if( b.n<54||b.p()[0]!='B'||b.p()[1]!='M' ) return 0;
@@ -694,7 +707,6 @@ static int read_scf_bmp(const char* path, qword count, std::vector<byte> &out) {
   int topdown = 0;
   if( H<0 ) { H = -H; topdown = 1; }
   if( bpp!=8||W<=0||H<=0||(comp!=0&&comp!=1) ) return 0;
-  if( (qword)W*(qword)H<count ) return 0;
 
   std::vector<byte> px((size_t)W*H, 0);        // stored-row order
   if( comp==0 ) {
@@ -719,6 +731,7 @@ static int read_scf_bmp(const char* path, qword count, std::vector<byte> &out) {
       }
     }
   }
+  qword count = (qword)W*(qword)H;
   out.resize((size_t)count);
   for( qword idx = 0; idx<count; idx++ ) {
     qword c = idx/(qword)H, y = idx%(qword)H;
@@ -820,6 +833,7 @@ struct EncOut {
   std::vector<byte> mp3;
   std::vector<byte> meta;
   std::vector<byte> scf;      // slot-major scalefactors, for the optional bmp
+  std::vector<byte> alloc;    // slot-major bit_alloc codes, likewise
   qword md_bytes;
 };
 
@@ -1110,7 +1124,8 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
   put_section(meta, gapblob.empty() ? (const byte*)"" : &gapblob[0], gapblob.size());
   put_section(meta, hplanes.empty() ? (const byte*)"" : &hplanes[0], hplanes.size());
   put_section(meta, cplanes.empty() ? (const byte*)"" : &cplanes[0], cplanes.size());
-  put_section(meta, pA.empty() ? (const byte*)"" : &pA[0], pA.size());
+  if( scf_external ) put_section(meta, (const byte*)"", 0);
+  else               put_section(meta, pA.empty() ? (const byte*)"" : &pA[0], pA.size());
   put_section(meta, pS.empty() ? (const byte*)"" : &pS[0], pS.size());
   if( scf_external ) put_section(meta, (const byte*)"", 0);
   else               put_section(meta, sF.empty() ? (const byte*)"" : &sF[0], sF.size());
@@ -1128,6 +1143,7 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
   out.mp3.swap(mp3);
   out.meta.swap(meta);
   out.scf.swap(sF);
+  out.alloc.swap(sA);
   out.md_bytes = md.size();
   return 1;
 }
@@ -1164,7 +1180,7 @@ static int compress(const char* inpath, const char* mp3path, const char* metapat
     fprintf(stderr, "mp2: cannot write '%s'\n", metapath);
     return 1;
   }
-  if( bmppath&&!write_scf_bmp(bmppath, out.scf) ) {
+  if( bmppath&&!write_scf_bmp(bmppath, out.alloc, out.scf) ) {
     fprintf(stderr, "mp2: cannot write '%s'\n", bmppath);
     return 1;
   }
@@ -1190,7 +1206,8 @@ static int compress(const char* inpath, const char* mp3path, const char* metapat
   printf("input      : %llu bytes\n", (unsigned long long)in.n);
   printf("output.mp3 : %llu bytes\n", (unsigned long long)out.mp3.size());
   printf("output.meta: %llu bytes\n", (unsigned long long)out.meta.size());
-  if( bmppath ) printf("output.bmp : %llu scalefactors\n", (unsigned long long)out.scf.size());
+  if( bmppath ) printf("output.bmp : %llu allocations + %llu scalefactors\n",
+                       (unsigned long long)out.alloc.size(), (unsigned long long)out.scf.size());
   return 0;
 }
 
@@ -1257,7 +1274,17 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
   //      walks over the frame list before the real one.
   qword offA[NSLOT+1], offS[NSLOT+1], offF[NSLOT+1];
   qword curA[NSLOT], curS[NSLOT], curF[NSLOT];
-  std::vector<byte> vA, vS, vF;
+  std::vector<byte> vA, vS, vF, vIMG;
+  if( flags&1 ) {
+    if( !bmppath ) {
+      fprintf(stderr, "mp2: this meta needs the bmp as a 4th argument\n");
+      return 1;
+    }
+    if( !read_scf_bmp(bmppath, vIMG) ) {
+      fprintf(stderr, "mp2: cannot read '%s'\n", bmppath);
+      return 1;
+    }
+  }
   {
     qword cnt[NSLOT];
     memset(cnt, 0, sizeof(cnt));
@@ -1271,7 +1298,10 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
     }
     offA[0] = 0;
     for( int s = 0; s<NSLOT; s++ ) offA[s+1] = offA[s]+cnt[s];
-    if( !unpack_stream(sA.p, sA.n, offA[NSLOT], 4, vA) ) {
+    if( flags&1 ) {                       // allocations lead the image
+      if( vIMG.size()<(size_t)offA[NSLOT] ) { fprintf(stderr, "mp2: bmp too small\n"); return 1; }
+      vA.assign(vIMG.begin(), vIMG.begin()+(size_t)offA[NSLOT]);
+    } else if( !unpack_stream(sA.p, sA.n, offA[NSLOT], 4, vA) ) {
       fprintf(stderr, "mp2: bit_alloc section size mismatch\n");
       return 1;
     }
@@ -1314,12 +1344,10 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
     }
     offF[0] = 0;
     for( int s = 0; s<NSLOT; s++ ) offF[s+1] = offF[s]+cnt[s];
-    if( flags&1 ) {
-      if( !bmppath ) { fprintf(stderr, "mp2: this meta needs the scalefactor bmp as a 4th argument\n"); return 1; }
-      if( !read_scf_bmp(bmppath, offF[NSLOT], vF) ) {
-        fprintf(stderr, "mp2: cannot read scalefactors from '%s'\n", bmppath);
-        return 1;
-      }
+    if( flags&1 ) {                       // scalefactors follow them
+      qword a = offA[NSLOT], nf = offF[NSLOT];
+      if( vIMG.size()<(size_t)(a+nf) ) { fprintf(stderr, "mp2: bmp too small\n"); return 1; }
+      vF.assign(vIMG.begin()+(size_t)a, vIMG.begin()+(size_t)(a+nf));
     } else {
       if( offF[NSLOT]!=sF.n ) { fprintf(stderr, "mp2: scalefactor section size mismatch\n"); return 1; }
       vF.assign(sF.p, sF.p+(size_t)sF.n);

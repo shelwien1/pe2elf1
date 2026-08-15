@@ -10,8 +10,9 @@ mp2 c input.mp2 output.mp3 output.meta [output.bmp]     pack
 mp2 d input.mp3 input.meta output.mp2  [input.bmp]      unpack
 ```
 
-With the optional fourth file, the scalefactors go out as an 8-bit BMP for an
-image compressor to take instead of sitting in the meta — see below.
+With the optional fourth file, the bit allocations and scalefactors go out as an
+8-bit BMP for an image compressor to take instead of sitting in the meta — see
+below.
 
 The mp3 is not meant to sound like the source — it is a container. It *is*
 a real mp3 though: every frame parses with an ordinary decoder, with correct
@@ -39,9 +40,9 @@ function bodies (`python3 mktabs.py` regenerates it).
 | subband samples | mp3 Huffman spectral data |
 | frame header (4 bytes) | meta, `HDRS` |
 | CRC (if protected) | meta, `CRCS` |
-| bit allocation codes | meta, `ALLOC` |
+| bit allocation codes | meta, `ALLOC` — or the bmp |
 | scfsi | meta, `SCFSI` |
-| scalefactors | meta, `SCF` |
+| scalefactors | meta, `SCF` — or the bmp |
 | ancillary/padding bits at the end of a frame | meta, `TAIL` |
 | top bits of 15/16-bit samples | meta, `HIBITS` |
 | bytes that are not part of a frame (ID3, junk, gaps) | meta, `GAPS` |
@@ -94,21 +95,33 @@ Against a single raw bit region for the same data — 922 669 bytes raw,
 632 632 compressed — the restructured meta is 23 % larger raw and **29 %
 smaller compressed**.
 
-### The scalefactors can go out as an image
+### The bulky streams can go out as an image
 
-Give `mp2 c` a fourth filename and the scalefactor stream is written there as an
-8-bit BMP instead of into the meta. The layout is the same slot-major order
-folded into columns — value `i` at `(i/H, i%H)`, so down a column is one subband
-through time, the direction the correlation runs. Width is read back from the
-header; 2048 measured best and the choice is worth well under a percent.
+Give `mp2 c` a fourth filename and the bit allocations and scalefactors are
+written there as an 8-bit BMP instead of into the meta. The layout is the same
+slot-major order folded into columns — value `i` at `(i/H, i%H)`, so down a
+column is one subband through time, the direction the correlation runs. Width is
+read back from the header; 2048 measured best and the choice is worth well under
+a percent. Allocations come first because their count follows from the frame
+headers alone, while the scalefactor count needs the allocations and the scfsi
+values — so the reader finds both with nothing stored.
 
-The point is not the image format, it is that this hands the stream to a
-compressor built to model it. **BMF** (Shkarin's, a context model) gets it to
-**246 612** against 284 452 for `xz` on the same bytes, 13 % better, and 38 160
-off the pipeline total. Ordinary image codecs do not: PNG's Up filter gives
-315 541 and WebP lossless 389 782, both worse than `xz`, and WebP additionally
-caps each dimension at 16 383 pixels. `mp2 d` reads the BMP back either plain or
-RLE8, since BMF re-emits it run-length coded when that is smaller.
+The point is not the image format, it is that this hands the streams to a
+compressor built to model them. **BMF** (Shkarin's, a context model) gets the
+pair to **332 724** against 374 508 for `xz` on the same bytes, 11 % better.
+Ordinary image codecs do not: on the scalefactors alone PNG's Up filter gives
+315 541 and WebP lossless 389 782, both worse than `xz`'s 284 452, and WebP
+additionally caps each dimension at 16 383 pixels. `mp2 d` reads the BMP back
+either plain or RLE8, since BMF re-emits it run-length coded when that is
+smaller.
+
+What else was tried in there. Frame headers do not belong: appending them costs
+8 388 bytes in the image against the 1 992 they compress to alone, so they stay
+in the meta — and all three together (411 544 total) are worse than not using
+the image for the allocations at all. `SCFSI` is worse in the image under any
+arrangement (`bmf` 72 520 against `xz` 69 760). Two separate BMP files beat one
+by 1 236 bytes, which is not worth a second output. Order inside the image is
+worth 160.
 
 The gain is the model, not the second dimension. `tests/sfimg.cpp` dumps the
 *true* subband-by-time grid — one column per subband, three rows per frame — and
@@ -118,10 +131,6 @@ residual is the worst of four and 2D prediction is worse than vertical alone,
 which says neighbouring subbands tell you nothing a subband's own past does not.
 The real grid also has to be 3.6× larger than the data, since scfsi transmits
 only 1 to 3 of each subband's 3 scalefactors and most subbands are unallocated.
-
-The same test on the other sections: BMF also wins on `ALLOC` (84 780 against
-90 056) and `HDRS` (1 992 against 2 132), and loses on `SCFSI` (72 520 against
-69 760). Only the scalefactors are externalised, being much the largest.
 
 ## How the samples map onto mp3 spectral lines
 
@@ -283,11 +292,11 @@ with `mp3zip` and the meta with `xz -9e`:
 | --- | ---: |
 | `xz -9e` of the original mp2 | 6 936 752 |
 | `mp3zip(output.mp3)` | 5 707 362 |
-| `xz -9e (output.meta)` | 162 328 |
-| `bmf(output.bmp)` | 246 612 |
-| **total** | **6 116 302** |
+| `xz -9e (output.meta)` | 71 916 |
+| `bmf(output.bmp)` | 332 724 |
+| **total** | **6 112 002** |
 
-**820 450 bytes, 11.8 %, below compressing the mp2 directly.** The whole chain
+**824 750 bytes, 11.9 %, below compressing the mp2 directly.** The whole chain
 `mp2 → mp3+meta+bmp → mp3zip/xz/bmf → mp2` is byte-exact, and mp3zip is confirmed
 lossless on this mp3 (it is an unusual one — zero-length scalefactors, constant
 side info, wide VBR swings).
