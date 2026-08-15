@@ -10,6 +10,7 @@
 #         CXX=g++ ./gc.sh          pick a compiler (default: clang++, else g++)
 #         GCOPTS='-DFOO=1' ./gc.sh extra flags appended to the command line
 #         MARCH=native ./gc.sh     override -march/-mtune (default: haswell)
+#         GCOUT=path ./gc.sh bmpc  write the binary somewhere else
 
 set -e
 
@@ -62,6 +63,7 @@ incs="-DNDEBUG -D__DIRNAM__=$(basename "$PWD")"
 build() {   # build <source> <output>
   src=$1; out=$2
   [ -f "$src" ] || { echo "gc.sh: no $src, skipping $out"; return 0; }
+  if [ -n "$GCOUT" ]; then out=$GCOUT; fi   # sweep.py builds many variants
   echo "$CXX -> $out"
   # shellcheck disable=SC2086
   $CXX -std=c++23 -Ofast $arch $incs $opts $link $GCOPTS "$src" -o "$out"
