@@ -403,13 +403,35 @@ register for a branch it had already decided.
 
 **The warning count is zero**, from four at the start of the plan.
 
+**`__choose_plane_coding`'s candidate table** turned out to be waiting on
+`deadparam.py`, which matched `unread_\w+` with the underscore required and so
+never saw `__cost_candidate`'s four numbered `unread4..7`.  With those gone the
+three calls differed in one thing: their descriptor buffers are the three rows
+of one 3x16 table, `&tbl16[16*cand]`, the same walking-off-the-end that selects
+the winning row twenty lines below.  One loop, argmin, ties to the lower index.
+
+**A return value that is not in the signature.**  `__alt_p2_filter` is handed
+`p2_row` as its `a2` and writes `a2[7][0..2]` -- one row past a `[7][4]`, which
+lands in `bias`, whose first three slots `alt_p2_model` reads.  The union those
+two came out of guaranteed the adjacency; flattening it kept the layout and
+lost the guarantee, so a `static_assert(offsetof)` says it.  That is the plan's
+Phase 3 step 1 applied where it earns its keep rather than where the plan
+expected to need it: an assertion that restates a layout is noise, and this one
+restates a *dependency*.
+
 ### still open
 
-  * `__choose_plane_coding`'s candidate table, `alt_p2_model`'s per-bank walk
-    and magnitude coding, and the `CodedStream` session consolidation -- the
-    three the plan named and this did not reach, for the reasons above.
+  * `alt_p2_model`'s per-bank walk and its magnitude coding.  Both are single
+    loops already and extracting either means threading about thirty locals
+    through a signature; a thirty-parameter method is not an improvement over a
+    labelled block.
+  * the `CodedStream` session consolidation -- the largest item the plan named,
+    and the one with the widest blast radius.  It wants its own round.
   * the `__` prefix, which needs three tools taught a new way to recognise a
     definition before it can move.
   * the weight row's struct.  A use counter still lives in a `float` slot; it
     goes through `memcpy` now, so it is defined rather than undefined, but the
-    row wants a type with a `uint32_t` member at that offset.
+    row wants a type with a `uint32_t` member at that offset.  Scoped: about
+    thirty `float (*)[4]` declarations and every `[j][k]` on one, and it has to
+    keep `__alt_p2_filter`'s two parameters distinguishable -- one is a weight
+    row and the other is `p2_row`, and today they share a type.
