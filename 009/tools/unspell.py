@@ -265,7 +265,10 @@ def survey(lines):
 
 
 if __name__ == '__main__':
-    path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+    if len(sys.argv) < 2 or sys.argv[1].startswith('--'):
+        sys.exit('usage: %s needs the file to read; `bmf.cpp` for a tool that\n       splices the unit, one .inc for a tool that does not'
+                         % __file__.rsplit('/', 1)[-1])
+    path = sys.argv[1]
     found = survey(open(path).read().split('\n'))
     for key, sites in sorted(found.items(), key=lambda kv: -len(kv[1])):
         print('%s  %s' % (key[0], dict(key[1])))

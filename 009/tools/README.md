@@ -9,7 +9,17 @@ that need more than a docstring to explain.
 **Every script documents itself.** `python3 tools/<name>.py` with no arguments
 prints its usage, and the module docstring is the reasoning: what the rule is,
 what it declines rather than guesses at, and what it got wrong before it got it
-right. The sections below cover the scripts that need more than that; the table
+right.
+
+That first sentence was false for fifty of them until recently: they defaulted
+to `subs1.hpp`, which is the file this began as and not a file this repository
+has, so running one bare opened nothing and printed a traceback. A traceback
+reads exactly like a tool that found something, which is the confusion
+`sweep.sh` exists to remove, and the sweep could not see this one because it
+always passes a path. They ask for the path now. Which path depends on the
+tool: `bmf.cpp` for one that splices the unit, one `.inc` for one that reads
+the file it is handed — and `sweep.sh` hands every tool the spliced unit, so
+the distinction only matters when you run one yourself. The sections below cover the scripts that need more than that; the table
 at the end of this file covers all of them.
 
 That table is **generated**, by `tools/readme.py`, from each script's own first

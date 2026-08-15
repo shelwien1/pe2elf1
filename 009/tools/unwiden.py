@@ -20,7 +20,10 @@ further than it did, which is §7's first hazard and not a spelling change.
 import re, sys, collections
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs, merge
-p = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+if len(sys.argv) < 2 or sys.argv[1].startswith('--'):
+    sys.exit('usage: %s needs the file to read; `bmf.cpp` for a tool that\n       splices the unit, one .inc for a tool that does not'
+                     % __file__.rsplit('/', 1)[-1])
+p = sys.argv[1]
 lines = open(p).read().split('\n')
 pending = []
 SC = r'(?:u?int(?:8|16|32|64)_t|float|double)'

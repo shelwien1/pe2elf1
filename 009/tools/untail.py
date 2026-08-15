@@ -98,7 +98,10 @@ def tails(lines, a, b, max_stmts):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+    if len(sys.argv) < 2 or sys.argv[1].startswith('--'):
+        sys.exit('usage: %s needs the file to read; `bmf.cpp` for a tool that\n       splices the unit, one .inc for a tool that does not'
+                         % __file__.rsplit('/', 1)[-1])
+    path = sys.argv[1]
     mx = int(sys.argv[sys.argv.index('--max') + 1]) if '--max' in sys.argv else 5
     mg = int(sys.argv[sys.argv.index('--sites') + 1]) if '--sites' in sys.argv else 2
     lines = open(path).read().split('\n')

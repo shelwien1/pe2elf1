@@ -654,3 +654,13 @@ What that turned up, none of it visible before, and all of it now done:
 And the sweep names the tool that wrote, rather than only that one did: it
 could say the copy had changed and never which of the eighty-eight changed it,
 which made the answer a bisection by hand every time.
+
+**Fifty tools opened a file this repository has never had.**  `subs1.hpp` is
+what the decompilation began as, and fifty tools still took it as the default
+path -- so running one bare printed a traceback rather than an answer, which is
+the exact confusion this directory exists to remove, and `sweep.sh` could not
+see it because the sweep always passes a path.  They ask for the path now, with
+the two answers spelled out: `bmf.cpp` for a tool that splices the unit, one
+`.inc` for one that reads the file it is handed.  `tools/README.md` opens by
+claiming every script prints its usage when run with no arguments; that
+sentence is true now.
