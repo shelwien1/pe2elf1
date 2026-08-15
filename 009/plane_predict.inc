@@ -258,9 +258,8 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done;
   int32_t rows_left;
   uint32_t j, row_rest, k, x_left;
-  uint8_t *p;
   alignas(16) uint8_t unfold[256];
-  p = pixels+1;
+  uint8_t *p = pixels+1;
   unfold[0] = 0;
   for( j = 0; j<127; ++j ) {
     unfold[2*j+1] = (uint8_t)(-1-(int32_t)j);

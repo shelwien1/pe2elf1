@@ -153,29 +153,24 @@ static void reduce_narrow_alphabet(ReduceAlphabetFrame& f, ModelBlock* blk1, uin
 
 void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   ReduceAlphabetFrame frame;
-  ModelBlock* blk1, * blk4;
-  uint32_t alpha_n, done, done2, off, slot_a, sym_bits;
-  bool more;
-  uint8_t* half;
-  int32_t node, side, alpha_m, carry, img_w, img_h, n_moved;
-  ModelBlock* blk3;
-  uint32_t n_kids, i, written, li, si, si_end, word, k, pairs, n_pairs, j;
+  ModelBlock *blk4;
+  uint32_t alpha_n, done, done2;
+  int32_t node, side, alpha_m, carry;
+  uint32_t i, written, si, si_end, word, k, j;
   uint16_t* kidp;
-  uint8_t *srcp, *p, *rp, *dst_a, *dst_b, *dst_c;
-  uint32_t val;
-  void* newbuf;
+  uint8_t *p, *rp;
   frame.slot11 = (ModelBlock*)(blk);
-  srcp = src;
-  sym_bits = blk->depth;
+  uint8_t *srcp = src;
+  uint32_t sym_bits = blk->depth;
   frame.slot2 = src;
   frame.slot7 = (ModelBlock*)(blk);
   frame.slot4 = 0xFFFFFFFF>>(-sym_bits&31);
-  n_kids = (sym_bits+7)>>3;
+  uint32_t n_kids = (sym_bits+7)>>3;
   for( i = 0; i<8; ++i ) {
     frame.lists[2*i].ent = nullptr;
     frame.lists[2*i+1].ent = nullptr;
   }
-  blk1 = frame.slot7;
+  ModelBlock *blk1 = frame.slot7;
   if( sym_bits<=8 ) {
     reduce_narrow_alphabet(frame, blk1, src);
   } else {
@@ -192,7 +187,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       written = 1;
       while( 1 ) {
         p += frame.slot9;
-        val = frame.slot4&*(uint32_t*)p;
+        uint32_t val = frame.slot4&*(uint32_t*)p;
         if( val!=*(uint32_t*)&frame.buf[8*node] ) {
           node = 0;
           if( val!=*(uint32_t*)frame.buf ) {
@@ -233,7 +228,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
         }
 // The alphabet is dense enough to code as a run of flags.
 code_dense:
-        blk3 = frame.slot7;
+        ModelBlock *blk3 = frame.slot7;
         blk3->sym_word[written++] = node;
         if( written>=blk3->height*blk3->width ) {
           srcp = frame.slot8;
@@ -251,21 +246,21 @@ alphabet_done:
     alpha_m = blk1->alphabet;
     if( alpha_m>0x2000 ) {
       (frame.slot[1]) = bmf_new(blk1->height*n_kids*blk1->width);
-      img_w = blk1->width;
-      img_h = blk1->height;
+      int32_t img_w = blk1->width;
+      int32_t img_h = blk1->height;
       frame.kids_i = blk1->width;
       frame.slot0 = img_h;
       if( n_kids ) {
         frame.slot6 = frame.slot0*img_w;
         if( n_kids>>1 ) {
-          half = (uint8_t*)(frame.slot[1])+frame.slot0*frame.kids_i;
+          uint8_t *half = (uint8_t*)(frame.slot[1])+frame.slot0*frame.kids_i;
           frame.slot8 = srcp;
           frame.slot9 = n_kids;
           frame.slot7 = (ModelBlock*)(blk1);
-          pairs = 0;
+          uint32_t pairs = 0;
           do {
-            slot_a = 2*pairs;
-            off = 2*pairs++*frame.slot6;
+            uint32_t slot_a = 2*pairs;
+            uint32_t off = 2*pairs++*frame.slot6;
             frame.slot[slot_a+2] = (uint8_t*)(frame.slot[1])+off;
             frame.slot[slot_a+3] = (void*)&half[off];
           } while( pairs<n_kids>>1 );
@@ -287,15 +282,15 @@ alphabet_done:
           frame.slot9 = n_kids;
           frame.slot7 = (ModelBlock*)(blk1);
           frame.kids_i = 0;
-          n_moved = 0;
-          n_pairs = n_kids>>1;
+          int32_t n_moved = 0;
+          uint32_t n_pairs = n_kids>>1;
           while( 1 ) {
             while( 1 ) {
               if( n_pairs ) {
                 for( j = 0; j<n_pairs; ++j ) {
-                  dst_a = (uint8_t*)(frame.slot[2*j+2]);
+                  uint8_t *dst_a = (uint8_t*)(frame.slot[2*j+2]);
                   *dst_a = rp[2*j];
-                  dst_b = (uint8_t*)frame.slot[2*j+3];
+                  uint8_t *dst_b = (uint8_t*)frame.slot[2*j+3];
                   frame.slot[2*j+2] = dst_a+1;
                   *dst_b = rp[2*j+1];
                   frame.slot[2*j+3] = dst_b+1;
@@ -307,10 +302,10 @@ alphabet_done:
               }
               if( (done2-1)>=frame.slot9 )
                 break;
-              dst_c = (uint8_t*)frame.slot[done2+1];
+              uint8_t *dst_c = (uint8_t*)frame.slot[done2+1];
               srcp = &rp[done2];
               *dst_c = rp[done2-1];
-              more = (uint32_t)(++n_moved)<frame.slot6;
+              bool more = (uint32_t)(++n_moved)<frame.slot6;
               frame.slot[done2+1] = dst_c+1;
               if( !more )
                 goto lists_ready;
@@ -329,7 +324,7 @@ lists_ready:
       blk1->height = n_kids*frame.slot0;
       blk1->depth = 8;
       free(frame.tmp);
-      newbuf = bmf_new(2*blk1->height*blk1->width);
+      void *newbuf = bmf_new(2*blk1->height*blk1->width);
       frame.tmp = frame.slot[1];
       blk1->sym_word = (uint16_t*)newbuf;
       reduce_alphabet(blk1, (uint8_t*)frame.tmp);
@@ -337,7 +332,7 @@ lists_ready:
     } else {
       if( 4*n_kids ) {
         frame.slot7 = (ModelBlock*)(blk1);
-        li = 0;
+        uint32_t li = 0;
         do {
           frame.lists[li].init(256, 1);
           ++li;

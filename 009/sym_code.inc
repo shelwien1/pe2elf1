@@ -23,7 +23,7 @@ template<int32_t f_DEC>
 int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
   uint32_t cum, j;
-  int32_t lvl, result, go, path, node, span;
+  int32_t lvl, result, go, path, span;
   uint16_t fq, *slot;
   uint16_t h9, acc8, acc6, acc;
   uint16_t *f0 = freq+2;
@@ -96,7 +96,7 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   int32_t mask = level_geom[lvl].half;
   if( !f_DEC )
     path = sym-level_geom[lvl].first;
-  node = 0;
+  int32_t node = 0;
   for( span = 1;; span *= 2 ) {
     FreqPair *pair = bit_tree(freq, lvl)+span+node;
     int32_t f1 = pair->f[1];
@@ -217,9 +217,9 @@ int32_t alt_p1_decode_symbol(CounterNode* node, int32_t ctx) {
 
 
 int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
-  int32_t tot, node;
+  int32_t node;
   uint32_t step, f;
-  tot = *_this;
+  int32_t tot = *_this;
   if( (uint32_t)tot<=0x8000 ) {
     int32_t lvl = model_geometry[symbol];
     step = (_this[1]>>2)&0xFFFFFFE0;
@@ -274,7 +274,6 @@ int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
 // through had to cast to hand one over.
 int32_t estimate_cost(const int32_t* bin, int32_t n) {
   double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
-  double total;
   int32_t i;
   for( i = 0; i+1<n; i += 2 ) {
     if( bin[i] ) {
@@ -287,7 +286,7 @@ int32_t estimate_cost(const int32_t* bin, int32_t n) {
     }
   }
   double entropy = ent_even+ent_odd;
-  total = sum_even+sum_odd;
+  double total = sum_even+sum_odd;
   for(; i<n; i++ )
     if( bin[i] ) {
       total += (double)bin[i];

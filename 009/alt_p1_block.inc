@@ -67,12 +67,11 @@ struct AltP1Block {
   }
 
   int32_t ctx_of(AltP1Block* nb0, AltP1Block* nb1) {
-    bool pick, is_zero, is_neg;
+    bool pick;
     int32_t act_all;
     uint32_t quiet;
-    int32_t guess;
     P1Ctx *cursor1 = cursor[1];
-    guess = cursor1->sym;
+    int32_t guess = cursor1->sym;
     P1Ctx *cur = cursor[0];
     int32_t west = cur[-1].sym;
     int32_t northwest = cursor1[-1].sym;
@@ -150,8 +149,8 @@ struct AltP1Block {
     ctx_w[1].sel = s1;
     int32_t s2 = (cursor1[-1].sym-cur[-1].sym>=0)+(cursor1[-1].sym>(int32_t)cur[-1].sym);
     ctx_w[2].sel = s2;
-    is_zero = ctx_w[3].sel==0;
-    is_neg = ctx_w[3].sel<0;
+    bool is_zero = ctx_w[3].sel==0;
+    bool is_neg = ctx_w[3].sel<0;
     int32_t s4 = (cursor1[1].sym-guess>=-step)+(cursor1[1].sym-guess>step);
     ctx_w[4].sel = s4;
     int32_t hi = step<ctx_w[5].sel;
@@ -295,14 +294,13 @@ struct AltP1Block {
   // Returned `ctx[0]` -- or, if the ninth selector's last branch ran, a counter
   // it had just bumped.  All five call sites discard it.
   void update_model() {
-    int32_t slot_f, slot_r;
     uint32_t code_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
     int32_t code_r = *((uint8_t)((uint8_t)pred-cursor[0]->sym)+fold);
     int32_t tree_sym = (int32_t)(code_f-5)>>1;
-    slot_f = 6-(code_f&1);
+    int32_t slot_f = 6-(code_f&1);
     if( code_f<5 )
       slot_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
-    slot_r = 6-(code_r&1);
+    int32_t slot_r = 6-(code_r&1);
     if( code_r<5 )
       slot_r = code_r;
     // `ctx_w[1].sel` and `ctx_w[2].sel` were read into `sel1_top`/`sel2_top`
@@ -352,7 +350,6 @@ struct AltP1Block {
   }
 
   AltP1Block*alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane) {
-    int32_t lvl, grp, slot, wid;
     uint32_t ctr = 0;
     width = img_w;
     height = img_h;
@@ -360,8 +357,8 @@ struct AltP1Block {
       init_counter_node(&counters[ctr++]);
     while( ctr<0x99C60 );
     pred = 0;
-    lvl = 0;
-    grp = 0;
+    int32_t lvl = 0;
+    int32_t grp = 0;
     int32_t k = 0;
     int32_t plane_hi = plane<<8;
     do {
@@ -377,7 +374,7 @@ struct AltP1Block {
       ++k;
     } while( (uint32_t)k<0x100 );
     uint32_t pair = 0;
-    slot = 0;
+    int32_t slot = 0;
     do {
       slot_of[2*pair] = 8*slot;
       int32_t slot1 = (2*pair==p1_slot_edges[slot])+slot;
@@ -401,7 +398,7 @@ struct AltP1Block {
       buf[row++] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+10));
     while( row<5 );
     alt_init_tables(fold, (int8_t*)unfold);
-    wid = width;
+    int32_t wid = width;
     if( width>-10 ) {
       int32_t r = 0;
       do {

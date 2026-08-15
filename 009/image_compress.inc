@@ -7,28 +7,22 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   int32_t coded_bytes;
   uint32_t coded_len;
   bool fits;
-  uint32_t data_bytes, row_bytes;
-  uint8_t has_coded;
-  uint32_t hdr_pad8;
-  int32_t ok_all, data_size;
-  BmfImage* img;
-  uint32_t pal_bytes, written;
-  uint8_t ok, ok_raw;
+  uint32_t data_bytes, written;
   BmfFile* arc = arc_in;
   if( !arc_in->fp )
     return 0;
   // The walk that was here read every member already in the output and left
   // the file positioned after the last, which is where an appended member had
   // to go.  `bmf c` writes the file, so there is nothing in front of this one.
-  has_coded = extra_blk!=nullptr;
-  img = (BmfImage*)(p_i);
-  row_bytes = p_i->stride;
+  uint8_t has_coded = extra_blk!=nullptr;
+  BmfImage *img = (BmfImage*)(p_i);
+  uint32_t row_bytes = p_i->stride;
   if( extra_blk )
     has_coded = 1;
   hdr.width = p_i->width;
   hdr.height = p_i->height;
   p_i->flags |= has_coded ? flags_tail : 0;
-  hdr_pad8 = *(uint32_t*)&p_i->_pad8;
+  uint32_t hdr_pad8 = *(uint32_t*)&p_i->_pad8;
   hdr.stride = row_bytes;
   near_lossless_q = 0;
   *(uint32_t*)&hdr._pad8 = hdr_pad8;
@@ -42,7 +36,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   if( fwrite(&tag, 4u, 1u, arc->fp)!=1 )
     return 0;
   uint8_t bpp = p_i->depth;
-  pal_bytes = bpp&depth_palette;
+  uint32_t pal_bytes = bpp&depth_palette;
   if( bpp&depth_palette )
     pal_bytes = 3<<(bpp&31);
   if( p_i->data_size<0x10u )
@@ -135,12 +129,12 @@ write_coded:
   coded_bytes = stream.cur- stream.buf;
   hdr.data_size = (uint32_t)(stream.cur- stream.buf);
   if( fits ) {
-    ok = fwrite(&hdr, 1u, 0x10u, arc->fp)==16;
+    uint8_t ok = fwrite(&hdr, 1u, 0x10u, arc->fp)==16;
     if( extra_blk ) {
       coded_len = extra_blk->len;
       ok &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc->fp)==coded_len+sizeof(CodedTail);
     }
-    ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc->fp)==(uint32_t)coded_bytes)&ok;
+    int32_t ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc->fp)==(uint32_t)coded_bytes)&ok;
     free(stream.buf);
     if( ok_all&&(p_i->depth&depth_palette)!=0 )
       fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, arc->fp);
@@ -158,13 +152,13 @@ write_coded:
   // second write of the value it already held.
 write_raw:
   pixels = p_i->pixels;
-  ok_raw = fwrite(img, 1u, 0x10u, arc->fp)==16;
+  uint8_t ok_raw = fwrite(img, 1u, 0x10u, arc->fp)==16;
   if( extra_blk ) {
     coded_len = extra_blk->len;
     ok_raw &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc->fp)==coded_len+sizeof(CodedTail);
   }
   written = fwrite(pixels, 1u, pal_bytes+img->data_size, arc->fp);
-  data_size = img->data_size;
+  int32_t data_size = img->data_size;
   if( !(ok_raw&(written==data_size+pal_bytes)) )
     return 0;
   return data_size;

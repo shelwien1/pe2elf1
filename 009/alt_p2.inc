@@ -82,17 +82,15 @@ inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
 template<int32_t f_DEC>
 void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
                                 int32_t width, int32_t height) {
-  P2Ctx *pix;
   int32_t j, code0, code;
   uint8_t *outp, code2;
   uint32_t k;
-  uint8_t* src_end;
-  src_end = src;
+  uint8_t *src_end = src;
   if( f_DEC )
     rc_begin_decode();
   else
     rc_begin_encode();
-  pix = cursor[0];
+  P2Ctx *pix = cursor[0];
   if( width>0 ) {
     uint8_t* p = src;
     for( j = 0; j<width; ++j ) {

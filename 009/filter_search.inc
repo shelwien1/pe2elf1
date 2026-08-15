@@ -71,16 +71,10 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint32_t plane_cost[4];
   uint8_t* tile_buf;
   int32_t plane_i, pi, flag8, best_flags;
-  int32_t n_hard, bits_total, n_flagged, best_bits;
-  uint8_t* tile_src;
-  BmfImage* tile_img;
   bool deep2;
-  uint8_t f0, f1, f2, f3;
-  uint8_t *srcp, *tile_copy;
-  int32_t hard, bits_a, bits_b;
-  int32_t flags_s;
-  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, best_cost, bits_f5, f5, pred, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, bits_d, pk, pl_k, bits, bits_f8, f8, bits_f13, f13, cost_f14, f14, bits_f6, f6;
-  tile_w = img->width;
+  int32_t bits_a, flags_s;
+  int32_t tile_h, y0, best_cost, f5, pred, cand, nplanes_c, plane, nplanes_b, pl_k, bits, f8, bits_f13, f13, f14, bits_f6, f6;
+  int32_t tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
     if( plane_count>0 ) {
@@ -95,7 +89,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
     return 0;
   }
   choose_plane_coding(img);
-  tile_img = alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
+  BmfImage *tile_img = alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
   stream.size = tile_img->data_size+0x20000;
   stream.buf = (uint8_t*)bmf_new(stream.size);
   packer_reset();
@@ -116,12 +110,12 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
     packer_flush();
     return cost;
   };
-  nplanes = plane_count;
+  int32_t nplanes = plane_count;
   y0 = (img->height-tile_h)>>1;
-  dx = img->width-tile_w;
-  off_y = y0*img->stride;
-  srcp = img->pixels+plane_count*(dx>>1)+off_y;
-  tile_src = tile_img->pixels;
+  int32_t dx = img->width-tile_w;
+  int32_t off_y = y0*img->stride;
+  uint8_t *srcp = img->pixels+plane_count*(dx>>1)+off_y;
+  uint8_t *tile_src = tile_img->pixels;
   // The tile is the middle of the image, `tile_h` rows of it.  The condition
   // was `y0 < tile_h+y0` and the bound `dims[1]+((img->height-dims[1])>>1)`,
   // which is `tile_h+y0` again with `y0` spelled out; the loop runs `tile_h`
@@ -136,12 +130,12 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
     }
     nplanes = plane_count;
   }
-  n_hard = 0;
-  bits_total = 0;
-  n_flagged = 0;
-  best_bits = 0;
+  int32_t n_hard = 0;
+  int32_t bits_total = 0;
+  int32_t n_flagged = 0;
+  int32_t best_bits = 0;
   if( nplanes>0 ) {
-    hard = n_hard;
+    int32_t hard = n_hard;
     best_flags = 0;
     pi = 0;
     while( 1 ) {
@@ -156,7 +150,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
           flags_s = 0;
         best_flags = flags_s;
       }
-      bits_f5 = probe_plane(plane_i, try_p1);
+      int32_t bits_f5 = probe_plane(plane_i, try_p1);
       packer_reset();
       f5 = best_flags;
       if( bits_f5<best_cost ) {
@@ -176,7 +170,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
         if( pi ) {
           {
 try_flag8:
-            bits_f8 = probe_plane(plane_i, try_refs);
+            int32_t bits_f8 = probe_plane(plane_i, try_refs);
             f8 = best_flags;
             packer_reset();
             if( bits_f8<best_cost ) {
@@ -197,7 +191,7 @@ try_flag8:
           // `bits_f13` was also kept in `rows[0]` for this one comparison,
           // which is the value the line above it already holds.
           if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
-            cost_f14 = probe_plane(plane_i, try_refs_p2);
+            int32_t cost_f14 = probe_plane(plane_i, try_refs_p2);
             deep2 = cost_f14<best_cost;
             if( cost_f14<best_cost )
               best_cost = cost_f14;
@@ -241,9 +235,9 @@ keep_flag8: { flag8 = (uint8_t)best_flags&desc_has_refs; }
   // orientation lost.
   {
     transpose_image(tile_img, plane_count);
-    bits_d = 0;
+    int32_t bits_d = 0;
     if( plane_count>0 ) {
-      pk = 0;
+      int32_t pk = 0;
       while( 1 ) {
         pl_k = plane_desc[pk].src_plane;
         model_planes(tile_img, tile_buf, pl_k);
@@ -277,12 +271,12 @@ tile_restored:
       if( plane_count>0 ) {
         plane = 0;
         do {
-          pi3 = plane;
-          f2 = plane_desc[plane++].flags&desc_has_refs|try_p1;
+          int32_t pi3 = plane;
+          uint8_t f2 = plane_desc[plane++].flags&desc_has_refs|try_p1;
           plane_desc[pi3].flags = f2;
         } while( plane<plane_count );
       }
-      bits_e = transform_cost(tile_img);
+      int32_t bits_e = transform_cost(tile_img);
       deep2 = bits_e<=best_bits;
       if( deep2 ) {
         best_bits = bits_e;
@@ -302,10 +296,10 @@ tile_restored:
       save_descriptors(saved);
       nplanes_c = plane_count;
       if( plane_count>0 ) {
-        pl_a = 0;
+        int32_t pl_a = 0;
         do {
-          pi0 = pl_a;
-          f0 = plane_desc[pl_a++].flags&desc_has_refs|try_p2;
+          int32_t pi0 = pl_a;
+          uint8_t f0 = plane_desc[pl_a++].flags&desc_has_refs|try_p2;
           plane_desc[pi0].flags = f0;
           nplanes_c = plane_count;
         } while( pl_a<plane_count );
@@ -323,14 +317,14 @@ tile_restored:
           } else {
             save_descriptors(saved);
             if( plane_count>0 ) {
-              pl_b = 0;
+              int32_t pl_b = 0;
               do {
-                pi1 = pl_b;
-                f1 = plane_desc[pl_b++].nrefs;
+                int32_t pi1 = pl_b;
+                uint8_t f1 = plane_desc[pl_b++].nrefs;
                 plane_desc[pi1].flags |= f1!=0 ? desc_has_refs : 0;
               } while( pl_b<plane_count );
             }
-            bits2 = transform_cost(tile_img);
+            int32_t bits2 = transform_cost(tile_img);
             deep2 = bits2<=bits_a;
             if( deep2 ) {
               cand = 0;
@@ -349,18 +343,18 @@ tile_restored:
   }
 planes_done:
   if( !n_hard&&plane_count>1 ) {
-    tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
+    uint8_t *tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
     memcpy(tile_copy, tile_src, tile_img->data_size);
     save_descriptors(saved);
     if( plane_count>0 ) {
-      pl_c = 0;
+      int32_t pl_c = 0;
       do {
-        pi4 = pl_c;
-        f3 = plane_desc[pl_c++].flags&~desc_alt_model;
+        int32_t pi4 = pl_c;
+        uint8_t f3 = plane_desc[pl_c++].flags&~desc_alt_model;
         plane_desc[pi4].flags = f3;
       } while( pl_c<plane_count );
     }
-    bits_b = transform_cost(tile_img);
+    int32_t bits_b = transform_cost(tile_img);
     if( bits_b>best_bits ) {
       restore_descriptors(saved);
     } else {
@@ -370,13 +364,13 @@ planes_done:
     if( n_flagged+bits_total ) {
       save_descriptors(saved);
       if( plane_count>0 ) {
-        pl_d = 0;
+        int32_t pl_d = 0;
         do
           plane_desc[pl_d++].flags = 0;
         while( pl_d<plane_count );
       }
       memcpy(tile_src, tile_copy, tile_img->data_size);
-      bits_c = transform_cost(tile_img);
+      int32_t bits_c = transform_cost(tile_img);
       deep2 = bits_c<=best_bits;
       if( deep2 ) {
         cand = 0;

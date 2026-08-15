@@ -19,14 +19,23 @@ the round after this one can re-take it.  Two passes:
 
 **What it declines, and why each one is a defect and not a preference.**
 
-  * **more than one assignment.**  Moving the declaration onto the first leaves
-    the second assigning a different object if the first is inside a loop.
+  * **more than one assignment, when the declaration would move *in*.**  The
+    second assignment would then be to a different object, because the block it
+    moved into runs more than once.  Moving *down* inside the declaration's own
+    block is a different matter -- same block, same lifetime, same object -- and
+    the two were sharing one check until it was measured.
   * **a first mention that is not a plain `name = expr;`.**  A compound
     assignment, a `&name`, a use as an argument -- each needs the old value.
-  * **a `case` or a label between the declaration and the assignment.**  C++
-    forbids jumping into the scope of a variable with an initialiser; the
-    compiler would catch it, but a tool that hands the compiler a program it
-    knows is ill-formed is not reporting, it is guessing.
+  * **a jump that crosses the new declaration.**  C++ forbids entering the
+    scope of a variable past its initialiser, and g++ takes it anyway under
+    `-fpermissive`: the build stays green and the variable is uninitialised on
+    that path, which is exactly the kind of thing a gate can miss.  What counts
+    is a label inside the new scope that some `goto` reaches from outside it --
+    not a label anywhere in the body, which is what this asked at first and
+    which cost `code_pixel` and `decode_pixel` all 138 of their names.
+    "Outside" is by containment, not by line: `goto code_residual` runs
+    *backwards* into a scope it is not in.  A `case` declines outright, its
+    `switch` head being above it by construction.
   * **the innermost enclosing block is a struct body.**  A declaration there is
     a *member*.  `MINIMAL-SYNTAX.md` records `SymEntry::cnt` being deleted this
     way, and the near-miss that matters: asking whether *any* enclosing block is
@@ -67,20 +76,41 @@ def depths(lines):
     return out, kinds
 
 
-def block_of(lines, dep, at, want):
-    """(start, end) of the innermost block at depth `want` containing `at`."""
-    a = at
-    while a > 0 and dep[a] >= want:
-        a -= 1
-    b = at
-    while b + 1 < len(lines) and dep[b + 1] >= want:
-        b += 1
-    return a, b
+def blocks(lines):
+    """Per line, the stack of block ids open *before* that line is read."""
+    out, stack, nxt = [], [], 0
+    for l in lines:
+        out.append(tuple(stack))
+        for c in l.split('//')[0]:
+            if c == '{':
+                stack.append(nxt)
+                nxt += 1
+            elif c == '}':
+                if stack:
+                    stack.pop()
+    return out
+
+
+def block_of(lines, ids, at):
+    """(opening line, closing line) of the innermost block containing `at`.
+
+    By brace identity and not by depth.  Depth cannot tell an `if` body from
+    the `else` under it -- `} else {` closes one and opens the other, so the
+    depth before that line is the same as before the lines either side of it,
+    and a walk outward from inside the `if` swallowed the `else` as well.  That
+    made two claims wrong at once: that every use of the name was inside the
+    block, and that no jump could enter it from outside.  `search_filter`'s
+    `goto try_flag8` lives in exactly that `else` and was being read as inside.
+    """
+    here = ids[at][-1]
+    span = [h for h in range(len(lines)) if here in ids[h]]
+    return span[0] - 1, span[-1]
 
 
 def candidates(lines, a, b):
     """[(decl_line, name, star, type, assign_line, kind)] inside body a..b."""
     dep, kinds = depths(lines)
+    ids = blocks(lines)
     base = dep[a] + 1
     body = lines[a:b + 1]
     out = []
@@ -112,23 +142,57 @@ def candidates(lines, a, b):
                 continue
             asg = [h for h in hits
                    if re.match(r'^\s*%s\s*=[^=]' % n, lines[h])]
-            if len(asg) != 1 or asg[0] != hits[0]:
+            if not asg or asg[0] != hits[0]:
                 continue
             j = asg[0]
+            # More than one assignment is fatal to the *deeper* pass and
+            # harmless to the same-depth one, and the two were sharing a
+            # check.  Moving a declaration down inside its own block does not
+            # change the object: same block, same lifetime, so a later
+            # assignment inside a loop still assigns the same variable.
+            # Moving it *in* does change the lifetime, which is what the
+            # docstring's reason is about.
+            #
+            # Worth 38 names on its own.  It was aimed at `code_pixel` and
+            # `decode_pixel` and got none of theirs; the guard below was what
+            # held those, which is why both were wrong at once.
+            if len(asg) != 1 and dep[j] != base:
+                continue
             rhs = re.match(r'^\s*%s\s*=\s*(.*);\s*$' % n, lines[j])
             if not rhs or re.search(r'(?<![\w.>])%s(?![\w])' % n, rhs.group(1)):
                 continue
-            # A label anywhere the new declaration would govern -- not just
-            # between the old declaration and the assignment -- is a `goto`
-            # that can enter the scope past the initialiser.  g++ takes that
-            # under -fpermissive with a warning, so the build stays green and
-            # the variable is simply uninitialised on that path: four sites in
-            # `model.inc` alone, all jumping to one LABEL_74.
-            def labelled(lo, hi):
-                return any(re.match(r'^\s*(case\b|default:|[A-Za-z_]\w*:\s*$)',
-                                    lines[h]) for h in range(lo, hi + 1))
-            if labelled(i + 1, j):
-                continue
+            # A jump that enters the new declaration's scope past its
+            # initialiser is what C++ forbids.  g++ takes it under
+            # -fpermissive with a warning, so the build stays green and the
+            # variable is simply uninitialised on that path -- which is why
+            # this is checked here and not left to the compiler.
+            #
+            # The first version of this declined on a label *anywhere* in the
+            # body, which is far wider than the rule and cost `code_pixel` and
+            # `decode_pixel` all 138 of their names between them.  What matters
+            # is whether a jump can land inside the new scope from outside it.
+            #
+            # "Outside" is containment and not line order, which the second
+            # version got wrong: `goto code_residual;` at alt_p2_model.inc:665
+            # goes *backwards* to a label at 439, and the declaration it skips
+            # is at 422 -- the jump is below the declaration and still enters
+            # its scope past the initialiser.  g++ said so under -fpermissive,
+            # which is a warning and not an error, so the build was green and
+            # `step10` was uninitialised on that path.
+            #
+            # A `case` declines outright: its `switch` head is above it by
+            # construction.
+            def skipped(lo, hi):
+                for h in range(lo, hi + 1):
+                    m = re.match(r'^\s*([A-Za-z_]\w*):\s*$', lines[h])
+                    if m:
+                        jump = r'\bgoto\s+%s\s*;' % m.group(1)
+                        if any(re.search(jump, lines[g])
+                               for g in range(a, b + 1) if not lo <= g <= hi):
+                            return True
+                    elif re.match(r'^\s*(case\b|default:)', lines[h]):
+                        return True
+                return False
             # `if( !f_DEC )` with an unbraced body: moving the declaration onto
             # the next line makes the declaration the whole substatement, which
             # C++ forbids -- the name is then not in scope anywhere.  g++ says
@@ -139,13 +203,13 @@ def candidates(lines, a, b):
                and prev.endswith(')') or re.match(r'^\s*(\}\s*)?else\s*$', prev):
                 continue
             if dep[j] == base:
-                if labelled(j, b):
+                if skipped(j, b):
                     continue
                 out.append((i, n, star, ty_k, j, 'same', rhs.group(1)))
                 continue
             if kinds[j][-1:] == (True,):          # innermost block is a struct
                 continue
-            s, e = block_of(lines, dep, j, dep[j])
+            s, e = block_of(lines, ids, j)
             if not all(s <= h <= e for h in hits):
                 continue
             # `} while( g0+1<15 );` puts the condition on the *closing brace's
@@ -159,7 +223,7 @@ def candidates(lines, a, b):
                    re.search(r'(?<![\w.>])%s(?![\w])' % n, tail):
                     break
             else:
-                if not labelled(j, e):
+                if not skipped(j, e):
                     out.append((i, n, star, ty_k, j, 'deep', rhs.group(1)))
             continue
     return out

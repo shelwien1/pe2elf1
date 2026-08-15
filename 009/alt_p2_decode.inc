@@ -11,14 +11,14 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   AltP2Block* plane[4], ** w;
   uint32_t i_1, first;
   int16_t seed1;
-  uint32_t i, src2;
+  uint32_t src2;
   int16_t seed3, seed2;
   AltP2Block** planep;
   bool xf3, off;
   int32_t nplanes;
   P2Coef p2_coef;
   p2_coef.fold();
-  i = p_i->width;
+  uint32_t i = p_i->width;
   int32_t raw = p_i->height;
   alt_p2_planes_alloc(plane, i);
   int32_t xf0 = plane_desc[plane_desc[1].src_plane].flags&desc_has_refs;

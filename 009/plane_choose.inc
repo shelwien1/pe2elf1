@@ -26,9 +26,8 @@ int32_t choose_plane_coding(BmfImage* img) {
   // against as offsets from this one, and the row in bytes.  All five were
   // frame slots, because MSVC kept them in registers it had to spill around
   // the `estimate_cost` calls in the middle of each arm.
-  int32_t wt4_cur, plane_a, plane_b, row_stride;
+  int32_t wt4_cur;
   uint32_t wt_slot;
-  double d1, d2, d3;
   // The three candidates' costs and their descriptors, as the two tables they
   // are.  This was one `alignas(16) uint8_t scratch[256]` with an
   // `int32_t (&)[4]` and an `int32_t (&)[16]` bound onto it at offsets a probe
@@ -50,23 +49,19 @@ int32_t choose_plane_coding(BmfImage* img) {
   // is in the corpus because of it.
   uint32_t cand_cost[3][4];
   PlaneDesc cand_desc[3][4];
-  uint8_t* pp;
   uint32_t uu;
   int32_t wa_slot;
-  bool cheaper, keep3, pick0;
   int8_t pos, pos3;
   int32_t* hist;
-  double dv0, dv1, dv2, inv;
-  int16_t g1_lo;
+  double dv0, dv1, dv2;
   uint32_t n_quads, next_plane, row, slack;
   uint16_t g1w;
-  int32_t n_planes, data_size, result, xform, wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, win, sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0, dn1, nx2, g1, dnx2, g2, pa, pb, bin_lin, alpha, bin_lin2, r0, r1, r2, wa_pick, pred4, pred4b, *hist2, sum3, best_sum3, wt4_best_dn, wt8_best_dn, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
-  uint32_t best_cost, best, cost_flat, i4, quad, cost_lin, best4, cost_c0, cost_c1, cost_c2;
-  uint8_t *px, *end_px;
-  n_planes = plane_count;
-  data_size = img->data_size;
+  int32_t result, xform, wt8, wt4, pred, win, sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b, sum3, best_sum3, wt4_best_dn, wt8_best_dn, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
+  uint32_t best_cost, best, quad, best4;
+  int32_t n_planes = plane_count;
+  int32_t data_size = img->data_size;
   alphabet_reduced = 1;
-  row_stride = (uint16_t)img->stride;
+  int32_t row_stride = (uint16_t)img->stride;
   const uint8_t* data_end = &img->pixels[data_size];
   memset(hists, 0, sizeof hists);
   // The descriptors only; the costs are written before they are read.  The
@@ -125,9 +120,9 @@ int32_t choose_plane_coding(BmfImage* img) {
       // and `4*sizeof(PlaneDesc)`, so it is one copy.
       memcpy(plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
       best_cost = cand_cost[xform][0];
-      plane_a = plane_desc[0].src_plane-xform;
+      int32_t plane_a = plane_desc[0].src_plane-xform;
       wt8 = plane_desc[xform].weight1;
-      plane_b = plane_desc[1].src_plane-xform;
+      int32_t plane_b = plane_desc[1].src_plane-xform;
       wt4 = plane_desc[xform].weight0;
       // Four arms of one search over the two weights, each a full pass over
       // the image costing one candidate pair.  They were written out four
@@ -290,19 +285,19 @@ int32_t choose_plane_coding(BmfImage* img) {
         }
       }
 weights_chosen:
-      px = &img->pixels[row_stride+n_planes+xform];
+      uint8_t *px = &img->pixels[row_stride+n_planes+xform];
       if( px<data_end ) {
         wt_slot = wt8;
         wt4_cur = wt4;
         do {
-          c2 = px[plane_b];
-          c2w = c2*wt_slot;
-          c1 = px[plane_a];
-          c1w = c1*wt4_cur;
+          int32_t c2 = px[plane_b];
+          int32_t c2w = c2*wt_slot;
+          int32_t c1 = px[plane_a];
+          int32_t c1w = c1*wt4_cur;
           ++hist_c[c2-c1+1280];
-          c0 = *px+512;
+          int32_t c0 = *px+512;
           px += n_planes;
-          bin0 = ((uint16_t)c0-(uint16_t)((uint32_t)(c2w+c1w+40)>>7))&0x3FF;
+          int32_t bin0 = ((uint16_t)c0-(uint16_t)((uint32_t)(c2w+c1w+40)>>7))&0x3FF;
           ++hist_flat[bin0];
           ++hist_a[c0-c1];
           ++hist_b[c0-c2];
@@ -318,8 +313,8 @@ weights_chosen:
       // The winning candidate's other three costs, against the fitted pair:
       // flat, plane-b only, and the two averaged.  Each was its own byte
       // offset into the block and they are one row of four.
-      cost_flat = cand_cost[xform][1];
-      cheaper = cost_flat<best;
+      uint32_t cost_flat = cand_cost[xform][1];
+      bool cheaper = cost_flat<best;
       if( cost_flat<best ) {
         best = cost_flat;
         wt4 = 128;
@@ -332,7 +327,7 @@ weights_chosen:
         wt4 = 0;
         wt8 = 128;
       }
-      keep3 = best<=cand_cost[xform][3];
+      bool keep3 = best<=cand_cost[xform][3];
       if( best>cand_cost[xform][3] )
         pred = 3;
       if( !keep3 ) {
@@ -403,11 +398,11 @@ weights_chosen:
         double Syy = 0.0, Syz = 0.0, Szz = 0.0;
         double Sxw = 0.0, Syw = 0.0, Szw = 0.0;
         memset(hists, 0, sizeof hists);
-        pp = &img->pixels[row_stride];
+        uint8_t *pp = &img->pixels[row_stride];
         n_quads = (data_end-1-pp)/4;
-        end_px = &img->pixels[row_stride+4];
+        uint8_t *end_px = &img->pixels[row_stride+4];
         if( end_px<data_end ) {
-          i4 = 0;
+          uint32_t i4 = 0;
           uu = (data_end-1-pp)/4;
           do {
             dv0 = (double)(img->pixels[4*i4]+pp[4*i4+4]-(img->pixels[4*i4+4]+pp[4*i4]));
@@ -431,10 +426,10 @@ weights_chosen:
         // determinant -- scaled by 128 because the weights are eighths of a
         // 128th and clamped to [-64, 191] below.  The `+0.1` keeps a singular
         // system (a flat image, every gradient zero) from dividing by zero.
-        d1 = Sxx*Szz-Sxz*Sxz;
-        d2 = 0.0-Sxx*Syz+Sxz*Sxy;
-        d3 = Sxz*Syz-Sxy*Szz;
-        inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
+        double d1 = Sxx*Szz-Sxz*Sxz;
+        double d2 = 0.0-Sxx*Syz+Sxz*Sxy;
+        double d3 = Sxz*Syz-Sxy*Szz;
+        double inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
         wa = (int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv);
         if( wa>=191 )
           wa = 191;
@@ -465,44 +460,44 @@ weights_chosen:
           uu = n_quads;
           quad = 0;
           do {
-            nx0 = img->pixels[4*quad+4];
-            dg0 = img->pixels[4*quad]+pp[4*quad+4];
-            dn0 = pp[4*quad];
-            ad0 = nx0+dn0;
-            dnx1 = pp[4*quad+5];
+            int32_t nx0 = img->pixels[4*quad+4];
+            int32_t dg0 = img->pixels[4*quad]+pp[4*quad+4];
+            int32_t dn0 = pp[4*quad];
+            int32_t ad0 = nx0+dn0;
+            int32_t dnx1 = pp[4*quad+5];
             g0 = dg0-ad0;
-            dn1 = pp[4*quad+1];
-            nx2 = img->pixels[4*quad+6];
+            int32_t dn1 = pp[4*quad+1];
+            int32_t nx2 = img->pixels[4*quad+6];
             g1 = img->pixels[4*quad+1]+dnx1-(img->pixels[4*quad+5]+dn1);
-            dnx2 = pp[4*quad+6];
-            g2 = img->pixels[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
+            int32_t dnx2 = pp[4*quad+6];
+            int32_t g2 = img->pixels[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
             g1w = (uint16_t)(img->pixels[4*quad+3]+pp[4*quad+7]-pp[4*quad+3]-img->pixels[4*quad+7]);
-            g1_lo = (int16_t)g1;
+            int16_t g1_lo = (int16_t)g1;
             g1w = g1w-512;
-            pa = g1*wb+g0*wa_slot;
-            pb = g2*wc;
+            int32_t pa = g1*wb+g0*wa_slot;
+            int32_t pb = g2*wc;
             ++hist_a[(g1w-(int16_t)g0)&0x3FF];
-            bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
+            int32_t bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
             ++hist_flat[bin_lin];
             ++hist_b[(g1w-g1_lo)&0x3FF];
             g1w = g1w-g2;
             ++hist_c[g1w&0x3FF];
             alpha = pp[4*quad+7]+256;
-            bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad+5]+wa_slot*pp[4*quad+4]+wc*(uint32_t)pp[4*quad+6]+63)>>7)+256)&0x3FF;
+            int32_t bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad+5]+wa_slot*pp[4*quad+4]+wc*(uint32_t)pp[4*quad+6]+63)>>7)+256)&0x3FF;
             ++hist_c[bin_lin2+1024];
-            r0 = alpha-pp[4*quad+4];
+            int32_t r0 = alpha-pp[4*quad+4];
             ++hist_c[r0+2048];
-            r1 = alpha-pp[4*quad+5];
+            int32_t r1 = alpha-pp[4*quad+5];
             ++hist_c[r1+3072];
-            r2 = alpha-pp[4*quad+6];
+            int32_t r2 = alpha-pp[4*quad+6];
             ++hist_c[r2+4096];
             quad = quad+1;
           } while( quad<uu );
         }
-        cost_lin = estimate_cost(hist_flat, 1024);
+        uint32_t cost_lin = estimate_cost(hist_flat, 1024);
         best4 = (cost_lin>>7)+cost_lin;
-        cost_c0 = estimate_cost(hist_a, 1024);
-        pick0 = cost_c0<best4;
+        uint32_t cost_c0 = estimate_cost(hist_a, 1024);
+        bool pick0 = cost_c0<best4;
         if( cost_c0<best4 )
           best4 = cost_c0;
         wa_pick = wa_slot;
@@ -515,7 +510,7 @@ weights_chosen:
         // `x0[0] = pick0;` before this call and `pred4 = x0[0];` after it was
         // MSVC spilling the register across the call, and `estimate_cost`
         // cannot reach a local of this body.  Same shape twice more below.
-        cost_c1 = estimate_cost(hist_b, 1024);
+        uint32_t cost_c1 = estimate_cost(hist_b, 1024);
         pred4 = pick0;
         if( cost_c1<best4 ) {
           best4 = cost_c1;
@@ -524,7 +519,7 @@ weights_chosen:
           wc = 0;
           wa_slot = 0;
         }
-        cost_c2 = estimate_cost(hist_c, 1024);
+        uint32_t cost_c2 = estimate_cost(hist_c, 1024);
         pred4b = pred4;
         if( cost_c2<best4 ) {
           pred4b = 3;
@@ -539,7 +534,7 @@ weights_chosen:
         plane_desc[3].nrefs = 3;
         // Rows 4..7, by the same window and the same layout-read constant
         // as the search above.
-        hist2 = hists+1024*(4+pred4b);
+        int32_t *hist2 = hists+1024*(4+pred4b);
         result = 4;
         sum3 = 0;
         for( i = 0; i<256; ++i )

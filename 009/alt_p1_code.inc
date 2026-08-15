@@ -64,7 +64,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   int32_t cur0, cur1, code1;
   uint8_t pred1, pred2, pred3;
   AltP1Block* made;
-  int32_t w, n_planes, keep0, code0, code1x, want2, code2, code3, np;
+  int32_t w, n_planes, keep0, code0, code1x, want2, code2, code3;
   uint8_t pred0, want1, want3;
   int32_t width = hdr->width;
   int32_t height = hdr->height;
@@ -318,7 +318,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     rc_end_decode();
   else
     rc_end_encode();
-  np = plane_count;
+  int32_t np = plane_count;
   if( plane_count>0 ) {
     int32_t f = 0;
     do {

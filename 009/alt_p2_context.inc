@@ -24,14 +24,13 @@ static inline int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2,
 
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
-  int32_t ctx15, sum_all, nb_slot;
-  P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2, *row2c;
+  int32_t ctx15, nb_slot;
+  P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2;
   P2Ctx* cx2;
   P2Ctx *nb0, *nb1;
-  bool in_band, no_ref;
-  int32_t in63, c_lo, mode, c_mid, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, magsum, run, flat_a, flat_b, ctx_idx;
+  bool no_ref;
+  int32_t in63, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, flat_a, flat_b;
   uint32_t ctx0_lo;
-  int32_t run4, magsum_s;
   P2Ctx *row0p = cursor[0];
   P2Ctx *cursor1 = cursor[1];
   P2Ctx *sub0_row = cursor[2];
@@ -40,7 +39,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t sum4 = 17*cursor1[3].dleft+15*cursor1[2].dleft+21*cursor1[1].dleft+18*cursor1->dleft+16*cursor1[-1].dleft+22*row0p[-1].dleft+ctx_bias[2]+19*row0p[-2].dleft;
   int32_t lane5 = sub0_row->dup;
   int32_t sum_u = 14*cursor1[3].dup+23*cursor1[1].dup+19*cursor1->dup+25*row0p[-1].dup+ctx_bias[3]+17*row0p[-2].dup+15*(cursor[3]->dup+lane5);
-  sum_all = sum4+sum_u+sum_ul+sum_ur;
+  int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
   int32_t band = (8*sum4>43*sum_u)+(8*sum4>17*sum_u)+(8*sum4>9*sum_u)+(8*sum4>5*sum_u)+(8*sum4>2*sum_u);
   int32_t den_d = 2*row0p[-2].val+2*row0p[-1].val;
   int32_t num_b = cursor1[1].val+(cursor1->val+2*row0p[-1].val);
@@ -106,7 +105,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   nb0 = cursor[0];
   p2_row[0][1] = (float)nb1[1].dval;
   p2_row[0][2] = (float)(nb0[-1].dval+nb1->dval-nb1[-1].dval);
-  row2c = cursor[2];
+  P2Ctx *row2c = cursor[2];
   p2_row[0][3] = (float)(nb0[-2].dval+(nb1->dval-nb1[-2].dval));
   P2Ctx *nb3 = cursor[3];
   p2_row[1][0] = (float)(nb1[-1].dval+nb1->dval-row2c[-1].dval);
@@ -227,9 +226,9 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   weights.row[3] = cur_l[-2];
   weights.row[4] = up_row[0];
   weights.row[5] = cur_l[0];
-  c_lo = 14*sum_u;
-  mode = 1;
-  c_mid = 13*sum_ur;
+  int32_t c_lo = 14*sum_u;
+  int32_t mode = 1;
+  int32_t c_mid = 13*sum_ur;
   if( 16*sum4<=14*sum_u ) {
     c_lo = 16*sum4;
     mode = 0;
@@ -251,7 +250,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t g3pair = cx0[-1].aerr+lane3;
   if( refa )
     g3pair += (rb0->aerr+ra0->aerr)>>1;
-  run = filt;
+  int32_t run = filt;
   P2Ctx *cx3 = (P2Ctx*)(cursor[3]);
   int32_t g3sum = cx1[3].aerr+cx1[-1].aerr+cx0[-1].aerr+cx0[-3].aerr+cx0[-4].aerr+cx0[-2].aerr;
   int32_t run_s = run;
@@ -447,19 +446,19 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t pred4 = p2_pred(p2_ctr[bank4+131072].weighted, p2_ctr[bank4+131072].rate);
   uint8_t* cx2p = (uint8_t*)cx2;
   nb_sum[9] = pred4;
-  run4 = run+pred4;
+  int32_t run4 = run+pred4;
   nb_sum[8] = run4;
-  magsum_s = cx1[5].mag+cx1[4].mag+cx1[-3].mag+cx1[-4].mag+3*(cx1[2].mag+cx2[1].mag)+7*cx1->mag+6*cx1[1].mag+cx0[-6].mag+cx0[-7].mag+cx0[-8].mag+8*cx0[-1].mag+cx4[2].mag+cx4[1].mag+cx4->mag+cx4[-1].mag+cx0[-4].mag+cx0[-5].mag+(cx3[2].mag+cx3[1].mag+cx3[-1].mag+cx3[-2].mag+cx4[-2].mag+cx2p[107]+cx2p[89]+cx2p[71]+(*(cx2p-19))+*(cx2p-37))+4*(cx1[-1].mag+cx0[-2].mag+cx2p[17])+2*(cx1[-2].mag+cx1[3].mag+cx0[-3].mag+cx3->mag+*(cx2p-1)+cx2p[53]);
+  int32_t magsum_s = cx1[5].mag+cx1[4].mag+cx1[-3].mag+cx1[-4].mag+3*(cx1[2].mag+cx2[1].mag)+7*cx1->mag+6*cx1[1].mag+cx0[-6].mag+cx0[-7].mag+cx0[-8].mag+8*cx0[-1].mag+cx4[2].mag+cx4[1].mag+cx4->mag+cx4[-1].mag+cx0[-4].mag+cx0[-5].mag+(cx3[2].mag+cx3[1].mag+cx3[-1].mag+cx3[-2].mag+cx4[-2].mag+cx2p[107]+cx2p[89]+cx2p[71]+(*(cx2p-19))+*(cx2p-37))+4*(cx1[-1].mag+cx0[-2].mag+cx2p[17])+2*(cx1[-2].mag+cx1[3].mag+cx0[-3].mag+cx3->mag+*(cx2p-1)+cx2p[53]);
   int32_t lo_band = band_lo;
   ctx_w[0].sel = (run4<1840)+(run4<272);
   int32_t hi_band = band_hi;
   ctx_w[1].sel = (run4-cx1->val<=hi_band)+(run4-cx1->val<lo_band);
   int32_t d_run4 = run4-cx0[-1].val;
-  in_band = d_run4<=hi_band;
+  bool in_band = d_run4<=hi_band;
   ctx_w[2].sel = in_band+(d_run4<lo_band);
   ctx_w[3].sel = cx1->sign;
   ctx_w[4].sel = cx0[-1].sign;
-  magsum = magsum_s;
+  int32_t magsum = magsum_s;
   int32_t magu = cx2[0].mag+cx1->mag;
   int32_t magl = cx0[-1].mag+cx0[-2].mag;
   if( refa ) {
@@ -515,7 +514,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ctx15 = nb_ctx[magsum>>3];
     ctx = ctx15;
   }
-  ctx_idx = (run+pred4+7)>>4;
+  int32_t ctx_idx = (run+pred4+7)>>4;
   if( ctx_idx>=255 )
     ctx_idx = 255;
   if( ctx_idx<0 )

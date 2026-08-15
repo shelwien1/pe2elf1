@@ -33,21 +33,17 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   // one that came off the wire is this one.
   BmfImage hdr;
   CodedTail head;
-  BmfFile* arc;
-  FILE *fp1;
-  BmfImage* img_at;
-  uint8_t bpp, has_coded;
-  uint8_t* pal_at;
+  uint8_t bpp;
   // The archive version, as a plain local.  The decompilation parked it in
   // `plane_desc[0].weight0` because the original did: `plane_desc[0]` is a
   // header slot, not a plane, and its three weight words were free.
   int32_t version;
-  uint32_t magic, pal_bytes, want2, got;
+  uint32_t magic, want2;
   uint8_t* plane_buf;
-  arc = arc_in;
+  BmfFile *arc = arc_in;
   if( p_coded_buf )
     *p_coded_buf = nullptr;
-  fp1 = (arc_in)->fp;
+  FILE *fp1 = (arc_in)->fp;
   if( !fp1 )
     return nullptr;
   // Skip any member that is not an image, by the length in its eight-byte
@@ -100,15 +96,15 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   if( hdr.data_size>bytes_left(arc->fp) ) {
     return arc->fail();
   }
-  pal_bytes = 3<<(hdr.depth&31);
+  uint32_t pal_bytes = 3<<(hdr.depth&31);
   if( !(hdr.depth&depth_palette) )
     pal_bytes = 0;
   if( !hdr.width||!hdr.height ) {
     return arc->fail();
   }
-  img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);
+  BmfImage *img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);
   img_at->depth = hdr.depth;
-  has_coded = p_coded_buf&&*p_coded_buf;
+  uint8_t has_coded = p_coded_buf&&*p_coded_buf;
   img_at->flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
   plane_count = ((hdr.depth&depth_bits)+7)>>3;
   if( plane_count<1||plane_count>4 ) {
@@ -246,8 +242,8 @@ check_length:
   free(stream.buf);
 read_palette:
   if( hdr.depth&depth_palette ) {
-    pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
-    got = fread(pal_at, 1u, pal_bytes, arc->fp);
+    uint8_t *pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
+    uint32_t got = fread(pal_at, 1u, pal_bytes, arc->fp);
     if( got!=pal_bytes ) {
       return arc->fail();
     }

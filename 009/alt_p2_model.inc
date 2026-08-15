@@ -340,8 +340,6 @@ void AltP2Block::code_banks(int32_t sample16) {
 }
 
 uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
-  P2Ctx* cursor0;
-  int32_t n2_half;
   // The frequency record whose bins this symbol's decision moves.  It was
   // `mir_top` again -- a `uint16_t*` over a `P2Freq`, where index 1 is `f[0]`
   // and `3-is_dec` is `f[2]` or `f[1]`.  Every one of its thirteen
@@ -349,24 +347,11 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   // one of those two bins, so there was never anything a word pointer was for.
   P2Freq* bin;
   P2Freq* grp;
-  uint32_t rec_idx;
-  int32_t hi_nibble;
   P2Freq* p2_rec;
-  uint32_t pair_ctx;
   int32_t is_dec;
-  uint32_t idx0;
-  float sample, d_bias2;
-  P2Freq* frecg2, * frecg1, * frecg0, * frecg3, * gtop, * frec;
-  uint32_t off0, off1, off2, off3, off4;
-  NbRow* wrow_cur;
-  NbRow* wrow_b;
-  float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
+  uint32_t idx0, step10;
   int32_t ctx_lo, ctx_l, ctx15, fold_sel,
       sel_alt, sel0, sel1, sel2, sel3, sel4;
-  int32_t dl, du, dul, dur, resid;
-  P2Freq* frec_step, * frec4c;
-  P2Freq* frec2, * frec3, * frec4b, * frec5, * frec6, * frec7, * prec0, * g0, * g1, * g2, * g3, * g4, * h4, * nxt4, * prec_m1, * h3, * nxt3, * h2, * nxt2, * h1, * nxt1, * h0, * nxt0;
-  uint32_t step_v, step10, step13;
   ctx_lo = ctx&0xF;
   int32_t sample16 = 16*sample_in;
   cursor[0]->val = 16*sample_in;
@@ -384,35 +369,35 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   const int32_t dead = (ctx_lo>6)+(ctx_lo>4)+2*(ctx_lo>9);
   cursor[0]->sign = (resid_in<=dead)+(resid_in< -dead);
   cursor[0]->mag = abs32(resid_in);
-  cursor0 = cursor[0];
-  sample = (float)sample16;
-  dl = sample16-cursor0[-1].val;
+  P2Ctx *cursor0 = cursor[0];
+  float sample = (float)sample16;
+  int32_t dl = sample16-cursor0[-1].val;
   cursor0->dleft = abs32(dl);
-  du = sample16-cursor[1]->val;
+  int32_t du = sample16-cursor[1]->val;
   cursor[0]->dup = abs32(du);
-  dul = sample16-cursor[1][-1].val;
+  int32_t dul = sample16-cursor[1][-1].val;
   cursor[0]->dupleft = abs32(dul);
-  dur = sample16-cursor[1][1].val;
+  int32_t dur = sample16-cursor[1][1].val;
   cursor[0]->dupright = abs32(dur);
-  resid = (int16_t)(sample16-pred_prev);
+  int32_t resid = (int16_t)(sample16-pred_prev);
   cursor[0]->err = resid;
   cursor[0]->aerr = abs32(resid);
-  wrow_cur = nb_cur;
-  ms1 = wrow_cur->w[14][1]+0.000099999997f;
-  wrow_b = cur[-1];
-  bias2 = bias[2];
+  NbRow *wrow_cur = nb_cur;
+  float ms1 = wrow_cur->w[14][1]+0.000099999997f;
+  NbRow *wrow_b = cur[-1];
+  float bias2 = bias[2];
   float n2_bias = bias[0];
-  d_bias2 = sample-bias2;
-  bias1 = bias[1];
-  d_bias = bias1-bias2;
-  ms_a = ((((sample-bias2)*(d_bias))-wrow_cur->w[14][0])*0.001f)+wrow_cur->w[14][0];
-  ms_b = ms1+(((d_bias*d_bias)-wrow_cur->w[14][1])*0.001f);
+  float d_bias2 = sample-bias2;
+  float bias1 = bias[1];
+  float d_bias = bias1-bias2;
+  float ms_a = ((((sample-bias2)*(d_bias))-wrow_cur->w[14][0])*0.001f)+wrow_cur->w[14][0];
+  float ms_b = ms1+(((d_bias*d_bias)-wrow_cur->w[14][1])*0.001f);
   wrow_cur->w[14][1] = ms_b;
-  ms_b10 = 0.1f*ms_b;
+  float ms_b10 = 0.1f*ms_b;
   if( (ms_b10)<=ms_a )
     ms_b10 = fminf(ms_b, ms_a);
   wrow_cur->w[14][0] = ms_b10;
-  conf = (1.0f-(ms_b10/(ms_b+576.0f)))*2.0f;
+  float conf = (1.0f-(ms_b10/(ms_b+576.0f)))*2.0f;
   nlms_track_two_rows(wrow_cur, wrow_b, (sample-bias1)*2.5999999f, d_bias2*conf, conf);
   nlms_predict_and_correct(wrow_cur, sample, n2_bias);
   *cur = nb_cur;
@@ -421,16 +406,16 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   code_banks(sample16);
   ctx_l = ctx;
   ++cursor[0];
-  frec = &freq[ctx_l];
+  P2Freq *frec = &freq[ctx_l];
   ++cursor[1];
   ++cursor[2];
   ++cursor[3];
   ++cursor[4];
-  step_v = frec[0].step;
+  uint32_t step_v = frec[0].step;
   if( step_v>0x10 ) {
     is_dec = a4&1;
     ctx15 = ctx_l&0xF;
-    pair_ctx = ctx_pair[a4&1];
+    uint32_t pair_ctx = ctx_pair[a4&1];
     if( ctx15<15 ) {
       bin = &frec[1];
       p2_rescale(bin);
@@ -459,10 +444,10 @@ code_residual:
         if( !fold[(uint8_t)-resid_in] )
           fold_sel = fold[(uint8_t)-resid_in];
         step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
-        frec_step = &freq[step_v];
+        P2Freq *frec_step = &freq[step_v];
         p2_rec = frec_step;
         if( ctx15<15 ) {
-          frec2 = &frec_step[1];
+          P2Freq *frec2 = &frec_step[1];
           bin = frec2;
           p2_freq_add(frec2, fold_sel, 4);
           if( ctx15<=0 )
@@ -473,13 +458,13 @@ code_residual:
         p2_freq_add(bin, fold_sel, 4);
 counters_done:
         if( a4 ) {
-          n2_half = (a4-1)>>1;
-          hi_nibble = (uint8_t)pair_ctx&0xF0;
+          int32_t n2_half = (a4-1)>>1;
+          int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
           if( hi_nibble>=0xF0||(update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
             update_binary_pair(model_strip(pair_ctx-16), n2_half);
           }
         }
-        prec0 = &p2_rec[0];
+        P2Freq *prec0 = &p2_rec[0];
         p2_freq_add(prec0, fold_sel, 6);
         if( !plane_idx||freq[ctx].step>0x100u ) {
           sel_alt = 2-is_dec;
@@ -488,19 +473,19 @@ counters_done:
           sel0 = ctx_w[0].sel;
           is_dec = sel_alt;
           if( sel0==1 ) {
-            h0 = &freq[ctx_w[0].w[0]+step_v-ctx_w[0].w[1]];
+            P2Freq *h0 = &freq[ctx_w[0].w[0]+step_v-ctx_w[0].w[1]];
             p2_freq_add(h0, fold_sel, 4);
-            off0 = ctx-ctx_w[0].w[1];
-            frecg0 = &freq[off0+ctx_w[0].w[0]];
+            uint32_t off0 = ctx-ctx_w[0].w[1];
+            P2Freq *frecg0 = &freq[off0+ctx_w[0].w[0]];
             idx0 = ctx_w[0].w[2]+off0;
             grp = frecg0;
-            frec3 = &frecg0[0];
+            P2Freq *frec3 = &frecg0[0];
             bin = frec3;
             p2_freq_add(frec3, is_dec, 3);
             if( ctx15<15 ) {
               bin = &grp[1];
               p2_freq_add(bin, is_dec, 4);
-              nxt0 = &freq[idx0+1];
+              P2Freq *nxt0 = &freq[idx0+1];
               p2_freq_add(nxt0, is_dec, 2);
             }
             if( ctx15>2 ) {
@@ -508,7 +493,7 @@ counters_done:
               p2_freq_add(bin, is_dec, 6);
             }
           } else {
-            g0 = &freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]];
+            P2Freq *g0 = &freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]];
             p2_freq_add(g0, fold_sel, 7);
             grp = (&freq[ctx_w[0].w[1]+(ctx-ctx_w[0].w[ctx_w[0].sel])]);
             bin = &grp[0];
@@ -524,19 +509,19 @@ counters_done:
           }
           sel1 = ctx_w[1].sel;
           if( sel1==1 ) {
-            frec4b = &freq[ctx_w[1].w[0]+step_v-ctx_w[1].w[1]];
+            P2Freq *frec4b = &freq[ctx_w[1].w[0]+step_v-ctx_w[1].w[1]];
             bin = frec4b;
             p2_freq_add(frec4b, fold_sel, 4);
-            off1 = ctx-ctx_w[1].w[1];
-            frecg1 = &freq[off1+ctx_w[1].w[0]];
+            uint32_t off1 = ctx-ctx_w[1].w[1];
+            P2Freq *frecg1 = &freq[off1+ctx_w[1].w[0]];
             idx0 = ctx_w[1].w[2]+off1;
             grp = frecg1;
-            h1 = &frecg1[0];
+            P2Freq *h1 = &frecg1[0];
             p2_freq_add(h1, is_dec, 3);
             if( ctx15<15 ) {
               bin = &grp[1];
               p2_freq_add(bin, is_dec, 4);
-              nxt1 = &freq[idx0+1];
+              P2Freq *nxt1 = &freq[idx0+1];
               p2_freq_add(nxt1, is_dec, 2);
             }
             if( ctx15>2 ) {
@@ -544,7 +529,7 @@ counters_done:
               p2_freq_add(bin, is_dec, 6);
             }
           } else {
-            g1 = &freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]];
+            P2Freq *g1 = &freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]];
             p2_freq_add(g1, fold_sel, 7);
             grp = (&freq[ctx_w[1].w[1]+(ctx-ctx_w[1].w[ctx_w[1].sel])]);
             bin = &grp[0];
@@ -560,19 +545,19 @@ counters_done:
           }
           sel2 = ctx_w[2].sel;
           if( sel2==1 ) {
-            frec5 = &freq[ctx_w[2].w[0]+step_v-ctx_w[2].w[1]];
+            P2Freq *frec5 = &freq[ctx_w[2].w[0]+step_v-ctx_w[2].w[1]];
             bin = frec5;
             p2_freq_add(frec5, fold_sel, 4);
-            off2 = ctx-ctx_w[2].w[1];
-            frecg2 = &freq[off2+ctx_w[2].w[0]];
+            uint32_t off2 = ctx-ctx_w[2].w[1];
+            P2Freq *frecg2 = &freq[off2+ctx_w[2].w[0]];
             idx0 = ctx_w[2].w[2]+off2;
             grp = frecg2;
-            h2 = &frecg2[0];
+            P2Freq *h2 = &frecg2[0];
             p2_freq_add(h2, is_dec, 3);
             if( ctx15<15 ) {
               bin = &grp[1];
               p2_freq_add(bin, is_dec, 4);
-              nxt2 = &freq[idx0+1];
+              P2Freq *nxt2 = &freq[idx0+1];
               p2_freq_add(nxt2, is_dec, 2);
             }
             if( ctx15>2 ) {
@@ -580,7 +565,7 @@ counters_done:
               p2_freq_add(bin, is_dec, 6);
             }
           } else {
-            g2 = &freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]];
+            P2Freq *g2 = &freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]];
             p2_freq_add(g2, fold_sel, 7);
             grp = (&freq[ctx_w[2].w[1]+(ctx-ctx_w[2].w[ctx_w[2].sel])]);
             bin = &grp[0];
@@ -596,19 +581,19 @@ counters_done:
           }
           sel3 = ctx_w[3].sel;
           if( sel3==1 ) {
-            frec6 = &freq[ctx_w[3].w[0]+step_v-ctx_w[3].w[1]];
+            P2Freq *frec6 = &freq[ctx_w[3].w[0]+step_v-ctx_w[3].w[1]];
             bin = frec6;
             p2_freq_add(frec6, fold_sel, 4);
-            off3 = ctx-ctx_w[3].w[1];
-            frecg3 = &freq[off3+ctx_w[3].w[0]];
+            uint32_t off3 = ctx-ctx_w[3].w[1];
+            P2Freq *frecg3 = &freq[off3+ctx_w[3].w[0]];
             idx0 = ctx_w[3].w[2]+off3;
             grp = frecg3;
-            h3 = &frecg3[0];
+            P2Freq *h3 = &frecg3[0];
             p2_freq_add(h3, is_dec, 3);
             if( ctx15<15 ) {
               bin = &grp[1];
               p2_freq_add(bin, is_dec, 4);
-              nxt3 = &freq[idx0+1];
+              P2Freq *nxt3 = &freq[idx0+1];
               p2_freq_add(nxt3, is_dec, 2);
             }
             if( ctx15>2 ) {
@@ -616,7 +601,7 @@ counters_done:
               p2_freq_add(bin, is_dec, 6);
             }
           } else {
-            g3 = &freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]];
+            P2Freq *g3 = &freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]];
             p2_freq_add(g3, fold_sel, 7);
             grp = (&freq[ctx_w[3].w[1]+(ctx-ctx_w[3].w[ctx_w[3].sel])]);
             bin = &grp[0];
@@ -632,29 +617,29 @@ counters_done:
           }
           sel4 = ctx_w[4].sel;
           if( sel4==1 ) {
-            frec7 = &freq[ctx_w[4].w[0]+step_v-ctx_w[4].w[1]];
+            P2Freq *frec7 = &freq[ctx_w[4].w[0]+step_v-ctx_w[4].w[1]];
             bin = frec7;
             p2_freq_add(frec7, fold_sel, 4);
-            off4 = ctx-ctx_w[4].w[1];
-            frec4c = &freq[off4+ctx_w[4].w[0]];
-            rec_idx = ctx_w[4].w[2]+off4;
+            uint32_t off4 = ctx-ctx_w[4].w[1];
+            P2Freq *frec4c = &freq[off4+ctx_w[4].w[0]];
+            uint32_t rec_idx = ctx_w[4].w[2]+off4;
             p2_rec = frec4c;
-            h4 = &frec4c[0];
+            P2Freq *h4 = &frec4c[0];
             p2_freq_add(h4, is_dec, 3);
             if( ctx15<15 ) {
               bin = &p2_rec[1];
               p2_freq_add(bin, is_dec, 4);
-              nxt4 = &freq[rec_idx+1];
+              P2Freq *nxt4 = &freq[rec_idx+1];
               p2_freq_add(nxt4, is_dec, 2);
             }
             if( ctx15>2 ) {
-              prec_m1 = &p2_rec[-1];
+              P2Freq *prec_m1 = &p2_rec[-1];
               p2_freq_add(prec_m1, is_dec, 6);
             }
           } else {
-            g4 = &freq[step_v+ctx_w[4].w[1]-ctx_w[4].w[2-sel4]];
+            P2Freq *g4 = &freq[step_v+ctx_w[4].w[1]-ctx_w[4].w[2-sel4]];
             p2_freq_add(g4, fold_sel, 7);
-            gtop = (&freq[ctx_w[4].w[1]+(ctx-ctx_w[4].w[ctx_w[4].sel])]);
+            P2Freq *gtop = (&freq[ctx_w[4].w[1]+(ctx-ctx_w[4].w[ctx_w[4].sel])]);
             p2_freq_add(&gtop[0], is_dec, 7);
             if( ctx15<15 ) {
               p2_freq_add(&gtop[1], is_dec, 5);
@@ -670,7 +655,7 @@ counters_done:
     }
     bin = &frec[-1];
     p2_rescale(bin);
-    step13 = (13*(uint32_t)frec[-1].step)>>4;
+    uint32_t step13 = (13*(uint32_t)frec[-1].step)>>4;
     if( a4 ) {
       bin->f[2-is_dec] += step13;
       update_binary_pair(model_strip(pair_ctx-1), (a4-1)>>1);

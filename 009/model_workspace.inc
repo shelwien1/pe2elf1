@@ -34,10 +34,9 @@ void ModelBlock::free_workspace(int8_t do_free) {
 }
 
 ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth) {
-  uint32_t w;
   int32_t j;
   uint32_t k, m, s, n;
-  w = img_w;
+  uint32_t w = img_w;
   exclusion_gen = 1;
   width = img_w;
   height = img_h;

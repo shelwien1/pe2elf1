@@ -1,29 +1,26 @@
 // bmp_write.inc -- write one back.
 
 int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
-  uint32_t off_bits, stride, done;
+  uint32_t done;
   uint8_t* end;
-  int32_t rows2, pal_bytes;
-  uint8_t *buf;
-  int32_t row_i, run_max, nib;
-  FILE* fp, * fp2;
+  int32_t pal_bytes;
   bool can_rle;
   uint32_t at, at2;
-  uint8_t *out_buf, *out_at, *p, *q, *out2;
-  int32_t rle_on, i, rows, bits, rle_mode, src_bits, rle_kind, lit_len, run, coded_bytes, y;
+  uint8_t *out_at, *p, *q;
+  int32_t bits, rle_kind, lit_len, run, coded_bytes;
   uint8_t byte;
-  uint32_t data_len, n_bytes, pad;
-  rle_on = want_rle;
-  fp = fopen(path, "wb");
+  uint32_t n_bytes, pad;
+  int32_t rle_on = want_rle;
+  FILE *fp = fopen(path, "wb");
   if( !fp )
     return 0;
-  out_buf = (uint8_t*)bmf_new(img->data_size+8*img->height+(img->data_size>>5)+2048);
+  uint8_t *out_buf = (uint8_t*)bmf_new(img->data_size+8*img->height+(img->data_size>>5)+2048);
   BmpHeader* bmp = (BmpHeader*)out_buf;
-  i = img->width;
+  int32_t i = img->width;
   bmp->biSize = bmp_hdr_v3;
   bmp->bfType = bmp_magic;
-  rows = img->height;
-  rows2 = rows;
+  int32_t rows = img->height;
+  int32_t rows2 = rows;
   bmp->bfReserved2 = 0;
   bmp->bfReserved1 = 0;
   bmp->biWidth = i;
@@ -39,7 +36,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   bmp->biClrUsed = 0;
   bmp->biYPelsPerMeter = 0;
   bmp->biXPelsPerMeter = 0;
-  buf = out_buf+54;
+  uint8_t *buf = out_buf+54;
   if( bits<=8 ) {
     int32_t ncolours = 1<<(bits&31);
     int32_t ncol = 1<<(bits&31);
@@ -104,17 +101,17 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     }
     buf = &out_buf[pal_bytes+54];
   }
-  stride = img->stride;
-  off_bits = (uint32_t)(buf-out_buf);
-  rle_mode = rle_on;
-  data_len = img->data_size;
+  uint32_t stride = img->stride;
+  uint32_t off_bits = (uint32_t)(buf-out_buf);
+  int32_t rle_mode = rle_on;
+  uint32_t data_len = img->data_size;
   while( 1 ) {
     out_at = buf;
     p = &img->pixels[data_len-stride];
     bmp->bfOffBits = off_bits;
     if( !rle_mode )
       break;
-    src_bits = depth&depth_bits;
+    int32_t src_bits = depth&depth_bits;
     can_rle = src_bits==4;
     if( src_bits!=4 ) {
       if( src_bits!=8 )
@@ -128,8 +125,8 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     // Pixels are nibbles rather than bytes, which is the whole difference
     // between the two runs: half the shift, and a run counts to 15 rather
     // than 255.  Both were `rle_kind-1`, arithmetic on a format constant.
-    nib = rle_kind==bmp_rle4;
-    run_max = (0x100u>>(nib&31))-1;
+    int32_t nib = rle_kind==bmp_rle4;
+    int32_t run_max = (0x100u>>(nib&31))-1;
     // Flush the literal run that ends at `run_end`: an escape byte, the count,
     // the bytes themselves, and a pad byte when the count is odd -- or, for a
     // run too short to be worth the two-byte header, one or two encoded pairs
@@ -165,7 +162,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
       }
     };
     if( rows2>0 ) {
-      row_i = 0;
+      int32_t row_i = 0;
       while( 1 ) {
         if( p>=&p[stride] )
           goto write_rows;
@@ -245,14 +242,14 @@ write_rows:
     }
     rle_mode = 0;
   }
-  fp2 = fp;
-  out2 = out_buf;
+  FILE *fp2 = fp;
+  uint8_t *out2 = out_buf;
   bmp->biCompression = bmp_rgb;
   if( rows2<=0 ) {
     coded_bytes = 0;
   } else {
     pad = ((stride+3)&0xFFFFFFFC)-stride;
-    y = 0;
+    int32_t y = 0;
     do {
       memcpy(out_at, p, stride);
       out_at += stride;

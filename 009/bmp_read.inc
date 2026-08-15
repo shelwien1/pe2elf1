@@ -3,15 +3,12 @@
 BmfImage* read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row, bmp_bgra[4], pix;
-  int32_t y8, run4;
   uint8_t* row_at;
   uint8_t* pal, * pal2, * pal3;
-  uint8_t lo;
   uint32_t row_pad, byte;
-  uint8_t cur, lo16;
-  uint8_t* row4, * row3, * row6, * pal_at, * row5;
-  int32_t pal_n, i, hi_nibble, left4, left4b, y, dxy, dy4, byte_in, step;
-  uint32_t stride_pad, pair, hi, stride, got, left;
+  uint8_t cur;
+  int32_t pal_n, i, hi_nibble;
+  uint32_t pair, stride, left;
   BmpHeader hdr;
   FILE* fp = fopen(path, "rb");
   if( !fp||fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=bmp_magic||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=bmp_hdr_v3||hdr.biPlanes!=1 ) {
@@ -45,7 +42,7 @@ BmfImage* read_bmp(char* path) {
     fclose(fp);
     return nullptr;
   }
-  stride_pad = (img->stride+3)&0xFFFFFFFC;
+  uint32_t stride_pad = (img->stride+3)&0xFFFFFFFC;
   if( hdr.biBitCount<=8u ) {
     pal_n = 1<<(hdr.biBitCount&31);
     if( (int32_t)hdr.biClrUsed )
@@ -123,7 +120,7 @@ BmfImage* read_bmp(char* path) {
     memset(img->pixels, 0, img->data_size);
     img_f = img;
     hi_nibble = 1;
-    y8 = img->height-1;
+    int32_t y8 = img->height-1;
     while( 1 ) {
       while( 1 ) {
         while( 1 ) {
@@ -135,8 +132,8 @@ BmfImage* read_bmp(char* path) {
 next_opcode:
           if( ferror(fp) )
             return nullptr;
-          run4 = fgetc(fp);
-          byte_in = fgetc(fp);
+          int32_t run4 = fgetc(fp);
+          int32_t byte_in = fgetc(fp);
           if( run4<0||byte_in<0 )
             return nullptr;
           byte = (uint32_t)byte_in;
@@ -145,10 +142,10 @@ next_opcode:
             break;
           if( row<pix_lo||row+(run4/2+1)>pix_hi )
             return nullptr;
-          lo = byte&0xF;
+          uint8_t lo = byte&0xF;
           if( hi_nibble ) {
-            left4b = run4;
-            row3 = row;
+            int32_t left4b = run4;
+            uint8_t *row3 = row;
             while( left4b!=1 ) {
               *row3++ = pair;
               left4b -= 2;
@@ -162,11 +159,11 @@ next_opcode:
             *row3 = pair&0xF0;
             hi_nibble = 0;
           } else {
-            left4 = run4;
-            row4 = row;
+            int32_t left4 = run4;
+            uint8_t *row4 = row;
             cur = *row;
-            hi = pair>>4;
-            lo16 = 16*lo;
+            uint32_t hi = pair>>4;
+            uint8_t lo16 = 16*lo;
             while( 1 ) {
               *row4++ = hi|cur;
               if( left4==1 )
@@ -194,11 +191,11 @@ next_opcode:
         goto done;
       if( byte!=2 )
         break;
-      dxy = fgetc(fp);
-      dy4 = fgetc(fp);
+      int32_t dxy = fgetc(fp);
+      int32_t dy4 = fgetc(fp);
       if( dxy<0||dy4<0 )
         return nullptr;
-      step = (dxy>>1)-dy4*(uint16_t)img_f->stride;
+      int32_t step = (dxy>>1)-dy4*(uint16_t)img_f->stride;
       if( (dxy&1)==1 ) {
         if( !hi_nibble )
           ++step;
@@ -209,8 +206,8 @@ next_opcode:
     if( row<pix_lo||row+((int32_t)byte/2+1)>pix_hi )
       return nullptr;
     fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
-    pal_at = (uint8_t*)pal_buf;
-    row5 = row;
+    uint8_t *pal_at = (uint8_t*)pal_buf;
+    uint8_t *row5 = row;
     while( 1 ) {
       pix = *pal_at;
       if( hi_nibble ) {
@@ -245,11 +242,11 @@ next_opcode:
   stride = img->stride;
   row_pad = stride_pad-stride;
   if( hdr.biHeight-1>=0 ) {
-    y = hdr.biHeight-1;
+    int32_t y = hdr.biHeight-1;
     img_f = img;
-    row6 = row;
+    uint8_t *row6 = row;
     while( 1 ) {
-      got = fread(row6, 1u, stride, fp);
+      uint32_t got = fread(row6, 1u, stride, fp);
       stride = (uint16_t)img_f->stride;
       if( got!=stride )
         return nullptr;

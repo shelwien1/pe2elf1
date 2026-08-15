@@ -11,10 +11,9 @@ struct P2Freq {
   uint16_t step;
   uint16_t f[3];
   uint32_t rescale_three_way() {
-    uint32_t cut;
     f[0] -= f[0]>>1;
     f[1] -= f[1]>>1;
-    cut = f[2]>>1;
+    uint32_t cut = f[2]>>1;
     f[2] -= cut;
     uint32_t budget = step;
     if( budget<=0x100 ) {
@@ -44,7 +43,6 @@ struct P2Freq {
   // can see, and it made `unstale.py` measure the wrong one.
   template<int32_t f_DEC>
   int32_t code_three_way(const uint32_t* ctx_pair, int32_t sym) {
-    uint16_t f_before;
     uint32_t cum;
     uint16_t st, *slot;
     uint16_t down;
@@ -84,7 +82,7 @@ struct P2Freq {
       rc.decode(cum, tot_1, tot);
     else
       rc.encode(cum, tot_1, tot);
-    f_before = *slot;
+    uint16_t f_before = *slot;
     if( *slot>0x4000u ) {
       uint32_t f1_old = f[1];
       uint32_t f2_old = f[2];
@@ -422,7 +420,6 @@ struct AltP2Block {
 
   AltP2Block*alt_p2_alloc(int32_t img_w, int32_t plane) {
     uint32_t done;
-    int32_t lvl, len;
     uint32_t j, p, n;
     plane_idx = plane;
     // One pass, not two 2x-unrolled ones.  The original walked the 163,840
@@ -477,7 +474,7 @@ struct AltP2Block {
     while( row<5 );
     memset(buf[0], 0, row_bytes);
     ctx_bias[3] = 0;
-    lvl = 0;
+    int32_t lvl = 0;
     ctx_bias[2] = 0;
     ctx_bias[1] = 0;
     uint32_t pair = 0;
@@ -498,7 +495,7 @@ struct AltP2Block {
       int32_t bump = 2*pair+++1==p2_ctx_edges[lvl1];
       lvl = bump+lvl1;
     } while( pair<0x82 );
-    len = 0;
+    int32_t len = 0;
     for( n = 0; n<0x3C; ++n ) {
       nb_ctx[2*n] = len;
       int32_t len1 = (2*n==p2_len_edges[len])+len;

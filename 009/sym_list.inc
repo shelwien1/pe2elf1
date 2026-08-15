@@ -57,13 +57,13 @@ struct SymList {
   bool rescale(int32_t count) {
     int32_t last_cnt;
     uint32_t n_left, running, since, due = rescale_at;
-    SymEntry *prev, *back;
+    SymEntry *back;
     if( count<=251&&due>=since_rescale )
       return false;
     n_left = live;
     int32_t bias = due<20*n;
     SymEntry *cur = ent-1;
-    prev = cur;
+    SymEntry *prev = cur;
     do {
       prev = cur;
       ++cur;
@@ -196,15 +196,12 @@ struct SymList {
   void add_weight(int32_t want, uint32_t add) {
     uint32_t count;
     bool full;
-    uint8_t c3, c, c2;
-    SymEntry* q, * p, * head;
-    uint16_t s3, s, s2;
+    SymEntry *head;
     int32_t recycled;
-    uint32_t n_live, left;
     SymEntry* list = ent;
-    n_live = live;
-    p = list;
-    left = n_live;
+    uint32_t n_live = live;
+    SymEntry *p = list;
+    uint32_t left = n_live;
     if( n_live ) {
       while( p->sym!=want ) {
         ++p;
@@ -218,9 +215,9 @@ struct SymList {
   placed:
         count = p->cnt;
       } else {
-        s = p->sym;
-        c = p->cnt;
-        q = p-1;
+        uint16_t s = p->sym;
+        uint8_t c = p->cnt;
+        SymEntry *q = p-1;
         *p = *q;
         q->set(s, c);
         head = ent;
@@ -232,8 +229,8 @@ struct SymList {
             p = q-1;
             if( count<=p->cnt )
               break;
-            s2 = q->sym;
-            c2 = q->cnt;
+            uint16_t s2 = q->sym;
+            uint8_t c2 = q->cnt;
             *q = *p;
             p->set(s2, c2);
             head = ent;
@@ -266,8 +263,8 @@ struct SymList {
       list->sym = want;
       since_rescale += 4;
       if( list!=ent ) {
-        s3 = list->sym;
-        c3 = list->cnt;
+        uint16_t s3 = list->sym;
+        uint8_t c3 = list->cnt;
         *list = list[-1];
         list[-1].set(s3, c3);
       }

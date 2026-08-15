@@ -139,11 +139,10 @@ static void transpose_image(BmfImage* img, int32_t planes) {
 // wrote it as one store.  The two decision bytes are written as themselves
 // now, which is also what let the return type stop being `int32_t*`.
 BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
-  int32_t bits, row_pack, row_bytes, pal_bytes;
-  uint16_t row16;
+  int32_t row_pack, row_bytes, pal_bytes;
   bool sub_byte_rows = false;
-  row16 = img_w;
-  bits = bpp;
+  uint16_t row16 = img_w;
+  int32_t bits = bpp;
   if( bpp>=5&&bpp<=7 ) {
     row_bytes = row16;
   } else {

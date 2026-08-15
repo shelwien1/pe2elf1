@@ -29,7 +29,7 @@ int32_t decode_symbol_list(SymList* syms) {
   // array is a plain local now, which is what would let ASan say so if that
   // stopped being true.
   SymEntry* list[no_symbol+1];
-  SymEntry *p, *q;
+  SymEntry *q;
   SymEntry** w, ** rd, ** rd2;
   int32_t live, c;
   live = syms->live;
@@ -59,7 +59,7 @@ int32_t decode_symbol_list(SymList* syms) {
   int32_t tot_all = cum+tot0;
   int32_t target = rc.get_freq(tot_all);
   int32_t tot = cum+tot0;
-  p = list[0];
+  SymEntry *p = list[0];
   rd = &list[1];
   SymEntry *first = list[0];
   uint32_t cum_lo = 0;
