@@ -122,17 +122,24 @@ Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **50052** | 5.14 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **49707** | 5.11 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **127294** | 4.42 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **150769** | 3.93 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **408614** | 1.45 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2912153** | 2.78 |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **49968** | 5.13 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **49624** | 5.10 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **122585** | 4.26 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **147775** | 3.85 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **408606** | 1.45 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2912183** | 2.78 |
 | x_ai.bmp | RLE8 | 887278 | — | — | 285808 | 285808 | fallback |
 | x_ci.bmp | RLE8 | 3278170 | — | — | 1046958 | 1046958 | fallback |
 
+Every one of these round-trips (`CODER=./bmpc ./t.sh testfiles/*.bmp`), as
+do an empty file, a 2-byte `BM`, 3 KB of `/dev/urandom`, a truncated BMP, a
+top-down BMP with non-zero row padding and a trailer, and book1.
+
 The two RLE8 files are not rasters, so they take the order-1 fallback and
-match coder0 exactly.
+match coder0 exactly (+1 byte for the mode flag).
+
+On the 8 MB target image bmpc codes 2912183 bytes against coder0's
+4057586 — 28.2% smaller — at 2.78 bits per byte.
 
 ## 5. Caveats
 

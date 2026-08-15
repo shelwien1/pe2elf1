@@ -119,6 +119,14 @@
 #ifndef RES_PLANE
 #define RES_PLANE    1   // one order-0 residual model per colour component
 #endif
+#ifndef RES_CTX
+#define RES_CTX      0   // >0: split the order-0 residual model by a
+                         // quantised local activity context -- RES_CTX
+                         // buckets of |e| at W + N + NE, per plane.  This
+                         // is the one place the residual coder stops being
+                         // order 0, so it is off by default; see
+                         // README-bmpc.md for what it measures.
+#endif
 #ifndef STATS
 #define STATS        0   // -DSTATS=1: dump predictor diagnostics to stderr
 #endif
@@ -291,6 +299,10 @@ struct Raster {
   ParamUpdater<1,Config_LM>* lam;   // z of the convex combination
 #endif
   Ctr*   res;              // order-0 residual model(s)
+#if RES_CTX
+  byte*  emap;             // |prediction error| per component, same geometry
+  int    ectx[4];          // activity bucket of the current pixel
+#endif
   Ctr*   padm;             // order-0 model for the row padding bytes
   float  i2f[256];         // byte -> mix input
   float  base[4];          // i2f[] of the operating point, per component
@@ -357,8 +369,13 @@ struct Raster {
     bias = new float[nc*NCTX];
     for( uint i=0; i<nc*NCTX; i++ ) bias[i] = 0.0f;
 #endif
-    res = new Ctr[256 * (RES_PLANE ? nc : 1)];
-    InitCtr( res, 256 * (RES_PLANE ? nc : 1) );
+    uint nres = 256 * (RES_PLANE ? nc : 1) * (RES_CTX ? RES_CTX : 1);
+    res = new Ctr[nres];
+    InitCtr( res, nres );
+#if RES_CTX
+    emap = new byte[bn];
+    memset( emap, 0, bn );
+#endif
     padm = new Ctr[256];
     InitCtr( padm, 256 );
 
@@ -409,6 +426,19 @@ struct Raster {
                 + (qgrad(int(pW[k])-int(pNW[k]))*BQ
                 +  qgrad(int(pNW[k])-int(pN[k])))*BQ
                 +  qgrad(int(pN[k])-int(pNE[k]));
+    }
+#endif
+#if RES_CTX
+    {
+      size_t o = size_t(At(px,py) - buf);
+      const byte* eW  = emap + o - size_t(nc);
+      const byte* eN  = emap + o - size_t(bstride)*nc;
+      const byte* eNE = eN + nc;
+      for( uint k=0; k<nc; k++ ) {
+        uint a = uint(eW[k]) + uint(eN[k]) + uint(eNE[k]);
+        uint q = 0; while( q+1 < RES_CTX && a >= (2u<<q) ) q++;
+        ectx[k] = int(q);
+      }
     }
 #endif
     int i = 0;
@@ -467,7 +497,11 @@ struct Raster {
 #if STATS
     s_h[r&255]++;
 #endif
+#if RES_CTX
+    r = CodeByte( res + (uint(RES_PLANE ? int(k)*RES_CTX : 0) + uint(ectx[k]))*256, r );
+#else
     r = CodeByte( res + (RES_PLANE ? k*256 : 0), r );
+#endif
 #if RES_ZIGZAG
     e = (r&1) ? -int((r+1)>>1) : int(r>>1);
     r = uint(e) & 255;
@@ -475,6 +509,12 @@ struct Raster {
     v = (uint(pb) + r) & 255;
 
     p[k] = byte(v);
+#if RES_CTX
+    {
+      int d = int(v) - pb; if( d<0 ) d = -d;
+      emap[size_t(p-buf)+k] = byte(d>255?255:d);
+    }
+#endif
 
     // --- weight update -----------------------------------------------
 #if MIX_LOGISTIC

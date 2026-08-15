@@ -23,7 +23,7 @@ pdesc( B0_NW_w_, 1, "01111111111" );
 static const int B0_NW_w = B0_NW_w_.value * (1);
 #endif
 #ifndef B0_INC_w
-pdesc( B0_INC_w_, 1, "0111111111111111111" );
+pdesc( B0_INC_w_, 1, "1111111100100110000" );
 static const int B0_INC_w = B0_INC_w_.value * (1);
 #endif
 #ifndef B0_STEP_w
@@ -35,7 +35,7 @@ pdesc( B0_WMAX_w_, 1, "0111111111111" );
 static const int B0_WMAX_w = B0_WMAX_w_.value * (1);
 #endif
 #ifndef B0_G2_w
-pdesc( B0_G2_w_, 1, "10011100000111101" );
+pdesc( B0_G2_w_, 1, "11111110111110110" );
 static const int B0_G2_w = B0_G2_w_.value * (1);
 #endif
 #ifndef B0_D_w
@@ -55,19 +55,19 @@ mdesc( B0_G1_w_, 1, "0111111111111" );
 static const int B0_G1_w = B0_G1_w_.value * (1);
 #endif
 #ifndef B0_HUB
-pdesc( B0_HUB_, 1, "0110010" );
+pdesc( B0_HUB_, 1, "0100000" );
 static const int B0_HUB = B0_HUB_.value * (1);
 #endif
 #ifndef B0_NW2_w
-pdesc( B0_NW2_w_, 1, "0111111111111" );
+pdesc( B0_NW2_w_, 1, "0110110100111" );
 static const int B0_NW2_w = B0_NW2_w_.value * (1);
 #endif
 #ifndef B0_INC2_w
-pdesc( B0_INC2_w_, 1, "0100010001000110100" );
+pdesc( B0_INC2_w_, 1, "0101011001000000100" );
 static const int B0_INC2_w = B0_INC2_w_.value * (1);
 #endif
 #ifndef B0_HUB2
-pdesc( B0_HUB2_, 1, "011111" );
+pdesc( B0_HUB2_, 1, "101001" );
 static const int B0_HUB2 = B0_HUB2_.value * (1);
 #endif
 #ifndef B0_NWL
@@ -79,7 +79,7 @@ pdesc( B0_INCL_, 1, "000000000000000" );
 static const int B0_INCL = B0_INCL_.value * (1);
 #endif
 #ifndef B0_STEPL
-pdesc( B0_STEPL_, 1, "01111111111111111" );
+pdesc( B0_STEPL_, 1, "00100100101101111" );
 static const int B0_STEPL = B0_STEPL_.value * (1);
 #endif
 #ifndef B0_MM2
