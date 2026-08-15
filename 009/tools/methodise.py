@@ -79,11 +79,34 @@ import structs                                                    # noqa: E402
 # with the reason, and counted apart, so the next round does not re-propose
 # them and does not have to re-derive why.
 DECLINED = {
+    # Four coders that read the image's width, height and depth and nothing
+    # else of it.  The rule accepts them and a reader should not: a method of
+    # `BmfImage` would make the image the compressor, the model, or the BMP
+    # writer, and the image is what these read rather than what acts.  Their
+    # first parameter is a receiver by the letter of the rule and an argument
+    # by what the body does with it, which is the one thing the syntactic test
+    # cannot see.
+    #
+    # `alt_model_p2_encode` carried a second reason for a round -- that its
+    # decode half took a `uint16_t *` and could not be the same kind of method,
+    # so a merge would break the pair.  That expired when the decode half was
+    # retyped; the pair matches now, and it is the first reason that holds.
     'alt_model_p2_encode':
-        'reads two fields of the image and is a 343-line encoder; a method of '
-        '`BmfImage` would make the image the compressor.  Its decode half takes '
-        'a `uint16_t *` and could not be the same kind of method, so the pair '
-        'would stop matching as well',
+        'reads three fields of the image and is a 323-line encoder; a method '
+        'of `BmfImage` would make the image the compressor',
+    'alt_model_p1':
+        'the merged p1 coder, 276 lines, and it reads the image for its width '
+        'and height.  Same judgement as `alt_model_p2_encode` above',
+    'alt_model_p2_decode':
+        'the decode half of `alt_model_p2_encode`, 273 lines, and declined '
+        'with it -- a pair this project keeps matched does not become a method '
+        'on one side',
+    'write_bmp':
+        'writes a BMP file from an image.  `BmfImage::write_bmp(path)` would '
+        'read as the image writing itself to disk, which is the file format\'s '
+        'job and not the image\'s; `MINIMAL-SYNTAX.md` section 3 declined it '
+        'by hand when it still had four uses of the parameter that were not '
+        'member accesses, and it is the same decline now that they are gone',
     'alt_p1_encode_symbol':
         'the two-line instantiation of `CounterNode::code_symbol<0>`, which is '
         'already a method.  These wrappers exist to give a merged '

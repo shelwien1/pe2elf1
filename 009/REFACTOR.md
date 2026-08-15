@@ -664,3 +664,58 @@ the two answers spelled out: `bmf.cpp` for a tool that splices the unit, one
 `.inc` for one that reads the file it is handed.  `tools/README.md` opens by
 claiming every script prints its usage when run with no arguments; that
 sentence is true now.
+
+## The types the decompiler could not see
+
+With the tools honest, the tree itself was worth another pass, and what it had
+was one shape repeated: **an object passed as bytes and cast back on the first
+line of the body.**
+
+`BmfImage` is sixteen bytes with `pixels` as the flexible array after it, so a
+byte offset from the struct base carries `sizeof(BmfImage)` as a literal 16 in
+every subscript.  Both spellings sat in one body -- `((uint8_t*)img)[4*i+16]`
+twenty lines from `&img->pixels[x3[2]]`, and in `transform_planes` in adjacent
+branches of one `if`.  47 subscripts are on `pixels` now, and the two length
+expressions that measured from the struct moved with them: `(data_end-17-pp)`
+is `(data_end-1-pp)`.
+
+The same shape at every level:
+
+  * five functions took an image as `uint8_t*` -- `cost_candidate`,
+    `model_planes`, `colour_transform`, `interleave_plane`, `bmf_pixels`;
+  * three took it as `uint16_t*` and read `*p_i`, `p_i[1]`, `p_i[5]&0x3F` --
+    width, height and depth by word index into a struct that names all three.
+    The asymmetry is what makes that one plain: `alt_model_p2_encode` was
+    retyped in an earlier round and reads `p_i->width`, while its decode twin
+    two files away still counted words;
+  * `read_bmp` returned `int32_t*` and `expand_image` returned `uint8_t*`, and
+    both callers opened with `BmfImage*const p_i_img = (BmfImage*)p_i` and used
+    that for everything after;
+  * `write_bmp` read the palette as `(uint8_t*)img + data_ofs2` with offsets
+    16..21, where `data_ofs2` was six spellings of `img->data_size` and the
+    palette is `img->palette()`.
+
+`colour_transform` and `interleave_plane` also returned the advanced cursor
+that no caller reads -- four call sites, every one a statement -- so both
+return `void`.  `img_a = (BmfImage*)((uint8_t*)img)` was a cast to bytes and
+straight back; `tile_a` and `tile_c` were `(uint8_t*)frame.tile_img` re-taken
+inside two loops; `(uint8_t*)((uint16_t*)p_i->pixels)` was a cast to words and
+straight back.  Pointer casts across the unit: 374 to 313.
+
+Typing four coders made `methodise.py` propose them, and all four are declined
+with the reason written down: a method of `BmfImage` would make the image the
+compressor, the model or the BMP writer, and the image is what these read
+rather than what acts.  `alt_model_p2_encode`'s recorded reason had a second
+half -- that its decode twin took a `uint16_t*` and could not be the same kind
+of method -- and retyping the twin expired it, which is the second decline this
+round that came with a date on it.
+
+**The gate had a hole and this walked into it.**  `./build.sh 2>&1 | tail -4`
+reports the pipe's exit status and not the compiler's, so a build that failed
+on an undeclared name printed a warning count of `0`, and the 110 checks that
+followed passed -- against the binary from before the edit.  The same defect
+found in `sweep.sh` that morning, in my own hands an hour later; the x32 leg is
+what caught it, because it builds rather than reusing.  `test.sh` refuses a
+binary older than any `.inc` or `.cpp` beside it now, and names them.  That
+covers this and the two earlier times a rebuild in one shell raced a test in
+another.  Proved it reports: `touch globals.inc`, and it declines.
