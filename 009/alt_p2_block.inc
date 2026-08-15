@@ -386,6 +386,8 @@ struct AltP2Block {
     w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
 
+  void code_banks(int32_t sample16);
+
   template<int f_DEC>
   void alt_p2_d8_body(uint8_t* src, uint8_t* out,
                       int32_t width, int32_t height);
