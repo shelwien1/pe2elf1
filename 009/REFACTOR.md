@@ -422,6 +422,19 @@ Phase 3 step 1 applied where it earns its keep rather than where the plan
 expected to need it: an assertion that restates a layout is noise, and this one
 restates a *dependency*.
 
+**The weight rows have a type.**  `NbRow { float w[15][4]; uint32_t uses;
+uint32_t _pad[3]; }` -- same 256 bytes at the same offsets, asserted both ways
+-- so the use count that lived in a `float` slot is a member rather than a
+`memcpy`.  Every `float (*)[4]` and `float (**)[4]` that pointed at a weight
+row moved with it, and the type separates two things that had shared one:
+`__alt_p2_filter`'s first parameter is a weight row and its second is
+`p2_row`.  The single `float (*)[4]` left in the tree is that second one.
+
+The first attempt used a regex for the subscripts and rewrote the struct's own
+`float w[15][4]` member into `float row->w[15][4]`.  That is the fourth time
+this round a broad pattern over these files was the wrong tool; the working
+method is explicit replacements plus the compiler.
+
 ### still open
 
   * `alt_p2_model`'s magnitude coding.  Its per-bank walk *was* on this list,
@@ -441,9 +454,3 @@ restates a *dependency*.
     and the one with the widest blast radius.  It wants its own round.
   * the `__` prefix, which needs three tools taught a new way to recognise a
     definition before it can move.
-  * the weight row's struct.  A use counter still lives in a `float` slot; it
-    goes through `memcpy` now, so it is defined rather than undefined, but the
-    row wants a type with a `uint32_t` member at that offset.  Scoped: about
-    thirty `float (*)[4]` declarations and every `[j][k]` on one, and it has to
-    keep `__alt_p2_filter`'s two parameters distinguishable -- one is a weight
-    row and the other is `p2_row`, and today they share a type.
