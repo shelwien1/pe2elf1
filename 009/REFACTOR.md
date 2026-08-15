@@ -797,7 +797,8 @@ anything the tool can still do:
     nineteen images then fail to expand at all, `expand exits 3`.  Not one
     image and not a stream that moved -- the header parse stops working, which
     is what says the frame's layout is what the parse reads through.  The entry
-    stays, with today's measurement.
+    stays, with today's measurement.  **It is cleared now** -- see "The
+    sixteen bytes that were four members" below, and the layout was a record.
 
 The lift then exposed storage the frame had been hiding: `marks[16]` has no
 reader anywhere, and a *member* can never be reported unused.  Two silences in
@@ -1041,3 +1042,53 @@ this file, and `pk.word` is a `uint32_t *` already.  `samecast.py` reads zero
 and that zero is honest: its rule is about a local or a parameter, and
 `stream.pk.word` is a member two levels down.  `packer_flush()` is the eight,
 beside the `packer_reset()` they all pair with.
+
+## The sixteen bytes that were four members
+
+`expand_image`'s frame was the one entry in `liftframe.py`'s table of measured
+gate failures: lifting it made seventeen of nineteen images fail to expand at
+all, `expand exits 3`, the bad-file code.  Not a stream that moved — the header
+parse ceasing to work — and the entry recorded that as the frame's layout being
+what the parse reads through.
+
+It was, and the whole of it is one `fread`:
+
+```c
+    uint16_t hdr_words[5];
+    uint8_t depth_b;
+    uint8_t flags_b;
+    uint32_t data_len;
+    ...
+    fread(frame.hdr_words, 0x10u, 1u, arc->fp)
+```
+
+Sixteen bytes across four members, of which the array is the first ten.  So the
+four are one object, and the array's size was never five of anything: they are
+`BmfImage`'s `width`, `height`, `stride` and `_pad8`, then its `depth`, `flags`
+and `data_size`, at exactly those offsets.  `compress_image` writes that record
+with `fwrite(&hdr, 1u, 0x10u, …)` from a `BmfImage` — the writer knew what it
+was and only the reader did not.
+
+That is the `read_bmp` finding one file over, and both entries said the same
+true thing about the same untrue reason.  With the header a record the rest
+lifts: a `CodedTail`, a `BmfImage` scratch for the one-plane decode, and
+fourteen spill slots each holding a copy of a local still live at the read.
+**`liftframe.py`'s failure table is now empty.**
+
+An empty table is not the end of its usefulness, and the way it emptied is a
+hazard of its own: an entry is a claim about a body, and a body can stop having
+a frame without the dict noticing.  `expand_image` printed as a live
+measurement for one round after its frame was gone.  The tool asks the unit
+now, prints `STALE` for a name whose body has no frame, and keeps it out of the
+"tried and reverted" count — proved by putting the cleared entry back beside a
+live one and watching it separate them.
+
+**Two more shared loops came out of it.**  The de-interleave — one plane out of
+the interleaved image, `dst[i] = pixels[plane + i*plane_count]`, with the
+one-plane case spelled out as the `memcpy` it is — was written three times:
+here, and as the no-reference arm of `colour_transform` and `interleave_plane`.
+It is `deinterleave_plane`.  And the pixel transpose was here a fifth time,
+which is `transpose_image`.  Between them they were most of what the frame's
+remaining slots were carrying: `Block`, `row_step`, `nplanes_s`, `s0`, `s4`,
+`s8`, `s12` and three saves of `img_at` and `arc` across calls that cannot
+touch either.

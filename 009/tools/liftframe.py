@@ -257,14 +257,19 @@ def indexed_out(lines, a, b, got):
 # genuinely inseparable is now zero.  The rule stays, because it is what makes
 # the tool refuse rather than guess; a union it declines is a question for a
 # reader, not an answer.
+# `expand_image` was the last entry and it is cleared, which empties the table.
+# It failed exactly as recorded -- seventeen of nineteen images `expand exits 3`
+# -- and the reason was one `fread` of sixteen bytes across four members that
+# are `BmfImage`'s first sixteen.  Reading into the record removed the reason
+# and the lift was then ordinary, the same way `read_bmp` cleared two rounds
+# before it.  Both entries said "the frame's layout is what the parse reads
+# through", both were true, and in both the layout turned out to be a record
+# with a name already in the tree.
+#
+# An empty table is not the end of this list's usefulness: the next frame given
+# its own storage that fails the gate belongs here, with the failure, so that
+# "0 to lift" keeps meaning what it says.
 PROVEN = {
-    # Re-taken with the rest: still fails, and wider than the entry said.  The
-    # thirteen members outside the union lift, and seventeen of the nineteen
-    # images then fail to expand at all -- `expand exits 3`, the bad-file code,
-    # on DLRAW, altp1, f05_200, med32, noise24, rle4 and eleven more.  Not one
-    # image, and not a stream that moved: the header parse stops working, which
-    # is what says the frame's layout is what the parse is reading through.
-    'expand_image':   'expand exits 3 on 17 of 19 images',
 }
 
 
@@ -404,12 +409,29 @@ if __name__ == '__main__':
             print('  %-24s %3d members  %s%s'
                   % (nm.lstrip('_'), len(got[2]), origin[a][0],
                      '  CLASH: ' + ','.join(clash) if clash else ''))
+        stale = 0
         if '--retry' not in sys.argv:
+            # A name in `PROVEN` whose body no longer has a frame is an entry
+            # describing an experiment that cannot be run, printed as though it
+            # were a live measurement.  `expand_image` sat here for one round
+            # after its frame dissolved, and nothing said so -- the table is a
+            # dict and the tool never asked the unit about it.  It asks now.
+            have = {nm.lstrip('_') for _a, _b, nm, _sig in structs.bodies(lines)
+                    if frame_of(lines, _a, _b)}
             for fn, why in sorted(PROVEN.items()):
-                print('  %-24s tried: %s' % (fn, why))
+                if fn in have:
+                    print('  %-24s tried: %s' % (fn, why))
+                else:
+                    stale += 1
+                    print('  %-24s STALE: the table says "%s" and this body '
+                          'has no frame to try' % (fn, why))
         for nm, why in sorted(declined):
             print('  %-24s declined: %s' % (nm.lstrip('_'), why))
+        # The count excludes a stale entry: it is not a frame that was tried
+        # and reverted, it is a line describing a body that has no frame.
         print('%d frames this can offer to lift; %d tried and reverted, '
-              '%d declined' % (len(found),
-                               0 if '--retry' in sys.argv else len(PROVEN),
-                               len(declined)))
+              '%d declined%s'
+              % (len(found),
+                 0 if '--retry' in sys.argv else len(PROVEN) - stale,
+                 len(declined),
+                 ', %d stale' % stale if stale else ''))

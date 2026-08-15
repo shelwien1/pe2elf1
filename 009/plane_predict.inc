@@ -91,23 +91,38 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   return last;
 }
 
+// One plane out of the interleaved image and back again: `dst[i]` is
+// `pixels[plane + i*plane_count]`.  This is what both coders degenerate to
+// when the plane has no reference planes to predict from, and what
+// `expand_image` does inline for the one plane it decodes on its own -- three
+// copies of the same two loops, each with the one-plane case spelled out as
+// the `memcpy` it is.
+//
+// `for` rather than the original `do`/`while`, which ran once whatever the
+// count: an image with no pixels does not reach here, and the bound is the
+// thing worth being able to read.
+static void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane) {
+  const uint8_t* src = &img->pixels[plane];
+  int32_t n = bmf_pixels(img);
+  if( plane_count==1 ) {
+    memcpy(dst, src, n);
+    return;
+  }
+  for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += plane_count )
+    dst[i] = src[ofs];
+}
+
 void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
   int32_t to_ref0;
   uint8_t* base = &img->pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
     int32_t n_flat = bmf_pixels(img);
-    int32_t step = plane_count;
     if( plane_count==1 ) {
       memcpy(base, src, n_flat);
       return;
     }
-    int32_t i = 0;
-    int32_t ofs = 0;
-    do {
+    for( int32_t i = 0, ofs = 0; i<n_flat; ++i, ofs += plane_count )
       base[ofs] = src[i];
-      ofs += step;
-      ++i;
-    } while( i<n_flat );
     return;
   }
   int32_t stride = plane_count;
@@ -179,19 +194,7 @@ void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
   int32_t to_ref0;
   uint8_t *src = &img->pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
-    int32_t n_flat = bmf_pixels(img);
-    int32_t step = plane_count;
-    if( plane_count==1 ) {
-      memcpy(dst, src, n_flat);
-      return;
-    }
-    int32_t i = 0;
-    int32_t ofs = 0;
-    do {
-      dst[i] = src[ofs];
-      ofs += step;
-      ++i;
-    } while( i<n_flat );
+    deinterleave_plane(img, dst, plane);
     return;
   }
   int32_t stride = plane_count;
