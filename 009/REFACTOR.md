@@ -844,3 +844,72 @@ initialiser, which is the gap `negindex.py`'s eight untyped names exposed.  It
 covers locals and parameters, 29 of the 42; a member is not in the type table,
 so the thirteen `(P2Ctx*)cursor[k]` were read off the declaration by hand, and
 the tool says so rather than reporting 29 as if it were all of them.
+
+## The bytes that were read as numbers
+
+Every bit field in this program was read as a literal, and the header has two
+of them side by side that both use 0x40: `flags & 0x40` is packed rows and
+`depth & 0x40` is a grey ramp, and a reader arriving at either had to know
+which byte they were looking at before the line meant anything.  Two of those
+seven bits had names; the rest of the tree had none at all.
+
+Five bit fields, five enums:
+
+  * **`BmfImage::flags`** -- the same byte in memory and on disk, since
+    `compress_image` builds its header as a `BmfImage` and writes the sixteen
+    bytes out.  Two bits describe the image, four describe the stream after it
+    (`flags_slow`, `flags_planar`, `flags_descriptors`, `flags_coded`) and
+    `flags_tail` says whether a `CodedTail` sits between the two.  It reaches
+    the code as `img->flags`, `hdr.flags`, `frame.flags_b`, `hdr_flags` and
+    `best_flags` depending on which side of the round trip you are on, which is
+    why the gate below is about the *name* and not about the type.
+  * **`BmfImage::depth`** -- already named, and now also `depth_one_plane`,
+    which two sites on the planar path wrote as `72`.
+  * **`PlaneDesc::flags`** -- `desc_predictor`, `desc_alt_model`,
+    `desc_has_refs`, the top four bits of the six-bit descriptor on the wire.
+  * **`plane_predictor`** -- `pred_mode0`, `pred_p1`, `pred_p2`, which is what
+    every `==1` and `==2` in the models was testing.  The fourth value is
+    representable and no encoder path produces it.
+  * **`ctx_group_flags`** -- the six weight folds.
+
+And `search_filter`'s six probe descriptors, each of which appeared twice --
+once as the argument to `probe_plane` and once as the answer stored back into
+`best_flags` -- so 13 and 14 were four unexplained numbers.
+
+**Two halves of one pair could not be read against each other.**
+`model_plane` named its six folds by role (`f_w3_to_w2`) and `unmodel_plane`
+named the same six bits by number (`f_b4`), in a different declaration order,
+and neither is the order the loop applies them in.  Same names, same order,
+with the fold order stated once in `tables.inc` where the table is.
+
+**Two locals said the wrong byte.**  `write_bmp`'s `int8_t depth_flags` is the
+depth -- `flags` is the byte next to it -- and it tested `depth_palette` as
+`depth_flags < 0`.  `bmf_compress`'s `Flags` is also the depth.
+`ExpandImageFrame::flags_b` was `int8_t` for the same sign trick and is
+unsigned now, with `flags_b & flags_tail` where the sign test was.
+
+**The two file formats' own constants.**  The BMF member tag is four bytes: two
+signature bytes and the version as two ASCII digits, and the version test was
+`((major<<8)-12288)|(minor-48) != 512` -- three constants for one idea, since
+12288 is `'0'<<8`, 48 is `'0'` and 512 is `2<<8`.  The writer was worse:
+`fwrite("\x81\x8A" "20\x81\x90" "20a+b", 4u, 1u, fp)` writes the first four
+bytes of a literal holding both signatures and three bytes more, so the tag it
+emits could not be read off the line emitting it.  On the BMP side, `bfType`,
+`biSize` and the three `biCompression` kinds; `read_bmp`'s accept list already
+named those three in its comments and the code now agrees with the comments.
+
+**`tools/flagnames.py` is the gate.**  An identifier carrying `flag` or `depth`
+may not meet a numeric literal across `&`, `|` or `^`.  Shifts are exempt --
+the descriptor's `flags<<2` is the wire layout, not a mask -- and so is a
+literal that is neither a single bit, an enumerator the unit declares, nor a
+byte with an enumerator cleared out of it.  That last exemption is what leaves
+`3<<(depth_b&31)` alone: 31 is a shift count masked to five bits and not a
+question about the palette bit, while `& 0x3F` one bit wider *is* `depth_bits`
+and does answer.
+
+Proved it reports before trusting its zero, once per rule: `hdr_flags & 0x20`
+for the enumerator, `depth_f & 0x80` for the single bit, `flags & 0xFB` for the
+complement.  Its first rule was half a rule -- the name pattern needed a
+character in front of the word it was looking for, so `hdr_flags` matched and
+`frame.depth_f` did not, and it reported one of the two sites put back.  A gate
+that finds half of what it is for reads exactly like a gate that works.
