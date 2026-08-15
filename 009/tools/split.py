@@ -10,6 +10,15 @@ extractor as one file this is what has to be replayed on top of it.  It is not
 idempotent -- run against an already split tree it finds a bmf.cpp that is an
 include list and reports that the layout names things bmf.cpp does not define.
 
+Read `LAYOUT` as a record of where each body went, not as something that can be
+run again unchanged.  It is keyed on names, and names move: better than thirty
+of them no longer exist in the tree, because the bodies were merged into
+templates, moved inside a record, or renamed.  Replaying this on a fresh
+extraction would need the layout rewritten against whatever that extraction
+calls them -- `sub_402FE0` and the rest -- which is a different job from
+re-running this file.  `sweep.sh` skips it, so nothing here is a finding it
+suppresses; this paragraph is so that the skip is not read as "still works".
+
 What it does, and what each part of it cost:
 
   * every top-level definition is assigned to a file by name, in `LAYOUT`, and

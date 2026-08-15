@@ -30,9 +30,9 @@ repository.  So the searches name the donor path and pass `--all`.  See
 `HISTORY` below.
 
 Once it worked it was too slow to run: 93 names at two `git log -S` searches
-over 748 commits each, past `sweep.sh`'s three-minute timeout -- and the sweep
-could not see that it had been killed, because `rc=$?` after a pipeline is
-`tail`'s status.  Both are fixed.  Here, the previous map is a memo for *both*
+over 748 commits each, 107 seconds idle and over `sweep.sh`'s 300-second
+timeout under load -- and the sweep could not have seen it killed if it were,
+because `rc=$?` after a pipeline is `tail`'s status.  Both are fixed.  Here, the previous map is a memo for *both*
 of its answers: the addresses it found and the names it searched for and did
 not find, which is the expensive half.  Six names are outside both lists and
 are walked every run; `--rederive` walks all 93 and is what makes the

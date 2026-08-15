@@ -509,18 +509,20 @@ still an address, and a map that names a body the tree does not have is one
 trusting that: emptying its `KEPT` set makes it name six.
 
 **And fixing it exposed a hole in `sweep.sh`.**  A working `addrmap.py` is a
-slow one -- 93 names at two `git log -S` searches over 748 commits -- and it
-went past the sweep's three-minute timeout.  The sweep has a check for exactly
-that, `[ "$rc" = 124 ]`, and the check could not fire: `rc=$?` after a pipeline
-is `tail`'s status, and `tail` succeeds on a truncated stream as readily as on a
-complete one.  So the sweep read the last surviving line of a killed tool as its
-answer.  `exit "${PIPESTATUS[0]}"` inside the substitution; proved by pointing
-it at `timeout 1 sleep 5`, which now reports 124 and used to report 0.
+slow one -- 93 names at two `git log -S` searches over 748 commits, 107 seconds
+on an idle machine and past the sweep's 300-second timeout when anything else is
+running.  The sweep has a check for exactly that, `[ "$rc" = 124 ]`, and the
+check could not fire: `rc=$?` after a pipeline is `tail`'s status, and `tail`
+succeeds on a truncated stream as readily as on a complete one.  So a killed
+tool's last surviving line would be read as its answer, and nothing would say
+so.  `exit "${PIPESTATUS[0]}"` inside the substitution; proved by pointing it at
+`timeout 1 sleep 5`, which now reports 124 and used to report 0.
 
 The tool itself is five seconds now.  The committed map is a memo for *both* of
 its answers -- the addresses it found and, the expensive half, the 76 names it
 searched for and did not find.  `--rederive` walks all 93, and that is the mode
-in which the agreement with the previous map means anything.
+in which the agreement with the previous map means anything: run that way it
+takes 1m47 and produces the memoised map exactly, entry for entry.
 
 **`__frame` too** -- 617 uses across six functions, the last identifier in the
 program that was not the compiler's to give.  It is `frame`, in the tree, the
