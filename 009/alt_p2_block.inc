@@ -42,7 +42,7 @@ struct P2Freq {
   // Named apart from `SymList::code_symbol`, which is a different coder in a
   // different model.  Two methods with one name is not an error the compiler
   // can see, and it made `unstale.py` measure the wrong one.
-  template<int f_DEC>
+  template<int32_t f_DEC>
   int32_t code_three_way(const uint32_t* ctx_pair, int32_t sym) {
     uint16_t f_before;
     uint32_t cum;
@@ -382,7 +382,7 @@ struct AltP2Block {
 
   void code_banks(int32_t sample16);
 
-  template<int f_DEC>
+  template<int32_t f_DEC>
   void alt_p2_d8_body(uint8_t* src, uint8_t* out,
                       int32_t width, int32_t height);
   int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb);

@@ -9,7 +9,7 @@ struct CounterNode {
   // beside the tree coder it calls; `alt_p1_encode_symbol` and
   // `alt_p1_decode_symbol` are the two instantiations under their callers'
   // names.
-  template<int f_DEC> int32_t code_symbol(int32_t ctx, int32_t sym);
+  template<int32_t f_DEC> int32_t code_symbol(int32_t ctx, int32_t sym);
 
   // One counter bumped, with the node's total kept in step.  119 sites in
   // `alt_p1_block`'s `update_model` wrote both halves out, and the increment --
@@ -139,7 +139,7 @@ struct BitCtr {
   // returns the bit.  Nothing reads the encoder's, both call sites drop it,
   // and it is kept anyway -- a merge is not the place to decide that a return
   // value is dead.
-  template<int f_DEC>
+  template<int32_t f_DEC>
   int32_t code_context_bit(BitCtr* parent, int32_t bit) {
     int32_t result;
     if( n[0] ) {

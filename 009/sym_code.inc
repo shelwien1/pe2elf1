@@ -19,7 +19,7 @@
 // uint16_t.  It is the same sum: every intermediate is 16 bits wide and the
 // result is stored through a uint16_t, so the orderings agree in the low 16
 // bits, which is all of them that survive.  The encoder's spellings are kept.
-template<int f_DEC>
+template<int32_t f_DEC>
 int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
   uint32_t cum;
@@ -148,7 +148,7 @@ int32_t decode_symbol_tree(uint16_t* freq) {
 // is a difference: `freq` is `uint16_t *`, so the casts are the promotion that
 // was already happening, and the two totals agree in the low 16 bits that
 // `*freq` and `& 0x7FFF` keep.  The encoder's spellings are the ones kept.
-template<int f_DEC>
+template<int32_t f_DEC>
 int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
   uint32_t cum;
   int32_t slot;

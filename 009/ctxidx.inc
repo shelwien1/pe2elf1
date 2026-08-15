@@ -30,14 +30,14 @@ struct CtxIdx {
   uint32_t val = 0;
 
   // One bit at `Pos`.
-  template<int Pos>
+  template<int32_t Pos>
   constexpr CtxIdx&bit(bool b) {
     val += (uint32_t)b<<Pos;
     return *this;
   }
 
   // `W` bits of `v`, moved to `Pos`.
-  template<int Pos, int W>
+  template<int32_t Pos, int32_t W>
   constexpr CtxIdx&bits(uint32_t v) {
     val += (v&((1u<<W)-1))<<Pos;
     return *this;

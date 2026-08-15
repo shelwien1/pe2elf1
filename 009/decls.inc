@@ -74,7 +74,7 @@ CounterNode*init_counter_node(CounterNode* node);
 // here for the same reason as everything else in this file: a caller that is
 // itself one of these templates -- P2Freq::code_three_way is -- can sit in a file
 // the definition comes after.
-template<int f_DEC> int32_t code_symbol_tree(uint16_t* freq, int32_t sym);
+template<int32_t f_DEC> int32_t code_symbol_tree(uint16_t* freq, int32_t sym);
 
 void encode_symbol_tree(uint16_t* freq, int32_t sym);
 void alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym);

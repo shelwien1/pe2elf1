@@ -79,7 +79,7 @@ inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
 // instead and writes the original byte out.  The decoder has none of that --
 // it is told which code was used -- and that asymmetry is the reason these two
 // were written separately in the first place.
-template<int f_DEC>
+template<int32_t f_DEC>
 void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
                                 int32_t width, int32_t height) {
   P2Ctx *pix;
@@ -255,7 +255,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
 // One block allocated, one body run, one block freed.  Only the middle line
 // differs, and the two bodies take their arguments in different orders --
 // which is the decompiler's record of two call sites, not two intentions.
-template<int f_DEC>
+template<int32_t f_DEC>
 void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   AltP2Block *blk;
   AltP2Block *raw = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));

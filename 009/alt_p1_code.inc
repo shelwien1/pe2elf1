@@ -54,7 +54,7 @@ static inline int32_t plane_mix3(const PlaneDesc& d, const uint8_t* p) {
   return (d.weight1*p[-2]+d.weight0*p[-3]+d.weight2*p[-1]+64)>>7;
 }
 
-template<int f_DEC>
+template<int32_t f_DEC>
 int32_t alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   int32_t cur3;
   // `void* plane[4]` with three `AltP1Block*&` aliases onto slots 1..3 -- the

@@ -52,9 +52,28 @@ file=${1:-subs1.hpp}
 # `git rev-parse` rather than report.
 work=$(mktemp "$(dirname "$file")/.sweep.XXXXXX")
 trap 'rm -f "$work"' EXIT
-cp "$file" "$work"
+
+# The copy is the unit, not the file.  `bmf.cpp` is 195 lines of `#include`
+# with two bodies in it, and 77 of the 88 tools below read the path they are
+# given and nothing else -- so for those 77 the sentence at the end of this
+# script, "every counting tool reports zero", was a statement about 195 lines
+# of include list.  Eleven tools splice for themselves, and each of those was
+# taught to only after it reported something impossible.
+#
+# Splicing here fixes the other 77 in one place instead of 77.  A tool that
+# splices for itself is unaffected: `structs.splice` looks for `#include "x"`
+# lines and this copy has none left, so it hands the file back unchanged.
+# Line numbers in a report are the spliced file's, which is the cost; the
+# question the sweep asks is whether a tool still finds something, and a
+# finding whose line number needs translating is still a finding.
+python3 - "$file" > "$work" <<'PY' || { echo "could not splice $file" >&2; exit 2; }
+import sys
+sys.path.insert(0, 'tools')
+import structs
+sys.stdout.write('\n'.join(structs.splice(sys.argv[1])[0]))
+PY
 before=$(cksum < "$work")
-usage=0 quiet=0 killed=0 absent=0 nonzero= reported= inapplicable=
+usage=0 quiet=0 killed=0 absent=0 nonzero= reported= inapplicable= wrote=
 
 for t in tools/*.py; do
   n=$(basename "$t")
@@ -100,12 +119,20 @@ for t in tools/*.py; do
     esac
   fi
   printf '%-22s %s\n' "$n" "$line"
+  # Which tool wrote, not just that one did.  The check at the end has always
+  # been able to say the copy changed and never which of the eighty-eight did
+  # it, so the answer was a bisection by hand every time.  It costs one cksum
+  # per tool.
+  now=$(cksum < "$work")
+  if [ "$now" != "$before" ]; then
+    wrote="$wrote $n"
+    before=$now
+  fi
 done
 
-after=$(cksum < "$work")
 echo
-if [ "$before" != "$after" ]; then
-  echo "FAIL: the copy changed during the sweep — a tool wrote to the file it was asked about"
+if [ -n "$wrote" ]; then
+  echo "FAIL: these tools wrote to the file they were asked about:$wrote"
   exit 1
 fi
 [ "$killed" = 0 ] || { echo "FAIL: $killed tools were killed by the timeout"; exit 1; }

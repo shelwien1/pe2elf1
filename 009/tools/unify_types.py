@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rewrite subs1.hpp's type vocabulary onto <cstdint>.
+"""Rewrite the decompiler's type vocabulary onto <cstdint>.
 
 Hex-Rays emits a type per whim: _DWORD here, `unsigned int` there, `unsigned
 __int16` for the same 16 bits a `_WORD` holds two lines up.  Every one of them
@@ -13,8 +13,11 @@ strrchr, sprintf and fopen.  `unsigned char` still becomes uint8_t (the same
 type under a different name), so nothing multi-word survives.
 
 Nothing here changes a type's identity; the substitutions below are all
-spelling changes for this target, and the object file is expected to come out
-bit-identical.
+spelling changes at both pointer widths, and the object file is expected to
+come out bit-identical.  "At both widths" is the rule and it has been broken
+once: `size_t` was mapped to `uint32_t` back when the only target was i386, and
+the allocator this project wrote since uses `size_t` for what it means.  See
+the note in `SUBS`.
 """
 import re
 import sys
@@ -69,9 +72,16 @@ SUBS = [
     (r'CHAR',               'char'),
     (r'LPCSTR',             'const char *'),
     (r'LPVOID',             'void *'),
-    # size_t is `unsigned int` here; the bodies use it as a plain 32-bit
-    # counter, next to _DWORDs holding the same values.
-    (r'size_t',             'uint32_t'),
+    # `size_t` is deliberately not mapped.  The comment that used to sit here --
+    # "it is `unsigned int` on this target, the bodies use it as a plain 32-bit
+    # counter" -- was true of the i386 build and is false of the x86-64 one
+    # this tree now builds by default.  Every `size_t` left is in the allocator,
+    # which is this project's own code rather than the decompiler's:
+    # `bmf_malloc(size_t)`, `bmf_arena_used`, and the bucket index stored at
+    # `((size_t *)p)[-2]`.  Rewriting those to `uint32_t` halves a
+    # pointer-sized header at 64 bits and corrupts the free list -- and this
+    # would have done it.  A type this maps has to be fixed-width at both
+    # widths, and `size_t` is the one in the list that is not.
     # Plain C.
     (r'short',              'int16_t'),
     (r'int',                'int32_t'),

@@ -17,7 +17,7 @@ static void end_plane_stream() {
 
 // The two ends differ in one call: the encoder flushes what it still holds and
 // the decoder reads to the marker.  Everything after is the same tear-down.
-template<int f_DEC>
+template<int32_t f_DEC>
 void rc_end() {
   if( f_DEC )
     rc.finish();
@@ -133,7 +133,7 @@ static uint16_t* begin_plane_stream() {
 // with a comment that the one caller reads it only under the same flag.  It
 // returns null there instead: that is what the caller behaves as if it got,
 // and it is not undefined.
-template<int f_DEC>
+template<int32_t f_DEC>
 uint16_t*rc_begin() {
   if( !f_DEC )
     *stream.pk.word = stream.pk.acc;

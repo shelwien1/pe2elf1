@@ -31,17 +31,17 @@ static void* bmf_bucket[BMF_BUCKETS];
 // answer is `ceil(log2(n)) - 5`, clamped.  This was the shift loop that says
 // the same thing one bucket at a time; it is a cold path either way, so the
 // change is for the reader.
-static int bmf_bucket_of(size_t n) {
+static int32_t bmf_bucket_of(size_t n) {
   if( n<=32 )
     return 0;
-  int b = 64-5-__builtin_clzll((unsigned long long)(n-1));
+  int32_t b = 64-5-__builtin_clzll((uint64_t)(n-1));
   return b<BMF_BUCKETS-1 ? b : BMF_BUCKETS-1;
 }
 
 static void*bmf_malloc(size_t n) {
   if( !bmf_arena )
     bmf_arena_init();
-  int b = bmf_bucket_of(n);
+  int32_t b = bmf_bucket_of(n);
   size_t need = (size_t)1<<(b+5);
   if( bmf_bucket[b] ) {
     void* p = bmf_bucket[b];
@@ -60,7 +60,7 @@ static void*bmf_malloc(size_t n) {
 static void bmf_free(void* p) {
   if( !p )
     return;
-  int b = (int)((size_t*)p)[-2];
+  int32_t b = (int32_t)((size_t*)p)[-2];
   if( b<0||b>=BMF_BUCKETS )
     return;
   *(void**)p = bmf_bucket[b];
