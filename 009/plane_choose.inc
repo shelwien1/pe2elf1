@@ -161,7 +161,6 @@ int32_t choose_plane_coding(BmfImage* img) {
           xform = cand;
         }
       }
-      x3[2] = xform;
       // The winning candidate's four descriptors, copied in.  This was eight
       // `uint64_t` stores through a `(uint8_t*)&plane_desc[0]+off` accessor,
       // two turns of a loop counting down by eight: offsets 56, 48, 40, 32
@@ -174,12 +173,15 @@ int32_t choose_plane_coding(BmfImage* img) {
       // three names.
       win_row = &tbl16[16*xform];
       memcpy(&plane_desc[0], win_row, 4*sizeof(PlaneDesc));
-      best_cost = acc0[4*x3[2]+2];
-      x3[1] = 16*x3[2];
-      frame.plane_a = plane_desc[0].src_plane-x3[2];
-      wt8 = plane_desc[x3[2]].weight1;
-      frame.plane_b = plane_desc[1].src_plane-x3[2];
-      wt4 = plane_desc[x3[2]].weight0;
+      best_cost = acc0[4*xform+2];
+      // The chosen transform's row in the 3x16 cost table, as a byte
+      // offset: `acc0` is `int32_t`, so sixteen bytes is the four-word
+      // row `acc0[4*xform + k]` reaches by index twenty lines above.
+      int32_t cost_row_ofs = 16*xform;
+      frame.plane_a = plane_desc[0].src_plane-xform;
+      wt8 = plane_desc[xform].weight1;
+      frame.plane_b = plane_desc[1].src_plane-xform;
+      wt4 = plane_desc[xform].weight0;
       {
         frame.wt_slot = wt8;
         x5[3] = wt4;
@@ -192,7 +194,7 @@ int32_t choose_plane_coding(BmfImage* img) {
         frame.s0 = wt4-wt_step;
         wt4_dn_end = frame.s0;
         *(uint32_t*)frame.buf_1 = wt8-wt_step;
-        uint8_t *plane0 = &img->pixels[x3[2]];
+        uint8_t *plane0 = &img->pixels[xform];
         wt8_dn_end = wt8-wt_step;
         while( 1 ) {
           if( wt4_dn<=wt4_dn_end ) {
@@ -388,7 +390,7 @@ int32_t choose_plane_coding(BmfImage* img) {
         }
       }
 weights_chosen:
-      px = &img->pixels[frame.row_stride+n_planes+x3[2]];
+      px = &img->pixels[frame.row_stride+n_planes+xform];
       if( px<data_end ) {
         frame.wt_slot = wt8;
         x5[3] = wt4;
@@ -415,29 +417,29 @@ weights_chosen:
       if( best_cost>>7>=0x4000 )
         slack = 0x4000;
       best = slack+best_cost;
-      cost_flat = *(int32_t*)((uint8_t*)&acc0[3]+x3[1]);
+      cost_flat = *(int32_t*)((uint8_t*)&acc0[3]+cost_row_ofs);
       cheaper = cost_flat<best;
       if( cost_flat<best ) {
-        best = *(int32_t*)((uint8_t*)&acc0[3]+x3[1]);
+        best = *(int32_t*)((uint8_t*)&acc0[3]+cost_row_ofs);
         wt4 = 128;
         wt8 = 0;
       }
       pred = cheaper;
-      if( *(uint32_t*)&scratch[x3[1]+16]<best ) {
-        best = *(uint32_t*)&scratch[x3[1]+16];
+      if( *(uint32_t*)&scratch[cost_row_ofs+16]<best ) {
+        best = *(uint32_t*)&scratch[cost_row_ofs+16];
         pred = 2;
         wt4 = 0;
         wt8 = 128;
       }
-      keep3 = best<=*(uint32_t*)&scratch[x3[1]+20];
-      if( best>*(uint32_t*)&scratch[x3[1]+20] )
+      keep3 = best<=*(uint32_t*)&scratch[cost_row_ofs+20];
+      if( best>*(uint32_t*)&scratch[cost_row_ofs+20] )
         pred = 3;
-      xform_row = x3[2];
+      xform_row = xform;
       if( !keep3 ) {
         wt4 = 64;
         wt8 = 64;
       }
-      plane_desc[x3[2]].weight0 = wt4;
+      plane_desc[xform].weight0 = wt4;
       plane_desc[xform_row].weight1 = wt8;
       hist = &frame.buf[4096*pred];
       win = (uintptr_t)hist&0xF;
@@ -459,7 +461,7 @@ weights_chosen:
         } while( win<1024 );
         n_planes = frame.nplanes_s;
       }
-      plane_desc[x3[2]].dc = pos+1;
+      plane_desc[xform].dc = pos+1;
       best_sum2 = 0;
       for( i = 0; i<0x100; ++i )
         best_sum2 += frame.hist_c[i+1024];
@@ -472,7 +474,7 @@ weights_chosen:
         }
       }
       result = pos2+1;
-      plane_desc[frame.plane_b+x3[2]].dc = result;
+      plane_desc[frame.plane_b+xform].dc = result;
       if( n_planes>=4 ) {
         // The alpha plane's weights, by least squares against the other three.
         //
@@ -603,9 +605,11 @@ weights_chosen:
           wb = 0;
         }
         wa_slot = wa_pick;
-        x0[0] = pick0;
+        // `x0[0] = pick0;` before this call and `pred4 = x0[0];` after it was
+        // MSVC spilling the register across the call, and `estimate_cost`
+        // cannot reach a local of this body.  Same shape twice more below.
         cost_c1 = estimate_cost((uint8_t*)frame.hist_b, 1024);
-        pred4 = x0[0];
+        pred4 = pick0;
         if( cost_c1<best4 ) {
           best4 = cost_c1;
           pred4 = 2;
@@ -613,9 +617,8 @@ weights_chosen:
           wc = 0;
           wa_slot = 0;
         }
-        x0[0] = pred4;
         cost_c2 = estimate_cost((uint8_t*)frame.hist_c, 1024);
-        pred4b = x0[0];
+        pred4b = pred4;
         if( cost_c2<best4 ) {
           pred4b = 3;
           wc = 128;
