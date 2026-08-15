@@ -278,6 +278,18 @@ struct AltP2Block {
   // rounding it up to a whole element would change what the model sees on the
   // first sample of a plane, so it is preserved rather than tidied.
   float p2_row[7][4];
+  // `bias` has to follow `p2_row`, and that is not decoration: `__alt_p2_filter`
+  // is handed `p2_row` as its `a2` and writes `a2[7][0]`, `a2[7][1]` and
+  // `a2[7][2]` -- one row past the end of a `[7][4]`, which lands here.  Those
+  // three floats are how it returns the centre, the mixed prediction and its
+  // own; `alt_p2_model` reads `bias[0..2]` and no other slot.  So the filter
+  // returns an `int32_t` and three floats, and the second half of that is
+  // invisible at both the call site and the signature.
+  //
+  // The union this pair came out of guaranteed the adjacency by construction.
+  // Sequential members do not, so it is asserted below -- the one place in this
+  // tree where an `offsetof` check is not restating the layout, because here
+  // the code depends on it.
   float bias[4];
   float (*nb_cur)[4];
   float (**row0)[4];
@@ -487,6 +499,13 @@ struct AltP2Block {
     return this;
   }
 };
+
+// `__alt_p2_filter` writes `a2[7][0..2]` where `a2` is `p2_row`, a `[7][4]`.
+// That is `bias`, and this says so in a form the compiler checks.
+static_assert(offsetof(AltP2Block, bias)
+              == offsetof(AltP2Block, p2_row)+sizeof(AltP2Block::p2_row),
+              "__alt_p2_filter returns three floats by writing one row past "
+              "p2_row, which has to be bias");
 
 struct CtxWeights {
   float (*f0[6])[4];
