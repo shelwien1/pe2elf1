@@ -2,15 +2,15 @@
 
 int32_t choose_plane_coding(BmfImage* img) {
   // Eight 1024-entry histograms in one block, because both searches below
-  // pick a row *by index*: the plane-order search takes `&buf[4096*pred]` and
-  // the alpha search `&hist_c[1024*pred4b+1024]`, which are rows 0..3 and
-  // rows 4..7 of this.  The decompilation had it as a 32,768-byte array with
-  // three of its rows named and the last five under one name with a
-  // 5120-entry array on it, and every write went through
-  // `*(uint32_t *)&buf[4*bin]` because the byte array was `estimate_cost`'s
-  // old parameter type reaching back into the declaration.
+  // pick a row *by index*.  The decompilation had it as `uint8_t buf[32768]`
+  // with three of its rows named and the last five under one name carrying a
+  // 5120-entry array, and the two searches reached their rows as
+  // `&buf[4096*pred]` and `&hist_c[1024*pred4b+1024]` -- rows 0..3 and rows
+  // 4..7 of this, spelled in bytes.  Every write went through
+  // `*(uint32_t *)&buf[4*bin]`, the byte array being `estimate_cost`'s old
+  // parameter type reaching back into the declaration.
   //
-  // The four names below are cursors into the one block, which is what the
+  // The four names below are cursors into the one block, which is what that
   // index arithmetic says they are.
   alignas(16) int32_t hists[8*1024];
   int32_t *const hist_flat = hists;          // row 0
@@ -22,9 +22,10 @@ int32_t choose_plane_coding(BmfImage* img) {
   // reason, with the first four bytes doubling as a stash for `wt8_dn_end`
   // across a loop that does not touch it.
   int32_t hist_arm_a[512], hist_arm_b[512], hist_arm_c[512], hist_arm_d[512];
-  // The weight search's two working values, and the two planes it reads
-  // against, all four of them frame slots because MSVC kept them in registers
-  // it had to spill around the `estimate_cost` calls.
+  // The weight search's two working weights, the two other planes it reads
+  // against as offsets from this one, and the row in bytes.  All five were
+  // frame slots, because MSVC kept them in registers it had to spill around
+  // the `estimate_cost` calls in the middle of each arm.
   int32_t wt4_cur, plane_a, plane_b, row_stride;
   uint32_t wt_slot;
   double d1, d2, d3;
