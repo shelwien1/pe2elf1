@@ -2,21 +2,18 @@
 
 int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
   BmfImage hdr;
-  int32_t plane_n, row_step;
   uint32_t filtered;
   uint8_t* pixels;
   int32_t coded_bytes;
-  uint8_t* pix_copy;
   uint32_t coded_len;
   bool fits;
   uint32_t data_bytes, row_bytes;
-  uint8_t has_coded, *row_at;
+  uint8_t has_coded;
   uint32_t hdr_pad8;
-  int32_t ok_all, y, pl_i, countdown, data_size, row_y;
-  uint16_t img_h;
+  int32_t ok_all, data_size;
   BmfImage* img;
   uint32_t pal_bytes, written;
-  uint8_t ok, * dst, ok_raw;
+  uint8_t ok, ok_raw;
   BmfFile* arc = arc_in;
   if( !arc_in->fp )
     return 0;
@@ -133,7 +130,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
 // Everything coded; flush the packer's last word and decide whether the coded
 // stream is smaller than the pixels it came from.
 write_coded:
-  *(uint32_t*)stream.pk.word = stream.pk.acc;
+  packer_flush();
   fits = (uint32_t)(stream.cur- stream.buf)<p_i->data_size;
   coded_bytes = stream.cur- stream.buf;
   hdr.data_size = (uint32_t)(stream.cur- stream.buf);
@@ -153,38 +150,8 @@ write_coded:
     return ok_all;
   }
   free(stream.buf);
-  if( p_i->flags&flags_transposed ) {
-    pix_copy = (uint8_t*)bmf_new(p_i->data_size);
-    plane_n = plane_count;
-    row_step = plane_count*(p_i->height-1);
-    pixels = p_i->pixels;
-    memcpy(pix_copy, p_i->pixels, p_i->data_size);
-    img_h = p_i->height;
-    if( img_h ) {
-      row_at = pix_copy;
-      row_y = 0;
-      y = 0;
-      do {
-        pl_i = img->width;
-        dst = img->pixels+y;
-        do {
-          countdown = plane_n;
-          do {
-            *dst++ = *row_at++;
-            --countdown;
-          } while( countdown );
-          dst += row_step;
-          --pl_i;
-        } while( pl_i );
-        img = (BmfImage*)(p_i);
-        img_h = p_i->height;
-        y += plane_n;
-        ++row_y;
-      } while( row_y<img_h );
-    }
-    transpose_image_in_place(img, plane_n);
-    free(pix_copy);
-  }
+  if( p_i->flags&flags_transposed )
+    transpose_image(img, plane_count);
   // Both arms end here with `pixels` pointing at the same bytes: the transpose
   // above swaps the header's width, height and stride and leaves the pixel
   // buffer alone.  The `goto` that skipped this assignment was skipping a

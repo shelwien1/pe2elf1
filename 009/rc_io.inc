@@ -176,6 +176,16 @@ static void packer_reset() {
   hist_scratch = stream.buf+stream.size-4096;
 }
 
+// The other half of `packer_reset`: put the accumulator's last, partial word
+// where the next spill would have put it, so that `stream.cur - stream.buf` is
+// the byte count of everything coded.  Eight sites wrote it out as
+// `*(uint32_t*)stream.pk.word = stream.pk.acc;` -- seven of them in
+// `search_filter`, which measures a trial encode and flushes after each -- and
+// the cast is to the type `pk.word` already has, so it said nothing at all.
+static void packer_flush() {
+  *stream.pk.word = stream.pk.acc;
+}
+
 // The header's bit stream: the per-plane descriptors, a few bits at a time,
 // through a 32-bit accumulator that spills to `stream.pk.word` when it fills.
 //
@@ -193,7 +203,7 @@ static void packer_reset() {
 // width.
 static void pack_bits(uint32_t word, int32_t n) {
   if( stream.pk.free_bits<n ) {
-    *(uint32_t*)stream.pk.word = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
+    *stream.pk.word = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
     stream.pk.word = (uint32_t*)stream.cur;
     stream.cur += 4;
     stream.pk.acc = word>>(stream.pk.free_bits&31);

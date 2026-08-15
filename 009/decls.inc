@@ -113,6 +113,7 @@ void transform_planes(BmfImage* p_i);
 static uint32_t bytes_left(FILE* fp);
 static uint32_t packer_word();
 static void packer_reset();
+static void packer_flush();
 static void pack_bits(uint32_t word, int32_t n);
 static uint32_t unpack_bits(int32_t n);
 BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf);

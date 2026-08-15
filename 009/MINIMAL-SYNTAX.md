@@ -304,8 +304,8 @@ is not, and the showing is the work.
 `tools/liftframe.py --list` is where the current count and the reason for each
 live, and `shape.py`'s frame rows count the members — which is why neither
 number is written out here. What is left is `choose_plane_coding`,
-`decode_symbol_list`, `expand_image`, `reduce_alphabet` (at file scope) and
-`search_filter`. `tools/README.md` records four rules learned by breaking this
+`decode_symbol_list`, `expand_image` and `reduce_alphabet` (at file scope);
+`search_filter`'s went the round after this paragraph was last corrected. `tools/README.md` records four rules learned by breaking this
 exact thing, the first of which is that an address taken of one member pins the
 whole frame. These bodies index off the ends of their locals deliberately; the
 frame is what makes the neighbours theirs to index.

@@ -244,6 +244,19 @@ def indexed_out(lines, a, b, got):
 # other pointer width, and ASan clean over 44 runs, which is the check that
 # answers here: the recorded failure was a stack-buffer-overflow and `test.sh`
 # cannot see one.
+#
+# **And then the union went too, so `search_filter` is off both lists.**  "The
+# union is MSVC's slot sharing and stays" is the rule this tool implements and
+# it is not a fact about any particular union: sharing a slot only matters if
+# the two arms are ever live together, and these two are not.  Everything in
+# the scalar arm is dead by the `free(tile_buf)` two thirds of the way down and
+# `saved` is first written four lines later, so the arms are one after the
+# other in time and are two plain locals.  Which is the same shape
+# `compress_image` and `alt_p2_context` turned out to have -- the docstring at
+# the top says both -- and the count of unions this rule has declined that were
+# genuinely inseparable is now zero.  The rule stays, because it is what makes
+# the tool refuse rather than guess; a union it declines is a question for a
+# reader, not an answer.
 PROVEN = {
     # Re-taken with the rest: still fails, and wider than the entry said.  The
     # thirteen members outside the union lift, and seventeen of the nineteen

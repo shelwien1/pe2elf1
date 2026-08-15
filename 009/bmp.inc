@@ -97,6 +97,39 @@ static inline void transpose_image_in_place(BmfImage* img, int32_t planes) {
   img->stride = (uint16_t)(img->width*planes);
 }
 
+// And the loop that has to run before it: the pixels themselves, column-major.
+// A copy goes aside and comes back so that pixel (x, y) lands at (y, x), all
+// `planes` bytes of it moving together.
+//
+// Open-coded at four sites -- three in `search_filter` and one in
+// `compress_image` -- each identical down to the shape of its three nested
+// `do`/`while`s, and each needing one value the loop cannot recompute: the
+// `planes*(height-1)` the destination advances by per column.  All three in
+// `search_filter` kept it in a frame slot, two of them in the same slot, which
+// is most of what that frame was for.
+//
+// The inner `do`/`while`s ran at least once whatever the count, so a zero
+// width or a zero plane count would have wrapped; `for` is the shape that says
+// what the bounds are.  Neither is reachable -- `search_filter` returns early
+// below four columns and `plane_count` is 1..4 -- so this is the same walk on
+// every input either can see.
+static void transpose_image(BmfImage* img, int32_t planes) {
+  uint8_t* copy = (uint8_t*)bmf_new(img->data_size);
+  memcpy(copy, img->pixels, img->data_size);
+  const int32_t step = planes*(img->height-1);
+  const uint8_t* src = copy;
+  for( int32_t y = 0; y<img->height; ++y ) {
+    uint8_t* dst = img->pixels+planes*y;
+    for( int32_t x = 0; x<img->width; ++x ) {
+      for( int32_t k = 0; k<planes; ++k )
+        *dst++ = *src++;
+      dst += step;
+    }
+  }
+  transpose_image_in_place(img, planes);
+  free(copy);
+}
+
 // The allocation is one block: a sixteen-byte `BmfImage`, the pixels, and the
 // palette after them if there is one.
 //

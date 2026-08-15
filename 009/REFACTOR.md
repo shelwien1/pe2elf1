@@ -791,7 +791,8 @@ anything the tool can still do:
     MSVC's slot sharing and stays.  ASan is the check that answers here, not
     `test.sh`: the recorded failure was a stack-buffer-overflow, and the streams
     can be byte-identical while one is happening.  110 checks, 23 of 23 at the
-    other width, and no ASan report over 44 runs.
+    other width, and no ASan report over 44 runs.  **The union went too** --
+    see "The union that was two variables in sequence" below.
   * **`expand_image` still fails**, and wider than its entry said: seventeen of
     nineteen images then fail to expand at all, `expand exits 3`.  Not one
     image and not a stream that moved -- the header parse stops working, which
@@ -985,3 +986,58 @@ had been rejecting became a clean receiver.  Declined, with the same judgement
 as the four coders and `write_bmp`: what acts here is the filter search, and
 `BmfImage::cost_candidate(cand, desc, costs)` would put the descriptor table
 and the cost array on the image.
+
+## The union that was two variables in sequence
+
+`search_filter`'s frame was one `union` of two arms and 36 bytes of pad, and
+`liftframe.py` had been declining it for four rounds under the rule that a
+union is MSVC's slot sharing written down and lifting its arms is not the same
+program.
+
+That rule is what makes the tool refuse rather than guess, and it is not a fact
+about any particular union.  Sharing a slot only matters if the two arms are
+ever live together, and these two are not: everything in the scalar arm is dead
+by the `free(tile_buf)` two thirds of the way down the body, and `saved[4]` is
+first written four lines later.  They are two variables one after the other in
+time, and they are two locals now.
+
+Which makes three: `compress_image`'s union held a header and a scratch in
+mutually exclusive branches, `alt_p2_context`'s two arms were the same six
+pointers viewed twice, and this one is a sequence.  **The count of unions this
+rule has declined that turned out to be genuinely inseparable is zero.**  The
+rule stays — a union it declines is a question for a reader, not an answer —
+but the answer has been the same three times.
+
+**Two of the scalars did double duty inside their own arm.**  `pi` was the
+plane loop's index and then a pixel stride; `costs[0]` — the first entry of a
+four-plane cost table — was that same stride twice more.  All three were the
+`planes*(height-1)` of a pixel transpose.
+
+**And `rows[2]` and `dims[2]` were not arrays.**  Six roles between them, and
+every one is a copy of a local still live at the read: `bits_f13`, `pl_k`,
+`bits_a`, `y0`, `plane_count`, `tile_h`, `plane_i`.  `dims[0]` was written
+twice and never read at all.  `uncopy.py` and `unaliasvar.py` cannot see any of
+this — their rule is about a named local and a subscript is not one — but they
+saw the last three the moment the subscripts became names, and reported
+`pl0`, `pl2` and `pl3` as copies of `plane_i`.  That is the sweep working: a
+transformation that makes a defect *nameable* is what lets an existing gate
+find it.
+
+**A pixel transpose was open-coded four times.**  `transpose_image_in_place`
+swaps the two dimensions in the header; the loop that has to run first — the
+pixels themselves, column-major — was written out three times in
+`search_filter` and once in `compress_image`, identical down to the shape of
+its three nested `do`/`while`s.  Each needed one value the loop cannot
+recompute, the `planes*(height-1)` the destination advances by per column, and
+all three in `search_filter` kept it in a frame slot, two of them in the same
+slot.  That is most of what the frame was for.  `transpose_image` is the four
+of them, and the `for` loops it is written with are what say the bounds; the
+`do`/`while`s ran at least once whatever the count, which neither a zero width
+nor a zero plane count can reach here.
+
+**And the packer's flush was a cast that said nothing.**
+`*(uint32_t *)stream.pk.word = stream.pk.acc;` at eight sites, seven of them in
+this file, and `pk.word` is a `uint32_t *` already.  `samecast.py` reads zero
+and that zero is honest: its rule is about a local or a parameter, and
+`stream.pk.word` is a member two levels down.  `packer_flush()` is the eight,
+beside the `packer_reset()` they all pair with.
