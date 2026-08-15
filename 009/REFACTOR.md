@@ -452,5 +452,38 @@ method is explicit replacements plus the compiler.
     compressed every image -- only the byte comparison saw it.
   * the `CodedStream` session consolidation -- the largest item the plan named,
     and the one with the widest blast radius.  It wants its own round.
-  * the `__` prefix, which needs three tools taught a new way to recognise a
-    definition before it can move.
+  * the `__` prefix.  "Three tools key on it" was the recorded reason and it
+    is not the real one; here is the real one.
+
+    60 names carry it, and `__`-prefixed identifiers are reserved to the
+    implementation, so this is more than cosmetic.  The collisions are
+    tractable: of eleven apparent ones, nine are comment matches or different
+    scopes, `__main` merges into `main` as the plan says, and only
+    `__packer_word()` genuinely collides -- with the `packer_word` global,
+    which is the packer's write cursor while the function reads the next word.
+    `addrmap.txt` already stores names *without* the prefix, so the map's keys
+    survive untouched.
+
+    What does not survive is `addrmap.py`'s `real_bodies`.  It reads like "every
+    definition in file order" and is not: its pattern stops at the `(`, so it
+    matches `decls.inc`'s declarations too -- 106 entries, 60 distinct, 46 of
+    them the same name twice.  `from_commits` then pairs the k-th entry before
+    a renaming commit with the k-th after, so what the list actually is, is a
+    stable ordered fingerprint that `rename.py` preserves.  The `__` is doing
+    a second job there: it means "recovered from BMF.exe", which is why the
+    project's own helpers -- `abs32`, `bmf_malloc`, `bmf_bucket_of` -- are not
+    in it.
+
+    Any pattern that stops requiring the prefix changes that list, and changing
+    it changes every index.  A stricter pattern that correctly excludes
+    declarations was written and measured: it finds all 60 and 18 helpers
+    besides, 79 entries where there were 106.  More accurate, and it would pair
+    names with the wrong addresses the moment the tool walks back through
+    history.
+
+    So the rename needs a decision about what `addrmap.py` is *for* -- whether
+    it re-derives the map from the git log each time, or whether
+    `tools/addrmap.txt` is now the recovered answer and the tool's job is to
+    check it.  That is a design question, not a pattern to fix, and guessing at
+    it would silently break the one thing that lets a disagreement with the
+    binary be traced back to an address.
