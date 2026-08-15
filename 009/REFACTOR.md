@@ -732,6 +732,22 @@ just printed the right one.  Writing a measurement into prose beside a tool
 that re-derives it is how the five stale numbers this round found got there,
 and the fix is not to be more careful; it is to stop writing it down twice.
 
+**And eight reads of a variable through a pointer to its own storage.**
+`*(int32_t*)&alphabet` where `alphabet` is a `uint32_t` is the decompiler
+writing a signedness change by taking the variable's address.  Two of the eight
+were `++*(int32_t*)&x`, which is not a signedness change at all: incrementing a
+`uint32_t` and incrementing its own storage as an `int32_t` are the same bits.
+One was `if( *(int32_t*)&hit )`, and whether a value is nonzero does not depend
+on how its top bit is read.  `samecast.py` has this as its second rule --
+reported and not applied, because choosing between `(T)x`, `++x` and `if( x )`
+is a reading of the expression rather than a substitution.
+
+The pattern that found them was wrong first, in a way worth keeping: its
+lookahead excluded `.` but not `->`, so `*(int32_t*)&blk1->width` read as a pun
+on the pointer `blk1`, and nine field reads looked like pointers squeezed
+through a 32-bit integer -- which `tools/x32.sh` had been saying there were
+none of, and was right.
+
 Typing four coders made `methodise.py` propose them, and all four are declined
 with the reason written down: a method of `BmfImage` would make the image the
 compressor, the model or the BMP writer, and the image is what these read
