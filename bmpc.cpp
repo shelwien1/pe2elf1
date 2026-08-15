@@ -371,7 +371,11 @@ struct Raster {
   ParamUpdater<1,Config_LM>* lam;   // z of the convex combination
 #endif
   Ctr*   res[RES_NM];      // residual models, see RES_NM
-  int    rbase[RES_NM][4]; // their row offsets for the current pixel
+  // Row offset of each model for the current pixel.  Rows 0/1/2/4 are filled
+  // in Gather(); models 3 and 5 key off data that only exists part-way
+  // through the pixel (the previous component's error, the predicted byte),
+  // so they compute their offset at use.
+  int    rbase[RES_NM][4];
   signed char* emap;       // clipped prediction error, same geometry as buf
   BitMix* bmix;            // mixer weights, per (plane, activity[, depth])
   uint   nmix;

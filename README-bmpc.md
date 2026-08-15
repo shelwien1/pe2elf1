@@ -160,12 +160,12 @@ Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **47077** | 4.84 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46732** | 4.80 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **105481** | 3.66 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **126096** | 3.28 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **360113** | 1.28 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2646464** | 2.52 |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **47093** | 4.84 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46749** | 4.80 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **103854** | 3.61 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **123906** | 3.23 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **359630** | 1.28 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2646067** | 2.52 |
 | x_ai.bmp | RLE8 | 887278 | — | — | 285808 | 285808 | fallback |
 | x_ci.bmp | RLE8 | 3278170 | — | — | 1046958 | 1046958 | fallback |
 
@@ -176,7 +176,7 @@ top-down BMP with non-zero row padding and a trailer, and book1.
 The two RLE8 files are not rasters, so they take the order-1 fallback and
 match coder0 exactly (+1 byte for the mode flag).
 
-On the 8 MB target image bmpc codes **2646464** bytes: 34.8% smaller than
+On the 8 MB target image bmpc codes **2646067** bytes: 34.8% smaller than
 coder0's 4057586, and 1.8% smaller than the 2694740 of `bmf`, which is
 what this was being measured against.
 
@@ -186,7 +186,8 @@ Where it got there, on that file:
 |---|---|---|
 | order-1 (coder0) | 4057586 | |
 | + the LPC mix, order-0 residual | 2912183 | −28.2% |
-| + the 6-model residual mix | **2646464** | −9.1% |
+| + the 6-model residual mix | 2646464 | −9.1% |
+| + a final `IDX/opt.pl` pass | **2646067** | |
 | bmf, for reference | 2694740 | |
 
 ## 6. Caveats
@@ -234,7 +235,10 @@ perl IDX/opt.pl opt.lst out/bmpc_opt                       # writes export.!!!
 ```
 
 `IDX/opt.pl` is `IDX/auto_opt2.pl` with a corpus list and a configurable
-target. Two things it needs from the source side:
+target. Four rounds of it were worth −0.8%, −1.3%, −0.5% and −0.6% on the
+full corpus — it keeps finding things, and it found one the hand sweeps
+missed entirely: `D_clip`, which nothing suggested would bind, wants to be
+~1/1000 of its seed and is worth −0.7% by itself. Two things it needs from the source side:
 
 * **the corpus has to cover every depth.** 8, 24 and 32bpp all take
   different paths through `n_colors`; whichever is missing drifts while

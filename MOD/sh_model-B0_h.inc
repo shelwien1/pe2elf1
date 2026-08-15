@@ -35,11 +35,11 @@ pdesc( B0_WMAX_w_, 1, "0111111111111" );
 static const int B0_WMAX_w = B0_WMAX_w_.value * (1);
 #endif
 #ifndef B0_G2_w
-pdesc( B0_G2_w_, 1, "11111110111110110" );
+pdesc( B0_G2_w_, 1, "01011111111100110" );
 static const int B0_G2_w = B0_G2_w_.value * (1);
 #endif
 #ifndef B0_D_w
-pdesc( B0_D_w_, 1, "0000000000010" );
+pdesc( B0_D_w_, 1, "0000000000000" );
 static const int B0_D_w = B0_D_w_.value * (1);
 #endif
 #ifndef B0_R_w
@@ -55,7 +55,7 @@ mdesc( B0_G1_w_, 1, "0111111111111" );
 static const int B0_G1_w = B0_G1_w_.value * (1);
 #endif
 #ifndef B0_HUB
-pdesc( B0_HUB_, 1, "0100000" );
+pdesc( B0_HUB_, 1, "0001111" );
 static const int B0_HUB = B0_HUB_.value * (1);
 #endif
 #ifndef B0_NW2_w
@@ -67,7 +67,7 @@ pdesc( B0_INC2_w_, 1, "0101011001000000100" );
 static const int B0_INC2_w = B0_INC2_w_.value * (1);
 #endif
 #ifndef B0_HUB2
-pdesc( B0_HUB2_, 1, "101001" );
+pdesc( B0_HUB2_, 1, "100000" );
 static const int B0_HUB2 = B0_HUB2_.value * (1);
 #endif
 #ifndef B0_NWL
@@ -75,7 +75,7 @@ pdesc( B0_NWL_, 1, "011111111111111" );
 static const int B0_NWL = B0_NWL_.value * (1);
 #endif
 #ifndef B0_INCL
-pdesc( B0_INCL_, 1, "000000000000000" );
+pdesc( B0_INCL_, 1, "000000000000010" );
 static const int B0_INCL = B0_INCL_.value * (1);
 #endif
 #ifndef B0_STEPL
@@ -135,7 +135,7 @@ pdesc( B0_NWB_, 1, "01111111111" );
 static const int B0_NWB = B0_NWB_.value * (1);
 #endif
 #ifndef B0_INCB
-pdesc( B0_INCB_, 1, "0011111111111111" );
+pdesc( B0_INCB_, 1, "0001111111001110" );
 static const int B0_INCB = B0_INCB_.value * (1);
 #endif
 #ifndef B0_STEPB
@@ -143,14 +143,14 @@ pdesc( B0_STEPB_, 1, "0110011001100" );
 static const int B0_STEPB = B0_STEPB_.value * (1);
 #endif
 #ifndef B0_DB
-pdesc( B0_DB_, 1, "0111111111111" );
+pdesc( B0_DB_, 1, "1101111011100" );
 static const int B0_DB = B0_DB_.value * (1);
 #endif
 #ifndef B0_BMW0
-pdesc( B0_BMW0_, 1, "0101010100" );
+pdesc( B0_BMW0_, 1, "0100000000" );
 static const int B0_BMW0 = B0_BMW0_.value * (1);
 #endif
 #ifndef B0_SSEW
-pdesc( B0_SSEW_, 1, "01011111111" );
+mdesc( B0_SSEW_, 1, "01011111111" );
 static const int B0_SSEW = B0_SSEW_.value * (1);
 #endif

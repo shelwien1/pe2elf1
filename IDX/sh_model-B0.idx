@@ -26,8 +26,8 @@ Number INC_w,   1, 1!1111111100100110000
 Number STEP_w,  1, 1!0110011001100
 Number WMAX_w,  1, 1!0111111111111
 # grad2_clip/1024 and D_clip/64.
-Number G2_w,    1, 1!11111110111110110
-Number D_w,     1, 1!0000000000010
+Number G2_w,    1, 1!01011111111100110
+Number D_w,     1, 1!0000000000000
 Number R_w,     1, 1!011110100001000111111
 Number R0_w,    1, 0!0000
 # ParamUpdater never reads grad1_clip.
@@ -35,14 +35,14 @@ Number R0_w,    1, 0!0000
 
 # --- loss ---
 # MIX_LOSS knee /1024; 48 == 6 byte levels.
-Number HUB,     1, 1!0100000
+Number HUB,     1, 1!0001111
 
 # --- MIX_DUAL: the second mix and the blend coordinate z ---
 Number NW2_w,   1, 1!0110110100111
 Number INC2_w,  1, 1!0101011001000000100
-Number HUB2,    1, 1!101001
+Number HUB2,    1, 1!100000
 Number NWL,     1, 1!011111111111111
-Number INCL,    1, 1!000000000000000
+Number INCL,    1, 1!000000000000010
 Number STEPL,   1, 1!00100100101101111
 Number MM2,     1, 0!0000
 
@@ -68,10 +68,10 @@ Number MM2,     1, 0!0000
 # NWB/4096 damping of the mixer's Newton step, INCB/1024 its epsilon,
 # STEPB/65536 its trust region, DB/1024 the per-weight gradient clip.
 Number NWB,     1, 1!01111111111
-Number INCB,    1, 1!0011111111111111
+Number INCB,    1, 1!0001111111001110
 Number STEPB,   1, 1!0110011001100
-Number DB,      1, 1!0111111111111
+Number DB,      1, 1!1101111011100
 # seed of each mixer weight /1024 (1/RES_NM would be 341)
-Number BMW0,    1, 1!0101010100
-# how much of the APM's opinion to take /1024
-Number SSEW,    1, 1!01011111111
+Number BMW0,    1, 1!0100000000
+# how much of the APM's opinion to take /1024 (frozen: RES_SSE=0)
+!Number SSEW,    1, 1!01011111111
