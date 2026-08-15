@@ -968,6 +968,17 @@ comment there had already named the parameter as the cause.  The parameter is
 `const int32_t *`; thirteen of the fifteen casts are gone, and the two left are
 that function's own frame, still byte arrays because the frame around them is.
 
+**The output was a byte pointer too.**  `desc` was `uint8_t *`, written as
+`desc[16*k]`, `desc[33]` and `*(uint32_t *)&desc[16*cand+4]`.  It is four
+`PlaneDesc` -- one candidate's row of `choose_plane_coding`'s 3x16 table, which
+that function copies into `plane_desc` with `memcpy(…, 4*sizeof(PlaneDesc))`
+once a candidate wins, so the record type was already written down one caller
+away.  Byte `16*k+0` is `nrefs`, `+1` is `src_plane`, `+4` and `+8` are the two
+weights, and those four fields are the whole of this function's output: the
+plane order as a permutation and its inverse -- the same pair `expand_image`
+builds off the wire -- and the two least-squares weights.  There is no pointer
+cast left in `filter_cost.inc`.
+
 **And it put a proposal on `methodise.py`'s list.**  Dissolving the frame took
 every use of `img` that was not a member access with it, so a function the rule
 had been rejecting became a clean receiver.  Declined, with the same judgement

@@ -162,11 +162,11 @@ int32_t choose_plane_coding(BmfImage* img) {
       // same relation for costs that are estimated bit counts and so never
       // negative.  One relation here.
       xform = 0;
-      uint32_t cheapest = cost_candidate(img, 0, (uint8_t*)tbl16,
+      uint32_t cheapest = cost_candidate(img, 0, (PlaneDesc*)tbl16,
                                            (uint32_t*)&acc0[2]);
       for( int32_t cand = 1; cand<3; ++cand ) {
         const uint32_t c = cost_candidate(img, cand,
-                                            (uint8_t*)&tbl16[16*cand], (uint32_t*)&acc0[2]);
+                                            (PlaneDesc*)&tbl16[16*cand], (uint32_t*)&acc0[2]);
         if( c<cheapest ) {
           cheapest = c;
           xform = cand;

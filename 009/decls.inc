@@ -97,7 +97,7 @@ int32_t estimate_cost(const int32_t* bin, int32_t n);
 void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
 int32_t alt_model_p1_decode(BmfImage* hdr, uint8_t* out);
 void reduce_alphabet(ModelBlock* blk, uint8_t* src);
-int32_t cost_candidate(BmfImage* img, int32_t cand, uint8_t* desc, uint32_t* costs);
+int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs);
 int32_t choose_plane_coding(BmfImage* img);
 BmfImage* read_bmp(char* path);
 int32_t decode_symbol_list(SymList* syms);

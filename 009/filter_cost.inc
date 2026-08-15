@@ -29,7 +29,15 @@
 // decompiler's spill slots for neighbour offsets that are `const` locals in
 // the walk, and `nplanes` is `plane_count`.  So the whole of the frame after
 // the histograms was padding, and there is no frame.
-int32_t cost_candidate(BmfImage* img, int32_t cand, uint8_t* desc, uint32_t* costs) {
+//
+// **The output was a byte pointer too.**  `pd` was `uint8_t *desc`, written as
+// `desc[16*k]`, `desc[33]` and `*(uint32_t *)&desc[16*cand+4]`.  It is four
+// `PlaneDesc` -- one candidate's row of `choose_plane_coding`'s 3x16 table,
+// which that function copies into `plane_desc` with
+// `memcpy(…, 4*sizeof(PlaneDesc))` once a candidate wins.  Byte 16*k+0 is
+// `nrefs`, +1 is `src_plane`, +4 and +8 are the two weights, and the whole of
+// this function's output is those four fields.  No cast is left in this file.
+int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
   // Six histograms of a difference, indexed `value + 512`, and a seventh of
   // the second walk's residual, indexed by nine bits.  The first six were one
   // 24,576-byte `memset`, being contiguous members; six is the same clear.
@@ -66,9 +74,8 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, uint8_t* desc, uint32_t* cos
   uint8_t* base = img->pixels;
   double syz = 0.0, syy = 0.0, sxz = 0.0, sxy = 0.0, sxx = 0.0;
 
-  const int32_t rec_ofs = 16*cand;
-  desc[rec_ofs] = 2;
-  desc[33] = (uint8_t)cand;
+  pd[cand].nrefs = 2;
+  pd[2].src_plane = (uint8_t)cand;
   uint8_t* p = &base[cand+row_b+planes];
   if( p<img_end ) {
     // Eight neighbour offsets, constant for the whole walk.  The decompiler
@@ -171,14 +178,18 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, uint8_t* desc, uint32_t* cos
     wa = wb;
     wb = w1s;
   }
-  *(uint32_t*)&desc[rec_ofs+4] = wa;
-  *(uint32_t*)&desc[rec_ofs+8] = wb;
+  pd[cand].weight0 = wa;
+  pd[cand].weight1 = wb;
+  // The plane order, as the permutation and its inverse -- `src_plane[rank]`
+  // and `nrefs[plane]` -- which is the pair `expand_image` builds from the
+  // wire.  `pick` and `d2` are offsets from this plane, so both indices are
+  // 0, 1 or 2 whichever candidate this is.
   int32_t idx1 = cand+pick;
   int32_t idx2 = cand+d2;
-  desc[16*idx1] = 0;
-  desc[1] = (uint8_t)idx1;
-  desc[16*idx2] = 1;
-  desc[17] = (uint8_t)idx2;
+  pd[idx1].nrefs = 0;
+  pd[0].src_plane = (uint8_t)idx1;
+  pd[idx2].nrefs = 1;
+  pd[1].src_plane = (uint8_t)idx2;
   // A `bool deep = 0;` guarded this, and nothing assigned it -- so `!deep` was
   // a constant the compiler folded and a condition a reader had to check.
   if( img->data_size>0x1000000u )
