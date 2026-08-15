@@ -719,3 +719,28 @@ what caught it, because it builds rather than reusing.  `test.sh` refuses a
 binary older than any `.inc` or `.cpp` beside it now, and names them.  That
 covers this and the two earlier times a rebuild in one shell raced a test in
 another.  Proved it reports: `touch globals.inc`, and it declines.
+
+**Two records the byte offsets were hiding.**  `CodedTail` is the member a BMF
+file may carry after the image: eight bytes of header and then its bytes,
+which `expand_image` reads and `compress_image` writes back out unread.  It was
+a `void*` whose length was `((const uint32_t*)extra_blk)[1]`, and an
+`uint8_t hdr[8]` read as `*(uint32_t*)&frame.hdr[4]` five times over.  Naming it
+gave two pieces of arithmetic somewhere to be explained: the `(len==0)` in the
+padding is what makes an empty tail cost a word rather than none, and the store
+that clears the last word is there because the read stops at the unpadded
+length.
+
+`CtxWeights::f0` was the last member named for its offset -- 0 `fNN` members
+across the unit now, 299 named -- and it is `row[6]`, the six weight sets
+`NbRow::predict` mixes, with the six taps written down beside it in cursor
+terms.
+
+**42 casts to the type the operand already had.**  `uncast.py` reads zero here
+and that zero is honest: it asks GCC, and `-Wuseless-cast` names none of them,
+checked directly on a four-line file rather than assumed.  `tools/samecast.py`
+is the check for the class, and it could not have been written before this
+round -- it needs `decl_types` to know the type of a local declared with an
+initialiser, which is the gap `negindex.py`'s eight untyped names exposed.  It
+covers locals and parameters, 29 of the 42; a member is not in the type table,
+so the thirteen `(P2Ctx*)cursor[k]` were read off the declaration by hand, and
+the tool says so rather than reporting 29 as if it were all of them.
