@@ -146,7 +146,14 @@ HISTORY = {
 }
 
 
-BODY_LINES = re.compile(r'`(\w+)`[^`\n]{0,60}?\(?(\d[\d ,]*) lines')
+# The claim and the word `lines` may sit either side of a line wrap.  This
+# read one line at a time and forbade the newline, so a claim the document
+# happened to wrap was invisible: `search_filter` at 366 lines survived at 335
+# for three rounds because the wrap fell between the number and the word, while
+# `choose_plane_coding` on the very next line was checked every sweep.  A
+# blank line still ends it -- a number at the end of one paragraph and `lines`
+# at the start of the next are not one claim.
+BODY_LINES = re.compile(r'`(\w+)`(?:[^`\n]|\n(?!\s*\n)){0,60}?\(?(\d[\d ,]*?)\s+lines')
 
 
 def read(src):
@@ -197,11 +204,12 @@ def measured(docs, sources, slack=2):
             lines = open(doc).read().split('\n')
         except IOError:
             continue
-        for i, line in enumerate(lines, 1):
-            for m in BODY_LINES.finditer(line):
-                nm, n = m.group(1), int(m.group(2).replace(' ', '').replace(',', ''))
-                if nm in have and abs(have[nm] - n) > slack:
-                    out.append((doc, i, nm, n, have[nm]))
+        text = '\n'.join(lines)
+        for m in BODY_LINES.finditer(text):
+            nm, n = m.group(1), int(m.group(2).replace(' ', '').replace(',', ''))
+            if nm in have and abs(have[nm] - n) > slack:
+                out.append((doc, text.count('\n', 0, m.start()) + 1, nm, n,
+                            have[nm]))
     return out
 
 

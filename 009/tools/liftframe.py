@@ -85,13 +85,18 @@ MEMBER = re.compile(r'\s*((?:alignas\([^)]*\)\s*)?'
 def frame_of(lines, a, b):
     """(first, last, [lift], [keep]) for the body's frame, or None.
 
-    The struct has to be *inside* the body.  `ReduceAlphabetFrame` is declared
+    The struct has to be *inside* the body.  `ReduceAlphabetFrame` was declared
     at file scope -- an earlier round moved it out so its two arms could split
-    into separate functions -- so this finds nothing there, and asking for that
-    frame answered "no frame this can lift".  Which is true of this tool and
+    into separate functions -- so this found nothing there, and asking for that
+    frame answered "no frame this can lift".  Which was true of this tool and
     not of the tree, and it is the silence the docstring above is against, one
     more code path over.  Said plainly rather than fixed: lifting a file-scope
     frame is a different operation, since the declaration is shared.
+
+    That frame is gone now, dissolved by hand rather than by this, so the
+    `file-scope` answer below is a path nothing currently takes.  It stays
+    because the next round that moves a frame out to share it will take it, and
+    a tool that goes quiet in that case is what this file exists against.
     """
     start = None
     for i in range(a, b + 1):
@@ -241,7 +246,10 @@ def indexed_out(lines, a, b, got):
 #     `buf[4*dx+2048]` is an index this cannot bound;
 #   * `reduce_alphabet`'s frame is at file scope, moved there by an earlier
 #     round so its two arms could split, and `frame_of` only looks inside the
-#     body.  Lifting a shared declaration is a different operation.
+#     body.  Lifting a shared declaration is a different operation.  (Cleared:
+#     the frame is gone.  Its two arms no longer share anything -- the narrow
+#     one owns its flag table -- so there was no shared declaration left to
+#     lift, and what remained went out by hand.)
 #
 # Both are in `candidates`' decline list rather than here, which is where a
 # reason that holds without running anything belongs.

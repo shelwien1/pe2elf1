@@ -356,15 +356,71 @@ The numbers to re-take at the end, and to write into this document beside the
 ones above:
 
 ```
-aliasing sites          534   →  ?
-unrolled runs            89   →  ?
-duplicated blocks        16   →  ?
-declaration lines 7+     16   →  ?
-frames                    1   →  ?
-bodies over 200 lines    16   →  ?
-lines, spliced       11,321   →  ?
+aliasing sites          534   →  467   (see below -- not the same scan)
+unrolled runs            89   →    0   (3 declined as tables, with reasons)
+duplicated blocks        16   →    0
+declaration lines 7+     16   →   11
+frames                    1   →    0
+bodies over 200 lines    16   →   11
+lines, spliced       11,321   → 10,858
 ```
 
 A plan kept without its outcome is a plan that gets re-proposed. This one has a
 column for the outcome and it is expected that several of these numbers will
 move less than the phase predicted — that is the useful part.
+
+---
+
+## What happened
+
+All five phases ran. Four of the seven numbers went to zero; one of the other
+three is not the measurement it looks like.
+
+**The aliasing number is the weak one and the reason is worth stating.** 534
+came from a one-off scan written while this plan was, and re-taking it meant
+writing that scan again — the buckets do not agree (47/82/405 then, 23/96/348
+now), so 467 is not 534 measured twice. What can be trusted is the part that
+became a tool: `passname.py`, `unspillpair.py`, `unaliasvar.py` and `uncopy.py`
+each report zero on every sweep, and each was proved able to report before its
+zero was believed. **A number that only a tool in `tools/` can re-take is the
+only kind this document should have quoted.**
+
+**Phase 2** found 39 unrolled loops rather than the ~20 predicted, and three
+runs stayed as tables — `init_counter_node`, the p2 frequency seed, and
+`update_model`'s neighbour list — because their values are unrelated numbers
+and a `for` would have to carry them in an array anyway. `reroll.py` was wrong
+three times before it was right, and all three were caught by a dry run into a
+scratch tree rather than by the gate: a counter named `i` shadowing a row index
+also named `i`, a dependence check that looked only for read-after-write when
+the row shifts are write-after-read, and a descending run being filed as
+"scheduler order" when it is index order backwards.
+
+**Phase 3** went to zero, and the encode/decode pairs moved with it: the p2
+pair fell from 123 shared lines of 586 to 39 of 385 and the p1 pair from 8 of
+60 to 3 of 50. Every block that came out was a named thing that had no name —
+`start_row`, `plane_transform`, `transform_cost`, `save_descriptors`. The
+decline of those pairs is stronger than it was, which is the outcome the
+phase's own text predicted and the reason it insisted the table be re-taken.
+
+**Phase 4 was the surprise.** It was ordered last on the theory that it was
+mostly a consequence of Phase 1, and it was not: it moved 478 declarations, and
+not one line of it was a new rule. `firstuse.py` already had the rule and was
+reporting zero because three of its guards were wider than what they guarded
+against. Two of the three were caught by g++ and not by the gate —
+`-fpermissive` turns "jump into scope past an initialiser" into a warning, so
+the build stays green and the variable is uninitialised on that path. **A tool
+reporting zero is a claim about the tool as much as about the tree**, and this
+round that claim was wrong three times in one file.
+
+**Phase 5 was speculative and the speculation held.** The hypothesis was that
+the 64KB `_pad0` and the `memset(buf, 0, 0x10000)` beside it were saying what
+the object is, and they were: `buf[4]` and `kids[127][4]` interleave — `kids`
+begins four bytes after `buf` and both stride by eight — so they are one array
+of 8192 eight-byte records, which is exactly the 65536 bytes the `memset`
+clears. With the array named, the twelve numbered spill slots around it were
+ordinary locals and the frame dissolved. `PROVEN` stays empty and the failure
+that stood against this phase is gone, because the reason for it was.
+
+Gated at every step: 110 checks over 17 images, ASan clean over 44 runs, x32
+23 of 23, 400 fuzz mutants with nothing reported, the header scan, `BMF_WARN`
+at zero, and the sweep at zero.
