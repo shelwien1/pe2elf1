@@ -443,6 +443,15 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         bin->f[0] += step10;
       }
       if( ctx15<=0 ) {
+// The residual coder, entered two ways: by falling into it when the context's
+// low nibble is zero, and by the `goto` at the bottom of this function, which
+// jumps back *into* this block from outside it.
+//
+// It stays a label.  A structured form needs a loop around the `if` and a flag
+// to say which way it was entered -- one more level of nesting and one more
+// variable, to remove one `goto` that already says what it does.  That is the
+// trade the refactoring plan names when it says to keep state-machine labels,
+// and this is one.
 code_residual:
         step_v = ctx;
         if( freq[step_v].step<=0x1Au )
