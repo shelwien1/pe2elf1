@@ -202,7 +202,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
               side = *(uint32_t*)&frame.buf[8*node]<val;
               kidp = frame.kids[node];
               node = kidp[side];
-              if( !kidp[side] )
+              if( !node )
                 break;
               if( val==*(uint32_t*)&frame.buf[8*node] ) {
                 written = frame.slot3;
@@ -234,12 +234,12 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
 // The alphabet is dense enough to code as a run of flags.
 code_dense:
         blk3 = frame.slot7;
-        frame.slot7->sym_word[written++] = node;
+        blk3->sym_word[written++] = node;
         if( written>=blk3->height*blk3->width ) {
           srcp = frame.slot8;
           n_kids = frame.slot9;
           blk1 = frame.slot7;
-          alpha_n = frame.slot7->alphabet;
+          alpha_n = blk1->alphabet;
           goto alphabet_done;
         }
       }
@@ -343,7 +343,7 @@ lists_ready:
           ++li;
         } while( li<4*n_kids );
         blk1 = frame.slot7;
-        alpha_m = frame.slot7->alphabet;
+        alpha_m = blk1->alphabet;
       }
       if( alpha_m ) {
         carry = 0;

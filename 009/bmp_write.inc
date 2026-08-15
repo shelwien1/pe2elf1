@@ -99,7 +99,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
       }
     } else {
       pal_bytes = 4*ncolours;
-      memset(buf, 0, 4*ncolours);
+      memset(buf, 0, pal_bytes);
       rows2 = img->height;
     }
     buf = &out_buf[pal_bytes+54];
@@ -233,7 +233,7 @@ write_rows:
     out_at[1] = 1;
     out_at += 2;
     coded_bytes = out_at-buf;
-    if( data_len>(uint32_t)(out_at-buf) ) {
+    if( data_len>(uint32_t)(coded_bytes) ) {
       bmp->biSizeImage = (uint32_t)coded_bytes;
       n_bytes = (uint32_t)(out_at-out_buf);
       bmp->bfSize = n_bytes;

@@ -81,10 +81,10 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
     if( esc<=4*alt_freq_limit ) {
       result = 4*(esc>alt_freq_limit);
       add = esc-result;
-      *(freq+1) = esc-result;
+      *(freq+1) = add;
     } else {
       add = esc-16;
-      *(freq+1) = esc-16;
+      *(freq+1) = add;
     }
   } else {
     add = *(freq+1);

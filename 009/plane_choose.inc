@@ -90,7 +90,9 @@ int32_t choose_plane_coding(BmfImage* img) {
       next_plane = 1;
     }
     result = next_plane-1;
-    if( (uint32_t)n_planes>(next_plane-1) ) {
+    // `next_plane` is unsigned and `result` is not, so naming the value here
+    // is what makes the conversion visible; it was always happening.
+    if( (uint32_t)n_planes>(uint32_t)result ) {
       plane_desc[next_plane-1].src_plane = result;
       plane_desc[next_plane-1].nrefs = result;
     }
@@ -310,7 +312,7 @@ weights_chosen:
         wt4 = wt4_cur;
       }
       slack = best_cost>>7;
-      if( best_cost>>7>=0x4000 )
+      if( slack>=0x4000 )
         slack = 0x4000;
       best = slack+best_cost;
       // The winning candidate's other three costs, against the fitted pair:

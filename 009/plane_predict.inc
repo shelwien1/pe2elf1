@@ -67,7 +67,7 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   }
   if( width!=1 ) {
     last = width-1;
-    int32_t pairs = (width-1)/2;
+    int32_t pairs = (last)/2;
     if( pairs ) {
       uint32_t k = 0;
       int32_t ofs = 0;
@@ -271,7 +271,7 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
     row_rest = 0;
   } else {
     row_rest = width-1;
-    uint32_t pairs = (width-1)/2;
+    uint32_t pairs = (row_rest)/2;
     if( pairs ) {
       for( k = 0; k<pairs; ++k ) {
         uint8_t cur = pixels[2*k]+unfold[pixels[2*k+1]];

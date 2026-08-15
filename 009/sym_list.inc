@@ -283,7 +283,7 @@ struct SymList {
       tot = 0;
       live = n_u;
       result = 12*n_u;
-      since_rescale = 12*n_u;
+      since_rescale = result;
       rescale_at = 8*n_u;
       if( n_u ) {
         result = 0;

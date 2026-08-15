@@ -45,7 +45,7 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
         else
           ++half;
         even = 2*half;
-        pos[2*k] = 2*half;
+        pos[2*k] = even;
         odd = 2*half-1;
         in_bucket = bucket-1;
         neg[ofs+256] = odd;

@@ -921,7 +921,7 @@ struct ModelBlock {
               if( ctr->limit<(uint32_t)bin_tot )
                 ctr->scale_rare();
               s1b = nb_sym[1];
-              ctr->n[nb_sym[1]] += 8;
+              ctr->n[s1b] += 8;
               if( s1b )
                 idx_s |= mask;
               seen |= idx_s&mask;
@@ -1017,7 +1017,7 @@ struct ModelBlock {
     freq = &grid[bucket_idx];
     freq_tbl = &grid[id2+188];
     tot = freq_tbl->w[5];
-    if( freq_tbl->w[5] ) {
+    if( tot ) {
       if( tot==1 ) {
         b15 = freq->b15;
         w2t = b15*freq_tbl->w[2];
@@ -1157,14 +1157,14 @@ struct ModelBlock {
         }
         if( w5b>s0c ) {
           s3a = nb_sym[3];
-          if( nb_sym[3]<15 )
+          if( s3a<15 )
             s3a = 15;
           nb_sym[3] = s3a;
           freq->b15 = s3a;
         }
       }
       s3b = nb_sym[3];
-      freq->w[5] = nb_sym[3]+w5b;
+      freq->w[5] = s3b+w5b;
       freq->w[lvl_b] += s3b;
       rc.decode(arg_cum, arg_high, arg_tot);
       hit = lvl_b;
@@ -1463,7 +1463,7 @@ struct ModelBlock {
         row_cur[5]->head4 = 0x01010101;
         pix_cur->prev = pix_cur->last;
         wp = nb_sym[8];
-        row_cur[5]->sym = nb_sym[8];
+        row_cur[5]->sym = wp;
         pix_cur->last = wp;
         r3 = row_cur[5];
         rec_word = *(uint32_t*)r3;
@@ -1707,14 +1707,14 @@ struct ModelBlock {
           }
           if( w5c>w5b ) {
             s3b = nb_sym[3];
-            if( nb_sym[3]<15 )
+            if( s3b<15 )
               s3b = 15;
             nb_sym[3] = s3b;
             binp->b15 = s3b;
           }
         }
         s3 = nb_sym[3];
-        binp->w[5] = nb_sym[3]+w5c;
+        binp->w[5] = s3+w5c;
         binp->w[lvl_b] += s3;
         rc.encode(arg_cum, arg_high, arg_tot);
         hit = lvl_b;
