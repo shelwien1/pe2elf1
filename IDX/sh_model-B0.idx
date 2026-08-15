@@ -63,3 +63,15 @@ Number MM2,     1, 0!0000
 !Number BT2,    1, 1!000110
 !Number BT3,    1, 1!0010100
 !Number BR,     1, 1!00011111
+
+# --- residual-model mixer and APM ---
+# NWB/4096 damping of the mixer's Newton step, INCB/1024 its epsilon,
+# STEPB/65536 its trust region, DB/1024 the per-weight gradient clip.
+Number NWB,     1, 1!0111111111
+Number INCB,    1, 1!0011111111111111
+Number STEPB,   1, 1!0110011001100
+Number DB,      1, 1!0111111111111
+# seed of each mixer weight /1024 (1/RES_NM would be 341)
+Number BMW0,    1, 1!0101010100
+# how much of the APM's opinion to take /1024
+Number SSEW,    1, 1!01011111111

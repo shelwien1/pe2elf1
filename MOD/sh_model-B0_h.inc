@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// B0 -- constants of bmpc's LPC mixer.
+// B0 -- constants of bmpc's pixel mix and residual mixer.
 //
 // GENERATED from IDX/sh_model-B0.idx by IDX/idx2inc.pl, then wrapped in
 // #ifndef by tools/idxguard.py; regenerate with  GCIDX=1 ./gc.sh.
@@ -129,4 +129,28 @@ static const int B0_BT3 = B0_BT3_.value * (1);
 #ifndef B0_BR
 mdesc( B0_BR_, 1, "00011111" );
 static const int B0_BR = B0_BR_.value * (1);
+#endif
+#ifndef B0_NWB
+pdesc( B0_NWB_, 1, "0111111111" );
+static const int B0_NWB = B0_NWB_.value * (1);
+#endif
+#ifndef B0_INCB
+pdesc( B0_INCB_, 1, "0011111111111111" );
+static const int B0_INCB = B0_INCB_.value * (1);
+#endif
+#ifndef B0_STEPB
+pdesc( B0_STEPB_, 1, "0110011001100" );
+static const int B0_STEPB = B0_STEPB_.value * (1);
+#endif
+#ifndef B0_DB
+pdesc( B0_DB_, 1, "0111111111111" );
+static const int B0_DB = B0_DB_.value * (1);
+#endif
+#ifndef B0_BMW0
+pdesc( B0_BMW0_, 1, "0101010100" );
+static const int B0_BMW0 = B0_BMW0_.value * (1);
+#endif
+#ifndef B0_SSEW
+pdesc( B0_SSEW_, 1, "01011111111" );
+static const int B0_SSEW = B0_SSEW_.value * (1);
 #endif

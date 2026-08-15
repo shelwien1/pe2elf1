@@ -64,6 +64,23 @@ set R_clip     = 1e9f;
 set R0         = 0.0f;
 #undef set
 
+// The residual-model mixer: weights on stretched probabilities.
+def_Config(Config_BM)
+#define set  const float Config_BM::
+set momentum_D = 0.0f;
+set momentum_R = 0.0f;
+set NW         = float(B0_NWB)/4096.0f;
+set inc        = float(B0_INCB)/1024.0f;
+set stepMax    = float(B0_STEPB)/65536.0f;
+set minVal     = -8.0f;
+set maxVal     =  8.0f;
+set grad1_clip = 1e9f;
+set grad2_clip = 1e9f;
+set D_clip     = float(B0_DB)/1024.0f;
+set R_clip     = 1e9f;
+set R0         = 0.0f;
+#undef set
+
 // Weight-space box and seeds (shared by both parameterisations).
 static const float LW_LO   = float(B0_WLO) / 1024.0f;
 static const float LW_HI   = float(B0_WHI) / 1024.0f;
@@ -76,3 +93,6 @@ static const float BIAS_R  = float(B0_BR) / 1024.0f;    // MIX_BIAS==2 EMA rate
 static const float LW_HUBA = float(B0_HUBA) / 256.0f;   // MIX_LOSS==3 knee, in EMA(|e|)
 static const float MAD_R   = float(B0_MADR) / 1024.0f;
 static const float LW_MAD0 = float(B0_MAD0) / 1024.0f;
+
+static const float BM_W0   = float(B0_BMW0) / 1024.0f;  // mixer weight seed
+static const float SSEW    = float(B0_SSEW) / 1024.0f;  // APM blend weight

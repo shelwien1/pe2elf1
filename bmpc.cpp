@@ -120,12 +120,45 @@
 #define RES_PLANE    1   // one order-0 residual model per colour component
 #endif
 #ifndef RES_CTX
-#define RES_CTX      0   // >0: split the order-0 residual model by a
-                         // quantised local activity context -- RES_CTX
-                         // buckets of |e| at W + N + NE, per plane.  This
-                         // is the one place the residual coder stops being
-                         // order 0, so it is off by default; see
-                         // README-bmpc.md for what it measures.
+#define RES_CTX      8   // activity buckets: |e| at W + N + NE, per plane.
+                         // RES_CTX=1 collapses model 1 onto model 0.
+#endif
+#ifndef RES_EQ
+#define RES_EQ      17   // signed buckets of eW+eN for model 2
+#endif
+#ifndef RES_NM
+#define RES_NM       4   // residual models mixed:
+                         //  0 = plane                       (order 0)
+                         //  1 = plane x activity            (how noisy here)
+                         //  2 = plane x signed eW+eN        (which way it missed)
+                         //  3 = plane x signed error already
+                         //      made on the previous component
+                         //      of THIS pixel (cross-channel)
+                         // Their predictions are mixed in the logistic
+                         // domain by a per-(plane,activity) weight vector
+                         // driven by ParamUpdater -- the same rank-1 Newton
+                         // step the pixel mix uses, with the cross-entropy
+                         // hdot = p(1-p).
+#endif
+#ifndef RES_MD
+#define RES_MD       1   // 1 = give the mixer a separate weight set per
+                         // depth in the bit tree; the models' relative
+                         // worth differs a lot between the top bits of the
+                         // residual and the noise in the bottom ones
+#endif
+#ifndef RES_MH
+#define RES_MH       0   // curvature the residual mixer is given:
+                         //  0 = hdot 1      -> R = |s|^2
+                         //  1 = hdot p(1-p) -> the true cross-entropy one.
+                         // The true one collapses to ~0 exactly where the
+                         // model is confident, which is most of the time, so
+                         // the normalised step blows up there; the pixel mix
+                         // hits the same wall with |x|^2 (see README sec.2).
+#endif
+#ifndef RES_SSE
+#define RES_SSE      0   // 1 = refine the mixed probability through an APM
+                         // indexed by (plane, tree node, quantised
+                         // stretch(p)), interpolated between two buckets
 #endif
 #ifndef STATS
 #define STATS        0   // -DSTATS=1: dump predictor diagnostics to stderr
@@ -215,6 +248,28 @@ static INLINE float LossG( float e, float knee ) {
 }
 
 static INLINE float squash( float x ) { return 1.0f/(1.0f+expf(-x)); }
+static const float SMAX = 12.0f;                 // stretch domain bound
+static const int   SSEQ = 32;                    // APM buckets
+static INLINE float stp( float p ) {             // stretch of a probability
+  p = clamp( p, 1.0f/65536.0f, 1.0f-1.0f/65536.0f );
+  return logf(p/(1.0f-p));
+}
+// signed quantiser for the eW+eN context of residual model 2
+static INLINE int qsigned( int d ) {
+  int s = d<0 ? -1 : 1; if( d<0 ) d = -d;
+  int h = RES_EQ>>1;
+  int q = 0; while( q<h && d >= (1<<q) ) q++;
+  return h + s*q;
+}
+
+// One mixer weight vector: RES_NM weights in the logistic domain.
+struct BitMix {
+  float w[RES_NM];
+  ParamUpdater<1,Config_BM> u[RES_NM];
+  void Init() {
+    for( uint i=0; i<RES_NM; i++ ) { w[i] = BM_W0; u[i].Init(BM_W0); }
+  }
+};
 static INLINE float stretch( float p ) { return logf(p/(1.0f-p)); }
 
 template<class cfg>
@@ -298,10 +353,15 @@ struct Raster {
   LPCMix2* mix2;           // the second, differently-paced mix
   ParamUpdater<1,Config_LM>* lam;   // z of the convex combination
 #endif
-  Ctr*   res;              // order-0 residual model(s)
-#if RES_CTX
-  byte*  emap;             // |prediction error| per component, same geometry
-  int    ectx[4];          // activity bucket of the current pixel
+  Ctr*   res[RES_NM];      // residual models, see RES_NM
+  int    rbase[RES_NM][4]; // their row offsets for the current pixel
+  signed char* emap;       // clipped prediction error, same geometry as buf
+  BitMix* bmix;            // mixer weights, per (plane, activity[, depth])
+  uint   nmix;
+  int    mctx[4];          // which set the current component uses
+  int    cerr[4];          // errors already made on this pixel
+#if RES_SSE
+  Ctr*   sse;              // [nc][256 nodes][SSEQ+1] APM
 #endif
   Ctr*   padm;             // order-0 model for the row padding bytes
   float  i2f[256];         // byte -> mix input
@@ -369,12 +429,32 @@ struct Raster {
     bias = new float[nc*NCTX];
     for( uint i=0; i<nc*NCTX; i++ ) bias[i] = 0.0f;
 #endif
-    uint nres = 256 * (RES_PLANE ? nc : 1) * (RES_CTX ? RES_CTX : 1);
-    res = new Ctr[nres];
-    InitCtr( res, nres );
-#if RES_CTX
-    emap = new byte[bn];
+    // model 0 is the order-0 tree (per plane when RES_PLANE); models 1 and 2
+    // add a context row each.
+    uint nrow[RES_NM];
+    nrow[0] = RES_PLANE ? nc : 1;
+#if RES_NM>1
+    nrow[1] = nc*RES_CTX;
+#endif
+#if RES_NM>2
+    nrow[2] = nc*RES_EQ;
+#endif
+#if RES_NM>3
+    nrow[3] = nc*RES_EQ;
+#endif
+    for( uint m=0; m<RES_NM; m++ ) {
+      res[m] = new Ctr[256*nrow[m]];
+      InitCtr( res[m], 256*nrow[m] );
+    }
+    emap = new signed char[bn];
     memset( emap, 0, bn );
+
+    nmix = nc*RES_CTX*(RES_MD?8:1);
+    bmix = new BitMix[nmix];
+    for( uint i=0; i<nmix; i++ ) bmix[i].Init();
+#if RES_SSE
+    sse = new Ctr[nc*256*(SSEQ+1)];
+    InitCtr( sse, nc*256*(SSEQ+1) );
 #endif
     padm = new Ctr[256];
     InitCtr( padm, 256 );
@@ -428,19 +508,27 @@ struct Raster {
                 +  qgrad(int(pN[k])-int(pNE[k]));
     }
 #endif
-#if RES_CTX
     {
       size_t o = size_t(At(px,py) - buf);
-      const byte* eW  = emap + o - size_t(nc);
-      const byte* eN  = emap + o - size_t(bstride)*nc;
-      const byte* eNE = eN + nc;
+      const signed char* eW  = emap + o - size_t(nc);
+      const signed char* eN  = emap + o - size_t(bstride)*nc;
+      const signed char* eNE = eN + nc;
       for( uint k=0; k<nc; k++ ) {
-        uint a = uint(eW[k]) + uint(eN[k]) + uint(eNE[k]);
+        int w = eW[k], n = eN[k], ne = eNE[k];
+        int aw = w<0?-w:w, an = n<0?-n:n, ane = ne<0?-ne:ne;
+        uint a = uint(aw+an+ane);
         uint q = 0; while( q+1 < RES_CTX && a >= (2u<<q) ) q++;
-        ectx[k] = int(q);
+        rbase[0][k] = (RES_PLANE ? int(k) : 0) * 256;
+#if RES_NM>1
+        rbase[1][k] = int(k*RES_CTX + q) * 256;
+#endif
+#if RES_NM>2
+        rbase[2][k] = int(k*RES_EQ + uint(qsigned(w+n))) * 256;
+#endif
+        mctx[k] = int(k*RES_CTX + q);
+        cerr[k] = 0;
       }
     }
-#endif
     int i = 0;
     float s = 0.0f;
     for( int dy=-PADT; dy<0; dy++ ) {
@@ -497,11 +585,7 @@ struct Raster {
 #if STATS
     s_h[r&255]++;
 #endif
-#if RES_CTX
-    r = CodeByte( res + (uint(RES_PLANE ? int(k)*RES_CTX : 0) + uint(ectx[k]))*256, r );
-#else
-    r = CodeByte( res + (RES_PLANE ? k*256 : 0), r );
-#endif
+    r = CodeRes( k, r );
 #if RES_ZIGZAG
     e = (r&1) ? -int((r+1)>>1) : int(r>>1);
     r = uint(e) & 255;
@@ -509,12 +593,12 @@ struct Raster {
     v = (uint(pb) + r) & 255;
 
     p[k] = byte(v);
-#if RES_CTX
     {
-      int d = int(v) - pb; if( d<0 ) d = -d;
-      emap[size_t(p-buf)+k] = byte(d>255?255:d);
+      int d = int(v) - pb;
+      d = (d<-128) ? -128 : (d>127 ? 127 : d);
+      emap[size_t(p-buf)+k] = (signed char)d;
+      cerr[k] = d;
     }
-#endif
 
     // --- weight update -----------------------------------------------
 #if MIX_LOGISTIC
@@ -557,6 +641,104 @@ struct Raster {
     if( k+1 < nc ) { float t = i2f[v] - base[k]; x[NPIX*nc+k] = t; xx += t*t; }
 #endif
     return v;
+  }
+
+  // One residual byte through the RES_NM models, mixed in the logistic
+  // domain, optionally refined by the APM.  Encode and decode run the very
+  // same instructions; only the bit source differs, inside rc_BProcess.
+  INLINE uint CodeRes( uint k, uint c ) {
+    uint cxt, bit;
+    Ctr* m0 = res[0] + rbase[0][k];
+#if RES_NM>1
+    Ctr* m1 = res[1] + rbase[1][k];
+#endif
+#if RES_NM>2
+    Ctr* m2 = res[2] + rbase[2][k];
+#endif
+#if RES_NM>3
+    Ctr* m3 = res[3] + (int(k)*RES_EQ + qsigned(k ? cerr[k-1] : 0))*256;
+#endif
+    BitMix* mxb = bmix + size_t(mctx[k])*(RES_MD?8:1);
+#if RES_SSE
+    Ctr* ap = sse + size_t(k)*256*(SSEQ+1);
+#endif
+
+    for( cxt=1; cxt<256; ) {
+      bit = (c>>7)&1;
+
+      float s[RES_NM];
+      m0[cxt].Predict();            s[0] = stp( m0[cxt].pK );
+#if RES_NM>1
+      m1[cxt].Predict();            s[1] = stp( m1[cxt].pK );
+#endif
+#if RES_NM>2
+      m2[cxt].Predict();            s[2] = stp( m2[cxt].pK );
+#endif
+#if RES_NM>3
+      m3[cxt].Predict();            s[3] = stp( m3[cxt].pK );
+#endif
+#if RES_MD
+      // depth = index of the leading 1 of cxt, i.e. how many bits are in
+      BitMix& mx = mxb[ (cxt>=128)?7 : (cxt>=64)?6 : (cxt>=32)?5 : (cxt>=16)?4
+                      : (cxt>=8)?3 : (cxt>=4)?2 : (cxt>=2)?1 : 0 ];
+#else
+      BitMix& mx = mxb[0];
+#endif
+      float dot = 0.0f, xx = 0.0f;
+      for( uint i=0; i<RES_NM; i++ ) { dot += mx.w[i]*s[i]; xx += s[i]*s[i]; }
+      float pm = squash( clip(dot, SMAX) );
+
+#if RES_SSE
+      // APM: bucket stretch(pm) and interpolate the two neighbouring cells.
+      float t  = (clip(stp(pm), SMAX)/SMAX + 1.0f) * (0.5f*SSEQ);
+      int   bq = int(t); if( bq<0 ) bq=0; if( bq>SSEQ-1 ) bq=SSEQ-1;
+      float fr = t - float(bq);
+      Ctr& a0 = ap[size_t(cxt)*(SSEQ+1) + bq];
+      Ctr& a1 = ap[size_t(cxt)*(SSEQ+1) + bq + 1];
+      a0.Predict(); a1.Predict();
+      float pa = a0.pK*(1.0f-fr) + a1.pK*fr;
+      float p  = pm*(1.0f-SSEW) + pa*SSEW;
+#else
+      float p  = pm;
+#endif
+      uint pi = uint( clamp( p*float(SCALE) ) );
+
+      bit = rc.rc_BProcess( pi, bit );
+
+      m0[cxt].C_Update( bit );
+#if RES_NM>1
+      m1[cxt].C_Update( bit );
+#endif
+#if RES_NM>2
+      m2[cxt].C_Update( bit );
+#endif
+#if RES_NM>3
+      m3[cxt].C_Update( bit );
+#endif
+#if RES_SSE
+      a0.C_Update( bit ); a1.C_Update( bit );
+#endif
+
+      // Mixer: cross entropy on the mixed probability, rank-1 curvature.
+      // Counter::pK -- and therefore pm -- is P(bit==0), which is what
+      // rc_BProcess wants as its freq; the target is 1-bit, not bit.
+      {
+        float gdot = pm - float(1-bit);
+#if RES_MH
+        float hc   = pm*(1.0f-pm)*xx;
+#else
+        float hc   = xx;
+#endif
+        for( uint i=0; i<RES_NM; i++ ) {
+          mx.u[i].AccumGH( gdot*s[i], hc );
+          mx.u[i].Apply( mx.u[i].StepRaw(), Config_BM::minVal, Config_BM::maxVal );
+          mx.w[i] = mx.u[i].val;
+        }
+      }
+
+      c<<=1; cxt += cxt+bit;
+    }
+    return byte(cxt);
   }
 
   void Row( FILE* f, FILE* g, uint y ) {
