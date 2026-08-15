@@ -176,6 +176,7 @@ meta into it. Four attempts, all measured against mp3zip, all losses:
 | scalefactors, high 3 bits, into the mp3 scalefactor field | 106 052 | 52 956 | −53 096 |
 | the same, granule-aligned for maximum correlation | 127 603 | 52 956 | −74 647 |
 | scalefactors, all 6 bits, into free high-frequency spectral lines | 411 808 | 284 452 | −127 356 |
+| the same, with the sign bits carrying the noisy low bits | 387 561 | 284 452 | −103 109 |
 
 The scalefactor-field attempt splits the 6-bit values 3/3 and carries the high —
 slowly varying, most compressible — half in the mp3, with `scalefac_compress`
@@ -194,10 +195,26 @@ zero follows from the bit allocation, which the unpacker reconstructs before it
 touches the mp3, so it simply knows to read scalefactors there instead. There is
 plenty of room — 360 always-free lines per frame above the last subband alone,
 against the 90 needed, before counting unallocated subbands or the 828 lines the
-joint-stereo bound frees in the second channel. It still loses badly: 2.64 bits
-per line, 5.3 bits to carry a 6-bit scalefactor, against 3.65 in the meta. Those
-lines were zeros that cost nearly nothing, and a nonzero value at the top of the
-spectrum is the last thing an mp3 model expects.
+joint-stereo bound frees in the second channel. Each scalefactor goes into two
+lines, three of its bits per line.
+
+Which three matters, and it is worth its own note. A spectral value is signed,
+and that sign is a *raw* bit — it costs exactly one bit, always, whatever is in
+it. So the bit that belongs there is the least predictable one. Putting each
+half's most significant bit in the sign, as the first attempt did, pays a full
+bit for something worth about 0.1 — twice per scalefactor. Moving the noisy low
+bits into the signs and leaving the predictable high bits to the magnitudes
+recovers 24 247 bytes, 5.9 %.
+
+It still loses by 103 109. Per scalefactor: two sign bits that cost exactly two,
+plus four magnitude bits that mp3zip codes in about three — against 3.65 bits for
+the whole value in the meta. The magnitude bits are the compressible ones, and
+the mp3 simply cannot predict them there: its context is the neighbouring
+spectral lines, which hold unrelated scalefactors from other subbands, while the
+meta puts the same subband's value from the neighbouring frame right next to it.
+Fixing that would need a line assignment stable across granules and frames, and
+the 81 (subband, part) slots per channel do not fit the 45 stable pairs the
+always-free region offers.
 
 The pattern is consistent enough to state as a rule: **the mp3 container is a
 good home for spectral data and a bad home for everything else.** A recompressor
