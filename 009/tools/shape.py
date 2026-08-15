@@ -429,8 +429,20 @@ def summary():
     # there is no word boundary before the `n`.  Six of them sat in the file
     # while this row read zero.  The suffix has to be a whole Hex-Rays name:
     # `run_dv3` and `w4_c` are not, and do not match.
+    #
+    # And the prefix has to be a *function name*, which is the only thing
+    # `rename.py` puts there.  Accepting any prefix made this row report the
+    # enum constant `bmp_hdr_v3` -- `bmp_hdr_` plus `v3`, where the `v3` is the
+    # BMP header version and not a Hex-Rays temporary -- so the row read "1
+    # distinct unexplained local, 2 of 115 bodies" against a file that has
+    # none.  A measure that invents work is worse than one that misses it, and
+    # this one invented work created by the round that named those constants.
     hexrays = r'(?:[vt]\d+|n(?:0x[0-9A-Fa-f]+|\d[0-9A-Fa-f]*)(?:_\d+)?)'
-    unexp = r'\b(?:\w+_)?%s\b' % hexrays
+    fnames = sorted({nm.lstrip('_') for _a, _b, nm, _s in structs.bodies(lines)},
+                    key=len, reverse=True)
+    prefix = r'(?:__?(?:%s)_)?' % '|'.join(re.escape(f) for f in fnames) \
+        if fnames else ''
+    unexp = r'\b%s%s\b' % (prefix, hexrays)
     bodyv = [len(re.findall(unexp,
                             '\n'.join(l.split('//')[0] for l in lines[a:b + 1])))
              for a, b, _, _ in structs.bodies(lines)]
