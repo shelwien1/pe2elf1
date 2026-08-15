@@ -14,6 +14,9 @@ The mp3 is not meant to sound like the source — it is a container. It *is*
 a real mp3 though: every frame parses with an ordinary decoder, with correct
 headers, side info, region/table selection and bit reservoir.
 
+[**Layer II vs Layer III**](docs/formats.html) is a companion document: the frame structures of
+the two formats side by side, field by field, and the arithmetic that makes the repacking exact.
+
 ## Build
 
 ```

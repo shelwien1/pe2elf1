@@ -1,0 +1,622 @@
+<title>Layer II vs Layer III</title>
+<style>
+:root {
+  --ground: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eceff3;
+  --ink: #161a20;
+  --ink-2: #4a5461;
+  --ink-3: #7a8593;
+  --rule: #d8dde4;
+  --rule-2: #c3cad3;
+  --l2: #9a6410;
+  --l2-tint: #f4e6cf;
+  --l2-edge: #d9b476;
+  --l3: #0f6d80;
+  --l3-tint: #d8ecf1;
+  --l3-edge: #7ec0ce;
+  --both: #5c5a72;
+  --both-tint: #e5e4ee;
+  --both-edge: #b3b0c6;
+  --shadow: 0 1px 2px rgba(20,26,34,.06), 0 8px 24px -16px rgba(20,26,34,.28);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0f1216;
+    --surface: #171b21;
+    --surface-2: #1e232b;
+    --ink: #e3e8ee;
+    --ink-2: #a4aeba;
+    --ink-3: #737e8c;
+    --rule: #2a313a;
+    --rule-2: #3a434e;
+    --l2: #e0a94e;
+    --l2-tint: #3a2e18;
+    --l2-edge: #6e5729;
+    --l3: #56bdd0;
+    --l3-tint: #12333b;
+    --l3-edge: #2a6270;
+    --both: #a9a5c4;
+    --both-tint: #292838;
+    --both-edge: #464459;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0f1216;
+  --surface: #171b21;
+  --surface-2: #1e232b;
+  --ink: #e3e8ee;
+  --ink-2: #a4aeba;
+  --ink-3: #737e8c;
+  --rule: #2a313a;
+  --rule-2: #3a434e;
+  --l2: #e0a94e;
+  --l2-tint: #3a2e18;
+  --l2-edge: #6e5729;
+  --l3: #56bdd0;
+  --l3-tint: #12333b;
+  --l3-edge: #2a6270;
+  --both: #a9a5c4;
+  --both-tint: #292838;
+  --both-edge: #464459;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 56px 28px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 60px;
+}
+
+h1, h2, h3 {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-weight: 600;
+  text-wrap: balance;
+  margin: 0;
+  letter-spacing: -.01em;
+}
+h1 { font-size: 2.6rem; line-height: 1.12; }
+h2 { font-size: 1.5rem; line-height: 1.25; }
+h3 { font-size: 1.05rem; line-height: 1.3; }
+p { margin: 0; max-width: 68ch; }
+
+code, .mono, table, .field, .bits { font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace; }
+code { font-size: .92em; color: var(--ink); background: var(--surface-2); padding: .1em .35em; border-radius: 3px; }
+
+.eyebrow {
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: .72rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---- masthead ---- */
+.masthead { display: flex; flex-direction: column; gap: 18px; }
+.masthead p { font-size: 1.08rem; color: var(--ink-2); }
+.anchor {
+  display: flex; flex-wrap: wrap; gap: 0;
+  border: 1px solid var(--rule); border-radius: 6px;
+  overflow: hidden; background: var(--surface); box-shadow: var(--shadow);
+}
+.anchor div {
+  flex: 1 1 150px; padding: 14px 18px;
+  border-right: 1px solid var(--rule);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.anchor div:last-child { border-right: 0; }
+.anchor b {
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.anchor span { font-size: .75rem; color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
+
+section { display: flex; flex-direction: column; gap: 22px; }
+.sechead { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---- format colour coding ---- */
+.l2 { --c: var(--l2); --tint: var(--l2-tint); --edge: var(--l2-edge); }
+.l3 { --c: var(--l3); --tint: var(--l3-tint); --edge: var(--l3-edge); }
+.both { --c: var(--both); --tint: var(--both-tint); --edge: var(--both-edge); }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: .74rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--c); font-weight: 600;
+}
+.tag::before { content: ""; width: 9px; height: 9px; border-radius: 2px; background: var(--c); }
+
+/* ---- side by side columns ---- */
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+@media (max-width: 800px) { .duo { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--c);
+  border-radius: 6px;
+  padding: 18px 20px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+  box-shadow: var(--shadow);
+}
+.panel > h3 { color: var(--c); }
+.panel p { font-size: .93rem; color: var(--ink-2); }
+
+/* ---- frame anatomy stacks ---- */
+.stack { display: flex; flex-direction: column; gap: 3px; }
+.blk {
+  background: var(--tint);
+  border: 1px solid var(--edge);
+  border-left: 4px solid var(--c);
+  border-radius: 3px;
+  padding: 7px 11px;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: .78rem;
+}
+.blk .nm { font-weight: 600; color: var(--ink); }
+.blk .sz { color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.blk.sub { margin-left: 22px; background: transparent; border-style: dashed; }
+.blk.pay { min-height: 96px; align-items: flex-start; padding-top: 10px; }
+.blk.ghost { background: transparent; border-style: dashed; opacity: .75; }
+.note { font-size: .8rem; color: var(--ink-3); max-width: none; }
+
+/* ---- bit field strip ---- */
+/* flex and grid children default to min-width:auto, which lets a wide child
+   push the page sideways instead of scrolling inside its own box */
+section > *, .panel > *, .duo > *, .tbox, .masthead > * { min-width: 0; }
+.scroller { overflow-x: auto; padding-bottom: 4px; min-width: 0; }
+.bits { display: flex; min-width: 720px; border: 1px solid var(--rule-2); border-radius: 5px; overflow: hidden; }
+.bits div {
+  border-right: 1px solid var(--rule-2);
+  padding: 9px 6px 8px;
+  text-align: center;
+  font-size: .7rem;
+  background: var(--surface);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.bits div:last-child { border-right: 0; }
+.bits .w { color: var(--ink-3); font-size: .62rem; font-variant-numeric: tabular-nums; }
+.bits .n { color: var(--ink); font-weight: 600; }
+.bits .same { background: var(--both-tint); }
+.bits .diff { background: var(--l2-tint); }
+
+/* ---- tables ---- */
+table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmp td:first-child { color: var(--ink-2); width: 30%; }
+.cmp td.a { color: var(--l2); }
+.cmp td.b { color: var(--l3); }
+.tbox {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+  overflow: hidden; box-shadow: var(--shadow);
+}
+.tbox .scroller { padding: 0; }
+.tbox table { min-width: 560px; }
+.tbox th:first-child, .tbox td:first-child { padding-left: 18px; }
+.tbox th:last-child, .tbox td:last-child { padding-right: 18px; }
+
+/* ---- callout ---- */
+.callout {
+  border: 1px solid var(--edge); border-left: 4px solid var(--c);
+  background: var(--tint); border-radius: 4px; padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.callout p { font-size: .9rem; color: var(--ink); max-width: none; }
+.callout .lbl { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--c); font-weight: 600; }
+
+/* ---- alignment maths ---- */
+.maths {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 20px 22px; display: flex; flex-direction: column; gap: 12px;
+  box-shadow: var(--shadow);
+}
+.eq {
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: .88rem; font-variant-numeric: tabular-nums;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline;
+}
+.eq .lhs { color: var(--l2); font-weight: 600; }
+.eq .rhs { color: var(--l3); font-weight: 600; }
+.eq .op { color: var(--ink-3); }
+
+footer { border-top: 1px solid var(--rule); padding-top: 22px; color: var(--ink-3); font-size: .84rem; }
+footer p { max-width: none; }
+a { color: var(--l3); }
+a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--l3); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">MPEG-1 / MPEG-2 audio &middot; bitstream reference</div>
+  <h1>Layer II vs Layer III</h1>
+  <p>Two frame formats from the same standard, built on the same 32-band filterbank, carrying the
+  same number of samples in the same number of bytes &mdash; and almost nothing else in common. This is
+  the field-by-field comparison behind <code>mp2.cpp</code>, which repacks Layer II subband samples
+  into a Layer III container. Every width here was checked against the decoder in
+  <code>mp3_A.h</code>.</p>
+  <div class="anchor">
+    <div><b>1152</b><span>samples / frame / ch</span></div>
+    <div><b>522</b><span>bytes @ 160 kbit/s</span></div>
+    <div><b>32</b><span>subbands, both layers</span></div>
+    <div><b>44100</b><span>Hz, joint stereo</span></div>
+  </div>
+  <p class="note">Byte figures throughout are the real numbers from frame 0 of
+  <code>Creditsmix_Comp.mp2</code> (160 kbit/s, 44.1 kHz, joint stereo, bound = 4, 27 subbands),
+  next to a Layer III frame at the same bitrate and sample rate.</p>
+</header>
+
+<!-- ============================ ANATOMY ============================ -->
+<section>
+  <div class="sechead">
+    <div class="eyebrow">01 &nbsp;/&nbsp; frame anatomy</div>
+    <h2>What a frame is made of</h2>
+    <p>Both stacks below are one 522-byte frame carrying 1152 samples per channel. Layer&nbsp;II
+    spends 20&nbsp;% of the frame describing how the samples are quantized and 78&nbsp;% on the
+    samples themselves, all inline, in that order. Layer&nbsp;III moves every parameter into a
+    fixed-size side info block and lets the payload spill across frame boundaries.</p>
+  </div>
+
+  <div class="duo">
+    <div class="panel l2">
+      <span class="tag">Layer II &mdash; mp2</span>
+      <h3>Self-contained, described inline</h3>
+      <div class="stack">
+        <div class="blk"><span class="nm">header</span><span class="sz">4 B &middot; 32 bits</span></div>
+        <div class="blk ghost"><span class="nm">CRC <em>(if protected)</em></span><span class="sz">2 B</span></div>
+        <div class="blk"><span class="nm">bit allocation</span><span class="sz">13 B &middot; 104 bits</span></div>
+        <div class="blk"><span class="nm">scfsi</span><span class="sz">9.5 B &middot; 76 bits</span></div>
+        <div class="blk"><span class="nm">scalefactors</span><span class="sz">85.5 B &middot; 114&times;6 bits</span></div>
+        <div class="blk pay">
+          <span class="nm">subband samples<br><span style="font-weight:400;color:var(--ink-2)">12 parts &times; 27 subbands &times; ch &times; 3</span></span>
+          <span class="sz">409.5 B &middot; 3276 bits</span>
+        </div>
+        <div class="blk"><span class="nm">ancillary</span><span class="sz">4 bits</span></div>
+      </div>
+      <p class="note">Everything a decoder needs is in the frame, in stream order. Nothing is
+      shared with any other frame, so a frame can be dropped or seeked to freely.</p>
+    </div>
+
+    <div class="panel l3">
+      <span class="tag">Layer III &mdash; mp3</span>
+      <h3>Parameters up front, payload elsewhere</h3>
+      <div class="stack">
+        <div class="blk"><span class="nm">header</span><span class="sz">4 B &middot; 32 bits</span></div>
+        <div class="blk ghost"><span class="nm">CRC <em>(if protected)</em></span><span class="sz">2 B</span></div>
+        <div class="blk"><span class="nm">side info</span><span class="sz">32 B &middot; 256 bits</span></div>
+        <div class="blk sub"><span class="nm">main_data_begin, scfsi, private</span><span class="sz">20 bits</span></div>
+        <div class="blk sub"><span class="nm">4 &times; granule&times;channel record</span><span class="sz">4 &times; 59 bits</span></div>
+        <div class="blk pay">
+          <span class="nm">main data slot<br><span style="font-weight:400;color:var(--ink-2)">scalefactors + Huffman, per granule&times;channel</span></span>
+          <span class="sz">486 B</span>
+        </div>
+        <div class="blk ghost"><span class="nm">ancillary</span><span class="sz">0&hellip;n bits</span></div>
+      </div>
+      <p class="note">The slot holds bytes, not necessarily <em>this</em> frame's bytes.
+      <code>main_data_begin</code> says how far back this frame's data actually starts &mdash; up to
+      511 bytes earlier, inside frames already gone past.</p>
+    </div>
+  </div>
+
+  <div class="callout l3">
+    <span class="lbl">The structural difference</span>
+    <p>The bit reservoir is the one thing that makes a Layer III frame not a unit. A granule that
+    needs more bits than its own frame provides reaches backwards into the unused tail of earlier
+    frames. Layer&nbsp;II has no equivalent: each frame gets exactly its own bytes, so a demanding
+    passage has to be quantized to fit. That single mechanism is why Layer&nbsp;III does more with
+    the same bitrate &mdash; and why an mp3 file cannot be cut at an arbitrary frame boundary the way
+    an mp2 file can.</p>
+  </div>
+</section>
+
+<!-- ============================ HEADER ============================ -->
+<section>
+  <div class="sechead">
+    <div class="eyebrow">02 &nbsp;/&nbsp; the 32-bit header</div>
+    <h2>Identical, down to the bit</h2>
+    <p>The one part the two layers genuinely share. Same fields, same widths, same order &mdash;
+    only the values differ, and only in three places.</p>
+  </div>
+
+  <div class="scroller">
+    <div class="bits">
+      <div class="same" style="flex:11"><span class="w">11</span><span class="n">sync</span></div>
+      <div class="same" style="flex:2"><span class="w">2</span><span class="n">ver</span></div>
+      <div class="diff" style="flex:2"><span class="w">2</span><span class="n">layer</span></div>
+      <div class="same" style="flex:1"><span class="w">1</span><span class="n">prot</span></div>
+      <div class="diff" style="flex:4"><span class="w">4</span><span class="n">bitrate</span></div>
+      <div class="same" style="flex:2"><span class="w">2</span><span class="n">rate</span></div>
+      <div class="same" style="flex:1"><span class="w">1</span><span class="n">pad</span></div>
+      <div class="same" style="flex:1"><span class="w">1</span><span class="n">priv</span></div>
+      <div class="same" style="flex:2"><span class="w">2</span><span class="n">mode</span></div>
+      <div class="diff" style="flex:2"><span class="w">2</span><span class="n">mode_ext</span></div>
+      <div class="same" style="flex:1"><span class="w">1</span><span class="n">copy</span></div>
+      <div class="same" style="flex:1"><span class="w">1</span><span class="n">orig</span></div>
+      <div class="same" style="flex:2"><span class="w">2</span><span class="n">emph</span></div>
+    </div>
+  </div>
+  <p class="note">Shaded amber: the three fields whose <em>values</em> differ between the layers.
+  Numbers above each field are its width in bits.</p>
+
+  <div class="tbox">
+    <div class="scroller">
+      <table class="cmp">
+        <thead><tr><th>field</th><th>Layer II</th><th>Layer III</th></tr></thead>
+        <tbody>
+          <tr><td><code>layer</code></td><td class="a"><code>10</code></td><td class="b"><code>01</code></td></tr>
+          <tr><td><code>bitrate</code> index</td>
+              <td class="a">32&ndash;384 kbit/s (MPEG-1)<br>8&ndash;160 (MPEG-2)</td>
+              <td class="b">32&ndash;320 kbit/s (MPEG-1)<br>8&ndash;160 (MPEG-2)</td></tr>
+          <tr><td><code>mode_ext</code> when joint</td>
+              <td class="a">intensity bound: 4, 8, 12 or 16 subbands</td>
+              <td class="b">two independent flags: M/S on, intensity on</td></tr>
+          <tr><td>frame length</td>
+              <td class="a" colspan="2" style="color:var(--ink-2)"><code>samples &times; bitrate / (8 &times; sample_rate) + padding</code> &mdash; same formula, but <code>samples</code> is 1152 for Layer II and for MPEG-1 Layer III, and 576 for MPEG-2/2.5 Layer III</td></tr>
+          <tr><td>CRC</td>
+              <td class="a" colspan="2" style="color:var(--ink-2)">16 bits after the header when the protection bit is 0. The reference decoder skips it; the converter copies it through untouched.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PARAMETERS ============================ -->
+<section>
+  <div class="sechead">
+    <div class="eyebrow">03 &nbsp;/&nbsp; per-frame parameters</div>
+    <h2>How each layer says &ldquo;decode it like this&rdquo;</h2>
+    <p>Layer&nbsp;II writes a variable-length run of fields whose size depends on the content.
+    Layer&nbsp;III writes a block of fixed size whose <em>contents</em> then describe a
+    variable-length payload.</p>
+  </div>
+
+  <div class="duo">
+    <div class="panel l2">
+      <span class="tag">Layer II</span>
+      <h3>Inline, variable length</h3>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>field</th><th>width</th><th>count</th></tr></thead>
+          <tbody>
+            <tr><td>bit allocation</td><td class="num">4 / 3 / 2 bits</td><td>per subband per channel<br><span class="note">width depends on the subband group</span></td></tr>
+            <tr><td>scfsi</td><td class="num">2 bits</td><td>per <em>allocated</em> subband&times;channel</td></tr>
+            <tr><td>scalefactor</td><td class="num">6 bits</td><td>1&ndash;3 per allocated subband&times;channel, chosen by scfsi</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Subband count is not fixed: 27 normally, 30 above 96 kbit/s per channel (except at
+      48 kHz), 8 or 12 at low rates, and always 30 for MPEG-2. Allocation code widths shrink with
+      frequency &mdash; 4 bits for subbands 0&ndash;10, 3 for 11&ndash;22, 2 for 23&ndash;29.</p>
+    </div>
+
+    <div class="panel l3">
+      <span class="tag">Layer III</span>
+      <h3>Side info, fixed length</h3>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>field</th><th>width</th><th>scope</th></tr></thead>
+          <tbody>
+            <tr><td><code>main_data_begin</code></td><td class="num">9 / 8 bits</td><td>frame</td></tr>
+            <tr><td><code>private_bits</code></td><td class="num">3 / 5 bits</td><td>frame</td></tr>
+            <tr><td><code>scfsi</code></td><td class="num">4 bits</td><td>per channel</td></tr>
+            <tr><td><code>part2_3_length</code></td><td class="num">12 bits</td><td rowspan="9" style="vertical-align:top">per granule<br>&times; channel<br><span class="note">59 bits each,<br>4 records for<br>MPEG-1 stereo</span></td></tr>
+            <tr><td><code>big_values</code></td><td class="num">9 bits</td></tr>
+            <tr><td><code>global_gain</code></td><td class="num">8 bits</td></tr>
+            <tr><td><code>scalefac_compress</code></td><td class="num">4 / 9 bits</td></tr>
+            <tr><td><code>window_switching</code></td><td class="num">1 bit</td></tr>
+            <tr><td><code>table_select[3]</code></td><td class="num">5 bits each</td></tr>
+            <tr><td><code>region0/1_count</code></td><td class="num">4 + 3 bits</td></tr>
+            <tr><td><code>preflag</code></td><td class="num">1 bit</td></tr>
+            <tr><td><code>scalefac_scale</code>, <code>count1table</code></td><td class="num">1 + 1 bit</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Total: 32 bytes for MPEG-1 stereo, 17 mono; 17 and 9 for MPEG-2/2.5, which has one granule
+      instead of two. If <code>window_switching</code> is set, the last three rows are replaced by
+      <code>block_type</code>, <code>mixed_block_flag</code>, two tables and three
+      <code>subblock_gain</code> values.</p>
+    </div>
+  </div>
+
+  <div class="callout both">
+    <span class="lbl">False friend</span>
+    <p>Both layers have a field called <code>scfsi</code>, and they mean different things.
+    In Layer&nbsp;II it says which of the three scalefactors of <em>one subband in this frame</em>
+    are actually transmitted (3, 2 or 1 values, covering parts 0&ndash;3, 4&ndash;7, 8&ndash;11).
+    In Layer&nbsp;III it says which scalefactor <em>bands</em> granule 2 copies from granule 1.
+    Same name, different axis: within-frame time in one, across-granule reuse in the other.</p>
+  </div>
+</section>
+
+<!-- ============================ COEFFICIENTS ============================ -->
+<section>
+  <div class="sechead">
+    <div class="eyebrow">04 &nbsp;/&nbsp; the payload</div>
+    <h2>Fixed-width codes vs Huffman</h2>
+    <p>This is where the two formats diverge completely, and it is the part <code>mp2.cpp</code>
+    has to translate.</p>
+  </div>
+
+  <div class="tbox">
+    <div class="scroller">
+      <table class="cmp">
+        <thead><tr><th></th><th>Layer II</th><th>Layer III</th></tr></thead>
+        <tbody>
+          <tr><td>what is coded</td>
+              <td class="a">32 subband samples per time step, straight off the polyphase filterbank</td>
+              <td class="b">576 MDCT lines per granule &mdash; each subband split 18 ways in frequency</td></tr>
+          <tr><td>resolution per frame</td>
+              <td class="a">32 subbands &times; 36 samples</td>
+              <td class="b">32 subbands &times; 18 lines &times; 2 granules</td></tr>
+          <tr><td>quantizer</td>
+              <td class="a">uniform, per subband; <code>nlevels = 2^n &minus; 1</code> for <code>n</code> = 2&hellip;16</td>
+              <td class="b">non-uniform, <code>|x|^(3/4)</code> companded, one step size per band</td></tr>
+          <tr><td>step size set by</td>
+              <td class="a">bit allocation + 6-bit scalefactor</td>
+              <td class="b"><code>global_gain</code> + scalefactor + <code>scalefac_scale</code> + <code>preflag</code></td></tr>
+          <tr><td>code words</td>
+              <td class="a"><code>n</code> bits per sample, flat</td>
+              <td class="b">Huffman: value <em>pairs</em> over 3 regions with independent tables, then <em>quadruples</em>, then implicit zeros</td></tr>
+          <tr><td>small-value trick</td>
+              <td class="a">3 samples of 3, 5 or 9 levels share one 5, 7 or 10-bit code</td>
+              <td class="b"><code>count1</code> region codes four &plusmn;1/0 values in one code word</td></tr>
+          <tr><td>large-value escape</td>
+              <td class="a">none needed &mdash; width is declared up front</td>
+              <td class="b"><code>linbits</code>: magnitude 15 means &ldquo;15 + the next 1&ndash;13 raw bits&rdquo;</td></tr>
+          <tr><td>sign</td>
+              <td class="a">inside the code word (offset by <code>2^(n&minus;1) &minus; 1</code>)</td>
+              <td class="b">one bit after each nonzero value</td></tr>
+          <tr><td>stream order</td>
+              <td class="a">part &rarr; subband &rarr; channel &rarr; 3 samples</td>
+              <td class="b">granule &rarr; channel &rarr; line 0&hellip;575, low frequency first</td></tr>
+          <tr><td>zero regions</td>
+              <td class="a">subband allocated 0 bits is simply absent</td>
+              <td class="b">everything above <code>big_values&times;2 + count1&times;4</code> is implicitly zero</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="duo">
+    <div class="panel l2">
+      <span class="tag">Layer II</span>
+      <h3>Reading a sample</h3>
+      <div class="stack">
+        <div class="blk"><span class="nm">n = 2&hellip;16</span><span class="sz">read n bits, value = code &minus; (2^(n&minus;1) &minus; 1)</span></div>
+        <div class="blk"><span class="nm">n = 17, 18, 19</span><span class="sz">read 5, 7, 10 bits &rarr; 3 samples</span></div>
+      </div>
+      <p class="note">The grouped case is a radix-3, radix-5 or radix-9 packing of three samples into
+      one code, used where three levels of resolution would waste most of a bit each.</p>
+    </div>
+    <div class="panel l3">
+      <span class="tag">Layer III</span>
+      <h3>Reading a value pair</h3>
+      <div class="stack">
+        <div class="blk"><span class="nm">pair code</span><span class="sz">1&ndash;19 bits &rarr; (x, y), each 0&hellip;15</span></div>
+        <div class="blk"><span class="nm">if x = 15</span><span class="sz">+ linbits raw bits</span></div>
+        <div class="blk"><span class="nm">if x &ne; 0</span><span class="sz">+ 1 sign bit</span></div>
+        <div class="blk"><span class="nm">then y</span><span class="sz">same again</span></div>
+      </div>
+      <p class="note">32 table slots, of which 29 carry codes; the widest reaches magnitude 8206.
+      Which table applies depends on which of the three regions the pair falls in.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ SCALEFACTORS / STEREO ============================ -->
+<section>
+  <div class="sechead">
+    <div class="eyebrow">05 &nbsp;/&nbsp; scalefactors and stereo</div>
+    <h2>Same words, different machinery</h2>
+  </div>
+
+  <div class="tbox">
+    <div class="scroller">
+      <table class="cmp">
+        <thead><tr><th></th><th>Layer II</th><th>Layer III</th></tr></thead>
+        <tbody>
+          <tr><td>scalefactor band</td>
+              <td class="a">one subband &mdash; 36 samples, uniform width</td>
+              <td class="b">21 bands per granule (long blocks), 4 to 158 lines wide, following the critical bands</td></tr>
+          <tr><td>values per band</td>
+              <td class="a">3 per frame, one per 12 samples</td>
+              <td class="b">1 per granule</td></tr>
+          <tr><td>value width</td>
+              <td class="a">6 bits, fixed</td>
+              <td class="b">0&ndash;4 bits, set by <code>scalefac_compress</code> &mdash; 0 means the band has no scalefactor at all</td></tr>
+          <tr><td>redundancy trick</td>
+              <td class="a">scfsi shares one value across 2 or 3 time parts</td>
+              <td class="b">scfsi copies granule 1's value into granule 2</td></tr>
+          <tr><td>short blocks</td>
+              <td class="a">no such thing &mdash; the time/frequency split is fixed</td>
+              <td class="b">12 bands &times; 3 windows, plus <code>subblock_gain</code> per window</td></tr>
+          <tr><td>joint stereo</td>
+              <td class="a">intensity only, above a bound of 4/8/12/16 subbands: one set of samples and one allocation shared, but separate scfsi and scalefactors per channel</td>
+              <td class="b">mid/side and intensity, independently switchable; the intensity boundary is per scalefactor band, derived from the position values</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="callout l2">
+    <span class="lbl">The one that catches people out</span>
+    <p>In Layer&nbsp;II joint stereo, above the bound the two channels share the samples <em>and</em>
+    the allocation code &mdash; but scfsi and scalefactors are still read twice, once per channel. A
+    parser that zeroes the second channel's allocation too early reads the wrong number of
+    scalefactor bits and desynchronises for the rest of the frame.</p>
+  </div>
+</section>
+
+<!-- ============================ MAPPING ============================ -->
+<section>
+  <div class="sechead">
+    <div class="eyebrow">06 &nbsp;/&nbsp; why the conversion works</div>
+    <h2>The numbers line up exactly</h2>
+    <p>For all their differences, both layers sit on the same 32-band polyphase filterbank, and the
+    frame sizes were chosen so that Layer&nbsp;III could subdivide what Layer&nbsp;II emits. That
+    leaves an exact, one-to-one place for every Layer&nbsp;II sample.</p>
+  </div>
+
+  <div class="maths">
+    <div class="eq"><span class="lhs">1152 samples / channel / frame</span><span class="op">=</span><span class="rhs">2 granules &times; 576 lines</span></div>
+    <div class="eq"><span class="lhs">32 subbands &times; 36 samples</span><span class="op">=</span><span class="rhs">32 subbands &times; 18 lines &times; 2 granules</span></div>
+    <div class="eq"><span class="lhs">subband sb, parts 6g &hellip; 6g+5</span><span class="op">&rarr;</span><span class="rhs">granule g, lines 18&middot;sb &hellip; 18&middot;sb+17</span></div>
+  </div>
+
+  <p>Laying the samples out subband-major rather than in Layer&nbsp;II stream order is what makes the
+  result behave like an mp3: the line index then tracks frequency, magnitudes fall away towards the
+  top of the spectrum, subbands with no allocation become the trailing zero region, and per-region
+  Huffman table selection has something real to select on.</p>
+
+  <div class="tbox">
+    <div class="scroller">
+      <table class="cmp">
+        <thead><tr><th>Layer II element</th><th>lands in</th><th>why</th></tr></thead>
+        <tbody>
+          <tr><td>subband samples</td><td class="b">mp3 Huffman spectral data</td><td>the mapping above</td></tr>
+          <tr><td>bit allocation</td><td class="a">meta file</td><td>no counterpart &mdash; Layer III gets its step size from scalefactors</td></tr>
+          <tr><td>scalefactors, scfsi</td><td class="a">meta file</td><td>different band structure and value width; nothing lines up</td></tr>
+          <tr><td>frame header, CRC</td><td class="a">meta file</td><td>the mp3 needs its own</td></tr>
+          <tr><td>ancillary bits</td><td class="a">meta file</td><td>arbitrary payload, must survive verbatim</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="callout l3">
+    <span class="lbl">Where it does not fit</span>
+    <p>Two edges. A Layer&nbsp;II sample of 15 or 16 bits exceeds the largest magnitude an mp3 value
+    can hold (8206), so its top 1&ndash;2 bits go to the meta file and the rest stays in the mp3. And
+    <code>part2_3_length</code> caps a granule at 4095 bits, which mono above roughly 300 kbit/s
+    exceeds &mdash; there the converter splits a Layer&nbsp;II frame across 4, 6 or 12 granules
+    instead of 2, at 3, 2 or 1 parts each.</p>
+  </div>
+</section>
+
+<footer>
+  <p>Field widths, allocation tables, subband counts and scalefactor rules were read out of
+  <code>mp3_A.h</code>, the minimp3-derived decoder this project is built on, rather than quoted from
+  memory. Frame byte counts come from frame 0 of the test file. Companion to
+  <code>README.md</code> in the same repository.</p>
+</footer>
+
+</div>
