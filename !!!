@@ -1,0 +1,7 @@
+
+1. Based on gc.bat, write a linux build script for coder0; write a linux test script based on t.bat; build and test roundtrip on book1;
+2. Using coder0's ParamUpdater framework, rangecoder, etc, write a lossless LPC compressor for bmp files;
+predict next byte using a linear mix of color components of adjacent pixels 
+(n_colors*60 inputs, 8x8 blocks with next symbol in the middle of bottom row, 3 pixels to the right of it also unknown);
+Encode the residual with order0 version of what coder0 does; Update linear mix weights with ParamUpdater;
+3. Experiment with predictor formula - try logistic mix, weights in logistic domain, adding a bias; The goal is best compression;
