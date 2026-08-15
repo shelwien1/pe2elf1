@@ -1092,3 +1092,55 @@ which is `transpose_image`.  Between them they were most of what the frame's
 remaining slots were carrying: `Block`, `row_step`, `nplanes_s`, `s0`, `s4`,
 `s8`, `s12` and three saves of `img_at` and `arc` across calls that cannot
 touch either.
+
+## The 32KB buffer that was eight histograms
+
+`choose_plane_coding`'s frame was the largest of the nine and the last one
+`liftframe.py` was declining on the union rule. Three unions, and all three
+arms that shared a slot turned out to be a sequence rather than an overlap —
+which is now four unions out of four.
+
+**`uint8_t buf[32768]` is `int32_t hists[8][1024]`.** Two searches in this body
+pick a histogram *by index*: the plane-order one takes `&buf[4096*pred]` and
+the alpha one `&hist_c[1024*pred4b+1024]`, which are rows 0..3 and rows 4..7 of
+one block. The decompilation had it as a byte array with three of its rows
+named and the last five under one name carrying a 5120-entry array, and every
+write went through `*(uint32_t *)&buf[4*bin]` — the byte array was
+`estimate_cost`'s old parameter type reaching back into the declaration, the
+same defect two files over.
+
+**`uint8_t buf_1[2048]` is `int32_t hist_arm_a[512]`**, the fourth of the
+weight search's four arms; the other three had been given their own storage a
+round earlier and this one had not. Its first four bytes doubled as a stash for
+`wt8_dn_end` across a loop that cannot touch it, and one of those stores was
+killed by the `memset` two lines later without anything reading it.
+
+**Eleven `sN` slots and six `pN` slots** carried arms C and D of that search,
+each a copy of a local that never changes under it. The four arms are the same
+loop written out four times; two were already clean, and the other two are now
+the same shape as them.
+
+**`scratch[256]` with two references bound onto it is two tables.** The three
+candidates' costs and their descriptors: `acc0[4*xform+2]`, `&tbl16[16*cand]`,
+`*(uint32_t *)&scratch[16*xform+20]` are `[xform]` and `[cand]` on
+`uint32_t cand_cost[3][4]` and `PlaneDesc cand_desc[3][4]`. Eight bytes sit
+before the costs in the original block and eight between them and the
+descriptors, and nothing reads either, so the two are two arrays. Not a
+cosmetic split: a round that missed the same fact put `tbl16` eight bytes early
+over `d4`, and `testfiles/xform1.bmp` and `xform2.bmp` are in the corpus with
+references taken from the *original decompilation* because of it. They pin
+candidates 1 and 2, so the gate covers this.
+
+**And an array index read off the stack pointer.** `win = (uintptr_t)hist &
+0xF` — the low four bits of a stack address, which was 4 because the frame was
+`alignas(16)` and `buf` sat four bytes into it behind a `_pad0[4]`. So the
+sliding window began at entry 4 rather than 0, in two searches, and `dc` came
+out of where it stopped.
+
+That is a value no gate here can see. All nineteen images produce byte-identical
+compressed streams at 0 and at 4 — measured, both builds, every image — so the
+corpus cannot adjudicate it and neither can any reference stream. The measured
+value is what stays, with the 4 written down and the reason it cannot be
+checked written down beside it. What made it worth finding is that it was
+silent in both directions: an earlier round changing `_pad0`'s size would have
+moved it, and nothing would have said so.
