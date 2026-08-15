@@ -224,7 +224,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
             uint8_t want = srcp[k];
             int32_t resid2 = (uint8_t)(want-pred);
             uint8_t recon2 = pred+unfold[fold[resid2]];
-            int32_t drift2 = (uint8_t)outp[k]-(uint8_t)(recon2+outp[k]-want);
+            int32_t drift2 = outp[k]-(uint8_t)(recon2+outp[k]-want);
             code = fold[resid2];
             if( drift2<-16||drift2>16 ) {
               outp[k] = want;
@@ -235,7 +235,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
             code2 = code;
             freq[ctx].encode_symbol(pair, code);
           }
-          alt_p2_model((uint8_t)outp[k], code2, (uint8_t)outp[k]-pred);
+          alt_p2_model(outp[k], code2, outp[k]-pred);
         }
         if( !f_DEC )
           src_end = &srcp[width];

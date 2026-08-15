@@ -63,7 +63,7 @@ int32_t decode_symbol_list(SymList* syms) {
   cum_lo = 0;
   while( 1 ) {
     cum_lo += p->cnt;
-    if( cum_lo>(uint32_t)(int32_t)target )
+    if( cum_lo>(uint32_t)target )
       break;
     p = *rd++;
     if( !p ) {

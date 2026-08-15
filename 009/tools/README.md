@@ -512,6 +512,7 @@ them run.
 | `retype.py` | Retype the locals a function uses as pointers, from int32_t to char * | yes |
 | `retype_locals.py` | Give a local the type the compiler says its assignments have | yes |
 | `runarray.py` | Declare a run of frame members as the array the code walks it as | yes |
+| `samecast.py` | Drop a cast to the type the operand already has | yes |
 | `shape.py` | Measure the things REFACTORING3.md is about, so its numbers can be checked | yes |
 | `signshift.py` | Find the comparisons written as a shift of a sign bit | yes |
 | `split.py` | Split bmf.cpp into one file per class and per large function | no |

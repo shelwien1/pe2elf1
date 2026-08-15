@@ -463,7 +463,7 @@ struct ModelBlock {
     blk = (ModelBlock*)(this_1);
     buf = (uint8_t*)bmf_new(this_1->alphabet);
     uint32_t alpha_n = this_1->alphabet;
-    this_1->alpha_map = (uint8_t*)buf;
+    this_1->alpha_map = buf;
     memset(buf, 1, alpha_n);
     blk->escape_list = &blk->escape;
     blk->escape.init(blk->alphabet, 1);
@@ -498,7 +498,7 @@ struct ModelBlock {
       } while( (uint32_t)s<blk->alphabet );
     }
     jj = blk->depth;
-    if( (uint32_t)jj==blk->depth_raw ) {
+    if( jj==blk->depth_raw ) {
       expand_buf = nullptr;
     } else {
       dst_buf = (uint8_t*)bmf_new(blk->height*blk->width+3);
@@ -558,7 +558,7 @@ struct ModelBlock {
           break;
         x2 = 0;
         do {
-          int32_t y = ((ModelBlock*)blk)->decode_pixel(x2);
+          int32_t y = (blk)->decode_pixel(x2);
           blk->init_tables();
           row_w = blk->width;
           x2 += y;
@@ -1523,7 +1523,7 @@ struct ModelBlock {
             nb_sym[1] = runlen_s&bit5;
             bin_tot = ctr->n[0]+ctr->n[1];
             rc.encode_bit(ctr->n[0], ctr->n[1], (runlen_s&bit5)!=0);
-            if( ctr->limit<(uint32_t)bin_tot )
+            if( ctr->limit<bin_tot )
               ctr->scale_rare();
             s1b = nb_sym[1];
             nb_sym[4] = bit5;

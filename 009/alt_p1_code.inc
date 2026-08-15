@@ -243,7 +243,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           int32_t at2 = blk2->ctx[0];
           blk2->ctx[2] = blk2->ctx[2]==0;
           if( blk2->counters[at2].total<0x4000u )
-            ((AltP1Block*)blk2)->update_model();
+            (blk2)->update_model();
           ++blk2->cursor[0];
           ++blk2->cursor[1];
           ++blk2->cursor[2];
@@ -292,7 +292,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             blk3->ctx[blk3->ctx[2]+3] += blk3->cursor[0]->mag-blk3->cursor[0][-4].mag-(blk3->cursor[4][-2].mag-blk3->cursor[4][6].mag)-(blk3->cursor[2][-2].mag-blk3->cursor[2][6].mag);
             blk3->ctx[2] = blk3->ctx[2]==0;
             if( blk3->counters[blk3->ctx[0]].total<0x4000u )
-              ((AltP1Block*)blk3)->update_model();
+              (blk3)->update_model();
             ++blk3->cursor[0];
             ++blk3->cursor[1];
             ++blk3->cursor[2];

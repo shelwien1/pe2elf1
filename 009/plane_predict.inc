@@ -50,7 +50,7 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
         do {
           int32_t north = (uint8_t)*--up;
           --p;
-          uint8_t pred = med_predict((uint8_t)p[-1], north, (uint8_t)p[-width-1]);
+          uint8_t pred = med_predict(p[-1], north, p[-width-1]);
           int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
           *p = code;
           ++*(uint32_t*)&hist_scratch[4*code];
@@ -136,7 +136,7 @@ void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
         uint8_t *p2 = base;
         do {
           int32_t x2 = dc+(uint8_t)*src++;
-          *p2 = (uint8_t)(((wgt0*(uint8_t)p2[to_ref0]+wgt1*(uint32_t)(uint8_t)p2[to_ref1]+40)>>7)+x2);
+          *p2 = (uint8_t)(((wgt0*p2[to_ref0]+wgt1*(uint32_t)p2[to_ref1]+40)>>7)+x2);
           p2 += stride;
           --left2;
         } while( left2 );
@@ -302,7 +302,7 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
           return p;
       }
       do {
-        uint8_t pred = med_predict((uint8_t)p[-1], (uint8_t)*up, (uint8_t)p[-width-1]);
+        uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
         *p = pred+unfold[(uint8_t)*p];
         ++up;
         ++p;

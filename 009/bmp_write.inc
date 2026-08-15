@@ -75,8 +75,8 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           do {
             uint32_t slot = 2*j;
             int32_t bgr = *(uint16_t*)&pal[6*j+3];
-            int32_t r = (uint8_t)pal[6*j+5];
-            *(uint32_t*)&out_buf[4*slot+54] = ((uint8_t)pal[6*j+2]<<16)|*(uint16_t*)&pal[6*j];
+            int32_t r = pal[6*j+5];
+            *(uint32_t*)&out_buf[4*slot+54] = (pal[6*j+2]<<16)|*(uint16_t*)&pal[6*j];
             *(uint32_t*)&out_buf[4*slot+58] = (r<<16)|bgr;
             ++j;
           } while( j<pairs );
@@ -92,7 +92,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           // the last pair it wrote, so `3*done-3` is that entry's first byte.
           const uint8_t *pal2 = img->palette();
           int32_t bgr2 = *(uint16_t*)&pal2[3*done-3];
-          *(uint32_t*)&out_buf[4*done+50] = (((uint8_t)pal2[3*done-1])<<16)|bgr2;
+          *(uint32_t*)&out_buf[4*done+50] = ((pal2[3*done-1])<<16)|bgr2;
         }
         pal_bytes = 4*ncol;
       }
@@ -146,7 +146,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
               byte = (uint8_t)*p;
               run = 1;
               do {
-                if( byte!=(uint8_t)p[run] )
+                if( byte!=p[run] )
                   break;
                 ++run;
               } while( end>&p[run] );

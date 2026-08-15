@@ -32,7 +32,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   hdr.height = p_i->height;
   p_i->flags |= has_coded<<7;
   hdr_pad8 = *(uint32_t*)&p_i->_pad8;
-  hdr.stride = (uint32_t)row_bytes;
+  hdr.stride = row_bytes;
   near_lossless_q = 0;
   *(uint32_t*)&hdr._pad8 = hdr_pad8;
   hdr.data_size = (uint32_t)p_i->data_size;
@@ -68,9 +68,9 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     hdr.width = p_i->width;
     hdr.height = p_i->height;
     data_bytes = p_i->data_size;
-    hdr.stride = (uint32_t)img_stride;
+    hdr.stride = img_stride;
     *(uint32_t*)&hdr._pad8 = hdr_pad8b;
-    hdr.data_size = (uint32_t)data_bytes;
+    hdr.data_size = data_bytes;
     hdr.flags = 0x34|(uint8_t)(hdr_pad8b>>24);
   } else {
     data_bytes = p_i->data_size;

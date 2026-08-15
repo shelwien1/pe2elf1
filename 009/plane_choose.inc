@@ -277,7 +277,7 @@ int32_t choose_plane_coding(BmfImage* img) {
                     } while( n_b );
                     wt8_up = x3[3];
                     wt4_up = x1[0];
-                    uint32_t cost_b = estimate_cost((uint8_t*)buf_2, 512);
+                    uint32_t cost_b = estimate_cost(buf_2, 512);
                     wt4_up_end = x0[3];
                     wt8_best = frame.wt_slot;
                     if( cost_b<best_cost ) {
@@ -327,7 +327,7 @@ int32_t choose_plane_coding(BmfImage* img) {
             } while( n_c!=1 );
             wt8_dn = frame.s6;
             wt4_dn = frame.s1;
-            uint32_t cost_c = estimate_cost((uint8_t*)buf_3, 512);
+            uint32_t cost_c = estimate_cost(buf_3, 512);
             wt8_dn_end = *(uint32_t*)frame.buf_1;
             wt4_best_dn = x5[3];
             if( cost_c<best_cost ) {
@@ -372,7 +372,7 @@ int32_t choose_plane_coding(BmfImage* img) {
               } while( n_d!=1 );
               wt8_dn = frame.s6;
               wt4_dn = frame.s1;
-              uint32_t cost_d = estimate_cost((uint8_t*)buf_4, 512);
+              uint32_t cost_d = estimate_cost(buf_4, 512);
               wt4_dn_end = frame.s0;
               wt8_best_dn = frame.wt_slot;
               if( cost_d<best_cost ) {

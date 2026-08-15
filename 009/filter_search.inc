@@ -153,7 +153,7 @@ try_flag8:
           f13 = frame.best_flags;
           packer_reset();
           if( bits_f13<best_cost ) {
-            best_cost = (int32_t)bits_f13;
+            best_cost = bits_f13;
             f13 = 13;
           }
           frame.best_flags = f13;

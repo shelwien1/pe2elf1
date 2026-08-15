@@ -31,7 +31,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t magsum_s;
   P2Ctx *row0p = cursor[0];
   P2Ctx *cursor1 = cursor[1];
-  P2Ctx *sub0_row = (P2Ctx*)cursor[2];
+  P2Ctx *sub0_row = cursor[2];
   int32_t sum_ul = 21*sub0_row[-1].dupleft+12*cursor1[3].dupleft+16*cursor1[2].dupleft+22*cursor1[1].dupleft+(23*row0p[-1].dupleft)+20*cursor1->dupleft+ctx_bias[0]+14*row0p[-2].dupleft;
   int32_t sum_ur = 17*sub0_row[-2].dupright+21*cursor1[2].dupright+15*cursor1[1].dupright+25*cursor1->dupright+9*cursor1[-1].dupright+22*row0p[-1].dupright+ctx_bias[1]+19*row0p[-2].dupright;
   int32_t sum4 = 17*cursor1[3].dleft+15*cursor1[2].dleft+21*cursor1[1].dleft+18*cursor1->dleft+16*cursor1[-1].dleft+22*row0p[-1].dleft+ctx_bias[2]+19*row0p[-2].dleft;
@@ -98,14 +98,14 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // `nb0[-1] + nb1->dval - nb1[-1]` and `nb1[-2] + nb1->dval - nb2[-2]` are
   // different shapes -- so a table of offsets would be 28 rows of data plus a
   // loop, which is the same information one indirection further away.
-  nb1 = (P2Ctx*)cursor[1];
+  nb1 = cursor[1];
   p2_row[0][0] = (float)nb1->dval;
-  nb0 = (P2Ctx*)cursor[0];
+  nb0 = cursor[0];
   p2_row[0][1] = (float)nb1[1].dval;
   p2_row[0][2] = (float)(nb0[-1].dval+nb1->dval-nb1[-1].dval);
-  row2c = (P2Ctx*)cursor[2];
+  row2c = cursor[2];
   p2_row[0][3] = (float)(nb0[-2].dval+(nb1->dval-nb1[-2].dval));
-  P2Ctx *nb3 = (P2Ctx*)cursor[3];
+  P2Ctx *nb3 = cursor[3];
   p2_row[1][0] = (float)(nb1[-1].dval+nb1->dval-row2c[-1].dval);
   p2_row[1][1] = (float)(-3*(row2c->dval-nb1->dval)+nb3->dval);
   p2_row[1][2] = (float)(nb0[-1].dval+nb1[2].dval-nb1[1].dval);
@@ -135,8 +135,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
           for( k = 0; k<4; ++k )
             p2_row[j][k] += bias_l;
       }
-      nb0 = (P2Ctx*)cursor[0];
-      nb1 = (P2Ctx*)cursor[1];
+      nb0 = cursor[0];
+      nb1 = cursor[1];
     }
     int32_t plane = plane_idx;
     if( plane ) {
@@ -182,7 +182,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
       p2_row[4][0] = (float)(nb0[-3].val+nb0[-1].val-nb0[-4].val);
       P2Ctx *nb3x = cursor[3];
       p2_row[4][1] = (float)(nb0[-5].val+nb1->val-nb1[-5].val);
-      P2Ctx *nb2x = (P2Ctx*)cursor[2];
+      P2Ctx *nb2x = cursor[2];
       p2_row[4][2] = (float)(nb0[-4].val+nb1->val-nb1[-4].val);
       p2_row[4][3] = (float)((nb2x->val+3*nb1[1].val-4*nb2x[1].val)-(((nb1[2].val-nb1->val-(nb3x[2].val-nb3x->val))>>1)-nb3x[1].val));
       p2_row[5][0] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
@@ -199,7 +199,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     row2c = nb2;
     p2_row[4][1] = (float)(nb0[-4].val+nb1->val-nb1[-4].val);
     p2_row[4][2] = (float)((nb2->val+3*nb1[1].val-4*nb2[1].val)-((((nb1[2].val-nb1->val)-(nb3[2].val-nb3->val))>>1)-nb3[1].val));
-    P2Ctx* nb4 = (P2Ctx*)cursor[4];
+    P2Ctx* nb4 = cursor[4];
     p2_row[4][3] = (float)(row2c[-1].val+nb1[1].val-nb3->val);
     p2_row[5][0] = (float)(nb3[1].val+nb1->val-nb4[1].val);
     p2_row[5][1] = (float)nb1[3].val;
@@ -238,8 +238,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   if( c_mid>11*sum_ul )
     mode = 3;
   int32_t filt = nb_cur->predict((float (*)[4]) p2_row, &weights, mode);
-  P2Ctx* cx0 = (P2Ctx*)cursor[0];
-  P2Ctx *cx1 = (P2Ctx*)cursor[1];
+  P2Ctx* cx0 = cursor[0];
+  P2Ctx *cx1 = cursor[1];
   // A 32-bit store at `&pred_prev`, which is a `uint16_t` followed by two
   // bytes of padding: the original wrote the whole word and the top half
   // landed in the pad, which nothing reads.  So it is the low half.
@@ -275,10 +275,10 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
            .bit<21>(ra0[-2].err+lane2 < 0)
            .bit<20>(cx0[-2].err < 0)
            .raw(ctx0_lo);
-    cx2 = (P2Ctx*)cursor[2];
+    cx2 = cursor[2];
   } else {
     run = run_s;
-    cx2 = (P2Ctx*)cursor[2];
+    cx2 = cursor[2];
     ctx0 = CtxIdx{}.bit<25>(cx1[3].err+cx0[-3].err+cx0[-7].err+cx0[-5].err < 0)
            .bit<24>(cx2[1].err+cx2->err+cx0[-4].err+cx0[-8].err < 0)
            .bit<23>(cx0[-4].err+cx0[-6].err < 0)

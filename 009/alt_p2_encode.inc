@@ -146,7 +146,7 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           blk_r->cursor[2] = buf1+8;
           blk_r->cursor[3] = buf2+8;
           blk_r->cursor[4] = buf3+8;
-          ((P2Ctx*)bb4)[-1] = ((P2Ctx*)bb0)[0];
+          (bb4)[-1] = (bb0)[0];
           {
             P2Ctx*const here = blk_r->cursor[0];
             P2Ctx*const up = blk_r->cursor[1];
