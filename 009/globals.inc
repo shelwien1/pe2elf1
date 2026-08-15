@@ -26,11 +26,32 @@ alignas(16) static int32_t plane_predictor = 0;
 
 alignas(16) static int32_t plane_alt_model = 0;
 
-alignas(16) static int32_t packer_free_bits = 0;
+// The compressed output, and the bit packer riding on the same bytes.
+//
+// Six globals until now -- `stream.buf`, `stream.cur`, `stream.size`,
+// `stream.pk.word`, `stream.pk.acc`, `stream.pk.free_bits` -- and they are two objects,
+// not six: the first three are the byte stream, the last three are a bit
+// packer over it.  Three of them carried `alignas(16)` from the donor's data
+// segment; nothing loads them with SSE, and the grouping is what says which
+// belongs to which.
+//
+// `free_bits` goes transiently negative: `packer_rewind` counts it down past
+// zero while it hands whole bytes back to the coder.  That is the one
+// non-obvious thing about this struct and it is load-bearing.
+struct Packer {
+  uint32_t* word;
+  uint32_t acc;
+  int32_t free_bits;
+};
 
-alignas(16) static uint32_t packer_acc = 0;
+struct CodedStream {
+  uint8_t* buf;
+  uint8_t* cur;
+  int32_t size;
+  Packer pk;
+};
 
-alignas(16) static int32_t coded_size = 0;
+alignas(16) static CodedStream stream;
 
 static int32_t desc_slow_mode;
 
@@ -109,12 +130,6 @@ static constexpr int32_t opt_pack_output = 1;
 static constexpr int32_t opt_search_quality = 9;
 
 static constexpr int32_t opt_max_error = 0;
-
-static uint32_t* packer_word;
-
-static uint8_t* out_cursor;
-
-static uint8_t* coded_buf;
 
 static uint8_t* hist_scratch;
 

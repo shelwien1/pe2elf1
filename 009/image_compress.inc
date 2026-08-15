@@ -53,8 +53,8 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   desc_slow_mode = 1;
   hdr.flags |= 0x24;
   if( (p_i->depth&depth_bits)<=4 ) {
-    coded_size = p_i->data_size+0x20000;
-    coded_buf = (uint8_t*)bmf_new(coded_size);
+    stream.size = p_i->data_size+0x20000;
+    stream.buf = (uint8_t*)bmf_new(stream.size);
     packer_reset();
     plane_predictor = 0;
     plane_alt_model = 0;
@@ -77,8 +77,8 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   } else {
     data_bytes = p_i->data_size;
   }
-  coded_size = data_bytes+0x20000;
-  coded_buf = (uint8_t*)bmf_new(data_bytes+0x20000);
+  stream.size = data_bytes+0x20000;
+  stream.buf = (uint8_t*)bmf_new(data_bytes+0x20000);
   packer_reset();
   // The near-lossless nibble, four zero bits, is written for a single
   // greyscale plane and for three or more planes -- and not for two, nor for a
@@ -129,18 +129,18 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
 // Everything coded; flush the packer's last word and decide whether the coded
 // stream is smaller than the pixels it came from.
 write_coded:
-  *(uint32_t*)packer_word = packer_acc;
-  fits = (uint32_t)(out_cursor- coded_buf)<p_i->data_size;
-  coded_bytes = out_cursor- coded_buf;
-  hdr.data_size = (uint32_t)(out_cursor- coded_buf);
+  *(uint32_t*)stream.pk.word = stream.pk.acc;
+  fits = (uint32_t)(stream.cur- stream.buf)<p_i->data_size;
+  coded_bytes = stream.cur- stream.buf;
+  hdr.data_size = (uint32_t)(stream.cur- stream.buf);
   if( fits ) {
     ok = fwrite(&hdr, 1u, 0x10u, arc->fp)==16;
     if( extra_blk ) {
       coded_len = ((const uint32_t*)extra_blk)[1];
       ok &= fwrite(extra_blk, 1u, coded_len+8, arc->fp)==coded_len+8;
     }
-    ok_all = (fwrite(coded_buf, 1u, coded_bytes, arc->fp)==(uint32_t)coded_bytes)&ok;
-    free(coded_buf);
+    ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc->fp)==(uint32_t)coded_bytes)&ok;
+    free(stream.buf);
     if( ok_all&&(p_i->depth&depth_palette)!=0 )
       fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, arc->fp);
     fflush(arc->fp);
@@ -148,7 +148,7 @@ write_coded:
       return (int32_t)hdr.data_size;
     return ok_all;
   }
-  free(coded_buf);
+  free(stream.buf);
   if( p_i->flags&flags_transposed ) {
     pix_copy = (uint8_t*)bmf_new(p_i->data_size);
     plane_n = plane_count;

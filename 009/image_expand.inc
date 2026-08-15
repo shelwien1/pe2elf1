@@ -129,11 +129,11 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
     exit(3);
   }
   desc_slow_mode = 1;
-  coded_size = __frame.data_len;
-  coded_buf = (uint8_t*)bmf_new(__frame.data_len);
+  stream.size = __frame.data_len;
+  stream.buf = (uint8_t*)bmf_new(__frame.data_len);
   packer_reset();
   want2 = __frame.data_len;
-  if( fread(coded_buf, 1u, __frame.data_len, arc->fp)!=want2 ) {
+  if( fread(stream.buf, 1u, __frame.data_len, arc->fp)!=want2 ) {
     return arc->fail();
   }
   bpp = img_at->depth;
@@ -271,10 +271,10 @@ restore_arc:
 free_plane_buf:
   free(plane_buf);
 check_length:
-  if( coded_buf+__frame.data_len!=out_cursor ) {
+  if( stream.buf+__frame.data_len!=stream.cur ) {
     return arc->fail();
   }
-  free(coded_buf);
+  free(stream.buf);
   __frame.depth_f = __frame.depth_b;
 read_palette:
   if( __frame.depth_f&0x80 ) {

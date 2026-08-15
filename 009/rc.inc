@@ -8,7 +8,7 @@
 // of the coding.
 //
 // The private section is private for a reason: `p()` and `set_p()` wrap
-// `out_cursor`, the one global this shares with the bit packer in rc_io.inc,
+// `stream.cur`, the one global this shares with the bit packer in rc_io.inc,
 // and `dec_get` is the only bounds check between a truncated file and a read
 // past the end of the buffer.
 struct RangeCoder {
@@ -26,15 +26,15 @@ private:
   uint32_t rdiv;
   uint32_t bytes;
   uint8_t*p() {
-    return out_cursor;
+    return stream.cur;
   }
 
   void set_p(uint8_t* q) {
-    out_cursor = q;
+    stream.cur = q;
   }
 
   uint8_t dec_get(uint8_t*&q) {
-    if( q>=coded_buf+coded_size )
+    if( q>=stream.buf+stream.size )
       bmf_fatal(bmf_read_error);
     return *q++;
   }
@@ -107,13 +107,13 @@ public:
     *q++ = (uint8_t)(len>>16);
     *q++ = (uint8_t)(len>>8);
     *q++ = (uint8_t)len;
-    while( (uint32_t)(q-(uint8_t*)coded_buf)%4!=3 )
+    while( (uint32_t)(q-(uint8_t*)stream.buf)%4!=3 )
       *q++ = 0;
     *q++ = kMarker;
     set_p(q);
-    packer_free_bits = 0;
-    packer_acc = 0;
-    packer_word = (uint32_t*)out_cursor;
+    stream.pk.free_bits = 0;
+    stream.pk.acc = 0;
+    stream.pk.word = (uint32_t*)stream.cur;
   }
 
   void dec_init() {
@@ -167,9 +167,9 @@ public:
     uint8_t* q = p();
     while( dec_get(q)!=kMarker ) {}
     set_p(q);
-    packer_word = (uint32_t*)out_cursor;
-    packer_free_bits = 0;
-    packer_acc = 0;
+    stream.pk.word = (uint32_t*)stream.cur;
+    stream.pk.free_bits = 0;
+    stream.pk.acc = 0;
   }
 };
 

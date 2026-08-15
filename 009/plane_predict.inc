@@ -319,8 +319,8 @@ uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
 void __transform_planes(BmfImage* p_i) {
   int32_t i;
   memset(hist_scratch, 0, 4096);
-  uint8_t *arc = (uint8_t*)coded_buf;
-  uint8_t *hdr = (uint8_t*)coded_buf+16;
+  uint8_t *arc = (uint8_t*)stream.buf;
+  uint8_t *hdr = (uint8_t*)stream.buf+16;
   *(BmfImage*)hdr = *p_i;
   uint8_t* src_pixels = (uint8_t*)((uint16_t*)p_i->pixels);
   memcpy(arc+32, p_i->pixels, p_i->data_size);

@@ -52,8 +52,8 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   }
   __choose_plane_coding(img);
   __frame.tile_img = __alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
-  coded_size = __frame.tile_img->data_size+0x20000;
-  coded_buf = (uint8_t*)bmf_new(coded_size);
+  stream.size = __frame.tile_img->data_size+0x20000;
+  stream.buf = (uint8_t*)bmf_new(stream.size);
   packer_reset();
   __frame.dims[0] = tile_h*tile_w;
   __frame.tile_buf = bmf_new(tile_h*tile_w);
@@ -69,8 +69,8 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   auto probe_plane = [&](int32_t pl, int32_t flags) {
     plane_desc[pl].flags = flags;
     __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl);
-    int32_t cost = 8*(out_cursor-coded_buf);
-    *(uint32_t*)packer_word = packer_acc;
+    int32_t cost = 8*(stream.cur-stream.buf);
+    *(uint32_t*)stream.pk.word = stream.pk.acc;
     return cost;
   };
   nplanes = plane_count;
@@ -246,8 +246,8 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
         pl_k = plane_desc[pk].src_plane;
         __frame.rows[0] = pl_k;
         __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl_k);
-        bits = 8*(out_cursor-coded_buf);
-        *(uint32_t*)packer_word = packer_acc;
+        bits = 8*(stream.cur-stream.buf);
+        *(uint32_t*)stream.pk.word = stream.pk.acc;
         bits_d += bits;
         packer_reset();
         if( (uint32_t)(bits-(bits>>8))>__frame.costs[__frame.rows[0]] )
@@ -340,9 +340,9 @@ tile_restored:
         } while( plane<plane_count );
       }
       __transform_planes(__frame.tile_img);
-      bits_e = 8*(out_cursor-coded_buf);
+      bits_e = 8*(stream.cur-stream.buf);
       deep2 = bits_e<=__frame.best_bits;
-      *(uint32_t*)packer_word = packer_acc;
+      *(uint32_t*)stream.pk.word = stream.pk.acc;
       packer_reset();
       if( deep2 ) {
         __frame.best_bits = bits_e;
@@ -376,10 +376,10 @@ tile_restored:
         cand = 0;
       } else {
         __transform_planes(__frame.tile_img);
-        bits_a = 8*(out_cursor-coded_buf);
+        bits_a = 8*(stream.cur-stream.buf);
         deep2 = bits_a<=__frame.best_bits;
         __frame.rows[0] = bits_a;
-        *(uint32_t*)packer_word = packer_acc;
+        *(uint32_t*)stream.pk.word = stream.pk.acc;
         packer_reset();
         if( deep2 ) {
           __frame.best_bits = bits_a;
@@ -398,9 +398,9 @@ tile_restored:
               } while( pl_b<plane_count );
             }
             __transform_planes(__frame.tile_img);
-            bits2 = 8*(out_cursor-coded_buf);
+            bits2 = 8*(stream.cur-stream.buf);
             deep2 = bits2<=__frame.rows[0];
-            *(uint32_t*)packer_word = packer_acc;
+            *(uint32_t*)stream.pk.word = stream.pk.acc;
             packer_reset();
             if( deep2 ) {
               cand = 0;
@@ -434,9 +434,9 @@ planes_done:
       } while( pl_c<plane_count );
     }
     __transform_planes(__frame.tile_img);
-    bits_b = 8*(out_cursor-coded_buf);
+    bits_b = 8*(stream.cur-stream.buf);
     __frame.rows[1] = bits_b;
-    *(uint32_t*)packer_word = packer_acc;
+    *(uint32_t*)stream.pk.word = stream.pk.acc;
     packer_reset();
     if( bits_b>__frame.best_bits ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
@@ -456,9 +456,9 @@ planes_done:
       }
       memcpy((uint8_t*)__frame.tile_src, tile_copy, __frame.tile_img->data_size);
       __transform_planes(__frame.tile_img);
-      bits_c = 8*(out_cursor-coded_buf);
+      bits_c = 8*(stream.cur-stream.buf);
       deep2 = bits_c<=__frame.best_bits;
-      *(uint32_t*)packer_word = packer_acc;
+      *(uint32_t*)stream.pk.word = stream.pk.acc;
       packer_reset();
       if( deep2 ) {
         cand = 0;
@@ -469,7 +469,7 @@ planes_done:
     }
     free(tile_copy);
   }
-  free(coded_buf);
+  free(stream.buf);
   free((uint8_t*)__frame.tile_img);
   return cand;
 }

@@ -38,23 +38,23 @@ void __rc_end_encode() {
 //
 // The packer writes 32 bits at a time and the coder starts at a byte, so
 // whatever whole bytes the last word did not need are given back here, one at
-// a time, and `packer_free_bits` is left holding what is still owed.  It goes
+// a time, and `stream.pk.free_bits` is left holding what is still owed.  It goes
 // transiently negative on the way, which is the thing to know about it.
 static void packer_rewind() {
-  if( out_cursor==(uint8_t*)packer_word )
+  if( stream.cur==(uint8_t*)stream.pk.word )
     return;
-  int32_t bits = packer_free_bits-8;
+  int32_t bits = stream.pk.free_bits-8;
   if( bits<0 ) {
-    packer_free_bits = bits;
+    stream.pk.free_bits = bits;
     return;
   }
-  uint8_t* at = out_cursor;
+  uint8_t* at = stream.cur;
   do {
     --at;
     bits -= 8;
   } while( bits>=0 );
-  out_cursor = at;
-  packer_free_bits = bits;
+  stream.cur = at;
+  stream.pk.free_bits = bits;
 }
 
 // Everything an alternate model needs before its first symbol: the residual
@@ -136,7 +136,7 @@ static uint16_t* begin_plane_stream() {
 template<int f_DEC>
 uint16_t*__rc_begin() {
   if( !f_DEC )
-    *packer_word = packer_acc;
+    *stream.pk.word = stream.pk.acc;
   packer_rewind();
   uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
   if( f_DEC )
@@ -155,10 +155,10 @@ void __rc_begin_decode() {
 }
 
 static uint32_t __packer_word() {
-  if( out_cursor+4>coded_buf+coded_size )
+  if( stream.cur+4>stream.buf+stream.size )
     bmf_fatal(bmf_read_error);
-  uint32_t w = *(uint32_t*)out_cursor;
-  out_cursor += 4;
+  uint32_t w = *(uint32_t*)stream.cur;
+  stream.cur += 4;
   return w;
 }
 
@@ -169,53 +169,53 @@ static uint32_t __packer_word() {
 // to live at the far end of this one -- is the one a reader has to remember is
 // part of the reset.
 static void packer_reset() {
-  packer_free_bits = 0;
-  packer_acc = 0;
-  out_cursor = coded_buf;
-  packer_word = (uint32_t*)coded_buf;
-  hist_scratch = coded_buf+coded_size-4096;
+  stream.pk.free_bits = 0;
+  stream.pk.acc = 0;
+  stream.cur = stream.buf;
+  stream.pk.word = (uint32_t*)stream.buf;
+  hist_scratch = stream.buf+stream.size-4096;
 }
 
 // The header's bit stream: the per-plane descriptors, a few bits at a time,
-// through a 32-bit accumulator that spills to `packer_word` when it fills.
+// through a 32-bit accumulator that spills to `stream.pk.word` when it fills.
 //
 // `compress_image` wrote this out six times and `expand_image` its mirror six
 // times, at widths 4, 6 and 8.  What made the six copies look unlike each other
-// was the count: it was kept in `bits_left`, `free_bits` or `packer_free_bits`
+// was the count: it was kept in `bits_left`, `free_bits` or `stream.pk.free_bits`
 // depending on the site, and every spill branch read the guard variable in one
-// place and `packer_free_bits` in another.  They agreed because the line before
+// place and `stream.pk.free_bits` in another.  They agreed because the line before
 // each block assigned one from the other; here there is one name and nothing to
 // keep in step.
 //
 // The order below is the one thing to preserve when reading this against the
-// original: the spill branch's `packer_acc` is computed from the count *before*
+// original: the spill branch's `stream.pk.acc` is computed from the count *before*
 // the count moves on.  Writing the count first would shift the carry-out by the
 // width.
 static void pack_bits(uint32_t word, int32_t n) {
-  if( packer_free_bits<n ) {
-    *(uint32_t*)packer_word = packer_acc|(2*(word<<((31-packer_free_bits)&31)));
-    packer_word = (uint32_t*)out_cursor;
-    out_cursor += 4;
-    packer_acc = word>>(packer_free_bits&31);
-    packer_free_bits += 32-n;
+  if( stream.pk.free_bits<n ) {
+    *(uint32_t*)stream.pk.word = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
+    stream.pk.word = (uint32_t*)stream.cur;
+    stream.cur += 4;
+    stream.pk.acc = word>>(stream.pk.free_bits&31);
+    stream.pk.free_bits += 32-n;
   } else {
-    packer_acc |= word<<(-packer_free_bits&31);
-    packer_free_bits -= n;
+    stream.pk.acc |= word<<(-stream.pk.free_bits&31);
+    stream.pk.free_bits -= n;
   }
 }
 
 static uint32_t unpack_bits(int32_t n) {
   const uint32_t mask = (1u<<n)-1;
   uint32_t v;
-  packer_free_bits -= n;
-  if( packer_free_bits<0 ) {
+  stream.pk.free_bits -= n;
+  if( stream.pk.free_bits<0 ) {
     const uint32_t w = __packer_word();
-    v = packer_acc|(w<<((packer_free_bits+n)&31))&mask;
-    packer_acc = w>>(-packer_free_bits&31);
-    packer_free_bits += 32;
+    v = stream.pk.acc|(w<<((stream.pk.free_bits+n)&31))&mask;
+    stream.pk.acc = w>>(-stream.pk.free_bits&31);
+    stream.pk.free_bits += 32;
   } else {
-    v = packer_acc&mask;
-    packer_acc = packer_acc>>n;
+    v = stream.pk.acc&mask;
+    stream.pk.acc = stream.pk.acc>>n;
   }
   return v;
 }
