@@ -18,7 +18,6 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   bool xf3, off;
   NbRow *b4, **b0;
   int32_t nplanes, nplanes2;
-  void* made, * src1, ** plane_p;
   P2Coef p2_coef;
   p2_coef.fold();
   i = p_i->width;
@@ -26,12 +25,9 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   if( plane_count>0 ) {
     int32_t pl = 0;
     do {
-      made = bmf_page_alloc(sizeof(AltP2Block));
-      if( made )
-        src1 = ((AltP2Block*)made)->alt_p2_alloc(i, pl);
-      else
-        src1 = nullptr;
-      plane[pl++] = (AltP2Block*)src1;
+      AltP2Block* page = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
+      plane[pl] = page ? page->alt_p2_alloc(i, pl) : nullptr;
+      ++pl;
     } while( pl<plane_count );
   }
   int32_t xf0 = plane_desc[plane_desc[1].src_plane].flags&8;
@@ -271,9 +267,8 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   if( plane_count>0 ) {
     int32_t pl3 = 0;
     do {
-      plane_p = (void**)plane[pl3];
-      if( plane_p ) {
-        ((AltP2Block*)plane_p)->alt_p2_free(1);
+      if( plane[pl3] ) {
+        plane[pl3]->alt_p2_free(1);
         nplanes2 = plane_count;
       }
       ++pl3;

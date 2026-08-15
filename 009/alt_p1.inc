@@ -112,7 +112,7 @@ void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
         int32_t x = 0;
         do {
           ++x;
-          blk->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
+          blk->ctx_of(nullptr, nullptr);
           int32_t code = alt_p1_decode_symbol(&blk->counters[blk->ctx[0]], blk->ctx[1]);
           int32_t val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
           *out_at = val;

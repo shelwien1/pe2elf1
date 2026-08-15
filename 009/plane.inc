@@ -19,7 +19,7 @@ void unmodel_plane(BmfImage* p_i, uint8_t* out) {
     if( raw )
       blk = ((ModelBlock*)raw)->layout_workspace(p_i->width, p_i->height, p_i->depth&depth_bits);
     else
-      blk = (ModelBlock*)(nullptr);
+      blk = nullptr;
     (blk)->unmodel_plane_slow(out);
     if( blk )
       blk->free_workspace(1);

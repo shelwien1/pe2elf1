@@ -209,11 +209,11 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     p2_row[6][1] = (float)nb4->val;
     p2_row[6][2] = (float)(nb0[-5].val+nb0[-1].val-nb0[-6].val);
     p2_row[6][3] = (float)nb1[-6].val;
-    rb2 = (P2Ctx*)(nullptr);
-    rb1 = (P2Ctx*)(nullptr);
+    rb2 = nullptr;
+    rb1 = nullptr;
     rb0 = nullptr;
-    ra2 = (P2Ctx*)(nullptr);
-    ra1 = (P2Ctx*)(nullptr);
+    ra2 = nullptr;
+    ra1 = nullptr;
     ra0 = nullptr;
   }
   NbRow **cur_l = cur;

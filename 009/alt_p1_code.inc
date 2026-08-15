@@ -125,7 +125,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             int32_t want0 = *(buf+off0);
             cur0 = want0;
           }
-          plane[0]->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
+          plane[0]->ctx_of(nullptr, nullptr);
           if( f_DEC ) {
             code0 = alt_p1_decode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
             pred0 = (uint8_t)blk0->pred;
@@ -170,7 +170,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             cur1 = want1;
           }
           AltP1Block* blk1 = plane[1];
-          plane[1]->ctx_of(plane[0], (AltP1Block*)0);
+          plane[1]->ctx_of(plane[0], nullptr);
           if( f_DEC ) {
             code1 = alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]], blk1->ctx[1]);
             pred1 = (uint8_t)blk1->pred;

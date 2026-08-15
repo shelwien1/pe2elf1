@@ -216,7 +216,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       cursor[0]->dval = 0;
       if( width>0 ) {
         for( k = 0; k<(uint32_t)width; ++k ) {
-          int32_t pred = alt_p2_context((AltP2Block*)nullptr, (AltP2Block*)nullptr);
+          int32_t pred = alt_p2_context(nullptr, nullptr);
           if( f_DEC ) {
             code2 = code = freq[ctx].decode_symbol(pair);
             outp[k] = (uint8_t)(pred+(unfold[code]));

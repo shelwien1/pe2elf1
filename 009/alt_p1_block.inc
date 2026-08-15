@@ -202,7 +202,7 @@ struct AltP1Block {
           int32_t x = 0;
           do {
             ++x;
-            ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
+            ctx_of(nullptr, nullptr);
             uint8_t guess = (uint8_t)pred;
             int32_t resid = (uint8_t)(*src-guess);
             uint8_t recon = *(fold[resid]+unfold)+guess;

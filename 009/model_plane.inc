@@ -25,7 +25,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     if( ws )
       blk = ((ModelBlock*)ws)->layout_workspace(p_i->width, p_i->height, p_i->depth&depth_bits);
     else
-      blk = (ModelBlock*)(0);
+      blk = nullptr;
     rc_begin_encode();
     reduce_alphabet(blk, pixels);
     int32_t bucket = 0;
