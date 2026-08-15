@@ -452,9 +452,17 @@ struct AltP2Block {
     ctx_bias[0] = 0;
     cursor[0] = buf[0]+8;
     do {
-      ctx_delta[2*pair] = (plane_idx<<8)|(16*lvl);
+      // The plane at bit 8 and the run level as a four-bit field at 4.  The
+      // level is bounded by its own table -- `p2_ctx_edges` has sixteen
+      // entries and `lvl` indexes it -- so the width is a fact rather than a
+      // guess.  The plane stays a `raw`: `plane_count` is
+      // `((depth & 0x3F) + 7) >> 3`, which is two bits only because the header
+      // check rejects depths above 32, and a mask that rests on a check
+      // somewhere else is the shape that moved three streams when `gA` was
+      // written as `bits<6, 2>`.
+      ctx_delta[2*pair] = CtxIdx{}.raw(plane_idx<<8).bits<4, 4>(lvl);
       int32_t lvl1 = (2*pair==p2_ctx_edges[lvl])+lvl;
-      ctx_delta[2*pair+1] = (plane_idx<<8)|(16*lvl1);
+      ctx_delta[2*pair+1] = CtxIdx{}.raw(plane_idx<<8).bits<4, 4>(lvl1);
       int32_t bump = 2*pair+++1==p2_ctx_edges[lvl1];
       lvl = bump+lvl1;
     } while( pair<0x82 );

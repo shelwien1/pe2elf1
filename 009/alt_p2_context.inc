@@ -15,7 +15,11 @@
 // were written as one.
 static inline int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2,
                                 int32_t sum, int32_t s0, int32_t s1, int32_t s2) {
-  return (((run>r0)+(run>r1)+(run>r2))<<13)|(((sum>s0)+(sum>s1)+(sum>s2))<<11);
+  // Two two-bit counts, at 13 and 11: how many of the three run
+  // thresholds the run passes, and how many of the three sum thresholds
+  // the sum does.  Each is a sum of three comparisons, so 0..3 exactly.
+  return CtxIdx{}.bits<13, 2>((run>r0)+(run>r1)+(run>r2))
+                 .bits<11, 2>((sum>s0)+(sum>s1)+(sum>s2));
 }
 
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
@@ -523,6 +527,13 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ctx_idx = 0;
   ctx_pair[0] = ctx_delta[ctx_idx+4]+ctx15;
   ctx_pair[1] = ctx15+ctx_delta[ctx_idx];
-  ctx = ctx15+32*(flat_b==0)+16*(flat_a==0)+ctx_w[4].w[ctx_w[4].sel]+ctx_w[3].w[ctx_w[3].sel]+ctx_w[2].w[ctx_w[2].sel]+ctx_w[1].w[ctx_w[1].sel]+ctx_w[0].w[ctx_w[0].sel];
+  // Two flatness bits at 5 and 4 over the base context, with the five
+  // weight-table contributions added on top.  Those five are values
+  // rather than fields -- each is a table entry, not a bit -- so they
+  // stay a sum and only the two bits become bits.
+  ctx = CtxIdx{}.bit<5>(flat_b==0).bit<4>(flat_a==0).raw(ctx15)
+        +ctx_w[4].w[ctx_w[4].sel]+ctx_w[3].w[ctx_w[3].sel]
+        +ctx_w[2].w[ctx_w[2].sel]+ctx_w[1].w[ctx_w[1].sel]
+        +ctx_w[0].w[ctx_w[0].sel];
   return ctx_idx;
 }

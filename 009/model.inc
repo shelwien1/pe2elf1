@@ -82,22 +82,29 @@ struct ModelBlock {
     bool far = false;
     for( band = 16; band<32; ++band )
       far |= result==nb[band];
-    int32_t near_hit = 32*near+((result==nb[10])<<6);
-    int32_t far_hit = 16*far;
+    // Three bits of one context word, written as a multiply chain by the
+    // decompiler: whether the symbol is the immediate neighbour, whether it
+    // is in bands 11..15, and whether it is in 16..31.
+    int32_t near_hit = CtxIdx{}.bit<6>(result==nb[10]).bit<5>(near);
+    int32_t far_hit = CtxIdx{}.bit<4>(far);
     int32_t ctx0 = far_hit+near_hit;
     ctr_node = ctx0;
     if( (far_hit+near_hit==0)&&pos>6 )
       return -1;
     SymList* sel0 = sel0_list;
-    int32_t ctx1 = ctx0+8*sym_in_top((sel0[mode_symbol[1]].ent), 10, result);
+    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[mode_symbol[1]].ent), 10, result)).raw(ctx0);
     ctr_node = ctx1;
     SymEntry *list_prev = sel0[mode_symbol[2]].ent;
     SymEntry *list_sym = sel0[result].ent;
-    int32_t fallback = sym_in_top((sel0[mode_symbol[3]].ent), 6, result)+2*sym_in_top(list_sym, 10, mode_symbol[2])+4*sym_in_top(list_prev, 4, result);
+    // The low three bits: is the symbol near the top of the previous
+    // symbol's list, of its own, and of the one before that.
+    int32_t fallback = CtxIdx{}.bit<2>(sym_in_top(list_prev, 4, result))
+                               .bit<1>(sym_in_top(list_sym, 10, mode_symbol[2]))
+                               .bit<0>(sym_in_top((sel0[mode_symbol[3]].ent), 6, result));
     int32_t ctx2 = fallback+ctx1;
     if( pos<=14||(ctx2&0xB)!=0 ) {
-      ctr_node = (pos<<7)+ctx2;
-      ctr_fallback = fallback+8*(pos>9);
+      ctr_node = CtxIdx{}.raw(pos<<7).raw(ctx2);
+      ctr_fallback = CtxIdx{}.bit<3>(pos>9).raw(fallback);
     } else {
       ctr_fallback = fallback;
       return -1;
@@ -803,7 +810,14 @@ struct ModelBlock {
     up9 = row_cur[9];
     nb2 = CtxIdx{}.bit<3>(row[-2].match[2]).bit<2>(row[-2].match[5])
                   .bit<1>(row[-2].match[4]).bit<0>(m_w1);
-    all_up = ((uint8_t)(up9->match[0]&r8->match[0]&nb_sym[2]&r7->match[0])<<9)+((uint8_t)(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1])<<8)+(bucket_at<<10)+nb2;
+    // Two run bits at 9 and 8, the bucket from 10 up, and `nb2`'s four
+    // bits underneath -- the comment below already said so and the
+    // expression did not.  The bucket stays a `raw`: it is a table
+    // lookup with no declared width to read one off.
+    all_up = CtxIdx{}.raw(bucket_at<<10)
+                     .bit<9>(up9->match[0]&r8->match[0]&nb_sym[2]&r7->match[0])
+                     .bit<8>(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1])
+                     .raw(nb2);
     cur6b = cur6;
     // The four gradient accumulators as four "is it flat" bits, over the
     // four-bit `nb2` below them; `all_up` carries the two run bits at 8 and 9
@@ -871,7 +885,15 @@ struct ModelBlock {
         }
   run_copied:
         bucket = *(run_bucket+idx1);
-        bit = esc_ctr[(8*bucket+4*(uint8_t)(up2[run+3].match[1]&up2[run+2].match[1])+2*m_up0+*(alpha_map+nb_sym[0])+1)].decode_context_bit(esc_ctr);
+        // Four fields and a plus-one: the bucket from bit 3 up, then
+        // three bits of neighbour agreement.  The `+1` is an offset
+        // into `esc_ctr` and not a field, which is why it is a `raw`.
+        int32_t esc_at = CtxIdx{}.raw(8*bucket)
+                                 .bit<2>(up2[run+3].match[1]&up2[run+2].match[1])
+                                 .bit<1>(m_up0)
+                                 .bit<0>(alpha_map[nb_sym[0]])
+                                 .raw(1);
+        bit = esc_ctr[esc_at].decode_context_bit(esc_ctr);
         msym1c = mode_symbol[1];
         hit = bit;
         *(((uint8_t*)alpha_map)+msym1c) = bit;
