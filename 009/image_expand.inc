@@ -14,7 +14,7 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
       };
     };
     int32_t nplanes_s;
-    void* row_step;
+    uint8_t* row_step;
     BmfFile* arc_f;
     BmfImage* p_i_2;
     int32_t depth_f;
@@ -236,7 +236,7 @@ restore_arc:
           frame.nplanes_s = plane_count;
           frame.s12 = n_pix;
           if( plane_count==1 ) {
-            memcpy(plane_buf, (uint8_t*)frame.row_step, frame.s12);
+            memcpy(plane_buf, frame.row_step, frame.s12);
             pred_s = plane_predictor;
           } else {
             frame.Block = &img_at->pixels[plane2];

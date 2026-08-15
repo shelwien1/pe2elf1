@@ -4,7 +4,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   BmfImage hdr;
   int32_t plane_n, row_step;
   uint32_t filtered;
-  void* pixels;
+  uint8_t* pixels;
   int32_t coded_bytes;
   uint8_t* pix_copy;
   uint32_t coded_len;
@@ -151,7 +151,7 @@ write_coded:
     pix_copy = (uint8_t*)bmf_new(p_i->data_size);
     plane_n = plane_count;
     row_step = plane_count*(p_i->height-1);
-    pixels = (uint16_t*)p_i->pixels;
+    pixels = p_i->pixels;
     memcpy(pix_copy, p_i->pixels, p_i->data_size);
     img_h = p_i->height;
     if( img_h ) {
@@ -184,7 +184,7 @@ write_coded:
   // buffer alone.  The `goto` that skipped this assignment was skipping a
   // second write of the value it already held.
 write_raw:
-  pixels = (uint16_t*)p_i->pixels;
+  pixels = p_i->pixels;
   ok_raw = fwrite(img, 1u, 0x10u, arc->fp)==16;
   if( extra_blk ) {
     coded_len = extra_blk->len;

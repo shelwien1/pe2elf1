@@ -12,7 +12,13 @@ static void free_sym_lists(SymList* lists) {
   free(sym_list_block(lists));
 }
 
-void**ModelBlock::free_workspace(int8_t do_free) {
+// Returns nothing.  It returned `(void**)this` -- after `free(this)` on the
+// path that takes it, so the value was a dangling pointer -- and neither of the
+// two callers reads it.  Third of its kind in this tree: `alt_p1_free` and
+// `alt_model_p1_d8_decode` were the first two, and the decompiler writes the
+// register that happened to hold `this` as a return value wherever MSVC left
+// it there.
+void ModelBlock::free_workspace(int8_t do_free) {
   int32_t i;
   free(sym_code);
   free(sym_word);
@@ -25,7 +31,6 @@ void**ModelBlock::free_workspace(int8_t do_free) {
   free(escape.ent);
   if( do_free&1 )
     free(this);
-  return (void**)this;
 }
 
 ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth) {

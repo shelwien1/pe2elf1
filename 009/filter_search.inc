@@ -12,13 +12,13 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
         int32_t plane_i;
         uint32_t costs[4];
         int32_t pi;
-        void* tile_buf;
+        uint8_t* tile_buf;
         int32_t flag8;
         int32_t best_flags;
         uint8_t _pad0[28];
       };
     };
-    void* tile_src;
+    uint8_t* tile_src;
     int32_t n_hard;
     int32_t bits_total;
     int32_t n_flagged;
@@ -56,7 +56,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   stream.buf = (uint8_t*)bmf_new(stream.size);
   packer_reset();
   frame.dims[0] = tile_h*tile_w;
-  frame.tile_buf = bmf_new(tile_h*tile_w);
+  frame.tile_buf = (uint8_t*)bmf_new(tile_h*tile_w);
   // Encode one plane of the trial tile under `flags` and return what it cost,
   // in bits.  Seven sites wrote this out: set the descriptor, call the model,
   // measure the bytes written, flush the packer's last partial word.  Four take
@@ -68,7 +68,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   // `-Q9`.
   auto probe_plane = [&](int32_t pl, int32_t flags) {
     plane_desc[pl].flags = flags;
-    model_planes(frame.tile_img, (uint8_t*)frame.tile_buf, pl);
+    model_planes(frame.tile_img, frame.tile_buf, pl);
     int32_t cost = 8*(stream.cur-stream.buf);
     *(uint32_t*)stream.pk.word = stream.pk.acc;
     return cost;
@@ -207,7 +207,7 @@ keep_flag8: { frame.flag8 = (uint8_t)frame.best_flags&8; }
     img_h1 = frame.tile_img->height;
     frame.rows[1] = plane_count;
     frame.pi = plane_count*(img_h1-1);
-    memcpy(p2, (uint8_t*)frame.tile_src, frame.tile_img->data_size);
+    memcpy(p2, frame.tile_src, frame.tile_img->data_size);
     img_h1b = frame.tile_img->height;
     if( img_h1b ) {
       p5 = p2;
@@ -239,7 +239,7 @@ keep_flag8: { frame.flag8 = (uint8_t)frame.best_flags&8; }
       while( 1 ) {
         pl_k = plane_desc[pk].src_plane;
         frame.rows[0] = pl_k;
-        model_planes(frame.tile_img, (uint8_t*)frame.tile_buf, pl_k);
+        model_planes(frame.tile_img, frame.tile_buf, pl_k);
         bits = 8*(stream.cur-stream.buf);
         *(uint32_t*)stream.pk.word = stream.pk.acc;
         bits_d += bits;
@@ -257,7 +257,7 @@ tile_restored:
       base2 = (uint8_t*)bmf_new(frame.tile_img->data_size);
       rows_x_planes = plane_count*(frame.tile_img->height-1);
       frame.rows[1] = plane_count;
-      memcpy(base2, (uint8_t*)frame.tile_src, frame.tile_img->data_size);
+      memcpy(base2, frame.tile_src, frame.tile_img->data_size);
       img_h2 = frame.tile_img->height;
       if( img_h2 ) {
         frame.costs[0] = rows_x_planes;
@@ -414,7 +414,7 @@ tile_restored:
 planes_done:
   if( !frame.n_hard&&plane_count>1 ) {
     tile_copy = (uint8_t*)bmf_new(frame.tile_img->data_size);
-    memcpy(tile_copy, (uint8_t*)frame.tile_src, frame.tile_img->data_size);
+    memcpy(tile_copy, frame.tile_src, frame.tile_img->data_size);
     for( desc_k = 0; desc_k<4; ++desc_k )
       frame.saved[desc_k] = plane_desc[desc_k];
     if( plane_count>0 ) {
@@ -446,7 +446,7 @@ planes_done:
           plane_desc[pl_d++].flags = 0;
         while( pl_d<plane_count );
       }
-      memcpy((uint8_t*)frame.tile_src, tile_copy, frame.tile_img->data_size);
+      memcpy(frame.tile_src, tile_copy, frame.tile_img->data_size);
       transform_planes(frame.tile_img);
       bits_c = 8*(stream.cur-stream.buf);
       deep2 = bits_c<=frame.best_bits;

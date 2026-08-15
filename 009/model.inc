@@ -68,7 +68,7 @@ struct ModelBlock {
   // workspace out over a fresh allocation and returns `this`, the other gives
   // it back.  Defined out of line in model_workspace.inc.
   ModelBlock*layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth);
-  void**free_workspace(int8_t do_free);
+  void free_workspace(int8_t do_free);
 
   int32_t pixel_context(uint32_t* nb) {
     int32_t band;
