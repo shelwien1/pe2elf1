@@ -27,9 +27,9 @@ inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
       nb[j][k] -= centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
-      mixed[j][k] = mix[0]*sets->f0[0]->w[j][k];
+      mixed[j][k] = mix[0]*sets->row[0]->w[j][k];
       for( i = 1; i<6; i++ )
-        mixed[j][k] += mix[i]*sets->f0[i]->w[j][k];
+        mixed[j][k] += mix[i]*sets->row[i]->w[j][k];
     }
   for( k = 0; k<4; k++ ) {
     acc[k] = mixed[0][k]*nb[0][k];
@@ -51,7 +51,7 @@ inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
       w[j][k] = mixed[j][k]*bmf_p2_decay;
-      w[j+7][k] = sets->f0[0]->w[j+7][k]*bmf_p2_seed;
+      w[j+7][k] = sets->row[0]->w[j+7][k]*bmf_p2_seed;
     }
   w[14][0] = 47.0f;
   w[14][1] = 169.2f;

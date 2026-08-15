@@ -599,7 +599,7 @@ quantiser itself depends on the band**. The slot is
 lazily, allocating on first use.
 
 A second linear stage, `NbRow::predict`, blends **six** weight sets — the six
-pointers in `CtxWeights::f0`, each a 7×4 matrix like the one above — using the
+pointers in `CtxWeights::row`, each a 7×4 matrix like the one above — using the
 six coefficients of `bmf_p2_mix[mode]`, one row of a 4×6 table. `bmf_p2_coef`
 is separate and earlier: it makes the centre value the features are measured
 against. The result is a mixed prediction.

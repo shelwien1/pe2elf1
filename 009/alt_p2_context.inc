@@ -217,13 +217,13 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ra0 = nullptr;
   }
   NbRow **cur_l = cur;
-  weights.f0[0] = cur_l[-1];
+  weights.row[0] = cur_l[-1];
   NbRow **up_row = above;
-  weights.f0[1] = up_row[1];
-  weights.f0[2] = up_row[2];
-  weights.f0[3] = cur_l[-2];
-  weights.f0[4] = up_row[0];
-  weights.f0[5] = cur_l[0];
+  weights.row[1] = up_row[1];
+  weights.row[2] = up_row[2];
+  weights.row[3] = cur_l[-2];
+  weights.row[4] = up_row[0];
+  weights.row[5] = cur_l[0];
   c_lo = 14*sum_u;
   mode = 1;
   c_mid = 13*sum_ur;

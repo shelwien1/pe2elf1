@@ -503,6 +503,23 @@ static_assert(offsetof(AltP2Block, bias)
               "NbRow::predict returns three floats by writing one row past "
               "p2_row, which has to be bias");
 
+// The six weight sets `NbRow::predict` mixes, in the order `bmf_p2_mix[mode]`
+// weights them -- so the order is the model's and not a choice.  In cursor
+// terms, with `cur` and `above` both pointing at this pixel's column and both
+// advanced one slot per pixel:
+//
+//     row[0] = cur[-1]     one to the left, this row
+//     row[1] = above[1]    one to the right, the row above
+//     row[2] = above[2]    two to the right, the row above
+//     row[3] = cur[-2]     two to the left, this row
+//     row[4] = above[0]    directly above
+//     row[5] = cur[0]      this column's slot, which this row has not written
+//                          yet -- the two row buffers alternate, so it still
+//                          holds what was put there when this buffer was last
+//                          the current row
+//
+// `f0` was the name, which is an offset and not a role: the member sits at
+// zero and the decompiler said so.
 struct CtxWeights {
-  NbRow* f0[6];
+  NbRow* row[6];
 };
