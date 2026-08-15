@@ -34,11 +34,12 @@ the block reads a replicated border (the row's own edge pixel sideways,
 128 above row 0), so the gather is branch-free.
 
 The residual goes through a 255-node binary decomposition coded by
-coder0's `Counter`, with coder0's order-1 byte context dropped — i.e. the
-order-0 version of what coder0 does. Header, palette and trailer bytes,
-and any file that is not a plain uncompressed BMP raster (RLE, bitfields,
-<8bpp, truncated pixel array, not a BMP at all), fall back to coder0's
-order-1 model, so the tool is lossless for any input.
+coder0's `Counter`. That started as the order-0 version of what coder0
+does — one tree, no byte context — and §4 is what replaced it. Header,
+palette and trailer bytes, and any file that is not a plain uncompressed
+BMP raster (RLE, bitfields, <8bpp, truncated pixel array, not a BMP at
+all), fall back to coder0's order-1 model, so the tool is lossless for
+any input.
 
 ## 2. The two things that had to be right before anything worked
 
@@ -116,18 +117,55 @@ z:         driven by the combined error, in the logistic domain
 residual:  (v − pred) folded to a zigzag, order-0 counter tree per plane
 ```
 
-## 4. Results
+## 4. The residual coder
+
+With the predictor exhausted, the order-0 residual model was what was
+left between bmpc and a real image compressor, so it became a context-mixing
+stage: six `Counter` trees over different contexts, mixed in the logistic
+domain by weights `ParamUpdater` drives with the cross-entropy gradient.
+The models, and what each was worth when it was added:
+
+| # | context | |
+|---|---|---|
+| 0 | plane | the original order-0 tree |
+| 1 | plane × activity — \|e\| at W+N+NE, 8 buckets | how noisy it is here |
+| 2 | plane × signed eW+eN, 17 buckets | which way the mix just missed |
+| 3 | plane × signed error already made on the **previous component of this pixel** | −1.46% |
+| 4 | plane × joint (qsigned eW, qsigned eN), 5×5 | −0.19% |
+| 5 | plane × **the predicted byte**, 256 buckets | −0.97% at 16 buckets, −3.14% at 256 |
+
+Models 0–2 together are −2.9% over plain order-0; the stack is **−9.0%**.
+Mixer weights are indexed by (plane, activity, depth in the bit tree) —
+the models' relative worth is very different for the top bits of the
+residual and for the noise in the bottom ones (−0.20%).
+
+Two things the measurements insisted on, both echoing §2:
+
+* **the mixer is fed `hdot = 1`, not the true cross-entropy `p(1-p)`.**
+  The true curvature collapses to ~0 exactly where the model is confident,
+  which is most bits, and the normalised step then blows up there.
+* **it wants a much smaller `NW` than the pixel mix** (1024/4096 with a
+  large ε). At the pixel mix's rate the residual mixer is +40%.
+
+An SSE/APM stage on top — interpolated over `stretch(p)`, per plane and
+tree node — is implemented (`RES_SSE=1`) and measured: worth −0.6% over a
+*broken* mixer, +0.1% over a working one. A mixer that already has six
+opinions has nothing left for it to correct. It stays off.
+
+`-DRES_NM=1 -DRES_MD=0` recovers the plain order-0 coder of §1.
+
+## 5. Results
 
 Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **49968** | 5.13 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **49624** | 5.10 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **122585** | 4.26 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **147775** | 3.85 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **408606** | 1.45 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2912183** | 2.78 |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **47077** | 4.84 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46732** | 4.80 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **105481** | 3.66 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **126096** | 3.28 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **360113** | 1.28 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2646464** | 2.52 |
 | x_ai.bmp | RLE8 | 887278 | — | — | 285808 | 285808 | fallback |
 | x_ci.bmp | RLE8 | 3278170 | — | — | 1046958 | 1046958 | fallback |
 
@@ -138,10 +176,20 @@ top-down BMP with non-zero row padding and a trailer, and book1.
 The two RLE8 files are not rasters, so they take the order-1 fallback and
 match coder0 exactly (+1 byte for the mode flag).
 
-On the 8 MB target image bmpc codes 2912183 bytes against coder0's
-4057586 — 28.2% smaller — at 2.78 bits per byte.
+On the 8 MB target image bmpc codes **2646464** bytes: 34.8% smaller than
+coder0's 4057586, and 1.8% smaller than the 2694740 of `bmf`, which is
+what this was being measured against.
 
-## 5. Caveats
+Where it got there, on that file:
+
+| | size | |
+|---|---|---|
+| order-1 (coder0) | 4057586 | |
+| + the LPC mix, order-0 residual | 2912183 | −28.2% |
+| + the 6-model residual mix | **2646464** | −9.1% |
+| bmf, for reference | 2694740 | |
+
+## 6. Caveats
 
 * **`-Ofast` makes the folded and unfolded builds differ slightly.** With
   a knob pinned by `-DB0_NW_w=1024` the compiler folds it and reassociates;
@@ -154,11 +202,16 @@ On the 8 MB target image bmpc codes 2912183 bytes against coder0's
 * 8bpp **palette** images are predicted on the index, which is only
   meaningful when the palette is ordered. t8p (paletted) and t8g
   (greyscale ramp) happen to land within 1% of each other here.
-* The mix is `n_colors·60` multiply-adds plus the same number of
-  `ParamUpdater` steps per byte, twice over (`MIX_DUAL`) — about 4 MB/s
-  each way. `-DMIX_DUAL=0` costs 0.7% and buys back ~30%.
+* It is slow: `n_colors·60` multiply-adds plus that many `ParamUpdater`
+  steps per byte, twice over (`MIX_DUAL`), and then six `Counter`
+  predict/update pairs and a mixer step per *bit* — about 145 KB/s each
+  way, symmetric. `-DMIX_DUAL=0` costs 0.7% and buys back ~30% of the
+  pixel-mix time; `-DRES_NM=3` costs ~4% and roughly halves the residual
+  time.
+* Memory is dominated by residual model 5: `n_colors·256·256` counters,
+  ~25 MB at 32bpp.
 
-## 6. Reproducing
+## 7. Reproducing
 
 Model shape (the `#define`s at the top of `bmpc.cpp`) was chosen with
 `sweep.py`, which rebuilds with `-D` overrides and reports the corpus total

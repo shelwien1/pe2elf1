@@ -127,18 +127,27 @@
 #define RES_EQ      17   // signed buckets of eW+eN for model 2
 #endif
 #ifndef RES_NM
-#define RES_NM       4   // residual models mixed:
+#define RES_NM       6   // residual models mixed:
                          //  0 = plane                       (order 0)
                          //  1 = plane x activity            (how noisy here)
                          //  2 = plane x signed eW+eN        (which way it missed)
                          //  3 = plane x signed error already
                          //      made on the previous component
                          //      of THIS pixel (cross-channel)
+                         //  4 = plane x joint (qsigned eW, qsigned eN),
+                         //      coarse -- direction, not just magnitude
+                         //  5 = plane x predicted value, RES_VQ buckets
                          // Their predictions are mixed in the logistic
                          // domain by a per-(plane,activity) weight vector
                          // driven by ParamUpdater -- the same rank-1 Newton
                          // step the pixel mix uses, with the cross-entropy
                          // hdot = p(1-p).
+#endif
+#ifndef RES_VQ
+#define RES_VQ     256   // buckets of the predicted byte for model 5
+#endif
+#ifndef RES_JQ
+#define RES_JQ       5   // per-axis buckets of the joint eW/eN model 4
 #endif
 #ifndef RES_MD
 #define RES_MD       1   // 1 = give the mixer a separate weight set per
@@ -254,6 +263,14 @@ static INLINE float stp( float p ) {             // stretch of a probability
   p = clamp( p, 1.0f/65536.0f, 1.0f-1.0f/65536.0f );
   return logf(p/(1.0f-p));
 }
+// per-axis quantiser for the joint eW/eN context of residual model 4
+static INLINE int qjoint( int d ) {
+  int h = RES_JQ>>1;
+  int s = d<0 ? -1 : 1; if( d<0 ) d = -d;
+  int q = 0; while( q<h && d >= (2<<(2*q)) ) q++;
+  return h + s*q;
+}
+
 // signed quantiser for the eW+eN context of residual model 2
 static INLINE int qsigned( int d ) {
   int s = d<0 ? -1 : 1; if( d<0 ) d = -d;
@@ -360,6 +377,7 @@ struct Raster {
   uint   nmix;
   int    mctx[4];          // which set the current component uses
   int    cerr[4];          // errors already made on this pixel
+  int    vctx[4];          // predicted-value bucket, per component
 #if RES_SSE
   Ctr*   sse;              // [nc][256 nodes][SSEQ+1] APM
 #endif
@@ -441,6 +459,12 @@ struct Raster {
 #endif
 #if RES_NM>3
     nrow[3] = nc*RES_EQ;
+#endif
+#if RES_NM>4
+    nrow[4] = nc*RES_JQ*RES_JQ;
+#endif
+#if RES_NM>5
+    nrow[5] = nc*RES_VQ;
 #endif
     for( uint m=0; m<RES_NM; m++ ) {
       res[m] = new Ctr[256*nrow[m]];
@@ -525,6 +549,9 @@ struct Raster {
 #if RES_NM>2
         rbase[2][k] = int(k*RES_EQ + uint(qsigned(w+n))) * 256;
 #endif
+#if RES_NM>4
+        rbase[4][k] = (int(k)*RES_JQ*RES_JQ + qjoint(w)*RES_JQ + qjoint(n)) * 256;
+#endif
         mctx[k] = int(k*RES_CTX + q);
         cerr[k] = 0;
       }
@@ -576,6 +603,8 @@ struct Raster {
       s_n++;
     }
 #endif
+
+    vctx[k] = (pb*RES_VQ)>>8;
 
     uint r = (v - uint(pb)) & 255;
 #if RES_ZIGZAG
@@ -658,6 +687,12 @@ struct Raster {
 #if RES_NM>3
     Ctr* m3 = res[3] + (int(k)*RES_EQ + qsigned(k ? cerr[k-1] : 0))*256;
 #endif
+#if RES_NM>4
+    Ctr* m4 = res[4] + rbase[4][k];
+#endif
+#if RES_NM>5
+    Ctr* m5 = res[5] + (int(k)*RES_VQ + vctx[k])*256;
+#endif
     BitMix* mxb = bmix + size_t(mctx[k])*(RES_MD?8:1);
 #if RES_SSE
     Ctr* ap = sse + size_t(k)*256*(SSEQ+1);
@@ -676,6 +711,12 @@ struct Raster {
 #endif
 #if RES_NM>3
       m3[cxt].Predict();            s[3] = stp( m3[cxt].pK );
+#endif
+#if RES_NM>4
+      m4[cxt].Predict();            s[4] = stp( m4[cxt].pK );
+#endif
+#if RES_NM>5
+      m5[cxt].Predict();            s[5] = stp( m5[cxt].pK );
 #endif
 #if RES_MD
       // depth = index of the leading 1 of cxt, i.e. how many bits are in
@@ -714,6 +755,12 @@ struct Raster {
 #endif
 #if RES_NM>3
       m3[cxt].C_Update( bit );
+#endif
+#if RES_NM>4
+      m4[cxt].C_Update( bit );
+#endif
+#if RES_NM>5
+      m5[cxt].C_Update( bit );
 #endif
 #if RES_SSE
       a0.C_Update( bit ); a1.C_Update( bit );

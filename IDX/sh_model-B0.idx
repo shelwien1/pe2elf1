@@ -67,7 +67,7 @@ Number MM2,     1, 0!0000
 # --- residual-model mixer and APM ---
 # NWB/4096 damping of the mixer's Newton step, INCB/1024 its epsilon,
 # STEPB/65536 its trust region, DB/1024 the per-weight gradient clip.
-Number NWB,     1, 1!0111111111
+Number NWB,     1, 1!01111111111
 Number INCB,    1, 1!0011111111111111
 Number STEPB,   1, 1!0110011001100
 Number DB,      1, 1!0111111111111

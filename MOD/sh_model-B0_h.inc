@@ -131,7 +131,7 @@ mdesc( B0_BR_, 1, "00011111" );
 static const int B0_BR = B0_BR_.value * (1);
 #endif
 #ifndef B0_NWB
-pdesc( B0_NWB_, 1, "0111111111" );
+pdesc( B0_NWB_, 1, "01111111111" );
 static const int B0_NWB = B0_NWB_.value * (1);
 #endif
 #ifndef B0_INCB
