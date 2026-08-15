@@ -14,7 +14,7 @@ BmfImage* read_bmp(char* path) {
   uint32_t stride_pad, pair, hi, stride, got, left;
   BmpHeader hdr;
   FILE* fp = fopen(path, "rb");
-  if( !fp||fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=0x4D42||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=40||hdr.biPlanes!=1 ) {
+  if( !fp||fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=bmp_magic||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=bmp_hdr_v3||hdr.biPlanes!=1 ) {
     return nullptr;
   }
   {
@@ -33,9 +33,9 @@ BmfImage* read_bmp(char* path) {
                                                                 // 1, 4, 8, 24 or 32 -- no 16
      || (int32_t)hdr.biClrUsed<0                                // a palette count, not a sign
      || (bmp_bpp<=8&&(int32_t)hdr.biClrUsed>(1<<bmp_bpp))       // no more entries than the depth allows
-     || hdr.biCompression>2                                     // none, RLE8 or RLE4
-     || (hdr.biCompression==1&&bmp_bpp!=8)                      // RLE8 is 8 bpp only
-     || (hdr.biCompression==2&&bmp_bpp!=4) ) {                  // RLE4 is 4 bpp only
+     || hdr.biCompression>bmp_rle4                              // none, RLE8 or RLE4
+     || (hdr.biCompression==bmp_rle8&&bmp_bpp!=8)               // RLE8 is 8 bpp only
+     || (hdr.biCompression==bmp_rle4&&bmp_bpp!=4) ) {           // RLE4 is 4 bpp only
       fclose(fp);
       return nullptr;
     }
@@ -74,10 +74,10 @@ BmfImage* read_bmp(char* path) {
   void* pal_buf = bmf_new(stride_pad<256 ? 256 : stride_pad);
   row = img->pixels+img->data_size-img->stride;
   fseek(fp, (int32_t)hdr.bfOffBits, 0);
-  if( hdr.biCompression ) {
+  if( hdr.biCompression!=bmp_rgb ) {
     uint8_t*const pix_lo = img->pixels;
     uint8_t*const pix_hi = img->pixels+img->data_size;
-    if( hdr.biCompression==1 ) {
+    if( hdr.biCompression==bmp_rle8 ) {
       memset(img->pixels, 0, img->data_size);
       row_at = row;
       img_f = img;
@@ -118,7 +118,7 @@ BmfImage* read_bmp(char* path) {
         }
       }
     }
-    if( hdr.biCompression!=2 )
+    if( hdr.biCompression!=bmp_rle4 )
       return nullptr;
     memset(img->pixels, 0, img->data_size);
     img_f = img;

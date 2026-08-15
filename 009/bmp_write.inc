@@ -20,8 +20,8 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   out_buf = (uint8_t*)bmf_new(img->data_size+8*img->height+(img->data_size>>5)+2048);
   BmpHeader* bmp = (BmpHeader*)out_buf;
   i = img->width;
-  bmp->biSize = 40;
-  bmp->bfType = 0x4D42;
+  bmp->biSize = bmp_hdr_v3;
+  bmp->bfType = bmp_magic;
   rows = img->height;
   rows2 = rows;
   bmp->bfReserved2 = 0;
@@ -121,12 +121,15 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         break;
       can_rle = 0;
     }
-    rle_kind = 2;
+    rle_kind = bmp_rle4;
     if( !can_rle )
-      rle_kind = 1;
+      rle_kind = bmp_rle8;
     bmp->biCompression = rle_kind;
-    nib = rle_kind-1;
-    run_max = (0x100u>>((rle_kind-1)&31))-1;
+    // Pixels are nibbles rather than bytes, which is the whole difference
+    // between the two runs: half the shift, and a run counts to 15 rather
+    // than 255.  Both were `rle_kind-1`, arithmetic on a format constant.
+    nib = rle_kind==bmp_rle4;
+    run_max = (0x100u>>(nib&31))-1;
     if( rows2>0 ) {
       rows3 = rows2;
       stride3 = stride;
@@ -296,7 +299,7 @@ write_rows:
   }
   fp2 = fp;
   out2 = out_buf;
-  bmp->biCompression = 0;
+  bmp->biCompression = bmp_rgb;
   if( rows2<=0 ) {
     coded_bytes = 0;
   } else {

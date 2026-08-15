@@ -37,10 +37,12 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   *(uint32_t*)&hdr._pad8 = hdr_pad8;
   hdr.data_size = (uint32_t)p_i->data_size;
   plane_count = ((p_i->depth&depth_bits)+7)>>3;
-  if( fwrite("\x81\x8A"
-             "20\x81\x90"
-             "20a+b",
-             4u, 1u, arc->fp)!=1 )
+  // An image member, version 2.0.  This was an `fwrite` of the first four
+  // bytes of `"\x81\x8A" "20\x81\x90" "20a+b"` -- both signatures and three
+  // more bytes in one literal, of which only the first four were ever written,
+  // so the tag it writes could not be read off the line that writes it.
+  const uint32_t tag = bmf_tag(bmf_sig_image, '2', '0');
+  if( fwrite(&tag, 4u, 1u, arc->fp)!=1 )
     return 0;
   uint8_t bpp = p_i->depth;
   pal_bytes = bpp&depth_palette;

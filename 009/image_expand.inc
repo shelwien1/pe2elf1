@@ -38,7 +38,6 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   uint8_t* pal_at, * copy, * srcp, * dst;
   int32_t plane_i, plane, pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes, last_row, at, y, pl_i, left;
   uint16_t img_h;
-  uint8_t major_v, minor_v;
   // The archive version, as a plain local.  The decompilation parked it in
   // `plane_desc[0].weight0` because the original did: `plane_desc[0]` is a
   // header slot, not a plane, and its three weight words were free.
@@ -63,17 +62,17 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
       }
     }
     magic = frame.magic_word;
-    if( (uint16_t)frame.magic_word!=0x9081 )
+    if( (uint16_t)frame.magic_word!=bmf_sig_other )
       break;
-    major_v = (uint8_t)(frame.magic_word>>16);
-    minor_v = (uint8_t)(frame.magic_word>>24);
-    version = ((major_v<<8)-12288)|(minor_v-48);
-    if( version!=512||fread(&frame.head, 8u, 1u, arc->fp)!=1 )
+    version = bmf_tag_version(frame.magic_word);
+    if( version!=bmf_version_20||fread(&frame.head, 8u, 1u, arc->fp)!=1 )
       break;
     fseek(arc->fp, frame.head.len, 1);
     fp1 = arc->fp;
   }
-  if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), version = ((major_v<<8)-12288)|(minor_v-48), version!=512)||fread(frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
+  version = bmf_tag_version(magic);
+  if( (uint16_t)magic!=bmf_sig_image||version!=bmf_version_20
+      ||fread(frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
     return arc->fail();
   }
   if( frame.flags_b&flags_tail ) {

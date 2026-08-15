@@ -170,6 +170,20 @@ BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette,
   return img;
 }
 
+// The BMP header's own constants, which are Windows' rather than BMF's.
+// `bfType` is the two letters `BM` little-endian; `biSize` is the size of the
+// second half of the header, which is what distinguishes the only version
+// either side here handles from OS/2's twelve-byte one and Windows' later
+// longer ones; and `biCompression` is a three-value enum both `read_bmp` and
+// `write_bmp` were spelling 0, 1 and 2.
+enum : uint32_t {
+  bmp_magic   = 'B'|'M'<<8,   // 0x4D42
+  bmp_hdr_v3  = 40,           // BITMAPINFOHEADER, and no other
+  bmp_rgb     = 0,            // rows as they are
+  bmp_rle8    = 1,            // run-length, one byte per pixel
+  bmp_rle4    = 2,            // run-length, one nibble per pixel
+};
+
 #pragma pack(push, 1)
 struct BmpHeader {
   uint16_t bfType;
