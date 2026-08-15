@@ -59,7 +59,11 @@ int32_t choose_plane_coding(BmfImage* img) {
     uint8_t _pad7[28];
   } frame;
   uint8_t buf_3[2048], buf_4[2048], buf_2[2048];
-  alignas(16) int32_t x0[4], x1[4], x3[4], x5[4];
+  // What is left of the spill area: five values the nested weight search
+  // carries, each the working copy of the local it is read into.  The
+  // arrays are gone -- nothing crossed between their slots, so they were
+  // five independent variables under four array names.
+  int32_t wt4_cur, wt4_up_cur, wt4_up_end_cur, wt8_up_cur, wt8_up_end_cur;
   double d1, d2, d3;
   // One run of the original frame, and the body indexes across every boundary
   // in it, so the six are bound onto one buffer at the offsets they had:
@@ -184,7 +188,7 @@ int32_t choose_plane_coding(BmfImage* img) {
       wt4 = plane_desc[xform].weight0;
       {
         frame.wt_slot = wt8;
-        x5[3] = wt4;
+        wt4_cur = wt4;
         frame.nplanes_s = n_planes;
         int32_t wt_step = 4;
         frame.s1 = wt4-1;
@@ -199,28 +203,28 @@ int32_t choose_plane_coding(BmfImage* img) {
         while( 1 ) {
           if( wt4_dn<=wt4_dn_end ) {
             if( wt8_dn<=wt8_dn_end ) {
-              x1[0] = x5[3]+1;
-              wt4_up = x5[3]+1;
-              x3[3] = frame.wt_slot+1;
+              wt4_up_cur = wt4_cur+1;
+              wt4_up = wt4_cur+1;
+              wt8_up_cur = frame.wt_slot+1;
               wt8_up = frame.wt_slot+1;
-              x0[3] = x5[3]+wt_step;
-              wt4_up_end = x5[3]+wt_step;
-              x0[2] = frame.wt_slot+wt_step;
+              wt4_up_end_cur = wt4_cur+wt_step;
+              wt4_up_end = wt4_cur+wt_step;
+              wt8_up_end_cur = frame.wt_slot+wt_step;
               wt8_up_end = frame.wt_slot+wt_step;
               while( 1 ) {
                 if( wt4_up>=wt4_up_end&&wt8_up>=wt8_up_end ) {
                   wt8 = frame.wt_slot;
-                  wt4 = x5[3];
+                  wt4 = wt4_cur;
                   n_planes = frame.nplanes_s;
                   goto weights_chosen;
                 }
                 if( wt4_up<wt4_up_end&&wt4_up<192 ) {
-                  x0[2] = wt8_up_end;
+                  wt8_up_end_cur = wt8_up_end;
                   memset(frame.buf_1, 0, 2048);
                   int32_t npix_a = img->width*(img->height-1);
                   int32_t stride_a = (uint16_t)img->stride;
-                  x3[3] = wt8_up;
-                  x1[0] = wt4_up;
+                  wt8_up_cur = wt8_up;
+                  wt4_up_cur = wt4_up;
                   int32_t n_a = npix_a-1;
                   int32_t ofs_up_a = -stride_a;
                   int32_t left_a = -plane_count;
@@ -232,33 +236,33 @@ int32_t choose_plane_coding(BmfImage* img) {
                     int32_t ul_a = p_a[ofs_ul_a];
                     int32_t g_a = ul_a+*p_a-p_a[ofs_up_a]-p_a[left_a];
                     int32_t cur_a = *q_a;
-                    int32_t bin_a = ((int16_t)g_a-(uint16_t)((x1[0]*(q_a[ofs_ul_a]+cur_a-q_a[ofs_up_a]-q_a[left_a])+frame.wt_slot*(row_c[ofs_ul_a]+*row_c-row_c[ofs_up_a]-(uint32_t)row_c[left_a])+40)>>7)-256)&0x1FF;
+                    int32_t bin_a = ((int16_t)g_a-(uint16_t)((wt4_up_cur*(q_a[ofs_ul_a]+cur_a-q_a[ofs_up_a]-q_a[left_a])+frame.wt_slot*(row_c[ofs_ul_a]+*row_c-row_c[ofs_up_a]-(uint32_t)row_c[left_a])+40)>>7)-256)&0x1FF;
                     ++*(uint32_t*)&frame.buf_1[4*bin_a];
                     q_a -= left_a;
                     p_a -= left_a;
                     row_c -= left_a;
                     --n_a;
                   } while( n_a );
-                  wt8_up = x3[3];
-                  wt4_up = x1[0];
+                  wt8_up = wt8_up_cur;
+                  wt4_up = wt4_up_cur;
                   uint32_t cost_a = estimate_cost((uint8_t*)frame.buf_1, 512);
-                  wt8_up_end = x0[2];
-                  wt4_best = x5[3];
+                  wt8_up_end = wt8_up_end_cur;
+                  wt4_best = wt4_cur;
                   if( cost_a<best_cost ) {
                     best_cost = cost_a;
                     wt4_best = wt4_up;
                   }
-                  x5[3] = wt4_best;
+                  wt4_cur = wt4_best;
                   wt4_up_end = wt_step+wt4_best;
                 }
                 if( wt8_up<wt8_up_end&&wt8_up<192 ) {
                   {
-                    x0[3] = wt4_up_end;
+                    wt4_up_end_cur = wt4_up_end;
                     memset(buf_2, 0, 2048);
                     int32_t npix_b = img->width*(img->height-1);
                     int32_t stride_b = (uint16_t)img->stride;
-                    x3[3] = wt8_up;
-                    x1[0] = wt4_up;
+                    wt8_up_cur = wt8_up;
+                    wt4_up_cur = wt4_up;
                     int32_t n_b = npix_b-1;
                     int32_t ofs_up_b = -stride_b;
                     int32_t left_b = -plane_count;
@@ -270,17 +274,17 @@ int32_t choose_plane_coding(BmfImage* img) {
                       int32_t ul_b = p_b[ofs_ul_b];
                       int32_t g_b = ul_b+*p_b-p_b[ofs_up_b]-p_b[left_b];
                       int32_t cur_b = *q_b;
-                      int32_t bin_b = ((int16_t)g_b-(uint16_t)((x5[3]*(q_b[ofs_ul_b]+cur_b-q_b[ofs_up_b]-q_b[left_b])+x3[3]*(row_d[ofs_ul_b]+*row_d-row_d[ofs_up_b]-(uint32_t)row_d[left_b])+40)>>7)-256)&0x1FF;
+                      int32_t bin_b = ((int16_t)g_b-(uint16_t)((wt4_cur*(q_b[ofs_ul_b]+cur_b-q_b[ofs_up_b]-q_b[left_b])+wt8_up_cur*(row_d[ofs_ul_b]+*row_d-row_d[ofs_up_b]-(uint32_t)row_d[left_b])+40)>>7)-256)&0x1FF;
                       ++*(uint32_t*)&buf_2[4*bin_b];
                       q_b -= left_b;
                       p_b -= left_b;
                       row_d -= left_b;
                       --n_b;
                     } while( n_b );
-                    wt8_up = x3[3];
-                    wt4_up = x1[0];
+                    wt8_up = wt8_up_cur;
+                    wt4_up = wt4_up_cur;
                     uint32_t cost_b = estimate_cost(buf_2, 512);
-                    wt4_up_end = x0[3];
+                    wt4_up_end = wt4_up_end_cur;
                     wt8_best = frame.wt_slot;
                     if( cost_b<best_cost ) {
                       best_cost = cost_b;
@@ -331,12 +335,12 @@ int32_t choose_plane_coding(BmfImage* img) {
             wt4_dn = frame.s1;
             uint32_t cost_c = estimate_cost(buf_3, 512);
             wt8_dn_end = *(uint32_t*)frame.buf_1;
-            wt4_best_dn = x5[3];
+            wt4_best_dn = wt4_cur;
             if( cost_c<best_cost ) {
               best_cost = cost_c;
               wt4_best_dn = wt4_dn;
             }
-            x5[3] = wt4_best_dn;
+            wt4_cur = wt4_best_dn;
             wt4_dn_end = wt4_best_dn-wt_step;
           }
           if( wt8_dn>wt8_dn_end&&wt8_dn>=-64 ) {
@@ -366,7 +370,7 @@ int32_t choose_plane_coding(BmfImage* img) {
                 frame.s10 = g_d;
                 r_d = &frame.p5[-left_d];
                 n_d = frame.s7;
-                int32_t bin_d = ((uint16_t)frame.s10-(uint16_t)((x5[3]*(q_d[frame.s8]+cur_d-q_d[frame.s9]-q_d[left_d])+frame.s6*(frame.p5[frame.s8]+*frame.p5-frame.p5[frame.s9]-(uint32_t)frame.p5[left_d])+40)>>7)-256)&0x1FF;
+                int32_t bin_d = ((uint16_t)frame.s10-(uint16_t)((wt4_cur*(q_d[frame.s8]+cur_d-q_d[frame.s9]-q_d[left_d])+frame.s6*(frame.p5[frame.s8]+*frame.p5-frame.p5[frame.s9]-(uint32_t)frame.p5[left_d])+40)>>7)-256)&0x1FF;
                 ++*(uint32_t*)&buf_4[4*bin_d];
                 q_d -= left_d;
                 p_d = &frame.p4[-left_d];
@@ -393,13 +397,13 @@ weights_chosen:
       px = &img->pixels[frame.row_stride+n_planes+xform];
       if( px<data_end ) {
         frame.wt_slot = wt8;
-        x5[3] = wt4;
+        wt4_cur = wt4;
         frame.nplanes_s = n_planes;
         do {
           c2 = px[frame.plane_b];
           c2w = c2*frame.wt_slot;
           c1 = px[frame.plane_a];
-          c1w = c1*x5[3];
+          c1w = c1*wt4_cur;
           ++frame.hist_c[c2-c1+1280];
           c0 = *px+512;
           px += frame.nplanes_s;
@@ -410,7 +414,7 @@ weights_chosen:
           ++frame.hist_c[(c0-((uint32_t)(((c1+c2)<<6)+40)>>7))];
         } while( px<data_end );
         wt8 = frame.wt_slot;
-        wt4 = x5[3];
+        wt4 = wt4_cur;
         n_planes = frame.nplanes_s;
       }
       slack = best_cost>>7;
@@ -549,7 +553,7 @@ weights_chosen:
           // because MSVC had both halves in registers, and `__PAIR64__` is its
           // name for that.  The two slots are `wb` and `wc` and nothing
           // between the store and the reload writes either: the loop assigns
-          // `x0[2]` and `x0[3]`, and those two slots have no other reader in
+          // `wt8_up_end_cur` and `wt4_up_end_cur`, and those two slots have no other reader in
           // the function at all.  So the spill is the two names.
           uu = n_quads;
           quad = 0;
@@ -557,28 +561,28 @@ weights_chosen:
             nx0 = img->pixels[4*quad+4];
             dg0 = img->pixels[4*quad]+pp[4*quad+4];
             dn0 = pp[4*quad];
-            x0[2] = quad;
+            wt8_up_end_cur = quad;
             ad0 = nx0+dn0;
             dnx1 = pp[4*quad+5];
             g0 = dg0-ad0;
             dn1 = pp[4*quad+1];
-            x0[3] = g0;
+            wt4_up_end_cur = g0;
             nx2 = img->pixels[4*quad+6];
             g1 = img->pixels[4*quad+1]+dnx1-(img->pixels[4*quad+5]+dn1);
             dnx2 = pp[4*quad+6];
-            x1[0] = g1;
+            wt4_up_cur = g1;
             g2 = img->pixels[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
             g1w = (uint16_t)(img->pixels[4*quad+3]+pp[4*quad+7]-pp[4*quad+3]-img->pixels[4*quad+7]);
-            g1_lo = (int16_t)x1[0];
+            g1_lo = (int16_t)wt4_up_cur;
             g1w = g1w-512;
-            pa = x1[0]*wb+x0[3]*wa_slot;
+            pa = wt4_up_cur*wb+wt4_up_end_cur*wa_slot;
             pb = g2*wc;
-            ++frame.hist_a[(g1w-(int16_t)x0[3])&0x3FF];
+            ++frame.hist_a[(g1w-(int16_t)wt4_up_end_cur)&0x3FF];
             bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
             ++*(uint32_t*)&frame.buf[4*bin_lin];
             ++frame.hist_b[(g1w-g1_lo)&0x3FF];
             g1w = g1w-g2;
-            quad_r = x0[2];
+            quad_r = wt8_up_end_cur;
             ++frame.hist_c[g1w&0x3FF];
             alpha = pp[4*quad_r+7]+256;
             bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad_r+5]+wa_slot*pp[4*quad_r+4]+wc*(uint32_t)pp[4*quad_r+6]+63)>>7)+256)&0x3FF;
