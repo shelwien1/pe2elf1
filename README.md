@@ -115,10 +115,36 @@ Sample code → mp3 value:
   plain radix decomposition of the *whole* code, so even codes above `mod³`
   (which a strict encoder never emits) round-trip exactly.
 
-Per granule the packer picks `region0_count`, `region1_count` and the three
-Huffman tables by measuring the real cost of every candidate over every band
-range, so each region gets the cheapest table that can represent it — including
-table 0 for all-zero regions.
+### The mp3 is coded for the recompressor, not for size
+
+The packer's default is *uniform* side info: one Huffman table for all three
+regions of every granule, `region0_count = region1_count = 0`, and
+`big_values = 288` — so the only side-info field that ever changes is
+`part2_3_length`. The table is chosen once for the whole file, as the cheapest
+one that can express every value in it.
+
+That deliberately makes the mp3 about a third larger than it needs to be. It is
+what an mp3 recompressor wants: it re-derives the spectral values anyway, so the
+Huffman coding costs it nothing, while every side-info field that varies has to
+be paid for. Measured with mp3zip on the sample:
+
+| encoding | mp3 | after mp3zip |
+| --- | ---: | ---: |
+| per-granule optimal tables + regions | 6 539 103 | 5 765 677 |
+| one fixed table, fixed regions | 8 210 407 | 5 726 346 |
+| + `big_values` fixed at 288 | 9 007 070 | **5 707 362** |
+| + `global_gain` set from granule magnitude | 9 226 541 | 5 717 261 |
+
+Making `global_gain` a magnitude hint *costs* 10 KB, so the recompressor does not
+use it to predict quantized magnitudes — anything that varies is pure expense.
+Constant bitrate loses to VBR (5 718 002), and turning the bit reservoir off is a
+disaster (12.4 MB — mp3zip essentially gives up).
+
+When a granule cannot be coded uniformly inside the 4095-bit `part2_3_length`
+limit — high-bitrate material, where 576 escape-coded values do not fit — the
+packer falls back to picking `region0_count`, `region1_count` and a table per
+region by measuring the real cost of every candidate over every band range,
+which produces the smallest legal mp3 instead.
 
 ### Frames per frame
 
@@ -143,35 +169,33 @@ frame (ordinary VBR), which keeps stuffing near zero.
 mp2 frames : 13827
 mp3 frames : 13827
 granules   : 2 per frame per channel
-mp3 bitrate: 32..192 kbps (vbr)
-max part23 : 1535 bits
-samples    : 6301314 bytes mp2 -> 6026320 bytes huffman (95.6%)
+side info  : uniform (huffman table 22, fixed regions)
+mp3 bitrate: 48..256 kbps (vbr)
+max part23 : 2165 bits
+samples    : 6301314 bytes mp2 -> 8503298 bytes huffman (134.9%)
 input      : 7223902 bytes
-output.mp3 : 6539103 bytes
+output.mp3 : 9007070 bytes
 output.meta: 1133581 bytes
 ```
 
-The Huffman-coded spectral data is *smaller* than the fixed-width Layer II
-sample data it came from (95.6 %), because Layer II spends the same number of
-bits on every sample of a subband while the mp3 tables can exploit the fact that
-most of them are small. What is left over is the mp3 frame headers and side
-info, 36 bytes per frame.
+Raw sizes are not the point — the pair exists to be compressed. Packing the mp3
+with `mp3zip` and the meta with `xz -9e`:
 
-Raw sizes are not the point — the pair exists to be compressed. With plain
-`xz -9e` and no mp3-specific modelling at all:
+| | bytes |
+| --- | ---: |
+| `xz -9e` of the original mp2 | 6 936 752 |
+| `mp3zip(output.mp3)` | 5 707 362 |
+| `xz -9e (output.meta)` | 447 100 |
+| **total** | **6 154 462** |
 
-| | raw | xz -9e |
-| --- | ---: | ---: |
-| `Creditsmix_Comp.mp2` | 7 223 902 | 6 936 752 |
-| `output.mp3` | 6 539 103 | 6 388 608 |
-| `output.meta` | 1 133 581 | 447 100 |
-| mp3 + meta | 7 672 684 | **6 835 708** |
+**782 290 bytes, 11.3 %, below compressing the mp2 directly.** The whole chain
+`mp2 → mp3+meta → mp3zip → mp3 → mp2` is byte-exact, and mp3zip is confirmed
+lossless on this mp3 (it is an unusual one — zero-length scalefactors, constant
+side info, wide VBR swings).
 
-so the split already beats compressing the mp2 directly, by 101 044 bytes,
-with all of the actual gain still to come from an mp3 recompressor working on
-the 6.4 MB of spectral data. (With the meta written as one raw bit region the
-compressed total was 7 021 240 — *worse* than the mp2 — which is what the
-layout above fixes.)
+Without an mp3-aware packer, `xz` alone on both files gives 6 835 708, which
+still beats the mp2. (With the meta written as one raw bit region that number
+was 7 021 240 — *worse* than the mp2 — which is what the layout above fixes.)
 
 The generated mp3 parses cleanly end to end with the reference decoder:
 
@@ -185,13 +209,15 @@ frames 13827 layer 3 ch 2 sr 44100 consumed 6539103/6539103 skipped 0 failed 0
 The mp3 side info has room to spare: `global_gain`, `scalefac_compress`,
 `preflag`, `scalefac_scale`, `count1table_select`, `scfsi` and the private bits
 are all constant here, 71 bits per frame, 123 KB over this file. Filling them
-would shrink the raw total, but it makes the *compressed* total worse. Those
-123 KB would hold about 164 000 scalefactors, which cost ~75 KB inside the meta
-where they sit next to their neighbours from the same subband; scattered one
-per granule across fixed-width side-info fields they compress to essentially
-nothing less than their raw 123 KB. Net result is roughly 48 KB worse. Moving
-bits between the two files does not remove information — only giving the
-modeller better context does, which is what the meta layout is for.
+shrinks the raw total but costs on both sides of the measurement. Under `xz`,
+the ~164 000 scalefactors that would fit there cost about 75 KB inside the meta,
+next to their neighbours from the same subband, and close to their full raw
+123 KB once scattered one per granule through fixed-width fields. Under mp3zip
+the direct experiment says the same thing: putting a magnitude hint in
+`global_gain` — data it could actually use — made the packed mp3 10 KB *larger*.
+Moving bits between the two files does not remove information; only giving the
+modeller better context does, which is what the meta layout and the uniform
+side info are for.
 
 ## Coverage
 

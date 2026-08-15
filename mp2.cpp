@@ -403,9 +403,29 @@ static void sfb_bounds(const byte* mp3hdr, int* B /*[23]*/) {
 
 #define COST_INF (1<<28)
 
-// pick region split + Huffman tables, return part2_3_length in bits
-static int choose_granule(const int* v, int nvals, const int* B, GrParam &gp) {
+// Pick region split + Huffman tables, return part2_3_length in bits.
+//
+// With fixtab >= 0 the granule is coded in "uniform" style: one table for all
+// three regions, region0_count = region1_count = 0 and big_values = 288, so
+// every side info field except part2_3_length is the same in every granule of
+// the file.  That is deliberately not the smallest mp3 - it is the one an mp3
+// recompressor likes best, since it re-derives the spectral values anyway and
+// only has to pay for whatever varies (measured: ~1% smaller after mp3zip,
+// even though the mp3 itself grows by a third).
+static int choose_granule(const int* v, int nvals, const int* B, GrParam &gp, int fixtab) {
   memset(&gp, 0, sizeof(gp));
+  if( fixtab>=0 ) {
+    gp.big_values = 288;
+    gp.t[0] = gp.t[1] = gp.t[2] = (byte)fixtab;
+    int bits = 0;
+    for( int i = 0; i<288; i++ ) {
+      int c = pair_cost(fixtab, iabs(v[2*i]), iabs(v[2*i+1]));
+      if( c<0 ) return COST_INF;
+      bits += c;
+    }
+    gp.part23 = (word)(bits>65535 ? 65535 : bits);
+    return bits;
+  }
   int P = (nvals+1)>>1;
   if( P<=0 ) return 0;
   if( P>288 ) P = 288;
@@ -699,6 +719,7 @@ struct EncOut {
   int bitrate_index;
   int frames;                 // mp3 frames written
   int maxgran;                // largest part2_3_length used
+  int fixtab;                 // uniform Huffman table, -1 = per-granule optimised
   qword src_sample_bits;      // Layer II sample bits packed
   qword huff_bits;            // Layer III huffman bits produced
   std::vector<byte> mp3;
@@ -706,9 +727,100 @@ struct EncOut {
   qword md_bytes;
 };
 
+// Parse one Layer II frame and spread its sample codes over Layer III spectral
+// lines in g_vals: subband sb of parts [g*PPG, g*PPG+PPG) -> lines
+// [sb*VPS, sb*VPS+VPS) of granule g.  bk*/whi/wtail may be null (dry run).
+static int frame_to_values(const byte* fr, int fbytes, int PPG, int VPS, L2Info &li,
+                           std::vector<byte>* bkA, std::vector<byte>* bkS, std::vector<byte>* bkF,
+                           BitWriter* whi, BitWriter* wtail) {
+  int hb = 4+(_HDR_IS_CRC(fr) ? 2 : 0);
+  if( !l2_parse(fr, fbytes, li, bkA, bkS, bkF) ) return 0;
+
+  BitReader br;
+  br.init(fr+hb, (qword)(fbytes-hb));
+  br.pos = li.prefix_bits;
+
+  memset(g_vals, 0, sizeof(g_vals));
+  int tb = li.lay.total_bands;
+  for( int part = 0; part<12; part++ ) {
+    int gi = part/PPG, lp = part%PPG;
+    for( int i = 0; i<2*tb; i++ ) {
+      int ba = li.bas[i];
+      if( !ba ) continue;
+      int sb = i>>1, ch = i&1;
+      int* dst = &g_vals[ch][gi][sb*VPS+lp*3];
+      if( ba<17 ) {
+        if( ba<15 ) {
+          int half = (1<<(ba-1))-1;
+          for( int k = 0; k<3; k++ ) dst[k] = (int)br.get(ba)-half;
+        } else {
+          for( int k = 0; k<3; k++ ) {
+            uint code = br.get(ba);
+            if( whi ) whi->put(code>>14, ba-14);   // top bits do not fit in an mp3 value
+            dst[k] = (int)(code&0x3FFF)-8191;
+          }
+        }
+      } else {
+        int mod = ba_mod(ba), h = mod/2;
+        uint code = br.get(ba_nbits(ba));
+        dst[0] = (int)(code%(uint)mod)-h;
+        dst[1] = (int)((code/(uint)mod)%(uint)mod)-h;
+        dst[2] = (int)(code/(uint)(mod*mod))-h;
+      }
+    }
+  }
+  if( br.over ) return 0;
+  if( wtail ) {
+    qword used = (qword)hb*8+li.prefix_bits+li.sample_bits;
+    copy_bits(br, *wtail, (qword)fbytes*8-used);
+  }
+  return 1;
+}
+
+// Best single Huffman table for the whole file, or -1 if none can express every
+// value.  The exact cost of a table follows from a 16x16 histogram of clamped
+// magnitude pairs plus the escape and nonzero counts, so all candidates can be
+// scored from one pass over the file.
+static int pick_uniform_table(const Buf &in, const std::vector<FrameRec> &frames, int G) {
+  const int PPG = 12/G, VPS = 3*PPG;
+  qword H[16][16], esc = 0, nz = 0;
+  int maxabs = 0;
+  memset(H, 0, sizeof(H));
+  for( size_t f = 0; f<frames.size(); f++ ) {
+    L2Info li;
+    if( !frame_to_values(in.p()+frames[f].off, frames[f].bytes, PPG, VPS, li, 0, 0, 0, 0, 0) ) return -1;
+    int nch = _HDR_IS_MONO(in.p()+frames[f].off) ? 1 : 2;
+    for( int ch = 0; ch<nch; ch++ ) for( int gi = 0; gi<G; gi++ ) {
+      const int* v = g_vals[ch][gi];
+      for( int i = 0; i<288; i++ ) {
+        int a = iabs(v[2*i]), b = iabs(v[2*i+1]);
+        if( a>maxabs ) maxabs = a;
+        if( b>maxabs ) maxabs = b;
+        if( a ) nz++;
+        if( b ) nz++;
+        if( a>=15 ) esc++;
+        if( b>=15 ) esc++;
+        H[a>15 ? 15 : a][b>15 ? 15 : b]++;
+      }
+    }
+  }
+  int best = -1;
+  qword bestcost = 0;
+  for( int ti = 0; ti<NTAB; ti++ ) {
+    int t = g_tablist[ti];
+    if( g_hmax[t]<maxabs ) continue;
+    qword c = nz+(qword)g_hlinbits[t]*esc;
+    for( int i = 0; i<16; i++ ) for( int j = 0; j<16; j++ ) {
+      if( H[i][j] ) c += H[i][j]*(qword)g_ht[t].len[i][j];
+    }
+    if( best<0||c<bestcost ) { best = t; bestcost = c; }
+  }
+  return best;
+}
+
 static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
                        const std::vector<GapRec> &gaps, int free_format_bytes,
-                       int G, EncOut &out) {
+                       int G, int fixtab, EncOut &out) {
   const int PPG = 12/G;                 // Layer II parts per Layer III granule
   const int VPS = 3*PPG;                // spectral lines per subband per granule
 
@@ -736,57 +848,16 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
     int nch = _HDR_IS_MONO(fr) ? 1 : 2;
 
     L2Info li;
-    if( !l2_parse(fr, fbytes, li, bkA, bkS, bkF) ) {
+    if( !frame_to_values(fr, fbytes, PPG, VPS, li, bkA, bkS, bkF, &whi, &wtail) ) {
       fprintf(stderr, "mp2: frame %d unparsable\n", (int)fi);
       return 0;
     }
+    int tb = li.lay.total_bands;
 
     hdrs.push_back(fr[0]); hdrs.push_back(fr[1]); hdrs.push_back(fr[2]); hdrs.push_back(fr[3]);
     if( hb==6 ) { crcs.push_back(fr[4]); crcs.push_back(fr[5]); }
 
-    // (l2_parse has already bucketed bit_alloc / scfsi / scalefactors)
-    BitReader br;
-    br.init(fr+hb, (qword)(fbytes-hb));
-    br.pos = li.prefix_bits;
-
-    // ---- unpack the sample codes into Layer III spectral lines
-    memset(g_vals, 0, sizeof(g_vals));
-    int tb = li.lay.total_bands;
-    for( int part = 0; part<12; part++ ) {
-      int gi = part/PPG, lp = part%PPG;
-      for( int i = 0; i<2*tb; i++ ) {
-        int ba = li.bas[i];
-        if( !ba ) continue;
-        int sb = i>>1, ch = i&1;
-        int* dst = &g_vals[ch][gi][sb*VPS+lp*3];
-        if( ba<17 ) {
-          int nb = ba;
-          if( ba<15 ) {
-            int half = (1<<(ba-1))-1;
-            for( int k = 0; k<3; k++ ) dst[k] = (int)br.get(nb)-half;
-          } else {
-            for( int k = 0; k<3; k++ ) {
-              uint code = br.get(nb);
-              whi.put(code>>14, ba-14);           // top bits do not fit in an mp3 value
-              dst[k] = (int)(code&0x3FFF)-8191;
-            }
-          }
-        } else {
-          int mod = ba_mod(ba), h = mod/2;
-          uint code = br.get(ba_nbits(ba));
-          dst[0] = (int)(code%(uint)mod)-h;
-          dst[1] = (int)((code/(uint)mod)%(uint)mod)-h;
-          dst[2] = (int)(code/(uint)(mod*mod))-h;
-        }
-      }
-    }
-    if( br.over ) { fprintf(stderr, "mp2: frame %d truncated\n", (int)fi); return 0; }
-
     src_sample_bits += li.sample_bits;
-
-    // ---- the remaining (ancillary) bits of the Layer II frame
-    qword used = (qword)hb*8+li.prefix_bits+li.sample_bits;
-    copy_bits(br, wtail, (qword)fbytes*8-used);
 
     // ---- how many spectral lines each channel actually uses
     int nvals[2] = {0, 0};
@@ -812,7 +883,7 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
         int gr = s/nch, ch = s%nch;
         int gi = mf*gr_per_frame+gr;
         int* v = g_vals[ch][gi];
-        int bits = choose_granule(v, nvals[ch], B, slot[s]);
+        int bits = choose_granule(v, nvals[ch], B, slot[s], fixtab);
         if( bits>4095 ) return 0;      // does not fit into part2_3_length
         if( bits>maxgran ) maxgran = bits;
         huff_bits += (qword)bits;
@@ -954,6 +1025,7 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
   out.bitrate_index = brmin|(brmax<<8);
   out.frames = nmp3frames;
   out.maxgran = maxgran;
+  out.fixtab = fixtab;
   out.src_sample_bits = src_sample_bits;
   out.huff_bits = huff_bits;
   out.mp3.swap(mp3);
@@ -975,10 +1047,12 @@ static int compress(const char* inpath, const char* mp3path, const char* metapat
 
   EncOut out;
   out.ok = 0;
-  int G = 0;
-  for( int gi = 0; gi<4; gi++ ) {
-    G = G_CHOICES[gi];
-    if( encode_pass(in, frames, gaps, free_format_bytes, G, out) ) break;
+  for( int gi = 0; gi<4&&!out.ok; gi++ ) {
+    int G = G_CHOICES[gi];
+    int ut = frames.empty() ? -1 : pick_uniform_table(in, frames, G);
+    if( ut>=0&&encode_pass(in, frames, gaps, free_format_bytes, G, ut, out) ) break;
+    out.ok = 0;
+    if( encode_pass(in, frames, gaps, free_format_bytes, G, -1, out) ) break;
     out.ok = 0;
   }
   if( !out.ok ) { fprintf(stderr, "mp2: failed to pack the stream\n"); return 1; }
@@ -995,6 +1069,8 @@ static int compress(const char* inpath, const char* mp3path, const char* metapat
   printf("mp2 frames : %u\n", (uint)frames.size());
   printf("mp3 frames : %d\n", out.frames);
   printf("granules   : %d per frame per channel\n", out.G);
+  if( out.fixtab>=0 ) printf("side info  : uniform (huffman table %d, fixed regions)\n", out.fixtab);
+  else                printf("side info  : per-granule optimised\n");
   if( out.frames ) {
     byte h[4];
     memcpy(h, out.mp3.empty() ? (const byte*)"\0\0\0\0" : &out.mp3[0], 4);
