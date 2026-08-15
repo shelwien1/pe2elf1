@@ -62,9 +62,7 @@ struct AltP1Block {
     {
       P1Ctx*const here = cursor[0];
       P1Ctx*const up = cursor[1];
-      here[-3] = up[2];
-      here[-2] = up[1];
-      here[-1] = up[0];
+      for( int32_t i = 0; i<3; ++i ) here[-3+i] = up[2-i];
     }
   }
 
@@ -387,34 +385,18 @@ struct AltP1Block {
       int32_t bump = 2*pair+++1==p1_slot_edges[slot1];
       slot = bump+slot1;
     } while( pair<0x80 );
-    ctx_w[0].w[1] = 32;
-    ctx_w[8].w[0] = 0;
-    ctx_w[7].w[0] = 0;
-    ctx_w[0].w[2] = 64;
-    ctx_w[6].w[0] = 0;
-    ctx_w[5].w[0] = 0;
-    ctx_w[4].w[0] = 0;
-    ctx_w[1].w[1] = 96;
-    ctx_w[3].w[0] = 0;
-    ctx_w[2].w[0] = 0;
-    ctx_w[1].w[0] = 0;
-    ctx_w[1].w[2] = 192;
-    ctx_w[0].w[0] = 0;
+    // The nine weights `alt_p1_context` sums, one per selector.  This was
+    // twenty-seven assignments in scheduler order with `uint32_t row = 0;`
+    // dropped into the middle of them, and none of the three sequences was
+    // readable through the interleaving: the middle weight triples from one
+    // context to the next, the top weight is twice the middle, and the bottom
+    // weight is zero.  The numbers 32 .. 419904 are that formula run out.
+    for( int32_t c = 0, w1 = 32; c<9; ++c, w1 *= 3 ) {
+      ctx_w[c].w[0] = 0;
+      ctx_w[c].w[1] = w1;
+      ctx_w[c].w[2] = 2*w1;
+    }
     uint32_t row = 0;
-    ctx_w[2].w[1] = 288;
-    ctx_w[2].w[2] = 576;
-    ctx_w[3].w[1] = 864;
-    ctx_w[3].w[2] = 1728;
-    ctx_w[4].w[1] = 2592;
-    ctx_w[4].w[2] = 5184;
-    ctx_w[5].w[1] = 7776;
-    ctx_w[5].w[2] = 15552;
-    ctx_w[6].w[1] = 23328;
-    ctx_w[6].w[2] = 46656;
-    ctx_w[7].w[1] = 69984;
-    ctx_w[7].w[2] = 139968;
-    ctx_w[8].w[1] = 209952;
-    ctx_w[8].w[2] = 419904;
     do
       buf[row++] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+10));
     while( row<5 );
@@ -423,25 +405,13 @@ struct AltP1Block {
     if( width>-10 ) {
       int32_t r = 0;
       do {
-        buf[4][r].sym = 72;
-        buf[3][r].sym = 72;
-        buf[2][r].sym = 72;
-        buf[1][r].sym = 72;
-        buf[0][r].sym = 72;
-        buf[4][r].mag = 0;
-        buf[3][r].mag = 0;
-        buf[2][r].mag = 0;
-        buf[1][r].mag = 0;
-        buf[0][r].mag = 0;
+        for( int32_t i = 0; i<5; ++i ) buf[4-i][r].sym = 72;
+        for( int32_t i = 0; i<5; ++i ) buf[4-i][r].mag = 0;
         wid = width;
         ++r;
       } while( r<width+10 );
     }
-    cursor[0] = buf[0]+wid+4;
-    cursor[1] = buf[1]+wid+4;
-    cursor[2] = buf[2]+wid+4;
-    cursor[3] = buf[3]+wid+4;
-    cursor[4] = buf[4]+wid+4;
+    for( int32_t i = 0; i<5; ++i ) cursor[i] = buf[i]+wid+4;
     return this;
   }
 

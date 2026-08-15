@@ -207,17 +207,14 @@ struct ModelBlock {
               int32_t c4 = cache[4];
               if( just==c4 ) {
                 cache[4] = c3;
-                sym_cache[3] = sym_cache[2];
-                sym_cache[2] = sym_cache[1];
-                sym_cache[1] = sym_cache[0];
+                // The direction is load-bearing: the turns touch the same places.
+                for( int32_t n = 0; n<3; ++n ) sym_cache[3-n] = sym_cache[2-n];
               } else {
                 int32_t c5 = cache[5];
                 if( just==c5 ) {
                   cache[5] = c4;
-                  sym_cache[4] = sym_cache[3];
-                  sym_cache[3] = sym_cache[2];
-                  sym_cache[2] = sym_cache[1];
-                  sym_cache[1] = sym_cache[0];
+                  // The direction is load-bearing: the turns touch the same places.
+                  for( int32_t n = 0; n<4; ++n ) sym_cache[4-n] = sym_cache[3-n];
                 } else {
                   int32_t c6 = cache[6];
                   if( just==c6 ) {
@@ -226,11 +223,8 @@ struct ModelBlock {
                     cache[7] = c6;
                     sym_cache[6] = sym_cache[5];
                   }
-                  sym_cache[5] = sym_cache[4];
-                  sym_cache[4] = sym_cache[3];
-                  sym_cache[3] = sym_cache[2];
-                  sym_cache[2] = sym_cache[1];
-                  sym_cache[1] = sym_cache[0];
+                  // The direction is load-bearing: the turns touch the same places.
+                  for( int32_t n = 0; n<5; ++n ) sym_cache[5-n] = sym_cache[4-n];
                 }
               }
             }
@@ -396,10 +390,7 @@ struct ModelBlock {
           this_1->ctx_bucket[g+15*lo+75*k] = g1;
           int32_t m5 = this_1->alphabet;
           FreqRec *rec = &this_1->grid[g1];
-          rec->w[1] = 2;
-          rec->w[2] = 2;
-          rec->w[3] = 2;
-          rec->w[4] = 2;
+          for( int32_t n = 0; n<4; ++n ) rec->w[1+n] = 2;
           if( f_w3_double ) {
             w2 = (uint16_t)(rec->w[4]+rec->w[3]);
             rec->w[3] = w2;
@@ -666,10 +657,7 @@ struct ModelBlock {
           do {
             row[q5] = row_at;
             row_at += 5*chunk;
-            row[q5+1] = &expand_buf[chunk*(q5+1)];
-            row[q5+2] = &expand_buf[chunk*(q5+2)];
-            row[q5+3] = &expand_buf[chunk*(q5+3)];
-            row[q5+4] = &expand_buf[chunk*(q5+4)];
+            for( int32_t n = 0; n<4; ++n ) row[q5+1+n] = &expand_buf[chunk*(q5+1+n)];
             q5 += 5;
           } while( q5<=nchunk-6 );
           done = q5;

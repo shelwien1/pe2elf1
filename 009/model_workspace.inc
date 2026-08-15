@@ -54,12 +54,7 @@ ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t im
       int32_t r = 0;
       do {
         row_cur[j][r].sym = 0;
-        row_cur[j][r].match[5] = 1;
-        row_cur[j][r].match[4] = 1;
-        row_cur[j][r].match[3] = 1;
-        row_cur[j][r].match[2] = 1;
-        row_cur[j][r].match[1] = 1;
-        row_cur[j][r].match[0] = 1;
+        for( int32_t i = 0; i<6; ++i ) row_cur[j][r].match[5-i] = 1;
         w = width;
         ++r;
       } while( (uint32_t)r<width+16 );

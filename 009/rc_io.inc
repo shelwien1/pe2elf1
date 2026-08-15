@@ -96,17 +96,16 @@ static uint16_t* begin_plane_stream() {
   if( tbl ) {
     int32_t k = 0;
     uint16_t *row = tbl;
+    // The ten numbers every row starts from.  They were ten stores in
+    // scheduler order with `row[0]` last and spelled `*row`, one row at a
+    // time, a thousand and twenty-four times; the values are unrelated to each
+    // other, so this is a table and not a loop, and index order is the only
+    // thing that lets it be read against the model it seeds.
+    const uint16_t seed_row[10] = {
+      635, (uint16_t)(24*alt_freq_limit), 205, 124, 147, 83, 48, 16, 8, 4,
+    };
     do {
-      row[1] = 24*alt_freq_limit;
-      row[2] = 205;
-      row[6] = 48;
-      row[3] = 124;
-      row[7] = 16;
-      row[4] = 147;
-      row[5] = 83;
-      row[8] = 8;
-      row[9] = 4;
-      *row = 635;
+      memcpy(row, seed_row, sizeof seed_row);
       FreqPair* seed = (FreqPair*)&row[10];
       for( uint32_t i = 0; i<0x7A; ++i ) {
         seed[i].f[0] = 60;

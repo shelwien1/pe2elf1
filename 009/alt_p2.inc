@@ -147,25 +147,12 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
   }
   {
     P2Ctx*const here = cursor[0];
-    here[0] = here[-1];
-    here[1] = here[-1];
-    here[2] = here[-1];
-    here[3] = here[-1];
-    here[4] = here[-1];
+    for( int32_t i = 0; i<5; ++i ) here[i] = here[-1];
   }
   P2Ctx*const rec3 = cursor[0]+(-width);
-  rec3[-1] = rec3[0];
-  rec3[-2] = rec3[1];
-  rec3[-3] = rec3[2];
-  rec3[-4] = rec3[3];
-  rec3[-5] = rec3[4];
-  rec3[-6] = rec3[5];
-  rec3[-7] = rec3[6];
-  rec3[-8] = rec3[7];
+  for( int32_t i = 0; i<8; ++i ) rec3[-1-i] = rec3[i];
   int32_t row_bytes = 18*width+234;
-  memcpy(buf[1], buf[0], row_bytes);
-  memcpy(buf[2], buf[0], row_bytes);
-  memcpy(buf[3], buf[0], row_bytes);
+  for( int32_t i = 0; i<3; ++i ) memcpy(buf[1+i], buf[0], row_bytes);
   if( height>1 ) {
     uint32_t* pair = ctx_pair;
     outp = out;
@@ -187,31 +174,18 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       r1[-1] = *r0;
       cur[-2] = *r0;
       memset(p2_row, 0, 15);
-      bias[0] = 0.0f;
-      bias[1] = 0.0f;
-      bias[2] = 0.0f;
-      bias[3] = 0.0f;
+      for( int32_t i = 0; i<4; ++i ) bias[i] = 0.0f;
       __builtin_memset(p2_row, 0, sizeof p2_row);
       {
         P2Ctx*const here = cursor[0];
-        here[0] = here[-1];
-        here[1] = here[-2];
-        here[2] = here[-3];
-        here[3] = here[-4];
-        here[4] = here[-5];
+        for( int32_t i = 0; i<5; ++i ) here[i] = here[-1-i];
       }
       ring_advance(buf, cursor, 8);
       cursor[0][-1] = cursor[1][0];
       {
         P2Ctx*const here = cursor[0];
         P2Ctx*const up = cursor[1];
-        here[-2] = up[1];
-        here[-3] = up[2];
-        here[-4] = up[3];
-        here[-5] = up[4];
-        here[-6] = up[5];
-        here[-7] = up[6];
-        here[-8] = up[7];
+        for( int32_t i = 0; i<7; ++i ) here[-2-i] = up[1+i];
       }
       cursor[0]->dval = 0;
       if( width>0 ) {

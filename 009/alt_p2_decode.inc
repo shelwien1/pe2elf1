@@ -53,24 +53,11 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
               AltP2Block *blk_k = (AltP2Block*)(*(planep-1));
               {
                 P2Ctx*const here = blk_k->cursor[0];
-                here[0] = here[-1];
-                here[1] = here[-1];
-                here[2] = here[-1];
-                here[3] = here[-1];
-                here[4] = here[-1];
+                for( int32_t j = 0; j<5; ++j ) here[j] = here[-1];
               }
               P2Ctx*const rec2 = blk_k->cursor[0]+back;
-              rec2[-1] = rec2[0];
-              rec2[-2] = rec2[1];
-              rec2[-3] = rec2[2];
-              rec2[-4] = rec2[3];
-              rec2[-5] = rec2[4];
-              rec2[-6] = rec2[5];
-              rec2[-7] = rec2[6];
-              rec2[-8] = rec2[7];
-              memcpy(blk_k->buf[1], blk_k->buf[0], row_bytes);
-              memcpy(blk_k->buf[2], blk_k->buf[0], row_bytes);
-              memcpy(blk_k->buf[3], blk_k->buf[0], row_bytes);
+              for( int32_t j = 0; j<8; ++j ) rec2[-1-j] = rec2[j];
+              for( int32_t j = 0; j<3; ++j ) memcpy(blk_k->buf[1+j], blk_k->buf[0], row_bytes);
             }
           } else {
             AltP2Block *src3 = (AltP2Block*)(plane[pl2-1]);
@@ -91,14 +78,8 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
               src3->buf[0][xf2].dleft = 256;
             } while( xf3 );
             planep = w;
-            memcpy(src3->buf[1], src3->buf[0], row_bytes);
-            memcpy(src3->buf[2], src3->buf[0], row_bytes);
-            memcpy(src3->buf[3], src3->buf[0], row_bytes);
-            src3->cursor[0] = src3->buf[0]+i+8;
-            src3->cursor[1] = src3->buf[1]+i+8;
-            src3->cursor[2] = src3->buf[2]+i+8;
-            src3->cursor[3] = src3->buf[3]+i+8;
-            src3->cursor[4] = src3->buf[4]+i+8;
+            for( int32_t j = 0; j<3; ++j ) memcpy(src3->buf[1+j], src3->buf[0], row_bytes);
+            for( int32_t j = 0; j<5; ++j ) src3->cursor[j] = src3->buf[j]+i+8;
           }
           AltP2Block *blk_r = (AltP2Block*)(*(planep-1));
           cur = blk_r->cur;
@@ -116,18 +97,11 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
           r1[-1] = *b0;
           blk_r->cur[-2] = *b0;
           memset(blk_r->p2_row, 0, 15);
-          blk_r->bias[0] = 0.0f;
-          blk_r->bias[1] = 0.0f;
-          blk_r->bias[2] = 0.0f;
-          blk_r->bias[3] = 0.0f;
+          for( int32_t j = 0; j<4; ++j ) blk_r->bias[j] = 0.0f;
           __builtin_memset(blk_r->p2_row, 0, sizeof blk_r->p2_row);
           {
             P2Ctx*const here = blk_r->cursor[0];
-            here[0] = here[-1];
-            here[1] = here[-2];
-            here[2] = here[-3];
-            here[3] = here[-4];
-            here[4] = here[-5];
+            for( int32_t j = 0; j<5; ++j ) here[j] = here[-1-j];
           }
           P2Ctx *buf3 = blk_r->buf[3];
           P2Ctx *bb4 = blk_r->buf[4];
@@ -150,13 +124,7 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
           {
             P2Ctx*const here = blk_r->cursor[0];
             P2Ctx*const up = blk_r->cursor[1];
-            here[-2] = up[1];
-            here[-3] = up[2];
-            here[-4] = up[3];
-            here[-5] = up[4];
-            here[-6] = up[5];
-            here[-7] = up[6];
-            here[-8] = up[7];
+            for( int32_t j = 0; j<7; ++j ) here[-2-j] = up[1+j];
           }
           blk_r->cursor[0]->dval = 0;
           nplanes = plane_count;
@@ -164,19 +132,13 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
         src2 = first;
         i = i_1;
       }
-      ctx_bias[3] = 0;
-      ctx_bias[2] = 0;
-      ctx_bias[1] = 0;
-      ctx_bias[0] = 0;
+      for( int32_t j = 0; j<4; ++j ) ctx_bias[3-j] = 0;
       if( i>0 ) {
         first = src2;
         uint32_t i_2 = 0;
         i_1 = i;
         do {
-          ctx_bias[0] >>= 3;
-          ctx_bias[1] >>= 3;
-          ctx_bias[2] >>= 3;
-          ctx_bias[3] >>= 3;
+          for( int32_t j = 0; j<4; ++j ) ctx_bias[j] >>= 3;
           AltP2Block* blk0 = (AltP2Block*)(plane[0]);
           int32_t pred0 = plane[0]->alt_p2_context(plane[2], plane[1]);
           P2Freq* freq = &blk0->freq[blk0->ctx];

@@ -508,6 +508,7 @@ them run.
 | `reads.py` | What does a tool actually read? | yes |
 | `reframe.py` | Give a plain-split frame back its layout, without giving back its casts | yes |
 | `rename.py` | Rename identifiers in subs1.hpp, one whole-word at a time | yes |
+| `reroll.py` | A loop the decompiler wrote out one turn at a time | yes |
 | `resign-drive.sh` | Apply every retype that measurably reduces the conversion count |  |
 | `resign.py` | Give a local the signedness of the values it actually holds | yes |
 | `resign_group.py` | Give a set of locals that must agree the same signedness | yes |

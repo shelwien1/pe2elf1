@@ -240,15 +240,9 @@ struct P2Coef {
     __builtin_memcpy(saved_coef, bmf_p2_coef, sizeof saved_coef);
     __builtin_memcpy(saved_rate, bmf_p2_rate[4], sizeof saved_rate);
     for( int32_t k = 0; k<4; ++k ) {
-      bmf_p2_coef[0][k] += bmf_p2_coef[4][k];
-      bmf_p2_coef[1][k] += bmf_p2_coef[5][k];
-      bmf_p2_coef[2][k] += bmf_p2_coef[6][k];
-      bmf_p2_coef[4][k] = 0;
-      bmf_p2_coef[5][k] = 0;
-      bmf_p2_coef[6][k] = 0;
-      bmf_p2_rate[4][k] = bmf_p2_rate_reset;
-      bmf_p2_rate[5][k] = bmf_p2_rate_reset;
-      bmf_p2_rate[6][k] = bmf_p2_rate_reset;
+      for( int32_t i = 0; i<3; ++i ) bmf_p2_coef[i][k] += bmf_p2_coef[4+i][k];
+      for( int32_t i = 0; i<3; ++i ) bmf_p2_coef[4+i][k] = 0;
+      for( int32_t i = 0; i<3; ++i ) bmf_p2_rate[4+i][k] = bmf_p2_rate_reset;
     }
   }
 
@@ -475,21 +469,15 @@ struct AltP2Block {
     }
     ctx = 15;
     alt_init_tables(fold, unfold);
-    ctx_w[4].w[0] = 0;
-    ctx_w[0].w[1] = 64;
-    ctx_w[3].w[0] = 0;
-    ctx_w[0].w[2] = 128;
-    ctx_w[2].w[0] = 0;
-    ctx_w[1].w[1] = 192;
-    ctx_w[1].w[0] = 0;
-    ctx_w[1].w[2] = 384;
-    ctx_w[0].w[0] = 0;
-    ctx_w[2].w[1] = 576;
-    ctx_w[2].w[2] = 1152;
-    ctx_w[3].w[1] = 1728;
-    ctx_w[3].w[2] = 3456;
-    ctx_w[4].w[1] = 5184;
-    ctx_w[4].w[2] = 10368;
+    // The same three sequences as `AltP1Block`'s, five contexts instead of
+    // nine and starting at 64 instead of 32: the middle weight triples, the
+    // top is twice the middle, the bottom is zero.  Fifteen assignments in
+    // scheduler order did not say that.
+    for( int32_t c = 0, w1 = 64; c<5; ++c, w1 *= 3 ) {
+      ctx_w[c].w[0] = 0;
+      ctx_w[c].w[1] = w1;
+      ctx_w[c].w[2] = 2*w1;
+    }
     return this;
   }
 

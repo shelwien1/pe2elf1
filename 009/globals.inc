@@ -247,10 +247,8 @@ static inline float bmf_hsum4(const float x[4]) {
 template<typename T>
 static inline void ring_advance(T** buf, T** cursor, int32_t margin) {
   T*const oldest = buf[4];
-  buf[4] = buf[3];
-  buf[3] = buf[2];
-  buf[2] = buf[1];
-  buf[1] = buf[0];
+  // The direction is load-bearing: the turns touch the same places.
+  for( int32_t i = 0; i<4; ++i ) buf[4-i] = buf[3-i];
   buf[0] = oldest;
   for( int32_t k = 0; k<5; ++k )
     cursor[k] = buf[k]+margin;
