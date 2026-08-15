@@ -15,9 +15,9 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   int16_t seed3, seed2;
   uint32_t src2;
   AltP2Block** planep;
-  float (**cur)[4], (**r1)[4];
+  NbRow **cur, **r1;
   bool xf3, off;
-  float (*b4)[4], (**b0)[4];
+  NbRow *b4, **b0;
   int32_t nplanes, nplanes2;
   void* made, * src1, ** plane_p;
   P2Coef p2_coef;

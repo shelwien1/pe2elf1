@@ -359,8 +359,8 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   float sample, d_bias2;
   P2Freq* frecg2, * frecg1, * frecg0, * frecg3, * gtop, * frec;
   uint32_t off0, off1, off2, off3, off4;
-  float (*wrow_cur)[4];
-  float (*wrow_b)[4];
+  NbRow* wrow_cur;
+  NbRow* wrow_b;
   float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
   int32_t ctx_lo, ctx_l, ctx15, fold_sel,
       sel_alt, sel0, sel1, sel2, sel3, sel4;
@@ -399,20 +399,20 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   cursor[0]->err = resid;
   cursor[0]->aerr = abs32(resid);
   wrow_cur = nb_cur;
-  ms1 = wrow_cur[14][1]+0.000099999997f;
+  ms1 = wrow_cur->w[14][1]+0.000099999997f;
   wrow_b = cur[-1];
   bias2 = bias[2];
   float n2_bias = bias[0];
   d_bias2 = sample-bias2;
   bias1 = bias[1];
   d_bias = bias1-bias2;
-  ms_a = ((((sample-bias2)*(bias1-bias2))-wrow_cur[14][0])*0.001f)+wrow_cur[14][0];
-  ms_b = ms1+(((d_bias*d_bias)-wrow_cur[14][1])*0.001f);
-  wrow_cur[14][1] = ms_b;
+  ms_a = ((((sample-bias2)*(bias1-bias2))-wrow_cur->w[14][0])*0.001f)+wrow_cur->w[14][0];
+  ms_b = ms1+(((d_bias*d_bias)-wrow_cur->w[14][1])*0.001f);
+  wrow_cur->w[14][1] = ms_b;
   ms_b10 = 0.1f*ms_b;
   if( (0.1f*ms_b)<=ms_a )
     ms_b10 = fminf(ms_b, ms_a);
-  wrow_cur[14][0] = ms_b10;
+  wrow_cur->w[14][0] = ms_b10;
   conf = (1.0f-(ms_b10/(ms_b+576.0f)))*2.0f;
   nlms_track_two_rows(wrow_cur, wrow_b, (sample-bias1)*2.5999999f, d_bias2*conf, conf);
   nlms_predict_and_correct(wrow_cur, sample, n2_bias);

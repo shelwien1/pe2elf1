@@ -196,36 +196,29 @@ struct P2Ctx {
   uint8_t mag;
 };
 
-// How many samples a weight row has seen, kept as an unsigned count in the
-// first `float` slot of the row's sixteenth line -- the row is `[16][4]` and
-// only fifteen lines are filter state, so the sixteenth was free and the
-// original used four bytes of it for this.
+// One row of the neighbour-weight bank.
 //
-// Two sites reached it, one through `uint32_t*` and one through `int32_t*`,
-// which is two answers to what the type is.
+// Lines 0..6 are the filter taps, 7..13 the running mean square of each tap's
+// input -- which is what makes it *normalised* least mean squares -- and 14
+// three scalars the two halves share.  Line 15 is a count of the samples this
+// row has seen, and the original kept it in the first of that line's four
+// `float` slots.
 //
-// `memcpy` rather than a cast, because a cast is the one thing that is not
-// allowed: reading a `float` object through a `uint32_t*` is exactly what
-// `-Wstrict-aliasing` was reporting here, and it was the last such report in
-// the tree.  `__builtin_memcpy` of four bytes is a single load or store at
-// `-O2` -- the streams are byte-identical either way -- and it is what the
-// language provides for reinterpreting bytes.
-//
-// Giving the row a struct with a `uint32_t` member at the identical offset
-// would remove the reinterpretation rather than legalise it, and that means
-// retyping every `float (*)[4]` in the p2 model and every `[j][k]` on one.
-// That is still worth doing and still not done; this makes the current form
-// defined in the meantime.
-static inline uint32_t nb_row_uses(const float (*row)[4]) {
-  uint32_t n;
-  __builtin_memcpy(&n, &row[15][0], sizeof n);
-  return n;
-}
+// It was a `float[16][4]` and the count was reached by casting: through a
+// `uint32_t*` at one site and an `int32_t*` at the other, which is two answers
+// to what the type is.  A `memcpy` accessor made that defined; a member makes
+// it unnecessary.  Same 256 bytes, same offsets, and `-Wstrict-aliasing` has
+// nothing left to say about it.
+struct NbRow {
+  float w[15][4];
+  uint32_t uses;
+  uint32_t _pad[3];
+};
 
-static inline void nb_row_bump(float (*row)[4]) {
-  const uint32_t n = nb_row_uses(row)+1;
-  __builtin_memcpy(&row[15][0], &n, sizeof n);
-}
+static_assert(sizeof(NbRow) == 16*4*sizeof(float),
+              "NbRow replaces a float[16][4] and has to be the same size");
+static_assert(offsetof(NbRow, uses) == 15*4*sizeof(float),
+              "the use count is the first slot of line 15");
 
 // `bmf_p2_coef` and `bmf_p2_rate` read like tuning constants and are not: for
 // the length of one image the model borrows them.  Rows 4..6 of the
@@ -265,7 +258,7 @@ struct P2Coef {
 };
 
 struct AltP2Block {
-  float nb_weights[1088][16][4];
+  NbRow nb_weights[1088];
   // This was a union of `p2_row` with a struct whose first 112 bytes were
   // `p2_row0_head[15]` and `_u0_0_4[97]` -- 112 being `sizeof p2_row`, so the
   // union existed only to pin everything after it at the original's offsets.
@@ -291,11 +284,11 @@ struct AltP2Block {
   // tree where an `offsetof` check is not restating the layout, because here
   // the code depends on it.
   float bias[4];
-  float (*nb_cur)[4];
-  float (**row0)[4];
-  float (**row1)[4];
-  float (**cur)[4];
-  float (**above)[4];
+  NbRow* nb_cur;
+  NbRow** row0;
+  NbRow** row1;
+  NbRow** cur;
+  NbRow** above;
   int32_t bank_ctx[5];
   int32_t _pad0;
   uint16_t pred_prev;
@@ -337,10 +330,10 @@ struct AltP2Block {
   // The NLMS filter, in two halves, and each was a bare braced block inside
   // `alt_p2_model`'s 674 lines.
   //
-  // A weight row is `float w[16][4]`: rows 0..6 are the filter taps, rows 7..13
-  // the running mean square of each tap's input -- which is what makes this
-  // *normalised* least mean squares, each tap's step divided by the energy it
-  // has been seeing -- and row 14 holds three scalars the two halves share.
+  // The row's shape is `NbRow` above: lines 0..6 the taps, 7..13 the running
+  // mean square of each tap's input -- which is what makes this *normalised*
+  // least mean squares, each tap's step divided by the energy it has been
+  // seeing -- and line 14 three scalars the two halves share.
   //
   // Both halves are written as `[7][4]` nests rather than 28 scalars because
   // that is the shape the original's SSE was in; keeping it is what lets a
@@ -349,41 +342,41 @@ struct AltP2Block {
   // Track the input energy and step both rows' weights toward their own error.
   // Two rows, not one: `fast` adapts against this sample and `slow` against the
   // confidence-scaled one, and the pair is the mixer.
-  void nlms_track_two_rows(float (*fast)[4], float (*slow)[4],
+  void nlms_track_two_rows(NbRow* fast, NbRow* slow,
                            float err_fast, float err_slow, float conf) {
-    const float floor_fast = 26896.0f*fast[14][2];
-    const float floor_slow = 5041.0f*slow[14][2];
+    const float floor_fast = 26896.0f*fast->w[14][2];
+    const float floor_slow = 5041.0f*slow->w[14][2];
     const float rate_slow = 0.013f*conf;
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k ) {
         const float x = p2_row[j][k];
-        float ms = fast[7+j][k]+(x*x-fast[7+j][k])*0.05f;
-        fast[7+j][k] = ms;
-        fast[j][k] += bmf_p2_rate[j][k]*err_fast*x/(ms+floor_fast);
-        ms = slow[7+j][k]+(x*x-slow[7+j][k])*rate_slow;
-        slow[7+j][k] = ms;
-        slow[j][k] += bmf_p2_rate[j][k]*err_slow*x/(ms+floor_slow);
+        float ms = fast->w[7+j][k]+(x*x-fast->w[7+j][k])*0.05f;
+        fast->w[7+j][k] = ms;
+        fast->w[j][k] += bmf_p2_rate[j][k]*err_fast*x/(ms+floor_fast);
+        ms = slow->w[7+j][k]+(x*x-slow->w[7+j][k])*rate_slow;
+        slow->w[7+j][k] = ms;
+        slow->w[j][k] += bmf_p2_rate[j][k]*err_slow*x/(ms+floor_slow);
       }
   }
 
   // Predict this sample from the fast row, then step that row toward the error
   // it just made.  `w[14][2]` decays toward 10 and scales the step floor, so
-  // the filter starts cautious and loosens; `nb_row_uses` counts the samples
-  // this row has seen.
-  void nlms_predict_and_correct(float (*w)[4], float sample, float bias0) {
+  // the filter starts cautious and loosens; `uses` counts the samples this
+  // row has seen.
+  void nlms_predict_and_correct(NbRow* row, float sample, float bias0) {
     float acc[4];
     for( int32_t k = 0; k<4; ++k ) {
-      acc[k] = w[0][k]*p2_row[0][k];
+      acc[k] = row->w[0][k]*p2_row[0][k];
       for( int32_t j = 1; j<7; ++j )
-        acc[k] += w[j][k]*p2_row[j][k];
+        acc[k] += row->w[j][k]*p2_row[j][k];
     }
     const float err = sample-(bias0+bmf_hsum4(acc));
-    const float ms_scale = w[14][2];
+    const float ms_scale = row->w[14][2];
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
-        w[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(w[7+j][k]+ms_scale*529.0f);
-    nb_row_bump(w);
-    w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
+        row->w[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(row->w[7+j][k]+ms_scale*529.0f);
+    ++row->uses;
+    row->w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
 
   void code_banks(int32_t sample16);
@@ -421,27 +414,27 @@ struct AltP2Block {
     deadzone_lo = -dz;
     band_lo = -band-7;
     band_hi = band+8;
-    row0 = (float (**)[4])bmf_new(sizeof(float (*)[4])*(img_w+4));
-    void* buf1 = bmf_new(sizeof(float (*)[4])*(img_w+4));
-    nb_weights[0][14][2] = 1.0f;
-    row1 = (float (**)[4]) buf1;
+    row0 = (NbRow**)bmf_new(sizeof(NbRow*)*(img_w+4));
+    void* buf1 = bmf_new(sizeof(NbRow*)*(img_w+4));
+    nb_weights[0].w[14][2] = 1.0f;
+    row1 = (NbRow**) buf1;
     cur = row0+img_w+2;
     if( img_w>-4 ) {
       uint32_t pairs = (img_w+4)/2;
       if( pairs ) {
         for( p = 0; p<pairs; ++p ) {
-          row1[2*p] = nb_weights[0];
-          row0[2*p] = nb_weights[0];
-          row1[2*p+1] = nb_weights[0];
-          row0[2*p+1] = nb_weights[0];
+          row1[2*p] = &nb_weights[0];
+          row0[2*p] = &nb_weights[0];
+          row1[2*p+1] = &nb_weights[0];
+          row0[2*p+1] = &nb_weights[0];
         }
         done = 2*p+1;
       } else {
         done = 1;
       }
       if( (uint32_t)(img_w+4)>(done-1) ) {
-        row1[done-1] = nb_weights[0];
-        row0[done-1] = nb_weights[0];
+        row1[done-1] = &nb_weights[0];
+        row0[done-1] = &nb_weights[0];
       }
     }
     uint32_t row = 0;
@@ -510,5 +503,5 @@ static_assert(offsetof(AltP2Block, bias)
               "p2_row, which has to be bias");
 
 struct CtxWeights {
-  float (*f0[6])[4];
+  NbRow* f0[6];
 };

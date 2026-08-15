@@ -1,7 +1,7 @@
 // alt_p2.inc -- the predictor-2 model around its block: the filter, and the two
 // directions of its eight-bit body.
 
-int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_t mode) {
+int32_t __alt_p2_filter(NbRow* _this, float (*a2)[4], CtxWeights* w, int32_t mode) {
   const float* mix = bmf_p2_mix[mode];
   float acc[4], mixed[7][4], centre, prediction, own;
   int32_t i, j, k;
@@ -17,9 +17,9 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_
       a2[j][k] -= centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
-      mixed[j][k] = mix[0]*w->f0[0][j][k];
+      mixed[j][k] = mix[0]*w->f0[0]->w[j][k];
       for( i = 1; i<6; i++ )
-        mixed[j][k] += mix[i]*w->f0[i][j][k];
+        mixed[j][k] += mix[i]*w->f0[i]->w[j][k];
     }
   for( k = 0; k<4; k++ ) {
     acc[k] = mixed[0][k]*a2[0][k];
@@ -28,24 +28,24 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_
   }
   prediction = bmf_hsum4(acc)+centre;
   a2[7][2] = prediction;
-  if( nb_row_uses(_this) ) {
+  if( _this->uses ) {
     for( k = 0; k<4; k++ ) {
-      acc[k] = _this[0][k]*a2[0][k];
+      acc[k] = _this->w[0][k]*a2[0][k];
       for( j = 1; j<7; j++ )
-        acc[k] += _this[j][k]*a2[j][k];
+        acc[k] += _this->w[j][k]*a2[j][k];
     }
     own = centre+bmf_hsum4(acc);
     a2[7][1] = own;
-    return (int32_t)(prediction+((own-prediction)*_this[14][0])/_this[14][1]);
+    return (int32_t)(prediction+((own-prediction)*_this->w[14][0])/_this->w[14][1]);
   }
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
-      _this[j][k] = mixed[j][k]*bmf_p2_decay;
-      _this[j+7][k] = w->f0[0][j+7][k]*bmf_p2_seed;
+      _this->w[j][k] = mixed[j][k]*bmf_p2_decay;
+      _this->w[j+7][k] = w->f0[0]->w[j+7][k]*bmf_p2_seed;
     }
-  _this[14][0] = 47.0f;
-  _this[14][1] = 169.2f;
-  _this[14][2] = 1.0f;
+  _this->w[14][0] = 47.0f;
+  _this->w[14][1] = 169.2f;
+  _this->w[14][2] = 1.0f;
   a2[7][1] = prediction;
   return (int32_t)prediction;
 }
@@ -76,8 +76,8 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
   int32_t j;
   int32_t code0;
   uint8_t *outp, code2;
-  float (**cur_at)[4], (**r1)[4];
-  float (*last)[4], (**r0)[4];
+  NbRow **cur_at, **r1;
+  NbRow *last, **r0;
   int32_t code;
   uint32_t k;
   uint8_t* src_end;

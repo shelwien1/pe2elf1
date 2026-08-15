@@ -23,14 +23,14 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t ctx15;
   P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2, *row2c;
   int32_t sum_all;
-  float (**up_row)[4];
+  NbRow** up_row;
   int32_t nb_slot;
   P2Ctx* cx2;
   P2Ctx *nb0;
-  float (*wrow)[4];
+  NbRow* wrow;
   bool in_band, no_ref;
   P2Ctx *nb1;
-  float (**cur_l)[4];
+  NbRow** cur_l;
   int32_t in63, c_lo, mode, c_mid, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, magsum, run_s2, flat_a, flat_b, ctx_idx;
   uint32_t ctx0_lo;
   int32_t run, run4;
@@ -66,31 +66,31 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .digit<64, 5>(gA).digit<320, 6>(band);
   int32_t nb_at = nb_id[(uint32_t)nb_slot];
   if( nb_id[(uint32_t)nb_slot] ) {
-    wrow = nb_weights[nb_at];
+    wrow = &nb_weights[nb_at];
     nb_cur = wrow;
     {
       float acc[4], err, floor_;
       int32_t j, k;
       for( k = 0; k<4; ++k ) {
-        acc[k] = wrow[0][k]*p2_row[0][k];
+        acc[k] = wrow->w[0][k]*p2_row[0][k];
         for( j = 1; j<7; ++j )
-          acc[k] += wrow[j][k]*p2_row[j][k];
+          acc[k] += wrow->w[j][k]*p2_row[j][k];
       }
       err = ((float)row0p[-1].val-(bmf_hsum4(acc)+bias[0]))*2.0999999f;
-      floor_ = 7744.0f*wrow[14][2];
+      floor_ = 7744.0f*wrow->w[14][2];
       for( j = 0; j<7; ++j )
         for( k = 0; k<4; ++k ) {
           float x = p2_row[j][k];
-          float ms = wrow[7+j][k]+(x*x-wrow[7+j][k])*bmf_p2_ms_rate;
-          wrow[7+j][k] = ms;
-          wrow[j][k] += bmf_p2_rate[j][k]*err*x/(ms+floor_);
+          float ms = wrow->w[7+j][k]+(x*x-wrow->w[7+j][k])*bmf_p2_ms_rate;
+          wrow->w[7+j][k] = ms;
+          wrow->w[j][k] += bmf_p2_rate[j][k]*err*x/(ms+floor_);
         }
     }
   } else {
     int32_t next_id = nb_id_used;
     nb_id_used = ++next_id;
     nb_id[(uint32_t)nb_slot] = next_id;
-    nb_cur = nb_weights[(int16_t)next_id];
+    nb_cur = &nb_weights[(int16_t)next_id];
   }
   // The filter's 28 inputs, four to a row.  Rows 0..3 are differences of `dval`
   // -- the second difference of the plane -- at widening offsets from the

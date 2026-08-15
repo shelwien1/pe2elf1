@@ -12,8 +12,8 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   int16_t seed1, l7c, seed2;
   uint32_t src1;
   AltP2Block* blk0, ** xf3;
-  float (**cur)[4], (**r1)[4];
-  float (*b4)[4], (**b0)[4];
+  NbRow **cur, **r1;
+  NbRow *b4, **b0;
   int32_t nplanes, want0, off0, seed0, at0, cur0, code0, cur1, code1, cur2, code2, l5c, seed3, nplanes2;
   void* raw, * made, ** plane_p;
   uint8_t* out = a2;
