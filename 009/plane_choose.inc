@@ -60,7 +60,7 @@ int32_t choose_plane_coding(BmfImage* img) {
   int16_t g1_lo;
   uint32_t n_quads, next_plane, row, slack;
   uint16_t g1w;
-  int32_t n_planes, data_size, result, xform, wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, win, sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0, dn1, nx2, g1, dnx2, g2, pa, pb, bin_lin, alpha, bin_lin2, r0, r1, r2, wa_pick, pred4, pred4b, *hist2, sum3, best_sum3, wt4_best_dn, wt8_best_dn, wt4_up, wt8_up, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
+  int32_t n_planes, data_size, result, xform, wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, win, sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0, dn1, nx2, g1, dnx2, g2, pa, pb, bin_lin, alpha, bin_lin2, r0, r1, r2, wa_pick, pred4, pred4b, *hist2, sum3, best_sum3, wt4_best_dn, wt8_best_dn, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
   uint32_t best_cost, best, cost_flat, i4, quad, cost_lin, best4, cost_c0, cost_c1, cost_c2;
   uint8_t *px, *end_px;
   n_planes = plane_count;
@@ -136,16 +136,16 @@ int32_t choose_plane_coding(BmfImage* img) {
         wt_slot = wt8;
         wt4_cur = wt4;
         int32_t wt_step = 4;
-        wt4_dn = wt4-1;
-        wt8_dn = wt8-1;
+        int32_t wt4_dn = wt4-1;
+        int32_t wt8_dn = wt8-1;
         wt4_dn_end = wt4-wt_step;
         uint8_t *plane0 = &img->pixels[xform];
         wt8_dn_end = wt8-wt_step;
         while( 1 ) {
           if( wt4_dn<=wt4_dn_end ) {
             if( wt8_dn<=wt8_dn_end ) {
-              wt4_up = wt4_cur+1;
-              wt8_up = wt_slot+1;
+              int32_t wt4_up = wt4_cur+1;
+              int32_t wt8_up = wt_slot+1;
               wt4_up_end = wt4_cur+wt_step;
               wt8_up_end = wt_slot+wt_step;
               while( 1 ) {

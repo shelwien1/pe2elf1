@@ -51,7 +51,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint8_t *srcp, *tile_copy;
   int32_t hard, bits_a, bits_b;
   int32_t flags_s, desc_k;
-  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, f5, pred, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, bits_d, pk, pl_k, bits, bits_f8, f8, bits_f13, f13, cost_f14, f14, bits_f6, f6;
+  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, best_cost, bits_f5, f5, pred, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, bits_d, pk, pl_k, bits, bits_f8, f8, bits_f13, f13, cost_f14, f14, bits_f6, f6;
   tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
@@ -99,7 +99,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   // which is `tile_h+y0` again with `y0` spelled out; the loop runs `tile_h`
   // times either way.
   if( tile_h>0 ) {
-    row_bytes = (uint16_t)tile_img->stride;
+    int32_t row_bytes = (uint16_t)tile_img->stride;
     uint8_t *dstp = tile_img->pixels;
     for( int32_t y = 0; y<tile_h; ++y ) {
       memcpy(dstp, srcp, row_bytes);

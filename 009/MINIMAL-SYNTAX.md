@@ -303,12 +303,12 @@ is not, and the showing is the work.
 
 `tools/liftframe.py --list` is where the current count and the reason for each
 live, and `shape.py`'s frame rows count the members — which is why neither
-number is written out here. What is left is `choose_plane_coding`,
-`decode_symbol_list` and `reduce_alphabet` (at file scope). `search_filter`'s,
-`expand_image`'s and `choose_plane_coding`'s all went in the rounds after this
-paragraph was last corrected -- the second of them the one entry
-`liftframe.py` had recorded as a measured gate failure, and the third the
-largest of the nine, 26 declared members over three unions and a 32KB buffer. `tools/README.md` records four rules learned by breaking this
+number is written out here. One is left, `reduce_alphabet`'s, and it is at file
+scope, which is a different operation: the declaration is shared between two
+bodies. Every other frame in the tree has dissolved, and none of them for a
+reason this paragraph could have predicted — the reasons were a record read
+across four members, two byte arrays that were counter arrays, a 3×16 table
+under three names, and four unions whose arms were never live together. `tools/README.md` records four rules learned by breaking this
 exact thing, the first of which is that an address taken of one member pins the
 whole frame. These bodies index off the ends of their locals deliberately; the
 frame is what makes the neighbours theirs to index.

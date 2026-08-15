@@ -106,18 +106,48 @@ struct SymList {
     return true;
   }
 
+  // Move `p` up past every entry it now outranks, and return the count it
+  // settles at -- which is what decides whether the list rescales.
+  //
+  // This was written out twice, here and in `decode_symbol_list`, identical
+  // down to the `goto` back into the `p == ent` arm that both used to leave
+  // the inner loop.  Four returns say the same four exits and the label goes
+  // with them.
+  int32_t promote(SymEntry* p) {
+    p->cnt += 4;
+    since_rescale += 4;
+    if( p==ent )
+      return p->cnt;
+    uint16_t s_a = p->sym;
+    uint8_t c_a = p->cnt;
+    SymEntry* q = p-1;
+    *p = *q;
+    q->set(s_a, c_a);
+    if( q==ent )
+      return q->cnt;
+    while( 1 ) {
+      int32_t top = q->cnt;
+      SymEntry* r = q-1;
+      if( top<=r->cnt )
+        return top;
+      uint16_t s_b = q->sym;
+      uint8_t c_b = q->cnt;
+      *q = *r;
+      r->set(s_b, c_b);
+      --q;
+      if( r==ent )
+        return r->cnt;
+    }
+  }
+
   int32_t code_symbol(int32_t want) {
     int32_t enc_cum, enc_high, enc_tot;
-    uint32_t left;
-    uint8_t c_a, c_b;
-    SymEntry* p, * head, * q;
-    int32_t cum, c, result, c2, top;
-    uint16_t s_a, s_b;
-    uint32_t rest, i;
+    int32_t c, result, c2;
+    uint32_t i;
     int8_t gen = exclusion_gen;
-    left = live;
-    p = ent-1;
-    cum = 0;
+    uint32_t left = live;
+    SymEntry *p = ent-1;
+    int32_t cum = 0;
     while( 1 ) {
       ++p;
       int32_t s = p->sym;
@@ -145,7 +175,7 @@ struct SymList {
       }
     }
     enc_high = cum;
-    rest = left-1;
+    uint32_t rest = left-1;
     enc_cum = cum-c;
     if( rest ) {
       for( i = 0; i<rest; ++i ) {
@@ -157,39 +187,7 @@ struct SymList {
       }
     }
     enc_tot = tot+cum;
-    p->cnt += 4;
-    head = ent;
-    since_rescale += 4;
-    if( p==head ) {
-  sorted:
-      top = p->cnt;
-    } else {
-      s_a = p->sym;
-      c_a = p->cnt;
-      q = p-1;
-      *p = *q;
-      q->set(s_a, c_a);
-      head = ent;
-      if( q==head ) {
-        top = q->cnt;
-      } else {
-        while( 1 ) {
-          top = q->cnt;
-          p = q-1;
-          if( top<=p->cnt )
-            break;
-          s_b = q->sym;
-          c_b = q->cnt;
-          *q = *p;
-          p->set(s_b, c_b);
-          head = ent;
-          --q;
-          if( p==head )
-            goto sorted;
-        }
-      }
-    }
-    rescale(top);
+    rescale(promote(p));
     result = 1;
     rc.encode(enc_cum, enc_high, enc_tot);
     return result;

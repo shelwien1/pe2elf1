@@ -38,7 +38,6 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   BmfImage* img_at;
   uint8_t bpp, has_coded;
   uint8_t* pal_at;
-  int32_t plane_i, plane, pl2, plane2, pred;
   // The archive version, as a plain local.  The decompilation parked it in
   // `plane_desc[0].weight0` because the original did: `plane_desc[0]` is a
   // header slot, not a plane, and its three weight words were free.
@@ -192,9 +191,9 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     BmfImage plane_hdr = *img_at;
     plane_hdr.depth = depth_one_plane;
     if( plane_count>0 ) {
-      plane_i = 0;
+      int32_t plane_i = 0;
       do {
-        plane = plane_desc[plane_i].src_plane;
+        int32_t plane = plane_desc[plane_i].src_plane;
         plane_predictor = plane_desc[plane].flags&desc_predictor;
         plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
         unmodel_plane(&plane_hdr, plane_buf);
@@ -219,11 +218,11 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     if( plane_alt_model )
       goto free_plane_buf;
     if( plane_count>0 ) {
-      pl2 = 0;
+      int32_t pl2 = 0;
       do {
         ++pl2;
-        plane2 = plane_desc[pl2-1].src_plane;
-        pred = plane_desc[plane2].flags&desc_predictor;
+        int32_t plane2 = plane_desc[pl2-1].src_plane;
+        int32_t pred = plane_desc[plane2].flags&desc_predictor;
         plane_predictor = pred;
         if( (plane_desc[plane2].flags&desc_has_refs)!=0||pred ) {
           deinterleave_plane(img_at, plane_buf, plane2);

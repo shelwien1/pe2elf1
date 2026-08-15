@@ -4,12 +4,22 @@
     python3 tools/liftframe.py subs1.hpp --list
     python3 tools/liftframe.py subs1.hpp model_planes
 
-Bodies that hold their locals in a `struct alignas(16) …{ … } frame;` --
-seventeen when this was written, nine now -- each carry a comment saying the
-frame is a layout rather than a bag of locals, with the exact failure that
-proved it: "altp1 segfaults while compressing", "five streams move, no signal".
-The count is printed by `--list` rather than quoted here, because a number in a
-docstring is a measurement that stops being re-taken.
+Bodies that hold their locals in a `struct alignas(16) …{ … } frame;` -- there
+were seventeen when this was written -- each carried a comment saying the frame
+is a layout rather than a bag of locals, with the exact failure that proved it:
+"altp1 segfaults while compressing", "five streams move, no signal".  The count
+is printed by `--list` rather than quoted here, because a number in a docstring
+is a measurement that stops being re-taken.
+
+**Every one of those claims has now expired**, and not one expired by being
+argued with.  Each frame turned out to be hiding a fact about the program: a
+sixteen-byte record read across four members, two byte arrays that were counter
+arrays, a 3x16 table under three names, an index computed from a stack address,
+and five unions whose two arms are never live at the same time.  The claim
+"this is a layout" was true of every one of them and told you nothing about
+which layout; finding that out is what dissolved them.  What is left is one
+frame, at file scope, which this declines for a reason about itself rather than
+about the frame.
 
 Every one of those comments cites `tools/frame-sweep.sh`, which drives
 `defram.py`, which lifts *aliases* -- `int32_t &v83 = *(int32_t *)(frame +
@@ -30,11 +40,18 @@ Four things it declines rather than guesses at:
     and lifting its arms to separate locals is not the same program.  A frame
     whose *every* member is inside one is declined outright and said so -- for
     a long time it was declined silently, and six frames were neither offered
-    nor mentioned under a line reading "0 frames this can offer to lift".  Two
-    of those six were not slot sharing at all: `compress_image`'s union held a
-    header and a scratch in mutually exclusive branches, and
-    `alt_p2_context`'s two arms were the same six pointers viewed twice.  Both
-    dissolved when the gate was asked;
+    nor mentioned under a line reading "0 frames this can offer to lift".
+
+    **Five unions have been declined on this rule and five were separable.**
+    `compress_image`'s held a header and a scratch in mutually exclusive
+    branches; `alt_p2_context`'s two arms were the same six pointers viewed
+    twice; `search_filter`'s, `decode_symbol_list`'s and
+    `choose_plane_coding`'s three are each a sequence -- everything in the
+    first arm is dead before the second is first written.  Sharing a slot only
+    matters if the arms are live together, which is a question about the body
+    and not about the union.  The rule stays, because what it does is refuse
+    rather than guess, and a union it declines is a question for a reader; but
+    nobody should read the refusal as an answer;
   * **a member whose name is already a local** of that body -- the two would
     become one variable;
   * **any use of `frame` that is not `frame.X`**, which after the asserts

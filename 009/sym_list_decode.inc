@@ -1,44 +1,46 @@
 // sym_list_decode.inc -- read back the alphabet an encoder wrote.
 
+// The decode half of `SymList::code_symbol`, and it was carrying its own copies
+// of two things that half already had as methods: the sort-up after a hit
+// (`promote`, 25 lines) and the halving pass (`rescale`, 55).  Both are called
+// here now, which is also what emptied the frame this used to run on.
+//
+// That frame was a `union` of the candidate array with a struct of eight spill
+// slots, each 4-byte member padded out to a pointer so it sat over one entry
+// of the array.  The two arms are a sequence rather than an overlap: the last
+// read of the array is the exclusion walk in the escape branch, and the first
+// spill write is the line after it.  Of the eight, one was the return value,
+// five were the two shared methods' locals, one was a save/restore pair of a
+// variable nothing else reads -- a register spill the decompiler kept with
+// nothing behind it -- and one was never used at all.
 int32_t decode_symbol_list(SymList* syms) {
-  struct alignas(16) DecodeSymbolListFrame {
-    union {
-      SymEntry* list[8192];
-      struct {
-        uint32_t list0;
-        BMF_SPILL_PAD(l0);
-        SymEntry* list1;
-        uint32_t list2;
-        BMF_SPILL_PAD(l2);
-        int32_t list3;
-        BMF_SPILL_PAD(l3);
-        int32_t list4;
-        BMF_SPILL_PAD(l4);
-        uint32_t list5;
-        BMF_SPILL_PAD(l5);
-        SymEntry* list6;
-        int32_t list7;
-        BMF_SPILL_PAD(l7);
-        SymEntry* list_tail[8184];
-      };
-    };
-    uint8_t _pad1[32];
-  } frame;
-  int32_t tot, tot0;
-  SymEntry *ent, *p, *q, *head, *cur, *prev, *up, *back;
+  // One pointer per symbol still in play, and a null terminator.
+  //
+  // `no_symbol+1` is the alphabet ceiling this program enforces, so this
+  // cannot be overrun by any `SymList` it builds -- which the old `[8192]`
+  // was one short of, and got away with because the eight bytes after it were
+  // the frame's trailing pad.
+  //
+  // What reaches here is far narrower.  The three call sites pass lists built
+  // by `init(256, 1)`, by `init(mask-n_syms+2, 1)` on a path where `mask` is
+  // at most 255, and by `init(99, 0)` and `init(33, 0)`; so 257 is the bound,
+  // and 257 is what an instrumented build measures as the high-water mark over
+  // the corpus -- `live = 256` on a 256-symbol list, plus the terminator.  The
+  // array is a plain local now, which is what would let ASan say so if that
+  // stopped being true.
+  SymEntry* list[no_symbol+1];
+  SymEntry *p, *q;
   SymEntry** w, ** rd, ** rd2;
-  uint32_t cum_lo, sym_cum, sym_high, cum_hi;
-  int32_t tot_1, tot_all, target;
-  int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
-  uint32_t n_left, zeros;
-  uint32_t list5_s, rescale_at, limit20, running, since_rescale;
+  int32_t live, c;
   live = syms->live;
-  ent = syms->ent;
-  w = frame.list;
+  SymEntry *ent = syms->ent;
+  w = list;
   uint32_t gen = (uint8_t)exclusion_gen;
   SymList* owner = syms;
-  cum = 0;
-  i = 0;
+  int32_t cum = 0;
+  int32_t i = 0;
+  // The candidates: every live symbol the encoder has not already offered and
+  // had rejected, with their counts summed.
   do {
     if( (uint8_t)exclusion_mask[ent[i].sym]==gen ) {
       c = 0;
@@ -53,141 +55,41 @@ int32_t decode_symbol_list(SymList* syms) {
   if( !cum )
     return -1;
   *w = nullptr;
-  tot0 = owner->tot;
-  tot_all = cum+tot0;
-  target = rc.get_freq(tot_all);
-  tot = cum+tot0;
-  p = frame.list[0];
-  rd = &frame.list[1];
-  SymEntry* first = frame.list[0];
-  cum_lo = 0;
+  int32_t tot0 = owner->tot;
+  int32_t tot_all = cum+tot0;
+  int32_t target = rc.get_freq(tot_all);
+  int32_t tot = cum+tot0;
+  p = list[0];
+  rd = &list[1];
+  SymEntry *first = list[0];
+  uint32_t cum_lo = 0;
   while( 1 ) {
     cum_lo += p->cnt;
     if( cum_lo>(uint32_t)target )
       break;
     p = *rd++;
     if( !p ) {
+      // Past the last candidate: the escape.  Stamp every one of them with
+      // this generation so the next list does not offer them again.
       int8_t gen_b = (int8_t)gen;
-      sym_cum = cum_lo;
-      cum_hi = tot;
-      sym_high = tot;
       q = first;
-      rd2 = &frame.list[1];
+      rd2 = &list[1];
       do {
         exclusion_mask[q->sym] = gen_b;
         q = *rd2++;
       } while( q );
-      tot_1 = tot;
-      frame.list7 = -1;
-      {
-        rc.decode(cum_lo, cum_hi, tot_1);
-        return frame.list7;
-      }
+      rc.decode(cum_lo, tot, tot);
+      return -1;
     }
   }
-  sym_high = cum_lo;
-  sym_cum = cum_lo-p->cnt;
-  frame.list7 = p->sym;
-  p->cnt += 4;
-  head = owner->ent;
-  owner->since_rescale += 4;
-  if( p==head ) {
-    top = p->cnt;
-  } else {
-    uint8_t c_a = p->cnt;
-    uint16_t s_a = p->sym;
-    SymEntry *q2 = p-1;
-    *p = *q2;
-    q2->set(s_a, c_a);
-    head = owner->ent;
-    if( q2==head ) {
-      top = q2->cnt;
-    } else {
-      frame.list5 = list5_s;
-      while( 1 ) {
-        top = q2->cnt;
-        SymEntry *r = q2-1;
-        if( top<=r->cnt )
-          break;
-        uint16_t s_b = q2->sym;
-        uint8_t c_b = q2->cnt;
-        *q2 = *r;
-        r->set(s_b, c_b);
-        head = owner->ent;
-        --q2;
-        if( r==head ) {
-          list5_s = frame.list5;
-          top = r->cnt;
-          goto next_symbol;
-        }
-      }
-      list5_s = frame.list5;
-    }
-  }
-next_symbol:
-  rescale_at = owner->rescale_at;
-  if( top>251||rescale_at<owner->since_rescale ) {
-    frame.list0 = owner->live;
-    limit20 = 20*owner->n;
-    n_left = frame.list0;
-    frame.list5 = list5_s;
-    frame.list4 = rescale_at<limit20;
-    cur = head-1;
-    do {
-      prev = cur;
-      ++cur;
-      half = (frame.list4+(uint32_t)cur->cnt)>>1;
-      cur->cnt = half;
-      if( cur!=owner->ent ) {
-        up = cur-1;
-        frame.list3 = up->cnt;
-        if( half>frame.list3 ) {
-          frame.list2 = cur->sym;
-          cur->set(up->sym, frame.list3);
-          if( up!=owner->ent ) {
-            (frame.list[1]) = cur;
-            frame.list0 = n_left;
-            do {
-              back = up-1;
-              back_cnt = back->cnt;
-              if( half<=back_cnt )
-                break;
-              up->set(back->sym, back_cnt);
-              --up;
-            } while( back!=owner->ent );
-            cur = frame.list[1];
-            n_left = frame.list0;
-          }
-          up->set(frame.list2, half);
-        }
-      }
-      --n_left;
-    } while( n_left );
-    list5_s = frame.list5;
-    running = owner->tot;
-    frame.list0 = 0;
-    if( !cur->cnt ) {
-      zeros = frame.list0;
-      do {
-        ++zeros;
-        owner->tot = ++running;
-        last_cnt = prev->cnt;
-        --prev;
-      } while( !last_cnt );
-      frame.list0 = zeros;
-      owner->live -= zeros;
-    }
-    since_rescale = owner->since_rescale;
-    owner->tot = running-(running>>1);
-    cum_lo = sym_cum;
-    cum_hi = sym_high;
-    tot_1 = tot_all;
-    owner->since_rescale = since_rescale-(since_rescale>>1);
-  } else {
-    tot_1 = tot_all;
-    cum_lo = sym_cum;
-    cum_hi = sym_high;
-  }
-  rc.decode(cum_lo, cum_hi, tot_1);
-  return frame.list7;
+  // The interval, taken before `promote` moves the entry and changes its
+  // count.  This order is the original's: the list is updated and only then is
+  // the decode committed, which is why the two bounds and the total were three
+  // of the frame's spill slots.
+  int32_t result = p->sym;
+  uint32_t sym_cum = cum_lo-p->cnt;
+  uint32_t sym_high = cum_lo;
+  owner->rescale(owner->promote(p));
+  rc.decode(sym_cum, sym_high, tot_all);
+  return result;
 }

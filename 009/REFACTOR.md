@@ -1144,3 +1144,52 @@ value is what stays, with the 4 written down and the reason it cannot be
 checked written down beside it. What made it worth finding is that it was
 silent in both directions: an earlier round changing `_pad0`'s size would have
 moved it, and nothing would have said so.
+
+## The last two frames, and what the encoder already had
+
+`decode_symbol_list`'s frame was a `union` of the candidate array with eight
+spill slots, each 4-byte member padded out to a pointer so it sat over one
+entry of the array. Same shape as `search_filter`'s and same answer: the arms
+are a sequence, not an overlap. The last read of the array is the exclusion
+walk in the escape branch and the first spill write is the line after it.
+**Five unions declined on that rule, five that turned out to be separable.**
+
+What the eight slots held is the finding. One was the return value. One was
+never used. One was a save/restore pair of a variable nothing else ever reads —
+a register spill the decompiler preserved with nothing behind it, and the local
+it round-tripped through was read before it was ever assigned. The other five
+were locals of two blocks that **`SymList` already had as methods**:
+
+  * the sort-up after a hit — move the entry past what it now outranks, 25
+    lines, identical to `code_symbol`'s down to the `goto` back into the
+    `p == ent` arm that both used to leave the inner loop. It is
+    `SymList::promote` now, with four returns where the label was;
+  * the halving pass, 55 lines, identical to `SymList::rescale`, which the
+    encoder has called for several rounds.
+
+So the decode half was carrying its own copy of both halves of the encoder's
+tail, and the frame existed to spill the locals of the copies.
+
+**And `SymEntry *list[8192]` was one short.** It holds one pointer per
+candidate plus a null terminator, so it needs the alphabet ceiling plus one;
+`no_symbol+1` is 8193. The old bound got away with it because the eight bytes
+past the end were the frame's trailing pad. What actually reaches this function
+is far narrower — the three call sites pass lists built by `init(256, 1)`, by
+`init(mask-n_syms+2, 1)` where `mask` is at most 255, and by `init(99, 0)` and
+`init(33, 0)` — and an instrumented build measures the high-water mark over the
+corpus at 257, which is `live = 256` plus the terminator. Measured rather than
+derived, and the array is a plain local now, which is what would let ASan say so
+if it stopped being true.
+
+**Dissolving four frames made 23 locals visible to a tool that had been at
+zero.** `firstuse.py` declares a local where it is first assigned; a frame
+member is not a local, so for four bodies it had nothing to look at. With the
+frames gone it found 23 and applied them, and `compact_locals.py` then found the
+one declaration line the change had left stranded. Neither tool changed; what
+changed is that the thing they check became sayable. That is the third time this
+round: `uncopy.py` and `unaliasvar.py` saw `pl0`, `pl2` and `pl3` the same way.
+
+`liftframe.py --list` now offers nothing, has nothing recorded as tried, and
+declines one: `reduce_alphabet`, whose frame is at file scope because an earlier
+round moved it there so its two arms could split into separate functions.
+Lifting a shared declaration is a different operation and the tool says so.
