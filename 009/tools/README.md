@@ -473,6 +473,7 @@ them run.
 | `explicitcmp.py` | Write out the conversion a signed/unsigned comparison already performs | yes |
 | `extents.py` | What each blob global is actually used as | yes |
 | `firstuse.py` | Declare a local where it is first assigned, not at the top of the body | yes |
+| `flagnames.py` | A bit of a header byte, masked as a number instead of by its name | yes |
 | `foldif.py` | Fold an `if` whose condition is now a known constant | yes |
 | `frame-sweep.sh` | Lift one frame, run the gate, keep it or put it back |  |
 | `fuzz.py` | Fuzz.py -- deterministic mutants of the test corpus | no |

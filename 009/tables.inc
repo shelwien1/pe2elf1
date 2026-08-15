@@ -2,6 +2,27 @@
 
 // Fifteen context groups, each a six-bit mask of which of the five selector
 // weights are folded together.  Indexed 0..14 by `g` in `model_plane`.
+//
+// The five weights are the five outcomes of the stage-one decision -- north,
+// west, north-east, north-west, escape.  Each bit folds one weight into another
+// and zeroes the source, and a group with no bits set gives all five their own
+// weight.  Order matters, because a fold reads what the fold before it left:
+// both readers apply them as 3-doubles, 4-into-2, 3-into-2, 4-into-1,
+// 3-into-1, 2-into-1, which is not the bit order this enum is written in.
+//
+// `model_plane` and `unmodel_plane` both read this table, and until this enum
+// existed one of them named the bits by role and the other by bit number
+// (`f_b0`, `f_b1`, ...), so the two halves of one encode/decode pair could not
+// be read against each other.
+enum : uint8_t {
+  ctx_w4_to_w1  = 0x01,
+  ctx_w4_to_w2  = 0x02,
+  ctx_w3_double = 0x04,
+  ctx_w3_to_w1  = 0x08,
+  ctx_w3_to_w2  = 0x10,
+  ctx_w2_to_w1  = 0x20,
+};
+
 alignas(16) static uint8_t ctx_group_flags[32] = {
   0, 1, 2, 4, 8, 10, 13, 16, 17, 22, 32, 35, 36, 56, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };

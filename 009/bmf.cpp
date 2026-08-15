@@ -46,7 +46,7 @@
 // exists.
 //
 //   alt_model_p2_encode / alt_model_p2_decode        123 of 586 (21%)
-//   code_pixel / decode_pixel                        147 of 1036 (14%)
+//   code_pixel / decode_pixel                        147 of 1044 (14%)
 //   predict_med / unpredict_med                       10 of 123 (8%)
 //   alt_model_p1_d8_encode / alt_model_p1_d8_decode     8 of 60 (13%)
 //   model_plane / unmodel_plane                       15 of 258 (6%)
@@ -119,13 +119,15 @@ void bmf_compress(const char* InName, const char* OutName) {
     Arc = bmf_open_file((BmfFile*)nb, (char*)OutName, 0);
   else
     Arc = nullptr;
-  int32_t Flags = p_i->depth;
-  if( Flags&depth_palette ) {
-    if( Flags&depth_grey ) {
-      p_i->depth = Flags^depth_palette;
+  // `Flags`, in a program whose header has a `flags` byte that is not this
+  // one: it is the depth.
+  int32_t Depth = p_i->depth;
+  if( Depth&depth_palette ) {
+    if( Depth&depth_grey ) {
+      p_i->depth = Depth^depth_palette;
     } else {
-      int32_t Colours = 1<<(Flags&depth_bits);
-      int32_t Step = 0x100u>>(Flags&depth_bits);
+      int32_t Colours = 1<<(Depth&depth_bits);
+      int32_t Step = 0x100u>>(Depth&depth_bits);
       const uint8_t* Palette = p_i->palette();
       int32_t Grey = 0;
       for( i = 0; i<Colours; ++i ) {
@@ -134,7 +136,7 @@ void bmf_compress(const char* InName, const char* OutName) {
         Grey += Step;
       }
       if( i>=Colours )
-        p_i->depth = (Flags|depth_grey)^depth_palette;
+        p_i->depth = (Depth|depth_grey)^depth_palette;
     }
   }
   int32_t coded_len = compress_image(Arc, p_i, coded_block);

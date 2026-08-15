@@ -21,7 +21,10 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     uint32_t pal_len;
     uint16_t hdr_words[5];
     uint8_t depth_b;
-    int8_t flags_b;
+    // The two decision bytes, straight off the wire, so `bmp.inc`'s two enums
+    // read them.  `flags_b` was `int8_t` and the coded-tail bit was tested as
+    // `flags_b<0`, which is a sign test standing in for a mask.
+    uint8_t flags_b;
     uint32_t data_len;
     CodedTail head;
     uint32_t magic_word;
@@ -73,7 +76,7 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), version = ((major_v<<8)-12288)|(minor_v-48), version!=512)||fread(frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
     return arc->fail();
   }
-  if( frame.flags_b<0 ) {
+  if( frame.flags_b&flags_tail ) {
     fread(&frame.head, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
       if( frame.head.len>bytes_left(arc->fp) ) {
@@ -98,23 +101,23 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     return arc->fail();
   }
   pal_bytes = 3<<(frame.depth_b&31);
-  if( !(frame.depth_b&0x80) )
-    pal_bytes = frame.depth_b&0x80;
+  if( !(frame.depth_b&depth_palette) )
+    pal_bytes = 0;
   frame.pal_len = pal_bytes;
   if( !frame.hdr_words[0]||!frame.hdr_words[1] ) {
     return arc->fail();
   }
-  img_at = alloc_image(frame.hdr_words[0], frame.hdr_words[1], frame.depth_b&0x3F, (uint8_t)(frame.depth_b&0x80)>>7, 1);
+  img_at = alloc_image(frame.hdr_words[0], frame.hdr_words[1], frame.depth_b&depth_bits, (frame.depth_b&depth_palette)!=0, 1);
   frame.depth_f = frame.depth_b;
   img_at->depth = frame.depth_b;
   has_coded = p_coded_buf&&*p_coded_buf;
-  int8_t hdr_flags = frame.flags_b;
-  img_at->flags |= frame.flags_b&2|(has_coded<<7);
-  plane_count = ((frame.depth_f&0x3Fu)+7)>>3;
+  uint8_t hdr_flags = frame.flags_b;
+  img_at->flags |= (frame.flags_b&flags_transposed)|(has_coded ? flags_tail : 0);
+  plane_count = ((frame.depth_f&depth_bits)+7)>>3;
   if( plane_count<1||plane_count>4 ) {
     return arc->fail();
   }
-  if( !(hdr_flags&0x20) ) {
+  if( !(hdr_flags&flags_coded) ) {
     if( frame.data_len>img_at->data_size ) {
       return arc->fail();
     }
@@ -126,7 +129,7 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   }
   near_lossless_q = 0;
   alphabet_reduced = 0;
-  if( !(hdr_flags&4) ) {
+  if( !(hdr_flags&flags_slow) ) {
     printf("\nwritten in fast mode; this build only decodes -S streams\n");
     exit(3);
   }
@@ -139,7 +142,7 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     return arc->fail();
   }
   bpp = img_at->depth;
-  if( (bpp&0x3Fu)<=4||(frame.flags_b&0x10)==0 ) {
+  if( (bpp&depth_bits)<=4||(frame.flags_b&flags_descriptors)==0 ) {
     plane_predictor = 0;
     plane_alt_model = 0;
     unmodel_plane(img_at, img_at->pixels);
@@ -148,7 +151,7 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   // The near-lossless nibble, mirroring `image_compress`: present for a single
   // greyscale plane and for three or more, absent otherwise.  Two `goto`s
   // jumped over it; the condition is the encoder's, negated.
-  if( plane_count==1 ? (bpp&0x40)!=0 : plane_count>2 ) {
+  if( plane_count==1 ? (bpp&depth_grey)!=0 : plane_count>2 ) {
     uint32_t near_lossless = unpack_bits(4);
     if( near_lossless ) {
       printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
@@ -168,7 +171,7 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
       plane_desc[pl].flags = desc_flags;
       plane_desc[pl].nrefs = nrefs;
       plane_desc[nrefs].src_plane = pl;
-      if( plane_desc[pl].flags&8 ) {
+      if( plane_desc[pl].flags&desc_has_refs ) {
         uint8_t dc_v = unpack_bits(8);
         plane_desc[pl].dc = dc_v;
         if( nrefs>1 ) {
@@ -188,19 +191,19 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     arc = frame.arc_f;
   }
   plane_buf = (uint8_t*)bmf_new(img_at->width*img_at->height);
-  if( frame.flags_b&8 ) {
+  if( frame.flags_b&flags_planar ) {
     frame.img = *img_at;
-    frame.img.depth = 72;
+    frame.img.depth = depth_one_plane;
     if( plane_count>0 ) {
       frame.arc_f = arc;
       plane_i = 0;
       do {
         plane = plane_desc[plane_i].src_plane;
-        plane_predictor = plane_desc[plane].flags&3;
-        plane_alt_model = (uint8_t)(plane_desc[plane].flags&4)>>2;
+        plane_predictor = plane_desc[plane].flags&desc_predictor;
+        plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
         unmodel_plane(&frame.img, plane_buf);
         if( plane_predictor ) {
-          if( plane_predictor==1 ) {
+          if( plane_predictor==pred_p1 ) {
             if( !plane_alt_model )
               unpredict_med(plane_buf, img_at->width, img_at->height);
           }
@@ -214,8 +217,8 @@ restore_arc:
       arc = frame.arc_f;
     }
   } else {
-    plane_predictor = plane_desc[0].flags&3;
-    plane_alt_model = (uint8_t)(plane_desc[0].flags&4)>>2;
+    plane_predictor = plane_desc[0].flags&desc_predictor;
+    plane_alt_model = (plane_desc[0].flags&desc_alt_model)!=0;
     {
       unmodel_plane(img_at, img_at->pixels);
       if( plane_alt_model )
@@ -227,9 +230,9 @@ restore_arc:
       do {
         ++pl2;
         plane2 = plane_desc[pl2-1].src_plane;
-        pred = plane_desc[plane2].flags&3;
+        pred = plane_desc[plane2].flags&desc_predictor;
         plane_predictor = pred;
-        if( (plane_desc[plane2].flags&8)!=0||pred ) {
+        if( (plane_desc[plane2].flags&desc_has_refs)!=0||pred ) {
           i = img_at->width;
           frame.row_step = &img_at->pixels[plane2];
           n_pix = i*img_at->height;
@@ -279,7 +282,7 @@ check_length:
   free(stream.buf);
   frame.depth_f = frame.depth_b;
 read_palette:
-  if( frame.depth_f&0x80 ) {
+  if( frame.depth_f&depth_palette ) {
     pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
     got = fread(pal_at, 1u, frame.pal_len, arc->fp);
     if( got!=frame.pal_len ) {

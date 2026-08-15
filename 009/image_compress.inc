@@ -30,7 +30,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
     has_coded = 1;
   hdr.width = p_i->width;
   hdr.height = p_i->height;
-  p_i->flags |= has_coded<<7;
+  p_i->flags |= has_coded ? flags_tail : 0;
   hdr_pad8 = *(uint32_t*)&p_i->_pad8;
   hdr.stride = row_bytes;
   near_lossless_q = 0;
@@ -43,13 +43,13 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
              4u, 1u, arc->fp)!=1 )
     return 0;
   uint8_t bpp = p_i->depth;
-  pal_bytes = bpp&0x80;
-  if( bpp&0x80 )
+  pal_bytes = bpp&depth_palette;
+  if( bpp&depth_palette )
     pal_bytes = 3<<(bpp&31);
   if( p_i->data_size<0x10u )
     goto write_raw;
   desc_slow_mode = 1;
-  hdr.flags |= 0x24;
+  hdr.flags |= flags_coded|flags_slow;
   if( (p_i->depth&depth_bits)<=4 ) {
     stream.size = p_i->data_size+0x20000;
     stream.buf = (uint8_t*)bmf_new(stream.size);
@@ -61,7 +61,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
     goto write_coded;
   }
   filtered = search_filter(p_i, 0);
-  hdr.flags |= 0x10u;
+  hdr.flags |= flags_descriptors;
   if( p_i->flags&flags_transposed ) {
     uint32_t img_stride = p_i->stride;
     uint32_t hdr_pad8b = *(uint32_t*)&p_i->_pad8;
@@ -71,7 +71,11 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
     hdr.stride = img_stride;
     *(uint32_t*)&hdr._pad8 = hdr_pad8b;
     hdr.data_size = data_bytes;
-    hdr.flags = 0x34|(uint8_t)(hdr_pad8b>>24);
+    // The top byte of the word at offset 8 is `p_i->flags`, so this is the
+    // three bits set above put back over the source's own -- the same value
+    // the `|=`s left, re-derived from a header that `search_filter` may have
+    // transposed under it.
+    hdr.flags = flags_coded|flags_descriptors|flags_slow|(uint8_t)(hdr_pad8b>>24);
   } else {
     data_bytes = p_i->data_size;
   }
@@ -91,9 +95,9 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   if( plane_count>0 ) {
     int32_t pl = 0;
     do {
-      uint32_t word_flags = (4*plane_desc[pl].flags)|plane_desc[pl].nrefs;
+      uint32_t word_flags = (plane_desc[pl].flags<<2)|plane_desc[pl].nrefs;
       pack_bits(word_flags, 6);
-      if( plane_desc[pl].flags&8 ) {
+      if( plane_desc[pl].flags&desc_has_refs ) {
         uint32_t word_dc = plane_desc[pl].dc;
         pack_bits(word_dc, 8);
         if( plane_desc[pl].nrefs>1u ) {
@@ -112,7 +116,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   }
   if( filtered ) {
     uint32_t n_pix = p_i->width*p_i->height;
-    hdr.flags |= 8u;
+    hdr.flags |= flags_planar;
     uint8_t *plane_buf = (uint8_t*)bmf_new(n_pix);
     if( plane_count>0 ) {
       int32_t pl2 = 0;

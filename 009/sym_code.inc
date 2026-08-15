@@ -223,7 +223,7 @@ int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
   if( (uint32_t)tot<=0x8000 ) {
     int32_t lvl = model_geometry[symbol];
     step = (_this[1]>>2)&0xFFFFFFE0;
-    if( plane_predictor==2 )
+    if( plane_predictor==pred_p2 )
       step = 15*(_this[1]>>5);
     *(_this+lvl+2) += step+4;
     tot = *_this+step+4;
@@ -247,7 +247,7 @@ int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
         span *= 2;
         mask >>= 1;
         node = go+2*node;
-        pair->f[go] = f+((alt_freq_init*((uint32_t)(plane_predictor==2)+5))>>3);
+        pair->f[go] = f+((alt_freq_init*((uint32_t)(plane_predictor==pred_p2)+5))>>3);
       } while( mask );
       return 0;
     }

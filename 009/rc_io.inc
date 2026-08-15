@@ -62,7 +62,7 @@ static void packer_rewind() {
 // frequency strips.  None of it is range coding -- `rc_begin` was doing this
 // and the coder's own init in one function, which is why it was 90 lines.
 static uint16_t* begin_plane_stream() {
-  if( plane_predictor==2 ) {
+  if( plane_predictor==pred_p2 ) {
     alt_freq_init = 8;
     alt_freq_limit = 8;
   } else {

@@ -94,7 +94,7 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
 void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
   int32_t to_ref0;
   uint8_t* base = &img->pixels[plane];
-  if( !(plane_desc[plane].flags&8) ) {
+  if( !(plane_desc[plane].flags&desc_has_refs) ) {
     int32_t n_flat = bmf_pixels(img);
     int32_t step = plane_count;
     if( plane_count==1 ) {
@@ -164,7 +164,7 @@ void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
 }
 
 // Subtract from one plane whatever the other planes predict of it, and write
-// the residual to `dst`.  Four modes, chosen by `flags & 8` and `nrefs`:
+// the residual to `dst`.  Four modes, chosen by `desc_has_refs` and `nrefs`:
 //
 //   no transform      copy the plane out, interleaved to flat
 //   one reference     `x - dc - ref`, a plain difference
@@ -178,7 +178,7 @@ void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
 void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
   int32_t to_ref0;
   uint8_t *src = &img->pixels[plane];
-  if( !(plane_desc[plane].flags&8) ) {
+  if( !(plane_desc[plane].flags&desc_has_refs) ) {
     int32_t n_flat = bmf_pixels(img);
     int32_t step = plane_count;
     if( plane_count==1 ) {
@@ -331,14 +331,14 @@ void transform_planes(BmfImage* p_i) {
     do {
       ++k;
       int32_t plane = plane_desc[k-1].src_plane;
-      int32_t predictor = plane_desc[plane].flags&3;
+      int32_t predictor = plane_desc[plane].flags&desc_predictor;
       plane_predictor = predictor;
-      int32_t alt = (uint8_t)(plane_desc[plane].flags&4)>>2;
+      int32_t alt = (plane_desc[plane].flags&desc_alt_model)!=0;
       plane_alt_model = alt;
-      if( ((plane_desc[plane].flags&8)!=0||predictor)&&!alt ) {
+      if( ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt ) {
         colour_transform(hdr, tmp, plane);
-        if( plane_predictor!=2 ) {
-          if( plane_predictor==1 ) {
+        if( plane_predictor!=pred_p2 ) {
+          if( plane_predictor==pred_p1 ) {
             predict_med(tmp, p_i->width, p_i->height);
           }
         }

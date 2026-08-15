@@ -75,6 +75,36 @@ static int32_t desc_slow_mode;
 
 static int32_t alphabet_reduced;
 
+// A plane descriptor's `flags` nibble, which is the top four bits of the
+// six-bit word on the wire -- `flags<<2 | nrefs`, packed by `compress_image`
+// and unpacked by `expand_image`.
+//
+// `desc_predictor` is two bits holding a number rather than a flag, and it is
+// the `plane_predictor` every model in the tree branches on: 0 is the mode-0
+// predictor, 1 is MED (alt_p1), 2 is alt_p2.
+//
+// 3 is representable and the encoder never writes it.  `search_filter` probes
+// six descriptors and every later edit it makes either leaves these two bits
+// alone or assigns 1 or 2 outright, so no path produces the fourth value; on
+// the decode side it is therefore a number off a file that matches none of the
+// `==pred_p1`/`==pred_p2` tests and falls through to mode 0's shape.
+enum : uint8_t {
+  desc_predictor = 0x03,  // which predictor, 0..2 -- the three below
+  desc_alt_model = 0x04,  // code the residual with the alternate model
+  desc_has_refs  = 0x08,  // a DC and up to three weights follow, and the plane
+                          // is predicted from `nrefs` others
+};
+
+// The three values of that two-bit field, which is what `plane_predictor`
+// holds and what every `==1` and `==2` in the models was testing.  `p1` and
+// `p2` are the tree's own names for the two alternate models -- alt_p1_*.inc
+// and alt_p2_*.inc -- and neither is about pixel depth.
+enum : int32_t {
+  pred_mode0 = 0,         // no per-plane predictor; `expand_predictor_mode0`
+  pred_p1    = 1,         // MED, and the p1 model
+  pred_p2    = 2,         // the p2 model
+};
+
 struct PlaneDesc {
   union {
     int32_t desc_word;

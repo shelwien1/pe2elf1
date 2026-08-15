@@ -9,12 +9,12 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   uint32_t j, k;
   SymList* lists1, * lists0;
   if( plane_alt_model ) {
-    if( plane_predictor==1 ) {
+    if( plane_predictor==pred_p1 ) {
       if( (p_i->depth&depth_bits)==8 )
         alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
         alt_model_p1_encode(p_i, pixels);
-    } else if( plane_predictor==2 ) {
+    } else if( plane_predictor==pred_p2 ) {
       if( (p_i->depth&depth_bits)==8 )
         alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
@@ -34,19 +34,16 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       int32_t flags = ctx_group_flags[g];
       blk->ctx_state[flags] = g;
       int32_t lo = 0;
-      // The five selector weights are the five outcomes of the stage-one
-      // decision -- north, west, north-east, north-west, escape -- and one of
-      // fifteen groups says which of them share a weight.  Each bit of the
-      // group's mask folds one weight into another and zeroes the source, so
-      // the six below are read in the order the folds compose: 3 doubles first,
-      // then 4 into 2, then 3 into 2, then 4 into 1, then 3 into 1, then 2 into
-      // 1.  A group with no bits set gives all five their own weight.
-      int32_t f_w3_double = flags&4;
-      int32_t f_w4_to_w2 = flags&2;
-      int32_t f_w3_to_w2 = flags&0x10;
-      int32_t f_w4_to_w1 = flags&1;
-      int32_t f_w3_to_w1 = flags&8;
-      int32_t f_w2_to_w1 = flags&0x20;
+      // One of fifteen groups says which of the five selector weights share a
+      // weight; `tables.inc` names the bits and gives the order the folds
+      // compose in.  Hoisted out of the two loops below, as the original has
+      // them.
+      int32_t f_w3_double = flags&ctx_w3_double;
+      int32_t f_w4_to_w2 = flags&ctx_w4_to_w2;
+      int32_t f_w3_to_w2 = flags&ctx_w3_to_w2;
+      int32_t f_w4_to_w1 = flags&ctx_w4_to_w1;
+      int32_t f_w3_to_w1 = flags&ctx_w3_to_w1;
+      int32_t f_w2_to_w1 = flags&ctx_w2_to_w1;
       do {
         uint32_t hi = 0;
         do {

@@ -1,15 +1,44 @@
 // bmp.inc -- the BMP file, as this program holds it in memory.
 
-// The two decision bytes.  `depth` is a width in its low six bits and two
-// statements about the palette in its top two; `flags` is separate, and its
-// 0x40 means something else entirely -- which is why these are named rather
-// than left as an 0x40 in each field meaning packed rows in one and a grey
-// ramp in the other.
-static constexpr uint8_t depth_bits = 0x3F;      // bits per pixel
-static constexpr uint8_t depth_grey = 0x40;      // the palette is a grey ramp
-static constexpr uint8_t depth_palette = 0x80;   // a palette follows the pixels
-static constexpr uint8_t flags_transposed = 0x02;// width and height are swapped
-static constexpr uint8_t flags_packed = 0x40;    // rows are packed sub-byte
+// The two decision bytes, one enum each.  They are adjacent in the header and
+// they both use 0x40, for two unrelated things -- packed rows in one, a grey
+// ramp in the other -- so an 0x40 left to stand on its own says which field it
+// came from and nothing else.  Grouping them also puts each byte on the page
+// as a byte: what bits exist, and which are holes.
+//
+// `depth` is a width in its low six bits and two statements about the palette
+// in its top two.
+enum : uint8_t {
+  depth_bits    = 0x3F,   // bits per pixel
+  depth_grey    = 0x40,   // the palette is a grey ramp
+  depth_palette = 0x80,   // a palette follows the pixels
+
+  // One eight-bit greyscale plane, which is what a header describing a single
+  // plane of a colour image says.  Both sides of the planar path copy the real
+  // header, overwrite `depth` with this, and hand the copy to the model; both
+  // wrote it as `72`.
+  depth_one_plane = depth_grey|8,
+};
+
+// `flags` is the same byte in memory and on disk: `compress_image` builds its
+// header as a `BmfImage` and writes the sixteen bytes out, `expand_image` reads
+// them back into one.  Two bits describe the image, four describe the stream
+// that follows it, and one says whether anything sits between the two.
+//
+// Bit 0 is unused.  `flags_packed` is written by `alloc_image` and read by
+// nothing -- in this program or in the file -- which is a fact about BMF 2.01
+// rather than about the decompilation, and it is kept and named because a bit
+// the encoder sets is part of the format whether or not the decoder consults
+// it.
+enum : uint8_t {
+  flags_transposed  = 0x02, // width and height are swapped
+  flags_slow        = 0x04, // coded in -S mode; this build decodes no other
+  flags_planar      = 0x08, // each plane coded alone, interleaved afterwards
+  flags_descriptors = 0x10, // a plane descriptor per plane heads the stream
+  flags_coded       = 0x20, // the data is a coded stream, not raw pixels
+  flags_packed      = 0x40, // rows are packed sub-byte
+  flags_tail        = 0x80, // a `CodedTail` sits between header and data
+};
 
 // A BMP palette entry is four bytes -- blue, green, red, and a zero reserved
 // byte -- so little-endian makes the word `0x00RRGGBB`.  The image carries its
@@ -49,7 +78,7 @@ struct BmfImage {
 
 // Transpose the header.  The loop at each call site has already moved the
 // pixels; this swaps the two dimensions that describe them, recomputes the
-// stride, and flips bit 1 of `flags`, which is the record that it happened.
+// stride, and flips `flags_transposed`, which is the record that it happened.
 //
 // Open-coded at five sites, in two spellings that are not obviously the same
 // store: three wrote `*(uint16_t*)&img->stride`, which leaves the top half of
@@ -64,7 +93,7 @@ static inline void transpose_image_in_place(BmfImage* img, int32_t planes) {
   uint16_t w = img->width;
   img->width = img->height;
   img->height = w;
-  img->flags ^= 2u;
+  img->flags ^= flags_transposed;
   img->stride = (uint16_t)(img->width*planes);
 }
 
@@ -72,11 +101,10 @@ static inline void transpose_image_in_place(BmfImage* img, int32_t planes) {
 // palette after them if there is one.
 //
 // It used to build the header's `(pad, pad, depth, flags)` word by arithmetic
-// -- `bpp<<16` for `depth`, `0x40000000` for `flags & 0x40` (rows are sub-byte
-// packed), `0x00800000` for `depth & 0x80` (a palette follows) -- and store it
-// through `result[2]`, because the original wrote it as one store.  The two
-// decision bytes are written as themselves now, which is also what let the
-// return type stop being `int32_t*`.
+// -- `bpp<<16` for `depth`, `0x40000000` for `flags_packed`, `0x00800000` for
+// `depth_palette` -- and store it through `result[2]`, because the original
+// wrote it as one store.  The two decision bytes are written as themselves
+// now, which is also what let the return type stop being `int32_t*`.
 BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
   int32_t bits, row_pack, row_bytes, pal_bytes;
   uint16_t row16;
@@ -130,8 +158,8 @@ BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette,
   img->stride = row_bytes;
   img->_pad8[0] = 0;
   img->_pad8[1] = 0;
-  img->depth = (uint8_t)(bpp|(has_palette ? 0x80 : 0));
-  img->flags = sub_byte_rows ? 0x40 : 0;
+  img->depth = (uint8_t)(bpp|(has_palette ? depth_palette : 0));
+  img->flags = sub_byte_rows ? flags_packed : 0;
   img->data_size = data_bytes;
   // The clear used to be guarded by `depth & 0x80`, with a `nullptr` for the
   // other arm -- and reaching it needed `pal_bytes` non-zero, which is exactly

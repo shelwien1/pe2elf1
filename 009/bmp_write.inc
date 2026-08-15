@@ -28,9 +28,12 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   bmp->bfReserved1 = 0;
   bmp->biWidth = i;
   bmp->biHeight = rows;
-  int8_t depth_flags = (int8_t)img->depth;
+  // The depth byte, whose top two bits pick which of the three palettes below
+  // gets written.  It was `int8_t depth_flags`, which named the wrong byte --
+  // `flags` is the other one -- and tested `depth_palette` as `depth_flags<0`.
+  uint8_t depth = img->depth;
   bmp->biPlanes = 1;
-  bits = img->depth&depth_bits;
+  bits = depth&depth_bits;
   bmp->biBitCount = bits;
   bmp->biClrImportant = 0;
   bmp->biClrUsed = 0;
@@ -40,7 +43,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   if( bits<=8 ) {
     int32_t ncolours = 1<<(bits&31);
     int32_t ncol = 1<<(bits&31);
-    if( depth_flags&0x40 ) {
+    if( depth&depth_grey ) {
       uint32_t levels = 0x100u>>(bits&31);
       if( ncol>0 ) {
         if( ncol/2 ) {
@@ -60,7 +63,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           *(uint32_t*)&out_buf[4*at+50] = bmp_grey_entry((uint8_t)(levels*(at-1)));
       }
       pal_bytes = 4*ncol;
-    } else if( depth_flags<0 ) {
+    } else if( depth&depth_palette ) {
       if( ncol<=0 ) {
         pal_bytes = 4*ncolours;
       } else {
@@ -111,7 +114,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     bmp->bfOffBits = off_bits;
     if( !rle_mode )
       break;
-    src_bits = img->depth&depth_bits;
+    src_bits = depth&depth_bits;
     can_rle = src_bits==4;
     if( src_bits!=4 ) {
       if( src_bits!=8 )

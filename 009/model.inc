@@ -377,13 +377,18 @@ struct ModelBlock {
       this_1->ctx_state[flags] = g;
       lo1 = 0;
       g0 = g;
-      int32_t y0 = flags&4;
-      int32_t f_b1 = flags&2;
-      int32_t f_b4 = flags&0x10;
+      // The same six folds `model_plane` hoists, under the same names and in
+      // the same order.  This half spelled them `y0`, `f_b1`, `f_b4`, `f_b0`,
+      // `f_b5`, `f_b3` -- bit numbers, which say where a bit is and not what
+      // it does, and left in the decompiler's declaration order, which is not
+      // the order the loop below applies them in.  `tables.inc` names the bits.
+      int32_t f_w3_double = flags&ctx_w3_double;
+      int32_t f_w4_to_w2 = flags&ctx_w4_to_w2;
+      int32_t f_w3_to_w2 = flags&ctx_w3_to_w2;
       lo = 0;
-      int32_t f_b0 = flags&1;
-      int32_t f_b5 = flags&0x20;
-      int32_t f_b3 = flags&8;
+      int32_t f_w4_to_w1 = flags&ctx_w4_to_w1;
+      int32_t f_w3_to_w1 = flags&ctx_w3_to_w1;
+      int32_t f_w2_to_w1 = flags&ctx_w2_to_w1;
       do {
         lo1 = lo;
         int32_t k = 0;
@@ -395,7 +400,7 @@ struct ModelBlock {
           rec->w[2] = 2;
           rec->w[3] = 2;
           rec->w[4] = 2;
-          if( y0 ) {
+          if( f_w3_double ) {
             w2 = (uint16_t)(rec->w[4]+rec->w[3]);
             rec->w[3] = w2;
             w4 = 0;
@@ -404,7 +409,7 @@ struct ModelBlock {
             w2 = rec->w[3];
             w4 = rec->w[4];
           }
-          if( f_b1 ) {
+          if( f_w4_to_w2 ) {
             w2n = (uint16_t)(w4+rec->w[2]);
             rec->w[2] = w2n;
             w4 = 0;
@@ -412,23 +417,23 @@ struct ModelBlock {
           } else {
             w2n = rec->w[2];
           }
-          if( f_b4 ) {
+          if( f_w3_to_w2 ) {
             w2n = (uint16_t)(w2+w2n);
             rec->w[2] = w2n;
             w2 = 0;
             rec->w[3] = 0;
           }
-          if( f_b0 ) {
+          if( f_w4_to_w1 ) {
             rec->w[1] += w4;
             w4 = 0;
             rec->w[4] = 0;
           }
-          if( f_b3 ) {
+          if( f_w3_to_w1 ) {
             rec->w[1] += w2;
             w2 = 0;
             rec->w[3] = 0;
           }
-          if( f_b5 ) {
+          if( f_w2_to_w1 ) {
             rec->w[1] += w2n;
             w2n = 0;
             rec->w[2] = 0;

@@ -1,5 +1,26 @@
 // filter_search.inc -- search the filters, which is what -Q9 spends its time on.
 
+// The six plane descriptors the per-plane search probes.  `probe_plane` is
+// called with each in turn and the same literal is also the answer stored back
+// into `best_flags`, so every one of these numbers appeared twice with nothing
+// saying what it selected.
+//
+// Each probe pairs its predictor with `desc_alt_model`, which is why 5 and 6
+// rather than 1 and 2.  These are not the only descriptors that reach the wire:
+// the three whole-image trials below start from what the per-plane search chose
+// and edit it -- forcing `try_p1` or `try_p2` across all planes, adding
+// `desc_has_refs` where `nrefs` is non-zero, or clearing `desc_alt_model` --
+// and keep the result if it codes smaller.  Clearing the alt bit is what puts
+// a bare 1 or 9 in a descriptor.
+enum : int32_t {
+  try_mode0    = pred_mode0,                                 //  0
+  try_p1       = pred_p1|desc_alt_model,                     //  5
+  try_p2       = pred_p2|desc_alt_model,                     //  6
+  try_refs     = desc_has_refs,                              //  8
+  try_refs_p1  = desc_has_refs|pred_p1|desc_alt_model,       // 13
+  try_refs_p2  = desc_has_refs|pred_p2|desc_alt_model,       // 14
+};
+
 uint32_t search_filter(BmfImage* img, int8_t mode) {
   struct alignas(16) SearchFilterFrame {
     union {
@@ -103,84 +124,84 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
       if( hard ) {
         best_cost = 0x7FFFFFFF;
       } else {
-        best_cost = probe_plane(dims[1], 0);
+        best_cost = probe_plane(dims[1], try_mode0);
         flags_s = frame.best_flags;
         packer_reset();
         if( best_cost!=0x7FFFFFFF )
           flags_s = 0;
         frame.best_flags = flags_s;
       }
-      bits_f5 = probe_plane(dims[1], 5);
+      bits_f5 = probe_plane(dims[1], try_p1);
       packer_reset();
       f5 = frame.best_flags;
       if( bits_f5<best_cost ) {
         best_cost = bits_f5;
-        f5 = 5;
+        f5 = try_p1;
       }
       frame.best_flags = f5;
       if( bits_f5<best_cost+(best_cost>>5)||hard ) {
         pl0 = dims[1];
-        bits_f6 = probe_plane(pl0, 6);
+        bits_f6 = probe_plane(pl0, try_p2);
         f6 = frame.best_flags;
         packer_reset();
         if( bits_f6<best_cost ) {
           best_cost = bits_f6;
-          f6 = 6;
+          f6 = try_p2;
         }
         frame.best_flags = f6;
         if( frame.pi ) {
           {
 try_flag8:
             pl2 = dims[1];
-            bits_f8 = probe_plane(pl2, 8);
+            bits_f8 = probe_plane(pl2, try_refs);
             f8 = frame.best_flags;
             packer_reset();
             if( bits_f8<best_cost ) {
               best_cost = bits_f8;
-              f8 = 8;
+              f8 = try_refs;
             }
             frame.best_flags = f8;
           }
           pl3 = dims[1];
-          bits_f13 = probe_plane(pl3, 13);
+          bits_f13 = probe_plane(pl3, try_refs_p1);
           rows[0] = bits_f13;
           f13 = frame.best_flags;
           packer_reset();
           if( bits_f13<best_cost ) {
             best_cost = bits_f13;
-            f13 = 13;
+            f13 = try_refs_p1;
           }
           frame.best_flags = f13;
-          pred = f13&3;
-          if( pred==2||best_cost+(best_cost>>5)>rows[0] ) {
+          pred = f13&desc_predictor;
+          if( pred==pred_p2||best_cost+(best_cost>>5)>rows[0] ) {
             // `dims[1]` and `plane_i` are the same plane -- both were set from
             // `plane_desc[pi].src_plane` at the top of this loop -- and the
             // first `cost_f14` was overwritten by the next line.
-            cost_f14 = probe_plane(frame.plane_i, 14);
+            cost_f14 = probe_plane(frame.plane_i, try_refs_p2);
             deep2 = cost_f14<best_cost;
             if( cost_f14<best_cost )
               best_cost = cost_f14;
             packer_reset();
             f14 = frame.best_flags;
             if( deep2 )
-              f14 = 14;
+              f14 = try_refs_p2;
             frame.best_flags = f14;
             if( deep2 )
-              pred = 2;
+              pred = pred_p2;
           }
           goto keep_flag8;
         }
-        pred = f6&3;
+        pred = f6&desc_predictor;
       } else {
         if( frame.pi )
           goto try_flag8;
-        pred = (uint8_t)frame.best_flags&3;
+        pred = (uint8_t)frame.best_flags&desc_predictor;
       }
-keep_flag8: { frame.flag8 = (uint8_t)frame.best_flags&8; }
+keep_flag8: { frame.flag8 = (uint8_t)frame.best_flags&desc_has_refs; }
       best_bits += best_cost;
-      c0 = pred==2;
-      if( pred!=1 )
-        pred = 0;
+      c0 = pred==pred_p2;
+      if( pred!=pred_p1 )
+        pred = pred_mode0;
       c1 = frame.plane_i;
       hard += c0;
       bits_total += pred;
@@ -321,7 +342,7 @@ tile_restored:
         plane = 0;
         do {
           pi3 = plane;
-          f2 = plane_desc[plane++].flags&8|5;
+          f2 = plane_desc[plane++].flags&desc_has_refs|try_p1;
           plane_desc[pi3].flags = f2;
         } while( plane<plane_count );
       }
@@ -353,7 +374,7 @@ tile_restored:
         pl_a = 0;
         do {
           pi0 = pl_a;
-          f0 = plane_desc[pl_a++].flags&8|6;
+          f0 = plane_desc[pl_a++].flags&desc_has_refs|try_p2;
           plane_desc[pi0].flags = f0;
           nplanes_c = plane_count;
         } while( pl_a<plane_count );
@@ -380,7 +401,7 @@ tile_restored:
               do {
                 pi1 = pl_b;
                 f1 = plane_desc[pl_b++].nrefs;
-                plane_desc[pi1].flags |= 8*(f1!=0);
+                plane_desc[pi1].flags |= f1!=0 ? desc_has_refs : 0;
               } while( pl_b<plane_count );
             }
             transform_planes(tile_img);
@@ -415,7 +436,7 @@ planes_done:
       pl_c = 0;
       do {
         pi4 = pl_c;
-        f3 = plane_desc[pl_c++].flags&0xFB;
+        f3 = plane_desc[pl_c++].flags&~desc_alt_model;
         plane_desc[pi4].flags = f3;
       } while( pl_c<plane_count );
     }
