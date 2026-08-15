@@ -204,6 +204,34 @@
                          // last few pixels were; the block range says how
                          // noisy this whole region is allowed to be.
 #endif
+#ifndef BLK_DEP
+#define BLK_DEP      1   // code the four statistic planes under the exact
+                         // constraints they place on each other:
+                         //   max >= min
+                         //   mask1 (always-1) is a subset of min & max
+                         //   mask0 (always-0) is a subset of ~(min | max)
+                         //     -- from which mask0 & mask1 == 0 follows
+                         //   min == max  <=>  mask1 == ~mask0, and then all
+                         //     four are the same byte, so the masks cost
+                         //     nothing at all
+                         // Same exclusion machinery as the raster: the bits
+                         // those leave undetermined are the only ones coded.
+#endif
+#ifndef BLK_MASKS
+#define BLK_MASKS    2   // the two mask planes:
+                         //  0 = never coded (min/max only)
+                         //  1 = always
+                         //  2 = decided per image, one flagged byte.
+                         // On photographs the masks pin down almost nothing
+                         // that [min,max] has not already pinned down, and
+                         // coding them loses.  On data with structure in the
+                         // low bits -- quantised, palette-mapped, 16-bit
+                         // halves -- they are the whole story.  The encoder
+                         // can tell which it has: compare the bits they save
+                         // on the raster against the bits they cost, which
+                         // after the inter-plane constraints is exactly
+                         // popcount(min&max) + popcount(~(min|max)).
+#endif
 #ifndef BLK_CLAMP
 #define BLK_CLAMP    1   // clamp the prediction into the block's [min,max]
 #endif
@@ -391,6 +419,27 @@ static INLINE void zigzagset( VSet& d, const VSet& s ) {
   d.m[3] = e3 | (o3<<1) | (o2>>63);
 }
 
+// The four small sets the statistic planes are drawn from.
+static INLINE void set_clear( VSet& S ) { S.m[0]=S.m[1]=S.m[2]=S.m[3]=0; }
+static INLINE void set_one( VSet& S, uint v ) {
+  set_clear(S); S.m[v>>6] = qword(1)<<(v&63);
+}
+static INLINE void set_ge( VSet& S, uint lo ) {          // { v : v >= lo }
+  for( uint i=0; i<4; i++ ) {
+    if( (i+1)*64 <= lo ) S.m[i] = 0;
+    else if( i*64 >= lo ) S.m[i] = ~qword(0);
+    else S.m[i] = ~qword(0) << (lo-i*64);
+  }
+}
+static INLINE void set_sub( VSet& S, uint m ) {          // { v : v & ~m == 0 }
+  set_clear(S);
+  for( uint v=0; v<256; v++ ) if( (v&~m&255)==0 ) S.m[v>>6] |= qword(1)<<(v&63);
+}
+static INLINE void set_sup( VSet& S, uint m ) {          // { v : v & m == m }
+  set_clear(S);
+  for( uint v=0; v<256; v++ ) if( (v&m)==m ) S.m[v>>6] |= qword(1)<<(v&63);
+}
+
 // One mixer weight vector: RES_NM weights in the logistic domain.
 struct BitMix {
   float w[RES_NM];
@@ -477,6 +526,13 @@ struct Raster {
                            // picture carries 4x the components and cannot
                            // afford nc*256*256 counters)
 #if BLK_STAT
+  // How this Raster's legal-value sets are obtained:
+  //   0  no constraint
+  //   1  the per-block table below (the raster)
+  //   2  derived from this pixel's earlier components (the statistic
+  //      picture, whose four planes constrain each other exactly)
+  uint lmode, nc0;
+  VSet lsc;                // scratch for mode 2
   uint blw, blh, nbx;      // log2 block size, blocks per row
   const VSet* lset;        // [block][component] legal value sets
   const byte* lrng;        // [block][component][2] its min and max
@@ -523,6 +579,30 @@ struct Raster {
   qword  s_h[256];         // residual histogram, for its order-0 entropy
 #endif
 
+#if BLK_STAT
+  // The legal set in force for component k of the pixel at p, and its
+  // bounds.  Mode 2 builds it from the components already decoded into p:
+  // plane 0 is min, 1 is max, 2 is the always-1 mask, 3 the always-0 mask.
+  INLINE const VSet* CurSet( uint k, const byte* p, int& lo, int& hi ) {
+    lo = 0; hi = 255;
+    if( lmode==1 ) { lo = lr[k][0]; hi = lr[k][1]; return lg[k]; }
+#if BLK_DEP
+    if( lmode==2 ) {
+      uint s = k/nc0, j = k%nc0;
+      if( s==0 ) return 0;                       // min: unconstrained
+      uint mn = p[j];
+      if( s==1 ) { set_ge(lsc,mn); lo = int(mn); return &lsc; }
+      uint mx = p[nc0+j];
+      if( mn==mx ) { set_one(lsc,mn); lo = hi = int(mn); return &lsc; }
+      if( s==2 ) { uint m = mn&mx;      set_sub(lsc,m); hi = int(m); }
+      else       { uint m = (mn|mx)&255; set_sup(lsc,m); lo = int(m); }
+      return &lsc;
+    }
+#endif
+    return 0;
+  }
+#endif
+
   INLINE float Knee( uint k ) const {
 #if MIX_LOSS==3
     return LW_HUBA * mad[k];
@@ -538,7 +618,7 @@ struct Raster {
   void Init( uint W_, uint H_, uint nc_, uint stride_, uint vq_ = RES_VQ ) {
     W = W_; H = H_; nc = nc_; stride = stride_; vq = vq_;
 #if BLK_STAT
-    lset = 0; lrng = 0;
+    lset = 0; lrng = 0; lmode = 0; nc0 = 0;
 #endif
     bstride = W + PADL + PADR;
     size_t bn = size_t(H+PADT) * bstride * nc;
@@ -750,13 +830,14 @@ struct Raster {
     }
 #endif
 
-#if BLK_STAT && BLK_CLAMP
-    // The block cannot hold anything outside [min,max], so neither can a
-    // sensible prediction.  Free, and it never hurts.
-    if( lset ) {
-      int lo = lr[k][0], hi = lr[k][1];
-      if( pb<lo ) pb = lo; else if( pb>hi ) pb = hi;
-    }
+#if BLK_STAT
+    int _lo, _hi;
+    const VSet* ls = lmode ? CurSet(k,p,_lo,_hi) : 0;
+#if BLK_CLAMP
+    // Nothing outside the legal range can occur, so neither should a
+    // prediction.  Free, and it never hurts.
+    if( ls ) { if( pb<_lo ) pb = _lo; else if( pb>_hi ) pb = _hi; }
+#endif
 #endif
 
     vctx[k] = int((uint(pb)*vq)>>8);
@@ -769,7 +850,11 @@ struct Raster {
 #if STATS
     s_h[r&255]++;
 #endif
+#if BLK_STAT
+    r = CodeRes( k, r, uint(pb), ls );
+#else
     r = CodeRes( k, r, uint(pb) );
+#endif
 #if RES_ZIGZAG
     e = (r&1) ? -int((r+1)>>1) : int(r>>1);
     r = uint(e) & 255;
@@ -830,15 +915,19 @@ struct Raster {
   // One residual byte through the RES_NM models, mixed in the logistic
   // domain, optionally refined by the APM.  Encode and decode run the very
   // same instructions; only the bit source differs, inside rc_BProcess.
+#if BLK_STAT
+  INLINE uint CodeRes( uint k, uint c, uint pb, const VSet* lv ) {
+#else
   INLINE uint CodeRes( uint k, uint c, uint pb ) {
+#endif
     uint cxt, bit;
 #if BLK_STAT
-    // Carry the block's legal VALUE set into the alphabet this tree codes:
-    // first r = (v-pb)&255, then the zigzag fold if it is on.  A subtree
-    // holding no legal symbol is not a choice, so its bit is not coded.
+    // Carry the legal VALUE set into the alphabet this tree codes: first
+    // r = (v-pb)&255, then the zigzag fold if it is on.  A subtree holding
+    // no legal symbol is not a choice, so its bit is not coded.
     VSet ls; uint nls = 256;
-    if( lset ) {
-      VSet t; rotr256( t, lg[k][0], pb );
+    if( lv ) {
+      VSet t; rotr256( t, *lv, pb );
 #if RES_ZIGZAG
       zigzagset( ls, t );
 #else
@@ -1032,18 +1121,19 @@ static INLINE uint blkl( int v ) { return uint( v<1 ? 1 : (v>12 ? 12 : v) ); }
 
 struct BlkStats {
   uint nbx, nby, nb, nc, blw, blh;
-  byte* st;                // [nb][4][nc] -- the four planes, as a picture
+  uint nst;                // 2 or 4 planes -- see BLK_MASKS
+  byte* st;                // [nb][NST][nc] -- the planes, as a picture
   VSet* set;               // [nb][nc]    -- derived legal value sets
   byte* rng;               // [nb][nc][2] -- and their min/max
 
   void Init( uint W, uint H, uint nc_ ) {
     blw = blkl(B0_BLKLW); blh = blkl(B0_BLKLH);
-    nc = nc_;
+    nc = nc_; nst = (BLK_MASKS==0) ? 2 : 4;
     nbx = (W + (1u<<blw) - 1) >> blw;
     nby = (H + (1u<<blh) - 1) >> blh;
     nb  = nbx*nby;
-    st  = new byte[size_t(nb)*4*nc];
-    memset( st, 0, size_t(nb)*4*nc );
+    st  = new byte[size_t(nb)*nst*nc];
+    memset( st, 0, size_t(nb)*nst*nc );
     set = new VSet[size_t(nb)*nc];
     rng = new byte[size_t(nb)*nc*2];
   }
@@ -1051,22 +1141,23 @@ struct BlkStats {
   // encoder side: measure the raster
   void Scan( const byte* img, uint W, uint H, uint stride ) {
     for( size_t i=0; i<size_t(nb)*nc; i++ ) {
-      st[(i/nc)*4*nc + 0*nc + i%nc] = 255;   // min
-      st[(i/nc)*4*nc + 1*nc + i%nc] = 0;     // max
-      st[(i/nc)*4*nc + 2*nc + i%nc] = 255;   // and
-      st[(i/nc)*4*nc + 3*nc + i%nc] = 0;     // or
+      st[(i/nc)*nst*nc + 0*nc + i%nc] = 255;   // min
+      st[(i/nc)*nst*nc + 1*nc + i%nc] = 0;     // max
+      if( nst>2 ) {
+        st[(i/nc)*nst*nc + 2*nc + i%nc] = 255;   // always-1 mask
+        st[(i/nc)*nst*nc + 3*nc + i%nc] = 0;     // always-0 mask, as its OR
+      }
     }
     for( uint y=0; y<H; y++ ) {
       const byte* q = img + size_t(y)*stride;
-      byte* b = st + (size_t(y>>blh)*nbx)*4*nc;
+      byte* b = st + (size_t(y>>blh)*nbx)*nst*nc;
       for( uint x=0; x<W; x++ ) {
-        byte* c = b + size_t(x>>blw)*4*nc;
+        byte* c = b + size_t(x>>blw)*nst*nc;
         for( uint k=0; k<nc; k++ ) {
           uint v = q[x*nc+k];
           if( v < c[0*nc+k] ) c[0*nc+k] = byte(v);
           if( v > c[1*nc+k] ) c[1*nc+k] = byte(v);
-          c[2*nc+k] &= byte(v);
-          c[3*nc+k] |= byte(v);
+          if( nst>2 ) { c[2*nc+k] &= byte(v); c[3*nc+k] |= byte(v); }
         }
       }
     }
@@ -1080,28 +1171,68 @@ struct BlkStats {
   // same block's min and max, so it costs the coder nothing to unpick.
   void Pack() {
     for( size_t b=0; b<nb; b++ ) {
-      byte* c = st + b*4*nc;
+      byte* c = st + b*nst*nc;
       for( uint k=0; k<nc; k++ ) {
-        uint mn = c[0*nc+k], mx = c[1*nc+k], am = c[2*nc+k], om = c[3*nc+k];
+        uint mn = c[0*nc+k], mx = c[1*nc+k];
+        uint am = (nst>2) ? c[2*nc+k] : 0, om = (nst>2) ? c[3*nc+k] : 255;
         // an empty block (the image is not a whole number of blocks) has
         // min=255,max=0; that survives the round trip as max-min = 1.
-        if( mn>mx ) { c[1*nc+k]=byte((mx-mn)&255); c[2*nc+k]=0; c[3*nc+k]=0; continue; }
+        if( mn>mx ) { c[1*nc+k]=byte((mx-mn)&255); if(nst>2){c[2*nc+k]=0;c[3*nc+k]=0;} continue; }
         c[1*nc+k] = byte(mx-mn);
-        c[2*nc+k] = byte((mn&mx) & ~am);
-        c[3*nc+k] = byte(om & ~(mn|mx));
+        if( nst>2 ) {
+          c[2*nc+k] = byte((mn&mx) & ~am);
+          c[3*nc+k] = byte(om & ~(mn|mx));
+        }
       }
     }
   }
   void Unpack() {
     for( size_t b=0; b<nb; b++ ) {
-      byte* c = st + b*4*nc;
+      byte* c = st + b*nst*nc;
       for( uint k=0; k<nc; k++ ) {
         uint mn = c[0*nc+k], mx = (mn + c[1*nc+k]) & 255;
         c[1*nc+k] = byte(mx);
-        c[2*nc+k] = byte((mn&mx) & ~c[2*nc+k]);
-        c[3*nc+k] = byte((mn|mx) |  c[3*nc+k]);
+        if( nst>2 ) {
+          c[2*nc+k] = byte((mn&mx) & ~c[2*nc+k]);
+          c[3*nc+k] = byte((mn|mx) |  c[3*nc+k]);
+        }
       }
     }
+  }
+
+  // Do the mask planes pay?  Their benefit is the alphabet they remove
+  // from every pixel of the block; their cost, after the inter-plane
+  // constraints, is exactly the bits those constraints leave free.  Both
+  // are countable here, so the encoder decides and flags it.
+  int MasksPay( uint W, uint H ) const {
+    double gain = 0.0, cost = 0.0;
+    for( size_t b=0; b<nb; b++ ) {
+      uint bx = uint(b)%nbx, by = uint(b)/nbx;
+      uint w = ((bx+1)<<blw)<=W ? (1u<<blw) : W-(bx<<blw);
+      uint h = ((by+1)<<blh)<=H ? (1u<<blh) : H-(by<<blh);
+      const byte* c = st + b*nst*nc;
+      for( uint k=0; k<nc; k++ ) {
+        uint mn = c[0*nc+k], mx = c[1*nc+k], am = c[2*nc+k], om = c[3*nc+k];
+        if( mn>mx ) continue;
+        uint n = 0;
+        for( uint v=mn; v<=mx; v++ ) if( (v&am)==am && (v&~om&255)==0 ) n++;
+        if( n==0 ) continue;
+        gain += double(w)*double(h) * log2( double(mx-mn+1)/double(n) );
+        uint fb = 0;
+        for( uint t=(mn&mx);        t; t&=t-1 ) fb++;
+        for( uint t=(~(mn|mx))&255; t; t&=t-1 ) fb++;
+        cost += fb;
+      }
+    }
+    return gain > cost;
+  }
+
+  // Dropping the mask planes changes the picture's layout, so the encoder
+  // has to compact what Scan() filled in at four planes.  (The decoder
+  // never sees the wide form: the picture is decoded at the narrow stride.)
+  void Shrink() {
+    for( size_t b=0; b<nb; b++ ) memmove( st + b*2*nc, st + b*4*nc, 2*nc );
+    nst = 2;
   }
 
   // both sides: st -> the legal sets.  A block with no pixels in it (the
@@ -1109,8 +1240,9 @@ struct BlkStats {
   // yields the empty set; give those every value so nothing is excluded.
   void Build() {
     for( size_t b=0; b<nb; b++ ) for( uint k=0; k<nc; k++ ) {
-      const byte* c = st + b*4*nc;
-      uint mn = c[0*nc+k], mx = c[1*nc+k], am = c[2*nc+k], om = c[3*nc+k];
+      const byte* c = st + b*nst*nc;
+      uint mn = c[0*nc+k], mx = c[1*nc+k];
+      uint am = (nst>2) ? c[2*nc+k] : 0, om = (nst>2) ? c[3*nc+k] : 255;
       VSet& S = set[b*nc+k];
       if( mn>mx ) {                       // empty block: constrain nothing
         for( uint i=0; i<4; i++ ) S.m[i] = ~qword(0);
@@ -1253,16 +1385,26 @@ int main( int argc, char** argv ) {
     // coded by its own Raster ahead of the raster it describes
     static BlkStats bs;
     bs.Init( b.W, b.H, b.nc );
-    if( f_DEC==0 ) { bs.Scan( img, b.W, b.H, b.stride ); if( BLK_PACK ) bs.Pack(); }
+    if( f_DEC==0 ) bs.Scan( img, b.W, b.H, b.stride );
+#if BLK_MASKS==2
+    {   // one flagged byte says whether the mask planes are in the stream
+      uint fl = (f_DEC==0) ? uint(bs.MasksPay(b.W,b.H)) : 0;
+      fl = CodeByte( o1[0], fl ) & 1;
+      if( fl==0 ) { if( f_DEC==0 ) bs.Shrink(); else bs.nst = 2; }
+    }
+#endif
+    if( f_DEC==0 && BLK_PACK ) bs.Pack();
     {
       static Raster sras;
-      uint nc2 = 4*b.nc;
+      uint nc2 = bs.nst*b.nc;
       sras.Init( bs.nbx, bs.nby, nc2, bs.nbx*nc2, BLK_SVQ );
+      sras.lmode = BLK_DEP ? 2 : 0;
+      sras.nc0   = b.nc;
       sras.Code( bs.st );
     }
     if( BLK_PACK ) bs.Unpack();
     bs.Build();
-    ras.lset = bs.set; ras.lrng = bs.rng;
+    ras.lset = bs.set; ras.lrng = bs.rng; ras.lmode = 1;
     ras.blw = bs.blw;  ras.blh = bs.blh;  ras.nbx = bs.nbx;
 #endif
 

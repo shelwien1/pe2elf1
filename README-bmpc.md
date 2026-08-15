@@ -166,7 +166,7 @@ same mix and the same residual CM, codes them ahead of the raster itself.
 Together they name the set of byte values the block can still hold:
 
 ```
-legal(v)  =  min <= v <= max  &&  (v & AND) == AND  &&  (v & ~OR) == 0
+legal(v)  =  min <= v <= max  &&  (v & mask1) == mask1  &&  (v & mask0) == 0
 ```
 
 carried into the alphabet the residual tree actually codes — a 256-bit
@@ -178,37 +178,79 @@ symbol, **that bit is not coded and not modelled at all** — it carries no
 information. A block whose component is constant costs nothing per pixel.
 The prediction is also clamped into `[min,max]`, which is free.
 
-| | geo | total | note |
+### The four values are not independent
+
+min and max are themselves values of the block, so
+
+```
+mask1 ⊆ min & max                         (BLK_DEP)
+mask0 ⊆ ~(min | max)
+  => mask0 & mask1 == 0                   follows; never coded separately
+min == max  <=>  mask1 == ~mask0,  and then all four are the same byte
+```
+
+which is the same exclusion machinery pointed at the statistic picture
+itself. After min and max, the masks have only `popcount(min & max)` and
+`popcount(~(min | max))` free bits between them — and **none at all** for a
+constant block. Worth −0.07% by itself, but the real effect is that it
+made *small* blocks affordable: at 32×32 the statistics went from +0.14%
+(a net loss) to −0.09%.
+
+The obvious-looking alternative — coding the planes packed against each
+other as plain numbers (`max−min`, `mask1` vs `min&max`, …) — is exact and
+makes every number smaller, and it **loses** (`BLK_PACK`, +0.02%). They are
+*pictures*: min and max are smooth, and the mix and the CM predict them
+from neighbouring blocks. The transform trades that structure for
+magnitudes the coder was not paying much for. Constraining them costs the
+structure nothing; rewriting them costs it everything.
+
+### Two of the four often do not pay
+
+On photographs the masks pin down almost nothing that `[min,max]` had not
+already pinned down, and coding them is a net loss even at their
+constrained price. On data with structure in the low bits — quantised,
+palette-mapped, 16-bit halves — they are the whole story. The encoder can
+tell which it is holding: the masks' benefit is the alphabet they remove
+from every pixel of the block, their cost is exactly the free bits the
+constraints leave, and both are countable before anything is coded. So
+`BLK_MASKS=2` decides per image and spends one flagged byte saying so.
+
+| | corpus geo | corpus total | `quant.bmp` |
 |---|---|---|---|
-| no statistics | 0 | 0 | |
-| 64×64, exclusion + clamp | **−0.30%** | −0.07% | |
-| + the block's range as residual-mixer context | −0.30% | **−0.11%** | helps the large files, where exclusion alone does not pay |
-| 32×32 | −0.47% | +0.03% | small noisy images −1.0%, large smooth ones +0.4% |
-| 16×16 | +0.32% | +1.35% | the picture costs more than it saves |
-| 128×128 | −0.17% | −0.07% | best on the 8 MB image (−1664 B) |
-| coding the planes packed (`max−min`, AND vs `min&max`, OR vs `min\|OR`) | −0.28% | −0.09% | **worse** than raw |
+| no statistics | 0 | 0 | 101105 |
+| min/max/mask0/mask1, always | −0.37% | −0.19% | **73035** |
+| min/max only | −0.39% | −0.22% | 101105 |
+| **decided per image** | **−0.39%** | **−0.22%** | **73035** |
 
-Two things this measured that are worth keeping:
+`quant.bmp` (`tools/mkcorpus.sh`) is a synthetic raster whose low three
+bits are always zero and which sets one more bit in half its blocks. The
+flag pays for itself 27.8% there and costs one byte on everything else.
 
-* **the planes want to stay raw.** Packing them against each other is
-  exact and makes every number smaller, and it loses. They are
-  *pictures*: min and max are smooth, and the mix and the CM predict them
-  from their neighbours. The transform trades that structure for
-  magnitudes the coder was not paying much for.
-* **the block edge is a trade with no single answer.** The picture costs
-  `4·n_colors` bytes per block regardless of what the block holds, while
-  the constraint tightens as the block shrinks. Which wins depends on how
-  compressible the raster is, not on how big it is: a noisy 320×240 wants
-  32×32 (−1.0%), a smooth 4096×512 wants 128×128. `B0_BLKLW`/`B0_BLKLH`
-  are therefore frozen out of `IDX/opt.pl` — its corpus is crops, so it
-  would answer that question with a bias it cannot see.
+### Block size
 
-The exclusion is worth less than the raw numbers suggest it should be
-(§ the analysis said 22–39 legal values out of 256 for a median block),
-and the reason is that the residual CM already knows most of it: with the
-activity, the neighbour errors and the predicted byte in its context, it
-had already put nearly all its probability mass inside the legal set. What
-the statistics add is the difference between *nearly* certain and free.
+| edge | geo | total | 8 MB image |
+|---|---|---|---|
+| 16×16 | **−0.95%** | −0.18% | 2651982 |
+| 32×32 | −0.69% | **−0.29%** | 2644872 |
+| 64×64 | −0.39% | −0.22% | **2643530** |
+| 128×128 | — | — | 2643732 |
+
+The statistic picture costs `n_planes·n_colors` bytes per block whatever
+the block holds, and the constraint tightens as the block shrinks, so
+where the two cross depends on how compressible the raster is rather than
+on how big it is: a noisy 320×240 keeps wanting smaller blocks, a smooth
+4096×512 does not. `B0_BLKLW`/`B0_BLKLH` are frozen out of `IDX/opt.pl` —
+its corpus is crops, so it would answer that question with a bias it
+cannot see — and stay at the 64×64 the brief started from, which is now
+also the best on the 8 MB image (before the inter-plane constraints,
+128×128 was).
+
+The exclusion is worth less than the analysis says it should be (a median
+block admits 22–39 of 256 values), and the reason is that the residual CM
+already knew most of it: with the activity, the neighbour errors and the
+predicted byte in its context, nearly all its probability mass was already
+inside the legal set. What the statistics add is the difference between
+*nearly* certain and free.
 
 ## 6. Results
 
@@ -216,12 +258,12 @@ Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46876** | 4.82 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46532** | 4.78 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **103452** | 3.59 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **123403** | 3.21 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **359192** | 1.27 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2645774** | 2.52 |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46861** | 4.81 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46513** | 4.78 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **103361** | 3.59 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **123282** | 3.21 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **358602** | 1.27 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2643530** | 2.52 |
 | x_ai.bmp | RLE8 | 887278 | — | — | 285808 | 285808 | fallback |
 | x_ci.bmp | RLE8 | 3278170 | — | — | 1046958 | 1046958 | fallback |
 
@@ -232,8 +274,8 @@ top-down BMP with non-zero row padding and a trailer, and book1.
 The two RLE8 files are not rasters, so they take the order-1 fallback and
 match coder0 exactly (+1 byte for the mode flag).
 
-On the 8 MB target image bmpc codes **2646067** bytes: 34.8% smaller than
-coder0's 4057586, and 1.8% smaller than the 2694740 of `bmf`, which is
+On the 8 MB target image bmpc codes **2643530** bytes: 34.8% smaller than
+coder0's 4057586, and 1.9% smaller than the 2694740 of `bmf`, which is
 what this was being measured against.
 
 Where it got there, on that file:
@@ -244,7 +286,7 @@ Where it got there, on that file:
 | + the LPC mix, order-0 residual | 2912183 | −28.2% |
 | + the 6-model residual mix | 2646464 | −9.1% |
 | + a final `IDX/opt.pl` pass | 2646067 | |
-| + per-block statistics (64×64) | **2645774** | −0.01%; at 128×128, 2644403 |
+| + per-block statistics (64×64) | **2643530** | −0.10% |
 | bmf, for reference | 2694740 | |
 
 ## 7. Caveats
