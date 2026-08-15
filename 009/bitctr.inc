@@ -5,6 +5,12 @@ struct CounterNode {
   uint16_t total;
   uint16_t c[7];
 
+  // Code one symbol against this node.  Defined out of line in sym_code.inc,
+  // beside the tree coder it calls; `__alt_p1_encode_symbol` and
+  // `__alt_p1_decode_symbol` are the two instantiations under their callers'
+  // names.
+  template<int f_DEC> int32_t code_symbol(int32_t ctx, int32_t sym);
+
   // One counter bumped, with the node's total kept in step.  119 sites in
   // `alt_p1_block`'s `update_model` wrote both halves out, and the increment --
   // one of nine constants, 2 to 17 -- is what that function is *about*: which

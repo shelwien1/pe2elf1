@@ -149,14 +149,14 @@ int32_t __decode_symbol_tree(uint16_t* freq) {
 // was already happening, and the two totals agree in the low 16 bits that
 // `*freq` and `& 0x7FFF` keep.  The encoder's spellings are the ones kept.
 template<int f_DEC>
-int32_t __alt_p1_code_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
+int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
   uint32_t cum;
   int32_t slot;
-  uint16_t *cur = node->c;
-  const uint32_t tot = node->total&0x7FFF;
+  uint16_t *cur = c;
+  const uint32_t tot = total&0x7FFF;
   if( f_DEC ) {
     sym = rc.get_freq(tot);
-    cum = node->c[0];
+    cum = c[0];
     while( cum<=(uint32_t)sym )
       cum += *++cur;
     rc.decode(cum-*cur, cum, tot);
@@ -166,8 +166,8 @@ int32_t __alt_p1_code_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
       slot = sym;
     cum = 0;
     for( int32_t k = 0; k<slot; k++ )
-      cum += node->c[k];
-    cur = &node->c[slot];
+      cum += c[k];
+    cur = &c[slot];
     rc.encode(cum, cum+*cur, tot);
   }
   // Halve or third every counter once the total passes 0x2000, and start the
@@ -178,24 +178,24 @@ int32_t __alt_p1_code_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
   // `false` and `true` for any pointer.  Both loops always ran; the flag was
   // MSVC's register for a branch it had already decided.
   if( tot>0x2000 ) {
-    node->total = 0x8000;
+    total = 0x8000;
     int32_t lo = 256;
     for( int32_t k = 6; k>=0; --k )
-      if( node->c[k]<lo )
-        lo = node->c[k];
+      if( c[k]<lo )
+        lo = c[k];
     for( int32_t k = 6; k>=0; --k ) {
-      const uint16_t nf = lo<=1 ? node->c[k]-(node->c[k]>>1) : (node->c[k]+2)/3;
-      node->c[k] = nf;
-      node->total += nf;
+      const uint16_t nf = lo<=1 ? c[k]-(c[k]>>1) : (c[k]+2)/3;
+      c[k] = nf;
+      total += nf;
     }
   }
   *cur += 32;
-  const int32_t result = node->total+32;
-  node->total = result;
-  slot = cur-node->c;
+  const int32_t result = total+32;
+  total = result;
+  slot = cur-c;
   if( slot>=5 ) {
     uint16_t*const strip = model_strip(128*(uint32_t)(slot&1)
-        +((((node->c[0]+(result&0x7FFF)+96-2*(uint32_t)node->c[slot])>>25)&0xFFFFFFC0)
+        +((((c[0]+(result&0x7FFF)+96-2*(uint32_t)c[slot])>>25)&0xFFFFFFC0)
           +(uint32_t)ctx));
     if( f_DEC )
       slot += 2*__decode_symbol_tree(strip);
@@ -208,11 +208,11 @@ int32_t __alt_p1_code_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
 // The donor pushed a third argument neither body reads.  `tools/deadparam.py`
 // took it and the two it was forwarded from.
 void __alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
-  __alt_p1_code_symbol<0>(node, ctx, sym);
+  node->code_symbol<0>(ctx, sym);
 }
 
 int32_t __alt_p1_decode_symbol(CounterNode* node, int32_t ctx) {
-  return __alt_p1_code_symbol<1>(node, ctx, 0);
+  return node->code_symbol<1>(ctx, 0);
 }
 
 

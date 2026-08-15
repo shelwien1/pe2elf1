@@ -78,6 +78,14 @@ DECLINED = {
         '`BmfImage` would make the image the compressor.  Its decode half takes '
         'a `uint16_t *` and could not be the same kind of method, so the pair '
         'would stop matching as well',
+    'alt_p1_encode_symbol':
+        'the two-line instantiation of `CounterNode::code_symbol<0>`, which is '
+        'already a method.  These wrappers exist to give a merged '
+        'encode/decode template the two names its callers use -- see the note '
+        'at the top of bmf.cpp -- so making them methods too would put '
+        '`node->alt_p1_encode_symbol` in front of `node->code_symbol<0>`',
+    'alt_p1_decode_symbol':
+        'the decode half of the pair above, and declined for the same reason',
 }
 
 
@@ -309,6 +317,16 @@ def apply_tree(path, origin, nm, rec, ret, rest, a, b, p):
     short = nm.lstrip('_')
     unit, order, base = unit_of(path)
     src, first = origin[a]
+    # A `template<...>` body is out of scope, and half-applying one is worse
+    # than not trying: the first attempt on `__alt_p1_code_symbol` dropped the
+    # `template<int f_DEC>` line, declared a non-template method, and reported
+    # "0 call sites" because the calls read `__f<0>(...)` and the call pattern
+    # has no `<0>` in it.  The tree did not compile, and the tool said it had
+    # succeeded.  Refuse instead; the conversion is four lines by hand.
+    if a > 0 and unit[src][first - 1].strip().startswith('template<'):
+        return False, ('%s is a template; methodising one means rewriting '
+                       '`__f<N>(x, ...)` call sites too, which this does not do'
+                       % short)
     if origin[b][0] != src:
         return False, '%s: its body spans two files' % short
     # The declaration goes in whichever file defines the struct.
