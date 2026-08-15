@@ -104,6 +104,11 @@ translation unit, so the visibility argument has not arrived either.  Doing it
 means teaching three tools a new way to find a definition; that is the work,
 and it is not done.
 
+*(Done later in the round, and this paragraph is wrong in the way it is most
+worth keeping: the claim was "checked this round and holds", and checking it
+properly is what found that `addrmap.py` had been printing an empty map.  See
+"the `__` prefix is gone" below.)*
+
 Also: the prefetch that asked for the cache line holding a local the next line
 writes, one `w2 = w2;`, and a pointer `search_filter` spilled to its frame
 and reloaded thirteen times -- `p_i_2`, `img_c` and the `img` parameter are one
@@ -138,7 +143,11 @@ turns of a countdown loop, at offsets 56 down to 0.  That is
 
 ## Phase 3 -- stack frames
 
-**Two of eight dissolved; six left where the tool left them.**
+**Two of eight dissolved; six left where the tool left them.**  *(Later in the
+round a seventh came partly apart -- `search_filter`'s ten members outside its
+union -- and three of the four recorded failures turned out to describe an
+experiment the tool could no longer run.  See "the four frames that were tried
+and reverted" below.)*
 
 `DecodePixelFrame` and `CodePixelFrame` dissolve.  An earlier round had already
 recovered the neighbour array out of them, and what was left was that array,
