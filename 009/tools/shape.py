@@ -392,7 +392,12 @@ def summary():
         offers, declined = liftframe.candidates(lines)
         row('  this can offer to lift', len(offers))
         row('  tried and reverted', len(liftframe.PROVEN))
-        row('  declined, every member in a union', len(declined))
+        # "every member in a union" was the only reason `liftframe` had when
+        # this row was written, and it now declines on three: the union, a
+        # member the body indexes out of, and a frame declared at file scope.
+        # A row that names one reason while counting three is the same defect
+        # as a count that names the wrong file.
+        row('  declined, with a reason', len(declined))
     except Exception:                                             # noqa: BLE001
         pass
     row('structs', len(members))

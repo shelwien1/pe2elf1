@@ -66,7 +66,16 @@ MEMBER = re.compile(r'\s*((?:alignas\([^)]*\)\s*)?'
 
 
 def frame_of(lines, a, b):
-    """(first, last, [lift], [keep]) for the body's frame, or None."""
+    """(first, last, [lift], [keep]) for the body's frame, or None.
+
+    The struct has to be *inside* the body.  `ReduceAlphabetFrame` is declared
+    at file scope -- an earlier round moved it out so its two arms could split
+    into separate functions -- so this finds nothing there, and asking for that
+    frame answered "no frame this can lift".  Which is true of this tool and
+    not of the tree, and it is the silence the docstring above is against, one
+    more code path over.  Said plainly rather than fixed: lifting a file-scope
+    frame is a different operation, since the declaration is shared.
+    """
     start = None
     for i in range(a, b + 1):
         c = lines[i].split('//')[0]
@@ -74,6 +83,11 @@ def frame_of(lines, a, b):
             start = i
             break
     if start is None:
+        # A body that names a file-scope frame type has one; it is just not
+        # here to lift.
+        for i in range(a, b + 1):
+            if re.search(r'\b\w+Frame\s+frame\s*;', lines[i].split('//')[0]):
+                return 'file-scope'
         return None
     depth, end = 0, None
     for i in range(start, b + 1):
@@ -188,13 +202,29 @@ def indexed_out(lines, a, b, got):
 # true.  `--retry` does not re-take them; it suppresses the table so the tool
 # will offer a frame anyway, and the gate is what says whether the offer was
 # good.
+# Re-taken again, against a tree three thousand lines further on, and two of the
+# four entries were describing an experiment this tool can no longer run:
+#
+#   * `cost_candidate` is declined structurally now, before any build --
+#     `buf[4*dx+2048]` indexes out of one member into the one after it, which
+#     is a permanent reason and a better one than a gate failure;
+#   * `reduce_alphabet`'s frame is at file scope, moved there by an earlier
+#     round so its two arms could split, and `frame_of` only looks inside the
+#     body.  Lifting a shared declaration is a different operation.
+#
+# Both are in `candidates`' decline list rather than here, which is where a
+# reason that holds without running anything belongs.
+#
+# `search_filter` cleared.  The entry below recorded a *whole*-frame lift, and
+# what this offers now is the ten members outside the union -- the union is
+# MSVC's slot sharing and stays.  110 checks byte-identical, 23 of 23 at the
+# other pointer width, and ASan clean over 44 runs, which is the check that
+# answers here: the recorded failure was a stack-buffer-overflow and `test.sh`
+# cannot see one.
 PROVEN = {
-    'search_filter':  'altp1 aborts while compressing (rc 134)',
-    'cost_candidate': 'altp1 aborts while compressing (rc 134)',
-    # These two offer only the members outside their union, and even that much
-    # moves what the body writes past.
+    # Offers only the members outside its union, and even that much moves what
+    # the body writes past.
     'expand_image':   'DLRAW exits 3 while decompressing',
-    'reduce_alphabet': 'DLRAW aborts while compressing (rc 134)',
 }
 
 
@@ -219,6 +249,10 @@ def candidates(lines):
     for a, b, nm, sig in structs.bodies(lines):
         got = frame_of(lines, a, b)
         if not got or nm.lstrip('_') in proven:
+            continue
+        if got == 'file-scope':
+            declined.append((nm, 'its frame is declared at file scope, which '
+                             'is a different lift: the declaration is shared'))
             continue
         crossed = indexed_out(lines, a, b, got) if got[2] else None
         if got[2] is None:
@@ -306,7 +340,14 @@ if __name__ == '__main__':
     if want:
         one = [f for f in found if f[0].lstrip('_') == want.lstrip('_')]
         if not one:
-            sys.exit('%s: no frame this can lift' % want)
+            # The reason, not just the refusal.  `--list` has printed declines
+            # with their reason since the six silent ones; asking for a single
+            # frame did not, and answered "no frame this can lift" to a frame
+            # this declines for a stated reason.  Same silence, one code path
+            # over.
+            why = [d for d in declined if d[0].lstrip('_') == want.lstrip('_')]
+            sys.exit('%s: %s' % (want, why[0][1] if why else
+                                 'no frame this can lift'))
         nm, a, b, got, clash = one[0]
         if clash:
             sys.exit('%s: %s already a local' % (nm, ', '.join(clash)))
