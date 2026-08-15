@@ -16,8 +16,8 @@
 // index, because it cannot bound one, and the decline was recorded as though
 // the index had been shown to escape.
 //
-// `buf_1[4]` is `hist_w[512]`, 2048 bytes.  `memset(buf_1, 0, 2048)` and
-// `estimate_cost(buf_1, 512)` both say so, and what the four-byte declaration
+// `buf_1[4]` was `hist_w[512]`, 2048 bytes.  `memset(buf_1, 0, 2048)` and
+// `estimate_cost(buf_1, 512)` both said so, and what the four-byte declaration
 // made of the other 2044 bytes was the eleven members after it: `img_end`,
 // eight offset slots, and the head of a 2008-byte pad.  Measured at both
 // widths rather than reasoned about -- the region is 24576..26623 either way,
@@ -27,7 +27,9 @@
 // Nothing read those eleven after the `memset`, which is why clearing them was
 // invisible: `img_end` is a local here, the eight offsets were the
 // decompiler's spill slots for neighbour offsets that are `const` locals in
-// the walk, and `nplanes` is `plane_count`.  So the whole of the frame after
+// the walk, and `nplanes` is `plane_count`.  The histogram itself has moved
+// again since: it belongs to `weight_pair_cost` now, which is the walk that
+// fills it and the four copies of that walk in `choose_plane_coding`.  So the whole of the frame after
 // the histograms was padding, and there is no frame.
 //
 // **The output was a byte pointer too.**  `pd` was `uint8_t *desc`, written as
@@ -60,6 +62,44 @@ static inline int32_t residual_bin(int32_t own, int32_t w0, int32_t a,
   return ((uint16_t)own-(uint16_t)((w0*a+w1*b+40)>>7)-256)&0x1FF;
 }
 
+// Cost one plane under a candidate pair of transform weights: walk every sample
+// after the first row, quantise its residual into a 512-bin histogram, and
+// score the histogram.
+//
+// Five copies: `cost_candidate`'s second walk, below, and four in
+// `choose_plane_coding` of twenty-six lines each, differing in nothing but the
+// two weights and which of four `[512]` locals they cleared.  Those four
+// locals are gone with them; the histogram belongs to the walk.
+//
+// `plane_a` and `plane_b` are byte offsets from this plane to the two it
+// references, which is why they are added to the same base rather than passed
+// as pointers.
+static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
+                                int32_t plane_a, int32_t plane_b,
+                                int32_t w4, int32_t w8) {
+  int32_t hist[512];
+  memset(hist, 0, sizeof hist);
+  const int32_t stride = (uint16_t)img->stride;
+  const int32_t left = -plane_count;
+  const int32_t ofs_up = -stride;
+  const int32_t ofs_ul = -stride-plane_count;
+  const uint8_t *p = plane0-ofs_ul;
+  const uint8_t *q = plane0+plane_a-ofs_ul;
+  const uint8_t *r = plane0+plane_b-ofs_ul;
+  int32_t n = img->width*(img->height-1)-1;
+  do {
+    const int32_t cur = *q;
+    ++hist[residual_bin(p[ofs_ul]+*p-p[ofs_up]-p[left],
+                        w4, q[ofs_ul]+cur-q[ofs_up]-q[left],
+                        w8, r[ofs_ul]+*r-r[ofs_up]-(uint32_t)r[left])];
+    q -= left;
+    p -= left;
+    r -= left;
+    --n;
+  } while( n );
+  return estimate_cost(hist, 512);
+}
+
 int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
   // Six histograms of a difference, indexed `value + 512`, and a seventh of
   // the second walk's residual, indexed by nine bits.  The first six were one
@@ -70,7 +110,6 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   alignas(16) int32_t hist_zx[1024];  // dz - dx
   alignas(16) int32_t hist_zy[1024];  // dz - dy
   alignas(16) int32_t hist_zp[1024];  // dz - (dx + dy)/2
-  alignas(16) int32_t hist_w[512];    // dz with the fitted weights taken out
   memset(hist_x, 0, sizeof hist_x);
   memset(hist_y, 0, sizeof hist_y);
   memset(hist_yx, 0, sizeof hist_yx);
@@ -148,30 +187,9 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   if( wb<-64 )
     wb = -64;
 
-  memset(hist_w, 0, sizeof hist_w);
-  int32_t img_w = (uint16_t)img->stride;
-  // The same three neighbours as above, for the plane this walk reads, and
-  // `plane_count` is the step to the next pixel.  The original held the west
-  // offset as `nstep` and stepped by `-nstep`.
-  const int32_t ofs_n = -img_w, ofs_w = -planes, ofs_nw = -img_w-planes;
-  int32_t rows = ((img->height-1)*img->width)-1;
-  uint8_t *r0 = &base[cand+img_w+planes], *r1 = r0+d1, *r2 = r0+d2;
-  do {
-    int32_t e0 = r0[ofs_nw];
-    int32_t e1 = e0+*r0-r0[ofs_n]-r0[ofs_w];
-    int32_t e2 = *r1;
-    int32_t bin2 = residual_bin(e1,
-                     wa, r1[ofs_nw]+e2-r1[ofs_n]-r1[ofs_w],
-                     wb, r2[ofs_nw]+*r2-r2[ofs_n]-(uint32_t)r2[ofs_w]);
-    ++hist_w[bin2];
-    r0 += planes;
-    r1 += planes;
-    r2 += planes;
-  } while( --rows!=0 );
-
   int32_t pick = d1;
   int32_t rec = 4*cand;
-  costs[rec] = estimate_cost(hist_w, 512);
+  costs[rec] = weight_pair_cost(img, &base[cand], d1, d2, wa, wb);
   costs[rec+1] = estimate_cost(hist_zx, 1024);
   costs[rec+2] = estimate_cost(hist_zy, 1024);
   costs[rec+3] = estimate_cost(hist_zp, 1024);

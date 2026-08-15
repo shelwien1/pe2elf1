@@ -21,7 +21,6 @@ int32_t choose_plane_coding(BmfImage* img) {
   // search.  The first was the frame's `buf_1`, a `uint8_t[2048]` for the same
   // reason, with the first four bytes doubling as a stash for `wt8_dn_end`
   // across a loop that does not touch it.
-  int32_t hist_arm_a[512], hist_arm_b[512], hist_arm_c[512], hist_arm_d[512];
   // The weight search's two working weights, the two other planes it reads
   // against as offsets from this one, and the row in bytes.  All five were
   // frame slots, because MSVC kept them in registers it had to spill around
@@ -152,30 +151,8 @@ int32_t choose_plane_coding(BmfImage* img) {
                   goto weights_chosen;
                 }
                 if( wt4_up<wt4_up_end&&wt4_up<192 ) {
-                  memset(hist_arm_a, 0, sizeof hist_arm_a);
-                  int32_t npix_a = img->width*(img->height-1);
-                  int32_t stride_a = (uint16_t)img->stride;
-                  int32_t n_a = npix_a-1;
-                  int32_t ofs_up_a = -stride_a;
-                  int32_t left_a = -plane_count;
-                  int32_t ofs_ul_a = -stride_a-plane_count;
-                  uint8_t *p_a = plane0-ofs_ul_a;
-                  uint8_t *q_a = plane0+plane_a-ofs_ul_a;
-                  uint8_t *row_c = plane0+plane_b-ofs_ul_a;
-                  do {
-                    int32_t ul_a = p_a[ofs_ul_a];
-                    int32_t g_a = ul_a+*p_a-p_a[ofs_up_a]-p_a[left_a];
-                    int32_t cur_a = *q_a;
-                    int32_t bin_a = residual_bin(g_a,
-                                wt4_up, q_a[ofs_ul_a]+cur_a-q_a[ofs_up_a]-q_a[left_a],
-                                wt_slot, row_c[ofs_ul_a]+*row_c-row_c[ofs_up_a]-(uint32_t)row_c[left_a]);
-                    ++hist_arm_a[bin_a];
-                    q_a -= left_a;
-                    p_a -= left_a;
-                    row_c -= left_a;
-                    --n_a;
-                  } while( n_a );
-                  uint32_t cost_a = estimate_cost(hist_arm_a, 512);
+                  uint32_t cost_a = weight_pair_cost(img, plane0, plane_a,
+                                      plane_b, wt4_up, wt_slot);
                   wt4_best = wt4_cur;
                   if( cost_a<best_cost ) {
                     best_cost = cost_a;
@@ -185,30 +162,8 @@ int32_t choose_plane_coding(BmfImage* img) {
                   wt4_up_end = wt_step+wt4_best;
                 }
                 if( wt8_up<wt8_up_end&&wt8_up<192 ) {
-                  memset(hist_arm_b, 0, sizeof hist_arm_b);
-                  int32_t npix_b = img->width*(img->height-1);
-                  int32_t stride_b = (uint16_t)img->stride;
-                  int32_t n_b = npix_b-1;
-                  int32_t ofs_up_b = -stride_b;
-                  int32_t left_b = -plane_count;
-                  int32_t ofs_ul_b = -stride_b-plane_count;
-                  uint8_t *p_b = plane0-ofs_ul_b;
-                  uint8_t *q_b = plane0+plane_a-ofs_ul_b;
-                  uint8_t *row_d = plane0+plane_b-ofs_ul_b;
-                  do {
-                    int32_t ul_b = p_b[ofs_ul_b];
-                    int32_t g_b = ul_b+*p_b-p_b[ofs_up_b]-p_b[left_b];
-                    int32_t cur_b = *q_b;
-                    int32_t bin_b = residual_bin(g_b,
-                                wt4_cur, q_b[ofs_ul_b]+cur_b-q_b[ofs_up_b]-q_b[left_b],
-                                wt8_up, row_d[ofs_ul_b]+*row_d-row_d[ofs_up_b]-(uint32_t)row_d[left_b]);
-                    ++hist_arm_b[bin_b];
-                    q_b -= left_b;
-                    p_b -= left_b;
-                    row_d -= left_b;
-                    --n_b;
-                  } while( n_b );
-                  uint32_t cost_b = estimate_cost(hist_arm_b, 512);
+                  uint32_t cost_b = weight_pair_cost(img, plane0, plane_a,
+                                      plane_b, wt4_cur, wt8_up);
                   wt8_best = wt_slot;
                   if( cost_b<best_cost ) {
                     best_cost = cost_b;
@@ -223,30 +178,8 @@ int32_t choose_plane_coding(BmfImage* img) {
             }
           }
           if( wt4_dn>wt4_dn_end&&wt4_dn>=-64 ) {
-            memset(hist_arm_c, 0, sizeof hist_arm_c);
-            int32_t npix_c = img->width*(img->height-1);
-            int32_t stride_c = (uint16_t)img->stride;
-            int32_t n_c = npix_c-1;
-            int32_t ofs_up_c = -stride_c;
-            int32_t left_c = -plane_count;
-            int32_t ofs_ul_c = -stride_c-plane_count;
-            uint8_t *p_c = plane0-ofs_ul_c;
-            uint8_t *q_c = plane0+plane_a-ofs_ul_c;
-            uint8_t *row_e = plane0+plane_b-ofs_ul_c;
-            do {
-              int32_t ul_c = p_c[ofs_ul_c];
-              int32_t g_c = ul_c+*p_c-p_c[ofs_up_c]-p_c[left_c];
-              int32_t cur_c = *q_c;
-              int32_t bin_c = residual_bin(g_c,
-                                wt4_dn, q_c[ofs_ul_c]+cur_c-q_c[ofs_up_c]-q_c[left_c],
-                                wt_slot, row_e[ofs_ul_c]+*row_e-row_e[ofs_up_c]-(uint32_t)row_e[left_c]);
-              ++hist_arm_c[bin_c];
-              q_c -= left_c;
-              p_c -= left_c;
-              row_e -= left_c;
-              --n_c;
-            } while( n_c );
-            uint32_t cost_c = estimate_cost(hist_arm_c, 512);
+            uint32_t cost_c = weight_pair_cost(img, plane0, plane_a,
+                                plane_b, wt4_dn, wt_slot);
             wt4_best_dn = wt4_cur;
             if( cost_c<best_cost ) {
               best_cost = cost_c;
@@ -256,30 +189,8 @@ int32_t choose_plane_coding(BmfImage* img) {
             wt4_dn_end = wt4_best_dn-wt_step;
           }
           if( wt8_dn>wt8_dn_end&&wt8_dn>=-64 ) {
-            memset(hist_arm_d, 0, sizeof hist_arm_d);
-            int32_t npix_d = img->width*(img->height-1);
-            int32_t stride_d = (uint16_t)img->stride;
-            int32_t n_d = npix_d-1;
-            int32_t ofs_up_d = -stride_d;
-            int32_t left_d = -plane_count;
-            int32_t ofs_ul_d = -stride_d-plane_count;
-            uint8_t *p_d = plane0-ofs_ul_d;
-            uint8_t *q_d = plane0+plane_a-ofs_ul_d;
-            uint8_t *row_f = plane0+plane_b-ofs_ul_d;
-            do {
-              int32_t ul_d = p_d[ofs_ul_d];
-              int32_t g_d = ul_d+*p_d-p_d[ofs_up_d]-p_d[left_d];
-              int32_t cur_d = *q_d;
-              int32_t bin_d = residual_bin(g_d,
-                                wt4_cur, q_d[ofs_ul_d]+cur_d-q_d[ofs_up_d]-q_d[left_d],
-                                wt8_dn, row_f[ofs_ul_d]+*row_f-row_f[ofs_up_d]-(uint32_t)row_f[left_d]);
-              ++hist_arm_d[bin_d];
-              q_d -= left_d;
-              p_d -= left_d;
-              row_f -= left_d;
-              --n_d;
-            } while( n_d );
-            uint32_t cost_d = estimate_cost(hist_arm_d, 512);
+            uint32_t cost_d = weight_pair_cost(img, plane0, plane_a,
+                                plane_b, wt4_cur, wt8_dn);
             wt8_best_dn = wt_slot;
             if( cost_d<best_cost ) {
               best_cost = cost_d;

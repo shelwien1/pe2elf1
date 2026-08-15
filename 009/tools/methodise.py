@@ -126,6 +126,16 @@ DECLINED = {
         '`choose_plane_coding` call this to compare candidates -- and the '
         'image is what it reads; `BmfImage::cost_candidate(cand, desc, costs)` '
         'would put the descriptor table and the cost array on the image',
+    # And its helper, for the same reason one level down.  It arrived the same
+    # way too: five copies of a walk came out as one function, and the new
+    # function reads the image for nothing but its stride and its dimensions,
+    # which is exactly the shape this rule looks for.
+    'weight_pair_cost':
+        'scores one plane under one pair of transform weights, which is a '
+        'question the filter search asks and not something an image does.  '
+        '`BmfImage::weight_pair_cost(plane0, a, b, w4, w8)` would read as the '
+        'image costing a candidate; the same judgement as `cost_candidate` '
+        'above, which is its only caller outside `choose_plane_coding`',
 }
 
 
