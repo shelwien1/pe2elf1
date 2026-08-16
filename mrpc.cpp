@@ -94,6 +94,16 @@
                          //  2 = trial: fit one global predictor per order
                          //      and keep the cheapest
 #endif
+#ifndef MRP_PROGRESS
+#define MRP_PROGRESS  1  // report progress on stderr while encoding:
+                         //  0 = never, 1 = when the image is big enough to
+                         //  take a while (MRP_PROGMIN pixels), 2 = always.
+                         // A two-pass coder that says nothing for an hour
+                         // is indistinguishable from a hung one.
+#endif
+#ifndef MRP_PROGMIN
+#define MRP_PROGMIN 200000
+#endif
 #ifndef MRP_SEED
 #define MRP_SEED  12345  // the coefficient search picks its tap pairs at
                          // random; this is the only thing that makes an
@@ -105,10 +115,28 @@
 #endif
 
 #define MAXC 4
+#ifndef TRIAL_PIX
+#define TRIAL_PIX 262144 // pixels the component-order trial fits on, spread
+                         // over TRIAL_BANDS bands.  One contiguous band is
+                         // not enough: it picks the order that suits that
+                         // part of the picture, which on a 4096-wide image
+                         // can be nothing like the rest of it.
+#endif
+#ifndef TRIAL_BANDS
+#define TRIAL_BANDS  6
+#endif
 #define MAX_TOTFREQ (1<<20)
 #define MIN_FREQ 1
 
 #include "sh_common.inc"
+#include <time.h>
+
+// Wall-ish clock for the progress report.  clock() is CPU time, which for
+// a single-threaded encoder is the number the user is waiting on.
+static double tnow( void ) { return double(clock())/double(CLOCKS_PER_SEC); }
+static double t_start = 0.0;
+static int    g_prog  = 0;
+#define PROG(...) do { if(g_prog){ fprintf(stderr,__VA_ARGS__); fflush(stderr);} } while(0)
 
 static const int NUM_UPELS = UPEL_DIST*(UPEL_DIST+1);
 static const int NUM_SUBPM = 1<<PM_ACC;
@@ -343,6 +371,8 @@ struct MRPC {
   int    mtfbuf[MRP_MAXCLASS];
   int    opt_loop;
   uint   rnd;
+  uint   tb0[TRIAL_BANDS], tb1[TRIAL_BANDS];   // rows the trial looks at
+  int    tnb;                                  // 0 = the whole image
 
   INLINE uint Rand() { rnd = rnd*1664525u + 1013904223u; return rnd>>8; }
   INLINE size_t OI( uint y, uint x ) const {
@@ -549,7 +579,10 @@ struct MRPC {
   // 1/sigma[group]^2 once the rate model is in force, which is the
   // statement that a sample from a noisy neighbourhood should not drag the
   // predictor as hard as one from a smooth one.
-  cost_t DesignPredictor( int mmse ) {
+  // The normal equations only, over rows [y0,y1): the component-order
+  // trial fits on a band rather than the whole image, which is a choice
+  // between n! candidates and does not need every pixel to make it.
+  void FitPredictor( int mmse ) {
     static double mat[NTMAX][NTMAX+1];
     static double wg[MRP_GROUP];
     static int    piv[NTMAX];
@@ -558,7 +591,8 @@ struct MRPC {
     for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) {
       int n = nt[k];
       for( int i=0; i<n; i++ ) for( int j=0; j<=n; j++ ) mat[i][j] = 0.0;
-      for( uint y=0; y<H; y++ ) {
+      for( int b=0; b<(tnb?tnb:1); b++ )
+      for( uint y=(tnb?tb0[b]:0); y<(tnb?tb1[b]:H); y++ ) {
         const char* pc = cls + size_t(y)*W;
         const byte* p  = org + OI(y,0);
         const char* pg = grp + PI(y,0);
@@ -614,6 +648,9 @@ struct MRPC {
       }
       for( int i=n; i<NTMAX; i++ ) coef[cl][k][i] = 0;
     }
+  }
+  cost_t DesignPredictor( int mmse ) {
+    FitPredictor( mmse );
     PredictRegion( 0, 0, H, W );
     return CalcCost( 0, 0, H, W );
   }
@@ -851,9 +888,16 @@ struct MRPC {
     int  level   = (opt_loop>1) ? QT_DEPTH : 0;
     uint blksize = (opt_loop>1) ? MAX_BSIZE : BASE_BSIZE;
     for( int i=0; i<num_class; i++ ) mtfbuf[i] = i;
-    for( uint y=0; y<H; y+=blksize ) for( uint x=0; x<W; x+=blksize ) {
-      SetPrdBuf( y, x, blksize );
-      VbsClass( y, x, blksize, W, level, blksize );
+    // this is the long pole -- every pixel of every block predicted under
+    // every class -- so it reports as it goes rather than at the end
+    uint nrow = (H+blksize-1)/blksize, done = 0, mark = 0;
+    for( uint y=0; y<H; y+=blksize ) {
+      for( uint x=0; x<W; x+=blksize ) {
+        SetPrdBuf( y, x, blksize );
+        VbsClass( y, x, blksize, W, level, blksize );
+      }
+      done++;
+      if( g_prog && nrow>=8 && done*8/nrow > mark ) { mark = done*8/nrow; PROG("."); }
     }
     return CalcCost( 0, 0, H, W );
   }
@@ -1365,12 +1409,32 @@ struct Codec : MRPCIO {
     LoadOrg();
     memset( cls, 0, size_t(W)*H );
     int save = num_class; num_class = 1;
-    DesignPredictor( 1 );
-    cost_t c = CalcCost( 0, 0, H, W );
+    FitPredictor( 1 );
+    cost_t c = 0;
+    for( int b=0; b<tnb; b++ ) {
+      PredictRegion( tb0[b], 0, tb1[b], W );
+      c += CalcCost( tb0[b], 0, tb1[b], W );
+    }
     num_class = save;
     return c;
   }
+  // Bands for the trial: a fixed pixel budget spread evenly down the
+  // image, so a wide picture is sampled in more places rather than in one
+  // deeper stripe.
+  void SetTrialBands() {
+    uint rows = uint(TRIAL_PIX / (W?W:1));
+    if( rows < 16 ) rows = 16;
+    if( rows >= H ) { tnb = 1; tb0[0] = 0; tb1[0] = H; return; }
+    uint nb = TRIAL_BANDS, bh = rows/nb;
+    if( bh < 8 ) { bh = 8; nb = rows/bh; if( nb<1 ) nb = 1; }
+    tnb = int(nb);
+    for( uint b=0; b<nb; b++ ) {
+      uint y0 = uint((double(H-bh)*double(b))/double(nb>1?nb-1:1));
+      tb0[b] = y0; tb1[b] = y0+bh;
+    }
+  }
   void ChooseOrder() {
+    SetTrialBands();
 #if MRP_ORD==1
     if( nc>=2 ) { ord[0] = 1; ord[1] = 0; }
 #elif MRP_ORD==2
@@ -1383,6 +1447,7 @@ struct Codec : MRPCIO {
     for(;;) {
       for( int k=0; k<n; k++ ) ord[k] = perm[k];
       cost_t cc = TrialOrder();
+      PROG( "." );
       if( cc<bc ) { bc = cc; for( int k=0; k<n; k++ ) best[k] = perm[k]; }
       while( i<n ) {                                   // Heap's algorithm
         if( c_[i]<i ) {
@@ -1396,6 +1461,7 @@ struct Codec : MRPCIO {
     (void)idx;
     for( int k=0; k<n; k++ ) ord[k] = best[k];
 #endif
+    tnb = 0;                                   // back to the whole image
     LoadOrg();
   }
 
@@ -1420,7 +1486,16 @@ struct Codec : MRPCIO {
     SetCoefCost();
     DefaultSideCosts();
 
+    PROG( "mrpc: %ux%ux%u  %d classes  taps %d+%d*%d%s\n", W, H, nc,
+          num_class, PRD_ORDER, int(nc)-1, XPRD_ORDER, XCUR?"+cur":"" );
+    double t0 = tnow();
+    PROG( "mrpc: order trial " );
     ChooseOrder();
+    PROG( " order" );
+    for( uint k=0; k<nc; k++ ) PROG( " %d", ord[k] );
+    PROG( "  (%.1fs)\n", tnow()-t0 );
+    PROG( "mrpc: -DMRP_CLASS=n and -DMAX_ITER=n are the time dials;"
+          " both searches are linear in the class count\n" );
     CodeParams( 0 );          // after ChooseOrder: it is what it picked
     InitClass();
 
@@ -1449,12 +1524,15 @@ struct Codec : MRPCIO {
     cost_t best = 1e30; int last = 0;
     opt_loop = 1;
     for( int it=0; it<MAX_ITER; it++ ) {
+      double ta = tnow();
+      PROG( "mrpc: [1:%2d] fit", it );
       cost_t c = DesignPredictor( it==0 );
+      PROG( " %.0fs group", tnow()-ta ); double tb = tnow();
       c = OptimizeGroup();
+      PROG( " %.0fs class", tnow()-tb ); tb = tnow();
       c = OptimizeClass();
-#if MRP_VERBOSE
-      fprintf( stderr, "[%2d] %.0f\n", it, c/8.0 );
-#endif
+      PROG( " %.0fs = %.0f B  [%.0fs]%s\n", tnow()-tb, c/8.0, tnow()-t_start,
+            (c<best) ? " *" : "" );
       if( c<best ) { best = c; last = it; SAVE(); }
       if( it-last >= EXTRA_ITER ) break;
     }
@@ -1465,19 +1543,22 @@ struct Codec : MRPCIO {
     opt_loop = 2;
     best = 1e30; last = 0;
     for( int it=0; it<MAX_ITER; it++ ) {
-      cost_t c;
+      cost_t c = 0;
+      double tb = tnow();
+      PROG( "mrpc: [2:%2d] coef", it );
 #if OPT_PRED
       c = OptimizePredictor();
 #endif
+      PROG( " %.0fs group", tnow()-tb ); tb = tnow();
       cost_t side = CodePredictor( 1 );
       c = OptimizeGroup();
       side += CodeThreshold( 1 );
+      PROG( " %.0fs class", tnow()-tb ); tb = tnow();
       c = OptimizeClass();
       side += CodeClass( 1 );
       c += side;
-#if MRP_VERBOSE
-      fprintf( stderr, "(%2d) %.0f + %.0f side\n", it, (c-side)/8.0, side/8.0 );
-#endif
+      PROG( " %.0fs = %.0f + %.0f side B  [%.0fs]%s\n", tnow()-tb,
+            (c-side)/8.0, side/8.0, tnow()-t_start, (c<best) ? " *" : "" );
       if( c<best ) { best = c; last = it; SAVE(); }
 #if OPT_PRED
       if( it-last >= EXTRA_ITER ) break;
@@ -1498,10 +1579,12 @@ struct Codec : MRPCIO {
     Dump( "enc" );
 #endif
     // --- write it out
+    PROG( "mrpc: writing" );
     CodeClass( 0 );
     CodePredictor( 0 );
     CodeThreshold( 0 );
     CodeImage( 0 );
+    PROG( " ... done  [%.0fs]\n", tnow()-t_start );
   }
 #if MRP_VERBOSE
   void Dump( const char* tag ) {
@@ -1664,6 +1747,11 @@ int main( int argc, char** argv ) {
     cd.img = new byte[b.pixbytes];
     if( f_DEC==0 ) { if( fread(cd.img,1,b.pixbytes,f)!=b.pixbytes ) return 6; }
 
+#if MRP_PROGRESS
+    g_prog = (f_DEC==0) &&
+             (MRP_PROGRESS>1 || double(b.W)*double(b.H) >= MRP_PROGMIN);
+#endif
+    t_start = tnow();
     if( f_DEC==0 ) cd.Encode();
     else { cd.Decode(); cd.StoreOrg(); }
 

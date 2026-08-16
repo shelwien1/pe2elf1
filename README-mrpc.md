@@ -149,7 +149,33 @@ reason the models are static: a decoded pixel costs one dot product and
 one rangecoder step, and there is no adaptation to replay. bmpc's decoder
 has to redo every update its encoder did; mrpc's does not.
 
-## 6. Parameters
+## 6. Watching it work
+
+A two-pass coder that says nothing for an hour is indistinguishable from a
+hung one, so any image big enough to take a while (`MRP_PROGMIN` pixels,
+default 200k) reports on stderr as it goes:
+
+```
+mrpc: 4096x512x4  63 classes  taps 20+3*6+cur
+mrpc: order trial ........................ order 3 2 0 1  (14.1s)
+mrpc: -DMRP_CLASS=n and -DMAX_ITER=n are the time dials; ...
+mrpc: [1: 0] fit 5s group 1s class........ 17s = 2868374 B  [38s] *
+mrpc: [1: 1] fit 5s group 1s class........ 17s = 2826921 B  [61s] *
+mrpc: [1: 2] fit 5s group 1s class........ 17s = 2822063 B  [84s] *
+mrpc: [1: 3] fit 5s group 1s class........ 17s = 2871484 B  [107s]
+```
+
+`[loop:iteration]`, then each phase with its own time, then the code
+length the iteration reached and the total elapsed; `*` marks an
+iteration that improved on the best so far, which is the one that will be
+kept. The dots inside `class` are eighths of the class search, the long
+pole — it is the phase that predicts every pixel of every block under
+every class. `-DMRP_PROGRESS=2` reports on small images too, `=0` never.
+
+The report is also how you decide whether to wait: the per-iteration time
+is stable, so three lines tell you what the run will cost.
+
+## 7. Parameters
 
 All of them are `#define`s at the top of `mrpc.cpp`, overridable with
 `-D`; `./mrpsweep.sh 'PRD_ORDER=30' 'XPRD_ORDER=12'` builds and totals a
@@ -174,18 +200,26 @@ full-image one.
 | `NUM_PMODEL` / `PM_ACC` | 16 / 3 | shapes, and bits of the fraction |
 | `MAX_ITER` / `EXTRA_ITER` | 20 / 4 | iterations of each loop |
 | `OPT_PRED` | 1 | the coefficient search (16%, and most of the time) |
+| `TRIAL_PIX` / `TRIAL_BANDS` | 262144 / 6 | what the order trial fits on |
 
 `MRP_CLASS` is worth checking per image: MRP's formula gives 21 for these,
 and both 12 (224508) and 32 (223258) are clearly worse than 21 (209483).
 
-It is also the knob that sets the encode time, because both expensive
-searches are linear in it: the class search predicts every pixel of a
+The component-order trial fits one global predictor per candidate order,
+and there are `n_colors!` of them — 24 for RGBA. It runs on `TRIAL_PIX`
+pixels spread over `TRIAL_BANDS` bands rather than the whole image: on the
+8 MB image that is 14 s instead of minutes, and it picks the same order
+(209483 either way on t24+t32). **One** band is not enough — a single
+32-row stripe of a 4096-wide image chose an order worth 4.7% more.
+
+`MRP_CLASS` is also the knob that sets the encode time, because both
+expensive searches are linear in it: the class search predicts every pixel of a
 block under every class, and the coefficient search runs once per (class,
 tap). MRP's formula asks for 72 classes on a 705×800 image and gets the
 63 cap, and an encode at that size runs in tens of minutes. `-DMRP_CLASS`
 is the dial; decode time does not move with it.
 
-## 7. Three bugs worth naming
+## 8. Three bugs worth naming
 
 All three were found the same way — by making the encoder and the decoder
 print checksums of the state they had just agreed on, and seeing which one
