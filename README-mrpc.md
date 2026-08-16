@@ -123,27 +123,31 @@ optimiser.
 |---|---|---|---|---|---|
 | t24.bmp | 320×240×24 | 230454 | **97984** | 100130 | +2.2% |
 | t32.bmp | 320×240×32 | 307254 | 115062 | **109353** | −5.0% |
+| x_ep.bmp | 705×800×32 | 2256054 | 340266 | **319318** | −6.2% |
 | t8g / t8p | 8bpp | 77878 | 46941 / 46589 | 53452 / 53385 | fallback |
 
-mrpc wins on 32bpp and loses slightly on 24bpp. That split is the two
-designs showing their shapes: bmpc's strength is its residual coder, seven
-context models mixed per bit, and t24 is photographic where that pays;
-mrpc's strength is the predictor, and t32 has the structure a per-region
-linear fit can actually capture.
+mrpc wins on 32bpp — by more the bigger the image gets — and loses
+slightly on 24bpp. That split is the two designs showing their shapes.
+bmpc's strength is its residual coder, seven context models mixed per bit,
+and t24 is photographic, which is where that pays. mrpc's strength is the
+predictor, and it needs samples: a class is fitted from the pixels
+assigned to it, so the larger the image the better the fit it can afford,
+while an adaptive coder has already converged and gets nothing more.
 
-**Encode time is the price, and decode time is the prize.** On t24:
+**Encode time is the price, and decode time is the prize.**
 
-| | encode | decode |
-|---|---|---|
-| bmpc | 2.9 s | 1.5 s |
-| mrpc | 36 s | **0.06 s** |
+| | bmpc enc | mrpc enc | bmpc dec | mrpc dec |
+|---|---|---|---|---|
+| t24 | 2.9 s | 36 s | 1.5 s | **0.06 s** |
+| x_ep | 23 s | 786 s | 9.2 s | **1 s** |
 
-Encoding is 12× slower because the coefficient search rescans every pixel
-of a class for each candidate pair, and the class search predicts every
-pixel of a block under every class. Decoding is **25× faster** for exactly
-the reason the models are static: a decoded pixel costs one dot product
-and one rangecoder step, and there is no adaptation to replay. bmpc's
-decoder has to redo every update its encoder did; mrpc's does not.
+Encoding is 12–34× slower because the coefficient search rescans every
+pixel of a class for each candidate pair, and the class search predicts
+every pixel of a block under every class — both linear in the class count,
+which grows with the image. Decoding is **9–25× faster** for exactly the
+reason the models are static: a decoded pixel costs one dot product and
+one rangecoder step, and there is no adaptation to replay. bmpc's decoder
+has to redo every update its encoder did; mrpc's does not.
 
 ## 6. Parameters
 
@@ -173,6 +177,13 @@ full-image one.
 
 `MRP_CLASS` is worth checking per image: MRP's formula gives 21 for these,
 and both 12 (224508) and 32 (223258) are clearly worse than 21 (209483).
+
+It is also the knob that sets the encode time, because both expensive
+searches are linear in it: the class search predicts every pixel of a
+block under every class, and the coefficient search runs once per (class,
+tap). MRP's formula asks for 72 classes on a 705×800 image and gets the
+63 cap, and an encode at that size runs in tens of minutes. `-DMRP_CLASS`
+is the dial; decode time does not move with it.
 
 ## 7. Three bugs worth naming
 

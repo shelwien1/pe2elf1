@@ -6,7 +6,7 @@
 # the part that actually shapes the code: C++23, -Ofast, -march=haswell, LTO,
 # fast-math, no frame pointer / stack protector, static link.
 #
-# Usage:  ./gc.sh [target ...]     targets: coder0 bmpc (default: all)
+# Usage:  ./gc.sh [target ...]     targets: coder0 bmpc mrpc (default: all)
 #         CXX=g++ ./gc.sh          pick a compiler (default: clang++, else g++)
 #         GCOPTS='-DFOO=1' ./gc.sh extra flags appended to the command line
 #         MARCH=native ./gc.sh     override -march/-mtune (default: haswell)
@@ -82,13 +82,14 @@ build() {   # build <source> <output>
   strip "$out" 2>/dev/null || true
 }
 
-[ $# -eq 0 ] && set -- coder0 bmpc
+[ $# -eq 0 ] && set -- coder0 bmpc mrpc
 
 rm -f *.o
 for t in "$@"; do
   case "$t" in
     coder0) build coder0.cpp coder0 ;;
     bmpc)   build bmpc.cpp   bmpc   ;;
+    mrpc)   build mrpc.cpp   mrpc   ;;
     *)      build "$t.cpp"   "$t"   ;;
   esac
 done
