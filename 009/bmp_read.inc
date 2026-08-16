@@ -102,9 +102,12 @@ BmfImage* read_bmp(char* path) {
           if( run_val==1 )
             goto done;
           if( run_val==2 ) {
-            int32_t dx = fgetc(fp);
-            int32_t dy = fgetc(fp);
-            if( dx<0||dy<0 )
+            // A delta is two more bytes of the same opcode, so it is the same
+            // read.  It picks up a `ferror` check the recovery did not have
+            // here: after a read error `fgetc` answers EOF, which is the -1
+            // this already refused, so the two agree.
+            int32_t dx, dy;
+            if( !read_rle_op(fp, dx, dy) )
               return nullptr;
             row_at += dx-dy*(uint16_t)img_f->stride;
           } else {
@@ -189,10 +192,10 @@ BmfImage* read_bmp(char* path) {
       } else if( byte==1 ) {
         goto done;
       } else if( byte==2 ) {
-        int32_t dxy = fgetc(fp);
-        int32_t dy4 = fgetc(fp);
-        if( dxy<0||dy4<0 )
+        int32_t dxy, dy4;
+        if( !read_rle_op(fp, dxy, dy4) )
           return nullptr;
+        // Half the horizontal step, because a column here is a nibble.
         int32_t step = (dxy>>1)-dy4*(uint16_t)img_f->stride;
         if( (dxy&1)==1 ) {
           if( !hi_nibble )

@@ -212,24 +212,19 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     unmodel_plane(img_at, img_at->pixels);
     if( plane_alt_model )
       goto free_plane_buf;
-    if( plane_count>0 ) {
-      int32_t pl2 = 0;
-      do {
-        ++pl2;
-        int32_t plane2 = plane_desc[pl2-1].src_plane;
-        int32_t pred = plane_desc[plane2].flags&desc_predictor;
-        plane_predictor = pred;
-        if( (plane_desc[plane2].flags&desc_has_refs)!=0||pred ) {
-          deinterleave_plane(img_at, plane_buf, plane2);
-          if( pred ) {
-            if( pred==pred_p1 )
-              unpredict_med(plane_buf, img_at->width, img_at->height);
-          } else {
-            expand_predictor_mode0(img_at->width);
-          }
-          interleave_plane(img_at, plane_buf, plane2);
+    for( int32_t pl2 = 0; pl2<plane_count; ++pl2 ) {
+      const int32_t plane2 = plane_in_order(pl2);
+      const int32_t pred = plane_predictor;
+      if( (plane_desc[plane2].flags&desc_has_refs)!=0||pred ) {
+        deinterleave_plane(img_at, plane_buf, plane2);
+        if( pred ) {
+          if( pred==pred_p1 )
+            unpredict_med(plane_buf, img_at->width, img_at->height);
+        } else {
+          expand_predictor_mode0(img_at->width);
         }
-      } while( pl2<plane_count );
+        interleave_plane(img_at, plane_buf, plane2);
+      }
     }
   }
 free_plane_buf:

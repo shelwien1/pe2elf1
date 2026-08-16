@@ -37,7 +37,7 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 262 now.  The p2
+start here.**  1031 lines of copy when this was written and 206 now.  The p2
 coders' prologue and epilogue used to be the largest groups and are gone: that
 pair merged, and so did four more, so `pairshare.py`'s declined table is down
 to two rows.
@@ -51,10 +51,14 @@ transform and its inverse, an encode/decode pair nobody had ever *named* as
 one, so no share had ever been measured and no decision taken.  They are one
 `template<int32_t f_DEC>` now.
 
-The longest runs today are four and five lines apiece, spread over `bmp_read`,
-`alt_p2_model`, `alt_p2`, `model` and `image_compress` -- no single body
-dominates.  A stale sentence in this docstring is the finding that matters
-here: this file records what the residue *is*, and nothing was checking it.
+The longest runs today are four lines apiece, spread over `alt_p2_model`,
+`image_compress` and `bmp_read` -- no single body dominates.  A stale sentence
+in this docstring is the finding that matters here: this file records what the
+residue *is*, and nothing was checking it.
+
+The largest entry for several rounds after that was not copy at all -- nine
+consecutive `uint32_t <name>;` in `ModelBlock`, one window three times over.
+See `DECL` below.
 """
 import collections
 import re
@@ -71,7 +75,25 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 227
+BUDGET = 206
+
+# A declaration and nothing else: a type, a name, an optional array bound, a
+# semicolon.  No initialiser, no call, no operator.
+#
+# These are skipped, and the reason is in this file's first line: what it looks
+# for is "a run of *statements* written out more than once".  A field list is
+# not statements.  `ModelBlock` opens with nine consecutive `uint32_t <name>;`
+# and they normalise to one window three times over -- the largest single entry
+# in the residue for several rounds, and nothing a reader could act on: a
+# struct's members cannot be factored into a helper, and two bodies declaring
+# the same locals is `firstuse.py`'s and `compact_locals.py`'s question, not
+# this one.
+#
+# It is a skip and not a special case for `ModelBlock`: a planted run of six
+# identical declarations is not counted, and a planted run of six identical
+# *statements* still is.
+DECL = re.compile(r'^[A-Za-z_][\w:]*(\s*<[^;]*>)?[\s*&]+\**\w+'
+                  r'(\s*\[[^\]]*\])*\s*;$')
 
 
 def normal(text):
@@ -97,6 +119,8 @@ def survey(path):
         if any(not b or b in '{}' or b.startswith('#') for b in block):
             continue
         if sum(len(b) for b in block) < MIN_CHARS:
+            continue
+        if all(DECL.match(b) for b in block):
             continue
         windows[normal('\n'.join(block))].append(i)
     out, taken = [], set()

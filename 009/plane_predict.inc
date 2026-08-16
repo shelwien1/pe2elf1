@@ -348,6 +348,18 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   return p;
 }
 
+// The k'th plane in descriptor order, with `plane_predictor` -- which is how a
+// descriptor reaches the model at all -- set from it.  Both walks over the
+// planes open with these two lines, the encoder here and the decoder in
+// `expand_image`, and until this round both also spelled the loop around them
+// as `++k` first and `plane_desc[k - 1]` after it under an `if( plane_count >
+// 0 )` guard that a `for` does not need.
+static int32_t plane_in_order(int32_t k) {
+  const int32_t plane = plane_desc[k].src_plane;
+  plane_predictor = plane_desc[plane].flags&desc_predictor;
+  return plane;
+}
+
 void transform_planes(BmfImage* p_i) {
   int32_t i;
   memset(hist_scratch, 0, 4096);
@@ -365,36 +377,31 @@ void transform_planes(BmfImage* p_i) {
   uint8_t* src_pixels = p_i->pixels;
   memcpy(hdr->pixels, p_i->pixels, p_i->data_size);
   uint8_t *tmp = (uint8_t*)bmf_new(p_i->width*p_i->height);
-  if( plane_count>0 ) {
-    int32_t k = 0;
-    do {
-      ++k;
-      int32_t plane = plane_desc[k-1].src_plane;
-      int32_t predictor = plane_desc[plane].flags&desc_predictor;
-      plane_predictor = predictor;
-      int32_t alt = (plane_desc[plane].flags&desc_alt_model)!=0;
-      plane_alt_model = alt;
-      if( ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt ) {
-        colour_transform(hdr, tmp, plane);
-        // `!= pred_p2 && == pred_p1` is `== pred_p1`: the two are distinct
-        // values of the same two-bit field, so the outer test can only be
-        // true when the inner one is.
-        if( plane_predictor==pred_p1 )
-          predict_med(tmp, p_i->width, p_i->height);
-        int32_t n = p_i->width*p_i->height;
-        int32_t stride = plane_count;
-        if( plane_count==1 ) {
-          memcpy(&p_i->pixels[plane], tmp, n);
-        } else {
-          uint8_t *dst = &p_i->pixels[plane];
-          int32_t ofs = 0;
-          for( i = 0; i<n; ++i ) {
-            dst[ofs] = tmp[i];
-            ofs += stride;
-          }
+  for( int32_t k = 0; k<plane_count; ++k ) {
+    const int32_t plane = plane_in_order(k);
+    const int32_t predictor = plane_predictor;
+    const int32_t alt = (plane_desc[plane].flags&desc_alt_model)!=0;
+    plane_alt_model = alt;
+    if( ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt ) {
+      colour_transform(hdr, tmp, plane);
+      // `!= pred_p2 && == pred_p1` is `== pred_p1`: the two are distinct
+      // values of the same two-bit field, so the outer test can only be
+      // true when the inner one is.
+      if( plane_predictor==pred_p1 )
+        predict_med(tmp, p_i->width, p_i->height);
+      int32_t n = p_i->width*p_i->height;
+      int32_t stride = plane_count;
+      if( plane_count==1 ) {
+        memcpy(&p_i->pixels[plane], tmp, n);
+      } else {
+        uint8_t *dst = &p_i->pixels[plane];
+        int32_t ofs = 0;
+        for( i = 0; i<n; ++i ) {
+          dst[ofs] = tmp[i];
+          ofs += stride;
         }
       }
-    } while( k<plane_count );
+    }
   }
   free(tmp);
   {
