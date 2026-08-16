@@ -65,6 +65,14 @@
                          // shape.  Variant 0 is the plain rung, so
                          // NUM_SIGV=1 is exactly the unextended model.
 #endif
+#ifndef PMFIX
+#define PMFIX         1  // transmit a bucketed correction to each group's
+                         // pmf, measured from the residuals the settled
+                         // model actually produced.  Costs nc*MRP_GROUP*15
+                         // small numbers of side information, so it is
+                         // gated on measured gain and can come out to a
+                         // single bit.
+#endif
 #ifndef SIGV_2STAGE
 #define SIGV_2STAGE   1  // pick the shape first, then the sigma of that
                          // shape, instead of scanning the product.  The
@@ -395,6 +403,53 @@ static PMod* alloc_pmodels( int num_pm, const int* pm_idx ) {
     }
   delete[] pdf;
   return pm;
+}
+
+// -------------------------------------------------------------
+// The generalized-Gaussian family is a prior, not a measurement: the
+// residuals of a given (component, group) deviate from whichever member
+// of it was picked, and always in the same direction for a given image.
+// So after the loops settle, measure the deviation and transmit it.
+//
+// The window is [base, base+MAXVAL] and base is the prediction, so the
+// table index carries the residual directly -- index i is residual
+// i-MAXVAL whatever base happens to be.  That makes the correction a
+// function of the index alone, and so something that can be baked into
+// the frequency table once instead of evaluated per symbol.
+//
+// The buckets are signed log classes: sign matters because a predictor
+// that is biased is biased one way.
+static const int PMFIX_LVL = 8;                 // levels either side of 1.0
+static const int PMFIX_BK  = 15;                // 1 + 2*7 signed log classes
+// 2^(j/8) in 16.16, j = -8..8 -- a table, not pow(), because both sides
+// have to build the same table (see the note on determinism in README)
+static const uint PMFIX_MUL[2*PMFIX_LVL+1] = {
+  32768, 35734, 38968, 42495, 46341, 50535,
+  55109, 60097, 65536, 71468, 77936, 84990,
+  92682, 101070, 110218, 120194, 131072,
+};
+// index -> bucket, and each bucket's index range: signing them keeps every
+// bucket one contiguous run, which is what makes the mass of a bucket
+// inside a moving window two cumfreq reads
+static char pmfix_bk[PMSIZE];
+static int  pmfix_lo[PMFIX_BK], pmfix_hi[PMFIX_BK];
+static void pmfix_init() {
+  static const int MAG[8] = { 1, 2, 4, 8, 16, 32, 64, MAXVAL+1 };
+  for( int i=0; i<PMSIZE; i++ ) {
+    int r = i - MAXVAL;
+    if( r==0 ) { pmfix_bk[i] = 0; continue; }
+    int a = (r<0) ? -r : r, c = 0;
+    while( c<6 && a>=MAG[c+1] ) c++;
+    pmfix_bk[i] = char( 1 + 2*c + (r<0) );
+  }
+  pmfix_lo[0] = MAXVAL; pmfix_hi[0] = MAXVAL+1;
+  for( int c=0; c<7; c++ ) {
+    int p = 1+2*c, n = p+1;
+    pmfix_lo[p] = MAXVAL+MAG[c];      pmfix_hi[p] = MAXVAL+MAG[c+1];
+    pmfix_lo[n] = MAXVAL-MAG[c+1]+1;  pmfix_hi[n] = MAXVAL-MAG[c]+1;
+    if( pmfix_hi[p] > PMSIZE ) pmfix_hi[p] = PMSIZE;
+    if( pmfix_lo[n] < 0 )      pmfix_lo[n] = 0;
+  }
 }
 
 // The cost tables the optimiser reads instead of running the coder.
@@ -1907,6 +1962,152 @@ struct MRPCIO : MRPC {
       }
     }
   }
+  // ---------------------------------------------------------------
+  // 7.2: the transmitted pmf correction.
+  //
+  // MeasurePmFix walks the settled model once and, per (component,
+  // group), compares how many symbols landed in each residual bucket
+  // with how many the model expected to.  The ratio, quantised to
+  // eighths of an octave, is the correction; BuildPmFix bakes it into a
+  // private copy of that group's frequency table.
+  //
+  // The rebuild is integer throughout and reads only the transmitted
+  // levels and the table the decoder builds anyway, so both sides land
+  // on the same frequencies.
+  PMod* pmfix;                     // [k][gr][sub], nc*MRP_GROUP*NUM_SUBPM
+  int   pmfl[MAXC][MRP_GROUP][PMFIX_BK];
+  int   pmfix_on;
+
+  void AllocPmFix() {
+    if( pmfix ) return;
+    int n = MAXC*MRP_GROUP*NUM_SUBPM;
+    pmfix = new PMod[n];
+    uint*  fb  = new uint[size_t(n)*(PMSIZE*2+1)];
+    float* blk = new float[size_t(n)*CSTRIDE];
+    for( int i=0; i<n; i++ ) {
+      pmfix[i].size    = PMSIZE;
+      pmfix[i].freq    = fb + size_t(i)*(PMSIZE*2+1);
+      pmfix[i].cumfreq = pmfix[i].freq + PMSIZE;
+      pmfix[i].cost    = blk + size_t(i)*CSTRIDE;
+      pmfix[i].subcost = pmfix[i].cost + PMSIZE;
+      pmfix[i].id      = 0;
+    }
+  }
+  void BuildPmFix() {
+    AllocPmFix();
+    const double a = 1.0/log(2.0);
+    for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ ) {
+      const PMod* src = pmodels + (size_t(g)*num_pm + pm_idx[k][g])*NUM_SUBPM;
+      PMod* dst = pmfix + (size_t(k)*MRP_GROUP + g)*NUM_SUBPM;
+      uint mul[PMFIX_BK];
+      for( int b=0; b<PMFIX_BK; b++ ) mul[b] = PMFIX_MUL[pmfl[k][g][b]+PMFIX_LVL];
+      for( int s=0; s<NUM_SUBPM; s++ ) {
+        uint tot = 0;
+        for( int i=0; i<PMSIZE; i++ ) {
+          uint e = src[s].freq[i] - MIN_FREQ;
+          uint f = MIN_FREQ + uint( (qword(e)*mul[int(pmfix_bk[i])]) >> 16 );
+          dst[s].freq[i] = f; tot += f;
+        }
+        // the coder's total is a window of this table, so the whole table
+        // staying under MAX_TOTFREQ is enough -- but scaling up can push
+        // it over, and then everything comes back down by one ratio
+        if( tot > MAX_TOTFREQ ) {
+          uint room = MAX_TOTFREQ - PMSIZE*MIN_FREQ, ex = tot - PMSIZE*MIN_FREQ;
+          for( int i=0; i<PMSIZE; i++ ) {
+            uint e = dst[s].freq[i] - MIN_FREQ;
+            dst[s].freq[i] = MIN_FREQ + uint( qword(e)*room/ex );
+          }
+        }
+        dst[s].cumfreq[0] = 0;
+        for( int i=0; i<PMSIZE; i++ )
+          dst[s].cumfreq[i+1] = dst[s].cumfreq[i] + dst[s].freq[i];
+        for( int i=0; i<PMSIZE; i++ )
+          dst[s].cost[i] = float(-a*log(double(dst[s].freq[i])));
+        for( int i=0; i<=MAXVAL; i++ )
+          dst[s].subcost[i] =
+            float(a*log(double(dst[s].cumfreq[i+MAXVAL+1]-dst[s].cumfreq[i])));
+      }
+      pml[k][g]  = dst;
+      pmlc[k][g] = dst->cost;
+    }
+    pmfix_on = 1;
+  }
+  void MeasurePmFix() {
+    static double obs[MAXC][MRP_GROUP][PMFIX_BK];
+    static double exp_[MAXC][MRP_GROUP][PMFIX_BK];
+    for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
+      for( int b=0; b<PMFIX_BK; b++ ) obs[k][g][b] = exp_[k][g][b] = 0.0;
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(static)
+#endif
+    for( int kk=0; kk<int(nc); kk++ ) {
+      const uint k = uint(kk);
+      for( uint y=0; y<H; y++ ) {
+        const byte* p = org + OI(y,0);
+        const short* pr = prd + PI(y,0);
+        const char* pg = grp + PI(y,0);
+        for( uint x=0; x<W; x++, p+=nc, pr+=nc, pg+=nc ) {
+          int gr = int(pg[k]);
+          int q = Qprd( int(pr[k]) ), base = q>>PM_ACC, sub = q&(NUM_SUBPM-1);
+          int v = base + int(p[k]);
+          obs[k][gr][int(pmfix_bk[v])] += 1.0;
+          const PMod* pm = pml[k][gr] + sub;
+          int hiw = base+MAXVAL+1;
+          double tot = double(pm->cumfreq[hiw] - pm->cumfreq[base]);
+          for( int b=0; b<PMFIX_BK; b++ ) {
+            int lo = pmfix_lo[b] > base ? pmfix_lo[b] : base;
+            int hi = pmfix_hi[b] < hiw  ? pmfix_hi[b] : hiw;
+            if( hi>lo )
+              exp_[k][gr][b] += double(pm->cumfreq[hi]-pm->cumfreq[lo]) / tot;
+          }
+        }
+      }
+    }
+    for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
+      for( int b=0; b<PMFIX_BK; b++ ) {
+        double o = obs[k][g][b], e = exp_[k][g][b];
+        int lv = 0;
+        if( e>0.5 && o>0.5 ) {
+          double r = log(o/e)/log(2.0)*double(PMFIX_LVL);
+          lv = int( r<0 ? r-0.5 : r+0.5 );
+        } else if( e>0.5 ) lv = -PMFIX_LVL;      // nothing landed here
+        if( lv >  PMFIX_LVL ) lv =  PMFIX_LVL;
+        if( lv < -PMFIX_LVL ) lv = -PMFIX_LVL;
+        pmfl[k][g][b] = lv;
+      }
+  }
+  // one flag, then the levels zigzagged so that "no correction" is the
+  // symbol the geometric model spends least on
+  cost_t CodePmFix( int dec, int measure ) {
+    SPMod f; f.Set( 2, -1 );
+    if( measure ) {
+      if( !pmfix_on ) return f.Cost( 0 );
+      cost_t c = f.Cost( 1 );
+      SPMod u; u.Set( 2*PMFIX_LVL+1, 4 );
+      for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
+        for( int b=0; b<PMFIX_BK; b++ ) {
+          int lv = pmfl[k][g][b];
+          c += u.Cost( lv<=0 ? -2*lv : 2*lv-1 );
+        }
+      return c;
+    }
+    if( dec ) pmfix_on = int(DecSP(f)); else EncSP( f, uint(pmfix_on) );
+    if( !pmfix_on ) return 0;
+    SPMod u; u.Set( 2*PMFIX_LVL+1, 4 );
+    for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
+      for( int b=0; b<PMFIX_BK; b++ ) {
+        if( dec ) {
+          int z = int(DecSP(u));
+          pmfl[k][g][b] = (z&1) ? (z+1)/2 : -(z/2);
+        } else {
+          int lv = pmfl[k][g][b];
+          EncSP( u, uint(lv<=0 ? -2*lv : 2*lv-1) );
+        }
+      }
+    if( dec ) BuildPmFix();
+    return 0;
+  }
+
   void CodeImage( int dec ) {
     ResetBorders();
     for( uint y=0; y<H; y++ ) {
@@ -1949,6 +2150,8 @@ struct Codec : MRPCIO {
     if( num_class > MRP_MAXCLASS ) num_class = MRP_MAXCLASS;
     if( num_class < 2 ) num_class = 2;
     size_t bn = size_t(H+PADT)*BS*nc;
+    pmfix = 0; pmfix_on = 0; pmfix_init();
+    memset( pmfl, 0, sizeof(pmfl) );
     org  = new byte[bn];   memset( org, 128, bn );
     errB = new short[bn];  memset( errB, 0, bn*sizeof(short) );
     prd   = new short[size_t(W)*H*nc];
@@ -2197,11 +2400,38 @@ struct Codec : MRPCIO {
 #if MRP_VERBOSE
     Dump( "enc" );
 #endif
+#if PMFIX
+    // The model is settled; now measure how far the family it was chosen
+    // from is from the residuals it produced, and send the difference.
+    // The thresholds are re-run against the corrected costs so the group
+    // boundaries agree with what will be coded -- and if the whole thing
+    // does not pay for its own side information, it comes back out and
+    // costs one bit.
+    {
+      cost_t c0 = CalcCost( 0, 0, H, W );
+      MeasurePmFix();
+      BuildPmFix();
+      int sv = opt_loop; opt_loop = 1;      // thresholds only, not shapes
+      cost_t c1 = OptimizeGroup();
+      cost_t side = CodePmFix( 0, 1 );
+      if( c1 + side >= c0 ) {
+        pmfix_on = 0; SetPmodels(); OptimizeGroup();
+        PROG( " (pmfix declined)" );
+      } else {
+        PROG( " (pmfix %.0f B)", (c0-c1-side)/8.0 );
+      }
+      opt_loop = sv;
+      CodeClass( 1 );
+    }
+#endif
     // --- write it out
     PROG( "mrpc: writing" );
     CodeClass( 0 );
     CodePredictor( 0 );
     CodeThreshold( 0 );
+#if PMFIX
+    CodePmFix( 0, 0 );
+#endif
     CodeImage( 0 );
     PROG( " ... done  [%.0fs]\n", tnow()-t_start );
   }
@@ -2239,6 +2469,9 @@ struct Codec : MRPCIO {
     DecodePredictor();
     DecodeThreshold();
     SetPmodels();
+#if PMFIX
+    CodePmFix( 1, 0 );        // rebuilds the tables if the flag is set
+#endif
 #if MRP_VERBOSE
     Dump( "dec" );
 #endif

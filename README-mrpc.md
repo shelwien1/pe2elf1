@@ -294,6 +294,84 @@ large image is minutes rather than an hour.
 
 Set `-DCOEF_MAX=0 -DMIN_GAIN=100000000` for the exact search.
 
+### Two things the transmitted model was leaving on the table
+
+Both come from the same observation: the generalized-Gaussian family is a
+*prior*, and a two-pass coder has no reason to stop at a prior when it can
+measure the thing and send the difference.
+
+**σ was quantised to the group it landed in.** Each activity group took
+its σ from the ladder rung and chose only the *shape*; the ladder steps by
+×1.38, so the rung can be 16% away from what the residuals in that group
+actually want. `NUM_SIGV=3` offers ±17.5% around the rung and codes the
+choice alongside the shape — two extra bits per (component, group), 96 in
+all. The whole price is the selection pass, which reads one cost table per
+candidate per (pixel, component), so it runs in two stages: sixteen shapes
+at the rung's own σ, then the three σ of whichever shape won. 19 reads
+instead of 48, and the exhaustive form is worth another 0.35% for 3% more
+time (`-DSIGV_2STAGE=0`) — inside the noise band described below.
+
+**And the family is still only a family.** After the loops settle,
+`MeasurePmFix` compares, per (component, group), how many residuals landed
+in each of fifteen signed log-magnitude buckets with how many the chosen
+member of the family expected to, and transmits the ratio quantised to
+eighths of an octave. The window is `[base, base+MAXVAL]` and `base` *is*
+the prediction, so table index *i* is residual *i*−`MAXVAL` whatever
+`base` happens to be — which is what makes the correction a function of
+the index alone, and so something to bake into the frequency table once
+rather than evaluate per symbol. The rebuild is integer throughout and
+reads only the transmitted levels, so both sides land on the same
+frequencies; the thresholds are then re-run against the corrected costs so
+the group boundaries agree with what is coded.
+
+It costs `nc`·16·15 small numbers of side information, zig-zagged so that
+"no correction" is the cheapest symbol, and it is gated on measured gain —
+if it does not pay for itself it comes back out and the whole thing costs
+one bit. **−1.46% across the corpus** (t32 alone −3.5%), which is more
+than the residuals-are-not-quite-Gaussian story deserved.
+
+### The iteration count is a compression parameter, not a tolerance
+
+The first loop alternates a weighted-least-squares fit with a class
+reassignment. The fit minimises squared error; the thing being measured is
+code length. They are not the same objective, so the loop does not
+descend — on a 320×240 image it went
+
+```
+135K  122K  147K  140K  147K  132K bytes
+```
+
+Only the best iterate is kept, and the second loop starts from it, so the
+whole file rides on which iterate happened to land low. Two consequences,
+and the second is the more useful one.
+
+**More iterations are worth real bytes**, because they are more samples of
+a noisy process rather than further steps of a descent. Five images,
+encode time for all five:
+
+| `MRP_EFFORT` | `MAX_ITER`/`EXTRA_ITER` | bytes | time |
+|---|---|---|---|
+| 0 | 12 / 3 | | |
+| 1 | 20 / 4 | 325919 | 55.5 s |
+| | 24 / 6 | 322181 | 63.2 s |
+| | 40 / 10 | 308019 | 93.8 s |
+| 2 | 60 / 20 | **302590** | 139.3 s |
+
+7.2% for 2.5× the time. The default stays at 1 because the complaint that
+started the speed work was about an 8 MB image taking an hour; `-DMRP_EFFORT=2`
+is there for when the bytes matter more than the wall clock. Decode time
+does not move with it at all.
+
+**And small deltas cannot be read off a single encode.** The border
+consistency fix — refreshing `errB`'s margins during optimisation so the
+optimiser's activity is the one `CodeImage` actually codes with — is
+correct, and it measured 2.6% *worse* across the corpus. Two `UPEL_DIST`
+columns out of 320 cannot move a file 2.6%; what moved was which iterate
+of the first loop won. It is `-DBORDER_FIX=1`, off, with the number
+written next to it, and the same is true of `-DINIT_METRIC=1`. Anything
+claiming less than a percent needs either the whole corpus or a frozen
+optimiser to be believed.
+
 ## 6. Watching it work
 
 A two-pass coder that says nothing for an hour is indistinguishable from a
@@ -343,12 +421,17 @@ full-image one.
 | `MRP_CLASS` | 0 | 0 = MRP's own `10.4e-5·pixels + 13.8` |
 | `MRP_GROUP` | 16 | activity groups |
 | `NUM_PMODEL` / `PM_ACC` | 16 / 3 | shapes, and bits of the fraction |
-| `MAX_ITER` / `EXTRA_ITER` | 20 / 4 | iterations of each loop |
+| `NUM_SIGV` | 3 | σ variants per group offered beside the shape |
+| `PMFIX` | 1 | transmit a measured correction to each group's pmf |
+| `MRP_EFFORT` | 1 | 0 fast, 1 default, 2 maximum compression |
+| `MAX_ITER` / `EXTRA_ITER` | from `MRP_EFFORT` | iterations of each loop |
 | `OPT_PRED` | 1 | the coefficient search (16%, and most of the time) |
 | `TRIAL_PIX` / `TRIAL_BANDS` | 262144 / 6 | what the order trial fits on |
 | `COEF_MAX` | 4096 | pixels the candidate sweep samples (0 = all) |
 | `MIN_GAIN` | 4096 | stop when an iteration gains under 1/this |
+| `DP_SHRINK` | 1 | run the threshold trellis only as far as the data goes |
 | `MRP_GATHER` | 0 | 1 = use AVX2 vgather; measured slower |
+| `BORDER_FIX` / `INIT_METRIC` | 0 / 0 | tried, measured negative, kept as toggles |
 
 `MRP_CLASS` is worth checking per image: MRP's formula gives 21 for these,
 and both 12 (224508) and 32 (223258) are clearly worse than 21 (209483).
