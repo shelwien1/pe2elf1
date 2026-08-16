@@ -34,7 +34,16 @@ none of the finding.
 the runs left are an encoder and a decoder whose shared lines are scaffolding,
 and `pairshare.py` measures those; some are a loop the original unrolled, which
 is `reroll.py`'s class when the lines are identical and this one's when they are
-not.  The residue below is kept with a reason apiece.
+not.
+
+**What the residue is now, and it is worth saying so the next round does not
+start here.**  1031 lines of copy when this was written and 480 now, and the
+largest groups left are the p2 coders' prologue and epilogue -- allocate the
+planes, read the three reference flags, begin the coder; end it, restore the
+coefficients, free the planes.  That is the pair `pairshare.py` owns and has
+measured and declined at every size it has been: 123 shared lines of 586 when
+its table was written, 34 of 153 now.  Taking those out means merging the pair,
+which is a decision with a number attached and not a duplication to sweep up.
 """
 import collections
 import re
@@ -51,7 +60,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 505
+BUDGET = 480
 
 
 def normal(text):

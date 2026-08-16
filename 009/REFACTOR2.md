@@ -435,8 +435,9 @@ it was **phase 3's question with the identifiers normalised away**:
 
 ```
 duplicated blocks, identical text        0
-duplicated runs, modulo renaming       108   →  ~100
-lines that are a copy                 1031   →   626
+duplicated runs, modulo renaming       108   →    85
+lines that are a copy                 1031   →   480
+lines, spliced                      11,321   → 10,357
 ```
 
 A decompiler names a temporary after the register it landed in, so two copies
@@ -454,7 +455,17 @@ Fifteen things came out of it, and each was a named idea that had no name:
 `record_sample`; `weight_pair_cost`, `residual_bin`, `over_thresholds`,
 `plane_transform`, `transform_cost`, `save_descriptors`. `code_pixel` and
 `decode_pixel` lost 40% of their length between them; `alt_p2_model` went from
-326 lines to 184; the unit went from 11,321 to 10,473.
+326 lines to 184; `alt_model_p2_encode` from 217 to 91 and its decoder from 166
+to 62.
+
+**Where it stops.** The largest groups left are the p2 coders' prologue and
+epilogue — allocate the planes, read the reference flags, begin the coder; end
+it, restore the coefficients, free the planes. That is the pair `pairshare.py`
+owns, measured and declined at every size it has been: 123 shared lines of 586
+when its table was written, 34 of 153 now. Taking those out means merging the
+pair, which is a decision with a number attached and not a duplication to sweep
+up. The share went *up* while both halves shrank, which is the number behaving
+correctly rather than the decline weakening.
 
 **Three of the gates were counting the wrong thing, and all three had been
 green for rounds.** That is the more useful finding:

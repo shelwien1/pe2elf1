@@ -120,13 +120,8 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             cur0 = want0;
           }
           plane[0]->ctx_of(nullptr, nullptr);
-          if( f_DEC ) {
-            int32_t code0 = alt_p1_decode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
-            uint8_t pred0 = (uint8_t)blk0->pred;
-            cur0 = (uint8_t)(pred0+blk0->unfold[code0]);
-          } else {
-            cur0 = blk0->encode_sample(buf, off0, cur0);
-          }
+          cur0 = f_DEC ? blk0->decode_sample()
+                         : blk0->encode_sample(buf, off0, cur0);
           // `keep0` was a third name for `cur0`: assigned from it in both arms
           // and again beside it when the drift check keeps the reconstruction.
           blk0->record_sample(cur0);
@@ -141,13 +136,8 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           }
           AltP1Block* blk1 = plane[1];
           plane[1]->ctx_of(plane[0], nullptr);
-          if( f_DEC ) {
-            int32_t code1 = alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]], blk1->ctx[1]);
-            uint8_t pred1 = (uint8_t)blk1->pred;
-            cur1 = (uint8_t)(pred1+blk1->unfold[code1]);
-          } else {
-            cur1 = blk1->encode_sample(buf, off1, cur1);
-          }
+          cur1 = f_DEC ? blk1->decode_sample()
+                         : blk1->encode_sample(buf, off1, cur1);
           blk1->record_sample(cur1);
           int32_t off2 = plane_desc[2].src_plane;
           if( f_DEC ) {
@@ -162,13 +152,8 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           }
           AltP1Block* blk2 = plane[2];
           plane[2]->ctx_of(plane[1], plane[0]);
-          if( f_DEC ) {
-            int32_t code2 = alt_p1_decode_symbol(&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1]);
-            uint8_t pred2 = (uint8_t)blk2->pred;
-            want2 = (uint8_t)(pred2+blk2->unfold[code2]);
-          } else {
-            want2 = blk2->encode_sample(buf, off2, want2);
-          }
+          want2 = f_DEC ? blk2->decode_sample()
+                         : blk2->encode_sample(buf, off2, want2);
           blk2->record_sample(want2);
           if( f_DEC ) {
             if( xf2 )
@@ -188,13 +173,8 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             }
             AltP1Block* blk3 = plane[3];
             plane[3]->ctx_of(plane[2], plane[1]);
-            if( f_DEC ) {
-              int32_t code3 = alt_p1_decode_symbol(&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1]);
-              uint8_t pred3 = (uint8_t)blk3->pred;
-              cur3 = (uint8_t)(pred3+blk3->unfold[code3]);
-            } else {
-              cur3 = blk3->encode_sample(buf, off3, cur3);
-            }
+            cur3 = f_DEC ? blk3->decode_sample()
+                           : blk3->encode_sample(buf, off3, cur3);
             blk3->record_sample(cur3);
             if( f_DEC ) {
               int32_t val3x = cur3;

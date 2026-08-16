@@ -129,6 +129,15 @@ struct AltP1Block {
     return cur;
   }
 
+  // The decode half of `encode_sample`: take the symbol and unfold it against
+  // the prediction.  Four copies in `alt_model_p1`, one per plane, and shorter
+  // than the encode half by exactly the near-lossless drift control -- the
+  // decoder is told which fold was used.
+  int32_t decode_sample() {
+    const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]], ctx[1]);
+    return (uint8_t)((uint8_t)pred+unfold[code]);
+  }
+
   // Record one coded sample: store it and its residual magnitude, roll that
   // magnitude into the activity sum for this parity, flip the parity, let the
   // counter bank rescale if it has room, and step the five cursors.
