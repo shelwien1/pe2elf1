@@ -62,28 +62,20 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
         do {
           for( int32_t j = 0; j<4; ++j ) ctx_bias[j] >>= 3;
           AltP2Block* blk0 = (AltP2Block*)(plane[0]);
-          int32_t pred0 = plane[0]->alt_p2_context(plane[2], plane[1]);
-          P2Freq* freq = &blk0->freq[blk0->ctx];
-          int32_t code0 = freq->decode_symbol(blk0->ctx_pair);
-          int32_t val0 = (uint8_t)(pred0+(blk0->unfold[code0]));
-          blk0->alt_p2_model(val0, code0, val0-pred0);
+          blk0->decode_sample(out, plane_desc[0].src_plane, plane[2], plane[1]);
           P2Ctx *cur0 = blk0->cursor[0];
           ctx_bias[0] += 32*cur0[-1].dupleft;
           ctx_bias[1] += 32*cur0[-1].dupright;
           ctx_bias[2] += 32*cur0[-1].dleft;
           ctx_bias[3] += 32*cur0[-1].dup;
           off = xf0==0;
-          out[plane_desc[0].src_plane] = val0;
           if( off )
             seed1 = 0;
           else
             seed1 = 16*out[plane_desc[0].src_plane];
           AltP2Block *blk1 = (AltP2Block*)(plane[1]);
           plane[1]->cursor[0]->dval = seed1;
-          int32_t pred1 = blk1->alt_p2_context(plane[0], plane[2]);
-          int32_t code1 = blk1->freq[blk1->ctx].decode_symbol(blk1->ctx_pair);
-          int32_t val1 = (uint8_t)(pred1+blk1->unfold[code1]);
-          blk1->alt_p2_model(val1, code1, val1-pred1);
+          blk1->decode_sample(out, plane_desc[1].src_plane, plane[0], plane[2]);
           P2Ctx *cur1 = blk1->cursor[0];
           int32_t l7a = cur1[-1].dupright;
           int32_t l4a = cur1[-1].dleft;
@@ -93,17 +85,13 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
           ctx_bias[2] += 32*l4a;
           ctx_bias[3] += 32*l5a;
           off = dc_flag==0;
-          out[plane_desc[1].src_plane] = val1;
           if( off )
             seed2 = 0;
           else
             seed2 = (plane_desc[plane_desc[2].src_plane].weight1*out[plane_desc[1].src_plane]+plane_desc[plane_desc[2].src_plane].weight0*out[plane_desc[0].src_plane])>>3;
           AltP2Block *blk2 = (AltP2Block*)(plane[2]);
           plane[2]->cursor[0]->dval = seed2;
-          int32_t pred2 = blk2->alt_p2_context(plane[0], plane[1]);
-          int32_t code2 = blk2->freq[blk2->ctx].decode_symbol(blk2->ctx_pair);
-          int32_t val2 = (uint8_t)(pred2+blk2->unfold[code2]);
-          blk2->alt_p2_model(val2, code2, val2-pred2);
+          blk2->decode_sample(out, plane_desc[2].src_plane, plane[0], plane[1]);
           P2Ctx *cur2 = blk2->cursor[0];
           int32_t l7b = cur2[-1].dupright;
           int32_t l4b = cur2[-1].dleft;
@@ -112,7 +100,6 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
           ctx_bias[1] += 32*l7b;
           ctx_bias[2] += 32*l4b;
           ctx_bias[3] += 32*l5b;
-          out[plane_desc[2].src_plane] = val2;
           nplanes = plane_count;
           if( plane_count>=4 ) {
             if( xf4 )
@@ -121,10 +108,10 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
               seed3 = 0;
             AltP2Block *blk3 = (AltP2Block*)(plane[3]);
             plane[3]->cursor[0]->dval = seed3;
-            int32_t pred3 = blk3->alt_p2_context(plane[2], plane[0]);
-            int32_t code3 = blk3->freq[blk3->ctx].decode_symbol(blk3->ctx_pair);
-            int32_t val3 = (uint8_t)(pred3+blk3->unfold[code3]);
-            blk3->alt_p2_model(val3, code3, val3-pred3);
+            // `out[3]`, not `out[plane_desc[3].src_plane]`, which is what the
+            // other three planes here and all four in the encoder use.  Kept
+            // as the binary has it.
+            blk3->decode_sample(out, 3, plane[2], plane[0]);
             P2Ctx *cur3 = blk3->cursor[0];
             int32_t l7c = cur3[-1].dupright;
             int32_t l4c = cur3[-1].dleft;
@@ -133,7 +120,6 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
             ctx_bias[1] += 32*l7c;
             ctx_bias[2] += 32*l4c;
             ctx_bias[3] += 32*l5c;
-            out[3] = val3;
             nplanes = plane_count;
           }
           out += nplanes;

@@ -45,7 +45,7 @@
 // numbers below were all wrong by the time it was written, which is why it
 // exists.
 //
-//   alt_model_p2_encode / alt_model_p2_decode         34 of 334 (10%)
+//   alt_model_p2_encode / alt_model_p2_decode         33 of 258 (13%)
 //   code_pixel / decode_pixel                        108 of 724 (15%)
 //   predict_med / unpredict_med                       10 of 122 (8%)
 //   alt_model_p1_d8_encode / alt_model_p1_d8_decode     3 of 45 (7%)
@@ -54,7 +54,7 @@
 // Every one of the five has moved since it was measured, and all of them the
 // same way: what the two halves shared was never the algorithm, so naming it
 // and calling it from both leaves less behind, not more.  The p2 pair fell
-// from 123 shared lines of 586 to 34 of 334 and the p1 pair from 8 of 60 to 3
+// from 123 shared lines of 586 to 33 of 258 and the p1 pair from 8 of 60 to 3
 // of 45.  The two `*_pixel` bodies have lost 40% of their length between them
 // -- `load_neighbours`, `FreqRec::blend_from`, `ModelBlock::start_row`,
 // `find_level`, `bump` -- and went from 1044 lines to 724.  The percentages

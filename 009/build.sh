@@ -175,10 +175,22 @@ if [ "${BMF_WARN:-0}" = 1 ]; then
   set +e
   $CXX $arch $std $opt $incs $opts $permissive $fidelity -fdiagnostics-plain-output \
       -Wsign-compare -Wunused-variable -Wshadow -fsyntax-only "$@" "$SRC" > "$log" 2>&1
+  rc=$?
   set -e
+  # An **error** is not a warning, and this printed the warning count either
+  # way: a build that failed to compile answered `0` and read as clean.  One
+  # did, for the length of an edit -- `'val3' was not declared in this scope`
+  # under a `0` -- and the only reason it did not survive longer is that
+  # somebody opened the log.  The count is the first line because
+  # `resign-drive.sh` ratchets on it, so the failure goes above it and the
+  # status is what carries it.
+  if [ "$rc" != 0 ]; then
+    echo "FAILED: $CXX exited $rc; see $log" >&2
+    grep -m3 ': error: ' "$log" >&2 || true
+  fi
   grep -c ': warning: ' "$log" || true
   stamp "$log"
-  exit 0
+  exit "$rc"
 fi
 
 if [ "${BMF_STRICT:-0}" = 1 ]; then

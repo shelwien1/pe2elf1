@@ -393,6 +393,51 @@ struct AltP2Block {
   int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb);
   uint32_t alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in);
 
+  // Code one sample of this plane, with the near-lossless drift control: fold
+  // the residual against the prediction, reconstruct it, and if the
+  // reconstruction has drifted more than sixteen from the byte already in the
+  // buffer, send the sample through `fold_hi` instead and leave that byte
+  // alone.
+  //
+  // Four copies in `alt_model_p2_encode`, one per plane, twelve lines apiece,
+  // differing in the block, the two reference planes and the output offset.
+  // The fourth spelled the reconstruction twice instead of naming it.
+  //
+  // `out[at]` is read twice on purpose, as the copies did: once before
+  // `alt_p2_context` and once after.
+  void encode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
+    int32_t sample = out[at];
+    const int32_t pred = alt_p2_context(refa, refb);
+    const int32_t resid = (uint8_t)(sample-pred);
+    int32_t code = fold[resid];
+    const int32_t was = out[at];
+    const int32_t clean = (uint8_t)(pred+unfold[code]);
+    const int32_t recon = (uint8_t)(clean+was-sample);
+    if( was-recon<-16||was-recon>16 ) {
+      code = fold_hi[resid];
+    } else {
+      sample = clean;
+      out[at] = recon;
+    }
+    freq[ctx].encode_symbol(ctx_pair, code);
+    alt_p2_model(sample, code, sample-pred);
+  }
+
+  // The decode half of `encode_sample`: predict, take the symbol, unfold it,
+  // write the byte, and step the model.  Four copies in `alt_model_p2_decode`,
+  // one per plane.
+  //
+  // Shorter than the encoder by exactly the near-lossless drift control, which
+  // is the asymmetry the header of alt_p2.inc records: the decoder is told
+  // which fold was used and has nothing to decide.
+  void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
+    const int32_t pred = alt_p2_context(refa, refb);
+    const int32_t code = freq[ctx].decode_symbol(ctx_pair);
+    const int32_t sample = (uint8_t)(pred+unfold[code]);
+    alt_p2_model(sample, code, sample-pred);
+    out[at] = sample;
+  }
+
   // Seed the three spare history rows from the row just coded: mirror its last
   // record five forward past the right edge, mirror eight back from the start
   // of the row above it, and copy the whole row into rows 1, 2 and 3.
