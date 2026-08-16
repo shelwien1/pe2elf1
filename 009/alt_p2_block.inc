@@ -137,7 +137,7 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
 // are not sit inside the comma expression of an `if`, where the update's own
 // result decides the branch and a call cannot say it.
 //
-// Eight of those 115 read the rate as `*(uint8_t*)&p->rate`, and `rate` is
+// Eight of them read the rate as `*(uint8_t*)&p->rate`, and `rate` is
 // `int8_t` -- so they took the byte unsigned where this takes it signed.  That
 // is the same value here and only here: `p2_pred` uses the rate as two shift
 // counts and masks both with `&31`, and the two readings differ by 256, which
@@ -402,6 +402,30 @@ struct AltP2Block {
   }
 
   void code_banks(int32_t sample16);
+
+  // One pass over a bank's eleven context bits, doing to each what the arm it
+  // was reached by says: bump the direct counter at shift 2, the rotated one
+  // at 3, optionally nudge the record after the direct one, bump the record
+  // before it, and bump the mirrored one with the residual negated.
+  //
+  // The second and third arms of `code_banks` differ in one line of the five:
+  // whether that nudge happens.  `direct[0]` and `rot[0]` are bumped before
+  // the branch that chooses between them and `mirror[10]` after the two join,
+  // which is why this skips both ends.
+  void walk_bank_bits(P2Count*const* direct, P2Count*const* mirror,
+                      P2Count*const* rot, int32_t res, bool nudge) {
+    for( int32_t k = 0; k<11; ++k ) {
+      if( k ) {
+        p2_update(direct[k], res, 2);
+        p2_update(rot[k], res, 3);
+      }
+      if( nudge )
+        p2_nudge(&direct[k][1], res);
+      p2_update(&direct[k][-1], res, 3);
+      if( k<10 )
+        p2_update(mirror[k], -res, 3);
+    }
+  }
 
   // Bank `k`, bumped.  Its selector picks one of two shapes: a selector of 1
   // bumps the group's record, the one after it, the first record of the next

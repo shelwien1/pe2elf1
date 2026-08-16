@@ -131,23 +131,6 @@ void AltP2Block::code_banks(int32_t sample16) {
             __builtin_prefetch(mirror[k], 0, 1);
             __builtin_prefetch(rot[k], 0, 1);
           }
-          // The second and third arms differ in one line of five: whether the
-          // record after the direct counter is nudged.  `direct[0]` and
-          // `rot[0]` are bumped before the branch that chooses between them and
-          // `mirror[10]` after the two join, which is why this skips both ends.
-          auto walk_bits = [&](bool nudge) {
-            for( int32_t k = 0; k<11; ++k ) {
-              if( k ) {
-                p2_update(direct[k], res_c, 2);
-                p2_update(rot[k], res_c, 3);
-              }
-              if( nudge )
-                p2_nudge(&direct[k][1], res_c);
-              p2_update(&direct[k][-1], res_c, 3);
-              if( k<10 )
-                p2_update(mirror[k], -res_c, 3);
-            }
-          };
           neg = -res_c;
           __builtin_prefetch(direct[8], 0, 1);
           w_top = mir[0].weighted;
@@ -189,7 +172,7 @@ void AltP2Block::code_banks(int32_t sample16) {
             p2_update(direct[0], res_c, 2);
             go = lowbits<3;
             p2_update(rot[0], res_c, 3);
-            walk_bits(go);
+            walk_bank_bits(direct, mirror, rot, res_c, go);
             // The one counter whose update straddles the join.  Both arms
             // reached it with `-res_c` under a name of their own.
             p2_update(mirror[10], -res_c, 3);

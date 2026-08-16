@@ -211,26 +211,25 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       while( 1 ) {
         p += n_kids;
         uint32_t val = mask&*(uint32_t*)p;
+        // `node = 0` makes `tree[node]` the root, so the second test is the
+        // first one again with the walk restarted -- and the overflow check
+        // can sit beside it rather than one level in, because a value that is
+        // the root's is node 0 and never negative.
         if( val!=tree[node].val ) {
           node = 0;
-          if( val!=tree[0].val ) {
+          if( val!=tree[0].val )
             node = tree_place(tree, blk, val);
-            if( node<0 ) {
-              alpha_n = blk->alphabet;
-              goto alphabet_done;
-            }
-          }
+          if( node<0 )
+            break;
         }
         blk->sym_word[written++] = node;
-        if( written>=(uint32_t)(blk->height*blk->width) ) {
-          alpha_n = blk->alphabet;
-          goto alphabet_done;
-        }
+        if( written>=(uint32_t)(blk->height*blk->width) )
+          break;
       }
     }
+    // Both exits of the loop above jumped here past this line, which is the
+    // line they set `alpha_n` from.  Leaving the loop runs it.
     alpha_n = blk->alphabet;
-// Both codings converge here with `blk->alphabet` set.
-alphabet_done:
     rc.encode(alpha_n-1, alpha_n, 0x2001u);
     if( blk->alphabet>0x2000 ) {
       out[1] = (uint8_t*)bmf_new(blk->height*n_kids*blk->width);
