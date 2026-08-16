@@ -1,5 +1,17 @@
 // bmp_read.inc -- read a BMP, in every depth and both run-length forms.
 
+// One run-length opcode: a count and a value.  False on a stream error or an
+// end of file, which both arms answer the same way and neither can tell apart
+// from a legitimate byte without this check -- `fgetc` returns `int` for that
+// reason.  Five lines at the top of each of the two loops.
+static bool read_rle_op(FILE* fp, int32_t& n, int32_t& v) {
+  if( ferror(fp) )
+    return false;
+  n = fgetc(fp);
+  v = fgetc(fp);
+  return n>=0&&v>=0;
+}
+
 BmfImage* read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row, bmp_bgra[4], pix;
@@ -78,11 +90,8 @@ BmfImage* read_bmp(char* path) {
       int32_t y4 = img->height-1;
       while( 1 ) {
         uint8_t *row_ofs = row_at;
-        if( ferror(fp) )
-          return nullptr;
-        int32_t run = fgetc(fp);
-        int32_t run_val = fgetc(fp);
-        if( run<0||run_val<0 )
+        int32_t run, run_val;
+        if( !read_rle_op(fp, run, run_val) )
           return nullptr;
         if( run ) {
           if( row_ofs<pix_lo||row_ofs+run>pix_hi )
@@ -125,11 +134,8 @@ BmfImage* read_bmp(char* path) {
     // end of line, out of the outer one for anything but a delta.  Reading it
     // meant holding three loops in mind to see a five-way branch on two bytes.
     while( 1 ) {
-      if( ferror(fp) )
-        return nullptr;
-      int32_t run4 = fgetc(fp);
-      int32_t byte_in = fgetc(fp);
-      if( run4<0||byte_in<0 )
+      int32_t run4, byte_in;
+      if( !read_rle_op(fp, run4, byte_in) )
         return nullptr;
       byte = (uint32_t)byte_in;
       pair = byte;

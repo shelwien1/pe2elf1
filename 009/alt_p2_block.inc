@@ -38,6 +38,7 @@ struct P2Freq {
   // The encoder said `ctx_pair[sym & 1]` and `(sym - 1) >> 1` where this says
   // `ctx_pair[idx & 1]`; they are the same, because `idx` is 1 for odd symbols
   // and 2 for even ones above zero.
+  //
   // Named apart from `SymList::code_symbol`, which is a different coder in a
   // different model.  Two methods with one name is not an error the compiler
   // can see, and it made `unstale.py` measure the wrong one.
@@ -145,11 +146,25 @@ static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
   p->weighted = p2_bump(w, res-p2_pred(w, p->rate), shift);
 }
 
-// The same counter, updated in place at a fixed shift of 2 and *without*
-// `p2_bump`'s dead-zone kick.  21 sites fold it into one `+=` on the next
-// counter in the bank; the rounding term is the only thing they share with
-// `p2_update`, and folding them together would put the kick where the original
-// has none.
+// The same step with the residual kept.  `p2_update` cannot be used at the two
+// sites this replaces: they subtract the bank's prediction *into* the caller's
+// residual, which the caller reads again below, so a helper taking it by value
+// would drop that write.  Both spelled it out with a temporary of their own,
+// `wm0400z` and `wm0400x`.
+static inline void p2_update_into(P2Count* p, int32_t& res, int32_t shift) {
+  const int32_t w = p->weighted;
+  res -= p2_pred(w, p->rate);
+  p->weighted = p2_bump(w, res, shift);
+}
+
+// The rescale on its own.  Two of `alt_p2_model`'s fifty sites compute the
+// increment and then add it *conditionally*, so the add cannot move into the
+// helper; the guard still can.
+static inline void p2_rescale(P2Freq* r) {
+  if( r->f[0]+r->f[1]+r->f[2]>29696 )
+    r->rescale_three_way();
+}
+
 // One count of a three-way record, bumped by `num` sixteenths of the record's
 // step, with the rescale that keeps the three counts from overflowing.  35 of
 // the 41 sites in `alt_p2_model` wrote both steps out.
@@ -162,19 +177,16 @@ static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
 // nothing else, which is only visible once they are written as sixteenths:
 // `(step&0xFFFC)>>2` and `(step&0xFFF8)>>3` are `(4*step)>>4` and `(2*step)>>4`,
 // the masks clearing bits the shift discards anyway.
-// The rescale on its own.  Two of `alt_p2_model`'s fifty sites compute the
-// increment and then add it *conditionally*, so the add cannot move into the
-// helper; the guard still can.
-static inline void p2_rescale(P2Freq* r) {
-  if( r->f[0]+r->f[1]+r->f[2]>29696 )
-    r->rescale_three_way();
-}
-
 static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num) {
   p2_rescale(r);
   r->f[slot] += (num*(uint32_t)r->step)>>4;
 }
 
+// The same counter, updated in place at a fixed shift of 2 and *without*
+// `p2_bump`'s dead-zone kick.  21 sites fold it into one `+=` on the next
+// counter in the bank; the rounding term is the only thing they share with
+// `p2_update`, and folding them together would put the kick where the original
+// has none.
 static inline void p2_nudge(P2Count* p, int32_t res) {
   // Sixteen bits in and sixteen bits out, through `uint16_t` so that the
   // wrap is defined rather than signed overflow.

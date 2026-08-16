@@ -11,16 +11,29 @@
 // The first call on a row has no weights of its own to predict with, so it
 // seeds them from the mixture instead and returns the mixed prediction
 // unchanged.  `uses` is what tells the two apart.
+// The seven taps against the neighbourhood, four lanes wide, summed across the
+// lanes: one prediction.  Written out three times below with three different
+// weight rows -- the fixed coefficients, the mixture of the six sets, and this
+// row's own -- with an `acc[4]` shared between them and reloaded each time.
+//
+// `[7][4]` rather than twenty-eight scalars is the layout the original's SSE
+// was in; keeping it is what lets a compiler put it back, and it is also what
+// makes the three one function.
+static inline float nb_dot(const float (*wt)[4], const float (*nb)[4]) {
+  float acc[4];
+  for( int32_t k = 0; k<4; k++ ) {
+    acc[k] = wt[0][k]*nb[0][k];
+    for( int32_t j = 1; j<7; j++ )
+      acc[k] += wt[j][k]*nb[j][k];
+  }
+  return bmf_hsum4(acc);
+}
+
 inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
   const float* mix = bmf_p2_mix[mode];
-  float acc[4], mixed[7][4], centre, prediction, own;
+  float mixed[7][4], centre, prediction, own;
   int32_t i, j, k;
-  for( k = 0; k<4; k++ ) {
-    acc[k] = bmf_p2_coef[0][k]*nb[0][k];
-    for( j = 1; j<7; j++ )
-      acc[k] += bmf_p2_coef[j][k]*nb[j][k];
-  }
-  centre = bmf_hsum4(acc);
+  centre = nb_dot(bmf_p2_coef, nb);
   nb[7][0] = centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ )
@@ -31,20 +44,10 @@ inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
       for( i = 1; i<6; i++ )
         mixed[j][k] += mix[i]*sets->row[i]->w[j][k];
     }
-  for( k = 0; k<4; k++ ) {
-    acc[k] = mixed[0][k]*nb[0][k];
-    for( j = 1; j<7; j++ )
-      acc[k] += mixed[j][k]*nb[j][k];
-  }
-  prediction = bmf_hsum4(acc)+centre;
+  prediction = nb_dot(mixed, nb)+centre;
   nb[7][2] = prediction;
   if( uses ) {
-    for( k = 0; k<4; k++ ) {
-      acc[k] = w[0][k]*nb[0][k];
-      for( j = 1; j<7; j++ )
-        acc[k] += w[j][k]*nb[j][k];
-    }
-    own = centre+bmf_hsum4(acc);
+    own = centre+nb_dot(w, nb);
     nb[7][1] = own;
     return (int32_t)(prediction+((own-prediction)*w[14][0])/w[14][1]);
   }

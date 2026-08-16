@@ -15,8 +15,8 @@ void AltP2Block::code_banks(int32_t sample16) {
   uint8_t b_top3;
   bool go;
   int32_t bctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, neg,
-      w_top, e_top, bump, res_s, w_top3, w_topm1, wm0400x, neg_b, res_t, res_m0010,
-      neg_c, neg_d, wd4000p1a, pd4000p1a, wm0400z, wm0020a, pm0020a, res_c;
+      w_top, e_top, bump, res_s, w_top3, w_topm1, neg_b, res_t, res_m0010,
+      neg_c, neg_d, wd4000p1a, pd4000p1a, wm0020a, pm0020a, res_c;
   for( uint32_t bank = 0; bank<5; ++bank ) {
       bctx = (uint32_t)bank_ctx[bank];
       res = sample16-(nb_sum[2*bank]);
@@ -176,12 +176,7 @@ void AltP2Block::code_banks(int32_t sample16) {
             p2_update(direct[4], res_c, 2);
             p2_update(rot[4], res_c, 3);
             p2_nudge(&direct[4][1], res_c);
-            // Not `p2_update`: this subtracts into `nres3` itself, and the
-            // residual is read again below.  A helper taking it by value
-            // would drop that write.
-            wm0400z = mirror[4]->weighted;
-            nres3 -= p2_pred(wm0400z, mirror[4]->rate);
-            mirror[4]->weighted = p2_bump(wm0400z, nres3, 3);
+            p2_update_into(mirror[4], nres3, 3);
             p2_update(direct[5], res_c, 2);
             p2_update(rot[5], res_c, 3);
             p2_nudge(&direct[5][1], res_c);
@@ -292,12 +287,7 @@ void AltP2Block::code_banks(int32_t sample16) {
               p2_update(direct[4], res_c, 2);
               p2_update(rot[4], res_c, 3);
               p2_update(&direct[4][-1], res_c, 3);
-              // Not `p2_update`: this subtracts into `nres1` itself, and the
-              // residual is read again below.  A helper taking it by value
-              // would drop that write.
-              wm0400x = mirror[4]->weighted;
-              nres1 -= p2_pred(wm0400x, mirror[4]->rate);
-              mirror[4]->weighted = p2_bump(wm0400x, nres1, 3);
+              p2_update_into(mirror[4], nres1, 3);
               p2_update(direct[5], res_c, 2);
               p2_update(rot[5], res_c, 3);
               neg_b = -res_c;
