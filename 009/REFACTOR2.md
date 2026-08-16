@@ -1011,3 +1011,42 @@ flag word saved and read back twice. With those two named, every write to
 `nb_sym` in either pixel coder is a candidate again — the four stage-one
 neighbours and the twenty-two spatial ones — and the twelve borrowed uses are
 gone.
+
+### The last unnamed offset
+
+`shape.py`'s first row counts raw-offset sites — "a place where the layout of
+an object is written as arithmetic instead of declared" — and it had sat at 1
+for the whole round: `(BmfImage*)(stream.buf + 16)`, a scratch image placed one
+header's worth of bytes into the coded buffer. The 16 *is* `sizeof(BmfImage)`,
+and spelled that way beside a `static_assert` it is a declaration.
+
+The tool still counted it, because its pattern is "a cast of `base + N`"
+whatever N is. That is the row's own distinction being missed by the row:
+`sizeof(T)` is exactly the thing it wants to see instead of a number. It skips
+those now, the tree reads **0**, and a one-line probe holding the literal form
+proves the row can still report.
+
+---
+
+## Where this leaves it
+
+Every counting tool in `tools/` reports zero against an instrument that was
+repaired in nine places this session — `structs.bodies` (131 bodies where there
+are 219), `structs.decl_types` (57 untyped names), `uncopy` (parameters,
+`this`, declaration-initialisers, chained folds, and a span that could not see
+a loop), `unspillpair` (wrapped declarations), `samecast` (parenthesised
+operands), `degoto` (a denominator of 0 for 42 jumps), `deadcheck` (a
+function's address is a use), and `shape` (the row above).
+
+What is left is declined with a measurement, not with a shrug:
+
+* **two encode/decode pairs**, from five. `predict_med`/`unpredict_med` walk in
+  opposite directions because one must read original neighbours and the other
+  reconstructed ones. `code_pixel`/`decode_pixel` diverge at the top — rank a
+  known symbol against find the rank holding a target — and meet at the bottom;
+  they are 455 lines and 55 shared, from 1044 and 123.
+* **285 lines of copy**, from 1031, and what is left is those two pairs, two
+  mutual inverses in `plane_predict.inc`, and a run of member declarations.
+* **34 jumps and 23 labels**, from 42 and 27. `degoto` declines each with a
+  reason and none is a plain `break` or `continue` — measured against a probe
+  holding one of each.

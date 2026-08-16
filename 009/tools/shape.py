@@ -50,6 +50,7 @@ P1 = re.compile(r'\(\s*%s\s*\*\s*\)\s*\(\s*(?:\(\s*%s\s*\*\s*\)\s*)?'
                 r'%s\s*\+' % (T, T, B))
 P2 = re.compile(r'\(\s*\(\s*%s\s*\*\s*\)\s*%s\s*\+' % (T, B))
 P3 = re.compile(r'\+\s*\(\s*%s\s*\*\s*\)\s*%s\b' % (T, B))
+SIZEOF = re.compile(r'\bsizeof\s*\(')
 
 # A frame, by its declaration.  This used to key on a `// NNN bytes` tag the
 # decompiler's output carried and every frame since has been given a name
@@ -120,6 +121,14 @@ def rawoffsets(lines, span):
     out = []
     for i, l in enumerate(lines):
         code = l.split('//')[0]
+        # `base + sizeof(T)` is the layout *declared*, which is the whole
+        # distinction this row exists to draw -- "written as arithmetic instead
+        # of declared".  The last site in the tree was
+        # `(BmfImage*)(stream.buf + 16)`, the 16 being one header; spelled
+        # `sizeof(BmfImage)` beside a `static_assert` it is a declaration, and
+        # counting it kept the row at 1 for a reason the row does not mean.
+        if SIZEOF.search(code):
+            continue
         at = {}
         for p in (P1, P2, P3):
             for m in p.finditer(code):

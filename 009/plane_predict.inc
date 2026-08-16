@@ -349,11 +349,16 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
 void transform_planes(BmfImage* p_i) {
   int32_t i;
   memset(hist_scratch, 0, 4096);
-  // A scratch image in the coded buffer: sixteen bytes reserved, then a copy
-  // of the header, then the pixels.  `BmfImage` is sixteen bytes, so the
-  // second 16 and the 32 are the same offset said twice -- `hdr->pixels` is
-  // `stream.buf+32`, which is what the copy below was addressing by number.
-  BmfImage *hdr = (BmfImage*)(stream.buf+16);
+  // A scratch image in the coded buffer: one header's worth of bytes reserved,
+  // then a copy of the header, then the pixels.  The reserved run and the
+  // header are the same size, which is why `hdr->pixels` is `stream.buf + 32`
+  // -- and what the copy below was addressing by number.
+  //
+  // `sizeof(BmfImage)` rather than the 16 it is: this was the last place in
+  // the tree where an object's layout was written as arithmetic instead of
+  // declared, which is the row `shape.py` counts first.
+  static_assert(sizeof(BmfImage) == 16, "the reserved run is one header");
+  BmfImage *hdr = (BmfImage*)(stream.buf+sizeof(BmfImage));
   *hdr = *p_i;
   uint8_t* src_pixels = p_i->pixels;
   memcpy(hdr->pixels, p_i->pixels, p_i->data_size);
