@@ -59,6 +59,16 @@ and moved on without a word. Four of them sat in `unmodel_plane_slow` and
 green sweep this tool has been in. Parameters come out of the signature now,
 and `this` is admitted against the enclosing class.
 
+*The span was textual, and a loop is not.* `Y` must not be assigned between
+the copy and `X`'s last use -- and "between" was `code[i+1:last+1]`, the lines
+in the file. A backward edge makes a line *below* the last use run *before*
+it, so `--at` under a loop's closing brace was outside the span and inside the
+region. That is `bucket_top` in both pixel coders, where folding it onto
+`bucket` turns "is this the first turn" into a tautology and moves the stream.
+The span now runs to the close of the innermost loop still open at the last
+use; `enclosing_end` below is that, and the probe with exactly the shape is
+what caught it.
+
 *The copy has to be its own statement.* Hex-Rays declares at the top and
 assigns lower down, which is the form the rule was written for; a hand-written
 `ModelBlock *blk1 = blk;` is a declaration, and declarations are filtered out
@@ -78,6 +88,8 @@ COPY = re.compile(r'^\s*([A-Za-z_]\w*) = (.*);\s*$')
 CAST = re.compile(r'^\(([A-Za-z_][\w\s*]*?)\s*\)\s*(.*)$')
 NAME = re.compile(r'^[A-Za-z_]\w*$')
 LABEL = re.compile(r'^\s*LABEL_\d+:')
+# What opens a loop, for `enclosing_end` below.
+LOOP = re.compile(r'\b(?:for|while)\s*\(|\bdo\b\s*$')
 # `&x` is the variable's address; `&x->m`, `&x.m` and `&x[i]` are not -- they
 # name a member or an element, and a callee holding one of those cannot change
 # `x` itself.  Without the lookahead every `*(uint16_t *)&v533->w2` read as
@@ -180,6 +192,62 @@ def receiver(lines, at):
     return stack[-1][1] if stack else None
 
 
+def enclosing_end(code, i, last):
+    """One past the last line that can run between the copy and `dst`'s last use.
+
+    Textually that is `last`, and textually was wrong.  A backward edge makes a
+    line *below* the last use run *before* it, so a `--src` under the loop's
+    closing brace is inside the region even though it is under it in the file:
+
+        top = at;                       // the copy
+        do {
+          total += (at == top);         // `top`'s last use
+          --at;                         // below it, and runs first
+        } while( at );
+
+    Folding `top` onto `at` there makes the test always true.  A probe with
+    exactly that shape is what caught it; `bucket_top` in both pixel coders is
+    the shape in the tree, and this rule offered to break both.
+
+    So the span runs to the end of whatever block encloses the last use, when
+    that block is a loop: from the copy, count braces, and if the depth ever
+    goes below where it started before reaching `last`, the copy and the use
+    are not in one straight run and there is no loop to widen to.  Otherwise
+    widen to the close of the innermost loop still open at `last`.
+    """
+    depth, opens = 0, []
+    for k in range(i + 1, len(code)):
+        c = code[k]
+        head = ''
+        for ch in c:
+            if ch == '{':
+                opens.append((depth, LOOP.search(head) is not None))
+                depth += 1
+                head = ''
+            elif ch == '}':
+                depth -= 1
+                if opens:
+                    opens.pop()
+                head = ''
+            else:
+                head += ch
+        if k >= last:
+            break
+    if k < last or not any(is_loop for _d, is_loop in opens):
+        return last + 1
+    # the innermost loop still open at `last`: walk on to its close
+    want = max(d for d, is_loop in opens if is_loop)
+    for j in range(k + 1, len(code)):
+        for ch in code[j]:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth <= want:
+                    return j + 1
+    return len(code)
+
+
 def candidates(lines):
     out = []
     for a, b, nm, sig in structs.bodies(lines):
@@ -238,7 +306,7 @@ def candidates(lines):
                 continue
             if re.search(ADDR % re.escape(src), '\n'.join(code)):
                 continue
-            span = code[i + 1:last + 1]
+            span = code[i + 1:enclosing_end(code, i, last)]
             if any(LABEL.match(r) for r in span):
                 continue
             if any(re.search(p % re.escape(src), '\n'.join(span)) for p in WRITE):

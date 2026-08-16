@@ -948,3 +948,36 @@ call: **9,144,286 calls over three images, all four intact in every one.** So
 the claim is true, and it is a measurement now rather than a reading of the
 nesting. The substitution stays unmade: it would be behaviour-preserving *over
 the corpus* rather than by construction, and those are not the same thing.
+
+### The candidate table, borrowed as a dozen locals
+
+`nb_sym` is 32 slots the model fills with the symbols a pixel is coded
+against — and `code_pixel` reuses eleven of them for a dozen unrelated values
+along the way. `nb_sym[1] = width - x` is how far a run may reach.
+`nb_sym[3] = idx1` is its length. `nb_sym[0] = bucket` is the bucket it started
+in. `nb_sym[4] = bit5` is a save across a `+= 8` that cannot move it. Reading
+the body, every one of those lines looks like the neighbourhood being written,
+and none of them is.
+
+Ten now have names — `run_limit`, `run_len`, `bucket_top`, `run_bit`,
+`run_hit`, `bucket` — and three of the ten were not values at all: two saves of
+`amap` and one of `run_left`, spilled into slots and read straight back across
+walks that touch neither, plus a `nb_sym[3] = first` that nothing ever reads.
+
+**Naming them is what let four tools see the rest.** `unsave` found the three
+spills, `uncopy` two redundant copies, `firstuse` two locals declarable where
+they are first assigned — none of which could be seen while the values were
+subscripts. And with the slots named, the two run scans were visibly one loop:
+`run_scan` is both, and the two `goto run_copied`s it removes take the jump
+count from 36 to 34.
+
+**One of `uncopy`'s findings would have broken the program.** It offered to
+fold `bucket_top` onto `bucket`, and `bucket` is decremented *below*
+`bucket_top`'s last use — inside the loop, so it runs *before* it. The rule's
+span was `code[i+1:last+1]`, the lines in the file, and a backward edge is
+exactly what that reading cannot see; folding would have turned "is this the
+first turn" into a tautology. The span now runs to the close of the innermost
+loop still open at the last use. A four-line probe with that shape is what
+caught it, and all four of the file's older probes still report.
+
+The pair is **486 lines and 62 shared**, from 653 and 94 when the round began.

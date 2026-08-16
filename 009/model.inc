@@ -505,6 +505,36 @@ struct ModelBlock {
     return minted;
   }
 
+  // How far the north row's "matched" flags run on from here, capped by the
+  // rest of the row, and the AND of the north-north row's `match[0]` over that
+  // run.  Answers the length.
+  //
+  // Both pixel coders scan it.  `run` trails the counter by a turn -- it is the
+  // last index whose flags were tested, which is what the escape context below
+  // indexes with -- and the encoder mirrored the counter into a slot of the
+  // candidate table at all three exits where the decoder just used its own
+  // counter.  Each also reached the tail through a `goto run_copied` out of
+  // the loop, which a `return` is.
+  int32_t run_scan(const PixRec* up1, const PixRec* up2, int32_t limit,
+                   int32_t& m_up0, int32_t& run) {
+    m_up0 = up2[0].match[0];
+    if( limit<=1 ) {
+      run = 1;
+      return 1;
+    }
+    int32_t n = 1;
+    while( 1 ) {
+      run = n;
+      if( !(up1[n+2].match[1]&up1[n+2].match[0]) )
+        return n;
+      m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
+      if( ++n>=limit ) {
+        run = n;
+        return n;
+      }
+    }
+  }
+
   void exclude_stage_one() {
     const int8_t gen = exclusion_gen;
     for( int32_t k = 1; k<5; ++k )
@@ -1166,24 +1196,7 @@ struct ModelBlock {
       PixRec *up1 = row_cur[6];
       PixRec *up2 = row_cur[7];
       if( (uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&up1[3].match[1]&up1[2].match[1]&up1[1].match[1]&up1[0].match[1]&up1[0].match[0]&(int8_t)up1[-1].match[1])&up2[3].match[1] ) {
-        m_up0 = up2[0].match[0];
-        int32_t idx1 = 1;
-        if( width-x<=1 ) {
-          run = 1;
-        } else {
-          nb_sym[1] = width-x;
-          while( 1 ) {
-            run = idx1;
-            if( !(up1[idx1+2].match[1]&up1[idx1+2].match[0]) )
-              break;
-            m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
-            if( ++idx1>=nb_sym[1] ) {
-              run = idx1;
-              goto run_copied;
-            }
-          }
-        }
-  run_copied:
+        const int32_t idx1 = run_scan(up1, up2, width-x, m_up0, run);
         int32_t bucket = *(run_bucket+idx1);
         // Four fields and a plus-one: the bucket from bit 3 up, then
         // three bits of neighbour agreement.  The `+1` is an offset
@@ -1204,22 +1217,25 @@ struct ModelBlock {
           idx_s = 0;
           if( idx1==1 )
             goto run_done;
-          nb_sym[3] = idx1;
-          nb_sym[0] = bucket;
+          // The bucket the run started in, a slot of the candidate table
+          // borrowed as a local.  `bucket` counts *down* through the loop
+          // below, so `bucket == bucket_top` is "this is the first turn" and
+          // not the tautology it reads as.  The run's length went into a
+          // second slot and is `idx1`, which is still live.
+          const int32_t bucket_top = bucket;
           idx_s = 0;
           int32_t mask = 1<<(bucket&31);
           int32_t seen = 0;
           do {
-            if( (mask|seen)<nb_sym[3] ) {
-              BitCtr *ctr = &run_ctr[16*((seen==0)+(bucket==nb_sym[0]))+bucket];
+            if( (mask|seen)<idx1 ) {
+              BitCtr *ctr = &run_ctr[16*((seen==0)+(bucket==bucket_top))+bucket];
               int32_t run0 = ctr->n[0];
               int32_t bin_tot = run0+ctr->n[1];
-              nb_sym[1] = rc.decode_bit(run0, ctr->n[1]);
+              const int32_t run_bit = rc.decode_bit(run0, ctr->n[1]);
               if( ctr->limit<(uint32_t)bin_tot )
                 ctr->scale_rare();
-              int32_t s1b = nb_sym[1];
-              ctr->n[s1b] += 8;
-              if( s1b )
+              ctr->n[run_bit] += 8;
+              if( run_bit )
                 idx_s |= mask;
               seen |= idx_s&mask;
             }
@@ -1387,7 +1403,7 @@ struct ModelBlock {
     int32_t runlen_s;
     uint32_t done;
     uint16_t* id3p;
-    int32_t nb, key, cap, m_up0, one, run, amap, runlen, run_left, bit5, lvl_a;
+    int32_t nb, key, cap, m_up0, run, amap, runlen, lvl_a;
     PixRec *cur5p1;
     PixRec* cur6c, * up2;
     PixRec* cur6 = (PixRec*)row_cur[6];
@@ -1457,40 +1473,18 @@ struct ModelBlock {
     int32_t m_w0 = row[-1].match[0];
     PixRec *rowp = row;
     if( (m_w1b&m_w0)!=0&&(cur6c = row_cur[6], up2 = row_cur[7], ((uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&cur6c[3].match[1]&cur6c[2].match[1]&cur6c[1].match[1]&cur6c[0].match[1]&cur6c[0].match[0]&cur6c[-1].match[1])&up2[3].match[1])!=0) ) {
-      m_up0 = up2[0].match[0];
-      int32_t to_edge = width-x;
-      nb_sym[4] = 1;
-      if( to_edge<=1 ) {
-        run = 1;
-      } else {
-        nb_sym[0] = to_edge;
-        one = 1;
-        while( 1 ) {
-          run = one;
-          if( !(cur6c[one+2].match[1]&cur6c[one+2].match[0]) )
-            break;
-          m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
-          if( ++one>=nb_sym[0] ) {
-            nb_sym[4] = one;
-            run = one;
-            goto run_copied;
-          }
-        }
-        nb_sym[4] = one;
-      }
-  run_copied:
+      const int32_t run_len = run_scan(cur6c, up2, width-x, m_up0, run);
       int32_t run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
-      nb_sym[5] = run_bucket[nb_sym[4]];
+      const int32_t bucket = run_bucket[run_len];
       amap = CtxIdx{}.bit<2>(run_pair).bit<1>(m_up0)
-                     .raw(8*nb_sym[5]).raw(alpha_map[nb_sym[8]]);
+                     .raw(8*bucket).raw(alpha_map[nb_sym[8]]);
       runlen = 0;
       if( rowp->sym==nb_sym[8] ) {
         do
           ++runlen;
-        while( runlen<nb_sym[4]&&rowp[runlen].sym==nb_sym[8] );
+        while( runlen<run_len&&rowp[runlen].sym==nb_sym[8] );
       }
-      int32_t run_hit = runlen==nb_sym[4];
-      nb_sym[6] = run_hit;
+      const int32_t run_hit = runlen==run_len;
       if( runlen>run_hit ) {
         row_cur[6] = &cur6c[runlen-run_hit];
         row_cur[7] = &up2[runlen-run_hit];
@@ -1509,14 +1503,15 @@ struct ModelBlock {
         cur2 = r3+1;
         row_cur[5] = r3+1;
         if( runlen-run_hit!=1 ) {
-          run_left = runlen-run_hit-1;
+          int32_t run_left = runlen-run_hit-1;
           uint32_t half = run_left/2;
           if( run_left/2 ) {
-            nb_sym[0] = run_left;
+            // `run_left` and `amap` saved into two slots of the candidate
+            // table and read straight back below, across a walk that touches
+            // neither -- a register spill with a name.
             int32_t s1 = nb_sym[1];
             runlen_s = runlen;
             uint32_t k = 0;
-            nb_sym[3] = amap;
             int16_t s8 = nb_sym[8];
             do {
               pix_cur->prev = s8;
@@ -1531,8 +1526,6 @@ struct ModelBlock {
               row_cur[5] = cur5p1;
               ++k;
             } while( k<half );
-            run_left = nb_sym[0];
-            amap = nb_sym[3];
             cur2 = cur5p1;
             runlen = runlen_s;
             done = 2*k+1;
@@ -1548,8 +1541,7 @@ struct ModelBlock {
             cur2 = cur5p1b;
           }
         }
-        PixRec *r4 = (PixRec*)row_cur[6];
-        nb_sym[3] = amap;
+        PixRec *r4 = row_cur[6];
         runlen_s = runlen;
         PixRec *up3 = (PixRec*)row_cur[7];
         grad[0] = match_seed_split(r4);
@@ -1558,39 +1550,40 @@ struct ModelBlock {
         int32_t s8b = nb_sym[8];
         grad[3] = match_seed(cur2-7, 4);
         cur2[-1].match[4] = s8b==r4[1].sym;
-        amap = nb_sym[3];
         row_cur[5][-1].match[5] = s8b==row_cur[6][2].sym;
         runlen = runlen_s;
       }
-      (&esc_ctr[(amap+1)])->encode_context_bit(esc_ctr, nb_sym[6]);
-      int32_t s6 = nb_sym[6];
+      (&esc_ctr[(amap+1)])->encode_context_bit(esc_ctr, run_hit);
       int32_t msym1 = mode_symbol[1];
       uint8_t *amap_at = (uint8_t*)alpha_map;
-      hit = nb_sym[6];
-      *(amap_at+msym1) = s6;
-      if( !s6&&nb_sym[4]!=1 ) {
+      hit = run_hit;
+      *(amap_at+msym1) = run_hit;
+      if( !run_hit&&run_len!=1 ) {
         runlen_s = runlen;
-        nb_sym[0] = nb_sym[5];
-        int32_t s4 = nb_sym[4];
-        bit5 = 1<<(nb_sym[5]&31);
+        // `bucket_at` counts down and `bucket` does not, so
+        // `bucket_at == bucket` is "this is the first turn" and not the
+        // tautology it reads as.  The decoder's half counts `bucket` itself
+        // down and needs the second name; both spelled it through a slot of
+        // the candidate table.
+        int32_t bucket_at = bucket;
+        int32_t bit5 = 1<<(bucket&31);
         int32_t first = 0;
-        int32_t s5 = nb_sym[5];
         do {
-          if( s4>(bit5|first) ) {
-            nb_sym[3] = first;
-            BitCtr *ctr = &run_ctr[16*((first==0)+(s5==nb_sym[0]))+s5];
-            nb_sym[1] = runlen_s&bit5;
+          if( run_len>(bit5|first) ) {
+            BitCtr *ctr = &run_ctr[16*((first==0)+(bucket_at==bucket))
+                                   +bucket_at];
+            const int32_t run_bit = runlen_s&bit5;
             uint32_t bin_tot = ctr->n[0]+ctr->n[1];
-            rc.encode_bit(ctr->n[0], ctr->n[1], (runlen_s&bit5)!=0);
+            rc.encode_bit(ctr->n[0], ctr->n[1], run_bit!=0);
             if( ctr->limit<bin_tot )
               ctr->scale_rare();
-            int32_t s1b = nb_sym[1];
-            nb_sym[4] = bit5;
-            ctr->n[nb_sym[1]!=0] += 8;
-            first |= s1b;
-            bit5 = nb_sym[4];
+            // `bit5` was saved into a slot and read straight back across the
+            // `+= 8`, which cannot move it; and `first` was stored into a
+            // fourth slot that nothing ever reads.
+            ctr->n[run_bit!=0] += 8;
+            first |= run_bit;
           }
-          --s5;
+          --bucket_at;
           bit5 >>= 1;
         } while( bit5 );
         runlen = runlen_s;
