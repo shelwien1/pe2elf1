@@ -141,13 +141,46 @@ while an adaptive coder has already converged and gets nothing more.
 | t24 | 2.9 s | 36 s | 1.5 s | **0.06 s** |
 | x_ep | 23 s | 786 s | 9.2 s | **1 s** |
 
-Encoding is 12–34× slower because the coefficient search rescans every
-pixel of a class for each candidate pair, and the class search predicts
-every pixel of a block under every class — both linear in the class count,
-which grows with the image. Decoding is **9–25× faster** for exactly the
-reason the models are static: a decoded pixel costs one dot product and
-one rangecoder step, and there is no adaptation to replay. bmpc's decoder
-has to redo every update its encoder did; mrpc's does not.
+Encoding is slower because the coefficient search visits every pixel of a
+class for each candidate pair, and the class search predicts every pixel
+of a block under every class — both linear in the class count, which grows
+with the image. Decoding is **9–25× faster** for exactly the reason the
+models are static: a decoded pixel costs one dot product and one
+rangecoder step, and there is no adaptation to replay. bmpc's decoder has
+to redo every update its encoder did; mrpc's does not.
+
+### Where the encoder's time went
+
+AVX2 and one index, measured on a 4096×128 crop, two iterations of each
+loop (85 s → 46 s overall, output byte-identical at every step):
+
+| | before | after | |
+|---|---|---|---|
+| order trial | 14.3 s | **5.4 s** | vector normal equations |
+| coefficient search | 17 s | **6 s** | class index, then vector candidates |
+| class search | 11 s | **6 s** | vector prediction and activity |
+| fit | 1 s | 1 s | |
+
+* **The coefficient search was finding its pixels by scanning the image.**
+  Once per (class, component, tap pair) — ten thousand full-image passes to
+  reach a sixty-third of the pixels each time. A counting sort into a
+  per-class pixel list, built once per iteration, took 17 s to 12 s before
+  a single intrinsic was involved. The lesson is the usual one: the vector
+  work was never the problem, the addressing was.
+* **`org` is interleaved, so eight consecutive pixels of one component are
+  a stride-`nc` gather.** Keeping a de-interleaved byte plane per component
+  makes them one 8-byte load, and the 41-tap dot product becomes
+  `cvtepu8_epi32` + `mullo` + `add` eight pixels at a time.
+* **A pixel's error values are adjacent in `errB`**, so the twelve-tap
+  activity sum computes *all* components in one vector rather than one per
+  component — the class search's second-largest cost, 11 s to 6 s together
+  with the above.
+* **The 11×3 candidate grid is five vectors**, its predictions an affine
+  function of two lane-constant patterns, and its two table lookups
+  SIMD-computed indices into one contiguous cost block.
+* **AVX2's `vgather` lost to eight ordinary loads** off those indices, 8 s
+  against 6 s. It is a microcoded loop, and the addresses were already in
+  registers. `-DMRP_GATHER=1` restores it.
 
 ## 6. Watching it work
 

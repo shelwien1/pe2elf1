@@ -104,6 +104,11 @@
 #ifndef MRP_PROGMIN
 #define MRP_PROGMIN 200000
 #endif
+#ifndef MRP_GATHER
+#define MRP_GATHER  0    // 1 = AVX2 vgather in the coefficient search,
+                         // 0 = SIMD-computed indices with scalar loads.
+                         // Measured: the loads win, 6s against 8s.
+#endif
 #ifndef MRP_SEED
 #define MRP_SEED  12345  // the coefficient search picks its tap pairs at
                          // random; this is the only thing that makes an
@@ -273,11 +278,16 @@ static PMod* alloc_pmodels( int num_pm, const int* pm_idx ) {
 }
 
 // The cost tables the optimiser reads instead of running the coder.
+static const int CSTRIDE = PMSIZE + MAXVAL + 1;
 static void set_costs( PMod* pm, int n ) {
   const double a = 1.0/log(2.0);
+  // One allocation, fixed stride: the eight sub-positions of a group are
+  // consecutive PMods, so lane s of a gather is cost[0] + s*CSTRIDE and the
+  // whole 33-candidate sweep becomes two gathers per eight.
+  float* blk = new float[size_t(n)*CSTRIDE];
   for( int i=0; i<n; i++ ) {
     PMod& p = pm[i];
-    if( !p.cost ) { p.cost = new float[PMSIZE+MAXVAL+1]; p.subcost = p.cost+PMSIZE; }
+    p.cost = blk + size_t(i)*CSTRIDE; p.subcost = p.cost+PMSIZE;
     for( int k=0; k<PMSIZE; k++ ) p.cost[k] = float(-a*log(double(p.freq[k])));
     for( int k=0; k<=MAXVAL; k++ )
       p.subcost[k] = float(a*log(double(p.cumfreq[k+MAXVAL+1]-p.cumfreq[k])));
@@ -348,6 +358,13 @@ struct MRPC {
 
   int  nt[MAXC];
   int  toff[MAXC][NTMAX];
+  // The same taps in de-interleaved coordinates.  org is nc bytes per
+  // pixel, so eight consecutive pixels of one component are a stride-nc
+  // gather; out of a per-component plane they are one 8-byte load, which
+  // is the difference between a gather and a vector.
+  byte* plane[MAXC];
+  int  tpl[MAXC][NTMAX];      // which plane each tap reads
+  int  tof[MAXC][NTMAX];      // its offset, in plane elements
   int  uoff[NUM_UPELS], uw[NUM_UPELS];
 
   int  (*coef)[MAXC][NTMAX];  // [class][component][tap]
@@ -373,6 +390,14 @@ struct MRPC {
   uint   rnd;
   uint   tb0[TRIAL_BANDS], tb1[TRIAL_BANDS];   // rows the trial looks at
   int    tnb;                                  // 0 = the whole image
+  ALIGN(32) int cA[40], cB[40];   // n/SSR and n%SSR of the 33 candidates
+  // Pixels grouped by class.  The coefficient search visits one class at a
+  // time and used to find it by scanning the whole image -- once per
+  // (class, component, tap pair), which on this corpus is ten thousand
+  // full-image scans to reach a sixty-third of the pixels each time.
+  uint*  cpo;                 // bordered offset (org, errB)
+  uint*  cpq;                 // plain offset (prd, grp)
+  size_t cbeg[MRP_MAXCLASS+1];
 
   INLINE uint Rand() { rnd = rnd*1664525u + 1013904223u; return rnd>>8; }
   INLINE size_t OI( uint y, uint x ) const {
@@ -398,6 +423,21 @@ struct MRPC {
 #endif
       nt[k] = n;
     }
+    for( uint k=0; k<nc; k++ ) {
+      int n = 0;
+      for( int i=0; i<PRD_ORDER && i<NDYX; i++, n++ ) {
+        tpl[k][n] = int(k); tof[k][n] = DYX[i][0]*int(BS) + DYX[i][1];
+      }
+      for( uint j=0; j<nc; j++ ) {
+        if( j==k ) continue;
+        for( int i=0; i<XPRD_ORDER && i<NDYX; i++, n++ ) {
+          tpl[k][n] = int(j); tof[k][n] = DYX[i][0]*int(BS) + DYX[i][1];
+        }
+      }
+#if XCUR
+      for( uint j=0; j<k; j++, n++ ) { tpl[k][n] = int(j); tof[k][n] = 0; }
+#endif
+    }
     for( int i=0; i<NUM_UPELS; i++ ) {
       uoff[i] = (DYX[i][0]*int(BS) + DYX[i][1])*int(nc);
       double d = sqrt(double(DYX[i][0]*DYX[i][0] + DYX[i][1]*DYX[i][1]));
@@ -421,6 +461,21 @@ struct MRPC {
     int t = (org_<<1) - j;
     return (t>0) ? t-1 : -t;
   }
+#if defined(__AVX2__)
+  // All nc components at once: a pixel's error values are adjacent in
+  // errB, so one 64-bit load per neighbour covers every component and the
+  // twelve-tap weighted sum becomes twelve vector madds instead of 12*nc
+  // scalar ones.  Returns the sums before the shift, as the scalar does.
+  INLINE void ActivityN( const short* e, int* u ) const {
+    __m128i acc = _mm_setzero_si128();
+    for( int i=0; i<NUM_UPELS; i++ ) {
+      __m128i v = _mm_cvtepi16_epi32(
+                    _mm_loadl_epi64( (const __m128i*)(e+uoff[i]) ) );
+      acc = _mm_add_epi32( acc, _mm_mullo_epi32( v, _mm_set1_epi32(uw[i]) ) );
+    }
+    _mm_storeu_si128( (__m128i*)u, acc );
+  }
+#endif
   INLINE int Activity( uint k, const short* e ) const {
     int u = 0;
     for( int i=0; i<NUM_UPELS; i++ ) u += int(e[uoff[i]+int(k)]) * uw[i];
@@ -492,21 +547,97 @@ struct MRPC {
     }
   }
 
+  // org -> planes.  Encoder only: the decoder predicts one pixel at a
+  // time and has nothing to batch.
+  INLINE size_t PL( uint y, uint x ) const {
+    return size_t(y+PADT)*BS + (x+PADL);
+  }
+  void BuildPlanes() {
+    size_t bn = size_t(H+PADT)*BS;
+    for( uint k=0; k<nc; k++ ) {
+      if( !plane[k] ) plane[k] = new byte[bn];
+      const byte* p = org + k;
+      byte* d = plane[k];
+      for( size_t i=0; i<bn; i++, p+=nc ) d[i] = *p;
+    }
+  }
+
+#if defined(__AVX2__)
+  // Eight consecutive pixels of component k under one coefficient vector.
+  INLINE void Predict8( uint k, const int* cf, size_t o, int* out ) const {
+    __m256i a0 = _mm256_setzero_si256(), a1 = _mm256_setzero_si256();
+    const int* tp = tpl[k]; const int* to = tof[k];
+    int n = nt[k], i = 0;
+    for( ; i+2<=n; i+=2 ) {
+      const byte* q0 = plane[tp[i]]   + o + to[i];
+      const byte* q1 = plane[tp[i+1]] + o + to[i+1];
+      __m256i v0 = _mm256_cvtepu8_epi32( _mm_loadl_epi64((const __m128i*)q0) );
+      __m256i v1 = _mm256_cvtepu8_epi32( _mm_loadl_epi64((const __m128i*)q1) );
+      a0 = _mm256_add_epi32( a0, _mm256_mullo_epi32( v0, _mm256_set1_epi32(cf[i]) ) );
+      a1 = _mm256_add_epi32( a1, _mm256_mullo_epi32( v1, _mm256_set1_epi32(cf[i+1]) ) );
+    }
+    for( ; i<n; i++ ) {
+      const byte* q = plane[tp[i]] + o + to[i];
+      __m256i v = _mm256_cvtepu8_epi32( _mm_loadl_epi64((const __m128i*)q) );
+      a0 = _mm256_add_epi32( a0, _mm256_mullo_epi32( v, _mm256_set1_epi32(cf[i]) ) );
+    }
+    _mm256_storeu_si256( (__m256i*)out, _mm256_add_epi32(a0,a1) );
+  }
+  // clamp to [0,MAXPRD] and the doubled absolute error, eight at a time
+  INLINE void ClipErr8( const int* pv, const byte* org8, size_t ostep,
+                        short* prdo, short* erro, size_t stepo ) const {
+    for( int i=0; i<8; i++ ) {
+      int v = Clip( pv[i] );
+      prdo[i*stepo] = short(v);
+      erro[i*stepo] = short( Econv( int(org8[i*ostep]), v ) );
+    }
+  }
+#endif
+
   // ---------------------------------------------------------------
   void PredictRegion( uint y0, uint x0, uint y1, uint x1 ) {
     for( uint y=y0; y<y1; y++ ) {
-      const byte* p = org + OI(y,x0);
-      short* pr = prd + PI(y,x0);
-      short* pe = errB + OI(y,x0);
-      const char* pc = cls + size_t(y)*W + x0;
-      for( uint x=x0; x<x1; x++ ) {
-        int cl = int(*pc++);
-        for( uint k=0; k<nc; k++ ) {
-          int v = Clip( Predict( k, p, coef[cl][k] ) );
-          pr[k] = short(v);
-          pe[k] = short( Econv( int(p[k]), v ) );
+      const char* pc = cls + size_t(y)*W;
+      uint x = x0;
+#if defined(__AVX2__)
+      // eight at a time as long as the class holds; the quadtree bottoms
+      // out at MIN_BSIZE so runs of one class are at least that long
+      ALIGN(32) int pv[8];
+      while( x+8 <= x1 ) {
+        int cl = int(pc[x]);
+        uint r = x+1;
+        while( r<x1 && int(pc[r])==cl ) r++;
+        if( r-x < 8 ) {                      // short run: scalar
+          const byte* p = org + OI(y,x);
+          short* pr = prd + PI(y,x); short* pe = errB + OI(y,x);
+          for( uint t=x; t<r; t++, p+=nc, pr+=nc, pe+=nc )
+            for( uint k=0; k<nc; k++ ) {
+              int v = Clip( Predict( k, p, coef[cl][k] ) );
+              pr[k] = short(v); pe[k] = short( Econv( int(p[k]), v ) );
+            }
+          x = r; continue;
         }
-        p += nc; pr += nc; pe += nc;
+        for( ; x+8<=r; x+=8 ) {
+          size_t o = PL(y,x);
+          for( uint k=0; k<nc; k++ ) {
+            Predict8( k, coef[cl][k], o, pv );
+            ClipErr8( pv, org+OI(y,x)+k, nc, prd+PI(y,x)+k, errB+OI(y,x)+k, nc );
+          }
+        }
+      }
+#endif
+      {
+        const byte* p = org + OI(y,x);
+        short* pr = prd + PI(y,x);
+        short* pe = errB + OI(y,x);
+        for( ; x<x1; x++, p+=nc, pr+=nc, pe+=nc ) {
+          int cl = int(pc[x]);
+          for( uint k=0; k<nc; k++ ) {
+            int v = Clip( Predict( k, p, coef[cl][k] ) );
+            pr[k] = short(v);
+            pe[k] = short( Econv( int(p[k]), v ) );
+          }
+        }
       }
     }
   }
@@ -522,8 +653,17 @@ struct MRPC {
       const char* pc = cls + size_t(y)*W + x0;
       for( uint x=x0; x<x1; x++ ) {
         int cl = int(*pc++);
+#if defined(__AVX2__)
+        ALIGN(16) int uv[4]; ActivityN( pe, uv );
+#endif
         for( uint k=0; k<nc; k++ ) {
+#if defined(__AVX2__)
+          int u = uv[k];
+          for( uint j=0; j<k*XUPEL; j++ ) u += int(pe[j])*64;
+          u >>= 6; if( u>MAX_UPARA ) u = MAX_UPARA;
+#else
           int u  = Activity( k, pe );
+#endif
           pu[k]  = short(u);
           int gr = int(uq[cl][k][u]);
           pg[k]  = char(gr);
@@ -591,6 +731,12 @@ struct MRPC {
     for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) {
       int n = nt[k];
       for( int i=0; i<n; i++ ) for( int j=0; j<=n; j++ ) mat[i][j] = 0.0;
+      // The tap values go into a contiguous vector once, and the rank-1
+      // update of the upper triangle is then FMAs down each row -- 861
+      // scalar multiply-adds per pixel become 216 vector ones, with the
+      // right-hand column carried in element n of the same sweep.
+      ALIGN(32) double xv[NTMAX+8];
+      const int* to = toff[k];
       for( int b=0; b<(tnb?tnb:1); b++ )
       for( uint y=(tnb?tb0[b]:0); y<(tnb?tb1[b]:H); y++ ) {
         const char* pc = cls + size_t(y)*W;
@@ -599,11 +745,19 @@ struct MRPC {
         for( uint x=0; x<W; x++, p+=nc, pg+=nc ) {
           if( int(pc[x])!=cl ) continue;
           double w = wg[int(pg[k])];
-          const int* to = toff[k];
+          for( int i=0; i<n; i++ ) xv[i] = double(p[to[i]]);
+          xv[n] = double(p[k]);
           for( int i=0; i<n; i++ ) {
-            double a = w*double(p[to[i]]);
-            for( int j=i; j<n; j++ ) mat[i][j] += a*double(p[to[j]]);
-            mat[i][n] += a*double(p[k]);
+            double a = w*xv[i];
+            double* m = mat[i];
+            int j = i;
+#if defined(__AVX2__) && defined(__FMA__)
+            __m256d va = _mm256_set1_pd(a);
+            for( ; j+4<=n+1; j+=4 )
+              _mm256_storeu_pd( m+j, _mm256_fmadd_pd( va,
+                _mm256_loadu_pd(xv+j), _mm256_loadu_pd(m+j) ) );
+#endif
+            for( ; j<=n; j++ ) m[j] += a*xv[j];
           }
         }
       }
@@ -674,8 +828,17 @@ struct MRPC {
       const char* pc = cls + size_t(y)*W;
       for( uint x=0; x<W; x++, p+=nc, pr+=nc, pe+=nc, pu+=nc ) {
         int cl = int(pc[x]);
+#if defined(__AVX2__)
+        ALIGN(16) int uv[4]; ActivityN( pe, uv );
+#endif
         for( uint k=0; k<nc; k++ ) {
+#if defined(__AVX2__)
+          int u = uv[k];
+          for( uint j=0; j<k*XUPEL; j++ ) u += int(pe[j])*64;
+          u >>= 6; if( u>MAX_UPARA ) u = MAX_UPARA;
+#else
           int u = Activity( k, pe );
+#endif
           pu[k] = short(u);
           int q = Qprd( int(pr[k]) ), base = q>>PM_ACC, sub = q&(NUM_SUBPM-1);
           int v = base + int(p[k]);
@@ -765,18 +928,42 @@ struct MRPC {
     for( int cl=0; cl<num_class; cl++ ) {
       size_t bp = size_t(cl)*bufsize*bufsize*nc;
       for( uint y=tly; y<bry; y++ ) {
-        const byte* p = org + OI(y,tlx);
-        short* pb = prdbuf + bp + (size_t(y%bufsize)*bufsize + tlx%bufsize)*nc;
-        short* eb = errbuf + bp + (size_t(y%bufsize)*bufsize + tlx%bufsize)*nc;
-        for( uint x=tlx; x<brx; x++, p+=nc, pb+=nc, eb+=nc ) {
-          if( int(cls[size_t(y)*W+x])==cl ) {
-            const short* pr = prd + PI(y,x);
-            const short* pe = errB + OI(y,x);
-            for( uint k=0; k<nc; k++ ) { pb[k] = pr[k]; eb[k] = pe[k]; }
-          } else for( uint k=0; k<nc; k++ ) {
-            int v = Clip( Predict( k, p, coef[cl][k] ) );
-            pb[k] = short(v);
-            eb[k] = short( Econv( int(p[k]), v ) );
+        short* pb0 = prdbuf + bp + (size_t(y%bufsize)*bufsize + tlx%bufsize)*nc;
+        short* eb0 = errbuf + bp + (size_t(y%bufsize)*bufsize + tlx%bufsize)*nc;
+        uint x = tlx;
+#if defined(__AVX2__)
+        // predict the whole row under this class, then put back the pixels
+        // that already have it -- branchless beats correct-but-scalar here
+        ALIGN(32) int pv[8];
+        for( ; x+8<=brx; x+=8 ) {
+          size_t o = PL(y,x);
+          short* pb = pb0 + size_t(x-tlx)*nc;
+          short* eb = eb0 + size_t(x-tlx)*nc;
+          for( uint k=0; k<nc; k++ ) {
+            Predict8( k, coef[cl][k], o, pv );
+            ClipErr8( pv, org+OI(y,x)+k, nc, pb+k, eb+k, nc );
+          }
+          for( uint t=0; t<8; t++ ) if( int(cls[size_t(y)*W+x+t])==cl ) {
+            const short* pr = prd + PI(y,x+t);
+            const short* pe = errB + OI(y,x+t);
+            for( uint k=0; k<nc; k++ ) { pb[t*nc+k] = pr[k]; eb[t*nc+k] = pe[k]; }
+          }
+        }
+#endif
+        {
+          const byte* p = org + OI(y,x);
+          short* pb = pb0 + size_t(x-tlx)*nc;
+          short* eb = eb0 + size_t(x-tlx)*nc;
+          for( ; x<brx; x++, p+=nc, pb+=nc, eb+=nc ) {
+            if( int(cls[size_t(y)*W+x])==cl ) {
+              const short* pr = prd + PI(y,x);
+              const short* pe = errB + OI(y,x);
+              for( uint k=0; k<nc; k++ ) { pb[k] = pr[k]; eb[k] = pe[k]; }
+            } else for( uint k=0; k<nc; k++ ) {
+              int v = Clip( Predict( k, p, coef[cl][k] ) );
+              pb[k] = short(v);
+              eb[k] = short( Econv( int(p[k]), v ) );
+            }
           }
         }
       }
@@ -920,13 +1107,93 @@ struct MRPC {
       }
     }
     int o1 = toff[k][p1], o2 = toff[k][p2];
-    for( uint y=0; y<H; y++ ) {
-      const char* pc = cls + size_t(y)*W;
-      const byte* p = org + OI(y,0);
-      const short* pr = prd + PI(y,0);
-      const char* pg = grp + PI(y,0);
-      for( uint x=0; x<W; x++, p+=nc, pr+=nc, pg+=nc ) {
-        if( int(pc[x])!=cl ) continue;
+#if defined(__AVX2__)
+    // Five vectors cover the 11x3 candidate grid (the last seven lanes are
+    // parked on candidate 0 so their gathers stay in range and their sums
+    // are dropped).  Each pass is two gathers instead of eight dependent
+    // loads into eight different sub-position tables.
+    __m256 acc[5]; for( int g=0; g<5; g++ ) acc[g] = _mm256_setzero_ps();
+    ALIGN(32) float flush[40];
+    for( int g=0; g<5; g++ ) for( int t=0; t<8; t++ ) flush[g*8+t] = 0.0f;
+    uint since = 0;
+    const __m256i vMAX = _mm256_set1_epi32(MAXPRD);
+    const __m256i vZ   = _mm256_setzero_si256();
+    const __m256i vH   = _mm256_set1_epi32(1<<(COEF_PREC-PM_ACC-1));
+    const __m256i vCS  = _mm256_set1_epi32(CSTRIDE);
+    const __m256i vSUB = _mm256_set1_epi32(NUM_SUBPM-1);
+    const __m256i vPS  = _mm256_set1_epi32(PMSIZE);
+    for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci++ ) {
+      {
+        const byte* p = org + cpo[ci];
+        const short* pr = prd + cpq[ci];
+        const char* pg = grp + cpq[ci];
+        int d1 = int(p[o1]), d2 = int(p[o2]);
+        int pf0 = int(pr[k]) - (d1-d2)*(SR>>1) + d2*(SSR>>1);
+        const float* cb0 = pml[k][int(pg[k])]->cost;
+        int v0 = int(p[k]);
+        // the next pixel of this class lands in one of sixteen tables and
+        // near the same base; ask for it, and for its pixel data, now
+        if( ci+1<ce ) {
+          const char* pgn = grp + cpq[ci+1];
+          _mm_prefetch( (const char*)(org + cpo[ci+1]), _MM_HINT_T0 );
+          _mm_prefetch( (const char*)(pml[k][int(pgn[k])]->cost
+                                      + ((MAXPRD-Clip(pf0))>>COEF_PREC) + v0),
+                        _MM_HINT_T0 );
+        }
+        __m256i vpf = _mm256_set1_epi32(pf0);
+        __m256i vdd = _mm256_set1_epi32(d1-d2);
+        __m256i vd2 = _mm256_set1_epi32(d2);
+        __m256i vv0 = _mm256_set1_epi32(v0);
+        for( int g=0; g<5; g++ ) {
+          __m256i A = _mm256_load_si256( (const __m256i*)(cA+g*8) );
+          __m256i B = _mm256_load_si256( (const __m256i*)(cB+g*8) );
+          __m256i pf = _mm256_add_epi32( vpf,
+                         _mm256_sub_epi32( _mm256_mullo_epi32(A,vdd),
+                                           _mm256_mullo_epi32(B,vd2) ) );
+          pf = _mm256_max_epi32( _mm256_min_epi32(pf,vMAX), vZ );
+          __m256i q = _mm256_srai_epi32(
+                        _mm256_add_epi32( _mm256_sub_epi32(vMAX,pf), vH ),
+                        COEF_PREC-PM_ACC );
+          __m256i base = _mm256_srai_epi32( q, PM_ACC );
+          __m256i off  = _mm256_mullo_epi32( _mm256_and_si256(q,vSUB), vCS );
+          __m256i i1 = _mm256_add_epi32( off, _mm256_add_epi32(base,vv0) );
+          __m256i i2 = _mm256_add_epi32( off, _mm256_add_epi32(base,vPS) );
+#if MRP_GATHER
+          __m256 c1 = _mm256_i32gather_ps( cb0, i1, 4 );
+          __m256 c2 = _mm256_i32gather_ps( cb0, i2, 4 );
+#else
+          // AVX2's gather is a microcoded loop; eight ordinary loads off
+          // SIMD-computed indices are usually the faster way to say it
+          ALIGN(32) int x1i[8], x2i[8]; ALIGN(32) float f1[8], f2[8];
+          _mm256_store_si256( (__m256i*)x1i, i1 );
+          _mm256_store_si256( (__m256i*)x2i, i2 );
+          for( int t=0; t<8; t++ ) { f1[t] = cb0[x1i[t]]; f2[t] = cb0[x2i[t]]; }
+          __m256 c1 = _mm256_load_ps(f1);
+          __m256 c2 = _mm256_load_ps(f2);
+#endif
+          acc[g] = _mm256_add_ps( acc[g], _mm256_add_ps(c1,c2) );
+        }
+        // float carries 24 bits; drain into the doubles before it matters
+        if( ++since >= 4096 ) {
+          for( int g=0; g<5; g++ ) {
+            _mm256_store_ps( flush+g*8, acc[g] );
+            acc[g] = _mm256_setzero_ps();
+            for( int t=0; t<8; t++ ) if( g*8+t<33 ) cbuf[g*8+t] += flush[g*8+t];
+          }
+          since = 0;
+        }
+      }
+    }
+    for( int g=0; g<5; g++ ) {
+      _mm256_store_ps( flush+g*8, acc[g] );
+      for( int t=0; t<8; t++ ) if( g*8+t<33 ) cbuf[g*8+t] += flush[g*8+t];
+    }
+#else
+    for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci++ ) {
+      {
+        const byte* p = org + cpo[ci];
+        const short* pr = prd + cpq[ci];
+        const char* pg = grp + cpq[ci];
         int d1 = int(p[o1]), d2 = int(p[o2]);
         int pf = int(pr[k]) - (d1-d2)*(SR>>1) + d2*(SSR>>1);
         const PMod* pmg = pml[k][int(pg[k])];
@@ -944,6 +1211,7 @@ struct MRPC {
         }
       }
     }
+#endif
     int b = (SR*SSR)>>1;
     for( int i=0; i<SR*SSR; i++ ) if( cbuf[i] < cbuf[b] ) b = i;
     int i = (b/SSR) - (SR>>1), j = (b%SSR) - (SSR>>1);
@@ -953,17 +1221,13 @@ struct MRPC {
     i = y - cf[p1]; j = x - cf[p2];
     if( i==0 && j==0 ) return;
     cf[p1] = y; cf[p2] = x;
-    for( uint yy=0; yy<H; yy++ ) {
-      const char* pc = cls + size_t(yy)*W;
-      const byte* p = org + OI(yy,0);
-      short* pr = prd + PI(yy,0);
-      short* pe = errB + OI(yy,0);
-      for( uint xx=0; xx<W; xx++, p+=nc, pr+=nc, pe+=nc ) {
-        if( int(pc[xx])!=cl ) continue;
-        int v = Clip( int(pr[k]) + int(p[o1])*i + int(p[o2])*j );
-        pr[k] = short(v);
-        pe[k] = short( Econv( int(p[k]), v ) );
-      }
+    for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci++ ) {
+      const byte* p = org + cpo[ci];
+      short* pr = prd + cpq[ci];
+      short* pe = errB + cpo[ci];
+      int v = Clip( int(pr[k]) + int(p[o1])*i + int(p[o2])*j );
+      pr[k] = short(v);
+      pe[k] = short( Econv( int(p[k]), v ) );
     }
   }
   // MRP draws the two taps at random.  Sweeping them instead -- every tap
@@ -973,7 +1237,22 @@ struct MRPC {
   // to sizes ~1% apart depending only on the seed, which is enough noise
   // to hide the parameter differences one is trying to measure.
   uint optpass;
+  void BuildClassList() {
+    size_t cnt[MRP_MAXCLASS+1];
+    for( int i=0; i<=num_class; i++ ) cnt[i] = 0;
+    for( size_t i=0; i<size_t(W)*H; i++ ) cnt[int(cls[i])+1]++;
+    cbeg[0] = 0;
+    for( int i=0; i<num_class; i++ ) cbeg[i+1] = cbeg[i] + cnt[i+1];
+    for( int i=0; i<=num_class; i++ ) cnt[i] = cbeg[i];
+    for( uint y=0; y<H; y++ ) for( uint x=0; x<W; x++ ) {
+      int c = int(cls[size_t(y)*W+x]);
+      size_t j = cnt[c]++;
+      cpo[j] = uint(OI(y,x));
+      cpq[j] = uint(PI(y,x));
+    }
+  }
   cost_t OptimizePredictor() {
+    BuildClassList();
     for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) {
       int n = nt[k];
       if( n<2 ) continue;
@@ -1359,12 +1638,15 @@ struct Codec : MRPCIO {
       memset( qtmap[l], 0, size_t(qtw[l])*qth[l] );
     }
     size_t nidx = (size_t(H/MIN_BSIZE+2))*(W/MIN_BSIZE+2)*2 + 256;
+    cpo = new uint[size_t(W)*H];
+    cpq = new uint[size_t(W)*H];
     qindex = new int[nidx];
     qhist  = new uint[MRP_MAXCLASS];
     prdbuf = new short[size_t(MRP_MAXCLASS)*MAX_BSIZE*MAX_BSIZE*nc];
     errbuf = new short[size_t(MRP_MAXCLASS)*MAX_BSIZE*MAX_BSIZE*nc];
-    for( uint k=0; k<nc; k++ ) ord[k] = int(k);
+    for( uint k=0; k<nc; k++ ) { ord[k] = int(k); plane[k] = 0; }
     rnd = MRP_SEED; optpass = 0;
+    for( int i=0; i<40; i++ ) { cA[i] = (i<33)? i/3 : 0; cB[i] = (i<33)? i%3 : 0; }
     opt_loop = 1;
     BuildTaps();
   }
@@ -1372,7 +1654,9 @@ struct Codec : MRPCIO {
     delete[] org; delete[] errB; delete[] prd; delete[] upara;
     delete[] grp; delete[] cls; delete[] coef; delete[] uq;
     for( int l=0; l<QT_DEPTH; l++ ) delete[] qtmap[l];
+    delete[] cpo; delete[] cpq;
     delete[] qindex; delete[] qhist; delete[] prdbuf; delete[] errbuf;
+    for( uint k=0; k<nc; k++ ) delete[] plane[k];
   }
 
   // the stored raster -> the bordered buffer, in coding order
@@ -1384,6 +1668,7 @@ struct Codec : MRPCIO {
         for( uint k=0; k<nc; k++ ) d[k] = s[ord[k]];
     }
     FillBorders();
+    BuildPlanes();
   }
   void StoreOrg() {
     memset( img, 0, pixbytes );
