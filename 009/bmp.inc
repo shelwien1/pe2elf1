@@ -84,6 +84,27 @@ struct BmfImage {
   // with, so `pixels` already is it.
   uint8_t* palette() { return pixels+data_size; }
   const uint8_t* palette() const { return pixels+data_size; }
+
+  // Every header field of `src` but `flags`, which the two callers set
+  // differently: `compress_image` writes the member header twice, once at the
+  // top and once after `search_filter`, which may have transposed the image
+  // under it.
+  //
+  // `_pad8[2]`, `depth` and `flags` are four consecutive bytes at offset 8, and
+  // both copies moved them as one `uint32_t` -- then the second recovered
+  // `flags` from the top of the saved word twenty lines later.  Member copies
+  // say it without the layout.  Each copy also spelled the stride into a local
+  // of its own, `row_bytes` and `img_stride`, read once on the next line but
+  // one.
+  void header_from(const BmfImage* src) {
+    width = src->width;
+    height = src->height;
+    stride = src->stride;
+    _pad8[0] = src->_pad8[0];
+    _pad8[1] = src->_pad8[1];
+    depth = src->depth;
+    data_size = src->data_size;
+  }
 };
 
 // Transpose the header.  The loop at each call site has already moved the

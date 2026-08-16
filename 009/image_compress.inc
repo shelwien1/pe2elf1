@@ -14,26 +14,6 @@ static uint8_t write_member_head(const void* head, const CodedTail* extra, FILE*
   return ok;
 }
 
-// The member header, taken from the image.  Every field but `flags`, which the
-// two writers set differently: the first takes the image's own after adding the
-// tail bit to it, and the second puts the three bits it has already `|=`d back
-// over a header `search_filter` may have transposed under it.
-//
-// `_pad8[2]`, `depth` and `flags` are four consecutive bytes at offset 8, and
-// both copies of this moved them as one `uint32_t` -- then the second recovered
-// `flags` from the top of the saved word twenty lines later.  Member copies say
-// it without the layout.  Each copy also spelled the stride into a local of its
-// own, `row_bytes` and `img_stride`, read once on the next line but one.
-static void header_from(BmfImage* hdr, const BmfImage* p_i) {
-  hdr->width = p_i->width;
-  hdr->height = p_i->height;
-  hdr->stride = p_i->stride;
-  hdr->_pad8[0] = p_i->_pad8[0];
-  hdr->_pad8[1] = p_i->_pad8[1];
-  hdr->depth = p_i->depth;
-  hdr->data_size = (uint32_t)p_i->data_size;
-}
-
 int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
   BmfImage hdr;
   uint32_t filtered;
@@ -46,12 +26,13 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   // The walk that was here read every member already in the output and left
   // the file positioned after the last, which is where an appended member had
   // to go.  `bmf c` writes the file, so there is nothing in front of this one.
-  uint8_t has_coded = extra_blk!=nullptr;
+  // The tail bit says a coded block precedes the payload.  This was a `!= 0`
+  // into a byte and then an `if` that stored 1 over it when the pointer was
+  // non-null -- which is the value the comparison had already put there.
   if( extra_blk )
-    has_coded = 1;
-  p_i->flags |= has_coded ? flags_tail : 0;
+    p_i->flags |= flags_tail;
   near_lossless_q = 0;
-  header_from(&hdr, p_i);
+  hdr.header_from(p_i);
   hdr.flags = p_i->flags;
   plane_count = ((p_i->depth&depth_bits)+7)>>3;
   // An image member, version 2.0.  This was an `fwrite` of the first four
@@ -80,7 +61,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   filtered = search_filter(p_i, 0);
   hdr.flags |= flags_descriptors;
   if( p_i->flags&flags_transposed ) {
-    header_from(&hdr, p_i);
+    hdr.header_from(p_i);
     data_bytes = p_i->data_size;
     // The three bits set above, put back over the source's own -- the same
     // value the `|=`s left, re-derived from a header that `search_filter` may
