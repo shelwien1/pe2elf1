@@ -1183,21 +1183,53 @@ declarations beside six identical statements, and one six-line repetitive block
 beside the same six lines split across two functions. The declarations and the
 single block are not counted; the statements and the split pair still are.
 
+## Three tools, and what each was built because of
+
+`tools/narrow.sh`, `tools/unsave.py` and `tools/deadstore.py` were all written
+after a measurement said something was unmeasured, and all three earned their
+keep before they were believed:
+
+* **`unsave.py`** finds a value saved into a second name and loaded straight
+  back. `unspillpair.py`'s zero was honest — its rule needs *every* assignment
+  to the shadow to be a copy, so it can merge the two names, and these slots
+  fail that on their first line. Four round trips in the tree, two of them
+  spanning a loop. Its first version called the save dead whenever the slot was
+  unread *between* the two statements, and one of the four loads back into a
+  name the body goes on to use.
+* **`deadstore.py`** finds a store overwritten before anything reads it, which
+  hides inside a live variable — `unwrite.py` asks about the *name*. **Its
+  first eleven findings were all wrong**, for two reasons worth writing down:
+  `return result;` is a name, a space and a name, which is a declaration's
+  shape, so a live store two lines above a `return` that read it looked dead;
+  and a store that *is* the body of a braceless `if` is not unconditional,
+  which brace depth cannot see. Eleven candidates, zero survivors, and the rule
+  is narrower for it. A tool whose first output is applied rather than checked
+  would have deleted eleven live stores.
+* **`narrow.sh`** round-trips fourteen geometries the corpus does not have, and
+  then a second leg that is the stronger of the two. `testfiles/rle4.bmp` and
+  `rle8.bmp` are real files that use encoded runs and end-of-line and nothing
+  else, so the absolute-run reader — six exits across two nibble parities — and
+  both delta opcodes were reached by no gate at all. Each pair is one opcode
+  stream using *every* opcode at both parities beside the same pixels written
+  out flat, with the stream decoded by an implementation that is not BMF's, so
+  what the two agreeing says is that two readers of one format agree.
+
 ## Where this leaves it, again
 
-* **63 lines of copy**, from 1031 and from the 285 that closed the round above.
+* **45 lines of copy**, from 1031 and from the 285 that closed the round above.
   Forty-one of the lines that came off were never copy at all — see above.
 * **27 jumps and 19 labels**, from 42 and 27.
 * **thirteen merged encode/decode pairs**, from twelve; two declined, and both
   smaller — `code_pixel`/`decode_pixel` is 277 lines and 27 shared, from 1044
   and 179.
-* **deepest nesting 7**, from 9.
-* **two new gates**: `tools/narrow.sh`, for the geometries the corpus does not
-  have, and `tools/unsave.py`, for a value saved into a second name and loaded
-  straight back. Both were built because something was measured and found
-  unmeasured, and both were proved able to report before their zero was
-  believed. `unsave.py`'s first version was wrong in the way that matters and
-  was caught by asking what its own rule allowed.
+* **deepest nesting 7**, from 9, in four bodies of two hundred and fifty-six.
+* **three new tools**, above.
+
+What is left in the copy residue is twelve runs of three and four lines, and
+most of them are now the *result* of naming rather than something to name: two
+call sites of one helper look alike, two arms of one search look alike, two
+`enum : uint8_t {` blocks look alike. That is the floor this measure has, and
+saying so is worth more than driving the number down by writing worse code.
 
 The one decline worth repeating is `estimate_cost`'s two accumulators. Rolling
 them into one loop passes all 110 checks over all seventeen images — and
