@@ -121,7 +121,7 @@ residual:  (v − pred) folded to a zigzag, order-0 counter tree per plane
 
 With the predictor exhausted, the order-0 residual model was what was
 left between bmpc and a real image compressor, so it became a context-mixing
-stage: six `Counter` trees over different contexts, mixed in the logistic
+stage: seven `Counter` trees over different contexts, mixed in the logistic
 domain by weights `ParamUpdater` drives with the cross-entropy gradient.
 The models, and what each was worth when it was added:
 
@@ -133,8 +133,9 @@ The models, and what each was worth when it was added:
 | 3 | plane × signed error already made on the **previous component of this pixel** | −1.46% |
 | 4 | plane × joint (qsigned eW, qsigned eN), 5×5 | −0.19% |
 | 5 | plane × **the predicted byte**, 256 buckets | −0.97% at 16 buckets, −3.14% at 256 |
+| 6 | plane × activity × **the fraction of the prediction**, 8 buckets | −1.26% (§7) |
 
-Models 0–2 together are −2.9% over plain order-0; the stack is **−9.0%**.
+Models 0–2 together are −2.9% over plain order-0; the stack is **−10.1%**.
 Mixer weights are indexed by (plane, activity, depth in the bit tree) —
 the models' relative worth is very different for the top bits of the
 residual and for the noise in the bottom ones (−0.20%).
@@ -149,7 +150,7 @@ Two things the measurements insisted on, both echoing §2:
 
 An SSE/APM stage on top — interpolated over `stretch(p)`, per plane and
 tree node — is implemented (`RES_SSE=1`) and measured: worth −0.6% over a
-*broken* mixer, +0.1% over a working one. A mixer that already has six
+*broken* mixer, +0.1% over a working one. A mixer that already has seven
 opinions has nothing left for it to correct. It stays off.
 
 `-DRES_NM=1 -DRES_MD=0` recovers the plain order-0 coder of §1.
@@ -310,30 +311,111 @@ predicted byte in its context, nearly all its probability mass was already
 inside the legal set. What the statistics add is the difference between
 *nearly* certain and free.
 
-## 7. Results
+## 7. What MRP had to give
+
+MRP-0.5 (Matsuda et al., *Minimum Rate Predictors*) is a two-pass image
+coder built on entirely different ground: it segments the image into
+classes over a quadtree, fits a separate linear predictor to each by
+weighted normal equations, and iterates the whole thing against measured
+code length, transmitting the coefficients. bmpc is one-pass and adaptive.
+Four of its ideas port anyway; two paid.
+
+| MRP idea | in bmpc | |
+|---|---|---|
+| **fraction of the prediction** (`bconv`/`fconv`, `PM_ACCURACY`) | residual model 6 | **−1.26%** |
+| **distance-weighted activity** (`calc_uenc`, `ctx_weight`) | `RES_CTXW=1` | **−0.46%** on top |
+| range-aware error map (`e2E`/`E2e`) | `RES_ZIGZAG=2` | +0.23% |
+| per-class predictors (quadtree + `design_predictor`) | `MIX_CLS`, `MIX_LCLS`, `MIX_LOSS=4` | +0.7% … +9.6% |
+
+**The fraction is the big one.** The mix produces a float; the coder is
+told an integer. MRP keeps the fraction and indexes its probability model
+by it, because 137.1 and 137.9 are not the same statement about the
+residual even though both round to 137. bmpc was throwing it away at
+`pb = int(f)`. Adding one more model — plane × activity × the fraction in
+8 buckets, `nc·8·8` rows of 256 counters, about 50 KB — is worth −1.26%,
+which is more than models 4 and 5 were worth put together. 4 buckets is
+worse, 16 is the same. It is worth exactly *one* model: a second one on a
+different context is +0.02%, and keying the **mixer's** weight set on the
+fraction as well is +0.69%.
+
+**The activity measure was too short.** bmpc summed |e| over W, N and NE.
+MRP sums over all 12 causal neighbours within distance 3, weighted
+`round(64/distance)`, and shifts by 6 — two noisy pixels beside each other
+and two three away are not the same amount of local texture, and a
+three-tap sum cannot tell them apart. Same context, same bucket count,
+−0.46% (`RES_CTXW=1`; the `>>7` variant that keeps the old numeric scale
+is only −0.03%, so it is the extra neighbours doing the work, not the
+rescaling). Doing the same to the *signed* context of model 2 does not
+pay (+0.16%) — direction averages away over 12 pixels in a way magnitude
+does not.
+
+**The range-aware error map loses**, which is a statement about bmpc, not
+about MRP. `e2E` maps a value known to lie in [lo,hi] onto [0,hi−lo]:
+inside ±th of the nearer bound both signs are possible and it is the plain
+zigzag, outside it only one is, so the tail continues upward instead of
+interleaving a bit that carries nothing. bmpc has better bounds than MRP
+does — the per-block min/max of §6 rather than 0..255 — and it still
+loses, for two reasons. The bit that carries nothing was already free:
+§6's exclusion machinery walks the legal set down the bit tree and does
+not code a node whose two subtrees are not both reachable. And bmpc's fold
+is *modular*: a residual of +200 against a prediction of 250 wraps to +6
+and costs almost nothing, where `e2E` calls it 255. Saturated predictions
+followed by a jump to the other end of the range are common enough in real
+images that the wrap is worth more than the alphabet compaction.
+`RES_ZIGZAG=2` implements it and stays off.
+
+**Per-class predictors do not survive the port.** This is MRP's headline
+idea, and the reason it does not carry is that bmpc's predictor is already
+local: a mix under `ParamUpdater` tracks whatever the last few hundred
+pixels were doing, which is most of what a class label would have told it.
+Splitting the weights by activity class (`MIX_CLS=4`) makes it **+9.6%** on
+t24 — 240 taps need data, and each class gets a quarter of it, arriving in
+bursts so its adaptation state is stale every time it is asked. The cheap
+half — both mixes keep every pixel, and only the `MIX_DUAL` blend
+coordinate is learned per class (`MIX_LCLS`) — is a wash: +0.7% on t24,
+−0.14% on x_ep. MRP also weights its normal equations by `1/sigma[gr]^2`,
+the residual spread of the activity group; the same statement here is a
+Huber knee tracked per (component, activity) rather than per component
+(`MIX_LOSS=4`), and that is +7% on t24. The knee is doing a different job
+than the weighting is: it decides what is an *outlier*, and an outlier is
+outlier-shaped relative to the whole component, not to its own bucket.
+
+The two that paid cost nothing at decode beyond 12 byte loads and one more
+counter per bit: **−1.72%** on the corpus together (−1.38% geo), and
+2643708 → 2631749 on the 8 MB image. Per file, shipped build against
+shipped build: t32 −1.88%, t24 −1.21%, x_ep −4.91%, and the two 8bpp files
+**+0.16%** — at `n_colors=1` the mix is 60 taps rather than 240, its output
+lands on a coarser grid, and there is correspondingly less in the fraction
+to read. 35 bytes each; not worth making either toggle depend on depth.
+
+## 8. Results
 
 Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46862** | 4.81 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46514** | 4.78 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **99261** | 3.45 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **117353** | 3.06 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **357764** | 1.27 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2643708** | 2.52 |
-| x_ai.bmp | RLE8 | 887278 | — | — | 285808 | 285808 | fallback |
-| x_ci.bmp | RLE8 | 3278170 | — | — | 1046958 | 1046958 | fallback |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46969** | 4.82 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46618** | 4.79 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **98051** | 3.40 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **115151** | 3.00 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **340507** | 1.21 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2631749** | 2.51 |
+| x_ai.bmp | RLE8 | 887278 | — | — | 285807 | 286423 | fallback |
+| x_ci.bmp | RLE8 | 3278170 | — | — | 1046957 | 1047507 | fallback |
 
 Every one of these round-trips (`CODER=./bmpc ./t.sh testfiles/*.bmp`), as
 do an empty file, a 2-byte `BM`, 3 KB of `/dev/urandom`, a truncated BMP, a
 top-down BMP with non-zero row padding and a trailer, and book1.
 
-The two RLE8 files are not rasters, so they take the order-1 fallback and
-match coder0 exactly (+1 byte for the mode flag).
+The two RLE8 files are not rasters, so they take the order-1 fallback,
+which is coder0's coder byte for byte — except that bmpc builds it with
+`FASTM=1`, the polynomial `exp2`/`log2` of §9. That costs 0.2% here
+(286423 against 285807) and next to nothing on the raster path (+0.08% on
+x_ep, ±5 bytes on t24 and t32), which is why it is on; `-DFASTM=0`
+reproduces coder0 to the byte.
 
-On the 8 MB target image bmpc codes **2643530** bytes: 34.8% smaller than
-coder0's 4057586, and 1.9% smaller than the 2694740 of `bmf`, which is
+On the 8 MB target image bmpc codes **2631749** bytes: 35.1% smaller than
+coder0's 4057586, and 2.3% smaller than the 2694740 of `bmf`, which is
 what this was being measured against.
 
 Where it got there, on that file:
@@ -345,10 +427,11 @@ Where it got there, on that file:
 | + the 6-model residual mix | 2646464 | −9.1% |
 | + a final `IDX/opt.pl` pass | 2646067 | |
 | + per-block statistics (64×64) | 2643530 | −0.10% |
-| + trial-chosen component order | **2643708** | +0.007% here; −4.8% on t32 |
+| + trial-chosen component order | 2643708 | +0.007% here; −4.8% on t32 |
+| + MRP's fraction and activity models (§7) | **2631749** | −0.45% |
 | bmf, for reference | 2694740 | |
 
-## 8. Speed
+## 9. Speed
 
 Best-of-N timings (`./bench.sh`), clang 18, `-Ofast -march=haswell -flto`:
 
@@ -388,8 +471,8 @@ shrinking residual model 5's table from 25 MB to 1.5 MB (`RES_VQ=16`) saves
   with a minimax polynomial, ~1e-5 relative. Consistency is what the codec
   needs, not correct rounding — both sides run the same instructions.
   `-DFASTM=0` restores libm.
-* **Prefetch** the first three tree nodes of all six models at the top of
-  `CodeRes` (they are in six tables up to 25 MB apart), the next raster
+* **Prefetch** the first three tree nodes of all seven models at the top of
+  `CodeRes` (they are in seven tables up to 25 MB apart), the next raster
   row in the gather, and ahead of the weight vector in the dot product.
   Worth little on its own, consistent with not being memory bound.
 
@@ -397,7 +480,7 @@ Two things measured and **rejected**: rewriting the eight RTRL trace
 updates as an `R[]`/`C[]` vector pair was *slower* (9.42 → 9.73s) because
 building the two vectors in memory costs more than the FMAs it saves —
 clang already keeps those eight in registers. And vectorising across the
-six models, the one place with real 6-wide parallelism, needs a gather per
+the models, the one place with real 6-wide parallelism, needs a gather per
 field from six scattered tables; on Haswell (no AVX-512 scatter, ~15-cycle
 gathers) the transpose costs about what the scalar work does.
 
@@ -406,7 +489,7 @@ the survivors in full — ~1.9× encode for 0.12–0.37% size. Off by default;
 the screen is a weak signal and this project has been trading the other
 way throughout.
 
-## 9. Caveats
+## 10. Caveats
 
 * **`-Ofast` makes the folded and unfolded builds differ slightly.** With
   a knob pinned by `-DB0_NW_w=1024` the compiler folds it and reassociates;
@@ -420,8 +503,8 @@ way throughout.
   meaningful when the palette is ordered. t8p (paletted) and t8g
   (greyscale ramp) happen to land within 1% of each other here.
 * It is slow: `n_colors·60` multiply-adds plus that many weight updates
-  per byte, twice over (`MIX_DUAL`), and then six `Counter` predict/update
-  pairs and a mixer step per *bit* — about 220 KB/s decode (§8). `-DMIX_DUAL=0` costs 0.7% and buys back ~30% of the
+  per byte, twice over (`MIX_DUAL`), and then seven `Counter` predict/update
+  pairs and a mixer step per *bit* — about 220 KB/s decode (§9). `-DMIX_DUAL=0` costs 0.7% and buys back ~30% of the
   pixel-mix time; `-DRES_NM=3` costs ~4% and roughly halves the residual
   time.
 * Memory is dominated by residual model 5: `n_colors·256·256` counters,
@@ -444,7 +527,7 @@ way throughout.
   instead did turn it into a small net win (−0.33%), but the reorder alone
   is worth −0.85% and costs nothing at decode, so the transform is gone.
 
-## 10. Reproducing
+## 11. Reproducing
 
 Model shape (the `#define`s at the top of `bmpc.cpp`) was chosen with
 `sweep.py`, which rebuilds with `-D` overrides and reports the corpus total

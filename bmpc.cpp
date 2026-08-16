@@ -95,7 +95,16 @@
                          //  1 = Huber   gdot = clip(e,HUB)
                          //  2 = L1      gdot = HUB*sign(e)
                          //  3 = Huber with the knee at HUBA * an EMA of
-                         //      |e| for that component.  A fixed knee is
+                         //      |e| for that component.
+                         //  4 = the same EMA, but kept per (component,
+                         //      activity bucket).  MRP fits its predictors
+                         //      by normal equations weighted 1/sigma[gr]^2,
+                         //      sigma being the spread of the residual in
+                         //      that activity group -- the same statement
+                         //      that an error of 6 is an outlier in a flat
+                         //      region and business as usual in a busy
+                         //      one, which a per-component knee cannot
+                         //      say.  A fixed knee is
                          //      not scale free: 8bpp images want it ~4x
                          //      wider than 24/32bpp ones (and the wider
                          //      the mix, the more one outlier costs), so
@@ -124,12 +133,50 @@
 #ifndef W_LOGIT
 #define W_LOGIT      0   // w = LO + SPAN*sigma(z), optimise z
 #endif
+#ifndef MIX_CLS
+#define MIX_CLS      1   // LPC weight sets per component, selected by the
+                         // causal activity class (the RES_CTX bucket,
+                         // folded down to MIX_CLS levels).
+                         // MRP's central idea: one predictor is not enough
+                         // for a whole image, so it segments the image into
+                         // classes and fits a separate set of coefficients
+                         // to each.  MRP finds the segmentation by two-pass
+                         // code-length optimisation over a quadtree; the
+                         // one-pass analogue is to let the class be
+                         // something the decoder can compute too -- how
+                         // busy the neighbourhood already is -- and let
+                         // each class's weights adapt on its own pixels.
+                         // Costs one Dot per pixel either way: only the
+                         // selected set runs.
+#endif
+#ifndef MIX_LCLS
+#define MIX_LCLS     1   // classes for the MIX_DUAL blend coordinate alone.
+                         // The cheap half of MIX_CLS: both mixes keep
+                         // seeing every pixel, so neither is starved, and
+                         // only the one number that says which of them to
+                         // believe is learned per class.
+#endif
 #ifndef LPC_INTRA
 #define LPC_INTRA    1   // also feed the already-coded components of the
                          // current pixel (0..n_colors-1 extra inputs)
 #endif
 #ifndef RES_ZIGZAG
-#define RES_ZIGZAG   1   // fold the residual to |e|*2-(e<0) before coding
+#define RES_ZIGZAG   1   // fold the residual before coding:
+                         //  0 = none, r = (v-pb) & 255
+                         //  1 = zigzag, |e|*2-(e<0), e the wrapped residual
+                         //  2 = range-aware (MRP's e2E): the value is known
+                         //      to lie in [lo,hi] -- the block's min/max
+                         //      when BLK_STAT has them, 0..255 otherwise --
+                         //      so only |e| <= th = min(pb-lo,hi-pb) has two
+                         //      possible signs.  Zigzag that core onto
+                         //      [0,2th] and lay the one-sided tail out
+                         //      contiguously above it.  The image is the
+                         //      prefix [0,hi-lo]: the impossible symbols
+                         //      leave the alphabet instead of being
+                         //      scattered through it by the wrap, so the
+                         //      counters that see a narrow block and the
+                         //      ones that see a wide one agree about what
+                         //      symbol 12 means.
 #endif
 #ifndef RES_PLANE
 #define RES_PLANE    1   // one order-0 residual model per colour component
@@ -138,11 +185,31 @@
 #define RES_CTX      8   // activity buckets: |e| at W + N + NE, per plane.
                          // RES_CTX=1 collapses model 1 onto model 0.
 #endif
+#ifndef RES_CTXW
+#define RES_CTXW     1   // what "activity" means for the RES_CTX bucket:
+                         //  0 = |eW| + |eN| + |eNE|
+                         //  1 = MRP's measure (mrp-05 encmrp.c, calc_uenc):
+                         //      the 12 causal neighbours within radius 3,
+                         //      weighted round(64/distance), sum >> 6.  Two
+                         //      pixels of noise beside each other and two
+                         //      three away are not the same amount of local
+                         //      texture, and a three-tap sum cannot tell.
+                         //  2 = the same, >> 7, which keeps the numbers in
+                         //      the range the RES_CTX bucket edges were
+                         //      picked for (the weights total 440, so >>6
+                         //      is 6.9*mean|e| against the 3-tap 3*mean|e|)
+#endif
+#ifndef RES_EQW
+#define RES_EQW      0   // 1 = model 2's signed context is the same 12
+                         // neighbours, distance weighted and signed, rather
+                         // than eW+eN.  The weighted magnitude sum (RES_CTXW)
+                         // paid; this asks whether the direction does too.
+#endif
 #ifndef RES_EQ
 #define RES_EQ      17   // signed buckets of eW+eN for model 2
 #endif
 #ifndef RES_NM
-#define RES_NM       6   // residual models mixed:
+#define RES_NM       7   // residual models mixed:
                          //  0 = plane                       (order 0)
                          //  1 = plane x activity            (how noisy here)
                          //  2 = plane x signed eW+eN        (which way it missed)
@@ -152,6 +219,17 @@
                          //  4 = plane x joint (qsigned eW, qsigned eN),
                          //      coarse -- direction, not just magnitude
                          //  5 = plane x predicted value, RES_VQ buckets
+                         //  6 = plane x activity x the FRACTIONAL part of
+                         //      the prediction, RES_FQ buckets.  The mix
+                         //      lands on 137.9 and the coder is told 138;
+                         //      MRP keeps that fraction and indexes its
+                         //      pmf by it (bconv/fconv, PM_ACCURACY),
+                         //      because it says which way the residual
+                         //      leans -- the split between e=0 and e=+1 is
+                         //      not the same at .1 as at .9.
+                         //  7 = plane x fraction x signed eW+eN: the same
+                         //      fraction against the direction the last two
+                         //      neighbours missed in
                          // Their predictions are mixed in the logistic
                          // domain by a per-(plane,activity) weight vector
                          // driven by ParamUpdater -- the same rank-1 Newton
@@ -163,6 +241,16 @@
 #endif
 #ifndef RES_JQ
 #define RES_JQ       5   // per-axis buckets of the joint eW/eN model 4
+#endif
+#ifndef RES_FQ
+#define RES_FQ       8   // buckets of the prediction's fraction, model 6
+#endif
+#ifndef RES_MF
+#define RES_MF       0   // 1 = the mixer's weight set also depends on the
+                         // prediction's fraction bucket: how much to trust
+                         // each model may depend on whether the mix landed
+                         // in the middle of a rounding interval or at its
+                         // edge
 #endif
 #ifndef RES_MD
 #define RES_MD       1   // 1 = give the mixer a separate weight set per
@@ -341,6 +429,17 @@ static const int PADL = 4;    // pixels of the bottom row left of x
 static const int PADR = 3;    // unknown pixels right of x
 static const int PADT = BH-1; // known rows above y
 static const int NPIX = (BH-1)*BW + PADL;    // 60 known pixels
+
+#if RES_CTXW
+// MRP's context pixels: every causal neighbour within distance 3, in
+// distance order (mrp-05 common.c, dyx[] truncated to NUM_UPELS=12), and
+// its weight round(64/distance) from init_ctx_weight.
+static const int UPELS = 12;
+static const int UD[UPELS][2] = { {0,-1},{-1,0},
+                                  {0,-2},{-1,-1},{-2,0},{-1,1},
+                                  {0,-3},{-1,-2},{-2,-1},{-3,0},{-2,1},{-1,2} };
+static const int UW[UPELS]    = {   64,64,  32,45,32,45,  21,29,29,21,29,29 };
+#endif
 // Components one Raster can carry.  The raster itself needs 4; the block
 // statistics are coded as one picture of 4 planes x 4 components.
 static const uint MAXC = 16;
@@ -458,6 +557,7 @@ static INLINE int qsigned( int d ) {
 struct VSet {
   qword m[4];
   INLINE int has( uint v ) const { return int((m[v>>6]>>(v&63))&1); }
+  INLINE void put( uint v ) { m[v>>6] |= qword(1)<<(v&63); }
   // any member in [lo, lo+len)?  len is a power of two and lo a multiple
   // of it, so the range is either whole words or inside one word.
   INLINE int any( uint lo, uint len ) const {
@@ -494,6 +594,13 @@ static INLINE qword spread32( uint x ) {
   v = (v | (v<< 1)) & 0x5555555555555555ull;
   return v;
 }
+static INLINE uint ctz64( qword v ) {
+#if defined(__GNUC__) || defined(__clang__)
+  return uint(__builtin_ctzll(v));
+#else
+  uint n=0; while( ((v>>n)&1)==0 ) n++; return n;
+#endif
+}
 static INLINE qword revbits64( qword v ) {
   v = ((v>> 1)&0x5555555555555555ull) | ((v&0x5555555555555555ull)<< 1);
   v = ((v>> 2)&0x3333333333333333ull) | ((v&0x3333333333333333ull)<< 2);
@@ -520,8 +627,33 @@ static INLINE void zigzagset( VSet& d, const VSet& s ) {
   d.m[3] = e3 | (o3<<1) | (o2>>63);
 }
 
+// MRP's range-aware error mapping (mrp-05/src/common.c, e2E/E2e), with
+// [lo,hi] the block's range rather than the whole 0..255.  th is how far
+// the prediction sits from the nearer bound: inside +-th both signs are
+// possible and the fold is the plain zigzag, outside it only one sign is,
+// and the tail continues the alphabet upwards instead of interleaving a
+// bit that carries nothing.  sgn is that forced sign (1 = e>0), which is
+// the side away from the nearer bound.
+static INLINE uint e2E( int e, int th ) {
+  uint a = uint(e<0 ? -e : e);
+  if( a <= uint(th) ) return (e<0) ? (a+a-1) : (a+a);
+  return uint(th) + a;                       // 2th + (a-th)
+}
+static INLINE int E2e( uint E, int th, int sgn ) {
+  if( E <= uint(th+th) ) return (E&1) ? -int((E+1)>>1) : int(E>>1);
+  int a = int(E) - th;
+  return sgn ? a : -a;
+}
+
 // The four small sets the statistic planes are drawn from.
 static INLINE void set_clear( VSet& S ) { S.m[0]=S.m[1]=S.m[2]=S.m[3]=0; }
+static INLINE void set_lt( VSet& S, uint n ) {           // { v : v < n }
+  for( uint i=0; i<4; i++ ) {
+    if( (i+1)*64 <= n ) S.m[i] = ~qword(0);
+    else if( i*64 >= n ) S.m[i] = 0;
+    else S.m[i] = (qword(1) << (n-i*64)) - 1;
+  }
+}
 static INLINE void set_one( VSet& S, uint v ) {
   set_clear(S); S.m[v>>6] = qword(1)<<(v&63);
 }
@@ -729,6 +861,12 @@ struct Raster {
   const byte* lr[MAXC];
   int   rq[MAXC];          // its range bucket
 #endif
+#if RES_ZIGZAG==2
+  int   e_th, e_sgn, e_rg; // the fold in force for the symbol being coded
+#endif
+#if RES_CTXW
+  int   uoff[UPELS];       // UD[] in emap units, fixed once bstride is known
+#endif
   byte*  buf;              // bordered raster, nc bytes/pixel
   uint   bstride;          // buffer row in pixels
   int    ni;               // mix taps
@@ -744,6 +882,16 @@ struct Raster {
   // through the pixel (the previous component's error, the predicted byte),
   // so they compute their offset at use.
   int    rbase[RES_NM][MAXC];
+  int    qcls[MAXC];          // the activity bucket of the current pixel
+#if RES_NM>6
+  int    actq[MAXC];          // k*RES_CTX + activity bucket, for model 6
+#endif
+#if RES_NM>7
+  int    eqc[MAXC];           // qsigned(eW+eN), for model 7
+#endif
+#if RES_MF
+  int    mctxb[MAXC];         // mctx before the fraction is folded in
+#endif
   signed char* emap;       // clipped prediction error, same geometry as buf
   BitMix* bmix;            // mixer weights, per (plane, activity[, depth])
   uint   nmix;
@@ -757,6 +905,9 @@ struct Raster {
   float  i2f[256];         // byte -> mix input
   float  base[MAXC];          // i2f[] of the operating point, per component
   float  mad[MAXC];           // MIX_LOSS==3: EMA of |e| per component
+#if MIX_LOSS==4
+  float  madc[MAXC*RES_CTX];  // MIX_LOSS==4: the same, per activity bucket
+#endif
 #if MIX_BIAS==2
   float* bias;             // [nc][NCTX] EMA of the residual
   int    bctx[MAXC];          // context of the current pixel, per component
@@ -795,6 +946,8 @@ struct Raster {
   INLINE float Knee( uint k ) const {
 #if MIX_LOSS==3
     return LW_HUBA * mad[k];
+#elif MIX_LOSS==4
+    return LW_HUBA * madc[k*RES_CTX + uint(qcls[k])];
 #else
     (void)k; return LW_HUB;
 #endif
@@ -814,6 +967,11 @@ struct Raster {
     buf = new byte[bn];
     memset( buf, 128, bn );     // border and not-yet-known pixels
 
+#if RES_CTXW
+    for( int i=0; i<UPELS; i++ )
+      uoff[i] = (UD[i][0]*int(bstride) + UD[i][1]) * int(nc);
+#endif
+
     ni = NPIX*nc;
 #if LPC_INTRA
     ni += nc-1;                 // components of this pixel already coded
@@ -824,21 +982,21 @@ struct Raster {
     // 32-byte aligned and padded: Dot/Update load it eight at a time
     x   = (float*)aligned_alloc( 32, size_t((ni+15)&~7)*sizeof(float) );
     for( int i=0; i<((ni+15)&~7); i++ ) x[i] = 0.0f;
-    mix = new LPCMix[nc];
+    mix = new LPCMix[nc*MIX_CLS];
     // Seed each mix on "same component of the pixel to the left", which
     // is input (NPIX-1)*nc + k -- the last of the bottom-row group.
     // Without centring the mix has to reproduce the left neighbour itself,
     // so seed that tap at 1; with centring the offset already does it and
     // every tap seeds at 0.
-    for( uint k=0; k<nc; k++ )
-      mix[k].Init( ni, MIX_CENTER ? -1 : int((NPIX-1)*nc + k) );
+    for( uint k=0; k<nc; k++ ) for( uint c=0; c<MIX_CLS; c++ )
+      mix[k*MIX_CLS+c].Init( ni, MIX_CENTER ? -1 : int((NPIX-1)*nc + k) );
 #if MIX_DUAL
-    mix2 = new LPCMix2[nc];
-    lam  = new ParamUpdater<1,Config_LM>[nc];
-    for( uint k=0; k<nc; k++ ) {
-      mix2[k].Init( ni, MIX_CENTER ? -1 : int((NPIX-1)*nc + k) );
-      lam[k].Init( 0.0f );          // sigma(0) = 1/2, an even blend
-    }
+    mix2 = new LPCMix2[nc*MIX_CLS];
+    lam  = new ParamUpdater<1,Config_LM>[nc*MIX_LCLS];
+    for( uint k=0; k<nc; k++ ) for( uint c=0; c<MIX_CLS; c++ )
+      mix2[k*MIX_CLS+c].Init( ni, MIX_CENTER ? -1 : int((NPIX-1)*nc + k) );
+    for( uint i=0; i<nc*MIX_LCLS; i++ )
+      lam[i].Init( 0.0f );              // sigma(0) = 1/2, an even blend
 #endif
 #if MIX_BIAS==1
     x[ni-1] = 1.0f;
@@ -867,6 +1025,12 @@ struct Raster {
 #if RES_NM>5
     nrow[5] = nc*vq;
 #endif
+#if RES_NM>6
+    nrow[6] = nc*RES_CTX*RES_FQ;
+#endif
+#if RES_NM>7
+    nrow[7] = nc*RES_FQ*RES_EQ;
+#endif
     for( uint m=0; m<RES_NM; m++ ) {
       res[m] = new Ctr[256*nrow[m]];
       InitCtr( res[m], 256*nrow[m] );
@@ -874,7 +1038,7 @@ struct Raster {
     emap = new signed char[bn];
     memset( emap, 0, bn );
 
-    nmix = nc*RES_CTX*(BLK_MCTX?BLK_RQ:1)*(RES_MD?8:1);
+    nmix = nc*RES_CTX*(BLK_MCTX?BLK_RQ:1)*(RES_MF?RES_FQ:1)*(RES_MD?8:1);
     bmix = new BitMix[nmix];
     for( uint i=0; i<nmix; i++ ) bmix[i].Init();
 #if RES_SSE
@@ -889,6 +1053,9 @@ struct Raster {
 #endif
 
     for( uint k=0; k<4; k++ ) mad[k] = LW_MAD0;
+#if MIX_LOSS==4
+    for( uint i=0; i<MAXC*RES_CTX; i++ ) madc[i] = LW_MAD0;
+#endif
 
     for( int v=0; v<256; v++ ) {
 #if MIX_LOGISTIC
@@ -947,28 +1114,59 @@ struct Raster {
 #endif
     {
       size_t o = size_t(At(px,py) - buf);
-      const signed char* eW  = emap + o - size_t(nc);
-      const signed char* eN  = emap + o - size_t(bstride)*nc;
-      const signed char* eNE = eN + nc;
+      const signed char* eo  = emap + o;
+      const signed char* eW  = eo - size_t(nc);
+      const signed char* eN  = eo - size_t(bstride)*nc;
       for( uint k=0; k<nc; k++ ) {
-        int w = eW[k], n = eN[k], ne = eNE[k];
+        int w = eW[k], n = eN[k];
+#if RES_CTXW || RES_EQW
+        int s = 0, sg = 0;
+        for( int i=0; i<UPELS; i++ ) {
+          int t = eo[uoff[i]+int(k)];
+          s += UW[i]*(t<0?-t:t); sg += UW[i]*t;
+        }
+        (void)sg;
+#endif
+#if RES_CTXW
+        uint a = uint(s>>(RES_CTXW==2?7:6));
+#else
+        int ne = eN[nc+k];
         int aw = w<0?-w:w, an = n<0?-n:n, ane = ne<0?-ne:ne;
         uint a = uint(aw+an+ane);
+#endif
         uint q = 0; while( q+1 < RES_CTX && a >= (2u<<q) ) q++;
         rbase[0][k] = (RES_PLANE ? int(k) : 0) * 256;
 #if RES_NM>1
         rbase[1][k] = int(k*RES_CTX + q) * 256;
 #endif
 #if RES_NM>2
+#if RES_EQW
+        rbase[2][k] = int(k*RES_EQ + uint(qsigned(sg>>6))) * 256;
+#else
         rbase[2][k] = int(k*RES_EQ + uint(qsigned(w+n))) * 256;
+#endif
 #endif
 #if RES_NM>4
         rbase[4][k] = (int(k)*RES_JQ*RES_JQ + qjoint(w)*RES_JQ + qjoint(n)) * 256;
 #endif
+#if RES_NM>6
+        actq[k] = int(k*RES_CTX + q);
+#endif
+#if RES_NM>7
+#if RES_EQW
+        eqc[k] = qsigned(sg>>6);
+#else
+        eqc[k] = qsigned(w+n);
+#endif
+#endif
+        qcls[k] = int(q);
 #if BLK_STAT && BLK_MCTX
         mctx[k] = int((k*RES_CTX + q)*BLK_RQ + uint(rq[k]));
 #else
         mctx[k] = int(k*RES_CTX + q);
+#endif
+#if RES_MF
+        mctxb[k] = mctx[k];
 #endif
         cerr[k] = 0;
       }
@@ -1030,12 +1228,17 @@ struct Raster {
 
   // One byte: predict, code the residual, update the mix.
   INLINE uint Byte( uint k, byte* p, uint v ) {
-    LPCMix& m = mix[k];
+    // Which weight set, and which blend coordinate, this pixel's class
+    // asks for.  Both fold the RES_CTX activity bucket down uniformly.
+    const uint mk = (MIX_CLS >1) ? k*MIX_CLS  + (uint(qcls[k])*MIX_CLS )/RES_CTX : k;
+    const uint lk = (MIX_LCLS>1) ? k*MIX_LCLS + (uint(qcls[k])*MIX_LCLS)/RES_CTX : k;
+    (void)lk;
+    LPCMix& m = mix[mk];
     float dotA = m.Dot(x);
     float dot  = dotA + base[k];
 #if MIX_DUAL
-    float dotB = mix2[k].Dot(x);
-    float lm   = squash( lam[k].val );
+    float dotB = mix2[mk].Dot(x);
+    float lm   = squash( lam[lk].val );
     float dd   = dotB - dotA;
     dot += lm*dd;
 #endif
@@ -1062,8 +1265,8 @@ struct Raster {
     }
 #endif
 
+    int _lo = 0, _hi = 255;
 #if BLK_STAT
-    int _lo, _hi;
     const VSet* ls = lmode ? CurSet(k,p,_lo,_hi) : 0;
 #if BLK_CLAMP
     // Nothing outside the legal range can occur, so neither should a
@@ -1071,13 +1274,45 @@ struct Raster {
     if( ls ) { if( pb<_lo ) pb = _lo; else if( pb>_hi ) pb = _hi; }
 #endif
 #endif
+#if RES_ZIGZAG==2
+    // The fold needs the same bounds the decoder will have; when the block
+    // statistics are off or say nothing they are simply 0..255, and e2E
+    // degenerates to MRP's own full-range form.
+#if !BLK_CLAMP
+    if( pb<_lo ) pb = _lo; else if( pb>_hi ) pb = _hi;
+#endif
+    { int dl = pb-_lo, dh = _hi-pb;
+      e_th  = dl<dh ? dl : dh;
+      e_sgn = int(dl<=dh);           // the tail lies away from the near bound
+      e_rg  = _hi-_lo; }
+#endif
 
     vctx[k] = int((uint(pb)*vq)>>8);
+#if RES_NM>6 || RES_MF
+    // pb is int(f) with the rounding half already folded into f, so f-pb is
+    // where inside the rounding interval the mix actually landed.
+    { int fq = int( (f - float(pb)) * float(RES_FQ) );
+      if( fq<0 ) fq = 0; else if( fq>=RES_FQ ) fq = RES_FQ-1;
+#if RES_NM>6
+      rbase[6][k] = (actq[k]*RES_FQ + fq) * 256;
+#endif
+#if RES_NM>7
+      rbase[7][k] = ((int(k)*RES_FQ + fq)*RES_EQ + eqc[k]) * 256;
+#endif
+#if RES_MF
+      mctx[k] = mctxb[k]*RES_FQ + fq;
+#endif
+    }
+#endif
 
+#if RES_ZIGZAG==2
+    uint r = e2E( int(v)-pb, e_th );
+#else
     uint r = (v - uint(pb)) & 255;
 #if RES_ZIGZAG
     int e = int(r); if( e>=128 ) e -= 256;
     r = (e<0) ? uint(-e-e-1) : uint(e+e);
+#endif
 #endif
 #if STATS
     s_h[r&255]++;
@@ -1087,11 +1322,15 @@ struct Raster {
 #else
     r = CodeRes( k, r, uint(pb) );
 #endif
+#if RES_ZIGZAG==2
+    v = uint(pb + E2e( r, e_th, e_sgn ));
+#else
 #if RES_ZIGZAG
     e = (r&1) ? -int((r+1)>>1) : int(r>>1);
     r = uint(e) & 255;
 #endif
     v = (uint(pb) + r) & 255;
+#endif
 
     p[k] = byte(v);
     {
@@ -1119,19 +1358,23 @@ struct Raster {
 #if MIX_DUAL
     // each mix descends its own error, the blend descends the joint one
     m.Update( x, LossG(dotA+base[k]-t, Knee(k)), 1.0f, xx );
-    mix2[k].Update( x, LossG(dotB+base[k]-t, LW_HUB2), 1.0f, xx );
+    mix2[mk].Update( x, LossG(dotB+base[k]-t, LW_HUB2), 1.0f, xx );
     {
       float f1 = lm*(1.0f-lm);            // dL/dz = gdot*dd*f1
       float u1 = dd*f1;
       float gz = LossG(ew, Knee(k)) * u1;
       float hz = u1*u1 + LossG(ew,Knee(k))*dd*f1*(1.0f-2.0f*lm);
-      lam[k].AccumGH( gz, hz );
-      lam[k].Apply( lam[k].StepRaw(), Config_LM::minVal, Config_LM::maxVal );
+      lam[lk].AccumGH( gz, hz );
+      lam[lk].Apply( lam[lk].StepRaw(), Config_LM::minVal, Config_LM::maxVal );
     }
 #else
     m.Update( x, LossG(ew, Knee(k)), 1.0f, xx );
 #endif
     mad[k] += (fabsf(ew)-mad[k]) * MAD_R;
+#if MIX_LOSS==4
+    { float& mc = madc[k*RES_CTX + uint(qcls[k])];
+      mc += (fabsf(ew)-mc) * MAD_R; }
+#endif
 #if MIX_BIAS==2
     bias[bctx[k]] += (t-dot) * BIAS_R;
 #endif
@@ -1159,6 +1402,20 @@ struct Raster {
     // no legal symbol is not a choice, so its bit is not coded.
     VSet ls; uint nls = 256;
     if( lv ) {
+#if RES_ZIGZAG==2
+      // e2E maps [lo,hi] onto [0,hi-lo].  When the block's set IS the whole
+      // range -- which it is unless the mask planes cut into it -- the image
+      // is the prefix [0,rg] and needs no per-symbol work at all.  When it
+      // is not, walk the set bits (30-odd of them, not 256).
+      nls = lv->count();
+      if( nls == uint(e_rg)+1 ) set_lt( ls, nls );
+      else {
+        set_clear( ls );
+        for( uint i=0; i<4; i++ )
+          for( qword w=lv->m[i]; w; w&=w-1 )
+            ls.put( e2E( int(i*64 + uint(ctz64(w))) - int(pb), e_th ) );
+      }
+#else
       VSet t; rotr256( t, *lv, pb );
 #if RES_ZIGZAG
       zigzagset( ls, t );
@@ -1166,6 +1423,7 @@ struct Raster {
       ls = t;
 #endif
       nls = ls.count();
+#endif
     }
 #endif
     Ctr* m0 = res[0] + rbase[0][k];
@@ -1183,6 +1441,12 @@ struct Raster {
 #endif
 #if RES_NM>5
     Ctr* m5 = res[5] + (int(k*vq) + vctx[k])*256;
+#endif
+#if RES_NM>6
+    Ctr* m6 = res[6] + rbase[6][k];
+#endif
+#if RES_NM>7
+    Ctr* m7 = res[7] + rbase[7][k];
 #endif
     BitMix* mxb = bmix + size_t(mctx[k])*(RES_MD?8:1);
 #if RES_SSE
@@ -1212,6 +1476,12 @@ struct Raster {
 #endif
 #if RES_NM>5
     PF3(m5);
+#endif
+#if RES_NM>6
+    PF3(m6);
+#endif
+#if RES_NM>7
+    PF3(m7);
 #endif
     #undef PF3
 #endif
@@ -1248,6 +1518,12 @@ struct Raster {
 #endif
 #if RES_NM>5
       m5[cxt].Predict();            s[5] = stp( m5[cxt].pK );
+#endif
+#if RES_NM>6
+      m6[cxt].Predict();            s[6] = stp( m6[cxt].pK );
+#endif
+#if RES_NM>7
+      m7[cxt].Predict();            s[7] = stp( m7[cxt].pK );
 #endif
 #if RES_MD
       // depth = index of the leading 1 of cxt, i.e. how many bits are in
@@ -1292,6 +1568,12 @@ struct Raster {
 #endif
 #if RES_NM>5
       m5[cxt].C_Update( bit );
+#endif
+#if RES_NM>6
+      m6[cxt].C_Update( bit );
+#endif
+#if RES_NM>7
+      m7[cxt].C_Update( bit );
 #endif
 #if RES_SSE
       a0.C_Update( bit ); a1.C_Update( bit );
@@ -1343,9 +1625,9 @@ struct Raster {
   }
 
   void Free() {
-    for( uint k=0; k<nc; k++ ) mix[k].Free();
+    for( uint k=0; k<nc*MIX_CLS; k++ ) mix[k].Free();
 #if MIX_DUAL
-    for( uint k=0; k<nc; k++ ) mix2[k].Free();
+    for( uint k=0; k<nc*MIX_CLS; k++ ) mix2[k].Free();
 #endif
     delete[] buf; ::free(x); delete[] mix; delete[] emap;
     delete[] bmix; delete[] padm;
