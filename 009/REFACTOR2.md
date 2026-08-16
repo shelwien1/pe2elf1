@@ -925,3 +925,26 @@ seventeen streams agree byte for byte without them.
 325 to 293. The percentage is unchanged, which is the point the table has been
 making all along: both halves shrink together because what comes out is
 scaffolding.
+
+### A claim of mine that needed measuring
+
+Extracting `context_ids` left one obvious next step: `code_pixel` and
+`decode_pixel` both write the same four stage-one neighbours into
+`mode_symbol[1..4]` *and* into four `nb_sym` slots — 8, 10, 6, 5 in the encoder
+and 0, 1, 3, 2 in the decoder — so reading `mode_symbol` and dropping the eight
+scratch stores looked like the tidy that would let the last shared block merge.
+
+Enumerating the reads first is what stopped it. `nb_sym` is 32 slots of the
+decompilation's stack and `code_pixel` reuses eleven of them for a dozen
+unrelated values, among them `nb_sym[5] = run_bucket[nb_sym[4]]` and
+`nb_sym[6] = run_hit` — two of the four `neighbour_rank` reads, written a
+hundred lines above its last call. So the comment I had written on
+`neighbour_rank` earlier in this session — "it is the same four in the same
+order everywhere that asks" — was an assertion, and the code around it gave
+real reason to doubt it.
+
+Instrumented, checking all four slots against `mode_symbol[1..4]` at every
+call: **9,144,286 calls over three images, all four intact in every one.** So
+the claim is true, and it is a measurement now rather than a reading of the
+nesting. The substitution stays unmade: it would be behaviour-preserving *over
+the corpus* rather than by construction, and those are not the same thing.

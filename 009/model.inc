@@ -51,9 +51,23 @@ static int32_t match_seed_split(const PixRec* at) {
 
 // Where a symbol sits among the four ranked neighbours the model keeps: 1..4
 // for the four, 0 -- the escape -- for anything else.  `nb_sym[8]`, `[10]`,
-// `[6]`, `[5]` is the rank order, and it is the same four in the same order
-// everywhere that asks.  Three chains in `code_pixel` ran it, each spelling
-// the four literals of its own scale into the arms.
+// `[6]`, `[5]` is the rank order.  Three chains in `code_pixel` ran it, each
+// spelling the four literals of its own scale into the arms.
+//
+// **That those four slots still hold the four neighbours is a measurement and
+// not an argument.**  `nb_sym` is 32 slots of the decompilation's stack and
+// `code_pixel` reuses eleven of them for a dozen unrelated values -- among
+// them `nb_sym[5] = run_bucket[nb_sym[4]]` and `nb_sym[6] = run_hit`, which
+// are two of the four this reads, written a hundred lines above the last call.
+// Whether those paths reach a call is not something the nesting makes plain.
+//
+// Instrumented, every call checking all four against `mode_symbol[1..4]` --
+// which `code_pixel` and `decode_pixel` fill with the same four symbols in the
+// same order and never rewrite: **9,144,286 calls over three images, all four
+// slots intact in every one.**  So the rank order is what it says, and the
+// obvious tidy -- read `mode_symbol` here and drop the eight scratch stores --
+// would be behaviour-preserving over the corpus rather than by construction,
+// which is not the same thing and is why it is not made.
 static inline int32_t neighbour_rank(const int32_t* nb_sym, int32_t sym) {
   if( sym==nb_sym[8] )
     return 1;
