@@ -22,6 +22,25 @@ static inline int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2,
                  .bits<11, 2>((sum>s0)+(sum>s1)+(sum>s2));
 }
 
+// How many of a run of thresholds a value clears: `n > scale * t[k]`, for `k`
+// from `hi` down to `lo`.  Four counts at the head of `alt_p2_context` --
+// thirteen comparisons between them, every one written out -- and the two
+// shapes are the same one: `gA` and `gB` compare against the threshold and
+// `gC` and `gD` against a multiple of it, so the scale is a parameter and is
+// 1 for the first two.
+static inline int32_t over_thresholds(int32_t n, const int32_t* t,
+                                      int32_t lo, int32_t hi, int32_t scale) {
+  int32_t over = 0;
+  for( int32_t k = hi; k>=lo; --k )
+    over += n>scale*t[k];
+  return over;
+}
+
+// The five ratios that put a sample's activity in one of six bands.  These
+// were five literals inside five comparisons, which is where a table goes when
+// nobody writes it down.
+static const int32_t p2_band_edges[5] = { 43, 17, 9, 5, 2 };
+
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
   int32_t ctx15, nb_slot;
@@ -40,14 +59,14 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t lane5 = sub0_row->dup;
   int32_t sum_u = 14*cursor1[3].dup+23*cursor1[1].dup+19*cursor1->dup+25*row0p[-1].dup+ctx_bias[3]+17*row0p[-2].dup+15*(cursor[3]->dup+lane5);
   int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
-  int32_t band = (8*sum4>43*sum_u)+(8*sum4>17*sum_u)+(8*sum4>9*sum_u)+(8*sum4>5*sum_u)+(8*sum4>2*sum_u);
+  int32_t band = over_thresholds(8*sum4, p2_band_edges, 0, 4, sum_u);
   int32_t den_d = 2*row0p[-2].val+2*row0p[-1].val;
   int32_t num_b = cursor1[1].val+(cursor1->val+2*row0p[-1].val);
   int32_t num_d = 16*(sub0_row[2].val+sub0_row->val+cursor1[1].val+sub0_row[-1].val);
-  int32_t gA = (sum_all>bmf_p2_thresholds[band][12])+(sum_all>bmf_p2_thresholds[band][11])+(sum_all>bmf_p2_thresholds[band][10])+(sum_all>bmf_p2_thresholds[band][9]);
-  int32_t gB = (num_b>bmf_p2_thresholds[band][8])+(num_b>bmf_p2_thresholds[band][7])+(num_b>bmf_p2_thresholds[band][6]);
-  int32_t gC = (16*sum_ur>sum_ul*bmf_p2_thresholds[band][5])+(16*sum_ur>sum_ul*bmf_p2_thresholds[band][4])+(16*sum_ur>sum_ul*bmf_p2_thresholds[band][3]);
-  int32_t gD = (num_d>bmf_p2_thresholds[band][2]*den_d)+(num_d>den_d*bmf_p2_thresholds[band][1])+(num_d>den_d*bmf_p2_thresholds[band][0]);
+  int32_t gA = over_thresholds(sum_all, bmf_p2_thresholds[band], 9, 12, 1);
+  int32_t gB = over_thresholds(num_b, bmf_p2_thresholds[band], 6, 8, 1);
+  int32_t gC = over_thresholds(16*sum_ur, bmf_p2_thresholds[band], 3, 5, sum_ul);
+  int32_t gD = over_thresholds(num_d, bmf_p2_thresholds[band], 0, 2, den_d);
   // Mixed radix, and only three of the five terms are bit fields.  `gB`, `gC`
   // and `gD` each sum three comparisons, so each is 0..3 and each is two bits.
   // `gA` sums *four*, so it is 0..4 -- five values with a stride of 64 -- and
