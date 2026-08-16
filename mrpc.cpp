@@ -94,6 +94,12 @@
                          //  2 = trial: fit one global predictor per order
                          //      and keep the cheapest
 #endif
+#ifndef MRP_SEED
+#define MRP_SEED  12345  // the coefficient search picks its tap pairs at
+                         // random; this is the only thing that makes an
+                         // encode non-deterministic across builds, and the
+                         // knob that measures how much that matters
+#endif
 #ifndef MRP_VERBOSE
 #define MRP_VERBOSE   0  // -DMRP_VERBOSE=1: optimisation trace on stderr
 #endif
@@ -916,16 +922,21 @@ struct MRPC {
       }
     }
   }
+  // MRP draws the two taps at random.  Sweeping them instead -- every tap
+  // paired with the one a fixed distance away, the distance rotating with
+  // the iteration -- covers the same pairs, converges no worse, and makes
+  // an encode reproducible: with the random draw the same file compresses
+  // to sizes ~1% apart depending only on the seed, which is enough noise
+  // to hide the parameter differences one is trying to measure.
+  uint optpass;
   cost_t OptimizePredictor() {
     for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) {
       int n = nt[k];
       if( n<2 ) continue;
-      for( int t=0; t<n; t++ ) {
-        int p1 = int(Rand()%uint(n)), p2 = int(Rand()%uint(n));
-        if( p1==p2 ) p2 = (p2+1)%n;
-        OptimizeCoef( cl, k, p1, p2 );
-      }
+      int d = 1 + int( optpass % uint(n-1) );
+      for( int t=0; t<n; t++ ) OptimizeCoef( cl, k, t, (t+d)%n );
     }
+    optpass++;
     PredictRegion( 0, 0, H, W );
     return CalcCost( 0, 0, H, W );
   }
@@ -1309,7 +1320,7 @@ struct Codec : MRPCIO {
     prdbuf = new short[size_t(MRP_MAXCLASS)*MAX_BSIZE*MAX_BSIZE*nc];
     errbuf = new short[size_t(MRP_MAXCLASS)*MAX_BSIZE*MAX_BSIZE*nc];
     for( uint k=0; k<nc; k++ ) ord[k] = int(k);
-    rnd = 12345;
+    rnd = MRP_SEED; optpass = 0;
     opt_loop = 1;
     BuildTaps();
   }
