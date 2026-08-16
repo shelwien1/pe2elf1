@@ -49,6 +49,37 @@ static int32_t match_seed_split(const PixRec* at) {
         +at[2].match[0]+at[3].match[0]+at[4].match[0]-5;
 }
 
+// Where a symbol sits among the four ranked neighbours the model keeps: 1..4
+// for the four, 0 -- the escape -- for anything else.  `nb_sym[8]`, `[10]`,
+// `[6]`, `[5]` is the rank order, and it is the same four in the same order
+// everywhere that asks.  Three chains in `code_pixel` ran it, each spelling
+// the four literals of its own scale into the arms.
+static inline int32_t neighbour_rank(const int32_t* nb_sym, int32_t sym) {
+  if( sym==nb_sym[8] )
+    return 1;
+  if( sym==nb_sym[10] )
+    return 2;
+  if( sym==nb_sym[6] )
+    return 3;
+  if( sym==nb_sym[5] )
+    return 4;
+  return 0;
+}
+
+// The cumulative weight below a level, as the arms of those chains spell it.
+// Level 4 takes it as the total less the top weight rather than summing the
+// four below, and level 3 sums in the order 0, 2, 1; the weights are
+// `uint16_t` widened to `int`, so no ordering of the same terms differs.
+static inline int32_t cum_below(const uint16_t* w, int32_t lvl) {
+  switch( lvl ) {
+  case 1: return w[0];
+  case 2: return w[0]+w[1];
+  case 3: return w[0]+w[2]+w[1];
+  case 4: return w[5]-w[4];
+  }
+  return 0;
+}
+
 struct ModelBlock {
   uint32_t width;
   int32_t height;
@@ -382,18 +413,31 @@ struct ModelBlock {
     }
   }
 
+  // Everything a block needs before its first pixel that depends on the
+  // alphabet: the per-symbol exclusion map seeded to one, the escape list, the
+  // selector cursor, and the two selector lists.  Both plane coders wrote this
+  // out; the decoder's copy read the same object under two more names.
+  void seed_alphabet() {
+    uint8_t* map = (uint8_t*)bmf_new(alphabet);
+    alpha_map = map;
+    memset(map, 1, alphabet);
+    escape_list = &escape;
+    escape.init(alphabet, 1);
+    sel_cur = sel;
+    sel1_list = new_sym_lists(alphabet);
+    sel0_list = new_sym_lists(alphabet);
+    init_symbol_lists();
+  }
+
   void expand_alphabet() {
     SymList lists[16];
     uint32_t* codes_p;
     int32_t left2, left;
-    uint32_t i, n_syms, j, carry;
+    uint32_t n_syms, j, carry;
     uint32_t bits = depth;
     uint32_t mask = 0xFFFFFFFF>>(-(uint8_t)depth&31);
     uint32_t nbytes = (bits+7)>>3;
-    for( i = 0; i<8; ++i ) {
-      lists[2*i].ent = nullptr;
-      lists[2*i+1].ent = nullptr;
-    }
+    clear_sym_lists(lists);
     uint32_t cap = mask+1;
     if( bits>8 )
       cap = no_symbol+1;
@@ -475,12 +519,11 @@ struct ModelBlock {
     uint8_t *dst_base = &dst[-(depth<8)];
     rc_begin_decode();
     expand_alphabet();
-    ModelBlock *this_1 = this;
     int32_t g1 = 0;
     int32_t g = 0;
     do {
       int32_t flags = ctx_group_flags[g];
-      this_1->ctx_state[flags] = g;
+      ctx_state[flags] = g;
       lo1 = 0;
       g0 = g;
       // The same six folds `model_plane` hoists, under the same names and in
@@ -499,9 +542,9 @@ struct ModelBlock {
         lo1 = lo;
         int32_t k = 0;
         do {
-          this_1->ctx_bucket[g+15*lo+75*k] = g1;
-          int32_t m5 = this_1->alphabet;
-          FreqRec *rec = &this_1->grid[g1];
+          ctx_bucket[g+15*lo+75*k] = g1;
+          int32_t m5 = alphabet;
+          FreqRec *rec = &grid[g1];
           for( int32_t n = 0; n<4; ++n ) rec->w[1+n] = 2;
           if( f_w3_double ) {
             w2 = (uint16_t)(rec->w[4]+rec->w[3]);
@@ -556,7 +599,7 @@ struct ModelBlock {
         lo = lo1+1;
       } while( lo1+1<5 );
       int32_t gi = 0;
-      SymPair* gctr = this_1->group_ctr[g0];
+      SymPair* gctr = group_ctr[g0];
       do {
         gctr[gi].last = no_symbol;
         gctr[gi++].prev = no_symbol;
@@ -564,62 +607,52 @@ struct ModelBlock {
       g = g0+1;
     } while( g0+1<15 );
     uint8_t *dst_buf = dst_base;
-    ModelBlock *blk = (ModelBlock*)(this_1);
-    uint8_t *buf = (uint8_t*)bmf_new(this_1->alphabet);
-    uint32_t alpha_n = this_1->alphabet;
-    this_1->alpha_map = buf;
-    memset(buf, 1, alpha_n);
-    blk->escape_list = &blk->escape;
-    blk->escape.init(blk->alphabet, 1);
-    blk->sel_cur = blk->sel;
-    blk->sel1_list = new_sym_lists(blk->alphabet);
-    blk->sel0_list = new_sym_lists(blk->alphabet);
-    blk->init_symbol_lists();
-    uint32_t jj = blk->depth;
-    if( jj==blk->depth_raw ) {
+    seed_alphabet();
+    uint32_t jj = depth;
+    if( jj==depth_raw ) {
       expand_buf = nullptr;
     } else {
-      dst_buf = (uint8_t*)bmf_new(blk->height*blk->width+3);
-      jj = blk->depth;
+      dst_buf = (uint8_t*)bmf_new(height*width+3);
+      jj = depth;
       expand_buf = dst_buf;
     }
     uint32_t nbytes = (jj+7)>>3;
-    if( blk->height>0 ) {
+    if( height>0 ) {
       out_at = dst_buf;
       bucket = 0;
       while( 1 ) {
-        blk->start_row();
-        lists = blk->row_cur[6];
-        t = blk->row_cur[7];
-        ++blk->row_cur[5];
+        start_row();
+        lists = row_cur[6];
+        t = row_cur[7];
+        ++row_cur[5];
         ++lists;
-        ++blk->row_cur[8];
-        blk->row_cur[6] = lists;
+        ++row_cur[8];
+        row_cur[6] = lists;
         ++t;
-        blk->row_cur[7] = t;
-        ++blk->row_cur[9];
-        blk->grad[0] = match_seed(lists, 5);
-        blk->grad[3] = 0;
-        blk->grad[2] = 0;
-        row_w = blk->width;
-        blk->grad[1] = match_seed(t, 5);
+        row_cur[7] = t;
+        ++row_cur[9];
+        grad[0] = match_seed(lists, 5);
+        grad[3] = 0;
+        grad[2] = 0;
+        row_w = width;
+        grad[1] = match_seed(t, 5);
         if( row_w<=0 )
           break;
         x2 = 0;
         do {
-          int32_t y = (blk)->decode_pixel(x2);
-          blk->init_tables();
-          row_w = blk->width;
+          int32_t y = decode_pixel(x2);
+          init_tables();
+          row_w = width;
           x2 += y;
-        } while( (uint32_t)x2<blk->width );
+        } while( (uint32_t)x2<width );
         if( nbytes!=4 )
           goto list_ready;
         if( row_w>0 ) {
           uint32_t *out32 = (uint32_t*)out_at;
           int32_t y2 = 0;
           do
-            *out32++ = blk->sym_code[blk->row_cur[0][y2+++8].sym];
-          while( (uint32_t)y2<blk->width );
+            *out32++ = sym_code[row_cur[0][y2+++8].sym];
+          while( (uint32_t)y2<width );
           out_at = (uint8_t*)out32;
           goto next_list;
         }
@@ -627,7 +660,7 @@ struct ModelBlock {
         bucket = bucket+1;
         // `height` is `int32_t` and this side is already `uint32_t`, so C
         // converts the right operand too.  Written where it happens.
-        if( (uint32_t)bucket>=(uint32_t)blk->height )
+        if( (uint32_t)bucket>=(uint32_t)height )
           goto list_done;
       }
       if( nbytes==4 )
@@ -638,24 +671,24 @@ struct ModelBlock {
           SymEntry *out_ent = (SymEntry*)out_at;
           int32_t step = 0;
           do {
-            uint32_t *x6 = blk->sym_code;
-            int32_t x7 = blk->row_cur[0][step+8].sym;
+            uint32_t *x6 = sym_code;
+            int32_t x7 = row_cur[0][step+8].sym;
             out_ent->set((uint16_t)x6[x7], (uint8_t)(x6[x7]>>16));
             ++step;
             ++out_ent;
-          } while( (uint32_t)step<blk->width );
+          } while( (uint32_t)step<width );
           out_at = (uint8_t*)out_ent;
         }
         goto next_list;
       }
       if( nbytes!=2 ) {
-        if( blk->depth==8 ) {
+        if( depth==8 ) {
           if( row_w>0 ) {
             uint8_t *out8 = out_at;
             int32_t x5 = 0;
             do
-              *out8++ = (uint8_t)blk->sym_code[blk->row_cur[0][x5+++8].sym];
-            while( (uint32_t)x5<blk->width );
+              *out8++ = (uint8_t)sym_code[row_cur[0][x5+++8].sym];
+            while( (uint32_t)x5<width );
             out_at = out8;
           }
         } else if( row_w>0 ) {
@@ -663,16 +696,16 @@ struct ModelBlock {
           bits = 0;
           uint8_t *out_bits = out_at;
           do {
-            int32_t bpp = blk->depth;
+            int32_t bpp = depth;
             bits -= bpp;
             if( bits<0 ) {
               bits = 8-bpp;
-              *++out_bits = blk->sym_code[blk->row_cur[0][x4+8].sym]<<((8-bpp)&31);
+              *++out_bits = sym_code[row_cur[0][x4+8].sym]<<((8-bpp)&31);
             } else {
-              *out_bits |= blk->sym_code[blk->row_cur[0][x4+8].sym]<<(bits&31);
+              *out_bits |= sym_code[row_cur[0][x4+8].sym]<<(bits&31);
             }
             ++x4;
-          } while( (uint32_t)x4<blk->width );
+          } while( (uint32_t)x4<width );
           out_at = out_bits;
         }
         goto next_list;
@@ -681,22 +714,22 @@ struct ModelBlock {
         uint16_t *out16 = (uint16_t*)out_at;
         int32_t x3 = 0;
         do
-          *out16++ = blk->sym_code[blk->row_cur[0][x3+++8].sym];
-        while( (uint32_t)x3<blk->width );
+          *out16++ = sym_code[row_cur[0][x3+++8].sym];
+        while( (uint32_t)x3<width );
         out_at = (uint8_t*)out16;
       }
       goto next_list;
     }
   list_done:
     rc_end_decode();
-    int32_t bpp_raw = blk->depth_raw;
-    if( (uint32_t)bpp_raw!=blk->depth ) {
+    int32_t bpp_raw = depth_raw;
+    if( (uint32_t)bpp_raw!=depth ) {
       int32_t nchunk = (bpp_raw+7)>>3;
       if( nchunk<=0 ) {
-        n_pix = blk->height*blk->width;
+        n_pix = height*width;
       } else {
         done = 0;
-        n_pix = blk->height*blk->width;
+        n_pix = height*width;
         int32_t chunk = n_pix/nchunk;
         if( nchunk>=6 ) {
           int32_t q5 = 0;
@@ -724,7 +757,7 @@ struct ModelBlock {
         do {
           uint8_t *p = row[q2];
           *interleave_at = *p;
-          n_pix2 = blk->height*blk->width;
+          n_pix2 = height*width;
           ++interleave_at;
           row[q2++] = p+1;
           if( q2==nchunk )
@@ -748,10 +781,9 @@ struct ModelBlock {
     FreqRec* freq;
     uint16_t* id3p;
     FreqRec* freq_tbl;
-    int32_t arg_cum, arg_high, arg_tot;
     uint32_t done, lvl_a;
     PixRec *next;
-    int32_t nb, key, cap, nb2, all_up, sig1, sig2, s1a, m_up0, run, bucket, bit, hit_a, idx_s, tot;
+    int32_t nb, key, cap, nb2, all_up, sig1, sig2, s1a, m_up0, run, bucket, bit, hit_a, idx_s;
     PixRec *cur6 = (PixRec*)row_cur[6];
     int32_t up_sym = cur6->sym;
     PixRec *row = row_cur[5];
@@ -1018,40 +1050,43 @@ struct ModelBlock {
     }
     freq = &grid[bucket_idx];
     freq_tbl = &grid[id2+188];
-    tot = freq_tbl->w[5];
-    if( tot ) {
-      if( tot==1 ) {
-        freq_tbl->blend_from(*freq);
-        tot = freq_tbl->w[5];
-      }
-      arg_tot = tot;
-      int32_t target = rc.get_freq(arg_tot);
+    // The lambda is in a block of its own because the `goto pixel_done`
+    // eighteen lines up jumps over it, and a jump may cross a scope but not an
+    // initialisation inside the label's own.
+    {
+    // Decode the stage-one symbol against one record: take the target, find
+    // which of its five levels holds it, let the record grow, and leave the
+    // level in `hit` for the callers that read it.  Both arms below run this
+    // and differ only in which record, and in what they then do to the other
+    // one -- so the two wrote it out with a private name for every value in
+    // it, `cum2`, `target2`, `lvl_b`, and a `freq2` that is `freq`.
+    auto decode_against = [&](FreqRec* rec) {
+      const int32_t total = rec->w[5];
       int32_t cum;
-      lvl_a = freq_tbl->find_level(target, cum);
-      arg_high = cum;
-      arg_cum = cum-freq_tbl->w[lvl_a];
-      freq_tbl->bump(lvl_a);
-      rc.decode(arg_cum, arg_high, arg_tot);
-      hit = lvl_a;
+      const int32_t lvl = rec->find_level(rc.get_freq(total), cum);
+      // Before the bump, which is what moves `w[lvl]`.
+      const int32_t low = cum-rec->w[lvl];
+      rec->bump(lvl);
+      rc.decode(low, cum, total);
+      hit = lvl;
+      return lvl;
+    };
+    const int32_t tot = freq_tbl->w[5];
+    if( tot ) {
+      // `tot` was re-read after the blend for the sake of `arg_tot`, which
+      // reads `w[5]` itself now.
+      if( tot==1 )
+        freq_tbl->blend_from(*freq);
+      lvl_a = decode_against(freq_tbl);
       if( freq_tbl->b14 ) {
         --freq_tbl->b14;
-        FreqRec *freq2 = freq;
         ++freq->w[5];
-        ++freq2->w[lvl_a];
-        lvl_a = hit;
+        ++freq->w[lvl_a];
       }
     } else {
-      arg_tot = freq->w[5];
-      int32_t target2 = rc.get_freq(arg_tot);
-      int32_t cum2;
-      int32_t lvl_b = freq->find_level(target2, cum2);
-      arg_high = cum2;
-      arg_cum = cum2-freq->w[lvl_b];
-      freq->bump(lvl_b);
-      rc.decode(arg_cum, arg_high, arg_tot);
-      hit = lvl_b;
-      freq_tbl->w[5] = freq_tbl->w[lvl_b]++!=0;
-      lvl_a = hit;
+      lvl_a = decode_against(freq);
+      freq_tbl->w[5] = freq_tbl->w[lvl_a]++!=0;
+    }
     }
     if( lvl_a ) {
       row_cur[5]->sym = mode_symbol[lvl_a];
@@ -1116,10 +1151,9 @@ struct ModelBlock {
     // indexes 0..31 and no further, so the pad held nothing back.
     alignas(16) int32_t nb_sym[32];
     int32_t runlen_s;
-    int32_t arg_cum;
-    uint32_t arg_tot, arg_high, done, grid_kind;
+    uint32_t done;
     uint16_t* id3p;
-    int32_t nb, key, cap, nb2, sig1, sig2, m_up0, one, run, amap, runlen, run_left, bit5, cum1, lvl_a, cum2, lvl_b;
+    int32_t nb, key, cap, nb2, sig1, sig2, m_up0, one, run, amap, runlen, run_left, bit5, lvl_a;
     PixRec *cur5p1;
     PixRec* cur6c, * up2;
     PixRec* cur6 = (PixRec*)row_cur[6];
@@ -1159,29 +1193,12 @@ struct ModelBlock {
     ctx_state_seen = state;
     SymPair* pair = &group_ctr[state][key];
     pix_cur = pair;
-    int32_t pair_last = pair->last;
-    if( pair_last==nb_sym[8] ) {
-      cap = 15;
-    } else if( pair_last==nb_sym[10] ) {
-      cap = 30;
-    } else if( pair_last==nb_sym[6] ) {
-      cap = 45;
-    } else {
-      up_eq_west = pair_last==nb_sym[5];
-      cap = 60;
-      if( !up_eq_west )
-        cap = 0;
-    }
-    int32_t pair_prev = pair->prev;
-    if( pair_prev==nb_sym[8] ) {
-      cap += 75;
-    } else if( pair_prev==nb_sym[10] ) {
-      cap += 150;
-    } else if( pair_prev==nb_sym[6] ) {
-      cap += 225;
-    } else if( pair_prev==nb_sym[5] ) {
-      cap += 300;
-    }
+    // The pair's two symbols ranked against the same four neighbours, at
+    // fifteen and seventy-five to the rank.  The first chain reached rank 4
+    // through `up_eq_west` -- a `bool` it had already used and finished with
+    // eighteen lines earlier -- and then tested it back.
+    cap = 15*neighbour_rank(nb_sym, pair->last)
+        +75*neighbour_rank(nb_sym, pair->prev);
     PixRec *r1 = row_cur[8];
     int32_t bucket_at = ctx_bucket[state+cap];
     PixRec *r2 = row_cur[7];
@@ -1385,73 +1402,39 @@ struct ModelBlock {
     } else {
       FreqRec *binp = &grid[bucket_idx];
       FreqRec *frec = &grid[id2+188];
-      grid_kind = frec->w[5];
+      // The mirror of `decode_pixel`'s `decode_against`: rank the symbol among
+      // the four neighbours, take the interval below that rank, let the record
+      // grow, and leave the rank in `hit`.  The second arm reached the same
+      // record through `grid[bucket_idx].w`, cast to the union's other member,
+      // so the two chains did not look like one.
+      auto code_against = [&](FreqRec* rec) {
+        const int32_t lvl = neighbour_rank(nb_sym, rowp->sym);
+        const int32_t cum = cum_below(rec->w, lvl);
+        const uint32_t total = rec->w[5];
+        // Before the bump, which is what moves `w[lvl]`.
+        const uint32_t high = rec->w[lvl]+cum;
+        rec->bump(lvl);
+        rc.encode(cum, high, total);
+        hit = lvl;
+        return lvl;
+      };
+      const uint32_t grid_kind = frec->w[5];
       if( grid_kind ) {
         if( grid_kind==1 ) {
           // `ip = (int32_t*)&grid[bucket_idx]` ten lines up, cast straight
           // back here and used as nothing else in between.
           frec->blend_from(*binp);
-          grid_kind = frec->w[5];
           rowp = row_cur[5];
         }
-        int32_t s9 = rowp->sym;
-        arg_tot = grid_kind;
-        if( s9==nb_sym[8] ) {
-          cum1 = frec->w[0];
-          lvl_a = 1;
-        } else if( s9==nb_sym[10] ) {
-          cum1 = frec->w[0]+frec->w[1];
-          lvl_a = 2;
-        } else if( s9==nb_sym[6] ) {
-          cum1 = frec->w[0]+frec->w[2]+frec->w[1];
-          lvl_a = 3;
-        } else if( s9==nb_sym[5] ) {
-          cum1 = frec->w[5]-frec->w[4];
-          lvl_a = 4;
-        } else {
-          cum1 = 0;
-          lvl_a = 0;
-        }
-        arg_cum = cum1;
-        arg_high = frec->w[lvl_a]+cum1;
-        frec->bump(lvl_a);
-        rc.encode(arg_cum, arg_high, arg_tot);
-        hit = lvl_a;
+        lvl_a = code_against(frec);
         if( frec->b14 ) {
           --frec->b14;
-          FreqRec *binp_s = binp;
           ++binp->w[5];
-          ++binp_s->w[lvl_a];
-          lvl_a = hit;
+          ++binp->w[lvl_a];
         }
       } else {
-        // `w` is the union member this was casting to reach.
-        uint16_t *wr = grid[bucket_idx].w;
-        int32_t s9b = rowp->sym;
-        arg_tot = binp->w[5];
-        if( s9b==nb_sym[8] ) {
-          cum2 = *wr;
-          lvl_b = 1;
-        } else if( s9b==nb_sym[10] ) {
-          cum2 = *wr+wr[1];
-          lvl_b = 2;
-        } else if( s9b==nb_sym[6] ) {
-          cum2 = *wr+wr[2]+wr[1];
-          lvl_b = 3;
-        } else if( s9b==nb_sym[5] ) {
-          cum2 = wr[5]-wr[4];
-          lvl_b = 4;
-        } else {
-          cum2 = 0;
-          lvl_b = 0;
-        }
-        arg_cum = cum2;
-        arg_high = binp->w[lvl_b]+cum2;
-        binp->bump(lvl_b);
-        rc.encode(arg_cum, arg_high, arg_tot);
-        hit = lvl_b;
-        frec->w[5] = (frec->w[lvl_b])++!=0;
-        lvl_a = hit;
+        lvl_a = code_against(binp);
+        frec->w[5] = frec->w[lvl_a]++!=0;
       }
       if( lvl_a )
         return 1;

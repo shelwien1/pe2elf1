@@ -1,7 +1,6 @@
 // model_plane.inc -- one plane through the main model.
 
 void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
-  ModelBlock* blk;
   int16_t w2n;
   uint32_t row_w;
   int32_t w3, w4, y;
@@ -19,11 +18,8 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         alt_model_p2_encode(p_i, pixels);
     }
   } else {
-    void* ws = bmf_new(sizeof(ModelBlock));
-    if( ws )
-      blk = ((ModelBlock*)ws)->layout_workspace(p_i->width, p_i->height, p_i->depth&depth_bits);
-    else
-      blk = nullptr;
+    ModelBlock* blk = new_model_block(p_i->width, p_i->height,
+                                     p_i->depth&depth_bits);
     rc_begin_encode();
     reduce_alphabet(blk, pixels);
     int32_t bucket = 0;
@@ -111,16 +107,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       } while( gi<0x10000 );
       ++g;
     } while( (uint32_t)g<0xF );
-    uint8_t* buf = (uint8_t*)bmf_new(blk->alphabet);
-    uint32_t alpha_n = blk->alphabet;
-    blk->alpha_map = buf;
-    memset(buf, 1, alpha_n);
-    blk->escape_list = &blk->escape;
-    blk->escape.init(blk->alphabet, 1);
-    blk->sel_cur = blk->sel;
-    blk->sel1_list = new_sym_lists(blk->alphabet);
-    blk->sel0_list = new_sym_lists(blk->alphabet);
-    blk->init_symbol_lists();
+    blk->seed_alphabet();
     if( blk->height>0 ) {
       uint16_t* word = blk->sym_word;
       y = 0;

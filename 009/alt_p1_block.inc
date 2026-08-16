@@ -2,6 +2,44 @@
 // and its counters.  "p1" is `plane_predictor == 1` and says nothing about depth --
 // measured, this codes t24's and t32's *eight-bit* planes.  MODELS.md section 6.
 
+// The near-lossless drift control, and the whole of what makes these two
+// models lossy.  Fold the residual between the source byte and the prediction
+// into a symbol, reconstruct from it, and measure how far that pulls the byte
+// already standing in the output buffer.  Past sixteen either way the
+// approximation is refused: `*dst` takes the source byte unchanged and the
+// symbol comes from the high fold instead.  Answers the symbol to code.
+//
+// Three copies -- the generic-depth arm of the p1 encoder and both of the p2
+// encoder's -- and no two spelled it alike.  One wrote `*(fold[resid]+unfold)`
+// for the inverse lookup, one indexed `fold_hi` with the residual recomputed
+// from scratch rather than with the name three lines above it, and one took
+// the drift before naming the symbol while the others did it after.
+//
+// It lives here, ahead of both blocks, because both call it; `unfold` is
+// `uint8_t` in the p1 block and `int8_t` in the p2 one, which is what the
+// template parameter is for.  The sum is narrowed to a byte either way, so the
+// signedness cannot reach the output.
+//
+// The two `encode_sample` methods make a *different* decision that looks like
+// this one, and the difference is worth stating: there the source byte and the
+// buffer byte are the same byte, read twice around the context step, so the
+// reconstruction they compare against is not this one.
+template<class Unfold>
+static inline uint8_t fold_or_refuse(uint8_t* dst, int32_t src, int32_t pred,
+                                     const uint8_t* fold,
+                                     const uint8_t* fold_hi,
+                                     const Unfold* unfold) {
+  const int32_t resid = (uint8_t)(src-pred);
+  const uint8_t recon = unfold[fold[resid]]+pred;
+  const int32_t drift = *dst-(uint8_t)(recon+*dst-src);
+  if( drift<-16||drift>16 ) {
+    *dst = (uint8_t)src;
+    return fold_hi[resid];
+  }
+  *dst = recon;
+  return fold[resid];
+}
+
 struct CtxWeight {
   int32_t sel;
   uint32_t w[3];
@@ -289,17 +327,8 @@ struct AltP1Block {
           do {
             ++x;
             ctx_of(nullptr, nullptr);
-            uint8_t guess = (uint8_t)pred;
-            int32_t resid = (uint8_t)(*src-guess);
-            uint8_t recon = *(fold[resid]+unfold)+guess;
-            code = fold[resid];
-            int32_t drift = (uint8_t)*q-(uint8_t)(recon+*q-*src);
-            if( drift<-16||drift>16 ) {
-              *q = *src;
-              code = fold_hi[resid];
-            } else {
-              *q = recon;
-            }
+            code = fold_or_refuse(q, *src, (uint8_t)pred, fold, fold_hi,
+                                  unfold);
             alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
             record_sample((uint8_t)*q);
             ++q;

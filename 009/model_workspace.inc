@@ -33,6 +33,18 @@ void ModelBlock::free_workspace(int8_t do_free) {
     free(this);
 }
 
+// A block on the heap, laid out for one image.  Both plane coders wrote the
+// allocation out and each guarded it the same way: call `layout_workspace` on
+// the raw pointer if `bmf_new` returned one, and hand back null otherwise --
+// which the caller then dereferenced unconditionally.  That is the binary's
+// behaviour and it stays; the guard is one place now rather than two.
+ModelBlock* new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
+  void* raw = bmf_new(sizeof(ModelBlock));
+  if( !raw )
+    return nullptr;
+  return ((ModelBlock*)raw)->layout_workspace(img_w, img_h, img_depth);
+}
+
 ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth) {
   int32_t j;
   uint32_t k, m, s, n;

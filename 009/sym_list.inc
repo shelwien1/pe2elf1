@@ -393,6 +393,16 @@ struct SymList {
   }
 };
 
+// Sixteen lists with nothing in them.  The two alphabet walks each open with
+// this, and each wrote the loop over eight with the two halves of every pair
+// spelled out -- one unrolling, not two different things.  Only `ent` is
+// cleared: the rest of each list is written by `init` before anything reads
+// it, and these sixteen live on the stack.
+static inline void clear_sym_lists(SymList* lists) {
+  for( int32_t k = 0; k<16; ++k )
+    lists[k].ent = nullptr;
+}
+
 struct SymListBlock {
   uint32_t n;
   SymList list[0];

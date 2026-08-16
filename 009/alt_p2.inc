@@ -102,17 +102,8 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       if( f_DEC ) {
         *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(ctx_pair)]);
       } else {
-        int32_t q = (uint16_t)rec[-1].val>>4;
-        int32_t resid = (uint8_t)(*p-q);
-        code0 = fold[resid];
-        uint8_t recon = unfold[code0]+q;
-        int32_t drift = (uint8_t)*out-(uint8_t)(recon+*out-*p);
-        if( drift<-16||drift>16 ) {
-          *out = *p;
-          code0 = fold_hi[resid];
-        } else {
-          *out = recon;
-        }
+        code0 = fold_or_refuse(out, *p, (uint16_t)rec[-1].val>>4, fold,
+                               fold_hi, unfold);
         fr.encode_symbol(ctx_pair, code0);
         ++p;
       }
@@ -156,17 +147,8 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
             code2 = code = freq[ctx].decode_symbol(pair);
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
-            uint8_t want = srcp[k];
-            int32_t resid2 = (uint8_t)(want-pred);
-            uint8_t recon2 = pred+unfold[fold[resid2]];
-            int32_t drift2 = outp[k]-(uint8_t)(recon2+outp[k]-want);
-            code = fold[resid2];
-            if( drift2<-16||drift2>16 ) {
-              outp[k] = want;
-              code = fold_hi[(uint8_t)(want-pred)];
-            } else {
-              outp[k] = recon2;
-            }
+            code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi,
+                                  unfold);
             code2 = code;
             freq[ctx].encode_symbol(pair, code);
           }

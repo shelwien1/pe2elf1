@@ -153,26 +153,22 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   uint8_t* out[19];
   uint32_t alpha_n, done, done2;
   int32_t node, side, alpha_m, carry;
-  uint32_t i, si_end, word, k, j;
+  uint32_t si_end, word, k, j;
   uint16_t* kidp;
   uint8_t *rp;
   uint8_t *srcp = src;
   uint32_t sym_bits = blk->depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
   uint32_t n_kids = (sym_bits+7)>>3;
-  for( i = 0; i<8; ++i ) {
-    lists[2*i].ent = nullptr;
-    lists[2*i+1].ent = nullptr;
-  }
-  ModelBlock *blk1 = blk;
+  clear_sym_lists(lists);
   if( sym_bits<=8 ) {
-    reduce_narrow_alphabet(lists, blk1, src, mask);
+    reduce_narrow_alphabet(lists, blk, src, mask);
   } else {
     memset(tree, 0, sizeof tree);
-    blk1->alphabet = 1;
+    blk->alphabet = 1;
     tree[0].val = mask&*(uint32_t*)src;
-    blk1->sym_word[0] = 0;
-    if( (uint32_t)(blk1->height**(int32_t*)&blk1->width)>1 ) {
+    blk->sym_word[0] = 0;
+    if( (uint32_t)(blk->height**(int32_t*)&blk->width)>1 ) {
       uint8_t *p = src;
       node = 0;
       uint32_t written = 1;
@@ -193,12 +189,12 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
                 goto code_dense;
               }
             }
-            int32_t alphabet = blk1->alphabet;
+            int32_t alphabet = blk->alphabet;
             mode_symbol[1] = side;
             node = (uint16_t)alphabet;
             int32_t alpha = alphabet+1;
             kidp[side] = node;
-            blk1->alphabet = alpha;
+            blk->alphabet = alpha;
             if( alpha>0x2000 ) {
               alpha_n = alpha;
               goto alphabet_done;
@@ -208,22 +204,22 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
         }
 // The alphabet is dense enough to code as a run of flags.
 code_dense:
-        blk1->sym_word[written++] = node;
-        if( written>=(uint32_t)(blk1->height*blk1->width) ) {
-          alpha_n = blk1->alphabet;
+        blk->sym_word[written++] = node;
+        if( written>=(uint32_t)(blk->height*blk->width) ) {
+          alpha_n = blk->alphabet;
           goto alphabet_done;
         }
       }
     }
-    alpha_n = blk1->alphabet;
+    alpha_n = blk->alphabet;
 // Both codings converge here with `blk->alphabet` set.
 alphabet_done:
     rc.encode(alpha_n-1, alpha_n, 0x2001u);
-    alpha_m = blk1->alphabet;
+    alpha_m = blk->alphabet;
     if( alpha_m>0x2000 ) {
-      out[1] = (uint8_t*)bmf_new(blk1->height*n_kids*blk1->width);
-      int32_t img_w = blk1->width;
-      int32_t img_h = blk1->height;
+      out[1] = (uint8_t*)bmf_new(blk->height*n_kids*blk->width);
+      int32_t img_w = blk->width;
+      int32_t img_h = blk->height;
       uint32_t plane_size;
       if( n_kids ) {
         plane_size = img_h*img_w;
@@ -287,13 +283,13 @@ lists_ready:
           ;
         }
       }
-      uint16_t* old_words = blk1->sym_word;
-      blk1->height = n_kids*img_h;
-      blk1->depth = 8;
+      uint16_t* old_words = blk->sym_word;
+      blk->height = n_kids*img_h;
+      blk->depth = 8;
       free(old_words);
-      void *newbuf = bmf_new(2*blk1->height*blk1->width);
-      blk1->sym_word = (uint16_t*)newbuf;
-      reduce_alphabet(blk1, out[1]);
+      void *newbuf = bmf_new(2*blk->height*blk->width);
+      blk->sym_word = (uint16_t*)newbuf;
+      reduce_alphabet(blk, out[1]);
       free(out[1]);
     } else {
       if( 4*n_kids ) {
@@ -302,13 +298,12 @@ lists_ready:
           lists[li].init(256, 1);
           ++li;
         } while( li<4*n_kids );
-        alpha_m = blk1->alphabet;
+        alpha_m = blk->alphabet;
       }
       if( alpha_m ) {
         carry = 0;
         uint32_t si = 0;
         si_end = alpha_m;
-        ModelBlock *blk4 = blk1;
         do {
           word = tree[si].val;
           if( n_kids ) {
@@ -318,7 +313,7 @@ lists_ready:
               word >>= 8;
             }
             word = tree[si].val;
-            si_end = blk4->alphabet;
+            si_end = blk->alphabet;
           }
           carry = (uint8_t)word>>7;
           ++si;
