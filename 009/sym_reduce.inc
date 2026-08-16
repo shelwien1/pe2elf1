@@ -75,12 +75,12 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
           blk1->sym_word[at] = sym;
           row_w = blk1->width;
           ++at;
-        } while( x<(uint32_t)(*(int32_t*)&blk1->width) );
+        } while( x<blk1->width );
         n_distinct = blk1->alphabet;
         ++y;
       } while( (uint32_t)y<(uint32_t)blk1->height );
     }
-  } else if( height**(int32_t*)&blk1->width ) {
+  } else if( height*blk1->width ) {
     uint8_t *q = src;
     uint32_t idx = 0;
     do {
@@ -89,7 +89,7 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
       sym_flag[sym2] = 1;
       ++q;
       blk1->sym_word[idx++] = sym2;
-    } while( idx<(uint32_t)(blk1->height**(int32_t*)&blk1->width) );
+    } while( idx<(uint32_t)(blk1->height*blk1->width) );
     n_distinct = blk1->alphabet;
   } else {
     n_distinct = 0;
@@ -118,12 +118,12 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
         s = s_next;
       } while( next_id<n_syms3 );
     }
-    if( blk1->height**(int32_t*)&blk1->width ) {
+    if( blk1->height*blk1->width ) {
       uint32_t m = 0;
       do {
         blk1->sym_word[m] = sym_flag[blk1->sym_word[m]];
         ++m;
-      } while( m<(uint32_t)(blk1->height**(int32_t*)&blk1->width) );
+      } while( m<(uint32_t)(blk1->height*blk1->width) );
     }
     free_sym_entries(lists, 16);
   } else {
@@ -167,7 +167,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
     blk->alphabet = 1;
     tree[0].val = mask&*(uint32_t*)src;
     blk->sym_word[0] = 0;
-    if( (uint32_t)(blk->height**(int32_t*)&blk->width)>1 ) {
+    if( (uint32_t)(blk->height*blk->width)>1 ) {
       uint8_t *p = src;
       node = 0;
       uint32_t written = 1;

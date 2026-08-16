@@ -147,7 +147,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
           } while( (uint32_t)x2<blk->width );
           y = y1;
         }
-      } while( (uint32_t)y<*(uint32_t*)&blk->height );
+      } while( (uint32_t)y<(uint32_t)blk->height );
     }
     rc_end_encode();
     blk->free_workspace(1);

@@ -179,7 +179,23 @@ static constexpr int32_t opt_search_quality = 9;
 
 static constexpr int32_t opt_max_error = 0;
 
+// The 1024 `uint32_t` counters at the tail of the coded buffer, which
+// `packer_reset` re-bases to `stream.buf + stream.size - 4096` between trials.
+//
+// A byte pointer indexed by four, not a `uint32_t*`, and that is measured
+// rather than inherited.  The base is not always four-aligned: an assert in
+// `packer_reset` fires on the `len1` malformed-decode case in the corpus.  It
+// never fires at a site that actually *indexes* the counters -- the same
+// assert moved to the three that do survives 110 checks, 400 fuzz mutants and
+// 8,704 header variations -- but a `uint32_t*` would be a misaligned pointer
+// the moment `packer_reset` formed it, dereferenced or not.
+//
+// So the storage stays as the binary has it and the access gets the name.
 static uint8_t* hist_scratch;
+
+static inline uint32_t& hist_count(int32_t k) {
+  return *(uint32_t*)&hist_scratch[4*k];
+}
 
 // The exclusion mask: one byte per symbol, stamped with the current generation
 // once the symbol has been offered and rejected, so the next candidate that

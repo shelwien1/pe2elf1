@@ -698,3 +698,38 @@ the line above had been hiding from `uncopy.py`.
 Three rounds in a row now the finding has been one layer under a green gate,
 and each time the thing that surfaced it was a transformation that made the
 next defect nameable.
+
+### The type table's hole, one layer down
+
+Fixing `decl_types` did not stop at `samecast.py`. `uncastwidth.py` — which the
+sweep exempts from its zero test, because it classifies rather than counts —
+went from 19 casts of the form `*(T*)&…` to 7:
+
+* **6 "same"**: `*(int32_t*)&blk1->width` read back through `(uint32_t)`, a
+  round trip through a same-width type, six times in `reduce_narrow_alphabet`.
+  Its `--apply` could not do these itself and did not pretend to: it types a
+  member from the struct declaration, which a lone `.inc` does not contain, so
+  against `sym_reduce.inc` it honestly reports them as `untyped` and deletes
+  nothing. The unit types them; the file is what gets written. Done by hand.
+* **1 "untyped"**: `*(uint32_t*)&blk->height` is `(uint32_t)blk->height`.
+* **4 "wide"**: `_pad8[2]`, `depth` and `flags` are four consecutive bytes at
+  offset 8 of `BmfImage`, and both copies of the header block moved them as one
+  `uint32_t` — then the second recovered `flags` from the top byte of the saved
+  word twenty lines later. Four member copies and a read of `p_i->flags` say it
+  without the layout.
+
+**And one that stays, because the probe said so.** `hist_scratch` is a
+`uint8_t*` indexed by four over 1024 `uint32_t` counters — exactly the shape an
+earlier round turned into `int32_t hists[8*1024]` in `plane_choose.inc`. It is
+not the same answer here. An assert on the base's alignment in `packer_reset`
+**fires**, on the `len1` malformed-decode case in the corpus; the same assert
+moved to the three sites that actually index the counters survives 110 checks,
+400 fuzz mutants and 8,704 header variations. So the counters are only ever
+reached through an aligned base, but a `uint32_t*` would be a misaligned
+pointer the moment `packer_reset` formed it, dereferenced or not. The storage
+stays as the binary has it and the access gets the name — `hist_count(k)` — with
+the measurement written where the decision is.
+
+The remaining 7 are the BMP palette writes in `bmp_write.inc`, which are
+serialisation into a byte buffer at computed offsets, and that one scratch
+access.

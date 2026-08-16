@@ -20,10 +20,16 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   hdr.width = p_i->width;
   hdr.height = p_i->height;
   p_i->flags |= has_coded ? flags_tail : 0;
-  uint32_t hdr_pad8 = *(uint32_t*)&p_i->_pad8;
   hdr.stride = row_bytes;
   near_lossless_q = 0;
-  *(uint32_t*)&hdr._pad8 = hdr_pad8;
+  // `_pad8[2]`, `depth` and `flags` are four consecutive bytes at offset 8,
+  // and both copies of this block moved them as one `uint32_t` -- then the
+  // second recovered `flags` from the top of the saved word twenty lines
+  // later.  Four member copies say it without the layout.
+  hdr._pad8[0] = p_i->_pad8[0];
+  hdr._pad8[1] = p_i->_pad8[1];
+  hdr.depth = p_i->depth;
+  hdr.flags = p_i->flags;
   hdr.data_size = (uint32_t)p_i->data_size;
   plane_count = ((p_i->depth&depth_bits)+7)>>3;
   // An image member, version 2.0.  This was an `fwrite` of the first four
@@ -55,18 +61,19 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   hdr.flags |= flags_descriptors;
   if( p_i->flags&flags_transposed ) {
     uint32_t img_stride = p_i->stride;
-    uint32_t hdr_pad8b = *(uint32_t*)&p_i->_pad8;
     hdr.width = p_i->width;
     hdr.height = p_i->height;
     data_bytes = p_i->data_size;
     hdr.stride = img_stride;
-    *(uint32_t*)&hdr._pad8 = hdr_pad8b;
+    hdr._pad8[0] = p_i->_pad8[0];
+    hdr._pad8[1] = p_i->_pad8[1];
+    hdr.depth = p_i->depth;
     hdr.data_size = data_bytes;
-    // The top byte of the word at offset 8 is `p_i->flags`, so this is the
-    // three bits set above put back over the source's own -- the same value
-    // the `|=`s left, re-derived from a header that `search_filter` may have
-    // transposed under it.
-    hdr.flags = flags_coded|flags_descriptors|flags_slow|(uint8_t)(hdr_pad8b>>24);
+    // The three bits set above, put back over the source's own -- the same
+    // value the `|=`s left, re-derived from a header that `search_filter` may
+    // have transposed under it.  This was `hdr_pad8b >> 24`, the top byte of
+    // the word at offset 8, and `p_i->flags` is not written between the two.
+    hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i->flags;
   } else {
     data_bytes = p_i->data_size;
   }
