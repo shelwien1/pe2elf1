@@ -439,7 +439,6 @@ code_residual:
           fold_sel = fold[(uint8_t)-resid_in];
         step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
         P2Freq *frec_step = &freq[step_v];
-        P2Freq *p2_rec = frec_step;
         if( ctx15<15 ) {
           P2Freq *frec2 = &frec_step[1];
           bin = frec2;
@@ -448,7 +447,7 @@ code_residual:
             goto counters_done;
         } else {
         }
-        bin = &p2_rec[-1];
+        bin = &frec_step[-1];
         p2_freq_add(bin, fold_sel, 4);
 counters_done:
         if( a4 ) {
@@ -458,7 +457,7 @@ counters_done:
             update_binary_pair(model_strip(pair_ctx-16), n2_half);
           }
         }
-        P2Freq *prec0 = &p2_rec[0];
+        P2Freq *prec0 = &frec_step[0];
         p2_freq_add(prec0, fold_sel, 6);
         if( !plane_idx||freq[ctx].step>0x100u ) {
           sel_alt = 2-is_dec;
@@ -475,7 +474,7 @@ counters_done:
           // Written out five times, thirty-six lines apiece, over `ctx_w[0]`
           // through `ctx_w[4]` with a fresh set of temporaries in each:
           // `frec3`/`frec4b`/`frec5`/`frec4c` for the first record,
-          // `idx0`/`rec_idx` for the next group, `grp`/`p2_rec`/`gtop` for the
+          // `idx0`/`rec_idx` for the next group, `grp`/`frec_step`/`gtop` for the
           // group.  Nothing else differed between the five, and not one of
           // those names outlives the copy it was written in.
           for( int32_t k = 0; k<5; ++k ) {

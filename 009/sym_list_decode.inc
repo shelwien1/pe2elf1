@@ -13,7 +13,7 @@
 // five were the two shared methods' locals, one was a save/restore pair of a
 // variable nothing else reads -- a register spill the decompiler kept with
 // nothing behind it -- and one was never used at all.
-int32_t decode_symbol_list(SymList* syms) {
+inline int32_t SymList::decode_symbol_list() {
   // One pointer per symbol still in play, and a null terminator.
   //
   // `no_symbol+1` is the alphabet ceiling this program enforces, so this
@@ -31,12 +31,15 @@ int32_t decode_symbol_list(SymList* syms) {
   SymEntry* list[no_symbol+1];
   SymEntry *q;
   SymEntry** w, ** rd, ** rd2;
-  int32_t live, c;
-  live = syms->live;
-  SymEntry *ent = syms->ent;
+  int32_t c;
+  // `live`, `ent` and `tot` were copied into locals of the same name, which is
+  // what the parameter form left behind and what made this a method's three
+  // shadowed members.  The two counts are `uint32_t` here and were `int32_t`
+  // there; the alphabet ceiling this file argues for above is 257, so the two
+  // readings of every comparison below agree, and the casts say which one the
+  // binary made.
   w = list;
   uint32_t gen = (uint8_t)exclusion_gen;
-  SymList* owner = syms;
   int32_t cum = 0;
   int32_t i = 0;
   // The candidates: every live symbol the encoder has not already offered and
@@ -51,14 +54,14 @@ int32_t decode_symbol_list(SymList* syms) {
     }
     cum += c;
     ++i;
-  } while( i<live );
+  } while( i<(int32_t)live );
   if( !cum )
     return -1;
   *w = nullptr;
-  int32_t tot0 = owner->tot;
-  int32_t tot_all = cum+tot0;
+  // One total, which the frame spelled twice: `cum + tot` went into two slots
+  // and the escape path read one while the hit path read the other.
+  int32_t tot_all = cum+(int32_t)tot;
   int32_t target = rc.get_freq(tot_all);
-  int32_t tot = cum+tot0;
   SymEntry *p = list[0];
   rd = &list[1];
   SymEntry *first = list[0];
@@ -78,7 +81,7 @@ int32_t decode_symbol_list(SymList* syms) {
         exclusion_mask[q->sym] = gen_b;
         q = *rd2++;
       } while( q );
-      rc.decode(cum_lo, tot, tot);
+      rc.decode(cum_lo, tot_all, tot_all);
       return -1;
     }
   }
@@ -88,8 +91,7 @@ int32_t decode_symbol_list(SymList* syms) {
   // of the frame's spill slots.
   int32_t result = p->sym;
   uint32_t sym_cum = cum_lo-p->cnt;
-  uint32_t sym_high = cum_lo;
-  owner->rescale(owner->promote(p));
-  rc.decode(sym_cum, sym_high, tot_all);
+  this->rescale(this->promote(p));
+  rc.decode(sym_cum, cum_lo, tot_all);
   return result;
 }

@@ -391,6 +391,11 @@ struct SymList {
     }
     return;
   }
+  // The decode half of `code_symbol`, in `sym_list_decode.inc`.  It was a free
+  // function taking the list as its first parameter until `uncopy.py` folded
+  // an `owner = syms` alias away and left the parameter reaching nothing but
+  // members, which is what `methodise.py` looks for.
+  int32_t decode_symbol_list();
 };
 
 // Sixteen lists with nothing in them.  The two alphabet walks each open with

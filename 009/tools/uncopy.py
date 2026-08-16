@@ -47,6 +47,24 @@ the declaration.
 `Y`'s address being taken anywhere at all -- rather than only inside the span
 -- is deliberate. A callee holding `&Y` can write it on a later call, and the
 span is not where that would show up.
+
+**Two blind spots this was green through, both found by hand and both proved on
+a probe before they were fixed.**
+
+*The source has to be a name the body declares.* A parameter is declared in the
+signature and `this` is declared nowhere, so `blk1 = blk` and `this_1 = this`
+were not copies as far as this was concerned -- the rule read `src not in ty`
+and moved on without a word. Four of them sat in `unmodel_plane_slow` and
+`reduce_alphabet`, dereferenced fifty-nine times between them, through every
+green sweep this tool has been in. Parameters come out of the signature now,
+and `this` is admitted against the enclosing class.
+
+*The copy has to be its own statement.* Hex-Rays declares at the top and
+assigns lower down, which is the form the rule was written for; a hand-written
+`ModelBlock *blk1 = blk;` is a declaration, and declarations are filtered out
+of the use list, so its own line was never `uses[0]` and it was skipped. It
+counts now when the declaration names exactly one variable, which is the case
+where deleting the line deletes nothing else.
 """
 import re
 import sys
@@ -108,17 +126,90 @@ def peel(rhs):
     return casts, rhs if NAME.match(rhs) else None
 
 
+PARAM = re.compile(r'^\s*(?:const\s+)?([A-Za-z_]\w*)\s*((?:\*|\s)*)([A-Za-z_]\w*)\s*$')
+# `T *x = y;` -- one declarator, one initialiser.  Two identifiers before the
+# `=` is what tells it from a plain `x = y;`, which `COPY` handles, and the
+# anchors are what keep a `for( int32_t i = 0; ...` header out.
+DECLINIT = re.compile(r'^\s*(?:const\s+)?([A-Za-z_]\w*)(\s*\*+\s*|\s+)'
+                      r'([A-Za-z_]\w*)\s*=\s*([^;]*);\s*$')
+# The separator between the two identifiers has to be there.  Written as
+# `((?:\*|\s)*?)` it could match nothing, and `blkA = blk;` parsed as a
+# declaration of `A` with type `blk` -- which took the plain-assignment form
+# this rule was built for away from `COPY` and reported zero where it used to
+# report one.  The probe that caught it is the third in this file's tests.
+NOT_A_TYPE = ('return', 'else', 'case', 'do', 'goto')
+CLASS = re.compile(r'^\s*(?:template\s*<[^;]*>\s*)?(?:struct|class)\s+'
+                   r'(?:alignas\s*\([^)]*\)\s*)?([A-Za-z_]\w*)\b[^;]*\{')
+
+
+def params(sig):
+    """{name: (type, stars)} for the parameters `sig` names.
+
+    Only the plain ones: `T x`, `T *x`, `const T* x`.  A parameter with a
+    default, an array bound or a function type is not a name this rule can fold
+    onto, and leaving it out of the table is the same as not seeing it.
+    """
+    m = re.search(r'\(([^()]*)\)\s*(?:\b(?:const|noexcept)\b\s*)*\{?\s*$',
+                  sig.rstrip().rstrip('{').rstrip() + '{')
+    if not m:
+        return {}
+    out = {}
+    for part in m.group(1).split(','):
+        d = PARAM.match(part)
+        if d:
+            out[d.group(3)] = (d.group(1), d.group(2).count('*'))
+    return out
+
+
+def receiver(lines, at):
+    """The class whose body encloses line `at`, or None.
+
+    Walked from the top rather than backwards, because a backwards walk cannot
+    tell an enclosing `struct X {` from a sibling one that has already closed.
+    """
+    stack, depth = [], 0
+    for i, l in enumerate(lines[:at]):
+        s = l.split('//')[0]
+        m = CLASS.match(s)
+        opened = s.count('{')
+        if m and opened:
+            stack.append((depth, m.group(1)))
+        depth += opened - s.count('}')
+        while stack and depth <= stack[-1][0]:
+            stack.pop()
+    return stack[-1][1] if stack else None
+
+
 def candidates(lines):
     out = []
-    for a, b, nm, _ in structs.bodies(lines):
+    for a, b, nm, sig in structs.bodies(lines):
         code = [l.split('//')[0] for l in lines[a:b + 1]]
         ty = unreload.types(code)
+        # A parameter is a name of this body as much as a local is; the copy
+        # rule below is about what the name holds, not where it was written.
+        for n, t in params(sig or '').items():
+            ty.setdefault(n, t)
+        # `unreload.types` reads `T x;` and not `T x = y;`, so a hand-written
+        # declaration-with-initialiser had no type either.
+        for l in code:
+            di = DECLINIT.match(l)
+            if di and di.group(1) not in NOT_A_TYPE:
+                ty.setdefault(di.group(3), (di.group(1), di.group(2).count('*')))
+        cls = receiver(lines, a)
+        if cls:
+            ty.setdefault('this', (cls, 1))
         for i, l in enumerate(code):
-            m = COPY.match(l)
-            if not m:
+            decl = DECLINIT.match(l)
+            if decl and decl.group(1) in NOT_A_TYPE:
+                decl = None
+            m = None if decl else COPY.match(l)
+            if decl:
+                dst, rhs = decl.group(3), decl.group(4)
+            elif m:
+                dst, rhs = m.group(1), m.group(2)
+            else:
                 continue
-            dst = m.group(1)
-            casts, src = peel(m.group(2))
+            casts, src = peel(rhs)
             if src is None or dst == src or dst not in ty or src not in ty:
                 continue
             if ty[dst] != ty[src]:
@@ -135,7 +226,7 @@ def candidates(lines):
                     continue
             uses = [k for k, r in enumerate(code)
                     if re.search(USE % re.escape(dst), r)
-                    and not undup.declaration(r)]
+                    and (k == i or not undup.declaration(r))]
             if not uses or uses[0] != i:
                 continue
             last = uses[-1]
@@ -172,9 +263,22 @@ def main():
               % (len(found), sum(n for _a, _b, _c, _d, _e, n in found)))
         return 0
 
+    # A chain has to be resolved to its root before anything is rewritten.
+    # `blkA = blk; blkB = blkA;` is two folds, and applying them as written left
+    # `blkA` in the text with both declarations deleted -- a name the fold had
+    # just removed.  Each `dst` is assigned exactly once by the rule above, so
+    # following `dst -> src` terminates.
+    root = {dst: src for _n, _i, _j, dst, src, _c in found}
+    def resolve(n):
+        seen = set()
+        while n in root and n not in seen:
+            seen.add(n)
+            n = root[n]
+        return n
     for _nm, i, last, dst, src, _n in found:
+        to = resolve(src)
         for k in range(i + 1, last + 1):
-            lines[k] = re.sub(r'\b%s\b' % re.escape(dst), src, lines[k])
+            lines[k] = re.sub(r'\b%s\b' % re.escape(dst), to, lines[k])
     for k in sorted({i for _n, i, _j, _d, _s, _c in found}, reverse=True):
         del lines[k]
     open(path, 'w').write('\n'.join(lines))

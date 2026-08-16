@@ -8,7 +8,6 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   uint32_t coded_len;
   bool fits;
   uint32_t data_bytes, written;
-  BmfFile* arc = arc_in;
   if( !arc_in->fp )
     return 0;
   // The walk that was here read every member already in the output and left
@@ -33,7 +32,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   // more bytes in one literal, of which only the first four were ever written,
   // so the tag it writes could not be read off the line that writes it.
   const uint32_t tag = bmf_tag(bmf_sig_image, '2', '0');
-  if( fwrite(&tag, 4u, 1u, arc->fp)!=1 )
+  if( fwrite(&tag, 4u, 1u, arc_in->fp)!=1 )
     return 0;
   uint8_t bpp = p_i->depth;
   uint32_t pal_bytes = bpp&depth_palette;
@@ -129,16 +128,16 @@ write_coded:
   coded_bytes = stream.cur- stream.buf;
   hdr.data_size = (uint32_t)(stream.cur- stream.buf);
   if( fits ) {
-    uint8_t ok = fwrite(&hdr, 1u, 0x10u, arc->fp)==16;
+    uint8_t ok = fwrite(&hdr, 1u, 0x10u, arc_in->fp)==16;
     if( extra_blk ) {
       coded_len = extra_blk->len;
-      ok &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc->fp)==coded_len+sizeof(CodedTail);
+      ok &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc_in->fp)==coded_len+sizeof(CodedTail);
     }
-    int32_t ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc->fp)==(uint32_t)coded_bytes)&ok;
+    int32_t ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc_in->fp)==(uint32_t)coded_bytes)&ok;
     free(stream.buf);
     if( ok_all&&(p_i->depth&depth_palette)!=0 )
-      fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, arc->fp);
-    fflush(arc->fp);
+      fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, arc_in->fp);
+    fflush(arc_in->fp);
     if( ok_all )
       return (int32_t)hdr.data_size;
     return ok_all;
@@ -152,12 +151,12 @@ write_coded:
   // second write of the value it already held.
 write_raw:
   pixels = p_i->pixels;
-  uint8_t ok_raw = fwrite(img, 1u, 0x10u, arc->fp)==16;
+  uint8_t ok_raw = fwrite(img, 1u, 0x10u, arc_in->fp)==16;
   if( extra_blk ) {
     coded_len = extra_blk->len;
-    ok_raw &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc->fp)==coded_len+sizeof(CodedTail);
+    ok_raw &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc_in->fp)==coded_len+sizeof(CodedTail);
   }
-  written = fwrite(pixels, 1u, pal_bytes+img->data_size, arc->fp);
+  written = fwrite(pixels, 1u, pal_bytes+img->data_size, arc_in->fp);
   int32_t data_size = img->data_size;
   if( !(ok_raw&(written==data_size+pal_bytes)) )
     return 0;

@@ -12,7 +12,7 @@
 //     uint8_t flags_b;
 //     uint32_t data_len;
 //     ...
-//     fread(frame.hdr_words, 0x10u, 1u, arc->fp)
+//     fread(frame.hdr_words, 0x10u, 1u, arc_in->fp)
 //
 // Sixteen bytes across four members, of which the array is the first ten.  So
 // the four are one object and the array's size was never five of anything:
@@ -40,7 +40,6 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   int32_t version;
   uint32_t magic, want2;
   uint8_t* plane_buf;
-  BmfFile *arc = arc_in;
   if( p_coded_buf )
     *p_coded_buf = nullptr;
   FILE *fp1 = (arc_in)->fp;
@@ -50,33 +49,33 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   // header, until one is.
   while( 1 ) {
     if( fread(&magic, 4u, 1u, fp1)!=1 ) {
-      FILE *fp = arc->fp;
+      FILE *fp = arc_in->fp;
       if( feof(fp) )
         return nullptr;
       {
         fclose(fp);
-        arc->fp = 0;
+        arc_in->fp = 0;
         return nullptr;
       }
     }
     if( (uint16_t)magic!=bmf_sig_other )
       break;
     version = bmf_tag_version(magic);
-    if( version!=bmf_version_20||fread(&head, 8u, 1u, arc->fp)!=1 )
+    if( version!=bmf_version_20||fread(&head, 8u, 1u, arc_in->fp)!=1 )
       break;
-    fseek(arc->fp, head.len, 1);
-    fp1 = arc->fp;
+    fseek(arc_in->fp, head.len, 1);
+    fp1 = arc_in->fp;
   }
   version = bmf_tag_version(magic);
   if( (uint16_t)magic!=bmf_sig_image||version!=bmf_version_20
-      ||fread(&hdr, 0x10u, 1u, arc->fp)!=1 ) {
-    return arc->fail();
+      ||fread(&hdr, 0x10u, 1u, arc_in->fp)!=1 ) {
+    return arc_in->fail();
   }
   if( hdr.flags&flags_tail ) {
-    fread(&head, 8u, 1u, arc->fp);
+    fread(&head, 8u, 1u, arc_in->fp);
     if( p_coded_buf ) {
-      if( head.len>bytes_left(arc->fp) ) {
-        return arc->fail();
+      if( head.len>bytes_left(arc_in->fp) ) {
+        return arc_in->fail();
       }
       // Up to a word, and up from zero to four: `(len==0)` is what makes an
       // empty tail one word rather than none, and the last word is cleared
@@ -88,19 +87,19 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
       blk->len = pad_len;
       blk->data[pad_len/4-1] = 0;
       *p_coded_buf = blk;
-      fread(blk->data, head.len, 1u, arc->fp);
+      fread(blk->data, head.len, 1u, arc_in->fp);
     } else {
-      fseek(arc->fp, head.len, 1);
+      fseek(arc_in->fp, head.len, 1);
     }
   }
-  if( hdr.data_size>bytes_left(arc->fp) ) {
-    return arc->fail();
+  if( hdr.data_size>bytes_left(arc_in->fp) ) {
+    return arc_in->fail();
   }
   uint32_t pal_bytes = 3<<(hdr.depth&31);
   if( !(hdr.depth&depth_palette) )
     pal_bytes = 0;
   if( !hdr.width||!hdr.height ) {
-    return arc->fail();
+    return arc_in->fail();
   }
   BmfImage *img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);
   img_at->depth = hdr.depth;
@@ -108,17 +107,17 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   img_at->flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
   plane_count = ((hdr.depth&depth_bits)+7)>>3;
   if( plane_count<1||plane_count>4 ) {
-    return arc->fail();
+    return arc_in->fail();
   }
   if( !(hdr.flags&flags_coded) ) {
     // Raw pixels.  `hdr.data_size` is what the file says follows and
     // `img_at->data_size` is what was allocated for it.
     if( hdr.data_size>img_at->data_size ) {
-      return arc->fail();
+      return arc_in->fail();
     }
     uint32_t want = hdr.data_size;
-    if( fread(img_at->pixels, 1u, hdr.data_size, arc->fp)!=want ) {
-      return arc->fail();
+    if( fread(img_at->pixels, 1u, hdr.data_size, arc_in->fp)!=want ) {
+      return arc_in->fail();
     }
     goto read_palette;
   }
@@ -133,8 +132,8 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   stream.buf = (uint8_t*)bmf_new(hdr.data_size);
   packer_reset();
   want2 = hdr.data_size;
-  if( fread(stream.buf, 1u, hdr.data_size, arc->fp)!=want2 ) {
-    return arc->fail();
+  if( fread(stream.buf, 1u, hdr.data_size, arc_in->fp)!=want2 ) {
+    return arc_in->fail();
   }
   bpp = img_at->depth;
   if( (bpp&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
@@ -237,20 +236,20 @@ free_plane_buf:
   free(plane_buf);
 check_length:
   if( stream.buf+hdr.data_size!=stream.cur ) {
-    return arc->fail();
+    return arc_in->fail();
   }
   free(stream.buf);
 read_palette:
   if( hdr.depth&depth_palette ) {
     uint8_t *pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
-    uint32_t got = fread(pal_at, 1u, pal_bytes, arc->fp);
+    uint32_t got = fread(pal_at, 1u, pal_bytes, arc_in->fp);
     if( got!=pal_bytes ) {
-      return arc->fail();
+      return arc_in->fail();
     }
   }
   if( img_at->flags&flags_transposed ) {
     if( (uint64_t)img_at->width*img_at->height*(uint32_t)plane_count>(uint64_t)img_at->data_size ) {
-      return arc->fail();
+      return arc_in->fail();
     }
     transpose_image(img_at, plane_count);
   }

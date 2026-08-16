@@ -44,58 +44,35 @@ def width(ty):
 
 
 def bodies(lines):
-    out, depth, start, name, sig = [], 0, None, None, None
-    for i, l in enumerate(lines):
-        s = l.split('//')[0]
-        for k, ch in enumerate(s):
-            if ch == '{':
-                if depth == 0:
-                    # walk back over a wrapped signature, but not past the
-                    # statement before it -- a `struct X {` has no signature at
-                    # all, and reaching back for one finds the previous
-                    # function's and hands the struct its name
-                    buf, j = s[:k], i
-                    while '(' not in buf or buf.count(')') - buf.count('(') > 0:
-                        j -= 1
-                        if j < 0 or i - j > 6:
-                            break
-                        prev = lines[j].split('//')[0]
-                        if prev.rstrip().endswith((';', '}', '{', ':')):
-                            break
-                        # a directive is not a signature, and `#pragma
-                        # pack(push, 1)` above a struct has the parenthesis this
-                        # is looking for -- which made deadcheck.py report a
-                        # function called `pack` that nothing calls
-                        if prev.lstrip().startswith('#'):
-                            break
-                        buf = prev + ' ' + buf
-                    # A brace after `=` opens an initialiser, not a body.
-                    # `alignas(16) static uint8_t ctx_group_flags[32] = {` has
-                    # a parenthesis and a name in front of it, so this read
-                    # twelve of the file's global tables as functions called
-                    # `alignas` -- and every per-body tool has been walking
-                    # their initialisers as if they were code, with `104
-                    # bodies` in section 1 where there are 92.
-                    # `prune_unreachable.py` learned the same thing in round
-                    # eight and the lesson stayed in its file.
-                    # The *last* name before the opening paren of the
-                    # signature, not the first: `__attribute__((noreturn)) void
-                    # __exit_402E40(...)` gave `attribute__`, and any leading
-                    # attribute or alignment specifier would do the same.
-                    m = (None if buf.rstrip().endswith('=') else
-                         re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\([^()]*\)\s*$',
-                                   buf.rstrip().rstrip('{').rstrip()) or
-                         re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', buf))
-                    name = m.group(1) if m and '(' in buf else None
-                    sig, start = buf, i
-                depth += 1
-            elif ch == '}':
-                depth -= 1
-                if depth == 0 and start is not None:
-                    if name:
-                        out.append((start, i, name, sig))
-                    start = None
-    return out
+    """(start, end, name, sig) for every function body, methods included.
+
+    This used to be its own walk, and that walk opened a body only at brace
+    depth 0 -- which was the whole file when the whole file was free functions.
+    It is classes now.  Measured on the spliced unit, its answer was 131 bodies
+    where `defs` finds 219: **every one of the 81 in-class methods was
+    invisible**, and 43 of the tools in this directory read the program through
+    here.  Their zeros were zeros about 138 of the program's 219 bodies, and
+    nothing in the sweep could say so, because a tool that is never shown a
+    body reports the same number as a tool that looks and finds nothing.
+
+    Four aliases of `this` in `unmodel_plane_slow` and `reduce_alphabet` are
+    what surfaced it: `uncopy.py` and `unaliasvar.py` were green on all four
+    while the names sat there being dereferenced fifty-nine times.
+
+    So it is `defs` without the depth.  There are no nested bodies in the tree
+    to double-count -- a lambda's `[&](...)` has no identifier before its
+    parameter list, so `defs` does not open one, and its lines stay part of the
+    enclosing body where they belong.
+
+    One thing to know before keying on the name.  Seven names now come back
+    twice, because a method's name belongs to its class: `bump` is a method of
+    both `FreqRec` and `CounterNode`, and `rescale`, `code_symbol`,
+    `encode_sample`, `decode_sample`, `start_row` and `palette` are each two
+    methods as well.  Nothing in this directory groups by the name alone today
+    and the sweep is green, but a tool that starts to must take the span with
+    it.
+    """
+    return [(a, b, nm, sig) for a, b, nm, sig, _d in defs(lines)]
 
 
 # `if (x) {` is not a definition of a function called `if`.  `catch` and the

@@ -81,6 +81,10 @@ DECL_LINE = re.compile(r'^\s*(?:const\s+|static\s+|unsigned\s+|signed\s+)*'
                        r'[\s\*]*[A-Za-z_]\w*(?:\[[^\]]*\])*\s*(?:=[^;]*)?)\s*;\s*$')
 NOT_A_TYPE = {'return', 'goto', 'break', 'continue', 'else', 'do', 'case',
               'default', 'delete', 'typedef', 'sizeof'}
+# The opening of a declaration, for the wrap-joining in `joined` below: a type
+# and then a declarator, with no `(` or `{` to make it a call or a body.
+DECL_HEAD = re.compile(r'^\s*(?:const\s+|static\s+|unsigned\s+|signed\s+)*'
+                       r'(?:struct\s+)?[A-Za-z_]\w*[\s\*]+[A-Za-z_]\w*')
 
 
 def is_decl(line):
@@ -98,11 +102,36 @@ def is_decl(line):
     return m if m and m.group(1) not in NOT_A_TYPE else None
 
 
+def joined(lines, a, b):
+    """The body's lines, with a declaration that wraps read as the one line it is.
+
+    Hex-Rays writes one `int32_t` list across as many rows as it needs, and
+    reading only the first row leaves every name on rows two and after with no
+    declaration at all.  `unreload.types` records fixing exactly this and names
+    three tools that had it; this was a fourth, and it did not fail silently --
+    it declined those names as "not a local of this body", which reads like a
+    judgement and was a parse.  `code_banks` declares twenty-eight `int32_t`
+    across three rows and every pair among them was declined that way.
+    """
+    out, i = [], a + 1
+    while i <= b:
+        c = lines[i].split('//')[0]
+        if (DECL_HEAD.match(c) and not c.rstrip().endswith(';')
+                and '(' not in c and '{' not in c):
+            j = i
+            while j < b and not lines[j].split('//')[0].rstrip().endswith(';'):
+                j += 1
+            c = ' '.join(lines[k].split('//')[0].strip() for k in range(i, j + 1))
+            i = j
+        out.append(c)
+        i += 1
+    return out
+
+
 def locals_in(lines, a, b):
     """{name: type} for the body's own declarations, signature line excluded."""
     out = {}
-    for i in range(a + 1, b + 1):
-        c = lines[i].split('//')[0]
+    for c in joined(lines, a, b):
         m = is_decl(c)
         if not m:
             continue
@@ -144,7 +173,10 @@ def shadows(lines, a, b, sig, locals_of):
         for m in BUMP.finditer(c):
             writes[m.group(1) or m.group(2)] += 1
         m = COPY.match(c)
-        if m:
+        # `x = nullptr;` is not one name copied into another.  Four of these
+        # were reaching the decline list and being turned away as "not a local
+        # of this body", which is true of a keyword and says nothing.
+        if m and m.group(2) not in ('nullptr', 'NULL', 'true', 'false'):
             copies[(m.group(1), m.group(2))].append(i)
     out, declined = [], []
     for (x, y), at in sorted(copies.items()):

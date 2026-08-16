@@ -136,6 +136,18 @@ DECLINED = {
         '`BmfImage::weight_pair_cost(plane0, a, b, w4, w8)` would read as the '
         'image costing a candidate; the same judgement as `cost_candidate` '
         'above, which is its only caller outside `choose_plane_coding`',
+    # This one arrived by the same route as `cost_candidate` and is declined
+    # for the reason the `alt_model_p2` pair is: it is one half of a matched
+    # pair and the other half cannot follow it.
+    'compress_image':
+        'appends one compressed image to an archive, 161 lines, and its '
+        'inverse `expand_image` uses `arc_in` for eight things that are not '
+        'member accesses -- `fread(..., arc_in->fp)`, `arc_in->fail()`, a '
+        'store to `arc_in->fp` -- so it cannot become a method beside it.  A '
+        'pair this project keeps matched does not become a method on one '
+        'side; the same judgement as `alt_model_p2_encode` above.  It became '
+        'a candidate only because `arc = arc_in` was folded away, which is '
+        'what left the parameter reaching nothing but members',
 }
 
 

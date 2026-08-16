@@ -483,3 +483,81 @@ All three are fixed and each was proved able to fail on a probe copy. The
 lesson is the one the tools directory was already built on and had stopped
 applying to itself: **a zero is a claim about the instrument as much as about
 the tree.**
+
+---
+
+## The round after that: the sweep was asking 138 of 219 bodies
+
+The previous section ended on "a zero is a claim about the instrument". This
+round is what happens when that is taken as a work item rather than a moral.
+
+**What surfaced it.** Four locals in the tree were `this` under another name —
+`this_1` and `blk` in `unmodel_plane_slow`, `blk1` and `blk4` in
+`reduce_alphabet` — with fifty-nine dereferences between them. Two tools exist
+for exactly that: `uncopy.py` ("a local that is only ever a copy of another")
+and `unaliasvar.py`. Both were green on all four, and had been for every round
+since the methods were written.
+
+**Three defects, each proved on a probe before it was fixed.**
+
+* `structs.bodies` opened a body only at brace depth 0, which was the whole
+  file when the whole file was free functions. Measured on the spliced unit its
+  answer was **131 bodies where `defs` finds 219** — every one of the 81
+  in-class methods invisible — and **43 of the 103 tools read the program
+  through it**. Their zeros were zeros about 138 of 219 bodies, and nothing in
+  the sweep could say so, because a tool that is never shown a body reports the
+  same number as a tool that looks and finds nothing.
+* `uncopy.py` required the copy's source to be a name the *body* declares. A
+  parameter is declared in the signature and `this` is declared nowhere, so
+  `blk1 = blk` and `this_1 = this` failed `src not in ty` and were skipped
+  without a word.
+* `uncopy.py` also required the copy to be its own statement. Hex-Rays declares
+  at the top and assigns lower down; a hand-written `ModelBlock *blk1 = blk;`
+  is a declaration, and declarations are filtered out of the use list, so its
+  own line was never `uses[0]`.
+
+**Fixing the second and third broke the first probe**, which is why probes are
+kept rather than run once: the new declaration pattern let `blkA = blk;` parse
+as a declaration of `A` with type `blk`, and the plain-assignment form that had
+worked for rounds went to zero. The separator between the two identifiers has
+to be there. All four probes report now.
+
+**What the fixed instrument then found in a tree that had just gone green:**
+
+| tool | answer |
+| --- | --- |
+| `compact_locals.py` | 2 declaration lines mergeable, in a method |
+| `uncopy.py` | 6 locals that are only a copy of another, 40 reads |
+| `methodise.py` | 2 functions whose first parameter is only ever a receiver |
+
+The six copies were `dst_keep`/`dst`, `owner`/`syms`, `sym_high`/`cum_lo`,
+`p2_rec`/`frec_step`, and `arc`/`arc_in` twice — 25 reads in `expand_image`
+alone. Folding them is what turned `decode_symbol_list` into
+`SymList::decode_symbol_list`, which in turn showed three locals shadowing the
+members they copy and one total, `cum + tot`, living in the body under two
+names. Each fix made the next one nameable; none of them was visible from the
+line the round started on.
+
+`compress_image` was the second `methodise` candidate and is declined, with the
+measurement recorded in the tool: its inverse `expand_image` uses `arc_in` for
+eight things that are not member accesses, and a pair this project keeps
+matched does not become a method on one side.
+
+`unspillpair.py` had the same wrapped-declaration defect `unreload.types`
+records fixing and names three tools for, so this was a fourth — and it did not
+fail silently, which is worse: it declined every pair among `code_banks`'
+twenty-eight `int32_t` as "not a local of this body", a sentence that reads
+like a judgement and was a parse. Joined, the two real pairs there decline for
+a reason instead (`a read of res_s precedes every copy into it`). Four more
+declines were `x = nullptr;`, which is not one name copied into another at all.
+54 remain and every one of them is a member store, a global, a constant or a
+reference parameter — the class is at its floor, and the floor is now made of
+judgements.
+
+One more, found by running the fixed tool's *apply* path on the probes rather
+than only its report: `uncopy.py --all` folded a chain — `blkA = blk;
+blkB = blkA;` — by applying the two folds independently, which deleted both
+declarations and left `blkA` in the text with nothing declaring it. Each `dst`
+is assigned exactly once, so following `dst -> src` to its root terminates;
+that is what it does now. The report had been right about the chain all along,
+which is why only running the transform caught it.

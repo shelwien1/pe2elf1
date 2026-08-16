@@ -470,7 +470,7 @@ struct ModelBlock {
             if( nbytes ) {
               uint32_t b = 0;
               do {
-                uint32_t piece = decode_symbol_list(&lists[4*b+carry]);
+                uint32_t piece = lists[4*b+carry].decode_symbol_list();
                 carry = piece>>6;
                 sym_code[s] += piece<<((8*b)&31);
                 ++b;
@@ -487,7 +487,7 @@ struct ModelBlock {
           int32_t run = 0;
           uint32_t s2 = 0;
           do {
-            int32_t gap = decode_symbol_list(&lists[0]);
+            int32_t gap = lists[0].decode_symbol_list();
             sym_code[s2] = gap+run;
             run += gap+1;
             ++s2;
@@ -508,15 +508,11 @@ struct ModelBlock {
   void unmodel_plane_slow(uint8_t* dst) {
     uint8_t* row[19];
     uint32_t row_w;
-    uint8_t *out_at;
-    int32_t g0;
-    int32_t done;
-    int32_t lo1;
-    uint8_t *expand_buf;
+    uint8_t *out_at, *expand_buf;
+    int32_t g0, done, lo1;
     int32_t lo, w2, w4, w2n, lvl_n, bucket, x2, bits, n_pix, q2, n_pix2;
     PixRec* lists, * t;
-    uint8_t *dst_keep = dst;
-    uint8_t *dst_base = &dst[-(depth<8)];
+      uint8_t *dst_base = &dst[-(depth<8)];
     rc_begin_decode();
     expand_alphabet();
     int32_t g1 = 0;
@@ -751,7 +747,7 @@ struct ModelBlock {
         } while( q1<nchunk );
       }
       if( n_pix>0 ) {
-        uint8_t *interleave_at = dst_keep;
+        uint8_t *interleave_at = dst;
         q2 = 0;
         int32_t written = 0;
         do {
@@ -1132,7 +1128,7 @@ struct ModelBlock {
       if( sel_p>&escape_list )
         bmf_fatal(bmf_read_error);
       if( (*sel_p)->live ) {
-        int32_t lsym = decode_symbol_list(*sel_p);
+        int32_t lsym = (*sel_p)->decode_symbol_list();
         row_cur[5]->sym = lsym;
         if( lsym>=0 )
           return idx_t+1;
