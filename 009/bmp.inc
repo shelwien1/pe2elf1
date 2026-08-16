@@ -53,6 +53,16 @@ static inline uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {
   return (uint32_t)r<<16|(uint32_t)g<<8|b;
 }
 
+// One 32-bit value into a byte buffer at an arbitrary offset.  A BMP's palette
+// starts at byte 54, so no entry in it is four-aligned and none of the six
+// sites that write one could be a `uint32_t*` store -- they were
+// `*(uint32_t*)&out_buf[4*slot+54]`, which is the store the binary makes and a
+// misaligned access as C++.  `memcpy` is the same store with the alignment
+// told truthfully; every compiler this builds under folds it to one `mov`.
+static inline void put_u32(uint8_t* at, uint32_t v) {
+  memcpy(at, &v, sizeof v);
+}
+
 // One level of a grey ramp: the same value in all three channels.
 static inline uint32_t bmp_grey_entry(uint8_t level) {
   return bmp_palette_entry(level, level, level);

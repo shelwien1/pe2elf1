@@ -100,7 +100,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src);
 int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs);
 int32_t choose_plane_coding(BmfImage* img);
 BmfImage* read_bmp(char* path);
-int32_t alt_model_p1_encode(uint16_t* hdr, uint8_t* src);
+int32_t alt_model_p1_encode(BmfImage* hdr, uint8_t* src);
 void alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height);
 int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out);
 void unmodel_plane(BmfImage* p_i, uint8_t* out);

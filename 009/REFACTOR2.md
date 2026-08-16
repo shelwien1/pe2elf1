@@ -733,3 +733,49 @@ the measurement written where the decision is.
 The remaining 7 are the BMP palette writes in `bmp_write.inc`, which are
 serialisation into a byte buffer at computed offsets, and that one scratch
 access.
+
+---
+
+## Declining is not finishing
+
+Everything the last two rounds left as "declined with a measurement" was work.
+Taken as work, all of it moved.
+
+**The punning went to zero rather than to a reason.** The six BMP palette
+writes were `*(uint32_t*)&out_buf[4*slot+54]` — a BMP's palette starts at byte
+54, so no entry in it is four-aligned and none of those could ever be a
+`uint32_t*` store. `put_u32` is a `memcpy`: the same store with the alignment
+told truthfully. `hist_scratch`'s counter is the same, a `memcpy` pair instead
+of a `uint32_t&`, which needs no claim about the base at all — so the careful
+alignment argument recorded above is now a note on why the storage is a byte
+array rather than a licence for a cast. **`uncastwidth.py` reports 0 of 19.**
+
+**`alt_model_p2_encode`/`decode` merged.** It was the largest declined pair at
+34 shared of 153 and the decline rested on "what they share is scaffolding".
+Read line by line that was not true: outside the four coding calls they are the
+same body. Eight of the differences were spellings — a bias loop counting up in
+one and down in the other over four slots it sets to zero, a `for` against a
+`do`/`while`, two register spills of the row index saved across a loop that
+does not touch it — and one is a deliberate near-miss the merge keeps, the
+decoder's `out[3]` where the encoder uses `plane_desc[3].src_plane`. That is
+the only `f_DEC` in the body that is not about direction. **153 lines to 6.**
+
+The instrumentation for it is worth recording because the first reading was
+wrong: `./test.sh 2>&1 | grep -c` said *zero* entries for both instantiations,
+which would have meant the 110 checks gated nothing. `test.sh` captures each
+run's stderr. Asked per image, the encoder runs over six of the seventeen and
+the decoder over two — so both halves are entered, which is what bmf.cpp's note
+requires and what the grep would have hidden.
+
+**`model_plane`/`unmodel_plane` fell from 14 of 170 to 4 of 146** the same way:
+what the two shared was the sixteen-line dispatch over the descriptor's model
+and depth, and that is `alt_model_plane<f_DEC>`. What is left is the main model
+— 100 lines written out in the encoder against a call to `unmodel_plane_slow`
+— which is not a shape a template makes one thing.
+
+**And a declaration nothing defines.** Reading those signatures turned up
+`decls.inc` declaring `alt_model_p1_encode(uint16_t* hdr, uint8_t* src)` where
+the definition takes `BmfImage*` — two different functions, with the call sites
+resolving to the real one and the declared overload never defined at all. A
+sweep of every declaration in the file against every definition in the unit
+finds exactly that one.

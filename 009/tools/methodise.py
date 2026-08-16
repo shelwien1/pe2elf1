@@ -91,16 +91,17 @@ DECLINED = {
     # decode half took a `uint16_t *` and could not be the same kind of method,
     # so a merge would break the pair.  That expired when the decode half was
     # retyped; the pair matches now, and it is the first reason that holds.
-    'alt_model_p2_encode':
-        'reads three fields of the image and is a 323-line encoder; a method '
-        'of `BmfImage` would make the image the compressor',
+    # Was two entries, `alt_model_p2_encode` and `alt_model_p2_decode`, each
+    # declined on the other.  They are one `alt_model_p2<f_DEC>` now and the
+    # wrappers that carry their names are three lines apiece, which is below
+    # anything this rule looks at; the judgement moves to the template.
+    'alt_model_p2':
+        'reads three fields of the image and is the merged p2 coder, 71 lines '
+        'over both directions; a method of `BmfImage` would make the image the '
+        'compressor',
     'alt_model_p1':
         'the merged p1 coder, 276 lines, and it reads the image for its width '
-        'and height.  Same judgement as `alt_model_p2_encode` above',
-    'alt_model_p2_decode':
-        'the decode half of `alt_model_p2_encode`, 273 lines, and declined '
-        'with it -- a pair this project keeps matched does not become a method '
-        'on one side',
+        'and height.  Same judgement as `alt_model_p2` above',
     'write_bmp':
         'writes a BMP file from an image.  `BmfImage::write_bmp(path)` would '
         'read as the image writing itself to disk, which is the file format\'s '

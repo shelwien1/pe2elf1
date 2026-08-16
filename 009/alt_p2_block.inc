@@ -438,6 +438,18 @@ struct AltP2Block {
     out[at] = sample;
   }
 
+  // One sample, in whichever direction the caller is going.  `alt_model_p2`
+  // is one template over both and this is the only line of its inner loop that
+  // differs between them; four planes make four such lines, which is what kept
+  // the two 90-line bodies apart.
+  template<int32_t f_DEC>
+  void code_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
+    if( f_DEC )
+      decode_sample(out, at, refa, refb);
+    else
+      encode_sample(out, at, refa, refb);
+  }
+
   // Seed the three spare history rows from the row just coded: mirror its last
   // record five forward past the right edge, mirror eight back from the start
   // of the row above it, and copy the whole row into rows 1, 2 and 3.

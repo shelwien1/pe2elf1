@@ -53,7 +53,7 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
           uint8_t pred = med_predict(p[-1], north, p[-width-1]);
           int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
           *p = code;
-          ++hist_count(code);
+          hist_bump(code);
           --x_left;
         } while( x_left );
       }
@@ -61,7 +61,7 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
       --p;
       last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
       *p = last;
-      ++hist_count(last);
+      hist_bump(last);
       --rows_left;
     } while( rows_left );
   }

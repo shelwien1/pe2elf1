@@ -5,19 +5,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   uint32_t row_w;
   int32_t w3, w4, y;
   uint16_t w2;
-  if( plane_alt_model ) {
-    if( plane_predictor==pred_p1 ) {
-      if( (p_i->depth&depth_bits)==8 )
-        alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
-      else
-        alt_model_p1_encode(p_i, pixels);
-    } else if( plane_predictor==pred_p2 ) {
-      if( (p_i->depth&depth_bits)==8 )
-        alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
-      else
-        alt_model_p2_encode(p_i, pixels);
-    }
-  } else {
+  if( !alt_model_plane<0>(p_i, pixels, raw) ) {
     ModelBlock* blk = new_model_block(p_i->width, p_i->height,
                                      p_i->depth&depth_bits);
     rc_begin_encode();

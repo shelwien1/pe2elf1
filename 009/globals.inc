@@ -190,11 +190,16 @@ static constexpr int32_t opt_max_error = 0;
 // 8,704 header variations -- but a `uint32_t*` would be a misaligned pointer
 // the moment `packer_reset` formed it, dereferenced or not.
 //
-// So the storage stays as the binary has it and the access gets the name.
+// So the storage stays as the binary has it, and the access is a `memcpy`
+// pair rather than a `uint32_t&` -- which is the same read-modify-write with
+// the alignment told truthfully, and needs no claim about the base at all.
 static uint8_t* hist_scratch;
 
-static inline uint32_t& hist_count(int32_t k) {
-  return *(uint32_t*)&hist_scratch[4*k];
+static inline void hist_bump(int32_t k) {
+  uint32_t n;
+  memcpy(&n, &hist_scratch[4*k], sizeof n);
+  ++n;
+  memcpy(&hist_scratch[4*k], &n, sizeof n);
 }
 
 // The exclusion mask: one byte per symbol, stamped with the current generation

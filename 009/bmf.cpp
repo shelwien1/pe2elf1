@@ -28,7 +28,7 @@
 //
 // ## the encode/decode pairs
 //
-// Nine of them are one `template<int32_t f_DEC>` each, instantiated as the two
+// Ten of them are one `template<int32_t f_DEC>` each, instantiated as the two
 // names their callers use.  What decided which: how many lines the two bodies
 // actually share, measured as a longest common subsequence over the pair.
 //
@@ -36,20 +36,37 @@
 //   alt_model_p2_d8             11 + 11     code_symbol_tree              85 + 86
 //   BitCtr::code_context_bit    52 + 50     AltP2Block::alt_p2_d8_body   171 + 147
 //   rc_begin                    91 + 89     alt_model_p1                 263 + 212
-//   P2Freq::code_three_way      49 + 55
+//   P2Freq::code_three_way      49 + 55     alt_model_p2                  3 + 3
 //
-// Five pairs were measured and declined.  What they share is not the body --
+// `alt_model_p2` is the tenth and was the first line of the declined table
+// below, at 34 shared of 153.  The share was not the reason to decline it and
+// reading the two bodies line by line is what showed that: outside the four
+// coding calls they are the same body, and what separated them was eight
+// spellings -- a bias loop counting up in one and down in the other over four
+// slots it sets to zero, a `for` against a `do`/`while`, two register spills
+// of the row index -- plus one deliberate near-miss the merge keeps as the
+// only `f_DEC` in it that is not about direction.  See `alt_p2_encode.inc`.
+// Both instantiations were instrumented and run: the encoder over six of the
+// seventeen images, the decoder over two.
+//
+// The `model_plane` pair fell from 14 shared lines of 170 to 4 of 146 the same
+// way `alt_model_p2` fell out of this table: what the two shared was the
+// sixteen-line dispatch over the descriptor's model and depth, and that is
+// `alt_model_plane<f_DEC>` in `plane.inc` now.  What is left is the main model
+// -- 100 lines written out in the encoder against a call to
+// `unmodel_plane_slow` -- which is not a shape a template makes one thing.
+//
+// Four pairs were measured and declined.  What they share is not the body --
 // it is the declaration block and the loop scaffolding -- and folding them
 // would put two unrelated algorithms behind one `if`.  `tools/pairshare.py`
 // re-measures this table and reports any line of it that has drifted; the
 // numbers below were all wrong by the time it was written, which is why it
 // exists.
 //
-//   alt_model_p2_encode / alt_model_p2_decode         34 of 153 (22%)
 //   code_pixel / decode_pixel                         94 of 653 (14%)
 //   predict_med / unpredict_med                       10 of 122 (8%)
 //   alt_model_p1_d8_encode / alt_model_p1_d8_decode     3 of 34 (9%)
-//   model_plane / unmodel_plane                       14 of 170 (8%)
+//   model_plane / unmodel_plane                        4 of 146 (3%)
 //
 // Every one of the five has moved since it was measured, and all of them the
 // same way: what the two halves shared was never the algorithm, so naming it
