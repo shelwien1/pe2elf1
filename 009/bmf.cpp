@@ -69,23 +69,39 @@
 // decoder's was already named left two five-line wrappers with one line
 // between them.
 //
-// Two pairs are measured and declined.  What they share is not the body -- it
-// is the declaration block and the loop scaffolding -- and folding them would
-// put two unrelated algorithms behind one `if`.  `tools/pairshare.py`
-// re-measures this table and reports any line of it that has drifted; the
-// numbers were all wrong by the time it was written, which is why it exists.
+// Two pairs are measured and declined, and after the three above came off this
+// table the reason for each is written out rather than left as a share.
+// `tools/pairshare.py` re-measures both and reports any line that has drifted.
 //
 //   code_pixel / decode_pixel                         94 of 653 (14%)
-//   predict_med / unpredict_med                       10 of 122 (8%)
+//   predict_med / unpredict_med                        8 of 113 (7%)
+//
+// **`predict_med` walks backwards and `unpredict_med` forwards**, and that is
+// structural rather than a spelling.  The forward transform has to read each
+// pixel's *original* north and west, so it starts at the bottom-right corner
+// and steps back; the inverse has to read the *reconstructed* ones, so it
+// starts at the top-left and steps forward.  The first row and column follow
+// the walk -- taken last by one and first by the other -- and that is most of
+// what the two do outside the shared middle.  A template over a direction flag
+// would have to reverse three loop headers and two edge cases, which is
+// writing both bodies out again with an `if` around each line.
+//
+// **`code_pixel` and `decode_pixel` diverge at the top and meet at the
+// bottom.**  The encoder knows the symbol and asks where it ranks; the decoder
+// asks the coder for a target and finds which rank holds it.  That is
+// `neighbour_rank` against `FreqRec::find_level`, and it decides the shape of
+// everything above it -- the encoder can test candidates in rank order and
+// stop, the decoder cannot.  What they genuinely share is the context, and
+// that has been coming out by name for several rounds: `load_neighbours`,
+// `FreqRec::blend_from`, `ModelBlock::start_row`, `find_level`, `bump`,
+// `neighbour_rank`, `cum_below`, `code_against`/`decode_against`.
 //
 // Both have moved since they were first measured, and the same way: what the
 // two halves shared was never the algorithm, so naming it and calling it from
 // both leaves less behind, not more.  The two `*_pixel` bodies have lost 40%
-// of their length between them -- `load_neighbours`, `FreqRec::blend_from`,
-// `ModelBlock::start_row`, `find_level`, `bump` -- and went from 1044 lines to
-// 653.  The percentage barely moves because both halves shrink together, which
-// is the point: the shared part is scaffolding, and scaffolding is what comes
-// out.
+// of their length between them and went from 1044 lines to 653.  The
+// percentage barely moves because both halves shrink together, which is the
+// point: the shared part is scaffolding, and scaffolding is what comes out.
 //
 // Every merge was gated on its own -- the seventeen streams byte for byte, at
 // both pointer widths -- and then instrumented and run over the corpus to

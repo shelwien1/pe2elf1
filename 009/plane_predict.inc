@@ -32,16 +32,38 @@ static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest
   return (uint8_t)west;
 }
 
+// The zigzag a MED residual takes on its way to a symbol, and its inverse:
+// 0, -1, 1, -2, 2, ... becomes 0, 1, 2, 3, 4, ..., so the sign rides in the low
+// bit and a small residual stays a small symbol.
+//
+// Both were built inline, five lines apiece, `fold` counting up in twos from
+// each end of the table and `unfold` filling the odd and even slots in one
+// pass.  Two spellings of one table and its inverse, and neither said so.
+//
+// Not the alt models' `alt_init_tables` pair, which buckets by
+// `near_lossless_q` and is a different table with the same job.
+static void med_fold_table(uint8_t* fold) {
+  for( int32_t j = 0; j<128; ++j ) {
+    fold[j] = (uint8_t)(2*j);
+    fold[128+j] = (uint8_t)(-1-2*j);
+  }
+}
+
+static void med_unfold_table(uint8_t* unfold) {
+  unfold[0] = 0;
+  for( int32_t j = 0; j<127; ++j ) {
+    unfold[2*j+1] = (uint8_t)(-1-j);
+    unfold[2*j+2] = (uint8_t)(1+j);
+  }
+  unfold[255] = (uint8_t)(-1-127);
+}
+
 uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
-  uint32_t done;
-  uint32_t j, last;
+  uint32_t done, last;
   alignas(16) uint8_t fold[272];
   uint8_t *p = pixels+height*width;
   uint8_t *up = &p[-width];
-  for( j = 0; j<128; ++j ) {
-    fold[j] = (uint8_t)(2*j);
-    fold[128+j] = (uint8_t)(-1-2*(int32_t)j);
-  }
+  med_fold_table(fold);
   int32_t rows_left = height-1;
   if( height!=1 ) {
     do {
@@ -267,15 +289,10 @@ void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done;
   int32_t rows_left;
-  uint32_t j, row_rest, k, x_left;
+  uint32_t row_rest, k, x_left;
   alignas(16) uint8_t unfold[256];
   uint8_t *p = pixels+1;
-  unfold[0] = 0;
-  for( j = 0; j<127; ++j ) {
-    unfold[2*j+1] = (uint8_t)(-1-(int32_t)j);
-    unfold[2*j+2] = (uint8_t)(1+j);
-  }
-  unfold[255] = (uint8_t)(-1-127);
+  med_unfold_table(unfold);
   if( width==1 ) {
     rows_left = height-1;
     if( height==1 )

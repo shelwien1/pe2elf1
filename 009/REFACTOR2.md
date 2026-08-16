@@ -841,3 +841,37 @@ had a rule for a function named before `,` or `)` but not before `:`. It
 reported all four p1 entry points dead while their p2 twins *on the same lines*
 were fine — the giveaway. Taking a function's address is a use; it counts one
 now, and a planted never-called body proves the tool can still report.
+
+### The last two, and why a reason beats a share
+
+`predict_med`/`unpredict_med` and `code_pixel`/`decode_pixel` are the two rows
+left, and after three pairs came off this table on the strength of "the share
+was measuring the wrong thing", each of these needed its reason written out
+rather than left as a percentage.
+
+**`predict_med` walks backwards and `unpredict_med` forwards, and that is
+structural.** The forward transform must read each pixel's *original* north and
+west, so it starts at the bottom-right corner and steps back; the inverse must
+read the *reconstructed* ones, so it starts at the top-left and steps forward.
+The first row and column follow the walk — taken last by one and first by the
+other. A template over a direction flag would have to reverse three loop
+headers and two edge cases, which is writing both bodies out again with an `if`
+around each line.
+
+What they did share and did not say: the zigzag that turns a signed residual
+into a small symbol — 0, -1, 1, -2, 2 … into 0, 1, 2, 3, 4 … — built inline in
+each, five lines apiece, one counting up in twos from each end of the table and
+the other filling odd and even slots in one pass. `med_fold_table` and
+`med_unfold_table` now, and neither is the alt models' `alt_init_tables` pair,
+which buckets by `near_lossless_q` and is a different table with the same job.
+
+**`code_pixel` and `decode_pixel` diverge at the top and meet at the bottom.**
+The encoder knows the symbol and asks where it ranks; the decoder asks the coder
+for a target and finds which rank holds it. That is `neighbour_rank` against
+`FreqRec::find_level`, and it decides the shape of everything above — the
+encoder can test candidates in rank order and stop, the decoder cannot. What
+they genuinely share is the context, and that has been coming out by name for
+several rounds.
+
+**Where the pairs ended: twelve merged, two declined**, from nine and five when
+the round began.
