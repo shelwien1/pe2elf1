@@ -103,7 +103,7 @@ def defs(lines):
         s = l.split('//')[0]
         for k, ch in enumerate(s):
             if ch == '{':
-                buf, j = s[:k], i
+                buf, j, taken = s[:k], i, 0
                 while '(' not in buf or buf.count(')') - buf.count('(') > 0:
                     j -= 1
                     if j < 0 or i - j > 6:
@@ -114,6 +114,7 @@ def defs(lines):
                     if prev.lstrip().startswith('#'):
                         break
                     buf = prev + ' ' + buf
+                    taken += 1
                 head = buf.rstrip()
                 # `void f() const {`, `void f() noexcept {` -- the declarator
                 # ends before those, and the name is what comes before its
@@ -127,6 +128,43 @@ def defs(lines):
                 name = m.group(1) if m and '(' in buf else None
                 if name in NOT_A_DEFINITION:
                     name = None
+                # The last entry of a constructor's initialiser list is
+                # `member(expr) {` -- a bare name, a parenthesised expression
+                # and a brace, which is a function definition's shape exactly.
+                # What tells them apart is what comes before: a definition has a
+                # return type or, for a constructor, nothing at all, while an
+                # initialiser entry follows a `:` or a `,`.
+                #
+                # `GroupFolds`'s `w2_to_w1(flags & ctx_w2_to_w1) {}` was read as
+                # a body, and `deadcheck.py` reported the member as a function
+                # nothing calls.  43 tools read the program through here, so the
+                # miss was not deadcheck's.
+                # A constructor's initialiser list on one line: the name is
+                # what stands before the `:`, not the last member after it.
+                same = re.match(r'^(.*?\b([A-Za-z_]\w*)\s*\([^()]*\))'
+                                r'\s*:(?!:)\s*\S', head)
+                if name and same:
+                    name = same.group(2)
+                elif name and re.match(r'^\s*[:,]?\s*[A-Za-z_]\w*'
+                                       r'\s*\([^()]*\)\s*,?$', head):
+                    k2 = i - taken - 1
+                    while k2 >= 0 and not lines[k2].split('//')[0].strip():
+                        k2 -= 1
+                    prev2 = lines[k2].split('//')[0].rstrip() if k2 >= 0 else ''
+                    if (head.lstrip().startswith(':')
+                            or prev2.endswith((',', ':'))):
+                        # Walk back over the rest of the list to the signature
+                        # the list belongs to, so the constructor is a body
+                        # under its own name rather than under its last member.
+                        while k2 >= 0:
+                            t = lines[k2].split('//')[0].strip()
+                            if t and not t.startswith(':') and not t.endswith(','):
+                                break
+                            k2 -= 1
+                        sm = (re.search(r'\b([A-Za-z_]\w*)\s*\([^()]*\)\s*$',
+                                        lines[k2].split('//')[0].rstrip())
+                              if k2 >= 0 else None)
+                        name = sm.group(1) if sm else None
                 # `struct alignas(16) CodePixelFrame {` has a parenthesis and a
                 # name in front of it and is a type, not a function.  The old
                 # answer was an entry in the never-called check's skip list

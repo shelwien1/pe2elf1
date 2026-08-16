@@ -262,8 +262,15 @@ def main():
                 bad += 1
 
     called = {t for t, cs in callers.items() if cs}
+    # A constructor is reached by syntax -- `const GroupFolds fold(flags);` --
+    # so its name never appears in front of a parenthesis at a call site, the
+    # same way an operator's does not.  A body whose name is a type declared in
+    # this unit is one; there is no other way for those two names to agree.
+    ctors = set(re.findall(r'^\s*(?:struct|class)\s+([A-Za-z_]\w*)\s*(?:\{|:)',
+                           '\n'.join(lines), re.M))
     for a, b, n, sig, _ in structs.defs(lines):
-        if 'static inline' in sig or n in called or n.startswith('operator '):
+        if ('static inline' in sig or n in called or n in ctors
+                or n.startswith('operator ')):
             continue
         if n.lstrip('_') in ('main', 'bmf_compress', 'bmf_decompress',
                              'bmf_addr', 'bmf_data_relocate', 'attribute__',

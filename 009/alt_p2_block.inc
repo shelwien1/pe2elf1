@@ -667,11 +667,12 @@ struct AltP2Block {
       buf[row++] = (P2Ctx*)bmf_new(row_bytes);
     while( row<5 );
     memset(buf[0], 0, row_bytes);
-    ctx_bias[3] = 0;
+    // Four independent stores the decompiler left in the order MSVC scheduled
+    // them, counting down with an unrelated initialisation dropped in the
+    // middle.
+    for( int32_t i = 0; i<4; ++i )
+      ctx_bias[i] = 0;
     int32_t lvl = 0;
-    ctx_bias[2] = 0;
-    ctx_bias[1] = 0;
-    ctx_bias[0] = 0;
     cursor[0] = buf[0]+8;
     // `2*pair+++1` -- a post-increment inside the comparison that decides the
     // next level, with the answer parked in a `bump` the next line adds.  The

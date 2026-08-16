@@ -1159,24 +1159,48 @@ whenever the slot was not read *between* the two statements, and one of the four
 loads back into a name the body goes on to use. Deleting that save would have
 deleted the value. It counts reads on both sides now.
 
+## The instrument, three times over
+
+Chasing the residue down found three separate things `dupblock.py` was counting
+that were not copy, and each of them was the largest entry left when it was
+found:
+
+* **a struct's field list.** `ModelBlock` opens with nine consecutive
+  `uint32_t <name>;`, which normalise to one window three times over. The tool's
+  own first line says it looks for "a run of *statements* written out more than
+  once", and a field list is not statements — nothing can be factored out of it.
+  Twenty-two lines. A first version of the skip matched one declarator and not
+  several, so `double dv0, dv1, dv2;` came back as soon as anything above it
+  moved; a second missed `alignas(16) int32_t hist_x[1024];`.
+* **a block matching a shifted copy of itself.** Four field zeroings in a row
+  put a three-line window at every line of themselves and every window
+  normalises alike, so `bmp->biClrImportant = 0;` and its three neighbours were
+  "a three-line run written out twice", at two starts three lines apart. That is
+  one block. Nineteen lines.
+
+Both are skips, and both were proved narrow before being believed: six identical
+declarations beside six identical statements, and one six-line repetitive block
+beside the same six lines split across two functions. The declarations and the
+single block are not counted; the statements and the split pair still are.
+
 ## Where this leaves it, again
 
-* **127 lines of copy**, from 1031 and from the 285 that closed the round above.
-  Twenty-two of those lines were never copy at all: `dupblock.py` was counting
-  `ModelBlock`'s field list, nine consecutive `uint32_t <name>;`, as statements
-  written out three times.
+* **73 lines of copy**, from 1031 and from the 285 that closed the round above.
+  Forty-one of the lines that came off were never copy at all — see above.
 * **27 jumps and 19 labels**, from 42 and 27.
 * **thirteen merged encode/decode pairs**, from twelve; two declined, and both
   smaller — `code_pixel`/`decode_pixel` is 304 lines and 28 shared, from 1044
   and 179.
 * **deepest nesting 7**, from 9.
 * **two new gates**: `tools/narrow.sh`, for the geometries the corpus does not
-  have, and `tools/unsave.py`. Both were built because something was measured
-  and found unmeasured, and both were proved able to report before their zero
-  was believed.
+  have, and `tools/unsave.py`, for a value saved into a second name and loaded
+  straight back. Both were built because something was measured and found
+  unmeasured, and both were proved able to report before their zero was
+  believed. `unsave.py`'s first version was wrong in the way that matters and
+  was caught by asking what its own rule allowed.
 
-The one decline this round that is worth repeating is `estimate_cost`'s two
-accumulators. Rolling them into one loop passes all 110 checks over all
-seventeen images — and floating-point addition is not associative, so that is a
-statement about the corpus and not about the program. It stays two loops, with
-the number written down.
+The one decline worth repeating is `estimate_cost`'s two accumulators. Rolling
+them into one loop passes all 110 checks over all seventeen images — and
+floating-point addition is not associative, so that is a statement about the
+corpus and not about the program. It stays two loops, with the number written
+down.
