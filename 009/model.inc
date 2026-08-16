@@ -1108,7 +1108,7 @@ struct ModelBlock {
     FreqRec* freq;
     uint16_t* id3p;
     FreqRec* freq_tbl;
-    uint32_t done, lvl_a;
+    uint32_t lvl_a;
     PixRec *next;
     int32_t nb, key, cap, s1a, m_up0, run, bit, hit_a, idx_s;
     PixRec *cur6 = (PixRec*)row_cur[6];
@@ -1258,50 +1258,36 @@ struct ModelBlock {
           rec->match2345 = 0x01010101;
           row_cur[5]->head4 = 0x01010101;
           SymPair *pixp = pix_cur;
-          nb_sym[1] = mode_symbol[1];
+          // The symbol, the head word and the flag word the run replicates.
+          // The first two went into two slots of the candidate table and came
+          // back out through `s1c`, `s3c`, `s3d` -- and `s1d` eighteen lines
+          // below the block, which is what makes slot 1 more than scratch and
+          // is why the run's symbol needs a name rather than a deletion.
+          const int32_t run_sym = mode_symbol[1];
           pixp->prev = pixp->last;
-          row_cur[5]->sym = (uint16_t)mode_symbol[1];
-          pix_cur->last = (uint16_t)mode_symbol[1];
-          int32_t flags_word = row_cur[5]->match2345;
-          nb_sym[3] = row_cur[5]->head4;
+          row_cur[5]->sym = (uint16_t)run_sym;
+          pix_cur->last = (uint16_t)run_sym;
+          const int32_t flags_word = row_cur[5]->match2345;
+          const int32_t head_word = row_cur[5]->head4;
           next = row_cur[5]+1;
           row_cur[5] = next;
-          if( idx_s-hit_a!=1 ) {
-            nb_sym[2] = (idx_s-hit_a-1)/2;
-            if( nb_sym[2] ) {
-              int32_t s3c = nb_sym[3];
-              nb_sym[0] = hit_a;
-              int16_t s1c = nb_sym[1];
-              uint32_t si = 0;
-              idx_t = idx_s;
-              uint32_t s2a = nb_sym[2];
-              do {
-                pix_cur->prev = s1c;
-                row_cur[5]->head4 = s3c;
-                row_cur[5]->match2345 = flags_word;
-                SymPair *pixq = pix_cur;
-                ++row_cur[5];
-                pixq->prev = s1c;
-                row_cur[5]->head4 = s3c;
-                row_cur[5]->match2345 = flags_word;
-                next = row_cur[5]+1;
-                row_cur[5] = next;
-                ++si;
-              } while( si<s2a );
-              hit_a = nb_sym[0];
-              idx_s = idx_t;
-              done = 2*si+1;
-            } else {
-              done = 1;
-            }
-            if( (uint32_t)(idx_s-hit_a-1)>(done-1) ) {
-              int32_t s3d = nb_sym[3];
-              pix_cur->prev = nb_sym[1];
-              row_cur[5]->head4 = s3d;
-              row_cur[5]->match2345 = flags_word;
-              next = row_cur[5]+1;
-              row_cur[5] = next;
-            }
+          // The records the run covers, each taking the symbol, head word and
+          // flag word of the one before it.  The original unrolled this by two
+          // and carried the odd one in a tail: a pair count in a third slot,
+          // `2*pairs+1` in `done`, and a tail that runs exactly when `fill` is
+          // odd -- so the two paths together are `fill` turns.  `hit_a` and
+          // `idx_s` were saved and restored around the pair loop, which
+          // touches neither.
+          //
+          // Unsigned, as the tail's own comparison was; the guard above is
+          // what keeps `fill` off zero.
+          const uint32_t fill = idx_s-hit_a-1;
+          for( uint32_t k = 0; k<fill; ++k ) {
+            pix_cur->prev = run_sym;
+            row_cur[5]->head4 = head_word;
+            row_cur[5]->match2345 = flags_word;
+            next = row_cur[5]+1;
+            row_cur[5] = next;
           }
           idx_t = idx_s;
           PixRec *cur6c = (PixRec*)row_cur[6];
@@ -1309,11 +1295,10 @@ struct ModelBlock {
           grad[0] = match_seed_split(cur6c);
           grad[1] = match_seed(up3-3, 8);
           grad[2] = match_seed(next-4, 2, 1);
-          int32_t s1d = nb_sym[1];
           grad[3] = match_seed(next-7, 4);
-          next[-1].match[4] = s1d==cur6c[1].sym;
+          next[-1].match[4] = run_sym==cur6c[1].sym;
           idx_s = idx_t;
-          row_cur[5][-1].match[5] = s1d==row_cur[6][2].sym;
+          row_cur[5][-1].match[5] = run_sym==row_cur[6][2].sym;
           hit_a = hit;
         }
         if( hit_a )

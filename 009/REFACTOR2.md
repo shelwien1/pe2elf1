@@ -981,3 +981,25 @@ loop still open at the last use. A four-line probe with that shape is what
 caught it, and all four of the file's older probes still report.
 
 The pair is **486 lines and 62 shared**, from 653 and 94 when the round began.
+
+### A reroll that failed, and the read that explains why
+
+The run-fill in `decode_pixel` writes the run's records with the symbol, head
+word and flag word of the one before them — unrolled by two, with the odd one
+in a tail, a pair count in a slot of the candidate table, and `2*pairs + 1` in
+`done` so the tail runs exactly when the count is odd. The two paths together
+are one loop of `fill` turns, and rewriting it that way **failed 12 of 110
+checks.**
+
+The arithmetic was not the problem; instrumented, `fill = 2*pairs + tail` holds
+on all 146 fills in the corpus. Bisecting — first the save/restores alone, then
+a single-step loop with the tail left standing — put the fault in what the
+rewrite *deleted*: `nb_sym[1] = mode_symbol[1]`. That slot is read again
+eighteen lines *below* the block, as `s1d`, to set two match flags. So it was
+never scratch for the loop; it was the run's symbol, live past it. Named
+`run_sym` and read there too, the reroll passes.
+
+That is the counterpart to the `bucket_top` finding above and the same lesson
+from the other side: a value in a borrowed slot has a lifetime the slot does
+not advertise, and the only way to know it is to enumerate every read. **The
+pair is 456 lines and 54 shared**, from 653 and 94.
