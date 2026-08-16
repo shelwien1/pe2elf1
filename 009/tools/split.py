@@ -185,7 +185,7 @@ LAYOUT = [
  ('alt_p1_block.inc',      ['fold_or_refuse', 'CtxWeight', 'P1Ctx', 'AltP1Block',
                      'AltP1Block::ctx_of',
                      'AltP1Block::update_model', 'AltP1Block::alt_p1_alloc',
-                     'AltP1Block::alt_p1_free', 'AltP1Block::d8_encode_body']),
+                     'AltP1Block::alt_p1_free', 'AltP1Block::d8_body']),
  ('alt_p2_block.inc',      ['P2Count', 'P2Freq', 'P2Freq::encode_symbol', 'P2Freq::decode_symbol',
                      'P2Freq::rescale_three_way', 'p2_pred', 'p2_bump', 'P2Ctx', 'AltP2Block',
                      'AltP2Block::alt_p2_alloc', 'AltP2Block::alt_p2_free', 'CtxWeights']),

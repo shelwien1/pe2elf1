@@ -779,3 +779,27 @@ the definition takes `BmfImage*` — two different functions, with the call site
 resolving to the real one and the declared overload never defined at all. A
 sweep of every declaration in the file against every definition in the unit
 finds exactly that one.
+
+### The pair whose number was measuring the wrong thing
+
+`alt_model_p1_d8_encode`/`decode` was the *smallest* line of the declined
+table, 3 shared of 34, and that number was not about the two coders. The encode
+half was a method — `AltP1Block::d8_encode_body` — and the decode half was
+written out inside the wrapper in `alt_p1.inc`. So what `pairshare.py` compared
+was a four-line wrapper against a twenty-six-line one, and the twenty-two lines
+they really share were on the wrong side of a call. A small share can mean the
+bodies differ or it can mean one of them is not where you are looking, and the
+tool cannot tell those apart.
+
+Naming the decoder's body the way the encoder's was already named made them
+comparable, and then they are the same skeleton with three lines in the middle
+differing: `AltP1Block::d8_body<f_DEC>`, the mirror of
+`AltP2Block::alt_p2_d8_body` that was merged rounds ago. The decoder walked its
+rows with a signed comparison where the encoder cast both sides to `uint32_t`;
+`height` is `int32_t` and the guard above has already established it is
+positive, so the two readings agree.
+
+Instrumented over the corpus: 70 encode entries and 5 decode. **Eleven merged
+pairs now, three declined** — `code_pixel`/`decode_pixel` at 94 of 653,
+`predict_med`/`unpredict_med` at 10 of 122, and `model_plane`/`unmodel_plane`
+at 4 of 146.

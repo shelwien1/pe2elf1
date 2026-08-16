@@ -110,7 +110,7 @@ struct AltP1Block {
   // Three callers wrote this out, and the third is not quite the same as the
   // other two: the generic `alt_model_p1` reads the two *mirrored* magnitudes,
   // the ones `advance_row` copied back past the left edge, through `(int8_t)`
-  // where `d8_encode_body` and `alt_model_p1_d8_decode` read the `uint8_t`
+  // where `d8_body` and the decoder it now shares with read the `uint8_t`
   // they are declared.  `advance_row`'s comment left that difference standing
   // as a question about how large a residual magnitude gets.
   //
@@ -180,7 +180,7 @@ struct AltP1Block {
   // magnitude into the activity sum for this parity, flip the parity, let the
   // counter bank rescale if it has room, and step the five cursors.
   //
-  // Six copies -- four in `alt_model_p1`, one in `d8_encode_body`, one in
+  // Six copies -- four in `alt_model_p1`, one in `d8_body`, one in
   // `alt_model_p1_d8_decode`.  Four wrote the activity update as
   // `- (a - b) - (c - d)` and two as `- (a - b + c - d)`, which is the same
   // sum; one hoisted `ctx[0]` into a local across the parity flip, which does
@@ -312,9 +312,27 @@ struct AltP1Block {
     return result;
   }
 
-  void d8_encode_body(uint8_t* src, uint8_t* out) {
-    int32_t code;
-    rc_begin_encode();
+  // One plane of an eight-bit image, in whichever direction the caller is
+  // going.  The mirror of `AltP2Block::alt_p2_d8_body`, and merged for the
+  // same reason: the row walk, the row seed and the per-sample context are one
+  // skeleton and only the middle three lines differ.
+  //
+  // The encode half was a method here and the decode half was written out
+  // inside `alt_model_p1_d8_decode` in `alt_p1.inc`, which is why
+  // `pairshare.py` measured that pair at 3 shared lines of 34: it was
+  // comparing a four-line wrapper against a twenty-six-line one, and the
+  // twenty-two lines they really share were on the wrong side of a call.
+  //
+  // The decoder walked its rows with `y < height` signed where the encoder
+  // cast both to `uint32_t`.  `height` is `int32_t` and the `if` above has
+  // already established it is positive, so the two readings agree; the
+  // encoder's is kept.
+  template<int32_t f_DEC>
+  void d8_body(uint8_t* src, uint8_t* out) {
+    if( f_DEC )
+      rc_begin_decode();
+    else
+      rc_begin_encode();
     if( height>0 ) {
       int32_t y = 0;
       do {
@@ -327,18 +345,27 @@ struct AltP1Block {
           do {
             ++x;
             ctx_of(nullptr, nullptr);
-            code = fold_or_refuse(q, *src, (uint8_t)pred, fold, fold_hi,
-                                  unfold);
-            alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
+            if( f_DEC ) {
+              const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]],
+                                                        ctx[1]);
+              *q = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
+            } else {
+              const int32_t code = fold_or_refuse(q, *src, (uint8_t)pred, fold,
+                                                  fold_hi, unfold);
+              alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
+              ++src;
+            }
             record_sample((uint8_t)*q);
             ++q;
-            ++src;
           } while( x<width );
           out = q;
         }
       } while( (uint32_t)y<(uint32_t)height );
     }
-    rc_end_encode();
+    if( f_DEC )
+      rc_end_decode();
+    else
+      rc_end_encode();
   }
 
   // One selector's counters, and there are nine of them -- `ctx_w[0]` through

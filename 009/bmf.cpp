@@ -28,7 +28,7 @@
 //
 // ## the encode/decode pairs
 //
-// Ten of them are one `template<int32_t f_DEC>` each, instantiated as the two
+// Eleven of them are one `template<int32_t f_DEC>` each, instantiated as the two
 // names their callers use.  What decided which: how many lines the two bodies
 // actually share, measured as a longest common subsequence over the pair.
 //
@@ -37,6 +37,7 @@
 //   BitCtr::code_context_bit    52 + 50     AltP2Block::alt_p2_d8_body   171 + 147
 //   rc_begin                    91 + 89     alt_model_p1                 263 + 212
 //   P2Freq::code_three_way      49 + 55     alt_model_p2                  3 + 3
+//   AltP1Block::d8_body          30 + 26
 //
 // `alt_model_p2` is the tenth and was the first line of the declined table
 // below, at 34 shared of 153.  The share was not the reason to decline it and
@@ -56,7 +57,15 @@
 // -- 100 lines written out in the encoder against a call to
 // `unmodel_plane_slow` -- which is not a shape a template makes one thing.
 //
-// Four pairs were measured and declined.  What they share is not the body --
+// `AltP1Block::d8_body` is the eleventh, and it was the *smallest* line of the
+// declined table at 3 shared of 34 -- a number that was measuring the wrong
+// thing.  The encode half was a method and the decode half was written out
+// inside `alt_model_p1_d8_decode`, so the pair the tool compared was a
+// four-line wrapper against a twenty-six-line one; the twenty-two lines they
+// really share were on the wrong side of a call.  Naming the decoder's body
+// the way the encoder's was already named is what made them comparable.
+//
+// Three pairs were measured and declined.  What they share is not the body --
 // it is the declaration block and the loop scaffolding -- and folding them
 // would put two unrelated algorithms behind one `if`.  `tools/pairshare.py`
 // re-measures this table and reports any line of it that has drifted; the
@@ -65,7 +74,6 @@
 //
 //   code_pixel / decode_pixel                         94 of 653 (14%)
 //   predict_med / unpredict_med                       10 of 122 (8%)
-//   alt_model_p1_d8_encode / alt_model_p1_d8_decode     3 of 34 (9%)
 //   model_plane / unmodel_plane                        4 of 146 (3%)
 //
 // Every one of the five has moved since it was measured, and all of them the

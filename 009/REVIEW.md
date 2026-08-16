@@ -450,7 +450,7 @@ Alongside it:
   one expression with a name — the sign of a count difference, quantised to a
   64-entry stride.
 * **the five-buffer row rotation appears in three files** — here in
-  `d8_encode_body`, and in `alt_p1_code.inc` and `alt_p1.inc`. It is
+  `d8_body`, and in `alt_p1_code.inc` and `alt_p1.inc`. It is
   `advance_row()` now, and **`corrected`**: 25 lines, not 29 and not identical.
   The two activity sums that follow differ — `alt_p1_code` reads two mirrored
   magnitudes through `(int8_t)` and the other two read them as the `uint8_t`

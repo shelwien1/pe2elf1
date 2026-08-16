@@ -76,47 +76,28 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
   return b;
 }
 
-// One p1 block, allocated for one plane.  `alt_model_p1_d8_encode` and
-// `alt_model_p1_d8_decode` opened with the same six lines, which is all the
-// two share -- the encoder's body is one call and the decoder's is written out
-// underneath it, which is why the pair stays two functions.
+// One p1 block, allocated for one plane, and the whole of what the two
+// eight-bit entry points do besides naming a direction.  The body they share
+// is `AltP1Block::d8_body<f_DEC>`; the decode half used to be written out
+// here, twenty-six lines against the encoder's four.
 static AltP1Block* alt_p1_block_alloc(int32_t width, int32_t height) {
   AltP1Block* raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
   return raw ? raw->alt_p1_alloc(width, height, 0) : nullptr;
 }
 
-void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
-  AltP1Block *blk = alt_p1_block_alloc(i, height);
-  blk->d8_encode_body(src, out);
+template<int32_t f_DEC>
+static void alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height,
+                            uint8_t* out) {
+  AltP1Block *blk = alt_p1_block_alloc(width, height);
+  blk->d8_body<f_DEC>(src, out);
   if( blk )
     blk->alt_p1_free(1);
 }
 
+void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+  alt_model_p1_d8<0>(src, i, height, out);
+}
+
 void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
-  AltP1Block *blk = alt_p1_block_alloc(i, height);
-  rc_begin_decode();
-  if( blk->height>0 ) {
-    int32_t y = 0;
-    do {
-      ++y;
-      blk->advance_row();
-      blk->seed_activity(false);
-      if( !(blk->width<=0) ) {
-        uint8_t* out_at = out;
-        int32_t x = 0;
-        do {
-          ++x;
-          blk->ctx_of(nullptr, nullptr);
-          int32_t code = alt_p1_decode_symbol(&blk->counters[blk->ctx[0]], blk->ctx[1]);
-          int32_t val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
-          *out_at = val;
-          blk->record_sample(val);
-          ++out_at;
-        } while( x<blk->width );
-        out = out_at;
-      }
-    } while( y<blk->height );
-  }
-  rc_end_decode();
-  blk->alt_p1_free(1);
+  alt_model_p1_d8<1>(nullptr, i, height, out);
 }
