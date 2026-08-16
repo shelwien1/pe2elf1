@@ -32,8 +32,19 @@
 # trip can construct.  It is carried by construction, and this says so rather
 # than implying otherwise by being green.
 #
-# It is fast (fourteen small images), so unlike `asan.sh` and `hdrscan.sh`
-# there is no reason not to run it.
+# The second leg is run-length pairs, and it is a stronger check than the
+# first.  `testfiles/rle4.bmp` and `rle8.bmp` are real files that use encoded
+# runs and end-of-line and nothing else, so the absolute-run reader -- six exits
+# across two nibble parities -- was reached by no gate at all: every one of the
+# six could be given a wrong answer with all 110 checks green.  Each pair is one
+# opcode stream that uses *every* opcode at both parities, beside the same
+# pixels written out flat, and `mknarrow.py` decodes the stream itself to
+# produce them.  What the two files being equal after a round trip says is that
+# two readers of one format agree; it is not this program checked against
+# itself.  All six exits are caught: perturbing any of them takes it to 1 of 2.
+#
+# It is fast (sixteen small images), so unlike `asan.sh` and `hdrscan.sh` there
+# is no reason not to run it.
 set -u
 cd "$(dirname "$0")/.."
 
@@ -43,18 +54,28 @@ BIN=${1:-./bmf}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-n=$(python3 tools/mknarrow.py "$tmp") || { echo "the generator failed" >&2; exit 2; }
+counts=$(python3 tools/mknarrow.py "$tmp") \
+  || { echo "the generator failed" >&2; exit 2; }
+n=${counts% *}
+rle=${counts#* }
+
+# Compress and expand one file, answering where the expansion landed.
+through() {
+  "$BIN" c "$1" "$tmp/$2.bmf" >/dev/null 2>&1 || return 1
+  "$BIN" d "$tmp/$2.bmf" "$tmp/$2.out.bmp" >/dev/null 2>&1 || return 1
+  return 0
+}
 
 ok=0
 bad=''
 for f in "$tmp"/*.bmp; do
   b=$(basename "$f" .bmp)
-  if ! "$BIN" c "$f" "$tmp/$b.bmf" >/dev/null 2>&1; then
-    bad="$bad $b(compress)"
-    continue
-  fi
-  if ! "$BIN" d "$tmp/$b.bmf" "$tmp/$b.out.bmp" >/dev/null 2>&1; then
-    bad="$bad $b(expand)"
+  # The run-length pairs are checked against each other below; a run-length
+  # file cannot round-trip to itself, because `write_bmp` splits its runs its
+  # own way.  `testfiles/out_rle4.bmp` is in the corpus for the same reason.
+  case $b in *_rle|*_raw) continue ;; esac
+  if ! through "$f" "$b"; then
+    bad="$bad $b(coder)"
     continue
   fi
   if cmp -s "$f" "$tmp/$b.out.bmp"; then
@@ -64,8 +85,27 @@ for f in "$tmp"/*.bmp; do
   fi
 done
 
+# Every run-length opcode, at both nibble parities, against the same pixels
+# written out flat.  `mknarrow.py` decodes the opcode stream itself, so what
+# these compare is two readers of one format and not this one against itself.
+pairs=0
+for f in "$tmp"/*_rle.bmp; do
+  b=$(basename "$f" _rle.bmp)
+  if ! through "$f" "${b}_rle" || ! through "$tmp/${b}_raw.bmp" "${b}_raw"; then
+    bad="$bad $b(coder)"
+    continue
+  fi
+  if cmp -s "$tmp/${b}_rle.out.bmp" "$tmp/${b}_raw.out.bmp"; then
+    pairs=$((pairs+1))
+  else
+    bad="$bad $b(run-length)"
+  fi
+done
+
 if [ -n "$bad" ]; then
-  echo "$ok of $n degenerate geometries round-trip; failed:$bad"
+  echo "$ok of $n degenerate geometries round-trip and $pairs of $rle"
+  echo "run-length streams agree with the same pixels flat; failed:$bad"
   exit 1
 fi
-echo "$ok of $n degenerate geometries round-trip"
+echo "$ok of $n degenerate geometries round-trip, and $pairs of $rle run-length"
+echo "streams agree with the same pixels written out flat"

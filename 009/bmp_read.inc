@@ -12,14 +12,50 @@ static bool read_rle_op(FILE* fp, int32_t& n, int32_t& v) {
   return n>=0&&v>=0;
 }
 
+// An absolute run of `n` nibbles, read a byte at a time from `src` and written
+// from the half of `*at` that `hi` names.  Answers where the run ended, leaving
+// `hi` saying which half of that byte the next nibble goes in.
+//
+// The parity does not change inside the run -- a turn writes a whole byte -- so
+// the two `hi_nibble = ` stores in the middle of the recovered loop stored what
+// was already there.  Lifting the loop out is what takes `read_bmp` off a
+// nesting depth of seven; the three exits were three copies of "save the
+// cursor" and are the return.
+static uint8_t* write_nibbles(uint8_t* at, int32_t& hi, const uint8_t* src,
+                              uint32_t n) {
+  while( 1 ) {
+    const uint8_t pix = *src;
+    const uint32_t left = n-1;
+    if( hi ) {
+      if( !left ) {
+        *at = *src&0xF0;
+        hi = 0;
+        return at;
+      }
+      *at++ = pix;
+    } else {
+      *at++ |= (uint8_t)*src>>4;
+      if( !left ) {
+        hi = 1;
+        return at;
+      }
+      *at = 16*(pix&0xF);
+    }
+    ++src;
+    n = left-1;
+    if( !n )
+      return at;
+  }
+}
+
 BmfImage* read_bmp(char* path) {
   BmfImage* img_f;
-  uint8_t* row, bmp_bgra[4], pix;
+  uint8_t* row, bmp_bgra[4];
   uint8_t* row_at;
   uint32_t row_pad;
   uint8_t cur;
   int32_t pal_n, i, hi_nibble;
-  uint32_t pair, stride, left;
+  uint32_t stride;
   BmpHeader hdr;
   FILE* fp = fopen(path, "rb");
   if( !fp||fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=bmp_magic||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=bmp_hdr_v3||hdr.biPlanes!=1 ) {
@@ -141,30 +177,29 @@ BmfImage* read_bmp(char* path) {
       if( !read_rle_op(fp, run4, byte_in) )
         return nullptr;
       const uint32_t byte = (uint32_t)byte_in;
-      pair = byte;
       if( run4 ) {
         if( row<pix_lo||row+(run4/2+1)>pix_hi )
           return nullptr;
         uint8_t lo = byte&0xF;
-        // `run4` nibbles of the two-nibble pattern in `pair`, from the half of
+        // `run4` nibbles of the two-nibble pattern in `byte`, from the half of
         // `*row` that `hi_nibble` names.  Both arms ended twice -- once by
         // falling out of their loop and once by a jump back to the top of the
         // one above -- and those are the same exit.  What told them apart is
         // the parity of `run4`, which is what each arm's counter is left
         // holding.
         if( hi_nibble ) {
-          // Byte-aligned, so every full byte is `pair` itself.  The counter
+          // Byte-aligned, so every full byte is `byte` itself.  The counter
           // steps by two and stops at 0 or 1.
           int32_t left4b = run4;
           uint8_t *row3 = row;
           while( left4b>1 ) {
-            *row3++ = pair;
+            *row3++ = byte;
             left4b -= 2;
           }
           row = row3;
           hi_nibble = left4b==0;
           if( left4b )
-            *row3 = pair&0xF0;
+            *row3 = byte&0xF0;
         } else {
           // Half a byte out of step: each byte written is the low nibble of
           // the previous pattern beside the high nibble of the next, so the
@@ -173,7 +208,7 @@ BmfImage* read_bmp(char* path) {
           int32_t left4 = run4;
           uint8_t *row4 = row;
           cur = *row;
-          uint32_t hi = pair>>4;
+          uint32_t hi = byte>>4;
           uint8_t lo16 = 16*lo;
           do {
             *row4++ = hi|cur;
@@ -209,38 +244,7 @@ BmfImage* read_bmp(char* path) {
         if( row<pix_lo||row+((int32_t)byte/2+1)>pix_hi )
           return nullptr;
         fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
-        uint8_t *pal_at = (uint8_t*)pal_buf;
-        uint8_t *row5 = row;
-        while( 1 ) {
-          pix = *pal_at;
-          if( hi_nibble ) {
-            left = pair-1;
-            if( !left ) {
-              row = row5;
-              *row5 = *pal_at&0xF0;
-              hi_nibble = 0;
-              break;
-            }
-            *row5++ = pix;
-            hi_nibble = 1;
-          } else {
-            *row5++ |= (uint8_t)*pal_at>>4;
-            left = pair-1;
-            if( !left ) {
-              row = row5;
-              hi_nibble = 1;
-              break;
-            }
-            *row5 = 16*(pix&0xF);
-            hi_nibble = 0;
-          }
-          ++pal_at;
-          pair = left-1;
-          if( !pair ) {
-            row = row5;
-            break;
-          }
-        }
+        row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, byte);
       }
     }
   }
