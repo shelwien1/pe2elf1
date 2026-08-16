@@ -190,8 +190,8 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   // components, so nothing past `out[5]` is ever touched.
   uint8_t* out[19];
   uint32_t alpha_n, done;
-  int32_t node, alpha_m, carry;
-  uint32_t si_end, word, k;
+  int32_t node, carry;
+  uint32_t word, k;
   uint8_t *rp;
   uint32_t sym_bits = blk->depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
@@ -232,8 +232,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
 // Both codings converge here with `blk->alphabet` set.
 alphabet_done:
     rc.encode(alpha_n-1, alpha_n, 0x2001u);
-    alpha_m = blk->alphabet;
-    if( alpha_m>0x2000 ) {
+    if( blk->alphabet>0x2000 ) {
       out[1] = (uint8_t*)bmf_new(blk->height*n_kids*blk->width);
       int32_t img_w = blk->width;
       int32_t img_h = blk->height;
@@ -294,32 +293,27 @@ alphabet_done:
       reduce_alphabet(blk, out[1]);
       free(out[1]);
     } else {
-      if( 4*n_kids ) {
-        uint32_t li = 0;
-        do {
-          lists[li].init(256, 1);
-          ++li;
-        } while( li<4*n_kids );
-        alpha_m = blk->alphabet;
-      }
+      // `alpha_m` was re-read from `blk->alphabet` after the list setup and
+      // again inside the loop below as `si_end`, across walks that touch
+      // neither -- the same spilling `expand_alphabet` does on its side.  One
+      // read.  `word` likewise: the byte loop shifts it down and the line after
+      // reloads it, and the only thing the reload feeds is the carry, which
+      // wants the *low* byte.
+      init_byte_lists(lists, n_kids);
+      const int32_t alpha_m = blk->alphabet;
       if( alpha_m ) {
         carry = 0;
         uint32_t si = 0;
-        si_end = alpha_m;
         do {
           word = tree[si].val;
-          if( n_kids ) {
-            for( k = 0; k<n_kids; ++k ) {
-              lists[4*k+carry].code_symbol((uint8_t)word);
-              carry = (uint8_t)word>>6;
-              word >>= 8;
-            }
-            word = tree[si].val;
-            si_end = blk->alphabet;
+          for( k = 0; k<n_kids; ++k ) {
+            lists[4*k+carry].code_symbol((uint8_t)word);
+            carry = (uint8_t)word>>6;
+            word >>= 8;
           }
-          carry = (uint8_t)word>>7;
+          carry = (uint8_t)tree[si].val>>7;
           ++si;
-        } while( si<si_end );
+        } while( si<(uint32_t)alpha_m );
       }
     }
     free_sym_entries(lists, 16);

@@ -53,6 +53,7 @@ struct BmfImage;
 struct BmpHeader;
 
 static inline void free_sym_entries(SymList* list, uint32_t n);
+static inline void init_byte_lists(SymList* list, uint32_t nbytes);
 static void free_sym_lists(SymList* lists);
 static inline SymListBlock*sym_list_block(SymList* list);
 static inline uint32_t sym_list_count(const SymList* list);

@@ -440,6 +440,15 @@ static inline void free_sym_entries(SymList* list, uint32_t n) {
     free(list[n].ent);
 }
 
+// One 256-symbol list per byte position and carry, four to a byte.  The wide
+// alphabet is coded a byte at a time with the carry out of the byte below
+// choosing which of that position's four lists codes it, which is what the
+// `4*k + carry` index says; both halves of the coder open with this loop.
+static inline void init_byte_lists(SymList* list, uint32_t nbytes) {
+  for( uint32_t k = 0; k<4*nbytes; ++k )
+    list[k].init(256, 1);
+}
+
 static inline SymListBlock*sym_list_block(SymList* list) {
   return (SymListBlock*)((uint8_t*)list-__builtin_offsetof(SymListBlock, list));
 }
