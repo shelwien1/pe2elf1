@@ -181,6 +181,27 @@ loop (85 s → 46 s overall, output byte-identical at every step):
 * **AVX2's `vgather` lost to eight ordinary loads** off those indices, 8 s
   against 6 s. It is a microcoded loop, and the addresses were already in
   registers. `-DMRP_GATHER=1` restores it.
+* **Four accumulator chains, not one.** `mullo_epi32` is ten cycles of
+  latency against one per cycle of throughput, so a single chain over 41
+  taps waits about five times longer than the multiplies take.
+
+### And two approximations, because the clock is a result too
+
+Vectorising bought 2.2×; these bought the rest, and they are the reason a
+large image is minutes rather than an hour.
+
+* **`COEF_MAX`** — the candidate sweep samples at most 4096 pixels of a
+  class instead of all of them, scaling the sum back up before the side
+  cost is added. It is choosing the argmin of 33 numbers; four thousand
+  samples decide that as well as thirty thousand do. **coef 6 s → 2 s**,
+  and on t24+t32 it is not merely free but *smaller* than the exact
+  version (208091 against 208595): the classes are uneven, so the large
+  ones get sampled, and the sampling breaks ties the exact sum does not.
+* **`MIN_GAIN`** — a loop stops once an iteration improves the cost by
+  less than 1/4096 of it. MRP runs a fixed count; past a point the
+  iterations are buying hundredths of a percent at a minute each.
+
+Set `-DCOEF_MAX=0 -DMIN_GAIN=100000000` for the exact search.
 
 ## 6. Watching it work
 
@@ -234,6 +255,9 @@ full-image one.
 | `MAX_ITER` / `EXTRA_ITER` | 20 / 4 | iterations of each loop |
 | `OPT_PRED` | 1 | the coefficient search (16%, and most of the time) |
 | `TRIAL_PIX` / `TRIAL_BANDS` | 262144 / 6 | what the order trial fits on |
+| `COEF_MAX` | 4096 | pixels the candidate sweep samples (0 = all) |
+| `MIN_GAIN` | 4096 | stop when an iteration gains under 1/this |
+| `MRP_GATHER` | 0 | 1 = use AVX2 vgather; measured slower |
 
 `MRP_CLASS` is worth checking per image: MRP's formula gives 21 for these,
 and both 12 (224508) and 32 (223258) are clearly worse than 21 (209483).

@@ -104,6 +104,19 @@
 #ifndef MRP_PROGMIN
 #define MRP_PROGMIN 200000
 #endif
+#ifndef COEF_MAX
+#define COEF_MAX  4096   // pixels of a class the candidate sweep samples.
+                         // It is choosing the argmin of 33 numbers; eight
+                         // thousand samples decide that as well as thirty
+                         // thousand do, and the sweep is the encoder's
+                         // largest cost on a big image.  0 = all of them.
+#endif
+#ifndef MIN_GAIN
+#define MIN_GAIN  4096   // stop a loop once an iteration improves by less
+                         // than 1/MIN_GAIN of the cost.  MRP runs a fixed
+                         // count; past a point the iterations are buying
+                         // hundredths of a percent at a minute each.
+#endif
 #ifndef MRP_GATHER
 #define MRP_GATHER  0    // 1 = AVX2 vgather in the coefficient search,
                          // 0 = SIMD-computed indices with scalar loads.
@@ -1102,14 +1115,21 @@ struct MRPC {
     static const int SR = 11, SSR = 3;
     cost_t cbuf[SR*SSR];
     int* cf = coef[cl][k];
+    cost_t side[SR*SSR];
     for( int i=0, n=0; i<SR; i++ ) {
       int y = cf[p1] + i - (SR>>1); if( y<0 ) y = -y; if( y>MAX_COEF ) y = MAX_COEF;
       for( int j=0; j<SSR; j++ ) {
         int x = cf[p2] - (i-(SR>>1)) - (j-(SSR>>1));
         if( x<0 ) x = -x; if( x>MAX_COEF ) x = MAX_COEF;
-        cbuf[n++] = coef_cost[coef_m[k][p1]][y] + coef_cost[coef_m[k][p2]][x];
+        side[n] = coef_cost[coef_m[k][p1]][y] + coef_cost[coef_m[k][p2]][x];
+        cbuf[n++] = 0.0;
       }
     }
+    // stride over the class's pixels; the sampled sum is scaled back up
+    // before the side cost, which is in absolute bits, is added to it
+    size_t cnt = cbeg[cl+1]-cbeg[cl];
+    size_t st  = 1;
+    if( COEF_MAX && cnt > COEF_MAX ) st = cnt/COEF_MAX;
     int o1 = toff[k][p1], o2 = toff[k][p2];
 #if defined(__AVX2__)
     // Five vectors cover the 11x3 candidate grid (the last seven lanes are
@@ -1126,7 +1146,7 @@ struct MRPC {
     const __m256i vCS  = _mm256_set1_epi32(CSTRIDE);
     const __m256i vSUB = _mm256_set1_epi32(NUM_SUBPM-1);
     const __m256i vPS  = _mm256_set1_epi32(PMSIZE);
-    for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci++ ) {
+    for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci+=st ) {
       {
         const byte* p = org + cpo[ci];
         const short* pr = prd + cpq[ci];
@@ -1135,11 +1155,11 @@ struct MRPC {
         int pf0 = int(pr[k]) - (d1-d2)*(SR>>1) + d2*(SSR>>1);
         const float* cb0 = pmlc[k][int(pg[k])];
         int v0 = int(p[k]);
-        // the next pixel of this class lands in one of sixteen tables and
-        // near the same base; ask for it, and for its pixel data, now
-        if( ci+1<ce ) {
-          const char* pgn = grp + cpq[ci+1];
-          _mm_prefetch( (const char*)(org + cpo[ci+1]), _MM_HINT_T0 );
+        // the next sampled pixel lands in one of sixteen tables and near
+        // the same base; ask for it, and for its pixel data, now
+        if( ci+st<ce ) {
+          const char* pgn = grp + cpq[ci+st];
+          _mm_prefetch( (const char*)(org + cpo[ci+st]), _MM_HINT_T0 );
           _mm_prefetch( (const char*)(pmlc[k][int(pgn[k])]
                                       + ((MAXPRD-Clip(pf0))>>COEF_PREC) + v0),
                         _MM_HINT_T0 );
@@ -1193,7 +1213,7 @@ struct MRPC {
       for( int t=0; t<8; t++ ) if( g*8+t<33 ) cbuf[g*8+t] += flush[g*8+t];
     }
 #else
-    for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci++ ) {
+    for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci+=st ) {
       {
         const byte* p = org + cpo[ci];
         const short* pr = prd + cpq[ci];
@@ -1216,6 +1236,7 @@ struct MRPC {
       }
     }
 #endif
+    for( int i=0; i<SR*SSR; i++ ) cbuf[i] = cbuf[i]*cost_t(st) + side[i];
     int b = (SR*SSR)>>1;
     for( int i=0; i<SR*SSR; i++ ) if( cbuf[i] < cbuf[b] ) b = i;
     int i = (b/SSR) - (SR>>1), j = (b%SSR) - (SSR>>1);
@@ -1824,7 +1845,10 @@ struct Codec : MRPCIO {
       c = OptimizeClass();
       PROG( " %.0fs = %.0f B  [%.0fs]%s\n", tnow()-tb, c/8.0, tnow()-t_start,
             (c<best) ? " *" : "" );
-      if( c<best ) { best = c; last = it; SAVE(); }
+      // an iteration only resets the patience counter if it bought
+      // something worth the minute it cost
+      if( c < best*(1.0 - 1.0/MIN_GAIN) ) last = it;
+      if( c<best ) { best = c; SAVE(); }
       if( it-last >= EXTRA_ITER ) break;
     }
     LOAD();
@@ -1850,7 +1874,8 @@ struct Codec : MRPCIO {
       c += side;
       PROG( " %.0fs = %.0f + %.0f side B  [%.0fs]%s\n", tnow()-tb,
             (c-side)/8.0, side/8.0, tnow()-t_start, (c<best) ? " *" : "" );
-      if( c<best ) { best = c; last = it; SAVE(); }
+      if( c < best*(1.0 - 1.0/MIN_GAIN) ) last = it;
+      if( c<best ) { best = c; SAVE(); }
 #if OPT_PRED
       if( it-last >= EXTRA_ITER ) break;
 #else
