@@ -1113,3 +1113,70 @@ were found in the round above by asking whether a tool could report. Four claims
 were found here by asking whether a sentence was still true. Neither question
 has a last answer, and "nothing left to do" is the one answer that is never a
 measurement.
+
+---
+
+## The comment that declined a loop
+
+Asking the same question of the *code* comments rather than the documents found
+the largest single thing left. `alt_p2_model`'s three counter-bank blocks were
+150 lines of `p2_update(direct[k], …)` written out eleven times apiece, under a
+comment that said, in bold, that they were "not rolled into loops, and that is a
+decision rather than an omission", and listed four exceptions at k = 0, 4, 9 and
+10.
+
+Every one of the four had dissolved, and none of them by being argued with:
+
+* "the longhand nudges and mirror bumps" were longhand when the note was
+  written. Two had been converted since; the last two went when `p2_nudge`
+  learned its shift instead of having it fixed at 2.
+* "k = 4 subtracts into the residual variable itself" — it does, and **nothing
+  reads the residual afterwards**. A write-back nobody reads is `p2_update`.
+* "k = 9 uses `res_t`, a *different* residual" — `res_t = res_c` two lines above
+  and `res_c = res_t` two lines below. One residual under a spill's name.
+* "k = 10's mirror bump straddles the join" — it does, and both arms reach it
+  with `-res_c`, so it is one line after the join.
+
+What the note said settled it was that hoisting would reorder counter updates
+against each other, since `direct`, `mirror` and `rot` index one bank and can
+name the same record for different k. That is true, and it is why nothing is
+hoisted: each loop does the same five things in the same order the unrolled text
+did. **The reason was sound and the conclusion had expired.** Three loops, and
+the copy residue fell from 203 lines to 132 in one commit.
+
+## `tools/unsave.py`
+
+`magsum_s = magsum;` … `magsum = magsum_s;` — a value saved into a second name
+and loaded straight back across a region that touches neither. Four of these
+were in the tree and no tool could see them. `unspillpair.py`'s zero was honest:
+its rule is that *every* assignment to the shadow must be a copy, so it can
+merge the two names, and these slots fail that on their first line. The fix is
+smaller than a merge — delete two statements — so the rule can be narrower and
+the span can hold a loop, which two of the four do.
+
+Its first version was wrong in the way that matters: it called the save dead
+whenever the slot was not read *between* the two statements, and one of the four
+loads back into a name the body goes on to use. Deleting that save would have
+deleted the value. It counts reads on both sides now.
+
+## Where this leaves it, again
+
+* **127 lines of copy**, from 1031 and from the 285 that closed the round above.
+  Twenty-two of those lines were never copy at all: `dupblock.py` was counting
+  `ModelBlock`'s field list, nine consecutive `uint32_t <name>;`, as statements
+  written out three times.
+* **27 jumps and 19 labels**, from 42 and 27.
+* **thirteen merged encode/decode pairs**, from twelve; two declined, and both
+  smaller — `code_pixel`/`decode_pixel` is 304 lines and 28 shared, from 1044
+  and 179.
+* **deepest nesting 7**, from 9.
+* **two new gates**: `tools/narrow.sh`, for the geometries the corpus does not
+  have, and `tools/unsave.py`. Both were built because something was measured
+  and found unmeasured, and both were proved able to report before their zero
+  was believed.
+
+The one decline this round that is worth repeating is `estimate_cost`'s two
+accumulators. Rolling them into one loop passes all 110 checks over all
+seventeen images — and floating-point addition is not associative, so that is a
+statement about the corpus and not about the program. It stays two loops, with
+the number written down.

@@ -1230,7 +1230,6 @@ struct ModelBlock {
     // pad, no other member, and nothing reading either.  `pixel_context`
     // indexes 0..31 and no further, so the pad held nothing back.
     alignas(16) int32_t nb_sym[32];
-    int32_t idx_t;
     FreqRec* freq;
     FreqRec* freq_tbl;
     uint32_t lvl_a;
@@ -1391,7 +1390,6 @@ struct ModelBlock {
     }
     idx_s = 0;
   pixel_done:
-    idx_t = idx_s;
     exclude_stage_one();
     sel[0] = nullptr;
     // The 32 candidate symbols `pixel_context` walks, in slot order.  Slots 0
@@ -1400,7 +1398,7 @@ struct ModelBlock {
     //
     seed_candidates(nb_sym);
     if( offer_candidates<1>(nb_sym)>=0 )
-      return idx_t+1;
+      return idx_s+1;
     SymList **sel_p = load_selectors();
     while( 1 ) {
       if( sel_p>&escape_list )
@@ -1409,7 +1407,7 @@ struct ModelBlock {
         int32_t lsym = (*sel_p)->decode_symbol_list();
         row_cur[5]->sym = lsym;
         if( lsym>=0 )
-          return idx_t+1;
+          return idx_s+1;
         sel_p = sel_cur;
       }
       sel_cur = ++sel_p;

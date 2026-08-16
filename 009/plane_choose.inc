@@ -136,7 +136,7 @@ int32_t choose_plane_coding(BmfImage* img) {
   uint32_t uu;
   int32_t wa_slot;
   double dv0, dv1, dv2;
-  uint32_t n_quads, next_plane, row, slack;
+  uint32_t next_plane, row, slack;
   uint16_t g1w;
   int32_t result, xform, wt8, wt4, pred, dv3, wa, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b;
   uint32_t best_cost, best, quad, best4;
@@ -313,7 +313,6 @@ int32_t choose_plane_coding(BmfImage* img) {
         double Sxw = 0.0, Syw = 0.0, Szw = 0.0;
         memset(hists, 0, sizeof hists);
         uint8_t *pp = &img->pixels[row_stride];
-        n_quads = (data_end-1-pp)/4;
         uint8_t *end_px = &img->pixels[row_stride+4];
         if( end_px<data_end ) {
           uint32_t i4 = 0;

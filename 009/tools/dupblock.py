@@ -95,8 +95,14 @@ BUDGET = 127
 # It is a skip and not a special case for `ModelBlock`: a planted run of six
 # identical declarations is not counted, and a planted run of six identical
 # *statements* still is.
-DECL = re.compile(r'^[A-Za-z_][\w:]*(\s*<[^;]*>)?[\s*&]+\**\w+'
-                  r'(\s*\[[^\]]*\])*\s*;$')
+#
+# One declarator or several -- `double dv0, dv1, dv2;` is one line and three
+# names, and a first version of this pattern matched only the single-name form,
+# so a run of comma-separated declarations at the top of two unrelated bodies
+# came back as copy the moment something above it moved.
+_ONE = r'\**\w+(?:\s*\[[^\]]*\])*'
+DECL = re.compile(r'^[A-Za-z_][\w:]*(?:\s*<[^;]*>)?[\s*&]+%s'
+                  r'(?:\s*,\s*%s)*\s*;$' % (_ONE, _ONE))
 
 
 def normal(text):
