@@ -45,11 +45,11 @@
 // numbers below were all wrong by the time it was written, which is why it
 // exists.
 //
-//   alt_model_p2_encode / alt_model_p2_decode         25 of 214 (12%)
+//   alt_model_p2_encode / alt_model_p2_decode         34 of 153 (22%)
 //   code_pixel / decode_pixel                        108 of 724 (15%)
 //   predict_med / unpredict_med                       10 of 122 (8%)
 //   alt_model_p1_d8_encode / alt_model_p1_d8_decode     3 of 34 (9%)
-//   model_plane / unmodel_plane                       15 of 198 (8%)
+//   model_plane / unmodel_plane                       15 of 187 (8%)
 //
 // Every one of the five has moved since it was measured, and all of them the
 // same way: what the two halves shared was never the algorithm, so naming it

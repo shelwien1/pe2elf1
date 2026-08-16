@@ -4,7 +4,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   ModelBlock* blk;
   int16_t w2n;
   uint32_t row_w;
-  int32_t w3, w4, lvl2, live, y;
+  int32_t w3, w4, y;
   uint16_t w2;
   if( plane_alt_model ) {
     if( plane_predictor==pred_p1 ) {
@@ -98,18 +98,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
             rec->b14 = has4+has3+w2+1;
             rec->w[0] = 0;
           }
-          if( rec->w[lo]&&rec->w[hi]&&(lvl2 = rec->b14, lvl2<=alpha) ) {
-            live = 1;
-            int16_t wt = (uint8_t)(1<<((5-lvl2)&31));
-            rec->b15 = wt;
-            rec->w[6] = wt<<6;
-            rec->w[lo] += wt;
-            rec->w[hi] += rec->b15;
-            rec->resum();
-          } else {
-            live = 0;
-          }
-          bucket += live;
+          bucket += rec->seed_pair(lo, hi, alpha);
           ++hi;
         } while( hi<5 );
         ++lo;

@@ -469,7 +469,7 @@ struct ModelBlock {
     int32_t done;
     int32_t lo1;
     uint8_t *expand_buf;
-    int32_t lo, w2, w4, w2n, lvl_n, live, bucket, x2, bits, n_pix, q2, n_pix2;
+    int32_t lo, w2, w4, w2n, lvl_n, bucket, x2, bits, n_pix, q2, n_pix2;
     PixRec* lists, * t;
     uint8_t *dst_keep = dst;
     uint8_t *dst_base = &dst[-(depth<8)];
@@ -550,18 +550,7 @@ struct ModelBlock {
             rec->b14 = lvl_n;
             rec->w[0] = 0;
           }
-          if( rec->w[lo1]&&rec->w[k]&&(uint8_t)lvl_n<=m5 ) {
-            live = 1;
-            int16_t lvl = (uint8_t)(1<<((5-lvl_n)&31));
-            rec->b15 = lvl;
-            rec->w[6] = lvl<<6;
-            rec->w[lo1] += lvl;
-            rec->w[k] += rec->b15;
-            rec->resum();
-          } else {
-            live = 0;
-          }
-          g1 += live;
+          g1 += rec->seed_pair(lo1, k, m5);
           ++k;
         } while( k<5 );
         lo = lo1+1;

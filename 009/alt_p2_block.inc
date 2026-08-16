@@ -482,6 +482,25 @@ struct AltP2Block {
       cursor[i] = buf[i]+width+8;
   }
 
+  // Roll the four bias accumulators forward by the record just coded: thirty-two
+  // times each of its four difference fields.
+  //
+  // Eight copies, four in each coder, and the two coders do not agree on where
+  // the total lives.  The decoder keeps it in `ctx_bias` and adds to it after
+  // every plane, which is the form that reads.  The encoder carries it in four
+  // locals -- `at0`, `seed0`, `off0`, `want0` -- and writes `ctx_bias` back from
+  // them one plane late, so plane 2's contribution reaches `ctx_bias` only if
+  // there is a plane 3 to need it.  That delay is MSVC's scheduling and not the
+  // model: `alt_p2_context` is the only reader, and by the time it could see the
+  // difference the next sample has already reloaded `ctx_bias` from the total.
+  void add_bias(int32_t* acc) const {
+    const P2Ctx&rec = cursor[0][-1];
+    acc[0] += 32*rec.dupleft;
+    acc[1] += 32*rec.dupright;
+    acc[2] += 32*rec.dleft;
+    acc[3] += 32*rec.dup;
+  }
+
   // Roll this plane forward by one row: carry the last neighbour of the row
   // just finished into both seams of the next, swap the two neighbour rows and
   // step them past their margins, clear the filter's row and its four biases,
@@ -628,6 +647,17 @@ struct AltP2Block {
     return this;
   }
 };
+
+// Whether the plane that plane `k` references carries a colour transform, and
+// so whether the sample it is seeded from has to be mixed from its references
+// or is zero.
+//
+// Three of these open each coder, under six names between them -- `xf0`, `np`
+// and `y` in the encoder, `xf0`, `dc_flag` and `xf4` in the decoder -- none of
+// which says which plane it is about.
+static bool ref_transformed(int32_t k) {
+  return (plane_desc[plane_desc[k].src_plane].flags&desc_has_refs)!=0;
+}
 
 // Every plane made ready for the next row.  Row 0 seeds the neutral record and
 // seats the cursors; row 1 seeds the three history rows from what row 0 left

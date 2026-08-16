@@ -11,6 +11,27 @@ struct FreqRec {
     };
   };
 
+  // Seed this record for one live selector pair: an escape weight that halves
+  // with the level, a floor at sixty-four times it, and the weight added to
+  // both of the pair's slots.  Answers whether the pair is live, which the
+  // caller counts.
+  //
+  // Written out in both `unmodel_plane_slow` and `model_plane`, ten lines
+  // apiece.  One read the level from the local it had just stored into `b14`
+  // and cast it to `uint8_t`; the other read it back out of `b14`, which is a
+  // `uint8_t` member, so the cast and the read-back are the same value.
+  bool seed_pair(int32_t lo, int32_t hi, int32_t alphabet_lvl) {
+    if( !w[lo]||!w[hi]||b14>alphabet_lvl )
+      return false;
+    const int16_t weight = (uint8_t)(1<<((5-b14)&31));
+    b15 = weight;
+    w[6] = weight<<6;
+    w[lo] += weight;
+    w[hi] += b15;
+    resum();
+    return true;
+  }
+
   // Which of the five levels `target` falls in, and the cumulative weight to
   // the end of it.  Five slots walked in order.
   //
