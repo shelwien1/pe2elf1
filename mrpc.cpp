@@ -56,6 +56,22 @@
 #ifndef NUM_PMODEL
 #define NUM_PMODEL   16  // generalized-Gaussian shapes to choose among
 #endif
+#ifndef NUM_SIGV
+#define NUM_SIGV      3  // sigma variants per group, on top of the shape.
+                         // The ladder steps by x1.38, so a group's sigma
+                         // can be up to 16% off whatever the residuals in
+                         // it actually want; NUM_SIGV=3 offers +-17.5%
+                         // around the rung and codes the choice with the
+                         // shape.  Variant 0 is the plain rung, so
+                         // NUM_SIGV=1 is exactly the unextended model.
+#endif
+#ifndef SIGV_2STAGE
+#define SIGV_2STAGE   1  // pick the shape first, then the sigma of that
+                         // shape, instead of scanning the product.  The
+                         // selection pass reads one cost table per
+                         // candidate per (pixel, component) and is the
+                         // whole price of NUM_SIGV; 0 = exhaustive.
+#endif
 #ifndef PM_ACC
 #define PM_ACC        3  // bits of the prediction's fraction the pmf sees
 #endif
@@ -79,11 +95,32 @@
 #ifndef BASE_BSIZE
 #define BASE_BSIZE    8
 #endif
+#ifndef MRP_EFFORT
+#define MRP_EFFORT    1  // how long to keep iterating: 0 fast, 1 default,
+                         // 2 maximum compression.  Sets MAX_ITER and
+                         // EXTRA_ITER, either of which can still be given
+                         // on its own.
+                         //
+                         // This is not a convergence tolerance.  The first
+                         // loop alternates a weighted-least-squares fit
+                         // with a class reassignment, and the fit
+                         // minimises squared error rather than code
+                         // length, so the sequence does not descend: on a
+                         // 320x240 image it went 135K, 122K, 147K, 140K,
+                         // 147K, 132K bytes.  Only the best iterate is
+                         // kept and the second loop starts from it, so the
+                         // whole file rides on which iterate happened to
+                         // land low.  They are samples of a noisy process,
+                         // not steps of a descent, and taking more of them
+                         // is worth 4.7% of the corpus -- for about eight
+                         // times the encode time, which is why it is a
+                         // knob and not the default.  Decode is unaffected.
+#endif
 #ifndef MAX_ITER
-#define MAX_ITER     20  // iterations of each optimisation loop
+#define MAX_ITER  (MRP_EFFORT<1 ? 12 : MRP_EFFORT<2 ? 20 : 60)
 #endif
 #ifndef EXTRA_ITER
-#define EXTRA_ITER    4  // ... after the last improvement
+#define EXTRA_ITER (MRP_EFFORT<1 ? 3 : MRP_EFFORT<2 ? 4 : 20)
 #endif
 #ifndef OPT_PRED
 #define OPT_PRED      1  // run the coefficient search in the second loop
@@ -119,6 +156,47 @@
 #endif
 #ifndef MRP_OLDSORT
 #define MRP_OLDSORT 0
+#endif
+#ifndef INIT_METRIC
+#define INIT_METRIC 0 // how InitClass ranks 8x8 blocks before the search:
+                      //  0 = variance, as MRP does it
+                      //  1 = gradient energy.  Variance is a weak proxy
+                      //      for how hard a block is to PREDICT -- a smooth
+                      //      ramp has large variance and no prediction
+                      //      difficulty at all -- so this looked promising.
+                      //      Measured: -0.01% on a 4096-wide crop, +0.9%
+                      //      on a 320-wide one and +3.1% on another.  The
+                      //      ranking is only a starting point for a
+                      //      nonconvex search, and a better-motivated
+                      //      starting point is not the same as a better
+                      //      one.  Kept as a toggle, off.
+#endif
+#ifndef BORDER_FIX
+#define BORDER_FIX 0 // refresh errB's borders after a full prediction pass.
+                     // FillBorders runs at load time, when the errors do
+                     // not exist yet, so during optimisation the margins
+                     // hold zeros while CodeImage fills them from live
+                     // errors -- pixels within UPEL_DIST of an edge are
+                     // group-quantised against an activity that is not the
+                     // one they are coded with.  This makes the two agree,
+                     // and it is right: it is also 2.6% WORSE across the
+                     // corpus.  What that measures is not the margin --
+                     // 2*UPEL_DIST/W of the pixels cannot move a file 2.6%
+                     // -- but the first loop's sensitivity to its starting
+                     // point (see EXTRA_ITER).  Any change of the same
+                     // size, correct or not, rolls the same dice.  Off
+                     // until the search stops being a lottery; turn it on
+                     // if you want the stored prd/grp to be exactly the
+                     // coding-time values.
+#endif
+#ifndef DP_SHRINK
+#define DP_SHRINK 1  // run the threshold trellis only up to the largest
+                     // activity the image actually produced.  The DP is
+                     // quadratic in that range and smooth images use a
+                     // small fraction of MAX_UPARA.  It also lowers the
+                     // last coded threshold, which is side information the
+                     // stream no longer pays for -- so it is not purely a
+                     // speed knob and the output moves.
 #endif
 #ifndef MRP_GATHER
 #define MRP_GATHER  0    // 1 = AVX2 vgather in the coefficient search,
@@ -289,8 +367,13 @@ static void set_freqtable( PMod* pm, double* pdf, int center,
   }
 }
 
-// [group][shape][subposition].  The decoder builds only the shapes the
-// stream names, so num_pm is 1 there.
+// The sigma multipliers a group may pick from.  The ladder's ratio is
+// 1.38, so +-17.5% halves the worst-case distance to a rung: entry 0 is
+// the rung itself, which keeps NUM_SIGV=1 bit-identical to the old model.
+static const double SIGV[3] = { 1.0, 1.0/1.175, 1.175 };
+
+// [group][variant][subposition], variant = sv*NUM_PMODEL + shape.  The
+// decoder builds only the shapes the stream names, so num_pm is 1 there.
 static PMod* alloc_pmodels( int num_pm, const int* pm_idx ) {
   int n = MRP_GROUP*num_pm*NUM_SUBPM;
   PMod* pm = new PMod[n];
@@ -304,10 +387,11 @@ static PMod* alloc_pmodels( int num_pm, const int* pm_idx ) {
   double* pdf = new double[size_t(PMSIZE)*NUM_SUBPM+1];
   for( int gr=0; gr<MRP_GROUP; gr++ )
     for( int i=0; i<num_pm; i++ ) {
-      int idx = pm_idx ? pm_idx[gr] : i;
+      int v   = pm_idx ? pm_idx[gr] : i;
+      int idx = v % NUM_PMODEL, sv = v / NUM_PMODEL;
       for( int j=0; j<NUM_SUBPM; j++ ) pm[(gr*num_pm+i)*NUM_SUBPM+j].id = i;
       set_freqtable( pm+size_t(gr*num_pm+i)*NUM_SUBPM, pdf, MAXVAL, idx,
-                     SIGMA[gr] );
+                     SIGMA[gr]*SIGV[sv] );
     }
   delete[] pdf;
   return pm;
@@ -664,6 +748,16 @@ struct MRPC {
 
   // ---------------------------------------------------------------
   void PredictRegion( uint y0, uint x0, uint y1, uint x1 ) {
+    const int full = BORDER_FIX && (x0==0) && (x1==W) && (y0==0) && (y1==H);
+    // Rows are independent here: the predictor reads `org`/`plane` and
+    // writes `prd`/`errB`, and nothing in this pass reads what it writes.
+    // Every pixel's result is a function of its own position, so the
+    // output does not depend on the schedule -- no reduction, no order.
+    // Only worth a team on the full-image calls; the class search runs
+    // this on 32-row blocks from inside a parallel region already.
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(static) if( y1-y0 >= 64 )
+#endif
     for( uint y=y0; y<y1; y++ ) {
       const char* pc = cls + size_t(y)*W;
       uint x = x0;
@@ -708,6 +802,8 @@ struct MRPC {
         }
       }
     }
+    // the margins now hold the same errors CodeImage will put there
+    if( full ) FillBorders();
   }
 
   // Same as CalcCost, but gives up as soon as the running total passes
@@ -770,12 +866,26 @@ struct MRPC {
     int* idx = new int[nb];
     for( size_t b=0; b<nb; b++ ) {
       uint by = uint(b/nbx)*BASE_BSIZE, bx = uint(b%nbx)*BASE_BSIZE;
+#if INIT_METRIC
+      double g = 0;
+      for( uint i=0; i<BASE_BSIZE; i++ ) {
+        const byte* p = org + OI(by+i,bx);
+        const byte* q = org + OI(by+i-1,bx);
+        for( uint j=0; j<BASE_BSIZE*nc; j++ ) {
+          int dx = int(p[j]) - int(p[int(j)-int(nc)]);
+          int dy = int(p[j]) - int(q[j]);
+          g += double((dx<0?-dx:dx) + (dy<0?-dy:dy));
+        }
+      }
+      var[b] = g;
+#else
       double s=0, s2=0;
       for( uint i=0; i<BASE_BSIZE; i++ ) {
         const byte* p = org + OI(by+i,bx);
         for( uint j=0; j<BASE_BSIZE*nc; j++ ) { double v=p[j]; s+=v; s2+=v*v; }
       }
       var[b] = s2 - s*s/double(BASE_BSIZE*BASE_BSIZE*nc);
+#endif
       idx[b] = int(b);
     }
     // Stable merge sort by (variance, block index).  The insertion sort
@@ -949,19 +1059,30 @@ struct MRPC {
     if( !cbuf ) cbuf = new cost_t[size_t(MRP_MAXCLASS)*MAXC*MRP_GROUP*nu];
     for( size_t i=0; i<need; i++ ) cbuf[i] = 0.0;
     #define CB(cl,k,gr) (cbuf + ((size_t(cl)*nc + (k))*MRP_GROUP + (gr))*nu)
-    for( uint y=0; y<H; y++ ) {
-      const byte* p = org + OI(y,0);
-      const short* pr = prd + PI(y,0);
-      const short* pe = errB + OI(y,0);
-      short* pu = upara + PI(y,0);
-      const char* pc = cls + size_t(y)*W;
-      for( uint x=0; x<W; x++, p+=nc, pr+=nc, pe+=nc, pu+=nc ) {
-        int cl = int(pc[x]);
-#if defined(__AVX2__)
-        ALIGN(16) int uv[4]; ActivityN( pe, uv );
+    static short umx[MRP_MAXCLASS][MAXC];
+    for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) umx[cl][k] = 0;
+    // Component-outer, not pixel-outer: every bin this pass touches is
+    // indexed by k, so the components own disjoint memory and each bin
+    // still receives its pixels in raster order -- the sums come out to
+    // the same last bit at any thread count.  The activity is recomputed
+    // per component rather than once for all of them, which is nc times
+    // the work spread over nc threads: the same wall time for that part,
+    // and the sixteen-group table loop that dominates goes nc-wide.
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(static)
 #endif
-        for( uint k=0; k<nc; k++ ) {
+    for( int kk=0; kk<int(nc); kk++ ) {
+      const uint k = uint(kk);
+      for( uint y=0; y<H; y++ ) {
+        const byte* p = org + OI(y,0);
+        const short* pr = prd + PI(y,0);
+        const short* pe = errB + OI(y,0);
+        short* pu = upara + PI(y,0);
+        const char* pc = cls + size_t(y)*W;
+        for( uint x=0; x<W; x++, p+=nc, pr+=nc, pe+=nc, pu+=nc ) {
+          int cl = int(pc[x]);
 #if defined(__AVX2__)
+          ALIGN(16) int uv[4]; ActivityN( pe, uv );
           int u = uv[k];
           for( uint j=0; j<k*XUPEL; j++ ) u += int(pe[j])*64;
           u >>= 6; if( u>MAX_UPARA ) u = MAX_UPARA;
@@ -969,6 +1090,7 @@ struct MRPC {
           int u = Activity( k, pe );
 #endif
           pu[k] = short(u);
+          if( u > umx[cl][k] ) umx[cl][k] = short(u);
           int q = Qprd( int(pr[k]) ), base = q>>PM_ACC, sub = q&(NUM_SUBPM-1);
           int v = base + int(p[k]);
           for( int gr=0; gr<MRP_GROUP; gr++ ) {
@@ -978,17 +1100,33 @@ struct MRPC {
         }
       }
     }
-    static cost_t dp[MAX_UPARA+2];
-    static int    tre[MRP_GROUP][MAX_UPARA+2];
-    for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) {
+    // one trellis per (class, component), reading its own slice of cbuf
+    // and writing its own th/uq rows: independent, so collapse them
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(dynamic,1) collapse(2)
+#endif
+    for( int cl=0; cl<num_class; cl++ ) for( int kk=0; kk<int(nc); kk++ ) {
+      const uint k = uint(kk);
+      static thread_local cost_t dp[MAX_UPARA+2];
+      static thread_local int    tre[MRP_GROUP][MAX_UPARA+2];
+#if DP_SHRINK
+      // nothing above the largest observed activity can carry cost, and
+      // the last group covers everything above the last threshold anyway
+      size_t nue = size_t(umx[cl][k]) + 2;
+      if( nue > nu ) nue = nu;
+      if( nue < size_t(MRP_GROUP)+1 ) nue = size_t(MRP_GROUP)+1;
+      if( nue > nu ) nue = nu;
+#else
+      const size_t nue = nu;
+#endif
       for( int gr=0; gr<MRP_GROUP; gr++ ) {
         cost_t* c = CB(cl,k,gr);
-        for( size_t u=1; u<nu; u++ ) c[u] += c[u-1];
+        for( size_t u=1; u<nue; u++ ) c[u] += c[u-1];
       }
-      for( size_t u=0; u<nu; u++ ) { dp[u] = CB(cl,k,0)[u]; tre[0][u] = 0; }
+      for( size_t u=0; u<nue; u++ ) { dp[u] = CB(cl,k,0)[u]; tre[0][u] = 0; }
       for( int gr=1; gr<MRP_GROUP; gr++ ) {
         const cost_t* c = CB(cl,k,gr);
-        for( int th1=int(nu)-1; th1>=0; th1-- ) {
+        for( int th1=int(nue)-1; th1>=0; th1-- ) {
           int th0 = th1;
           cost_t mc = dp[th1] - c[th1] + th_cost[0]
                     + th_cost[th0 - tre[gr-1][th0]];
@@ -1002,7 +1140,7 @@ struct MRPC {
           if( gr==MRP_GROUP-1 ) break;
         }
       }
-      int t = int(nu)-1;
+      int t = int(nue)-1;
       for( int gr=MRP_GROUP-1; gr>0; gr-- ) { t = tre[gr][t]; th[cl][k][gr-1] = t; }
       th[cl][k][MRP_GROUP-1] = MAX_UPARA+1;
       int u = 0;
@@ -1013,35 +1151,60 @@ struct MRPC {
     #undef CB
     cost_t cost = CalcCost( 0, 0, H, W );
 
-    // and which generalized-Gaussian shape each group should use
+    // and which (shape, sigma) variant each group should use.  The pass
+    // costs one table read per candidate per (pixel, component), so it is
+    // run twice over small candidate sets rather than once over their
+    // product: sixteen shapes at the group's own sigma, then the sigma
+    // variants of the shape that won.  19 reads instead of 48, and the
+    // stages disagree only where the argmin shape moves with sigma.
     if( opt_loop>1 && num_pm>1 ) {
-      static cost_t pc2[MAXC][MRP_GROUP][NUM_PMODEL];
+      static cost_t pc2[MAXC][MRP_GROUP][NUM_PMODEL*NUM_SIGV];
+      static int    cnd[MAXC][MRP_GROUP][NUM_PMODEL*NUM_SIGV];
+      int ncand = SIGV_2STAGE ? NUM_PMODEL : num_pm;
       for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
-        for( int i=0; i<NUM_PMODEL; i++ ) pc2[k][g][i] = 0.0;
-      for( uint y=0; y<H; y++ ) {
-        const byte* p = org + OI(y,0);
-        const short* pr = prd + PI(y,0);
-        const char* pg = grp + PI(y,0);
-        for( uint x=0; x<W; x++, p+=nc, pr+=nc, pg+=nc )
-          for( uint k=0; k<nc; k++ ) {
-            int gr = int(pg[k]);
-            int q = Qprd( int(pr[k]) ), base = q>>PM_ACC, sub = q&(NUM_SUBPM-1);
-            int v = base + int(p[k]);
-            for( int i=0; i<NUM_PMODEL; i++ ) {
-              const PMod* pm = pmodels + (size_t(gr)*num_pm+i)*NUM_SUBPM + sub;
-              pc2[k][gr][i] += pm->cost[v] + pm->subcost[base];
+        for( int i=0; i<ncand; i++ ) cnd[k][g][i] = i;
+      for( int stage=0; stage<(SIGV_2STAGE && NUM_SIGV>1 ? 2 : 1); stage++ ) {
+        for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
+          for( int i=0; i<ncand; i++ ) pc2[k][g][i] = 0.0;
+        // same component-outer split as the histogram, and for the same
+        // reason: pc2[k] is private to k and each bin keeps raster order
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(static)
+#endif
+        for( int kk=0; kk<int(nc); kk++ ) {
+          const uint k = uint(kk);
+          for( uint y=0; y<H; y++ ) {
+            const byte* p = org + OI(y,0);
+            const short* pr = prd + PI(y,0);
+            const char* pg = grp + PI(y,0);
+            for( uint x=0; x<W; x++, p+=nc, pr+=nc, pg+=nc ) {
+              int gr = int(pg[k]);
+              int q = Qprd( int(pr[k]) ), base = q>>PM_ACC, sub = q&(NUM_SUBPM-1);
+              int v = base + int(p[k]);
+              const int* cd = cnd[k][gr];
+              for( int i=0; i<ncand; i++ ) {
+                const PMod* pm = pmodels + (size_t(gr)*num_pm+cd[i])*NUM_SUBPM + sub;
+                pc2[k][gr][i] += pm->cost[v] + pm->subcost[base];
+              }
             }
           }
-      }
-      cost = 0.0;
-      for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ ) {
-        int best = 0;
-        for( int i=1; i<NUM_PMODEL; i++ )
-          if( pc2[k][g][i] < pc2[k][g][best] ) best = i;
-        pm_idx[k][g] = best;
-        pml[k][g] = pmodels + (size_t(g)*num_pm+best)*NUM_SUBPM;
-        pmlc[k][g] = pml[k][g]->cost;
-        cost += pc2[k][g][best];
+        }
+        cost = 0.0;
+        for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ ) {
+          int best = 0;
+          for( int i=1; i<ncand; i++ )
+            if( pc2[k][g][i] < pc2[k][g][best] ) best = i;
+          pm_idx[k][g] = cnd[k][g][best];
+          pml[k][g] = pmodels + (size_t(g)*num_pm+pm_idx[k][g])*NUM_SUBPM;
+          pmlc[k][g] = pml[k][g]->cost;
+          cost += pc2[k][g][best];
+        }
+        if( stage==0 ) {                       // now the sigmas of that shape
+          for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
+            for( int s=0; s<NUM_SIGV; s++ )
+              cnd[k][g][s] = s*NUM_PMODEL + pm_idx[k][g];
+          ncand = NUM_SIGV;
+        }
       }
     }
     return cost;
@@ -1524,7 +1687,7 @@ struct MRPCIO : MRPC {
     sp.Set( MAX_UPARA+2, mm );
     for( int i=0; i<MAX_UPARA+2; i++ ) th_cost[i] = sp.Cost(i);
     cost_t total = mc;
-    if( num_pm>1 ) total += cost_t(nc)*MRP_GROUP*4.0;
+    if( num_pm>1 ) total += cost_t(nc)*MRP_GROUP*(log(double(num_pm))/log(2.0));
     if( !measure ) {
       SPMod q; q.Set( 16, -1 );
       EncSP( q, mm );
@@ -1536,7 +1699,7 @@ struct MRPCIO : MRPC {
           prev = th[cl][k][gr];
         }
       }
-      SPMod u; u.Set( NUM_PMODEL, -1 );
+      SPMod u; u.Set( num_pm, -1 );
       for( uint k=0; k<nc; k++ ) for( int gr=0; gr<MRP_GROUP; gr++ )
         EncSP( u, pm_idx[k][gr] );
     }
@@ -1559,7 +1722,7 @@ struct MRPCIO : MRPC {
         for( ; u2<th[cl][k][gr] && u2<=MAX_UPARA; u2++ ) uq[cl][k][u2] = char(gr);
       for( ; u2<=MAX_UPARA; u2++ ) uq[cl][k][u2] = char(MRP_GROUP-1);
     }
-    SPMod u; u.Set( NUM_PMODEL, -1 );
+    SPMod u; u.Set( num_pm, -1 );
     for( uint k=0; k<nc; k++ ) for( int gr=0; gr<MRP_GROUP; gr++ )
       pm_idx[k][gr] = DecSP( u );
   }
@@ -1929,7 +2092,7 @@ struct Codec : MRPCIO {
   }
 
   void Encode() {
-    num_pm  = NUM_PMODEL;
+    num_pm  = NUM_PMODEL*NUM_SIGV;
     pmodels = alloc_pmodels( num_pm, 0 );
     set_costs( pmodels, MRP_GROUP*num_pm*NUM_SUBPM );
     for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
@@ -2068,7 +2231,7 @@ struct Codec : MRPCIO {
 
   // --- decoder ---------------------------------------------------
   void Decode() {
-    num_pm  = NUM_PMODEL;
+    num_pm  = NUM_PMODEL*NUM_SIGV;
     pmodels = alloc_pmodels( num_pm, 0 );
     opt_loop = 2;
     CodeParams( 1 );
