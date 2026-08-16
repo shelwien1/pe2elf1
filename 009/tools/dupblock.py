@@ -37,7 +37,7 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 480 now, and the
+start here.**  1031 lines of copy when this was written and 425 now, and the
 largest groups left are the p2 coders' prologue and epilogue -- allocate the
 planes, read the three reference flags, begin the coder; end it, restore the
 coefficients, free the planes.  That is the pair `pairshare.py` owns and has
@@ -60,7 +60,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 475
+BUDGET = 425
 
 
 def normal(text):

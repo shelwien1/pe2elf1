@@ -101,15 +101,29 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
 // `for` rather than the original `do`/`while`, which ran once whatever the
 // count: an image with no pixels does not reach here, and the bound is the
 // thing worth being able to read.
-static void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane) {
-  const uint8_t* src = &img->pixels[plane];
-  int32_t n = bmf_pixels(img);
-  if( plane_count==1 ) {
+// `n` bytes from `src` to `dst`, one of the two strided by `plane_count` and
+// the other flat -- so a `memcpy` exactly when the image has one plane and
+// both strides are one.
+static void strided_copy(uint8_t* dst, int32_t dstep,
+                         const uint8_t* src, int32_t sstep, int32_t n) {
+  if( dstep==1&&sstep==1 ) {
     memcpy(dst, src, n);
     return;
   }
-  for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += plane_count )
-    dst[i] = src[ofs];
+  for( int32_t i = 0; i<n; ++i, dst += dstep, src += sstep )
+    *dst = *src;
+}
+
+static void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane) {
+  strided_copy(dst, 1, &img->pixels[plane], plane_count, bmf_pixels(img));
+}
+
+// The inverse.  `colour_transform` reached for the gather by name and
+// `interleave_plane` wrote the scatter out, so the two did not look like a
+// pair; writing them both this way round is what shows that the only
+// difference is which side carries the stride.
+static void interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane) {
+  strided_copy(&img->pixels[plane], plane_count, src, 1, bmf_pixels(img));
 }
 
 // What a plane's descriptor says about the transform between it and the planes
@@ -152,50 +166,46 @@ static PlaneTransform plane_transform(int32_t plane) {
 void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
   uint8_t* base = &img->pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
-    int32_t n_flat = bmf_pixels(img);
-    if( plane_count==1 ) {
-      memcpy(base, src, n_flat);
-      return;
-    }
-    for( int32_t i = 0, ofs = 0; i<n_flat; ++i, ofs += plane_count )
-      base[ofs] = src[i];
+    interleave_flat(img, src, plane);
     return;
   }
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
   const PlaneTransform t = plane_transform(plane);
-  if( !t.by_weights ) {
-    if( plane_desc[plane].nrefs!=1 ) {
-      if( t.mode==2 ) {
-        int32_t left2 = bmf_pixels(img);
-        uint8_t *p2 = base;
-        do {
-          int32_t x2 = t.dc+(uint8_t)*src++;
-          *p2 = (uint8_t)(((t.wgt0*p2[t.to_ref0]+t.wgt1*(uint32_t)p2[t.to_ref1]+40)>>7)+x2);
-          p2 += stride;
-          --left2;
-        } while( left2 );
-      } else if( t.mode==3 ) {
-        int32_t left3 = bmf_pixels(img);
-        uint8_t *p3 = base;
-        do {
-          int32_t x3 = t.dc+(uint8_t)*src++;
-          *p3 = (uint8_t)(((t.wgt1*(uint8_t)*(p3-2)+t.wgt0*(uint8_t)*(p3-3)+t.wgt2*(uint32_t)(uint8_t)*(p3-1)+63)>>7)+x3);
-          p3 += stride;
-          --left3;
-        } while( left3 );
-      }
-      return;
-    }
+  // The same dispatch `colour_transform` makes, written the same way round.
+  // Here it was two nested `if`s with the one-reference path falling out of
+  // the bottom of both, which is `by_weights || nrefs == 1` reached the long
+  // way.
+  if( t.by_weights||plane_desc[plane].nrefs==1 ) {
+    uint8_t *ref = base+t.to_ref0;
+    int32_t i2 = 0;
+    int32_t ofs2 = 0;
+    do {
+      base[ofs2] = ref[ofs2]+t.dc+src[i2];
+      ofs2 += stride;
+      ++i2;
+    } while( i2<n );
+    return;
   }
-  uint8_t *ref = base+t.to_ref0;
-  int32_t i2 = 0;
-  int32_t ofs2 = 0;
-  do {
-    base[ofs2] = ref[ofs2]+t.dc+src[i2];
-    ofs2 += stride;
-    ++i2;
-  } while( i2<n );
+  if( t.mode==2 ) {
+    int32_t left2 = bmf_pixels(img);
+    uint8_t *p2 = base;
+    do {
+      int32_t x2 = t.dc+(uint8_t)*src++;
+      *p2 = (uint8_t)(((t.wgt0*p2[t.to_ref0]+t.wgt1*(uint32_t)p2[t.to_ref1]+40)>>7)+x2);
+      p2 += stride;
+      --left2;
+    } while( left2 );
+  } else if( t.mode==3 ) {
+    int32_t left3 = bmf_pixels(img);
+    uint8_t *p3 = base;
+    do {
+      int32_t x3 = t.dc+(uint8_t)*src++;
+      *p3 = (uint8_t)(((t.wgt1*(uint8_t)*(p3-2)+t.wgt0*(uint8_t)*(p3-3)+t.wgt2*(uint32_t)(uint8_t)*(p3-1)+63)>>7)+x3);
+      p3 += stride;
+      --left3;
+    } while( left3 );
+  }
 }
 
 // Subtract from one plane whatever the other planes predict of it, and write

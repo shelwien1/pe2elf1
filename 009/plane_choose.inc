@@ -28,6 +28,44 @@ static int32_t widest_window(const int32_t* hist, int32_t first, int32_t end,
   return at;
 }
 
+// The two-weight search for one plane pair: `w4` and `w8` are the best pair
+// found so far and `cost` what a full pass over the image says it costs.
+//
+// A trial replaces one axis with `cand`, leaving the other where it stands,
+// and keeps the replacement only when it is cheaper.  It answers that axis's
+// bound, recentred `step` away from whatever is now current; `step` is
+// negative on the descending half.
+//
+// Four arms wrote this out.  Each spelled the incumbent into a name of its own
+// -- `wt4_best`, `wt8_best`, `wt4_best_dn`, `wt8_best_dn` -- assigned it back
+// one line later, and recomputed the bound from that name rather than from the
+// weight, so the four did not read as one thing.
+struct WeightSearch {
+  const BmfImage* img;
+  const uint8_t* plane0;
+  int32_t plane_a, plane_b;
+  int32_t w4, w8;
+  uint32_t cost;
+
+  int32_t trial_a(int32_t cand, int32_t step) {
+    const uint32_t c = weight_pair_cost(img, plane0, plane_a, plane_b, cand, w8);
+    if( c<cost ) {
+      cost = c;
+      w4 = cand;
+    }
+    return w4+step;
+  }
+
+  int32_t trial_b(int32_t cand, int32_t step) {
+    const uint32_t c = weight_pair_cost(img, plane0, plane_a, plane_b, w4, cand);
+    if( c<cost ) {
+      cost = c;
+      w8 = cand;
+    }
+    return w8+step;
+  }
+};
+
 int32_t choose_plane_coding(BmfImage* img) {
   // Eight 1024-entry histograms in one block, because both searches below
   // pick a row *by index*.  The decompilation had it as `uint8_t buf[32768]`
@@ -49,12 +87,6 @@ int32_t choose_plane_coding(BmfImage* img) {
   // search.  The first was the frame's `buf_1`, a `uint8_t[2048]` for the same
   // reason, with the first four bytes doubling as a stash for `wt8_dn_end`
   // across a loop that does not touch it.
-  // The weight search's two working weights, the two other planes it reads
-  // against as offsets from this one, and the row in bytes.  All five were
-  // frame slots, because MSVC kept them in registers it had to spill around
-  // the `estimate_cost` calls in the middle of each arm.
-  int32_t wt4_cur;
-  uint32_t wt_slot;
   // The three candidates' costs and their descriptors, as the two tables they
   // are.  This was one `alignas(16) uint8_t scratch[256]` with an
   // `int32_t (&)[4]` and an `int32_t (&)[16]` bound onto it at offsets a probe
@@ -81,7 +113,7 @@ int32_t choose_plane_coding(BmfImage* img) {
   double dv0, dv1, dv2;
   uint32_t n_quads, next_plane, row, slack;
   uint16_t g1w;
-  int32_t result, xform, wt8, wt4, pred, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b, wt4_best_dn, wt8_best_dn, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
+  int32_t result, xform, wt8, wt4, pred, dv3, wa, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b;
   uint32_t best_cost, best, quad, best4;
   int32_t n_planes = plane_count;
   int32_t data_size = img->data_size;
@@ -149,82 +181,49 @@ int32_t choose_plane_coding(BmfImage* img) {
       wt8 = plane_desc[xform].weight1;
       int32_t plane_b = plane_desc[1].src_plane-xform;
       wt4 = plane_desc[xform].weight0;
-      // Four arms of one search over the two weights, each a full pass over
-      // the image costing one candidate pair.  They were written out four
-      // times and the first two had already been cleaned; these are the same
-      // loop, and the eleven `sN` and six `pN` slots the last two ran on were
-      // each a copy of a local that never changes under them.
+      // Coordinate descent on the two weights, four trials to a turn, each a
+      // full pass over the image.  Both axes walk down by one until neither
+      // can move four steps past its best, then both walk up the same way; a
+      // trial that wins pushes its axis's bound out again, so an axis keeps
+      // going as long as it keeps improving.  The eleven `sN` and six `pN`
+      // slots the descending half ran on were each a copy of a local that
+      // never changes under them.
       {
-        wt_slot = wt8;
-        wt4_cur = wt4;
+        const uint8_t *plane0 = &img->pixels[xform];
+        WeightSearch search = { img, plane0, plane_a, plane_b, wt4, wt8,
+                                best_cost };
         int32_t wt_step = 4;
         int32_t wt4_dn = wt4-1;
         int32_t wt8_dn = wt8-1;
-        wt4_dn_end = wt4-wt_step;
-        uint8_t *plane0 = &img->pixels[xform];
-        wt8_dn_end = wt8-wt_step;
+        int32_t wt4_dn_end = wt4-wt_step;
+        int32_t wt8_dn_end = wt8-wt_step;
         while( 1 ) {
           if( wt4_dn<=wt4_dn_end ) {
             if( wt8_dn<=wt8_dn_end ) {
-              int32_t wt4_up = wt4_cur+1;
-              int32_t wt8_up = wt_slot+1;
-              wt4_up_end = wt4_cur+wt_step;
-              wt8_up_end = wt_slot+wt_step;
+              int32_t wt4_up = search.w4+1;
+              int32_t wt8_up = search.w8+1;
+              int32_t wt4_up_end = search.w4+wt_step;
+              int32_t wt8_up_end = search.w8+wt_step;
               while( 1 ) {
                 if( wt4_up>=wt4_up_end&&wt8_up>=wt8_up_end ) {
-                  wt8 = wt_slot;
-                  wt4 = wt4_cur;
+                  wt8 = search.w8;
+                  wt4 = search.w4;
+                  best_cost = search.cost;
                   goto weights_chosen;
                 }
-                if( wt4_up<wt4_up_end&&wt4_up<192 ) {
-                  uint32_t cost_a = weight_pair_cost(img, plane0, plane_a,
-                                      plane_b, wt4_up, wt_slot);
-                  wt4_best = wt4_cur;
-                  if( cost_a<best_cost ) {
-                    best_cost = cost_a;
-                    wt4_best = wt4_up;
-                  }
-                  wt4_cur = wt4_best;
-                  wt4_up_end = wt_step+wt4_best;
-                }
-                if( wt8_up<wt8_up_end&&wt8_up<192 ) {
-                  uint32_t cost_b = weight_pair_cost(img, plane0, plane_a,
-                                      plane_b, wt4_cur, wt8_up);
-                  wt8_best = wt_slot;
-                  if( cost_b<best_cost ) {
-                    best_cost = cost_b;
-                    wt8_best = wt8_up;
-                  }
-                  wt_slot = wt8_best;
-                  wt8_up_end = wt_step+wt8_best;
-                }
+                if( wt4_up<wt4_up_end&&wt4_up<192 )
+                  wt4_up_end = search.trial_a(wt4_up, wt_step);
+                if( wt8_up<wt8_up_end&&wt8_up<192 )
+                  wt8_up_end = search.trial_b(wt8_up, wt_step);
                 ++wt4_up;
                 ++wt8_up;
               }
             }
           }
-          if( wt4_dn>wt4_dn_end&&wt4_dn>=-64 ) {
-            uint32_t cost_c = weight_pair_cost(img, plane0, plane_a,
-                                plane_b, wt4_dn, wt_slot);
-            wt4_best_dn = wt4_cur;
-            if( cost_c<best_cost ) {
-              best_cost = cost_c;
-              wt4_best_dn = wt4_dn;
-            }
-            wt4_cur = wt4_best_dn;
-            wt4_dn_end = wt4_best_dn-wt_step;
-          }
-          if( wt8_dn>wt8_dn_end&&wt8_dn>=-64 ) {
-            uint32_t cost_d = weight_pair_cost(img, plane0, plane_a,
-                                plane_b, wt4_cur, wt8_dn);
-            wt8_best_dn = wt_slot;
-            if( cost_d<best_cost ) {
-              best_cost = cost_d;
-              wt8_best_dn = wt8_dn;
-            }
-            wt_slot = wt8_best_dn;
-            wt8_dn_end = wt8_best_dn-wt_step;
-          }
+          if( wt4_dn>wt4_dn_end&&wt4_dn>=-64 )
+            wt4_dn_end = search.trial_a(wt4_dn, -wt_step);
+          if( wt8_dn>wt8_dn_end&&wt8_dn>=-64 )
+            wt8_dn_end = search.trial_b(wt8_dn, -wt_step);
           --wt4_dn;
           --wt8_dn;
         }
@@ -232,13 +231,17 @@ int32_t choose_plane_coding(BmfImage* img) {
 weights_chosen:
       uint8_t *px = &img->pixels[row_stride+n_planes+xform];
       if( px<data_end ) {
-        wt_slot = wt8;
-        wt4_cur = wt4;
+        // `wt8` and `wt4` were copied into two more locals for this walk and
+        // copied straight back after it, with nothing between touching either
+        // -- MSVC spilling the two registers the loop wanted.  The copy of
+        // `wt8` was unsigned, which made `c2*wt_slot` an unsigned multiply;
+        // both weights are small enough that the product is the same either
+        // way, and the sum is cast to `uint32_t` before the shift regardless.
         do {
           int32_t c2 = px[plane_b];
-          int32_t c2w = c2*wt_slot;
+          int32_t c2w = c2*wt8;
           int32_t c1 = px[plane_a];
-          int32_t c1w = c1*wt4_cur;
+          int32_t c1w = c1*wt4;
           ++hist_c[c2-c1+1280];
           int32_t c0 = *px+512;
           px += n_planes;
@@ -248,8 +251,6 @@ weights_chosen:
           ++hist_b[c0-c2];
           ++hist_c[(c0-((uint32_t)(((c1+c2)<<6)+40)>>7))];
         } while( px<data_end );
-        wt8 = wt_slot;
-        wt4 = wt4_cur;
       }
       slack = best_cost>>7;
       if( slack>=0x4000 )

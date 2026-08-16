@@ -39,8 +39,11 @@ static void restore_descriptors(const PlaneDesc* saved) {
 // that cost in bits.  Written out five times, and the order is the whole of
 // it: the count has to be taken before the packer is flushed, and the packer
 // has to be reset before the next trial.  Four of the five spelled the answer
-// into a differently-named local and then into `deep2` as well, so the five
-// did not look like one thing.
+// into a differently-named local, so the five did not look like one thing.
+//
+// Four callers then wrote `deep2 = bits <= best; if( deep2 )` -- one name,
+// four unrelated one-shot conditions, none of them read again after the `if`
+// that follows.  They are the conditions now.
 static int32_t transform_cost(BmfImage* tile_img) {
   transform_planes(tile_img);
   const int32_t bits = 8*(stream.cur-stream.buf);
@@ -71,9 +74,8 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint32_t plane_cost[4];
   uint8_t* tile_buf;
   int32_t plane_i, pi, flag8, best_flags;
-  bool deep2;
-  int32_t bits_a, flags_s;
-  int32_t tile_h, y0, best_cost, f5, pred, cand, nplanes_c, plane, nplanes_b, pl_k, bits, f8, bits_f13, f13, f14, bits_f6, f6;
+  int32_t bits_a;
+  int32_t tile_h, y0, best_cost, pred, cand, nplanes_c, plane, nplanes_b, pl_k, bits, bits_f13;
   int32_t tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
@@ -110,6 +112,25 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
     packer_flush();
     return cost;
   };
+  // Cost one candidate for this plane and keep it if it is cheaper than the
+  // best so far.  Five sites wrote this out, each spelling the incumbent flags
+  // into a private name (`f5`, `f6`, `f8`, `f13`, `f14`) that the `if` either
+  // overwrote or handed straight back -- five names for one variable.
+  //
+  // `won` is separate from the returned cost because a tie leaves `best_cost`
+  // equal to the candidate's cost without the candidate being taken, so the
+  // one site that needs to know cannot read it back off `best_cost`.
+  bool won = false;
+  auto probe_keep = [&](int32_t pl, int32_t flags) {
+    const int32_t cost = probe_plane(pl, flags);
+    packer_reset();
+    won = cost<best_cost;
+    if( won ) {
+      best_cost = cost;
+      best_flags = flags;
+    }
+    return cost;
+  };
   int32_t nplanes = plane_count;
   y0 = (img->height-tile_h)>>1;
   int32_t dx = img->width-tile_w;
@@ -144,68 +165,30 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
         best_cost = 0x7FFFFFFF;
       } else {
         best_cost = probe_plane(plane_i, try_mode0);
-        flags_s = best_flags;
         packer_reset();
         if( best_cost!=0x7FFFFFFF )
-          flags_s = 0;
-        best_flags = flags_s;
+          best_flags = 0;
       }
-      int32_t bits_f5 = probe_plane(plane_i, try_p1);
-      packer_reset();
-      f5 = best_flags;
-      if( bits_f5<best_cost ) {
-        best_cost = bits_f5;
-        f5 = try_p1;
-      }
-      best_flags = f5;
+      int32_t bits_f5 = probe_keep(plane_i, try_p1);
       if( bits_f5<best_cost+(best_cost>>5)||hard ) {
-        bits_f6 = probe_plane(plane_i, try_p2);
-        f6 = best_flags;
-        packer_reset();
-        if( bits_f6<best_cost ) {
-          best_cost = bits_f6;
-          f6 = try_p2;
-        }
-        best_flags = f6;
+        probe_keep(plane_i, try_p2);
         if( pi ) {
           {
 try_flag8:
-            int32_t bits_f8 = probe_plane(plane_i, try_refs);
-            f8 = best_flags;
-            packer_reset();
-            if( bits_f8<best_cost ) {
-              best_cost = bits_f8;
-              f8 = try_refs;
-            }
-            best_flags = f8;
+            probe_keep(plane_i, try_refs);
           }
-          bits_f13 = probe_plane(plane_i, try_refs_p1);
-          f13 = best_flags;
-          packer_reset();
-          if( bits_f13<best_cost ) {
-            best_cost = bits_f13;
-            f13 = try_refs_p1;
-          }
-          best_flags = f13;
-          pred = f13&desc_predictor;
+          bits_f13 = probe_keep(plane_i, try_refs_p1);
+          pred = best_flags&desc_predictor;
           // `bits_f13` was also kept in `rows[0]` for this one comparison,
           // which is the value the line above it already holds.
           if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
-            int32_t cost_f14 = probe_plane(plane_i, try_refs_p2);
-            deep2 = cost_f14<best_cost;
-            if( cost_f14<best_cost )
-              best_cost = cost_f14;
-            packer_reset();
-            f14 = best_flags;
-            if( deep2 )
-              f14 = try_refs_p2;
-            best_flags = f14;
-            if( deep2 )
+            probe_keep(plane_i, try_refs_p2);
+            if( won )
               pred = pred_p2;
           }
           goto keep_flag8;
         }
-        pred = f6&desc_predictor;
+        pred = best_flags&desc_predictor;
       } else {
         if( pi )
           goto try_flag8;
@@ -277,8 +260,7 @@ tile_restored:
         } while( plane<plane_count );
       }
       int32_t bits_e = transform_cost(tile_img);
-      deep2 = bits_e<=best_bits;
-      if( deep2 ) {
+      if( bits_e<=best_bits ) {
         best_bits = bits_e;
         nplanes_b = plane_count;
         cand = 0;
@@ -308,8 +290,7 @@ tile_restored:
         cand = 0;
       } else {
         bits_a = transform_cost(tile_img);
-        deep2 = bits_a<=best_bits;
-        if( deep2 ) {
+        if( bits_a<=best_bits ) {
           best_bits = bits_a;
           n_hard = bits_a;
           if( plane_count-1==n_flagged ) {
@@ -325,13 +306,9 @@ tile_restored:
               } while( pl_b<plane_count );
             }
             int32_t bits2 = transform_cost(tile_img);
-            deep2 = bits2<=bits_a;
-            if( deep2 ) {
-              cand = 0;
-            } else {
+            if( bits2>bits_a )
               restore_descriptors(saved);
-              cand = 0;
-            }
+            cand = 0;
           }
         } else {
           restore_descriptors(saved);
@@ -371,8 +348,7 @@ planes_done:
       }
       memcpy(tile_src, tile_copy, tile_img->data_size);
       int32_t bits_c = transform_cost(tile_img);
-      deep2 = bits_c<=best_bits;
-      if( deep2 ) {
+      if( bits_c<=best_bits ) {
         cand = 0;
       } else {
         restore_descriptors(saved);
