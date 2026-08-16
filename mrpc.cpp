@@ -87,7 +87,10 @@
                          // shape, instead of scanning the product.  The
                          // selection pass reads one cost table per
                          // candidate per (pixel, component) and is the
-                         // whole price of NUM_SIGV; 0 = exhaustive.
+                         // whole price of NUM_SIGV; 0 = exhaustive, which
+                         // measured 0.35% smaller for 3% more encode time
+                         // -- inside the noise band BORDER_FIX mapped
+                         // out, so it is not clearly a real 0.35%.
 #endif
 #ifndef PM_ACC
 #define PM_ACC        3  // bits of the prediction's fraction the pmf sees
