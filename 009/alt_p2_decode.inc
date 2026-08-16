@@ -9,11 +9,9 @@
 // `P2Coef::fold`/`restore` now, which is also how the claim got checked.
 int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   AltP2Block* plane[4];
-  uint32_t i_1, first;
   int16_t seed1;
   uint32_t src2;
   int16_t seed3, seed2;
-  AltP2Block** planep;
   bool off;
   int32_t nplanes;
   P2Coef p2_coef;
@@ -27,38 +25,17 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
   rc_begin_decode();
   if( raw>0 ) {
     src2 = 0;
-    int32_t back = -i;
     nplanes = plane_count;
     do {
       if( nplanes>0 ) {
-        first = src2;
-        int32_t pl2 = 0;
-        i_1 = i;
-        do {
-          ++pl2;
-          if( first ) {
-            planep = &plane[pl2];
-            if( first==1 ) {
-              AltP2Block *blk_k = (AltP2Block*)(*(planep-1));
-              blk_k->seed_history(-back);
-            }
-          } else {
-            AltP2Block *src3 = (AltP2Block*)(plane[pl2-1]);
-            planep = &plane[pl2];
-            src3->seed_row0(i);
-          }
-          AltP2Block *blk_r = (AltP2Block*)(*(planep-1));
-          blk_r->start_row();
-          nplanes = plane_count;
-        } while( plane_count>pl2 );
-        src2 = first;
-        i = i_1;
+        alt_p2_start_row(plane, src2, i);
+        nplanes = plane_count;
       }
       for( int32_t j = 0; j<4; ++j ) ctx_bias[3-j] = 0;
       if( i>0 ) {
-        first = src2;
+        uint32_t first = src2;
         uint32_t i_2 = 0;
-        i_1 = i;
+        uint32_t i_1 = i;
         do {
           for( int32_t j = 0; j<4; ++j ) ctx_bias[j] >>= 3;
           AltP2Block* blk0 = (AltP2Block*)(plane[0]);

@@ -629,6 +629,29 @@ struct AltP2Block {
   }
 };
 
+// Every plane made ready for the next row.  Row 0 seeds the neutral record and
+// seats the cursors; row 1 seeds the three history rows from what row 0 left
+// behind; every row after that only rolls forward.
+//
+// Both coders wrote this out, fifteen lines each, and both spelled the row
+// index twice -- `src1`/`xf4` in the encoder, `src2`/`first` in the decoder --
+// because MSVC saved it around the loop and read it back after.  The decoder
+// spelled the width twice as well, `i` and `i_1`.
+//
+// The width goes to `seed_history` unnegated.  Both call sites read
+// `seed_history(-first)` where `first` was itself `-width`, and writing the
+// obvious `seed_history(-width)` here cost eight of the 110 checks -- which is
+// the one thing a double negative spelled through a named local is good at.
+static void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
+  for( int32_t k = 0; k<plane_count; ++k ) {
+    if( row==0 )
+      plane[k]->seed_row0(width);
+    else if( row==1 )
+      plane[k]->seed_history(width);
+    plane[k]->start_row();
+  }
+}
+
 // The planes both directions of the p2 model work through.  Each of
 // `alt_model_p2_encode` and `alt_model_p2_decode` opened with the first of
 // these and closed with the second, written out, and the closing one is the

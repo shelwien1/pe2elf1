@@ -6,10 +6,8 @@
 // the two are one object now.
 int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];
-  uint32_t xf4, i;
+  uint32_t i, src1;
   int16_t seed1, l7c, seed2;
-  uint32_t src1;
-  AltP2Block* blk0, ** xf3;
   int32_t nplanes, want0, off0, seed0, at0;
   uint8_t* out = a2;
   P2Coef p2_coef;
@@ -23,35 +21,16 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   rc_begin_encode();
   if( height>0 ) {
     src1 = 0;
-    int32_t first = -row_i;
     nplanes = plane_count;
     do {
       if( nplanes>0 ) {
-        xf4 = src1;
-        int32_t pl2 = 0;
-        do {
-          ++pl2;
-          if( xf4 ) {
-            xf3 = &plane[pl2];
-            if( xf4==1 ) {
-              AltP2Block *blk_k = (AltP2Block*)(*(xf3-1));
-              blk_k->seed_history(-first);
-            }
-          } else {
-            AltP2Block *src2 = (AltP2Block*)(plane[pl2-1]);
-            xf3 = &plane[pl2];
-            src2->seed_row0(row_i);
-          }
-          AltP2Block *blk_r = (AltP2Block*)(*(xf3-1));
-          blk_r->start_row();
-          nplanes = plane_count;
-        } while( plane_count>pl2 );
-        src1 = xf4;
+        alt_p2_start_row(plane, src1, row_i);
+        nplanes = plane_count;
       }
       if( row_i<=0 ) {
         for( int32_t j = 0; j<4; ++j ) ctx_bias[j] = 0;
       } else {
-        xf4 = src1;
+        uint32_t xf4 = src1;
         want0 = 0;
         off0 = 0;
         seed0 = 0;
@@ -62,7 +41,7 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           ctx_bias[1] = seed0>>3;
           ctx_bias[2] = off0>>3;
           ctx_bias[3] = want0>>3;
-          blk0 = (AltP2Block*)(plane[0]);
+          AltP2Block *blk0 = (AltP2Block*)(plane[0]);
           blk0->encode_sample(out, off0b, plane[2], plane[1]);
           P2Ctx *rec0 = blk0->cursor[0];
           int32_t l7a = rec0[-1].dupright;
