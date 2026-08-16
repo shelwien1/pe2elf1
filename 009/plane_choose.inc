@@ -1,5 +1,33 @@
 // plane_choose.inc -- decide how each plane of an image is to be coded.
 
+// The 256-wide window of a histogram with the largest total, scanned from
+// `first` and answering where that window starts -- or `miss` when nothing
+// after the first window beats it.  That start, plus one, is the plane's DC
+// offset.
+//
+// Three copies, and the differences between them are three constants: two scan
+// a whole 1024-entry row from offset 4 and default to -1, and the third scans
+// the first half of a row from offset 0 and defaults to 255.
+//
+// Two of the three then narrowed the answer through an `int8_t` before adding
+// one and the third did not, which cannot show: `dc` is a `uint8_t`, and
+// `(int8_t)w + 1` and `w + 1` agree modulo 256.
+static int32_t widest_window(const int32_t* hist, int32_t first, int32_t end,
+                             int32_t miss) {
+  int32_t sum = 0;
+  for( int32_t i = 0; i<256; ++i )
+    sum += hist[first+i];
+  int32_t best = sum, at = miss;
+  for( int32_t w = first+256; w<end; ++w ) {
+    sum += hist[w]-hist[w-256];
+    if( sum>=best ) {
+      at = w;
+      best = sum;
+    }
+  }
+  return at;
+}
+
 int32_t choose_plane_coding(BmfImage* img) {
   // Eight 1024-entry histograms in one block, because both searches below
   // pick a row *by index*.  The decompilation had it as `uint8_t buf[32768]`
@@ -50,12 +78,10 @@ int32_t choose_plane_coding(BmfImage* img) {
   PlaneDesc cand_desc[3][4];
   uint32_t uu;
   int32_t wa_slot;
-  int8_t pos, pos3;
-  int32_t* hist;
   double dv0, dv1, dv2;
   uint32_t n_quads, next_plane, row, slack;
   uint16_t g1w;
-  int32_t result, xform, wt8, wt4, pred, win, sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b, sum3, best_sum3, wt4_best_dn, wt8_best_dn, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
+  int32_t result, xform, wt8, wt4, pred, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b, wt4_best_dn, wt8_best_dn, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
   uint32_t best_cost, best, quad, best4;
   int32_t n_planes = plane_count;
   int32_t data_size = img->data_size;
@@ -265,36 +291,9 @@ weights_chosen:
       // as an array index is not something any gate here can see -- all
       // nineteen images produce byte-identical streams at 0 and at 4, checked
       // -- so the measured value is what stays, with the 4 written down.
-      hist = hists+1024*pred;
-      win = 4;
-      sum = 0;
-      for( i = 0; i<256; ++i )
-        sum += hist[win+i];
-      win += 256;
-      best_sum = sum;
-      pos = -1;
-      while( win<1024 ) {
-        sum = hist[win]+sum-hist[win-256];
-        if( sum>=best_sum ) {
-          pos = win;
-          best_sum = sum;
-        }
-        ++win;
-      }
-      plane_desc[xform].dc = pos+1;
+      plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
       // The same window over row 4, which is `hist_c[1024..2047]`.
-      best_sum2 = 0;
-      for( i = 0; i<0x100; ++i )
-        best_sum2 += hist_c[i+1024];
-      pos2 = 255;
-      for( sum2 = best_sum2; i<512; ++i ) {
-        sum2 = hist_c[i+1024]+sum2-hist_c[i+768];
-        if( sum2>=best_sum2 ) {
-          pos2 = i;
-          best_sum2 = sum2;
-        }
-      }
-      result = pos2+1;
+      result = widest_window(hist_c+1024, 0, 512, 255)+1;
       plane_desc[plane_b+xform].dc = result;
       if( n_planes>=4 ) {
         // The alpha plane's weights, by least squares against the other three.
@@ -453,21 +452,7 @@ weights_chosen:
         plane_desc[3].nrefs = 3;
         // Rows 4..7, by the same window and the same layout-read constant
         // as the search above.
-        int32_t *hist2 = hists+1024*(4+pred4b);
-        result = 4;
-        sum3 = 0;
-        for( i = 0; i<256; ++i )
-          sum3 += hist2[result+i];
-        result += 256;
-        best_sum3 = sum3;
-        for( pos3 = -1; result<1024; ++result ) {
-          sum3 = hist2[result]+sum3-hist2[result-256];
-          if( sum3>=best_sum3 ) {
-            pos3 = result;
-            best_sum3 = sum3;
-          }
-        }
-        plane_desc[3].dc = pos3+1;
+        plane_desc[3].dc = widest_window(hists+1024*(4+pred4b), 4, 1024, -1)+1;
       }
     }
   }
