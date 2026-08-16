@@ -128,6 +128,16 @@ def call_graph(lines):
             for m in re.finditer(r'(?<![\w.>])([A-Za-z_]\w*)\s*(?=[,)])', l):
                 if m.group(1) in free:
                     callers.setdefault(m.group(1), set()).add(n)
+            # And the *first* arm of a conditional, which is followed by `:`
+            # rather than by `,` or `)`.  `(p1 ? f : g)(args)` picks one of two
+            # functions by name; the rule above sees `g` and not `f`, so
+            # `alt_model_plane`'s four p1 entry points were reported dead while
+            # their p2 twins on the same four lines were not.  The `?` is what
+            # keeps a label or a `case` out, and the name still has to be one
+            # this file defines.
+            for m in re.finditer(r'\?\s*([A-Za-z_]\w*)\s*(?=:)', l):
+                if m.group(1) in free:
+                    callers.setdefault(m.group(1), set()).add(n)
     # A body that only calls itself is not called.  Recursion is a real edge
     # for every other question this graph is asked, but for `is anything left
     # that reaches this`, an edge from a body to itself answers yes about

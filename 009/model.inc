@@ -561,6 +561,157 @@ struct ModelBlock {
     return out_bits;
   }
 
+  // One plane through the main model, encoding.  The mirror of
+  // `unmodel_plane_slow` above, and it was written out inside `model_plane`
+  // where its inverse was a call -- 130 lines of `blk->` against
+  // `blk->unmodel_plane_slow(out)`.
+  //
+  // That asymmetry is the same one `AltP1Block::d8_body` had, and it has the
+  // same effect on the measurement: `pairshare.py` was comparing a body
+  // against a call and reporting what the two *wrappers* share.  With both
+  // sides named, the pair is 4 of 146 -- and those four are the allocation
+  // and the free, which is where the two genuinely agree.  The bodies do not:
+  // the encoder seeds fifteen context groups and the alphabet before its row
+  // walk, and the decoder reads all of that back off the stream.
+  void model_plane_slow(uint8_t* pixels) {
+    int16_t w2n;
+    uint32_t row_w;
+    int32_t w3, w4, y;
+    uint16_t w2;
+    rc_begin_encode();
+    reduce_alphabet(this, pixels);
+    int32_t bucket = 0;
+    int32_t g = 0;
+    do {
+      int32_t flags = ctx_group_flags[g];
+      ctx_state[flags] = g;
+      int32_t lo = 0;
+      // One of fifteen groups says which of the five selector weights share a
+      // weight; `tables.inc` names the bits and gives the order the folds
+      // compose in.  Hoisted out of the two loops below, as the original has
+      // them.
+      int32_t f_w3_double = flags&ctx_w3_double;
+      int32_t f_w4_to_w2 = flags&ctx_w4_to_w2;
+      int32_t f_w3_to_w2 = flags&ctx_w3_to_w2;
+      int32_t f_w4_to_w1 = flags&ctx_w4_to_w1;
+      int32_t f_w3_to_w1 = flags&ctx_w3_to_w1;
+      int32_t f_w2_to_w1 = flags&ctx_w2_to_w1;
+      do {
+        uint32_t hi = 0;
+        do {
+          ctx_bucket[g+15*lo+75*hi] = bucket;
+          int32_t alpha = alphabet;
+          FreqRec* rec = &grid[bucket];
+          w2n = 2;
+          rec->w[0] = 2;
+          w2 = 2;
+          w3 = 2;
+          w4 = 2;
+          if( f_w3_double ) {
+            w3 = 4;
+            w4 = 0;
+          }
+          if( f_w4_to_w2 ) {
+            w2 = w4+2;
+            w4 = 0;
+          }
+          if( f_w3_to_w2 ) {
+            w2 = w3+w2;
+            w3 = 0;
+          }
+          if( f_w4_to_w1 ) {
+            w2n = w4+2;
+            w4 = 0;
+            rec->w[4] = 0;
+          } else {
+            rec->w[4] = w4;
+          }
+          if( f_w3_to_w1 ) {
+            w2n += w3;
+            w3 = 0;
+            rec->w[3] = 0;
+          } else {
+            rec->w[3] = w3;
+          }
+          if( f_w2_to_w1 ) {
+            rec->w[1] = w2+w2n;
+            w2 = 0;
+            rec->w[2] = 0;
+          } else {
+            rec->w[2] = w2;
+            rec->w[1] = w2n;
+          }
+          int32_t has3 = w3!=0;
+          int32_t has4 = w4!=0;
+          if( w2 )
+            w2 = 1;
+          int32_t lvl = has4+has3+w2+2;
+          if( lvl<=alpha ) {
+            rec->b14 = lvl;
+          } else {
+            rec->b14 = has4+has3+w2+1;
+            rec->w[0] = 0;
+          }
+          bucket += rec->seed_pair(lo, hi, alpha);
+          ++hi;
+        } while( hi<5 );
+        ++lo;
+      } while( (uint32_t)lo<5 );
+      uint32_t gi = 0;
+      // `gctr` rather than `group_ctr`: as a free function this read
+      // `blk->group_ctr[g]` and the local could take the member's name.
+      SymPair* gctr = group_ctr[g];
+      do {
+        gctr[gi].last = 0x2000;
+        gctr[gi++].prev = 0x2000;
+      } while( gi<0x10000 );
+      ++g;
+    } while( (uint32_t)g<0xF );
+    seed_alphabet();
+    if( height>0 ) {
+      uint16_t* word = sym_word;
+      y = 0;
+      do {
+        int32_t y1 = y+1;
+        start_row();
+        PixRec *up1 = row_cur[6];
+        PixRec *up2 = row_cur[7];
+        ++row_cur[5];
+        ++up1;
+        row_cur[6] = up1;
+        ++row_cur[8];
+        ++up2;
+        row_cur[7] = up2;
+        ++row_cur[9];
+        grad[0] = match_seed(up1, 5);
+        grad[3] = 0;
+        grad[2] = 0;
+        y = y1;
+        row_w = width;
+        grad[1] = match_seed(up2, 5);
+        if( row_w>0 ) {
+          int32_t x = 0;
+          do {
+            ++x;
+            row_cur[5][x-1].sym = word[x-1];
+            row_w = width;
+          } while( (uint32_t)x<width );
+          word += x;
+        }
+        if( row_w>0 ) {
+          int32_t x2 = 0;
+          do {
+            int32_t step = code_pixel(x2);
+            init_tables();
+            x2 += step;
+          } while( (uint32_t)x2<width );
+          y = y1;
+        }
+      } while( (uint32_t)y<(uint32_t)height );
+    }
+    rc_end_encode();
+  }
+
   void unmodel_plane_slow(uint8_t* dst) {
     uint8_t* row[19];
     uint32_t row_w;

@@ -19,41 +19,55 @@ template<int32_t f_DEC>
 static bool alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   if( !plane_alt_model )
     return false;
+  const bool p1 = plane_predictor==pred_p1;
+  if( !p1&&plane_predictor!=pred_p2 )
+    return true;
+  // The four entry points come in p1/p2 pairs and each pair has one signature,
+  // so the predictor picks *which* of a pair and the depth and direction pick
+  // *which pair*.  Written as two nested `if`s under each predictor this was
+  // the same ten lines twice, differing in a `1` against a `2`.
   const bool d8 = (p_i->depth&depth_bits)==8;
-  if( plane_predictor==pred_p1 ) {
-    if( d8 ) {
-      if( f_DEC )
-        alt_model_p1_d8_decode(pixels, p_i->width, p_i->height);
-      else
-        alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
-    } else if( f_DEC ) {
-      alt_model_p1_decode(p_i, pixels);
-    } else {
-      alt_model_p1_encode(p_i, pixels);
-    }
-  } else if( plane_predictor==pred_p2 ) {
-    if( d8 ) {
-      if( f_DEC )
-        alt_model_p2_d8_decode(pixels, p_i->width, p_i->height);
-      else
-        alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
-    } else if( f_DEC ) {
-      alt_model_p2_decode(p_i, pixels);
-    } else {
-      alt_model_p2_encode(p_i, pixels);
-    }
+  if( d8 ) {
+    if( f_DEC )
+      (p1 ? alt_model_p1_d8_decode : alt_model_p2_d8_decode)
+        (pixels, p_i->width, p_i->height);
+    else
+      (p1 ? alt_model_p1_d8_encode : alt_model_p2_d8_encode)
+        (pixels, p_i->width, p_i->height, raw);
+  } else if( f_DEC ) {
+    (p1 ? alt_model_p1_decode : alt_model_p2_decode)(p_i, pixels);
+  } else {
+    (p1 ? alt_model_p1_encode : alt_model_p2_encode)(p_i, pixels);
   }
   return true;
 }
 
-void unmodel_plane(BmfImage* p_i, uint8_t* out) {
-  if( alt_model_plane<1>(p_i, out, nullptr) )
+// One plane through the main model, in whichever direction: allocate the
+// workspace, run the body, give it back.  The two bodies are not one thing --
+// the encoder seeds fifteen context groups and the alphabet before its row
+// walk and the decoder reads all of that back off the stream, 130 lines
+// against 260 -- but everything around them is, and that is what
+// `pairshare.py` was left measuring once both bodies had names.
+//
+// The `if( blk )` was on the decoder's free and not the encoder's.  It is dead
+// either way: the line above has already dereferenced `blk`, so a null one
+// does not reach here.  Kept, as the wider of the two spellings.
+template<int32_t f_DEC>
+static void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+  if( alt_model_plane<f_DEC>(p_i, pixels, raw) )
     return;
   ModelBlock* blk = new_model_block(p_i->width, p_i->height,
                                     p_i->depth&depth_bits);
-  blk->unmodel_plane_slow(out);
+  if( f_DEC )
+    blk->unmodel_plane_slow(pixels);
+  else
+    blk->model_plane_slow(pixels);
   if( blk )
     blk->free_workspace(1);
+}
+
+void unmodel_plane(BmfImage* p_i, uint8_t* out) {
+  code_plane<1>(p_i, out, nullptr);
 }
 
 void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {

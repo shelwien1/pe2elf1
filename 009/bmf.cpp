@@ -28,68 +28,69 @@
 //
 // ## the encode/decode pairs
 //
-// Eleven of them are one `template<int32_t f_DEC>` each, instantiated as the two
-// names their callers use.  What decided which: how many lines the two bodies
-// actually share, measured as a longest common subsequence over the pair.
+// Twelve of them are one `template<int32_t f_DEC>` each, instantiated as the
+// two names their callers use.  What decided which: how many lines the two
+// bodies actually share, measured as a longest common subsequence over the
+// pair.
 //
 //   rc_end                       5 + 5     CounterNode::code_symbol      53 + 49
 //   alt_model_p2_d8             11 + 11     code_symbol_tree              85 + 86
 //   BitCtr::code_context_bit    52 + 50     AltP2Block::alt_p2_d8_body   171 + 147
 //   rc_begin                    91 + 89     alt_model_p1                 263 + 212
 //   P2Freq::code_three_way      49 + 55     alt_model_p2                  3 + 3
-//   AltP1Block::d8_body          30 + 26
+//   AltP1Block::d8_body         30 + 26     code_plane                    1 + 1
 //
-// `alt_model_p2` is the tenth and was the first line of the declined table
-// below, at 34 shared of 153.  The share was not the reason to decline it and
-// reading the two bodies line by line is what showed that: outside the four
-// coding calls they are the same body, and what separated them was eight
-// spellings -- a bias loop counting up in one and down in the other over four
-// slots it sets to zero, a `for` against a `do`/`while`, two register spills
-// of the row index -- plus one deliberate near-miss the merge keeps as the
-// only `f_DEC` in it that is not about direction.  See `alt_p2_encode.inc`.
-// Both instantiations were instrumented and run: the encoder over six of the
-// seventeen images, the decoder over two.
+// The last three came off the declined table below, and two of them for a
+// reason worth writing down: **a small share can mean the two bodies differ,
+// or it can mean one of them is not where the tool is looking, and the
+// measurement cannot tell those apart.**
 //
-// The `model_plane` pair fell from 14 shared lines of 170 to 4 of 146 the same
-// way `alt_model_p2` fell out of this table: what the two shared was the
-// sixteen-line dispatch over the descriptor's model and depth, and that is
-// `alt_model_plane<f_DEC>` in `plane.inc` now.  What is left is the main model
-// -- 100 lines written out in the encoder against a call to
-// `unmodel_plane_slow` -- which is not a shape a template makes one thing.
+// `alt_model_p2` was the first line of that table at 34 shared of 153, and
+// there the share really was about the bodies -- it was just wrong about what
+// it meant.  Outside the four coding calls the two are the same body; what
+// separated them was eight spellings (a bias loop counting up in one and down
+// in the other over four slots it sets to zero, a `for` against a `do`/`while`,
+// two register spills of the row index) plus one deliberate near-miss the
+// merge keeps as the only `f_DEC` in it that is not about direction.
 //
-// `AltP1Block::d8_body` is the eleventh, and it was the *smallest* line of the
-// declined table at 3 shared of 34 -- a number that was measuring the wrong
-// thing.  The encode half was a method and the decode half was written out
-// inside `alt_model_p1_d8_decode`, so the pair the tool compared was a
-// four-line wrapper against a twenty-six-line one; the twenty-two lines they
-// really share were on the wrong side of a call.  Naming the decoder's body
-// the way the encoder's was already named is what made them comparable.
+// `AltP1Block::d8_body` was the *smallest* line of the table at 3 of 34, and
+// that number was not about the coders at all.  The encode half was a method
+// and the decode half was written out inside `alt_model_p1_d8_decode`, so what
+// the tool compared was a four-line wrapper against a twenty-six-line one and
+// the twenty-two lines they really share were on the wrong side of a call.
 //
-// Three pairs were measured and declined.  What they share is not the body --
-// it is the declaration block and the loop scaffolding -- and folding them
-// would put two unrelated algorithms behind one `if`.  `tools/pairshare.py`
+// `code_plane` left in two steps.  First the sixteen-line dispatch over the
+// descriptor's model and depth came out as `alt_model_plane<f_DEC>`, taking
+// the pair from 14 shared lines of 170 to 4 of 146.  What was left read as
+// "the main model, which the two do differently" -- and it was not: the
+// decoder's main model was a call to `unmodel_plane_slow` and the encoder's
+// was 130 lines of `blk->` written out in `model_plane`.  Those two bodies
+// really are different and stay two methods; naming the encoder's the way the
+// decoder's was already named left two five-line wrappers with one line
+// between them.
+//
+// Two pairs are measured and declined.  What they share is not the body -- it
+// is the declaration block and the loop scaffolding -- and folding them would
+// put two unrelated algorithms behind one `if`.  `tools/pairshare.py`
 // re-measures this table and reports any line of it that has drifted; the
-// numbers below were all wrong by the time it was written, which is why it
-// exists.
+// numbers were all wrong by the time it was written, which is why it exists.
 //
 //   code_pixel / decode_pixel                         94 of 653 (14%)
 //   predict_med / unpredict_med                       10 of 122 (8%)
-//   model_plane / unmodel_plane                        4 of 146 (3%)
 //
-// Every one of the five has moved since it was measured, and all of them the
-// same way: what the two halves shared was never the algorithm, so naming it
-// and calling it from both leaves less behind, not more.  The p2 pair fell
-// from 123 shared lines of 586 to 25 of 215 and the p1 pair from 8 of 60 to 3
-// of 34.  The two `*_pixel` bodies have lost 40% of their length between them
-// -- `load_neighbours`, `FreqRec::blend_from`, `ModelBlock::start_row`,
-// `find_level`, `bump` -- and went from 1044 lines to 724.  The percentages
-// barely move because both halves shrink together, which is the point: the
-// shared part is scaffolding, and scaffolding is what comes out.
+// Both have moved since they were first measured, and the same way: what the
+// two halves shared was never the algorithm, so naming it and calling it from
+// both leaves less behind, not more.  The two `*_pixel` bodies have lost 40%
+// of their length between them -- `load_neighbours`, `FreqRec::blend_from`,
+// `ModelBlock::start_row`, `find_level`, `bump` -- and went from 1044 lines to
+// 653.  The percentage barely moves because both halves shrink together, which
+// is the point: the shared part is scaffolding, and scaffolding is what comes
+// out.
 //
-// Every merge was gated on its own -- the fifteen streams byte for byte, at
-// both pointer widths -- and then all nine were instrumented and run over the
-// corpus to check that both instantiations are actually entered.  A template
-// whose decode half never runs is a gate passing about nothing.
+// Every merge was gated on its own -- the seventeen streams byte for byte, at
+// both pointer widths -- and then instrumented and run over the corpus to
+// check that both instantiations are actually entered.  A template whose
+// decode half never runs is a gate passing about nothing.
 
 #include <cctype>
 #include <cmath>

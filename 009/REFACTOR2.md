@@ -803,3 +803,41 @@ Instrumented over the corpus: 70 encode entries and 5 decode. **Eleven merged
 pairs now, three declined** — `code_pixel`/`decode_pixel` at 94 of 653,
 `predict_med`/`unpredict_med` at 10 of 122, and `model_plane`/`unmodel_plane`
 at 4 of 146.
+
+### The same mistake twice, and the tool it broke
+
+`model_plane`/`unmodel_plane` was the last easy line of the declined table and
+it came off in two steps. The dispatch over the descriptor's model and depth
+went first — sixteen lines apiece, `alt_model_plane<f_DEC>` — taking the pair
+from 14 shared of 170 to 4 of 146. What was left read as "the main model, which
+the two do differently", and that reading was wrong in exactly the way
+`AltP1Block::d8_body` had been wrong an hour earlier: the *decoder's* main model
+was a call to `unmodel_plane_slow` and the *encoder's* was 130 lines of `blk->`
+written out in `model_plane`. The two bodies really are different and stay two
+methods; naming the encoder's the way the decoder's was already named left two
+five-line wrappers with one line between them, and `code_plane<f_DEC>` is those.
+
+**Twelve merged pairs now, two declined.** So: a share this table reads as "they
+differ" can also mean one of the two is not where the tool is looking, and that
+is not a rare accident — it happened twice in one session on the two smallest
+rows.
+
+Three things the round broke and had to fix, all of them mine rather than the
+binary's:
+
+* the extraction dropped `rc_end_encode()` — the slice ended one line early, and
+  22 of 110 checks failed. The stream simply never terminated.
+* the encoder's `SymPair* group_ctr = blk->group_ctr[g]` became
+  `group_ctr = group_ctr[g]` once `blk->` went away: a local that could carry
+  the member's name as a free function cannot as a method. It is `gctr` now,
+  which is what the decoder already called it.
+* `alt_model_plane`'s p1 and p2 arms were the same ten lines with a `1` against
+  a `2`, which `dupblock.py` caught as a *rise*. The four entry points come in
+  pairs with one signature each, so the predictor picks which of a pair and the
+  depth and direction pick which pair — `(p1 ? f : g)(args)`.
+
+That last one broke `deadcheck.py`, which reads the call graph textually and
+had a rule for a function named before `,` or `)` but not before `:`. It
+reported all four p1 entry points dead while their p2 twins *on the same lines*
+were fine — the giveaway. Taking a function's address is a use; it counts one
+now, and a planted never-called body proves the tool can still report.
