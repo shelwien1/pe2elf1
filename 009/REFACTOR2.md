@@ -875,3 +875,53 @@ several rounds.
 
 **Where the pairs ended: twelve merged, two declined**, from nine and five when
 the round began.
+
+---
+
+## The pair that stays two functions, taken apart anyway
+
+`code_pixel`/`decode_pixel` is one of the two declines left, and the decline
+holds — the encoder knows the symbol and asks where it ranks, the decoder asks
+for a target and finds which rank holds it, and that decides the shape of
+everything above. But a pair that stays two functions is not a pair with
+nothing to do. Six things came out of them this round, and each one made the
+next visible:
+
+* **`seed_candidates`** — the 32-candidate table. Both filled it and both
+  reached the same two members through a local of their own: `pixr` and `wq`
+  for `pix_cur`, `cache` for `sym_cache`, and the encoder then spelled the
+  first two slots into `w6d` and `wq1` before storing them. **Six names for
+  three members.**
+* **`offer_candidates<f_DEC>`** — the walk that offers each candidate for one
+  context bit. The decoder stores the candidate into the record before reading
+  the bit and the encoder reads the record to make the bit; that is the whole
+  of the difference, which is why it answers the symbol rather than storing it.
+* **`exclude_stage_one`** — five stores of one value, under eight names.
+* **`write_row_at<T>`** — three of `write_row`'s four arms are one walk with a
+  different cursor type, and only the narrowest spelled the cast the other two
+  make implicitly.
+* **`intern_ctx`** — a dense id per context signature. Four sites, and every
+  one read the table back after storing rather than using the value it had just
+  stored.
+* **`context_ids`** — and this is the one the others uncovered. Once the
+  borrowed candidate slot had a name, the two 25-line blocks that build `sig1`,
+  `sig2` and the two ids were the same computation under different names
+  throughout: `r8`/`r1` and `r7`/`r2` for `row_cur[8]` and `row_cur[7]`,
+  `row`/`cur5` for the row cursor, `up_m0`/`up_match0` for the slot, a
+  `match1` one of them named and the other read directly. The decoder also
+  named `all_up` and folded it in with a `raw` where the encoder wrote one
+  chain — and `CtxIdx` *adds*, so with no overlapping terms the two orders are
+  the same sum.
+
+**Three dead reloads fell out of that.** Both coders reloaded the row-6 cursor,
+the row-5 cursor and the borrowed slot on an intern miss, and all three are
+re-reads of values the intern cannot have moved: `ctx_id1` is a `uint16_t`
+table and `row_cur` an array of pointers beside it, so a store to
+`ctx_id1[sig1]` reaches neither. What the decompilation shows there is the
+compiler reloading across a store it could not prove did not alias. The
+seventeen streams agree byte for byte without them.
+
+**The pair went from 653 lines to 539 and 94 shared to 73**; the ratchet from
+325 to 293. The percentage is unchanged, which is the point the table has been
+making all along: both halves shrink together because what comes out is
+scaffolding.

@@ -73,7 +73,7 @@
 // table the reason for each is written out rather than left as a share.
 // `tools/pairshare.py` re-measures both and reports any line that has drifted.
 //
-//   code_pixel / decode_pixel                         94 of 653 (14%)
+//   code_pixel / decode_pixel                         73 of 539 (14%)
 //   predict_med / unpredict_med                        8 of 113 (7%)
 //
 // **`predict_med` walks backwards and `unpredict_med` forwards**, and that is
@@ -99,7 +99,7 @@
 // Both have moved since they were first measured, and the same way: what the
 // two halves shared was never the algorithm, so naming it and calling it from
 // both leaves less behind, not more.  The two `*_pixel` bodies have lost 40%
-// of their length between them and went from 1044 lines to 653.  The
+// of their length between them and went from 1044 lines to 539.  The
 // percentage barely moves because both halves shrink together, which is the
 // point: the shared part is scaffolding, and scaffolding is what comes out.
 //

@@ -358,6 +358,154 @@ struct ModelBlock {
   // feed them, each load under a name of its own, `h10` through `h31`, because
   // MSVC scheduled them that way.  Every one was used exactly once, and
   // nothing here writes `row_cur`, so the order is free.
+  // The 32 candidate symbols this pixel is coded against, in slot order: 0 and
+  // 1 the two most recent at this context, 2..9 the move-to-front cache, and
+  // 10..31 the spatial neighbours widening outward.
+  //
+  // Both pixel coders fill it and both reached the same two members through a
+  // local of their own -- `pixr` and `wq` for `pix_cur`, `cache` for
+  // `sym_cache` -- and the encoder then spelled the first two slots into `w6d`
+  // and `wq1` before storing them.  Six names for three members.
+  // The 32 candidates offered one at a time.  Each valid one costs a single
+  // context bit -- is this the symbol? -- and a hit ends the pixel; a miss
+  // stamps the candidate excluded so no later list offers it again.  Answers
+  // the symbol, or -1 when all 32 miss.
+  //
+  // The decoder stores the candidate into the record before it reads the bit
+  // and the encoder reads the record to make the bit; that is the whole of the
+  // difference, and it is why this answers the symbol rather than storing it.
+  // On a full miss both leave the *last* valid candidate sitting in the record,
+  // which the escape path below then overwrites.
+  //
+  // `sym_pos` is a member because `pixel_context` indexes the candidate list by
+  // it, and it is still live after this returns -- `update_selector` reads
+  // `sym_pos > 3`.  A hit leaves it at the hit's index and a full miss at 32,
+  // which is what the two `do`/`while`s left.
+  template<int32_t f_DEC>
+  int32_t offer_candidates(int32_t* nb_sym) {
+    for( sym_pos = 0; sym_pos<32; ++sym_pos ) {
+      const int32_t sym = pixel_context((uint32_t*)nb_sym);
+      if( sym<0 )
+        continue;
+      // `is_sym` and not `hit`: `hit` is a member of this block, carrying an
+      // answer from the stage-one coder to three other methods.
+      int32_t is_sym;
+      if( f_DEC ) {
+        is_sym = bit_node[ctr_node].decode_context_bit(&bit_root[ctr_fallback]);
+        row_cur[5]->sym = sym;
+      } else {
+        is_sym = sym==row_cur[5]->sym;
+        bit_node[ctr_node].encode_context_bit(&bit_root[ctr_fallback], is_sym);
+      }
+      if( is_sym )
+        return sym;
+      exclusion_mask[sym] = exclusion_gen;
+    }
+    return -1;
+  }
+
+  // The four symbols the stage-one coder already offered, and the escape,
+  // stamped with this generation so the candidate walk below does not offer
+  // any of them again.
+  //
+  // Both coders spelled `exclusion_gen` into a local and three of the four
+  // `mode_symbol` slots into three more -- `msym3`, `msym2`/`excl_sym_a`,
+  // `msym1`/`excl_sym_b` -- while reading the fourth straight out of the
+  // table.  Eight names for five stores of one value, which is also why the
+  // order does not matter: every one of them writes `exclusion_gen`.
+  // The two context ids this pixel is coded in, and the bucket they hang off.
+  // `sig1` is four "is this gradient flat" bits, two "did four rows above all
+  // match" bits, the bucket from 10 up and `nb2`'s four underneath; `sig2`
+  // narrows the interned `id1` with three more bits taken from records the
+  // intern miss may have just reloaded.  Answers `id2`, and leaves the bucket
+  // in `bucket_idx` where the frequency table is picked off it.
+  //
+  // Both pixel coders build this and the decompilation gave every value in it
+  // a different name on each side: `r8`/`r1` and `r7`/`r2` for `row_cur[8]`
+  // and `row_cur[7]`, `row`/`cur5` for the row cursor, `up_m0`/`up_match0`
+  // for the borrowed slot, `match1` for a `cur6->match[1]` the other read
+  // directly.  The decoder also named `all_up` -- the bucket and the two run
+  // bits -- and folded it in with a `raw`, where the encoder wrote one chain.
+  // `CtxIdx` adds rather than ORs and the terms do not overlap, so the two
+  // orders are the same sum.
+  //
+  // The encoder cast the two run bits to `uint8_t` and the decoder did not.
+  // Every `match` byte in this program is a comparison, an `&` of two of
+  // those, a copy of another record's byte, or the `0x01010101` two sites
+  // store through the union -- so the byte is 0 or 1, the `&` chain is 0 or 1,
+  // and the two readings agree.
+  //
+  // The reload of the row cursor inside the miss is dead and kept: `row` and
+  // `cur5` are both `row_cur[5]` on entry, nothing between reassigns either,
+  // and neither is read after this returns.
+  int32_t context_ids(int32_t state, int32_t cap) {
+    PixRec *const cur6 = row_cur[6];
+    PixRec *const r8 = row_cur[8];
+    PixRec *const r7 = row_cur[7];
+    PixRec *const up9 = row_cur[9];
+    PixRec *const row = row_cur[5];
+    const int32_t bucket_at = ctx_bucket[state+cap];
+    bucket_idx = bucket_at;
+    const int32_t up_m0 = cur6->match[0];
+    const uint32_t nb2 = CtxIdx{}.bit<3>(row[-2].match[2])
+                                 .bit<2>(row[-2].match[5])
+                                 .bit<1>(row[-2].match[4])
+                                 .bit<0>(row[-1].match[1]);
+    const uint32_t sig1 =
+        CtxIdx{}.bit<7>(grad[3]==0).bit<6>(grad[2]==0)
+                .bit<5>(grad[1]==0).bit<4>(grad[0]==0)
+                .bit<9>(up9->match[0]&r8->match[0]&up_m0&r7->match[0])
+                .bit<8>(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1])
+                .raw(bucket_at<<10).raw(nb2);
+    // Both coders reloaded three things on the intern miss -- the row-6
+    // cursor into a second name, the row-5 cursor, and `up_m0` -- and all
+    // three are re-reads of values the intern cannot have moved: `ctx_id1` is
+    // a `uint16_t` table and `row_cur` is an array of pointers beside it, so
+    // the store to `ctx_id1[sig1]` reaches neither.  What the decompiler is
+    // showing is the compiler reloading across a store it could not prove
+    // did not alias.  The seventeen streams say the same.
+    int32_t id1;
+    intern_ctx(ctx_id1, sig1, ctx_id1_used, id1);
+    const uint32_t sig2 = CtxIdx{}.bit<2>(cur6[1].match[3]).bit<1>(up_m0)
+                                  .bit<0>(row[-1].match[5]).raw(8*id1);
+    int32_t id2;
+    intern_ctx(ctx_id2, sig2, ctx_id2_used, id2);
+    return id2;
+  }
+
+  // Intern a context signature: a dense id per distinct signature, minted in
+  // first-seen order, with `0xFFFF` the empty slot.  Answers whether the
+  // signature had *not* been seen, which the two `sig1` sites need -- they
+  // reload two row cursors and a neighbour slot on exactly that path.
+  //
+  // Four sites, two per pixel coder.  Every one of them read the table back
+  // after storing rather than using the value it had just stored; that is what
+  // the decompilation makes of a store followed by a reload, and it is why the
+  // four looked like six lines instead of three.
+  static bool intern_ctx(uint16_t* tbl, int32_t sig, uint32_t& used,
+                         int32_t& id) {
+    const bool minted = tbl[sig]==0xFFFF;
+    if( minted )
+      tbl[sig] = used++;
+    id = tbl[sig];
+    return minted;
+  }
+
+  void exclude_stage_one() {
+    const int8_t gen = exclusion_gen;
+    for( int32_t k = 1; k<5; ++k )
+      exclusion_mask[mode_symbol[k]] = gen;
+    exclusion_mask[no_symbol] = gen;
+  }
+
+  void seed_candidates(int32_t* nb_sym) {
+    nb_sym[0] = pix_cur->last;
+    nb_sym[1] = pix_cur->prev;
+    for( int32_t c = 0; c<8; ++c )
+      nb_sym[2+c] = sym_cache[c];
+    load_neighbours(nb_sym);
+  }
+
   void load_neighbours(int32_t* nb_sym) {
     const PixRec *const r5 = row_cur[5], *const r6 = row_cur[6],
                  *const r7 = row_cur[7], *const r8 = row_cur[8];
@@ -503,17 +651,25 @@ struct ModelBlock {
   // It is `width` re-read after the pixel loop, so on every path that decodes
   // anything it is `width` and non-zero; on the one path where it is zero it
   // is what makes this do nothing.
+  // One row of symbols out at a fixed store width.  Three of `write_row`'s
+  // four arms are this walk with a different cursor type -- `uint32_t`,
+  // `uint16_t`, `uint8_t` -- and the narrowest of the three was the only one
+  // that spelled the cast the other two make implicitly.
+  template<class T>
+  uint8_t* write_row_at(uint8_t* out_at) {
+    T* out = (T*)out_at;
+    int32_t i = 0;
+    do
+      *out++ = (T)sym_code[row_cur[0][i+++8].sym];
+    while( (uint32_t)i<width );
+    return (uint8_t*)out;
+  }
+
   uint8_t* write_row(uint8_t* out_at, uint32_t nbytes, uint32_t row_w) {
     if( row_w<=0 )
       return out_at;
-    if( nbytes==4 ) {
-      uint32_t *out32 = (uint32_t*)out_at;
-      int32_t y2 = 0;
-      do
-        *out32++ = sym_code[row_cur[0][y2+++8].sym];
-      while( (uint32_t)y2<width );
-      return (uint8_t*)out32;
-    }
+    if( nbytes==4 )
+      return write_row_at<uint32_t>(out_at);
     if( nbytes==3 ) {
       SymEntry *out_ent = (SymEntry*)out_at;
       int32_t step = 0;
@@ -526,22 +682,10 @@ struct ModelBlock {
       } while( (uint32_t)step<width );
       return (uint8_t*)out_ent;
     }
-    if( nbytes==2 ) {
-      uint16_t *out16 = (uint16_t*)out_at;
-      int32_t x3 = 0;
-      do
-        *out16++ = sym_code[row_cur[0][x3+++8].sym];
-      while( (uint32_t)x3<width );
-      return (uint8_t*)out16;
-    }
-    if( depth==8 ) {
-      uint8_t *out8 = out_at;
-      int32_t x5 = 0;
-      do
-        *out8++ = (uint8_t)sym_code[row_cur[0][x5+++8].sym];
-      while( (uint32_t)x5<width );
-      return out8;
-    }
+    if( nbytes==2 )
+      return write_row_at<uint16_t>(out_at);
+    if( depth==8 )
+      return write_row_at<uint8_t>(out_at);
     // Sub-byte depths, packed high bits first.  `out_bits` starts one byte
     // *before* the row and the first symbol's `bits < 0` moves it on, which is
     // why the pre-increment is on the store and not on the cursor.
@@ -922,7 +1066,7 @@ struct ModelBlock {
     FreqRec* freq_tbl;
     uint32_t done, lvl_a;
     PixRec *next;
-    int32_t nb, key, cap, nb2, all_up, sig1, sig2, s1a, m_up0, run, bucket, bit, hit_a, idx_s;
+    int32_t nb, key, cap, s1a, m_up0, run, bit, hit_a, idx_s;
     PixRec *cur6 = (PixRec*)row_cur[6];
     int32_t up_sym = cur6->sym;
     PixRec *row = row_cur[5];
@@ -982,47 +1126,7 @@ struct ModelBlock {
     } else if( pair_prev==nb_sym[2] ) {
       cap += 300;
     }
-    PixRec *r8 = row_cur[8];
-    int32_t bucket_at = ctx_bucket[state+cap];
-    PixRec *r7 = row_cur[7];
-    bucket_idx = bucket_at;
-    int32_t up_m0 = cur6->match[0];
-    nb_sym[2] = up_m0;
-    int32_t m_w1 = row[-1].match[1];
-    PixRec *up9 = row_cur[9];
-    nb2 = CtxIdx{}.bit<3>(row[-2].match[2]).bit<2>(row[-2].match[5])
-                  .bit<1>(row[-2].match[4]).bit<0>(m_w1);
-    // Two run bits at 9 and 8, the bucket from 10 up, and `nb2`'s four
-    // bits underneath -- the comment below already said so and the
-    // expression did not.  The bucket stays a `raw`: it is a table
-    // lookup with no declared width to read one off.
-    all_up = CtxIdx{}.raw(bucket_at<<10)
-                     .bit<9>(up9->match[0]&r8->match[0]&nb_sym[2]&r7->match[0])
-                     .bit<8>(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1])
-                     .raw(nb2);
-    PixRec *cur6b = cur6;
-    // The four gradient accumulators as four "is it flat" bits, over the
-    // four-bit `nb2` below them; `all_up` carries the two run bits at 8 and 9
-    // and the bucket from 10 up.
-    sig1 = CtxIdx{}.bit<7>(grad[3]==0).bit<6>(grad[2]==0)
-                   .bit<5>(grad[1]==0).bit<4>(grad[0]==0)
-                   .raw(all_up);
-    int32_t id1 = ctx_id1[sig1];
-    if( id1==0xFFFF ) {
-      ctx_id1[sig1] = ctx_id1_used;
-      cur6b = row_cur[6];
-      row = row_cur[5];
-      ++ctx_id1_used;
-      id1 = ctx_id1[sig1];
-      nb_sym[2] = cur6b->match[0];
-    }
-    sig2 = CtxIdx{}.bit<2>(cur6b[1].match[3]).bit<1>(nb_sym[2])
-                   .bit<0>(row[-1].match[5]).raw(8*id1);
-    int32_t id2 = ctx_id2[sig2];
-    if( id2==0xFFFF ) {
-      ctx_id2[sig2] = ctx_id2_used++;
-      id2 = ctx_id2[sig2];
-    }
+    int32_t id2 = context_ids(state, cap);
     if( (int32_t)alphabet<32 ) {
       int32_t id3_used = ctx_id3_used;
       // The encoder's half of this context is at `sig3` below, written the same
@@ -1066,7 +1170,7 @@ struct ModelBlock {
           }
         }
   run_copied:
-        bucket = *(run_bucket+idx1);
+        int32_t bucket = *(run_bucket+idx1);
         // Four fields and a plus-one: the bucket from bit 3 up, then
         // three bits of neighbour agreement.  The `+1` is an offset
         // into `esc_ctr` and not a field, which is why it is a `raw`.
@@ -1233,39 +1337,16 @@ struct ModelBlock {
     }
     idx_s = 0;
   pixel_done:
-    int8_t gen = exclusion_gen;
-    int32_t msym3 = mode_symbol[3];
-    int32_t msym1 = mode_symbol[1];
     idx_t = idx_s;
-    int32_t msym2 = mode_symbol[2];
-    exclusion_mask[mode_symbol[4]] = exclusion_gen;
-    SymPair *pixr = pix_cur;
-    exclusion_mask[msym3] = gen;
-    exclusion_mask[msym2] = gen;
-    exclusion_mask[msym1] = gen;
-    exclusion_mask[no_symbol] = gen;
+    exclude_stage_one();
     sel[0] = nullptr;
     // The 32 candidate symbols `pixel_context` walks, in slot order.  Slots 0
     // and 1 are the two most recent symbols at this exact context, 2..9 the
     // move-to-front cache, and 10..31 the spatial neighbours widening outward.
     //
-    nb_sym[0] = pixr->last;
-    nb_sym[1] = pixr->prev;
-    for( int32_t c = 0; c<8; ++c )
-      nb_sym[2+c] = sym_cache[c];
-    load_neighbours(nb_sym);
-    sym_pos = 0;
-    do {
-      int32_t psym = pixel_context((uint32_t*)nb_sym);
-      if( psym>=0 ) {
-        int32_t bit2 = bit_node[ctr_node].decode_context_bit(&bit_root[ctr_fallback]);
-        row_cur[5]->sym = psym;
-        if( bit2 )
-          return idx_t+1;
-        exclusion_mask[psym] = exclusion_gen;
-      }
-      ++sym_pos;
-    } while( sym_pos<32 );
+    seed_candidates(nb_sym);
+    if( offer_candidates<1>(nb_sym)>=0 )
+      return idx_t+1;
     SymList **sel_p = load_selectors();
     while( 1 ) {
       if( sel_p>&escape_list )
@@ -1292,7 +1373,7 @@ struct ModelBlock {
     int32_t runlen_s;
     uint32_t done;
     uint16_t* id3p;
-    int32_t nb, key, cap, nb2, sig1, sig2, m_up0, one, run, amap, runlen, run_left, bit5, lvl_a;
+    int32_t nb, key, cap, m_up0, one, run, amap, runlen, run_left, bit5, lvl_a;
     PixRec *cur5p1;
     PixRec* cur6c, * up2;
     PixRec* cur6 = (PixRec*)row_cur[6];
@@ -1338,44 +1419,8 @@ struct ModelBlock {
     // eighteen lines earlier -- and then tested it back.
     cap = 15*neighbour_rank(nb_sym, pair->last)
         +75*neighbour_rank(nb_sym, pair->prev);
-    PixRec *r1 = row_cur[8];
-    int32_t bucket_at = ctx_bucket[state+cap];
-    PixRec *r2 = row_cur[7];
-    bucket_idx = bucket_at;
-    int32_t up_match0 = cur6->match[0];
-    uint8_t match1 = cur6->match[1];
     PixRec *cur2 = cur5;
-    nb_sym[0] = up_match0;
-    PixRec* up9 = row_cur[9];
-    int32_t m_w1 = cur5[-1].match[1];
-    nb2 = CtxIdx{}.bit<3>(cur5[-2].match[2]).bit<2>(cur5[-2].match[5])
-                  .bit<1>(cur5[-2].match[4]).bit<0>(m_w1);
-    // Four "is this gradient flat" bits, two "did four rows above all match"
-    // bits, and the bucket, over `nb2`'s four.  Written as one multiplication
-    // chain the widths were not countable; here the index is plainly 10 bits
-    // plus however many `bucket_at` has.
-    sig1 = CtxIdx{}.bit<7>(grad[3]==0).bit<6>(grad[2]==0)
-                   .bit<5>(grad[1]==0).bit<4>(grad[0]==0)
-                   .bit<9>((uint8_t)(up9->match[0]&r1->match[0]&nb_sym[0]&r2->match[0]))
-                   .bit<8>((uint8_t)(up9->match[1]&r1->match[1]&r2->match[1]&match1))
-                   .raw(bucket_at<<10).raw(nb2);
-    int32_t id1 = ctx_id1[sig1];
-    PixRec *cur6b = cur6;
-    if( id1==0xFFFF ) {
-      ctx_id1[sig1] = ctx_id1_used;
-      cur6b = row_cur[6];
-      cur5 = row_cur[5];
-      ++ctx_id1_used;
-      id1 = ctx_id1[sig1];
-      nb_sym[0] = cur6b->match[0];
-    }
-    sig2 = CtxIdx{}.bit<2>(cur6b[1].match[3]).bit<1>(nb_sym[0])
-                   .bit<0>(cur5[-1].match[5]).raw(8*id1);
-    int32_t id2 = ctx_id2[sig2];
-    if( id2==0xFFFF ) {
-      ctx_id2[sig2] = (ctx_id2_used)++;
-      id2 = ctx_id2[sig2];
-    }
+    int32_t id2 = context_ids(state, cap);
     if( (int32_t)alphabet<32 ) {
       int32_t id3_used = ctx_id3_used;
       int32_t sig3 = CtxIdx{}.bits<0, 4>(nb_sym[10]).raw(16*id2);
@@ -1579,42 +1624,16 @@ struct ModelBlock {
         return 1;
       runlen = 0;
     }
-    int8_t mode = exclusion_gen;
-    int32_t msym3 = mode_symbol[3];
-    int32_t excl_sym_a = mode_symbol[2];
-    int32_t excl_sym_b = mode_symbol[1];
-    exclusion_mask[mode_symbol[4]] = exclusion_gen;
-    exclusion_mask[msym3] = mode;
-    SymPair *wq = pix_cur;
-    exclusion_mask[excl_sym_a] = mode;
-    exclusion_mask[excl_sym_b] = mode;
-    uint16_t *cache = sym_cache;
-    exclusion_mask[no_symbol] = mode;
+    exclude_stage_one();
     runlen_s = runlen;
     sel[0] = nullptr;
-    int32_t w6d = wq->last;
-    int32_t wq1 = wq->prev;
     // The same 32 candidates as `decode_pixel`'s, in slot order: 0 and 1 the
     // two most recent symbols at this context, 2..9 the move-to-front cache,
     // 10..31 the spatial neighbours widening outward.  The decompilation
     // interleaved the stores with the loads and named every load.
-    nb_sym[0] = w6d;
-    nb_sym[1] = wq1;
-    for( int32_t c = 0; c<8; ++c )
-      nb_sym[2+c] = cache[c];
-    load_neighbours(nb_sym);
-    sym_pos = 0;
-    do {
-      int32_t esym = pixel_context((uint32_t*)nb_sym);
-      if( esym>=0 ) {
-        int32_t up_hit = esym==row_cur[5]->sym;
-        (&bit_node[(int32_t)ctr_node])->encode_context_bit(&bit_root[(int32_t)ctr_fallback], up_hit);
-        if( up_hit )
-          return runlen_s+1;
-        exclusion_mask[esym] = exclusion_gen;
-      }
-      ++sym_pos;
-    } while( sym_pos<32 );
+    seed_candidates(nb_sym);
+    if( offer_candidates<0>(nb_sym)>=0 )
+      return runlen_s+1;
     SymList **sel_p = load_selectors();
     while( 1 ) {
       if( (*sel_p)->live ) {
