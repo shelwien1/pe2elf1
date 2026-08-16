@@ -28,7 +28,7 @@
 //
 // ## the encode/decode pairs
 //
-// Twelve of them are one `template<int32_t f_DEC>` each, instantiated as the
+// Thirteen of them are one `template<int32_t f_DEC>` each, instantiated as the
 // two names their callers use.  What decided which: how many lines the two
 // bodies actually share, measured as a longest common subsequence over the
 // pair.
@@ -39,6 +39,19 @@
 //   rc_begin                    91 + 89     alt_model_p1                 263 + 212
 //   P2Freq::code_three_way      49 + 55     alt_model_p2                  3 + 3
 //   AltP1Block::d8_body         30 + 26     code_plane                    1 + 1
+//   code_colour_plane           40 + 43
+//
+// `code_colour_plane` was never on the declined table, which is the point of
+// it: `interleave_plane` and `colour_transform` are an encode/decode pair that
+// nothing had *named* as one, so no share was ever measured and no decision
+// was ever taken.  A comment above them said the nineteen lines that read the
+// descriptor "are the whole of what the two share -- the loops under them are
+// inverses and have nothing else in common", and that was a sentence about
+// spelling: the two blends were written four different ways between them, one
+// casting to `uint32_t` mid-expression, one summing into an `int32_t` and
+// casting the total, two splitting the sum across an extra local.  All four
+// are the same thirty-two bits.  Written unsigned throughout, each loop is a
+// blend and a sign.
 //
 // The last three came off the declined table below, and two of them for a
 // reason worth writing down: **a small share can mean the two bodies differ,

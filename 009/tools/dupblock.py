@@ -37,14 +37,24 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 285 now.  The p2
+start here.**  1031 lines of copy when this was written and 262 now.  The p2
 coders' prologue and epilogue used to be the largest groups and are gone: that
-pair merged, and so did three more, so `pairshare.py`'s declined table is down
-to two rows.  What is left is dominated by `code_pixel`/`decode_pixel`, the
-largest of those two at 94 shared lines of 653 -- eight of the ten longest runs
-here are in `model.inc` and every one of them is that pair.  Taking those out
-means merging it, which is a decision with a number attached and not a
-duplication to sweep up.
+pair merged, and so did four more, so `pairshare.py`'s declined table is down
+to two rows.
+
+For several rounds the sentence here read "what is left is dominated by
+`code_pixel`/`decode_pixel` -- eight of the ten longest runs are in `model.inc`
+and every one of them is that pair", and by the time anyone looked again it was
+not true.  Naming what that pair shares shortened it faster than the ratchet
+came down, and the longest run had moved to `plane_predict.inc`: the colour
+transform and its inverse, an encode/decode pair nobody had ever *named* as
+one, so no share had ever been measured and no decision taken.  They are one
+`template<int32_t f_DEC>` now.
+
+The longest runs today are four and five lines apiece, spread over `bmp_read`,
+`alt_p2_model`, `alt_p2`, `model` and `image_compress` -- no single body
+dominates.  A stale sentence in this docstring is the finding that matters
+here: this file records what the residue *is*, and nothing was checking it.
 """
 import collections
 import re
@@ -61,7 +71,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 278
+BUDGET = 262
 
 
 def normal(text):

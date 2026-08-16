@@ -152,8 +152,12 @@ static void interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane) {
 // it references: which plane, the DC offset, and the three weights.
 //
 // `interleave_plane` and `colour_transform` each decoded this in the same
-// nineteen lines, and those nineteen are the whole of what the two share --
-// the loops under them are inverses and have nothing else in common.
+// nineteen lines.  The round that named this said those nineteen were the whole
+// of what the two share, "the loops under them are inverses and have nothing
+// else in common" -- which was a sentence about how they were spelled.  Each
+// loop is one blend of the referenced planes and then a sign: the forward
+// writes `x - dc - blend` and the inverse `blend + dc + x`, over the same
+// operands in the same order.  They are `code_colour_plane<f_DEC>` below.
 //
 // `by_weights` is the case worth naming.  A two-reference plane whose weights
 // are 128 and 0 reads only one plane after all, and which one depends on which
@@ -162,6 +166,23 @@ static void interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane) {
 struct PlaneTransform {
   int32_t to_ref0, to_ref1, mode, dc, wgt0, wgt1, wgt2;
   bool by_weights;
+
+  // What the referenced planes predict of this one at `p`, in the units the
+  // residual is in.  Two references read the two planes the descriptor names;
+  // three read the three bytes before `p`, which are the other components of
+  // the same pixel.  Only these two modes reach here -- one reference is the
+  // `by_weights` path above and no references is the flat copy.
+  //
+  // Both were written four different ways across the encoder and the decoder,
+  // one casting to `uint32_t` mid-expression, one summing into an `int32_t`
+  // and casting the total, two splitting the sum across an extra local.  All
+  // four are the same thirty-two bits; unsigned throughout is the one that
+  // cannot overflow signed.
+  uint32_t blend(const uint8_t* p) const {
+    if( mode==2 )
+      return (wgt0*(uint32_t)p[to_ref0]+wgt1*(uint32_t)p[to_ref1]+40)>>7;
+    return (wgt1*(uint32_t)p[-2]+wgt0*(uint32_t)p[-3]+wgt2*(uint32_t)p[-1]+63)>>7;
+  }
 };
 
 static PlaneTransform plane_transform(int32_t plane) {
@@ -185,105 +206,83 @@ static PlaneTransform plane_transform(int32_t plane) {
   return t;
 }
 
-void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
-  uint8_t* base = &img->pixels[plane];
-  if( !(plane_desc[plane].flags&desc_has_refs) ) {
-    interleave_flat(img, src, plane);
-    return;
-  }
-  int32_t stride = plane_count;
-  int32_t n = bmf_pixels(img);
-  const PlaneTransform t = plane_transform(plane);
-  // The same dispatch `colour_transform` makes, written the same way round.
-  // Here it was two nested `if`s with the one-reference path falling out of
-  // the bottom of both, which is `by_weights || nrefs == 1` reached the long
-  // way.
-  if( t.by_weights||plane_desc[plane].nrefs==1 ) {
-    uint8_t *ref = base+t.to_ref0;
-    int32_t i2 = 0;
-    int32_t ofs2 = 0;
-    do {
-      base[ofs2] = ref[ofs2]+t.dc+src[i2];
-      ofs2 += stride;
-      ++i2;
-    } while( i2<n );
-    return;
-  }
-  if( t.mode==2 ) {
-    int32_t left2 = bmf_pixels(img);
-    uint8_t *p2 = base;
-    do {
-      int32_t x2 = t.dc+(uint8_t)*src++;
-      *p2 = (uint8_t)(((t.wgt0*p2[t.to_ref0]+t.wgt1*(uint32_t)p2[t.to_ref1]+40)>>7)+x2);
-      p2 += stride;
-      --left2;
-    } while( left2 );
-  } else if( t.mode==3 ) {
-    int32_t left3 = bmf_pixels(img);
-    uint8_t *p3 = base;
-    do {
-      int32_t x3 = t.dc+(uint8_t)*src++;
-      *p3 = (uint8_t)(((t.wgt1*(uint8_t)*(p3-2)+t.wgt0*(uint8_t)*(p3-3)+t.wgt2*(uint32_t)(uint8_t)*(p3-1)+63)>>7)+x3);
-      p3 += stride;
-      --left3;
-    } while( left3 );
-  }
-}
-
-// Subtract from one plane whatever the other planes predict of it, and write
-// the residual to `dst`.  Four modes, chosen by `desc_has_refs` and `nrefs`:
+// One plane against the planes it references, in whichever direction.  Four
+// modes, chosen by `desc_has_refs` and `nrefs`:
 //
-//   no transform      copy the plane out, interleaved to flat
+//   no transform      copy the plane, interleaved to flat or back
 //   one reference     `x - dc - ref`, a plain difference
 //   two references    `x - dc - (w0*a + w1*b + 40)/128`
 //   three references  `x - dc - (w0*a + w1*b + w2*c + 63)/128`
 //
 // The two-reference case degenerates to the one-reference case when one weight
 // is 128 and the other 0, and the code takes that path explicitly -- which is
-// the `by_weights` flag below, and why a two-reference descriptor can end up
-// reading only one plane.
-void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
-  uint8_t *src = &img->pixels[plane];
+// `plane_transform`'s `by_weights` flag, and why a two-reference descriptor can
+// end up reading only one plane.
+//
+// `f_DEC` is which way: the encoder reads the image and writes residuals to
+// `side`, the decoder reads residuals from `side` and writes the image back.
+// Every `if( f_DEC )` in here is that and nothing else.
+//
+// The blends were written four different ways between the two bodies -- one
+// cast to `uint32_t` mid-expression, one summing into an `int32_t` and casting
+// the total, two splitting the sum across an extra local -- and all four are
+// the same thirty-two bits.  Spelling them unsigned throughout is what let the
+// two loops become one, and it takes a signed overflow out of the forward
+// direction on the way.
+template<int32_t f_DEC>
+static void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
+  uint8_t* base = &img->pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
-    deinterleave_plane(img, dst, plane);
+    if( f_DEC )
+      interleave_flat(img, side, plane);
+    else
+      deinterleave_plane(img, side, plane);
     return;
   }
   int32_t stride = plane_count;
   int32_t n = bmf_pixels(img);
   const PlaneTransform t = plane_transform(plane);
+  // The same dispatch `plane_transform` makes, written the same way round.
+  // Here it was two nested `if`s with the one-reference path falling out of
+  // the bottom of both, which is `by_weights || nrefs == 1` reached the long
+  // way.
   if( t.by_weights||plane_desc[plane].nrefs==1 ) {
-    uint8_t* ref = src+t.to_ref0;
-    int32_t i2 = 0;
-    int32_t ofs2 = 0;
+    const uint8_t *ref = base+t.to_ref0;
+    int32_t i = 0;
+    int32_t ofs = 0;
     do {
-      uint8_t d = src[ofs2]-t.dc-ref[ofs2];
-      ofs2 += stride;
-      dst[i2++] = d;
-    } while( i2<n );
+      if( f_DEC )
+        base[ofs] = ref[ofs]+t.dc+side[i];
+      else
+        side[i] = base[ofs]-t.dc-ref[ofs];
+      ofs += stride;
+      ++i;
+    } while( i<n );
     return;
   }
-  if( t.mode==2 ) {
-    int32_t left2 = bmf_pixels(img);
-    uint8_t *p2 = src;
+  // Two references and three were two loops of six lines that differed in one
+  // expression, which is `PlaneTransform::blend`.
+  if( t.mode==2||t.mode==3 ) {
+    int32_t left = n;
+    uint8_t *p = base;
     do {
-      int32_t x2 = *p2-t.dc;
-      uint32_t blend = t.wgt0*p2[t.to_ref0]+t.wgt1*p2[t.to_ref1]+40;
-      p2 += stride;
-      *dst++ = (uint8_t)(x2-(blend>>7));
-      --left2;
-    } while( left2 );
-  } else if( t.mode==3 ) {
-    int32_t left3 = bmf_pixels(img);
-    uint8_t *p3 = src;
-    do {
-      int32_t x3 = *p3-t.dc;
-      int32_t wsum = t.wgt1**(p3-2)+t.wgt0**(p3-3);
-      int32_t w12sum = t.wgt2**(p3-1);
-      p3 += stride;
-      *dst++ = (uint8_t)(x3-((uint32_t)(wsum+w12sum+63)>>7));
-      --left3;
-    } while( left3 );
+      const uint32_t blend = t.blend(p);
+      if( f_DEC )
+        *p = (uint8_t)(blend+t.dc+*side++);
+      else
+        *side++ = (uint8_t)(*p-t.dc-blend);
+      p += stride;
+      --left;
+    } while( left );
   }
+}
+
+void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
+  code_colour_plane<1>(img, src, plane);
+}
+
+void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
+  code_colour_plane<0>(img, dst, plane);
 }
 
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
