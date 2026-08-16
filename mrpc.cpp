@@ -143,10 +143,16 @@
 #ifndef TRIAL_BANDS
 #define TRIAL_BANDS  6
 #endif
-#define MAX_TOTFREQ (1<<20)
+#ifndef MAX_TOTFREQ
+#define MAX_TOTFREQ (1<<20)   // must stay under the rangecoder's range
+                              // floor, or `range = (range/tot)*tot` throws
+                              // away real bits: sh_rcm.inc renormalises by
+                              // bytes, so that floor is 2^24
+#endif
 #define MIN_FREQ 1
 
 #include "sh_common.inc"
+#include "sh_rcm.inc"
 #include <time.h>
 
 // Wall-ish clock for the progress report.  clock() is CPU time, which for
@@ -191,7 +197,7 @@ typedef double cost_t;
 // entry points MRP's models want; rc_BProcess is only used by the header
 // and fallback models.
 // -------------------------------------------------------------
-Rangecoder rc;
+RangecoderM rc;
 uint f_DEC = 0;
 
 // A plain adaptive binary probability: no ParamUpdater, one shift.
@@ -199,7 +205,7 @@ struct BC {
   word p;
   void Init() { p = SCALE/2; }
   INLINE uint Code( uint bit ) {
-    bit = rc.rc_BProcess( p, bit );
+    bit = rc.BProcess( p, bit );
     if( bit ) p = word(p - (p>>5)); else p = word(p + ((SCALE-p)>>5));
     if( p<32 ) p = 32; else if( p>SCALE-32 ) p = SCALE-32;
     return bit;
@@ -333,7 +339,7 @@ struct SPMod {
 
 static INLINE void EncSym( const PMod* pm, int lo, int hi, int s ) {
   uint off = pm->cumfreq[lo], tot = pm->cumfreq[hi]-off;
-  rc.rc_Process( pm->cumfreq[s]-off, pm->freq[s], tot );
+  rc.Encode( pm->cumfreq[s]-off, pm->freq[s], tot );
 }
 // Half the decoder's time is here: the window is always 256 symbols wide
 // and the binary search over it is eight loads, each of which has to
@@ -344,7 +350,7 @@ static INLINE void EncSym( const PMod* pm, int lo, int hi, int s ) {
 static INLINE int DecSym( const PMod* pm, int lo, int hi ) {
   const uint* c = pm->cumfreq + lo;
   uint off = c[0], tot = pm->cumfreq[hi]-off;
-  uint v = rc.rc_GetFreq( tot ) + off;      // compare unshifted
+  uint v = rc.GetFreq( tot ) + off;         // compare unshifted
   int n = hi-lo, i;
 #if defined(__AVX2__)
   if( n==256 ) {
@@ -362,24 +368,24 @@ static INLINE int DecSym( const PMod* pm, int lo, int hi ) {
       cnt += 8 - __builtin_popcount( uint(m) );
     }
     i = lo + b*32 + cnt;
-    rc.rc_Process( pm->cumfreq[i]-off, pm->freq[i], tot );
+    rc.Decode( pm->cumfreq[i]-off, pm->freq[i], tot );
     return i;
   }
 #endif
   { int a=lo, j=hi-1;
     while( a<j ) { int k=(a+j)>>1; if( pm->cumfreq[k+1] <= v ) a=k+1; else j=k; }
     i = a; }
-  rc.rc_Process( pm->cumfreq[i]-off, pm->freq[i], tot );
+  rc.Decode( pm->cumfreq[i]-off, pm->freq[i], tot );
   return i;
 }
 static INLINE void EncSP( const SPMod& p, int s ) {
-  rc.rc_Process( p.cumfreq[s], p.freq[s], p.cumfreq[p.size] );
+  rc.Encode( p.cumfreq[s], p.freq[s], p.cumfreq[p.size] );
 }
 static INLINE int DecSP( const SPMod& p ) {
-  uint v = rc.rc_GetFreq( p.cumfreq[p.size] );
+  uint v = rc.GetFreq( p.cumfreq[p.size] );
   int i=0, j=p.size-1;
   while( i<j ) { int k=(i+j)>>1; if( p.cumfreq[k+1]<=v ) i=k+1; else j=k; }
-  rc.rc_Process( p.cumfreq[i], p.freq[i], p.cumfreq[p.size] );
+  rc.Decode( p.cumfreq[i], p.freq[i], p.cumfreq[p.size] );
   return i;
 }
 
@@ -1367,7 +1373,7 @@ struct MRPCIO : MRPC {
           int v = coef[cl][k][i], s = (v<0);
           if( v<0 ) v = -v;
           EncSP( sp, v );
-          if( v>0 ) rc.rc_Process( uint(s), 1, 2 );
+          if( v>0 ) rc.Encode( uint(s), 1, 2 );
         }
       }
     }
@@ -1382,8 +1388,8 @@ struct MRPCIO : MRPC {
         for( int cl=0; cl<num_class; cl++ ) {
           int v = DecSP( sp );
           if( v>0 ) {
-            uint f = rc.rc_GetFreq(2); uint s = (f>=1);
-            rc.rc_Process( s, 1, 2 );
+            uint s = rc.GetFreq(2);
+            rc.Decode( s, 1, 2 );
             if( s ) v = -v;
           }
           coef[cl][k][i] = v;
