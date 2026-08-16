@@ -1176,13 +1176,13 @@ struct ModelBlock {
       // The encoder's half of this context is at `sig3` below, written the same
       // way: a four-bit field of the symbol under a lazily allocated id.  It
       // reuses `sym1`, which held the left neighbour's symbol until here.
-      nb_sym[1] = CtxIdx{}.bits<0, 4>(nb_sym[1]).raw(16*id2);
-      id3p = &ctx_id3[nb_sym[1]];
+      const int32_t sig3 = CtxIdx{}.bits<0, 4>(nb_sym[1]).raw(16*id2);
+      id3p = &ctx_id3[sig3];
       id2 = *id3p;
       if( id2==0xFFFF ) {
-        s1a = nb_sym[1];
+        s1a = sig3;
         if( id3_used>53248 )
-          s1a = nb_sym[1]|0xF;
+          s1a = sig3|0xF;
         id3p = &ctx_id3[s1a];
         id2 = *id3p;
       }
@@ -1484,29 +1484,30 @@ struct ModelBlock {
         pix_cur->last = wp;
         PixRec *r3 = row_cur[5];
         uint32_t rec_word = *(uint32_t*)r3;
-        nb_sym[1] = r3->match2345;
+        // The record's flag word, saved into a slot of the candidate table and
+        // read back twice below across walks that do not touch it.
+        const int32_t flag_word = r3->match2345;
         cur2 = r3+1;
         row_cur[5] = r3+1;
         if( runlen-run_hit!=1 ) {
           int32_t run_left = runlen-run_hit-1;
           uint32_t half = run_left/2;
           if( run_left/2 ) {
-            // `run_left` and `amap` saved into two slots of the candidate
-            // table and read straight back below, across a walk that touches
-            // neither -- a register spill with a name.
-            int32_t s1 = nb_sym[1];
+            // `run_left` and `amap` were saved into two slots of the
+            // candidate table and read straight back below, across a walk that
+            // touches neither -- register spills with names.
             runlen_s = runlen;
             uint32_t k = 0;
             int16_t s8 = nb_sym[8];
             do {
               pix_cur->prev = s8;
               row_cur[5]->head4 = rec_word;
-              row_cur[5]->match2345 = s1;
+              row_cur[5]->match2345 = flag_word;
               SymPair *pixp = pix_cur;
               ++row_cur[5];
               pixp->prev = s8;
               row_cur[5]->head4 = rec_word;
-              row_cur[5]->match2345 = s1;
+              row_cur[5]->match2345 = flag_word;
               cur5p1 = row_cur[5]+1;
               row_cur[5] = cur5p1;
               ++k;
@@ -1520,7 +1521,7 @@ struct ModelBlock {
           if( (uint32_t)run_left>(done-1) ) {
             pix_cur->prev = nb_sym[8];
             row_cur[5]->head4 = rec_word;
-            row_cur[5]->match2345 = nb_sym[1];
+            row_cur[5]->match2345 = flag_word;
             PixRec *cur5p1b = row_cur[5]+1;
             row_cur[5] = cur5p1b;
             cur2 = cur5p1b;

@@ -1003,3 +1003,11 @@ That is the counterpart to the `bucket_top` finding above and the same lesson
 from the other side: a value in a borrowed slot has a lifetime the slot does
 not advertise, and the only way to know it is to enumerate every read. **The
 pair is 456 lines and 54 shared**, from 653 and 94.
+
+**And that is the last of them.** `sig3` in the decoder was a context index
+built from slot 1 and stored back into it, where the encoder's half already had
+a local of that name; the encoder's `nb_sym[1] = r3->match2345` was a record's
+flag word saved and read back twice. With those two named, every write to
+`nb_sym` in either pixel coder is a candidate again — the four stage-one
+neighbours and the twenty-two spatial ones — and the twelve borrowed uses are
+gone.
