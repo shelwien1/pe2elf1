@@ -143,42 +143,45 @@ next_opcode:
           if( row<pix_lo||row+(run4/2+1)>pix_hi )
             return nullptr;
           uint8_t lo = byte&0xF;
+          // `run4` nibbles of the two-nibble pattern in `pair`, from the half
+          // of `*row` that `hi_nibble` names.  Both arms ended twice -- once
+          // by falling out of the loop and once by a `goto` back to
+          // `next_opcode` from inside it -- and the label is the top of the
+          // loop this `if` is the body of, so the jump and the fall-through
+          // are the same exit.  What told them apart is the parity of `run4`,
+          // which is what each arm's counter is left holding.
           if( hi_nibble ) {
+            // Byte-aligned, so every full byte is `pair` itself.  The counter
+            // steps by two and stops at 0 or 1.
             int32_t left4b = run4;
             uint8_t *row3 = row;
-            while( left4b!=1 ) {
+            while( left4b>1 ) {
               *row3++ = pair;
               left4b -= 2;
-              if( !left4b ) {
-                row = row3;
-                hi_nibble = 1;
-                goto next_opcode;
-              }
             }
             row = row3;
-            *row3 = pair&0xF0;
-            hi_nibble = 0;
+            hi_nibble = left4b==0;
+            if( left4b )
+              *row3 = pair&0xF0;
           } else {
+            // Half a byte out of step: each byte written is the low nibble of
+            // the previous pattern beside the high nibble of the next, so the
+            // first byte carries whatever `*row` already held and the last may
+            // be half a byte on its own.  Here the counter ends at 0 or -1.
             int32_t left4 = run4;
             uint8_t *row4 = row;
             cur = *row;
             uint32_t hi = pair>>4;
             uint8_t lo16 = 16*lo;
-            while( 1 ) {
+            do {
               *row4++ = hi|cur;
-              if( left4==1 )
-                break;
               cur = lo16;
               left4 -= 2;
-              if( !left4 ) {
-                row = row4;
-                *row4 = lo16;
-                hi_nibble = 0;
-                goto next_opcode;
-              }
-            }
+            } while( left4>0 );
             row = row4;
-            hi_nibble = 1;
+            hi_nibble = left4<0;
+            if( !hi_nibble )
+              *row4 = lo16;
           }
         }
         if( byte )

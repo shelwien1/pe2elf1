@@ -176,6 +176,46 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         out_at += 2;
       }
     };
+    // How many bytes from `at` repeat `*at`, counting `at` itself and stopping
+    // at `end`.  The caller has already established `at + 1 < end`, which is
+    // why the recovered loop tested the byte before the bound and this tests
+    // the bound before the byte -- at the first turn they are the same test.
+    auto run_length = [](const uint8_t* at, const uint8_t* end) {
+      int32_t n = 1;
+      while( end>at+n&&at[n]==*at )
+        ++n;
+      return n;
+    };
+    // Emit repeat pairs from `p` for as long as the next run is worth more
+    // than the literal it would otherwise join, flushing that literal first
+    // when there is one.  Returns true when the row ended on a pair boundary,
+    // which is the one exit that has to leave the loop *outside* this one --
+    // said by a `goto` past both in the recovery, and the reason this was two
+    // `while( 1 )`s deep before anything in it happened.
+    auto emit_runs = [&]() {
+      while( 1 ) {
+        q = p+1;
+        if( p+1>=end )
+          return false;
+        byte = (uint8_t)*p;
+        run = run_length(p, end);
+        if( run<=2&&(run!=2||lit_len) )
+          return false;
+        if( run_max<run )
+          run = run_max;
+        if( lit_len ) {
+          flush_literal(p);
+          lit_len = 0;
+          byte = *p;
+        }
+        out_at[1] = byte;
+        p += run;
+        *out_at = run<<(nib&31);
+        out_at += 2;
+        if( p>=end )
+          return true;
+      }
+    };
     if( rows2>0 ) {
       int32_t row_i = 0;
       while( 1 ) {
@@ -185,33 +225,8 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         lit_len = 0;
         do {
           while( 1 ) {
-            while( 1 ) {
-              q = p+1;
-              if( p+1>=end )
-                break;
-              byte = (uint8_t)*p;
-              run = 1;
-              do {
-                if( byte!=p[run] )
-                  break;
-                ++run;
-              } while( end>&p[run] );
-              if( run<=2&&(run!=2||lit_len) )
-                break;
-              if( run_max<run )
-                run = run_max;
-              if( lit_len ) {
-                flush_literal(p);
-                lit_len = 0;
-                byte = *p;
-              }
-              out_at[1] = byte;
-              p += run;
-              *out_at = run<<(nib&31);
-              out_at += 2;
-              if( p>=end )
-                goto write_rows;
-            }
+            if( emit_runs() )
+              goto write_rows;
             ++p;
             if( ++lit_len!=run_max )
               break;
