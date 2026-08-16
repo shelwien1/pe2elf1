@@ -305,6 +305,30 @@ struct ModelBlock {
     return sel_cur;
   }
 
+  // Start a row: rotate the five record rows by one, reseat the five cursors
+  // seven records into the rows they now point at, and seed the six `match`
+  // bytes the first samples of the row would otherwise read from the row
+  // before it.
+  //
+  // Written out in both `model_plane` and `unmodel_plane`, and the eleven
+  // lines of the rotation are `ring_advance` -- the same template the p1 and
+  // p2 rings use, here over `row_cur[0..4]` with `row_cur[5..9]` as its
+  // cursors.  The copies spelled it through five named temporaries, which is
+  // what hid the shape: `row_cur[5]` is `row_cur[0] + 7` and so on down.
+  void start_row() {
+    row_cur[5]->match[1] = row_cur[5][-1].sym==0;
+    row_cur[5]->match[3] = row_cur[6][-1].sym==0;
+    ring_advance(row_cur, row_cur+5, 7);
+    uint8_t zero = row_cur[6][1].sym==0;
+    row_cur[5]->match[2] = zero;
+    row_cur[5][-1].match[4] = zero;
+    row_cur[5][-2].match[5] = zero;
+    zero = row_cur[6][2].sym==0;
+    row_cur[5]->match[4] = zero;
+    row_cur[5][-1].match[5] = zero;
+    row_cur[5]->match[5] = row_cur[6][3].sym==0;
+  }
+
   // The twenty-two neighbours the escape context is built from, in the order
   // `pixel_context` reads them: rows 5 to 8 of the workspace at fixed offsets
   // from the sample being coded, and one from row 9.  Slots 0 and 1 are the
@@ -445,7 +469,6 @@ struct ModelBlock {
     int32_t done;
     int32_t lo1;
     uint8_t *expand_buf;
-    PixRec* kk, * row_cur3, * row_cur2, * row_cur1, * n_syms;
     int32_t lo, w2, w4, w2n, lvl_n, live, bucket, x2, bits, n_pix, q2, n_pix2;
     SymList *i, *j;
     PixRec* lists, * t;
@@ -597,35 +620,7 @@ struct ModelBlock {
       out_at = dst_buf;
       bucket = 0;
       while( 1 ) {
-        blk->row_cur[5]->match[1] = blk->row_cur[5][-1].sym==0;
-        blk->row_cur[5]->match[3] = blk->row_cur[6][-1].sym==0;
-        kk = blk->row_cur[4];
-        row_cur3 = blk->row_cur[3];
-        row_cur2 = blk->row_cur[2];
-        row_cur1 = blk->row_cur[1];
-        n_syms = blk->row_cur[0];
-        blk->row_cur[4] = row_cur3;
-        blk->row_cur[3] = row_cur2;
-        blk->row_cur[2] = row_cur1;
-        blk->row_cur[1] = n_syms;
-        blk->row_cur[0] = kk;
-        kk += 7;
-        blk->row_cur[5] = kk;
-        n_syms += 7;
-        blk->row_cur[6] = n_syms;
-        blk->row_cur[7] = row_cur1+7;
-        blk->row_cur[8] = row_cur2+7;
-        blk->row_cur[9] = row_cur3+7;
-        {
-          uint8_t zero = n_syms[1].sym==0;
-          kk->match[2] = zero;
-          blk->row_cur[5][-1].match[4] = zero;
-          blk->row_cur[5][-2].match[5] = zero;
-          zero = blk->row_cur[6][2].sym==0;
-          blk->row_cur[5]->match[4] = zero;
-          blk->row_cur[5][-1].match[5] = zero;
-        }
-        blk->row_cur[5]->match[5] = blk->row_cur[6][3].sym==0;
+        blk->start_row();
         lists = blk->row_cur[6];
         t = blk->row_cur[7];
         ++blk->row_cur[5];

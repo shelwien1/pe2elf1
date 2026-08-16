@@ -7,7 +7,6 @@
 int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];
   uint32_t xf4, i;
-  bool xf2;
   int16_t seed1, l7c, seed2;
   uint32_t src1;
   AltP2Block* blk0, ** xf3;
@@ -25,8 +24,6 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   if( height>0 ) {
     src1 = 0;
     int32_t first = -row_i;
-    uint32_t row_bytes = 18*row_i+234;
-    uint32_t code3 = row_i+13;
     nplanes = plane_count;
     do {
       if( nplanes>0 ) {
@@ -38,35 +35,12 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             xf3 = &plane[pl2];
             if( xf4==1 ) {
               AltP2Block *blk_k = (AltP2Block*)(*(xf3-1));
-              {
-                P2Ctx*const here = blk_k->cursor[0];
-                for( int32_t j = 0; j<5; ++j ) here[j] = here[-1];
-              }
-              P2Ctx*const rec4 = blk_k->cursor[0]+first;
-              for( int32_t j = 0; j<8; ++j ) rec4[-1-j] = rec4[j];
-              for( int32_t j = 0; j<3; ++j ) memcpy(blk_k->buf[1+j], blk_k->buf[0], row_bytes);
+              blk_k->seed_history(-first);
             }
           } else {
             AltP2Block *src2 = (AltP2Block*)(plane[pl2-1]);
-            AltP2Block** back = &plane[pl2];
-            int32_t src3 = 0;
-            do {
-              int32_t xf1 = src3;
-              src2->buf[0][xf1].val = 256;
-              xf2 = (uint32_t)(++src3)<code3;
-              src2->buf[0][xf1].dval = 256;
-              src2->buf[0][xf1].err = -16;
-              src2->buf[0][xf1].sign = 1;
-              src2->buf[0][xf1].mag = 3;
-              src2->buf[0][xf1].aerr = 512;
-              src2->buf[0][xf1].dupright = 512;
-              src2->buf[0][xf1].dupleft = 512;
-              src2->buf[0][xf1].dup = 1024;
-              src2->buf[0][xf1].dleft = 256;
-            } while( xf2 );
-            xf3 = back;
-            for( int32_t j = 0; j<3; ++j ) memcpy(src2->buf[1+j], src2->buf[0], row_bytes);
-            for( int32_t j = 0; j<5; ++j ) src2->cursor[j] = src2->buf[j]+row_i+8;
+            xf3 = &plane[pl2];
+            src2->seed_row0(row_i);
           }
           AltP2Block *blk_r = (AltP2Block*)(*(xf3-1));
           blk_r->start_row();

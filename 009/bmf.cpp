@@ -45,18 +45,20 @@
 // numbers below were all wrong by the time it was written, which is why it
 // exists.
 //
-//   alt_model_p2_encode / alt_model_p2_decode         39 of 385 (10%)
-//   code_pixel / decode_pixel                        141 of 1034 (14%)
-//   predict_med / unpredict_med                       10 of 123 (8%)
-//   alt_model_p1_d8_encode / alt_model_p1_d8_decode     3 of 50 (6%)
-//   model_plane / unmodel_plane                       15 of 252 (6%)
+//   alt_model_p2_encode / alt_model_p2_decode         34 of 334 (10%)
+//   code_pixel / decode_pixel                        124 of 865 (14%)
+//   predict_med / unpredict_med                       10 of 122 (8%)
+//   alt_model_p1_d8_encode / alt_model_p1_d8_decode     3 of 45 (7%)
+//   model_plane / unmodel_plane                       15 of 224 (7%)
 //
-// Four of the five moved when the duplicated blocks came out, and every one of
-// them moved the same way: what the two halves shared was never the algorithm,
-// so naming it and calling it from both leaves less behind, not more.  The p2
-// pair fell from 123 of 586 to 39 of 385 -- `AltP2Block::start_row`,
-// `alt_p2_planes_alloc` and `alt_p2_planes_free` are the difference -- and the
-// p1 pair from 8 of 60 to 3 of 50.  The decline is stronger than it was.
+// Every one of the five has moved since it was measured, and all of them the
+// same way: what the two halves shared was never the algorithm, so naming it
+// and calling it from both leaves less behind, not more.  The p2 pair fell
+// from 123 shared lines of 586 to 34 of 334 and the p1 pair from 8 of 60 to 3
+// of 45, and both `*_pixel` bodies lost a third of their length to
+// `load_neighbours`, `FreqRec::blend_from` and `ModelBlock::start_row`.  The
+// percentages barely move because both halves shrink together, which is the
+// point: the shared part is scaffolding, and scaffolding is what comes out.
 //
 // Every merge was gated on its own -- the fifteen streams byte for byte, at
 // both pointer widths -- and then all nine were instrumented and run over the

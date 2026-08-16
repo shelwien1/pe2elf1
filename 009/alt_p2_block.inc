@@ -393,6 +393,50 @@ struct AltP2Block {
   int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb);
   uint32_t alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in);
 
+  // Seed the three spare history rows from the row just coded: mirror its last
+  // record five forward past the right edge, mirror eight back from the start
+  // of the row above it, and copy the whole row into rows 1, 2 and 3.
+  //
+  // Three copies -- `alt_p2_d8_body` after its first row, and both of
+  // `alt_model_p2_encode` and `alt_model_p2_decode` -- with the width spelled
+  // as `width`, `first` and `back`, one of them negated at the call site.
+  // `18*width + 234` is `sizeof(P2Ctx) * (width + 13)`.
+  void seed_history(int32_t width) {
+    P2Ctx*const here = cursor[0];
+    for( int32_t i = 0; i<5; ++i )
+      here[i] = here[-1];
+    P2Ctx*const up = cursor[0]-width;
+    for( int32_t i = 0; i<8; ++i )
+      up[-1-i] = up[i];
+    const int32_t row_bytes = 18*width+234;
+    for( int32_t i = 0; i<3; ++i )
+      memcpy(buf[1+i], buf[0], row_bytes);
+  }
+
+  // The neutral record every row 0 starts from, and the five cursors seated
+  // past it.  Written out in both coders, twelve lines apiece for the record
+  // and one re-rolled loop each for the copies and the cursors.
+  void seed_row0(int32_t width) {
+    for( int32_t x = 0; x<width+13; ++x ) {
+      P2Ctx&rec = buf[0][x];
+      rec.val = 256;
+      rec.dval = 256;
+      rec.err = -16;
+      rec.sign = 1;
+      rec.mag = 3;
+      rec.aerr = 512;
+      rec.dupright = 512;
+      rec.dupleft = 512;
+      rec.dup = 1024;
+      rec.dleft = 256;
+    }
+    const int32_t row_bytes = 18*width+234;
+    for( int32_t i = 0; i<3; ++i )
+      memcpy(buf[1+i], buf[0], row_bytes);
+    for( int32_t i = 0; i<5; ++i )
+      cursor[i] = buf[i]+width+8;
+  }
+
   // Roll this plane forward by one row: carry the last neighbour of the row
   // just finished into both seams of the next, swap the two neighbour rows and
   // step them past their margins, clear the filter's row and its four biases,

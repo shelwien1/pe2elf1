@@ -163,35 +163,7 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       y = 0;
       do {
         int32_t y1 = y+1;
-        blk->row_cur[5]->match[1] = blk->row_cur[5][-1].sym==0;
-        blk->row_cur[5]->match[3] = blk->row_cur[6][-1].sym==0;
-        PixRec *r4 = blk->row_cur[4];
-        PixRec *row_cur3 = blk->row_cur[3];
-        PixRec *row_cur2 = blk->row_cur[2];
-        PixRec *row_cur1 = blk->row_cur[1];
-        PixRec *r0 = blk->row_cur[0];
-        blk->row_cur[4] = row_cur3;
-        blk->row_cur[3] = row_cur2;
-        blk->row_cur[2] = row_cur1;
-        blk->row_cur[1] = r0;
-        blk->row_cur[0] = r4;
-        r4 += 7;
-        blk->row_cur[5] = r4;
-        r0 += 7;
-        blk->row_cur[6] = r0;
-        blk->row_cur[7] = row_cur1+7;
-        blk->row_cur[8] = row_cur2+7;
-        blk->row_cur[9] = row_cur3+7;
-        {
-          uint8_t zero = r0[1].sym==0;
-          r4->match[2] = zero;
-          blk->row_cur[5][-1].match[4] = zero;
-          blk->row_cur[5][-2].match[5] = zero;
-          zero = blk->row_cur[6][2].sym==0;
-          blk->row_cur[5]->match[4] = zero;
-          blk->row_cur[5][-1].match[5] = zero;
-        }
-        blk->row_cur[5]->match[5] = blk->row_cur[6][3].sym==0;
+        blk->start_row();
         PixRec *up1 = blk->row_cur[6];
         PixRec *up2 = blk->row_cur[7];
         ++blk->row_cur[5];

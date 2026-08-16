@@ -141,14 +141,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
     if( !f_DEC )
       src_end = p;
   }
-  {
-    P2Ctx*const here = cursor[0];
-    for( int32_t i = 0; i<5; ++i ) here[i] = here[-1];
-  }
-  P2Ctx*const rec3 = cursor[0]+(-width);
-  for( int32_t i = 0; i<8; ++i ) rec3[-1-i] = rec3[i];
-  int32_t row_bytes = 18*width+234;
-  for( int32_t i = 0; i<3; ++i ) memcpy(buf[1+i], buf[0], row_bytes);
+  seed_history(width);
   if( height>1 ) {
     uint32_t* pair = ctx_pair;
     outp = out;

@@ -8,13 +8,13 @@
 // identical to the encoder's, 260 lines from the six that undo them.  Both are
 // `P2Coef::fold`/`restore` now, which is also how the claim got checked.
 int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
-  AltP2Block* plane[4], ** w;
+  AltP2Block* plane[4];
   uint32_t i_1, first;
   int16_t seed1;
   uint32_t src2;
   int16_t seed3, seed2;
   AltP2Block** planep;
-  bool xf3, off;
+  bool off;
   int32_t nplanes;
   P2Coef p2_coef;
   p2_coef.fold();
@@ -29,8 +29,6 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
     src2 = 0;
     int32_t back = -i;
     nplanes = plane_count;
-    uint32_t row_bytes = 18*i+234;
-    uint32_t np = i+13;
     do {
       if( nplanes>0 ) {
         first = src2;
@@ -42,35 +40,12 @@ int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
             planep = &plane[pl2];
             if( first==1 ) {
               AltP2Block *blk_k = (AltP2Block*)(*(planep-1));
-              {
-                P2Ctx*const here = blk_k->cursor[0];
-                for( int32_t j = 0; j<5; ++j ) here[j] = here[-1];
-              }
-              P2Ctx*const rec2 = blk_k->cursor[0]+back;
-              for( int32_t j = 0; j<8; ++j ) rec2[-1-j] = rec2[j];
-              for( int32_t j = 0; j<3; ++j ) memcpy(blk_k->buf[1+j], blk_k->buf[0], row_bytes);
+              blk_k->seed_history(-back);
             }
           } else {
             AltP2Block *src3 = (AltP2Block*)(plane[pl2-1]);
-            w = &plane[pl2];
-            int32_t xf1 = 0;
-            do {
-              int32_t xf2 = xf1;
-              src3->buf[0][xf2].val = 256;
-              xf3 = (uint32_t)(++xf1)<np;
-              src3->buf[0][xf2].dval = 256;
-              src3->buf[0][xf2].err = -16;
-              src3->buf[0][xf2].sign = 1;
-              src3->buf[0][xf2].mag = 3;
-              src3->buf[0][xf2].aerr = 512;
-              src3->buf[0][xf2].dupright = 512;
-              src3->buf[0][xf2].dupleft = 512;
-              src3->buf[0][xf2].dup = 1024;
-              src3->buf[0][xf2].dleft = 256;
-            } while( xf3 );
-            planep = w;
-            for( int32_t j = 0; j<3; ++j ) memcpy(src3->buf[1+j], src3->buf[0], row_bytes);
-            for( int32_t j = 0; j<5; ++j ) src3->cursor[j] = src3->buf[j]+i+8;
+            planep = &plane[pl2];
+            src3->seed_row0(i);
           }
           AltP2Block *blk_r = (AltP2Block*)(*(planep-1));
           blk_r->start_row();
