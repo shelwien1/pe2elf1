@@ -117,6 +117,9 @@
                          // count; past a point the iterations are buying
                          // hundredths of a percent at a minute each.
 #endif
+#ifndef MRP_OLDSORT
+#define MRP_OLDSORT 0
+#endif
 #ifndef MRP_GATHER
 #define MRP_GATHER  0    // 1 = AVX2 vgather in the coefficient search,
                          // 0 = SIMD-computed indices with scalar loads.
@@ -154,10 +157,24 @@
 #include "sh_common.inc"
 #include "sh_rcm.inc"
 #include <time.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
-// Wall-ish clock for the progress report.  clock() is CPU time, which for
-// a single-threaded encoder is the number the user is waiting on.
-static double tnow( void ) { return double(clock())/double(CLOCKS_PER_SEC); }
+// The progress report wants wall time.  clock() is CPU time, which is the
+// same thing single-threaded and four times the truth on four threads.
+static double tnow( void ) {
+#ifdef _OPENMP
+  return omp_get_wtime();
+#elif defined(CLOCK_MONOTONIC)
+  struct timespec ts;
+  if( clock_gettime(CLOCK_MONOTONIC,&ts)==0 )
+    return double(ts.tv_sec) + double(ts.tv_nsec)*1e-9;
+  return double(clock())/double(CLOCKS_PER_SEC);
+#else
+  return double(clock())/double(CLOCKS_PER_SEC);
+#endif
+}
 static double t_start = 0.0;
 static int    g_prog  = 0;
 #define PROG(...) do { if(g_prog){ fprintf(stderr,__VA_ARGS__); fflush(stderr);} } while(0)
@@ -693,6 +710,19 @@ struct MRPC {
     }
   }
 
+  // Same as CalcCost, but gives up as soon as the running total passes
+  // `bound`.  The class search asks 63 questions per block and only wants
+  // the smallest answer, so most candidates need only be shown to be
+  // worse than one that is already known.  `>` not `>=`, so a candidate
+  // that would tie still completes and the tie-break is unchanged.
+  cost_t CalcCostB( uint y0, uint x0, uint y1, uint x1, cost_t bound ) {
+    cost_t cost = 0;
+    for( uint y=y0; y<y1; y++ ) {
+      cost += CalcCost( y, x0, y+1, x1 );
+      if( cost > bound ) return cost;
+    }
+    return cost;
+  }
   cost_t CalcCost( uint y0, uint x0, uint y1, uint x1 ) {
     cost_t cost = 0;
     for( uint y=y0; y<y1; y++ ) {
@@ -748,11 +778,32 @@ struct MRPC {
       var[b] = s2 - s*s/double(BASE_BSIZE*BASE_BSIZE*nc);
       idx[b] = int(b);
     }
-    for( size_t i=1; i<nb; i++ ) {           // insertion sort by variance
+    // Stable merge sort by (variance, block index).  The insertion sort
+    // this replaces is O(nb^2) -- 262144 blocks at 16 MP is ~17G shifts,
+    // once per encode -- and stability matters: the initial assignment
+    // feeds the whole nonconvex search, so an unstable order moves the
+    // stream.
+#if MRP_OLDSORT
+    for( size_t i=1; i<nb; i++ ) {
       int t = idx[i]; size_t j = i;
       while( j>0 && var[idx[j-1]] > var[t] ) { idx[j] = idx[j-1]; j--; }
       idx[j] = t;
     }
+#else
+    { int* tmp = new int[nb];
+      for( size_t w=1; w<nb; w*=2 ) {
+        for( size_t lo=0; lo<nb; lo+=2*w ) {
+          size_t mid = (lo+w<nb) ? lo+w : nb, hi = (lo+2*w<nb) ? lo+2*w : nb;
+          size_t a=lo, b=mid, o=lo;
+          while( a<mid && b<hi )
+            tmp[o++] = ( var[idx[b]] < var[idx[a]] ) ? idx[b++] : idx[a++];
+          while( a<mid ) tmp[o++] = idx[a++];
+          while( b<hi  ) tmp[o++] = idx[b++];
+        }
+        for( size_t i=0; i<nb; i++ ) idx[i] = tmp[i];
+      }
+      delete[] tmp; }
+#endif
     memset( cls, 0, size_t(W)*H );
     for( size_t k=0; k<nb; k++ ) {
       int cl = int((k*size_t(num_class))/nb);
@@ -774,12 +825,19 @@ struct MRPC {
   // trial fits on a band rather than the whole image, which is a choice
   // between n! candidates and does not need every pixel to make it.
   void FitPredictor( int mmse ) {
-    static double mat[NTMAX][NTMAX+1];
-    static double wg[MRP_GROUP];
-    static int    piv[NTMAX];
+    double wg[MRP_GROUP];
     for( int g=0; g<MRP_GROUP; g++ )
       wg[g] = mmse ? 1.0 : 1.0/(SIGMA[g]*SIGMA[g]);
-    for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) {
+    int nck = num_class*int(nc);
+    // one normal-equation system per (class, component), all independent;
+    // the scratch that used to be `static` is per-task now
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(dynamic,1) if(!tnb)
+#endif
+    for( int ii=0; ii<nck; ii++ ) {
+      int cl = ii/int(nc); uint k = uint(ii%int(nc));
+      static thread_local double mat[NTMAX][NTMAX+1];
+      static thread_local int    piv[NTMAX];
       int n = nt[k];
       for( int i=0; i<n; i++ ) for( int j=0; j<=n; j++ ) mat[i][j] = 0.0;
       // The tap values go into a contiguous vector once, and the rank-1
@@ -788,30 +846,49 @@ struct MRPC {
       // right-hand column carried in element n of the same sweep.
       ALIGN(32) double xv[NTMAX+8];
       const int* to = toff[k];
-      for( int b=0; b<(tnb?tnb:1); b++ )
-      for( uint y=(tnb?tb0[b]:0); y<(tnb?tb1[b]:H); y++ ) {
-        const char* pc = cls + size_t(y)*W;
-        const byte* p  = org + OI(y,0);
-        const char* pg = grp + PI(y,0);
-        for( uint x=0; x<W; x++, p+=nc, pg+=nc ) {
-          if( int(pc[x])!=cl ) continue;
-          double w = wg[int(pg[k])];
-          for( int i=0; i<n; i++ ) xv[i] = double(p[to[i]]);
-          xv[n] = double(p[k]);
-          for( int i=0; i<n; i++ ) {
-            double a = w*xv[i];
-            double* m = mat[i];
-            int j = i;
+      // The pixels of one class, from the class list.  Scanning the whole
+      // image per (class, component) to touch a sixty-third of it cost
+      // C*K full passes over cls; the list costs one.
+      // names deliberately unlike the caller's: FITPIX(p,pg) would expand
+      // to `const byte* p = p;`, which is self-initialisation, not shadowing
+      #define FITPIX(P,PG) do {                                          \
+          const byte* fp_ = (P); const char* fg_ = (PG);                  \
+          double w = wg[int(fg_[k])];                                     \
+          for( int i=0; i<n; i++ ) xv[i] = double(fp_[to[i]]);            \
+          xv[n] = double(fp_[k]);                                         \
+          for( int i=0; i<n; i++ ) {                                      \
+            double a = w*xv[i];                                           \
+            double* m = mat[i];                                           \
+            int j = i;                                                    \
+            AVXFIT                                                        \
+            for( ; j<=n; j++ ) m[j] += a*xv[j];                           \
+          }                                                               \
+        } while(0)
 #if defined(__AVX2__) && defined(__FMA__)
-            __m256d va = _mm256_set1_pd(a);
-            for( ; j+4<=n+1; j+=4 )
-              _mm256_storeu_pd( m+j, _mm256_fmadd_pd( va,
-                _mm256_loadu_pd(xv+j), _mm256_loadu_pd(m+j) ) );
+      #define AVXFIT  { __m256d va = _mm256_set1_pd(a);                   \
+          for( ; j+4<=n+1; j+=4 )                                         \
+            _mm256_storeu_pd( m+j, _mm256_fmadd_pd( va,                   \
+              _mm256_loadu_pd(xv+j), _mm256_loadu_pd(m+j) ) ); }
+#else
+      #define AVXFIT
 #endif
-            for( ; j<=n; j++ ) m[j] += a*xv[j];
+      if( tnb ) {                        // order trial: bands, one class
+        for( int b=0; b<tnb; b++ )
+        for( uint y=tb0[b]; y<tb1[b]; y++ ) {
+          const char* pc = cls + size_t(y)*W;
+          const byte* p  = org + OI(y,0);
+          const char* pg = grp + PI(y,0);
+          for( uint x=0; x<W; x++, p+=nc, pg+=nc ) {
+            if( int(pc[x])!=cl ) continue;
+            FITPIX( p, pg );
           }
         }
+      } else {
+        for( size_t ci=cbeg[cl], ce=cbeg[cl+1]; ci<ce; ci++ )
+          FITPIX( org + cpo[ci], grp + cpq[ci] );
       }
+      #undef FITPIX
+      #undef AVXFIT
       for( int i=0; i<n; i++ ) for( int j=0; j<i; j++ ) mat[i][j] = mat[j][i];
       // Gauss-Jordan with partial pivoting
       for( int i=0; i<n; i++ ) piv[i] = i;
@@ -855,6 +932,7 @@ struct MRPC {
     }
   }
   cost_t DesignPredictor( int mmse ) {
+    if( !tnb ) BuildClassList();
     FitPredictor( mmse );
     PredictRegion( 0, 0, H, W );
     return CalcCost( 0, 0, H, W );
@@ -977,6 +1055,9 @@ struct MRPC {
   void SetPrdBuf( uint tly, uint tlx, uint bufsize ) {
     uint brx = (tlx+bufsize<W) ? tlx+bufsize : W;
     uint bry = (tly+bufsize<H) ? tly+bufsize : H;
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(static)
+#endif
     for( int cl=0; cl<num_class; cl++ ) {
       size_t bp = size_t(cl)*bufsize*bufsize*nc;
       for( uint y=tly; y<bry; y++ ) {
@@ -1038,14 +1119,28 @@ struct MRPC {
       }
     }
   }
-  int FindClass( uint tly, uint tlx, uint bry, uint brx, uint bufsize ) {
-    cost_t mc = 1e30; int mcl = 0;
+  // Returns the winning class and, in `outc`, the cost it won with --
+  // which VbsClass would otherwise recompute over the same block.
+  int FindClass( uint tly, uint tlx, uint bry, uint brx, uint bufsize,
+                 cost_t& outc ) {
+    // The block's current class is almost always competitive, so costing
+    // it first gives every other candidate a tight bound to fail against.
+    int cur = int(cls[size_t(tly)*W+tlx]);
+    PutBlock( cur, tly, tlx, bry, brx, bufsize );
+    cost_t mc = class_cost[mtfbuf[cur]] + CalcCost( tly, tlx, bry, brx );
+    int mcl = cur;
     for( int cl=0; cl<num_class; cl++ ) {
+      if( cl==cur ) continue;
+      cost_t base = class_cost[mtfbuf[cl]];
+      if( base > mc ) continue;                 // side cost alone loses
       PutBlock( cl, tly, tlx, bry, brx, bufsize );
-      cost_t c = class_cost[mtfbuf[cl]] + CalcCost( tly, tlx, bry, brx );
-      if( c<mc ) { mc = c; mcl = cl; }
+      cost_t c = base + CalcCostB( tly, tlx, bry, brx, mc-base );
+      // strictly-better, or an exact tie with a lower index: the same
+      // winner the plain first-minimum scan would have picked
+      if( c<mc || (c==mc && cl<mcl) ) { mc = c; mcl = cl; }
     }
     PutBlock( mcl, tly, tlx, bry, brx, bufsize );
+    outc = mc;
     return mcl;
   }
   // `width` is the right edge of the enclosing block, not of the image:
@@ -1090,12 +1185,12 @@ struct MRPC {
     int mtf_save[MRP_MAXCLASS];
     for( int k=0; k<num_class; k++ ) mtf_save[k] = mtfbuf[k];
     MtfClass( tly, tlx, blksize, width );
-    int cl = FindClass( tly, tlx, bry, brx, bufsize );
+    cost_t won;
+    int cl = FindClass( tly, tlx, bry, brx, bufsize, won );
     cost_t qtcost = class_cost[mtfbuf[cl]];
     if( level>0 ) {
       int ctx = QtCtx( level, tly, tlx, blksize, width );
-      cost_t cost1 = CalcCost( tly, tlx, bry, brx )
-                   + class_cost[mtfbuf[cl]] + qtflag_cost[ctx];
+      cost_t cost1 = won + qtflag_cost[ctx];    // FindClass already has it
       uint half = blksize>>1;
       for( int k=0; k<num_class; k++ ) mtfbuf[k] = mtf_save[k];
       qtcost = qtflag_cost[ctx+1];
@@ -1313,7 +1408,17 @@ struct MRPC {
   }
   cost_t OptimizePredictor() {
     BuildClassList();
-    for( int cl=0; cl<num_class; cl++ ) for( uint k=0; k<nc; k++ ) {
+    // Every (class, component) is an independent chain: OptimizeCoef reads
+    // immutable state and touches prd/errB only at slot k of that class's
+    // own pixels.  Classes partition the pixels, components partition the
+    // slots, so all C*K chains are disjoint -- and the result of each is
+    // what it was single-threaded, so the stream does not move with -j.
+    int nck = num_class*int(nc);
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(dynamic,1)
+#endif
+    for( int i=0; i<nck; i++ ) {
+      int cl = i/int(nc); uint k = uint(i%int(nc));
       int n = nt[k];
       if( n<2 ) continue;
       int d = 1 + int( optpass % uint(n-1) );

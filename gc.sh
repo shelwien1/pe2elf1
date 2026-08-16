@@ -11,6 +11,8 @@
 #         GCOPTS='-DFOO=1' ./gc.sh extra flags appended to the command line
 #         MARCH=native ./gc.sh     override -march/-mtune (default: haswell)
 #         GCOUT=path ./gc.sh bmpc  write the binary somewhere else
+#         GCOMP=1 ./gc.sh mrpc     build mrpc with OpenMP (mrpc only; it
+#                                  falls back to g++ if clang has no libomp)
 
 set -e
 
@@ -40,6 +42,18 @@ if [ "${GCIDX:-0}" = "1" ]; then
   done
 fi
 
+# --- OpenMP (mrpc's encoder threads) ----------------------------------------
+omp=""
+if [ "${GCOMP:-0}" = "1" ]; then
+  omp="-fopenmp"
+  # clang needs libomp; where it is missing, g++ carries libgomp
+  if [ -z "$CXX" ] && command -v clang++ >/dev/null 2>&1; then
+    if ! echo 'int main(){return 0;}' | clang++ -fopenmp -x c++ - -o /dev/null 2>/dev/null; then
+      CXX=g++
+    fi
+  fi
+fi
+
 # --- compiler ---------------------------------------------------------------
 if [ -z "$CXX" ]; then
   if command -v clang++ >/dev/null 2>&1; then CXX=clang++; else CXX=g++; fi
@@ -64,9 +78,13 @@ case "$($CXX --version 2>&1 | head -1)" in
     ;;
 esac
 
-# -static matches gc.bat; drop it if the toolchain has no static libstdc++.
+# -static matches gc.bat; drop it if the toolchain has no static libstdc++,
+# and drop it for OpenMP -- libgomp dlopens its plugins, which a statically
+# linked binary cannot do.
 link="-static"
-if ! echo 'int main(){return 0;}' | $CXX -x c++ -static -o /dev/null - 2>/dev/null; then
+if [ -n "$omp" ]; then
+  link=""
+elif ! echo 'int main(){return 0;}' | $CXX -x c++ -static -o /dev/null - 2>/dev/null; then
   link=""
 fi
 
@@ -78,7 +96,7 @@ build() {   # build <source> <output>
   if [ -n "$GCOUT" ]; then out=$GCOUT; fi   # sweep.py builds many variants
   echo "$CXX -> $out"
   # shellcheck disable=SC2086
-  $CXX -std=c++23 -Ofast $arch $incs $opts $link $GCOPTS "$src" -o "$out"
+  $CXX -std=c++23 -Ofast $arch $incs $opts $link $omp $GCOPTS "$src" -o "$out"
   strip "$out" 2>/dev/null || true
 }
 
