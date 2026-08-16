@@ -6,8 +6,6 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   uint32_t row_w;
   int32_t w3, w4, lvl2, live, y;
   uint16_t w2;
-  uint32_t j, k;
-  SymList* lists1, * lists0;
   if( plane_alt_model ) {
     if( plane_predictor==pred_p1 ) {
       if( (p_i->depth&depth_bits)==8 )
@@ -131,32 +129,8 @@ void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     blk->escape_list = &blk->escape;
     blk->escape.init(blk->alphabet, 1);
     blk->sel_cur = blk->sel;
-    uint32_t n_syms = blk->alphabet;
-    SymListBlock *blk1 = (SymListBlock*)bmf_new(SymListBlock::bytes(n_syms));
-    if( blk1 ) {
-      blk1->n = n_syms;
-      lists1 = blk1->list;
-      if( n_syms ) {
-        for( j = 0; j<n_syms; ++j )
-          lists1[j].ent = nullptr;
-      }
-    } else {
-      lists1 = nullptr;
-    }
-    uint32_t n_syms2 = blk->alphabet;
-    blk->sel1_list = lists1;
-    SymListBlock *blk0 = (SymListBlock*)bmf_new(SymListBlock::bytes(n_syms2));
-    if( blk0 ) {
-      blk0->n = n_syms2;
-      lists0 = blk0->list;
-      if( n_syms2 ) {
-        for( k = 0; k<n_syms2; ++k )
-          lists0[k].ent = nullptr;
-      }
-    } else {
-      lists0 = nullptr;
-    }
-    blk->sel0_list = lists0;
+    blk->sel1_list = new_sym_lists(blk->alphabet);
+    blk->sel0_list = new_sym_lists(blk->alphabet);
     blk->init_symbol_lists();
     if( blk->height>0 ) {
       uint16_t* word = blk->sym_word;

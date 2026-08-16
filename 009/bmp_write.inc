@@ -9,7 +9,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   uint8_t *out_at, *p, *q;
   int32_t bits, rle_kind, lit_len, run, coded_bytes;
   uint8_t byte;
-  uint32_t n_bytes, pad;
+  uint32_t pad;
   int32_t rle_on = want_rle;
   FILE *fp = fopen(path, "wb");
   if( !fp )
@@ -102,6 +102,21 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     buf = &out_buf[pal_bytes+54];
   }
   uint32_t stride = img->stride;
+  // Write the two size fields into the header, put the buffer out, and close.
+  // Both exits do this -- the run-length one only when the encoding came out
+  // smaller than the raw pixels -- and the second copy reached the file and
+  // the buffer through `fp2` and `out2`, which are assigned `fp` and `out_buf`
+  // on every path that gets there.
+  auto finish = [&](int32_t coded) {
+    bmp->biSizeImage = (uint32_t)coded;
+    uint32_t n_bytes = (uint32_t)(out_at-out_buf);
+    bmp->bfSize = n_bytes;
+    if( fwrite(out_buf, 1u, n_bytes, fp)!=bmp->bfSize )
+      return 0;
+    free(out_buf);
+    fclose(fp);
+    return 1;
+  };
   uint32_t off_bits = (uint32_t)(buf-out_buf);
   int32_t rle_mode = rle_on;
   uint32_t data_len = img->data_size;
@@ -230,20 +245,10 @@ write_rows:
     out_at[1] = 1;
     out_at += 2;
     coded_bytes = out_at-buf;
-    if( data_len>(uint32_t)(coded_bytes) ) {
-      bmp->biSizeImage = (uint32_t)coded_bytes;
-      n_bytes = (uint32_t)(out_at-out_buf);
-      bmp->bfSize = n_bytes;
-      if( fwrite(out_buf, 1u, n_bytes, fp)!=bmp->bfSize )
-        return 0;
-      free(out_buf);
-      fclose(fp);
-      return 1;
-    }
+    if( data_len>(uint32_t)(coded_bytes) )
+      return finish(coded_bytes);
     rle_mode = 0;
   }
-  FILE *fp2 = fp;
-  uint8_t *out2 = out_buf;
   bmp->biCompression = bmp_rgb;
   if( rows2<=0 ) {
     coded_bytes = 0;
@@ -260,16 +265,7 @@ write_rows:
       }
       ++y;
     } while( y<img->height );
-    out2 = out_buf;
-    fp2 = fp;
     coded_bytes = out_at-buf;
   }
-  bmp->biSizeImage = (uint32_t)coded_bytes;
-  n_bytes = (uint32_t)(out_at-out2);
-  bmp->bfSize = n_bytes;
-  if( fwrite(out2, 1u, n_bytes, fp2)!=bmp->bfSize )
-    return 0;
-  free(out2);
-  fclose(fp2);
-  return 1;
+  return finish(coded_bytes);
 }

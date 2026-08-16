@@ -380,6 +380,25 @@ struct SymListBlock {
   }
 };
 
+// One block of `n` empty symbol lists, or nothing if the allocation failed.
+//
+// Four copies -- two in `expand_alphabet`, two in `model_plane`'s allocation --
+// eleven lines apiece, and the two pairs did not look alike: one pair walked
+// the lists with a cursor and a countdown, `for( i = list_a; wt; --wt )
+// (list_a++)->ent = nullptr;`, leaving the *cursor* in the variable the caller
+// then reads, and the other indexed.  Both mean "clear them all", and the
+// countdown pair also consumed the count it was given, which is why each of
+// those two had to re-read `blk->alphabet` for the next one.
+static SymList* new_sym_lists(uint32_t n) {
+  SymListBlock* block = (SymListBlock*)bmf_new(SymListBlock::bytes(n));
+  if( !block )
+    return nullptr;
+  block->n = n;
+  for( uint32_t i = 0; i<n; ++i )
+    block->list[i].ent = nullptr;
+  return block->list;
+}
+
 static inline void free_sym_entries(SymList* list, uint32_t n) {
   while( n-- )
     free(list[n].ent);

@@ -61,11 +61,10 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   // decompiler's way of saying that a `void*` array is read as blocks.  It is
   // an array of blocks.
   AltP1Block* plane[4];
-  int32_t cur0, cur1, code1;
-  uint8_t pred1, pred2, pred3;
+  int32_t cur0, cur1;
   AltP1Block* made;
-  int32_t w, n_planes, code0, code1x, want2, code2, code3;
-  uint8_t pred0, want1, want3;
+  int32_t w, n_planes, want2;
+  uint8_t want1, want3;
   int32_t width = hdr->width;
   int32_t height = hdr->height;
   if( plane_count>0 ) {
@@ -122,23 +121,11 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           }
           plane[0]->ctx_of(nullptr, nullptr);
           if( f_DEC ) {
-            code0 = alt_p1_decode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
-            pred0 = (uint8_t)blk0->pred;
+            int32_t code0 = alt_p1_decode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
+            uint8_t pred0 = (uint8_t)blk0->pred;
             cur0 = (uint8_t)(pred0+blk0->unfold[code0]);
           } else {
-            pred0 = (uint8_t)blk0->pred;
-            int32_t resid0 = (uint8_t)(cur0-pred0);
-            code0 = blk0->fold[resid0];
-            int32_t recon0 = (uint8_t)(blk0->unfold[code0]+pred0);
-            int32_t out0 = (uint8_t)(recon0+*(buf+off0)-cur0);
-            int32_t drift0 = *(buf+off0)-out0;
-            if( drift0<-16||drift0>16 ) {
-              code0 = blk0->fold_hi[resid0];
-            } else {
-              cur0 = recon0;
-              *(buf+off0) = out0;
-            }
-            alt_p1_encode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1], code0);
+            cur0 = blk0->encode_sample(buf, off0, cur0);
           }
           // `keep0` was a third name for `cur0`: assigned from it in both arms
           // and again beside it when the drift check keeps the reconstruction.
@@ -155,25 +142,11 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           AltP1Block* blk1 = plane[1];
           plane[1]->ctx_of(plane[0], nullptr);
           if( f_DEC ) {
-            code1 = alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]], blk1->ctx[1]);
-            pred1 = (uint8_t)blk1->pred;
+            int32_t code1 = alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]], blk1->ctx[1]);
+            uint8_t pred1 = (uint8_t)blk1->pred;
             cur1 = (uint8_t)(pred1+blk1->unfold[code1]);
           } else {
-            pred1 = (uint8_t)blk1->pred;
-            int32_t resid1 = (uint8_t)(cur1-pred1);
-            code1 = blk1->fold[resid1];
-            int32_t at1 = *(buf+off1);
-            int32_t recon1 = (uint8_t)(blk1->unfold[code1]+pred1);
-            int32_t out1 = (uint8_t)(recon1+*(buf+off1)-cur1);
-            int32_t drift1 = at1-out1;
-            code1x = code1;
-            if( drift1<-16||drift1>16 ) {
-              code1x = blk1->fold_hi[resid1];
-            } else {
-              *(buf+off1) = out1;
-              cur1 = recon1;
-            }
-            alt_p1_encode_symbol(&blk1->counters[blk1->ctx[0]], (int32_t)blk1->ctx[1], code1x);
+            cur1 = blk1->encode_sample(buf, off1, cur1);
           }
           blk1->record_sample(cur1);
           int32_t off2 = plane_desc[2].src_plane;
@@ -190,23 +163,11 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           AltP1Block* blk2 = plane[2];
           plane[2]->ctx_of(plane[1], plane[0]);
           if( f_DEC ) {
-            code2 = alt_p1_decode_symbol(&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1]);
-            pred2 = (uint8_t)blk2->pred;
+            int32_t code2 = alt_p1_decode_symbol(&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1]);
+            uint8_t pred2 = (uint8_t)blk2->pred;
             want2 = (uint8_t)(pred2+blk2->unfold[code2]);
           } else {
-            pred2 = (uint8_t)blk2->pred;
-            int32_t resid2 = (uint8_t)(want2-pred2);
-            code2 = blk2->fold[resid2];
-            int32_t recon2 = (uint8_t)(blk2->unfold[code2]+pred2);
-            int32_t out2 = (uint8_t)(recon2+*(off2+buf)-want2);
-            int32_t drift2 = *(off2+buf)-out2;
-            if( drift2<-16||drift2>16 ) {
-              code2 = blk2->fold_hi[resid2];
-            } else {
-              want2 = recon2;
-              *(off2+buf) = out2;
-            }
-            alt_p1_encode_symbol(&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1], code2);
+            want2 = blk2->encode_sample(buf, off2, want2);
           }
           blk2->record_sample(want2);
           if( f_DEC ) {
@@ -228,23 +189,11 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             AltP1Block* blk3 = plane[3];
             plane[3]->ctx_of(plane[2], plane[1]);
             if( f_DEC ) {
-              code3 = alt_p1_decode_symbol(&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1]);
-              pred3 = (uint8_t)blk3->pred;
+              int32_t code3 = alt_p1_decode_symbol(&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1]);
+              uint8_t pred3 = (uint8_t)blk3->pred;
               cur3 = (uint8_t)(pred3+blk3->unfold[code3]);
             } else {
-              pred3 = (uint8_t)blk3->pred;
-              code3 = blk3->fold[(uint8_t)(cur3-pred3)];
-              int32_t resid3 = (uint8_t)(cur3-pred3);
-              int32_t recon3 = (uint8_t)(blk3->unfold[code3]+pred3);
-              int32_t drift3 = *(off3+buf)-(uint8_t)(recon3+*(off3+buf)-cur3);
-              uint8_t out3 = recon3+*(off3+buf)-cur3;
-              if( drift3<-16||drift3>16 ) {
-                code3 = blk3->fold_hi[resid3];
-              } else {
-                cur3 = recon3;
-                *(off3+buf) = out3;
-              }
-              alt_p1_encode_symbol(&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1], code3);
+              cur3 = blk3->encode_sample(buf, off3, cur3);
             }
             blk3->record_sample(cur3);
             if( f_DEC ) {

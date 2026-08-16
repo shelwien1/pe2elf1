@@ -470,7 +470,6 @@ struct ModelBlock {
     int32_t lo1;
     uint8_t *expand_buf;
     int32_t lo, w2, w4, w2n, lvl_n, live, bucket, x2, bits, n_pix, q2, n_pix2;
-    SymList *i, *j;
     PixRec* lists, * t;
     uint8_t *dst_keep = dst;
     uint8_t *dst_base = &dst[-(depth<8)];
@@ -584,28 +583,8 @@ struct ModelBlock {
     blk->escape_list = &blk->escape;
     blk->escape.init(blk->alphabet, 1);
     blk->sel_cur = blk->sel;
-    uint32_t wt = blk->alphabet;
-    SymListBlock *has3 = (SymListBlock*)bmf_new(SymListBlock::bytes(wt));
-    if( has3 ) {
-      has3->n = wt;
-      SymList *list_a = has3->list;
-      for( i = list_a; wt; --wt )
-        (list_a++)->ent = nullptr;
-    } else {
-      i = nullptr;
-    }
-    uint32_t has4 = blk->alphabet;
-    blk->sel1_list = i;
-    SymListBlock *alpha = (SymListBlock*)bmf_new(SymListBlock::bytes(has4));
-    if( alpha ) {
-      alpha->n = has4;
-      SymList *list_b = alpha->list;
-      for( j = list_b; has4; --has4 )
-        (list_b++)->ent = nullptr;
-    } else {
-      j = nullptr;
-    }
-    blk->sel0_list = j;
+    blk->sel1_list = new_sym_lists(blk->alphabet);
+    blk->sel0_list = new_sym_lists(blk->alphabet);
     blk->init_symbol_lists();
     uint32_t jj = blk->depth;
     if( jj==blk->depth_raw ) {

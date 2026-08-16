@@ -102,6 +102,33 @@ struct AltP1Block {
     }
   }
 
+  // Code one sample with the near-lossless drift control, and answer with the
+  // value the model should record: fold the residual against the prediction,
+  // reconstruct it, and if the reconstruction has drifted more than sixteen
+  // from the byte already in the buffer, send the sample through `fold_hi`
+  // instead and leave that byte alone.
+  //
+  // Four copies in `alt_model_p1`, one per plane, and the same shape as
+  // `AltP2Block::encode_sample`.  One of the four carried the code under a
+  // second name, `code1x`; one computed the drift inline and the byte it
+  // compares against afterwards, as a `uint8_t` where the others used an
+  // `int32_t` -- the store truncates either way.
+  int32_t encode_sample(uint8_t* dst, int32_t at, int32_t cur) {
+    const int32_t p = (uint8_t)pred;
+    const int32_t resid = (uint8_t)(cur-p);
+    int32_t code = fold[resid];
+    const int32_t recon = (uint8_t)(unfold[code]+p);
+    const int32_t out = (uint8_t)(recon+dst[at]-cur);
+    if( dst[at]-out<-16||dst[at]-out>16 ) {
+      code = fold_hi[resid];
+    } else {
+      cur = recon;
+      dst[at] = out;
+    }
+    alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
+    return cur;
+  }
+
   // Record one coded sample: store it and its residual magnitude, roll that
   // magnitude into the activity sum for this parity, flip the parity, let the
   // counter bank rescale if it has room, and step the five cursors.
