@@ -37,7 +37,7 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 132 now.  The p2
+start here.**  1031 lines of copy when this was written and 113 now.  The p2
 coders' prologue and epilogue used to be the largest groups and are gone: that
 pair merged, and so did four more, so `pairshare.py`'s declined table is down
 to two rows.
@@ -78,7 +78,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 127
+BUDGET = 113
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.
@@ -99,10 +99,14 @@ BUDGET = 127
 # One declarator or several -- `double dv0, dv1, dv2;` is one line and three
 # names, and a first version of this pattern matched only the single-name form,
 # so a run of comma-separated declarations at the top of two unrelated bodies
-# came back as copy the moment something above it moved.
+# came back as copy the moment something above it moved.  Leading `static`,
+# `const`, `constexpr`, `inline` and `alignas(N)` are qualifiers on a
+# declaration and not something else; `static_assert(...)` is not matched,
+# because a type name here has to be followed by space and a declarator.
 _ONE = r'\**\w+(?:\s*\[[^\]]*\])*'
-DECL = re.compile(r'^[A-Za-z_][\w:]*(?:\s*<[^;]*>)?[\s*&]+%s'
-                  r'(?:\s*,\s*%s)*\s*;$' % (_ONE, _ONE))
+_QUAL = r'(?:(?:static|const|constexpr|inline|alignas\s*\([^)]*\))\s+)*'
+DECL = re.compile(r'^%s[A-Za-z_][\w:]*(?:\s*<[^;]*>)?[\s*&]+%s'
+                  r'(?:\s*,\s*%s)*\s*;$' % (_QUAL, _ONE, _ONE))
 
 
 def normal(text):

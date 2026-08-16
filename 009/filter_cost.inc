@@ -101,21 +101,20 @@ static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
 }
 
 int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
-  // Six histograms of a difference, indexed `value + 512`, and a seventh of
-  // the second walk's residual, indexed by nine bits.  The first six were one
-  // 24,576-byte `memset`, being contiguous members; six is the same clear.
-  alignas(16) int32_t hist_x[1024];   // dx, the first reference plane
-  alignas(16) int32_t hist_y[1024];   // dy, the second
-  alignas(16) int32_t hist_yx[1024];  // dy - dx
-  alignas(16) int32_t hist_zx[1024];  // dz - dx
-  alignas(16) int32_t hist_zy[1024];  // dz - dy
-  alignas(16) int32_t hist_zp[1024];  // dz - (dx + dy)/2
-  memset(hist_x, 0, sizeof hist_x);
-  memset(hist_y, 0, sizeof hist_y);
-  memset(hist_yx, 0, sizeof hist_yx);
-  memset(hist_zx, 0, sizeof hist_zx);
-  memset(hist_zy, 0, sizeof hist_zy);
-  memset(hist_zp, 0, sizeof hist_zp);
+  // Six histograms of a difference, indexed `value + 512`, in one block --
+  // which is what the original had: a single 24,576-byte `memset` over six
+  // contiguous members.  A round that named the six turned that clear into
+  // six, and six declarations and six `memset`s were the two longest runs
+  // `dupblock.py` had left in this file.  The names are cursors into the
+  // block, the shape `choose_plane_coding` already uses for its eight.
+  alignas(16) int32_t hists[6*1024];
+  int32_t *const hist_x = hists;            // dx, the first reference plane
+  int32_t *const hist_y = hists+1*1024;     // dy, the second
+  int32_t *const hist_yx = hists+2*1024;    // dy - dx
+  int32_t *const hist_zx = hists+3*1024;    // dz - dx
+  int32_t *const hist_zy = hists+4*1024;    // dz - dy
+  int32_t *const hist_zp = hists+5*1024;    // dz - (dx + dy)/2
+  memset(hists, 0, sizeof hists);
 
   const int32_t planes = plane_count;
   // `*(const uint16_t*)&img->stride` -- the low half of a `uint32_t`, which
