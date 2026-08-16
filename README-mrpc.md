@@ -330,6 +330,21 @@ if it does not pay for itself it comes back out and the whole thing costs
 one bit. **−1.46% across the corpus** (t32 alone −3.5%), which is more
 than the residuals-are-not-quite-Gaussian story deserved.
 
+One caveat both of these inherit. The decoder does not receive the
+frequency tables, it *rebuilds* them — `set_freqtable` calls `exp`, `pow`
+and `lngammaf`, and the results pass through truncations like
+`uint(norm·pdf)+MIN_FREQ`. A last-ulp difference in `pow` between C
+runtimes can flip one truncation, change one `freq`, and desynchronise the
+whole stream. mrpc is built with `-Ofast`, which is exactly the setting
+that makes this possible. Measured on this platform: clang and g++ encode
+`t24` to the same 96368 bytes, and each decodes the other's stream
+correctly — so the hazard is not currently biting. It is still a hazard,
+and the fix is to build those tables from fixed-point or polynomial
+constructions the way `sh_common.inc`'s `fexp2f`/`flog2f` already do for
+the hot path — speed is irrelevant there, it runs once, only bit-identity
+matters. Until then, treat a decode on a *different* C runtime as untested
+rather than guaranteed.
+
 ### The iteration count is a compression parameter, not a tolerance
 
 The first loop alternates a weighted-least-squares fit with a class
@@ -470,3 +485,89 @@ diverged first.
   context cell that lies in the *next* parent, which the decoder has not
   reached yet. Read it and encoder and decoder disagree about the
   probability of a flag, and everything after it is noise.
+
+## 9. The optimisation notes, item by item
+
+`mrpc_optimization_1.md` lists ~30 ideas across speed and compression.
+This is where each one stands. "Identical" means the output was checked
+byte-for-byte against the build before the change — the standard for
+anything claiming to be a pure speed win.
+
+**Landed, output identical**
+
+| | | |
+|---|---|---|
+| 4.1 | fit from the class lists, not a class scan | |
+| 4.2 | branch-and-bound `FindClass`, and return the winner's cost | |
+| 4.7 | stable merge sort in `InitClass` | |
+| 3.1 | the coefficient sweep threaded over (class, component) | |
+| 3.2 | `SetPrdBuf` threaded over classes | |
+| 3.3 | `FitPredictor` threaded over (class, component) | |
+| 3.4 | the group histogram, the pmodel selection and the trellis | |
+| 3.5 | `PredictRegion` over rows | |
+
+3.4 and 3.5 are the ones in this round. The histogram and selection passes
+went *component-outer* rather than pixel-outer, which is what makes them
+both threadable and bit-identical: every bin they touch is indexed by `k`,
+so the components own disjoint memory and each bin still receives its
+pixels in raster order. The activity gets recomputed per component instead
+of once for all of them — `nc` times the work spread over `nc` threads,
+so the same wall time for that part, while the sixteen-group loop that
+actually dominates goes `nc`-wide. Verified identical at 1, 2 and 4
+threads.
+
+**Landed, output moves — and measured**
+
+| | | |
+|---|---|---|
+| 7.1 | σ variants beside the shape | −0.3% |
+| 7.2 | transmitted pmf correction | **−1.46%** |
+| 5.3 | trellis shrunk to the observed activity range | faster, and smaller side info |
+| 7.10 | more iterations, as `MRP_EFFORT` | −7.2% at effort 2 |
+| 4.6 | two-stage candidate sampling, applied to 7.1's grid | 19 table reads instead of 48 |
+
+**Tried, measured negative, kept as documented toggles**
+
+`BORDER_FIX` (7.7) and `INIT_METRIC` (7.9). 7.7 is the interesting one and
+it is discussed above: it is *correct* and it costs 2.6%, which is how the
+noise floor of these measurements got established in the first place.
+
+**Not attempted, and why**
+
+* **4.3, `ChooseOrder` without the per-trial `LoadOrg`.** The plane side is
+  easy — `BuildTaps` already separates "which plane" from "which offset" —
+  but the interleaved side is not: `CalcCost` reads `p[k]`, the activity
+  reads `e[uoff+k]`, and the scalar `Predict` indexes `org` directly. Every
+  one of those would need the permutation threaded through it, in the
+  decoder's hot loop among others. Real win, invasive change.
+* **4.4 int16 cost tables, 4.5 `madd_epi16` over 16 pixels, 5.1 `CalcCost`
+  with error planes, 5.2 the histogram's table layout, 5.4 sweep
+  interleave, 5.5 AVX-512.** Speed only, and after 7.10 the encoder's time
+  is dominated by *how many* iterations it runs rather than the cost of
+  one. These are the right next things if effort 2 is to become the
+  default.
+* **3.2's tile-based parallel `FindClass`.** The class walk is sequential
+  by construction — each block's MTF context is the blocks before it — so
+  this needs a tiling whose determinism argument is more than "fixed
+  partition", and it is the largest remaining parallel fraction.
+* **6 and 4.8, the decoder's reciprocal tables and `DecSym` bucket index.**
+  Decode is already 0.6 s on the 8 MB image against bmpc's 43.9 s. Nothing
+  here is complaining.
+* **7.3 truly adaptive final pass.** The notes say do 7.2 first; 7.2 is
+  done, and 7.3 would desynchronise the optimiser's cost model from the
+  coder to buy the same thing again.
+* **7.4 intercept term.** One virtual tap ≡ 1 per (class, component).
+  Cheap in principle, but the sweep applies coefficient moves
+  incrementally as `prd += p[o1]·i + p[o2]·j`, so a tap whose value is not
+  read from the image needs a special case in `Predict`, `Predict8`,
+  `FitPredictor` and `OptimizeCoef` — four hot loops for an estimated
+  0–0.3%.
+* **7.5 error-feedback taps.** The notes flag it themselves: error taps'
+  values change when coefficients change, which breaks the sweep's
+  incremental update.
+* **7.6 side-information modelling.** On the images here the side
+  information is 3.4 KB of a 96 KB file; worth revisiting on small images.
+* **7.8 deterministic table construction.** Measured rather than fixed —
+  see the note above. The hazard is real, it is not currently biting on
+  this platform, and the fix is mechanical when cross-runtime decode has to
+  be guaranteed.
