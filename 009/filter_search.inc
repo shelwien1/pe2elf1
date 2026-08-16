@@ -35,11 +35,39 @@ static void restore_descriptors(const PlaneDesc* saved) {
     plane_desc[k] = saved[k];
 }
 
-// Ask every plane for the second predictor, keeping nothing of what it was
+// Ask every plane for one of the two predictors, keeping nothing of what it was
 // asked for before but whether it may use its references.
-static void offer_p2_to_all() {
+//
+// Four of the five whole-image trials edit every descriptor the same way, and
+// all four were written out in the decompiler's shape: `plane_desc[k++].flags`
+// with the index saved into a second name for the store, under an
+// `if( plane_count > 0 )` guard a `for` does not need.
+static void offer_to_all(int32_t want) {
   for( int32_t k = 0; k<plane_count; ++k )
-    plane_desc[k].flags = plane_desc[k].flags&desc_has_refs|try_p2;
+    plane_desc[k].flags = plane_desc[k].flags&desc_has_refs|want;
+}
+
+// The alternate model taken away from every plane, leaving what else its
+// descriptor says.
+static void drop_alt_model_from_all() {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags &= ~desc_alt_model;
+}
+
+// Every descriptor cleared.
+static void clear_flags_on_all() {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags = 0;
+}
+
+// Every descriptor back to the identity order: plane k is plane k, with no
+// transform and no references.
+static void reset_descriptors() {
+  for( int32_t k = 0; k<plane_count; ++k ) {
+    plane_desc[k].flags = 0;
+    plane_desc[k].src_plane = k;
+    plane_desc[k].nrefs = k;
+  }
 }
 
 // Let every plane that has references use them.
@@ -88,19 +116,11 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint8_t* tile_buf;
   int32_t plane_i, pi, flag8, best_flags;
   int32_t bits_a;
-  int32_t tile_h, y0, best_cost, pred, cand, plane, nplanes_b, pl_k, bits, bits_f13;
+  int32_t tile_h, y0, best_cost, pred, cand, nplanes_b, pl_k, bits, bits_f13;
   int32_t tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
-    if( plane_count>0 ) {
-      int32_t pl = 0;
-      do {
-        plane_desc[pl].flags = 0;
-        plane_desc[pl].src_plane = pl;
-        plane_desc[pl].nrefs = pl;
-        ++pl;
-      } while( pl<plane_count );
-    }
+    reset_descriptors();
     return 0;
   }
   choose_plane_coding(img);
@@ -262,14 +282,7 @@ tile_restored:
   if( plane_count>2 ) {
     if( bits_total ) {
       save_descriptors(saved);
-      if( plane_count>0 ) {
-        plane = 0;
-        do {
-          int32_t pi3 = plane;
-          uint8_t f2 = plane_desc[plane++].flags&desc_has_refs|try_p1;
-          plane_desc[pi3].flags = f2;
-        } while( plane<plane_count );
-      }
+      offer_to_all(try_p1);
       int32_t bits_e = transform_cost(tile_img);
       if( bits_e<=best_bits ) {
         best_bits = bits_e;
@@ -287,7 +300,7 @@ tile_restored:
     }
     if( n_hard+(cand==0) ) {
       save_descriptors(saved);
-      offer_p2_to_all();
+      offer_to_all(try_p2);
       // `nplanes_c` was `plane_count` assigned before this loop and again on
       // every turn of it, and nothing here writes the count -- three spellings
       // of one read.
@@ -321,14 +334,7 @@ planes_done:
     uint8_t *tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
     memcpy(tile_copy, tile_src, tile_img->data_size);
     save_descriptors(saved);
-    if( plane_count>0 ) {
-      int32_t pl_c = 0;
-      do {
-        int32_t pi4 = pl_c;
-        uint8_t f3 = plane_desc[pl_c++].flags&~desc_alt_model;
-        plane_desc[pi4].flags = f3;
-      } while( pl_c<plane_count );
-    }
+    drop_alt_model_from_all();
     int32_t bits_b = transform_cost(tile_img);
     if( bits_b>best_bits ) {
       restore_descriptors(saved);
@@ -338,12 +344,7 @@ planes_done:
     }
     if( n_flagged+bits_total ) {
       save_descriptors(saved);
-      if( plane_count>0 ) {
-        int32_t pl_d = 0;
-        do
-          plane_desc[pl_d++].flags = 0;
-        while( pl_d<plane_count );
-      }
+      clear_flags_on_all();
       memcpy(tile_src, tile_copy, tile_img->data_size);
       int32_t bits_c = transform_cost(tile_img);
       if( bits_c<=best_bits ) {

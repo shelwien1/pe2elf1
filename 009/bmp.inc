@@ -96,6 +96,13 @@ struct BmfImage {
   // say it without the layout.  Each copy also spelled the stride into a local
   // of its own, `row_bytes` and `img_stride`, read once on the next line but
   // one.
+  // The first byte of row `y`, counting from the bottom -- which is where a
+  // BMP's rows start.  Both run-length arms of `read_bmp` compute it when an
+  // end-of-line opcode sends them up a row, and both took the stride through a
+  // `uint16_t`: the field is 32 bits and the value is not, and the reads on
+  // these paths matched the stores that made it.
+  uint8_t* row(int32_t y) { return pixels+y*(uint16_t)stride; }
+
   void header_from(const BmfImage* src) {
     width = src->width;
     height = src->height;

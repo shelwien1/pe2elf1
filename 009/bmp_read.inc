@@ -120,7 +120,7 @@ BmfImage* read_bmp(char* path) {
         } else {
           if( --y4<0 )
             goto done;
-          row_at = img_f->pixels+y4*(uint16_t)img_f->stride;
+          row_at = img_f->row(y4);
         }
       }
     }
@@ -188,7 +188,7 @@ BmfImage* read_bmp(char* path) {
       } else if( !byte ) {
         if( --y8<0 )
           goto done;
-        row = img_f->pixels+y8*(uint16_t)img_f->stride;
+        row = img_f->row(y8);
       } else if( byte==1 ) {
         goto done;
       } else if( byte==2 ) {
