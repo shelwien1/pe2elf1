@@ -102,6 +102,28 @@ static inline int32_t cum_below(const uint16_t* w, int32_t lvl) {
   return 0;
 }
 
+// The six folds a context group's flag word carries: which of the five
+// selector weights share a weight with which.  `tables.inc` names the bits and
+// gives the order the folds compose in.
+//
+// Both halves of the model hoist all six out of the two loops that apply them,
+// as the original does, and both spelled the six out.  The encoder's names were
+// these; the decoder's were `y0`, `f_b1`, `f_b4`, `f_b0`, `f_b5`, `f_b3` -- bit
+// numbers, which say where a bit is and not what it does, in the decompiler's
+// declaration order rather than the order they compose in.  What the two loops
+// do with the six is genuinely different, so this is the six and not the loop.
+struct GroupFolds {
+  int32_t w3_double, w4_to_w2, w3_to_w2, w4_to_w1, w3_to_w1, w2_to_w1;
+
+  explicit GroupFolds(int32_t flags)
+      : w3_double(flags&ctx_w3_double),
+        w4_to_w2(flags&ctx_w4_to_w2),
+        w3_to_w2(flags&ctx_w3_to_w2),
+        w4_to_w1(flags&ctx_w4_to_w1),
+        w3_to_w1(flags&ctx_w3_to_w1),
+        w2_to_w1(flags&ctx_w2_to_w1) {}
+};
+
 struct ModelBlock {
   uint32_t width;
   int32_t height;
@@ -900,16 +922,8 @@ struct ModelBlock {
       int32_t flags = ctx_group_flags[g];
       ctx_state[flags] = g;
       int32_t lo = 0;
-      // One of fifteen groups says which of the five selector weights share a
-      // weight; `tables.inc` names the bits and gives the order the folds
-      // compose in.  Hoisted out of the two loops below, as the original has
-      // them.
-      int32_t f_w3_double = flags&ctx_w3_double;
-      int32_t f_w4_to_w2 = flags&ctx_w4_to_w2;
-      int32_t f_w3_to_w2 = flags&ctx_w3_to_w2;
-      int32_t f_w4_to_w1 = flags&ctx_w4_to_w1;
-      int32_t f_w3_to_w1 = flags&ctx_w3_to_w1;
-      int32_t f_w2_to_w1 = flags&ctx_w2_to_w1;
+      // Hoisted out of the two loops below, as the original has it.
+      const GroupFolds fold(flags);
       do {
         uint32_t hi = 0;
         do {
@@ -921,33 +935,33 @@ struct ModelBlock {
           w2 = 2;
           w3 = 2;
           w4 = 2;
-          if( f_w3_double ) {
+          if( fold.w3_double ) {
             w3 = 4;
             w4 = 0;
           }
-          if( f_w4_to_w2 ) {
+          if( fold.w4_to_w2 ) {
             w2 = w4+2;
             w4 = 0;
           }
-          if( f_w3_to_w2 ) {
+          if( fold.w3_to_w2 ) {
             w2 = w3+w2;
             w3 = 0;
           }
-          if( f_w4_to_w1 ) {
+          if( fold.w4_to_w1 ) {
             w2n = w4+2;
             w4 = 0;
             rec->w[4] = 0;
           } else {
             rec->w[4] = w4;
           }
-          if( f_w3_to_w1 ) {
+          if( fold.w3_to_w1 ) {
             w2n += w3;
             w3 = 0;
             rec->w[3] = 0;
           } else {
             rec->w[3] = w3;
           }
-          if( f_w2_to_w1 ) {
+          if( fold.w2_to_w1 ) {
             rec->w[1] = w2+w2n;
             w2 = 0;
             rec->w[2] = 0;
@@ -1043,18 +1057,9 @@ struct ModelBlock {
       ctx_state[flags] = g;
       lo1 = 0;
       g0 = g;
-      // The same six folds `model_plane` hoists, under the same names and in
-      // the same order.  This half spelled them `y0`, `f_b1`, `f_b4`, `f_b0`,
-      // `f_b5`, `f_b3` -- bit numbers, which say where a bit is and not what
-      // it does, and left in the decompiler's declaration order, which is not
-      // the order the loop below applies them in.  `tables.inc` names the bits.
-      int32_t f_w3_double = flags&ctx_w3_double;
-      int32_t f_w4_to_w2 = flags&ctx_w4_to_w2;
-      int32_t f_w3_to_w2 = flags&ctx_w3_to_w2;
+      // The same six folds `model_plane` hoists.
+      const GroupFolds fold(flags);
       lo = 0;
-      int32_t f_w4_to_w1 = flags&ctx_w4_to_w1;
-      int32_t f_w3_to_w1 = flags&ctx_w3_to_w1;
-      int32_t f_w2_to_w1 = flags&ctx_w2_to_w1;
       do {
         lo1 = lo;
         int32_t k = 0;
@@ -1063,7 +1068,7 @@ struct ModelBlock {
           int32_t m5 = alphabet;
           FreqRec *rec = &grid[g1];
           for( int32_t n = 0; n<4; ++n ) rec->w[1+n] = 2;
-          if( f_w3_double ) {
+          if( fold.w3_double ) {
             w2 = (uint16_t)(rec->w[4]+rec->w[3]);
             rec->w[3] = w2;
             w4 = 0;
@@ -1072,7 +1077,7 @@ struct ModelBlock {
             w2 = rec->w[3];
             w4 = rec->w[4];
           }
-          if( f_w4_to_w2 ) {
+          if( fold.w4_to_w2 ) {
             w2n = (uint16_t)(w4+rec->w[2]);
             rec->w[2] = w2n;
             w4 = 0;
@@ -1080,23 +1085,23 @@ struct ModelBlock {
           } else {
             w2n = rec->w[2];
           }
-          if( f_w3_to_w2 ) {
+          if( fold.w3_to_w2 ) {
             w2n = (uint16_t)(w2+w2n);
             rec->w[2] = w2n;
             w2 = 0;
             rec->w[3] = 0;
           }
-          if( f_w4_to_w1 ) {
+          if( fold.w4_to_w1 ) {
             rec->w[1] += w4;
             w4 = 0;
             rec->w[4] = 0;
           }
-          if( f_w3_to_w1 ) {
+          if( fold.w3_to_w1 ) {
             rec->w[1] += w2;
             w2 = 0;
             rec->w[3] = 0;
           }
-          if( f_w2_to_w1 ) {
+          if( fold.w2_to_w1 ) {
             rec->w[1] += w2n;
             w2n = 0;
             rec->w[2] = 0;
