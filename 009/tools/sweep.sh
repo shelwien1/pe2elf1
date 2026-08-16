@@ -111,11 +111,18 @@ for t in tools/*.py; do
   # A tool the timeout killed is not a tool reporting zero, and it can have
   # been killed part-way through a write.  Say which it was.
   [ "$rc" = 124 ] && { killed=$((killed + 1)); line='(timed out)'; }
+  # The **first** number on the line, not any number on it.  The old test
+  # accepted a zero anywhere, so `pairshare.py` answering "1 of 5 declined
+  # pairs have drifted, 0 named but not found" passed on the `0` eleven words
+  # later, and a drifted table sat through a sweep that said every tool
+  # reported zero.  A tool whose leading number is a census rather than a
+  # finding belongs in the `report=1` list above, where it is named and counted
+  # apart -- which is the choice this forces, and the point.
   if [ "$report" = 0 ] && [ "$rc" != 124 ]; then
     case $line in
-      *[!0-9]0[!0-9]*|0[!0-9]*|*[!0-9]0|0) ;;
       'no '*|*'nothing'*|*'(needs more arguments)'*|'not applicable:'*) ;;
-      *) nonzero="$nonzero $n" ;;
+      *) first=$(printf '%s' "$line" | tr -cs '0-9' ' ' | cut -d' ' -f1)
+         [ "$first" = 0 ] || nonzero="$nonzero $n" ;;
     esac
   fi
   printf '%-22s %s\n' "$n" "$line"

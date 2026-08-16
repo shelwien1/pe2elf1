@@ -55,13 +55,20 @@ import structs                                                    # noqa: E402
 MIN_LEN = 40
 MIN_PLUS = 3
 
-# Kept, with the reason.  Keyed by the first file:line of the group.
+# Kept, with the reason -- keyed by the group's *normal form*, which is the
+# only name a group has that survives being looked at from somewhere else.
+# Keying on the file the first copy sits in was tried and was worse than
+# useless: `sweep.sh` hands every tool a spliced work copy, so the origin file
+# was that copy's name, no key matched, and this tool reported two live groups
+# under the sweep and zero when run by hand.  A tool that answers differently
+# depending on who is asking is not a gate.
 DECLINED = {
-    'model.inc': 'writing one decoded row out through the symbol table, at '
-                 'four bytes a sample in `decode_symbol_list`\'s caller and at '
-                 'two in `unmodel_plane`\'s.  The expression is the same and '
-                 'the destination type is not, so sharing it means a template '
-                 'over the output width to save one line at each of two sites',
+    'B0->B1[B0->B2[0][B3+++8].B4]':
+        'writing one decoded row out through the symbol table, at four bytes a '
+        'sample in `decode_symbol_list`\'s caller and at two in '
+        '`unmodel_plane`\'s.  The expression is the same and the destination '
+        'type is not, so sharing it means a template over the output width to '
+        'save one line at each of two sites',
 }
 
 
@@ -105,7 +112,7 @@ def survey(path):
         if len(rhs) < MIN_LEN or rhs.count('+') < MIN_PLUS:
             continue
         groups[normal(rhs)].append((origin[i], rhs))
-    return [v for v in groups.values() if len(v) > 1]
+    return [(k, v) for k, v in groups.items() if len(v) > 1]
 
 
 def main():
@@ -113,17 +120,17 @@ def main():
         sys.exit('usage: python3 tools/sameexpr.py bmf.cpp [--list]')
     found = survey(sys.argv[1])
     kept, live = [], []
-    for g in found:
-        (kept if g[0][0][0] in DECLINED else live).append(g)
+    for key, g in found:
+        (kept if key in DECLINED else live).append((key, g))
     if '--list' in sys.argv:
-        for g in live + kept:
-            note = DECLINED.get(g[0][0][0])
+        for key, g in live + kept:
+            note = DECLINED.get(key)
             print('%d copies%s' % (len(g), '  -- kept: ' + note if note else ''))
             for o, e in g:
                 print('    %-24s %s' % ('%s:%d' % o, e[:72]))
     print('%d expressions written out in more than one place, in %d groups; '
           '%d groups kept with a reason'
-          % (sum(len(g) for g in live), len(live), len(kept)))
+          % (sum(len(g) for _, g in live), len(live), len(kept)))
 
 
 if __name__ == '__main__':

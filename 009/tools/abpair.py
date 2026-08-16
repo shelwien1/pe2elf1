@@ -77,8 +77,12 @@ def main():
             n_new += why is None
             print('  %-24s %sa = %s ; %sb = %s   %s'
                   % (nm, stem, A, stem, B, why or '** not accounted for **'))
-    print('%d a/b families, %d assigned the same value, %d not accounted for'
-          % (n_fam, n_same, n_new))
+    # The finding first and the census after it.  `sweep.sh` reads the leading
+    # number as the answer, and it used to read `n_fam` -- 28 families, which
+    # is a count of what exists and not of what is wrong.  It passed only
+    # because the old rule accepted a zero anywhere on the line.
+    print('%d a/b pairs not accounted for and %d assigned the same value, '
+          'in %d families' % (n_new, n_same, n_fam))
     return 0
 
 

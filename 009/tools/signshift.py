@@ -106,9 +106,13 @@ def main():
             print('  %-22s:%-4d %-34s    not proven -- read it and add it to PROVEN'
                   % (path, line, inner))
     unproven = [f for f in found if f[2] not in PROVEN and f[2] not in DECLINED]
-    print('%d comparisons written as a sign shift, %d proven, %d declined, %d unread'
-          % (len(found), len(todo), sum(1 for f in found if f[2] in DECLINED),
-             len(unproven)))
+    # The unread count first: that is the one that is a defect.  `sweep.sh`
+    # reads the leading number, and it used to read `len(found)` -- every site
+    # this recognises, proven and declined ones included -- which is a census.
+    print('%d sign-shift comparisons neither proven nor declined; %d found, '
+          '%d proven, %d declined'
+          % (len(unproven), len(found), len(todo),
+             sum(1 for f in found if f[2] in DECLINED)))
     if '--apply' in sys.argv:
         n = 0
         for path in sorted(set(f[0] for f in found)):
