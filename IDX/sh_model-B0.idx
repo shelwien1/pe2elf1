@@ -70,9 +70,9 @@ Number MM2,     1, 0!0000
 Number NWB,     1, 1!01111111111
 Number INCB,    1, 1!0001111111001110
 Number STEPB,   1, 1!0110011001100
-Number DB,      1, 1!1101111011100
+Number DB,      1, 1!1111000010001
 # seed of each mixer weight /1024 (1/RES_NM would be 341)
-Number BMW0,    1, 1!0100000000
+Number BMW0,    1, 1!0011000000
 # how much of the APM's opinion to take /1024 (frozen: RES_SSE=0)
 !Number SSEW,    1, 1!01011111111
 

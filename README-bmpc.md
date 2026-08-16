@@ -394,12 +394,12 @@ Sizes in bytes; `coder0` is the order-1 baseline on the same file.
 
 | file | | raw | bzip2 -9 | xz -9e | coder0 | **bmpc** | bpc |
 |---|---|---|---|---|---|---|---|
-| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46969** | 4.82 |
-| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46618** | 4.79 |
-| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **98051** | 3.40 |
-| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **115151** | 3.00 |
-| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **340507** | 1.21 |
-| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2631749** | 2.51 |
+| t8g.bmp | 320×240×8 | 77878 | 52454 | 56108 | 51784 | **46941** | 4.82 |
+| t8p.bmp | 320×240×8 pal | 77878 | 52092 | 55964 | 51439 | **46589** | 4.79 |
+| t24.bmp | 320×240×24 | 230454 | 225644 | 188344 | 182265 | **97984** | 3.40 |
+| t32.bmp | 320×240×32 | 307254 | 307692 | 271776 | 272514 | **115062** | 3.00 |
+| x_ep.bmp | 705×800×32 | 2256054 | 497718 | 498560 | 709320 | **340266** | 1.21 |
+| 20000171A.bmp | 4096×512×32 | 8388662 | — | — | 4057586 | **2631309** | 2.51 |
 | x_ai.bmp | RLE8 | 887278 | — | — | 285807 | 286423 | fallback |
 | x_ci.bmp | RLE8 | 3278170 | — | — | 1046957 | 1047507 | fallback |
 
@@ -414,8 +414,8 @@ which is coder0's coder byte for byte — except that bmpc builds it with
 x_ep, ±5 bytes on t24 and t32), which is why it is on; `-DFASTM=0`
 reproduces coder0 to the byte.
 
-On the 8 MB target image bmpc codes **2631749** bytes: 35.1% smaller than
-coder0's 4057586, and 2.3% smaller than the 2694740 of `bmf`, which is
+On the 8 MB target image bmpc codes **2631309** bytes: 35.1% smaller than
+coder0's 4057586, and 2.4% smaller than the 2694740 of `bmf`, which is
 what this was being measured against.
 
 Where it got there, on that file:
@@ -428,7 +428,8 @@ Where it got there, on that file:
 | + a final `IDX/opt.pl` pass | 2646067 | |
 | + per-block statistics (64×64) | 2643530 | −0.10% |
 | + trial-chosen component order | 2643708 | +0.007% here; −4.8% on t32 |
-| + MRP's fraction and activity models (§7) | **2631749** | −0.45% |
+| + MRP's fraction and activity models (§7) | 2631749 | −0.45% |
+| + a fifth `IDX/opt.pl` pass, for the new mixer | **2631309** | |
 | bmf, for reference | 2694740 | |
 
 ## 9. Speed
@@ -551,7 +552,12 @@ perl IDX/opt.pl opt.lst out/bmpc_opt                       # writes export.!!!
 
 `IDX/opt.pl` is `IDX/auto_opt2.pl` with a corpus list and a configurable
 target. Four rounds of it were worth −0.8%, −1.3%, −0.5% and −0.6% on the
-full corpus — it keeps finding things, and it found one the hand sweeps
+full corpus, and a fifth after §7 changed the mixer's shape found −0.20%
+on its own corpus (−0.02% on the full one) by moving exactly two knobs:
+the mixer's weight seed `BMW0` down from 257/1024 to 193/1024, and its
+per-weight gradient clip `DB` up from 6.97 to 7.52 — a seventh model each
+weight has to share the output with, and a heavier tail to clip. A sixth
+round found nothing further — it keeps finding things, and it found one the hand sweeps
 missed entirely: `D_clip`, which nothing suggested would bind, wants to be
 ~1/1000 of its seed and is worth −0.7% by itself. Two things it needs from the source side:
 

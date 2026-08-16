@@ -137,11 +137,11 @@ pdesc( B0_STEPB_, 1, "0110011001100" );
 static const int B0_STEPB = B0_STEPB_.value * (1);
 #endif
 #ifndef B0_DB
-pdesc( B0_DB_, 1, "1101111011100" );
+pdesc( B0_DB_, 1, "1111000010001" );
 static const int B0_DB = B0_DB_.value * (1);
 #endif
 #ifndef B0_BMW0
-pdesc( B0_BMW0_, 1, "0100000000" );
+pdesc( B0_BMW0_, 1, "0011000000" );
 static const int B0_BMW0 = B0_BMW0_.value * (1);
 #endif
 #ifndef B0_SSEW
