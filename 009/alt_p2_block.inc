@@ -387,6 +387,45 @@ struct AltP2Block {
 
   void code_banks(int32_t sample16);
 
+  // Bank `k`, bumped.  Its selector picks one of two shapes: a selector of 1
+  // bumps the group's record, the one after it, the first record of the next
+  // group and the one before -- four counts at 3, 4, 2 and 6 sixteenths -- and
+  // any other selector bumps three, at 7, 5 and 6.  The bank the step came
+  // from is bumped first either way, at 4 or 7.
+  //
+  // Written out five times in `alt_p2_model`, thirty-six lines apiece, over
+  // `ctx_w[0]` through `ctx_w[4]` with a fresh set of temporaries in each --
+  // `frec3`/`frec4b`/`frec5`/`frec4c` for the first record, `idx0`/`rec_idx`
+  // for the next group, `grp`/`frec_step`/`gtop` for the group.  Nothing else
+  // differed, and not one of those names outlived the copy it was written in.
+  // Round nine made the five a loop over `k`; this makes the loop's body a
+  // name, which is what took the model's deepest nesting off eight.
+  void bump_bank(int32_t k, uint32_t step_v, int32_t ctx15, int32_t fold_sel,
+                 int32_t is_dec) {
+    const int32_t sel = ctx_w[k].sel;
+    if( sel==1 ) {
+      p2_freq_add(&freq[ctx_w[k].w[0]+step_v-ctx_w[k].w[1]], fold_sel, 4);
+      const uint32_t off = ctx-ctx_w[k].w[1];
+      P2Freq*const group = &freq[off+ctx_w[k].w[0]];
+      const uint32_t next_group = ctx_w[k].w[2]+off;
+      p2_freq_add(&group[0], is_dec, 3);
+      if( ctx15<15 ) {
+        p2_freq_add(&group[1], is_dec, 4);
+        p2_freq_add(&freq[next_group+1], is_dec, 2);
+      }
+      if( ctx15>2 )
+        p2_freq_add(&group[-1], is_dec, 6);
+    } else {
+      p2_freq_add(&freq[step_v+ctx_w[k].w[1]-ctx_w[k].w[2-sel]], fold_sel, 7);
+      P2Freq*const group = &freq[ctx_w[k].w[1]+(ctx-ctx_w[k].w[sel])];
+      p2_freq_add(&group[0], is_dec, 7);
+      if( ctx15<15 )
+        p2_freq_add(&group[1], is_dec, 5);
+      if( ctx15>0 )
+        p2_freq_add(&group[-1], is_dec, 6);
+    }
+  }
+
   template<int32_t f_DEC>
   void alt_p2_d8_body(uint8_t* src, uint8_t* out,
                       int32_t width, int32_t height);

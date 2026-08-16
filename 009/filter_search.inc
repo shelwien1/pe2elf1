@@ -35,6 +35,19 @@ static void restore_descriptors(const PlaneDesc* saved) {
     plane_desc[k] = saved[k];
 }
 
+// Ask every plane for the second predictor, keeping nothing of what it was
+// asked for before but whether it may use its references.
+static void offer_p2_to_all() {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags = plane_desc[k].flags&desc_has_refs|try_p2;
+}
+
+// Let every plane that has references use them.
+static void allow_refs_where_present() {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags |= plane_desc[k].nrefs!=0 ? desc_has_refs : 0;
+}
+
 // Transform the planes the way the descriptors currently say, and answer what
 // that cost in bits.  Written out five times, and the order is the whole of
 // it: the count has to be taken before the packer is flushed, and the packer
@@ -75,7 +88,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint8_t* tile_buf;
   int32_t plane_i, pi, flag8, best_flags;
   int32_t bits_a;
-  int32_t tile_h, y0, best_cost, pred, cand, nplanes_c, plane, nplanes_b, pl_k, bits, bits_f13;
+  int32_t tile_h, y0, best_cost, pred, cand, plane, nplanes_b, pl_k, bits, bits_f13;
   int32_t tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
@@ -276,17 +289,11 @@ tile_restored:
     }
     if( n_hard+(cand==0) ) {
       save_descriptors(saved);
-      nplanes_c = plane_count;
-      if( plane_count>0 ) {
-        int32_t pl_a = 0;
-        do {
-          int32_t pi0 = pl_a;
-          uint8_t f0 = plane_desc[pl_a++].flags&desc_has_refs|try_p2;
-          plane_desc[pi0].flags = f0;
-          nplanes_c = plane_count;
-        } while( pl_a<plane_count );
-      }
-      if( nplanes_c==n_hard&&nplanes_c-1==n_flagged ) {
+      offer_p2_to_all();
+      // `nplanes_c` was `plane_count` assigned before this loop and again on
+      // every turn of it, and nothing here writes the count -- three spellings
+      // of one read.
+      if( plane_count==n_hard&&plane_count-1==n_flagged ) {
         cand = 0;
       } else {
         bits_a = transform_cost(tile_img);
@@ -297,14 +304,7 @@ tile_restored:
             cand = 0;
           } else {
             save_descriptors(saved);
-            if( plane_count>0 ) {
-              int32_t pl_b = 0;
-              do {
-                int32_t pi1 = pl_b;
-                uint8_t f1 = plane_desc[pl_b++].nrefs;
-                plane_desc[pi1].flags |= f1!=0 ? desc_has_refs : 0;
-              } while( pl_b<plane_count );
-            }
+            allow_refs_where_present();
             int32_t bits2 = transform_cost(tile_img);
             if( bits2>bits_a )
               restore_descriptors(saved);

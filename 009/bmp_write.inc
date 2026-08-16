@@ -176,13 +176,16 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         out_at += 2;
       }
     };
-    // How many bytes from `at` repeat `*at`, counting `at` itself and stopping
-    // at `end`.  The caller has already established `at + 1 < end`, which is
-    // why the recovered loop tested the byte before the bound and this tests
-    // the bound before the byte -- at the first turn they are the same test.
-    auto run_length = [](const uint8_t* at, const uint8_t* end) {
+    // How many bytes from `from` repeat `*from`, counting `from` itself and
+    // stopping at `stop`.  The caller has already established `from + 1 < stop`,
+    // which is why the recovered loop tested the byte before the bound and this
+    // tests the bound before the byte -- at the first turn they are one test.
+    //
+    // Not `at`/`end`: this body already has locals by both names, and a shadow
+    // is what `BMF_WARN=1 ./build.sh` counts.
+    auto run_length = [](const uint8_t* from, const uint8_t* stop) {
       int32_t n = 1;
-      while( end>at+n&&at[n]==*at )
+      while( stop>from+n&&from[n]==*from )
         ++n;
       return n;
     };
