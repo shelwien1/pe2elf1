@@ -512,7 +512,17 @@ struct AltP2Block {
   // Three copies -- `alt_p2_d8_body` after its first row, and both of
   // `alt_model_p2_encode` and `alt_model_p2_decode` -- with the width spelled
   // as `width`, `first` and `back`, one of them negated at the call site.
-  // `18*width + 234` is `sizeof(P2Ctx) * (width + 13)`.
+  // The three history rows seeded from row 0, which both seeds end with.
+  // `18*width + 234` is `sizeof(P2Ctx) * (width + 13)` -- a whole row, margins
+  // included -- and written that way it is a layout declared rather than
+  // multiplied out.
+  void copy_row0_down(int32_t width) {
+    static_assert(sizeof(P2Ctx) == 18, "a row is eighteen bytes to the record");
+    const int32_t row_bytes = sizeof(P2Ctx)*(width+13);
+    for( int32_t i = 0; i<3; ++i )
+      memcpy(buf[1+i], buf[0], row_bytes);
+  }
+
   void seed_history(int32_t width) {
     P2Ctx*const here = cursor[0];
     for( int32_t i = 0; i<5; ++i )
@@ -520,9 +530,7 @@ struct AltP2Block {
     P2Ctx*const up = cursor[0]-width;
     for( int32_t i = 0; i<8; ++i )
       up[-1-i] = up[i];
-    const int32_t row_bytes = 18*width+234;
-    for( int32_t i = 0; i<3; ++i )
-      memcpy(buf[1+i], buf[0], row_bytes);
+    copy_row0_down(width);
   }
 
   // The neutral record every row 0 starts from, and the five cursors seated
@@ -542,9 +550,7 @@ struct AltP2Block {
       rec.dup = 1024;
       rec.dleft = 256;
     }
-    const int32_t row_bytes = 18*width+234;
-    for( int32_t i = 0; i<3; ++i )
-      memcpy(buf[1+i], buf[0], row_bytes);
+    copy_row0_down(width);
     for( int32_t i = 0; i<5; ++i )
       cursor[i] = buf[i]+width+8;
   }
@@ -665,10 +671,13 @@ struct AltP2Block {
     int32_t lvl = 0;
     ctx_bias[2] = 0;
     ctx_bias[1] = 0;
-    uint32_t pair = 0;
     ctx_bias[0] = 0;
     cursor[0] = buf[0]+8;
-    do {
+    // `2*pair+++1` -- a post-increment inside the comparison that decides the
+    // next level, with the answer parked in a `bump` the next line adds.  The
+    // `nb_ctx` walk three lines below does the same thing in a `for` with
+    // neither, and this is that shape.
+    for( uint32_t pair = 0; pair<0x82; ++pair ) {
       // The plane at bit 8 and the run level as a four-bit field at 4.  The
       // level is bounded by its own table -- `p2_ctx_edges` has sixteen
       // entries and `lvl` indexes it -- so the width is a fact rather than a
@@ -678,11 +687,10 @@ struct AltP2Block {
       // somewhere else is the shape that moved three streams when `gA` was
       // written as `bits<6, 2>`.
       ctx_delta[2*pair] = CtxIdx{}.raw(plane_idx<<8).bits<4, 4>(lvl);
-      int32_t lvl1 = (2*pair==p2_ctx_edges[lvl])+lvl;
+      const int32_t lvl1 = (2*pair==p2_ctx_edges[lvl])+lvl;
       ctx_delta[2*pair+1] = CtxIdx{}.raw(plane_idx<<8).bits<4, 4>(lvl1);
-      int32_t bump = 2*pair+++1==p2_ctx_edges[lvl1];
-      lvl = bump+lvl1;
-    } while( pair<0x82 );
+      lvl = (2*pair+1==p2_ctx_edges[lvl1])+lvl1;
+    }
     int32_t len = 0;
     for( n = 0; n<0x3C; ++n ) {
       nb_ctx[2*n] = len;

@@ -19,6 +19,21 @@
 // uint16_t.  It is the same sum: every intermediate is 16 bits wide and the
 // result is stored through a uint16_t, so the orderings agree in the low 16
 // bits, which is all of them that survive.  The encoder's spellings are kept.
+// Both counts of a bit-tree pair halved, answering the one the walk took.  Two
+// sites wrote it out, and the temporary each carried is not decoration: `f[0]`
+// is halved in place first, so `f[1]` has to be read before that store for the
+// compiler to keep it in a register the way the original did.
+//
+// The two differ only in the limit that triggers them -- 0x4000 where the coder
+// reads it and 0x2000 where the cost estimator does -- so the limit stays at
+// the call and the halving is here.
+static inline uint32_t halve_pair(FreqPair* pair, int32_t go) {
+  const uint32_t f1_old = pair->f[1];
+  pair->f[0] -= pair->f[0]>>1;
+  pair->f[1] = f1_old-(f1_old>>1);
+  return pair->f[go];
+}
+
 template<int32_t f_DEC>
 int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
@@ -108,12 +123,8 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
       result = rc.encode_bit(fa, f1, go);
     }
     fq = pair->f[go];
-    if( fq>0x4000u ) {
-      uint32_t f1_old = pair->f[1];
-      pair->f[0] -= pair->f[0]>>1;
-      pair->f[1] = f1_old-(f1_old>>1);
-      fq = pair->f[go];
-    }
+    if( fq>0x4000u )
+      fq = halve_pair(pair, go);
     pair->f[go] = alt_freq_init+fq;
     mask >>= 1;
     node = go+2*node;
@@ -238,12 +249,8 @@ int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
         FreqPair *pair = tbl+node+span;
         int32_t go = (mask&path)!=0;
         f = pair->f[go];
-        if( f>0x2000 ) {
-          uint32_t f1_old = pair->f[1];
-          pair->f[0] -= pair->f[0]>>1;
-          pair->f[1] = f1_old-(f1_old>>1);
-          f = pair->f[go];
-        }
+        if( f>0x2000 )
+          f = halve_pair(pair, go);
         span *= 2;
         mask >>= 1;
         node = go+2*node;

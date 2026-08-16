@@ -506,15 +506,17 @@ struct AltP1Block {
       grp = (odd==p1_group_edges[grp1])+grp1;
       ++k;
     } while( (uint32_t)k<0x100 );
-    uint32_t pair = 0;
+    // The same walk `alt_p2_block` makes over its own edge table, and it was
+    // spelled the same way: `2*pair+++1`, a post-increment inside the
+    // comparison that decides the next slot, with the answer parked in a
+    // `bump` the next line adds.
     int32_t slot = 0;
-    do {
+    for( uint32_t pair = 0; pair<0x80; ++pair ) {
       slot_of[2*pair] = 8*slot;
-      int32_t slot1 = (2*pair==p1_slot_edges[slot])+slot;
+      const int32_t slot1 = (2*pair==p1_slot_edges[slot])+slot;
       slot_of[2*pair+1] = 8*slot1;
-      int32_t bump = 2*pair+++1==p1_slot_edges[slot1];
-      slot = bump+slot1;
-    } while( pair<0x80 );
+      slot = (2*pair+1==p1_slot_edges[slot1])+slot1;
+    }
     // The nine weights `alt_p1_context` sums, one per selector.  This was
     // twenty-seven assignments in scheduler order with `uint32_t row = 0;`
     // dropped into the middle of them, and none of the three sequences was
