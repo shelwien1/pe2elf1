@@ -4,7 +4,6 @@ BmfImage* read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row, bmp_bgra[4], pix;
   uint8_t* row_at;
-  uint8_t* pal, * pal2, * pal3;
   uint32_t row_pad, byte;
   uint8_t cur;
   int32_t pal_n, i, hi_nibble;
@@ -48,23 +47,21 @@ BmfImage* read_bmp(char* path) {
     if( (int32_t)hdr.biClrUsed )
       pal_n = (int32_t)hdr.biClrUsed;
     if( pal_n>0 ) {
+      // The palette sits past the pixels, and the recovery worked that out
+      // again before each of the three stores -- three names, `pal`, `pal2`
+      // and `pal3`, for one pointer MSVC rematerialised rather than kept in a
+      // register.  It does not depend on `i` either, so it is one line above
+      // the loop.
+      //
+      // The null it takes when the depth carries no palette is the original's:
+      // storing through it would fault either way, and nothing that reaches
+      // here has `biBitCount <= 8` without `depth_palette`.
+      uint8_t* pal = img->depth&depth_palette ? img->pixels+img->data_size : nullptr;
       for( i = 0; i<pal_n; ++i ) {
         fread(bmp_bgra, 4u, 1u, fp);
-        if( img->depth&depth_palette )
-          pal = img->pixels+img->data_size;
-        else
-          pal = 0;
-        *(pal+3*i+2) = bmp_bgra[2];
-        if( img->depth&depth_palette )
-          pal2 = img->pixels+img->data_size;
-        else
-          pal2 = 0;
-        *(pal2+3*i+1) = bmp_bgra[1];
-        if( img->depth&depth_palette )
-          pal3 = img->pixels+img->data_size;
-        else
-          pal3 = 0;
-        *(pal3+3*i) = bmp_bgra[0];
+        pal[3*i+2] = bmp_bgra[2];
+        pal[3*i+1] = bmp_bgra[1];
+        pal[3*i] = bmp_bgra[0];
       }
     }
   }
@@ -121,124 +118,120 @@ BmfImage* read_bmp(char* path) {
     img_f = img;
     hi_nibble = 1;
     int32_t y8 = img->height-1;
+    // One opcode per turn, which is what RLE8 above already looked like.  This
+    // was three `while( 1 )`s with a label at the top of the innermost and five
+    // jumps back to it, and the nesting *was* the dispatch: fall out of the
+    // innermost loop for an escape, out of the middle one for anything but an
+    // end of line, out of the outer one for anything but a delta.  Reading it
+    // meant holding three loops in mind to see a five-way branch on two bytes.
     while( 1 ) {
-      while( 1 ) {
-        while( 1 ) {
-// The top of the run-length opcode loop.  Five paths jump here and this is
-// not a `continue`: the label sits at brace depth 5 and the five jumps at
-// depths 8, 8, 5, 5 and 4, so three of them are inside nested loops or
-// outside this one.  Substituting `continue` compiles, passes the corpus,
-// and sends two of the five to the wrong loop.
-next_opcode:
-          if( ferror(fp) )
-            return nullptr;
-          int32_t run4 = fgetc(fp);
-          int32_t byte_in = fgetc(fp);
-          if( run4<0||byte_in<0 )
-            return nullptr;
-          byte = (uint32_t)byte_in;
-          pair = byte;
-          if( !run4 )
-            break;
-          if( row<pix_lo||row+(run4/2+1)>pix_hi )
-            return nullptr;
-          uint8_t lo = byte&0xF;
-          // `run4` nibbles of the two-nibble pattern in `pair`, from the half
-          // of `*row` that `hi_nibble` names.  Both arms ended twice -- once
-          // by falling out of the loop and once by a `goto` back to
-          // `next_opcode` from inside it -- and the label is the top of the
-          // loop this `if` is the body of, so the jump and the fall-through
-          // are the same exit.  What told them apart is the parity of `run4`,
-          // which is what each arm's counter is left holding.
-          if( hi_nibble ) {
-            // Byte-aligned, so every full byte is `pair` itself.  The counter
-            // steps by two and stops at 0 or 1.
-            int32_t left4b = run4;
-            uint8_t *row3 = row;
-            while( left4b>1 ) {
-              *row3++ = pair;
-              left4b -= 2;
-            }
-            row = row3;
-            hi_nibble = left4b==0;
-            if( left4b )
-              *row3 = pair&0xF0;
-          } else {
-            // Half a byte out of step: each byte written is the low nibble of
-            // the previous pattern beside the high nibble of the next, so the
-            // first byte carries whatever `*row` already held and the last may
-            // be half a byte on its own.  Here the counter ends at 0 or -1.
-            int32_t left4 = run4;
-            uint8_t *row4 = row;
-            cur = *row;
-            uint32_t hi = pair>>4;
-            uint8_t lo16 = 16*lo;
-            do {
-              *row4++ = hi|cur;
-              cur = lo16;
-              left4 -= 2;
-            } while( left4>0 );
-            row = row4;
-            hi_nibble = left4<0;
-            if( !hi_nibble )
-              *row4 = lo16;
+      if( ferror(fp) )
+        return nullptr;
+      int32_t run4 = fgetc(fp);
+      int32_t byte_in = fgetc(fp);
+      if( run4<0||byte_in<0 )
+        return nullptr;
+      byte = (uint32_t)byte_in;
+      pair = byte;
+      if( run4 ) {
+        if( row<pix_lo||row+(run4/2+1)>pix_hi )
+          return nullptr;
+        uint8_t lo = byte&0xF;
+        // `run4` nibbles of the two-nibble pattern in `pair`, from the half of
+        // `*row` that `hi_nibble` names.  Both arms ended twice -- once by
+        // falling out of their loop and once by a jump back to the top of the
+        // one above -- and those are the same exit.  What told them apart is
+        // the parity of `run4`, which is what each arm's counter is left
+        // holding.
+        if( hi_nibble ) {
+          // Byte-aligned, so every full byte is `pair` itself.  The counter
+          // steps by two and stops at 0 or 1.
+          int32_t left4b = run4;
+          uint8_t *row3 = row;
+          while( left4b>1 ) {
+            *row3++ = pair;
+            left4b -= 2;
           }
+          row = row3;
+          hi_nibble = left4b==0;
+          if( left4b )
+            *row3 = pair&0xF0;
+        } else {
+          // Half a byte out of step: each byte written is the low nibble of
+          // the previous pattern beside the high nibble of the next, so the
+          // first byte carries whatever `*row` already held and the last may
+          // be half a byte on its own.  Here the counter ends at 0 or -1.
+          int32_t left4 = run4;
+          uint8_t *row4 = row;
+          cur = *row;
+          uint32_t hi = pair>>4;
+          uint8_t lo16 = 16*lo;
+          do {
+            *row4++ = hi|cur;
+            cur = lo16;
+            left4 -= 2;
+          } while( left4>0 );
+          row = row4;
+          hi_nibble = left4<0;
+          if( !hi_nibble )
+            *row4 = lo16;
         }
-        if( byte )
-          break;
+      } else if( !byte ) {
         if( --y8<0 )
           goto done;
         row = img_f->pixels+y8*(uint16_t)img_f->stride;
-      }
-      if( byte==1 )
+      } else if( byte==1 ) {
         goto done;
-      if( byte!=2 )
-        break;
-      int32_t dxy = fgetc(fp);
-      int32_t dy4 = fgetc(fp);
-      if( dxy<0||dy4<0 )
-        return nullptr;
-      int32_t step = (dxy>>1)-dy4*(uint16_t)img_f->stride;
-      if( (dxy&1)==1 ) {
-        if( !hi_nibble )
-          ++step;
-        hi_nibble = !hi_nibble;
-      }
-      row += step;
-    }
-    if( row<pix_lo||row+((int32_t)byte/2+1)>pix_hi )
-      return nullptr;
-    fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
-    uint8_t *pal_at = (uint8_t*)pal_buf;
-    uint8_t *row5 = row;
-    while( 1 ) {
-      pix = *pal_at;
-      if( hi_nibble ) {
-        left = pair-1;
-        if( !left ) {
-          row = row5;
-          *row5 = *pal_at&0xF0;
-          hi_nibble = 0;
-          goto next_opcode;
+      } else if( byte==2 ) {
+        int32_t dxy = fgetc(fp);
+        int32_t dy4 = fgetc(fp);
+        if( dxy<0||dy4<0 )
+          return nullptr;
+        int32_t step = (dxy>>1)-dy4*(uint16_t)img_f->stride;
+        if( (dxy&1)==1 ) {
+          if( !hi_nibble )
+            ++step;
+          hi_nibble = !hi_nibble;
         }
-        *row5++ = pix;
-        hi_nibble = 1;
+        row += step;
       } else {
-        *row5++ |= (uint8_t)*pal_at>>4;
-        left = pair-1;
-        if( !left ) {
-          row = row5;
-          hi_nibble = 1;
-          goto next_opcode;
+        // An absolute run of `byte` nibbles, read a byte at a time and split
+        // across whichever half of the output `hi_nibble` names.
+        if( row<pix_lo||row+((int32_t)byte/2+1)>pix_hi )
+          return nullptr;
+        fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
+        uint8_t *pal_at = (uint8_t*)pal_buf;
+        uint8_t *row5 = row;
+        while( 1 ) {
+          pix = *pal_at;
+          if( hi_nibble ) {
+            left = pair-1;
+            if( !left ) {
+              row = row5;
+              *row5 = *pal_at&0xF0;
+              hi_nibble = 0;
+              break;
+            }
+            *row5++ = pix;
+            hi_nibble = 1;
+          } else {
+            *row5++ |= (uint8_t)*pal_at>>4;
+            left = pair-1;
+            if( !left ) {
+              row = row5;
+              hi_nibble = 1;
+              break;
+            }
+            *row5 = 16*(pix&0xF);
+            hi_nibble = 0;
+          }
+          ++pal_at;
+          pair = left-1;
+          if( !pair ) {
+            row = row5;
+            break;
+          }
         }
-        *row5 = 16*(pix&0xF);
-        hi_nibble = 0;
-      }
-      ++pal_at;
-      pair = left-1;
-      if( !pair ) {
-        row = row5;
-        goto next_opcode;
       }
     }
   }
