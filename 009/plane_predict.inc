@@ -352,11 +352,11 @@ void transform_planes(BmfImage* p_i) {
       plane_alt_model = alt;
       if( ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt ) {
         colour_transform(hdr, tmp, plane);
-        if( plane_predictor!=pred_p2 ) {
-          if( plane_predictor==pred_p1 ) {
-            predict_med(tmp, p_i->width, p_i->height);
-          }
-        }
+        // `!= pred_p2 && == pred_p1` is `== pred_p1`: the two are distinct
+        // values of the same two-bit field, so the outer test can only be
+        // true when the inner one is.
+        if( plane_predictor==pred_p1 )
+          predict_med(tmp, p_i->width, p_i->height);
         int32_t n = p_i->width*p_i->height;
         int32_t stride = plane_count;
         if( plane_count==1 ) {

@@ -614,3 +614,27 @@ the immediately enclosing loop (`continue`), or the first thing after its
 closing brace (`break`)? — the answer over all 37 is zero. The measurement was
 run against a two-function probe containing one of each first, and named both;
 the zero on the tree is a zero the instrument could have broken.
+
+---
+
+## Nesting, and a detector that was wrong before it was right
+
+Nothing measures how deep a body nests. Measured: 125 of the 219 bodies reach
+depth 1, and three reach 9 — `choose_plane_coding`, `reduce_alphabet`,
+`init_tables`.
+
+The cheap part of that is `if (a) { if (b) { … } }` where the inner is the
+whole of the outer, which is `if (a && b)` and one level less. **The first
+detector for it reported five and was wrong about four of them**: it found the
+inner `if`'s closing brace by running the depth back to zero, which for
+`if (b) { X } else { Y }` lands on the *final* brace and reads as no `else` at
+all. An inner `else` blocks the merge outright — `if (a) { if (b) X else Y }`
+does nothing when `a` is false, and `if (a && b) X else Y` runs `Y`. Two of the
+five survive the corrected question and both are done:
+`plane_predictor != pred_p2 && plane_predictor == pred_p1` is the second test
+alone, and the weight search's two descent bounds are one `&&`.
+`choose_plane_coding` is no longer one of the three at depth 9.
+
+The pattern of the whole session, one more time: the finding was not in the
+tree, it was in the question — and the first version of the question was wrong
+in a way only reading its answers could show.

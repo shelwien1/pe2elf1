@@ -198,26 +198,25 @@ int32_t choose_plane_coding(BmfImage* img) {
         int32_t wt4_dn_end = wt4-wt_step;
         int32_t wt8_dn_end = wt8-wt_step;
         while( 1 ) {
-          if( wt4_dn<=wt4_dn_end ) {
-            if( wt8_dn<=wt8_dn_end ) {
-              int32_t wt4_up = search.w4+1;
-              int32_t wt8_up = search.w8+1;
-              int32_t wt4_up_end = search.w4+wt_step;
-              int32_t wt8_up_end = search.w8+wt_step;
-              while( 1 ) {
-                if( wt4_up>=wt4_up_end&&wt8_up>=wt8_up_end ) {
-                  wt8 = search.w8;
-                  wt4 = search.w4;
-                  best_cost = search.cost;
-                  goto weights_chosen;
-                }
-                if( wt4_up<wt4_up_end&&wt4_up<192 )
-                  wt4_up_end = search.trial_a(wt4_up, wt_step);
-                if( wt8_up<wt8_up_end&&wt8_up<192 )
-                  wt8_up_end = search.trial_b(wt8_up, wt_step);
-                ++wt4_up;
-                ++wt8_up;
+          // Both axes out of room going down: turn round and go up.
+          if( wt4_dn<=wt4_dn_end&&wt8_dn<=wt8_dn_end ) {
+            int32_t wt4_up = search.w4+1;
+            int32_t wt8_up = search.w8+1;
+            int32_t wt4_up_end = search.w4+wt_step;
+            int32_t wt8_up_end = search.w8+wt_step;
+            while( 1 ) {
+              if( wt4_up>=wt4_up_end&&wt8_up>=wt8_up_end ) {
+                wt8 = search.w8;
+                wt4 = search.w4;
+                best_cost = search.cost;
+                goto weights_chosen;
               }
+              if( wt4_up<wt4_up_end&&wt4_up<192 )
+                wt4_up_end = search.trial_a(wt4_up, wt_step);
+              if( wt8_up<wt8_up_end&&wt8_up<192 )
+                wt8_up_end = search.trial_b(wt8_up, wt_step);
+              ++wt4_up;
+              ++wt8_up;
             }
           }
           if( wt4_dn>wt4_dn_end&&wt4_dn>=-64 )
