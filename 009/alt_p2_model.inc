@@ -14,9 +14,8 @@
 void AltP2Block::code_banks(int32_t sample16) {
   uint8_t b_top3;
   bool go;
-  int32_t bctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, neg,
-      w_top, e_top, bump, res_s, w_top3, w_topm1, neg_b, res_t, res_m0010,
-      neg_c, neg_d, wd4000p1a, pd4000p1a, wm0020a, pm0020a, res_c;
+  int32_t bctx, res, w0, w0b, res2, w1, e1, neg,
+      w_top, e_top, bump, res_s, w_top3, res_c;
   for( uint32_t bank = 0; bank<5; ++bank ) {
       bctx = (uint32_t)bank_ctx[bank];
       res = sample16-(nb_sum[2*bank]);
@@ -63,9 +62,7 @@ void AltP2Block::code_banks(int32_t sample16) {
           res2 = (nb_sum[2*bank+1])+res;
           int32_t lowbits = ctxw&3;
           if( (uint32_t)lowbits>=3||(w1 = node0[1].weighted, e1 = res2-p2_pred(w1, (uint8_t)node0[1].rate), go = lowbits<=0, node0[1].weighted = (int16_t)w1+((32*((e1>deadzone_hi)-(uint32_t)(e1<deadzone_lo))+e1+1)>>1), !go) ) {
-            wnode0m1a = node0[-1].weighted;
-            enode0m1a = res2-p2_pred(wnode0m1a, (uint8_t)node0[-1].rate);
-            node0[-1].weighted = (int16_t)wnode0m1a+((32*((enode0m1a>deadzone_hi)-(uint32_t)(enode0m1a<deadzone_lo))+enode0m1a+2)>>2);
+            p2_update(&node0[-1], res2, 2);
           }
           // Three update blocks follow, one per branch, and each walks these
           // eleven bits in order doing four or five things to each: bump the
@@ -74,26 +71,33 @@ void AltP2Block::code_banks(int32_t sample16) {
           // mirrored one with the residual negated.  Which of the five, and at
           // which bit, is the whole of what separates the three.
           //
-          // **They are not rolled into loops, and that is a decision rather
-          // than an omission.**  Every one of the three has exceptions -- at
-          // k = 0, 4, 9 and 10 -- and they are not decoration:
+          // For several rounds this said they were **not** rolled into loops,
+          // "a decision rather than an omission", and listed four exceptions at
+          // k = 0, 4, 9 and 10.  Every one of the four has since dissolved, and
+          // none of them dissolved by being argued with:
           //
-          //   * k = 0's nudge and k = 4's and k = 9's mirror bumps are written
-          //     longhand at some of the sites, because they are partial stores
-          //     or subtract into the residual variable itself;
-          //   * k = 9 in the third block uses `res_t`, a *different* residual
-          //     from the other ten;
-          //   * k = 10's mirror bump straddles the join of two arms and
-          //     happens once, after them.
+          //   * "k = 0's nudge and k = 4's and k = 9's mirror bumps are written
+          //     longhand" -- they were, and they are `p2_nudge` and `p2_update`
+          //     now.  Two of the three had already been converted; the last two
+          //     went when `p2_nudge` learned its shift instead of fixing it
+          //     at 2.
+          //   * "k = 4 subtracts into the residual variable itself" -- it does,
+          //     through `p2_update_into`, and *nothing reads the residual
+          //     afterwards*.  A write-back nobody reads is `p2_update`.
+          //   * "k = 9 in the third block uses `res_t`, a different residual" --
+          //     `res_t = res_c` two lines above and `res_c = res_t` two lines
+          //     below.  It is the same residual under a spill's name.
+          //   * "k = 10's mirror bump straddles the join and happens once" --
+          //     true, and both arms reach it with `-res_c`, so it is one line
+          //     after the join rather than a name each arm has to set.
           //
-          // A loop would carry four `if( k == … )` arms, and -- the reason
-          // that settles it -- hoisting the longhand cases out of their place
-          // in the sequence reorders counter updates against each other.
-          // `direct`, `mirror` and `rot` are all indices into one bank and can
-          // name the same record for different k, and every update reads
-          // before it writes, so the order is not free.  The indices above are
-          // what makes the shape readable; rolling it is what would make it
-          // wrong.
+          // What settled it was said to be that "hoisting the longhand cases
+          // out of their place reorders counter updates against each other" --
+          // `direct`, `mirror` and `rot` index one bank and can name the same
+          // record for different k, so the order is not free.  That is true and
+          // it is why nothing is hoisted: each loop below does the same five
+          // things in the same order the unrolled text did, and the only lines
+          // that moved are the four `-res_c` under four names.
           P2Count* bankp = &p2_ctr[32768*bank];
           res_c = res2;
           // The eleven context bits this counter bank tracks, and the three
@@ -127,6 +131,23 @@ void AltP2Block::code_banks(int32_t sample16) {
             __builtin_prefetch(mirror[k], 0, 1);
             __builtin_prefetch(rot[k], 0, 1);
           }
+          // The second and third arms differ in one line of five: whether the
+          // record after the direct counter is nudged.  `direct[0]` and
+          // `rot[0]` are bumped before the branch that chooses between them and
+          // `mirror[10]` after the two join, which is why this skips both ends.
+          auto walk_bits = [&](bool nudge) {
+            for( int32_t k = 0; k<11; ++k ) {
+              if( k ) {
+                p2_update(direct[k], res_c, 2);
+                p2_update(rot[k], res_c, 3);
+              }
+              if( nudge )
+                p2_nudge(&direct[k][1], res_c);
+              p2_update(&direct[k][-1], res_c, 3);
+              if( k<10 )
+                p2_update(mirror[k], -res_c, 3);
+            }
+          };
           neg = -res_c;
           __builtin_prefetch(direct[8], 0, 1);
           w_top = mir[0].weighted;
@@ -154,172 +175,24 @@ void AltP2Block::code_banks(int32_t sample16) {
           __builtin_prefetch(rot[10], 0, 1);
           if( go&&(w_top3 = mir[1].weighted, b_top3 = (uint8_t)mir[1].rate, res_c = res_s, go = lowbits<=0, mir[1].weighted = (int16_t)(((uint32_t)(-res_s-p2_pred(w_top3, b_top3)+2)>>2)+w_top3), go) ) {
             res_c = res_s;
-            p2_update(direct[0], res_s, 2);
-            p2_update(rot[0], res_s, 3);
-            wd4000p1a = direct[0][1].weighted;
-            pd4000p1a = p2_pred(wd4000p1a, (uint8_t)direct[0][1].rate);
-            int32_t nres3 = -res_s;
-            direct[0][1].weighted = (int16_t)((uint32_t)(res_s-pd4000p1a+2)>>2)+wd4000p1a;
-            p2_update(mirror[0], -res_s, 3);
-            p2_update(direct[1], res_c, 2);
-            p2_update(rot[1], res_c, 3);
-            p2_nudge(&direct[1][1], res_c);
-            p2_update(mirror[1], nres3, 3);
-            p2_update(direct[2], res_c, 2);
-            p2_update(rot[2], res_c, 3);
-            p2_nudge(&direct[2][1], res_c);
-            p2_update(mirror[2], nres3, 3);
-            p2_update(direct[3], res_c, 2);
-            p2_update(rot[3], res_c, 3);
-            p2_nudge(&direct[3][1], res_c);
-            p2_update(mirror[3], nres3, 3);
-            p2_update(direct[4], res_c, 2);
-            p2_update(rot[4], res_c, 3);
-            p2_nudge(&direct[4][1], res_c);
-            p2_update_into(mirror[4], nres3, 3);
-            p2_update(direct[5], res_c, 2);
-            p2_update(rot[5], res_c, 3);
-            p2_nudge(&direct[5][1], res_c);
-            int32_t nres2 = -res_c;
-            p2_update(mirror[5], -res_c, 3);
-            p2_update(direct[6], res_c, 2);
-            p2_update(rot[6], res_c, 3);
-            p2_nudge(&direct[6][1], res_c);
-            p2_update(mirror[6], nres2, 3);
-            p2_update(direct[7], res_c, 2);
-            p2_update(rot[7], res_c, 3);
-            p2_nudge(&direct[7][1], res_c);
-            p2_update(mirror[7], nres2, 3);
-            p2_update(direct[8], res_c, 2);
-            p2_update(rot[8], res_c, 3);
-            p2_nudge(&direct[8][1], res_c);
-            p2_update(mirror[8], nres2, 3);
-            p2_update(direct[9], res_c, 2);
-            p2_update(rot[9], res_c, 3);
-            p2_nudge(&direct[9][1], res_c);
-            wm0020a = mirror[9]->weighted;
-            pm0020a = p2_pred(wm0020a, mirror[9]->rate);
-            mirror[9]->weighted = wm0020a+((32*((nres2-pm0020a>deadzone_hi)-(uint32_t)(nres2-pm0020a<deadzone_lo))+nres2-pm0020a+4)>>3);
-            p2_update(direct[10], res_c, 2);
-            p2_update(rot[10], res_c, 3);
-            p2_nudge(&direct[10][1], res_c);
-            p2_update(mirror[10], -res_c, 3);
+            // The first arm owns both ends and never touches the record
+            // before the direct counter, so it is its own loop.
+            for( int32_t k = 0; k<11; ++k ) {
+              p2_update(direct[k], res_c, 2);
+              p2_update(rot[k], res_c, 3);
+              p2_nudge(&direct[k][1], res_c);
+              p2_update(mirror[k], -res_c, 3);
+            }
           } else {
-            w_topm1 = mir[-1].weighted;
             res_c = res_s;
-            mir[-1].weighted = (int16_t)(((uint32_t)(-res_s-p2_pred(w_topm1, (uint8_t)mir[-1].rate)+4)>>3)+w_topm1);
+            p2_nudge(&mir[-1], -res_s, 3);
             p2_update(direct[0], res_c, 2);
             go = lowbits<3;
             p2_update(rot[0], res_c, 3);
-            if( go ) {
-              p2_nudge(&direct[0][1], res_c);
-              neg_c = -res_c;
-              p2_update(&direct[0][-1], res_c, 3);
-              p2_update(mirror[0], neg_c, 3);
-              p2_update(direct[1], res_c, 2);
-              p2_update(rot[1], res_c, 3);
-              p2_nudge(&direct[1][1], res_c);
-              p2_update(&direct[1][-1], res_c, 3);
-              p2_update(mirror[1], neg_c, 3);
-              p2_update(direct[2], res_c, 2);
-              p2_update(rot[2], res_c, 3);
-              p2_nudge(&direct[2][1], res_c);
-              p2_update(&direct[2][-1], res_c, 3);
-              p2_update(mirror[2], neg_c, 3);
-              p2_update(direct[3], res_c, 2);
-              p2_update(rot[3], res_c, 3);
-              p2_nudge(&direct[3][1], res_c);
-              p2_update(&direct[3][-1], res_c, 3);
-              p2_update(mirror[3], neg_c, 3);
-              p2_update(direct[4], res_c, 2);
-              p2_update(rot[4], res_c, 3);
-              p2_nudge(&direct[4][1], res_c);
-              p2_update(&direct[4][-1], res_c, 3);
-              int32_t nres5 = -res_c;
-              p2_update(mirror[4], -res_c, 3);
-              p2_update(direct[5], res_c, 2);
-              p2_update(rot[5], res_c, 3);
-              p2_nudge(&direct[5][1], res_c);
-              p2_update(&direct[5][-1], res_c, 3);
-              p2_update(mirror[5], nres5, 3);
-              p2_update(direct[6], res_c, 2);
-              p2_update(rot[6], res_c, 3);
-              p2_nudge(&direct[6][1], res_c);
-              p2_update(&direct[6][-1], res_c, 3);
-              p2_update(mirror[6], nres5, 3);
-              p2_update(direct[7], res_c, 2);
-              p2_update(rot[7], res_c, 3);
-              p2_nudge(&direct[7][1], res_c);
-              p2_update(&direct[7][-1], res_c, 3);
-              p2_update(mirror[7], nres5, 3);
-              p2_update(direct[8], res_c, 2);
-              p2_update(rot[8], res_c, 3);
-              p2_nudge(&direct[8][1], res_c);
-              neg_d = -res_c;
-              p2_update(&direct[8][-1], res_c, 3);
-              p2_update(mirror[8], neg_d, 3);
-              p2_update(direct[9], res_c, 2);
-              p2_update(rot[9], res_c, 3);
-              p2_nudge(&direct[9][1], res_c);
-              p2_update(&direct[9][-1], res_c, 3);
-              p2_update(mirror[9], neg_d, 3);
-              p2_update(direct[10], res_c, 2);
-              p2_update(rot[10], res_c, 3);
-              p2_nudge(&direct[10][1], res_c);
-              p2_update(&direct[10][-1], res_c, 3);
-              res_m0010 = neg_d;
-            } else {
-              p2_update(&direct[0][-1], res_c, 3);
-              int32_t nres1 = -res_c;
-              p2_update(mirror[0], -res_c, 3);
-              p2_update(direct[1], res_c, 2);
-              p2_update(rot[1], res_c, 3);
-              p2_update(&direct[1][-1], res_c, 3);
-              p2_update(mirror[1], nres1, 3);
-              p2_update(direct[2], res_c, 2);
-              p2_update(rot[2], res_c, 3);
-              p2_update(&direct[2][-1], res_c, 3);
-              p2_update(mirror[2], nres1, 3);
-              p2_update(direct[3], res_c, 2);
-              p2_update(rot[3], res_c, 3);
-              p2_update(&direct[3][-1], res_c, 3);
-              p2_update(mirror[3], nres1, 3);
-              p2_update(direct[4], res_c, 2);
-              p2_update(rot[4], res_c, 3);
-              p2_update(&direct[4][-1], res_c, 3);
-              p2_update_into(mirror[4], nres1, 3);
-              p2_update(direct[5], res_c, 2);
-              p2_update(rot[5], res_c, 3);
-              neg_b = -res_c;
-              p2_update(&direct[5][-1], res_c, 3);
-              p2_update(mirror[5], neg_b, 3);
-              p2_update(direct[6], res_c, 2);
-              p2_update(rot[6], res_c, 3);
-              p2_update(&direct[6][-1], res_c, 3);
-              p2_update(mirror[6], neg_b, 3);
-              p2_update(direct[7], res_c, 2);
-              p2_update(rot[7], res_c, 3);
-              p2_update(&direct[7][-1], res_c, 3);
-              p2_update(mirror[7], neg_b, 3);
-              p2_update(direct[8], res_c, 2);
-              p2_update(rot[8], res_c, 3);
-              p2_update(&direct[8][-1], res_c, 3);
-              p2_update(mirror[8], neg_b, 3);
-              res_t = res_c;
-              p2_update(direct[9], res_c, 2);
-              res_c = res_t;
-              p2_update(rot[9], res_t, 3);
-              p2_update(&direct[9][-1], res_t, 3);
-              int32_t nres4 = -res_t;
-              p2_update(mirror[9], -res_t, 3);
-              p2_update(direct[10], res_c, 2);
-              p2_update(rot[10], res_c, 3);
-              p2_update(&direct[10][-1], res_c, 3);
-              res_m0010 = nres4;
-            }
-            // The one counter whose update straddles the join: both arms choose a
-            // residual, and the bump happens once, after them.
-            p2_update(mirror[10], res_m0010, 3);
+            walk_bits(go);
+            // The one counter whose update straddles the join.  Both arms
+            // reached it with `-res_c` under a name of their own.
+            p2_update(mirror[10], -res_c, 3);
           }
         }
       }

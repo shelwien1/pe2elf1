@@ -37,7 +37,7 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 206 now.  The p2
+start here.**  1031 lines of copy when this was written and 132 now.  The p2
 coders' prologue and epilogue used to be the largest groups and are gone: that
 pair merged, and so did four more, so `pairshare.py`'s declined table is down
 to two rows.
@@ -51,14 +51,17 @@ transform and its inverse, an encode/decode pair nobody had ever *named* as
 one, so no share had ever been measured and no decision taken.  They are one
 `template<int32_t f_DEC>` now.
 
-The longest runs today are four lines apiece, spread over `alt_p2_model`,
-`image_compress` and `bmp_read` -- no single body dominates.  A stale sentence
-in this docstring is the finding that matters here: this file records what the
-residue *is*, and nothing was checking it.
+After that the longest runs were four lines apiece, all of them in
+`alt_p2_model`'s three unrolled counter-bank blocks -- 150 lines that carried a
+comment explaining, in four bullets, why they could not be loops.  All four
+bullets had dissolved under later rounds and nobody had gone back to check.
+They are three loops now and the residue fell by a third in one commit.
 
-The largest entry for several rounds after that was not copy at all -- nine
-consecutive `uint32_t <name>;` in `ModelBlock`, one window three times over.
-See `DECL` below.
+A stale sentence in this docstring is the finding that matters here: this file
+records what the residue *is*, and nothing was checking it.  Twice now the
+largest entry has been something the prose above did not describe -- and once
+it was not copy at all, nine consecutive `uint32_t <name>;` in `ModelBlock`,
+one window three times over.  See `DECL` below.
 """
 import collections
 import re
@@ -75,7 +78,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 206
+BUDGET = 132
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.

@@ -133,8 +133,9 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
 }
 
 // One counter update: predict from the weight, bump it by how wrong that was.
-// 115 of `alt_p2_model`'s 117 `p2_bump` sites were these three statements
-// written out, with a pair of temporaries each.
+// All but two of `alt_p2_model`'s 118 `p2_bump` sites are this; the two that
+// are not sit inside the comma expression of an `if`, where the update's own
+// result decides the branch and a call cannot say it.
 //
 // Eight of those 115 read the rate as `*(uint8_t*)&p->rate`, and `rate` is
 // `int8_t` -- so they took the byte unsigned where this takes it signed.  That
@@ -182,15 +183,18 @@ static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num) {
   r->f[slot] += (num*(uint32_t)r->step)>>4;
 }
 
-// The same counter, updated in place at a fixed shift of 2 and *without*
-// `p2_bump`'s dead-zone kick.  21 sites fold it into one `+=` on the next
-// counter in the bank; the rounding term is the only thing they share with
-// `p2_update`, and folding them together would put the kick where the original
-// has none.
-static inline void p2_nudge(P2Count* p, int32_t res) {
+// The same counter, updated in place and *without* `p2_bump`'s dead-zone kick.
+// 22 sites fold it into one `+=` on the next counter in the bank; the rounding
+// term is the only thing they share with `p2_update`, and folding them together
+// would put the kick where the original has none.
+static inline void p2_nudge(P2Count* p, int32_t res, int32_t shift) {
   // Sixteen bits in and sixteen bits out, through `uint16_t` so that the
   // wrap is defined rather than signed overflow.
-  p->weighted = (int16_t)((uint16_t)p->weighted+((uint32_t)(res-p2_pred(p->weighted, p->rate)+2)>>2));
+  //
+  // The shift defaults to 2 because 21 of the 22 sites want 2; the odd one is
+  // a mirror counter at 3, written out in `alt_p2_model` because a helper
+  // fixed at 2 could not say it.
+  p->weighted = (int16_t)((uint16_t)p->weighted+((uint32_t)(res-p2_pred(p->weighted, p->rate)+(1<<(shift-1)))>>shift));
 }
 
 struct P2Ctx {
