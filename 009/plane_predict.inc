@@ -286,20 +286,17 @@ void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
 }
 
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
-  uint32_t done;
-  int32_t rows_left;
-  uint32_t row_rest, k, x_left;
+  uint32_t done, k, x_left;
   alignas(16) uint8_t unfold[256];
   uint8_t *p = pixels+1;
   med_unfold_table(unfold);
-  if( width==1 ) {
-    rows_left = height-1;
-    if( height==1 )
-      return p;
-    row_rest = 0;
-  } else {
-    row_rest = width-1;
-    uint32_t pairs = (row_rest)/2;
+  int32_t rows_left = height-1;
+  if( width!=1 ) {
+    // The first row has nothing above it, so it is a plain left-to-right
+    // difference.  The original unrolled it by two -- the `pairs` loop -- with
+    // the odd pixel after it.
+    uint32_t row_rest = width-1;
+    uint32_t pairs = row_rest/2;
     if( pairs ) {
       for( k = 0; k<pairs; ++k ) {
         uint8_t cur = pixels[2*k]+unfold[pixels[2*k+1]];
@@ -315,33 +312,39 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
       pixels[done] = pixels[done-1]+unfold[pixels[done]];
       p = &pixels[done+1];
     }
-    rows_left = height-1;
-    if( height==1 )
-      return p;
   }
-  {
-    uint8_t *up = &p[-width];
+  if( height==1 )
+    return p;
+  if( width==1 ) {
+    // One pixel to a row, so the row loop and the column loop are one loop and
+    // `med_predict` never runs: a pixel's only neighbour is the one above it.
+    //
+    // The recovery said this with a `while( 1 )` wrapped round the first pixel
+    // of a row which broke out of itself for a wide image and looped for a
+    // narrow one -- one loop doing two jobs, with the narrow case's `return`
+    // three levels in and its `x_left = 0` assigned every turn and never read.
     do {
-      while( 1 ) {
-        ++up;
-        *p = unfold[(uint8_t)*p]+p[-width];
-        x_left = row_rest;
-        ++p;
-        if( width!=1 )
-          break;
-        if( !--rows_left )
-          return p;
-      }
-      do {
-        uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
-        *p = pred+unfold[(uint8_t)*p];
-        ++up;
-        ++p;
-        --x_left;
-      } while( x_left );
-      --rows_left;
-    } while( rows_left );
+      *p = unfold[(uint8_t)*p]+p[-width];
+      ++p;
+    } while( --rows_left );
+    return p;
   }
+  uint8_t *up = &p[-width];
+  do {
+    // The first pixel of a row has no west neighbour, so it takes the one
+    // above it rather than a MED prediction.
+    ++up;
+    *p = unfold[(uint8_t)*p]+p[-width];
+    ++p;
+    x_left = width-1;
+    do {
+      uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
+      *p = pred+unfold[(uint8_t)*p];
+      ++up;
+      ++p;
+      --x_left;
+    } while( x_left );
+  } while( --rows_left );
   return p;
 }
 

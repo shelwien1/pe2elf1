@@ -87,7 +87,7 @@
 // `tools/pairshare.py` re-measures both and reports any line that has drifted.
 //
 //   code_pixel / decode_pixel                         28 of 328 (9%)
-//   predict_med / unpredict_med                        8 of 113 (7%)
+//   predict_med / unpredict_med                       10 of 104 (10%)
 //
 // **`predict_med` walks backwards and `unpredict_med` forwards**, and that is
 // structural rather than a spelling.  The forward transform has to read each
@@ -98,6 +98,16 @@
 // what the two do outside the shared middle.  A template over a direction flag
 // would have to reverse three loop headers and two edge cases, which is
 // writing both bodies out again with an `if` around each line.
+//
+// `unpredict_med` got nine lines shorter anyway, and not by sharing anything
+// with its partner.  Its first pixel of a row sat inside a `while( 1 )` that
+// broke out of itself for a wide image and looped for a narrow one -- one loop
+// doing two jobs, with the narrow case's `return` three levels in.  The narrow
+// case is its own loop now, and it is worth knowing that **no gate reaches
+// it**: `search_filter` gives up below `4 x 3` and leaves every descriptor at
+// mode 0, so the encoder never picks MED for an image one pixel wide, and only
+// a stream that claims one can get there.  `tools/narrow.sh` says so where a
+// reader will look for it.
 //
 // **`code_pixel` and `decode_pixel` diverge at the top and meet at the
 // bottom.**  The encoder knows the symbol and asks where it ranks; the decoder

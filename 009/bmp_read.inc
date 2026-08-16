@@ -16,7 +16,7 @@ BmfImage* read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row, bmp_bgra[4], pix;
   uint8_t* row_at;
-  uint32_t row_pad, byte;
+  uint32_t row_pad;
   uint8_t cur;
   int32_t pal_n, i, hi_nibble;
   uint32_t pair, stride, left;
@@ -137,7 +137,7 @@ BmfImage* read_bmp(char* path) {
       int32_t run4, byte_in;
       if( !read_rle_op(fp, run4, byte_in) )
         return nullptr;
-      byte = (uint32_t)byte_in;
+      const uint32_t byte = (uint32_t)byte_in;
       pair = byte;
       if( run4 ) {
         if( row<pix_lo||row+(run4/2+1)>pix_hi )

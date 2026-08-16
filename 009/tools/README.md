@@ -486,11 +486,13 @@ them run.
 | `methodise.py` | Turn a function whose first parameter is its receiver into a method | yes |
 | `mkaltp1.py` | Write testfiles/altp1.bmp — the image that reaches `alt_model_p1_decode` | no |
 | `mkmed32.py` | Write testfiles/med32.bmp — the image that reaches `unpredict_med` | no |
+| `mknarrow.py` | Write the degenerate-geometry BMPs `tools/narrow.sh` round-trips | no |
 | `mknoise.py` | Write testfiles/noise24.bmp — data that does not compress | no |
 | `mkrefs.sh` | Regenerate testfiles/ref_<name>.bmf, the streams test.sh compares against |  |
 | `mkrle.py` | Write the two run-length-encoded BMPs in testfiles/ | no |
 | `name_raw_addrs.py` | Rewrite subs1.hpp's raw BMF_BLOB(0x...) addresses as named globals | yes |
 | `namelocal.py` | Name a local after the member it is one assignment of | yes |
+| `narrow.sh` | Round-trip the geometries the corpus does not have |  |
 | `negindex.py` | Find `p[-u]` where `u` is unsigned — a subtraction that only i386 undoes | yes |
 | `objects.py` | Group the names that denote the same allocation, and describe each object | yes |
 | `outpath.py` | Refuse to write a generator's output over something that is not its output | no |
