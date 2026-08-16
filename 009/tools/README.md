@@ -470,6 +470,7 @@ them run.
 | `defram.py` | Lift the frame members that are provably not part of a layout | yes |
 | `degoto.py` | Turn `if (c) goto L; ... L:` back into `if (!c) { ... }` | yes |
 | `dethread.py` | Delete the `const __m128 &` parameter thread | yes |
+| `dupblock.py` | A run of statements written out more than once, under different names | yes |
 | `explicitcmp.py` | Write out the conversion a signed/unsigned comparison already performs | yes |
 | `extents.py` | What each blob global is actually used as | yes |
 | `firstuse.py` | Declare a local where it is first assigned, not at the top of the body | yes |

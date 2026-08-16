@@ -783,9 +783,7 @@ struct ModelBlock {
     int32_t arg_cum, arg_high, arg_tot;
     uint32_t done, lvl_a;
     PixRec *next;
-    int32_t nb, key, cap, nb2, all_up, sig1, sig2, s1a, m_up0, run, bucket, bit, hit_a, idx_s, tot, b15a, w5a, lvl_b, w5b, s0c, s3a;
-    uint16_t k1;
-    uint16_t k4, k3;
+    int32_t nb, key, cap, nb2, all_up, sig1, sig2, s1a, m_up0, run, bucket, bit, hit_a, idx_s, tot;
     PixRec *cur6 = (PixRec*)row_cur[6];
     int32_t up_sym = cur6->sym;
     PixRec *row = row_cur[5];
@@ -1060,40 +1058,11 @@ struct ModelBlock {
       }
       arg_tot = tot;
       int32_t target = rc.get_freq(arg_tot);
-      int32_t cum = freq_tbl->w[0];
-      if( cum<=target ) {
-        cum += freq_tbl->w[1];
-        if( cum<=target ) {
-          cum += freq_tbl->w[2];
-          if( cum<=target ) {
-            cum += freq_tbl->w[3];
-            if( cum<=target ) {
-              cum += freq_tbl->w[4];
-              lvl_a = 4;
-            } else {
-              lvl_a = 3;
-            }
-          } else {
-            lvl_a = 2;
-          }
-        } else {
-          lvl_a = 1;
-        }
-      } else {
-        lvl_a = 0;
-      }
-      int32_t w6a = freq_tbl->w[6];
+      int32_t cum;
+      lvl_a = freq_tbl->find_level(target, cum);
       arg_high = cum;
-      b15a = freq_tbl->b15;
       arg_cum = cum-freq_tbl->w[lvl_a];
-      w5a = freq_tbl->w[5];
-      if( w5a>w6a&&(freq_tbl->w[lvl_a]+b15a+8<w5a||freq_tbl->w[5]>0x4000u) ) {
-        uint8_t kick = (uint8_t)b15a;
-        w5a = freq_tbl->rescale((uint16_t)w6a, kick);
-        b15a = kick;
-      }
-      freq_tbl->w[5] = b15a+w5a;
-      freq_tbl->w[lvl_a] += b15a;
+      freq_tbl->bump(lvl_a);
       rc.decode(arg_cum, arg_high, arg_tot);
       hit = lvl_a;
       if( freq_tbl->b14 ) {
@@ -1106,71 +1075,11 @@ struct ModelBlock {
     } else {
       arg_tot = freq->w[5];
       int32_t target2 = rc.get_freq(arg_tot);
-      int32_t cum2 = freq->w[0];
-      if( cum2<=target2 ) {
-        cum2 += freq->w[1];
-        if( cum2<=target2 ) {
-          cum2 += freq->w[2];
-          if( cum2<=target2 ) {
-            cum2 += freq->w[3];
-            if( cum2<=target2 ) {
-              cum2 += freq->w[4];
-              lvl_b = 4;
-            } else {
-              lvl_b = 3;
-            }
-          } else {
-            lvl_b = 2;
-          }
-        } else {
-          lvl_b = 1;
-        }
-      } else {
-        lvl_b = 0;
-      }
-      int32_t b15b = freq->b15;
+      int32_t cum2;
+      int32_t lvl_b = freq->find_level(target2, cum2);
       arg_high = cum2;
       arg_cum = cum2-freq->w[lvl_b];
-      w5b = freq->w[5];
-      int32_t w6b = freq->w[6];
-      nb_sym[3] = b15b;
-      if( w5b>w6b&&(freq->w[lvl_b]+nb_sym[3]+8<w5b||w5b>0x4000) ) {
-        nb_sym[0] = w6b;
-        nb_sym[2] = lvl_b;
-        k1 = freq->w[1];
-        uint32_t k2 = freq->w[2];
-        uint16_t k0 = freq->w[0]-(freq->w[0]>>1);
-        freq->w[0] = k0;
-        k1 = k1-(k1>>1);
-        freq->w[1] = k1;
-        uint32_t k2h = k2-(k2>>1);
-        k3 = (uint16_t)freq->w[3];
-        freq->w[2] = k2h;
-        k3 = k3-(k3>>1);
-        k4 = (uint16_t)freq->w[4];
-        freq->w[3] = k3;
-        k4 = k4-(k4>>1);
-        freq->w[4] = k4;
-        k4 = k0+k4;
-        w5b = (uint16_t)(k4+k3+k2h+k1);
-        s0c = nb_sym[0];
-        freq->w[5] = w5b;
-        lvl_b = nb_sym[2];
-        if( s0c<256&&!freq->b14 ) {
-          s0c = 256;
-          freq->w[6] = 256;
-        }
-        if( w5b>s0c ) {
-          s3a = nb_sym[3];
-          if( s3a<15 )
-            s3a = 15;
-          nb_sym[3] = s3a;
-          freq->b15 = s3a;
-        }
-      }
-      int16_t s3b = nb_sym[3];
-      freq->w[5] = s3b+w5b;
-      freq->w[lvl_b] += s3b;
+      freq->bump(lvl_b);
       rc.decode(arg_cum, arg_high, arg_tot);
       hit = lvl_b;
       freq_tbl->w[5] = freq_tbl->w[lvl_b]++!=0;
@@ -1240,11 +1149,9 @@ struct ModelBlock {
     alignas(16) int32_t nb_sym[32];
     int32_t runlen_s;
     int32_t arg_cum;
-    uint16_t g4, g3;
     uint32_t arg_tot, arg_high, done, grid_kind;
     uint16_t* id3p;
-    int32_t nb, key, cap, nb2, sig1, sig2, m_up0, one, run, amap, runlen, run_left, bit5, cum1, lvl_a, w5a, b15a, cum2, lvl_b, w5c, w5b, s3b;
-    uint16_t w1;
+    int32_t nb, key, cap, nb2, sig1, sig2, m_up0, one, run, amap, runlen, run_left, bit5, cum1, lvl_a, cum2, lvl_b;
     PixRec *cur5p1;
     PixRec* cur6c, * up2;
     PixRec* cur6 = (PixRec*)row_cur[6];
@@ -1537,18 +1444,9 @@ struct ModelBlock {
           cum1 = 0;
           lvl_a = 0;
         }
-        int32_t w6a = frec->w[6];
         arg_cum = cum1;
         arg_high = frec->w[lvl_a]+cum1;
-        w5a = frec->w[5];
-        b15a = frec->b15;
-        if( w5a>w6a&&(frec->w[lvl_a]+b15a+8<w5a||frec->w[5]>0x4000u) ) {
-          uint8_t kick = (uint8_t)b15a;
-          w5a = frec->rescale((uint16_t)w6a, kick);
-          b15a = kick;
-        }
-        frec->w[5] = b15a+w5a;
-        frec->w[lvl_a] += b15a;
+        frec->bump(lvl_a);
         rc.encode(arg_cum, arg_high, arg_tot);
         hit = lvl_a;
         if( frec->b14 ) {
@@ -1581,46 +1479,7 @@ struct ModelBlock {
         }
         arg_cum = cum2;
         arg_high = binp->w[lvl_b]+cum2;
-        w5c = binp->w[5];
-        int32_t w6c = binp->w[6];
-        nb_sym[3] = binp->b15;
-        if( w5c>w6c&&(binp->w[lvl_b]+nb_sym[3]+8<w5c||w5c>0x4000) ) {
-          nb_sym[0] = w6c;
-          w1 = binp->w[1];
-          uint32_t g2 = binp->w[2];
-          nb_sym[2] = lvl_b;
-          int16_t g0 = binp->w[0]-(binp->w[0]>>1);
-          binp->w[0] = g0;
-          w1 = w1-(w1>>1);
-          binp->w[1] = w1;
-          uint32_t g2h = g2-(g2>>1);
-          g3 = (uint16_t)binp->w[3];
-          binp->w[2] = g2h;
-          g3 = g3-(g3>>1);
-          g4 = (uint16_t)binp->w[4];
-          binp->w[3] = g3;
-          g4 = g4-(g4>>1);
-          binp->w[4] = g4;
-          g4 = g0+g4;
-          lvl_b = nb_sym[2];
-          w5c = (uint16_t)(g4+g3+g2h+w1);
-          w5b = nb_sym[0];
-          binp->w[5] = w5c;
-          if( w5b<256&&!binp->b14 ) {
-            w5b = 256;
-            binp->w[6] = 256;
-          }
-          if( w5c>w5b ) {
-            s3b = nb_sym[3];
-            if( s3b<15 )
-              s3b = 15;
-            nb_sym[3] = s3b;
-            binp->b15 = s3b;
-          }
-        }
-        int16_t s3 = nb_sym[3];
-        binp->w[5] = s3+w5c;
-        binp->w[lvl_b] += s3;
+        binp->bump(lvl_b);
         rc.encode(arg_cum, arg_high, arg_tot);
         hit = lvl_b;
         frec->w[5] = (frec->w[lvl_b])++!=0;

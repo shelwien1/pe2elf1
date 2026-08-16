@@ -11,6 +11,41 @@ struct FreqRec {
     };
   };
 
+  // Which of the five levels `target` falls in, and the cumulative weight to
+  // the end of it.  Five slots walked in order.
+  //
+  // Both decoders wrote this as a five-deep nest of `if`/`else`, twenty-three
+  // lines, with the level a literal in each of the six arms -- a linear search
+  // with its loop unrolled and its counter written out as constants.
+  int32_t find_level(int32_t target, int32_t& cum) const {
+    int32_t lvl = 0;
+    cum = w[0];
+    while( lvl<4&&cum<=target )
+      cum += w[++lvl];
+    return lvl;
+  }
+
+  // Add `b15` to one level and to the total, rescaling the record first if it
+  // has outgrown the escape floor in `w[6]` or passed 0x4000.
+  //
+  // Three sites wrote this out.  Two of the three called `rescale`; the third
+  // had it inlined as well, thirty-eight lines, holding the floor, the level
+  // and the increment in `nb_sym[0]`, `nb_sym[2]` and `nb_sym[3]` -- three
+  // slots of the pixel's *neighbour table* used as scratch.
+  //
+  // That third copy also wrote `b15` unconditionally where `rescale` writes it
+  // only when it is raising it.  The value is the same either way: the branch
+  // it sits in has already taken the maximum of the old `b15` and 15.
+  void bump(int32_t lvl) {
+    const uint16_t floor_ = w[6];
+    uint16_t total = w[5];
+    uint8_t kick = b15;
+    if( total>floor_&&(w[lvl]+kick+8<total||w[5]>0x4000u) )
+      total = rescale(floor_, kick);
+    w[5] = kick+total;
+    w[lvl] += kick;
+  }
+
   // Blend `src` into this record.  The five selector weights this record has
   // are kept, scaled by `src`'s `b15`; `src`'s weights take their place; each
   // then gets 21 parts in `src`'s total added back, rounded up; and the total
