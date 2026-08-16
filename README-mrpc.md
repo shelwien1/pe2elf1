@@ -141,7 +141,7 @@ while an adaptive coder has already converged and gets nothing more.
 |---|---|---|---|---|
 | t24 | 2.9 s | 21 s | 1.5 s | **0.07 s** |
 | t32 | 9.8 s | 31 s | 2.1 s | **0.06 s** |
-| 20000171A (8 MB) | 120 s | 560 s | 44 s | **9 s** |
+| 20000171A (8 MB) | 120 s | 560 s | 43.9 s | **0.74 s** |
 
 The 8 MB image took over half an hour when it was first run, and printed
 nothing while it did. It is 9 minutes now (§7), and the phase that
@@ -149,6 +149,11 @@ remains is the class search: 27 s of every 28 s iteration, because the
 quadtree evaluates all 63 classes over the same pixels at each of its five
 levels. Pruning the candidate list at the deeper levels is the next thing
 worth measuring.
+
+The decode column is why the whole arrangement is worth its encode: **59×
+faster than bmpc on that file**, 0.74 s against 43.9 s. bmpc's decoder has
+to replay every `ParamUpdater` step its encoder took; mrpc's reads a
+transmitted model.
 
 Encoding is slower because the coefficient search visits every pixel of a
 class for each candidate pair, and the class search predicts every pixel
@@ -193,6 +198,41 @@ loop (85 s → 46 s overall, output byte-identical at every step):
 * **Four accumulator chains, not one.** `mullo_epi32` is ten cycles of
   latency against one per cycle of throughput, so a single chain over 41
   taps waits about five times longer than the multiplies take.
+
+### The decoder, and what did not work
+
+Decoding is strictly sequential — pixel *x* needs pixel *x−1* — so it
+cannot batch over pixels the way the encoder's searches do. Ablation (a
+build with the symbol decode stubbed out) splits the 0.77 s on the 8 MB
+image into roughly **45% prediction and bookkeeping, 55% symbol decode**.
+
+Two thirds of a prediction's taps read rows that are already *finished*,
+so that part of every prediction in a row can be computed before the row
+starts, eight pixels at a time out of the planes — the same trick that
+worked so well in the encoder, and integer addition is associative so the
+split is bit-exact. It was **slower**: 0.88 s against 0.77 s. Writing an
+accumulator row and reading it back costs more than the 28 taps saved,
+and the interleaved `org` was already giving several taps per cache line
+where the planes spread them over four. Reverted.
+
+(Along the way it did produce a real find. Row 0 is special: its taps
+reach into the top border, which `BorderTopCol` is still filling in *as
+row 0 is coded*, so precomputing that row reads cells that have not
+happened yet. A self-check comparing the split against `Predict` —
+`-DMRP_CHECK=1` — found it in one run.)
+
+What did pay is the search inside `DecSym`. The window is always 256
+symbols wide and the binary search over it is eight loads, each of which
+must finish before the next address is known. Counting instead of
+searching breaks the chain: eight *independent* probes pick a block of 32,
+then that block is compared eight at a time. Same answer, no load waiting
+on another load — 0.77 s → **0.74 s**.
+
+The rest is three 64-bit divisions per symbol in the rangecoder
+(`rc_GetFreq` and two in `rc_Process`). The usual fix — divide once by
+`totfreq` and multiply — changes the arithmetic and therefore the
+bitstream, and `sh_v2f.inc` is shared with coder0 and bmpc. It would be a
+mrpc-only entry point; not done.
 
 ### And two approximations, because the clock is a result too
 

@@ -335,11 +335,40 @@ static INLINE void EncSym( const PMod* pm, int lo, int hi, int s ) {
   uint off = pm->cumfreq[lo], tot = pm->cumfreq[hi]-off;
   rc.rc_Process( pm->cumfreq[s]-off, pm->freq[s], tot );
 }
+// Half the decoder's time is here: the window is always 256 symbols wide
+// and the binary search over it is eight loads, each of which has to
+// finish before the next address is known.  Counting instead of searching
+// breaks that chain -- eight INDEPENDENT probes to pick a block of 32,
+// then the block itself compared eight at a time.  Same answer, and no
+// load waits on another load's result.
 static INLINE int DecSym( const PMod* pm, int lo, int hi ) {
-  uint off = pm->cumfreq[lo], tot = pm->cumfreq[hi]-off;
-  uint v = rc.rc_GetFreq( tot );
-  int i=lo, j=hi-1;
-  while( i<j ) { int k=(i+j)>>1; if( pm->cumfreq[k+1]-off <= v ) i=k+1; else j=k; }
+  const uint* c = pm->cumfreq + lo;
+  uint off = c[0], tot = pm->cumfreq[hi]-off;
+  uint v = rc.rc_GetFreq( tot ) + off;      // compare unshifted
+  int n = hi-lo, i;
+#if defined(__AVX2__)
+  if( n==256 ) {
+    int b = 0;                              // c[32*(b+1)] > v <= c[32*b]
+    b += (c[ 32]<=v) + (c[ 64]<=v) + (c[ 96]<=v) + (c[128]<=v)
+       + (c[160]<=v) + (c[192]<=v) + (c[224]<=v);
+    const uint* q = c + b*32 + 1;
+    __m256i vv = _mm256_set1_epi32( int(v) );
+    int cnt = 0;
+    for( int t=0; t<32; t+=8 ) {
+      __m256i x = _mm256_loadu_si256( (const __m256i*)(q+t) );
+      // x <= v is the complement of x > v
+      int m = _mm256_movemask_ps( _mm256_castsi256_ps(
+                _mm256_cmpgt_epi32( x, vv ) ) );
+      cnt += 8 - __builtin_popcount( uint(m) );
+    }
+    i = lo + b*32 + cnt;
+    rc.rc_Process( pm->cumfreq[i]-off, pm->freq[i], tot );
+    return i;
+  }
+#endif
+  { int a=lo, j=hi-1;
+    while( a<j ) { int k=(a+j)>>1; if( pm->cumfreq[k+1] <= v ) a=k+1; else j=k; }
+    i = a; }
   rc.rc_Process( pm->cumfreq[i]-off, pm->freq[i], tot );
   return i;
 }
