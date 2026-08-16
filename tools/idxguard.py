@@ -10,16 +10,43 @@
 # With the guard, -DB0_NW_w=1024 replaces the whole declaration by a literal
 # (which is also what makes sweep.py's model-shape search possible); without
 # it, -D turns the declarator into a number and the file will not compile.
-# The generated file is otherwise untouched, so it stays a build input that
-# `GCIDX=1 ./gc.sh` can rewrite from the .idx at any time.
+# Two smaller jobs keep `GCIDX=1 ./gc.sh` idempotent against the tracked
+# file, so regenerating from the .idx produces no diff:
 #
-#   tools/idxguard.py MOD/sh_model-B0_h.inc
+#   --banner-from OLD   carry the leading // comment block of the previous
+#                       version across (idx2inc.pl emits none, and the
+#                       banner is where the file says where it came from)
+#   the empty module scaffold idx2inc.pl always closes with -- `struct X_T`
+#                       with a zero _Size and empty Init/Quit -- is dropped;
+#                       B0 declares parameters only, it has no tables.
+#
+#   tools/idxguard.py [--banner-from OLD] MOD/sh_model-B0_h.inc
 import re, sys
+
+def banner_of( path ):
+    try: lines = open(path).read().split('\n')
+    except OSError: return []
+    out = []
+    for line in lines:
+        if line.startswith('//'): out.append(line)
+        elif out or line.strip(): break
+    return out
+
+# `struct X_T { ... };` with nothing in it: no Table members, so no state.
+SCAFFOLD = re.compile(
+    r'\n*struct \w+_T \{.*?_Size = 0;\s*'
+    r'void \w+_Init\( void \) \{\s*\}\s*'
+    r'void \w+_Quit\( void \) \{\s*\}\s*\};\s*\Z', re.S )
+
+banner = []
+args = sys.argv[1:]
+if args[:1] == ['--banner-from']:
+    banner = banner_of( args[1] ); args = args[2:]
 
 DECL = re.compile(r'^(?:pdesc|mdesc)\(\s*(\w+?)_,')
 CONST = re.compile(r'^static const (?:int|word\*) (\w+)\s*=')
 
-for path in sys.argv[1:]:
+for path in args:
     out, pend = [], []
     for line in open(path).read().split('\n'):
         m = DECL.match(line)
@@ -37,5 +64,11 @@ for path in sys.argv[1:]:
         out += pend + [line]
         pend = []
     out += pend
-    open(path, 'w').write('\n'.join(out))
+    text = SCAFFOLD.sub( '\n', '\n'.join(out) )
+    if banner:
+        body = text.split('\n')
+        while body and (body[0].startswith('//') or not body[0].strip()):
+            body.pop(0)
+        text = '\n'.join( banner + body )
+    open(path, 'w').write(text)
     print('guarded %s' % path)

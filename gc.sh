@@ -23,11 +23,20 @@ if [ "${GCIDX:-0}" = "1" ]; then
   for a in IDX/*.idx; do
     [ -e "$a" ] || continue
     b=$(basename "$a" .idx)
+    # keep the outgoing file: its banner is carried across, so regenerating
+    # an unchanged .idx leaves no diff (see tools/idxguard.py)
+    old=""
+    if [ -f "MOD/${b}_h.inc" ]; then
+      old="MOD/${b}_h.inc.prev"; cp -f "MOD/${b}_h.inc" "$old"
+    fi
     ( cd IDX && perl idx2inc.pl "$b.idx" 0 >/dev/null )
     mv -f IDX/"$b"_*.inc MOD/ 2>/dev/null || true
     # idx2inc.pl emits bare declarations; the #ifndef wrapper is what lets
     # sweep.py pin a knob with -D without editing the generated file.
-    [ -f "MOD/${b}_h.inc" ] && python3 tools/idxguard.py "MOD/${b}_h.inc" >/dev/null
+    if [ -f "MOD/${b}_h.inc" ]; then
+      python3 tools/idxguard.py ${old:+--banner-from "$old"} "MOD/${b}_h.inc" >/dev/null
+    fi
+    [ -n "$old" ] && rm -f "$old"
   done
 fi
 

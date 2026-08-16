@@ -333,21 +333,3 @@ static const int C0_mwXhi = C0_mwXhi_.value * (1);
 pdesc( C0_BWT_, 0, "000000000" );
 static const int C0_BWT = C0_BWT_.value * (1);
 #endif
-
-
-
-struct C0_T { 
-#undef USE_NEW
-#define USE_NEW 0
-
-
-  
-  /* Total bytes this module's Table() members occupy -- a constant here, since
-   * Const mode has already folded every count. */
-  static constexpr unsigned long long C0_Size = 0;
-  void C0_Init( void ) {
-  
-  }
-  void C0_Quit( void ) {
-  }
-};
