@@ -1494,7 +1494,6 @@ struct ModelBlock {
               ++k;
             } while( k<half );
             cur2 = cur5p1;
-            runlen = runlen_s;
             done = 2*k+1;
           } else {
             done = 1;
@@ -1516,7 +1515,6 @@ struct ModelBlock {
       hit = run_hit;
       *(amap_at+msym1) = run_hit;
       if( !run_hit&&run_len!=1 ) {
-        runlen_s = runlen;
         // `bucket_at` counts down and `bucket` does not, so
         // `bucket_at == bucket` is "this is the first turn" and not the
         // tautology it reads as.  The decoder's half counts `bucket` itself
@@ -1529,7 +1527,7 @@ struct ModelBlock {
           if( run_len>(bit5|first) ) {
             BitCtr *ctr = &run_ctr[16*((first==0)+(bucket_at==bucket))
                                    +bucket_at];
-            const int32_t run_bit = runlen_s&bit5;
+            const int32_t run_bit = runlen&bit5;
             uint32_t bin_tot = ctr->n[0]+ctr->n[1];
             rc.encode_bit(ctr->n[0], ctr->n[1], run_bit!=0);
             if( ctr->limit<bin_tot )
@@ -1543,7 +1541,6 @@ struct ModelBlock {
           --bucket_at;
           bit5 >>= 1;
         } while( bit5 );
-        runlen = runlen_s;
       }
       if( hit )
         return runlen;

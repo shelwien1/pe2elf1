@@ -555,7 +555,7 @@ them run.
 | `unrecast.py` | Drop the cast when the base already has that type | yes |
 | `unrechoist.py` | Fold an 18-byte record copy whose loads MSVC hoisted above its stores | yes |
 | `unreload.py` | Load a member once where the decompilation loads it over and over | yes |
-| `unsave.py` | Delete a local that saves a value across a region that cannot change it | yes |
+| `unsave.py` | A value saved into a second name and loaded straight back | yes |
 | `unscalar.py` | Delete a struct that is a run of one scalar, and point at the scalar | yes |
 | `unshim.py` | Inline the `__fwd_*` shims and call the function they call | yes |
 | `unslot.py` | Give a frame slot's extra names their own storage | yes |

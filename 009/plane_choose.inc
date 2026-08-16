@@ -334,7 +334,6 @@ int32_t choose_plane_coding(BmfImage* img) {
             Syw += dv1*(double)dv3;
             Szw += dv2*(double)dv3;
           } while( i4<uu );
-          n_quads = uu;
         }
         // The three cofactors of the first row of `S`, and one over its
         // determinant -- scaled by 128 because the weights are eighths of a
@@ -371,7 +370,6 @@ int32_t choose_plane_coding(BmfImage* img) {
           // The loop below spilled three more registers to that same area --
           // `quad`, `g0` and `g1`, each already a local one line up -- and
           // those stores are gone with it.
-          uu = n_quads;
           quad = 0;
           do {
             int32_t nx0 = img->pixels[4*quad+4];

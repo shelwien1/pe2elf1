@@ -1,237 +1,156 @@
 #!/usr/bin/env python3
-"""Delete a local that saves a value across a region that cannot change it.
+"""A value saved into a second name and loaded straight back.
 
-    python3 tools/unsave.py subs1.hpp
-    python3 tools/unsave.py subs1.hpp --all
+    python3 tools/unsave.py bmf.cpp             # report
+    python3 tools/unsave.py bmf.cpp --list      # and every pair
+    python3 tools/unsave.py bmf.cpp --declined  # and what stopped each
 
-MSVC spills a register before a loop and reloads it after, and Hex-Rays gives
-the spill slot a name, so a loop that touches neither of them arrives wrapped in
-a save and a restore:
+    magsum_s = magsum;                  int32_t d = ra0->val-ra1->val;
+    int32_t d = ra0->val-ra1->val;      ctx_w[3].sel = ...;
+    ctx_w[3].sel = ...;          -->    int32_t e = ra0->val-ra0[-1].val;
+    int32_t e = ra0->val-ra0[-1].val;   ctx_w[4].sel = ...;
+    magsum = magsum_s;
+    ctx_w[4].sel = ...;
 
-    v29 = v16;                              do
-    do                                      {
-    {                             →           ... nothing writing v16 ...
-      ... nothing writing v16 ...           }
-    }                                       while ( v17 );
-    while ( v17 );
-    v16 = v29;
+MSVC spills a register to a stack slot across a region that does not touch it
+and loads it back afterwards.  Hex-Rays names the slot, so the round trip
+survives as two statements that together say nothing.
 
-`v29` is not a variable. It is the compiler's note to itself about where `v16`
-went, and reading the body as if it were one means reading a value being
-carried across a region for a reason -- when the reason is that there is no
-reason.
+**Why this is not `unspillpair.py`.**  That tool wants *every* assignment to the
+shadow to be `x = y`, so it can merge the two names.  These slots fail that on
+their first line -- `magsum_s` is a fifty-term expression before it is ever a
+spill -- and its zero is honest.  The shape here is narrower and the fix is
+smaller: not "merge two names" but "delete two statements".
 
-Nine of these were found by hand in one afternoon (`predict_med`,
-`unpredict_med` twice, `alt_init_tables`, `transform_planes`, and four in
-`free_workspace`), which is what makes it a rule and not a curiosity.
+**The rule.**  `A = B;` at some line and `B = A;` at a later line, with
 
-The conditions are all about the region between the two lines:
+  * `A` and `B` both plain locals of the body, neither a parameter, a member, a
+    global, nor address-taken -- so no call between them can write either;
+  * the two statements at the same brace depth, so the load is not inside a
+    branch the save is outside of;
+  * no assignment to `A` or to `B` anywhere between them, at any depth.  This
+    is a textual scan of the whole span, nested blocks included, which is what
+    lets the span hold a loop -- one of the three pairs in this tree wraps a
+    `do`/`while`.
 
-  * the save is `S = X;` and the restore is `X = S;`, with `X` a plain
-    identifier and `S` a local that appears nowhere else in the body;
-  * nothing between them writes `X` -- no assignment, no `++`, no `&X`, no
-    `LOWORD(X) =` -- and nothing calls a function naming `X`;
-  * the region contains no label and no `goto`, so control cannot enter or
-    leave it in a way that skips one of the pair;
-  * the region brace-balances, so the save and the restore are in the same
-    block.
+Then `B = A;` is dead: `B` still holds what it held at the save.  The save is
+dead as well only when `A` is read nowhere else in the body -- not between the
+two and **not after the load either**, which is the half a first version of
+this file got wrong: one of the four pairs here loads back into a name the body
+goes on to use, and deleting its save would have deleted the value.  So the
+report gives both counts and only says "read nowhere" when both are zero.
 
-The `&X` and call checks are what make it safe rather than plausible: a region
-that hands `X`'s address to a callee can change it without naming it, and this
-cannot see inside the callee.
-
-What it will not touch is the other shape, where the restore assigns something
-the region *did* change -- that is a real save, and the body needs it.
-
-Nor will it see a pair written with casts.  `unmodel_plane_slow` has
-`this_1 = (ModelBlock *)((uint32_t *)this_4); ... this_4 = (ModelBlock *)((int32_t)this_1);`
-twice, which is the same artefact, and `ASSIGN` above wants a bare name on both
-sides.  Allowing casts would mean deciding which casts preserve the value, and
-that is a question about widths this cannot answer from the text -- so those
-two were done by hand.
+**What it cannot see.**  A save and a load in different branches of an `if`, and
+a slot whose address is taken.  Neither occurs here; both are declines rather
+than silent skips, and `--declined` prints them.
 """
 import re
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
-import undup                                                      # noqa: E402
 
-# A member is not the local of the same name: `blk->slot` is not `slot`.  A
-# pattern that names an identifier has to say it is not reaching through one.
-NAMED = r'(?<![\w.])(?<!->)%s(?!\w)'
-
-
-def named(x):
-    """`x` as an identifier, whether it is a name or one lane of an array.
-
-    The trailing guard is `(?!\\w)` and not `\\b` because a lane ends in `]`,
-    which is not a word character: `x3\\[3\\]\\b` requires a word character
-    *after* the bracket and so matches nothing.
-    """
-    return NAMED % re.escape(x)
+NAME = r'[A-Za-z_]\w*'
+COPY = re.compile(r'^(%s)\s*=\s*(%s)\s*;$' % (NAME, NAME))
+WRITE = re.compile(r'(?<![.\w>])(%s)\s*(?:=(?!=)|\+=|-=|\*=|/=|%%=|&=|\|=|\^='
+                   r'|<<=|>>=|\+\+|--)' % NAME)
+PREINC = re.compile(r'(?:\+\+|--)\s*(%s)' % NAME)
+ADDR = re.compile(r'&\s*(%s)\b' % NAME)
 
 
-# The saving slot may be one lane of an array.  MSVC parks a register in a
-# sixteen-byte stack slot as readily as in a four-byte one, and Hex-Rays writes
-# that as `x3[3] = wt8_up;` -- which a pattern wanting a bare name on the left
-# cannot see.  `choose_plane_coding` alone had six such pairs around two loops
-# that touch neither value, under a rule reporting zero: the same blindness the
-# raw-offset row had in section 30, in a different tool.
-ASSIGN = re.compile(r'^\s*([A-Za-z_]\w*(?:\[\d+\])?) = ([A-Za-z_]\w*);\s*$')
-LABEL = re.compile(r'^\s*LABEL_\d+:')
-# `&x` is the variable's address; `&x->m`, `&x.m` and `&x[i]` are not -- they
-# name a member or an element, and a callee holding one of those cannot change
-# `x` itself.  Without the lookahead every `*(uint16_t *)&v533->w2` read as
-# "address taken" and disqualified the local, which is thirteen of the counter
-# pointers in `alt_p2_model` alone.
-ADDR = r'&\s*%s(?!\w)(?!\s*(?:->|\.|\[))'
-WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s(?!\w)',
-         r'\b%s\s*[-+*/|&^%%]?=(?!=)',
-         ADDR,
-         # Hex-Rays writes a sub-register through these, and a partial write is
-         # still a write: `BYTE1(v20) = 3` leaves the restore below stale.
-         r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)',
-         r'\b(?:BYTE[123]|WORD[123])\s*\(\s*%s\s*\)']
+def code(line):
+    return line.split('//')[0]
 
 
-def candidates(lines):
-    out = []
-    for a, b, nm, _ in structs.bodies(lines):
-        code = [l.split('//')[0] for l in lines[a:b + 1]]
-        used, shapes = set(), []
-        for i, l in enumerate(code):
-            m = ASSIGN.match(l)
-            if not m:
-                continue
-            slot, held = m.group(1), m.group(2)
-            if slot == held:
-                continue
-            if i in used:
-                continue
-            back = re.compile(r'^\s*%s = %s;\s*$' % (re.escape(held), re.escape(slot)))
-            for j in range(i + 1, len(code)):
-                if back.match(code[j]):
-                    break
-            else:
-                continue
-            # The saving name must exist only for this pair and, at most, as a
-            # read inside the region -- MSVC sometimes uses the spill slot as
-            # the operand while the original register holds something else, so
-            # `v34 = v5; ... v34[-1].sym ...; v5 = v34;` is the same artefact
-            # with the alias read rather than idle.  Those reads become reads
-            # of the original, which is what they are: nothing in the region
-            # writes it.
-            region = code[i + 1:j]
-            # One slot name can serve several pairs -- MSVC reuses the stack
-            # slot, so `this_1 = this_4; ... this_4 = this_1;` appears twice in
-            # `unmodel_plane_slow` with the same two names.  Uses that belong
-            # to a pair already accepted are not uses that block this one.
-            # The outside test is deferred: see `prune` below.  A slot MSVC
-            # reuses for several disjoint pairs blocks *itself* here -- the
-            # first pair sees the second pair's two lines as other uses and
-            # refuses, and so does the second.  `choose_plane_coding` parks
-            # `best_cost` in `x3[0]` five times over five loops, and all five
-            # rejected each other.
-            if any(re.search(p % re.escape(slot), '\n'.join(region))
-                   for p in WRITE):
-                continue
-            # A lane can be written without being named.  `memset(x1, 0, 16)`
-            # and `*(double *)x1` reach the whole slot, and
-            # `*(int64_t *)&x1[2] = __PAIR64__(...)` writes lanes 2 *and* 3
-            # through the address of lane 2.  So for a lane the region must
-            # contain neither the bare array nor the address of any lane of it;
-            # a plain subscript of another lane is a different variable and is
-            # allowed, which is what keeps `x0[2]` offerable in a region that
-            # reads `x0[0]`.
-            if '[' in slot:
-                arr = slot.split('[')[0]
-                whole = r'(?<![\w.])(?<!->)%s(?!\w|\s*\[)' % re.escape(arr)
-                lane_addr = r'&\s*%s\s*\[' % re.escape(arr)
-                if re.search(whole, '\n'.join(region)) or \
-                        re.search(lane_addr, '\n'.join(region)):
-                    continue
-            body = '\n'.join(region)
-            if 'goto ' in body or any(LABEL.match(r) for r in region):
-                continue
-            if sum(r.count('{') - r.count('}') for r in region) != 0:
-                continue
-            if any(re.search(p % re.escape(held), body) for p in WRITE):
-                continue
-            # A callee handed `X` -- or its address -- can change it unseen.
-            if any(re.search(NAMED % re.escape(held), c)
-                   for c in re.findall(r'\w+\s*\(([^;]*)\)', body)):
-                continue
-            reads = sum(1 for r in region if re.search(named(slot), r))
-            used.update((i, j))
-            shapes.append((i, j, slot, held, len(region), reads))
-        for i, j, slot, held, n, reads in prune(code, shapes):
-            out.append((nm, a + i, a + j, slot, held, n, reads))
+def writes(text):
+    """Every name this line assigns to, incremented or decremented."""
+    out = set()
+    for m in WRITE.finditer(text):
+        out.add(m.group(1))
+    for m in PREINC.finditer(text):
+        out.add(m.group(1))
     return out
 
 
-def prune(code, shapes):
-    """Drop the pairs whose slot is named outside every pair that owns it.
+def depths(lines, a, b):
+    """Brace depth at the start of each line of the body."""
+    out, d = [], 0
+    for i in range(a, b + 1):
+        out.append(d)
+        t = code(lines[i])
+        d += t.count('{') - t.count('}')
+    return out
 
-    The rule is still "the saving name exists only for this pair", but a slot
-    MSVC reuses is owned by *all* of its pairs, not just the ones already
-    accepted -- and which of those survive depends on this test, so it is a
-    fixed point.  Dropping a pair can only remove ownership, so removing the
-    violators and asking again terminates.
 
-    A line inside a pair's own region is an alias read and is allowed; that is
-    what the `i <= k <= j` window says.
-    """
-    keep = list(shapes)
-    while True:
-        owned = {}
-        for i, j, slot, _h, _n, _r in keep:
-            owned.setdefault(slot, set()).update((i, j))
-        bad = []
-        for k, (i, j, slot, _h, _n, _r) in enumerate(keep):
-            if any(not (i <= x <= j) and x not in owned.get(slot, ())
-                   and re.search(named(slot), ln)
-                   and not undup.declaration(ln)
-                   for x, ln in enumerate(code)):
-                bad.append(k)
-        if not bad:
-            return keep
-        for k in reversed(bad):
-            del keep[k]
+def pairs(lines, a, b, locals_):
+    """(save, load, reads_between, decline) for every candidate in one body."""
+    dep = depths(lines, a, b)
+    found = []
+    for i in range(a, b + 1):
+        m = COPY.match(code(lines[i]).strip())
+        if not m:
+            continue
+        lhs, rhs = m.group(1), m.group(2)
+        if lhs not in locals_ or rhs not in locals_ or lhs == rhs:
+            continue
+        for j in range(i + 1, b + 1):
+            n = COPY.match(code(lines[j]).strip())
+            if not n or (n.group(1), n.group(2)) != (rhs, lhs):
+                # A write to either name before the load ends the search.
+                w = writes(code(lines[j]))
+                if lhs in w or rhs in w:
+                    break
+                continue
+            if dep[j - a] != dep[i - a]:
+                found.append((i, j, None, 'the load is at another brace depth'))
+                break
+            span = '\n'.join(code(lines[k]) for k in range(i + 1, j))
+            after = '\n'.join(code(lines[k]) for k in range(j + 1, b + 1))
+            reads = (len(re.findall(r'\b%s\b' % re.escape(lhs), span)),
+                     len(re.findall(r'\b%s\b' % re.escape(lhs), after)))
+            found.append((i, j, reads, None))
+            break
+    return found
+
+
+def survey(path):
+    lines, origin = structs.splice(path)
+    out, declined = [], []
+    for a, b, name, sig, _d in structs.defs(lines):
+        body = '\n'.join(code(l) for l in lines[a:b + 1])
+        taken = set(ADDR.findall(body))
+        names = set(structs.decl_types(sig, lines, a, b))
+        names -= taken
+        for i, j, reads, why in pairs(lines, a, b, names):
+            row = (name, origin[i], origin[j], reads)
+            if why:
+                declined.append(row + (why,))
+            else:
+                out.append(row)
+    return out, declined
 
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1].startswith('--'):
-        sys.exit('usage: %s needs the file to read; `bmf.cpp` for a tool that\n       splices the unit, one .inc for a tool that does not'
-                         % __file__.rsplit('/', 1)[-1])
-    path = sys.argv[1]
-    lines = open(path).read().split('\n')
-    found = candidates(lines)
-
-    if '--all' not in sys.argv:
-        for nm, i, j, slot, held, n, reads in found:
-            print('%6d  %-24s %-10s saves %-10s over %d lines%s'
-                  % (i + 1, nm.lstrip('_'), slot, held, n,
-                     ', read %d times as an alias' % reads if reads else ''))
-        print('%d saves across a region that cannot change the value' % len(found))
-        return 0
-
-    # An alias read inside the region becomes a read of what it aliases.
-    for _nm, i, j, slot, held, _l, reads in found:
-        if not reads:
-            continue
-        for k in range(i + 1, j):
-            lines[k] = re.sub(named(slot), held, lines[k])
-    # One descending pass over every line to remove: pairs can nest, and
-    # deleting a pair at a time lets an inner pair's indices shift under an
-    # outer one's restore.
-    for k in sorted({i for _n, i, _j, _s, _h, _l, _r in found} |
-                    {j for _n, _i, j, _s, _h, _l, _r in found}, reverse=True):
-        del lines[k]
-    open(path, 'w').write('\n'.join(lines))
-    print('%d saves deleted' % len(found))
-    return 0
+        sys.exit('usage: python3 tools/unsave.py bmf.cpp [--list] [--declined]')
+    found, declined = survey(sys.argv[1])
+    if '--list' in sys.argv:
+        for name, at, back, reads in found:
+            note = ''
+            if reads[0] or reads[1]:
+                note = '  (slot read %d time%s between, %d after)' % (
+                    reads[0], '' if reads[0] == 1 else 's', reads[1])
+            print('  %-24s %s:%s -> %s:%s%s'
+                  % (name, at[0], at[1], back[0], back[1], note))
+    if '--declined' in sys.argv:
+        for name, at, back, _r, why in declined:
+            print('  %-24s %s:%s -> %s:%s  %s'
+                  % (name, at[0], at[1], back[0], back[1], why))
+    clean = sum(1 for _n, _a, _b, r in found if not r[0] and not r[1])
+    print('%d values saved and loaded straight back, %d of them with a slot '
+          'read nowhere else; %d declined'
+          % (len(found), clean, len(declined)))
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    main()
