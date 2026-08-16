@@ -124,9 +124,10 @@ optimiser.
 | t24.bmp | 320×240×24 | 230454 | 97984 | **96368** | −1.6% |
 | t32.bmp | 320×240×32 | 307254 | 115062 | **105350** | −8.4% |
 | x_ep.bmp | 705×800×32 | 2256054 | 340266 | **321162** | −5.6% |
+| 20000171A.bmp | 4096×512×32 | 8388662 | **2631309** | 2743714 | +4.3% |
 | t8g / t8p | 8bpp | 77878 | 46941 / 46589 | 53452 / 53385 | fallback |
 
-At `MRP_EFFORT=1`, the default. Effort 2 takes another 7% off all three.
+At `MRP_EFFORT=1`, the default. Effort 2 takes another 7% off.
 
 mrpc wins on 32bpp — by more the bigger the image gets — and, since the
 model work in §5, on 24bpp as well: t24 was mrpc's one loss at +1.5% and
@@ -143,14 +144,16 @@ while an adaptive coder has already converged and gets nothing more.
 |---|---|---|---|---|
 | t24 | 2.9 s | 21 s | 1.5 s | **0.07 s** |
 | t32 | 9.8 s | 31 s | 2.1 s | **0.06 s** |
-| 20000171A (8 MB) | 120 s | 521 s | 43.9 s | **0.60 s** |
+| 20000171A (8 MB) | 120 s | 433 s | 43.9 s | **0.60 s** |
 
 The 8 MB image took over half an hour when it was first run, and printed
-nothing while it did. It is 9 minutes now (§7), and the phase that
-remains is the class search: 27 s of every 28 s iteration, because the
-quadtree evaluates all 63 classes over the same pixels at each of its five
-levels. Pruning the candidate list at the deeper levels is the next thing
-worth measuring.
+nothing while it did. It is 7 minutes now (§7) — and 11 KB smaller than it
+was at 9, because the model work in this section and the search work in §7
+pull in the same direction. The phase that remains is the class search: it
+evaluates all 63 classes over the same pixels at each of the quadtree's
+five levels. Pruning the candidate list at the deeper levels is the next
+thing worth measuring, and it is the largest parallel fraction still
+sequential.
 
 The decode column is why the whole arrangement is worth its encode: **73×
 faster than bmpc on that file**, 0.60 s against 43.9 s. bmpc's decoder has
