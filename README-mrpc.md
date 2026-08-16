@@ -141,7 +141,7 @@ while an adaptive coder has already converged and gets nothing more.
 |---|---|---|---|---|
 | t24 | 2.9 s | 21 s | 1.5 s | **0.07 s** |
 | t32 | 9.8 s | 31 s | 2.1 s | **0.06 s** |
-| 20000171A (8 MB) | 120 s | 560 s | 43.9 s | **0.74 s** |
+| 20000171A (8 MB) | 120 s | 521 s | 43.9 s | **0.60 s** |
 
 The 8 MB image took over half an hour when it was first run, and printed
 nothing while it did. It is 9 minutes now (§7), and the phase that
@@ -150,8 +150,8 @@ quadtree evaluates all 63 classes over the same pixels at each of its five
 levels. Pruning the candidate list at the deeper levels is the next thing
 worth measuring.
 
-The decode column is why the whole arrangement is worth its encode: **59×
-faster than bmpc on that file**, 0.74 s against 43.9 s. bmpc's decoder has
+The decode column is why the whole arrangement is worth its encode: **73×
+faster than bmpc on that file**, 0.60 s against 43.9 s. bmpc's decoder has
 to replay every `ParamUpdater` step its encoder took; mrpc's reads a
 transmitted model.
 
@@ -203,8 +203,9 @@ loop (85 s → 46 s overall, output byte-identical at every step):
 
 Decoding is strictly sequential — pixel *x* needs pixel *x−1* — so it
 cannot batch over pixels the way the encoder's searches do. Ablation (a
-build with the symbol decode stubbed out) splits the 0.77 s on the 8 MB
-image into roughly **45% prediction and bookkeeping, 55% symbol decode**.
+build with the symbol decode stubbed out) split the 0.77 s it then took on
+the 8 MB image into roughly **45% prediction and bookkeeping, 55% symbol
+decode**. It is 0.60 s now; the two changes below are why.
 
 Two thirds of a prediction's taps read rows that are already *finished*,
 so that part of every prediction in a row can be computed before the row
@@ -228,11 +229,52 @@ searching breaks the chain: eight *independent* probes pick a block of 32,
 then that block is compared eight at a time. Same answer, no load waiting
 on another load — 0.77 s → **0.74 s**.
 
-The rest is three 64-bit divisions per symbol in the rangecoder
-(`rc_GetFreq` and two in `rc_Process`). The usual fix — divide once by
-`totfreq` and multiply — changes the arithmetic and therefore the
-bitstream, and `sh_v2f.inc` is shared with coder0 and bmpc. It would be a
-mrpc-only entry point; not done.
+### The rangecoder: `sh_rcm.inc`
+
+That left the coder itself, and it was worth doing. `sh_v2f.inc` is
+bit-oriented — it renormalises **one bit at a time**, `inpbit`/`outbit`
+assembling the bytes by hand — and every multi-symbol operation costs
+**three 64-bit divisions**: one in `rc_GetFreq` and two in `rc_Process`,
+which cannot share a divide because their numerators differ. At ~2.6 bits
+a symbol that is 2.6 trips through a bit loop plus three divisions.
+
+`sh_rcm.inc` says the same thing the way `sh_rcv7.inc` does: the range
+renormalises **a byte at a time** (`sTOP = 2^24`), so the loop runs about
+a third of a time per symbol and each trip is a `getc`/`putc`; and there
+is **one division per symbol** instead of three, with none at all on the
+binary path — multiply and shift. It is a separate file because
+`sh_v2f.inc` is shared with coder0 and bmpc, whose streams must not move.
+
+Measured on a 4096×128 crop, with both builds predicting the *same* code
+length (767513 bytes) so the comparison is the coder and nothing else:
+
+| | actual | overhead | decode |
+|---|---|---|---|
+| `sh_v2f.inc` | 767815 | +302 B | 210 ms |
+| `sh_rcm.inc` | 767815 | +302 B | **168 ms** |
+
+**20% faster and not one byte larger.** Two things had to be got right:
+
+* The naive `r = range/tot; range = r*freq` gives each symbol an interval
+  of `r·freq` where an exact coder gives `range·freq/tot`, so every symbol
+  is short by up to `tot/range`. With `tot` at 2²⁰ and the byte-renorm
+  floor at 2²⁴ that cost **2110 bytes**, seven times the coder's entire
+  overhead. Handing the leftover interval to the top symbol recovers
+  *nine* of them — the loss is not the wasted interval, it is the
+  rescaling of every symbol. Carrying 16 more bits in `r` (`RCM_PREC`,
+  still one division, 64-bit multiplies) recovers all of it for 2 ms.
+* With those bits the decoder's inverse is no longer `(code<<16)/r`.
+  `Span()` truncates, so the inverse has to round the other way, or the
+  symbol landing exactly on an interval boundary decodes one too low. It
+  fails on rasters and not on the binary path, because the binary path
+  never lands on one.
+
+Two properties of `sh_rcv7.inc`'s flush are worth knowing if you read the
+file: it settles `low` to the shortest value still inside
+`[low, low+range)` rather than flushing all four bytes, and it stops as
+soon as `low` is all-ones — so **the decoder must supply `0xFF` past the
+end of the stream**. Returning 0 there costs the last few symbols of every
+stream, which is exactly how it first failed.
 
 ### And two approximations, because the clock is a result too
 
