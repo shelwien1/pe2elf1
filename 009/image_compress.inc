@@ -14,6 +14,26 @@ static uint8_t write_member_head(const void* head, const CodedTail* extra, FILE*
   return ok;
 }
 
+// The member header, taken from the image.  Every field but `flags`, which the
+// two writers set differently: the first takes the image's own after adding the
+// tail bit to it, and the second puts the three bits it has already `|=`d back
+// over a header `search_filter` may have transposed under it.
+//
+// `_pad8[2]`, `depth` and `flags` are four consecutive bytes at offset 8, and
+// both copies of this moved them as one `uint32_t` -- then the second recovered
+// `flags` from the top of the saved word twenty lines later.  Member copies say
+// it without the layout.  Each copy also spelled the stride into a local of its
+// own, `row_bytes` and `img_stride`, read once on the next line but one.
+static void header_from(BmfImage* hdr, const BmfImage* p_i) {
+  hdr->width = p_i->width;
+  hdr->height = p_i->height;
+  hdr->stride = p_i->stride;
+  hdr->_pad8[0] = p_i->_pad8[0];
+  hdr->_pad8[1] = p_i->_pad8[1];
+  hdr->depth = p_i->depth;
+  hdr->data_size = (uint32_t)p_i->data_size;
+}
+
 int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
   BmfImage hdr;
   uint32_t filtered;
@@ -27,23 +47,12 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   // the file positioned after the last, which is where an appended member had
   // to go.  `bmf c` writes the file, so there is nothing in front of this one.
   uint8_t has_coded = extra_blk!=nullptr;
-  uint32_t row_bytes = p_i->stride;
   if( extra_blk )
     has_coded = 1;
-  hdr.width = p_i->width;
-  hdr.height = p_i->height;
   p_i->flags |= has_coded ? flags_tail : 0;
-  hdr.stride = row_bytes;
   near_lossless_q = 0;
-  // `_pad8[2]`, `depth` and `flags` are four consecutive bytes at offset 8,
-  // and both copies of this block moved them as one `uint32_t` -- then the
-  // second recovered `flags` from the top of the saved word twenty lines
-  // later.  Four member copies say it without the layout.
-  hdr._pad8[0] = p_i->_pad8[0];
-  hdr._pad8[1] = p_i->_pad8[1];
-  hdr.depth = p_i->depth;
+  header_from(&hdr, p_i);
   hdr.flags = p_i->flags;
-  hdr.data_size = (uint32_t)p_i->data_size;
   plane_count = ((p_i->depth&depth_bits)+7)>>3;
   // An image member, version 2.0.  This was an `fwrite` of the first four
   // bytes of `"\x81\x8A" "20\x81\x90" "20a+b"` -- both signatures and three
@@ -61,9 +70,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   desc_slow_mode = 1;
   hdr.flags |= flags_coded|flags_slow;
   if( (p_i->depth&depth_bits)<=4 ) {
-    stream.size = p_i->data_size+0x20000;
-    stream.buf = (uint8_t*)bmf_new(stream.size);
-    packer_reset();
+    stream_open(p_i->data_size);
     plane_predictor = 0;
     plane_alt_model = 0;
     alphabet_reduced = 0;
@@ -73,15 +80,8 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   filtered = search_filter(p_i, 0);
   hdr.flags |= flags_descriptors;
   if( p_i->flags&flags_transposed ) {
-    uint32_t img_stride = p_i->stride;
-    hdr.width = p_i->width;
-    hdr.height = p_i->height;
+    header_from(&hdr, p_i);
     data_bytes = p_i->data_size;
-    hdr.stride = img_stride;
-    hdr._pad8[0] = p_i->_pad8[0];
-    hdr._pad8[1] = p_i->_pad8[1];
-    hdr.depth = p_i->depth;
-    hdr.data_size = data_bytes;
     // The three bits set above, put back over the source's own -- the same
     // value the `|=`s left, re-derived from a header that `search_filter` may
     // have transposed under it.  This was `hdr_pad8b >> 24`, the top byte of
@@ -90,9 +90,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   } else {
     data_bytes = p_i->data_size;
   }
-  stream.size = data_bytes+0x20000;
-  stream.buf = (uint8_t*)bmf_new(data_bytes+0x20000);
-  packer_reset();
+  stream_open(data_bytes);
   // The near-lossless nibble, four zero bits, is written for a single
   // greyscale plane and for three or more planes -- and not for two, nor for a
   // single palette plane.  The decompiler wrote that as a `goto` into the

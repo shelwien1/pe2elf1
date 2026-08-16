@@ -175,6 +175,16 @@ static void packer_reset() {
   hist_scratch = stream.buf+stream.size-4096;
 }
 
+// A coded buffer for an image of `data_size` bytes, with the packer rewound
+// onto it.  128K of headroom past the pixels, which is what the three encoding
+// entry points allocate: the size is written into `stream.size` first because
+// `packer_reset` reads it back to place `hist_scratch` at the far end.
+static void stream_open(uint32_t data_size) {
+  stream.size = data_size+0x20000;
+  stream.buf = (uint8_t*)bmf_new(stream.size);
+  packer_reset();
+}
+
 // The other half of `packer_reset`: put the accumulator's last, partial word
 // where the next spill would have put it, so that `stream.cur - stream.buf` is
 // the byte count of everything coded.  Eight sites wrote it out as

@@ -111,20 +111,29 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
         w = width;
       }
       if( w>0 ) {
+        // One plane's sample, coded either way: its context built from the
+        // planes beside it, the sample itself, and the record it leaves.  All
+        // four planes do exactly this and all four wrote it out, each with a
+        // `blkN` of its own that no line outside the four uses.
+        auto code_sample = [&](int32_t n, AltP1Block* a, AltP1Block* b,
+                               int32_t off, int32_t val) {
+          AltP1Block*const blk = plane[n];
+          blk->ctx_of(a, b);
+          val = f_DEC ? blk->decode_sample()
+                      : blk->encode_sample(buf, off, val);
+          blk->record_sample(val);
+          return val;
+        };
         uint32_t x = 0;
         do {
-          AltP1Block* blk0 = plane[0];
           int32_t off0 = plane_desc[0].src_plane;
           if( !f_DEC ) {
             int32_t want0 = *(buf+off0);
             cur0 = want0;
           }
-          plane[0]->ctx_of(nullptr, nullptr);
-          cur0 = f_DEC ? blk0->decode_sample()
-                         : blk0->encode_sample(buf, off0, cur0);
           // `keep0` was a third name for `cur0`: assigned from it in both arms
           // and again beside it when the drift check keeps the reconstruction.
-          blk0->record_sample(cur0);
+          cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
           int32_t off1 = plane_desc[1].src_plane;
           if( f_DEC ) {
             *(buf+off0) = cur0;
@@ -134,11 +143,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
               want1 = want1-dc1-*(buf+off0);
             cur1 = want1;
           }
-          AltP1Block* blk1 = plane[1];
-          plane[1]->ctx_of(plane[0], nullptr);
-          cur1 = f_DEC ? blk1->decode_sample()
-                         : blk1->encode_sample(buf, off1, cur1);
-          blk1->record_sample(cur1);
+          cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
           int32_t off2 = plane_desc[2].src_plane;
           if( f_DEC ) {
             int32_t val1x = cur1;
@@ -150,11 +155,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             if( xf2 )
               want2 = (uint8_t)(want2-dc2-(plane_mix2(plane_desc[off2], buf+off0, buf+off1)));
           }
-          AltP1Block* blk2 = plane[2];
-          plane[2]->ctx_of(plane[1], plane[0]);
-          want2 = f_DEC ? blk2->decode_sample()
-                         : blk2->encode_sample(buf, off2, want2);
-          blk2->record_sample(want2);
+          want2 = code_sample(2, plane[1], plane[0], off2, want2);
           if( f_DEC ) {
             if( xf2 )
               *(buf+off2) = (plane_mix2(plane_desc[off2], buf+off0, buf+off1))+dc2+want2;
@@ -171,11 +172,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
                 want3 = *(buf+off3);
               cur3 = want3;
             }
-            AltP1Block* blk3 = plane[3];
-            plane[3]->ctx_of(plane[2], plane[1]);
-            cur3 = f_DEC ? blk3->decode_sample()
-                           : blk3->encode_sample(buf, off3, cur3);
-            blk3->record_sample(cur3);
+            cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
             if( f_DEC ) {
               int32_t val3x = cur3;
               if( xf3 )

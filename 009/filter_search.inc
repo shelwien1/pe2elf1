@@ -105,9 +105,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   }
   choose_plane_coding(img);
   BmfImage *tile_img = alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
-  stream.size = tile_img->data_size+0x20000;
-  stream.buf = (uint8_t*)bmf_new(stream.size);
-  packer_reset();
+  stream_open(tile_img->data_size);
   tile_buf = (uint8_t*)bmf_new(tile_h*tile_w);
   // Encode one plane of the trial tile under `flags` and return what it cost,
   // in bits.  Seven sites wrote this out: set the descriptor, call the model,
