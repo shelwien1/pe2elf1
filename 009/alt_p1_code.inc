@@ -64,7 +64,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   int32_t cur0, cur1, code1;
   uint8_t pred1, pred2, pred3;
   AltP1Block* made;
-  int32_t w, n_planes, keep0, code0, code1x, want2, code2, code3;
+  int32_t w, n_planes, code0, code1x, want2, code2, code3;
   uint8_t pred0, want1, want3;
   int32_t width = hdr->width;
   int32_t height = hdr->height;
@@ -125,9 +125,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             code0 = alt_p1_decode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
             pred0 = (uint8_t)blk0->pred;
             cur0 = (uint8_t)(pred0+blk0->unfold[code0]);
-            keep0 = cur0;
           } else {
-            keep0 = cur0;
             pred0 = (uint8_t)blk0->pred;
             int32_t resid0 = (uint8_t)(cur0-pred0);
             code0 = blk0->fold[resid0];
@@ -139,22 +137,12 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             } else {
               cur0 = recon0;
               *(buf+off0) = out0;
-              keep0 = recon0;
             }
             alt_p1_encode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1], code0);
           }
-          int32_t err0 = keep0-blk0->pred;
-          blk0->cursor[0]->sym = cur0;
-          blk0->cursor[0]->mag = abs32(err0);
-          blk0->ctx[blk0->ctx[2]+3] = blk0->ctx[blk0->ctx[2]+3]+blk0->cursor[0]->mag-blk0->cursor[0][-4].mag-(blk0->cursor[4][-2].mag-blk0->cursor[4][6].mag+blk0->cursor[2][-2].mag-blk0->cursor[2][6].mag);
-          blk0->ctx[2] = blk0->ctx[2]==0;
-          if( blk0->counters[blk0->ctx[0]].total<0x4000u )
-            blk0->update_model();
-          ++blk0->cursor[0];
-          ++blk0->cursor[1];
-          ++blk0->cursor[2];
-          ++blk0->cursor[3];
-          ++blk0->cursor[4];
+          // `keep0` was a third name for `cur0`: assigned from it in both arms
+          // and again beside it when the drift check keeps the reconstruction.
+          blk0->record_sample(cur0);
           int32_t off1 = plane_desc[1].src_plane;
           if( f_DEC ) {
             *(buf+off0) = cur0;
@@ -187,18 +175,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             }
             alt_p1_encode_symbol(&blk1->counters[blk1->ctx[0]], (int32_t)blk1->ctx[1], code1x);
           }
-          int32_t err1 = cur1-blk1->pred;
-          blk1->cursor[0]->sym = cur1;
-          blk1->cursor[0]->mag = abs32(err1);
-          blk1->ctx[blk1->ctx[2]+3] += blk1->cursor[0]->mag-blk1->cursor[0][-4].mag-(blk1->cursor[4][-2].mag-blk1->cursor[4][6].mag)-(blk1->cursor[2][-2].mag-blk1->cursor[2][6].mag);
-          blk1->ctx[2] = blk1->ctx[2]==0;
-          if( blk1->counters[blk1->ctx[0]].total<0x4000u )
-            (blk1)->update_model();
-          ++blk1->cursor[0];
-          ++blk1->cursor[1];
-          ++blk1->cursor[2];
-          ++blk1->cursor[3];
-          ++blk1->cursor[4];
+          blk1->record_sample(cur1);
           int32_t off2 = plane_desc[2].src_plane;
           if( f_DEC ) {
             int32_t val1x = cur1;
@@ -231,19 +208,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             }
             alt_p1_encode_symbol(&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1], code2);
           }
-          int32_t err2 = want2-blk2->pred;
-          blk2->cursor[0]->sym = want2;
-          blk2->cursor[0]->mag = abs32(err2);
-          blk2->ctx[blk2->ctx[2]+3] += blk2->cursor[0]->mag-blk2->cursor[0][-4].mag-(blk2->cursor[4][-2].mag-blk2->cursor[4][6].mag)-(blk2->cursor[2][-2].mag-blk2->cursor[2][6].mag);
-          int32_t at2 = blk2->ctx[0];
-          blk2->ctx[2] = blk2->ctx[2]==0;
-          if( blk2->counters[at2].total<0x4000u )
-            (blk2)->update_model();
-          ++blk2->cursor[0];
-          ++blk2->cursor[1];
-          ++blk2->cursor[2];
-          ++blk2->cursor[3];
-          ++blk2->cursor[4];
+          blk2->record_sample(want2);
           if( f_DEC ) {
             if( xf2 )
               *(buf+off2) = (plane_mix2(plane_desc[off2], buf+off0, buf+off1))+dc2+want2;
@@ -281,18 +246,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
               }
               alt_p1_encode_symbol(&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1], code3);
             }
-            int32_t err3 = cur3-blk3->pred;
-            blk3->cursor[0]->sym = cur3;
-            blk3->cursor[0]->mag = abs32(err3);
-            blk3->ctx[blk3->ctx[2]+3] += blk3->cursor[0]->mag-blk3->cursor[0][-4].mag-(blk3->cursor[4][-2].mag-blk3->cursor[4][6].mag)-(blk3->cursor[2][-2].mag-blk3->cursor[2][6].mag);
-            blk3->ctx[2] = blk3->ctx[2]==0;
-            if( blk3->counters[blk3->ctx[0]].total<0x4000u )
-              (blk3)->update_model();
-            ++blk3->cursor[0];
-            ++blk3->cursor[1];
-            ++blk3->cursor[2];
-            ++blk3->cursor[3];
-            ++blk3->cursor[4];
+            blk3->record_sample(cur3);
             if( f_DEC ) {
               int32_t val3x = cur3;
               if( xf3 )

@@ -102,6 +102,28 @@ struct AltP1Block {
     }
   }
 
+  // Record one coded sample: store it and its residual magnitude, roll that
+  // magnitude into the activity sum for this parity, flip the parity, let the
+  // counter bank rescale if it has room, and step the five cursors.
+  //
+  // Six copies -- four in `alt_model_p1`, one in `d8_encode_body`, one in
+  // `alt_model_p1_d8_decode`.  Four wrote the activity update as
+  // `- (a - b) - (c - d)` and two as `- (a - b + c - d)`, which is the same
+  // sum; one hoisted `ctx[0]` into a local across the parity flip, which does
+  // not touch it.
+  void record_sample(int32_t val) {
+    cursor[0]->sym = val;
+    cursor[0]->mag = abs32(val-pred);
+    ctx[3+ctx[2]] += cursor[0]->mag-cursor[0][-4].mag
+                    -(cursor[4][-2].mag-cursor[4][6].mag)
+                    -(cursor[2][-2].mag-cursor[2][6].mag);
+    ctx[2] = ctx[2]==0;
+    if( counters[ctx[0]].total<0x4000u )
+      update_model();
+    for( int32_t k = 0; k<5; ++k )
+      ++cursor[k];
+  }
+
   int32_t ctx_of(AltP1Block* nb0, AltP1Block* nb1) {
     bool pick;
     int32_t act_all;
@@ -243,20 +265,8 @@ struct AltP1Block {
               *q = recon;
             }
             alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
-            int32_t val = (uint8_t)*q;
-            int32_t err = val-pred;
-            cursor[0]->sym = val;
-            cursor[0]->mag = abs32(err);
-            ctx[3+ctx[2]] = ctx[3+ctx[2]]+cursor[0]->mag-cursor[0][-4].mag-(cursor[4][-2].mag-cursor[4][6].mag+cursor[2][-2].mag-cursor[2][6].mag);
-            ctx[2] = ctx[2]==0;
-            if( counters[ctx[0]].total<0x4000u )
-              update_model();
-            ++cursor[0];
+            record_sample((uint8_t)*q);
             ++q;
-            ++cursor[1];
-            ++cursor[2];
-            ++cursor[3];
-            ++cursor[4];
             ++src;
           } while( x<width );
           out = q;
