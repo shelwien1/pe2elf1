@@ -21,7 +21,15 @@ the windows that agree.  Grow each group as far as it stays in agreement, take
 the longest first and let it consume its lines so the same body is not reported
 twice under a shorter window.  Windows holding a brace on its own, a blank, or a
 preprocessor line are skipped, as are those under sixty characters -- three
-short statements match by accident.
+short statements match by accident -- and so are windows that are declarations
+and nothing else (see `DECL`).
+
+Occurrences that **overlap each other** are one repetitive block and not two
+copies of one.  Four field zeroings in a row put a window at every line of
+themselves and every window normalises alike, so `bmp->biClrImportant = 0;` and
+its three neighbours were being reported as a three-line run written twice.  A
+group keeps a non-overlapping subset of its occurrences; one that has none is a
+block, not duplication.  This was nineteen of the lines it counted.
 
 **It reports and does not apply.**  Every one of these came out as a named
 thing, and what the name should be is the whole of the work: `ring_advance` was
@@ -37,7 +45,7 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 101 now.  The p2
+start here.**  1031 lines of copy when this was written and 82 now.  The p2
 coders' prologue and epilogue used to be the largest groups and are gone: that
 pair merged, and so did four more, so `pairshare.py`'s declined table is down
 to two rows.
@@ -78,7 +86,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 101
+BUDGET = 82
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.
@@ -138,6 +146,18 @@ def survey(path):
         windows[normal('\n'.join(block))].append(i)
     out, taken = [], set()
     for _, ats in sorted(windows.items(), key=lambda kv: -len(kv[1])):
+        # Occurrences that overlap each other are one repetitive block, not two
+        # copies of one.  `bmp->biClrImportant = 0;` and the three field zeroings
+        # under it put a window at every line of themselves, and every window
+        # normalises to the same thing, so four assignments in a row were being
+        # reported as a three-line run written twice.  Keep a non-overlapping
+        # subset; a group that has none is one block and not duplication.
+        spaced, last = [], None
+        for a in sorted(ats):
+            if last is None or a - last >= WINDOW:
+                spaced.append(a)
+                last = a
+        ats = spaced
         if len(ats) < 2 or any(a in taken for a in ats):
             continue
         n = WINDOW
