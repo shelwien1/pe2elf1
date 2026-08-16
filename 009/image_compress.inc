@@ -14,7 +14,6 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   // the file positioned after the last, which is where an appended member had
   // to go.  `bmf c` writes the file, so there is nothing in front of this one.
   uint8_t has_coded = extra_blk!=nullptr;
-  BmfImage *img = (BmfImage*)(p_i);
   uint32_t row_bytes = p_i->stride;
   if( extra_blk )
     has_coded = 1;
@@ -144,20 +143,20 @@ write_coded:
   }
   free(stream.buf);
   if( p_i->flags&flags_transposed )
-    transpose_image(img, plane_count);
+    transpose_image(p_i, plane_count);
   // Both arms end here with `pixels` pointing at the same bytes: the transpose
   // above swaps the header's width, height and stride and leaves the pixel
   // buffer alone.  The `goto` that skipped this assignment was skipping a
   // second write of the value it already held.
 write_raw:
   pixels = p_i->pixels;
-  uint8_t ok_raw = fwrite(img, 1u, 0x10u, arc_in->fp)==16;
+  uint8_t ok_raw = fwrite(p_i, 1u, 0x10u, arc_in->fp)==16;
   if( extra_blk ) {
     coded_len = extra_blk->len;
     ok_raw &= fwrite(extra_blk, 1u, coded_len+sizeof(CodedTail), arc_in->fp)==coded_len+sizeof(CodedTail);
   }
-  written = fwrite(pixels, 1u, pal_bytes+img->data_size, arc_in->fp);
-  int32_t data_size = img->data_size;
+  written = fwrite(pixels, 1u, pal_bytes+p_i->data_size, arc_in->fp);
+  int32_t data_size = p_i->data_size;
   if( !(ok_raw&(written==data_size+pal_bytes)) )
     return 0;
   return data_size;

@@ -305,7 +305,19 @@ def decl_types(sig, lines, a, b):
                           r'\s*([A-Za-z_][A-Za-z0-9_]*)\s*$', p)
             if mm:
                 types[mm.group(2)] = re.sub(r'\s+', '', mm.group(1))
-    i = a
+    # From `a + 1`: `a` is the line carrying the body's opening brace, and a
+    # signature reads as a declaration -- `int32_t f(BmfImage* p, uint8_t* q) {`
+    # starts with a type and a name.  So the scan opened on it, ran forward to
+    # the next `;`, and swallowed the first real declaration of the body into a
+    # join that parses as nothing.  **57 names in 43 bodies had no type at
+    # all**, every one of them the first local its function declares, and about
+    # twenty tools read the program through this table.  `AltP2Block* plane[4]`
+    # in both p2 coders is one; `samecast.py` skips a name it cannot type, so
+    # eight casts of a pointer to its own type sat under a zero.
+    #
+    # The two one-line bodies in the tree (`CodedStream::palette`, twice) have
+    # `a == b` and declare nothing, so starting one line in costs nothing.
+    i = a + 1
     while i <= b:
         if not starts_declaration(lines[i]):
             i += 1

@@ -39,14 +39,14 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
         for( i = 0; i<(uint32_t)row_i; ++i ) {
           int32_t off0b = plane_desc[0].src_plane;
           for( int32_t j = 0; j<4; ++j ) ctx_bias[j] >>= 3;
-          AltP2Block *blk0 = (AltP2Block*)(plane[0]);
+          AltP2Block *blk0 = plane[0];
           blk0->encode_sample(out, off0b, plane[2], plane[1]);
           blk0->add_bias(ctx_bias);
           if( ref1_mixed )
             seed1 = 16*out[plane_desc[0].src_plane];
           else
             seed1 = 0;
-          AltP2Block *blk1 = (AltP2Block*)(plane[1]);
+          AltP2Block *blk1 = plane[1];
           plane[1]->cursor[0]->dval = seed1;
           int32_t off1 = plane_desc[1].src_plane;
           blk1->encode_sample(out, off1, plane[0], plane[2]);
@@ -55,7 +55,7 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             seed2 = (plane_desc[plane_desc[2].src_plane].weight1*out[plane_desc[1].src_plane]+plane_desc[plane_desc[2].src_plane].weight0*out[plane_desc[0].src_plane])>>3;
           else
             seed2 = 0;
-          AltP2Block *blk2 = (AltP2Block*)(plane[2]);
+          AltP2Block *blk2 = plane[2];
           plane[2]->cursor[0]->dval = seed2;
           int32_t off2 = plane_desc[2].src_plane;
           blk2->encode_sample(out, off2, plane[0], plane[1]);
@@ -66,7 +66,7 @@ int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
               l7c = (plane_desc[plane_desc[3].src_plane].weight2*out[2]+plane_desc[plane_desc[3].src_plane].weight1*out[1]+plane_desc[plane_desc[3].src_plane].weight0**out)>>3;
             else
               l7c = 0;
-            AltP2Block *l4c = (AltP2Block*)(plane[3]);
+            AltP2Block *l4c = plane[3];
             plane[3]->cursor[0]->dval = l7c;
             int32_t alpha_src = plane_desc[3].src_plane;
             l4c->encode_sample(out, alpha_src, plane[2], plane[0]);

@@ -638,3 +638,63 @@ alone, and the weight search's two descent bounds are one `&&`.
 The pattern of the whole session, one more time: the finding was not in the
 tree, it was in the question — and the first version of the question was wrong
 in a way only reading its answers could show.
+
+---
+
+## The two things the round had left, and the third under them
+
+The round ended by naming what it had not done: two bodies at nesting depth 9,
+and three encode/decode pairs declined with numbers. Both were work, not a
+floor.
+
+**`init_tables`, depth 9.** A move-to-front cache over eight entries, written
+as an eight-deep `if`/`else` nest with the slide unrolled into every arm — a
+linear search with its loop written out and its counter spelled as the depth of
+the nesting. Seven arms named the entry they had just read (`c0`…`c6`), and
+`cache` was a second name for `sym_cache` used interchangeably between the two
+halves of the same arm. Only slots 1..6 are searched, which is the original's
+reach: a miss therefore lands on 7, and the deepest arm's `cache[7] = c6` is
+exactly the store the slide makes for `k == 7`, so not-found is
+found-at-the-end and needs no arm of its own. 34 lines out.
+
+**`reduce_alphabet`, depth 9.** Two `while( 1 )`s, a `goto` out of both and a
+`break` landing in the same place — and the shape of it was an unrolling by
+*two*: an inner pair loop over `n_kids >> 1`, then one extra component for an
+odd count. Which loop carried the turn counter depended on the parity, so the
+two increments are one increment and the two loops are one loop:
+`out[c + 2]` takes `rp[c]`, `n_kids` bytes a turn, `plane_size` turns. **No
+body in the tree is at depth 9 now**, and 36 jumps remain of the 42 this
+document started with.
+
+**The pairs, and what was actually under them.** The declined table's own
+argument is that the shared part is scaffolding, and that naming it leaves less
+behind rather than more. Read that way, the p2 pair's 34 shared lines are a
+prologue and an epilogue that are *already* nothing but named calls —
+`p2_coef.fold()`, `alt_p2_planes_alloc`, three `ref_transformed`,
+`rc_begin_encode`/`decode` — and the one thing left to name would be the call
+sequence itself, which would hide the single line that differs. That is the
+decline standing up under a closer look, not a new one.
+
+What the look found instead: `AltP2Block *blk2 = (AltP2Block*)(plane[2])`,
+eight times across the two coders, where `plane` is already `AltP2Block*[4]`.
+Five cast tools reported zero on them, and behind that were **two more defects
+in shared machinery**:
+
+* `structs.decl_types` began its scan on the body's *opening-brace* line, and a
+  signature reads as a declaration — `int32_t f(BmfImage* p, uint8_t* q) {`
+  starts with a type and a name. So it opened there, ran to the next `;`, and
+  swallowed the first real declaration into a join that parses as nothing.
+  **57 names in 43 bodies had no type at all**, every one of them the first
+  local its function declares, and about twenty tools read the program through
+  this table. `samecast.py` skips a name it cannot type, which is why `plane`
+  was invisible.
+* `samecast.py`'s pattern then required a bare name after the cast, and all
+  eight of these parenthesise their operand.
+
+With both fixed it reports 15, and applying its own answer exposed one more
+alias underneath — `BmfImage *img = p_i` in `compress_image`, which the cast on
+the line above had been hiding from `uncopy.py`.
+
+Three rounds in a row now the finding has been one layer under a green gate,
+and each time the thing that surfaced it was a transformation that made the
+next defect nameable.

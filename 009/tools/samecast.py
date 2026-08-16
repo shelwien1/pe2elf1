@@ -63,8 +63,14 @@ import structs                                                    # noqa: E402
 
 # `(T)name`, `(T *)name[i]`, `(T)name[i][j]` -- and nothing whose operand is an
 # expression.  The trailing guard keeps `(T)name(` out: that is a call.
-CAST = re.compile(r'\(\s*([A-Za-z_]\w*\s*\**)\s*\)\s*([A-Za-z_]\w*)'
-                  r'((?:\[[^\]\[]*\])*)(?![\w(])')
+# The operand, bare or in parentheses of its own.  `(AltP2Block*)(plane[2])`
+# is how the decompiler writes eight of these in the two p2 coders, and a
+# pattern that demanded a bare name after the `)` matched none of them -- so
+# they sat under this file's zero next to the `(P2Ctx*)cursor[0]` sites it does
+# report.  A parenthesised sub-expression is still not matched: only a name.
+_OPERAND = r'([A-Za-z_]\w*)((?:\[[^\]\[]*\])*)'
+CAST = re.compile(r'\(\s*([A-Za-z_]\w*\s*\**)\s*\)\s*'
+                  r'(?:\(\s*%s\s*\)|%s(?![\w(]))' % (_OPERAND, _OPERAND))
 
 
 def peel(ty, subs):
@@ -84,13 +90,15 @@ def survey(path):
         ty = structs.decl_types(sig, lines, a, b)
         for i in range(a, b + 1):
             for m in CAST.finditer(lines[i].split('//')[0]):
-                have = ty.get(m.group(2))
+                name = m.group(2) or m.group(4)
+                subs = m.group(3) if m.group(2) else m.group(5)
+                have = ty.get(name)
                 if not have:
                     continue
-                have = peel(re.sub(r'\s+', '', have), m.group(3))
+                have = peel(re.sub(r'\s+', '', have), subs)
                 if have and have == re.sub(r'\s+', '', m.group(1)):
                     out.append((origin[i][0], origin[i][1], m.group(0),
-                                m.group(2) + m.group(3)))
+                                name + subs))
     return out
 
 

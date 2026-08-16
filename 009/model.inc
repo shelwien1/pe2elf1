@@ -247,51 +247,34 @@ struct ModelBlock {
       }
     }
     if( !promoted ) {
+      // Move-to-front over the eight-entry symbol cache: find the symbol just
+      // coded, slide everything above it down one, and put it at the front.
+      //
+      // This was an eight-deep `if`/`else` nest with the slide unrolled into
+      // every arm -- a linear search with its loop written out and its counter
+      // spelled as the depth of the nesting, which is what put this body at
+      // nesting depth 9.  Seven arms named the entry they had just read (`c0`
+      // to `c6`) and `cache` was a second name for `sym_cache`, used
+      // interchangeably between the two halves of the same arm.
+      //
+      // Only slots 1..6 are searched, which is the original's reach and not a
+      // simplification: nothing tests slot 7.  A miss therefore lands on 7,
+      // and the deepest arm's `cache[7] = c6` is exactly the store the slide
+      // makes for `k == 7` -- so not-found is found-at-the-end and needs no
+      // arm of its own.
+      //
+      // The slide runs downward because the turns touch the same places; the
+      // three arms that had it as a loop already said so.
       int32_t just = row_cur[5]->sym;
-      uint16_t *cache = sym_cache;
-      int32_t c0 = cache[0];
-      if( just!=c0 ) {
-        int32_t c1 = cache[1];
-        if( just==c1 ) {
-          cache[1] = c0;
-        } else {
-          int32_t c2 = cache[2];
-          if( just==c2 ) {
-            cache[2] = c1;
-            sym_cache[1] = sym_cache[0];
-          } else {
-            int32_t c3 = cache[3];
-            if( just==c3 ) {
-              cache[3] = c2;
-              sym_cache[2] = sym_cache[1];
-              sym_cache[1] = sym_cache[0];
-            } else {
-              int32_t c4 = cache[4];
-              if( just==c4 ) {
-                cache[4] = c3;
-                // The direction is load-bearing: the turns touch the same places.
-                for( int32_t n = 0; n<3; ++n ) sym_cache[3-n] = sym_cache[2-n];
-              } else {
-                int32_t c5 = cache[5];
-                if( just==c5 ) {
-                  cache[5] = c4;
-                  // The direction is load-bearing: the turns touch the same places.
-                  for( int32_t n = 0; n<4; ++n ) sym_cache[4-n] = sym_cache[3-n];
-                } else {
-                  int32_t c6 = cache[6];
-                  if( just==c6 ) {
-                    cache[6] = c5;
-                  } else {
-                    cache[7] = c6;
-                    sym_cache[6] = sym_cache[5];
-                  }
-                  // The direction is load-bearing: the turns touch the same places.
-                  for( int32_t n = 0; n<5; ++n ) sym_cache[5-n] = sym_cache[4-n];
-                }
-              }
-            }
+      if( just!=sym_cache[0] ) {
+        int32_t k = 7;
+        for( int32_t i = 1; i<7; ++i )
+          if( just==sym_cache[i] ) {
+            k = i;
+            break;
           }
-        }
+        for( int32_t i = k; i>0; --i )
+          sym_cache[i] = sym_cache[i-1];
         sym_cache[0] = just;
       }
     }

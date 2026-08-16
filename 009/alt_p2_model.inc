@@ -148,7 +148,7 @@ void AltP2Block::code_banks(int32_t sample16) {
           // (w_new>>2)` -- kept a high half that the next line throws away.
           // Sixteen bits in and sixteen bits out.
           mir[0].weighted = (int16_t)(w_top+(w_new>>2));
-          __builtin_prefetch(((P2Count*)(rot[9])), 0, 1);
+          __builtin_prefetch((rot[9]), 0, 1);
           __builtin_prefetch(direct[10], 0, 1);
           __builtin_prefetch(mirror[10], 0, 1);
           __builtin_prefetch(rot[10], 0, 1);

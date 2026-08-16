@@ -151,12 +151,11 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   // slot was; a depth the header admits is at most 32 bits, so at most four
   // components, so nothing past `out[5]` is ever touched.
   uint8_t* out[19];
-  uint32_t alpha_n, done, done2;
+  uint32_t alpha_n, done;
   int32_t node, side, alpha_m, carry;
-  uint32_t si_end, word, k, j;
+  uint32_t si_end, word, k;
   uint16_t* kidp;
   uint8_t *rp;
-  uint8_t *srcp = src;
   uint32_t sym_bits = blk->depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
   uint32_t n_kids = (sym_bits+7)>>3;
@@ -242,45 +241,30 @@ alphabet_done:
         plane_size = img_h*img_w;
       }
       if( plane_size ) {
+        // Deinterleave: each turn scatters `n_kids` consecutive source bytes
+        // to the `n_kids` component cursors, one byte each, `plane_size`
+        // turns.
+        //
+        // This was two `while( 1 )`s, a `goto` out of both and a `break` that
+        // lands in the same place, and the shape of it was an unrolling by
+        // *two*: an inner pair loop over `n_kids >> 1` and then a single extra
+        // component for an odd count.  Which loop carried the turn counter
+        // depended on the parity -- for an even `n_kids` the inner one broke
+        // at once and the outer counted, for an odd one the inner never broke
+        // and counted itself -- so the two increments are one increment and
+        // the two loops are one loop.
+        //
+        // The pair loop's `j` reached `out[2*j+2]` and `out[2*j+3]` from
+        // `rp[2*j]` and `rp[2*j+1]`, and the odd tail reached `out[2*n+2]`
+        // from `rp[2*n]`: `out[c + 2]` takes `rp[c]` in both, which is the
+        // line below.
         rp = src;
         if( n_kids ) {
-          int32_t n_moved = 0;
-          uint32_t n_pairs = n_kids>>1;
-          while( 1 ) {
-            while( 1 ) {
-              if( n_pairs ) {
-                for( j = 0; j<n_pairs; ++j ) {
-                  uint8_t *dst_a = out[2*j+2];
-                  *dst_a = rp[2*j];
-                  uint8_t *dst_b = out[2*j+3];
-                  out[2*j+2] = dst_a+1;
-                  *dst_b = rp[2*j+1];
-                  out[2*j+3] = dst_b+1;
-                }
-                done2 = 2*j+1;
-                srcp = &rp[2*j];
-              } else {
-                done2 = 1;
-              }
-              if( (done2-1)>=n_kids )
-                break;
-              uint8_t *dst_c = out[done2+1];
-              srcp = &rp[done2];
-              *dst_c = rp[done2-1];
-              bool more = (uint32_t)(++n_moved)<plane_size;
-              out[done2+1] = dst_c+1;
-              if( !more )
-                goto lists_ready;
-              rp += done2;
-            }
-            if( (uint32_t)(++n_moved)>=plane_size )
-              break;
-            rp = srcp;
+          for( uint32_t moved = 0; moved<plane_size; ++moved ) {
+            for( uint32_t c = 0; c<n_kids; ++c )
+              *out[c+2]++ = rp[c];
+            rp += n_kids;
           }
-// Two loops out at once, which is all the `goto` is for: the row ran out
-// mid-component.  The `break` above lands here too.
-lists_ready:
-          ;
         }
       }
       uint16_t* old_words = blk->sym_word;

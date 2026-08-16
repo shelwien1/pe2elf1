@@ -128,7 +128,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   p2_row[1][2] = (float)(nb0[-1].dval+nb1[2].dval-nb1[1].dval);
   p2_row[1][3] = (float)(nb0[-2].dval+nb1[1].dval-nb1[-1].dval);
   p2_row[2][0] = (float)(2*nb0[-1].dval-nb0[-2].dval);
-  P2Ctx *nb2 = (P2Ctx*)(row2c);
+  P2Ctx *nb2 = row2c;
   p2_row[2][1] = (float)(nb0[-3].dval+nb1->dval-nb1[-3].dval);
   p2_row[2][2] = (float)(nb2->dval+nb1[1].dval-nb3[1].dval);
   p2_row[2][3] = (float)nb0[-3].dval;
@@ -162,7 +162,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
         p2_row[4][1] = (float)(nb0[-2].val+ra1[2].val-ra1->val);
         p2_row[4][2] = (float)(nb1[1].val+ra0[-1].val-ra1->val);
         p2_row[4][3] = (float)(nb0[-1].val+ra1->val-ra1[-1].val);
-        p2_row[5][0] = (float)(nb1[1].val+(rb1[2].val-((P2Ctx*)(rb2))[3].val));
+        p2_row[5][0] = (float)(nb1[1].val+(rb1[2].val-(rb2)[3].val));
         p2_row[5][1] = (float)(nb0[-2].val+rb0->val-rb0[-2].val);
         p2_row[5][2] = (float)(nb1->val+rb0->val-rb1->val);
         no_ref = has_ref==0;
@@ -170,7 +170,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
         if( no_ref ) {
           int16_t *nb2w = (int16_t*)cursor[2];
           p2_row[6][0] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
-          p2_row[6][1] = (float)(*nb2w+ra0->val-((P2Ctx*)(ra2))->val);
+          p2_row[6][1] = (float)(*nb2w+ra0->val-(ra2)->val);
           p2_row[6][2] = (float)(ra2->val+ra0->val-*nb2w+2*(nb1->val-ra1->val));
           in63 = *(int16_t*)((uint8_t*)nb0-18)+nb1[-1].val+ra1[-2].val+ra0->val-ra0[-1].val-ra1[-1].val-nb1[-2].val;
         } else {
@@ -190,7 +190,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
         p2_row[5][2] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
         int16_t *nb2w2 = (int16_t*)cursor[2];
         p2_row[5][3] = (float)(nb0[-2].val+rb0->val-rb0[-2].val);
-        p2_row[6][0] = (float)(*nb2w2+rb0->val-((P2Ctx*)(rb2))->val);
+        p2_row[6][0] = (float)(*nb2w2+rb0->val-(rb2)->val);
         p2_row[6][1] = (float)(rb0[-2].val+rb0->val-nb0[-2].val+2*(nb0[-1].val-rb0[-1].val));
         p2_row[6][2] = (float)(nb0[-2].val+rb0->err);
         p2_row[6][3] = (float)(*nb2w2+ra0->err);
@@ -509,7 +509,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
       magsum = magsum_s;
       ctx_w[4].sel = in_band+(d_rb_left<lo_band);
       int32_t ra0_val = ra0->val;
-      int32_t d_ra_ra1b = ra0_val-((P2Ctx*)(ra1))->val;
+      int32_t d_ra_ra1b = ra0_val-(ra1)->val;
       in_band = lo_band<=d_ra_ra1b;
       if( in_band&&d_ra_ra1b<=hi_band ) {
         flat_a = 1;
