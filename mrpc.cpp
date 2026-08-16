@@ -73,6 +73,15 @@
                          // gated on measured gain and can come out to a
                          // single bit.
 #endif
+#ifndef PMFIX_ROUNDS
+#define PMFIX_ROUNDS  1  // times to measure-and-apply the correction.  The
+                         // second round sees a model that has already been
+                         // corrected once and the thresholds re-chosen
+                         // under it, so what it measures is the residual
+                         // mismatch, and the levels compose.  Measured
+                         // 0.04% for a second pass over the image: one
+                         // round takes essentially all of it.
+#endif
 #ifndef SIGV_2STAGE
 #define SIGV_2STAGE   1  // pick the shape first, then the sigma of that
                          // shape, instead of scanning the product.  The
@@ -2071,6 +2080,9 @@ struct MRPCIO : MRPC {
           double r = log(o/e)/log(2.0)*double(PMFIX_LVL);
           lv = int( r<0 ? r-0.5 : r+0.5 );
         } else if( e>0.5 ) lv = -PMFIX_LVL;      // nothing landed here
+        // the ratio is measured against whatever pml currently is, so
+        // on a second round it is the residual mismatch and composes
+        lv += pmfl[k][g][b];
         if( lv >  PMFIX_LVL ) lv =  PMFIX_LVL;
         if( lv < -PMFIX_LVL ) lv = -PMFIX_LVL;
         pmfl[k][g][b] = lv;
@@ -2409,10 +2421,13 @@ struct Codec : MRPCIO {
     // costs one bit.
     {
       cost_t c0 = CalcCost( 0, 0, H, W );
-      MeasurePmFix();
-      BuildPmFix();
       int sv = opt_loop; opt_loop = 1;      // thresholds only, not shapes
-      cost_t c1 = OptimizeGroup();
+      cost_t c1 = 0;
+      for( int r=0; r<PMFIX_ROUNDS; r++ ) {
+        MeasurePmFix();                     // deltas, against the current pml
+        BuildPmFix();
+        c1 = OptimizeGroup();
+      }
       cost_t side = CodePmFix( 0, 1 );
       if( c1 + side >= c0 ) {
         pmfix_on = 0; SetPmodels(); OptimizeGroup();

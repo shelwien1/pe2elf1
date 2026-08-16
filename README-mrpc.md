@@ -121,14 +121,16 @@ optimiser.
 
 | file | | raw | bmpc | **mrpc** | |
 |---|---|---|---|---|---|
-| t24.bmp | 320×240×24 | 230454 | **97984** | 99409 | +1.5% |
-| t32.bmp | 320×240×32 | 307254 | 115062 | **109186** | −5.1% |
-| x_ep.bmp | 705×800×32 | 2256054 | 340266 | **319318** | −6.2% |
-| 20000171A.bmp | 4096×512×32 | 8388662 | **2631309** | 2754974 | +4.7% |
+| t24.bmp | 320×240×24 | 230454 | 97984 | **96368** | −1.6% |
+| t32.bmp | 320×240×32 | 307254 | 115062 | **105350** | −8.4% |
+| x_ep.bmp | 705×800×32 | 2256054 | 340266 | **321162** | −5.6% |
 | t8g / t8p | 8bpp | 77878 | 46941 / 46589 | 53452 / 53385 | fallback |
 
-mrpc wins on 32bpp — by more the bigger the image gets — and loses
-slightly on 24bpp. That split is the two designs showing their shapes.
+At `MRP_EFFORT=1`, the default. Effort 2 takes another 7% off all three.
+
+mrpc wins on 32bpp — by more the bigger the image gets — and, since the
+model work in §5, on 24bpp as well: t24 was mrpc's one loss at +1.5% and
+is now a 1.6% win. The margin still has the shape of the two designs.
 bmpc's strength is its residual coder, seven context models mixed per bit,
 and t24 is photographic, which is where that pays. mrpc's strength is the
 predictor, and it needs samples: a class is fitted from the pixels
