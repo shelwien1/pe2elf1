@@ -1,0 +1,4 @@
+*.o
+/dff2dsf
+*.dff
+*.dsf
