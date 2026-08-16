@@ -20,6 +20,32 @@
 #include <x86intrin.h>
 #endif
 
+// Aligned allocation.  The C11/C++17 aligned_alloc pairs with free(), which
+// Windows cannot do -- _aligned_malloc blocks carry a header free() knows
+// nothing about -- so every such block goes back through aligned_free(),
+// which is the one call that means the right thing on both.
+#if defined(_WIN32) || defined(_MSC_VER)
+#include <malloc.h>
+
+// Wrapper to match standard C11/C++17 aligned_alloc signature
+inline void* aligned_alloc( size_t alignment, size_t size ) {
+    return _aligned_malloc( size, alignment );
+}
+
+inline void aligned_free( void* ptr ) {
+    _aligned_free( ptr );
+}
+
+#else
+#include <cstdlib>
+
+// Standard C++17 fallback (aligned_alloc uses std::free for deallocation)
+inline void aligned_free( void* ptr ) {
+    std::free( ptr );
+}
+
+#endif
+
 typedef unsigned short word;
 typedef unsigned int   uint;
 typedef unsigned char  byte;
@@ -29,12 +55,15 @@ typedef unsigned long long qword;
  #define INLINE   __attribute__((always_inline))
  #define NOINLINE __attribute__((noinline))
  #define ALIGN(n) __attribute__((aligned(n)))
- #define restrict __restrict
 #else
  #define INLINE   __forceinline
  #define NOINLINE __declspec(noinline)
  #define ALIGN(n) __declspec(align(n))
 #endif
+
+// Both spell it the same way, and the C keyword is not one in C++.  Defined
+// after the system headers, which use __restrict directly.
+#define restrict __restrict
 
 uint flen( FILE* f ) {
   fseek( f, 0, SEEK_END );

@@ -730,10 +730,10 @@ struct LPCMixT {
 #endif
   }
 
-  // w comes from aligned_alloc, so it goes back through free(), not
+  // w comes from aligned_alloc, so it goes back through aligned_free(), not
   // delete[] -- the trial coder builds and tears down a Raster per order.
   void Free() {
-    if( w ) { ::free(w); w = 0; }
+    if( w ) { aligned_free(w); w = 0; }
     if( u ) { delete[] u; u = 0; }
   }
 
@@ -1629,7 +1629,7 @@ struct Raster {
 #if MIX_DUAL
     for( uint k=0; k<nc*MIX_CLS; k++ ) mix2[k].Free();
 #endif
-    delete[] buf; ::free(x); delete[] mix; delete[] emap;
+    delete[] buf; aligned_free(x); delete[] mix; delete[] emap;
     delete[] bmix; delete[] padm;
     for( uint m=0; m<RES_NM; m++ ) delete[] res[m];
 #if MIX_DUAL
