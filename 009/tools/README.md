@@ -464,6 +464,7 @@ them run.
 | `ctxidx.py` | Turn a masked context word into a `CtxIdx` chain, one line at a time | yes |
 | `deadcheck.py` | Report code nothing can reach | yes |
 | `deadparam.py` | Drop the parameters nothing reads, and the arguments that fed them | yes |
+| `deadstore.py` | A store to a local that a later store overwrites before anything reads it | yes |
 | `deblob.py` | Give every blob global its own definition, and see what breaks | yes |
 | `decast.py` | Delete the casts that cast a thing to the type it already has | yes |
 | `dedup.py` | Collapse recovered structs that are byte-for-byte the same declaration | yes |
