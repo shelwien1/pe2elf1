@@ -1050,3 +1050,66 @@ What is left is declined with a measurement, not with a shrug:
 * **34 jumps and 23 labels**, from 42 and 27. `degoto` declines each with a
   reason and none is a plain `break` or `continue` — measured against a probe
   holding one of each.
+
+---
+
+## What "nothing to do" was worth as a claim
+
+The three bullets above were written as the end of the round. Every one of them
+moved afterwards, and none of them moved because a new tool was built — they
+moved because the things they described were read again.
+
+**"Two mutual inverses in `plane_predict.inc`"** was the second bullet's
+throwaway clause. `interleave_plane` and `colour_transform` are an encode/decode
+pair that nothing had ever *named* as one, so `pairshare.py` had never measured
+them and no decision had ever been taken. A comment above them said the nineteen
+lines that read the descriptor "are the whole of what the two share — the loops
+under them are inverses and have nothing else in common", and that was a
+sentence about spelling: the two blends were written four different ways
+between them, one casting to `uint32_t` mid-expression, one summing into an
+`int32_t` and casting the total, two splitting the sum across an extra local.
+All four are the same thirty-two bits. Written unsigned throughout, each loop is
+a blend and a sign, and they are `code_colour_plane<f_DEC>` — the thirteenth
+merged pair, and the merge takes a signed overflow out of the forward direction
+on the way.
+
+**`code_pixel`/`decode_pixel` at "455 lines and 55 shared"** is 328 and 28. Both
+bodies open by reading the same four neighbours — north, west, north-east,
+north-west — and both parked them in the candidate array: slots 8, 10, 6, 5 in
+one and 0, 1, 3, 2 in the other. Two arbitrary sets of slots for one set of
+values. That is the whole reason twenty-eight identical lines did not look
+identical, and why a `rank` written against one set could not be called from the
+other. The round that wrote `neighbour_rank` had left it alone and said why:
+`code_pixel` was borrowing eleven of those slots for unrelated values, two of
+them among the four, so the claim had to be settled by instrumenting. The round
+after *that* gave the eleven borrowed slots their own names — and nobody went
+back to the note. `struct Neighbours` is those four; `open_pixel` is the
+twenty-eight lines.
+
+**"34 jumps"** is 27, and 23 labels is 19. `read_bmp`'s RLE4 arm was three
+`while( 1 )`s with a label at the top of the innermost and five jumps back to
+it, and the nesting *was* the dispatch — fall out of the innermost loop for an
+escape, out of the middle for anything but an end of line, out of the outer for
+anything but a delta. It is a five-way branch on two bytes now, which is the
+shape the RLE8 arm above it already had. `sym_reduce.inc`'s BST insert and
+`plane_choose.inc`'s coordinate descent went the same way, and the deepest
+nesting in the tree went from 9 to 7.
+
+**"285 lines of copy"** is 227.
+
+And the gates moved too, in the direction that matters least and is worth the
+most: `tools/narrow.sh` round-trips fourteen geometries the corpus does not
+have — a one-pixel row, a one-pixel column, a single pixel, a packed depth at
+width one. It found nothing. It exists because probing `unpredict_med` showed
+that one of its four paths could be given a wrong answer with all 110 checks
+staying green, and it does **not** close that particular gap either: no image
+that narrow ever gets a MED predictor, because `search_filter` gives up below
+`4 x 3`. The tool says so at the top rather than implying otherwise by being
+green.
+
+The pattern, one more time, is the one this document has been about from the
+start: **a measurement is a claim with a date on it.** Nine instrument defects
+were found in the round above by asking whether a tool could report. Four claims
+were found here by asking whether a sentence was still true. Neither question
+has a last answer, and "nothing left to do" is the one answer that is never a
+measurement.
