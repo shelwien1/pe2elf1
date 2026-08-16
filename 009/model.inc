@@ -653,6 +653,21 @@ struct ModelBlock {
     return id2;
   }
 
+  // The four gradient seeds and the two match flags a coded run leaves behind.
+  // Both pixel coders write these eight lines, and each wrapped them in a spill
+  // of an unrelated local -- `idx_s` in the decoder and `runlen` in the encoder
+  // -- saved above and loaded back below with nothing between touching either.
+  void seed_after_run(PixRec* cur, int32_t sym) {
+    PixRec*const r4 = row_cur[6];
+    PixRec*const up3 = row_cur[7];
+    grad[0] = match_seed_split(r4);
+    grad[1] = match_seed(up3-3, 8);
+    grad[2] = match_seed(cur-4, 2, 1);
+    grad[3] = match_seed(cur-7, 4);
+    cur[-1].match[4] = sym==r4[1].sym;
+    row_cur[5][-1].match[5] = sym==row_cur[6][2].sym;
+  }
+
   void seed_candidates(int32_t* nb_sym) {
     nb_sym[0] = pix_cur->last;
     nb_sym[1] = pix_cur->prev;
@@ -1322,16 +1337,7 @@ struct ModelBlock {
             next = row_cur[5]+1;
             row_cur[5] = next;
           }
-          idx_t = idx_s;
-          PixRec *cur6c = (PixRec*)row_cur[6];
-          PixRec *up3 = (PixRec*)row_cur[7];
-          grad[0] = match_seed_split(cur6c);
-          grad[1] = match_seed(up3-3, 8);
-          grad[2] = match_seed(next-4, 2, 1);
-          grad[3] = match_seed(next-7, 4);
-          next[-1].match[4] = run_sym==cur6c[1].sym;
-          idx_s = idx_t;
-          row_cur[5][-1].match[5] = run_sym==row_cur[6][2].sym;
+          seed_after_run(next, run_sym);
           hit_a = hit;
         }
         if( hit_a )
@@ -1502,17 +1508,7 @@ struct ModelBlock {
             cur2 = cur5p1b;
           }
         }
-        PixRec *r4 = row_cur[6];
-        runlen_s = runlen;
-        PixRec *up3 = (PixRec*)row_cur[7];
-        grad[0] = match_seed_split(r4);
-        grad[1] = match_seed(up3-3, 8);
-        grad[2] = match_seed(cur2-4, 2, 1);
-        int32_t s8b = nb4.up;
-        grad[3] = match_seed(cur2-7, 4);
-        cur2[-1].match[4] = s8b==r4[1].sym;
-        row_cur[5][-1].match[5] = s8b==row_cur[6][2].sym;
-        runlen = runlen_s;
+        seed_after_run(cur2, nb4.up);
       }
       (&esc_ctr[(amap+1)])->encode_context_bit(esc_ctr, run_hit);
       int32_t msym1 = mode_symbol[1];

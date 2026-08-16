@@ -493,20 +493,20 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     } else {
       flat_b = mag_ref1+mag_ref0+magu+rb2->mag+ra2->mag;
     }
+    // `magsum_s = magsum;` above each of these and `magsum = magsum_s;` three
+    // lines down was MSVC spilling the register `magsum` was in across the
+    // reads below it and loading it straight back.  Nothing between the two
+    // touches it, in either arm.
     if( plane_idx==1 ) {
-      magsum_s = magsum;
       int32_t d_ra_ra1 = ra0->val-ra1->val;
       ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
       int32_t d_ra_left = ra0->val-ra0[-1].val;
-      magsum = magsum_s;
       ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
     } else if( (int32_t)plane_idx>1 ) {
-      magsum_s = magsum;
       int32_t d_rb_rb1 = rb0->val-rb1->val;
       ctx_w[3].sel = (d_rb_rb1<=hi_band)+(d_rb_rb1<lo_band);
       int32_t d_rb_left = rb0->val-rb0[-1].val;
       in_band = d_rb_left<=hi_band;
-      magsum = magsum_s;
       ctx_w[4].sel = in_band+(d_rb_left<lo_band);
       int32_t ra0_val = ra0->val;
       int32_t d_ra_ra1b = ra0_val-(ra1)->val;

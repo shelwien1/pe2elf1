@@ -264,8 +264,17 @@ int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
 // candidates through this and nothing else.
 //
 // The two accumulators over even and odd bins are the original's pairing, for
-// a two-lane SSE add that is not here any more; they change the rounding of
-// the sum and nothing else.
+// a two-lane SSE add that is not here any more.  `dupblock.py` reports the two
+// halves as copy, and they stay: floating-point addition is not associative, so
+// `(a + c) + (b + d)` and `((a + b) + c) + d` are different sums of the same
+// four numbers, and this one feeds a comparison that decides a filter.
+//
+// **It is declined with a measurement rather than on principle.**  Rolling the
+// two lanes into one loop passes all 110 checks over all seventeen images --
+// no stream moves.  That makes it corpus-verified rather than true by
+// construction, which is not the same thing: the next image is not in the
+// corpus.  The same rule kept `neighbour_rank` reading its own four slots for
+// a round.
 // `n` is a count of bins and not of bytes.  The parameter was `uint8_t *` with
 // the cast to `const int32_t *` on the first line, and the byte pointer reached
 // back into every caller: two histogram arrays were *declared* `uint8_t[2048]`
