@@ -305,6 +305,48 @@ struct ModelBlock {
     return sel_cur;
   }
 
+  // The twenty-two neighbours the escape context is built from, in the order
+  // `pixel_context` reads them: rows 5 to 8 of the workspace at fixed offsets
+  // from the sample being coded, and one from row 9.  Slots 0 and 1 are the
+  // two most recent symbols seen at this position and 2..9 the symbol cache;
+  // those stay at the call sites, which hold them under different names.
+  //
+  // `code_pixel` and `decode_pixel` each wrote the twenty-two out a line
+  // apiece over the same four rows under different names -- `up5` against
+  // `r6`, `r8c` against `r7` -- which is why nothing comparing text could see
+  // they were the same table.
+  //
+  // The decompilation had them interleaved with the twenty-four loads that
+  // feed them, each load under a name of its own, `h10` through `h31`, because
+  // MSVC scheduled them that way.  Every one was used exactly once, and
+  // nothing here writes `row_cur`, so the order is free.
+  void load_neighbours(int32_t* nb_sym) {
+    const PixRec *const r5 = row_cur[5], *const r6 = row_cur[6],
+                 *const r7 = row_cur[7], *const r8 = row_cur[8];
+    nb_sym[10] = r5[-2].sym;
+    nb_sym[11] = r6[2].sym;
+    nb_sym[12] = r7[1].sym;
+    nb_sym[13] = r7->sym;
+    nb_sym[14] = r6[-2].sym;
+    nb_sym[15] = r7[-1].sym;
+    nb_sym[16] = r5[-3].sym;
+    nb_sym[17] = r6[3].sym;
+    nb_sym[18] = r6[4].sym;
+    nb_sym[19] = r5[-4].sym;
+    nb_sym[20] = r6[-3].sym;
+    nb_sym[21] = r7[2].sym;
+    nb_sym[22] = r8->sym;
+    nb_sym[23] = r7[-2].sym;
+    nb_sym[24] = r5[-5].sym;
+    nb_sym[25] = r8[1].sym;
+    nb_sym[26] = r6[5].sym;
+    nb_sym[27] = row_cur[9]->sym;
+    nb_sym[28] = r5[-7].sym;
+    nb_sym[29] = r8[-1].sym;
+    nb_sym[30] = r6[7].sym;
+    nb_sym[31] = r7[3].sym;
+  }
+
   // Both selector lists, one entry per symbol of the alphabet.  Written out at
   // the end of `expand_alphabet` and again in `model_plane`'s allocation, the
   // same seven lines with the same two capacities: 99 for the list that walks
@@ -1018,39 +1060,8 @@ struct ModelBlock {
     tot = freq_tbl->w[5];
     if( tot ) {
       if( tot==1 ) {
-        int32_t b15 = freq->b15;
-        int32_t w2t = b15*freq_tbl->w[2];
-        int32_t w3t = b15*freq_tbl->w[3];
-        nb_sym[1] = b15*freq_tbl->w[0];
-        int16_t w1s = b15*freq_tbl->w[1];
-        nb_sym[2] = w2t;
-        int32_t w4t = b15*freq_tbl->w[4];
-        nb_sym[0] = w3t;
-        nb_sym[3] = w4t;
-        *freq_tbl = *freq;
-        int32_t w5 = freq_tbl->w[5];
-        int32_t w0r = freq_tbl->w[0];
-        freq_tbl->b14 *= 8;
-        int32_t w1r = 21*freq_tbl->w[1];
-        nb_sym[1] += (21*w0r+w5-1)/w5;
-        freq_tbl->w[0] = nb_sym[1];
-        int32_t q1 = (w1r+w5-1)/w5;
-        int32_t w2r = 21*freq_tbl->w[2];
-        int32_t w3 = freq_tbl->w[3];
-        uint16_t q1w = q1+w1s;
-        freq_tbl->w[1] = q1w;
-        int32_t w3r = 21*w3;
-        int32_t s0a = nb_sym[0];
-        int32_t n2r = (w2r+w5-1)/w5+nb_sym[2];
-        freq_tbl->w[2] = (uint16_t)n2r;
-        int32_t span = (w3r+w5-1)/w5+s0a;
-        int32_t w4r = 21*freq_tbl->w[4];
-        freq_tbl->w[3] = span;
-        int32_t n4r = (w4r+w5-1)/w5+nb_sym[3];
-        freq_tbl->w[4] = n4r;
-        uint16_t tot2 = nb_sym[1]+n4r+(span+(uint16_t)n2r+q1w);
-        tot = tot2;
-        freq_tbl->w[5] = tot2;
+        freq_tbl->blend_from(*freq);
+        tot = freq_tbl->w[5];
       }
       arg_tot = tot;
       int32_t target = rc.get_freq(arg_tot);
@@ -1192,40 +1203,11 @@ struct ModelBlock {
     // and 1 are the two most recent symbols at this exact context, 2..9 the
     // move-to-front cache, and 10..31 the spatial neighbours widening outward.
     //
-    // The decompilation interleaved the 32 stores with the 24 loads that feed
-    // them and gave every load a name -- `h10` through `h31` -- because MSVC
-    // scheduled them that way.  Every one was used exactly once.  Nothing here
-    // writes `row_cur` or `sym_cache`, so the order is free.
-    PixRec *up4 = row_cur[6];
-    PixRec *r5 = row_cur[5];
-    PixRec *up5 = row_cur[7];
-    PixRec *r8c = row_cur[8];
     nb_sym[0] = pixr->last;
     nb_sym[1] = pixr->prev;
     for( int32_t c = 0; c<8; ++c )
       nb_sym[2+c] = sym_cache[c];
-    nb_sym[10] = r5[-2].sym;
-    nb_sym[11] = up4[2].sym;
-    nb_sym[12] = up5[1].sym;
-    nb_sym[13] = up5->sym;
-    nb_sym[14] = up4[-2].sym;
-    nb_sym[15] = up5[-1].sym;
-    nb_sym[16] = r5[-3].sym;
-    nb_sym[17] = up4[3].sym;
-    nb_sym[18] = up4[4].sym;
-    nb_sym[19] = r5[-4].sym;
-    nb_sym[20] = up4[-3].sym;
-    nb_sym[21] = up5[2].sym;
-    nb_sym[22] = r8c->sym;
-    nb_sym[23] = up5[-2].sym;
-    nb_sym[24] = r5[-5].sym;
-    nb_sym[25] = r8c[1].sym;
-    nb_sym[26] = up4[5].sym;
-    nb_sym[27] = row_cur[9]->sym;
-    nb_sym[28] = r5[-7].sym;
-    nb_sym[29] = r8c[-1].sym;
-    nb_sym[30] = up4[7].sym;
-    nb_sym[31] = up5[3].sym;
+    load_neighbours(nb_sym);
     sym_pos = 0;
     do {
       int32_t psym = pixel_context((uint32_t*)nb_sym);
@@ -1266,11 +1248,9 @@ struct ModelBlock {
     uint16_t g4, g3;
     uint32_t arg_tot, arg_high, done, grid_kind;
     uint16_t* id3p;
-    int16_t acc2;
-    int32_t nb, key, cap, nb2, sig1, sig2, m_up0, one, run, amap, runlen, run_left, bit5, first, cum1, lvl_a, w5a, b15a, acc, cum2, lvl_b, w5c, w5b, s3b;
-    uint16_t w5, w1;
+    int32_t nb, key, cap, nb2, sig1, sig2, m_up0, one, run, amap, runlen, run_left, bit5, cum1, lvl_a, w5a, b15a, cum2, lvl_b, w5c, w5b, s3b;
+    uint16_t w1;
     PixRec *cur5p1;
-    uint32_t half;
     PixRec* cur6c, * up2;
     PixRec* cur6 = (PixRec*)row_cur[6];
     int32_t up_sym = cur6->sym;
@@ -1445,7 +1425,7 @@ struct ModelBlock {
         row_cur[5] = r3+1;
         if( runlen-run_hit!=1 ) {
           run_left = runlen-run_hit-1;
-          half = run_left/2;
+          uint32_t half = run_left/2;
           if( run_left/2 ) {
             nb_sym[0] = run_left;
             int32_t s1 = nb_sym[1];
@@ -1508,7 +1488,7 @@ struct ModelBlock {
         nb_sym[0] = nb_sym[5];
         int32_t s4 = nb_sym[4];
         bit5 = 1<<(nb_sym[5]&31);
-        first = 0;
+        int32_t first = 0;
         int32_t s5 = nb_sym[5];
         do {
           if( s4>(bit5|first) ) {
@@ -1538,49 +1518,10 @@ struct ModelBlock {
       grid_kind = frec->w[5];
       if( grid_kind ) {
         if( grid_kind==1 ) {
-          int32_t b15 = binp->b15;
-          int32_t w2t = b15*frec->w[2];
-          int32_t w3t = b15*frec->w[3];
-          nb_sym[0] = b15*frec->w[0];
-          int16_t w1s = b15*frec->w[1];
-          nb_sym[1] = w2t;
-          int32_t w4t = b15*frec->w[4];
-          nb_sym[2] = w3t;
-          nb_sym[3] = w4t;
-          // `ip = (int32_t*)&grid[bucket_idx]` ten lines up, cast straight back
-          // here and used as nothing else in between.
-          *frec = grid[bucket_idx];
-          w5 = frec->w[5];
-          frec->b14 *= 8;
-          acc = 21*frec->w[1];
-          nb_sym[0] += (21*frec->w[0]+w5-1)/w5;
-          frec->w[0] = nb_sym[0];
-          int32_t q1 = (acc+w5-1)/w5;
-          // `acc` is `21*frec->w[1]` until here, and `q1` above is the last
-          // thing to read it whole.  From here down it is sixteen bits: MSVC
-          // kept the register and wrote only its low half, and both of the
-          // reads that follow are sixteen bits wide -- `frec->w[2]`, and
-          // `acc2`, which is an `int16_t`.  So the half the partial store
-          // preserved is dead, and this is the assignment it amounts to.
-          // (Written the other way first, mask and all: 72 images produce the
-          // same streams either way, which is a weaker statement than the
-          // types are.)
-          acc = (uint16_t)nb_sym[1];
-          int32_t w2s = 21*frec->w[2];
-          uint16_t w6 = q1+w1s;
-          frec->w[1] = w6;
-          int32_t q2 = (w2s+w5-1)/w5;
-          int32_t w3s = 21*frec->w[3];
-          acc = (uint16_t)(q2+acc);
-          frec->w[2] = acc;
-          int32_t bp = nb_sym[2]+(w3s+w5-1)/w5;
-          int32_t w4s = 21*frec->w[4];
-          frec->w[3] = (uint16_t)bp;
-          acc2 = (uint16_t)bp+acc+w6;
-          w5 = (w4s+w5-1)/w5+nb_sym[3];
-          frec->w[4] = w5;
-          grid_kind = (uint16_t)(nb_sym[0]+w5+acc2);
-          frec->w[5] = grid_kind;
+          // `ip = (int32_t*)&grid[bucket_idx]` ten lines up, cast straight
+          // back here and used as nothing else in between.
+          frec->blend_from(*binp);
+          grid_kind = frec->w[5];
           rowp = row_cur[5];
         }
         int32_t s9 = rowp->sym;
@@ -1713,36 +1654,11 @@ struct ModelBlock {
     // two most recent symbols at this context, 2..9 the move-to-front cache,
     // 10..31 the spatial neighbours widening outward.  The decompilation
     // interleaved the stores with the loads and named every load.
-    PixRec *r5 = row_cur[5];
-    PixRec *up4 = row_cur[6];
-    PixRec *r6 = row_cur[7];
-    PixRec *r7 = row_cur[8];
     nb_sym[0] = w6d;
     nb_sym[1] = wq1;
     for( int32_t c = 0; c<8; ++c )
       nb_sym[2+c] = cache[c];
-    nb_sym[10] = r5[-2].sym;
-    nb_sym[11] = up4[2].sym;
-    nb_sym[12] = r6[1].sym;
-    nb_sym[13] = r6->sym;
-    nb_sym[14] = up4[-2].sym;
-    nb_sym[15] = r6[-1].sym;
-    nb_sym[16] = r5[-3].sym;
-    nb_sym[17] = up4[3].sym;
-    nb_sym[18] = up4[4].sym;
-    nb_sym[19] = r5[-4].sym;
-    nb_sym[20] = up4[-3].sym;
-    nb_sym[21] = r6[2].sym;
-    nb_sym[22] = r7->sym;
-    nb_sym[23] = r6[-2].sym;
-    nb_sym[24] = r5[-5].sym;
-    nb_sym[25] = r7[1].sym;
-    nb_sym[26] = up4[5].sym;
-    nb_sym[27] = row_cur[9]->sym;
-    nb_sym[28] = r5[-7].sym;
-    nb_sym[29] = r7[-1].sym;
-    nb_sym[30] = up4[7].sym;
-    nb_sym[31] = r6[3].sym;
+    load_neighbours(nb_sym);
     sym_pos = 0;
     do {
       int32_t esym = pixel_context((uint32_t*)nb_sym);

@@ -11,6 +11,34 @@ struct FreqRec {
     };
   };
 
+  // Blend `src` into this record.  The five selector weights this record has
+  // are kept, scaled by `src`'s `b15`; `src`'s weights take their place; each
+  // then gets 21 parts in `src`'s total added back, rounded up; and the total
+  // is re-summed.  `b14` is multiplied by eight on the way through.
+  //
+  // `code_pixel` and `decode_pixel` each wrote this out, twenty-three lines
+  // apiece, holding four of the five scaled weights in `nb_sym[0..3]` -- four
+  // slots of the thirty-two-entry *neighbour table*, borrowed as scratch
+  // because that is where MSVC had spare stack.  Reading either body, those
+  // four lines look like the neighbourhood being written and they are not.
+  //
+  // The fifth scaled weight was an `int16_t` in both copies where the other
+  // four were `int32_t`, and `b15 * w[1]` reaches 16.7 million, so that
+  // truncation is real.  It is also invisible: the value is only ever added to
+  // and stored into a `uint16_t`, and the two agree modulo 65536.
+  void blend_from(const FreqRec& src) {
+    const int32_t scale = src.b15;
+    int32_t kept[5];
+    for( int32_t i = 0; i<5; ++i )
+      kept[i] = scale*w[i];
+    *this = src;
+    b14 *= 8;
+    const int32_t total = w[5];
+    for( int32_t i = 0; i<5; ++i )
+      w[i] = (uint16_t)(kept[i]+(21*w[i]+total-1)/total);
+    resum();
+  }
+
   // `w[5]` is the total of the five selector weights.  Three places compute it:
   // this, and the two `init_tables` bodies that seed a record -- and those two
   // spelled the five terms in the order 0, 4, 3, 2, 1.
