@@ -1185,11 +1185,11 @@ single block are not counted; the statements and the split pair still are.
 
 ## Where this leaves it, again
 
-* **73 lines of copy**, from 1031 and from the 285 that closed the round above.
+* **63 lines of copy**, from 1031 and from the 285 that closed the round above.
   Forty-one of the lines that came off were never copy at all — see above.
 * **27 jumps and 19 labels**, from 42 and 27.
 * **thirteen merged encode/decode pairs**, from twelve; two declined, and both
-  smaller — `code_pixel`/`decode_pixel` is 304 lines and 28 shared, from 1044
+  smaller — `code_pixel`/`decode_pixel` is 277 lines and 27 shared, from 1044
   and 179.
 * **deepest nesting 7**, from 9.
 * **two new gates**: `tools/narrow.sh`, for the geometries the corpus does not

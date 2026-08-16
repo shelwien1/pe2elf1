@@ -48,12 +48,21 @@ public:
     cache = kMarker;
   }
 
-  void emit(uint32_t carry) {
+  // The cached byte with the carry folded into it, and then the run of pending
+  // bytes that carry resolves.  Both writers open with these four lines, and
+  // they answer the cursor rather than storing it because only one of them is
+  // finished with it: `emit` moves on to the next cache byte, `flush` to the
+  // length and the tail.
+  uint8_t* emit_carry(uint32_t carry) {
     uint8_t* q = p();
     *q++ = (uint8_t)(cache+carry);
     for(; pending; --pending )
       *q++ = (uint8_t)(carry-1);
-    set_p(q);
+    return q;
+  }
+
+  void emit(uint32_t carry) {
+    set_p(emit_carry(carry));
     cache = (uint8_t)(low>>23);
   }
 
@@ -99,10 +108,7 @@ public:
     uint32_t len = bytes;
     uint32_t rounded = ((low&0x7FFFFF)>=((len&0xFFFFFF)>>1))+(low>>23);
     uint32_t carry = rounded>0xFF;
-    uint8_t* q = p();
-    *q++ = (uint8_t)(cache+carry);
-    for(; pending; --pending )
-      *q++ = (uint8_t)(carry-1);
+    uint8_t* q = emit_carry(carry);
     *q++ = (uint8_t)rounded;
     *q++ = (uint8_t)(len>>16);
     *q++ = (uint8_t)(len>>8);

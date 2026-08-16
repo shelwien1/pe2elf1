@@ -675,6 +675,24 @@ struct ModelBlock {
     return id2;
   }
 
+  // The records a coded run covers, each taking the symbol, the head word and
+  // the flag word of the one before it.
+  //
+  // The decoder wrote one record a turn.  The encoder's half was unrolled by
+  // two, and the second copy of the three stores went through `pixp`, a second
+  // name for a `pix_cur` the first copy had not moved -- so the pair loop
+  // wrote the same `prev` twice and advanced the row cursor twice, which is
+  // two turns of this.
+  void fill_run(int32_t sym, uint32_t head_word, uint32_t flags_word,
+                uint32_t n) {
+    for( uint32_t k = 0; k<n; ++k ) {
+      pix_cur->prev = sym;
+      row_cur[5]->head4 = head_word;
+      row_cur[5]->match2345 = flags_word;
+      ++row_cur[5];
+    }
+  }
+
   // The four gradient seeds and the two match flags a coded run leaves behind.
   // Both pixel coders write these eight lines, and each wrapped them in a spill
   // of an unrelated local -- `idx_s` in the decoder and `runlen` in the encoder
@@ -1238,7 +1256,6 @@ struct ModelBlock {
     FreqRec* freq;
     FreqRec* freq_tbl;
     uint32_t lvl_a;
-    PixRec *next;
     int32_t m_up0, run, bit, hit_a, idx_s;
     PixRec *cur6 = row_cur[6];
     PixRec *row = row_cur[5];
@@ -1321,8 +1338,7 @@ struct ModelBlock {
           pix_cur->last = (uint16_t)run_sym;
           const int32_t flags_word = row_cur[5]->match2345;
           const int32_t head_word = row_cur[5]->head4;
-          next = row_cur[5]+1;
-          row_cur[5] = next;
+          ++row_cur[5];
           // The records the run covers, each taking the symbol, head word and
           // flag word of the one before it.  The original unrolled this by two
           // and carried the odd one in a tail: a pair count in a third slot,
@@ -1333,15 +1349,8 @@ struct ModelBlock {
           //
           // Unsigned, as the tail's own comparison was; the guard above is
           // what keeps `fill` off zero.
-          const uint32_t fill = idx_s-hit_a-1;
-          for( uint32_t k = 0; k<fill; ++k ) {
-            pix_cur->prev = run_sym;
-            row_cur[5]->head4 = head_word;
-            row_cur[5]->match2345 = flags_word;
-            next = row_cur[5]+1;
-            row_cur[5] = next;
-          }
-          seed_after_run(next, run_sym);
+          fill_run(run_sym, head_word, flags_word, idx_s-hit_a-1);
+          seed_after_run(row_cur[5], run_sym);
           hit_a = hit;
         }
         if( hit_a )
@@ -1427,10 +1436,8 @@ struct ModelBlock {
     // pad, no other member, and nothing reading either.  `pixel_context`
     // indexes 0..31 and no further, so the pad held nothing back.
     alignas(16) int32_t nb_sym[32];
-    int32_t runlen_s;
     uint32_t done;
     int32_t m_up0, run, amap, runlen, lvl_a;
-    PixRec *cur5p1;
     PixRec* cur6c, * up2;
     PixRec* cur6 = row_cur[6];
     PixRec *cur5 = row_cur[5];
@@ -1480,24 +1487,9 @@ struct ModelBlock {
             // `run_left` and `amap` were saved into two slots of the
             // candidate table and read straight back below, across a walk that
             // touches neither -- register spills with names.
-            runlen_s = runlen;
-            uint32_t k = 0;
-            int16_t s8 = nb4.up;
-            do {
-              pix_cur->prev = s8;
-              row_cur[5]->head4 = rec_word;
-              row_cur[5]->match2345 = flag_word;
-              SymPair *pixp = pix_cur;
-              ++row_cur[5];
-              pixp->prev = s8;
-              row_cur[5]->head4 = rec_word;
-              row_cur[5]->match2345 = flag_word;
-              cur5p1 = row_cur[5]+1;
-              row_cur[5] = cur5p1;
-              ++k;
-            } while( k<half );
-            cur2 = cur5p1;
-            done = 2*k+1;
+            fill_run(nb4.up, rec_word, flag_word, 2*half);
+            cur2 = row_cur[5];
+            done = 2*half+1;
           } else {
             done = 1;
           }
@@ -1589,7 +1581,6 @@ struct ModelBlock {
       runlen = 0;
     }
     exclude_stage_one();
-    runlen_s = runlen;
     sel[0] = nullptr;
     // The same 32 candidates as `decode_pixel`'s, in slot order: 0 and 1 the
     // two most recent symbols at this context, 2..9 the move-to-front cache,
@@ -1597,12 +1588,12 @@ struct ModelBlock {
     // interleaved the stores with the loads and named every load.
     seed_candidates(nb_sym);
     if( offer_candidates<0>(nb_sym)>=0 )
-      return runlen_s+1;
+      return runlen+1;
     SymList **sel_p = load_selectors();
     while( 1 ) {
       if( (*sel_p)->live ) {
         if( (*sel_p)->code_symbol(row_cur[5]->sym) )
-          return runlen_s+1;
+          return runlen+1;
         sel_p = sel_cur;
       }
       sel_cur = ++sel_p;
