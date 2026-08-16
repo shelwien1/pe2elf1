@@ -86,7 +86,7 @@
 // table the reason for each is written out rather than left as a share.
 // `tools/pairshare.py` re-measures both and reports any line that has drifted.
 //
-//   code_pixel / decode_pixel                         55 of 455 (12%)
+//   code_pixel / decode_pixel                         28 of 328 (9%)
 //   predict_med / unpredict_med                        8 of 113 (7%)
 //
 // **`predict_med` walks backwards and `unpredict_med` forwards**, and that is
@@ -102,19 +102,28 @@
 // **`code_pixel` and `decode_pixel` diverge at the top and meet at the
 // bottom.**  The encoder knows the symbol and asks where it ranks; the decoder
 // asks the coder for a target and finds which rank holds it.  That is
-// `neighbour_rank` against `FreqRec::find_level`, and it decides the shape of
-// everything above it -- the encoder can test candidates in rank order and
+// `Neighbours::rank` against `FreqRec::find_level`, and it decides the shape
+// of everything above it -- the encoder can test candidates in rank order and
 // stop, the decoder cannot.  What they genuinely share is the context, and
 // that has been coming out by name for several rounds: `load_neighbours`,
 // `FreqRec::blend_from`, `ModelBlock::start_row`, `find_level`, `bump`,
-// `neighbour_rank`, `cum_below`, `code_against`/`decode_against`.
+// `cum_below`, `code_against`/`decode_against`, and now the whole opening as
+// `open_pixel` -- neighbours, match context, pair key, context state, symbol
+// pair and context id, twenty-eight lines that were written twice.
 //
 // Both have moved since they were first measured, and the same way: what the
 // two halves shared was never the algorithm, so naming it and calling it from
-// both leaves less behind, not more.  The two `*_pixel` bodies have lost 40%
-// of their length between them and went from 1044 lines to 455.  The
-// percentage barely moves because both halves shrink together, which is the
-// point: the shared part is scaffolding, and scaffolding is what comes out.
+// both leaves less behind, not more.  The two `*_pixel` bodies went from 1044
+// lines to 328, and the share with them -- 179 lines to 28.  The percentage
+// barely moves because both halves shrink together, which is the point: the
+// shared part is scaffolding, and scaffolding is what comes out.
+//
+// What kept the opening from being seen as one thing for nine rounds was four
+// values in two arbitrary sets of stack slots -- `nb_sym[8]`, `[10]`, `[6]`,
+// `[5]` in one body and `[0]`, `[1]`, `[3]`, `[2]` in the other.  Nothing was
+// wrong with either; they simply could not be compared.  Naming them
+// `Neighbours` made twenty-eight lines identical that had always been the same
+// lines.
 //
 // Every merge was gated on its own -- the seventeen streams byte for byte, at
 // both pointer widths -- and then instrumented and run over the corpus to

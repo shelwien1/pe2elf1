@@ -49,36 +49,44 @@ static int32_t match_seed_split(const PixRec* at) {
         +at[2].match[0]+at[3].match[0]+at[4].match[0]-5;
 }
 
-// Where a symbol sits among the four ranked neighbours the model keeps: 1..4
-// for the four, 0 -- the escape -- for anything else.  `nb_sym[8]`, `[10]`,
-// `[6]`, `[5]` is the rank order.  Three chains in `code_pixel` ran it, each
-// spelling the four literals of its own scale into the arms.
+// The four neighbours both pixel coders rank a symbol against, in rank order:
+// north, west, north-east, north-west.
 //
-// **That those four slots still hold the four neighbours is a measurement and
-// not an argument.**  `nb_sym` is 32 slots of the decompilation's stack and
-// `code_pixel` reuses eleven of them for a dozen unrelated values -- among
-// them `nb_sym[5] = run_bucket[nb_sym[4]]` and `nb_sym[6] = run_hit`, which
-// are two of the four this reads, written a hundred lines above the last call.
-// Whether those paths reach a call is not something the nesting makes plain.
+// They lived in the candidate array until this round -- `nb_sym[8]`, `[10]`,
+// `[6]`, `[5]` in the encoder and `[0]`, `[1]`, `[3]`, `[2]` in the decoder,
+// two arbitrary sets of slots for one set of values, which is why the two
+// coders' openings did not look alike and why a `rank` written against one set
+// could not be called from the other.
 //
-// Instrumented, every call checking all four against `mode_symbol[1..4]` --
-// which `code_pixel` and `decode_pixel` fill with the same four symbols in the
-// same order and never rewrite: **9,144,286 calls over three images, all four
-// slots intact in every one.**  So the rank order is what it says, and the
-// obvious tidy -- read `mode_symbol` here and drop the eight scratch stores --
-// would be behaviour-preserving over the corpus rather than by construction,
-// which is not the same thing and is why it is not made.
-static inline int32_t neighbour_rank(const int32_t* nb_sym, int32_t sym) {
-  if( sym==nb_sym[8] )
-    return 1;
-  if( sym==nb_sym[10] )
-    return 2;
-  if( sym==nb_sym[6] )
-    return 3;
-  if( sym==nb_sym[5] )
-    return 4;
-  return 0;
-}
+// The round that wrote `neighbour_rank` left this alone for a reason it
+// recorded: `code_pixel` was borrowing eleven of those slots for unrelated
+// values, two of them (`nb_sym[5] = run_bucket[nb_sym[4]]`, `nb_sym[6] =
+// run_hit`) among the four, so "the four slots still hold the four neighbours"
+// was a claim about paths rather than about the text, and it was settled by
+// instrumenting -- 9,144,286 calls over three images, all four intact.  The
+// round after that gave those eleven borrowed slots their own names, which
+// removed the hazard and left the note behind: **between the four stores and
+// the last read of them there is now no write to `nb_sym` at all in either
+// body.**  So the four are four locals, by construction, and the note was
+// describing a tree that no longer existed.
+struct Neighbours {
+  int32_t up, left, up_next, upleft;
+
+  // Where a symbol sits among them: 1..4 for the four, 0 -- the escape -- for
+  // anything else.  Five chains between the two coders ran this, each spelling
+  // the four literals of its own scale into the arms.
+  int32_t rank(int32_t sym) const {
+    if( sym==up )
+      return 1;
+    if( sym==left )
+      return 2;
+    if( sym==up_next )
+      return 3;
+    if( sym==upleft )
+      return 4;
+    return 0;
+  }
+};
 
 // The cumulative weight below a level, as the arms of those chains spell it.
 // Level 4 takes it as the total less the top weight rather than summing the
@@ -540,6 +548,109 @@ struct ModelBlock {
     for( int32_t k = 1; k<5; ++k )
       exclusion_mask[mode_symbol[k]] = gen;
     exclusion_mask[no_symbol] = gen;
+  }
+
+  // The four ranked neighbours of the pixel at the cursor, and the four
+  // `mode_symbol` slots that carry them for the rest of the pixel.  Both pixel
+  // coders open with exactly this; they spelled it with two different sets of
+  // `nb_sym` slots and so it did not read as one thing.
+  Neighbours rank_neighbours() {
+    const PixRec* up = row_cur[6];
+    const PixRec* west = row_cur[5];
+    const Neighbours n = { up->sym, west[-1].sym, up[1].sym, up[-1].sym };
+    mode_symbol[1] = n.up;
+    mode_symbol[2] = n.left;
+    mode_symbol[3] = n.up_next;
+    mode_symbol[4] = n.upleft;
+    return n;
+  }
+
+  // Six match flags of the four named neighbours, as six bits.
+  //
+  // The decoder folded two of the six into one `raw` term, `N.match[1] +
+  // 4*(NE == NW)`, which is the same word only because `match[1]` is 0 or 1 --
+  // and it is: the two places that write it write a comparison.
+  uint32_t match_context(const Neighbours& n, const PixRec* up,
+                         const PixRec* west) const {
+    return CtxIdx{}.bit<5>(west[-1].match[2]).bit<4>(west[-1].match[4])
+                   .bit<3>(up[1].match[1]).bit<2>(n.up_next==n.upleft)
+                   .bit<1>(west[-1].match[0]).bit<0>(up->match[1]);
+  }
+
+  // The key into the symbol-pair tables: the north neighbour's reverse-table
+  // entry less whichever of the other three first disagrees with it, and less
+  // the second neighbour west when all four agree.
+  //
+  // Both coders wrote this as a nest of three `if`s with the disagreements
+  // tested inside out, so the run of "first one that differs" was spelled
+  // backwards; one of them widened the table entry through an `int16_t` and
+  // the other through a `uint16_t`, which the cast at the end makes the same
+  // sixteen bits either way.
+  uint16_t pair_key(const Neighbours& n, const PixRec* west) const {
+    if( n.up!=n.left )
+      return (uint16_t)(sym_rev[n.up]-n.left);
+    if( n.up!=n.up_next )
+      return (uint16_t)(sym_rev[n.up]-n.up_next);
+    if( n.up!=n.upleft )
+      return (uint16_t)(sym_rev[n.up]-n.upleft);
+    return (uint16_t)(sym_rev[n.up]-west[-2].sym);
+  }
+
+  // Everything both pixel coders work out before they part: the four ranked
+  // neighbours, the six-bit match context, the pair key, the context state,
+  // the symbol pair, and the second-level context id -- with a third level
+  // lazily allocated under it when the alphabet is small enough to want one.
+  //
+  // The encoder then asks where a known symbol ranks and the decoder asks
+  // which rank holds a target.  *That* is where the two genuinely diverge, and
+  // everything above it was these twenty-eight lines written twice.  They did
+  // not read as one thing because the four neighbours sat in two arbitrary
+  // sets of scratch slots; once those became `Neighbours`, what was left
+  // between the two copies was three spellings -- a `bool` one of them tested
+  // twice, an extra name for `sig3`'s masked form in the other, and two of the
+  // six match bits folded into one `raw` term.
+  //
+  // `nb4` comes back by reference because both bodies rank against it again
+  // further down; everything else here is a member or is dead at the return.
+  int32_t open_pixel(Neighbours& nb4, const PixRec* up, const PixRec* west) {
+    nb4 = rank_neighbours();
+    const int32_t nb = match_context(nb4, up, west);
+    const int32_t key = pair_key(nb4, west);
+    sym_cache = &sym_ctr[8*key];
+    const int32_t state = ctx_state[nb];
+    ctx_state_seen = state;
+    SymPair*const pair = &group_ctr[state][key];
+    pix_cur = pair;
+    // The pair's two symbols ranked against the four neighbours, at fifteen
+    // and seventy-five to the rank.  Five chains between the two coders
+    // spelled the four literals of their own scale into the arms; one of them
+    // reached rank 4 through an `else` that sets 60 and then takes it back,
+    // and another through a `bool` it had finished with eighteen lines above.
+    const int32_t cap = 15*nb4.rank(pair->last)+75*nb4.rank(pair->prev);
+    int32_t id2 = context_ids(state, cap);
+    if( (int32_t)alphabet<32 ) {
+      // A third level under the second: four bits of the west neighbour's
+      // symbol beneath the id, with the id for that pair allocated the first
+      // time it is seen.  Past 53248 ids the four bits are forced to 15, which
+      // merges those sixteen contexts into one rather than allocating past the
+      // table.
+      int32_t id3_used = ctx_id3_used;
+      int32_t sig3 = CtxIdx{}.bits<0, 4>(nb4.left).raw(16*id2);
+      uint16_t* id3p = &ctx_id3[sig3];
+      id2 = *id3p;
+      if( id2==0xFFFF ) {
+        if( id3_used>53248 )
+          sig3 |= 0xF;
+        id3p = &ctx_id3[sig3];
+        id2 = *id3p;
+      }
+      if( id2>=id3_used ) {
+        *id3p = id3_used;
+        ++ctx_id3_used;
+        id2 = *id3p;
+      }
+    }
+    return id2;
   }
 
   void seed_candidates(int32_t* nb_sym) {
@@ -1106,92 +1217,14 @@ struct ModelBlock {
     alignas(16) int32_t nb_sym[32];
     int32_t idx_t;
     FreqRec* freq;
-    uint16_t* id3p;
     FreqRec* freq_tbl;
     uint32_t lvl_a;
     PixRec *next;
-    int32_t nb, key, cap, s1a, m_up0, run, bit, hit_a, idx_s;
-    PixRec *cur6 = (PixRec*)row_cur[6];
-    int32_t up_sym = cur6->sym;
+    int32_t m_up0, run, bit, hit_a, idx_s;
+    PixRec *cur6 = row_cur[6];
     PixRec *row = row_cur[5];
-    int32_t left_sym = row[-1].sym;
-    int32_t up_p1_sym = cur6[1].sym;
-    int32_t up_m1_sym = cur6[-1].sym;
-    nb_sym[0] = up_sym;
-    mode_symbol[1] = up_sym;
-    nb_sym[1] = left_sym;
-    mode_symbol[2] = left_sym;
-    nb_sym[3] = up_p1_sym;
-    mode_symbol[3] = up_p1_sym;
-    int32_t m_lo = cur6->match[1]+4*(up_p1_sym==up_m1_sym);
-    int32_t m_up = cur6[1].match[1];
-    nb_sym[2] = up_m1_sym;
-    mode_symbol[4] = up_m1_sym;
-    // Six match flags of the four named neighbours, as six bits.
-    nb = CtxIdx{}.bit<5>(row[-1].match[2]).bit<4>(row[-1].match[4])
-                 .bit<3>(m_up).bit<1>(row[-1].match[0]).raw(m_lo);
-    if( up_sym==left_sym ) {
-      if( nb_sym[3]==nb_sym[0] ) {
-        int16_t revtab = sym_rev[up_sym];
-        if( up_sym==nb_sym[2] )
-          key = (uint16_t)(revtab-row[-2].sym);
-        else
-          key = (uint16_t)(revtab-nb_sym[2]);
-      } else {
-        key = (uint16_t)(sym_rev[up_sym]-nb_sym[3]);
-      }
-    } else {
-      key = (uint16_t)(sym_rev[up_sym]-nb_sym[1]);
-    }
-    sym_cache = &sym_ctr[8*key];
-    int32_t state = ctx_state[nb];
-    ctx_state_seen = state;
-    SymPair *pair = &group_ctr[state][key];
-    pix_cur = pair;
-    int32_t pair_last = pair->last;
-    if( pair_last==nb_sym[0] ) {
-      cap = 15;
-    } else if( pair_last==nb_sym[1] ) {
-      cap = 30;
-    } else if( pair_last==nb_sym[3] ) {
-      cap = 45;
-    } else {
-      cap = 60;
-      if( !(pair_last==nb_sym[2]) )
-        cap = 0;
-    }
-    uint16_t pair_prev = pair->prev;
-    if( pair_prev==nb_sym[0] ) {
-      cap += 75;
-    } else if( pair_prev==nb_sym[1] ) {
-      cap += 150;
-    } else if( pair_prev==nb_sym[3] ) {
-      cap += 225;
-    } else if( pair_prev==nb_sym[2] ) {
-      cap += 300;
-    }
-    int32_t id2 = context_ids(state, cap);
-    if( (int32_t)alphabet<32 ) {
-      int32_t id3_used = ctx_id3_used;
-      // The encoder's half of this context is at `sig3` below, written the same
-      // way: a four-bit field of the symbol under a lazily allocated id.  It
-      // reuses `sym1`, which held the left neighbour's symbol until here.
-      const int32_t sig3 = CtxIdx{}.bits<0, 4>(nb_sym[1]).raw(16*id2);
-      id3p = &ctx_id3[sig3];
-      id2 = *id3p;
-      if( id2==0xFFFF ) {
-        s1a = sig3;
-        if( id3_used>53248 )
-          s1a = sig3|0xF;
-        id3p = &ctx_id3[s1a];
-        id2 = *id3p;
-      }
-      if( id2>=id3_used ) {
-        *id3p = id3_used;
-        ++ctx_id3_used;
-        id2 = *id3p;
-      }
-    }
+    Neighbours nb4;
+    int32_t id2 = open_pixel(nb4, cur6, row);
     if( row_cur[5][-1].match[1]&row_cur[5][-1].match[0] ) {
       PixRec *up1 = row_cur[6];
       PixRec *up2 = row_cur[7];
@@ -1204,7 +1237,7 @@ struct ModelBlock {
         int32_t esc_at = CtxIdx{}.raw(8*bucket)
                                  .bit<2>(up2[run+3].match[1]&up2[run+2].match[1])
                                  .bit<1>(m_up0)
-                                 .bit<0>(alpha_map[nb_sym[0]])
+                                 .bit<0>(alpha_map[nb4.up])
                                  .raw(1);
         bit = esc_ctr[esc_at].decode_context_bit(esc_ctr);
         int32_t msym1c = mode_symbol[1];
@@ -1387,72 +1420,14 @@ struct ModelBlock {
     alignas(16) int32_t nb_sym[32];
     int32_t runlen_s;
     uint32_t done;
-    uint16_t* id3p;
-    int32_t nb, key, cap, m_up0, run, amap, runlen, lvl_a;
+    int32_t m_up0, run, amap, runlen, lvl_a;
     PixRec *cur5p1;
     PixRec* cur6c, * up2;
-    PixRec* cur6 = (PixRec*)row_cur[6];
-    int32_t up_sym = cur6->sym;
+    PixRec* cur6 = row_cur[6];
     PixRec *cur5 = row_cur[5];
-    int32_t left_sym = cur5[-1].sym;
-    int32_t up_next_sym = cur6[1].sym;
-    int32_t upleft_sym = cur6[-1].sym;
-    nb_sym[8] = up_sym;
-    mode_symbol[1] = up_sym;
-    nb_sym[10] = left_sym;
-    mode_symbol[2] = left_sym;
-    nb_sym[6] = up_next_sym;
-    mode_symbol[3] = up_next_sym;
-    nb_sym[5] = upleft_sym;
-    mode_symbol[4] = upleft_sym;
-    // Six match flags of the four named neighbours, as six bits.
-    nb = CtxIdx{}.bit<5>(cur5[-1].match[2]).bit<4>(cur5[-1].match[4])
-                 .bit<3>(cur6[1].match[1]).bit<2>(up_next_sym==upleft_sym)
-                 .bit<1>(cur5[-1].match[0]).bit<0>(cur6->match[1]);
-    bool up_eq_west = up_sym==left_sym;
-    if( up_eq_west ) {
-      if( nb_sym[8]==nb_sym[6] ) {
-        uint16_t rev = sym_rev[nb_sym[8]];
-        if( nb_sym[8]==nb_sym[5] )
-          key = (uint16_t)(rev-cur5[-2].sym);
-        else
-          key = (uint16_t)(rev-nb_sym[5]);
-      } else {
-        key = (uint16_t)(sym_rev[nb_sym[8]]-nb_sym[6]);
-      }
-    } else {
-      key = (uint16_t)(sym_rev[nb_sym[8]]-nb_sym[10]);
-    }
-    sym_cache = &sym_ctr[8*key];
-    int32_t state = ctx_state[nb];
-    ctx_state_seen = state;
-    SymPair* pair = &group_ctr[state][key];
-    pix_cur = pair;
-    // The pair's two symbols ranked against the same four neighbours, at
-    // fifteen and seventy-five to the rank.  The first chain reached rank 4
-    // through `up_eq_west` -- a `bool` it had already used and finished with
-    // eighteen lines earlier -- and then tested it back.
-    cap = 15*neighbour_rank(nb_sym, pair->last)
-        +75*neighbour_rank(nb_sym, pair->prev);
+    Neighbours nb4;
+    int32_t id2 = open_pixel(nb4, cur6, cur5);
     PixRec *cur2 = cur5;
-    int32_t id2 = context_ids(state, cap);
-    if( (int32_t)alphabet<32 ) {
-      int32_t id3_used = ctx_id3_used;
-      int32_t sig3 = CtxIdx{}.bits<0, 4>(nb_sym[10]).raw(16*id2);
-      id3p = &ctx_id3[sig3];
-      id2 = *id3p;
-      if( id2==0xFFFF ) {
-        if( id3_used>53248 )
-          sig3 |= 0xFu;
-        id3p = &ctx_id3[sig3];
-        id2 = *id3p;
-      }
-      if( id2>=id3_used ) {
-        *id3p = id3_used;
-        ++ctx_id3_used;
-        id2 = *id3p;
-      }
-    }
     PixRec* row = row_cur[5];
     int32_t m_w1b = row[-1].match[1];
     int32_t m_w0 = row[-1].match[0];
@@ -1462,12 +1437,12 @@ struct ModelBlock {
       int32_t run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
       const int32_t bucket = run_bucket[run_len];
       amap = CtxIdx{}.bit<2>(run_pair).bit<1>(m_up0)
-                     .raw(8*bucket).raw(alpha_map[nb_sym[8]]);
+                     .raw(8*bucket).raw(alpha_map[nb4.up]);
       runlen = 0;
-      if( rowp->sym==nb_sym[8] ) {
+      if( rowp->sym==nb4.up ) {
         do
           ++runlen;
-        while( runlen<run_len&&rowp[runlen].sym==nb_sym[8] );
+        while( runlen<run_len&&rowp[runlen].sym==nb4.up );
       }
       const int32_t run_hit = runlen==run_len;
       if( runlen>run_hit ) {
@@ -1479,7 +1454,7 @@ struct ModelBlock {
         rowp->match2345 = 0x01010101;
         row_cur[5]->head4 = 0x01010101;
         pix_cur->prev = pix_cur->last;
-        uint16_t wp = nb_sym[8];
+        uint16_t wp = nb4.up;
         row_cur[5]->sym = wp;
         pix_cur->last = wp;
         PixRec *r3 = row_cur[5];
@@ -1498,7 +1473,7 @@ struct ModelBlock {
             // touches neither -- register spills with names.
             runlen_s = runlen;
             uint32_t k = 0;
-            int16_t s8 = nb_sym[8];
+            int16_t s8 = nb4.up;
             do {
               pix_cur->prev = s8;
               row_cur[5]->head4 = rec_word;
@@ -1519,7 +1494,7 @@ struct ModelBlock {
             done = 1;
           }
           if( (uint32_t)run_left>(done-1) ) {
-            pix_cur->prev = nb_sym[8];
+            pix_cur->prev = nb4.up;
             row_cur[5]->head4 = rec_word;
             row_cur[5]->match2345 = flag_word;
             PixRec *cur5p1b = row_cur[5]+1;
@@ -1533,7 +1508,7 @@ struct ModelBlock {
         grad[0] = match_seed_split(r4);
         grad[1] = match_seed(up3-3, 8);
         grad[2] = match_seed(cur2-4, 2, 1);
-        int32_t s8b = nb_sym[8];
+        int32_t s8b = nb4.up;
         grad[3] = match_seed(cur2-7, 4);
         cur2[-1].match[4] = s8b==r4[1].sym;
         row_cur[5][-1].match[5] = s8b==row_cur[6][2].sym;
@@ -1585,7 +1560,7 @@ struct ModelBlock {
       // record through `grid[bucket_idx].w`, cast to the union's other member,
       // so the two chains did not look like one.
       auto code_against = [&](FreqRec* rec) {
-        const int32_t lvl = neighbour_rank(nb_sym, rowp->sym);
+        const int32_t lvl = nb4.rank(rowp->sym);
         const int32_t cum = cum_below(rec->w, lvl);
         const uint32_t total = rec->w[5];
         // Before the bump, which is what moves `w[lvl]`.
