@@ -375,6 +375,9 @@ struct MRPC {
   PMod*  pmodels;
   int    num_pm;
   PMod*  pml[MAXC][MRP_GROUP];
+  // the same thing as a bare pointer: the inner loops were paying two
+  // dependent loads (pml -> PMod -> cost) for every pixel and component
+  const float* pmlc[MAXC][MRP_GROUP];
 
   cost_t class_cost[MRP_MAXCLASS];
   cost_t qtflag_cost[QT_DEPTH<<3];
@@ -668,9 +671,9 @@ struct MRPC {
           int gr = int(uq[cl][k][u]);
           pg[k]  = char(gr);
           int q  = Qprd( int(pr[k]) );
-          const PMod* pm = pml[k][gr] + (q & (NUM_SUBPM-1));
+          const float* cq = pmlc[k][gr] + (q & (NUM_SUBPM-1))*CSTRIDE;
           int base = q >> PM_ACC;
-          cost += pm->cost[base + int(p[k])] + pm->subcost[base];
+          cost += cq[base + int(p[k])] + cq[PMSIZE + base];
         }
         p += nc; pr += nc; pe += nc; pu += nc; pg += nc;
       }
@@ -843,8 +846,8 @@ struct MRPC {
           int q = Qprd( int(pr[k]) ), base = q>>PM_ACC, sub = q&(NUM_SUBPM-1);
           int v = base + int(p[k]);
           for( int gr=0; gr<MRP_GROUP; gr++ ) {
-            const PMod* pm = pml[k][gr] + sub;
-            CB(cl,k,gr)[u+1] += pm->cost[v] + pm->subcost[base];
+            const float* cq = pmlc[k][gr] + size_t(sub)*CSTRIDE;
+            CB(cl,k,gr)[u+1] += cq[v] + cq[PMSIZE+base];
           }
         }
       }
@@ -911,6 +914,7 @@ struct MRPC {
           if( pc2[k][g][i] < pc2[k][g][best] ) best = i;
         pm_idx[k][g] = best;
         pml[k][g] = pmodels + (size_t(g)*num_pm+best)*NUM_SUBPM;
+        pmlc[k][g] = pml[k][g]->cost;
         cost += pc2[k][g][best];
       }
     }
@@ -1129,14 +1133,14 @@ struct MRPC {
         const char* pg = grp + cpq[ci];
         int d1 = int(p[o1]), d2 = int(p[o2]);
         int pf0 = int(pr[k]) - (d1-d2)*(SR>>1) + d2*(SSR>>1);
-        const float* cb0 = pml[k][int(pg[k])]->cost;
+        const float* cb0 = pmlc[k][int(pg[k])];
         int v0 = int(p[k]);
         // the next pixel of this class lands in one of sixteen tables and
         // near the same base; ask for it, and for its pixel data, now
         if( ci+1<ce ) {
           const char* pgn = grp + cpq[ci+1];
           _mm_prefetch( (const char*)(org + cpo[ci+1]), _MM_HINT_T0 );
-          _mm_prefetch( (const char*)(pml[k][int(pgn[k])]->cost
+          _mm_prefetch( (const char*)(pmlc[k][int(pgn[k])]
                                       + ((MAXPRD-Clip(pf0))>>COEF_PREC) + v0),
                         _MM_HINT_T0 );
         }
@@ -1681,8 +1685,10 @@ struct Codec : MRPCIO {
   }
 
   void SetPmodels() {
-    for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ )
+    for( uint k=0; k<nc; k++ ) for( int g=0; g<MRP_GROUP; g++ ) {
       pml[k][g] = pmodels + (size_t(g)*num_pm + pm_idx[k][g])*NUM_SUBPM;
+      pmlc[k][g] = pml[k][g]->cost;
+    }
   }
 
   // --- component order ------------------------------------------

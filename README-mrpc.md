@@ -121,8 +121,8 @@ optimiser.
 
 | file | | raw | bmpc | **mrpc** | |
 |---|---|---|---|---|---|
-| t24.bmp | 320×240×24 | 230454 | **97984** | 100130 | +2.2% |
-| t32.bmp | 320×240×32 | 307254 | 115062 | **109353** | −5.0% |
+| t24.bmp | 320×240×24 | 230454 | **97984** | 99409 | +1.5% |
+| t32.bmp | 320×240×32 | 307254 | 115062 | **109186** | −5.1% |
 | x_ep.bmp | 705×800×32 | 2256054 | 340266 | **319318** | −6.2% |
 | t8g / t8p | 8bpp | 77878 | 46941 / 46589 | 53452 / 53385 | fallback |
 
@@ -138,8 +138,8 @@ while an adaptive coder has already converged and gets nothing more.
 
 | | bmpc enc | mrpc enc | bmpc dec | mrpc dec |
 |---|---|---|---|---|
-| t24 | 2.9 s | 36 s | 1.5 s | **0.06 s** |
-| x_ep | 23 s | 786 s | 9.2 s | **1 s** |
+| t24 | 2.9 s | 21 s | 1.5 s | **0.07 s** |
+| t32 | 9.8 s | 31 s | 2.1 s | **0.06 s** |
 
 Encoding is slower because the coefficient search visits every pixel of a
 class for each candidate pair, and the class search predicts every pixel
