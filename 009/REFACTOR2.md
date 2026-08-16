@@ -602,3 +602,15 @@ the same call — the second reached only by the `break` a zero-width image
 takes, where every arm's `row_w > 0` guard is false and the arm `nbytes`
 selects writes nothing either way. **42 jumps to 37, 27 labels to 26**, and the
 ratchet from 373 to 369.
+
+**And the 37 that are left are not `break`s or `continue`s.** `degoto.py`
+declines them per *label*, which is the right unit for a rewrite that moves a
+region but the wrong one for asking whether a single jump has a structured
+name — `next_opcode`'s five were declined together by an earlier round, on the
+measurement that substituting `continue` for all five "compiles, passes the
+corpus, and sends two of the five to the wrong loop", and that says nothing
+about the other three. Asked per jump — is this label the first statement of
+the immediately enclosing loop (`continue`), or the first thing after its
+closing brace (`break`)? — the answer over all 37 is zero. The measurement was
+run against a two-function probe containing one of each first, and named both;
+the zero on the tree is a zero the instrument could have broken.
