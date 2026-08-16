@@ -57,16 +57,95 @@ import re
 import sys
 
 
+# The labels this tree has.  This file looked for `LABEL_\d+` in five places,
+# which is the spelling Hex-Rays emits and the spelling every one of the 42
+# jumps here stopped using rounds ago -- so the headline read "0 candidates of
+# 0 gotos" and the denominator was the giveaway nobody read.  `shape.py`
+# records fixing exactly this in its own jump rows; this file did not get the
+# same fix.
+#
+# `default:` and the access specifiers are not jump targets and a `case` label
+# has a value rather than a name, so none of them can be named by a `goto`;
+# what keeps them out is that the rule below needs a `goto` naming the label.
+#
+# A label may carry a statement on its own line -- `keep_flag8: { ... }` is one
+# -- and requiring the colon to end the line reported that one as "no label of
+# that name" while the label sat eight lines below the `goto`.  A decline whose
+# reason is that the tool could not find something the file has is not a
+# decline.
+LABEL = r'[A-Za-z_]\w*'
+GOTO = r'\bgoto (%s);' % LABEL
+NOT_A_LABEL = ('default', 'public', 'private', 'protected')
+
+
+def fallthrough(lines):
+    """The gotos whose target is the next statement, so the jump does nothing.
+
+    A third shape, and the degenerate one: the region the other two rewrite is
+    empty here, and what replaces the `goto` is nothing at all.
+
+        if ( c ) { S; goto L; }       if ( c ) { S; }
+        L:                       ->   L:
+
+    Neither of the other two rules can see it.  Both need the label to have
+    this `goto` as its only predecessor, because both move the region the jump
+    skips; this one moves nothing, so how many other jumps reach the label
+    cannot matter.  `next_list` in `unmodel_plane_slow` has five and sat here
+    through every round.
+
+    What has to hold is that falling off the `goto` reaches the label: every
+    line between must be a `}` that closes a plain block, and no `else` may
+    follow one.  A `}` closing a loop or a `switch` sends control somewhere
+    else, and so does an `else`.
+    """
+    kind, stack = {}, []
+    for i, l in enumerate(lines):
+        s = l.split('//')[0]
+        head = ''
+        for ch in s:
+            if ch == '{':
+                stack.append(('loop' if re.search(r'\b(?:for|while)\s*\(\s*', head)
+                              or re.search(r'\bdo\b\s*$', head) else
+                              'switch' if re.search(r'\bswitch\s*\(', head) else
+                              'block'))
+                head = ''
+            elif ch == '}':
+                kind[i] = stack.pop() if stack else 'block'
+                head = ''
+            else:
+                head += ch
+    lab = {}
+    for i, l in enumerate(lines):
+        m = re.match(r'^(\s*)(%s):(?!:)' % LABEL, l)
+        if m and m.group(2) not in NOT_A_LABEL:
+            lab[m.group(2)] = i
+    out = []
+    for i, l in enumerate(lines):
+        m = re.search(GOTO, l.split('//')[0])
+        if not m or l.split('//')[0].strip() != m.group(0):
+            continue
+        j = lab.get(m.group(1))
+        if j is None or j <= i:
+            continue
+        if all(lines[k].split('//')[0].strip() in ('', '}')
+               and (lines[k].split('//')[0].strip() != '}' or kind.get(k) == 'block')
+               for k in range(i + 1, j)):
+            out.append((i, m.group(1)))
+    return out
+
+
 def analyse(lines, why=None):
     lab = {}
     for i, l in enumerate(lines):
-        m = re.match(r'^(\s*)(LABEL_\d+):\s*$', l)
+        m = re.match(r'^(\s*)(%s):(?!:)' % LABEL, l)
+        if m and m.group(2) in NOT_A_LABEL:
+            m = None
         if m:
             lab[m.group(2)] = i
     gotos = {}
     for i, l in enumerate(lines):
         # Comments explain jumps that are no longer there; only code has them.
-        m = re.search(r'goto (LABEL_\d+);', l.split('//')[0])
+        m = re.search(GOTO, l.split('//')[0])
         if m:
             gotos.setdefault(m.group(1), []).append(i)
 
@@ -104,7 +183,8 @@ def analyse(lines, why=None):
                           'statements', n)
                 continue
             inner = [m2.group(1) for l2 in region
-                     for m2 in [re.match(r'^\s*(LABEL_\d+):', l2)] if m2]
+                     for m2 in [re.match(r'^\s*(%s):(?!:)' % LABEL, l2)] if m2
+                     and m2.group(1) not in NOT_A_LABEL]
             if any(any(k < i or k > j for k in gotos.get(x, [])) for x in inner):
                 note(why, 'something else enters the region it skips', n)
                 continue
@@ -118,7 +198,8 @@ def analyse(lines, why=None):
                  'the region it skips is not one run of statements', n)
             continue
         inner = [m2.group(1) for l2 in region
-                 for m2 in [re.match(r'^\s*(LABEL_\d+):', l2)] if m2]
+                 for m2 in [re.match(r'^\s*(%s):(?!:)' % LABEL, l2)] if m2
+                     and m2.group(1) not in NOT_A_LABEL]
         if any(any(k < i or k > j for k in gotos.get(x, [])) for x in inner):
             note(why, 'something else enters the region it skips', n)
             continue
@@ -248,7 +329,7 @@ def main():
         print('%d labels rejected, %d gotos in the file'
               % (sum(len(v) for v in why.values()),
                  sum(1 for l in lines
-                     if re.search(r'goto LABEL_\d+;', l.split('//')[0]))))
+                     if re.search(GOTO, l.split('//')[0]))))
         return 0
 
     cands = analyse(lines)
@@ -258,8 +339,13 @@ def main():
             print('%3d  line %-6d %-10s %3d lines   %s if ( %s )'
                   % (k, head + 1, n, j - (close or i) - 1,
                      'else on' if close else 'invert', cond[:40]))
-        print('%d candidates of %d gotos' % (len(cands), sum(
-            1 for l in lines if re.search(r'goto LABEL_\d+;', l.split('//')[0]))))
+        for i, n in fallthrough(lines):
+            print('  -  line %-6d %-10s   the label is the next statement'
+                  % (i + 1, n))
+        print('%d candidates of %d gotos, %d of them a jump to the next '
+              'statement' % (len(cands), sum(
+                  1 for l in lines if re.search(GOTO, l.split('//')[0])),
+                  len(fallthrough(lines))))
         return
 
     k = int(sys.argv[sys.argv.index('--apply') + 1]) - 1

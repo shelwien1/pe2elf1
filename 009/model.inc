@@ -505,12 +505,85 @@ struct ModelBlock {
     }
   }
 
+  // One decoded row written out, at whatever width the stream is: four arms
+  // chosen by `nbytes` and then, for the narrowest, by `depth`.  Answers where
+  // the next row starts.
+  //
+  // The decompilation reached the arms with `goto list_ready` out of the row
+  // loop and four `goto next_list` back into it, and the two places that write
+  // a row are the two calls below -- the second reached only by the `break`
+  // that a zero-width image takes, where every arm's `row_w > 0` guard is
+  // false and the whole of it is a no-op.  That is why both sites can be the
+  // same call: the arm `nbytes` selects there writes nothing either way.
+  //
+  // `row_w` is the guard the four carried and it is kept rather than dropped.
+  // It is `width` re-read after the pixel loop, so on every path that decodes
+  // anything it is `width` and non-zero; on the one path where it is zero it
+  // is what makes this do nothing.
+  uint8_t* write_row(uint8_t* out_at, uint32_t nbytes, uint32_t row_w) {
+    if( row_w<=0 )
+      return out_at;
+    if( nbytes==4 ) {
+      uint32_t *out32 = (uint32_t*)out_at;
+      int32_t y2 = 0;
+      do
+        *out32++ = sym_code[row_cur[0][y2+++8].sym];
+      while( (uint32_t)y2<width );
+      return (uint8_t*)out32;
+    }
+    if( nbytes==3 ) {
+      SymEntry *out_ent = (SymEntry*)out_at;
+      int32_t step = 0;
+      do {
+        uint32_t *x6 = sym_code;
+        int32_t x7 = row_cur[0][step+8].sym;
+        out_ent->set((uint16_t)x6[x7], (uint8_t)(x6[x7]>>16));
+        ++step;
+        ++out_ent;
+      } while( (uint32_t)step<width );
+      return (uint8_t*)out_ent;
+    }
+    if( nbytes==2 ) {
+      uint16_t *out16 = (uint16_t*)out_at;
+      int32_t x3 = 0;
+      do
+        *out16++ = sym_code[row_cur[0][x3+++8].sym];
+      while( (uint32_t)x3<width );
+      return (uint8_t*)out16;
+    }
+    if( depth==8 ) {
+      uint8_t *out8 = out_at;
+      int32_t x5 = 0;
+      do
+        *out8++ = (uint8_t)sym_code[row_cur[0][x5+++8].sym];
+      while( (uint32_t)x5<width );
+      return out8;
+    }
+    // Sub-byte depths, packed high bits first.  `out_bits` starts one byte
+    // *before* the row and the first symbol's `bits < 0` moves it on, which is
+    // why the pre-increment is on the store and not on the cursor.
+    int32_t x4 = 0, bits = 0;
+    uint8_t *out_bits = out_at;
+    do {
+      int32_t bpp = depth;
+      bits -= bpp;
+      if( bits<0 ) {
+        bits = 8-bpp;
+        *++out_bits = sym_code[row_cur[0][x4+8].sym]<<((8-bpp)&31);
+      } else {
+        *out_bits |= sym_code[row_cur[0][x4+8].sym]<<(bits&31);
+      }
+      ++x4;
+    } while( (uint32_t)x4<width );
+    return out_bits;
+  }
+
   void unmodel_plane_slow(uint8_t* dst) {
     uint8_t* row[19];
     uint32_t row_w;
     uint8_t *out_at, *expand_buf;
     int32_t g0, done, lo1;
-    int32_t lo, w2, w4, w2n, lvl_n, bucket, x2, bits, n_pix, q2, n_pix2;
+    int32_t lo, w2, w4, w2n, lvl_n, bucket, x2, n_pix, q2, n_pix2;
     PixRec* lists, * t;
       uint8_t *dst_base = &dst[-(depth<8)];
     rc_begin_decode();
@@ -641,17 +714,7 @@ struct ModelBlock {
           row_w = width;
           x2 += y;
         } while( (uint32_t)x2<width );
-        if( nbytes!=4 )
-          goto list_ready;
-        if( row_w>0 ) {
-          uint32_t *out32 = (uint32_t*)out_at;
-          int32_t y2 = 0;
-          do
-            *out32++ = sym_code[row_cur[0][y2+++8].sym];
-          while( (uint32_t)y2<width );
-          out_at = (uint8_t*)out32;
-          goto next_list;
-        }
+        out_at = write_row(out_at, nbytes, row_w);
   next_list:
         bucket = bucket+1;
         // `height` is `int32_t` and this side is already `uint32_t`, so C
@@ -659,61 +722,7 @@ struct ModelBlock {
         if( (uint32_t)bucket>=(uint32_t)height )
           goto list_done;
       }
-      if( nbytes==4 )
-        goto next_list;
-  list_ready:
-      if( nbytes==3 ) {
-        if( row_w>0 ) {
-          SymEntry *out_ent = (SymEntry*)out_at;
-          int32_t step = 0;
-          do {
-            uint32_t *x6 = sym_code;
-            int32_t x7 = row_cur[0][step+8].sym;
-            out_ent->set((uint16_t)x6[x7], (uint8_t)(x6[x7]>>16));
-            ++step;
-            ++out_ent;
-          } while( (uint32_t)step<width );
-          out_at = (uint8_t*)out_ent;
-        }
-        goto next_list;
-      }
-      if( nbytes!=2 ) {
-        if( depth==8 ) {
-          if( row_w>0 ) {
-            uint8_t *out8 = out_at;
-            int32_t x5 = 0;
-            do
-              *out8++ = (uint8_t)sym_code[row_cur[0][x5+++8].sym];
-            while( (uint32_t)x5<width );
-            out_at = out8;
-          }
-        } else if( row_w>0 ) {
-          int32_t x4 = 0;
-          bits = 0;
-          uint8_t *out_bits = out_at;
-          do {
-            int32_t bpp = depth;
-            bits -= bpp;
-            if( bits<0 ) {
-              bits = 8-bpp;
-              *++out_bits = sym_code[row_cur[0][x4+8].sym]<<((8-bpp)&31);
-            } else {
-              *out_bits |= sym_code[row_cur[0][x4+8].sym]<<(bits&31);
-            }
-            ++x4;
-          } while( (uint32_t)x4<width );
-          out_at = out_bits;
-        }
-        goto next_list;
-      }
-      if( row_w>0 ) {
-        uint16_t *out16 = (uint16_t*)out_at;
-        int32_t x3 = 0;
-        do
-          *out16++ = sym_code[row_cur[0][x3+++8].sym];
-        while( (uint32_t)x3<width );
-        out_at = (uint8_t*)out16;
-      }
+      out_at = write_row(out_at, nbytes, row_w);
       goto next_list;
     }
   list_done:

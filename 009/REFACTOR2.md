@@ -561,3 +561,44 @@ declarations and left `blkA` in the text with nothing declaring it. Each `dst`
 is assigned exactly once, so following `dst -> src` to its root terminates;
 that is what it does now. The report had been right about the chain all along,
 which is why only running the transform caught it.
+
+---
+
+## The gotos, asked with a working denominator
+
+`shape.py` counts 42 jumps and `degoto.py` reported **"0 candidates of 0
+gotos"**. The denominator was the giveaway: it looked for `goto LABEL_n;` in
+five places, the spelling Hex-Rays emits and the spelling every jump in this
+tree stopped using rounds ago. `shape.py` records fixing exactly this in its own
+jump rows — "a row that can only ever count something the tree no longer has is
+a row that reports the rename rather than the jumps" — and `degoto.py` never
+got the same fix. Its zero was a zero about zero jumps.
+
+Pointed at the labels the tree has, it declines 26 with reasons: 17 where the
+`goto` is not the whole of an `if`, 6 where more than one `goto` reaches the
+label, 3 backward. One of the 26 was `keep_flag8`, declined as "no label of
+that name" while the label sat eight lines below the jump — the pattern
+required the colon to end the line and that one carries a statement. A decline
+whose reason is that the tool could not find something the file has is not a
+decline.
+
+**A third shape, which neither of the other two can see.** Both existing rules
+need the label to have the jump as its only predecessor, because both *move*
+the region the jump skips. A `goto` whose target is the next statement moves
+nothing, so how many other jumps reach the label cannot matter:
+
+```
+if ( c ) { S; goto L; }        if ( c ) { S; }
+L:                        ->   L:
+```
+
+`next_list` in `unmodel_plane_slow` had five predecessors and one of its five
+jumps was this. It is gone.
+
+**Then the loop it was in.** Four arms wrote a decoded row out at four widths,
+reached by `goto list_ready` out of the row loop and four `goto next_list` back
+into it. They are one `write_row` now, and *both* places that write a row are
+the same call — the second reached only by the `break` a zero-width image
+takes, where every arm's `row_w > 0` guard is false and the arm `nbytes`
+selects writes nothing either way. **42 jumps to 37, 27 labels to 26**, and the
+ratchet from 373 to 369.
