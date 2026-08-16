@@ -28,41 +28,41 @@ static int32_t widest_window(const int32_t* hist, int32_t first, int32_t end,
   return at;
 }
 
-// The two-weight search for one plane pair: `w4` and `w8` are the best pair
-// found so far and `cost` what a full pass over the image says it costs.
+// The two-weight search for one plane pair: `w` is the best pair found so far
+// and `cost` what a full pass over the image says it costs.
 //
-// A trial replaces one axis with `cand`, leaving the other where it stands,
-// and keeps the replacement only when it is cheaper.  It answers that axis's
-// bound, recentred `step` away from whatever is now current; `step` is
-// negative on the descending half.
-//
-// Four arms wrote this out.  Each spelled the incumbent into a name of its own
-// -- `wt4_best`, `wt8_best`, `wt4_best_dn`, `wt8_best_dn` -- assigned it back
-// one line later, and recomputed the bound from that name rather than from the
-// weight, so the four did not read as one thing.
+// The two are the descriptor's `weight0` and `weight1`, which is what they are
+// on the wire.  They were `w4` and `w8` here, after the stack slots the
+// recovery had them in, and that made the axis part of the name rather than an
+// index -- which is why everything below was written twice.
 struct WeightSearch {
   const BmfImage* img;
   const uint8_t* plane0;
   int32_t plane_a, plane_b;
-  int32_t w4, w8;
+  int32_t w[2];
   uint32_t cost;
 
-  int32_t trial_a(int32_t cand, int32_t step) {
-    const uint32_t c = weight_pair_cost(img, plane0, plane_a, plane_b, cand, w8);
+  // A trial replaces one axis with `cand`, leaving the other where it stands,
+  // and keeps the replacement only when it is cheaper.  It answers that axis's
+  // bound, recentred `step` away from whatever is now current; `step` is
+  // negative on the descending half.
+  //
+  // Four arms wrote this out.  Each spelled the incumbent into a name of its
+  // own -- `wt4_best`, `wt8_best`, `wt4_best_dn`, `wt8_best_dn` -- assigned it
+  // back one line later, and recomputed the bound from that name rather than
+  // from the weight, so the four did not read as one thing.  A round after
+  // that made them two methods, one per axis, which is the same six lines
+  // twice.
+  int32_t trial(int32_t axis, int32_t cand, int32_t step) {
+    int32_t pair[2] = { w[0], w[1] };
+    pair[axis] = cand;
+    const uint32_t c = weight_pair_cost(img, plane0, plane_a, plane_b,
+                                        pair[0], pair[1]);
     if( c<cost ) {
       cost = c;
-      w4 = cand;
+      w[axis] = cand;
     }
-    return w4+step;
-  }
-
-  int32_t trial_b(int32_t cand, int32_t step) {
-    const uint32_t c = weight_pair_cost(img, plane0, plane_a, plane_b, w4, cand);
-    if( c<cost ) {
-      cost = c;
-      w8 = cand;
-    }
-    return w8+step;
+    return w[axis]+step;
   }
 
   // One direction of the descent.  Both axes walk away from the current best
@@ -74,19 +74,19 @@ struct WeightSearch {
   // nested inside the first's loop and leaving it by a `goto` to a label past
   // the bottom of both.  The two differ in the sign of the walk, the sense of
   // the two comparisons, and which end of [-64, 191] the weight is held
-  // against -- all three of which are `dir`.
+  // against -- all three of which are `dir`.  What was left after that was the
+  // per-axis half written twice, which is the `for` below.
   void descend(int32_t step, int32_t dir) {
-    int32_t a = w4+dir, b = w8+dir;
-    int32_t a_end = w4+dir*step, b_end = w8+dir*step;
+    int32_t at[2] = { w[0]+dir, w[1]+dir };
+    int32_t end[2] = { w[0]+dir*step, w[1]+dir*step };
     while( 1 ) {
-      if( dir*a>=dir*a_end&&dir*b>=dir*b_end )
+      if( dir*at[0]>=dir*end[0]&&dir*at[1]>=dir*end[1] )
         return;
-      if( dir*a<dir*a_end&&(dir<0 ? a>=-64 : a<192) )
-        a_end = trial_a(a, dir*step);
-      if( dir*b<dir*b_end&&(dir<0 ? b>=-64 : b<192) )
-        b_end = trial_b(b, dir*step);
-      a += dir;
-      b += dir;
+      for( int32_t k = 0; k<2; ++k )
+        if( dir*at[k]<dir*end[k]&&(dir<0 ? at[k]>=-64 : at[k]<192) )
+          end[k] = trial(k, at[k], dir*step);
+      at[0] += dir;
+      at[1] += dir;
     }
   }
 };
@@ -215,13 +215,13 @@ int32_t choose_plane_coding(BmfImage* img) {
       // never changes under them.
       {
         const uint8_t *plane0 = &img->pixels[xform];
-        WeightSearch search = { img, plane0, plane_a, plane_b, wt4, wt8,
+        WeightSearch search = { img, plane0, plane_a, plane_b, { wt4, wt8 },
                                 best_cost };
         int32_t wt_step = 4;
         search.descend(wt_step, -1);
         search.descend(wt_step, +1);
-        wt8 = search.w8;
-        wt4 = search.w4;
+        wt8 = search.w[1];
+        wt4 = search.w[0];
         best_cost = search.cost;
       }
       uint8_t *px = &img->pixels[row_stride+n_planes+xform];

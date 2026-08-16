@@ -45,7 +45,7 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 51 now.  The p2
+start here.**  1031 lines of copy when this was written and 48 now.  The p2
 coders' prologue and epilogue used to be the largest groups and are gone: that
 pair merged, and so did four more, so `pairshare.py`'s declined table is down
 to two rows.
@@ -86,7 +86,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 51
+BUDGET = 48
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.
