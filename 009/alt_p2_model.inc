@@ -67,6 +67,33 @@ void AltP2Block::code_banks(int32_t sample16) {
             enode0m1a = res2-p2_pred(wnode0m1a, (uint8_t)node0[-1].rate);
             node0[-1].weighted = (int16_t)wnode0m1a+((32*((enode0m1a>deadzone_hi)-(uint32_t)(enode0m1a<deadzone_lo))+enode0m1a+2)>>2);
           }
+          // Three update blocks follow, one per branch, and each walks these
+          // eleven bits in order doing four or five things to each: bump the
+          // direct counter at shift 2, the rotated one at 3, nudge the record
+          // after the direct one, bump the record before it, and bump the
+          // mirrored one with the residual negated.  Which of the five, and at
+          // which bit, is the whole of what separates the three.
+          //
+          // **They are not rolled into loops, and that is a decision rather
+          // than an omission.**  Every one of the three has exceptions -- at
+          // k = 0, 4, 9 and 10 -- and they are not decoration:
+          //
+          //   * k = 0's nudge and k = 4's and k = 9's mirror bumps are written
+          //     longhand at some of the sites, because they are partial stores
+          //     or subtract into the residual variable itself;
+          //   * k = 9 in the third block uses `res_t`, a *different* residual
+          //     from the other ten;
+          //   * k = 10's mirror bump straddles the join of two arms and
+          //     happens once, after them.
+          //
+          // A loop would carry four `if( k == … )` arms, and -- the reason
+          // that settles it -- hoisting the longhand cases out of their place
+          // in the sequence reorders counter updates against each other.
+          // `direct`, `mirror` and `rot` are all indices into one bank and can
+          // name the same record for different k, and every update reads
+          // before it writes, so the order is not free.  The indices above are
+          // what makes the shape readable; rolling it is what would make it
+          // wrong.
           P2Count* bankp = &p2_ctr[32768*bank];
           res_c = res2;
           // The eleven context bits this counter bank tracks, and the three

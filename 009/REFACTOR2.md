@@ -424,3 +424,51 @@ that stood against this phase is gone, because the reason for it was.
 Gated at every step: 110 checks over 17 images, ASan clean over 44 runs, x32
 23 of 23, 400 fuzz mutants with nothing reported, the header scan, `BMF_WARN`
 at zero, and the sweep at zero.
+
+---
+
+## The round after: what asking the same question differently found
+
+The plan above ended with every tool in `tools/` at zero, which is where a
+round is supposed to end. The question that reopened it was not a new class —
+it was **phase 3's question with the identifiers normalised away**:
+
+```
+duplicated blocks, identical text        0
+duplicated runs, modulo renaming       108   →  ~100
+lines that are a copy                 1031   →   626
+```
+
+A decompiler names a temporary after the register it landed in, so two copies
+of one idea are almost never spelled the same way twice, and phase 3's scan —
+six or more *identical* lines — could not see any of it. `tools/dupblock.py`
+asks with the names taken out and holds the answer as a ratchet, because this
+class cannot reach zero: an encoder and its decoder share scaffolding whatever
+you do to them.
+
+Fifteen things came out of it, and each was a named idea that had no name:
+`AltP2Block::start_row`, `seed_history`, `seed_row0`, `encode_sample`,
+`decode_sample`, `nlms_step`; `ModelBlock::start_row`, `load_neighbours`,
+`init_symbol_lists`, `load_selectors`, `match_seed`; `FreqRec::resum`,
+`blend_from`, `find_level`, `bump`; `AltP1Block::seed_activity`,
+`record_sample`; `weight_pair_cost`, `residual_bin`, `over_thresholds`,
+`plane_transform`, `transform_cost`, `save_descriptors`. `code_pixel` and
+`decode_pixel` lost 40% of their length between them; `alt_p2_model` went from
+326 lines to 184; the unit went from 11,321 to 10,473.
+
+**Three of the gates were counting the wrong thing, and all three had been
+green for rounds.** That is the more useful finding:
+
+* `sweep.sh` tested for a zero *anywhere* on a tool's line, so `pairshare.py`
+  answering "1 of 5 declined pairs have drifted, 0 named but not found" passed
+  on the `0` eleven words later.
+* `BMF_WARN=1 ./build.sh` printed the count of lines matching `': warning: '`,
+  and an error is not a warning — so a build that did not compile answered `0`.
+* `proven.sh`, the meta-gate whose whole job is asking whether these zeros can
+  move at all, replayed `subs1.hpp`. The tree stopped being one file a long
+  time ago; every run has ended on `no history for subs1.hpp` and exit 2.
+
+All three are fixed and each was proved able to fail on a probe copy. The
+lesson is the one the tools directory was already built on and had stopped
+applying to itself: **a zero is a claim about the instrument as much as about
+the tree.**
