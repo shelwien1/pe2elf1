@@ -64,6 +64,31 @@ struct WeightSearch {
     }
     return w8+step;
   }
+
+  // One direction of the descent.  Both axes walk away from the current best
+  // by `dir`, each until it has gone `step` past the last position that
+  // improved; a trial that wins pushes its axis's bound out again, so an axis
+  // keeps going as long as it keeps improving.  Returns when neither has room.
+  //
+  // This was written out twice, once per direction, with the second copy
+  // nested inside the first's loop and leaving it by a `goto` to a label past
+  // the bottom of both.  The two differ in the sign of the walk, the sense of
+  // the two comparisons, and which end of [-64, 191] the weight is held
+  // against -- all three of which are `dir`.
+  void descend(int32_t step, int32_t dir) {
+    int32_t a = w4+dir, b = w8+dir;
+    int32_t a_end = w4+dir*step, b_end = w8+dir*step;
+    while( 1 ) {
+      if( dir*a>=dir*a_end&&dir*b>=dir*b_end )
+        return;
+      if( dir*a<dir*a_end&&(dir<0 ? a>=-64 : a<192) )
+        a_end = trial_a(a, dir*step);
+      if( dir*b<dir*b_end&&(dir<0 ? b>=-64 : b<192) )
+        b_end = trial_b(b, dir*step);
+      a += dir;
+      b += dir;
+    }
+  }
 };
 
 int32_t choose_plane_coding(BmfImage* img) {
@@ -193,41 +218,12 @@ int32_t choose_plane_coding(BmfImage* img) {
         WeightSearch search = { img, plane0, plane_a, plane_b, wt4, wt8,
                                 best_cost };
         int32_t wt_step = 4;
-        int32_t wt4_dn = wt4-1;
-        int32_t wt8_dn = wt8-1;
-        int32_t wt4_dn_end = wt4-wt_step;
-        int32_t wt8_dn_end = wt8-wt_step;
-        while( 1 ) {
-          // Both axes out of room going down: turn round and go up.
-          if( wt4_dn<=wt4_dn_end&&wt8_dn<=wt8_dn_end ) {
-            int32_t wt4_up = search.w4+1;
-            int32_t wt8_up = search.w8+1;
-            int32_t wt4_up_end = search.w4+wt_step;
-            int32_t wt8_up_end = search.w8+wt_step;
-            while( 1 ) {
-              if( wt4_up>=wt4_up_end&&wt8_up>=wt8_up_end ) {
-                wt8 = search.w8;
-                wt4 = search.w4;
-                best_cost = search.cost;
-                goto weights_chosen;
-              }
-              if( wt4_up<wt4_up_end&&wt4_up<192 )
-                wt4_up_end = search.trial_a(wt4_up, wt_step);
-              if( wt8_up<wt8_up_end&&wt8_up<192 )
-                wt8_up_end = search.trial_b(wt8_up, wt_step);
-              ++wt4_up;
-              ++wt8_up;
-            }
-          }
-          if( wt4_dn>wt4_dn_end&&wt4_dn>=-64 )
-            wt4_dn_end = search.trial_a(wt4_dn, -wt_step);
-          if( wt8_dn>wt8_dn_end&&wt8_dn>=-64 )
-            wt8_dn_end = search.trial_b(wt8_dn, -wt_step);
-          --wt4_dn;
-          --wt8_dn;
-        }
+        search.descend(wt_step, -1);
+        search.descend(wt_step, +1);
+        wt8 = search.w8;
+        wt4 = search.w4;
+        best_cost = search.cost;
       }
-weights_chosen:
       uint8_t *px = &img->pixels[row_stride+n_planes+xform];
       if( px<data_end ) {
         // `wt8` and `wt4` were copied into two more locals for this walk and

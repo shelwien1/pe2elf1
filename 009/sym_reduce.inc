@@ -131,6 +131,44 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
   }
 }
 
+// Find `val` in the tree, hanging a new leaf off the side the walk fell out
+// of when it is not there.  Returns the node holding `val` afterwards, or -1
+// when that insert took the alphabet past the 0x2000 the tree gives up at.
+//
+// This was the deepest thing in the file: a `while( 1 )` inside an `if` inside
+// an `if` inside a `while( 1 )`, with a `goto` out of the middle of it to a
+// label six lines below the outer loop's bottom.  The jump and the label are
+// the same statement said twice -- "the node for `val` is settled, go record
+// it" -- which is what a return is.
+//
+// `mode_symbol[1]` is the side the leaf was hung on, and it is read by the
+// caller's caller rather than here, so it stays a global write.
+static int32_t tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
+  int32_t node = 0, side;
+  uint16_t* kidp;
+  while( 1 ) {
+    side = tree[node].val<val;
+    kidp = tree[node].kid;
+    node = kidp[side];
+    if( !node )
+      break;
+    if( val==tree[node].val ) {
+      mode_symbol[1] = side;
+      return node;
+    }
+  }
+  int32_t alphabet = blk->alphabet;
+  mode_symbol[1] = side;
+  node = (uint16_t)alphabet;
+  int32_t alpha = alphabet+1;
+  kidp[side] = node;
+  blk->alphabet = alpha;
+  if( alpha>0x2000 )
+    return -1;
+  tree[node].val = val;
+  return node;
+}
+
 // The wide arm: symbols too big for a flag table, so the distinct values go
 // into a binary search tree and the image is renumbered through it.
 //
@@ -152,9 +190,8 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   // components, so nothing past `out[5]` is ever touched.
   uint8_t* out[19];
   uint32_t alpha_n, done;
-  int32_t node, side, alpha_m, carry;
+  int32_t node, alpha_m, carry;
   uint32_t si_end, word, k;
-  uint16_t* kidp;
   uint8_t *rp;
   uint32_t sym_bits = blk->depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
@@ -177,32 +214,13 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
         if( val!=tree[node].val ) {
           node = 0;
           if( val!=tree[0].val ) {
-            while( 1 ) {
-              side = tree[node].val<val;
-              kidp = tree[node].kid;
-              node = kidp[side];
-              if( !node )
-                break;
-              if( val==tree[node].val ) {
-                mode_symbol[1] = side;
-                goto code_dense;
-              }
-            }
-            int32_t alphabet = blk->alphabet;
-            mode_symbol[1] = side;
-            node = (uint16_t)alphabet;
-            int32_t alpha = alphabet+1;
-            kidp[side] = node;
-            blk->alphabet = alpha;
-            if( alpha>0x2000 ) {
-              alpha_n = alpha;
+            node = tree_place(tree, blk, val);
+            if( node<0 ) {
+              alpha_n = blk->alphabet;
               goto alphabet_done;
             }
-            tree[node].val = val;
           }
         }
-// The alphabet is dense enough to code as a run of flags.
-code_dense:
         blk->sym_word[written++] = node;
         if( written>=(uint32_t)(blk->height*blk->width) ) {
           alpha_n = blk->alphabet;
