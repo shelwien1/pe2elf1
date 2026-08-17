@@ -10,6 +10,9 @@ usage: dff2dsf d input.dff output.dsf
   d   decode: DST coded or raw DSD in a .dff, written as a .dsf
   c   compress: DSD in a .dsf, written as a DST coded .dff
 
+  --threads N   encode N frames at a time (default 1, 'auto' for one
+                per core); the output does not depend on the count
+
 options, which select the optional chunks of a written .dff:
   --disable-DSTI   frame index, 12 bytes per frame, for seeking
   --disable-COMT   comment naming the encoder, with a timestamp
@@ -22,7 +25,7 @@ options, which select the optional chunks of a written .dff:
 
 ```
 make                     # or, with no build system at all:
-c++ -O2 -std=c++20 -mavx2 src/dff2dsf.cpp -o dff2dsf
+c++ -O2 -std=c++20 -mavx2 -pthread src/dff2dsf.cpp -o dff2dsf
 
 make windows             # cross build with mingw-w64
 ```
@@ -36,7 +39,9 @@ The whole program is a single translation unit: `src/dff2dsf.cpp` includes the
 `.hpp` files, which are the implementation, so there is nothing to link.
 
 C++20, no dependencies. Built with `-fno-exceptions -fno-rtti`; no STL streams
-and no STL containers are used, only stdio and explicit allocation. Compiles
+and no STL containers are used, only stdio and explicit allocation. The one
+place the standard library does the work is threading, which is `<thread>`,
+`<mutex>` and `<condition_variable>` — hence `-pthread`. Compiles
 clean at `-Wall -Wextra -Wpedantic` with GCC, Clang and mingw-w64; the only
 platform specific pieces are 64-bit file offsets and reading the clock, both in
 `common.h` and keyed on the C runtime rather than the OS, since MinGW and MSVC
@@ -203,6 +208,26 @@ bytes, and `-ffp-contract=off` in the default flags keeps that true by stopping
 the filter design arithmetic from contracting into FMAs on targets that have
 them.
 
+Frames are the other axis. Each one starts the decoder's history from the same
+fixed pattern, so nothing carries over from the frame before and frames can be
+encoded in any order — `--threads N` does N at once. Reading and writing stay in
+the calling thread and stay in order: frames move through a small ring of slots,
+that thread fills every free slot and then blocks until the oldest frame has been
+coded and writes it, while workers take the next uncoded frame in turn. The ring
+is two slots longer than the worker count so reading and writing overlap
+encoding. Nothing else is shared — each worker has its own encoder, since every
+buffer in one is rewritten per frame anyway.
+
+| threads | test file | speedup |
+|---|---|---|
+| 1 (default) | 6m50s | |
+| 4 | 1m53s | 3.6x |
+
+The output does not depend on the thread count: on the full file every thread
+count produces the same 78,038,932 bytes of DST data, and on a clip the files are
+byte for byte identical, including from the Windows build. That is the property
+worth keeping, and it is what the tests check.
+
 Two details made the vector code possible. The bitplane packing looked like it
 needed a bit transpose; reversing the bytes first turns it into exactly what
 `vpmovmskb` produces. And the prediction is sixteen table lookups per sample,
@@ -226,13 +251,18 @@ ffmpeg -v error -i out.dsf    -c:a pcm_s24le -f md5 -   # must match
 ./dff2dsf c out.dsf out2.dff
 ffmpeg -v error -i out2.dff   -c:a pcm_s24le -f md5 -   # must match
 ./dff2dsf d out2.dff out2.dsf                           # must equal out.dsf
+./dff2dsf c out.dsf out3.dff --threads 4                # must equal out2.dff
 ```
 
 All of these hold on the test file against FFmpeg master (`74705b3`): decoding
 is bit-exact with FFmpeg, FFmpeg decodes this encoder's DST stream to identical
-samples, and compress/decompress round trips bit for bit. The decoder was also
-checked against a synthetic uncompressed-DSD `.dff`, and both directions run
-clean under ASan/UBSan including runs over randomly corrupted input.
+samples, and compress/decompress round trips bit for bit. The whole 4:15 file was
+checked that way on four threads too, matching the reference md5 and producing
+the same 78,038,932 bytes as one thread. The decoder was also checked against a
+synthetic uncompressed-DSD `.dff`, and both directions run clean under ASan/UBSan
+including runs over randomly corrupted input; the threaded encoder is clean under
+ThreadSanitizer as well, including the awkward cases — fewer frames than threads,
+a truncated input, and a failing write, none of which may leave a worker waiting.
 
 ## Source layout
 
@@ -248,6 +278,7 @@ Each `.hpp` is an implementation file with its declarations in the matching
 | `src/dsf.hpp` | DSF writing: deinterleave and bit reversal |
 | `src/dsfread.hpp` | DSF reading: the same in reverse |
 | `src/dffwrite.hpp` | DSDIFF writing |
+| `src/encpool.hpp` | encoding frames on several threads |
 | `src/bits.h`, `src/bitwrite.h` | bit reader and writer, JPEG-LS Golomb code |
 | `src/crc.h` | the DSDIFF frame CRC carried in `DSTC` |
 | `src/common.h` | byte order, buffered file access, the platform bits |

@@ -146,7 +146,7 @@ then frame assembly, with a check that falls back if a frame fails to compress.
 
 | | Philips `DstEncUi 4.0.3` | dff2dsf |
 |---|---|---|
-| structure | 6-stage pipeline, thread per stage | single threaded |
+| structure | 6-stage pipeline, thread per stage | one thread per frame, off by default |
 | autocorrelation | popcount-XOR, 11-bit tables, 32-lag unroll | popcount-XOR, hardware/AVX2 |
 | predictor | Levinson-Durbin | Levinson-Durbin |
 | order | stops at 0.3% residual, which DSD never reaches | fixed 128, same in practice |
@@ -222,9 +222,11 @@ against an ill-conditioned frame producing enormous coefficients. It has never
 been observed on the test material, but the reference encoder carries the check
 for a reason, and this is the most defensible thing left on the list.
 
-**Pipelined threading — not adopted.** Their six stage pipeline is the obvious
-way to use more cores. Frames here are independent, so plain parallelism across
-frames would be simpler and scale better than a stage pipeline.
+**Threading — adopted, but across frames rather than stages.** Their six stage
+pipeline is one way to use more cores, but it is bounded by the slowest stage.
+Frames here are independent, so `--threads N` simply encodes N frames at once,
+which is both simpler and scales with the core count rather than with the number
+of stages: 3.6x on four cores, against the 6x their pipeline could reach at best.
 
 The cost of following two candidates is that encoding takes twice as long, since
 the refinement now runs twice per frame. That is the whole of the extra time -

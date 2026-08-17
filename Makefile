@@ -5,9 +5,9 @@ CXX      ?= g++
 # add into one FMA rounds differently, which could shift a quantised coefficient.
 # It costs nothing measurable, so it is on as insurance.
 CXXFLAGS ?= -O2 -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra \
-            -mavx2 -ffp-contract=off
+            -mavx2 -ffp-contract=off -pthread
 LDFLAGS  ?=
-LDLIBS   ?= -lm
+LDLIBS   ?= -lm -pthread
 
 # The whole program is a single translation unit; the .hpp files are the
 # implementation, included by src/dff2dsf.cpp.

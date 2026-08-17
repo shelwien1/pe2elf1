@@ -7,6 +7,10 @@
 #   2. re-compress that .dsf to .dff; FFmpeg must decode it to the same samples
 #   3. decode the re-compressed .dff again; it must match the .dsf bit for bit
 #   4. compare the compressed size against the input
+#   5. re-compress on several threads; the result must be identical
+#
+# That compresses the input three times over, so run it on a clip unless you
+# have the time.
 set -e
 
 DFF="$1"
@@ -60,6 +64,20 @@ if cmp -s "$DSF" "$DSF2"; then
     echo "  PASS: compress/decompress round trip is bit-exact"
 else
     echo "  FAIL: round trip is not bit-exact" >&2
+    status=1
+fi
+
+# Encoding on several threads must produce exactly the same file.  The comment
+# chunk is timestamped, so both of these leave it out rather than comparing a
+# clock; everything else, DST frames included, has to match byte for byte.
+"$BIN" c "$DSF" "$TMP/st.dff" --disable-COMT 2>"$TMP/enc_st.log" \
+    || { cat "$TMP/enc_st.log"; exit 1; }
+"$BIN" c "$DSF" "$TMP/mt.dff" --disable-COMT --threads 4 2>"$TMP/enc_mt.log" \
+    || { cat "$TMP/enc_mt.log"; exit 1; }
+if cmp -s "$TMP/st.dff" "$TMP/mt.dff"; then
+    echo "  PASS: encoding on 4 threads gives the same bytes as on 1"
+else
+    echo "  FAIL: the thread count changed the output" >&2
     status=1
 fi
 
