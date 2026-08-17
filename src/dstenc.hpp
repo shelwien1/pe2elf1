@@ -678,7 +678,7 @@ void DstEncoder::analyse_channel(int ch) {
     uint64_t lo = 0xAAAAAAAAAAAAAAAAull, hi = 0xAAAAAAAAAAAAAAAAull;
 
     for (unsigned i = 0; i < frame_bits_; i++) {
-#define F(x) filter[(x)][((x) < 8 ? (lo >> (8 * (x))) : (hi >> (8 * ((x) - 8)))) & 0xFF]
+#define F(x) filter[(x)][((((x) < 8 ? lo : hi) >> (8 * ((x) & 7))) & 0xFF)]
         const int16_t predict = int16_t(F( 0) + F( 1) + F( 2) + F( 3) +
                                         F( 4) + F( 5) + F( 6) + F( 7) +
                                         F( 8) + F( 9) + F(10) + F(11) +

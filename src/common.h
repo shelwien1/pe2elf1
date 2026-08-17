@@ -13,27 +13,52 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef _WIN32
+#ifndef _WIN32
 #include <sys/types.h>
 #endif
 
 namespace dff2dsf {
 
 // ---------------------------------------------------------------- platform
+//
+// What differs between systems here is the C runtime, not the operating system:
+// MinGW and MSVC target the same Windows CRT but are otherwise unalike, so these
+// key on the runtime.
 
-// Files here run past 2 GB, so seeking has to be 64-bit.  MinGW gets that from
-// _FILE_OFFSET_BITS above, which redirects fseeko to its 64-bit form; this makes
-// a build where that quietly did not happen fail here rather than at 2 GB.
+// Seeking has to be 64-bit, since these files run past 2 GB.  POSIX spells that
+// fseeko, with _FILE_OFFSET_BITS above making off_t wide enough; both Windows
+// runtimes spell it _fseeki64 and neither has fseeko at all.
+#ifdef _WIN32
+
+inline int file_seek(FILE* f, int64_t offset, int whence) {
+    return _fseeki64(f, offset, whence);
+}
+
+inline int64_t file_tell(FILE* f) {
+    return _ftelli64(f);
+}
+
+#else
+
 static_assert(sizeof(off_t) == 8, "64-bit file offsets are required");
+
+inline int file_seek(FILE* f, int64_t offset, int whence) {
+    return fseeko(f, off_t(offset), whence);
+}
+
+inline int64_t file_tell(FILE* f) {
+    return int64_t(ftello(f));
+}
+
+#endif
 
 // gmtime_r is POSIX; the Windows CRT spells it gmtime_s, with the arguments the
 // other way round.
 inline bool utc_now(struct tm* out) {
-#ifdef _WIN32
     const time_t now = time(nullptr);
+#ifdef _WIN32
     return gmtime_s(out, &now) == 0;
 #else
-    const time_t now = time(nullptr);
     return gmtime_r(&now, out) != nullptr;
 #endif
 }
@@ -154,22 +179,22 @@ public:
     }
 
     bool seek(int64_t pos) {
-        if (fseeko(f_, off_t(pos), SEEK_SET) != 0) return ERR("seek failed");
+        if (file_seek(f_, pos, SEEK_SET) != 0) return ERR("seek failed");
         return true;
     }
 
     bool skip(int64_t n) {
-        if (fseeko(f_, off_t(n), SEEK_CUR) != 0) return ERR("seek failed");
+        if (file_seek(f_, n, SEEK_CUR) != 0) return ERR("seek failed");
         return true;
     }
 
-    int64_t tell() const { return int64_t(ftello(f_)); }
+    int64_t tell() const { return file_tell(f_); }
 
     int64_t size() {
         int64_t cur = tell();
-        if (fseeko(f_, 0, SEEK_END) != 0) return -1;
+        if (file_seek(f_, 0, SEEK_END) != 0) return -1;
         int64_t n = tell();
-        fseeko(f_, off_t(cur), SEEK_SET);
+        file_seek(f_, cur, SEEK_SET);
         return n;
     }
 

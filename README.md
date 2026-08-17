@@ -27,7 +27,8 @@ C++20, no dependencies. Built with `-fno-exceptions -fno-rtti`; no STL streams
 and no STL containers are used, only stdio and explicit allocation. Compiles
 clean at `-Wall -Wextra -Wpedantic` with GCC, Clang and mingw-w64; the only
 platform specific pieces are 64-bit file offsets and reading the clock, both in
-`common.h`. The Windows build was checked by running it: under Wine it encodes
+`common.h` and keyed on the C runtime rather than the OS, since MinGW and MSVC
+share a runtime but agree on little else. The Windows build was checked by running it: under Wine it encodes
 the same input to byte-identical DST data and round trips bit-exactly, with the
 AVX2 paths active.
 

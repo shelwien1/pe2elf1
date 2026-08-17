@@ -237,7 +237,7 @@ bool DstDecoder::decode(const uint8_t* data, size_t size, size_t capacity, uint8
             uint64_t* status = status_[ch];
 
             const uint64_t lo = status[0], hi = status[1];
-#define F(x) filter[(x)][((x) < 8 ? (lo >> (8 * (x))) : (hi >> (8 * ((x) - 8)))) & 0xFF]
+#define F(x) filter[(x)][((((x) < 8 ? lo : hi) >> (8 * ((x) & 7))) & 0xFF)]
             const int16_t predict = int16_t(F( 0) + F( 1) + F( 2) + F( 3) +
                                             F( 4) + F( 5) + F( 6) + F( 7) +
                                             F( 8) + F( 9) + F(10) + F(11) +
