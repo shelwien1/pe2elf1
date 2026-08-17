@@ -250,24 +250,25 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   {
     transpose_image(tile_img, plane_count);
     int32_t bits_d = 0;
-    if( plane_count>0 ) {
-      int32_t pk = 0;
-      while( 1 ) {
-        pl_k = plane_desc[pk].src_plane;
-        model_planes(tile_img, tile_buf, pl_k);
-        bits = 8*(stream.cur-stream.buf);
-        packer_flush();
-        bits_d += bits;
-        packer_reset();
-        if( (uint32_t)(bits-(bits>>8))>plane_cost[pl_k] )
-          break;
-        if( ++pk>=plane_count ) {
-          goto tile_restored;
-        }
-      }
-      bits_d += best_bits+1;
+    // The plane that costs more transposed is the one that settles it, so the
+    // walk stops there -- and where it stopped is the answer: `pk` is short of
+    // the count when a plane was dearer and equal to it when none was.  The
+    // recovery said that with a `break` out of a `while( 1 )` for one exit and
+    // a `goto` past the line below for the other.
+    int32_t pk = 0;
+    while( pk<plane_count ) {
+      pl_k = plane_desc[pk].src_plane;
+      model_planes(tile_img, tile_buf, pl_k);
+      bits = 8*(stream.cur-stream.buf);
+      packer_flush();
+      bits_d += bits;
+      packer_reset();
+      if( (uint32_t)(bits-(bits>>8))>plane_cost[pl_k] )
+        break;
+      ++pk;
     }
-tile_restored:
+    if( pk<plane_count )
+      bits_d += best_bits+1;
     if( bits_d+(bits_d>>12)>=best_bits ) {
       // Transposed is no better: put the tile back and leave the image alone.
       transpose_image(tile_img, plane_count);
