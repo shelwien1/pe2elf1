@@ -19,6 +19,11 @@
 
 #include <math.h>
 
+#if defined(__x86_64__) || defined(__i386__)
+#define DFF2DSF_X86 1
+#include <immintrin.h>
+#endif
+
 namespace dff2dsf {
 
 namespace {
@@ -67,6 +72,10 @@ constexpr double kRefineDecay = 0.7;
 // Bitplanes the per-sample gradient weight is quantised to.  Four levels of
 // resolution is enough to match an exact weighting, at a quarter of the cost.
 constexpr unsigned kGradientPlanes = 4;
+
+// The vectorised prediction reads a byte of history per four taps, the furthest
+// reaching back this far before the sample.
+constexpr unsigned kWindowLead = 128;
 
 // ------------------------------------------------------------ arithmetic coder
 //
@@ -203,6 +212,265 @@ inline unsigned quantise_prob(uint64_t n, uint64_t errors) {
     return unsigned(p);
 }
 
+
+// --------------------------------------------------------- bitplane packing
+//
+// Lays the per-sample gradient weights out as bitplanes for the kernel above.
+// Done a word at a time with the plane words held in registers: the obvious
+// per-sample "set this bit if that weight bit is set" costs four unpredictable
+// branches and four read-modify-writes per sample, which measured far more than
+// the correlation it feeds.  Returns the sum of the weights.
+uint64_t pack_planes_scalar(const uint8_t* code, const uint8_t* weight_of,
+                            uint64_t* planes, unsigned nwords) {
+    uint64_t total = 0;
+
+    for (unsigned j = 0; j < nwords; j++) {
+        const uint8_t* c = code + size_t(j) * 64;
+        uint64_t plane[kGradientPlanes] = {};
+
+        for (unsigned b = 0; b < 64; b++) {
+            const uint64_t q = weight_of[c[b]];
+            const unsigned shift = 63 - b;
+            total += q;
+            for (unsigned p = 0; p < kGradientPlanes; p++)
+                plane[p] |= ((q >> p) & 1) << shift;
+        }
+
+        for (unsigned p = 0; p < kGradientPlanes; p++)
+            planes[p * nwords + j] = plane[p];
+    }
+    return total;
+}
+
+#ifdef DFF2DSF_X86
+
+bool have_avx2() {
+    static const bool yes = __builtin_cpu_supports("avx2");
+    return yes;
+}
+
+// Same packing with AVX2.  A byte comparison turns "weight bit p is set" into a
+// per-byte mask, and movemask collects 32 of those into a word in one go; the
+// bytes are reversed first because the bit numbering here runs the other way.
+__attribute__((target("avx2")))
+uint64_t pack_planes_avx2(const uint8_t* code, const uint8_t* weight_of,
+                          uint64_t* planes, unsigned nwords) {
+    const __m256i reverse_lane = _mm256_setr_epi8(
+        15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+        15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+    const __m256i zero = _mm256_setzero_si256();
+    __m256i weight_sum = zero;
+
+    for (unsigned j = 0; j < nwords; j++) {
+        uint64_t plane[kGradientPlanes] = {};
+
+        for (unsigned half = 0; half < 2; half++) {
+            const uint8_t* c = code + size_t(j) * 64 + half * 32;
+            alignas(32) uint8_t q[32];
+            for (unsigned b = 0; b < 32; b++)
+                q[b] = weight_of[c[b]];
+
+            const __m256i v = _mm256_load_si256((const __m256i*)q);
+            weight_sum = _mm256_add_epi64(weight_sum, _mm256_sad_epu8(v, zero));
+
+            const __m256i lanes = _mm256_shuffle_epi8(v, reverse_lane);
+            const __m256i reversed = _mm256_permute2x128_si256(lanes, lanes, 0x01);
+
+            for (unsigned p = 0; p < kGradientPlanes; p++) {
+                const __m256i sel = _mm256_set1_epi8(char(1 << p));
+                const __m256i hit = _mm256_cmpeq_epi8(_mm256_and_si256(reversed, sel), sel);
+                const uint32_t bits = uint32_t(_mm256_movemask_epi8(hit));
+                plane[p] |= uint64_t(bits) << (half ? 0 : 32);
+            }
+        }
+
+        for (unsigned p = 0; p < kGradientPlanes; p++)
+            planes[p * nwords + j] = plane[p];
+    }
+
+    alignas(32) uint64_t lanes[4];
+    _mm256_store_si256((__m256i*)lanes, weight_sum);
+    return lanes[0] + lanes[1] + lanes[2] + lanes[3];
+}
+
+#endif // DFF2DSF_X86
+
+inline uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
+                            uint64_t* planes, unsigned nwords) {
+#ifdef DFF2DSF_X86
+    if (have_avx2())
+        return pack_planes_avx2(code, weight_of, planes, nwords);
+#endif
+    return pack_planes_scalar(code, weight_of, planes, nwords);
+}
+
+// ------------------------------------------------------- correlation kernel
+//
+// The encoder's innermost loop, by a wide margin: for one lag, the weighted
+// count of samples whose bit differs from the bit that many places earlier,
+//
+//     sum over planes p of  2^p * popcount(plane_p & (bits ^ bits >> k))
+//
+// Bit parallel already, so 64 samples move per operation; AVX2 quadruples that
+// and replaces the popcount with the usual nibble table shuffle.
+
+// Shifted view of the bit sequence: the word k bits earlier than word j.
+inline uint64_t lagged_word(const uint64_t* w, unsigned j, unsigned wshift, unsigned bshift) {
+    const uint64_t* d = w + j - wshift;
+    return bshift ? ((d[-1] << (64 - bshift)) | (d[0] >> bshift)) : d[0];
+}
+
+uint64_t disagreement_scalar(const uint64_t* w, const uint64_t* planes,
+                             unsigned nwords, unsigned k) {
+    const unsigned wshift = k >> 6;
+    const unsigned bshift = k & 63;
+    uint64_t sum[kGradientPlanes] = {};
+
+    for (unsigned j = 0; j < nwords; j++) {
+        const uint64_t differs = w[j] ^ lagged_word(w, j, wshift, bshift);
+        for (unsigned p = 0; p < kGradientPlanes; p++)
+            sum[p] += unsigned(__builtin_popcountll(planes[p * nwords + j] & differs));
+    }
+
+    uint64_t total = 0;
+    for (unsigned p = 0; p < kGradientPlanes; p++)
+        total += sum[p] << p;
+    return total;
+}
+
+#ifdef DFF2DSF_X86
+
+__attribute__((target("avx2")))
+uint64_t disagreement_avx2(const uint64_t* w, const uint64_t* planes,
+                           unsigned nwords, unsigned k) {
+    const unsigned wshift = k >> 6;
+    const unsigned bshift = k & 63;
+
+    // Popcount of each nibble, for the byte-wise table lookup below.
+    const __m256i nibble_count = _mm256_setr_epi8(
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
+    const __m256i low_nibble = _mm256_set1_epi8(0x0f);
+    const __m256i zero = _mm256_setzero_si256();
+
+    __m256i acc[kGradientPlanes];
+    for (unsigned p = 0; p < kGradientPlanes; p++)
+        acc[p] = zero;
+
+    unsigned j = 0;
+    for (; j + 4 <= nwords; j += 4) {
+        const __m256i x = _mm256_loadu_si256((const __m256i*)(w + j));
+        const __m256i d0 = _mm256_loadu_si256((const __m256i*)(w + j - wshift));
+        __m256i y = d0;
+        if (bshift) {
+            // Every 64-bit lane is shifted the same way, so the lane-wise shifts
+            // reproduce the scalar version exactly.
+            const __m256i dm1 = _mm256_loadu_si256((const __m256i*)(w + j - wshift - 1));
+            y = _mm256_or_si256(_mm256_slli_epi64(dm1, int(64 - bshift)),
+                                _mm256_srli_epi64(d0, int(bshift)));
+        }
+        const __m256i differs = _mm256_xor_si256(x, y);
+
+        for (unsigned p = 0; p < kGradientPlanes; p++) {
+            const __m256i v = _mm256_and_si256(
+                _mm256_loadu_si256((const __m256i*)(planes + p * nwords + j)), differs);
+            const __m256i lo = _mm256_and_si256(v, low_nibble);
+            const __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), low_nibble);
+            const __m256i counts = _mm256_add_epi8(_mm256_shuffle_epi8(nibble_count, lo),
+                                                   _mm256_shuffle_epi8(nibble_count, hi));
+            // Sums each 8 byte group, so counts stay well inside 64 bit lanes.
+            acc[p] = _mm256_add_epi64(acc[p], _mm256_sad_epu8(counts, zero));
+        }
+    }
+
+    uint64_t total = 0;
+    for (unsigned p = 0; p < kGradientPlanes; p++) {
+        alignas(32) uint64_t lanes[4];
+        _mm256_store_si256((__m256i*)lanes, acc[p]);
+        total += (lanes[0] + lanes[1] + lanes[2] + lanes[3]) << p;
+    }
+
+    // Tail, for frame sizes that are not a multiple of four words.
+    for (; j < nwords; j++) {
+        const uint64_t differs = w[j] ^ lagged_word(w, j, wshift, bshift);
+        for (unsigned p = 0; p < kGradientPlanes; p++)
+            total += uint64_t(unsigned(__builtin_popcountll(planes[p * nwords + j] & differs))) << p;
+    }
+    return total;
+}
+
+#endif // DFF2DSF_X86
+
+
+// Plain popcount of the same shifted XOR, for the autocorrelation.
+uint64_t differing_bits_scalar(const uint64_t* w, unsigned nwords, unsigned k) {
+    const unsigned wshift = k >> 6;
+    const unsigned bshift = k & 63;
+    uint64_t diff = 0;
+    for (unsigned j = 0; j < nwords; j++)
+        diff += unsigned(__builtin_popcountll(w[j] ^ lagged_word(w, j, wshift, bshift)));
+    return diff;
+}
+
+#ifdef DFF2DSF_X86
+
+__attribute__((target("avx2")))
+uint64_t differing_bits_avx2(const uint64_t* w, unsigned nwords, unsigned k) {
+    const unsigned wshift = k >> 6;
+    const unsigned bshift = k & 63;
+    const __m256i nibble_count = _mm256_setr_epi8(
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
+    const __m256i low_nibble = _mm256_set1_epi8(0x0f);
+    const __m256i zero = _mm256_setzero_si256();
+    __m256i acc = zero;
+
+    unsigned j = 0;
+    for (; j + 4 <= nwords; j += 4) {
+        const __m256i x = _mm256_loadu_si256((const __m256i*)(w + j));
+        const __m256i d0 = _mm256_loadu_si256((const __m256i*)(w + j - wshift));
+        __m256i y = d0;
+        if (bshift) {
+            const __m256i dm1 = _mm256_loadu_si256((const __m256i*)(w + j - wshift - 1));
+            y = _mm256_or_si256(_mm256_slli_epi64(dm1, int(64 - bshift)),
+                                _mm256_srli_epi64(d0, int(bshift)));
+        }
+        const __m256i v = _mm256_xor_si256(x, y);
+        const __m256i lo = _mm256_and_si256(v, low_nibble);
+        const __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), low_nibble);
+        const __m256i counts = _mm256_add_epi8(_mm256_shuffle_epi8(nibble_count, lo),
+                                               _mm256_shuffle_epi8(nibble_count, hi));
+        acc = _mm256_add_epi64(acc, _mm256_sad_epu8(counts, zero));
+    }
+
+    alignas(32) uint64_t lanes[4];
+    _mm256_store_si256((__m256i*)lanes, acc);
+    uint64_t diff = lanes[0] + lanes[1] + lanes[2] + lanes[3];
+
+    for (; j < nwords; j++)
+        diff += unsigned(__builtin_popcountll(w[j] ^ lagged_word(w, j, wshift, bshift)));
+    return diff;
+}
+
+#endif // DFF2DSF_X86
+
+inline uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
+#ifdef DFF2DSF_X86
+    if (have_avx2())
+        return differing_bits_avx2(w, nwords, k);
+#endif
+    return differing_bits_scalar(w, nwords, k);
+}
+
+inline uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
+                             unsigned nwords, unsigned k) {
+#ifdef DFF2DSF_X86
+    if (have_avx2())
+        return disagreement_avx2(w, planes, nwords, k);
+#endif
+    return disagreement_scalar(w, planes, nwords, k);
+}
+
 } // namespace
 
 DstEncoder::~DstEncoder() {
@@ -210,6 +478,7 @@ DstEncoder::~DstEncoder() {
     free(code_);
     free(filter_);
     free(mask_);
+    free(window_);
 }
 
 bool DstEncoder::init(int channels, unsigned dsd_rate) {
@@ -231,9 +500,10 @@ bool DstEncoder::alloc() {
     bits_ = static_cast<uint64_t*>(xalloc(sizeof(uint64_t) * words_per_channel_ * unsigned(channels_)));
     code_ = static_cast<uint8_t*>(xalloc(size_t(frame_bits_) * size_t(channels_)));
     filter_ = static_cast<int16_t(*)[256]>(xalloc(sizeof(int16_t) * 16 * 256));
+    window_ = static_cast<uint8_t*>(xalloc(kWindowLead + frame_bits_ + 1));
     mask_ = static_cast<uint64_t*>(xalloc(sizeof(uint64_t) * kGradientPlanes *
                                           (frame_bits_ / 64) * unsigned(channels_)));
-    return bits_ && code_ && filter_ && mask_;
+    return bits_ && code_ && filter_ && mask_ && window_;
 }
 
 // r[k] = sum over channels of sum_i x[i] * x[i-k], with x = +-1 from the bits.
@@ -246,20 +516,10 @@ void DstEncoder::autocorrelation(double* r) const {
     r[0] = double(total);
 
     for (unsigned k = 1; k <= kDstFilterLength; k++) {
-        const unsigned wshift = k >> 6;
-        const unsigned bshift = k & 63;
         int64_t diff = 0;
-
-        for (int ch = 0; ch < channels_; ch++) {
-            const uint64_t* w = bits_ + size_t(ch) * words_per_channel_;
-            for (unsigned j = 0; j < nwords; j++) {
-                const uint64_t x = w[kHistoryWords + j];
-                const unsigned base = kHistoryWords + j - wshift;
-                const uint64_t y = bshift ? ((w[base - 1] << (64 - bshift)) | (w[base] >> bshift))
-                                          : w[base];
-                diff += __builtin_popcountll(x ^ y);
-            }
-        }
+        for (int ch = 0; ch < channels_; ch++)
+            diff += int64_t(differing_bits(bits_ + size_t(ch) * words_per_channel_ + kHistoryWords,
+                                           nwords, k));
         r[k] = double(total - 2 * diff);
     }
 }
@@ -319,9 +579,125 @@ void DstEncoder::quantise_filter() {
     }
 }
 
+
+
+#ifdef DFF2DSF_X86
+
+// The prediction, vectorised.
+//
+// Two things make this possible.  First, byte j of the decoder's shift register
+// at sample i is the byte it held at sample i - 8j, so one sliding array of "the
+// eight bits before this sample" serves every tap.  Second, and unlike the
+// decoder - which cannot look ahead because each bit depends on the one just
+// decoded - the encoder knows every bit in advance, so the samples are
+// independent of one another and vectorise.
+//
+// Four taps at a time index a 16 entry table, which is exactly a byte shuffle.
+// Their partial sums have to fit in a byte for that, so each coefficient is
+// split into its high and low nibble and the two halves are accumulated
+// separately: four taps of a nibble reach at most +-64, and recombining them as
+// 16 * high + low reproduces the sum exactly.
+__attribute__((target("avx2")))
+void DstEncoder::analyse_channel_avx2(int ch) {
+    const uint64_t* w = bits_ + size_t(ch) * words_per_channel_ + kHistoryWords;
+    uint8_t* code = code_ + size_t(ch) * frame_bits_;
+    uint8_t* window = window_ + kWindowLead;
+
+    // Before the frame the register holds the fixed 0xAA history, which is just
+    // alternating bits; after that each byte is the previous one shifted up with
+    // the newest bit added.
+    for (int i = -int(kWindowLead); i <= 0; i++)
+        window[i] = (i & 1) ? 0x55 : 0xAA;
+    for (unsigned i = 0; i < frame_bits_; i++) {
+        const unsigned bit = unsigned(w[i >> 6] >> (63 - (i & 63))) & 1;
+        window[i + 1] = uint8_t((window[i] << 1) | bit);
+    }
+
+    constexpr unsigned kGroups = kDstFilterLength / 4;
+    __m256i high_table[kGroups], low_table[kGroups];
+    for (unsigned g = 0; g < kGroups; g++) {
+        alignas(16) int8_t high[16], low[16];
+        for (unsigned n = 0; n < 16; n++) {
+            int sh = 0, sl = 0;
+            for (unsigned b = 0; b < 4; b++) {
+                const int sign = ((n >> b) & 1) ? 1 : -1;
+                sh += sign * (coeff_[4 * g + b] >> 4);
+                sl += sign * (coeff_[4 * g + b] & 15);
+            }
+            high[n] = int8_t(sh);
+            low[n] = int8_t(sl);
+        }
+        high_table[g] = _mm256_broadcastsi128_si256(_mm_load_si128((const __m128i*)high));
+        low_table[g] = _mm256_broadcastsi128_si256(_mm_load_si128((const __m128i*)low));
+    }
+
+    const __m256i nibble = _mm256_set1_epi8(0x0f);
+    const __m256i one = _mm256_set1_epi16(1);
+    const __m256i bin_limit = _mm256_set1_epi16(int16_t(kDstMaxProbLength - 1));
+
+    unsigned i = 0;
+    for (; i + 32 <= frame_bits_; i += 32) {
+        __m256i hi_lo = _mm256_setzero_si256(), hi_hi = _mm256_setzero_si256();
+        __m256i lo_lo = _mm256_setzero_si256(), lo_hi = _mm256_setzero_si256();
+
+        for (unsigned g = 0; g < kGroups; g++) {
+            const __m256i index = _mm256_and_si256(
+                _mm256_loadu_si256((const __m256i*)(window + i - 4 * g)), nibble);
+            const __m256i ph = _mm256_shuffle_epi8(high_table[g], index);
+            const __m256i pl = _mm256_shuffle_epi8(low_table[g], index);
+            hi_lo = _mm256_add_epi16(hi_lo, _mm256_cvtepi8_epi16(_mm256_castsi256_si128(ph)));
+            hi_hi = _mm256_add_epi16(hi_hi, _mm256_cvtepi8_epi16(_mm256_extracti128_si256(ph, 1)));
+            lo_lo = _mm256_add_epi16(lo_lo, _mm256_cvtepi8_epi16(_mm256_castsi256_si128(pl)));
+            lo_hi = _mm256_add_epi16(lo_hi, _mm256_cvtepi8_epi16(_mm256_extracti128_si256(pl, 1)));
+        }
+
+        // 16 * high + low, wrapping exactly as the decoder's 16 bit sum does.
+        const __m256i predict[2] = {
+            _mm256_add_epi16(_mm256_slli_epi16(hi_lo, 4), lo_lo),
+            _mm256_add_epi16(_mm256_slli_epi16(hi_hi, 4), lo_hi),
+        };
+
+        for (unsigned half = 0; half < 2; half++) {
+            const __m256i p = predict[half];
+            const __m256i bin = _mm256_min_epi16(
+                _mm256_srli_epi16(_mm256_abs_epi16(p), 3), bin_limit);
+            const __m256i negative = _mm256_srli_epi16(p, 15);
+            const __m256i actual = _mm256_and_si256(
+                _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)(window + i + 1 + half * 16))),
+                one);
+            const __m256i correct = _mm256_xor_si256(actual, negative);
+            const __m256i packed = _mm256_or_si256(bin, _mm256_slli_epi16(correct, 7));
+
+            const __m256i bytes = _mm256_packus_epi16(packed, packed);
+            _mm_storel_epi64((__m128i*)(code + i + half * 16), _mm256_castsi256_si128(bytes));
+            _mm_storel_epi64((__m128i*)(code + i + half * 16 + 8),
+                             _mm256_extracti128_si256(bytes, 1));
+        }
+    }
+
+    for (; i < frame_bits_; i++) {
+        int sum = 0;
+        for (unsigned t = 0; t < kDstFilterLength; t++)
+            sum += ((window[i - 4 * (t / 4)] >> (t % 4)) & 1) ? coeff_[t] : -coeff_[t];
+        const int16_t predict = int16_t(sum);
+        unsigned bin = unsigned(predict < 0 ? -predict : predict) >> 3;
+        if (bin >= kDstMaxProbLength) bin = kDstMaxProbLength - 1;
+        const unsigned correct = (unsigned(window[i + 1]) ^ unsigned(predict >> 15)) & 1;
+        code[i] = uint8_t(bin | (correct << 7));
+    }
+}
+
+#endif // DFF2DSF_X86
+
 // Runs the decoder's prediction over one channel, recording for every sample
 // which probability bin it falls in and whether the prediction was wrong.
 void DstEncoder::analyse_channel(int ch) {
+#ifdef DFF2DSF_X86
+    if (have_avx2()) {
+        analyse_channel_avx2(ch);
+        return;
+    }
+#endif
     const uint64_t* w = bits_ + size_t(ch) * words_per_channel_;
     uint8_t* code = code_ + size_t(ch) * frame_bits_;
     const int16_t (*filter)[256] = filter_;
@@ -355,8 +731,15 @@ void DstEncoder::analyse_channel(int ch) {
 // fixed 0xAA pattern rather than signal are coded at even odds, so they are left
 // out of the statistics.
 bool DstEncoder::analyse_frame() {
-    if (!build_filter_lut(coeff_, kDstFilterLength, filter_))
-        return false;
+    // Only the scalar prediction reads this table; the vector path indexes the
+    // coefficients four at a time instead.  It is still worth knowing that the
+    // decoder can build its own copy, but that cannot fail here: eight taps of
+    // at most 256 sum to 2048, well inside the 16 bits it has to fit.
+#ifdef DFF2DSF_X86
+    if (!have_avx2())
+#endif
+        if (!build_filter_lut(coeff_, kDstFilterLength, filter_))
+            return false;
 
     memset(bin_count_, 0, sizeof(bin_count_));
     memset(bin_errors_, 0, sizeof(bin_errors_));
@@ -436,21 +819,11 @@ void DstEncoder::gradient_step(int iteration) {
         }
     }
 
-    memset(mask_, 0, sizeof(uint64_t) * kGradientPlanes * size_t(channels_) * nwords);
     double total = 0;
+    for (int ch = 0; ch < channels_; ch++)
+        total += double(pack_planes(code_ + size_t(ch) * frame_bits_, weight_of,
+                                    mask_ + size_t(ch) * kGradientPlanes * nwords, nwords));
 
-    for (int ch = 0; ch < channels_; ch++) {
-        const uint8_t* code = code_ + size_t(ch) * frame_bits_;
-        uint64_t* planes = mask_ + size_t(ch) * kGradientPlanes * nwords;
-        for (unsigned i = 0; i < frame_bits_; i++) {
-            const unsigned q = weight_of[code[i]];
-            if (!q) continue;
-            total += double(q);
-            const uint64_t bit = 1ull << (63 - (i & 63));
-            for (unsigned p = 0; p < kGradientPlanes; p++)
-                if ((q >> p) & 1) planes[p * nwords + (i >> 6)] |= bit;
-        }
-    }
     if (total <= 0) return;
 
     double step = kRefineStep;
@@ -458,30 +831,13 @@ void DstEncoder::gradient_step(int iteration) {
         step *= kRefineDecay;
 
     for (unsigned t = 0; t < kDstFilterLength; t++) {
-        const unsigned k = t + 1;
-        const unsigned wshift = k >> 6;
-        const unsigned bshift = k & 63;
-        double disagree = 0;
-
-        for (int ch = 0; ch < channels_; ch++) {
-            const uint64_t* w = bits_ + size_t(ch) * words_per_channel_;
-            const uint64_t* planes = mask_ + size_t(ch) * kGradientPlanes * nwords;
-            uint64_t sum[kGradientPlanes] = {};
-
-            for (unsigned j = 0; j < nwords; j++) {
-                const uint64_t x = w[kHistoryWords + j];
-                const unsigned base = kHistoryWords + j - wshift;
-                const uint64_t y = bshift ? ((w[base - 1] << (64 - bshift)) | (w[base] >> bshift))
-                                          : w[base];
-                const uint64_t disagreement = x ^ y;
-                for (unsigned p = 0; p < kGradientPlanes; p++)
-                    sum[p] += unsigned(__builtin_popcountll(planes[p * nwords + j] & disagreement));
-            }
-            for (unsigned p = 0; p < kGradientPlanes; p++)
-                disagree += double(sum[p] << p);
-        }
+        uint64_t disagree = 0;
+        for (int ch = 0; ch < channels_; ch++)
+            disagree += disagreement(bits_ + size_t(ch) * words_per_channel_ + kHistoryWords,
+                                     mask_ + size_t(ch) * kGradientPlanes * nwords,
+                                     nwords, t + 1);
         // Weight agreeing with the target counts positive, disagreeing negative.
-        weight_[t] += step * (total - 2.0 * disagree) / total;
+        weight_[t] += step * (total - 2.0 * double(disagree)) / total;
     }
 
     quantise_filter();

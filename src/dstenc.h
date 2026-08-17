@@ -43,6 +43,7 @@ private:
     void quantise_filter();
     bool analyse_frame();
     void analyse_channel(int ch);
+    void analyse_channel_avx2(int ch);
     double estimate_cost() const;
     unsigned trimmed_length() const;
     bool refine_filter();
@@ -60,6 +61,7 @@ private:
     int coeff_[kDstFilterLength] = {};
     double weight_[kDstFilterLength] = {};   // filter before quantisation
     int16_t (*filter_)[256] = nullptr;   // [16][256] prediction lookup
+    uint8_t* window_ = nullptr;          // the eight bits preceding each sample
 
     // Per-bin sample and prediction-error counts, gathered over all channels.
     uint64_t bin_count_[kDstMaxProbLength] = {};

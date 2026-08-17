@@ -113,11 +113,37 @@ data is the figure to watch.
 Per frame this encoder wins on loud material and loses a little on quiet
 material: on the first 200 frames, which are a quiet intro, it is 0.8% behind.
 
-Decoding the test file takes about 27 s on one core; encoding takes about 16
-minutes, nearly all of it the twelve refinement passes over each frame. The
-refinement is what buys the last 0.4%: without it the Levinson-Durbin filter
+The refinement is what buys the last 0.4%: without it the Levinson-Durbin filter
 alone lands about 4% behind, and a cheaper sign-error (perceptron) refinement
 stops around 0.2% behind.
+
+## Speed
+
+Decoding the test file takes about 27 s on one core. Encoding is dominated by
+the twelve refinement passes over every frame, and three inner loops account for
+nearly all of it. Each has an AVX2 implementation, selected at run time through
+`__builtin_cpu_supports`, with the scalar version kept as the fallback; both
+produce byte-identical output, which is how the vector code is tested.
+
+| inner loop | scalar | AVX2 | how |
+|---|---|---|---|
+| correlation of weights with the bit sequence | 10.2 s | 1.3 s | four words per step, popcount by nibble table shuffle |
+| packing gradient weights into bitplanes | 3.2 s | 0.3 s | byte compare plus movemask, 32 samples at a time |
+| the prediction itself | 2.8 s | 1.8 s | four taps per byte shuffle, see below |
+| autocorrelation | 0.25 s | 0.08 s | same popcount kernel as the correlation |
+
+Times are for 400 frames. Together they take the test file from 14m17s to
+3m35s, a 4x speedup with the output byte-identical.
+
+Two details made the vector code possible. The bitplane packing looked like it
+needed a bit transpose; reversing the bytes first turns it into exactly what
+`vpmovmskb` produces. And the prediction is sixteen table lookups per sample,
+which vectorises only if the tables are small enough for a byte shuffle: four
+taps index sixteen entries, but their partial sums do not fit in a byte, so each
+coefficient is split into high and low nibbles and the halves are accumulated
+apart and recombined as `16 * high + low`. Gathering from the byte-indexed
+tables instead - the obvious approach - was tried and ran twice as slow as the
+scalar code on this hardware.
 
 ## Verifying against FFmpeg
 
