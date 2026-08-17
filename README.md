@@ -106,6 +106,10 @@ Per frame, for all channels together:
 Steps 3 to 5 predict bit for bit exactly as the decoder does, sharing the filter
 lookup table in `dst.hpp`.
 
+`docs/philips-encoder.md` compares this against the reference encoder's own
+algorithm, read out of a decompilation of its DLL: where the two agree, where
+they differ, and what that explains about the measurements below.
+
 Things that were tried and measurably lost, for the record: per-channel filters
 and per-channel probability tables (both cost more to send than they save),
 warm-starting the refinement from the previous frame's filter, smoothing the
