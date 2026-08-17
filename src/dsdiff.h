@@ -24,6 +24,20 @@ namespace {
 // past them: anything larger is a corrupt file rather than something to parse.
 constexpr uint64_t kMaxChunkPayload = 64u << 20;
 
+// How many damaged regions are reported individually before the walk stops
+// naming them one by one and leaves the total to the summary.
+constexpr uint32_t kMaxDamageReports = 8;
+
+// An IFF chunk id is four printable characters.  Anything else where a header
+// should be is damage, not a chunk to step over - which matters because the
+// usual damage is a run of zeroes, and a zero id with a zero size would
+// otherwise be stepped over twelve bytes at a time for as long as it lasts.
+inline bool id_is_printable(CByteP id) {
+    for (int32_t i = 0; i < 4; i++)
+        if (id[i] < 0x20 || id[i] > 0x7E) return false;
+    return true;
+}
+
 } // namespace
 
 class DffReader {
@@ -110,10 +124,15 @@ public:
     // included, so this compares like for like across encoders.
     uint64_t dst_payload() const { return dst_payload_; }
 
+    // Sound data the frame walk had to step over because it was damaged.
+    uint64_t skipped_bytes() const { return skipped_bytes_; }
+    uint32_t damaged_regions() const { return damaged_regions_; }
+
     // Next DST frame.  Returns 1 on success, 0 at end of data, -1 on error.
     // The payload is zero padded to allow the bit reader's windowed reads.
     int32_t next_dst_frame(CBytePP data, SizeP size, SizeP capacity) {
         while (chunk_pos() + 12 <= body_end_) {
+            const int64_t header_pos = chunk_pos();
             uint8_t id[4];
             uint64_t chunk_size;
             if (!read_chunk_header(id, &chunk_size)) return 0;
@@ -121,14 +140,13 @@ public:
 
             if (tag_is(id, "DSTF")) {
                 // The frame has to fit the buffer, which is sized for the largest
-                // frame the format can produce; anything larger is corrupt.
-                if (chunk_size < 1 || chunk_size + kBitReaderPadding > sizeof(buf_)) {
-                    ERR("implausible DSTF size %" PRIu64, chunk_size);
-                    return -1;
-                }
-                if (body + int64_t(chunk_size) > body_end_) {
-                    ERR("truncated DSTF frame");
-                    return -1;
+                // frame the format can produce, and has to end inside the sound
+                // data.  A header that fails either is damage rather than a frame,
+                // so the walk goes looking for the next one instead of giving up.
+                if (chunk_size < 1 || chunk_size + kBitReaderPadding > sizeof(buf_) ||
+                    body + int64_t(chunk_size) > body_end_) {
+                    if (!resync(header_pos)) return 0;
+                    continue;
                 }
                 const size_t n = size_t(chunk_size);
                 if (!f_.read(buf_, n)) return -1;
@@ -142,10 +160,12 @@ public:
                 return 1;
             }
 
-            // Anything else in here is not needed.
-            if (chunk_size > kMaxChunkPayload) {
-                ERR("implausible chunk size %" PRIu64 " in DST data", chunk_size);
-                return -1;
+            // Anything else in here is either a chunk with nothing this program
+            // needs, or the point where the walk has lost the thread.
+            if (!id_is_printable(id) || chunk_size > kMaxChunkPayload ||
+                body + int64_t(chunk_size) > body_end_) {
+                if (!resync(header_pos)) return 0;
+                continue;
             }
             if (!f_.skip(int64_t(chunk_size) + int64_t(chunk_size & 1))) return 0;
         }
@@ -265,6 +285,55 @@ private:
         f_.skip(int64_t(size) - 4 + int64_t(size & 1));
     }
 
+    // Finds the next DST frame after damaged sound data, so that one bad stretch
+    // costs the frames it covers rather than everything after it: DST frames are
+    // independent, and each one starts the decoder from the same fixed history,
+    // so decoding can pick up again at any of them.
+    //
+    // The stream only goes forwards, so this is a byte at a time, holding the
+    // last twelve in a window and stopping when they read as a DSTF header whose
+    // size fits both the frame buffer and what is left of the sound data.  Those
+    // four bytes could occur inside a coded frame by chance, but the odds of the
+    // eight after them also passing are small enough not to design around: the
+    // cost of guessing wrong is one frame of noise before the next resync, not a
+    // failed conversion.
+    bool resync(int64_t from) {
+        uint8_t w[12];
+        size_t have = 0;
+
+        while (f_.tell() < body_end_) {
+            if (have == sizeof(w)) {
+                memmove(w, w + 1, sizeof(w) - 1);
+                have--;
+            }
+            if (!f_.read(w + have, 1, /*eof_ok=*/true)) break;
+            have++;
+            if (have < sizeof(w)) continue;
+            if (!tag_is(w, "DSTF")) continue;
+
+            const uint64_t size = rb64(w + 4);
+            if (size < 1 || size + kBitReaderPadding > sizeof(buf_)) continue;
+            if (f_.tell() + int64_t(size) > body_end_) continue;
+
+            const int64_t at = f_.tell() - 12;
+            report_damage(from, at - from, "resumed at the next DST frame");
+            push_back(w, size);
+            return true;
+        }
+
+        report_damage(from, body_end_ - from, "no further DST frame found");
+        return false;
+    }
+
+    void report_damage(int64_t at, int64_t bytes, const char* what) {
+        if (bytes < 0) bytes = 0;
+        skipped_bytes_ += uint64_t(bytes);
+        if (damaged_regions_++ < kMaxDamageReports)
+            fprintf(stderr, "\ndff2dsf: warning: damaged sound data at %" PRId64
+                            ", skipped %" PRId64 " bytes, %s\n", at, bytes, what);
+        return;
+    }
+
     // One chunk header of push-back, which is all the look-ahead here needs.
     void push_back(CByteP id, uint64_t size) {
         memcpy(pending_, id, 4);
@@ -307,6 +376,8 @@ private:
     bool saw_cmpr_ = false;
     uint32_t frame_count_ = 0;
     uint64_t dst_payload_ = 0;
+    uint64_t skipped_bytes_ = 0;
+    uint32_t damaged_regions_ = 0;
     bool has_frame_crc_ = false;
     uint32_t frame_crc_ = 0;
     uint16_t frame_rate_ = 0;

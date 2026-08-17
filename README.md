@@ -191,6 +191,26 @@ from the specification's own recipe rather than from the table-driven code, and
 by corrupting files — a flipped bit in a `DSTC` value, and one in the middle of
 a frame's coded data that still decodes without complaint, are both caught.
 
+Damage does not have to cost the rest of the file. Because DST frames are
+independent — each starts the decoder from the same fixed history — decoding can
+resume at any of them, so when the chunk walk finds something other than a chunk
+header where one should be it scans forward for the next `DSTF` and carries on.
+The frames the damaged stretch covers are lost and the ones after it are not.
+Both the byte range skipped and how many of the announced frames survived are
+reported, since a file that converts is not the same as a file that is intact:
+
+    dff2dsf: warning: damaged sound data at 104858626, skipped 131102 bytes,
+                      resumed at the next DST frame
+    damaged: 131102 bytes of sound data skipped in 1 place(s),
+             53306 of 53342 frames decoded
+
+That example is a real one — a 128 KiB block of zeroes at exactly the 100 MiB
+mark of a file from DstEncUi 4.0.3, written up in `docs/philips-encoder.md` —
+and it is what the recovery was built against. It costs 36 frames out of 53342
+rather than the 45% of the file that stopping there did; every other frame comes
+out byte-identical to the uncompressed original. FFmpeg stops at the same frame
+and decodes no further.
+
 ## How the encoder designs its filter
 
 The filter is the whole game: with the reference encoder's own coefficients

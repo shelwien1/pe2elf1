@@ -231,3 +231,37 @@ of stages: 3.6x on four cores, against the 6x their pipeline could reach at best
 The cost of following two candidates is that encoding takes twice as long, since
 the refinement now runs twice per frame. That is the whole of the extra time -
 everything before the refinement is unchanged.
+
+## Two bugs in the shipping encoder
+
+Neither is in the DST coding proper; both are in the code that writes the file.
+
+**A 128 KiB block of zeroes at 100 MiB.** A DSDIFF file written by *DstEncUi
+4.0.3 / Files.dll 1.4.4* has the range `[0x6400000, 0x6420000)` — exactly
+104,857,600 to 104,988,672, the first 128 KiB block at the 100 MiB mark —
+overwritten with zeroes. Everything on both sides of it is intact: decoding
+matches the uncompressed original byte for byte before the hole, and again after
+it, and the file's own `DSTI` index lists ordinary offsets and lengths straight
+across the damaged range, so the encoder knew what the frames were and how long
+they were when it built the index. It simply did not write them. The alignment
+and the size say buffered output: one 128 KiB buffer flushed without having been
+filled.
+
+The damage costs 37 of 53,342 frames — the 36 wholly inside it and the one whose
+payload it clips. FFmpeg stops dead at that frame and decodes no further, which
+is what this program used to do as well; it now scans forward to the next `DSTF`
+and recovers everything after, at the price of the 36.
+
+**A DSD256 source written out as DSD64.** The same file's `FS` chunk says
+2,822,400 Hz. The source is 11,289,600 Hz — DSD256 — and the two are the same
+audio: our decode of the DST stream is byte-identical to the uncompressed
+original. The encoder kept the DSD64 frame length of 37,632 samples per channel
+and simply produced four times as many frames, then wrote the DSD64 rate into
+the header. Everything else is internally consistent, `FRTE` included, so
+nothing in the file gives the real rate away and a decoder has no way to
+recover it: the audio is right, and it will play four times too slow.
+
+DST is only specified at 2,822,400 Hz, so declining DSD256 would have been a
+defensible answer; declaring it as something it is not was not. This program
+writes the input's actual rate, and round trips DSD256 bit-exactly, FFmpeg
+agreeing on the samples.

@@ -275,9 +275,18 @@ bool decode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path) {
     if (!ok) return false;
     if (!writer.finish()) return false;
 
-    if (reader.is_dst())
+    if (reader.is_dst()) {
         fprintf(stderr, "dst payload: %" PRIu64 " bytes in %" PRIu64 " frames\n",
                 reader.dst_payload(), frames);
+        // A damaged file still converts, but how much of it survived is the first
+        // thing anyone will want to know, so it goes with the totals rather than
+        // only in the warnings further up.
+        if (reader.damaged_regions())
+            fprintf(stderr, "damaged: %" PRIu64 " bytes of sound data skipped in %u"
+                            " place(s), %" PRIu64 " of %u frames decoded\n",
+                    reader.skipped_bytes(), reader.damaged_regions(), frames,
+                    reader.frame_count());
+    }
     return true;
 }
 
