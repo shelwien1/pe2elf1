@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn one function's frame struct back into ordinary locals.
 
-    python3 tools/liftframe.py subs1.hpp --list
-    python3 tools/liftframe.py subs1.hpp model_planes
+    python3 tools/liftframe.py bmf.cpp --list
+    python3 tools/liftframe.py bmf.cpp model_planes
 
 Bodies that hold their locals in a `struct alignas(16) …{ … } frame;` -- there
 were seventeen when this was written -- each carried a comment saying the frame

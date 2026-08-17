@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Turn a struct that is really an array back into one.
 
-    python3 tools/unstruct.py subs1.hpp --list
-    python3 tools/unstruct.py subs1.hpp Obj120 [Obj122 ...]
-    python3 tools/unstruct.py subs1.hpp --all
+    python3 tools/unstruct.py bmf.cpp --list
+    python3 tools/unstruct.py bmf.cpp Obj120 [Obj122 ...]
+    python3 tools/unstruct.py bmf.cpp --all
 
 `structs.py` recovers a struct from the constant offsets a pointer is
 dereferenced at, and for most objects that is right. For some it is not:

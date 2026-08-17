@@ -83,6 +83,40 @@ PY
 before=$(cksum < "$work")
 usage=0 quiet=0 killed=0 absent=0 nonzero= reported= inapplicable= wrote=
 
+# The shell drivers were never asked anything.  The loop below walks
+# `tools/*.py`, and for a round after the decompilation became 37 `.inc` files
+# four `.sh` drivers still named `subs1.hpp` -- `frame-sweep`,
+# `unmemcast-sweep`, `struct-sweep` and `resign-drive`.  Run today, each died
+# on the missing file and then printed its own `0 kept, 0 reverted`, which is
+# the exact zero this script exists to distrust.  Two `.py` defaults had gone
+# the same way: `shape.py` with no argument -- the form its own usage line
+# gives first -- ended in a traceback and an exit status of 0.
+#
+# So: a path a tool names on a line it executes has to exist.  Comments are
+# stripped, because a comment naming `003/subs1.hpp` is history and history is
+# allowed to name what is gone; `mktemp` templates and anything with a `$` or a
+# `/` in it are somewhere else and not this tree's.
+#
+# The shell tools only.  A `.py` names its file in a docstring rather than in
+# code, and those lines are as often a placeholder -- `input.hpp`, `one.inc`,
+# `output.hpp` -- as a real path; a rule that cannot tell an example from an
+# argument would have to be argued with every time somebody wrote one.  The
+# usage lines were stale too and were rewritten by hand in the same round; what
+# they need is a reader, and what these need is a test.
+stale=
+for t in tools/*.sh; do
+  for f in $(sed 's/#.*//' "$t" |
+             grep -oE '[A-Za-z0-9_./$"{}-]*[A-Za-z0-9_.-]\.(hpp|inc|cpp)' |
+             sort -u); do
+    case $f in */*|*XXXXXX*|*'$'*|-*) continue ;; esac
+    [ -e "$f" ] || stale="$stale $(basename "$t"):$f"
+  done
+done
+[ -z "$stale" ] || {
+  echo "FAIL: these tools name a file this tree does not have:$stale"
+  exit 1
+}
+
 for t in tools/*.py; do
   n=$(basename "$t")
   case $n in

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Drop a pointer cast the next cast immediately overrides.
 
-    python3 tools/unlayer.py subs1.hpp
-    python3 tools/unlayer.py subs1.hpp --all
+    python3 tools/unlayer.py bmf.cpp
+    python3 tools/unlayer.py bmf.cpp --all
 
     transform_planes((BmfImage *)(uint16_t *)frame.tile_img, ...)
     __alt_p1_context((AltP1Block *)(uint8_t **)_this, ...)

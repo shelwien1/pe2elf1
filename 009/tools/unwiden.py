@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give a cursor the type its dereferences read, not the one it was declared.
 
-    python3 tools/unwiden.py subs1.hpp
-    python3 tools/unwiden.py subs1.hpp --all
+    python3 tools/unwiden.py bmf.cpp
+    python3 tools/unwiden.py bmf.cpp --all
 
     uint32_t *v13;
     v13 = &((uint32_t *)this_3)[4 * v11];

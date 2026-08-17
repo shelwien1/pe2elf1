@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give every blob global its own definition, and see what breaks.
 
-    python3 tools/deblob.py subs1.hpp blob.inc            # report
-    python3 tools/deblob.py subs1.hpp blob.inc --apply    # rewrite
+    python3 tools/deblob.py bmf.cpp blob.inc            # report
+    python3 tools/deblob.py bmf.cpp blob.inc --apply    # rewrite
 
 `blob.inc` is BMF.exe's data segment as one array, and every global is a
 reference into it at its original offset.  That is faithful, but it means the

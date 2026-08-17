@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Replace a `goto` to a straight-line return with the statements themselves.
 
-    python3 tools/untail.py subs1.hpp
-    python3 tools/untail.py subs1.hpp --all
+    python3 tools/untail.py bmf.cpp
+    python3 tools/untail.py bmf.cpp --all
 
 `degoto.py` rewrites a forward `goto` that is the whole of an `if` by inverting
 the condition; it declines everything else, and its `--why` breakdown says the

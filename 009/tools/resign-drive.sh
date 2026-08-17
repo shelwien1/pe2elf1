@@ -92,8 +92,15 @@ done
 # file does, so the verdict is stamped with the source's checksum and goes
 # stale by itself.
 {
-  grep -v "^$(basename "$tool") " "$DRIVEN" 2>/dev/null | grep -v '^# source '
+  grep -v "^$(basename "$tool") " "$DRIVEN" 2>/dev/null | grep -v '^# '
   printf '%s %s\n' "$(basename "$tool")" "$stop"
-  printf '# source %s %s\n' "$SRC" "$(cksum < "$SRC")"
+  # `buildlog.STAMP`, and not a `cksum` of one file: `resign.driven` reads this
+  # back through `buildlog.read`, which wants `# sources <digest>` over the
+  # whole tree.  It was `# subs1.hpp <cksum>`, which that reader has never been
+  # able to parse -- so every verdict written here since the split has come
+  # back as "stale" and the memo has printed nothing, which is the same silence
+  # as no memo at all.
+  python3 -c "import sys; sys.path.insert(0, 'tools'); import buildlog
+print('# sources ' + buildlog.digest('$SRC'))"
 } > "$T/driven" && mv "$T/driven" "$DRIVEN"
 echo "$DRIVEN: $(basename "$tool") $stop"

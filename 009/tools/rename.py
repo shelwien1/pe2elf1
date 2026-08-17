@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Rename identifiers in subs1.hpp, one whole-word at a time.
 
-    python3 tools/rename.py subs1.hpp OLD=NEW [OLD=NEW ...]
-    python3 tools/rename.py subs1.hpp --file names.txt
+    python3 tools/rename.py bmf.cpp OLD=NEW [OLD=NEW ...]
+    python3 tools/rename.py bmf.cpp --file names.txt
 
 Whole-word only, and it refuses rather than guesses:
 

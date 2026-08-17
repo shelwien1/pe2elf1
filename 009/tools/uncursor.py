@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One cursor for a run of record moves, instead of one reload each.
 
-    python3 tools/uncursor.py subs1.hpp
-    python3 tools/uncursor.py subs1.hpp --all
+    python3 tools/uncursor.py bmf.cpp
+    python3 tools/uncursor.py bmf.cpp --all
 
 MSVC reloaded the table base between every pair of the window shift, and
 Hex-Rays gave each reload its own name:

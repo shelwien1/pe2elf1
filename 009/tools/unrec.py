@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fold an unrolled 18-byte record copy into one assignment.
 
-    python3 tools/unrec.py subs1.hpp --list
-    python3 tools/unrec.py subs1.hpp --all
+    python3 tools/unrec.py bmf.cpp --list
+    python3 tools/unrec.py bmf.cpp --all
 
 `algorithm_v2.md` §9 found the p2 table's record size by counting the places
 that copy one: the compiler unrolled every 18-byte move into four dwords and a

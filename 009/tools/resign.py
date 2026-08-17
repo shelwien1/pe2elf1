@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give a local the signedness of the values it actually holds.
 
-    python3 tools/resign.py subs1.hpp
-    python3 tools/resign.py subs1.hpp --all
+    python3 tools/resign.py bmf.cpp
+    python3 tools/resign.py bmf.cpp --all
 
 Hex-Rays picks `int` or `unsigned int` per register, not per quantity, so a
 count assigned only from `int32_t` expressions arrives declared `uint32_t` and
@@ -89,8 +89,17 @@ def driven(path, who=None):
 # and reading both the same way had every sign conversion backwards, which
 # looked like a local being assigned from both signednesses at once.  204 of
 # the 319 candidates were rejected as "mixed direction" for that reason alone.
-WARN = re.compile(r"^subs1\.hpp:(\d+):(\d+): warning: conversion "
+#
+# The filename was spelled `subs1.hpp` as a literal, and since the split gcc
+# names one of the thirty-seven includes and never that.  A rule that cannot
+# match reports zero exactly like a rule with nothing to find, and this one has
+# read zero ever since -- `shape.py` and `retype_locals.py` were each fixed for
+# the same sentence and this was the third reader of the same log.  The name is
+# a group now and the caller compares it against the file it was given, which
+# is the only file the line numbers below can mean.
+WARN = re.compile(r"^(?:.*/)?([\w.\-]+):(\d+):(\d+): warning: conversion "
                   r"(from|to) '([^']+)'(?: \{aka '[^']*'\})? (?:to|from) '([^']+)'")
+HAVE = [False]
 STORE = re.compile(r'^\s*([A-Za-z_]\w*)\s*=(?!=)')
 # Every width, not just the 32-bit pair.  Hex-Rays picks a signedness per
 # register at whatever width the register is used at, and a `uint16_t`
@@ -126,16 +135,27 @@ def candidates(lines, log='warn.log'):
     # count *up* by 43, which the ratchet caught and the streams did not.
     # `tools/buildlog.py` is that check, in one place -- it was in two here and
     # missing from the two other tools that read the same logs.
-    for l in buildlog.rows(log, SRC[0]):
+    here = os.path.basename(SRC[0])
+    rows = buildlog.rows(log, SRC[0])
+    # Whether the log carries the warnings this rule is *about*, which is not
+    # the same question as whether it carries any.  `BMF_WARN=1 ./build.sh`
+    # passes `-Wsign-compare -Wunused-variable -Wshadow` and not
+    # `-Wconversion`, so on the tree's own ratchet log there are none at all --
+    # and a bare `0 conversions` against a log with nothing in it to read is
+    # the lie `tools/buildlog.py` was written about, one log along.  Rebuild
+    # with `BMF_WARN=1 ./build.sh -Wconversion -Wsign-conversion` to give this
+    # something to answer.
+    HAVE[0] = any(' warning: conversion ' in l for l in rows)
+    for l in rows:
         m = WARN.match(l)
-        if not m:
+        if not m or m.group(1) != here:
             continue
-        ln = int(m.group(1))
+        ln = int(m.group(2))
         nm = fn.get(ln - 1)
         if nm is None:
             continue
-        src, dst = ((m.group(5), m.group(4)) if m.group(3) == 'to'
-                    else (m.group(4), m.group(5)))
+        src, dst = ((m.group(6), m.group(5)) if m.group(4) == 'to'
+                    else (m.group(5), m.group(6)))
         code = lines[ln - 1].split('//')[0]
         d = STORE.match(code)
         if d:
@@ -146,7 +166,7 @@ def candidates(lines, log='warn.log'):
         # unsigned, passed a local Hex-Rays declared signed.  The warning's
         # column is the expression being converted, so a bare identifier there
         # is the local to flip, and the flip goes toward the destination.
-        col = int(m.group(2)) - 1
+        col = int(m.group(3)) - 1
         w = re.match(r'[A-Za-z_]\w*', code[col:])
         back = re.search(r'[A-Za-z_]\w*$', code[:col])
         if w and not back and code[col + w.end():col + w.end() + 1] in (',', ')'):
@@ -334,8 +354,12 @@ def main():
             print('%-24s %-16s %-9s -> %-9s %d conversions'
                   % (nm.lstrip('_'), name, cur, want, n))
         was = driven(SRC[0], 'resign.py')
-        print('%d locals declared against their own assignments, %d conversions%s'
-              % (len(found), sum(f[6] for f in found), was and ' (%s)' % was))
+        why = ('' if HAVE[0] else
+               ' (no conversion warnings in the log: rebuild with '
+               '`BMF_WARN=1 ./build.sh -Wconversion -Wsign-conversion`)')
+        print('%d locals declared against their own assignments, %d conversions%s%s'
+              % (len(found), sum(f[6] for f in found), why,
+                 was and ' (%s)' % was))
         return 0
 
     # Declarations only: the uses do not mention the type.  One name has to

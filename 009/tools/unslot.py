@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give a frame slot's extra names their own storage.
 
-    python3 tools/unslot.py subs1.hpp --list
-    python3 tools/unslot.py subs1.hpp alt_p2_context slot0
+    python3 tools/unslot.py bmf.cpp --list
+    python3 tools/unslot.py bmf.cpp alt_p2_context slot0
 
 REFACTORING4.md §5 item 3.  MSVC reused one stack slot for several variables
 whose live ranges do not overlap, and Hex-Rays named each use, so round three's
@@ -65,6 +65,9 @@ def main():
             for slot, al in g.items():
                 print('%-24s %-8s %s' % (fn, slot,
                                          ', '.join('%s:%s' % (n, t) for n, t, _ in al)))
+        if structs.no_frames(lines):
+            print('not applicable: no `struct alignas(16)` frame in this file')
+            return 0
         print('%d slots, %d extra names'
               % (sum(len(g) for g in found.values()),
                  sum(len(v) - 1 for g in found.values() for v in g.values())))

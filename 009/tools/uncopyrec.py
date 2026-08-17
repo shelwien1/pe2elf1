@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn an 18-byte `bmf_copy` into a record assignment.
 
-    python3 tools/uncopyrec.py subs1.hpp --list
-    python3 tools/uncopyrec.py subs1.hpp --all
+    python3 tools/uncopyrec.py bmf.cpp --list
+    python3 tools/uncopyrec.py bmf.cpp --all
 
 Round three folded the unrolled 18-byte moves into `bmf_copy(dst, src, 18)`
 before there was a type for the thing being moved.  There is one now:

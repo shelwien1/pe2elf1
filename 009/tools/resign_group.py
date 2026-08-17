@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give a set of locals that must agree the same signedness.
 
-    python3 tools/resign_group.py subs1.hpp
-    python3 tools/resign_group.py subs1.hpp --all --only=K
+    python3 tools/resign_group.py bmf.cpp
+    python3 tools/resign_group.py bmf.cpp --all --only=K
 
 `resign.py` flips one local at a time and stops where the flip only moves the
 warning: a local converted on the way in *and* on the way out cannot be helped
@@ -47,6 +47,7 @@ Whether a group pays is still the compiler's answer and not this file's.
 `tools/resign-drive.sh --group` applies one and rebuilds.
 """
 import collections
+import os
 import re
 import sys
 
@@ -72,18 +73,23 @@ def components(lines, log='warn.log'):
 
     types = {}
     edges = collections.defaultdict(set)
+    # The same filename group `resign.WARN` grew when its literal `subs1.hpp`
+    # stopped matching anything: a warning names the file the line is in, and
+    # the line numbers below can only mean the file this was given.
+    here = os.path.basename(sys.argv[1])
+    resign.HAVE[0] = any(' warning: conversion ' in l for l in rows)
     for l in rows:
         m = resign.WARN.match(l)
-        if not m:
+        if not m or m.group(1) != here:
             continue
-        nm = fn.get(int(m.group(1)) - 1)
+        nm = fn.get(int(m.group(2)) - 1)
         if nm is None:
             continue
         a, b, _sig = bodies[nm]
         if nm not in types:
             types[nm] = unreload.types([x.split('//')[0] for x in lines[a:b + 1]])
         ty = types[nm]
-        code = lines[int(m.group(1)) - 1].split('//')[0]
+        code = lines[int(m.group(2)) - 1].split('//')[0]
         d = resign.STORE.match(code)
         if not d or d.group(1) not in ty:
             continue
@@ -188,8 +194,12 @@ def main():
                                         ', '.join('%s (%s)' % (v, cur[v])
                                                   for v in sorted(flips))[:60]))
         was = resign.driven(sys.argv[1], 'resign_group.py')
-        print('%d groups of locals that have to agree, %d flips%s'
-              % (len(found), sum(len(f[3]) for f in found), was and ' (%s)' % was))
+        why = ('' if resign.HAVE[0] else
+               ' (no conversion warnings in the log: rebuild with '
+               '`BMF_WARN=1 ./build.sh -Wconversion -Wsign-conversion`)')
+        print('%d groups of locals that have to agree, %d flips%s%s'
+              % (len(found), sum(len(f[3]) for f in found), why,
+                 was and ' (%s)' % was))
         return 0
 
     done = 0

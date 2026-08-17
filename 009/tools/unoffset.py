@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Turn `*(T *)((char *)p + N)` into the member of `p` that lives at N.
 
-    python3 tools/unoffset.py subs1.hpp --list
-    python3 tools/unoffset.py subs1.hpp __alt_p1_context
-    python3 tools/unoffset.py subs1.hpp --all
+    python3 tools/unoffset.py bmf.cpp --list
+    python3 tools/unoffset.py bmf.cpp __alt_p1_context
+    python3 tools/unoffset.py bmf.cpp --all
 
 REFACTORING3.md §2.1's whole complaint, applied where the struct already says
 the answer.  `alt_p1_alloc` reached `Obj0`'s `f0`, `f4`, `f8` and `f12[51]`

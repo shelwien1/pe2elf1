@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Collapse a run of consecutive same-type members into the array it is.
 
-    python3 tools/arrayify.py subs1.hpp --list
-    python3 tools/arrayify.py subs1.hpp --apply
+    python3 tools/arrayify.py bmf.cpp --list
+    python3 tools/arrayify.py bmf.cpp --apply
 
 `Obj0` declares fifty-one `uint32_t` at +12, +16, +20 … +212, one member each.
 Nothing in that says they are contiguous, which is the only thing about them

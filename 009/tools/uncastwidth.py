@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Classify `*(T *)&x.m` by the width of the cast against the width of `m`.
 
-    python3 tools/uncastwidth.py subs1.hpp            # the census
-    python3 tools/uncastwidth.py subs1.hpp --same     # list the deletable ones
-    python3 tools/uncastwidth.py subs1.hpp --wide     # and the real packed stores
-    python3 tools/uncastwidth.py subs1.hpp --apply    # delete the same-width ones
+    python3 tools/uncastwidth.py bmf.cpp            # the census
+    python3 tools/uncastwidth.py bmf.cpp --same     # list the deletable ones
+    python3 tools/uncastwidth.py bmf.cpp --wide     # and the real packed stores
+    python3 tools/uncastwidth.py bmf.cpp --apply    # delete the same-width ones
 
 Hex-Rays writes a store through `*(T *)&obj->member` whenever MSVC's store did
 not have the member's type, and that covers two entirely different things:

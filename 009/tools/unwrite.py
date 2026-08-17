@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Delete a local that is written once and never read.
 
-    python3 tools/unwrite.py subs1.hpp
-    python3 tools/unwrite.py subs1.hpp --all
+    python3 tools/unwrite.py bmf.cpp
+    python3 tools/unwrite.py bmf.cpp --all
 
 `unused.py` works from the compiler's `-Wunused-variable`, which does not fire
 on a variable that *is* assigned.  GCC's `-Wunused-but-set-variable` does, and

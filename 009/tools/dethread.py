@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Delete the `const __m128 &` parameter thread.
 
-    python3 tools/dethread.py subs1.hpp --list
-    python3 tools/dethread.py subs1.hpp --all
+    python3 tools/dethread.py bmf.cpp --list
+    python3 tools/dethread.py bmf.cpp --all
 
 REFACTORING4.md §2.6 item 1.  `main` declares
 

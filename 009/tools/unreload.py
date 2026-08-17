@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Load a member once where the decompilation loads it over and over.
 
-    python3 tools/unreload.py subs1.hpp
-    python3 tools/unreload.py subs1.hpp --all
+    python3 tools/unreload.py bmf.cpp
+    python3 tools/unreload.py bmf.cpp --all
 
 MSVC reloads a member between every pair of uses -- it cannot prove the store
 in between does not alias the object it came from -- and Hex-Rays gives every

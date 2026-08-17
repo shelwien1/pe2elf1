@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Turn one function's `__hexrays_frame` buffer back into ordinary locals.
 
-    python3 tools/unframe.py subs1.hpp __code_pixel
-    python3 tools/unframe.py subs1.hpp __code_pixel --struct
-    python3 tools/unframe.py subs1.hpp --list
+    python3 tools/unframe.py bmf.cpp __code_pixel
+    python3 tools/unframe.py bmf.cpp __code_pixel --struct
+    python3 tools/unframe.py bmf.cpp --list
 
 Hex-Rays could not always recover a function's stack frame as named locals, so
 the extractor emitted the frame as one array and bound each local to an offset

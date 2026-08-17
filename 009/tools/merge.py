@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Make several recoveries of one object into one struct.
 
-    python3 tools/merge.py subs1.hpp --plan Obj11 Obj8 Obj19 Obj31 Obj69
-    python3 tools/merge.py subs1.hpp --apply Obj11 Obj8 Obj19 Obj31 Obj69
+    python3 tools/merge.py bmf.cpp --plan Obj11 Obj8 Obj19 Obj31 Obj69
+    python3 tools/merge.py bmf.cpp --apply Obj11 Obj8 Obj19 Obj31 Obj69
 
 `structs.py` recovers a struct per *access pattern*, so one object arrives as
 several: REFACTORING3.md §2.2 shows `alt_model_p2_encode` storing an array

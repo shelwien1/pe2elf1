@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Find `p[-u]` where `u` is unsigned — a subtraction that only i386 undoes.
 
-    python3 tools/negindex.py subs1.hpp
-    python3 tools/negindex.py subs1.hpp --all     # every negative index
+    python3 tools/negindex.py bmf.cpp
+    python3 tools/negindex.py bmf.cpp --all     # every negative index
 
 Hex-Rays writes `&p[-n]` for a pointer stepped backwards, and gives `n` the
 type MSVC's register had, which is often unsigned.  `-n` on a `uint32_t` is

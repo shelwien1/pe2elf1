@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Delete a struct that is a run of one scalar, and point at the scalar.
 
-    python3 tools/unscalar.py subs1.hpp --list
-    python3 tools/unscalar.py subs1.hpp Obj13
-    python3 tools/unscalar.py subs1.hpp --all
+    python3 tools/unscalar.py bmf.cpp --list
+    python3 tools/unscalar.py bmf.cpp Obj13
+    python3 tools/unscalar.py bmf.cpp --all
 
 `structs.py` recovers a struct per access pattern, and a pattern that only ever
 dereferences its base gives a struct with one member at offset zero:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Lift the frame members that are provably not part of a layout.
 
-    python3 tools/defram.py subs1.hpp --list
-    python3 tools/defram.py subs1.hpp __alt_p2_model
-    python3 tools/defram.py subs1.hpp --all
+    python3 tools/defram.py bmf.cpp --list
+    python3 tools/defram.py bmf.cpp __alt_p2_model
+    python3 tools/defram.py bmf.cpp --all
 
 Round one's `reframe.py` did the opposite: it gave 8 plain-split frames their
 struct back, after one of them segfaulted because its locals had stopped being
@@ -44,7 +44,14 @@ import structs                                                    # noqa: E402
 SCALAR = re.compile(r'^(\s*)(.+?)\s*&\s*(\w+)\s*=\s*(.*?)frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
 ARRAY = re.compile(r'^(\s*)(.+?)\s*\(&(\w+)\)(\[\d+\])\s*=\s*(.*?)frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
 # The tag came with REFACTORING4.md §5 item 1.
-OPEN = re.compile(r'^(\s*)struct alignas\(16\) \w* ?\{\s*// (\d+) bytes')
+# The frame's declaration.  The `// NNN bytes` tag this used to require was
+# something the decompiler's output carried and every frame since has been
+# given a name instead -- `shape.py`'s frame census says so, and says the tag
+# went.  Requiring it meant this pattern could not match a frame the tree
+# actually writes, so "0 of 0 aliases lift" was a zero from a rule that could
+# not fire.  The tag is optional now; the tree has no frames left either way,
+# which is a fact the two answers below tell apart.
+OPEN = re.compile(r'^(\s*)struct alignas\(16\) \w* ?\{(?:\s*// (\d+) bytes)?\s*$')
 MEMBER = re.compile(r'^(\s*)([A-Za-z_][\w ]*?\s*\**)\s*(\w+)\s*(\[(\d+)\])?\s*;(.*)$')
 ANYALIAS = re.compile(r'^\s*[^=;]*&\s*\(?\w+\)?(?:\[\d+\])?\s*=[^;]*frame\.\w+[^;]*;\s*$')
 ASSERT = re.compile(r'^\s*(static_assert|"|\|\||==)')
@@ -272,6 +279,15 @@ def main():
                   % (nm.lstrip('_'), len(go), len(fr['aliases']),
                      'the whole frame' if not stay else
                      ', '.join('%d %s' % (v, k) for k, v in sorted(why.items()))))
+        # "0 of 0" is what this said whether the file held frames with no
+        # liftable alias or held no frame at all, and for the whole of one
+        # round it was the second -- `shape.py` counts 0 frames in the tree,
+        # Phase 3 having dissolved every one.  A question whose subject is
+        # absent is neither a finding nor a zero; `sweep.sh` counts that answer
+        # apart and this is one.
+        if not any(OPEN.match(l) for l in lines):
+            print('not applicable: no `struct alignas(16)` frame in this file')
+            return 0
         print('%d of %d aliases lift' % (sum(len(p[2]) for p in plans),
                                          sum(len(p[1]['aliases']) for p in plans)))
         return 0

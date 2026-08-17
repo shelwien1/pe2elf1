@@ -2,7 +2,7 @@
 """Fold an `if` whose condition is now a known constant.
 
     python3 foldif.py --scan [file...]        find conditions that are constant
-    python3 foldif.py subs1.hpp <line> true|false ["note"]
+    python3 foldif.py bmf.cpp <line> true|false ["note"]
 
 <line> is the 1-based line of the `if (...)`.  With `true` the then-branch is
 kept and any `else` deleted; with `false` the then-branch is deleted and the

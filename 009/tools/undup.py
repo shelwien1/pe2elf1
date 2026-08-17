@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Collapse an `if`/`else` whose two arms are the same code.
 
-    python3 tools/undup.py subs1.hpp
-    python3 tools/undup.py subs1.hpp --all
+    python3 tools/undup.py bmf.cpp
+    python3 tools/undup.py bmf.cpp --all
 
 MSVC proves at compile time that a copy loop cannot alias, fails to prove it,
 and emits *both* answers -- a six-line test over a pair of pointers, and behind

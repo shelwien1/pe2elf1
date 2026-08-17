@@ -2,7 +2,7 @@
 """Compact one decompiled function's block of local declarations.
 
     python3 tools/compact_locals.py input.hpp output.hpp funcname [mode]
-    python3 tools/compact_locals.py subs1.hpp [mode]     # report, write nothing
+    python3 tools/compact_locals.py bmf.cpp [mode]     # report, write nothing
 
 Hex-Rays emits every local on its own line, which for a body of any size is a
 screenful of noise before the code starts:

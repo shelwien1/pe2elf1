@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Collapse recovered structs that are byte-for-byte the same declaration.
 
-    python3 tools/dedup.py subs1.hpp --list
-    python3 tools/dedup.py subs1.hpp --apply
+    python3 tools/dedup.py bmf.cpp --list
+    python3 tools/dedup.py bmf.cpp --apply
 
 `structs.py` recovers one struct per alias class, and the same shape turns up
 again and again: ten copies of

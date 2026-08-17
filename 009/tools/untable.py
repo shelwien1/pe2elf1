@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Say a file-scope table once instead of three times.
 
-    python3 tools/untable.py subs1.hpp --list
-    python3 tools/untable.py subs1.hpp __dword_439880
-    python3 tools/untable.py subs1.hpp --all
+    python3 tools/untable.py bmf.cpp --list
+    python3 tools/untable.py bmf.cpp __dword_439880
+    python3 tools/untable.py bmf.cpp --all
 
 REFACTORING4.md §4.  Twenty tables arrived as a byte image, a typedef for the
 real type, and a reference that reinterprets one as the other:

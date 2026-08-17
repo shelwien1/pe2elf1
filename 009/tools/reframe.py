@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give a plain-split frame back its layout, without giving back its casts.
 
-    python3 tools/reframe.py subs1.hpp pre2.hpp --list
-    python3 tools/reframe.py subs1.hpp pre2.hpp write_bmp
+    python3 tools/reframe.py bmf.cpp pre2.hpp --list
+    python3 tools/reframe.py bmf.cpp pre2.hpp write_bmp
 
 Phase 2 turned each `__hexrays_frame` buffer into ordinary locals.  Sixteen
 functions could not take that and got a struct with explicit padding instead;

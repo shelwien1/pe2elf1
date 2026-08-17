@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Put back a load the compiler hoisted out of the expression that uses it.
 
-    python3 tools/unhoist.py subs1.hpp
-    python3 tools/unhoist.py subs1.hpp --all
+    python3 tools/unhoist.py bmf.cpp
+    python3 tools/unhoist.py bmf.cpp --all
 
 MSVC schedules loads early to hide their latency, and Hex-Rays gives each
 hoisted load a name, so one expression arrives as a pile of one-use locals

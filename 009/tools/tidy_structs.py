@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Clean up what `structs.py` had to write conservatively.
 
-    python3 tools/tidy_structs.py subs1.hpp
+    python3 tools/tidy_structs.py bmf.cpp
 
 The rewriter emits three things wider than they need to be, because at the
 moment it writes them it does not know they are safe to narrow:

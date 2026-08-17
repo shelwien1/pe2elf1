@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One address, written more than one way.
 
-    python3 tools/unspell.py subs1.hpp
+    python3 tools/unspell.py bmf.cpp
 
     rc_begin_encode   row[4 * i + 20] = 60      # row is uint8_t *
     rc_begin_decode   row[2 * i + 10] = 60      # row is uint16_t *

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Delete the casts that cast a thing to the type it already has.
 
-    python3 tools/decast.py subs1.hpp [--from warnings.txt]
+    python3 tools/decast.py bmf.cpp [--from warnings.txt]
 
 Same arrangement as `tools/unused.py`, and for the same reason: the list comes
 from the compiler, not from a pattern here.  `-Wuseless-cast` fires only when

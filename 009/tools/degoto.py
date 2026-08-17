@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn `if (c) goto L; ... L:` back into `if (!c) { ... }`.
 
-    python3 tools/degoto.py subs1.hpp --list
-    python3 tools/degoto.py subs1.hpp --apply 1     # the first candidate
+    python3 tools/degoto.py bmf.cpp --list
+    python3 tools/degoto.py bmf.cpp --apply 1     # the first candidate
 
 REFACTORING.md's Phase 6 expected the file's `goto`s to be four rewritable
 shapes -- loop `continue`, loop `break`, early `return`, shared error tail.

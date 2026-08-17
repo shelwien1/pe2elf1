@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Turn `((T *)p)[expr + K]` into the array member of `p` that `K` lands in.
 
-    python3 tools/unindex.py subs1.hpp --list
-    python3 tools/unindex.py subs1.hpp __alt_p2_model
-    python3 tools/unindex.py subs1.hpp --all
+    python3 tools/unindex.py bmf.cpp --list
+    python3 tools/unindex.py bmf.cpp __alt_p2_model
+    python3 tools/unindex.py bmf.cpp --all
 
 REFACTORING5.md §3.4.  `unoffset.py` handles the shape whose index is a
 constant; this one handles the shape whose index is a variable *plus* a

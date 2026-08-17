@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Write out the conversion a signed/unsigned comparison already performs.
 
-    python3 tools/explicitcmp.py subs1.hpp
-    python3 tools/explicitcmp.py subs1.hpp --all
+    python3 tools/explicitcmp.py bmf.cpp
+    python3 tools/explicitcmp.py bmf.cpp --all
 
 `while ( x < width )` with `x` unsigned and `width` signed does not compare a
 signed value with an unsigned one -- C converts `width` to `unsigned` first and

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write subs1.hpp's pattern constants in hex instead of decimal.
 
-    python3 tools/hex_constants.py subs1.hpp
+    python3 tools/hex_constants.py bmf.cpp
 
 Hex-Rays prints integer literals in decimal, which hides what some of them are.
 A byte-fill written into a table next to `0x606060606060606LL` reads as

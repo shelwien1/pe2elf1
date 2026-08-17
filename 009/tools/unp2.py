@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Give the p2 counter table's cursors the record type they point at.
 
-    python3 tools/unp2.py subs1.hpp --list
-    python3 tools/unp2.py subs1.hpp Obj102
-    python3 tools/unp2.py subs1.hpp --all
+    python3 tools/unp2.py bmf.cpp --list
+    python3 tools/unp2.py bmf.cpp Obj102
+    python3 tools/unp2.py bmf.cpp --all
 
 REFACTORING5.md §3.1.  Round four named the table -- `Obj11::f284712` is
 `P2Count[163840]`, four bytes a record -- but the model reads it through 30

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Retype the locals a function uses as pointers, from int32_t to char *.
 
-    python3 tools/retype.py subs1.hpp __sub_416C90
-    python3 tools/retype.py subs1.hpp --list
+    python3 tools/retype.py bmf.cpp __sub_416C90
+    python3 tools/retype.py bmf.cpp --list
 
 Hex-Rays could not tell an address from an int, so a function that walks a
 structure does it like this:

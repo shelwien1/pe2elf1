@@ -2,9 +2,9 @@
 """Classify the pointers this file still puts through a 32-bit integer.
 
     BMF_STRICT=1 BMF_BITS=64 ./build.sh     # writes strict64.log
-    python3 tools/ptrwidth.py subs1.hpp             # the census
-    python3 tools/ptrwidth.py subs1.hpp --roundtrip # list one kind
-    python3 tools/ptrwidth.py subs1.hpp --apply     # rewrite the safe kind
+    python3 tools/ptrwidth.py bmf.cpp             # the census
+    python3 tools/ptrwidth.py bmf.cpp --roundtrip # list one kind
+    python3 tools/ptrwidth.py bmf.cpp --apply     # rewrite the safe kind
 
 `BMF_STRICT=1 ./build.sh` has said 0 for six rounds, and on i386 that is true:
 `(int32_t)p` is not a narrowing when a pointer is four bytes wide, so the whole

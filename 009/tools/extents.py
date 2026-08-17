@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What each blob global is actually used as.
 
-    python3 tools/extents.py subs1.hpp
+    python3 tools/extents.py bmf.cpp
 
 Hex-Rays gave most of these globals the bound `[0x10000]`, which is a guess and
 usually a wrong one: `hist_scratch` is declared `int32_t[65536]` and only ever

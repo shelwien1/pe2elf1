@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Inline a local that is assigned once and read once.
 
-    python3 tools/untemp.py subs1.hpp
-    python3 tools/untemp.py subs1.hpp --all
+    python3 tools/untemp.py bmf.cpp
+    python3 tools/untemp.py bmf.cpp --all
 
 MSVC spills a subexpression into a register and Hex-Rays gives the register a
 name, so a swap of two counts arrives as four statements and two names:

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Inline the `__fwd_*` shims and call the function they call.
 
-    python3 tools/unshim.py subs1.hpp --list
-    python3 tools/unshim.py subs1.hpp --all
+    python3 tools/unshim.py bmf.cpp --list
+    python3 tools/unshim.py bmf.cpp --all
 
 Round one gave every cross-function call a shim, because the extraction did not
 agree with itself about argument types:

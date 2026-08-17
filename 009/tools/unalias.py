@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fold a frame alias into the member it binds, REFACTORING4.md §5 item 2.
 
-    python3 tools/unalias.py subs1.hpp --list
-    python3 tools/unalias.py subs1.hpp read_bmp
-    python3 tools/unalias.py subs1.hpp --all
+    python3 tools/unalias.py bmf.cpp --list
+    python3 tools/unalias.py bmf.cpp read_bmp
+    python3 tools/unalias.py bmf.cpp --all
 
 Round three gave every frame member a reference so the body could keep saying
 what Hex-Rays called it:

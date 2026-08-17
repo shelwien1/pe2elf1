@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Find numbers in the code that are a struct member's byte offset.
 
-    python3 tools/rawoffset.py subs1.hpp
-    python3 tools/rawoffset.py subs1.hpp --all    # every match, not just big ones
+    python3 tools/rawoffset.py bmf.cpp
+    python3 tools/rawoffset.py bmf.cpp --all    # every match, not just big ones
 
 An earlier round reported "raw-offset sites 0" and the count was a spelling:
 it looked for `_this + ofs`, which is the shape Hex-Rays emits for a *small*

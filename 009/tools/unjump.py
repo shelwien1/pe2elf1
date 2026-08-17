@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn a `goto` into the block it jumps into.
 
-    python3 tools/unjump.py subs1.hpp
-    python3 tools/unjump.py subs1.hpp --all
+    python3 tools/unjump.py bmf.cpp
+    python3 tools/unjump.py bmf.cpp --all
 
 `degoto.py --why` counts eleven labels it declines because the `goto` jumps
 *into* a block. Every one of them is the same shape, and it is not irreducible:

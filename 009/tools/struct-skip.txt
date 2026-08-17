@@ -212,3 +212,4 @@ interleave_plane:__byte_4433AD
 interleave_plane:Src_2 interleave_plane:Src_3 interleave_plane:Src_4
 colour_transform:__byte_4433AD
 colour_transform:Src_3 colour_transform:Src_4 colour_transform:Src_5
+main:args

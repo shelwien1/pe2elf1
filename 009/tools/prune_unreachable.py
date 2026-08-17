@@ -14,8 +14,8 @@ unreachable.  In a tool that deletes what it names, that is not a report.
 Given a unit with classes in it this declines, and `deadcheck.py` is the check
 that answers.
 
-    python3 tools/prune_unreachable.py subs1.hpp            # report only
-    python3 tools/prune_unreachable.py subs1.hpp --apply    # rewrite the file
+    python3 tools/prune_unreachable.py bmf.cpp            # report only
+    python3 tools/prune_unreachable.py bmf.cpp --apply    # rewrite the file
 
 Roots are `main` plus anything bmf.cpp itself names.  Whole function
 definitions go, and then any entry of the globals block that no surviving body

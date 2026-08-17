@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Give a `bmf_bss` global storage of its own.
 
-    python3 tools/unbss.py subs1.hpp --list
-    python3 tools/unbss.py subs1.hpp __dword_4458E0 __dword_4458E4
-    python3 tools/unbss.py subs1.hpp --group C --name bias --array
+    python3 tools/unbss.py bmf.cpp --list
+    python3 tools/unbss.py bmf.cpp __dword_4458E0 __dword_4458E4
+    python3 tools/unbss.py bmf.cpp --group C --name bias --array
 
 REFACTORING3.md §3.  The 60 globals still live at their 1997 addresses:
 

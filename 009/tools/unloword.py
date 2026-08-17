@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Give a local the width its writes and reads agree on, not the register's.
 
-    python3 tools/unloword.py subs1.hpp
-    python3 tools/unloword.py subs1.hpp --all
-    python3 tools/unloword.py subs1.hpp --declined   # and what stopped each one
+    python3 tools/unloword.py bmf.cpp
+    python3 tools/unloword.py bmf.cpp --all
+    python3 tools/unloword.py bmf.cpp --declined   # and what stopped each one
 
     uint32_t row16;
     if ( !byte_rows && bits == 4 )

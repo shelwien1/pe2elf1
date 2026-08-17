@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fold an 18-byte record copy whose loads MSVC hoisted above its stores.
 
-    python3 tools/unrechoist.py subs1.hpp --list
-    python3 tools/unrechoist.py subs1.hpp --all
+    python3 tools/unrechoist.py bmf.cpp --list
+    python3 tools/unrechoist.py bmf.cpp --all
 
 `unrec.py` takes the unrolled copy whose five statements are five
 load-stores in a row.  MSVC did not always emit it that way: where it had

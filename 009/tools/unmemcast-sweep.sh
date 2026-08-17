@@ -25,9 +25,14 @@ kept=0 reverted=0 offered=0
 for f in "${FILES[@]}"; do
   # a type can carry a `*`, so split on the arrow rather than on whitespace
   python3 tools/unmemcast.py "$f" --list |
-    sed -E 's/^([^ ]+) +([^ ]+) +-> +(.*[^ ]) +[0-9]+ sites$/__\1|\2|\3/' > "$LIST"
+    sed -nE 's/^([^ ]+) +([^ ]+) +-> +(.*[^ ]) +[0-9]+ sites$/__\1|\2|\3/p' > "$LIST"
+  # `sed -n ... p`, not `sed ...`: an untransformed line -- the tool's own
+  # summary, or its header -- came through as a whole-line `$fn` with no `|`
+  # in it, and every file counted one.  The run reported "36 offered" against
+  # a tool that had offered nothing, which is a fake finding of exactly the
+  # shape the fake zeros above were.
   while IFS='|' read -r fn mem ty; do
-    [ -n "$fn" ] || continue
+    [ -n "$fn" ] && [ -n "$mem" ] && [ -n "$ty" ] || continue
     offered=$((offered+1))
     cp "$f" "$SAVE"
     python3 tools/unmemcast.py "$f" "$fn" "$mem" "$ty" >/dev/null ||

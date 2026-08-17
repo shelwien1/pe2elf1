@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Drop the cast when the base already has that type.
 
-    python3 tools/unrecast.py subs1.hpp
-    python3 tools/unrecast.py subs1.hpp --all
+    python3 tools/unrecast.py bmf.cpp
+    python3 tools/unrecast.py bmf.cpp --all
 
 Hex-Rays casts before every scaled dereference whether or not the cast says
 anything, and after five rounds of retyping most of them say nothing:

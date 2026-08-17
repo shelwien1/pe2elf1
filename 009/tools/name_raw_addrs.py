@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rewrite subs1.hpp's raw BMF_BLOB(0x...) addresses as named globals.
 
-    python3 tools/name_raw_addrs.py subs1.hpp
+    python3 tools/name_raw_addrs.py bmf.cpp
 
 Most of BMF.exe's data segment reached the decompilation as named globals, but
 Hex-Rays left some addresses baked into expressions instead -- the

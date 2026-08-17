@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give one of the program's objects a struct, and use it.
 
-    python3 tools/structs.py subs1.hpp --list
-    python3 tools/structs.py subs1.hpp --apply 3      # object 3
+    python3 tools/structs.py bmf.cpp --list
+    python3 tools/structs.py bmf.cpp --apply 3      # object 3
 
 `tools/objects.py` groups the names that denote the same allocation and reports
 each one's field map.  This turns a map into a declaration and rewrites the
@@ -41,6 +41,55 @@ WIDTH = {'char': 1, 'uint8_t': 1, 'int8_t': 1, 'uint16_t': 2, 'int16_t': 2,
 def width(ty):
     ty = re.sub(r'^\s*const\s+', '', ty.strip()).strip()
     return 4 if ty.endswith('*') else WIDTH.get(ty)
+
+
+_SAID = [False]
+INCLUDES = re.compile(r'^\s*#include "[^"]+\.inc"')
+
+
+def note_unspliced(lines):
+    """Say so, once, when `lines` is an include list rather than a program.
+
+    `bmf.cpp` is 195 lines of `#include` with two bodies in it, and 77 of the
+    tools here read the path they are given and nothing else.  For a tool that
+    *rewrites* that path -- which is most of them -- that is right: the unit it
+    can apply to is one file.  It is silent, though, when someone runs one by
+    hand to take a measurement, and a measurement is what the answer then gets
+    read as: `python3 tools/firstuse.py bmf.cpp` answered `0 locals` about a
+    program that was not there, and three commit messages in one round quoted
+    it.  `sweep.sh` splices a copy before it asks, which is why the sweep found
+    three things the hand runs had not.
+
+    Printed on stderr and not raised, and not on the last line, because
+    `sweep.sh` requires the last line to carry a zero and the answer itself is
+    not what is wrong.  Once per process: several of these walk the file more
+    than once.
+    """
+    if _SAID[0] or not any(INCLUDES.match(l) for l in lines):
+        return
+    _SAID[0] = True
+    sys.stderr.write(
+        'note: this is an include list, not the program -- the bodies below '
+        'are the two in bmf.cpp itself.\n      `tools/sweep.sh bmf.cpp` asks '
+        'every tool against the spliced unit; a tool that rewrites what it '
+        'reads\n      wants one of the .inc files instead.\n')
+
+
+FRAME = re.compile(r'^\s*struct alignas\(16\) ')
+
+
+def no_frames(lines):
+    """True when `lines` holds no reconstructed stack frame at all.
+
+    Four tools here ask a question whose subject is a frame -- which members
+    are read wider than they are declared, which slots carry two names, which
+    spill areas are one value, which aliases lift -- and Phase 3 dissolved
+    every frame in the tree.  Their answers were `0 frame members`, `0 slots`,
+    `0 spill areas`, `0 of 0 aliases`, none of which says that what it counted
+    was absent rather than clean.  `sweep.sh` counts a `not applicable:` apart
+    from a zero for exactly this reason; this is the test the four share.
+    """
+    return not any(FRAME.match(l) for l in lines)
 
 
 def bodies(lines):
@@ -98,6 +147,7 @@ def defs(lines):
     depth comes back with the body.  `depth == 0` is a free function, which is
     the only kind whose address can be taken by writing its bare name.
     """
+    note_unspliced(lines)
     out, stack = [], []
     for i, l in enumerate(lines):
         s = l.split('//')[0]

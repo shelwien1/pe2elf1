@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Name a local after the member it is one assignment of.
 
-    python3 tools/namelocal.py subs1.hpp
-    python3 tools/namelocal.py subs1.hpp --all
+    python3 tools/namelocal.py bmf.cpp
+    python3 tools/namelocal.py bmf.cpp --all
 
 `unaliasvar.py` folds a local that is a copy of another local and `untemp.py`
 folds one that is read once. What is left after both is the local that is a

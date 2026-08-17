@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Give a frame's spill area one member per slot.
 
-    python3 tools/unspill.py subs1.hpp --list
-    python3 tools/unspill.py subs1.hpp decode_pixel sym
+    python3 tools/unspill.py bmf.cpp --list
+    python3 tools/unspill.py bmf.cpp decode_pixel sym
 
 REFACTORING5.md §5.1.  Round three declared these as arrays because a byte
 range is what they looked like:
@@ -141,6 +141,9 @@ def main():
                       % (fn, mem, n, len(use),
                          sum(sum(c.values()) for c in use.values()), tys,
                          ', %d walks' % len(walk) if walk else ''))
+        if structs.no_frames(lines):
+            print('not applicable: no `struct alignas(16)` frame in this file')
+            return 0
         print('%d spill areas in %d functions'
               % (sum(len(g) for g in found.values()), len(found)))
         return 0

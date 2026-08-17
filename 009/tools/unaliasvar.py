@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fold a local that is one assignment of another local.
 
-    python3 tools/unaliasvar.py subs1.hpp --list
-    python3 tools/unaliasvar.py subs1.hpp --all
+    python3 tools/unaliasvar.py bmf.cpp --list
+    python3 tools/unaliasvar.py bmf.cpp --all
 
 MSVC spills a value and reloads it into a second register, and Hex-Rays gives
 each register a name, so one quantity arrives as a chain:

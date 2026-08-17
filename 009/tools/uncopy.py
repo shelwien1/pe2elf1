@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Delete a local that is only ever a copy of another local.
 
-    python3 tools/uncopy.py subs1.hpp
-    python3 tools/uncopy.py subs1.hpp --all
+    python3 tools/uncopy.py bmf.cpp
+    python3 tools/uncopy.py bmf.cpp --all
 
 MSVC keeps a value in more than one register across a long straight-line
 block, and Hex-Rays names every register, so one row cursor arrives as a

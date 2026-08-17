@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn `p->f278528[i].m128_XX[k]` into the member of `Obj11` at that offset.
 
-    python3 tools/unlane.py subs1.hpp --list
-    python3 tools/unlane.py subs1.hpp --all
+    python3 tools/unlane.py bmf.cpp --list
+    python3 tools/unlane.py bmf.cpp --all
 
 REFACTORING4.md §2.5.  `Obj11`'s union declares the same bytes four ways, and
 the first way -- `__m128 f278528[21]` -- is Hex-Rays' record of a 16-byte

@@ -2,8 +2,8 @@
 """Give a local the type the compiler says its assignments have.
 
     BMF_STRICT=1 ./build.sh          # writes strict.log
-    python3 tools/retype_locals.py subs1.hpp --list
-    python3 tools/retype_locals.py subs1.hpp --apply
+    python3 tools/retype_locals.py bmf.cpp --list
+    python3 tools/retype_locals.py bmf.cpp --apply
 
 Phase C's worklist is `strict.log`: every conversion the build needs
 `-fpermissive` to accept.  Most of them are one shape --

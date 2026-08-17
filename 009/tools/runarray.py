@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Declare a run of frame members as the array the code walks it as.
 
-    python3 tools/runarray.py subs1.hpp --list
-    python3 tools/runarray.py subs1.hpp alt_model_p2_encode lpAddress plane
+    python3 tools/runarray.py bmf.cpp --list
+    python3 tools/runarray.py bmf.cpp alt_model_p2_encode lpAddress plane
 
 REFACTORING3.md §4.2's third category.  Hex-Rays recovered
 

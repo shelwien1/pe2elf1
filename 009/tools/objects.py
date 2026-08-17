@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Group the names that denote the same allocation, and describe each object.
 
-    python3 tools/objects.py subs1.hpp            # the objects
-    python3 tools/objects.py subs1.hpp --fields N # the field map of object N
+    python3 tools/objects.py bmf.cpp            # the objects
+    python3 tools/objects.py bmf.cpp --fields N # the field map of object N
 
 REFACTORING.md §4.2 and §7 say the obstacle to typing the structure fields is
 not the offsets -- those are mostly constant -- but object identity: `_this` in
