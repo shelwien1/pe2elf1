@@ -2,6 +2,8 @@
 //
 //   dff2dsf d input.dff output.dsf     decode, undoing DST compression
 //   dff2dsf c input.dsf output.dff     compress with DST
+//
+// plus --enable-/--disable- flags naming the optional chunks of the .dff.
 
 // The whole program is one translation unit: each .hpp is an implementation
 // file that includes its own declarations, so building is just
@@ -18,16 +20,83 @@ namespace dff2dsf {
 
 namespace {
 
+// The optional chunks of a written .dff, each named after the chunk itself and
+// each switchable with --enable-<name> or --disable-<name>.  The defaults live
+// in DffWriteOptions, not here, so the two cannot drift apart.
+struct Feature {
+    const char* name;
+    bool DffWriteOptions::* flag;
+    const char* what;
+};
+
+constexpr Feature kFeatures[] = {
+    { "DSTI", &DffWriteOptions::dsti, "frame index, 12 bytes per frame, for seeking" },
+    { "COMT", &DffWriteOptions::comt, "comment naming the encoder, with a timestamp" },
+    { "ABSS", &DffWriteOptions::abss, "absolute start time, in PROP/SND" },
+    { "LSCO", &DffWriteOptions::lsco, "loudspeaker configuration, in PROP/SND" },
+};
+
 int usage() {
     fprintf(stderr,
             "dff2dsf - DSDIFF (DST) and DSF converter\n"
             "\n"
             "usage: dff2dsf d input.dff output.dsf\n"
-            "       dff2dsf c input.dsf output.dff\n"
+            "       dff2dsf c input.dsf output.dff [options]\n"
             "\n"
             "  d   decode: DST coded or raw DSD in a .dff, written as a .dsf\n"
-            "  c   compress: DSD in a .dsf, written as a DST coded .dff\n");
+            "  c   compress: DSD in a .dsf, written as a DST coded .dff\n"
+            "\n"
+            "options, which select the optional chunks of a written .dff:\n");
+
+    // Each is listed the way round that changes something: what is written by
+    // default is offered for removal, and the rest for adding.
+    const DffWriteOptions defaults;
+    for (const Feature& f : kFeatures) {
+        char flag[32];
+        snprintf(flag, sizeof(flag), "--%s-%s",
+                 defaults.*f.flag ? "disable" : "enable", f.name);
+        fprintf(stderr, "  %-16s %s\n", flag, f.what);
+    }
+
+    fprintf(stderr,
+            "\n"
+            "Each has both forms, so a default can also be restated explicitly.\n"
+            "FVER, PROP/SND with FS, CHNL and CMPR, and the DST sound data itself\n"
+            "are what a decoder needs, and are always written.\n");
     return 1;
+}
+
+// Chunk ids are conventionally upper case, but neither shift key is required.
+bool name_is(const char* a, const char* b) {
+    for (;; a++, b++) {
+        char x = *a, y = *b;
+        if (x >= 'a' && x <= 'z') x = char(x - 'a' + 'A');
+        if (y >= 'a' && y <= 'z') y = char(y - 'a' + 'A');
+        if (x != y) return false;
+        if (!x) return true;
+    }
+}
+
+bool parse_option(const char* arg, DffWriteOptions* opt) {
+    bool enable;
+    const char* name;
+    if (strncmp(arg, "--enable-", 9) == 0) {
+        enable = true;
+        name = arg + 9;
+    } else if (strncmp(arg, "--disable-", 10) == 0) {
+        enable = false;
+        name = arg + 10;
+    } else {
+        return false;
+    }
+
+    for (const Feature& f : kFeatures) {
+        if (name_is(name, f.name)) {
+            opt->*f.flag = enable;
+            return true;
+        }
+    }
+    return false;
 }
 
 void print_progress(uint64_t done, uint64_t total) {
@@ -135,7 +204,8 @@ bool decode_file(const char* in_path, const char* out_path) {
     return true;
 }
 
-bool encode_file(const char* in_path, const char* out_path) {
+bool encode_file(const char* in_path, const char* out_path,
+                 const DffWriteOptions& options) {
     DsfReader reader;
     if (!reader.open(in_path)) return false;
 
@@ -155,7 +225,7 @@ bool encode_file(const char* in_path, const char* out_path) {
             double(reader.samples_per_channel()) / double(rate));
 
     DffWriter writer;
-    if (!writer.open(out_path, channels, rate)) return false;
+    if (!writer.open(out_path, channels, rate, options)) return false;
 
     uint8_t* src = static_cast<uint8_t*>(xalloc(bytes_per_channel * size_t(channels)));
     uint8_t* frame = static_cast<uint8_t*>(xalloc(enc.max_frame_size()));
@@ -206,13 +276,39 @@ bool encode_file(const char* in_path, const char* out_path) {
 int main(int argc, char** argv) {
     using namespace dff2dsf;
 
-    if (argc != 4) return usage();
-    if (argv[1][1] != '\0' || (argv[1][0] != 'd' && argv[1][0] != 'c')) {
-        fprintf(stderr, "dff2dsf: unknown command '%s'\n\n", argv[1]);
+    // Command, input and output in that order, with options anywhere among them.
+    DffWriteOptions options;
+    const char* arg[3] = {};
+    int nargs = 0;
+    bool any_option = false;
+
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-' && argv[i][1] != '\0') {
+            if (!parse_option(argv[i], &options)) {
+                fprintf(stderr, "dff2dsf: unknown option '%s'\n\n", argv[i]);
+                return usage();
+            }
+            any_option = true;
+            continue;
+        }
+        if (nargs == 3) {
+            fprintf(stderr, "dff2dsf: unexpected argument '%s'\n\n", argv[i]);
+            return usage();
+        }
+        arg[nargs++] = argv[i];
+    }
+
+    if (nargs != 3) return usage();
+    if (arg[0][1] != '\0' || (arg[0][0] != 'd' && arg[0][0] != 'c')) {
+        fprintf(stderr, "dff2dsf: unknown command '%s'\n\n", arg[0]);
         return usage();
     }
 
-    const bool ok = argv[1][0] == 'd' ? decode_file(argv[2], argv[3])
-                                      : encode_file(argv[2], argv[3]);
+    const bool decoding = arg[0][0] == 'd';
+    if (decoding && any_option)
+        fprintf(stderr, "dff2dsf: note: the format options only apply to 'c'\n");
+
+    const bool ok = decoding ? decode_file(arg[1], arg[2])
+                             : encode_file(arg[1], arg[2], options);
     return ok ? 0 : 1;
 }

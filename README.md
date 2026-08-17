@@ -5,10 +5,16 @@ format the Philips encoder (`DstEncUi`) produces — and plain DSF (`.dsf`).
 
 ```
 usage: dff2dsf d input.dff output.dsf
-       dff2dsf c input.dsf output.dff
+       dff2dsf c input.dsf output.dff [options]
 
   d   decode: DST coded or raw DSD in a .dff, written as a .dsf
   c   compress: DSD in a .dsf, written as a DST coded .dff
+
+options, which select the optional chunks of a written .dff:
+  --disable-DSTI   frame index, 12 bytes per frame, for seeking
+  --disable-COMT   comment naming the encoder, with a timestamp
+  --disable-ABSS   absolute start time, in PROP/SND
+  --disable-LSCO   loudspeaker configuration, in PROP/SND
 ```
 
 ## Building
@@ -73,6 +79,15 @@ for chunk:
 Per-frame CRCs (`DSTC`) are allowed by DSDIFF but the reference file carries
 none, so this encoder emits none either — adding them would make the output less
 like the original, not more.
+
+The `--disable-` options remove the last two rows of that table, and `ABSS` and
+`LSCO` from within `PROP`; each also has an `--enable-` form, so a default can
+be restated rather than remembered. Everything else — the `FRM8` form, `FVER`,
+`FS`, `CHNL`, `CMPR` and the sound data — is what a decoder needs, and is always
+written. The options change the container only: the DST frames come out byte for
+byte the same whatever is switched off, which is what makes them safe to use.
+FFmpeg decodes every combination to identical samples, and each round trips
+bit-exactly.
 
 ## How the encoder designs its filter
 

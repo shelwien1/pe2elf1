@@ -54,9 +54,11 @@ const char kCreatingMachine[] = "dff2dsf DST encoder";
 
 } // namespace
 
-bool DffWriter::open(const char* path, int channels, unsigned dsd_rate) {
+bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
+                     const DffWriteOptions& options) {
     if (channels < 1 || channels > kDstMaxChannels)
         return ERR("unsupported channel count %d", channels);
+    opt_ = options;
     if (!f_.open_write(path)) return false;
 
     uint8_t hdr[256];
@@ -77,8 +79,8 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate) {
                                12 + 4 +            // FS
                                12 + chnl_size + (chnl_size & 1) +
                                12 + 20 +           // CMPR
-                               12 + 8 +            // ABSS
-                               12 + 2;             // LSCO
+                               (opt_.abss ? 12 + 8 : 0) +
+                               (opt_.lsco ? 12 + 2 : 0);
     put_tag(p, "PROP");
     put_be64(p, prop_size);
     put_tag(p, "SND ");
@@ -102,16 +104,20 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate) {
     p += 14;
     *p++ = 0;                             // pad to the even size above
 
-    put_tag(p, "ABSS");
-    put_be64(p, 8);
-    put_be16(p, 0);                       // hours
-    *p++ = 0;                             // minutes
-    *p++ = 0;                             // seconds
-    put_be32(p, 0);                       // samples
+    if (opt_.abss) {
+        put_tag(p, "ABSS");
+        put_be64(p, 8);
+        put_be16(p, 0);                   // hours
+        *p++ = 0;                         // minutes
+        *p++ = 0;                         // seconds
+        put_be32(p, 0);                   // samples
+    }
 
-    put_tag(p, "LSCO");
-    put_be64(p, 2);
-    put_be16(p, uint16_t(lsco_for(channels)));
+    if (opt_.lsco) {
+        put_tag(p, "LSCO");
+        put_be64(p, 2);
+        put_be16(p, uint16_t(lsco_for(channels)));
+    }
 
     put_tag(p, "DST ");
     dst_size_pos_ = p - hdr;
@@ -156,15 +162,16 @@ bool DffWriter::write_frame(const uint8_t* data, size_t size) {
         if (!f_.write(&pad, 1)) return false;
     }
 
-    // The index points at the frame data, not at its chunk header.
-    if (!record_frame(chunk_pos + 12, size)) return false;
+    // The index points at the frame data, not at its chunk header.  With no
+    // index to write there is nothing to remember, so nothing is kept.
+    if (opt_.dsti && !record_frame(chunk_pos + 12, size)) return false;
     frames_++;
     return true;
 }
 
 // DSTI: one entry per frame, so a player can seek without walking every chunk.
 bool DffWriter::write_index() {
-    if (!frames_) return true;
+    if (!opt_.dsti || !frames_) return true;
 
     uint8_t hdr[12];
     uint8_t* p = hdr;
@@ -193,6 +200,8 @@ bool DffWriter::write_index() {
 
 // COMT: a single file-history comment naming the encoder, timestamped now.
 bool DffWriter::write_comment() {
+    if (!opt_.comt) return true;
+
     const uint32_t text_len = uint32_t(sizeof(kCreatingMachine) - 1);
     const uint32_t padded = text_len + (text_len & 1);
     const uint64_t size = 2 + 14 + padded;
