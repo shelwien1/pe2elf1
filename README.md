@@ -149,6 +149,9 @@ Per frame, for all channels together:
 Steps 3 to 5 predict bit for bit exactly as the decoder does, sharing the filter
 lookup table in `dst.hpp`.
 
+`ALGORITHM.md` describes both directions in full — the frame syntax, the table
+coding, the arithmetic coder, the filter design and the refinement — at the level
+of detail you would need to write another implementation.
 `docs/philips-encoder.md` compares this against the reference encoder's own
 algorithm, read out of a decompilation of its DLL: where the two agree, where
 they differ, and which of its ideas were worth taking. The coefficient smoothing
