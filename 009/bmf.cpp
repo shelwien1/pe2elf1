@@ -28,7 +28,7 @@
 //
 // ## the encode/decode pairs
 //
-// Thirteen of them are one `template<int32_t f_DEC>` each, instantiated as the
+// Fourteen of them are one `template<int32_t f_DEC>` each, instantiated as the
 // two names their callers use.  What decided which: how many lines the two
 // bodies actually share, measured as a longest common subsequence over the
 // pair.
@@ -39,7 +39,15 @@
 //   rc_begin                    91 + 89     alt_model_p1                 263 + 212
 //   P2Freq::code_three_way      49 + 55     alt_model_p2                  3 + 3
 //   AltP1Block::d8_body         30 + 26     code_plane                    1 + 1
-//   code_colour_plane           40 + 43
+//   code_colour_plane           40 + 43     ModelBlock::code_run_length   26 + 24
+//
+// The last of those is inside the one pair that stays two functions.  A
+// declined pair is a decision about two *bodies*, not a bar on naming what
+// they share: `run_scan` came out of these two an earlier round and this is
+// the walk beside it, one bit per bucket level with the bit read on one side
+// and taken from the length on the other.  The pair is 13 shared lines of 211
+// now, from 27 of 277 at the start of the round -- the share falls because
+// what they shared keeps becoming something with a name.
 //
 // `code_colour_plane` was never on the declined table, which is the point of
 // it: `interleave_plane` and `colour_transform` are an encode/decode pair that
@@ -86,7 +94,7 @@
 // table the reason for each is written out rather than left as a share.
 // `tools/pairshare.py` re-measures both and reports any line that has drifted.
 //
-//   code_pixel / decode_pixel                         16 of 252 (6%)
+//   code_pixel / decode_pixel                         13 of 211 (6%)
 //   predict_med / unpredict_med                       10 of 104 (10%)
 //
 // **`predict_med` walks backwards and `unpredict_med` forwards**, and that is

@@ -1230,6 +1230,53 @@ struct ModelBlock {
     }
   }
 
+  // The run's length, one bit per bucket level from the top down.  A bit is
+  // coded only at a level that could still belong to a run shorter than `cap`,
+  // and `seen` says whether this is the first bit at a level: `bucket` counts
+  // *down*, so `bucket == top` is "this is the first turn" and not the
+  // tautology it reads as.
+  //
+  // Both coders wrote this out and they differ in where the bit comes from and
+  // in nothing else, down to the order of the rescale against the counter
+  // bump.  The decoder counted `bucket` itself down and the encoder kept a
+  // second name for it -- `bucket_at` beside `bucket`, with a comment in each
+  // body explaining that the comparison of the two is not a tautology -- and
+  // both spelled every value in here through a slot of the candidate table.
+  //
+  // The encoder's `first |= run_bit` accumulated the mask rather than the bit
+  // and its counter bump then wrote `n[run_bit != 0]`; with the bit normalised
+  // the two arms are the same three lines.  The return is the decoder's
+  // answer; the encoder's caller already holds the length and drops it.
+  template<int32_t f_DEC>
+  int32_t code_run_length(int32_t bucket, int32_t cap, int32_t len) {
+    const int32_t top = bucket;
+    int32_t idx = 0;
+    int32_t mask = 1<<(bucket&31);
+    int32_t seen = 0;
+    do {
+      if( (mask|seen)<cap ) {
+        BitCtr *ctr = &run_ctr[16*((seen==0)+(bucket==top))+bucket];
+        const uint32_t bin_tot = ctr->n[0]+ctr->n[1];
+        int32_t run_bit;
+        if( f_DEC ) {
+          run_bit = rc.decode_bit(ctr->n[0], ctr->n[1]);
+        } else {
+          run_bit = (len&mask)!=0;
+          rc.encode_bit(ctr->n[0], ctr->n[1], run_bit);
+        }
+        if( ctr->limit<bin_tot )
+          ctr->scale_rare();
+        ctr->n[run_bit] += 8;
+        if( run_bit )
+          idx |= mask;
+        seen |= idx&mask;
+      }
+      --bucket;
+      mask >>= 1;
+    } while( mask );
+    return idx;
+  }
+
   // Stage one missed, so the symbol is looked for among the candidates and then
   // down the selector lists.  `idx_s` is how far the run reached -- zero when
   // there was no run -- and every answer here is one past it.
@@ -1303,41 +1350,13 @@ struct ModelBlock {
         // fetched again after a spill, and one of them was the whole reason
         // the `goto` below could skip a line.
         const int32_t hit_a = hit;
-        if( hit_a ) {
-          idx_s = idx1;
-        } else {
-          idx_s = 0;
-          // A run of one is already decoded: the escape bit said so and the
-          // length needs no bits.  This was a `goto` past the loop *and* past
-          // the two lines below it -- both of which are no-ops when `idx_s` is
-          // zero, which it is on exactly this path.
-          if( idx1>1 ) {
-            // The bucket the run started in, a slot of the candidate table
-            // borrowed as a local.  `bucket` counts *down* through the loop
-            // below, so `bucket == bucket_top` is "this is the first turn" and
-            // not the tautology it reads as.  The run's length went into a
-            // second slot and is `idx1`, which is still live.
-            const int32_t bucket_top = bucket;
-            int32_t mask = 1<<(bucket&31);
-            int32_t seen = 0;
-            do {
-              if( (mask|seen)<idx1 ) {
-                BitCtr *ctr = &run_ctr[16*((seen==0)+(bucket==bucket_top))+bucket];
-                int32_t run0 = ctr->n[0];
-                int32_t bin_tot = run0+ctr->n[1];
-                const int32_t run_bit = rc.decode_bit(run0, ctr->n[1]);
-                if( ctr->limit<(uint32_t)bin_tot )
-                  ctr->scale_rare();
-                ctr->n[run_bit] += 8;
-                if( run_bit )
-                  idx_s |= mask;
-                seen |= idx_s&mask;
-              }
-              --bucket;
-              mask >>= 1;
-            } while( mask );
-          }
-        }
+        // A run of one is already decoded: the escape bit said so and the
+        // length needs no bits.  That was a `goto` past the walk *and* past the
+        // two lines below it -- both of which are no-ops when `idx_s` is zero,
+        // which it is on exactly this path.
+        idx_s = hit_a ? idx1
+              : idx1>1 ? code_run_length<1>(bucket, idx1, 0)
+              : 0;
         if( idx_s )
           row_cur[5][idx_s-1].sym = row_cur[5][-1].sym;
         if( idx_s>hit_a ) {
@@ -1509,34 +1528,8 @@ struct ModelBlock {
       uint8_t *amap_at = (uint8_t*)alpha_map;
       hit = run_hit;
       *(amap_at+msym1) = run_hit;
-      if( !run_hit&&run_len!=1 ) {
-        // `bucket_at` counts down and `bucket` does not, so
-        // `bucket_at == bucket` is "this is the first turn" and not the
-        // tautology it reads as.  The decoder's half counts `bucket` itself
-        // down and needs the second name; both spelled it through a slot of
-        // the candidate table.
-        int32_t bucket_at = bucket;
-        int32_t bit5 = 1<<(bucket&31);
-        int32_t first = 0;
-        do {
-          if( run_len>(bit5|first) ) {
-            BitCtr *ctr = &run_ctr[16*((first==0)+(bucket_at==bucket))
-                                   +bucket_at];
-            const int32_t run_bit = runlen&bit5;
-            uint32_t bin_tot = ctr->n[0]+ctr->n[1];
-            rc.encode_bit(ctr->n[0], ctr->n[1], run_bit!=0);
-            if( ctr->limit<bin_tot )
-              ctr->scale_rare();
-            // `bit5` was saved into a slot and read straight back across the
-            // `+= 8`, which cannot move it; and `first` was stored into a
-            // fourth slot that nothing ever reads.
-            ctr->n[run_bit!=0] += 8;
-            first |= run_bit;
-          }
-          --bucket_at;
-          bit5 >>= 1;
-        } while( bit5 );
-      }
+      if( !run_hit&&run_len!=1 )
+        code_run_length<0>(bucket, run_len, runlen);
       if( hit )
         return runlen;
     } else {
