@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Names the algorithm documents spell that the program no longer has.
 
-    python3 tools/unstale.py                  # ALGORITHM.md, algorithm_v2.md
+    python3 tools/unstale.py                  # ALGORITHM.md, ALGORITHM_v2.md
     python3 tools/unstale.py --list           # and what each one is
     python3 tools/unstale.py old/subs1.hpp    # check them against that source
 
-`ALGORITHM.md` and `algorithm_v2.md` describe the program as it stands, body by
+`ALGORITHM.md` and `ALGORITHM_v2.md` describe the program as it stands, body by
 body and field by field.  Every rename since they were written has been able to
 falsify a sentence in them, and nothing checked: `rename.py` warns about the
 renames *it* makes, and says nothing about an edit made by hand.
@@ -55,7 +55,12 @@ import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 
-DOCS = ('ALGORITHM.md', 'algorithm_v2.md', 'MODELS.md')
+# `ALGORITHM_v2.md`, with the capital A.  This read `algorithm_v2.md` for as
+# long as the entry has existed, and no such file has ever been in this
+# repository -- `survey` skips a document it cannot open, so the name sat in the
+# list looking like coverage and provided none.  A missing document is now
+# reported rather than skipped, which is what turned it up.
+DOCS = ('ALGORITHM.md', 'ALGORITHM_v2.md', 'MODELS.md')
 
 # Named on purpose.  The reason is the entry: a name whose reason cannot be
 # written down does not belong here.
@@ -241,11 +246,17 @@ def survey(docs=DOCS, sources=('subs1.hpp', 'bmf.cpp')):
             text.append('\n'.join(lines))
     code = '\n'.join(l.split('//')[0] for l in '\n'.join(text).split('\n'))
     names = set(re.findall(r'[A-Za-z_]\w*', code))
-    out = []
+    out, missing = [], []
     for doc in docs:
         try:
             lines = open(doc).read().split('\n')
         except IOError:
+            # Not `continue`.  A document this cannot open is a document it is
+            # not checking, and saying nothing about that is how `DOCS` came to
+            # name `algorithm_v2.md` -- a file that has never been in this
+            # repository -- and look like coverage for as long as the entry
+            # existed.
+            missing.append(doc)
             continue
         for i, line in enumerate(lines, 1):
             for m in re.finditer(r'`([A-Za-z_]\w*)`', line):
@@ -253,7 +264,7 @@ def survey(docs=DOCS, sources=('subs1.hpp', 'bmf.cpp')):
                 if len(n) <= 2 or known(names, n) or n in HISTORY:
                     continue
                 out.append((doc, i, n, line.strip()))
-    return out
+    return out, missing
 
 
 def main():
@@ -266,8 +277,10 @@ def main():
     docs = [a for a in sys.argv[1:] if a.endswith('.md')] or list(DOCS)
     src = [a for a in sys.argv[1:]
            if not a.endswith('.md') and not a.startswith('--')]
-    found = survey(tuple(docs), tuple(src) + ('bmf.cpp',) if src
-                   else ('subs1.hpp', 'bmf.cpp'))
+    found, missing = survey(tuple(docs), tuple(src) + ('bmf.cpp',) if src
+                            else ('subs1.hpp', 'bmf.cpp'))
+    for doc in missing:
+        print('%-22s cannot be opened -- not checked' % doc)
     seen = set()
     for doc, line, name, text in found:
         if '--list' in sys.argv or name not in seen:
@@ -278,8 +291,9 @@ def main():
     for doc, line, nm, said, is_ in drift:
         print('%-22s %s:%d  says %d lines, is %d' % (nm, doc, line, said, is_))
     print('%d names in %d documents that the program no longer has, '
-          '%d line counts that have drifted'
-          % (len(seen), len(set(d for d, _, _, _ in found)), len(drift)))
+          '%d line counts that have drifted, %d documents not checked'
+          % (len(seen), len(set(d for d, _, _, _ in found)), len(drift),
+             len(missing)))
     return 0
 
 
