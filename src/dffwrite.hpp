@@ -59,6 +59,7 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
     if (channels < 1 || channels > kDstMaxChannels)
         return ERR("unsupported channel count %d", channels);
     opt_ = options;
+    channels_ = channels;
     if (!f_.open_write(path)) return false;
 
     uint8_t hdr[256];
@@ -148,7 +149,8 @@ bool DffWriter::record_frame(int64_t payload_pos, size_t size) {
     return true;
 }
 
-bool DffWriter::write_frame(const uint8_t* data, size_t size) {
+bool DffWriter::write_frame(const uint8_t* data, size_t size,
+                            const uint8_t* dsd, size_t dsd_bytes_per_channel) {
     uint8_t hdr[12];
     uint8_t* p = hdr;
     put_tag(p, "DSTF");
@@ -160,6 +162,18 @@ bool DffWriter::write_frame(const uint8_t* data, size_t size) {
     if (size & 1) {
         const uint8_t pad = 0;
         if (!f_.write(&pad, 1)) return false;
+    }
+
+    // DSTC belongs immediately after the frame it covers, and covers the DSD
+    // that went in rather than the DST that came out.
+    if (opt_.dstc) {
+        if (!dsd) return ERR("DSTC is enabled but the frame's DSD was not given");
+        uint8_t crc[16];
+        p = crc;
+        put_tag(p, "DSTC");
+        put_be64(p, 4);
+        put_be32(p, dsd_crc_planar(dsd, dsd_bytes_per_channel, channels_));
+        if (!f_.write(crc, sizeof(crc))) return false;
     }
 
     // The index points at the frame data, not at its chunk header.  With no

@@ -34,6 +34,7 @@ constexpr Feature kFeatures[] = {
     { "COMT", &DffWriteOptions::comt, "comment naming the encoder, with a timestamp" },
     { "ABSS", &DffWriteOptions::abss, "absolute start time, in PROP/SND" },
     { "LSCO", &DffWriteOptions::lsco, "loudspeaker configuration, in PROP/SND" },
+    { "DSTC", &DffWriteOptions::dstc, "per-frame CRC over the DSD, 16 bytes per frame" },
 };
 
 int usage() {
@@ -117,7 +118,7 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
     if (!frame) return false;
 
     const size_t bytes_per_channel = dec.frame_bits() / 8;
-    uint64_t frames = 0;
+    uint64_t frames = 0, crcs = 0, crc_errors = 0;
     bool ok = true;
 
     for (;;) {
@@ -132,6 +133,18 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
             ok = false;
             break;
         }
+        // A DSTC chunk covers the DSD the frame decodes to, so it checks the
+        // decoding as well as the file.
+        if (reader.has_frame_crc()) {
+            crcs++;
+            if (dsd_crc(0, frame, dec.frame_bytes()) != reader.frame_crc()) {
+                if (crc_errors < 8)
+                    fprintf(stderr, "\rdff2dsf: warning: frame %llu fails its DSTC CRC\n",
+                            (unsigned long long)frames);
+                crc_errors++;
+            }
+        }
+
         if (!writer.write(frame, bytes_per_channel)) { ok = false; break; }
 
         if ((++frames & 255) == 0) print_progress(frames, reader.frame_count());
@@ -146,6 +159,9 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
     if (dec.uncoded_frames())
         fprintf(stderr, "dff2dsf: %llu frame(s) were stored uncompressed\n",
                 (unsigned long long)dec.uncoded_frames());
+    if (crcs)
+        fprintf(stderr, "crc: %llu frame(s) carried a DSTC CRC, %llu mismatched\n",
+                (unsigned long long)crcs, (unsigned long long)crc_errors);
 
     free(frame);
     *frames_out = frames;
@@ -241,7 +257,7 @@ bool encode_file(const char* in_path, const char* out_path,
 
         size_t size = 0;
         if (!enc.encode(src, frame, enc.max_frame_size(), &size)) { ok = false; break; }
-        if (!writer.write_frame(frame, size)) { ok = false; break; }
+        if (!writer.write_frame(frame, size, src, bytes_per_channel)) { ok = false; break; }
 
         frames++;
         coded_bytes += size;

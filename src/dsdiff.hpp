@@ -181,6 +181,25 @@ bool DffReader::open(const char* path) {
     return true;
 }
 
+// A frame's CRC, if the file carries them, is in the DSTC chunk immediately
+// after it.  Looking for it here keeps it paired with the frame it covers.
+void DffReader::read_frame_crc() {
+    has_frame_crc_ = false;
+    if (cur_ + 12 > body_end_) return;
+    if (!f_.seek(cur_)) return;
+
+    uint8_t id[4];
+    uint64_t size;
+    if (!read_chunk_header(id, &size)) return;
+    if (!tag_is(id, "DSTC") || size < 4) return;
+
+    uint8_t v[4];
+    if (!f_.read(v, 4)) return;
+    frame_crc_ = rb32(v);
+    has_frame_crc_ = true;
+    cur_ += 12 + int64_t(size) + int64_t(size & 1);
+}
+
 int DffReader::next_dst_frame(const uint8_t** data, size_t* size, size_t* capacity) {
     while (cur_ + 12 <= body_end_) {
         if (!f_.seek(cur_)) return -1;
@@ -208,9 +227,10 @@ int DffReader::next_dst_frame(const uint8_t** data, size_t* size, size_t* capaci
             *size = n;
             *capacity = n + kBitReaderPadding;
             dst_payload_ += n;
+            read_frame_crc();
             return 1;
         }
-        // DSTC (frame CRC) and anything else in here is not needed.
+        // Anything else in here is not needed.
     }
     return 0;
 }

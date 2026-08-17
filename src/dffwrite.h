@@ -6,6 +6,7 @@
 #define DFF2DSF_DFFWRITE_H
 
 #include "common.h"
+#include "crc.h"
 
 namespace dff2dsf {
 
@@ -15,10 +16,11 @@ namespace dff2dsf {
 // chunks not listed here - FRM8, FVER, PROP/SND with FS, CHNL and CMPR, and the
 // DST sound data itself - carry what a decoder needs and are not optional.
 struct DffWriteOptions {
-    bool dsti = true;   // DSTI frame index, for seeking
-    bool comt = true;   // COMT comment naming the encoder
-    bool abss = true;   // ABSS absolute start time, in PROP/SND
-    bool lsco = true;   // LSCO loudspeaker configuration, in PROP/SND
+    bool dsti = true;    // DSTI frame index, for seeking
+    bool comt = true;    // COMT comment naming the encoder
+    bool abss = true;    // ABSS absolute start time, in PROP/SND
+    bool lsco = true;    // LSCO loudspeaker configuration, in PROP/SND
+    bool dstc = false;   // DSTC per-frame CRC after each frame
 };
 
 class DffWriter {
@@ -28,8 +30,11 @@ public:
     bool open(const char* path, int channels, unsigned dsd_rate,
               const DffWriteOptions& options = DffWriteOptions());
 
-    // Appends one DST frame as a DSTF chunk.
-    bool write_frame(const uint8_t* data, size_t size);
+    // Appends one DST frame as a DSTF chunk.  `dsd` is the uncompressed planar
+    // DSD the frame codes, which the DSTC chunk's CRC is taken over; it is only
+    // read when that chunk is enabled.
+    bool write_frame(const uint8_t* data, size_t size,
+                     const uint8_t* dsd = nullptr, size_t dsd_bytes_per_channel = 0);
 
     // Writes the trailing chunks, patches the sizes and the frame count, closes.
     bool finish();
@@ -43,6 +48,7 @@ private:
 
     DffWriteOptions opt_;
     File f_;
+    int channels_ = 0;
     int64_t frm8_size_pos_ = 0;
     int64_t dst_size_pos_ = 0;
     int64_t dst_body_pos_ = 0;

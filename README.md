@@ -15,6 +15,7 @@ options, which select the optional chunks of a written .dff:
   --disable-COMT   comment naming the encoder, with a timestamp
   --disable-ABSS   absolute start time, in PROP/SND
   --disable-LSCO   loudspeaker configuration, in PROP/SND
+  --enable-DSTC    per-frame CRC over the DSD, 16 bytes per frame
 ```
 
 ## Building
@@ -77,17 +78,32 @@ for chunk:
 | `COMT` | file history comment naming the encoder |
 
 Per-frame CRCs (`DSTC`) are allowed by DSDIFF but the reference file carries
-none, so this encoder emits none either — adding them would make the output less
-like the original, not more.
+none, so they are off by default here too; `--enable-DSTC` writes them. The
+DSDIFF 1.5 specification puts one after each frame, holding a four byte CRC over
+the *uncompressed* DSD that frame codes — so it checks the decoder as much as
+the file:
+
+    CRC(x) = (x^32 · I(x)) mod2long G(x),   G(x) = x^32 + x^31 + x^4 + 1
+
+with `I(x)` the frame's interleaved DSD bits, most significant bit of the first
+byte first. That is an ordinary MSB-first CRC with generator `0x80000011`, zero
+initial value, no reflection and no final inversion. They cost 16 bytes per
+frame, 0.4% of a typical file. This decoder checks them whenever a file carries
+them, whoever wrote it, and reports how many frames matched.
 
 The `--disable-` options remove the last two rows of that table, and `ABSS` and
 `LSCO` from within `PROP`; each also has an `--enable-` form, so a default can
 be restated rather than remembered. Everything else — the `FRM8` form, `FVER`,
 `FS`, `CHNL`, `CMPR` and the sound data — is what a decoder needs, and is always
 written. The options change the container only: the DST frames come out byte for
-byte the same whatever is switched off, which is what makes them safe to use.
-FFmpeg decodes every combination to identical samples, and each round trips
+byte the same whatever is switched on or off, which is what makes them safe to
+use. FFmpeg decodes every combination to identical samples, and each round trips
 bit-exactly.
+
+The CRCs were checked two ways: against a bitwise long division written straight
+from the specification's own recipe rather than from the table-driven code, and
+by corrupting files — a flipped bit in a `DSTC` value, and one in the middle of
+a frame's coded data that still decodes without complaint, are both caught.
 
 ## How the encoder designs its filter
 
@@ -233,6 +249,7 @@ Each `.hpp` is an implementation file with its declarations in the matching
 | `src/dsfread.hpp` | DSF reading: the same in reverse |
 | `src/dffwrite.hpp` | DSDIFF writing |
 | `src/bits.h`, `src/bitwrite.h` | bit reader and writer, JPEG-LS Golomb code |
+| `src/crc.h` | the DSDIFF frame CRC carried in `DSTC` |
 | `src/common.h` | byte order, buffered file access, the platform bits |
 
 ## Licensing

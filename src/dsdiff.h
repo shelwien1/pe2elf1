@@ -34,12 +34,18 @@ public:
     // The payload is zero padded to allow the bit reader's windowed reads.
     int next_dst_frame(const uint8_t** data, size_t* size, size_t* capacity);
 
+    // The DSTC chunk that followed the frame just returned, if there was one:
+    // a CRC over the DSD that frame decodes to.
+    bool has_frame_crc() const { return has_frame_crc_; }
+    uint32_t frame_crc() const { return frame_crc_; }
+
     // Next block of raw interleaved DSD.  Returns 1, 0 or -1 as above.
     int next_dsd_block(const uint8_t** data, size_t* size);
 
 private:
     bool parse_prop(int64_t end);
     bool parse_frte(uint64_t size);
+    void read_frame_crc();
     bool read_chunk_header(uint8_t id[4], uint64_t* size);
     bool ensure_capacity(size_t n);
 
@@ -56,6 +62,8 @@ private:
     bool saw_cmpr_ = false;
     uint32_t frame_count_ = 0;
     uint64_t dst_payload_ = 0;
+    bool has_frame_crc_ = false;
+    uint32_t frame_crc_ = 0;
     uint16_t frame_rate_ = 0;
     uint32_t channel_ids_[kDstMaxChannels] = {};
 
