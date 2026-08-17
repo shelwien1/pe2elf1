@@ -41,8 +41,8 @@ a unit they can read. The tree was 12,091 lines when that was re-taken; the
 twenty are that fix's comment.
 
 Two of those figures have since moved and the rest have not: it is 10,464
-spliced lines as this is re-read, and 16 `while( 1 )`s rather than 32 — see
-Phase 7, where one of them stopped being a decline. A figure in a table is a
+spliced lines as this is re-read, and 15 `while( 1 )`s rather than 32 — see
+Phase 7, where two of them stopped being declines. A figure in a table is a
 measurement with a date on it, so these carry when they were taken rather than
 a "now" that goes quietly wrong.
 
@@ -286,13 +286,22 @@ plan's own criterion for leaving a loop alone: more syntax, not less.
 So the phase is a decline, and the reason is now measured rather than guessed.
 Left in the plan as "expect roughly half", the next round re-proposes it.
 
-**Re-measured four rounds later, and one of them qualifies now.** There are 16
-`while( 1 )`s where there were 32, and `plane_choose.inc`'s `descend` is a
-`while( dir*at[0] < dir*end[0] || dir*at[1] < dir*end[1] )`. Nothing about the
-rule changed; the body did. That loop was written out twice, once per
-direction, with the second copy nested inside the first's and leaving it by a
-`goto` past the bottom of both — so the test that is now at the top of the loop
-was not at the top of anything when the 32 were counted.
+**Re-measured four rounds later, and two of them qualify now.** There are 15
+`while( 1 )`s where there were 32.
+
+`plane_choose.inc`'s `descend` is a `while( dir*at[0] < dir*end[0] ||
+dir*at[1] < dir*end[1] )`. Nothing about the rule changed; the body did. That
+loop was written out twice, once per direction, with the second copy nested
+inside the first's and leaving it by a `goto` past the bottom of both — so the
+test that is now at the top of the loop was not at the top of anything when
+the 32 were counted.
+
+`unmodel_plane_slow`'s row loop is a `do … while( (uint32_t)++bucket <
+(uint32_t)height )`, which is the shape the paragraph above names *first* —
+"the break at the bottom a `do … while (c)`" — with its break on the last line
+and no statement after it. That is not a body that moved: it is a case the
+measurement missed, and the sentence "not one of the 32" was wrong when it was
+written.
 
 Which is the thing worth keeping from this section, over and above the
 decline: a decline is a measurement of a body, and the body moves. The

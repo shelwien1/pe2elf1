@@ -1145,7 +1145,11 @@ struct ModelBlock {
     if( height>0 ) {
       out_at = dst_buf;
       int32_t bucket = 0;
-      while( 1 ) {
+      // A `while( 1 )` whose only exit was a `break` on the last line, which is
+      // the `do`/`while` it is written as.  `MINIMAL-SYNTAX.md`'s Phase 7 is
+      // the second of that document's declines to have expired: it measured 32
+      // of these and nought convertible, and this is the shape it named first.
+      do {
         start_row();
         PixRec* lists = row_cur[6];
         PixRec* t = row_cur[7];
@@ -1178,9 +1182,7 @@ struct ModelBlock {
         out_at = write_row(out_at, nbytes, row_w);
         // `height` is `int32_t` and this side is already `uint32_t`, so C
         // converts the right operand too.  Written where it happens.
-        if( (uint32_t)++bucket>=(uint32_t)height )
-          break;
-      }
+      } while( (uint32_t)++bucket<(uint32_t)height );
     }
     rc_end_decode();
     int32_t bpp_raw = depth_raw;
