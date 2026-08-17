@@ -49,8 +49,8 @@ private:
     enum State { kEmpty, kFilled, kCoding, kCoded };
 
     struct Slot {
-        uint8_t* src = nullptr;    // planar DSD for one frame
-        uint8_t* out = nullptr;    // the coded frame
+        ByteP src = nullptr;       // planar DSD for one frame
+        ByteP out = nullptr;       // the coded frame
         size_t out_size = 0;
         int state = kEmpty;
     };
@@ -62,13 +62,15 @@ private:
     // within them is fixed size.
     static constexpr size_t kSlotBytes = kMaxFrameBytes + kMaxDstFrameSize;
 
-    DstEncoder* encoders_ = nullptr;
-    uint8_t* buffers_ = nullptr;
+    DstEncoder* __restrict encoders_ = nullptr;
+    ByteP buffers_ = nullptr;
 
     bool alloc(unsigned slots);
     void worker(unsigned index);
     void fill(DsfReader& reader);
     bool write_next(DffWriter& writer);   // false once finished or failed
+
+    using SlotP = Slot* __restrict;
 
     Slot slots_[kMaxThreads + 2];
     unsigned slot_count_ = 0;

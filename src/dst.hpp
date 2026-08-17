@@ -15,14 +15,14 @@ namespace dff2dsf {
 
 namespace {
 
-inline void ac_init(DstArithCoder* ac, BitReader& br) {
+inline void ac_init(ArithCoderP ac, BitReader& br) {
     ac->a = 4095;
     ac->c = br.get(12);
 }
 
 // Binary arithmetic decoder (10.11).  `p` is the probability, scaled to 1..128,
 // that the decoded bit equals the prediction.
-inline void ac_get(DstArithCoder* ac, BitReader& br, unsigned p, unsigned* e) {
+inline void ac_get(ArithCoderP ac, BitReader& br, unsigned p, UIntP e) {
     unsigned k = (ac->a >> 8) | ((ac->a >> 7) & 1);
     unsigned q = k * p;
     unsigned a_q = ac->a - q;
@@ -42,7 +42,7 @@ inline void ac_get(DstArithCoder* ac, BitReader& br, unsigned p, unsigned* e) {
     }
 }
 
-void read_uncoded_coeff(BitReader& br, int* dst, unsigned elements,
+void read_uncoded_coeff(BitReader& br, IntP dst, unsigned elements,
                         int coeff_bits, bool is_signed, int offset) {
     for (unsigned i = 0; i < elements; i++)
         dst[i] = (is_signed ? br.get_signed(coeff_bits) : int(br.get(coeff_bits))) + offset;
@@ -69,7 +69,7 @@ bool DstDecoder::init(int channels, unsigned dsd_rate) {
 }
 
 // Channel to filter/probability element mapping (10.7 - 10.9).
-bool DstDecoder::read_map(BitReader& br, Table& t, unsigned map[kDstMaxChannels]) {
+bool DstDecoder::read_map(BitReader& br, Table& t, UIntP map) {
     t.elements = 1;
     map[0] = 0;
     if (!br.get1()) {
@@ -93,7 +93,7 @@ bool DstDecoder::read_map(BitReader& br, Table& t, unsigned map[kDstMaxChannels]
 // Filter coefficient sets (10.12) and probability tables (10.13).  Each table is
 // either stored verbatim or predicted from its own previous entries with one of
 // three fixed predictors, the residual being Golomb coded.
-bool DstDecoder::read_table(BitReader& br, Table& t, const int8_t pred[3][3],
+bool DstDecoder::read_table(BitReader& br, Table& t, CPredP pred,
                             int length_bits, int coeff_bits, bool is_signed, int offset) {
     for (unsigned i = 0; i < t.elements; i++) {
         t.length[i] = br.get(length_bits) + 1;
@@ -127,7 +127,7 @@ bool DstDecoder::read_table(BitReader& br, Table& t, const int8_t pred[3][3],
 
 // Precomputes the FIR prediction as 16 lookups of 8 taps each: entry [j][k] is
 // the contribution of the 8 history bits in byte j when those bits are `k`.
-bool build_filter_lut(const int* coeff, unsigned length, int16_t lut[16][256]) {
+bool build_filter_lut(CIntP coeff, unsigned length, LutP lut) {
     for (int j = 0; j < 16; j++) {
         int total = int(length) - j * 8;
         if (total < 0) total = 0;
@@ -152,7 +152,7 @@ bool DstDecoder::build_filter() {
     return true;
 }
 
-bool DstDecoder::decode(const uint8_t* data, size_t size, size_t capacity, uint8_t* out) {
+bool DstDecoder::decode(CByteP data, size_t size, size_t capacity, ByteP out) {
     const int channels = channels_;
     const unsigned samples = frame_bits_;
     const size_t out_size = frame_bytes();
@@ -227,13 +227,13 @@ bool DstDecoder::decode(const uint8_t* data, size_t size, size_t capacity, uint8
     ac_get(&ac_, br, prob_dst_x_bit(fsets_.coeff[0][0]), &dst_x_bit);
 
     for (unsigned i = 0; i < samples; i++) {
-        uint8_t* out_byte = out + size_t(i >> 3) * unsigned(channels);
+        const ByteP out_byte = out + size_t(i >> 3) * unsigned(channels);
         const unsigned out_shift = 7 - (i & 7);
 
         for (int ch = 0; ch < channels; ch++) {
             const unsigned felem = map_ch_to_felem[ch];
-            const int16_t (*filter)[256] = filter_[felem];
-            uint64_t* status = status_[ch];
+            const CLutP filter = filter_[felem];
+            const WordP status = status_[ch];
 
             const uint64_t lo = status[0], hi = status[1];
 #define F(x) filter[(x)][((((x) < 8 ? lo : hi) >> (8 * ((x) & 7))) & 0xFF)]

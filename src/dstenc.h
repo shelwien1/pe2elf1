@@ -49,13 +49,13 @@ public:
     // Encodes one frame.  `src` holds planar MSB-first DSD, one channel after
     // another, frame_bytes_per_channel() bytes each.  `out` must have room for
     // max_frame_size() bytes.
-    bool encode(const uint8_t* src, uint8_t* out, size_t out_capacity, size_t* out_size);
+    bool encode(CByteP src, ByteP out, size_t out_capacity, SizeP out_size);
 
     uint64_t uncoded_frames() const { return uncoded_frames_; }
 
 private:
-    void autocorrelation(double* r) const;
-    void design_filter(double* r);
+    void autocorrelation(DoubleP r) const;
+    void design_filter(DoubleP r);
     void quantise_filter();
     bool analyse_frame();
 #ifdef __AVX2__
@@ -68,7 +68,7 @@ private:
     bool refine_filter();
     bool refine_from_start();
     void gradient_step(int iteration);
-    void build_prob_table(unsigned* length, int* table) const;
+    void build_prob_table(UIntP length, IntP table) const;
 
     int channels_ = 0;
     unsigned frame_bits_ = 0;

@@ -31,8 +31,8 @@ public:
     // Appends one DST frame as a DSTF chunk.  `dsd` is the uncompressed planar
     // DSD the frame codes, which the DSTC chunk's CRC is taken over; it is only
     // read when that chunk is enabled.
-    bool write_frame(const uint8_t* data, size_t size,
-                     const uint8_t* dsd = nullptr, size_t dsd_bytes_per_channel = 0);
+    bool write_frame(CByteP data, size_t size,
+                     CByteP dsd = nullptr, size_t dsd_bytes_per_channel = 0);
 
     // Writes the trailing chunks, patches the sizes and the frame count, closes.
     bool finish();

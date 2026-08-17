@@ -11,7 +11,7 @@ namespace {
 
 // DSF channel type codes: 1 mono, 2 stereo, 3 three channel, 4 quad,
 // 5 four channel, 6 five channel, 7 five channel + LFE.
-unsigned channel_type_for(int channels, const uint32_t* ids) {
+unsigned channel_type_for(int channels, CU32P ids) {
     switch (channels) {
     case 1: return 1;
     case 2: return 2;
@@ -32,7 +32,7 @@ unsigned channel_type_for(int channels, const uint32_t* ids) {
 } // namespace
 
 bool DsfWriter::open(const char* path, int channels, unsigned dsd_rate,
-                     const uint32_t* channel_ids) {
+                     CU32P channel_ids) {
     if (channels < 1 || channels > kDstMaxChannels)
         return ERR("unsupported channel count %d", channels);
 
@@ -40,7 +40,7 @@ bool DsfWriter::open(const char* path, int channels, unsigned dsd_rate,
     // in that same byte order.
     uint32_t ids_be[kDstMaxChannels] = {};
     for (int i = 0; i < channels; i++) {
-        uint8_t* p = reinterpret_cast<uint8_t*>(&ids_be[i]);
+        const ByteP p = reinterpret_cast<uint8_t*>(&ids_be[i]);
         p[0] = uint8_t(channel_ids[i] >> 24); p[1] = uint8_t(channel_ids[i] >> 16);
         p[2] = uint8_t(channel_ids[i] >> 8);  p[3] = uint8_t(channel_ids[i]);
     }
@@ -91,7 +91,7 @@ bool DsfWriter::flush_block() {
     return true;
 }
 
-bool DsfWriter::write(const uint8_t* src, size_t bytes_per_channel) {
+bool DsfWriter::write(CByteP src, size_t bytes_per_channel) {
     const int channels = channels_;
     size_t done = 0;
 
@@ -101,17 +101,17 @@ bool DsfWriter::write(const uint8_t* src, size_t bytes_per_channel) {
 
         // Deinterleave into the planar blocks, reversing each byte on the way.
         if (channels == 2) {
-            uint8_t* d0 = blocks_ + fill_;
-            uint8_t* d1 = blocks_ + kDsfBlockSize + fill_;
-            const uint8_t* s = src + done * 2;
+            const ByteP d0 = blocks_ + fill_;
+            const ByteP d1 = blocks_ + kDsfBlockSize + fill_;
+            const CByteP s = src + done * 2;
             for (size_t i = 0; i < n; i++) {
                 d0[i] = kReverse.v[s[2 * i]];
                 d1[i] = kReverse.v[s[2 * i + 1]];
             }
         } else {
             for (int ch = 0; ch < channels; ch++) {
-                uint8_t* d = blocks_ + size_t(ch) * kDsfBlockSize + fill_;
-                const uint8_t* s = src + done * size_t(channels) + size_t(ch);
+                const ByteP d = blocks_ + size_t(ch) * kDsfBlockSize + fill_;
+                const CByteP s = src + done * size_t(channels) + size_t(ch);
                 for (size_t i = 0; i < n; i++)
                     d[i] = kReverse.v[s[i * size_t(channels)]];
             }

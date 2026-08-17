@@ -82,7 +82,7 @@ bool name_is(const char* a, const char* b) {
     }
 }
 
-bool parse_threads(const char* s, unsigned* out) {
+bool parse_threads(const char* s, UIntP out) {
     if (name_is(s, "auto")) {
         *out = default_thread_count();
         return true;
@@ -94,7 +94,7 @@ bool parse_threads(const char* s, unsigned* out) {
     return true;
 }
 
-bool parse_option(const char* arg, DffWriteOptions* opt) {
+bool parse_option(const char* arg, DffWriteOptions* __restrict opt) {
     bool enable;
     const char* name;
     if (strncmp(arg, "--enable-", 9) == 0) {
@@ -126,7 +126,7 @@ void print_progress(uint64_t done, uint64_t total) {
     fflush(stderr);
 }
 
-bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
+bool decode_dst(DffReader& reader, DsfWriter& writer, WordP frames_out) {
     // One decoder and one frame buffer, both sized for the largest stream this
     // build handles rather than for the one in hand, and both static: nothing
     // here has to be allocated, and neither is small enough to want on a stack.
@@ -139,7 +139,7 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
     bool ok = true;
 
     for (;;) {
-        const uint8_t* data;
+        CByteP data;
         size_t size, capacity;
         int r = reader.next_dst_frame(&data, &size, &capacity);
         if (r < 0) { ok = false; break; }
@@ -187,7 +187,7 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
 bool decode_raw_dsd(DffReader& reader, DsfWriter& writer) {
     uint64_t bytes = 0;
     for (;;) {
-        const uint8_t* data;
+        CByteP data;
         size_t size;
         int r = reader.next_dsd_block(&data, &size);
         if (r < 0) return false;
@@ -257,8 +257,8 @@ void print_encode_progress(void* ctx, uint64_t frames, uint64_t coded_bytes) {
 // One frame at a time, in this thread: the default, and what the pool below is
 // measured against.
 bool encode_serial(DsfReader& reader, DffWriter& writer, int channels, unsigned rate,
-                   const EncodeProgress& prog, uint64_t* frames_out,
-                   uint64_t* coded_out, uint64_t* uncoded_out) {
+                   const EncodeProgress& prog, WordP frames_out,
+                   WordP coded_out, WordP uncoded_out) {
     // The encoder is around 3 MB of working buffers, so it is static rather than
     // automatic - a Windows thread gets a 1 MB stack by default - and the two
     // frame buffers are sized for the largest stream this build handles.

@@ -56,6 +56,18 @@ test file's 19119 frames. And `--threads N` needs an encoder and a slot buffer
 per worker, which is a runtime choice by definition — those are the program's
 only two allocations, one block each, however many threads are asked for.
 
+Pointers are declared through a small set of `__restrict` qualified types in
+`common.h` — `ByteP`, `CByteP`, `WordP`, `CLutP` and so on — rather than by
+repeating the qualifier at each declaration. Nothing here is ever aliased: the
+frame going in, the frame coming out, the history, the per-sample codes, the
+bitplanes and the lookup tables are all distinct objects, and saying so lets the
+compiler keep values in registers across stores. The types are used only where
+that promise actually holds; plain types mark the places it does not. It buys no
+measurable speed on this workload — the hot loops already copy into locals — but
+it makes the aliasing rules the code relies on part of its signatures, and the
+output is byte for byte the same with GCC, Clang, mingw, scalar and vector
+builds alike, which is what a wrong `restrict` would break.
+
 Under Valgrind, counting every allocation the process makes including the C and
 C++ runtimes' own:
 

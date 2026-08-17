@@ -40,6 +40,8 @@ struct DstArithCoder {
     unsigned c;
 };
 
+using ArithCoderP = DstArithCoder* __restrict;
+
 // Fixed predictors the coefficient and probability tables are coded against
 // (10.12, 10.13).  Shared by the decoder that reads them and the encoder that
 // has to produce residuals against the same prediction.
@@ -64,7 +66,7 @@ inline unsigned prob_dst_x_bit(int c) {
 // sign-based FIR eight taps at a time: lut[j][k] is the contribution of history
 // byte j when those eight bits are k.  Shared with the encoder, which has to
 // predict exactly as the decoder does.  False if a partial sum leaves int16.
-bool build_filter_lut(const int* coeff, unsigned length, int16_t lut[16][256]);
+bool build_filter_lut(CIntP coeff, unsigned length, LutP lut);
 
 class DstDecoder {
 public:
@@ -81,7 +83,7 @@ public:
     // Output is MSB-first DSD, byte-interleaved by channel, as stored in DSDIFF.
     // `data` must be followed by kBitReaderPadding zero bytes; `capacity` is the
     // size of that whole padded allocation.
-    bool decode(const uint8_t* data, size_t size, size_t capacity, uint8_t* out);
+    bool decode(CByteP data, size_t size, size_t capacity, ByteP out);
 
     // Number of frames that were stored uncompressed rather than DST coded.
     uint64_t uncoded_frames() const { return uncoded_frames_; }
@@ -93,8 +95,8 @@ private:
         int coeff[kDstMaxElements][128];
     };
 
-    bool read_map(class BitReader& br, Table& t, unsigned map[kDstMaxChannels]);
-    bool read_table(class BitReader& br, Table& t, const int8_t pred[3][3],
+    bool read_map(class BitReader& br, Table& t, UIntP map);
+    bool read_table(class BitReader& br, Table& t, CPredP pred,
                     int length_bits, int coeff_bits, bool is_signed, int offset);
     bool build_filter();
 

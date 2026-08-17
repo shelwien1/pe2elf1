@@ -49,7 +49,7 @@ constexpr double kRefineDecay = 0.7;
 // leave it.  Sub-interval [0, a-q) codes e = 1, [a-q, a) codes e = 0.
 class ArithEncoder {
 public:
-    void init(BitWriter* bw) {
+    void init(BitWriterP bw) {
         bw_ = bw;
         a_ = 4095;
         low_ = 0;
@@ -81,7 +81,7 @@ public:
     void flush() { bw_->put(low_, 12); }
 
 private:
-    BitWriter* bw_ = nullptr;
+    BitWriterP bw_ = nullptr;
     unsigned a_ = 0;
     unsigned low_ = 0;
 };
@@ -103,8 +103,7 @@ inline void put_golomb(BitWriter& bw, int v, int k) {
 }
 
 // Residual the decoder's table predictor has to be fed to reproduce values[j].
-inline int table_residual(const int* values, unsigned j, unsigned method,
-                          const int8_t pred[3][3]) {
+inline int table_residual(CIntP values, unsigned j, unsigned method, CPredP pred) {
     int x = 0;
     for (unsigned k = 0; k <= method; k++)
         x += pred[method][k] * values[j - k - 1];
@@ -116,9 +115,8 @@ inline int table_residual(const int* values, unsigned j, unsigned method,
 // writes it.  Returns the cost in bits, length field included.  Verbatim values
 // are written as coeff_bits of two's complement, which is what the decoder reads
 // back with either get_sbits() or get_bits() plus the offset.
-size_t code_table(BitWriter* bw, const int* values, unsigned n,
-                  const int8_t pred[3][3], int length_bits, int coeff_bits,
-                  int offset) {
+size_t code_table(BitWriterP bw, CIntP values, unsigned n, CPredP pred,
+                  int length_bits, int coeff_bits, int offset) {
     const size_t raw_bits = size_t(length_bits) + 1 + size_t(n) * size_t(coeff_bits);
 
     size_t best = raw_bits;
@@ -190,12 +188,11 @@ inline unsigned quantise_prob(uint64_t n, uint64_t errors) {
 // the correlation it feeds.  Returns the sum of the weights.
 #ifndef __AVX2__
 
-uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
-                     uint64_t* planes, unsigned nwords) {
+uint64_t pack_planes(CByteP code, CByteP weight_of, WordP planes, unsigned nwords) {
     uint64_t total = 0;
 
     for (unsigned j = 0; j < nwords; j++) {
-        const uint8_t* c = code + size_t(j) * 64;
+        const CByteP c = code + size_t(j) * 64;
         uint64_t plane[kGradientPlanes] = {};
 
         for (unsigned b = 0; b < 64; b++) {
@@ -217,8 +214,7 @@ uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
 // Same packing with AVX2.  A byte comparison turns "weight bit p is set" into a
 // per-byte mask, and movemask collects 32 of those into a word in one go; the
 // bytes are reversed first because the bit numbering here runs the other way.
-uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
-                     uint64_t* planes, unsigned nwords) {
+uint64_t pack_planes(CByteP code, CByteP weight_of, WordP planes, unsigned nwords) {
     const __m256i reverse_lane = _mm256_setr_epi8(
         15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
         15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
@@ -229,7 +225,7 @@ uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
         uint64_t plane[kGradientPlanes] = {};
 
         for (unsigned half = 0; half < 2; half++) {
-            const uint8_t* c = code + size_t(j) * 64 + half * 32;
+            const CByteP c = code + size_t(j) * 64 + half * 32;
             alignas(32) uint8_t q[32];
             for (unsigned b = 0; b < 32; b++)
                 q[b] = weight_of[c[b]];
@@ -270,15 +266,14 @@ uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
 // and replaces the popcount with the usual nibble table shuffle.
 
 // Shifted view of the bit sequence: the word k bits earlier than word j.
-inline uint64_t lagged_word(const uint64_t* w, unsigned j, unsigned wshift, unsigned bshift) {
-    const uint64_t* d = w + j - wshift;
+inline uint64_t lagged_word(CWordP w, unsigned j, unsigned wshift, unsigned bshift) {
+    const CWordP d = w + j - wshift;
     return bshift ? ((d[-1] << (64 - bshift)) | (d[0] >> bshift)) : d[0];
 }
 
 #ifndef __AVX2__
 
-uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
-                      unsigned nwords, unsigned k) {
+uint64_t disagreement(CWordP w, CWordP planes, unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
     uint64_t sum[kGradientPlanes] = {};
@@ -297,8 +292,7 @@ uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
 
 #else
 
-uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
-                      unsigned nwords, unsigned k) {
+uint64_t disagreement(CWordP w, CWordP planes, unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
 
@@ -361,7 +355,7 @@ uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
 // Plain popcount of the same shifted XOR, for the autocorrelation.
 #ifndef __AVX2__
 
-uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
+uint64_t differing_bits(CWordP w, unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
     uint64_t diff = 0;
@@ -372,7 +366,7 @@ uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
 
 #else
 
-uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
+uint64_t differing_bits(CWordP w, unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
     const __m256i nibble_count = _mm256_setr_epi8(
@@ -431,7 +425,7 @@ bool DstEncoder::init(int channels, unsigned dsd_rate) {
 // r[k] = sum over channels of sum_i x[i] * x[i-k], with x = +-1 from the bits.
 // Equal bits contribute +1 and differing bits -1, so the sum is the sample count
 // minus twice the number of differing bits, which is a popcount of an XOR.
-void DstEncoder::autocorrelation(double* r) const {
+void DstEncoder::autocorrelation(DoubleP r) const {
     const unsigned nwords = frame_bits_ / 64;
     const int64_t total = int64_t(frame_bits_) * channels_;
 
@@ -449,7 +443,7 @@ void DstEncoder::autocorrelation(double* r) const {
 // Levinson-Durbin.  No white noise correction is applied: the recursion is
 // bounded by the reflection coefficient check below, and slackening the
 // correlation measurably costs prediction accuracy on DSD.
-void DstEncoder::design_filter(double* r) {
+void DstEncoder::design_filter(DoubleP r) {
     double b[kDstFilterLength + 1] = {};
     double tmp[kDstFilterLength + 1];
 
@@ -535,9 +529,9 @@ void DstEncoder::quantise_filter() {
 // separately: four taps of a nibble reach at most +-64, and recombining them as
 // 16 * high + low reproduces the sum exactly.
 void DstEncoder::analyse_channel_avx2(int ch) {
-    const uint64_t* w = bits_ + size_t(ch) * words_per_channel_ + kHistoryWords;
-    uint8_t* code = code_ + size_t(ch) * frame_bits_;
-    uint8_t* window = window_ + kWindowLead;
+    const CWordP w = bits_ + size_t(ch) * words_per_channel_ + kHistoryWords;
+    const ByteP code = code_ + size_t(ch) * frame_bits_;
+    const ByteP window = window_ + kWindowLead;
 
     // Before the frame the register holds the fixed 0xAA history, which is just
     // alternating bits; after that each byte is the previous one shifted up with
@@ -630,9 +624,9 @@ void DstEncoder::analyse_channel_avx2(int ch) {
 #ifndef __AVX2__
 
 void DstEncoder::analyse_channel(int ch) {
-    const uint64_t* w = bits_ + size_t(ch) * words_per_channel_;
-    uint8_t* code = code_ + size_t(ch) * frame_bits_;
-    const int16_t (*filter)[256] = filter_;
+    const CWordP w = bits_ + size_t(ch) * words_per_channel_;
+    const ByteP code = code_ + size_t(ch) * frame_bits_;
+    const CLutP filter = filter_;
 
     uint64_t lo = 0xAAAAAAAAAAAAAAAAull, hi = 0xAAAAAAAAAAAAAAAAull;
 
@@ -683,7 +677,7 @@ bool DstEncoder::analyse_frame() {
 #else
         analyse_channel(ch);
 #endif
-        const uint8_t* code = code_ + size_t(ch) * frame_bits_;
+        const CByteP code = code_ + size_t(ch) * frame_bits_;
         for (unsigned i = kDstFilterLength; i < frame_bits_; i++) {
             const unsigned bin = code[i] & 0x7F;
             bin_count_[bin]++;
@@ -834,7 +828,7 @@ bool DstEncoder::refine_from_start() {
 
 // Chooses the probability table length that minimises the coded size: a longer
 // table models the low confidence bins better but costs more to transmit.
-void DstEncoder::build_prob_table(unsigned* out_length, int* out_table) const {
+void DstEncoder::build_prob_table(UIntP out_length, IntP out_table) const {
     double best_cost = 0;
     unsigned best_length = 1;
 
@@ -870,17 +864,17 @@ void DstEncoder::build_prob_table(unsigned* out_length, int* out_table) const {
     *out_length = best_length;
 }
 
-bool DstEncoder::encode(const uint8_t* src, uint8_t* out, size_t out_capacity, size_t* out_size) {
+bool DstEncoder::encode(CByteP src, ByteP out, size_t out_capacity, SizeP out_size) {
     const unsigned nbytes = frame_bits_ / 8;
     if (out_capacity < max_frame_size())
         return ERR("output buffer too small for a DST frame");
 
     // Load the frame, preceded by the history the decoder starts from.
     for (int ch = 0; ch < channels_; ch++) {
-        uint64_t* w = bits_ + size_t(ch) * words_per_channel_;
+        const WordP w = bits_ + size_t(ch) * words_per_channel_;
         for (unsigned i = 0; i < kHistoryWords; i++)
             w[i] = 0xAAAAAAAAAAAAAAAAull;
-        const uint8_t* s = src + size_t(ch) * nbytes;
+        const CByteP s = src + size_t(ch) * nbytes;
         for (unsigned i = 0; i < frame_bits_ / 64; i++)
             w[kHistoryWords + i] = rb64(s + size_t(i) * 8);
     }
@@ -904,7 +898,7 @@ bool DstEncoder::encode(const uint8_t* src, uint8_t* out, size_t out_capacity, s
     // without them, so this is a genuine comparison rather than a formality.
     unsigned half_prob[kDstMaxChannels];
     for (int ch = 0; ch < channels_; ch++) {
-        const uint8_t* code = code_ + size_t(ch) * frame_bits_;
+        const CByteP code = code_ + size_t(ch) * frame_bits_;
         double table_cost = 0;
         for (unsigned i = 0; i < filter_length && i < frame_bits_; i++) {
             const unsigned bin = (code[i] & 0x7F) < prob_length ? (code[i] & 0x7F)

@@ -30,20 +30,20 @@ unsigned lsco_for(int channels) {
     }
 }
 
-void put_tag(uint8_t*& p, const char* tag) {
+void put_tag(ByteP& p, const char* tag) {
     memcpy(p, tag, 4);
     p += 4;
 }
 
-void put_be64(uint8_t*& p, uint64_t v) {
+void put_be64(ByteP& p, uint64_t v) {
     for (int i = 7; i >= 0; i--) *p++ = uint8_t(v >> (8 * i));
 }
 
-void put_be32(uint8_t*& p, uint32_t v) {
+void put_be32(ByteP& p, uint32_t v) {
     for (int i = 3; i >= 0; i--) *p++ = uint8_t(v >> (8 * i));
 }
 
-void put_be16(uint8_t*& p, uint16_t v) {
+void put_be16(ByteP& p, uint16_t v) {
     *p++ = uint8_t(v >> 8);
     *p++ = uint8_t(v);
 }
@@ -63,7 +63,7 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
     if (!f_.open_write(path)) return false;
 
     uint8_t hdr[256];
-    uint8_t* p = hdr;
+    ByteP p = hdr;
 
     put_tag(p, "FRM8");
     frm8_size_pos_ = p - hdr;
@@ -135,10 +135,10 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
     return true;
 }
 
-bool DffWriter::write_frame(const uint8_t* data, size_t size,
-                            const uint8_t* dsd, size_t dsd_bytes_per_channel) {
+bool DffWriter::write_frame(CByteP data, size_t size,
+                            CByteP dsd, size_t dsd_bytes_per_channel) {
     uint8_t hdr[12];
-    uint8_t* p = hdr;
+    ByteP p = hdr;
     put_tag(p, "DSTF");
     put_be64(p, size);
 
@@ -178,7 +178,7 @@ bool DffWriter::write_index(int64_t dst_end) {
     if (!opt_.dsti || !frames_) return true;
 
     uint8_t hdr[12];
-    uint8_t* p = hdr;
+    ByteP p = hdr;
     put_tag(p, "DSTI");
     put_be64(p, frames_ * 12);
     if (!f_.seek(dst_end) || !f_.write(hdr, sizeof(hdr))) return false;
@@ -197,7 +197,7 @@ bool DffWriter::write_index(int64_t dst_end) {
         const uint64_t size = rb64(ck + 4);
 
         if (tag_is(ck, "DSTF")) {
-            uint8_t* q = buf + size_t(n) * 12;
+            ByteP q = buf + size_t(n) * 12;
             put_be64(q, uint64_t(pos) + 12);
             put_be32(q, uint32_t(size));
             seen++;
@@ -235,7 +235,7 @@ bool DffWriter::write_comment() {
     if (!utc_now(&utc)) return ERR("cannot read the current time");
 
     uint8_t buf[128];
-    uint8_t* p = buf;
+    ByteP p = buf;
     put_tag(p, "COMT");
     put_be64(p, size);
     put_be16(p, 1);                                   // one comment
@@ -265,7 +265,7 @@ bool DffWriter::finish() {
     const int64_t end = f_.tell();
 
     uint8_t v[8];
-    uint8_t* p;
+    ByteP p;
 
     p = v; put_be64(p, uint64_t(end - 12));
     if (!f_.seek(frm8_size_pos_) || !f_.write(v, 8)) return false;

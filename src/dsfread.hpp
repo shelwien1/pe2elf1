@@ -14,9 +14,9 @@ bool DsfReader::open(const char* path) {
     uint8_t hdr[kDsfHeaderSize];
     if (!f_.read(hdr, sizeof(hdr))) return false;
 
-    auto rl32 = [](const uint8_t* p) { return uint32_t(p[0]) | (uint32_t(p[1]) << 8) |
+    auto rl32 = [](CByteP p) { return uint32_t(p[0]) | (uint32_t(p[1]) << 8) |
                                               (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24); };
-    auto rl64 = [&](const uint8_t* p) { return uint64_t(rl32(p)) | (uint64_t(rl32(p + 4)) << 32); };
+    auto rl64 = [&](CByteP p) { return uint64_t(rl32(p)) | (uint64_t(rl32(p + 4)) << 32); };
 
     if (memcmp(hdr, "DSD ", 4) || rl64(hdr + 4) != 28)
         return ERR("not a DSF file (no DSD chunk of 28 bytes)");
@@ -86,7 +86,7 @@ bool DsfReader::refill() {
     for (int ch = 0; ch < channels_; ch++) {
         size_t n = f_.read_some(block_, block_size_);
         if (n < shortest) shortest = n;
-        uint8_t* d = buf_ + size_t(ch) * capacity_ + avail_;
+        const ByteP d = buf_ + size_t(ch) * capacity_ + avail_;
         if (lsb_first_)
             for (size_t i = 0; i < n; i++) d[i] = kReverse.v[block_[i]];
         else
@@ -108,7 +108,7 @@ bool DsfReader::refill() {
     return true;
 }
 
-int DsfReader::read_planar(uint8_t* dst, size_t bytes_per_channel) {
+int DsfReader::read_planar(ByteP dst, size_t bytes_per_channel) {
     if (!capacity_) {
         if (bytes_per_channel > kMaxFrameBytesPerChannel) {
             ERR("frame of %zu bytes per channel is larger than this build handles",
@@ -128,7 +128,7 @@ int DsfReader::read_planar(uint8_t* dst, size_t bytes_per_channel) {
 
     size_t n = avail_ < bytes_per_channel ? avail_ : bytes_per_channel;
     for (int ch = 0; ch < channels_; ch++) {
-        uint8_t* d = dst + size_t(ch) * bytes_per_channel;
+        const ByteP d = dst + size_t(ch) * bytes_per_channel;
         memcpy(d, buf_ + size_t(ch) * capacity_ + head_, n);
         if (n < bytes_per_channel)
             memset(d + n, kDsdSilence, bytes_per_channel - n);

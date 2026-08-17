@@ -41,7 +41,7 @@ public:
 
     // Next DST frame.  Returns 1 on success, 0 at end of data, -1 on error.
     // The payload is zero padded to allow the bit reader's windowed reads.
-    int next_dst_frame(const uint8_t** data, size_t* size, size_t* capacity);
+    int next_dst_frame(CBytePP data, SizeP size, SizeP capacity);
 
     // The DSTC chunk that followed the frame just returned, if there was one:
     // a CRC over the DSD that frame decodes to.
@@ -49,13 +49,13 @@ public:
     uint32_t frame_crc() const { return frame_crc_; }
 
     // Next block of raw interleaved DSD.  Returns 1, 0 or -1 as above.
-    int next_dsd_block(const uint8_t** data, size_t* size);
+    int next_dsd_block(CBytePP data, SizeP size);
 
 private:
     bool parse_prop(int64_t end);
     bool parse_frte(uint64_t size);
     void read_frame_crc();
-    bool read_chunk_header(uint8_t id[4], uint64_t* size);
+    bool read_chunk_header(ByteP id, WordP size);
 
     File f_;
     int64_t file_size_ = 0;

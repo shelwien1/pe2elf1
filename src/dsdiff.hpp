@@ -16,7 +16,7 @@ constexpr uint64_t kMaxChunkPayload = 64u << 20;
 
 } // namespace
 
-bool DffReader::read_chunk_header(uint8_t id[4], uint64_t* size) {
+bool DffReader::read_chunk_header(ByteP id, WordP size) {
     uint8_t hdr[12];
     if (!f_.read(hdr, sizeof(hdr), /*eof_ok=*/true)) return false;
     memcpy(id, hdr, 4);
@@ -182,7 +182,7 @@ void DffReader::read_frame_crc() {
     cur_ += 12 + int64_t(size) + int64_t(size & 1);
 }
 
-int DffReader::next_dst_frame(const uint8_t** data, size_t* size, size_t* capacity) {
+int DffReader::next_dst_frame(CBytePP data, SizeP size, SizeP capacity) {
     while (cur_ + 12 <= body_end_) {
         if (!f_.seek(cur_)) return -1;
 
@@ -218,7 +218,7 @@ int DffReader::next_dst_frame(const uint8_t** data, size_t* size, size_t* capaci
     return 0;
 }
 
-int DffReader::next_dsd_block(const uint8_t** data, size_t* size) {
+int DffReader::next_dsd_block(CBytePP data, SizeP size) {
     if (cur_ >= body_end_) return 0;
 
     size_t want = kDsdBlockBytes;

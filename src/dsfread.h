@@ -22,7 +22,7 @@ public:
 
     // Fills `bytes_per_channel` bytes for each channel, planar, MSB-first.  The
     // final frame is padded with DSD silence.  Returns 1, 0 at end, -1 on error.
-    int read_planar(uint8_t* dst, size_t bytes_per_channel);
+    int read_planar(ByteP dst, size_t bytes_per_channel);
 
 private:
     bool refill();

@@ -14,7 +14,7 @@ namespace dff2dsf {
 class BitWriter {
 public:
     // `buf` must be zero filled: bits are OR-ed in.
-    void init(uint8_t* buf, size_t capacity) {
+    void init(ByteP buf, size_t capacity) {
         buf_ = buf;
         capacity_bits_ = capacity * 8;
         pos_ = 0;
@@ -54,11 +54,13 @@ public:
     bool overflow() const { return overflow_; }
 
 private:
-    uint8_t* buf_ = nullptr;
+    ByteP buf_ = nullptr;
     size_t capacity_bits_ = 0;
     size_t pos_ = 0;
     bool overflow_ = false;
 };
+
+using BitWriterP = BitWriter* __restrict;
 
 } // namespace dff2dsf
 

@@ -36,7 +36,7 @@ bool EncodePool::alloc(unsigned slots) {
 // look at it.
 void EncodePool::fill(DsfReader& reader) {
     for (;;) {
-        Slot* s;
+        SlotP s;
         {
             std::lock_guard<std::mutex> lock(mu_);
             if (failed_ || total_ != kUnknown) return;
@@ -65,7 +65,7 @@ void EncodePool::fill(DsfReader& reader) {
 // Waits for the oldest outstanding frame and writes it, which is what keeps the
 // output in order however the workers finish.
 bool EncodePool::write_next(DffWriter& writer) {
-    Slot* s;
+    SlotP s;
     uint64_t index;
     {
         std::unique_lock<std::mutex> lock(mu_);
@@ -108,7 +108,7 @@ void EncodePool::worker(unsigned index) {
     }
 
     for (;;) {
-        Slot* s = nullptr;
+        SlotP s = nullptr;
         {
             std::unique_lock<std::mutex> lock(mu_);
             for (;;) {

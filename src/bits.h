@@ -19,7 +19,7 @@ class BitReader {
 public:
     // `size` is the payload length; `capacity` is the allocation length, which
     // must be at least size + kBitReaderPadding and zero-filled past `size`.
-    void init(const uint8_t* buf, size_t size, size_t capacity) {
+    void init(CByteP buf, size_t size, size_t capacity) {
         buf_ = buf;
         nbits_ = int64_t(size) * 8;
         capacity_ = capacity;
@@ -61,7 +61,7 @@ private:
         return rb64(buf_ + byte);
     }
 
-    const uint8_t* buf_ = nullptr;
+    CByteP buf_ = nullptr;
     int64_t nbits_ = 0;
     int64_t pos_ = 0;
     size_t capacity_ = 0;

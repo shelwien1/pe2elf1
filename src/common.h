@@ -54,7 +54,7 @@ inline int64_t file_tell(FILE* f) {
 
 // gmtime_r is POSIX; the Windows CRT spells it gmtime_s, with the arguments the
 // other way round.
-inline bool utc_now(struct tm* out) {
+inline bool utc_now(struct tm* __restrict out) {
     const time_t now = time(nullptr);
 #ifdef _WIN32
     return gmtime_s(out, &now) == 0;
@@ -63,31 +63,66 @@ inline bool utc_now(struct tm* out) {
 #endif
 }
 
+// ---------------------------------------------------------------- pointers
+//
+// Every buffer in this program is a distinct object: frames in, frames out,
+// history, per-sample codes, bitplanes, lookup tables.  Nothing is ever aliased,
+// and saying so lets the compiler keep values in registers across stores instead
+// of reloading them - which matters in the kernels, where a store to the output
+// would otherwise be assumed to invalidate the input.
+//
+// These types spell that promise once so it does not have to be repeated at
+// every declaration.  __restrict is spelled the same by GCC, Clang and MSVC.
+// They are only used where the promise actually holds; where two pointers could
+// name the same bytes, the plain type is used instead.
+using ByteP    = uint8_t* __restrict;
+using CByteP   = const uint8_t* __restrict;
+using WordP    = uint64_t* __restrict;
+using CWordP   = const uint64_t* __restrict;
+using IntP     = int* __restrict;
+using CIntP    = const int* __restrict;
+using DoubleP  = double* __restrict;
+using UIntP    = unsigned* __restrict;
+using SizeP    = size_t* __restrict;
+using CU32P    = const uint32_t* __restrict;
+using CBytePP  = CByteP* __restrict;           // out parameter naming a buffer
+using VoidP    = void* __restrict;
+using CVoidP   = const void* __restrict;
+
+// The prediction lookup: 16 rows of 256, indexed by a byte of history.
+using LutRow = int16_t[256];
+using LutP   = LutRow* __restrict;
+using CLutP  = const LutRow* __restrict;
+
+// The format's fixed table predictors: three orders of up to three taps.
+using PredRow = const int8_t[3];
+using CPredP  = PredRow* __restrict;
+
 // ---------------------------------------------------------------- diagnostics
 
 #define ERR(...) (fprintf(stderr, "dff2dsf: " __VA_ARGS__), fputc('\n', stderr), false)
 
 // ---------------------------------------------------------------- byte order
 
-inline uint32_t rb32(const uint8_t* p) {
+inline uint32_t rb32(CByteP p) {
     return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
            (uint32_t(p[2]) <<  8) |  uint32_t(p[3]);
 }
 
-inline uint64_t rb64(const uint8_t* p) {
+inline uint64_t rb64(CByteP p) {
     return (uint64_t(rb32(p)) << 32) | rb32(p + 4);
 }
 
-inline uint16_t rb16(const uint8_t* p) {
+inline uint16_t rb16(CByteP p) {
     return uint16_t((uint32_t(p[0]) << 8) | p[1]);
 }
 
-inline void wl32(uint8_t* p, uint32_t v) {
+inline void wl32(ByteP p, uint32_t v) {
     p[0] = uint8_t(v); p[1] = uint8_t(v >> 8);
     p[2] = uint8_t(v >> 16); p[3] = uint8_t(v >> 24);
 }
 
-inline void wl64(uint8_t* p, uint64_t v) {
+inline void wl64(ByteP p, uint64_t v) {
     wl32(p, uint32_t(v)); wl32(p + 4, uint32_t(v >> 32));
 }
 
@@ -96,7 +131,7 @@ inline int ilog2(unsigned v) {
 }
 
 // Four-character chunk id comparison. Ids are raw ASCII, never byte-swapped.
-inline bool tag_is(const uint8_t* p, const char (&s)[5]) {
+inline bool tag_is(CByteP p, const char (&s)[5]) {
     return memcmp(p, s, 4) == 0;
 }
 
@@ -162,7 +197,7 @@ public:
     }
 
     // Reads exactly n bytes; a short read is an error unless eof_ok.
-    bool read(void* buf, size_t n, bool eof_ok = false) {
+    bool read(VoidP buf, size_t n, bool eof_ok = false) {
         size_t got = fread(buf, 1, n, f_);
         if (got != n) {
             if (eof_ok && got == 0) return false;
@@ -174,11 +209,11 @@ public:
     // Reads up to n bytes, returning how many were read.  Unlike read(), a
     // short read is not an error: callers use this where a truncated file is
     // something to cope with rather than reject.
-    size_t read_some(void* buf, size_t n) {
+    size_t read_some(VoidP buf, size_t n) {
         return fread(buf, 1, n, f_);
     }
 
-    bool write(const void* buf, size_t n) {
+    bool write(CVoidP buf, size_t n) {
         if (fwrite(buf, 1, n, f_) != n) return ERR("write failed");
         return true;
     }

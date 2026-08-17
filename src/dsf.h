@@ -20,12 +20,12 @@ constexpr size_t kDsfHeaderSize = 28 + 52 + 12;
 
 class DsfWriter {
 public:
-    bool open(const char* path, int channels, unsigned dsd_rate, const uint32_t* channel_ids);
+    bool open(const char* path, int channels, unsigned dsd_rate, CU32P channel_ids);
 
     // Appends `bytes_per_channel` bytes per channel of MSB-first DSD that is
     // byte-interleaved by channel, i.e. exactly what DSDIFF and the DST decoder
     // produce.  `src` holds bytes_per_channel * channels bytes.
-    bool write(const uint8_t* src, size_t bytes_per_channel);
+    bool write(CByteP src, size_t bytes_per_channel);
 
     // Flushes the partial block and patches the header with the final sizes.
     bool finish();

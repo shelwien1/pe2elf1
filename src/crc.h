@@ -33,7 +33,7 @@ struct DsdCrcTable {
 };
 inline constexpr DsdCrcTable kDsdCrc{};
 
-inline uint32_t dsd_crc(uint32_t crc, const uint8_t* p, size_t n) {
+inline uint32_t dsd_crc(uint32_t crc, CByteP p, size_t n) {
     for (size_t i = 0; i < n; i++)
         crc = (crc << 8) ^ kDsdCrc.v[((crc >> 24) ^ p[i]) & 0xFF];
     return crc;
@@ -42,7 +42,7 @@ inline uint32_t dsd_crc(uint32_t crc, const uint8_t* p, size_t n) {
 // The same over planar DSD, which is how the encoder holds a frame: the CRC is
 // defined over the interleaved order, so the channels are woven together here
 // rather than by writing out an interleaved copy first.
-inline uint32_t dsd_crc_planar(const uint8_t* planar, size_t bytes_per_channel,
+inline uint32_t dsd_crc_planar(CByteP planar, size_t bytes_per_channel,
                                int channels) {
     uint32_t crc = 0;
     for (size_t i = 0; i < bytes_per_channel; i++)
