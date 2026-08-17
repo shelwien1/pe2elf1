@@ -81,6 +81,16 @@ else
     status=1
 fi
 
+# And the same for decoding, which spreads frames over threads the same way.
+"$BIN" d "$DFF" "$TMP/mt.dsf" --threads 4 2>"$TMP/dec_mt.log" \
+    || { cat "$TMP/dec_mt.log"; exit 1; }
+if cmp -s "$DSF" "$TMP/mt.dsf"; then
+    echo "  PASS: decoding on 4 threads gives the same bytes as on 1"
+else
+    echo "  FAIL: the thread count changed the decoded output" >&2
+    status=1
+fi
+
 a=$(payload "$TMP/dec1.log")
 b=$(payload "$TMP/dec2.log")
 if [ -n "$a" ] && [ -n "$b" ] && [ "$a" -gt 0 ]; then

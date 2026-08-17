@@ -4,14 +4,15 @@ A standalone codec for DSDIFF (`.dff`) files with DST lossless compression — t
 format the Philips encoder (`DstEncUi`) produces — and plain DSF (`.dsf`).
 
 ```
-usage: dff2dsf d input.dff output.dsf
+usage: dff2dsf d input.dff output.dsf [--threads N]
        dff2dsf c input.dsf output.dff [options]
 
   d   decode: DST coded or raw DSD in a .dff, written as a .dsf
   c   compress: DSD in a .dsf, written as a DST coded .dff
 
-  --threads N   encode N frames at a time (default 1, 'auto' for one
-                per core); the output does not depend on the count
+  --threads N   work on N frames at a time, in either direction
+                (default 1, 'auto' for one per core); the output
+                does not depend on the count
 
 options, which select the optional chunks of a written .dff:
   --disable-DSTI   frame index, 12 bytes per frame, for seeking
@@ -54,9 +55,9 @@ rather than going a byte at a time through `get()`/`put()`.
 
 The stack is saved and restored by copying it, which is the reason nothing on
 the way down to a `get()` or a `put()` may be large. Every working buffer here
-is static or a member already; measured, the deepest yield copies 377 bytes
-decoding, 457 encoding, and 2665 with `--threads 4`, against the 64 KB the
-library allows. `make frames` checks the constraint with
+is static or a member already; measured, the deepest yield copies 489 bytes
+decoding and 457 encoding, rising to 809 and 617 with `--threads 4`, against the
+64 KB the library allows. `make frames` checks the constraint with
 `-Wframe-larger-than=65536`: the only function over it is Lib3's own 256 KB
 stack pad, which is what that budget is measured from.
 
@@ -73,18 +74,18 @@ directions, goes through the pins.
 Every buffer is sized at build time for the largest stream the program accepts —
 DSD512, six channels, so a frame of 37632 bytes per channel — rather than for the
 stream in hand. Nothing is sized, grown or allocated at run time as a result:
-decoding and single threaded encoding allocate nothing whatsoever. That costs
+single threaded decoding and encoding allocate nothing whatsoever. That costs
 5.8 MB of BSS against 62 KB of code, and at DSD64 most of it is never touched —
-peak RSS is 10.4 MB either direction.
+peak RSS is around 4.5 MB either direction.
 
 Two things resisted that. The `DSTI` index is 12 bytes per frame with no bound on
 the frame count, so it is not kept at all: `patch()` recovers it by walking the
 `DSTF` chunks the coroutine has just written, which is one 12 byte read per frame
 against pages still in cache, and reproduces the remembered index byte for byte
-over the test file's 19119 frames. And `--threads N` needs an encoder and a slot
+over the test file's 19119 frames. And `--threads N` needs a coder and a slot
 buffer per worker, which is a runtime choice by definition — those are the
-program's only two allocations, one block each, however many threads are asked
-for.
+program's only two allocations per direction, one block each, however many
+threads are asked for.
 
 Integers are spelled as fixed-width types throughout — `int32_t`, `uint32_t`,
 `uint64_t` and the rest — with `size_t` kept for sizes and offsets into memory,
@@ -109,15 +110,21 @@ C++ runtimes' own:
 
 | | allocations | peak heap | peak RSS |
 |---|---|---|---|
-| print usage | 1 | 72 KB | |
-| decode | 5 | 72 KB | 10.4 MB |
-| encode | 10 | 74 KB | 10.4 MB |
-| encode `--threads 4` | 20 | 15.8 MB | 18.3 MB |
+| decode | 5 | 83 KB | 4.2 MB |
+| decode `--threads 4` | 15 | 3.2 MB | 4.9 MB |
+| encode | 10 | 87 KB | 4.7 MB |
+| encode `--threads 4` | 20 | 15.8 MB | 18.6 MB |
 
-The first rows are libstdc++'s startup pool and stdio's own per-file structures
-and buffers; none of them are this program's. The threaded run adds its two
-blocks — four encoders and six slots, 15.1 MB of the 15.8 — and libstdc++'s
-per-thread bookkeeping.
+Allocation counts and peak heap are Valgrind's, peak RSS is the process's own
+`VmHWM` read at exit. The single threaded rows are libstdc++'s startup pool and
+stdio's per-file structures and buffers; none of them are this program's.
+
+The threaded rows add the two blocks. Encoding's are the larger by far — an
+encoder is three megabytes of working buffers, so four of them plus six slots
+come to 15.1 MB of the 15.8, and nearly all of it is touched. Decoding's come to
+3.2 MB and barely show in RSS: a decoder is a few hundred kilobytes of tables,
+and a slot is sized for a DSD512 six channel frame while a DSD64 stereo one uses
+about fourteen kilobytes of its four hundred and fifty. Reserved, not resident.
 
 C++20, and Lib3 for the I/O. Built with `-fno-exceptions -fno-rtti`; no STL
 streams and no STL containers are used, only stdio and explicit allocation. The
@@ -336,25 +343,44 @@ vector kernels above. Those had no branches to remove, which is the whole
 result: this pays where the hot loop is scalar and the count is small, and
 nowhere else.
 
-Frames are the other axis. Each one starts the decoder's history from the same
-fixed pattern, so nothing carries over from the frame before and frames can be
-encoded in any order — `--threads N` does N at once. Reading and writing stay in
-the calling thread and stay in order: frames move through a small ring of slots,
-that thread fills every free slot and then blocks until the oldest frame has been
-coded and writes it, while workers take the next uncoded frame in turn. The ring
-is two slots longer than the worker count so reading and writing overlap
-encoding. Nothing else is shared — each worker has its own encoder, since every
-buffer in one is rewritten per frame anyway.
+Frames are the other axis, in both directions. Each one starts the decoder's
+history from the same fixed pattern, so nothing carries over from the frame
+before and frames can be coded in any order — `--threads N` does N at once,
+whether compressing or decoding. Reading and writing stay in the calling thread
+and stay in order: frames move through a small ring of slots, that thread fills
+every free slot and then blocks until the oldest frame has been coded and writes
+it, while workers take the next unclaimed frame in turn. The ring is two slots
+longer than the worker count so reading and writing overlap coding. Nothing else
+is shared — each worker has its own encoder or decoder, since every buffer in one
+is rewritten per frame anyway.
 
-| threads | test file | speedup |
+That the calling thread does all the I/O is a requirement rather than a
+preference: it is the coroutine's thread, and reading or writing suspends it by
+copying its stack. Workers only ever touch buffers.
+
+| threads | encoding the test file | decoding it |
 |---|---|---|
-| 1 (default) | 6m50s | |
-| 4 | 1m53s | 3.6x |
+| 1 (default) | 6m50s | 22.3 s |
+| 2 | | 11.6 s — 1.9x |
+| 3 | | 7.7 s — **2.9x** |
+| 4 | 1m53s — **3.6x** | 8.9 s |
 
-The output does not depend on the thread count: on the full file every thread
-count produces the same 78,038,932 bytes of DST data, and on a clip the files are
-byte for byte identical, including from the Windows build. That is the property
-worth keeping, and it is what the tests check.
+Encoding scales to the core count; decoding peaks one below it, on this four-core
+machine. The difference is how much work a frame is. Encoding one takes about
+21 ms, decoding one about 1.2 ms, so decoding hands frames across the queue
+eighteen times as often for the same amount of work and the lock traffic starts
+to show — and the calling thread, which reads, deinterleaves and writes, needs a
+core of its own for that. It is not the I/O: copying the same file's worth of
+raw DSD, which is the reading, deinterleaving and writing with no decoding at
+all, takes 0.37 s of the 22.
+
+The output does not depend on the thread count, in either direction: on the full
+file every count produces the same 78,038,932 bytes of DST data, and decoding is
+byte for byte identical on 1, 2, 4, 8 and 16 threads, including from the Windows
+build. Which frames a DSTC CRC mismatch is reported for, and in what order, is
+the same too — the check runs in the worker but the verdict is reported by
+whoever writes the frame out, so it follows frame order rather than completion
+order. That is the property worth keeping, and it is what the tests check.
 
 Two details made the vector code possible. The bitplane packing looked like it
 needed a bit transpose; reversing the bytes first turns it into exactly what
@@ -380,19 +406,22 @@ ffmpeg -v error -i out.dsf    -c:a pcm_s24le -f md5 -   # must match
 ffmpeg -v error -i out2.dff   -c:a pcm_s24le -f md5 -   # must match
 ./dff2dsf d out2.dff out2.dsf                           # must equal out.dsf
 ./dff2dsf c out.dsf out3.dff --threads 4                # must equal out2.dff
+./dff2dsf d input.dff out4.dsf --threads 4              # must equal out.dsf
 ```
 
 All of these hold on the test file against FFmpeg master (`74705b3`): decoding
 is bit-exact with FFmpeg, FFmpeg decodes this encoder's DST stream to identical
 samples, and compress/decompress round trips bit for bit. The whole 4:15 file was
 checked that way on four threads too, matching the reference md5 and producing
-the same 78,038,932 bytes as one thread. The decoder was also checked against a
-synthetic uncompressed-DSD `.dff`, and both directions run clean under ASan/UBSan
+the same 78,038,932 bytes as one thread, and decoded on four threads to the same
+bytes as on one. The decoder was also checked against a synthetic
+uncompressed-DSD `.dff`, and both directions run clean under ASan/UBSan
 including runs over randomly corrupted input — with `--param asan-stack=0`, since
 ASan's stack red-zones and a coroutine that saves its stack by copying it cannot
-both be right about that memory; the threaded encoder is clean under
-ThreadSanitizer as well, including the awkward cases — fewer frames than threads,
-a truncated input, and a failing write, none of which may leave a worker waiting.
+both be right about that memory; both pools are clean under ThreadSanitizer as
+well, including the awkward cases — fewer frames than threads, a truncated input,
+a damaged frame the walk has to resync past, and a failing write, none of which
+may leave a worker waiting.
 
 ## Source layout
 
@@ -411,6 +440,7 @@ in order, so they are read in that order too.
 | `src/dsfread.h` | DSF reading: the same in reverse |
 | `src/dffwrite.h` | DSDIFF writing |
 | `src/encpool.h` | encoding frames on several threads |
+| `src/decpool.h` | decoding frames on several threads |
 | `src/bits.h`, `src/bitwrite.h` | bit reader and writer, JPEG-LS Golomb code |
 | `src/crc.h` | the DSDIFF frame CRC carried in `DSTC` |
 | `src/Lib3/` | the coroutine library the I/O runs on, as supplied |

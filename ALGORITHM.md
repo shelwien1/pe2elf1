@@ -515,14 +515,22 @@ the path is tested here. Such a file round trips bit-exactly, padding included.
 
 ### Threads
 
-Frames are independent, so `--threads N` encodes N of them at once: frames move
-through a ring of slots two longer than the worker count, the calling thread
-fills every free slot and writes finished frames in order, and workers take the
-next uncoded frame in turn. Each worker holds its own encoder, since every buffer
-in one is rewritten per frame anyway.
+Frames are independent in both directions, so `--threads N` works on N of them
+at once whichever way the conversion runs: frames move through a ring of slots
+two longer than the worker count, the calling thread fills every free slot and
+writes finished frames in order, and workers take the next unclaimed frame in
+turn. Each worker holds its own encoder or decoder, since every buffer in one is
+rewritten per frame anyway.
+
+The calling thread keeps the I/O because it is the coroutine's thread and
+reading or writing suspends it by copying its stack; workers only touch buffers.
+On the decode side a frame's DSTC CRC is checked in the worker that decoded it,
+but the verdict is reported by whoever writes that frame out, so mismatches are
+named in frame order rather than completion order.
 
 Nothing about the result depends on the thread count — the same frame always
-produces the same bytes — which is checked on every run of `tests/verify.sh`.
+produces the same bytes — which is checked in both directions on every run of
+`tests/verify.sh`.
 
 ## Constants
 
@@ -549,6 +557,7 @@ produces the same bytes — which is checked on every run of `tests/verify.sh`.
 | `src/dstenc.h` | the encoder: autocorrelation, filter design, refinement, coding |
 | `src/bitwrite.h` | bit writer with backwards carry propagation |
 | `src/encpool.h` | encoding frames on several threads |
+| `src/decpool.h` | decoding frames on several threads |
 
 `README.md` covers the containers and the measured results;
 `docs/philips-encoder.md` compares this encoder against the reference encoder's

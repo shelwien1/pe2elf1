@@ -141,6 +141,17 @@ struct ReverseTable {
 };
 inline constexpr ReverseTable kReverse{};
 
+// ------------------------------------------------------------------ threading
+
+// Both directions spread whole frames across threads, so the ceiling and what
+// `--threads auto` resolves to are shared by the two pools.
+constexpr uint32_t kMaxThreads = 256;
+
+inline uint32_t default_thread_count() {
+    const uint32_t n = std::thread::hardware_concurrency();
+    return n ? (n > kMaxThreads ? kMaxThreads : n) : 1;
+}
+
 // ---------------------------------------------------------------- allocation
 
 // Allocation failure is fatal and reported; with -fno-exceptions there is no

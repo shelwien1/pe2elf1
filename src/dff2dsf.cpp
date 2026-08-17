@@ -55,6 +55,7 @@
 #include "dstenc.h"
 #include "dffwrite.h"
 #include "encpool.h"
+#include "decpool.h"
 
 
 namespace dff2dsf {
@@ -82,14 +83,15 @@ int32_t usage() {
     fprintf(stderr,
             "dff2dsf - DSDIFF (DST) and DSF converter\n"
             "\n"
-            "usage: dff2dsf d input.dff output.dsf\n"
+            "usage: dff2dsf d input.dff output.dsf [--threads N]\n"
             "       dff2dsf c input.dsf output.dff [options]\n"
             "\n"
             "  d   decode: DST coded or raw DSD in a .dff, written as a .dsf\n"
             "  c   compress: DSD in a .dsf, written as a DST coded .dff\n"
             "\n"
-            "  --threads N   encode N frames at a time (default 1, 'auto' for one\n"
-            "                per core); the output does not depend on the count\n"
+            "  --threads N   work on N frames at a time, in either direction\n"
+            "                (default 1, 'auto' for one per core); the output\n"
+            "                does not depend on the count\n"
             "\n"
             "options, which select the optional chunks of a written .dff:\n");
 
@@ -166,7 +168,16 @@ void print_progress(uint64_t done, uint64_t total) {
     fflush(stderr);
 }
 
-bool decode_dst(DffReader& reader, DsfWriter& writer, WordP frames_out) {
+// Called after every frame is written, by either decode path.
+void print_decode_progress(void* ctx, uint64_t frames) {
+    if (frames & 255) return;
+    print_progress(frames, *static_cast<const uint64_t*>(ctx));
+}
+
+// One frame at a time, in this thread: the default, and what the pool below is
+// measured against.
+bool decode_serial(DffReader& reader, DsfWriter& writer, WordP frames_out,
+                   WordP crcs_out, WordP crc_errors_out, WordP uncoded_out) {
     // One decoder and one frame buffer, both sized for the largest stream this
     // build handles rather than for the one in hand, and both static: nothing
     // here has to be allocated, and neither is small enough to want on a stack.
@@ -207,15 +218,43 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, WordP frames_out) {
         if ((++frames & 255) == 0) print_progress(frames, reader.frame_count());
     }
 
+    *frames_out = frames;
+    *crcs_out = crcs;
+    *crc_errors_out = crc_errors;
+    *uncoded_out = dec.uncoded_frames();
+    return ok;
+}
+
+// The pool is static for the same reason the reader and writer are, and because
+// its workers outlive the yields that suspend the calling thread.
+DecodePool g_decode_pool;
+
+bool decode_dst(DffReader& reader, DsfWriter& writer, uint32_t threads,
+                WordP frames_out) {
+    const uint64_t total = reader.frame_count();
+    uint64_t frames = 0, crcs = 0, crc_errors = 0, uncoded = 0;
+    bool ok;
+
+    if (threads > 1) {
+        ok = g_decode_pool.run(reader, writer, threads, reader.channels(),
+                               reader.dsd_rate(), print_decode_progress,
+                               const_cast<uint64_t*>(&total));
+        frames = g_decode_pool.frames();
+        crcs = g_decode_pool.crcs();
+        crc_errors = g_decode_pool.crc_errors();
+        uncoded = g_decode_pool.uncoded_frames();
+    } else {
+        ok = decode_serial(reader, writer, &frames, &crcs, &crc_errors, &uncoded);
+    }
+
     print_progress(frames, reader.frame_count());
     fputc('\n', stderr);
 
     if (ok && reader.frame_count() && frames != reader.frame_count())
         fprintf(stderr, "dff2dsf: warning: FRTE announced %u frames, found %" PRIu64 "\n",
                 reader.frame_count(), frames);
-    if (dec.uncoded_frames())
-        fprintf(stderr, "dff2dsf: %" PRIu64 " frame(s) were stored uncompressed\n",
-                dec.uncoded_frames());
+    if (uncoded)
+        fprintf(stderr, "dff2dsf: %" PRIu64 " frame(s) were stored uncompressed\n", uncoded);
     if (crcs)
         fprintf(stderr, "crc: %" PRIu64 " frame(s) carried a DSTC CRC, %" PRIu64 " mismatched\n",
                 crcs, crc_errors);
@@ -247,7 +286,8 @@ bool decode_raw_dsd(DffReader& reader, DsfWriter& writer) {
 DffReader g_dff_in;
 DsfWriter g_dsf_out;
 
-bool decode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path) {
+bool decode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path,
+                   uint32_t threads) {
     DffReader& reader = g_dff_in;
     DsfWriter& writer = g_dsf_out;
     if (!reader.begin(inp)) return false;
@@ -261,13 +301,16 @@ bool decode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path) {
     if (reader.is_dst() && reader.frame_count())
         fprintf(stderr, "length: %u frames, %.2f s\n", reader.frame_count(),
                 double(reader.frame_count()) / (reader.frame_rate() ? reader.frame_rate() : 75));
+    // Raw DSD is a copy, not a decode, so there is nothing for the threads to do.
+    if (threads > 1 && reader.is_dst())
+        fprintf(stderr, "threads: %u\n", threads);
 
     if (!writer.begin(out, channels, rate, reader.channel_ids())) return false;
 
     bool ok;
     uint64_t frames = 0;
     if (reader.is_dst()) {
-        ok = decode_dst(reader, writer, &frames);
+        ok = decode_dst(reader, writer, threads, &frames);
     } else {
         ok = decode_raw_dsd(reader, writer);
     }
@@ -415,10 +458,11 @@ bool encode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path,
 // hundred bytes.
 struct DecodeCoro : Coroutine {
     const char* in_path = nullptr;
+    uint32_t threads = 1;
     bool ok = false;
 
     void do_process( void ) {
-        ok = decode_stream(&pin[0], &pin[1], in_path);
+        ok = decode_stream(&pin[0], &pin[1], in_path, threads);
         yield(this, 0);
     }
 };
@@ -456,6 +500,7 @@ bool run_conversion(const char* in_path, const char* out_path, bool decoding,
     bool ok;
     if (decoding) {
         g_decode.in_path = in_path;
+        g_decode.threads = threads;
         g_decode.processfile(f, g);
         ok = g_decode.ok && g_dsf_out.patch(g);
     } else {
@@ -497,8 +542,7 @@ int main(int argc, char** argv) {   // the one signature C++ fixes
                                     " or 'auto'\n\n", kMaxThreads);
                     return usage();
                 }
-                any_option = true;
-                continue;
+                continue;   // --threads applies to both directions
             }
             if (!parse_option(argv[i], &options)) {
                 fprintf(stderr, "dff2dsf: unknown option '%s'\n\n", argv[i]);
@@ -522,7 +566,7 @@ int main(int argc, char** argv) {   // the one signature C++ fixes
 
     const bool decoding = arg[0][0] == 'd';
     if (decoding && any_option)
-        fprintf(stderr, "dff2dsf: note: those options only apply to 'c'\n");
+        fprintf(stderr, "dff2dsf: note: the chunk options only apply to 'c'\n");
 
     const bool ok = run_conversion(arg[1], arg[2], decoding, options, threads);
     return ok ? 0 : 1;

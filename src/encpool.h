@@ -15,14 +15,6 @@
 
 namespace dff2dsf {
 
-constexpr uint32_t kMaxThreads = 256;
-
-// How many threads to use for `--threads auto`, and the ceiling on the request.
-inline uint32_t default_thread_count() {
-    const uint32_t n = std::thread::hardware_concurrency();
-    return n ? (n > kMaxThreads ? kMaxThreads : n) : 1;
-}
-
 class EncodePool {
 public:
     ~EncodePool() {
@@ -80,7 +72,7 @@ public:
 
         for (uint32_t i = 0; i < threads; i++) workers[i].join();
 
-        return !failed_;
+        return !failed_ && !read_failed_;
     }
 
     uint64_t frames() const { return frames_; }
@@ -184,7 +176,13 @@ private:
             {
                 std::lock_guard<std::mutex> lock(mu_);
                 if (r < 0) {
-                    failed_ = true;
+                    // A read that fails ends the input as far as the ring is
+                    // concerned rather than abandoning it: the frames already in
+                    // hand were read successfully and are still written, which is
+                    // what one thread would have done with them.  The failure is
+                    // remembered separately so the conversion still reports it.
+                    read_failed_ = true;
+                    total_ = next_fill_;
                 } else if (r == 0) {
                     total_ = next_fill_;      // the input ran out here
                 } else {
@@ -251,7 +249,8 @@ private:
     uint64_t next_encode_ = 0;    // frame to hand to the next free worker
     uint64_t next_write_ = 0;     // frame to write next
     uint64_t total_ = kUnknown;   // frame count, once the input has run out
-    bool failed_ = false;
+    bool failed_ = false;        // encoding or writing gave up; nothing more is written
+    bool read_failed_ = false;   // the input gave up; what was read is still written
 
     uint64_t frames_ = 0;
     uint64_t coded_bytes_ = 0;
