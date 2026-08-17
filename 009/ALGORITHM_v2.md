@@ -166,15 +166,29 @@ bytes:
 | 0 | 2 | delta: two more bytes, `dx` and `dy` |
 | 0 | ≥ 3 | absolute run of `v` pixels, padded to an even byte count |
 
+`read_rle_op` is the two-byte read both share, and the one place the truncation
+check lives: `ferror` first, then two `fgetc`s, false if either came back
+negative. The int return of `fgetc` is what makes that possible — end of file has
+to be distinguishable from a legitimate `0xFF`, and a byte-wide result could not.
+A truncated RLE file is refused here rather than run off the end of.
+
 RLE4 is the same machine with a nibble for a pixel: half the horizontal step in
 a delta, a run counted in nibbles, and a cursor carrying which half of the
 current byte the next nibble goes in. The parity is tracked across deltas — an
 odd `dx` flips it and, when the cursor was on the low nibble, costs an extra
-byte of advance.
+byte of advance. `write_nibbles` is the absolute-run inner loop, and the thing to
+know about it is that **the parity does not change inside a run**: each turn
+writes one whole byte, so the half-byte cursor is read once at the top and set
+once at the end.
 
 Every opcode is bounds-checked against the pixel buffer through
 `BmfImage::holds(at, n)` before it writes, and both walks clear the buffer first
 because the opcodes are not obliged to cover it.
+
+The uncompressed case is `read_rows`: rows bottom-up, each read at `stride` bytes
+and then `fseek`ed past its padding to the next multiple of four. Reading
+bottom-up is not a transform — it is what a BMP is — so the buffer BMF models is
+already top-down.
 
 **The run structure is not preserved.** BMF stores pixels. `write_bmp`
 re-encodes
@@ -483,6 +497,25 @@ actual coder; it models an order-0 entropy of the residuals and picks the
 smallest. That is why §6.5 matters — the thing being measured is not the thing
 that will run.
 
+The histograms it reads are built by `hist_bump`, one increment at
+`hist_scratch[4k]` — a `uint8_t*` addressed as 32-bit counters, so the increment
+goes through a pair of `memcpy`s rather than a cast.
+
+And `hist_scratch` is not its own allocation. `packer_reset` places it at
+`stream.buf + stream.size − 4096`: **the last 4096 bytes of the output buffer**,
+1024 counters, living at the far end of the same block the coded stream is
+growing into from the front. The decision layer's scratch space and the output
+share one allocation and grow toward each other. `transform_planes` clears all
+4096 bytes at the top of a candidate; `model_planes` clears the first 1024 —
+256 counters — per plane.
+
+`stream_open` sizes the block `data_size + 0x20000`, so the histogram sits in the
+last 4KB of 128KB of headroom past the raw pixel count, and a coded stream would
+have to exceed the raw size by 124KB to reach it — which the raw fallback of §4.2
+makes moot. `packer_reset` re-places the pointer on every rewind, and since
+`search_filter` rewinds between every trial, that placement is part of the reset
+rather than a one-time setup.
+
 The two accumulators over even and odd bins are the original's pairing for a
 two-lane SSE add. They are kept: floating-point addition is not associative, so
 merging them changes the sum, and the sum feeds a comparison that decides a
@@ -497,11 +530,23 @@ descriptors.
 
 ### 6.1 depth 4 and below takes the short path
 
-`compress_image` tests `(depth & depth_bits) <= 4` and, if so, opens the stream,
+`code_image_body` tests `(depth & depth_bits) <= 4` and, if so, opens the stream,
 sets `plane_predictor = 0`, `plane_alt_model = 0`, `alphabet_reduced = 0`, and
 calls `model_plane` on the whole image. **No search, no transform, no
 predictor, no descriptors** — `flags_descriptors` is never set, which is why the
 corpus's four sub-byte streams carry `0x64` and not `0x3c`.
+
+That is the whole of the narrow arm; the wide one runs `search_filter`, sets
+`flags_descriptors`, re-reads the header if the search transposed the image, and
+then `write_plane_descs` and the planes. `write_member_head` puts the sixteen-byte
+header out, followed by the coded tail when there is one — which is what makes a
+`.bmf` a container of members rather than one stream, and §4.2's raw fallback the
+same function with no tail.
+
+`search_filter` has its own refusal, separate from that: an image narrower than 4
+or shorter than 3 gets `reset_descriptors` — every descriptor cleared to predictor
+0, no references, no alternate model — and a returned cost of 0. Too small to
+measure anything on, so nothing is claimed.
 
 There is one plane and its alphabet is at most sixteen symbols. The main model's
 match-and-run machinery is what suits that; a predictor on a 4-bit palette index
@@ -529,7 +574,9 @@ last.
 The wire format carries `(flags << 2) | nrefs` in six bits, then — only when
 `desc_has_refs` is set — a byte of `dc`, and then, only when `nrefs > 1`, one
 byte each of `weight0` and `weight1` biased by 64, and `weight2` too when
-`nrefs > 2`.
+`nrefs > 2`. `write_plane_descs` and `read_plane_descs` are the two ends of
+exactly that, through the packer of §5.1; the bias of 64 is there because a
+weight is signed and the field is not.
 
 Nothing on the wire states the coding order separately, because **`nrefs` is
 both the reference count and the position**. They are the same number: a plane
@@ -791,6 +838,12 @@ a whole-plane pre-transform handed to the main model.
 
 ### 7.3 planar and interleaved
 
+`transform_planes` is the encoder's loop over the planes and `plane_in_order(k)`
+its one-line indexer: it returns `plane_desc[k].src_plane` — the plane coded
+`k`-th — and sets `plane_predictor` from *that plane's own* descriptor on the way
+past. Two indices in one line, which is the §6.2 confusion in its most
+compressed form.
+
 In planar mode (`flags_planar`) `model_planes` runs per plane: it sets
 `plane_predictor` and `plane_alt_model` from the descriptor, calls
 `colour_transform` to gather the plane into a flat buffer, clears the
@@ -873,6 +926,13 @@ For a depth below 8 this pass is also where the **packed rows are unpacked**:
 the source is read bit-field by bit-field and each pixel lands in its own
 `sym_word` entry. Everything downstream works one entry per pixel.
 
+Coming back the other way, `write_row` is what undoes it: the decoded symbol
+numbers in `row_cur[0]` are mapped back through `sym_code[]` and written out at
+whatever width the depth calls for — `write_row_at<uint32_t>` for four bytes, a
+three-byte `SymEntry` store for 24-bit, and the narrow cases repacked. The
+alphabet reduction is a permutation, so the inverse is a table lookup and not a
+search.
+
 **More than eight bits.** A symbol is now `(depth+7)/8` bytes and no flag table
 will do, so the distinct values go into a **binary search tree** of
 `ReduceNode { uint32_t val; uint16_t kid[2]; }` — eight bytes a node, 8192 of
@@ -910,6 +970,14 @@ Then one of two things:
 - three context-id tables filled with `0xFFFF`, `sym_ctr[524288]` filled with
   `no_symbol` (8192), the `FreqRec` grid cleared from entry 188 on, and the
   binary counters seeded.
+
+`seed_alphabet` then builds the symbol-list side of it: an `alpha_map` of one
+byte per symbol set to 1, the dense escape list, and the two per-symbol selector
+list arrays from `new_sym_lists` — one `SymList` per symbol, each starting with
+no entries. `init_symbol_lists` gives every list its capacity. On the decoding
+side the same work is preceded by `expand_alphabet`, which is where the alphabet
+arrives off the stream rather than being computed: the count flat-coded, then
+the values byte by byte through the carry-context lists of §8.1, run in reverse.
 
 A `PixRec` is eight bytes: a `uint16_t sym` and six `match[]` bytes. **Those six
 bytes are the model's texture, and every context signature below is built from
@@ -1042,9 +1110,17 @@ covers and `seed_after_run` primes the one past it.
 
 **Rung 2 — the four-way match.** The pixel is coded against the five-slot
 alphabet of §8.3 in the `FreqRec` the bucket names. `find_level` walks the five
-weights to find which holds the target, `bump` adds `b15` to that level and the
+weights to find which holds the target, `cum_below` sums the weights beneath a
+level to give the coder its `cum`, `bump` adds `b15` to that level and the
 total, and a rescale halves all five when the total passes `w[6]` or 0x4000 —
 with the escape floor keeping the escape reachable.
+
+`cum_below` is a four-case `switch` rather than a loop, and the fourth case is
+worth a look. `w[5]` is the record's running total — `resum` is the one line
+that recomputes it as `w[0..4]` summed — so level 4's cumulative
+weight — the sum of `w[0..3]` — is taken as `w[5] - w[4]`: the total less the one
+weight above it, rather than four additions that reproduce a number already
+stored.
 
 Two `FreqRec`s are in play, a per-bucket one and a per-context one, and when the
 latter is fresh `blend_from` seeds it from the former: the incumbent weights
@@ -1063,11 +1139,18 @@ Under the bucket runs a chain of **lazily interned context identifiers** —
   alphabet is under 32 symbols, and past 53248 ids the nibble is forced to 15,
   merging those sixteen contexts rather than allocating past the table.
 
-The four gradients the first of those reads are running counts: "how many of the
-last *n* records matched on this lane, less *n*", so **zero means all of them
+`context_ids` is the function that builds all three, and the four gradients the
+first of them reads are running counts from `match_seed`: "how many of the last
+*n* records matched on this lane, less *n*", so **zero means all of them
 matched**, and each slides by one add and one subtract per pixel.
+`match_seed_split` is the same count over five records that are *not*
+consecutive — −3, −2, +2, +3, +4, stepping over the three around the pixel being
+coded, which are the ones not yet known.
 
-**Rung 3 — the escape ladder.** `seed_candidates` assembles 32 candidates:
+**Rung 3 — the escape ladder.** `exclude_stage_one` runs first, marking the four
+ranked neighbours and `no_symbol` excluded — rung 2 has just failed to be any of
+them, so offering them again would cost bits to say no twice. Then
+`seed_candidates` assembles 32 candidates and `offer_candidates` walks them:
 
 | slots | from |
 | --- | --- |
@@ -1102,6 +1185,13 @@ is the candidate in the top ten of `sel0_list[N]`, in the top four of
 the
 top six of `sel0_list[NE]` — and the ladder position above all of it.
 
+Those five "in the top *n* of" questions are all `sym_in_top`, a linear scan of a
+list's first *n* entries. Since a `SymList` is kept in descending count order,
+"in the top ten" is "among the ten most frequent symbols seen in that
+neighbour's list", so the context is asking how well the candidate agrees with
+what the neighbourhood has been doing — using the lists as evidence without
+coding anything from them.
+
 A hit ends the pixel. A miss adds the candidate to the **exclusion mask**, which
 is a generation counter rather than a cleared array, so it costs nothing in
 every
@@ -1128,6 +1218,15 @@ and marks every entry in the list excluded on the way out, so the next list does
 not offer them again. A list whose live entries are all excluded codes nothing
 at
 all.
+
+`decode_symbol_list` is the reading half, and its shape is the one thing about
+`SymList` that is not symmetric: the encoder knows its symbol and sums the
+weights below it, while the decoder has to build **a pointer per symbol still in
+play** — the live entries that are not excluded, null-terminated — walk them
+against the point the coder gave it, and then fold the answer back. The bound on
+that array is `no_symbol + 1`, and an instrumented build measures the high-water
+mark over the corpus at 257: a 256-symbol list with every entry live, plus the
+terminator.
 
 Rescale runs when `since_rescale` passes `rescale_at` **or** the moment any one
 count reaches 252. It halves every count — with a rounding bias of one when the
@@ -1226,6 +1325,19 @@ table, `p1_level_step = 1, 1, 2, 2, 2, 4, 4, 4`, turns the level into the
 deadband width two of the features below compare against, so the quantiser gets
 coarser exactly where the neighbourhood is busier.
 
+`alt_p1_alloc` builds all three step functions, per plane, by one pass over 256
+activity values carrying a running level and group and stepping each when the
+value reaches its next edge — so the tables in `tables.inc` are edge lists and
+the step functions are derived, not stored. `group_of` carries the plane index in
+its high byte (`plane << 8`), which is how one counter array serves four planes
+without their statistics mixing. The same pass builds `slot_of` over 256 values
+of a separate `p1_slot_edges` ladder, times 8.
+
+That function also seeds the counters: `init_counter_node` over all **629,856**
+of them, each starting `{8, 2, 2, 2, 2, 3, 3}` with a total of 22 — a prior that
+favours the first slot eight to two and the two escape slots three, rather than a
+uniform. Model B's whole context space is initialised before its first sample.
+
 On top of it, **nine ternary features**, each 0, 1 or 2:
 
 | feature | compares |
@@ -1246,6 +1358,22 @@ feature with the three values pre-scaled to `32 · 3^k`, and the counter index i
 ```c
 ctx[0] = Σ ctx_w[k].w[sel_k]  +  16·quiet  +  8·(ctx[3 + ctx[2]] == 0)  +  act_lvl;
 ```
+
+`ctx[3]` and `ctx[4]` are a **second** activity measure, separate from the one
+above and kept per column parity. `seed_activity` builds them at the start of a
+row — sixteen `mag` fields from two rows up and four rows up, plus two from the
+current row — and `record_sample` then slides each along by one add and three
+subtracts per sample, flipping `ctx[2]` so the two parities alternate. The whole
+pair is read in exactly one place, the `== 0` above: all that survives of it is
+one bit, "has this column parity been completely flat".
+
+That is worth knowing because it settles a question the source cannot. Two of
+the three coders read those `mag` bytes as `int8_t` and one as `uint8_t`, so a
+magnitude of 128 or more gives sums 256 apart — and it does not matter, because a
+sum is only ever tested against zero and both readings are zero together.
+Instrumented over the corpus: the generic coder runs `seed_activity` 3,216 times
+and 70 of those rows carry a magnitude at or above 128. The casts stay as the
+binary has them.
 
 so `counters[]` has 32 · 3⁹ = **629856** entries. The low five bits are *not*
 just the activity level: bits 0–2 are `act_lvl` (0…7), bit 3 is a small state
@@ -1314,6 +1442,34 @@ from `pred − sample`. Then
   at
   7 and 5. A cold context borrows from a warm one, in the mirror.
 
+Then `update_selector`, nine times — once per ternary feature. Each call walks
+three counters: the feature read the *opposite* way, the middle value, and an
+alternate context built from two of the three weights. Which two is the only
+thing across the nine that is not uniform: **slot 0 pairs `w[0]` with `w[1]`
+where the other eight pair `w[1]` with `w[2 − sel]`.** The same one-weight shift
+appears in `ctx_alt`'s slot-0 term, so it is a parameter of the family rather
+than a special case invented to close a loop.
+
+A feature already at its middle value (`sel == 1`) is the symmetric case: the two
+outer values sit either side of it, so **both** are bumped, and equally:
+
+```
+sel == 1     lo, hi          6      forward code
+             their level +1  4      when that level exists
+             their level -1  3
+sel != 1     w[2 - sel]      7      forward
+             w[1]            6      forward,   +1 -> 4,  -1 -> 3
+             ctx_alt         4      REVERSED,  +1 -> 2,  -1 -> 2
+```
+
+The third line of the off-centre case is the one that matters: the alternate
+context is bumped with the **reversed** code, not the forward one, at half the
+weight the middle gets. So every coded sample teaches nine mirrored features as
+well as its own — and the increments across the whole update, 17, 13, 11, 7, 6,
+5, 4, 3, 2, are the model's own ranking of how much each of those neighbours'
+evidence is worth. None of them is adaptive; they are nine constants in the
+binary.
+
 ### 9.5 near-lossless machinery, inert in this build
 
 Every encode path carries a drift check:
@@ -1329,6 +1485,16 @@ With `-S` — the only mode this build writes — `near_lossless_q` is 0, so
 `alt_init_tables` builds `fold` as the exact inverse of `unfold`, `recon` always
 equals `want`, the drift is always zero and the `fold_hi` branch cannot fire. It
 is the `-E` near-lossless path, kept because it is what the donor does.
+
+It appears in two forms, and they are **not** the same decision. `fold_or_refuse`
+compares the reconstruction against a byte in a *different* buffer — the source
+and the destination are separate there — while `encode_sample` reads one byte
+twice, before and after the context step, so what it compares against is the
+byte it is about to overwrite. Same five lines, different operands, and a merge
+that assumed otherwise would be wrong in the near-lossless mode this build
+cannot reach. `encode_sample` also carries the coding call itself, so it is the
+whole per-sample body of model B: fold, drift-check, `alt_p1_encode_symbol`,
+return the reconstruction.
 
 ---
 
@@ -1478,7 +1644,18 @@ than 29696.
 
 Underneath sits `p2_ctr[163840]` — **five banks of 32768 counters**, each bank
 addressed by a different context derived from the same neighbourhood. Each holds
-a `weighted` accumulator and an adaptive `rate`, and after each sample:
+a `weighted` accumulator and an adaptive `rate`. `alt_p2_alloc` seeds every one
+of the 163,840 at `weighted = 0, rate = 5, b1 = 2`, and all 15,552 `P2Freq`
+records at `f = {2048, 2816, 2816}` with `step = 4096` — so the three-way counter
+starts biased **against** the literal symbol, 2048 against 5632 for the two
+escapes together, and the step starts at its maximum and only decays. It also
+sets the deadzone from `near_lossless_q` (which is 0, so `±1`) and the band to
+`[−7, 8]`.
+
+This runs **per plane**: 163,840 counters and 15,552 records re-seeded four times
+for a 32-bit image, which is a large part of why this is the expensive model.
+
+After each sample:
 
 - the bank's own counter takes the residual through a **deadzone**, so small
   residuals do not move it;
@@ -1493,8 +1670,81 @@ a `weighted` accumulator and an adaptive `rate`, and after each sample:
   (`ctx ^ bit ^ 0x7FF0`), and `rot` at the context with its low nibble rotated
   through `p2_ctx_rotate`.
 
+`code_banks` is the loop over the five, `bump_bank` one bank's worth, and
+`walk_bank_bits` the eleven-bit pass inside it. That last one is where the
+asymmetry lives: it skips `direct[0]` and `rot[0]` at the start and `mirror[10]`
+at the end, because those three are bumped by the caller — before the branch
+that chooses between the two shapes, and after the two rejoin. So the eleven
+bits are not treated eleven identical ways; the first and last are handled
+outside the loop, and the middle nine inside.
+
+One flag distinguishes the three arms of `code_banks`, and only one: whether the
+record *after* the direct one is nudged as well. Everything else in the five
+lines is the same.
+
+Four primitives do the arithmetic, and they exist separately for reasons the
+call sites forced:
+
+| | what it does |
+| --- | --- |
+| `p2_pred` | the bank's own prediction, two shifts of the accumulator by the rate |
+| `p2_bump` | accumulator plus error, shifted — the whole update in one line |
+| `p2_update` | the two together, for a caller that does not need the residual back |
+| `p2_update_into` | the same, but it subtracts the prediction **into** the caller's residual by reference, because two sites read that residual again below |
+
+`p2_nudge` and `p2_rescale` are the two halves that could not be folded in:
+two of the fifty sites in `alt_p2_model` compute the increment and then add it
+*conditionally*, so the add cannot move into a helper even though the guard can.
+
+`add_bias` is the other accumulator running alongside all of this — 32 times each
+of a neighbour's four difference fields, summed into `ctx_bias` and read only by
+`alt_p2_context`. The encoder writes it back one plane late, carried in four
+locals; the decoder adds after every plane. That is MSVC's scheduling and not a
+difference in the model, because the next sample reloads `ctx_bias` from the
+total before anything could observe it.
+
 That neighbour smoothing is most of the cost of this model, and §6.5 is where it
 gets turned off: the search measures the model without it.
+
+### 10.5 rows and borders, in both alternate models
+
+Neither alternate model special-cases an edge in its prediction. Both keep a
+**ring of history rows with margins**, and handle the borders by *filling the
+margins with mirrored records* before the row walk starts — so every pixel,
+including the first one of the first row, reads a full neighbourhood and the
+predictor has no branches in it.
+
+Model B does this in `advance_row`, once per row: copy the six records before the
+cursor forward over the six after it (mirroring the right margin of the row just
+finished), rotate the four-row ring with `ring_advance`, carry one record across
+the seam, and mirror three more back over the left margin.
+
+Model C splits it three ways, driven by `alt_p2_start_row`:
+
+| row | what runs |
+| --- | --- |
+| 0 | `seed_row0` — every record in the top row set to a **neutral invented value**, then `copy_row0_down` duplicates it into the three rows behind |
+| 1 | `seed_history` — mirror the coded first row into the margins, then `copy_row0_down` again |
+| any | `start_row` — the per-row cursor reset |
+
+`seed_row0`'s constants are the interesting part, because they are a prior and
+not a zero:
+
+```
+val 256   dval 256   err −16   sign 1   mag 3
+aerr 512  dup 1024   dleft 256  dupleft 512  dupright 512
+```
+
+A neighbourhood that has never been seen is described as *moderately active with
+a small negative error*, not as flat. Seeding it flat would tell the context
+quantiser that the top of every image is a smooth region, and the first row is
+exactly where that is least likely to be true.
+
+`code_sample` is the per-sample switch — `encode_sample` or `decode_sample` —
+and is what `alt_model_p2_d8`, `alt_model_p2` and their model B counterpart
+`alt_model_p1_d8` drive in their row loops. Those three templates are the bodies
+behind the six entry points of §7.4: each is one `template<int32_t f_DEC>` with
+its encode and decode instantiations named separately.
 
 ---
 
@@ -1612,9 +1862,28 @@ was written from what the expression looks like. `>>25` reads as a sign test.
 `2 * half` reads as a pair count. A strip that is 254 wide and seeded 254 wide
 reads as a strip that is used 254 wide. None of those survives being run.
 
-`tools/unstale.py` checks that every name this document writes in backticks is a
-name the program still has, and that a line count quoted beside a function's
-name matches that function. This document is in its list of documents to check.
+Two tools check this document, one in each direction.
+
+`tools/unstale.py` checks that every name it writes in backticks is a name the
+program still has, and that a line count quoted beside a function's name matches
+that function.
+
+`tools/covered.py` asks the reverse, and it exists because of what it found. The
+first draft of this document was gated, committed and pushed **missing the entire
+counter layer** — `bitctr.inc` and `sym_code.inc`, which is to say every
+adaptive probability in the program. `unstale.py` reported zero throughout,
+correctly: it can only check names that are present, and silence is invisible to
+it. So `covered.py` walks the other way — for every function in the spliced unit,
+does any document name it? — and reports a ratchet rather than a zero, because
+the honest answer is that seven functions are still undescribed and they are
+frees and byte-movers.
+
+That pass took the undescribed count 64 → 50 → 7, and the two things it turned up
+that were not just missing identifiers are worth naming: the two rounding
+constants of §7.1, and the fact that `alt_p1_alloc` and `alt_p2_alloc` — which
+look like allocators and are named like allocators — seed 629,856 counter nodes,
+163,840 bank counters and 15,552 three-way records with the priors §9.2 and §10.4
+now give.
 
 Both of those caught something here while it was being written: an ambiguous
 sentence in §11 that read as if `decode_stage_two` were thirteen lines long, and

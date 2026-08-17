@@ -209,7 +209,28 @@ RULES = [
 #
 # Lower it when you describe something.  Raising it is a decision to document
 # less than the last round did, and should read like one in the diff.
-BUDGET = 50
+#
+# 64 when the tool was first run, then 50 after a naming pass, then 7 after
+# working through the list.  The seven that remain are named in the output every
+# run, and they are:
+#
+#   alt_p1_free  alt_p2_free  alt_p2_planes_free  free_sym_lists   frees
+#   alt_p2_planes_alloc          the loop that calls the seeder, per plane
+#   header_from                  eight fields copied from another header
+#   strided_copy                 memcpy, or a byte at a time at two strides
+#
+# An eighth exemption rule would take them, and writing one was the wrong
+# answer.  Every rule above says "this kind of function cannot carry an
+# algorithm"; a rule broad enough to catch `strided_copy` and `header_from` is
+# broad enough to catch something that does, and the two functions this pass
+# nearly lost that way were `alt_p1_alloc` and `alt_p2_alloc` -- which look like
+# allocators, are named like allocators, and between them seed 629,856 counter
+# nodes, 163,840 bank counters and 15,552 three-way records with the priors the
+# models start from.  Those are now 9.2 and 10.4.
+#
+# So the seven stay counted.  A list of seven in the output is readable; a rule
+# that might quietly take an eighth is not.
+BUDGET = 7
 
 # Named by what encloses them, not by which file they are in, and that is not
 # a stylistic preference -- it is the only version that answers the same way
