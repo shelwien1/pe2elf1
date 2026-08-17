@@ -64,9 +64,17 @@ coeff[i] = floor(coeff[i] / max|coeff| * 255 + 0.5)        quantisation
 
 Four things stand out.
 
-**Adaptive order.** Levinson-Durbin stops as soon as the residual error falls
-below **0.3% of `r[0]`**, or stops decreasing. The filter is only as long as the
-frame needs. Ours is always 128 taps.
+**Order selection that does not actually fire.** Levinson-Durbin stops on either
+of two conditions: the residual falling below **0.3% of `r[0]`**, or the
+reflection coefficient reaching magnitude one. Read quickly, the first looks
+like adaptive order selection and a likely explanation for their advantage on
+quiet frames. It is not. On DSD the residual never approaches 0.3% of `r[0]` -
+the signal is one-bit and the predictor, though it gets the *sign* right 87% of
+the time, leaves a large residual in the least squares sense - so the second
+condition is the operative one, and it is exactly the reflection coefficient
+test this encoder already applies. Their filters come out 128 taps as well,
+which the dumped coefficient tables confirm. Implemented and measured here: a
+0.3% threshold changes nothing, and so does 3%.
 
 **Conditional white noise correction.** `r[0]` is inflated by a factor of
 1.0000041, but *only* when the first solve produced coefficients larger than
@@ -96,8 +104,10 @@ of the shift register. Per sample it writes the probability bin,
 bit array.
 
 One difference: the loop is specialised by how many bytes of history the filter
-actually spans (separate cases for 1–4 bytes, 5–8 bytes, and so on), which only
-pays off because the order is adaptive and often short.
+actually spans, with separate cases for 1–4 bytes, 5–8 bytes and so on. The
+format permits short filters even though this material never produces one, so on
+DSD it always lands in the widest case and the specialisation costs nothing and
+buys nothing.
 
 ### 4. Probability tables
 
@@ -139,14 +149,14 @@ then frame assembly, with a check that falls back if a frame fails to compress.
 | structure | 6-stage pipeline, thread per stage | single threaded |
 | autocorrelation | popcount-XOR, 11-bit tables, 32-lag unroll | popcount-XOR, hardware/AVX2 |
 | predictor | Levinson-Durbin | Levinson-Durbin |
-| order | adaptive, stops at 0.3% residual | fixed 128 |
+| order | stops at 0.3% residual, which DSD never reaches | fixed 128, same in practice |
 | conditioning | white noise correction only if max\|c\| > 10 | none |
-| coefficient smoothing | `[1 2 1]/4` | none |
-| refinement | **none, feed-forward** | **12 maximum-likelihood gradient steps** |
+| coefficient smoothing | `[1 2 1]/4` | `[1 2 1]/4`, kept as one of two candidates |
+| refinement | **none, feed-forward** | **12 maximum-likelihood gradient steps, from two starts** |
 | quantisation | peak → 255, round half up | same |
 | prediction | 16 × 256 byte-indexed tables | same (AVX2: 4-tap nibble tables) |
 | bins | `min(\|predict\|>>3, 63)` | same |
-| probability | `round(256.5 · e/n)`, clamp 1..128 | `round(256 · e/n)`, clamp 1..128 |
+| probability | `round(256.5 · e/n)`, clamp 1..128 | same |
 | empty bins | filled from above | filled from below |
 | table length | trim empty and equal-run | cost-based search |
 
@@ -166,32 +176,56 @@ a predictor whose sign is all that matters, and twelve maximum-likelihood steps
 close that gap and a little more — which is where the 0.070% overall win comes
 from.
 
-**Why we lose on quiet frames.** This is the useful finding. We are 0.8% behind
-on the quiet intro of the test file while winning overall, and the reason is
-almost certainly adaptive order. On a quiet or simple frame their solver stops
-early, sends a short filter and pays little for it; we always send 128
-coefficients whether or not the frame needs them. Trimming trailing zero
-coefficients here helped slightly, but that is a weak version of the same idea.
+**Why we lose on quiet frames.** The first guess was adaptive order, and it was
+wrong - see above, their order is 128 as well. Comparing the two encoders frame
+by frame over the quiet intro shows something more useful: the loss is not
+concentrated in the near-silent frames at all (there is one such frame, and it
+accounts for 80 bytes of a 5000 byte gap), but spread across ordinary frames,
+and it is two-sided. On some frames we are 250 bytes worse, on others 90 bytes
+better.
 
-## Worth trying here
+That is the signature of a local search landing in different basins, not of a
+systematic modelling deficit - and it is what motivated refining from two
+starting points, which recovers a good part of it.
 
-Roughly in order of expected value:
+## What was taken from this, and what it gave
 
-1. **Adaptive order.** Terminate Levinson on the same kind of residual threshold
-   and let quiet frames carry short filters. Directly targets the case where we
-   lose. Note an earlier experiment truncating the filter to fixed lengths (64,
-   32, …) after refinement never paid — but that tested truncation of an already
-   refined 128-tap filter, not stopping the solve early, which is a different
-   thing and leaves the refinement free to work on a genuinely shorter filter.
-2. **Coefficient smoothing as an extra candidate.** Cheap to evaluate: smooth,
-   run one analysis pass, keep it if the total cost drops. Their filters code
-   ~40 bits per frame cheaper than ours, and the refinement here already scores
-   candidates by payload plus table cost, so this drops straight in.
-3. **The conditioning guard.** We have no protection against an ill-conditioned
-   frame producing a filter with huge coefficients. It has not been observed on
-   the test material, but the reference encoder carries the check for a reason.
-4. **Probability scale of 256.5.** Worth about 0.01%; trivial to apply, and now
-   with a principled justification rather than a swept constant.
-5. **Pipelined threading.** Their six-stage pipeline is the obvious way to use
-   more cores. Frames here are independent, so plain parallelism across frames
-   would be simpler and scale better than a stage pipeline.
+Measured on 200 quiet frames and 400 loud ones, against DST payload bytes.
+
+**Coefficient smoothing — adopted, and it is the substantial one.** A single
+`[1 2 1]/4` pass over the Levinson solution. Least squares fits every wrinkle of
+the measured correlation, including the part that is estimation noise rather
+than signal; smoothing takes that off, and the result both predicts slightly
+better and codes cheaper because neighbouring coefficients differ by less.
+
+It does not win on every frame, though - on roughly a third the unsmoothed
+design is better - so rather than replacing the design, both are now refined and
+the cheaper result kept. The refinement is a local search and the two designs
+sit in different basins, which is why following both is worth more than picking
+the better start:
+
+| | quiet 200 | loud 400 |
+|---|---|---|
+| before | 769,747 | 1,609,998 |
+| smoothed only | 769,125 | 1,609,797 |
+| better of the two starts, then refine | 769,035 | 1,609,797 |
+| refine both, keep the cheaper | **768,843** | **1,609,458** |
+
+**Probability scale of 256.5 — adopted.** Worth about 0.01%, and it replaces a
+swept constant with a justified one.
+
+**Order selection — measured, no effect.** See above: their threshold does not
+fire on DSD, and neither does ours when implemented.
+
+**The conditioning guard — not adopted.** There is still no protection here
+against an ill-conditioned frame producing enormous coefficients. It has never
+been observed on the test material, but the reference encoder carries the check
+for a reason, and this is the most defensible thing left on the list.
+
+**Pipelined threading — not adopted.** Their six stage pipeline is the obvious
+way to use more cores. Frames here are independent, so plain parallelism across
+frames would be simpler and scale better than a stage pipeline.
+
+The cost of following two candidates is that encoding takes twice as long, since
+the refinement now runs twice per frame. That is the whole of the extra time -
+everything before the refinement is unchanged.

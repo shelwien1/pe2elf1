@@ -50,6 +50,7 @@ private:
     double estimate_cost() const;
     unsigned trimmed_length() const;
     bool refine_filter();
+    bool refine_from_start();
     void gradient_step(int iteration);
     void build_prob_table(unsigned* length, int* table) const;
 
@@ -63,6 +64,7 @@ private:
     uint64_t* mask_ = nullptr;      // per channel: gradient weight as bitplanes
     int coeff_[kDstFilterLength] = {};
     double weight_[kDstFilterLength] = {};   // filter before quantisation
+    double raw_weight_[kDstFilterLength] = {};   // the same before smoothing
     int16_t (*filter_)[256] = nullptr;   // [16][256] prediction lookup
     uint8_t* window_ = nullptr;          // the eight bits preceding each sample
 

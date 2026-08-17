@@ -88,9 +88,13 @@ Per frame, for all channels together:
    over 37632 samples costs a few hundred thousand word operations.
 2. **Levinson-Durbin** for a 128-tap predictor, quantised so the largest tap
    fills the 9-bit coefficient field. No white noise correction: slackening the
-   correlation measurably costs accuracy on DSD.
-3. **Refine it against the objective DST actually scores.** This matters more
-   than anything else here. Levinson-Durbin minimises the squared error of the
+   correlation measurably costs accuracy on DSD. A `[1 2 1]/4` smoothing pass
+   over the solution takes off the part of the fit that is estimation noise
+   rather than signal; it wins on most frames but not all, so the smoothed and
+   unsmoothed designs are both kept.
+3. **Refine it against the objective DST actually scores**, from each of those
+   two starting points, keeping whichever result codes cheaper. This matters
+   more than anything else here. Levinson-Durbin minimises the squared error of the
    prediction, but the decoder only ever takes its *sign*, so the filter is a
    binary classifier and the objective is a likelihood, not a least square. The
    refinement is a maximum-likelihood (logistic) gradient step: each sample is
@@ -98,6 +102,9 @@ Per frame, for all channels together:
    bin it landed in already measures. Weights are quantised to bitplanes so the
    weighted correlation is again just popcounts. Twelve steps with a decaying
    step size takes the frame from the Levinson solution to roughly 4% cheaper.
+   The refinement is a local search, so the two starts land in different basins
+   and following both is worth another 0.12%, at the cost of doubling encode
+   time.
 4. **Measure the probability table** from the refined prediction: for each
    |prediction| bin, how often the predicted bit was actually wrong. The table
    length is chosen to trade modelling accuracy against the cost of sending it.
@@ -108,7 +115,8 @@ lookup table in `dst.hpp`.
 
 `docs/philips-encoder.md` compares this against the reference encoder's own
 algorithm, read out of a decompilation of its DLL: where the two agree, where
-they differ, and what that explains about the measurements below.
+they differ, and which of its ideas were worth taking. The coefficient smoothing
+and the probability scale above both came from there.
 
 Things that were tried and measurably lost, for the record: per-channel filters
 and per-channel probability tables (both cost more to send than they save),
@@ -124,15 +132,17 @@ frames, 180 MB of raw DSD):
 | | DST data | whole file | ratio |
 |---|---|---|---|
 | Philips `DstEncUi` 4.0.3 | 78,188,710 | 78,657,280 | 2.3005 |
-| dff2dsf | 78,133,734 | 78,602,392 | 2.3021 |
+| dff2dsf | 78,038,932 | 78,507,698 | 2.3049 |
 
-0.070% smaller on the same 19119 frames. Both measures agree because both files
+0.192% smaller on the same 19119 frames. Both measures agree because both files
 carry the same chunks, including the 229 KB `DSTI` index; comparing whole files
 against an encoder that omits the index would be meaningless, so the DST frame
 data is the figure to watch.
 
-Per frame this encoder wins on loud material and loses a little on quiet
-material: on the first 200 frames, which are a quiet intro, it is 0.8% behind.
+Per frame this encoder wins on loud material and still loses a little on quiet
+material: on the first 200 frames, which are a quiet intro, it is 0.6% behind.
+Comparing frame by frame there shows the gap is two-sided rather than
+systematic, which is what following two starting points is for.
 
 The refinement is what buys the last 0.4%: without it the Levinson-Durbin filter
 alone lands about 4% behind, and a cheaper sign-error (perceptron) refinement
@@ -154,7 +164,9 @@ the vector code is tested - build it both ways and compare.
 | autocorrelation | 0.25 s | 0.08 s | same popcount kernel as the correlation |
 
 Times are for 400 frames. Together they take the test file from 14m17s to
-3m35s, a 4x speedup with the output byte-identical. The same holds across
+3m35s, a 4x speedup with the output byte-identical. Refining from two starting
+points then spends half of that back, for 0.12% smaller output: the file now
+encodes in 6m50s. The same holds across
 targets: `-mavx2`, `-march=native` and a scalar build all produce the same
 bytes, and `-ffp-contract=off` in the default flags keeps that true by stopping
 the filter design arithmetic from contracting into FMAs on targets that have

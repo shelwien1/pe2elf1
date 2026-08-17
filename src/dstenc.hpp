@@ -180,9 +180,13 @@ inline double bin_cost(uint64_t n, uint64_t errors, unsigned p) {
     return double(errors) * -log2(pe) + double(n - errors) * -log2(1.0 - pe);
 }
 
+// The coder's interval arithmetic makes the effective probability slightly less
+// than p/256, so the scale that minimises the coded size is a shade above 256.
+// Sweeping it here put the optimum between 259 and 262; the reference encoder
+// uses 256.5, which is the same correction and is what this follows.
 inline unsigned quantise_prob(uint64_t n, uint64_t errors) {
     if (!n) return 128;
-    int p = int(lround(256.0 * double(errors) / double(n)));
+    int p = int(lround(256.5 * double(errors) / double(n)));
     if (p < 1) p = 1;
     if (p > 128) p = 128;
     return unsigned(p);
@@ -504,6 +508,21 @@ void DstEncoder::design_filter(double* r) {
 
     for (unsigned i = 0; i < kDstFilterLength; i++)
         weight_[i] = i < order ? b[i + 1] : 0.0;
+
+    // Keep the solution as solved, then smooth a copy of it.  Least squares
+    // fits every wrinkle of the measured correlation, including the part that
+    // is estimation noise rather than signal; a [1 2 1] pass takes that off and
+    // usually predicts slightly better, as well as coding a little cheaper
+    // because neighbouring coefficients then differ by less.  Usually, not
+    // always - which is why both are kept and refine_filter() tries each.
+    memcpy(raw_weight_, weight_, sizeof(weight_));
+    double previous = weight_[0];
+    for (unsigned i = 1; i + 1 < kDstFilterLength; i++) {
+        const double current = weight_[i];
+        weight_[i] = 0.25 * previous + 0.5 * current + 0.25 * weight_[i + 1];
+        previous = current;
+    }
+
     quantise_filter();
 }
 
@@ -791,9 +810,32 @@ void DstEncoder::gradient_step(int iteration) {
     quantise_filter();
 }
 
-// Iterates the refinement, keeping whichever filter codes cheapest.  Leaves the
-// analysis in code_ and the bin counters matching the filter it settles on.
+// The refinement is a local search, so where it ends up depends on where it
+// starts.  The smoothed and unsmoothed designs sit in different basins and
+// neither wins reliably - on the test material each is better than the other on
+// a third of frames - so both are followed and the cheaper result kept.
 bool DstEncoder::refine_filter() {
+    int smoothed_coeff[kDstFilterLength];
+
+    if (!refine_from_start()) return false;
+    const double smoothed_cost = estimate_cost();
+    memcpy(smoothed_coeff, coeff_, sizeof(coeff_));
+
+    memcpy(weight_, raw_weight_, sizeof(weight_));
+    quantise_filter();
+    if (!refine_from_start()) return false;
+
+    if (estimate_cost() > smoothed_cost) {
+        memcpy(coeff_, smoothed_coeff, sizeof(coeff_));
+        return analyse_frame();
+    }
+    return true;
+}
+
+// Iterates the refinement from wherever weight_ currently is, keeping whichever
+// filter codes cheapest.  Leaves the analysis in code_ and the bin counters
+// matching the filter it settles on.
+bool DstEncoder::refine_from_start() {
     int best_coeff[kDstFilterLength];
     double best_cost = 0;
     bool analysis_is_best = false;
