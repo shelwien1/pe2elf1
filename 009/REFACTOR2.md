@@ -1282,9 +1282,11 @@ claim about the program and then checking the claim.
   both mean "stage one did not produce the symbol", which is a function with
   the run length as its argument.
 
-Nine of the eighteen came off with a dead store, a dead local or a redundant
-reload attached, because a jump is what had been holding each of those in
-place. `shape.py` reports every jump row at zero: none restart a loop, none
+The eighteen sit at nine sites, and seven of the nine came off with a dead
+store, a dead local or a redundant reload attached, because a jump is what had
+been holding each of those in place. The two that did not are `write_rows`,
+whose three carried arguments an earlier round had already taken, and
+`pixel_done`, which was holding a scope rather than a value. `shape.py` reports every jump row at zero: none restart a loop, none
 exit a block, none go sideways, none enter one.
 
 ## The gate that was not being run
@@ -1363,13 +1365,86 @@ are as often a placeholder (`input.hpp`, `one.inc`) as a path. The 132 usage
 examples across 63 tools that named `subs1.hpp` were rewritten by hand in the
 same round; what they need is a reader, and what the drivers need is a test.
 
+## Two declines re-measured, and they were not the same kind
+
+`MINIMAL-SYNTAX.md`'s Phase 7 measured 32 `while( 1 )`s with a break and
+reported **0 convertible** — "not one of the 32 has its break at the top at
+the loop's own nesting level; nineteen have it in the middle, twelve have no
+top-level break at all". Two of them convert. They are worth telling apart,
+because only one of them is the pattern this project keeps meeting.
+
+`plane_choose`'s `descend` is a `while( dir*at[0] < dir*end[0] || dir*at[1] <
+dir*end[1] )` now. **The body moved.** That loop was written out twice, once
+per direction, with the second copy nested inside the first's and leaving it
+by a `goto` past the bottom of both; the test that is now at the top of the
+loop was not at the top of anything when the 32 were counted. A decline is a
+measurement of a body, and bodies move.
+
+`unmodel_plane_slow`'s row loop is a `do … while( (uint32_t)++bucket <
+(uint32_t)height )`. **Nothing moved.** Its break was on the last line with no
+statement after it, which is the shape the same paragraph names *first* when
+it lists what would qualify. The sentence quoted above is true as written —
+none has its break at the *top* — and then the paragraph goes on to say none
+qualifies at all, which does not follow from it and was not true when it was
+written.
+
+The first is the cost of recording a measurement; the second is the cost of a
+summary that says more than its measurement did.
+
+## The pair that stays two functions, taken apart again
+
+`code_pixel` and `decode_pixel` each wrote out the walk that codes a run's
+length — one bit per bucket level from the top down, a bit coded only where
+the level could still belong to a run shorter than the cap. They differ in
+where the bit comes from and in nothing else, down to the order of the rescale
+against the counter bump. The encoder's `first |= run_bit` accumulated the
+mask where the decoder accumulated the bit, so its counter bump had to write
+`n[run_bit != 0]`; with the bit normalised the two arms are the same three
+lines. Both bodies carried a comment explaining that comparing their two
+bucket names is not the tautology it reads as, which is one sentence now.
+
+`ModelBlock::code_run_length<f_DEC>` is the fourteenth merged pair and sits
+inside the one pair that stays two functions — which is the point worth
+keeping. **A declined pair is a decision about two bodies, not a bar on naming
+what they share.** `run_scan` came out of these two an earlier round; this is
+the walk beside it. `code_pixel`/`decode_pixel` is 13 shared lines of 211,
+from 27 of 277 at the start of this round: the share falls because what they
+share keeps becoming something with a name.
+
+It also took the tree's deepest nesting from 7 to 6 — the `if( idx1 > 1 )`
+that replaced a `goto` two commits earlier was the seventh level, and the walk
+it guarded is a call.
+
+## Four guards on a constant
+
+`write_bmp`'s palette writer tested its entry count four times, `ncol > 0`
+twice and `ncol / 2` twice. The count is `1 << bits`, and `bits` reaches
+`write_bmp` only through `expand_image`, which refuses any depth whose plane
+count is outside 1..4 — so it is 1..32 there and 1..8 in this branch, and the
+count is 2, 16 or 256. The four arms those guards protect are `at = 1`,
+`at2 = 1` with `done = 1`, and a `pal_bytes` assignment that writes no
+palette. None can be reached, and `hdrscan.sh` puts all 256 depth bytes
+through this, which is what the reasoning rests on rather than a reading of
+the code.
+
+Two levels of nesting went with them and three names with those: `ncolours`
+and `ncol` were the same expression assigned on consecutive lines and then
+used interchangeably — `4*ncol` in one arm and `4*ncolours` in the next — and
+`done` was `at2` copied on the following line, a copy that existed only
+because the dead arm set the two differently. That is the shape the whole
+round has: a dead branch is not only dead, it is load-bearing for the names
+around it.
+
 ## Where this leaves it, a third time
 
 * **0 jumps and 0 labels**, from 18 and 12 at the start of this round, and
   from 42 and 27 when the count was first taken.
 * **39 lines of copy**, from 45; the ratchet moved with it.
-* **thirteen merged encode/decode pairs**; two declined, and
-  `code_pixel`/`decode_pixel` is now 252 lines with 16 shared, from 277 and 27.
+* **fourteen merged encode/decode pairs**, from thirteen; two declined, and
+  `code_pixel`/`decode_pixel` is 211 lines with 13 shared, from 277 and 27.
+* **deepest nesting 6**, from 7, in eleven bodies of 280.
+* **15 `while( 1 )`s**, from 32 when that class was last counted and 16 at the
+  start of this round.
 * **every counting tool zero, nothing silent, seven subjects absent** — three
   more than last round, and the three are tools that had been answering zero
   about frames the tree does not have.
@@ -1380,3 +1455,16 @@ on it. This round it was the instruments themselves — a default argument, a
 filename in a regex, a stamp format, a glob that stops at `*.py`. A tool that
 cannot fire reports the same number as a tool with nothing to find, and the
 only way to tell them apart is to make it fire.
+
+Which is also what the eighteen jumps were. Each of them was a claim: that
+this exit is different from that one, that this variable has to outlive the
+walk, that a structured form would need a flag. Seven of the nine sites came
+off with a dead store, a dead local or a redundant reload attached, because a
+jump is what had been holding each of those in place — and two of the claims
+had simply stopped being true, one about a comparison that could not hold and
+one about a loop that needed no flag at all.
+
+So the answer to "is there anything left" is not a number. Every zero in this
+document is a zero somebody has now watched report something else, and the
+next round's work is whatever the round after this one finds those zeros were
+wrong about.
