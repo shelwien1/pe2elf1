@@ -17,19 +17,10 @@
 #ifndef DFF2DSF_DSTENC_HPP
 #define DFF2DSF_DSTENC_HPP
 
-#include "dstenc.h"
-#include "bitwrite.h"
-
-#include <math.h>
-
-// The vector kernels are selected by the target the compiler was pointed at:
-// build with -mavx2 (or any -march that implies it) and they are used, build
+// The vector kernels below are selected by the target the compiler was pointed
+// at: build with -mavx2 (or any -march that implies it) and they are used, build
 // without and the scalar versions are.  Both produce identical output, so
 // compiling it both ways and comparing is how the vector code is tested.
-#ifdef __AVX2__
-#include <immintrin.h>
-#endif
-
 namespace dff2dsf {
 
 namespace {
@@ -177,7 +168,6 @@ inline uint32_t quantise_prob(uint64_t n, uint64_t errors) {
     if (p > 128) p = 128;
     return uint32_t(p);
 }
-
 
 // --------------------------------------------------------- bitplane packing
 //
@@ -351,7 +341,6 @@ uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
 
 #endif // __AVX2__
 
-
 // Plain popcount of the same shifted XOR, for the autocorrelation.
 #ifndef __AVX2__
 
@@ -509,8 +498,6 @@ void DstEncoder::quantise_filter() {
         coeff_[i] = c;
     }
 }
-
-
 
 #ifdef __AVX2__
 

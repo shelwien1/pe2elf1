@@ -5,10 +5,6 @@
 #ifndef DFF2DSF_DSFREAD_H
 #define DFF2DSF_DSFREAD_H
 
-#include "common.h"
-#include "dst.h"
-#include "dsf.h"
-
 namespace dff2dsf {
 
 class DsfReader {

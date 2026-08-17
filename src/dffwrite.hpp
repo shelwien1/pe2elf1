@@ -3,9 +3,6 @@
 #ifndef DFF2DSF_DFFWRITE_HPP
 #define DFF2DSF_DFFWRITE_HPP
 
-#include "dffwrite.h"
-#include "dst.h"
-
 namespace dff2dsf {
 
 namespace {

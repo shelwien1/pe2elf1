@@ -4,19 +4,6 @@
 #ifndef DFF2DSF_COMMON_H
 #define DFF2DSF_COMMON_H
 
-#define _FILE_OFFSET_BITS 64
-
-#include <stdint.h>
-#include <inttypes.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-
-#ifndef _WIN32
-#include <sys/types.h>
-#endif
 
 namespace dff2dsf {
 

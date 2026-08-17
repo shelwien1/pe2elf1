@@ -3,9 +3,6 @@
 #ifndef DFF2DSF_DSFREAD_HPP
 #define DFF2DSF_DSFREAD_HPP
 
-#include "dsfread.h"
-#include "dsf.h"
-
 namespace dff2dsf {
 
 bool DsfReader::open(const char* path) {

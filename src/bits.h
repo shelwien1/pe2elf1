@@ -7,8 +7,6 @@
 #ifndef DFF2DSF_BITS_H
 #define DFF2DSF_BITS_H
 
-#include "common.h"
-
 namespace dff2dsf {
 
 // Bytes of zero padding a caller must provide past the payload so that the

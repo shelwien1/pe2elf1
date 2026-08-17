@@ -13,8 +13,6 @@
 #ifndef DFF2DSF_CRC_H
 #define DFF2DSF_CRC_H
 
-#include "common.h"
-
 namespace dff2dsf {
 
 constexpr uint32_t kDsdCrcPoly = 0x80000011;   // x^31 + x^4 + 1, x^32 implied

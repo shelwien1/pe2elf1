@@ -5,9 +5,6 @@
 #ifndef DFF2DSF_DFFWRITE_H
 #define DFF2DSF_DFFWRITE_H
 
-#include "common.h"
-#include "crc.h"
-
 namespace dff2dsf {
 
 // Which optional parts of the layout the writer emits.  The defaults are what

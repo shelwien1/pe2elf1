@@ -13,16 +13,6 @@
 #ifndef DFF2DSF_ENCPOOL_H
 #define DFF2DSF_ENCPOOL_H
 
-#include "common.h"
-#include "dsfread.h"
-#include "dstenc.h"
-#include "dffwrite.h"
-
-#include <condition_variable>
-#include <mutex>
-#include <new>
-#include <thread>
-
 namespace dff2dsf {
 
 // How many threads to use for `--threads auto`, and the ceiling on the request.

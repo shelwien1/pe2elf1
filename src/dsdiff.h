@@ -6,10 +6,6 @@
 #ifndef DFF2DSF_DSDIFF_H
 #define DFF2DSF_DSDIFF_H
 
-#include "common.h"
-#include "dst.h"
-#include "bits.h"
-
 namespace dff2dsf {
 
 // Raw DSD is handed to the writer in chunks of roughly this size.

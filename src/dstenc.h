@@ -7,9 +7,6 @@
 #ifndef DFF2DSF_DSTENC_H
 #define DFF2DSF_DSTENC_H
 
-#include "common.h"
-#include "dst.h"
-
 namespace dff2dsf {
 
 constexpr uint32_t kDstFilterLength = 128;   // maximum, and what encoders use
@@ -81,8 +78,15 @@ private:
     uint8_t code_[size_t(kMaxFrameBits) * kDstMaxChannels];
     // Per channel: the gradient weights as bitplanes.
     uint64_t mask_[size_t(kGradientPlanes) * (kMaxFrameBits / 64) * kDstMaxChannels];
-    uint8_t window_[kWindowLead + kMaxFrameBits + 1];   // the 8 bits before each sample
-    int16_t filter_[16][256] = {};        // prediction lookup
+    // Scratch for the prediction, one or the other depending on how it is
+    // evaluated: the scalar path indexes the decoder's lookup table by bytes of
+    // the shift register, the vector path slides a window of the eight bits
+    // before each sample and indexes four taps at a time.
+#ifdef __AVX2__
+    uint8_t window_[kWindowLead + kMaxFrameBits + 1];
+#else
+    int16_t filter_[16][256] = {};
+#endif
 
     int32_t coeff_[kDstFilterLength] = {};
     double weight_[kDstFilterLength] = {};   // filter before quantisation

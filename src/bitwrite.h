@@ -7,8 +7,6 @@
 #ifndef DFF2DSF_BITWRITE_H
 #define DFF2DSF_BITWRITE_H
 
-#include "common.h"
-
 namespace dff2dsf {
 
 class BitWriter {

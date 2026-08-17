@@ -7,9 +7,6 @@
 #ifndef DFF2DSF_DSF_H
 #define DFF2DSF_DSF_H
 
-#include "common.h"
-#include "dst.h"
-
 namespace dff2dsf {
 
 // Alternating bits are DSD silence: what short blocks and frames are padded with.

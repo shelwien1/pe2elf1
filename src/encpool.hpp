@@ -3,8 +3,6 @@
 #ifndef DFF2DSF_ENCPOOL_HPP
 #define DFF2DSF_ENCPOOL_HPP
 
-#include "encpool.h"
-
 namespace dff2dsf {
 
 uint32_t default_thread_count() {

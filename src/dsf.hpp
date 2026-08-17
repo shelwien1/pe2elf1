@@ -3,8 +3,6 @@
 #ifndef DFF2DSF_DSF_HPP
 #define DFF2DSF_DSF_HPP
 
-#include "dsf.h"
-
 namespace dff2dsf {
 
 namespace {

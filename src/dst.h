@@ -9,8 +9,6 @@
 #ifndef DFF2DSF_DST_H
 #define DFF2DSF_DST_H
 
-#include "common.h"
-
 namespace dff2dsf {
 
 constexpr int32_t kDstMaxChannels = 6;

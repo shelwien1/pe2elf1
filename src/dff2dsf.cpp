@@ -5,10 +5,51 @@
 //
 // plus --enable-/--disable- flags naming the optional chunks of the .dff.
 
-// The whole program is one translation unit: each .hpp is an implementation
-// file that includes its own declarations, so building is just
+// The whole program is one translation unit, and this is the only file that
+// includes anything: the headers below assume everything before them, so they
+// are listed in dependency order rather than including each other.  Building is
 //
-//     c++ -O2 -std=c++20 src/dff2dsf.cpp -o dff2dsf
+//     c++ -O2 -std=c++20 -mavx2 -pthread src/dff2dsf.cpp -o dff2dsf
+
+#define _FILE_OFFSET_BITS 64      // must precede the C library headers
+
+#include <inttypes.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#ifndef _WIN32
+#include <sys/types.h>            // off_t, for the 64-bit fseeko
+#endif
+
+// The vector kernels in dstenc.hpp are selected by whether the target has AVX2.
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
+#include <condition_variable>
+#include <mutex>
+#include <new>
+#include <thread>
+
+// Declarations, each depending on the ones above it.
+#include "common.h"
+#include "bits.h"
+#include "bitwrite.h"
+#include "crc.h"
+#include "dst.h"
+#include "dsdiff.h"
+#include "dsf.h"
+#include "dsfread.h"
+#include "dstenc.h"
+#include "dffwrite.h"
+#include "encpool.h"
+
+// Implementations.
 #include "dst.hpp"
 #include "dsdiff.hpp"
 #include "dsf.hpp"

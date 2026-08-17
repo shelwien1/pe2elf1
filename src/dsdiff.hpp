@@ -3,9 +3,6 @@
 #ifndef DFF2DSF_DSDIFF_HPP
 #define DFF2DSF_DSDIFF_HPP
 
-#include "dsdiff.h"
-#include "bits.h"
-
 namespace dff2dsf {
 
 namespace {

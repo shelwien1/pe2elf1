@@ -8,9 +8,6 @@
 #ifndef DFF2DSF_DST_HPP
 #define DFF2DSF_DST_HPP
 
-#include "dst.h"
-#include "bits.h"
-
 namespace dff2dsf {
 
 namespace {
