@@ -227,13 +227,59 @@ public:
         uint32_t dst_x_bit;
         ac_get(&ac_, br, prob_dst_x_bit(fsets_.coeff[0][0]), &dst_x_bit);
 
-        for (uint32_t i = 0; i < samples; i++) {
-            const ByteP out_byte = out + size_t(i >> 3) * uint32_t(channels);
+        // The channel count and the half-probability test are both settled for
+        // the whole frame, so they are settled here rather than per sample: the
+        // loop is instantiated per channel count, and split at the last sample
+        // any channel still codes at even odds.
+        uint32_t head = 0;
+        for (int32_t ch = 0; ch < channels; ch++)
+            if (half_prob[ch] && fsets_.length[map_ch_to_felem[ch]] > head)
+                head = fsets_.length[map_ch_to_felem[ch]];
+        if (head > samples) head = samples;
+
+        switch (channels) {
+        case 1:  decode_frame<1>(br, out, samples, head, map_ch_to_felem, map_ch_to_pelem, half_prob); break;
+        case 2:  decode_frame<2>(br, out, samples, head, map_ch_to_felem, map_ch_to_pelem, half_prob); break;
+        case 3:  decode_frame<3>(br, out, samples, head, map_ch_to_felem, map_ch_to_pelem, half_prob); break;
+        case 4:  decode_frame<4>(br, out, samples, head, map_ch_to_felem, map_ch_to_pelem, half_prob); break;
+        case 5:  decode_frame<5>(br, out, samples, head, map_ch_to_felem, map_ch_to_pelem, half_prob); break;
+        default: decode_frame<6>(br, out, samples, head, map_ch_to_felem, map_ch_to_pelem, half_prob); break;
+        }
+
+        return true;
+    }
+
+    // Number of frames that were stored uncompressed rather than DST coded.
+    uint64_t uncoded_frames() const { return uncoded_frames_; }
+
+private:
+    // The sample loop, over a compile-time channel count.  `Head` selects the
+    // stretch where a channel with the half-probability flag set still codes at
+    // even odds: outside it the test is known false and the table always used,
+    // which is every sample but the first hundred-odd.
+    template <int32_t Channels, bool Head>
+    void decode_samples(BitReader& br, ByteP out, uint32_t first, uint32_t last,
+                        const uint32_t* felem, const uint32_t* pelem,
+                        const uint32_t* half_prob) {
+        // With the channel count known the loop below unrolls, so everything a
+        // channel looks up through its element mapping can be gathered once here
+        // and then lives in registers rather than being re-indexed per sample.
+        CLutP filter_of[Channels];
+        CIntP probs_of[Channels];
+        uint32_t last_bin[Channels], half_len[Channels];
+        for (int32_t ch = 0; ch < Channels; ch++) {
+            filter_of[ch] = filter_[felem[ch]];
+            probs_of[ch] = probs_.coeff[pelem[ch]];
+            last_bin[ch] = probs_.length[pelem[ch]] - 1;
+            half_len[ch] = fsets_.length[felem[ch]];
+        }
+
+        for (uint32_t i = first; i < last; i++) {
+            const ByteP out_byte = out + size_t(i >> 3) * uint32_t(Channels);
             const uint32_t out_shift = 7 - (i & 7);
 
-            for (int32_t ch = 0; ch < channels; ch++) {
-                const uint32_t felem = map_ch_to_felem[ch];
-                const CLutP filter = filter_[felem];
+            for (int32_t ch = 0; ch < Channels; ch++) {
+                const CLutP filter = filter_of[ch];
                 const WordP status = status_[ch];
 
                 const uint64_t lo = status[0], hi = status[1];
@@ -245,32 +291,33 @@ public:
 #undef F
 
                 uint32_t prob;
-                if (!half_prob[ch] || i >= fsets_.length[felem]) {
-                    uint32_t pelem = map_ch_to_pelem[ch];
-                    uint32_t index = uint32_t(predict < 0 ? -predict : predict) >> 3;
-                    uint32_t last = probs_.length[pelem] - 1;
-                    prob = uint32_t(probs_.coeff[pelem][index < last ? index : last]);
+                if (!Head || !half_prob[ch] || i >= half_len[ch]) {
+                    const uint32_t index = uint32_t(predict < 0 ? -predict : predict) >> 3;
+                    const uint32_t lb = last_bin[ch];
+                    prob = uint32_t(probs_of[ch][index < lb ? index : lb]);
                 } else {
                     prob = 128;
                 }
 
                 uint32_t residual;
                 ac_get(&ac_, br, prob, &residual);
-                uint32_t v = ((predict >> 15) ^ int32_t(residual)) & 1;
+                const uint32_t v = ((predict >> 15) ^ int32_t(residual)) & 1;
                 out_byte[ch] |= uint8_t(v << out_shift);
 
                 status[1] = (hi << 1) | (lo >> 63);
                 status[0] = (lo << 1) | v;
             }
         }
-
-        return true;
     }
 
-    // Number of frames that were stored uncompressed rather than DST coded.
-    uint64_t uncoded_frames() const { return uncoded_frames_; }
+    template <int32_t Channels>
+    void decode_frame(BitReader& br, ByteP out, uint32_t samples, uint32_t head,
+                      const uint32_t* felem, const uint32_t* pelem,
+                      const uint32_t* half_prob) {
+        decode_samples<Channels, true>(br, out, 0, head, felem, pelem, half_prob);
+        decode_samples<Channels, false>(br, out, head, samples, felem, pelem, half_prob);
+    }
 
-private:
     struct Table {
         uint32_t elements;
         uint32_t length[kDstMaxElements];

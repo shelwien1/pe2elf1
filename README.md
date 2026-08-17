@@ -270,7 +270,7 @@ stops around 0.2% behind.
 
 ## Speed
 
-Decoding the test file takes about 27 s on one core. Encoding is dominated by
+Decoding the test file takes about 24 s on one core. Encoding is dominated by
 the twelve refinement passes over every frame, and three inner loops account for
 nearly all of it. Each has an AVX2 implementation, chosen at compile time by
 whether the target has AVX2; both produce byte-identical output, which is how
@@ -291,6 +291,30 @@ targets: `-mavx2`, `-march=native` and a scalar build all produce the same
 bytes, and `-ffp-contract=off` in the default flags keeps that true by stopping
 the filter design arithmetic from contracting into FMAs on targets that have
 them.
+
+The decoder has no vector kernel to hide behind, so what it costs is what its
+inner loop is made of, and several things in there were arguments rather than
+constants. The channel count is a template parameter now, which unrolls the
+per-channel loop and lets everything a channel reaches through its element
+mapping - its filter table, its probability table and that table's length - be
+gathered once instead of re-indexed per sample. The leading stretch where a
+channel may code at even odds is a second parameter, so the tail after it is
+instantiated with the test known false: the decoder codes a hundred thousand
+samples per frame and only the first hundred-odd can take that branch. The same
+two splits are applied to the encoder's coding loop and to the .dsf
+deinterleave, the predictor order in the table search - one, two or three terms -
+is a parameter so the innermost dot product unrolls, and the frame CRC and the
+correlation kernels' word-aligned case go the same way.
+
+Measured, min of nine runs each with the builds interleaved: decoding the test
+file goes from 25.1 s to 23.9 s, about 5%, and callgrind puts the instruction
+count 8.1% lower, which is the part that does not depend on the machine being
+quiet. Encoding does not move - 8.5 to 8.6 s whichever of the four combinations
+is built, a spread with no ordering in it - and callgrind agrees, 1.8% fewer
+instructions against a workload that spends nearly all of them in the three
+vector kernels above. Those had no branches to remove, which is the whole
+result: this pays where the hot loop is scalar and the count is small, and
+nowhere else.
 
 Frames are the other axis. Each one starts the decoder's history from the same
 fixed pattern, so nothing carries over from the frame before and frames can be

@@ -39,16 +39,31 @@ inline uint32_t dsd_crc(uint32_t crc, CByteP p, size_t n) {
 
 // The same over planar DSD, which is how the encoder holds a frame: the CRC is
 // defined over the interleaved order, so the channels are woven together here
-// rather than by writing out an interleaved copy first.
-inline uint32_t dsd_crc_planar(CByteP planar, size_t bytes_per_channel,
-                               int32_t channels) {
+// rather than by writing out an interleaved copy first.  The channel count is a
+// template parameter so the inner loop unrolls into a straight run of table
+// steps: it is two long for nearly every file, and a loop of two is mostly
+// branch.
+template <int32_t Channels>
+inline uint32_t dsd_crc_planar_n(CByteP planar, size_t bytes_per_channel) {
     uint32_t crc = 0;
     for (size_t i = 0; i < bytes_per_channel; i++)
-        for (int32_t ch = 0; ch < channels; ch++) {
+        for (int32_t ch = 0; ch < Channels; ch++) {
             const uint8_t b = planar[size_t(ch) * bytes_per_channel + i];
             crc = (crc << 8) ^ kDsdCrc.v[((crc >> 24) ^ b) & 0xFF];
         }
     return crc;
+}
+
+inline uint32_t dsd_crc_planar(CByteP planar, size_t bytes_per_channel,
+                               int32_t channels) {
+    switch (channels) {
+    case 1:  return dsd_crc_planar_n<1>(planar, bytes_per_channel);
+    case 2:  return dsd_crc_planar_n<2>(planar, bytes_per_channel);
+    case 3:  return dsd_crc_planar_n<3>(planar, bytes_per_channel);
+    case 4:  return dsd_crc_planar_n<4>(planar, bytes_per_channel);
+    case 5:  return dsd_crc_planar_n<5>(planar, bytes_per_channel);
+    default: return dsd_crc_planar_n<6>(planar, bytes_per_channel);
+    }
 }
 
 } // namespace dff2dsf

@@ -93,39 +93,20 @@ public:
     // Appends `bytes_per_channel` bytes per channel of MSB-first DSD that is
     // byte-interleaved by channel, i.e. exactly what DSDIFF and the DST decoder
     // produce.  `src` holds bytes_per_channel * channels bytes.
+    //
+    // The channel count is fixed for the file, so it is settled once here: the
+    // deinterleave below is instantiated per count, which turns the inner loop's
+    // stride and trip count into constants and drops the two-channel special
+    // case that used to be written out by hand.
     bool write(CByteP src, size_t bytes_per_channel) {
-        const int32_t channels = channels_;
-        size_t done = 0;
-
-        while (done < bytes_per_channel) {
-            size_t n = kDsfBlockSize - fill_;
-            if (n > bytes_per_channel - done) n = bytes_per_channel - done;
-
-            // Deinterleave into the planar blocks, reversing each byte on the way.
-            if (channels == 2) {
-                const ByteP d0 = blocks_ + fill_;
-                const ByteP d1 = blocks_ + kDsfBlockSize + fill_;
-                const CByteP s = src + done * 2;
-                for (size_t i = 0; i < n; i++) {
-                    d0[i] = kReverse.v[s[2 * i]];
-                    d1[i] = kReverse.v[s[2 * i + 1]];
-                }
-            } else {
-                for (int32_t ch = 0; ch < channels; ch++) {
-                    const ByteP d = blocks_ + size_t(ch) * kDsfBlockSize + fill_;
-                    const CByteP s = src + done * size_t(channels) + size_t(ch);
-                    for (size_t i = 0; i < n; i++)
-                        d[i] = kReverse.v[s[i * size_t(channels)]];
-                }
-            }
-
-            fill_ += n;
-            done += n;
-            samples_ += uint64_t(n) * 8;
-
-            if (fill_ == kDsfBlockSize && !flush_block()) return false;
+        switch (channels_) {
+        case 1:  return write_n<1>(src, bytes_per_channel);
+        case 2:  return write_n<2>(src, bytes_per_channel);
+        case 3:  return write_n<3>(src, bytes_per_channel);
+        case 4:  return write_n<4>(src, bytes_per_channel);
+        case 5:  return write_n<5>(src, bytes_per_channel);
+        default: return write_n<6>(src, bytes_per_channel);
         }
-        return true;
     }
 
     // Flushes the partial block.  Still on the stream, so still in the
@@ -146,6 +127,31 @@ public:
     }
 
 private:
+    template <int32_t Channels>
+    bool write_n(CByteP src, size_t bytes_per_channel) {
+        size_t done = 0;
+
+        while (done < bytes_per_channel) {
+            size_t n = kDsfBlockSize - fill_;
+            if (n > bytes_per_channel - done) n = bytes_per_channel - done;
+
+            // Deinterleave into the planar blocks, reversing each byte on the way.
+            for (int32_t ch = 0; ch < Channels; ch++) {
+                const ByteP d = blocks_ + size_t(ch) * kDsfBlockSize + fill_;
+                const CByteP s = src + done * size_t(Channels) + size_t(ch);
+                for (size_t i = 0; i < n; i++)
+                    d[i] = kReverse.v[s[i * size_t(Channels)]];
+            }
+
+            fill_ += n;
+            done += n;
+            samples_ += uint64_t(n) * 8;
+
+            if (fill_ == kDsfBlockSize && !flush_block()) return false;
+        }
+        return true;
+    }
+
     static bool patch_at(FILE* g, int64_t pos, const uint8_t (&v)[8]) {
         if (file_seek(g, pos, SEEK_SET) != 0) return ERR("seek failed");
         if (fwrite(v, 1, 8, g) != 8) return ERR("write failed");

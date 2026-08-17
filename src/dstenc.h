@@ -107,11 +107,60 @@ inline void put_golomb(BitWriter& bw, int32_t v, int32_t k) {
 }
 
 // Residual the decoder's table predictor has to be fed to reproduce values[j].
-inline int32_t table_residual(CIntP values, uint32_t j, uint32_t method, CPredP pred) {
+// The predictor order is a template parameter: it is one, two or three, and a
+// loop that short is more loop than arithmetic.  This runs in the innermost
+// position of the table search below, so it is the one place in the encoder
+// where the shape of a two instruction body matters.
+template <uint32_t Method>
+inline int32_t table_residual(CIntP values, uint32_t j, CPredP pred) {
     int32_t x = 0;
-    for (uint32_t k = 0; k <= method; k++)
-        x += pred[method][k] * values[j - k - 1];
+    for (uint32_t k = 0; k <= Method; k++)
+        x += pred[Method][k] * values[j - k - 1];
     return x >= 0 ? values[j] + (x + 4) / 8 : values[j] - (-x + 3) / 8;
+}
+
+// Same, for the one place that has to work from a method decided at run time:
+// writing out the table the search settled on, twice per frame.
+inline int32_t table_residual(CIntP values, uint32_t j, uint32_t method, CPredP pred) {
+    switch (method) {
+    case 0:  return table_residual<0>(values, j, pred);
+    case 1:  return table_residual<1>(values, j, pred);
+    default: return table_residual<2>(values, j, pred);
+    }
+}
+
+// Cost of coding values[Method+1 ..] with predictor order Method and Golomb
+// parameter k, given the bits the header already costs.  Returns zero if the
+// coding cannot be used or has already grown past `best`, which is what lets the
+// search abandon a candidate as soon as it is beaten.
+template <uint32_t Method>
+inline size_t method_cost(CIntP values, uint32_t n, CPredP pred, int32_t k,
+                          size_t bits, size_t best) {
+    for (uint32_t j = Method + 1; j < n; j++) {
+        const int32_t r = table_residual<Method>(values, j, pred);
+        // A run of zeroes longer than the frame would not decode back.
+        if ((uint32_t(r < 0 ? -r : r) >> k) > 4095) return 0;
+        bits += golomb_bits(r, k);
+        if (bits >= best) return 0;
+    }
+    return bits;
+}
+
+// Tries every Golomb parameter for one predictor order, keeping the best.
+template <uint32_t Method>
+inline void try_method(CIntP values, uint32_t n, CPredP pred, int32_t length_bits,
+                       int32_t coeff_bits, SizeP best, IntP best_method, IntP best_k) {
+    if (Method + 1 >= n) return;
+    const size_t head = size_t(length_bits) + 1 + 2 +
+                        size_t(Method + 1) * size_t(coeff_bits) + 3;
+    for (int32_t k = 0; k < 8; k++) {
+        const size_t bits = method_cost<Method>(values, n, pred, k, head, *best);
+        if (bits && bits < *best) {
+            *best = bits;
+            *best_method = int32_t(Method);
+            *best_k = k;
+        }
+    }
 }
 
 // Picks the cheapest of the four codings the format allows (verbatim, or
@@ -126,21 +175,9 @@ size_t code_table(BitWriterP bw, CIntP values, uint32_t n, CPredP pred,
     size_t best = raw_bits;
     int32_t best_method = -1, best_k = 0;
 
-    for (uint32_t method = 0; method < 3 && method + 1 < n; method++) {
-        for (int32_t k = 0; k < 8; k++) {
-            size_t bits = size_t(length_bits) + 1 + 2 +
-                          size_t(method + 1) * size_t(coeff_bits) + 3;
-            bool usable = true;
-            for (uint32_t j = method + 1; j < n; j++) {
-                int32_t r = table_residual(values, j, method, pred);
-                // A run of zeroes longer than the frame would not decode back.
-                if ((uint32_t(r < 0 ? -r : r) >> k) > 4095) { usable = false; break; }
-                bits += golomb_bits(r, k);
-                if (bits >= best) { usable = false; break; }
-            }
-            if (usable && bits < best) { best = bits; best_method = int32_t(method); best_k = k; }
-        }
-    }
+    try_method<0>(values, n, pred, length_bits, coeff_bits, &best, &best_method, &best_k);
+    try_method<1>(values, n, pred, length_bits, coeff_bits, &best, &best_method, &best_k);
+    try_method<2>(values, n, pred, length_bits, coeff_bits, &best, &best_method, &best_k);
 
     if (!bw) return best;
 
@@ -271,20 +308,27 @@ uint64_t pack_planes(CByteP code, CByteP weight_of, WordP planes, uint32_t nword
 // and replaces the popcount with the usual nibble table shuffle.
 
 // Shifted view of the bit sequence: the word k bits earlier than word j.
+//
+// Whether the lag is a whole number of words is fixed for a whole call - it is
+// the lag itself - so it rides in as a template parameter and the innermost
+// loop carries no test.  Two lags in 128 take the aligned path, but the branch
+// was in the loop for all of them.
+template <bool Shifted>
 inline uint64_t lagged_word(CWordP w, uint32_t j, uint32_t wshift, uint32_t bshift) {
     const CWordP d = w + j - wshift;
-    return bshift ? ((d[-1] << (64 - bshift)) | (d[0] >> bshift)) : d[0];
+    if constexpr (Shifted) return (d[-1] << (64 - bshift)) | (d[0] >> bshift);
+    else                   return d[0];
 }
 
 #ifndef __AVX2__
 
-uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
-    const uint32_t wshift = k >> 6;
-    const uint32_t bshift = k & 63;
+template <bool Shifted>
+uint64_t disagreement_at(CWordP w, CWordP planes, uint32_t nwords,
+                         uint32_t wshift, uint32_t bshift) {
     uint64_t sum[kGradientPlanes] = {};
 
     for (uint32_t j = 0; j < nwords; j++) {
-        const uint64_t differs = w[j] ^ lagged_word(w, j, wshift, bshift);
+        const uint64_t differs = w[j] ^ lagged_word<Shifted>(w, j, wshift, bshift);
         for (uint32_t p = 0; p < kGradientPlanes; p++)
             sum[p] += uint32_t(__builtin_popcountll(planes[p * nwords + j] & differs));
     }
@@ -297,10 +341,9 @@ uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
 
 #else
 
-uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
-    const uint32_t wshift = k >> 6;
-    const uint32_t bshift = k & 63;
-
+template <bool Shifted>
+uint64_t disagreement_at(CWordP w, CWordP planes, uint32_t nwords,
+                         uint32_t wshift, uint32_t bshift) {
     // Popcount of each nibble, for the byte-wise table lookup below.
     const __m256i nibble_count = _mm256_setr_epi8(
         0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
@@ -317,7 +360,7 @@ uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
         const __m256i x = _mm256_loadu_si256((const __m256i*)(w + j));
         const __m256i d0 = _mm256_loadu_si256((const __m256i*)(w + j - wshift));
         __m256i y = d0;
-        if (bshift) {
+        if constexpr (Shifted) {
             // Every 64-bit lane is shifted the same way, so the lane-wise shifts
             // reproduce the scalar version exactly.
             const __m256i dm1 = _mm256_loadu_si256((const __m256i*)(w + j - wshift - 1));
@@ -347,7 +390,7 @@ uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
 
     // Tail, for frame sizes that are not a multiple of four words.
     for (; j < nwords; j++) {
-        const uint64_t differs = w[j] ^ lagged_word(w, j, wshift, bshift);
+        const uint64_t differs = w[j] ^ lagged_word<Shifted>(w, j, wshift, bshift);
         for (uint32_t p = 0; p < kGradientPlanes; p++)
             total += uint64_t(uint32_t(__builtin_popcountll(planes[p * nwords + j] & differs))) << p;
     }
@@ -360,20 +403,18 @@ uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
 // Plain popcount of the same shifted XOR, for the autocorrelation.
 #ifndef __AVX2__
 
-uint64_t differing_bits(CWordP w, uint32_t nwords, uint32_t k) {
-    const uint32_t wshift = k >> 6;
-    const uint32_t bshift = k & 63;
+template <bool Shifted>
+uint64_t differing_bits_at(CWordP w, uint32_t nwords, uint32_t wshift, uint32_t bshift) {
     uint64_t diff = 0;
     for (uint32_t j = 0; j < nwords; j++)
-        diff += uint32_t(__builtin_popcountll(w[j] ^ lagged_word(w, j, wshift, bshift)));
+        diff += uint32_t(__builtin_popcountll(w[j] ^ lagged_word<Shifted>(w, j, wshift, bshift)));
     return diff;
 }
 
 #else
 
-uint64_t differing_bits(CWordP w, uint32_t nwords, uint32_t k) {
-    const uint32_t wshift = k >> 6;
-    const uint32_t bshift = k & 63;
+template <bool Shifted>
+uint64_t differing_bits_at(CWordP w, uint32_t nwords, uint32_t wshift, uint32_t bshift) {
     const __m256i nibble_count = _mm256_setr_epi8(
         0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
         0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
@@ -386,7 +427,7 @@ uint64_t differing_bits(CWordP w, uint32_t nwords, uint32_t k) {
         const __m256i x = _mm256_loadu_si256((const __m256i*)(w + j));
         const __m256i d0 = _mm256_loadu_si256((const __m256i*)(w + j - wshift));
         __m256i y = d0;
-        if (bshift) {
+        if constexpr (Shifted) {
             const __m256i dm1 = _mm256_loadu_si256((const __m256i*)(w + j - wshift - 1));
             y = _mm256_or_si256(_mm256_slli_epi64(dm1, int32_t(64 - bshift)),
                                 _mm256_srli_epi64(d0, int32_t(bshift)));
@@ -404,11 +445,25 @@ uint64_t differing_bits(CWordP w, uint32_t nwords, uint32_t k) {
     uint64_t diff = lanes[0] + lanes[1] + lanes[2] + lanes[3];
 
     for (; j < nwords; j++)
-        diff += uint32_t(__builtin_popcountll(w[j] ^ lagged_word(w, j, wshift, bshift)));
+        diff += uint32_t(__builtin_popcountll(w[j] ^ lagged_word<Shifted>(w, j, wshift, bshift)));
     return diff;
 }
 
 #endif // __AVX2__
+
+// One test per call, rather than one per word: which of the two kernels above
+// runs is decided here, from a lag that does not change while it runs.
+inline uint64_t disagreement(CWordP w, CWordP planes, uint32_t nwords, uint32_t k) {
+    const uint32_t wshift = k >> 6, bshift = k & 63;
+    return bshift ? disagreement_at<true>(w, planes, nwords, wshift, bshift)
+                  : disagreement_at<false>(w, planes, nwords, wshift, 0);
+}
+
+inline uint64_t differing_bits(CWordP w, uint32_t nwords, uint32_t k) {
+    const uint32_t wshift = k >> 6, bshift = k & 63;
+    return bshift ? differing_bits_at<true>(w, nwords, wshift, bshift)
+                  : differing_bits_at<false>(w, nwords, wshift, 0);
+}
 
 } // namespace
 
@@ -510,16 +565,24 @@ public:
         // The decoder opens with a bit it discards; code the cheaper symbol.
         ac.encode(prob_dst_x_bit(coeff_[0]), 1);
 
-        for (uint32_t i = 0; i < frame_bits_; i++) {
-            for (int32_t ch = 0; ch < channels_; ch++) {
-                const uint8_t c = code_[size_t(ch) * frame_bits_ + i];
-                const uint32_t p = (half_prob[ch] && i < filter_length)
-                                       ? 128u
-                                       : uint32_t(prob_table[(c & 0x7F) < prob_length
-                                                                 ? (c & 0x7F)
-                                                                 : prob_length - 1]);
-                ac.encode(p, c >> 7);
-            }
+        // Only the leading filter_length samples can be coded at even odds, and
+        // only in the channels that chose to, so the whole test belongs to a head
+        // that is usually a few hundred samples out of a hundred thousand.  Both
+        // the channel count and whether this is the head are template parameters,
+        // which leaves the long tail as a flat loop over a known number of
+        // channels with no per-sample branch left in it.
+        uint32_t head = 0;
+        for (int32_t ch = 0; ch < channels_; ch++)
+            if (half_prob[ch]) { head = filter_length; break; }
+        if (head > frame_bits_) head = frame_bits_;
+
+        switch (channels_) {
+        case 1:  encode_samples<1>(ac, head, prob_length, prob_table, half_prob); break;
+        case 2:  encode_samples<2>(ac, head, prob_length, prob_table, half_prob); break;
+        case 3:  encode_samples<3>(ac, head, prob_length, prob_table, half_prob); break;
+        case 4:  encode_samples<4>(ac, head, prob_length, prob_table, half_prob); break;
+        case 5:  encode_samples<5>(ac, head, prob_length, prob_table, half_prob); break;
+        default: encode_samples<6>(ac, head, prob_length, prob_table, half_prob); break;
         }
         ac.flush();
 
@@ -548,6 +611,35 @@ public:
     uint64_t uncoded_frames() const { return uncoded_frames_; }
 
 private:
+    // Codes samples [first, last) of every channel.  With Head set the leading
+    // half-probability run is still in play and each channel's choice has to be
+    // consulted; without it every sample goes through the table, and the test
+    // folds away along with the loop over a compile time channel count.
+    template <int32_t Channels, bool Head>
+    void encode_run(ArithEncoder& ac, uint32_t first, uint32_t last,
+                    uint32_t prob_length, CIntP prob_table, CU32P half_prob) {
+        for (uint32_t i = first; i < last; i++) {
+            for (int32_t ch = 0; ch < Channels; ch++) {
+                const uint8_t c = code_[size_t(ch) * frame_bits_ + i];
+                uint32_t p = 128u;
+                if (!Head || !half_prob[ch]) {
+                    const uint32_t bin = (c & 0x7F) < prob_length ? (c & 0x7F)
+                                                                 : prob_length - 1;
+                    p = uint32_t(prob_table[bin]);
+                }
+                ac.encode(p, c >> 7);
+            }
+        }
+    }
+
+    template <int32_t Channels>
+    void encode_samples(ArithEncoder& ac, uint32_t head, uint32_t prob_length,
+                        CIntP prob_table, CU32P half_prob) {
+        encode_run<Channels, true>(ac, 0, head, prob_length, prob_table, half_prob);
+        encode_run<Channels, false>(ac, head, frame_bits_, prob_length, prob_table,
+                                    half_prob);
+    }
+
     // r[k] = sum over channels of sum_i x[i] * x[i-k], with x = +-1 from the bits.
     // Equal bits contribute +1 and differing bits -1, so the sum is the sample count
     // minus twice the number of differing bits, which is a popcount of an XOR.
