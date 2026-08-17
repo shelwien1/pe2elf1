@@ -26,7 +26,12 @@ public:
     // Encodes every frame `reader` still holds into `writer`.  `progress` is
     // called from the calling thread after each frame is written, and may be
     // null.  Returns false if reading, encoding or writing failed.
-    bool run(DsfReader& reader, DffWriter& writer, uint32_t threads,
+    //
+    // The reader is a template parameter because the DSD can come from either
+    // container: a .dsf, or a .dff that holds it uncompressed.  All this needs
+    // of it is read_planar().
+    template <class Reader>
+    bool run(Reader& reader, DffWriter& writer, uint32_t threads,
              int32_t channels, uint32_t dsd_rate,
              void (*progress)(void* ctx, uint64_t frames, uint64_t coded_bytes),
              void* ctx) {
@@ -161,7 +166,8 @@ private:
     // Reads frames into every slot the writer has finished with.  The slot itself is
     // filled without the lock held: until its state says otherwise no worker will
     // look at it.
-    void fill(DsfReader& reader) {
+    template <class Reader>
+    void fill(Reader& reader) {
         for (;;) {
             SlotP s;
             {

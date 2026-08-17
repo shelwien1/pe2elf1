@@ -5,10 +5,11 @@ format the Philips encoder (`DstEncUi`) produces — and plain DSF (`.dsf`).
 
 ```
 usage: dff2dsf d input.dff output.dsf [--threads N]
-       dff2dsf c input.dsf output.dff [options]
+       dff2dsf c input.dsf|input.dff output.dff [options]
 
   d   decode: DST coded or raw DSD in a .dff, written as a .dsf
-  c   compress: DSD in a .dsf, written as a DST coded .dff
+  c   compress: DSD from a .dsf, or uncompressed DSD from a .dff,
+      written as a DST coded .dff
 
   --threads N   work on N frames at a time, in either direction
                 (default 1, 'auto' for one per core); the output
@@ -140,7 +141,17 @@ AVX2 paths active.
 ## What it does
 
 DSDIFF and DSF hold the same 1-bit DSD samples, but arrange them differently, so
-converting is a matter of undoing (or applying) DST and rearranging:
+converting is a matter of undoing (or applying) DST and rearranging.
+
+Which container the DSD to compress arrives in is a property of the file rather
+than of the command, so `c` reads either: a `.dsf`, or a `.dff` that holds its
+DSD uncompressed — which is what a `.dff` straight off a recorder or an
+authoring tool is, and what DST is there to shrink in the first place. The
+signature decides, and a `.dff` that is already DST coded is refused rather than
+silently re-coded. The DST frames come out the same either way: the same audio
+compressed from a `.dsf` and from a `.dff` produces byte-identical output, which
+is what says the two front ends agree. Neither carries metadata across — a
+source `ID3` or `COMT` chunk is not copied to the output.
 
 | | DSDIFF (.dff) | DSF (.dsf) |
 |---|---|---|
@@ -148,6 +159,7 @@ converting is a matter of undoing (or applying) DST and rearranging:
 | sample data | byte-interleaved per channel | planar, 4096-byte blocks per channel |
 | bit order | MSB first | LSB first (`bits per sample` = 1) |
 | compression | raw DSD or DST | raw DSD only |
+| as input to `c` | uncompressed DSD only | yes |
 
 DST (Direct Stream Transfer, ISO/IEC 14496-3 Part 3 Subpart 10) codes each
 1/75 s frame independently: a 128-tap sign-based FIR predicts the next DSD bit
@@ -414,7 +426,11 @@ is bit-exact with FFmpeg, FFmpeg decodes this encoder's DST stream to identical
 samples, and compress/decompress round trips bit for bit. The whole 4:15 file was
 checked that way on four threads too, matching the reference md5 and producing
 the same 78,038,932 bytes as one thread, and decoded on four threads to the same
-bytes as on one. The decoder was also checked against a synthetic
+bytes as on one. Compressing from a `.dff` was checked the same way, on a 478 MiB
+DSD256 recording: FFmpeg decodes the source and this encoder's DST of it to
+identical PCM across every sample the source has, the DSD round trips byte for
+byte per channel, and the same audio compressed from a `.dsf` and from a `.dff`
+gives byte-identical output. The decoder was also checked against a synthetic
 uncompressed-DSD `.dff`, and both directions run clean under ASan/UBSan
 including runs over randomly corrupted input — with `--param asan-stack=0`, since
 ASan's stack red-zones and a coroutine that saves its stack by copying it cannot

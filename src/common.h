@@ -118,6 +118,10 @@ inline int32_t ilog2(uint32_t v) {
     return v ? 31 - __builtin_clz(v) : 0;
 }
 
+// Alternating bits are DSD silence: what short blocks and frames are padded
+// with, in either container.
+inline constexpr uint8_t kDsdSilence = 0x69;
+
 // Four-character chunk id comparison. Ids are raw ASCII, never byte-swapped.
 inline bool tag_is(CByteP p, const char (&s)[5]) {
     return memcmp(p, s, 4) == 0;

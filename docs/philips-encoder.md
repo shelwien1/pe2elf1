@@ -265,3 +265,38 @@ DST is only specified at 2,822,400 Hz, so declining DSD256 would have been a
 defensible answer; declaring it as something it is not was not. This program
 writes the input's actual rate, and round trips DSD256 bit-exactly, FFmpeg
 agreeing on the samples.
+
+Compressing that source properly — one DST frame per 1/75 s of DSD256, 13,336
+frames rather than 53,342 — also makes the file smaller. Their payload figure
+below is exact: their own `DSTI` index lists a length for every one of the 53,342
+frames, including the 36 the zeroed block destroyed.
+
+| | frames | DST payload |
+|---|---|---|
+| DstEncUi 4.0.3, framed as DSD64 | 53,342 | 188,630,601 |
+| this encoder, framed as DSD256 | 13,336 | 183,440,801 |
+
+2.75% less — but that is not a codec comparison, because the framing differs and
+framing is most of it. Every frame carries its own filter and probability tables,
+so four times as many frames carry four times as many of them. Compressing the
+same audio both ways here, by lying about the rate in a copy of the input the way
+DstEncUi did, costs 2 to 5% for the shorter frames:
+
+| 160 DSD64 frames of | theirs | ours, same framing | ours, framed as DSD256 |
+|---|---|---|---|
+| the intro | 516,336 | 542,733 | 516,330 |
+| the middle | 586,939 | 580,329 | 568,638 |
+| three quarters in | 571,301 | 566,228 | 549,709 |
+| the end | 513,294 | 554,534 | 537,636 |
+
+At equal framing the two encoders trade: we are 1% smaller through the middle and
+5 to 8% larger at either end. That is the same two-sided, material-dependent
+spread as on the DSD64 test file, only wider — the refinement is a local search,
+and on this material it lands in the worse basin more often than it does there.
+Worth knowing, and not something the whole-file number shows.
+
+The one thing that is not identical is the very end. The source is 13,335.5
+frames long and DST cannot signal a partial final frame, so the last one is
+padded here with 7,860 bytes per channel of DSD silence; DstEncUi dropped the
+2,296 byte tail instead. FFmpeg decodes both to identical PCM over every sample
+the source actually has.

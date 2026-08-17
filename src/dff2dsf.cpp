@@ -84,10 +84,11 @@ int32_t usage() {
             "dff2dsf - DSDIFF (DST) and DSF converter\n"
             "\n"
             "usage: dff2dsf d input.dff output.dsf [--threads N]\n"
-            "       dff2dsf c input.dsf output.dff [options]\n"
+            "       dff2dsf c input.dsf|input.dff output.dff [options]\n"
             "\n"
             "  d   decode: DST coded or raw DSD in a .dff, written as a .dsf\n"
-            "  c   compress: DSD in a .dsf, written as a DST coded .dff\n"
+            "  c   compress: DSD from a .dsf, or uncompressed DSD from a .dff,\n"
+            "      written as a DST coded .dff\n"
             "\n"
             "  --threads N   work on N frames at a time, in either direction\n"
             "                (default 1, 'auto' for one per core); the output\n"
@@ -351,7 +352,8 @@ void print_encode_progress(void* ctx, uint64_t frames, uint64_t coded_bytes) {
 
 // One frame at a time, in this thread: the default, and what the pool below is
 // measured against.
-bool encode_serial(DsfReader& reader, DffWriter& writer, int32_t channels, uint32_t rate,
+template <class Reader>
+bool encode_serial(Reader& reader, DffWriter& writer, int32_t channels, uint32_t rate,
                    const EncodeProgress& prog, WordP frames_out,
                    WordP coded_out, WordP uncoded_out) {
     // The encoder is around 3 MB of working buffers, so it is static rather than
@@ -391,11 +393,14 @@ DffWriter g_dff_out;
 EncodePool g_pool;      // static for the same reason, and because its workers
                         // outlive the yields that suspend the calling thread
 
-bool encode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path,
-                   const DffWriteOptions& options, uint32_t threads) {
-    DsfReader& reader = g_dsf_in;
+// Everything after the header has been parsed, which is the same either way the
+// DSD arrived: the reader only has to answer channels(), dsd_rate(),
+// samples_per_channel() and read_planar().
+template <class Reader>
+bool encode_from(Reader& reader, coro3_pin* out, const char* in_path,
+                 const char* container, const DffWriteOptions& options,
+                 uint32_t threads) {
     DffWriter& writer = g_dff_out;
-    if (!reader.begin(inp)) return false;
 
     const int32_t channels = reader.channels();
     const uint32_t rate = reader.dsd_rate();
@@ -409,7 +414,8 @@ bool encode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path,
         (reader.samples_per_channel() + frame_bits - 1) / frame_bits;
 
     fprintf(stderr, "input : %s\n", in_path);
-    fprintf(stderr, "format: %u Hz DSD (DSD%u), %d channel(s)\n", rate, rate / 44100, channels);
+    fprintf(stderr, "format: %s, %u Hz DSD (DSD%u), %d channel(s)\n",
+            container, rate, rate / 44100, channels);
     fprintf(stderr, "length: %" PRIu64 " frames, %.2f s\n", total_frames,
             double(reader.samples_per_channel()) / double(rate));
     if (threads > 1)
@@ -444,6 +450,28 @@ bool encode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path,
     return true;
 }
 
+// The DSD to compress can come from either container: a .dsf, or a .dff that
+// holds it uncompressed - which is what a .dff straight off a recorder is, and
+// what DST is there to shrink.  Which one this is was decided from the file's
+// own signature before the coroutine started.
+bool encode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path,
+                   const DffWriteOptions& options, uint32_t threads,
+                   bool from_dff) {
+    if (from_dff) {
+        // The same reader the decoder uses; only one direction runs per
+        // invocation, so there is no reason for a second one.
+        DffReader& reader = g_dff_in;
+        if (!reader.begin(inp)) return false;
+        if (reader.is_dst())
+            return ERR("'%s' is already DST coded - decode it first", in_path);
+        return encode_from(reader, out, in_path, "raw DSD in a .dff", options, threads);
+    }
+
+    DsfReader& reader = g_dsf_in;
+    if (!reader.begin(inp)) return false;
+    return encode_from(reader, out, in_path, "DSD in a .dsf", options, threads);
+}
+
 // ------------------------------------------------------------------ coroutines
 //
 // Each direction is a coroutine: it runs the conversion as straight-line code
@@ -471,10 +499,11 @@ struct EncodeCoro : Coroutine {
     const char* in_path = nullptr;
     DffWriteOptions options;
     uint32_t threads = 1;
+    bool from_dff = false;
     bool ok = false;
 
     void do_process( void ) {
-        ok = encode_stream(&pin[0], &pin[1], in_path, options, threads);
+        ok = encode_stream(&pin[0], &pin[1], in_path, options, threads, from_dff);
         yield(this, 0);
     }
 };
@@ -504,6 +533,13 @@ bool run_conversion(const char* in_path, const char* out_path, bool decoding,
         g_decode.processfile(f, g);
         ok = g_decode.ok && g_dsf_out.patch(g);
     } else {
+        // Which container the DSD arrives in is a property of the file, not of
+        // the command, and the driver reads from wherever the handle is left.
+        uint8_t tag[4] = {};
+        g_encode.from_dff = fread(tag, 1, sizeof(tag), f) == sizeof(tag) &&
+                            tag_is(tag, "FRM8");
+        rewind(f);
+
         g_encode.in_path = in_path;
         g_encode.options = options;
         g_encode.threads = threads;

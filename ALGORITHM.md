@@ -50,6 +50,13 @@ cores as it likes.
 Throughout, a DSD bit `b` is read as the value `s(b) = 2b - 1`, so a 1 is +1 and
 a 0 is −1. Every arithmetic below is in those terms.
 
+The encoder wants a frame planar — one run of bytes per channel — while both
+containers store it interleaved (DSF a block at a time, DSDIFF a byte at a
+time), so whichever reader is in front of it deinterleaves as it goes and the
+codec never sees a container. That is also why the source can be either: `c`
+takes its DSD from a `.dsf` or from a `.dff` that holds it uncompressed, and the
+frames it encodes are identical either way.
+
 Where frames come from — the `FRM8` form, `PROP`/`SND`, `DST `/`FRTE`/`DSTF`,
 and the optional `DSTI`, `DSTC` and `COMT` chunks — is container business, and
 is described in `README.md` instead.

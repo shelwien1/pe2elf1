@@ -177,6 +177,53 @@ public:
     bool has_frame_crc() const { return has_frame_crc_; }
     uint32_t frame_crc() const { return frame_crc_; }
 
+    // DSD bits per channel in the sound data, for a file holding it raw.
+    uint64_t samples_per_channel() const {
+        if (!channels_ || is_dst_) return 0;
+        return uint64_t(body_end_ - body_pos_) / uint64_t(channels_) * 8;
+    }
+
+    // Next frame of raw DSD, deinterleaved into the planar order the encoder
+    // wants.  DSDIFF stores DSD most significant bit first, which is what the
+    // encoder wants too, so unlike the .dsf reader nothing is bit reversed here.
+    // The final frame is padded with DSD silence.  Returns 1, 0 at end, -1 on
+    // error.
+    int32_t read_planar(ByteP dst, size_t bytes_per_channel) {
+        const size_t need = bytes_per_channel * size_t(channels_);
+        if (need > sizeof(buf_)) {
+            ERR("frame of %zu bytes per channel is larger than this build handles",
+                bytes_per_channel);
+            return -1;
+        }
+
+        const int64_t left = body_end_ - f_.tell();
+        if (left <= 0) return 0;
+
+        size_t want = need;
+        if (int64_t(want) > left) want = size_t(left);
+
+        // The pin hands back whatever its window holds, so a frame usually takes
+        // several goes.
+        size_t got = 0;
+        while (got < want) {
+            const size_t n = f_.read_some(buf_ + got, want - got);
+            if (!n) break;
+            got += n;
+        }
+        if (!got) return 0;
+
+        const size_t whole = got / size_t(channels_);
+        switch (channels_) {
+        case 1:  deinterleave<1>(dst, bytes_per_channel, whole); break;
+        case 2:  deinterleave<2>(dst, bytes_per_channel, whole); break;
+        case 3:  deinterleave<3>(dst, bytes_per_channel, whole); break;
+        case 4:  deinterleave<4>(dst, bytes_per_channel, whole); break;
+        case 5:  deinterleave<5>(dst, bytes_per_channel, whole); break;
+        default: deinterleave<6>(dst, bytes_per_channel, whole); break;
+        }
+        return 1;
+    }
+
     // Next block of raw interleaved DSD.  Returns 1, 0 or -1 as above.
     int32_t next_dsd_block(CBytePP data, SizeP size) {
         const int64_t left = body_end_ - f_.tell();
@@ -196,6 +243,19 @@ public:
     }
 
 private:
+    // Splits `whole` interleaved samples out of buf_ into one run per channel,
+    // over a compile-time channel count so the stride is a constant.
+    template <int32_t Channels>
+    void deinterleave(ByteP dst, size_t bytes_per_channel, size_t whole) {
+        for (int32_t ch = 0; ch < Channels; ch++) {
+            const ByteP d = dst + size_t(ch) * bytes_per_channel;
+            const CByteP s = buf_ + ch;
+            for (size_t i = 0; i < whole; i++) d[i] = s[i * Channels];
+            if (whole < bytes_per_channel)
+                memset(d + whole, kDsdSilence, bytes_per_channel - whole);
+        }
+    }
+
     // PROP/SND holds the stream properties: sample rate, channels and which
     // compression the sound data chunk uses.
     bool parse_prop(int64_t end) {
