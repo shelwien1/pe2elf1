@@ -27,7 +27,7 @@ bool DsfReader::open(const char* path) {
     if (rl32(hdr + 44) != 0) return ERR("unsupported DSF format id %u", rl32(hdr + 44));
 
     channel_type_ = rl32(hdr + 48);
-    channels_ = int(rl32(hdr + 52));
+    channels_ = int32_t(rl32(hdr + 52));
     dsd_rate_ = rl32(hdr + 56);
 
     switch (rl32(hdr + 60)) {
@@ -60,7 +60,7 @@ bool DsfReader::open(const char* path) {
 
     remaining_ = samples_ / 8;
     // Fall back to the data chunk if the header's sample count is missing.
-    uint64_t stored = uint64_t(data_end_ - int64_t(kDsfHeaderSize)) / unsigned(channels_);
+    uint64_t stored = uint64_t(data_end_ - int64_t(kDsfHeaderSize)) / uint32_t(channels_);
     if (!remaining_ || remaining_ > stored) remaining_ = stored;
 
     return true;
@@ -73,7 +73,7 @@ bool DsfReader::refill() {
 
     // Compact anything already consumed to the front.
     if (head_) {
-        for (int ch = 0; ch < channels_; ch++)
+        for (int32_t ch = 0; ch < channels_; ch++)
             memmove(buf_ + size_t(ch) * capacity_, buf_ + size_t(ch) * capacity_ + head_, avail_);
         head_ = 0;
     }
@@ -83,7 +83,7 @@ bool DsfReader::refill() {
     // A truncated file still yields whatever whole samples it holds, so read
     // what is there and take the shortest channel as the usable length.
     size_t shortest = block_size_;
-    for (int ch = 0; ch < channels_; ch++) {
+    for (int32_t ch = 0; ch < channels_; ch++) {
         size_t n = f_.read_some(block_, block_size_);
         if (n < shortest) shortest = n;
         const ByteP d = buf_ + size_t(ch) * capacity_ + avail_;
@@ -108,7 +108,7 @@ bool DsfReader::refill() {
     return true;
 }
 
-int DsfReader::read_planar(ByteP dst, size_t bytes_per_channel) {
+int32_t DsfReader::read_planar(ByteP dst, size_t bytes_per_channel) {
     if (!capacity_) {
         if (bytes_per_channel > kMaxFrameBytesPerChannel) {
             ERR("frame of %zu bytes per channel is larger than this build handles",
@@ -127,7 +127,7 @@ int DsfReader::read_planar(ByteP dst, size_t bytes_per_channel) {
     if (!avail_) return 0;
 
     size_t n = avail_ < bytes_per_channel ? avail_ : bytes_per_channel;
-    for (int ch = 0; ch < channels_; ch++) {
+    for (int32_t ch = 0; ch < channels_; ch++) {
         const ByteP d = dst + size_t(ch) * bytes_per_channel;
         memcpy(d, buf_ + size_t(ch) * capacity_ + head_, n);
         if (n < bytes_per_channel)

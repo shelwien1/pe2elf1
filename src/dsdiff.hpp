@@ -51,16 +51,16 @@ bool DffReader::parse_prop(int64_t end) {
             if (size < 2) return ERR("short CHNL chunk");
             uint8_t v[2];
             if (!f_.read(v, 2)) return false;
-            unsigned n = rb16(v);
-            if (n < 1 || n > unsigned(kDstMaxChannels))
+            uint32_t n = rb16(v);
+            if (n < 1 || n > uint32_t(kDstMaxChannels))
                 return ERR("unsupported channel count %u", n);
             if (size < 2 + 4 * uint64_t(n)) return ERR("short CHNL chunk");
-            for (unsigned i = 0; i < n; i++) {
+            for (uint32_t i = 0; i < n; i++) {
                 uint8_t idb[4];
                 if (!f_.read(idb, 4)) return false;
                 channel_ids_[i] = rb32(idb);
             }
-            channels_ = int(n);
+            channels_ = int32_t(n);
         } else if (tag_is(id, "CMPR")) {
             if (size < 4) return ERR("short CMPR chunk");
             uint8_t v[4];
@@ -182,7 +182,7 @@ void DffReader::read_frame_crc() {
     cur_ += 12 + int64_t(size) + int64_t(size & 1);
 }
 
-int DffReader::next_dst_frame(CBytePP data, SizeP size, SizeP capacity) {
+int32_t DffReader::next_dst_frame(CBytePP data, SizeP size, SizeP capacity) {
     while (cur_ + 12 <= body_end_) {
         if (!f_.seek(cur_)) return -1;
 
@@ -196,7 +196,7 @@ int DffReader::next_dst_frame(CBytePP data, SizeP size, SizeP capacity) {
             // The frame has to fit the buffer, which is sized for the largest
             // frame the format can produce; anything larger is corrupt.
             if (chunk_size < 1 || chunk_size + kBitReaderPadding > sizeof(buf_)) {
-                ERR("implausible DSTF size %llu", (unsigned long long)chunk_size);
+                ERR("implausible DSTF size %" PRIu64, chunk_size);
                 return -1;
             }
             if (body + int64_t(chunk_size) > body_end_) {
@@ -218,7 +218,7 @@ int DffReader::next_dst_frame(CBytePP data, SizeP size, SizeP capacity) {
     return 0;
 }
 
-int DffReader::next_dsd_block(CBytePP data, SizeP size) {
+int32_t DffReader::next_dsd_block(CBytePP data, SizeP size) {
     if (cur_ >= body_end_) return 0;
 
     size_t want = kDsdBlockBytes;

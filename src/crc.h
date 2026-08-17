@@ -23,9 +23,9 @@ constexpr uint32_t kDsdCrcPoly = 0x80000011;   // x^31 + x^4 + 1, x^32 implied
 struct DsdCrcTable {
     uint32_t v[256];
     constexpr DsdCrcTable() : v() {
-        for (unsigned i = 0; i < 256; i++) {
+        for (uint32_t i = 0; i < 256; i++) {
             uint32_t c = i << 24;
-            for (int b = 0; b < 8; b++)
+            for (int32_t b = 0; b < 8; b++)
                 c = (c & 0x80000000u) ? (c << 1) ^ kDsdCrcPoly : c << 1;
             v[i] = c;
         }
@@ -43,10 +43,10 @@ inline uint32_t dsd_crc(uint32_t crc, CByteP p, size_t n) {
 // defined over the interleaved order, so the channels are woven together here
 // rather than by writing out an interleaved copy first.
 inline uint32_t dsd_crc_planar(CByteP planar, size_t bytes_per_channel,
-                               int channels) {
+                               int32_t channels) {
     uint32_t crc = 0;
     for (size_t i = 0; i < bytes_per_channel; i++)
-        for (int ch = 0; ch < channels; ch++) {
+        for (int32_t ch = 0; ch < channels; ch++) {
             const uint8_t b = planar[size_t(ch) * bytes_per_channel + i];
             crc = (crc << 8) ^ kDsdCrc.v[((crc >> 24) ^ b) & 0xFF];
         }

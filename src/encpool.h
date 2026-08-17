@@ -26,8 +26,8 @@
 namespace dff2dsf {
 
 // How many threads to use for `--threads auto`, and the ceiling on the request.
-unsigned default_thread_count();
-constexpr unsigned kMaxThreads = 256;
+uint32_t default_thread_count();
+constexpr uint32_t kMaxThreads = 256;
 
 class EncodePool {
 public:
@@ -36,8 +36,8 @@ public:
     // Encodes every frame `reader` still holds into `writer`.  `progress` is
     // called from the calling thread after each frame is written, and may be
     // null.  Returns false if reading, encoding or writing failed.
-    bool run(DsfReader& reader, DffWriter& writer, unsigned threads,
-             int channels, unsigned dsd_rate,
+    bool run(DsfReader& reader, DffWriter& writer, uint32_t threads,
+             int32_t channels, uint32_t dsd_rate,
              void (*progress)(void* ctx, uint64_t frames, uint64_t coded_bytes),
              void* ctx);
 
@@ -46,13 +46,13 @@ public:
     uint64_t uncoded_frames() const { return uncoded_frames_; }
 
 private:
-    enum State { kEmpty, kFilled, kCoding, kCoded };
+    enum State : int32_t { kEmpty, kFilled, kCoding, kCoded };
 
     struct Slot {
         ByteP src = nullptr;       // planar DSD for one frame
         ByteP out = nullptr;       // the coded frame
         size_t out_size = 0;
-        int state = kEmpty;
+        int32_t state = kEmpty;
     };
 
     // The two allocations this program makes, and the only ones: an encoder per
@@ -65,19 +65,19 @@ private:
     DstEncoder* __restrict encoders_ = nullptr;
     ByteP buffers_ = nullptr;
 
-    bool alloc(unsigned slots);
-    void worker(unsigned index);
+    bool alloc(uint32_t slots);
+    void worker(uint32_t index);
     void fill(DsfReader& reader);
     bool write_next(DffWriter& writer);   // false once finished or failed
 
     using SlotP = Slot* __restrict;
 
     Slot slots_[kMaxThreads + 2];
-    unsigned slot_count_ = 0;
-    unsigned threads_ = 0;
+    uint32_t slot_count_ = 0;
+    uint32_t threads_ = 0;
     size_t bytes_per_channel_ = 0;
-    int channels_ = 0;
-    unsigned dsd_rate_ = 0;
+    int32_t channels_ = 0;
+    uint32_t dsd_rate_ = 0;
 
     std::mutex mu_;
     std::condition_variable cv_;

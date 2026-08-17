@@ -7,6 +7,7 @@
 #define _FILE_OFFSET_BITS 64
 
 #include <stdint.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,7 +31,7 @@ namespace dff2dsf {
 // runtimes spell it _fseeki64 and neither has fseeko at all.
 #ifdef _WIN32
 
-inline int file_seek(FILE* f, int64_t offset, int whence) {
+inline int32_t file_seek(FILE* f, int64_t offset, int32_t whence) {
     return _fseeki64(f, offset, whence);
 }
 
@@ -42,7 +43,7 @@ inline int64_t file_tell(FILE* f) {
 
 static_assert(sizeof(off_t) == 8, "64-bit file offsets are required");
 
-inline int file_seek(FILE* f, int64_t offset, int whence) {
+inline int32_t file_seek(FILE* f, int64_t offset, int32_t whence) {
     return fseeko(f, off_t(offset), whence);
 }
 
@@ -79,10 +80,10 @@ using ByteP    = uint8_t* __restrict;
 using CByteP   = const uint8_t* __restrict;
 using WordP    = uint64_t* __restrict;
 using CWordP   = const uint64_t* __restrict;
-using IntP     = int* __restrict;
-using CIntP    = const int* __restrict;
+using IntP     = int32_t* __restrict;
+using CIntP    = const int32_t* __restrict;
 using DoubleP  = double* __restrict;
-using UIntP    = unsigned* __restrict;
+using UIntP    = uint32_t* __restrict;
 using SizeP    = size_t* __restrict;
 using CU32P    = const uint32_t* __restrict;
 using CBytePP  = CByteP* __restrict;           // out parameter naming a buffer
@@ -126,7 +127,7 @@ inline void wl64(ByteP p, uint64_t v) {
     wl32(p, uint32_t(v)); wl32(p + 4, uint32_t(v >> 32));
 }
 
-inline int ilog2(unsigned v) {
+inline int32_t ilog2(uint32_t v) {
     return v ? 31 - __builtin_clz(v) : 0;
 }
 
@@ -143,10 +144,10 @@ inline bool tag_is(CByteP p, const char (&s)[5]) {
 struct ReverseTable {
     uint8_t v[256];
     constexpr ReverseTable() : v() {
-        for (int i = 0; i < 256; i++) {
-            unsigned r = 0;
-            for (int b = 0; b < 8; b++)
-                r |= ((unsigned(i) >> b) & 1) << (7 - b);
+        for (int32_t i = 0; i < 256; i++) {
+            uint32_t r = 0;
+            for (int32_t b = 0; b < 8; b++)
+                r |= ((uint32_t(i) >> b) & 1) << (7 - b);
             v[i] = uint8_t(r);
         }
     }

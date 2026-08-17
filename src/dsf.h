@@ -20,7 +20,7 @@ constexpr size_t kDsfHeaderSize = 28 + 52 + 12;
 
 class DsfWriter {
 public:
-    bool open(const char* path, int channels, unsigned dsd_rate, CU32P channel_ids);
+    bool open(const char* path, int32_t channels, uint32_t dsd_rate, CU32P channel_ids);
 
     // Appends `bytes_per_channel` bytes per channel of MSB-first DSD that is
     // byte-interleaved by channel, i.e. exactly what DSDIFF and the DST decoder
@@ -34,9 +34,9 @@ private:
     bool flush_block();
 
     File f_;
-    int channels_ = 0;
-    unsigned dsd_rate_ = 0;
-    unsigned channel_type_ = 0;
+    int32_t channels_ = 0;
+    uint32_t dsd_rate_ = 0;
+    uint32_t channel_type_ = 0;
     // The block being filled, planar: channel c occupies c * kDsfBlockSize.  The
     // block size is fixed by the format, so this is too.
     uint8_t blocks_[kDstMaxChannels * kDsfBlockSize];

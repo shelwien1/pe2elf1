@@ -56,6 +56,12 @@ test file's 19119 frames. And `--threads N` needs an encoder and a slot buffer
 per worker, which is a runtime choice by definition — those are the program's
 only two allocations, one block each, however many threads are asked for.
 
+Integers are spelled as fixed-width types throughout — `int32_t`, `uint32_t`,
+`uint64_t` and the rest — with `size_t` kept for sizes and offsets into memory,
+and `int` surviving only where the language fixes it, in `main`'s signature.
+64-bit values are printed through `PRIu64` rather than `%llu`, which is both the
+matching spelling and the one the Windows runtime actually wants.
+
 Pointers are declared through a small set of `__restrict` qualified types in
 `common.h` — `ByteP`, `CByteP`, `WordP`, `CLutP` and so on — rather than by
 repeating the qualifier at each declaration. Nothing here is ever aliased: the

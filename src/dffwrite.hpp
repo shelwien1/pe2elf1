@@ -22,7 +22,7 @@ const char* const kChannelIds[kDstMaxChannels + 1][kDstMaxChannels] = {
 };
 
 // Loudspeaker configuration codes matching those channel layouts.
-unsigned lsco_for(int channels) {
+uint32_t lsco_for(int32_t channels) {
     switch (channels) {
     case 5:  return 3;   // 5 channel
     case 6:  return 4;   // 5 channel + LFE
@@ -36,11 +36,11 @@ void put_tag(ByteP& p, const char* tag) {
 }
 
 void put_be64(ByteP& p, uint64_t v) {
-    for (int i = 7; i >= 0; i--) *p++ = uint8_t(v >> (8 * i));
+    for (int32_t i = 7; i >= 0; i--) *p++ = uint8_t(v >> (8 * i));
 }
 
 void put_be32(ByteP& p, uint32_t v) {
-    for (int i = 3; i >= 0; i--) *p++ = uint8_t(v >> (8 * i));
+    for (int32_t i = 3; i >= 0; i--) *p++ = uint8_t(v >> (8 * i));
 }
 
 void put_be16(ByteP& p, uint16_t v) {
@@ -54,7 +54,7 @@ const char kCreatingMachine[] = "dff2dsf DST encoder";
 
 } // namespace
 
-bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
+bool DffWriter::open(const char* path, int32_t channels, uint32_t dsd_rate,
                      const DffWriteOptions& options) {
     if (channels < 1 || channels > kDstMaxChannels)
         return ERR("unsupported channel count %d", channels);
@@ -75,8 +75,8 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
     put_be32(p, 0x01050000);              // DSDIFF 1.5.0.0
 
     // PROP/SND: sample rate, channels, compression, start time, speaker config.
-    const unsigned chnl_size = 2 + 4 * unsigned(channels);
-    const unsigned prop_size = 4 +                 // "SND "
+    const uint32_t chnl_size = 2 + 4 * uint32_t(channels);
+    const uint32_t prop_size = 4 +                 // "SND "
                                12 + 4 +            // FS
                                12 + chnl_size + (chnl_size & 1) +
                                12 + 20 +           // CMPR
@@ -93,7 +93,7 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
     put_tag(p, "CHNL");
     put_be64(p, chnl_size);
     put_be16(p, uint16_t(channels));
-    for (int i = 0; i < channels; i++)
+    for (int32_t i = 0; i < channels; i++)
         put_tag(p, kChannelIds[channels][i]);
     if (chnl_size & 1) *p++ = 0;
 
@@ -183,9 +183,9 @@ bool DffWriter::write_index(int64_t dst_end) {
     put_be64(p, frames_ * 12);
     if (!f_.seek(dst_end) || !f_.write(hdr, sizeof(hdr))) return false;
 
-    constexpr unsigned kBatch = 256;         // entries buffered between writes
+    constexpr uint32_t kBatch = 256;         // entries buffered between writes
     uint8_t buf[kBatch * 12];
-    unsigned n = 0;
+    uint32_t n = 0;
     uint64_t seen = 0;
     int64_t pos = dst_body_pos_;             // the walk, over FRTE, DSTF, DSTC
     int64_t out = dst_end + 12;              // where the next entries go
@@ -216,8 +216,8 @@ bool DffWriter::write_index(int64_t dst_end) {
     }
 
     if (seen != frames_)
-        return ERR("frame index found %llu frames, expected %llu",
-                   (unsigned long long)seen, (unsigned long long)frames_);
+        return ERR("frame index found %" PRIu64 " frames, expected %" PRIu64,
+                   seen, frames_);
 
     // The comment chunk is written next, and follows the index.
     return f_.seek(out);

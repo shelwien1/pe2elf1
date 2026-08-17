@@ -29,30 +29,30 @@ public:
     int64_t left() const { return nbits_ - pos_; }
     int64_t pos() const { return pos_; }
 
-    unsigned get1() {
+    uint32_t get1() {
         size_t byte = size_t(pos_ >> 3);
-        unsigned bit = unsigned(pos_ & 7);
+        uint32_t bit = uint32_t(pos_ & 7);
         pos_++;
         if (byte >= capacity_) return 0;
         return (buf_[byte] >> (7 - bit)) & 1;
     }
 
     // n in [0,32]; n == 0 yields 0, matching FFmpeg's get_bits_long().
-    unsigned get(int n) {
+    uint32_t get(int32_t n) {
         if (n <= 0) return 0;
-        unsigned v = unsigned((window() << unsigned(pos_ & 7)) >> (64 - n));
+        uint32_t v = uint32_t((window() << uint32_t(pos_ & 7)) >> (64 - n));
         pos_ += n;
         return v;
     }
 
-    int get_signed(int n) {
+    int32_t get_signed(int32_t n) {
         if (n <= 0) return 0;
-        unsigned v = get(n);
-        unsigned sign = 1u << (n - 1);
-        return int((v ^ sign) - sign);
+        uint32_t v = get(n);
+        uint32_t sign = 1u << (n - 1);
+        return int32_t((v ^ sign) - sign);
     }
 
-    void skip(int n) { pos_ += n; }
+    void skip(int32_t n) { pos_ += n; }
 
 private:
     uint64_t window() const {
@@ -70,19 +70,19 @@ private:
 // Unsigned JPEG-LS Golomb code (FFmpeg get_ur_golomb_jpegls with esc_len 0).
 // The loop mirrors FFmpeg's operand order: the bit is consumed before the
 // remaining-bits check, which matters at the tail of a frame.
-inline int get_ur_golomb_jpegls(BitReader& br, int k, int64_t limit) {
+inline int32_t get_ur_golomb_jpegls(BitReader& br, int32_t k, int64_t limit) {
     int64_t i;
     for (i = 0; i < limit && br.get1() == 0 && br.left() > 0; i++)
         ;
     if (i < limit - 1)
-        return int(br.get(k)) + int(i << k);
+        return int32_t(br.get(k)) + int32_t(i << k);
     return -1;
 }
 
 // Signed variant used by the DST coefficient tables: magnitude followed by a
 // sign bit, which is only present for non-zero values.
-inline int get_sr_golomb_dst(BitReader& br, unsigned k) {
-    int v = get_ur_golomb_jpegls(br, int(k), br.left());
+inline int32_t get_sr_golomb_dst(BitReader& br, uint32_t k) {
+    int32_t v = get_ur_golomb_jpegls(br, int32_t(k), br.left());
     if (v && br.get1())
         v = -v;
     return v;

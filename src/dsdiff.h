@@ -26,8 +26,8 @@ class DffReader {
 public:
     bool open(const char* path);
 
-    unsigned dsd_rate() const { return dsd_rate_; }
-    int channels() const { return channels_; }
+    uint32_t dsd_rate() const { return dsd_rate_; }
+    int32_t channels() const { return channels_; }
     bool is_dst() const { return is_dst_; }
     uint32_t frame_count() const { return frame_count_; }
     uint16_t frame_rate() const { return frame_rate_; }
@@ -41,7 +41,7 @@ public:
 
     // Next DST frame.  Returns 1 on success, 0 at end of data, -1 on error.
     // The payload is zero padded to allow the bit reader's windowed reads.
-    int next_dst_frame(CBytePP data, SizeP size, SizeP capacity);
+    int32_t next_dst_frame(CBytePP data, SizeP size, SizeP capacity);
 
     // The DSTC chunk that followed the frame just returned, if there was one:
     // a CRC over the DSD that frame decodes to.
@@ -49,7 +49,7 @@ public:
     uint32_t frame_crc() const { return frame_crc_; }
 
     // Next block of raw interleaved DSD.  Returns 1, 0 or -1 as above.
-    int next_dsd_block(CBytePP data, SizeP size);
+    int32_t next_dsd_block(CBytePP data, SizeP size);
 
 private:
     bool parse_prop(int64_t end);
@@ -63,8 +63,8 @@ private:
     int64_t body_end_ = 0;   // one past the last byte of sound data
     int64_t cur_ = 0;
 
-    unsigned dsd_rate_ = 0;
-    int channels_ = 0;
+    uint32_t dsd_rate_ = 0;
+    int32_t channels_ = 0;
     bool is_dst_ = false;
     bool saw_prop_ = false;
     bool saw_cmpr_ = false;

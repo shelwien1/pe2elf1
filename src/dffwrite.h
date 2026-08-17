@@ -25,7 +25,7 @@ struct DffWriteOptions {
 
 class DffWriter {
 public:
-    bool open(const char* path, int channels, unsigned dsd_rate,
+    bool open(const char* path, int32_t channels, uint32_t dsd_rate,
               const DffWriteOptions& options = DffWriteOptions());
 
     // Appends one DST frame as a DSTF chunk.  `dsd` is the uncompressed planar
@@ -45,7 +45,7 @@ private:
 
     DffWriteOptions opt_;
     File f_;
-    int channels_ = 0;
+    int32_t channels_ = 0;
     int64_t frm8_size_pos_ = 0;
     int64_t dst_size_pos_ = 0;
     int64_t dst_body_pos_ = 0;

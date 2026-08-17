@@ -13,8 +13,8 @@
 
 namespace dff2dsf {
 
-constexpr int kDstMaxChannels = 6;
-constexpr int kDstMaxElements = 2 * kDstMaxChannels;
+constexpr int32_t kDstMaxChannels = 6;
+constexpr int32_t kDstMaxElements = 2 * kDstMaxChannels;
 
 // The largest stream this program handles, and with it the size of every working
 // buffer.  ISO/IEC 14496-3 specifies DST for 64, 128 and 256 times 44100; 512 is
@@ -22,13 +22,13 @@ constexpr int kDstMaxElements = 2 * kDstMaxChannels;
 // is unchanged.  Everything derived from this is a compile-time constant, which
 // is what lets the buffers be plain arrays rather than allocations: a frame is
 // 1/75 s, so 588 DSD bits per channel per 44.1 kHz of rate.
-constexpr unsigned kMaxDsdRate = 512u * 44100u;
-constexpr unsigned kMaxFrameBits = 588u * (kMaxDsdRate / 44100u);        // 301056
-constexpr unsigned kMaxFrameBytesPerChannel = kMaxFrameBits / 8;         // 37632
+constexpr uint32_t kMaxDsdRate = 512u * 44100u;
+constexpr uint32_t kMaxFrameBits = 588u * (kMaxDsdRate / 44100u);        // 301056
+constexpr uint32_t kMaxFrameBytesPerChannel = kMaxFrameBits / 8;         // 37632
 constexpr size_t kMaxFrameBytes = size_t(kMaxFrameBytesPerChannel) * kDstMaxChannels;
 
 // DSD bits per channel in one frame at `dsd_rate`.
-inline unsigned frame_bits_for(unsigned dsd_rate) { return 588u * (dsd_rate / 44100u); }
+inline uint32_t frame_bits_for(uint32_t dsd_rate) { return 588u * (dsd_rate / 44100u); }
 
 // The uncompressed fallback frame: a header byte and the interleaved DSD.
 constexpr size_t kMaxDstFrameSize = 1 + kMaxFrameBytes;
@@ -36,8 +36,8 @@ constexpr size_t kMaxDstFrameSize = 1 + kMaxFrameBytes;
 // State of the binary arithmetic decoder (10.11); an implementation detail of
 // DstDecoder, at namespace scope only so the decoding helpers can take it.
 struct DstArithCoder {
-    unsigned a;
-    unsigned c;
+    uint32_t a;
+    uint32_t c;
 };
 
 using ArithCoderP = DstArithCoder* __restrict;
@@ -58,26 +58,26 @@ inline constexpr int8_t kProbsPredCoeff[3][3] = {
 };
 
 // Probability of the sign bit of the very first sample (10.11).
-inline unsigned prob_dst_x_bit(int c) {
-    return unsigned((kReverse.v[c & 127] >> 1) + 1);
+inline uint32_t prob_dst_x_bit(int32_t c) {
+    return uint32_t((kReverse.v[c & 127] >> 1) + 1);
 }
 
 // Expands filter coefficients into the lookup table that evaluates the 128-tap
 // sign-based FIR eight taps at a time: lut[j][k] is the contribution of history
 // byte j when those eight bits are k.  Shared with the encoder, which has to
 // predict exactly as the decoder does.  False if a partial sum leaves int16.
-bool build_filter_lut(CIntP coeff, unsigned length, LutP lut);
+bool build_filter_lut(CIntP coeff, uint32_t length, LutP lut);
 
 class DstDecoder {
 public:
     // `dsd_rate` is the DSD bit rate per channel (e.g. 2822400 for DSD64).
-    bool init(int channels, unsigned dsd_rate);
+    bool init(int32_t channels, uint32_t dsd_rate);
 
     // DSD bits per channel in one DST frame (37632 for DSD64, i.e. 1/75 s).
-    unsigned frame_bits() const { return frame_bits_; }
+    uint32_t frame_bits() const { return frame_bits_; }
 
     // Size of the interleaved output buffer decode() expects.
-    size_t frame_bytes() const { return size_t(frame_bits_ / 8) * unsigned(channels_); }
+    size_t frame_bytes() const { return size_t(frame_bits_ / 8) * uint32_t(channels_); }
 
     // Decodes one DSTF frame into `out`, which must hold frame_bytes() bytes.
     // Output is MSB-first DSD, byte-interleaved by channel, as stored in DSDIFF.
@@ -90,18 +90,18 @@ public:
 
 private:
     struct Table {
-        unsigned elements;
-        unsigned length[kDstMaxElements];
-        int coeff[kDstMaxElements][128];
+        uint32_t elements;
+        uint32_t length[kDstMaxElements];
+        int32_t coeff[kDstMaxElements][128];
     };
 
     bool read_map(class BitReader& br, Table& t, UIntP map);
     bool read_table(class BitReader& br, Table& t, CPredP pred,
-                    int length_bits, int coeff_bits, bool is_signed, int offset);
+                    int32_t length_bits, int32_t coeff_bits, bool is_signed, int32_t offset);
     bool build_filter();
 
-    int channels_ = 0;
-    unsigned frame_bits_ = 0;
+    int32_t channels_ = 0;
+    uint32_t frame_bits_ = 0;
     uint64_t uncoded_frames_ = 0;
 
     Table fsets_ {};

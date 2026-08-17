@@ -7,23 +7,23 @@
 
 namespace dff2dsf {
 
-unsigned default_thread_count() {
-    const unsigned n = std::thread::hardware_concurrency();
+uint32_t default_thread_count() {
+    const uint32_t n = std::thread::hardware_concurrency();
     return n ? (n > kMaxThreads ? kMaxThreads : n) : 1;
 }
 
 EncodePool::~EncodePool() {
-    for (unsigned i = 0; i < threads_; i++) encoders_[i].~DstEncoder();
+    for (uint32_t i = 0; i < threads_; i++) encoders_[i].~DstEncoder();
     free(encoders_);
     free(buffers_);
 }
 
 // One block for every slot's buffer pair, carved up here.
-bool EncodePool::alloc(unsigned slots) {
+bool EncodePool::alloc(uint32_t slots) {
     buffers_ = static_cast<uint8_t*>(xalloc(kSlotBytes * slots));
     if (!buffers_) return false;
 
-    for (unsigned i = 0; i < slots; i++) {
+    for (uint32_t i = 0; i < slots; i++) {
         slots_[i].src = buffers_ + kSlotBytes * i;
         slots_[i].out = slots_[i].src + kMaxFrameBytes;
     }
@@ -44,7 +44,7 @@ void EncodePool::fill(DsfReader& reader) {
             s = &slots_[next_fill_ % slot_count_];
         }
 
-        const int r = reader.read_planar(s->src, bytes_per_channel_);
+        const int32_t r = reader.read_planar(s->src, bytes_per_channel_);
 
         {
             std::lock_guard<std::mutex> lock(mu_);
@@ -96,7 +96,7 @@ bool EncodePool::write_next(DffWriter& writer) {
     return ok;
 }
 
-void EncodePool::worker(unsigned index) {
+void EncodePool::worker(uint32_t index) {
     DstEncoder& enc = encoders_[index];
     if (!enc.init(channels_, dsd_rate_)) {
         {
@@ -142,8 +142,8 @@ void EncodePool::worker(unsigned index) {
     uncoded_frames_ += enc.uncoded_frames();
 }
 
-bool EncodePool::run(DsfReader& reader, DffWriter& writer, unsigned threads,
-                     int channels, unsigned dsd_rate,
+bool EncodePool::run(DsfReader& reader, DffWriter& writer, uint32_t threads,
+                     int32_t channels, uint32_t dsd_rate,
                      void (*progress)(void*, uint64_t, uint64_t), void* ctx) {
     if (threads < 1) threads = 1;
     if (threads > kMaxThreads) threads = kMaxThreads;
@@ -168,7 +168,7 @@ bool EncodePool::run(DsfReader& reader, DffWriter& writer, unsigned threads,
     // A default constructed std::thread is empty and costs a pointer, so the
     // ceiling can just live on the stack rather than being allocated.
     std::thread workers[kMaxThreads];
-    for (unsigned i = 0; i < threads; i++)
+    for (uint32_t i = 0; i < threads; i++)
         workers[i] = std::thread(&EncodePool::worker, this, i);
 
     for (;;) {
@@ -185,7 +185,7 @@ bool EncodePool::run(DsfReader& reader, DffWriter& writer, unsigned threads,
     }
     cv_.notify_all();
 
-    for (unsigned i = 0; i < threads; i++) workers[i].join();
+    for (uint32_t i = 0; i < threads; i++) workers[i].join();
 
     return !failed_;
 }

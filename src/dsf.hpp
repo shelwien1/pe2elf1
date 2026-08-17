@@ -11,14 +11,14 @@ namespace {
 
 // DSF channel type codes: 1 mono, 2 stereo, 3 three channel, 4 quad,
 // 5 four channel, 6 five channel, 7 five channel + LFE.
-unsigned channel_type_for(int channels, CU32P ids) {
+uint32_t channel_type_for(int32_t channels, CU32P ids) {
     switch (channels) {
     case 1: return 1;
     case 2: return 2;
     case 3: return 3;
     case 4: {
         // Quad is LF/RF/LS/RS; the "four channel" layout has a centre instead.
-        for (int i = 0; i < 4; i++)
+        for (int32_t i = 0; i < 4; i++)
             if (memcmp(&ids[i], "C   ", 4) == 0 || memcmp(&ids[i], "MC  ", 4) == 0)
                 return 5;
         return 4;
@@ -31,7 +31,7 @@ unsigned channel_type_for(int channels, CU32P ids) {
 
 } // namespace
 
-bool DsfWriter::open(const char* path, int channels, unsigned dsd_rate,
+bool DsfWriter::open(const char* path, int32_t channels, uint32_t dsd_rate,
                      CU32P channel_ids) {
     if (channels < 1 || channels > kDstMaxChannels)
         return ERR("unsupported channel count %d", channels);
@@ -39,7 +39,7 @@ bool DsfWriter::open(const char* path, int channels, unsigned dsd_rate,
     // channel_ids arrive as big-endian packed four character codes; compare them
     // in that same byte order.
     uint32_t ids_be[kDstMaxChannels] = {};
-    for (int i = 0; i < channels; i++) {
+    for (int32_t i = 0; i < channels; i++) {
         const ByteP p = reinterpret_cast<uint8_t*>(&ids_be[i]);
         p[0] = uint8_t(channel_ids[i] >> 24); p[1] = uint8_t(channel_ids[i] >> 16);
         p[2] = uint8_t(channel_ids[i] >> 8);  p[3] = uint8_t(channel_ids[i]);
@@ -64,11 +64,11 @@ bool DsfWriter::open(const char* path, int channels, unsigned dsd_rate,
     wl32(hdr + 40, 1);                    // format version
     wl32(hdr + 44, 0);                    // format id: DSD raw
     wl32(hdr + 48, channel_type_);
-    wl32(hdr + 52, unsigned(channels));
+    wl32(hdr + 52, uint32_t(channels));
     wl32(hdr + 56, dsd_rate);
     wl32(hdr + 60, 1);                    // bits per sample: 1 = LSB first
     wl64(hdr + 64, 0);                    // sample count per channel
-    wl32(hdr + 72, unsigned(kDsfBlockSize));
+    wl32(hdr + 72, uint32_t(kDsfBlockSize));
     wl32(hdr + 76, 0);                    // reserved
 
     memcpy(hdr + 80, "data", 4);
@@ -81,7 +81,7 @@ bool DsfWriter::flush_block() {
     if (!fill_) return true;
     // Short final block: pad every channel out to the fixed block size.
     if (fill_ < kDsfBlockSize)
-        for (int ch = 0; ch < channels_; ch++)
+        for (int32_t ch = 0; ch < channels_; ch++)
             memset(blocks_ + size_t(ch) * kDsfBlockSize + fill_, kDsdSilence,
                    kDsfBlockSize - fill_);
 
@@ -92,7 +92,7 @@ bool DsfWriter::flush_block() {
 }
 
 bool DsfWriter::write(CByteP src, size_t bytes_per_channel) {
-    const int channels = channels_;
+    const int32_t channels = channels_;
     size_t done = 0;
 
     while (done < bytes_per_channel) {
@@ -109,7 +109,7 @@ bool DsfWriter::write(CByteP src, size_t bytes_per_channel) {
                 d1[i] = kReverse.v[s[2 * i + 1]];
             }
         } else {
-            for (int ch = 0; ch < channels; ch++) {
+            for (int32_t ch = 0; ch < channels; ch++) {
                 const ByteP d = blocks_ + size_t(ch) * kDsfBlockSize + fill_;
                 const CByteP s = src + done * size_t(channels) + size_t(ch);
                 for (size_t i = 0; i < n; i++)

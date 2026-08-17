@@ -38,7 +38,7 @@ constexpr Feature kFeatures[] = {
     { "DSTC", &DffWriteOptions::dstc, "per-frame CRC over the DSD, 16 bytes per frame" },
 };
 
-int usage() {
+int32_t usage() {
     fprintf(stderr,
             "dff2dsf - DSDIFF (DST) and DSF converter\n"
             "\n"
@@ -88,9 +88,9 @@ bool parse_threads(const char* s, UIntP out) {
         return true;
     }
     char* end = nullptr;
-    const unsigned long v = strtoul(s, &end, 10);
+    const uint64_t v = strtoul(s, &end, 10);
     if (end == s || !end || *end || v < 1 || v > kMaxThreads) return false;
-    *out = unsigned(v);
+    *out = uint32_t(v);
     return true;
 }
 
@@ -118,11 +118,11 @@ bool parse_option(const char* arg, DffWriteOptions* __restrict opt) {
 
 void print_progress(uint64_t done, uint64_t total) {
     if (total)
-        fprintf(stderr, "\rdecoding: %llu/%llu frames (%.1f%%)",
-                (unsigned long long)done, (unsigned long long)total,
+        fprintf(stderr, "\rdecoding: %" PRIu64 "/%" PRIu64 " frames (%.1f%%)",
+                done, total,
                 100.0 * double(done) / double(total));
     else
-        fprintf(stderr, "\rdecoding: %llu frames", (unsigned long long)done);
+        fprintf(stderr, "\rdecoding: %" PRIu64 " frames", done);
     fflush(stderr);
 }
 
@@ -141,12 +141,12 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, WordP frames_out) {
     for (;;) {
         CByteP data;
         size_t size, capacity;
-        int r = reader.next_dst_frame(&data, &size, &capacity);
+        int32_t r = reader.next_dst_frame(&data, &size, &capacity);
         if (r < 0) { ok = false; break; }
         if (r == 0) break;
 
         if (!dec.decode(data, size, capacity, frame)) {
-            ERR("failed decoding frame %llu", (unsigned long long)frames);
+            ERR("failed decoding frame %" PRIu64, frames);
             ok = false;
             break;
         }
@@ -156,8 +156,8 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, WordP frames_out) {
             crcs++;
             if (dsd_crc(0, frame, dec.frame_bytes()) != reader.frame_crc()) {
                 if (crc_errors < 8)
-                    fprintf(stderr, "\rdff2dsf: warning: frame %llu fails its DSTC CRC\n",
-                            (unsigned long long)frames);
+                    fprintf(stderr, "\rdff2dsf: warning: frame %" PRIu64 " fails its DSTC CRC\n",
+                            frames);
                 crc_errors++;
             }
         }
@@ -171,14 +171,14 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, WordP frames_out) {
     fputc('\n', stderr);
 
     if (ok && reader.frame_count() && frames != reader.frame_count())
-        fprintf(stderr, "dff2dsf: warning: FRTE announced %u frames, found %llu\n",
-                reader.frame_count(), (unsigned long long)frames);
+        fprintf(stderr, "dff2dsf: warning: FRTE announced %u frames, found %" PRIu64 "\n",
+                reader.frame_count(), frames);
     if (dec.uncoded_frames())
-        fprintf(stderr, "dff2dsf: %llu frame(s) were stored uncompressed\n",
-                (unsigned long long)dec.uncoded_frames());
+        fprintf(stderr, "dff2dsf: %" PRIu64 " frame(s) were stored uncompressed\n",
+                dec.uncoded_frames());
     if (crcs)
-        fprintf(stderr, "crc: %llu frame(s) carried a DSTC CRC, %llu mismatched\n",
-                (unsigned long long)crcs, (unsigned long long)crc_errors);
+        fprintf(stderr, "crc: %" PRIu64 " frame(s) carried a DSTC CRC, %" PRIu64 " mismatched\n",
+                crcs, crc_errors);
 
     *frames_out = frames;
     return ok;
@@ -189,13 +189,13 @@ bool decode_raw_dsd(DffReader& reader, DsfWriter& writer) {
     for (;;) {
         CByteP data;
         size_t size;
-        int r = reader.next_dsd_block(&data, &size);
+        int32_t r = reader.next_dsd_block(&data, &size);
         if (r < 0) return false;
         if (r == 0) break;
 
         if (!writer.write(data, size / size_t(reader.channels()))) return false;
         bytes += size;
-        fprintf(stderr, "\rcopying: %llu MiB", (unsigned long long)(bytes >> 20));
+        fprintf(stderr, "\rcopying: %" PRIu64 " MiB", (bytes >> 20));
     }
     fputc('\n', stderr);
     return true;
@@ -207,8 +207,8 @@ bool decode_file(const char* in_path, const char* out_path) {
     static DffReader reader;
     if (!reader.open(in_path)) return false;
 
-    const unsigned rate = reader.dsd_rate();
-    const int channels = reader.channels();
+    const uint32_t rate = reader.dsd_rate();
+    const int32_t channels = reader.channels();
 
     fprintf(stderr, "input : %s\n", in_path);
     fprintf(stderr, "format: %s, %u Hz DSD (DSD%u), %d channel(s)\n",
@@ -232,8 +232,8 @@ bool decode_file(const char* in_path, const char* out_path) {
     if (!writer.finish()) return false;
 
     if (reader.is_dst())
-        fprintf(stderr, "dst payload: %llu bytes in %llu frames\n",
-                (unsigned long long)reader.dst_payload(), (unsigned long long)frames);
+        fprintf(stderr, "dst payload: %" PRIu64 " bytes in %" PRIu64 " frames\n",
+                reader.dst_payload(), frames);
     fprintf(stderr, "output: %s\n", out_path);
     return true;
 }
@@ -247,8 +247,8 @@ struct EncodeProgress {
 void print_encode_progress(void* ctx, uint64_t frames, uint64_t coded_bytes) {
     if (frames & 63) return;
     const EncodeProgress* p = static_cast<const EncodeProgress*>(ctx);
-    fprintf(stderr, "\rencoding: %llu/%llu frames (%.1f%%), ratio %.3f",
-            (unsigned long long)frames, (unsigned long long)p->total_frames,
+    fprintf(stderr, "\rencoding: %" PRIu64 "/%" PRIu64 " frames (%.1f%%), ratio %.3f",
+            frames, p->total_frames,
             p->total_frames ? 100.0 * double(frames) / double(p->total_frames) : 0.0,
             double(frames * p->raw_per_frame) / double(coded_bytes));
     fflush(stderr);
@@ -256,7 +256,7 @@ void print_encode_progress(void* ctx, uint64_t frames, uint64_t coded_bytes) {
 
 // One frame at a time, in this thread: the default, and what the pool below is
 // measured against.
-bool encode_serial(DsfReader& reader, DffWriter& writer, int channels, unsigned rate,
+bool encode_serial(DsfReader& reader, DffWriter& writer, int32_t channels, uint32_t rate,
                    const EncodeProgress& prog, WordP frames_out,
                    WordP coded_out, WordP uncoded_out) {
     // The encoder is around 3 MB of working buffers, so it is static rather than
@@ -272,7 +272,7 @@ bool encode_serial(DsfReader& reader, DffWriter& writer, int channels, unsigned 
     bool ok = true;
 
     for (;;) {
-        int r = reader.read_planar(src, bytes_per_channel);
+        int32_t r = reader.read_planar(src, bytes_per_channel);
         if (r < 0) { ok = false; break; }
         if (r == 0) break;
 
@@ -292,16 +292,16 @@ bool encode_serial(DsfReader& reader, DffWriter& writer, int channels, unsigned 
 }
 
 bool encode_file(const char* in_path, const char* out_path,
-                 const DffWriteOptions& options, unsigned threads) {
+                 const DffWriteOptions& options, uint32_t threads) {
     static DsfReader reader;
     if (!reader.open(in_path)) return false;
 
-    const int channels = reader.channels();
-    const unsigned rate = reader.dsd_rate();
+    const int32_t channels = reader.channels();
+    const uint32_t rate = reader.dsd_rate();
 
     // The frame geometry follows from the sample rate alone, so both encode
     // paths can have it without building an encoder to ask.
-    const unsigned frame_bits = frame_bits_for(rate);
+    const uint32_t frame_bits = frame_bits_for(rate);
     if (!frame_bits) return ERR("unsupported sample rate %u", rate);
     const size_t bytes_per_channel = frame_bits / 8;
     const uint64_t total_frames =
@@ -309,7 +309,7 @@ bool encode_file(const char* in_path, const char* out_path,
 
     fprintf(stderr, "input : %s\n", in_path);
     fprintf(stderr, "format: %u Hz DSD (DSD%u), %d channel(s)\n", rate, rate / 44100, channels);
-    fprintf(stderr, "length: %llu frames, %.2f s\n", (unsigned long long)total_frames,
+    fprintf(stderr, "length: %" PRIu64 " frames, %.2f s\n", total_frames,
             double(reader.samples_per_channel()) / double(rate));
     if (threads > 1)
         fprintf(stderr, "threads: %u\n", threads);
@@ -339,11 +339,11 @@ bool encode_file(const char* in_path, const char* out_path,
     if (!writer.finish()) return false;
 
     const double raw = double(frames * prog.raw_per_frame);
-    fprintf(stderr, "\rencoding: %llu frames, ratio %.3f%*s\n",
-            (unsigned long long)frames, coded_bytes ? raw / double(coded_bytes) : 0.0, 20, "");
+    fprintf(stderr, "\rencoding: %" PRIu64 " frames, ratio %.3f%*s\n",
+            frames, coded_bytes ? raw / double(coded_bytes) : 0.0, 20, "");
     if (uncoded)
-        fprintf(stderr, "dff2dsf: %llu frame(s) did not compress and were stored raw\n",
-                (unsigned long long)uncoded);
+        fprintf(stderr, "dff2dsf: %" PRIu64 " frame(s) did not compress and were stored raw\n",
+                uncoded);
     fprintf(stderr, "output: %s\n", out_path);
     return true;
 }
@@ -351,17 +351,17 @@ bool encode_file(const char* in_path, const char* out_path,
 } // namespace
 } // namespace dff2dsf
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) {   // the one signature C++ fixes
     using namespace dff2dsf;
 
     // Command, input and output in that order, with options anywhere among them.
     DffWriteOptions options;
-    unsigned threads = 1;
+    uint32_t threads = 1;
     const char* arg[3] = {};
-    int nargs = 0;
+    int32_t nargs = 0;
     bool any_option = false;
 
-    for (int i = 1; i < argc; i++) {
+    for (int32_t i = 1; i < argc; i++) {
         if (argv[i][0] == '-' && argv[i][1] != '\0') {
             // --threads takes a value, either attached or as the next argument.
             if (strncmp(argv[i], "--threads", 9) == 0 &&

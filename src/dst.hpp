@@ -22,10 +22,10 @@ inline void ac_init(ArithCoderP ac, BitReader& br) {
 
 // Binary arithmetic decoder (10.11).  `p` is the probability, scaled to 1..128,
 // that the decoded bit equals the prediction.
-inline void ac_get(ArithCoderP ac, BitReader& br, unsigned p, UIntP e) {
-    unsigned k = (ac->a >> 8) | ((ac->a >> 7) & 1);
-    unsigned q = k * p;
-    unsigned a_q = ac->a - q;
+inline void ac_get(ArithCoderP ac, BitReader& br, uint32_t p, UIntP e) {
+    uint32_t k = (ac->a >> 8) | ((ac->a >> 7) & 1);
+    uint32_t q = k * p;
+    uint32_t a_q = ac->a - q;
 
     *e = ac->c < a_q;
     if (*e) {
@@ -36,21 +36,21 @@ inline void ac_get(ArithCoderP ac, BitReader& br, unsigned p, UIntP e) {
     }
 
     if (ac->a < 2048) {
-        int n = 11 - ilog2(ac->a);
+        int32_t n = 11 - ilog2(ac->a);
         ac->a <<= n;
         ac->c = (ac->c << n) | br.get(n);
     }
 }
 
-void read_uncoded_coeff(BitReader& br, IntP dst, unsigned elements,
-                        int coeff_bits, bool is_signed, int offset) {
-    for (unsigned i = 0; i < elements; i++)
-        dst[i] = (is_signed ? br.get_signed(coeff_bits) : int(br.get(coeff_bits))) + offset;
+void read_uncoded_coeff(BitReader& br, IntP dst, uint32_t elements,
+                        int32_t coeff_bits, bool is_signed, int32_t offset) {
+    for (uint32_t i = 0; i < elements; i++)
+        dst[i] = (is_signed ? br.get_signed(coeff_bits) : int32_t(br.get(coeff_bits))) + offset;
 }
 
 } // namespace
 
-bool DstDecoder::init(int channels, unsigned dsd_rate) {
+bool DstDecoder::init(int32_t channels, uint32_t dsd_rate) {
     if (channels < 1 || channels > kDstMaxChannels)
         return ERR("unsupported channel count %d (DST allows up to %d)", channels, kDstMaxChannels);
 
@@ -73,12 +73,12 @@ bool DstDecoder::read_map(BitReader& br, Table& t, UIntP map) {
     t.elements = 1;
     map[0] = 0;
     if (!br.get1()) {
-        for (int ch = 1; ch < channels_; ch++) {
-            int bits = ilog2(t.elements) + 1;
+        for (int32_t ch = 1; ch < channels_; ch++) {
+            int32_t bits = ilog2(t.elements) + 1;
             map[ch] = br.get(bits);
             if (map[ch] == t.elements) {
                 t.elements++;
-                if (t.elements >= unsigned(kDstMaxElements))
+                if (t.elements >= uint32_t(kDstMaxElements))
                     return ERR("too many coding elements");
             } else if (map[ch] > t.elements) {
                 return ERR("invalid element map");
@@ -94,24 +94,24 @@ bool DstDecoder::read_map(BitReader& br, Table& t, UIntP map) {
 // either stored verbatim or predicted from its own previous entries with one of
 // three fixed predictors, the residual being Golomb coded.
 bool DstDecoder::read_table(BitReader& br, Table& t, CPredP pred,
-                            int length_bits, int coeff_bits, bool is_signed, int offset) {
-    for (unsigned i = 0; i < t.elements; i++) {
+                            int32_t length_bits, int32_t coeff_bits, bool is_signed, int32_t offset) {
+    for (uint32_t i = 0; i < t.elements; i++) {
         t.length[i] = br.get(length_bits) + 1;
         if (!br.get1()) {
             read_uncoded_coeff(br, t.coeff[i], t.length[i], coeff_bits, is_signed, offset);
         } else {
-            unsigned method = br.get(2);
+            uint32_t method = br.get(2);
             if (method == 3)
                 return ERR("invalid table prediction method");
 
             read_uncoded_coeff(br, t.coeff[i], method + 1, coeff_bits, is_signed, offset);
 
-            unsigned lsb_size = br.get(3);
-            for (unsigned j = method + 1; j < t.length[i]; j++) {
-                int x = 0;
-                for (unsigned k = 0; k < method + 1; k++)
-                    x += pred[method][k] * int(unsigned(t.coeff[i][j - k - 1]));
-                int c = get_sr_golomb_dst(br, lsb_size);
+            uint32_t lsb_size = br.get(3);
+            for (uint32_t j = method + 1; j < t.length[i]; j++) {
+                int32_t x = 0;
+                for (uint32_t k = 0; k < method + 1; k++)
+                    x += pred[method][k] * int32_t(uint32_t(t.coeff[i][j - k - 1]));
+                int32_t c = get_sr_golomb_dst(br, lsb_size);
                 if (x >= 0)
                     c -= (x + 4) / 8;
                 else
@@ -127,15 +127,15 @@ bool DstDecoder::read_table(BitReader& br, Table& t, CPredP pred,
 
 // Precomputes the FIR prediction as 16 lookups of 8 taps each: entry [j][k] is
 // the contribution of the 8 history bits in byte j when those bits are `k`.
-bool build_filter_lut(CIntP coeff, unsigned length, LutP lut) {
-    for (int j = 0; j < 16; j++) {
-        int total = int(length) - j * 8;
+bool build_filter_lut(CIntP coeff, uint32_t length, LutP lut) {
+    for (int32_t j = 0; j < 16; j++) {
+        int32_t total = int32_t(length) - j * 8;
         if (total < 0) total = 0;
         if (total > 8) total = 8;
 
-        for (int k = 0; k < 256; k++) {
+        for (int32_t k = 0; k < 256; k++) {
             int64_t v = 0;
-            for (int l = 0; l < total; l++)
+            for (int32_t l = 0; l < total; l++)
                 v += (((k >> l) & 1) * 2 - 1) * coeff[j * 8 + l];
             if (int16_t(v) != v)
                 return ERR("filter coefficient overflow");
@@ -146,15 +146,15 @@ bool build_filter_lut(CIntP coeff, unsigned length, LutP lut) {
 }
 
 bool DstDecoder::build_filter() {
-    for (unsigned i = 0; i < fsets_.elements; i++)
+    for (uint32_t i = 0; i < fsets_.elements; i++)
         if (!build_filter_lut(fsets_.coeff[i], fsets_.length[i], filter_[i]))
             return false;
     return true;
 }
 
 bool DstDecoder::decode(CByteP data, size_t size, size_t capacity, ByteP out) {
-    const int channels = channels_;
-    const unsigned samples = frame_bits_;
+    const int32_t channels = channels_;
+    const uint32_t samples = frame_bits_;
     const size_t out_size = frame_bytes();
 
     if (size <= 1)
@@ -187,10 +187,10 @@ bool DstDecoder::decode(CByteP data, size_t size, size_t capacity, ByteP out) {
         return ERR("unsupported frame: not end of channel segmentation");
 
     // Mapping (10.7 - 10.9).
-    unsigned map_ch_to_felem[kDstMaxChannels];
-    unsigned map_ch_to_pelem[kDstMaxChannels];
+    uint32_t map_ch_to_felem[kDstMaxChannels];
+    uint32_t map_ch_to_pelem[kDstMaxChannels];
 
-    unsigned same_map = br.get1();
+    uint32_t same_map = br.get1();
 
     if (!read_map(br, fsets_, map_ch_to_felem))
         return false;
@@ -204,8 +204,8 @@ bool DstDecoder::decode(CByteP data, size_t size, size_t capacity, ByteP out) {
     }
 
     // Half probability (10.10).
-    unsigned half_prob[kDstMaxChannels];
-    for (int ch = 0; ch < channels; ch++)
+    uint32_t half_prob[kDstMaxChannels];
+    for (int32_t ch = 0; ch < channels; ch++)
         half_prob[ch] = br.get1();
 
     if (!read_table(br, fsets_, kFsetsPredCoeff, 7, 9, true, 0))
@@ -223,15 +223,15 @@ bool DstDecoder::decode(CByteP data, size_t size, size_t capacity, ByteP out) {
 
     memset(status_, 0xAA, sizeof(status_));
 
-    unsigned dst_x_bit;
+    uint32_t dst_x_bit;
     ac_get(&ac_, br, prob_dst_x_bit(fsets_.coeff[0][0]), &dst_x_bit);
 
-    for (unsigned i = 0; i < samples; i++) {
-        const ByteP out_byte = out + size_t(i >> 3) * unsigned(channels);
-        const unsigned out_shift = 7 - (i & 7);
+    for (uint32_t i = 0; i < samples; i++) {
+        const ByteP out_byte = out + size_t(i >> 3) * uint32_t(channels);
+        const uint32_t out_shift = 7 - (i & 7);
 
-        for (int ch = 0; ch < channels; ch++) {
-            const unsigned felem = map_ch_to_felem[ch];
+        for (int32_t ch = 0; ch < channels; ch++) {
+            const uint32_t felem = map_ch_to_felem[ch];
             const CLutP filter = filter_[felem];
             const WordP status = status_[ch];
 
@@ -243,19 +243,19 @@ bool DstDecoder::decode(CByteP data, size_t size, size_t capacity, ByteP out) {
                                             F(12) + F(13) + F(14) + F(15));
 #undef F
 
-            unsigned prob;
+            uint32_t prob;
             if (!half_prob[ch] || i >= fsets_.length[felem]) {
-                unsigned pelem = map_ch_to_pelem[ch];
-                unsigned index = unsigned(predict < 0 ? -predict : predict) >> 3;
-                unsigned last = probs_.length[pelem] - 1;
-                prob = unsigned(probs_.coeff[pelem][index < last ? index : last]);
+                uint32_t pelem = map_ch_to_pelem[ch];
+                uint32_t index = uint32_t(predict < 0 ? -predict : predict) >> 3;
+                uint32_t last = probs_.length[pelem] - 1;
+                prob = uint32_t(probs_.coeff[pelem][index < last ? index : last]);
             } else {
                 prob = 128;
             }
 
-            unsigned residual;
+            uint32_t residual;
             ac_get(&ac_, br, prob, &residual);
-            unsigned v = ((predict >> 15) ^ int(residual)) & 1;
+            uint32_t v = ((predict >> 15) ^ int32_t(residual)) & 1;
             out_byte[ch] |= uint8_t(v << out_shift);
 
             status[1] = (hi << 1) | (lo >> 63);

@@ -15,23 +15,23 @@ class DsfReader {
 public:
     bool open(const char* path);
 
-    int channels() const { return channels_; }
-    unsigned dsd_rate() const { return dsd_rate_; }
-    unsigned channel_type() const { return channel_type_; }
+    int32_t channels() const { return channels_; }
+    uint32_t dsd_rate() const { return dsd_rate_; }
+    uint32_t channel_type() const { return channel_type_; }
     uint64_t samples_per_channel() const { return samples_; }
 
     // Fills `bytes_per_channel` bytes for each channel, planar, MSB-first.  The
     // final frame is padded with DSD silence.  Returns 1, 0 at end, -1 on error.
-    int read_planar(ByteP dst, size_t bytes_per_channel);
+    int32_t read_planar(ByteP dst, size_t bytes_per_channel);
 
 private:
     bool refill();
 
     File f_;
-    int channels_ = 0;
-    unsigned dsd_rate_ = 0;
-    unsigned channel_type_ = 0;
-    unsigned block_size_ = 0;     // per channel
+    int32_t channels_ = 0;
+    uint32_t dsd_rate_ = 0;
+    uint32_t channel_type_ = 0;
+    uint32_t block_size_ = 0;     // per channel
     bool lsb_first_ = true;
     bool truncated_ = false;
     uint64_t samples_ = 0;        // DSD bits per channel

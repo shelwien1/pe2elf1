@@ -21,15 +21,15 @@ public:
         overflow_ = false;
     }
 
-    void put_bit(unsigned v) {
+    void put_bit(uint32_t v) {
         if (pos_ >= capacity_bits_) { overflow_ = true; return; }
         if (v) buf_[pos_ >> 3] |= uint8_t(0x80u >> (pos_ & 7));
         pos_++;
     }
 
     // Writes the low n bits of v, most significant first.
-    void put(unsigned v, int n) {
-        for (int i = n - 1; i >= 0; i--)
+    void put(uint32_t v, int32_t n) {
+        for (int32_t i = n - 1; i >= 0; i--)
             put_bit((v >> i) & 1);
     }
 
@@ -38,9 +38,9 @@ public:
     void carry() {
         if (!pos_) { overflow_ = true; return; }
         size_t i = (pos_ - 1) >> 3;
-        unsigned add = 0x80u >> ((pos_ - 1) & 7);
+        uint32_t add = 0x80u >> ((pos_ - 1) & 7);
         for (;;) {
-            unsigned v = buf_[i] + add;
+            uint32_t v = buf_[i] + add;
             buf_[i] = uint8_t(v);
             if (v < 256) return;
             if (i == 0) { overflow_ = true; return; }  // carry out of the buffer
