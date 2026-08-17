@@ -22,8 +22,11 @@
 
 #include <math.h>
 
-#if defined(__x86_64__) || defined(__i386__)
-#define DFF2DSF_X86 1
+// The vector kernels are selected by the target the compiler was pointed at:
+// build with -mavx2 (or any -march that implies it) and they are used, build
+// without and the scalar versions are.  Both produce identical output, so
+// compiling it both ways and comparing is how the vector code is tested.
+#ifdef __AVX2__
 #include <immintrin.h>
 #endif
 
@@ -193,8 +196,10 @@ inline unsigned quantise_prob(uint64_t n, uint64_t errors) {
 // per-sample "set this bit if that weight bit is set" costs four unpredictable
 // branches and four read-modify-writes per sample, which measured far more than
 // the correlation it feeds.  Returns the sum of the weights.
-uint64_t pack_planes_scalar(const uint8_t* code, const uint8_t* weight_of,
-                            uint64_t* planes, unsigned nwords) {
+#ifndef __AVX2__
+
+uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
+                     uint64_t* planes, unsigned nwords) {
     uint64_t total = 0;
 
     for (unsigned j = 0; j < nwords; j++) {
@@ -215,19 +220,13 @@ uint64_t pack_planes_scalar(const uint8_t* code, const uint8_t* weight_of,
     return total;
 }
 
-#ifdef DFF2DSF_X86
-
-bool have_avx2() {
-    static const bool yes = __builtin_cpu_supports("avx2");
-    return yes;
-}
+#else
 
 // Same packing with AVX2.  A byte comparison turns "weight bit p is set" into a
 // per-byte mask, and movemask collects 32 of those into a word in one go; the
 // bytes are reversed first because the bit numbering here runs the other way.
-__attribute__((target("avx2")))
-uint64_t pack_planes_avx2(const uint8_t* code, const uint8_t* weight_of,
-                          uint64_t* planes, unsigned nwords) {
+uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
+                     uint64_t* planes, unsigned nwords) {
     const __m256i reverse_lane = _mm256_setr_epi8(
         15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
         15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
@@ -266,16 +265,7 @@ uint64_t pack_planes_avx2(const uint8_t* code, const uint8_t* weight_of,
     return lanes[0] + lanes[1] + lanes[2] + lanes[3];
 }
 
-#endif // DFF2DSF_X86
-
-inline uint64_t pack_planes(const uint8_t* code, const uint8_t* weight_of,
-                            uint64_t* planes, unsigned nwords) {
-#ifdef DFF2DSF_X86
-    if (have_avx2())
-        return pack_planes_avx2(code, weight_of, planes, nwords);
-#endif
-    return pack_planes_scalar(code, weight_of, planes, nwords);
-}
+#endif // __AVX2__
 
 // ------------------------------------------------------- correlation kernel
 //
@@ -293,8 +283,10 @@ inline uint64_t lagged_word(const uint64_t* w, unsigned j, unsigned wshift, unsi
     return bshift ? ((d[-1] << (64 - bshift)) | (d[0] >> bshift)) : d[0];
 }
 
-uint64_t disagreement_scalar(const uint64_t* w, const uint64_t* planes,
-                             unsigned nwords, unsigned k) {
+#ifndef __AVX2__
+
+uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
+                      unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
     uint64_t sum[kGradientPlanes] = {};
@@ -311,11 +303,10 @@ uint64_t disagreement_scalar(const uint64_t* w, const uint64_t* planes,
     return total;
 }
 
-#ifdef DFF2DSF_X86
+#else
 
-__attribute__((target("avx2")))
-uint64_t disagreement_avx2(const uint64_t* w, const uint64_t* planes,
-                           unsigned nwords, unsigned k) {
+uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
+                      unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
 
@@ -372,11 +363,13 @@ uint64_t disagreement_avx2(const uint64_t* w, const uint64_t* planes,
     return total;
 }
 
-#endif // DFF2DSF_X86
+#endif // __AVX2__
 
 
 // Plain popcount of the same shifted XOR, for the autocorrelation.
-uint64_t differing_bits_scalar(const uint64_t* w, unsigned nwords, unsigned k) {
+#ifndef __AVX2__
+
+uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
     uint64_t diff = 0;
@@ -385,10 +378,9 @@ uint64_t differing_bits_scalar(const uint64_t* w, unsigned nwords, unsigned k) {
     return diff;
 }
 
-#ifdef DFF2DSF_X86
+#else
 
-__attribute__((target("avx2")))
-uint64_t differing_bits_avx2(const uint64_t* w, unsigned nwords, unsigned k) {
+uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
     const unsigned wshift = k >> 6;
     const unsigned bshift = k & 63;
     const __m256i nibble_count = _mm256_setr_epi8(
@@ -425,24 +417,7 @@ uint64_t differing_bits_avx2(const uint64_t* w, unsigned nwords, unsigned k) {
     return diff;
 }
 
-#endif // DFF2DSF_X86
-
-inline uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
-#ifdef DFF2DSF_X86
-    if (have_avx2())
-        return differing_bits_avx2(w, nwords, k);
-#endif
-    return differing_bits_scalar(w, nwords, k);
-}
-
-inline uint64_t disagreement(const uint64_t* w, const uint64_t* planes,
-                             unsigned nwords, unsigned k) {
-#ifdef DFF2DSF_X86
-    if (have_avx2())
-        return disagreement_avx2(w, planes, nwords, k);
-#endif
-    return disagreement_scalar(w, planes, nwords, k);
-}
+#endif // __AVX2__
 
 } // namespace
 
@@ -554,7 +529,7 @@ void DstEncoder::quantise_filter() {
 
 
 
-#ifdef DFF2DSF_X86
+#ifdef __AVX2__
 
 // The prediction, vectorised.
 //
@@ -570,7 +545,6 @@ void DstEncoder::quantise_filter() {
 // split into its high and low nibble and the two halves are accumulated
 // separately: four taps of a nibble reach at most +-64, and recombining them as
 // 16 * high + low reproduces the sum exactly.
-__attribute__((target("avx2")))
 void DstEncoder::analyse_channel_avx2(int ch) {
     const uint64_t* w = bits_ + size_t(ch) * words_per_channel_ + kHistoryWords;
     uint8_t* code = code_ + size_t(ch) * frame_bits_;
@@ -660,17 +634,13 @@ void DstEncoder::analyse_channel_avx2(int ch) {
     }
 }
 
-#endif // DFF2DSF_X86
+#endif // __AVX2__
 
 // Runs the decoder's prediction over one channel, recording for every sample
 // which probability bin it falls in and whether the prediction was wrong.
+#ifndef __AVX2__
+
 void DstEncoder::analyse_channel(int ch) {
-#ifdef DFF2DSF_X86
-    if (have_avx2()) {
-        analyse_channel_avx2(ch);
-        return;
-    }
-#endif
     const uint64_t* w = bits_ + size_t(ch) * words_per_channel_;
     uint8_t* code = code_ + size_t(ch) * frame_bits_;
     const int16_t (*filter)[256] = filter_;
@@ -699,6 +669,8 @@ void DstEncoder::analyse_channel(int ch) {
     }
 }
 
+#endif // !__AVX2__
+
 // Runs the current filter over every channel and gathers the per-bin statistics
 // the probability table is built from.  The samples whose history is still the
 // fixed 0xAA pattern rather than signal are coded at even odds, so they are left
@@ -708,17 +680,20 @@ bool DstEncoder::analyse_frame() {
     // coefficients four at a time instead.  It is still worth knowing that the
     // decoder can build its own copy, but that cannot fail here: eight taps of
     // at most 256 sum to 2048, well inside the 16 bits it has to fit.
-#ifdef DFF2DSF_X86
-    if (!have_avx2())
+#ifndef __AVX2__
+    if (!build_filter_lut(coeff_, kDstFilterLength, filter_))
+        return false;
 #endif
-        if (!build_filter_lut(coeff_, kDstFilterLength, filter_))
-            return false;
 
     memset(bin_count_, 0, sizeof(bin_count_));
     memset(bin_errors_, 0, sizeof(bin_errors_));
 
     for (int ch = 0; ch < channels_; ch++) {
+#ifdef __AVX2__
+        analyse_channel_avx2(ch);
+#else
         analyse_channel(ch);
+#endif
         const uint8_t* code = code_ + size_t(ch) * frame_bits_;
         for (unsigned i = kDstFilterLength; i < frame_bits_; i++) {
             const unsigned bin = code[i] & 0x7F;

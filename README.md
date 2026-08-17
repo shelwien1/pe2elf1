@@ -15,10 +15,15 @@ usage: dff2dsf d input.dff output.dsf
 
 ```
 make                     # or, with no build system at all:
-c++ -O2 -std=c++20 src/dff2dsf.cpp -o dff2dsf
+c++ -O2 -std=c++20 -mavx2 src/dff2dsf.cpp -o dff2dsf
 
 make windows             # cross build with mingw-w64
 ```
+
+`-mavx2` (or any `-march` that implies it, such as `-march=native`) selects the
+vector kernels; without it the scalar ones are compiled and encoding is about
+four times slower. Nothing is chosen at run time, so nothing has to be detected
+and no compiler runtime library is involved.
 
 The whole program is a single translation unit: `src/dff2dsf.cpp` includes the
 `.hpp` files, which are the implementation, so there is nothing to link.
@@ -133,9 +138,9 @@ stops around 0.2% behind.
 
 Decoding the test file takes about 27 s on one core. Encoding is dominated by
 the twelve refinement passes over every frame, and three inner loops account for
-nearly all of it. Each has an AVX2 implementation, selected at run time through
-`__builtin_cpu_supports`, with the scalar version kept as the fallback; both
-produce byte-identical output, which is how the vector code is tested.
+nearly all of it. Each has an AVX2 implementation, chosen at compile time by
+whether the target has AVX2; both produce byte-identical output, which is how
+the vector code is tested - build it both ways and compare.
 
 | inner loop | scalar | AVX2 | how |
 |---|---|---|---|
@@ -145,7 +150,11 @@ produce byte-identical output, which is how the vector code is tested.
 | autocorrelation | 0.25 s | 0.08 s | same popcount kernel as the correlation |
 
 Times are for 400 frames. Together they take the test file from 14m17s to
-3m35s, a 4x speedup with the output byte-identical.
+3m35s, a 4x speedup with the output byte-identical. The same holds across
+targets: `-mavx2`, `-march=native` and a scalar build all produce the same
+bytes, and `-ffp-contract=off` in the default flags keeps that true by stopping
+the filter design arithmetic from contracting into FMAs on targets that have
+them.
 
 Two details made the vector code possible. The bitplane packing looked like it
 needed a bit transpose; reversing the bytes first turns it into exactly what

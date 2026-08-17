@@ -1,5 +1,11 @@
 CXX      ?= g++
-CXXFLAGS ?= -O2 -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra
+# -mavx2 selects the vector kernels; drop it (or raise it to -march=native) and
+# the scalar ones are compiled instead.  -ffp-contract=off keeps the filter
+# design arithmetic identical whatever the target: contracting a multiply and an
+# add into one FMA rounds differently, which could shift a quantised coefficient.
+# It costs nothing measurable, so it is on as insurance.
+CXXFLAGS ?= -O2 -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra \
+            -mavx2 -ffp-contract=off
 LDFLAGS  ?=
 LDLIBS   ?= -lm
 

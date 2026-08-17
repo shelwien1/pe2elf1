@@ -42,8 +42,11 @@ private:
     void design_filter(double* r);
     void quantise_filter();
     bool analyse_frame();
-    void analyse_channel(int ch);
+#ifdef __AVX2__
     void analyse_channel_avx2(int ch);
+#else
+    void analyse_channel(int ch);
+#endif
     double estimate_cost() const;
     unsigned trimmed_length() const;
     bool refine_filter();
