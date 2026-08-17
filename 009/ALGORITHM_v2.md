@@ -1838,8 +1838,8 @@ build is pinned to and not a set of switches. Changing one changes nothing.
 
 ## 13. How this document was checked
 
-Everything above was read out of the source. Six things were checked by running
-something rather than by reading it, and they are the six a careless reading
+Everything above was read out of the source. Eight things were checked by running
+something rather than by reading it, and they are the eight a careless reading
 would get wrong:
 
 - **the packed-row claim of §2.1** — read out of the `stride` field of
@@ -1863,13 +1863,26 @@ would get wrong:
   then confirmed by instrumenting `match_context` to record every signature it
   produced over all nineteen corpus images. No signature outside the fifteen
   occurred, which is what makes "the other 49 entries are never read" a
-  statement about the program rather than about the corpus.
+  statement about the program rather than about the corpus;
+- **the candidate bound of §8.6** — `decode_symbol_list` instrumented to record
+  the widest candidate array it ever fills, over every reference stream. 257,
+  against a declared capacity of 8193;
+- **the two counts in §9.2** — `seed_activity` instrumented over all nineteen
+  images: 18,224 calls, 1,212 of them reading a magnitude at or above 128. The
+  source comment said 3,216 and 70. Both were stale, by more than five- and
+  seventeen-fold, and neither had ever been checked.
 
-The three corrections above have a shape in common, and it is worth naming: each
-is a place where the *arithmetic* is unsigned or exact and the *prose* about it
-was written from what the expression looks like. `>>25` reads as a sign test.
-`2 * half` reads as a pair count. A strip that is 254 wide and seeded 254 wide
-reads as a strip that is used 254 wide. None of those survives being run.
+Two of the eight came out different from what was written down, and they differ
+in an instructive way. The last one drifted: it was true when measured and the
+corpus grew underneath it, and nothing failed, because the conclusion it supports
+— a sum compared against zero — does not depend on the size of the number. A
+figure that does not carry its own argument can rot silently.
+
+The other three were never true. Each is a place where the *arithmetic* is
+unsigned or exact and the *prose* was written from what the expression looks
+like: `>>25` reads as a sign test, `2 * half` reads as a pair count, a strip
+seeded 254 wide reads as a strip used 254 wide. None of those survives being
+run — which is the argument for running them.
 
 Two tools check this document, one in each direction.
 
