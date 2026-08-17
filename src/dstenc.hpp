@@ -34,24 +34,12 @@ namespace dff2dsf {
 
 namespace {
 
-// 128 bits of history precede every frame, and the decoder starts them at 0xAA.
-constexpr unsigned kHistoryBits = 128;
-constexpr unsigned kHistoryWords = kHistoryBits / 64;
-
 // Refinement schedule.  Each pass costs one run of the prediction over the
 // frame, and the cost keeps falling out to about a dozen; stopping as soon as a
 // pass fails to improve is not safe, because the cost dips and recovers.
 constexpr int kRefineIterations = 12;
 constexpr double kRefineStep = 0.35;
 constexpr double kRefineDecay = 0.7;
-
-// Bitplanes the per-sample gradient weight is quantised to.  Four levels of
-// resolution is enough to match an exact weighting, at a quarter of the cost.
-constexpr unsigned kGradientPlanes = 4;
-
-// The vectorised prediction reads a byte of history per four taps, the furthest
-// reaching back this far before the sample.
-constexpr unsigned kWindowLead = 128;
 
 // ------------------------------------------------------------ arithmetic coder
 //
@@ -425,37 +413,19 @@ uint64_t differing_bits(const uint64_t* w, unsigned nwords, unsigned k) {
 
 } // namespace
 
-DstEncoder::~DstEncoder() {
-    free(bits_);
-    free(code_);
-    free(filter_);
-    free(mask_);
-    free(window_);
-}
-
 bool DstEncoder::init(int channels, unsigned dsd_rate) {
     if (channels < 1 || channels > kDstMaxChannels)
         return ERR("unsupported channel count %d (DST allows up to %d)", channels, kDstMaxChannels);
-    if (dsd_rate > 512u * 44100u || dsd_rate % 44100u)
+    if (!dsd_rate || dsd_rate > kMaxDsdRate || dsd_rate % 44100u)
         return ERR("unsupported sample rate %u", dsd_rate);
 
-    frame_bits_ = 588u * (dsd_rate / 44100u);
+    frame_bits_ = frame_bits_for(dsd_rate);
     if (frame_bits_ & 63)
         return ERR("frame size of %u bits is not a whole number of 64 bit words", frame_bits_);
 
     channels_ = channels;
     words_per_channel_ = kHistoryWords + frame_bits_ / 64;
-    return alloc();
-}
-
-bool DstEncoder::alloc() {
-    bits_ = static_cast<uint64_t*>(xalloc(sizeof(uint64_t) * words_per_channel_ * unsigned(channels_)));
-    code_ = static_cast<uint8_t*>(xalloc(size_t(frame_bits_) * size_t(channels_)));
-    filter_ = static_cast<int16_t(*)[256]>(xalloc(sizeof(int16_t) * 16 * 256));
-    window_ = static_cast<uint8_t*>(xalloc(kWindowLead + frame_bits_ + 1));
-    mask_ = static_cast<uint64_t*>(xalloc(sizeof(uint64_t) * kGradientPlanes *
-                                          (frame_bits_ / 64) * unsigned(channels_)));
-    return bits_ && code_ && filter_ && mask_ && window_;
+    return true;
 }
 
 // r[k] = sum over channels of sum_i x[i] * x[i-k], with x = +-1 from the bits.

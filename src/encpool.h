@@ -20,6 +20,7 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <new>
 #include <thread>
 
 namespace dff2dsf {
@@ -54,15 +55,25 @@ private:
         int state = kEmpty;
     };
 
-    bool alloc(unsigned slots, size_t src_size, size_t out_size);
-    void free_slots();
-    void worker();
+    // The two allocations this program makes, and the only ones: an encoder per
+    // worker and a buffer pair per slot.  Both scale with --threads, which is a
+    // runtime choice by definition, so there is no maximum worth reserving - at
+    // the ceiling of 256 threads these would come to a gigabyte.  Everything
+    // within them is fixed size.
+    static constexpr size_t kSlotBytes = kMaxFrameBytes + kMaxDstFrameSize;
+
+    DstEncoder* encoders_ = nullptr;
+    uint8_t* buffers_ = nullptr;
+
+    bool alloc(unsigned slots);
+    void worker(unsigned index);
     void fill(DsfReader& reader);
     bool write_next(DffWriter& writer);   // false once finished or failed
 
-    Slot* slots_ = nullptr;
+    Slot slots_[kMaxThreads + 2];
     unsigned slot_count_ = 0;
-    size_t src_size_ = 0, out_capacity_ = 0, bytes_per_channel_ = 0;
+    unsigned threads_ = 0;
+    size_t bytes_per_channel_ = 0;
     int channels_ = 0;
     unsigned dsd_rate_ = 0;
 

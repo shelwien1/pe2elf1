@@ -10,29 +10,11 @@ namespace dff2dsf {
 
 namespace {
 
-// A single DSTF frame is at most one uncompressed frame plus its header; this
-// bound keeps a corrupt size field from triggering a huge allocation.
+// Sanity bound on the header chunks, whose sizes are only ever read to skip
+// past them: anything larger is a corrupt file rather than something to parse.
 constexpr uint64_t kMaxChunkPayload = 64u << 20;
 
-// Raw DSD is handed to the writer in chunks of roughly this size.
-constexpr size_t kDsdBlockBytes = 1u << 20;
-
 } // namespace
-
-DffReader::~DffReader() {
-    free(buf_);
-}
-
-bool DffReader::ensure_capacity(size_t n) {
-    if (n <= buf_capacity_) return true;
-    size_t want = buf_capacity_ ? buf_capacity_ : 65536;
-    while (want < n) want *= 2;
-    uint8_t* p = static_cast<uint8_t*>(realloc(buf_, want));
-    if (!p) return ERR("out of memory (%zu bytes)", want);
-    buf_ = p;
-    buf_capacity_ = want;
-    return true;
-}
 
 bool DffReader::read_chunk_header(uint8_t id[4], uint64_t* size) {
     uint8_t hdr[12];
@@ -211,7 +193,9 @@ int DffReader::next_dst_frame(const uint8_t** data, size_t* size, size_t* capaci
         cur_ = body + int64_t(chunk_size) + int64_t(chunk_size & 1);
 
         if (tag_is(id, "DSTF")) {
-            if (chunk_size < 1 || chunk_size > kMaxChunkPayload) {
+            // The frame has to fit the buffer, which is sized for the largest
+            // frame the format can produce; anything larger is corrupt.
+            if (chunk_size < 1 || chunk_size + kBitReaderPadding > sizeof(buf_)) {
                 ERR("implausible DSTF size %llu", (unsigned long long)chunk_size);
                 return -1;
             }
@@ -220,7 +204,6 @@ int DffReader::next_dst_frame(const uint8_t** data, size_t* size, size_t* capaci
                 return -1;
             }
             size_t n = size_t(chunk_size);
-            if (!ensure_capacity(n + kBitReaderPadding)) return -1;
             if (!f_.read(buf_, n)) return -1;
             memset(buf_ + n, 0, kBitReaderPadding);
             *data = buf_;
@@ -243,7 +226,6 @@ int DffReader::next_dsd_block(const uint8_t** data, size_t* size) {
     want -= want % size_t(channels_);
     if (int64_t(want) > body_end_ - cur_) want = size_t(body_end_ - cur_);
 
-    if (!ensure_capacity(want)) return -1;
     if (!f_.seek(cur_)) return -1;
     if (!f_.read(buf_, want)) return -1;
     cur_ += int64_t(want);

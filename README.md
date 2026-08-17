@@ -38,6 +38,38 @@ and no compiler runtime library is involved.
 The whole program is a single translation unit: `src/dff2dsf.cpp` includes the
 `.hpp` files, which are the implementation, so there is nothing to link.
 
+## Memory
+
+Every buffer is sized at build time for the largest stream the program accepts —
+DSD512, six channels, so a frame of 37632 bytes per channel — rather than for the
+stream in hand. Nothing is sized, grown or allocated at run time as a result:
+decoding and single threaded encoding allocate nothing whatsoever, not even
+inside stdio, since each `File` hands `setvbuf` its own buffer. That costs 9.5 MB
+of BSS against 56 KB of code, and at DSD64 most of it is never touched — peak RSS
+is 10.6 MB either direction.
+
+Two things resisted that. The `DSTI` index is 12 bytes per frame with no bound on
+the frame count, so it is not kept at all: `finish()` recovers it by walking the
+`DSTF` chunks it has just written, which is one 12 byte read per frame against
+pages still in cache, and reproduces the remembered index byte for byte over the
+test file's 19119 frames. And `--threads N` needs an encoder and a slot buffer
+per worker, which is a runtime choice by definition — those are the program's
+only two allocations, one block each, however many threads are asked for.
+
+Under Valgrind, counting every allocation the process makes including the C and
+C++ runtimes' own:
+
+| | allocations | peak heap | peak RSS |
+|---|---|---|---|
+| print usage | 1 | 72 KB | |
+| decode | 3 | 72 KB | 10.6 MB |
+| encode | 8 | 74 KB | 10.6 MB |
+| encode `--threads 4` | 18 | 15.8 MB | 18.1 MB |
+
+The first three are libstdc++'s startup pool and one `FILE` per open file; none
+of them are this program's. The threaded run adds its two blocks — four encoders
+and six slots, 15.1 MB of the 15.8 — and libstdc++'s per-thread bookkeeping.
+
 C++20, no dependencies. Built with `-fno-exceptions -fno-rtti`; no STL streams
 and no STL containers are used, only stdio and explicit allocation. The one
 place the standard library does the work is threading, which is `<thread>`,

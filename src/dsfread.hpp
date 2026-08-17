@@ -8,10 +8,6 @@
 
 namespace dff2dsf {
 
-DsfReader::~DsfReader() {
-    free(buf_);
-}
-
 bool DsfReader::open(const char* path) {
     if (!f_.open_read(path)) return false;
 
@@ -45,9 +41,12 @@ bool DsfReader::open(const char* path) {
 
     if (channels_ < 1 || channels_ > kDstMaxChannels)
         return ERR("unsupported channel count %d", channels_);
-    if (!block_size_ || block_size_ > (1u << 20))
-        return ERR("implausible DSF block size %u", block_size_);
-    if (!dsd_rate_) return ERR("missing DSF sample rate");
+    // The format fixes the block size at 4096 bytes per channel; a smaller one
+    // still works here, a larger one would not fit the staging buffer.
+    if (!block_size_ || block_size_ > kDsfBlockSize)
+        return ERR("unsupported DSF block size %u", block_size_);
+    if (!dsd_rate_ || dsd_rate_ > kMaxDsdRate || dsd_rate_ % 44100u)
+        return ERR("unsupported DSF sample rate %u", dsd_rate_);
 
     if (memcmp(hdr + 80, "data", 4))
         return ERR("malformed DSF: no data chunk");
@@ -81,23 +80,19 @@ bool DsfReader::refill() {
 
     if (avail_ + block_size_ > capacity_) return false;
 
-    uint8_t* block = static_cast<uint8_t*>(xalloc(block_size_));
-    if (!block) return false;
-
     // A truncated file still yields whatever whole samples it holds, so read
     // what is there and take the shortest channel as the usable length.
     size_t shortest = block_size_;
     for (int ch = 0; ch < channels_; ch++) {
-        size_t n = f_.read_some(block, block_size_);
+        size_t n = f_.read_some(block_, block_size_);
         if (n < shortest) shortest = n;
         uint8_t* d = buf_ + size_t(ch) * capacity_ + avail_;
         if (lsb_first_)
-            for (size_t i = 0; i < n; i++) d[i] = kReverse.v[block[i]];
+            for (size_t i = 0; i < n; i++) d[i] = kReverse.v[block_[i]];
         else
-            memcpy(d, block, n);
+            memcpy(d, block_, n);
         if (n < block_size_) memset(d + n, kDsdSilence, block_size_ - n);
     }
-    free(block);
 
     if (!shortest) return false;
     if (shortest < block_size_ && !truncated_) {
@@ -114,10 +109,13 @@ bool DsfReader::refill() {
 }
 
 int DsfReader::read_planar(uint8_t* dst, size_t bytes_per_channel) {
-    if (!buf_) {
+    if (!capacity_) {
+        if (bytes_per_channel > kMaxFrameBytesPerChannel) {
+            ERR("frame of %zu bytes per channel is larger than this build handles",
+                bytes_per_channel);
+            return -1;
+        }
         capacity_ = bytes_per_channel + block_size_;
-        buf_ = static_cast<uint8_t*>(xalloc(capacity_ * size_t(channels_)));
-        if (!buf_) return -1;
     } else if (bytes_per_channel + block_size_ > capacity_) {
         ERR("frame size changed mid-stream");
         return -1;

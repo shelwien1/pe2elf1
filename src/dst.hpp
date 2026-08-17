@@ -55,12 +55,11 @@ bool DstDecoder::init(int channels, unsigned dsd_rate) {
         return ERR("unsupported channel count %d (DST allows up to %d)", channels, kDstMaxChannels);
 
     // ISO/IEC 14496-3 only allows 64, 128 and 256 times 44100.  Be a little more
-    // permissive, but keep the bound that makes the frame size sane.
-    if (dsd_rate > 512u * 44100u || dsd_rate % 44100u)
+    // permissive, but keep the bound the working buffers are sized for.
+    if (!dsd_rate || dsd_rate > kMaxDsdRate || dsd_rate % 44100u)
         return ERR("unsupported sample rate %u", dsd_rate);
 
-    // 588 DSD bits per channel per 44.1kHz-relative unit, i.e. one frame is 1/75 s.
-    frame_bits_ = 588u * (dsd_rate / 44100u);
+    frame_bits_ = frame_bits_for(dsd_rate);
     if (frame_bits_ & 7)
         return ERR("frame size of %u bits is not a whole number of bytes", frame_bits_);
 

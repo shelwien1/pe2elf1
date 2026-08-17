@@ -130,6 +130,11 @@ inline void* xalloc(size_t n) {
 
 // ---------------------------------------------------------------- file access
 
+// Stdio buffer size.  Passing our own buffer to setvbuf rather than a null
+// pointer keeps the C library from allocating one, which is the only allocation
+// this program would otherwise make per file.
+constexpr size_t kFileBuffer = 1 << 20;
+
 class File {
 public:
     File() : f_(nullptr) {}
@@ -141,14 +146,14 @@ public:
     bool open_read(const char* path) {
         f_ = fopen(path, "rb");
         if (!f_) return ERR("cannot open '%s' for reading", path);
-        setvbuf(f_, nullptr, _IOFBF, 1 << 20);
+        setvbuf(f_, reinterpret_cast<char*>(buf_), _IOFBF, sizeof(buf_));
         return true;
     }
 
     bool open_write(const char* path) {
         f_ = fopen(path, "wb+");
         if (!f_) return ERR("cannot open '%s' for writing", path);
-        setvbuf(f_, nullptr, _IOFBF, 1 << 20);
+        setvbuf(f_, reinterpret_cast<char*>(buf_), _IOFBF, sizeof(buf_));
         return true;
     }
 
@@ -202,6 +207,7 @@ public:
 
 private:
     FILE* f_;
+    uint8_t buf_[kFileBuffer];   // the stream's buffer, ours rather than libc's
 };
 
 } // namespace dff2dsf

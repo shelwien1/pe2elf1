@@ -31,10 +31,6 @@ unsigned channel_type_for(int channels, const uint32_t* ids) {
 
 } // namespace
 
-DsfWriter::~DsfWriter() {
-    free(blocks_);
-}
-
 bool DsfWriter::open(const char* path, int channels, unsigned dsd_rate,
                      const uint32_t* channel_ids) {
     if (channels < 1 || channels > kDstMaxChannels)
@@ -53,9 +49,6 @@ bool DsfWriter::open(const char* path, int channels, unsigned dsd_rate,
     dsd_rate_ = dsd_rate;
     channel_type_ = channel_type_for(channels, ids_be);
     if (!channel_type_) return ERR("no DSF channel type for %d channels", channels);
-
-    blocks_ = static_cast<uint8_t*>(xalloc(size_t(channels) * kDsfBlockSize));
-    if (!blocks_) return false;
 
     if (!f_.open_write(path)) return false;
 

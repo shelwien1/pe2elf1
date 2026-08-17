@@ -127,11 +127,12 @@ void print_progress(uint64_t done, uint64_t total) {
 }
 
 bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
-    DstDecoder dec;
+    // One decoder and one frame buffer, both sized for the largest stream this
+    // build handles rather than for the one in hand, and both static: nothing
+    // here has to be allocated, and neither is small enough to want on a stack.
+    static DstDecoder dec;
+    static uint8_t frame[kMaxFrameBytes];
     if (!dec.init(reader.channels(), reader.dsd_rate())) return false;
-
-    uint8_t* frame = static_cast<uint8_t*>(xalloc(dec.frame_bytes()));
-    if (!frame) return false;
 
     const size_t bytes_per_channel = dec.frame_bits() / 8;
     uint64_t frames = 0, crcs = 0, crc_errors = 0;
@@ -179,7 +180,6 @@ bool decode_dst(DffReader& reader, DsfWriter& writer, uint64_t* frames_out) {
         fprintf(stderr, "crc: %llu frame(s) carried a DSTC CRC, %llu mismatched\n",
                 (unsigned long long)crcs, (unsigned long long)crc_errors);
 
-    free(frame);
     *frames_out = frames;
     return ok;
 }
@@ -202,7 +202,9 @@ bool decode_raw_dsd(DffReader& reader, DsfWriter& writer) {
 }
 
 bool decode_file(const char* in_path, const char* out_path) {
-    DffReader reader;
+    // Static for the same reason as the decoder above: the reader's chunk buffer
+    // and the writer's block are fixed size, and one of each exists.
+    static DffReader reader;
     if (!reader.open(in_path)) return false;
 
     const unsigned rate = reader.dsd_rate();
@@ -215,7 +217,7 @@ bool decode_file(const char* in_path, const char* out_path) {
         fprintf(stderr, "length: %u frames, %.2f s\n", reader.frame_count(),
                 double(reader.frame_count()) / (reader.frame_rate() ? reader.frame_rate() : 75));
 
-    DsfWriter writer;
+    static DsfWriter writer;
     if (!writer.open(out_path, channels, rate, reader.channel_ids())) return false;
 
     bool ok;
@@ -257,14 +259,15 @@ void print_encode_progress(void* ctx, uint64_t frames, uint64_t coded_bytes) {
 bool encode_serial(DsfReader& reader, DffWriter& writer, int channels, unsigned rate,
                    const EncodeProgress& prog, uint64_t* frames_out,
                    uint64_t* coded_out, uint64_t* uncoded_out) {
-    DstEncoder enc;
+    // The encoder is around 3 MB of working buffers, so it is static rather than
+    // automatic - a Windows thread gets a 1 MB stack by default - and the two
+    // frame buffers are sized for the largest stream this build handles.
+    static DstEncoder enc;
+    static uint8_t src[kMaxFrameBytes];
+    static uint8_t frame[kMaxDstFrameSize];
     if (!enc.init(channels, rate)) return false;
 
     const size_t bytes_per_channel = enc.frame_bytes_per_channel();
-    uint8_t* src = static_cast<uint8_t*>(xalloc(bytes_per_channel * size_t(channels)));
-    uint8_t* frame = static_cast<uint8_t*>(xalloc(enc.max_frame_size()));
-    if (!src || !frame) { free(src); free(frame); return false; }
-
     uint64_t frames = 0, coded_bytes = 0;
     bool ok = true;
 
@@ -282,8 +285,6 @@ bool encode_serial(DsfReader& reader, DffWriter& writer, int channels, unsigned 
         print_encode_progress(const_cast<EncodeProgress*>(&prog), frames, coded_bytes);
     }
 
-    free(src);
-    free(frame);
     *frames_out = frames;
     *coded_out = coded_bytes;
     *uncoded_out = enc.uncoded_frames();
@@ -292,19 +293,19 @@ bool encode_serial(DsfReader& reader, DffWriter& writer, int channels, unsigned 
 
 bool encode_file(const char* in_path, const char* out_path,
                  const DffWriteOptions& options, unsigned threads) {
-    DsfReader reader;
+    static DsfReader reader;
     if (!reader.open(in_path)) return false;
 
     const int channels = reader.channels();
     const unsigned rate = reader.dsd_rate();
 
-    // The frame geometry is fixed by the sample rate, and both encode paths need
-    // it before they start.
-    DstEncoder geometry;
-    if (!geometry.init(channels, rate)) return false;
-    const size_t bytes_per_channel = geometry.frame_bytes_per_channel();
+    // The frame geometry follows from the sample rate alone, so both encode
+    // paths can have it without building an encoder to ask.
+    const unsigned frame_bits = frame_bits_for(rate);
+    if (!frame_bits) return ERR("unsupported sample rate %u", rate);
+    const size_t bytes_per_channel = frame_bits / 8;
     const uint64_t total_frames =
-        (reader.samples_per_channel() + geometry.frame_bits() - 1) / geometry.frame_bits();
+        (reader.samples_per_channel() + frame_bits - 1) / frame_bits;
 
     fprintf(stderr, "input : %s\n", in_path);
     fprintf(stderr, "format: %u Hz DSD (DSD%u), %d channel(s)\n", rate, rate / 44100, channels);
@@ -313,7 +314,9 @@ bool encode_file(const char* in_path, const char* out_path,
     if (threads > 1)
         fprintf(stderr, "threads: %u\n", threads);
 
-    DffWriter writer;
+    // Static like the rest: a File carries its own megabyte of stdio buffer, and
+    // a Windows thread starts with a megabyte of stack in total.
+    static DffWriter writer;
     if (!writer.open(out_path, channels, rate, options)) return false;
 
     const EncodeProgress prog = { total_frames, bytes_per_channel * size_t(channels) };

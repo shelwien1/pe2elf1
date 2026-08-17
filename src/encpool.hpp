@@ -13,30 +13,21 @@ unsigned default_thread_count() {
 }
 
 EncodePool::~EncodePool() {
-    free_slots();
+    for (unsigned i = 0; i < threads_; i++) encoders_[i].~DstEncoder();
+    free(encoders_);
+    free(buffers_);
 }
 
-void EncodePool::free_slots() {
-    for (unsigned i = 0; i < slot_count_; i++) {
-        free(slots_[i].src);
-        free(slots_[i].out);
-    }
-    free(slots_);
-    slots_ = nullptr;
-    slot_count_ = 0;
-}
-
-bool EncodePool::alloc(unsigned slots, size_t src_size, size_t out_size) {
-    slots_ = static_cast<Slot*>(xalloc(sizeof(Slot) * slots));
-    if (!slots_) return false;
-    for (unsigned i = 0; i < slots; i++) slots_[i] = Slot();
-    slot_count_ = slots;
+// One block for every slot's buffer pair, carved up here.
+bool EncodePool::alloc(unsigned slots) {
+    buffers_ = static_cast<uint8_t*>(xalloc(kSlotBytes * slots));
+    if (!buffers_) return false;
 
     for (unsigned i = 0; i < slots; i++) {
-        slots_[i].src = static_cast<uint8_t*>(xalloc(src_size));
-        slots_[i].out = static_cast<uint8_t*>(xalloc(out_size));
-        if (!slots_[i].src || !slots_[i].out) return false;
+        slots_[i].src = buffers_ + kSlotBytes * i;
+        slots_[i].out = slots_[i].src + kMaxFrameBytes;
     }
+    slot_count_ = slots;
     return true;
 }
 
@@ -105,8 +96,8 @@ bool EncodePool::write_next(DffWriter& writer) {
     return ok;
 }
 
-void EncodePool::worker() {
-    DstEncoder enc;
+void EncodePool::worker(unsigned index) {
+    DstEncoder& enc = encoders_[index];
     if (!enc.init(channels_, dsd_rate_)) {
         {
             std::lock_guard<std::mutex> lock(mu_);
@@ -137,7 +128,7 @@ void EncodePool::worker() {
         }
         if (!s) break;
 
-        const bool ok = enc.encode(s->src, s->out, out_capacity_, &s->out_size);
+        const bool ok = enc.encode(s->src, s->out, kMaxDstFrameSize, &s->out_size);
 
         {
             std::lock_guard<std::mutex> lock(mu_);
@@ -159,24 +150,26 @@ bool EncodePool::run(DsfReader& reader, DffWriter& writer, unsigned threads,
 
     channels_ = channels;
     dsd_rate_ = dsd_rate;
-
-    // One encoder is built here purely to learn the frame geometry; the workers
-    // build their own, since all of its working buffers are written per frame.
-    DstEncoder probe;
-    if (!probe.init(channels, dsd_rate)) return false;
-    bytes_per_channel_ = probe.frame_bytes_per_channel();
-    src_size_ = bytes_per_channel_ * size_t(channels);
-    out_capacity_ = probe.max_frame_size();
+    bytes_per_channel_ = frame_bits_for(dsd_rate) / 8;
+    if (!bytes_per_channel_) return ERR("unsupported sample rate %u", dsd_rate);
 
     // Two spare slots: one being read into and one being written out while every
     // worker has a frame in hand.
-    if (!alloc(threads + 2, src_size_, out_capacity_)) return false;
+    if (!alloc(threads + 2)) return false;
+
+    // One encoder per worker.  They are three megabytes each of fixed size
+    // buffers, so they are built here in one block rather than on the workers'
+    // stacks, which a Windows thread starts with one megabyte of.
+    encoders_ = static_cast<DstEncoder*>(xalloc(sizeof(DstEncoder) * threads));
+    if (!encoders_) return false;
+    for (; threads_ < threads; threads_++)
+        new (&encoders_[threads_]) DstEncoder();
 
     // A default constructed std::thread is empty and costs a pointer, so the
     // ceiling can just live on the stack rather than being allocated.
     std::thread workers[kMaxThreads];
     for (unsigned i = 0; i < threads; i++)
-        workers[i] = std::thread(&EncodePool::worker, this);
+        workers[i] = std::thread(&EncodePool::worker, this, i);
 
     for (;;) {
         fill(reader);

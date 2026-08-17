@@ -135,20 +135,6 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate,
     return true;
 }
 
-bool DffWriter::record_frame(int64_t payload_pos, size_t size) {
-    if (frames_ == index_capacity_) {
-        uint64_t want = index_capacity_ ? index_capacity_ * 2 : 4096;
-        IndexEntry* p = static_cast<IndexEntry*>(
-            realloc(index_, sizeof(IndexEntry) * size_t(want)));
-        if (!p) return ERR("out of memory growing the frame index");
-        index_ = p;
-        index_capacity_ = want;
-    }
-    index_[frames_].offset = uint64_t(payload_pos);
-    index_[frames_].size = uint32_t(size);
-    return true;
-}
-
 bool DffWriter::write_frame(const uint8_t* data, size_t size,
                             const uint8_t* dsd, size_t dsd_bytes_per_channel) {
     uint8_t hdr[12];
@@ -156,7 +142,6 @@ bool DffWriter::write_frame(const uint8_t* data, size_t size,
     put_tag(p, "DSTF");
     put_be64(p, size);
 
-    const int64_t chunk_pos = f_.tell();
     if (!f_.write(hdr, sizeof(hdr))) return false;
     if (!f_.write(data, size)) return false;
     if (size & 1) {
@@ -176,40 +161,66 @@ bool DffWriter::write_frame(const uint8_t* data, size_t size,
         if (!f_.write(crc, sizeof(crc))) return false;
     }
 
-    // The index points at the frame data, not at its chunk header.  With no
-    // index to write there is nothing to remember, so nothing is kept.
-    if (opt_.dsti && !record_frame(chunk_pos + 12, size)) return false;
     frames_++;
     return true;
 }
 
-// DSTI: one entry per frame, so a player can seek without walking every chunk.
-bool DffWriter::write_index() {
+// DSTI: one entry per frame - where its data starts and how long it is - so a
+// player can seek without walking every chunk.
+//
+// The entries are recovered by walking the DST chunk just written rather than
+// remembered as the frames go by.  A remembered index is the one thing here
+// whose size the format does not bound: 12 bytes a frame is 229 KB for the test
+// file but grows without limit with duration, and it would be the only
+// allocation left in a single threaded encode.  Walking costs one 12 byte read
+// per frame, sequential and against pages that were written moments ago.
+bool DffWriter::write_index(int64_t dst_end) {
     if (!opt_.dsti || !frames_) return true;
 
     uint8_t hdr[12];
     uint8_t* p = hdr;
     put_tag(p, "DSTI");
     put_be64(p, frames_ * 12);
-    if (!f_.write(hdr, sizeof(hdr))) return false;
+    if (!f_.seek(dst_end) || !f_.write(hdr, sizeof(hdr))) return false;
 
-    // Buffered rather than one write per entry, but not all at once either.
-    constexpr uint64_t kBatch = 4096;
-    uint8_t* buf = static_cast<uint8_t*>(xalloc(size_t(kBatch) * 12));
-    if (!buf) return false;
+    constexpr unsigned kBatch = 256;         // entries buffered between writes
+    uint8_t buf[kBatch * 12];
+    unsigned n = 0;
+    uint64_t seen = 0;
+    int64_t pos = dst_body_pos_;             // the walk, over FRTE, DSTF, DSTC
+    int64_t out = dst_end + 12;              // where the next entries go
 
-    bool ok = true;
-    for (uint64_t i = 0; i < frames_ && ok; i += kBatch) {
-        const uint64_t n = (frames_ - i < kBatch) ? frames_ - i : kBatch;
-        uint8_t* q = buf;
-        for (uint64_t j = 0; j < n; j++) {
-            put_be64(q, index_[i + j].offset);
-            put_be32(q, index_[i + j].size);
+    while (pos + 12 <= dst_end) {
+        uint8_t ck[12];
+        if (f_.tell() != pos && !f_.seek(pos)) return false;
+        if (!f_.read(ck, sizeof(ck))) return false;
+        const uint64_t size = rb64(ck + 4);
+
+        if (tag_is(ck, "DSTF")) {
+            uint8_t* q = buf + size_t(n) * 12;
+            put_be64(q, uint64_t(pos) + 12);
+            put_be32(q, uint32_t(size));
+            seen++;
+            if (++n == kBatch) {
+                if (!f_.seek(out) || !f_.write(buf, sizeof(buf))) return false;
+                out += int64_t(sizeof(buf));
+                n = 0;
+            }
         }
-        ok = f_.write(buf, size_t(n) * 12);
+        pos += 12 + int64_t(size) + int64_t(size & 1);
     }
-    free(buf);
-    return ok;
+
+    if (n) {
+        if (!f_.seek(out) || !f_.write(buf, size_t(n) * 12)) return false;
+        out += int64_t(n) * 12;
+    }
+
+    if (seen != frames_)
+        return ERR("frame index found %llu frames, expected %llu",
+                   (unsigned long long)seen, (unsigned long long)frames_);
+
+    // The comment chunk is written next, and follows the index.
+    return f_.seek(out);
 }
 
 // COMT: a single file-history comment naming the encoder, timestamped now.
@@ -248,7 +259,7 @@ bool DffWriter::finish() {
     // DST chunk but inside the form.
     const int64_t dst_end = f_.tell();
 
-    if (!write_index()) return false;
+    if (!write_index(dst_end)) return false;
     if (!write_comment()) return false;
 
     const int64_t end = f_.tell();
@@ -267,10 +278,6 @@ bool DffWriter::finish() {
 
     f_.close();
     return true;
-}
-
-DffWriter::~DffWriter() {
-    free(index_);
 }
 
 } // namespace dff2dsf

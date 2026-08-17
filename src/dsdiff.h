@@ -8,13 +8,22 @@
 
 #include "common.h"
 #include "dst.h"
+#include "bits.h"
 
 namespace dff2dsf {
 
+// Raw DSD is handed to the writer in chunks of roughly this size.
+constexpr size_t kDsdBlockBytes = 1u << 20;
+
+// The read buffer holds either a DST frame with the bit reader's padding, or a
+// block of raw DSD, whichever is larger - so it is a fixed array rather than
+// something grown to fit as chunks arrive.
+constexpr size_t kDffReadBuffer =
+    kDsdBlockBytes > kMaxDstFrameSize + kBitReaderPadding
+        ? kDsdBlockBytes : kMaxDstFrameSize + kBitReaderPadding;
+
 class DffReader {
 public:
-    ~DffReader();
-
     bool open(const char* path);
 
     unsigned dsd_rate() const { return dsd_rate_; }
@@ -47,7 +56,6 @@ private:
     bool parse_frte(uint64_t size);
     void read_frame_crc();
     bool read_chunk_header(uint8_t id[4], uint64_t* size);
-    bool ensure_capacity(size_t n);
 
     File f_;
     int64_t file_size_ = 0;
@@ -67,8 +75,7 @@ private:
     uint16_t frame_rate_ = 0;
     uint32_t channel_ids_[kDstMaxChannels] = {};
 
-    uint8_t* buf_ = nullptr;
-    size_t buf_capacity_ = 0;
+    uint8_t buf_[kDffReadBuffer];
 };
 
 } // namespace dff2dsf

@@ -7,13 +7,12 @@
 
 #include "common.h"
 #include "dst.h"
+#include "dsf.h"
 
 namespace dff2dsf {
 
 class DsfReader {
 public:
-    ~DsfReader();
-
     bool open(const char* path);
 
     int channels() const { return channels_; }
@@ -39,7 +38,12 @@ private:
     uint64_t remaining_ = 0;      // audio bytes per channel still unread
     int64_t data_end_ = 0;
 
-    uint8_t* buf_ = nullptr;      // planar, stride capacity_
+    // Planar staging, stride capacity_: one frame plus one block per channel, so
+    // a frame can always be served whole.  Sized here for the largest frame and
+    // the format's block size, which makes it a fixed array; capacity_ is the
+    // stride actually in use.
+    uint8_t buf_[(size_t(kMaxFrameBytesPerChannel) + kDsfBlockSize) * kDstMaxChannels];
+    uint8_t block_[kDsfBlockSize];   // one channel's block, as read from the file
     size_t capacity_ = 0;
     size_t avail_ = 0;
     size_t head_ = 0;

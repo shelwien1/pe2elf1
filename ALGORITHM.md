@@ -538,6 +538,7 @@ produces the same bytes — which is checked on every run of `tests/verify.sh`.
 | refinement | 12 steps × 2 starts | step 0.35, decay 0.7 |
 | gradient planes | 4 | weight quantisation for the popcount kernel |
 | probability scale | 256.5 | rather than 256, for the coder's interval rounding |
+| largest stream | DSD512, 6 channels | what every buffer is sized for, so none is sized at run time |
 
 ## Where this lives in the source
 

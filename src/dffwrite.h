@@ -25,8 +25,6 @@ struct DffWriteOptions {
 
 class DffWriter {
 public:
-    ~DffWriter();
-
     bool open(const char* path, int channels, unsigned dsd_rate,
               const DffWriteOptions& options = DffWriteOptions());
 
@@ -42,8 +40,7 @@ public:
     uint64_t frames() const { return frames_; }
 
 private:
-    bool record_frame(int64_t payload_pos, size_t size);
-    bool write_index();
+    bool write_index(int64_t dst_end);
     bool write_comment();
 
     DffWriteOptions opt_;
@@ -54,14 +51,6 @@ private:
     int64_t dst_body_pos_ = 0;
     int64_t frte_count_pos_ = 0;
     uint64_t frames_ = 0;
-
-    // One DSTI entry per frame: where its data starts and how long it is.
-    struct IndexEntry {
-        uint64_t offset;
-        uint32_t size;
-    };
-    IndexEntry* index_ = nullptr;
-    uint64_t index_capacity_ = 0;
 };
 
 } // namespace dff2dsf

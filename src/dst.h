@@ -16,6 +16,23 @@ namespace dff2dsf {
 constexpr int kDstMaxChannels = 6;
 constexpr int kDstMaxElements = 2 * kDstMaxChannels;
 
+// The largest stream this program handles, and with it the size of every working
+// buffer.  ISO/IEC 14496-3 specifies DST for 64, 128 and 256 times 44100; 512 is
+// accepted as well, since .dsf files at that rate exist and the frame arithmetic
+// is unchanged.  Everything derived from this is a compile-time constant, which
+// is what lets the buffers be plain arrays rather than allocations: a frame is
+// 1/75 s, so 588 DSD bits per channel per 44.1 kHz of rate.
+constexpr unsigned kMaxDsdRate = 512u * 44100u;
+constexpr unsigned kMaxFrameBits = 588u * (kMaxDsdRate / 44100u);        // 301056
+constexpr unsigned kMaxFrameBytesPerChannel = kMaxFrameBits / 8;         // 37632
+constexpr size_t kMaxFrameBytes = size_t(kMaxFrameBytesPerChannel) * kDstMaxChannels;
+
+// DSD bits per channel in one frame at `dsd_rate`.
+inline unsigned frame_bits_for(unsigned dsd_rate) { return 588u * (dsd_rate / 44100u); }
+
+// The uncompressed fallback frame: a header byte and the interleaved DSD.
+constexpr size_t kMaxDstFrameSize = 1 + kMaxFrameBytes;
+
 // State of the binary arithmetic decoder (10.11); an implementation detail of
 // DstDecoder, at namespace scope only so the decoding helpers can take it.
 struct DstArithCoder {
