@@ -1049,8 +1049,7 @@ struct ModelBlock {
     uint32_t row_w;
     uint8_t *out_at, *expand_buf;
     int32_t g0, done, lo1;
-    int32_t lo, w2, w4, w2n, lvl_n, bucket, x2, n_pix, q2, n_pix2;
-    PixRec* lists, * t;
+    int32_t lo, w2, w4, w2n, lvl_n, n_pix, q2, n_pix2;
       uint8_t *dst_base = &dst[-(depth<8)];
     rc_begin_decode();
     expand_alphabet();
@@ -1145,11 +1144,11 @@ struct ModelBlock {
     uint32_t nbytes = (jj+7)>>3;
     if( height>0 ) {
       out_at = dst_buf;
-      bucket = 0;
+      int32_t bucket = 0;
       while( 1 ) {
         start_row();
-        lists = row_cur[6];
-        t = row_cur[7];
+        PixRec* lists = row_cur[6];
+        PixRec* t = row_cur[7];
         ++row_cur[5];
         ++lists;
         ++row_cur[8];
@@ -1162,27 +1161,27 @@ struct ModelBlock {
         grad[2] = 0;
         row_w = width;
         grad[1] = match_seed(t, 5);
-        if( row_w<=0 )
-          break;
-        x2 = 0;
-        do {
-          int32_t y = decode_pixel(x2);
-          init_tables();
-          row_w = width;
-          x2 += y;
-        } while( (uint32_t)x2<width );
+        // `row_w` is `width`, which nothing in this loop writes, so the test
+        // below is the same answer on every row.  The recovery said it with a
+        // `break` out of the loop, the row write repeated underneath it, and a
+        // `goto` back *into* the loop at the counter -- three statements for
+        // "skip the pixels and go round again".
+        if( row_w>0 ) {
+          int32_t x2 = 0;
+          do {
+            int32_t y = decode_pixel(x2);
+            init_tables();
+            row_w = width;
+            x2 += y;
+          } while( (uint32_t)x2<width );
+        }
         out_at = write_row(out_at, nbytes, row_w);
-  next_list:
-        bucket = bucket+1;
         // `height` is `int32_t` and this side is already `uint32_t`, so C
         // converts the right operand too.  Written where it happens.
-        if( (uint32_t)bucket>=(uint32_t)height )
-          goto list_done;
+        if( (uint32_t)++bucket>=(uint32_t)height )
+          break;
       }
-      out_at = write_row(out_at, nbytes, row_w);
-      goto next_list;
     }
-  list_done:
     rc_end_decode();
     int32_t bpp_raw = depth_raw;
     if( (uint32_t)bpp_raw!=depth ) {

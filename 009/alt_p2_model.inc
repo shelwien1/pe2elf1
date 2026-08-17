@@ -285,17 +285,19 @@ code_residual:
           fold_sel = fold[(uint8_t)-resid_in];
         step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
         P2Freq *frec_step = &freq[step_v];
+        // The record after the step's and the record before it, each bumped
+        // when the level leaves room for it.  This was one `if` with an empty
+        // `else`, a `goto` out of its middle to a label below the second bump,
+        // and the second bump reached by falling past that label -- three ways
+        // of saying two independent conditions.
         if( ctx15<15 ) {
-          P2Freq *frec2 = &frec_step[1];
-          bin = frec2;
-          p2_freq_add(frec2, fold_sel, 4);
-          if( ctx15<=0 )
-            goto counters_done;
-        } else {
+          bin = &frec_step[1];
+          p2_freq_add(bin, fold_sel, 4);
         }
-        bin = &frec_step[-1];
-        p2_freq_add(bin, fold_sel, 4);
-counters_done:
+        if( ctx15>0 ) {
+          bin = &frec_step[-1];
+          p2_freq_add(bin, fold_sel, 4);
+        }
         if( a4 ) {
           int32_t n2_half = (a4-1)>>1;
           int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
