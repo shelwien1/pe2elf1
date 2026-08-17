@@ -114,7 +114,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   PlaneDesc saved[4];
   uint32_t plane_cost[4];
   uint8_t* tile_buf;
-  int32_t plane_i, pi, flag8, best_flags;
+  int32_t plane_i, pi, best_flags;
   int32_t bits_a;
   int32_t tile_h, y0, best_cost, pred, cand, nplanes_b, pl_k, bits, bits_f13;
   int32_t tile_w = img->width;
@@ -201,31 +201,31 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
           best_flags = 0;
       }
       int32_t bits_f5 = probe_keep(plane_i, try_p1);
-      if( bits_f5<best_cost+(best_cost>>5)||hard ) {
+      // The second predictor is only worth a trial when the first came close
+      // to the incumbent, and the reference descriptors are tried for every
+      // plane but the first -- two independent conditions.  The recovery
+      // nested them and then jumped *into* the inner arm from the outer
+      // `else`, with a second label under both to rejoin.
+      if( bits_f5<best_cost+(best_cost>>5)||hard )
         probe_keep(plane_i, try_p2);
-        if( pi ) {
-          {
-try_flag8:
-            probe_keep(plane_i, try_refs);
-          }
-          bits_f13 = probe_keep(plane_i, try_refs_p1);
-          pred = best_flags&desc_predictor;
-          // `bits_f13` was also kept in `rows[0]` for this one comparison,
-          // which is the value the line above it already holds.
-          if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
-            probe_keep(plane_i, try_refs_p2);
-            if( won )
-              pred = pred_p2;
-          }
-          goto keep_flag8;
-        }
+      if( pi ) {
+        probe_keep(plane_i, try_refs);
+        bits_f13 = probe_keep(plane_i, try_refs_p1);
         pred = best_flags&desc_predictor;
+        // `bits_f13` was also kept in `rows[0]` for this one comparison,
+        // which is the value the line above it already holds.
+        if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
+          probe_keep(plane_i, try_refs_p2);
+          if( won )
+            pred = pred_p2;
+        }
       } else {
-        if( pi )
-          goto try_flag8;
-        pred = (uint8_t)best_flags&desc_predictor;
+        // The two arms this replaces spelled it `best_flags & 3` and
+        // `(uint8_t)best_flags & 3`, which is one value: the field is the low
+        // two bits.
+        pred = best_flags&desc_predictor;
       }
-keep_flag8: { flag8 = (uint8_t)best_flags&desc_has_refs; }
+      const int32_t flag8 = (uint8_t)best_flags&desc_has_refs;
       best_bits += best_cost;
       // `pred` is read for the p2 count before the next line rewrites it, so
       // the count is taken first.

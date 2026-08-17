@@ -288,7 +288,6 @@ struct SymList {
   void add_weight(int32_t want, uint32_t add) {
     uint32_t count;
     bool full;
-    SymEntry *head;
     int32_t recycled;
     SymEntry* list = ent;
     uint32_t n_live = live;
@@ -302,9 +301,10 @@ struct SymList {
       }
       p->cnt += add;
       since_rescale += add;
-      head = ent;
-      if( p==head ) {
-  placed:
+      // `head` was `ent` read back at three points across a walk that does not
+      // move the list, and the walk is a move-to-front: the entry just bumped
+      // swaps forward while the one in front of it counts less.
+      if( p==ent ) {
         count = p->cnt;
       } else {
         uint16_t s = p->sym;
@@ -312,8 +312,7 @@ struct SymList {
         SymEntry *q = p-1;
         *p = *q;
         q->set(s, c);
-        head = ent;
-        if( q==head ) {
+        if( q==ent ) {
           count = q->cnt;
         } else {
           while( 1 ) {
@@ -325,10 +324,14 @@ struct SymList {
             uint8_t c2 = q->cnt;
             *q = *p;
             p->set(s2, c2);
-            head = ent;
             --q;
-            if( p==head )
-              goto placed;
+            // `--q` has just made `q` the `p` above, so the count the head
+            // holds is `q`'s.  The recovery jumped to the `p == ent` arm to
+            // read it, which is where the label was.
+            if( p==ent ) {
+              count = q->cnt;
+              break;
+            }
           }
         }
       }
