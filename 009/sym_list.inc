@@ -287,18 +287,20 @@ struct SymList {
 
   void add_weight(int32_t want, uint32_t add) {
     uint32_t count;
-    bool full;
     int32_t recycled;
     SymEntry* list = ent;
     uint32_t n_live = live;
     SymEntry *p = list;
+    // Find `want` among the live entries.  Running out of them is what "not in
+    // the list" means, and an empty list is that same answer reached without a
+    // step -- which is why the recovered walk jumped out of itself into the
+    // empty-list arm's block rather than falling anywhere.
     uint32_t left = n_live;
-    if( n_live ) {
-      while( p->sym!=want ) {
-        ++p;
-        if( !--left )
-          goto rescaled;
-      }
+    while( left&&p->sym!=want ) {
+      ++p;
+      --left;
+    }
+    if( left ) {
       p->cnt += add;
       since_rescale += add;
       // `head` was `ent` read back at three points across a walk that does not
@@ -337,32 +339,32 @@ struct SymList {
       }
       rescale(count);
       return;
+    }
+    // Not in the list, so it joins it -- over the least-counted entry when the
+    // list is already `n` long, which is what the entry the walk left behind
+    // is.  `full` was assigned the same comparison twice, once before the
+    // length test and once inside it, with nothing between that moves either
+    // side.
+    const bool full = n_live==n;
+    if( n_live>=n&&add<=1 )
+      return;
+    if( full ) {
+      live = --n_live;
+      recycled = list[n_live].cnt;
     } else {
-  rescaled:
-      full = n_live==n;
-      if( n_live>=n ) {
-        if( add<=1 )
-          return;
-        full = n_live==n;
-      }
-      if( full ) {
-        live = --n_live;
-        recycled = list[n_live].cnt;
-      } else {
-        recycled = 1;
-      }
-      list += n_live;
-      live = n_live+1;
-      tot = recycled+tot+1;
-      list->cnt = 2;
-      list->sym = want;
-      since_rescale += 4;
-      if( list!=ent ) {
-        uint16_t s3 = list->sym;
-        uint8_t c3 = list->cnt;
-        *list = list[-1];
-        list[-1].set(s3, c3);
-      }
+      recycled = 1;
+    }
+    list += n_live;
+    live = n_live+1;
+    tot = recycled+tot+1;
+    list->cnt = 2;
+    list->sym = want;
+    since_rescale += 4;
+    if( list!=ent ) {
+      uint16_t s3 = list->sym;
+      uint8_t c3 = list->cnt;
+      *list = list[-1];
+      list[-1].set(s3, c3);
     }
   }
   void init(int32_t n_syms, int32_t dense) {
