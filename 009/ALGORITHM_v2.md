@@ -1360,20 +1360,29 @@ ctx[0] = Σ ctx_w[k].w[sel_k]  +  16·quiet  +  8·(ctx[3 + ctx[2]] == 0)  +  ac
 ```
 
 `ctx[3]` and `ctx[4]` are a **second** activity measure, separate from the one
-above and kept per column parity. `seed_activity` builds them at the start of a
-row — sixteen `mag` fields from two rows up and four rows up, plus two from the
-current row — and `record_sample` then slides each along by one add and three
-subtracts per sample, flipping `ctx[2]` so the two parities alternate. The whole
-pair is read in exactly one place, the `== 0` above: all that survives of it is
-one bit, "has this column parity been completely flat".
+above and kept per column parity. `seed_activity` builds both at the start of a
+row, each from ten `mag` fields — four from two rows up, four from four rows up,
+and two from the current row, all at that parity's stride — and `record_sample`
+then slides each along by one add and three subtracts per sample, flipping
+`ctx[2]` so the two parities alternate. The whole pair is read in exactly one
+place, the `== 0` above: all that survives of twenty fields is one bit, "has this
+column parity been completely flat".
 
 That is worth knowing because it settles a question the source cannot. Two of
 the three coders read those `mag` bytes as `int8_t` and one as `uint8_t`, so a
 magnitude of 128 or more gives sums 256 apart — and it does not matter, because a
 sum is only ever tested against zero and both readings are zero together.
-Instrumented over the corpus: the generic coder runs `seed_activity` 3,216 times
-and 70 of those rows carry a magnitude at or above 128. The casts stay as the
-binary has them.
+Measured over the corpus: the generic coder runs `seed_activity` **18,224** times
+and **1,212** of those calls read at least one `mag` at or above 128, so the
+difference is exercised heavily and still cannot reach the output. The casts stay
+as the binary has them.
+
+(`alt_p1_block.inc` gave those as 3,216 and 70, which were stale by more than
+five- and seventeen-fold. Re-measured for this document by counting calls and
+their operands, and corrected in the source in the same commit. The conclusion
+never depended on the size of either number — a sum compared against zero is
+settled by any count above zero — which is exactly why nothing noticed them
+drifting.)
 
 so `counters[]` has 32 · 3⁹ = **629856** entries. The low five bits are *not*
 just the activity level: bits 0–2 are `act_lvl` (0…7), bit 3 is a small state

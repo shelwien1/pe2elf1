@@ -117,10 +117,18 @@ struct AltP1Block {
   // It is answered, and the answer is that the difference is exercised and
   // still does not show.  `mag` is `abs32(val - pred)` of two bytes, so it
   // reaches 255 and the two readings then differ by 256; instrumented over the
-  // corpus, the generic coder runs this 3,216 times and 70 of those rows carry
-  // a magnitude at or above 128.  Dropping the casts moves no stream even so,
-  // because these two sums are read in exactly one place --
+  // corpus, the generic coder runs this **18,224** times and **1,212** of those
+  // calls read at least one `mag` at or above 128.  Dropping the casts moves no
+  // stream even so, because these two sums are read in exactly one place --
   // `ctx[3 + ctx[2]] == 0` -- and are only ever tested against zero.
+  //
+  // Those two numbers said 3,216 and 70 for as long as the sentence existed,
+  // and both were stale by more than 5x.  A measurement written into a comment
+  // is a claim with a date on it and nothing here checks this one, which is the
+  // same defect `pairshare.py` was built for one directory over; re-measured by
+  // counting calls and operands over all nineteen images.  The conclusion is
+  // unchanged and was never close -- the sums are compared against zero, so any
+  // count above zero settles it identically.
   //
   // So the casts stay as the binary has them and the parameter says which
   // coder is asking, rather than one of the three being quietly changed to
