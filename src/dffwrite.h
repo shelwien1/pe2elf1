@@ -68,20 +68,20 @@ const char kCreatingMachine[] = "dff2dsf DST encoder";
 
 class DffWriter {
 public:
-    bool open(const char* path, int32_t channels, uint32_t dsd_rate,
-              const DffWriteOptions& options = DffWriteOptions()) {
+    bool begin(coro3_pin* out, int32_t channels, uint32_t dsd_rate,
+               const DffWriteOptions& options = DffWriteOptions()) {
         if (channels < 1 || channels > kDstMaxChannels)
             return ERR("unsupported channel count %d", channels);
         opt_ = options;
         channels_ = channels;
-        if (!f_.open_write(path)) return false;
+        f_.attach(out);
 
         uint8_t hdr[256];
         ByteP p = hdr;
 
         put_tag(p, "FRM8");
         frm8_size_pos_ = p - hdr;
-        put_be64(p, 0);                       // patched in finish()
+        put_be64(p, 0);                       // patched in patch()
         put_tag(p, "DSD ");
 
         put_tag(p, "FVER");
@@ -136,12 +136,12 @@ public:
 
         put_tag(p, "DST ");
         dst_size_pos_ = p - hdr;
-        put_be64(p, 0);                       // patched in finish()
+        put_be64(p, 0);                       // patched in patch()
 
         put_tag(p, "FRTE");
         put_be64(p, 6);
         frte_count_pos_ = p - hdr;
-        put_be32(p, 0);                       // patched in finish()
+        put_be32(p, 0);                       // patched in patch()
         put_be16(p, 75);                      // DST frames are always 1/75 s
 
         if (!f_.write(hdr, size_t(p - hdr))) return false;
@@ -182,36 +182,43 @@ public:
         return true;
     }
 
-    // Writes the trailing chunks, patches the sizes and the frame count, closes.
+    // The last frame has gone out, so the stream's work is over: the index and
+    // the comment come after the sound data, and the index has to read the
+    // frames back, neither of which a stream can do.
     bool finish() {
-        // The sound data ends here; the index and comment follow it, outside the
-        // DST chunk but inside the form.
-        const int64_t dst_end = f_.tell();
+        dst_end_ = f_.tell();
+        return true;
+    }
 
-        if (!write_index(dst_end)) return false;
-        if (!write_comment()) return false;
+    // The trailing chunks and the three fields that were written before their
+    // values were known, on the file the driver has just finished writing.
+    bool patch(FILE* g) {
+        if (!write_index(g)) return false;
+        if (!write_comment(g)) return false;
 
-        const int64_t end = f_.tell();
+        const int64_t end = file_tell(g);
 
         uint8_t v[8];
         ByteP p;
 
         p = v; put_be64(p, uint64_t(end - 12));
-        if (!f_.seek(frm8_size_pos_) || !f_.write(v, 8)) return false;
+        if (!patch_at(g, frm8_size_pos_, v, 8)) return false;
 
-        p = v; put_be64(p, uint64_t(dst_end - dst_body_pos_));
-        if (!f_.seek(dst_size_pos_) || !f_.write(v, 8)) return false;
+        p = v; put_be64(p, uint64_t(dst_end_ - dst_body_pos_));
+        if (!patch_at(g, dst_size_pos_, v, 8)) return false;
 
         p = v; put_be32(p, uint32_t(frames_));
-        if (!f_.seek(frte_count_pos_) || !f_.write(v, 4)) return false;
-
-        f_.close();
-        return true;
+        return patch_at(g, frte_count_pos_, v, 4);
     }
 
     uint64_t frames() const { return frames_; }
 
 private:
+    static bool patch_at(FILE* g, int64_t pos, const uint8_t* v, size_t n) {
+        if (file_seek(g, pos, SEEK_SET) != 0) return ERR("seek failed");
+        if (fwrite(v, 1, n, g) != n) return ERR("write failed");
+        return true;
+    }
     // DSTI: one entry per frame - where its data starts and how long it is - so a
     // player can seek without walking every chunk.
     //
@@ -221,14 +228,15 @@ private:
     // file but grows without limit with duration, and it would be the only
     // allocation left in a single threaded encode.  Walking costs one 12 byte read
     // per frame, sequential and against pages that were written moments ago.
-    bool write_index(int64_t dst_end) {
+    bool write_index(FILE* g) {
         if (!opt_.dsti || !frames_) return true;
+        const int64_t dst_end = dst_end_;
 
         uint8_t hdr[12];
         ByteP p = hdr;
         put_tag(p, "DSTI");
         put_be64(p, frames_ * 12);
-        if (!f_.seek(dst_end) || !f_.write(hdr, sizeof(hdr))) return false;
+        if (!seek_to(g, dst_end) || !write_at(g, hdr, sizeof(hdr))) return false;
 
         constexpr uint32_t kBatch = 256;         // entries buffered between writes
         uint8_t buf[kBatch * 12];
@@ -239,8 +247,8 @@ private:
 
         while (pos + 12 <= dst_end) {
             uint8_t ck[12];
-            if (f_.tell() != pos && !f_.seek(pos)) return false;
-            if (!f_.read(ck, sizeof(ck))) return false;
+            if (file_tell(g) != pos && !seek_to(g, pos)) return false;
+            if (fread(ck, 1, sizeof(ck), g) != sizeof(ck)) return ERR("short read");
             const uint64_t size = rb64(ck + 4);
 
             if (tag_is(ck, "DSTF")) {
@@ -249,7 +257,7 @@ private:
                 put_be32(q, uint32_t(size));
                 seen++;
                 if (++n == kBatch) {
-                    if (!f_.seek(out) || !f_.write(buf, sizeof(buf))) return false;
+                    if (!seek_to(g, out) || !write_at(g, buf, sizeof(buf))) return false;
                     out += int64_t(sizeof(buf));
                     n = 0;
                 }
@@ -258,7 +266,7 @@ private:
         }
 
         if (n) {
-            if (!f_.seek(out) || !f_.write(buf, size_t(n) * 12)) return false;
+            if (!seek_to(g, out) || !write_at(g, buf, size_t(n) * 12)) return false;
             out += int64_t(n) * 12;
         }
 
@@ -267,12 +275,13 @@ private:
                        seen, frames_);
 
         // The comment chunk is written next, and follows the index.
-        return f_.seek(out);
+        return seek_to(g, out);
     }
 
     // COMT: a single file-history comment naming the encoder, timestamped now.
-    bool write_comment() {
+    bool write_comment(FILE* g) {
         if (!opt_.comt) return true;
+        if (!opt_.dsti && !seek_to(g, dst_end_)) return false;
 
         const uint32_t text_len = uint32_t(sizeof(kCreatingMachine) - 1);
         const uint32_t padded = text_len + (text_len & 1);
@@ -298,12 +307,23 @@ private:
         p += text_len;
         if (text_len & 1) *p++ = 0;
 
-        return f_.write(buf, size_t(p - buf));
+        return write_at(g, buf, size_t(p - buf));
+    }
+
+    static bool seek_to(FILE* g, int64_t pos) {
+        if (file_seek(g, pos, SEEK_SET) != 0) return ERR("seek failed");
+        return true;
+    }
+
+    static bool write_at(FILE* g, const uint8_t* v, size_t n) {
+        if (fwrite(v, 1, n, g) != n) return ERR("write failed");
+        return true;
     }
 
     DffWriteOptions opt_;
-    File f_;
+    Stream f_;
     int32_t channels_ = 0;
+    int64_t dst_end_ = 0;      // where the sound data stopped
     int64_t frm8_size_pos_ = 0;
     int64_t dst_size_pos_ = 0;
     int64_t dst_body_pos_ = 0;

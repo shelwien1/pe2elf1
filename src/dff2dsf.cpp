@@ -36,6 +36,12 @@
 #include <new>
 #include <thread>
 
+// Lib3, the coroutine library the file I/O runs through: the Coroutine with its
+// pins, and the driver that reads and writes 64 KB at a time around it.
+#include "Lib3/common.inc"
+#include "Lib3/coro3b.inc"
+#include "Lib3/coro_fp.inc"
+
 // One header per module, each depending on the ones above it: every class
 // carries its own implementation, so there is nothing else to include.
 #include "common.h"
@@ -235,11 +241,16 @@ bool decode_raw_dsd(DffReader& reader, DsfWriter& writer) {
     return true;
 }
 
-bool decode_file(const char* in_path, const char* out_path) {
-    // Static for the same reason as the decoder above: the reader's chunk buffer
-    // and the writer's block are fixed size, and one of each exists.
-    static DffReader reader;
-    if (!reader.open(in_path)) return false;
+// The reader's chunk buffer and the writer's block are fixed size and there is
+// one of each, so they live here rather than on the coroutine's stack - which is
+// copied on every yield, and is the reason nothing large may be automatic.
+DffReader g_dff_in;
+DsfWriter g_dsf_out;
+
+bool decode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path) {
+    DffReader& reader = g_dff_in;
+    DsfWriter& writer = g_dsf_out;
+    if (!reader.begin(inp)) return false;
 
     const uint32_t rate = reader.dsd_rate();
     const int32_t channels = reader.channels();
@@ -251,8 +262,7 @@ bool decode_file(const char* in_path, const char* out_path) {
         fprintf(stderr, "length: %u frames, %.2f s\n", reader.frame_count(),
                 double(reader.frame_count()) / (reader.frame_rate() ? reader.frame_rate() : 75));
 
-    static DsfWriter writer;
-    if (!writer.open(out_path, channels, rate, reader.channel_ids())) return false;
+    if (!writer.begin(out, channels, rate, reader.channel_ids())) return false;
 
     bool ok;
     uint64_t frames = 0;
@@ -268,7 +278,6 @@ bool decode_file(const char* in_path, const char* out_path) {
     if (reader.is_dst())
         fprintf(stderr, "dst payload: %" PRIu64 " bytes in %" PRIu64 " frames\n",
                 reader.dst_payload(), frames);
-    fprintf(stderr, "output: %s\n", out_path);
     return true;
 }
 
@@ -325,10 +334,16 @@ bool encode_serial(DsfReader& reader, DffWriter& writer, int32_t channels, uint3
     return ok;
 }
 
-bool encode_file(const char* in_path, const char* out_path,
-                 const DffWriteOptions& options, uint32_t threads) {
-    static DsfReader reader;
-    if (!reader.open(in_path)) return false;
+DsfReader g_dsf_in;
+DffWriter g_dff_out;
+EncodePool g_pool;      // static for the same reason, and because its workers
+                        // outlive the yields that suspend the calling thread
+
+bool encode_stream(coro3_pin* inp, coro3_pin* out, const char* in_path,
+                   const DffWriteOptions& options, uint32_t threads) {
+    DsfReader& reader = g_dsf_in;
+    DffWriter& writer = g_dff_out;
+    if (!reader.begin(inp)) return false;
 
     const int32_t channels = reader.channels();
     const uint32_t rate = reader.dsd_rate();
@@ -348,22 +363,18 @@ bool encode_file(const char* in_path, const char* out_path,
     if (threads > 1)
         fprintf(stderr, "threads: %u\n", threads);
 
-    // Static like the rest: a File carries its own megabyte of stdio buffer, and
-    // a Windows thread starts with a megabyte of stack in total.
-    static DffWriter writer;
-    if (!writer.open(out_path, channels, rate, options)) return false;
+    if (!writer.begin(out, channels, rate, options)) return false;
 
     const EncodeProgress prog = { total_frames, bytes_per_channel * size_t(channels) };
     uint64_t frames = 0, coded_bytes = 0, uncoded = 0;
     bool ok;
 
     if (threads > 1) {
-        EncodePool pool;
-        ok = pool.run(reader, writer, threads, channels, rate,
-                      print_encode_progress, const_cast<EncodeProgress*>(&prog));
-        frames = pool.frames();
-        coded_bytes = pool.coded_bytes();
-        uncoded = pool.uncoded_frames();
+        ok = g_pool.run(reader, writer, threads, channels, rate,
+                        print_encode_progress, const_cast<EncodeProgress*>(&prog));
+        frames = g_pool.frames();
+        coded_bytes = g_pool.coded_bytes();
+        uncoded = g_pool.uncoded_frames();
     } else {
         ok = encode_serial(reader, writer, channels, rate, prog,
                            &frames, &coded_bytes, &uncoded);
@@ -378,8 +389,78 @@ bool encode_file(const char* in_path, const char* out_path,
     if (uncoded)
         fprintf(stderr, "dff2dsf: %" PRIu64 " frame(s) did not compress and were stored raw\n",
                 uncoded);
-    fprintf(stderr, "output: %s\n", out_path);
     return true;
+}
+
+// ------------------------------------------------------------------ coroutines
+//
+// Each direction is a coroutine: it runs the conversion as straight-line code
+// and pulls or pushes bytes through the two pins, and Lib3's driver does the
+// fread and fwrite around it.  A pin that runs dry or fills up yields, which
+// suspends the whole call stack - parser, codec, frame loop and all - until the
+// driver has refilled or flushed, and resumes it where it stopped.
+//
+// That stack is saved and restored by copying it, so nothing on the way down to
+// a get() or a put() may be large: every buffer in this program is static or a
+// member for exactly that reason, and the deepest yield here copies a few
+// hundred bytes.
+struct DecodeCoro : Coroutine {
+    const char* in_path = nullptr;
+    bool ok = false;
+
+    void do_process( void ) {
+        ok = decode_stream(&pin[0], &pin[1], in_path);
+        yield(this, 0);
+    }
+};
+
+struct EncodeCoro : Coroutine {
+    const char* in_path = nullptr;
+    DffWriteOptions options;
+    uint32_t threads = 1;
+    bool ok = false;
+
+    void do_process( void ) {
+        ok = encode_stream(&pin[0], &pin[1], in_path, options, threads);
+        yield(this, 0);
+    }
+};
+
+// The driver carries the two 64 KB buffers it reads and writes through, so
+// these are static as well.
+CoroFileProc<DecodeCoro> g_decode;
+CoroFileProc<EncodeCoro> g_encode;
+
+// Runs one direction: open the files, let the coroutine stream the conversion
+// through them, then let the writer patch the header fields whose values were
+// only known at the end.
+bool run_conversion(const char* in_path, const char* out_path, bool decoding,
+                    const DffWriteOptions& options, uint32_t threads) {
+    FILE* f = fopen(in_path, "rb");
+    if (!f) return ERR("cannot open '%s' for reading", in_path);
+
+    // "wb+" rather than "wb": writing the frame index means reading the frames
+    // back, once the coroutine has finished with the file.
+    FILE* g = fopen(out_path, "wb+");
+    if (!g) { fclose(f); return ERR("cannot open '%s' for writing", out_path); }
+
+    bool ok;
+    if (decoding) {
+        g_decode.in_path = in_path;
+        g_decode.processfile(f, g);
+        ok = g_decode.ok && g_dsf_out.patch(g);
+    } else {
+        g_encode.in_path = in_path;
+        g_encode.options = options;
+        g_encode.threads = threads;
+        g_encode.processfile(f, g);
+        ok = g_encode.ok && g_dff_out.patch(g);
+    }
+
+    fclose(f);
+    if (fclose(g) != 0 && ok) return ERR("cannot write '%s'", out_path);
+    if (ok) fprintf(stderr, "output: %s\n", out_path);
+    return ok;
 }
 
 } // namespace
@@ -434,7 +515,6 @@ int main(int argc, char** argv) {   // the one signature C++ fixes
     if (decoding && any_option)
         fprintf(stderr, "dff2dsf: note: those options only apply to 'c'\n");
 
-    const bool ok = decoding ? decode_file(arg[1], arg[2])
-                             : encode_file(arg[1], arg[2], options, threads);
+    const bool ok = run_conversion(arg[1], arg[2], decoding, options, threads);
     return ok ? 0 : 1;
 }

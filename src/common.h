@@ -153,40 +153,29 @@ inline void* xalloc(size_t n) {
 
 // ---------------------------------------------------------------- file access
 
-// Stdio buffer size.  Passing our own buffer to setvbuf rather than a null
-// pointer keeps the C library from allocating one, which is the only allocation
-// this program would otherwise make per file.
-constexpr size_t kFileBuffer = 1 << 20;
-
-class File {
+// ---------------------------------------------------------------- streams
+//
+// All the byte traffic goes through Lib3's coroutine: the driver in
+// Lib3/coro_fp.inc reads the input file into a 64 KB buffer and writes the
+// output one out, and the conversion runs as a coroutine that pulls and pushes
+// bytes through the two pins.  When a pin runs dry or fills up it yields, which
+// suspends the whole call stack - parser, codec and all - and returns to the
+// driver for a refill or a flush.
+//
+// The traffic is sequential in both directions, which is what a stream can do.
+// The two places that must go back and patch a header once its contents are
+// known - a DSF header, and a DSDIFF form and its DST chunk - do that with
+// stdio after the coroutine has finished, in finalise().
+class Stream {
 public:
-    File() : f_(nullptr) {}
-    ~File() { close(); }
+    void attach(coro3_pin* pin) { pin_ = pin; pos_ = 0; }
 
-    File(const File&) = delete;
-    File& operator=(const File&) = delete;
-
-    bool open_read(const char* path) {
-        f_ = fopen(path, "rb");
-        if (!f_) return ERR("cannot open '%s' for reading", path);
-        setvbuf(f_, reinterpret_cast<char*>(buf_), _IOFBF, sizeof(buf_));
-        return true;
-    }
-
-    bool open_write(const char* path) {
-        f_ = fopen(path, "wb+");
-        if (!f_) return ERR("cannot open '%s' for writing", path);
-        setvbuf(f_, reinterpret_cast<char*>(buf_), _IOFBF, sizeof(buf_));
-        return true;
-    }
-
-    void close() {
-        if (f_) { fclose(f_); f_ = nullptr; }
-    }
+    // Bytes read or written so far, which is the position in the file.
+    int64_t tell() const { return pos_; }
 
     // Reads exactly n bytes; a short read is an error unless eof_ok.
     bool read(VoidP buf, size_t n, bool eof_ok = false) {
-        size_t got = fread(buf, 1, n, f_);
+        const size_t got = read_some(buf, n);
         if (got != n) {
             if (eof_ok && got == 0) return false;
             return ERR("unexpected end of file (wanted %zu, got %zu)", n, got);
@@ -198,39 +187,62 @@ public:
     // short read is not an error: callers use this where a truncated file is
     // something to cope with rather than reject.
     size_t read_some(VoidP buf, size_t n) {
-        return fread(buf, 1, n, f_);
+        ByteP d = static_cast<ByteP>(buf);
+        size_t left = n;
+        while (left) {
+            if (!fill()) break;
+            const size_t take = window() < left ? window() : left;
+            memcpy(d, pin_->ptr, take);
+            pin_->ptr += take;
+            d += take;
+            left -= take;
+            pos_ += int64_t(take);
+        }
+        return n - left;
     }
 
     bool write(CVoidP buf, size_t n) {
-        if (fwrite(buf, 1, n, f_) != n) return ERR("write failed");
+        CByteP s = static_cast<CByteP>(buf);
+        while (n) {
+            pin_->chkout();                  // yields when the window is full
+            const size_t room = pin_->getoutleft();
+            const size_t put = room < n ? room : n;
+            memcpy(pin_->ptr, s, put);
+            pin_->ptr += put;
+            s += put;
+            n -= put;
+            pos_ += int64_t(put);
+        }
         return true;
     }
 
-    bool seek(int64_t pos) {
-        if (file_seek(f_, pos, SEEK_SET) != 0) return ERR("seek failed");
-        return true;
-    }
-
+    // Forward only, and free: the bytes are dropped out of the window rather
+    // than copied anywhere.
     bool skip(int64_t n) {
-        if (file_seek(f_, n, SEEK_CUR) != 0) return ERR("seek failed");
+        while (n > 0) {
+            if (!fill()) return ERR("unexpected end of file");
+            const size_t take = int64_t(window()) < n ? window() : size_t(n);
+            pin_->ptr += take;
+            n -= int64_t(take);
+            pos_ += int64_t(take);
+        }
         return true;
     }
-
-    int64_t tell() const { return file_tell(f_); }
-
-    int64_t size() {
-        int64_t cur = tell();
-        if (file_seek(f_, 0, SEEK_END) != 0) return -1;
-        int64_t n = tell();
-        file_seek(f_, cur, SEEK_SET);
-        return n;
-    }
-
-    bool ok() const { return f_ != nullptr; }
 
 private:
-    FILE* f_;
-    uint8_t buf_[kFileBuffer];   // the stream's buffer, ours rather than libc's
+    size_t window() const { return pin_->getinplen(); }
+
+    // Waits for input, yielding to the driver; false once the file has run out.
+    bool fill() {
+        while (pin_->ptr >= pin_->end) {
+            if (pin_->f_quit()) return false;
+            pin_->yield_r();
+        }
+        return true;
+    }
+
+    coro3_pin* pin_ = nullptr;
+    int64_t pos_ = 0;
 };
 
 } // namespace dff2dsf

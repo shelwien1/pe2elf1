@@ -59,8 +59,8 @@ public:
             new (&encoders_[threads_]) DstEncoder();
 
         // A default constructed std::thread is empty and costs a pointer, so the
-        // ceiling can just live on the stack rather than being allocated.
-        std::thread workers[kMaxThreads];
+        // ceiling can just be a member: an array of them on the stack would be
+        // copied on every coroutine yield, since run() is called from inside one.
         for (uint32_t i = 0; i < threads; i++)
             workers[i] = std::thread(&EncodePool::worker, this, i);
 
@@ -234,6 +234,7 @@ private:
     using SlotP = Slot* __restrict;
 
     Slot slots_[kMaxThreads + 2];
+    std::thread workers[kMaxThreads];
     uint32_t slot_count_ = 0;
     uint32_t threads_ = 0;
     size_t bytes_per_channel_ = 0;

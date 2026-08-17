@@ -30,7 +30,13 @@ windows: $(WIN_BIN)
 $(WIN_BIN): $(SRC) $(DEPS)
 	$(WIN_CXX) $(CXXFLAGS) -static $(SRC) -o $@
 
+# The coroutine copies its own stack on every yield, so no frame in the
+# conversion may be larger than Coroutine::STKPAD.  The only hit is Lib3's own
+# 256 KB pad in call_do_process0, which is what that budget is measured against.
+frames: $(SRC) $(DEPS)
+	$(CXX) $(CXXFLAGS) -Wframe-larger-than=65536 -c $(SRC) -o /dev/null
+
 clean:
 	rm -f $(BIN) $(WIN_BIN) src/*.o
 
-.PHONY: all windows clean
+.PHONY: all windows frames clean

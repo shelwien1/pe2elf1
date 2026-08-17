@@ -9,8 +9,8 @@ namespace dff2dsf {
 
 class DsfReader {
 public:
-    bool open(const char* path) {
-        if (!f_.open_read(path)) return false;
+    bool begin(coro3_pin* inp) {
+        f_.attach(inp);
 
         uint8_t hdr[kDsfHeaderSize];
         if (!f_.read(hdr, sizeof(hdr))) return false;
@@ -54,14 +54,14 @@ public:
         uint64_t data_size = rl64(hdr + 84);
         if (data_size < 12) return ERR("malformed DSF: short data chunk");
 
-        int64_t file_size = f_.size();
+        // A stream cannot ask how long the file is, so the data chunk's own size
+        // bounds the audio; a file that ends early is caught by the short read
+        // in refill() instead.
         data_end_ = int64_t(kDsfHeaderSize) + int64_t(data_size - 12);
-        if (data_end_ > file_size || data_end_ < int64_t(kDsfHeaderSize))
-            data_end_ = file_size;
 
         remaining_ = samples_ / 8;
         // Fall back to the data chunk if the header's sample count is missing.
-        uint64_t stored = uint64_t(data_end_ - int64_t(kDsfHeaderSize)) / uint32_t(channels_);
+        const uint64_t stored = uint64_t(data_end_ - int64_t(kDsfHeaderSize)) / uint32_t(channels_);
         if (!remaining_ || remaining_ > stored) remaining_ = stored;
 
         return true;
@@ -148,7 +148,7 @@ private:
         return true;
     }
 
-    File f_;
+    Stream f_;
     int32_t channels_ = 0;
     uint32_t dsd_rate_ = 0;
     uint32_t channel_type_ = 0;

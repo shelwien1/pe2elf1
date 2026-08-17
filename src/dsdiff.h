@@ -28,45 +28,47 @@ constexpr uint64_t kMaxChunkPayload = 64u << 20;
 
 class DffReader {
 public:
-    bool open(const char* path) {
-        if (!f_.open_read(path)) return false;
-        file_size_ = f_.size();
-        if (file_size_ < 16) return ERR("file is too small to be a DSDIFF");
+    // Parses everything up to the sound data, leaving the stream positioned at
+    // its first chunk.  The file arrives a byte at a time, so chunks that carry
+    // nothing needed are skipped rather than seeked over, and the one place that
+    // has to look ahead - is there a DSTC after this frame? - pushes the chunk
+    // header it read back for the next call.
+    bool begin(coro3_pin* inp) {
+        f_.attach(inp);
 
         uint8_t hdr[16];
         if (!f_.read(hdr, sizeof(hdr))) return false;
         if (!tag_is(hdr, "FRM8") || !tag_is(hdr + 12, "DSD "))
             return ERR("not a DSDIFF file (no FRM8/DSD signature)");
 
-        int64_t form_end = 12 + int64_t(rb64(hdr + 4));
-        if (form_end <= 16 || form_end > file_size_) form_end = file_size_;
+        const int64_t form_end = 12 + int64_t(rb64(hdr + 4));
+        if (form_end <= 16) return ERR("malformed FRM8 chunk");
 
         while (f_.tell() + 12 <= form_end) {
             uint8_t id[4];
             uint64_t size;
             if (!read_chunk_header(id, &size)) break;
-            int64_t body = f_.tell();
-            int64_t next = body + int64_t(size) + int64_t(size & 1);
+            const int64_t body = f_.tell();
 
             if (tag_is(id, "PROP")) {
-                int64_t end = body + int64_t(size);
+                const int64_t end = body + int64_t(size);
                 if (size < 4 || end > form_end) return ERR("malformed PROP chunk");
                 if (!parse_prop(end)) return false;
-            } else if (tag_is(id, "DST ") || tag_is(id, "DSD ")) {
+                continue;
+            }
+            if (tag_is(id, "DST ") || tag_is(id, "DSD ")) {
                 body_pos_ = body;
                 body_end_ = body + int64_t(size);
-                if (body_end_ > file_size_ || body_end_ < body_pos_)
-                    body_end_ = file_size_;
-                cur_ = body_pos_;
+                if (body_end_ < body_pos_) return ERR("malformed sound data chunk");
                 // The sound data chunk id is authoritative; CMPR is only a hint.
-                bool dst_chunk = tag_is(id, "DST ");
+                const bool dst_chunk = tag_is(id, "DST ");
                 if (saw_cmpr_ && dst_chunk != is_dst_)
                     fprintf(stderr, "dff2dsf: warning: CMPR disagrees with the sound data chunk\n");
                 is_dst_ = dst_chunk;
                 break;
             }
-
-            if (next <= body || !f_.seek(next)) break;
+            if (size > kMaxChunkPayload) return ERR("implausible chunk size");
+            if (!f_.skip(int64_t(size) + int64_t(size & 1))) break;
         }
 
         if (!saw_prop_) return ERR("no PROP/SND chunk found");
@@ -74,25 +76,20 @@ public:
         if (!dsd_rate_) return ERR("no FS chunk found");
         if (!channels_) return ERR("no CHNL chunk found");
 
-        // FRTE precedes the frames inside the DST chunk; read it up front so the
-        // total length is known before decoding starts.
+        // FRTE has to be the first chunk inside the DST data, and carries the
+        // frame count the caller wants before decoding starts.  Reading it here
+        // costs the look-ahead of one chunk header, which is pushed back if the
+        // file skipped FRTE and went straight to the frames.
         if (is_dst_) {
-            int64_t save = cur_;
-            while (cur_ + 12 <= body_end_) {
-                if (!f_.seek(cur_)) return false;
-                uint8_t id[4];
-                uint64_t size;
-                if (!read_chunk_header(id, &size)) break;
-                if (size > kMaxChunkPayload) return ERR("implausible chunk size in DST data");
+            uint8_t id[4];
+            uint64_t size;
+            if (read_chunk_header(id, &size)) {
                 if (tag_is(id, "FRTE")) {
                     if (!parse_frte(size)) return false;
-                    break;
+                } else {
+                    push_back(id, size);
                 }
-                if (tag_is(id, "DSTF")) break;  // no FRTE, fall back to counting
-                cur_ += 12 + int64_t(size) + int64_t(size & 1);
             }
-            cur_ = save;
-            if (!f_.seek(cur_)) return false;
             if (frame_rate_ && frame_rate_ != 75)
                 fprintf(stderr, "dff2dsf: warning: unusual DST frame rate %u\n", frame_rate_);
         }
@@ -116,14 +113,11 @@ public:
     // Next DST frame.  Returns 1 on success, 0 at end of data, -1 on error.
     // The payload is zero padded to allow the bit reader's windowed reads.
     int32_t next_dst_frame(CBytePP data, SizeP size, SizeP capacity) {
-        while (cur_ + 12 <= body_end_) {
-            if (!f_.seek(cur_)) return -1;
-
+        while (chunk_pos() + 12 <= body_end_) {
             uint8_t id[4];
             uint64_t chunk_size;
             if (!read_chunk_header(id, &chunk_size)) return 0;
-            int64_t body = cur_ + 12;
-            cur_ = body + int64_t(chunk_size) + int64_t(chunk_size & 1);
+            const int64_t body = f_.tell();
 
             if (tag_is(id, "DSTF")) {
                 // The frame has to fit the buffer, which is sized for the largest
@@ -136,9 +130,10 @@ public:
                     ERR("truncated DSTF frame");
                     return -1;
                 }
-                size_t n = size_t(chunk_size);
+                const size_t n = size_t(chunk_size);
                 if (!f_.read(buf_, n)) return -1;
                 memset(buf_ + n, 0, kBitReaderPadding);
+                if ((chunk_size & 1) && !f_.skip(1)) return -1;
                 *data = buf_;
                 *size = n;
                 *capacity = n + kBitReaderPadding;
@@ -146,7 +141,13 @@ public:
                 read_frame_crc();
                 return 1;
             }
+
             // Anything else in here is not needed.
+            if (chunk_size > kMaxChunkPayload) {
+                ERR("implausible chunk size %" PRIu64 " in DST data", chunk_size);
+                return -1;
+            }
+            if (!f_.skip(int64_t(chunk_size) + int64_t(chunk_size & 1))) return 0;
         }
         return 0;
     }
@@ -158,20 +159,20 @@ public:
 
     // Next block of raw interleaved DSD.  Returns 1, 0 or -1 as above.
     int32_t next_dsd_block(CBytePP data, SizeP size) {
-        if (cur_ >= body_end_) return 0;
+        const int64_t left = body_end_ - f_.tell();
+        if (left <= 0) return 0;
 
         size_t want = kDsdBlockBytes;
         // Keep blocks a whole number of frames' worth of samples per channel.
         want -= want % size_t(channels_);
-        if (int64_t(want) > body_end_ - cur_) want = size_t(body_end_ - cur_);
+        if (int64_t(want) > left) want = size_t(left);
 
-        if (!f_.seek(cur_)) return -1;
-        if (!f_.read(buf_, want)) return -1;
-        cur_ += int64_t(want);
+        const size_t got = f_.read_some(buf_, want);
+        if (!got) return 0;
 
         *data = buf_;
-        *size = want;
-        return 1;
+        *size = got - got % size_t(channels_);
+        return *size ? 1 : 0;
     }
 
 private:
@@ -182,14 +183,14 @@ private:
         if (!f_.read(type, 4)) return false;
         if (!tag_is(type, "SND ")) {
             // Property lists other than sound carry nothing we need.
-            return f_.seek(end);
+            return f_.skip(end - f_.tell());
         }
 
         while (f_.tell() + 12 <= end) {
             uint8_t id[4];
             uint64_t size;
             if (!read_chunk_header(id, &size)) return false;
-            int64_t body = f_.tell();
+            const int64_t body = f_.tell();
             if (size > kMaxChunkPayload || body + int64_t(size) > end)
                 return ERR("malformed PROP chunk");
 
@@ -202,7 +203,7 @@ private:
                 if (size < 2) return ERR("short CHNL chunk");
                 uint8_t v[2];
                 if (!f_.read(v, 2)) return false;
-                uint32_t n = rb16(v);
+                const uint32_t n = rb16(v);
                 if (n < 1 || n > uint32_t(kDstMaxChannels))
                     return ERR("unsupported channel count %u", n);
                 if (size < 2 + 4 * uint64_t(n)) return ERR("short CHNL chunk");
@@ -226,11 +227,11 @@ private:
                 saw_cmpr_ = true;
             }
 
-            if (!f_.seek(body + int64_t(size) + int64_t(size & 1))) return false;
+            if (!f_.skip(body + int64_t(size) + int64_t(size & 1) - f_.tell())) return false;
         }
 
         saw_prop_ = true;
-        return f_.seek(end);
+        return f_.skip(end - f_.tell());
     }
 
     bool parse_frte(uint64_t size) {
@@ -239,29 +240,46 @@ private:
         if (!f_.read(v, 6)) return false;
         frame_count_ = rb32(v);
         frame_rate_ = rb16(v + 4);
-        return true;
+        return f_.skip(int64_t(size) - 6 + int64_t(size & 1));
     }
 
     // A frame's CRC, if the file carries them, is in the DSTC chunk immediately
-    // after it.  Looking for it here keeps it paired with the frame it covers.
+    // after it.  Looking for it here keeps it paired with the frame it covers;
+    // when the next chunk is another frame instead, its header goes back.
     void read_frame_crc() {
         has_frame_crc_ = false;
-        if (cur_ + 12 > body_end_) return;
-        if (!f_.seek(cur_)) return;
+        if (chunk_pos() + 12 > body_end_) return;
 
         uint8_t id[4];
         uint64_t size;
         if (!read_chunk_header(id, &size)) return;
-        if (!tag_is(id, "DSTC") || size < 4) return;
+        if (!tag_is(id, "DSTC") || size < 4 || size > kMaxChunkPayload) {
+            push_back(id, size);
+            return;
+        }
 
         uint8_t v[4];
         if (!f_.read(v, 4)) return;
         frame_crc_ = rb32(v);
         has_frame_crc_ = true;
-        cur_ += 12 + int64_t(size) + int64_t(size & 1);
+        f_.skip(int64_t(size) - 4 + int64_t(size & 1));
+    }
+
+    // One chunk header of push-back, which is all the look-ahead here needs.
+    void push_back(CByteP id, uint64_t size) {
+        memcpy(pending_, id, 4);
+        pending_size_ = size;
+        has_pending_ = true;
+        pending_pos_ = f_.tell() - 12;
     }
 
     bool read_chunk_header(ByteP id, WordP size) {
+        if (has_pending_) {
+            has_pending_ = false;
+            memcpy(id, pending_, 4);
+            *size = pending_size_;
+            return true;
+        }
         uint8_t hdr[12];
         if (!f_.read(hdr, sizeof(hdr), /*eof_ok=*/true)) return false;
         memcpy(id, hdr, 4);
@@ -269,11 +287,18 @@ private:
         return true;
     }
 
-    File f_;
-    int64_t file_size_ = 0;
+    // Where the stream is as far as the chunk walk is concerned: one chunk
+    // header behind the stream itself while a header is pushed back.
+    int64_t chunk_pos() const { return has_pending_ ? pending_pos_ : f_.tell(); }
+
+    Stream f_;
     int64_t body_pos_ = 0;   // first byte of sound data
     int64_t body_end_ = 0;   // one past the last byte of sound data
-    int64_t cur_ = 0;
+
+    uint8_t pending_[4] = {};
+    uint64_t pending_size_ = 0;
+    int64_t pending_pos_ = 0;
+    bool has_pending_ = false;
 
     uint32_t dsd_rate_ = 0;
     int32_t channels_ = 0;

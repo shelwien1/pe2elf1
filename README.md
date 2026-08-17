@@ -36,27 +36,55 @@ four times slower. Nothing is chosen at run time, so nothing has to be detected
 and no compiler runtime library is involved.
 
 The whole program is a single translation unit, and `src/dff2dsf.cpp` is the
-only file that includes anything at all: the C and C++ library headers, then one
-header per module in dependency order. Nothing to link, and one place that says
-what the program depends on.
+only file that includes anything at all: the C and C++ library headers, then
+Lib3, then one header per module in dependency order. Nothing to link, and one
+place that says what the program depends on.
+
+## I/O
+
+Both conversions run as coroutines on **Lib3** (`src/Lib3/`), the same library
+and the same shape `dxt5comp` uses: `CoroFileProc` reads the input file into a
+64 KB buffer and writes the output one out, and the conversion itself is
+straight-line code that pulls and pushes bytes through the coroutine's two pins.
+A pin that runs dry or fills up yields — which suspends the whole call stack,
+parser and codec and frame loop together — until the driver has refilled or
+flushed it, and then resumes exactly where it stopped. `Stream` in `common.h` is
+the thin layer between the two: it copies whole runs out of the pin's window
+rather than going a byte at a time through `get()`/`put()`.
+
+The stack is saved and restored by copying it, which is the reason nothing on
+the way down to a `get()` or a `put()` may be large. Every working buffer here
+is static or a member already; measured, the deepest yield copies 377 bytes
+decoding, 457 encoding, and 2665 with `--threads 4`, against the 64 KB the
+library allows. `make frames` checks the constraint with
+`-Wframe-larger-than=65536`: the only function over it is Lib3's own 256 KB
+stack pad, which is what that budget is measured from.
+
+Two things a stream cannot do: seek back to a header once its contents are
+known, and read the output back. So the writers do that afterwards, with plain
+stdio on the file the driver has just finished writing — `DsfWriter::patch()`
+fills in the DSF file size, sample count and data size; `DffWriter::patch()`
+walks the `DSTF` chunks to build the `DSTI` index, appends `COMT`, and fills in
+the `FRM8` and `DST ` sizes and the frame count. Everything else, in both
+directions, goes through the pins.
 
 ## Memory
 
 Every buffer is sized at build time for the largest stream the program accepts —
 DSD512, six channels, so a frame of 37632 bytes per channel — rather than for the
 stream in hand. Nothing is sized, grown or allocated at run time as a result:
-decoding and single threaded encoding allocate nothing whatsoever, not even
-inside stdio, since each `File` hands `setvbuf` its own buffer. That costs 9.5 MB
-of BSS against 56 KB of code, and at DSD64 most of it is never touched — peak RSS
-is 10.6 MB either direction.
+decoding and single threaded encoding allocate nothing whatsoever. That costs
+5.8 MB of BSS against 62 KB of code, and at DSD64 most of it is never touched —
+peak RSS is 10.4 MB either direction.
 
 Two things resisted that. The `DSTI` index is 12 bytes per frame with no bound on
-the frame count, so it is not kept at all: `finish()` recovers it by walking the
-`DSTF` chunks it has just written, which is one 12 byte read per frame against
-pages still in cache, and reproduces the remembered index byte for byte over the
-test file's 19119 frames. And `--threads N` needs an encoder and a slot buffer
-per worker, which is a runtime choice by definition — those are the program's
-only two allocations, one block each, however many threads are asked for.
+the frame count, so it is not kept at all: `patch()` recovers it by walking the
+`DSTF` chunks the coroutine has just written, which is one 12 byte read per frame
+against pages still in cache, and reproduces the remembered index byte for byte
+over the test file's 19119 frames. And `--threads N` needs an encoder and a slot
+buffer per worker, which is a runtime choice by definition — those are the
+program's only two allocations, one block each, however many threads are asked
+for.
 
 Integers are spelled as fixed-width types throughout — `int32_t`, `uint32_t`,
 `uint64_t` and the rest — with `size_t` kept for sizes and offsets into memory,
@@ -82,17 +110,18 @@ C++ runtimes' own:
 | | allocations | peak heap | peak RSS |
 |---|---|---|---|
 | print usage | 1 | 72 KB | |
-| decode | 3 | 72 KB | 10.6 MB |
-| encode | 8 | 74 KB | 10.6 MB |
-| encode `--threads 4` | 18 | 15.8 MB | 18.1 MB |
+| decode | 5 | 72 KB | 10.4 MB |
+| encode | 10 | 74 KB | 10.4 MB |
+| encode `--threads 4` | 20 | 15.8 MB | 18.3 MB |
 
-The first three are libstdc++'s startup pool and one `FILE` per open file; none
-of them are this program's. The threaded run adds its two blocks — four encoders
-and six slots, 15.1 MB of the 15.8 — and libstdc++'s per-thread bookkeeping.
+The first rows are libstdc++'s startup pool and stdio's own per-file structures
+and buffers; none of them are this program's. The threaded run adds its two
+blocks — four encoders and six slots, 15.1 MB of the 15.8 — and libstdc++'s
+per-thread bookkeeping.
 
-C++20, no dependencies. Built with `-fno-exceptions -fno-rtti`; no STL streams
-and no STL containers are used, only stdio and explicit allocation. The one
-place the standard library does the work is threading, which is `<thread>`,
+C++20, and Lib3 for the I/O. Built with `-fno-exceptions -fno-rtti`; no STL
+streams and no STL containers are used, only stdio and explicit allocation. The
+one place the standard library does the work is threading, which is `<thread>`,
 `<mutex>` and `<condition_variable>` — hence `-pthread`. Compiles
 clean at `-Wall -Wextra -Wpedantic` with GCC, Clang and mingw-w64; the only
 platform specific pieces are 64-bit file offsets and reading the clock, both in
@@ -315,7 +344,9 @@ samples, and compress/decompress round trips bit for bit. The whole 4:15 file wa
 checked that way on four threads too, matching the reference md5 and producing
 the same 78,038,932 bytes as one thread. The decoder was also checked against a
 synthetic uncompressed-DSD `.dff`, and both directions run clean under ASan/UBSan
-including runs over randomly corrupted input; the threaded encoder is clean under
+including runs over randomly corrupted input — with `--param asan-stack=0`, since
+ASan's stack red-zones and a coroutine that saves its stack by copying it cannot
+both be right about that memory; the threaded encoder is clean under
 ThreadSanitizer as well, including the awkward cases — fewer frames than threads,
 a truncated input, and a failing write, none of which may leave a worker waiting.
 
@@ -338,6 +369,7 @@ in order, so they are read in that order too.
 | `src/encpool.h` | encoding frames on several threads |
 | `src/bits.h`, `src/bitwrite.h` | bit reader and writer, JPEG-LS Golomb code |
 | `src/crc.h` | the DSDIFF frame CRC carried in `DSTC` |
+| `src/Lib3/` | the coroutine library the I/O runs on, as supplied |
 | `src/common.h` | byte order, buffered file access, the platform bits |
 
 ## Licensing

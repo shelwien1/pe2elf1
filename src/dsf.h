@@ -42,8 +42,10 @@ uint32_t channel_type_for(int32_t channels, CU32P ids) {
 
 class DsfWriter {
 public:
-    bool open(const char* path, int32_t channels, uint32_t dsd_rate,
-              CU32P channel_ids) {
+    // Writes the header, with the three fields that are only known at the end
+    // left at zero; patch() fills them in once the coroutine has run.
+    bool begin(coro3_pin* out, int32_t channels, uint32_t dsd_rate,
+               CU32P channel_ids) {
         if (channels < 1 || channels > kDstMaxChannels)
             return ERR("unsupported channel count %d", channels);
 
@@ -61,9 +63,9 @@ public:
         channel_type_ = channel_type_for(channels, ids_be);
         if (!channel_type_) return ERR("no DSF channel type for %d channels", channels);
 
-        if (!f_.open_write(path)) return false;
+        f_.attach(out);
 
-        // Placeholder header; the sizes are patched in finish().
+        // Placeholder header; the sizes are patched at the end.
         uint8_t hdr[kDsfHeaderSize] = {};
         memcpy(hdr, "DSD ", 4);
         wl64(hdr + 4, 28);
@@ -126,27 +128,30 @@ public:
         return true;
     }
 
-    // Flushes the partial block and patches the header with the final sizes.
-    bool finish() {
-        if (!flush_block()) return false;
+    // Flushes the partial block.  Still on the stream, so still in the
+    // coroutine: this is the last thing it writes.
+    bool finish() { return flush_block(); }
 
-        uint64_t file_size = kDsfHeaderSize + data_bytes_;
-
+    // The sizes and the sample count, written back into the header that went
+    // out before any of them were known.  The coroutine has finished by now, so
+    // this is plain stdio on the file the driver wrote.
+    bool patch(FILE* g) const {
         uint8_t v[8];
-        wl64(v, file_size);
-        if (!f_.seek(12) || !f_.write(v, 8)) return false;
-
-        wl64(v, samples_);
-        if (!f_.seek(64) || !f_.write(v, 8)) return false;
-
-        wl64(v, 12 + data_bytes_);
-        if (!f_.seek(84) || !f_.write(v, 8)) return false;
-
-        f_.close();
-        return true;
+        wl64(v, kDsfHeaderSize + data_bytes_);      // total file size
+        if (!patch_at(g, 12, v)) return false;
+        wl64(v, samples_);                          // sample count per channel
+        if (!patch_at(g, 64, v)) return false;
+        wl64(v, 12 + data_bytes_);                  // data chunk size
+        return patch_at(g, 84, v);
     }
 
 private:
+    static bool patch_at(FILE* g, int64_t pos, const uint8_t (&v)[8]) {
+        if (file_seek(g, pos, SEEK_SET) != 0) return ERR("seek failed");
+        if (fwrite(v, 1, 8, g) != 8) return ERR("write failed");
+        return true;
+    }
+
     bool flush_block() {
         if (!fill_) return true;
         // Short final block: pad every channel out to the fixed block size.
@@ -161,7 +166,7 @@ private:
         return true;
     }
 
-    File f_;
+    Stream f_;
     int32_t channels_ = 0;
     uint32_t dsd_rate_ = 0;
     uint32_t channel_type_ = 0;
