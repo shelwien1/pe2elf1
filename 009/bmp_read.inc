@@ -48,14 +48,167 @@ static uint8_t* write_nibbles(uint8_t* at, int32_t& hi, const uint8_t* src,
   }
 }
 
+// `n` bytes from `at` are inside the pixels.  Both walks spelled the two bounds
+// into a pair of locals at the top and compared against them four times
+// between them, which is the same sentence written four ways.
+static bool rle_fits(const BmfImage* img, const uint8_t* at, int32_t n) {
+  return at>=img->pixels&&at+n<=img->pixels+img->data_size;
+}
+
+// The RLE8 opcode stream.  True when it ended -- by the end-of-bitmap escape or
+// by running off the top row -- and false on a short read or an opcode that
+// would write outside the image.
+//
+// Both endings were a `goto done` five frames up, to the one place that closes
+// the file and gives the scratch back; false is the `return nullptr` that was
+// already written five times here and leaves both exactly as it found them.
+static bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
+  int32_t y = img->height-1;
+  int32_t n, v;
+  while( read_rle_op(fp, n, v) ) {
+    if( n ) {
+      if( !rle_fits(img, at, n) )
+        return false;
+      __builtin_memset(at, v, n);
+      at += n;
+    } else if( !v ) {
+      if( --y<0 )
+        return true;
+      at = img->row(y);
+    } else if( v==1 ) {
+      return true;
+    } else if( v==2 ) {
+      // A delta is two more bytes of the same opcode, so it is the same read.
+      // It picks up a `ferror` check the recovery did not have here: after a
+      // read error `fgetc` answers EOF, which is the -1 this already refused,
+      // so the two agree.
+      int32_t dx, dy;
+      if( !read_rle_op(fp, dx, dy) )
+        return false;
+      at += dx-dy*(uint16_t)img->stride;
+    } else {
+      if( !rle_fits(img, at, v) )
+        return false;
+      fread(pal_buf, (v+1)&0xFFFFFFFE, 1u, fp);
+      memcpy(at, (uint8_t*)pal_buf, v);
+      at += v;
+    }
+  }
+  return false;
+}
+
+// The RLE4 opcode stream, which is RLE8's with a nibble for a pixel: half the
+// horizontal step, a run counted in nibbles, and a cursor that carries which
+// half of `*row` the next one goes in.
+//
+// One opcode per turn, which is what RLE8 above already looked like.  This was
+// three `while( 1 )`s with a label at the top of the innermost and five jumps
+// back to it, and the nesting *was* the dispatch: fall out of the innermost
+// loop for an escape, out of the middle one for anything but an end of line,
+// out of the outer one for anything but a delta.  Reading it meant holding
+// three loops in mind to see a five-way branch on two bytes.
+static bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
+  int32_t hi_nibble = 1;
+  int32_t y = img->height-1;
+  int32_t run4, byte_in;
+  while( read_rle_op(fp, run4, byte_in) ) {
+    const uint32_t byte = (uint32_t)byte_in;
+    if( run4 ) {
+      if( !rle_fits(img, row, run4/2+1) )
+        return false;
+      uint8_t lo = byte&0xF;
+      // `run4` nibbles of the two-nibble pattern in `byte`, from the half of
+      // `*row` that `hi_nibble` names.  Both arms ended twice -- once by
+      // falling out of their loop and once by a jump back to the top of the
+      // one above -- and those are the same exit.  What told them apart is
+      // the parity of `run4`, which is what each arm's counter is left
+      // holding.
+      if( hi_nibble ) {
+        // Byte-aligned, so every full byte is `byte` itself.  The counter
+        // steps by two and stops at 0 or 1.
+        int32_t left4b = run4;
+        uint8_t *row3 = row;
+        while( left4b>1 ) {
+          *row3++ = byte;
+          left4b -= 2;
+        }
+        row = row3;
+        hi_nibble = left4b==0;
+        if( left4b )
+          *row3 = byte&0xF0;
+      } else {
+        // Half a byte out of step: each byte written is the low nibble of
+        // the previous pattern beside the high nibble of the next, so the
+        // first byte carries whatever `*row` already held and the last may
+        // be half a byte on its own.  Here the counter ends at 0 or -1.
+        int32_t left4 = run4;
+        uint8_t *row4 = row;
+        uint8_t cur = *row;
+        uint32_t hi = byte>>4;
+        uint8_t lo16 = 16*lo;
+        do {
+          *row4++ = hi|cur;
+          cur = lo16;
+          left4 -= 2;
+        } while( left4>0 );
+        row = row4;
+        hi_nibble = left4<0;
+        if( !hi_nibble )
+          *row4 = lo16;
+      }
+    } else if( !byte ) {
+      if( --y<0 )
+        return true;
+      row = img->row(y);
+    } else if( byte==1 ) {
+      return true;
+    } else if( byte==2 ) {
+      int32_t dxy, dy4;
+      if( !read_rle_op(fp, dxy, dy4) )
+        return false;
+      // Half the horizontal step, because a column here is a nibble.
+      int32_t step = (dxy>>1)-dy4*(uint16_t)img->stride;
+      if( (dxy&1)==1 ) {
+        if( !hi_nibble )
+          ++step;
+        hi_nibble = !hi_nibble;
+      }
+      row += step;
+    } else {
+      // An absolute run of `byte` nibbles, read a byte at a time and split
+      // across whichever half of the output `hi_nibble` names.
+      if( !rle_fits(img, row, (int32_t)byte/2+1) )
+        return false;
+      fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
+      row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, byte);
+    }
+  }
+  return false;
+}
+
+// Uncompressed rows, bottom-up, each padded out to a multiple of four bytes.
+//
+// The stride was re-read from the header after every call in the recovered
+// loop -- `stride = (uint16_t)img_f->stride`, twice a turn -- which is one
+// value under a spill and a truncation.  Neither says anything: `fread` and
+// `fseek` do not write the header, and the accepted-format check one screen up
+// bounds a row to 65535 bytes, so the cast cannot narrow it.
+static bool read_rows(FILE* fp, BmfImage* img, uint8_t* row, uint32_t stride_pad) {
+  const uint32_t stride = img->stride;
+  const uint32_t row_pad = stride_pad-stride;
+  for( int32_t y = img->height-1; y>=0; --y ) {
+    if( fread(row, 1u, stride, fp)!=stride )
+      return false;
+    if( row_pad )
+      fseek(fp, row_pad, 1);
+    row -= stride;
+  }
+  return true;
+}
+
 BmfImage* read_bmp(char* path) {
-  BmfImage* img_f;
-  uint8_t* row, bmp_bgra[4];
-  uint8_t* row_at;
-  uint32_t row_pad;
-  uint8_t cur;
-  int32_t pal_n, i, hi_nibble;
-  uint32_t stride;
+  uint8_t bmp_bgra[4];
+  int32_t pal_n, i;
   BmpHeader hdr;
   FILE* fp = fopen(path, "rb");
   if( !fp||fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=bmp_magic||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=bmp_hdr_v3||hdr.biPlanes!=1 ) {
@@ -114,162 +267,24 @@ BmfImage* read_bmp(char* path) {
     }
   }
   void* pal_buf = bmf_new(stride_pad<256 ? 256 : stride_pad);
-  row = img->pixels+img->data_size-img->stride;
+  uint8_t *row = img->pixels+img->data_size-img->stride;
   fseek(fp, (int32_t)hdr.bfOffBits, 0);
-  if( hdr.biCompression!=bmp_rgb ) {
-    uint8_t*const pix_lo = img->pixels;
-    uint8_t*const pix_hi = img->pixels+img->data_size;
-    if( hdr.biCompression==bmp_rle8 ) {
-      memset(img->pixels, 0, img->data_size);
-      row_at = row;
-      img_f = img;
-      int32_t y4 = img->height-1;
-      while( 1 ) {
-        uint8_t *row_ofs = row_at;
-        int32_t run, run_val;
-        if( !read_rle_op(fp, run, run_val) )
-          return nullptr;
-        if( run ) {
-          if( row_ofs<pix_lo||row_ofs+run>pix_hi )
-            return nullptr;
-          __builtin_memset(row_ofs, run_val, run);
-          row_at = row_ofs+run;
-        } else if( run_val ) {
-          if( run_val==1 )
-            goto done;
-          if( run_val==2 ) {
-            // A delta is two more bytes of the same opcode, so it is the same
-            // read.  It picks up a `ferror` check the recovery did not have
-            // here: after a read error `fgetc` answers EOF, which is the -1
-            // this already refused, so the two agree.
-            int32_t dx, dy;
-            if( !read_rle_op(fp, dx, dy) )
-              return nullptr;
-            row_at += dx-dy*(uint16_t)img_f->stride;
-          } else {
-            if( row_at<pix_lo||row_at+run_val>pix_hi )
-              return nullptr;
-            fread(pal_buf, (run_val+1)&0xFFFFFFFE, 1u, fp);
-            memcpy(row_at, (uint8_t*)pal_buf, run_val);
-            row_at += run_val;
-          }
-        } else {
-          if( --y4<0 )
-            goto done;
-          row_at = img_f->row(y4);
-        }
-      }
-    }
-    if( hdr.biCompression!=bmp_rle4 )
-      return nullptr;
+  // Three ways to read the pixels, and each ended by jumping five frames out to
+  // one tail that closes the file and gives the scratch back.  That tail is
+  // here; each walk answers whether it got to the end of the bitmap.
+  // Both run-length forms leave the pixels they never reach untouched, so both
+  // cleared the buffer first; the uncompressed walk writes every byte.
+  bool ok;
+  if( hdr.biCompression==bmp_rgb ) {
+    ok = read_rows(fp, img, row, stride_pad);
+  } else {
     memset(img->pixels, 0, img->data_size);
-    img_f = img;
-    hi_nibble = 1;
-    int32_t y8 = img->height-1;
-    // One opcode per turn, which is what RLE8 above already looked like.  This
-    // was three `while( 1 )`s with a label at the top of the innermost and five
-    // jumps back to it, and the nesting *was* the dispatch: fall out of the
-    // innermost loop for an escape, out of the middle one for anything but an
-    // end of line, out of the outer one for anything but a delta.  Reading it
-    // meant holding three loops in mind to see a five-way branch on two bytes.
-    while( 1 ) {
-      int32_t run4, byte_in;
-      if( !read_rle_op(fp, run4, byte_in) )
-        return nullptr;
-      const uint32_t byte = (uint32_t)byte_in;
-      if( run4 ) {
-        if( row<pix_lo||row+(run4/2+1)>pix_hi )
-          return nullptr;
-        uint8_t lo = byte&0xF;
-        // `run4` nibbles of the two-nibble pattern in `byte`, from the half of
-        // `*row` that `hi_nibble` names.  Both arms ended twice -- once by
-        // falling out of their loop and once by a jump back to the top of the
-        // one above -- and those are the same exit.  What told them apart is
-        // the parity of `run4`, which is what each arm's counter is left
-        // holding.
-        if( hi_nibble ) {
-          // Byte-aligned, so every full byte is `byte` itself.  The counter
-          // steps by two and stops at 0 or 1.
-          int32_t left4b = run4;
-          uint8_t *row3 = row;
-          while( left4b>1 ) {
-            *row3++ = byte;
-            left4b -= 2;
-          }
-          row = row3;
-          hi_nibble = left4b==0;
-          if( left4b )
-            *row3 = byte&0xF0;
-        } else {
-          // Half a byte out of step: each byte written is the low nibble of
-          // the previous pattern beside the high nibble of the next, so the
-          // first byte carries whatever `*row` already held and the last may
-          // be half a byte on its own.  Here the counter ends at 0 or -1.
-          int32_t left4 = run4;
-          uint8_t *row4 = row;
-          cur = *row;
-          uint32_t hi = byte>>4;
-          uint8_t lo16 = 16*lo;
-          do {
-            *row4++ = hi|cur;
-            cur = lo16;
-            left4 -= 2;
-          } while( left4>0 );
-          row = row4;
-          hi_nibble = left4<0;
-          if( !hi_nibble )
-            *row4 = lo16;
-        }
-      } else if( !byte ) {
-        if( --y8<0 )
-          goto done;
-        row = img_f->row(y8);
-      } else if( byte==1 ) {
-        goto done;
-      } else if( byte==2 ) {
-        int32_t dxy, dy4;
-        if( !read_rle_op(fp, dxy, dy4) )
-          return nullptr;
-        // Half the horizontal step, because a column here is a nibble.
-        int32_t step = (dxy>>1)-dy4*(uint16_t)img_f->stride;
-        if( (dxy&1)==1 ) {
-          if( !hi_nibble )
-            ++step;
-          hi_nibble = !hi_nibble;
-        }
-        row += step;
-      } else {
-        // An absolute run of `byte` nibbles, read a byte at a time and split
-        // across whichever half of the output `hi_nibble` names.
-        if( row<pix_lo||row+((int32_t)byte/2+1)>pix_hi )
-          return nullptr;
-        fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
-        row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, byte);
-      }
-    }
+    ok = hdr.biCompression==bmp_rle8 ? read_rle8(fp, img, row, pal_buf)
+       : hdr.biCompression==bmp_rle4 ? read_rle4(fp, img, row, pal_buf)
+       : false;
   }
-  stride = img->stride;
-  row_pad = stride_pad-stride;
-  if( hdr.biHeight-1>=0 ) {
-    int32_t y = hdr.biHeight-1;
-    img_f = img;
-    uint8_t *row6 = row;
-    while( 1 ) {
-      uint32_t got = fread(row6, 1u, stride, fp);
-      stride = (uint16_t)img_f->stride;
-      if( got!=stride )
-        return nullptr;
-      if( row_pad ) {
-        fseek(fp, row_pad, 1);
-        stride = (uint16_t)img_f->stride;
-      }
-      row6 -= stride;
-      if( --y<0 )
-        goto done;
-    }
-  }
-// One exit: close the file, give the palette scratch back, return the image.
-done:
+  if( !ok )
+    return nullptr;
   fclose(fp);
   free(pal_buf);
   return img;

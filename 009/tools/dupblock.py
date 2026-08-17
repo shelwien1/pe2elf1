@@ -45,10 +45,18 @@ is `reroll.py`'s class when the lines are identical and this one's when they are
 not.
 
 **What the residue is now, and it is worth saying so the next round does not
-start here.**  1031 lines of copy when this was written and 45 now.  The p2
+start here.**  1031 lines of copy when this was written and 39 now.  The p2
 coders' prologue and epilogue used to be the largest groups and are gone: that
 pair merged, and so did four more, so `pairshare.py`'s declined table is down
 to two rows.
+
+Nothing left is longer than four lines, and twelve runs of three or four is
+what two coders and two run-length forms cost.  Six of the twelve are
+`code_pixel`/`decode_pixel` and the two alphabet coders in `sym_code`; the rest
+are a pair each of siblings that open the same way -- the two run-length
+readers, the two `enum : uint8_t` blocks, the two histogram walks, the two
+`save_descriptors` trials.  A shorter list than this one would mean merging
+things that are not the same idea.
 
 For several rounds the sentence here read "what is left is dominated by
 `code_pixel`/`decode_pixel` -- eight of the ten longest runs are in `model.inc`
@@ -86,7 +94,7 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 45
+BUDGET = 39
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.
