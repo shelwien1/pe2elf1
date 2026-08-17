@@ -2,7 +2,7 @@
 
 Notes from reading a decompilation of `DstEncCtrl.dll` (the encoder behind
 `DstEncUi 4.0.3`, which produced the reference file this project is measured
-against), and what it says about the choices made in `src/dstenc.hpp`.
+against), and what it says about the choices made in `src/dstenc.h`.
 
 Nothing was copied. This is an analysis of what the reference encoder does and
 why; the implementation here remains written from the ISO/IEC 14496-3 Part 3

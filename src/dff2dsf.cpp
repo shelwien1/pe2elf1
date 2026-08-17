@@ -36,7 +36,8 @@
 #include <new>
 #include <thread>
 
-// Declarations, each depending on the ones above it.
+// One header per module, each depending on the ones above it: every class
+// carries its own implementation, so there is nothing else to include.
 #include "common.h"
 #include "bits.h"
 #include "bitwrite.h"
@@ -49,14 +50,6 @@
 #include "dffwrite.h"
 #include "encpool.h"
 
-// Implementations.
-#include "dst.hpp"
-#include "dsdiff.hpp"
-#include "dsf.hpp"
-#include "dsfread.hpp"
-#include "dstenc.hpp"
-#include "dffwrite.hpp"
-#include "encpool.hpp"
 
 namespace dff2dsf {
 

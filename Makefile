@@ -9,14 +9,14 @@ CXXFLAGS ?= -O2 -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra \
 LDFLAGS  ?=
 LDLIBS   ?= -lm -pthread
 
-# The whole program is a single translation unit; the .hpp files are the
-# implementation, included by src/dff2dsf.cpp.
+# The whole program is a single translation unit: one header per module, each
+# carrying its own implementation, all included by src/dff2dsf.cpp.
 SRC := src/dff2dsf.cpp
-DEPS := $(wildcard src/*.h) $(wildcard src/*.hpp)
+DEPS := $(wildcard src/*.h)
 BIN := dff2dsf
 
 # Cross build for Windows.  Nothing here is platform specific beyond 64-bit file
-# offsets and the clock, both handled in common.h and dffwrite.hpp.
+# offsets and the clock, both handled in common.h.
 WIN_CXX ?= x86_64-w64-mingw32-g++
 WIN_BIN := dff2dsf.exe
 

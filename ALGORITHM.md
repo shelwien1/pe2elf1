@@ -6,7 +6,7 @@ what it does, in the order the code does it: decoding first, because encoding is
 defined entirely in terms of what the decoder will do with the result.
 
 Section numbers in parentheses are the specification's, quoted where
-`src/dst.hpp` quotes them. The decoder here is a port of FFmpeg's
+`src/dst.h` quotes them. The decoder here is a port of FFmpeg's
 `libavcodec/dstdec.c` and is LGPL; the encoder is original work but predicts
 through the decoder's own filter evaluation, so the two agree by construction.
 
@@ -274,7 +274,7 @@ The pipeline, per frame and across all channels together:
 ```
 
 Steps 3–5 predict bit for bit as the decoder does, sharing the filter lookup
-table from `dst.hpp`. One filter and one probability table are used for all
+table from `dst.h`. One filter and one probability table are used for all
 channels: per-channel versions were measured and cost more to send than they
 save.
 
@@ -544,11 +544,11 @@ produces the same bytes — which is checked on every run of `tests/verify.sh`.
 
 | file | contents |
 |---|---|
-| `src/dst.hpp` | the decoder: tables, filter LUT, arithmetic decoder, sample loop |
+| `src/dst.h` | the decoder: tables, filter LUT, arithmetic decoder, sample loop |
 | `src/bits.h` | MSB-first bit reader, JPEG-LS Golomb |
-| `src/dstenc.hpp` | the encoder: autocorrelation, filter design, refinement, coding |
+| `src/dstenc.h` | the encoder: autocorrelation, filter design, refinement, coding |
 | `src/bitwrite.h` | bit writer with backwards carry propagation |
-| `src/encpool.hpp` | encoding frames on several threads |
+| `src/encpool.h` | encoding frames on several threads |
 
 `README.md` covers the containers and the measured results;
 `docs/philips-encoder.md` compares this encoder against the reference encoder's

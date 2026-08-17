@@ -36,9 +36,9 @@ four times slower. Nothing is chosen at run time, so nothing has to be detected
 and no compiler runtime library is involved.
 
 The whole program is a single translation unit, and `src/dff2dsf.cpp` is the
-only file that includes anything at all: the C and C++ library headers, then the
-declarations, then the implementations, each listed in dependency order. Nothing
-to link, and one place that says what the program depends on.
+only file that includes anything at all: the C and C++ library headers, then one
+header per module in dependency order. Nothing to link, and one place that says
+what the program depends on.
 
 ## Memory
 
@@ -199,7 +199,7 @@ Per frame, for all channels together:
 5. **Arithmetic code** the "prediction was wrong" flags with those probabilities.
 
 Steps 3 to 5 predict bit for bit exactly as the decoder does, sharing the filter
-lookup table in `dst.hpp`.
+lookup table in `dst.h`.
 
 `ALGORITHM.md` describes both directions in full — the frame syntax, the table
 coding, the arithmetic coder, the filter design and the refinement — at the level
@@ -321,27 +321,28 @@ a truncated input, and a failing write, none of which may leave a worker waiting
 
 ## Source layout
 
-Each `.hpp` is an implementation file with its declarations in the matching
-`.h`. None of them include anything; `src/dff2dsf.cpp` includes them all, in
-order, so they are read in that order too.
+One header per module, each holding a class with its methods defined inline —
+there are no separate declaration and implementation files, and no out-of-line
+definitions. None of them include anything; `src/dff2dsf.cpp` includes them all,
+in order, so they are read in that order too.
 
 | file | contents |
 |---|---|
 | `src/dff2dsf.cpp` | command line, decode and encode loops |
-| `src/dsdiff.hpp` | DSDIFF container parsing and frame iteration |
-| `src/dst.hpp` | DST decoder |
-| `src/dstenc.hpp` | DST encoder: filter design, refinement, arithmetic coding |
-| `src/dsf.hpp` | DSF writing: deinterleave and bit reversal |
-| `src/dsfread.hpp` | DSF reading: the same in reverse |
-| `src/dffwrite.hpp` | DSDIFF writing |
-| `src/encpool.hpp` | encoding frames on several threads |
+| `src/dsdiff.h` | DSDIFF container parsing and frame iteration |
+| `src/dst.h` | DST decoder |
+| `src/dstenc.h` | DST encoder: filter design, refinement, arithmetic coding |
+| `src/dsf.h` | DSF writing: deinterleave and bit reversal |
+| `src/dsfread.h` | DSF reading: the same in reverse |
+| `src/dffwrite.h` | DSDIFF writing |
+| `src/encpool.h` | encoding frames on several threads |
 | `src/bits.h`, `src/bitwrite.h` | bit reader and writer, JPEG-LS Golomb code |
 | `src/crc.h` | the DSDIFF frame CRC carried in `DSTC` |
 | `src/common.h` | byte order, buffered file access, the platform bits |
 
 ## Licensing
 
-`src/dst.hpp`, `src/dst.h` and `src/bits.h` are derived from FFmpeg
+`src/dst.h` and `src/bits.h` are derived from FFmpeg
 (`libavcodec/dstdec.c`, `get_bits.h`, `golomb.h`), which is **LGPL-2.1-or-later**
 — see `LICENSE.ffmpeg`. That license governs those files and therefore the
 combined binary, regardless of the MIT `LICENSE` covering the rest of this
