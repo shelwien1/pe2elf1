@@ -204,6 +204,7 @@ int DffReader::next_dst_frame(const uint8_t** data, size_t* size, size_t* capaci
             *data = buf_;
             *size = n;
             *capacity = n + kBitReaderPadding;
+            dst_payload_ += n;
             return 1;
         }
         // DSTC (frame CRC) and anything else in here is not needed.

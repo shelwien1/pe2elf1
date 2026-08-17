@@ -99,6 +99,13 @@ public:
         return true;
     }
 
+    // Reads up to n bytes, returning how many were read.  Unlike read(), a
+    // short read is not an error: callers use this where a truncated file is
+    // something to cope with rather than reject.
+    size_t read_some(void* buf, size_t n) {
+        return fread(buf, 1, n, f_);
+    }
+
     bool write(const void* buf, size_t n) {
         if (fwrite(buf, 1, n, f_) != n) return ERR("write failed");
         return true;

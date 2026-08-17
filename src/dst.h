@@ -23,6 +23,12 @@ struct DstArithCoder {
     unsigned c;
 };
 
+// Expands filter coefficients into the lookup table that evaluates the 128-tap
+// sign-based FIR eight taps at a time: lut[j][k] is the contribution of history
+// byte j when those eight bits are k.  Shared with the encoder, which has to
+// predict exactly as the decoder does.  False if a partial sum leaves int16.
+bool build_filter_lut(const int* coeff, unsigned length, int16_t lut[16][256]);
+
 class DstDecoder {
 public:
     // `dsd_rate` is the DSD bit rate per channel (e.g. 2822400 for DSD64).

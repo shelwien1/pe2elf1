@@ -1,11 +1,15 @@
-// dff2dsf - decode a DSDIFF (.dff) file, DST coded or raw, into a DSF (.dsf).
+// dff2dsf - convert between DSDIFF (.dff) and DSF (.dsf).
 //
-//   dff2dsf d input.dff output.dsf
+//   dff2dsf d input.dff output.dsf     decode, undoing DST compression
+//   dff2dsf c input.dsf output.dff     compress with DST
 
 #include "common.h"
+#include "dffwrite.h"
 #include "dsdiff.h"
 #include "dsf.h"
+#include "dsfread.h"
 #include "dst.h"
+#include "dstenc.h"
 
 namespace dff2dsf {
 
@@ -13,11 +17,13 @@ namespace {
 
 int usage() {
     fprintf(stderr,
-            "dff2dsf - DSDIFF (DST) to DSF decoder\n"
+            "dff2dsf - DSDIFF (DST) and DSF converter\n"
             "\n"
             "usage: dff2dsf d input.dff output.dsf\n"
+            "       dff2dsf c input.dsf output.dff\n"
             "\n"
-            "  d   decode: DST coded or raw DSD in a .dff, written as a .dsf\n");
+            "  d   decode: DST coded or raw DSD in a .dff, written as a .dsf\n"
+            "  c   compress: DSD in a .dsf, written as a DST coded .dff\n");
     return 1;
 }
 
@@ -109,8 +115,8 @@ bool decode_file(const char* in_path, const char* out_path) {
     if (!writer.open(out_path, channels, rate, reader.channel_ids())) return false;
 
     bool ok;
+    uint64_t frames = 0;
     if (reader.is_dst()) {
-        uint64_t frames = 0;
         ok = decode_dst(reader, writer, &frames);
     } else {
         ok = decode_raw_dsd(reader, writer);
@@ -119,6 +125,74 @@ bool decode_file(const char* in_path, const char* out_path) {
     if (!ok) return false;
     if (!writer.finish()) return false;
 
+    if (reader.is_dst())
+        fprintf(stderr, "dst payload: %llu bytes in %llu frames\n",
+                (unsigned long long)reader.dst_payload(), (unsigned long long)frames);
+    fprintf(stderr, "output: %s\n", out_path);
+    return true;
+}
+
+bool encode_file(const char* in_path, const char* out_path) {
+    DsfReader reader;
+    if (!reader.open(in_path)) return false;
+
+    const int channels = reader.channels();
+    const unsigned rate = reader.dsd_rate();
+
+    DstEncoder enc;
+    if (!enc.init(channels, rate)) return false;
+
+    const size_t bytes_per_channel = enc.frame_bytes_per_channel();
+    const uint64_t total_frames =
+        (reader.samples_per_channel() + enc.frame_bits() - 1) / enc.frame_bits();
+
+    fprintf(stderr, "input : %s\n", in_path);
+    fprintf(stderr, "format: %u Hz DSD (DSD%u), %d channel(s)\n", rate, rate / 44100, channels);
+    fprintf(stderr, "length: %llu frames, %.2f s\n", (unsigned long long)total_frames,
+            double(reader.samples_per_channel()) / double(rate));
+
+    DffWriter writer;
+    if (!writer.open(out_path, channels, rate)) return false;
+
+    uint8_t* src = static_cast<uint8_t*>(xalloc(bytes_per_channel * size_t(channels)));
+    uint8_t* frame = static_cast<uint8_t*>(xalloc(enc.max_frame_size()));
+    if (!src || !frame) { free(src); free(frame); return false; }
+
+    uint64_t frames = 0, coded_bytes = 0;
+    bool ok = true;
+
+    for (;;) {
+        int r = reader.read_planar(src, bytes_per_channel);
+        if (r < 0) { ok = false; break; }
+        if (r == 0) break;
+
+        size_t size = 0;
+        if (!enc.encode(src, frame, enc.max_frame_size(), &size)) { ok = false; break; }
+        if (!writer.write_frame(frame, size)) { ok = false; break; }
+
+        frames++;
+        coded_bytes += size;
+        if ((frames & 63) == 0) {
+            fprintf(stderr, "\rencoding: %llu/%llu frames (%.1f%%), ratio %.3f",
+                    (unsigned long long)frames, (unsigned long long)total_frames,
+                    total_frames ? 100.0 * double(frames) / double(total_frames) : 0.0,
+                    double(frames * bytes_per_channel * size_t(channels)) / double(coded_bytes));
+            fflush(stderr);
+        }
+    }
+
+    free(src);
+    free(frame);
+    if (!ok) return false;
+
+    if (!writer.finish()) return false;
+
+    const double raw = double(frames * bytes_per_channel * size_t(channels));
+    fprintf(stderr, "\rencoding: %llu frames, ratio %.3f%*s\n",
+            (unsigned long long)frames, coded_bytes ? raw / double(coded_bytes) : 0.0, 20, "");
+    if (enc.uncoded_frames())
+        fprintf(stderr, "dff2dsf: %llu frame(s) did not compress and were stored raw\n",
+                (unsigned long long)enc.uncoded_frames());
     fprintf(stderr, "output: %s\n", out_path);
     return true;
 }
@@ -130,10 +204,12 @@ int main(int argc, char** argv) {
     using namespace dff2dsf;
 
     if (argc != 4) return usage();
-    if (argv[1][0] != 'd' || argv[1][1] != '\0') {
+    if (argv[1][1] != '\0' || (argv[1][0] != 'd' && argv[1][0] != 'c')) {
         fprintf(stderr, "dff2dsf: unknown command '%s'\n\n", argv[1]);
         return usage();
     }
 
-    return decode_file(argv[2], argv[3]) ? 0 : 1;
+    const bool ok = argv[1][0] == 'd' ? decode_file(argv[2], argv[3])
+                                      : encode_file(argv[2], argv[3]);
+    return ok ? 0 : 1;
 }

@@ -157,25 +157,28 @@ bool DstDecoder::read_table(BitReader& br, Table& t, const int8_t pred[3][3],
 
 // Precomputes the FIR prediction as 16 lookups of 8 taps each: entry [j][k] is
 // the contribution of the 8 history bits in byte j when those bits are `k`.
-bool DstDecoder::build_filter() {
-    for (unsigned i = 0; i < fsets_.elements; i++) {
-        int length = int(fsets_.length[i]);
+bool build_filter_lut(const int* coeff, unsigned length, int16_t lut[16][256]) {
+    for (int j = 0; j < 16; j++) {
+        int total = int(length) - j * 8;
+        if (total < 0) total = 0;
+        if (total > 8) total = 8;
 
-        for (int j = 0; j < 16; j++) {
-            int total = length - j * 8;
-            if (total < 0) total = 0;
-            if (total > 8) total = 8;
-
-            for (int k = 0; k < 256; k++) {
-                int64_t v = 0;
-                for (int l = 0; l < total; l++)
-                    v += (((k >> l) & 1) * 2 - 1) * fsets_.coeff[i][j * 8 + l];
-                if (int16_t(v) != v)
-                    return ERR("filter coefficient overflow");
-                filter_[i][j][k] = int16_t(v);
-            }
+        for (int k = 0; k < 256; k++) {
+            int64_t v = 0;
+            for (int l = 0; l < total; l++)
+                v += (((k >> l) & 1) * 2 - 1) * coeff[j * 8 + l];
+            if (int16_t(v) != v)
+                return ERR("filter coefficient overflow");
+            lut[j][k] = int16_t(v);
         }
     }
+    return true;
+}
+
+bool DstDecoder::build_filter() {
+    for (unsigned i = 0; i < fsets_.elements; i++)
+        if (!build_filter_lut(fsets_.coeff[i], fsets_.length[i], filter_[i]))
+            return false;
     return true;
 }
 

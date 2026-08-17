@@ -25,6 +25,11 @@ public:
     const uint32_t* channel_ids() const { return channel_ids_; }
     int64_t data_bytes() const { return body_end_ - body_pos_; }
 
+    // Total size of the DST frame payloads seen so far, which is the compressed
+    // audio proper: container extras such as a frame index chunk are not
+    // included, so this compares like for like across encoders.
+    uint64_t dst_payload() const { return dst_payload_; }
+
     // Next DST frame.  Returns 1 on success, 0 at end of data, -1 on error.
     // The payload is zero padded to allow the bit reader's windowed reads.
     int next_dst_frame(const uint8_t** data, size_t* size, size_t* capacity);
@@ -50,6 +55,7 @@ private:
     bool saw_prop_ = false;
     bool saw_cmpr_ = false;
     uint32_t frame_count_ = 0;
+    uint64_t dst_payload_ = 0;
     uint16_t frame_rate_ = 0;
     uint32_t channel_ids_[kDstMaxChannels] = {};
 
