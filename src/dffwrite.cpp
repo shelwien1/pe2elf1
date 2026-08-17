@@ -3,6 +3,8 @@
 #include "dffwrite.h"
 #include "dst.h"
 
+#include <time.h>
+
 namespace dff2dsf {
 
 namespace {
@@ -44,6 +46,10 @@ void put_be16(uint8_t*& p, uint16_t v) {
     *p++ = uint8_t(v >> 8);
     *p++ = uint8_t(v);
 }
+
+// What this encoder writes into the file's comment chunk, the way the reference
+// encoder records the tool that produced the file.
+const char kCreatingMachine[] = "dff2dsf DST encoder";
 
 } // namespace
 
@@ -121,23 +127,107 @@ bool DffWriter::open(const char* path, int channels, unsigned dsd_rate) {
     return true;
 }
 
+bool DffWriter::record_frame(int64_t payload_pos, size_t size) {
+    if (frames_ == index_capacity_) {
+        uint64_t want = index_capacity_ ? index_capacity_ * 2 : 4096;
+        IndexEntry* p = static_cast<IndexEntry*>(
+            realloc(index_, sizeof(IndexEntry) * size_t(want)));
+        if (!p) return ERR("out of memory growing the frame index");
+        index_ = p;
+        index_capacity_ = want;
+    }
+    index_[frames_].offset = uint64_t(payload_pos);
+    index_[frames_].size = uint32_t(size);
+    return true;
+}
+
 bool DffWriter::write_frame(const uint8_t* data, size_t size) {
     uint8_t hdr[12];
     uint8_t* p = hdr;
     put_tag(p, "DSTF");
     put_be64(p, size);
 
+    const int64_t chunk_pos = f_.tell();
     if (!f_.write(hdr, sizeof(hdr))) return false;
     if (!f_.write(data, size)) return false;
     if (size & 1) {
         const uint8_t pad = 0;
         if (!f_.write(&pad, 1)) return false;
     }
+
+    // The index points at the frame data, not at its chunk header.
+    if (!record_frame(chunk_pos + 12, size)) return false;
     frames_++;
     return true;
 }
 
+// DSTI: one entry per frame, so a player can seek without walking every chunk.
+bool DffWriter::write_index() {
+    if (!frames_) return true;
+
+    uint8_t hdr[12];
+    uint8_t* p = hdr;
+    put_tag(p, "DSTI");
+    put_be64(p, frames_ * 12);
+    if (!f_.write(hdr, sizeof(hdr))) return false;
+
+    // Buffered rather than one write per entry, but not all at once either.
+    constexpr uint64_t kBatch = 4096;
+    uint8_t* buf = static_cast<uint8_t*>(xalloc(size_t(kBatch) * 12));
+    if (!buf) return false;
+
+    bool ok = true;
+    for (uint64_t i = 0; i < frames_ && ok; i += kBatch) {
+        const uint64_t n = (frames_ - i < kBatch) ? frames_ - i : kBatch;
+        uint8_t* q = buf;
+        for (uint64_t j = 0; j < n; j++) {
+            put_be64(q, index_[i + j].offset);
+            put_be32(q, index_[i + j].size);
+        }
+        ok = f_.write(buf, size_t(n) * 12);
+    }
+    free(buf);
+    return ok;
+}
+
+// COMT: a single file-history comment naming the encoder, timestamped now.
+bool DffWriter::write_comment() {
+    const uint32_t text_len = uint32_t(sizeof(kCreatingMachine) - 1);
+    const uint32_t padded = text_len + (text_len & 1);
+    const uint64_t size = 2 + 14 + padded;
+
+    time_t now = time(nullptr);
+    struct tm utc;
+    if (!gmtime_r(&now, &utc)) return ERR("cannot read the current time");
+
+    uint8_t buf[128];
+    uint8_t* p = buf;
+    put_tag(p, "COMT");
+    put_be64(p, size);
+    put_be16(p, 1);                                   // one comment
+    put_be16(p, uint16_t(utc.tm_year + 1900));
+    *p++ = uint8_t(utc.tm_mon + 1);
+    *p++ = uint8_t(utc.tm_mday);
+    *p++ = uint8_t(utc.tm_hour);
+    *p++ = uint8_t(utc.tm_min);
+    put_be16(p, 3);                                   // comment type: file history
+    put_be16(p, 2);                                   // reference: creating machine
+    put_be32(p, text_len);
+    memcpy(p, kCreatingMachine, text_len);
+    p += text_len;
+    if (text_len & 1) *p++ = 0;
+
+    return f_.write(buf, size_t(p - buf));
+}
+
 bool DffWriter::finish() {
+    // The sound data ends here; the index and comment follow it, outside the
+    // DST chunk but inside the form.
+    const int64_t dst_end = f_.tell();
+
+    if (!write_index()) return false;
+    if (!write_comment()) return false;
+
     const int64_t end = f_.tell();
 
     uint8_t v[8];
@@ -146,7 +236,7 @@ bool DffWriter::finish() {
     p = v; put_be64(p, uint64_t(end - 12));
     if (!f_.seek(frm8_size_pos_) || !f_.write(v, 8)) return false;
 
-    p = v; put_be64(p, uint64_t(end - dst_body_pos_));
+    p = v; put_be64(p, uint64_t(dst_end - dst_body_pos_));
     if (!f_.seek(dst_size_pos_) || !f_.write(v, 8)) return false;
 
     p = v; put_be32(p, uint32_t(frames_));
@@ -154,6 +244,10 @@ bool DffWriter::finish() {
 
     f_.close();
     return true;
+}
+
+DffWriter::~DffWriter() {
+    free(index_);
 }
 
 } // namespace dff2dsf

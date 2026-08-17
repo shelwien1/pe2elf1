@@ -42,6 +42,21 @@ The last DSF block is padded to the fixed 4096 bytes per channel with `0x69`
 (DSD silence); the exact length is carried by the sample count in the header, so
 players trim the padding.
 
+The `.dff` this encoder writes is laid out like the reference encoder's, chunk
+for chunk:
+
+| chunk | contents |
+|---|---|
+| `FVER` | format version 1.5.0.0 |
+| `PROP`/`SND ` | `FS  `, `CHNL`, `CMPR`, `ABSS`, `LSCO` |
+| `DST ` | `FRTE` frame count and rate, then one `DSTF` per frame |
+| `DSTI` | frame index: data offset and length for each frame, for seeking |
+| `COMT` | file history comment naming the encoder |
+
+Per-frame CRCs (`DSTC`) are allowed by DSDIFF but the reference file carries
+none, so this encoder emits none either — adding them would make the output less
+like the original, not more.
+
 ## How the encoder designs its filter
 
 The filter is the whole game: with the reference encoder's own coefficients
@@ -85,16 +100,16 @@ towards cheaper codes. Coefficient quantisation turns out to cost nothing.
 On a 4:15 DSD64 stereo file produced by `DstEncUi - Version '4.0.3'` (19119
 frames, 180 MB of raw DSD):
 
-| | DST data | ratio |
-|---|---|---|
-| Philips `DstEncUi` 4.0.3 | 78,188,710 | 2.3005 |
-| dff2dsf | 78,133,734 | 2.3021 |
+| | DST data | whole file | ratio |
+|---|---|---|---|
+| Philips `DstEncUi` 4.0.3 | 78,188,710 | 78,657,280 | 2.3005 |
+| dff2dsf | 78,133,734 | 78,602,392 | 2.3021 |
 
-Compare the DST frame data, not the file size: the reference file also carries a
-229 KB `DSTI` frame index, which is not compressed audio, and counting it would
-flatter this encoder by a quarter of a percent it has not earned.
+0.070% smaller on the same 19119 frames. Both measures agree because both files
+carry the same chunks, including the 229 KB `DSTI` index; comparing whole files
+against an encoder that omits the index would be meaningless, so the DST frame
+data is the figure to watch.
 
-That is 0.070% smaller than the reference encoder, on the same 19119 frames.
 Per frame this encoder wins on loud material and loses a little on quiet
 material: on the first 200 frames, which are a quiet intro, it is 0.8% behind.
 
