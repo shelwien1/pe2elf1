@@ -27,6 +27,7 @@
 // dependency.  With the header a record the rest lifts: a `CodedTail`, a
 // `BmfImage` scratch for the one-plane decode, and fourteen spill slots each
 // holding a copy of a local that is still live at the read.
+
 // The plane descriptors, six bits each: two of reference count and four of
 // flags, then the dc byte and the reference weights those flags call for.  The
 // weights are written biased by 64 and read back the same way.
@@ -120,7 +121,15 @@ static void unmodel_described(BmfImage* img_at, uint8_t flags) {
 // `img_at`.  False when the file is short of what the header promised, or when
 // the stream did not end where its own length said it would -- the caller turns
 // either into `fail()`, which is what each was before.
-static bool expand_coded(BmfFile* arc_in, BmfImage* img_at, const BmfImage& hdr) {
+//
+// `FILE*` and not the `BmfFile*` the caller holds: the archive is what
+// `expand_image` reads members out of, and this reads bytes out of a stream.
+// The lift took `arc_in` at first, which left a first parameter every use of
+// which was `arc_in->fp` -- `methodise.py`'s rule for a receiver, and the
+// wrong reading, since `arc_in->expand_coded(...)` would be the archive
+// expanding an image.  Its opposite number is declined in that tool for the
+// same sentence; this one did not have to be.
+static bool expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
   near_lossless_q = 0;
   alphabet_reduced = 0;
   if( !(hdr.flags&flags_slow) ) {
@@ -132,7 +141,7 @@ static bool expand_coded(BmfFile* arc_in, BmfImage* img_at, const BmfImage& hdr)
   stream.buf = (uint8_t*)bmf_new(hdr.data_size);
   packer_reset();
   uint32_t want = hdr.data_size;
-  if( fread(stream.buf, 1u, hdr.data_size, arc_in->fp)!=want )
+  if( fread(stream.buf, 1u, hdr.data_size, fp)!=want )
     return false;
   if( (img_at->depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
     plane_predictor = 0;
@@ -228,7 +237,7 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     return arc_in->fail();
   }
   if( hdr.flags&flags_coded ) {
-    if( !expand_coded(arc_in, img_at, hdr) ) {
+    if( !expand_coded(arc_in->fp, img_at, hdr) ) {
       return arc_in->fail();
     }
   } else {

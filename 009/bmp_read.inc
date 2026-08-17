@@ -48,13 +48,6 @@ static uint8_t* write_nibbles(uint8_t* at, int32_t& hi, const uint8_t* src,
   }
 }
 
-// `n` bytes from `at` are inside the pixels.  Both walks spelled the two bounds
-// into a pair of locals at the top and compared against them four times
-// between them, which is the same sentence written four ways.
-static bool rle_fits(const BmfImage* img, const uint8_t* at, int32_t n) {
-  return at>=img->pixels&&at+n<=img->pixels+img->data_size;
-}
-
 // The RLE8 opcode stream.  True when it ended -- by the end-of-bitmap escape or
 // by running off the top row -- and false on a short read or an opcode that
 // would write outside the image.
@@ -67,7 +60,7 @@ static bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
   int32_t n, v;
   while( read_rle_op(fp, n, v) ) {
     if( n ) {
-      if( !rle_fits(img, at, n) )
+      if( !img->holds(at, n) )
         return false;
       __builtin_memset(at, v, n);
       at += n;
@@ -87,7 +80,7 @@ static bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
         return false;
       at += dx-dy*(uint16_t)img->stride;
     } else {
-      if( !rle_fits(img, at, v) )
+      if( !img->holds(at, v) )
         return false;
       fread(pal_buf, (v+1)&0xFFFFFFFE, 1u, fp);
       memcpy(at, (uint8_t*)pal_buf, v);
@@ -114,7 +107,7 @@ static bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
   while( read_rle_op(fp, run4, byte_in) ) {
     const uint32_t byte = (uint32_t)byte_in;
     if( run4 ) {
-      if( !rle_fits(img, row, run4/2+1) )
+      if( !img->holds(row, run4/2+1) )
         return false;
       uint8_t lo = byte&0xF;
       // `run4` nibbles of the two-nibble pattern in `byte`, from the half of
@@ -177,7 +170,7 @@ static bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
     } else {
       // An absolute run of `byte` nibbles, read a byte at a time and split
       // across whichever half of the output `hi_nibble` names.
-      if( !rle_fits(img, row, (int32_t)byte/2+1) )
+      if( !img->holds(row, (int32_t)byte/2+1) )
         return false;
       fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
       row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, byte);

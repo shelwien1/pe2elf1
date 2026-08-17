@@ -190,7 +190,6 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   // one of those two bins, so there was never anything a word pointer was for.
   P2Freq* bin;
   int32_t is_dec;
-  uint32_t step10;
   int32_t fold_sel, sel_alt;
   int32_t ctx_lo = ctx&0xF;
   int32_t sample16 = 16*sample_in;
@@ -271,7 +270,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     auto nudge = [&](int32_t at, uint32_t num, uint32_t pair_at) {
       bin = &frec[at];
       p2_rescale(bin);
-      step10 = (num*(uint32_t)frec[at].step)>>4;
+      const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
       if( a4 ) {
         bin->f[2-is_dec] += step10;
         update_binary_pair(model_strip(pair_at), (a4-1)>>1);

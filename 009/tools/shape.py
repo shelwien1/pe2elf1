@@ -16,6 +16,7 @@ It is a counter, not a target -- `exclusion_mask[symbol]` is a byte buffer being
 indexed and will never become a member.  See REFACTORING3.md §6.
 """
 import collections
+import os
 import re
 import sys
 
@@ -29,7 +30,15 @@ import structs                                                    # noqa: E402
 # The file to report on.  This was a constant, so `shape.py other.hpp`
 # silently reported on `subs1.hpp` -- which made every figure in it look
 # identical across four commits when they were being read from one file.
-SRC = next((a for a in sys.argv[1:] if not a.startswith('--')), 'subs1.hpp')
+#
+# The *default* stayed `subs1.hpp` for a round after the tree stopped having
+# one, so `tools/shape.py` with no argument -- the form its own usage line
+# gives -- ended in a `FileNotFoundError` traceback and an exit status of 0.
+# The default is the unit now, and a missing one is said in a sentence.
+SRC = next((a for a in sys.argv[1:] if not a.startswith('--')), 'bmf.cpp')
+if not os.path.exists(SRC):
+    sys.exit('%s: no such file -- the unit is `bmf.cpp` and a module is one '
+             'of the `.inc` files beside it' % SRC)
 
 # A type name with any number of stars: `char *`, `uint32_t **`, `Obj11 *`.
 T = r'[A-Za-z_]\w*\s*\**'

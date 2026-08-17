@@ -86,7 +86,7 @@
 // table the reason for each is written out rather than left as a share.
 // `tools/pairshare.py` re-measures both and reports any line that has drifted.
 //
-//   code_pixel / decode_pixel                         27 of 277 (10%)
+//   code_pixel / decode_pixel                         16 of 252 (6%)
 //   predict_med / unpredict_med                       10 of 104 (10%)
 //
 // **`predict_med` walks backwards and `unpredict_med` forwards**, and that is

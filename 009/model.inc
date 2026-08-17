@@ -1272,10 +1272,8 @@ struct ModelBlock {
     // pad, no other member, and nothing reading either.  `pixel_context`
     // indexes 0..31 and no further, so the pad held nothing back.
     alignas(16) int32_t nb_sym[32];
-    FreqRec* freq;
-    FreqRec* freq_tbl;
     uint32_t lvl_a;
-    int32_t m_up0, run, bit, hit_a, idx_s;
+    int32_t m_up0, run, bit, idx_s;
     PixRec *cur6 = row_cur[6];
     PixRec *row = row_cur[5];
     Neighbours nb4;
@@ -1386,8 +1384,8 @@ struct ModelBlock {
         return decode_stage_two(nb_sym, idx_s);
       }
     }
-    freq = &grid[bucket_idx];
-    freq_tbl = &grid[id2+188];
+    FreqRec *freq = &grid[bucket_idx];
+    FreqRec *freq_tbl = &grid[id2+188];
     {
     // Decode the stage-one symbol against one record: take the target, find
     // which of its five levels holds it, let the record grow, and leave the

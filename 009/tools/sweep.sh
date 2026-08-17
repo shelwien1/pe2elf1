@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # sweep.sh — ask every tool in this directory what it still finds.
 #
-#   tools/sweep.sh              report on subs1.hpp
+#   tools/sweep.sh              report on bmf.cpp
 #   tools/sweep.sh other.hpp    report on another file
+#
+# The default was `subs1.hpp` for one round after the decompilation stopped
+# being called that, so `tools/sweep.sh` with no argument -- the spelling this
+# usage block gives first -- exited 2 with `no such file`.  Inside a `{ a; b; c; }`
+# gate run that reads as a sweep that found nothing, because the compound's
+# status is the last command's and the sweep was not it.  A default that names
+# a file the repository does not have is the same defect the script's own third
+# answer was added for, one directory up.
 #
 # Each round of this project ends with the claim "every tool reports zero", and
 # for a long time that claim was worth very little.  Some tools printed nothing
@@ -44,7 +52,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-file=${1:-subs1.hpp}
+file=${1:-bmf.cpp}
 [ -f "$file" ] || { echo "no such file: $file" >&2; exit 2; }
 
 # Beside the real file, not in /tmp: some tools resolve the repository from the

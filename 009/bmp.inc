@@ -85,6 +85,14 @@ struct BmfImage {
   uint8_t* palette() { return pixels+data_size; }
   const uint8_t* palette() const { return pixels+data_size; }
 
+  // `n` bytes from `at` are inside this image's pixels.  Both run-length
+  // readers spelled the two bounds into a pair of locals at the top and
+  // compared against them four times between them, which is the same sentence
+  // written four ways.
+  bool holds(const uint8_t* at, int32_t n) const {
+    return at>=pixels&&at+n<=pixels+data_size;
+  }
+
   // Every header field of `src` but `flags`, which the two callers set
   // differently: `compress_image` writes the member header twice, once at the
   // top and once after `search_filter`, which may have transposed the image
