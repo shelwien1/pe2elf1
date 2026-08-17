@@ -1230,6 +1230,40 @@ struct ModelBlock {
     }
   }
 
+  // Stage one missed, so the symbol is looked for among the candidates and then
+  // down the selector lists.  `idx_s` is how far the run reached -- zero when
+  // there was no run -- and every answer here is one past it.
+  //
+  // Two paths reach this and both were a `goto pixel_done`: the run coder when
+  // it decoded a run but not the pixel that follows it, and stage one when its
+  // level came back zero.  The label was the last of the tree's, and it forced
+  // the stage-one block that sits between the two into a scope of its own,
+  // because a jump may cross a scope but not an initialisation inside the
+  // label's.
+  int32_t decode_stage_two(int32_t* nb_sym, int32_t idx_s) {
+    exclude_stage_one();
+    sel[0] = nullptr;
+    // The 32 candidate symbols `pixel_context` walks, in slot order.  Slots 0
+    // and 1 are the two most recent symbols at this exact context, 2..9 the
+    // move-to-front cache, and 10..31 the spatial neighbours widening outward.
+    seed_candidates(nb_sym);
+    if( offer_candidates<1>(nb_sym)>=0 )
+      return idx_s+1;
+    SymList **sel_p = load_selectors();
+    while( 1 ) {
+      if( sel_p>&escape_list )
+        bmf_fatal(bmf_read_error);
+      if( (*sel_p)->live ) {
+        int32_t lsym = (*sel_p)->decode_symbol_list();
+        row_cur[5]->sym = lsym;
+        if( lsym>=0 )
+          return idx_s+1;
+        sel_p = sel_cur;
+      }
+      sel_cur = ++sel_p;
+    }
+  }
+
   int32_t decode_pixel(int32_t x) {
     // The neighbour list `pixel_context` indexes by `sym_pos`.  BMF.exe fills
     // it one slot at a time, so Hex-Rays gave each slot a member, and an
@@ -1264,43 +1298,50 @@ struct ModelBlock {
         int32_t msym1c = mode_symbol[1];
         hit = bit;
         *(((uint8_t*)alpha_map)+msym1c) = bit;
-        hit_a = hit;
+        // `hit_a` is `hit`, and nothing between here and the end of this block
+        // writes either: `hit` is a member of this record and the only writes
+        // to it in the tree are this line and the two `hit = lvl` in the stage
+        // -one coders.  The two `hit_a = hit` further down were the same value
+        // fetched again after a spill, and one of them was the whole reason
+        // the `goto` below could skip a line.
+        const int32_t hit_a = hit;
         if( hit_a ) {
           idx_s = idx1;
         } else {
           idx_s = 0;
-          if( idx1==1 )
-            goto run_done;
-          // The bucket the run started in, a slot of the candidate table
-          // borrowed as a local.  `bucket` counts *down* through the loop
-          // below, so `bucket == bucket_top` is "this is the first turn" and
-          // not the tautology it reads as.  The run's length went into a
-          // second slot and is `idx1`, which is still live.
-          const int32_t bucket_top = bucket;
-          idx_s = 0;
-          int32_t mask = 1<<(bucket&31);
-          int32_t seen = 0;
-          do {
-            if( (mask|seen)<idx1 ) {
-              BitCtr *ctr = &run_ctr[16*((seen==0)+(bucket==bucket_top))+bucket];
-              int32_t run0 = ctr->n[0];
-              int32_t bin_tot = run0+ctr->n[1];
-              const int32_t run_bit = rc.decode_bit(run0, ctr->n[1]);
-              if( ctr->limit<(uint32_t)bin_tot )
-                ctr->scale_rare();
-              ctr->n[run_bit] += 8;
-              if( run_bit )
-                idx_s |= mask;
-              seen |= idx_s&mask;
-            }
-            --bucket;
-            mask >>= 1;
-          } while( mask );
+          // A run of one is already decoded: the escape bit said so and the
+          // length needs no bits.  This was a `goto` past the loop *and* past
+          // the two lines below it -- both of which are no-ops when `idx_s` is
+          // zero, which it is on exactly this path.
+          if( idx1>1 ) {
+            // The bucket the run started in, a slot of the candidate table
+            // borrowed as a local.  `bucket` counts *down* through the loop
+            // below, so `bucket == bucket_top` is "this is the first turn" and
+            // not the tautology it reads as.  The run's length went into a
+            // second slot and is `idx1`, which is still live.
+            const int32_t bucket_top = bucket;
+            int32_t mask = 1<<(bucket&31);
+            int32_t seen = 0;
+            do {
+              if( (mask|seen)<idx1 ) {
+                BitCtr *ctr = &run_ctr[16*((seen==0)+(bucket==bucket_top))+bucket];
+                int32_t run0 = ctr->n[0];
+                int32_t bin_tot = run0+ctr->n[1];
+                const int32_t run_bit = rc.decode_bit(run0, ctr->n[1]);
+                if( ctr->limit<(uint32_t)bin_tot )
+                  ctr->scale_rare();
+                ctr->n[run_bit] += 8;
+                if( run_bit )
+                  idx_s |= mask;
+                seen |= idx_s&mask;
+              }
+              --bucket;
+              mask >>= 1;
+            } while( mask );
+          }
         }
         if( idx_s )
           row_cur[5][idx_s-1].sym = row_cur[5][-1].sym;
-        hit_a = hit;
-  run_done:
         if( idx_s>hit_a ) {
           row_cur[6] = row_cur[6]+idx_s-hit_a;
           PixRec *r8b = row_cur[8];
@@ -1336,18 +1377,17 @@ struct ModelBlock {
           // what keeps `fill` off zero.
           fill_run(run_sym, head_word, flags_word, idx_s-hit_a-1);
           seed_after_run(row_cur[5], run_sym);
-          hit_a = hit;
         }
         if( hit_a )
           return idx_s;
-        goto pixel_done;
+        // The run was coded but the pixel was not, so what follows is the
+        // second stage with `idx_s` carrying how far the run reached.  The
+        // recovery jumped past the whole of stage one to say that.
+        return decode_stage_two(nb_sym, idx_s);
       }
     }
     freq = &grid[bucket_idx];
     freq_tbl = &grid[id2+188];
-    // The lambda is in a block of its own because the `goto pixel_done`
-    // eighteen lines up jumps over it, and a jump may cross a scope but not an
-    // initialisation inside the label's own.
     {
     // Decode the stage-one symbol against one record: take the target, find
     // which of its five levels holds it, let the record grow, and leave the
@@ -1387,30 +1427,7 @@ struct ModelBlock {
       row_cur[5]->sym = mode_symbol[lvl_a];
       return 1;
     }
-    idx_s = 0;
-  pixel_done:
-    exclude_stage_one();
-    sel[0] = nullptr;
-    // The 32 candidate symbols `pixel_context` walks, in slot order.  Slots 0
-    // and 1 are the two most recent symbols at this exact context, 2..9 the
-    // move-to-front cache, and 10..31 the spatial neighbours widening outward.
-    //
-    seed_candidates(nb_sym);
-    if( offer_candidates<1>(nb_sym)>=0 )
-      return idx_s+1;
-    SymList **sel_p = load_selectors();
-    while( 1 ) {
-      if( sel_p>&escape_list )
-        bmf_fatal(bmf_read_error);
-      if( (*sel_p)->live ) {
-        int32_t lsym = (*sel_p)->decode_symbol_list();
-        row_cur[5]->sym = lsym;
-        if( lsym>=0 )
-          return idx_s+1;
-        sel_p = sel_cur;
-      }
-      sel_cur = ++sel_p;
-    }
+    return decode_stage_two(nb_sym, 0);
   }
 
   int32_t code_pixel(int32_t x) {
