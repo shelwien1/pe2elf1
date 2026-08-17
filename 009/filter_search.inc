@@ -116,7 +116,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   uint8_t* tile_buf;
   int32_t plane_i, pi, best_flags;
   int32_t bits_a;
-  int32_t tile_h, y0, best_cost, pred, cand, nplanes_b, pl_k, bits, bits_f13;
+  int32_t tile_h, y0, best_cost, pred, cand, pl_k, bits, bits_f13;
   int32_t tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
@@ -287,15 +287,18 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
       int32_t bits_e = transform_cost(tile_img);
       if( bits_e<=best_bits ) {
         best_bits = bits_e;
-        nplanes_b = plane_count;
         cand = 0;
       } else {
         restore_descriptors(saved);
-        nplanes_b = plane_count;
         cand = 1;
       }
-      if( nplanes_b<=2 )
-        goto planes_done;
+      // The `goto planes_done` that stood here asked whether `nplanes_b <= 2`,
+      // and both arms above had just set `nplanes_b = plane_count` inside a
+      // block guarded by `plane_count > 2`.  Nothing between the two writes the
+      // count -- it is set once at the top of `compress_image` and once at the
+      // top of `expand_image`, and neither is on this path -- so the test was
+      // `plane_count > 2 && plane_count <= 2` and the jump could not be taken.
+      // The variable was read nowhere else.
     } else {
       cand = 1;
     }
@@ -330,7 +333,6 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   } else {
     cand = 1;
   }
-planes_done:
   if( !n_hard&&plane_count>1 ) {
     uint8_t *tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
     memcpy(tile_copy, tile_src, tile_img->data_size);

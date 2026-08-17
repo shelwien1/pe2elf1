@@ -256,82 +256,78 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     is_dec = a4&1;
     int32_t ctx15 = ctx_l&0xF;
     uint32_t pair_ctx = ctx_pair[a4&1];
-    if( ctx15<15 ) {
-      bin = &frec[1];
+    // One neighbouring record nudged: rescale it, then add a fraction of its
+    // own step to the side `is_dec` names -- or to side 0 when this symbol
+    // carried no residual.  `num/16` is that fraction.
+    //
+    // This was a label and a backward `goto`, and the comment above it said a
+    // structured form needed a loop and a flag to say which way the block had
+    // been entered.  It needs neither.  The residual coder below runs on every
+    // path that gets this far, and the only thing the two entries disagreed
+    // about is whether the record *below* the context had been nudged first --
+    // which is `ctx15 > 0`, the condition already sitting under the jump.  The
+    // two nudges are the same six lines twice over, differing in which
+    // neighbour and in the fraction.
+    auto nudge = [&](int32_t at, uint32_t num, uint32_t pair_at) {
+      bin = &frec[at];
       p2_rescale(bin);
-      step10 = (10*(uint32_t)frec[1].step)>>4;
+      step10 = (num*(uint32_t)frec[at].step)>>4;
       if( a4 ) {
         bin->f[2-is_dec] += step10;
-        update_binary_pair(model_strip(pair_ctx+1), (a4-1)>>1);
+        update_binary_pair(model_strip(pair_at), (a4-1)>>1);
       } else {
         bin->f[0] += step10;
       }
-      if( ctx15<=0 ) {
-// The residual coder, entered two ways: by falling into it when the context's
-// low nibble is zero, and by the `goto` at the bottom of this function, which
-// jumps back *into* this block from outside it.
-//
-// It stays a label.  A structured form needs a loop around the `if` and a flag
-// to say which way it was entered -- one more level of nesting and one more
-// variable, to remove one `goto` that already says what it does.  That is the
-// trade the refactoring plan names when it says to keep state-machine labels,
-// and this is one.
-code_residual:
-        step_v = ctx;
-        if( freq[step_v].step<=0x1Au )
-          return step_v;
-        fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
-        if( !fold[(uint8_t)-resid_in] )
-          fold_sel = fold[(uint8_t)-resid_in];
-        step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
-        P2Freq *frec_step = &freq[step_v];
-        // The record after the step's and the record before it, each bumped
-        // when the level leaves room for it.  This was one `if` with an empty
-        // `else`, a `goto` out of its middle to a label below the second bump,
-        // and the second bump reached by falling past that label -- three ways
-        // of saying two independent conditions.
-        if( ctx15<15 ) {
-          bin = &frec_step[1];
-          p2_freq_add(bin, fold_sel, 4);
-        }
-        if( ctx15>0 ) {
-          bin = &frec_step[-1];
-          p2_freq_add(bin, fold_sel, 4);
-        }
-        if( a4 ) {
-          int32_t n2_half = (a4-1)>>1;
-          int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
-          if( hi_nibble>=0xF0||(update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
-            update_binary_pair(model_strip(pair_ctx-16), n2_half);
-          }
-        }
-        P2Freq *prec0 = &frec_step[0];
-        p2_freq_add(prec0, fold_sel, 6);
-        if( !plane_idx||freq[ctx].step>0x100u ) {
-          sel_alt = 2-is_dec;
-          if( !a4 )
-            sel_alt = 0;
-          is_dec = sel_alt;
-          // The five context banks, bumped.  `bump_bank` is one bank's worth;
-          // the five were written out in full, thirty-six lines apiece, and its
-          // comment says what they had in common.
-          for( int32_t k = 0; k<5; ++k )
-            bump_bank(k, step_v, ctx15, fold_sel, is_dec);
-        }
-        return step_v;
-      }
-      frec = &freq[ctx];
+    };
+    if( ctx15<15 )
+      nudge(1, 10, pair_ctx+1);
+    if( ctx15>0 )
+      nudge(-1, 13, pair_ctx-1);
+    // The reload of `frec` that stood between the two nudges was `&freq[ctx]`,
+    // which is what it already held: `ctx` is written in `code_banks` and in
+    // the table set-up, both above this, and nothing between the two nudges
+    // touches it.
+    step_v = ctx;
+    if( freq[step_v].step<=0x1Au )
+      return step_v;
+    fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
+    if( !fold[(uint8_t)-resid_in] )
+      fold_sel = fold[(uint8_t)-resid_in];
+    step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
+    P2Freq *frec_step = &freq[step_v];
+    // The record after the step's and the record before it, each bumped when
+    // the level leaves room for it.  This was one `if` with an empty `else`, a
+    // `goto` out of its middle to a label below the second bump, and the second
+    // bump reached by falling past that label -- three ways of saying two
+    // independent conditions.
+    if( ctx15<15 ) {
+      bin = &frec_step[1];
+      p2_freq_add(bin, fold_sel, 4);
     }
-    bin = &frec[-1];
-    p2_rescale(bin);
-    uint32_t step13 = (13*(uint32_t)frec[-1].step)>>4;
+    if( ctx15>0 ) {
+      bin = &frec_step[-1];
+      p2_freq_add(bin, fold_sel, 4);
+    }
     if( a4 ) {
-      bin->f[2-is_dec] += step13;
-      update_binary_pair(model_strip(pair_ctx-1), (a4-1)>>1);
-    } else {
-      bin->f[0] += step13;
+      int32_t n2_half = (a4-1)>>1;
+      int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
+      if( hi_nibble>=0xF0||(update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
+        update_binary_pair(model_strip(pair_ctx-16), n2_half);
+      }
     }
-    goto code_residual;
+    P2Freq *prec0 = &frec_step[0];
+    p2_freq_add(prec0, fold_sel, 6);
+    if( !plane_idx||freq[ctx].step>0x100u ) {
+      sel_alt = 2-is_dec;
+      if( !a4 )
+        sel_alt = 0;
+      is_dec = sel_alt;
+      // The five context banks, bumped.  `bump_bank` is one bank's worth; the
+      // five were written out in full, thirty-six lines apiece, and its comment
+      // says what they had in common.
+      for( int32_t k = 0; k<5; ++k )
+        bump_bank(k, step_v, ctx15, fold_sel, is_dec);
+    }
   }
   return step_v;
 }
