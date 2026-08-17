@@ -301,11 +301,12 @@ as `stream.cur - stream.buf` and get a byte count that includes the descriptors.
 
 ### 5.2 `BitCtr` — a binary counter that inherits
 
-Every binary decision in model A goes through `BitCtr` (`bitctr.inc`): two
-16-bit counts and a rescale threshold. What makes it more than a pair of counts
-is that a fresh one does not code its own bit — it borrows a parent's
-distribution until it has evidence of its own. The counter has **three states**,
-and they are distinguished by the two counts rather than by any flag:
+Every binary decision in model A goes through `BitCtr::code_context_bit`
+(`bitctr.inc`): two 16-bit counts and a rescale threshold. What makes it more
+than a pair of counts is that a fresh one does not code its own bit — it borrows
+a parent's distribution until it has evidence of its own. The counter has
+**three states**, and they are distinguished by the two counts rather than by
+any flag:
 
 | state | test | what happens on a bit |
 | --- | --- | --- |
@@ -429,7 +430,8 @@ not at all. A plane starts adaptive and settles; `freq[1]` seeds at
 `24 * alt_freq_limit` and walks down. The two limits themselves are set by which
 model is running: 8 and 8 for predictor 2, 16 and 64 for everything else.
 
-Each pair in the tree is halved at 0x4000 and the side taken is set to
+Each pair in the tree is halved at 0x4000 — by `halve_pair`, which halves both
+sides and hands back the one the walk took — and the side taken is then set to
 `alt_freq_init + f`, so a tree node's counts never run away and never reach zero.
 All 1024 strips are seeded identically at `begin_plane_stream` — a ten-entry
 header `{635, 24*limit, 205, 124, 147, 83, 48, 16, 8, 4}` and 122 pairs at
@@ -661,7 +663,10 @@ candidates stop being worth their time.
 Then the whole-tile trials, each of which edits every descriptor at once,
 re-encodes, and keeps the edit only if it did not cost more:
 
-1. **transposed or not.** The tile is rotated, `flags ^= flags_transposed`, and
+1. **transposed or not.** The tile is rotated by `transpose_image` — which
+   copies the pixels out, writes them back column-major, and then calls
+   `transpose_image_in_place` to swap `width` with `height` and recompute the
+   stride — `flags ^= flags_transposed`, and
    re-encoded plane by plane against the per-plane figures just taken. The walk
    stops at the first plane that costs more transposed than it did upright — so
    where it stopped *is* the answer, and no flag is needed to record it.
@@ -762,10 +767,12 @@ this document needs both.
 
 ### 7.2 MED, standalone
 
-`predict_med` / `unpredict_med` apply the gradient predictor of §10.1 **in place
-over a whole plane**, folding each residual zigzag through a 256-entry table.
-This is what runs for predictor 1 when the *main* model is coding — the flags 1
-or 9 that only `search_filter`'s alt-off trial produces.
+`predict_med` / `unpredict_med` apply the gradient rule — `med_predict`, which
+is LOCO-I's: `min(N,W)` at a rising edge, `max(N,W)` at a falling one, and
+`N + W − NW` between — **in place over a whole plane**, folding each residual
+zigzag through a 256-entry table built by `med_fold_table` (and inverted by
+`med_unfold_table`). This is what runs for predictor 1 when the *main* model is
+coding — the flags 1 or 9 that only `search_filter`'s alt-off trial produces.
 
 The forward pass walks the plane **backwards from the last pixel**, so each
 prediction still sees unmodified neighbours; the inverse walks forwards, so each
@@ -794,6 +801,41 @@ one eight-bit greyscale plane** regardless of the image's real depth.
 In interleaved mode the model is handed the image's own header and walks the
 interleaved buffer at a stride of `plane_count`, so a 32-bit image is one pass
 over four-byte symbols rather than four passes over bytes.
+
+### 7.4 which model a plane actually gets
+
+`code_plane<f_DEC>` is where the descriptor becomes a model. It asks
+`alt_model_plane` first, and falls through to the main model only if that
+answers false:
+
+```
+plane_alt_model == 0            ->  false: the main model codes the plane
+predictor is neither 1 nor 2    ->  true, and nothing is coded here at all
+predictor 1 or 2                ->  true, after one of six entry points
+```
+
+The middle line is the one to notice. A descriptor with `desc_alt_model` set and
+a predictor of 0 or 3 returns **true without coding anything** — it does not fall
+through to the main model. That is what the original's nesting says, and §12's
+"what cannot happen" depends on the search never producing such a descriptor.
+
+The six entry points are three pairs, and which pair is chosen by the plane's
+depth and the direction, not by the predictor:
+
+| | encode | decode |
+| --- | --- | --- |
+| 8-bit, p1 / p2 | `alt_model_p1_d8_encode` / `alt_model_p2_d8_encode` | `…_d8_decode` |
+| other depths, p1 | `alt_model_p1_encode` | `alt_model_p1_decode` |
+| other depths, p2 | `alt_model_p2_encode` | `alt_model_p2_decode` |
+
+The eight-bit variants take `(pixels, width, height)` and the others take the
+image header, which is the whole reason the split exists: an 8-bit plane is a
+flat byte array and needs no header to walk.
+
+When it does fall through, `new_model_block` allocates the main model's
+workspace for this plane's dimensions and depth, `model_plane_slow` or
+`unmodel_plane_slow` runs the row walk, and `free_workspace` gives it back. One
+allocation per plane, not one per image.
 
 ---
 
@@ -1311,8 +1353,8 @@ and `mag` (its absolute value). The two bytes are what the context quantiser of
 §10.2 sums over; the 16-bit fields are what the filter reads.
 
 Those become a **7×4 feature matrix** `p2_row[7][4]`. The prediction is
-`centre + Σ w[j][k]·p2_row[j][k]` over all 28 taps, and one tap's update is a
-**normalised least-mean-squares** step — `nlms_step`:
+`centre + Σ w[j][k]·p2_row[j][k]` over all 28 taps — that sum is `nb_dot` — and
+one tap's update is a **normalised least-mean-squares** step, `nlms_step`:
 
 ```c
 ms          = w[7+j][k] + (x·x − w[7+j][k])·ms_rate;   // running power of the tap
@@ -1360,7 +1402,10 @@ interleaved path and not the `d8` one.
 Not one predictor but **1088**, chosen by a quantised description of the local
 texture. `alt_p2_context` accumulates four directional activity sums — up-left,
 up-right, left, up — each a fixed-weight combination of eight neighbours'
-difference fields, and derives five small numbers:
+difference fields, and derives five small numbers. Four of them are
+`over_thresholds`: how many of a run of thresholds a value clears, optionally
+against a multiple of each. (`ctx_quant` is the same counting for the run and
+sum contexts of §10.4, packed as two two-bit fields.)
 
 | | from | range |
 | --- | --- | --- |
