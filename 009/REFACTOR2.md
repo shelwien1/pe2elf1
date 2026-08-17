@@ -1306,7 +1306,15 @@ and the declined-pairs table in `bmf.cpp`, still saying `27 of 277` about a
 decoder that had just lost twenty-five lines.
 
 `structs.defs` says so now, once, when it is handed an include list rather
-than a program. It is a note on stderr and not a refusal: for a tool that
+than a program — and the first thing that note caught was not a hand run at
+all. It appeared in the middle of `tools/x32.sh`'s output, because that gate
+asks `ptrwidth.py bmf.cpp`, and `ptrwidth.py` is one of the seventy-seven that
+read the path they are given. The row the whole script exists to print, "0
+pointers through a 32-bit integer", was a statement about the include list.
+The comment on the line above it read "`bmf.cpp`, not `subs1.hpp`: the
+decompilation is in the one file now", which had been two rounds out of date
+when it was written. It splices now, and a planted `(int32_t)(uintptr_t)p`
+shows the difference: the include list answers 0 and the unit answers 1. It is a note on stderr and not a refusal: for a tool that
 *rewrites* what it reads, one file is the right unit and the answer about
 `bmf.cpp` is the right answer. What was wrong was what it got read as.
 

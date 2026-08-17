@@ -189,9 +189,23 @@ if ( ulimit -v 65536 ) >/dev/null 2>&1; then
 fi
 
 BMF_STRICT=1 BMF_BITS=64 ./build.sh >/dev/null 2>&1
-# `bmf.cpp`, not `subs1.hpp`: the decompilation is in the one file now, and
-# asking for the old name ended an otherwise passing run with a traceback.
-left=$(python3 tools/ptrwidth.py bmf.cpp | tail -1)
+# The spliced unit, not `bmf.cpp`.  The comment here used to read "`bmf.cpp`,
+# not `subs1.hpp`: the decompilation is in the one file now", and it was two
+# rounds out of date when it was written: `bmf.cpp` is 195 lines of `#include`
+# with two bodies in it, and `ptrwidth.py` reads the path it is given.  So the
+# row this whole script exists to print -- "0 pointers through a 32-bit
+# integer" -- was a statement about the include list.  It was right, and it was
+# right the way an unasked question is.
+#
+# `structs.splice` is what `sweep.sh` uses for the seventy-seven tools that do
+# not splice for themselves; three lines of it here fixes the one that matters
+# to this gate.  `structs.defs` prints a note when it is handed an include
+# list, and that note appearing in this script's output is what found it.
+unit=$(mktemp "$PWD/.x32.XXXXXX")
+python3 -c 'import sys; sys.path.insert(0, "tools"); import structs
+sys.stdout.write("\n".join(structs.splice("bmf.cpp")[0]))' > "$unit"
+left=$(python3 tools/ptrwidth.py "$unit" | tail -1)
+rm -f "$unit"
 
 echo
 echo "$same of $ran cases agree with the default build"
