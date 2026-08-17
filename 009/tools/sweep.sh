@@ -105,8 +105,14 @@ usage=0 quiet=0 killed=0 absent=0 nonzero= reported= inapplicable= wrote=
 # they need is a reader, and what these need is a test.
 stale=
 for t in tools/*.sh; do
+  # No `"` in the class.  It was there so a quoted `$VAR` form would be caught
+  # by the `$` skip below, and what it actually did was capture the opening
+  # quote of `structs.splice("bmf.cpp")` as part of the path -- so the check
+  # reported `"bmf.cpp` missing from a tree that has `bmf.cpp`.  A rule that
+  # fires on a file that is there is the same defect as one that stays quiet
+  # about a file that is not, pointed the other way.
   for f in $(sed 's/#.*//' "$t" |
-             grep -oE '[A-Za-z0-9_./$"{}-]*[A-Za-z0-9_.-]\.(hpp|inc|cpp)' |
+             grep -oE '[A-Za-z0-9_./${}-]*[A-Za-z0-9_.-]\.(hpp|inc|cpp)' |
              sort -u); do
     case $f in */*|*XXXXXX*|*'$'*|-*) continue ;; esac
     [ -e "$f" ] || stale="$stale $(basename "$t"):$f"

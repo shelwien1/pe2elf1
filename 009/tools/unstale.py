@@ -214,12 +214,23 @@ def measured(docs, sources, slack=2):
 
 
 def known(names, n):
-    """Is `n` an identifier the source still has?
+    """Is `n` an identifier the source still has, spelled the way it is there?
 
-    The bodies carry a `__` prefix here and the documents write them without
-    one, so `compress_image` and `__compress_image` are the same name.
+    A document may write `compress_image` where the source has
+    `__compress_image` -- the leading underscores were the decompiler's and a
+    reader is right to drop them -- so that direction is accepted.
+
+    The *other* direction is not, and used to be: a third clause read
+    `n.lstrip('_') in names`, which passed a document still writing
+    `__alt_p2_context` long after the round that took the prefix off every body
+    in the tree.  Both names denote the same function, so nothing was wrong
+    about the program; what was wrong is that this file's opening promise --
+    "names in `code font` are the names in this tree, so every claim here can be
+    checked against the file it comes from" -- had stopped being true, and the
+    tool whose job is that promise was the reason nobody noticed.  Two names in
+    `ALGORITHM.md` were hiding behind it.
     """
-    return n in names or ('__' + n) in names or n.lstrip('_') in names
+    return n in names or ('__' + n) in names
 
 
 def survey(docs=DOCS, sources=('subs1.hpp', 'bmf.cpp')):
