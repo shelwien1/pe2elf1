@@ -1314,7 +1314,22 @@ pointers through a 32-bit integer", was a statement about the include list.
 The comment on the line above it read "`bmf.cpp`, not `subs1.hpp`: the
 decompilation is in the one file now", which had been two rounds out of date
 when it was written. It splices now, and a planted `(int32_t)(uintptr_t)p`
-shows the difference: the include list answers 0 and the unit answers 1. It is a note on stderr and not a refusal: for a tool that
+shows the difference: the include list answers 0 and the unit answers 1.
+
+`tools/proven.sh` had the same sentence and the same hole. Its whole job is to
+replay each tool against old revisions and report which ones ever answer
+something else — the evidence that a rule can fire at all. Its header said "a
+tool splices `bmf.cpp`, so what it reads is every `.inc` beside it", which is
+true of nineteen of the ninety-six; the other seventy-seven were handed the
+include list at every revision, answered the same thing every time, and landed
+in the not-proven bucket for a reason that bucket does not name. Each
+revision's `bmf.cpp` is replaced by its spliced self after it is unpacked, and
+over the same three revisions the count of tools that demonstrably answer
+differently goes **21 → 28**: twelve gained — `defram`, `degoto`, `firstuse`,
+`uncopy`, `unmemcast`, `unslot`, `unspill` and five more — and five lost, all
+of them log readers whose old "difference" was a staleness note moving rather
+than a rule firing. Those five are silent now, which is the honest answer for
+a tool whose log does not describe the tree being replayed. It is a note on stderr and not a refusal: for a tool that
 *rewrites* what it reads, one file is the right unit and the answer about
 `bmf.cpp` is the right answer. What was wrong was what it got read as.
 

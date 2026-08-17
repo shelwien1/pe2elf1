@@ -64,10 +64,19 @@ n=${1:-12}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# ~n points spread over the directory's history.  The unit is the directory
-# and not a file: a tool splices `bmf.cpp`, so what it reads is every `.inc`
-# beside it, and replaying `bmf.cpp` alone would replay a 195-line include list
+# ~n points spread over the directory's history.  The unit is the directory and
+# not a file: replaying `bmf.cpp` alone would replay a 195-line include list
 # against today's sources.
+#
+# This used to say "a tool splices `bmf.cpp`, so what it reads is every `.inc`
+# beside it", and that is true of nineteen of the ninety-six.  The other
+# seventy-seven read the path they are given, so materialising the tree was
+# necessary and not sufficient: they were still handed the include list, still
+# answered the same thing at every revision, and still landed in the
+# not-proven bucket below -- for a reason the bucket does not name.  Each
+# revision's `bmf.cpp` is replaced by its spliced self after it is unpacked,
+# which is what `sweep.sh` does and leaves the nineteen unaffected (there are
+# no `#include "x.inc"` lines left for them to follow).
 mapfile -t hist < <(git log --format=%h -- .)
 [ "${#hist[@]}" -gt 0 ] || { echo "no history for this directory" >&2; exit 2; }
 st=$(( ${#hist[@]} / n + 1 ))
@@ -101,6 +110,18 @@ echo
 mkdir -p "$tmp/now" "$tmp/rev"
 git archive HEAD -- . | tar -x -C "$tmp/now"
 cp -r tools "$tmp/tools"
+
+# The unit, over the file, under the file's own name.  The basename is what
+# `decast.py` and `uncast.py` match their compiler warnings against, so the
+# spliced text goes back where it came from rather than beside it.  A revision
+# whose `bmf.cpp` is not an include list -- anything from before the split --
+# comes back byte for byte, which is the same guarantee `sweep.sh` relies on.
+splice_in_place() {
+  python3 -c 'import sys; sys.path.insert(0, "tools"); import structs
+sys.stdout.write("\n".join(structs.splice(sys.argv[1])[0]))' "$1" > "$1.unit" 2>/dev/null &&
+    mv "$1.unit" "$1" || rm -f "$1.unit"
+}
+splice_in_place "$tmp/now/bmf.cpp"
 # Each revision's whole tree, materialised once and reused by every tool.  A
 # revision from before the split has no `bmf.cpp` and is skipped; one from
 # before a tool's subject existed simply answers whatever it answers, which is
@@ -110,7 +131,7 @@ for r in "${revs[@]}"; do
   rm -rf "$tmp/rev/$r"
   mkdir -p "$tmp/rev/$r"
   git archive "$r" -- . 2>/dev/null | tar -x -C "$tmp/rev/$r" 2>/dev/null
-  [ -f "$tmp/rev/$r/bmf.cpp" ] && have[$r]=1
+  [ -f "$tmp/rev/$r/bmf.cpp" ] && { splice_in_place "$tmp/rev/$r/bmf.cpp"; have[$r]=1; }
 done
 usable=${#have[@]}
 echo "$usable of them have a bmf.cpp to replay"
