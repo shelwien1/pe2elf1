@@ -178,6 +178,13 @@ struct PlaneTransform {
   // and casting the total, two splitting the sum across an extra local.  All
   // four are the same thirty-two bits; unsigned throughout is the one that
   // cannot overflow signed.
+  //
+  // The **63** in the three-reference form is not a typo for 64.  Model B
+  // computes this same blend for itself, on the interleaved path, in
+  // `alt_p1_code.inc`'s `plane_mix3` -- and rounds it with 64.  The
+  // two-reference forms agree at 40; only this one differs, by one.  Merging
+  // the two helpers changes the output of every four-plane image, so they stay
+  // apart.  See the note over `plane_mix2` for the reachability count.
   uint32_t blend(const uint8_t* p) const {
     if( mode==2 )
       return (wgt0*(uint32_t)p[to_ref0]+wgt1*(uint32_t)p[to_ref1]+40)>>7;

@@ -735,6 +735,31 @@ signed overflow. The inverse writes `blend + dc + x` over the same operands in
 the same order, which is why both directions are one
 `template<int32_t f_DEC>`.
 
+**The same blend exists twice in the program, and the two do not agree.**
+`PlaneTransform::blend` above is the planar path. Model B does not use it: it
+codes the interleaved image directly, one plane at a time within a pixel, and
+subtracts the reference blend itself through `plane_mix2` and `plane_mix3` in
+`alt_p1_code.inc`. Term for term the expressions are identical — same weights,
+same operands, same shift — except for the rounding constant on the
+three-reference form:
+
+| | two references | three references |
+| --- | --- | --- |
+| `PlaneTransform::blend` (planar) | `+40` | `+63` |
+| `plane_mix2` / `plane_mix3` (interleaved) | `+40` | **`+64`** |
+
+So a three-reference plane rounds one way when the image is coded planar and
+the other way when it is coded interleaved, a difference of one in the last
+place of the prediction. It is not dead code on either side: counting calls over
+the corpus, `plane_mix3` runs on `altp1`, `med32` and `t32` — the four-plane
+images — and `plane_mix2` on those three plus `t24`. Every other image reaches
+neither.
+
+Whether this was deliberate in 1997 is not answerable from the source. What is
+answerable is that both constants are in `BMF.exe`, since the gate here is
+byte-identical output and neither may be changed. Anyone reimplementing from
+this document needs both.
+
 ### 7.2 MED, standalone
 
 `predict_med` / `unpredict_med` apply the gradient predictor of §10.1 **in place
@@ -1509,8 +1534,8 @@ build is pinned to and not a set of switches. Changing one changes nothing.
 
 ## 13. How this document was checked
 
-Everything above was read out of the source. Five things were checked by running
-something rather than by reading it, and they are the five a careless reading
+Everything above was read out of the source. Six things were checked by running
+something rather than by reading it, and they are the six a careless reading
 would get wrong:
 
 - **the packed-row claim of §2.1** — read out of the `stride` field of
@@ -1526,6 +1551,10 @@ would get wrong:
   `tbl_base` and the highest index a walk touches. That is where the four unread
   `uint16_t` at the top of each strip came from; a first draft of the sentence
   claimed the trees tiled the strip exactly, which the numbers do not say;
+- **the two rounding constants of §7.1** — found by reading `plane_mix3` beside
+  `PlaneTransform::blend`, then checked for reachability by counting calls to
+  both over all nineteen corpus images. `plane_mix3` is entered by three of
+  them, so the `+64` is live and not a path the program never takes;
 - **the fifteen partitions of §8.3** — derived from the six bit definitions, and
   then confirmed by instrumenting `match_context` to record every signature it
   produced over all nineteen corpus images. No signature outside the fifteen

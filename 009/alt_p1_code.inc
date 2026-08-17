@@ -46,6 +46,19 @@
 // The three-plane form reads its operands as `p[-3]`, `p[-2]`, `p[-1]`: the
 // planes are interleaved, so the three bytes before this one are planes 0, 1
 // and 2 of the same pixel.
+//
+// And that is the same expression `PlaneTransform::blend` computes in
+// `plane_predict.inc` -- same weights, same operands, same shift -- with one
+// difference nobody would predict: **blend rounds the three-plane form with 63
+// and this rounds it with 64.**  The two-plane forms agree at 40.  So the same
+// reference prediction is a level apart depending on whether the plane is being
+// coded planar (through `code_colour_plane`) or interleaved (through here).
+//
+// Left alone deliberately, and noted here because the obvious tidy -- one blend
+// helper called from both -- silently changes the output of every four-plane
+// image.  Both constants are in BMF.exe.  `plane_mix3` is entered by `altp1`,
+// `med32` and `t32` in the corpus, so neither side is a path the program never
+// takes; counted by instrumenting both and running all nineteen images.
 static inline uint32_t plane_mix2(const PlaneDesc& d, const uint8_t* p0, const uint8_t* p1) {
   return (d.weight0**p0+d.weight1*(uint32_t)*p1+40)>>7;
 }
