@@ -23,6 +23,26 @@ struct DstArithCoder {
     unsigned c;
 };
 
+// Fixed predictors the coefficient and probability tables are coded against
+// (10.12, 10.13).  Shared by the decoder that reads them and the encoder that
+// has to produce residuals against the same prediction.
+inline constexpr int8_t kFsetsPredCoeff[3][3] = {
+    {  -8,  0, 0 },
+    { -16,  8, 0 },
+    {  -9, -5, 6 },
+};
+
+inline constexpr int8_t kProbsPredCoeff[3][3] = {
+    {  -8,  0,  0 },
+    { -16,  8,  0 },
+    { -24, 24, -8 },
+};
+
+// Probability of the sign bit of the very first sample (10.11).
+inline unsigned prob_dst_x_bit(int c) {
+    return unsigned((kReverse.v[c & 127] >> 1) + 1);
+}
+
 // Expands filter coefficients into the lookup table that evaluates the 128-tap
 // sign-based FIR eight taps at a time: lut[j][k] is the contribution of history
 // byte j when those eight bits are k.  Shared with the encoder, which has to

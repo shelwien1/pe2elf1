@@ -5,44 +5,15 @@
 // ISO/IEC 14496-3 Part 3 Subpart 10 section numbers are quoted where FFmpeg
 // quotes them, so the two sources can be read side by side.
 
+#ifndef DFF2DSF_DST_HPP
+#define DFF2DSF_DST_HPP
+
 #include "dst.h"
 #include "bits.h"
 
 namespace dff2dsf {
 
 namespace {
-
-// Fixed predictors for the differentially coded coefficient tables (10.12/10.13).
-constexpr int8_t kFsetsPredCoeff[3][3] = {
-    {  -8,  0, 0 },
-    { -16,  8, 0 },
-    {  -9, -5, 6 },
-};
-
-constexpr int8_t kProbsPredCoeff[3][3] = {
-    {  -8,  0,  0 },
-    { -16,  8,  0 },
-    { -24, 24, -8 },
-};
-
-// Bit-reversal table (FFmpeg's ff_reverse), built at compile time.
-struct ReverseTable {
-    uint8_t v[256];
-    constexpr ReverseTable() : v() {
-        for (int i = 0; i < 256; i++) {
-            unsigned r = 0;
-            for (int b = 0; b < 8; b++)
-                r |= ((unsigned(i) >> b) & 1) << (7 - b);
-            v[i] = uint8_t(r);
-        }
-    }
-};
-constexpr ReverseTable kReverse{};
-
-// Probability of the sign bit of the very first sample (10.11).
-inline unsigned prob_dst_x_bit(int c) {
-    return unsigned((kReverse.v[c & 127] >> 1) + 1);
-}
 
 inline void ac_init(DstArithCoder* ac, BitReader& br) {
     ac->a = 4095;
@@ -297,3 +268,5 @@ bool DstDecoder::decode(const uint8_t* data, size_t size, size_t capacity, uint8
 }
 
 } // namespace dff2dsf
+
+#endif // DFF2DSF_DST_HPP

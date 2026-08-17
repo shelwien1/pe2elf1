@@ -12,6 +12,9 @@
 
 namespace dff2dsf {
 
+// Alternating bits are DSD silence: what short blocks and frames are padded with.
+inline constexpr uint8_t kDsdSilence = 0x69;
+
 constexpr size_t kDsfBlockSize = 4096;   // per channel, fixed by the format
 constexpr size_t kDsfHeaderSize = 28 + 52 + 12;
 

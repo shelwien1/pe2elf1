@@ -14,11 +14,22 @@ usage: dff2dsf d input.dff output.dsf
 ## Building
 
 ```
-make
+make                     # or, with no build system at all:
+c++ -O2 -std=c++20 src/dff2dsf.cpp -o dff2dsf
+
+make windows             # cross build with mingw-w64
 ```
 
+The whole program is a single translation unit: `src/dff2dsf.cpp` includes the
+`.hpp` files, which are the implementation, so there is nothing to link.
+
 C++20, no dependencies. Built with `-fno-exceptions -fno-rtti`; no STL streams
-and no STL containers are used, only stdio and explicit allocation.
+and no STL containers are used, only stdio and explicit allocation. Compiles
+clean at `-Wall -Wextra -Wpedantic` with GCC, Clang and mingw-w64; the only
+platform specific pieces are 64-bit file offsets and reading the clock, both in
+`common.h`. The Windows build was checked by running it: under Wine it encodes
+the same input to byte-identical DST data and round trips bit-exactly, with the
+AVX2 paths active.
 
 ## What it does
 
@@ -87,7 +98,7 @@ Per frame, for all channels together:
 5. **Arithmetic code** the "prediction was wrong" flags with those probabilities.
 
 Steps 3 to 5 predict bit for bit exactly as the decoder does, sharing the filter
-lookup table in `dst.cpp`.
+lookup table in `dst.hpp`.
 
 Things that were tried and measurably lost, for the record: per-channel filters
 and per-channel probability tables (both cost more to send than they save),
@@ -168,21 +179,24 @@ clean under ASan/UBSan including runs over randomly corrupted input.
 
 ## Source layout
 
+Each `.hpp` is an implementation file with its declarations in the matching
+`.h`; `src/dff2dsf.cpp` includes them all.
+
 | file | contents |
 |---|---|
-| `src/main.cpp` | command line, decode and encode loops |
-| `src/dsdiff.cpp` | DSDIFF container parsing and frame iteration |
-| `src/dst.cpp` | DST decoder |
-| `src/dstenc.cpp` | DST encoder: filter design, refinement, arithmetic coding |
-| `src/dsf.cpp` | DSF writing: deinterleave and bit reversal |
-| `src/dsfread.cpp` | DSF reading: the same in reverse |
-| `src/dffwrite.cpp` | DSDIFF writing |
+| `src/dff2dsf.cpp` | command line, decode and encode loops |
+| `src/dsdiff.hpp` | DSDIFF container parsing and frame iteration |
+| `src/dst.hpp` | DST decoder |
+| `src/dstenc.hpp` | DST encoder: filter design, refinement, arithmetic coding |
+| `src/dsf.hpp` | DSF writing: deinterleave and bit reversal |
+| `src/dsfread.hpp` | DSF reading: the same in reverse |
+| `src/dffwrite.hpp` | DSDIFF writing |
 | `src/bits.h`, `src/bitwrite.h` | bit reader and writer, JPEG-LS Golomb code |
-| `src/common.h` | byte order helpers, buffered file access |
+| `src/common.h` | byte order, buffered file access, the platform bits |
 
 ## Licensing
 
-`src/dst.cpp`, `src/dst.h` and `src/bits.h` are derived from FFmpeg
+`src/dst.hpp`, `src/dst.h` and `src/bits.h` are derived from FFmpeg
 (`libavcodec/dstdec.c`, `get_bits.h`, `golomb.h`), which is **LGPL-2.1-or-later**
 — see `LICENSE.ffmpeg`. That license governs those files and therefore the
 combined binary, regardless of the MIT `LICENSE` covering the rest of this

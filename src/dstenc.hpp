@@ -14,6 +14,9 @@
 // Steps 3 to 5 must predict bit for bit as the decoder does, so all of them use
 // the filter lookup table from dst.cpp.
 
+#ifndef DFF2DSF_DSTENC_HPP
+#define DFF2DSF_DSTENC_HPP
+
 #include "dstenc.h"
 #include "bitwrite.h"
 
@@ -27,36 +30,6 @@
 namespace dff2dsf {
 
 namespace {
-
-// Same fixed predictors the decoder applies when reading back the tables.
-constexpr int8_t kFsetsPredCoeff[3][3] = {
-    {  -8,  0, 0 },
-    { -16,  8, 0 },
-    {  -9, -5, 6 },
-};
-
-constexpr int8_t kProbsPredCoeff[3][3] = {
-    {  -8,  0,  0 },
-    { -16,  8,  0 },
-    { -24, 24, -8 },
-};
-
-struct ReverseTable {
-    uint8_t v[256];
-    constexpr ReverseTable() : v() {
-        for (int i = 0; i < 256; i++) {
-            unsigned r = 0;
-            for (int b = 0; b < 8; b++)
-                r |= ((unsigned(i) >> b) & 1) << (7 - b);
-            v[i] = uint8_t(r);
-        }
-    }
-};
-constexpr ReverseTable kReverse{};
-
-inline unsigned prob_dst_x_bit(int c) {
-    return unsigned((kReverse.v[c & 127] >> 1) + 1);
-}
 
 // 128 bits of history precede every frame, and the decoder starts them at 0xAA.
 constexpr unsigned kHistoryBits = 128;
@@ -1016,3 +989,5 @@ bool DstEncoder::encode(const uint8_t* src, uint8_t* out, size_t out_capacity, s
 }
 
 } // namespace dff2dsf
+
+#endif // DFF2DSF_DSTENC_HPP

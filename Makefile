@@ -1,31 +1,30 @@
 CXX      ?= g++
 CXXFLAGS ?= -O2 -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra
-LDLIBS   ?= -lm
 LDFLAGS  ?=
+LDLIBS   ?= -lm
 
-SRC := src/main.cpp src/dst.cpp src/dsdiff.cpp src/dsf.cpp \
-       src/dstenc.cpp src/dsfread.cpp src/dffwrite.cpp
-OBJ := $(SRC:.cpp=.o)
+# The whole program is a single translation unit; the .hpp files are the
+# implementation, included by src/dff2dsf.cpp.
+SRC := src/dff2dsf.cpp
+DEPS := $(wildcard src/*.h) $(wildcard src/*.hpp)
 BIN := dff2dsf
+
+# Cross build for Windows.  Nothing here is platform specific beyond 64-bit file
+# offsets and the clock, both handled in common.h and dffwrite.hpp.
+WIN_CXX ?= x86_64-w64-mingw32-g++
+WIN_BIN := dff2dsf.exe
 
 all: $(BIN)
 
-$(BIN): $(OBJ)
-	$(CXX) $(CXXFLAGS) $(OBJ) -o $@ $(LDFLAGS) $(LDLIBS)
+$(BIN): $(SRC) $(DEPS)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $@ $(LDFLAGS) $(LDLIBS)
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+windows: $(WIN_BIN)
 
-src/main.o:     src/common.h src/dsdiff.h src/dsf.h src/dst.h \
-                src/dsfread.h src/dstenc.h src/dffwrite.h
-src/dst.o:      src/common.h src/bits.h src/dst.h
-src/dsdiff.o:   src/common.h src/bits.h src/dsdiff.h src/dst.h
-src/dsf.o:      src/common.h src/dsf.h src/dst.h
-src/dstenc.o:   src/common.h src/bitwrite.h src/dst.h src/dstenc.h
-src/dsfread.o:  src/common.h src/dsf.h src/dsfread.h src/dst.h
-src/dffwrite.o: src/common.h src/dffwrite.h src/dst.h
+$(WIN_BIN): $(SRC) $(DEPS)
+	$(WIN_CXX) $(CXXFLAGS) -static $(SRC) -o $@
 
 clean:
-	rm -f $(OBJ) $(BIN)
+	rm -f $(BIN) $(WIN_BIN) src/*.o
 
-.PHONY: all clean
+.PHONY: all windows clean

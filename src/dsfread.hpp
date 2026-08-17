@@ -1,28 +1,12 @@
 // dff2dsf - DSF (.dsf) container reader.
 
+#ifndef DFF2DSF_DSFREAD_HPP
+#define DFF2DSF_DSFREAD_HPP
+
 #include "dsfread.h"
 #include "dsf.h"
 
 namespace dff2dsf {
-
-namespace {
-
-constexpr uint8_t kDsdSilence = 0x69;
-
-struct ReverseTable {
-    uint8_t v[256];
-    constexpr ReverseTable() : v() {
-        for (int i = 0; i < 256; i++) {
-            unsigned r = 0;
-            for (int b = 0; b < 8; b++)
-                r |= ((unsigned(i) >> b) & 1) << (7 - b);
-            v[i] = uint8_t(r);
-        }
-    }
-};
-constexpr ReverseTable kReverse{};
-
-} // namespace
 
 DsfReader::~DsfReader() {
     free(buf_);
@@ -158,3 +142,5 @@ int DsfReader::read_planar(uint8_t* dst, size_t bytes_per_channel) {
 }
 
 } // namespace dff2dsf
+
+#endif // DFF2DSF_DSFREAD_HPP

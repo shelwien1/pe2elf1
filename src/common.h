@@ -11,8 +11,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#ifdef _WIN32
+#include <sys/types.h>
+#endif
 
 namespace dff2dsf {
+
+// ---------------------------------------------------------------- platform
+
+// Files here run past 2 GB, so seeking has to be 64-bit.  MinGW gets that from
+// _FILE_OFFSET_BITS above, which redirects fseeko to its 64-bit form; this makes
+// a build where that quietly did not happen fail here rather than at 2 GB.
+static_assert(sizeof(off_t) == 8, "64-bit file offsets are required");
+
+// gmtime_r is POSIX; the Windows CRT spells it gmtime_s, with the arguments the
+// other way round.
+inline bool utc_now(struct tm* out) {
+#ifdef _WIN32
+    const time_t now = time(nullptr);
+    return gmtime_s(out, &now) == 0;
+#else
+    const time_t now = time(nullptr);
+    return gmtime_r(&now, out) != nullptr;
+#endif
+}
 
 // ---------------------------------------------------------------- diagnostics
 
@@ -50,6 +74,24 @@ inline int ilog2(unsigned v) {
 inline bool tag_is(const uint8_t* p, const char (&s)[5]) {
     return memcmp(p, s, 4) == 0;
 }
+
+// ---------------------------------------------------------------- bit order
+
+// Bit-reversal of a byte, built at compile time.  DSF stores its samples least
+// significant bit first while DSDIFF is the other way round, and the DST format
+// uses the same table for one of its probabilities.
+struct ReverseTable {
+    uint8_t v[256];
+    constexpr ReverseTable() : v() {
+        for (int i = 0; i < 256; i++) {
+            unsigned r = 0;
+            for (int b = 0; b < 8; b++)
+                r |= ((unsigned(i) >> b) & 1) << (7 - b);
+            v[i] = uint8_t(r);
+        }
+    }
+};
+inline constexpr ReverseTable kReverse{};
 
 // ---------------------------------------------------------------- allocation
 

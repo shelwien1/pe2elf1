@@ -1,9 +1,10 @@
 // dff2dsf - DSDIFF (.dff) container writer for DST coded frames.
 
+#ifndef DFF2DSF_DFFWRITE_HPP
+#define DFF2DSF_DFFWRITE_HPP
+
 #include "dffwrite.h"
 #include "dst.h"
-
-#include <time.h>
 
 namespace dff2dsf {
 
@@ -196,9 +197,8 @@ bool DffWriter::write_comment() {
     const uint32_t padded = text_len + (text_len & 1);
     const uint64_t size = 2 + 14 + padded;
 
-    time_t now = time(nullptr);
     struct tm utc;
-    if (!gmtime_r(&now, &utc)) return ERR("cannot read the current time");
+    if (!utc_now(&utc)) return ERR("cannot read the current time");
 
     uint8_t buf[128];
     uint8_t* p = buf;
@@ -251,3 +251,5 @@ DffWriter::~DffWriter() {
 }
 
 } // namespace dff2dsf
+
+#endif // DFF2DSF_DFFWRITE_HPP

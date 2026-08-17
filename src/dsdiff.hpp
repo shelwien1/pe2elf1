@@ -1,5 +1,8 @@
 // dff2dsf - DSDIFF (.dff) container reader.
 
+#ifndef DFF2DSF_DSDIFF_HPP
+#define DFF2DSF_DSDIFF_HPP
+
 #include "dsdiff.h"
 #include "bits.h"
 
@@ -231,3 +234,5 @@ int DffReader::next_dsd_block(const uint8_t** data, size_t* size) {
 }
 
 } // namespace dff2dsf
+
+#endif // DFF2DSF_DSDIFF_HPP

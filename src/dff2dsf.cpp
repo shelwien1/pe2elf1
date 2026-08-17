@@ -3,13 +3,16 @@
 //   dff2dsf d input.dff output.dsf     decode, undoing DST compression
 //   dff2dsf c input.dsf output.dff     compress with DST
 
-#include "common.h"
-#include "dffwrite.h"
-#include "dsdiff.h"
-#include "dsf.h"
-#include "dsfread.h"
-#include "dst.h"
-#include "dstenc.h"
+// The whole program is one translation unit: each .hpp is an implementation
+// file that includes its own declarations, so building is just
+//
+//     c++ -O2 -std=c++20 src/dff2dsf.cpp -o dff2dsf
+#include "dst.hpp"
+#include "dsdiff.hpp"
+#include "dsf.hpp"
+#include "dsfread.hpp"
+#include "dstenc.hpp"
+#include "dffwrite.hpp"
 
 namespace dff2dsf {
 

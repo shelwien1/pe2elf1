@@ -1,4 +1,5 @@
 *.o
 /dff2dsf
+/dff2dsf.exe
 *.dff
 *.dsf

@@ -1,28 +1,13 @@
 // dff2dsf - DSF (.dsf) container writer.
 
+#ifndef DFF2DSF_DSF_HPP
+#define DFF2DSF_DSF_HPP
+
 #include "dsf.h"
 
 namespace dff2dsf {
 
 namespace {
-
-// Byte the DSF spec-adjacent tooling uses to pad the final block: alternating
-// bits are DSD silence, so a player that ignores the sample count and plays the
-// padding hears nothing rather than a click.
-constexpr uint8_t kDsdSilence = 0x69;
-
-struct ReverseTable {
-    uint8_t v[256];
-    constexpr ReverseTable() : v() {
-        for (int i = 0; i < 256; i++) {
-            unsigned r = 0;
-            for (int b = 0; b < 8; b++)
-                r |= ((unsigned(i) >> b) & 1) << (7 - b);
-            v[i] = uint8_t(r);
-        }
-    }
-};
-constexpr ReverseTable kReverse{};
 
 // DSF channel type codes: 1 mono, 2 stereo, 3 three channel, 4 quad,
 // 5 four channel, 6 five channel, 7 five channel + LFE.
@@ -168,3 +153,5 @@ bool DsfWriter::finish() {
 }
 
 } // namespace dff2dsf
+
+#endif // DFF2DSF_DSF_HPP
