@@ -1,11 +1,9 @@
 // bmp_write.inc -- write one back.
 
 int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
-  uint32_t done;
   uint8_t* end;
   int32_t pal_bytes;
   bool can_rle;
-  uint32_t at, at2;
   uint8_t *out_at, *p, *q;
   int32_t bits, rle_kind, lit_len, run, coded_bytes;
   uint8_t byte;
@@ -38,64 +36,63 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   bmp->biXPelsPerMeter = 0;
   uint8_t *buf = out_buf+54;
   if( bits<=8 ) {
-    int32_t ncolours = 1<<(bits&31);
-    int32_t ncol = 1<<(bits&31);
+    // The palette's entry count, `1 << bits`.  A depth reaches `write_bmp`
+    // only through `expand_image`, which refuses anything whose plane count
+    // `((depth & 0x3F) + 7) >> 3` is outside 1..4, so `bits` is 1..32 and here
+    // 1..8 -- and `ncol` is 2, 16 or 256.  The two `> 0` tests and the two
+    // `/ 2` ones below were tests on that, and the four arms they guarded
+    // (`at = 1`, `at2 = 1`/`done = 1`, and a `pal_bytes` with no palette
+    // written) cannot
+    // be reached.  `hdrscan.sh` puts every one of the 256 depth bytes through
+    // this, which is the check the reasoning rests on.
+    //
+    // The count had two names, `ncolours` and `ncol`, assigned the same
+    // expression on consecutive lines and then used interchangeably -- down to
+    // `pal_bytes = 4*ncol` in one arm and `4*ncolours` in the next.
+    const int32_t ncol = 1<<(bits&31);
     if( depth&depth_grey ) {
       uint32_t levels = 0x100u>>(bits&31);
-      if( ncol>0 ) {
-        if( ncol/2 ) {
-          uint32_t k = 0;
-          int32_t grey = 0;
-          do {
-            put_u32(&out_buf[8*k+54], bmp_grey_entry((uint8_t)grey));
-            put_u32(&out_buf[8*k+58], bmp_grey_entry((uint8_t)(grey+levels)));
-            grey += 2*levels;
-            ++k;
-          } while( k<(uint32_t)(ncol/2) );
-          at = 2*k+1;
-        } else {
-          at = 1;
-        }
-        if( (at-1)<(uint32_t)ncol )
-          put_u32(&out_buf[4*at+50], bmp_grey_entry((uint8_t)(levels*(at-1))));
-      }
+      uint32_t k = 0;
+      int32_t grey = 0;
+      do {
+        put_u32(&out_buf[8*k+54], bmp_grey_entry((uint8_t)grey));
+        put_u32(&out_buf[8*k+58], bmp_grey_entry((uint8_t)(grey+levels)));
+        grey += 2*levels;
+        ++k;
+      } while( k<(uint32_t)(ncol/2) );
+      const uint32_t at = 2*k+1;
+      if( (at-1)<(uint32_t)ncol )
+        put_u32(&out_buf[4*at+50], bmp_grey_entry((uint8_t)(levels*(at-1))));
       pal_bytes = 4*ncol;
     } else if( depth&depth_palette ) {
-      if( ncol<=0 ) {
-        pal_bytes = 4*ncolours;
-      } else {
-        uint32_t pairs = ncolours/2;
-        if( ncolours/2 ) {
-          uint32_t j = 0;
-          // `data_ofs2` is `img->data_size` on every path that reaches here,
-          // and the palette sits immediately after the pixels -- so this was
-          // `img->palette()` with `sizeof(BmfImage)` spelled as a 16 inside
-          // each subscript.  Two BGR triples per turn, six bytes.
-          const uint8_t *pal = img->palette();
-          do {
-            uint32_t slot = 2*j;
-            const uint8_t *e0 = &pal[6*j], *e1 = &pal[6*j+3];
-            put_u32(&out_buf[4*slot+54], bmp_palette_entry(e0[0], e0[1], e0[2]));
-            put_u32(&out_buf[4*slot+58], bmp_palette_entry(e1[0], e1[1], e1[2]));
-            ++j;
-          } while( j<pairs );
-          rle_on = want_rle;
-          at2 = 2*j+1;
-          done = at2;
-        } else {
-          at2 = 1;
-          done = 1;
-        }
-        if( (at2-1)<(uint32_t)ncol ) {
-          // The odd colour the loop above did not reach.  `done` is one past
-          // the last pair it wrote, so `3*done-3` is that entry's first byte.
-          const uint8_t *e = img->palette()+3*done-3;
-          put_u32(&out_buf[4*done+50], bmp_palette_entry(e[0], e[1], e[2]));
-        }
-        pal_bytes = 4*ncol;
+      uint32_t pairs = ncol/2;
+      uint32_t j = 0;
+      // `data_ofs2` is `img->data_size` on every path that reaches here, and
+      // the palette sits immediately after the pixels -- so this was
+      // `img->palette()` with `sizeof(BmfImage)` spelled as a 16 inside each
+      // subscript.  Two BGR triples per turn, six bytes.
+      const uint8_t *pal = img->palette();
+      do {
+        uint32_t slot = 2*j;
+        const uint8_t *e0 = &pal[6*j], *e1 = &pal[6*j+3];
+        put_u32(&out_buf[4*slot+54], bmp_palette_entry(e0[0], e0[1], e0[2]));
+        put_u32(&out_buf[4*slot+58], bmp_palette_entry(e1[0], e1[1], e1[2]));
+        ++j;
+      } while( j<pairs );
+      rle_on = want_rle;
+      // `done` was `at2` copied on the next line and then read twice below
+      // it; the copy existed because the arm this replaced set the two to
+      // different things.
+      const uint32_t at2 = 2*j+1;
+      if( (at2-1)<(uint32_t)ncol ) {
+        // The odd colour the loop above did not reach.  `at2` is one past the
+        // last pair it wrote, so `3*at2-3` is that entry's first byte.
+        const uint8_t *e = img->palette()+3*at2-3;
+        put_u32(&out_buf[4*at2+50], bmp_palette_entry(e[0], e[1], e[2]));
       }
+      pal_bytes = 4*ncol;
     } else {
-      pal_bytes = 4*ncolours;
+      pal_bytes = 4*ncol;
       memset(buf, 0, pal_bytes);
       rows2 = img->height;
     }
