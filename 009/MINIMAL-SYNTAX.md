@@ -37,8 +37,14 @@ table (see that file's header). Every count in the table above is unchanged —
 `this->` 0, `::` 0, `blk->` 224, `!= 0` 11, `= (x);` 0, `while( 1 )` 32,
 `frame.` 972 — the warning count is still 4 with no shadows, and
 `deadcheck`, `methodise`, `unstale` and `liftframe` all still answer zero over
-a unit they can read. The tree is 12,091 lines now; the twenty are that fix's
-comment.
+a unit they can read. The tree was 12,091 lines when that was re-taken; the
+twenty are that fix's comment.
+
+Two of those figures have since moved and the rest have not: it is 10,464
+spliced lines as this is re-read, and 16 `while( 1 )`s rather than 32 — see
+Phase 7, where one of them stopped being a decline. A figure in a table is a
+measurement with a date on it, so these carry when they were taken rather than
+a "now" that goes quietly wrong.
 
 ---
 
@@ -53,7 +59,7 @@ uncast     0 useless casts removed   uncopy     0 locals that are only a copy
 unrecast   0 sites                   unwrite    0 write-only locals
 unlayer    0 pointer casts           unsave     0 saves across a dead region
 unalias    0 frame aliases           unaliasvar 0 aliases of a single assignment
-namelocal  0 locals nameable         degoto     0 candidates of 11 gotos
+namelocal  0 locals nameable         degoto     0 candidates of 0 gotos
 unjump     0 gotos into a block      untail     0 shared tails
 undup      0 identical if/else arms  deadcheck  0 findings
 ```
@@ -279,6 +285,19 @@ plan's own criterion for leaving a loop alone: more syntax, not less.
 
 So the phase is a decline, and the reason is now measured rather than guessed.
 Left in the plan as "expect roughly half", the next round re-proposes it.
+
+**Re-measured four rounds later, and one of them qualifies now.** There are 16
+`while( 1 )`s where there were 32, and `plane_choose.inc`'s `descend` is a
+`while( dir*at[0] < dir*end[0] || dir*at[1] < dir*end[1] )`. Nothing about the
+rule changed; the body did. That loop was written out twice, once per
+direction, with the second copy nested inside the first's and leaving it by a
+`goto` past the bottom of both — so the test that is now at the top of the loop
+was not at the top of anything when the 32 were counted.
+
+Which is the thing worth keeping from this section, over and above the
+decline: a decline is a measurement of a body, and the body moves. The
+paragraph above is right about the tree it was taken on and was wrong about
+this one for at least a round before anybody looked.
 
 ---
 

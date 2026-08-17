@@ -54,11 +54,13 @@ Everything about which model runs is decided in `image_compress.inc`, at two
 ### Branch 1 — depth ≤ 4 takes the short path
 
 ```c
-if( (p_i->depth&0x3Fu)<=4 ) {
+if( (p_i->depth&depth_bits)<=4 ) {
+  stream_open(p_i->data_size);
   plane_predictor = 0;
   plane_alt_model = 0;
+  alphabet_reduced = 0;
   model_plane(p_i, p_i->pixels, p_i->pixels);
-  goto LABEL_57;
+  return;
 }
 ```
 
@@ -67,7 +69,7 @@ anything. One pass of the **main model** over the whole image at its native
 depth. 1-bit and 4-bit images never reach the other two models, and the header
 they get has no descriptor block for the decoder to read.
 
-This is worth stating plainly because it is easy to miss: `search_filter` at 266
+This is worth stating plainly because it is easy to miss: `search_filter` at 269
 lines and `choose_plane_coding` at 360 lines -- most of what the encoder spends
 its time on -- **never run for a 1-bit or 4-bit image**.
 

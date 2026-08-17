@@ -79,9 +79,13 @@ struct WeightSearch {
   void descend(int32_t step, int32_t dir) {
     int32_t at[2] = { w[0]+dir, w[1]+dir };
     int32_t end[2] = { w[0]+dir*step, w[1]+dir*step };
-    while( 1 ) {
-      if( dir*at[0]>=dir*end[0]&&dir*at[1]>=dir*end[1] )
-        return;
+    // The `return` at the top of a `while( 1 )` is the loop's condition.
+    // `MINIMAL-SYNTAX.md` measured this class at 32 sites and none convertible
+    // -- "nineteen have it in the middle, twelve have no top-level break at
+    // all" -- and the measurement was of a body this one did not have yet: the
+    // two directions were written out twice with a `goto` past both, and the
+    // top-level test only became a top-level test when they merged.
+    while( dir*at[0]<dir*end[0]||dir*at[1]<dir*end[1] ) {
       for( int32_t k = 0; k<2; ++k )
         if( dir*at[k]<dir*end[k]&&(dir<0 ? at[k]>=-64 : at[k]<192) )
           end[k] = trial(k, at[k], dir*step);

@@ -1236,3 +1236,147 @@ them into one loop passes all 110 checks over all seventeen images — and
 floating-point addition is not associative, so that is a statement about the
 corpus and not about the program. It stays two loops, with the number written
 down.
+
+## Zero jumps
+
+The round above closed at 27 jumps and 19 labels and called the rest
+structural. Eighteen of the twenty-seven were still there when this one
+started; none of them is now.
+
+What made the difference was not a new technique. It was reading each one as a
+claim about the program and then checking the claim.
+
+* **`filter_search`'s `planes_done`** was reached by `if( nplanes_b <= 2 )
+  goto`, sitting inside `if( plane_count > 2 )`, with both arms above it having
+  just written `nplanes_b = plane_count`. `plane_count` is written in exactly
+  two places in the tree, both at the top of a frame this path does not reach.
+  So the test was `plane_count > 2 && plane_count <= 2`. The jump could not be
+  taken and the variable was read nowhere else.
+* **`alt_p2_model`'s `code_residual`** carried a comment saying a structured
+  form needed "a loop around the `if` and a flag to say which way it was
+  entered — one more level of nesting and one more variable, to remove one
+  `goto` that already says what it does". It needed neither. The residual coder
+  runs on every path that reaches it; the two entries disagree about exactly
+  one thing, whether the record *below* the context was nudged first, and that
+  is `ctx15 > 0` — the condition already written under the jump. With the jump
+  gone the two nudges are visibly the same six lines twice over.
+* **`expand_image`** ended in a three-step ladder — `read_palette`,
+  `check_length`, `free_plane_buf` — where each arm fell into a different depth
+  of one tail. Each step is a scope: four functions, and the alternate model's
+  jump past the plane loop is one of them returning early.
+* **`compress_image`** mirrored it, and `write_plane_descs` now sits beside
+  `read_plane_descs` so the descriptor format reads as one thing in two
+  directions rather than four levels of nested `if` in each frame.
+* **`read_bmp`'s `done`**, five jumps into one tail, is three functions and a
+  dispatch. Six locals went with it, each of which existed because a value had
+  to outlive a jump.
+* **`write_bmp`'s `write_rows`** was a label in the middle of the row loop with
+  three jumps to it from two loops further in. The row is a function; the three
+  are `return`; `row_i` was the last of the label's three carried arguments and
+  is the row loop's own counter.
+* **`add_weight`'s `rescaled`** was the tree's one jump *into* a block, from
+  the search loop into the empty-list arm. Running out of live entries and
+  having none to begin with are the same answer.
+* **`decode_pixel`'s two.** `run_done` was skipping two lines that do nothing
+  on the path that skipped them. `pixel_done` was the join of two paths that
+  both mean "stage one did not produce the symbol", which is a function with
+  the run length as its argument.
+
+Nine of the eighteen came off with a dead store, a dead local or a redundant
+reload attached, because a jump is what had been holding each of those in
+place. `shape.py` reports every jump row at zero: none restart a loop, none
+exit a block, none go sideways, none enter one.
+
+## The gate that was not being run
+
+Three commits in this round said "every counting tool still at zero" and
+quoted `firstuse.py bmf.cpp`. `bmf.cpp` is 195 lines of `#include` with two
+bodies in it, and `firstuse.py` is one of the seventy-seven tools here that
+read the path they are given and nothing else. The zero was about a program
+that was not there.
+
+`tools/sweep.sh bmf.cpp` splices before it asks, which is why the sweep came
+back FAIL on three tools while the hand runs were green — and all three
+findings were this round's own work: two locals in `decode_pixel` and one in
+`alt_p2_model` that could move to their first use now that no jump crossed
+them; `rle_fits`, whose every use of its first parameter was a member access;
+and the declined-pairs table in `bmf.cpp`, still saying `27 of 277` about a
+decoder that had just lost twenty-five lines.
+
+`structs.defs` says so now, once, when it is handed an include list rather
+than a program. It is a note on stderr and not a refusal: for a tool that
+*rewrites* what it reads, one file is the right unit and the answer about
+`bmf.cpp` is the right answer. What was wrong was what it got read as.
+
+## Four zeros that could not have been anything else
+
+Running the drivers turned up a class this project has met before and had not
+looked for in its own shell scripts.
+
+`sweep.sh` walks `tools/*.py`. It had never asked the sixteen `.sh` tools
+anything, and four of them still named `subs1.hpp` — a file the tree stopped
+having when it split into thirty-seven `.inc`s. Run today, each died on the
+missing path and then printed its own zero: `0 kept, 0 reverted`, `round 1: `,
+or — in `resign-drive.sh` — an empty `n` that `[ "$n" = 0 ]` read as *not*
+zero, so the loop drove two hundred rounds of nothing.
+
+Two `.py` defaults had gone the same way. `shape.py` with no argument, the
+form its own usage line gives first, ended in a `FileNotFoundError` traceback
+and an exit status of 0.
+
+And then four tools whose zeros were unreachable by construction:
+
+* **`resign.py`** matched warning lines with a literal `^subs1\.hpp:`. gcc has
+  named one of the includes and never that since the split. `shape.py` and
+  `retype_locals.py` were each fixed for this exact sentence, and each fix
+  says so in a comment; this was the third reader of the same log and nobody
+  went back for it. With the filename a group it finds a candidate again — and
+  then a second layer under the first: `BMF_WARN=1 ./build.sh` passes
+  `-Wsign-compare -Wunused-variable -Wshadow` and no conversion warning at all,
+  so the log it reads has nothing of the kind in it. Its summary says which
+  flags would give it something to answer.
+* **`resign_group.py`** shared that regex and the group numbers under it.
+* **`defram.py`** required a `// NNN bytes` tag on a frame's declaration.
+  `shape.py`'s own frame census records that the tag went rounds ago and that
+  frames are named instead. The pattern could not match a frame; with the tag
+  optional it lifts a planted one.
+* **`tools/driven.txt`**, where the driver records what it measured so the
+  tools do not re-offer it, was stamped `# subs1.hpp <cksum>` where its reader
+  wants `# sources <digest>`. Every verdict written since the split has come
+  back stale, so the memo has printed nothing — which is the same silence as
+  no memo at all, and is the defect the memo was built to fix.
+
+`unmemcast`, `unslot`, `unspill` and `defram` all ask about reconstructed
+stack frames, and `shape.py` counts none in the tree. `0 frame members`,
+`0 slots`, `0 spill areas`, `0 of 0 aliases` — not one of those distinguishes
+clean from absent, which is the third answer `sweep.sh` was taught to count
+apart. They say `not applicable` now, and go back to counting when a frame is
+planted beside them.
+
+`sweep.sh` gained the test that would have caught the four drivers: a path
+named on a line a shell tool *executes* has to exist. Comments are stripped,
+because a comment naming `003/subs1.hpp` is history and history is allowed to
+name what is gone. It is proven able to report — a planted `grep subs1.hpp`
+fails the sweep — and proven quiet on the same name in a comment. It covers
+the shell tools only: a `.py` names its file in a docstring, and those lines
+are as often a placeholder (`input.hpp`, `one.inc`) as a path. The 132 usage
+examples across 63 tools that named `subs1.hpp` were rewritten by hand in the
+same round; what they need is a reader, and what the drivers need is a test.
+
+## Where this leaves it, a third time
+
+* **0 jumps and 0 labels**, from 18 and 12 at the start of this round, and
+  from 42 and 27 when the count was first taken.
+* **39 lines of copy**, from 45; the ratchet moved with it.
+* **thirteen merged encode/decode pairs**; two declined, and
+  `code_pixel`/`decode_pixel` is now 252 lines with 16 shared, from 277 and 27.
+* **every counting tool zero, nothing silent, seven subjects absent** — three
+  more than last round, and the three are tools that had been answering zero
+  about frames the tree does not have.
+
+The pattern this round is the one the last two had, arriving somewhere new.
+Last round it was comments: a claim in a comment is a measurement with a date
+on it. This round it was the instruments themselves — a default argument, a
+filename in a regex, a stamp format, a glob that stops at `*.py`. A tool that
+cannot fire reports the same number as a tool with nothing to find, and the
+only way to tell them apart is to make it fire.
