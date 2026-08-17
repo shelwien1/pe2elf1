@@ -24,10 +24,24 @@ struct CounterNode {
     total += n;
   }
 
-  // The 64-wide stride the escape's context is shifted by: 0 when this slot
-  // holds at least half the node's mass, -64 when it does not.  `>>25` on a
-  // value that fits in 16 bits is a sign test, and `&0xFFFFFFC0` turns the
-  // resulting 0 or -1 into 0 or -64.
+  // One bit of the escape's strip index: 0 when this slot holds at most half
+  // the node's mass, **+64** when it holds more.
+  //
+  // The comment here read "-64 when it does not", and both halves of that were
+  // wrong.  The arithmetic is unsigned -- `(uint32_t)c[slot]` makes it so --
+  // so `2*c[slot] > (total&0x7FFF) + c[0]` *wraps* rather than going negative,
+  // `>>25` is a logical shift giving 127 rather than a sign test giving -1,
+  // and `&0xFFFFFFC0` clears the low six bits of 127 to leave 64.  The
+  // condition is inverted as well: the wrap is the case where the slot is
+  // *over* half, which the old sentence gave to the 0.
+  //
+  // The call sites settle it without needing the shift read at all.  Every one
+  // of the four adds this to `ctx + 128*(slot&1)` and hands the sum to
+  // `model_strip`, which indexes 1024 strips; -64 as a `uint32_t` is
+  // 0xFFFFFFC0 and the sum would leave the table on the first escape whose
+  // slot was over half.  One of them then tests `key & 0x38`, which reads bits
+  // 3..5 of a small non-negative number.  It is a context bit, and it is set
+  // high.
   //
   // `alt_p1_block` spelled this out four times, twice reading `total` from a
   // local holding the value just stored into it.  Same value, three lines

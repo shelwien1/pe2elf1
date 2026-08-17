@@ -13,7 +13,9 @@ happens to those numbers afterwards is a separate subject.
 
 The **bit packer** *is* in scope, because it is not the range coder: the plane
 descriptors are packed with plain shifts into the same buffer, and where the two
-writers meet is part of the format. See §5.
+writers meet is part of the format. So are the **adaptive counters** — `rc` is
+handed a distribution and this is what computes one, which makes it the model
+and not the coder. Both are §5.
 
 There is no single algorithm here. There are **three models**, a **decision
 layer** that picks between them one plane at a time by trial encoding, and a
@@ -268,7 +270,15 @@ than its input rather than merely bounded by it.
 
 ---
 
-## 5. The bit packer, which is not the range coder
+## 5. Below the models: the packer, the counters, and the bit meter
+
+Three things sit between a model and `rc`, and all three are in scope because
+none of them is the range coder. The packer is a second writer into the same
+buffer. The counters are where the probabilities actually come from — `rc` is
+handed numbers, and this is what computes them. And `estimate_cost` is the one
+number every decision in §6 compares.
+
+### 5.1 the bit packer
 
 `rc_io.inc`'s `pack_bits` and `unpack_bits` are a plain LSB-first packer over
 32-bit words. The near-lossless nibble and the plane descriptors go through it
@@ -288,6 +298,193 @@ time from the same cursor.
 
 One cursor, two writers: that is why `compress_image` can measure a coded stream
 as `stream.cur - stream.buf` and get a byte count that includes the descriptors.
+
+### 5.2 `BitCtr` — a binary counter that inherits
+
+Every binary decision in model A goes through `BitCtr` (`bitctr.inc`): two
+16-bit counts and a rescale threshold. What makes it more than a pair of counts
+is that a fresh one does not code its own bit — it borrows a parent's
+distribution until it has evidence of its own. The counter has **three states**,
+and they are distinguished by the two counts rather than by any flag:
+
+| state | test | what happens on a bit |
+| --- | --- | --- |
+| unseen | `n[0] == 0` | the **parent** codes the bit and takes the +8; this stores `bit + 1` into `n[0]` and nothing else |
+| seen once | `n[0] != 0`, `n[1] == 0` | `seed_from(parent)` runs first, then it codes normally |
+| live | both non-zero | it codes its own bit |
+
+An unseen counter is one that is all zeroes, which is why the arrays it lives in
+are simply `memset` and never initialised entry by entry.
+
+`seed_from` is the interesting one. The child takes the parent's *shape* scaled
+to a total of 64 —
+
+```
+n[0] = (par_tot + 64*par[0] - 64) / par_tot
+n[1] = (64*par[1] + par_tot - 64) / par_tot
+```
+
+— then bumps the side the remembered first bit went by 4, sets its threshold to
+512, and **takes the parent down by 3 on that same side** (when the parent has
+more than 3 there to give). The last of those is
+easy to miss and is the point of the arrangement: a parent that has just handed
+its shape to a child is that much less sure of itself, so the next child gets a
+slightly different inheritance. Prediction spreads from parents to children and
+is depleted by the spreading.
+
+A coded bit adds `kStep = 8` to its side. When the total passes `limit`,
+`scale_rare` halves both sides **and raises the limit by 64** (to a ceiling of
+0x4000): a counter that keeps being right is allowed to get more confident
+before it is cut back again. And while the child is still cheap to be wrong
+about — total under 0x88 — the parent hears about the bit too, gaining 1 on the
+side that was coded. That is a partial update, not a full one, and it stops as
+soon as the child has 136 units of its own evidence.
+
+Two seeded shapes exist. `init_parent` is even (4/4) under a low threshold of
+72, so the first handful of bits move it a long way. `init_root` is **not**
+even: 40 against 16, five to two toward "no", which is the prior for an escape.
+
+### 5.3 `CounterNode` — seven slots and an escape
+
+Model B codes a residual through a seven-slot frequency node, not a 256-way
+table. `init_counter_node` seeds it `{8, 2, 2, 2, 2, 3, 3}` with a total of 22,
+and the mapping from symbol to slot is:
+
+```
+sym < 5          slot = sym               five slots of their own
+sym >= 5, odd    slot = 5      \  the two escape slots, split by parity
+sym >= 5, even   slot = 6      /
+```
+
+So the alphabet is five literal symbols and two escapes. A coded symbol adds 32
+to its slot and to the total.
+
+The rescale is unusual and worth stating exactly. When the total passes 0x2000
+the node finds its **smallest** count and then divides every count by two if
+that minimum is 0 or 1, but by **three** — `(c + 2) / 3` — if it is 2 or more.
+A node with a rare symbol still in it is cut gently so the rare symbol is not
+rounded away; a node where everything has been seen is cut hard. The new total
+starts from `0x8000` rather than 0, because the top bit of `total` is a flag
+and the coder masks it off with `& 0x7FFF` at every read.
+
+When the slot is 5 or 6 the node has escaped, and the remaining magnitude is
+coded by the binary tree of §5.4 against a frequency strip chosen by three
+things: the escape's parity (`128 * (slot & 1)`), the caller's context, and one
+bit from `escape_bias`.
+
+`escape_bias` is 0 or **+64**, and it is +64 when the escaped slot holds more
+than half the node's mass. It computes that with an unsigned wrap rather than a
+comparison: `(total & 0x7FFF) + c[0] - 2*c[slot]` in `uint32_t` arithmetic goes
+huge when the slot is over half, `>> 25` turns huge into 127, and `& ~63` turns
+127 into 64. The source comment on it claimed `-64` and claimed the opposite
+condition; both are wrong, and the call sites settle it without needing the
+shift read at all — the value is *added* to a strip index, and `0xFFFFFFC0`
+would leave a 1024-entry table on the first escape. Corrected in `bitctr.inc`
+in the same commit as this section.
+
+### 5.4 the symbol tree
+
+`code_symbol_tree` (`sym_code.inc`) codes a value in two stages: a **level**
+from a ten-entry frequency header, then a **path** down a binary tree within
+that level. `begin_plane_stream` lays the geometry out once per plane:
+
+```
+level        2   3   4   5   6   7
+first        2   4   8  16  32  64      first symbol of the level
+symbols      2   4   8  16  32  64      2 * level_geom[lvl].half
+path bits    1   2   3   4   5   6      log2 of that
+tbl_base     0   1   4  11  26  57      first - lvl, except level 2
+```
+
+The six trees are laid end to end after the ten-entry header, and `model_geometry`
+covers symbols 0..127 — a 128-symbol alphabet in six levels.
+
+The seeding fills the whole strip: 10 header entries plus 122 pairs is 254
+`uint16_t`, which is the strip width exactly. The *walk* does not reach that
+far. Level 7 is the deepest, its table starts at index 122, and the last pair it
+can touch is at 248..249 — so four `uint16_t` at the top of every strip are
+seeded and never read. (Checked by running the recurrence from `rc_io.inc` and
+the walk from `sym_code.inc` against each other, rather than by reading them.)
+
+`model_geometry[i]` is the level that owns symbol `i` — 0 at 0, 1 at 1, and 2 or
+more from there up — so a symbol below 2 *is* its own level and the tree is
+skipped entirely. That is why the encoder's `sym >= 2` and the decoder's
+`lvl >= 2` are the same test written from the two ends.
+
+The level is coded from `freq[2..9]` with `freq[0]` as the running total, and
+the two directions meet at the slot: the encoder sums the frequencies below its
+level, the decoder walks until it passes the point `rc` gave it. From there —
+rescale, escape counter, tree walk — the code is shared.
+
+The level rescale (at a total of 0x4000) halves all eight level counts, and then
+does something to `freq[1]`, the increment that every coded level adds:
+
+```
+freq[1] <= 4*alt_freq_limit   ->  freq[1] -= 4 * (freq[1] > alt_freq_limit)
+otherwise                     ->  freq[1] -= 16
+```
+
+The increment **decays toward `alt_freq_limit`** — fast at first, then by 4, then
+not at all. A plane starts adaptive and settles; `freq[1]` seeds at
+`24 * alt_freq_limit` and walks down. The two limits themselves are set by which
+model is running: 8 and 8 for predictor 2, 16 and 64 for everything else.
+
+Each pair in the tree is halved at 0x4000 and the side taken is set to
+`alt_freq_init + f`, so a tree node's counts never run away and never reach zero.
+All 1024 strips are seeded identically at `begin_plane_stream` — a ten-entry
+header `{635, 24*limit, 205, 124, 147, 83, 48, 16, 8, 4}` and 122 pairs at
+60/36. The header is a decaying geometric prior over levels; the pairs are a
+mild bias toward the low branch.
+
+### 5.5 `update_binary_pair` — the same tree, moved without coding
+
+`update_binary_pair` walks the identical structure and codes nothing. It is
+called from seven sites — four in model B, three in model C — always on strips
+**neighbouring** the one that coded: the context one step up, one step down, one
+bias apart. A symbol trains the strips near it as well as the strip that
+carried it. This is
+context mixing done by writing rather than by averaging: nothing blends the
+neighbours' predictions at read time, they are simply kept warm.
+
+Two constants differ from the coding path, both keyed on the running model:
+
+```
+level increment   (freq[1] >> 2) & ~31        predictor 1
+                  15 * (freq[1] >> 5)         predictor 2
+pair increment    (alt_freq_init * 5) >> 3    predictor 1
+                  (alt_freq_init * 6) >> 3    predictor 2
+```
+
+and the pairs are halved at 0x2000 rather than 0x4000 — a strip that is only
+being trained is rescaled twice as often as one that is being read.
+
+The level counts are not rescaled here at all. There is no equivalent of
+`code_symbol_tree`'s 0x4000 branch; instead the **whole function** does nothing
+once `freq[0]` passes 0x8000. So a strip that is only ever trained and never
+coded saturates and then stops moving, where a strip the coder reaches is
+halved and carries on. Training decays to nothing on its own; it does not have
+to be switched off.
+
+### 5.6 `estimate_cost` — the one number every decision compares
+
+Every choice in §6 — which transform, which predictor, which references, which
+of the four candidate filters — is settled by handing a histogram to
+`estimate_cost` and comparing integers. It returns
+
+```
+(N·ln N  −  Σ nᵢ·ln nᵢ) · log₂(e)
+```
+
+which is `N · H(p)`: the **total** cost in bits of coding N symbols with those
+frequencies, not the per-symbol cost. Nothing in the decision layer models the
+actual coder; it models an order-0 entropy of the residuals and picks the
+smallest. That is why §6.5 matters — the thing being measured is not the thing
+that will run.
+
+The two accumulators over even and odd bins are the original's pairing for a
+two-lane SSE add. They are kept: floating-point addition is not associative, so
+merging them changes the sum, and the sum feeds a comparison that decides a
+filter.
 
 ---
 
@@ -424,6 +621,13 @@ several times.
 
 Where `choose_plane_coding` estimates, this one **actually encodes and throws
 the output away**, keeping the bit count. It is the whole cost of `-Q9`.
+
+The measurement is `transform_cost`: run `transform_planes` over a scratch
+image, take `8 * (stream.cur - stream.buf)`, then `packer_flush` and
+`packer_reset` to put the cursor back where it started. Every figure below is
+that function, and every one of them is real coded bits from the real models —
+not an entropy estimate. That is the difference between §6.3 and §6.4, and it
+is why one runs per plane and the other runs a few dozen times per image.
 
 It cuts a tile from the centre of the image — the full width and height if they
 fit, otherwise centred — and refuses outright if the image is narrower than 4 or
@@ -1305,18 +1509,34 @@ build is pinned to and not a set of switches. Changing one changes nothing.
 
 ## 13. How this document was checked
 
-Everything above was read out of the source. Three things were checked by
-running the program rather than by reading it, and they are the three that a
-careless reading would get wrong:
+Everything above was read out of the source. Five things were checked by running
+something rather than by reading it, and they are the five a careless reading
+would get wrong:
 
 - **the packed-row claim of §2.1** — read out of the `stride` field of
   `testfiles/ref_*.bmf`, which is the encoder's own answer;
 - **the flag values of §4.1** — read out of byte 15 of the same files;
+- **the sign of `escape_bias` in §5.3** — the expression compiled and evaluated
+  on both sides of the half-mass boundary. It returns 0 and 64; the source
+  comment said 0 and −64, and gave the two cases the wrong way round. Reading it
+  is what produced the wrong answer twice, because `>>25` looks like a sign test
+  and is not one here. Corrected in `bitctr.inc`;
+- **the level geometry table of §5.4** — the recurrence in `begin_plane_stream`
+  and the tree walk in `code_symbol_tree` were run against each other to get
+  `tbl_base` and the highest index a walk touches. That is where the four unread
+  `uint16_t` at the top of each strip came from; a first draft of the sentence
+  claimed the trees tiled the strip exactly, which the numbers do not say;
 - **the fifteen partitions of §8.3** — derived from the six bit definitions, and
   then confirmed by instrumenting `match_context` to record every signature it
   produced over all nineteen corpus images. No signature outside the fifteen
   occurred, which is what makes "the other 49 entries are never read" a
   statement about the program rather than about the corpus.
+
+The three corrections above have a shape in common, and it is worth naming: each
+is a place where the *arithmetic* is unsigned or exact and the *prose* about it
+was written from what the expression looks like. `>>25` reads as a sign test.
+`2 * half` reads as a pair count. A strip that is 254 wide and seeded 254 wide
+reads as a strip that is used 254 wide. None of those survives being run.
 
 `tools/unstale.py` checks that every name this document writes in backticks is a
 name the program still has, and that a line count quoted beside a function's
