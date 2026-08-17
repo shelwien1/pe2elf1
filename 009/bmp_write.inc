@@ -219,45 +219,49 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           return true;
       }
     };
-    if( rows2>0 ) {
-      int32_t row_i = 0;
-      while( 1 ) {
-        if( p>=&p[stride] )
-          goto write_rows;
-        end = &p[stride];
-        lit_len = 0;
-        do {
-          while( 1 ) {
-            if( emit_runs() )
-              goto write_rows;
-            ++p;
-            if( ++lit_len!=run_max )
-              break;
-            flush_literal(q);
-            if( q>=end )
-              goto write_rows;
-            lit_len = 0;
-          }
-        } while( q<end );
-        if( lit_len )
+    // One row of opcodes: runs and literals until the row runs out.  Three
+    // paths end a row -- the row is empty, `emit_runs` reached the end on a
+    // pair boundary, or a maximum-length literal ended there -- and each used
+    // to be a `goto` two loops out to the end-of-line pair below, setting
+    // `row_i`, `rows3` and `stride3` on the way as the row loop's three
+    // arguments, passed by assignment because the decompiler had no function to
+    // pass them to.  Two of the three were `img->height` and `img->stride`
+    // re-read under another name, and nothing in this body writes either field,
+    // so eight assignments across four exits said nothing.  `row_i` is the one
+    // that carries, and it is the row loop's own counter.
+    auto emit_row = [&]() {
+      end = &p[stride];
+      if( p>=end )
+        return;
+      lit_len = 0;
+      do {
+        while( 1 ) {
+          if( emit_runs() )
+            return;
+          ++p;
+          if( ++lit_len!=run_max )
+            break;
           flush_literal(q);
-// The row-writing loop.  Three paths reach it and each used to set `row_i`,
-// `rows3` and `stride3` first -- the loop's three arguments, passed by
-// assignment because the decompiler had no function to pass them to.  Two of
-// the three were `img->height` and `img->stride` re-read under another name,
-// and nothing in this body writes either field, so eight assignments across
-// four exits said nothing.  `row_i` is the one that carries.
-write_rows:
+          if( q>=end )
+            return;
+          lit_len = 0;
+        }
+      } while( q<end );
+      if( lit_len )
+        flush_literal(q);
+    };
+    if( rows2>0 ) {
+      for( int32_t row_i = 0; row_i<rows2; ++row_i ) {
+        emit_row();
+        // End of line, then back down two rows: one for the row just written
+        // and one because a BMP's rows run bottom-up while the cursor walks
+        // forward through them.
         *out_at = 0;
         out_at[1] = 0;
         out_at += 2;
-        ++row_i;
         p -= 2*stride;
-        if( row_i>=rows2 ) {
-          data_len = img->data_size;
-          break;
-        }
       }
+      data_len = img->data_size;
     }
     *out_at = 0;
     out_at[1] = 1;
