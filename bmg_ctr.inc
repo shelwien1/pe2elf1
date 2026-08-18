@@ -31,6 +31,21 @@ static void ctr_fill( Counter* p, qword n, uint v ) {
   for( qword i=0; i<n; i++ ) p[i].P = v;
 }
 
+// An EMA with a fixed rate throws away most of what the first few
+// observations of a context are worth: the n-th of them should move the
+// estimate by about 1/n, not by the steady-state rate.  Every model here
+// carries one use count per context row, and the count picks the rate out of
+// this table -- fast while the row is new, settling to the tuned rate.
+// It is also how a row that has never been seen can say so: the mixer is fed
+// a neutral input rather than the seed value, so a cold model does not vote.
+static int wrtab[16];
+static void init_wrtab( int base ) {
+  for( int i=0; i<16; i++ ) {
+    int w = (int)((2*SCALE) / (2*i + 3));      // ~ SCALE/(i+1.5)
+    wrtab[i] = (w > base) ? w : base;
+  }
+}
+
 // ---------------------------------------------------------------- logistic
 
 // 12-bit probability domain, +-2047 stretched domain.  Same tables every

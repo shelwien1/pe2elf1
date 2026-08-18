@@ -119,6 +119,8 @@ struct ImgModel {
   byte*  mb[4];  byte*  m[4];      // |error|, clipped to 255
 
   Counter *t1, *t2, *t3, *t4, *t5, *t6, *t7, *t8, *t9, *ta, *tesc;
+  byte *n1_, *n2_, *n3_, *n4_, *n5_, *n6_, *n8_, *n9_, *na_;   // per-row use counts
+  byte *ne1, *ne2, *ne3, *nep;
   Counter *el1, *el2, *el3;        // the escape level, mixed like the ladder
   Counter *ep2;                    // second escape-path model
   Mixer<NMIX> mx;
@@ -178,6 +180,20 @@ struct ImgModel {
     t8   = new Counter[ (qword)M8SZ*NLIT ];
     t9   = new Counter[ (qword)M9SZ*NLIT ];
     ta   = new Counter[ (qword)MASZ*NLIT ];
+    n1_ = new byte[M1SZ]; memset( n1_, 0, M1SZ );
+    n2_ = new byte[M2SZ]; memset( n2_, 0, M2SZ );
+    n3_ = new byte[M3SZ]; memset( n3_, 0, M3SZ );
+    n4_ = new byte[M4SZ]; memset( n4_, 0, M4SZ );
+    n5_ = new byte[M5SZ]; memset( n5_, 0, M5SZ );
+    n6_ = new byte[M6SZ]; memset( n6_, 0, M6SZ );
+    n8_ = new byte[M8SZ]; memset( n8_, 0, M8SZ );
+    n9_ = new byte[M9SZ]; memset( n9_, 0, M9SZ );
+    na_ = new byte[MASZ]; memset( na_, 0, MASZ );
+    ne1 = new byte[NSTRIP]; memset( ne1, 0, NSTRIP );
+    ne2 = new byte[E2SZ];   memset( ne2, 0, E2SZ );
+    ne3 = new byte[E3SZ];   memset( ne3, 0, E3SZ );
+    nep = new byte[EPSZ];   memset( nep, 0, EPSZ );
+    init_wrtab( P0_CT_wr );
     tesc = new Counter[ (qword)NSTRIP*STRIPW ];
     el1  = new Counter[ (qword)NSTRIP*8 ];
     el2  = new Counter[ (qword)E2SZ*8 ];
@@ -269,6 +285,9 @@ struct ImgModel {
     delete[] t5; delete[] t6; delete[] t7; delete[] t8; delete[] t9;
     delete[] ta; delete[] tesc;
     delete[] el1; delete[] el2; delete[] el3; delete[] ep2;
+    delete[] n1_; delete[] n2_; delete[] n3_; delete[] n4_;
+    delete[] n5_; delete[] n6_; delete[] n8_; delete[] n9_; delete[] na_;
+    delete[] ne1; delete[] ne2; delete[] ne3; delete[] nep;
     mx.free_(); apm.free_(); apm2.free_(); emx.free_(); eapm.free_(); pmx.free_();
   }
 
@@ -409,12 +428,12 @@ struct ImgModel {
     // no gradient or activity measure can see.
     qword r8 = (qword)(((Wv&15)*16 + (Nv&15))*8 + alvl)*3 + pc;
 
-    Counter* c1p = t1 + r1*NLIT;
-    Counter* c2p = t2 + r2*NLIT;
-    Counter* c3p = t3 + r3*NLIT;
-    Counter* c4p = t4 + r4*NLIT;
-    Counter* c5p = t5 + r5*NLIT;
-    Counter* c6p = t6 + r6*NLIT;
+    Counter* c1p = t1 + r1*NLIT;   int u1 = n1_[r1], w1_ = wrtab[u1];
+    Counter* c2p = t2 + r2*NLIT;   int u2 = n2_[r2], w2_ = wrtab[u2];
+    Counter* c3p = t3 + r3*NLIT;   int u3 = n3_[r3], w3_ = wrtab[u3];
+    Counter* c4p = t4 + r4*NLIT;   int u4 = n4_[r4];
+    Counter* c5p = t5 + r5*NLIT;   int u5 = n5_[r5], w5_ = wrtab[u5];
+    Counter* c6p = t6 + r6*NLIT;   int u6 = n6_[r6], w6_ = wrtab[u6];
     // The exact neighbourhood, hashed.  Where the match model offers one
     // prediction from one earlier occurrence, this carries the whole
     // distribution of what has followed this neighbourhood -- which is what
@@ -426,9 +445,10 @@ struct ImgModel {
     h9 ^= (uint)NEv * 0x27D4EB2Fu;
     h9 ^= (uint)pc * 0x165667B1u;
     h9 ^= h9 >> 15;
-    Counter* c8p = t8 + r8*NLIT;
-    Counter* c9p = t9 + (qword)(h9 & (M9SZ-1))*NLIT;
-    Counter* cap = ta + (qword)(((mfull*2654435761u)>>4) & (MASZ-1))*NLIT;
+    qword r9 = h9 & (M9SZ-1), rA = ((mfull*2654435761u)>>4) & (MASZ-1);
+    Counter* c8p = t8 + r8*NLIT;   int u8 = n8_[r8], w8_ = wrtab[u8];
+    Counter* c9p = t9 + r9*NLIT;   int u9 = n9_[r9], w9_ = wrtab[u9];
+    Counter* cap = ta + rA*NLIT;   int uA = na_[rA], wA_ = wrtab[uA];
 
     // neighbouring activity levels, for the section 9.4 side updates
     Counter* n1lo = (alvl>0) ? t1 + ((qword)(c1*8 + alvl-1)*3 + pc)*NLIT : 0;
@@ -440,16 +460,16 @@ struct ImgModel {
     for( k=0; k<NLIT; k++ ) {
       int ms = mvalid ? ((mcode == (uint)k) ? 2 : 1) : 0;
       Counter* c7p = t7 + ((qword)((ms*8 + mlq)*3 + pc))*NLIT;
-      mx.st[0] = stretch15( c1p[k].P );
-      mx.st[1] = stretch15( c2p[k].P );
-      mx.st[2] = stretch15( c3p[k].P );
+      mx.st[0] = u1 ? stretch15( c1p[k].P ) : 0;
+      mx.st[1] = u2 ? stretch15( c2p[k].P ) : 0;
+      mx.st[2] = u3 ? stretch15( c3p[k].P ) : 0;
       mx.st[3] = stretch15( c4p[k].P );
-      mx.st[4] = stretch15( c5p[k].P );
-      mx.st[5] = stretch15( c6p[k].P );
+      mx.st[4] = u5 ? stretch15( c5p[k].P ) : 0;
+      mx.st[5] = u6 ? stretch15( c6p[k].P ) : 0;
       mx.st[6] = stretch15( c7p[k].P );
-      mx.st[7] = stretch15( c8p[k].P );
-      mx.st[8] = stretch15( c9p[k].P );
-      mx.st[9] = stretch15( cap[k].P );
+      mx.st[7] = u8 ? stretch15( c8p[k].P ) : 0;
+      mx.st[8] = u9 ? stretch15( c9p[k].P ) : 0;
+      mx.st[9] = uA ? stretch15( cap[k].P ) : 0;
       mx.st[10] = 256;
       mx.select( ((((k*8 + alvl)*3 + pc)*8 + qrn)*3 + ms)*3 + mtype );
       int pr = mx.mix();
@@ -472,16 +492,16 @@ struct ImgModel {
       mx.update( bit, P0_MX_LR );
       apm.update( bit, P0_AP_RATE );
       apm2.update( bit, P0_AP_RATE );
-      c1p[k].Update( bit, P0_CT_wr, P0_CT_mw );
-      c2p[k].Update( bit, P0_CT_wr, P0_CT_mw );
-      c3p[k].Update( bit, P0_CT_wr, P0_CT_mw );
+      c1p[k].Update( bit, w1_, P0_CT_mw );
+      c2p[k].Update( bit, w2_, P0_CT_mw );
+      c3p[k].Update( bit, w3_, P0_CT_mw );
       c4p[k].Update( bit, P0_CTF_wr, P0_CTF_mw );
-      c5p[k].Update( bit, P0_CT_wr, P0_CT_mw );
-      c6p[k].Update( bit, P0_CT_wr, P0_CT_mw );
+      c5p[k].Update( bit, w5_, P0_CT_mw );
+      c6p[k].Update( bit, w6_, P0_CT_mw );
       c7p[k].Update( bit, P0_CTF_wr, P0_CTF_mw );
-      c8p[k].Update( bit, P0_CT_wr, P0_CT_mw );
-      c9p[k].Update( bit, P0_CTF_wr, P0_CTF_mw );
-      cap[k].Update( bit, P0_CTF_wr, P0_CTF_mw );
+      c8p[k].Update( bit, w8_, P0_CT_mw );
+      c9p[k].Update( bit, w9_, P0_CTF_mw );
+      cap[k].Update( bit, wA_, P0_CTF_mw );
       if( n1lo ) n1lo[k].Update( bit, P0_CTN_wr, P0_CT_mw );
       if( n1hi ) n1hi[k].Update( bit, P0_CTN_wr, P0_CT_mw );
 
@@ -499,16 +519,18 @@ struct ImgModel {
       eh ^= (uint)(((alvl*3 + pc)*9 + qeW)*9 + qeN) * 0x85EBCA6Bu;
       eh ^= (uint)((part*3 + mtype)*3 + t0) * 0xC2B2AE35u;
       eh ^= eh >> 13;
-      Counter* l1 = el1 + strip*8;
-      Counter* l2 = el2 + ((qword)((part*3 + mtype)*8 + alvl)*3 + pc)*8;
-      Counter* l3 = el3 + (qword)(eh & (E3SZ-1))*8;
+      qword re2 = (qword)((part*3 + mtype)*8 + alvl)*3 + pc, re3 = eh & (E3SZ-1);
+      Counter* l1 = el1 + strip*8;   int v1 = ne1[strip], y1 = wrtab[v1];
+      Counter* l2 = el2 + re2*8;     int v2 = ne2[re2],   y2 = wrtab[v2];
+      Counter* l3 = el3 + re3*8;     int v3 = ne3[re3],   y3 = wrtab[v3];
+      if( v1<15 ) ne1[strip]++;  if( v2<15 ) ne2[re2]++;  if( v3<15 ) ne3[re3]++;
       uint vv = f_DEC ? 0 : (code - NLIT + 1);      // 1 .. 256-NLIT
       int lvl = f_DEC ? 0 : ilog2i( vv );
       int j;
       for( j=0; j<7; j++ ) {
-        emx.st[0] = stretch15( l1[j].P );
-        emx.st[1] = stretch15( l2[j].P );
-        emx.st[2] = stretch15( l3[j].P );
+        emx.st[0] = v1 ? stretch15( l1[j].P ) : 0;
+        emx.st[1] = v2 ? stretch15( l2[j].P ) : 0;
+        emx.st[2] = v3 ? stretch15( l3[j].P ) : 0;
         emx.st[3] = 256;
         emx.select( ((j*8 + alvl)*3 + pc)*8 + gA );
         int pr = emx.mix();
@@ -523,9 +545,9 @@ struct ImgModel {
         st_add( 1, p15, bit );
         emx.update( bit, P0_MX_LR );
         eapm.update( bit, P0_AP_RATE );
-        l1[j].Update( bit, P0_EL_wr, P0_EL_mw );
-        l2[j].Update( bit, P0_EL_wr, P0_EL_mw );
-        l3[j].Update( bit, P0_EL_wr, P0_EL_mw );
+        l1[j].Update( bit, y1, P0_EL_mw );
+        l2[j].Update( bit, y2, P0_EL_mw );
+        l3[j].Update( bit, y3, P0_EL_mw );
         if( bit == 0 ) break;
       }
       lvl = j;
@@ -536,9 +558,12 @@ struct ImgModel {
         ph ^= (uint)(((part*3 + mtype)*8 + alvl)*3 + pc) * 0x85EBCA6Bu;
         ph ^= (uint)((Wv&15)*16 + (Nv&15)) * 0xC2B2AE35u;
         ph ^= ph >> 13;
-        Counter& q2 = ep2[ ph & (EPSZ-1) ];
+        qword rp = ph & (EPSZ-1);
+        Counter& q2 = ep2[ rp ];
+        int vp2 = nep[rp], yp = wrtab[vp2];
+        if( vp2<15 ) nep[rp]++;
         pmx.st[0] = stretch15( q1.P );
-        pmx.st[1] = stretch15( q2.P );
+        pmx.st[1] = vp2 ? stretch15( q2.P ) : 0;
         pmx.st[2] = 256;
         pmx.select( ((b*8 + alvl)*3 + pc)*8 + gA );
         int pr = pmx.mix();
@@ -550,7 +575,7 @@ struct ImgModel {
         st_add( 2, p15, bit );
         pmx.update( bit, P0_MX_LR );
         q1.Update( bit, P0_EP_wr, P0_EP_mw );
-        q2.Update( bit, P0_EP_wr, P0_EP_mw );
+        q2.Update( bit, yp, P0_EP_mw );
         ctx += ctx + bit;
       }
       if( f_DEC ) { vv = ctx; code = vv - 1 + NLIT; }
@@ -572,6 +597,11 @@ struct ImgModel {
     st_hist[pc][ zigzag(err) ]++; st_n[pc]++;
     if( mvalid ) st_mhit[ (int)vp[mpos]==val ]++;
 #endif
+
+    if( u1<15 ) n1_[r1]++;  if( u2<15 ) n2_[r2]++;  if( u3<15 ) n3_[r3]++;
+    if( u4<15 ) n4_[r4]++;  if( u5<15 ) n5_[r5]++;  if( u6<15 ) n6_[r6]++;
+    if( u8<15 ) n8_[r8]++;  if( u9<15 ) n9_[r9]++;  if( uA<15 ) na_[rA]++;
+    (void)u4;
 
     mlen[p]   = (mvalid && (int)vp[mpos] == val) ? mlen[p]+1 : 0;
     mtab[p][mh] = (uint)i;
