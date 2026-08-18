@@ -1,22 +1,22 @@
-# opt.pl -- parameter optimizer for dxt5comp (adapted from auto_opt2.pl)
+# opt.pl -- parameter optimizer for bmg (adapted from auto_opt2.pl)
 #
 # Flips the bits of the "!MAP!" pattern strings embedded in the executable by
 # the Debug-mode pdesc/pmask macros, keeping whatever shrinks the total output.
 # The build must therefore be the Debug build (mk.sh / g.bat with no argument).
 #
-#   perl IDX/opt.pl [corpus-file-list]
+#   ./mk.sh && cp bmg bmg_opt && perl IDX/opt.pl opt.lst
 #
-# corpus-file-list: text file, one .dds path per line (default: opt.lst,
+# corpus-file-list: text file, one .bmp path per line (default: opt.lst,
 # and if that is missing, the single file $deffile below). Optimizing on one
-# image overfits it; 5-20 assorted dds files is a much better target.
+# image overfits it; 5-20 assorted bmp files is a much better target.
 #
 # Results are written continuously to export.!!! (mdesc lines) and progress
 # to opttimes.!!!. Fold them back into the .idx sources with:
 #   cd IDX && for f in *.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
 
-$exe     = "./dxt5comp";
-$deffile = "0000006F.dds";
-$tmp     = "opt_tmp.d5c";
+$exe     = "./bmg_opt";
+$deffile = "opt/t24.bmp";
+$tmp     = "opt_tmp.bmg";
 $rndfrac = 0.75;   # bit is flipped in the initial random kick when rand>this
 
 #---------------------------------------------------------------- corpus

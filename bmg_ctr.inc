@@ -79,11 +79,15 @@ static INLINE int stretch15( uint p15 ) { return stretch_t[ p15 >> 3 ]; }
 
 // ---------------------------------------------------------------- mixer
 
-// Round-to-nearest instead of an arithmetic shift.  Every gradient step in
-// this file is a signed product scaled down by a shift, and >> rounds toward
-// minus infinity: a step of -1 for every negative product too small to
-// register, and none for the positive ones.  Over a few million samples that
-// walks every weight to its negative clamp.  Measured: it cost t24 27kB.
+// Round-to-nearest instead of an arithmetic shift.  Every gradient step here is
+// a signed product scaled down by a shift, and >> rounds toward minus infinity:
+// a step of -1 for every negative product too small to register, and none for
+// the positive ones.  In this mixer that is worth 0.01% -- the error term
+// shrinks as the prediction improves, so the weights stop moving before the
+// drift can accumulate.  It is used anyway because the same expression in an
+// NLMS filter, where the step does not self-limit, walked every weight to its
+// clamp and cost 24% before it was found; a shift that rounds is the cheap way
+// not to have to know which case one is in.
 static INLINE int rsh( int x, int s ) { return (x + (1 << (s-1))) >> s; }
 
 
@@ -152,6 +156,7 @@ struct APM {
   void free_( void ) { delete[] t; t = 0; }
 
   INLINE int pp( int pr12, int cx ) {
+    if( pr12 < 0 ) pr12 = 0; else if( pr12 > 4095 ) pr12 = 4095;
     int s = stretch_t[pr12] + 2048;          // 0..4095
     int w = s & 127;
     idx = cx*33 + (s>>7);
@@ -159,6 +164,7 @@ struct APM {
   }
 
   INLINE void update( int bit, int rate ) {
+    if( rate < 1 ) rate = 1; else if( rate > 16 ) rate = 16;   // it is a shift
     int y = 1-bit;                            // target for P(bit==0)
     int g = (y<<16) + (y<<rate) - y - y;
     t[idx  ] += (g - t[idx  ]) >> rate;

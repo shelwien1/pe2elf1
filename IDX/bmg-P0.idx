@@ -119,15 +119,5 @@ Number DZ6,       1, 1!00011
 Number DZ7,       1, 1!00011
 
 # ---- predictor -----------------------------------------------------------
-# LMS_SH = 0 
-Number LMS_SH,    1, 0!00000
-# LMS_LIM = 8192 
-Number LMS_LIM,   1, 1!01111111111111
-# LMS_PSH = 6 
-Number LMS_PSH,   1, 0!00110
-# BIAS_RESET = 256 
-Number BIAS_RESET, 1, 2!000011111110
-# BIAS_LIM = 96 
-Number BIAS_LIM,  1, 1!001011111
-# BIAS_G = 256 
-Number BIAS_G,    1, 0!100000000
+# (the NLMS filter and the bias corrector that used to live here were
+#  measured and removed -- see BMG-FORMAT.md)
