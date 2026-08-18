@@ -334,9 +334,16 @@ struct Codec {
         if( f_DEC ) buf[i] = byte(b);
       }
     } else {
-      rm.init();
+      rm.init( W, H );
       uint cap = fsize - info.dataOffset;
       uint used = rm.walk<f_DEC>( buf + info.dataOffset, cap, pix, W, H );
+#ifdef BMG_STATS
+      fprintf(stderr,"  rle: %llu run %llu abs %llu eol %llu eob %llu delta   len-miss run=%llu abs=%llu  stream=%u\n",
+              (unsigned long long)rm.nop[0],(unsigned long long)rm.nop[1],(unsigned long long)rm.nop[2],
+              (unsigned long long)rm.nop[3],(unsigned long long)rm.nop[4],
+              (unsigned long long)rm.nlen[0],(unsigned long long)rm.nlen[1], used);
+#endif
+      rm.free_();
       need_bm();
       for( uint i=info.dataOffset+used; i<fsize; i++ ) {
         uint b = bm.code<f_DEC>( f_DEC?0:buf[i], 1 );
@@ -498,6 +505,7 @@ struct Codec {
           if( clist[s] > 1 ) extra += log((double)clist[s]) * 1.4426950408889634;
         }
         expand = ( cr + extra < ci );
+        if( getenv("BMG_EXPAND") ) expand = atoi(getenv("BMG_EXPAND"));
         delete[] pb; delete[] pg; delete[] pr;
       }
     }

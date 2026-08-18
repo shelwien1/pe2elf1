@@ -30,7 +30,10 @@
 // which is what lets a plane's context see what the other planes just did at
 // the same pixel (section 9's interleaved driver).
 
-static const int NLIT  = 6;      // literal codes 0..NLIT-1, then escape
+#ifndef BMG_NLIT
+ #define BMG_NLIT 6
+#endif
+static const int NLIT  = BMG_NLIT;   // literal codes 0..NLIT-1, then escape
 static const int NMIX  = 8;      // mixer inputs
 static const int MARG  = 8;      // row margin, in samples
 
@@ -43,7 +46,12 @@ static const int M5SZ  = 9*9*8*3;           // cross-plane residuals
 static const int M6SZ  = 15*3*8*3;          // partition x MED branch x alvl x pclass
 static const int M7SZ  = 3*8*3;             // match state x match length x pclass
 static const int NSTRIP = 3*8*9*8;          // escape strips
-static const int STRIPW = 8 + 8*128;        // 8 level counters + 8 level trees
+static const int STRIPW = 8*128;            // one path tree per level
+static const int E2SZ   = 15*3*8*3;         // partition x MED branch x alvl x pclass
+static const int E3LOG  = 16;
+static const int E3SZ   = 1<<E3LOG;
+static const int EMXSETS = 7*8*3*8;
+static const int EAPSETS = 7*8*3*9;
 static const int MXSETS = NLIT*8*3*8*3;
 static const int APSETS = NLIT*8*3*9;
 static const int MHLOG  = 19;               // match table, per plane
@@ -103,8 +111,10 @@ struct ImgModel {
   byte*  mb[4];  byte*  m[4];      // |error|, clipped to 255
 
   Counter *t1, *t2, *t3, *t4, *t5, *t6, *t7, *tesc;
+  Counter *el1, *el2, *el3;        // the escape level, mixed like the ladder
   Mixer<NMIX> mx;
-  APM  apm;
+  Mixer<4>    emx;
+  APM  apm, eapm;
 
   uint* mtab[4];                   // match model: context hash -> last position
   int   mlen[4];
@@ -156,8 +166,12 @@ struct ImgModel {
     t6   = new Counter[ (qword)M6SZ*NLIT ];
     t7   = new Counter[ (qword)M7SZ*NLIT ];
     tesc = new Counter[ (qword)NSTRIP*STRIPW ];
+    el1  = new Counter[ (qword)NSTRIP*8 ];
+    el2  = new Counter[ (qword)E2SZ*8 ];
+    el3  = new Counter[ (qword)E3SZ*8 ];
     tbl_bytes = ( (qword)(M1SZ+M2SZ+M3SZ+M4SZ+M5SZ+M6SZ+M7SZ)*NLIT
-                + (qword)NSTRIP*STRIPW ) * sizeof(Counter)
+                + (qword)NSTRIP*STRIPW + (qword)NSTRIP*8
+                + (qword)E2SZ*8 + (qword)E3SZ*8 ) * sizeof(Counter)
                 + (qword)NP*sizeof(uint)*((qword)1<<MHLOG);
 
     // A fresh literal-ladder counter starts biased toward "yes": the folded
@@ -173,9 +187,14 @@ struct ImgModel {
     ctr_fill( t6, (qword)M6SZ*NLIT, seed );
     ctr_fill( t7, (qword)M7SZ*NLIT, seed );
     ctr_fill( tesc, (qword)NSTRIP*STRIPW, hSCALE );
+    ctr_fill( el1, (qword)NSTRIP*8, seed );
+    ctr_fill( el2, (qword)E2SZ*8, seed );
+    ctr_fill( el3, (qword)E3SZ*8, seed );
 
     mx.alloc( MXSETS, P0_MX_W0 );
     apm.alloc( APSETS );
+    emx.alloc( EMXSETS, P0_MX_W0*2 );
+    eapm.alloc( EAPSETS );
 
     const int ae[7] = { P0_ACT_E0,P0_ACT_E1,P0_ACT_E2,P0_ACT_E3,P0_ACT_E4,P0_ACT_E5,P0_ACT_E6 };
     const int ge[7] = { P0_GRP_E0,P0_GRP_E1,P0_GRP_E2,P0_GRP_E3,P0_GRP_E4,P0_GRP_E5,P0_GRP_E6 };
@@ -228,7 +247,8 @@ struct ImgModel {
     }
     delete[] t1; delete[] t2; delete[] t3; delete[] t4;
     delete[] t5; delete[] t6; delete[] t7; delete[] tesc;
-    mx.free_(); apm.free_();
+    delete[] el1; delete[] el2; delete[] el3;
+    mx.free_(); apm.free_(); emx.free_(); eapm.free_();
   }
 
   // ------------------------------------------------------------- helpers
@@ -422,21 +442,45 @@ struct ImgModel {
       // strip index carries something the counter index does not.
       qword strip = (qword)(((pc*8 + gA)*9 + qeW)*8 + qpr);
       Counter* sp = tesc + strip*STRIPW;
+      uint eh = (uint)c1 * 0x9E3779B1u;
+      eh ^= (uint)(((alvl*3 + pc)*9 + qeW)*9 + qeN) * 0x85EBCA6Bu;
+      eh ^= (uint)((part*3 + mtype)*3 + t0) * 0xC2B2AE35u;
+      eh ^= eh >> 13;
+      Counter* l1 = el1 + strip*8;
+      Counter* l2 = el2 + ((qword)((part*3 + mtype)*8 + alvl)*3 + pc)*8;
+      Counter* l3 = el3 + (qword)(eh & (E3SZ-1))*8;
       uint vv = f_DEC ? 0 : (code - NLIT + 1);      // 1 .. 256-NLIT
       int lvl = f_DEC ? 0 : ilog2i( vv );
       int j;
       for( j=0; j<7; j++ ) {
+        emx.st[0] = stretch15( l1[j].P );
+        emx.st[1] = stretch15( l2[j].P );
+        emx.st[2] = stretch15( l3[j].P );
+        emx.st[3] = 256;
+        emx.select( ((j*8 + alvl)*3 + pc)*8 + gA );
+        int pr = emx.mix();
+        int pa = eapm.pp( pr, ((j*8 + alvl)*3 + pc)*9 + qeW );
+        int wt = P0_AP_WT; if( wt < 0 ) wt = 0; if( wt > 16 ) wt = 16;
+        int prf = (pr*(16-wt) + pa*wt) >> 4;
+        uint p15 = uint(prf) << 3;
+        if( p15 < 8 ) p15 = 8;
+        if( p15 > SCALE-8 ) p15 = SCALE-8;
         uint bit = f_DEC ? 0 : (lvl == j ? 0u : 1u);
-        st_add( 1, sp[j].P, bit );
-        bit = bit_code<f_DEC>( sp[j], bit, P0_EL_wr, P0_EL_mw );
+        bit = rc.rc_BProcess( p15, bit );
+        st_add( 1, p15, bit );
+        emx.update( bit, P0_MX_LR );
+        eapm.update( bit, P0_AP_RATE );
+        l1[j].Update( bit, P0_EL_wr, P0_EL_mw );
+        l2[j].Update( bit, P0_EL_wr, P0_EL_mw );
+        l3[j].Update( bit, P0_EL_wr, P0_EL_mw );
         if( bit == 0 ) break;
       }
       lvl = j;
       uint ctx = 1;
       for( int b=lvl-1; b>=0; b-- ) {
         uint bit = f_DEC ? 0 : ((vv>>b)&1);
-        st_add( 2, sp[8 + lvl*128 + (ctx&127)].P, bit );
-        bit = bit_code<f_DEC>( sp[8 + lvl*128 + (ctx&127)], bit, P0_EP_wr, P0_EP_mw );
+        st_add( 2, sp[lvl*128 + (ctx&127)].P, bit );
+        bit = bit_code<f_DEC>( sp[lvl*128 + (ctx&127)], bit, P0_EP_wr, P0_EP_mw );
         ctx += ctx + bit;
       }
       if( f_DEC ) { vv = ctx; code = vv - 1 + NLIT; }

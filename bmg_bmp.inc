@@ -179,38 +179,66 @@ struct ByteModel {
 // is always the pixel under the cursor, so what is left on the wire is the
 // encoder's choices and nothing else.
 struct RleModel {
-  Counter opc[16*5];
+  Counter opc[64*5];
   Counter runeq[8], abseq[8], valeq[8], absmatch[8], padz[4];
   Counter trun[256], tabs[256], tval[256], tlit[256], tdx[256], tdy[256], tpad[256];
+#ifdef BMG_STATS
+  qword nop[6], nlen[4];
+#endif
 
-  void init( void ) {
-    ctr_fill( opc, 16*5, hSCALE );
+  int  W, H, cached;
+  byte* rl;            // run length starting at x, capped at 255
+  short* nx;           // distance from x to the next run of three or more
+
+  void init( int w, int h ) {
+    W = w; H = h; cached = -1;
+    rl = new byte[W+2]; nx = new short[W+2];
+    ctr_fill( opc, 64*5, hSCALE );
     ctr_fill( runeq, 8, hSCALE ); ctr_fill( abseq, 8, hSCALE );
     ctr_fill( valeq, 8, hSCALE ); ctr_fill( absmatch, 8, hSCALE );
     ctr_fill( padz, 4, hSCALE );
     ctr_fill( trun,256,hSCALE ); ctr_fill( tabs,256,hSCALE ); ctr_fill( tval,256,hSCALE );
     ctr_fill( tlit,256,hSCALE ); ctr_fill( tdx,256,hSCALE ); ctr_fill( tdy,256,hSCALE );
     ctr_fill( tpad,256,hSCALE );
+#ifdef BMG_STATS
+    memset(nop,0,sizeof(nop)); memset(nlen,0,sizeof(nlen));
+#endif
   }
+  void free_( void ) { delete[] rl; delete[] nx; rl=0; nx=0; }
 
-  static int runof( const byte* img, int W, int H, int row, int x ) {
-    if( row < 0 || row >= H || x >= W ) return 0;
+  // Per-row run geometry.  Both halves of the codec compute it from pixels
+  // they already have, so everything derived from it is free on the wire.
+  void cache_row( const byte* img, int row ) {
+    if( row == cached ) return;
+    cached = row;
+    if( row < 0 || row >= H ) { for( int x=0; x<W; x++ ) { rl[x]=0; nx[x]=0; } return; }
     const byte* r = img + (qword)(H-1-row)*W;
-    byte c = r[x];
-    int n = 1, lim = W - x; if( lim > 255 ) lim = 255;
-    while( n < lim && r[x+n] == c ) n++;
-    return n;
+    int run = 0;
+    for( int x=W-1; x>=0; x-- ) {
+      run = (x+1<W && r[x]==r[x+1]) ? run+1 : 1;
+      rl[x] = byte( run>255 ? 255 : run );
+    }
+    int d = W;                                  // distance to the next run of 3+
+    for( int x=W-1; x>=0; x-- ) { nx[x] = short(d-x); if( rl[x] >= 3 ) d = x; }
+    for( int x=0; x<W; x++ ) { int t = (rl[x]>=3) ? 0 : (nx[x]); if( t > W-x ) t = W-x; nx[x] = short(t); }
   }
 
   // dst is the RLE byte stream: read on encode, written on decode.
   // Returns the number of stream bytes the walk covered.
   template<int f_DEC>
-  uint walk( byte* dst, uint cap, const byte* img, int W, int H ) {
-    uint i = 0;  int x = 0, row = 0;
+  uint walk( byte* dst, uint cap, const byte* img, int w, int h ) {
+    W = w; H = h;
+    uint i = 0;  int x = 0, row = 0, prevop = 5;
     for(;;) {
-      int mr = runof( img, W, H, row, x );
-      int oc = ilog2i( (uint)mr + 1 ); if( oc > 7 ) oc = 7;
-      oc = oc*2 + (x==0);
+      cache_row( img, row );
+      int inrow = (row>=0 && row<H && x<W);
+      int mr = inrow ? rl[x] : 0;
+      if( mr > W-x ) mr = W-x;
+      // what a greedy encoder would do here: a run if there is one, otherwise
+      // literals up to the next run of three
+      int lit = inrow ? nx[x] : 0;
+      if( lit > 255 ) lit = 255;
+      int oc = ((mr>=3 ? (mr>=8 ? 2 : 1) : (mr>=2)) * 6 + prevop) * 2 + (x==0);
 
       int op = RLE_STOP;
       if( !f_DEC ) {
@@ -231,37 +259,49 @@ struct RleModel {
         if( bit==0 ) break;
       }
       if( f_DEC ) op = j;
-
+#ifdef BMG_STATS
+      nop[op]++;
+#endif
       if( op == RLE_STOP ) return i;
+      prevop = op;
 
       if( op == RLE_RUN ) {
         int pn = mr ? mr : 1;
         uint n = f_DEC ? 0 : dst[i];
         uint bit = f_DEC ? 0 : (n==(uint)pn ? 0u : 1u);
-        bit = bit_code<f_DEC>( runeq[oc>>1], bit, P0_RL_wr, P0_RL_mw );
+        bit = bit_code<f_DEC>( runeq[oc>>3], bit, P0_RL_wr, P0_RL_mw );
         if( bit ) n = byte_code<f_DEC>( trun, f_DEC?0:n, P0_RL_wr, P0_RL_mw );
         else if( f_DEC ) n = (uint)pn;
-        uint pv = (row>=0 && row<H && x<W) ? img[(qword)(H-1-row)*W + x] : 0;
+        if( !n ) n = 1;
+#ifdef BMG_STATS
+        nlen[0] += (bit!=0);
+#endif
+        uint pv = inrow ? img[(qword)(H-1-row)*W + x] : 0;
         uint val = f_DEC ? 0 : dst[i+1];
         bit = f_DEC ? 0 : (val==pv ? 0u : 1u);
-        bit = bit_code<f_DEC>( valeq[oc>>1], bit, P0_RL_wr, P0_RL_mw );
+        bit = bit_code<f_DEC>( valeq[oc>>3], bit, P0_RL_wr, P0_RL_mw );
         if( bit ) val = byte_code<f_DEC>( tval, f_DEC?0:val, P0_RL_wr, P0_RL_mw );
         else if( f_DEC ) val = pv;
         if( f_DEC ) { if( i+2 > cap ) return i; dst[i]=byte(n); dst[i+1]=byte(val); }
         x += (int)n; i += 2;
       } else if( op == RLE_ABS ) {
-        int ml = W - x; if( ml > 255 ) ml = 255; if( ml < 3 ) ml = 3;
+        int pl = lit; if( pl < 3 ) pl = 3; if( pl > W-x ) pl = W-x; if( pl > 255 ) pl = 255;
         uint n = f_DEC ? 0 : dst[i+1];
-        uint bit = f_DEC ? 0 : (n==(uint)ml ? 0u : 1u);
-        bit = bit_code<f_DEC>( abseq[oc>>1], bit, P0_RL_wr, P0_RL_mw );
+        uint bit = f_DEC ? 0 : (n==(uint)pl ? 0u : 1u);
+        bit = bit_code<f_DEC>( abseq[oc>>3], bit, P0_RL_wr, P0_RL_mw );
         if( bit ) n = byte_code<f_DEC>( tabs, f_DEC?0:n, P0_RL_wr, P0_RL_mw );
-        else if( f_DEC ) n = (uint)ml;
+        else if( f_DEC ) n = (uint)pl;
         if( n < 3 ) n = 3;
-        const byte* src = img + (qword)(H-1-row)*W + x;
+#ifdef BMG_STATS
+        nlen[1] += (bit!=0);
+#endif
+        static byte zbuf[256];
+        int okay = (inrow && x + (int)n <= W);
+        const byte* src = okay ? img + (qword)(H-1-row)*W + x : zbuf;
         int same = 1;
         if( !f_DEC ) { for( uint q=0; q<n; q++ ) if( dst[i+2+q]!=src[q] ) { same=0; break; } }
         bit = f_DEC ? 0 : (same ? 0u : 1u);
-        bit = bit_code<f_DEC>( absmatch[oc>>1], bit, P0_RL_wr, P0_RL_mw );
+        bit = bit_code<f_DEC>( absmatch[oc>>3], bit, P0_RL_wr, P0_RL_mw );
         same = (bit==0);
         uint pad = (n+1) & ~1u;
         if( f_DEC && i+2+pad > cap ) return i;
