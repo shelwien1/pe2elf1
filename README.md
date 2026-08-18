@@ -58,14 +58,14 @@ Seven images from the BMF distribution, round-trip byte-exact on all of them:
 
 | file | | input | bmg | ratio |
 | --- | --- | ---: | ---: | ---: |
-| `t8g.bmp` | 320×240 grey | 77 878 | 44 911 | 0.577 |
-| `t8p.bmp` | 320×240 palette | 77 878 | 45 024 | 0.578 |
-| `t24.bmp` | 320×240 RGB | 230 454 | 53 726 | 0.233 |
-| `t32.bmp` | 320×240 RGBA | 307 254 | 53 768 | 0.175 |
-| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 149 112 | 0.168 |
+| `t8g.bmp` | 320×240 grey | 77 878 | 44 912 | 0.577 |
+| `t8p.bmp` | 320×240 palette | 77 878 | 45 026 | 0.578 |
+| `t24.bmp` | 320×240 RGB | 230 454 | 53 718 | 0.233 |
+| `t32.bmp` | 320×240 RGBA | 307 254 | 53 760 | 0.175 |
+| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 149 111 | 0.168 |
 | `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 569 528 | 0.174 |
-| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 339 556 | 0.151 |
-| **total** | | **7 114 966** | **1 255 625** | **0.176** |
+| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 339 560 | 0.151 |
+| **total** | | **7 114 966** | **1 255 615** | **0.176** |
 
 Decoding runs once and is fast — one to two and a half million samples a second.
 Encoding runs the model two to six times, because choosing the predictor per
@@ -79,14 +79,14 @@ own encoder. Tables are 90–140 MB, mostly independent of image size.
 
 | file | bmf | bmg | |
 | --- | ---: | ---: | ---: |
-| `t8g.bmp` | 42 912 | 44 911 | +4.66% |
-| `t8p.bmp` | 43 676 | 45 024 | +3.09% |
-| `t24.bmp` | 53 924 | 53 726 | **−0.37%** |
-| `t32.bmp` | 53 996 | 53 768 | **−0.42%** |
-| `x_ai.bmp` | 148 780 | 149 112 | +0.22% |
-| `x_ci.bmp` | 633 144 | 569 528 | **−10.05%** |
-| `x_ep.bmp` | 330 616 | 339 556 | +2.70% |
-| **total** | **1 307 048** | **1 255 625** | **−3.93%** |
+| `t8g.bmp` | 320×240 grey | 77 878 | 44 912 | 0.577 |
+| `t8p.bmp` | 320×240 palette | 77 878 | 45 026 | 0.578 |
+| `t24.bmp` | 320×240 RGB | 230 454 | 53 718 | 0.233 |
+| `t32.bmp` | 320×240 RGBA | 307 254 | 53 760 | 0.175 |
+| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 149 111 | 0.168 |
+| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 569 528 | 0.174 |
+| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 339 560 | 0.151 |
+| **total** | | **7 114 966** | **1 255 615** | **0.176** |
 
 bmg is 3.9% smaller overall — and its stream also reproduces the input byte for
 byte, which bmf's does not: bmf re-encodes an RLE bitmap's run structure with

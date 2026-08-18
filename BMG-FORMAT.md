@@ -521,16 +521,21 @@ RLE8 file is not among them, and does not need to be: after §6 the whole run
 structure of `x_ci` costs 334 bytes, so there is nothing there for a parameter
 to move.)
 
-Three rounds were run. The first was worth 0.6% on the full corpus, the second
-0.08%, and the third — after the model gained the filter, the second mixing
-layer and the slow companion counters — found 0.15% on its crops and, checked
-one knob at a time on the *full* corpus, kept one of them. That is the shape of
-the curve.
+Three rounds were run. The first was worth 0.6% on the full corpus and the
+second 0.08%. The third — after the model gained the filter, the second mixing
+layer and the slow companion counters — found **0.27% on its crops and −0.12% on
+the corpus**: it had pushed the slow companion counter's rate from 1/1544 to
+1/144, faster than the primary it exists to be slower than, and taken the
+probability floor to 1. Applied one knob at a time against all seven files,
+exactly one of the sixteen survived, worth ten bytes.
 
-It is also a warning about the corpus. Sweeping by hand on a three-file subset
-found a mixer rate and a counter rate that were together worth 0.05% on those
-three and cost 0.05% on the other four; every number in this document that came
-out of a sweep was re-measured on all seven before it was kept.
+That is worth writing down twice, because it happened twice: a hand sweep on a
+three-file subset likewise found a mixer rate and a counter rate together worth
+0.05% on those three and −0.05% on the other four. **Every number in this
+document that came out of a sweep was re-measured on all seven before it was
+kept**, and the sweeps that were not are the reason `opt.lst`'s crops are a
+liability as well as a necessity: they make a measurement affordable and they do
+not make it true.
 
 The result worth writing down is not a rate. The optimizer pushed the activity
 ladder's first edge from 1 to 501, which — after the sort-and-clamp the consumer

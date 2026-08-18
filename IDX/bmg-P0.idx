@@ -24,7 +24,7 @@ Number EL_mw,     1, 1!000111001001
 # wr = 1365 
 Rate1  EP_wr,     16!0000001010100
 # EP_mw = 24 
-Number EP_mw,     1, 1!001000010000
+Number EP_mw,     1, 1!000000001000
 # wr = 1638 
 Rate1  BY_wr,     16!0000100110000
 # BY_mw = 20 
