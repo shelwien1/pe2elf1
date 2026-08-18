@@ -3,6 +3,8 @@
 #                     mapping object and opt.pl can hill-climb it.
 # mk.sh release    -- shipping build: Const 1.  Every knob is a literal the
 #                     compiler folds; no mapping objects, no indirection.
+# mk.sh stat       -- build bmgstat, the image analysis tool.  Independent of
+#                     the coder and of IDX; see README "Analysing an image".
 #
 # Both builds must produce byte-identical streams -- that is the contract, and
 # ./mk.sh check is the test.  See IDX-FORMAT.md sections 1 and 12.
@@ -22,6 +24,12 @@ gen() {   # gen <idx-basename> <use_new>  -- $1 is copied because a shell
 }
 
 case "$1" in
+stat)
+  # The analysis tool.  It shares nothing with the coder -- no IDX, no MOD --
+  # so it is built on its own and never as a side effect of ./mk.sh.
+  $CXX $OPT $STD -Wall -Wextra -Wno-unused-parameter bmgstat.cpp -o bmgstat -lm
+  echo "analysis tool: ./bmgstat testfiles/*.bmp"
+  ;;
 release)
   # Derive the shipping source from the tuning source with one substitution, so
   # the two can never drift.

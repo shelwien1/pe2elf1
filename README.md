@@ -38,6 +38,55 @@ gives the fast build — and `mk.sh` regenerates it when perl is present. A stal
 `t.sh` compresses, expands, and `cmp`s against the original. It exits non-zero
 if any file fails to round-trip.
 
+## Analysing an image
+
+`bmgstat` is a separate tool that reports what is *in* a bitmap that a
+compressor could exploit — and prices each finding in bytes, so the report ends
+with a ranked list of things to do rather than a wall of numbers.
+
+```sh
+./mk.sh stat
+./bmgstat testfiles/x_ep.bmp
+./bmgstat -q -t 500 -n 16 some/*.bmp     # looser exception budget, more colours
+```
+
+It reads the same depths `bmg` does, expanding 8-bit files through their palette
+so the statistics are of colours rather than of indices. What it measures:
+
+* **per component** — min, max, mean, median, standard deviation, distinct
+  values, order-0 entropy, and the lattice step if the used values are evenly
+  spaced;
+* **per bit plane** — the 0/1 balance, with a verdict of *always 0* / *always 1*
+  when the minority fits an exception budget (100 ppm by default, `-t`), priced
+  at log2(N choose k) — the cost of naming *which* pixels are the exceptions,
+  which is the whole cost of a property that holds almost everywhere;
+* **the value set** — gaps, a fitted gamma for the spacing of the used values,
+  and whether renumbering them 0..n−1 shrinks the MED residual;
+* **unique pixels** — distinct pixels and distinct RGB, whether the image is
+  palettizable, and the most frequent colours;
+* **derivability** — for every target and every subset of the others, the counts
+  table the question asks for: how many rows it would have, how many pixels
+  disagree with their row's most common value, the conditional entropy H(T|S),
+  and whether the table plus its exceptions costs less than the plane does;
+* **pairwise tone maps** — H(T|P), the mutual information, the best
+  deterministic curve P→T and its residual, and the exponent of the power law
+  fitted to the same relation, which is what a gamma correction between two
+  channels looks like: two numbers instead of a 256-entry table;
+* **exact relations, affine fits, and correlation** — X constant, X == Y,
+  X == 255−Y within budget; the best weighted least-squares reading of each
+  component from the others and what its residual costs;
+* **spatial structure** — neighbour equality, runs, repeated rows, horizontal
+  period, MED residual entropies, and the value-domain colour transform,
+  reported both per target and as a *realizable* set, since the per-target
+  choices can be circular;
+* **alpha** — opaque and clear fractions, mask against gradient, whether the
+  colour under full transparency is constant, and whether the pixels are
+  consistent with premultiplication.
+
+Every byte figure is an upper bound against a stated baseline — the raw bytes,
+an order-0 coder on the values, or an order-0 coder on the MED residuals — and
+the closing section says which, because the numbers overlap and do not add up.
+
 ## What it takes
 
 | depth | |
@@ -155,4 +204,5 @@ and `BMG-FORMAT.md` §7 for what each knob does.
 | `sh_mapping.inc` | IDX runtime support |
 | `IDX/`, `MOD/` | parameter declarations and their generated headers |
 | `IDX-FORMAT.md` | the IDX parameter system, as it came with `bcdr5` |
+| `bmgstat.cpp` | the image analysis tool, standalone |
 | `mk.sh`, `t.sh` | build and test |

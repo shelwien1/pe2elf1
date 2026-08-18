@@ -1,6 +1,7 @@
 # build products
 bmg
 bmg_opt
+bmgstat
 *.o
 *.exe
 
