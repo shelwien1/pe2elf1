@@ -10,54 +10,54 @@ Const 0
 # wr = 1365 
 Rate1  CT_wr,     16!0000101110000
 # CT_mw = 16 
-Number CT_mw,     1, 1!000000001111
+Number CT_mw,     1, 1!000100000001
 # wr = 3276 
 Rate1  CTF_wr,    16!0000010010000
 # CTF_mw = 40 
-Number CTF_mw,    1, 1!000000100111
+Number CTF_mw,    1, 1!000000101001
 # wr = 409 
 Rate1  CTN_wr,    16!0010011110000
 # wr = 1365 
 Rate1  EL_wr,     16!0000101110000
 # EL_mw = 24 
-Number EL_mw,     1, 1!000000010111
+Number EL_mw,     1, 1!000111001001
 # wr = 1365 
-Rate1  EP_wr,     16!0000101110000
+Rate1  EP_wr,     16!0000001010100
 # EP_mw = 24 
-Number EP_mw,     1, 1!000000010111
+Number EP_mw,     1, 1!001000010000
 # wr = 1638 
 Rate1  BY_wr,     16!0000100110000
 # BY_mw = 20 
 Number BY_mw,     1, 1!000000010011
 # wr = 2048 
-Rate1  PR_wr,     16!0000011110000
+Rate1  PR_wr,     16!0000000000111
 # PR_mw = 16 
-Number PR_mw,     1, 1!000000001111
+Number PR_mw,     1, 1!000000000000
 # wr = 2048 
 Rate1  RL_wr,     16!0000011110000
 # RL_mw = 24 
 Number RL_mw,     1, 1!000000010111
 # wr = 1024 
-Rate1  FL_wr,     16!0000111110000
+Rate1  FL_wr,     16!0000000001000
 # FL_mw = 400 
 Number FL_mw,     1, 1!000110001111
 
 # ---- mixer and SSE -------------------------------------------------------
 # MX_LR = 12 
-Number MX_LR,     1, 1!00001011
+Number MX_LR,     1, 1!00011010
 # MX_W0 = 11000 
-Number MX_W0,     1, 1!0010101011110111
+Number MX_W0,     1, 1!0010110111000101
 # AP_RATE = 7 
 Number AP_RATE,   1, 1!00110
 # AP_WT = 7 
-Number AP_WT,     1, 1!00110
+Number AP_WT,     1, 1!00111
 # AP_WT2 = 6 
-Number AP_WT2,    1, 1!00101
+Number AP_WT2,    1, 1!01001
 
 # ---- activity quantiser --------------------------------------------------
 # eight activity levels; the ladder is sorted and clamped at the point of use
 # ACT_E0 = 1 
-Number ACT_E0,    1, 1!000000000
+Number ACT_E0,    1, 1!111110100
 # ACT_E1 = 2 
 Number ACT_E1,    1, 1!000000001
 # ACT_E2 = 4 
@@ -72,7 +72,7 @@ Number ACT_E5,    1, 1!000100010
 Number ACT_E6,    1, 1!001100110
 # eight escape-strip groups, deliberately a different ladder
 # GRP_E0 = 1 
-Number GRP_E0,    1, 1!000000000
+Number GRP_E0,    1, 1!010000100
 # GRP_E1 = 3 
 Number GRP_E1,    1, 1!000000010
 # GRP_E2 = 6 
@@ -87,19 +87,19 @@ Number GRP_E5,    1, 1!000011010
 Number GRP_E6,    1, 1!000110011
 # activity weights: W, N, NW, NE, NN, WW, and the cross-plane term
 # AW_W = 6 
-Number AW_W,      1, 0!00110
+Number AW_W,      1, 0!10101
 # AW_N = 4 
 Number AW_N,      1, 0!00100
 # AW_NW = 3 
-Number AW_NW,     1, 0!00011
+Number AW_NW,     1, 0!00000
 # AW_NE = 3 
-Number AW_NE,     1, 0!00011
+Number AW_NE,     1, 0!00010
 # AW_NN = 2 
 Number AW_NN,     1, 0!00010
 # AW_WW = 2 
-Number AW_WW,     1, 0!00010
+Number AW_WW,     1, 0!00011
 # AW_X = 4 
-Number AW_X,      1, 0!00100
+Number AW_X,      1, 0!00110
 # per-level deadband for the ternary features
 # DZ0 = 1 
 Number DZ0,       1, 1!00000

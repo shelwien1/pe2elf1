@@ -62,7 +62,7 @@ def crop(src, dst, cw, ch):
 WANT = [("t8g.bmp", "opt/t8g.bmp", 256, 192),
         ("t24.bmp", "opt/t24.bmp", 224, 168),
         ("t32.bmp", "opt/t32.bmp", 224, 168),
-        ("x_ci.bmp", "opt/o_ci.bmp", 512, 320),
+        ("x_ci.bmp", "opt/o_ci.bmp", 1024, 640),
         ("x_ep.bmp", "opt/o_ep.bmp", 224, 224)]
 
 os.makedirs("opt", exist_ok=True)
