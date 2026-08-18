@@ -124,4 +124,5 @@ and `BMG-FORMAT.md` §7 for what each knob does.
 | `bmg_bmp.inc` | BMP parsing, the prologue and generic byte models, RLE8 |
 | `sh_mapping.inc` | IDX runtime support |
 | `IDX/`, `MOD/` | parameter declarations and their generated headers |
+| `IDX-FORMAT.md` | the IDX parameter system, as it came with `bcdr5` |
 | `mk.sh`, `t.sh` | build and test |
