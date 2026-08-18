@@ -66,10 +66,15 @@ static const int EPSZ    = 1<<EPLOG;        // second escape-path model
 static const int EMXSETS = 7*8*3*8;
 static const int PMXSETS = 8*8*3*8;
 static const int EAPSETS = 7*8*3*9;
-static const int MXSETS = NLIT*8*3*8*3*3;
+static const int MXSETS  = NLIT*8*3*8*3*3;      // first layer, gradient state
+static const int MXSETSB = NLIT*15*9*3;         // first layer, a different cut
+static const int MX2SETS = NLIT*3*3*8;          // second layer
 static const int APSETS = NLIT*8*3*9;
 static const int AP2SETS = NLIT*3*8*3*3;
 static const int MHLOG  = 19;               // match table, per plane
+static const int NCAND  = 16;               // candidate predictors mixed by LMS
+static const int NTX    = 12;               // texture buckets selecting a weight set
+static const int LWSETS = 3*NTX;
 
 static Rangecoder rc;
 
@@ -77,6 +82,7 @@ static Rangecoder rc;
 static double st_bits[8];
 static qword  st_hist[4][256];
 static qword  st_n[4], st_mhit[2];
+static qword  st_hmed[256], st_hlms[256], st_ncorr, st_acorr;
 static INLINE void st_add( int k, uint p15, uint bit ) {
   double p = bit ? (1.0 - p15/32768.0) : (p15/32768.0);
   st_bits[k] -= log(p)/log(2.0);
@@ -130,7 +136,11 @@ struct ImgModel {
   byte *ne1, *ne2, *ne3, *nep;
   Counter *el1, *el2, *el3;        // the escape level, mixed like the ladder
   Counter *ep2;                    // second escape-path model
-  Mixer<NMIX> mx;
+  // Two layers.  One gated mixer answers with the weights of whatever
+  // selector it was given; two of them, gated on different things, disagree
+  // where the selectors disagree, and a second layer learns which to believe.
+  Mixer<NMIX> mx, mxb;
+  Mixer<3>    mx2;
   Mixer<4>    emx;
   Mixer<3>    pmx;
   APM  apm, apm2, eapm;
@@ -138,6 +148,16 @@ struct ImgModel {
   uint* mtab[4];                   // match model: context hash -> last position
   int   mlen[4];
   int   runlen[4];
+  int   usefilt[4];     // does this plane code against the filter or against MED?
+
+  // Section 10.1's filter, in integers.  Model C does not correct a fixed
+  // predictor -- it mixes candidate *predictions* with NLMS weights, picks the
+  // weight set by a quantised description of the texture, and normalises each
+  // tap by its own running power.  That last part is what makes it work: the
+  // candidates have wildly different variances, so one shared normalisation
+  // lets the loud taps drown the quiet ones.
+  int  lw[LWSETS][NCAND];
+  int  lpw[LWSETS][NCAND];
 
   byte level_of[512], group_of[512];
   int  dzof[8];
@@ -232,7 +252,12 @@ struct ImgModel {
     ctr_fill( el3, (qword)E3SZ*8, seed );
     ctr_fill( ep2, (qword)EPSZ, hSCALE );
 
+    memset( lw, 0, sizeof(lw) );
+    for( int q=0; q<4; q++ ) usefilt[q] = 0;
+    for( int s=0; s<LWSETS; s++ ) for( int j=0; j<NCAND; j++ ) lpw[s][j] = 64;
     mx.alloc( MXSETS, P0_MX_W0 );
+    mxb.alloc( MXSETSB, P0_MX_W0 );
+    mx2.alloc( MX2SETS, (1<<16)/2 );
     apm.alloc( APSETS );
     apm2.alloc( AP2SETS );
     emx.alloc( EMXSETS, P0_MX_W0*2 );
@@ -295,7 +320,8 @@ struct ImgModel {
     delete[] n1_; delete[] n2_; delete[] n3_; delete[] n4_;
     delete[] n5_; delete[] n6_; delete[] n8_; delete[] n9_; delete[] na_;
     delete[] ne1; delete[] ne2; delete[] ne3; delete[] nep;
-    mx.free_(); apm.free_(); apm2.free_(); emx.free_(); eapm.free_(); pmx.free_();
+    mx.free_(); mxb.free_(); mx2.free_(); apm.free_(); apm2.free_();
+    emx.free_(); eapm.free_(); pmx.free_();
   }
 
   // ------------------------------------------------------------- helpers
@@ -354,6 +380,7 @@ struct ImgModel {
 
     int Wv = vp[i-1], Nv = vp[i-s1], NWv = vp[i-s1-1], NEv = vp[i-s1+1];
     int NNv = vp[i-s2], WWv = vp[i-2], NEEv = vp[i-s1+2], NNEv = vp[i-s2+1];
+    int NWWv = vp[i-s1-2], NNWv = vp[i-s2-1];
 
     int eW = ep[i-1], eN = ep[i-s1];
     int ra = refA[p], rb = refB[p];
@@ -363,11 +390,58 @@ struct ImgModel {
     // MED, and which of its three branches answered -- the branch is a
     // statement about the local edge and costs nothing to carry.
     int mxv = Wv>Nv ? Wv : Nv, mnv = Wv>Nv ? Nv : Wv;
-    int pred, mtype;
-    if( NWv >= mxv )      { pred = mnv;           mtype = 0; }
-    else if( NWv <= mnv ) { pred = mxv;           mtype = 1; }
-    else                  { pred = Wv + Nv - NWv; mtype = 2; }
-    if( pred < 0 ) pred = 0; else if( pred > 255 ) pred = 255;
+    int pmed, mtype;
+    if( NWv >= mxv )      { pmed = mnv;           mtype = 0; }
+    else if( NWv <= mnv ) { pmed = mxv;           mtype = 1; }
+    else                  { pmed = Wv + Nv - NWv; mtype = 2; }
+    if( pmed < 0 ) pmed = 0; else if( pmed > 255 ) pmed = 255;
+    int pred = pmed;
+
+    // ---- the candidate predictors, and the filter that mixes them
+    int cd[NCAND];
+    cd[ 0] = Wv;
+    cd[ 1] = Nv;
+    cd[ 2] = NEv;
+    cd[ 3] = NWv;
+    cd[ 4] = Wv + Nv - NWv;
+    cd[ 5] = (Wv + Nv + 1) >> 1;
+    cd[ 6] = Wv + NEv - Nv;
+    cd[ 7] = 2*Wv - WWv;
+    cd[ 8] = 2*Nv - NNv;
+    cd[ 9] = (3*(Wv + Nv) - 2*NWv + 2) >> 2;
+    cd[10] = Nv + NEv - NNEv;
+    cd[11] = Wv + NWv - NWWv;
+    cd[12] = (Wv + NEv + 1) >> 1;
+    cd[13] = 2*NEv - NEEv;
+    cd[14] = NNv + Wv - NNWv;
+    cd[15] = (NEv + NWv + 1) >> 1;
+
+    int spread = iabs(Wv-Nv) + iabs(Nv-NEv) + iabs(Wv-NWv) + iabs(Nv-NWv);
+    int tx = ilog2i( (uint)spread + 1 ); if( tx > NTX-1 ) tx = NTX-1;
+    int ws = pclass[p]*NTX + tx;
+    int* lwp = lw[ws];
+    int* lpp = lpw[ws];
+
+    int dd[NCAND];
+    long long dot = 0;
+    for( int j=0; j<NCAND; j++ ) {
+      int d = cd[j] - pmed;
+      dd[j] = d;
+      dot += (long long)lwp[j]*d;
+    }
+    int plms = pmed + rsh64( dot, 16 );
+    if( plms < 0 ) plms = 0; else if( plms > 255 ) plms = 255;
+
+    // Coding against the filter moves the prediction out from under the
+    // contexts that carry the exact neighbourhood, which is where a
+    // screenshot's compression lives -- so when the filter is in use, its
+    // correction goes into those contexts and they are deterministic again.
+    int lqx = 0;
+    if( usefilt[p] ) {
+      pred = plms;
+      int c = plms - pmed;
+      lqx = 1 + ((c < -8) ? 0 : (c > 8) ? 16 : c + 8);
+    }
 
     // activity
     int act = P0_AW_W  * mp[i-1]    + P0_AW_N  * mp[i-s1]
@@ -421,7 +495,7 @@ struct ImgModel {
     uint  hh = (uint)c1 * 0x9E3779B1u;
     hh ^= (uint)((t0*3 + t8_)*15 + part) * 0x85EBCA6Bu;
     hh ^= (uint)(((alvl*3 + pc)*9 + qeW)*9 + qeN) * 0xC2B2AE35u;
-    hh ^= (uint)((qpr*3 + mtype)*8 + gA) * 0x27D4EB2Fu;
+    hh ^= (uint)(((qpr*3 + mtype)*8 + gA)*18 + lqx) * 0x27D4EB2Fu;
     hh ^= hh >> 15;
     qword r2 = hh & (M2SZ-1);
     qword r3 = (qword)(((qeW*9 + qeN)*8 + qpr)*8 + alvl)*3 + pc;
@@ -450,9 +524,10 @@ struct ImgModel {
     h9 ^= (uint)Nv * 0x85EBCA6Bu;
     h9 ^= (uint)NWv * 0xC2B2AE35u;
     h9 ^= (uint)NEv * 0x27D4EB2Fu;
-    h9 ^= (uint)pc * 0x165667B1u;
+    h9 ^= (uint)(pc*18 + lqx) * 0x165667B1u;
     h9 ^= h9 >> 15;
-    qword r9 = h9 & (M9SZ-1), rA = ((mfull*2654435761u)>>4) & (MASZ-1);
+    uint mfx = mfull ^ ((uint)lqx * 0x85EBCA6Bu);
+    qword r9 = h9 & (M9SZ-1), rA = ((mfx*2654435761u)>>4) & (MASZ-1);
     Counter* c8p = t8 + r8*NLIT;   int u8 = n8_[r8], w8_ = wrtab[u8];
     Counter* c9p = t9 + r9*NLIT;   int u9 = n9_[r9], w9_ = wrtab[u9];
     Counter* cap = ta + rA*NLIT;   int uA = na_[rA], wA_ = wrtab[uA];
@@ -478,8 +553,15 @@ struct ImgModel {
       mx.st[8] = u9 ? stretch15( c9p[k].P ) : 0;
       mx.st[9] = uA ? stretch15( cap[k].P ) : 0;
       mx.st[10] = 256;
+      for( int q=0; q<NMIX; q++ ) mxb.st[q] = mx.st[q];
       mx.select( ((((k*8 + alvl)*3 + pc)*8 + qrn)*3 + ms)*3 + mtype );
-      int pr = mx.mix();
+      mxb.select( ((k*15 + part)*9 + qeW)*3 + pc );
+      int pra = mx.mix(), prb = mxb.mix();
+      mx2.st[0] = stretch_t[pra];
+      mx2.st[1] = stretch_t[prb];
+      mx2.st[2] = 256;
+      mx2.select( ((k*3 + pc)*3 + ms)*8 + mlq );
+      int pr = mx2.mix();
       // Two secondary estimators on different questions -- one on the
       // gradient state, one on what the match model is doing -- averaged with
       // the mixer's own answer.
@@ -497,6 +579,8 @@ struct ImgModel {
       st_add( 0, p15, bit );
 
       mx.update( bit, P0_MX_LR );
+      mxb.update( bit, P0_MX_LR );
+      mx2.update( bit, P0_MX_LR2 );
       apm.update( bit, P0_AP_RATE );
       apm2.update( bit, P0_AP_RATE );
       c1p[k].Update( bit, w1_, P0_CT_mw );
@@ -602,12 +686,32 @@ struct ImgModel {
 
 #ifdef BMG_STATS
     st_hist[pc][ zigzag(err) ]++; st_n[pc]++;
+    st_hmed[ zigzag(val-pmed) ]++; st_hlms[ zigzag(val-plms) ]++;
+    st_ncorr++; st_acorr += iabs(plms-pmed);
     if( mvalid ) st_mhit[ (int)vp[mpos]==val ]++;
 #endif
 
     if( u1<15 ) n1_[r1]++;  if( u2<15 ) n2_[r2]++;  if( u3<15 ) n3_[r3]++;
     if( u4<15 ) n4_[r4]++;  if( u5<15 ) n5_[r5]++;  if( u6<15 ) n6_[r6]++;
     if( u8<15 ) n8_[r8]++;  if( u9<15 ) n9_[r9]++;  if( uA<15 ) na_[rA]++;
+
+    // ---- the filter's step, normalised per tap.  A shift rather than a
+    // divide: 2^sh tracks the tap's own running power, so the step is the NLMS
+    // step to within a factor of two and costs no division at all.
+    {
+      int lerr = val - plms;
+      int lim = P0_LM_LIM, kmu = P0_LM_MU;
+      for( int j=0; j<NCAND; j++ ) {
+        int d = dd[j];
+        lpp[j] += rsh( d*d - lpp[j], 5 );
+        int sh = ilog2i( (uint)lpp[j] + 4 ) - kmu;
+        if( sh < 0 ) sh = 0; else if( sh > 24 ) sh = 24;
+        int nw = lwp[j] + rsh64( (long long)lerr * d, sh );
+        if( nw >  lim ) nw =  lim;
+        if( nw < -lim ) nw = -lim;
+        lwp[j] = nw;
+      }
+    }
 
     mlen[p]   = (mvalid && (int)vp[mpos] == val) ? mlen[p]+1 : 0;
     mtab[p][mh] = (uint)i;

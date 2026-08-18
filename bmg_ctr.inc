@@ -89,6 +89,10 @@ static INLINE int stretch15( uint p15 ) { return stretch_t[ p15 >> 3 ]; }
 // clamp and cost 24% before it was found; a shift that rounds is the cheap way
 // not to have to know which case one is in.
 static INLINE int rsh( int x, int s ) { return (x + (1 << (s-1))) >> s; }
+static INLINE int iabs( int x ) { return x<0 ? -x : x; }
+static INLINE int rsh64( long long x, int s ) {
+  return (int)((x + (1LL << (s-1))) >> s);
+}
 
 
 // A gated linear mixer in the stretched domain.  One weight set per selector

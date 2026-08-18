@@ -117,8 +117,8 @@ struct Codec {
   int   im_on;
   int   own_buf;      // the decoder allocates buf; the encoder is handed it
 
-  int hub;
-  Codec() { buf=0; pix=0; pal=0; expand=0; bm_on=0; cn=0; hub=1;
+  int hub, filt;
+  Codec() { buf=0; pix=0; pal=0; expand=0; bm_on=0; cn=0; hub=1; filt=0;
             tsc0=0; tsc1=0; im_on=0; own_buf=0; }
   ~Codec() {
     if( im_on ) im.free_();
@@ -129,6 +129,7 @@ struct Codec {
   }
 
   void need_bm( void ) { if( !bm_on ) { bm.alloc(); bm_on=1; } }
+  void drop_bm( void ) { if( bm_on ) { bm.free_(); bm_on=0; } }
 
   // ---------------------------------------------------------- palette
 
@@ -259,6 +260,7 @@ struct Codec {
     } else expand = 0;
 
     NPX = expand ? 3 : (info.bpp==8 ? 1 : bpp8);
+    if( im_on ) im.free_();
     im.alloc( W, H, NPX );  im_on = 1;
     if( !f_DEC ) planes_from_pix();
 
@@ -304,6 +306,13 @@ struct Codec {
       }
     }
 
+    // ---- predictor: MED, or the candidate-mixing filter (section 6.4)
+    {
+      uint b = f_DEC ? 0 : (uint)(filt ? 0 : 1);
+      b = bit_code<f_DEC>( flag[5], b, P0_FL_wr, P0_FL_mw );
+      filt = (b==0);
+      for( int q=0; q<NPX; q++ ) im.usefilt[q] = filt;
+    }
     im.run<f_DEC>();
     if( f_DEC ) pix_from_planes();
 
@@ -560,12 +569,31 @@ struct Codec {
       }
     }
 
+    // Section 6.4: where choose_plane_coding estimates, this one actually
+    // encodes and throws the output away.  It has to: the filter cuts x_ep's
+    // raw residual entropy by 15% and t24's by 6%, and it is worth 1.1% on the
+    // first and *costs* 0.7% on the second, because how much of it the context
+    // models had already extracted is not something an entropy estimate can
+    // see.  Two trials, keep the shorter.
     qword cap = (qword)fsize + 0x20000;
     byte* out = new byte[cap];
-    rc.init( out, cap, 0 );
-    int good = body<0>();
-    rc.flush();
-    qword n = rc.mpos;
+    byte* alt = 0;
+    int good = 0;
+    qword n = 0;
+    int ntrial = info.ok ? 2 : 1;
+    for( int t=0; t<ntrial; t++ ) {
+      byte* dst = t ? (alt = new byte[cap]) : out;
+      filt = t;
+      drop_bm();
+      rc.init( dst, cap, 0 );
+      int g = body<0>();
+      rc.flush();
+      if( t==0 ) { good = g; n = rc.mpos; }
+      else if( g && rc.mpos < n ) {
+        delete[] out; out = alt; alt = 0; n = rc.mpos; good = g;
+      }
+    }
+    delete[] alt;
 
     byte hdr[9];
     hdr[0]='B'; hdr[1]='M'; hdr[2]='G'; hdr[3]='1';
@@ -644,6 +672,21 @@ int main( int argc, char** argv ) {
     double sec = double(clock()-t0)/CLOCKS_PER_SEC;
 #ifdef BMG_STATS
     { double tot=0; qword N=0;
+      { double a=estimate_cost((uint*)0,0,0); (void)a;
+        double e0=0,e1=0; qword N2=st_ncorr;
+        if(N2){ e0=N2*log((double)N2); e1=e0;
+          for(int i=0;i<256;i++){ if(st_hmed[i]) e0-=st_hmed[i]*log((double)st_hmed[i]);
+                                  if(st_hlms[i]) e1-=st_hlms[i]*log((double)st_hlms[i]); }
+          fprintf(stderr,"  residual order0: MED %.0f B, LMS %.0f B (%+.2f%%), mean|corr| %.3f\n",
+                  e0*1.4426950408889634/8, e1*1.4426950408889634/8,
+                  (e1-e0)*100/e0, (double)st_acorr/N2); } }
+      { double e0=0,e1=0; qword N2=st_ncorr;
+        if(N2){ e0=N2*log((double)N2); e1=e0;
+          for(int i=0;i<256;i++){ if(st_hmed[i]) e0-=st_hmed[i]*log((double)st_hmed[i]);
+                                  if(st_hlms[i]) e1-=st_hlms[i]*log((double)st_hlms[i]); }
+          fprintf(stderr,"  residual order0: MED %.0f B, filter %.0f B (%+.2f%%), mean|corr| %.3f\n",
+                  e0*1.4426950408889634/8, e1*1.4426950408889634/8,
+                  (e1-e0)*100/e0, (double)st_acorr/N2); } }
       fprintf(stderr,"  match hit rate %.3f\n", st_mhit[0]+st_mhit[1] ? (double)st_mhit[1]/(st_mhit[0]+st_mhit[1]) : 0.0);
       for(int i=0;i<3;i++) tot+=st_bits[i];
       for(int c=0;c<4;c++) N+=st_n[c];
