@@ -608,7 +608,6 @@ struct ImgModel {
     if( u1<15 ) n1_[r1]++;  if( u2<15 ) n2_[r2]++;  if( u3<15 ) n3_[r3]++;
     if( u4<15 ) n4_[r4]++;  if( u5<15 ) n5_[r5]++;  if( u6<15 ) n6_[r6]++;
     if( u8<15 ) n8_[r8]++;  if( u9<15 ) n9_[r9]++;  if( uA<15 ) na_[rA]++;
-    (void)u4;
 
     mlen[p]   = (mvalid && (int)vp[mpos] == val) ? mlen[p]+1 : 0;
     mtab[p][mh] = (uint)i;

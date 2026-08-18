@@ -236,7 +236,7 @@ struct Codec {
     if( f_DEC ) {
       info.parse( buf, fsize );
       if( !info.ok ) return 0;
-      pal = 0;
+      delete[] pal; pal = 0;
       if( info.ncol > 0 ) {
         pal = new byte[3*info.ncol];
         for( int i=0; i<info.ncol; i++ ) {
