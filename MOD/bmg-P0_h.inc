@@ -108,6 +108,8 @@ pdesc( P0_LM_MU_, 1, "00100" );
 static const int P0_LM_MU = P0_LM_MU_.value * (1);
 pdesc( P0_LM_LIM_, 1, "101111111111" );
 static const int P0_LM_LIM = P0_LM_LIM_.value * (16);
+pdesc( P0_CTS_wr_, 16, "0010111111000" );
+static const int P0_CTS_wr = eSCALE/P0_CTS_wr_.value;
 
 
 

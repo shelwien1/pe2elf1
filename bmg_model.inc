@@ -34,7 +34,7 @@
  #define BMG_NLIT 12
 #endif
 static const int NLIT  = BMG_NLIT;   // literal codes 0..NLIT-1, then escape
-static const int NMIX  = 11;     // mixer inputs
+static const int NMIX  = 13;     // mixer inputs
 static const int MARG  = 8;      // row margin, in samples
 
 static const int M1SZ  = 2187*8*3;          // t1..t7 x alvl x pclass
@@ -132,6 +132,10 @@ struct ImgModel {
   byte*  mb[4];  byte*  m[4];      // |error|, clipped to 255
 
   Counter *t1, *t2, *t3, *t4, *t5, *t6, *t7, *t8, *t9, *ta, *tesc;
+  // A second, slow-rate counter on the two strongest models.  One rate has to
+  // be a compromise between tracking and averaging; two let the mixer pick,
+  // per context state, which of the two answers to believe.
+  Counter *t9s, *tas;
   byte *n1_, *n2_, *n3_, *n4_, *n5_, *n6_, *n8_, *n9_, *na_;   // per-row use counts
   byte *ne1, *ne2, *ne3, *nep;
   Counter *el1, *el2, *el3;        // the escape level, mixed like the ladder
@@ -207,6 +211,8 @@ struct ImgModel {
     t8   = new Counter[ (qword)M8SZ*NLIT ];
     t9   = new Counter[ (qword)M9SZ*NLIT ];
     ta   = new Counter[ (qword)MASZ*NLIT ];
+    t9s  = new Counter[ (qword)M9SZ*NLIT ];
+    tas  = new Counter[ (qword)MASZ*NLIT ];
     n1_ = new byte[M1SZ]; memset( n1_, 0, M1SZ );
     n2_ = new byte[M2SZ]; memset( n2_, 0, M2SZ );
     n3_ = new byte[M3SZ]; memset( n3_, 0, M3SZ );
@@ -226,7 +232,7 @@ struct ImgModel {
     el2  = new Counter[ (qword)E2SZ*8 ];
     el3  = new Counter[ (qword)E3SZ*8 ];
     ep2  = new Counter[ (qword)EPSZ ];
-    tbl_bytes = ( (qword)(M1SZ+M2SZ+M3SZ+M4SZ+M5SZ+M6SZ+M7SZ+M8SZ+M9SZ+MASZ)*NLIT
+    tbl_bytes = ( (qword)(M1SZ+M2SZ+M3SZ+M4SZ+M5SZ+M6SZ+M7SZ+M8SZ+2*M9SZ+2*MASZ)*NLIT
                 + (qword)NSTRIP*STRIPW + (qword)NSTRIP*8
                 + (qword)E2SZ*8 + (qword)E3SZ*8 + (qword)EPSZ ) * sizeof(Counter)
                 + (qword)NP*sizeof(uint)*((qword)1<<MHLOG);
@@ -246,6 +252,8 @@ struct ImgModel {
     ctr_fill( t8, (qword)M8SZ*NLIT, seed );
     ctr_fill( t9, (qword)M9SZ*NLIT, seed );
     ctr_fill( ta, (qword)MASZ*NLIT, seed );
+    ctr_fill( t9s, (qword)M9SZ*NLIT, seed );
+    ctr_fill( tas, (qword)MASZ*NLIT, seed );
     ctr_fill( tesc, (qword)NSTRIP*STRIPW, hSCALE );
     ctr_fill( el1, (qword)NSTRIP*8, seed );
     ctr_fill( el2, (qword)E2SZ*8, seed );
@@ -315,7 +323,7 @@ struct ImgModel {
     }
     delete[] t1; delete[] t2; delete[] t3; delete[] t4;
     delete[] t5; delete[] t6; delete[] t7; delete[] t8; delete[] t9;
-    delete[] ta; delete[] tesc;
+    delete[] ta; delete[] t9s; delete[] tas; delete[] tesc;
     delete[] el1; delete[] el2; delete[] el3; delete[] ep2;
     delete[] n1_; delete[] n2_; delete[] n3_; delete[] n4_;
     delete[] n5_; delete[] n6_; delete[] n8_; delete[] n9_; delete[] na_;
@@ -538,6 +546,8 @@ struct ImgModel {
     Counter* c8p = t8 + r8*NLIT;   int u8 = n8_[r8], w8_ = wrtab[u8];
     Counter* c9p = t9 + r9*NLIT;   int u9 = n9_[r9], w9_ = wrtab[u9];
     Counter* cap = ta + rA*NLIT;   int uA = na_[rA], wA_ = wrtab[uA];
+    Counter* c9s = t9s + r9*NLIT;
+    Counter* cas = tas + rA*NLIT;
 
     // neighbouring activity levels, for the section 9.4 side updates
     Counter* n1lo = (alvl>0) ? t1 + ((qword)(c1*8 + alvl-1)*3 + pc)*NLIT : 0;
@@ -559,7 +569,9 @@ struct ImgModel {
       mx.st[7] = u8 ? stretch15( c8p[k].P ) : 0;
       mx.st[8] = u9 ? stretch15( c9p[k].P ) : 0;
       mx.st[9] = uA ? stretch15( cap[k].P ) : 0;
-      mx.st[10] = 256;
+      mx.st[10] = u9 ? stretch15( c9s[k].P ) : 0;
+      mx.st[11] = uA ? stretch15( cas[k].P ) : 0;
+      mx.st[12] = 256;
       for( int q=0; q<NMIX; q++ ) mxb.st[q] = mx.st[q];
       mx.select( ((((k*8 + alvl)*3 + pc)*8 + qrn)*3 + ms)*3 + mtype );
       mxb.select( ((k*15 + part)*9 + qeW)*3 + pc );
@@ -600,6 +612,9 @@ struct ImgModel {
       c8p[k].Update( bit, w8_, P0_CT_mw );
       c9p[k].Update( bit, w9_, P0_CTF_mw );
       cap[k].Update( bit, wA_, P0_CTF_mw );
+      c9s[k].Update( bit, (w9_ < P0_CTS_wr) ? w9_ : P0_CTS_wr, P0_CT_mw );
+      cas[k].Update( bit, (wA_ < P0_CTS_wr) ? wA_ : P0_CTS_wr, P0_CT_mw );
+
       if( n1lo ) n1lo[k].Update( bit, P0_CTN_wr, P0_CT_mw );
       if( n1hi ) n1hi[k].Update( bit, P0_CTN_wr, P0_CT_mw );
 

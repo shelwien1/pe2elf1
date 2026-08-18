@@ -133,3 +133,7 @@ Number LM_MU,     1, 1!00100
 # LM_LIM = 49152
 Number LM_LIM,    16, 1!101111111111
 
+
+# ---- slow companions on M9 and MA ----------------------------------------
+# wr = 341
+Rate1  CTS_wr,    16!0010111111000
