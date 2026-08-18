@@ -1,0 +1,27 @@
+
+Prefix C0
+Debug 1
+
+Const 1
+
+Rate1   SINGLE_wr,   16!00000110000010
+Number  SINGLE_mw,  1,1!00001110001000
+
+Const 0
+
+Rate1   BITS_wr,   16!00000101110000
+Number  BITS_mw,  1,1!00001010000100
+
+Const 0
+
+Rate1   BITS7_wr,   16!00100000100100
+Number  BITS7_mw,  1,1!00000111000100
+
+Const 1
+
+Rate1   EMPTY_wr,   16!00001000000100
+Number  EMPTY_mw,  1,1!00001000101001
+
+Rate1   FULL_wr,   16!00000011011011
+Number  FULL_mw,  1,1!00001000100100
+
