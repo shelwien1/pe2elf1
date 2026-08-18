@@ -306,12 +306,14 @@ struct Codec {
       }
     }
 
-    // ---- predictor: MED, or the candidate-mixing filter (section 6.4)
-    {
-      uint b = f_DEC ? 0 : (uint)(filt ? 0 : 1);
+    // ---- predictor: MED, or the candidate-mixing filter, one bit per plane
+    // (section 6.2's descriptors carry a predictor per plane for the same
+    // reason -- bmf's own choice on t24 is 0,1,1 across the three)
+    for( int q=0; q<NPX; q++ ) {
+      uint b = f_DEC ? 0 : (uint)((filt>>q)&1);
       b = bit_code<f_DEC>( flag[5], b, P0_FL_wr, P0_FL_mw );
-      filt = (b==0);
-      for( int q=0; q<NPX; q++ ) im.usefilt[q] = filt;
+      if( f_DEC ) filt = (filt & ~(1<<q)) | ((int)b<<q);
+      im.usefilt[q] = (int)b;
     }
     im.run<f_DEC>();
     if( f_DEC ) pix_from_planes();
@@ -519,6 +521,19 @@ struct Codec {
 
   // ---------------------------------------------------------- drivers
 
+  qword trial( byte* dst, qword cap, int* good ) {
+    drop_bm();
+    rc.init( dst, cap, 0 );
+    *good = body<0>();
+    rc.flush();
+    return rc.mpos;
+  }
+  // How many planes the image model will use -- known before the first trial,
+  // because expand and the depth already are.
+  int plane_guess( void ) {
+    return expand ? 3 : (info.bpp==8 ? 1 : (info.bpp>>3));
+  }
+
   int compress( FILE* fo ) {
     info.parse( buf, fsize );
     if( info.ok && info.ncol > 0 ) {
@@ -580,19 +595,25 @@ struct Codec {
     byte* alt = 0;
     int good = 0;
     qword n = 0;
-    int ntrial = info.ok ? 2 : 1;
-    for( int t=0; t<ntrial; t++ ) {
-      byte* dst = t ? (alt = new byte[cap]) : out;
-      filt = t;
-      drop_bm();
-      rc.init( dst, cap, 0 );
-      int g = body<0>();
-      rc.flush();
-      if( t==0 ) { good = g; n = rc.mpos; }
-      else if( g && rc.mpos < n ) {
-        delete[] out; out = alt; alt = 0; n = rc.mpos; good = g;
-      }
+    int np = info.ok ? plane_guess() : 0;
+    int best = 0;
+    alt = new byte[cap];
+    for( int t=0; t<(np?2:1); t++ ) {      // all-MED against all-filter
+      byte* dst = (t==0) ? out : alt;
+      filt = t ? (1<<np)-1 : 0;
+      qword sz = trial( dst, cap, &good );
+      if( t==0 || (good && sz < n) ) { n = sz; best = filt; if(t) { byte* s=out; out=alt; alt=s; } }
     }
+    // then one plane at a time, kept if it pays -- the same greedy walk
+    // search_filter makes over its flag values
+    for( int q=0; q<np && np>1; q++ ) {
+      int cand = best ^ (1<<q);
+      filt = cand;
+      int g;
+      qword sz = trial( alt, cap, &g );
+      if( g && sz < n ) { n = sz; best = cand; byte* s=out; out=alt; alt=s; }
+    }
+    filt = best;
     delete[] alt;
 
     byte hdr[9];
