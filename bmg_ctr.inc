@@ -92,10 +92,17 @@ static INLINE int stretch15( uint p15 ) { return stretch_t[ p15 >> 3 ]; }
 // NLMS filter, where the step does not self-limit, walked every weight to its
 // clamp and cost 24% before it was found; a shift that rounds is the cheap way
 // not to have to know which case one is in.
-static INLINE int rsh( int x, int s ) { return (x + (1 << (s-1))) >> s; }
+// The rounding constant is written (1<<s)>>1 rather than 1<<(s-1) so that a
+// shift of zero is a no-op rather than undefined behaviour.  The filter's
+// per-tap normalisation reaches zero on a tap whose power has collapsed, and
+// 1<<-1 is a shift count of 31 on x86, which would make the rounding constant
+// INT_MIN.  UBSan found it; this build's output does not change, which is the
+// usual way undefined behaviour presents until the compiler or the target
+// changes underneath it.
+static INLINE int rsh( int x, int s ) { return (x + (int)((1u << s) >> 1)) >> s; }
 static INLINE int iabs( int x ) { return x<0 ? -x : x; }
 static INLINE int rsh64( long long x, int s ) {
-  return (int)((x + (1LL << (s-1))) >> s);
+  return (int)((x + (long long)((1ull << s) >> 1)) >> s);
 }
 
 
