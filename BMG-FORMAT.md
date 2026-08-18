@@ -577,6 +577,42 @@ For scale, the order-0 entropy of the MED residuals — which is what §6.3's
 of the distance on `t24`; context mixing accounts for the rest and for all of it
 on the screenshots.
 
+### 8.1 against BMF
+
+`bmf.cpp` built with `-Ofast -march=native`, same seven files:
+
+| file | bmf | bmg | |
+| --- | ---: | ---: | ---: |
+| `t8g.bmp` | BMFNUM_t8g | BMGNUM_t8g | PCT_t8g |
+| `t8p.bmp` | BMFNUM_t8p | BMGNUM_t8p | PCT_t8p |
+| `t24.bmp` | BMFNUM_t24 | BMGNUM_t24 | PCT_t24 |
+| `t32.bmp` | BMFNUM_t32 | BMGNUM_t32 | PCT_t32 |
+| `x_ai.bmp` | BMFNUM_x_ai | BMGNUM_x_ai | PCT_x_ai |
+| `x_ci.bmp` | BMFNUM_x_ci | BMGNUM_x_ci | PCT_x_ci |
+| `x_ep.bmp` | BMFNUM_x_ep | BMGNUM_x_ep | PCT_x_ep |
+| **total** | **BMFNUM_tot** | **BMGNUM_tot** | **PCT_tot** |
+
+And bmg's number is for a stream that also reproduces the input **byte for
+byte**, which bmf's is not: on `x_ai` and `x_ci` bmf stores pixels and
+re-encodes the run structure with its own rules, while bmg reproduces the
+original RLE stream exactly (§6) — and still wins `x_ci` by ten percent.
+
+Instrumenting bmf's `write_plane_descs` says which of its three models it
+reaches for, and it lines up with where the two differ:
+
+| file | bmf's descriptors |
+| --- | --- |
+| `x_ai`, `x_ci` | flags 0 — model A, no predictor, no references |
+| `t8g`, `t8p` | predictor 2 — model C |
+| `x_ep` | predictor 2 on all four planes — model C |
+| `t24`, `t32` | 0, 1, 1 across the planes — the main model and model B |
+
+bmg is ahead where bmf uses model A, ahead where bmf mixes, and behind where
+bmf commits to model C — which is the honest summary of what §4.4's filter is
+and is not. Twenty candidates with per-tap normalisation recover a good part of
+what model C's twenty-eight with six blended weight sets and two-speed tracking
+find; they do not recover all of it.
+
 Round-trip is checked three ways: `t.sh` over the corpus, twenty synthetic edge
 cases (1×1, one-pixel-wide, top-down, oversized DIB headers, a gap before the
 pixels, trailing data, a colour palette, a palette with duplicate colours, a

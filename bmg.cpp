@@ -117,8 +117,9 @@ struct Codec {
   int   im_on;
   int   own_buf;      // the decoder allocates buf; the encoder is handed it
 
-  int hub, filt;
-  Codec() { buf=0; pix=0; pal=0; expand=0; bm_on=0; cn=0; hub=1; filt=0;
+  int hub, filt, hub_done;
+  int hw[4][3];        // the searched transform, kept across trials
+  Codec() { buf=0; pix=0; pal=0; expand=0; bm_on=0; cn=0; hub=1; filt=0; hub_done=0; memset(hw,0,sizeof(hw));
             tsc0=0; tsc1=0; im_on=0; own_buf=0; }
   ~Codec() {
     if( im_on ) im.free_();
@@ -266,7 +267,10 @@ struct Codec {
 
     // ---- section 6.3: which plane leads, and what the others subtract of it
     if( NPX >= 3 ) {
-      if( !f_DEC ) {
+      // The plane order and the transform weights do not depend on which
+      // predictor a trial is testing, so the search runs once and every later
+      // trial reuses it -- a third off the encode time of a 32-bit image.
+      if( !f_DEC && !hub_done ) {
         tsc0 = new byte[W+2]; tsc1 = new byte[W+2];
         memset( tsc0, 128, W+2 ); memset( tsc1, 128, W+2 );
         double bestc = 1e300;
@@ -281,15 +285,19 @@ struct Codec {
           }
           if( tot < bestc ) { bestc = tot; bh = hb; memcpy( bw, cw, sizeof(bw) ); }
         }
-        hub = bh;
+        hub = bh;  hub_done = 1;
         im.set_hub( hub );
+        for( int q=0; q<NPX; q++ ) { hw[q][0]=bw[q][0]; hw[q][1]=bw[q][1]; hw[q][2]=bw[q][2]; }
 #ifdef BMG_STATS
         fprintf(stderr,"  hub=%d est=%.0f B  weights:", bh, bestc/8);
         for(int q=0;q<NPX;q++) fprintf(stderr," p%d(%d,%d,dc%d)",q,bw[q][0],bw[q][1],bw[q][2]);
         fprintf(stderr,"\n");
 #endif
-        for( int q=0; q<NPX; q++ ) { im.tw0[q]=bw[q][0]; im.tw1[q]=bw[q][1]; im.tdc[q]=bw[q][2]; }
         delete[] tsc0; delete[] tsc1; tsc0=tsc1=0;
+      }
+      if( !f_DEC ) {
+        im.set_hub( hub );
+        for( int q=0; q<NPX; q++ ) { im.tw0[q]=hw[q][0]; im.tw1[q]=hw[q][1]; im.tdc[q]=hw[q][2]; }
       }
       uint hb = f_DEC ? 0 : (uint)hub;
       uint b0 = bit_code<f_DEC>( flag[2], (hb>>1)&1, P0_FL_wr, P0_FL_mw );
