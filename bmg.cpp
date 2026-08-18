@@ -52,27 +52,29 @@ static double med_cost1( const byte* pl, int W, int H ) {
   return estimate_cost( hist, 256, (qword)W*H );
 }
 
-// The same for three planes coded as G, then B and R against G's residual.
+// The same for three planes coded the way the model will code them: the green
+// plane on its own, then blue and red as the section 7.1 value-domain
+// difference against it.  The estimate has to match the coder it is choosing
+// for, which is why this subtracts the reference plane's *value* rather than
+// its residual.
 static double med_cost3( const byte* b, const byte* g, const byte* r, int W, int H ) {
-  uint hg[256], hb[256], hr[256];
-  memset( hg,0,sizeof(hg) ); memset( hb,0,sizeof(hb) ); memset( hr,0,sizeof(hr) );
-  for( int y=0; y<H; y++ ) for( int x=0; x<W; x++ ) {
-    qword i = (qword)y*W+x;
-    int rg=0, rb=0, rr=0;
-    const byte* pl[3] = { g, b, r };
-    int res[3];
-    for( int k=0; k<3; k++ ) {
-      const byte* q = pl[k];
-      int Wv = x ? q[i-1] : (y ? q[i-W] : 128);
-      int Nv = y ? q[i-W] : Wv;
-      int NWv = (x&&y) ? q[i-W-1] : Nv;
-      res[k] = q[i] - ImgModel::med(Wv,Nv,NWv);
+  const byte* pl[3] = { g, b, r };
+  double tot = 0;
+  for( int k=0; k<3; k++ ) {
+    uint hist[256]; memset( hist, 0, sizeof(hist) );
+    const byte* q = pl[k];
+    for( int y=0; y<H; y++ ) for( int x=0; x<W; x++ ) {
+      qword i = (qword)y*W+x;
+      int d  = k ? ((q[i]  - g[i]) & 255) : q[i];
+      int dW = x ? (k ? ((q[i-1]-g[i-1])&255) : q[i-1])
+                 : (y ? (k ? ((q[i-W]-g[i-W])&255) : q[i-W]) : 128);
+      int dN = y ? (k ? ((q[i-W]-g[i-W])&255) : q[i-W]) : dW;
+      int dNW = (x&&y) ? (k ? ((q[i-W-1]-g[i-W-1])&255) : q[i-W-1]) : dN;
+      hist[ ImgModel::zigzag( d - ImgModel::med(dW,dN,dNW) ) ]++;
     }
-    rg = res[0]; rb = res[1]-res[0]; rr = res[2]-res[0];
-    hg[ImgModel::zigzag(rg)]++; hb[ImgModel::zigzag(rb)]++; hr[ImgModel::zigzag(rr)]++;
+    tot += estimate_cost( hist, 256, (qword)W*H );
   }
-  return estimate_cost(hg,256,(qword)W*H) + estimate_cost(hb,256,(qword)W*H)
-       + estimate_cost(hr,256,(qword)W*H);
+  return tot;
 }
 
 // ---------------------------------------------------------------- codec
@@ -112,11 +114,19 @@ struct Codec {
   byte* pix;          // W*H*bytes_per_pixel, top-down
   byte* pal;          // ncol*3, BGR
   int   expand, NPX;
-  int   pidx[3][256]; // colour -> index lists, for the expansion inverse
-  int*  clist; int clist_n;
+  int   im_on;
+  int   own_buf;      // the decoder allocates buf; the encoder is handed it
 
   int hub;
-  Codec() { buf=0; pix=0; pal=0; expand=0; bm_on=0; clist=0; hub=1; tsc0=0; tsc1=0; }
+  Codec() { buf=0; pix=0; pal=0; expand=0; bm_on=0; cn=0; hub=1;
+            tsc0=0; tsc1=0; im_on=0; own_buf=0; }
+  ~Codec() {
+    if( im_on ) im.free_();
+    if( bm_on ) bm.free_();
+    delete[] pix; delete[] pal; delete[] tsc0; delete[] tsc1;
+    if( own_buf ) delete[] buf;
+    pm.free_();
+  }
 
   void need_bm( void ) { if( !bm_on ) { bm.alloc(); bm_on=1; } }
 
@@ -249,7 +259,7 @@ struct Codec {
     } else expand = 0;
 
     NPX = expand ? 3 : (info.bpp==8 ? 1 : bpp8);
-    im.alloc( W, H, NPX );
+    im.alloc( W, H, NPX );  im_on = 1;
     if( !f_DEC ) planes_from_pix();
 
     // ---- section 6.3: which plane leads, and what the others subtract of it
@@ -303,16 +313,15 @@ struct Codec {
       build_colour_index();
       for( int y=0; y<H; y++ ) for( int x=0; x<W; x++ ) {
         qword o = (qword)y*im.stride + x;
-        int b_ = im.a[0][o], g_ = im.a[1][o], r_ = im.a[2][o];
-        int slot = clist_slot( b_, g_, r_ );
-        int k = clist[slot];
+        int k, lo = colour_run( im.a[0][o], im.a[1][o], im.a[2][o], &k );
         uint rank = 0;
         if( !f_DEC ) {
           int want = pix[(qword)y*W+x];
-          for( int j=0; j<k; j++ ) if( clist[slot+1+j]==want ) { rank=j; break; }
+          for( int j=0; j<k; j++ ) if( (int)(csort[lo+j] & 255u) == want ) { rank = (uint)j; break; }
         }
         rank = km.code<f_DEC>( rank, (uint)k );
-        if( f_DEC ) pix[(qword)y*W+x] = byte( k ? clist[slot+1+(rank<(uint)k?rank:0)] : 0 );
+        if( f_DEC ) pix[(qword)y*W+x] =
+          byte( k ? (csort[lo + (rank<(uint)k ? rank : 0)] & 255u) : 0 );
       }
     }
 
@@ -442,25 +451,40 @@ struct Codec {
 
   // ---------------------------------------------------------- colour index
 
-  // clist is a flat table: 4096 hash slots, each a count followed by up to
-  // eight indices.  A palette with two entries of the same colour is legal and
-  // has to round-trip, so the colour alone is not enough to name the index.
-  static const int CH = 4096, CW = 9;
-  int clist_slot( int b, int g, int r ) {
-    uint h = ((uint)b | ((uint)g<<8) | ((uint)r<<16)) * 2654435761u;
-    return (int)((h >> 20) & (CH-1)) * CW;
-  }
+  // The inverse of the palette.  A palette with two entries of the same colour
+  // is legal and has to round-trip, so a colour does not name an index on its
+  // own; what it names is a *run* of indices, and which one of them was meant
+  // is coded as a rank.
+  //
+  // This was a hash table first, and the hash was the problem rather than the
+  // idea: 256 palette colours in 4096 slots collided five times more often than
+  // random on a colour cube, and every collision widened a rank that should
+  // have been empty -- 279 bytes of disambiguation on an image that has no
+  // duplicate colours at all.  Sorting the palette and binary-searching it is
+  // exact, costs 256 entries, and cannot collide, so a rank is coded only where
+  // the palette really is ambiguous.
+  uint csort[256];   // colour in bits 8..31, palette index in bits 0..7
+  int  cn;
   void build_colour_index( void ) {
-    if( clist ) return;
-    clist = new int[CH*CW];
-    memset( clist, 0, sizeof(int)*CH*CW );
-    // resolve collisions by chaining into the next free slot is overkill here:
-    // a slot holds the indices of every colour that hashes to it, and the
-    // encoder searches for its own index, so a collision only widens the rank.
-    for( int i=0; i<info.ncol; i++ ) {
-      int s = clist_slot( pal[3*i], pal[3*i+1], pal[3*i+2] );
-      if( clist[s] < CW-1 ) clist[s+1+clist[s]++] = i;
+    if( cn ) return;
+    cn = info.ncol;
+    for( int i=0; i<cn; i++ )
+      csort[i] = ((uint)pal[3*i] | ((uint)pal[3*i+1]<<8) | ((uint)pal[3*i+2]<<16))*256u + (uint)i;
+    for( int i=1; i<cn; i++ ) {                 // insertion sort; cn <= 256
+      uint v = csort[i]; int j = i-1;
+      while( j>=0 && csort[j] > v ) { csort[j+1] = csort[j]; j--; }
+      csort[j+1] = v;
     }
+  }
+  // First entry with this colour, and how many entries share it.
+  int colour_run( int b, int g, int r, int* count ) {
+    uint key = ((uint)b | ((uint)g<<8) | ((uint)r<<16))*256u;
+    int lo = 0, hi = cn;
+    while( lo < hi ) { int m = (lo+hi)>>1; if( csort[m] < key ) lo = m+1; else hi = m; }
+    int k = 0;
+    while( lo+k < cn && (csort[lo+k] & ~255u) == key ) k++;
+    *count = k;
+    return lo;
   }
 
   // ---------------------------------------------------------- drivers
@@ -498,14 +522,19 @@ struct Codec {
         double ci = med_cost1( pix, W, H );
         double cr = med_cost3( pb, pg, pr, W, H );
         // the disambiguation channel is part of the expanded cost
-        build_colour_index();
         double extra = 0;
-        for( qword i=0; i<(qword)W*H; i++ ) {
-          int s = clist_slot( pb[i], pg[i], pr[i] );
-          if( clist[s] > 1 ) extra += log((double)clist[s]) * 1.4426950408889634;
+        {
+          build_colour_index();
+          for( qword i=0; i<(qword)W*H; i++ ) {
+            int k; colour_run( pb[i], pg[i], pr[i], &k );
+            if( k > 1 ) extra += log((double)k) * 1.4426950408889634;
+          }
+          expand = ( cr + extra < ci );
+#ifdef BMG_STATS
+          fprintf( stderr, "  palette: indices %.0f B, expanded %.0f B (+%.0f disambiguation) -> %s\n",
+                   ci/8, cr/8, extra/8, expand ? "expand" : "indices" );
+#endif
         }
-        expand = ( cr + extra < ci );
-        if( getenv("BMG_EXPAND") ) expand = atoi(getenv("BMG_EXPAND"));
         delete[] pb; delete[] pg; delete[] pr;
       }
     }
@@ -541,7 +570,7 @@ struct Codec {
     }
     fsize = src[4] | (src[5]<<8) | (src[6]<<16) | ((uint)src[7]<<24);
     int mode = src[8];
-    buf = new byte[ fsize ? fsize : 1 ];
+    buf = new byte[ fsize ? fsize : 1 ];  own_buf = 1;
     memset( buf, 0, fsize );
     if( mode == 2 ) {
       if( slen < 9+fsize ) { fprintf(stderr,"truncated\n"); return 0; }
@@ -622,5 +651,6 @@ int main( int argc, char** argv ) {
   }
 
   fclose(g);
+  if( mode != 'c' ) delete[] in;      // the encoder handed `in` to the codec
   return rv;
 }

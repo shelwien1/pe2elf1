@@ -1,0 +1,16 @@
+# build products
+bmg
+bmg_opt
+*.o
+*.exe
+
+# optimizer scratch: opt.pl patches a copy of the binary in place and
+# accumulates its winners here
+export.!!!
+opttimes.!!!
+opt_tmp.bmg
+opt.log
+
+# the corpus and the crops made from it -- third-party test images, see README
+testfiles/
+opt/

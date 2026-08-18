@@ -9,7 +9,12 @@ trap 'rm -rf "$TMP"' EXIT
 
 files="$*"
 [ -z "$files" ] && files=$(ls testfiles/*.bmp 2>/dev/null)
-[ -z "$files" ] && { echo "no test files; put some in testfiles/ or name them"; exit 1; }
+[ -z "$files" ] && {
+  echo "no test files.  Put BMPs in testfiles/ (the seven from the BMF"
+  echo "distribution are what the numbers in README.md are measured on) or"
+  echo "name them on the command line:  ./t.sh path/to/*.bmp"
+  exit 1
+}
 
 tin=0; tout=0; fail=0
 printf "%-16s %10s %10s %8s  %s\n" file input output ratio "round-trip"

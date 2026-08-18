@@ -34,7 +34,7 @@ struct BmpInfo {
     fileSize   = rd32(d+2);
     dataOffset = rd32(d+10);
     dibSize    = rd32(d+14);
-    if( dibSize < 40 ) return;
+    if( dibSize < 40 || dibSize > n ) return;      // 14+dibSize must not wrap
     if( n < 14 + dibSize ) return;
     width   = (int)rd32(d+18);
     sheight = (int)rd32(d+22);
@@ -51,7 +51,13 @@ struct BmpInfo {
     if( bpp!=8 && bpp!=24 && bpp!=32 ) return;
     if( comp!=0 && !(comp==1 && bpp==8) ) return;
     if( comp==1 && topdown ) return;                   // RLE is bottom-up only
-    if( (qword)W*H > 400000000ull ) return;
+    // Bound the pixel buffer.  For an uncompressed bitmap the row check at the
+    // end ties it to the file size; for RLE8 nothing does, since two bytes can
+    // cover 255 pixels and a delta can jump anywhere, so it needs a ceiling of
+    // its own.  Past it the file goes to the generic model, which still
+    // round-trips it -- just less well.
+    if( (qword)W*H > (1ull<<28) ) return;
+    if( (qword)W*H*(qword)(bpp>>3) > (1ull<<30) ) return;
     ncol = 0; palOff = 14 + dibSize;
     if( bpp == 8 ) {
       uint want = clrUsed ? clrUsed : 256;
@@ -115,6 +121,7 @@ struct PrologueModel {
   static const int ROWS = 4*256 + 4;
   void alloc( void ) { t = new Counter[(qword)ROWS*256]; ctr_fill( t, (qword)ROWS*256, hSCALE ); memset(prevd,0,4); }
   void free_( void ) { delete[] t; t = 0; }
+  PrologueModel() { t = 0; }
 
   template<int f_DEC>
   uint code( byte* buf, uint i, uint val ) {
