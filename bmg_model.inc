@@ -31,10 +31,10 @@
 // the same pixel (section 9's interleaved driver).
 
 #ifndef BMG_NLIT
- #define BMG_NLIT 6
+ #define BMG_NLIT 12
 #endif
 static const int NLIT  = BMG_NLIT;   // literal codes 0..NLIT-1, then escape
-static const int NMIX  = 8;      // mixer inputs
+static const int NMIX  = 11;     // mixer inputs
 static const int MARG  = 8;      // row margin, in samples
 
 static const int M1SZ  = 2187*8*3;          // t1..t7 x alvl x pclass
@@ -45,15 +45,23 @@ static const int M4SZ  = 8*3*8*9;           // alvl x pclass x qrun x qeW
 static const int M5SZ  = 9*9*8*3;           // cross-plane residuals
 static const int M6SZ  = 15*3*8*3;          // partition x MED branch x alvl x pclass
 static const int M7SZ  = 3*8*3;             // match state x match length x pclass
+static const int M8SZ  = 256*8*3;           // low nibbles of W and N x alvl x pclass
+static const int M9LOG = 18;
+static const int M9SZ  = 1<<M9LOG;          // the exact neighbourhood, hashed
+static const int MASZ  = 1<<19;             // the wider neighbourhood, hashed
 static const int NSTRIP = 3*8*9*8;          // escape strips
 static const int STRIPW = 8*128;            // one path tree per level
 static const int E2SZ   = 15*3*8*3;         // partition x MED branch x alvl x pclass
 static const int E3LOG  = 16;
 static const int E3SZ   = 1<<E3LOG;
+static const int EPLOG   = 18;
+static const int EPSZ    = 1<<EPLOG;        // second escape-path model
 static const int EMXSETS = 7*8*3*8;
+static const int PMXSETS = 8*8*3*8;
 static const int EAPSETS = 7*8*3*9;
-static const int MXSETS = NLIT*8*3*8*3;
+static const int MXSETS = NLIT*8*3*8*3*3;
 static const int APSETS = NLIT*8*3*9;
+static const int AP2SETS = NLIT*3*8*3*3;
 static const int MHLOG  = 19;               // match table, per plane
 
 static Rangecoder rc;
@@ -110,11 +118,13 @@ struct ImgModel {
   short* eb[4];  short* e[4];      // signed prediction errors, padded
   byte*  mb[4];  byte*  m[4];      // |error|, clipped to 255
 
-  Counter *t1, *t2, *t3, *t4, *t5, *t6, *t7, *tesc;
+  Counter *t1, *t2, *t3, *t4, *t5, *t6, *t7, *t8, *t9, *ta, *tesc;
   Counter *el1, *el2, *el3;        // the escape level, mixed like the ladder
+  Counter *ep2;                    // second escape-path model
   Mixer<NMIX> mx;
   Mixer<4>    emx;
-  APM  apm, eapm;
+  Mixer<3>    pmx;
+  APM  apm, apm2, eapm;
 
   uint* mtab[4];                   // match model: context hash -> last position
   int   mlen[4];
@@ -165,13 +175,17 @@ struct ImgModel {
     t5   = new Counter[ (qword)M5SZ*NLIT ];
     t6   = new Counter[ (qword)M6SZ*NLIT ];
     t7   = new Counter[ (qword)M7SZ*NLIT ];
+    t8   = new Counter[ (qword)M8SZ*NLIT ];
+    t9   = new Counter[ (qword)M9SZ*NLIT ];
+    ta   = new Counter[ (qword)MASZ*NLIT ];
     tesc = new Counter[ (qword)NSTRIP*STRIPW ];
     el1  = new Counter[ (qword)NSTRIP*8 ];
     el2  = new Counter[ (qword)E2SZ*8 ];
     el3  = new Counter[ (qword)E3SZ*8 ];
-    tbl_bytes = ( (qword)(M1SZ+M2SZ+M3SZ+M4SZ+M5SZ+M6SZ+M7SZ)*NLIT
+    ep2  = new Counter[ (qword)EPSZ ];
+    tbl_bytes = ( (qword)(M1SZ+M2SZ+M3SZ+M4SZ+M5SZ+M6SZ+M7SZ+M8SZ+M9SZ+MASZ)*NLIT
                 + (qword)NSTRIP*STRIPW + (qword)NSTRIP*8
-                + (qword)E2SZ*8 + (qword)E3SZ*8 ) * sizeof(Counter)
+                + (qword)E2SZ*8 + (qword)E3SZ*8 + (qword)EPSZ ) * sizeof(Counter)
                 + (qword)NP*sizeof(uint)*((qword)1<<MHLOG);
 
     // A fresh literal-ladder counter starts biased toward "yes": the folded
@@ -186,14 +200,20 @@ struct ImgModel {
     ctr_fill( t5, (qword)M5SZ*NLIT, seed );
     ctr_fill( t6, (qword)M6SZ*NLIT, seed );
     ctr_fill( t7, (qword)M7SZ*NLIT, seed );
+    ctr_fill( t8, (qword)M8SZ*NLIT, seed );
+    ctr_fill( t9, (qword)M9SZ*NLIT, seed );
+    ctr_fill( ta, (qword)MASZ*NLIT, seed );
     ctr_fill( tesc, (qword)NSTRIP*STRIPW, hSCALE );
     ctr_fill( el1, (qword)NSTRIP*8, seed );
     ctr_fill( el2, (qword)E2SZ*8, seed );
     ctr_fill( el3, (qword)E3SZ*8, seed );
+    ctr_fill( ep2, (qword)EPSZ, hSCALE );
 
     mx.alloc( MXSETS, P0_MX_W0 );
     apm.alloc( APSETS );
+    apm2.alloc( AP2SETS );
     emx.alloc( EMXSETS, P0_MX_W0*2 );
+    pmx.alloc( PMXSETS, P0_MX_W0*3 );
     eapm.alloc( EAPSETS );
 
     const int ae[7] = { P0_ACT_E0,P0_ACT_E1,P0_ACT_E2,P0_ACT_E3,P0_ACT_E4,P0_ACT_E5,P0_ACT_E6 };
@@ -246,9 +266,10 @@ struct ImgModel {
       delete[] vb[p]; delete[] ab[p]; delete[] eb[p]; delete[] mb[p]; delete[] mtab[p];
     }
     delete[] t1; delete[] t2; delete[] t3; delete[] t4;
-    delete[] t5; delete[] t6; delete[] t7; delete[] tesc;
-    delete[] el1; delete[] el2; delete[] el3;
-    mx.free_(); apm.free_(); emx.free_(); eapm.free_();
+    delete[] t5; delete[] t6; delete[] t7; delete[] t8; delete[] t9;
+    delete[] ta; delete[] tesc;
+    delete[] el1; delete[] el2; delete[] el3; delete[] ep2;
+    mx.free_(); apm.free_(); apm2.free_(); emx.free_(); eapm.free_(); pmx.free_();
   }
 
   // ------------------------------------------------------------- helpers
@@ -360,6 +381,7 @@ struct ImgModel {
             ^ ( (uint)WWv * 0x165667B1u ) ^ ( (uint)NNv * 0x9E3779B9u )
             ^ ( (uint)NEEv * 0x7FEB352Du ) ^ ( (uint)NNEv * 0x846CA68Bu );
     mh ^= mh >> 15;
+    uint mfull = mh;                 // the same eight neighbours, as a context
     mh &= (1u<<MHLOG) - 1;
     uint mpos = mtab[p][mh];
     int  mvalid = (mpos != 0xFFFFFFFFu);
@@ -380,6 +402,12 @@ struct ImgModel {
     qword r4 = (qword)((alvl*3 + pc)*8 + qrn)*9 + qeW;
     qword r5 = (qword)((qerr(eRA)*9 + qerr(eRB))*8 + alvl)*3 + pc;
     qword r6 = (qword)((part*3 + mtype)*8 + alvl)*3 + pc;
+    // The low nibbles of the two nearest neighbours.  Section 8.5's ctx_id3
+    // refines its context with exactly this and for the same reason: on data
+    // that came through a colour quantiser or a palette, the low bits of a
+    // neighbour say which cell of the quantiser grid this pixel sits in, which
+    // no gradient or activity measure can see.
+    qword r8 = (qword)(((Wv&15)*16 + (Nv&15))*8 + alvl)*3 + pc;
 
     Counter* c1p = t1 + r1*NLIT;
     Counter* c2p = t2 + r2*NLIT;
@@ -387,6 +415,20 @@ struct ImgModel {
     Counter* c4p = t4 + r4*NLIT;
     Counter* c5p = t5 + r5*NLIT;
     Counter* c6p = t6 + r6*NLIT;
+    // The exact neighbourhood, hashed.  Where the match model offers one
+    // prediction from one earlier occurrence, this carries the whole
+    // distribution of what has followed this neighbourhood -- which is what
+    // model A is doing when it asks "is this pixel one of its neighbours"
+    // (section 8.5), written as a context rather than as a ladder.
+    uint h9 = (uint)Wv * 0x9E3779B1u;
+    h9 ^= (uint)Nv * 0x85EBCA6Bu;
+    h9 ^= (uint)NWv * 0xC2B2AE35u;
+    h9 ^= (uint)NEv * 0x27D4EB2Fu;
+    h9 ^= (uint)pc * 0x165667B1u;
+    h9 ^= h9 >> 15;
+    Counter* c8p = t8 + r8*NLIT;
+    Counter* c9p = t9 + (qword)(h9 & (M9SZ-1))*NLIT;
+    Counter* cap = ta + (qword)(((mfull*2654435761u)>>4) & (MASZ-1))*NLIT;
 
     // neighbouring activity levels, for the section 9.4 side updates
     Counter* n1lo = (alvl>0) ? t1 + ((qword)(c1*8 + alvl-1)*3 + pc)*NLIT : 0;
@@ -405,13 +447,20 @@ struct ImgModel {
       mx.st[4] = stretch15( c5p[k].P );
       mx.st[5] = stretch15( c6p[k].P );
       mx.st[6] = stretch15( c7p[k].P );
-      mx.st[7] = 256;
-      mx.select( (((k*8 + alvl)*3 + pc)*8 + qrn)*3 + ms );
+      mx.st[7] = stretch15( c8p[k].P );
+      mx.st[8] = stretch15( c9p[k].P );
+      mx.st[9] = stretch15( cap[k].P );
+      mx.st[10] = 256;
+      mx.select( ((((k*8 + alvl)*3 + pc)*8 + qrn)*3 + ms)*3 + mtype );
       int pr = mx.mix();
-      int ac = ((k*8 + alvl)*3 + pc)*9 + qeW;
-      int pa = apm.pp( pr, ac );
+      // Two secondary estimators on different questions -- one on the
+      // gradient state, one on what the match model is doing -- averaged with
+      // the mixer's own answer.
+      int pa  = apm.pp ( pr, ((k*8 + alvl)*3 + pc)*9 + qeW );
+      int pa2 = apm2.pp( pr, (((k*3 + ms)*8 + mlq)*3 + pc)*3 + mtype );
       int wt = P0_AP_WT; if( wt < 0 ) wt = 0; if( wt > 16 ) wt = 16;
-      int prf = (pr*(16-wt) + pa*wt) >> 4;
+      int wt2 = P0_AP_WT2; if( wt2 < 0 ) wt2 = 0; if( wt+wt2 > 16 ) wt2 = 16-wt;
+      int prf = (pr*(16-wt-wt2) + pa*wt + pa2*wt2) >> 4;
       uint p15 = uint(prf) << 3;
       if( p15 < 8 ) p15 = 8;
       if( p15 > SCALE-8 ) p15 = SCALE-8;
@@ -422,6 +471,7 @@ struct ImgModel {
 
       mx.update( bit, P0_MX_LR );
       apm.update( bit, P0_AP_RATE );
+      apm2.update( bit, P0_AP_RATE );
       c1p[k].Update( bit, P0_CT_wr, P0_CT_mw );
       c2p[k].Update( bit, P0_CT_wr, P0_CT_mw );
       c3p[k].Update( bit, P0_CT_wr, P0_CT_mw );
@@ -429,6 +479,9 @@ struct ImgModel {
       c5p[k].Update( bit, P0_CT_wr, P0_CT_mw );
       c6p[k].Update( bit, P0_CT_wr, P0_CT_mw );
       c7p[k].Update( bit, P0_CTF_wr, P0_CTF_mw );
+      c8p[k].Update( bit, P0_CT_wr, P0_CT_mw );
+      c9p[k].Update( bit, P0_CTF_wr, P0_CTF_mw );
+      cap[k].Update( bit, P0_CTF_wr, P0_CTF_mw );
       if( n1lo ) n1lo[k].Update( bit, P0_CTN_wr, P0_CT_mw );
       if( n1hi ) n1hi[k].Update( bit, P0_CTN_wr, P0_CT_mw );
 
@@ -478,9 +531,26 @@ struct ImgModel {
       lvl = j;
       uint ctx = 1;
       for( int b=lvl-1; b>=0; b-- ) {
+        Counter& q1 = sp[lvl*128 + (ctx&127)];
+        uint ph = (uint)((lvl*128 + (ctx&127))) * 0x9E3779B1u;
+        ph ^= (uint)(((part*3 + mtype)*8 + alvl)*3 + pc) * 0x85EBCA6Bu;
+        ph ^= (uint)((Wv&15)*16 + (Nv&15)) * 0xC2B2AE35u;
+        ph ^= ph >> 13;
+        Counter& q2 = ep2[ ph & (EPSZ-1) ];
+        pmx.st[0] = stretch15( q1.P );
+        pmx.st[1] = stretch15( q2.P );
+        pmx.st[2] = 256;
+        pmx.select( ((b*8 + alvl)*3 + pc)*8 + gA );
+        int pr = pmx.mix();
+        uint p15 = uint(pr) << 3;
+        if( p15 < 8 ) p15 = 8;
+        if( p15 > SCALE-8 ) p15 = SCALE-8;
         uint bit = f_DEC ? 0 : ((vv>>b)&1);
-        st_add( 2, sp[lvl*128 + (ctx&127)].P, bit );
-        bit = bit_code<f_DEC>( sp[lvl*128 + (ctx&127)], bit, P0_EP_wr, P0_EP_mw );
+        bit = rc.rc_BProcess( p15, bit );
+        st_add( 2, p15, bit );
+        pmx.update( bit, P0_MX_LR );
+        q1.Update( bit, P0_EP_wr, P0_EP_mw );
+        q2.Update( bit, P0_EP_wr, P0_EP_mw );
         ctx += ctx + bit;
       }
       if( f_DEC ) { vv = ctx; code = vv - 1 + NLIT; }

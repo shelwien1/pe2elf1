@@ -49,8 +49,10 @@ Number MX_LR,     1, 1!00001011
 Number MX_W0,     1, 1!0010101011110111
 # AP_RATE = 7 
 Number AP_RATE,   1, 1!00110
-# AP_WT = 12 
-Number AP_WT,     1, 1!01011
+# AP_WT = 7 
+Number AP_WT,     1, 1!00110
+# AP_WT2 = 6 
+Number AP_WT2,    1, 1!00101
 
 # ---- activity quantiser --------------------------------------------------
 # eight activity levels; the ladder is sorted and clamped at the point of use
