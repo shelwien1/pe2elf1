@@ -187,7 +187,9 @@ which is the search noticing that alpha is not a colour.
 
 ### 4.4 prediction
 
-MED / LOCO-I (§9.1), and nothing else:
+Two predictors, one bit per plane on the wire saying which.
+
+**MED / LOCO-I** (§9.1):
 
 ```
 NW ≥ max(W,N)  →  pred = min(W,N)      a vertical edge left of the pixel
@@ -198,15 +200,48 @@ otherwise      →  pred = W + N − NW    a plane through the three
 Which of the three branches answered is kept and used as context. It is a
 statement about the local edge and it costs nothing to carry.
 
-**What is not here.** §10's learned predictor — an NLMS filter over the
-neighbourhood — was built, in integer arithmetic so it would be reproducible,
-and then removed. Once the colour transform of §4.2 is doing the cross-plane
-work in the value domain the filter has nothing left to find, and it cost 0.8%
-on the corpus at every step size tried, monotonically improving as the step went
-to zero. A JPEG-LS bias corrector went the same way: it is worth 2.7% on `t8g`
-and costs 4.3% on `t24`, and neither a magnitude gate nor a self-scoring on/off
+**The candidate-mixing filter**, which is §10.1 in integers. The thing to
+understand about model C is that it does *not* correct a fixed predictor: its
+`p2_row[7][4]` is twenty-eight **candidate predictions** — `W + N − NW` is one
+of them, `2W − WW` is another — and what it learns is their mixture. That is a
+far better conditioned problem than correcting MED from the neighbours' errors,
+because centring the candidates on MED makes each one a *disagreement* and makes
+the target the MED residual itself.
+
+bmg keeps twenty candidates: the four nearest neighbours, six planar and
+second-order extrapolations, four averages, and four cross-plane terms built
+from the reference planes' residuals (§10.1's rows 4–6). The weight set is
+picked by a logarithmic ladder over how much the neighbourhood disagrees with
+itself, and — the part that makes it work — **each tap is normalised by its own
+running power**, as a shift rather than a divide. The candidates have wildly
+different variances; one shared normalisation lets the loud taps drown the quiet
+ones.
+
+Measured against MED on the raw residual, the filter is worth −15% on `x_ep`,
+−7% on `t32`, −6% on `t24`, −2% on `t8g` — and **+24% on `x_ai`**.
+
+**Why it cannot simply replace MED, and why the choice has to be trial-coded.**
+MED is a deterministic function of the neighbourhood. That means the two models
+that carry the exact neighbourhood — M9 and MA of §4.5 — pin the residual
+distribution exactly, and those two are where a screenshot's compression lives.
+A learned prediction moves out from under them: the same neighbourhood maps to a
+different residual as the weights drift. Feeding the filter's correction into
+those contexts restores them, and even then the filter is worth 1.1% on `x_ep`
+and *costs* 0.7% on `t24`.
+
+No entropy estimate predicts that, because what it turns on is how much of the
+filter's information the context models had already extracted. So §6.4's answer
+applies — encode it and throw the output away — and §4.9 below is that.
+
+**What is not here.** An earlier NLMS built over the neighbours' *errors*,
+correcting MED, was measured and removed: once §4.2's colour transform does the
+cross-plane work in the value domain, an error-feedback filter has nothing left
+to find, and it cost 0.8% at every step size tried, monotonically improving as
+the step went to zero. A JPEG-LS bias corrector went the same way: worth 2.7% on
+`t8g`, costing 4.3% on `t24`, and neither a magnitude gate nor a self-scoring
 switch nor feeding it as context instead of as a shift separated the two cases.
-Both are absent from the source rather than switched off in it.
+A two-speed filter — §10.1's fast and slow rows — measured to nothing. All three
+are absent from the source rather than switched off in it.
 
 Two things about that are worth writing down, because they cost a day between
 them:
@@ -258,7 +293,7 @@ model A's reading of a neighbourhood as *equalities* rather than as quantities,
 which is what suits a palette or a screenshot, and it is carried here as one
 context dimension rather than as a separate model.
 
-Ten context models feed the mixer:
+Thirteen context models feed the mixer:
 
 | | context |
 | --- | --- |
@@ -272,6 +307,8 @@ Ten context models feed the mixer:
 | M8 | the low nibbles of W and N × activity × plane class |
 | M9 | the exact four-neighbour values, hashed |
 | MA | the exact eight-neighbour values, hashed |
+| M9s, MAs | M9 and MA again, at a slower rate (§4.8) |
+| MF | the filter's own error at W and N, by MED branch and texture |
 
 M8 is §8.5's `ctx_id3` idea — that context refines itself with the low nibble of
 W, and it is there for the same reason: on data that came through a colour
@@ -284,6 +321,12 @@ M9 and MA are worth another 3.9% between them, which is the answer to a question
 asking "is this pixel one of its neighbours, and if not, which of the symbols
 nearby is it" — and a residual coder can ask the same question by carrying the
 exact neighbourhood as a context and letting the mixer weigh it.
+
+MF is §10.2's idea rather than §8's. Model C builds its contexts out of the
+filter's own `err` and `aerr` fields rather than out of the neighbourhood, and
+that is exactly what lets them track a prediction that moves. MF is that in one
+model: the filter's error at W and at N, quantised, crossed with the MED branch
+and the texture bucket.
 
 ### 4.6 the match model
 
@@ -320,6 +363,29 @@ between eight and sixteen.
 The escape strip is indexed by the *group* ladder rather than the *level*
 ladder, for the reason §9.2 gives.
 
+### 4.9 the trial, and what it costs
+
+§6.4 is the one part of BMF's decision layer bmg reproduces literally rather
+than replacing with an estimate. Everything else — the plane order, the
+transform weights, the palette reading — is settled by `estimate_cost`, because
+for those the thing being measured is close enough to the thing that will run.
+The predictor is not, for the reason §4.4 gives, so it is settled the way §6.4
+settles things: encode it, keep the bit count, throw the output away.
+
+The encoder codes the image with every plane on MED, then with every plane on
+the filter, keeps the shorter, and then walks the planes one at a time flipping
+each and keeping the flip if it paid — the same greedy walk `search_filter`
+makes over its flag values. That is 2 trials for a grey image and 2 + *n* for an
+*n*-plane one: six full encodes for a 32-bit image.
+
+It is worth having. Per-plane rather than per-image is what takes `t24` from
+55 318 to 53 734 bytes and `t32` from 55 359 to 53 775 — past bmf on both — and
+bmf's own descriptors on `t24` read 0, 1, 1 across the three planes, so it is
+making the same distinction.
+
+The cost is encode time and nothing else: **the decoder is told the answer** and
+runs once.
+
 ### 4.8 counters, mixing, and rates
 
 The counter is bcdr5's: one 16-bit probability, an EMA toward the coded bit,
@@ -337,17 +403,29 @@ the tuned rate, and — the half that matters more — a row that has never been
 seen feeds the mixer a **neutral** input instead of its seed value, so a cold
 model does not vote. Worth 1.4%.
 
-**A gated linear mixer**, in the stretched domain, one weight set per
-`(rung, activity, plane class, run length, match state, MED branch)`, followed
-by two SSE stages on different questions — one on the gradient state, one on
-what the match model is doing — averaged with the mixer's own answer.
+**Two layers of gated linear mixing**, in the stretched domain. A gated mixer
+answers with the weights of whatever selector it was given; two of them, gated
+on different things — one on `(rung, activity, plane class, run length, match
+state, MED branch)`, the other on `(rung, partition, west error, plane class)` —
+disagree exactly where their selectors disagree, and a second layer learns which
+to believe. Then two SSE stages on different questions, one on the gradient
+state and one on what the match model is doing, averaged with the mixer's own
+answer. A third SSE stage was tried and is worth 47 bytes on the corpus, so it
+is not here.
 
 §5.5 describes BMF training the strips *next to* the one that coded, because
 nothing blends predictions at read time: "context mixing done by writing rather
 than by averaging". Here something does blend them, so those neighbour writes
-become a refinement rather than the only mechanism — the two activity levels
-either side of the coding context are still updated, at their own slower rate,
-which is §9.4's idea kept for what it is worth on its own.
+become a refinement rather than the only mechanism. They are still made — but
+not where §9.4 makes them. Tuning flattened the activity ladder to almost a
+single level (§7), which left two side-writes aimed at a dimension that no
+longer varies; re-aimed along the quantised west and north errors they do
+something again.
+
+**A second counter at a slower rate**, on M9 and MA. One rate has to be a
+compromise between tracking a changing context and averaging a stable one; two
+let the mixer pick, per context state, which answer to believe. Worth 0.23%
+there; extending it to M2 and M1 measured to nothing.
 
 ---
 
@@ -518,6 +596,5 @@ went in. No memory error, no undefined behaviour, no failed round-trip.
   model. §6.1's short path for depths of 4 and below has no counterpart because
   those depths are outside what this compressor claims.
 - **A quality setting.** There is one model and it always runs. §6.4's trial
-  encoding — the whole cost of BMF's `-Q9` — is replaced by estimates
-  everywhere: the plane order, the transform weights and the palette reading are
-  all settled by `estimate_cost`, and nothing is coded twice.
+  encoding is here (§4.9) but only for the predictor; the plane order, the
+  transform weights and the palette reading are settled by `estimate_cost`.

@@ -38,9 +38,13 @@ static void ctr_fill( Counter* p, qword n, uint v ) {
 // this table -- fast while the row is new, settling to the tuned rate.
 // It is also how a row that has never been seen can say so: the mixer is fed
 // a neutral input rather than the seed value, so a cold model does not vote.
-static int wrtab[16];
+// Sixty-four steps, not sixteen.  The schedule has to run long enough to
+// *reach* the tuned steady rate: 2*SCALE/(2i+3) is still 1986 at i=15, faster
+// than the base rate the optimizer settled on, so a sixteen-step schedule that
+// caps there never lets a mature context slow down to it.
+static int wrtab[64];
 static void init_wrtab( int base ) {
-  for( int i=0; i<16; i++ ) {
+  for( int i=0; i<64; i++ ) {
     int w = (int)((2*SCALE) / (2*i + 3));      // ~ SCALE/(i+1.5)
     wrtab[i] = (w > base) ? w : base;
   }

@@ -662,7 +662,7 @@ struct ImgModel {
       Counter* l1 = el1 + strip*8;   int v1 = ne1[strip], y1 = wrtab[v1];
       Counter* l2 = el2 + re2*8;     int v2 = ne2[re2],   y2 = wrtab[v2];
       Counter* l3 = el3 + re3*8;     int v3 = ne3[re3],   y3 = wrtab[v3];
-      if( v1<15 ) ne1[strip]++;  if( v2<15 ) ne2[re2]++;  if( v3<15 ) ne3[re3]++;
+      if( v1<63 ) ne1[strip]++;  if( v2<63 ) ne2[re2]++;  if( v3<63 ) ne3[re3]++;
       uint vv = f_DEC ? 0 : (code - NLIT + 1);      // 1 .. 256-NLIT
       int lvl = f_DEC ? 0 : ilog2i( vv );
       int j;
@@ -700,7 +700,7 @@ struct ImgModel {
         qword rp = ph & (EPSZ-1);
         Counter& q2 = ep2[ rp ];
         int vp2 = nep[rp], yp = wrtab[vp2];
-        if( vp2<15 ) nep[rp]++;
+        if( vp2<63 ) nep[rp]++;
         pmx.st[0] = stretch15( q1.P );
         pmx.st[1] = vp2 ? stretch15( q2.P ) : 0;
         pmx.st[2] = 256;
@@ -739,9 +739,9 @@ struct ImgModel {
     if( mvalid ) st_mhit[ (int)vp[mpos]==val ]++;
 #endif
 
-    if( u1<15 ) n1_[r1]++;  if( u2<15 ) n2_[r2]++;  if( u3<15 ) n3_[r3]++;
-    if( u4<15 ) n4_[r4]++;  if( u5<15 ) n5_[r5]++;  if( u6<15 ) n6_[r6]++;
-    if( u8<15 ) n8_[r8]++;  if( u9<15 ) n9_[r9]++;  if( uA<15 ) na_[rA]++;
+    if( u1<63 ) n1_[r1]++;  if( u2<63 ) n2_[r2]++;  if( u3<63 ) n3_[r3]++;
+    if( u4<63 ) n4_[r4]++;  if( u5<63 ) n5_[r5]++;  if( u6<63 ) n6_[r6]++;
+    if( u8<63 ) n8_[r8]++;  if( u9<63 ) n9_[r9]++;  if( uA<63 ) na_[rA]++;
 
     // ---- the filter's step, normalised per tap.  A shift rather than a
     // divide: 2^sh tracks the tap's own running power, so the step is the NLMS
