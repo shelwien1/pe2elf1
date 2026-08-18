@@ -23,8 +23,10 @@ bmg d input.bmg output.bmp      expand
 ```
 
 Needs a C++17 compiler and, to regenerate `MOD/` from `IDX/`, perl. `MOD/` is
-checked in generated, so the tree builds without perl; `mk.sh` regenerates it
-when perl is present.
+checked in generated — in its shipping form, so `g++ bmg.cpp -o bmg` on its own
+gives the fast build — and `mk.sh` regenerates it when perl is present. A stale
+`MOD/` compiles fine and codes differently, so regenerate it after touching an
+`.idx`.
 
 ## Testing
 
