@@ -59,11 +59,11 @@ def crop(src, dst, cw, ch):
     open(dst, 'wb').write(bytes(hdr) + body)
     print("%-16s %dx%d %dbpp  %d bytes" % (dst, cw, ch, bpp, off+len(body)))
 
-WANT = [("t8g.bmp", "opt/t8g.bmp", 256, 192),
-        ("t24.bmp", "opt/t24.bmp", 224, 168),
-        ("t32.bmp", "opt/t32.bmp", 224, 168),
-        ("x_ci.bmp", "opt/o_ci.bmp", 1024, 640),
-        ("x_ep.bmp", "opt/o_ep.bmp", 224, 224)]
+WANT = [("t8g.bmp", "opt/t8g.bmp", 200, 150),
+        ("t24.bmp", "opt/t24.bmp", 176, 132),
+        ("t32.bmp", "opt/t32.bmp", 176, 132),
+        ("x_ci.bmp", "opt/o_ci.bmp", 640, 400),
+        ("x_ep.bmp", "opt/o_ep.bmp", 176, 176)]
 
 os.makedirs("opt", exist_ok=True)
 missing = [s for s, _, _, _ in WANT if not os.path.exists("testfiles/"+s)]
