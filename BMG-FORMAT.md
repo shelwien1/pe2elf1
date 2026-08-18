@@ -436,9 +436,26 @@ executable as `!MAP!name!base\0pattern`, the optimizer flips bits in the binary,
 re-runs the corpus and keeps what shrinks the total. `mk.sh check` is the test
 IDX-FORMAT.md §12 asks for, and it passes on every corpus file.
 
-`opt.lst` names five images cropped small enough that one measurement is about a
-second: two of them 8-bit, two 32-bit, one 24-bit, so no model is left untouched
-while the others move.
+`IDX/mkcorpus.py` builds `opt.lst` and the crops it names: five images small
+enough that one measurement is about a second and a half, two of them 8-bit, two
+32-bit, one 24-bit, so no model is left untouched while the others move. (An
+RLE8 file is not among them, and does not need to be: after §6 the whole run
+structure of `x_ci` costs 334 bytes, so there is nothing there for a parameter
+to move.)
+
+Two rounds were run, twenty-eight and forty-five minutes. The first was worth
+0.6% on the full corpus, the second 0.08%; that is the shape of the curve, and
+it is the reason the corpus is what it is rather than larger.
+
+The result worth writing down is not a rate. The optimizer pushed the activity
+ladder's first edge from 1 to 501, which — after the sort-and-clamp the consumer
+applies — collapses eight activity levels into what is very nearly a single
+flag. It is better, and better on the full corpus as well as on the five crops,
+by 0.6%. With ten context models already carrying the neighbourhood directly,
+the activity measure §9.2 builds so carefully was diluting those contexts more
+than it was separating them. Replacing that dimension with the match length or
+the zero-run length instead was measured and is worth 0.01%, which says the same
+thing from the other side: the information was already in the mix.
 
 Every knob is clamped at the point of use rather than in the `.idx` — the
 pattern is the search space and the clamp is the contract (IDX-FORMAT.md §5).
@@ -467,20 +484,29 @@ Corpus is `testfiles/`, the seven images from the BMF distribution that are
 
 | file | | input | bmg | bits/pixel |
 | --- | --- | ---: | ---: | ---: |
-| `t8g.bmp` | 320×240 grey | 77 878 | 45 859 | 4.78 |
-| `t8p.bmp` | 320×240 palette | 77 878 | 45 934 | 4.79 |
-| `t24.bmp` | 320×240 RGB | 230 454 | 56 361 | 5.87 |
-| `t32.bmp` | 320×240 RGBA | 307 254 | 56 429 | 5.88 |
-| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 152 200 | 0.27 |
-| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 574 487 | 1.02 |
-| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 353 074 | 5.01 |
-| **total** | | **7 114 966** | **1 284 344** | |
+| `t8g.bmp` | 320×240 grey | 77 878 | 45 196 | 4.71 |
+| `t8p.bmp` | 320×240 palette | 77 878 | 45 310 | 4.72 |
+| `t24.bmp` | 320×240 RGB | 230 454 | 55 282 | 5.76 |
+| `t32.bmp` | 320×240 RGBA | 307 254 | 55 317 | 5.76 |
+| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 150 235 | 0.27 |
+| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 574 643 | 1.02 |
+| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 350 229 | 4.97 |
+| **total** | | **7 114 966** | **1 276 212** | |
 
 For scale, the order-0 entropy of the MED residuals — which is what §6.3's
 `estimate_cost` measures and what a good non-adaptive coder would reach — is
 4.80 bpp on `t8g` and 17.69 bpp on `t24`. The colour transform accounts for most
 of the distance on `t24`; context mixing accounts for the rest and for all of it
 on the screenshots.
+
+Round-trip is checked three ways: `t.sh` over the corpus, twenty synthetic edge
+cases (1×1, one-pixel-wide, top-down, oversized DIB headers, a gap before the
+pixels, trailing data, a colour palette, a palette with duplicate colours, a
+hand-built RLE8 stream, a flat image, a file that is not a BMP at all, an empty
+file), and a fuzz in both directions under ASan and UBSan — 1500 corrupted
+streams into the decoder and 1200 mutated files into the encoder, with the
+encoder's fuzz requiring that whatever came out decodes back to exactly what
+went in. No memory error, no undefined behaviour, no failed round-trip.
 
 ---
 
