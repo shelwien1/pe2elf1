@@ -521,9 +521,16 @@ RLE8 file is not among them, and does not need to be: after §6 the whole run
 structure of `x_ci` costs 334 bytes, so there is nothing there for a parameter
 to move.)
 
-Two rounds were run, twenty-eight and forty-five minutes. The first was worth
-0.6% on the full corpus, the second 0.08%; that is the shape of the curve, and
-it is the reason the corpus is what it is rather than larger.
+Three rounds were run. The first was worth 0.6% on the full corpus, the second
+0.08%, and the third — after the model gained the filter, the second mixing
+layer and the slow companion counters — found 0.15% on its crops and, checked
+one knob at a time on the *full* corpus, kept one of them. That is the shape of
+the curve.
+
+It is also a warning about the corpus. Sweeping by hand on a three-file subset
+found a mixer rate and a counter rate that were together worth 0.05% on those
+three and cost 0.05% on the other four; every number in this document that came
+out of a sweep was re-measured on all seven before it was kept.
 
 The result worth writing down is not a rate. The optimizer pushed the activity
 ladder's first edge from 1 to 501, which — after the sort-and-clamp the consumer
@@ -583,14 +590,14 @@ on the screenshots.
 
 | file | bmf | bmg | |
 | --- | ---: | ---: | ---: |
-| `t8g.bmp` | BMFNUM_t8g | BMGNUM_t8g | PCT_t8g |
-| `t8p.bmp` | BMFNUM_t8p | BMGNUM_t8p | PCT_t8p |
-| `t24.bmp` | BMFNUM_t24 | BMGNUM_t24 | PCT_t24 |
-| `t32.bmp` | BMFNUM_t32 | BMGNUM_t32 | PCT_t32 |
-| `x_ai.bmp` | BMFNUM_x_ai | BMGNUM_x_ai | PCT_x_ai |
-| `x_ci.bmp` | BMFNUM_x_ci | BMGNUM_x_ci | PCT_x_ci |
-| `x_ep.bmp` | BMFNUM_x_ep | BMGNUM_x_ep | PCT_x_ep |
-| **total** | **BMFNUM_tot** | **BMGNUM_tot** | **PCT_tot** |
+| `t8g.bmp` | 42 912 | 44 911 | +4.66% |
+| `t8p.bmp` | 43 676 | 45 024 | +3.09% |
+| `t24.bmp` | 53 924 | 53 726 | -0.37% |
+| `t32.bmp` | 53 996 | 53 768 | -0.42% |
+| `x_ai.bmp` | 148 780 | 149 112 | +0.22% |
+| `x_ci.bmp` | 633 144 | 569 528 | -10.05% |
+| `x_ep.bmp` | 330 616 | 339 556 | +2.70% |
+| **total** | **1 307 048** | **1 255 625** | **-3.93%** |
 
 And bmg's number is for a stream that also reproduces the input **byte for
 byte**, which bmf's is not: on `x_ai` and `x_ci` bmf stores pixels and

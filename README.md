@@ -58,14 +58,14 @@ Seven images from the BMF distribution, round-trip byte-exact on all of them:
 
 | file | | input | bmg | ratio |
 | --- | --- | ---: | ---: | ---: |
-| `t8g.bmp` | 320×240 grey | 77 878 | 45 196 | 0.580 |
-| `t8p.bmp` | 320×240 palette | 77 878 | 45 310 | 0.582 |
-| `t24.bmp` | 320×240 RGB | 230 454 | 55 282 | 0.240 |
-| `t32.bmp` | 320×240 RGBA | 307 254 | 55 317 | 0.180 |
-| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 150 235 | 0.169 |
-| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 574 643 | 0.175 |
-| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 350 229 | 0.155 |
-| **total** | | **7 114 966** | **1 276 212** | **0.179** |
+| `t8g.bmp` | 320×240 grey | 77 878 | 44 911 | 0.577 |
+| `t8p.bmp` | 320×240 palette | 77 878 | 45 024 | 0.578 |
+| `t24.bmp` | 320×240 RGB | 230 454 | 53 726 | 0.233 |
+| `t32.bmp` | 320×240 RGBA | 307 254 | 53 768 | 0.175 |
+| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 149 112 | 0.168 |
+| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 569 528 | 0.174 |
+| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 339 556 | 0.151 |
+| **total** | | **7 114 966** | **1 255 625** | **0.176** |
 
 Decoding runs once and is fast — one to two and a half million samples a second.
 Encoding runs the model two to six times, because choosing the predictor per
@@ -73,10 +73,35 @@ plane means trying it (BMF's `-Q9` pays the same way), so it is two to four
 times slower than bmf's encoder while its decoder is about twice as fast as its
 own encoder. Tables are 90–140 MB, mostly independent of image size.
 
+### Against BMF 2.01
+
+`bmf.cpp` built with `-Ofast -march=native`:
+
+| file | bmf | bmg | |
+| --- | ---: | ---: | ---: |
+| `t8g.bmp` | 42 912 | 44 911 | +4.66% |
+| `t8p.bmp` | 43 676 | 45 024 | +3.09% |
+| `t24.bmp` | 53 924 | 53 726 | **−0.37%** |
+| `t32.bmp` | 53 996 | 53 768 | **−0.42%** |
+| `x_ai.bmp` | 148 780 | 149 112 | +0.22% |
+| `x_ci.bmp` | 633 144 | 569 528 | **−10.05%** |
+| `x_ep.bmp` | 330 616 | 339 556 | +2.70% |
+| **total** | **1 307 048** | **1 255 625** | **−3.93%** |
+
+bmg is 3.9% smaller overall — and its stream also reproduces the input byte for
+byte, which bmf's does not: bmf re-encodes an RLE bitmap's run structure with
+its own rules, while bmg reproduces the original stream exactly, and still wins
+`x_ci` by ten percent.
+
+Where bmf is ahead is where it reaches for model C, its learned predictor: `t8g`,
+`t8p` and `x_ep` all take predictor 2 in its descriptors. `BMG-FORMAT.md` §4.4
+and §8.1 are about what that model does, how much of it twenty integer candidate
+predictors recover, and what they do not.
+
 Round-trip is verified three ways: `t.sh` over the corpus, twenty synthetic edge
-cases, and a fuzz in both directions under ASan and UBSan — 1500 corrupted
-streams into the decoder and 1200 mutated files into the encoder, the latter
-requiring that whatever came out decodes back to exactly what went in.
+cases, and a fuzz in both directions under ASan and UBSan — corrupted streams
+into the decoder and mutated files into the encoder, the latter requiring that
+whatever came out decodes back to exactly what went in.
 
 ## How it works
 
