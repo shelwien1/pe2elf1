@@ -20,13 +20,40 @@ bmg d input.bmg output.bmp      expand
 ./mk.sh                # tuning build:   every IDX knob is a live object
 ./mk.sh release        # shipping build: every IDX knob is a folded literal
 ./mk.sh check          # prove the two produce identical streams
+./mk.sh stat           # build bmgstat, the analysis tool
 ```
 
-Needs a C++17 compiler and, to regenerate `MOD/` from `IDX/`, perl. `MOD/` is
+Needs a C++11 compiler and, to regenerate `MOD/` from `IDX/`, perl. `MOD/` is
 checked in generated — in its shipping form, so `g++ bmg.cpp -o bmg` on its own
 gives the fast build — and `mk.sh` regenerates it when perl is present. A stale
 `MOD/` compiles fine and codes differently, so regenerate it after touching an
 `.idx`.
+
+### Windows
+
+`mk.cmd` and `t.cmd` are the same targets and the same test for `cmd.exe`:
+
+```bat
+mk.cmd                 :: tuning build
+mk.cmd release         :: shipping build
+mk.cmd check           :: prove the two produce identical streams
+mk.cmd stat            :: build bmgstat.exe
+t.cmd                  :: round-trip and size report
+```
+
+MinGW-w64 g++ by default; `set CXX=cl` first to build with MSVC 2015 or later
+instead — the two want different words for the same four things and that is the
+whole of the difference. `mk.cmd release` needs perl on PATH (Strawberry Perl
+will do), exactly as `mk.sh release` does; without it the checked-in `MOD\` is
+used as it stands. The MinGW build passes `-static`, because otherwise the
+executable needs `libstdc++-6.dll` and `libgcc_s_seh-1.dll` beside it.
+
+The stream is the same on both platforms, which matters for a compressor: a
+file compressed on one decodes on the other. That is measured, not assumed —
+cross-built with MinGW-w64 and run under Wine, all seven corpus files compress
+to byte-identical output and round-trip, and the headers `mk.cmd release`
+regenerates through Strawberry Perl match the ones `mk.sh release` writes. It
+has not been run on a real Windows machine here, so that is the one gap.
 
 ## Testing
 
@@ -45,7 +72,7 @@ compressor could exploit — and prices each finding in bytes, so the report end
 with a ranked list of things to do rather than a wall of numbers.
 
 ```sh
-./mk.sh stat
+./mk.sh stat                             # mk.cmd stat on Windows
 ./bmgstat testfiles/x_ep.bmp
 ./bmgstat -q -t 500 -n 16 some/*.bmp     # looser exception budget, more colours
 ```
@@ -206,3 +233,4 @@ and `BMG-FORMAT.md` §7 for what each knob does.
 | `IDX-FORMAT.md` | the IDX parameter system, as it came with `bcdr5` |
 | `bmgstat.cpp` | the image analysis tool, standalone |
 | `mk.sh`, `t.sh` | build and test |
+| `mk.cmd`, `t.cmd` | the same two for Windows `cmd.exe` |

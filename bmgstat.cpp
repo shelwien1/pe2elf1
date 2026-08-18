@@ -14,6 +14,15 @@
 // images -- BI_RGB or BI_RLE8 -- which it expands through the palette so the
 // same questions can be asked of them.
 
+// Windows needs three things said before the first include: MSVC deprecates
+// fopen and the str* family under its "secure CRT" warnings, MinGW's stdio has
+// to be told to use the C99 printf or %llu prints as the literal text, and
+// 32-bit builds need the large-file interfaces.  None of the three costs
+// anything anywhere else.
+#define _CRT_SECURE_NO_WARNINGS 1
+#define __USE_MINGW_ANSI_STDIO  1
+#define _FILE_OFFSET_BITS       64
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +43,26 @@ static int    opt_quiet = 0;
 // ---------------------------------------------------------------- helpers
 
 
+
+// The size of an open file.  `long` is 32 bits on 64-bit Windows, so plain
+// ftell() silently caps at 2 GB there; each platform spells the 64-bit form
+// differently.  Returns -1 if the file cannot be sized.
+static long long fsize_( FILE* f ) {
+#if defined(_MSC_VER)
+  if( _fseeki64( f, 0, SEEK_END ) ) return -1;
+  long long L = _ftelli64( f );
+  _fseeki64( f, 0, SEEK_SET );
+#elif defined(__MINGW32__)
+  if( fseeko64( f, 0, SEEK_END ) ) return -1;
+  long long L = ftello64( f );
+  fseeko64( f, 0, SEEK_SET );
+#else
+  if( fseeko( f, 0, SEEK_END ) ) return -1;
+  long long L = ftello( f );
+  fseeko( f, 0, SEEK_SET );
+#endif
+  return L;
+}
 
 static double log2_(double x) { return log(x) * 1.4426950408889634; }
 
@@ -151,10 +180,11 @@ static int rle8_decode( const byte* s, uint len, byte* img, int W, int H ) {
 static int load_bmp( const char* fn, Image* im ) {
   FILE* f = fopen( fn, "rb" );
   if( !f ) { fprintf( stderr, "%s: cannot open\n", fn ); return 0; }
-  fseek( f, 0, SEEK_END );  long L = ftell(f);  fseek( f, 0, SEEK_SET );
+  long long L = fsize_( f );
   if( L < 54 ) { fclose(f); fprintf(stderr,"%s: too short\n",fn); return 0; }
-  byte* d = new byte[L];
-  if( (long)fread( d, 1, L, f ) != L ) { fclose(f); delete[] d; return 0; }
+  if( L > 0xFFFFFFFFll ) { fclose(f); fprintf(stderr,"%s: over 4 GB\n",fn); return 0; }
+  byte* d = new byte[(size_t)L];
+  if( fread( d, 1, (size_t)L, f ) != (size_t)L ) { fclose(f); delete[] d; return 0; }
   fclose(f);
 
   memset( im, 0, sizeof(*im) );

@@ -10,6 +10,15 @@
 // The container is byte-exact: whatever goes in comes back out, header bytes,
 // row padding, RLE run structure and trailing bytes included.
 
+// Windows needs three things said before the first include: MSVC deprecates
+// fopen and the str* family under its "secure CRT" warnings, MinGW's stdio has
+// to be told to use the C99 printf or %llu prints as the literal text, and
+// 32-bit builds need the large-file interfaces.  None of the three costs
+// anything anywhere else.
+#define _CRT_SECURE_NO_WARNINGS 1
+#define __USE_MINGW_ANSI_STDIO  1
+#define _FILE_OFFSET_BITS       64
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +37,26 @@ typedef unsigned long long qword;
  #define INLINE   __forceinline
  #define NOINLINE __declspec(noinline)
 #endif
+
+// The size of an open file.  `long` is 32 bits on 64-bit Windows, so plain
+// ftell() silently caps at 2 GB there; each platform spells the 64-bit form
+// differently.  Returns -1 if the file cannot be sized.
+static long long fsize_( FILE* f ) {
+#if defined(_MSC_VER)
+  if( _fseeki64( f, 0, SEEK_END ) ) return -1;
+  long long L = _ftelli64( f );
+  _fseeki64( f, 0, SEEK_SET );
+#elif defined(__MINGW32__)
+  if( fseeko64( f, 0, SEEK_END ) ) return -1;
+  long long L = ftello64( f );
+  fseeko64( f, 0, SEEK_SET );
+#else
+  if( fseeko( f, 0, SEEK_END ) ) return -1;
+  long long L = ftello( f );
+  fseeko( f, 0, SEEK_SET );
+#endif
+  return L;
+}
 
 #include "bmg_rc.inc"
 #include "sh_mapping.inc"
@@ -681,10 +710,13 @@ int main( int argc, char** argv ) {
 
   FILE* f = fopen( argv[2], "rb" );
   if( !f ) { fprintf( stderr, "cannot open %s\n", argv[2] ); return 1; }
-  fseek( f, 0, SEEK_END );  long L = ftell(f);  fseek( f, 0, SEEK_SET );
+  long long L = fsize_( f );
   if( L < 0 ) { fprintf(stderr,"cannot size %s\n",argv[2]); return 1; }
-  byte* in = new byte[ L ? L : 1 ];
-  if( (long)fread( in, 1, L, f ) != L ) { fprintf(stderr,"short read\n"); return 1; }
+  // The container's size field is 32 bits, so refuse anything that would not
+  // survive the cast rather than truncating it into a wrong-looking stream.
+  if( L > 0xFFFFFFFFll ) { fprintf(stderr,"%s is over 4 GB\n",argv[2]); return 1; }
+  byte* in = new byte[ L ? (size_t)L : 1 ];
+  if( fread( in, 1, (size_t)L, f ) != (size_t)L ) { fprintf(stderr,"short read\n"); return 1; }
   fclose(f);
 
   FILE* g = fopen( argv[3], "wb" );
@@ -737,7 +769,8 @@ int main( int argc, char** argv ) {
                cd.info.comp==1 ? " rle8" : "", cd.expand ? " expanded" : "",
                n, 8.0*n/((double)cd.info.W*cd.info.H), sec );
     else
-      fprintf( stderr, "%s: %ld -> %d bytes (generic), %.2fs\n", argv[2], L, n, sec );
+      fprintf( stderr, "%s: %llu -> %d bytes (generic), %.2fs\n",
+               argv[2], (unsigned long long)L, n, sec );
   } else {
     rv = cd.decompress( in, (uint)L, g ) ? 0 : 3;
     fprintf( stderr, "%s -> %s, %.2fs\n", argv[2], argv[3], double(clock()-t0)/CLOCKS_PER_SEC );
