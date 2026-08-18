@@ -38,7 +38,9 @@ static const int NMIX  = 11;     // mixer inputs
 static const int MARG  = 8;      // row margin, in samples
 
 static const int M1SZ  = 2187*8*3;          // t1..t7 x alvl x pclass
-static const int M2LOG = 19;
+#ifndef M2LOG
+ #define M2LOG 19
+#endif
 static const int M2SZ  = 1<<M2LOG;          // hashed, everything
 static const int M3SZ  = 9*9*8*8*3;         // qeW x qeN x qpred x alvl x pclass
 static const int M4SZ  = 8*3*8*9;           // alvl x pclass x qrun x qeW
@@ -46,9 +48,14 @@ static const int M5SZ  = 9*9*8*3;           // cross-plane residuals
 static const int M6SZ  = 15*3*8*3;          // partition x MED branch x alvl x pclass
 static const int M7SZ  = 3*8*3;             // match state x match length x pclass
 static const int M8SZ  = 256*8*3;           // low nibbles of W and N x alvl x pclass
-static const int M9LOG = 18;
+#ifndef M9LOG
+ #define M9LOG 18
+#endif
+#ifndef MALOG
+ #define MALOG 19
+#endif
 static const int M9SZ  = 1<<M9LOG;          // the exact neighbourhood, hashed
-static const int MASZ  = 1<<19;             // the wider neighbourhood, hashed
+static const int MASZ  = 1<<MALOG;          // the wider neighbourhood, hashed
 static const int NSTRIP = 3*8*9*8;          // escape strips
 static const int STRIPW = 8*128;            // one path tree per level
 static const int E2SZ   = 15*3*8*3;         // partition x MED branch x alvl x pclass

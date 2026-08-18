@@ -183,14 +183,14 @@ struct Codec {
 
   // ---------------------------------------------------------- pixels <-> file
 
-  void rows_from_file( void ) {                  // encode, comp==0
+  void rows_from_file( void ) {                  // encode, uncompressed
     int W = info.W, H = info.H, bpp8 = info.bpp>>3;
     for( int r=0; r<H; r++ ) {
       int y = info.topdown ? r : H-1-r;
       memcpy( pix + (qword)y*W*bpp8, buf + info.dataOffset + (qword)r*info.stride, (qword)W*bpp8 );
     }
   }
-  void rows_to_file( void ) {                    // decode, comp==0
+  void rows_to_file( void ) {                    // decode, uncompressed
     int W = info.W, H = info.H, bpp8 = info.bpp>>3;
     for( int r=0; r<H; r++ ) {
       int y = info.topdown ? r : H-1-r;
@@ -326,7 +326,7 @@ struct Codec {
     }
 
     // ---- the pixel bytes back into the file
-    if( info.comp == 0 ) {
+    if( info.comp != 1 ) {
       if( f_DEC ) rows_to_file();
       need_bm();
       uint padn = info.stride - info.used;
@@ -351,6 +351,8 @@ struct Codec {
               (unsigned long long)rm.nop[0],(unsigned long long)rm.nop[1],(unsigned long long)rm.nop[2],
               (unsigned long long)rm.nop[3],(unsigned long long)rm.nop[4],
               (unsigned long long)rm.nlen[0],(unsigned long long)rm.nlen[1], used);
+      fprintf(stderr,"  rle: greedy hits %llu, misses %llu\n",
+              (unsigned long long)rm.nlen[2],(unsigned long long)rm.nlen[3]);
 #endif
       rm.free_();
       need_bm();
@@ -502,7 +504,7 @@ struct Codec {
     if( info.ok ) {
       int W = info.W, H = info.H, bpp8 = info.bpp>>3;
       pix = new byte[(qword)W*H*bpp8];
-      if( info.comp == 0 ) rows_from_file();
+      if( info.comp != 1 ) rows_from_file();
       else {
         uint cons = 0;
         if( !rle8_decode( buf+info.dataOffset, fsize-info.dataOffset, pix, W, H, &cons ) )

@@ -60,10 +60,10 @@ Seven images from the BMF distribution, round-trip byte-exact on all of them:
 | `t8p.bmp` | 320×240 palette | 77 878 | 45 934 | 0.590 |
 | `t24.bmp` | 320×240 RGB | 230 454 | 56 361 | 0.245 |
 | `t32.bmp` | 320×240 RGBA | 307 254 | 56 429 | 0.184 |
-| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 160 129 | 0.180 |
-| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 617 130 | 0.188 |
+| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 152 200 | 0.172 |
+| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 574 487 | 0.175 |
 | `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 353 074 | 0.157 |
-| **total** | | **7 114 966** | **1 334 916** | **0.188** |
+| **total** | | **7 114 966** | **1 284 344** | **0.181** |
 
 About 1.5 million samples a second, and about 60 MB of tables regardless of
 image size.

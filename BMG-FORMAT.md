@@ -390,16 +390,25 @@ each op the model already knows:
   literal run stops at;
 - every byte an absolute run will contain.
 
-What is left on the wire is the *encoder's choices*: which op, and whether its
-length was the obvious one. Coding the length prediction from the greedy rule
-took absolute-run lengths from missing every single time to missing never, and
-`x_ci` from 773 KB to 683 KB — 12%, for a prediction that costs one pass over
-each row.
+What is left on the wire is the *encoder's choices*. They are coded twice over:
+first as **one bit** saying whether this op is, whole, what a greedy encoder
+would have emitted here — the op, its length and its data — and only if that
+bit says no, as an op code, a length, and a "matches the image" flag in front of
+the data with a raw fallback behind it.
 
-Everything is still coded rather than assumed, with a "matches the image" bit in
-front of the data and a raw fallback behind it, so a stream from a non-greedy
-encoder, or one with overlapping ops, or one with garbage in an absolute run,
-round-trips too — just less cheaply.
+So a stream from a greedy encoder costs about a third of a bit an op and a
+stream from anything else still round-trips. On `x_ci`, whose 3.2 MB of RLE
+carries a million ops, the whole run structure costs **334 bytes**.
+
+The context that bit is read in decides whether it is worth having, and by a
+lot. Read against a coarse "is there a run of three or more here" it hits 89% and
+*costs* more than coding the op longhand. Read against the run length and the
+literal length at full resolution below four — because a run of exactly two is
+the case where an encoder may reasonably emit either a pair or a literal, and
+lumping it in with "three or more" is what makes the bit expensive — the same
+89% hit rate is worth 7.4% of `x_ci`. Predicting the absolute-run length from
+the greedy rule was worth another 12% before that, taking those lengths from
+missing every single time to missing never.
 
 RLE4 is not accepted: it needs a 4-bit depth, which is outside Grey/RGB/RGBA.
 Those files go to the generic model.
@@ -462,10 +471,10 @@ Corpus is `testfiles/`, the seven images from the BMF distribution that are
 | `t8p.bmp` | 320×240 palette | 77 878 | 45 934 | 4.79 |
 | `t24.bmp` | 320×240 RGB | 230 454 | 56 361 | 5.87 |
 | `t32.bmp` | 320×240 RGBA | 307 254 | 56 429 | 5.88 |
-| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 160 129 | 0.28 |
-| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 617 130 | 1.09 |
+| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 152 200 | 0.27 |
+| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 574 487 | 1.02 |
 | `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 353 074 | 5.01 |
-| **total** | | **7 114 966** | **1 334 916** | |
+| **total** | | **7 114 966** | **1 284 344** | |
 
 For scale, the order-0 entropy of the MED residuals — which is what §6.3's
 `estimate_cost` measures and what a good non-adaptive coder would reach — is

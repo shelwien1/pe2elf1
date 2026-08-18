@@ -49,7 +49,11 @@ struct BmpInfo {
     W = width;
     if( H <= 0 || H > 65535 ) return;
     if( bpp!=8 && bpp!=24 && bpp!=32 ) return;
-    if( comp!=0 && !(comp==1 && bpp==8) ) return;
+    // BI_BITFIELDS at 32 bits is accepted: the masks only say how to read a
+    // pixel, not how the bytes are laid out, and this model codes byte planes.
+    // The masks themselves live between the DIB header and the pixels, so the
+    // prologue model carries them without knowing what they are.
+    if( comp!=0 && !(comp==1 && bpp==8) && !(comp==3 && bpp==32) ) return;
     if( comp==1 && topdown ) return;                   // RLE is bottom-up only
     // Bound the pixel buffer.  For an uncompressed bitmap the row check at the
     // end ties it to the file size; for RLE8 nothing does, since two bytes can
@@ -68,7 +72,7 @@ struct BmpInfo {
     if( dataOffset < 14+dibSize || dataOffset > n ) return;
     used   = ((uint)W*bpp) >> 3;
     stride = ((((uint)W*bpp) + 31) >> 5) << 2;
-    if( comp==0 ) {
+    if( comp!=1 ) {
       if( (qword)dataOffset + (qword)stride*H > n ) return;
     }
     ok = 1;
@@ -186,7 +190,8 @@ struct ByteModel {
 // is always the pixel under the cursor, so what is left on the wire is the
 // encoder's choices and nothing else.
 struct RleModel {
-  Counter opc[64*5];
+  Counter opc[6*6*4*2*5];
+  Counter ghit[5*5*5*6*2];
   Counter runeq[8], abseq[8], valeq[8], absmatch[8], padz[4];
   Counter trun[256], tabs[256], tval[256], tlit[256], tdx[256], tdy[256], tpad[256];
 #ifdef BMG_STATS
@@ -200,7 +205,8 @@ struct RleModel {
   void init( int w, int h ) {
     W = w; H = h; cached = -1;
     rl = new byte[W+2]; nx = new short[W+2];
-    ctr_fill( opc, 64*5, hSCALE );
+    ctr_fill( opc, 6*6*4*2*5, hSCALE );
+    ctr_fill( ghit, 5*5*5*6*2, hSCALE );
     ctr_fill( runeq, 8, hSCALE ); ctr_fill( abseq, 8, hSCALE );
     ctr_fill( valeq, 8, hSCALE ); ctr_fill( absmatch, 8, hSCALE );
     ctr_fill( padz, 4, hSCALE );
@@ -235,7 +241,7 @@ struct RleModel {
   template<int f_DEC>
   uint walk( byte* dst, uint cap, const byte* img, int w, int h ) {
     W = w; H = h;
-    uint i = 0;  int x = 0, row = 0, prevop = 5;
+    uint i = 0;  int x = 0, row = 0, prevop = 5, prevop2 = 5;
     for(;;) {
       cache_row( img, row );
       int inrow = (row>=0 && row<H && x<W);
@@ -245,7 +251,10 @@ struct RleModel {
       // literals up to the next run of three
       int lit = inrow ? nx[x] : 0;
       if( lit > 255 ) lit = 255;
-      int oc = ((mr>=3 ? (mr>=8 ? 2 : 1) : (mr>=2)) * 6 + prevop) * 2 + (x==0);
+      // What the previous two ops were is most of what says what this one is:
+      // a greedy encoder alternates runs and literal blocks, and which of the
+      // two it is about to emit is already visible in the run length here.
+      int oc = (((mr>=3 ? (mr>=8 ? 2 : 1) : (mr>=2)) * 6 + prevop) * 6 + prevop2) * 2 + (x==0);
 
       int op = RLE_STOP;
       if( !f_DEC ) {
@@ -259,6 +268,64 @@ struct RleModel {
           else op = RLE_ABS;
         }
       }
+
+      // What a greedy RLE8 encoder would emit here, whole: the op, its length
+      // and its data.  Both halves can work it out from the pixels, so a stream
+      // that came from such an encoder -- and the abs-length prediction says
+      // this corpus did -- costs one bit an op instead of an op code, a length
+      // and two match flags.  Everything is still coded rather than assumed;
+      // the bit just says whether the rest has to be.
+      int gop, glen = 0;
+      if( row >= H )       gop = RLE_EOB;
+      else if( !inrow )    gop = RLE_EOL;
+      else if( mr >= 3 )   { gop = RLE_RUN; glen = mr; }
+      else if( lit >= 3 )  { gop = RLE_ABS; glen = lit; }
+      else                 { gop = RLE_RUN; glen = mr; }
+      uint gbytes = (gop==RLE_ABS) ? 2 + ((glen+1) & ~1) : 2;
+      const byte* grow = inrow ? img + (qword)(H-1-row)*W + x : 0;
+
+      uint hit = 0;
+      if( !f_DEC && op == gop && i + gbytes <= cap ) {
+        if( gop == RLE_RUN )      hit = ( dst[i]==(uint)glen && dst[i+1]==grow[0] );
+        else if( gop == RLE_ABS ) {
+          hit = ( dst[i+1]==(uint)glen );
+          if( hit ) for( int q=0; q<glen; q++ ) if( dst[i+2+q]!=grow[q] ) { hit=0; break; }
+          if( hit && (glen&1) ) hit = ( dst[i+2+glen]==0 );
+        }
+        else hit = 1;                       // EOL and EOB carry nothing else
+      }
+      // The context for this bit is the geometry the greedy rule read, at full
+      // resolution where it is ambiguous: a run of two is the case where an
+      // encoder may reasonably emit either a pair or a literal, and lumping it
+      // in with "three or more" is what makes the bit expensive.
+      { int a = mr<4 ? mr : 4, b = lit<4 ? lit : 4, c = gop<4 ? gop : 4;
+        int gc = (((a*5 + b)*5 + c)*6 + prevop)*2 + (x==0);
+        hit = 1 - bit_code<f_DEC>( ghit[gc], 1-hit, P0_RL_wr, P0_RL_mw ); }
+      if( hit ) {
+        if( f_DEC ) {
+          if( i + gbytes > cap ) return i;
+          if( gop == RLE_RUN ) { dst[i]=byte(glen); dst[i+1]=grow[0]; }
+          else if( gop == RLE_ABS ) {
+            dst[i]=0; dst[i+1]=byte(glen);
+            memcpy( dst+i+2, grow, glen );
+            if( glen&1 ) dst[i+2+glen] = 0;
+          }
+          else if( gop == RLE_EOL ) { dst[i]=0; dst[i+1]=0; }
+          else                      { dst[i]=0; dst[i+1]=1; }
+        }
+#ifdef BMG_STATS
+        nop[gop]++;  nlen[2]++;
+#endif
+        prevop2 = prevop; prevop = gop;
+        if( gop == RLE_EOB ) return i+2;
+        if( gop == RLE_EOL ) { x = 0; row++; }
+        else x += glen;
+        i += gbytes;
+        if( x > W ) x = W;
+        if( row > H ) row = H;
+        continue;
+      }
+
       int j;
       for( j=0; j<5; j++ ) {
         uint bit = f_DEC ? 0 : (op==j ? 0u : 1u);
@@ -267,16 +334,16 @@ struct RleModel {
       }
       if( f_DEC ) op = j;
 #ifdef BMG_STATS
-      nop[op]++;
+      nop[op]++;  nlen[3]++;
 #endif
       if( op == RLE_STOP ) return i;
-      prevop = op;
+      prevop2 = prevop; prevop = op;
 
       if( op == RLE_RUN ) {
         int pn = mr ? mr : 1;
         uint n = f_DEC ? 0 : dst[i];
         uint bit = f_DEC ? 0 : (n==(uint)pn ? 0u : 1u);
-        bit = bit_code<f_DEC>( runeq[oc>>3], bit, P0_RL_wr, P0_RL_mw );
+        bit = bit_code<f_DEC>( runeq[oc/144], bit, P0_RL_wr, P0_RL_mw );
         if( bit ) n = byte_code<f_DEC>( trun, f_DEC?0:n, P0_RL_wr, P0_RL_mw );
         else if( f_DEC ) n = (uint)pn;
         if( !n ) n = 1;
@@ -286,7 +353,7 @@ struct RleModel {
         uint pv = inrow ? img[(qword)(H-1-row)*W + x] : 0;
         uint val = f_DEC ? 0 : dst[i+1];
         bit = f_DEC ? 0 : (val==pv ? 0u : 1u);
-        bit = bit_code<f_DEC>( valeq[oc>>3], bit, P0_RL_wr, P0_RL_mw );
+        bit = bit_code<f_DEC>( valeq[oc/144], bit, P0_RL_wr, P0_RL_mw );
         if( bit ) val = byte_code<f_DEC>( tval, f_DEC?0:val, P0_RL_wr, P0_RL_mw );
         else if( f_DEC ) val = pv;
         if( f_DEC ) { if( i+2 > cap ) return i; dst[i]=byte(n); dst[i+1]=byte(val); }
@@ -295,7 +362,7 @@ struct RleModel {
         int pl = lit; if( pl < 3 ) pl = 3; if( pl > W-x ) pl = W-x; if( pl > 255 ) pl = 255;
         uint n = f_DEC ? 0 : dst[i+1];
         uint bit = f_DEC ? 0 : (n==(uint)pl ? 0u : 1u);
-        bit = bit_code<f_DEC>( abseq[oc>>3], bit, P0_RL_wr, P0_RL_mw );
+        bit = bit_code<f_DEC>( abseq[oc/144], bit, P0_RL_wr, P0_RL_mw );
         if( bit ) n = byte_code<f_DEC>( tabs, f_DEC?0:n, P0_RL_wr, P0_RL_mw );
         else if( f_DEC ) n = (uint)pl;
         if( n < 3 ) n = 3;
@@ -308,7 +375,7 @@ struct RleModel {
         int same = 1;
         if( !f_DEC ) { for( uint q=0; q<n; q++ ) if( dst[i+2+q]!=src[q] ) { same=0; break; } }
         bit = f_DEC ? 0 : (same ? 0u : 1u);
-        bit = bit_code<f_DEC>( absmatch[oc>>3], bit, P0_RL_wr, P0_RL_mw );
+        bit = bit_code<f_DEC>( absmatch[oc/144], bit, P0_RL_wr, P0_RL_mw );
         same = (bit==0);
         uint pad = (n+1) & ~1u;
         if( f_DEC && i+2+pad > cap ) return i;
