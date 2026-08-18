@@ -8,7 +8,7 @@ Const 0
 
 # ---- counter learning rates and probability floors ----------------------
 # wr = 1365 
-Rate1  CT_wr,     16!0000101110000
+Rate1  CT_wr,     16!0000111110000
 # CT_mw = 16 
 Number CT_mw,     1, 1!000100000001
 # wr = 3276 

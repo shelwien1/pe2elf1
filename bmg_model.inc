@@ -43,7 +43,7 @@ static const int M1SZ  = 2187*8*3;          // t1..t7 x alvl x pclass
 #endif
 static const int M2SZ  = 1<<M2LOG;          // hashed, everything
 static const int M3SZ  = 9*9*8*8*3;         // qeW x qeN x qpred x alvl x pclass
-static const int M4SZ  = 8*3*8*9;           // alvl x pclass x qrun x qeW
+static const int M4SZ  = 8*3*16*9;          // alvl x pclass x qrun x qeW
 static const int M5SZ  = 9*9*8*3;           // cross-plane residuals
 static const int M6SZ  = 15*3*8*3;          // partition x MED branch x alvl x pclass
 static const int M7SZ  = 3*8*3;             // match state x match length x pclass
@@ -69,7 +69,7 @@ static const int EPSZ    = 1<<EPLOG;        // second escape-path model
 static const int EMXSETS = 7*8*3*8;
 static const int PMXSETS = 8*8*3*8;
 static const int EAPSETS = 7*8*3*9;
-static const int MXSETS  = NLIT*8*3*8*3*3;      // first layer, gradient state
+static const int MXSETS  = NLIT*8*3*16*3*3;     // first layer, gradient state
 static const int MXSETSB = NLIT*15*9*3;         // first layer, a different cut
 static const int MX2SETS = NLIT*3*3*8;          // second layer
 static const int APSETS = NLIT*8*3*9;
@@ -507,7 +507,9 @@ struct ImgModel {
     int qeW = qerr( eW ), qeN = qerr( eN );
     int qpr = pred >> 5;
     int pc  = pclass[p];
-    int qrn = ilog2i( (uint)runlen[p] + 1 ); if( qrn > 7 ) qrn = 7;
+    // Sixteen buckets, not eight: a screenshot's runs are long enough that
+    // everything past 127 was landing in one bucket.
+    int qrn = ilog2i( (uint)runlen[p] + 1 ); if( qrn > 15 ) qrn = 15;
 
     // ---- match model: what followed this exact neighbourhood last time
     uint mh = ( (uint)Wv * 0x9E3779B1u ) ^ ( (uint)Nv * 0x85EBCA6Bu )
@@ -533,7 +535,7 @@ struct ImgModel {
     hh ^= hh >> 15;
     qword r2 = hh & (M2SZ-1);
     qword r3 = (qword)(((qeW*9 + qeN)*8 + qpr)*8 + alvl)*3 + pc;
-    qword r4 = (qword)((alvl*3 + pc)*8 + qrn)*9 + qeW;
+    qword r4 = (qword)((alvl*3 + pc)*16 + qrn)*9 + qeW;
     qword r5 = (qword)((qerr(eRA)*9 + qerr(eRB))*8 + alvl)*3 + pc;
     qword r6 = (qword)((part*3 + mtype)*8 + alvl)*3 + pc;
     // The low nibbles of the two nearest neighbours.  Section 8.5's ctx_id3
@@ -605,7 +607,7 @@ struct ImgModel {
       mx.st[12] = stretch15( cfp[k].P );
       mx.st[13] = 256;
       for( int q=0; q<NMIX; q++ ) mxb.st[q] = mx.st[q];
-      mx.select( ((((k*8 + alvl)*3 + pc)*8 + qrn)*3 + ms)*3 + mtype );
+      mx.select( ((((k*8 + alvl)*3 + pc)*16 + qrn)*3 + ms)*3 + mtype );
       mxb.select( ((k*15 + part)*9 + qeW)*3 + pc );
       int pra = mx.mix(), prb = mxb.mix();
       mx2.st[0] = stretch_t[pra];
