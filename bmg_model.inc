@@ -72,7 +72,7 @@ static const int MX2SETS = NLIT*3*3*8;          // second layer
 static const int APSETS = NLIT*8*3*9;
 static const int AP2SETS = NLIT*3*8*3*3;
 static const int MHLOG  = 19;               // match table, per plane
-static const int NCAND  = 16;               // candidate predictors mixed by LMS
+static const int NCAND  = 20;               // candidate predictors mixed by LMS
 static const int NTX    = 12;               // texture buckets selecting a weight set
 static const int LWSETS = 3*NTX;
 
@@ -415,6 +415,13 @@ struct ImgModel {
     cd[13] = 2*NEv - NEEv;
     cd[14] = NNv + Wv - NNWv;
     cd[15] = (NEv + NWv + 1) >> 1;
+    // Section 10.1's rows 4 to 6 are cross-plane terms.  Here the reference
+    // planes have already been through the colour transform, so what they have
+    // left to say at this pixel is their own residual.
+    cd[16] = pmed + eRA;
+    cd[17] = pmed + eRB;
+    cd[18] = pmed + rsh( eRA + eRB, 1 );
+    cd[19] = (Wv + Nv + NEv + NWv + 2) >> 2;
 
     int spread = iabs(Wv-Nv) + iabs(Nv-NEv) + iabs(Wv-NWv) + iabs(Nv-NWv);
     int tx = ilog2i( (uint)spread + 1 ); if( tx > NTX-1 ) tx = NTX-1;
