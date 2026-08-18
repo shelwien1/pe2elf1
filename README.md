@@ -67,9 +67,11 @@ Seven images from the BMF distribution, round-trip byte-exact on all of them:
 | `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 350 229 | 0.155 |
 | **total** | | **7 114 966** | **1 276 212** | **0.179** |
 
-One to two and a half million samples a second in each direction, and 80–110 MB
-of tables — mostly independent of image size, since the context tables are what
-dominate and they are fixed.
+Decoding runs once and is fast — one to two and a half million samples a second.
+Encoding runs the model two to six times, because choosing the predictor per
+plane means trying it (BMF's `-Q9` pays the same way), so it is two to four
+times slower than bmf's encoder while its decoder is about twice as fast as its
+own encoder. Tables are 90–140 MB, mostly independent of image size.
 
 Round-trip is verified three ways: `t.sh` over the corpus, twenty synthetic edge
 cases, and a fuzz in both directions under ASan and UBSan — 1500 corrupted
@@ -91,10 +93,13 @@ The short version:
 * colour planes subtract a fitted, searched combination of the plane that leads
   — in the value domain, before prediction, which measures three times better
   than subtracting the leading plane's residual;
-* prediction is MED / LOCO-I and nothing else;
+* each plane is predicted either by MED / LOCO-I or by a learned mixture of
+  twenty candidate predictors, and which one is decided by **encoding the image
+  both ways and keeping the shorter** — no entropy estimate gets that choice
+  right, and getting it right per plane is worth 3%;
 * the residual is folded, coded as a literal ladder with a logarithmic escape,
-  and every decision is mixed from ten context models in the logistic domain and
-  refined by two secondary estimators.
+  and every decision is mixed from thirteen context models through two layers of
+  gated linear mixing and refined by two secondary estimators.
 
 ## Tuning
 

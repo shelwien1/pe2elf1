@@ -61,6 +61,8 @@ static const int NSTRIP = 3*8*9*8;          // escape strips
 static const int STRIPW = 8*128;            // one path tree per level
 static const int E2SZ   = 15*3*8*3;         // partition x MED branch x alvl x pclass
 static const int E3LOG  = 16;
+static const int E4LOG  = 17;
+static const int E4SZ   = 1<<E4LOG;
 static const int E3SZ   = 1<<E3LOG;
 static const int EPLOG   = 18;
 static const int EPSZ    = 1<<EPLOG;        // second escape-path model
@@ -139,16 +141,16 @@ struct ImgModel {
   // per context state, which of the two answers to believe.
   Counter *t9s, *tas, *tf;
   byte *n1_, *n2_, *n3_, *n4_, *n5_, *n6_, *n8_, *n9_, *na_;   // per-row use counts
-  byte *ne1, *ne2, *ne3, *nep;
-  Counter *el1, *el2, *el3;        // the escape level, mixed like the ladder
-  Counter *ep2;                    // second escape-path model
+  byte *ne1, *ne2, *ne3, *ne4, *nep;
+  Counter *el1, *el2, *el3, *el4;  // the escape level, mixed like the ladder
+  Counter *ep2, *ep3;              // further escape-path models
   // Two layers.  One gated mixer answers with the weights of whatever
   // selector it was given; two of them, gated on different things, disagree
   // where the selectors disagree, and a second layer learns which to believe.
   Mixer<NMIX> mx, mxb;
   Mixer<3>    mx2;
-  Mixer<4>    emx;
-  Mixer<3>    pmx;
+  Mixer<5>    emx;
+  Mixer<4>    pmx;
   APM  apm, apm2, eapm;
 
   uint* mtab[4];                   // match model: context hash -> last position
@@ -230,6 +232,7 @@ struct ImgModel {
     ne1 = new byte[NSTRIP]; memset( ne1, 0, NSTRIP );
     ne2 = new byte[E2SZ];   memset( ne2, 0, E2SZ );
     ne3 = new byte[E3SZ];   memset( ne3, 0, E3SZ );
+    ne4 = new byte[E4SZ];   memset( ne4, 0, E4SZ );
     nep = new byte[EPSZ];   memset( nep, 0, EPSZ );
     init_wrtab( P0_CT_wr );
     tesc = new Counter[ (qword)NSTRIP*STRIPW ];
@@ -237,9 +240,12 @@ struct ImgModel {
     el2  = new Counter[ (qword)E2SZ*8 ];
     el3  = new Counter[ (qword)E3SZ*8 ];
     ep2  = new Counter[ (qword)EPSZ ];
+    el4  = new Counter[ (qword)E4SZ*8 ];
+    ep3  = new Counter[ (qword)EPSZ ];
     tbl_bytes = ( (qword)(M1SZ+M2SZ+M3SZ+M4SZ+M5SZ+M6SZ+M7SZ+M8SZ+2*M9SZ+2*MASZ+MFSZ)*NLIT
                 + (qword)NSTRIP*STRIPW + (qword)NSTRIP*8
-                + (qword)E2SZ*8 + (qword)E3SZ*8 + (qword)EPSZ ) * sizeof(Counter)
+                + (qword)E2SZ*8 + (qword)E3SZ*8 + (qword)E4SZ*8
+                + 2*(qword)EPSZ ) * sizeof(Counter)
                 + (qword)NP*sizeof(uint)*((qword)1<<MHLOG);
 
     // A fresh literal-ladder counter starts biased toward "yes": the folded
@@ -265,6 +271,8 @@ struct ImgModel {
     ctr_fill( el2, (qword)E2SZ*8, seed );
     ctr_fill( el3, (qword)E3SZ*8, seed );
     ctr_fill( ep2, (qword)EPSZ, hSCALE );
+    ctr_fill( el4, (qword)E4SZ*8, seed );
+    ctr_fill( ep3, (qword)EPSZ, hSCALE );
 
     memset( lw, 0, sizeof(lw) );
     for( int q=0; q<4; q++ ) usefilt[q] = 0;
@@ -331,10 +339,11 @@ struct ImgModel {
     delete[] t1; delete[] t2; delete[] t3; delete[] t4;
     delete[] t5; delete[] t6; delete[] t7; delete[] t8; delete[] t9;
     delete[] ta; delete[] t9s; delete[] tas; delete[] tf; delete[] tesc;
-    delete[] el1; delete[] el2; delete[] el3; delete[] ep2;
+    delete[] el1; delete[] el2; delete[] el3; delete[] el4;
+    delete[] ep2; delete[] ep3;
     delete[] n1_; delete[] n2_; delete[] n3_; delete[] n4_;
     delete[] n5_; delete[] n6_; delete[] n8_; delete[] n9_; delete[] na_;
-    delete[] ne1; delete[] ne2; delete[] ne3; delete[] nep;
+    delete[] ne1; delete[] ne2; delete[] ne3; delete[] ne4; delete[] nep;
     mx.free_(); mxb.free_(); mx2.free_(); apm.free_(); apm2.free_();
     emx.free_(); eapm.free_(); pmx.free_();
   }
@@ -662,7 +671,12 @@ struct ImgModel {
       Counter* l1 = el1 + strip*8;   int v1 = ne1[strip], y1 = wrtab[v1];
       Counter* l2 = el2 + re2*8;     int v2 = ne2[re2],   y2 = wrtab[v2];
       Counter* l3 = el3 + re3*8;     int v3 = ne3[re3],   y3 = wrtab[v3];
+      // the exact neighbourhood, the same context M9 carries -- the escape is
+      // a third of t8g's bits and it had nothing of the kind
+      qword re4 = (h9 ^ (h9>>7)) & (E4SZ-1);
+      Counter* l4 = el4 + re4*8;     int v4 = ne4[re4],   y4 = wrtab[v4];
       if( v1<63 ) ne1[strip]++;  if( v2<63 ) ne2[re2]++;  if( v3<63 ) ne3[re3]++;
+      if( v4<63 ) ne4[re4]++;
       uint vv = f_DEC ? 0 : (code - NLIT + 1);      // 1 .. 256-NLIT
       int lvl = f_DEC ? 0 : ilog2i( vv );
       int j;
@@ -670,7 +684,8 @@ struct ImgModel {
         emx.st[0] = v1 ? stretch15( l1[j].P ) : 0;
         emx.st[1] = v2 ? stretch15( l2[j].P ) : 0;
         emx.st[2] = v3 ? stretch15( l3[j].P ) : 0;
-        emx.st[3] = 256;
+        emx.st[3] = v4 ? stretch15( l4[j].P ) : 0;
+        emx.st[4] = 256;
         emx.select( ((j*8 + alvl)*3 + pc)*8 + gA );
         int pr = emx.mix();
         int pa = eapm.pp( pr, ((j*8 + alvl)*3 + pc)*9 + qeW );
@@ -687,6 +702,7 @@ struct ImgModel {
         l1[j].Update( bit, y1, P0_EL_mw );
         l2[j].Update( bit, y2, P0_EL_mw );
         l3[j].Update( bit, y3, P0_EL_mw );
+        l4[j].Update( bit, y4, P0_EL_mw );
         if( bit == 0 ) break;
       }
       lvl = j;
@@ -702,8 +718,12 @@ struct ImgModel {
         int vp2 = nep[rp], yp = wrtab[vp2];
         if( vp2<63 ) nep[rp]++;
         pmx.st[0] = stretch15( q1.P );
+        uint p3h = (h9 ^ ((uint)(lvl*128 + (ctx&127)) * 0x9E3779B1u));
+        p3h ^= p3h >> 13;
+        Counter& q3 = ep3[ p3h & (EPSZ-1) ];
         pmx.st[1] = vp2 ? stretch15( q2.P ) : 0;
-        pmx.st[2] = 256;
+        pmx.st[2] = stretch15( q3.P );
+        pmx.st[3] = 256;
         pmx.select( ((b*8 + alvl)*3 + pc)*8 + gA );
         int pr = pmx.mix();
         uint p15 = uint(pr) << 3;
@@ -715,6 +735,7 @@ struct ImgModel {
         pmx.update( bit, P0_MX_LR );
         q1.Update( bit, P0_EP_wr, P0_EP_mw );
         q2.Update( bit, yp, P0_EP_mw );
+        q3.Update( bit, P0_EP_wr, P0_EP_mw );
         ctx += ctx + bit;
       }
       if( f_DEC ) { vv = ctx; code = vv - 1 + NLIT; }
