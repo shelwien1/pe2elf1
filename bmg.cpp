@@ -377,24 +377,43 @@ struct Codec {
     const byte* vp = im.v[p];
     const byte* v0 = (r0>=0) ? im.v[r0] : 0;
     const byte* v1 = (r1>=0) ? im.v[r1] : 0;
-    for( int y=0; y<H; y++ ) {
-      const byte* rp = vp + (qword)y*st;
-      const byte* q0 = v0 ? v0 + (qword)y*st : 0;
-      const byte* q1 = v1 ? v1 + (qword)y*st : 0;
-      for( int x=0; x<W; x++ ) {
-        int bl = dc;
-        if( q0 ) { int s = w0*q0[x]; if( q1 ) s += w1*q1[x]; bl += rsh(s,7); }
-        d0[x] = byte( (rp[x] - bl) & 255 );
-      }
-      for( int x=0; x<W; x++ ) {
-        int Wv = x ? d0[x-1] : (y ? d1[0] : 128);
-        int Nv = y ? d1[x]   : Wv;
-        int NWv = (x&&y) ? d1[x-1] : Nv;
-        hist[ ImgModel::zigzag( d0[x] - ImgModel::med(Wv,Nv,NWv) ) ]++;
-      }
-      byte* t = d1; d1 = d0; d0 = t;
+
+    // A large image is sampled in four contiguous bands rather than read whole:
+    // this runs a few hundred times per image and it is an estimate, so what it
+    // has to get right is the *ordering* of a few dozen candidates.  Contiguous
+    // bands rather than every n-th row, because the MED residual of a row needs
+    // the row above it to mean anything.
+    int nband = 1, bh = H;
+    if( (qword)W*H > 200000 ) {
+      nband = 4;
+      bh = (int)( 200000 / (4*(qword)W) );
+      if( bh < 8 ) bh = 8;
+      if( bh > H/4 ) bh = H/4;
     }
-    return estimate_cost( hist, 256, (qword)W*H );
+    qword n = 0;
+    for( int b=0; b<nband; b++ ) {
+      int y0 = (nband==1) ? 0 : b*(H/nband);
+      for( int yy=0; yy<bh && y0+yy<H; yy++ ) {
+        int y = y0+yy;
+        const byte* rp = vp + (qword)y*st;
+        const byte* q0 = v0 ? v0 + (qword)y*st : 0;
+        const byte* q1 = v1 ? v1 + (qword)y*st : 0;
+        for( int x=0; x<W; x++ ) {
+          int bl = dc;
+          if( q0 ) { int s = w0*q0[x]; if( q1 ) s += w1*q1[x]; bl += rsh(s,7); }
+          d0[x] = byte( (rp[x] - bl) & 255 );
+        }
+        for( int x=0; x<W; x++ ) {
+          int Wv = x ? d0[x-1] : (yy ? d1[0] : 128);
+          int Nv = yy ? d1[x]  : Wv;
+          int NWv = (x&&yy) ? d1[x-1] : Nv;
+          hist[ ImgModel::zigzag( d0[x] - ImgModel::med(Wv,Nv,NWv) ) ]++;
+        }
+        byte* t = d1; d1 = d0; d0 = t;
+        n += W;
+      }
+    }
+    return estimate_cost( hist, 256, n );
   }
 
   // DC that centres the transformed plane on 128, so the modulo-256 wrap of
