@@ -574,20 +574,21 @@ Corpus is `testfiles/`, the seven images from the BMF distribution that are
 
 | file | | input | bmg | bits/pixel |
 | --- | --- | ---: | ---: | ---: |
-| `t8g.bmp` | 320×240 grey | 77 878 | 45 196 | 4.71 |
-| `t8p.bmp` | 320×240 palette | 77 878 | 45 310 | 4.72 |
-| `t24.bmp` | 320×240 RGB | 230 454 | 55 282 | 5.76 |
-| `t32.bmp` | 320×240 RGBA | 307 254 | 55 317 | 5.76 |
-| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 150 235 | 0.27 |
-| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 574 643 | 1.02 |
-| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 350 229 | 4.97 |
-| **total** | | **7 114 966** | **1 276 212** | |
+| `t8g.bmp` | 320×240 grey | 77 878 | 44 912 | 4.68 |
+| `t8p.bmp` | 320×240 palette | 77 878 | 45 026 | 4.69 |
+| `t24.bmp` | 320×240 RGB | 230 454 | 53 718 | 5.60 |
+| `t32.bmp` | 320×240 RGBA | 307 254 | 53 760 | 5.60 |
+| `x_ai.bmp` | 2820×1600 grey RLE8 | 887 278 | 149 111 | 0.26 |
+| `x_ci.bmp` | 2820×1600 grey RLE8 | 3 278 170 | 569 528 | 1.01 |
+| `x_ep.bmp` | 705×800 RGBA | 2 256 054 | 339 560 | 4.82 |
+| **total** | | **7 114 966** | **1 255 615** | |
 
 For scale, the order-0 entropy of the MED residuals — which is what §6.3's
 `estimate_cost` measures and what a good non-adaptive coder would reach — is
 4.80 bpp on `t8g` and 17.69 bpp on `t24`. The colour transform accounts for most
-of the distance on `t24`; context mixing accounts for the rest and for all of it
-on the screenshots.
+of the distance on `t24`; the filter, the context mixing and the trial that
+chooses between them account for the rest, and for all of it on the
+screenshots.
 
 ### 8.1 against BMF
 
