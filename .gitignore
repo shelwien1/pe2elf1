@@ -2,6 +2,7 @@
 bmg
 bmg_opt
 bmgstat
+bmppal
 *.o
 *.exe
 

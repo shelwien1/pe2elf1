@@ -4,6 +4,7 @@ rem                      mapping object and opt.pl can hill-climb it.
 rem mk.cmd release    -- shipping build: Const 1.  Every knob is a literal the
 rem                      compiler folds; no mapping objects, no indirection.
 rem mk.cmd stat       -- build bmgstat, the image analysis tool.
+rem mk.cmd pal        -- build bmppal, the palette transform of PALETTE.md.
 rem mk.cmd check      -- prove the two builds produce identical streams.
 rem
 rem The Windows counterpart of mk.sh, and it has to stay in step with it: the
@@ -39,10 +40,11 @@ if defined MSVC (
 )
 
 if /i "%~1"=="stat"    goto :stat
+if /i "%~1"=="pal"     goto :pal
 if /i "%~1"=="release" goto :release
 if /i "%~1"=="check"   goto :check
 if /i "%~1"==""        goto :tuning
-echo mk.cmd: unknown target "%~1" -- try release, stat or check
+echo mk.cmd: unknown target "%~1" -- try release, stat, pal or check
 exit /b 1
 
 rem ------------------------------------------------------------------ tuning
@@ -85,6 +87,15 @@ rem so it is built on its own and never as a side effect of mk.cmd.
 %CXX% %STATFLAGS% bmgstat.cpp %OUTFLAG%bmgstat.exe
 if errorlevel 1 exit /b 1
 echo analysis tool: bmgstat testfiles\*.bmp
+exit /b 0
+
+rem --------------------------------------------------------------------- pal
+:pal
+rem The palette transform.  Borrows bmg_rc.inc and nothing else, so it needs no
+rem IDX and no MOD either.
+%CXX% %STATFLAGS% bmppal.cpp %OUTFLAG%bmppal.exe
+if errorlevel 1 exit /b 1
+echo palette tool: bmppal c in.bmp idx.bmp idx.pal
 exit /b 0
 
 rem ------------------------------------------------------------------- check

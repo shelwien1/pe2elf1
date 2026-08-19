@@ -5,7 +5,7 @@ plane of indices into that list. This document is about whether that is a good
 idea, when, and how each of its three parts should be built.
 
 It is a companion to `BMG-FORMAT.md`, and every number in it was measured on the
-seven corpus files with `bmg` itself, not estimated. Section 11 says exactly how.
+seven corpus files with `bmg` itself, not estimated. Section 12 says exactly how.
 
 Four independent write-ups of the same idea were reviewed against these
 measurements. Where they proposed something testable it was tested; §10 lists
@@ -1080,7 +1080,119 @@ and §6.1 measures it properly at 44% rather than 4%.
 
 ---
 
-## 11. How this was measured
+## 11. bmppal: the tool
+
+`bmppal.cpp` is this document as a program. It performs the split of §1 and
+nothing else — it does not compress the index image, because that is the coder's
+job and the separation is the whole point.
+
+```sh
+./mk.sh pal
+bmppal c input.bmp out.bmp out.pal [out.frq]
+bmppal d out.bmp out.pal [out.frq] restored.bmp
+```
+
+| | |
+| --- | --- |
+| `out.bmp` | the index image, as a plain BMP: 8bpp with a grey ramp while the palette fits in a byte, 24 or 32bpp packed little-endian above that. A ramp of exactly `K` monotone entries, which is what makes `bmg` take its index path (`BMG-FORMAT.md` §3.1) rather than expanding to colour planes. |
+| `out.pal` | the palette, the ordering, and the container record. Range coded with `bmg_rc.inc`. Carries the occurrence table too unless `out.frq` is named. |
+| `out.frq` | the occurrence table, uncompressed: one little-endian `uint32` per palette entry, in index order. |
+
+**`bmppal d` reproduces the input byte for byte**, not merely pixel for pixel:
+header, palette table, row padding, RLE run structure, gaps and trailing bytes.
+That contract is what the container record in `out.pal` is for, and it is what
+makes the tool comparable with `bmg` rather than with a pixel dumper.
+
+Which of this document it implements:
+
+| | |
+| --- | --- |
+| §2.1, §2.5 | the palette goes out as a set, ascending, delta-coded on the packed integer — no colour transform, no space-filling sort, because those measured worse |
+| §3 | the counts go in `out.pal` coded, or in `out.frq` raw; the report says what they cost so the choice is informed |
+| §4 | the canonical order is free; anything else costs what it costs |
+| §5.3 | the search objective is `L1`, the adjacency-weighted sum of rank differences, over a co-occurrence table built once |
+| §5.4 | integer sort keys with a total tie-break on the packed value — verified below to give byte-identical streams on Linux and Windows |
+| §6.2 | palettes of eight or fewer are ordered by exhaustive permutation search, and the permutation is transmitted |
+
+A paletted input is handled without decoding it: the symbol is the **stored index
+byte**, not the colour, so two palette slots holding the same colour stay two
+symbols and the file's own bytes come back. For an RLE8 input that means the run
+structure is never touched — only the value bytes inside it are remapped — so
+`out.bmp` is still RLE8 and still byte-exactly reversible.
+
+### 11.1 what it does to the corpus
+
+`out.bmp` compressed with `bmg`, plus `out.pal`, against `bmg` on the original.
+Every row round-trips through the whole pipeline — `bmppal c`, `bmg c`, `bmg d`,
+`bmppal d` — back to the input byte for byte:
+
+| file | `bmg` on the original | `bmg` on `out.bmp` | `out.pal` | total | |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `x_ci` | 569 528 | 567 716 | 70 | **567 786** | **−0.31%** |
+| `x_ai` | 149 111 | 148 699 | 87 | **148 786** | **−0.22%** |
+| `t8p` | 45 026 | 44 912 | 386 | 45 298 | +0.60% |
+| `t8g` | 44 912 | 44 912 | 328 | 45 240 | +0.73% |
+| `x_ep` | 339 560 | 534 379 | 36 568 | 570 947 | +68% |
+| `t24` | 53 718 | 133 920 | 85 281 | 219 201 | +308% |
+| `t32` | 53 760 | 66 853 | 170 862 | 237 715 | +342% |
+
+The verdict is §8's, arrived at independently: **it wins on the two files with
+tiny palettes and loses on everything else**, and the losses on the last three
+match §6.7's proxy prediction of 1.9× / 3.7× / 3.2× at 1.7× / 4.1× / 4.4×.
+
+The ordering search behaves as §6 said it would. On `x_ai` and `x_ci` it takes
+the exhaustive permutation, improving `L1` by 28% and 27% and the real output by
+0.22% and 0.31% — which is also a reminder that the surrogate is directional and
+not proportional. On `t8p` it tries 2 017 integer weight vectors and confirms the
+packed order, exactly as §6.1's spherical search did. On the large-`K` files it
+does not search at all, by design.
+
+### 11.2 the container cost, which §6.5 left out
+
+`t8g` and `t8p` are the interesting failures, and they correct this document.
+
+§6.5 estimated that palettizing `t8p` would **gain** 70–86 bytes. The tool
+**loses 272**. The estimate priced the colour set at 23–39 bytes (§2.2) and
+stopped there. Two things it did not price:
+
+* **the file's own palette table.** `t8p` stores 1 024 bytes of colour table that
+  a byte-exact transform must reproduce. Coded inline by `bmg` it is nearly free,
+  because the surrounding model has context for it; coded in a separate `.pal`
+  stream with nothing around it, it costs about 58 bytes. Splitting a file into
+  independent streams costs whatever the streams could have told each other.
+* **the occurrence table.** The tool always carries it, because that is what it
+  is for. On `t8g` it is **278 of the 328 bytes** — five times the rest of the
+  palette put together. Nothing in the restore needs it.
+
+So the corrected figure for "palettize an already-paletted file": the index
+coding wins 114 bytes on `t8p`, the palette table costs about 58, and the
+occurrence table costs 278 more if you keep it. Take the counts away and the
+split is roughly break-even; keep them and it loses. §6.5's number was the
+pixels; this is the file.
+
+### 11.3 verification
+
+* Round-trip on the seven corpus files and twelve synthetic edge cases — 1×1,
+  single-colour, top-down, `BI_BITFIELDS`, a gap before the pixels, trailing
+  bytes, non-zero row padding, a palette with a duplicated colour and junk in the
+  unused slots, `K = 1`, RLE8 with EOL/delta/absolute runs, and a `K` large
+  enough to force the 24-bit index path — with and without `out.frq`, all byte
+  exact.
+* Clean under ASan and UBSan on all of the above.
+* Fuzzed both directions: mutated bitmaps into `c`, where every file accepted has
+  to round-trip exactly, and corrupted `out.bmp`/`out.pal`/`out.frq` into `d`,
+  where nothing may crash. The fuzz found two real defects — a corrupt `.pal`
+  could index the palette out of bounds, and a malformed input whose pixel bytes
+  point past its own palette was accepted by the encoder and then refused by the
+  decoder. Both are fixed; the second is now refused up front.
+* Cross-built with MinGW-w64 and run under Wine: `out.bmp`, `out.pal` and
+  `out.frq` are **byte-identical** to the Linux build's on every test file, and
+  each platform restores the other's output exactly. That is §5.4 earning its
+  keep — a floating-point sort key would have made this fail on the first tie.
+
+---
+
+## 12. How this was measured
 
 `bmg` at commit-time, release build, on the seven corpus files. Everything here
 is reproducible — the scripts are in `palexp/` and need only numpy:

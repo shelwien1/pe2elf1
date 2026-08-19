@@ -21,6 +21,7 @@ bmg d input.bmg output.bmp      expand
 ./mk.sh release        # shipping build: every IDX knob is a folded literal
 ./mk.sh check          # prove the two produce identical streams
 ./mk.sh stat           # build bmgstat, the analysis tool
+./mk.sh pal            # build bmppal, the palette transform
 ```
 
 Needs a C++11 compiler and, to regenerate `MOD/` from `IDX/`, perl. `MOD/` is
@@ -186,6 +187,14 @@ context models, the residual coder, and — the part worth reading first — the
 three things that were built from `ALGORITHM_v2.md`, measured, and then removed
 because they did not pay.
 
+`bmppal` is that study as a program — `PALETTE.md` §11:
+
+```sh
+./mk.sh pal
+bmppal c input.bmp out.bmp out.pal [out.frq]   # split into index image + palette
+bmppal d out.bmp out.pal [out.frq] input.bmp   # and back, byte for byte
+```
+
 `PALETTE.md` is a study of one thing `bmg` does *not* do: build a palette of
 every distinct pixel and code the image as a plane of indices into it. How to
 code the palette and the counts, how to order it — worth 44% of the compressed
@@ -240,6 +249,7 @@ and `BMG-FORMAT.md` §7 for what each knob does.
 | `IDX/`, `MOD/` | parameter declarations and their generated headers |
 | `IDX-FORMAT.md` | the IDX parameter system, as it came with `bcdr5` |
 | `bmgstat.cpp` | the image analysis tool, standalone |
+| `bmppal.cpp` | the palette transform of `PALETTE.md`, standalone |
 | `PALETTE.md` | whether to code whole pixels as palette indices, measured |
 | `palexp/` | the measurements behind `PALETTE.md`, in Python |
 | `mk.sh`, `t.sh` | build and test |

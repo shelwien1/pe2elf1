@@ -5,6 +5,8 @@
 #                     compiler folds; no mapping objects, no indirection.
 # mk.sh stat       -- build bmgstat, the image analysis tool.  Independent of
 #                     the coder and of IDX; see README "Analysing an image".
+# mk.sh pal        -- build bmppal, the palette transform of PALETTE.md.  Uses
+#                     the range coder and nothing else from the coder.
 #
 # Both builds must produce byte-identical streams -- that is the contract, and
 # ./mk.sh check is the test.  See IDX-FORMAT.md sections 1 and 12.
@@ -29,6 +31,12 @@ stat)
   # so it is built on its own and never as a side effect of ./mk.sh.
   $CXX $OPT $STD -Wall -Wextra -Wno-unused-parameter bmgstat.cpp -o bmgstat -lm
   echo "analysis tool: ./bmgstat testfiles/*.bmp"
+  ;;
+pal)
+  # The palette transform.  It borrows bmg_rc.inc and nothing else, so it needs
+  # no IDX and no MOD either.
+  $CXX $OPT $STD -Wall -Wextra -Wno-unused-parameter bmppal.cpp -o bmppal
+  echo "palette tool: ./bmppal c in.bmp idx.bmp idx.pal"
   ;;
 release)
   # Derive the shipping source from the tuning source with one substitution, so
