@@ -328,6 +328,21 @@ struct AltP2Block {
   // accesses are in bounds now.  CONTEXT-INDEX.md section 1.
   int16_t nb_id[1920];
   P2Count p2_ctr[163840];
+
+  // Counter `ctx` of bank `k`.  Five banks of 32768, so the bank is a digit at
+  // that stride and the context is the fifteen bits under it -- which is a
+  // width the construction proves rather than one asserted here: a bank context
+  // sets no bit above 25 and is then shifted down by 11.
+  //
+  // Nine sites indexed this array and they did it two ways.  `alt_p2_model`
+  // wrote `32768*bank + bctx` in a loop over the five; `alt_p2_context` walks
+  // them straight through and wrote the stride out as five literals -- `bank1 +
+  // 32768`, `bank2 + 65536`, `bank3 + 98304`, `bank4 + 131072` -- so which bank
+  // a line touches had to be recovered by dividing.  They are the same index
+  // and now say so.
+  static uint32_t slot(int32_t bank, int32_t ctx) {
+    return CtxIdx{}.bits<0, 15>(ctx).digit<32768, 5>(bank);
+  }
   P2Freq freq[15552];
   uint8_t _pad3[8];
   // Defined out of line, in alt_p2_context.inc and alt_p2_model.inc.  They are
@@ -703,17 +718,22 @@ struct AltP2Block {
     // `nb_ctx` walk three lines below does the same thing in a `for` with
     // neither, and this is that shape.
     for( uint32_t pair = 0; pair<0x82; ++pair ) {
-      // The plane at bit 8 and the run level as a four-bit field at 4.  The
-      // level is bounded by its own table -- `p2_ctx_edges` has sixteen
+      // The plane from bit 8 up and the run level as a four-bit field at 4.
+      // The level is bounded by its own table -- `p2_ctx_edges` has sixteen
       // entries and `lvl` indexes it -- so the width is a fact rather than a
-      // guess.  The plane stays a `raw`: `plane_count` is
+      // guess, and `bits<4, 4>` states it.
+      //
+      // The plane is `above<8>` and not `bits<8, 2>`, which is the distinction
+      // those two methods exist to draw.  `plane_count` is
       // `((depth & 0x3F) + 7) >> 3`, which is two bits only because the header
-      // check rejects depths above 32, and a mask that rests on a check
-      // somewhere else is the shape that moved three streams when `gA` was
-      // written as `bits<6, 2>`.
-      ctx_delta[2*pair] = CtxIdx{}.raw(plane_idx<<8).bits<4, 4>(lvl);
+      // check rejects depths above 32 -- a width that rests on a test in
+      // another file is not a width to assert here, and a mask that turns out
+      // too narrow drops the top of the value silently.  That is what moved
+      // three streams when `gA` was written as `bits<6, 2>`.  `above<8>` says
+      // where the fields below it end and claims nothing else.
+      ctx_delta[2*pair] = CtxIdx{}.above<8>(plane_idx).bits<4, 4>(lvl);
       const int32_t lvl1 = (2*pair==p2_ctx_edges[lvl])+lvl;
-      ctx_delta[2*pair+1] = CtxIdx{}.raw(plane_idx<<8).bits<4, 4>(lvl1);
+      ctx_delta[2*pair+1] = CtxIdx{}.above<8>(plane_idx).bits<4, 4>(lvl1);
       lvl = (2*pair+1==p2_ctx_edges[lvl1])+lvl1;
     }
     int32_t len = 0;

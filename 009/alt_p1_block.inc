@@ -315,7 +315,26 @@ struct AltP1Block {
     ctx_w[7].sel = h7+g7;
     int32_t s8 = !is_neg+(!is_neg&&!is_zero);
     ctx_w[8].sel = s8;
-    int32_t result = ctx_w[0].w[s0]+ctx_w[1].w[s1]+ctx_w[2].w[s2]+ctx_w[3].w[s3]+ctx_w[4].w[s4]+ctx_w[5].w[s5]+ctx_w[6].w[s6]+ctx_w[7].w[s7]+ctx_w[8].w[s8]+16*quiet+8*(ctx[3+ctx[2]]==0)+act_lvl;
+    // The activity level in the low three bits, two flatness flags over it, and
+    // the nine ternary features above bit 5.
+    //
+    // `act_lvl` is `level_of[]`, which `alt_p1_alloc` fills by walking the
+    // seven edges of `p1_level_edges` -- so eight levels, three bits, and the
+    // width is a fact about that table rather than a guess.  `quiet` is a
+    // comparison at all three of the places that set it, and the other flag is
+    // the one bit that survives the two activity sums of `seed_activity`.
+    //
+    // The nine weights stay a sum and cannot be anything else: `CtxWeight::w`
+    // holds each feature's three values *pre-scaled* to `32 * 3^k`, so the
+    // stride lives in the table and what is written here is nine lookups added.
+    // That is a mixed-radix number whose digits were multiplied out at set-up,
+    // which `digit<>` cannot say and `raw` can.
+    int32_t result = CtxIdx{}.bits<0, 3>(act_lvl)
+                             .bit<3>(ctx[3+ctx[2]]==0)
+                             .bit<4>(quiet)
+                             .raw(ctx_w[0].w[s0]+ctx_w[1].w[s1]+ctx_w[2].w[s2]
+                                 +ctx_w[3].w[s3]+ctx_w[4].w[s4]+ctx_w[5].w[s5]
+                                 +ctx_w[6].w[s6]+ctx_w[7].w[s7]+ctx_w[8].w[s8]);
     ctx[0] = result;
     return result;
   }
@@ -447,7 +466,13 @@ struct AltP1Block {
     // `ctx_w[1].sel` and `ctx_w[2].sel` were read into `sel1_top`/`sel2_top`
     // eight lines above this sum, which made two of its nine terms look unlike
     // the other seven.  Nothing between the read and the use touches `ctx_w`.
-    uint32_t ctx_alt = ctx[0]&0x1F;
+    // The alternate context: the low five bits of the live one -- the activity
+    // level and the two flatness flags of `ctx_of`, kept -- with all nine
+    // features read the other way round above them.  `&0x1F` is that field, and
+    // saying so is what makes the boundary between "kept" and "mirrored"
+    // visible; `AltP2Block` builds its own the same way over five features and
+    // six bits.
+    uint32_t ctx_alt = CtxIdx{}.bits<0, 5>(ctx[0]);
     for( int32_t k = 8; k>=1; --k )
       ctx_alt += ctx_w[k].w[2-ctx_w[k].sel];
     ctx_alt += ctx_w[0].w[1];
@@ -513,16 +538,33 @@ struct AltP1Block {
     int32_t lvl = 0;
     int32_t grp = 0;
     int32_t k = 0;
-    int32_t plane_hi = plane<<8;
+    // `group_of` and `slot_of` are the two halves of the strip index `ctx[1]`,
+    // and they are built to sit beside each other without overlapping:
+    //
+    //   bits 0..2   the activity group, 0..7 -- `p1_group_edges` has seven
+    //               live entries, so eight groups
+    //   bits 3..5   the predicted-value slot, the same shape over
+    //               `p1_slot_edges`, which is why `slot_of` holds `8 * slot`
+    //   bit  6      whether the escaping node's slot holds over half its mass
+    //   bit  7      the escape's parity
+    //   bits 8+     the plane
+    //
+    // The two coding sites supply bits 6 and 7; these two loops supply the
+    // rest.  Bits 3..5 being the slot is what `key & 0x38` reads in
+    // `update_model`, and why the `key +- 8` there steps that field by one.
+    //
+    // The plane was hoisted into `plane_hi = plane << 8` and then written
+    // `plane_hi | grp` on one line and `grp1 | plane_hi` on the next -- the
+    // same value, twice, in two orders.
     do {
       level_of[2*k] = lvl;
       int32_t lvl1 = (2*k==p1_level_edges[lvl])+lvl;
-      group_of[2*k] = plane_hi|grp;
+      group_of[2*k] = CtxIdx{}.above<8>(plane).bits<0, 3>(grp);
       level_of[2*k+1] = lvl1;
       int32_t odd = 2*k+1;
       int32_t grp1 = (2*k==p1_group_edges[grp])+grp;
       lvl = (odd==p1_level_edges[lvl1])+lvl1;
-      group_of[2*k+1] = grp1|plane_hi;
+      group_of[2*k+1] = CtxIdx{}.above<8>(plane).bits<0, 3>(grp1);
       grp = (odd==p1_group_edges[grp1])+grp1;
       ++k;
     } while( (uint32_t)k<0x100 );
@@ -532,9 +574,9 @@ struct AltP1Block {
     // `bump` the next line adds.
     int32_t slot = 0;
     for( uint32_t pair = 0; pair<0x80; ++pair ) {
-      slot_of[2*pair] = 8*slot;
+      slot_of[2*pair] = CtxIdx{}.above<3>(slot);
       const int32_t slot1 = (2*pair==p1_slot_edges[slot])+slot;
-      slot_of[2*pair+1] = 8*slot1;
+      slot_of[2*pair+1] = CtxIdx{}.above<3>(slot1);
       slot = (2*pair+1==p1_slot_edges[slot1])+slot1;
     }
     // The nine weights `alt_p1_context` sums, one per selector.  This was

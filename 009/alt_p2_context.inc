@@ -310,7 +310,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   }
   int32_t bank0 = ctx0>>11;
   bank_ctx[0] = bank0;
-  int32_t pred0 = p2_pred(p2_ctr[bank0].weighted, p2_ctr[bank0].rate);
+  int32_t pred0 = p2_pred(p2_ctr[slot(0, bank0)].weighted, p2_ctr[slot(0, bank0)].rate);
   int32_t sum_c = sum_all;
   P2Ctx *cx4 = cursor[4];
   nb_sum[1] = pred0;
@@ -386,8 +386,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   }
   int32_t bank1 = ctx1>>11;
   bank_ctx[1] = bank1;
-  int8_t rate1 = p2_ctr[bank1+32768].rate;
-  int32_t w1c = p2_ctr[bank1+32768].weighted;
+  int8_t rate1 = p2_ctr[slot(1, bank1)].rate;
+  int32_t w1c = p2_ctr[slot(1, bank1)].weighted;
   int32_t one1 = 1<<((rate1+31)&31);
   pred1 = (one1+w1c)>>(rate1&31);
   run1 = pred1+run0;
@@ -429,7 +429,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   }
   int32_t bank2 = ctx2>>11;
   bank_ctx[2] = bank2;
-  int32_t pred2 = p2_pred(p2_ctr[bank2+65536].weighted, p2_ctr[bank2+65536].rate);
+  int32_t pred2 = p2_pred(p2_ctr[slot(2, bank2)].weighted, p2_ctr[slot(2, bank2)].rate);
   nb_sum[5] = pred2;
   run2 = pred2+run1;
   nb_sum[4] = run2;
@@ -452,8 +452,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .bit_of<15>(run2-cx0[-3].val)
                     .raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9)))>>11;
   bank_ctx[3] = bank3;
-  int32_t w3c = p2_ctr[bank3+98304].weighted;
-  int32_t pred3 = p2_pred(w3c, p2_ctr[bank3+98304].rate);
+  int32_t w3c = p2_ctr[slot(3, bank3)].weighted;
+  int32_t pred3 = p2_pred(w3c, p2_ctr[slot(3, bank3)].rate);
   nb_sum[7] = pred3;
   run3 = pred3+run2;
   run = run3;
@@ -474,7 +474,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .bit_of<15>((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)
                     .raw((ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10))))>>11;
   bank_ctx[4] = bank4;
-  int32_t pred4 = p2_pred(p2_ctr[bank4+131072].weighted, p2_ctr[bank4+131072].rate);
+  int32_t pred4 = p2_pred(p2_ctr[slot(4, bank4)].weighted, p2_ctr[slot(4, bank4)].rate);
   uint8_t* cx2p = (uint8_t*)cx2;
   nb_sum[9] = pred4;
   int32_t run4 = run+pred4;
@@ -550,13 +550,22 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ctx_idx = 255;
   if( ctx_idx<0 )
     ctx_idx = 0;
-  ctx_pair[0] = ctx_delta[ctx_idx+4]+ctx15;
-  ctx_pair[1] = ctx15+ctx_delta[ctx_idx];
-  // Two flatness bits at 5 and 4 over the base context, with the five
-  // weight-table contributions added on top.  Those five are values
-  // rather than fields -- each is a table entry, not a bit -- so they
-  // stay a sum and only the two bits become bits.
-  ctx = CtxIdx{}.bit<5>(flat_b==0).bit<4>(flat_a==0).raw(ctx15)
+  // The magnitude context in the low nibble, under a `ctx_delta` entry that
+  // occupies bits 4 and up -- the run level as `bits<4, 4>` and the plane
+  // `above<8>`, built once in `alt_p2_alloc`.  `ctx15` is `nb_ctx[]`, whose
+  // values run 0..15 because `p2_len_edges` has fifteen live entries, so the
+  // nibble is exactly the room the entry leaves and the two cannot overlap.
+  //
+  // The pair is the same index four `ctx_idx` apart, which is one step of the
+  // level field.
+  ctx_pair[0] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx+4]);
+  ctx_pair[1] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx]);
+  // The magnitude context in the low nibble, two flatness bits at 4 and 5 over
+  // it, and the five weight-table contributions added on top.  Those five are
+  // values rather than fields -- each is a table entry pre-scaled the way
+  // `AltP1Block`'s nine are -- so they stay a sum and only the rest becomes
+  // fields.
+  ctx = CtxIdx{}.bits<0, 4>(ctx15).bit<4>(flat_a==0).bit<5>(flat_b==0)
         +ctx_w[4].w[ctx_w[4].sel]+ctx_w[3].w[ctx_w[3].sel]
         +ctx_w[2].w[ctx_w[2].sel]+ctx_w[1].w[ctx_w[1].sel]
         +ctx_w[0].w[ctx_w[0].sel];

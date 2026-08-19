@@ -159,6 +159,33 @@ struct ModelBlock {
   uint8_t ctx_state[64];
   uint8_t ctx_bucket[375];
   uint8_t _pad25[1];
+
+  // Which bucket a (group, last rank, previous rank) triple names.  Three
+  // digits of a mixed-radix number: fifteen context groups, and five values
+  // each for the two ranks, because `Neighbours::rank` answers 1..4 for the
+  // four neighbours and 0 for anything else.  15 * 5 * 5 = 375, which is the
+  // size of the array above -- so the radices are not a description of this
+  // index, they are what makes it fit.
+  //
+  // One place, because there are three sites: the two seeding walks and the
+  // read in `context_ids`.  Written inline the two walks became identical for
+  // three more lines than they had been and `dupblock.py` went 39 -> 42; a
+  // helper is shorter than the chain it replaces, so the ratchet went back to
+  // 39 and the 15/5/5 fact stopped being written twice.
+  static uint32_t bucket_slot(int32_t group, int32_t last, int32_t prev) {
+    return CtxIdx{}.digit<1, 15>(group).digit<15, 5>(last).digit<75, 5>(prev);
+  }
+
+  // Seat `bucket` at that slot and hand back its frequency record.  Both
+  // seeding walks open their innermost loop with these two lines and diverge on
+  // the next one -- one sets the five weights out, the other loops over four of
+  // them -- so this is the whole of what they share and it is worth exactly
+  // what it removes.
+  FreqRec* seat_bucket(int32_t group, int32_t last, int32_t prev,
+                       int32_t bucket) {
+    ctx_bucket[bucket_slot(group, last, prev)] = (uint8_t)bucket;
+    return &grid[bucket];
+  }
   uint8_t* run_bucket;
   uint8_t* alpha_map;
   uint8_t grad[4];
@@ -209,7 +236,7 @@ struct ModelBlock {
                                .bit<0>(sym_in_top((sel0[mode_symbol[3]].ent), 6, result));
     int32_t ctx2 = fallback+ctx1;
     if( pos<=14||(ctx2&0xB)!=0 ) {
-      ctr_node = CtxIdx{}.raw(pos<<7).raw(ctx2);
+      ctr_node = CtxIdx{}.above<7>(pos).raw(ctx2);
       ctr_fallback = CtxIdx{}.bit<3>(pos>9).raw(fallback);
     } else {
       ctr_fallback = fallback;
@@ -500,7 +527,7 @@ struct ModelBlock {
                 .bit<5>(grad[1]==0).bit<4>(grad[0]==0)
                 .bit<9>(up9->match[0]&r8->match[0]&up_m0&r7->match[0])
                 .bit<8>(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1])
-                .raw(bucket_at<<10).raw(nb2);
+                .above<10>(bucket_at).raw(nb2);
     // Both coders reloaded three things on the intern miss -- the row-6
     // cursor into a second name, the row-5 cursor, and `up_m0` -- and all
     // three are re-reads of values the intern cannot have moved: `ctx_id1` is
@@ -511,7 +538,7 @@ struct ModelBlock {
     int32_t id1;
     intern_ctx(ctx_id1, sig1, ctx_id1_used, id1);
     const uint32_t sig2 = CtxIdx{}.bit<2>(cur6[1].match[3]).bit<1>(up_m0)
-                                  .bit<0>(row[-1].match[5]).raw(8*id1);
+                                  .bit<0>(row[-1].match[5]).above<3>(id1);
     int32_t id2;
     intern_ctx(ctx_id2, sig2, ctx_id2_used, id2);
     return id2;
@@ -638,7 +665,10 @@ struct ModelBlock {
     nb4 = rank_neighbours();
     const int32_t nb = match_context(nb4, up, west);
     const int32_t key = pair_key(nb4, west);
-    sym_cache = &sym_ctr[8*key];
+    // The key's row of the eight-entry cache: the key from bit 3 up, and the
+    // three bits under it are the slot within the row that `sym_cache[0..7]`
+    // then walks.
+    sym_cache = &sym_ctr[CtxIdx{}.above<3>(key)];
     const int32_t state = ctx_state[nb];
     ctx_state_seen = state;
     SymPair*const pair = &group_ctr[state][key];
@@ -657,7 +687,7 @@ struct ModelBlock {
       // merges those sixteen contexts into one rather than allocating past the
       // table.
       int32_t id3_used = ctx_id3_used;
-      int32_t sig3 = CtxIdx{}.bits<0, 4>(nb4.left).raw(16*id2);
+      int32_t sig3 = CtxIdx{}.bits<0, 4>(nb4.left).above<4>(id2);
       uint16_t* id3p = &ctx_id3[sig3];
       id2 = *id3p;
       if( id2==0xFFFF ) {
@@ -931,9 +961,8 @@ struct ModelBlock {
       do {
         uint32_t hi = 0;
         do {
-          ctx_bucket[g+15*lo+75*hi] = bucket;
+          FreqRec* rec = seat_bucket(g, lo, hi, bucket);
           int32_t alpha = alphabet;
-          FreqRec* rec = &grid[bucket];
           w2n = 2;
           rec->w[0] = 2;
           w2 = 2;
@@ -1067,9 +1096,8 @@ struct ModelBlock {
         lo1 = lo;
         int32_t k = 0;
         do {
-          ctx_bucket[g+15*lo+75*k] = g1;
+          FreqRec *rec = seat_bucket(g, lo, k, g1);
           int32_t m5 = alphabet;
-          FreqRec *rec = &grid[g1];
           for( int32_t n = 0; n<4; ++n ) rec->w[1+n] = 2;
           if( fold.w3_double ) {
             w2 = (uint16_t)(rec->w[4]+rec->w[3]);
@@ -1257,7 +1285,8 @@ struct ModelBlock {
     int32_t seen = 0;
     do {
       if( (mask|seen)<cap ) {
-        BitCtr *ctr = &run_ctr[16*((seen==0)+(bucket==top))+bucket];
+        BitCtr *ctr = &run_ctr[CtxIdx{}.bits<0, 4>(bucket)
+                                .digit<16, 3>((seen==0)+(bucket==top))];
         const uint32_t bin_tot = ctr->n[0]+ctr->n[1];
         int32_t run_bit;
         if( f_DEC ) {
@@ -1336,7 +1365,7 @@ struct ModelBlock {
         // Four fields and a plus-one: the bucket from bit 3 up, then
         // three bits of neighbour agreement.  The `+1` is an offset
         // into `esc_ctr` and not a field, which is why it is a `raw`.
-        int32_t esc_at = CtxIdx{}.raw(8*bucket)
+        int32_t esc_at = CtxIdx{}.above<3>(bucket)
                                  .bit<2>(up2[run+3].match[1]&up2[run+2].match[1])
                                  .bit<1>(m_up0)
                                  .bit<0>(alpha_map[nb4.up])
@@ -1474,7 +1503,7 @@ struct ModelBlock {
       int32_t run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
       const int32_t bucket = run_bucket[run_len];
       amap = CtxIdx{}.bit<2>(run_pair).bit<1>(m_up0)
-                     .raw(8*bucket).raw(alpha_map[nb4.up]);
+                     .above<3>(bucket).bit<0>(alpha_map[nb4.up]);
       runlen = 0;
       if( rowp->sym==nb4.up ) {
         do

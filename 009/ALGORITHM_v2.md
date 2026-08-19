@@ -1440,11 +1440,26 @@ are exact inverses. Then two stages:
 2. Slots 5 and 6 **escape into a binary tree**. `code_symbol_tree` walks
    `level_geom[]` coding one bit per level through `FreqPair` counters, with the
    level chosen by `model_geometry[code]`, which is what makes a large residual
-   cost logarithmically. The strip index is the three fields of §5.3 — the
-   escape's parity at bit 7, `escape_high` at bit 6, `ctx[1]` under both — so
-   the parity and the half-mass bit pick one of four strips and the activity
-   group and predicted value pick the place in it. The two `update_binary_pair`
-   calls beside it use the same index ±8, training the neighbouring contexts.
+   cost logarithmically. The strip index is five fields, and they come from
+   three different places:
+
+```
+bits 0..2   activity group      group_of[], eight groups over p1_group_edges
+bits 3..5   predicted-value slot slot_of[], eight over p1_slot_edges
+bit  6      escape_high          does the escaping slot hold over half the node
+bit  7      escape parity        slot & 1
+bits 8..    the plane            group_of[]'s high byte
+```
+
+   The two lower fields are baked into `group_of[]` and `slot_of[]` when the
+   plane's tables are built, and `ctx[1]` is their sum — which is why one plane's
+   statistics cannot reach another's even though all four share one array.
+
+   The two `update_binary_pair` calls beside the coding one use the same index
+   **±8**, and 8 is one step of the *slot* field. So a coded escape trains the
+   strips for the two neighbouring predicted-value bands, not for arbitrary
+   contexts. The guard on those calls reads `key & 0x38`, which is that field
+   exactly: bits 3…5, checked for room before stepping.
 
 ### 9.4 the update, which is where the model earns its keep
 

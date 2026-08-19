@@ -96,6 +96,34 @@ struct CtxIdx {
     return *this;
   }
 
+  // `v` from bit `Pos` up, with no claim about how wide it is.
+  //
+  // The high end of an index, where `bits<Pos, W>` would be a lie and `raw` is
+  // silence.  `sig1`'s bucket, `sig2`'s and `sig3`'s interned ids, the run
+  // bucket in both escape contexts, the ladder position and the plane: seven
+  // terms, each of which is a value that has to clear the fields under it and
+  // whose own range is bounded by a table size somewhere else, not by anything
+  // visible at the index.
+  //
+  // They were `raw(8*id1)`, `raw(16*id2)`, `raw(bucket_at<<10)`, `raw(pos<<7)`
+  // -- the multiply-for-a-shift this whole struct was written to get rid of.
+  // `raw` says "some number, added"; `above<3>` says "everything below bit 3
+  // belongs to the fields you just read".  That is the fact a reader of an
+  // index wants, and the one thing `8*` makes them work out by hand.
+  //
+  // Deliberately not masked.  A `bits<Pos, W>` here would quietly drop the top
+  // of an id that outgrew `W`, which is the failure mode that moved three
+  // streams when `gA` was written as a two-bit field; this cannot silently
+  // truncate because it does not claim a width at all.  What it costs is that
+  // an overlap with the fields below is not caught -- but those fields are
+  // `bit<>` and `bits<>` and countable, which is the whole point of writing the
+  // index this way.
+  template<int32_t Pos>
+  constexpr CtxIdx&above(uint32_t v) {
+    val += v<<Pos;
+    return *this;
+  }
+
   // A term that is neither a bit field nor a bounded digit -- an index already
   // built, or one whose range the code cannot state.
   constexpr CtxIdx&raw(uint32_t v) {

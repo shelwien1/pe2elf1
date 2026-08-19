@@ -350,9 +350,70 @@ def audit(path, src):
     for line, bit, inner in tight:
         print('%s:%d  bit_of<%d> is provably a sign; bit<%d>(… < 0) would say so'
               % (path, line, bit, bit))
-    print('%d unfounded sign claims, %d positional terms that are provable'
-          % (len(bad), len(tight)))
-    return 1 if bad else 0
+    left = unbuilt(path, src)
+    print('%d unfounded sign claims, %d positional terms that are provable, '
+          '%d context indices still built by multiply'
+          % (len(bad), len(tight), len(left)))
+    return 1 if bad or left else 0
+
+
+# The tables a model context indexes.  A subscript into one of these is an
+# index into a context space, which is what this file is about; a subscript into
+# a row buffer or a pixel array is not.
+TABLES = ('counters', 'p2_ctr', 'esc_ctr', 'bit_node', 'bit_root', 'run_ctr',
+          'sym_ctr', 'group_ctr', 'nb_id', 'ctx_bucket', 'grid', 'ctx_id1',
+          'ctx_id2', 'ctx_id3', 'ctx_delta', 'nb_ctx', 'nb_weights')
+INDEXED = re.compile(r'\b(?:%s)\[([^]]*)\]|\bmodel_strip\(' % '|'.join(TABLES))
+# Scaling inside a subscript: a multiply by a constant, or a shift.  A `+ 1` or
+# a `- 8` is an offset to a neighbouring context and not a field, and `2*k` in a
+# fill loop is a pair index, so those are not this.
+SCALED = re.compile(r'(?<![\w.])\d+\s*\*|<<\s*\d+|\*\s*\d+(?![\w.])')
+# `t[2*n]` and `t[2*n+1]`: a fill loop writing two entries a turn, which is a
+# pair index and not a packed field.  Four of these -- in `model_workspace`'s
+# `sym_ctr` clear and `alt_p2_block`'s `nb_ctx` walk -- were the whole of what
+# the first version of this rule found, and reporting them would have taught a
+# reader to skim the list.  Matched as the *entire* subscript, so a `2*x` that
+# is one term of a larger index is still caught.
+PAIR_LOOP = re.compile(r'^\s*2\s*\*\s*\w+\s*(?:\+\s*1\s*)?$')
+
+
+def unbuilt(path, src):
+    """Context indices that are still arithmetic rather than a `CtxIdx`.
+
+    Item two of the review this round answers: *are there context expressions
+    left that were never converted?*  Answering it by reading is how the first
+    six were missed for as long as they were, so it is a rule now.
+
+    A subscript into one of the tables above, or an argument to `model_strip`,
+    that scales a term by a constant is building an index out of fields with a
+    multiply -- which is the exact thing `CtxIdx` was written to replace, and
+    the exact thing that is invisible until someone adds up the powers of two by
+    hand.  `nb_slot`, `sig1`, `esc_at`, `ctx_bucket`'s 15/75 pair, `run_ctr`'s
+    three groups of sixteen and `p2_ctr`'s five banks all read that way once.
+
+    What this cannot see, and a reader should: an index assembled into a local
+    first and then used as a bare subscript.  `counters[ctx_alt]` looks clean
+    here whatever `ctx_alt` was built from.  That is why the number below is a
+    floor on the work and not a proof there is none.
+    """
+    out = []
+    for i, l in enumerate(src, 1):
+        code = l.split('//')[0]
+        if 'CtxIdx' in code:
+            continue
+        for m in INDEXED.finditer(code):
+            inner = m.group(1)
+            if inner is None:                     # model_strip( -- take the call
+                j, depth = m.end(), 1
+                while j < len(code) and depth:
+                    depth += (code[j] == '(') - (code[j] == ')')
+                    j += 1
+                inner = code[m.end():j - 1]
+            if SCALED.search(inner) and not PAIR_LOOP.match(inner):
+                out.append((i, inner.strip()))
+    for i, inner in out:
+        print('%s:%d  context index built by multiply: %s' % (path, i, inner[:64]))
+    return out
 
 
 def wrap(path, src, do):
@@ -507,13 +568,14 @@ def main():
             # answer while this tool only knew how to migrate; answering it
             # after the migration would be a tool reporting a clean tree
             # because it stopped looking.
-            if re.search(r'\.bit(_of)?<\d+>', '\n'.join(src)):
-                return audit(path, src)
-            where = 'alt_p2_context.inc'
-            print('not applicable: %s has no masked context words%s'
-                  % (path, '' if path.endswith(where)
-                     else ' -- they are in ' + where))
-            return 0
+            # Always, not only when the file already has chains.  Scoping the
+            # scan to files with a `CtxIdx` in them put it exactly where an
+            # unconverted index cannot be: run per-file it answered 0 over the
+            # tree while the spliced unit -- which `sweep.sh` passes -- answered
+            # 4, because 32 of the 37 units returned `not applicable` before the
+            # scan could run.  A check that skips the files it is looking for is
+            # the shape this whole round keeps finding.
+            return audit(path, src)
         # Every line converts now, so the count that matters is not how many
         # can be acted on -- it is how many of their terms are *proven* rather
         # than merely placed.  That number is 1 of 66, and it should stay

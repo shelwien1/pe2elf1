@@ -19,7 +19,7 @@ void AltP2Block::code_banks(int32_t sample16) {
   for( uint32_t bank = 0; bank<5; ++bank ) {
       bctx = (uint32_t)bank_ctx[bank];
       res = sample16-(nb_sum[2*bank]);
-      P2Count* node0 = &p2_ctr[32768*bank+bctx];
+      P2Count* node0 = &p2_ctr[slot(bank, bctx)];
       w0 = res+(uint16_t)node0->weighted;
       node0->weighted = w0;
       int32_t countdown = node0->b1;
@@ -57,7 +57,7 @@ void AltP2Block::code_banks(int32_t sample16) {
           // assignment, which asks for the cache line holding a local the
           // function is about to write anyway.  Every other prefetch below is of
           // the counter the next few lines will read; this one is now too.
-          P2Count *mir = &p2_ctr[32768*bank+(ctxw^0x7FF0)];
+          P2Count *mir = &p2_ctr[slot(bank, ctxw^0x7FF0)];
           __builtin_prefetch(mir, 0, 1);
           res2 = (nb_sum[2*bank+1])+res;
           int32_t lowbits = ctxw&3;
@@ -98,7 +98,7 @@ void AltP2Block::code_banks(int32_t sample16) {
           // it is why nothing is hoisted: each loop below does the same five
           // things in the same order the unrolled text did, and the only lines
           // that moved are the four `-res_c` under four names.
-          P2Count* bankp = &p2_ctr[32768*bank];
+          P2Count* bankp = &p2_ctr[slot(bank, 0)];
           res_c = res2;
           // The eleven context bits this counter bank tracks, and the three
           // counters each one names: `direct` at the context with that bit
@@ -292,7 +292,17 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
     if( !fold[(uint8_t)-resid_in] )
       fold_sel = fold[(uint8_t)-resid_in];
-    step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
+    // The alternate context: the low six bits of the live one, with all five
+    // features read the other way round above it.  `AltP1Block::update_model`
+    // builds its own the same way over nine features and five bits.
+    //
+    // The weights stay a sum for the reason they do there -- each is a table
+    // entry already scaled by its feature's stride -- and the parentheses round
+    // the last two terms were the register allocator's, not a grouping.
+    step_v = CtxIdx{}.bits<0, 6>(ctx)
+                     .raw(ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]
+                         +ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]
+                         +ctx_w[0].w[1]);
     P2Freq *frec_step = &freq[step_v];
     // The record after the step's and the record before it, each bumped when
     // the level leaves room for it.  This was one `if` with an empty `else`, a
