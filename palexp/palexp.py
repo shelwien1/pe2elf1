@@ -214,7 +214,8 @@ def palette_costs(p):
     out = {}
     out['raw'] = K*bytes_per
     d = np.diff(np.sort(u.astype(np.int64)))
-    out['delta-H0'] = (H(np.bincount(np.minimum(d, 1<<20)))*(K-1) + 32)/8
+    _, dn = np.unique(d, return_counts=True)     # not bincount: the deltas of a
+    out['delta-H0'] = (H(dn)*(K-1) + 32)/8       # 32-bit key can span the range
     universe = 1 << (8*bytes_per)
     out['set-bound'] = log2_choose(universe, K)/8
     # per-channel entropy of the sorted-by-packed list, which is what a byte

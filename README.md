@@ -190,7 +190,9 @@ because they did not pay.
 every distinct pixel and code the image as a plane of indices into it. How to
 code the palette and the counts, how to order it — worth 44% of the compressed
 size on `t8p` — and where the idea pays, which is small palettes and mostly in
-speed rather than in bytes.
+speed rather than in bytes. Its last section audits four external write-ups of
+the same idea against the measurements: what they got right and adopted here,
+ten claims the corpus refutes, and two errors of mine that they exposed.
 
 The short version:
 

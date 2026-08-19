@@ -5,7 +5,12 @@ plane of indices into that list. This document is about whether that is a good
 idea, when, and how each of its three parts should be built.
 
 It is a companion to `BMG-FORMAT.md`, and every number in it was measured on the
-seven corpus files with `bmg` itself, not estimated. Section 10 says exactly how.
+seven corpus files with `bmg` itself, not estimated. Section 11 says exactly how.
+
+Four independent write-ups of the same idea were reviewed against these
+measurements. Where they proposed something testable it was tested; §10 lists
+what held up, what did not, and the outright errors — including two of my own,
+in §3 and §5.3, which their proposals exposed.
 
 The short answer, up front:
 
@@ -13,18 +18,30 @@ The short answer, up front:
   delta-codes to 23 bytes, a 4-entry one to a handful. The information-theoretic
   cost of a *random* set of that size is 558 bytes — real palettes beat that
   bound because they are grids, not random sets: by 24× on `t8p`, 4× on `x_ep`.
-* **Do not send the frequency table.** For every image where palettizing pays at
-  all, letting an adaptive coder learn the counts is *cheaper* than transmitting
-  them — 259 bytes against 308 on `t8p`. And "exclude a colour once its count
+  And the way to get there is the *simplest* one: sort by the packed integer and
+  delta-code that integer. Every colour transform and every space-filling sort
+  offered by the four reviewed documents is worse, on every file, by 1.2× to 3×
+  (§2.5).
+* **The frequency table is a wash, so skip it.** A well-coded count table and an
+  adaptive coder's learning cost come out within 22 bytes of each other on `t8p`
+  — 237 against 259, or 0.05% of the file. And "exclude a colour once its count
   reaches zero" turns out to be adaptive coding wearing a hat: to first order the
-  two cost the same thing, and the countdown version also has to pay for the
-  counts.
+  two cost the same thing. §3 also has the one genuinely promising use for the
+  counts, which is deciding what belongs in the palette at all.
 * **The ordering is the whole game.** On `t8p` the best and worst orderings
   differ by **44%** of the compressed size (44 917 against 64 835 bytes). Luma
   ordering — the obvious choice — is one of the *worst*. An optimised linear mix
   found the best one from scratch.
 * **Gamma bought nothing** on this corpus, and §5.2 explains why that is not an
   accident — one of the two ways to apply it cannot change a sort order at all.
+  Neither did PCA, the initialiser three of the four documents recommend: it
+  lands 22–32% away from the answer on `t8p`, because the orderings that matter
+  are lexicographic and PCA cannot express one (§5.5).
+* **Which surrogate you optimise depends on how close the candidates are.** Over
+  a wide range the residual entropy ranks orderings almost perfectly (+0.99);
+  inside two percent it is close to useless (+0.01 to +0.29) and the simple
+  sum of adjacency-weighted rank differences the documents propose wins instead
+  (+0.56 to +0.66). §5.3.
 * **The big win is speed, not size.** Coding `x_ci` as one index plane instead of
   three colour planes is 0.07% smaller but **5.9× faster to encode and 2.3×
   faster to decode**.
@@ -101,7 +118,7 @@ Real palettes are not random sets. Here is the same four ways, measured:
 | `t8p` | 256×3 | 768 | **23** | 39 | 558 |
 | `x_ai` | 8×3 | 24 | **4** | 0 | 22 |
 | `x_ep` RGB | 6 064×3 | 18 192 | **1 636** | — | 9 759 |
-| `x_ep` RGBA | 37 040×4 | 148 160 | **19 856** | 26 288 | 84 570 |
+| `x_ep` RGBA | 37 040×4 | 148 160 | **20 060** | 26 288 | 84 570 |
 | `t24` | 76 312×3 | 228 936 | **75 959** | — | 87 946 |
 | `t32` | 76 800×4 | 307 200 | **105 569** | — | 165 252 |
 
@@ -152,9 +169,71 @@ For a palette that is a product grid, the octree finds it too — every split is
 all-or-nothing — so the special case in 2.3 is an optimisation, not a
 requirement.
 
+### 2.5 the transforms everyone recommends, measured
+
+All four reviewed documents recommend the same two things before delta-coding a
+palette: a decorrelating colour transform (YCoCg-R, or green-guided residuals
+`ΔG, ΔR−ΔG, ΔB−ΔG`), and — in two of them — sorting the palette along a
+space-filling curve first, on the grounds that a Hilbert order keeps consecutive
+palette entries close in RGB.
+
+Both are worse than doing nothing. Order-0 cost of the residual streams, in
+bytes, for every combination:
+
+| file | `K` | sort | packed Δ | per-channel Δ | YCoCg-R Δ | green-guided Δ |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| `t8p` | 256 | **packed** | **23** | 43 | 61 | 60 |
+| | | Morton | — | 110 | 149 | 174 |
+| | | Hilbert | — | 119 | 237 | 160 |
+| `x_ep` | 37 040 | **packed** | **20 060** | 26 292 | 35 412 | 34 590 |
+| | | Morton | — | 47 198 | 48 746 | 48 705 |
+| | | Hilbert | — | 25 681 | 27 468 | 27 999 |
+| `t24` | 76 312 | **packed** | **75 959** | 82 669 | 170 687 | 99 784 |
+| | | Morton | — | 100 047 | 102 936 | 115 802 |
+| | | Hilbert | — | 94 422 | 96 384 | 105 233 |
+| `t32` | 76 800 | **packed** | **105 569** | 162 706 | 218 319 | 232 066 |
+| | | Morton | — | 169 809 | 172 736 | 185 686 |
+| | | Hilbert | — | 159 790 | 161 803 | 170 712 |
+
+(`t8g`, `x_ai` and `x_ci` are 4 bytes under every combination and are omitted.)
+
+The winner is the same everywhere and it is the least sophisticated entry in the
+table: **sort by the packed integer, delta-code the packed integer.** Not the
+channels separately, not a colour transform, not a space-filling order.
+
+The reason the colour transforms lose is that they are solving the wrong problem.
+YCoCg-R and green-guided prediction decorrelate the *channels of one pixel*, which
+is what you want when coding an image. In a palette sorted by the packed value the
+channels are not competing — the high channel is nearly constant along a run and
+the low channel does all the moving — and a transform that mixes them destroys
+exactly that structure. On `t32` it costs more than twice as much as leaving it
+alone.
+
+The reason the space-filling sorts lose is subtler and is worth stating carefully,
+because one of the documents asserts that a Hilbert order **guarantees** a bounded
+distance between consecutive palette entries, and puts the resulting palette cost
+at "3–6 bits per colour component". Neither claim survives contact:
+
+| file | Hilbert: mean, max consecutive L1 | packed: mean, max |
+| --- | ---: | ---: |
+| `t8p` | 42.8, **121** | 70.2, 589 |
+| `x_ep` | 0.25, **40** | 3.3, 124 |
+| `t24` | 5.4, **246** | 32.6, 506 |
+
+A Hilbert curve through the *whole* RGB cube takes unit steps, but a palette is a
+sparse *subset* of the cube, and consecutive members of a subset can be
+arbitrarily far apart along the curve. Nothing is bounded. What is true is that
+Hilbert order does cut the mean consecutive distance substantially — 6× on `t24`
+— and it still produces a **larger** palette encoding than packed order, on every
+file. And `t8p` settles the "3–6 bits per component" figure: packed delta gets
+that palette down to 23 bytes for 256 colours, which is 0.24 bits per component.
+
+The lesson is the one the whole document keeps arriving at: minimising distance
+in colour space is not the objective. Here it is not even a good proxy for it.
+
 ---
 
-## 3. Coding the frequency table — and why not to
+## 3. Coding the frequency table — and whether to
 
 ### 3.1 the counts are only worth sending to a static coder
 
@@ -165,28 +244,45 @@ no table plus an adaptive one".
 
 The classical answer is that adaptive coding costs about `(K−1)/2 · log2 N` bits
 more than coding with the true distribution — Rissanen's model cost, one half bit
-per free parameter per doubling of the data. An explicit table of `K` positive
-counts summing to `N` costs at least `log2 C(N−1, K−1)` bits. Measured:
+per free parameter per doubling of the data. The question is what the table costs
+against that.
 
-| file | `K` | count table ≥ | adaptive model cost ≈ | winner |
-| --- | ---: | ---: | ---: | --- |
-| `x_ci` | 4 | 8 B | 4 B | adaptive, by 4 B |
-| `x_ai` | 8 | 18 B | 10 B | adaptive, by 8 B |
-| `t8g`/`t8p` | 256 | 308 B | 259 B | adaptive, by 49 B |
-| `x_ep` RGB | 6 064 | 6 043 B | 7 240 B | table, by 1 197 B |
-| `x_ep` RGBA | 37 040 | 24 643 B | 44 228 B | table, by 19 585 B |
+A first draft of this section put the table's floor at `log2 C(N−1, K−1)`, the
+number of compositions of `N` into `K` positive parts, and concluded that adaptive
+coding wins outright everywhere palettizing pays. That was wrong, and one of the
+reviewed documents pointed at why: the composition count is the cost under a
+*uniform* prior over count vectors, and real count vectors are nowhere near
+uniform. Coding each count with an order-0 model over the count values — which is
+what any real implementation would do — beats it:
 
-The crossover is where the average count falls to a few hundred:
+| file | `K` | compositions | order-0 over counts | adaptive model cost | winner |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `x_ci` | 4 | 8 B | **1 B** | 4 B | table, by 3 B |
+| `x_ai` | 8 | 18 B | **3 B** | 10 B | table, by 7 B |
+| `t8g`/`t8p` | 256 | 308 B | **237 B** | 259 B | table, by 22 B |
+| `x_ep` RGB | 6 064 | 6 043 B | — | 7 240 B | table |
+| `x_ep` RGBA | 37 040 | 24 643 B | **13 843 B** | 44 228 B | table, by 30 385 B |
 
-| `N` | crossover `K` | `K/N` |
-| ---: | ---: | ---: |
-| 76 800 | 747 | 1/103 |
-| 564 000 | 2 035 | 1/277 |
-| 4 512 000 | 5 767 | 1/782 |
+So the honest verdict is not "never send counts" but **"it is a wash where it
+matters, and not worth the complexity"**: 22 bytes on a 45 000-byte file is
+0.05%, and the 259-byte adaptive figure is itself an over-estimate of what an
+initial histogram could recover, because `bmg`'s index coder is not a memoryless
+`K`-ary model — it is a context-mixing coder whose counters are shared across
+contexts and whose learning transient is not the textbook one. Where the table
+would clearly pay, at `K/N` above roughly 1/100, palettizing has already lost for
+other reasons.
 
-**Every file where palettizing is worth considering sits on the adaptive side of
-that line.** By the time an explicit table would pay, `K/N` is large enough that
-the palette itself has already sunk the idea. So: no frequency table.
+One caveat on the last column: `(K−1)/2 · log2 N` is an asymptotic result for
+`N ≫ K` and it stops meaning anything as `K` approaches `N`. On `t24` it reports
+77 402 bytes of "model cost" for an image `bmg` codes in 53 718 — which is not a
+statement about `bmg`, it is the formula leaving its domain. Read the table only
+for the rows where a palette is plausible.
+
+The rows also say something about the images. `t8g`, `t8p`, `x_ai` and `x_ci` have
+**no singleton colours at all** — every palette entry is reused, which is what
+makes a palette worth having. `x_ep` is 51% singletons and `t24` is 99.4%: at that
+point the "frequency table" is mostly the sentence "everything occurs once", which
+is why its composition cost collapses to 532 bytes.
 
 ### 3.2 exclusion is adaptive coding in disguise
 
@@ -223,6 +319,33 @@ counters costs a tenth of the exact table and removes most of the learning
 transient. On `t8p` that is 128 bytes to recover a good part of 259. Whether it
 nets out is a measurement, not an argument, and it is the only version of "send
 the frequency table" I would bother testing.
+
+### 3.4 counts as an admission test: escape coding
+
+There is one use for the counts that has nothing to do with entropy coding, and
+it is the most promising untested idea in the reviewed documents: **only admit a
+colour to the palette if it repeats**, and code the rest as escapes. A palette is
+a dictionary, and a dictionary entry used once has paid for itself and no more.
+
+| file | threshold | palette entries | palette (set bound) | escaped pixels |
+| --- | --- | ---: | ---: | ---: |
+| `x_ep` | all | 37 040 | 84 570 B | 0 |
+| | count ≥ 2 | **18 181** | **43 844 B** | 18 859 (3.3%) |
+| | count ≥ 4 | 9 650 | 24 373 B | 38 808 (6.9%) |
+| | count ≥ 8 | 5 057 | 13 361 B | 62 249 (11.0%) |
+| `t24` | all | 76 312 | 87 946 B | 0 |
+| | count ≥ 2 | 488 | 1 007 B | 75 824 (**98.7%**) |
+
+On `x_ep` the trade looks real: half the palette for 3.3% of pixels sent another
+way. On `t24` it is decisive in the other direction — the threshold that shrinks
+the palette to nothing also escapes almost every pixel, which is just a
+restatement of the fact that `t24` has no reusable colours. That is the honest
+diagnostic: **escape coding rescues an image only if its palette has a head, and
+`t24` is all tail.**
+
+I did not build the escape path, so `x_ep`'s 43 844 bytes is a palette cost with
+no matching index-plane measurement. It is the one line item in this document
+that is a design sketch rather than a result.
 
 ---
 
@@ -294,6 +417,19 @@ Two consequences for the search:
   derivative is zero almost everywhere and undefined on the walls;
 * candidate directions, not candidate step sizes, are what to enumerate.
 
+And one consequence for anyone trying to enlarge the family. One of the reviewed
+documents proposes a "richer projection"
+
+    s = w0 + w_R·R + w_G·G + w_B·B + w_RG·(R−G) + w_GB·(G−B) + …
+
+This adds **nothing**. `R−G` and `G−B` are linear combinations of `R`, `G`, `B`,
+so the whole expression collapses to a plain linear mix with the weights
+`(w_R + w_RG, w_G − w_RG + w_GB, w_B − w_GB)`; and `w0`, a constant added to every
+key, cannot change a sort order. Sorting by `Y`, `Co`, `Cg` or any other linear
+colour space is likewise already inside the family — only the *coordinates* of
+the search change, never its reach. Leaving the family requires a genuinely
+non-linear term, which per-channel gamma is and these are not.
+
 ### 5.2 what gamma does, and what it cannot do
 
 Applying a gamma to the mixed key — `(w·c)^γ` — **cannot change the ordering at
@@ -330,21 +466,133 @@ irregular rather than gamma-spaced.
 
 The objective is "minimise the compressed size of the index plane", and the only
 exact way to evaluate it is to compress the index plane. That is affordable at
-the end and not during a search, so the search needs a proxy. Two natural ones:
+the end and not during a search, so the search needs a surrogate. Four candidates,
+all computable from a **co-occurrence table built once** — the counts `n_ab` of
+adjacent pixel pairs with colours `a` and `b` — except the last, which needs a
+pass over the image:
 
-* **`Hpair`** — the order-0 entropy of `(rank(a) − rank(b)) mod K` over every
-  west/north adjacent pixel pair. Computable from a **co-occurrence table built
-  once**, so evaluating a candidate ordering costs `O(nnz)` rather than `O(N)`.
-  On `x_ai` that is 64 entries against 9 million: the difference between a
-  1 000-candidate search taking a second and taking an hour.
-* **`Hmed`** — the order-0 entropy of the MED residual of the reordered index
-  plane. Closer to what the coder does, but `O(N)` per candidate.
+| surrogate | | cost per candidate |
+| --- | --- | --- |
+| `L1` | `Σ n_ab · |π(a) − π(b)|` | `O(nnz)` |
+| `log2(1+d)` | `Σ n_ab · log2(1 + |π(a) − π(b)|)` | `O(nnz)` |
+| `Hpair` | order-0 entropy of `(π(a) − π(b)) mod K`, weighted by `n_ab` | `O(nnz)` |
+| `Hmed` | order-0 entropy of the MED residual of the reordered index plane | `O(N)` |
 
-Measured against reality (section 6.3), both are directionally right over a wide
-range and unreliable inside a few percent. The design that follows from that is
-the one `bmg` already uses for its predictor choice (`BMG-FORMAT.md` §4.9):
-**shortlist with the proxy, then trial-encode the shortlist and keep the
-shortest**. Two bits of side information name the winner of four.
+The co-occurrence table is what makes any of this practical: on `x_ai` it has 64
+entries against 9 million adjacent pairs, which is the difference between a
+thousand-candidate search taking a second and taking an hour.
+
+I started with `Hmed` and `Hpair` on the reasoning that the coder codes residuals,
+so a residual entropy must be the closest thing to its cost. All four reviewed
+documents propose `L1` or `log2(1+d)` instead. **They are right, and the
+correction is not small.** Rank correlation against real `bmg` output, over every
+ordering that could be afforded:
+
+| | `x_ci` (12 orderings, 0.5% spread) | `x_ai` (40, 1.6%) | `t8p` (24, 63%) |
+| --- | ---: | ---: | ---: |
+| `Hmed` | +0.371 | +0.290 | **+0.989** |
+| `Hpair` | +0.287 | +0.008 | **+0.980** |
+| `L1` | +0.559 | **+0.663** | +0.750 |
+| `log2(1+d)` | **+0.643** | +0.638 | +0.782 |
+
+and, more usefully, what each surrogate's own top pick actually cost:
+
+| | `x_ci` | `x_ai` | `t8p` |
+| --- | ---: | ---: | ---: |
+| true best | 567 497 | 148 733 | 44 917 |
+| best by `Hmed` | 567 497 ✓ | 149 412 | 44 917 ✓ |
+| best by `Hpair` | 567 497 ✓ | 150 374 | 44 917 ✓ |
+| best by `L1` | 567 497 ✓ | **148 733 ✓** | 44 917 ✓ |
+| best by `log2(1+d)` | 567 497 ✓ | **148 733 ✓** | 44 917 ✓ |
+
+The split is clean and it is about *range*, not about which file. Where the
+candidates differ by tens of percent (`t8p`) the entropy surrogates are nearly
+perfect and the adjacency sums are merely good. Where they differ by one or two
+percent (`x_ai`) the entropy surrogates collapse — `Hpair` at +0.008 is
+indistinguishable from ranking at random — and the adjacency sums keep working
+and find the optimum.
+
+That is not mysterious. `Hmed` and `Hpair` are entropies of a histogram, and a
+histogram is insensitive to *which* residuals moved: swapping two bins leaves the
+entropy untouched. `L1` is sensitive to magnitude directly, and magnitude is what
+a residual ladder charges for. When orderings differ grossly the histogram shape
+differs grossly too and either works; when they differ finely, only the one that
+counts magnitudes still sees anything.
+
+So: **use `L1` (or `log2(1+d)`, which is marginally better on the narrowest
+spread) as the search objective, and keep `Hmed` as a sanity check on the
+shortlist.** Then do what `bmg` already does for its predictor choice
+(`BMG-FORMAT.md` §4.9) — trial-encode the shortlist and keep the shortest. Two
+bits of side information name the winner of four.
+
+One surrogate the documents propose does **not** work: the raw count of index
+transitions, `#{(x,y) : I(x,y) ≠ I(x−1,y)}`, suggested as an objective for
+graphics. It is invariant under relabelling — every ordering has the same
+transition count — so its correlation with output size on `x_ai` is −0.011, which
+is what a constant should score. It is a useful thing to *measure* about an image
+and useless as an ordering objective.
+
+### 5.4 integer keys, and why they are not optional here
+
+Every one of the reviewed documents writes the sort key in floating point, and
+one of them notes in passing that integer arithmetic makes ties deterministic.
+For `bmg` it is stronger than a nicety: the whole contract is that a stream is
+byte-identical across platforms and compilers (`README.md`, "Windows"), and a
+floating-point sort key breaks that the moment two colours land within a rounding
+error of each other and a different FPU or a different compiler flag orders them
+differently. The decoder would rebuild a different palette and decode garbage.
+
+So the key must be integer, and the tie-break must be total:
+
+```
+key(c) = W_R·R + W_G·G + W_B·B  (+ W_A·A)      integer, exact
+ties broken by the packed value of c            total, deterministic
+```
+
+The good news is that the weights can be tiny. Quantising `t8p`'s searched
+`w = (0.9641, 0.2651, 0.0150)` to integers:
+
+| weight precision | integer weights | ordering | `bmg` bytes |
+| --- | --- | --- | ---: |
+| 4-bit | `(15, 4, 0)` | identical to packed | 44 917 |
+| 8-bit | `(255, 70, 4)` | identical to packed | 44 917 |
+| 16-bit | `(65535, 18020, 1020)` | identical to packed | 44 917 |
+
+**Four bits per weight is enough** — even with `W_B = 0`, because the tie-break on
+the packed value supplies the missing least-significant ordering for free. Three
+4-bit weights and a mode byte is under three bytes of side information, and the
+sort becomes exact integer arithmetic with no platform dependence anywhere.
+
+### 5.5 PCA as an initialiser: measured, and it does not work
+
+Three of the four documents recommend starting the weight search from a principal
+component — either of the colours themselves (frequency-weighted) or of the
+spatial colour differences — on the reasoning that the dominant axis of variation
+is the axis worth sorting along. It is cheap, it is `3×3`, and it is the first
+thing anyone would try.
+
+| file | ordering | `bmg` bytes | |
+| --- | --- | ---: | --- |
+| `t8p` | packed / searched linear mix | **44 917** | |
+| | PCA of the colours, `w = (−0.574, 0.814, 0.091)` | 59 388 | **+32%** |
+| | PCA of the spatial differences, `w = (−0.040, 0.007, 0.999)` | 54 655 | **+22%** |
+| `t8g`, `x_ai`, `x_ci` | either PCA | identical to packed | — |
+
+On the greyscale files both variants return `(0.577, 0.577, 0.577)` — the grey
+axis, exactly right, because there is only one axis. On `t8p` both are badly
+wrong.
+
+The reason is worth keeping, because it generalises. The ordering `t8p` wants is
+**lexicographic**: R first, then G, then B, which a linear mix expresses with
+weights of wildly different magnitudes — the searched answer is a 64 : 18 : 1
+ratio. PCA returns a direction of variance, and the variance of a colour cube is
+roughly isotropic, so it returns weights of comparable magnitude. **A principal
+component cannot be lexicographic.** And quantised colour spaces — 3-3-2, 5-6-5,
+the web palette — are exactly the images where palettizing pays and exactly the
+ones whose natural ordering is lexicographic.
+
+PCA is not a bad idea in general; it is a bad idea for this. A spherical search
+over 768 directions costs 0.4 seconds on `t8p` and finds the answer outright.
 
 ---
 
@@ -431,6 +679,9 @@ difference, and it composes with everything else.
 
 ### 6.3 the proxies are directional, not precise
 
+The full four-surrogate comparison is §5.3; this is the entropy pair alone, which
+is what the first draft of this document used throughout:
+
 | file | Spearman(`Hpair`, bytes) | Spearman(`Hmed`, bytes) |
 | --- | ---: | ---: |
 | `x_ci`, all 12 orderings | +0.434 | +0.371 |
@@ -492,7 +743,27 @@ palettizing an already-paletted file buys: the file was already carrying the
 palette, so all that changed is which alphabet the model works in. The size win
 is small here; §6.4 is where this change actually pays.
 
-### 6.6 and the negative control
+### 6.6 Gray-coded indices lose
+
+One document suggests transforming the index with a Gray code, `g = i XOR (i>>1)`,
+so that adjacent indices differ in one bit — attractive if the index coder is a
+bit-plane coder, and it notes the idea may hurt an arithmetic residual coder.
+Measured against `bmg`, which codes residual magnitude on a ladder rather than
+bit planes:
+
+| file | plain | Gray-coded | |
+| --- | ---: | ---: | ---: |
+| `t8g`, `t8p` | 44 917 | 57 598 | **+28%** |
+| `x_ai` | 149 055 | 150 506 | +1.0% |
+| `x_ci` | 569 308 | **568 032** | −0.22% |
+
+A heavy loss where the alphabet is large, a small loss at `K = 8`, and a small
+*win* at `K = 4` — where a two-bit index is close to being a bit-plane
+representation already and there is almost nothing for a magnitude coder to
+exploit. The caution in the source was the right one, and the answer for a
+magnitude-oriented coder is no.
+
+### 6.7 and the negative control
 
 For the photographic and near-injective files, the index plane's order-0 MED cost
 plus the palette, against what `bmg` produces today:
@@ -501,7 +772,7 @@ plus the palette, against what `bmg` produces today:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `t24` | 12.82 b/px | 123 036 | 75 959 | 198 995 | 53 718 | **3.7×** |
 | `t32` | 7.12 b/px | 68 381 | 105 569 | 173 950 | 53 760 | **3.2×** |
-| `x_ep` RGBA | 8.68 b/px | 611 704 | 19 856 | 631 560 | 339 560 | **1.9×** |
+| `x_ep` RGBA | 8.68 b/px | 611 704 | 20 060 | 631 764 | 339 560 | **1.9×** |
 | `x_ep` RGB only | 8.15 b/px | 574 335 | 1 636 | 575 971 + alpha | 339 560 | **≥1.7×** |
 
 Not close. On `t32` the palette alone — 105 569 bytes — is twice the entire
@@ -542,6 +813,16 @@ measures and which a palette removes by construction.
 **Match models get whole-pixel symbols.** A repeated colour is a repeated symbol
 rather than three separately-matching bytes, so a match model's hit is
 unambiguous. On screenshots and UI captures this is most of the file.
+
+**Approximate equality becomes exact equality.** This is the benefit I
+under-weighted and one of the reviewed documents puts near the top, rightly. Two
+regions with the same shape but different brightness — a gradient at 100…104 and
+the same gradient at 150…154 — share no bytes at all in RGB, so no match model and
+no LZ can connect them. Under a palette ordered along that gradient both become
+some `n … n+4`, and their *residual* sequences become identical. The palette is a
+structural normalisation layer: it converts similarity into equality, which is the
+only form of similarity a match model can use. `bmg` has a match model
+(`bmg_model.inc` M7) that would see this and currently cannot.
 
 **The palette is often already in the file.** For 8-bit BMPs the palette is
 carried anyway, and a byte-exact coder has to reproduce it either way — so the
@@ -590,14 +871,39 @@ From the measurements, as a rule with the corpus attached:
 | `256 < K`, `K/N < 1/100` | **worth trying** — needs a >8-bit index coder; palette still small next to the plane | `x_ep` RGB (6 064, 1/93) |
 | `K/N > 1/10` | **no** — the palette approaches the file | `x_ep` RGBA (1/15), `t24`, `t32` |
 
+Two of the reviewed documents give a numerical threshold for abandoning the
+scheme: one says disable palette mode when `K/N > 0.3`, the other calls the method
+"optimal when `N < H·W/3`" — the same figure. **Both are far too generous.** At
+`K/N = 1/15` (`x_ep` as RGBA, well inside their accept region) palettizing already
+loses to `bmg` by 1.9×, and at `1/93` (`x_ep` as RGB) it still loses by 1.7×. The
+usable threshold on this corpus is nearer `K/N = 1/100`, thirty times stricter
+than published. A rule of thumb that accepts `t24` — where the palette alone is
+1.4× the entire compressed file — is not a rule worth having.
+
 Two refinements the corpus argues for.
 
 **Palettize colour, not the whole cell, when there is an alpha channel.**
 `x_ep`'s 37 040 RGBA pixels are 6 064 RGB colours and an alpha plane; the RGBA
-palette costs 19 856 bytes and the RGB one 1 636. Alpha is a different kind of
+palette costs 20 060 bytes and the RGB one 1 636. Alpha is a different kind of
 signal — `bmgstat` reports it as "a real gradient" here, with 77.5% of pixels
 fully opaque — and it wants its own plane and its own model, not a seat in a
 joint alphabet that it multiplies by six.
+
+One document proposes a middle course: keep alpha in the palette but sort by an
+alpha *class* (`A = 0`, `A = 1…254`, `A = 255`) and then by RGB inside each class,
+so that unrelated transparent colours do not get dragged into the colour ordering.
+Measured on `x_ep`, that is worse than doing nothing:
+
+| ordering of the RGBA palette | `Hmed` | index plane |
+| --- | ---: | ---: |
+| packed integer — which is already alpha-major | **8.6766** | **611 704 B** |
+| alpha class {0, mid, 255}, then RGB | 9.1484 | 644 961 B |
+| RGB-major, alpha in the low bits | 10.7693 | 759 236 B |
+
+The proposal is half right and already done: the packed integer puts alpha in the
+top byte, so sorting by it *is* "alpha first, then colour", and it is the best of
+the three. Coarsening alpha into three classes throws away ordering information
+and costs 5%. What actually helps is taking alpha out of the palette altogether.
 
 **Do not decide by rule.** Every threshold above is a shortlisting heuristic. The
 proxies rank orderings well over wide ranges and badly over narrow ones (§6.3),
@@ -619,10 +925,11 @@ In order of return on effort:
    lives. Worth 70–86 bytes on `t8p` and 5.9× encode time on files like `x_ci`.
 
 2. **Search the palette order.** Free orderings first — packed integer, luma,
-   Hilbert, greedy RGB tour — then a linear mix optimised against `Hmed` from the
-   co-occurrence table. Shortlist four, trial-encode them, send two bits. On `t8p`
-   the search reaches the best ordering; on `x_ci` and `x_ai` an exhaustive
-   permutation search is affordable and finds 0.20–0.32%.
+   Hilbert, greedy RGB tour — then a linear mix with **integer** weights (§5.4)
+   optimised against `L1` from the co-occurrence table (§5.3). Shortlist four,
+   trial-encode them, send two bits and three 4-bit weights. On `t8p` the search
+   reaches the best ordering; on `x_ci` and `x_ai` an exhaustive permutation
+   search is affordable and finds 0.20–0.32%.
 
    The open question this document did not answer: at `K = 256` an arbitrary
    permutation costs 0.47% (§4), and the best free ordering happened to be the
@@ -642,17 +949,138 @@ In order of return on effort:
    colours, alpha kept separate, index split across a nibble-and-byte pair of
    context models rather than two byte planes.
 
-What I would *not* build: gamma in the sort key, until a file turns up whose
-palette has genuinely uneven level spacing. `bmgstat`'s tone-curve section is the
+What I would *not* build, all of it measured rather than assumed: a colour
+transform or a space-filling sort before delta-coding the palette (§2.5, worse on
+every file); PCA as the weight initialiser (§5.5, 22–32% off on `t8p`); Gray-coded
+indices (§6.6, +28% where the alphabet is large); an alpha-class hierarchy in the
+sort key (§8, 5% worse than the packed order it was meant to improve); and gamma
+in the sort key, until a file turns up whose palette has genuinely uneven level
+spacing. `bmgstat`'s tone-curve section is the
 test, and it reports γ = 1.000 with rms 0.00 for every component of every file
 where palettizing is in play. The one exception is the blue component of `t24`
 and `t32` — 64 values, γ = 1.76 — and its rms of 76 says those levels are not on
 a power law either, just irregular. They are also the two files a palette cannot
 help under any circumstances.
 
+### 9.1 the three ideas worth building that this document did not test
+
+Three proposals from the reviewed documents are, I think, better than anything
+measured here, and all three are too large to have tested in passing. They are
+listed as open work, not as results.
+
+**Predict in colour space, then map back to the palette.** The costliest thing
+about palettizing is §7.2: a 1-D order cannot preserve 3-D locality, so prediction
+gets worse. The proposal sidesteps it entirely. The decoder holds the palette, so
+it knows the *colour* of every neighbour — it can run MED in RGB, exactly as a
+non-palettized coder does, arrive at a predicted colour `Ĉ`, then binary-search
+the sorted palette around `Ĉ` and code the *rank of the true colour among the
+candidates near the prediction* rather than a numeric index residual. Prediction
+happens in the space where it works; only the symbol is an index. It also makes
+the ordering much less critical, since the ordering is then only being used as a
+search structure. This is the single strongest idea in the four documents and it
+is the one I would build first if the goal were a new codec rather than an
+addition to `bmg`.
+
+**Tile-local orderings over one global palette.** A global ordering is one
+compromise across an entire image, and §6.1's 44% spread says the compromise is
+expensive. Keep one global palette — colours stay deduplicated — and give each
+tile its own permutation of the subset it uses. A tile using 500 of 100 000
+colours gets 9-bit indices instead of 17, and an ordering fitted to its own
+gradients. The cost is per-tile metadata, and the tile size has to be searched.
+
+**Escape coding for the tail.** §3.4 has the numbers and no codec behind them.
+
 ---
 
-## 10. How this was measured
+## 10. The reviewed documents: what held up
+
+Four write-ups of this idea were checked against the measurements. This is the
+audit, because "look out for errors" was the brief and because several of the
+proposals are right and worth adopting.
+
+### 10.1 right, and adopted
+
+* **`L1` / `log2(1+d)` over the co-occurrence table as the search objective.**
+  All four propose it; all four are correct and I was not. It beats the residual
+  entropies decisively wherever the candidates are close together (§5.3).
+* **Build the co-occurrence table once and search on it**, rather than
+  re-scanning the image per candidate. Independently arrived at here; it is what
+  makes a thousand-candidate search cost a second.
+* **The objective must be the coder's cost, not colour distance** — stated
+  plainly in three of the four, and every measurement in §6 agrees.
+* **Do not transmit a frequency table to an adaptive coder.** Unanimous, correct.
+* **Integer keys with a deterministic tie-break** (one document). For a codec
+  whose contract is byte-identical streams across platforms this is not a detail
+  (§5.4).
+* **Counts coded as an order-0 model over count values**, which is what exposed
+  the error in §3.1 below.
+* **Escape colours, hierarchical and tile-local palettes, and colour-space
+  prediction with palette lookup** — the three best untested ideas, §9.1.
+* **`log2 K` is an alphabet bound and says nothing about entropy**; **`K ≈ N`
+  is the failure mode**; **the encoder should decide by trying both modes**. All
+  correct, all confirmed.
+
+### 10.2 wrong, and refuted by measurement
+
+* **"Apply a reversible colour transform before delta-coding the palette."**
+  Proposed by all four. Worse than plain packed-integer deltas on every file,
+  by 1.2× to 3× (§2.5).
+* **"Sorting the palette by a Hilbert curve *guarantees* consecutive entries are
+  close, bounding palette storage to 3–6 bits per component."** The guarantee is
+  false — a palette is a sparse subset of the cube and consecutive members can be
+  arbitrarily far apart; measured maxima are 121, 40 and 246 (§2.5). The 3–6 bit
+  figure is beaten by a factor of 20 by packed deltas, which reach 0.24 bits per
+  component on `t8p`.
+* **"Disable palette mode when `K/N > 0.3`" / "optimal when `N < H·W/3`."** Thirty
+  times too generous; the usable threshold here is nearer `1/100` (§8).
+* **PCA as the weight initialiser**, in three of the four. 22–32% off on `t8p`,
+  because a principal component cannot express a lexicographic ordering and
+  quantised colour spaces are lexicographic (§5.5).
+* **"A richer projection `w0 + w_R·R + … + w_RG·(R−G) + w_GB·(G−B)`."** Adds no
+  expressive power whatsoever — those terms are linear in `R, G, B` and the
+  constant cannot change a sort order (§5.1).
+* **Gray-coded indices** as a general improvement. +28% on the 256-colour files
+  (§6.6); the source's own caveat was the accurate part.
+* **Alpha-class hierarchical ordering.** 5% worse than the packed order it was
+  meant to improve, which is already alpha-major (§8).
+* **Index-transition count as an ordering objective.** It is invariant under
+  relabelling, so it cannot rank orderings at all: measured correlation −0.011
+  (§5.3).
+* **"Negative weights make the search space larger."** Only by a factor of two,
+  and that factor is free: `w` and `−w` give reversed orderings with identical
+  residual magnitudes, so the hemisphere suffices. Negative *relative* signs
+  between channels are a different matter and are genuinely useful — the searched
+  optimum for `x_ep` has two.
+* **"A grid search over 100–400 spherical points is guaranteed to find the global
+  optimum within the search resolution."** The guarantee is vacuous: the objective
+  is piecewise constant over `O(K⁴)` cells — about `10⁹` at `K = 256` (§5.1) — so
+  400 samples touch a vanishing fraction of them, and "within the search
+  resolution" is doing all the work in that sentence.
+
+### 10.3 not evidence
+
+One document reports a benchmark table — "`64×64`, `N = 4088` unique colours",
+optimised weights `(0.6, 0.9, 0.3)`, "4.16% overall bitstream reduction". Its own
+listed code generates the test image with `np.random.randint`, i.e. uniform noise,
+in which 4 088 of 4 096 pixels are unique and no ordering can help anything. The
+numbers are not measurements of the effect they are labelled with. The general
+claim they illustrate — that tuned weights beat BT.709 luma — happens to be true,
+and §6.1 measures it properly at 44% rather than 4%.
+
+### 10.4 two errors of my own that the review exposed
+
+* **§3.1 originally claimed the frequency table's floor is `log2 C(N−1, K−1)`**
+  and concluded that adaptive coding beats it outright. That bound assumes a
+  uniform prior over count vectors; an order-0 model over the count *values* is
+  substantially cheaper — 237 bytes against 308 on `t8p` — which turns a clear win
+  into a wash. The recommendation survives, the argument did not.
+* **§5.3 originally recommended `Hmed` as the search objective.** On the files
+  where the decision is close, it is barely better than random (§5.3). The
+  documents' `L1` is the right choice and it was in front of me.
+
+---
+
+## 11. How this was measured
 
 `bmg` at commit-time, release build, on the seven corpus files. Everything here
 is reproducible — the scripts are in `palexp/` and need only numpy:
@@ -660,8 +1088,10 @@ is reproducible — the scripts are in `palexp/` and need only numpy:
 ```sh
 ./mk.sh release
 python3 palexp/run.py   testfiles/t8p.bmp   # §2.2, §3, §6.1: orderings, real bytes
-python3 palexp/exact.py testfiles/x_ci.bmp  # §6.2, §6.3: every ordering, and the fit
-python3 palexp/big.py   testfiles/t24.bmp   # §6.6: the negative control
+python3 palexp/exact.py testfiles/x_ci.bmp  # §6.2: every ordering, real bytes
+python3 palexp/surro.py                     # §5.3: which surrogate predicts the coder
+python3 palexp/review.py                    # §2.5, §3.4, §5.4, §5.5, §6.6, §8, §10
+python3 palexp/big.py   testfiles/t24.bmp   # §6.7: the negative control
 ```
 
 * Palettes, counts, co-occurrence tables, orderings and the entropy proxies are
@@ -682,7 +1112,12 @@ python3 palexp/big.py   testfiles/t24.bmp   # §6.6: the negative control
   co-occurrence table.
 * `x_ci`'s twelve orderings were all compressed. `x_ai`'s 20 160 orderings were
   all scored on `Hpair`; 44 spanning the range were compressed.
-* The one thing measured with a proxy alone is the large-`K` control in §6.6 —
-  `bmg` cannot code a 16-bit index plane, so those rows are order-0 MED entropy,
-  which §6.3 shows `bmg` beats by about 3%. Even at a 3% discount the verdict is
-  a factor of two.
+* The things measured with a proxy alone are the large-`K` control in §6.7 and
+  the alpha-ordering table in §8 — `bmg` cannot code a 16-bit index plane, so
+  those rows are order-0 MED entropy, which §6.3 shows `bmg` beats by 2.5–6.7%.
+  Even at that discount the §6.7 verdict is a factor of two.
+* §3.4's escape-coding table is a palette cost with no index-plane measurement
+  behind it; it is the one design sketch in the document.
+* The four reviewed write-ups are not in the repository. §10 quotes their claims
+  closely enough to check without them, and `palexp/review.py` reproduces every
+  number that refutes or confirms one.
