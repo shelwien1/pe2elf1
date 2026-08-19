@@ -95,7 +95,7 @@
 // `tools/pairshare.py` re-measures both and reports any line that has drifted.
 //
 //   code_pixel / decode_pixel                         13 of 211 (6%)
-//   predict_med / unpredict_med                       10 of 104 (10%)
+//   predict_med / unpredict_med                        7 of 89 (8%)
 //
 // **`predict_med` walks backwards and `unpredict_med` forwards**, and that is
 // structural rather than a spelling.  The forward transform has to read each

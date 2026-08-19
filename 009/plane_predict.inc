@@ -63,45 +63,38 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint8_t *p = pixels+height*width;
   uint8_t *up = &p[-width];
   med_fold_table(fold);
-  int32_t rows_left = height-1;
-  if( height!=1 ) {
-    do {
-      int32_t x_left = width-1;
-      if( width!=1 ) {
-        do {
-          int32_t north = (uint8_t)*--up;
-          --p;
-          uint8_t pred = med_predict(p[-1], north, p[-width-1]);
-          int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
-          *p = code;
-          hist_bump(code);
-          --x_left;
-        } while( x_left );
-      }
-      --up;
+  // Same again a row up: `height - 1` rows, so `if( height != 1 )` is the
+  // count being non-zero.
+  for( int32_t rows_left = height-1; rows_left; --rows_left ) {
+    // The `if( width != 1 )` guard and the `do` inside it are one statement:
+    // the count is `width - 1`, so the guard is the loop's own test.
+    for( int32_t x_left = width-1; x_left; --x_left ) {
+      const int32_t north = (uint8_t)*--up;
       --p;
-      last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
-      *p = last;
-      hist_bump(last);
-      --rows_left;
-    } while( rows_left );
+      const uint8_t pred = med_predict(p[-1], north, p[-width-1]);
+      const int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
+      *p = code;
+      hist_bump(code);
+    }
+    // The first column has no west neighbour, so it takes a plain vertical
+    // difference.
+    --up;
+    --p;
+    last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
+    *p = last;
+    hist_bump(last);
   }
   if( width!=1 ) {
     last = width-1;
-    int32_t pairs = (last)/2;
-    if( pairs ) {
+    const int32_t pairs = last/2;
+    {
       uint32_t k = 0;
-      int32_t ofs = 0;
-      do {
-        uint8_t left = p[ofs-2];
-        ++k;
+      for( int32_t ofs = 0; k<(uint32_t)pairs; ++k, ofs -= 2 ) {
+        const uint8_t left = p[ofs-2];
         p[ofs-1] = fold[(uint8_t)(p[ofs-1]-left)];
         p[ofs-2] = fold[(uint8_t)(left-p[ofs-3])];
-        ofs -= 2;
-      } while( k<(uint32_t)pairs );
+      }
       done = 2*k+1;
-    } else {
-      done = 1;
     }
     if( last>(done-1) ) {
       uint8_t *q = p-done;
@@ -254,32 +247,25 @@ static void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
   // way.
   if( t.by_weights||plane_desc[plane].nrefs==1 ) {
     const uint8_t *ref = base+t.to_ref0;
-    int32_t i = 0;
-    int32_t ofs = 0;
-    do {
+    for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += stride ) {
       if( f_DEC )
         base[ofs] = ref[ofs]+t.dc+side[i];
       else
         side[i] = base[ofs]-t.dc-ref[ofs];
-      ofs += stride;
-      ++i;
-    } while( i<n );
+    }
     return;
   }
   // Two references and three were two loops of six lines that differed in one
   // expression, which is `PlaneTransform::blend`.
   if( t.mode==2||t.mode==3 ) {
-    int32_t left = n;
     uint8_t *p = base;
-    do {
+    for( int32_t left = n; left; --left, p += stride ) {
       const uint32_t blend = t.blend(p);
       if( f_DEC )
         *p = (uint8_t)(blend+t.dc+*side++);
       else
         *side++ = (uint8_t)(*p-t.dc-blend);
-      p += stride;
-      --left;
-    } while( left );
+    }
   }
 }
 
@@ -329,28 +315,26 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
     // of a row which broke out of itself for a wide image and looped for a
     // narrow one -- one loop doing two jobs, with the narrow case's `return`
     // three levels in and its `x_left = 0` assigned every turn and never read.
-    do {
+    for( ; rows_left; --rows_left ) {
       *p = unfold[(uint8_t)*p]+p[-width];
       ++p;
-    } while( --rows_left );
+    }
     return p;
   }
   uint8_t *up = &p[-width];
-  do {
+  for( ; rows_left; --rows_left ) {
     // The first pixel of a row has no west neighbour, so it takes the one
     // above it rather than a MED prediction.
     ++up;
     *p = unfold[(uint8_t)*p]+p[-width];
     ++p;
-    x_left = width-1;
-    do {
-      uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
+    for( x_left = width-1; x_left; --x_left ) {
+      const uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
       *p = pred+unfold[(uint8_t)*p];
       ++up;
       ++p;
-      --x_left;
-    } while( x_left );
-  } while( --rows_left );
+    }
+  }
   return p;
 }
 

@@ -31,7 +31,7 @@ static_assert(sizeof(ReduceNode) == 8,
 // multi-byte symbols -- and the two shared nothing but a frame and 350 lines.
 static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* src,
                                    uint32_t mask) {
-  int32_t n_distinct, row_w, y, bits, shift, prev, s, s_next;
+  int32_t n_distinct, y, bits, shift, prev, s, s_next;
   uint32_t n_syms3, sym_flag[256];
   // The flag table, one entry per symbol, and then the renumbering: the same
   // 1024 bytes hold a 0/1 flag while the alphabet is being counted and the new
@@ -46,50 +46,44 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
   if( packed ) {
     n_distinct = 0;
     if( height ) {
-      row_w = blk1->width;
       // `at` and `y` were `at_spill` and `y_spill`, two more slots in that
       // shared area, written at the bottom of the row loop and read back at
       // the top of the next -- which is what a local does.  `bits_spill` was
       // narrower still: assigned `shift` and read back four lines later.
+      // `row_w = blk1->width` was restated inside the pixel loop, and the
+      // `break` above tested it -- a member nothing in either body writes, so
+      // the test is the same answer on every row and the `for` below carries
+      // it.  `shift & 31` is a dead mask: this path is sub-byte only, so `bpp`
+      // is 1, 2 or 4 and the shift is under 8.
       const uint8_t* p = src-1;
       int32_t at = 0;
-      y = 0;
-      do {
-        if( !row_w )
-          break;
-        uint32_t x = 0;
+      const int32_t bpp = blk1->depth;
+      for( y = 0; y<blk1->height; ++y ) {
         bits = 0;
-        do {
-          int32_t bpp = blk1->depth;
+        for( uint32_t x = 0; x<blk1->width; ++x, ++at ) {
           shift = bits-bpp;
           if( shift<0 ) {
             ++p;
             shift = 8-bpp;
           }
-          uint32_t sym = mask&(*p>>(shift&31));
-          bool first = sym_flag[sym]==0;
-          ++x;
+          const uint32_t sym = mask&(*p>>shift);
+          blk1->alphabet += sym_flag[sym]==0;
           sym_flag[sym] = 1;
           bits = shift;
-          blk1->alphabet += first;
           blk1->sym_word[at] = sym;
-          row_w = blk1->width;
-          ++at;
-        } while( x<blk1->width );
-        n_distinct = blk1->alphabet;
-        ++y;
-      } while( (uint32_t)y<(uint32_t)blk1->height );
+        }
+      }
+      n_distinct = blk1->alphabet;
     }
   } else if( height*blk1->width ) {
-    uint8_t *q = src;
-    uint32_t idx = 0;
-    do {
-      blk1->alphabet += sym_flag[*q]==0;
-      int32_t sym2 = *q;
+    const uint8_t *q = src;
+    const uint32_t n_pix = blk1->height*blk1->width;
+    for( uint32_t idx = 0; idx<n_pix; ++idx ) {
+      const int32_t sym2 = *q++;
+      blk1->alphabet += sym_flag[sym2]==0;
       sym_flag[sym2] = 1;
-      ++q;
-      blk1->sym_word[idx++] = sym2;
-    } while( idx<(uint32_t)(blk1->height*blk1->width) );
+      blk1->sym_word[idx] = sym2;
+    }
     n_distinct = blk1->alphabet;
   } else {
     n_distinct = 0;
@@ -118,12 +112,12 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
         s = s_next;
       } while( next_id<n_syms3 );
     }
-    if( blk1->height*blk1->width ) {
-      uint32_t m = 0;
-      do {
+    {
+      // Every pixel through the reduced alphabet.  The `if` was the `do`'s
+      // guaranteed first turn being made safe for an empty image.
+      const uint32_t n_pix = blk1->height*blk1->width;
+      for( uint32_t m = 0; m<n_pix; ++m )
         blk1->sym_word[m] = sym_flag[blk1->sym_word[m]];
-        ++m;
-      } while( m<(uint32_t)(blk1->height*blk1->width) );
     }
     free_sym_entries(lists, 16);
   } else {
@@ -239,14 +233,16 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       if( n_kids ) {
         plane_size = img_h*img_w;
         if( n_kids>>1 ) {
+          // `2*pairs++*plane_size` is the post-increment-in-an-expression
+          // Phase 2 asks for by name: it reads as `2 * pairs * plane_size`.
           uint8_t *half = out[1]+img_h*img_w;
           uint32_t pairs = 0;
-          do {
-            uint32_t slot_a = 2*pairs;
-            uint32_t off = 2*pairs++*plane_size;
+          for( ; pairs<n_kids>>1; ++pairs ) {
+            const uint32_t slot_a = 2*pairs;
+            const uint32_t off = 2*pairs*plane_size;
             out[slot_a+2] = out[1]+off;
             out[slot_a+3] = &half[off];
-          } while( pairs<n_kids>>1 );
+          }
           done = 2*pairs+1;
         } else {
           done = 1;
@@ -302,8 +298,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       const int32_t alpha_m = blk->alphabet;
       if( alpha_m ) {
         carry = 0;
-        uint32_t si = 0;
-        do {
+        for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si ) {
           word = tree[si].val;
           for( k = 0; k<n_kids; ++k ) {
             lists[4*k+carry].code_symbol((uint8_t)word);
@@ -311,8 +306,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
             word >>= 8;
           }
           carry = (uint8_t)tree[si].val>>7;
-          ++si;
-        } while( si<(uint32_t)alpha_m );
+        }
       }
     }
     free_sym_entries(lists, 16);
