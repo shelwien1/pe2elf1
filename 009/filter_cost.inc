@@ -86,8 +86,9 @@ static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
   const uint8_t *p = plane0-ofs_ul;
   const uint8_t *q = plane0+plane_a-ofs_ul;
   const uint8_t *r = plane0+plane_b-ofs_ul;
-  int32_t n = img->width*(img->height-1)-1;
-  do {
+  // One pixel short of the rows below the first, and never zero: the caller
+  // only reaches here for an image with at least two rows and two columns.
+  for( int32_t n = img->width*(img->height-1)-1; n; --n ) {
     const int32_t cur = *q;
     ++hist[residual_bin(p[ofs_ul]+*p-p[ofs_up]-p[left],
                         w4, q[ofs_ul]+cur-q[ofs_up]-q[left],
@@ -95,8 +96,7 @@ static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
     q -= left;
     p -= left;
     r -= left;
-    --n;
-  } while( n );
+  }
   return estimate_cost(hist, 512);
 }
 

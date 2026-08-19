@@ -94,7 +94,34 @@ MIN_CHARS = 60
 # time.  What it can do is not grow, so the number below is a **ratchet** --
 # the lines of copy measured after the round that wrote this tool, which came
 # down from 1031.  Lower it whenever it falls; a rise is the finding.
-BUDGET = 39
+#
+# 39 -> 44, and this is the first raise.  It should read like a decision, so:
+#
+# `alt_model_p1`'s plane release was eleven lines of decompiler noise -- a
+# `do`/`while` on a counter reloaded from `plane_count` inside its own body,
+# around a null check that `bmf_new` being fatal makes dead.  Stage-2 phase 2
+# took it to three:
+#
+#     for( int32_t f = 0; f<plane_count; ++f )
+#       plane[f]->alt_p1_free();
+#     return plane_count;
+#
+# which is now a five-line match -- those three plus a brace and a blank line --
+# against `alt_p2_planes_free`, which has always been exactly that.  So the copy
+# did not grow; one of its two sites stopped being obscured.
+#
+# It cannot be shared as it stands.  The two loops differ only in the method
+# name, and giving both blocks a `release()` is recorded four files over, in
+# `prune_unreachable.py`, as having been tried and reverted: that tool keys a
+# map on the unqualified name and asserted `two definitions of release`.  The
+# alternatives are a member-function-pointer template or a pair of free-function
+# overloads plumbed across an include boundary, and both read worse than the
+# three lines they would remove.
+#
+# So: five lines of trivial loop, deliberately left, in exchange for eight lines
+# of noise deleted.  Lower it again the moment something makes the pair
+# shareable.
+BUDGET = 44
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.

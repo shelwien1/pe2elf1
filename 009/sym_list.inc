@@ -376,16 +376,11 @@ struct SymList {
     if( dense ) {
       tot = 0;
       live = n_u;
-      result = 12*n_u;
-      since_rescale = result;
+      since_rescale = 12*n_u;
       rescale_at = 8*n_u;
-      if( n_u ) {
-        result = 0;
-        do {
-          ent[result].sym = result;
-          ent[result].cnt = 1;
-          ++result;
-        } while( result<live );
+      for( result = 0; result<live; ++result ) {
+        ent[result].sym = result;
+        ent[result].cnt = 1;
       }
     } else {
       tot = 2;

@@ -139,8 +139,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
   if( height>1 ) {
     uint32_t* pair = ctx_pair;
     outp = out;
-    uint32_t y = 0;
-    do {
+    for( uint32_t y = 0; y<(uint32_t)(height-1); ++y ) {
       uint8_t *srcp = src_end;
       start_row();
       if( width>0 ) {
@@ -161,8 +160,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
           src_end = &srcp[width];
         outp = &outp[width];
       }
-      ++y;
-    } while( y<(uint32_t)(height-1) );
+    }
   }
   if( f_DEC )
     rc_end_decode();

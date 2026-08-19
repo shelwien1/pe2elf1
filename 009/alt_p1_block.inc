@@ -360,17 +360,13 @@ struct AltP1Block {
       rc_begin_decode();
     else
       rc_begin_encode();
-    if( height>0 ) {
-      int32_t y = 0;
-      do {
-        ++y;
+    {
+      for( int32_t y = 0; y<height; ++y ) {
         advance_row();
         seed_activity(false);
-        if( !(width<=0) ) {
+        {
           uint8_t* q = out;
-          int32_t x = 0;
-          do {
-            ++x;
+          for( int32_t x = 0; x<width; ++x ) {
             ctx_of(nullptr, nullptr);
             if( f_DEC ) {
               const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]],
@@ -384,10 +380,10 @@ struct AltP1Block {
             }
             record_sample((uint8_t)*q);
             ++q;
-          } while( x<width );
+          }
           out = q;
         }
-      } while( (uint32_t)y<(uint32_t)height );
+      }
     }
     if( f_DEC )
       rc_end_decode();
@@ -552,18 +548,17 @@ struct AltP1Block {
     // The plane was hoisted into `plane_hi = plane << 8` and then written
     // `plane_hi | grp` on one line and `grp1 | plane_hi` on the next -- the
     // same value, twice, in two orders.
-    do {
+    for( k = 0; k<0x100; ++k ) {
       level_of[2*k] = lvl;
-      int32_t lvl1 = (2*k==p1_level_edges[lvl])+lvl;
+      const int32_t lvl1 = (2*k==p1_level_edges[lvl])+lvl;
       group_of[2*k] = CtxIdx{}.above<8>(plane).bits<0, 3>(grp);
       level_of[2*k+1] = lvl1;
-      int32_t odd = 2*k+1;
-      int32_t grp1 = (2*k==p1_group_edges[grp])+grp;
+      const int32_t odd = 2*k+1;
+      const int32_t grp1 = (2*k==p1_group_edges[grp])+grp;
       lvl = (odd==p1_level_edges[lvl1])+lvl1;
       group_of[2*k+1] = CtxIdx{}.above<8>(plane).bits<0, 3>(grp1);
       grp = (odd==p1_group_edges[grp1])+grp1;
-      ++k;
-    } while( (uint32_t)k<0x100 );
+    }
     // The same walk `alt_p2_block` makes over its own edge table, and it was
     // spelled the same way: `2*pair+++1`, a post-increment inside the
     // comparison that decides the next slot, with the answer parked in a
@@ -587,21 +582,16 @@ struct AltP1Block {
       ctx_w[c].w[2] = 2*w1;
     }
     uint32_t row = 0;
-    do
-      buf[row++] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+10));
-    while( row<5 );
+    for( int32_t row = 0; row<5; ++row )
+      buf[row] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+10));
     alt_init_tables(fold, (int8_t*)unfold);
-    int32_t wid = width;
-    if( width>-10 ) {
-      int32_t r = 0;
-      do {
-        for( int32_t i = 0; i<5; ++i ) buf[4-i][r].sym = 72;
-        for( int32_t i = 0; i<5; ++i ) buf[4-i][r].mag = 0;
-        wid = width;
-        ++r;
-      } while( r<width+10 );
+    // `width + 10` is never negative, so the `> -10` guard the `do` needed is
+    // gone with it, and `wid = width` inside the body was a member re-read.
+    for( int32_t r = 0; r<width+10; ++r ) {
+      for( int32_t i = 0; i<5; ++i ) buf[4-i][r].sym = 72;
+      for( int32_t i = 0; i<5; ++i ) buf[4-i][r].mag = 0;
     }
-    for( int32_t i = 0; i<5; ++i ) cursor[i] = buf[i]+wid+4;
+    for( int32_t i = 0; i<5; ++i ) cursor[i] = buf[i]+width+4;
     return this;
   }
 

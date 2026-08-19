@@ -41,10 +41,9 @@ inline int32_t SymList::decode_symbol_list() {
   w = list;
   uint32_t gen = (uint8_t)exclusion_gen;
   int32_t cum = 0;
-  int32_t i = 0;
   // The candidates: every live symbol the encoder has not already offered and
   // had rejected, with their counts summed.
-  do {
+  for( int32_t i = 0; i<(int32_t)live; ++i ) {
     if( (uint8_t)exclusion_mask[ent[i].sym]==gen ) {
       c = 0;
     } else {
@@ -53,8 +52,7 @@ inline int32_t SymList::decode_symbol_list() {
       *w++ = e;
     }
     cum += c;
-    ++i;
-  } while( i<(int32_t)live );
+  }
   if( !cum )
     return -1;
   *w = nullptr;

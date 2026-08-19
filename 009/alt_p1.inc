@@ -32,12 +32,15 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
     uint32_t pairs = (128-lo)/2;
     half = 0;
     in_bucket = 1;
-    if( pairs ) {
+    {
+      // `pos[2*k+++1]` reads as `pos[2*k + 1]` and is `pos[2*(k++) + 1]`; the
+      // increment is the loop's own.  `(fold)[lo]` had parentheses round a
+      // plain array name.
       uint32_t k = 0;
       int32_t ofs = 0;
-      uint8_t *pos = &(fold)[lo];
+      uint8_t *pos = &fold[lo];
       uint8_t *neg = fold-lo;
-      do {
+      for( ; k<pairs; ++k, ofs -= 2 ) {
         bucket = bucket_size;
         int32_t bucket_1 = in_bucket-1;
         if( bucket_1 )
@@ -54,18 +57,17 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
           even = 2*++half;
           odd = 2*half-1;
         }
-        pos[2*k+++1] = even;
+        pos[2*k+1] = even;
         neg[ofs+255] = odd;
-        ofs -= 2;
-      } while( k<pairs );
+      }
+      // `done = 1` when `pairs` is zero, which is what the `else` arm this
+      // replaces assigned: `k` never moves, so `2*k + 1` is already 1.
       done = 2*k+1;
-    } else {
-      done = 1;
     }
     if( (done-1)<span ) {
       if( in_bucket==1 )
         half = half+1;
-      (fold)[lo-1+done] = 2*half;
+      fold[lo-1+done] = 2*half;
       fold[257-lo-done] = 2*half-1;
     }
   }

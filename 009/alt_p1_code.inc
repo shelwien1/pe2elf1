@@ -69,22 +69,17 @@ static inline int32_t plane_mix3(const PlaneDesc& d, const uint8_t* p) {
 
 template<int32_t f_DEC>
 int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
-  int32_t cur3;
   // `void* plane[4]` with three `AltP1Block*&` aliases onto slots 1..3 -- the
   // decompiler's way of saying that a `void*` array is read as blocks.  It is
   // an array of blocks.
   AltP1Block* plane[4];
-  int32_t cur0, cur1;
-  int32_t w, n_planes, want2;
+  int32_t cur0, cur1, cur3;
+  int32_t want2;
   int32_t width = hdr->width;
   int32_t height = hdr->height;
-  if( plane_count>0 ) {
-    int32_t k = 0;
-    do {
-      AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
-      plane[k] = raw->alt_p1_alloc(width, height, k);
-      ++k;
-    } while( k<plane_count );
+  for( int32_t k = 0; k<plane_count; ++k ) {
+    AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
+    plane[k] = raw->alt_p1_alloc(width, height, k);
   }
   int32_t src1 = plane_desc[1].src_plane;
   int32_t src2 = plane_desc[2].src_plane;
@@ -102,23 +97,16 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     rc_begin_decode();
   else
     rc_begin_encode();
-  if( height>0 ) {
-    uint32_t y = 0;
-    w = width;
-    n_planes = plane_count;
-    do {
-      if( n_planes>0 ) {
-        int32_t p = 0;
-        do {
-          ++p;
-          AltP1Block* blk_k = plane[p-1];
-          blk_k->advance_row();
-          blk_k->seed_activity(true);
-          n_planes = plane_count;
-        } while( p<plane_count );
-        w = width;
+  {
+    // `n_planes = plane_count` and `w = width` were restated six times between
+    // them inside bodies that write neither -- MSVC reloading two globals it
+    // could not prove unchanged across the calls that sit between the reads.
+    for( uint32_t y = 0; y<(uint32_t)height; ++y ) {
+      for( int32_t p = 0; p<plane_count; ++p ) {
+        plane[p]->advance_row();
+        plane[p]->seed_activity(true);
       }
-      if( w>0 ) {
+      {
         // One plane's sample, coded either way: its context built from the
         // planes beside it, the sample itself, and the record it leaves.  All
         // four planes do exactly this and all four wrote it out, each with a
@@ -159,8 +147,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             val += dc+mix;
           *(buf+off) = val;
         };
-        uint32_t x = 0;
-        do {
+        for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
           int32_t off0 = plane_desc[0].src_plane;
           if( !f_DEC )
             cur0 = fold_from(off0, 0, 0, 0);
@@ -185,7 +172,6 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           if( f_DEC )
             unfold_to(off2, xf2, dc2,
                       plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
-          n_planes = plane_count;
           if( plane_count>=4 ) {
             int32_t off3 = plane_desc[3].src_plane;
             if( !f_DEC )
@@ -195,33 +181,21 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             if( f_DEC )
               unfold_to(off3, xf3, dc3,
                         plane_mix3(plane_desc[off3], buf+off3), cur3);
-            n_planes = plane_count;
           }
-          buf += n_planes;
-          ++x;
-        } while( x<(uint32_t)width );
-        w = width;
+          buf += plane_count;
+        }
       }
-      ++y;
-    } while( y<(uint32_t)height );
+    }
   }
   if( f_DEC )
     rc_end_decode();
   else
     rc_end_encode();
-  int32_t np = plane_count;
-  if( plane_count>0 ) {
-    int32_t f = 0;
-    do {
-      AltP1Block* q = plane[f];
-      if( q ) {
-        q->alt_p1_free();
-        np = plane_count;
-      }
-      ++f;
-    } while( f<np );
-  }
-  return np;
+  // `bmf_new` is fatal, so every slot is populated -- the `if( q )` was the
+  // same dead null check 11.1 removed from the p2 side.
+  for( int32_t f = 0; f<plane_count; ++f )
+    plane[f]->alt_p1_free();
+  return plane_count;
 }
 
 int32_t alt_model_p1_encode(BmfImage* hdr, uint8_t* src) {

@@ -1197,39 +1197,36 @@ struct ModelBlock {
         done = 0;
         n_pix = height*width;
         int32_t chunk = n_pix/nchunk;
-        if( nchunk>=6 ) {
+        {
+          // Five rows a turn while five fit, then one at a time.  Both walks
+          // set `row[k] = &expand_buf[chunk*k]`; the unrolled one spells the
+          // first of each five through a running cursor and the other four
+          // through the subscript, which is why they did not look like one
+          // thing.
           int32_t q5 = 0;
           uint8_t *row_at = expand_buf;
-          do {
+          for( ; q5<=nchunk-6; q5 += 5, row_at += 5*chunk ) {
             row[q5] = row_at;
-            row_at += 5*chunk;
             for( int32_t n = 0; n<4; ++n ) row[q5+1+n] = &expand_buf[chunk*(q5+1+n)];
-            q5 += 5;
-          } while( q5<=nchunk-6 );
-          done = q5;
+          }
+          done = nchunk>=6 ? q5 : 0;
         }
-        int32_t q1 = done;
-        int32_t at = chunk*done;
-        do {
-          row[q1] = &expand_buf[at];
-          at += chunk;
-          ++q1;
-        } while( q1<nchunk );
+        for( int32_t q1 = done; q1<nchunk; ++q1 )
+          row[q1] = &expand_buf[chunk*q1];
       }
-      if( n_pix>0 ) {
+      {
+        // `n_pix2 = height*width` was re-read inside the loop; neither factor
+        // moves.
         uint8_t *interleave_at = dst;
+        n_pix2 = height*width;
         q2 = 0;
-        int32_t written = 0;
-        do {
+        for( int32_t written = 0; written<n_pix2; ++written ) {
           uint8_t *p = row[q2];
-          *interleave_at = *p;
-          n_pix2 = height*width;
-          ++interleave_at;
-          row[q2++] = p+1;
-          if( q2==nchunk )
+          *interleave_at++ = *p;
+          row[q2] = p+1;
+          if( ++q2==nchunk )
             q2 = 0;
-          ++written;
-        } while( written<n_pix2 );
+        }
       }
       free(expand_buf);
     }
