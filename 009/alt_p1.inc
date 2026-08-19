@@ -91,7 +91,7 @@ static void alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height,
   AltP1Block *blk = alt_p1_block_alloc(width, height);
   blk->d8_body<f_DEC>(src, out);
   if( blk )
-    blk->alt_p1_free(1);
+    blk->alt_p1_free();
 }
 
 void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {

@@ -265,7 +265,7 @@ void bmf_decompress(const char* InName, const char* OutName) {
   free(coded_block);
   coded_block = nullptr;
   free(p_i);
-  bmf_close_file(arc, 1);
+  bmf_close_file(arc);
 }
 
 

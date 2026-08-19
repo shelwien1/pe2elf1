@@ -757,14 +757,24 @@ struct AltP2Block {
     return this;
   }
 
-  AltP2Block*alt_p2_free(int8_t do_free) {
+  // Returns nothing, and takes nothing.  It returned `this` *after*
+  // `bmf_page_free(this)` -- a dangling pointer, which g++ reports under
+  // `-Wuse-after-free` -- and the `do_free` flag it tested is 1 at every call
+  // site in the tree.  Fourth of its kind here, after `alt_p1_free`,
+  // `alt_model_p1_d8_decode` and `ModelBlock::free_workspace`: the decompiler
+  // writes the register that happened to hold `this` as a return value wherever
+  // MSVC left it there, and a `do_free` nobody clears is the same artefact one
+  // level up.
+  //
+  // The plan asks for "release workspace" and "release object" to be split.
+  // There is nothing to split: no caller wants the workspace freed and the
+  // object kept, which is what the always-1 flag says.
+  void alt_p2_free() {
     for( int32_t k = 0; k<5; ++k )
       free(buf[k]);
     free(row0);
     free(row1);
-    if( do_free&1 )
-      bmf_page_free(this);
-    return this;
+    bmf_page_free(this);
   }
 };
 
@@ -819,7 +829,7 @@ static void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
 
 static int32_t alt_p2_planes_free(AltP2Block** plane) {
   for( int32_t pl = 0; pl<plane_count; ++pl )
-    plane[pl]->alt_p2_free(1);
+    plane[pl]->alt_p2_free();
   return plane_count;
 }
 

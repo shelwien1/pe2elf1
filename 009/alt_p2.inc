@@ -186,7 +186,7 @@ void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   else
     blk->alt_p2_d8_body<0>(src, out, i, height);
   if( blk )
-    blk->alt_p2_free(1);
+    blk->alt_p2_free();
 }
 
 void alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {

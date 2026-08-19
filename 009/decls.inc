@@ -65,7 +65,7 @@ static inline void p2_nudge(P2Count* p, int32_t res, int32_t shift = 2);
 static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest);
 static inline void p2_rescale(P2Freq* r);
 static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num);
-BmfFile*bmf_close_file(BmfFile* arc, int8_t do_free);
+void bmf_close_file(BmfFile* arc);
 void expand_predictor_mode0(int32_t i);
 uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height);
 uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold);

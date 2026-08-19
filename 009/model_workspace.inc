@@ -12,13 +12,15 @@ static void free_sym_lists(SymList* lists) {
   free(sym_list_block(lists));
 }
 
-// Returns nothing.  It returned `(void**)this` -- after `free(this)` on the
-// path that takes it, so the value was a dangling pointer -- and neither of the
-// two callers reads it.  Third of its kind in this tree: `alt_p1_free` and
-// `alt_model_p1_d8_decode` were the first two, and the decompiler writes the
-// register that happened to hold `this` as a return value wherever MSVC left
-// it there.
-void ModelBlock::free_workspace(int8_t do_free) {
+// Returns nothing, and takes nothing.  It returned `(void**)this` -- after
+// `free(this)` on the path that takes it, so the value was a dangling pointer
+// -- and neither of the two callers reads it.  The `do_free` flag it tested is
+// 1 at every call site of all four functions in this family (`alt_p1_free`,
+// `alt_model_p1_d8_decode`, `alt_p2_free` and this), which is the same
+// artefact one level up: the decompiler writes the register that happened to
+// hold `this` as a return value wherever MSVC left it there, and a flag whose
+// false arm no caller takes as a parameter.
+void ModelBlock::free_workspace() {
   int32_t i;
   free(sym_code);
   free(sym_word);
@@ -29,8 +31,7 @@ void ModelBlock::free_workspace(int8_t do_free) {
   for( i = 0; i<5; ++i )
     free(row_cur[i]);
   free(escape.ent);
-  if( do_free&1 )
-    free(this);
+  free(this);
 }
 
 // A block on the heap, laid out for one image.  Both plane coders wrote the

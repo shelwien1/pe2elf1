@@ -62,7 +62,7 @@ static void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     blk->unmodel_plane_slow(pixels);
   else
     blk->model_plane_slow(pixels);
-  blk->free_workspace(1);
+  blk->free_workspace();
 }
 
 void unmodel_plane(BmfImage* p_i, uint8_t* out) {

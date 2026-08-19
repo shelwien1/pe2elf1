@@ -60,11 +60,11 @@ struct BmfFile {
   }
 };
 
-BmfFile*bmf_close_file(BmfFile* arc, int8_t do_free) {
+// Same shape as `AltP2Block::alt_p2_free`: it returned `arc` after `free(arc)`
+// and tested a `do_free` its one caller always passes as 1.
+void bmf_close_file(BmfFile* arc) {
   arc->close();
-  if( do_free&1 )
-    free(arc);
-  return arc;
+  free(arc);
 }
 
 static uint32_t bytes_left(FILE* fp) {

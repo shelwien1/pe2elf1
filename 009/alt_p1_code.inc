@@ -215,7 +215,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     do {
       AltP1Block* q = plane[f];
       if( q ) {
-        q->alt_p1_free(1);
+        q->alt_p1_free();
         np = plane_count;
       }
       ++f;
