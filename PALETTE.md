@@ -1296,7 +1296,57 @@ end, where the table had been costing several times what it should: 15 bytes
 instead of 20 on `x_ci`, 4 instead of 11 on `t32`. Those are the files where
 palettizing pays at all.
 
-### 11.4 the container cost, which §6.5 left out
+### 11.4 the same split in front of BMF
+
+`bmg` is a poor test of whether palettizing pays, because it already palettizes:
+`Codec::gray_monotone` sends an 8-bit image with a monotone grey ramp down the
+index path and codes the plane directly, so most of the benefit is priced in
+before `bmppal` is invited. BMF 2.01 does not do that. Putting the same split in
+front of it, `bmf c` on `out.bmp` plus `out.pal`, against `bmf c` on the original:
+
+| file | `bmf` | with the countdown | `-x` | best |
+| --- | ---: | ---: | ---: | ---: |
+| `x_ci` | 633 144 | 603 210 ✗ | **603 254** | **−4.72%** |
+| `t8p` | 43 676 | 43 360 | **43 288** | **−0.89%** |
+| `x_ai` | 148 780 | 148 887 | 148 874 | +0.06% |
+| `t8g` | 42 912 | 43 302 | 43 230 | +0.74% |
+| `x_ep` | 330 616 | 544 761 | 479 752 | +45% |
+| `t24` | 53 924 | 205 490 | 219 094 | +281% |
+| `t32` | 53 996 | 245 583 | 238 955 | +343% |
+| **corpus** | **1 307 048** | | | **1 276 770, −2.32%** |
+
+taking the better of the two modes per file where both restore. Every row was
+run end to end — `bmppal c`, `bmf c`, `bmf d`, `bmppal d` — and compared with the
+input.
+
+**It is worth about ten times more to BMF than to `bmg`**, which is the whole
+point: the split is worth most to a coder that does not already do it. `x_ci`
+alone gives up 29 890 bytes, and `t8p` is the cleaner demonstration —
+`bmf` on `bmppal`'s index plane comes to 42 912 bytes, which is *exactly* what
+`bmf` spends on `t8g`. The two files carry identical index data behind different
+palettes, and BMF had been paying 764 bytes for the difference; the split hands
+it the same problem twice and it produces the same answer twice.
+
+It does not close the whole gap. `bmg` codes that same `x_ci` index plane in
+567 674 bytes against BMF's 603 144, so BMF is still 6% behind on the palettized
+form — the split fixes the representation, not the model.
+
+**One operational warning, and it is not `bmppal`'s to fix.** The countdown
+(§11.2) makes an RLE8 `out.bmp` sensitive to how the runs are split, because the
+rank a colour gets moves as the image is coded and two adjacent runs can end up
+carrying the same byte. A coder that re-encodes the run structure will merge
+them, and the ranks no longer line up. BMF does re-encode — that is the same
+behaviour that costs it `x_ci` against `bmg` in §8.1 of `BMG-FORMAT.md` — so
+`x_ci` with the countdown does not survive the trip. It fails **loudly**: the
+decoder reports that the index image does not decode against the occurrence
+table and refuses, rather than handing back a plausible wrong picture. `-x` is
+immune, because a fixed map per colour does not care how the runs are cut, and
+the `-x` column above is byte-exact everywhere.
+
+So: pair `bmppal` with a byte-exact coder and use the countdown; pair it with one
+that rewrites containers and pass `-x` for run-length input.
+
+### 11.5 the container cost, which §6.5 left out
 
 `t8g` and `t8p` are the interesting failures, and they correct this document.
 
@@ -1319,7 +1369,7 @@ occurrence table costs 278 more if you keep it. Take the counts away and the
 split is roughly break-even; keep them and it loses. §6.5's number was the
 pixels; this is the file.
 
-### 11.5 verification
+### 11.6 verification
 
 * Round-trip on the seven corpus files and twelve synthetic edge cases, with the
   countdown on and off and with and without `out.frq` — 1×1,

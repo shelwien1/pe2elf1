@@ -187,7 +187,10 @@ context models, the residual coder, and — the part worth reading first — the
 three things that were built from `ALGORITHM_v2.md`, measured, and then removed
 because they did not pay.
 
-`bmppal` is that study as a program — `PALETTE.md` §11:
+`bmppal` is that study as a program — `PALETTE.md` §11. It is worth about ten
+times more to BMF than to `bmg`, because `bmg` already palettizes an 8-bit image
+internally and BMF does not: in front of `bmf` it takes `x_ci` down 4.7% and the
+corpus down 2.3%.
 
 ```sh
 ./mk.sh pal
