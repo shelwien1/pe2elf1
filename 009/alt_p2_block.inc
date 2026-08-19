@@ -813,14 +813,13 @@ static void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
 static void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
   for( int32_t pl = 0; pl<plane_count; ++pl ) {
     AltP2Block* page = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
-    plane[pl] = page ? page->alt_p2_alloc(width, pl) : nullptr;
+    plane[pl] = page->alt_p2_alloc(width, pl);
   }
 }
 
 static int32_t alt_p2_planes_free(AltP2Block** plane) {
   for( int32_t pl = 0; pl<plane_count; ++pl )
-    if( plane[pl] )
-      plane[pl]->alt_p2_free(1);
+    plane[pl]->alt_p2_free(1);
   return plane_count;
 }
 

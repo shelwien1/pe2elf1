@@ -40,8 +40,6 @@ void ModelBlock::free_workspace(int8_t do_free) {
 // behaviour and it stays; the guard is one place now rather than two.
 ModelBlock* new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
   void* raw = bmf_new(sizeof(ModelBlock));
-  if( !raw )
-    return nullptr;
   return ((ModelBlock*)raw)->layout_workspace(img_w, img_h, img_depth);
 }
 

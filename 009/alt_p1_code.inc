@@ -75,7 +75,6 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   // an array of blocks.
   AltP1Block* plane[4];
   int32_t cur0, cur1;
-  AltP1Block* made;
   int32_t w, n_planes, want2;
   int32_t width = hdr->width;
   int32_t height = hdr->height;
@@ -83,11 +82,8 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     int32_t k = 0;
     do {
       AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
-      if( raw )
-        made = raw->alt_p1_alloc(width, height, k);
-      else
-        made = nullptr;
-      plane[k++] = made;
+      plane[k] = raw->alt_p1_alloc(width, height, k);
+      ++k;
     } while( k<plane_count );
   }
   int32_t src1 = plane_desc[1].src_plane;

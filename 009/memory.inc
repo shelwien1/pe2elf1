@@ -71,10 +71,21 @@ static void bmf_free(void* p) {
 #define free bmf_free
 #endif
 #define BMF_PAGE ((uintptr_t)4096)
+// Fatal on failure, like `bmf_new` two functions down, and that is a fix
+// rather than a tidy: this returned null, `alt_p2_planes_alloc` stored the null
+// into `plane[pl]`, and `alt_p2_start_row` dereferenced it on the first row
+// without looking.  `alt_p2_planes_free` *did* look -- `if( plane[pl] )` -- so
+// the check existed on the path that could not crash and was missing from the
+// one that could.
+//
+// Routing it here rather than at the two call sites is what makes the class go
+// away instead of one instance of it: every other allocation in this tree is
+// already fatal, so a nullable allocator is the outlier that invites the next
+// unchecked store.
 static void*bmf_page_alloc(size_t n) {
   void* base = malloc(n+BMF_PAGE+sizeof(void*));
   if( !base )
-    return nullptr;
+    bmf_fatal(bmf_no_memory);
   uintptr_t raw = (uintptr_t)base+sizeof(void*);
   char* p = (char*)((raw+(BMF_PAGE-1))&~(BMF_PAGE-1));
   ((void**)p)[-1] = base;
