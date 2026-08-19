@@ -166,6 +166,79 @@ template<int DEC> static qword num_code( NumModel& m, qword v ) {
   return DEC ? r - 1 : v;
 }
 
+// ---------------------------------------------------------------- the counts
+//
+// The occurrence table is a composition: K positive numbers with a known sum.
+// Coding them one at a time throws that away.  This is the other way, taken from
+// Shelwien's frqcomp (`model_freq.inc`, `freq_proc`): recurse over the table,
+// splitting the range in half and sending how the parent's total divides between
+// the halves, with the right half then determined by subtraction and never sent
+// at all.  Two flags catch the degenerate splits -- all of it on one side, none
+// of it anywhere -- and the split itself goes through a bounded binary code that
+// spends nothing on values the total has already ruled out.
+//
+// Every count here is at least one, so what is coded is the table of n_i - 1
+// against a total of N - K.  That turns "every entry occurs once", the commonest
+// shape a palette has, into a table of zeros.
+//
+// It does not win everywhere, so it does not replace the per-number coder -- see
+// PALETTE.md 11.5.  Both are coded and the shorter is kept.
+
+#ifndef FRQ_CTX
+#define FRQ_CTX 32                        // adaptive tree nodes; deeper ones go raw
+#endif
+
+struct FreqModel {
+  Counter node[FRQ_CTX], cmax, cmin;
+  void init() { for( int i=0; i<FRQ_CTX; i++ ) node[i].init(); cmax.init(); cmin.init(); }
+};
+
+static int log2i_( qword x ) { int n = -1; while( x ) { n++; x >>= 1; } return n; }
+
+// n in (lo,hi), most significant bit first.  A bit whose whole subtree falls
+// outside the interval is not coded: it is implied, and implied bits are free.
+template<int DEC> static qword bounded_num( FreqModel& F, qword n, qword lo, qword hi ) {
+  if( hi <= lo + 1 ) return lo;                    // nothing left to say
+  int clen = log2i_( hi - 1 ) + 1;
+  qword z = 0;
+  for( int i = clen-1; i >= 0; i-- ) {
+    qword step = 1ull << i;
+    uint k = DEC ? 0u : (uint)((n >> i) & 1);
+    if( z + step - 1 <= lo ) k = 1;
+    else if( z + step >= hi ) k = 0;
+    else {
+      qword j = ((1ull << clen) + z) >> (i+1);
+      if( j < FRQ_CTX ) k = bit_code<DEC>( F.node[j], k );
+      else k = rc.rc_BProcess( hSCALE, k );        // too deep to be worth a counter
+    }
+    z |= (qword)k << i;
+  }
+  return z;
+}
+
+// The sum of f[A..B) given the total it has to fit inside.  total < sum on entry
+// means the caller already knows the sum -- it is the right half of a split that
+// has just been coded -- and then nothing is coded here, only inside.
+template<int DEC> static qword freq_proc( FreqModel& F, qword* f, qword A, qword B,
+                                          qword total, qword sum ) {
+  if( B == A ) return 0;
+  if( !DEC ) { sum = 0; for( qword i=A; i<B; i++ ) sum += f[i]; }
+  if( total >= sum ) {
+    if( bit_code<DEC>( F.cmax, DEC ? 0u : (uint)(sum == total) ) ) sum = total;
+    else if( bit_code<DEC>( F.cmin, DEC ? 0u : (uint)(sum == 0) ) ) sum = 0;
+    else sum = bounded_num<DEC>( F, sum, 0, total );
+  }
+  if( B - A <= 1 ) f[A] = sum;
+  else if( sum == 0 ) { if( DEC ) for( qword i=A; i<B; i++ ) f[i] = 0; }
+  else {
+    qword h = (B - A) >> 1;
+    qword s0 = freq_proc<DEC>( F, f, A, A+h, sum, 0 );
+    if( s0 > sum ) return sum;                     // corrupt stream; caller checks
+    freq_proc<DEC>( F, f, A+h, B, 0, sum - s0 );
+  }
+  return sum;
+}
+
 // ---------------------------------------------------------------- hash map
 //
 // (a,b) -> count over neighbouring index pairs.  Open addressed, power of two,
@@ -462,7 +535,7 @@ struct PalCtx {
   qword K;
   int   ordmode, w[4];
   int*  perm;
-  int   has_counts, excl;
+  int   has_counts, excl, frqmode;
   qword ncol;      byte*  paltab;     // mode 0
   qword hdrlen;    byte*  hdr;        // mode 1
   qword padlen;    byte*  pad;
@@ -482,7 +555,9 @@ struct PalCtx {
 struct PalModels {
   ByteModel bm, bmd;
   NumModel  nmisc, nlen, ndelta, ncnt, nperm;
-  void init() { bm.init(); bmd.init(); nmisc.init(); nlen.init(); ndelta.init(); ncnt.init(); nperm.init(); }
+  FreqModel fq;
+  void init() { bm.init(); bmd.init(); nmisc.init(); nlen.init(); ndelta.init();
+                ncnt.init(); nperm.init(); fq.init(); }
 };
 
 // A run of bytes, order-1.
@@ -530,6 +605,10 @@ template<int DEC> static int pal_stream( PalCtx& c, PalModels& M ) {
   c.has_counts = (int)num_code<DEC>( M.nmisc, c.has_counts );
   c.excl       = (int)num_code<DEC>( M.nmisc, c.excl );
   if( c.excl > 1 ) return 0;
+  if( c.has_counts ) {
+    c.frqmode = (int)num_code<DEC>( M.nmisc, c.frqmode );
+    if( c.frqmode > 1 ) return 0;
+  }
 
   if( c.mode == 0 ) {
     c.ncol = num_code<DEC>( M.nmisc, c.ncol );
@@ -576,9 +655,30 @@ template<int DEC> static int pal_stream( PalCtx& c, PalModels& M ) {
   }
 
   if( c.has_counts ) {
-    if( DEC ) { c.cnt = new qword[c.K]; for( qword j=0; j<c.K; j++ ) c.cnt[j] = 0; }
-    for( qword j=0; j<c.K; j++ )
-      c.cnt[j] = num_code<DEC>( M.ncnt, DEC ? 0 : c.cnt[j] - 1 ) + (DEC ? 1 : 0);
+    if( DEC ) c.cnt = new qword[c.K];
+    if( c.frqmode == 0 ) {
+      // one number at a time, length contexted on the previous length.  This one
+      // needs no total, so it is not sent -- the mode is coded first precisely so
+      // that the rest of the block can differ.
+      for( qword j=0; j<c.K; j++ ) {
+        qword v = num_code<DEC>( M.ncnt, DEC ? 0 : c.cnt[j] - 1 );
+        if( v > (1ull<<40) ) return 0;
+        if( DEC ) c.cnt[j] = v + 1;
+      }
+    } else {
+      qword tot = 0;
+      if( !DEC ) for( qword j=0; j<c.K; j++ ) tot += c.cnt[j];
+      tot = num_code<DEC>( M.ncnt, tot );
+      if( tot < c.K || tot > (1ull<<40) ) return 0;    // K counts, each at least one
+      // the whole table at once, against its known total
+      qword* m = new qword[c.K];
+      if( !DEC ) for( qword j=0; j<c.K; j++ ) m[j] = c.cnt[j] - 1;
+      qword got = freq_proc<DEC>( M.fq, m, 0, c.K, tot - c.K, 0 );
+      qword chk = 0;
+      for( qword j=0; j<c.K; j++ ) { c.cnt[j] = m[j] + 1; chk += m[j]; }
+      delete[] m;
+      if( got != tot - c.K || chk != tot - c.K ) return 0;
+    }
   }
   return 1;
 }
@@ -587,24 +687,35 @@ template<int DEC> static int pal_stream( PalCtx& c, PalModels& M ) {
 // what the occurrence table costs without coding the file twice by hand.
 static qword write_pal( const char* fn, PalCtx& c ) {
   qword cap = (1u<<16) + 16*( c.ncol*4 + c.K*10 + c.hdrlen + c.padlen + c.taillen );
-  byte* buf = new byte[cap];
-  buf[0]='B'; buf[1]='P'; buf[2]='A'; buf[3]='L'; buf[4]=2;
-  rc.init( buf+5, cap-5, 0 );
-  PalModels* M = new PalModels; M->init();
-  pal_stream<0>( c, *M );
-  rc.flush();
-  qword n = 5 + rc.mpos;
-  delete M;
-  if( rc.mpos >= cap-5 ) { fprintf(stderr,"palette stream overflowed\n"); delete[] buf; return 0; }
-  if( fn && !spew( fn, buf, n ) ) n = 0;
-  delete[] buf;
-  return n;
+  byte* best = 0; qword bn = 0; int bestmode = 0;
+  // Neither way of coding the occurrence table wins everywhere -- one number at
+  // a time reads a long tail of ones cheaply, the whole table at once reads a
+  // small dense one much better -- so both are coded and the shorter is kept.
+  // It costs two passes over a few kilobytes and one bit to say which.
+  for( int mode = 0; mode <= (c.has_counts ? 1 : 0); mode++ ) {
+    byte* buf = new byte[cap];
+    buf[0]='B'; buf[1]='P'; buf[2]='A'; buf[3]='L'; buf[4]=3;
+    c.frqmode = mode;
+    rc.init( buf+5, cap-5, 0 );
+    PalModels* M = new PalModels; M->init();
+    pal_stream<0>( c, *M );
+    rc.flush();
+    delete M;
+    if( rc.mpos >= cap-5 ) { fprintf(stderr,"palette stream overflowed\n"); delete[] buf; delete[] best; return 0; }
+    qword n = 5 + rc.mpos;
+    if( !best || n < bn ) { delete[] best; best = buf; bn = n; bestmode = mode; }
+    else delete[] buf;
+  }
+  c.frqmode = bestmode;
+  if( fn && !spew( fn, best, bn ) ) bn = 0;
+  delete[] best;
+  return bn;
 }
 
 static int read_pal( const char* fn, PalCtx& c ) {
   qword n; byte* d = slurp( fn, &n );
   if( !d ) return 0;
-  if( n < 6 || d[0]!='B' || d[1]!='P' || d[2]!='A' || d[3]!='L' || d[4]!=2 ) {
+  if( n < 6 || d[0]!='B' || d[1]!='P' || d[2]!='A' || d[3]!='L' || d[4]!=3 ) {
     fprintf( stderr, "%s: not a bmppal palette\n", fn ); delete[] d; return 0;
   }
   rc.init( d+5, n-5, 1 );
@@ -967,8 +1078,9 @@ static int do_compress( const char* fin, const char* fbmp, const char* fpal,
              ffrq ? " + " : " = ", (unsigned long long)fn_,
              (unsigned long long)(bn+pn+fn_) );
     if( pn_bare )
-      fprintf( stderr, "  of the palette, %llu bytes are the occurrence table%s\n",
+      fprintf( stderr, "  of the palette, %llu bytes are the occurrence table (%s)%s\n",
                (unsigned long long)(pn - pn_bare),
+               c.frqmode ? "split against its total" : "one number at a time",
                excl ? ", which the index image needs" : " -- nothing reads it" );
     if( excl )
       fprintf( stderr, "  countdown: the alphabet averaged %.1f of %llu symbols"

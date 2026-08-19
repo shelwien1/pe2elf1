@@ -1108,6 +1108,7 @@ Which of this document it implements:
 | | |
 | --- | --- |
 | §2.1, §2.5 | the palette goes out as a set, ascending, delta-coded on the packed integer — no colour transform, no space-filling sort, because those measured worse |
+| §3, §11.3 | the counts are coded two ways and the shorter kept — one number at a time, or split against their total after Shelwien's frqcomp |
 | §3.2 | the counts are *used*: a pixel's index is its colour's rank among the colours not yet spent, so a colour leaves the alphabet when its count reaches zero. §11.2 |
 | §4 | the canonical order is free; anything else costs what it costs |
 | §5.3 | the search objective is `L1`, the adjacency-weighted sum of rank differences, over a co-occurrence table built once |
@@ -1128,13 +1129,13 @@ Every row round-trips through the whole pipeline — `bmppal c`, `bmg c`, `bmg d
 
 | file | `bmg` on the original | `bmg` on `out.bmp` | `out.pal` | total | |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `x_ci` | 569 528 | 567 674 | 71 | **567 745** | **−0.31%** |
-| `x_ai` | 149 111 | 148 766 | 87 | **148 853** | **−0.17%** |
-| `t8p` | 45 026 | 44 967 | 387 | 45 354 | +0.73% |
-| `t8g` | 44 912 | 44 967 | 329 | 45 296 | +0.86% |
-| `x_ep` | 339 560 | 526 709 | 36 568 | 563 277 | +66% |
-| `t24` | 53 718 | 122 422 | 85 281 | 207 703 | +287% |
-| `t32` | 53 760 | 70 242 | 170 862 | 241 104 | +348% |
+| `x_ci` | 569 528 | 567 674 | 66 | **567 740** | **−0.31%** |
+| `x_ai` | 149 111 | 148 766 | 79 | **148 845** | **−0.18%** |
+| `t8p` | 45 026 | 44 967 | 376 | 45 343 | +0.70% |
+| `t8g` | 44 912 | 44 967 | 318 | 45 285 | +0.83% |
+| `x_ep` | 339 560 | 526 709 | 36 569 | 563 278 | +66% |
+| `t24` | 53 718 | 122 422 | 85 282 | 207 704 | +287% |
+| `t32` | 53 760 | 70 242 | 170 855 | 241 097 | +348% |
 
 The verdict is §8's, arrived at independently: **it wins on the two files with
 tiny palettes and loses on everything else**, and the losses on the last three
@@ -1215,7 +1216,87 @@ exclusion returns 11 498. `x_ep` has the alphabet collapse but a 13 551-byte
 table, so against a no-counts baseline it loses 1.05%. That is §3.2's trade
 exactly, now measured against a real coder instead of argued from Stirling.
 
-### 11.3 the container cost, which §6.5 left out
+### 11.3 coding the table two ways, after frqcomp
+
+§3 priced the occurrence table against two bounds — `log2 C(N−1, K−1)`, the
+number of compositions, and an order-0 model of the count values — and the tool's
+first coder was neither: one adaptive Elias-gamma number per entry, its length
+contexted on the previous length. That does capture the one structure a palette's
+counts really have (neighbouring entries in colour order have similar counts) and
+it beat the order-0 estimate on `x_ep`. What it throws away is the constraint:
+the counts sum to a known total, so the last one is free and every one before it
+is bounded.
+
+Shelwien's **frqcomp** codes exactly that constraint. Its `freq_proc` recurses
+over the table, splitting the range in half and sending how the parent's total
+divides between the halves; the right half then follows by subtraction and is
+never sent. Two flags catch the degenerate splits — all the mass on one side,
+none of it anywhere — and the split value goes through a bounded binary code that
+spends nothing on values the total has already ruled out. It is interpolative
+coding of a composition, which is the textbook-right shape for this data.
+
+Ported into `bmppal` with one change that matters — every count here is at least
+one, so what is coded is the table of `n_i − 1` against a total of `N − K`, which
+turns "everything occurs once" into a table of zeros — it gives:
+
+| file | `K` | one number at a time | frqcomp | |
+| --- | ---: | ---: | ---: | ---: |
+| `t32` | 76 800 | 11 | **4** | **−64%** |
+| `x_ci` | 4 | 20 | **14** | **−30%** |
+| `x_ai` | 8 | 33 | **24** | **−27%** |
+| `t8g` | 256 | 278 | **267** | **−4%** |
+| `t8p` | 256 | 279 | **268** | **−4%** |
+| `x_ep` | 37 040 | **13 550** | 16 775 | +24% |
+| `t24` | 76 312 | **675** | 972 | +44% |
+
+**It wins on small and dense tables and loses on large sparse ones**, and the
+split is not close in either direction. The reason is the same one in both
+columns. A table that is mostly ones — `t24` is 99.4% singletons, so its `n_i − 1`
+table is 99.4% zeros — costs the per-number coder almost nothing, about 0.07 bits
+an entry, while the recursion still has to walk down to isolate each of the 488
+non-zeros and pay a flag at every level on the way. A table that is small and
+dense is the other way round: there is nothing for a per-number coder to be cheap
+about, and knowing the total is most of the information.
+
+Two attempts to make the recursion win everywhere both failed, and are worth
+recording because the second is the plausible one:
+
+* **Contexting the flags and the split value separately**, on `log2` of the range
+  size and `log2` of the total rather than one shared counter each. It helped the
+  sparse tables (`t24` 972 → 850, `x_ep` 16 775 → 15 996) and hurt the small ones
+  (`t8g` 267 → 296), because at `K = 256` there are only eight levels to spread
+  the statistics over and splitting them dilutes them. Enlarging the node table
+  from 32 counters to 128 or 512 changed nothing at all.
+* **Centring the split on the proportional midpoint** — coding the distance from
+  `total·nL/(nL+nR)` folded so zero is the likeliest symbol, on the reasoning
+  that if the entries either side of the cut are alike the split lands near there
+  with a spread of `√total` rather than `total`. It made things *worse*
+  (`x_ep` 15 996 → 16 584, `t24` 850 → 888). The premise is wrong for these
+  tables: with half the entries at zero and a heavy tail, the mass sits wherever
+  the big entries are and not in proportion to how many entries a side holds.
+
+So neither coder replaces the other, and the tool does what it does everywhere
+else — **codes the table both ways and keeps the shorter**, with one bit to say
+which and the total sent only in the branch that uses it:
+
+| file | before | after | |
+| --- | ---: | ---: | ---: |
+| `t32` | 11 | **4** | −64% |
+| `x_ci` | 20 | **15** | −25% |
+| `x_ai` | 33 | **25** | −24% |
+| `t8g` | 278 | **267** | −4.0% |
+| `t8p` | 279 | **268** | −3.9% |
+| `t24` | 675 | 676 | +1 byte |
+| `x_ep` | 13 550 | 13 551 | +1 byte |
+| **corpus** | **14 846** | **14 806** | **−0.27%** |
+
+The corpus total moves very little, because it is dominated by `x_ep`'s 13 551
+bytes and that is the file frqcomp loses on. What the change buys is the small
+end, where the table had been costing several times what it should: 15 bytes
+instead of 20 on `x_ci`, 4 instead of 11 on `t32`. Those are the files where
+palettizing pays at all.
+
+### 11.4 the container cost, which §6.5 left out
 
 `t8g` and `t8p` are the interesting failures, and they correct this document.
 
@@ -1238,7 +1319,7 @@ occurrence table costs 278 more if you keep it. Take the counts away and the
 split is roughly break-even; keep them and it loses. §6.5's number was the
 pixels; this is the file.
 
-### 11.4 verification
+### 11.5 verification
 
 * Round-trip on the seven corpus files and twelve synthetic edge cases, with the
   countdown on and off and with and without `out.frq` — 1×1,
@@ -1256,10 +1337,11 @@ pixels; this is the file.
   palette out of bounds, and a malformed input whose pixel bytes point past its
   own palette was accepted by the encoder and then refused by the decoder. Both
   are fixed; the second is now refused up front, with the offending index named.
-  The countdown adds a third kind of refusal that costs nothing to get right —
-  a rank that names a symbol which is already spent, or an occurrence table the
-  index image does not use up exactly, is rejected rather than decoded into
-  something plausible.
+  The countdown and the table splitter each add a kind of refusal that costs
+  nothing to get right: a rank that names a symbol already spent, an occurrence
+  table the index image does not use up exactly, and a split that claims more
+  than its parent's total are all rejected rather than decoded into something
+  plausible.
 * Cross-built with MinGW-w64 and run under Wine: `out.bmp`, `out.pal` and
   `out.frq` are **byte-identical** to the Linux build's on every test file, and
   each platform restores the other's output exactly. That is §5.4 earning its
