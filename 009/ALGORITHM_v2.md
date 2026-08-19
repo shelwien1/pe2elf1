@@ -1664,6 +1664,42 @@ sets the deadzone from `near_lossless_q` (which is 0, so `±1`) and the band to
 This runs **per plane**: 163,840 counters and 15,552 records re-seeded four times
 for a 32-bit image, which is a large part of why this is the expensive model.
 
+**The five banks are a cascade, not five opinions.** Each one predicts a
+*correction* to the running prediction, and the next one's context is built from
+the corrected value:
+
+```
+run_s = filt                    the NLMS prediction of §10.1
+ctx0 -> bank0 -> pred0          run0 = pred0 + run_s
+ctx1 -> bank1 -> pred1          run1 = pred1 + run0
+ctx2 -> bank2 -> pred2          run2 = pred2 + run1
+bank3         -> pred3          run3 = pred3 + run2
+bank4         -> pred4          run4 = pred4 + run3
+```
+
+Every term of `ctx1` carries `run0`, every term of `ctx2` carries `run1`, and so
+on down — which is why none of these can be reasoned about from the types alone,
+and it is the single most important fact about how this model is put together.
+The ten intermediate values are kept in `nb_sum[0..9]` as five (running,
+correction) pairs, and `run4` is what the context selectors of §10.2 finally
+read.
+
+Each bank context has the same shape: **eleven single-bit features at bits
+15…25, and `ctx_quant`'s two two-bit fields at 11…14**, then `>>11` to index the
+bank. That leaves fifteen bits, and 2¹⁵ is 32768 — exactly one bank. The eleven
+features are differences between the running prediction and various neighbours;
+each contributes whichever bit of that difference sits at its position.
+
+Those are **not** sign tests, and the source says so in its spelling. A term the
+types prove negative-or-not is written `bit<k>(expr < 0)`; a term that merely
+contributes bit *k* of something unbounded is written `bit_of<k>(expr)`. Across
+the six context words there are 66 such terms and **exactly one** is provable —
+because every other one carries a `run`, which is an accumulated prediction with
+no type bound. Instrumented over the corpus, four of them demonstrably exceed
+their bit: `d_run0` reaches 36157 against bit 15. So a bank context is not
+"eleven signs of eleven differences"; it is eleven arbitrary bits, and the model
+works because the counters learn whatever those bits happen to correlate with.
+
 After each sample:
 
 - the bank's own counter takes the residual through a **deadzone**, so small

@@ -271,14 +271,18 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t run_s = run;
   // Four of the five masks are a sign test the types prove: a sum of `w` of
   // these `int16_t` members is under `w * 2^15`, so every bit from
-  // `15 + ceil(log2 w)` up is a copy of the sign.  The fifth is a sign too, and
-  // for a reason from outside that rule -- the cast makes it bit 15 of a
-  // *sixteen-bit* value -- so it stays as it was written.  tools/ctxidx.py.
+  // `15 + ceil(log2 w)` up is a copy of the sign.  Those four are `bit<>`.
+  //
+  // The fifth is a sign too, and for a reason from outside that rule -- the
+  // cast makes it bit 15 of a *sixteen-bit* value -- so it says `bit_of<15>`
+  // instead: the bit where it is, with no claim about the rest.  Same code as
+  // the mask it replaces, and the position is now the thing that generates the
+  // mask rather than a hex literal beside it.  tools/ctxidx.py.
   ctx0_lo = CtxIdx{}.bit<19>(cx1[1].err+cx1->err+cx1[-1].err+cx0[-1].err < 0)
             .bit<18>(cx3->err+cx0[-2].err+2*cx0[-4].err < 0)
             .bit<17>(cx1[-3].err+cx0[-3].err+cx0[-5].err+cx0[-7].err < 0)
             .bit<16>(cx0[-1].err < 0)
-            .raw(((uint16_t)cx0[-3].err)&0x8000)
+            .bit_of<15>((uint16_t)cx0[-3].err)
             .bits<13, 2>((run>3536)+(run>720)+(run>288))
             .bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
   bank_ctx[0] = ctx0_lo;
@@ -318,13 +322,12 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t d_up = nb4_4-run0;
   int32_t up5 = cx1[5].val;
   int32_t d_up5 = up5-run0;
-  // The four words below -- two spellings of `ctx1`, two of `ctx2`, and the two
-  // `bank` words after them -- keep their masks, and this is the measurement
-  // that says they must.
+  // The six words below -- two spellings of `ctx1`, two of `ctx2`, and the two
+  // `bank` words after them -- are `bit_of<>` almost throughout, and this is
+  // the measurement that says they have to be.
   //
-  // Every `expr & <one bit>` here is a sign test *if* `|expr|` stays under that
-  // bit, and `tools/ctxidx.py` converts the ones where the types say so: a sum
-  // of `w` `int16_t` members is under `w * 2^15`.  These are not those.  Every
+  // Every `expr & <one bit>` is a sign test *if* `|expr|` stays under that bit,
+  // and `bit<k>(expr < 0)` is how a word says so.  These do not qualify.  Every
   // term carries a `run` -- `run0 = pred0 + run_s`, `run1 = pred1 + run0`, and
   // on down -- which is an accumulated prediction with no type bound, and the
   // masks reach as low as bit 15.
@@ -336,37 +339,50 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   //   bank3 bit 24  `... - ((uint32_t)(...)>>1) ...`  is unsigned throughout
   //   bank4 bit 15  `(uint16_t)run3 - ...`          reaches 69572 as an int
   //
-  // and twelve more come within a factor of four of their bit, which makes
-  // them sign tests by how the corpus happened to run and not by anything the
-  // code says.  Rewriting any of these as `< 0` would change what the program
-  // computes.  `tools/ctxidx.py --line N` reports; it declines all six.
+  // and twelve more come within a factor of four of their bit, which makes them
+  // sign tests by how the corpus happened to run and not by anything the code
+  // says.  Rewriting any of these as `< 0` would change what the program
+  // computes.  Exactly one term across the six is provable, and it is the
+  // `bit<24>` in the first arm.
+  //
+  // So `bit_of<Pos>` is the spelling: it keeps the bit where it is and claims
+  // nothing further, which is the same code the mask was and a strictly better
+  // record of it.  These were `(expr) & 0x2000000` with a `// bit 25` beside
+  // them, sixty-six times -- a hex literal to count out by hand and a label
+  // nothing checked.  The position now *generates* the mask, so the two cannot
+  // disagree, and the eleven fields of a word can be read off the chain.
+  //
+  // What has not changed is which terms are believed and which are proven:
+  // `bit<>` and `bit_of<>` sit side by side and say which is which.
+  // `tools/ctxidx.py --list` reports the split; it is 1 of 66.
   if( refa ) {
     int32_t dv_now = cx0[0].dval;
-    ctx1 = (cx0[-1].val+ra0->val-ra0[-1].val-run0)&0x2000000             // bit 25
-         |(ra2->dval+ra1->dval-2*ra0->dval)&0x1000000                    // bit 24
-         |((dv_now+cx0[-3].dval-run0-(cx1[2].dval-cx1[5].dval))&0x800000 // bit 23
-         |(dv_now+cx0[-5].dval-run0)&0x400000                            // bit 22
-         |(dv_now+cx1->dval+rb1[2].dval-rb2[2].dval-run0)&0x200000       // bit 21
-         |(dv_now+cx0[-1].dval+rb0->dval-rb0[-1].dval-run0)&0x100000     // bit 20
-         |(cx2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)&0x80000      // bit 19
-         |(dv_now+cx1[2].dval+ra0->dval-ra1[2].dval-run0)&0x40000        // bit 18
-         |d_up5&0x20000                                                  // bit 17
-         |d_up&0x10000                                                   // bit 16
-         |d_run0&0x8000                                                  // bit 15
-         |ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
+    ctx1 = CtxIdx{}.bit_of<25>(cx0[-1].val+ra0->val-ra0[-1].val-run0)
+           .bit<24>(ra2->dval+ra1->dval-2*ra0->dval < 0)
+           .bit_of<23>(dv_now+cx0[-3].dval-run0-(cx1[2].dval-cx1[5].dval))
+           .bit_of<22>(dv_now+cx0[-5].dval-run0)
+           .bit_of<21>(dv_now+cx1->dval+rb1[2].dval-rb2[2].dval-run0)
+           .bit_of<20>(dv_now+cx0[-1].dval+rb0->dval-rb0[-1].dval-run0)
+           .bit_of<19>(cx2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)
+           .bit_of<18>(dv_now+cx1[2].dval+ra0->dval-ra1[2].dval-run0)
+           .bit_of<17>(d_up5)
+           .bit_of<16>(d_up)
+           .bit_of<15>(d_run0)
+           .raw(ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
   } else {
     int32_t d_run0b = run0-cx0[-3].val;
-    ctx1 = (cx1[-5].val-cx1[-2].val+d_run0b)&0x1000000                   // bit 24
-         |(d_run0b+cx1[2].val-up5)&0x800000                              // bit 23
-         |(cx4[3].val-cx2[2].val+run0-cx2[1].val)&0x400000               // bit 22
-         |(cx4[-1].val-cx3->val+run0-cx1[-1].val)&0x200000               // bit 21
-         |(cx1->val-cx1[2].val+run0-cx0[-2].val)&0x100000                // bit 20
-         | -d_up5&0x80000                                                // bit 19
-         | -d_up&0x40000                                                 // bit 18
-         |(run0-cx4[2].val)&0x20000                                      // bit 17
-         |(run0-cx4[-3].val)&0x10000                                     // bit 16
-         | -d_run0&0x8000                                                // bit 15
-         |ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11)|(nb4_4-cx3->val+run0-cx1[4].val)&0x2000000;   // bit 25
+    ctx1 = CtxIdx{}.bit_of<25>(nb4_4-cx3->val+run0-cx1[4].val)
+           .bit_of<24>(cx1[-5].val-cx1[-2].val+d_run0b)
+           .bit_of<23>(d_run0b+cx1[2].val-up5)
+           .bit_of<22>(cx4[3].val-cx2[2].val+run0-cx2[1].val)
+           .bit_of<21>(cx4[-1].val-cx3->val+run0-cx1[-1].val)
+           .bit_of<20>(cx1->val-cx1[2].val+run0-cx0[-2].val)
+           .bit_of<19>(-d_up5)
+           .bit_of<18>(-d_up)
+           .bit_of<17>(run0-cx4[2].val)
+           .bit_of<16>(run0-cx4[-3].val)
+           .bit_of<15>(-d_run0)
+           .raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
   }
   int32_t bank1 = ctx1>>11;
   bank_ctx[1] = bank1;
@@ -385,31 +401,31 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   if( refa ) {
     int32_t dv1 = cx1[1].dval;
     int32_t d_ra = ra0->val-run1;
-    ctx2 = (cx0[0].dval+cx1[-1].dval-run1-(cx2->dval-dv1))&0x2000000     // bit 25
-         |(cx0[0].dval+cx0[-1].dval-run1-(cx1->dval-dv1))&0x1000000      // bit 24
-         |(rb0->val-run1+cx2_val0-rb2->val)&0x800000                     // bit 23
-         |(d_ra+cx2_val0-ra2->val)&0x400000                              // bit 22
-         |(d_ra+cx1[-1].val-ra1[-1].val)&0x200000                        // bit 21
-         |((cx0[0].dval-cx0[-2].dval+2*cx0[-1].dval-run1)&0x100000       // bit 20
-         |(2*cx1_val-run1-cx2_val0)&0x80000                              // bit 19
-         | -lap&0x40000                                                  // bit 18
-         |dtop2&0x20000                                                  // bit 17
-         |dvsum2&0x10000                                                 // bit 16
-         |(208-rb0->val)&0x8000                                          // bit 15
-         |ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
+    ctx2 = CtxIdx{}.bit_of<25>(cx0[0].dval+cx1[-1].dval-run1-(cx2->dval-dv1))
+           .bit_of<24>(cx0[0].dval+cx0[-1].dval-run1-(cx1->dval-dv1))
+           .bit_of<23>(rb0->val-run1+cx2_val0-rb2->val)
+           .bit_of<22>(d_ra+cx2_val0-ra2->val)
+           .bit_of<21>(d_ra+cx1[-1].val-ra1[-1].val)
+           .bit_of<20>(cx0[0].dval-cx0[-2].dval+2*cx0[-1].dval-run1)
+           .bit_of<19>(2*cx1_val-run1-cx2_val0)
+           .bit_of<18>(-lap)
+           .bit_of<17>(dtop2)
+           .bit_of<16>(dvsum2)
+           .bit_of<15>(208-rb0->val)
+           .raw(ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
   } else {
-    ctx2 = (run1+3*(cx2_val0-cx1_val)-cx3->val)&0x2000000                // bit 25
-         |(run1+cx4->val-(cx2[2].val+cx2[-2].val))&0x1000000             // bit 24
-         |(cx3[2].val-cx2[-1].val+run1-cx1[3].val)&0x800000              // bit 23
-         |(cx3[1].val-cx1[1].val-dtop2)&0x400000                         // bit 22
-         |(cx3->val-cx1_val-dtop2)&0x200000                              // bit 21
-         |lap&0x100000                                                   // bit 20
-         |(run1-cx4[3].val)&0x80000                                      // bit 19
-         |(cx3[1].val-run1)&0x40000                                      // bit 18
-         |(run1-cx4->val)&0x20000                                        // bit 17
-         |(run1-cx3[-2].val)&0x10000                                     // bit 16
-         | -dvsum2&0x8000                                                // bit 15
-         |ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13);
+    ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-cx3->val)
+           .bit_of<24>(run1+cx4->val-(cx2[2].val+cx2[-2].val))
+           .bit_of<23>(cx3[2].val-cx2[-1].val+run1-cx1[3].val)
+           .bit_of<22>(cx3[1].val-cx1[1].val-dtop2)
+           .bit_of<21>(cx3->val-cx1_val-dtop2)
+           .bit_of<20>(lap)
+           .bit_of<19>(run1-cx4[3].val)
+           .bit_of<18>(cx3[1].val-run1)
+           .bit_of<17>(run1-cx4->val)
+           .bit_of<16>(run1-cx3[-2].val)
+           .bit_of<15>(-dvsum2)
+           .raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
   }
   int32_t bank2 = ctx2>>11;
   bank_ctx[2] = bank2;
@@ -423,18 +439,18 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // `q9`, `q39` and `q10` -- computed from the positive one, before this line
   // -- could be added to comparisons made after it.  Those are written out
   // now, so the negation and the six sign flips cancel.
-  bank3 = (int32_t)((3*(cx0[-2].val-cx0[-1].val)+run2-cx0[-3].val)&0x2000000 // bit 25
-       |(cx2[1].dval-((uint32_t)(cx1[1].dval+cx1[2].dval+cx1[-1].dval+cx1->dval)>>1)+run_dv3)&0x1000000 // bit 24
-       |(cx2[-3].val-cx1[-2].val+run2-cx1[-1].val)&0x800000              // bit 23
-       | -(cx2[2].val+run2-2*cx1[1].val)&0x400000                        // bit 22
-       |(cx1[-2].dval-cx0[-2].val+run2-cx1->dval)&0x200000               // bit 21
-       |(run2-cx1[3].val)&0x100000                                       // bit 20
-       |(run_dv3-cx2[1].dval)&0x80000                                    // bit 19
-       |(run2-cx3->val)&0x40000                                          // bit 18
-       |(2*run2-cx1->dval-(cx1->val+cx0[0].dval))&0x20000                // bit 17
-       |(run2-cx0[-1].dval-cx0[0].dval)&0x10000                          // bit 16
-       |(run2-cx0[-3].val)&0x8000                                        // bit 15
-       |ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9))>>11;
+  bank3 = (int32_t)(CtxIdx{}.bit_of<25>(3*(cx0[-2].val-cx0[-1].val)+run2-cx0[-3].val)
+                    .bit_of<24>(cx2[1].dval-((uint32_t)(cx1[1].dval+cx1[2].dval+cx1[-1].dval+cx1->dval)>>1)+run_dv3)
+                    .bit_of<23>(cx2[-3].val-cx1[-2].val+run2-cx1[-1].val)
+                    .bit_of<22>(-(cx2[2].val+run2-2*cx1[1].val))
+                    .bit_of<21>(cx1[-2].dval-cx0[-2].val+run2-cx1->dval)
+                    .bit_of<20>(run2-cx1[3].val)
+                    .bit_of<19>(run_dv3-cx2[1].dval)
+                    .bit_of<18>(run2-cx3->val)
+                    .bit_of<17>(2*run2-cx1->dval-(cx1->val+cx0[0].dval))
+                    .bit_of<16>(run2-cx0[-1].dval-cx0[0].dval)
+                    .bit_of<15>(run2-cx0[-3].val)
+                    .raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9)))>>11;
   bank_ctx[3] = bank3;
   int32_t w3c = p2_ctr[bank3+98304].weighted;
   int32_t pred3 = p2_pred(w3c, p2_ctr[bank3+98304].rate);
@@ -445,18 +461,18 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t dv_now4 = cx0[0].dval;
   int32_t run_dv4 = run3-dv_now4;
   int32_t run_up4 = run3+cx3->val;
-  bank4 = (int32_t)((run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))&0x2000000 // bit 25
-       |(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))&0x1000000            // bit 24
-       |(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))&0x800000             // bit 23
-       |(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))&0x400000       // bit 22
-       |(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))&0x200000             // bit 21
-       |(cx2[-2].val+run-2*cx1[-1].val)&0x100000                         // bit 20
-       |(cx2->dval-2*cx1->dval+run_dv4)&0x80000                          // bit 19
-       |((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))&0x40000              // bit 18
-       |(run_dv4-cx1[4].dval)&0x20000                                    // bit 17
-       |(run_dv4-cx1[-2].dval)&0x10000                                   // bit 16
-       |(((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000 // bit 15
-       )|(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10)))>>11;
+  bank4 = (int32_t)(CtxIdx{}.bit_of<25>(run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))
+                    .bit_of<24>(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))
+                    .bit_of<23>(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))
+                    .bit_of<22>(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))
+                    .bit_of<21>(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))
+                    .bit_of<20>(cx2[-2].val+run-2*cx1[-1].val)
+                    .bit_of<19>(cx2->dval-2*cx1->dval+run_dv4)
+                    .bit_of<18>((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))
+                    .bit_of<17>(run_dv4-cx1[4].dval)
+                    .bit_of<16>(run_dv4-cx1[-2].dval)
+                    .bit_of<15>((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)
+                    .raw((ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10))))>>11;
   bank_ctx[4] = bank4;
   int32_t pred4 = p2_pred(p2_ctr[bank4+131072].weighted, p2_ctr[bank4+131072].rate);
   uint8_t* cx2p = (uint8_t*)cx2;

@@ -462,7 +462,7 @@ them run.
 | `collect_globals.py` | Collect subs1.hpp's global declarations into one sorted, deduplicated block | yes |
 | `compact_locals.py` | Compact one decompiled function's block of local declarations | yes |
 | `covered.py` | Names the program's functions that no algorithm document describes | yes |
-| `ctxidx.py` | Turn a masked context word into a `CtxIdx` chain, one line at a time | yes |
+| `ctxidx.py` | Check that a context word's sign claims are ones the types prove | yes |
 | `deadcheck.py` | Report code nothing can reach | yes |
 | `deadparam.py` | Drop the parameters nothing reads, and the arguments that fed them | yes |
 | `deadstore.py` | A store to a local that a later store overwrites before anything reads it | yes |

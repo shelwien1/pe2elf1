@@ -63,6 +63,39 @@ struct CtxIdx {
     return *this;
   }
 
+  // Bit `Pos` of `v`, kept where it already is.
+  //
+  // Not `bit<Pos>`, and the difference is the whole reason this exists.
+  // `bit<Pos>(b)` *puts* a boolean at `Pos` and is a claim: that the term is
+  // one bit wide and this is its value.  `bit_of<Pos>(v)` *takes* the bit that
+  // is already at `Pos` and claims nothing about the rest of `v` -- which is
+  // what the six bank contexts in `alt_p2_context` need, because their terms
+  // carry an accumulated `run` with no type bound and the masked bit is
+  // demonstrably not always the sign.  `tools/ctxidx.py` measured four of them
+  // reaching well past their bit.
+  //
+  // Before this, such a term had two spellings and both were bad.  Written as
+  // the decompiler left it, `(expr) & 0x2000000`, the position is a hex
+  // literal that has to be counted out by hand and a `// bit 25` comment
+  // beside it that nothing checks.  Written as `raw((expr) & 0x2000000)` --
+  // which is what `ctxidx.py` used to offer and why it refused all six lines --
+  // it is the same literal with scaffolding around it.
+  //
+  // Here the position *is* the mask: `1u << Pos` is generated, so a mask that
+  // disagrees with its label cannot be written, and the widths of a word's
+  // fields can be read off the chain the way every other `CtxIdx` user's can.
+  //
+  // `|=` rather than `+=`, because that is what the source does and because a
+  // term whose other bits this deliberately does not bound must not be able to
+  // carry into its neighbour.  The fields are disjoint -- that is what the
+  // type is for -- so the two agree; the one that cannot carry is the one to
+  // write.
+  template<int32_t Pos>
+  constexpr CtxIdx&bit_of(uint32_t v) {
+    val |= v&(1u<<Pos);
+    return *this;
+  }
+
   // A term that is neither a bit field nor a bounded digit -- an index already
   // built, or one whose range the code cannot state.
   constexpr CtxIdx&raw(uint32_t v) {
