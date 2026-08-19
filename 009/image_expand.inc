@@ -225,7 +225,17 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   uint32_t pal_bytes = 3<<(hdr.depth&31);
   if( !(hdr.depth&depth_palette) )
     pal_bytes = 0;
-  if( !hdr.width||!hdr.height ) {
+  // Stage-2 11.3.  `read_bmp` refuses a source whose row will not fit in
+  // sixteen bits; this did not, and `width` is `uint16_t`, so a header claiming
+  // 16384 pixels at 32 bits asked for a 262140-byte row and `alloc_image`
+  // truncated it to 0.  A zero stride is not caught anywhere downstream -- every
+  // row of the image is then row 0.
+  //
+  // The same predicate as the reader's, written the same way round, and it can
+  // only fire on a crafted stream: nothing this program writes gets here,
+  // because the encoder refused the source that would have produced it.
+  if( !hdr.width||!hdr.height
+   || (uint32_t)hdr.width*(uint32_t)((((hdr.depth&depth_bits)+7)>>3))>0xFFFFu ) {
     return arc_in->fail();
   }
   BmfImage *img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);

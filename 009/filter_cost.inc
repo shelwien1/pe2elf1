@@ -79,7 +79,7 @@ static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
                                 int32_t w4, int32_t w8) {
   int32_t hist[512];
   memset(hist, 0, sizeof hist);
-  const int32_t stride = (uint16_t)img->stride;
+  const int32_t stride = img->stride;
   const int32_t left = -plane_count;
   const int32_t ofs_up = -stride;
   const int32_t ofs_ul = -stride-plane_count;
@@ -126,7 +126,7 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   // back through a `uint32_t *`.  The stash, the reload and the store back are
   // gone; the type they gave the value stays, because every `d - row_b` below
   // was unsigned.
-  const uint32_t row_b = (uint16_t)img->stride;
+  const uint32_t row_b = img->stride;
   // The two other planes of the pixel, as offsets from this one.  `cand` is
   // 0, 1 or 2, so the pair is (1, 2), (1, -1) or (-2, -1).
   const int32_t d1 = (cand+1)%3-cand;

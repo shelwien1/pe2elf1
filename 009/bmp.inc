@@ -68,11 +68,27 @@ static inline uint32_t bmp_grey_entry(uint8_t level) {
   return bmp_palette_entry(level, level, level);
 }
 
+// The sixteen-byte member header, on disk and in memory: `write_member_head`
+// puts this record out with `fwrite(head, 1, 0x10, fp)` and `expand_image`
+// reads it back the same way, so the field offsets below *are* the format.
 struct BmfImage {
   uint16_t width;
   uint16_t height;
-  uint32_t stride;
-  uint8_t _pad8[2];
+  // Sixteen bits, and the two bytes it gave up are pad.
+  //
+  // It was `uint32_t` and every read masked it to sixteen -- seven sites -- and
+  // every write truncated first.  Seven unexplained masks are a format limit
+  // nobody wrote down, so this writes it down: a row is at most 65535 bytes.
+  // `read_bmp` already refuses a wider one (`width * ((bpp+7)>>3) > 0xFFFF`);
+  // `expand_image` did not, and 11.3 is that gap -- `width` is `uint16_t`, so a
+  // crafted header at 16384 by 32 bits asks for a 262140-byte row, and the
+  // truncation made it 0 rather than an error.  The check is there now.
+  //
+  // The two bytes move into `_pad8` rather than shrinking the record, because
+  // the record is the format.  On every stream this program has ever written
+  // they were the high half of a stride below 65536, which is to say zero.
+  uint16_t stride;
+  uint8_t _pad8[4];
   uint8_t depth;
   uint8_t flags;
   uint32_t data_size;
@@ -107,20 +123,34 @@ struct BmfImage {
   // The first byte of row `y`, counting from the bottom -- which is where a
   // BMP's rows start.  Both run-length arms of `read_bmp` compute it when an
   // end-of-line opcode sends them up a row, and both took the stride through a
-  // `uint16_t`: the field is 32 bits and the value is not, and the reads on
-  // these paths matched the stores that made it.
-  uint8_t* row(int32_t y) { return pixels+y*(uint16_t)stride; }
+  // `uint16_t` to match the stores that made it.  The field is sixteen bits
+  // now, so the cast is gone from here and from the six other read sites.
+  uint8_t* row(int32_t y) { return pixels+y*stride; }
 
+  // All four pad bytes, not two.  Two of them used to be the high half of a
+  // 32-bit stride and were carried by the `stride` copy; with a sixteen-bit
+  // field nothing else moves them, and they are part of a header that goes to
+  // disk byte for byte.
   void header_from(const BmfImage* src) {
     width = src->width;
     height = src->height;
     stride = src->stride;
-    _pad8[0] = src->_pad8[0];
-    _pad8[1] = src->_pad8[1];
+    for( int32_t k = 0; k<4; ++k )
+      _pad8[k] = src->_pad8[k];
     depth = src->depth;
     data_size = src->data_size;
   }
 };
+
+// The format, asserted where the fields are declared.  `write_member_head`
+// writes 0x10 bytes of this and `expand_image` reads 0x10 back, so a change to
+// any offset below is a change to the container.
+static_assert(sizeof(BmfImage) == 16, "the member header is sixteen bytes");
+static_assert(offsetof(BmfImage, width) == 0 && offsetof(BmfImage, height) == 2
+           && offsetof(BmfImage, stride) == 4 && offsetof(BmfImage, _pad8) == 6
+           && offsetof(BmfImage, depth) == 10 && offsetof(BmfImage, flags) == 11
+           && offsetof(BmfImage, data_size) == 12,
+              "member header field offsets are the on-disk layout");
 
 // Transpose the header.  The loop at each call site has already moved the
 // pixels; this swaps the two dimensions that describe them, recomputes the
@@ -140,7 +170,7 @@ static inline void transpose_image_in_place(BmfImage* img, int32_t planes) {
   img->width = img->height;
   img->height = w;
   img->flags ^= flags_transposed;
-  img->stride = (uint16_t)(img->width*planes);
+  img->stride = img->width*planes;
 }
 
 // And the loop that has to run before it: the pixels themselves, column-major.
@@ -234,8 +264,8 @@ BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette,
   img->width = img_w;
   img->height = img_h;
   img->stride = row_bytes;
-  img->_pad8[0] = 0;
-  img->_pad8[1] = 0;
+  for( int32_t k = 0; k<4; ++k )
+    img->_pad8[k] = 0;
   img->depth = (uint8_t)(bpp|(has_palette ? depth_palette : 0));
   img->flags = sub_byte_rows ? flags_packed : 0;
   img->data_size = data_bytes;

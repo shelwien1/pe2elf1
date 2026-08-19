@@ -173,7 +173,7 @@ uint32_t search_filter(BmfImage* img, int8_t mode) {
   // which is `tile_h+y0` again with `y0` spelled out; the loop runs `tile_h`
   // times either way.
   if( tile_h>0 ) {
-    int32_t row_bytes = (uint16_t)tile_img->stride;
+    int32_t row_bytes = tile_img->stride;
     uint8_t *dstp = tile_img->pixels;
     for( int32_t y = 0; y<tile_h; ++y ) {
       memcpy(dstp, srcp, row_bytes);

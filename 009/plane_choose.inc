@@ -147,7 +147,7 @@ int32_t choose_plane_coding(BmfImage* img) {
   int32_t n_planes = plane_count;
   int32_t data_size = img->data_size;
   alphabet_reduced = 1;
-  int32_t row_stride = (uint16_t)img->stride;
+  int32_t row_stride = img->stride;
   const uint8_t* data_end = &img->pixels[data_size];
   memset(hists, 0, sizeof hists);
   // The descriptors only; the costs are written before they are read.  The

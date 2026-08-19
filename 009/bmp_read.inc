@@ -78,7 +78,7 @@ static bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
       int32_t dx, dy;
       if( !read_rle_op(fp, dx, dy) )
         return false;
-      at += dx-dy*(uint16_t)img->stride;
+      at += dx-dy*img->stride;
     } else {
       if( !img->holds(at, v) )
         return false;
@@ -160,7 +160,7 @@ static bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
       if( !read_rle_op(fp, dxy, dy4) )
         return false;
       // Half the horizontal step, because a column here is a nibble.
-      int32_t step = (dxy>>1)-dy4*(uint16_t)img->stride;
+      int32_t step = (dxy>>1)-dy4*img->stride;
       if( (dxy&1)==1 ) {
         if( !hi_nibble )
           ++step;
@@ -203,8 +203,17 @@ BmfImage* read_bmp(char* path) {
   uint8_t bmp_bgra[4];
   int32_t pal_n, i;
   BmpHeader hdr;
+  // Stage-2 11.4.  `bmf_compress` used to open this path, close it again and
+  // then call here, purely so that "cannot open" could exit 1 (`bmf_no_open`)
+  // while "not a BMP" exits 3 (`bmf_read_error`) -- the two are the same
+  // `return nullptr` from here, so the probe was the only thing that told them
+  // apart.  Deleting the probe without this line would have changed the exit
+  // code for a missing file, which is what makes the caveat worth having.
   FILE* fp = fopen(path, "rb");
-  if( !fp||fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=bmp_magic||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=bmp_hdr_v3||hdr.biPlanes!=1 ) {
+  if( !fp )
+    bmf_fatal(bmf_no_open, path);
+  if( fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=bmp_magic||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=bmp_hdr_v3||hdr.biPlanes!=1 ) {
+    fclose(fp);
     return nullptr;
   }
   {

@@ -51,9 +51,11 @@ struct BmfFile {
     return nullptr;
   }
 
+  // Stage-2 11.5.  The `fseek(fp, 0, SEEK_END)` that stood here answered no
+  // format requirement -- one member per file, written front to back, and the
+  // position after `fclose` is not a thing anyone can read.
   void close() {
     if( fp ) {
-      fseek(fp, 0, SEEK_END);
       fclose(fp);
       fp = nullptr;
     }
