@@ -235,7 +235,7 @@ template<class F> static qword rle8_walk( const byte* s, qword avail, int W, int
     uint a = s[i], b = s[i+1];
     if( a ) {
       if( x + (int)a > W || y >= H ) return 0;
-      f( i+1 );
+      f( i+1, a );                        // one byte, a pixels
       x += a; i += 2;
     } else if( b == 0 ) { x = 0; y++; i += 2; }
     else if( b == 1 ) { i += 2; return i; }
@@ -246,14 +246,14 @@ template<class F> static qword rle8_walk( const byte* s, qword avail, int W, int
       qword pad = b & 1;
       if( i + 2 + b + pad > avail ) return 0;
       if( x + (int)b > W || y >= H ) return 0;
-      for( uint k=0; k<b; k++ ) f( i+2+k );
+      for( uint k=0; k<b; k++ ) f( i+2+k, 1 );
       x += b; i += 2 + b + pad;
     }
   }
   return i;
 }
 
-struct NopVisit { void operator()( qword ) {} };
+struct NopVisit { void operator()( qword, uint ) {} };
 
 static void parse( Bmp* m ) {
   m->ok = 0; m->why = "not a BMP";
@@ -365,6 +365,92 @@ static double order_cost( const PairMap& pm, const int* pos ) {
 
 static uint gcd_( uint a, uint b ) { while( b ) { uint t = a % b; a = b; b = t; } return a; }
 
+// ---------------------------------------------------------------- exclusion
+//
+// The occurrence table is only worth carrying if something reads it.  PALETTE.md
+// 3.2 works out what reading it buys: given the counts, the exact information
+// content of the index sequence is the multinomial log2(N! / prod n_i!), and a
+// coder reaches it by striking each symbol out of the alphabet as its count runs
+// down to zero.  Everything after that point that would have named the dead
+// symbol is redundancy, and the last stretch of the image -- where one symbol is
+// all that is left -- is free.
+//
+// So the index a pixel is given is not a fixed number per colour.  It is the
+// colour's **rank among the symbols still alive**, which a Fenwick tree over the
+// live flags answers, and updates, in log K.  The transform is a bijection given
+// the counts, so the file still comes back byte for byte; and it is monotone in
+// the static order, so a rank only ever drifts downwards and the spatial
+// structure the ordering search worked for survives.
+
+struct Fenwick {
+  int n; int* t;
+  Fenwick() { n = 0; t = 0; }
+  void init( int K ) {                       // every symbol alive
+    n = K; t = new int[K+1]; t[0] = 0;
+    for( int i=1; i<=K; i++ ) t[i] = i & (-i);
+  }
+  void free_() { delete[] t; t = 0; }
+  void kill( int i ) { for( int j=i+1; j<=n; j += j & (-j) ) t[j]--; }
+  int  rank( int i ) {                       // how many alive strictly below i
+    int s = 0; for( int j=i; j>0; j -= j & (-j) ) s += t[j];
+    return s;
+  }
+  int  nth( int k ) {                        // the k-th alive, k counted from 0
+    int i = 0, lg = 1;
+    while( (lg<<1) <= n ) lg <<= 1;
+    for( int b=lg; b; b >>= 1 ) if( i + b <= n && t[i+b] <= k ) { i += b; k -= t[i]; }
+    return i;                                // i is 0-based
+  }
+};
+
+// One step of the countdown, shared by both directions so they cannot disagree.
+struct Countdown {
+  Fenwick fw; qword* remain; int K, alive;
+  double alivesum; qword steps;              // how much alphabet the coder saw
+  Countdown() { remain = 0; K = alive = 0; alivesum = 0; steps = 0; }
+  void init( int K_, const qword* cnt ) {
+    K = alive = K_; fw.init( K_ );
+    remain = new qword[K_];
+    for( int j=0; j<K_; j++ ) { remain[j] = cnt[j]; if( !cnt[j] ) { fw.kill(j); alive--; } }
+  }
+  void free_() { fw.free_(); delete[] remain; remain = 0; }
+  int  to_rank( int j ) { return fw.rank( j ); }
+  int  from_rank( int r ) { return fw.nth( r ); }   // caller checks r < alive
+  int  take( int j, qword k ) {              // 0 if the counts do not cover it
+    alivesum += alive; steps++;
+    if( j < 0 || j >= K || remain[j] < k ) return 0;
+    remain[j] -= k;
+    if( !remain[j] ) { fw.kill( j ); alive--; }
+    return 1;
+  }
+  int  spent() { for( int j=0; j<K; j++ ) if( remain[j] ) return 0; return 1; }
+};
+
+// The two visitors that carry the countdown through an RLE8 stream.  A run is
+// one index byte standing for n pixels, and the rank cannot move inside a run --
+// only the run's own symbol is being spent, and it cannot die before its last
+// pixel -- so one substitution per byte is right in both directions.
+struct RleToRank {
+  byte* s; const int* map; Countdown* cd; int ok;
+  void operator()( qword p, uint n ) {
+    if( !ok ) return;
+    int j = map[ s[p] ];
+    s[p] = byte( cd->to_rank( j ) );
+    if( !cd->take( j, n ) ) ok = 0;
+  }
+};
+struct RleFromRank {
+  byte* s; const int* map; Countdown* cd; int ok;   // map[static index] = original byte
+  void operator()( qword p, uint n ) {
+    if( !ok ) return;
+    int r = s[p];
+    if( r >= cd->alive ) { ok = 0; return; }
+    int j = cd->from_rank( r );
+    s[p] = byte( map[j] );
+    if( !cd->take( j, n ) ) ok = 0;
+  }
+};
+
 // ---------------------------------------------------------------- .pal stream
 //
 // One function, run forwards to write and backwards to read, so the two can
@@ -376,7 +462,7 @@ struct PalCtx {
   qword K;
   int   ordmode, w[4];
   int*  perm;
-  int   has_counts;
+  int   has_counts, excl;
   qword ncol;      byte*  paltab;     // mode 0
   qword hdrlen;    byte*  hdr;        // mode 1
   qword padlen;    byte*  pad;
@@ -442,6 +528,8 @@ template<int DEC> static int pal_stream( PalCtx& c, PalModels& M ) {
     }
   }
   c.has_counts = (int)num_code<DEC>( M.nmisc, c.has_counts );
+  c.excl       = (int)num_code<DEC>( M.nmisc, c.excl );
+  if( c.excl > 1 ) return 0;
 
   if( c.mode == 0 ) {
     c.ncol = num_code<DEC>( M.nmisc, c.ncol );
@@ -500,7 +588,7 @@ template<int DEC> static int pal_stream( PalCtx& c, PalModels& M ) {
 static qword write_pal( const char* fn, PalCtx& c ) {
   qword cap = (1u<<16) + 16*( c.ncol*4 + c.K*10 + c.hdrlen + c.padlen + c.taillen );
   byte* buf = new byte[cap];
-  buf[0]='B'; buf[1]='P'; buf[2]='A'; buf[3]='L'; buf[4]=1;
+  buf[0]='B'; buf[1]='P'; buf[2]='A'; buf[3]='L'; buf[4]=2;
   rc.init( buf+5, cap-5, 0 );
   PalModels* M = new PalModels; M->init();
   pal_stream<0>( c, *M );
@@ -516,7 +604,7 @@ static qword write_pal( const char* fn, PalCtx& c ) {
 static int read_pal( const char* fn, PalCtx& c ) {
   qword n; byte* d = slurp( fn, &n );
   if( !d ) return 0;
-  if( n < 6 || d[0]!='B' || d[1]!='P' || d[2]!='A' || d[3]!='L' || d[4]!=1 ) {
+  if( n < 6 || d[0]!='B' || d[1]!='P' || d[2]!='A' || d[3]!='L' || d[4]!=2 ) {
     fprintf( stderr, "%s: not a bmppal palette\n", fn ); delete[] d; return 0;
   }
   rc.init( d+5, n-5, 1 );
@@ -696,11 +784,11 @@ static void rle8_image( const byte* s, qword avail, int W, int H, qword* raw ) {
 // Rewrite every index byte of an RLE8 stream in place through map[].
 struct RleRemap {
   byte* s; const int* map;
-  void operator()( qword p ) { s[p] = byte(map[ s[p] ]); }
+  void operator()( qword p, uint ) { s[p] = byte(map[ s[p] ]); }
 };
 
 static int do_compress( const char* fin, const char* fbmp, const char* fpal,
-                        const char* ffrq, int quiet ) {
+                        const char* ffrq, int quiet, int excl ) {
   Bmp m; m.d = slurp( fin, &m.n );
   if( !m.d ) return 0;
   parse( &m );
@@ -782,6 +870,9 @@ static int do_compress( const char* fin, const char* fbmp, const char* fpal,
   for( qword j=0; j<K; j++ ) cnt[ pos[j] ] = scnt[j];
   delete[] scnt;
 
+  Countdown cd;
+  if( excl ) cd.init( (int)K, cnt );
+
   // ---- out.bmp
   qword bn = 0; byte* bd = 0;
   if( mode_pal ) {
@@ -797,18 +888,35 @@ static int do_compress( const char* fin, const char* fbmp, const char* fpal,
     int map[256]; for( int i=0; i<256; i++ ) map[i] = 0;
     for( qword j=0; j<K; j++ ) map[ (int)sym[j] ] = pos[j];
     if( m.comp == 1 ) {
-      RleRemap rr; rr.s = bd + m.off; rr.map = map;
-      rle8_walk( bd + m.off, bn - m.off, m.W, m.H, rr );
+      if( excl ) {
+        RleToRank rr; rr.s = bd + m.off; rr.map = map; rr.cd = &cd; rr.ok = 1;
+        rle8_walk( bd + m.off, bn - m.off, m.W, m.H, rr );
+        if( !rr.ok ) { fprintf(stderr,"%s: internal: the countdown ran dry\n",fin); return 0; }
+      } else {
+        RleRemap rr; rr.s = bd + m.off; rr.map = map;
+        rle8_walk( bd + m.off, bn - m.off, m.W, m.H, rr );
+      }
     } else for( int y=0; y<m.H; y++ ) {
       byte* r = bd + m.off + (qword)y*m.stride;
-      for( int x=0; x<m.W; x++ ) r[x] = byte(map[r[x]]);
+      for( int x=0; x<m.W; x++ ) {
+        int j = map[r[x]];
+        r[x] = byte( excl ? cd.to_rank(j) : j );
+        if( excl ) cd.take( j, 1 );
+      }
     }
   } else {
     int* idx = new int[N];
-    for( qword i=0; i<N; i++ ) idx[i] = pos[ idx0[i] ];
+    for( qword i=0; i<N; i++ ) {
+      int j = pos[ idx0[i] ];
+      idx[i] = excl ? cd.to_rank(j) : j;
+      if( excl ) cd.take( j, 1 );
+    }
     bd = build_index_bmp( idx, m.W, m.H, m.topdown, K, &bn );
     delete[] idx;
   }
+  if( excl && !cd.spent() ) { fprintf(stderr,"%s: internal: the countdown did not finish\n",fin); return 0; }
+  double meanalive = (excl && cd.steps) ? cd.alivesum/cd.steps : (double)K;
+  cd.free_();
   if( !spew( fbmp, bd, bn ) ) { delete[] bd; return 0; }
 
   // ---- out.pal
@@ -817,6 +925,7 @@ static int do_compress( const char* fin, const char* fbmp, const char* fpal,
   c.K = K; c.ordmode = o.mode; c.perm = o.perm;
   memcpy( c.w, o.w, sizeof(c.w) );
   c.has_counts = ffrq ? 0 : 1;
+  c.excl = excl;
   c.sym = sym; c.cnt = cnt;
   qword padrow = 0;
   if( mode_pal ) {
@@ -858,9 +967,13 @@ static int do_compress( const char* fin, const char* fbmp, const char* fpal,
              ffrq ? " + " : " = ", (unsigned long long)fn_,
              (unsigned long long)(bn+pn+fn_) );
     if( pn_bare )
-      fprintf( stderr, "  of the palette, %llu bytes are the occurrence table"
-                       " -- name an out.frq to move it, or ignore it if nothing reads it\n",
-               (unsigned long long)(pn - pn_bare) );
+      fprintf( stderr, "  of the palette, %llu bytes are the occurrence table%s\n",
+               (unsigned long long)(pn - pn_bare),
+               excl ? ", which the index image needs" : " -- nothing reads it" );
+    if( excl )
+      fprintf( stderr, "  countdown: the alphabet averaged %.1f of %llu symbols"
+                       " (%.1f%%) -- that is all the exclusion can be worth\n",
+               meanalive, (unsigned long long)K, 100.0*meanalive/(double)K );
   }
 
   delete[] bd; delete[] pos; delete[] idx0; delete[] sym; delete[] cnt;
@@ -878,8 +991,10 @@ static int do_restore( const char* fbmp, const char* fpal, const char* ffrq,
   int rv = 0, K = 0;
   int *pos = 0, *inv = 0;
   qword* have = 0;
+  qword* cnt = 0;
   byte* rd = 0;
   qword rn = 0;
+  Countdown cd;
   Bmp m; m.d = 0;
 
   if( !read_pal( fpal, c ) ) return 0;
@@ -902,6 +1017,33 @@ static int do_restore( const char* fbmp, const char* fpal, const char* ffrq,
     inv[pos[j]] = j;
   }
 
+  // With the countdown on, the occurrence table is not a note about the image --
+  // it is half the code.  It has to be here before a single pixel is read.
+  if( c.excl ) {
+    if( ffrq ) {
+      qword fn2; byte* fb = slurp( ffrq, &fn2 );
+      if( !fb ) goto done;
+      if( fn2 != (qword)K*4 ) {
+        fprintf(stderr,"%s: %llu bytes, expected %d entries\n",ffrq,(unsigned long long)fn2,K);
+        delete[] fb; goto done;
+      }
+      cnt = new qword[K];
+      for( int j=0; j<K; j++ ) cnt[j] = rd32( fb + 4*j );
+      delete[] fb;
+      if( c.has_counts ) for( int j=0; j<K; j++ ) if( cnt[j] != c.cnt[j] ) {
+        fprintf( stderr, "%s: disagrees with the table coded into %s\n", ffrq, fpal ); goto done;
+      }
+    } else if( c.has_counts ) {
+      cnt = new qword[K];
+      for( int j=0; j<K; j++ ) cnt[j] = c.cnt[j];
+    } else {
+      fprintf( stderr, "%s: the index image was coded against the occurrence table,"
+                       " which is not in here -- name the out.frq\n", fpal );
+      goto done;
+    }
+    cd.init( K, cnt );
+  }
+
   if( c.mode == 0 ) {
     if( m.bpp != 8 || m.ncol != c.ncol ) { fprintf(stderr,"%s: does not match the palette\n",fbmp); goto done; }
     rn = m.n; rd = new byte[rn];
@@ -910,11 +1052,25 @@ static int do_restore( const char* fbmp, const char* fpal, const char* ffrq,
     int map[256]; for( int i=0; i<256; i++ ) map[i] = 0;
     for( int u=0; u<K; u++ ) map[u] = (int)c.sym[ inv[u] ];
     if( m.comp == 1 ) {
-      RleRemap rr; rr.s = rd + m.off; rr.map = map;
-      rle8_walk( rd + m.off, rn - m.off, m.W, m.H, rr );
+      if( c.excl ) {
+        RleFromRank rr; rr.s = rd + m.off; rr.map = map; rr.cd = &cd; rr.ok = 1;
+        rle8_walk( rd + m.off, rn - m.off, m.W, m.H, rr );
+        if( !rr.ok ) { fprintf(stderr,"%s: does not decode against this occurrence table\n",fbmp); goto done; }
+      } else {
+        RleRemap rr; rr.s = rd + m.off; rr.map = map;
+        rle8_walk( rd + m.off, rn - m.off, m.W, m.H, rr );
+      }
     } else for( int y=0; y<m.H; y++ ) {
       byte* r = rd + m.off + (qword)y*m.stride;
-      for( int x=0; x<m.W; x++ ) r[x] = byte(map[r[x]]);
+      for( int x=0; x<m.W; x++ ) {
+        if( c.excl ) {
+          int rk = r[x];
+          if( rk >= cd.alive ) { fprintf(stderr,"%s: does not decode against this occurrence table\n",fbmp); goto done; }
+          int j = cd.from_rank( rk );
+          r[x] = byte( c.sym[ inv[j] ] );
+          if( !cd.take( j, 1 ) ) { fprintf(stderr,"%s: does not decode against this occurrence table\n",fbmp); goto done; }
+        } else r[x] = byte(map[r[x]]);
+      }
     }
   } else {
     if( (qword)m.W != c.W || (qword)m.H != c.H ) { fprintf(stderr,"%s: geometry does not match the palette\n",fbmp); goto done; }
@@ -929,7 +1085,13 @@ static int do_restore( const char* fbmp, const char* fpal, const char* ffrq,
       byte* r = rd + c.hdrlen + y*rowb;
       const int* s = idx + y*c.W;
       for( qword x=0; x<c.W; x++ ) {
-        qword v = c.sym[ inv[ s[x] ] ];
+        int j = s[x];
+        if( c.excl ) {
+          if( j >= cd.alive ) { delete[] idx; fprintf(stderr,"%s: does not decode against this occurrence table\n",fbmp); goto done; }
+          j = cd.from_rank( j );
+          if( !cd.take( j, 1 ) ) { delete[] idx; fprintf(stderr,"%s: does not decode against this occurrence table\n",fbmp); goto done; }
+        }
+        qword v = c.sym[ inv[j] ];
         for( qword p=0; p<c.npx; p++ ) r[x*c.npx+p] = byte(v >> (8*p));
       }
       memcpy( r + c.W*c.npx, c.pad + y*padrow, (size_t)padrow );
@@ -940,7 +1102,12 @@ static int do_restore( const char* fbmp, const char* fpal, const char* ffrq,
 
   // the counts are not needed to restore anything; when they are present they
   // are checked, because a mismatch means the wrong file was named
-  if( c.has_counts || ffrq ) {
+  if( c.excl ) {
+    if( !cd.spent() ) {
+      fprintf( stderr, "%s: the occurrence table was not used up by the index image\n", fpal );
+      goto done;
+    }
+  } else if( c.has_counts || ffrq ) {
     have = new qword[K];
     for( int j=0; j<K; j++ ) have[j] = 0;
     if( c.mode == 0 ) {
@@ -957,13 +1124,13 @@ static int do_restore( const char* fbmp, const char* fpal, const char* ffrq,
       if( idx ) { for( qword i=0; i<c.W*c.H; i++ ) have[idx[i]]++; delete[] idx; }
     }
   }
-  if( c.has_counts ) {
+  if( c.has_counts && !c.excl ) {
     for( int j=0; j<K; j++ ) if( c.cnt[j] != have[j] ) {
       fprintf( stderr, "%s: the coded occurrence table disagrees with the index image\n", fpal );
       goto done;
     }
   }
-  if( ffrq ) {
+  if( ffrq && !c.excl ) {
     qword fn2; byte* fb = slurp( ffrq, &fn2 );
     if( !fb ) goto done;
     int bad = 0;
@@ -983,7 +1150,8 @@ static int do_restore( const char* fbmp, const char* fpal, const char* ffrq,
              fout, (unsigned long long)c.K, (unsigned long long)rn );
   rv = 1;
 done:
-  delete[] rd; delete[] pos; delete[] inv; delete[] have; delete[] m.d;
+  cd.free_();
+  delete[] rd; delete[] pos; delete[] inv; delete[] have; delete[] cnt; delete[] m.d;
   c.free_();
   return rv;
 }
@@ -994,10 +1162,12 @@ static void usage( void ) {
   printf(
   "bmppal -- split a bitmap into an index image, a palette and its counts\n"
   "\n"
-  "  bmppal [-q] c input.bmp out.bmp out.pal [out.frq]\n"
-  "  bmppal [-q] d out.bmp out.pal [out.frq] restored.bmp\n"
+  "  bmppal [-qx] c input.bmp out.bmp out.pal [out.frq]\n"
+  "  bmppal [-q]  d out.bmp out.pal [out.frq] restored.bmp\n"
   "\n"
   "  -q        no report on stderr\n"
+  "  -x        no countdown: index by a fixed number per colour, and leave the\n"
+  "            occurrence table as something nothing reads\n"
   "  out.bmp   the index image: every pixel replaced by its palette index,\n"
   "            8bpp with a grey ramp while the palette fits in a byte, 24 or\n"
   "            32bpp packed little-endian above that.  Hand it to an image\n"
@@ -1008,6 +1178,12 @@ static void usage( void ) {
   "  out.frq   the occurrence counts, uncompressed: one little-endian uint32\n"
   "            per palette entry, in index order.\n"
   "\n"
+  "By default a pixel's index is its colour's rank among the colours that have\n"
+  "not yet been used up, so a colour leaves the alphabet when its count reaches\n"
+  "zero and the tail of the image codes against a smaller and smaller alphabet.\n"
+  "That makes the occurrence table part of the code rather than a note about it,\n"
+  "and the decoder needs it.  -x turns it off.\n"
+  "\n"
   "Reads 8bpp BI_RGB and BI_RLE8, 24bpp BI_RGB, and 32bpp BI_RGB and\n"
   "BI_BITFIELDS.  `d` reproduces the input byte for byte.\n"
   "\n"
@@ -1017,14 +1193,19 @@ static void usage( void ) {
 }
 
 int main( int argc, char** argv ) {
-  int quiet = 0, i = 1;
-  if( argc > 1 && argv[1][0]=='-' && argv[1][1]=='q' && !argv[1][2] ) { quiet = 1; i = 2; argc--; }
-  if( argc != 5 && argc != 6 ) usage();
+  int quiet = 0, excl = 1, i = 1;
+  for( ; i < argc && argv[i][0]=='-' && argv[i][1] && !argv[i][2]; i++ ) {
+    if( argv[i][1] == 'q' ) quiet = 1;
+    else if( argv[i][1] == 'x' ) excl = 0;
+    else usage();
+  }
+  int n = argc - i;
+  if( n != 4 && n != 5 ) usage();
   char m = argv[i][0];
   if( argv[i][1] || (m != 'c' && m != 'd') ) usage();
   char** a = argv + i + 1;
   int ok;
-  if( m == 'c' ) ok = do_compress( a[0], a[1], a[2], argc==6 ? a[3] : 0, quiet );
-  else           ok = do_restore ( a[0], a[1], argc==6 ? a[2] : 0, argc==6 ? a[3] : a[2], quiet );
+  if( m == 'c' ) ok = do_compress( a[0], a[1], a[2], n==5 ? a[3] : 0, quiet, excl );
+  else           ok = do_restore ( a[0], a[1], n==5 ? a[2] : 0, n==5 ? a[3] : a[2], quiet );
   return ok ? 0 : 1;
 }

@@ -1108,7 +1108,7 @@ Which of this document it implements:
 | | |
 | --- | --- |
 | §2.1, §2.5 | the palette goes out as a set, ascending, delta-coded on the packed integer — no colour transform, no space-filling sort, because those measured worse |
-| §3 | the counts go in `out.pal` coded, or in `out.frq` raw; the report says what they cost so the choice is informed |
+| §3.2 | the counts are *used*: a pixel's index is its colour's rank among the colours not yet spent, so a colour leaves the alphabet when its count reaches zero. §11.2 |
 | §4 | the canonical order is free; anything else costs what it costs |
 | §5.3 | the search objective is `L1`, the adjacency-weighted sum of rank differences, over a co-occurrence table built once |
 | §5.4 | integer sort keys with a total tie-break on the packed value — verified below to give byte-identical streams on Linux and Windows |
@@ -1128,17 +1128,17 @@ Every row round-trips through the whole pipeline — `bmppal c`, `bmg c`, `bmg d
 
 | file | `bmg` on the original | `bmg` on `out.bmp` | `out.pal` | total | |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `x_ci` | 569 528 | 567 716 | 70 | **567 786** | **−0.31%** |
-| `x_ai` | 149 111 | 148 699 | 87 | **148 786** | **−0.22%** |
-| `t8p` | 45 026 | 44 912 | 386 | 45 298 | +0.60% |
-| `t8g` | 44 912 | 44 912 | 328 | 45 240 | +0.73% |
-| `x_ep` | 339 560 | 534 379 | 36 568 | 570 947 | +68% |
-| `t24` | 53 718 | 133 920 | 85 281 | 219 201 | +308% |
-| `t32` | 53 760 | 66 853 | 170 862 | 237 715 | +342% |
+| `x_ci` | 569 528 | 567 674 | 71 | **567 745** | **−0.31%** |
+| `x_ai` | 149 111 | 148 766 | 87 | **148 853** | **−0.17%** |
+| `t8p` | 45 026 | 44 967 | 387 | 45 354 | +0.73% |
+| `t8g` | 44 912 | 44 967 | 329 | 45 296 | +0.86% |
+| `x_ep` | 339 560 | 526 709 | 36 568 | 563 277 | +66% |
+| `t24` | 53 718 | 122 422 | 85 281 | 207 703 | +287% |
+| `t32` | 53 760 | 70 242 | 170 862 | 241 104 | +348% |
 
 The verdict is §8's, arrived at independently: **it wins on the two files with
 tiny palettes and loses on everything else**, and the losses on the last three
-match §6.7's proxy prediction of 1.9× / 3.7× / 3.2× at 1.7× / 4.1× / 4.4×.
+match §6.7's proxy prediction of 1.9× / 3.7× / 3.2× at 1.7× / 3.9× / 4.5×.
 
 The ordering search behaves as §6 said it would. On `x_ai` and `x_ci` it takes
 the exhaustive permutation, improving `L1` by 28% and 27% and the real output by
@@ -1147,7 +1147,75 @@ not proportional. On `t8p` it tries 2 017 integer weight vectors and confirms th
 packed order, exactly as §6.1's spherical search did. On the large-`K` files it
 does not search at all, by design.
 
-### 11.2 the container cost, which §6.5 left out
+### 11.2 the countdown, and what makes the occurrence table earn its place
+
+The first version of the tool transmitted the counts and never read them. That is
+the worst of both worlds — the bytes are spent and nothing is bought — and §3.2
+already says what to do about it: **strike a symbol out of the alphabet when its
+count runs down to zero**, so the tail of the image codes against a smaller and
+smaller alphabet and the last stretch, where one colour is all that is left, is
+free.
+
+So a pixel's index is not a fixed number per colour. It is the colour's **rank
+among the symbols still alive**, which a Fenwick tree over the live flags answers
+and updates in `log K`. The transform is a bijection given the counts — the file
+still comes back byte for byte — and it is monotone in the static order, so a
+rank only ever drifts downwards and the spatial structure the ordering search
+worked for is not scrambled. The decoder now *needs* the occurrence table, which
+is the point: it stopped being a note about the image and became half the code.
+
+Two useful properties fell out. A run in an RLE8 stream stays a run, because only
+the run's own symbol is being spent and it cannot die before its last pixel, so
+the rank cannot move inside a run. And the encoder reports how much alphabet the
+coder actually saw, which is the whole of what the exclusion can be worth:
+
+| file | mean alphabet | `bmg` on `out.bmp` with `-x` | with the countdown | |
+| --- | ---: | ---: | ---: | ---: |
+| `t24` | 50.0% of `K` | 133 920 | **122 422** | **−8.6%** |
+| `x_ep` | 59.6% | 534 379 | **526 709** | **−1.4%** |
+| `t8g`, `t8p` | 84.1% | 44 912 | 44 967 | +0.1% |
+| `x_ai` | 99.9% | 148 699 | 148 766 | +0.05% |
+| `x_ci` | 100.0% | 567 716 | **567 674** | −0.01% |
+| `t32` | 50.0% | 66 853 | 70 242 | +5.1% |
+
+The diagnostic predicts the sign everywhere except `t32`. Where the alphabet
+never collapses — `x_ai` and `x_ci`, whose four and eight colours each occur
+hundreds of thousands of times — there is nothing to exclude and the transform is
+a no-op that costs a rounding error. Where half the palette dies during the
+image, it is worth several percent. `t32` is the exception and an instructive
+one: every one of its 76 800 colours is unique, so the alphabet halves, but its
+static index already correlates with position (§6.7 noted the same anomaly), and
+subtracting the number of already-spent smaller keys destroys more structure than
+the shrinking alphabet returns.
+
+Whether it is on by default turns on a question the command line has already
+answered. **The occurrence table is transmitted either way** — that is what the
+tool is specified to do — so the baseline is "sent and ignored", and against that
+baseline the countdown is a win on three files, a wash on three, and a loss on
+one:
+
+| file | counts sent and ignored | counts driving the countdown | |
+| --- | ---: | ---: | ---: |
+| `t24` | 219 202 | **207 703** | **−5.25%** |
+| `x_ep` | 570 947 | **563 277** | **−1.34%** |
+| `x_ci` | 567 786 | **567 745** | −0.01% |
+| `x_ai` | 148 786 | 148 853 | +0.05% |
+| `t8g` | 45 241 | 45 296 | +0.12% |
+| `t8p` | 45 298 | 45 354 | +0.12% |
+| `t32` | 237 715 | 241 104 | +1.43% |
+
+So it is on by default, and `-x` turns it off.
+
+The separate question — whether to send the counts at all — is §3's, and the
+answer there has not changed. Priced against *not sending them*, the countdown
+only pays where the counts are cheap as well as useful, which on this corpus is
+`t24` alone: its table costs 676 bytes because 99.4% of its colours are
+singletons and a table that says "everything occurs once" is nearly free, and the
+exclusion returns 11 498. `x_ep` has the alphabet collapse but a 13 551-byte
+table, so against a no-counts baseline it loses 1.05%. That is §3.2's trade
+exactly, now measured against a real coder instead of argued from Stirling.
+
+### 11.3 the container cost, which §6.5 left out
 
 `t8g` and `t8p` are the interesting failures, and they correct this document.
 
@@ -1170,23 +1238,28 @@ occurrence table costs 278 more if you keep it. Take the counts away and the
 split is roughly break-even; keep them and it loses. §6.5's number was the
 pixels; this is the file.
 
-### 11.3 verification
+### 11.4 verification
 
-* Round-trip on the seven corpus files and twelve synthetic edge cases — 1×1,
+* Round-trip on the seven corpus files and twelve synthetic edge cases, with the
+  countdown on and off and with and without `out.frq` — 1×1,
   single-colour, top-down, `BI_BITFIELDS`, a gap before the pixels, trailing
   bytes, non-zero row padding, a palette with a duplicated colour and junk in the
   unused slots, `K = 1`, RLE8 with EOL/delta/absolute runs, and a `K` large
-  enough to force the 24-bit index path — with and without `out.frq`, all byte
-  exact.
+  enough to force the 24-bit index path — all byte exact, 76 combinations.
 * Clean under ASan and UBSan on all of the above.
-* Fuzzed both directions under the sanitizers: 5 000 mutated bitmaps into `c`,
-  where every file accepted has to round-trip exactly — 2 619 accepted, all
-  exact, 2 381 refused — and 5 000 corrupted `out.bmp`/`out.pal`/`out.frq` into
-  `d`, where nothing may crash — 293 completed, 4 707 refused, no crashes. The
-  fuzz found two real defects: a corrupt `.pal` could index the palette out of
-  bounds, and a malformed input whose pixel bytes point past its own palette was
-  accepted by the encoder and then refused by the decoder. Both are fixed; the
-  second is now refused up front, with the offending index named.
+* Fuzzed both directions under the sanitizers, countdown on and off: mutated
+  bitmaps into `c`, where every file accepted has to round-trip exactly — 1 333
+  accepted, all exact, 1 167 refused — and corrupted
+  `out.bmp`/`out.pal`/`out.frq` into `d`, where nothing may crash — 174
+  completed, 2 326 refused, no crashes. An earlier 10 000-run pass over the
+  pre-countdown build found two real defects: a corrupt `.pal` could index the
+  palette out of bounds, and a malformed input whose pixel bytes point past its
+  own palette was accepted by the encoder and then refused by the decoder. Both
+  are fixed; the second is now refused up front, with the offending index named.
+  The countdown adds a third kind of refusal that costs nothing to get right —
+  a rank that names a symbol which is already spent, or an occurrence table the
+  index image does not use up exactly, is rejected rather than decoded into
+  something plausible.
 * Cross-built with MinGW-w64 and run under Wine: `out.bmp`, `out.pal` and
   `out.frq` are **byte-identical** to the Linux build's on every test file, and
   each platform restores the other's output exactly. That is §5.4 earning its
