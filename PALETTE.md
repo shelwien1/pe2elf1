@@ -1179,12 +1179,14 @@ pixels; this is the file.
   enough to force the 24-bit index path — with and without `out.frq`, all byte
   exact.
 * Clean under ASan and UBSan on all of the above.
-* Fuzzed both directions: mutated bitmaps into `c`, where every file accepted has
-  to round-trip exactly, and corrupted `out.bmp`/`out.pal`/`out.frq` into `d`,
-  where nothing may crash. The fuzz found two real defects — a corrupt `.pal`
-  could index the palette out of bounds, and a malformed input whose pixel bytes
-  point past its own palette was accepted by the encoder and then refused by the
-  decoder. Both are fixed; the second is now refused up front.
+* Fuzzed both directions under the sanitizers: 5 000 mutated bitmaps into `c`,
+  where every file accepted has to round-trip exactly — 2 619 accepted, all
+  exact, 2 381 refused — and 5 000 corrupted `out.bmp`/`out.pal`/`out.frq` into
+  `d`, where nothing may crash — 293 completed, 4 707 refused, no crashes. The
+  fuzz found two real defects: a corrupt `.pal` could index the palette out of
+  bounds, and a malformed input whose pixel bytes point past its own palette was
+  accepted by the encoder and then refused by the decoder. Both are fixed; the
+  second is now refused up front, with the offending index named.
 * Cross-built with MinGW-w64 and run under Wine: `out.bmp`, `out.pal` and
   `out.frq` are **byte-identical** to the Linux build's on every test file, and
   each platform restores the other's output exactly. That is §5.4 earning its
