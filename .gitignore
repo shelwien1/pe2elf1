@@ -15,3 +15,7 @@ opt.log
 # the corpus and the crops made from it -- third-party test images, see README
 testfiles/
 opt/
+
+# palexp scratch
+palexp/__pycache__/
+palexp/w/
