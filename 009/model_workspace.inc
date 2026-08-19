@@ -59,27 +59,27 @@ ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t im
     PixRec* buf = (PixRec*)bmf_new(sizeof(PixRec)*(w+16));
     row_cur[j] = buf;
     row_cur[j+5] = buf+8;
+    // `width + 16` is never negative -- `width` is a `uint16_t` field -- so the
+    // `> -16` guard the `do` needed to be safe is gone with it, and so is the
+    // `w = width` the loop re-did on every record.
     w = width;
-    if( (int32_t)width>-16 ) {
-      int32_t r = 0;
-      do {
-        row_cur[j][r].sym = 0;
-        for( int32_t i = 0; i<6; ++i ) row_cur[j][r].match[5-i] = 1;
-        w = width;
-        ++r;
-      } while( (uint32_t)r<width+16 );
+    for( uint32_t r = 0; r<width+16u; ++r ) {
+      row_cur[j][r].sym = 0;
+      for( int32_t i = 0; i<6; ++i ) row_cur[j][r].match[5-i] = 1;
     }
   }
   uint8_t* runs = (uint8_t*)bmf_new(w+1);
   run_bucket = runs;
   *runs = 0;
-  if( (int32_t)width>0 ) {
+  {
+    // The post-increment inside the subscript -- `run_bucket[x+++1]` -- is the
+    // one shape Phase 2 asks to be pulled out: it reads as `x + 1` and is
+    // `(x++) + 1`.
     uint8_t bucket = 0;
-    int32_t x = 0;
-    do {
-      bucket += x==2<<(bucket&31);
-      run_bucket[x+++1] = bucket;
-    } while( (uint32_t)x<width );
+    for( uint32_t x = 0; x<width; ++x ) {
+      bucket += x==2u<<(bucket&31);
+      run_bucket[x+1] = bucket;
+    }
   }
   __builtin_memset(sym_rev, 0, sizeof sym_rev);
   for( k = 0; k<0x2000; ++k ) {
@@ -108,23 +108,17 @@ ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t im
     sym_ctr[2*n] = no_symbol;
     sym_ctr[2*n+1] = no_symbol;
   }
-  uint32_t i8 = 0;
-  do {
-    uint32_t e0 = 2*i8;
-    ++i8;
-    bit_root[e0].init_root();
-    bit_root[e0+1].init_root();
-  } while( i8<8 );
-  uint32_t i24 = 0;
+  for( uint32_t k8 = 0; k8<8; ++k8 ) {
+    bit_root[2*k8].init_root();
+    bit_root[2*k8+1].init_root();
+  }
   memset(bit_node, 0, sizeof bit_node);
   sym_word = (uint16_t*)bmf_new(2*height*width);
   esc_ctr[0].init_parent();
   memset(&esc_ctr[1], 0, 1536);
-  do {
-    uint32_t e1 = 2*i24;
-    ++i24;
-    run_ctr[e1].init_parent();
-    run_ctr[e1+1].init_parent();
-  } while( i24<0x18 );
+  for( uint32_t k24 = 0; k24<0x18; ++k24 ) {
+    run_ctr[2*k24].init_parent();
+    run_ctr[2*k24+1].init_parent();
+  }
   return this;
 }

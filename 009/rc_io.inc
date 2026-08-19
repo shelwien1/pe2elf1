@@ -48,11 +48,13 @@ static void packer_rewind() {
     stream.pk.free_bits = bits;
     return;
   }
+  // The guard above makes the first turn certain, so the `do` and the `while`
+  // are the same walk; this one says its bound before it takes a step.
   uint8_t* at = stream.cur;
-  do {
+  while( bits>=0 ) {
     --at;
     bits -= 8;
-  } while( bits>=0 );
+  }
   stream.cur = at;
   stream.pk.free_bits = bits;
 }
@@ -104,16 +106,14 @@ static uint16_t* begin_plane_stream() {
     const uint16_t seed_row[10] = {
       635, (uint16_t)(24*alt_freq_limit), 205, 124, 147, 83, 48, 16, 8, 4,
     };
-    do {
+    for( k = 0; k<0x400; ++k, row += 254 ) {
       memcpy(row, seed_row, sizeof seed_row);
       FreqPair* seed = (FreqPair*)&row[10];
       for( uint32_t i = 0; i<0x7A; ++i ) {
         seed[i].f[0] = 60;
         seed[i].f[1] = 36;
       }
-      row += 254;
-      ++k;
-    } while( (uint32_t)k<0x400 );
+    }
   }
   model_tables = tbl;
   return tbl;

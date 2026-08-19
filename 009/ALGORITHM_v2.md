@@ -1258,9 +1258,20 @@ Lists come in two flavours: **dense** (`init(n, 1)`) starts with every symbol
 present at count 1, **sparse** starts empty and grows. The per-symbol selector
 lists are sparse with capacities 99 and 33; the escape list is dense.
 
-### 8.7 what happens between pixels
+### 8.7 what happens between rows, and between pixels
 
-`init_tables()` runs after **every** pixel and does seven things:
+`begin_row()` opens each row, both directions: it calls `start_row()` to reseat
+the five cursors at their margins, steps all five past that margin, and rebuilds
+the two gradient seeds `match_seed` counts over the two rows above. Those seeds
+are the `grad[0]` and `grad[1]` of §8.5's context ids; `grad[2]` and `grad[3]`
+start each row at zero and slide as the row is coded.
+
+`code_row_pixels<f_DEC>` is then the row itself — and the loop is not `for each
+x`, because `code_pixel` and `decode_pixel` **answer how many pixels they
+consumed**. A run swallows several at once, so the step comes back from the
+body, and `init_tables()` runs once per *call*, not once per pixel covered.
+
+`init_tables()` does seven things:
 
 1. **feed the selector lists** — on an escape, four `add_weight` calls pairing
    the coded symbol with N and W (weights 3, 4, 2, 1 depending on where the

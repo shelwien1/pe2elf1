@@ -825,30 +825,28 @@ struct ModelBlock {
       if( (int32_t)depth>8 ) {
         init_byte_lists(lists, nbytes);
         if( n_syms ) {
+          // Guarded by `if( alphabet )` above.
           carry = 0;
-          uint32_t s = 0;
-          do {
+          for( uint32_t s = 0; s<alphabet; ++s ) {
             sym_code[s] = 0;
             for( uint32_t b = 0; b<nbytes; ++b ) {
               uint32_t piece = lists[4*b+carry].decode_symbol_list();
               carry = piece>>6;
               sym_code[s] += piece<<((8*b)&31);
             }
-            carry = (uint8_t)sym_code[s++]>>7;
-          } while( s<alphabet );
+            carry = (uint8_t)sym_code[s]>>7;
+          }
         }
       } else if( n_syms<=mask ) {
         lists[0].init(mask-n_syms+2, 1);
         lists[0].rescale_at = 19*lists[0].n;
         if( alphabet ) {
           int32_t run = 0;
-          uint32_t s2 = 0;
-          do {
+          for( uint32_t s2 = 0; s2<alphabet; ++s2 ) {
             int32_t gap = lists[0].decode_symbol_list();
             sym_code[s2] = gap+run;
             run += gap+1;
-            ++s2;
-          } while( s2<alphabet );
+          }
         }
       }
       for( left = 15; left>=0; --left )
@@ -897,15 +895,14 @@ struct ModelBlock {
     if( nbytes==4 )
       return write_row_at<uint32_t>(out_at);
     if( nbytes==3 ) {
+      // Guarded by `row_w <= 0` at the top, so the `do` had nothing to carry.
+      // `x6` and `x7` were MSVC's two registers for `sym_code` and the symbol
+      // it indexes -- the table is a member and the symbol is one subscript.
       SymEntry *out_ent = (SymEntry*)out_at;
-      int32_t step = 0;
-      do {
-        uint32_t *x6 = sym_code;
-        int32_t x7 = row_cur[0][step+8].sym;
-        out_ent->set((uint16_t)x6[x7], (uint8_t)(x6[x7]>>16));
-        ++step;
-        ++out_ent;
-      } while( (uint32_t)step<width );
+      for( uint32_t step = 0; step<width; ++step, ++out_ent ) {
+        const uint32_t code = sym_code[row_cur[0][step+8].sym];
+        out_ent->set((uint16_t)code, (uint8_t)(code>>16));
+      }
       return (uint8_t*)out_ent;
     }
     if( nbytes==2 )
@@ -915,20 +912,59 @@ struct ModelBlock {
     // Sub-byte depths, packed high bits first.  `out_bits` starts one byte
     // *before* the row and the first symbol's `bits < 0` moves it on, which is
     // why the pre-increment is on the store and not on the cursor.
-    int32_t x4 = 0, bits = 0;
+    // `(8-bpp)&31` and `bits&31` are dead masks: this path is reached only for
+    // sub-byte depths, so `bpp` is 1, 2 or 4 and both counts are under 8.
+    int32_t bits = 0;
     uint8_t *out_bits = out_at;
-    do {
-      int32_t bpp = depth;
+    const int32_t bpp = depth;
+    for( uint32_t x4 = 0; x4<width; ++x4 ) {
+      const uint32_t code = sym_code[row_cur[0][x4+8].sym];
       bits -= bpp;
       if( bits<0 ) {
         bits = 8-bpp;
-        *++out_bits = sym_code[row_cur[0][x4+8].sym]<<((8-bpp)&31);
+        *++out_bits = code<<(8-bpp);
       } else {
-        *out_bits |= sym_code[row_cur[0][x4+8].sym]<<(bits&31);
+        *out_bits |= code<<bits;
       }
-      ++x4;
-    } while( (uint32_t)x4<width );
+    }
     return out_bits;
+  }
+
+  // Open a row: advance the five cursors past the margin `start_row` reseated
+  // them at, and rebuild the two gradient seeds the context reads from the two
+  // rows above.
+  //
+  // Both plane coders open every row with exactly these nine lines.  They were
+  // not visible as one thing while each spelled the cursor bumps as
+  // load-modify-store through a local of its own -- `up1`/`up2` on one side and
+  // `lists`/`t` on the other -- and normalising the two row walks in Phase 2 is
+  // what put them side by side.
+  // Every pixel of a row, in whichever direction.  Both coders answer how many
+  // pixels they consumed -- a run takes several -- so the step is the body's.
+  //
+  // Four lines, and the fifteenth `template<int32_t f_DEC>` pair in this tree.
+  // They became a visible copy of each other in Phase 2: while one was a
+  // `do`/`while` on `x2` and the other the same loop with its counter written
+  // through `y`, nothing lined them up.
+  template<int32_t f_DEC>
+  void code_row_pixels() {
+    for( uint32_t x2 = 0; x2<width; ) {
+      x2 += f_DEC ? decode_pixel(x2) : code_pixel(x2);
+      init_tables();
+    }
+  }
+
+  void begin_row() {
+    start_row();
+    ++row_cur[5];
+    ++row_cur[6];
+    ++row_cur[7];
+    ++row_cur[8];
+    ++row_cur[9];
+    grad[0] = match_seed(row_cur[6], 5);
+    grad[1] = match_seed(row_cur[7], 5);
+    grad[2] = 0;
+    grad[3] = 0;
   }
 
   // One plane through the main model, encoding.  The mirror of
@@ -945,22 +981,20 @@ struct ModelBlock {
   // walk, and the decoder reads all of that back off the stream.
   void model_plane_slow(uint8_t* pixels) {
     int16_t w2n;
-    uint32_t row_w;
     int32_t w3, w4, y;
     uint16_t w2;
     rc_begin_encode();
     reduce_alphabet(this, pixels);
     int32_t bucket = 0;
-    int32_t g = 0;
-    do {
+    // Fifteen groups, five ranks, five ranks -- constant bounds, so the `do`'s
+    // guaranteed first turn was never carrying anything.
+    for( int32_t g = 0; g<15; ++g ) {
       int32_t flags = ctx_group_flags[g];
       ctx_state[flags] = g;
-      int32_t lo = 0;
       // Hoisted out of the two loops below, as the original has it.
       const GroupFolds fold(flags);
-      do {
-        uint32_t hi = 0;
-        do {
+      for( int32_t lo = 0; lo<5; ++lo ) {
+        for( int32_t hi = 0; hi<5; ++hi ) {
           FreqRec* rec = seat_bucket(g, lo, hi, bucket);
           int32_t alpha = alphabet;
           w2n = 2;
@@ -1014,88 +1048,62 @@ struct ModelBlock {
             rec->w[0] = 0;
           }
           bucket += rec->seed_pair(lo, hi, alpha);
-          ++hi;
-        } while( hi<5 );
-        ++lo;
-      } while( (uint32_t)lo<5 );
-      uint32_t gi = 0;
+        }
+      }
       // `gctr` rather than `group_ctr`: as a free function this read
       // `blk->group_ctr[g]` and the local could take the member's name.
       SymPair* gctr = group_ctr[g];
-      do {
+      for( uint32_t gi = 0; gi<0x10000; ++gi ) {
         gctr[gi].last = 0x2000;
-        gctr[gi++].prev = 0x2000;
-      } while( gi<0x10000 );
-      ++g;
-    } while( (uint32_t)g<0xF );
+        gctr[gi].prev = 0x2000;
+      }
+    }
     seed_alphabet();
-    if( height>0 ) {
+    {
+      // `y1 = y + 1` and two `y = y1` were the counter written through a second
+      // name, and `row_w = width` inside the pixel loop re-read a member the
+      // body never writes -- three dead stores per row.  The `if( height > 0 )`
+      // and the two `if( row_w > 0 )` guards go with the `do`s they protected.
+      //
+      // The four load-modify-store bumps -- `up1 = row_cur[6]; ++up1;
+      // row_cur[6] = up1;` -- are `++row_cur[6]` with the cursor read back
+      // after, which is what `match_seed` wants.
       uint16_t* word = sym_word;
-      y = 0;
-      do {
-        int32_t y1 = y+1;
-        start_row();
-        PixRec *up1 = row_cur[6];
-        PixRec *up2 = row_cur[7];
-        ++row_cur[5];
-        ++up1;
-        row_cur[6] = up1;
-        ++row_cur[8];
-        ++up2;
-        row_cur[7] = up2;
-        ++row_cur[9];
-        grad[0] = match_seed(up1, 5);
-        grad[3] = 0;
-        grad[2] = 0;
-        y = y1;
-        row_w = width;
-        grad[1] = match_seed(up2, 5);
-        if( row_w>0 ) {
-          int32_t x = 0;
-          do {
-            ++x;
-            row_cur[5][x-1].sym = word[x-1];
-            row_w = width;
-          } while( (uint32_t)x<width );
-          word += x;
-        }
-        if( row_w>0 ) {
-          int32_t x2 = 0;
-          do {
-            int32_t step = code_pixel(x2);
-            init_tables();
-            x2 += step;
-          } while( (uint32_t)x2<width );
-          y = y1;
-        }
-      } while( (uint32_t)y<(uint32_t)height );
+      for( y = 0; y<height; ++y ) {
+        begin_row();
+        for( uint32_t x = 0; x<width; ++x )
+          row_cur[5][x].sym = word[x];
+        word += width;
+        // `code_pixel` answers how many pixels it consumed -- a run takes
+        // several -- so the step is the body's and not the header's.
+        code_row_pixels<0>();
+      }
     }
     rc_end_encode();
   }
 
   void unmodel_plane_slow(uint8_t* dst) {
     uint8_t* row[19];
-    uint32_t row_w;
     uint8_t *out_at, *expand_buf;
-    int32_t g0, done, lo1;
+    int32_t g0, done;
     int32_t lo, w2, w4, w2n, lvl_n, n_pix, q2, n_pix2;
       uint8_t *dst_base = &dst[-(depth<8)];
     rc_begin_decode();
     expand_alphabet();
     int32_t g1 = 0;
-    int32_t g = 0;
-    do {
+    // The encoder's nest, mirrored -- and the decompiler gave each level two
+    // names, incrementing one and testing the other: `g`/`g0`, `lo`/`lo1`.
+    // `g0 = g` at the top and `g = g0 + 1` at the bottom is one counter, and
+    // `lo1` was a copy of `lo` that `tools/uncopy.py` reported the moment the
+    // loop headers stopped hiding it.
+    for( int32_t g = 0; g<15; ++g ) {
       int32_t flags = ctx_group_flags[g];
       ctx_state[flags] = g;
-      lo1 = 0;
       g0 = g;
       // The same six folds `model_plane` hoists.
       const GroupFolds fold(flags);
-      lo = 0;
-      do {
-        lo1 = lo;
-        int32_t k = 0;
-        do {
+      for( lo = 0; lo<5; ++lo ) {
+        for( int32_t k = 0; k<5; ++k ) {
           FreqRec *rec = seat_bucket(g, lo, k, g1);
           int32_t m5 = alphabet;
           for( int32_t n = 0; n<4; ++n ) rec->w[1+n] = 2;
@@ -1146,19 +1154,15 @@ struct ModelBlock {
             rec->b14 = lvl_n;
             rec->w[0] = 0;
           }
-          g1 += rec->seed_pair(lo1, k, m5);
-          ++k;
-        } while( k<5 );
-        lo = lo1+1;
-      } while( lo1+1<5 );
-      int32_t gi = 0;
+          g1 += rec->seed_pair(lo, k, m5);
+        }
+      }
       SymPair* gctr = group_ctr[g0];
-      do {
+      for( int32_t gi = 0; gi<0x10000; ++gi ) {
         gctr[gi].last = no_symbol;
-        gctr[gi++].prev = no_symbol;
-      } while( gi<0x10000 );
-      g = g0+1;
-    } while( g0+1<15 );
+        gctr[gi].prev = no_symbol;
+      }
+    }
     uint8_t *dst_buf = dst_base;
     seed_alphabet();
     uint32_t jj = depth;
@@ -1171,46 +1175,17 @@ struct ModelBlock {
     }
     uint32_t nbytes = (jj+7)>>3;
     if( height>0 ) {
+      // The encoder's row walk, mirrored, and it carried the same three
+      // artefacts: `row_w = width` restated three times inside a body that
+      // never writes `width`, the four cursor bumps as load-modify-store
+      // through a local, and the counter tested in the `while` with a
+      // pre-increment on it.
       out_at = dst_buf;
-      int32_t bucket = 0;
-      // A `while( 1 )` whose only exit was a `break` on the last line, which is
-      // the `do`/`while` it is written as.  `MINIMAL-SYNTAX.md`'s Phase 7 is
-      // the second of that document's declines to have expired: it measured 32
-      // of these and nought convertible, and this is the shape it named first.
-      do {
-        start_row();
-        PixRec* lists = row_cur[6];
-        PixRec* t = row_cur[7];
-        ++row_cur[5];
-        ++lists;
-        ++row_cur[8];
-        row_cur[6] = lists;
-        ++t;
-        row_cur[7] = t;
-        ++row_cur[9];
-        grad[0] = match_seed(lists, 5);
-        grad[3] = 0;
-        grad[2] = 0;
-        row_w = width;
-        grad[1] = match_seed(t, 5);
-        // `row_w` is `width`, which nothing in this loop writes, so the test
-        // below is the same answer on every row.  The recovery said it with a
-        // `break` out of the loop, the row write repeated underneath it, and a
-        // `goto` back *into* the loop at the counter -- three statements for
-        // "skip the pixels and go round again".
-        if( row_w>0 ) {
-          int32_t x2 = 0;
-          do {
-            int32_t y = decode_pixel(x2);
-            init_tables();
-            row_w = width;
-            x2 += y;
-          } while( (uint32_t)x2<width );
-        }
-        out_at = write_row(out_at, nbytes, row_w);
-        // `height` is `int32_t` and this side is already `uint32_t`, so C
-        // converts the right operand too.  Written where it happens.
-      } while( (uint32_t)++bucket<(uint32_t)height );
+      for( int32_t bucket = 0; bucket<height; ++bucket ) {
+        begin_row();
+        code_row_pixels<1>();
+        out_at = write_row(out_at, nbytes, width);
+      }
     }
     rc_end_decode();
     int32_t bpp_raw = depth_raw;

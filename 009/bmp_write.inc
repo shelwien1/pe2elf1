@@ -52,14 +52,15 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     const int32_t ncol = 1<<(bits&31);
     if( depth&depth_grey ) {
       uint32_t levels = 0x100u>>(bits&31);
+      // `ncol` is 2, 16 or 256, so the half is at least one and the `do`'s
+      // guaranteed first turn was never load-bearing.  `k` outlives the loop:
+      // the odd entry below reads where it stopped.
       uint32_t k = 0;
       int32_t grey = 0;
-      do {
+      for( ; k<(uint32_t)(ncol/2); ++k, grey += 2*levels ) {
         put_u32(&out_buf[8*k+54], bmp_grey_entry((uint8_t)grey));
         put_u32(&out_buf[8*k+58], bmp_grey_entry((uint8_t)(grey+levels)));
-        grey += 2*levels;
-        ++k;
-      } while( k<(uint32_t)(ncol/2) );
+      }
       const uint32_t at = 2*k+1;
       if( (at-1)<(uint32_t)ncol )
         put_u32(&out_buf[4*at+50], bmp_grey_entry((uint8_t)(levels*(at-1))));
@@ -72,13 +73,12 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
       // `img->palette()` with `sizeof(BmfImage)` spelled as a 16 inside each
       // subscript.  Two BGR triples per turn, six bytes.
       const uint8_t *pal = img->palette();
-      do {
-        uint32_t slot = 2*j;
+      for( ; j<pairs; ++j ) {
+        const uint32_t slot = 2*j;
         const uint8_t *e0 = &pal[6*j], *e1 = &pal[6*j+3];
         put_u32(&out_buf[4*slot+54], bmp_palette_entry(e0[0], e0[1], e0[2]));
         put_u32(&out_buf[4*slot+58], bmp_palette_entry(e1[0], e1[1], e1[2]));
-        ++j;
-      } while( j<pairs );
+      }
       rle_on = want_rle;
       // `done` was `at2` copied on the next line and then read twice below
       // it; the copy existed because the arm this replaced set the two to
@@ -272,8 +272,8 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     coded_bytes = 0;
   } else {
     pad = ((stride+3)&0xFFFFFFFC)-stride;
-    int32_t y = 0;
-    do {
+    // Guarded by `rows2 > 0` above, and `rows2` is `img->height`.
+    for( int32_t y = 0; y<img->height; ++y ) {
       memcpy(out_at, p, stride);
       out_at += stride;
       p -= stride;
@@ -281,8 +281,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         *(uint32_t*)out_at = 0;
         out_at += pad;
       }
-      ++y;
-    } while( y<img->height );
+    }
     coded_bytes = out_at-buf;
   }
   return finish(coded_bytes);

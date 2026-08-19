@@ -156,16 +156,19 @@ int32_t choose_plane_coding(BmfImage* img) {
   memset(cand_desc, 0, sizeof cand_desc);
   if( n_planes>0 ) {
     if( n_planes/2 ) {
+      // `2*pair+++1` is the post-increment-inside-an-expression Phase 2 asks
+      // to be pulled out: it reads as `2*pair + 1` and is `2*(pair++) + 1`,
+      // which is the same value only because the increment is the loop's own.
+      // `pair` outlives the loop -- the plane after the pairs is `2*pair + 1`.
       uint32_t pair = 0;
-      do {
-        uint8_t pl_even = 2*pair;
+      for( ; pair<(uint32_t)(n_planes/2); ++pair ) {
+        const uint8_t pl_even = 2*pair, pl_odd = 2*pair+1;
         row = 2*pair;
-        plane_desc[row].src_plane = 2*pair;
-        uint8_t pl_odd = 2*pair+++1;
+        plane_desc[row].src_plane = pl_even;
         plane_desc[row].nrefs = pl_even;
         plane_desc[row+1].src_plane = pl_odd;
         plane_desc[row+1].nrefs = pl_odd;
-      } while( pair<(uint32_t)(n_planes/2) );
+      }
       next_plane = 2*pair+1;
     } else {
       next_plane = 1;
@@ -317,15 +320,14 @@ int32_t choose_plane_coding(BmfImage* img) {
         uint8_t *pp = &img->pixels[row_stride];
         uint8_t *end_px = &img->pixels[row_stride+4];
         if( end_px<data_end ) {
-          uint32_t i4 = 0;
           uu = (data_end-1-pp)/4;
-          do {
+          // Guarded by `end_px < data_end` above, which is `uu >= 1`.
+          for( uint32_t i4 = 0; i4<uu; ++i4 ) {
             dv0 = (double)(img->pixels[4*i4]+pp[4*i4+4]-(img->pixels[4*i4+4]+pp[4*i4]));
             dv1 = (double)(img->pixels[4*i4+1]+pp[4*i4+5]-(img->pixels[4*i4+5]+pp[4*i4+1]));
             dv2 = (double)(img->pixels[4*i4+2]+pp[4*i4+6]-(img->pixels[4*i4+6]+pp[4*i4+2]));
             dv3 = img->pixels[4*i4+3]+pp[4*i4+7]-(img->pixels[4*i4+7]+pp[4*i4+3]);
             Sxx += dv0*dv0;
-            ++i4;
             Sxy += dv0*dv1;
             Sxz += dv0*dv2;
             Syy += dv1*dv1;
@@ -334,7 +336,7 @@ int32_t choose_plane_coding(BmfImage* img) {
             Sxw += dv0*(double)dv3;
             Syw += dv1*(double)dv3;
             Szw += dv2*(double)dv3;
-          } while( i4<uu );
+          }
         }
         // The three cofactors of the first row of `S`, and one over its
         // determinant -- scaled by 128 because the weights are eighths of a
@@ -359,8 +361,8 @@ int32_t choose_plane_coding(BmfImage* img) {
           // The loop below spilled three more registers to that same area --
           // `quad`, `g0` and `g1`, each already a local one line up -- and
           // those stores are gone with it.
-          quad = 0;
-          do {
+          // The same bound as the accumulation loop above, and the same guard.
+          for( quad = 0; quad<uu; ++quad ) {
             int32_t nx0 = img->pixels[4*quad+4];
             int32_t dg0 = img->pixels[4*quad]+pp[4*quad+4];
             int32_t dn0 = pp[4*quad];
@@ -392,8 +394,7 @@ int32_t choose_plane_coding(BmfImage* img) {
             ++hist_c[r1+3072];
             int32_t r2 = alpha-pp[4*quad+6];
             ++hist_c[r2+4096];
-            quad = quad+1;
-          } while( quad<uu );
+          }
         }
         uint32_t cost_lin = estimate_cost(hist_flat, 1024);
         best4 = (cost_lin>>7)+cost_lin;
