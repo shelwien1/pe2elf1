@@ -46,8 +46,19 @@ struct CounterNode {
   // `alt_p1_block` spelled this out four times, twice reading `total` from a
   // local holding the value just stored into it.  Same value, three lines
   // apart.
-  uint32_t escape_bias(int32_t slot) const {
-    return (((total&0x7FFF)+c[0]-2*(uint32_t)c[slot])>>25)&0xFFFFFFC0;
+  // As the comparison it is, rather than as the unsigned wrap that computes
+  // it.  Every caller added the 0-or-64 this replaces into a strip index where
+  // 64 is bit 6, so a `bool` at `bit<6>` is what they want and the two
+  // spellings meet there.  Named for what it answers: this slot holds more
+  // than half the node.
+  //
+  // `>>25` on a `uint32_t` and `& ~63` on the 127 it leaves is a way of writing
+  // `> 0 ? 64 : 0` that took three readings to get right -- see the note above
+  // -- and there is no reason for the shift to be the thing on the page when
+  // what it means is one comparison.  Same value: the sum wraps exactly when
+  // `2*c[slot]` passes it, which is this test.
+  bool escape_high(int32_t slot) const {
+    return 2u*c[slot]>(total&0x7FFF)+c[0];
   }
 };
 

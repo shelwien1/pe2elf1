@@ -204,9 +204,21 @@ int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
   total = result;
   slot = cur-c;
   if( slot>=5 ) {
-    uint16_t*const strip = model_strip(128*(uint32_t)(slot&1)
-        +((((c[0]+(result&0x7FFF)+96-2*(uint32_t)c[slot])>>25)&0xFFFFFFC0)
-          +(uint32_t)ctx));
+    // The same three fields `alt_p1_block` builds -- the escape's parity at bit
+    // 7, "this slot holds more than half" at bit 6, the caller's context under
+    // both -- and *not* `CounterNode::escape_high`, which is the same test
+    // without the `+ 96`.  Ninety-six is three of the 32s a coded symbol adds,
+    // and whether it belongs here or there is not answerable from the source;
+    // the binary has it on this side only, so this keeps its own comparison and
+    // says why rather than sharing a method that would be wrong by 96.
+    //
+    // Written as `((c[0] + tot + 96 - 2*c[slot]) >> 25) & 0xFFFFFFC0`: an
+    // unsigned wrap, a logical shift to 127, and a mask down to 64.  That is
+    // this comparison, and it is worth having on the page as one.
+    uint16_t*const strip = model_strip(
+        CtxIdx{}.bit<7>(slot&1)
+                .bit<6>(2u*c[slot]>c[0]+(result&0x7FFF)+96)
+                .raw((uint32_t)ctx));
     if( f_DEC )
       slot += 2*decode_symbol_tree(strip);
     else

@@ -383,19 +383,36 @@ starts from `0x8000` rather than 0, because the top bit of `total` is a flag
 and the coder masks it off with `& 0x7FFF` at every read.
 
 When the slot is 5 or 6 the node has escaped, and the remaining magnitude is
-coded by the binary tree of §5.4 against a frequency strip chosen by three
-things: the escape's parity (`128 * (slot & 1)`), the caller's context, and one
-bit from `escape_bias`.
+coded by the binary tree of §5.4 against a frequency strip. That strip's index
+is three fields:
 
-`escape_bias` is 0 or **+64**, and it is +64 when the escaped slot holds more
-than half the node's mass. It computes that with an unsigned wrap rather than a
-comparison: `(total & 0x7FFF) + c[0] - 2*c[slot]` in `uint32_t` arithmetic goes
-huge when the slot is over half, `>> 25` turns huge into 127, and `& ~63` turns
-127 into 64. The source comment on it claimed `-64` and claimed the opposite
-condition; both are wrong, and the call sites settle it without needing the
-shift read at all — the value is *added* to a strip index, and `0xFFFFFFC0`
-would leave a 1024-entry table on the first escape. Corrected in `bitctr.inc`
-in the same commit as this section.
+```
+bit 7   the escape's parity, slot & 1
+bit 6   escape_high -- does this slot hold more than half the node?
+bits    the caller's context, underneath both
+```
+
+The middle one is worth its own paragraph, because reading it is what produced
+two wrong answers. Every site wrote it as
+`((total & 0x7FFF) + c[0] - 2*c[slot]) >> 25 & 0xFFFFFFC0`, and the source
+called that a sign test giving 0 or **−64**. It is neither. The arithmetic is
+unsigned — `(uint32_t)c[slot]` makes it so — so the subtraction *wraps* instead
+of going negative when the slot is over half; `>> 25` is a logical shift giving
+127, not a sign test giving −1; and `& ~63` leaves **+64**. The condition is
+inverted too: the wrap is the over-half case, which the old sentence gave to the
+zero.
+
+The call sites settle it without the shift needing to be read at all, which is
+the part worth keeping. The value is *added* to a strip index that runs over
+1024 strips, and −64 as a `uint32_t` is `0xFFFFFFC0` — the sum would leave the
+table on the first escape whose slot went over half. It is a context bit, and it
+is set high.
+
+`CounterNode::escape_high` is that test written as the comparison it is,
+`2*c[slot] > (total & 0x7FFF) + c[0]`, with the 64 supplied by `bit<6>` at each
+call site instead of by the mask. The one exception is `code_symbol`'s own copy,
+which carries an extra `+ 96` — three of the 32s a coded symbol adds — and so
+keeps its own comparison rather than share a method that would be wrong by 96.
 
 ### 5.4 the symbol tree
 
@@ -1423,12 +1440,11 @@ are exact inverses. Then two stages:
 2. Slots 5 and 6 **escape into a binary tree**. `code_symbol_tree` walks
    `level_geom[]` coding one bit per level through `FreqPair` counters, with the
    level chosen by `model_geometry[code]`, which is what makes a large residual
-   cost logarithmically. The strip is
-   `model_strip(128·(slot & 1) + escape_bias + ctx[1])`, so the parity picks one
-   of two strips and the activity group and predicted value pick the place in
-   it.
-   `escape_bias` is a sign test folded to 0 or −64 on
-   `(total & 0x7FFF) + c[0] − 2·c[slot]`.
+   cost logarithmically. The strip index is the three fields of §5.3 — the
+   escape's parity at bit 7, `escape_high` at bit 6, `ctx[1]` under both — so
+   the parity and the half-mass bit pick one of four strips and the activity
+   group and predicted value pick the place in it. The two `update_binary_pair`
+   calls beside it use the same index ±8, training the neighbouring contexts.
 
 ### 9.4 the update, which is where the model earns its keep
 
@@ -1881,11 +1897,14 @@ would get wrong:
 - **the packed-row claim of §2.1** — read out of the `stride` field of
   `testfiles/ref_*.bmf`, which is the encoder's own answer;
 - **the flag values of §4.1** — read out of byte 15 of the same files;
-- **the sign of `escape_bias` in §5.3** — the expression compiled and evaluated
-  on both sides of the half-mass boundary. It returns 0 and 64; the source
-  comment said 0 and −64, and gave the two cases the wrong way round. Reading it
-  is what produced the wrong answer twice, because `>>25` looks like a sign test
-  and is not one here. Corrected in `bitctr.inc`;
+- **the half-mass bit of §5.3** — the expression compiled and evaluated on both
+  sides of its boundary. It is 0 and +64; the source called it 0 and −64 and
+  gave the two cases the wrong way round. Reading it is what produced the wrong
+  answer, because `>>25` looks like a sign test and is not one under unsigned
+  arithmetic — and it produced it *twice in this document*, in §5.3 and again in
+  §9.3, because both passages were derived from the same comment rather than
+  from the code. Corrected in `bitctr.inc`, where it is now the comparison
+  `escape_high` and the 64 comes from `bit<6>`;
 - **the level geometry table of §5.4** — the recurrence in `begin_plane_stream`
   and the tree walk in `code_symbol_tree` were run against each other to get
   `tbl_base` and the highest index a walk touches. That is where the four unread

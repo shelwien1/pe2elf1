@@ -459,14 +459,20 @@ struct AltP1Block {
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, 11);
       if( slot_f>=5 )
-        update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+node_up[1].escape_bias(slot_f)), (int32_t)(code_f-5)>>1);
+        update_binary_pair(model_strip(CtxIdx{}.bit<7>(slot_f&1)
+                                              .bit<6>(node_up[1].escape_high(slot_f))
+                                              .raw(ctx_up)),
+                           (int32_t)(code_f-5)>>1);
     }
     if( result&7 ) {
       CounterNode *node_dn = &counters[result];
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, 13);
       if( slot_f>=5 )
-        update_binary_pair(model_strip(128*(uint32_t)(slot_f&1)+(uint32_t)ctx_dn+node_dn[-1].escape_bias(slot_f)), tree_sym);
+        update_binary_pair(model_strip(CtxIdx{}.bit<7>(slot_f&1)
+                                              .bit<6>(node_dn[-1].escape_high(slot_f))
+                                              .raw(ctx_dn)),
+                           tree_sym);
     }
     if( counters[result].total<0xCCCu ) {
       if( (result&7u)<7 ) {
@@ -476,9 +482,15 @@ struct AltP1Block {
         node_alt[-1].bump(slot_r, 5);
       }
       if( slot_f>=5 ) {
-        uint32_t bias = counters[result].escape_bias(slot_f);
-        uint32_t key = ctx[1]+bias+((slot_f&1)<<7);
-        if( (key&0x38)>=0x38||(update_binary_pair(model_strip(128*(slot_f&1)+ctx[1]+bias+8), tree_sym), (key&0x38)!=0) ) {
+        // `key + 8` and `key - 8`: the two strips one context step either side
+        // of this one, the same "train the neighbours" the other two arms do.
+        // The first was written out longhand as
+        // `128*(slot_f&1) + ctx[1] + bias + 8`, which is `key` re-derived three
+        // terms at a time beside the `key` on the line above it.
+        const uint32_t key = CtxIdx{}.bit<7>(slot_f&1)
+                                     .bit<6>(counters[result].escape_high(slot_f))
+                                     .raw(ctx[1]);
+        if( (key&0x38)>=0x38||(update_binary_pair(model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
           update_binary_pair(model_strip(key-8), tree_sym);
         }
       }
