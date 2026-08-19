@@ -203,12 +203,11 @@
 
 void bmf_compress(const char* InName, const char* OutName) {
   int32_t i;
-  BmfFile* Arc;
   BmfImage *p_i = read_bmp((char*)InName);
   if( !p_i )
     bmf_fatal(bmf_read_error);
   printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i->width, p_i->height, p_i->depth&depth_bits, p_i->data_size);
-  Arc = bmf_open_file((BmfFile*)bmf_new(sizeof(BmfFile)), (char*)OutName, 0);
+  BmfFile* Arc = bmf_open_file((BmfFile*)bmf_new(sizeof(BmfFile)), (char*)OutName, 0);
   // `Flags`, in a program whose header has a `flags` byte that is not this
   // one: it is the depth.
   int32_t Depth = p_i->depth;

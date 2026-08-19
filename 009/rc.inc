@@ -147,7 +147,7 @@ public:
     dec_normalise();
     rdiv = range/tot;
     uint32_t count = low/rdiv;
-    return (count>=tot) ? tot-1 : count;
+    return umin32(count, tot-1);
   }
 
   void decode(uint32_t cum, uint32_t high, uint32_t tot) {

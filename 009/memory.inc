@@ -35,7 +35,7 @@ static int32_t bmf_bucket_of(size_t n) {
   if( n<=32 )
     return 0;
   int32_t b = 64-5-__builtin_clzll((uint64_t)(n-1));
-  return b<BMF_BUCKETS-1 ? b : BMF_BUCKETS-1;
+  return min32(b, BMF_BUCKETS-1);
 }
 
 static void*bmf_malloc(size_t n) {
@@ -61,7 +61,8 @@ static void bmf_free(void* p) {
   if( !p )
     return;
   int32_t b = (int32_t)((size_t*)p)[-2];
-  if( b<0||b>=BMF_BUCKETS )
+  // One comparison, not two: a negative `b` wraps past the bucket count.
+  if( (uint32_t)b>=BMF_BUCKETS )
     return;
   *(void**)p = bmf_bucket[b];
   bmf_bucket[b] = p;

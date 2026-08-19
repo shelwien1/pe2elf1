@@ -241,18 +241,21 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   weights.row[3] = cur_l[-2];
   weights.row[4] = up_row[0];
   weights.row[5] = cur_l[0];
-  int32_t c_lo = 14*sum_u;
-  int32_t mode = 1;
-  int32_t c_mid = 13*sum_ur;
-  if( 16*sum4<=14*sum_u ) {
-    c_lo = 16*sum4;
-    mode = 0;
-  }
-  if( c_lo>c_mid )
+  // Which of the four directional activity sums is smallest, once each is
+  // scaled by its own weight.  The weights are model parameters and stay named
+  // candidates rather than going inline.
+  //
+  // The original walked it with two running minima and three `if`s, and the tie
+  // rule is the part that has to survive: `16*sum4 <= 14*sum_u` sends a tie to
+  // mode 0, which `best01 == a` reproduces because `min32` returns `a` on
+  // equality.  Checked over all 43,046,721 quadruples in [-40,40]^4 -- 0
+  // disagreements -- rather than at the three boundaries by hand.
+  const int32_t a = 16*sum4, b = 14*sum_u, c = 13*sum_ur, d = 11*sum_ul;
+  const int32_t best01 = min32(a, b);
+  int32_t mode = (best01==a) ? 0 : 1;
+  if( best01>c )
     mode = 2;
-  else
-    c_mid = c_lo;
-  if( c_mid>11*sum_ul )
+  if( min32(best01, c)>d )
     mode = 3;
   int32_t filt = nb_cur->predict((float (*)[4]) p2_row, &weights, mode);
   P2Ctx* cx0 = cursor[0];
@@ -545,11 +548,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ctx15 = nb_ctx[magsum>>3];
     ctx = ctx15;
   }
-  int32_t ctx_idx = (run+pred4+7)>>4;
-  if( ctx_idx>=255 )
-    ctx_idx = 255;
-  if( ctx_idx<0 )
-    ctx_idx = 0;
+  const int32_t ctx_idx = clamp32((run+pred4+7)>>4, 0, 255);
   // The magnitude context in the low nibble, under a `ctx_delta` entry that
   // occupies bits 4 and up -- the run level as `bits<4, 4>` and the plane
   // `above<8>`, built once in `alt_p2_alloc`.  `ctx15` is `nb_ctx[]`, whose

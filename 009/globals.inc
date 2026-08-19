@@ -275,3 +275,13 @@ static inline void ring_advance(T** buf, T** cursor, int32_t margin) {
     cursor[k] = buf[k]+margin;
 }
 
+// And the same ring, released.  Both alternate-model blocks keep five rows and
+// both give them back the same way; the two bodies were one four-line copy of
+// each other from the moment `alt_p1_free` and `alt_p2_free` stopped differing
+// in a `do_free` flag neither caller ever cleared.
+template<class T>
+static inline void ring_free(T** buf) {
+  for( int32_t k = 0; k<5; ++k )
+    free(buf[k]);
+}
+

@@ -457,12 +457,8 @@ struct AltP1Block {
     uint32_t code_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
     int32_t code_r = *((uint8_t)((uint8_t)pred-cursor[0]->sym)+fold);
     int32_t tree_sym = (int32_t)(code_f-5)>>1;
-    int32_t slot_f = 6-(code_f&1);
-    if( code_f<5 )
-      slot_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
-    int32_t slot_r = 6-(code_r&1);
-    if( code_r<5 )
-      slot_r = code_r;
+    const int32_t slot_f = sym_slot(code_f);
+    const int32_t slot_r = sym_slot(code_r);
     // `ctx_w[1].sel` and `ctx_w[2].sel` were read into `sel1_top`/`sel2_top`
     // eight lines above this sum, which made two of its nine terms look unlike
     // the other seven.  Nothing between the read and the use touches `ctx_w`.
@@ -616,8 +612,7 @@ struct AltP1Block {
   // the one that did not, `alt_model_p1_d8_decode`, only passed it on to
   // another caller that did.
   void alt_p1_free() {
-    for( int32_t k = 0; k<5; ++k )
-      free(buf[k]);
+    ring_free(buf);
     free(this);
   }
 };

@@ -129,7 +129,13 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   const uint32_t row_b = img->stride;
   // The two other planes of the pixel, as offsets from this one.  `cand` is
   // 0, 1 or 2, so the pair is (1, 2), (1, -1) or (-2, -1).
-  const int32_t d1 = (cand+1)%3-cand;
+  // The two other planes, as offsets from this one.  Not `const`: the swap
+  // below exchanges them when the second turns out to be the better first
+  // reference, and both names mean the same thing throughout -- "the offset of
+  // the reference in slot N".  A third local held the first of them across that
+  // swap and `tools/uncopy.py` reported it for what it was, a copy: `d1` is not
+  // read again after the swap, so the two were never live at once.
+  int32_t d1 = (cand+1)%3-cand;
   int32_t d2 = (cand+2)%3-cand;
   uint8_t* img_end = &img->pixels[img->data_size];
   uint8_t* base = img->pixels;
@@ -175,18 +181,11 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   double inv = 128.0/(0.1-sxy*sxy+sxx*syy);
   double w1f = (syy*sxz-sxy*syz)*inv;
   double w2f = inv*(sxx*syz-sxy*sxz);
-  int32_t wa = (int32_t)w1f;
-  if( wa>=191 )
-    wa = 191;
-  if( wa<-64 )
-    wa = -64;
-  int32_t wb = (int32_t)w2f;
-  if( wb>=191 )
-    wb = 191;
-  if( wb<-64 )
-    wb = -64;
+  // Not `const`: the swap forty lines down exchanges them when the two
+  // reference planes come out in the other order.
+  int32_t wa = clamp_weight((int32_t)w1f);
+  int32_t wb = clamp_weight((int32_t)w2f);
 
-  int32_t pick = d1;
   int32_t rec = 4*cand;
   costs[rec] = weight_pair_cost(img, &base[cand], d1, d2, wa, wb);
   costs[rec+1] = estimate_cost(hist_zx, 1024);
@@ -208,25 +207,21 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   int32_t s2 = cost+c2;
   int32_t best = s2;
   if( s1<s2 ) {
+    // The two reference planes come out the other way round, so everything
+    // that names one of them exchanges: the plane, its cost, and its weight.
     best = s1;
-    int32_t tmp = pick;
-    pick = d2;
     cost = cost_y;
-    d2 = tmp;
-    uint32_t swap = costs[rec+1];
-    costs[rec+1] = costs[rec+2];
-    costs[rec+2] = swap;
-    int32_t w1s = wa;
-    wa = wb;
-    wb = w1s;
+    swap32(d1, d2);
+    swap32(costs[rec+1], costs[rec+2]);
+    swap32(wa, wb);
   }
   pd[cand].weight0 = wa;
   pd[cand].weight1 = wb;
   // The plane order, as the permutation and its inverse -- `src_plane[rank]`
   // and `nrefs[plane]` -- which is the pair `expand_image` builds from the
-  // wire.  `pick` and `d2` are offsets from this plane, so both indices are
+  // wire.  `d1` and `d2` are offsets from this plane, so both indices are
   // 0, 1 or 2 whichever candidate this is.
-  int32_t idx1 = cand+pick;
+  int32_t idx1 = cand+d1;
   int32_t idx2 = cand+d2;
   pd[idx1].nrefs = 0;
   pd[0].src_plane = (uint8_t)idx1;
@@ -238,11 +233,8 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
     return cost+cost_yx+costs[rec];
   uint32_t lo2 = costs[rec];
   uint32_t lo3 = costs[rec+2];
-  if( lo2>=costs[rec+1] )
-    lo2 = costs[rec+1];
-  if( lo3>=costs[rec+3] )
-    lo3 = costs[rec+3];
-  if( lo2<lo3 )
-    lo3 = lo2;
+  lo2 = umin32(lo2, costs[rec+1]);
+  lo3 = umin32(lo3, costs[rec+3]);
+  lo3 = umin32(lo3, lo2);
   return best+lo3;
 }

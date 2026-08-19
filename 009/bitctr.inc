@@ -43,24 +43,27 @@ struct CounterNode {
   // 3..5 of a small non-negative number.  It is a context bit, and it is set
   // high.
   //
-  // `alt_p1_block` spelled this out four times, twice reading `total` from a
-  // local holding the value just stored into it.  Same value, three lines
-  // apart.
-  // As the comparison it is, rather than as the unsigned wrap that computes
-  // it.  Every caller added the 0-or-64 this replaces into a strip index where
-  // 64 is bit 6, so a `bool` at `bit<6>` is what they want and the two
-  // spellings meet there.  Named for what it answers: this slot holds more
-  // than half the node.
-  //
-  // `>>25` on a `uint32_t` and `& ~63` on the 127 it leaves is a way of writing
-  // `> 0 ? 64 : 0` that took three readings to get right -- see the note above
-  // -- and there is no reason for the shift to be the thing on the page when
-  // what it means is one comparison.  Same value: the sum wraps exactly when
-  // `2*c[slot]` passes it, which is this test.
+  // So it is written as the comparison it is.  Every caller adds the 0-or-64
+  // into a strip index where 64 is bit 6, so a `bool` under `bit<6>` is what
+  // they want and the two spellings meet there.  `alt_p1_block` spelled the
+  // shift out four times, twice reading `total` from a local holding the value
+  // just stored into it.
   bool escape_high(int32_t slot) const {
     return 2u*c[slot]>(total&0x7FFF)+c[0];
   }
 };
+
+// The tree slot a folded code takes: itself below 5, then slot 5 for odd codes
+// and 6 for even ones.  Two independent spellings of one mapping --
+// `CounterNode::code_symbol` writes it this way round and
+// `AltP1Block::update_model` computes it twice, once per fold direction.
+//
+// `update_model` also re-read `fold[(uint8_t)(sym - pred)]` to get the low case
+// rather than reusing the `code_f` it had just computed from the same
+// expression.  Passing the code in removes that second table read.
+static inline int32_t sym_slot(int32_t code) {
+  return code<5 ? code : 6-(code&1);
+}
 
 struct SymPair {
   uint16_t last;

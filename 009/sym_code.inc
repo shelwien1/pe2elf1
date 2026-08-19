@@ -171,9 +171,7 @@ int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
       cum += *++cur;
     rc.decode(cum-*cur, cum, tot);
   } else {
-    slot = 6-(sym&1);
-    if( sym<5 )
-      slot = sym;
+    slot = sym_slot(sym);
     cum = 0;
     for( int32_t k = 0; k<slot; k++ )
       cum += c[k];

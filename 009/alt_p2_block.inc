@@ -17,8 +17,12 @@ struct P2Freq {
     f[2] -= cut;
     uint32_t budget = step;
     if( budget<=0x100 ) {
+      // `((16 - budget) >> 30) & 0xFFFFFFFE` on the guarded range, which is a
+      // decompiled branchless select and not an idiom: the unsigned wrap makes
+      // `16 - budget` reach 2^30 exactly when `budget > 16`, the shift turns
+      // that into 3, and the mask into 2.  Below 17 it is 0.
       if( step<=0x20u )
-        cut = ((16-budget)>>30)&0xFFFFFFFE;
+        cut = budget>16 ? 2 : 0;
       else
         cut = 32;
       step = budget-cut;
@@ -92,8 +96,9 @@ struct P2Freq {
       f[2] = f2_old-(f2_old>>1);
       st = step;
       if( st<=256 ) {
+        // The same branchless select as `rescale_three_way`'s.
         if( st<=32 )
-          down = ((uint32_t)(16-st)>>30)&0xFFFFFFFE;
+          down = st>16 ? 2 : 0;
         else
           down = 32;
         st = st-down;
@@ -123,8 +128,22 @@ struct P2Freq {
   }
 };
 
+// A rounding arithmetic shift right, and the two `&31` masks it was written
+// with are dead.
+//
+// `rate` is `P2Count::rate`.  `alt_p2_alloc` seeds every one of the 163,840
+// counters to 5, and exactly one other line writes it -- `code_banks`'s
+// `node0->rate = b0n` -- which only fires while `(uint8_t)rate < 8`.  So
+// `rate` is in [5, 8] always, and on that range `(rate+31)&31` is `rate-1` and
+// `rate&31` is `rate`.
+//
+// Not mmax's `uint32_t{1u} << ...`: that makes the whole expression unsigned and
+// turns the arithmetic shift into a logical one.  `weighted` is `int16_t`-stored
+// and routinely negative, so it would change the prediction.  The shift count is
+// 4..7 and never 31, so the UB that fix is aimed at is unreachable.
 static inline int32_t p2_pred(int32_t weighted, int32_t rate) {
-  return (weighted+(1<<((rate+31)&31)))>>(rate&31);
+  BMF_ASSUME(rate>=5&&rate<=8);
+  return (weighted+(1<<(rate-1)))>>rate;
 }
 
 static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
@@ -701,7 +720,7 @@ struct AltP2Block {
       }
     }
     uint32_t row = 0;
-    int32_t row_bytes = 18*(img_w<3 ? 3 : img_w)+234;
+    int32_t row_bytes = 18*max32(img_w, 3)+234;
     do
       buf[row++] = (P2Ctx*)bmf_new(row_bytes);
     while( row<5 );
@@ -770,8 +789,7 @@ struct AltP2Block {
   // There is nothing to split: no caller wants the workspace freed and the
   // object kept, which is what the always-1 flag says.
   void alt_p2_free() {
-    for( int32_t k = 0; k<5; ++k )
-      free(buf[k]);
+    ring_free(buf);
     free(row0);
     free(row1);
     bmf_page_free(this);

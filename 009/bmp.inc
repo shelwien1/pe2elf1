@@ -225,7 +225,7 @@ BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette,
     if( bpp==3 )
       bits = 4;
     else if( !packed )
-      bits = bpp>4 ? bpp : 4;
+      bits = max32(bpp, 4);
     bool byte_rows = bpp!=3&&bits>=8;
     if( !packed ) {
       if( !byte_rows&&bits==4 )

@@ -5,6 +5,7 @@
 #     BMF_BITS=32 ./build.sh            # the same source at the other width
 #     BMF_OUT=/tmp/bmf BMF_STATIC=0 BMF_GC=0 ./build.sh -fsanitize=address -g -O1
 #     BMF_WARN=1   ./build.sh           # warn.log   and the count, no binary
+#     BMF_ASSERTS=1 ./build.sh          # the BMF_ASSUME invariants, checked
 #     BMF_STRICT=1 ./build.sh           # strict.log and the count, no binary
 #     BMF_GC=list  ./build.sh           # and name the bodies --gc-sections drops
 #     BMF_ALIAS=-fstrict-aliasing ./build.sh   # tools/alias.sh's knob; see below
@@ -108,6 +109,19 @@ permissive='-fpermissive'
 # And the three that decide the answer.  See the header.
 fidelity="${BMF_ALIAS:--fno-strict-aliasing} -ffp-contract=off"
 incs='-DNDEBUG -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0'
+# The invariants the source states as `BMF_ASSUME`, checked rather than
+# asserted.  Off in the shipping build -- `-DNDEBUG` above already disarms
+# `assert`, and these sit in the hottest loops in the program -- and on for a
+# leg the gate can run:
+#
+#     BMF_ASSERTS=1 ./build.sh && ./test.sh
+#
+# Stage 2 §1.7 asks for `p2_pred`'s `rate in [5,8]` to be "pinned with a debug
+# assert rather than re-derived later"; a pin nothing can pull is a comment, so
+# this is the build that pulls it.
+if [ "${BMF_ASSERTS:-0}" = 1 ]; then
+  incs="-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -DBMF_ASSERTS"
+fi
 std='-std=gnu++17'
 opt='-O2'
 

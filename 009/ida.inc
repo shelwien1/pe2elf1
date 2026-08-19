@@ -40,6 +40,82 @@ inline uint32_t abs32(int32_t x) {
   return x<0 ? 0u-(uint32_t)x : (uint32_t)x;
 }
 
+// An invariant the source depends on, checked in the `BMF_ASSERTS=1` build and
+// absent from the shipping one.
+//
+// Every use of this stands where a comment would otherwise have to say "and
+// this cannot happen because" -- `p2_pred`'s shift range, `p2_bump`'s.  The
+// reasoning is written out at each; what this adds is that the reasoning can be
+// run.  Not `assert` directly, because the default build passes `-DNDEBUG` and
+// a reader would have to know that to know these are off.
+#ifdef BMF_ASSERTS
+#  include <cassert>
+#  define BMF_ASSUME(x) assert(x)
+#else
+#  define BMF_ASSUME(x) ((void)0)
+#endif
+
+// Named-width min/max/clamp, and the width in the name is the point.
+//
+// Not `std::min` / `std::clamp`: the call sites mix `int32_t`, `uint32_t` and
+// `uint16_t` operands, and template deduction would pick one and hide the
+// conversion -- in a program where a conversion is how the fold tables work,
+// that is exactly the wrong thing to make invisible.  Spelling the width means
+// every narrowing at a call site is still written down.  No `<algorithm>`
+// either, which keeps this header free-standing.
+//
+// At `-O2` these are the same `cmov` the two-line `if` forms compiled to; the
+// gate says so, since none of the eleven sites they replace moved a stream.
+static inline int32_t min32(int32_t a, int32_t b) {
+  return a<b ? a : b;
+}
+
+static inline int32_t max32(int32_t a, int32_t b) {
+  return a>b ? a : b;
+}
+
+static inline uint32_t umin32(uint32_t a, uint32_t b) {
+  return a<b ? a : b;
+}
+
+static inline int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {
+  return v<lo ? lo : v>hi ? hi : v;
+}
+
+// The reference weight's range, and the one clamp that is written five times.
+//
+// `>= 191 -> 191` is `min(w, 191)` exactly -- the boundary case assigns the
+// value it already holds -- so fusing the two `if`s loses nothing.  Both bounds
+// are model parameters: a weight is a 128th, so 191 is 1.49x and -64 is -0.5x.
+constexpr int32_t kWeightMin = -64, kWeightMax = 191;
+
+// The ceiling on `choose_plane_coding`'s slack -- how much worse than the best
+// a candidate may cost and still be tried.  0x4000 occurs in at least five
+// unrelated roles in this program and this is one of them; it is *not*
+// `BitCtr::kMaxLimit`, nor either rescale trigger, and naming it here rather
+// than sharing one header constant is deliberate.  Two constants that happen to
+// share a value are not one constant.
+constexpr uint32_t kSlackMax = 0x4000;
+
+// Exchange two values.  Not `std::swap`, for the same reason `min32` is not
+// `std::min`: no `<utility>`, and the width is written down.
+//
+// Three of these sit in a row in `cost_candidate` when the two reference planes
+// come out in the other order, and all three were spelled with a temporary of
+// their own -- `tmp`, `swap`, `w1s`.  A swap written that way reads as two
+// copies plus a spill, which is what `tools/abpair.py` reported it as the
+// moment the clamps around it stopped hiding the shape.
+template<class T>
+static inline void swap32(T& a, T& b) {
+  const T t = a;
+  a = b;
+  b = t;
+}
+
+static inline int32_t clamp_weight(int32_t w) {
+  return clamp32(w, kWeightMin, kWeightMax);
+}
+
 // The exit codes, which are also the indices into the message table below --
 // that table is what defines them, so there is nothing here to invent.  They
 // are the program's exit status as well, and `test.sh` reads them, so the

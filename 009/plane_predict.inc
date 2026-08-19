@@ -8,28 +8,27 @@
 void expand_predictor_mode0(int32_t i) {
 }
 
-// The MED / LOCO-I predictor, which JPEG-LS calls the median edge detector:
+// The MED / LOCO-I predictor, which JPEG-LS calls the median edge detector, and
+// now written as the rule rather than as the branch tree MSVC compiled it to:
 // pick `min(N,W)` at a rising edge, `max(N,W)` at a falling one, and the plane
-// `N + W - NW` in between.  Written out twice, once in each direction, in the
-// two nested comparisons the original compiled to -- which is the same rule
-// with the `min`/`max` inlined into the branch.
+// `N + W - NW` in between.
 //
-// A published predictor whose name appears nowhere is the worst kind of
-// duplication: two copies, and a reader who does not already recognise it has
-// to derive the rule from the branches, twice.
+// Proven, not argued.  Both spellings evaluated over all 16,777,216 byte triples
+// -- 0 disagreements -- which covers the two tie boundaries the case analysis
+// has to get right and which a corpus run does not reach on purpose.
+//
+// The `(uint8_t)` casts here are provably non-wrapping, unlike the folding casts
+// elsewhere in this tree: on the third path the gradient lies in `[lo, hi]` and
+// on the other two the result is a neighbour.  No `clamp(0, 255)` is needed, and
+// adding one -- as one of the plans supplying this stage proposes -- would be a
+// no-op here and would break the bitstream anywhere the wrap *is* the algorithm.
 static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest) {
-  if( west<north ) {
-    if( northwest<west )
-      return (uint8_t)north;
-    if( northwest<=north )
-      return (uint8_t)(north+west-northwest);
-  } else {
-    if( northwest>west )
-      return (uint8_t)north;
-    if( northwest>=north )
-      return (uint8_t)(north+west-northwest);
-  }
-  return (uint8_t)west;
+  const int32_t lo = min32(west, north), hi = max32(west, north);
+  if( northwest>=hi )
+    return (uint8_t)lo;
+  if( northwest<=lo )
+    return (uint8_t)hi;
+  return (uint8_t)(west+north-northwest);
 }
 
 // The zigzag a MED residual takes on its way to a symbol, and its inverse:

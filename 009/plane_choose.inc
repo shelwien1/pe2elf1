@@ -140,9 +140,9 @@ int32_t choose_plane_coding(BmfImage* img) {
   uint32_t uu;
   int32_t wa_slot;
   double dv0, dv1, dv2;
-  uint32_t next_plane, row, slack;
+  uint32_t next_plane, row;
   uint16_t g1w;
-  int32_t result, xform, wt8, wt4, pred, dv3, wa, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b;
+  int32_t result, xform, wt8, wt4, pred, dv3, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b;
   uint32_t best_cost, best, quad, best4;
   int32_t n_planes = plane_count;
   int32_t data_size = img->data_size;
@@ -251,9 +251,7 @@ int32_t choose_plane_coding(BmfImage* img) {
           ++hist_c[(c0-((uint32_t)(((c1+c2)<<6)+40)>>7))];
         } while( px<data_end );
       }
-      slack = best_cost>>7;
-      if( slack>=0x4000 )
-        slack = 0x4000;
+      const uint32_t slack = umin32(best_cost>>7, kSlackMax);
       best = slack+best_cost;
       // The winning candidate's other three costs, against the fitted pair:
       // flat, plane-b only, and the two averaged.  Each was its own byte
@@ -346,22 +344,10 @@ int32_t choose_plane_coding(BmfImage* img) {
         double d2 = 0.0-Sxx*Syz+Sxz*Sxy;
         double d3 = Sxz*Syz-Sxy*Szz;
         double inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
-        wa = (int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv);
-        if( wa>=191 )
-          wa = 191;
-        if( wa<-64 )
-          wa = -64;
+        const int32_t wa = clamp_weight((int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv));
         wa_slot = wa;
-        wb = (int32_t)((d1*Syw+d2*Szw+d3*Sxw)*inv);
-        if( wb>=191 )
-          wb = 191;
-        if( wb<-64 )
-          wb = -64;
-        wc = (int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy));
-        if( wc>=191 )
-          wc = 191;
-        if( wc<-64 )
-          wc = -64;
+        wb = clamp_weight((int32_t)((d1*Syw+d2*Szw+d3*Sxw)*inv));
+        wc = clamp_weight((int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy)));
         if( end_px<data_end ) {
           // `x0[0..1]` used to be written here and read back forty lines
           // below -- one 64-bit store, which the decompiler wrote as a pair

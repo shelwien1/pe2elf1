@@ -268,7 +268,7 @@ BmfImage* read_bmp(char* path) {
       }
     }
   }
-  void* pal_buf = bmf_new(stride_pad<256 ? 256 : stride_pad);
+  void* pal_buf = bmf_new(max32(stride_pad, 256));
   uint8_t *row = img->pixels+img->data_size-img->stride;
   fseek(fp, (int32_t)hdr.bfOffBits, 0);
   // Three ways to read the pixels, and each ended by jumping five frames out to

@@ -201,8 +201,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         run = run_length(p, end);
         if( run<=2&&(run!=2||lit_len) )
           return false;
-        if( run_max<run )
-          run = run_max;
+        run = min32(run, run_max);
         if( lit_len ) {
           flush_literal(p);
           lit_len = 0;
