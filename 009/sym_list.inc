@@ -113,8 +113,7 @@ struct FreqRec {
   // across the middle of it.  Both copies also re-read `w[5]` afterwards to add
   // `b15`, which is why this returns the new sum instead of only storing it.
   uint16_t rescale(uint16_t escape_floor, uint8_t& kick) {
-    for( int32_t i = 0; i<5; ++i )
-      w[i] -= w[i]>>1;
+    halve_counts(w, 5);
     const uint16_t sum = resum();
     if( escape_floor<256&&!b14 ) {
       escape_floor = 256;
@@ -193,21 +192,32 @@ struct SymList {
       live -= n_left;
     }
     since = since_rescale;
-    tot = running-(running>>1);
-    since_rescale = since-(since>>1);
+    tot = halve_up(running);
+    since_rescale = halve_up(since);
     return true;
   }
 
   // Move `p` up past every entry it now outranks, and return the count it
-  // settles at -- which is what decides whether the list rescales.
+  // settles at -- which is what decides whether the list rescales.  A
+  // move-to-front over a list kept in count order.
   //
-  // This was written out twice, here and in `decode_symbol_list`, identical
-  // down to the `goto` back into the `p == ent` arm that both used to leave
-  // the inner loop.  Four returns say the same four exits and the label goes
-  // with them.
-  int32_t promote(SymEntry* p) {
-    p->cnt += 4;
-    since_rescale += 4;
+  // An earlier round found this walk written out twice, here and in
+  // `decode_symbol_list`, identical down to the `goto` back into the
+  // `p == ent` arm that both used to leave the inner loop; four returns say the
+  // same four exits and the label went with them.
+  //
+  // It was written out a *third* time, in the live branch of `add_weight`, and
+  // that spelling hid it well enough to survive that round: it assigns a
+  // `count` at four points where this returns, it reuses `p` for the trailing
+  // cursor this calls `r`, and its terminal case reads `q->cnt` where this
+  // reads `r->cnt` -- the same entry, because the `--q` between them made it
+  // so.  Both early exits and both terminal cases were diffed before the two
+  // were made one.
+  //
+  // What genuinely differs between the callers is the increment, 4 against
+  // `add_weight`'s argument, and whether the answer is returned or handed to
+  // `rescale`.  Both stay with the callers.
+  int32_t move_up(SymEntry* p) {
     if( p==ent )
       return p->cnt;
     uint16_t s_a = p->sym;
@@ -230,6 +240,12 @@ struct SymList {
       if( r==ent )
         return r->cnt;
     }
+  }
+
+  int32_t promote(SymEntry* p) {
+    p->cnt += 4;
+    since_rescale += 4;
+    return move_up(p);
   }
 
   int32_t code_symbol(int32_t want) {
@@ -286,7 +302,6 @@ struct SymList {
   }
 
   void add_weight(int32_t want, uint32_t add) {
-    uint32_t count;
     int32_t recycled;
     SymEntry* list = ent;
     uint32_t n_live = live;
@@ -304,40 +319,8 @@ struct SymList {
       p->cnt += add;
       since_rescale += add;
       // `head` was `ent` read back at three points across a walk that does not
-      // move the list, and the walk is a move-to-front: the entry just bumped
-      // swaps forward while the one in front of it counts less.
-      if( p==ent ) {
-        count = p->cnt;
-      } else {
-        uint16_t s = p->sym;
-        uint8_t c = p->cnt;
-        SymEntry *q = p-1;
-        *p = *q;
-        q->set(s, c);
-        if( q==ent ) {
-          count = q->cnt;
-        } else {
-          while( 1 ) {
-            count = q->cnt;
-            p = q-1;
-            if( count<=p->cnt )
-              break;
-            uint16_t s2 = q->sym;
-            uint8_t c2 = q->cnt;
-            *q = *p;
-            p->set(s2, c2);
-            --q;
-            // `--q` has just made `q` the `p` above, so the count the head
-            // holds is `q`'s.  The recovery jumped to the `p == ent` arm to
-            // read it, which is where the label was.
-            if( p==ent ) {
-              count = q->cnt;
-              break;
-            }
-          }
-        }
-      }
-      rescale(count);
+      // move the list.  The walk is `move_up`.
+      rescale(move_up(p));
       return;
     }
     // Not in the list, so it joins it -- over the least-counted entry when the

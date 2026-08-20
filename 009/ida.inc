@@ -116,6 +116,28 @@ static inline int32_t clamp_weight(int32_t w) {
   return clamp32(w, kWeightMin, kWeightMax);
 }
 
+// Halve a count, rounding *up*: `x - (x >> 1)`, which leaves 1 at 1 and 0 at 0.
+// Every adaptive counter in the program is cut back this way, and rounding up
+// is the point of it -- a symbol seen once must not be rescaled out of the
+// alphabet, and a range coder cannot be handed a zero-weight slot it is still
+// willing to code.
+//
+// Five models share the rule over runs of `uint16_t`: `FreqRec::rescale` over
+// five weights, `P2Freq` over three in each of two places, `BitCtr::scale_rare`
+// over two and `halve_pair` over a bit-tree pair.  `SymList::rescale` is *not*
+// this and is left alone: it halves with `(bias + cnt) >> 1`, rounding down
+// with a bias that depends on how far the list is from its rescale point, and
+// it re-sorts as it goes.  Its two closing scalars are the shared rule and use
+// `halve_up`.
+static inline uint32_t halve_up(uint32_t x) {
+  return x-(x>>1);
+}
+
+static inline void halve_counts(uint16_t* c, int32_t n) {
+  for( int32_t k = 0; k<n; ++k )
+    c[k] = (uint16_t)halve_up(c[k]);
+}
+
 // The exit codes, which are also the indices into the message table below --
 // that table is what defines them, so there is nothing here to invent.  They
 // are the program's exit status as well, and `test.sh` reads them, so the

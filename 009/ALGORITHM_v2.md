@@ -1229,8 +1229,10 @@ An array of `(symbol, count)` pairs in descending count order.
 
 Coding a symbol walks the live entries accumulating the counts of those **not
 excluded**; a hit codes `(cum − c, cum, tot + total)` and then `promote`s the
-entry — plus 4, bubbled toward the front while it outranks its neighbour — and
-rescales if that is due. A miss codes the whole accumulated weight as the escape
+entry — plus 4, then `move_up`, which bubbles it toward the front while it
+outranks its neighbour and answers with the count at the position it settles in
+— and rescales if that is due. `add_weight` is the same two steps with the
+caller's increment in place of the 4. A miss codes the whole accumulated weight as the escape
 and marks every entry in the list excluded on the way out, so the next list does
 not offer them again. A list whose live entries are all excluded codes nothing
 at

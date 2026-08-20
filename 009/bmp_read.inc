@@ -55,6 +55,20 @@ static uint8_t* write_nibbles(uint8_t* at, int32_t& hi, const uint8_t* src,
 // Both endings were a `goto done` five frames up, to the one place that closes
 // the file and gives the scratch back; false is the `return nullptr` that was
 // already written five times here and leaves both exactly as it found them.
+//
+// This and `read_rle4` share a shape and share it as far as it goes: one opcode
+// a turn through `read_rle_op`, then a five-way branch, and the two arms that
+// are the same in both -- end of line and end of bitmap -- are the same three
+// lines.  The other three are not shared and cannot be: a run, a delta and an
+// absolute block each carry the nibble/byte difference in their arithmetic, and
+// the only way to fold them would be a callback per arm, which is the dispatch
+// written twice with an indirection over it.
+//
+// `write_nibbles` has no counterpart on the writing side either.  A 4-bit image
+// is stored *packed*, two pixels to a byte -- which is what `run4/2 + 1` and
+// `dxy >> 1` in `read_rle4` are about -- so `write_bmp` copies bytes and never
+// has a nibble to lay down.  The helper unpacks an RLE4 absolute run into that
+// packed buffer; there is nothing in the other direction for it to do.
 static bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
   int32_t y = img->height-1;
   int32_t n, v;

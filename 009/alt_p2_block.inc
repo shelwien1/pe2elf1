@@ -11,10 +11,11 @@ struct P2Freq {
   uint16_t step;
   uint16_t f[3];
   uint32_t rescale_three_way() {
-    f[0] -= f[0]>>1;
-    f[1] -= f[1]>>1;
+    // `cut` is read before the halving because the halving consumes it:
+    // `f[2] -= f[2] >> 1` is `f[2] -= cut`.  It is also the return value on the
+    // branch below that does not overwrite it.
     uint32_t cut = f[2]>>1;
-    f[2] -= cut;
+    halve_counts(f, 3);
     uint32_t budget = step;
     if( budget<=0x100 ) {
       // `((16 - budget) >> 30) & 0xFFFFFFFE` on the guarded range, which is a
@@ -89,11 +90,7 @@ struct P2Freq {
       rc.encode(cum, tot_1, tot);
     uint16_t f_before = *slot;
     if( *slot>0x4000u ) {
-      uint32_t f1_old = f[1];
-      uint32_t f2_old = f[2];
-      f[0] -= f[0]>>1;
-      f[1] = f1_old-(f1_old>>1);
-      f[2] = f2_old-(f2_old>>1);
+      halve_counts(f, 3);
       st = step;
       if( st<=256 ) {
         // The same branchless select as `rescale_three_way`'s.

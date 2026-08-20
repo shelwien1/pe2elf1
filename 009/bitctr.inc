@@ -139,8 +139,7 @@ struct BitCtr {
   // is cut back again.  `rescale_counter_pair` is this, called from the run
   // coder, and is now the same code rather than a second copy of it.
   int32_t scale_rare() {
-    n[0] -= n[0]>>1;
-    n[1] -= n[1]>>1;
+    halve_counts(n, 2);
     if( limit<kMaxLimit )
       limit += kLimitStep;
     return limit;

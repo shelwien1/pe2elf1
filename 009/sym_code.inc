@@ -20,17 +20,17 @@
 // result is stored through a uint16_t, so the orderings agree in the low 16
 // bits, which is all of them that survive.  The encoder's spellings are kept.
 // Both counts of a bit-tree pair halved, answering the one the walk took.  Two
-// sites wrote it out, and the temporary each carried is not decoration: `f[0]`
-// is halved in place first, so `f[1]` has to be read before that store for the
-// compiler to keep it in a register the way the original did.
+// sites wrote it out, each with a temporary for `f[1]` -- `f[0]` is halved in
+// place first, and the temporary is how the original kept `f[1]` in a register
+// across that store.  That is a scheduling record, not a dependency: the two
+// counts are independent, and the halving is `halve_counts` like every other
+// counter pair in the program.
 //
-// The two differ only in the limit that triggers them -- 0x4000 where the coder
-// reads it and 0x2000 where the cost estimator does -- so the limit stays at
-// the call and the halving is here.
+// The two sites differ only in the limit that triggers them -- 0x4000 where the
+// coder reads it and 0x2000 where the cost estimator does -- so the limit stays
+// at the call and the halving is here.
 static inline uint32_t halve_pair(FreqPair* pair, int32_t go) {
-  const uint32_t f1_old = pair->f[1];
-  pair->f[0] -= pair->f[0]>>1;
-  pair->f[1] = f1_old-(f1_old>>1);
+  halve_counts(pair->f, 2);
   return pair->f[go];
 }
 

@@ -12,33 +12,43 @@
 // nothing it touches is read after it; the compiler was asked rather than a
 // regex, twice, because the regex undercounted both times.
 void AltP2Block::code_banks(int32_t sample16) {
-  uint8_t b_top3;
-  bool go;
-  int32_t bctx, res, w0, w0b, res2, w1, e1, neg,
-      w_top, e_top, bump, res_s, w_top3, res_c;
+  // This function opened with a declaration of thirteen `int32_t`, a `bool` and
+  // a `uint8_t` -- MSVC's frame, in the order it allocated the slots.  Five of
+  // them existed only to carry a value across a comma in the middle of an `if`
+  // (`go`, `w1`, `e1`, `w_top3`, `b_top3`) and three more were one residual
+  // under four names; with those gone the rest declare where they are first
+  // written, which is inside the bank loop, one block in.
   for( uint32_t bank = 0; bank<5; ++bank ) {
-      bctx = (uint32_t)bank_ctx[bank];
-      res = sample16-(nb_sum[2*bank]);
+      const int32_t bctx = (uint32_t)bank_ctx[bank];
+      const int32_t res = sample16-nb_sum[2*bank];
       P2Count* node0 = &p2_ctr[slot(bank, bctx)];
-      w0 = res+(uint16_t)node0->weighted;
+      const int32_t w0 = res+(uint16_t)node0->weighted;
       node0->weighted = w0;
       int32_t countdown = node0->b1;
       if( countdown ) {
-        w0b = w0+4*((res>deadzone_hi)-(res<deadzone_lo));
+        const int32_t w0b = w0+4*((res>deadzone_hi)-(res<deadzone_lo));
         node0->weighted = w0b;
         uint32_t ctxw = bctx;
+        // The rate ladder: a counter that keeps seeing a small residual counts
+        // down, and at zero its rate steps up and its accumulator doubles --
+        // unless it is already at the top of the ladder, where it stays at zero
+        // and re-arms nothing.
+        //
+        // Two of the three arms stored the same thing.  `b1` is `uint8_t` and
+        // `countdown` is a copy of it guarded non-zero above, so after the
+        // decrement it is 0..254 and `(uint8_t)--countdown` tests the value the
+        // decrement produced; the cast was the decompiler recording the byte
+        // compare.  Written as a decrement and a test, the "count is not out"
+        // arm and the "count is out but the rate is capped" arm are one line.
         if( (int32_t)abs32(res)<38 ) {
-          if( (uint8_t)-- countdown ) {
-            node0->b1 = countdown;
+          --countdown;
+          if( !countdown&&(uint8_t)node0->rate<8u ) {
+            uint8_t b0n = node0->rate+1;
+            node0->rate = b0n;
+            node0->b1 = p2_b1_reload[b0n-1];
+            node0->weighted = 2*w0b;
           } else {
-            if( (uint8_t)node0->rate<8u ) {
-              uint8_t b0n = node0->rate+1;
-              node0->rate = b0n;
-              node0->b1 = p2_b1_reload[b0n-1];
-              node0->weighted = 2*w0b;
-            } else {
-              node0->b1 = countdown;
-            }
+            node0->b1 = countdown;
           }
         }
         if( !alphabet_reduced ) {
@@ -59,11 +69,34 @@ void AltP2Block::code_banks(int32_t sample16) {
           // the counter the next few lines will read; this one is now too.
           P2Count *mir = &p2_ctr[slot(bank, ctxw^0x7FF0)];
           __builtin_prefetch(mir, 0, 1);
-          res2 = (nb_sum[2*bank+1])+res;
+          // The bank's residual with its mirror correction added, and the
+          // only value the rest of this block works from.  It reached the three
+          // counter walks below through three more names -- `res_c` assigned
+          // from it here, `res_s` from `res_c` at the top of the branch,
+          // `res_c` from `res_s` again inside it, and `res_t` in the third walk
+          // -- with no write to any of them in between.  One name, and `const`
+          // says there is no second value to look for.
+          const int32_t res2 = nb_sum[2*bank+1]+res;
+          // The record after the bank's counter is bumped on three of the four
+          // low-bit values and the record before it on three others, and the
+          // two sets are not the same three.  That is all this is.
+          //
+          // It arrived as one `if` with a five-term comma expression in the
+          // right half of an `||`: the bump itself was written inside the
+          // condition, with a `go` set mid-chain and read as the chain's value
+          // two terms later so that the short circuit did double duty as the
+          // second guard.  `lowbits >= 3` skips the chain, which is why the
+          // first bump does not happen there; `!go` is `lowbits > 0`, which is
+          // why the second one does not happen at zero.
+          //
+          // Written out it is `p2_update` twice, at shifts 1 and 2 -- the first
+          // of this file's counter updates the helper could not reach, because
+          // a call has no value to hand back to an `||`.
           int32_t lowbits = ctxw&3;
-          if( (uint32_t)lowbits>=3||(w1 = node0[1].weighted, e1 = res2-p2_pred(w1, (uint8_t)node0[1].rate), go = lowbits<=0, node0[1].weighted = (int16_t)w1+((32*((e1>deadzone_hi)-(uint32_t)(e1<deadzone_lo))+e1+1)>>1), !go) ) {
+          if( lowbits<3 )
+            p2_update(&node0[1], res2, 1);
+          if( lowbits )
             p2_update(&node0[-1], res2, 2);
-          }
           // Three update blocks follow, one per branch, and each walks these
           // eleven bits in order doing four or five things to each: bump the
           // direct counter at shift 2, the rotated one at 3, nudge the record
@@ -85,10 +118,13 @@ void AltP2Block::code_banks(int32_t sample16) {
           //     through `p2_update_into`, and *nothing reads the residual
           //     afterwards*.  A write-back nobody reads is `p2_update`.
           //   * "k = 9 in the third block uses `res_t`, a different residual" --
-          //     `res_t = res_c` two lines above and `res_c = res_t` two lines
-          //     below.  It is the same residual under a spill's name.
+          //     it was assigned from the block's residual two lines above and
+          //     back into it two lines below.  It is the same residual under a
+          //     spill's name, which is what the `const` below now says of all
+          //     four.
           //   * "k = 10's mirror bump straddles the join and happens once" --
-          //     true, and both arms reach it with `-res_c`, so it is one line
+          //     true, and both arms reach it with the negated residual, so
+          //     it is one line
           //     after the join rather than a name each arm has to set.
           //
           // What settled it was said to be that "hoisting the longhand cases
@@ -97,9 +133,8 @@ void AltP2Block::code_banks(int32_t sample16) {
           // record for different k, so the order is not free.  That is true and
           // it is why nothing is hoisted: each loop below does the same five
           // things in the same order the unrolled text did, and the only lines
-          // that moved are the four `-res_c` under four names.
+          // that moved are the four negated residuals under four names.
           P2Count* bankp = &p2_ctr[slot(bank, 0)];
-          res_c = res2;
           // The eleven context bits this counter bank tracks, and the three
           // counters each one names: `direct` at the context with that bit
           // flipped, `mirror` at the same one with the top bits flipped as
@@ -131,23 +166,21 @@ void AltP2Block::code_banks(int32_t sample16) {
             __builtin_prefetch(mirror[k], 0, 1);
             __builtin_prefetch(rot[k], 0, 1);
           }
-          neg = -res_c;
+          const int32_t neg = -res2;
           __builtin_prefetch(direct[8], 0, 1);
-          w_top = mir[0].weighted;
+          const int32_t w_top = mir[0].weighted;
           __builtin_prefetch(mirror[8], 0, 1);
-          e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
+          const int32_t e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
           __builtin_prefetch(rot[8], 0, 1);
           // `e_top > deadzone_hi`, which is what the five siblings of this line
           // in this file already say.  It arrived as the x86 flags the compare
           // sets -- `!(lt ^ of | zf)` over `__OFSUB__` -- because signed
           // less-than *is* `SF != OF`, so `(e_top-deadzone_hi<0) ^ overflow` is
           // the less-than, and not-less-and-not-equal is greater.
-          bump = 32*((e_top>deadzone_hi)-(e_top<deadzone_lo));
+          const int32_t bump = 32*((e_top>deadzone_hi)-(e_top<deadzone_lo));
           __builtin_prefetch(direct[9], 0, 1);
           __builtin_prefetch(mirror[9], 0, 1);
-          res_s = res_c;
           uint32_t w_new = bump+e_top+2;
-          go = lowbits<3;
           // The partial store this was written as -- `LOWORD(w_new) = w_top +
           // (w_new>>2)` -- kept a high half that the next line throws away.
           // Sixteen bits in and sixteen bits out.
@@ -156,26 +189,38 @@ void AltP2Block::code_banks(int32_t sample16) {
           __builtin_prefetch(direct[10], 0, 1);
           __builtin_prefetch(mirror[10], 0, 1);
           __builtin_prefetch(rot[10], 0, 1);
-          if( go&&(w_top3 = mir[1].weighted, b_top3 = (uint8_t)mir[1].rate, res_c = res_s, go = lowbits<=0, mir[1].weighted = (int16_t)(((uint32_t)(-res_s-p2_pred(w_top3, b_top3)+2)>>2)+w_top3), go) ) {
-            res_c = res_s;
+          // The same shape as the `||` above and the same unfolding: the
+          // record after the mirrored counter is nudged whenever `lowbits < 3`,
+          // and *then* the low bits choose between the two walks.  The chain
+          // set `go` from `lowbits <= 0` in its middle and returned it at its
+          // end, so the branch this reads was decided four terms before the
+          // `if` could see it.
+          //
+          // `res_c = res_s` was the third term; both arms opened with it as
+          // well, and with one name for the residual it says nothing at all.
+          if( lowbits<3 )
+            p2_nudge(&mir[1], -res2);
+          if( lowbits<=0 ) {
             // The first arm owns both ends and never touches the record
             // before the direct counter, so it is its own loop.
             for( int32_t k = 0; k<11; ++k ) {
-              p2_update(direct[k], res_c, 2);
-              p2_update(rot[k], res_c, 3);
-              p2_nudge(&direct[k][1], res_c);
-              p2_update(mirror[k], -res_c, 3);
+              p2_update(direct[k], res2, 2);
+              p2_update(rot[k], res2, 3);
+              p2_nudge(&direct[k][1], res2);
+              p2_update(mirror[k], -res2, 3);
             }
           } else {
-            res_c = res_s;
-            p2_nudge(&mir[-1], -res_s, 3);
-            p2_update(direct[0], res_c, 2);
-            go = lowbits<3;
-            p2_update(rot[0], res_c, 3);
-            walk_bank_bits(direct, mirror, rot, res_c, go);
+            p2_nudge(&mir[-1], -res2, 3);
+            p2_update(direct[0], res2, 2);
+            p2_update(rot[0], res2, 3);
+            // `lowbits < 3` was assigned into `go` twice on the way here and
+            // read once.  This arm runs at `lowbits` of 1, 2 or 3, so the flag
+            // is "not the last value", and it is the one line of five that
+            // separates the two passes `walk_bank_bits` can make.
+            walk_bank_bits(direct, mirror, rot, res2, lowbits<3);
             // The one counter whose update straddles the join.  Both arms
-            // reached it with `-res_c` under a name of their own.
-            p2_update(mirror[10], -res_c, 3);
+            // reached it with the negated residual under a name of their own.
+            p2_update(mirror[10], -res2, 3);
           }
         }
       }
