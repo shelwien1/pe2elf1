@@ -220,11 +220,13 @@ AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* ref
 int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs& refs) {
   P2Ctx *const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2],
         *const c3 = cursor[3], *const c4 = cursor[4];
-  int32_t ctx15, flat_a, flat_b;
+  int32_t flat_a, flat_b;
   int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
-  int32_t lo_band = band_lo;
+  // The two band edges, read once.  They were read one at a time between the
+  // selector stores, which is where the scheduler wanted the loads and not an
+  // order anything depends on: nothing here writes either member.
+  const int32_t lo_band = band_lo, hi_band = band_hi;
   ctx_w[0].sel = (run4<1840)+(run4<272);
-  int32_t hi_band = band_hi;
   ctx_w[1].sel = (run4-c1->val<=hi_band)+(run4-c1->val<lo_band);
   int32_t d_run4 = run4-c0[-1].val;
   bool in_band = d_run4<=hi_band;
@@ -287,13 +289,15 @@ int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs& refs) {
     flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
     flat_b = c4->mag+c3->mag+magu+c0[0].mag;
   }
-  if( magsum>=960 ) {
-    ctx15 = 15;
-    ctx = 15;
-  } else {
-    ctx15 = nb_ctx[magsum>>3];
-    ctx = ctx15;
-  }
+  // The magnitude class, and the two arms that set it wrote `ctx15` and `ctx`
+  // to the same value apiece -- four stores for one number.
+  //
+  // The `ctx` half of them was dead: nothing between here and the `ctx = ...`
+  // at the end of this function reads the member, and that assignment is
+  // unconditional.  Proved rather than argued, because a member is not
+  // something `deadstore.py` follows: 12345 stored here leaves all 111 checks
+  // passing, and added to the assignment at the end it fails twenty.
+  const int32_t ctx15 = magsum>=960 ? 15 : nb_ctx[magsum>>3];
   const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
   // The magnitude context in the low nibble, under a `ctx_delta` entry that
   // occupies bits 4 and up -- the run level as `bits<4, 4>` and the plane

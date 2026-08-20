@@ -246,21 +246,23 @@ static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
   }
   uint32_t cost_lin = estimate_cost(hr.r0, 1024);
   uint32_t best4 = (cost_lin>>7)+cost_lin;
-  uint32_t cost_c0 = estimate_cost(hr.r1, 1024);
-  bool pick0 = cost_c0<best4;
-  if( cost_c0<best4 )
-    best4 = cost_c0;
-  int32_t wa_pick = wa_slot;
+  const uint32_t cost_c0 = estimate_cost(hr.r1, 1024);
+  // The comparison was written twice, once into `pick0` and once as the `if`,
+  // and `wa_slot` was copied into `wa_pick` for four lines and copied back --
+  // MSVC keeping the register live across the call below.  `uncopy.py` cannot
+  // see either: its rule is a local that is *only* a copy, and this one is
+  // assigned in between.
+  const bool pick0 = cost_c0<best4;
   if( pick0 ) {
-    wa_pick = 128;
+    best4 = cost_c0;
+    wa_slot = 128;
     wc = 0;
     wb = 0;
   }
-  wa_slot = wa_pick;
   // `x0[0] = pick0;` before this call and `pred4 = x0[0];` after it was
   // MSVC spilling the register across the call, and `estimate_cost`
   // cannot reach a local of this body.  Same shape twice more below.
-  uint32_t cost_c1 = estimate_cost(hr.r2, 1024);
+  const uint32_t cost_c1 = estimate_cost(hr.r2, 1024);
   int32_t pred4 = pick0;
   if( cost_c1<best4 ) {
     best4 = cost_c1;
@@ -269,10 +271,11 @@ static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
     wc = 0;
     wa_slot = 0;
   }
-  uint32_t cost_c2 = estimate_cost(hr.r3, 1024);
-  int32_t pred4b = pred4;
+  const uint32_t cost_c2 = estimate_cost(hr.r3, 1024);
+  // `pred4b` was a second name for `pred4`, diverging only in the arm below --
+  // the same spill across the same call, one candidate later.
   if( cost_c2<best4 ) {
-    pred4b = 3;
+    pred4 = 3;
     wc = 128;
     wb = 0;
     wa_slot = 0;
@@ -284,7 +287,7 @@ static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
   plane_desc[3].nrefs = 3;
   // Rows 4..7, by the same window and the same layout-read constant
   // as the search above.
-  plane_desc[3].dc = widest_window(hists+1024*(4+pred4b), 4, 1024, -1)+1;
+  plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
 }
 
 int32_t choose_plane_coding(BmfImage* img) {
