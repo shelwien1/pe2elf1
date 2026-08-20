@@ -1647,7 +1647,12 @@ nb_slot = 320·band + 64·gA + 16·gB + 4·gC + gD
 ```
 
 with a maximum of 1919, which is `nb_id[1920]`; `nb_id` maps slots to weight
-sets lazily, minting one on first use.
+sets lazily, minting one on first use. That lookup is `seat_nb_row`, and it does
+two things at once: a slot seen before names a row and that row is *first
+stepped toward the sample* — predict with `nb_dot`, take the error against the
+previous sample, walk all 28 taps through `nlms_step` — while a slot seen for
+the first time takes the next row untouched, because it has nothing to step from
+and `NbRow::predict` seeds it from the mixture on its first call instead.
 
 **There are 1920 slots and only 1088 weight sets, and nothing reconciles the
 two.** Row 0 is the no-history set every cursor starts pointing at, so 1087

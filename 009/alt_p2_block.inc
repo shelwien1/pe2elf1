@@ -445,6 +445,65 @@ struct AltP2Block {
   // Two of the five did not call `p2_pred` at all: they spelled its shift out,
   // with the `&31` masks that are dead for the reason the helper's comment
   // gives.  Those two are the same call as the other three.
+
+  // The weight row this neighbourhood slot uses, found or minted.
+  //
+  // A slot seen before names a row, and that row is stepped toward the sample
+  // first: predict with it, take the error against `c0[-1].val`, and walk all
+  // twenty-eight taps.  A slot seen for the first time takes the next row and
+  // is not stepped -- it has nothing to step from, and `NbRow::predict` seeds
+  // it from the mixture on its first call instead.
+  //
+  // Lifted out of `alt_p2_context` because it is a stage of that function
+  // rather than a step in it: fifty-five lines between the slot number and the
+  // filter inputs, doing one thing that has a name.  What it needs from the
+  // caller is the slot and the row cursor whose sample the error is measured
+  // against; `p2_row`, `bias`, `nb_id` and `nb_cur` are all members.
+  void seat_nb_row(int32_t nb_slot, const P2Ctx* c0) {
+    const int32_t at = nb_id[nb_slot];
+    if( !at ) {
+      // **The counter is not bounded and the array it indexes is.**  `nb_slot`
+      // names 1920 slots -- `320*band + 64*gA + 16*gB + 4*gC + gD`, and every
+      // one of the five is a nested count of threshold crossings, so every one
+      // of its values is reachable -- while `nb_weights` holds 1088 rows, of
+      // which row 0 is the no-history row `alt_p2_alloc` seeds and
+      // `row0`/`row1` start pointing at.  So 1087 distinct slots in one plane
+      // is the most this can allocate, and the 1088th writes past the array
+      // into `p2_row`, `bias` and `nb_cur` -- the last of which is a pointer
+      // the next sample follows.
+      //
+      // Nothing here or anywhere else checks it, and the sizing is not
+      // obviously wrong: instrumented, the nineteen corpus images reach a
+      // high-water mark of 593 (`x_ep`; the next are `t8g` and `t8p` at 473),
+      // and a montage built to spread activity, gradient direction and noise
+      // across 2500 independently-parameterised tiles reaches 980.  The *union*
+      // over all twenty is 1034 distinct slots -- 53 short of the bound.  That
+      // margin is small enough that 1088 looks measured rather than guessed,
+      // and small enough that no input found so far crosses it.
+      //
+      // It is left as it is: a clamp would change the model on exactly the
+      // inputs in question and no corpus stream would move to say so.  The
+      // `BMF_ASSUME` is the honest instrument -- a comment under the default
+      // build and a check under `BMF_ASSERTS=1`, which is a build leg.
+      //
+      // The three statements this replaced carried a `next_id` that was
+      // `nb_id_used` before, during and after the increment, and an `(int16_t)`
+      // on the last read that matched the width the store narrows to and cannot
+      // bite below 32768.
+      nb_id[nb_slot] = ++nb_id_used;
+      BMF_ASSUME(nb_id_used<1088);
+      nb_cur = &nb_weights[nb_id_used];
+      return;
+    }
+    NbRow*const wrow = &nb_weights[at];
+    nb_cur = wrow;
+    const float err = ((float)c0[-1].val-(nb_dot(wrow->w, p2_row)+bias[0]))*2.0999999f;
+    const float floor_ = 7744.0f*wrow->w[14][2];
+    for( int32_t j = 0; j<7; ++j )
+      for( int32_t k = 0; k<4; ++k )
+        nlms_step(wrow, j, k, p2_row[j][k], err, bmf_p2_ms_rate, floor_);
+  }
+
   int32_t p2_pred_at(int32_t bank, int32_t bctx) {
     const P2Count& c = p2_ctr[slot(bank, bctx)];
     return p2_pred(c.weighted, c.rate);
@@ -511,13 +570,7 @@ struct AltP2Block {
   // the filter starts cautious and loosens; `uses` counts the samples this
   // row has seen.
   void nlms_predict_and_correct(NbRow* row, float sample, float bias0) {
-    float acc[4];
-    for( int32_t k = 0; k<4; ++k ) {
-      acc[k] = row->w[0][k]*p2_row[0][k];
-      for( int32_t j = 1; j<7; ++j )
-        acc[k] += row->w[j][k]*p2_row[j][k];
-    }
-    const float err = sample-(bias0+bmf_hsum4(acc));
+    const float err = sample-(bias0+nb_dot(row->w, p2_row));
     const float ms_scale = row->w[14][2];
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )

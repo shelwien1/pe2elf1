@@ -82,13 +82,15 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   uint32_t ctx0_lo;
   // The five row cursors, read once.
   //
-  // This function reached them through eleven aliases created at eight points
-  // -- `c0`, `c1`, `c2` at the top; `c0`, `c1`, `c2`, `c3`,
-  // `c2` in the feature block; `c2`, `c3`, `c4` in the no-reference
-  // arm; `c0`..`c4` before the bank contexts -- with `c0`/`c1` reloaded
-  // after the bias loop and `c2` assigned identically in both arms of the
-  // reference test.  Eleven names for five things, and reading the body as if
-  // `c1` and `c1` were different rows is the mistake the spelling invites.
+  // This function reached them through sixteen names bound in five places:
+  // `row0p`, `cursor1`, `sub0_row` at the top; `nb0`, `nb1`, `row2c`, `nb3`
+  // and `nb2` (a second name for `row2c`) interleaved with the filter inputs;
+  // `nb2x`, `nb3x`, `nb4` in the no-reference arm; `cx0`..`cx4` before the
+  // bank contexts.  `nb0`/`nb1` were reassigned after the bias loop and `cx2`
+  // was assigned identically in both arms of the reference test, so the
+  // sixteen names sat over five rows: cursor 2 alone answered to `sub0_row`,
+  // `row2c`, `nb2`, `nb2x` and `cx2`.  Reading the body as if `nb2` and
+  // `nb2x` were different rows is the mistake that spelling invites.
   //
   // They are safe to hoist because nothing here advances a cursor:
   // `alt_p2_model` does that, after this returns.  Checked by grep before the
@@ -98,7 +100,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // with margins, which is what the model reads; what goes is the aliasing.
   P2Ctx *const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2],
         *const c3 = cursor[3], *const c4 = cursor[4];
-  // Eleven cursors and two fields between them, and the sixty filter inputs
+  // Five cursors and two fields between them, and the sixty filter inputs
   // below read nothing else -- three subscripts a line, sixty lines, four
   // variants of the same block one per reference count.  Named this way the
   // four can be diffed against each other by eye, which is the whole point of
@@ -137,56 +139,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // is what `nb_id[]` is sized for.
   nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD)
                     .digit<64, 5>(gA).digit<320, 6>(band);
-  int32_t nb_at = nb_id[nb_slot];
-  if( nb_id[nb_slot] ) {
-    NbRow *wrow = &nb_weights[nb_at];
-    nb_cur = wrow;
-    {
-      float acc[4], err, floor_;
-      int32_t j, k;
-      for( k = 0; k<4; ++k ) {
-        acc[k] = wrow->w[0][k]*p2_row[0][k];
-        for( j = 1; j<7; ++j )
-          acc[k] += wrow->w[j][k]*p2_row[j][k];
-      }
-      err = ((float)c0[-1].val-(bmf_hsum4(acc)+bias[0]))*2.0999999f;
-      floor_ = 7744.0f*wrow->w[14][2];
-      for( j = 0; j<7; ++j )
-        for( k = 0; k<4; ++k )
-          nlms_step(wrow, j, k, p2_row[j][k], err, bmf_p2_ms_rate, floor_);
-    }
-  } else {
-    // A slot seen for the first time takes the next weight row.  Three
-    // statements and a `next_id` that is `nb_id_used` before, during and after
-    // the increment; the `(int16_t)` on the last read matched the width the
-    // store above narrows to, and cannot bite below 32768.
-    //
-    // **The counter is not bounded and the array it indexes is.**  `nb_slot`
-    // names 1920 slots -- `320*band + 64*gA + 16*gB + 4*gC + gD`, and every one
-    // of the five is a nested count of threshold crossings, so every one of its
-    // values is reachable -- while `nb_weights` holds 1088 rows, of which row 0
-    // is the no-history row `alt_p2_alloc` seeds and `row0`/`row1` start
-    // pointing at.  So 1087 distinct slots in one plane is the most this can
-    // allocate, and the 1088th writes past the array into `p2_row`, `bias` and
-    // `nb_cur` -- the last of which is a pointer the next sample follows.
-    //
-    // Nothing here or anywhere else checks it, and the sizing is not obviously
-    // wrong: instrumented, the nineteen corpus images reach a high-water mark
-    // of 593 (`x_ep`; the next are `t8g` and `t8p` at 473), and a montage built
-    // to spread activity, gradient direction and noise across 2500
-    // independently-parameterised tiles reaches 980.  The *union* over all
-    // twenty is 1034 distinct slots -- 53 short of the bound.  That margin is
-    // small enough that 1088 looks measured rather than guessed, and small
-    // enough that no input found so far crosses it.
-    //
-    // It is left as it is: a clamp would change the model on exactly the inputs
-    // in question and no corpus stream would move to say so.  The `BMF_ASSUME`
-    // is the honest instrument -- a comment under the default build and a check
-    // under `BMF_ASSERTS=1`, which is a build leg.
-    nb_id[nb_slot] = ++nb_id_used;
-    BMF_ASSUME(nb_id_used<1088);
-    nb_cur = &nb_weights[nb_id_used];
-  }
+  seat_nb_row(nb_slot, c0);
   // The filter's 28 inputs, four to a row.  Rows 0..3 are differences of `dval`
   // -- the second difference of the plane -- at widening offsets from the
   // current pixel: row 0 the four nearest, row 1 the next ring, rows 2 and 3

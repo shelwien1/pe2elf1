@@ -11,24 +11,6 @@
 // The first call on a row has no weights of its own to predict with, so it
 // seeds them from the mixture instead and returns the mixed prediction
 // unchanged.  `uses` is what tells the two apart.
-// The seven taps against the neighbourhood, four lanes wide, summed across the
-// lanes: one prediction.  Written out three times below with three different
-// weight rows -- the fixed coefficients, the mixture of the six sets, and this
-// row's own -- with an `acc[4]` shared between them and reloaded each time.
-//
-// `[7][4]` rather than twenty-eight scalars is the layout the original's SSE
-// was in; keeping it is what lets a compiler put it back, and it is also what
-// makes the three one function.
-static inline float nb_dot(const float (*wt)[4], const float (*nb)[4]) {
-  float acc[4];
-  for( int32_t k = 0; k<4; k++ ) {
-    acc[k] = wt[0][k]*nb[0][k];
-    for( int32_t j = 1; j<7; j++ )
-      acc[k] += wt[j][k]*nb[j][k];
-  }
-  return bmf_hsum4(acc);
-}
-
 inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
   const float* mix = bmf_p2_mix[mode];
   float mixed[7][4], centre, prediction, own;

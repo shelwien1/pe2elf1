@@ -270,6 +270,28 @@ static inline float bmf_hsum4(const float x[4]) {
   return (x[0]+x[2])+(x[1]+x[3]);
 }
 
+// Seven taps by four lanes against seven inputs by four lanes: one prediction.
+// The four lanes accumulate independently and fold at the end, which is not the
+// same rounding as one running sum and is why the fold is `bmf_hsum4` and not a
+// fifth `+=`.
+//
+// `[7][4]` rather than twenty-eight scalars is the layout the original's SSE
+// was in; keeping it is what lets a compiler put it back, and it is also what
+// makes the five call sites one function.  Three are in `NbRow::predict` -- the
+// fixed coefficients, the mixture of the six sets, and the row's own weights --
+// and two are the forward halves of the NLMS steps in `AltP2Block`, which is
+// why this lives here rather than in `alt_p2.inc`: that file is included after
+// `alt_p2_block.inc`.
+static inline float nb_dot(const float (*wt)[4], const float (*nb)[4]) {
+  float acc[4];
+  for( int32_t k = 0; k<4; ++k ) {
+    acc[k] = wt[0][k]*nb[0][k];
+    for( int32_t j = 1; j<7; ++j )
+      acc[k] += wt[j][k]*nb[j][k];
+  }
+  return bmf_hsum4(acc);
+}
+
 // The five-row ring both alternate models keep.  `buf[0..4]` are the last five
 // rows, oldest last, and `cursor[k]` points `margin` records into row `k` so
 // that a negative index reaches the left-edge padding.  Advancing rotates the
