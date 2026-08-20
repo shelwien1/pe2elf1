@@ -16,7 +16,13 @@ always safe where an `if` block was.
 `--scan` is the half this file was missing.  Folding needs a line number and a
 verdict, which means somebody has to have *found* the `if` first -- so for as
 long as this tool only folded, its silence in `sweep.sh` meant "nobody asked",
-not "there is nothing".  `filter_search` had five `if( !deep )` whose `deep` was
+not "there is nothing".
+
+And then the sweep went on not asking for several rounds more, because it runs
+`tool <file>` and this answered that with a usage line -- counted as "wants more
+arguments" and not as a zero, which was right and still left the scan unrun.  A
+file and nothing else is a scan now.  The half that was missing was missing one
+level up as well, which is worth knowing about any tool that grew a mode.  `filter_search` had five `if( !deep )` whose `deep` was
 assigned `0` three lines above, each making the statement above it dead, and no
 tool here said so.
 
@@ -73,7 +79,15 @@ def scan(path):
 
 
 def main():
-    if '--scan' in sys.argv:
+    # A file and nothing else is a scan.  `--scan` was added because this tool's
+    # silence in `sweep.sh` meant "nobody asked" rather than "there is nothing"
+    # -- and then the sweep went on not asking, because it runs `tool <file>`
+    # and this answered that with a usage line.  The half that was missing was
+    # still missing, one level up.
+    #
+    # Folding needs a line number and a verdict, so there is no reading of
+    # `foldif.py bmf.cpp` that wants anything but the scan.
+    if '--scan' in sys.argv or len(sys.argv) == 2 and not sys.argv[1].startswith('-'):
         import glob
         paths = [a for a in sys.argv[1:] if not a.startswith('--')] or sorted(glob.glob('*.inc'))
         n = 0
