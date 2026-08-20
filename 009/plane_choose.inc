@@ -103,6 +103,180 @@ struct WeightSearch {
   }
 };
 
+// The three weights `choose_alpha_plane` fits and then may throw away, one per
+// colour plane.  A named triple because the fit and the choice are two halves of
+// one job and this is what crosses between them.
+struct AlphaWeights {
+  int32_t a, b, c;
+};
+
+// Three weights, one per colour plane, fitted to the alpha plane by least
+// squares over the image's gradients.
+//
+// `dv0`, `dv1` and `dv2` are the three colour planes' horizontal-minus-vertical
+// gradient at one pixel and `dv3` is the alpha plane's.  The nine sums are the
+// covariances of that four-vector -- `S<a><b>` is the sum over pixels of
+// `d<a>*d<b>`, with `w` for the alpha term -- and the 3x3 system
+// `S * weights = Sw` is solved by cofactors at the end.
+//
+// The original kept the nine in six SSE registers and spilled them to the
+// stack, which arrived as `int32_t x0[4]` .. `x5[4]` read through forty
+// `*(double*)` casts, plus three more slots borrowed from the frame's unions --
+// `q0` and `q1` overlaid `row_stride`, `plane_b`, `plane_a` and `nplanes_s`,
+// and were safe only because those four are last read twenty lines above.  Nine
+// named doubles say the same arithmetic and take the round trip out, and the
+// two unions that lent the slots had no reader left.
+static AlphaWeights fit_alpha_weights(const uint8_t* px, const uint8_t* pp,
+                                      uint32_t uu) {
+  double Sxx = 0.0, Sxy = 0.0, Sxz = 0.0;
+  double Syy = 0.0, Syz = 0.0, Szz = 0.0;
+  double Sxw = 0.0, Syw = 0.0, Szw = 0.0;
+  for( uint32_t i4 = 0; i4<uu; ++i4 ) {
+    const double dv0 = (double)(px[4*i4]+pp[4*i4+4]-(px[4*i4+4]+pp[4*i4]));
+    const double dv1 = (double)(px[4*i4+1]+pp[4*i4+5]-(px[4*i4+5]+pp[4*i4+1]));
+    const double dv2 = (double)(px[4*i4+2]+pp[4*i4+6]-(px[4*i4+6]+pp[4*i4+2]));
+    const int32_t dv3 = px[4*i4+3]+pp[4*i4+7]-(px[4*i4+7]+pp[4*i4+3]);
+    Sxx += dv0*dv0;
+    Sxy += dv0*dv1;
+    Sxz += dv0*dv2;
+    Syy += dv1*dv1;
+    Syz += dv1*dv2;
+    Szz += dv2*dv2;
+    Sxw += dv0*(double)dv3;
+    Syw += dv1*(double)dv3;
+    Szw += dv2*(double)dv3;
+  }
+  // The three cofactors of the first row of `S`, and one over its
+  // determinant -- scaled by 128 because the weights are eighths of a
+  // 128th and clamped to [-64, 191] below.  The `+0.1` keeps a singular
+  // system (a flat image, every gradient zero) from dividing by zero.
+  double d1 = Sxx*Szz-Sxz*Sxz;
+  double d2 = 0.0-Sxx*Syz+Sxz*Sxy;
+  double d3 = Sxz*Syz-Sxy*Szz;
+  double inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
+  const int32_t wa = clamp_weight((int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv));
+  const int32_t wb = clamp_weight((int32_t)((d1*Syw+d2*Szw+d3*Sxw)*inv));
+  const int32_t wc = clamp_weight((int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy)));
+  return { wa, wb, wc };
+}
+
+// The alpha plane's predictor, chosen among the same four candidates the colour
+// planes were and by the same measure: histogram each candidate's residual over
+// the image, cost the histogram, keep the cheapest.  Runs only for a four-plane
+// image, writes only `plane_desc[3]`, and is the last thing `choose_plane_coding`
+// does -- a stage of that function rather than a step in it.
+//
+// It borrows the caller's eight histogram rows instead of declaring its own.
+// They are 32KB of stack that is already there and about to go out of scope, and
+// the `widest_window` at the end indexes them by row exactly as the colour
+// search does -- rows 4..7 rather than 0..3, which is the `4 +` in that call.
+// Taken by reference so `sizeof hists` still means the whole block.
+static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
+                               const uint8_t* data_end, int32_t row_stride) {
+  // Rows by number rather than by name here, which is what the original spelled
+  // in bytes and what the `widest_window` at the end needs anyway: row 0 is the
+  // linear predictor's residual, row 1 the first colour plane's, row 2 the
+  // second's, row 3 the third's, and rows 4..7 the four candidates again for
+  // the window scan.  `choose_plane_coding` names its four because it reads
+  // them fifteen lines apart; these are all inside one loop.
+  const HistRows hr = hist_rows(hists);
+  memset(hists, 0, sizeof hists);
+  const uint8_t*const px = img->pixels;
+  const uint8_t*const pp = &px[row_stride];
+  // Both loops below were guarded by `&px[row_stride + 4] < data_end` and `uu`
+  // was computed inside the first guard, so it was never read undefined -- but
+  // only by an argument that spans forty lines and two loops.  Zero says the
+  // same thing in the value, and the guard becomes the count it always was.
+  const uint32_t uu = &px[row_stride+4]<data_end ? (uint32_t)((data_end-1-pp)/4) : 0;
+  const AlphaWeights w = fit_alpha_weights(px, pp, uu);
+  int32_t wa_slot = w.a, wb = w.b, wc = w.c;
+  // `x0[0..1]` used to be written here and read back forty lines
+  // below -- one 64-bit store, which the decompiler wrote as a pair
+  // because MSVC had both halves in registers, and `__PAIR64__` is its
+  // name for that.  The two slots are `wb` and `wc` and nothing
+  // between the store and the reload writes either.  So the spill is
+  // the two names.
+  //
+  // The loop below spilled three more registers to that same area --
+  // `quad`, `g0` and `g1`, each already a local one line up -- and
+  // those stores are gone with it.
+  // The same bound as the accumulation loop above, and the same guard.
+  for( uint32_t quad = 0; quad<uu; ++quad ) {
+    int32_t nx0 = px[4*quad+4];
+    int32_t dg0 = px[4*quad]+pp[4*quad+4];
+    int32_t dn0 = pp[4*quad];
+    int32_t ad0 = nx0+dn0;
+    int32_t dnx1 = pp[4*quad+5];
+    const int32_t g0 = dg0-ad0;
+    int32_t dn1 = pp[4*quad+1];
+    int32_t nx2 = px[4*quad+6];
+    const int32_t g1 = px[4*quad+1]+dnx1-(px[4*quad+5]+dn1);
+    int32_t dnx2 = pp[4*quad+6];
+    int32_t g2 = px[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
+    uint16_t g1w = (uint16_t)(px[4*quad+3]+pp[4*quad+7]-pp[4*quad+3]-px[4*quad+7]);
+    int16_t g1_lo = (int16_t)g1;
+    g1w = g1w-512;
+    int32_t pa = g1*wb+g0*wa_slot;
+    int32_t pb = g2*wc;
+    ++hr.r1[(g1w-(int16_t)g0)&0x3FF];
+    int32_t bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
+    ++hr.r0[bin_lin];
+    ++hr.r2[(g1w-g1_lo)&0x3FF];
+    g1w = g1w-g2;
+    ++hr.r3[g1w&0x3FF];
+    const int32_t alpha = pp[4*quad+7]+256;
+    int32_t bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad+5]+wa_slot*pp[4*quad+4]+wc*(uint32_t)pp[4*quad+6]+63)>>7)+256)&0x3FF;
+    ++hr.r3[bin_lin2+1024];
+    int32_t r0 = alpha-pp[4*quad+4];
+    ++hr.r3[r0+2048];
+    int32_t r1 = alpha-pp[4*quad+5];
+    ++hr.r3[r1+3072];
+    int32_t r2 = alpha-pp[4*quad+6];
+    ++hr.r3[r2+4096];
+  }
+  uint32_t cost_lin = estimate_cost(hr.r0, 1024);
+  uint32_t best4 = (cost_lin>>7)+cost_lin;
+  uint32_t cost_c0 = estimate_cost(hr.r1, 1024);
+  bool pick0 = cost_c0<best4;
+  if( cost_c0<best4 )
+    best4 = cost_c0;
+  int32_t wa_pick = wa_slot;
+  if( pick0 ) {
+    wa_pick = 128;
+    wc = 0;
+    wb = 0;
+  }
+  wa_slot = wa_pick;
+  // `x0[0] = pick0;` before this call and `pred4 = x0[0];` after it was
+  // MSVC spilling the register across the call, and `estimate_cost`
+  // cannot reach a local of this body.  Same shape twice more below.
+  uint32_t cost_c1 = estimate_cost(hr.r2, 1024);
+  int32_t pred4 = pick0;
+  if( cost_c1<best4 ) {
+    best4 = cost_c1;
+    pred4 = 2;
+    wb = 128;
+    wc = 0;
+    wa_slot = 0;
+  }
+  uint32_t cost_c2 = estimate_cost(hr.r3, 1024);
+  int32_t pred4b = pred4;
+  if( cost_c2<best4 ) {
+    pred4b = 3;
+    wc = 128;
+    wb = 0;
+    wa_slot = 0;
+  }
+  plane_desc[3].weight0 = wa_slot;
+  plane_desc[3].weight1 = wb;
+  plane_desc[3].weight2 = wc;
+  plane_desc[3].src_plane = 3;
+  plane_desc[3].nrefs = 3;
+  // Rows 4..7, by the same window and the same layout-read constant
+  // as the search above.
+  plane_desc[3].dc = widest_window(hists+1024*(4+pred4b), 4, 1024, -1)+1;
+}
+
 int32_t choose_plane_coding(BmfImage* img) {
   // Eight 1024-entry histograms in one block, because both searches below
   // pick a row *by index*.  The decompilation had it as `uint8_t buf[32768]`
@@ -116,10 +290,9 @@ int32_t choose_plane_coding(BmfImage* img) {
   // The four names below are cursors into the one block, which is what that
   // index arithmetic says they are.
   alignas(16) int32_t hists[8*1024];
-  int32_t *const hist_flat = hists;          // row 0
-  int32_t *const hist_a = hists+1*1024;      // row 1
-  int32_t *const hist_b = hists+2*1024;      // row 2
-  int32_t *const hist_c = hists+3*1024;      // row 3, and rows 4..7 after it
+  const HistRows hr = hist_rows(hists);
+  int32_t *const hist_flat = hr.r0, *const hist_a = hr.r1;   // rows 0 and 1
+  int32_t *const hist_b = hr.r2, *const hist_c = hr.r3;      // row 2, and row 3 with 4..7 after it
   // Four 512-entry histograms of `bin` values, one per arm of the weight
   // search.  The first was the frame's `buf_1`, a `uint8_t[2048]` for the same
   // reason, with the first four bytes doubling as a stash for `wt8_dn_end`
@@ -305,146 +478,7 @@ int32_t choose_plane_coding(BmfImage* img) {
       result = widest_window(hist_c+1024, 0, 512, 255)+1;
       plane_desc[plane_b+xform].dc = result;
       if( n_planes>=4 ) {
-        // The alpha plane's weights, by least squares against the other three.
-        //
-        // `dv0`, `dv1` and `dv2` are the three colour planes' gradients at one
-        // pixel and `dv3` the alpha plane's; these are the nine covariances of
-        // that four-vector, `S<a><b> = sum over pixels of d<a>*d<b>`, with `w`
-        // for the alpha term.  The 3x3 system `S * weights = Sw` is solved by
-        // cofactors below.
-        //
-        // The original kept them in six SSE registers and spilled them to the
-        // stack, which arrived here as `int32_t x0[4]` .. `x5[4]` read through
-        // forty `*(double*)` casts, plus three more slots borrowed from the
-        // frame's unions -- `q0` and `q1` overlaid `row_stride`, `plane_b`,
-        // `plane_a` and `nplanes_s`, and were safe only because those four are
-        // last read twenty lines above.  Nine named doubles say the same
-        // arithmetic and take the round trip out, and the two unions that lent
-        // the slots had no reader left.
-        double Sxx = 0.0, Sxy = 0.0, Sxz = 0.0;
-        double Syy = 0.0, Syz = 0.0, Szz = 0.0;
-        double Sxw = 0.0, Syw = 0.0, Szw = 0.0;
-        memset(hists, 0, sizeof hists);
-        uint8_t *pp = &img->pixels[row_stride];
-        uint8_t *end_px = &img->pixels[row_stride+4];
-        if( end_px<data_end ) {
-          uu = (data_end-1-pp)/4;
-          // Guarded by `end_px < data_end` above, which is `uu >= 1`.
-          for( uint32_t i4 = 0; i4<uu; ++i4 ) {
-            dv0 = (double)(img->pixels[4*i4]+pp[4*i4+4]-(img->pixels[4*i4+4]+pp[4*i4]));
-            dv1 = (double)(img->pixels[4*i4+1]+pp[4*i4+5]-(img->pixels[4*i4+5]+pp[4*i4+1]));
-            dv2 = (double)(img->pixels[4*i4+2]+pp[4*i4+6]-(img->pixels[4*i4+6]+pp[4*i4+2]));
-            dv3 = img->pixels[4*i4+3]+pp[4*i4+7]-(img->pixels[4*i4+7]+pp[4*i4+3]);
-            Sxx += dv0*dv0;
-            Sxy += dv0*dv1;
-            Sxz += dv0*dv2;
-            Syy += dv1*dv1;
-            Syz += dv1*dv2;
-            Szz += dv2*dv2;
-            Sxw += dv0*(double)dv3;
-            Syw += dv1*(double)dv3;
-            Szw += dv2*(double)dv3;
-          }
-        }
-        // The three cofactors of the first row of `S`, and one over its
-        // determinant -- scaled by 128 because the weights are eighths of a
-        // 128th and clamped to [-64, 191] below.  The `+0.1` keeps a singular
-        // system (a flat image, every gradient zero) from dividing by zero.
-        double d1 = Sxx*Szz-Sxz*Sxz;
-        double d2 = 0.0-Sxx*Syz+Sxz*Sxy;
-        double d3 = Sxz*Syz-Sxy*Szz;
-        double inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
-        const int32_t wa = clamp_weight((int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv));
-        wa_slot = wa;
-        wb = clamp_weight((int32_t)((d1*Syw+d2*Szw+d3*Sxw)*inv));
-        wc = clamp_weight((int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy)));
-        if( end_px<data_end ) {
-          // `x0[0..1]` used to be written here and read back forty lines
-          // below -- one 64-bit store, which the decompiler wrote as a pair
-          // because MSVC had both halves in registers, and `__PAIR64__` is its
-          // name for that.  The two slots are `wb` and `wc` and nothing
-          // between the store and the reload writes either.  So the spill is
-          // the two names.
-          //
-          // The loop below spilled three more registers to that same area --
-          // `quad`, `g0` and `g1`, each already a local one line up -- and
-          // those stores are gone with it.
-          // The same bound as the accumulation loop above, and the same guard.
-          for( quad = 0; quad<uu; ++quad ) {
-            int32_t nx0 = img->pixels[4*quad+4];
-            int32_t dg0 = img->pixels[4*quad]+pp[4*quad+4];
-            int32_t dn0 = pp[4*quad];
-            int32_t ad0 = nx0+dn0;
-            int32_t dnx1 = pp[4*quad+5];
-            g0 = dg0-ad0;
-            int32_t dn1 = pp[4*quad+1];
-            int32_t nx2 = img->pixels[4*quad+6];
-            g1 = img->pixels[4*quad+1]+dnx1-(img->pixels[4*quad+5]+dn1);
-            int32_t dnx2 = pp[4*quad+6];
-            int32_t g2 = img->pixels[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
-            g1w = (uint16_t)(img->pixels[4*quad+3]+pp[4*quad+7]-pp[4*quad+3]-img->pixels[4*quad+7]);
-            int16_t g1_lo = (int16_t)g1;
-            g1w = g1w-512;
-            int32_t pa = g1*wb+g0*wa_slot;
-            int32_t pb = g2*wc;
-            ++hist_a[(g1w-(int16_t)g0)&0x3FF];
-            int32_t bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
-            ++hist_flat[bin_lin];
-            ++hist_b[(g1w-g1_lo)&0x3FF];
-            g1w = g1w-g2;
-            ++hist_c[g1w&0x3FF];
-            alpha = pp[4*quad+7]+256;
-            int32_t bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad+5]+wa_slot*pp[4*quad+4]+wc*(uint32_t)pp[4*quad+6]+63)>>7)+256)&0x3FF;
-            ++hist_c[bin_lin2+1024];
-            int32_t r0 = alpha-pp[4*quad+4];
-            ++hist_c[r0+2048];
-            int32_t r1 = alpha-pp[4*quad+5];
-            ++hist_c[r1+3072];
-            int32_t r2 = alpha-pp[4*quad+6];
-            ++hist_c[r2+4096];
-          }
-        }
-        uint32_t cost_lin = estimate_cost(hist_flat, 1024);
-        best4 = (cost_lin>>7)+cost_lin;
-        uint32_t cost_c0 = estimate_cost(hist_a, 1024);
-        bool pick0 = cost_c0<best4;
-        if( cost_c0<best4 )
-          best4 = cost_c0;
-        wa_pick = wa_slot;
-        if( pick0 ) {
-          wa_pick = 128;
-          wc = 0;
-          wb = 0;
-        }
-        wa_slot = wa_pick;
-        // `x0[0] = pick0;` before this call and `pred4 = x0[0];` after it was
-        // MSVC spilling the register across the call, and `estimate_cost`
-        // cannot reach a local of this body.  Same shape twice more below.
-        uint32_t cost_c1 = estimate_cost(hist_b, 1024);
-        pred4 = pick0;
-        if( cost_c1<best4 ) {
-          best4 = cost_c1;
-          pred4 = 2;
-          wb = 128;
-          wc = 0;
-          wa_slot = 0;
-        }
-        uint32_t cost_c2 = estimate_cost(hist_c, 1024);
-        pred4b = pred4;
-        if( cost_c2<best4 ) {
-          pred4b = 3;
-          wc = 128;
-          wb = 0;
-          wa_slot = 0;
-        }
-        plane_desc[3].weight0 = wa_slot;
-        plane_desc[3].weight1 = wb;
-        plane_desc[3].weight2 = wc;
-        plane_desc[3].src_plane = 3;
-        plane_desc[3].nrefs = 3;
-        // Rows 4..7, by the same window and the same layout-read constant
-        // as the search above.
-        plane_desc[3].dc = widest_window(hists+1024*(4+pred4b), 4, 1024, -1)+1;
+        choose_alpha_plane(img, hists, data_end, row_stride);
       }
     }
   }

@@ -664,10 +664,12 @@ several times.
    4. All nineteen corpus images produce byte-identical streams at 0 and at 4;
    the measured value is what the code keeps, with the 4 written down.
 
-6. **A fourth plane gets a least-squares fit.** For a 32-bit image the alpha
-   plane's three weights are not chosen from a menu. One pass accumulates the
-   nine covariances `S_ab = Σ d_a·d_b` of the four planes' local gradients, and
-   the 3×3 system `S·w = S_w` is solved by cofactors:
+6. **A fourth plane gets a least-squares fit** — `choose_alpha_plane`, the last
+   stage of `choose_plane_coding` and the only one that runs for a 32-bit image
+   alone. The alpha plane's three weights are not chosen from a menu.
+   `fit_alpha_weights` makes one pass accumulating the nine covariances
+   `S_ab = Σ d_a·d_b` of the four planes' local gradients, and the 3×3 system
+   `S·w = S_w` is solved by cofactors:
 
    ```c
    d1  = Sxx·Szz − Sxz²
@@ -680,8 +682,9 @@ several times.
    keeps a flat image — every gradient zero, the system singular — from dividing
    by zero. Each weight is clamped to [−64, 191], which is exactly the range the
    descriptor's biased byte can carry. Then four more candidates are compared
-   the
-   same way: the fitted triple, or any one of the three references alone at 128.
+   the same way: the fitted triple, or any one of the three references alone at
+   128. The fit can therefore be thrown away — it is one entrant among four, not
+   the answer — which is why the two halves are two functions.
 
 ### 6.4 `search_filter` — trial encoding
 

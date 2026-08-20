@@ -57,6 +57,24 @@
 //     one cannot show, for all inputs and not merely on this corpus: the two
 //     readings differ by exactly 65536, which is 128 times 512, so they agree
 //     in the nine bits `& 0x1FF` keeps.
+// The rows of a histogram block, cut out by index.  Three functions here and in
+// plane_choose.inc keep their histograms in one `int32_t[n*1024]` -- because
+// each of them also picks a row *by index*, which is what the original's byte
+// offsets said -- and each then cut the same cursors out of it a row at a time.
+// Six lines, four lines and four lines, and `hists + 3*1024` written out in all
+// three.  The stride lives here now and the call sites name their rows.
+//
+// Six rather than four because `cost_candidate` uses six; the two callers that
+// want four ignore the tail, which costs nothing and keeps this one function.
+struct HistRows {
+  int32_t *r0, *r1, *r2, *r3, *r4, *r5;
+};
+
+static HistRows hist_rows(int32_t* hists) {
+  return { hists, hists+1*1024, hists+2*1024, hists+3*1024,
+           hists+4*1024, hists+5*1024 };
+}
+
 static inline int32_t residual_bin(int32_t own, int32_t w0, int32_t a,
                                    int32_t w1, uint32_t b) {
   return ((uint16_t)own-(uint16_t)((w0*a+w1*b+40)>>7)-256)&0x1FF;
@@ -108,12 +126,13 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   // `dupblock.py` had left in this file.  The names are cursors into the
   // block, the shape `choose_plane_coding` already uses for its eight.
   alignas(16) int32_t hists[6*1024];
-  int32_t *const hist_x = hists;            // dx, the first reference plane
-  int32_t *const hist_y = hists+1*1024;     // dy, the second
-  int32_t *const hist_yx = hists+2*1024;    // dy - dx
-  int32_t *const hist_zx = hists+3*1024;    // dz - dx
-  int32_t *const hist_zy = hists+4*1024;    // dz - dy
-  int32_t *const hist_zp = hists+5*1024;    // dz - (dx + dy)/2
+  const HistRows hr = hist_rows(hists);
+  int32_t *const hist_x = hr.r0;      // dx, the first reference plane
+  int32_t *const hist_y = hr.r1;      // dy, the second
+  int32_t *const hist_yx = hr.r2;     // dy - dx
+  int32_t *const hist_zx = hr.r3;     // dz - dx
+  int32_t *const hist_zy = hr.r4;     // dz - dy
+  int32_t *const hist_zp = hr.r5;     // dz - (dx + dy)/2
   memset(hists, 0, sizeof hists);
 
   const int32_t planes = plane_count;

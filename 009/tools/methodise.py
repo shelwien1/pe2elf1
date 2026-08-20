@@ -137,6 +137,17 @@ DECLINED = {
         '`BmfImage::weight_pair_cost(plane0, a, b, w4, w8)` would read as the '
         'image costing a candidate; the same judgement as `cost_candidate` '
         'above, which is its only caller outside `choose_plane_coding`',
+    # A third arrival by the `cost_candidate` route, one round later: lifting
+    # the alpha block out of `choose_plane_coding` made it a function, and a
+    # function that reads the image for nothing but its pixels is what this rule
+    # looks for.  The judgement is `cost_candidate`'s, one plane down.
+    'choose_alpha_plane':
+        'picks the alpha plane\'s predictor and weights, 100 lines.  What acts '
+        'here is the plane search -- this is the last stage of '
+        '`choose_plane_coding` and has no other caller -- and the image is what '
+        'it reads; `BmfImage::choose_alpha_plane(hists, end, stride)` would '
+        'read as the image choosing how to code itself, and would put a '
+        'histogram block and a scratch pointer on the image to do it',
     # This one arrived by the same route as `cost_candidate` and is declined
     # for the reason the `alt_model_p2` pair is: it is one half of a matched
     # pair and the other half cannot follow it.
