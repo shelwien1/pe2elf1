@@ -361,16 +361,18 @@ struct ModelBlock {
       here->match[4] = here->sym==up[2].sym;
       here->match[5] = here->sym==up[3].sym;
     }
-    PixRec *up1 = row_cur[6];
-    PixRec *up2 = row_cur[7];
-    PixRec *row = row_cur[5]+1;
-    row_cur[5] = row;
+    // Five cursors stepped by one.  Three of the five were written as an alias
+    // created, incremented and stored back -- `up1`, `up2`, `row` -- because
+    // MSVC needed the incremented value in a register for the reads below; the
+    // other two were already `++row_cur[k]`.
+    ++row_cur[5];
+    ++row_cur[6];
+    ++row_cur[7];
     ++row_cur[8];
-    ++up1;
-    row_cur[6] = up1;
-    ++up2;
     ++row_cur[9];
-    row_cur[7] = up2;
+    PixRec *const row = row_cur[5];
+    PixRec *const up1 = row_cur[6];
+    PixRec *const up2 = row_cur[7];
     grad[0] += up1[4].match[0]-up1[-4].match[0];
     grad[1] += up2[4].match[0]-up2[-4].match[0];
     grad[2] += row[-1].match[1]-row[-5].match[1];
@@ -1333,7 +1335,7 @@ struct ModelBlock {
       PixRec *up2 = row_cur[7];
       if( (uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&up1[3].match[1]&up1[2].match[1]&up1[1].match[1]&up1[0].match[1]&up1[0].match[0]&(int8_t)up1[-1].match[1])&up2[3].match[1] ) {
         const int32_t idx1 = run_scan(up1, up2, width-x, m_up0, run);
-        int32_t bucket = *(run_bucket+idx1);
+        int32_t bucket = run_bucket[idx1];
         // Four fields and a plus-one: the bucket from bit 3 up, then
         // three bits of neighbour agreement.  The `+1` is an offset
         // into `esc_ctr` and not a field, which is why it is a `raw`.

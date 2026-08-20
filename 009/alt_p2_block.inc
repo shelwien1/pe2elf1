@@ -229,6 +229,20 @@ struct P2Ctx {
   uint8_t mag;
 };
 
+// `alt_p2_context` reached ten of these fields by byte offset off a `uint8_t*`
+// -- `cx2p[107]`, `cx2p[89]`, `*(cx2p-19)` and so on, for `c2[5].mag` down to
+// `c2[-3].mag` -- plus a `*(int16_t*)((uint8_t*)nb0-18)` for `c0[-1].val` and
+// two first-member punnings of a `P2Ctx*` to `int16_t*` for `c2->val`.  Every
+// one of them is arithmetic on this layout, so the layout is asserted rather
+// than left as a fact about whichever offsets happened to be typed in.
+//
+// These are not restating a struct definition for its own sake: 107 is
+// `5*18 + 17`, and both numbers have to be right for the old spelling and the
+// new one to name the same byte.
+static_assert(sizeof(P2Ctx) == 18, "the byte offsets in alt_p2_context assume 18");
+static_assert(offsetof(P2Ctx, val) == 0 && offsetof(P2Ctx, mag) == 17,
+              "alt_p2_context reached `val` at +0 and `mag` at +17");
+
 // One row of the neighbour-weight bank.
 //
 // Lines 0..6 are the filter taps, 7..13 the running mean square of each tap's

@@ -83,20 +83,31 @@ static void bmf_free(void* p) {
 // away instead of one instance of it: every other allocation in this tree is
 // already fatal, so a nullable allocator is the outlier that invites the next
 // unchecked store.
+// A page-aligned block, with the un-aligned pointer `free` needs kept in the
+// word before it.  `((void**)p)[-1]` at both ends is that word; naming it says
+// which one thing the two sites agree about.
+struct PageHeader {
+  void* base;
+};
+
+static inline PageHeader* bmf_page_header(void* p) {
+  return (PageHeader*)p-1;
+}
+
 static void*bmf_page_alloc(size_t n) {
-  void* base = malloc(n+BMF_PAGE+sizeof(void*));
+  void* base = malloc(n+BMF_PAGE+sizeof(PageHeader));
   if( !base )
     bmf_fatal(bmf_no_memory);
-  uintptr_t raw = (uintptr_t)base+sizeof(void*);
+  uintptr_t raw = (uintptr_t)base+sizeof(PageHeader);
   char* p = (char*)((raw+(BMF_PAGE-1))&~(BMF_PAGE-1));
-  ((void**)p)[-1] = base;
+  bmf_page_header(p)->base = base;
   memset(p, 0, n);
   return p;
 }
 
 static void bmf_page_free(void* p) {
   if( p )
-    free(((void**)p)[-1]);
+    free(bmf_page_header(p)->base);
 }
 
 // The original installed a new-handler and let `operator new` retry through

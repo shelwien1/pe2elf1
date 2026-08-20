@@ -28,6 +28,15 @@ inline int32_t SymList::decode_symbol_list() {
   // the corpus -- `live = 256` on a 256-symbol list, plus the terminator.  The
   // array is a plain local now, which is what would let ASan say so if that
   // stopped being true.
+  //
+  // It is still **64 KiB of stack per call** -- 8193 pointers -- against 257
+  // that are ever written.  That is a deliberate keep, not an oversight: the
+  // bound the array is declared with is the one the format enforces, while 257
+  // is a fact about the three call sites, and sizing a buffer from the narrower
+  // of the two is how the `[8192]` this replaced came to be one short.  Worth
+  // stating because it is a per-call stack cost nothing else in the program
+  // comes close to, and because the recursion depth here is one:
+  // `decode_symbol_list` calls nothing that calls it back.
   SymEntry* list[no_symbol+1];
   SymEntry *q;
   SymEntry** w, ** rd, ** rd2;

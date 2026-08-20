@@ -17,10 +17,14 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
   *unfold = 0;
   unfold[255] = 0x80;
   for( i = 0; i<0x3F; ++i ) {
-    ((uint8_t*)unfold)[4*i+2] = 2*i+1;
-    ((uint8_t*)unfold)[4*i+1] = (uint8_t)(-2*i-1);
-    ((uint8_t*)unfold)[4*i+4] = 2*i+2;
-    ((uint8_t*)unfold)[4*i+3] = (uint8_t)(-2*i-2);
+    // `unfold` is `int8_t*` and these four stores punned it to `uint8_t*` so
+    // that the two negative entries could be written as bytes.  The values fit
+    // an `int8_t` -- `i` runs to 62, so the magnitudes stop at 126 -- and the
+    // signed spelling is the one the table is read back as.
+    unfold[4*i+2] = (int8_t)(2*i+1);
+    unfold[4*i+1] = (int8_t)(-2*i-1);
+    unfold[4*i+4] = (int8_t)(2*i+2);
+    unfold[4*i+3] = (int8_t)(-2*i-2);
   }
   unfold[254] = 127;
   unfold[253] = -127;

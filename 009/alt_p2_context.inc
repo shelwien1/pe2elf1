@@ -45,24 +45,37 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
   int32_t ctx15, nb_slot;
   P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2;
-  P2Ctx* cx2;
-  P2Ctx *nb0, *nb1;
   bool no_ref;
   int32_t in63, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, flat_a, flat_b;
   uint32_t ctx0_lo;
-  P2Ctx *row0p = cursor[0];
-  P2Ctx *cursor1 = cursor[1];
-  P2Ctx *sub0_row = cursor[2];
-  int32_t sum_ul = 21*sub0_row[-1].dupleft+12*cursor1[3].dupleft+16*cursor1[2].dupleft+22*cursor1[1].dupleft+(23*row0p[-1].dupleft)+20*cursor1->dupleft+ctx_bias[0]+14*row0p[-2].dupleft;
-  int32_t sum_ur = 17*sub0_row[-2].dupright+21*cursor1[2].dupright+15*cursor1[1].dupright+25*cursor1->dupright+9*cursor1[-1].dupright+22*row0p[-1].dupright+ctx_bias[1]+19*row0p[-2].dupright;
-  int32_t sum4 = 17*cursor1[3].dleft+15*cursor1[2].dleft+21*cursor1[1].dleft+18*cursor1->dleft+16*cursor1[-1].dleft+22*row0p[-1].dleft+ctx_bias[2]+19*row0p[-2].dleft;
-  int32_t lane5 = sub0_row->dup;
-  int32_t sum_u = 14*cursor1[3].dup+23*cursor1[1].dup+19*cursor1->dup+25*row0p[-1].dup+ctx_bias[3]+17*row0p[-2].dup+15*(cursor[3]->dup+lane5);
+  // The five row cursors, read once.
+  //
+  // This function reached them through eleven aliases created at eight points
+  // -- `c0`, `c1`, `c2` at the top; `c0`, `c1`, `c2`, `c3`,
+  // `c2` in the feature block; `c2`, `c3`, `c4` in the no-reference
+  // arm; `c0`..`c4` before the bank contexts -- with `c0`/`c1` reloaded
+  // after the bias loop and `c2` assigned identically in both arms of the
+  // reference test.  Eleven names for five things, and reading the body as if
+  // `c1` and `c1` were different rows is the mistake the spelling invites.
+  //
+  // They are safe to hoist because nothing here advances a cursor:
+  // `alt_p2_model` does that, after this returns.  Checked by grep before the
+  // rewrite, and by the gate after it.
+  //
+  // The negative subscripts stay.  `c0[-3].val` is a sliding window over a row
+  // with margins, which is what the model reads; what goes is the aliasing.
+  P2Ctx *const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2],
+        *const c3 = cursor[3], *const c4 = cursor[4];
+  int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1->dupleft+ctx_bias[0]+14*c0[-2].dupleft;
+  int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1->dupright+9*c1[-1].dupright+22*c0[-1].dupright+ctx_bias[1]+19*c0[-2].dupright;
+  int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1->dleft+16*c1[-1].dleft+22*c0[-1].dleft+ctx_bias[2]+19*c0[-2].dleft;
+  int32_t lane5 = c2->dup;
+  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1->dup+25*c0[-1].dup+ctx_bias[3]+17*c0[-2].dup+15*(c3->dup+lane5);
   int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
   int32_t band = over_thresholds(8*sum4, p2_band_edges, 0, 4, sum_u);
-  int32_t den_d = 2*row0p[-2].val+2*row0p[-1].val;
-  int32_t num_b = cursor1[1].val+(cursor1->val+2*row0p[-1].val);
-  int32_t num_d = 16*(sub0_row[2].val+sub0_row->val+cursor1[1].val+sub0_row[-1].val);
+  int32_t den_d = 2*c0[-2].val+2*c0[-1].val;
+  int32_t num_b = c1[1].val+(c1->val+2*c0[-1].val);
+  int32_t num_d = 16*(c2[2].val+c2->val+c1[1].val+c2[-1].val);
   int32_t gA = over_thresholds(sum_all, bmf_p2_thresholds[band], 9, 12, 1);
   int32_t gB = over_thresholds(num_b, bmf_p2_thresholds[band], 6, 8, 1);
   int32_t gC = over_thresholds(16*sum_ur, bmf_p2_thresholds[band], 3, 5, sum_ul);
@@ -91,7 +104,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
         for( j = 1; j<7; ++j )
           acc[k] += wrow->w[j][k]*p2_row[j][k];
       }
-      err = ((float)row0p[-1].val-(bmf_hsum4(acc)+bias[0]))*2.0999999f;
+      err = ((float)c0[-1].val-(bmf_hsum4(acc)+bias[0]))*2.0999999f;
       floor_ = 7744.0f*wrow->w[14][2];
       for( j = 0; j<7; ++j )
         for( k = 0; k<4; ++k )
@@ -112,120 +125,107 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   //
   // Written out one subscript at a time because that is what the original did,
   // and left that way: the offsets are not a pattern a loop could generate --
-  // `nb0[-1] + nb1->dval - nb1[-1]` and `nb1[-2] + nb1->dval - nb2[-2]` are
+  // `c0[-1] + c1->dval - c1[-1]` and `c1[-2] + c1->dval - c2[-2]` are
   // different shapes -- so a table of offsets would be 28 rows of data plus a
   // loop, which is the same information one indirection further away.
-  nb1 = cursor[1];
-  p2_row[0][0] = (float)nb1->dval;
-  nb0 = cursor[0];
-  p2_row[0][1] = (float)nb1[1].dval;
-  p2_row[0][2] = (float)(nb0[-1].dval+nb1->dval-nb1[-1].dval);
-  P2Ctx *row2c = cursor[2];
-  p2_row[0][3] = (float)(nb0[-2].dval+(nb1->dval-nb1[-2].dval));
-  P2Ctx *nb3 = cursor[3];
-  p2_row[1][0] = (float)(nb1[-1].dval+nb1->dval-row2c[-1].dval);
-  p2_row[1][1] = (float)(-3*(row2c->dval-nb1->dval)+nb3->dval);
-  p2_row[1][2] = (float)(nb0[-1].dval+nb1[2].dval-nb1[1].dval);
-  p2_row[1][3] = (float)(nb0[-2].dval+nb1[1].dval-nb1[-1].dval);
-  p2_row[2][0] = (float)(2*nb0[-1].dval-nb0[-2].dval);
-  P2Ctx *nb2 = row2c;
-  p2_row[2][1] = (float)(nb0[-3].dval+nb1->dval-nb1[-3].dval);
-  p2_row[2][2] = (float)(nb2->dval+nb1[1].dval-nb3[1].dval);
-  p2_row[2][3] = (float)nb0[-3].dval;
-  p2_row[3][0] = (float)(nb1[-2].dval+nb1->dval-nb2[-2].dval);
-  p2_row[3][1] = (float)(nb0[-2].dval+nb1[-1].dval-nb1[-3].dval);
-  p2_row[3][2] = (float)(nb1[1].dval+((nb1[2].dval+nb1->dval)>>1)-nb2[2].dval);
-  p2_row[3][3] = (float)nb3->dval;
+  p2_row[0][0] = (float)c1->dval;
+  p2_row[0][1] = (float)c1[1].dval;
+  p2_row[0][2] = (float)(c0[-1].dval+c1->dval-c1[-1].dval);
+  p2_row[0][3] = (float)(c0[-2].dval+(c1->dval-c1[-2].dval));
+  p2_row[1][0] = (float)(c1[-1].dval+c1->dval-c2[-1].dval);
+  p2_row[1][1] = (float)(-3*(c2->dval-c1->dval)+c3->dval);
+  p2_row[1][2] = (float)(c0[-1].dval+c1[2].dval-c1[1].dval);
+  p2_row[1][3] = (float)(c0[-2].dval+c1[1].dval-c1[-1].dval);
+  p2_row[2][0] = (float)(2*c0[-1].dval-c0[-2].dval);
+  p2_row[2][1] = (float)(c0[-3].dval+c1->dval-c1[-3].dval);
+  p2_row[2][2] = (float)(c2->dval+c1[1].dval-c3[1].dval);
+  p2_row[2][3] = (float)c0[-3].dval;
+  p2_row[3][0] = (float)(c1[-2].dval+c1->dval-c2[-2].dval);
+  p2_row[3][1] = (float)(c0[-2].dval+c1[-1].dval-c1[-3].dval);
+  p2_row[3][2] = (float)(c1[1].dval+((c1[2].dval+c1->dval)>>1)-c2[2].dval);
+  p2_row[3][3] = (float)c3->dval;
   if( refa ) {
-    ra0 = (P2Ctx*)refa->cursor[0]-1;
-    ra1 = (P2Ctx*)((int16_t*)(refa->cursor[1]-1));
-    ra2 = (P2Ctx*)((int16_t*)(refa->cursor[2]-1));
-    rb0 = (P2Ctx*)refb->cursor[0]-1;
+    ra0 = refa->cursor[0]-1;
+    ra1 = refa->cursor[1]-1;
+    ra2 = refa->cursor[2]-1;
+    rb0 = refb->cursor[0]-1;
     no_ref = has_ref==0;
     rb1 = refb->cursor[1]-1;
     rb2 = refb->cursor[2]-1;
     if( !no_ref ) {
       {
-        float bias_l = (float)nb0->dval;
+        float bias_l = (float)c0->dval;
         int32_t j, k;
         for( j = 0; j<4; ++j )
           for( k = 0; k<4; ++k )
             p2_row[j][k] += bias_l;
       }
-      nb0 = cursor[0];
-      nb1 = cursor[1];
     }
     int32_t plane = plane_idx;
     if( plane ) {
       if( plane==1 ) {
-        p2_row[4][0] = (float)(nb0->dval+nb1[3].dval);
-        p2_row[4][1] = (float)(nb0[-2].val+ra1[2].val-ra1->val);
-        p2_row[4][2] = (float)(nb1[1].val+ra0[-1].val-ra1->val);
-        p2_row[4][3] = (float)(nb0[-1].val+ra1->val-ra1[-1].val);
-        p2_row[5][0] = (float)(nb1[1].val+(rb1[2].val-(rb2)[3].val));
-        p2_row[5][1] = (float)(nb0[-2].val+rb0->val-rb0[-2].val);
-        p2_row[5][2] = (float)(nb1->val+rb0->val-rb1->val);
+        p2_row[4][0] = (float)(c0->dval+c1[3].dval);
+        p2_row[4][1] = (float)(c0[-2].val+ra1[2].val-ra1->val);
+        p2_row[4][2] = (float)(c1[1].val+ra0[-1].val-ra1->val);
+        p2_row[4][3] = (float)(c0[-1].val+ra1->val-ra1[-1].val);
+        p2_row[5][0] = (float)(c1[1].val+(rb1[2].val-(rb2)[3].val));
+        p2_row[5][1] = (float)(c0[-2].val+rb0->val-rb0[-2].val);
+        p2_row[5][2] = (float)(c1->val+rb0->val-rb1->val);
         no_ref = has_ref==0;
-        p2_row[5][3] = (float)(nb0[-2].val+ra0->err);
+        p2_row[5][3] = (float)(c0[-2].val+ra0->err);
         if( no_ref ) {
-          int16_t *nb2w = (int16_t*)cursor[2];
-          p2_row[6][0] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
-          p2_row[6][1] = (float)(*nb2w+ra0->val-(ra2)->val);
-          p2_row[6][2] = (float)(ra2->val+ra0->val-*nb2w+2*(nb1->val-ra1->val));
-          in63 = *(int16_t*)((uint8_t*)nb0-18)+nb1[-1].val+ra1[-2].val+ra0->val-ra0[-1].val-ra1[-1].val-nb1[-2].val;
+          p2_row[6][0] = (float)(c0[-2].val+ra0->val-ra0[-2].val);
+          p2_row[6][1] = (float)(c2->val+ra0->val-ra2->val);
+          p2_row[6][2] = (float)(ra2->val+ra0->val-c2->val+2*(c1->val-ra1->val));
+          in63 = c0[-1].val+c1[-1].val+ra1[-2].val+ra0->val-ra0[-1].val-ra1[-1].val-c1[-2].val;
         } else {
-          p2_row[6][0] = (float)nb1->val;
-          p2_row[6][1] = (float)nb0[-3].val;
-          p2_row[6][2] = (float)(nb0[-1].val+ra0[-1].val-ra0[-2].val);
-          in63 = nb0[-3].val+nb0[-1].val-nb0[-4].val;
+          p2_row[6][0] = (float)c1->val;
+          p2_row[6][1] = (float)c0[-3].val;
+          p2_row[6][2] = (float)(c0[-1].val+ra0[-1].val-ra0[-2].val);
+          in63 = c0[-3].val+c0[-1].val-c0[-4].val;
         }
         p2_row[6][3] = (float)in63;
       } else {
-        p2_row[4][0] = (float)(nb0[-3].val+nb0[-1].val-nb0[-4].val);
-        p2_row[4][1] = (float)(nb0[-1].val+ra0[-1].val-ra0[-2].val);
-        p2_row[4][2] = (float)(nb1[1].val+ra1->val-ra2[1].val);
-        p2_row[4][3] = (float)(nb0[-2].val+ra1[2].val-ra1->val);
-        p2_row[5][0] = (float)(nb1->val+ra0[-2].val-ra1[-2].val);
-        p2_row[5][1] = (float)(nb1->val+ra0->val-ra1->val);
-        p2_row[5][2] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
-        int16_t *nb2w2 = (int16_t*)cursor[2];
-        p2_row[5][3] = (float)(nb0[-2].val+rb0->val-rb0[-2].val);
-        p2_row[6][0] = (float)(*nb2w2+rb0->val-(rb2)->val);
-        p2_row[6][1] = (float)(rb0[-2].val+rb0->val-nb0[-2].val+2*(nb0[-1].val-rb0[-1].val));
-        p2_row[6][2] = (float)(nb0[-2].val+rb0->err);
-        p2_row[6][3] = (float)(*nb2w2+ra0->err);
+        p2_row[4][0] = (float)(c0[-3].val+c0[-1].val-c0[-4].val);
+        p2_row[4][1] = (float)(c0[-1].val+ra0[-1].val-ra0[-2].val);
+        p2_row[4][2] = (float)(c1[1].val+ra1->val-ra2[1].val);
+        p2_row[4][3] = (float)(c0[-2].val+ra1[2].val-ra1->val);
+        p2_row[5][0] = (float)(c1->val+ra0[-2].val-ra1[-2].val);
+        p2_row[5][1] = (float)(c1->val+ra0->val-ra1->val);
+        p2_row[5][2] = (float)(c0[-2].val+ra0->val-ra0[-2].val);
+        p2_row[5][3] = (float)(c0[-2].val+rb0->val-rb0[-2].val);
+        p2_row[6][0] = (float)(c2->val+rb0->val-rb2->val);
+        p2_row[6][1] = (float)(rb0[-2].val+rb0->val-c0[-2].val+2*(c0[-1].val-rb0[-1].val));
+        p2_row[6][2] = (float)(c0[-2].val+rb0->err);
+        p2_row[6][3] = (float)(c2->val+ra0->err);
       }
     } else {
-      p2_row[4][0] = (float)(nb0[-3].val+nb0[-1].val-nb0[-4].val);
-      P2Ctx *nb3x = cursor[3];
-      p2_row[4][1] = (float)(nb0[-5].val+nb1->val-nb1[-5].val);
-      P2Ctx *nb2x = cursor[2];
-      p2_row[4][2] = (float)(nb0[-4].val+nb1->val-nb1[-4].val);
-      p2_row[4][3] = (float)((nb2x->val+3*nb1[1].val-4*nb2x[1].val)-(((nb1[2].val-nb1->val-(nb3x[2].val-nb3x->val))>>1)-nb3x[1].val));
-      p2_row[5][0] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
-      p2_row[5][1] = (float)(nb1[1].val+ra1[1].val-ra2[2].val);
-      p2_row[5][2] = (float)(nb1[-2].val+ra1[2].val-ra2->val);
-      p2_row[5][3] = (float)((ra0[-2].val+ra0->val-nb0[-2].val)+2*(nb0[-1].val-ra0[-1].val));
-      p2_row[6][0] = (float)(nb2x[1].val+rb0->val-rb2[1].val);
-      p2_row[6][1] = (float)(nb0[-2].val+rb0->val-rb0[-2].val);
-      p2_row[6][2] = (float)(nb0[-1].val+rb1[1].val-rb1->val);
-      p2_row[6][3] = (float)(nb1[1].val+rb1[2].val-rb2[3].val);
+      p2_row[4][0] = (float)(c0[-3].val+c0[-1].val-c0[-4].val);
+      p2_row[4][1] = (float)(c0[-5].val+c1->val-c1[-5].val);
+      p2_row[4][2] = (float)(c0[-4].val+c1->val-c1[-4].val);
+      p2_row[4][3] = (float)((c2->val+3*c1[1].val-4*c2[1].val)-(((c1[2].val-c1->val-(c3[2].val-c3->val))>>1)-c3[1].val));
+      p2_row[5][0] = (float)(c0[-2].val+ra0->val-ra0[-2].val);
+      p2_row[5][1] = (float)(c1[1].val+ra1[1].val-ra2[2].val);
+      p2_row[5][2] = (float)(c1[-2].val+ra1[2].val-ra2->val);
+      p2_row[5][3] = (float)((ra0[-2].val+ra0->val-c0[-2].val)+2*(c0[-1].val-ra0[-1].val));
+      p2_row[6][0] = (float)(c2[1].val+rb0->val-rb2[1].val);
+      p2_row[6][1] = (float)(c0[-2].val+rb0->val-rb0[-2].val);
+      p2_row[6][2] = (float)(c0[-1].val+rb1[1].val-rb1->val);
+      p2_row[6][3] = (float)(c1[1].val+rb1[2].val-rb2[3].val);
     }
   } else {
-    p2_row[4][0] = (float)(nb1[3].val+nb1->val-nb2[3].val);
-    row2c = nb2;
-    p2_row[4][1] = (float)(nb0[-4].val+nb1->val-nb1[-4].val);
-    p2_row[4][2] = (float)((nb2->val+3*nb1[1].val-4*nb2[1].val)-((((nb1[2].val-nb1->val)-(nb3[2].val-nb3->val))>>1)-nb3[1].val));
-    P2Ctx* nb4 = cursor[4];
-    p2_row[4][3] = (float)(row2c[-1].val+nb1[1].val-nb3->val);
-    p2_row[5][0] = (float)(nb3[1].val+nb1->val-nb4[1].val);
-    p2_row[5][1] = (float)nb1[3].val;
-    p2_row[5][2] = (float)(nb0[-3].val+nb0[-1].val-nb0[-4].val);
-    p2_row[5][3] = (float)(nb0[-1].val+nb3->val-nb3[-1].val);
-    p2_row[6][0] = (float)(nb0[-5].val+nb1->val-nb1[-5].val);
-    p2_row[6][1] = (float)nb4->val;
-    p2_row[6][2] = (float)(nb0[-5].val+nb0[-1].val-nb0[-6].val);
-    p2_row[6][3] = (float)nb1[-6].val;
+    p2_row[4][0] = (float)(c1[3].val+c1->val-c2[3].val);
+    p2_row[4][1] = (float)(c0[-4].val+c1->val-c1[-4].val);
+    p2_row[4][2] = (float)((c2->val+3*c1[1].val-4*c2[1].val)-((((c1[2].val-c1->val)-(c3[2].val-c3->val))>>1)-c3[1].val));
+    p2_row[4][3] = (float)(c2[-1].val+c1[1].val-c3->val);
+    p2_row[5][0] = (float)(c3[1].val+c1->val-c4[1].val);
+    p2_row[5][1] = (float)c1[3].val;
+    p2_row[5][2] = (float)(c0[-3].val+c0[-1].val-c0[-4].val);
+    p2_row[5][3] = (float)(c0[-1].val+c3->val-c3[-1].val);
+    p2_row[6][0] = (float)(c0[-5].val+c1->val-c1[-5].val);
+    p2_row[6][1] = (float)c4->val;
+    p2_row[6][2] = (float)(c0[-5].val+c0[-1].val-c0[-6].val);
+    p2_row[6][3] = (float)c1[-6].val;
     rb2 = nullptr;
     rb1 = nullptr;
     rb0 = nullptr;
@@ -233,14 +233,16 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ra1 = nullptr;
     ra0 = nullptr;
   }
-  NbRow **cur_l = cur;
-  weights.row[0] = cur_l[-1];
-  NbRow **up_row = above;
-  weights.row[1] = up_row[1];
-  weights.row[2] = up_row[2];
-  weights.row[3] = cur_l[-2];
-  weights.row[4] = up_row[0];
-  weights.row[5] = cur_l[0];
+  // The six weight sets `NbRow::predict` mixes: three from this row's cursor
+  // and three from the row above.  `cur_l` and `up_row` were `cur` and `above`
+  // read into locals so the six loads could be scheduled against each other,
+  // and neither cursor moves until `alt_p2_model` advances it.
+  weights.row[0] = cur[-1];
+  weights.row[1] = above[1];
+  weights.row[2] = above[2];
+  weights.row[3] = cur[-2];
+  weights.row[4] = above[0];
+  weights.row[5] = cur[0];
   // Which of the four directional activity sums is smallest, once each is
   // scaled by its own weight.  The weights are model parameters and stay named
   // candidates rather than going inline.
@@ -258,19 +260,16 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   if( min32(best01, c)>d )
     mode = 3;
   int32_t filt = nb_cur->predict((float (*)[4]) p2_row, &weights, mode);
-  P2Ctx* cx0 = cursor[0];
-  P2Ctx *cx1 = cursor[1];
   // A 32-bit store at `&pred_prev`, which is a `uint16_t` followed by two
   // bytes of padding: the original wrote the whole word and the top half
   // landed in the pad, which nothing reads.  So it is the low half.
   pred_prev = (uint16_t)filt;
-  int32_t lane3 = cx1->aerr;
-  int32_t g3pair = cx0[-1].aerr+lane3;
+  int32_t lane3 = c1->aerr;
+  int32_t g3pair = c0[-1].aerr+lane3;
   if( refa )
     g3pair += (rb0->aerr+ra0->aerr)>>1;
   int32_t run = filt;
-  P2Ctx *cx3 = (P2Ctx*)(cursor[3]);
-  int32_t g3sum = cx1[3].aerr+cx1[-1].aerr+cx0[-1].aerr+cx0[-3].aerr+cx0[-4].aerr+cx0[-2].aerr;
+  int32_t g3sum = c1[3].aerr+c1[-1].aerr+c0[-1].aerr+c0[-3].aerr+c0[-4].aerr+c0[-2].aerr;
   int32_t run_s = run;
   // Four of the five masks are a sign test the types prove: a sum of `w` of
   // these `int16_t` members is under `w * 2^15`, so every bit from
@@ -281,11 +280,11 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // instead: the bit where it is, with no claim about the rest.  Same code as
   // the mask it replaces, and the position is now the thing that generates the
   // mask rather than a hex literal beside it.  tools/ctxidx.py.
-  ctx0_lo = CtxIdx{}.bit<19>(cx1[1].err+cx1->err+cx1[-1].err+cx0[-1].err < 0)
-            .bit<18>(cx3->err+cx0[-2].err+2*cx0[-4].err < 0)
-            .bit<17>(cx1[-3].err+cx0[-3].err+cx0[-5].err+cx0[-7].err < 0)
-            .bit<16>(cx0[-1].err < 0)
-            .bit_of<15>((uint16_t)cx0[-3].err)
+  ctx0_lo = CtxIdx{}.bit<19>(c1[1].err+c1->err+c1[-1].err+c0[-1].err < 0)
+            .bit<18>(c3->err+c0[-2].err+2*c0[-4].err < 0)
+            .bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err < 0)
+            .bit<16>(c0[-1].err < 0)
+            .bit_of<15>((uint16_t)c0[-3].err)
             .bits<13, 2>((run>3536)+(run>720)+(run>288))
             .bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
   bank_ctx[0] = ctx0_lo;
@@ -297,33 +296,30 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
            .bit<23>(ra0[-1].err < 0)
            .bit<22>(rb0->err+rb0[-2].err < 0)
            .bit<21>(ra0[-2].err+lane2 < 0)
-           .bit<20>(cx0[-2].err < 0)
+           .bit<20>(c0[-2].err < 0)
            .raw(ctx0_lo);
-    cx2 = cursor[2];
   } else {
     run = run_s;
-    cx2 = cursor[2];
-    ctx0 = CtxIdx{}.bit<25>(cx1[3].err+cx0[-3].err+cx0[-7].err+cx0[-5].err < 0)
-           .bit<24>(cx2[1].err+cx2->err+cx0[-4].err+cx0[-8].err < 0)
-           .bit<23>(cx0[-4].err+cx0[-6].err < 0)
-           .bit<22>(cx0[-4].err < 0)
-           .bit<21>(cx0[-5].err < 0)
-           .bit<20>(cx0[-7].err < 0)
+    ctx0 = CtxIdx{}.bit<25>(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err < 0)
+           .bit<24>(c2[1].err+c2->err+c0[-4].err+c0[-8].err < 0)
+           .bit<23>(c0[-4].err+c0[-6].err < 0)
+           .bit<22>(c0[-4].err < 0)
+           .bit<21>(c0[-5].err < 0)
+           .bit<20>(c0[-7].err < 0)
            .raw(ctx0_lo);
   }
   int32_t bank0 = ctx0>>11;
   bank_ctx[0] = bank0;
   int32_t pred0 = p2_pred(p2_ctr[slot(0, bank0)].weighted, p2_ctr[slot(0, bank0)].rate);
   int32_t sum_c = sum_all;
-  P2Ctx *cx4 = cursor[4];
   nb_sum[1] = pred0;
   int32_t run0 = pred0+run_s;
   nb_sum[0] = run0;
-  int32_t nb4_4 = cx4[4].val;
+  int32_t nb4_4 = c4[4].val;
   sum_all = ((g3pair<<9)+sum_c)>>13;
-  int32_t d_run0 = cx0[-5].val-run0;
+  int32_t d_run0 = c0[-5].val-run0;
   int32_t d_up = nb4_4-run0;
-  int32_t up5 = cx1[5].val;
+  int32_t up5 = c1[5].val;
   int32_t d_up5 = up5-run0;
   // The six words below -- two spellings of `ctx1`, two of `ctx2`, and the two
   // `bank` words after them -- are `bit_of<>` almost throughout, and this is
@@ -338,7 +334,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // Instrumented over the corpus, four of them are *not* sign tests at all:
   //
   //   ctx1  bit 15  `d_run0`                        reaches 36157
-  //   bank3 bit 15  `run2-cx0[-3].val`              reaches 35550
+  //   bank3 bit 15  `run2-c0[-3].val`              reaches 35550
   //   bank3 bit 24  `... - ((uint32_t)(...)>>1) ...`  is unsigned throughout
   //   bank4 bit 15  `(uint16_t)run3 - ...`          reaches 69572 as an int
   //
@@ -359,31 +355,31 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // `bit<>` and `bit_of<>` sit side by side and say which is which.
   // `tools/ctxidx.py --list` reports the split; it is 1 of 66.
   if( refa ) {
-    int32_t dv_now = cx0[0].dval;
-    ctx1 = CtxIdx{}.bit_of<25>(cx0[-1].val+ra0->val-ra0[-1].val-run0)
+    int32_t dv_now = c0[0].dval;
+    ctx1 = CtxIdx{}.bit_of<25>(c0[-1].val+ra0->val-ra0[-1].val-run0)
            .bit<24>(ra2->dval+ra1->dval-2*ra0->dval < 0)
-           .bit_of<23>(dv_now+cx0[-3].dval-run0-(cx1[2].dval-cx1[5].dval))
-           .bit_of<22>(dv_now+cx0[-5].dval-run0)
-           .bit_of<21>(dv_now+cx1->dval+rb1[2].dval-rb2[2].dval-run0)
-           .bit_of<20>(dv_now+cx0[-1].dval+rb0->dval-rb0[-1].dval-run0)
-           .bit_of<19>(cx2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)
-           .bit_of<18>(dv_now+cx1[2].dval+ra0->dval-ra1[2].dval-run0)
+           .bit_of<23>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval))
+           .bit_of<22>(dv_now+c0[-5].dval-run0)
+           .bit_of<21>(dv_now+c1->dval+rb1[2].dval-rb2[2].dval-run0)
+           .bit_of<20>(dv_now+c0[-1].dval+rb0->dval-rb0[-1].dval-run0)
+           .bit_of<19>(c2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)
+           .bit_of<18>(dv_now+c1[2].dval+ra0->dval-ra1[2].dval-run0)
            .bit_of<17>(d_up5)
            .bit_of<16>(d_up)
            .bit_of<15>(d_run0)
            .raw(ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
   } else {
-    int32_t d_run0b = run0-cx0[-3].val;
-    ctx1 = CtxIdx{}.bit_of<25>(nb4_4-cx3->val+run0-cx1[4].val)
-           .bit_of<24>(cx1[-5].val-cx1[-2].val+d_run0b)
-           .bit_of<23>(d_run0b+cx1[2].val-up5)
-           .bit_of<22>(cx4[3].val-cx2[2].val+run0-cx2[1].val)
-           .bit_of<21>(cx4[-1].val-cx3->val+run0-cx1[-1].val)
-           .bit_of<20>(cx1->val-cx1[2].val+run0-cx0[-2].val)
+    int32_t d_run0b = run0-c0[-3].val;
+    ctx1 = CtxIdx{}.bit_of<25>(nb4_4-c3->val+run0-c1[4].val)
+           .bit_of<24>(c1[-5].val-c1[-2].val+d_run0b)
+           .bit_of<23>(d_run0b+c1[2].val-up5)
+           .bit_of<22>(c4[3].val-c2[2].val+run0-c2[1].val)
+           .bit_of<21>(c4[-1].val-c3->val+run0-c1[-1].val)
+           .bit_of<20>(c1->val-c1[2].val+run0-c0[-2].val)
            .bit_of<19>(-d_up5)
            .bit_of<18>(-d_up)
-           .bit_of<17>(run0-cx4[2].val)
-           .bit_of<16>(run0-cx4[-3].val)
+           .bit_of<17>(run0-c4[2].val)
+           .bit_of<16>(run0-c4[-3].val)
            .bit_of<15>(-d_run0)
            .raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
   }
@@ -396,20 +392,20 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   run1 = pred1+run0;
   nb_sum[2] = run1;
   nb_sum[3] = pred1;
-  int32_t cx2_val0 = cx2->val;
-  int32_t cx1_val = cx1->val;
-  int32_t dvsum2 = cx0[-2].val-run1;
-  int32_t lap = cx0[-2].val+run1-2*cx0[-1].val;
+  int32_t cx2_val0 = c2->val;
+  int32_t cx1_val = c1->val;
+  int32_t dvsum2 = c0[-2].val-run1;
+  int32_t lap = c0[-2].val+run1-2*c0[-1].val;
   int32_t dtop2 = cx2_val0-run1;
   if( refa ) {
-    int32_t dv1 = cx1[1].dval;
+    int32_t dv1 = c1[1].dval;
     int32_t d_ra = ra0->val-run1;
-    ctx2 = CtxIdx{}.bit_of<25>(cx0[0].dval+cx1[-1].dval-run1-(cx2->dval-dv1))
-           .bit_of<24>(cx0[0].dval+cx0[-1].dval-run1-(cx1->dval-dv1))
+    ctx2 = CtxIdx{}.bit_of<25>(c0[0].dval+c1[-1].dval-run1-(c2->dval-dv1))
+           .bit_of<24>(c0[0].dval+c0[-1].dval-run1-(c1->dval-dv1))
            .bit_of<23>(rb0->val-run1+cx2_val0-rb2->val)
            .bit_of<22>(d_ra+cx2_val0-ra2->val)
-           .bit_of<21>(d_ra+cx1[-1].val-ra1[-1].val)
-           .bit_of<20>(cx0[0].dval-cx0[-2].dval+2*cx0[-1].dval-run1)
+           .bit_of<21>(d_ra+c1[-1].val-ra1[-1].val)
+           .bit_of<20>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1)
            .bit_of<19>(2*cx1_val-run1-cx2_val0)
            .bit_of<18>(-lap)
            .bit_of<17>(dtop2)
@@ -417,16 +413,16 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
            .bit_of<15>(208-rb0->val)
            .raw(ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
   } else {
-    ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-cx3->val)
-           .bit_of<24>(run1+cx4->val-(cx2[2].val+cx2[-2].val))
-           .bit_of<23>(cx3[2].val-cx2[-1].val+run1-cx1[3].val)
-           .bit_of<22>(cx3[1].val-cx1[1].val-dtop2)
-           .bit_of<21>(cx3->val-cx1_val-dtop2)
+    ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-c3->val)
+           .bit_of<24>(run1+c4->val-(c2[2].val+c2[-2].val))
+           .bit_of<23>(c3[2].val-c2[-1].val+run1-c1[3].val)
+           .bit_of<22>(c3[1].val-c1[1].val-dtop2)
+           .bit_of<21>(c3->val-cx1_val-dtop2)
            .bit_of<20>(lap)
-           .bit_of<19>(run1-cx4[3].val)
-           .bit_of<18>(cx3[1].val-run1)
-           .bit_of<17>(run1-cx4->val)
-           .bit_of<16>(run1-cx3[-2].val)
+           .bit_of<19>(run1-c4[3].val)
+           .bit_of<18>(c3[1].val-run1)
+           .bit_of<17>(run1-c4->val)
+           .bit_of<16>(run1-c3[-2].val)
            .bit_of<15>(-dvsum2)
            .raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
   }
@@ -436,23 +432,23 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   nb_sum[5] = pred2;
   run2 = pred2+run1;
   nb_sum[4] = run2;
-  int32_t run_dv3 = run2-cx0[0].dval;
+  int32_t run_dv3 = run2-c0[0].dval;
   // `sum_all = -sum_all` was here, and the six thresholds below read `< -K`
   // because of it.  Nothing else used the negated value: it existed so that
   // `q9`, `q39` and `q10` -- computed from the positive one, before this line
   // -- could be added to comparisons made after it.  Those are written out
   // now, so the negation and the six sign flips cancel.
-  bank3 = (int32_t)(CtxIdx{}.bit_of<25>(3*(cx0[-2].val-cx0[-1].val)+run2-cx0[-3].val)
-                    .bit_of<24>(cx2[1].dval-((uint32_t)(cx1[1].dval+cx1[2].dval+cx1[-1].dval+cx1->dval)>>1)+run_dv3)
-                    .bit_of<23>(cx2[-3].val-cx1[-2].val+run2-cx1[-1].val)
-                    .bit_of<22>(-(cx2[2].val+run2-2*cx1[1].val))
-                    .bit_of<21>(cx1[-2].dval-cx0[-2].val+run2-cx1->dval)
-                    .bit_of<20>(run2-cx1[3].val)
-                    .bit_of<19>(run_dv3-cx2[1].dval)
-                    .bit_of<18>(run2-cx3->val)
-                    .bit_of<17>(2*run2-cx1->dval-(cx1->val+cx0[0].dval))
-                    .bit_of<16>(run2-cx0[-1].dval-cx0[0].dval)
-                    .bit_of<15>(run2-cx0[-3].val)
+  bank3 = (int32_t)(CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val)
+                    .bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1->dval)>>1)+run_dv3)
+                    .bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val)
+                    .bit_of<22>(-(c2[2].val+run2-2*c1[1].val))
+                    .bit_of<21>(c1[-2].dval-c0[-2].val+run2-c1->dval)
+                    .bit_of<20>(run2-c1[3].val)
+                    .bit_of<19>(run_dv3-c2[1].dval)
+                    .bit_of<18>(run2-c3->val)
+                    .bit_of<17>(2*run2-c1->dval-(c1->val+c0[0].dval))
+                    .bit_of<16>(run2-c0[-1].dval-c0[0].dval)
+                    .bit_of<15>(run2-c0[-3].val)
                     .raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9)))>>11;
   bank_ctx[3] = bank3;
   int32_t w3c = p2_ctr[slot(3, bank3)].weighted;
@@ -461,40 +457,39 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   run3 = pred3+run2;
   run = run3;
   nb_sum[6] = run3;
-  int32_t dv_now4 = cx0[0].dval;
+  int32_t dv_now4 = c0[0].dval;
   int32_t run_dv4 = run3-dv_now4;
-  int32_t run_up4 = run3+cx3->val;
-  bank4 = (int32_t)(CtxIdx{}.bit_of<25>(run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))
-                    .bit_of<24>(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))
-                    .bit_of<23>(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))
-                    .bit_of<22>(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))
-                    .bit_of<21>(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))
-                    .bit_of<20>(cx2[-2].val+run-2*cx1[-1].val)
-                    .bit_of<19>(cx2->dval-2*cx1->dval+run_dv4)
-                    .bit_of<18>((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))
-                    .bit_of<17>(run_dv4-cx1[4].dval)
-                    .bit_of<16>(run_dv4-cx1[-2].dval)
-                    .bit_of<15>((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)
+  int32_t run_up4 = run3+c3->val;
+  bank4 = (int32_t)(CtxIdx{}.bit_of<25>(run-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2))
+                    .bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4))
+                    .bit_of<23>(run-2*c0[-2].dval-(dv_now4-c0[-4].dval))
+                    .bit_of<22>(run-c0[-3].dval-dv_now4-(c1->val-c1[-3].val))
+                    .bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval))
+                    .bit_of<20>(c2[-2].val+run-2*c1[-1].val)
+                    .bit_of<19>(c2->dval-2*c1->dval+run_dv4)
+                    .bit_of<18>((run3-c0[-1].val)-(c1->val-c1[-1].val))
+                    .bit_of<17>(run_dv4-c1[4].dval)
+                    .bit_of<16>(run_dv4-c1[-2].dval)
+                    .bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4)
                     .raw((ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10))))>>11;
   bank_ctx[4] = bank4;
   int32_t pred4 = p2_pred(p2_ctr[slot(4, bank4)].weighted, p2_ctr[slot(4, bank4)].rate);
-  uint8_t* cx2p = (uint8_t*)cx2;
   nb_sum[9] = pred4;
   int32_t run4 = run+pred4;
   nb_sum[8] = run4;
-  int32_t magsum_s = cx1[5].mag+cx1[4].mag+cx1[-3].mag+cx1[-4].mag+3*(cx1[2].mag+cx2[1].mag)+7*cx1->mag+6*cx1[1].mag+cx0[-6].mag+cx0[-7].mag+cx0[-8].mag+8*cx0[-1].mag+cx4[2].mag+cx4[1].mag+cx4->mag+cx4[-1].mag+cx0[-4].mag+cx0[-5].mag+(cx3[2].mag+cx3[1].mag+cx3[-1].mag+cx3[-2].mag+cx4[-2].mag+cx2p[107]+cx2p[89]+cx2p[71]+(*(cx2p-19))+*(cx2p-37))+4*(cx1[-1].mag+cx0[-2].mag+cx2p[17])+2*(cx1[-2].mag+cx1[3].mag+cx0[-3].mag+cx3->mag+*(cx2p-1)+cx2p[53]);
+  int32_t magsum_s = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
   int32_t lo_band = band_lo;
   ctx_w[0].sel = (run4<1840)+(run4<272);
   int32_t hi_band = band_hi;
-  ctx_w[1].sel = (run4-cx1->val<=hi_band)+(run4-cx1->val<lo_band);
-  int32_t d_run4 = run4-cx0[-1].val;
+  ctx_w[1].sel = (run4-c1->val<=hi_band)+(run4-c1->val<lo_band);
+  int32_t d_run4 = run4-c0[-1].val;
   bool in_band = d_run4<=hi_band;
   ctx_w[2].sel = in_band+(d_run4<lo_band);
-  ctx_w[3].sel = cx1->sign;
-  ctx_w[4].sel = cx0[-1].sign;
+  ctx_w[3].sel = c1->sign;
+  ctx_w[4].sel = c0[-1].sign;
   int32_t magsum = magsum_s;
-  int32_t magu = cx2[0].mag+cx1->mag;
-  int32_t magl = cx0[-1].mag+cx0[-2].mag;
+  int32_t magu = c2[0].mag+c1->mag;
+  int32_t magl = c0[-1].mag+c0[-2].mag;
   if( refa ) {
     int32_t mag = rb0->mag;
     int32_t mag_ref1 = rb1->mag+ra1->mag;
@@ -502,9 +497,9 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     magsum = mag_ref1+magsum_s+4*mag_ref0+2*(ra0[-1].mag+rb0[-1].mag);
     flat_a = mag_ref0+magl+rb0[-2].mag+rb0[-1].mag+ra0[-2].mag+ra0[-1].mag;
     if( has_ref ) {
-      int32_t d_run4b = run4-cx1->dval-cx0[0].dval;
+      int32_t d_run4b = run4-c1->dval-c0[0].dval;
       if( d_run4b<lo_band||d_run4b>hi_band ) {
-        run4 = run4-cx0[-1].dval-cx0[0].dval;
+        run4 = run4-c0[-1].dval-c0[0].dval;
         flat_b = run4>=lo_band&&hi_band>=run4;
       } else {
         flat_b = 1;
@@ -538,8 +533,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
       }
     }
   } else {
-    flat_a = magl+cx0[-3].mag+cx0[-4].mag+cx0[-5].mag;
-    flat_b = cx4->mag+cx3->mag+magu+cx0[0].mag;
+    flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
+    flat_b = c4->mag+c3->mag+magu+c0[0].mag;
   }
   if( magsum>=960 ) {
     ctx15 = 15;

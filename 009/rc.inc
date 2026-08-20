@@ -113,7 +113,7 @@ public:
     *q++ = (uint8_t)(len>>16);
     *q++ = (uint8_t)(len>>8);
     *q++ = (uint8_t)len;
-    while( (uint32_t)(q-(uint8_t*)stream.buf)%4!=3 )
+    while( (uint32_t)(q-stream.buf)%4!=3 )
       *q++ = 0;
     *q++ = kMarker;
     set_p(q);

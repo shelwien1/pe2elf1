@@ -193,9 +193,15 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   int32_t fold_sel, sel_alt;
   int32_t ctx_lo = ctx&0xF;
   int32_t sample16 = 16*sample_in;
-  cursor[0]->val = 16*sample_in;
-  cursor[0]->dval = cursor[0]->val-cursor[0]->dval;
-  cursor[0][1].dval = 0;
+  // This row's record and the one above it, read once.  Nothing below
+  // advances a cursor until the five `++cursor[k]` a dozen lines down, and
+  // the decompilation had a `cursor0` alias for two of the sixteen reads
+  // and the member expression for the other fourteen.
+  P2Ctx *const c0 = cursor[0];
+  P2Ctx *const c1 = cursor[1];
+  c0->val = 16*sample_in;
+  c0->dval = c0->val-c0->dval;
+  c0[1].dval = 0;
   // The deadzone half-width for this context, and where the residual falls
   // against it.  `dead` climbs 0, 1, 2, 4 with the context's low nibble;
   // `sign` is 2 below the band, 1 inside or below the top, 0 above -- a
@@ -206,21 +212,20 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   // `int32_t` -- which is `-dead` only because the conversion is
   // implementation-defined in the way gcc happens to define it.
   const int32_t dead = (ctx_lo>6)+(ctx_lo>4)+2*(ctx_lo>9);
-  cursor[0]->sign = (resid_in<=dead)+(resid_in< -dead);
-  cursor[0]->mag = abs32(resid_in);
-  P2Ctx *cursor0 = cursor[0];
+  c0->sign = (resid_in<=dead)+(resid_in< -dead);
+  c0->mag = abs32(resid_in);
   float sample = (float)sample16;
-  int32_t dl = sample16-cursor0[-1].val;
-  cursor0->dleft = abs32(dl);
-  int32_t du = sample16-cursor[1]->val;
-  cursor[0]->dup = abs32(du);
-  int32_t dul = sample16-cursor[1][-1].val;
-  cursor[0]->dupleft = abs32(dul);
-  int32_t dur = sample16-cursor[1][1].val;
-  cursor[0]->dupright = abs32(dur);
+  int32_t dl = sample16-c0[-1].val;
+  c0->dleft = abs32(dl);
+  int32_t du = sample16-c1->val;
+  c0->dup = abs32(du);
+  int32_t dul = sample16-c1[-1].val;
+  c0->dupleft = abs32(dul);
+  int32_t dur = sample16-c1[1].val;
+  c0->dupright = abs32(dur);
   int32_t resid = (int16_t)(sample16-pred_prev);
-  cursor[0]->err = resid;
-  cursor[0]->aerr = abs32(resid);
+  c0->err = resid;
+  c0->aerr = abs32(resid);
   NbRow *wrow_cur = nb_cur;
   float ms1 = wrow_cur->w[14][1]+0.000099999997f;
   NbRow *wrow_b = cur[-1];

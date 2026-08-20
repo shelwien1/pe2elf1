@@ -450,9 +450,12 @@ struct AltP1Block {
   // Returned `ctx[0]` -- or, if the ninth selector's last branch ran, a counter
   // it had just bumped.  All five call sites discard it.
   void update_model() {
-    uint32_t code_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
-    int32_t code_r = *((uint8_t)((uint8_t)pred-cursor[0]->sym)+fold);
-    int32_t tree_sym = (int32_t)(code_f-5)>>1;
+    // `*(index + fold)` twice, which is `fold[index]`: the pointer addition
+    // was the decompiler's, and the wraparound cast on the *index* is semantic
+    // and stays.
+    const uint32_t code_f = fold[(uint8_t)(cursor[0]->sym-(uint8_t)pred)];
+    const int32_t code_r = fold[(uint8_t)((uint8_t)pred-cursor[0]->sym)];
+    const int32_t tree_sym = (int32_t)(code_f-5)>>1;
     const int32_t slot_f = sym_slot(code_f);
     const int32_t slot_r = sym_slot(code_r);
     // `ctx_w[1].sel` and `ctx_w[2].sel` were read into `sel1_top`/`sel2_top`
