@@ -22,8 +22,8 @@
 # `plane_choose.inc`.  Every other image picks colour transform 0; these
 # two are the only ones in the corpus that pick 1 and 2.
 #
-# Seven legs, because "the streams match" is a much narrower statement than it
-# sounds and six kinds of defect live outside it:
+# Eight legs, because "the streams match" is a much narrower statement than it
+# sounds and seven kinds of defect live outside it:
 #
 #   streams       compress each image, compare against its reference.
 #   round trip    expand it again, compare against the input.  A stream can
@@ -46,6 +46,13 @@
 #                 Under a small enough `ulimit -v`, bmf_new returns null and the
 #                 program is expected to say "Out of memory!" and exit 7 rather
 #                 than dereference it.
+#   oversize      a BMP whose row does not fit in sixteen bits.  Stage 2 asked
+#                 for one of these as a known-failing case, back when
+#                 `BmfImage::stride` was a `uint32_t` written truncated and read
+#                 masked and any such image silently got `stride = 0`.  The
+#                 field is `uint16_t` now and the input is refused up front, so
+#                 what this pins is the refusal -- nothing else in the corpus
+#                 reaches that clause of the accepted-format check.
 #
 # The malformed and truncated inputs are built here from whatever the corpus
 # currently is, rather than kept in testfiles/, so that re-taking the references
@@ -247,6 +254,34 @@ open(t + "/rawlen.bmf", "wb").write(
     fi
   done
   echo "$mal/$nmal malformed streams refused with a code from the table"
+
+  # A BMP whose row does not fit in sixteen bits.  Stage 2 Section 11.3 asked
+  # for one of these in the corpus as a *known-failing* case, because
+  # `BmfImage::stride` was `uint32_t`, was written truncated and read masked,
+  # and any image with `width * bytes-per-pixel >= 65536` silently got
+  # `stride = 0`.  The field is `uint16_t` now and `read_bmp` rejects the input
+  # up front, so it is no longer known-failing -- which is exactly why it is
+  # worth pinning: nothing else in the corpus reaches that clause.
+  #
+  # 16384 x 1 at 32bpp is 65536 bytes a row, one over the limit.  It is a 64 KiB
+  # file, built here rather than committed.
+  python3 -c '
+import struct, sys
+w, h, bpp = 16384, 1, 32
+stride = w * 4
+data = b"\0" * (stride * h)
+hdr = b"BM" + struct.pack("<IHHI", 14 + 40 + len(data), 0, 0, 54)
+info = struct.pack("<IiiHHIIiiII", 40, w, h, 1, bpp, 0, len(data), 2835, 2835, 0, 0)
+open(sys.argv[1] + "/wide.bmp", "wb").write(hdr + info + data)' "$tmp"
+  ran=$((ran + 1))
+  rm -f "$tmp/wide.bmf"
+  ( ulimit -f 262144; timeout "$T" "$BIN" c "$tmp/wide.bmp" "$tmp/wide.bmf" ) >/dev/null 2>&1
+  rc=$?
+  if [ "$rc" -ge 1 ] && [ "$rc" -le 8 ]; then
+    echo "oversize: a 65536-byte row is refused with a code from the table"
+  else
+    note "wide.bmp" "a 65536-byte row $(why $rc), not a code from the table"
+  fi
 else
   note malformed "testfiles/ref_t24.bmf and ref_t8g.bmf are what these are made from"
 fi

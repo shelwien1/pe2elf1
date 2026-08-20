@@ -8,11 +8,25 @@
 #     BMF_ASSERTS=1 ./build.sh          # the BMF_ASSUME invariants, checked
 #     BMF_STRICT=1 ./build.sh           # strict.log and the count, no binary
 #     BMF_CONV=1   ./build.sh           # conv.log  and the count, no binary
+#     ./build.sh -DBMF_HIGH_ARENA       # the arena leg; see below
 #     BMF_GC=list  ./build.sh           # and name the bodies --gc-sections drops
 #     BMF_ALIAS=-fstrict-aliasing ./build.sh   # tools/alias.sh's knob; see below
 #
 # Anything on the command line is appended to the compiler's, which is how
 # tools/asan.sh, tools/fuzz.sh and tools/hdrscan.sh ask for their builds.
+#
+# `-DBMF_HIGH_ARENA` is the one worth naming here, because it is a *leg* and not
+# a knob: `memory.inc` compiles a whole bump allocator behind
+# `#if UINTPTR_MAX > 0xFFFFFFFFu && defined(BMF_HIGH_ARENA)`, and the default
+# build never reaches a line of it.  `bmf_bucket_of`, `bmf_free`, the block
+# header and the `#define malloc` pair all live inside it.  Stage 2 Phase 0 asks
+# for the leg for exactly that reason: without it, edits to that code are
+# unbuilt as well as untested.
+#
+#     ./build.sh -DBMF_HIGH_ARENA && ./test.sh
+#
+# `test.sh` answers 110 there rather than 111, and says which check it skipped:
+# the out-of-memory leg cannot fire when the arena is reserved up front.
 #
 # ## what g.bat says, and where this departs from it
 #
