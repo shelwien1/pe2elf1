@@ -1650,11 +1650,31 @@ struct ModelBlock {
 // the declaration; these are it -- the offset of the member *after* each pad,
 // which is the only thing the pad exists to produce.
 //
-// This is the larger of the two: 8,102,552 bytes, one allocation, and a
-// `grid[65723]` whose bound is not round in any base.  If a pad is ever
-// mis-sized in an edit these say so at compile time rather than at the first
-// stream that reads a counter one record over.
+// This is the larger of the two: one allocation, and a `grid[65723]` whose
+// bound is not round in any base.  If a pad is ever mis-sized in an edit these
+// say so at compile time rather than at the first stream that reads a counter
+// one record over.
+//
+// **All four depend on the pointer width and were written at 64 only**, which
+// broke `BMF_BITS=32 ./build.sh` for three rounds without anybody noticing --
+// the leg is documented in build.sh and nothing was running it.  `SymList`
+// carries pointers and `ModelBlock` holds several before `bit_root`, so every
+// offset here moves: 40 bytes by `bit_root`, still 40 by `escape`, 72 by
+// `sel_cur` once six more pointers have gone past, and 104 by the end.
+//
+// The 32-bit numbers are the more faithful pair: `_pad22` and `_pad25` are the
+// decompilation's record of a 32-bit x86 frame, and the widths they were
+// measured at are the widths they describe.  Both are written down because a
+// contract that holds at one width and is silent at the other is not a
+// contract, it is a build that happens to pass.
+#if UINTPTR_MAX > 0xFFFFFFFFu
 static_assert(offsetof(ModelBlock, bit_root) == 1051720, "_pad1051664 sizes the gap");
 static_assert(offsetof(ModelBlock, escape) == 1078224, "_pad16 sizes the gap");
 static_assert(offsetof(ModelBlock, sel_cur) == 1078304, "_pad22 sizes the gap");
 static_assert(sizeof(ModelBlock) == 8102552, "_pad25 closes the record");
+#else
+static_assert(offsetof(ModelBlock, bit_root) == 1051680, "_pad1051664 sizes the gap");
+static_assert(offsetof(ModelBlock, escape) == 1078184, "_pad16 sizes the gap");
+static_assert(offsetof(ModelBlock, sel_cur) == 1078232, "_pad22 sizes the gap");
+static_assert(sizeof(ModelBlock) == 8102448, "_pad25 closes the record");
+#endif

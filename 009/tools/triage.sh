@@ -5,10 +5,16 @@
 #     tools/triage.sh t8g x_ci        # named ones
 #
 # `test.sh` is the gate and this is not: it skips the round trip, the archive,
-# the malformed inputs, the OOM ladder and both compiler ratchets.  What it is
-# for is bisecting a change that broke something, where the question is only
-# "does the stream still match" and the full gate's minutes per attempt are the
-# whole cost.  Answer with `test.sh` before committing, always.
+# the malformed inputs and the OOM ladder.  What it is for is bisecting a change
+# that broke something, where the question is only "does the stream still match"
+# and the full gate's minutes per attempt are the whole cost.  Answer with
+# `test.sh` before committing, always.
+#
+# This used to say `test.sh` covered "both compiler ratchets" as well.  It never
+# has -- the ratchets and the other six builds are legs of `build.sh`, and for
+# three rounds nothing ran any of them, which is how `BMF_BITS=32` came to not
+# compile at all without anybody noticing.  `tools/legs.sh` runs them now, and
+# is what a round ends with.
 #
 # The output file is removed first.  It used to be load-bearing -- `bmf c`
 # appended a member to an archive that already existed, so a second run against

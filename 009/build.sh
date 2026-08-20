@@ -256,9 +256,26 @@ fi
 #
 # It is a ratchet on the same argument as the others here: a *new* narrowing
 # that nobody decided on shows up as a count that went up.
+#
+# **And for a round it could not, because no number was written down.**  A
+# ratchet whose reading has to be remembered between sessions is a measurement,
+# not a ratchet -- the same defect `long.py` was built to close on the other
+# side of the tree.  Extracting four stages out of `alt_p2_context` and
+# `choose_plane_coding` took the count from 198 to 225 without anybody noticing,
+# because 29 of the new ones were conversions inside frame declarations the
+# extractions had emptied and nothing was comparing.  Deleting those took it to
+# 196, which is two *below* where the round started.
+#
+# So the numbers are here.  Two of them, because a cast through `int32_t` is not
+# a narrowing when a pointer is four bytes wide, and the two widths have
+# genuinely different lists.  Lowering one is a result; raising one is a
+# decision, and it goes in this file with the reason.
+CONV_RATCHET_64=196
+CONV_RATCHET_32=183
 if [ "${BMF_CONV:-0}" = 1 ]; then
   log=conv.log
-  [ "$BITS" = 32 ] || log=conv64.log
+  ratchet=$CONV_RATCHET_32
+  [ "$BITS" = 32 ] || { log=conv64.log; ratchet=$CONV_RATCHET_64; }
   set +e
   $CXX $arch $std $opt $incs $opts $permissive $fidelity -fdiagnostics-plain-output \
       -Wall -Wextra -Wconversion -fsyntax-only "$@" "$SRC" > "$log" 2>&1
@@ -268,9 +285,22 @@ if [ "${BMF_CONV:-0}" = 1 ]; then
     echo "FAILED: $CXX exited $rc; see $log" >&2
     grep -m3 ': error: ' "$log" >&2 || true
   fi
-  grep -c ': warning: ' "$log" || true
+  n=$(grep -c ': warning: ' "$log" || true)
+  if [ "$n" -gt "$ratchet" ]; then
+    echo "$n, $((n - ratchet)) over the $ratchet ratchet at $BITS bits"
+  elif [ "$n" -lt "$ratchet" ]; then
+    echo "$n, $((ratchet - n)) under the $ratchet ratchet at $BITS bits -- lower it"
+  else
+    echo "$n, at the ratchet"
+  fi
   stamp "$log"
-  exit 0
+  # And exit with the compiler's status.  This said `exit 0` whatever happened,
+  # so a *compile error* under this leg answered with a warning count and a zero
+  # status: the count is `grep -c ': warning: '` and an error is an `error:`
+  # line, which no warning grep sees.  `tools/legs.sh` was written checking the
+  # status, was pointed at a deliberately broken `static_assert`, and got back
+  # "183, at the ratchet" for a build that did not compile.
+  exit "$rc"
 fi
 
 if [ "${BMF_STRICT:-0}" = 1 ]; then

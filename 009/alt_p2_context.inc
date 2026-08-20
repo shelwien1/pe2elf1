@@ -323,9 +323,8 @@ int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs& refs) {
 
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
-  int32_t ctx15, nb_slot;
+  int32_t nb_slot;
   uint32_t ctx0, ctx1, ctx2;
-  int32_t flat_a, flat_b;
   uint32_t ctx0_lo;
   // The five row cursors, read once.
   //
@@ -347,20 +346,12 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // with margins, which is what the model reads; what goes is the aliasing.
   P2Ctx *const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2],
         *const c3 = cursor[3], *const c4 = cursor[4];
-  // Five cursors and two fields between them, and the sixty filter inputs
-  // below read nothing else -- three subscripts a line, sixty lines, four
-  // variants of the same block one per reference count.  Named this way the
-  // four can be diffed against each other by eye, which is the whole point of
-  // the exercise; spelled out they cannot.
   //
-  // `d` is this plane's rows read as `dval` and `v` as `val`; `a` and `b` are
-  // the two reference planes' rows, always `val`.  The three `.err` reads stay
-  // written out because there are three of them.
-  //
-  // `a0`..`b2` are the two reference planes' and are declared where those
-  // cursors are set, in the reference arm below.
-  const DvalRow d0{c0}, d1{c1}, d2{c2}, d3{c3};
-  const ValRow v0{c0}, v1{c1}, v2{c2}, v3{c3}, v4{c4};
+  // `DvalRow` and `ValRow` used to be built here too, for the sixty filter
+  // inputs; those went to `fill_row_inputs` and the accessors went with them.
+  // What is left reads `.dupleft`, `.dupright`, `.dleft`, `.dup`, `.val`,
+  // `.err` and `.mag`, which is seven fields and not the two an accessor pays
+  // for.
   int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1->dupleft+ctx_bias[0]+14*c0[-2].dupleft;
   int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1->dupright+9*c1[-1].dupright+22*c0[-1].dupright+ctx_bias[1]+19*c0[-2].dupright;
   int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1->dleft+16*c1[-1].dleft+22*c0[-1].dleft+ctx_bias[2]+19*c0[-2].dleft;

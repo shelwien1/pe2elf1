@@ -483,6 +483,7 @@ them run.
 | `fuzz.sh` | Run mutated inputs through an AddressSanitizer build |  |
 | `hdrscan.sh` | Every value of the member header's one-byte fields, under ASan |  |
 | `hex_constants.py` | Write subs1.hpp's pattern constants in hex instead of decimal | yes |
+| `legs.sh` | Run every build `build.sh` documents, and say what each answered |  |
 | `liftframe.py` | Turn one function's frame struct back into ordinary locals | yes |
 | `long.py` | The longest function bodies, against a ratchet | yes |
 | `merge.py` | Make several recoveries of one object into one struct | yes |

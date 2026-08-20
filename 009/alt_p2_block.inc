@@ -521,8 +521,10 @@ struct AltP2Block {
   // order for banks 0, 2, 3 and 4 and the other order for bank 1, so which slot
   // held which could only be read off by matching each literal to its neighbour.
   //
-  // `ctx>>11` drops the eleven low bits the `bit_of<>` chains fill and is the
-  // same shift at all five sites.  It takes the word unsigned because that is
+  // `word>>11` drops the eleven low bits the `bit_of<>` chains fill and is the
+  // same shift at all five sites.  The parameter is `word` rather than `ctx`
+  // because `AltP2Block::ctx` is a member and a parameter of that name shadows
+  // it -- which the `BMF_WARN=1` leg says and the default build does not.  It takes the word unsigned because that is
   // what `CtxIdx` converts to and what banks 3 and 4 shifted -- banks 0, 1 and 2
   // went through an `int32_t` local first and shifted arithmetically, which is
   // the same value for a word whose highest field is bit 25 but not the same
@@ -530,8 +532,8 @@ struct AltP2Block {
   //
   // Bank 0's `run_in` is the filter output rather than a previous stage; the
   // other four chain.
-  int32_t step_bank(int32_t bank_no, uint32_t ctx, int32_t run_in) {
-    const int32_t bank = (int32_t)(ctx>>11);
+  int32_t step_bank(int32_t bank_no, uint32_t word, int32_t run_in) {
+    const int32_t bank = (int32_t)(word>>11);
     bank_ctx[bank_no] = bank;
     const int32_t pred = p2_pred_at(bank_no, bank);
     nb_sum[2*bank_no+1] = pred;
@@ -1074,10 +1076,21 @@ static int32_t alt_p2_planes_free(AltP2Block** plane) {
 
 // `NbRow::predict` writes `nb[7][0..2]` where `nb` is `p2_row`, a `[7][4]`.
 // That is `bias`, and this says so in a form the compiler checks.
+// Both widths, for the reason the `ModelBlock` set gives: the block holds
+// pointers -- `cursor[5]`, `cur`, `above`, `nb_cur` and the row buffers -- so
+// every offset past them moves, by 20 here and by 64 once the five cursors and
+// the three weight-row pointers have gone by.
+#if UINTPTR_MAX > 0xFFFFFFFFu
 static_assert(offsetof(AltP2Block, pred_prev) == 278720, "_pad0 sizes the gap");
 static_assert(offsetof(AltP2Block, ctx) == 278724, "_pad2 sizes the gap");
 static_assert(offsetof(AltP2Block, nb_sum) == 278968, "_pad1 sizes the gap");
 static_assert(sizeof(AltP2Block) == 1064560, "_pad3 closes the record");
+#else
+static_assert(offsetof(AltP2Block, pred_prev) == 278700, "_pad0 sizes the gap");
+static_assert(offsetof(AltP2Block, ctx) == 278704, "_pad2 sizes the gap");
+static_assert(offsetof(AltP2Block, nb_sum) == 278904, "_pad1 sizes the gap");
+static_assert(sizeof(AltP2Block) == 1064496, "_pad3 closes the record");
+#endif
 
 static_assert(offsetof(AltP2Block, bias)
               == offsetof(AltP2Block, p2_row)+sizeof(AltP2Block::p2_row),

@@ -331,13 +331,9 @@ int32_t choose_plane_coding(BmfImage* img) {
   // is in the corpus because of it.
   uint32_t cand_cost[3][4];
   PlaneDesc cand_desc[3][4];
-  uint32_t uu;
-  int32_t wa_slot;
-  double dv0, dv1, dv2;
   uint32_t next_plane, row;
-  uint16_t g1w;
-  int32_t result, xform, wt8, wt4, pred, dv3, wb, wc, g0, g1, alpha, wa_pick, pred4, pred4b;
-  uint32_t best_cost, best, quad, best4;
+  int32_t result, xform, wt8, wt4, pred;
+  uint32_t best_cost, best;
   int32_t n_planes = plane_count;
   int32_t data_size = img->data_size;
   alphabet_reduced = 1;
