@@ -119,7 +119,6 @@ def decl_star(c):
     """Does the first star on this line bind a type?"""
     m = STAR.search(c)
     return bool(m) and bool(TYPED.search(c[:m.start()]))
-OPEN = re.compile(r'^\S.*\)\s*(?:const\s*)?\{\s*$')
 
 
 def bodies(lines):

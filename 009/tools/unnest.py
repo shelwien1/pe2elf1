@@ -62,7 +62,6 @@ IF = re.compile(r'^(\s*)if\(\s*(.+?)\s*\)\s*\{\s*$')
 # The line that opens an enclosing block, and what an early exit out of it is.
 LOOP = re.compile(r'^\s*(for|while)\s*\(')
 DO = re.compile(r'^\s*do\s*\{')
-FUNC = re.compile(r'^\S.*\)\s*(const\s*)?\{\s*$')
 
 
 def units(path):
@@ -109,10 +108,14 @@ def encloser(lines, i, indent, opens):
     with less indentation that ends in `{`.  A `switch` is excluded by never
     matching it -- neither pattern below does.
 
-    **A body is a body whether or not its signature fits on a line.**  `FUNC`
-    wanted the whole of one, so when the opener found here was the *second* line
-    of a wrapped signature it matched neither `LOOP` nor `FUNC`, this answered
-    `None`, and the finding was dropped without a word.  `opens` holds the line
+    **A body is a body whether or not its signature fits on a line.**  This used
+    to test the opener against a pattern wanting the whole of one, so when the
+    opener was the *second* line of a wrapped signature it matched neither that
+    nor `LOOP`, this answered `None`, and the finding was dropped without a
+    word.  That pattern is gone rather than left sitting unused: the two of them
+    -- here and in `unstar.py` -- were the only definition regexes in this
+    directory that a wrapped signature defeats, checked by running every one of
+    them against a wrapped example and a flat one.  `opens` holds the line
     each body starts at, per `structs.bodies`, and a wrapped signature starts at
     the first of its lines -- so the test looks back a few from where the scan
     stopped.

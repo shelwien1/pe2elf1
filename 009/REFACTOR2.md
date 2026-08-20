@@ -1730,3 +1730,64 @@ probe that proves nothing, arrived at from the other direction.
 
 **What a round ends with now**: `./build.sh && ./test.sh`, `tools/sweep.sh`,
 `tools/legs.sh`, and the three slow ones -- `asan.sh`, `fuzz.sh`, `hdrscan.sh`.
+
+## Forty-two subscripts written the long way, and what finding them exposed
+
+Asked where the unnecessary pointer accesses were, the honest answer turned out
+to be forty-two, in three shapes:
+
+```
+*(freq+3)   ->  freq[3]      29 of them
+*unfold     ->  unfold[0]    12
+*slot       ->  slot[0]       1, and it was next to `slot[-1]` on the same line
+```
+
+`*unfold = 0;` sat directly above `unfold[255] = 0x80;`.  `code_symbol_tree`
+reached one table three ways in forty lines -- `f0[j]` in a loop, `*(freq+3)` in
+a rescale written longhand, `*freq` for element zero.  `update_binary_pair` did
+the same in seven.  Hex-Rays writes an array access as pointer arithmetic
+whenever the original's addressing mode was a base plus an offset, so the
+spelling records the instruction and not the idea.
+
+`tools/unstar.py` is the rule, and the half of it that matters is the half that
+*declines*.  A cursor the body walks keeps its star: `*slot` inside the decode
+loop is the counter the walk arrived at, not element zero of anything, and
+`slot[0]` there would read worse.  So `*p` is reported only when the body never
+moves `p` and subscripts it somewhere else -- one base spelled two ways in one
+body, which is a thing a reader has to stop and reconcile.
+
+**The pair that splits on that rule is the best argument for having one.**
+`model.inc` and `sym_list.inc` carry the same line, `*slot = slot[-1];` and
+`*list = list[-1];`.  A first reading called both of them cursors and left both,
+on a body span that ran far past the method.  A second called both findings, on
+a grep that truncated before the `list += n_live;` that moves one of them.  The
+rule was right both times and the reader was not: `slot` never moves and is a
+subscript now, `list` does and keeps its star.
+
+**And it exposed something much larger than itself.**  `unstar.py` could not see
+a function whose signature wrapped onto a second line.  Fixing that by hand
+fixed the wrapping and still missed every in-class method -- and
+`structs.bodies` had existed the whole time for exactly this, saying in its own
+docstring that it was written after forty-three tools here turned out to be
+reporting zeros about 138 of the program's 219 bodies.  All three of this
+round's new tools were rolling their own regex and seeing 190 bodies where the
+shared finder sees 331.
+
+What that cost, once each tool was moved onto it:
+
+  * `long.py`'s census had been measuring a subset -- thirty-four wrapped
+    definitions invisible, `bmp_rle_encode` at 138 lines among them, and every
+    method.  Its ratchet is 171 now and means something.
+  * `unnest.py` had been **dropping findings silently**: when a guard's
+    enclosing block opened on the second line of a wrapped signature it matched
+    neither the loop pattern nor the function pattern, so the finding went
+    nowhere.  Two came back, holding 39 and 24 lines, both now early returns.
+  * `unstar.py`'s own walk test counted a *declaration* as a walk, but only when
+    the spacing put the star against the type -- so one of two identical lines
+    reported and the other did not, by where a space fell.
+
+That is the round's lesson repeating for the fourth time, and it is worth
+stating in one sentence: **a check that cannot see a thing and a check that sees
+it and finds nothing print the same number.**  The 32-bit leg, the two `resign`
+tools, `resign-drive.sh`, and now three body finders.  Every one of them was
+green.
