@@ -5,9 +5,6 @@
 // nothing subtracted from it.  The body is empty in BMF.exe too -- the encoder
 // side calls through a table of three, and this is the entry the table needs at
 // index 0.
-void expand_predictor_mode0(int32_t i) {
-}
-
 // The MED / LOCO-I predictor, which JPEG-LS calls the median edge detector, and
 // now written as the rule rather than as the branch tree MSVC compiled it to:
 // pick `min(N,W)` at a rising edge, `max(N,W)` at a falling one, and the plane

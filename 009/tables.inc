@@ -63,9 +63,22 @@ alignas(16) static int32_t bmf_p2_thresholds[6][13] = {
 // little-endian, which is not a property a reload table should have.  A rate
 // of 0 or 1 reloading to zero is deliberate -- it interacts with the
 // `(uint8_t)--countdown` wrap at the use site, so it is preserved, not fixed.
-alignas(16) static const uint8_t p2_b1_reload[8] = {
-  0x00, 0x00, 0x80, 0x3F, 0x02, 0x07, 0x2E, 0xC5,
-};
+// What a counter's countdown is re-armed to when its rate steps up, indexed by
+// the rate it is stepping *from*.
+//
+// Declared `[8]` in the decompilation and read at exactly one site,
+// `p2_b1_reload[b0n - 1]` with `b0n = rate + 1` under a `rate < 8` guard -- so
+// the rate is 5, 6 or 7 and the index is 5, 6 or 7.  Indices 0 to 4 are
+// unreachable, and the first four bytes were `00 00 80 3F`, which is `1.0f`
+// little-endian: the "table" was a mis-sliced fragment of an adjacent float
+// constant with the three live bytes on the end of it.
+//
+// The original binary is not here to check the declared bound against, so what
+// was checked is the reachable range and the reader count -- one site, one
+// guard, three indices -- and the gate, which would move a stream if the three
+// values were wrong or if anything read past the end.  `alignas(16)` stays: it
+// is the table's own alignment and not a claim about what follows it.
+alignas(16) static const uint8_t p2_b1_reload[3] = { 7, 46, 197 };
 
 alignas(16) static uint8_t p1_level_edges[8] = {
   1, 2, 4, 8, 14, 35, 103, 0,

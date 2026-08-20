@@ -140,7 +140,14 @@ struct ModelBlock {
   uint32_t ctr_fallback;
   uint32_t ctr_node;
   PixRec* row_cur[10];
-  FreqRec grid[65723];
+  // The frequency grid: 349 buckets of 188 records, plus the 111 the
+  // `id2 + kFreqTableOffset` reads below reach past the last bucket's base.
+  // `65723` is what the decompilation had and it is not a round number in any
+  // base; the two readings that produce it are written here so the next reader
+  // does not have to find one.
+  static const int32_t kFreqTableOffset = 188;
+  static const int32_t kFreqGridCount = 65723;
+  FreqRec grid[kFreqGridCount];
   uint8_t _pad1051664[16];
   BitCtr bit_root[16];
   BitCtr bit_node[4096];
@@ -703,7 +710,8 @@ struct ModelBlock {
     if( (int32_t)alphabet<32 ) {
       // A third level under the second: four bits of the west neighbour's
       // symbol beneath the id, with the id for that pair allocated the first
-      // time it is seen.  Past 53248 ids the four bits are forced to 15, which
+      // time it is seen.  Past `kCtxId3Limit` ids the four bits are forced to
+      // 15, which
       // merges those sixteen contexts into one rather than allocating past the
       // table.
       int32_t id3_used = ctx_id3_used;
@@ -711,7 +719,7 @@ struct ModelBlock {
       uint16_t* id3p = &ctx_id3[sig3];
       id2 = *id3p;
       if( id2==0xFFFF ) {
-        if( id3_used>53248 )
+        if( id3_used>kCtxId3Limit )
           sig3 |= 0xF;
         id3p = &ctx_id3[sig3];
         id2 = *id3p;
@@ -1433,7 +1441,7 @@ struct ModelBlock {
       }
     }
     FreqRec *freq = &grid[bucket_idx];
-    FreqRec *freq_tbl = &grid[id2+188];
+    FreqRec *freq_tbl = &grid[id2+kFreqTableOffset];
     {
     // Decode the stage-one symbol against one record: take the target, find
     // which of its five levels holds it, let the record grow, and leave the
@@ -1563,7 +1571,7 @@ struct ModelBlock {
         return runlen;
     } else {
       FreqRec *binp = &grid[bucket_idx];
-      FreqRec *frec = &grid[id2+188];
+      FreqRec *frec = &grid[id2+kFreqTableOffset];
       // The mirror of `decode_pixel`'s `decode_against`: rank the symbol among
       // the four neighbours, take the interval below that rank, let the record
       // grow, and leave the rank in `hit`.  The second arm reached the same

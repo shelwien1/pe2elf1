@@ -623,5 +623,8 @@ absence of `-S`. It was not decompiled; the decoder refuses streams without flag
 check that selects it, and the 4-bit nibble in the header are all present and
 wired. With `E = 0` the drift never exceeds 16, so the branch is never taken.
 
-**Predictor mode 0 on the expand side.** `expand_predictor_mode0` is an empty
-body — the original's counterpart to a predictor this build never selects.
+**Predictor mode 0 on the expand side.** The original had an empty function
+here — a counterpart to a predictor this build never selects, called from the
+`else` of an `if`/`else if` in both expand paths. It is gone: `pred_p1` is 1, so
+testing for it already excludes mode 0, and an empty call in an `else` is not a
+format hook. The enumerator stays, because it is a value in the stream.

@@ -192,7 +192,7 @@ static inline void p2_update_into(P2Count* p, int32_t& res, int32_t shift) {
 // increment and then add it *conditionally*, so the add cannot move into the
 // helper; the guard still can.
 static inline void p2_rescale(P2Freq* r) {
-  if( r->f[0]+r->f[1]+r->f[2]>29696 )
+  if( r->f[0]+r->f[1]+r->f[2]>kP2FreqRescaleTotal )
     r->rescale_three_way();
 }
 
@@ -396,7 +396,10 @@ struct AltP2Block {
   // because four `int16_t` is eight bytes.  Same size, same offsets, and the
   // accesses are in bounds now.  CONTEXT-INDEX.md section 1.
   int16_t nb_id[1920];
-  P2Count p2_ctr[163840];
+  // Five banks of 32768, which `slot()` is the index arithmetic for.  The
+  // seeding loop counted to `0x28000` and this said 163840; the same number.
+  static const int32_t kP2CounterCount = 5*32768;
+  P2Count p2_ctr[kP2CounterCount];
 
   // Counter `ctx` of bank `k`.  Five banks of 32768, so the bank is a digit at
   // that stride and the context is the fifteen bits under it -- which is a
@@ -426,7 +429,11 @@ struct AltP2Block {
     const P2Count& c = p2_ctr[slot(bank, bctx)];
     return p2_pred(c.weighted, c.rate);
   }
-  P2Freq freq[15552];
+  // 15552 = 16 magnitude levels * 972, the mixed-radix span the five ternary
+  // selectors reach through `mixer_fwd`.  Seeded by a loop that counted to
+  // `0x3CC0`.
+  static const int32_t kP2FreqCount = 15552;
+  P2Freq freq[kP2FreqCount];
   uint8_t _pad3[8];
   // Defined out of line, in alt_p2_context.inc and alt_p2_model.inc.  They are
   // 400 and 1100 lines and belong in their own files, which is what the split
@@ -739,17 +746,20 @@ struct AltP2Block {
     // counters twice -- once zeroing `weighted`, once seeding `rate` and `b1`
     // -- with each loop doing two records an iteration.  This runs once per
     // plane, and the difference is not measurable: 9.7s either way on `x_ep`.
-    for( j = 0; j<0x28000; ++j ) {
+    for( j = 0; j<(uint32_t)kP2CounterCount; ++j ) {
       p2_ctr[j].weighted = 0;
       p2_ctr[j].rate = 5;
       p2_ctr[j].b1 = 2;
     }
-    for( uint32_t e = 0; e<0x3CC0; ++e ) {
+    for( uint32_t e = 0; e<(uint32_t)kP2FreqCount; ++e ) {
       freq[e].f[0] = 2048;
       freq[e].f[1] = 2816;
       freq[e].f[2] = 2816;
       freq[e].step = 4096;
     }
+    // See `alt_init_tables`: this is the second of the three reads of a
+    // quantiser nothing in this build sets above zero.
+    BMF_ASSUME(near_lossless_q==0);
     int32_t dz = 4*near_lossless_q+1;
     int32_t band = 16*near_lossless_q;
     has_ref = (plane_desc[plane_desc[plane_idx].src_plane].flags&desc_has_refs)!=0;
@@ -781,7 +791,7 @@ struct AltP2Block {
       }
     }
     uint32_t row = 0;
-    int32_t row_bytes = 18*max32(img_w, 3)+234;
+    int32_t row_bytes = 18*max32(img_w, 3)+kP2RowPad;
     do
       buf[row++] = (P2Ctx*)bmf_new(row_bytes);
     while( row<5 );

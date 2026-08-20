@@ -113,7 +113,13 @@ struct AltP1Block {
   uint8_t fold_hi[256];
   uint8_t unfold[256];
   int32_t group_of[512];
-  CounterNode counters[629856];
+  // 629856 = 8 levels * 2 flatness bits * 3^9 -- the activity level in the low
+  // three bits, two flags over it, and nine ternary features above those,
+  // which is what `mixer_fwd` sums into.  The loop that seeds it counted to
+  // `0x99C60`, the same number in hex, so the two spellings had to be matched
+  // by conversion to see they were one bound.
+  static const int32_t kP1CounterCount = 629856;
+  CounterNode counters[kP1CounterCount];
   // Start a row: mirror the last six records past the right edge, rotate the
   // five row buffers by one, reseat the five cursors, carry the last record of
   // the row above into the left margin, mirror three records back from it, and
@@ -517,7 +523,7 @@ struct AltP1Block {
                                               .raw(ctx_dn)),
                            tree_sym);
     }
-    if( counters[result].total<0xCCCu ) {
+    if( counters[result].total<kCounterNudgeLimit ) {
       if( (result&7u)<7 ) {
         node_alt[1].bump(slot_r, 7);
       }
@@ -551,7 +557,7 @@ struct AltP1Block {
     height = img_h;
     do
       init_counter_node(&counters[ctr++]);
-    while( ctr<0x99C60 );
+    while( ctr<kP1CounterCount );
     pred = 0;
     int32_t lvl = 0;
     int32_t grp = 0;

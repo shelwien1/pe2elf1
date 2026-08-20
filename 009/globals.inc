@@ -100,7 +100,8 @@ enum : uint8_t {
 // `p2` are the tree's own names for the two alternate models -- alt_p1_*.inc
 // and alt_p2_*.inc -- and neither is about pixel depth.
 enum : int32_t {
-  pred_mode0 = 0,         // no per-plane predictor; `expand_predictor_mode0`
+  pred_mode0 = 0,         // no per-plane predictor at all
+
   pred_p1    = 1,         // MED, and the p1 model
   pred_p2    = 2,         // the p2 model
 };

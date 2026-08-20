@@ -129,7 +129,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
       int32_t ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc_in->fp)==(uint32_t)coded_bytes)&ok;
       free(stream.buf);
       if( ok_all&&(p_i->depth&depth_palette)!=0 )
-        fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, arc_in->fp);
+        write_all(&p_i->pixels[p_i->data_size], pal_bytes, arc_in->fp);
       fflush(arc_in->fp);
       if( ok_all )
         return (int32_t)hdr.data_size;

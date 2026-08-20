@@ -43,9 +43,11 @@ void AltP2Block::code_banks(int32_t sample16) {
         if( (int32_t)abs32(res)<38 ) {
           --countdown;
           if( !countdown&&(uint8_t)node0->rate<8u ) {
-            uint8_t b0n = node0->rate+1;
-            node0->rate = b0n;
-            node0->b1 = p2_b1_reload[b0n-1];
+            // `b0n - 1` is the rate this counter is stepping *from*, and the
+            // table starts at rate 5, which is the lowest any counter holds.
+            const int32_t from = node0->rate;
+            node0->rate = (uint8_t)(from+1);
+            node0->b1 = p2_b1_reload[from-5];
             node0->weighted = 2*w0b;
           } else {
             node0->b1 = countdown;
@@ -67,7 +69,7 @@ void AltP2Block::code_banks(int32_t sample16) {
           // assignment, which asks for the cache line holding a local the
           // function is about to write anyway.  Every other prefetch below is of
           // the counter the next few lines will read; this one is now too.
-          P2Count *mir = &p2_ctr[slot(bank, ctxw^0x7FF0)];
+          P2Count *mir = &p2_ctr[slot(bank, ctxw^kBankMirrorMask)];
           __builtin_prefetch(mir, 0, 1);
           // The bank's residual with its mirror correction added, and the
           // only value the rest of this block works from.  It reached the three
@@ -145,7 +147,8 @@ void AltP2Block::code_banks(int32_t sample16) {
           // `rot[0]`, `direct[1]` and so on down -- and eleven of the thirty-three
           // indices were written as a hex constant apiece: `ctxw^0x3FF0`,
           // `ctxw^0x5FF0`, `ctxw^0x77F0`.  Every one of those eleven is
-          // `ctxw ^ bit ^ 0x7FF0`, which is what "the top bits flipped" means
+          // `ctxw ^ bit ^ kBankMirrorMask`, which is what "the top bits
+          // flipped" means
           // and what none of the constants said.  The last two were spelled a
           // third way again, through `x0020` and `x0010`.
           //
@@ -160,7 +163,7 @@ void AltP2Block::code_banks(int32_t sample16) {
           for( int32_t k = 0; k<11; ++k ) {
             const uint32_t x = ctxw^p2_bank_bits[k];
             direct[k] = &bankp[x];
-            mirror[k] = &bankp[x^0x7FF0];
+            mirror[k] = &bankp[x^kBankMirrorMask];
             rot[k] = &bankp[p2_ctx_rotate[(x>>2)&3]+(x&0xFFFFFFF3)];
             __builtin_prefetch(direct[k], 0, 1);
             __builtin_prefetch(mirror[k], 0, 1);

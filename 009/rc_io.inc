@@ -94,7 +94,11 @@ static uint16_t* begin_plane_stream() {
     memset(&model_geometry[slot], lvl, 2*level_geom[lvl].half);
     slot += 2*level_geom[lvl].half;
   }
-  uint16_t* tbl = (uint16_t*)bmf_new(0x7F000u);
+  // The model's frequency tables, one allocation.  `0x7F000` is 520192 bytes
+  // and the shape behind it is `model_geometry`'s: it is a byte count in the
+  // decompilation and stays one, because nothing here divides it by an
+  // element size.
+  uint16_t* tbl = (uint16_t*)bmf_new(kModelTableBytes);
   if( tbl ) {
     int32_t k = 0;
     uint16_t *row = tbl;

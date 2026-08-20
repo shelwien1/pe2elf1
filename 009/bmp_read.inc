@@ -96,7 +96,8 @@ static bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
     } else {
       if( !img->holds(at, v) )
         return false;
-      fread(pal_buf, (v+1)&0xFFFFFFFE, 1u, fp);
+      if( !read_exact(pal_buf, (v+1)&0xFFFFFFFE, fp) )
+        return false;
       memcpy(at, (uint8_t*)pal_buf, v);
       at += v;
     }
@@ -186,7 +187,8 @@ static bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
       // across whichever half of the output `hi_nibble` names.
       if( !img->holds(row, (int32_t)byte/2+1) )
         return false;
-      fread(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, 1u, fp);
+      if( !read_exact(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, fp) )
+        return false;
       row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, byte);
     }
   }
@@ -275,7 +277,10 @@ BmfImage* read_bmp(char* path) {
       // here has `biBitCount <= 8` without `depth_palette`.
       uint8_t* pal = img->depth&depth_palette ? img->pixels+img->data_size : nullptr;
       for( i = 0; i<pal_n; ++i ) {
-        fread(bmp_bgra, 4u, 1u, fp);
+        if( !read_exact(bmp_bgra, 4u, fp) ) {
+          fclose(fp);
+          return nullptr;
+        }
         pal[3*i+2] = bmp_bgra[2];
         pal[3*i+1] = bmp_bgra[1];
         pal[3*i] = bmp_bgra[0];

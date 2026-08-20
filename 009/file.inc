@@ -69,6 +69,29 @@ void bmf_close_file(BmfFile* arc) {
   free(arc);
 }
 
+// One record in, one record out, or the answer is no.
+//
+// Six `fread`/`fwrite` results went unread.  A codec reading untrusted input
+// cannot do that: a short read leaves the destination holding whatever was
+// there before, and the four in `read_bmp` were filling a palette, an RLE
+// absolute run and a 32-bit mask from stale scratch.  `(void)` on the result
+// would compile and would be worse than the warning.
+//
+// Two shapes, because the callers have two.  Where the function already has a
+// failure path -- `read_rle8` and `read_rle4` return false, `expand_image`
+// calls `arc_in->fail()` -- the read answers a bool and the caller takes its
+// own path.  Where there is none, the write is fatal: `compress_image`'s
+// palette write is the last thing it does and a partial archive is not
+// something to return success for.
+static inline bool read_exact(void* dst, size_t n, FILE* fp) {
+  return n==0||fread(dst, n, 1u, fp)==1;
+}
+
+static inline void write_all(const void* src, size_t n, FILE* fp) {
+  if( n&&fwrite(src, 1u, n, fp)!=n )
+    bmf_fatal(bmf_write_error);
+}
+
 static uint32_t bytes_left(FILE* fp) {
   long here = ftell(fp);
   if( here<0||fseek(fp, 0, SEEK_END)!=0 )

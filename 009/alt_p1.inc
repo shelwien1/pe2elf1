@@ -5,14 +5,38 @@
 //
 // The buckets are `2*near_lossless_q + 1` wide, which is the near-lossless
 // quantiser: at `E = 0` that is one and the mapping is the plain zigzag above.
-// Nothing else in this build sets `near_lossless_q`, so the bucket arithmetic
-// is present, correct and never exercised with a width above one.
+//
+// **`near_lossless_q` is a knob no path in this build can turn.**  Four places
+// assign it and all four assign 0 -- `read_plane_descs`, `expand_coded`,
+// `write_plane_descs`, `code_image_body` -- and `main` parses `c`/`d` and two
+// paths and nothing else, despite the banner's "always with -S -Q9".  So the
+// bucket width here is always 1, the deadzone in `alt_p2_alloc` always +-1 and
+// the band always 0.
+//
+// Stage 2 Phase 8 asks for one of two things: wire it to a flag, or fold the
+// constants.  Both are declined and the reason is the same one:
+//
+//   * Folding deletes the only description this tree has of how BMF 2.01's
+//     near-lossless mode works.  The mode is reachable in the donor binary --
+//     that is what `-Q` is -- and Section 9.5 of ALGORITHM_v2.md is written
+//     from exactly this arithmetic.  Deleting it makes that section
+//     unverifiable against anything.
+//   * Wiring a flag adds a mode the gate cannot check.  Every reference stream
+//     in `testfiles/` was taken at `q = 0`; a `-Q` path would ship untested,
+//     and a refactoring tree whose premise is byte-identical output is the
+//     wrong place to grow a feature.
+//
+// So it stays, and what changes is that the claim is checked rather than
+// commented: `BMF_ASSUME(near_lossless_q == 0)` at each of the three places
+// that read it, under the `BMF_ASSERTS=1` leg.  A knob no path can turn, and a
+// build that says so.
 uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
   uint8_t even, odd;
   uint32_t done;
   int32_t in_bucket, bucket;
   uint8_t half;
   uint32_t i, b;
+  BMF_ASSUME(near_lossless_q==0);
   int32_t bucket_size = 2*near_lossless_q+1;
   *unfold = 0;
   unfold[255] = 0x80;

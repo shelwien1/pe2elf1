@@ -62,9 +62,13 @@ static void unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
     unmodel_plane(&plane_hdr, plane_buf);
     // `pred && pred == pred_p1 && !alt` was three nested `if`s with the mode-0
     // arm hanging off the outermost `else`, which is one condition either way.
-    if( !plane_predictor )
-      expand_predictor_mode0(img_at->width);
-    else if( plane_predictor==pred_p1&&!plane_alt_model )
+    //
+    // That arm called `expand_predictor_mode0(width)`, whose body is empty.
+    // It is not a format hook and not a table entry -- both call sites are the
+    // `else` of an `if`/`else if` chain, and `pred_p1` is 1, so testing for it
+    // already excludes mode 0.  The function, its declaration and both calls
+    // are gone; the enumerator stays, because it is a value in the stream.
+    if( plane_predictor==pred_p1&&!plane_alt_model )
       unpredict_med(plane_buf, img_at->width, img_at->height);
     interleave_plane(img_at, plane_buf, plane);
   }
@@ -86,9 +90,7 @@ static void unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf) {
     if( (plane_desc[plane].flags&desc_has_refs)==0&&!pred )
       continue;
     deinterleave_plane(img_at, plane_buf, plane);
-    if( !pred )
-      expand_predictor_mode0(img_at->width);
-    else if( pred==pred_p1 )
+    if( pred==pred_p1 )
       unpredict_med(plane_buf, img_at->width, img_at->height);
     interleave_plane(img_at, plane_buf, plane);
   }
@@ -199,7 +201,8 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     return arc_in->fail();
   }
   if( hdr.flags&flags_tail ) {
-    fread(&head, 8u, 1u, arc_in->fp);
+    if( !read_exact(&head, 8u, arc_in->fp) )
+      return arc_in->fail();
     if( p_coded_buf ) {
       if( head.len>bytes_left(arc_in->fp) ) {
         return arc_in->fail();
@@ -214,7 +217,8 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
       blk->len = pad_len;
       blk->data[pad_len/4-1] = 0;
       *p_coded_buf = blk;
-      fread(blk->data, head.len, 1u, arc_in->fp);
+      if( !read_exact(blk->data, head.len, arc_in->fp) )
+        return arc_in->fail();
     } else {
       fseek(arc_in->fp, head.len, 1);
     }

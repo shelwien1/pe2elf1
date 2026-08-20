@@ -54,11 +54,15 @@ struct CtxIdx {
   // `bits<6, 2>(gA)` was tried, and the one neighbourhood in the corpus that
   // reaches `gA == 4` landed in slot 0 instead of 256, moving three streams.
   //
-  // The radix is not enforced here -- it is a fact about the caller's value,
-  // and this is a constant-folded add -- but it is written down, which is what
-  // says `320 * 6 = 1920` is the size the table has to be.
+  // `Radix` was written down and never read, which made it a comment the
+  // compiler could not check -- and gpt Section 10 read that as a reason to
+  // delete the parameter.  It is the opposite: the radix is the fact that says
+  // `320 * 6 = 1920` is the size `nb_id[]` has to be, so what it wanted was
+  // enforcement rather than removal.  `BMF_ASSUME` is that, under a build leg
+  // the gate runs; the shipping build is the same constant-folded add it was.
   template<uint32_t Stride, uint32_t Radix>
   constexpr CtxIdx&digit(uint32_t v) {
+    BMF_ASSUME(v<Radix);
     val += Stride*v;
     return *this;
   }

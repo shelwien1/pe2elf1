@@ -20,12 +20,6 @@
 // the compiler did.  `__PAIR64__` was the other, and its one remaining site was
 // a register split after all -- two 32-bit stores MSVC had both halves for.
 
-// Four bytes of a recovered struct that exist only at the wider pointer width:
-// a member that is a pointer in one build and four bytes of padding in the
-// other.  The struct's layout is the program's, and this is how it stays the
-// same size at both.
-#define BMF_SPILL_PAD(n) uint8_t _spill_pad ## n[sizeof(void*)-4]
-
 // The two helpers the decompiler calls by name.  `abs32` is a function and not
 // a macro, and it is what the branchless absolute values above became: the
 // original computed `(m ^ x) - m` with `m` the sign broadcast into a byte or a
@@ -96,6 +90,34 @@ constexpr int32_t kWeightMin = -64, kWeightMax = 191;
 // than sharing one header constant is deliberate.  Two constants that happen to
 // share a value are not one constant.
 constexpr uint32_t kSlackMax = 0x4000;
+
+// Three more values that were literals at the point of use, named where the
+// types they belong to cannot reach.  Each is one number in one role; none of
+// them is shared with anything that happens to have the same value.
+//
+// `kP2FreqRescaleTotal` is the sum at which a `P2Freq`'s three counts are
+// halved -- not `kSlackMax`, not `BitCtr::kMaxLimit`, not either of the two
+// 0x4000 rescale triggers, and worth saying because 29696 is 0x7400 and reads
+// like it might be one of them.
+//
+// `kCounterNudgeLimit` is the total below which `update_model` calls a context
+// unsettled and lets it borrow from the mirror.  `kP2RowPad` is the margin a
+// `P2Ctx` row carries: `18*width + 234` is `sizeof(P2Ctx) * (width + 13)`, so
+// it is thirteen records and not a byte count anybody chose.
+constexpr int32_t kP2FreqRescaleTotal = 29696;
+constexpr uint32_t kCounterNudgeLimit = 0xCCC;
+constexpr int32_t kP2RowPad = 234;
+// The ceiling on `ModelBlock::open_pixel`'s id-3 allocator: past it the four
+// context bits are forced to 15 rather than minting another id.
+constexpr int32_t kCtxId3Limit = 53248;
+// The one allocation `begin_plane_stream` makes for the model's frequency
+// tables, in bytes.
+constexpr uint32_t kModelTableBytes = 0x7F000u;
+// "The top bits flipped": the mask that turns a bank context into the one a
+// symmetric neighbourhood would have used.  Eleven of `code_banks`'s
+// thirty-three indices were written as a hex constant apiece -- `ctxw^0x3FF0`,
+// `ctxw^0x5FF0`, `ctxw^0x77F0` -- and every one is `ctxw ^ bit ^ 0x7FF0`.
+constexpr uint32_t kBankMirrorMask = 0x7FF0;
 
 // Exchange two values.  Not `std::swap`, for the same reason `min32` is not
 // `std::min`: no `<utility>`, and the width is written down.
