@@ -163,8 +163,26 @@ that is Intel's, from the oneAPI apt repository:
 sudo apt-get install intel-oneapi-runtime-opencl ocl-icd-libopencl1 opencl-headers
 ```
 
+### Windows
+
+```sh
+make windows    # mrpc.exe, cross-built with MinGW-w64
+```
+
+Needs `g++-mingw-w64-x86-64` and the Khronos headers (`CL_HEADERS`, staged
+into `winsdk/` — handing the cross compiler the whole of `/usr/include`
+hands it glibc's headers too). `WINARCH` defaults to `haswell`, matching
+`gc.bat`, so the executable wants AVX2.
+
+There is no import library for the ICD loader on Windows, and an executable
+that imports `OpenCL.dll` statically will not start at all on a machine
+without it — which would put `-C` out of reach exactly where it is needed.
+So the loader is opened by hand at startup and a missing one is just one
+more reason to run on the host. `mrpc.exe` imports nothing but `KERNEL32`
+and `msvcrt`: no OpenCL, no runtime DLLs.
+
 `gc.bat` is the original Windows/clang build; it carries a commented line
-showing what to add for OpenCL there.
+showing what to add for OpenCL if you build there natively.
 
 Compile-time switches, on top of the ones mrpc already had: `MRP_OPENCL` turns
 the whole thing on, and `MRP_CL_CLASS`, `MRP_CL_COEF`, `MRP_CL_GROUP` (all 1)

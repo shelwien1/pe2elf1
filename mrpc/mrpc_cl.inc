@@ -15,8 +15,105 @@
 // -------------------------------------------------------------
 
 #define CL_TARGET_OPENCL_VERSION 300
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
 #include "mrpc_kernels.inc"
+
+// -------------------------------------------------------------
+// Windows has no import library to link the ICD loader against, and an
+// executable that imports OpenCL.dll statically will not start at all on
+// a machine that has no OpenCL installed -- which would make -C
+// unreachable exactly where it is needed.  So on Windows the loader is
+// opened by hand, and failing to find it is one more reason to run on the
+// host.  Everywhere else these are the real symbols.
+// -------------------------------------------------------------
+#if defined(_WIN32)||defined(_MSC_VER)
+
+extern "C" {
+typedef int(__stdcall* CL_PROC)();
+__declspec(dllimport) void* __stdcall LoadLibraryA(const char*);
+__declspec(dllimport) CL_PROC __stdcall GetProcAddress(void*, const char*);
+}
+
+// every entry point this file uses; the queue constructors are the only
+// optional ones, and one of the two has to be there
+#define CL_EACH(F)                                                         \
+        F(clGetPlatformIDs) F(clGetPlatformInfo) F(clGetDeviceIDs)         \
+        F(clGetDeviceInfo) F(clCreateContext) F(clCreateProgramWithSource) \
+        F(clBuildProgram) F(clGetProgramBuildInfo) F(clCreateKernel)       \
+        F(clCreateBuffer) F(clSetKernelArg) F(clEnqueueNDRangeKernel)      \
+        F(clEnqueueReadBuffer) F(clEnqueueWriteBuffer) F(clWaitForEvents)  \
+        F(clGetEventProfilingInfo) F(clReleaseEvent)
+#define CL_EACH_OPT(F) F(clCreateCommandQueueWithProperties) F(clCreateCommandQueue)
+
+#define CL_TDEF(n) typedef decltype(&::n) t_##n;
+CL_EACH(CL_TDEF)
+CL_EACH_OPT(CL_TDEF)
+#undef CL_TDEF
+#define CL_PTR(n) static t_##n pfn_##n = 0;
+CL_EACH(CL_PTR)
+CL_EACH_OPT(CL_PTR)
+#undef CL_PTR
+
+static int CLLoadICD(void) {
+  if( pfn_clGetPlatformIDs )
+    return 1;
+  void* h = LoadLibraryA("OpenCL.dll");
+  if( !h )
+    return 0;
+  int ok = 1;
+#define CL_GET(n)                                       \
+        pfn_##n = (t_##n)GetProcAddress(h, #n);         \
+        if( !pfn_##n )                                  \
+          ok = 0;
+  CL_EACH(CL_GET)
+#undef CL_GET
+#define CL_GETOPT(n) pfn_##n = (t_##n)GetProcAddress(h, #n);
+  CL_EACH_OPT(CL_GETOPT)
+#undef CL_GETOPT
+  if( !pfn_clCreateCommandQueueWithProperties&&!pfn_clCreateCommandQueue )
+    ok = 0;
+  return ok;
+}
+
+#define clGetPlatformIDs             pfn_clGetPlatformIDs
+#define clGetPlatformInfo            pfn_clGetPlatformInfo
+#define clGetDeviceIDs               pfn_clGetDeviceIDs
+#define clGetDeviceInfo              pfn_clGetDeviceInfo
+#define clCreateContext              pfn_clCreateContext
+#define clCreateProgramWithSource    pfn_clCreateProgramWithSource
+#define clBuildProgram               pfn_clBuildProgram
+#define clGetProgramBuildInfo        pfn_clGetProgramBuildInfo
+#define clCreateKernel               pfn_clCreateKernel
+#define clCreateBuffer               pfn_clCreateBuffer
+#define clSetKernelArg               pfn_clSetKernelArg
+#define clEnqueueNDRangeKernel       pfn_clEnqueueNDRangeKernel
+#define clEnqueueReadBuffer          pfn_clEnqueueReadBuffer
+#define clEnqueueWriteBuffer         pfn_clEnqueueWriteBuffer
+#define clWaitForEvents              pfn_clWaitForEvents
+#define clGetEventProfilingInfo      pfn_clGetEventProfilingInfo
+#define clReleaseEvent               pfn_clReleaseEvent
+
+#else
+static int CLLoadICD(void) {
+  return 1;
+}
+#endif
+
+// The 2.0 constructor where there is one, the 1.2 one where there is not:
+// the profiling queue -V asks for is the only property either takes.
+static cl_command_queue CLMakeQueue(cl_context ctx, cl_device_id d, int prof, cl_int* e) {
+#if defined(_WIN32)||defined(_MSC_VER)
+  if( !pfn_clCreateCommandQueueWithProperties ) {
+    return pfn_clCreateCommandQueue(ctx, d, prof ? CL_QUEUE_PROFILING_ENABLE : 0, e);
+  }
+  const cl_queue_properties qp[] = {CL_QUEUE_PROPERTIES, CL_QUEUE_PROFILING_ENABLE, 0};
+  return pfn_clCreateCommandQueueWithProperties(ctx, d, prof ? qp : 0, e);
+#else
+  const cl_queue_properties qp[] = {CL_QUEUE_PROPERTIES, CL_QUEUE_PROFILING_ENABLE, 0};
+  return clCreateCommandQueueWithProperties(ctx, d, prof ? qp : 0, e);
+#endif
+}
 
 // the 11x3 candidate grid of OptimizeCoef, as the kernel sees it
 static const int CL_SR = 11, CL_SSR = 3, CL_NCAND = CL_SR*CL_SSR;
@@ -98,7 +195,7 @@ struct CLDevList {
   void Enumerate(int want_plat) {
     n = 0;
     cl_uint np = 0;
-    if( clGetPlatformIDs(0, 0, &np)!=CL_SUCCESS||np==0 )
+    if( !CLLoadICD()||clGetPlatformIDs(0, 0, &np)!=CL_SUCCESS||np==0 )
       return;
     cl_platform_id* ps = new cl_platform_id[np];
     clGetPlatformIDs(np, ps, 0);
@@ -123,11 +220,18 @@ struct CLDevList {
 
 static void CLListDevices(FILE* f) {
   cl_uint np = 0;
-  if( clGetPlatformIDs(0, 0, &np)!=CL_SUCCESS||np==0 ) {
+  if( !CLLoadICD()||clGetPlatformIDs(0, 0, &np)!=CL_SUCCESS||np==0 ) {
+#if defined(_WIN32)||defined(_MSC_VER)
+    fprintf(f, "no OpenCL platforms found\n"
+               "  (OpenCL.dll and a runtime have to be installed; a GPU driver brings\n"
+               "   both, and Intel's CPU runtime -- 'Intel CPU Runtime for OpenCL\n"
+               "   Applications' -- adds a device that does not need one)\n");
+#else
     fprintf(f, "no OpenCL platforms found\n"
                "  (an ICD loader and a runtime have to be installed; on Debian/Ubuntu\n"
                "   that is ocl-icd-libopencl1 plus a driver -- intel-oneapi-runtime-opencl\n"
                "   for the CPU, mesa-opencl-icd or the vendor package for a GPU)\n");
+#endif
     return;
   }
   cl_platform_id* ps = new cl_platform_id[np];
@@ -309,8 +413,7 @@ struct MrpcCL {
     ctx = clCreateContext(props, 1, &device, 0, 0, &e);
     if( e!=CL_SUCCESS )
       return Fail("clCreateContext", e);
-    cl_queue_properties qp[] = {CL_QUEUE_PROPERTIES, CL_QUEUE_PROFILING_ENABLE, 0};
-    q = clCreateCommandQueueWithProperties(ctx, device, verbose ? qp : 0, &e);
+    q = CLMakeQueue(ctx, device, verbose, &e);
     if( e!=CL_SUCCESS )
       return Fail("clCreateCommandQueue", e);
     clGetDeviceInfo(device, CL_DEVICE_LOCAL_MEM_SIZE, sizeof(lmem), &lmem, 0);
