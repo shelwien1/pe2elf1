@@ -93,40 +93,36 @@ static int32_t transform_cost(BmfImage* tile_img) {
   return bits;
 }
 
-uint32_t search_filter(BmfImage* img) {
-  // The frame was one union of two arms and 36 bytes of pad, and the two arms
-  // never overlap: everything in the scalar arm is dead by the `free(tile_buf)`
-  // below, and `saved` is first written four lines later.  So it is MSVC
-  // sharing one 64-byte slot between the per-plane search and the
-  // whole-image trials, and the two are plain locals.
-  //
-  // Two of those scalars did double duty inside the arm as well.  `pi` was the
-  // plane loop's index and then a pixel stride, and `costs[0]` -- the first
-  // entry of a four-plane cost table -- was that same stride twice more; all
-  // three were the `planes*(height-1)` of a pixel transpose, and the transpose
-  // is `transpose_image` now.
-  //
-  // `rows[2]` and `dims[2]` were not arrays either.  Every one of their six
-  // roles is a copy of a local that is still live at the read -- `bits_f13`,
-  // `pl_k`, `bits_a`, `y0`, `plane_count`, `tile_h`, `plane_i` -- and
-  // `dims[0]` was written twice and never read.  `uncopy.py` cannot see any of
-  // it: its rule is about a named local, and a subscript is not one.
-  PlaneDesc saved[4];
-  uint32_t plane_cost[4];
-  uint8_t* tile_buf;
-  int32_t plane_i, pi, best_flags;
-  int32_t bits_a;
-  int32_t tile_h, y0, best_cost, pred, cand, pl_k, bits, bits_f13;
-  int32_t tile_w = img->width;
-  tile_h = img->height;
-  if( tile_w<4||tile_h<3 ) {
-    reset_descriptors();
-    return 0;
-  }
-  choose_plane_coding(img);
-  BmfImage *tile_img = alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
-  stream_open(tile_img->data_size);
-  tile_buf = (uint8_t*)bmf_new(tile_h*tile_w);
+// What the per-plane search settles on, beyond the flags it writes into
+// `plane_desc` as it goes.
+//
+// `n_p1` and `n_p2` are counts and not bit totals, which their old names --
+// `bits_total` and `n_hard` -- did not say.  `bits_total` accumulated `pred`,
+// and `pred` at that point is `pred_p1` (1) or `pred_mode0` (0), so it counted
+// the planes that chose the first predictor; every reader of it asks whether it
+// is nonzero.
+struct PlaneSearch {
+  int32_t bits;    // what the winning descriptors cost, over all planes
+  int32_t n_p1;    // planes that chose predictor 1
+  int32_t n_p2;    // planes that chose predictor 2
+  int32_t n_refs;  // planes that took a reference descriptor
+};
+
+// One pass over the planes: try each plane's candidates against the trial tile,
+// keep the cheapest, and record what was chosen.  Ninety lines out of
+// `search_filter`, and closed -- `probe_plane`, `probe_keep`, `best_cost`,
+// `best_flags` and `won` are used here and nowhere else, so they come along and
+// `search_filter` is left reading as its three stages: search each plane, try
+// the transpose, try four whole-image variants.
+//
+// The candidate ladder is two independent conditions the recovery had nested,
+// jumping *into* the inner arm from the outer `else` with a second label under
+// both to rejoin: the second predictor is only worth a trial when the first came
+// close to the incumbent, and the reference descriptors are tried for every
+// plane but the first.
+static PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf,
+                                 uint32_t* plane_cost) {
+  int32_t best_cost = 0, best_flags = 0;
   // Encode one plane of the trial tile under `flags` and return what it cost,
   // in bits.  Seven sites wrote this out: set the descriptor, call the model,
   // measure the bytes written, flush the packer's last partial word.  Four take
@@ -162,7 +158,100 @@ uint32_t search_filter(BmfImage* img) {
     }
     return cost;
   };
-  int32_t nplanes = plane_count;
+  PlaneSearch out = { 0, 0, 0, 0 };
+  // `plane_count` is set once at the top of `compress_image` and once at the top
+  // of `expand_image`, and neither is on this path, so the loop's bound cannot
+  // move under it.  The original read it into `nplanes` here, again after the
+  // tile copy -- the same value both times -- and again as `nplanes_b` and
+  // `nplanes_c` further down.
+  for( int32_t pi = 0; pi<plane_count; ++pi ) {
+    const int32_t plane_i = plane_desc[pi].src_plane;
+    // Once any plane has taken the p2 model, the cheaper candidates are not
+    // offered to the planes after it: mode 0 is skipped outright and the p2
+    // trial becomes unconditional.
+    if( out.n_p2 ) {
+      best_cost = 0x7FFFFFFF;
+    } else {
+      best_cost = probe_plane(plane_i, try_mode0);
+      packer_reset();
+      if( best_cost!=0x7FFFFFFF )
+        best_flags = 0;
+    }
+    const int32_t bits_f5 = probe_keep(plane_i, try_p1);
+    // The second predictor is only worth a trial when the first came close
+    // to the incumbent, and the reference descriptors are tried for every
+    // plane but the first -- two independent conditions.  The recovery
+    // nested them and then jumped *into* the inner arm from the outer
+    // `else`, with a second label under both to rejoin.
+    if( bits_f5<best_cost+(best_cost>>5)||out.n_p2 )
+      probe_keep(plane_i, try_p2);
+    int32_t pred;
+    if( pi ) {
+      probe_keep(plane_i, try_refs);
+      const int32_t bits_f13 = probe_keep(plane_i, try_refs_p1);
+      pred = best_flags&desc_predictor;
+      // `bits_f13` was also kept in `rows[0]` for this one comparison,
+      // which is the value the line above it already holds.
+      if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
+        probe_keep(plane_i, try_refs_p2);
+        if( won )
+          pred = pred_p2;
+      }
+    } else {
+      // The two arms this replaces spelled it `best_flags & 3` and
+      // `(uint8_t)best_flags & 3`, which is one value: the field is the low
+      // two bits.
+      pred = best_flags&desc_predictor;
+    }
+    const int32_t flag8 = (uint8_t)best_flags&desc_has_refs;
+    out.bits += best_cost;
+    // `pred` is read for the p2 count before the next line rewrites it, so
+    // the count is taken first.  `pred_p1` is 1 and `pred_mode0` is 0, so the
+    // line after the count is a count too -- which is what `n_p1` says and
+    // `bits_total += pred` did not.
+    out.n_p2 += pred==pred_p2;
+    if( pred!=pred_p1 )
+      pred = pred_mode0;
+    out.n_p1 += pred;
+    plane_cost[plane_i] = best_cost;
+    out.n_refs += flag8!=0;
+    plane_desc[plane_i].flags = (uint8_t)best_flags;
+  }
+  return out;
+}
+
+uint32_t search_filter(BmfImage* img) {
+  // The frame was one union of two arms and 36 bytes of pad, and the two arms
+  // never overlap: everything in the scalar arm is dead by the `free(tile_buf)`
+  // below, and `saved` is first written four lines later.  So it is MSVC
+  // sharing one 64-byte slot between the per-plane search and the
+  // whole-image trials, and the two are plain locals.
+  //
+  // Two of those scalars did double duty inside the arm as well.  `pi` was the
+  // plane loop's index and then a pixel stride, and `costs[0]` -- the first
+  // entry of a four-plane cost table -- was that same stride twice more; all
+  // three were the `planes*(height-1)` of a pixel transpose, and the transpose
+  // is `transpose_image` now.
+  //
+  // `rows[2]` and `dims[2]` were not arrays either.  Every one of their six
+  // roles is a copy of a local that is still live at the read -- `bits_f13`,
+  // `pl_k`, `bits_a`, `y0`, `plane_count`, `tile_h`, `plane_i` -- and
+  // `dims[0]` was written twice and never read.  `uncopy.py` cannot see any of
+  // it: its rule is about a named local, and a subscript is not one.
+  PlaneDesc saved[4];
+  uint32_t plane_cost[4];
+  uint8_t* tile_buf;
+  int32_t tile_h, y0, cand, pl_k;
+  int32_t tile_w = img->width;
+  tile_h = img->height;
+  if( tile_w<4||tile_h<3 ) {
+    reset_descriptors();
+    return 0;
+  }
+  choose_plane_coding(img);
+  BmfImage *tile_img = alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
+  stream_open(tile_img->data_size);
+  tile_buf = (uint8_t*)bmf_new(tile_h*tile_w);
   y0 = (img->height-tile_h)>>1;
   int32_t dx = img->width-tile_w;
   int32_t off_y = y0*img->stride;
@@ -180,69 +269,9 @@ uint32_t search_filter(BmfImage* img) {
       dstp += row_bytes;
       srcp += img->stride;
     }
-    nplanes = plane_count;
   }
-  int32_t n_hard = 0;
-  int32_t bits_total = 0;
-  int32_t n_flagged = 0;
-  int32_t best_bits = 0;
-  if( nplanes>0 ) {
-    int32_t hard = n_hard;
-    best_flags = 0;
-    pi = 0;
-    while( 1 ) {
-      plane_i = plane_desc[pi].src_plane;
-      if( hard ) {
-        best_cost = 0x7FFFFFFF;
-      } else {
-        best_cost = probe_plane(plane_i, try_mode0);
-        packer_reset();
-        if( best_cost!=0x7FFFFFFF )
-          best_flags = 0;
-      }
-      int32_t bits_f5 = probe_keep(plane_i, try_p1);
-      // The second predictor is only worth a trial when the first came close
-      // to the incumbent, and the reference descriptors are tried for every
-      // plane but the first -- two independent conditions.  The recovery
-      // nested them and then jumped *into* the inner arm from the outer
-      // `else`, with a second label under both to rejoin.
-      if( bits_f5<best_cost+(best_cost>>5)||hard )
-        probe_keep(plane_i, try_p2);
-      if( pi ) {
-        probe_keep(plane_i, try_refs);
-        bits_f13 = probe_keep(plane_i, try_refs_p1);
-        pred = best_flags&desc_predictor;
-        // `bits_f13` was also kept in `rows[0]` for this one comparison,
-        // which is the value the line above it already holds.
-        if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
-          probe_keep(plane_i, try_refs_p2);
-          if( won )
-            pred = pred_p2;
-        }
-      } else {
-        // The two arms this replaces spelled it `best_flags & 3` and
-        // `(uint8_t)best_flags & 3`, which is one value: the field is the low
-        // two bits.
-        pred = best_flags&desc_predictor;
-      }
-      const int32_t flag8 = (uint8_t)best_flags&desc_has_refs;
-      best_bits += best_cost;
-      // `pred` is read for the p2 count before the next line rewrites it, so
-      // the count is taken first.
-      int32_t chose_p2 = pred==pred_p2;
-      if( pred!=pred_p1 )
-        pred = pred_mode0;
-      hard += chose_p2;
-      bits_total += pred;
-      plane_cost[plane_i] = best_cost;
-      n_flagged += flag8!=0;
-      plane_desc[plane_i].flags = (uint8_t)best_flags;
-      if( ++pi>=plane_count ) {
-        n_hard = hard;
-        break;
-      }
-    }
-  }
+  PlaneSearch ps = search_planes(tile_img, tile_buf, plane_cost);
+  int32_t best_bits = ps.bits;
   // The transposed tile, costed against the per-plane figures the search just
   // took.  Three pixel transposes here, all `transpose_image`: this one to try
   // the other orientation, and one of the two below to put back whichever
@@ -259,7 +288,7 @@ uint32_t search_filter(BmfImage* img) {
     while( pk<plane_count ) {
       pl_k = plane_desc[pk].src_plane;
       model_planes(tile_img, tile_buf, pl_k);
-      bits = 8*(stream.cur-stream.buf);
+      const int32_t bits = 8*(stream.cur-stream.buf);
       packer_flush();
       bits_d += bits;
       packer_reset();
@@ -281,7 +310,7 @@ uint32_t search_filter(BmfImage* img) {
   }
   free(tile_buf);
   if( plane_count>2 ) {
-    if( bits_total ) {
+    if( ps.n_p1 ) {
       save_descriptors(saved);
       offer_to_all(try_p1);
       int32_t bits_e = transform_cost(tile_img);
@@ -302,20 +331,33 @@ uint32_t search_filter(BmfImage* img) {
     } else {
       cand = 1;
     }
-    if( n_hard+(cand==0) ) {
+    if( ps.n_p2+(cand==0) ) {
       save_descriptors(saved);
       offer_to_all(try_p2);
       // `nplanes_c` was `plane_count` assigned before this loop and again on
       // every turn of it, and nothing here writes the count -- three spellings
       // of one read.
-      if( plane_count==n_hard&&plane_count-1==n_flagged ) {
+      if( plane_count==ps.n_p2&&plane_count-1==ps.n_refs ) {
         cand = 0;
       } else {
-        bits_a = transform_cost(tile_img);
+        const int32_t bits_a = transform_cost(tile_img);
         if( bits_a<=best_bits ) {
           best_bits = bits_a;
-          n_hard = bits_a;
-          if( plane_count-1==n_flagged ) {
+          // **A bit count stored in a plane count**, and it is the original's,
+          // left alone.  `n_p2` is read once more below, as `!n_p2`, and what
+          // this line is for is to stop that last block from running now that
+          // the p2-everywhere transform has been taken.  Writing `bits_a` says
+          // so only while `bits_a` is nonzero.
+          //
+          // It is not provably nonzero: `transform_cost` measures the bytes the
+          // coder wrote *before* its flush, and the trial tile is as small as
+          // 4x3, so a perfectly predicted tile emitting none of them is not
+          // ruled out by anything here.  A flag would change the program on
+          // exactly that input and no corpus stream would move to say so, which
+          // is the same call `nb_weights`' bound got: the honest thing is the
+          // note, not the improvement.
+          ps.n_p2 = bits_a;
+          if( plane_count-1==ps.n_refs ) {
             cand = 0;
           } else {
             save_descriptors(saved);
@@ -333,7 +375,7 @@ uint32_t search_filter(BmfImage* img) {
   } else {
     cand = 1;
   }
-  if( !n_hard&&plane_count>1 ) {
+  if( !ps.n_p2&&plane_count>1 ) {
     uint8_t *tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
     memcpy(tile_copy, tile_src, tile_img->data_size);
     save_descriptors(saved);
@@ -345,7 +387,7 @@ uint32_t search_filter(BmfImage* img) {
       best_bits = bits_b;
       cand = 0;
     }
-    if( n_flagged+bits_total ) {
+    if( ps.n_refs+ps.n_p1 ) {
       save_descriptors(saved);
       clear_flags_on_all();
       memcpy(tile_src, tile_copy, tile_img->data_size);

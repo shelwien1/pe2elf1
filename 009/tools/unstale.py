@@ -96,6 +96,12 @@ HISTORY = {
     'log_two_lane': "BMF.exe's two-lane `log`, gone with the SIMD",
     '__bmf_half_half': 'the constant that helper substituted',
     '_mm_andnot_ps': 'an intrinsic, in a sentence about the original',
+    # Two of this tree's own names, retired in the round that split
+    # `search_filter` and quoted where the document says what they used to be
+    # called.  They said "bit count" and held a plane count, which is the whole
+    # reason the sentence naming them is there.
+    'bits_total': 'this tree\'s old name for `PlaneSearch::n_p1`',
+    'n_hard': 'this tree\'s old name for `PlaneSearch::n_p2`',
     # Hex-Rays locals, quoted as what Hex-Rays called them.
     'v58': 'quoted as a Hex-Rays name',
     'n15_2': 'quoted as a Hex-Rays name',

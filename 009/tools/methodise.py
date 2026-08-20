@@ -137,6 +137,20 @@ DECLINED = {
         '`BmfImage::weight_pair_cost(plane0, a, b, w4, w8)` would read as the '
         'image costing a candidate; the same judgement as `cost_candidate` '
         'above, which is its only caller outside `choose_plane_coding`',
+    # `write_bmp` was declined by hand in `MINIMAL-SYNTAX.md` and is declined
+    # above; splitting it into three put two of its stages here, and they carry
+    # the parent's judgement rather than a new one.  A stage of a function that
+    # is not a method is not a method either.
+    'write_bmp_palette':
+        'writes the palette of a BMP file, 62 lines, and is one stage of '
+        '`write_bmp` -- which is declined above because a file format is not '
+        'something an image does.  `BmfImage::write_bmp_palette(out, depth, '
+        'bits)` would put a BMP file offset on the image',
+    'bmp_rle_encode':
+        'run-length encodes an image into a BMP opcode stream, 139 lines.  The '
+        'encoding is the file format\'s and the image is what it reads; the '
+        'same judgement as `write_bmp_palette` above and as `write_bmp`, whose '
+        'stage it is',
     # A third arrival by the `cost_candidate` route, one round later: lifting
     # the alpha block out of `choose_plane_coding` made it a function, and a
     # function that reads the image for nothing but its pixels is what this rule

@@ -202,16 +202,23 @@ are what the decoder is expected to produce.
 A 54-byte header, the palette if the depth has one, and the rows bottom-up with
 each padded to a multiple of four. Three palettes are possible and the depth
 byte picks: a grey ramp rebuilt from the depth, the stored palette, or none.
+`write_bmp_palette` is all three and returns how many bytes it wrote, which is
+what puts the pixels at their offset.
 
-If the image is 4- or 8-bit and run-length encoding is asked for, the rows go
-through an encoder that alternates runs and literals: `emit_runs` emits repeat
-pairs while the next run is worth more than the literal it would otherwise join,
-and a literal is flushed either as an escape-plus-count-plus-bytes block or,
-when
-it is too short to be worth the two-byte header, as one or two encoded pairs. If
-the result is not smaller than the raw rows, the whole attempt is dropped and
-the
-file is written uncompressed.
+If the image is 4- or 8-bit and run-length encoding is asked for,
+`bmp_rle_encode` puts the rows through an encoder that alternates runs and
+literals: `emit_runs` emits repeat pairs while the next run is worth more than
+the literal it would otherwise join, and a literal is flushed either as an
+escape-plus-count-plus-bytes block or, when it is too short to be worth the
+two-byte header, as one or two encoded pairs. Each row ends with an
+end-of-line pair and the image with an end-of-bitmap pair.
+
+**Whether the encoding is kept is a separate question**, and the answer is a
+straight size comparison: if the opcodes are not smaller than the raw rows the
+whole attempt is dropped and the pixels are written uncompressed over the top of
+it. `bmp_rle_encode` returns the cursor and the caller asks; the depth having no
+run-length form at all — anything but 4 or 8 bits — is the same answer by
+another route, a null return.
 
 ---
 
@@ -714,18 +721,25 @@ For each plane, in `src_plane` order, it probes a subset of six flag values:
 | 14 | `try_refs_p2` | 2 | alternate p2 | yes |
 
 and the pruning is one idea throughout: **has any earlier plane already settled
-on predictor 2.** That counter is `n_hard`, and the reasoning is that an image
-needing the deep model for one plane will need it for the rest, so the cheap
-candidates stop being worth their time.
+on predictor 2.** That counter is `PlaneSearch::n_p2`, and the reasoning is that
+an image needing the deep model for one plane will need it for the rest, so the
+cheap candidates stop being worth their time.
 
-- `try_mode0` is skipped once `n_hard` is non-zero;
+- `try_mode0` is skipped once `n_p2` is non-zero;
 - `try_p2` is tried when `try_p1` came within `cost/32` of the incumbent, **or**
-  `n_hard` is non-zero;
+  `n_p2` is non-zero;
 - `try_refs` and `try_refs_p1` only from the second plane on, since the first
   has
   nothing to reference;
 - `try_refs_p2` when the winner so far is predictor 2, or `try_refs_p1` came
   within `cost/32`.
+
+This pass is `search_planes`, and what it hands back is a `PlaneSearch`: the
+winning descriptors' total cost and three counts — planes that chose predictor
+1, planes that chose predictor 2, planes that took a reference descriptor. The
+flags themselves it writes into `plane_desc` as it goes. The three counts are
+what the whole-tile trials below are gated on, and two of them used to be called
+`bits_total` and `n_hard`, which said bit count where they meant plane count.
 
 Then the whole-tile trials, each of which edits every descriptor at once,
 re-encodes, and keeps the edit only if it did not cost more:

@@ -249,9 +249,10 @@ predictor, bit 2 selects the alternate model and bit 3 the colour transform:
 
 Not all six are always tried, and the condition that prunes them is the same
 one throughout: **has any earlier plane already chosen predictor 2**. The
-counter is called `n_hard` and it is incremented exactly when a plane settles
-on predictor 2, on the reasoning that an image needing the deep model for one
-plane will need it for the rest and the cheap candidates are not worth timing.
+counter is `PlaneSearch::n_p2` and it is incremented exactly when a plane
+settles on predictor 2, on the reasoning that an image needing the deep model
+for one plane will need it for the rest and the cheap candidates are not worth
+timing.
 
 So: `0` is skipped once that counter is non-zero; `6` is tried when `5` came
 within `cost/32` of the best so far **or** the counter is non-zero; `8` and

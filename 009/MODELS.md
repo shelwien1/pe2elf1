@@ -69,8 +69,8 @@ anything. One pass of the **main model** over the whole image at its native
 depth. 1-bit and 4-bit images never reach the other two models, and the header
 they get has no descriptor block for the decoder to read.
 
-This is worth stating plainly because it is easy to miss: `search_filter` at 269
-lines and `choose_plane_coding` at 346 lines -- most of what the encoder spends
+This is worth stating plainly because it is easy to miss: `search_filter` at 184
+lines and `choose_plane_coding` at 207 lines -- most of what the encoder spends
 its time on -- **never run for a 1-bit or 4-bit image**.
 
 ### Branch 2 — depth ≥ 8, planar or interleaved
