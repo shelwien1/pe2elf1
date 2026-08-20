@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""An `if` that is the last statement of its block, holding everything in it.
+"""Nesting that holds lines and buys nothing: a trailing guard, and a bare block.
 
     python3 tools/unnest.py bmf.cpp             # report
     python3 tools/unnest.py bmf.cpp --list      # and every one
@@ -43,6 +43,19 @@ loop, which the next run reports.  Checked both ways round on that file --
 198 lines, then 169 -- rather than assumed.  Making it recurse would report a
 finding whose fix depends on another finding being taken first, and a list where
 the second entry is contingent on the first is a list that gets half applied.
+
+**The second finding is a bare braced block.**  `{ ... }` with no `if`, `for`
+or `while` in front of it is a scope, and a scope that declares nothing scopes
+nothing -- it is where the decompiler put a jump's landing, and it costs every
+line inside it a level.  `alt_model_p1` had one around eighty-eight lines,
+`AltP1Block::d8_body` the same one around the same loop, and `model_plane_slow`
+one around a single call.
+
+Declaring nothing is the whole of the test, and it is deliberately that narrow.
+A bare block *with* a declaration in it may be limiting that name's lifetime on
+purpose -- `search_filter` has one holding the transpose trial's `bits_d` and
+`pk`, and it reads better for it.  Twenty-four bare blocks in the tree, three of
+them declaring nothing, and those three are the finding.
 
 **What it does not report.**  An `if` with an `else` (there is a second case, so
 there is nothing to invert), an `if` inside a `switch` (the enclosing block's
@@ -137,10 +150,56 @@ def encloser(lines, i, indent, opens):
     return None
 
 
+# A declaration at the top level of a block: what makes a bare `{ ... }` a
+# scope rather than a leftover.
+DECL = re.compile(r'^\s*(?:const\s+|static\s+|unsigned\s+)*'
+                  r'[A-Za-z_][\w:<>]*(?:\s*<[^;]*>)?[\s*&]+[A-Za-z_]\w*')
+
+
+def bare_blocks(lines, defs):
+    """A `{ ... }` with no control statement in front and no declaration in it."""
+    out = []
+    for i, l in enumerate(lines):
+        if l.strip() != '{':
+            continue
+        j = i - 1
+        while j >= 0 and (not lines[j].strip() or lines[j].lstrip().startswith('//')):
+            j -= 1
+        prev = lines[j].rstrip() if j >= 0 else ''
+        if not (prev.endswith((';', '}', '{')) or prev == ''):
+            continue
+        ind = len(l) - len(l.lstrip())
+        k = next((x for x in range(i + 1, len(lines))
+                  if len(lines[x]) - len(lines[x].lstrip()) == ind
+                  and lines[x].lstrip().startswith('}')), None)
+        if k is None or lines[k].strip() != '}':
+            continue
+        inner = [x for x in lines[i + 1:k]
+                 if len(x) - len(x.lstrip()) == ind + 2
+                 and not x.lstrip().startswith('//')]
+        if any(DECL.match(x) for x in inner):
+            continue
+        name = ''
+        for nm, a, b in defs:
+            if a <= i <= b:
+                name = nm
+        out.append((k - i - 1, path_of(lines), i + 1, name,
+                    'a bare block, declaring nothing', 'drop the braces'))
+    return out
+
+
+def path_of(_lines):
+    return PATH[0]
+
+
+PATH = ['']
+
+
 def findings(path):
+    PATH[0] = path
     lines, defs = units(path)
     opens = {a for _nm, a, _b in defs}
-    out = []
+    out = bare_blocks(lines, defs)
     for i, l in enumerate(lines):
         m = IF.match(l)
         if not m:
@@ -187,9 +246,10 @@ def main():
     out.sort(reverse=True)
     if show:
         for held, path, line, name, cond, exit_ in out:
-            print('%5d lines  %-26s %s:%d  if( %s ) -> %s'
-                  % (held, name, path, line, cond, exit_))
-    print('%d guards holding %d lines that an early exit would unindent'
+            what = cond if exit_ == 'drop the braces' else 'if( %s )' % cond
+            print('%5d lines  %-26s %s:%d  %s -> %s'
+                  % (held, name, path, line, what, exit_))
+    print('%d nestings holding %d lines that buy nothing'
           % (len(out), sum(h for h, *_ in out)))
 
 

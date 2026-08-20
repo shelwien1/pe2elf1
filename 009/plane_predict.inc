@@ -397,7 +397,5 @@ void transform_planes(BmfImage* p_i) {
     }
   }
   free(tmp);
-  {
-    model_plane(p_i, src_pixels, src_pixels);
-  }
+  model_plane(p_i, src_pixels, src_pixels);
 }

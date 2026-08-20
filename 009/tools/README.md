@@ -553,7 +553,7 @@ them run.
 | `unmemcast-sweep.sh` | Retype one frame member, run the gate, keep it or put it back |  |
 | `unmemcast.py` | Give a frame member the type its readers cast it to | yes |
 | `unnamed.py` | Names still spelled the way Hex-Rays spelled them, asked of the source | yes |
-| `unnest.py` | An `if` that is the last statement of its block, holding everything in it | yes |
+| `unnest.py` | Nesting that holds lines and buys nothing: a trailing guard, and a bare block | yes |
 | `unoffset.py` | Turn `*(T *)((char *)p + N)` into the member of `p` that lives at N | yes |
 | `unp2.py` | Give the p2 counter table's cursors the record type they point at | yes |
 | `unrec.py` | Fold an unrolled 18-byte record copy into one assignment | yes |

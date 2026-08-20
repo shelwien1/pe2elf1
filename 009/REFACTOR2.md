@@ -1791,3 +1791,43 @@ stating in one sentence: **a check that cannot see a thing and a check that sees
 it and finds nothing print the same number.**  The 32-bit leg, the two `resign`
 tools, `resign-drive.sh`, and now three body finders.  Every one of them was
 green.
+
+## What the spelling pass was worth the second time
+
+`code_symbol_tree`'s rescale was twenty-six lines carrying seven accumulators --
+`h2`, `acc`, `h4`, `sum4`, `acc6`, `acc8`, `h9` -- with the stores interleaved
+in the order the registers came free.  Underneath all of it:
+
+```
+freq[k] -= freq[k]>>1    for k in 2..9, summing into freq[0]
+```
+
+That is `halve_up`, which this tree already calls through `halve_counts` from
+four other places.  Six lines now.
+
+**It only became visible after the dereference pass.**  The block reached its
+table as `*(freq+2)` .. `*(freq+9)`, and spelled that way it is twenty-six
+unrelated statements; spelled as subscripts it is one loop written out.  The
+first-order value of that pass was that `freq[3]` reads better than
+`*(freq+3)`.  This was the second-order one, and it was larger.
+
+**One of the seven was `int16_t` where the rest were `uint16_t`.**  That only
+matters above 32767, where the signed one goes negative and sign-extends into
+the next term -- so the rewrite is exact under a bound and not otherwise.
+Instrumented over the corpus the total reaches 16431 and that partial 16396,
+both held down by the rescale firing at 16384, and the bound is a `BMF_ASSUME`
+the asserts leg checks.  Shown able to fail before being trusted: at `< 0x1000`
+the asserts leg fails twenty checks.
+
+`reroll.py` was right to say nothing about this, and now says why.  Its rule is
+textual identity once the *integers* are blanked, and no two of those twenty-six
+statements are the same text under any blanking -- the decompiler renamed per
+turn.  Widening it to blank identifiers is `dupblock.py`'s rule, which reports
+rather than applies for exactly that reason.  A scan for the residue -- a window
+touching `name[K]` for five or more consecutive `K` -- came back with eight, all
+of them prose or a loop that is already a loop.
+
+**And the conversion ratchet earned its keep in the same commit**: 196 to 192 at
+64 bits, 183 to 179 at 32, with `legs.sh` saying "lower it" rather than passing
+quietly.  Two commits earlier the same number had gone 198 to 225 unnoticed,
+because there was no number to compare against.

@@ -97,93 +97,94 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     rc_begin_decode();
   else
     rc_begin_encode();
-  {
-    // `n_planes = plane_count` and `w = width` were restated six times between
-    // them inside bodies that write neither -- MSVC reloading two globals it
-    // could not prove unchanged across the calls that sit between the reads.
-    for( uint32_t y = 0; y<(uint32_t)height; ++y ) {
-      for( int32_t p = 0; p<plane_count; ++p ) {
-        plane[p]->advance_row();
-        plane[p]->seed_activity(true);
-      }
-      {
-        // One plane's sample, coded either way: its context built from the
-        // planes beside it, the sample itself, and the record it leaves.  All
-        // four planes do exactly this and all four wrote it out, each with a
-        // `blkN` of its own that no line outside the four uses.
-        auto code_sample = [&](int32_t n, AltP1Block* a, AltP1Block* b,
-                               int32_t off, int32_t val) {
-          AltP1Block*const blk = plane[n];
-          blk->ctx_of(a, b);
-          val = f_DEC ? blk->decode_sample()
-                      : blk->encode_sample(buf, off, val);
-          blk->record_sample(val);
-          return val;
-        };
-        // The residual the encoder hands the coder, and the pixel the decoder
-        // writes back -- the pixel less the DC and less what the planes before
-        // it predict, and the same sum put back.  Four planes do each, and all
-        // eight were written out: three of the four spelled the intermediate
-        // into a name of its own (`want1`, `val1x`, `val3x`) and the fourth put
-        // the sum in the store.
-        //
-        // Three of the four residuals were narrowed to a byte on their way to
-        // the coder -- two through a `uint8_t` temporary and one through a
-        // cast -- and the fourth is a plane that is never transformed, so its
-        // value is a byte already.  The casts are at the calls.
-        //
-        // `mix` is evaluated at the call whether or not the plane is
-        // transformed, which the four sites did not do.  It is a pure read of
-        // the pixels beside this one either way -- the encoder's from the
-        // image and the decoder's from what it has already put back, which are
-        // the same bytes at this point, and that is what makes the codec work.
-        auto fold_from = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix) {
-          const int32_t v = buf[off];
-          return xf ? v-dc-mix : v;
-        };
-        auto unfold_to = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix,
-                             int32_t val) {
-          if( xf )
-            val += dc+mix;
-          buf[off] = val;
-        };
-        for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
-          int32_t off0 = plane_desc[0].src_plane;
+  // A bare braced block held all eighty-eight lines below, declaring
+  // nothing and scoping nothing -- where the decompiler put a jump's
+  // landing.
+  // `n_planes = plane_count` and `w = width` were restated six times between
+  // them inside bodies that write neither -- MSVC reloading two globals it
+  // could not prove unchanged across the calls that sit between the reads.
+  for( uint32_t y = 0; y<(uint32_t)height; ++y ) {
+    for( int32_t p = 0; p<plane_count; ++p ) {
+      plane[p]->advance_row();
+      plane[p]->seed_activity(true);
+    }
+    {
+      // One plane's sample, coded either way: its context built from the
+      // planes beside it, the sample itself, and the record it leaves.  All
+      // four planes do exactly this and all four wrote it out, each with a
+      // `blkN` of its own that no line outside the four uses.
+      auto code_sample = [&](int32_t n, AltP1Block* a, AltP1Block* b,
+                             int32_t off, int32_t val) {
+        AltP1Block*const blk = plane[n];
+        blk->ctx_of(a, b);
+        val = f_DEC ? blk->decode_sample()
+                    : blk->encode_sample(buf, off, val);
+        blk->record_sample(val);
+        return val;
+      };
+      // The residual the encoder hands the coder, and the pixel the decoder
+      // writes back -- the pixel less the DC and less what the planes before
+      // it predict, and the same sum put back.  Four planes do each, and all
+      // eight were written out: three of the four spelled the intermediate
+      // into a name of its own (`want1`, `val1x`, `val3x`) and the fourth put
+      // the sum in the store.
+      //
+      // Three of the four residuals were narrowed to a byte on their way to
+      // the coder -- two through a `uint8_t` temporary and one through a
+      // cast -- and the fourth is a plane that is never transformed, so its
+      // value is a byte already.  The casts are at the calls.
+      //
+      // `mix` is evaluated at the call whether or not the plane is
+      // transformed, which the four sites did not do.  It is a pure read of
+      // the pixels beside this one either way -- the encoder's from the
+      // image and the decoder's from what it has already put back, which are
+      // the same bytes at this point, and that is what makes the codec work.
+      auto fold_from = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix) {
+        const int32_t v = buf[off];
+        return xf ? v-dc-mix : v;
+      };
+      auto unfold_to = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix,
+                           int32_t val) {
+        if( xf )
+          val += dc+mix;
+        buf[off] = val;
+      };
+      for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
+        int32_t off0 = plane_desc[0].src_plane;
+        if constexpr( !f_DEC )
+          cur0 = fold_from(off0, 0, 0, 0);
+        // `keep0` was a third name for `cur0`: assigned from it in both arms
+        // and again beside it when the drift check keeps the reconstruction.
+        cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
+        int32_t off1 = plane_desc[1].src_plane;
+        if constexpr( f_DEC )
+          unfold_to(off0, 0, 0, 0, cur0);
+        else
+          // Narrowed to a byte, as the `uint8_t want1` this replaces was:
+          // the residual reaches the coder eight bits wide.
+          cur1 = (uint8_t)fold_from(off1, xf1, dc1, buf[off0]);
+        cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
+        int32_t off2 = plane_desc[2].src_plane;
+        if constexpr( f_DEC )
+          unfold_to(off1, xf1, dc1, buf[off0], cur1);
+        else
+          want2 = (uint8_t)fold_from(off2, xf2, dc2,
+                                     plane_mix2(plane_desc[off2], buf+off0, buf+off1));
+        want2 = code_sample(2, plane[1], plane[0], off2, want2);
+        if constexpr( f_DEC )
+          unfold_to(off2, xf2, dc2,
+                    plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
+        if( plane_count>=4 ) {
+          int32_t off3 = plane_desc[3].src_plane;
           if constexpr( !f_DEC )
-            cur0 = fold_from(off0, 0, 0, 0);
-          // `keep0` was a third name for `cur0`: assigned from it in both arms
-          // and again beside it when the drift check keeps the reconstruction.
-          cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
-          int32_t off1 = plane_desc[1].src_plane;
+            cur3 = (uint8_t)fold_from(off3, xf3, dc3,
+                                      plane_mix3(plane_desc[off3], buf+off3));
+          cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
           if constexpr( f_DEC )
-            unfold_to(off0, 0, 0, 0, cur0);
-          else
-            // Narrowed to a byte, as the `uint8_t want1` this replaces was:
-            // the residual reaches the coder eight bits wide.
-            cur1 = (uint8_t)fold_from(off1, xf1, dc1, buf[off0]);
-          cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
-          int32_t off2 = plane_desc[2].src_plane;
-          if constexpr( f_DEC )
-            unfold_to(off1, xf1, dc1, buf[off0], cur1);
-          else
-            want2 = (uint8_t)fold_from(off2, xf2, dc2,
-                                       plane_mix2(plane_desc[off2], buf+off0, buf+off1));
-          want2 = code_sample(2, plane[1], plane[0], off2, want2);
-          if constexpr( f_DEC )
-            unfold_to(off2, xf2, dc2,
-                      plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
-          if( plane_count>=4 ) {
-            int32_t off3 = plane_desc[3].src_plane;
-            if constexpr( !f_DEC )
-              cur3 = (uint8_t)fold_from(off3, xf3, dc3,
-                                        plane_mix3(plane_desc[off3], buf+off3));
-            cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
-            if constexpr( f_DEC )
-              unfold_to(off3, xf3, dc3,
-                        plane_mix3(plane_desc[off3], buf+off3), cur3);
-          }
-          buf += plane_count;
+            unfold_to(off3, xf3, dc3,
+                      plane_mix3(plane_desc[off3], buf+off3), cur3);
         }
+        buf += plane_count;
       }
     }
   }

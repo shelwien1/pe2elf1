@@ -407,29 +407,28 @@ struct AltP1Block {
       rc_begin_decode();
     else
       rc_begin_encode();
-    {
-      for( int32_t y = 0; y<height; ++y ) {
-        advance_row();
-        seed_activity(false);
-        {
-          uint8_t* q = out;
-          for( int32_t x = 0; x<width; ++x ) {
-            ctx_of(nullptr, nullptr);
-            if constexpr( f_DEC ) {
-              const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]],
-                                                        ctx[1]);
-              *q = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
-            } else {
-              const int32_t code = fold_or_refuse(q, *src, (uint8_t)pred, fold,
-                                                  fold_hi, unfold);
-              alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
-              ++src;
-            }
-            record_sample((uint8_t)*q);
-            ++q;
+    // The same bare block as `alt_model_p1`'s, around the same loop.
+    for( int32_t y = 0; y<height; ++y ) {
+      advance_row();
+      seed_activity(false);
+      {
+        uint8_t* q = out;
+        for( int32_t x = 0; x<width; ++x ) {
+          ctx_of(nullptr, nullptr);
+          if constexpr( f_DEC ) {
+            const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]],
+                                                      ctx[1]);
+            *q = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
+          } else {
+            const int32_t code = fold_or_refuse(q, *src, (uint8_t)pred, fold,
+                                                fold_hi, unfold);
+            alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
+            ++src;
           }
-          out = q;
+          record_sample((uint8_t)*q);
+          ++q;
         }
+        out = q;
       }
     }
     if constexpr( f_DEC )
