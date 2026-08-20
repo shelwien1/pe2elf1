@@ -53,6 +53,9 @@ than negated, and this reports rather than applies.
 import re
 import sys
 
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import structs                                                    # noqa: E402
+
 MIN = 12
 
 IF = re.compile(r'^(\s*)if\(\s*(.+?)\s*\)\s*\{\s*$')
@@ -63,25 +66,14 @@ FUNC = re.compile(r'^\S.*\)\s*(const\s*)?\{\s*$')
 
 
 def units(path):
-    """(name, first line index, last line index) for each definition in `path`.
+    """(lines, [(name, first, last)]) for each definition in `path`.
 
-    Only used to name a finding.  A body this cannot attribute is still
-    reported, under the empty name -- a finding without a function name is a
-    worse finding, not a skipped one.
+    Through `structs.bodies`, which sees a signature that wraps onto a second
+    line and an in-class method; the walk this replaced saw neither.  Naming a
+    finding was the smaller half of what that cost -- see `encloser`.
     """
     lines = open(path).read().split('\n')
-    out = []
-    for i, l in enumerate(lines):
-        if not FUNC.match(l) or l.lstrip().startswith('//'):
-            continue
-        m = re.search(r'([A-Za-z_]\w*(?:::[A-Za-z_]\w*)?)\s*\(', l)
-        if not m:
-            continue
-        for j in range(i + 1, len(lines)):
-            if lines[j] == '}':
-                out.append((m.group(1), i, j))
-                break
-    return lines, out
+    return lines, [(nm, a, b) for a, b, nm, _sig in structs.bodies(lines)]
 
 
 def close_of(lines, i):
@@ -110,12 +102,20 @@ def close_of(lines, i):
     return -1
 
 
-def encloser(lines, i, indent):
+def encloser(lines, i, indent, opens):
     """What an early exit out of the block holding line `i` would be.
 
     Scans back for the line that opens that block: it is the nearest line above
     with less indentation that ends in `{`.  A `switch` is excluded by never
     matching it -- neither pattern below does.
+
+    **A body is a body whether or not its signature fits on a line.**  `FUNC`
+    wanted the whole of one, so when the opener found here was the *second* line
+    of a wrapped signature it matched neither `LOOP` nor `FUNC`, this answered
+    `None`, and the finding was dropped without a word.  `opens` holds the line
+    each body starts at, per `structs.bodies`, and a wrapped signature starts at
+    the first of its lines -- so the test looks back a few from where the scan
+    stopped.
     """
     for j in range(i - 1, -1, -1):
         l = lines[j]
@@ -127,14 +127,16 @@ def encloser(lines, i, indent):
             return None
         if LOOP.match(l) or DO.match(l):
             return 'continue'
-        if FUNC.match(l):
-            return 'return'
+        for k in range(j, max(-1, j - 4), -1):
+            if k in opens:
+                return 'return'
         return None
     return None
 
 
 def findings(path):
     lines, defs = units(path)
+    opens = {a for _nm, a, _b in defs}
     out = []
     for i, l in enumerate(lines):
         m = IF.match(l)
@@ -160,7 +162,7 @@ def findings(path):
         held = end - i - 1
         if held < MIN:
             continue
-        exit_ = encloser(lines, i, indent)
+        exit_ = encloser(lines, i, indent, opens)
         if not exit_:
             continue
         name = ''

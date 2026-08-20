@@ -45,16 +45,24 @@ condition was false -- nothing subscripted `freq` -- and the four `*freq` were
 correctly left.  Rewriting the twenty-five offsets *created* the subscripts, and
 the second pass reported them.  Two passes and a zero on this tree.
 
-**Two it leaves, and they are worth naming so the next reader does not think
-they were missed.**  `model.inc` and `sym_list.inc` each carry `*slot = slot[-1];`
--- one base spelled both ways on one line, which is exactly what this reports
-elsewhere.  Both are search cursors the body walks, and `*slot` there means "the
-record we arrived at" rather than element zero, so the walking rule excludes
-them.  `slot[0] = slot[-1]` would read better on that line alone and worse in
-the twenty around it; the rule is the rule.
+**One it leaves, and it is worth naming so the next reader does not think it
+was missed.**  `model.inc` and `sym_list.inc` each carry the same line -- one
+base spelled both ways at once, `*slot = slot[-1];` and `*list = list[-1];` --
+and the rule splits them.  `slot` in `init_tables` is `&ent[n_live]` and never
+moves, so it is `slot[0] = slot[-1]` now.  `list` in `add_weight` has a
+`list += n_live;` in it, so `*list` there means "the record we arrived at" and
+the star stays.
+
+The first reading of this pair called both of them cursors and left both, on a
+body span that ran far past the method; the second called both findings, on a
+grep that truncated before the line that moves `list`.  The rule got it right
+both times and the reader did not, which is the argument for the rule.
 """
 import re
 import sys
+
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import structs                                                    # noqa: E402
 
 # `*(name + offset)` -- the unconditional half.  The offset is not required to
 # be a literal: `update_binary_pair` reaches one base three ways in seven lines
@@ -107,7 +115,7 @@ def binds_type(c, start, end, decl_line=False):
     return decl_line and before == ','
 
 
-def declares(c):
+def decl_star(c):
     """Does the first star on this line bind a type?"""
     m = STAR.search(c)
     return bool(m) and bool(TYPED.search(c[:m.start()]))
@@ -115,60 +123,51 @@ OPEN = re.compile(r'^\S.*\)\s*(?:const\s*)?\{\s*$')
 
 
 def bodies(lines):
-    """(name, first, last) for each top-level definition.
+    """(name, first, last) for each definition.
 
     **A signature that wraps is still a signature**, and requiring the whole of
-    one on a line skipped every body whose parameters did not fit -- which on
-    this tree is `bmp_rle_encode`, `write_bmp_palette`, `fit_alpha_weights`,
-    `choose_alpha_plane`, `search_planes` and half a dozen more, all of them
-    invisible to this file and reported as nothing rather than as skipped.
-    Found by asking the widened question by hand and getting a finding inside
-    `bmp_rle_encode` that this had never looked at.
+    one on a line skipped every body whose parameters did not fit --
+    `bmp_rle_encode`, `write_bmp_palette`, `fit_alpha_weights`,
+    `choose_alpha_plane`, `search_planes` and thirty more -- along with every
+    in-class method, which is most of the tree.  Those were reported as nothing
+    rather than as skipped.
 
-    So a definition starts at a line beginning in column 0 that has a `(` in it,
-    and runs to the first line after it that ends in `{` -- at most a few lines
-    down, or it is not a signature.
+    A hand-rolled version of this fixed the wrapping and still missed the
+    methods, which is the argument for not hand-rolling it: `structs.bodies`
+    exists, says in its own docstring that it was written after exactly this
+    happened to forty-three other tools here, and answers 331 where the walk it
+    replaced answered 190.
     """
-    out = []
-    for i, l in enumerate(lines):
-        if l.lstrip().startswith('//') or l[:1].isspace() or '(' not in l:
-            continue
-        head = l
-        for k in range(i, min(i + 4, len(lines))):
-            head = l if k == i else head + ' ' + lines[k].strip()
-            if lines[k].rstrip().endswith('{'):
-                break
-            if lines[k].rstrip().endswith(';'):
-                head = None
-                break
-        else:
-            head = None
-        if not head or not OPEN.match(head.replace('\n', ' ')):
-            continue
-        m = re.search(r'([A-Za-z_]\w*(?:::[A-Za-z_]\w*)?)\s*\(', head)
-        if not m:
-            continue
-        for j in range(i + 1, len(lines)):
-            if lines[j] == '}':
-                out.append((m.group(1), i, j))
-                break
-    return out
+    return [(nm, a, b) for a, b, nm, _sig in structs.bodies(lines)]
 
 
-def moves(text, name):
-    """Does this body advance `name`, or assign to it?
+def declares(line, name):
+    """Does `line` declare `name`?"""
+    return bool(re.search(r'(?:^|[;,(])\s*(?:const\s+|static\s+|volatile\s+)*'
+                          r'[A-Za-z_][\w:]*(?:\s*<[^;]*>)?[\s*&]+%s\b'
+                          % re.escape(name), line))
 
-    `*p = x` assigns through `p` and does not move it, so the assignment test
-    has to refuse a star on its left -- without that, `*slot = slot[-1];` read
-    as "slot is assigned here" and excluded itself, which is the one line in the
-    tree that spells the same base both ways at once and the clearest finding
-    there is.
+
+def moves(lines, name):
+    """Does this body advance `name`, or assign to it after declaring it?
+
+    Two things it must not count.  `*p = x` assigns *through* `p` and does not
+    move it.  And the declaration is where the pointer is set up, not where it
+    walks -- without that, `SymEntry* list = ent;` read as "list is assigned
+    here" and excluded `*list = list[-1];`, while `SymEntry *slot = &ent[n];`
+    two files over did not, because the star sits against the name there and the
+    lookbehind happened to catch it.  The same line, reported or not by where
+    the space fell.  Both are findings; a declaration is skipped whole.
     """
     n = re.escape(name)
-    for pat in (r'\+\+\s*%s\b', r'%s\s*\+\+', r'--\s*%s\b', r'%s\s*--',
-                r'(?<![*\]])\b%s\s*[-+]=', r'(?<![=!<>*])(?<!\]\s)\b%s\s*=(?!=)'):
-        if re.search(pat % n, text):
-            return True
+    pats = (r'\+\+\s*%s\b', r'%s\s*\+\+', r'--\s*%s\b', r'%s\s*--',
+            r'(?<![*\]])\b%s\s*[-+]=', r'(?<![=!<>*])(?<!\]\s)\b%s\s*=(?!=)')
+    for l in lines:
+        if declares(l, name):
+            continue
+        for pat in pats:
+            if re.search(pat % n, l):
+                return True
     return False
 
 
@@ -185,7 +184,7 @@ def findings(path):
         for m in OFFSET.finditer(c):
             out.append((path, i + 1, '*(%s+%s)' % m.groups(),
                         '%s[%s]' % m.groups(), l.strip()[:70]))
-        decl_line = declares(c)
+        decl_line = decl_star(c)
         for m in STAR.finditer(c):
             if binds_type(c, m.start(), m.end(), decl_line):
                 continue
@@ -193,10 +192,10 @@ def findings(path):
             span = [s for s in spans if s[1] <= i <= s[2]]
             if not span:
                 continue
-            body = '\n'.join(code(x) for x in lines[span[0][1]:span[0][2] + 1])
-            if moves(body, name):
+            rows = [code(x) for x in lines[span[0][1]:span[0][2] + 1]]
+            if moves(rows, name):
                 continue
-            if not re.search(r'\b%s\s*\[' % re.escape(name), body):
+            if not re.search(r'\b%s\s*\[' % re.escape(name), '\n'.join(rows)):
                 continue
             out.append((path, i + 1, '*' + name, name + '[0]', l.strip()[:70]))
     return out

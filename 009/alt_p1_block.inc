@@ -537,32 +537,34 @@ struct AltP1Block {
                                               .raw(ctx_dn)),
                            tree_sym);
     }
-    if( counters[result].total<kCounterNudgeLimit ) {
-      if( (result&7u)<7 ) {
-        node_alt[1].bump(slot_r, 7);
-      }
-      if( result&7 ) {
-        node_alt[-1].bump(slot_r, 5);
-      }
-      if( slot_f>=5 ) {
-        // `key + 8` and `key - 8`: the two strips one context step either side
-        // of this one, the same "train the neighbours" the other two arms do.
-        // The first was written out longhand as
-        // `128*(slot_f&1) + ctx[1] + bias + 8`, which is `key` re-derived three
-        // terms at a time beside the `key` on the line above it.
-        const uint32_t key = CtxIdx{}.bit<7>(slot_f&1)
-                                     .bit<6>(counters[result].escape_high(slot_f))
-                                     .raw(ctx[1]);
-        if( (key&0x38)>=0x38||(update_binary_pair(model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
-          update_binary_pair(model_strip(key-8), tree_sym);
-        }
-      }
-      // The nine selectors.  `update_selector` is what the decompilation
-      // wrote out nine times.
-      update_selector(0, slot_f, slot_r, ctx_alt, 0, 1);
-      for( int32_t k = 1; k<9; ++k )
-        update_selector(k, slot_f, slot_r, ctx_alt, 1, 2-ctx_w[k].sel);
+    // A counter that has seen enough does not get its neighbours nudged --
+    // a guard with nothing after it, holding twenty-four lines.
+    if( counters[result].total>=kCounterNudgeLimit )
+      return;
+    if( (result&7u)<7 ) {
+      node_alt[1].bump(slot_r, 7);
     }
+    if( result&7 ) {
+      node_alt[-1].bump(slot_r, 5);
+    }
+    if( slot_f>=5 ) {
+      // `key + 8` and `key - 8`: the two strips one context step either side
+      // of this one, the same "train the neighbours" the other two arms do.
+      // The first was written out longhand as
+      // `128*(slot_f&1) + ctx[1] + bias + 8`, which is `key` re-derived three
+      // terms at a time beside the `key` on the line above it.
+      const uint32_t key = CtxIdx{}.bit<7>(slot_f&1)
+                                   .bit<6>(counters[result].escape_high(slot_f))
+                                   .raw(ctx[1]);
+      if( (key&0x38)>=0x38||(update_binary_pair(model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
+        update_binary_pair(model_strip(key-8), tree_sym);
+      }
+    }
+    // The nine selectors.  `update_selector` is what the decompilation
+    // wrote out nine times.
+    update_selector(0, slot_f, slot_r, ctx_alt, 0, 1);
+    for( int32_t k = 1; k<9; ++k )
+      update_selector(k, slot_f, slot_r, ctx_alt, 1, 2-ctx_w[k].sel);
   }
 
   AltP1Block*alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane) {

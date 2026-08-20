@@ -326,7 +326,7 @@ struct ModelBlock {
           if( slot!=list->ent ) {
             uint16_t sym = slot->sym;
             uint8_t cnt = slot->cnt;
-            *slot = slot[-1];
+            slot[0] = slot[-1];
             slot[-1].set(sym, cnt);
           }
           cur = sel_cur;
@@ -1236,47 +1236,49 @@ struct ModelBlock {
     }
     rc_end_decode();
     int32_t bpp_raw = depth_raw;
-    if( (uint32_t)bpp_raw!=depth ) {
-      int32_t nchunk = (bpp_raw+7)>>3;
-      if( nchunk<=0 ) {
-        n_pix = height*width;
-      } else {
-        done = 0;
-        n_pix = height*width;
-        int32_t chunk = n_pix/nchunk;
-        {
-          // Five rows a turn while five fit, then one at a time.  Both walks
-          // set `row[k] = &expand_buf[chunk*k]`; the unrolled one spells the
-          // first of each five through a running cursor and the other four
-          // through the subscript, which is why they did not look like one
-          // thing.
-          int32_t q5 = 0;
-          uint8_t *row_at = expand_buf;
-          for( ; q5<=nchunk-6; q5 += 5, row_at += 5*chunk ) {
-            row[q5] = row_at;
-            for( int32_t n = 0; n<4; ++n ) row[q5+1+n] = &expand_buf[chunk*(q5+1+n)];
-          }
-          done = nchunk>=6 ? q5 : 0;
-        }
-        for( int32_t q1 = done; q1<nchunk; ++q1 )
-          row[q1] = &expand_buf[chunk*q1];
-      }
+    // The plane was coded at its own depth, so there is nothing to unpack:
+    // a guard with nothing after it, holding thirty-nine lines.
+    if( (uint32_t)bpp_raw==depth )
+      return;
+    int32_t nchunk = (bpp_raw+7)>>3;
+    if( nchunk<=0 ) {
+      n_pix = height*width;
+    } else {
+      done = 0;
+      n_pix = height*width;
+      int32_t chunk = n_pix/nchunk;
       {
-        // `n_pix2 = height*width` was re-read inside the loop; neither factor
-        // moves.
-        uint8_t *interleave_at = dst;
-        n_pix2 = height*width;
-        q2 = 0;
-        for( int32_t written = 0; written<n_pix2; ++written ) {
-          uint8_t *p = row[q2];
-          *interleave_at++ = *p;
-          row[q2] = p+1;
-          if( ++q2==nchunk )
-            q2 = 0;
+        // Five rows a turn while five fit, then one at a time.  Both walks
+        // set `row[k] = &expand_buf[chunk*k]`; the unrolled one spells the
+        // first of each five through a running cursor and the other four
+        // through the subscript, which is why they did not look like one
+        // thing.
+        int32_t q5 = 0;
+        uint8_t *row_at = expand_buf;
+        for( ; q5<=nchunk-6; q5 += 5, row_at += 5*chunk ) {
+          row[q5] = row_at;
+          for( int32_t n = 0; n<4; ++n ) row[q5+1+n] = &expand_buf[chunk*(q5+1+n)];
         }
+        done = nchunk>=6 ? q5 : 0;
       }
-      free(expand_buf);
+      for( int32_t q1 = done; q1<nchunk; ++q1 )
+        row[q1] = &expand_buf[chunk*q1];
     }
+    {
+      // `n_pix2 = height*width` was re-read inside the loop; neither factor
+      // moves.
+      uint8_t *interleave_at = dst;
+      n_pix2 = height*width;
+      q2 = 0;
+      for( int32_t written = 0; written<n_pix2; ++written ) {
+        uint8_t *p = row[q2];
+        *interleave_at++ = *p;
+        row[q2] = p+1;
+        if( ++q2==nchunk )
+          q2 = 0;
+      }
+    }
+    free(expand_buf);
   }
 
   // The run's length, one bit per bucket level from the top down.  A bit is

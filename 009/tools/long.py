@@ -22,8 +22,14 @@ is now *longer than the longest was* tells them a body grew back, which is the
 failure this is for.  Raising it is a decision someone makes and writes down,
 the way `dupblock.py`'s is.
 
-**What a body is.**  A line at any indentation that is a return type, a name and
-a parameter list ending in `{`, whose matching `}` is at the same indentation.
+**What a body is** comes from `structs.bodies`, which every tool here that
+reads the program should be using and which this one was not.  Its own regex
+wanted a whole signature on one line, so the thirty-four definitions whose
+parameters wrap were invisible -- `bmp_rle_encode` at 138 lines,
+`choose_alpha_plane` at 108, `search_planes` at 99 -- and so was every in-class
+method, which is most of the tree.  It reported 190 bodies where the shared
+finder reports 331.
+
 Lambdas are not counted separately -- they are part of the body that holds them,
 which is the right answer for this question: a hundred-line lambda inside a
 twenty-line function is a hundred-and-twenty-line function to read.
@@ -35,8 +41,10 @@ those up moves lines without making anything clearer.  `unnest.py` reports a
 shape that is always worth fixing; this reports a number that is worth looking
 at.  The difference is why this one has a ratchet and that one has a zero.
 """
-import re
 import sys
+
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import structs                                                    # noqa: E402
 
 # The largest code-line count in the tree: `alt_p2_context`, and what is left of
 # it is the five bank context words.
@@ -48,32 +56,33 @@ import sys
 # the cursors were named `c0`..`c4` and the fields spelled `d1(0)` and `v0(-2)`.
 # Five word-builders would each read well alone and the set of them would read
 # worse.  This number is where that decision is recorded.
-RATCHET = 174
-
-DEF = re.compile(r'^(\s*)((?:[A-Za-z_][\w:<>,*&\s]*[\s*&])?'
-                 r'([A-Za-z_]\w*(?:::[A-Za-z_]\w*)?))\s*\(.*\)\s*(const\s*)?\{\s*$')
-# A line that looks like a definition and is not one.
-KEYWORDS = ('if(', 'for(', 'while(', 'switch(', 'return ', 'else', 'catch(',
-            '= {', 'sizeof', 'static_assert')
-
+#
+# 174 until the census was corrected to see wrapped signatures and in-class
+# methods; 171 is the same body measured properly, with the twenty-five
+# `*(freq+K)` rewrites and a folded `ctx15` accounting for the three.  Nothing
+# the corrected census newly sees comes near it -- `bmp_rle_encode` is the
+# largest at 94 -- which is worth saying, because "the ratchet held" is only
+# information if the thing that held it could have failed.
+RATCHET = 171
 
 def bodies(path):
+    """Every body in `path`, measured.
+
+    Through `structs.bodies` and not a regex of its own.  The regex this
+    replaced wanted a whole signature on one line, so it never saw the
+    thirty-four definitions whose parameters wrap -- `bmp_rle_encode` at 141
+    lines, `choose_alpha_plane` at 108, `search_planes` at 99 -- and it never
+    saw an in-class method at all.  A census that cannot see a body reports the
+    same number as one that looks and finds it short, which is the defect
+    `structs.bodies` was written for and says so in its own docstring.
+    """
     lines = open(path).read().split('\n')
     out = []
-    for i, l in enumerate(lines):
-        if l.lstrip().startswith('//') or any(k in l for k in KEYWORDS):
-            continue
-        m = DEF.match(l)
-        if not m:
-            continue
-        close = m.group(1) + '}'
-        for j in range(i + 1, len(lines)):
-            if lines[j] == close:
-                body = lines[i + 1:j]
-                code = [x for x in body
-                        if x.strip() and not x.strip().startswith('//')]
-                out.append((len(code), len(body), path, i + 1, m.group(3)))
-                break
+    for a, b, nm, _sig in structs.bodies(lines):
+        body = lines[a + 1:b]
+        code = [x for x in body
+                if x.strip() and not x.strip().startswith('//')]
+        out.append((len(code), len(body), path, a + 1, nm))
     return out
 
 
