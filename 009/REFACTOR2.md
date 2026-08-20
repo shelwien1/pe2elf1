@@ -1676,3 +1676,57 @@ at 174, which is the five context words.  Before the round the longest was 241
 and the next 129, which is what "outlier" meant; there is not one now.  111
 checks over 17 images on every commit, every counting tool in a 95-tool sweep at
 zero, ASan clean over 44 runs, and `hdrscan` clean over 8704.
+
+## The gate had a hole in it the width of a pointer
+
+The round above ended "111 checks over 17 images on every commit, every counting
+tool at zero".  Both halves were true and neither was the whole gate.
+
+`build.sh` documents **seven** builds.  `test.sh` runs one of them.  Nothing ran
+the other six, and `BMF_BITS=32 ./build.sh` had not compiled since Phase 6 --
+three rounds -- because that phase added eight `static_assert`s on struct
+offsets and wrote every number at 64 bits.  It was found by running the leg,
+which had not happened since; it was confirmed by building the same leg in a
+worktree at the commit before Phase 6, where it compiles.
+
+Every one of the eight offsets moves with the pointer width, so both sets are
+written down under a `UINTPTR_MAX` guard.  The 32-bit numbers are the more
+faithful pair -- `_pad22` and `_pad25` are the decompilation's record of a
+32-bit x86 frame, and the width they were measured at is the width they
+describe.
+
+**And with the leg building, it passes 111 of 111 byte-identical.**  That is
+worth more than the fix: the arithmetic that reaches the range coder does not
+depend on how wide an address is, which a decompilation of 1997 x86 has no
+reason to guarantee and every reason to break.  `tools/x32.sh` had been written
+to ask exactly this and had been unrunnable the whole time.
+
+`tools/legs.sh` runs all seven now and exits non-zero when one does not answer
+what it should.  Pointed at a deliberately broken assert it immediately found
+two more things:
+
+  * **`BMF_CONV=1` exited 0 whatever happened.**  Its count is
+    `grep -c ': warning: '`, and a failed `static_assert` is an `error:` line,
+    so a build that did not compile answered "183, at the ratchet" with a
+    successful status.
+  * `legs.sh`'s own check had to read that status rather than the last line,
+    which is the same defect one level up.  It was written the wrong way first.
+
+**The CONV leg is a ratchet now instead of a leg calling itself one.**  Its
+comment has said "a *new* narrowing that nobody decided on shows up as a count
+that went up" since it was written, with no number to go up from -- and this
+round took it from 198 to 225 without anybody noticing, because 29 of the new
+ones were conversions inside frame declarations that four extractions had
+emptied.  Deleting those left 196, two below where the round started.  Both
+widths are recorded and the leg says over, under or at.
+
+The thirty unused locals the extractions left behind are the other half of that
+story, and they say something about the sweep.  `unused.py` reports zero and is
+right to: it reads the *spliced copy*, and the default build does not pass
+`-Wall`.  The only thing in this tree that can see an unused local is
+`BMF_WARN=1`, and for a round nothing ran it.  A tool reporting zero and a leg
+nobody runs look identical from the outside, which is the same lesson as the
+probe that proves nothing, arrived at from the other direction.
+
+**What a round ends with now**: `./build.sh && ./test.sh`, `tools/sweep.sh`,
+`tools/legs.sh`, and the three slow ones -- `asan.sh`, `fuzz.sh`, `hdrscan.sh`.
