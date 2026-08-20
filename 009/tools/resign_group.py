@@ -193,12 +193,16 @@ def main():
                                         next(iter(flips.values())),
                                         ', '.join('%s (%s)' % (v, cur[v])
                                                   for v in sorted(flips))[:60]))
+        # The same false zero `resign.py` carried, and for the same reason: see
+        # the note at its report.
+        if not resign.HAVE[0]:
+            print('not applicable: warn.log carries no conversion warnings, so '
+                  'there is nothing to read.  Rebuild with `BMF_WARN=1 '
+                  './build.sh -Wconversion -Wsign-conversion` and ask again.')
+            return 0
         was = resign.driven(sys.argv[1], 'resign_group.py')
-        why = ('' if resign.HAVE[0] else
-               ' (no conversion warnings in the log: rebuild with '
-               '`BMF_WARN=1 ./build.sh -Wconversion -Wsign-conversion`)')
-        print('%d groups of locals that have to agree, %d flips%s%s'
-              % (len(found), sum(len(f[3]) for f in found), why,
+        print('%d groups of locals that have to agree, %d flips%s'
+              % (len(found), sum(len(f[3]) for f in found),
                  was and ' (%s)' % was))
         return 0
 

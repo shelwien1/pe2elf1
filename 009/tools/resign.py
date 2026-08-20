@@ -41,6 +41,28 @@ That last exemption is only safe because `explicitcmp.py` has run.  Before it,
 have made it signed; now the comparison carries `(uint32_t)width` and converts
 either way round.  The two rules have to go in that order.
 
+**What it proposes on this tree now is wrong, all nine of it, and that is
+measured rather than suspected.**  Given its log for the first time in several
+rounds -- see the note at the report -- it proposed nine flips across six files.
+Applied one file at a time with the gate after each: two moved streams and were
+reverted, `model.inc`'s pair and `sym_list.inc`'s.  The other four passed the
+gate and *raised* the sign-conversion count: 404 with none of them and 416 with
+all four, with `sym_code.inc`'s `go` alone worth eight of the twelve.
+
+The rule that fails is the third one below -- "flipping removes more conversions
+than it creates".  It counts what the log names as arriving at the local, and
+the log does not name what leaves it through a *parameter*.  This round put four
+helper methods between `alt_p2_context` and its work; `step_bank(1, ctx1, run0)`
+takes a `uint32_t`, so flipping `ctx1` to `int32_t` removes two conversions from
+the log and adds three the log never mentioned.  The tool is measuring one side
+of a boundary that did not exist when it was written.
+
+Nothing is deleted for that.  The rule is sound for the shape it was built for,
+the accounting is what is short, and the honest instrument in the meantime is
+the count itself: flip, rebuild the log, compare, keep it only if the number
+went down and the gate did not move.  Both halves, and this round's nine failed
+one or the other apiece.
+
 The list is what this proposes; `--all` applies it, and the gate is the check.
 Fifteen byte-identical streams is a stronger statement about a type change than
 any argument this file could make.
@@ -353,12 +375,30 @@ def main():
         for nm, _a, _b, name, cur, want, n in found:
             print('%-24s %-16s %-9s -> %-9s %d conversions'
                   % (nm.lstrip('_'), name, cur, want, n))
+        # **A zero with no input is not a zero, and this said one for rounds.**
+        # `sweep.sh` builds the default log, which carries no `-Wconversion`
+        # and no `-Wsign-conversion`, so this tool had nothing to read and
+        # answered "0 locals declared against their own assignments, 0
+        # conversions" -- with the reason in parentheses *after* the numbers,
+        # where a reader takes the numbers first.
+        #
+        # The sweep was not fooled, and it is worth being exact about why: this
+        # file is one of the six named in `sweep.sh` as answering with proposals
+        # rather than a count, so its last line was never being checked for a
+        # zero at all.  Nothing was fooled and nothing was asking, which is the
+        # same position the `BMF_BITS=32` leg was in.
+        #
+        # The sweep already has the right category: a question whose subject is
+        # absent is neither a finding nor a zero, and is counted apart.  So it
+        # says `not applicable` and is.
+        if not HAVE[0]:
+            print('not applicable: warn.log carries no conversion warnings, so '
+                  'there is nothing to read.  Rebuild with `BMF_WARN=1 '
+                  './build.sh -Wconversion -Wsign-conversion` and ask again.')
+            return 0
         was = driven(SRC[0], 'resign.py')
-        why = ('' if HAVE[0] else
-               ' (no conversion warnings in the log: rebuild with '
-               '`BMF_WARN=1 ./build.sh -Wconversion -Wsign-conversion`)')
-        print('%d locals declared against their own assignments, %d conversions%s%s'
-              % (len(found), sum(f[6] for f in found), why,
+        print('%d locals declared against their own assignments, %d conversions%s'
+              % (len(found), sum(f[6] for f in found),
                  was and ' (%s)' % was))
         return 0
 
