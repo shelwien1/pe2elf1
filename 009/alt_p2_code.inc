@@ -1,4 +1,4 @@
-// alt_p2_encode.inc -- the predictor-2 model at depths other than eight, both
+// alt_p2_code.inc -- the predictor-2 model at depths other than eight, both
 // directions.
 //
 // `P2Coef` in alt_p2_block.inc is the coefficient-table borrow both directions
@@ -103,6 +103,13 @@ static int32_t alt_model_p2(BmfImage* p_i, uint8_t* out) {
   return alt_p2_planes_free(plane);
 }
 
+// The two names `plane.inc` reaches for.  The decode half was a file of its own
+// holding these two lines; `alt_p1_code.inc` keeps its pair together and this
+// is the same shape one model over.
 int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   return alt_model_p2<0>(p_i, a2);
+}
+
+int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
+  return alt_model_p2<1>(p_i, out);
 }

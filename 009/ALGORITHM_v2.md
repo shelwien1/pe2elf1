@@ -1576,7 +1576,7 @@ return the reconstruction.
 ## 10. Model C — the alternate model for predictor 2
 
 `alt_p2_block.inc`, `alt_p2_context.inc`, `alt_p2_model.inc`, and the two
-drivers in `alt_p2.inc` and `alt_p2_encode.inc`/`alt_p2_decode.inc`. Selected by
+drivers in `alt_p2.inc` and `alt_p2_code.inc`. Selected by
 flags 6 or 14, and the most expensive of the three — `alt_p2_model.inc` holds
 the largest body in the program.
 

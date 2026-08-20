@@ -65,6 +65,16 @@ static void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   blk->free_workspace();
 }
 
+// The two names the callers reach for, and they sit together because they are
+// one function apiece.  `model_plane` was a file of its own -- what had been in
+// it was 130 lines of `blk->` where the decoder had a call, which is why
+// `pairshare.py` read this pair at 14 shared lines of 170: it was comparing a
+// body against a call.  With the body in `code_plane` above, the pair is these
+// six lines.
+void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+  code_plane<0>(p_i, pixels, raw);
+}
+
 void unmodel_plane(BmfImage* p_i, uint8_t* out) {
   code_plane<1>(p_i, out, nullptr);
 }

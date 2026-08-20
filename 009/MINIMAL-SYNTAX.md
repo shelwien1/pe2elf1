@@ -163,7 +163,7 @@ than methodised, since inlining each at its one or two call sites removes the
 function, its forward declaration and the hop.
 
 `blk->` is 786 → 224. **The 224 are not candidates**: in `model.inc`,
-`model_plane.inc` and `alt_p1.inc`, `blk` is a *local* holding a block the
+`plane.inc` and `alt_p1.inc`, `blk` is a *local* holding a block the
 enclosing function does not belong to, and `blk->x` there is an ordinary member
 access on another object.
 

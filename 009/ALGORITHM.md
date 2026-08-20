@@ -346,7 +346,7 @@ consistent with each other, not with the final stream.
 
 ## 4. Model A — the main model
 
-`model.inc`, driven by `model_plane.inc`. It runs for every image at 4 bits or
+`model.inc`, driven by `plane.inc`. It runs for every image at 4 bits or
 below, for every plane the search leaves at flags 0 or 8, and for the whole
 interleaved image when the alt-off trial of §3.3 wins — in that last case at
 the image's full depth, so a 32-bit image is one pass over 4-byte symbols
@@ -581,7 +581,8 @@ not in it. The last one always has it.
 
 ### 4.4 what the driver does between pixels
 
-`model_plane.inc` walks rows and columns; `start_row` rotates the five row
+`ModelBlock::model_plane_slow` walks rows and columns; `start_row` rotates the
+five row
 buffers one step (`ring_advance`) and seeds the fresh row's match flags against
 symbol 0; and `init_tables()` runs after **every** pixel. That last one is where
 the model learns, and it does seven things in order:
@@ -802,8 +803,8 @@ largest body in the program. Where model B predicts with a fixed rule, this one
 
 It has the same two drivers as model B: `AltP2Block::alt_p2_d8_body` for one
 plane at a time (what `t8g`, `t8p` and `rle8` use — a single 8-bit plane is
-this model's home ground), and `alt_p2_decode.inc` /
-`alt_p2_encode.inc` for all planes at once (`x_ep`).
+this model's home ground), and `alt_p2_code.inc` for all planes at once
+(`x_ep`).
 
 ### 6.1 an NLMS linear predictor
 

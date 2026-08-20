@@ -1134,7 +1134,7 @@ struct ModelBlock {
     uint8_t *out_at, *expand_buf;
     int32_t g0, done;
     int32_t lo, w3, w4, w2, lvl_n, n_pix, q2, n_pix2;
-      uint8_t *dst_base = &dst[-(depth<8)];
+    uint8_t *dst_base = &dst[-(depth<8)];
     rc_begin_decode();
     expand_alphabet();
     int32_t g1 = 0;
