@@ -100,6 +100,20 @@ static inline int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* 
 static inline int32_t nb_resid(const AltP1Block* nb);
 
 struct AltP1Block {
+  // How far a cursor sits into its row, and how far past the last sample the
+  // row-end mirror reaches.  Both are load-bearing and neither was written
+  // down: `ring_advance(buf, cursor, 4)` put the 4 in a call argument, the 10
+  // sat in the allocation, and the relationship between them -- that a row is
+  // margin plus samples plus tail -- was nowhere.
+  //
+  // The margin is what makes `cur[-4]` defined.  Stage 2 Section 12.11 is
+  // right that the negative subscripts are fine and that nothing said why;
+  // this is the why.  The deepest subscript the p1 sources reach is exactly
+  // -4, measured, and the tail is the six records `advance_row` mirrors past
+  // the right edge.
+  static const int32_t kRowMargin = 4;
+  static const int32_t kRowTail = 6;
+
   int32_t width;
   int32_t height;
   int32_t pred;
@@ -140,7 +154,7 @@ struct AltP1Block {
       for( int32_t k = 0; k<6; ++k )
         here[k] = here[-1-k];
     }
-    ring_advance(buf, cursor, 4);
+    ring_advance(buf, cursor, kRowMargin);
     cursor[0][-4] = cursor[1][3];
     {
       P1Ctx*const here = cursor[0];
@@ -614,7 +628,7 @@ struct AltP1Block {
       ctx_w[c].w[2] = 2*w1;
     }
     for( int32_t row = 0; row<5; ++row )
-      buf[row] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+10));
+      buf[row] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+kRowMargin+kRowTail));
     alt_init_tables(fold, (int8_t*)unfold);
     // `width + 10` is never negative, so the `> -10` guard the `do` needed is
     // gone with it, and `wid = width` inside the body was a member re-read.

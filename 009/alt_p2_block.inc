@@ -336,6 +336,14 @@ struct P2Coef {
 };
 
 struct AltP2Block {
+  // The same pair as `AltP1Block::kRowMargin` and for the same reason: the 8
+  // was a `ring_advance` argument and the 13 an allocation, with nothing
+  // saying they are two ends of one row.  The deepest subscript the p2 sources
+  // reach is exactly -8, measured, which is the margin; the tail is what the
+  // right-edge mirror and the `c1[5]` lookahead need.
+  static const int32_t kRowMargin = 8;
+  static const int32_t kRowTail = 5;
+
   NbRow nb_weights[1088];
   // This was a union of `p2_row` with a struct whose first 112 bytes were
   // `p2_row0_head[15]` and `_u0_0_4[97]` -- 112 being `sizeof p2_row`, so the
@@ -656,7 +664,7 @@ struct AltP2Block {
   // multiplied out.
   void copy_row0_down(int32_t width) {
     static_assert(sizeof(P2Ctx) == 18, "a row is eighteen bytes to the record");
-    const int32_t row_bytes = sizeof(P2Ctx)*(width+13);
+    const int32_t row_bytes = sizeof(P2Ctx)*(width+kRowMargin+kRowTail);
     for( int32_t i = 0; i<3; ++i )
       memcpy(buf[1+i], buf[0], row_bytes);
   }
@@ -740,7 +748,7 @@ struct AltP2Block {
       P2Ctx*const here = cursor[0];
       for( int32_t i = 0; i<5; ++i ) here[i] = here[-1-i];
     }
-    ring_advance(buf, cursor, 8);
+    ring_advance(buf, cursor, kRowMargin);
     cursor[0][-1] = cursor[1][0];
     {
       P2Ctx*const here = cursor[0];
@@ -803,6 +811,12 @@ struct AltP2Block {
       }
     }
     uint32_t row = 0;
+    // `18*width + 234` is `sizeof(P2Ctx) * (width + 13)`, which is the same
+    // margin-plus-samples-plus-tail as the line above spells directly.  It is
+    // kept in the decompilation's form because `kP2RowPad` is what the original
+    // added and the two readings are worth having side by side.
+    static_assert(kP2RowPad == sizeof(P2Ctx)*(kRowMargin+kRowTail),
+                  "the row pad is the two margins");
     int32_t row_bytes = 18*max32(img_w, 3)+kP2RowPad;
     do
       buf[row++] = (P2Ctx*)bmf_new(row_bytes);

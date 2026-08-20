@@ -135,6 +135,19 @@ struct ModelBlock {
   uint32_t ctx_id3_used;
   uint32_t hit;
   uint32_t ctx_state_seen;
+  // The same margin pair as the two alternate blocks.  Here the deepest static
+  // subscript is `row[-8]` in `record_sample` while the margin is 7, and the
+  // two are not in conflict: that read happens after the five `++row_cur[k]`,
+  // so the cursor has already stepped at least one record into the row.  A
+  // margin that has to be reasoned about together with a cursor bump is
+  // exactly the kind of thing Stage 2 Section 12.11 says nothing documents.
+  //
+  // The runtime side of it is ASan, which walks all nineteen images clean;
+  // what these add is the *name*, so the 7 in `ring_advance` and the 16 in the
+  // allocation stop being two unrelated numbers.
+  static const int32_t kRowMargin = 7;
+  static const int32_t kRowTail = 9;
+
   uint32_t bucket_idx;
   uint32_t sym_pos;
   uint32_t ctr_fallback;
@@ -430,7 +443,7 @@ struct ModelBlock {
   void start_row() {
     row_cur[5]->match[1] = row_cur[5][-1].sym==0;
     row_cur[5]->match[3] = row_cur[6][-1].sym==0;
-    ring_advance(row_cur, row_cur+5, 7);
+    ring_advance(row_cur, row_cur+5, kRowMargin);
     uint8_t zero = row_cur[6][1].sym==0;
     row_cur[5]->match[2] = zero;
     row_cur[5][-1].match[4] = zero;

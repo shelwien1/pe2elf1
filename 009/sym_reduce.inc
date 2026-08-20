@@ -190,13 +190,28 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   uint32_t sym_bits = blk->depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
   uint32_t n_kids = (sym_bits+7)>>3;
+  // One symbol's bytes as a word.  `p` walks by `n_kids`, which is 2, 3 or 4
+  // here, so two of the three strides leave these loads *unaligned* -- and
+  // `*(uint32_t*)p` on an unaligned address is the aliasing violation the
+  // `-fno-strict-aliasing` build has been carrying rather than the alignment
+  // fault it would be elsewhere.
+  //
+  // `memcpy` is the standard-sanctioned spelling and compiles to the same
+  // unaligned load at -O2.  Not `std::bit_cast` over a `std::array` (kimi's
+  // suggestion): that works but goes the long way round, and `hist_bump` next
+  // door already uses `memcpy` for exactly this.
+  auto load32 = [](const uint8_t* at) {
+    uint32_t v;
+    memcpy(&v, at, sizeof v);
+    return v;
+  };
   clear_sym_lists(lists);
   if( sym_bits<=8 ) {
     reduce_narrow_alphabet(lists, blk, src, mask);
   } else {
     memset(tree, 0, sizeof tree);
     blk->alphabet = 1;
-    tree[0].val = mask&*(uint32_t*)src;
+    tree[0].val = mask&load32(src);
     blk->sym_word[0] = 0;
     if( (uint32_t)(blk->height*blk->width)>1 ) {
       uint8_t *p = src;
@@ -204,7 +219,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       uint32_t written = 1;
       while( 1 ) {
         p += n_kids;
-        uint32_t val = mask&*(uint32_t*)p;
+        uint32_t val = mask&load32(p);
         // `node = 0` makes `tree[node]` the root, so the second test is the
         // first one again with the walk restarted -- and the overflow check
         // can sit beside it rather than one level in, because a value that is

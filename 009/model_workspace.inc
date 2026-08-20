@@ -56,14 +56,20 @@ ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t im
   escape.ent = nullptr;
   sym_code = nullptr;
   for( j = 0; j<5; ++j ) {
-    PixRec* buf = (PixRec*)bmf_new(sizeof(PixRec)*(w+16));
+    PixRec* buf = (PixRec*)bmf_new(sizeof(PixRec)*(w+ModelBlock::kRowMargin
+                                                    +ModelBlock::kRowTail));
     row_cur[j] = buf;
-    row_cur[j+5] = buf+8;
+    // The second cursor set starts one past the margin, and `start_row` then
+    // reseats it *at* the margin -- so the 8 here and the 7 there are the same
+    // edge approached from two sides, which is why they differ by one.
+    row_cur[j+5] = buf+ModelBlock::kRowMargin+1;
     // `width + 16` is never negative -- `width` is a `uint16_t` field -- so the
     // `> -16` guard the `do` needed to be safe is gone with it, and so is the
-    // `w = width` the loop re-did on every record.
+    // `w = width` the loop re-did on every record.  The 16 is the two margins:
+    // `ModelBlock::kRowMargin` on the left, which is what makes `row[-8]`
+    // defined once the cursor has stepped, and `kRowTail` on the right.
     w = width;
-    for( uint32_t r = 0; r<width+16u; ++r ) {
+    for( uint32_t r = 0; r<width+(uint32_t)(ModelBlock::kRowMargin+ModelBlock::kRowTail); ++r ) {
       row_cur[j][r].sym = 0;
       for( int32_t i = 0; i<6; ++i ) row_cur[j][r].match[5-i] = 1;
     }
