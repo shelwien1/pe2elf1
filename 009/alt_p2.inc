@@ -124,24 +124,28 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
     for( uint32_t y = 0; y<(uint32_t)(height-1); ++y ) {
       uint8_t *srcp = src_end;
       start_row();
-      if( width>0 ) {
-        for( k = 0; k<(uint32_t)width; ++k ) {
-          int32_t pred = alt_p2_context(nullptr, nullptr);
-          if constexpr( f_DEC ) {
-            code2 = code = freq[ctx].decode_symbol(pair);
-            outp[k] = (uint8_t)(pred+(unfold[code]));
-          } else {
-            code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi,
-                                  unfold);
-            code2 = code;
-            freq[ctx].encode_symbol(pair, code);
-          }
-          alt_p2_model(outp[k], code2, outp[k]-pred);
+      // A zero-width plane has no pixels in the row, and the guard held the
+      // whole of the row body with nothing after it.  `start_row()` above it
+      // still runs for every row, which is why this is a `continue` and not
+      // a test hoisted out of the loop.
+      if( width<=0 )
+        continue;
+      for( k = 0; k<(uint32_t)width; ++k ) {
+        int32_t pred = alt_p2_context(nullptr, nullptr);
+        if constexpr( f_DEC ) {
+          code2 = code = freq[ctx].decode_symbol(pair);
+          outp[k] = (uint8_t)(pred+(unfold[code]));
+        } else {
+          code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi,
+                                unfold);
+          code2 = code;
+          freq[ctx].encode_symbol(pair, code);
         }
-        if constexpr( !f_DEC )
-          src_end = &srcp[width];
-        outp = &outp[width];
+        alt_p2_model(outp[k], code2, outp[k]-pred);
       }
+      if constexpr( !f_DEC )
+        src_end = &srcp[width];
+      outp = &outp[width];
     }
   }
   if constexpr( f_DEC )

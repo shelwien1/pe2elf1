@@ -369,24 +369,30 @@ void transform_planes(BmfImage* p_i) {
     const int32_t predictor = plane_predictor;
     const int32_t alt = (plane_desc[plane].flags&desc_alt_model)!=0;
     plane_alt_model = alt;
-    if( ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt ) {
-      colour_transform(hdr, tmp, plane);
-      // `!= pred_p2 && == pred_p1` is `== pred_p1`: the two are distinct
-      // values of the same two-bit field, so the outer test can only be
-      // true when the inner one is.
-      if( plane_predictor==pred_p1 )
-        predict_med(tmp, p_i->width, p_i->height);
-      int32_t n = p_i->width*p_i->height;
-      int32_t stride = plane_count;
-      if( plane_count==1 ) {
-        memcpy(&p_i->pixels[plane], tmp, n);
-      } else {
-        uint8_t *dst = &p_i->pixels[plane];
-        int32_t ofs = 0;
-        for( i = 0; i<n; ++i ) {
-          dst[ofs] = tmp[i];
-          ofs += stride;
-        }
+    // A plane is transformed when it has references or a predictor, and not
+    // when it carries the alternate model -- that family does its own.  The
+    // condition held the whole of the loop body and had nothing after it, so it
+    // is a name and an early exit.
+    const bool transform_it =
+        ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt;
+    if( !transform_it )
+      continue;
+    colour_transform(hdr, tmp, plane);
+    // `!= pred_p2 && == pred_p1` is `== pred_p1`: the two are distinct
+    // values of the same two-bit field, so the outer test can only be
+    // true when the inner one is.
+    if( plane_predictor==pred_p1 )
+      predict_med(tmp, p_i->width, p_i->height);
+    int32_t n = p_i->width*p_i->height;
+    int32_t stride = plane_count;
+    if( plane_count==1 ) {
+      memcpy(&p_i->pixels[plane], tmp, n);
+    } else {
+      uint8_t *dst = &p_i->pixels[plane];
+      int32_t ofs = 0;
+      for( i = 0; i<n; ++i ) {
+        dst[ofs] = tmp[i];
+        ofs += stride;
       }
     }
   }

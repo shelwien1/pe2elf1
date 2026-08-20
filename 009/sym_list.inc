@@ -250,7 +250,7 @@ struct SymList {
 
   int32_t code_symbol(int32_t want) {
     int32_t enc_cum, enc_high, enc_tot;
-    int32_t c, result, c2;
+    int32_t c, c2;
     uint32_t i;
     int8_t gen = exclusion_gen;
     uint32_t left = live;
@@ -265,22 +265,26 @@ struct SymList {
         if( s==want )
           break;
       }
-      if( !--left ) {
-        if( !cum )
-          return 0;
-        enc_cum = cum;
-        enc_tot = tot+cum;
-        enc_high = enc_tot;
-        do {
-          exclusion_mask[p->sym] = gen;
-          --p;
-        } while( p>=ent );
-        result = 0;
-        {
-          rc.encode(enc_cum, enc_high, enc_tot);
-          return result;
-        }
-      }
+      // The last live symbol, which needs no code of its own: every other one
+      // is excluded and the decoder can name it.  A guard with nothing after it
+      // in the loop, so it says `continue` and the fourteen lines it held come
+      // out a level.
+      if( --left )
+        continue;
+      if( !cum )
+        return 0;
+      enc_cum = cum;
+      enc_tot = tot+cum;
+      enc_high = enc_tot;
+      do {
+        exclusion_mask[p->sym] = gen;
+        --p;
+      } while( p>=ent );
+      // `result = 0;` and a braced block around the two lines below it, the
+      // block being where the decompiler put a `goto`'s landing.  There is one
+      // value and it is a literal.
+      rc.encode(enc_cum, enc_high, enc_tot);
+      return 0;
     }
     enc_high = cum;
     uint32_t rest = left-1;
@@ -296,9 +300,8 @@ struct SymList {
     }
     enc_tot = tot+cum;
     rescale(promote(p));
-    result = 1;
     rc.encode(enc_cum, enc_high, enc_tot);
-    return result;
+    return 1;
   }
 
   void add_weight(int32_t want, uint32_t add) {
