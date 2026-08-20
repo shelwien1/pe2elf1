@@ -154,7 +154,7 @@ static uint8_t* bmp_rle_encode(BmfImage* img, int32_t bits, uint8_t* buf,
   // is what `BMF_WARN=1 ./build.sh` counts.
   auto run_length = [](const uint8_t* from, const uint8_t* stop) {
     int32_t n = 1;
-    while( stop>from+n&&from[n]==*from )
+    while( stop>from+n&&from[n]==from[0] )
       ++n;
     return n;
   };

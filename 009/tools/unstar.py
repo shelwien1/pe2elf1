@@ -89,24 +89,63 @@ TYPED = re.compile(r'(?:^|[;,\(]|\b(?:const|volatile|static|inline)\b)\s*'
                    r'[A-Za-z_][\w:]*(?:\s*<[^;]*>)?\s*$')
 
 
-def binds_type(c, start, end):
+def binds_type(c, start, end, decl_line=False):
     after = c[end:end + 1]
     if after == '[':
         return True
     before = c[:start].rstrip()[-1:]
     if before == '(' and after == ')':
         return True
-    return bool(TYPED.search(c[:start]))
+    if TYPED.search(c[:start]):
+        return True
+    # A fourth shape, and the last: the second and later declarators of a list
+    # with initialisers.  `const uint8_t *e0 = &pal[6*j], *e1 = &pal[6*j+3];`
+    # has no type name before `*e1`, only a comma -- and a comma before a star
+    # is also what a call argument looks like.  What tells them apart is the
+    # *first* star on the line: if that one bound a type, this is a declarator
+    # list and so does this one.
+    return decl_line and before == ','
+
+
+def declares(c):
+    """Does the first star on this line bind a type?"""
+    m = STAR.search(c)
+    return bool(m) and bool(TYPED.search(c[:m.start()]))
 OPEN = re.compile(r'^\S.*\)\s*(?:const\s*)?\{\s*$')
 
 
 def bodies(lines):
-    """(name, first, last) for each top-level definition, by indentation."""
+    """(name, first, last) for each top-level definition.
+
+    **A signature that wraps is still a signature**, and requiring the whole of
+    one on a line skipped every body whose parameters did not fit -- which on
+    this tree is `bmp_rle_encode`, `write_bmp_palette`, `fit_alpha_weights`,
+    `choose_alpha_plane`, `search_planes` and half a dozen more, all of them
+    invisible to this file and reported as nothing rather than as skipped.
+    Found by asking the widened question by hand and getting a finding inside
+    `bmp_rle_encode` that this had never looked at.
+
+    So a definition starts at a line beginning in column 0 that has a `(` in it,
+    and runs to the first line after it that ends in `{` -- at most a few lines
+    down, or it is not a signature.
+    """
     out = []
     for i, l in enumerate(lines):
-        if l.lstrip().startswith('//') or not OPEN.match(l):
+        if l.lstrip().startswith('//') or l[:1].isspace() or '(' not in l:
             continue
-        m = re.search(r'([A-Za-z_]\w*(?:::[A-Za-z_]\w*)?)\s*\(', l)
+        head = l
+        for k in range(i, min(i + 4, len(lines))):
+            head = l if k == i else head + ' ' + lines[k].strip()
+            if lines[k].rstrip().endswith('{'):
+                break
+            if lines[k].rstrip().endswith(';'):
+                head = None
+                break
+        else:
+            head = None
+        if not head or not OPEN.match(head.replace('\n', ' ')):
+            continue
+        m = re.search(r'([A-Za-z_]\w*(?:::[A-Za-z_]\w*)?)\s*\(', head)
         if not m:
             continue
         for j in range(i + 1, len(lines)):
@@ -146,8 +185,9 @@ def findings(path):
         for m in OFFSET.finditer(c):
             out.append((path, i + 1, '*(%s+%s)' % m.groups(),
                         '%s[%s]' % m.groups(), l.strip()[:70]))
+        decl_line = declares(c)
         for m in STAR.finditer(c):
-            if binds_type(c, m.start(), m.end()):
+            if binds_type(c, m.start(), m.end(), decl_line):
                 continue
             name = m.group(1)
             span = [s for s in spans if s[1] <= i <= s[2]]
