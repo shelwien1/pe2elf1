@@ -43,3 +43,15 @@ done
 sleep 2
 echo "resumed:"
 ps -eo pid,etime,args | grep '[a]uto_opt2.pl'
+
+# NOTE on launching these under the Claude Code harness rather than from a shell:
+# use one background Bash task per instance, and keep the pipeline
+#
+#   cd opt/<d> && exec perl auto_opt2.pl 2>&1 | tee -a opt.log | grep --line-buffered -E '^(!!!|===|Done)'
+#
+# The tee/grep half is not cosmetic.  Redirecting straight to opt.log
+# (`>> opt.log 2>&1`) leaves the harness task's own output stream empty, so the
+# task list shows a running climber with no output for as long as it runs, which
+# is indistinguishable there from one that died.  Sending the descriptor headers,
+# the `=== <size>` improvement markers and the final `Done` to stdout keeps the
+# task list truthful while opt.log still gets every trial line.
