@@ -171,6 +171,16 @@ static AlphaWeights fit_alpha_weights(const uint8_t* px, const uint8_t* pp,
 // the `widest_window` at the end indexes them by row exactly as the colour
 // search does -- rows 4..7 rather than 0..3, which is the `4 +` in that call.
 // Taken by reference so `sizeof hists` still means the whole block.
+//
+// **What the gate sees of this.**  Five of the seventeen corpus images reach
+// here -- `t32`, `med32`, `x_ep`, `xform1` and `xform2`, the four-plane ones --
+// and making the call conditional on `0` fails 12 of 111 checks, so the stage is
+// covered in both directions.  Perturbing the *fitted* weight alone fails only
+// one, `xform2`: the other four either pick a candidate that overwrites all
+// three weights with a constant or already fit to zero, so the fit is real work
+// whose result three of the four candidates discard.  That is a fact about the
+// algorithm and not a gap in the corpus, and it is written down because the
+// one-check number looks like a gap and is the first thing a probe reports.
 static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
                                const uint8_t* data_end, int32_t row_stride) {
   // Rows by number rather than by name here, which is what the original spelled
