@@ -40,7 +40,6 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint32_t cum, j;
   int32_t lvl, result, go, span;
   uint16_t fq, *slot;
-  uint16_t h9, acc8, acc6, acc;
   uint16_t *f0 = freq+2;
   uint32_t tot = freq[0];
   if constexpr( f_DEC ) {
@@ -66,33 +65,28 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
     result = rc.encode(cum, cum_hi, tot);
   }
   if( freq[0]>0x4000u ) {
-    uint16_t h2 = freq[2]-(freq[2]>>1);
-    acc = freq[3];
-    freq[2] = h2;
-    acc = acc-(acc>>1);
-    freq[3] = acc;
-    acc = h2+acc;
-    uint16_t h4 = freq[4]-(freq[4]>>1);
-    freq[4] = h4;
-    int16_t sum4 = acc+h4;
-    acc = freq[5]-(freq[5]>>1);
-    acc6 = freq[6];
-    freq[5] = acc;
-    acc6 = acc6-(acc6>>1);
-    freq[6] = acc6;
-    acc6 = sum4+acc+acc6;
-    acc = freq[7]-(freq[7]>>1);
-    acc8 = freq[8];
-    freq[7] = acc;
-    acc = acc6+acc;
-    acc8 = acc8-(acc8>>1);
-    h9 = freq[9];
-    freq[8] = acc8;
-    acc8 = acc+acc8;
-    h9 = h9-(h9>>1);
+    // The eight level counts halved, and their new total.  Twenty-six lines
+    // until the `*(freq+K)` spellings became subscripts and the shape showed:
+    // `freq[k] -= freq[k]>>1` for k in 2..9, with a running sum landing in
+    // `freq[0]`.  That is `halve_up`, which this file's four siblings already
+    // call through `halve_counts` -- `P2Freq` halves three the same way twice
+    // over, `BitCtr::scale_rare` two, `halve_pair` a bit-tree pair.
+    //
+    // The unrolling carried six accumulators (`h2`, `acc`, `h4`, `sum4`,
+    // `acc6`, `acc8`, `h9`) that are one running total interleaved with the
+    // stores in the order the registers came free, and one of them was
+    // `int16_t` where the rest are `uint16_t`.  That only matters above 32767,
+    // where the signed one would go negative and sign-extend into the next
+    // term; the assert is what says it cannot.  Instrumented over the corpus
+    // the total reaches 16431 and the `int16_t` partial 16396 -- the rescale
+    // fires at 16384, which is what bounds both.
+    halve_counts(freq+2, 8);
+    uint16_t total = 0;
+    for( int32_t k = 2; k<10; ++k )
+      total += freq[k];
+    BMF_ASSUME(total<0x8000u);
     int32_t esc = freq[1];
-    freq[9] = h9;
-    freq[0] = acc8+h9;
+    freq[0] = total;
     if( esc<=4*alt_freq_limit ) {
       result = 4*(esc>alt_freq_limit);
       add = esc-result;

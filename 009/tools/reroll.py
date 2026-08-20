@@ -33,6 +33,22 @@ comment, so a later reader who wants to "tidy" the loop into ascending order
 has been told.  No comment means nothing was found, which for a run of calls
 the tool cannot read is weaker than "the turns are independent".
 
+**What it cannot see, said here so its zero is not read as more than it is.**
+The rule is textual identity once the *integers* are blanked, and a decompiler
+that renames per turn defeats it.  `code_symbol_tree`'s rescale was eight turns
+of `freq[k] -= freq[k]>>1` with a running total, and it came out as twenty-six
+interleaved lines carrying seven accumulators -- `h2`, `acc`, `h4`, `sum4`,
+`acc6`, `acc8`, `h9` -- with the stores in the order the registers came free.
+No two of those statements are the same text under any blanking of integers,
+and this file was right to say nothing about them.
+
+Widening to blank identifiers as well is `dupblock.py`'s rule, and it reports
+rather than applies for exactly this reason: once the names may differ, so may
+the meanings.  That block was found by reading, after `unstar.py` turned its
+`*(freq+K)` spellings into subscripts and the shape showed.  A scan for the
+residue -- a window touching `name[K]` for five or more consecutive `K` -- came
+back with eight, all of them prose or a loop that is already a loop.
+
 **The counter needs a fresh name.**  `src2->cursor[0] = src2->buf[0]+row_i+8;`
 unrolled five ways is a loop, and the same block in the decoder spells `row_i`
 as `i`.  Re-rolling that one with a counter also called `i` shadows the row and
