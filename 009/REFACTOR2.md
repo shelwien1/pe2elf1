@@ -1601,3 +1601,78 @@ can fire and still say nothing.  Three of the four instruments this round leaned
 on had to be shown able to report before their zeros were worth anything, and
 one of them — `covered.py` — was wrong twice in the same run, first about a body
 written on its signature's own line and then about two methods sharing a name.
+
+## Stage three: the monsters, and two tools that came out of taking them apart
+
+Nobody asked for this round.  The plan was finished and the gate was green; what
+was left was six functions between two hundred and five hundred and fifty lines
+each, and the question of whether any of them had a seam that was a *stage*
+rather than a step.  Four did.
+
+| | was | is | what came out |
+| --- | --- | --- | --- |
+| `alt_p2_context` | 557 | 284 | `seat_nb_row`, `fill_row_inputs`, `step_bank`, `seat_symbol_context` |
+| `write_bmp` | 286 | 81 | `write_bmp_palette`, `bmp_rle_encode` |
+| `choose_plane_coding` | 347 | 205 | `choose_alpha_plane`, `fit_alpha_weights` |
+| `search_filter` | 269 | 182 | `search_planes` |
+
+The test that decided each one was the same: **does the block end where its
+enclosing block does, and does it touch anything else of the frame.**
+`fill_row_inputs` touched six cursors and nothing else, so those are what it
+hands back.  `search_planes` took two lambdas and three locals with it because
+nothing outside used them.  `bmp_rle_encode` needed only its own cursor, which
+is why the retry that wrapped it — a `while( 1 )` with at most two turns, a flag
+at the bottom and three `break`s out — could become one `if` at the call site.
+
+**Where the seam was declined, it was declined out loud and in the file.**  The
+four variants of `fill_row_inputs`' rows 4..6 stay adjacent, and so do the five
+bank context words: each is one block per case, differing only in its terms, and
+being able to diff them by eye is the entire reason the cursors are named
+`c0`..`c4` and the fields spelled `d1(0)`.  Four or five small functions would
+each read better alone and the set of them would read worse.  That is written at
+`fill_row_inputs` and in `long.py`'s ratchet constant, because it is exactly the
+kind of decision a later pass undoes for looking tidy.
+
+**Ten things fell out of the moves that nobody was looking for.**  A dead store
+into `bank_ctx[0]`, proved rather than argued — 12345 stored there leaves all
+111 checks passing and stored nine lines down fails twelve.  `no_ref` assigned
+twice thirty lines apart, which `const` now refuses.  `run4` written twice, the
+second time as a register reused for a difference — and the original said so
+itself, recomputing `run3 + pred4` for the level index rather than reading the
+variable back.  `nb_dot` written out three times.  `hists + 3*1024` written in
+three functions.  Two accumulators named for bits that held plane counts.  A
+`can_rle` flag with three other names for the same bit.  And `n_p2 = bits_a`,
+a bit count stored in a plane count, which is **left alone**: its only effect is
+on an `!n_p2` twenty lines below, so a flag would say it better, but
+`transform_cost` measures bytes written before the coder's flush and the trial
+tile is as small as 4x3, so a zero is not ruled out by anything here.
+
+**Two tools.**
+
+`unnest.py` came from `code_banks`: two nested `if`s around all of its working
+lines, nothing after either, 73 lines of code at five levels of indentation, and
+no tool said so.  A decompiler makes this shape by default — a conditional jump
+over a region becomes an `if` around the region, and nothing asks whether the
+region ends where its block does.  Its first run had two false findings in eight
+because `close_of` counted braces and `} else {` is net zero; reading the eight
+one at a time is what caught it, and three more of the eight went the same way
+once it was fixed.  Four real findings, all fixed.
+
+`long.py` came from running the same census by hand four times in one round.
+Every time a function came apart the next question was which one is longest now,
+and the answer was a throwaway regex in a shell.  It counts *code* lines, so a
+heavily annotated body is not the finding, and it carries a ratchet, because
+"the longest function is 174 lines" tells a reader nothing they can act on while
+"something is longer than the longest was" tells them a body grew back.
+
+**Both were shown able to report before their zeros were counted.**  `unnest.py`
+finds all four of its findings on the tree as it stood one commit earlier and
+none on the tree now; `long.py` reports `alt_p2_context` sixty-seven lines over
+on the tree of four commits ago.  That is the rule this project keeps
+re-learning, and this round it was cheap: two `git show`s into a scratch file.
+
+**Where this leaves it.**  Thirteen bodies between 87 and 129 code lines and one
+at 174, which is the five context words.  Before the round the longest was 241
+and the next 129, which is what "outlier" meant; there is not one now.  111
+checks over 17 images on every commit, every counting tool in a 95-tool sweep at
+zero, ASan clean over 44 runs, and `hdrscan` clean over 8704.
