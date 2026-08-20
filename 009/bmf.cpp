@@ -180,7 +180,6 @@
 #include "file.inc"
 #include "rc_io.inc"
 #include "sym_code.inc"
-#include "sym_list_decode.inc"
 #include "model_workspace.inc"
 #include "sym_reduce.inc"
 #include "alt_p1.inc"
