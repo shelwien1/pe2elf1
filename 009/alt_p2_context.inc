@@ -207,6 +207,116 @@ AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* ref
   }
 }
 
+// The symbol context this sample is coded in, and the level index that goes
+// with it.  The last stage of `alt_p2_context`: everything above it produces
+// `run4`, the cascade's running prediction, and this turns that plus the
+// neighbourhood's magnitudes into the five ternary selectors, the two flatness
+// bits and the sixteen-way magnitude class.
+//
+// Ninety lines, and what it needs from the caller is `run4` and the reference
+// rows -- `ctx_w`, `ctx`, `ctx_pair`, `band_lo`, `band_hi`, `has_ref`,
+// `plane_idx` and the five cursors are all members.  It writes `ctx_w[].sel`,
+// `ctx` and `ctx_pair[]` and answers with the level index.
+int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs& refs) {
+  P2Ctx *const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2],
+        *const c3 = cursor[3], *const c4 = cursor[4];
+  int32_t ctx15, flat_a, flat_b;
+  int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
+  int32_t lo_band = band_lo;
+  ctx_w[0].sel = (run4<1840)+(run4<272);
+  int32_t hi_band = band_hi;
+  ctx_w[1].sel = (run4-c1->val<=hi_band)+(run4-c1->val<lo_band);
+  int32_t d_run4 = run4-c0[-1].val;
+  bool in_band = d_run4<=hi_band;
+  ctx_w[2].sel = in_band+(d_run4<lo_band);
+  ctx_w[3].sel = c1->sign;
+  ctx_w[4].sel = c0[-1].sign;
+  int32_t magsum = magsum_own;
+  int32_t magu = c2[0].mag+c1->mag;
+  int32_t magl = c0[-1].mag+c0[-2].mag;
+  if( refs.a.r0 ) {
+    int32_t mag = refs.b.r0->mag;
+    int32_t mag_ref1 = refs.b.r1->mag+refs.a.r1->mag;
+    int32_t mag_ref0 = mag+refs.a.r0->mag;
+    magsum = mag_ref1+magsum_own+4*mag_ref0+2*(refs.a.r0[-1].mag+refs.b.r0[-1].mag);
+    flat_a = mag_ref0+magl+refs.b.r0[-2].mag+refs.b.r0[-1].mag+refs.a.r0[-2].mag+refs.a.r0[-1].mag;
+    if( has_ref ) {
+      // The second difference was written back over `run4`, which is a
+      // register reused and not a value updated: nothing downstream wants the
+      // overwritten one, and the level index below recomputed `run3 + pred4`
+      // rather than reading it -- the original saying so in its own way.  With
+      // its own name `run4` is written once and the index is just `run4`.
+      const int32_t d_run4b = run4-c1->dval-c0[0].dval;
+      if( d_run4b<lo_band||d_run4b>hi_band ) {
+        const int32_t d_run4c = run4-c0[-1].dval-c0[0].dval;
+        flat_b = d_run4c>=lo_band&&hi_band>=d_run4c;
+      } else {
+        flat_b = 1;
+      }
+    } else {
+      flat_b = mag_ref1+mag_ref0+magu+refs.b.r2->mag+refs.a.r2->mag;
+    }
+    // `magsum_own = magsum;` above each of these and `magsum = magsum_own;` three
+    // lines down was MSVC spilling the register `magsum` was in across the
+    // reads below it and loading it straight back.  Nothing between the two
+    // touches it, in either arm.  What is left of that name is `magsum_own` --
+    // this plane's own sum, which is the base both arms add to and not a spill
+    // of anything.
+    if( plane_idx==1 ) {
+      int32_t d_ra_ra1 = refs.a.r0->val-refs.a.r1->val;
+      ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
+      int32_t d_ra_left = refs.a.r0->val-refs.a.r0[-1].val;
+      ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
+    } else if( (int32_t)plane_idx>1 ) {
+      int32_t d_rb_rb1 = refs.b.r0->val-refs.b.r1->val;
+      ctx_w[3].sel = (d_rb_rb1<=hi_band)+(d_rb_rb1<lo_band);
+      int32_t d_rb_left = refs.b.r0->val-refs.b.r0[-1].val;
+      in_band = d_rb_left<=hi_band;
+      ctx_w[4].sel = in_band+(d_rb_left<lo_band);
+      int32_t ra0_val = refs.a.r0->val;
+      int32_t d_ra_ra1b = ra0_val-(refs.a.r1)->val;
+      in_band = lo_band<=d_ra_ra1b;
+      if( in_band&&d_ra_ra1b<=hi_band ) {
+        flat_a = 1;
+      } else {
+        int32_t d_ra_leftb = ra0_val-refs.a.r0[-1].val;
+        flat_a = d_ra_leftb>=lo_band&&d_ra_leftb<=hi_band;
+      }
+    }
+  } else {
+    flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
+    flat_b = c4->mag+c3->mag+magu+c0[0].mag;
+  }
+  if( magsum>=960 ) {
+    ctx15 = 15;
+    ctx = 15;
+  } else {
+    ctx15 = nb_ctx[magsum>>3];
+    ctx = ctx15;
+  }
+  const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
+  // The magnitude context in the low nibble, under a `ctx_delta` entry that
+  // occupies bits 4 and up -- the run level as `bits<4, 4>` and the plane
+  // `above<8>`, built once in `alt_p2_alloc`.  `ctx15` is `nb_ctx[]`, whose
+  // values run 0..15 because `p2_len_edges` has fifteen live entries, so the
+  // nibble is exactly the room the entry leaves and the two cannot overlap.
+  //
+  // The pair is the same index four `ctx_idx` apart, which is one step of the
+  // level field.
+  ctx_pair[0] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx+4]);
+  ctx_pair[1] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx]);
+  // The magnitude context in the low nibble, two flatness bits at 4 and 5 over
+  // it, and the five weight-table contributions added on top.  Those five are
+  // values rather than fields -- each is a table entry pre-scaled the way
+  // `AltP1Block`'s nine are -- so they stay a sum and only the rest becomes
+  // fields.
+  // It was written out with the terms running down from index 4, which is the
+  // order the registers came free in.
+  ctx = CtxIdx{}.bits<0, 4>(ctx15).bit<4>(flat_a==0).bit<5>(flat_b==0)
+                .raw(mixer_fwd(ctx_w, 5));
+  return ctx_idx;
+}
+
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
   int32_t ctx15, nb_slot;
@@ -491,98 +601,5 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4)
                     .raw(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10));
   const int32_t run4 = step_bank(4, ctx4, run3);
-  int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
-  int32_t lo_band = band_lo;
-  ctx_w[0].sel = (run4<1840)+(run4<272);
-  int32_t hi_band = band_hi;
-  ctx_w[1].sel = (run4-c1->val<=hi_band)+(run4-c1->val<lo_band);
-  int32_t d_run4 = run4-c0[-1].val;
-  bool in_band = d_run4<=hi_band;
-  ctx_w[2].sel = in_band+(d_run4<lo_band);
-  ctx_w[3].sel = c1->sign;
-  ctx_w[4].sel = c0[-1].sign;
-  int32_t magsum = magsum_own;
-  int32_t magu = c2[0].mag+c1->mag;
-  int32_t magl = c0[-1].mag+c0[-2].mag;
-  if( refa ) {
-    int32_t mag = rb0->mag;
-    int32_t mag_ref1 = rb1->mag+ra1->mag;
-    int32_t mag_ref0 = mag+ra0->mag;
-    magsum = mag_ref1+magsum_own+4*mag_ref0+2*(ra0[-1].mag+rb0[-1].mag);
-    flat_a = mag_ref0+magl+rb0[-2].mag+rb0[-1].mag+ra0[-2].mag+ra0[-1].mag;
-    if( has_ref ) {
-      // The second difference was written back over `run4`, which is a
-      // register reused and not a value updated: nothing downstream wants the
-      // overwritten one, and the level index below recomputed `run3 + pred4`
-      // rather than reading it -- the original saying so in its own way.  With
-      // its own name `run4` is written once and the index is just `run4`.
-      const int32_t d_run4b = run4-c1->dval-c0[0].dval;
-      if( d_run4b<lo_band||d_run4b>hi_band ) {
-        const int32_t d_run4c = run4-c0[-1].dval-c0[0].dval;
-        flat_b = d_run4c>=lo_band&&hi_band>=d_run4c;
-      } else {
-        flat_b = 1;
-      }
-    } else {
-      flat_b = mag_ref1+mag_ref0+magu+rb2->mag+ra2->mag;
-    }
-    // `magsum_own = magsum;` above each of these and `magsum = magsum_own;` three
-    // lines down was MSVC spilling the register `magsum` was in across the
-    // reads below it and loading it straight back.  Nothing between the two
-    // touches it, in either arm.  What is left of that name is `magsum_own` --
-    // this plane's own sum, which is the base both arms add to and not a spill
-    // of anything.
-    if( plane_idx==1 ) {
-      int32_t d_ra_ra1 = ra0->val-ra1->val;
-      ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
-      int32_t d_ra_left = ra0->val-ra0[-1].val;
-      ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
-    } else if( (int32_t)plane_idx>1 ) {
-      int32_t d_rb_rb1 = rb0->val-rb1->val;
-      ctx_w[3].sel = (d_rb_rb1<=hi_band)+(d_rb_rb1<lo_band);
-      int32_t d_rb_left = rb0->val-rb0[-1].val;
-      in_band = d_rb_left<=hi_band;
-      ctx_w[4].sel = in_band+(d_rb_left<lo_band);
-      int32_t ra0_val = ra0->val;
-      int32_t d_ra_ra1b = ra0_val-(ra1)->val;
-      in_band = lo_band<=d_ra_ra1b;
-      if( in_band&&d_ra_ra1b<=hi_band ) {
-        flat_a = 1;
-      } else {
-        int32_t d_ra_leftb = ra0_val-ra0[-1].val;
-        flat_a = d_ra_leftb>=lo_band&&d_ra_leftb<=hi_band;
-      }
-    }
-  } else {
-    flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
-    flat_b = c4->mag+c3->mag+magu+c0[0].mag;
-  }
-  if( magsum>=960 ) {
-    ctx15 = 15;
-    ctx = 15;
-  } else {
-    ctx15 = nb_ctx[magsum>>3];
-    ctx = ctx15;
-  }
-  const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
-  // The magnitude context in the low nibble, under a `ctx_delta` entry that
-  // occupies bits 4 and up -- the run level as `bits<4, 4>` and the plane
-  // `above<8>`, built once in `alt_p2_alloc`.  `ctx15` is `nb_ctx[]`, whose
-  // values run 0..15 because `p2_len_edges` has fifteen live entries, so the
-  // nibble is exactly the room the entry leaves and the two cannot overlap.
-  //
-  // The pair is the same index four `ctx_idx` apart, which is one step of the
-  // level field.
-  ctx_pair[0] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx+4]);
-  ctx_pair[1] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx]);
-  // The magnitude context in the low nibble, two flatness bits at 4 and 5 over
-  // it, and the five weight-table contributions added on top.  Those five are
-  // values rather than fields -- each is a table entry pre-scaled the way
-  // `AltP1Block`'s nine are -- so they stay a sum and only the rest becomes
-  // fields.
-  // It was written out with the terms running down from index 4, which is the
-  // order the registers came free in.
-  ctx = CtxIdx{}.bits<0, 4>(ctx15).bit<4>(flat_a==0).bit<5>(flat_b==0)
-                .raw(mixer_fwd(ctx_w, 5));
-  return ctx_idx;
+  return seat_symbol_context(run4, refs);
 }

@@ -648,6 +648,8 @@ struct AltP2Block {
 
   P2Refs fill_row_inputs(AltP2Block* refa, AltP2Block* refb);
 
+  int32_t seat_symbol_context(int32_t run4, const P2Refs& refs);
+
   void code_banks(int32_t sample16);
 
   // One pass over a bank's eleven context bits, doing to each what the arm it

@@ -1797,6 +1797,16 @@ than five copies: written out, the two stores appeared in one order at four of
 the sites and the other order at the fifth, so which slot held which could only
 be established by matching literal subscripts.
 
+`run4` then goes to `seat_symbol_context`, the last stage of `alt_p2_context`
+and the one that decides how the symbol is actually coded. It turns the running
+prediction and the neighbourhood's magnitudes into the five ternary selectors of
+`ctx_w[]`, two flatness bits, and a sixteen-way magnitude class through
+`nb_ctx[]`; what it answers with is the level index, and what it leaves behind
+in `ctx` and `ctx_pair[]` is the context the frequency record is looked up
+under. The magnitude sum it classifies on is a fixed-weight sum over 40
+neighbours' `mag` bytes, with the two reference planes' added in when the plane
+has references.
+
 Each bank context has the same shape: **eleven single-bit features at bits
 15…25, and `ctx_quant`'s two two-bit fields at 11…14**, then `>>11` to index the
 bank. That leaves fifteen bits, and 2¹⁵ is 32768 — exactly one bank. The eleven

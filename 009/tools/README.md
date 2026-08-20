@@ -484,6 +484,7 @@ them run.
 | `hdrscan.sh` | Every value of the member header's one-byte fields, under ASan |  |
 | `hex_constants.py` | Write subs1.hpp's pattern constants in hex instead of decimal | yes |
 | `liftframe.py` | Turn one function's frame struct back into ordinary locals | yes |
+| `long.py` | The longest function bodies, against a ratchet | yes |
 | `merge.py` | Make several recoveries of one object into one struct | yes |
 | `methodise.py` | Turn a function whose first parameter is its receiver into a method | yes |
 | `mkaltp1.py` | Write testfiles/altp1.bmp — the image that reaches `alt_model_p1_decode` | no |
