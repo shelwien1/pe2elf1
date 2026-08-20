@@ -73,11 +73,143 @@ struct RowOf {
 using DvalRow = RowOf<&P2Ctx::dval>;
 using ValRow = RowOf<&P2Ctx::val>;
 
+// The filter's 28 inputs, and the reference cursors the rest of
+// `alt_p2_context` reads.  One stage of that function rather than a step in it:
+// a hundred and twenty lines that put `p2_row` together and touch nothing else
+// of the frame except the six cursors, which is what it hands back.
+//
+// The four variants of rows 4..6 stay side by side deliberately.  They are one
+// block per reference count -- plane 1, plane 2 and up, plane 0 with
+// references, and no references at all -- and being able to diff them against
+// each other by eye is the whole reason the sixty subscripts were named `d0`,
+// `v1` and so on in the first place.  Four small functions would each read
+// better alone and the set of them would read worse, so the seam is drawn
+// around all four and not between them.
+AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* refb) {
+  P2Ctx *const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2],
+        *const c3 = cursor[3], *const c4 = cursor[4];
+  const DvalRow d0{c0}, d1{c1}, d2{c2}, d3{c3};
+  const ValRow v0{c0}, v1{c1}, v2{c2}, v3{c3}, v4{c4};
+  // The filter's 28 inputs, four to a row.  Rows 0..3 are differences of `dval`
+  // -- the second difference of the plane -- at widening offsets from the
+  // current pixel: row 0 the four nearest, row 1 the next ring, rows 2 and 3
+  // the ones two and three records out.  Rows 4..6 are the cross-plane terms
+  // and are only filled when this plane has references; without them the
+  // filter sees this plane alone.
+  //
+  // Written out one subscript at a time because that is what the original did,
+  // and left that way: the offsets are not a pattern a loop could generate --
+  // `c0[-1] + c1->dval - c1[-1]` and `c1[-2] + c1->dval - c2[-2]` are
+  // different shapes -- so a table of offsets would be 28 rows of data plus a
+  // loop, which is the same information one indirection further away.
+  p2_row[0][0] = (float)d1(0);
+  p2_row[0][1] = (float)d1(1);
+  p2_row[0][2] = (float)grad(d0(-1), d1(0), d1(-1));
+  p2_row[0][3] = (float)grad(d0(-2), d1(0), d1(-2));
+  p2_row[1][0] = (float)grad(d1(-1), d1(0), d2(-1));
+  p2_row[1][1] = (float)(-3*(d2(0)-d1(0))+d3(0));
+  p2_row[1][2] = (float)grad(d0(-1), d1(2), d1(1));
+  p2_row[1][3] = (float)grad(d0(-2), d1(1), d1(-1));
+  p2_row[2][0] = (float)(2*d0(-1)-d0(-2));
+  p2_row[2][1] = (float)grad(d0(-3), d1(0), d1(-3));
+  p2_row[2][2] = (float)grad(d2(0), d1(1), d3(1));
+  p2_row[2][3] = (float)d0(-3);
+  p2_row[3][0] = (float)grad(d1(-2), d1(0), d2(-2));
+  p2_row[3][1] = (float)grad(d0(-2), d1(-1), d1(-3));
+  p2_row[3][2] = (float)grad(d1(1), (d1(2)+d1(0))>>1, d2(2));
+  p2_row[3][3] = (float)d3(0);
+  if( refa ) {
+    const P2Refs refs{ref_rows(refa->cursor), ref_rows(refb->cursor)};
+    P2Ctx *const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;
+    P2Ctx *const rb0 = refs.b.r0, *const rb1 = refs.b.r1, *const rb2 = refs.b.r2;
+    const ValRow a0{ra0}, a1{ra1}, a2{ra2}, b0{rb0}, b1{rb1}, b2{rb2};
+    // `no_ref = has_ref == 0;` was written twice, thirty lines apart, with
+    // nothing between the two touching `has_ref`.  `const` is the proof rather
+    // than the claim: the second write does not compile now.  It was a reload
+    // of a spilled flag, and with the block a function of its own the two
+    // assignments finally sat close enough together to be seen as one.
+    const bool no_ref = has_ref==0;
+    if( !no_ref ) {
+      const float bias_l = (float)c0->dval;
+      for( int32_t j = 0; j<4; ++j )
+        for( int32_t k = 0; k<4; ++k )
+          p2_row[j][k] += bias_l;
+    }
+    const int32_t plane = (int32_t)plane_idx;
+    if( plane ) {
+      if( plane==1 ) {
+        p2_row[4][0] = (float)(d0(0)+d1(3));
+        p2_row[4][1] = (float)grad(v0(-2), a1(2), a1(0));
+        p2_row[4][2] = (float)grad(v1(1), a0(-1), a1(0));
+        p2_row[4][3] = (float)grad(v0(-1), a1(0), a1(-1));
+        p2_row[5][0] = (float)grad(v1(1), b1(2), b2(3));
+        p2_row[5][1] = (float)grad(v0(-2), b0(0), b0(-2));
+        p2_row[5][2] = (float)grad(v1(0), b0(0), b1(0));
+        p2_row[5][3] = (float)(v0(-2)+ra0->err);
+        if( no_ref ) {
+          p2_row[6][0] = (float)grad(v0(-2), a0(0), a0(-2));
+          p2_row[6][1] = (float)grad(v2(0), a0(0), a2(0));
+          p2_row[6][2] = (float)(grad(a2(0), a0(0), v2(0))+2*(v1(0)-a1(0)));
+          p2_row[6][3] = (float)(v0(-1)+v1(-1)+a1(-2)+a0(0)-a0(-1)-a1(-1)-v1(-2));
+        } else {
+          p2_row[6][0] = (float)v1(0);
+          p2_row[6][1] = (float)v0(-3);
+          p2_row[6][2] = (float)grad(v0(-1), a0(-1), a0(-2));
+          p2_row[6][3] = (float)grad(v0(-3), v0(-1), v0(-4));
+        }
+      } else {
+        p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
+        p2_row[4][1] = (float)grad(v0(-1), a0(-1), a0(-2));
+        p2_row[4][2] = (float)grad(v1(1), a1(0), a2(1));
+        p2_row[4][3] = (float)grad(v0(-2), a1(2), a1(0));
+        p2_row[5][0] = (float)grad(v1(0), a0(-2), a1(-2));
+        p2_row[5][1] = (float)grad(v1(0), a0(0), a1(0));
+        p2_row[5][2] = (float)grad(v0(-2), a0(0), a0(-2));
+        p2_row[5][3] = (float)grad(v0(-2), b0(0), b0(-2));
+        p2_row[6][0] = (float)grad(v2(0), b0(0), b2(0));
+        p2_row[6][1] = (float)(grad(b0(-2), b0(0), v0(-2))+2*(v0(-1)-b0(-1)));
+        p2_row[6][2] = (float)(v0(-2)+rb0->err);
+        p2_row[6][3] = (float)(v2(0)+ra0->err);
+      }
+    } else {
+      p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
+      p2_row[4][1] = (float)grad(v0(-5), v1(0), v1(-5));
+      p2_row[4][2] = (float)grad(v0(-4), v1(0), v1(-4));
+      p2_row[4][3] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
+      p2_row[5][0] = (float)grad(v0(-2), a0(0), a0(-2));
+      p2_row[5][1] = (float)grad(v1(1), a1(1), a2(2));
+      p2_row[5][2] = (float)grad(v1(-2), a1(2), a2(0));
+      p2_row[5][3] = (float)(grad(a0(-2), a0(0), v0(-2))+2*(v0(-1)-a0(-1)));
+      p2_row[6][0] = (float)grad(v2(1), b0(0), b2(1));
+      p2_row[6][1] = (float)grad(v0(-2), b0(0), b0(-2));
+      p2_row[6][2] = (float)grad(v0(-1), b1(1), b1(0));
+      p2_row[6][3] = (float)grad(v1(1), b1(2), b2(3));
+    }
+    return refs;
+  } else {
+    p2_row[4][0] = (float)grad(v1(3), v1(0), v2(3));
+    p2_row[4][1] = (float)grad(v0(-4), v1(0), v1(-4));
+    // The same expression as `p2_row[4][3]` of the no-plane arm above, which
+    // spelled its inner difference `a - b - (c - d)` where this one has
+    // `(a - b) - (c - d)`.  One pair of parentheses, no value: they are now
+    // written the same and can be seen to be.
+    p2_row[4][2] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
+    p2_row[4][3] = (float)grad(v2(-1), v1(1), v3(0));
+    p2_row[5][0] = (float)grad(v3(1), v1(0), v4(1));
+    p2_row[5][1] = (float)v1(3);
+    p2_row[5][2] = (float)grad(v0(-3), v0(-1), v0(-4));
+    p2_row[5][3] = (float)grad(v0(-1), v3(0), v3(-1));
+    p2_row[6][0] = (float)grad(v0(-5), v1(0), v1(-5));
+    p2_row[6][1] = (float)v4(0);
+    p2_row[6][2] = (float)grad(v0(-5), v0(-1), v0(-6));
+    p2_row[6][3] = (float)v1(-6);
+    return {};
+  }
+}
+
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
   int32_t ctx15, nb_slot;
-  P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2;
-  bool no_ref;
   uint32_t ctx0, ctx1, ctx2;
   int32_t flat_a, flat_b;
   uint32_t ctx0_lo;
@@ -141,127 +273,11 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD)
                     .digit<64, 5>(gA).digit<320, 6>(band);
   seat_nb_row(nb_slot, c0);
-  // The filter's 28 inputs, four to a row.  Rows 0..3 are differences of `dval`
-  // -- the second difference of the plane -- at widening offsets from the
-  // current pixel: row 0 the four nearest, row 1 the next ring, rows 2 and 3
-  // the ones two and three records out.  Rows 4..6 are the cross-plane terms
-  // and are only filled when this plane has references; without them the
-  // filter sees this plane alone.
-  //
-  // Written out one subscript at a time because that is what the original did,
-  // and left that way: the offsets are not a pattern a loop could generate --
-  // `c0[-1] + c1->dval - c1[-1]` and `c1[-2] + c1->dval - c2[-2]` are
-  // different shapes -- so a table of offsets would be 28 rows of data plus a
-  // loop, which is the same information one indirection further away.
-  p2_row[0][0] = (float)d1(0);
-  p2_row[0][1] = (float)d1(1);
-  p2_row[0][2] = (float)grad(d0(-1), d1(0), d1(-1));
-  p2_row[0][3] = (float)grad(d0(-2), d1(0), d1(-2));
-  p2_row[1][0] = (float)grad(d1(-1), d1(0), d2(-1));
-  p2_row[1][1] = (float)(-3*(d2(0)-d1(0))+d3(0));
-  p2_row[1][2] = (float)grad(d0(-1), d1(2), d1(1));
-  p2_row[1][3] = (float)grad(d0(-2), d1(1), d1(-1));
-  p2_row[2][0] = (float)(2*d0(-1)-d0(-2));
-  p2_row[2][1] = (float)grad(d0(-3), d1(0), d1(-3));
-  p2_row[2][2] = (float)grad(d2(0), d1(1), d3(1));
-  p2_row[2][3] = (float)d0(-3);
-  p2_row[3][0] = (float)grad(d1(-2), d1(0), d2(-2));
-  p2_row[3][1] = (float)grad(d0(-2), d1(-1), d1(-3));
-  p2_row[3][2] = (float)grad(d1(1), (d1(2)+d1(0))>>1, d2(2));
-  p2_row[3][3] = (float)d3(0);
-  if( refa ) {
-    ra0 = refa->cursor[0]-1;
-    ra1 = refa->cursor[1]-1;
-    ra2 = refa->cursor[2]-1;
-    rb0 = refb->cursor[0]-1;
-    no_ref = has_ref==0;
-    rb1 = refb->cursor[1]-1;
-    rb2 = refb->cursor[2]-1;
-    const ValRow a0{ra0}, a1{ra1}, a2{ra2}, b0{rb0}, b1{rb1}, b2{rb2};
-    if( !no_ref ) {
-      {
-        float bias_l = (float)c0->dval;
-        int32_t j, k;
-        for( j = 0; j<4; ++j )
-          for( k = 0; k<4; ++k )
-            p2_row[j][k] += bias_l;
-      }
-    }
-    int32_t plane = plane_idx;
-    if( plane ) {
-      if( plane==1 ) {
-        p2_row[4][0] = (float)(d0(0)+d1(3));
-        p2_row[4][1] = (float)grad(v0(-2), a1(2), a1(0));
-        p2_row[4][2] = (float)grad(v1(1), a0(-1), a1(0));
-        p2_row[4][3] = (float)grad(v0(-1), a1(0), a1(-1));
-        p2_row[5][0] = (float)grad(v1(1), b1(2), b2(3));
-        p2_row[5][1] = (float)grad(v0(-2), b0(0), b0(-2));
-        p2_row[5][2] = (float)grad(v1(0), b0(0), b1(0));
-        no_ref = has_ref==0;
-        p2_row[5][3] = (float)(v0(-2)+ra0->err);
-        if( no_ref ) {
-          p2_row[6][0] = (float)grad(v0(-2), a0(0), a0(-2));
-          p2_row[6][1] = (float)grad(v2(0), a0(0), a2(0));
-          p2_row[6][2] = (float)(grad(a2(0), a0(0), v2(0))+2*(v1(0)-a1(0)));
-          p2_row[6][3] = (float)(v0(-1)+v1(-1)+a1(-2)+a0(0)-a0(-1)-a1(-1)-v1(-2));
-        } else {
-          p2_row[6][0] = (float)v1(0);
-          p2_row[6][1] = (float)v0(-3);
-          p2_row[6][2] = (float)grad(v0(-1), a0(-1), a0(-2));
-          p2_row[6][3] = (float)grad(v0(-3), v0(-1), v0(-4));
-        }
-      } else {
-        p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
-        p2_row[4][1] = (float)grad(v0(-1), a0(-1), a0(-2));
-        p2_row[4][2] = (float)grad(v1(1), a1(0), a2(1));
-        p2_row[4][3] = (float)grad(v0(-2), a1(2), a1(0));
-        p2_row[5][0] = (float)grad(v1(0), a0(-2), a1(-2));
-        p2_row[5][1] = (float)grad(v1(0), a0(0), a1(0));
-        p2_row[5][2] = (float)grad(v0(-2), a0(0), a0(-2));
-        p2_row[5][3] = (float)grad(v0(-2), b0(0), b0(-2));
-        p2_row[6][0] = (float)grad(v2(0), b0(0), b2(0));
-        p2_row[6][1] = (float)(grad(b0(-2), b0(0), v0(-2))+2*(v0(-1)-b0(-1)));
-        p2_row[6][2] = (float)(v0(-2)+rb0->err);
-        p2_row[6][3] = (float)(v2(0)+ra0->err);
-      }
-    } else {
-      p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
-      p2_row[4][1] = (float)grad(v0(-5), v1(0), v1(-5));
-      p2_row[4][2] = (float)grad(v0(-4), v1(0), v1(-4));
-      p2_row[4][3] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
-      p2_row[5][0] = (float)grad(v0(-2), a0(0), a0(-2));
-      p2_row[5][1] = (float)grad(v1(1), a1(1), a2(2));
-      p2_row[5][2] = (float)grad(v1(-2), a1(2), a2(0));
-      p2_row[5][3] = (float)(grad(a0(-2), a0(0), v0(-2))+2*(v0(-1)-a0(-1)));
-      p2_row[6][0] = (float)grad(v2(1), b0(0), b2(1));
-      p2_row[6][1] = (float)grad(v0(-2), b0(0), b0(-2));
-      p2_row[6][2] = (float)grad(v0(-1), b1(1), b1(0));
-      p2_row[6][3] = (float)grad(v1(1), b1(2), b2(3));
-    }
-  } else {
-    p2_row[4][0] = (float)grad(v1(3), v1(0), v2(3));
-    p2_row[4][1] = (float)grad(v0(-4), v1(0), v1(-4));
-    // The same expression as `p2_row[4][3]` of the no-plane arm above, which
-    // spelled its inner difference `a - b - (c - d)` where this one has
-    // `(a - b) - (c - d)`.  One pair of parentheses, no value: they are now
-    // written the same and can be seen to be.
-    p2_row[4][2] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
-    p2_row[4][3] = (float)grad(v2(-1), v1(1), v3(0));
-    p2_row[5][0] = (float)grad(v3(1), v1(0), v4(1));
-    p2_row[5][1] = (float)v1(3);
-    p2_row[5][2] = (float)grad(v0(-3), v0(-1), v0(-4));
-    p2_row[5][3] = (float)grad(v0(-1), v3(0), v3(-1));
-    p2_row[6][0] = (float)grad(v0(-5), v1(0), v1(-5));
-    p2_row[6][1] = (float)v4(0);
-    p2_row[6][2] = (float)grad(v0(-5), v0(-1), v0(-6));
-    p2_row[6][3] = (float)v1(-6);
-    rb2 = nullptr;
-    rb1 = nullptr;
-    rb0 = nullptr;
-    ra2 = nullptr;
-    ra1 = nullptr;
-    ra0 = nullptr;
-  }
+  // The six cursors come back rather than being read again here: they are one
+  // record back from the ring, which is a thing to get right once.
+  const P2Refs refs = fill_row_inputs(refa, refb);
+  P2Ctx *const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;
+  P2Ctx *const rb0 = refs.b.r0, *const rb1 = refs.b.r1, *const rb2 = refs.b.r2;
   // The six weight sets `NbRow::predict` mixes: three from this row's cursor
   // and three from the row above.  `cur_l` and `up_row` were `cur` and `above`
   // read into locals so the six loads could be scheduled against each other,

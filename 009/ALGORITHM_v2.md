@@ -1576,9 +1576,19 @@ fell)
 and `mag` (its absolute value). The two bytes are what the context quantiser of
 §10.2 sums over; the 16-bit fields are what the filter reads.
 
-Those become a **7×4 feature matrix** `p2_row[7][4]`. The prediction is
-`centre + Σ w[j][k]·p2_row[j][k]` over all 28 taps — that sum is `nb_dot` — and
-one tap's update is a **normalised least-mean-squares** step, `nlms_step`:
+Those become a **7×4 feature matrix** `p2_row[7][4]`, built by
+`fill_row_inputs`. Rows 0…3 are differences of `dval` — the plane's second
+difference — at widening offsets from the current pixel, and are filled the same
+way for every plane. Rows 4…6 are the cross-plane terms and come in **four
+variants**, one per reference count: plane 1, plane 2 and up, plane 0 with
+references, and no references at all, in which last case the filter sees this
+plane alone. The same function hands back the six reference cursors — three rows
+of each reference plane, one record back — because it is the one place that
+works out where they point.
+
+The prediction is `centre + Σ w[j][k]·p2_row[j][k]` over all 28 taps — that sum
+is `nb_dot`, shared with the three inside `NbRow::predict` — and one tap's
+update is a **normalised least-mean-squares** step, `nlms_step`:
 
 ```c
 ms          = w[7+j][k] + (x·x − w[7+j][k])·ms_rate;   // running power of the tap

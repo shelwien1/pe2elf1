@@ -610,6 +610,44 @@ struct AltP2Block {
     row->w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
 
+  // The two reference planes' rows as `alt_p2_context` reads them: three
+  // cursors each, one record back from where the ring points.  All six are null
+  // when this plane has no references, which is what `refa` being null means and
+  // what the arms downstream test for.
+  //
+  // A struct rather than six out-parameters because they are one thing -- the
+  // reference neighbourhood -- and because six `P2Ctx**` in a signature is six
+  // chances to pass them in the wrong order.
+  //
+  struct P2RefRows {
+    P2Ctx *r0, *r1, *r2;
+  };
+
+  struct P2Refs {
+    P2RefRows a, b;
+  };
+
+  // Rows 0, 1 and 2 of a reference plane's ring, each one record back from where
+  // it points.  Both reference planes are read identically and that `-1` had
+  // been spelled out six times, which is the kind of offset that wants one home.
+  //
+  // A named factory over an aggregate rather than a constructor.  The
+  // constructor was written first and `covered.py` reported the type as an
+  // undescribed function while `deadcheck.py` read `r2(ring[2]-1)` in its
+  // initialiser list as a call to something nothing defines -- a member
+  // initialiser list being a construct nothing else in this tree uses.  Two
+  // tools could have been taught it, but a function with a name that says what
+  // it returns is the better of the two spellings on its own merits, so the
+  // construct went instead of the parsers.
+  //
+  // It takes the ring rather than the block so that it does not depend on a
+  // type it is declared inside.
+  static P2RefRows ref_rows(P2Ctx* const* ring) {
+    return {ring[0]-1, ring[1]-1, ring[2]-1};
+  }
+
+  P2Refs fill_row_inputs(AltP2Block* refa, AltP2Block* refb);
+
   void code_banks(int32_t sample16);
 
   // One pass over a bank's eleven context bits, doing to each what the arm it
