@@ -55,7 +55,7 @@ struct P2Freq {
     uint16_t *base = &f[0];
     int32_t c01 = f[1]+f[0];
     uint32_t tot = c01+f[2];
-    if( f_DEC ) {
+    if constexpr( f_DEC ) {
       int32_t target = rc.get_freq(tot);
       cum = f[0];
       if( (uint32_t)target>=cum ) {
@@ -84,7 +84,7 @@ struct P2Freq {
       }
     }
     uint32_t tot_1 = cum+*slot;
-    if( f_DEC )
+    if constexpr( f_DEC )
       rc.decode(cum, tot_1, tot);
     else
       rc.encode(cum, tot_1, tot);
@@ -645,7 +645,7 @@ struct AltP2Block {
   // the two 90-line bodies apart.
   template<int32_t f_DEC>
   void code_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
-    if( f_DEC )
+    if constexpr( f_DEC )
       decode_sample(out, at, refa, refb);
     else
       encode_sample(out, at, refa, refb);

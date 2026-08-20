@@ -93,7 +93,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   int8_t dc3 = plane_desc[src3].dc;
   int32_t xf2 = fl2&8;
   int32_t xf3 = fl3&8;
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc_begin_decode();
   else
     rc_begin_encode();
@@ -149,13 +149,13 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
         };
         for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
           int32_t off0 = plane_desc[0].src_plane;
-          if( !f_DEC )
+          if constexpr( !f_DEC )
             cur0 = fold_from(off0, 0, 0, 0);
           // `keep0` was a third name for `cur0`: assigned from it in both arms
           // and again beside it when the drift check keeps the reconstruction.
           cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
           int32_t off1 = plane_desc[1].src_plane;
-          if( f_DEC )
+          if constexpr( f_DEC )
             unfold_to(off0, 0, 0, 0, cur0);
           else
             // Narrowed to a byte, as the `uint8_t want1` this replaces was:
@@ -163,22 +163,22 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
             cur1 = (uint8_t)fold_from(off1, xf1, dc1, *(buf+off0));
           cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
           int32_t off2 = plane_desc[2].src_plane;
-          if( f_DEC )
+          if constexpr( f_DEC )
             unfold_to(off1, xf1, dc1, *(buf+off0), cur1);
           else
             want2 = (uint8_t)fold_from(off2, xf2, dc2,
                                        plane_mix2(plane_desc[off2], buf+off0, buf+off1));
           want2 = code_sample(2, plane[1], plane[0], off2, want2);
-          if( f_DEC )
+          if constexpr( f_DEC )
             unfold_to(off2, xf2, dc2,
                       plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
           if( plane_count>=4 ) {
             int32_t off3 = plane_desc[3].src_plane;
-            if( !f_DEC )
+            if constexpr( !f_DEC )
               cur3 = (uint8_t)fold_from(off3, xf3, dc3,
                                         plane_mix3(plane_desc[off3], buf+off3));
             cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
-            if( f_DEC )
+            if constexpr( f_DEC )
               unfold_to(off3, xf3, dc3,
                         plane_mix3(plane_desc[off3], buf+off3), cur3);
           }
@@ -187,7 +187,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
       }
     }
   }
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc_end_decode();
   else
     rc_end_encode();

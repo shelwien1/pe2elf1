@@ -38,12 +38,12 @@ template<int32_t f_DEC>
 int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
   uint32_t cum, j;
-  int32_t lvl, result, go, path, span;
+  int32_t lvl, result, go, span;
   uint16_t fq, *slot;
   uint16_t h9, acc8, acc6, acc;
   uint16_t *f0 = freq+2;
   uint32_t tot = *freq;
-  if( f_DEC ) {
+  if constexpr( f_DEC ) {
     uint32_t target = rc.get_freq(tot);
     slot = f0;
     lvl = 0;
@@ -109,14 +109,19 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   if( lvl<2 )
     return lvl;
   int32_t mask = level_geom[lvl].half;
-  if( !f_DEC )
+  // The bits the encoder still has to send.  The decoder has none, and every
+  // read of this is inside a branch `if constexpr` discards there -- so the 0
+  // is never observed and exists only so the declaration can sit here, at the
+  // one place the value is produced, rather than in the frame at the top.
+  int32_t path = 0;
+  if constexpr( !f_DEC )
     path = sym-level_geom[lvl].first;
   int32_t node = 0;
   for( span = 1;; span *= 2 ) {
     FreqPair *pair = bit_tree(freq, lvl)+span+node;
     int32_t f1 = pair->f[1];
     int32_t fa = pair->f[0];
-    if( f_DEC ) {
+    if constexpr( f_DEC ) {
       go = rc.decode_bit(fa, f1);
     } else {
       go = (mask&path)!=0;
@@ -164,7 +169,7 @@ int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
   int32_t slot;
   uint16_t *cur = c;
   const uint32_t tot = total&0x7FFF;
-  if( f_DEC ) {
+  if constexpr( f_DEC ) {
     sym = rc.get_freq(tot);
     cum = c[0];
     while( cum<=(uint32_t)sym )
@@ -217,7 +222,7 @@ int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
         CtxIdx{}.bit<7>(slot&1)
                 .bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96)
                 .raw((uint32_t)ctx));
-    if( f_DEC )
+    if constexpr( f_DEC )
       slot += 2*decode_symbol_tree(strip);
     else
       encode_symbol_tree(strip, (sym-5)>>1);

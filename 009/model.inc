@@ -501,7 +501,7 @@ struct ModelBlock {
       // `is_sym` and not `hit`: `hit` is a member of this block, carrying an
       // answer from the stage-one coder to three other methods.
       int32_t is_sym;
-      if( f_DEC ) {
+      if constexpr( f_DEC ) {
         is_sym = bit_node[ctr_node].decode_context_bit(&bit_root[ctr_fallback]);
         row_cur[5]->sym = sym;
       } else {
@@ -1308,7 +1308,7 @@ struct ModelBlock {
                                 .digit<16, 3>((seen==0)+(bucket==top))];
         const uint32_t bin_tot = ctr->n[0]+ctr->n[1];
         int32_t run_bit;
-        if( f_DEC ) {
+        if constexpr( f_DEC ) {
           run_bit = rc.decode_bit(ctr->n[0], ctr->n[1]);
         } else {
           run_bit = (len&mask)!=0;

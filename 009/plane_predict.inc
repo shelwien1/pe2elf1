@@ -217,7 +217,7 @@ static PlaneTransform plane_transform(int32_t plane) {
 //
 // `f_DEC` is which way: the encoder reads the image and writes residuals to
 // `side`, the decoder reads residuals from `side` and writes the image back.
-// Every `if( f_DEC )` in here is that and nothing else.
+// Every `if constexpr( f_DEC )` in here is that and nothing else.
 //
 // The blends were written four different ways between the two bodies -- one
 // cast to `uint32_t` mid-expression, one summing into an `int32_t` and casting
@@ -229,7 +229,7 @@ template<int32_t f_DEC>
 static void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
   uint8_t* base = &img->pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
-    if( f_DEC )
+    if constexpr( f_DEC )
       interleave_flat(img, side, plane);
     else
       deinterleave_plane(img, side, plane);
@@ -245,7 +245,7 @@ static void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
   if( t.by_weights||plane_desc[plane].nrefs==1 ) {
     const uint8_t *ref = base+t.to_ref0;
     for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += stride ) {
-      if( f_DEC )
+      if constexpr( f_DEC )
         base[ofs] = ref[ofs]+t.dc+side[i];
       else
         side[i] = base[ofs]-t.dc-ref[ofs];
@@ -258,7 +258,7 @@ static void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
     uint8_t *p = base;
     for( int32_t left = n; left; --left, p += stride ) {
       const uint32_t blend = t.blend(p);
-      if( f_DEC )
+      if constexpr( f_DEC )
         *p = (uint8_t)(blend+t.dc+*side++);
       else
         *side++ = (uint8_t)(*p-t.dc-blend);

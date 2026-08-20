@@ -40,7 +40,7 @@ static int32_t alt_model_p2(BmfImage* p_i, uint8_t* out) {
   const bool ref1_mixed = ref_transformed(1);
   const bool ref2_mixed = ref_transformed(2);
   const bool ref3_mixed = ref_transformed(3);
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc_begin_decode();
   else
     rc_begin_encode();
@@ -95,7 +95,7 @@ static int32_t alt_model_p2(BmfImage* p_i, uint8_t* out) {
       out += nplanes;
     }
   }
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc_end_decode();
   else
     rc_end_encode();

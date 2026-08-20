@@ -28,13 +28,13 @@ static bool alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   // the same ten lines twice, differing in a `1` against a `2`.
   const bool d8 = (p_i->depth&depth_bits)==8;
   if( d8 ) {
-    if( f_DEC )
+    if constexpr( f_DEC )
       (p1 ? alt_model_p1_d8_decode : alt_model_p2_d8_decode)
         (pixels, p_i->width, p_i->height);
     else
       (p1 ? alt_model_p1_d8_encode : alt_model_p2_d8_encode)
         (pixels, p_i->width, p_i->height, raw);
-  } else if( f_DEC ) {
+  } else if constexpr( f_DEC ) {
     (p1 ? alt_model_p1_decode : alt_model_p2_decode)(p_i, pixels);
   } else {
     (p1 ? alt_model_p1_encode : alt_model_p2_encode)(p_i, pixels);
@@ -58,7 +58,7 @@ static void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     return;
   ModelBlock* blk = new_model_block(p_i->width, p_i->height,
                                     p_i->depth&depth_bits);
-  if( f_DEC )
+  if constexpr( f_DEC )
     blk->unmodel_plane_slow(pixels);
   else
     blk->model_plane_slow(pixels);

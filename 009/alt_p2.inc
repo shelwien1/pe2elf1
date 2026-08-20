@@ -89,7 +89,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
   uint8_t *outp, code2;
   uint32_t k;
   uint8_t *src_end = src;
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc_begin_decode();
   else
     rc_begin_encode();
@@ -102,7 +102,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       ctx_pair[0] = ctx+ctx_delta[q2+4];
       ctx_pair[1] = ctx+ctx_delta[q2];
       P2Freq&fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
-      if( f_DEC ) {
+      if constexpr( f_DEC ) {
         *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(ctx_pair)]);
       } else {
         code0 = fold_or_refuse(out, *p, (uint16_t)rec[-1].val>>4, fold,
@@ -132,7 +132,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       pix = cursor[0]+1;
       cursor[0] = pix;
     }
-    if( !f_DEC )
+    if constexpr( !f_DEC )
       src_end = p;
   }
   seed_history(width);
@@ -145,7 +145,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       if( width>0 ) {
         for( k = 0; k<(uint32_t)width; ++k ) {
           int32_t pred = alt_p2_context(nullptr, nullptr);
-          if( f_DEC ) {
+          if constexpr( f_DEC ) {
             code2 = code = freq[ctx].decode_symbol(pair);
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
@@ -156,13 +156,13 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
           }
           alt_p2_model(outp[k], code2, outp[k]-pred);
         }
-        if( !f_DEC )
+        if constexpr( !f_DEC )
           src_end = &srcp[width];
         outp = &outp[width];
       }
     }
   }
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc_end_decode();
   else
     rc_end_encode();
@@ -179,7 +179,7 @@ void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
     blk = raw->alt_p2_alloc(i, 0);
   else
     blk = nullptr;
-  if( f_DEC )
+  if constexpr( f_DEC )
     blk->alt_p2_d8_body<1>(nullptr, out, i, height);
   else
     blk->alt_p2_d8_body<0>(src, out, i, height);

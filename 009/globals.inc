@@ -239,6 +239,24 @@ static inline uint16_t*model_strip(uint32_t k) {
 
 static int32_t mode_symbol[5];
 
+// **These three stay file-scope, and the stage-2 appendix's reason for moving
+// them does not hold.**  It says `exclusion_gen`, `exclusion_mask` and
+// `mode_symbol` "are used only by `ModelBlock`, so they can become members
+// without a context object".  Measured, they are not:
+//
+//   `SymList::code_symbol`         reads `exclusion_gen` and writes
+//                                  `exclusion_mask`, four sites
+//   `SymList::decode_symbol_list`  the same, three sites
+//   `reduce_alphabet`              writes `mode_symbol[1]`, twice, and it is a
+//                                  free function
+//
+// `SymList` is not a member of `ModelBlock` -- the block holds pointers to
+// lists whose lifetime it does not own -- so making these members means
+// threading a `ModelBlock&` through the two hottest coding loops in the
+// program.  That is the whole-program control-flow change the same appendix
+// rejects two entries above, bought for no expression-level gain, and it is
+// the `BmfContext` consolidation under another name.  Stage 3, with the split.
+
 static inline void bmf_zero16(void* p) {
   __builtin_memset(p, 0, 16);
 }

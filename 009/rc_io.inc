@@ -19,7 +19,7 @@ static void end_plane_stream() {
 // the decoder reads to the marker.  Everything after is the same tear-down.
 template<int32_t f_DEC>
 void rc_end() {
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc.finish();
   else
     rc.flush();
@@ -138,11 +138,11 @@ static uint16_t* begin_plane_stream() {
 // and it is not undefined.
 template<int32_t f_DEC>
 uint16_t*rc_begin() {
-  if( !f_DEC )
+  if constexpr( !f_DEC )
     *stream.pk.word = stream.pk.acc;
   packer_rewind();
   uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
-  if( f_DEC )
+  if constexpr( f_DEC )
     rc.dec_init();
   else
     rc.enc_init();

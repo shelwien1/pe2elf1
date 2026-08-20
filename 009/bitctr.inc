@@ -173,7 +173,7 @@ struct BitCtr {
       if( !n[1] )
         seed_from(parent);
       const uint32_t tot = summ();
-      if( f_DEC )
+      if constexpr( f_DEC )
         bit = rc.decode_bit(n[0], n[1]);
       else
         rc.encode_bit(n[0], n[1], bit);
@@ -188,7 +188,7 @@ struct BitCtr {
       // Unseen.  The parent codes the bit, and this keeps it as `bit + 1` so
       // the next visit knows which side to bump when it seeds.
       const uint32_t p_tot = parent->summ();
-      if( f_DEC )
+      if constexpr( f_DEC )
         bit = rc.decode_bit(parent->n[0], parent->n[1]);
       else
         rc.encode_bit(parent->n[0], parent->n[1], bit);

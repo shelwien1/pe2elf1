@@ -403,7 +403,7 @@ struct AltP1Block {
   // encoder's is kept.
   template<int32_t f_DEC>
   void d8_body(uint8_t* src, uint8_t* out) {
-    if( f_DEC )
+    if constexpr( f_DEC )
       rc_begin_decode();
     else
       rc_begin_encode();
@@ -415,7 +415,7 @@ struct AltP1Block {
           uint8_t* q = out;
           for( int32_t x = 0; x<width; ++x ) {
             ctx_of(nullptr, nullptr);
-            if( f_DEC ) {
+            if constexpr( f_DEC ) {
               const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]],
                                                         ctx[1]);
               *q = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
@@ -432,7 +432,7 @@ struct AltP1Block {
         }
       }
     }
-    if( f_DEC )
+    if constexpr( f_DEC )
       rc_end_decode();
     else
       rc_end_encode();
