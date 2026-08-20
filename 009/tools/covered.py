@@ -284,6 +284,18 @@ def exempt(name, file, lines, lo, hi):
     body = [l for l in body if l and l not in ('{', '}')]
     if body and WRAPPER.match(body[0]) and len(body) <= 2:
         return 'template wrapper'
+    # A body written on the signature's own line -- `int32_t operator()(int32_t
+    # i) const { return row[i].*Field; }` -- has no closing brace of its own on
+    # a line of its own, so the scan below runs to the end of the unit and calls
+    # the shortest body there is the longest one.  `RowOf::operator()` was the
+    # first of this shape in the tree and the rule reported it.
+    #
+    # The semicolon count is what keeps `void f() { if(x) { a(); } b(); }` out:
+    # a line can be balanced and still be a function worth explaining.
+    tail = lines[hi].split('//')[0]
+    if tail.count('{') and tail.count('{') == tail.count('}'):
+        if tail[tail.index('{') + 1:tail.rindex('}')].count(';') <= 2:
+            return 'one-liner'
     # Count to the closing brace at the definition's own indentation.
     indent = len(lines[lo]) - len(lines[lo].lstrip())
     n = 0
@@ -310,9 +322,14 @@ def survey(path, docs):
     prose = '\n'.join(text)
     out, seen = [], set()
     for name, lo, hi in defined(lines):
-        if name in seen:
+        # Keyed on the enclosing type as well as the name, because a name is
+        # not unique: two structs can each define `operator()`, and on the name
+        # alone the second is skipped as already-seen -- so whichever came first
+        # answers for both and a change to the other cannot be reported.
+        key = (enclosing(lines, lo), name)
+        if key in seen:
             continue
-        seen.add(name)
+        seen.add(key)
         if re.search(r'\b%s\b' % re.escape(name), prose):
             continue
         out.append((name, where[lo], lo + 1,
