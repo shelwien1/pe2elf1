@@ -607,7 +607,6 @@ struct AltP1Block {
       ctx_w[c].w[1] = w1;
       ctx_w[c].w[2] = 2*w1;
     }
-    uint32_t row = 0;
     for( int32_t row = 0; row<5; ++row )
       buf[row] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+10));
     alt_init_tables(fold, (int8_t*)unfold);

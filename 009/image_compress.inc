@@ -46,7 +46,7 @@ static void code_image_body(BmfImage* p_i, BmfImage& hdr) {
     model_plane(p_i, p_i->pixels, p_i->pixels);
     return;
   }
-  const uint32_t filtered = search_filter(p_i, 0);
+  const uint32_t filtered = search_filter(p_i);
   hdr.flags |= flags_descriptors;
   // `search_filter` may have transposed the image under the header written at
   // the top, so the header is taken again -- but not the byte count, which the

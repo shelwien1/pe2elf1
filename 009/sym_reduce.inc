@@ -75,7 +75,7 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
       }
       n_distinct = blk1->alphabet;
     }
-  } else if( height*blk1->width ) {
+  } else if( height&&blk1->width ) {
     const uint8_t *q = src;
     const uint32_t n_pix = blk1->height*blk1->width;
     for( uint32_t idx = 0; idx<n_pix; ++idx ) {

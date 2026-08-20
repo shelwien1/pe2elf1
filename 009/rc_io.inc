@@ -229,7 +229,7 @@ static uint32_t unpack_bits(int32_t n) {
   stream.pk.free_bits -= n;
   if( stream.pk.free_bits<0 ) {
     const uint32_t w = packer_word();
-    v = stream.pk.acc|(w<<((stream.pk.free_bits+n)&31))&mask;
+    v = stream.pk.acc|((w<<((stream.pk.free_bits+n)&31))&mask);
     stream.pk.acc = w>>(-stream.pk.free_bits&31);
     stream.pk.free_bits += 32;
   } else {

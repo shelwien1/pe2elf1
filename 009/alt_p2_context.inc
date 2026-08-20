@@ -137,8 +137,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // is what `nb_id[]` is sized for.
   nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD)
                     .digit<64, 5>(gA).digit<320, 6>(band);
-  int32_t nb_at = nb_id[(uint32_t)nb_slot];
-  if( nb_id[(uint32_t)nb_slot] ) {
+  int32_t nb_at = nb_id[nb_slot];
+  if( nb_id[nb_slot] ) {
     NbRow *wrow = &nb_weights[nb_at];
     nb_cur = wrow;
     {
@@ -183,7 +183,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     // in question and no corpus stream would move to say so.  The `BMF_ASSUME`
     // is the honest instrument -- a comment under the default build and a check
     // under `BMF_ASSERTS=1`, which is a build leg.
-    nb_id[(uint32_t)nb_slot] = ++nb_id_used;
+    nb_id[nb_slot] = ++nb_id_used;
     BMF_ASSUME(nb_id_used<1088);
     nb_cur = &nb_weights[nb_id_used];
   }
@@ -503,7 +503,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // `q9`, `q39` and `q10` -- computed from the positive one, before this line
   // -- could be added to comparisons made after it.  Those are written out
   // now, so the negation and the six sign flips cancel.
-  bank3 = (int32_t)(CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val)
+  bank3 = (CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val)
                     .bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1->dval)>>1)+run_dv3)
                     .bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val)
                     .bit_of<22>(-(c2[2].val+run2-2*c1[1].val))
@@ -523,7 +523,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t dv_now4 = c0[0].dval;
   int32_t run_dv4 = run3-dv_now4;
   int32_t run_up4 = run3+c3->val;
-  bank4 = (int32_t)(CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2))
+  bank4 = (CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2))
                     .bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4))
                     .bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval))
                     .bit_of<22>(run3-c0[-3].dval-dv_now4-(c1->val-c1[-3].val))

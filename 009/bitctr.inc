@@ -49,7 +49,7 @@ struct CounterNode {
   // shift out four times, twice reading `total` from a local holding the value
   // just stored into it.
   bool escape_high(int32_t slot) const {
-    return 2u*c[slot]>(total&0x7FFF)+c[0];
+    return 2u*c[slot]>(total&0x7FFFu)+c[0];
   }
 };
 

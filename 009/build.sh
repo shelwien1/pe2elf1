@@ -7,6 +7,7 @@
 #     BMF_WARN=1   ./build.sh           # warn.log   and the count, no binary
 #     BMF_ASSERTS=1 ./build.sh          # the BMF_ASSUME invariants, checked
 #     BMF_STRICT=1 ./build.sh           # strict.log and the count, no binary
+#     BMF_CONV=1   ./build.sh           # conv.log  and the count, no binary
 #     BMF_GC=list  ./build.sh           # and name the bodies --gc-sections drops
 #     BMF_ALIAS=-fstrict-aliasing ./build.sh   # tools/alias.sh's knob; see below
 #
@@ -205,6 +206,57 @@ if [ "${BMF_WARN:-0}" = 1 ]; then
   grep -c ': warning: ' "$log" || true
   stamp "$log"
   exit "$rc"
+fi
+
+# Every implicit narrowing the program performs, counted.
+#
+# This is the *cast audit*'s instrument and not a cleanliness pass.  A narrowing
+# in this program is usually the point, and the classes are worth writing down
+# once so the next audit does not re-derive them:
+#
+#   wraparound before a table lookup   `(uint8_t)(sym - pred)` indexing `fold`
+#                                      and `fold_hi`, ~40 sites.  The wrap *is*
+#                                      the fold: the table has 256 entries and
+#                                      the residual is taken modulo 256.
+#   the model's truncating update      `(int16_t)` into `P2Count::weighted` and
+#                                      `(uint16_t)` into `P2Freq`'s counts.
+#                                      Sixteen bits in, sixteen out, and the
+#                                      high half the store dropped was never
+#                                      read.
+#   byte extraction                    `(uint8_t)(low >> 23)` in the range
+#                                      coder, and the four in `flush`.
+#   context truncation                 `(uint16_t)` feeding `CtxIdx::bit_of`,
+#                                      where the cast is what puts the bit at
+#                                      15 rather than at 31.
+#   float widening                     `(float)` through the NLMS filter.
+#
+# None of those is going anywhere.  Marking each with an inline `/*wrap*/` was
+# considered and declined: forty markers is forty more things to keep true, and
+# the count below is one thing that cannot drift.
+#
+# What the count is for is the other direction.  When a cast is *removed* as
+# redundant, the question is whether it was doing something; a cast that was
+# doing something leaves a warning behind when it goes.  So the procedure is
+# "note the count, remove the cast, compare" -- and having the count in a build
+# leg is what makes the comparison a command rather than a remembered number.
+#
+# It is a ratchet on the same argument as the others here: a *new* narrowing
+# that nobody decided on shows up as a count that went up.
+if [ "${BMF_CONV:-0}" = 1 ]; then
+  log=conv.log
+  [ "$BITS" = 32 ] || log=conv64.log
+  set +e
+  $CXX $arch $std $opt $incs $opts $permissive $fidelity -fdiagnostics-plain-output \
+      -Wall -Wextra -Wconversion -fsyntax-only "$@" "$SRC" > "$log" 2>&1
+  rc=$?
+  set -e
+  if [ "$rc" != 0 ]; then
+    echo "FAILED: $CXX exited $rc; see $log" >&2
+    grep -m3 ': error: ' "$log" >&2 || true
+  fi
+  grep -c ': warning: ' "$log" || true
+  stamp "$log"
+  exit 0
 fi
 
 if [ "${BMF_STRICT:-0}" = 1 ]; then

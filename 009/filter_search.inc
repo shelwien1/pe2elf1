@@ -44,7 +44,7 @@ static void restore_descriptors(const PlaneDesc* saved) {
 // `if( plane_count > 0 )` guard a `for` does not need.
 static void offer_to_all(int32_t want) {
   for( int32_t k = 0; k<plane_count; ++k )
-    plane_desc[k].flags = plane_desc[k].flags&desc_has_refs|want;
+    plane_desc[k].flags = (plane_desc[k].flags&desc_has_refs)|want;
 }
 
 // The alternate model taken away from every plane, leaving what else its
@@ -93,7 +93,7 @@ static int32_t transform_cost(BmfImage* tile_img) {
   return bits;
 }
 
-uint32_t search_filter(BmfImage* img, int8_t mode) {
+uint32_t search_filter(BmfImage* img) {
   // The frame was one union of two arms and 36 bytes of pad, and the two arms
   // never overlap: everything in the scalar arm is dead by the `free(tile_buf)`
   // below, and `saved` is first written four lines later.  So it is MSVC

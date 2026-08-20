@@ -19,7 +19,7 @@ void AltP2Block::code_banks(int32_t sample16) {
   // under four names; with those gone the rest declare where they are first
   // written, which is inside the bank loop, one block in.
   for( uint32_t bank = 0; bank<5; ++bank ) {
-      const int32_t bctx = (uint32_t)bank_ctx[bank];
+      const int32_t bctx = bank_ctx[bank];
       const int32_t res = sample16-nb_sum[2*bank];
       P2Count* node0 = &p2_ctr[slot(bank, bctx)];
       const int32_t w0 = res+(uint16_t)node0->weighted;

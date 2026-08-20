@@ -144,6 +144,20 @@ static inline int32_t p2_pred(int32_t weighted, int32_t rate) {
 }
 
 static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
+  // `1u << (shift - 1)` is the rounding term, and the shift is 1, 2 or 3:
+  // every caller is `p2_update`, `p2_update_into` or `p2_nudge`, and between
+  // them they pass 1 once, 2 four times and 3 eight, plus three `p2_nudge`
+  // calls taking the default 2.  Nothing here bounds it, which is what the
+  // assert is for -- a comment saying "and this cannot happen because" that
+  // can be run.
+  //
+  // It was written `>= 2` first, on the plan's word that the shift is 2 or 3,
+  // and the `BMF_ASSERTS` leg failed 15 checks on the spot.  The 1 is real and
+  // it is *new*: unfolding `code_banks`'s comma chain into statements turned an
+  // expression that spelled its own `+1` and `>>1` into `p2_update(p, res, 1)`.
+  // An invariant taken from a document rather than from the callers, checked by
+  // a leg that runs.
+  BMF_ASSUME(shift>=1&&shift<=3);
   const uint32_t kick = 32u*(uint32_t)((err>deadzone_hi)-(err<deadzone_lo));
   return (int16_t)((uint32_t)w2+((kick+(uint32_t)err+(1u<<(shift-1)))>>shift));
 }
@@ -408,8 +422,8 @@ struct AltP2Block {
   // Two of the five did not call `p2_pred` at all: they spelled its shift out,
   // with the `&31` masks that are dead for the reason the helper's comment
   // gives.  Those two are the same call as the other three.
-  int32_t p2_pred_at(int32_t bank, int32_t ctx) {
-    const P2Count& c = p2_ctr[slot(bank, ctx)];
+  int32_t p2_pred_at(int32_t bank, int32_t bctx) {
+    const P2Count& c = p2_ctr[slot(bank, bctx)];
     return p2_pred(c.weighted, c.rate);
   }
   P2Freq freq[15552];

@@ -122,6 +122,6 @@ static void packer_flush();
 static void pack_bits(uint32_t word, int32_t n);
 static uint32_t unpack_bits(int32_t n);
 BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf);
-uint32_t search_filter(BmfImage* img, int8_t mode);
+uint32_t search_filter(BmfImage* img);
 BmfFile*bmf_open_file(BmfFile* out, char* path, int32_t read_only);
 int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk);

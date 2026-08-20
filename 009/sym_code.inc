@@ -215,7 +215,7 @@ int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
     // this comparison, and it is worth having on the page as one.
     uint16_t*const strip = model_strip(
         CtxIdx{}.bit<7>(slot&1)
-                .bit<6>(2u*c[slot]>c[0]+(result&0x7FFF)+96)
+                .bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96)
                 .raw((uint32_t)ctx));
     if( f_DEC )
       slot += 2*decode_symbol_tree(strip);
