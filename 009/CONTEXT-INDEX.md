@@ -185,6 +185,12 @@ Nine lines of `alt_p2_context.inc`, 408 lines long, hold every one of them:
 | 311 | `bank3` | 11 | 15..25 | `<<13`, `<<11` |
 | 322 | `bank4` | 12 | 15..25 | `<<13` |
 
+The line numbers and the last two names are as they stood when this was written.
+`bank3` and `bank4` were the words *and* the bank numbers they shifted down to,
+because the shift was folded into the chain; the five stages are `step_bank`
+calls now and the words are `ctx3` and `ctx4`, one shift for all five.  Nothing
+about the terms below changed -- this is a record of a round, not of the file.
+
 **Eighty-three of the eighty-six** are the same shape:
 
 ```c

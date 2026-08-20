@@ -508,6 +508,37 @@ struct AltP2Block {
     const P2Count& c = p2_ctr[slot(bank, bctx)];
     return p2_pred(c.weighted, c.rate);
   }
+
+  // One stage of the five-bank cascade.  The context word's top bits name the
+  // bank slot, the counter there predicts, and that prediction accumulates onto
+  // the running one, which is what the next stage's word is built against.
+  //
+  // The two `nb_sum` slots per bank are the pair `alt_p2_model` reads back: the
+  // running total at `2*bank` -- the residual is taken against it -- and the
+  // stage's own prediction at `2*bank + 1`, which the second arm folds into the
+  // residual again.  That indexing is why this is one function and not five: the
+  // even/odd convention was spelled out ten times, with the two stores in one
+  // order for banks 0, 2, 3 and 4 and the other order for bank 1, so which slot
+  // held which could only be read off by matching each literal to its neighbour.
+  //
+  // `ctx>>11` drops the eleven low bits the `bit_of<>` chains fill and is the
+  // same shift at all five sites.  It takes the word unsigned because that is
+  // what `CtxIdx` converts to and what banks 3 and 4 shifted -- banks 0, 1 and 2
+  // went through an `int32_t` local first and shifted arithmetically, which is
+  // the same value for a word whose highest field is bit 25 but not the same
+  // spelling.  One spelling now, and the three locals are `uint32_t`.
+  //
+  // Bank 0's `run_in` is the filter output rather than a previous stage; the
+  // other four chain.
+  int32_t step_bank(int32_t bank_no, uint32_t ctx, int32_t run_in) {
+    const int32_t bank = (int32_t)(ctx>>11);
+    bank_ctx[bank_no] = bank;
+    const int32_t pred = p2_pred_at(bank_no, bank);
+    nb_sum[2*bank_no+1] = pred;
+    const int32_t run = pred+run_in;
+    nb_sum[2*bank_no] = run;
+    return run;
+  }
   // 15552 = 16 magnitude levels * 972, the mixed-radix span the five ternary
   // selectors reach through `mixer_fwd`.  Seeded by a loop that counted to
   // `0x3CC0`.

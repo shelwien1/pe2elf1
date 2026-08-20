@@ -78,7 +78,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t ctx15, nb_slot;
   P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2;
   bool no_ref;
-  int32_t ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, flat_a, flat_b;
+  uint32_t ctx0, ctx1, ctx2;
+  int32_t flat_a, flat_b;
   uint32_t ctx0_lo;
   // The five row cursors, read once.
   //
@@ -312,7 +313,11 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
             .bit_of<15>((uint16_t)c0[-3].err)
             .bits<13, 2>((filt>3536)+(filt>720)+(filt>288))
             .bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
-  bank_ctx[0] = ctx0_lo;
+  // `bank_ctx[0] = ctx0_lo;` was here, overwritten nine lines down by the bank
+  // the finished word names and read by nothing in between.  Proved rather than
+  // argued: storing 12345 here leaves all 111 checks passing, and storing it at
+  // the surviving assignment fails 12 of them, so the slot is live and this
+  // write to it is not.
   if( refa ) {
     ctx0 = CtxIdx{}.bit<25>(rb0[-1].err < 0)
            .bit<24>(rb0->err < 0)
@@ -330,34 +335,29 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
            .bit<20>(c0[-7].err < 0)
            .raw(ctx0_lo);
   }
-  int32_t bank0 = ctx0>>11;
-  bank_ctx[0] = bank0;
-  int32_t pred0 = p2_pred_at(0, bank0);
-  nb_sum[1] = pred0;
-  int32_t run0 = pred0+filt;
-  nb_sum[0] = run0;
+  const int32_t run0 = step_bank(0, ctx0, filt);
   int32_t nb4_4 = c4[4].val;
   sum_all = ((g3pair<<9)+sum_all)>>13;
   int32_t d_run0 = c0[-5].val-run0;
   int32_t d_up = nb4_4-run0;
   int32_t up5 = c1[5].val;
   int32_t d_up5 = up5-run0;
-  // The six words below -- two spellings of `ctx1`, two of `ctx2`, and the two
-  // `bank` words after them -- are `bit_of<>` almost throughout, and this is
-  // the measurement that says they have to be.
+  // The six words below -- two spellings of `ctx1`, two of `ctx2`, and `ctx3`
+  // and `ctx4` after them -- are `bit_of<>` almost throughout, and this is the
+  // measurement that says they have to be.
   //
   // Every `expr & <one bit>` is a sign test *if* `|expr|` stays under that bit,
   // and `bit<k>(expr < 0)` is how a word says so.  These do not qualify.  Every
-  // term carries a `run` -- `run0 = pred0 + run_s`, `run1 = pred1 + run0`, and
-  // on down -- which is an accumulated prediction with no type bound, and the
-  // masks reach as low as bit 15.
+  // term carries a `run` -- each is the stage before it plus that stage's own
+  // prediction, which `step_bank` accumulates -- and that is a prediction with
+  // no type bound, while the masks reach as low as bit 15.
   //
   // Instrumented over the corpus, four of them are *not* sign tests at all:
   //
-  //   ctx1  bit 15  `d_run0`                        reaches 36157
-  //   bank3 bit 15  `run2-c0[-3].val`              reaches 35550
-  //   bank3 bit 24  `... - ((uint32_t)(...)>>1) ...`  is unsigned throughout
-  //   bank4 bit 15  `(uint16_t)run3 - ...`          reaches 69572 as an int
+  //   ctx1  bit 15  `d_run0`                           reaches 36157
+  //   ctx3  bit 15  `run2-c0[-3].val`                  reaches 35550
+  //   ctx3  bit 24  `... - ((uint32_t)(...)>>1) ...`   is unsigned throughout
+  //   ctx4  bit 15  `(uint16_t)run3 - ...`             reaches 69572 as an int
   //
   // and twelve more come within a factor of four of their bit, which makes them
   // sign tests by how the corpus happened to run and not by anything the code
@@ -404,12 +404,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
            .bit_of<15>(-d_run0)
            .raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
   }
-  int32_t bank1 = ctx1>>11;
-  bank_ctx[1] = bank1;
-  pred1 = p2_pred_at(1, bank1);
-  run1 = pred1+run0;
-  nb_sum[2] = run1;
-  nb_sum[3] = pred1;
+  const int32_t run1 = step_bank(1, ctx1, run0);
   int32_t cx2_val0 = c2->val;
   int32_t cx1_val = c1->val;
   int32_t dvsum2 = c0[-2].val-run1;
@@ -444,19 +439,14 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
            .bit_of<15>(-dvsum2)
            .raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
   }
-  int32_t bank2 = ctx2>>11;
-  bank_ctx[2] = bank2;
-  int32_t pred2 = p2_pred_at(2, bank2);
-  nb_sum[5] = pred2;
-  run2 = pred2+run1;
-  nb_sum[4] = run2;
+  const int32_t run2 = step_bank(2, ctx2, run1);
   int32_t run_dv3 = run2-c0[0].dval;
   // `sum_all = -sum_all` was here, and the six thresholds below read `< -K`
   // because of it.  Nothing else used the negated value: it existed so that
   // `q9`, `q39` and `q10` -- computed from the positive one, before this line
   // -- could be added to comparisons made after it.  Those are written out
   // now, so the negation and the six sign flips cancel.
-  bank3 = (CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val)
+  const uint32_t ctx3 = CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val)
                     .bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1->dval)>>1)+run_dv3)
                     .bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val)
                     .bit_of<22>(-(c2[2].val+run2-2*c1[1].val))
@@ -467,16 +457,12 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .bit_of<17>(2*run2-c1->dval-(c1->val+c0[0].dval))
                     .bit_of<16>(run2-c0[-1].dval-c0[0].dval)
                     .bit_of<15>(run2-c0[-3].val)
-                    .raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9)))>>11;
-  bank_ctx[3] = bank3;
-  int32_t pred3 = p2_pred_at(3, bank3);
-  nb_sum[7] = pred3;
-  run3 = pred3+run2;
-  nb_sum[6] = run3;
+                    .raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9));
+  const int32_t run3 = step_bank(3, ctx3, run2);
   int32_t dv_now4 = c0[0].dval;
   int32_t run_dv4 = run3-dv_now4;
   int32_t run_up4 = run3+c3->val;
-  bank4 = (CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2))
+  const uint32_t ctx4 = CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2))
                     .bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4))
                     .bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval))
                     .bit_of<22>(run3-c0[-3].dval-dv_now4-(c1->val-c1[-3].val))
@@ -487,12 +473,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .bit_of<17>(run_dv4-c1[4].dval)
                     .bit_of<16>(run_dv4-c1[-2].dval)
                     .bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4)
-                    .raw((ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10))))>>11;
-  bank_ctx[4] = bank4;
-  int32_t pred4 = p2_pred_at(4, bank4);
-  nb_sum[9] = pred4;
-  int32_t run4 = run3+pred4;
-  nb_sum[8] = run4;
+                    .raw(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10));
+  const int32_t run4 = step_bank(4, ctx4, run3);
   int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
   int32_t lo_band = band_lo;
   ctx_w[0].sel = (run4<1840)+(run4<272);
@@ -513,10 +495,15 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     magsum = mag_ref1+magsum_own+4*mag_ref0+2*(ra0[-1].mag+rb0[-1].mag);
     flat_a = mag_ref0+magl+rb0[-2].mag+rb0[-1].mag+ra0[-2].mag+ra0[-1].mag;
     if( has_ref ) {
-      int32_t d_run4b = run4-c1->dval-c0[0].dval;
+      // The second difference was written back over `run4`, which is a
+      // register reused and not a value updated: nothing downstream wants the
+      // overwritten one, and the level index below recomputed `run3 + pred4`
+      // rather than reading it -- the original saying so in its own way.  With
+      // its own name `run4` is written once and the index is just `run4`.
+      const int32_t d_run4b = run4-c1->dval-c0[0].dval;
       if( d_run4b<lo_band||d_run4b>hi_band ) {
-        run4 = run4-c0[-1].dval-c0[0].dval;
-        flat_b = run4>=lo_band&&hi_band>=run4;
+        const int32_t d_run4c = run4-c0[-1].dval-c0[0].dval;
+        flat_b = d_run4c>=lo_band&&hi_band>=d_run4c;
       } else {
         flat_b = 1;
       }
@@ -561,7 +548,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ctx15 = nb_ctx[magsum>>3];
     ctx = ctx15;
   }
-  const int32_t ctx_idx = clamp32((run3+pred4+7)>>4, 0, 255);
+  const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
   // The magnitude context in the low nibble, under a `ctx_delta` entry that
   // occupies bits 4 and up -- the run level as `bits<4, 4>` and the plane
   // `above<8>`, built once in `alt_p2_alloc`.  `ctx15` is `nb_ctx[]`, whose

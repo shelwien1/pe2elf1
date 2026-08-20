@@ -1748,20 +1748,27 @@ for a 32-bit image, which is a large part of why this is the expensive model.
 the corrected value:
 
 ```
-run_s = filt                    the NLMS prediction of §10.1
-ctx0 -> bank0 -> pred0          run0 = pred0 + run_s
-ctx1 -> bank1 -> pred1          run1 = pred1 + run0
-ctx2 -> bank2 -> pred2          run2 = pred2 + run1
-bank3         -> pred3          run3 = pred3 + run2
-bank4         -> pred4          run4 = pred4 + run3
+run0 = step_bank(0, ctx0, filt)     filt is the NLMS prediction of §10.1
+run1 = step_bank(1, ctx1, run0)
+run2 = step_bank(2, ctx2, run1)
+run3 = step_bank(3, ctx3, run2)
+run4 = step_bank(4, ctx4, run3)
 ```
 
-Every term of `ctx1` carries `run0`, every term of `ctx2` carries `run1`, and so
-on down — which is why none of these can be reasoned about from the types alone,
-and it is the single most important fact about how this model is put together.
+`step_bank` is one stage: shift the context word down to name the bank slot, ask
+the counter there for a correction, and add that correction to the running
+prediction it was handed. Every term of `ctx1` carries `run0`, every term of
+`ctx2` carries `run1`, and so on down — which is why none of these can be
+reasoned about from the types alone, and it is the single most important fact
+about how this model is put together.
+
 The ten intermediate values are kept in `nb_sum[0..9]` as five (running,
-correction) pairs, and `run4` is what the context selectors of §10.2 finally
-read.
+correction) pairs — the running total at the even index, the stage's own
+correction at the odd one — and `run4` is what the context selectors of §10.2
+finally read. That even/odd convention is why `step_bank` is one function rather
+than five copies: written out, the two stores appeared in one order at four of
+the sites and the other order at the fifth, so which slot held which could only
+be established by matching literal subscripts.
 
 Each bank context has the same shape: **eleven single-bit features at bits
 15…25, and `ctx_quant`'s two two-bit fields at 11…14**, then `>>11` to index the
