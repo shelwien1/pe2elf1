@@ -1,0 +1,10 @@
+# Tuning corpus for IDX/opt.pl -- one wav path per line, '#' comments ignored.
+#
+# The nz_wins set (9 real MS-ADPCM music files, 0.7-3.4 MB each) is a good
+# target: full-length, varied material, and with a published nz -cc column to
+# check against.  It is single-encoder and MS-only, though, so freeze the IMA-
+# relevant parameters with the '!' line modifier before tuning on it alone.
+#
+#music_00002.wav
+#music_00003.wav
+#music_00004.wav

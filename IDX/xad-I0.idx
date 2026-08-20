@@ -1,0 +1,14 @@
+# I0: parameters that exist only on the IMA-ADPCM path.  Kept apart from the
+# shared model so a tuning run on an MS-only corpus cannot quietly drift them,
+# and so the two formats' quantizers can be swept independently.
+
+Prefix I0
+Debug 1
+Const 1
+
+# The IMA step index, 0..88, as a threshold map: a 1 opens a new context bucket
+# at that position, a 0 merges it into the one before.  All-ones is one bucket
+# per index value, which is where the IMA tuning settled -- the full 89-value
+# index beat 4-wide bucketing there.
+Index Ib
+ s0: sidx, 1!1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111

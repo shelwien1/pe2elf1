@@ -1,0 +1,13 @@
+# build products and optimizer scratch
+xadpcm
+xadpcm.g++
+xadpcm.clang
+*.o
+*.exe
+*.xac
+opt/
+snap/
+_t.*
+book1bwt.ari
+export.!!!
+opttimes.!!!

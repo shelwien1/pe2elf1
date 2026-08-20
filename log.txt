@@ -1,0 +1,2 @@
+5.076s: xadpcm_r21_hsw.exe c wavs2 1
+4.388s: xadpcm_r21_skx.exe c wavs2 1
