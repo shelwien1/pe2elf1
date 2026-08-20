@@ -15,7 +15,12 @@ OUT=${2:-snap}
 ROOT=`pwd`
 
 cd "$WORK"
-perl "$ROOT/best_exp.pl" a b c d
+# best_exp.pl dies when no instance has an opttimes.!!! yet -- that is the
+# normal state of the first minutes, not an error worth a stack trace.
+if ! perl "$ROOT/best_exp.pl" a b c d; then
+  echo "snapshot: no instance has improved on the baseline yet"
+  exit 2
+fi
 cd "$ROOT"
 
 rm -rf "$OUT"
