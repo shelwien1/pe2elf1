@@ -1547,3 +1547,57 @@ rather than guessed, and the finding is a `BMF_ASSUME` under the `BMF_ASSERTS`
 leg and a paragraph in §10.2, not a clamp.  A clamp would change the model on
 exactly the inputs nobody has produced, and no reference stream would move to
 say so.
+
+---
+
+## Stage two, finished: what the plan asked for, and what it was wrong about
+
+Nine phases, four declines and three corrections.  The gate ran on every commit
+and answered the same thing each time: 111 checks, 17 images, byte-identical.
+
+**What landed.**  Phase 3 dissolved eleven aliases for five cursors in
+`alt_p2_context`, ten fields reached by byte offset, and the arena's two punned
+headers.  Phase 5 named the two mixer shapes, the ternary selector, the boundary
+nudge, the gradient predictor and the row accessor — the last two turning sixty
+lines of `c0[-2].val` into sixty lines that can be diffed against each other.
+Phase 6 took `alt_p2_model` from one `if` around ninety lines down to an early
+return with three names where one local had carried three values.  Phase 4 found
+six redundant casts with the `-Wconversion` count as the oracle and left the
+forty semantic ones alone, with the classes written into a build leg rather than
+into forty inline markers.  Phases 7 through 9 named eleven constants, removed
+four pieces of dead code and closed the last warning.
+
+**Four things the plan asked for were declined, each with the reason recorded at
+the code.**  `near_lossless_q` stays a knob no path can turn, because folding it
+deletes the only description this tree has of BMF 2.01's near-lossless mode and
+wiring a flag adds a mode no reference stream was taken under.  The BMP RLE
+decoders share what they can already, and `write_nibbles` has no counterpart on
+the writing side because a 4-bit image is stored packed.  `CtxIdx::digit`'s
+unused `Radix` is not deleted but *checked* — it is the fact that sizes
+`nb_id[]`, so what it wanted was enforcement.  And the
+`exclusion_gen`/`mode_symbol` move is declined outright, because its premise is
+false: those are read by `SymList` and by a free function, not only by
+`ModelBlock`, so the move is the whole-program change the same appendix rejects
+two entries above.
+
+**Three of the plan's claims did not survive contact with the code.**
+`p2_bump`'s shift is 1..3, not 2..3 — and the assert that says so failed fifteen
+checks the moment it was written, because Phase 5's own comma-chain unfolding
+had introduced the 1 an hour earlier.  `expand_predictor_mode0` had two call
+sites, not one.  `p2_b1_reload`'s live entries were 5..7 as the plan said, but
+the plan asked for verification against a binary that is not here, so what was
+verified instead was the reachable range, the reader count, and ASan after the
+shrink moved everything behind it.
+
+**And one finding nobody asked for.**  `nb_weights` holds 1088 rows while
+`nb_slot` names 1920 slots, with nothing between them.  The corpus reaches 593;
+an adversarial montage reaches 980; the union over twenty images is 1034, fifty-
+three short of the bound.  So the array looks measured rather than guessed, and
+no input found so far crosses it — which is a different statement from "it
+cannot be crossed", and the `BMF_ASSUME` is there to tell the difference.
+
+The methodological note of the round is in the section above this one: a probe
+can fire and still say nothing.  Three of the four instruments this round leaned
+on had to be shown able to report before their zeros were worth anything, and
+one of them — `covered.py` — was wrong twice in the same run, first about a body
+written on its signature's own line and then about two methods sharing a name.
