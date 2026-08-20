@@ -1630,3 +1630,18 @@ struct ModelBlock {
     }
   }
 };
+
+// The four `_padN` arrays in `ModelBlock` are the decompilation's record of
+// gaps in the original's frame, and a filler array is a layout contract in a
+// form nothing checks.  Stage 2 Section 10 asks for the contract to travel with
+// the declaration; these are it -- the offset of the member *after* each pad,
+// which is the only thing the pad exists to produce.
+//
+// This is the larger of the two: 8,102,552 bytes, one allocation, and a
+// `grid[65723]` whose bound is not round in any base.  If a pad is ever
+// mis-sized in an edit these say so at compile time rather than at the first
+// stream that reads a counter one record over.
+static_assert(offsetof(ModelBlock, bit_root) == 1051720, "_pad1051664 sizes the gap");
+static_assert(offsetof(ModelBlock, escape) == 1078224, "_pad16 sizes the gap");
+static_assert(offsetof(ModelBlock, sel_cur) == 1078304, "_pad22 sizes the gap");
+static_assert(sizeof(ModelBlock) == 8102552, "_pad25 closes the record");

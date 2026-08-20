@@ -401,6 +401,18 @@ struct AltP2Block {
   static const int32_t kP2CounterCount = 5*32768;
   P2Count p2_ctr[kP2CounterCount];
 
+  // The four `_padN` arrays above are the decompilation's record of gaps in
+  // MSVC's frame, and a filler array is a layout contract written in a form
+  // nothing checks.  Stage 2 Section 10 asks for the contract to travel with
+  // the declaration instead, which is what these are: the offset of the member
+  // *after* each pad, which is the only thing the pad exists to produce.
+  //
+  // They matter more than the usual `offsetof` restatement because this struct
+  // is 1,064,560 bytes of model state reached through one `bmf_page_alloc`, and
+  // because two of its members are already load-bearing on adjacency -- `bias`
+  // one row past `p2_row`, asserted below, and `nb_id` whose last four entries
+  // were a separate `_pad2[8]` until an index reached them.
+
   // Counter `ctx` of bank `k`.  Five banks of 32768, so the bank is a digit at
   // that stride and the context is the fifteen bits under it -- which is a
   // width the construction proves rather than one asserted here: a bank context
@@ -924,6 +936,11 @@ static int32_t alt_p2_planes_free(AltP2Block** plane) {
 
 // `NbRow::predict` writes `nb[7][0..2]` where `nb` is `p2_row`, a `[7][4]`.
 // That is `bias`, and this says so in a form the compiler checks.
+static_assert(offsetof(AltP2Block, pred_prev) == 278720, "_pad0 sizes the gap");
+static_assert(offsetof(AltP2Block, ctx) == 278724, "_pad2 sizes the gap");
+static_assert(offsetof(AltP2Block, nb_sum) == 278968, "_pad1 sizes the gap");
+static_assert(sizeof(AltP2Block) == 1064560, "_pad3 closes the record");
+
 static_assert(offsetof(AltP2Block, bias)
               == offsetof(AltP2Block, p2_row)+sizeof(AltP2Block::p2_row),
               "NbRow::predict returns three floats by writing one row past "
