@@ -1,10 +1,15 @@
 # What tools/resign-drive.sh last measured about resign.py's and
-# resign_group.py's offers.  The rows below were measured against the
-# single-file tree and their stamp line was `# subs1.hpp <cksum>`, which
-# resign.driven -- reading through buildlog.read -- has never been able to
-# parse, so they have printed as "stale" ever since.  Both tools report zero
-# on this tree, so there is nothing to re-measure; the format is corrected
-# here for the next run that has something to say.
-resign.py none of 28 reduces the count
-resign_group.py none of 23 reduces the count
-# sources 0 0
+# resign_group.py's offers, one row per (tool, file) -- the rule applies per
+# file, so a row that does not name one is a verdict about nothing.
+#
+# `none of N reduces` means the driver applied each of that file's N candidates
+# on its own, rebuilt with the conversion flags, and none of them lowered the
+# count.  The stamp at the end is the whole tree's, so every row goes stale
+# together the moment anything moves.
+resign.py model.inc none of 2 reduces the count
+resign.py plane_choose.inc none of 1 reduces the count
+resign.py sym_code.inc none of 1 reduces the count
+resign.py sym_list.inc none of 2 reduces the count
+resign.py alt_p2_context.inc none of 2 reduces the count
+resign.py bmp.inc none of 1 reduces the count
+# sources 3281280497 502453

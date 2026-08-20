@@ -57,11 +57,14 @@ takes a `uint32_t`, so flipping `ctx1` to `int32_t` removes two conversions from
 the log and adds three the log never mentioned.  The tool is measuring one side
 of a boundary that did not exist when it was written.
 
-Nothing is deleted for that.  The rule is sound for the shape it was built for,
-the accounting is what is short, and the honest instrument in the meantime is
-the count itself: flip, rebuild the log, compare, keep it only if the number
-went down and the gate did not move.  Both halves, and this round's nine failed
-one or the other apiece.
+Nothing is deleted for that.  The rule is sound for the shape it was built for
+and the accounting is what is short -- and `tools/resign-drive.sh` already
+existed for exactly this, having written down the same limitation when it was
+built: "it cannot see it flowing into a struct member or a call argument, so for
+a handful of candidates it cannot tell a removal from a move.  This settles
+those the only way they can be settled: apply one, rebuild, count."  That is the
+instrument.  Run the driver rather than this list when the question is whether a
+flip pays; this list is where to look when the question is which ones to try.
 
 The list is what this proposes; `--all` applies it, and the gate is the check.
 Fifteen byte-identical streams is a stronger statement about a type change than
