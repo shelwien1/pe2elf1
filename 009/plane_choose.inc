@@ -85,9 +85,17 @@ struct WeightSearch {
     // all" -- and the measurement was of a body this one did not have yet: the
     // two directions were written out twice with a `goto` past both, and the
     // top-level test only became a top-level test when they merged.
+    //
+    // `(dir<0 ? at[k]>=-64 : at[k]<192)` is **not** the `clamp_weight` bound
+    // wearing a ternary, and Stage 2 Section 1.6 is right to call it out: which
+    // end is tested depends on `dir`, a runtime flag, so it is two predicates
+    // over one range rather than a saturation of it.  The two constants are the
+    // same `kWeightMin`/`kWeightMax` pair -- one past the top, because this is
+    // the *next* value the search would try -- and that shared origin is what
+    // makes the rewrite look available when it is not.
     while( dir*at[0]<dir*end[0]||dir*at[1]<dir*end[1] ) {
       for( int32_t k = 0; k<2; ++k )
-        if( dir*at[k]<dir*end[k]&&(dir<0 ? at[k]>=-64 : at[k]<192) )
+        if( dir*at[k]<dir*end[k]&&(dir<0 ? at[k]>=kWeightMin : at[k]<kWeightMax+1) )
           end[k] = trial(k, at[k], dir*step);
       at[0] += dir;
       at[1] += dir;

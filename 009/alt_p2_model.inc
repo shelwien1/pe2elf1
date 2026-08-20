@@ -296,6 +296,12 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
   const float cov = (((err_own*d_pred)-wrow_cur->w[14][0])*0.001f)+wrow_cur->w[14][0];
   const float var = (wrow_cur->w[14][1]+0.000099999997f)+(((d_pred*d_pred)-wrow_cur->w[14][1])*0.001f);
   wrow_cur->w[14][1] = var;
+  // **Not a min, and the one `fminf` in the program sits inside it.**  Stage 2
+  // Section 1.6 asks for this said out loud, because the shape invites the
+  // rewrite: the false branch keeps `0.1f * var` rather than either operand, so
+  // `clamp(cov, 0.1f*var, var)` is what it *does* and `min(var, cov)` is not.
+  // Written as a clamp it would read better and mean the same thing; written as
+  // a min it would be wrong.  It is left in the source's own shape.
   float cov_kept = 0.1f*var;
   if( cov_kept<=cov )
     cov_kept = fminf(var, cov);
