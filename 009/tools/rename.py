@@ -21,6 +21,13 @@ is what the collision check catches.
 
 Names in a --file are one `OLD NEW` pair per line; `#` starts a comment.
 
+Every report line carries how many of that name's substitutions landed inside a
+`//` comment, when any did.  Nothing is refused -- rewriting comments is the
+policy and the right one, a comment naming a variable should follow it -- but a
+comment saying what the variable *used to be called* is rewritten by the same
+rule, and this tree's comments are full of those.  The count is which half of the
+substitutions wants reading before the commit.  See `in_comments`.
+
 `--in FUNC` scopes the rename to one function body, signature included.  Almost
 every `vNN` in this file is shared -- `v59` is a local in read_bmp and a
 different local in thirty other bodies -- so a whole-file rename of one is
@@ -63,6 +70,7 @@ def rename_in(path, fn, pairs):
     if not span:
         sys.exit('%s: no such function' % fn)
     a, b = span
+    commented = 0
     text = '\n'.join(lines[a:b + 1])
     # the collision check reads code only.  A comment saying "predictor-2
     # expander" is not a declaration of `predictor`, and refusing on it sends
@@ -99,18 +107,53 @@ def rename_in(path, fn, pairs):
         pat = (r'\b%s\b' if '--member' in sys.argv else NAMED)
         rx = re.compile(pat % re.escape(old))
         skip = set() if '--member' in sys.argv else frame_lines(text)
-        rows, k = text.split('\n'), 0
+        rows, k, in_comment = text.split('\n'), 0, 0
         for i, l in enumerate(rows):
             if i in skip:
                 continue
+            in_comment += comment_hits(l, rx)
             rows[i], n = rx.subn(new, l)
             k += n
         text = '\n'.join(rows)
-        print('%-22s -> %-22s %4d' % (old, new, k))
+        print('%-22s -> %-22s %4d%s'
+              % (old, new, k, in_comments(in_comment)))
         total += k
+        commented += in_comment
     lines[a:b + 1] = text.split('\n')
     open(path, 'w').write('\n'.join(lines))
-    print('%d occurrences in %s, %d names' % (total, fn.lstrip('_'), len(pairs)))
+    print('%d occurrences in %s, %d names%s'
+          % (total, fn.lstrip('_'), len(pairs), in_comments(commented, True)))
+
+
+def comment_hits(line, rx):
+    """How many of `rx`'s matches on `line` are inside its `//` comment."""
+    at = line.find('//')
+    return 0 if at < 0 else len(rx.findall(line[at:]))
+
+
+def in_comments(n, tail=False):
+    """The comment count, said only when there is one.
+
+    **A rename rewrites comments on purpose**, because a comment naming a
+    variable should follow it -- that is the policy above and it is the right
+    default.  What it cannot tell is a comment naming the variable from a
+    comment saying what the variable *used to be called*, and this tree's
+    comments are full of the second kind by house style.
+
+    Three times in one round a rename went through a paragraph explaining the
+    names it was retiring and left it meaningless: an alias history that ended
+    up reading "as if `c1` and `c1` were different rows", and twice a
+    measurement table whose row labels became the names that replaced them.
+    Every one was found by eye, afterwards, and one of them survived four
+    commits.
+
+    So the count is not a warning and nothing is refused -- the operator asked
+    for the rename and comments are part of it.  It is the number that says
+    which half of the substitutions wants reading before the commit.
+    """
+    if not n:
+        return ''
+    return ('%s%d in comments -- read them' % (', ' if tail else '  <- ', n))
 
 
 def locals_named(text, name):
@@ -272,13 +315,17 @@ def main():
                      'pass --member to move the frame member itself'
                      % (old, ', '.join(sorted(where))))
 
-    total = 0
+    total, commented = 0, 0
     for old, new in pairs:
-        text, k = re.subn(pat(old), new, text)
-        print('%-22s -> %-22s %4d' % (old, new, k))
+        rx = re.compile(pat(old))
+        in_comment = sum(comment_hits(l, rx) for l in text.split('\n'))
+        text, k = rx.subn(new, text)
+        print('%-22s -> %-22s %4d%s' % (old, new, k, in_comments(in_comment)))
         total += k
+        commented += in_comment
     open(path, 'w').write(text)
-    print('%d occurrences, %d names' % (total, len(pairs)))
+    print('%d occurrences, %d names%s'
+          % (total, len(pairs), in_comments(commented, True)))
     # A rename silently invalidates every document that names the function.
     # ALGORITHM.md describes the algorithm body by body, and eight renames in
     # one round left twenty-four of its references pointing at names that no
