@@ -45,6 +45,46 @@ struct CtxWeight {
   uint32_t w[3];
 };
 
+// The two ways a row of weights is summed into a context index.  Each weight is
+// a table entry *pre-scaled* by its feature's stride, so what these return is a
+// mixed-radix number whose digits were multiplied out at set-up -- which is why
+// the result stays a sum and only the bits below it become fields.
+//
+// `mixer_fwd` reads every feature's live weight.  `mixer_rev` reads each one
+// the other way round, `w[2 - sel]`, except slot 0, which reads `w[1]` in both
+// directions.  That asymmetry is not an accident of one call site:
+// `update_selector` takes the same pair as a parameter, and slot 0 names
+// `w[0]`/`w[1]` there where the other eight name `w[1]`/`w[2 - sel]`.
+//
+// Four places spelled one of these out -- two nine-tap and two five-tap, two
+// running up the row and two down it.  The terms are `uint32_t` and the sum is
+// unsigned, so the direction was never load-bearing.
+static inline uint32_t mixer_fwd(const CtxWeight* cw, int32_t n) {
+  uint32_t sum = 0;
+  for( int32_t k = 0; k<n; ++k )
+    sum += cw[k].w[cw[k].sel];
+  return sum;
+}
+
+static inline uint32_t mixer_rev(const CtxWeight* cw, int32_t n) {
+  uint32_t sum = cw[0].w[1];
+  for( int32_t k = 1; k<n; ++k )
+    sum += cw[k].w[2-cw[k].sel];
+  return sum;
+}
+
+// A signed value cut into three, with an optional dead zone: below `-dead` is
+// 0, inside the band is 1, above `dead` is 2.  Seven of `ctx_of`'s nine
+// selectors are this, and they arrived as seven interleaved copies of
+// `!is_neg + (!is_neg && !is_zero)` -- five of them reusing two `bool` locals
+// that the scheduler had woven through the other two.
+//
+// `dead == 0` collapses the two comparisons to `(v >= 0) + (v > 0)`, which is
+// the plain sign, so the two variants are one function rather than two.
+static inline int32_t tri_sign(int32_t v, int32_t dead = 0) {
+  return (v>=-dead)+(v>dead);
+}
+
 struct P1Ctx {
   uint8_t sym;
   uint8_t mag;
@@ -280,41 +320,30 @@ struct AltP1Block {
     ctx[0] = act_lvl;
     ctx[1] = group_of[act_q]+slot_of[(uint32_t)guess];
     // The same expression twice in the decompilation, once into the slot and
-    // once into the index that reads it.  The other eight slots need both --
-    // `ctx_w[N].sel` is overwritten further down while `sN` keeps the index --
-    // but nothing overwrites slot 0's.
+    // Nine selectors, each written over the value the arms above left in it or
+    // computed fresh from the row.  Seven are `tri_sign`; slot 0 is a pair of
+    // fixed thresholds on the prediction rather than a sign, and slots 4 and 5
+    // carry `step` as their dead zone.
+    //
+    // The decompilation had these interleaved -- slot 4 computed between slot
+    // 3's two `bool`s and slot 3's own result, slots 6 and 7 splitting their
+    // halves across the next slot's reads -- and carried a second copy of each
+    // value in `s0..s8` because `ctx_w[N].sel` is read again below.  Nothing
+    // here reads another slot, so the schedule was the register allocator's and
+    // the `sN` are the slots themselves.
     ctx_w[0].sel = (guess>216)+(guess>22);
-    uint32_t s0 = ctx_w[0].sel;
-    int32_t s1 = (cursor1[-1].sym-cursor1->sym>=0)+(cursor1[-1].sym>(int32_t)cursor1->sym);
-    ctx_w[1].sel = s1;
-    int32_t s2 = (cursor1[-1].sym-cur[-1].sym>=0)+(cursor1[-1].sym>(int32_t)cur[-1].sym);
-    ctx_w[2].sel = s2;
-    bool is_zero = ctx_w[3].sel==0;
-    bool is_neg = ctx_w[3].sel<0;
-    int32_t s4 = (cursor1[1].sym-guess>=-step)+(cursor1[1].sym-guess>step);
-    ctx_w[4].sel = s4;
-    int32_t hi = step<ctx_w[5].sel;
-    int32_t lo = -step<=ctx_w[5].sel;
-    int32_t s3 = !is_neg+(!is_neg&&!is_zero);
-    ctx_w[3].sel = s3;
-    int32_t s5 = lo+hi;
-    is_zero = ctx_w[6].sel==0;
-    is_neg = ctx_w[6].sel<0;
-    ctx_w[5].sel = s5;
-    int32_t g6 = !is_neg&&!is_zero;
-    int32_t h6 = !is_neg;
-    is_zero = ctx_w[7].sel==0;
-    is_neg = ctx_w[7].sel<0;
-    int32_t s6 = h6+g6;
-    ctx_w[6].sel = h6+g6;
-    int32_t g7 = !is_neg&&!is_zero;
-    int32_t h7 = !is_neg;
-    is_zero = ctx_w[8].sel==0;
-    is_neg = ctx_w[8].sel<0;
-    int32_t s7 = h7+g7;
-    ctx_w[7].sel = h7+g7;
-    int32_t s8 = !is_neg+(!is_neg&&!is_zero);
-    ctx_w[8].sel = s8;
+    ctx_w[1].sel = tri_sign(cursor1[-1].sym-cursor1->sym);
+    ctx_w[2].sel = tri_sign(cursor1[-1].sym-cur[-1].sym);
+    ctx_w[3].sel = tri_sign(ctx_w[3].sel);
+    ctx_w[4].sel = tri_sign(cursor1[1].sym-guess, step);
+    ctx_w[5].sel = tri_sign(ctx_w[5].sel, step);
+    // The last three are the same line three times, which is what naming the
+    // shape made visible: `reroll.py` found the run the moment `tri_sign`
+    // existed.  Slot 3 is the fourth of them and stays in place, because moving
+    // it up here to make the run four long would put it after slots 4 and 5 for
+    // no reason but the loop's convenience.
+    for( int32_t k = 6; k<=8; ++k )
+      ctx_w[k].sel = tri_sign(ctx_w[k].sel);
     // The activity level in the low three bits, two flatness flags over it, and
     // the nine ternary features above bit 5.
     //
@@ -328,13 +357,11 @@ struct AltP1Block {
     // holds each feature's three values *pre-scaled* to `32 * 3^k`, so the
     // stride lives in the table and what is written here is nine lookups added.
     // That is a mixed-radix number whose digits were multiplied out at set-up,
-    // which `digit<>` cannot say and `raw` can.
+    // which `digit<>` cannot say and `raw` can -- see `mixer_fwd`.
     int32_t result = CtxIdx{}.bits<0, 3>(act_lvl)
                              .bit<3>(ctx[3+ctx[2]]==0)
                              .bit<4>(quiet)
-                             .raw(ctx_w[0].w[s0]+ctx_w[1].w[s1]+ctx_w[2].w[s2]
-                                 +ctx_w[3].w[s3]+ctx_w[4].w[s4]+ctx_w[5].w[s5]
-                                 +ctx_w[6].w[s6]+ctx_w[7].w[s7]+ctx_w[8].w[s8]);
+                             .raw(mixer_fwd(ctx_w, 9));
     ctx[0] = result;
     return result;
   }
@@ -460,17 +487,13 @@ struct AltP1Block {
     const int32_t slot_r = sym_slot(code_r);
     // `ctx_w[1].sel` and `ctx_w[2].sel` were read into `sel1_top`/`sel2_top`
     // eight lines above this sum, which made two of its nine terms look unlike
-    // the other seven.  Nothing between the read and the use touches `ctx_w`.
     // The alternate context: the low five bits of the live one -- the activity
     // level and the two flatness flags of `ctx_of`, kept -- with all nine
     // features read the other way round above them.  `&0x1F` is that field, and
     // saying so is what makes the boundary between "kept" and "mirrored"
     // visible; `AltP2Block` builds its own the same way over five features and
     // six bits.
-    uint32_t ctx_alt = CtxIdx{}.bits<0, 5>(ctx[0]);
-    for( int32_t k = 8; k>=1; --k )
-      ctx_alt += ctx_w[k].w[2-ctx_w[k].sel];
-    ctx_alt += ctx_w[0].w[1];
+    uint32_t ctx_alt = CtxIdx{}.bits<0, 5>(ctx[0]).raw(mixer_rev(ctx_w, 9));
     CounterNode *node_alt = &counters[ctx_alt];
     node_alt[0].bump(slot_r, 17);
     const int32_t result = ctx[0];

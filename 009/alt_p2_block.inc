@@ -202,6 +202,27 @@ static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num) {
   r->f[slot] += (num*(uint32_t)r->step)>>4;
 }
 
+// The record either side of a group's, each touched only where the magnitude
+// context leaves room: level 15 has no record above it, and the level at the
+// bottom has none below.  Where that bottom is differs -- one of the two
+// selector shapes in `bump_selector` stops at 2 rather than 0 -- so the low
+// bound is a parameter and not a normalization.
+//
+// The `sel == 1` arm of `bump_selector` is this shape with a *second* bump on
+// the next group's record wedged between the two, inside the upper branch.  It
+// stays written out: hoisting that bump out would run it unconditionally, and
+// moving it after the lower one would reorder two `p2_freq_add`s whose records
+// are only distinct because two weight-table entries happen to differ by more
+// than two.  That is a fact about the tables, not about the code, and it is not
+// worth resting a byte-identical stream on.
+static inline void p2_bump_sides(P2Freq* group, int32_t ctx15, int32_t lo,
+                                 int32_t slot, uint32_t up, uint32_t dn) {
+  if( ctx15<15 )
+    p2_freq_add(&group[1], slot, up);
+  if( ctx15>lo )
+    p2_freq_add(&group[-1], slot, dn);
+}
+
 // The same counter, updated in place and *without* `p2_bump`'s dead-zone kick.
 // 22 sites fold it into one `+=` on the next counter in the bank; the rounding
 // term is the only thing they share with `p2_update`, and folding them together
@@ -376,6 +397,20 @@ struct AltP2Block {
   static uint32_t slot(int32_t bank, int32_t ctx) {
     return CtxIdx{}.bits<0, 15>(ctx).digit<32768, 5>(bank);
   }
+
+  // The prediction bank `bank` makes in context `ctx`.  `alt_p2_context` builds
+  // five of these, one per stage of the cascade, and each of the five evaluated
+  // `slot()` twice -- once for the weight and once for the rate -- because the
+  // decompilation had the two loads as separate expressions.  `slot` is a pure
+  // static, so folding them is exact.
+  //
+  // Two of the five did not call `p2_pred` at all: they spelled its shift out,
+  // with the `&31` masks that are dead for the reason the helper's comment
+  // gives.  Those two are the same call as the other three.
+  int32_t p2_pred_at(int32_t bank, int32_t ctx) {
+    const P2Count& c = p2_ctr[slot(bank, ctx)];
+    return p2_pred(c.weighted, c.rate);
+  }
   P2Freq freq[15552];
   uint8_t _pad3[8];
   // Defined out of line, in alt_p2_context.inc and alt_p2_model.inc.  They are
@@ -507,10 +542,7 @@ struct AltP2Block {
       p2_freq_add(&freq[step_v+ctx_w[k].w[1]-ctx_w[k].w[2-sel]], fold_sel, 7);
       P2Freq*const group = &freq[ctx_w[k].w[1]+(ctx-ctx_w[k].w[sel])];
       p2_freq_add(&group[0], is_dec, 7);
-      if( ctx15<15 )
-        p2_freq_add(&group[1], is_dec, 5);
-      if( ctx15>0 )
-        p2_freq_add(&group[-1], is_dec, 6);
+      p2_bump_sides(group, ctx15, 0, is_dec, 5, 6);
     }
   }
 

@@ -1387,6 +1387,9 @@ feature with the three values pre-scaled to `32 · 3^k`, and the counter index i
 ctx[0] = Σ ctx_w[k].w[sel_k]  +  16·quiet  +  8·(ctx[3 + ctx[2]] == 0)  +  act_lvl;
 ```
 
+That sum is `mixer_fwd(ctx_w, 9)` in the source, and predictor 2 builds its own
+five-feature context with `mixer_fwd(ctx_w, 5)` over the same `CtxWeight` row.
+
 `ctx[3]` and `ctx[4]` are a **second** activity measure, separate from the one
 above and kept per column parity. `seed_activity` builds both at the start of a
 row, each from ten `mag` fields — four from two rows up, four from four rows up,
@@ -1481,7 +1484,9 @@ from `pred − sample`. Then
 
 - the **alternate context** — every feature read in the opposite direction,
   `ctx_w[k].w[2 − sel_k]`, with feature 0 forced to its middle value and the low
-  five bits kept — is bumped by **17** for the reversed code. That is the model
+  five bits kept, which is `mixer_rev(ctx_w, 9)`; predictor 2 mirrors its five
+  the same way, with `mixer_rev(ctx_w, 5)` under six kept bits rather than five
+  — is bumped by **17** for the reversed code. That is the model
   learning the mirrored statistic for free, on the assumption that an image with
   a bias one way has the opposite bias somewhere else.
 - the context **one activity level up** is bumped by 11 and the one **down** by
@@ -1690,6 +1695,12 @@ few rescales, and comes to rest at 16 or below, which is a fixed point. The
 three
 counts halve on every rescale regardless, and rescale fires when they total more
 than 29696.
+
+Records are bumped in threes: the one the context names, and the two either side
+of it in the magnitude level — `p2_bump_sides`, which touches the record above
+only below level 15 and the one below only above the bottom level. Where that
+bottom is is not uniform: one of `bump_bank`'s two shapes stops at 2 rather than
+0, so under that shape levels 1 and 2 get no bump from below either.
 
 ### 10.4 the counter cascade, and what the search turns off
 

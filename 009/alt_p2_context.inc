@@ -310,7 +310,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   }
   int32_t bank0 = ctx0>>11;
   bank_ctx[0] = bank0;
-  int32_t pred0 = p2_pred(p2_ctr[slot(0, bank0)].weighted, p2_ctr[slot(0, bank0)].rate);
+  int32_t pred0 = p2_pred_at(0, bank0);
   int32_t sum_c = sum_all;
   nb_sum[1] = pred0;
   int32_t run0 = pred0+run_s;
@@ -385,10 +385,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   }
   int32_t bank1 = ctx1>>11;
   bank_ctx[1] = bank1;
-  int8_t rate1 = p2_ctr[slot(1, bank1)].rate;
-  int32_t w1c = p2_ctr[slot(1, bank1)].weighted;
-  int32_t one1 = 1<<((rate1+31)&31);
-  pred1 = (one1+w1c)>>(rate1&31);
+  pred1 = p2_pred_at(1, bank1);
   run1 = pred1+run0;
   nb_sum[2] = run1;
   nb_sum[3] = pred1;
@@ -428,7 +425,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   }
   int32_t bank2 = ctx2>>11;
   bank_ctx[2] = bank2;
-  int32_t pred2 = p2_pred(p2_ctr[slot(2, bank2)].weighted, p2_ctr[slot(2, bank2)].rate);
+  int32_t pred2 = p2_pred_at(2, bank2);
   nb_sum[5] = pred2;
   run2 = pred2+run1;
   nb_sum[4] = run2;
@@ -451,8 +448,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .bit_of<15>(run2-c0[-3].val)
                     .raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9)))>>11;
   bank_ctx[3] = bank3;
-  int32_t w3c = p2_ctr[slot(3, bank3)].weighted;
-  int32_t pred3 = p2_pred(w3c, p2_ctr[slot(3, bank3)].rate);
+  int32_t pred3 = p2_pred_at(3, bank3);
   nb_sum[7] = pred3;
   run3 = pred3+run2;
   run = run3;
@@ -473,7 +469,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
                     .bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4)
                     .raw((ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10))))>>11;
   bank_ctx[4] = bank4;
-  int32_t pred4 = p2_pred(p2_ctr[slot(4, bank4)].weighted, p2_ctr[slot(4, bank4)].rate);
+  int32_t pred4 = p2_pred_at(4, bank4);
   nb_sum[9] = pred4;
   int32_t run4 = run+pred4;
   nb_sum[8] = run4;
@@ -559,9 +555,9 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // values rather than fields -- each is a table entry pre-scaled the way
   // `AltP1Block`'s nine are -- so they stay a sum and only the rest becomes
   // fields.
+  // It was written out with the terms running down from index 4, which is the
+  // order the registers came free in.
   ctx = CtxIdx{}.bits<0, 4>(ctx15).bit<4>(flat_a==0).bit<5>(flat_b==0)
-        +ctx_w[4].w[ctx_w[4].sel]+ctx_w[3].w[ctx_w[3].sel]
-        +ctx_w[2].w[ctx_w[2].sel]+ctx_w[1].w[ctx_w[1].sel]
-        +ctx_w[0].w[ctx_w[0].sel];
+                .raw(mixer_fwd(ctx_w, 5));
   return ctx_idx;
 }

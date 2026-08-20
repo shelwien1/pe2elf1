@@ -183,12 +183,6 @@ void AltP2Block::code_banks(int32_t sample16) {
 }
 
 uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
-  // The frequency record whose bins this symbol's decision moves.  It was
-  // `mir_top` again -- a `uint16_t*` over a `P2Freq`, where index 1 is `f[0]`
-  // and `3-is_dec` is `f[2]` or `f[1]`.  Every one of its thirteen
-  // assignments was a `P2Freq*` with the cast written on it, and every use was
-  // one of those two bins, so there was never anything a word pointer was for.
-  P2Freq* bin;
   int32_t is_dec;
   int32_t fold_sel, sel_alt;
   int32_t ctx_lo = ctx&0xF;
@@ -273,7 +267,13 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     // two nudges are the same six lines twice over, differing in which
     // neighbour and in the fraction.
     auto nudge = [&](int32_t at, uint32_t num, uint32_t pair_at) {
-      bin = &frec[at];
+      // `bin` is the record this nudge moves.  It was `mir_top` -- a
+      // `uint16_t*` over a `P2Freq`, where index 1 is `f[0]` and `3 - is_dec`
+      // is `f[2]` or `f[1]` -- declared at the top of the function and assigned
+      // thirteen times, each with a `P2Freq*` cast written on it.  Twelve of
+      // those thirteen are now `p2_freq_add` and `p2_bump_sides`; this is the
+      // survivor, and it is a local.
+      P2Freq*const bin = &frec[at];
       p2_rescale(bin);
       const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
       if( a4 ) {
@@ -304,24 +304,14 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     // The weights stay a sum for the reason they do there -- each is a table
     // entry already scaled by its feature's stride -- and the parentheses round
     // the last two terms were the register allocator's, not a grouping.
-    step_v = CtxIdx{}.bits<0, 6>(ctx)
-                     .raw(ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]
-                         +ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]
-                         +ctx_w[0].w[1]);
+    step_v = CtxIdx{}.bits<0, 6>(ctx).raw(mixer_rev(ctx_w, 5));
     P2Freq *frec_step = &freq[step_v];
     // The record after the step's and the record before it, each bumped when
     // the level leaves room for it.  This was one `if` with an empty `else`, a
     // `goto` out of its middle to a label below the second bump, and the second
     // bump reached by falling past that label -- three ways of saying two
-    // independent conditions.
-    if( ctx15<15 ) {
-      bin = &frec_step[1];
-      p2_freq_add(bin, fold_sel, 4);
-    }
-    if( ctx15>0 ) {
-      bin = &frec_step[-1];
-      p2_freq_add(bin, fold_sel, 4);
-    }
+    // independent conditions, which is what `p2_bump_sides` is.
+    p2_bump_sides(frec_step, ctx15, 0, fold_sel, 4, 4);
     if( a4 ) {
       int32_t n2_half = (a4-1)>>1;
       int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
