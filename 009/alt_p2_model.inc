@@ -166,29 +166,27 @@ void AltP2Block::code_banks(int32_t sample16) {
             __builtin_prefetch(mirror[k], 0, 1);
             __builtin_prefetch(rot[k], 0, 1);
           }
+          // The nine prefetches that stood between these lines -- indices 8, 9
+          // and 10 of each of the three arrays, interleaved one per statement --
+          // asked for cache lines the loop above has already asked for.  They
+          // were the tail of MSVC's schedule after the thirty-three loads were
+          // hoisted, and re-rolling those loads into the loop left the second
+          // set behind.  A hint issued twice is a hint; nine of them are noise
+          // between the lines that do the work.
           const int32_t neg = -res2;
-          __builtin_prefetch(direct[8], 0, 1);
           const int32_t w_top = mir[0].weighted;
-          __builtin_prefetch(mirror[8], 0, 1);
           const int32_t e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
-          __builtin_prefetch(rot[8], 0, 1);
           // `e_top > deadzone_hi`, which is what the five siblings of this line
           // in this file already say.  It arrived as the x86 flags the compare
           // sets -- `!(lt ^ of | zf)` over `__OFSUB__` -- because signed
           // less-than *is* `SF != OF`, so `(e_top-deadzone_hi<0) ^ overflow` is
           // the less-than, and not-less-and-not-equal is greater.
           const int32_t bump = 32*((e_top>deadzone_hi)-(e_top<deadzone_lo));
-          __builtin_prefetch(direct[9], 0, 1);
-          __builtin_prefetch(mirror[9], 0, 1);
           uint32_t w_new = bump+e_top+2;
           // The partial store this was written as -- `LOWORD(w_new) = w_top +
           // (w_new>>2)` -- kept a high half that the next line throws away.
           // Sixteen bits in and sixteen bits out.
           mir[0].weighted = (int16_t)(w_top+(w_new>>2));
-          __builtin_prefetch((rot[9]), 0, 1);
-          __builtin_prefetch(direct[10], 0, 1);
-          __builtin_prefetch(mirror[10], 0, 1);
-          __builtin_prefetch(rot[10], 0, 1);
           // The same shape as the `||` above and the same unfolding: the
           // record after the mirrored counter is nudged whenever `lowbits < 3`,
           // and *then* the low bits choose between the two walks.  The chain
@@ -227,9 +225,7 @@ void AltP2Block::code_banks(int32_t sample16) {
   }
 }
 
-uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
-  int32_t is_dec;
-  int32_t fold_sel, sel_alt;
+uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid_in) {
   int32_t ctx_lo = ctx&0xF;
   int32_t sample16 = 16*sample_in;
   // This row's record and the one above it, read once.  Nothing below
@@ -266,23 +262,44 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   c0->err = resid;
   c0->aerr = abs32(resid);
   NbRow *wrow_cur = nb_cur;
-  float ms1 = wrow_cur->w[14][1]+0.000099999997f;
   NbRow *wrow_b = cur[-1];
-  float bias2 = bias[2];
-  float n2_bias = bias[0];
-  float d_bias2 = sample-bias2;
-  float bias1 = bias[1];
-  float d_bias = bias1-bias2;
-  float ms_a = ((((sample-bias2)*(d_bias))-wrow_cur->w[14][0])*0.001f)+wrow_cur->w[14][0];
-  float ms_b = ms1+(((d_bias*d_bias)-wrow_cur->w[14][1])*0.001f);
-  wrow_cur->w[14][1] = ms_b;
-  float ms_b10 = 0.1f*ms_b;
-  if( (ms_b10)<=ms_a )
-    ms_b10 = fminf(ms_b, ms_a);
-  wrow_cur->w[14][0] = ms_b10;
-  float conf = (1.0f-(ms_b10/(ms_b+576.0f)))*2.0f;
-  nlms_track_two_rows(wrow_cur, wrow_b, (sample-bias1)*2.5999999f, d_bias2*conf, conf);
-  nlms_predict_and_correct(wrow_cur, sample, n2_bias);
+  // `NbRow::predict` answers with three floats through `bias[0..2]`: the centre
+  // the filter's features are measured against, the *mixed* prediction of the
+  // six weight sets, and this set's *own*.  They arrived as `n2_bias`, `bias1`
+  // and `bias2`, which say where they were fetched from and not what they are.
+  const float centre = bias[0];
+  const float mixed = bias[1];
+  const float own = bias[2];
+  const float err_own = sample-own;
+  const float d_pred = mixed-own;
+  // The confidence that reconciles the two predictions, and the reason row 14
+  // exists.  `cov` follows the covariance between the sample's distance from
+  // this set's own prediction and the two predictions' disagreement; `var`
+  // follows the variance of that disagreement.  Both are running averages at a
+  // rate of 0.001, and `var` carries a floor of 1e-4 -- `ms1`, computed nine
+  // lines above its use -- so the ratio below cannot divide by a variance that
+  // has decayed away.
+  //
+  // `cov` is then clamped into `[0.1 * var, var]` before it is stored, which is
+  // what stops the ratio running away in either direction, and `conf` lands in
+  // [0, 2].  It scales both the correction fed to `nlms_track_two_rows` and the
+  // step that call takes, so a set whose disagreement with the mix carries no
+  // information about the error is corrected less rather than more.
+  //
+  // The three were `ms_a`, `ms_b` and `ms_b10` -- the last of which is not
+  // `0.1 * ms_b` by the time it is stored, only where it starts.  The
+  // parenthesisation is preserved exactly: float addition is not associative
+  // and the gate is the only thing that would have said so.
+  const float cov = (((err_own*d_pred)-wrow_cur->w[14][0])*0.001f)+wrow_cur->w[14][0];
+  const float var = (wrow_cur->w[14][1]+0.000099999997f)+(((d_pred*d_pred)-wrow_cur->w[14][1])*0.001f);
+  wrow_cur->w[14][1] = var;
+  float cov_kept = 0.1f*var;
+  if( cov_kept<=cov )
+    cov_kept = fminf(var, cov);
+  wrow_cur->w[14][0] = cov_kept;
+  const float conf = (1.0f-(cov_kept/(var+576.0f)))*2.0f;
+  nlms_track_two_rows(wrow_cur, wrow_b, (sample-mixed)*2.5999999f, err_own*conf, conf);
+  nlms_predict_and_correct(wrow_cur, sample, centre);
   *cur = nb_cur;
   ++cur;
   ++above;
@@ -294,89 +311,93 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   ++cursor[2];
   ++cursor[3];
   ++cursor[4];
-  uint32_t step_v = frec[0].step;
-  if( step_v>0x10 ) {
-    is_dec = a4&1;
-    int32_t ctx15 = ctx_l&0xF;
-    uint32_t pair_ctx = ctx_pair[a4&1];
-    // One neighbouring record nudged: rescale it, then add a fraction of its
-    // own step to the side `is_dec` names -- or to side 0 when this symbol
-    // carried no residual.  `num/16` is that fraction.
-    //
-    // This was a label and a backward `goto`, and the comment above it said a
-    // structured form needed a loop and a flag to say which way the block had
-    // been entered.  It needs neither.  The residual coder below runs on every
-    // path that gets this far, and the only thing the two entries disagreed
-    // about is whether the record *below* the context had been nudged first --
-    // which is `ctx15 > 0`, the condition already sitting under the jump.  The
-    // two nudges are the same six lines twice over, differing in which
-    // neighbour and in the fraction.
-    auto nudge = [&](int32_t at, uint32_t num, uint32_t pair_at) {
-      // `bin` is the record this nudge moves.  It was `mir_top` -- a
-      // `uint16_t*` over a `P2Freq`, where index 1 is `f[0]` and `3 - is_dec`
-      // is `f[2]` or `f[1]` -- declared at the top of the function and assigned
-      // thirteen times, each with a `P2Freq*` cast written on it.  Twelve of
-      // those thirteen are now `p2_freq_add` and `p2_bump_sides`; this is the
-      // survivor, and it is a local.
-      P2Freq*const bin = &frec[at];
-      p2_rescale(bin);
-      const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
-      if( a4 ) {
-        bin->f[2-is_dec] += step10;
-        update_binary_pair(model_strip(pair_at), (a4-1)>>1);
-      } else {
-        bin->f[0] += step10;
-      }
-    };
-    if( ctx15<15 )
-      nudge(1, 10, pair_ctx+1);
-    if( ctx15>0 )
-      nudge(-1, 13, pair_ctx-1);
-    // The reload of `frec` that stood between the two nudges was `&freq[ctx]`,
-    // which is what it already held: `ctx` is written in `code_banks` and in
-    // the table set-up, both above this, and nothing between the two nudges
-    // touches it.
-    step_v = ctx;
-    if( freq[step_v].step<=0x1Au )
-      return step_v;
-    fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
-    if( !fold[(uint8_t)-resid_in] )
-      fold_sel = fold[(uint8_t)-resid_in];
-    // The alternate context: the low six bits of the live one, with all five
-    // features read the other way round above it.  `AltP1Block::update_model`
-    // builds its own the same way over nine features and five bits.
-    //
-    // The weights stay a sum for the reason they do there -- each is a table
-    // entry already scaled by its feature's stride -- and the parentheses round
-    // the last two terms were the register allocator's, not a grouping.
-    step_v = CtxIdx{}.bits<0, 6>(ctx).raw(mixer_rev(ctx_w, 5));
-    P2Freq *frec_step = &freq[step_v];
-    // The record after the step's and the record before it, each bumped when
-    // the level leaves room for it.  This was one `if` with an empty `else`, a
-    // `goto` out of its middle to a label below the second bump, and the second
-    // bump reached by falling past that label -- three ways of saying two
-    // independent conditions, which is what `p2_bump_sides` is.
-    p2_bump_sides(frec_step, ctx15, 0, fold_sel, 4, 4);
-    if( a4 ) {
-      int32_t n2_half = (a4-1)>>1;
-      int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
-      if( hi_nibble>=0xF0||(update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
-        update_binary_pair(model_strip(pair_ctx-16), n2_half);
-      }
+  // The step of the record this sample was coded against.  Below 17 the context
+  // has settled far enough that none of the updates below run, and the whole
+  // body was that test's `then` arm -- one `if` around ninety lines, three deep
+  // before anything happened.  As an early return the rest is one level out,
+  // and the three values that one local carried are three names.
+  const uint32_t step0 = frec[0].step;
+  if( step0<=0x10 )
+    return step0;
+  int32_t is_dec = code&1;
+  int32_t ctx15 = ctx_l&0xF;
+  uint32_t pair_ctx = ctx_pair[code&1];
+  // One neighbouring record nudged: rescale it, then add a fraction of its
+  // own step to the side `is_dec` names -- or to side 0 when this symbol
+  // carried no residual.  `num/16` is that fraction.
+  //
+  // This was a label and a backward `goto`, and the comment above it said a
+  // structured form needed a loop and a flag to say which way the block had
+  // been entered.  It needs neither.  The residual coder below runs on every
+  // path that gets this far, and the only thing the two entries disagreed
+  // about is whether the record *below* the context had been nudged first --
+  // which is `ctx15 > 0`, the condition already sitting under the jump.  The
+  // two nudges are the same six lines twice over, differing in which
+  // neighbour and in the fraction.
+  auto nudge = [&](int32_t at, uint32_t num, uint32_t pair_at) {
+    // `bin` is the record this nudge moves.  It was `mir_top` -- a
+    // `uint16_t*` over a `P2Freq`, where index 1 is `f[0]` and `3 - is_dec`
+    // is `f[2]` or `f[1]` -- declared at the top of the function and assigned
+    // thirteen times, each with a `P2Freq*` cast written on it.  Twelve of
+    // those thirteen are now `p2_freq_add` and `p2_bump_sides`; this is the
+    // survivor, and it is a local.
+    P2Freq*const bin = &frec[at];
+    p2_rescale(bin);
+    const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
+    if( code ) {
+      bin->f[2-is_dec] += step10;
+      update_binary_pair(model_strip(pair_at), (code-1)>>1);
+    } else {
+      bin->f[0] += step10;
     }
-    P2Freq *prec0 = &frec_step[0];
-    p2_freq_add(prec0, fold_sel, 6);
-    if( !plane_idx||freq[ctx].step>0x100u ) {
-      sel_alt = 2-is_dec;
-      if( !a4 )
-        sel_alt = 0;
-      is_dec = sel_alt;
-      // The five context banks, bumped.  `bump_bank` is one bank's worth; the
-      // five were written out in full, thirty-six lines apiece, and its comment
-      // says what they had in common.
-      for( int32_t k = 0; k<5; ++k )
-        bump_bank(k, step_v, ctx15, fold_sel, is_dec);
+  };
+  if( ctx15<15 )
+    nudge(1, 10, pair_ctx+1);
+  if( ctx15>0 )
+    nudge(-1, 13, pair_ctx-1);
+  // The reload of `frec` that stood between the two nudges was `&freq[ctx]`,
+  // which is what it already held: `ctx` is written in `code_banks` and in
+  // the table set-up, both above this, and nothing between the two nudges
+  // touches it.
+  if( freq[ctx].step<=0x1Au )
+    return ctx;
+  int32_t fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
+  if( !fold[(uint8_t)-resid_in] )
+    fold_sel = fold[(uint8_t)-resid_in];
+  // The alternate context: the low six bits of the live one, with all five
+  // features read the other way round above it.  `AltP1Block::update_model`
+  // builds its own the same way over nine features and five bits.
+  //
+  // The weights stay a sum for the reason they do there -- each is a table
+  // entry already scaled by its feature's stride -- and the parentheses round
+  // the last two terms were the register allocator's, not a grouping.
+  const uint32_t step_ctx = CtxIdx{}.bits<0, 6>(ctx).raw(mixer_rev(ctx_w, 5));
+  P2Freq *frec_step = &freq[step_ctx];
+  // The record after the step's and the record before it, each bumped when
+  // the level leaves room for it.  This was one `if` with an empty `else`, a
+  // `goto` out of its middle to a label below the second bump, and the second
+  // bump reached by falling past that label -- three ways of saying two
+  // independent conditions, which is what `p2_bump_sides` is.
+  p2_bump_sides(frec_step, ctx15, 0, fold_sel, 4, 4);
+  if( code ) {
+    int32_t n2_half = (code-1)>>1;
+    int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
+    if( hi_nibble>=0xF0||(update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
+      update_binary_pair(model_strip(pair_ctx-16), n2_half);
     }
   }
-  return step_v;
+  P2Freq *prec0 = &frec_step[0];
+  p2_freq_add(prec0, fold_sel, 6);
+  if( !plane_idx||freq[ctx].step>0x100u ) {
+    // The mirrored side of the three-way counter -- 0 and 2 swap, 1 stays --
+    // or side 0 when the symbol carried no residual.  `sel_alt` was a temporary
+    // that held the answer for one line before `is_dec` took it.
+    is_dec = code ? 2-is_dec : 0;
+    // The five context banks, bumped.  `bump_bank` is one bank's worth; the
+    // five were written out in full, thirty-six lines apiece, and its comment
+    // says what they had in common.
+    for( int32_t k = 0; k<5; ++k )
+      bump_bank(k, step_ctx, ctx15, fold_sel, is_dec);
+  }
+  return step_ctx;
 }

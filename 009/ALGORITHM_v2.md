@@ -1649,6 +1649,25 @@ nb_slot = 320·band + 64·gA + 16·gB + 4·gC + gD
 with a maximum of 1919, which is `nb_id[1920]`; `nb_id` maps slots to weight
 sets lazily, minting one on first use.
 
+**There are 1920 slots and only 1088 weight sets, and nothing reconciles the
+two.** Row 0 is the no-history set every cursor starts pointing at, so 1087
+distinct slots in one plane is the most the allocator can serve; the 1088th
+would write past `nb_weights` into `p2_row`, `bias` and `nb_cur` — a pointer the
+next sample follows. Every one of the five digits is a nested count of threshold
+crossings, so every one of the 1920 values is individually reachable, and the
+question is only whether one image can name more than 1087 of them.
+
+Measured: the nineteen corpus images reach a high-water mark of **593** (`x_ep`;
+`t8g` and `t8p` are next at 473), and a montage built to spread activity,
+gradient direction and noise across 2500 independently-parameterised tiles
+reaches **980**. The union of distinct slots over all twenty is **1034** —
+fifty-three short of the bound. That margin is narrow enough that 1088 reads as
+a number someone measured rather than guessed, and narrow enough that no input
+found so far crosses it. The source carries a `BMF_ASSUME` at the allocation,
+which the `BMF_ASSERTS=1` build leg checks; a runtime clamp is deliberately
+*not* there, because it would change the model on exactly the inputs in question
+and no reference stream would move to say so.
+
 A second linear stage, `NbRow::predict`, blends **six** weight sets — the six
 pointers in `CtxWeights::row`, each a 7×4 matrix — using the six coefficients of
 `bmf_p2_mix[mode]`, one row of a 4×6 table. `bmf_p2_coef` is separate and

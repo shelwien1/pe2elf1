@@ -61,6 +61,11 @@ static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl);
 static inline int32_t p2_pred(int32_t weighted, int32_t rate);
 static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift);
 static inline void p2_update(P2Count* p, int32_t res, int32_t shift);
+// The default argument lives here and only here, which is where C++ requires
+// it: a default given on the declaration cannot be repeated on the definition
+// in `alt_p2_block.inc`.  Worth saying out loud because the definition reads
+// like a three-argument function and three of its four call sites pass two, so
+// a reader who finds the definition first will look for the 2 and not find it.
 static inline void p2_nudge(P2Count* p, int32_t res, int32_t shift = 2);
 static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest);
 static inline void p2_rescale(P2Freq* r);

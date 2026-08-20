@@ -78,7 +78,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t ctx15, nb_slot;
   P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2;
   bool no_ref;
-  int32_t in63, ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, flat_a, flat_b;
+  int32_t ctx0, ctx1, pred1, run1, ctx2, run2, bank3, run3, bank4, flat_a, flat_b;
   uint32_t ctx0_lo;
   // The five row cursors, read once.
   //
@@ -115,8 +115,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1->dupleft+ctx_bias[0]+14*c0[-2].dupleft;
   int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1->dupright+9*c1[-1].dupright+22*c0[-1].dupright+ctx_bias[1]+19*c0[-2].dupright;
   int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1->dleft+16*c1[-1].dleft+22*c0[-1].dleft+ctx_bias[2]+19*c0[-2].dleft;
-  int32_t lane5 = c2->dup;
-  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1->dup+25*c0[-1].dup+ctx_bias[3]+17*c0[-2].dup+15*(c3->dup+lane5);
+  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1->dup+25*c0[-1].dup+ctx_bias[3]+17*c0[-2].dup+15*(c3->dup+c2->dup);
   int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
   int32_t band = over_thresholds(8*sum4, p2_band_edges, 0, 4, sum_u);
   int32_t den_d = 2*c0[-2].val+2*c0[-1].val;
@@ -157,10 +156,36 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
           nlms_step(wrow, j, k, p2_row[j][k], err, bmf_p2_ms_rate, floor_);
     }
   } else {
-    int32_t next_id = nb_id_used;
-    nb_id_used = ++next_id;
-    nb_id[(uint32_t)nb_slot] = next_id;
-    nb_cur = &nb_weights[(int16_t)next_id];
+    // A slot seen for the first time takes the next weight row.  Three
+    // statements and a `next_id` that is `nb_id_used` before, during and after
+    // the increment; the `(int16_t)` on the last read matched the width the
+    // store above narrows to, and cannot bite below 32768.
+    //
+    // **The counter is not bounded and the array it indexes is.**  `nb_slot`
+    // names 1920 slots -- `320*band + 64*gA + 16*gB + 4*gC + gD`, and every one
+    // of the five is a nested count of threshold crossings, so every one of its
+    // values is reachable -- while `nb_weights` holds 1088 rows, of which row 0
+    // is the no-history row `alt_p2_alloc` seeds and `row0`/`row1` start
+    // pointing at.  So 1087 distinct slots in one plane is the most this can
+    // allocate, and the 1088th writes past the array into `p2_row`, `bias` and
+    // `nb_cur` -- the last of which is a pointer the next sample follows.
+    //
+    // Nothing here or anywhere else checks it, and the sizing is not obviously
+    // wrong: instrumented, the nineteen corpus images reach a high-water mark
+    // of 593 (`x_ep`; the next are `t8g` and `t8p` at 473), and a montage built
+    // to spread activity, gradient direction and noise across 2500
+    // independently-parameterised tiles reaches 980.  The *union* over all
+    // twenty is 1034 distinct slots -- 53 short of the bound.  That margin is
+    // small enough that 1088 looks measured rather than guessed, and small
+    // enough that no input found so far crosses it.
+    //
+    // It is left as it is: a clamp would change the model on exactly the inputs
+    // in question and no corpus stream would move to say so.  The `BMF_ASSUME`
+    // is the honest instrument -- a comment under the default build and a check
+    // under `BMF_ASSERTS=1`, which is a build leg.
+    nb_id[(uint32_t)nb_slot] = ++nb_id_used;
+    BMF_ASSUME(nb_id_used<1088);
+    nb_cur = &nb_weights[nb_id_used];
   }
   // The filter's 28 inputs, four to a row.  Rows 0..3 are differences of `dval`
   // -- the second difference of the plane -- at widening offsets from the
@@ -224,14 +249,13 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
           p2_row[6][0] = (float)grad(v0(-2), a0(0), a0(-2));
           p2_row[6][1] = (float)grad(v2(0), a0(0), a2(0));
           p2_row[6][2] = (float)(grad(a2(0), a0(0), v2(0))+2*(v1(0)-a1(0)));
-          in63 = v0(-1)+v1(-1)+a1(-2)+a0(0)-a0(-1)-a1(-1)-v1(-2);
+          p2_row[6][3] = (float)(v0(-1)+v1(-1)+a1(-2)+a0(0)-a0(-1)-a1(-1)-v1(-2));
         } else {
           p2_row[6][0] = (float)v1(0);
           p2_row[6][1] = (float)v0(-3);
           p2_row[6][2] = (float)grad(v0(-1), a0(-1), a0(-2));
-          in63 = grad(v0(-3), v0(-1), v0(-4));
+          p2_row[6][3] = (float)grad(v0(-3), v0(-1), v0(-4));
         }
-        p2_row[6][3] = (float)in63;
       } else {
         p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
         p2_row[4][1] = (float)grad(v0(-1), a0(-1), a0(-2));
@@ -310,18 +334,15 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     mode = 2;
   if( min32(best01, c)>d )
     mode = 3;
-  int32_t filt = nb_cur->predict((float (*)[4]) p2_row, &weights, mode);
+  const int32_t filt = nb_cur->predict((float (*)[4]) p2_row, &weights, mode);
   // A 32-bit store at `&pred_prev`, which is a `uint16_t` followed by two
   // bytes of padding: the original wrote the whole word and the top half
   // landed in the pad, which nothing reads.  So it is the low half.
   pred_prev = (uint16_t)filt;
-  int32_t lane3 = c1->aerr;
-  int32_t g3pair = c0[-1].aerr+lane3;
+  int32_t g3pair = c0[-1].aerr+c1->aerr;
   if( refa )
     g3pair += (rb0->aerr+ra0->aerr)>>1;
-  int32_t run = filt;
   int32_t g3sum = c1[3].aerr+c1[-1].aerr+c0[-1].aerr+c0[-3].aerr+c0[-4].aerr+c0[-2].aerr;
-  int32_t run_s = run;
   // Four of the five masks are a sign test the types prove: a sum of `w` of
   // these `int16_t` members is under `w * 2^15`, so every bit from
   // `15 + ceil(log2 w)` up is a copy of the sign.  Those four are `bit<>`.
@@ -336,21 +357,18 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
             .bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err < 0)
             .bit<16>(c0[-1].err < 0)
             .bit_of<15>((uint16_t)c0[-3].err)
-            .bits<13, 2>((run>3536)+(run>720)+(run>288))
+            .bits<13, 2>((filt>3536)+(filt>720)+(filt>288))
             .bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
   bank_ctx[0] = ctx0_lo;
   if( refa ) {
-    int32_t lane2 = ra0->err;
-    run = run_s;
     ctx0 = CtxIdx{}.bit<25>(rb0[-1].err < 0)
            .bit<24>(rb0->err < 0)
            .bit<23>(ra0[-1].err < 0)
            .bit<22>(rb0->err+rb0[-2].err < 0)
-           .bit<21>(ra0[-2].err+lane2 < 0)
+           .bit<21>(ra0[-2].err+ra0->err < 0)
            .bit<20>(c0[-2].err < 0)
            .raw(ctx0_lo);
   } else {
-    run = run_s;
     ctx0 = CtxIdx{}.bit<25>(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err < 0)
            .bit<24>(c2[1].err+c2->err+c0[-4].err+c0[-8].err < 0)
            .bit<23>(c0[-4].err+c0[-6].err < 0)
@@ -362,12 +380,11 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t bank0 = ctx0>>11;
   bank_ctx[0] = bank0;
   int32_t pred0 = p2_pred_at(0, bank0);
-  int32_t sum_c = sum_all;
   nb_sum[1] = pred0;
-  int32_t run0 = pred0+run_s;
+  int32_t run0 = pred0+filt;
   nb_sum[0] = run0;
   int32_t nb4_4 = c4[4].val;
-  sum_all = ((g3pair<<9)+sum_c)>>13;
+  sum_all = ((g3pair<<9)+sum_all)>>13;
   int32_t d_run0 = c0[-5].val-run0;
   int32_t d_up = nb4_4-run0;
   int32_t up5 = c1[5].val;
@@ -502,17 +519,16 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t pred3 = p2_pred_at(3, bank3);
   nb_sum[7] = pred3;
   run3 = pred3+run2;
-  run = run3;
   nb_sum[6] = run3;
   int32_t dv_now4 = c0[0].dval;
   int32_t run_dv4 = run3-dv_now4;
   int32_t run_up4 = run3+c3->val;
-  bank4 = (int32_t)(CtxIdx{}.bit_of<25>(run-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2))
+  bank4 = (int32_t)(CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2))
                     .bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4))
-                    .bit_of<23>(run-2*c0[-2].dval-(dv_now4-c0[-4].dval))
-                    .bit_of<22>(run-c0[-3].dval-dv_now4-(c1->val-c1[-3].val))
+                    .bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval))
+                    .bit_of<22>(run3-c0[-3].dval-dv_now4-(c1->val-c1[-3].val))
                     .bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval))
-                    .bit_of<20>(c2[-2].val+run-2*c1[-1].val)
+                    .bit_of<20>(c2[-2].val+run3-2*c1[-1].val)
                     .bit_of<19>(c2->dval-2*c1->dval+run_dv4)
                     .bit_of<18>((run3-c0[-1].val)-(c1->val-c1[-1].val))
                     .bit_of<17>(run_dv4-c1[4].dval)
@@ -522,9 +538,9 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   bank_ctx[4] = bank4;
   int32_t pred4 = p2_pred_at(4, bank4);
   nb_sum[9] = pred4;
-  int32_t run4 = run+pred4;
+  int32_t run4 = run3+pred4;
   nb_sum[8] = run4;
-  int32_t magsum_s = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
+  int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
   int32_t lo_band = band_lo;
   ctx_w[0].sel = (run4<1840)+(run4<272);
   int32_t hi_band = band_hi;
@@ -534,14 +550,14 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   ctx_w[2].sel = in_band+(d_run4<lo_band);
   ctx_w[3].sel = c1->sign;
   ctx_w[4].sel = c0[-1].sign;
-  int32_t magsum = magsum_s;
+  int32_t magsum = magsum_own;
   int32_t magu = c2[0].mag+c1->mag;
   int32_t magl = c0[-1].mag+c0[-2].mag;
   if( refa ) {
     int32_t mag = rb0->mag;
     int32_t mag_ref1 = rb1->mag+ra1->mag;
     int32_t mag_ref0 = mag+ra0->mag;
-    magsum = mag_ref1+magsum_s+4*mag_ref0+2*(ra0[-1].mag+rb0[-1].mag);
+    magsum = mag_ref1+magsum_own+4*mag_ref0+2*(ra0[-1].mag+rb0[-1].mag);
     flat_a = mag_ref0+magl+rb0[-2].mag+rb0[-1].mag+ra0[-2].mag+ra0[-1].mag;
     if( has_ref ) {
       int32_t d_run4b = run4-c1->dval-c0[0].dval;
@@ -554,10 +570,12 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     } else {
       flat_b = mag_ref1+mag_ref0+magu+rb2->mag+ra2->mag;
     }
-    // `magsum_s = magsum;` above each of these and `magsum = magsum_s;` three
+    // `magsum_own = magsum;` above each of these and `magsum = magsum_own;` three
     // lines down was MSVC spilling the register `magsum` was in across the
     // reads below it and loading it straight back.  Nothing between the two
-    // touches it, in either arm.
+    // touches it, in either arm.  What is left of that name is `magsum_own` --
+    // this plane's own sum, which is the base both arms add to and not a spill
+    // of anything.
     if( plane_idx==1 ) {
       int32_t d_ra_ra1 = ra0->val-ra1->val;
       ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
@@ -590,7 +608,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     ctx15 = nb_ctx[magsum>>3];
     ctx = ctx15;
   }
-  const int32_t ctx_idx = clamp32((run+pred4+7)>>4, 0, 255);
+  const int32_t ctx_idx = clamp32((run3+pred4+7)>>4, 0, 255);
   // The magnitude context in the low nibble, under a `ctx_delta` entry that
   // occupies bits 4 and up -- the run level as `bits<4, 4>` and the plane
   // `above<8>`, built once in `alt_p2_alloc`.  `ctx15` is `nb_ctx[]`, whose

@@ -1491,3 +1491,59 @@ So the answer to "is there anything left" is not a number. Every zero in this
 document is a zero somebody has now watched report something else, and the
 next round's work is whatever the round after this one finds those zeros were
 wrong about.
+
+---
+
+## Stage two: a green probe that proves nothing
+
+The last three sections were about instruments that could not fire.  This one is
+about a probe that fires perfectly and still says nothing, which is harder to
+notice because the probe *is* the gate and the gate is not broken.
+
+`ModelBlock::pixel_context` wrote its two out-parameters three times on the way
+through — `ctr_node = ctx0`, then `ctr_node = ctx1`, then the real pair in the
+arm that returns a symbol, with a `ctr_fallback = fallback` in the arm that does
+not.  Only the third write can be read: `offer_candidates` is the sole caller
+and `continue`s on a negative return without touching either member.  Deleting
+the other three is the obvious Phase 6 edit, and the obvious way to check it is
+to poison them and watch the gate.
+
+The poison passed.  So did a poison of the *live* store: `ctr_node ^= 1` is
+byte-identical on all seventeen images.  And `ctr_node + 128` fails four checks.
+Two of those three results are worthless and the third is worthless in the
+opposite direction:
+
+* **`^ 1` is a permutation of `bit_node[4096]`,** every entry of which starts
+  memset to zero.  Applying a bijection to a uniformly-initialised table at
+  every access relabels the whole table: each counter still receives the exact
+  sequence of bits some counter received before, so not one byte moves.  It is
+  not that the low bit is unused — instrumented, most of the index pairs the
+  corpus touches have *both* halves live.
+* **`+ 128` is not a permutation, it is an overrun.**  The index is
+  `(pos << 7) + ctx2` with `pos` up to 31, so `+ 128` walks off the end of a
+  4096-entry array and into the block behind it.  The four failing checks are
+  memory corruption, and they would fail just as loudly if the value were never
+  read at all.
+* **`&= ~1` is the honest one.**  In bounds, and not injective — two contexts
+  collapse onto one, so a live store has to move.  It fails ten checks.
+
+With that as the control, setting each of the three suspect stores to 0 in turn
+leaves all 110 green, and an execution counter says the three lines run 601k,
+582k and 133k times on `t8g` alone.  Then they are dead, and they are gone.
+
+The rule the round before this one was "a tool that cannot fire reports the same
+number as a tool with nothing to find".  This is its other half: **a probe can
+fire and still be uninformative, if what it perturbs is a symmetry of the thing
+it is probing.**  A counter index is only worth perturbing in a way that is
+neither a bijection over a uniform table nor a step outside the array — and
+neither of those disqualifications is visible in the diff.
+
+The same round found `nb_weights[1088]` addressed by a slot number that ranges
+over 1920.  That one is not a defect anybody can demonstrate: the corpus reaches
+593, a montage built to spread activity and gradient direction over 2500
+independently-parameterised tiles reaches 980, and the union over all twenty
+images is 1034 — fifty-three short of the bound.  So the array looks measured
+rather than guessed, and the finding is a `BMF_ASSUME` under the `BMF_ASSERTS`
+leg and a paragraph in §10.2, not a clamp.  A clamp would change the model on
+exactly the inputs nobody has produced, and no reference stream would move to
+say so.

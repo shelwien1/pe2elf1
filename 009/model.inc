@@ -221,12 +221,31 @@ struct ModelBlock {
     int32_t near_hit = CtxIdx{}.bit<6>(result==nb[10]).bit<5>(near);
     int32_t far_hit = CtxIdx{}.bit<4>(far);
     int32_t ctx0 = far_hit+near_hit;
-    ctr_node = ctx0;
+    // `ctr_node = ctx0;` was here, `ctr_node = ctx1;` four lines down, and
+    // `ctr_fallback = fallback;` in the last `else` -- three stores on the way
+    // through, of which only the pair in the taken arm below is ever read.
+    // `offer_candidates` is the only caller, and it `continue`s on a negative
+    // return without touching either member; the next turn calls back in here,
+    // which overwrites both before anything looks at them.
+    //
+    // Shown rather than argued, because the argument is easy to get wrong.  The
+    // three lines execute 601k, 582k and 133k times on `t8g` alone, so a silent
+    // gate is not an unexercised one; setting each to 0 in turn leaves all 110
+    // checks green, and the same edit on the *live* store below fails 10 of
+    // them.
+    //
+    // The control matters more than it looks.  `ctr_node ^= 1` on the live
+    // store is *also* byte-identical, and that proves nothing: `^ 1` is a
+    // permutation of `bit_node[4096]`, every entry of which starts memset to
+    // zero, so it relabels the whole table and each counter still sees the
+    // sequence some counter saw before.  `+ 128` does move four checks -- by
+    // pushing the index past 4095 and corrupting the block, which is not
+    // observability either.  A perturbation of a counter index is only evidence
+    // when it is neither injective nor out of bounds, which is what `&= ~1` is.
     if( (far_hit+near_hit==0)&&pos>6 )
       return -1;
     SymList* sel0 = sel0_list;
     int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[mode_symbol[1]].ent), 10, result)).raw(ctx0);
-    ctr_node = ctx1;
     SymEntry *list_prev = sel0[mode_symbol[2]].ent;
     SymEntry *list_sym = sel0[result].ent;
     // The low three bits: is the symbol near the top of the previous
@@ -239,7 +258,6 @@ struct ModelBlock {
       ctr_node = CtxIdx{}.above<7>(pos).raw(ctx2);
       ctr_fallback = CtxIdx{}.bit<3>(pos>9).raw(fallback);
     } else {
-      ctr_fallback = fallback;
       return -1;
     }
     return result;
@@ -883,11 +901,17 @@ struct ModelBlock {
   // that spelled the cast the other two make implicitly.
   template<class T>
   uint8_t* write_row_at(uint8_t* out_at) {
+    // `row_cur[0][i+++8]` is `row_cur[0][(i++) + 8]`; the increment is the
+    // loop's own and belongs on a line of its own.  The `do` stays a `do`:
+    // `write_row`'s guard is `row_w`, not `width`, and the comment above says
+    // the two are equal on every path that decodes anything -- which is a claim
+    // about the caller, not something to rest a first-iteration difference on.
     T* out = (T*)out_at;
-    int32_t i = 0;
-    do
-      *out++ = (T)sym_code[row_cur[0][i+++8].sym];
-    while( (uint32_t)i<width );
+    uint32_t i = 0;
+    do {
+      *out++ = (T)sym_code[row_cur[0][i+8].sym];
+      ++i;
+    } while( i<width );
     return (uint8_t*)out;
   }
 
@@ -919,8 +943,8 @@ struct ModelBlock {
     int32_t bits = 0;
     uint8_t *out_bits = out_at;
     const int32_t bpp = depth;
-    for( uint32_t x4 = 0; x4<width; ++x4 ) {
-      const uint32_t code = sym_code[row_cur[0][x4+8].sym];
+    for( uint32_t x = 0; x<width; ++x ) {
+      const uint32_t code = sym_code[row_cur[0][x+8].sym];
       bits -= bpp;
       if( bits<0 ) {
         bits = 8-bpp;
@@ -982,7 +1006,7 @@ struct ModelBlock {
   // the encoder seeds fifteen context groups and the alphabet before its row
   // walk, and the decoder reads all of that back off the stream.
   void model_plane_slow(uint8_t* pixels) {
-    int16_t w2n;
+    int16_t w1;
     int32_t w3, w4, y;
     uint16_t w2;
     rc_begin_encode();
@@ -999,7 +1023,7 @@ struct ModelBlock {
         for( int32_t hi = 0; hi<5; ++hi ) {
           FreqRec* rec = seat_bucket(g, lo, hi, bucket);
           int32_t alpha = alphabet;
-          w2n = 2;
+          w1 = 2;
           rec->w[0] = 2;
           w2 = 2;
           w3 = 2;
@@ -1017,26 +1041,26 @@ struct ModelBlock {
             w3 = 0;
           }
           if( fold.w4_to_w1 ) {
-            w2n = w4+2;
+            w1 = w4+2;
             w4 = 0;
             rec->w[4] = 0;
           } else {
             rec->w[4] = w4;
           }
           if( fold.w3_to_w1 ) {
-            w2n += w3;
+            w1 += w3;
             w3 = 0;
             rec->w[3] = 0;
           } else {
             rec->w[3] = w3;
           }
           if( fold.w2_to_w1 ) {
-            rec->w[1] = w2+w2n;
+            rec->w[1] = w2+w1;
             w2 = 0;
             rec->w[2] = 0;
           } else {
             rec->w[2] = w2;
-            rec->w[1] = w2n;
+            rec->w[1] = w1;
           }
           int32_t has3 = w3!=0;
           int32_t has4 = w4!=0;
@@ -1088,7 +1112,7 @@ struct ModelBlock {
     uint8_t* row[19];
     uint8_t *out_at, *expand_buf;
     int32_t g0, done;
-    int32_t lo, w2, w4, w2n, lvl_n, n_pix, q2, n_pix2;
+    int32_t lo, w3, w4, w2, lvl_n, n_pix, q2, n_pix2;
       uint8_t *dst_base = &dst[-(depth<8)];
     rc_begin_decode();
     expand_alphabet();
@@ -1110,26 +1134,26 @@ struct ModelBlock {
           int32_t m5 = alphabet;
           for( int32_t n = 0; n<4; ++n ) rec->w[1+n] = 2;
           if( fold.w3_double ) {
-            w2 = (uint16_t)(rec->w[4]+rec->w[3]);
-            rec->w[3] = w2;
+            w3 = (uint16_t)(rec->w[4]+rec->w[3]);
+            rec->w[3] = w3;
             w4 = 0;
             rec->w[4] = 0;
           } else {
-            w2 = rec->w[3];
+            w3 = rec->w[3];
             w4 = rec->w[4];
           }
           if( fold.w4_to_w2 ) {
-            w2n = (uint16_t)(w4+rec->w[2]);
-            rec->w[2] = w2n;
+            w2 = (uint16_t)(w4+rec->w[2]);
+            rec->w[2] = w2;
             w4 = 0;
             rec->w[4] = 0;
           } else {
-            w2n = rec->w[2];
+            w2 = rec->w[2];
           }
           if( fold.w3_to_w2 ) {
-            w2n = (uint16_t)(w2+w2n);
-            rec->w[2] = w2n;
-            w2 = 0;
+            w2 = (uint16_t)(w3+w2);
+            rec->w[2] = w2;
+            w3 = 0;
             rec->w[3] = 0;
           }
           if( fold.w4_to_w1 ) {
@@ -1138,16 +1162,16 @@ struct ModelBlock {
             rec->w[4] = 0;
           }
           if( fold.w3_to_w1 ) {
-            rec->w[1] += w2;
-            w2 = 0;
+            rec->w[1] += w3;
+            w3 = 0;
             rec->w[3] = 0;
           }
           if( fold.w2_to_w1 ) {
-            rec->w[1] += w2n;
-            w2n = 0;
+            rec->w[1] += w2;
+            w2 = 0;
             rec->w[2] = 0;
           }
-          lvl_n = (w2!=0)+(w2n!=0)+(w4!=0)+2;
+          lvl_n = (w3!=0)+(w2!=0)+(w4!=0)+2;
           if( lvl_n<=m5 ) {
             rec->b14 = lvl_n;
             rec->w[0] = 2;

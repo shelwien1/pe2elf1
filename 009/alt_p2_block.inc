@@ -221,16 +221,20 @@ static inline void p2_bump_sides(P2Freq* group, int32_t ctx15, int32_t lo,
 }
 
 // The same counter, updated in place and *without* `p2_bump`'s dead-zone kick.
-// 22 sites fold it into one `+=` on the next counter in the bank; the rounding
-// term is the only thing they share with `p2_update`, and folding them together
-// would put the kick where the original has none.
+// 22 sites in the decompilation folded it into one `+=` on the next counter in
+// the bank; the rounding term is the only thing they share with `p2_update`,
+// and folding the two together would put the kick where the original has none.
+//
+// Four call sites now, three of them inside loops, plus one that used to be a
+// comma term in the middle of an `if`.
 static inline void p2_nudge(P2Count* p, int32_t res, int32_t shift) {
   // Sixteen bits in and sixteen bits out, through `uint16_t` so that the
   // wrap is defined rather than signed overflow.
   //
-  // The shift defaults to 2 because 21 of the 22 sites want 2; the odd one is
-  // a mirror counter at 3, written out in `alt_p2_model` because a helper
-  // fixed at 2 could not say it.
+  // The shift defaults to 2 because 21 of the original 22 sites wanted 2, and
+  // three of the four that are left still do; the odd one is a mirror counter
+  // at 3.  The default is declared in `decls.inc` and cannot be repeated here,
+  // which is worth knowing before looking for it.
   p->weighted = (int16_t)((uint16_t)p->weighted+((uint32_t)(res-p2_pred(p->weighted, p->rate)+(1<<(shift-1)))>>shift));
 }
 
