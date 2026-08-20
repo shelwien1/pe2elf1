@@ -1831,3 +1831,49 @@ of them prose or a loop that is already a loop.
 64 bits, 183 to 179 at 32, with `legs.sh` saying "lower it" rather than passing
 quietly.  Two commits earlier the same number had gone 198 to 225 unnoticed,
 because there was no number to compare against.
+
+## Three files that were a wrapper, and one that was a reason that had gone
+
+Asked which `.inc` files hold nothing but a one-line function, the tree had two:
+
+```
+model_plane.inc      void model_plane(...)             { code_plane<0>(...); }
+alt_p2_decode.inc    int32_t alt_model_p2_decode(...)  { return alt_model_p2<1>(...); }
+```
+
+Each is half of a pair whose other half already lived with the body it wraps.
+`plane.inc` held `code_plane<f_DEC>` *and* `unmodel_plane`, so `model_plane` had
+been separated from its own decode half; `alt_p1_code.inc` keeps its pair
+adjacent under their template and the p2 file does now too, which is why it is
+`alt_p2_code.inc` rather than `alt_p2_encode.inc`.
+
+**`sym_list_decode.inc` was the more interesting one**, because it was not a
+wrapper -- fifty lines of real body -- and it still should not have been a file.
+It held one method of a class defined nine files earlier, and the reason it sat
+that far down had gone: it reaches `rc.decode` and `rc.get_freq` and otherwise
+only its own class's members, and `rc.inc` is included two files *before*
+`sym_list.inc`.  The split was the size and the frame, and its own header
+records what happened to both -- two copied bodies became calls to `promote` and
+`rescale`, which emptied the frame.  Nothing re-asked the question afterwards.
+
+36 files to 33.
+
+**The check that makes a file move safe to claim.**  Splice both trees, strip
+comments and whitespace, sort the lines, diff.  Identical means the same
+statements in the same multiset -- what moved is position and prose, and nothing
+else could have.  Both merges pass it, which is a stronger statement than the
+gate alone: the gate says the streams did not move, and this says the program
+did not.
+
+**And the answer to "are there more".**  Asked of every `.inc`, two files have
+no definition longer than four lines -- `ctxidx.inc`, which is `CtxIdx`'s seven
+builder methods, and `ida.inc`, which is nine small numeric helpers.  Both are
+modules of short bodies rather than wrappers around something else, so both
+stay.  Every one of the 33 headers names its own file, checked.
+
+`REVIEW.md` and `tools/split.py` still name all three of the removed files, and
+still should.  The first reviews the tree at a past state and gives
+`sym_list_decode.inc` as 194 lines; the second says in its own docstring that
+its layout table is "a record of where each body went, not something that can be
+run again", with thirty names in it that already did not exist.  A record that
+is updated to match the present is not a record.
