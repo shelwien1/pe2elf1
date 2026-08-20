@@ -42,12 +42,12 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t fq, *slot;
   uint16_t h9, acc8, acc6, acc;
   uint16_t *f0 = freq+2;
-  uint32_t tot = *freq;
+  uint32_t tot = freq[0];
   if constexpr( f_DEC ) {
     uint32_t target = rc.get_freq(tot);
     slot = f0;
     lvl = 0;
-    cum = *f0;
+    cum = f0[0];
     if( cum<=target ) {
       do {
         ++slot;
@@ -65,47 +65,47 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
     uint32_t cum_hi = cum+*slot;
     result = rc.encode(cum, cum_hi, tot);
   }
-  if( *freq>0x4000u ) {
-    uint16_t h2 = *(freq+2)-(*(freq+2)>>1);
-    acc = *(freq+3);
-    *(freq+2) = h2;
+  if( freq[0]>0x4000u ) {
+    uint16_t h2 = freq[2]-(freq[2]>>1);
+    acc = freq[3];
+    freq[2] = h2;
     acc = acc-(acc>>1);
-    *(freq+3) = acc;
+    freq[3] = acc;
     acc = h2+acc;
-    uint16_t h4 = *(freq+4)-(*(freq+4)>>1);
-    *(freq+4) = h4;
+    uint16_t h4 = freq[4]-(freq[4]>>1);
+    freq[4] = h4;
     int16_t sum4 = acc+h4;
-    acc = *(freq+5)-(*(freq+5)>>1);
-    acc6 = *(freq+6);
-    *(freq+5) = acc;
+    acc = freq[5]-(freq[5]>>1);
+    acc6 = freq[6];
+    freq[5] = acc;
     acc6 = acc6-(acc6>>1);
-    *(freq+6) = acc6;
+    freq[6] = acc6;
     acc6 = sum4+acc+acc6;
-    acc = *(freq+7)-(*(freq+7)>>1);
-    acc8 = *(freq+8);
-    *(freq+7) = acc;
+    acc = freq[7]-(freq[7]>>1);
+    acc8 = freq[8];
+    freq[7] = acc;
     acc = acc6+acc;
     acc8 = acc8-(acc8>>1);
-    h9 = *(freq+9);
-    *(freq+8) = acc8;
+    h9 = freq[9];
+    freq[8] = acc8;
     acc8 = acc+acc8;
     h9 = h9-(h9>>1);
-    int32_t esc = *(freq+1);
-    *(freq+9) = h9;
-    *freq = acc8+h9;
+    int32_t esc = freq[1];
+    freq[9] = h9;
+    freq[0] = acc8+h9;
     if( esc<=4*alt_freq_limit ) {
       result = 4*(esc>alt_freq_limit);
       add = esc-result;
-      *(freq+1) = add;
+      freq[1] = add;
     } else {
       add = esc-16;
-      *(freq+1) = add;
+      freq[1] = add;
     }
   } else {
-    add = *(freq+1);
+    add = freq[1];
   }
   *slot += add;
-  *freq += *(freq+1);
+  freq[0] += freq[1];
   if( lvl<2 )
     return lvl;
   int32_t mask = level_geom[lvl].half;
@@ -245,15 +245,15 @@ int32_t alt_p1_decode_symbol(CounterNode* node, int32_t ctx) {
 int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
   int32_t node;
   uint32_t step, f;
-  int32_t tot = *_this;
+  int32_t tot = _this[0];
   if( (uint32_t)tot<=0x8000 ) {
     int32_t lvl = model_geometry[symbol];
     step = (_this[1]>>2)&0xFFFFFFE0;
     if( plane_predictor==pred_p2 )
       step = 15*(_this[1]>>5);
-    *(_this+lvl+2) += step+4;
-    tot = *_this+step+4;
-    *_this = tot;
+    _this[lvl+2] += step+4;
+    tot = _this[0]+step+4;
+    _this[0] = tot;
     if( symbol>=2 ) {
       int32_t mask = level_geom[lvl].half;
       int32_t path = symbol-level_geom[lvl].first;

@@ -568,6 +568,7 @@ them run.
 | `unspill.py` | Give a frame's spill area one member per slot | yes |
 | `unspillpair.py` | Two names for one value, where one is only ever a copy of the other | yes |
 | `unstale.py` | Names the algorithm documents spell that the program no longer has | yes |
+| `unstar.py` | A dereference that would read as a subscript, beside subscripts that do | yes |
 | `unstruct.py` | Turn a struct that is really an array back into one | yes |
 | `untable.py` | Say a file-scope table once instead of three times | yes |
 | `untail.py` | Replace a `goto` to a straight-line return with the statements themselves | yes |

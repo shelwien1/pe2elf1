@@ -138,14 +138,14 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
         // image and the decoder's from what it has already put back, which are
         // the same bytes at this point, and that is what makes the codec work.
         auto fold_from = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix) {
-          const int32_t v = *(buf+off);
+          const int32_t v = buf[off];
           return xf ? v-dc-mix : v;
         };
         auto unfold_to = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix,
                              int32_t val) {
           if( xf )
             val += dc+mix;
-          *(buf+off) = val;
+          buf[off] = val;
         };
         for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
           int32_t off0 = plane_desc[0].src_plane;
@@ -160,11 +160,11 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           else
             // Narrowed to a byte, as the `uint8_t want1` this replaces was:
             // the residual reaches the coder eight bits wide.
-            cur1 = (uint8_t)fold_from(off1, xf1, dc1, *(buf+off0));
+            cur1 = (uint8_t)fold_from(off1, xf1, dc1, buf[off0]);
           cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
           int32_t off2 = plane_desc[2].src_plane;
           if constexpr( f_DEC )
-            unfold_to(off1, xf1, dc1, *(buf+off0), cur1);
+            unfold_to(off1, xf1, dc1, buf[off0], cur1);
           else
             want2 = (uint8_t)fold_from(off2, xf2, dc2,
                                        plane_mix2(plane_desc[off2], buf+off0, buf+off1));

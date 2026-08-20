@@ -38,7 +38,7 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
   uint32_t i, b;
   BMF_ASSUME(near_lossless_q==0);
   int32_t bucket_size = 2*near_lossless_q+1;
-  *unfold = 0;
+  unfold[0] = 0;
   unfold[255] = 0x80;
   for( i = 0; i<0x3F; ++i ) {
     // `unfold` is `int8_t*` and these four stores punned it to `uint8_t*` so
@@ -52,7 +52,7 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
   }
   unfold[254] = 127;
   unfold[253] = -127;
-  *fold = 0;
+  fold[0] = 0;
   uint32_t lo = 1;
   fold[128] = (uint8_t)-1;
   {

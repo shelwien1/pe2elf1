@@ -1577,7 +1577,7 @@ struct ModelBlock {
       int32_t msym1 = mode_symbol[1];
       uint8_t *amap_at = (uint8_t*)alpha_map;
       hit = run_hit;
-      *(amap_at+msym1) = run_hit;
+      amap_at[msym1] = run_hit;
       if( !run_hit&&run_len!=1 )
         code_run_length<0>(bucket, run_len, runlen);
       if( hit )
