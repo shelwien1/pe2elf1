@@ -12,4 +12,5 @@ resign.py sym_code.inc none of 1 reduces the count
 resign.py sym_list.inc none of 2 reduces the count
 resign.py alt_p2_context.inc none of 2 reduces the count
 resign.py bmp.inc none of 1 reduces the count
+resign_group.py plane_choose.inc none of 2 reduces the count
 # sources 3281280497 502453
