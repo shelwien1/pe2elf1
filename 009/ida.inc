@@ -180,4 +180,11 @@ enum BmfExit {
   bmf_user_break = 8,
 };
 
+// The widest plane this program will take, and the reason every per-row buffer
+// has a compile-time size.  `read_bmp` refuses a width outside 1..65535 and a
+// row above 0xFFFF bytes; `expand_image` refuses the same on the way back in.
+// So a row is at most this many records however wide the record is, and a ring
+// of five rows is an array rather than five allocations.
+constexpr int32_t kMaxWidth = 0xFFFF;
+
 __attribute__((noreturn)) void bmf_fatal(int32_t Code, ...);

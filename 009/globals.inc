@@ -231,6 +231,16 @@ static constexpr int32_t no_symbol = 8192;
 
 alignas(16) static int8_t exclusion_mask[(no_symbol+1+15)&~15];
 
+// 520,192 bytes, the same every time, and reached through this one pointer --
+// which is what bounds it to one: a second table would have to overwrite the
+// pointer to the first, so no two can be live.  `begin_plane_stream` filled a
+// fresh `bmf_new` and `end_plane_stream` freed it, once per plane stream, for a
+// table whose size is a compile-time constant.
+//
+// `uint16_t` and a byte count: `kModelTableBytes` is a byte count in the
+// decompilation and stays one, because nothing divides it by an element size.
+alignas(16) static uint16_t model_table_store[kModelTableBytes/sizeof(uint16_t)];
+
 static uint16_t* model_tables;
 
 static inline uint16_t*model_strip(uint32_t k) {
@@ -316,13 +326,6 @@ static inline void ring_advance(T** buf, T** cursor, int32_t margin) {
     cursor[k] = buf[k]+margin;
 }
 
-// And the same ring, released.  Both alternate-model blocks keep five rows and
-// both give them back the same way; the two bodies were one four-line copy of
-// each other from the moment `alt_p1_free` and `alt_p2_free` stopped differing
-// in a `do_free` flag neither caller ever cleared.
-template<class T>
-static inline void ring_free(T** buf) {
-  for( int32_t k = 0; k<5; ++k )
-    free(buf[k]);
-}
+// `ring_free` was here, four lines giving five rows back.  Both rings point
+// into their block's own storage now, so there is nothing to give.
 

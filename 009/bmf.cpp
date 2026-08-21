@@ -204,7 +204,10 @@ void bmf_compress(const char* InName, const char* OutName) {
   if( !p_i )
     bmf_fatal(bmf_read_error);
   printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i->width, p_i->height, p_i->depth&depth_bits, p_i->data_size);
-  BmfFile* Arc = bmf_open_file((BmfFile*)bmf_new(sizeof(BmfFile)), (char*)OutName, 0);
+  // Eight bytes, one per run.  It was a `bmf_new` whose result was handed
+  // straight to `bmf_open_file` and never freed.
+  static BmfFile arc_store;
+  BmfFile* Arc = bmf_open_file(&arc_store, (char*)OutName, 0);
   // `Flags`, in a program whose header has a `flags` byte that is not this
   // one: it is the depth.
   int32_t Depth = p_i->depth;

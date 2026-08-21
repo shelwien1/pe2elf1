@@ -633,8 +633,12 @@ struct AltP1Block {
       ctx_w[c].w[1] = w1;
       ctx_w[c].w[2] = 2*w1;
     }
+    // The ring points into the block's own storage.  A row is at most
+    // `kMaxWidth + kRowMargin + kRowTail` records however wide the image is,
+    // and `ring_advance` only ever permutes these five pointers -- so the
+    // rotation still works and there is nothing to free.
     for( int32_t row = 0; row<5; ++row )
-      buf[row] = (P1Ctx*)bmf_new(sizeof(P1Ctx)*(width+kRowMargin+kRowTail));
+      buf[row] = row_store[row];
     alt_init_tables(fold, (int8_t*)unfold);
     // `width + 10` is never negative, so the `> -10` guard the `do` needed is
     // gone with it, and `wid = width` inside the body was a member re-read.
@@ -653,9 +657,18 @@ struct AltP1Block {
   // the one that did not, `alt_model_p1_d8_decode`, only passed it on to
   // another caller that did.
   void alt_p1_free() {
-    ring_free(buf);
     p1_block_give(this);
   }
+
+  // The five rows the ring above points into.  Last in the struct so that no
+  // member's offset moves: what the ring holds is five pointers, and where they
+  // point is not something any of this program's layout contracts is about.
+  //
+  // 2 bytes to the record and 65545 records to the row, so 655 KB for the five
+  // -- against five `bmf_new` calls and five `free`s per plane, four planes
+  // deep.  A row's size is `kMaxWidth` and not the image's, which is the trade:
+  // a 16-pixel-wide image now carries the same rows a 65535-pixel one does.
+  P1Ctx row_store[5][kMaxWidth+kRowMargin+kRowTail];
 };
 
 // The four blocks this model can have live at once.  `alt_model_p1` allocates

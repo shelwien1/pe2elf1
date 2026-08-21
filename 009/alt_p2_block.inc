@@ -919,10 +919,12 @@ struct AltP2Block {
     deadzone_lo = -dz;
     band_lo = -band-7;
     band_hi = band+8;
-    row0 = (NbRow**)bmf_new(sizeof(NbRow*)*(img_w+4));
-    void* buf1 = bmf_new(sizeof(NbRow*)*(img_w+4));
+    // Two rows of weight-set pointers, one per column plus the four the
+    // margins need.  `img_w + 4` is at most `kMaxWidth + 4`, so they are
+    // members like the record rows below.
+    row0 = row0_store;
     nb_weights[0].w[14][2] = 1.0f;
-    row1 = (NbRow**) buf1;
+    row1 = row1_store;
     cur = row0+img_w+2;
     if( img_w>-4 ) {
       uint32_t pairs = (img_w+4)/2;
@@ -950,9 +952,16 @@ struct AltP2Block {
     static_assert(kP2RowPad == sizeof(P2Ctx)*(kRowMargin+kRowTail),
                   "the row pad is the two margins");
     int32_t row_bytes = 18*max32(img_w, 3)+kP2RowPad;
-    do
-      buf[row++] = (P2Ctx*)bmf_new(row_bytes);
-    while( row<5 );
+    // The ring points into the block, as `AltP1Block`'s does.  `row_bytes` is
+    // still what the memsets and the row copies use -- only the storage moved.
+    //
+    // A `for` and not the `do` that was here: writing it `buf[row++] =
+    // row_store[row]` reads `row` and increments it in one expression, which
+    // g++ reports as `-Wsequence-point` and C++17 only makes well-defined by a
+    // rule about which side of an assignment is evaluated first.  The
+    // `BMF_CONV=1` leg counted it the moment it was written.
+    for( row = 0; row<5; ++row )
+      buf[row] = row_store[row];
     memset(buf[0], 0, row_bytes);
     // Four independent stores the decompiler left in the order MSVC scheduled
     // them, counting down with an unrelated initialisation dropped in the
@@ -1018,11 +1027,20 @@ struct AltP2Block {
   // There is nothing to split: no caller wants the workspace freed and the
   // object kept, which is what the always-1 flag says.
   void alt_p2_free() {
-    ring_free(buf);
-    free(row0);
-    free(row1);
     p2_block_give(this);
   }
+
+  // The rows the three cursors above point into, last in the struct so that no
+  // member's offset moves.  18 bytes to the record and 65548 records to the row
+  // -- 5.9 MB for the ring -- plus two pointer rows of 65539 each.
+  //
+  // That is 7.9 MB a block against 1.02, and four blocks live, so this is where
+  // most of the program's `.bss` comes from.  What it buys is seven allocations
+  // and seven frees per plane gone, and a model whose working set is a
+  // compile-time constant.
+  P2Ctx row_store[5][kMaxWidth+kRowMargin+kRowTail];
+  NbRow* row0_store[kMaxWidth+4];
+  NbRow* row1_store[kMaxWidth+4];
 };
 
 // The four blocks this model can have live at once, in the data segment.  One
@@ -1110,12 +1128,16 @@ static int32_t alt_p2_planes_free(AltP2Block** plane) {
 static_assert(offsetof(AltP2Block, pred_prev) == 278720, "_pad0 sizes the gap");
 static_assert(offsetof(AltP2Block, ctx) == 278724, "_pad2 sizes the gap");
 static_assert(offsetof(AltP2Block, nb_sum) == 278968, "_pad1 sizes the gap");
-static_assert(sizeof(AltP2Block) == 1064560, "_pad3 closes the record");
+// `sizeof` no longer answers this: the row storage is appended to the record,
+// so what pins `_pad3` is where that storage starts.  The number is the same
+// one -- the decompiled record still ends at 1064560 -- and saying it this way
+// also says that everything past it is this tree's and not the binary's.
+static_assert(offsetof(AltP2Block, row_store) == 1064560, "_pad3 closes the record");
 #else
 static_assert(offsetof(AltP2Block, pred_prev) == 278700, "_pad0 sizes the gap");
 static_assert(offsetof(AltP2Block, ctx) == 278704, "_pad2 sizes the gap");
 static_assert(offsetof(AltP2Block, nb_sum) == 278904, "_pad1 sizes the gap");
-static_assert(sizeof(AltP2Block) == 1064496, "_pad3 closes the record");
+static_assert(offsetof(AltP2Block, row_store) == 1064496, "_pad3 closes the record");
 #endif
 
 static_assert(offsetof(AltP2Block, bias)

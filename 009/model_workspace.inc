@@ -21,15 +21,12 @@ static void free_sym_lists(SymList* lists) {
 // hold `this` as a return value wherever MSVC left it there, and a flag whose
 // false arm no caller takes as a parameter.
 void ModelBlock::free_workspace() {
-  int32_t i;
   free(sym_code);
   free(sym_word);
   free(run_bucket);
   free(alpha_map);
   free_sym_lists(sel1_list);
   free_sym_lists(sel0_list);
-  for( i = 0; i<5; ++i )
-    free(row_cur[i]);
   free(escape.ent);
   model_blocks.give(this);
 }
@@ -56,8 +53,10 @@ ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t im
   escape.ent = nullptr;
   sym_code = nullptr;
   for( j = 0; j<5; ++j ) {
-    PixRec* buf = (PixRec*)bmf_new(sizeof(PixRec)*(w+ModelBlock::kRowMargin
-                                                    +ModelBlock::kRowTail));
+    // The block's own storage, as the two alternate models' rings are.  Both
+    // cursor sets point into it -- `row_cur[j]` at the start and `row_cur[j+5]`
+    // one past the left margin -- and neither is ever freed now.
+    PixRec* buf = row_store[j];
     row_cur[j] = buf;
     // The second cursor set starts one past the margin, and `start_row` then
     // reseats it *at* the margin -- so the 8 here and the 7 there are the same

@@ -287,7 +287,13 @@ BmfImage* read_bmp(char* path) {
       }
     }
   }
-  void* pal_buf = bmf_new(max32(stride_pad, 256));
+  // One padded row of scratch, and the reader has already refused a stride
+  // above 0xFFFF, so `stride_pad` is at most 65536 and the floor of 256 only
+  // matters for the narrowest images.  `read_bmp` is not reentrant -- one file,
+  // one call -- so one buffer is the bound.
+  static uint8_t pal_store[65536];
+  void* pal_buf = pal_store;
+  BMF_ASSUME(max32(stride_pad, 256)<=(int32_t)sizeof pal_store);
   uint8_t *row = img->pixels+img->data_size-img->stride;
   fseek(fp, (int32_t)hdr.bfOffBits, 0);
   // Three ways to read the pixels, and each ended by jumping five frames out to
@@ -307,6 +313,6 @@ BmfImage* read_bmp(char* path) {
   if( !ok )
     return nullptr;
   fclose(fp);
-  free(pal_buf);
+  // `free(pal_buf)` was here; `pal_store` is static.
   return img;
 }

@@ -10,9 +10,11 @@ uint32_t rc_decode_flat(uint32_t tot) {
 // Give back what `begin_plane_stream` took.  This is the model layer's, not
 // the coder's -- `rc_end` was doing both jobs and only one of them is range
 // coding.
+// Nothing to give back: the table is `model_table_store`, and what this used to
+// do was `free(model_tables)`.  The function stays because the two ends of a
+// plane stream being named is what the comment above is about, and because
+// `begin_plane_stream` still has work on the other side of the flag.
 static void end_plane_stream() {
-  if( plane_alt_model )
-    free(model_tables);
 }
 
 // The two ends differ in one call: the encoder flushes what it still holds and
@@ -98,7 +100,7 @@ static uint16_t* begin_plane_stream() {
   // and the shape behind it is `model_geometry`'s: it is a byte count in the
   // decompilation and stays one, because nothing here divides it by an
   // element size.
-  uint16_t* tbl = (uint16_t*)bmf_new(kModelTableBytes);
+  uint16_t* tbl = model_table_store;
   if( tbl ) {
     int32_t k = 0;
     uint16_t *row = tbl;

@@ -1644,6 +1644,11 @@ struct ModelBlock {
       sel_cur = ++sel_p;
     }
   }
+
+  // The five rows both cursor sets point into, last in the struct so that no
+  // member's offset moves.  8 bytes to the record and `kMaxWidth + 16` records
+  // to the row: 2.6 MB, against five `bmf_new` calls and five `free`s an image.
+  PixRec row_store[5][kMaxWidth+kRowMargin+kRowTail];
 };
 
 // The one block the main model needs.  `code_plane` allocates it, runs a plane
@@ -1684,10 +1689,10 @@ static BlockPool<ModelBlock, 1> model_blocks;
 static_assert(offsetof(ModelBlock, bit_root) == 1051720, "_pad1051664 sizes the gap");
 static_assert(offsetof(ModelBlock, escape) == 1078224, "_pad16 sizes the gap");
 static_assert(offsetof(ModelBlock, sel_cur) == 1078304, "_pad22 sizes the gap");
-static_assert(sizeof(ModelBlock) == 8102552, "_pad25 closes the record");
+static_assert(offsetof(ModelBlock, row_store) == 8102552, "_pad25 closes the record");
 #else
 static_assert(offsetof(ModelBlock, bit_root) == 1051680, "_pad1051664 sizes the gap");
 static_assert(offsetof(ModelBlock, escape) == 1078184, "_pad16 sizes the gap");
 static_assert(offsetof(ModelBlock, sel_cur) == 1078232, "_pad22 sizes the gap");
-static_assert(sizeof(ModelBlock) == 8102448, "_pad25 closes the record");
+static_assert(offsetof(ModelBlock, row_store) == 8102448, "_pad25 closes the record");
 #endif
