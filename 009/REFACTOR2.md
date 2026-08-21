@@ -1977,9 +1977,21 @@ paths and `read_bmp`/`write_bmp` are still the program's, which is what the ask
 allowed for.
 
 **`tools/parallel.cpp` is the check the class exists for**, and it earned its
-place three times over: eight codecs in eight threads, four compressing and four
-expanding, interleaved, three rounds each, every result compared byte for byte
-against what the same codec produced alone.
+place three times over: eight codecs in eight threads, every result compared
+byte for byte against what one codec produced alone.
+
+Its first version gave each thread a fixed job -- four compressing, four
+expanding -- which puts both directions in the process at once but never puts
+both through *one* codec, so no compress ever started from the state an expand
+had left. It picks per step now: each thread's own generator names one of the
+four images and one of the two directions, `kSteps` times, from a seed that is
+fixed by default and printed on every line it writes. A failure is repeatable
+by passing that seed back.
+
+**And it was shown to report before its zero was believed.** Making
+`BMFState::p2_coef` and `p2_rate` `static inline` in a scratch copy -- one word,
+and exactly the sharing ThreadSanitizer found -- takes it to
+`FAILED: 3 of 48 parallel results differ, at seed 20260821`.
 
 1. `byte_list_ent` and `gap_list_ent` were still file-scope.  Two codecs at once
    wrote into the same 12 KB and `t8g` compressed to 43688 bytes in a thread
