@@ -157,6 +157,15 @@ mrpc -l
             time per kernel at the end
 ```
 
+The compiled kernels are cached in the working directory as `<device name>.!cl`
+— `NVIDIA_GeForce_RTX_3090.!cl` — which saves the second or three the device
+compiler costs on every run. The header records hashes of the kernel source,
+the build options (which carry the image geometry, so a cache made on one image
+is stale for another of a different width), the device and driver versions, and
+the binary itself; anything that does not match means compiling from source and
+overwriting the file. A directory it cannot write to is not an error, just no
+cache.
+
 With no `-d` or `-T` the first GPU is used, or the first CPU device if there is
 no GPU. Naming a device that is not there stops with status 8; not finding one
 when none was asked for falls back to the host with a note on stderr. So does

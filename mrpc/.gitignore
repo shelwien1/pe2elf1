@@ -4,3 +4,4 @@ mrpc-nocl
 *.exe
 *.mrp
 winsdk/
+*.!cl

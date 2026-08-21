@@ -43,7 +43,8 @@ __declspec(dllimport) CL_PROC __stdcall GetProcAddress(void*, const char*);
         F(clBuildProgram) F(clGetProgramBuildInfo) F(clCreateKernel)       \
         F(clCreateBuffer) F(clSetKernelArg) F(clEnqueueNDRangeKernel)      \
         F(clEnqueueReadBuffer) F(clEnqueueWriteBuffer) F(clWaitForEvents)  \
-        F(clGetEventProfilingInfo) F(clReleaseEvent)
+        F(clGetEventProfilingInfo) F(clReleaseEvent) F(clGetProgramInfo)   \
+        F(clCreateProgramWithBinary) F(clReleaseProgram)
 #define CL_EACH_OPT(F) F(clCreateCommandQueueWithProperties) F(clCreateCommandQueue)
 
 #define CL_TDEF(n) typedef decltype(&::n) t_##n;
@@ -93,6 +94,9 @@ static int CLLoadICD(void) {
 #define clWaitForEvents              pfn_clWaitForEvents
 #define clGetEventProfilingInfo      pfn_clGetEventProfilingInfo
 #define clReleaseEvent               pfn_clReleaseEvent
+#define clGetProgramInfo             pfn_clGetProgramInfo
+#define clCreateProgramWithBinary    pfn_clCreateProgramWithBinary
+#define clReleaseProgram             pfn_clReleaseProgram
 
 #else
 static int CLLoadICD(void) {
@@ -276,6 +280,45 @@ static void CLListDevices(FILE* f) {
   delete[] ps;
 }
 
+
+// -------------------------------------------------------------
+// The compiled kernels, cached in the working directory.
+//
+// Building the program from source costs a second or three on every run,
+// which on a small image is most of the encode.  The device will hand
+// back its own compiled binary, so keep it: <device name>.!cl, next to
+// wherever mrpc was run.
+//
+// A binary is only good for the device, the driver, the source and the
+// build options it was made with -- and the options carry the image
+// geometry, so a cache made on one image is stale for another with a
+// different width.  All four are hashed into the header and checked, the
+// binary itself is checksummed against corruption, and anything that does
+// not add up means compiling from source again and overwriting the file.
+// A cache that cannot be written -- a read-only directory -- is not an
+// error, it is just no cache.
+// -------------------------------------------------------------
+struct CLCacheHdr {
+  char magic[8];
+  qword srchash; // the kernel source
+  qword opthash; // the build options, geometry and all
+  qword idhash;  // device name, device version, driver version
+  qword binhash; // the binary itself
+  qword binsize;
+};
+
+static const char CL_CACHE_MAGIC[8] = {'m', 'r', 'p', 'c', 'C', 'L', 1, 0};
+
+static qword CLHash(const void* p, size_t n) { // FNV-1a
+  const byte* b = (const byte*)p;
+  qword h = 14695981039346656037ULL;
+  for( size_t i = 0; i<n; i++ ) {
+    h ^= b[i];
+    h *= 1099511628211ULL;
+  }
+  return h;
+}
+
 // -------------------------------------------------------------
 #define CLCK(call, what)                        \
         do {                                    \
@@ -313,6 +356,8 @@ struct MrpcCL {
   cl_mem d_udy, d_udx, d_uw, d_cA, d_cB, d_cbeg;
   cl_mem d_halo, d_prdcube, d_errcube, d_pixcost, d_partials, d_hist, d_pmcost;
   cl_mem d_cum, d_dp, d_tre, d_th, d_thcost;
+
+  char cachename[256]; // <device name>.!cl
 
   // host staging
   short* halo;
@@ -432,6 +477,107 @@ struct MrpcCL {
              CLInfoStr(device, CL_DEVICE_NAME, d, sizeof(d)), p);
   }
 
+
+  // --- the kernel binary cache --------------------------------------
+  // The device's name, as a filename: anything that is not a plain
+  // character becomes an underscore, and runs of them collapse.
+  void CacheName() {
+    char d[512];
+    CLInfoStr(device, CL_DEVICE_NAME, d, sizeof(d));
+    int n = 0;
+    for( int i = 0; d[i]&&n<200; i++ ) {
+      char ch = d[i];
+      int plain = (ch>='0'&&ch<='9')||(ch>='A'&&ch<='Z')||(ch>='a'&&ch<='z')||ch=='-'||ch=='.';
+      if( !plain )
+        ch = '_';
+      if( ch=='_'&&(n==0||cachename[n-1]=='_') )
+        continue;
+      cachename[n++] = ch;
+    }
+    while( n&&(cachename[n-1]=='_'||cachename[n-1]=='.') )
+      n--;
+    if( n==0 ) {
+      memcpy(cachename, "device", 6);
+      n = 6;
+    }
+    memcpy(cachename+n, ".!cl", 5);
+  }
+
+  qword CacheId() const {
+    char b[1536];
+    int n = 0;
+    static const cl_device_info what[3] = {CL_DEVICE_NAME, CL_DEVICE_VERSION, CL_DRIVER_VERSION};
+    for( int i = 0; i<3; i++ ) {
+      char s[512];
+      CLInfoStr(device, what[i], s, sizeof(s));
+      for( int j = 0; s[j]&&n<int(sizeof(b))-1; j++ )
+        b[n++] = s[j];
+      if( n<int(sizeof(b)) )
+        b[n++] = '\n';
+    }
+    return CLHash(b, size_t(n));
+  }
+
+  cl_program CacheLoad(const char* opts) {
+    FILE* f = fopen(cachename, "rb");
+    if( !f )
+      return 0;
+    CLCacheHdr h;
+    cl_program pr = 0;
+    byte* bin = 0;
+    if( fread(&h, 1, sizeof(h), f)==sizeof(h)&&
+        memcmp(h.magic, CL_CACHE_MAGIC, 8)==0&&
+        h.srchash==CLHash(MRPC_CL_SRC, strlen(MRPC_CL_SRC))&&
+        h.opthash==CLHash(opts, strlen(opts))&&
+        h.idhash==CacheId()&&
+        h.binsize&&h.binsize<(qword(1)<<30) ) {
+      bin = new byte[size_t(h.binsize)];
+      if( fread(bin, 1, size_t(h.binsize), f)==size_t(h.binsize)&&
+          CLHash(bin, size_t(h.binsize))==h.binhash ) {
+        size_t sz = size_t(h.binsize);
+        const unsigned char* p = (const unsigned char*)bin;
+        cl_int st = CL_SUCCESS, e = CL_SUCCESS;
+        pr = clCreateProgramWithBinary(ctx, 1, &device, &sz, &p, &st, &e);
+        if( e!=CL_SUCCESS||st!=CL_SUCCESS ) {
+          if( pr )
+            clReleaseProgram(pr);
+          pr = 0;
+        }
+      }
+    }
+    delete[] bin;
+    fclose(f);
+    return pr;
+  }
+
+  void CacheSave(cl_program pr, const char* opts) {
+    size_t n = 0;
+    if( clGetProgramInfo(pr, CL_PROGRAM_BINARY_SIZES, sizeof(n), &n, 0)!=CL_SUCCESS||n==0 )
+      return;
+    byte* bin = new byte[n];
+    unsigned char* p = (unsigned char*)bin;
+    if( clGetProgramInfo(pr, CL_PROGRAM_BINARIES, sizeof(p), &p, 0)==CL_SUCCESS ) {
+      FILE* f = fopen(cachename, "wb");
+      if( f ) {
+        CLCacheHdr h;
+        memcpy(h.magic, CL_CACHE_MAGIC, 8);
+        h.srchash = CLHash(MRPC_CL_SRC, strlen(MRPC_CL_SRC));
+        h.opthash = CLHash(opts, strlen(opts));
+        h.idhash = CacheId();
+        h.binhash = CLHash(bin, n);
+        h.binsize = n;
+        if( fwrite(&h, 1, sizeof(h), f)!=sizeof(h)||fwrite(bin, 1, n, f)!=n ) {
+          fclose(f);
+          remove(cachename); // a half-written cache is worse than none
+          f = 0;
+        }
+        if( f )
+          fclose(f);
+      }
+    }
+    delete[] bin;
+  }
+
   // --- build ------------------------------------------------------
   // The image geometry is a compile-time constant for the kernels: nc and
   // the row stride decide every address they compute, and a device
@@ -461,14 +607,45 @@ struct MrpcCL {
              CL_SR, CL_SSR, CL_NCAND, COEF_MAX);
 
     cl_int e = CL_SUCCESS;
+    CacheName();
     for( int b = 0; b<CL_NBS; b++ ) {
       char o2[2200];
       snprintf(o2, sizeof(o2), "%s -D BSZ=%d -D TW=%d -D TH=%d", opts,
                CL_BSZ[b], CL_TW[b], CL_TH[b]);
-      prog[b] = clCreateProgramWithSource(ctx, 1, &MRPC_CL_SRC, 0, &e);
-      if( e!=CL_SUCCESS )
-        return Fail("clCreateProgramWithSource", e);
-      e = clBuildProgram(prog[b], 1, &device, o2, 0, 0);
+      // only the first program is cached: one file, one binary, and the
+      // second block size is not built at all as things stand
+      double t0 = tnow();
+      int cached = 0;
+      if( b==0 ) {
+        prog[b] = CacheLoad(o2);
+        cached = prog[b]!=0;
+      }
+      if( !cached ) {
+        prog[b] = clCreateProgramWithSource(ctx, 1, &MRPC_CL_SRC, 0, &e);
+        if( e!=CL_SUCCESS )
+          return Fail("clCreateProgramWithSource", e);
+      }
+      // a binary is already compiled: it is built again because the spec
+      // says so, but not with the options that produced it
+      e = clBuildProgram(prog[b], 1, &device, cached ? "" : o2, 0, 0);
+      if( e!=CL_SUCCESS&&cached ) {
+        // the device took the binary and then would not build it; the
+        // file is no good whatever the header said
+        clReleaseProgram(prog[b]);
+        remove(cachename);
+        cached = 0;
+        prog[b] = clCreateProgramWithSource(ctx, 1, &MRPC_CL_SRC, 0, &e);
+        if( e!=CL_SUCCESS )
+          return Fail("clCreateProgramWithSource", e);
+        e = clBuildProgram(prog[b], 1, &device, o2, 0, 0);
+      }
+      if( e==CL_SUCCESS ) {
+        if( b==0&&!cached )
+          CacheSave(prog[b], o2);
+        if( verbose )
+          fprintf(stderr, "mrpc: opencl: kernels %s %s (%.2fs)\n",
+                  cached ? "from" : "compiled, cached in", cachename, tnow()-t0);
+      }
       if( e!=CL_SUCCESS||(verbose&&b==0) ) {
         size_t n = 0;
         clGetProgramBuildInfo(prog[b], device, CL_PROGRAM_BUILD_LOG, 0, 0, &n);
