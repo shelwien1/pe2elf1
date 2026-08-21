@@ -84,7 +84,7 @@ mdesc( G0_MU1B_, 0, "1000" );
 mdesc( G0_MU1_, 0, "0110" );
 mdesc( G0_MU2B_, 0, "0111" );
 mdesc( G0_MU2_, 0, "0101" );
-mdesc( G0_MU3B_, 0, "1000" );
+mdesc( G0_MU3B_, 0, "1011" );
 mdesc( G0_MU3_, 0, "0100" );
 mdesc( G0_MU4B_, 0, "0100" );
 mdesc( G0_MU4_, 0, "1000" );
