@@ -37,22 +37,22 @@ Const 0
 # as 65536>>shift.  Memory of this model says the rate schedule was the single
 # biggest knob found by hand (-2.2%), which makes it the first thing to hand to
 # opt.pl now that the intermediate rates exist.
-Number CW0,  1, 0!1010100101100010
-Number CW1,  1, 0!0111110011000001
-Number CW2,  1, 0!0101001000000000
-Number CW3,  1, 0!0100100100000000
+Number CW0,  1, 0!0111110000000010
+Number CW1,  1, 0!0110100111000000
+Number CW2,  1, 0!0101111100000000
+Number CW3,  1, 0!0100111010100100
 Number CW4,  1, 0!0100010010000011
 Number CW5,  1, 0!0011100100100101
-Number CW6,  1, 0!0011000000000001
-Number CW7,  1, 0!0010011101100000
+Number CW6,  1, 0!0011001100000101
+Number CW7,  1, 0!0010111101100101
 Number CW8,  1, 0!0010011000001001
-Number CW9,  1, 0!0010000000000000
+Number CW9,  1, 0!0010001001101000
 Number CW10, 1, 0!0010000000001000
 Number CW11, 1, 0!0001110010000000
-Number CW12, 1, 0!0001011110000000
-Number CW13, 1, 0!0001011010100001
+Number CW12, 1, 0!0001110101000001
+Number CW13, 1, 0!0001101000100000
 Number CW14, 1, 0!0001100000000000
-Number CW15, 1, 0!0000001000000000
+Number CW15, 1, 0!0000001001100001
 
 # Rate-index cap.  n indexes CW[0..15] and was capped at 15 in code, i.e. every
 # counter eventually reaches the slowest rate in the schedule.  Capping lower
@@ -61,7 +61,7 @@ Number CW_NMAX, 1, 0!01111
 
 # Prior every code counter starts from.  Unbiased is CTR_ONE/2; the tree nodes
 # below the root are not unbiased in truth, and this is the only handle on that.
-Number CP_INIT, 1, 0!1000000000000000
+Number CP_INIT, 1, 0!1000000000010010
 
 # Slow fixed-rate twin of the primary code counter (was shift 8 -> 65536>>8).
 Number SLOW_MUL, 1, 0!0000000100000000
@@ -71,19 +71,19 @@ Number SP_INIT,  1, 0!0101110000010000
 # coded header field).  These see a handful of values per block, not one per
 # sample, so the schedule that suits the code tree is not obviously right here.
 # Cloned from it, so seeded identical.
-Number HW0,   1, 0!0101010000000000
+Number HW0,   1, 0!0011100000100000
 Number HW1,   1, 0!0011010000001000
 Number HW2,   1, 0!0100001101000010
 Number HW3,   1, 0!0011000000000000
 Number HW4,   1, 0!0011000000000100
-Number HW5,   1, 0!0010110000010000
+Number HW5,   1, 0!0001110000001000
 Number HW6,   1, 0!0001100000000000
-Number HW7,   1, 0!0001000010000000
-Number HW8,   1, 0!0010010000001000
-Number HW9,   1, 0!0010101000101110
+Number HW7,   1, 0!0001100000001001
+Number HW8,   1, 0!0001001100001000
+Number HW9,   1, 0!0001100000000010
 Number HW10,  1, 0!0001011000011001
 Number HW11,  1, 0!0010000000000000
-Number HW12,  1, 0!0000110000110001
+Number HW12,  1, 0!0000100000010001
 Number HW13,  1, 0!0001011000000001
 Number HW14,  1, 0!0001001001000000
 Number HW15,  1, 0!0000010000000000
@@ -94,7 +94,7 @@ Number HP_INIT, 1, 0!0101000000000000
 # headers, trailing chunks, runt blocks and the MS coefficient-set byte -- all
 # near-static data where a fast early rate mostly costs noise.  Cloned from the
 # code schedule, so seeded identical.
-Number LW0,   1, 0!1011111100000010
+Number LW0,   1, 0!1010010000000000
 Number LW1,   1, 0!0111100000000000
 Number LW2,   1, 0!0100110000000001
 Number LW3,   1, 0!0010000000000000
@@ -111,13 +111,13 @@ Number LW13,  1, 0!0000010000000000
 Number LW14,  1, 0!0000010000000000
 Number LW15,  1, 0!0000111000100000
 Number LW_NMAX, 1, 0!01111
-Number LP_INIT, 1, 0!0101001100100000
+Number LP_INIT, 1, 0!0100110000000000
 
 #---------------------------------------------------------------- mixer
 
 # Learning rate: dw = st*err*MLR >> 20.  Seeded 256 = 2^(20-12), i.e. the old
 # >>12.
-Number MLR, 1, 0!0000000001100101
+Number MLR, 1, 0!0000000001111111
 
 # Weight init and clamp (clamp as log2, so 16 = the old +-65536).
 Number W_INIT,   1, 0!0000101100011000
@@ -129,7 +129,7 @@ Number BIAS, 1, 0!0000000000
 #---------------------------------------------------------------- APM
 
 # Blend numerators: pf = (AB*pa + (4-AB)*p) >> 2, one per stage.
-Number AB1, 1, 0!01
+Number AB1, 1, 0!10
 Number AB2, 1, 0!01
 
 # Structure and rate, one pair per stage instance:
@@ -138,10 +138,10 @@ Number AB2, 1, 0!01
 #            power-of-two constraint.
 #   AP_R_* = update rate multiplier: t += (g-t)*frac*R >> 28.  1024 reproduces
 #            the old >>13 exactly at N = 32.
-Number AP_N_A, 1, 0!00000100001
-Number AP_R_A, 1, 0!0000000101000010
-Number AP_N_B, 1, 0!00000011100
-Number AP_R_B, 1, 0!0000001110101100
+Number AP_N_A, 1, 0!00000101000
+Number AP_R_A, 1, 0!0000000100100110
+Number AP_N_B, 1, 0!00000010100
+Number AP_R_B, 1, 0!0000010111110000
 
 #---------------------------------------------------------------- signal predictor
 
@@ -149,9 +149,9 @@ Number AP_R_B, 1, 0!0000001110101100
 # free to move; mixing a short and a long horizon beat any single length by
 # hand, but the three were never fitted jointly.  Base 1 with 9 bits gives the
 # optimizer [1, 512] each.
-Number N1, 1, 1!110000011
+Number N1, 1, 1!101110000
 Number N2, 1, 1!111111111
-Number N3, 1, 1!100111101
+Number N3, 1, 1!100011110
 
 # Cross-channel stage: taps on the OTHER channel's recent deltas, adapted on
 # what the three own-signal stages leave over.  0 disables it, which is what
@@ -178,7 +178,7 @@ Number N3, 1, 1!100111101
 # 0 -- it costs nothing off, and the reasoning only holds while the cross stage
 # stays linear.
 Number XPRED, 1, 0!00
-Number N4, 1, 0!000100001
+Number N4, 1, 0!000001001
 
 # Stage-1 tap 0 at reset: 1<<WSH makes the untrained predictor a linear
 # extrapolation of the last two samples, which is what the first samples of the
@@ -186,18 +186,18 @@ Number N4, 1, 0!000100001
 Number PW0, 1, 0!10101010000011000
 
 # NLMS per-stage adaptation gain (the shift added to the energy scale).
-Number MU1, 1, 0!0111
+Number MU1, 1, 0!0110
 Number MU2, 1, 0!0101
 Number MU3, 1, 0!0100
-Number MU4, 1, 0!1000
+Number MU4, 1, 0!1001
 
 # NLMS per-stage energy floor multiplier: the normaliser is en + n*EFL, so 1 is
 # the current "one unit per tap".  Raising it damps adaptation on quiet passages
 # without touching the loud-signal behaviour, which no single MU can do.
-Number EFL1, 1, 1!0100
-Number EFL2, 1, 1!0010
-Number EFL3, 1, 1!1101
-Number EFL4, 1, 1!1101
+Number EFL1, 1, 1!1110
+Number EFL2, 1, 1!1011
+Number EFL3, 1, 1!1100
+Number EFL4, 1, 1!1001
 
 #---------------------------------------------------------------- match model
 
@@ -207,8 +207,8 @@ Number EFL4, 1, 1!1101
 # the long one flattens out from 12 up.  HB/TB are log2 of the shared history
 # ring and of each model's hash table.
 Number MATCH_ORDER, 1, 0!000111
-Number MATCH_ORDER2, 1, 0!010010
-Number MATCH_HB,    1, 0!10110
+Number MATCH_ORDER2, 1, 0!010001
+Number MATCH_HB,    1, 0!10010
 Number MATCH_TB,    1, 0!11110
 
 # ...and the long model's own, seeded identical to the short one's so the
@@ -219,7 +219,7 @@ Number MATCH_TB,    1, 0!11110
 # that fires rarely and wants reach rather than density.  Nothing about the
 # storage was shared (each MatchModel has always owned its vectors), only the
 # two numbers, so separating them costs nothing and gives opt.pl the knob.
-Number MATCH_HB2,   1, 0!00111
+Number MATCH_HB2,   1, 0!01100
 Number MATCH_TB2,   1, 0!11110
 
 # Feed match-present into the mixer's weight-set selection as well as into the
@@ -246,7 +246,7 @@ Number MW13,  1, 0!0000010000000000
 Number MW14,  1, 0!0000010000000000
 Number MW15,  1, 0!0000010000000000
 Number MW_NMAX, 1, 0!01111
-Number MP_INIT, 1, 0!1111000000010000
+Number MP_INIT, 1, 0!0001010000010000
 
 #---------------------------------------------------------------- solid mode
 
@@ -273,19 +273,19 @@ Number NCONF, 1, 1!001
 # picks per file.  These are ordinary tunables -- opt.pl can move them, and
 # setting them equal to the primary set makes the second cascade redundant
 # rather than harmful (it just costs its mixer inputs).
-Number N1B,    1, 1!000000111
-Number N2B,    1, 1!000000011
-Number N3B,    1, 1!000000001
-Number N4B,    1, 0!000110000
-Number MU1B,   1, 0!1000
-Number MU2B,   1, 0!1001
+Number N1B,    1, 1!001011110
+Number N2B,    1, 1!000010000
+Number N3B,    1, 1!000001000
+Number N4B,    1, 0!000010001
+Number MU1B,   1, 0!0110
+Number MU2B,   1, 0!0111
 Number MU3B,   1, 0!1000
 Number MU4B,   1, 0!0100
 Number EFL1B,  1, 1!1010
 Number EFL2B,  1, 1!1001
 Number EFL3B,  1, 1!0010
-Number EFL4B,  1, 1!1101
-Number PW0B,   1, 0!10010000100001101
+Number EFL4B,  1, 1!1000
+Number PW0B,   1, 0!11001010001100010
 
 #---------------------------------------------------------------- coder shape
 # These were literals or #defines inside xadpcm.cpp.  They are here because
@@ -304,8 +304,8 @@ Number ST_SCALE, 1, 0!0100000000
 Number WSH, 1, 8!1110
 
 # Clamp on the summed prediction, and the guard on the adaptation shift.
-Number PRED_DMAX,  1, 0!00101000000101001
-Number PRED_SHMAX, 1, 0!010000
+Number PRED_DMAX,  1, 0!00100000000000000
+Number PRED_SHMAX, 1, 0!010011
 
 # Widest magnitude class the header-residual tree may name.  NOT a tuning knob:
 # above the cap a value is coded as the cap, and the encoder then goes on using
@@ -324,4 +324,4 @@ Number PRED_SHMAX, 1, 0!010000
 Number LIT_CTX_TAILBITS, 1, 0!11001000
 Number LIT_CTX_NIBBLE,   1, 0!11011100
 
-Number HJ_BITS, 1, 8!10101
+Number HJ_BITS, 1, 8!00000

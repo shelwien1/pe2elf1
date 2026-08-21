@@ -8,4 +8,4 @@ Const 0
 # where extra length stops buying confidence.  The input is clamped to the
 # pattern length by the generated code.
 Index Ml
- l0: mlen, 1!000000011111111111111110
+ l0: mlen, 1!000000011111111111111111
