@@ -1646,6 +1646,17 @@ struct ModelBlock {
   }
 };
 
+// The one block the main model needs.  `code_plane` allocates it, runs a plane
+// through it and frees it, and nothing nests: instrumented over the corpus both
+// directions the high-water mark is 1.
+//
+// Not zeroed, matching the `bmf_new` this replaces, and on the same measurement
+// as the p1 pool -- 0xA5 in every byte of the slot on take leaves all 111
+// checks passing, so `layout_workspace` writes everything anything reads.
+//
+// 7.73 MB of `.bss`.
+static BlockPool<ModelBlock, 1> model_blocks;
+
 // The four `_padN` arrays in `ModelBlock` are the decompilation's record of
 // gaps in the original's frame, and a filler array is a layout contract in a
 // form nothing checks.  Stage 2 Section 10 asks for the contract to travel with

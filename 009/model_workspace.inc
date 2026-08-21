@@ -31,7 +31,7 @@ void ModelBlock::free_workspace() {
   for( i = 0; i<5; ++i )
     free(row_cur[i]);
   free(escape.ent);
-  free(this);
+  model_blocks.give(this);
 }
 
 // A block on the heap, laid out for one image.  Both plane coders wrote the
@@ -40,7 +40,7 @@ void ModelBlock::free_workspace() {
 // which the caller then dereferenced unconditionally.  That is the binary's
 // behaviour and it stays; the guard is one place now rather than two.
 ModelBlock* new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
-  void* raw = bmf_new(sizeof(ModelBlock));
+  void* raw = model_blocks.take(false);
   return ((ModelBlock*)raw)->layout_workspace(img_w, img_h, img_depth);
 }
 

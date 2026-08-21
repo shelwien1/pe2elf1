@@ -318,12 +318,30 @@ echo "$cut/$ncut truncated streams refused without a crash"
 # anything on the other.  Any rung that reports is enough; a rung that succeeds
 # is not a failure.  What fails is every rung succeeding -- nothing was tested --
 # or a rung dying instead of reporting.
+#
+# **The ladder's floor is the binary's own image, and it is read from the binary
+# rather than written here.**  The three model blocks are `.bss` now -- 50 MB of
+# it -- so a rung below that dies mapping its own image before `main`, which is
+# a SIGSEGV that answers nothing and used to read as "died instead of
+# reporting".  Every rung of the old ladder was under the floor the moment the
+# blocks moved, and the leg failed six times over while the program was correct.
+# Deriving the floor means the pools can be resized without this number going
+# stale behind them.
+#
+# **And the image has to be big enough to have a window.**  With the blocks
+# static, `t1.bmp` needs so little heap that no rung separates "cannot map the
+# image" from "succeeds" -- 52500 KB segfaults and 53000 KB completes, with
+# nothing in between.  `x_ep.bmp` is 2.2 MB and its heap need is wide enough to
+# straddle: floor+4000 and floor+8000 both report.
 ran=$((ran + 1))
 if ( ulimit -v 65536 ) >/dev/null 2>&1; then
   said='' arena=''
-  for kb in 4000 6000 8000 10000 12000 16000; do
+  floor=$(size "$BIN" 2>/dev/null | awk 'NR==2 {print int(($1+$2+$3)/1024)}')
+  [ -n "$floor" ] || floor=4000
+  for step in 4000 8000 16000 32000 64000; do
+    kb=$((floor + step))
     rm -f "$tmp/oom.bmf"
-    ( ulimit -v $kb; timeout "$T" "$BIN" c testfiles/t1.bmp "$tmp/oom.bmf" ) \
+    ( ulimit -v $kb; timeout "$T" "$BIN" c testfiles/x_ep.bmp "$tmp/oom.bmf" ) \
         >"$tmp/oom.log" 2>&1
     rc=$?
     # A -DBMF_HIGH_ARENA build reserves 768 MB up front, so every rung fails
@@ -335,7 +353,10 @@ if ( ulimit -v 65536 ) >/dev/null 2>&1; then
     if grep -q 'no high arena' "$tmp/oom.log"; then arena=1; break; fi
     case $rc in
       7) if grep -q 'Out of memory!' "$tmp/oom.log"; then
+           # One rung answering is the whole question; the rungs above it are
+           # full compressions of a 2.2 MB image and buy nothing.
            said=$kb
+           break
          else
            note "out of mem" "-v $kb exits 7 without saying why"
          fi ;;

@@ -99,6 +99,11 @@ struct P1Ctx {
 static inline int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb);
 static inline int32_t nb_resid(const AltP1Block* nb);
 
+// As `AltP2Block`, one file over: the pool holds these by value so it cannot
+// come before the class, and `alt_p1_free` gives one back from inside it.
+struct AltP1Block;
+static void p1_block_give(AltP1Block* p);
+
 struct AltP1Block {
   // How far a cursor sits into its row, and how far past the last sample the
   // row-end mirror reaches.  Both are load-bearing and neither was written
@@ -649,9 +654,35 @@ struct AltP1Block {
   // another caller that did.
   void alt_p1_free() {
     ring_free(buf);
-    free(this);
+    p1_block_give(this);
   }
 };
+
+// The four blocks this model can have live at once.  `alt_model_p1` allocates
+// one per plane and `plane_count` is at most 4; instrumented over the corpus
+// both directions the high-water mark is 4, reached by `t32` and `med32`.
+//
+// **Not zeroed, and that was measured rather than assumed.**  `bmf_new` handed
+// back whatever malloc had, so a block arrived uninitialised and
+// `alt_p1_alloc` is what makes it a block.  A pool hands back a *reused* slot
+// instead, which is a different kind of garbage -- so the question is whether
+// anything reads a byte `alt_p1_alloc` does not write.  Filling every slot with
+// 0xA5 on take leaves all 111 checks passing, and so does filling it with zero,
+// which says nothing is read before it is written and the choice does not
+// matter.  It is left not-zeroing because that is what `bmf_new` did.
+//
+// 9.61 MB apiece, 38.5 MB of `.bss` -- the largest single thing in this
+// program's image, and the reason the out-of-memory ladder in `test.sh` starts
+// where it does.
+static BlockPool<AltP1Block, 4> p1_blocks;
+
+static AltP1Block* p1_block_take() {
+  return p1_blocks.take(false);
+}
+
+static void p1_block_give(AltP1Block* p) {
+  p1_blocks.give(p);
+}
 
 static inline int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb) {
   const P1Ctx* r = nb->cursor[0];

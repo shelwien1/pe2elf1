@@ -335,6 +335,12 @@ struct P2Coef {
   }
 };
 
+// The pool below the class hands these out, and `alt_p2_free` gives one back
+// from inside it -- so the name has to exist before the class and the storage
+// cannot, since the pool holds `AltP2Block` by value.
+struct AltP2Block;
+static void p2_block_give(AltP2Block* p);
+
 struct AltP2Block {
   // The same pair as `AltP1Block::kRowMargin` and for the same reason: the 8
   // was a `ring_advance` argument and the 13 an allocation, with nothing
@@ -416,7 +422,7 @@ struct AltP2Block {
   // *after* each pad, which is the only thing the pad exists to produce.
   //
   // They matter more than the usual `offsetof` restatement because this struct
-  // is 1,064,560 bytes of model state reached through one `bmf_page_alloc`, and
+  // is 1,064,560 bytes of model state, one slot of `p2_blocks`, and
   // because two of its members are already load-bearing on adjacency -- `bias`
   // one row past `p2_row`, asserted below, and `nb_id` whose last four entries
   // were a separate `_pad2[8]` until an index reached them.
@@ -1015,9 +1021,29 @@ struct AltP2Block {
     ring_free(buf);
     free(row0);
     free(row1);
-    bmf_page_free(this);
+    p2_block_give(this);
   }
 };
+
+// The four blocks this model can have live at once, in the data segment.  One
+// per plane and `plane_count` is at most 4, which `expand_image` enforces and
+// the corpus reaches: instrumented both directions, `x_ep`, `xform2` and
+// `med32` all hit four.
+//
+// Zeroed on take, and that `true` is load-bearing rather than tidy: the page
+// allocator this replaces memset what it returned, and filling these slots with
+// 0xA5 instead fails 15 of 111 checks.  Which is also what makes the *other* two
+// pools' `false` an answer and not an omission -- the same poison leaves them
+// green.  1.02 MB apiece, 4.1 MB of `.bss`.
+static BlockPool<AltP2Block, 4> p2_blocks;
+
+static AltP2Block* p2_block_take() {
+  return p2_blocks.take(true);
+}
+
+static void p2_block_give(AltP2Block* p) {
+  p2_blocks.give(p);
+}
 
 // Whether the plane that plane `k` references carries a colour transform, and
 // so whether the sample it is seeded from has to be mixed from its references
@@ -1063,7 +1089,7 @@ static void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
 // nothing and the `for` say the same thing as the `do`.
 static void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
   for( int32_t pl = 0; pl<plane_count; ++pl ) {
-    AltP2Block* page = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
+    AltP2Block* page = p2_block_take();
     plane[pl] = page->alt_p2_alloc(width, pl);
   }
 }

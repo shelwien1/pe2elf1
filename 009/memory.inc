@@ -72,43 +72,66 @@ static void bmf_free(void* p) {
 #define free bmf_free
 #endif
 #define BMF_PAGE ((uintptr_t)4096)
-// Fatal on failure, like `bmf_new` two functions down, and that is a fix
-// rather than a tidy: this returned null, `alt_p2_planes_alloc` stored the null
-// into `plane[pl]`, and `alt_p2_start_row` dereferenced it on the first row
-// without looking.  `alt_p2_planes_free` *did* look -- `if( plane[pl] )` -- so
-// the check existed on the path that could not crash and was missing from the
-// one that could.
+// `bmf_page_alloc` and `bmf_page_free` were here, with a `PageHeader` holding
+// the unaligned pointer `free` needed in the word before the block.  The only
+// two callers were the `AltP2Block` allocations, and both take from a
+// `BlockPool` now; `deadcheck.py` reported the pair the moment they did.
 //
-// Routing it here rather than at the two call sites is what makes the class go
-// away instead of one instance of it: every other allocation in this tree is
-// already fatal, so a nullable allocator is the outlier that invites the next
+// What the page alignment was for went with them.  It is kept as `alignas(4096)`
+// on the pool's storage -- nothing is known to need it, and keeping it means the
+// question does not have to be answered -- but it is now a property of an array
+// rather than four hundred bytes of allocator.
+
+// A fixed number of blocks of one type, in the data segment rather than on the
+// heap.  Three of this program's allocations are a whole model's working set --
+// `AltP1Block` at 9.6 MB, `ModelBlock` at 7.7 MB, `AltP2Block` at 1.0 MB -- and
+// every one of them is a compile-time size that never depends on the input.  A
+// block whose size is known and whose count is bounded does not need an
+// allocator; it needs an array.
+//
+// `N` is the most that can be live at once, and for the two per-plane models
+// that is `plane_count`, which is `((depth & 0x3F) + 7) >> 3` and so at most 4
+// -- `expand_image` refuses anything outside 1..4 outright.  Measured as well as
+// derived: instrumented over the corpus both directions, the high-water marks
+// are 4, 4 and 1, which is what the three pools are sized for.
+//
+// `take` is fatal when the pool is out for the same reason `bmf_new` is fatal
+// when malloc fails: every caller in this tree stores the result without
+// looking, and a nullable allocator is the outlier that invites the next
 // unchecked store.
-// A page-aligned block, with the un-aligned pointer `free` needs kept in the
-// word before it.  `((void**)p)[-1]` at both ends is that word; naming it says
-// which one thing the two sites agree about.
-struct PageHeader {
-  void* base;
-};
+//
+// `zero` is not a convenience.  The page allocator this replaces memset the
+// block it returned and `bmf_new` did not, so the pools differ in exactly that
+// -- and a pool hands back a *reused* slot where malloc handed back a fresh one.
+// See the note at `p1_blocks` for what was measured about the difference, and
+// note that the p2 pool's `true` is load-bearing: filling its slots with 0xA5
+// instead fails 15 of 111 checks.
+template<class T, int32_t N>
+struct BlockPool {
+  // Page-aligned because the allocator this replaces was, and two of the three
+  // went through it.  Nothing here is known to need it; keeping it means the
+  // question does not have to be answered.
+  alignas(4096) T slot[N];
+  uint8_t taken[N];
 
-static inline PageHeader* bmf_page_header(void* p) {
-  return (PageHeader*)p-1;
-}
-
-static void*bmf_page_alloc(size_t n) {
-  void* base = malloc(n+BMF_PAGE+sizeof(PageHeader));
-  if( !base )
+  T* take(bool zero) {
+    for( int32_t k = 0; k<N; ++k ) {
+      if( taken[k] )
+        continue;
+      taken[k] = 1;
+      if( zero )
+        memset(&slot[k], 0, sizeof(T));
+      return &slot[k];
+    }
     bmf_fatal(bmf_no_memory);
-  uintptr_t raw = (uintptr_t)base+sizeof(PageHeader);
-  char* p = (char*)((raw+(BMF_PAGE-1))&~(BMF_PAGE-1));
-  bmf_page_header(p)->base = base;
-  memset(p, 0, n);
-  return p;
-}
+  }
 
-static void bmf_page_free(void* p) {
-  if( p )
-    free(bmf_page_header(p)->base);
-}
+  void give(T* p) {
+    const int32_t k = (int32_t)(p-slot);
+    BMF_ASSUME((uint32_t)k<(uint32_t)N);
+    taken[k] = 0;
+  }
+};
 
 // The original installed a new-handler and let `operator new` retry through
 // it forever; the handler it installed never returns.  So the loop had one

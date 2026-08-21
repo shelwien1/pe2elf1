@@ -111,7 +111,7 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
 // is `AltP1Block::d8_body<f_DEC>`; the decode half used to be written out
 // here, twenty-six lines against the encoder's four.
 static AltP1Block* alt_p1_block_alloc(int32_t width, int32_t height) {
-  AltP1Block* raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
+  AltP1Block* raw = p1_block_take();
   return raw ? raw->alt_p1_alloc(width, height, 0) : nullptr;
 }
 

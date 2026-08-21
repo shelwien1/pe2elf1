@@ -160,7 +160,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
 template<int32_t f_DEC>
 void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   AltP2Block *blk;
-  AltP2Block *raw = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
+  AltP2Block *raw = p2_block_take();
   if( raw )
     blk = raw->alt_p2_alloc(i, 0);
   else

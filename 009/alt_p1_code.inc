@@ -78,7 +78,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   int32_t width = hdr->width;
   int32_t height = hdr->height;
   for( int32_t k = 0; k<plane_count; ++k ) {
-    AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
+    AltP1Block *raw = p1_block_take();
     plane[k] = raw->alt_p1_alloc(width, height, k);
   }
   int32_t src1 = plane_desc[1].src_plane;
