@@ -3,25 +3,41 @@
 # into the parameter sources, rebuild, and measure.
 #
 #   ./snapshot.sh [workdir] [outdir]
+#   ./snapshot.sh --export=FILE [outdir]
 #
 # workdir defaults to ./opt (the a/ b/ c/ d/ instance dirs live there), outdir to
-# ./snap.  Nothing here touches the instances: they own their own xadpcm copy and
+# ./snap.  With --export the gather step is skipped and that profile is measured
+# directly -- which is how a merge_opt.pl hybrid gets checked, since it is not
+# any one instance's export and best_exp.pl would never pick it.
+#
+# Nothing here touches the instances: they own their own xadpcm copy and
 # keep climbing while this runs.  The tree's own IDX/ is left alone too -- the
 # import happens on a COPY, so a snapshot is a measurement, not a commit.  Fold a
 # result into the tree only when it is the one being kept.
 set -e
-WORK=${1:-opt}
-OUT=${2:-snap}
 ROOT=`pwd`
-
-cd "$WORK"
-# best_exp.pl dies when no instance has an opttimes.!!! yet -- that is the
-# normal state of the first minutes, not an error worth a stack trace.
-if ! perl "$ROOT/best_exp.pl" a b c d; then
-  echo "snapshot: no instance has improved on the baseline yet"
-  exit 2
+EXPORT=""
+case "$1" in
+  --export=*) EXPORT=${1#--export=}; shift;;
+esac
+if [ -n "$EXPORT" ]; then
+  WORK=""
+  OUT=${1:-snap}
+  [ -f "$EXPORT" ] || { echo "snapshot: $EXPORT not found" >&2; exit 1; }
+  case "$EXPORT" in /*) ;; *) EXPORT="$ROOT/$EXPORT";; esac
+else
+  WORK=${1:-opt}
+  OUT=${2:-snap}
+  cd "$WORK"
+  # best_exp.pl dies when no instance has an opttimes.!!! yet -- that is the
+  # normal state of the first minutes, not an error worth a stack trace.
+  if ! perl "$ROOT/best_exp.pl" a b c d; then
+    echo "snapshot: no instance has improved on the baseline yet"
+    exit 2
+  fi
+  cd "$ROOT"
+  EXPORT="$ROOT/$WORK/export.!!!"
 fi
-cd "$ROOT"
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -29,7 +45,7 @@ mkdir -p "$OUT"
 # which is symlinked instead of copied)
 cp -r IDX Lib3 MOD *.inc *.cpp mk.sh "$OUT"/
 ln -sf "$ROOT/wavs3" "$OUT"/wavs3
-cp "$WORK/export.!!!" "$OUT"/export.!!!
+cp "$EXPORT" "$OUT"/export.!!!
 
 cd "$OUT"
 sh "$ROOT/import.sh" "export.!!!" IDX > import.log 2>&1

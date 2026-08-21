@@ -1,0 +1,30 @@
+# M0: parameters that exist only on the MS-ADPCM path.  Kept apart from the
+# shared model so a tuning run on an IMA-only corpus cannot quietly drift them.
+
+Prefix M0
+Debug 1
+Const 0
+
+# iDelta has no small index the way the IMA step has, so it is read in the log
+# domain -- the octave plus MS_DLOG_SUB bits below the leading one -- and this
+# threshold map decides how many of those steps become separate contexts.  It
+# can be fine where iDelta discriminates and coarse where it does not, which no
+# single shift can express.  Its LENGTH is tied to MS_DLOG_SUB in the .cpp:
+# ((EMAX-E0)<<SUB)+(1<<SUB) input positions must be covered.
+Index Md
+ d0: dlog, 1!010001011111111110010001001000010100000000000000000000000000000000000000
+
+# Bit-tree order for the MS nibble: 0 raw two's complement, 1 sign then
+# magnitude, 2 magnitude then sign.  The code is a quantized residual, so the
+# natural split is not obvious -- this was measured, not reasoned.
+Number MSMAP, 1, 0!01
+
+# Confidence rule: 0 keeps the SIGN of where the prediction sat inside its
+# quantizer cell, 1 keeps only the distance.  MS rounds to nearest, so the sign
+# says which neighbour is the near miss; worth 0.48% when it was measured.
+Number MSCONF, 1, 0!0
+
+# Decay of the two iDelta-predictor cost trackers.  Encoders differ: ffmpeg
+# carries its running iDelta across block boundaries, others re-fit per block,
+# and the per-channel choice is made by decayed absolute error.
+Number MSDSH, 1, 0!01100
