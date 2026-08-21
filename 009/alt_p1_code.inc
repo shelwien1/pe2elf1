@@ -59,8 +59,13 @@
 // image.  Both constants are in BMF.exe.  `plane_mix3` is entered by `altp1`,
 // `med32` and `t32` in the corpus, so neither side is a path the program never
 // takes; counted by instrumenting both and running all nineteen images.
+// The space in `weight0* *p0` is the one place in this tree a binary `*` gets
+// one, and it is not a slip: written closed up it is `weight0**p0`, which reads
+// as a dereference through a pointer to a pointer and is a multiply against a
+// dereference.  `p0` is not subscripted anywhere here, so `unstar.py` correctly
+// leaves the star alone -- what was wrong was only that the two stars touched.
 static inline uint32_t plane_mix2(const PlaneDesc& d, const uint8_t* p0, const uint8_t* p1) {
-  return (d.weight0**p0+d.weight1*(uint32_t)*p1+40)>>7;
+  return (d.weight0* *p0+d.weight1*(uint32_t)*p1+40)>>7;
 }
 
 static inline int32_t plane_mix3(const PlaneDesc& d, const uint8_t* p) {
@@ -68,7 +73,7 @@ static inline int32_t plane_mix3(const PlaneDesc& d, const uint8_t* p) {
 }
 
 template<int32_t f_DEC>
-int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
+int32_t BMFCodec::alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   // `void* plane[4]` with three `AltP1Block*&` aliases onto slots 1..3 -- the
   // decompiler's way of saying that a `void*` array is read as blocks.  It is
   // an array of blocks.
@@ -77,20 +82,20 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   int32_t want2;
   int32_t width = hdr->width;
   int32_t height = hdr->height;
-  for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
-    AltP1Block *raw = p1_block_take();
-    plane[k] = raw->alt_p1_alloc(&bmf_cx, width, height, k);
+  for( int32_t k = 0; k<plane_count; ++k ) {
+    AltP1Block *raw = p1_blocks.take(false);
+    plane[k] = raw->alt_p1_alloc(this, width, height, k);
   }
-  int32_t src1 = bmf_cx.plane_desc[1].src_plane;
-  int32_t src2 = bmf_cx.plane_desc[2].src_plane;
-  int32_t src3 = bmf_cx.plane_desc[3].src_plane;
-  uint8_t fl1 = bmf_cx.plane_desc[src1].flags;
-  uint8_t fl2 = bmf_cx.plane_desc[src2].flags;
-  uint8_t fl3 = bmf_cx.plane_desc[src3].flags;
-  int32_t dc2 = bmf_cx.plane_desc[src2].dc;
-  int32_t dc1 = bmf_cx.plane_desc[src1].dc;
+  int32_t src1 = plane_desc[1].src_plane;
+  int32_t src2 = plane_desc[2].src_plane;
+  int32_t src3 = plane_desc[3].src_plane;
+  uint8_t fl1 = plane_desc[src1].flags;
+  uint8_t fl2 = plane_desc[src2].flags;
+  uint8_t fl3 = plane_desc[src3].flags;
+  int32_t dc2 = plane_desc[src2].dc;
+  int32_t dc1 = plane_desc[src1].dc;
   int32_t xf1 = fl1&8;
-  int8_t dc3 = bmf_cx.plane_desc[src3].dc;
+  int8_t dc3 = plane_desc[src3].dc;
   int32_t xf2 = fl2&8;
   int32_t xf3 = fl3&8;
   if constexpr( f_DEC )
@@ -104,7 +109,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   // them inside bodies that write neither -- MSVC reloading two globals it
   // could not prove unchanged across the calls that sit between the reads.
   for( uint32_t y = 0; y<(uint32_t)height; ++y ) {
-    for( int32_t p = 0; p<bmf_cx.plane_count; ++p ) {
+    for( int32_t p = 0; p<plane_count; ++p ) {
       plane[p]->advance_row();
       plane[p]->seed_activity(true);
     }
@@ -150,13 +155,13 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
         buf[off] = val;
       };
       for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
-        int32_t off0 = bmf_cx.plane_desc[0].src_plane;
+        int32_t off0 = plane_desc[0].src_plane;
         if constexpr( !f_DEC )
           cur0 = fold_from(off0, 0, 0, 0);
         // `keep0` was a third name for `cur0`: assigned from it in both arms
         // and again beside it when the drift check keeps the reconstruction.
         cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
-        int32_t off1 = bmf_cx.plane_desc[1].src_plane;
+        int32_t off1 = plane_desc[1].src_plane;
         if constexpr( f_DEC )
           unfold_to(off0, 0, 0, 0, cur0);
         else
@@ -164,27 +169,27 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
           // the residual reaches the coder eight bits wide.
           cur1 = (uint8_t)fold_from(off1, xf1, dc1, buf[off0]);
         cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
-        int32_t off2 = bmf_cx.plane_desc[2].src_plane;
+        int32_t off2 = plane_desc[2].src_plane;
         if constexpr( f_DEC )
           unfold_to(off1, xf1, dc1, buf[off0], cur1);
         else
           want2 = (uint8_t)fold_from(off2, xf2, dc2,
-                                     plane_mix2(bmf_cx.plane_desc[off2], buf+off0, buf+off1));
+                                     plane_mix2(plane_desc[off2], buf+off0, buf+off1));
         want2 = code_sample(2, plane[1], plane[0], off2, want2);
         if constexpr( f_DEC )
           unfold_to(off2, xf2, dc2,
-                    plane_mix2(bmf_cx.plane_desc[off2], buf+off0, buf+off1), want2);
-        if( bmf_cx.plane_count>=4 ) {
-          int32_t off3 = bmf_cx.plane_desc[3].src_plane;
+                    plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
+        if( plane_count>=4 ) {
+          int32_t off3 = plane_desc[3].src_plane;
           if constexpr( !f_DEC )
             cur3 = (uint8_t)fold_from(off3, xf3, dc3,
-                                      plane_mix3(bmf_cx.plane_desc[off3], buf+off3));
+                                      plane_mix3(plane_desc[off3], buf+off3));
           cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
           if constexpr( f_DEC )
             unfold_to(off3, xf3, dc3,
-                      plane_mix3(bmf_cx.plane_desc[off3], buf+off3), cur3);
+                      plane_mix3(plane_desc[off3], buf+off3), cur3);
         }
-        buf += bmf_cx.plane_count;
+        buf += plane_count;
       }
     }
   }
@@ -194,15 +199,15 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     rc_end_encode();
   // `bmf_new` is fatal, so every slot is populated -- the `if( q )` was the
   // same dead null check 11.1 removed from the p2 side.
-  for( int32_t f = 0; f<bmf_cx.plane_count; ++f )
-    plane[f]->alt_p1_free();
-  return bmf_cx.plane_count;
+  for( int32_t f = 0; f<plane_count; ++f )
+    p1_blocks.give(plane[f]);
+  return plane_count;
 }
 
-int32_t alt_model_p1_encode(BmfImage* hdr, uint8_t* src) {
+int32_t BMFCodec::alt_model_p1_encode(BmfImage* hdr, uint8_t* src) {
   return alt_model_p1<0>(hdr, src);
 }
 
-int32_t alt_model_p1_decode(BmfImage* hdr, uint8_t* out) {
+int32_t BMFCodec::alt_model_p1_decode(BmfImage* hdr, uint8_t* out) {
   return alt_model_p1<1>(hdr, out);
 }

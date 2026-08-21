@@ -121,7 +121,13 @@ MIN_CHARS = 60
 # So: five lines of trivial loop, deliberately left, in exchange for eight lines
 # of noise deleted.  Lower it again the moment something makes the pair
 # shareable.
-BUDGET = 44
+#
+# 44 -> 43.  `BMFCodec` put sixty-four method declarations in one sorted list
+# and two three-line stretches of it coincided, which took the residue to 46 --
+# copy that no edit could remove, because the list *is* the class.  The skip at
+# `FUNC` below reads a prototype as what it is, the three lines went, and what
+# is left is 43.
+BUDGET = 43
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.
@@ -148,8 +154,40 @@ BUDGET = 44
 # because a type name here has to be followed by space and a declarator.
 _ONE = r'\**\w+(?:\s*\[[^\]]*\])*'
 _QUAL = r'(?:(?:static|const|constexpr|inline|alignas\s*\([^)]*\))\s+)*'
-DECL = re.compile(r'^%s[A-Za-z_][\w:]*(?:\s*<[^;]*>)?[\s*&]+%s'
-                  r'(?:\s*,\s*%s)*\s*;$' % (_QUAL, _ONE, _ONE))
+# **A statement that opens with a keyword is a statement**, and without this
+# both patterns below read the keyword as the type: `return idx_s;` parses as a
+# declaration of `idx_s` with type `return`, and `return f(x);` as a prototype.
+# The self-test planted the second, which is how this came to be here; the first
+# had been silently skipped by `DECL` since the day it was written.
+_KW = (r'(?!(?:return|delete|throw|new|case|else|goto|sizeof|using|typedef'
+       r'|co_return|co_await|co_yield)\b)')
+DECL = re.compile(r'^%s%s[A-Za-z_][\w:]*(?:\s*<[^;]*>)?[\s*&]+%s'
+                  r'(?:\s*,\s*%s)*\s*;$' % (_QUAL, _KW, _ONE, _ONE))
+
+# **A function declared and not defined, and the `template<...>` line that can
+# stand above one.**  Same skip and the same reason as `DECL`: a prototype is
+# not a statement, and a list of them cannot be factored into a helper -- it is
+# the list of what the helpers *are*.
+#
+# This arrived with `BMFCodec`.  Sixty-four method declarations in `codec.inc`,
+# sorted, put `..._p1_decode; ..._p1_encode; template<int32_t f_DEC>` eight
+# lines above `..._p2_decode; ..._p2_encode; template<int32_t f_DEC>`, which
+# normalise to the same window -- three lines of "copy" that no edit could
+# remove and that took the residue two lines over its ratchet.  Raising the
+# ratchet would have recorded a class declaring its methods as a debt.
+#
+# A **declaration** and not a call: the pattern needs a return type before the
+# name, so `save_descriptors(saved);` -- one identifier, then the paren -- does
+# not match, and neither does `int32_t n = f(x);`, which has an operator where
+# the paren would have to be.  Proven both ways in `selftest` below.
+FUNC = re.compile(r'^%s%s[A-Za-z_][\w:]*(?:\s*<[^;()]*>)?[\s*&]+\**\w+'
+                  r'\s*\([^;]*\)(?:\s*const)?\s*;$' % (_QUAL, _KW))
+TMPL = re.compile(r'^template\s*<[^;]*>$')
+
+
+def not_a_statement(line):
+    """A field, a prototype or a template header -- none of them statements."""
+    return bool(DECL.match(line) or FUNC.match(line) or TMPL.match(line))
 
 
 def normal(text):
@@ -176,7 +214,7 @@ def survey(path):
             continue
         if sum(len(b) for b in block) < MIN_CHARS:
             continue
-        if all(DECL.match(b) for b in block):
+        if all(not_a_statement(b) for b in block):
             continue
         windows[normal('\n'.join(block))].append(i)
     out, taken = [], set()
@@ -205,9 +243,83 @@ def survey(path):
     return out
 
 
+# **Proof that the skip did not turn the tool off.**  A skip is the one change
+# to a counting tool that can make it answer zero for the wrong reason, so both
+# halves are planted: six statements written twice still count, six prototypes
+# written twice do not, and the four lines that a prototype is easy to confuse
+# with are checked one at a time.
+#
+#     python3 tools/dupblock.py --selftest
+_SELFTEST = [
+    # A call is a statement, whatever it looks like.  So is an initialised
+    # declaration, and so is anything with an operator in it.
+    ('save_descriptors(saved);', False),
+    ('int32_t n = weight_pair_cost(img, p0, a, b, 4, 8);', False),
+    ('blk->free_workspace();', False),
+    ('return alt_model_p1_decode(hdr, out);', False),
+    # These four are not.
+    ('int32_t alt_model_p1_decode(BmfImage* hdr, uint8_t* out);', True),
+    ('AltP1Block* alt_p1_block_alloc(int32_t width, int32_t height);', True),
+    ('template<int32_t f_DEC>', True),
+    ('uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height);', True),
+]
+
+
+def selftest():
+    import tempfile, os
+    bad = 0
+    for line, want in _SELFTEST:
+        got = not_a_statement(line)
+        if got != want:
+            bad += 1
+            print('  %-14s %s' % ('statement' if want else 'declaration', line))
+    # And the whole survey, over a planted file rather than over the regex.
+    # Long enough to clear MIN_CHARS: a three-line window of `x = f(k);` is
+    # thirty characters and this tool ignores it, so a first version of this
+    # plant reported no copy for the right reason and would have passed a
+    # broken skip.
+    # The two wrappers differ in *shape* and not only in their names, because
+    # the normaliser renames identifiers away: `void a() {` twice is itself a
+    # duplicate run, and a first version of this plant reported eight lines of
+    # copy for the braces around the declarations rather than for anything in
+    # them.  A second parameter is enough to tell the two apart.
+    open_a = 'void first_holder(int32_t k) {'
+    open_b = 'void second_holder(int32_t k, int32_t j) {'
+    stmt = ['  plane_cost[0] = weight_pair_cost(img, plane0, 1, 2, 4, 8);',
+            '  plane_cost[1] = weight_pair_cost(img, plane0, 2, 3, 4, 8);',
+            '  plane_cost[2] = weight_pair_cost(img, plane0, 3, 1, 4, 8);',
+            '  other_cost[0] = weight_pair_cost(img, plane1, 1, 2, 8, 4);',
+            '  other_cost[1] = weight_pair_cost(img, plane1, 2, 3, 8, 4);',
+            '  other_cost[2] = weight_pair_cost(img, plane1, 3, 1, 8, 4);']
+    decl = ['  int32_t alpha_of_plane(BmfImage* img, int32_t plane_index);',
+            '  int32_t beta_of_plane(BmfImage* img, int32_t plane_index);',
+            '  int32_t gamma_of_plane(BmfImage* img, int32_t plane_index);',
+            '  int32_t delta_of_stream(BmfImage* hdr, int32_t plane_count);',
+            '  int32_t epsilon_of_stream(BmfImage* hdr, int32_t plane_count);',
+            '  int32_t zeta_of_stream(BmfImage* hdr, int32_t plane_count);']
+    for planted, want_copy in ((stmt, True), (decl, False)):
+        text = '\n'.join([open_a] + planted + ['}', '', open_b] + planted + ['}'])
+        fd, path = tempfile.mkstemp(suffix='.cpp', dir='.')
+        os.write(fd, text.encode())
+        os.close(fd)
+        try:
+            copied = sum(n * (len(ats) - 1) for n, ats, _ in survey(path))
+        finally:
+            os.unlink(path)
+        if bool(copied) != want_copy:
+            bad += 1
+            print('  planted %s: %d lines of copy, wanted %s'
+                  % ('statements' if want_copy else 'declarations', copied,
+                     'some' if want_copy else 'none'))
+    print('%d of %d self-tests disagree' % (bad, len(_SELFTEST) + 2))
+    return 1 if bad else 0
+
+
 def main():
+    if '--selftest' in sys.argv:
+        sys.exit(selftest())
     if len(sys.argv) < 2 or sys.argv[1].startswith('--'):
-        sys.exit('usage: python3 tools/dupblock.py bmf.cpp [--list]')
+        sys.exit('usage: python3 tools/dupblock.py bmf.cpp [--list|--selftest]')
     found = survey(sys.argv[1])
     copied = sum(n * (len(ats) - 1) for n, ats, _ in found)
     if '--list' in sys.argv:

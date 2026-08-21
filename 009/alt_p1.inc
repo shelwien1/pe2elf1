@@ -110,24 +110,24 @@ uint32_t BMFState::alt_init_tables(uint8_t* fold, int8_t* unfold) {
 // eight-bit entry points do besides naming a direction.  The body they share
 // is `AltP1Block::d8_body<f_DEC>`; the decode half used to be written out
 // here, twenty-six lines against the encoder's four.
-static AltP1Block* alt_p1_block_alloc(int32_t width, int32_t height) {
-  AltP1Block* raw = p1_block_take();
-  return raw ? raw->alt_p1_alloc(&bmf_cx, width, height, 0) : nullptr;
+AltP1Block* BMFCodec::alt_p1_block_alloc(int32_t width, int32_t height) {
+  AltP1Block* raw = p1_blocks.take(false);
+  return raw ? raw->alt_p1_alloc(this, width, height, 0) : nullptr;
 }
 
 template<int32_t f_DEC>
-static void alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height,
-                            uint8_t* out) {
+void BMFCodec::alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height,
+                               uint8_t* out) {
   AltP1Block *blk = alt_p1_block_alloc(width, height);
   blk->d8_body<f_DEC>(src, out);
   if( blk )
-    blk->alt_p1_free();
+    p1_blocks.give(blk);
 }
 
-void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+void BMFCodec::alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   alt_model_p1_d8<0>(src, i, height, out);
 }
 
-void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
+void BMFCodec::alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
   alt_model_p1_d8<1>(nullptr, i, height, out);
 }

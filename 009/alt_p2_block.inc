@@ -296,7 +296,7 @@ struct NbRow {
   float w[15][4];
   uint32_t uses;
   uint32_t _pad[3];
-  int32_t predict(float (*nb)[4], CtxWeights* sets, int32_t mode);
+  int32_t predict(BMFState* cx, float (*nb)[4], CtxWeights* sets, int32_t mode);
 };
 
 static_assert(sizeof(NbRow) == 16*4*sizeof(float),
@@ -319,27 +319,23 @@ struct P2Coef {
   float saved_coef[7][4];
   float saved_rate[3][4];
 
-  void fold() {
-    __builtin_memcpy(saved_coef, bmf_p2_coef, sizeof saved_coef);
-    __builtin_memcpy(saved_rate, bmf_p2_rate[4], sizeof saved_rate);
+  // The session is this codec's, not the program's: `cx->p2_coef` and
+  // `cx->p2_rate` are copies `BMFState::reset` seeds from the constants.
+  void fold(BMFState* cx) {
+    __builtin_memcpy(saved_coef, cx->p2_coef, sizeof saved_coef);
+    __builtin_memcpy(saved_rate, cx->p2_rate[4], sizeof saved_rate);
     for( int32_t k = 0; k<4; ++k ) {
-      for( int32_t i = 0; i<3; ++i ) bmf_p2_coef[i][k] += bmf_p2_coef[4+i][k];
-      for( int32_t i = 0; i<3; ++i ) bmf_p2_coef[4+i][k] = 0;
-      for( int32_t i = 0; i<3; ++i ) bmf_p2_rate[4+i][k] = bmf_p2_rate_reset;
+      for( int32_t i = 0; i<3; ++i ) cx->p2_coef[i][k] += cx->p2_coef[4+i][k];
+      for( int32_t i = 0; i<3; ++i ) cx->p2_coef[4+i][k] = 0;
+      for( int32_t i = 0; i<3; ++i ) cx->p2_rate[4+i][k] = bmf_p2_rate_reset;
     }
   }
 
-  void restore() {
-    __builtin_memcpy(bmf_p2_coef, saved_coef, sizeof saved_coef);
-    __builtin_memcpy(bmf_p2_rate[4], saved_rate, sizeof saved_rate);
+  void restore(BMFState* cx) {
+    __builtin_memcpy(cx->p2_coef, saved_coef, sizeof saved_coef);
+    __builtin_memcpy(cx->p2_rate[4], saved_rate, sizeof saved_rate);
   }
 };
-
-// The pool below the class hands these out, and `alt_p2_free` gives one back
-// from inside it -- so the name has to exist before the class and the storage
-// cannot, since the pool holds `AltP2Block` by value.
-struct AltP2Block;
-static void p2_block_give(AltP2Block* p);
 
 struct AltP2Block {
   // The same pair as `AltP1Block::kRowMargin` and for the same reason: the 8
@@ -585,7 +581,7 @@ struct AltP2Block {
                  float ms_rate, float floor_) {
     const float ms = row->w[7+j][k]+(x*x-row->w[7+j][k])*ms_rate;
     row->w[7+j][k] = ms;
-    row->w[j][k] += bmf_p2_rate[j][k]*err*x/(ms+floor_);
+    row->w[j][k] += cx->p2_rate[j][k]*err*x/(ms+floor_);
   }
 
   // Track the input energy and step both rows' weights toward their own error.
@@ -613,7 +609,7 @@ struct AltP2Block {
     const float ms_scale = row->w[14][2];
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
-        row->w[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(row->w[7+j][k]+ms_scale*529.0f);
+        row->w[j][k] += cx->p2_rate[j][k]*err*p2_row[j][k]/(row->w[7+j][k]+ms_scale*529.0f);
     ++row->uses;
     row->w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
@@ -1027,9 +1023,6 @@ struct AltP2Block {
   // The plan asks for "release workspace" and "release object" to be split.
   // There is nothing to split: no caller wants the workspace freed and the
   // object kept, which is what the always-1 flag says.
-  void alt_p2_free() {
-    p2_block_give(this);
-  }
 
   // The rows the three cursors above point into, last in the struct so that no
   // member's offset moves.  18 bytes to the record and 65548 records to the row
@@ -1064,15 +1057,8 @@ struct AltP2Block {
 // 0xA5 instead fails 15 of 111 checks.  Which is also what makes the *other* two
 // pools' `false` an answer and not an omission -- the same poison leaves them
 // green.  1.02 MB apiece, 4.1 MB of `.bss`.
-static BlockPool<AltP2Block, 4> p2_blocks;
-
-static AltP2Block* p2_block_take() {
-  return p2_blocks.take(true);
-}
-
-static void p2_block_give(AltP2Block* p) {
-  p2_blocks.give(p);
-}
+// The pool is `BMFCodec::p2_blocks`, for the reason given at `AltP1Block`: a
+// block cannot hold the pool that holds it.
 
 // Whether the plane that plane `k` references carries a colour transform, and
 // so whether the sample it is seeded from has to be mixed from its references
@@ -1081,8 +1067,8 @@ static void p2_block_give(AltP2Block* p) {
 // Three of these open each coder, under six names between them -- `xf0`, `np`
 // and `y` in the encoder, `xf0`, `dc_flag` and `xf4` in the decoder -- none of
 // which says which plane it is about.
-static bool ref_transformed(BMFState* cx, int32_t k) {
-  return (cx->plane_desc[cx->plane_desc[k].src_plane].flags&desc_has_refs)!=0;
+bool BMFState::ref_transformed(int32_t k) {
+  return (plane_desc[plane_desc[k].src_plane].flags&desc_has_refs)!=0;
 }
 
 // Every plane made ready for the next row.  Row 0 seeds the neutral record and
@@ -1098,8 +1084,8 @@ static bool ref_transformed(BMFState* cx, int32_t k) {
 // `seed_history(-first)` where `first` was itself `-width`, and writing the
 // obvious `seed_history(-width)` here cost eight of the 110 checks -- which is
 // the one thing a double negative spelled through a named local is good at.
-static void alt_p2_start_row(BMFState* cx, AltP2Block** plane, int32_t row, int32_t width) {
-  for( int32_t k = 0; k<cx->plane_count; ++k ) {
+void BMFState::alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
+  for( int32_t k = 0; k<plane_count; ++k ) {
     if( row==0 )
       plane[k]->seed_row0(width);
     else if( row==1 )
@@ -1116,18 +1102,7 @@ static void alt_p2_start_row(BMFState* cx, AltP2Block** plane, int32_t row, int3
 // turn of a loop it is also the bound of.  Nothing in `alt_p2_alloc` or
 // `alt_p2_free` writes `plane_count`, which is what makes the re-read say
 // nothing and the `for` say the same thing as the `do`.
-static void alt_p2_planes_alloc(BMFState* cx, AltP2Block** plane, int32_t width) {
-  for( int32_t pl = 0; pl<cx->plane_count; ++pl ) {
-    AltP2Block* page = p2_block_take();
-    plane[pl] = page->alt_p2_alloc(cx, width, pl);
-  }
-}
 
-static int32_t alt_p2_planes_free(BMFState* cx, AltP2Block** plane) {
-  for( int32_t pl = 0; pl<cx->plane_count; ++pl )
-    plane[pl]->alt_p2_free();
-  return cx->plane_count;
-}
 
 // `NbRow::predict` writes `nb[7][0..2]` where `nb` is `p2_row`, a `[7][4]`.
 // That is `bias`, and this says so in a form the compiler checks.

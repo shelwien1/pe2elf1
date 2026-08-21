@@ -102,11 +102,15 @@ alignas(16) static int32_t p1_level_step[8] = {
 // puts back.  Stage 2 Section 7 says so explicitly and it is worth repeating
 // here, because they sit in a file of tables that are now all `constexpr` and
 // the odd pair out is the one that would break silently.
-alignas(16) static float bmf_p2_coef[7][4] = {
+// Read `bmf_p2_coef_init` and `bmf_p2_rate_init`: these are the values a codec
+// starts from, not the values it uses.  `BMFState` keeps a copy of each and
+// `P2Coef` folds *that* -- see the note there.  They were mutable file-scope
+// arrays until two codecs in two threads folded them at once.
+alignas(16) static const float bmf_p2_coef_init[7][4] = {
   {-0.05f, -0.07f, 0.3f, 0.18f}, {-0.03f, 0.04f, 0.06f, -0.01f}, {0.06f, 0.16f, 0.0f, -0.01f}, {-0.1f, -0.02f, 0.05f, 0.05f}, {0.06f, 0.0f, 0.04f, 0.02f}, {0.04f, 0.02f, 0.04f, 0.05f}, {0.07f, 0.0f, 0.03f, 0.02f},
 };
 
-alignas(16) static float bmf_p2_rate[7][4] = {
+alignas(16) static const float bmf_p2_rate_init[7][4] = {
   {0.0108f, 0.0069f, 0.0054f, 0.0052f}, {0.0042f, 0.0042f, 0.0042f, 0.0039f}, {0.0035f, 0.0035f, 0.0028f, 0.0028f}, {0.0027f, 0.0026f, 0.0026f, 0.0024f}, {0.0023f, 0.0023f, 0.0022f, 0.0021f}, {0.0019f, 0.0019f, 0.0017f, 0.0017f}, {0.0015f, 0.0015f, 0.0011f, 0.0009f},
 };
 

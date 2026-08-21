@@ -17,18 +17,18 @@ static uint8_t write_member_head(const void* head, const CodedTail* extra, FILE*
 // The plane descriptors, as `read_plane_descs` reads them back: six bits of
 // count and flags, then the dc byte and the weights the flags call for, each
 // biased by 64.
-static void write_plane_descs() {
-  for( int32_t pl = 0; pl<bmf_cx.plane_count; ++pl ) {
-    pack_bits((bmf_cx.plane_desc[pl].flags<<2)|bmf_cx.plane_desc[pl].nrefs, 6);
-    if( !(bmf_cx.plane_desc[pl].flags&desc_has_refs) )
+void BMFCodec::write_plane_descs() {
+  for( int32_t pl = 0; pl<plane_count; ++pl ) {
+    pack_bits((plane_desc[pl].flags<<2)|plane_desc[pl].nrefs, 6);
+    if( !(plane_desc[pl].flags&desc_has_refs) )
       continue;
-    pack_bits(bmf_cx.plane_desc[pl].dc, 8);
-    if( bmf_cx.plane_desc[pl].nrefs<=1u )
+    pack_bits(plane_desc[pl].dc, 8);
+    if( plane_desc[pl].nrefs<=1u )
       continue;
-    pack_bits(bmf_cx.plane_desc[pl].weight0+64, 8);
-    pack_bits(bmf_cx.plane_desc[pl].weight1+64, 8);
-    if( bmf_cx.plane_desc[pl].nrefs>2u )
-      pack_bits(bmf_cx.plane_desc[pl].weight2+64, 8);
+    pack_bits(plane_desc[pl].weight0+64, 8);
+    pack_bits(plane_desc[pl].weight1+64, 8);
+    if( plane_desc[pl].nrefs>2u )
+      pack_bits(plane_desc[pl].weight2+64, 8);
   }
 }
 
@@ -37,12 +37,12 @@ static void write_plane_descs() {
 // gets the filter search, the descriptors, and the planes.  The narrow arm was
 // a `goto` past all of that to the flush below, which is this function's own
 // early `return`.
-static void code_image_body(BmfImage* p_i, BmfImage& hdr) {
+void BMFCodec::code_image_body(BmfImage* p_i, BmfImage& hdr) {
   if( (p_i->depth&depth_bits)<=4 ) {
     stream_open(p_i->data_size);
-    bmf_cx.plane_predictor = 0;
-    bmf_cx.plane_alt_model = 0;
-    bmf_cx.alphabet_reduced = 0;
+    plane_predictor = 0;
+    plane_alt_model = 0;
+    alphabet_reduced = 0;
     model_plane(p_i, p_i->pixels, p_i->pixels);
     return;
   }
@@ -66,24 +66,60 @@ static void code_image_body(BmfImage* p_i, BmfImage& hdr) {
   // single palette plane.  The decompiler wrote that as a `goto` into the
   // middle of the `if` from its own `else`, which is one condition with the
   // `||` taken out.
-  if( bmf_cx.plane_count==1 ? (p_i->depth&depth_grey)!=0 : bmf_cx.plane_count>2 ) {
-    bmf_cx.near_lossless_q = 0;
+  if( plane_count==1 ? (p_i->depth&depth_grey)!=0 : plane_count>2 ) {
+    near_lossless_q = 0;
     pack_bits(0, 4);
   }
-  bmf_cx.alphabet_reduced = 0;
+  alphabet_reduced = 0;
   write_plane_descs();
   if( filtered ) {
     hdr.flags |= flags_planar;
     uint8_t *plane_buf = (uint8_t*)bmf_new(p_i->width*p_i->height);
-    for( int32_t k = 0; k<bmf_cx.plane_count; ++k )
-      model_planes(p_i, plane_buf, bmf_cx.plane_desc[k].src_plane);
+    for( int32_t k = 0; k<plane_count; ++k )
+      model_planes(p_i, plane_buf, plane_desc[k].src_plane);
     free(plane_buf);
   } else {
     transform_planes(p_i);
   }
 }
 
-int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
+// **The in-memory entry point**, and half of what a caller outside this file
+// actually wants: an image in memory becomes a coded stream in memory, with no
+// path and no file.
+//
+// It is `compress_image` over a buffer rather than a second copy of it.
+// `open_memstream` hands back a `FILE*` that writes into a `malloc`ed buffer
+// and reports its length, which is exactly the shape `compress_image` already
+// takes -- so the file layer stays where it is and the codec gains an entry
+// point rather than a fork.
+//
+// The caller frees what comes back.  `nullptr` and a zero length mean the image
+// was refused, which is the same answer `compress_image` gives.
+uint8_t* BMFCodec::compress_to_memory(BmfImage* p_i, size_t* out_len,
+                                      const CodedTail* tail) {
+  // A codec is reusable because this line is here.  It is also why the tail is
+  // a parameter: it zeroes `coded_block`, so a caller who had put one there
+  // would have had it dropped between the two lines.
+  reset();
+  *out_len = 0;
+  char* buf = nullptr;
+  size_t len = 0;
+  BmfFile arc;
+  arc.fp = open_memstream(&buf, &len);
+  if( !arc.fp )
+    return nullptr;
+  const int32_t coded = compress_image(&arc, p_i, tail);
+  fclose(arc.fp);
+  arc.fp = nullptr;
+  if( !coded ) {
+    free(buf);
+    return nullptr;
+  }
+  *out_len = len;
+  return (uint8_t*)buf;
+}
+
+int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
   BmfImage hdr;
   if( !arc_in->fp )
     return 0;
@@ -95,10 +131,10 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   // non-null -- which is the value the comparison had already put there.
   if( extra_blk )
     p_i->flags |= flags_tail;
-  bmf_cx.near_lossless_q = 0;
+  near_lossless_q = 0;
   hdr.header_from(p_i);
   hdr.flags = p_i->flags;
-  bmf_cx.plane_count = ((p_i->depth&depth_bits)+7)>>3;
+  plane_count = ((p_i->depth&depth_bits)+7)>>3;
   // An image member, version 2.0.  This was an `fwrite` of the first four
   // bytes of `"\x81\x8A" "20\x81\x90" "20a+b"` -- both signatures and three
   // more bytes in one literal, of which only the first four were ever written,
@@ -113,7 +149,7 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
   // Anything shorter than the header describing it is not worth coding, and the
   // `goto write_raw` that said so jumped the whole of the block below.
   if( p_i->data_size>=0x10u ) {
-    bmf_cx.desc_slow_mode = 1;
+    desc_slow_mode = 1;
     hdr.flags |= flags_coded|flags_slow;
     code_image_body(p_i, hdr);
     // Everything coded; flush the packer's last word and decide whether the
@@ -122,12 +158,12 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
     // `coded_bytes`, once into the header -- and nothing moves the cursor
     // between them.
     packer_flush();
-    const int32_t coded_bytes = bmf_cx.stream.cur-bmf_cx.stream.buf;
+    const int32_t coded_bytes = stream.cur-stream.buf;
     hdr.data_size = (uint32_t)coded_bytes;
     if( (uint32_t)coded_bytes<p_i->data_size ) {
       const uint8_t ok = write_member_head(&hdr, extra_blk, arc_in->fp);
-      int32_t ok_all = (fwrite(bmf_cx.stream.buf, 1u, coded_bytes, arc_in->fp)==(uint32_t)coded_bytes)&ok;
-      free(bmf_cx.stream.buf);
+      int32_t ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc_in->fp)==(uint32_t)coded_bytes)&ok;
+      free(stream.buf);
       if( ok_all&&(p_i->depth&depth_palette)!=0 )
         write_all(&p_i->pixels[p_i->data_size], pal_bytes, arc_in->fp);
       fflush(arc_in->fp);
@@ -135,9 +171,9 @@ int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_bl
         return (int32_t)hdr.data_size;
       return ok_all;
     }
-    free(bmf_cx.stream.buf);
+    free(stream.buf);
     if( p_i->flags&flags_transposed )
-      transpose_image(p_i, bmf_cx.plane_count);
+      transpose_image(p_i, plane_count);
   }
   // The raw member: the image's own sixteen-byte header, which is the same
   // record laid out the same way, and then the pixels.  The transpose above

@@ -88,11 +88,11 @@ static void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk
   } else {
     n_distinct = 0;
   }
-  bmf_cx.rc.encode(n_distinct-1, n_distinct, mask+1);
+  cx->rc.encode(n_distinct-1, n_distinct, mask+1);
   uint32_t n_syms = blk1->alphabet;
   if( n_syms<=mask ) {
     BMF_ASSUME(mask-n_syms+2<=257);
-    lists[0].init(mask-n_syms+2, 1, gap_list_ent);
+    lists[0].init(mask-n_syms+2, 1, cx->gap_list_ent);
     lists[0].rescale_at = 19*lists[0].n;
     n_syms3 = blk1->alphabet;
     if( n_syms3 ) {
@@ -310,7 +310,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       // read.  `word` likewise: the byte loop shifts it down and the line after
       // reloads it, and the only thing the reload feeds is the carry, which
       // wants the *low* byte.
-      init_byte_lists(lists, n_kids);
+      init_byte_lists(this, lists, n_kids);
       const int32_t alpha_m = blk->alphabet;
       if( alpha_m ) {
         carry = 0;

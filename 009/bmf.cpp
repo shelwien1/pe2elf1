@@ -177,6 +177,7 @@
 #include "alt_p1_block.inc"
 #include "alt_p2_block.inc"
 #include "model.inc"
+#include "codec.inc"
 #include "bmp.inc"
 #include "file.inc"
 #include "rc_io.inc"
@@ -198,6 +199,16 @@
 #include "bmp_write.inc"
 #include "image_expand.inc"
 #include "image_compress.inc"
+
+// **The one codec this program keeps**, and the only place a `BMFCodec` is
+// named outside the class.  It is 86 MB, so it is made once and reused rather
+// than per image; a caller that wanted two would make two, which is what
+// `tools/parallel.cpp` does.
+//
+// Static rather than a local of `main` because 86 MB is more than a thread's
+// stack, and file-scope rather than a member of anything because this is the
+// program's own driver -- the class it drives has no file-scope name left.
+static BMFCodec bmf_codec;
 
 void bmf_compress(const char* InName, const char* OutName) {
   int32_t i;
@@ -229,7 +240,7 @@ void bmf_compress(const char* InName, const char* OutName) {
         p_i->depth = (Depth|depth_grey)^depth_palette;
     }
   }
-  int32_t coded_len = compress_image(Arc, p_i, bmf_cx.coded_block);
+  int32_t coded_len = bmf_codec.compress_image(Arc, p_i, bmf_codec.coded_block);
   if( !coded_len )
     bmf_fatal(bmf_write_error, OutName);
   printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i->height*p_i->width));
@@ -242,7 +253,7 @@ void bmf_decompress(const char* InName, const char* OutName) {
     arc = bmf_open_file((BmfFile*)nb, (char*)InName, 1);
   else
     arc = nullptr;
-  BmfImage* p_i = expand_image(arc, &bmf_cx.coded_block);
+  BmfImage* p_i = bmf_codec.expand_image(arc, &bmf_codec.coded_block);
   // One image in a file: nothing to parse is not the end of a list of members,
   // it is a file that is not one of ours.
   if( !p_i )
@@ -255,8 +266,8 @@ void bmf_decompress(const char* InName, const char* OutName) {
   }
   if( !write_bmp(p_i, (char*)OutName, 1) )
     bmf_fatal(bmf_write_error, OutName);
-  free(bmf_cx.coded_block);
-  bmf_cx.coded_block = nullptr;
+  free(bmf_codec.coded_block);
+  bmf_codec.coded_block = nullptr;
   free(p_i);
   bmf_close_file(arc);
 }

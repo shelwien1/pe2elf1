@@ -253,6 +253,19 @@ static void bmf_set_denormal_mode() {
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
 }
 
+// One symbol and its count, three bytes packed.  Declared here rather than
+// with `SymList` because `BMFState` holds two arrays of them.
+#pragma pack(push, 1)
+struct SymEntry {
+  uint16_t sym;
+  uint8_t cnt;
+  void set(uint32_t s, uint32_t c) {
+    sym = (uint16_t)s;
+    cnt = (uint8_t)c;
+  }
+};
+#pragma pack(pop)
+
 static inline float bmf_hsum4(const float x[4]) {
   return (x[0]+x[2])+(x[1]+x[3]);
 }

@@ -30,7 +30,7 @@ void AltP2Block::code_banks(int32_t sample16) {
     // the rest of the function five levels in.
     if( !countdown )
       continue;
-    const int32_t w0b = w0+4*((res>bmf_cx.deadzone_hi)-(res<bmf_cx.deadzone_lo));
+    const int32_t w0b = w0+4*((res>cx->deadzone_hi)-(res<cx->deadzone_lo));
     node0->weighted = w0b;
     uint32_t ctxw = bctx;
     // The rate ladder: a counter that keeps seeing a small residual counts
@@ -57,7 +57,7 @@ void AltP2Block::code_banks(int32_t sample16) {
         node0->b1 = countdown;
       }
     }
-    if( bmf_cx.alphabet_reduced )
+    if( cx->alphabet_reduced )
       continue;
     // The mirrored context: the same counter with the top bits of its
     // index flipped, which is the model's guess at what a symmetric
@@ -189,7 +189,7 @@ void AltP2Block::code_banks(int32_t sample16) {
     // sets -- `!(lt ^ of | zf)` over `__OFSUB__` -- because signed
     // less-than *is* `SF != OF`, so `(e_top-deadzone_hi<0) ^ overflow` is
     // the less-than, and not-less-and-not-equal is greater.
-    const int32_t bump = 32*((e_top>bmf_cx.deadzone_hi)-(e_top<bmf_cx.deadzone_lo));
+    const int32_t bump = 32*((e_top>cx->deadzone_hi)-(e_top<cx->deadzone_lo));
     uint32_t w_new = bump+e_top+2;
     // The partial store this was written as -- `LOWORD(w_new) = w_top +
     // (w_new>>2)` -- kept a high half that the next line throws away.

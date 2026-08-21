@@ -864,7 +864,7 @@ struct ModelBlock {
       for( j = 0; j<n_syms; ++j )
         sym_code[j] = j;
       if( (int32_t)depth>8 ) {
-        init_byte_lists(lists, nbytes);
+        init_byte_lists(cx, lists, nbytes);
         if( n_syms ) {
           // Guarded by `if( alphabet )` above.
           carry = 0;
@@ -880,7 +880,7 @@ struct ModelBlock {
         }
       } else if( n_syms<=mask ) {
         BMF_ASSUME(mask-n_syms+2<=257);
-        lists[0].init(mask-n_syms+2, 1, gap_list_ent);
+        lists[0].init(mask-n_syms+2, 1, cx->gap_list_ent);
         lists[0].rescale_at = 19*lists[0].n;
         if( alphabet ) {
           int32_t run = 0;
@@ -1037,7 +1037,7 @@ struct ModelBlock {
     int16_t w1;
     int32_t w3, w4, y;
     uint16_t w2;
-    rc_begin_encode();
+    cx->rc_begin_encode();
     cx->reduce_alphabet(this, pixels);
     int32_t bucket = 0;
     // Fifteen groups, five ranks, five ranks -- constant bounds, so the `do`'s
@@ -1133,7 +1133,7 @@ struct ModelBlock {
         code_row_pixels<0>();
       }
     }
-    rc_end_encode();
+    cx->rc_end_encode();
   }
 
   void unmodel_plane_slow(uint8_t* dst) {
@@ -1142,7 +1142,7 @@ struct ModelBlock {
     int32_t g0, done;
     int32_t lo, w3, w4, w2, lvl_n, n_pix, q2, n_pix2;
     uint8_t *dst_base = &dst[-(depth<8)];
-    rc_begin_decode();
+    cx->rc_begin_decode();
     expand_alphabet();
     int32_t g1 = 0;
     // The encoder's nest, mirrored -- and the decompiler gave each level two
@@ -1241,7 +1241,7 @@ struct ModelBlock {
         out_at = write_row(out_at, nbytes, width);
       }
     }
-    rc_end_decode();
+    cx->rc_end_decode();
     int32_t bpp_raw = depth_raw;
     // The plane was coded at its own depth, so there is nothing to unpack:
     // a guard with nothing after it, holding thirty-nine lines.
@@ -1693,16 +1693,9 @@ struct ModelBlock {
   BMFState* cx;
 };
 
-// The one block the main model needs.  `code_plane` allocates it, runs a plane
-// through it and frees it, and nothing nests: instrumented over the corpus both
-// directions the high-water mark is 1.
-//
-// Not zeroed, matching the `bmf_new` this replaces, and on the same measurement
-// as the p1 pool -- 0xA5 in every byte of the slot on take leaves all 111
-// checks passing, so `layout_workspace` writes everything anything reads.
-//
-// 7.73 MB of `.bss`.
-static BlockPool<ModelBlock, 1> model_blocks;
+// The pool is `BMFCodec::model_blocks`, for the reason given at `AltP1Block`.
+// One slot, because nothing nests a `ModelBlock`: instrumented over the corpus
+// both directions the high-water mark is 1.
 
 // The four `_padN` arrays in `ModelBlock` are the decompilation's record of
 // gaps in the original's frame, and a filler array is a layout contract in a

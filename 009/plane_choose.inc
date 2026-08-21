@@ -36,6 +36,10 @@ static int32_t widest_window(const int32_t* hist, int32_t first, int32_t end,
 // recovery had them in, and that made the axis part of the name rather than an
 // index -- which is why everything below was written twice.
 struct WeightSearch {
+  // The codec whose `weight_pair_cost` scores a candidate.  This struct is a
+  // local of `choose_plane_coding`, so the codec that made it is the one that
+  // fills this in.
+  BMFCodec* cx;
   const BmfImage* img;
   const uint8_t* plane0;
   int32_t plane_a, plane_b;
@@ -56,7 +60,7 @@ struct WeightSearch {
   int32_t trial(int32_t axis, int32_t cand, int32_t step) {
     int32_t pair[2] = { w[0], w[1] };
     pair[axis] = cand;
-    const uint32_t c = weight_pair_cost(img, plane0, plane_a, plane_b,
+    const uint32_t c = cx->weight_pair_cost(img, plane0, plane_a, plane_b,
                                         pair[0], pair[1]);
     if( c<cost ) {
       cost = c;
@@ -181,7 +185,7 @@ static AlphaWeights fit_alpha_weights(const uint8_t* px, const uint8_t* pp,
 // whose result three of the four candidates discard.  That is a fact about the
 // algorithm and not a gap in the corpus, and it is written down because the
 // one-check number looks like a gap and is the first thing a probe reports.
-static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
+void BMFCodec::choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
                                const uint8_t* data_end, int32_t row_stride) {
   // Rows by number rather than by name here, which is what the original spelled
   // in bytes and what the `widest_window` at the end needs anyway: row 0 is the
@@ -280,17 +284,17 @@ static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
     wb = 0;
     wa_slot = 0;
   }
-  bmf_cx.plane_desc[3].weight0 = wa_slot;
-  bmf_cx.plane_desc[3].weight1 = wb;
-  bmf_cx.plane_desc[3].weight2 = wc;
-  bmf_cx.plane_desc[3].src_plane = 3;
-  bmf_cx.plane_desc[3].nrefs = 3;
+  plane_desc[3].weight0 = wa_slot;
+  plane_desc[3].weight1 = wb;
+  plane_desc[3].weight2 = wc;
+  plane_desc[3].src_plane = 3;
+  plane_desc[3].nrefs = 3;
   // Rows 4..7, by the same window and the same layout-read constant
   // as the search above.
-  bmf_cx.plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
+  plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
 }
 
-int32_t choose_plane_coding(BmfImage* img) {
+int32_t BMFCodec::choose_plane_coding(BmfImage* img) {
   // Eight 1024-entry histograms in one block, because both searches below
   // pick a row *by index*.  The decompilation had it as `uint8_t buf[32768]`
   // with three of its rows named and the last five under one name carrying a
@@ -334,9 +338,9 @@ int32_t choose_plane_coding(BmfImage* img) {
   uint32_t next_plane, row;
   int32_t result, xform, wt8, wt4, pred;
   uint32_t best_cost, best;
-  int32_t n_planes = bmf_cx.plane_count;
+  int32_t n_planes = plane_count;
   int32_t data_size = img->data_size;
-  bmf_cx.alphabet_reduced = 1;
+  alphabet_reduced = 1;
   int32_t row_stride = img->stride;
   const uint8_t* data_end = &img->pixels[data_size];
   memset(hists, 0, sizeof hists);
@@ -354,10 +358,10 @@ int32_t choose_plane_coding(BmfImage* img) {
       for( ; pair<(uint32_t)(n_planes/2); ++pair ) {
         const uint8_t pl_even = 2*pair, pl_odd = 2*pair+1;
         row = 2*pair;
-        bmf_cx.plane_desc[row].src_plane = pl_even;
-        bmf_cx.plane_desc[row].nrefs = pl_even;
-        bmf_cx.plane_desc[row+1].src_plane = pl_odd;
-        bmf_cx.plane_desc[row+1].nrefs = pl_odd;
+        plane_desc[row].src_plane = pl_even;
+        plane_desc[row].nrefs = pl_even;
+        plane_desc[row+1].src_plane = pl_odd;
+        plane_desc[row+1].nrefs = pl_odd;
       }
       next_plane = 2*pair+1;
     } else {
@@ -367,8 +371,8 @@ int32_t choose_plane_coding(BmfImage* img) {
     // `next_plane` is unsigned and `result` is not, so naming the value here
     // is what makes the conversion visible; it was always happening.
     if( (uint32_t)n_planes>(uint32_t)result ) {
-      bmf_cx.plane_desc[next_plane-1].src_plane = result;
-      bmf_cx.plane_desc[next_plane-1].nrefs = result;
+      plane_desc[next_plane-1].src_plane = result;
+      plane_desc[next_plane-1].nrefs = result;
     }
     if( n_planes>=3 ) {
       // The three candidate transforms, costed, cheapest kept.  The
@@ -397,12 +401,12 @@ int32_t choose_plane_coding(BmfImage* img) {
       // two turns of a loop counting down by eight: offsets 56, 48, 40, 32
       // then 24, 16, 8, 0.  Sixty-four bytes, which is one row of the table
       // and `4*sizeof(PlaneDesc)`, so it is one copy.
-      memcpy(bmf_cx.plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
+      memcpy(plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
       best_cost = cand_cost[xform][0];
-      int32_t plane_a = bmf_cx.plane_desc[0].src_plane-xform;
-      wt8 = bmf_cx.plane_desc[xform].weight1;
-      int32_t plane_b = bmf_cx.plane_desc[1].src_plane-xform;
-      wt4 = bmf_cx.plane_desc[xform].weight0;
+      int32_t plane_a = plane_desc[0].src_plane-xform;
+      wt8 = plane_desc[xform].weight1;
+      int32_t plane_b = plane_desc[1].src_plane-xform;
+      wt4 = plane_desc[xform].weight0;
       // Coordinate descent on the two weights, four trials to a turn, each a
       // full pass over the image.  Both axes walk down by one until neither
       // can move four steps past its best, then both walk up the same way; a
@@ -412,8 +416,8 @@ int32_t choose_plane_coding(BmfImage* img) {
       // never changes under them.
       {
         const uint8_t *plane0 = &img->pixels[xform];
-        WeightSearch search = { img, plane0, plane_a, plane_b, { wt4, wt8 },
-                                best_cost };
+        WeightSearch search = { this, img, plane0, plane_a, plane_b,
+                                { wt4, wt8 }, best_cost };
         int32_t wt_step = 4;
         search.descend(wt_step, -1);
         search.descend(wt_step, +1);
@@ -470,8 +474,8 @@ int32_t choose_plane_coding(BmfImage* img) {
         wt4 = 64;
         wt8 = 64;
       }
-      bmf_cx.plane_desc[xform].weight0 = wt4;
-      bmf_cx.plane_desc[xform].weight1 = wt8;
+      plane_desc[xform].weight0 = wt4;
+      plane_desc[xform].weight1 = wt8;
       // The widest 256-entry window of one histogram row, and `pos` is its
       // right edge -- truncated to `int8_t`, which is what makes `dc` a byte.
       //
@@ -482,10 +486,10 @@ int32_t choose_plane_coding(BmfImage* img) {
       // as an array index is not something any gate here can see -- all
       // nineteen images produce byte-identical streams at 0 and at 4, checked
       // -- so the measured value is what stays, with the 4 written down.
-      bmf_cx.plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
+      plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
       // The same window over row 4, which is `hist_c[1024..2047]`.
       result = widest_window(hist_c+1024, 0, 512, 255)+1;
-      bmf_cx.plane_desc[plane_b+xform].dc = result;
+      plane_desc[plane_b+xform].dc = result;
       if( n_planes>=4 ) {
         choose_alpha_plane(img, hists, data_end, row_stride);
       }

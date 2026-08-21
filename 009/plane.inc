@@ -16,28 +16,38 @@
 // original's nesting says and it is why this answers `true` for any
 // `plane_alt_model`, not just for the two arms that do something.
 template<int32_t f_DEC>
-static bool alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
-  if( !bmf_cx.plane_alt_model )
+bool BMFCodec::alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+  if( !plane_alt_model )
     return false;
-  const bool p1 = bmf_cx.plane_predictor==pred_p1;
-  if( !p1&&bmf_cx.plane_predictor!=pred_p2 )
+  const bool p1 = plane_predictor==pred_p1;
+  if( !p1&&plane_predictor!=pred_p2 )
     return true;
   // The four entry points come in p1/p2 pairs and each pair has one signature,
   // so the predictor picks *which* of a pair and the depth and direction pick
   // *which pair*.  Written as two nested `if`s under each predictor this was
   // the same ten lines twice, differing in a `1` against a `2`.
+  //
+  // It said that with `(p1 ? f : g)(args)`, picking between two functions by
+  // name.  That stops working the moment they are member functions -- a
+  // pointer-to-member is not a pointer to a function and there is no object in
+  // the ternary to bind one to -- so the choice is an `if` on the same flag.
+  // Four call sites instead of two; the shape the comment describes is intact
+  // and the eight lines it replaced are still not back.
   const bool d8 = (p_i->depth&depth_bits)==8;
   if( d8 ) {
-    if constexpr( f_DEC )
-      (p1 ? alt_model_p1_d8_decode : alt_model_p2_d8_decode)
-        (pixels, p_i->width, p_i->height);
-    else
-      (p1 ? alt_model_p1_d8_encode : alt_model_p2_d8_encode)
-        (pixels, p_i->width, p_i->height, raw);
+    if constexpr( f_DEC ) {
+      if( p1 ) alt_model_p1_d8_decode(pixels, p_i->width, p_i->height);
+      else     alt_model_p2_d8_decode(pixels, p_i->width, p_i->height);
+    } else {
+      if( p1 ) alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
+      else     alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
+    }
   } else if constexpr( f_DEC ) {
-    (p1 ? alt_model_p1_decode : alt_model_p2_decode)(p_i, pixels);
+    if( p1 ) alt_model_p1_decode(p_i, pixels);
+    else     alt_model_p2_decode(p_i, pixels);
   } else {
-    (p1 ? alt_model_p1_encode : alt_model_p2_encode)(p_i, pixels);
+    if( p1 ) alt_model_p1_encode(p_i, pixels);
+    else     alt_model_p2_encode(p_i, pixels);
   }
   return true;
 }
@@ -53,7 +63,7 @@ static bool alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
 // either way: the line above has already dereferenced `blk`, so a null one
 // does not reach here.  Kept, as the wider of the two spellings.
 template<int32_t f_DEC>
-static void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+void BMFCodec::code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   if( alt_model_plane<f_DEC>(p_i, pixels, raw) )
     return;
   ModelBlock* blk = new_model_block(p_i->width, p_i->height,
@@ -63,6 +73,7 @@ static void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   else
     blk->model_plane_slow(pixels);
   blk->free_workspace();
+  model_blocks.give(blk);
 }
 
 // The two names the callers reach for, and they sit together because they are
@@ -71,17 +82,17 @@ static void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
 // `pairshare.py` read this pair at 14 shared lines of 170: it was comparing a
 // body against a call.  With the body in `code_plane` above, the pair is these
 // six lines.
-void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+void BMFCodec::model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   code_plane<0>(p_i, pixels, raw);
 }
 
-void unmodel_plane(BmfImage* p_i, uint8_t* out) {
+void BMFCodec::unmodel_plane(BmfImage* p_i, uint8_t* out) {
   code_plane<1>(p_i, out, nullptr);
 }
 
-void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
-  bmf_cx.plane_predictor = bmf_cx.plane_desc[plane].flags&desc_predictor;
-  bmf_cx.plane_alt_model = (bmf_cx.plane_desc[plane].flags&desc_alt_model)!=0;
+void BMFCodec::model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
+  plane_predictor = plane_desc[plane].flags&desc_predictor;
+  plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
   colour_transform(img, pixels, plane);
   // 1,024 bytes.  The original zeroed them as a `memset` of the unaligned head,
   // one aligned 16-byte store at the tail, and a loop of seven more stepping
@@ -90,11 +101,11 @@ void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
   // rounding takes: the head covers everything below the aligned start (at most
   // 15 bytes), the loop covers 1,008 from there, and the tail store covers what
   // the loop's own offset pushed past the end.  This runs once per plane.
-  memset(bmf_cx.hist_scratch, 0, 1024);
+  memset(hist_scratch, 0, 1024);
   {
     BmfImage hdr = *img;
     hdr.depth = depth_one_plane;
-    if( bmf_cx.plane_predictor==pred_p1&&!bmf_cx.plane_alt_model )
+    if( plane_predictor==pred_p1&&!plane_alt_model )
       predict_med(pixels, img->width, img->height);
     model_plane(&hdr, pixels, pixels);
   }

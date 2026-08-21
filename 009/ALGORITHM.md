@@ -837,11 +837,17 @@ row *past* the end of it — see below.)
 
 **The rate and coefficient tables are not constants.** `P2Coef::fold` runs at
 the top of an image and `restore` at the bottom, and between them the model has
-edited `bmf_p2_coef` and `bmf_p2_rate` in place: rows 4–6 of the coefficients —
+edited `p2_coef` and `p2_rate` in place: rows 4–6 of the coefficients —
 the cross-plane terms — are folded into rows 0–2 and zeroed, and three rate rows
 are set to `bmf_p2_rate_reset`. So a single-plane image and a multi-plane one
 are running different filters out of the same table, and reading the table's
 declared values tells you what the *interleaved* path uses, not the `d8` one.
+
+Those two are members of `BMFState`, seeded in `reset` from `bmf_p2_coef_init`
+and `bmf_p2_rate_init`, which are the genuine constants. They were file-scope
+arrays until the codec became a class, and that is what made the borrow above a
+*shared* session: `tools/parallel.cpp` under ThreadSanitizer caught `fold`
+writing what another codec's `nb_dot` was reading.
 
 One more shape worth knowing because the code depends on it: `NbRow::predict`
 takes `p2_row` as its `nb` argument and writes `nb[7][0..2]` — one row past the
@@ -871,7 +877,7 @@ lazily, allocating on first use.
 
 A second linear stage, `NbRow::predict`, blends **six** weight sets — the six
 pointers in `CtxWeights::row`, each a 7×4 matrix like the one above — using the
-six coefficients of `bmf_p2_mix[mode]`, one row of a 4×6 table. `bmf_p2_coef`
+six coefficients of `bmf_p2_mix[mode]`, one row of a 4×6 table. `p2_coef`
 is separate and earlier: it makes the centre value the features are measured
 against. The result is a mixed prediction.
 

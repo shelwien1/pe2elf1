@@ -25,14 +25,14 @@ enum : int32_t {
 // edits `plane_desc` in place, measures the result, and either keeps it or
 // undoes it -- ten copies of these three lines between them, each with its own
 // spelling of the loop index.
-static void save_descriptors(PlaneDesc* saved) {
+void BMFCodec::save_descriptors(PlaneDesc* saved) {
   for( int32_t k = 0; k<4; ++k )
-    saved[k] = bmf_cx.plane_desc[k];
+    saved[k] = plane_desc[k];
 }
 
-static void restore_descriptors(const PlaneDesc* saved) {
+void BMFCodec::restore_descriptors(const PlaneDesc* saved) {
   for( int32_t k = 0; k<4; ++k )
-    bmf_cx.plane_desc[k] = saved[k];
+    plane_desc[k] = saved[k];
 }
 
 // Ask every plane for one of the two predictors, keeping nothing of what it was
@@ -42,38 +42,38 @@ static void restore_descriptors(const PlaneDesc* saved) {
 // all four were written out in the decompiler's shape: `plane_desc[k++].flags`
 // with the index saved into a second name for the store, under an
 // `if( plane_count > 0 )` guard a `for` does not need.
-static void offer_to_all(int32_t want) {
-  for( int32_t k = 0; k<bmf_cx.plane_count; ++k )
-    bmf_cx.plane_desc[k].flags = (bmf_cx.plane_desc[k].flags&desc_has_refs)|want;
+void BMFCodec::offer_to_all(int32_t want) {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags = (plane_desc[k].flags&desc_has_refs)|want;
 }
 
 // The alternate model taken away from every plane, leaving what else its
 // descriptor says.
-static void drop_alt_model_from_all() {
-  for( int32_t k = 0; k<bmf_cx.plane_count; ++k )
-    bmf_cx.plane_desc[k].flags &= ~desc_alt_model;
+void BMFCodec::drop_alt_model_from_all() {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags &= ~desc_alt_model;
 }
 
 // Every descriptor cleared.
-static void clear_flags_on_all() {
-  for( int32_t k = 0; k<bmf_cx.plane_count; ++k )
-    bmf_cx.plane_desc[k].flags = 0;
+void BMFCodec::clear_flags_on_all() {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags = 0;
 }
 
 // Every descriptor back to the identity order: plane k is plane k, with no
 // transform and no references.
-static void reset_descriptors() {
-  for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
-    bmf_cx.plane_desc[k].flags = 0;
-    bmf_cx.plane_desc[k].src_plane = k;
-    bmf_cx.plane_desc[k].nrefs = k;
+void BMFCodec::reset_descriptors() {
+  for( int32_t k = 0; k<plane_count; ++k ) {
+    plane_desc[k].flags = 0;
+    plane_desc[k].src_plane = k;
+    plane_desc[k].nrefs = k;
   }
 }
 
 // Let every plane that has references use them.
-static void allow_refs_where_present() {
-  for( int32_t k = 0; k<bmf_cx.plane_count; ++k )
-    bmf_cx.plane_desc[k].flags |= bmf_cx.plane_desc[k].nrefs!=0 ? desc_has_refs : 0;
+void BMFCodec::allow_refs_where_present() {
+  for( int32_t k = 0; k<plane_count; ++k )
+    plane_desc[k].flags |= plane_desc[k].nrefs!=0 ? desc_has_refs : 0;
 }
 
 // Transform the planes the way the descriptors currently say, and answer what
@@ -85,9 +85,9 @@ static void allow_refs_where_present() {
 // Four callers then wrote `deep2 = bits <= best; if( deep2 )` -- one name,
 // four unrelated one-shot conditions, none of them read again after the `if`
 // that follows.  They are the conditions now.
-static int32_t transform_cost(BmfImage* tile_img) {
+int32_t BMFCodec::transform_cost(BmfImage* tile_img) {
   transform_planes(tile_img);
-  const int32_t bits = 8*(bmf_cx.stream.cur-bmf_cx.stream.buf);
+  const int32_t bits = 8*(stream.cur-stream.buf);
   packer_flush();
   packer_reset();
   return bits;
@@ -120,7 +120,7 @@ struct PlaneSearch {
 // both to rejoin: the second predictor is only worth a trial when the first came
 // close to the incumbent, and the reference descriptors are tried for every
 // plane but the first.
-static PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf,
+PlaneSearch BMFCodec::search_planes(BmfImage* tile_img, uint8_t* tile_buf,
                                  uint32_t* plane_cost) {
   int32_t best_cost = 0, best_flags = 0;
   // Encode one plane of the trial tile under `flags` and return what it cost,
@@ -133,9 +133,9 @@ static PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf,
   // makes comparing candidates worth anything -- and is also the whole cost of
   // `-Q9`.
   auto probe_plane = [&](int32_t pl, int32_t flags) {
-    bmf_cx.plane_desc[pl].flags = flags;
+    plane_desc[pl].flags = flags;
     model_planes(tile_img, tile_buf, pl);
-    int32_t cost = 8*(bmf_cx.stream.cur-bmf_cx.stream.buf);
+    int32_t cost = 8*(stream.cur-stream.buf);
     packer_flush();
     return cost;
   };
@@ -164,8 +164,8 @@ static PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf,
   // move under it.  The original read it into `nplanes` here, again after the
   // tile copy -- the same value both times -- and again as `nplanes_b` and
   // `nplanes_c` further down.
-  for( int32_t pi = 0; pi<bmf_cx.plane_count; ++pi ) {
-    const int32_t plane_i = bmf_cx.plane_desc[pi].src_plane;
+  for( int32_t pi = 0; pi<plane_count; ++pi ) {
+    const int32_t plane_i = plane_desc[pi].src_plane;
     // Once any plane has taken the p2 model, the cheaper candidates are not
     // offered to the planes after it: mode 0 is skipped outright and the p2
     // trial becomes unconditional.
@@ -215,12 +215,12 @@ static PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf,
     out.n_p1 += pred;
     plane_cost[plane_i] = best_cost;
     out.n_refs += flag8!=0;
-    bmf_cx.plane_desc[plane_i].flags = (uint8_t)best_flags;
+    plane_desc[plane_i].flags = (uint8_t)best_flags;
   }
   return out;
 }
 
-uint32_t search_filter(BmfImage* img) {
+uint32_t BMFCodec::search_filter(BmfImage* img) {
   // The frame was one union of two arms and 36 bytes of pad, and the two arms
   // never overlap: everything in the scalar arm is dead by the `free(tile_buf)`
   // below, and `saved` is first written four lines later.  So it is MSVC
@@ -255,7 +255,7 @@ uint32_t search_filter(BmfImage* img) {
   y0 = (img->height-tile_h)>>1;
   int32_t dx = img->width-tile_w;
   int32_t off_y = y0*img->stride;
-  uint8_t *srcp = img->pixels+bmf_cx.plane_count*(dx>>1)+off_y;
+  uint8_t *srcp = img->pixels+plane_count*(dx>>1)+off_y;
   uint8_t *tile_src = tile_img->pixels;
   // The tile is the middle of the image, `tile_h` rows of it.  The condition
   // was `y0 < tile_h+y0` and the bound `dims[1]+((img->height-dims[1])>>1)`,
@@ -277,7 +277,7 @@ uint32_t search_filter(BmfImage* img) {
   // the other orientation, and one of the two below to put back whichever
   // orientation lost.
   {
-    transpose_image(tile_img, bmf_cx.plane_count);
+    transpose_image(tile_img, plane_count);
     int32_t bits_d = 0;
     // The plane that costs more transposed is the one that settles it, so the
     // walk stops there -- and where it stopped is the answer: `pk` is short of
@@ -285,10 +285,10 @@ uint32_t search_filter(BmfImage* img) {
     // recovery said that with a `break` out of a `while( 1 )` for one exit and
     // a `goto` past the line below for the other.
     int32_t pk = 0;
-    while( pk<bmf_cx.plane_count ) {
-      pl_k = bmf_cx.plane_desc[pk].src_plane;
+    while( pk<plane_count ) {
+      pl_k = plane_desc[pk].src_plane;
       model_planes(tile_img, tile_buf, pl_k);
-      const int32_t bits = 8*(bmf_cx.stream.cur-bmf_cx.stream.buf);
+      const int32_t bits = 8*(stream.cur-stream.buf);
       packer_flush();
       bits_d += bits;
       packer_reset();
@@ -296,20 +296,20 @@ uint32_t search_filter(BmfImage* img) {
         break;
       ++pk;
     }
-    if( pk<bmf_cx.plane_count )
+    if( pk<plane_count )
       bits_d += best_bits+1;
     if( bits_d+(bits_d>>12)>=best_bits ) {
       // Transposed is no better: put the tile back and leave the image alone.
-      transpose_image(tile_img, bmf_cx.plane_count);
+      transpose_image(tile_img, plane_count);
     } else {
       // Transposed is better, so the whole image turns with it and the tile
       // stays as it is.
       best_bits = bits_d;
-      transpose_image(img, bmf_cx.plane_count);
+      transpose_image(img, plane_count);
     }
   }
   free(tile_buf);
-  if( bmf_cx.plane_count>2 ) {
+  if( plane_count>2 ) {
     if( ps.n_p1 ) {
       save_descriptors(saved);
       offer_to_all(try_p1);
@@ -337,7 +337,7 @@ uint32_t search_filter(BmfImage* img) {
       // `nplanes_c` was `plane_count` assigned before this loop and again on
       // every turn of it, and nothing here writes the count -- three spellings
       // of one read.
-      if( bmf_cx.plane_count==ps.n_p2&&bmf_cx.plane_count-1==ps.n_refs ) {
+      if( plane_count==ps.n_p2&&plane_count-1==ps.n_refs ) {
         cand = 0;
       } else {
         const int32_t bits_a = transform_cost(tile_img);
@@ -357,7 +357,7 @@ uint32_t search_filter(BmfImage* img) {
           // is the same call `nb_weights`' bound got: the honest thing is the
           // note, not the improvement.
           ps.n_p2 = bits_a;
-          if( bmf_cx.plane_count-1==ps.n_refs ) {
+          if( plane_count-1==ps.n_refs ) {
             cand = 0;
           } else {
             save_descriptors(saved);
@@ -375,7 +375,7 @@ uint32_t search_filter(BmfImage* img) {
   } else {
     cand = 1;
   }
-  if( !ps.n_p2&&bmf_cx.plane_count>1 ) {
+  if( !ps.n_p2&&plane_count>1 ) {
     uint8_t *tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
     memcpy(tile_copy, tile_src, tile_img->data_size);
     save_descriptors(saved);
@@ -400,7 +400,7 @@ uint32_t search_filter(BmfImage* img) {
     }
     free(tile_copy);
   }
-  free(bmf_cx.stream.buf);
+  free(stream.buf);
   free((uint8_t*)tile_img);
   return cand;
 }

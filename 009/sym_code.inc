@@ -132,12 +132,12 @@ int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
   }
 }
 
-void encode_symbol_tree(BMFState* cx, uint16_t* freq, int32_t sym) {
-  cx->code_symbol_tree<0>(freq, sym);
+void BMFState::encode_symbol_tree(uint16_t* freq, int32_t sym) {
+  code_symbol_tree<0>(freq, sym);
 }
 
-int32_t decode_symbol_tree(BMFState* cx, uint16_t* freq) {
-  return cx->code_symbol_tree<1>(freq, 0);
+int32_t BMFState::decode_symbol_tree(uint16_t* freq) {
+  return code_symbol_tree<1>(freq, 0);
 }
 
 // One symbol of the one-bit model's alphabet.  The two directions meet at the
@@ -164,18 +164,18 @@ int32_t CounterNode::code_symbol(BMFState* cx, int32_t ctx, int32_t sym) {
   uint16_t *cur = c;
   const uint32_t tot = total&0x7FFF;
   if constexpr( f_DEC ) {
-    sym = bmf_cx.rc.get_freq(tot);
+    sym = cx->rc.get_freq(tot);
     cum = c[0];
     while( cum<=(uint32_t)sym )
       cum += *++cur;
-    bmf_cx.rc.decode(cum-*cur, cum, tot);
+    cx->rc.decode(cum-*cur, cum, tot);
   } else {
     slot = sym_slot(sym);
     cum = 0;
     for( int32_t k = 0; k<slot; k++ )
       cum += c[k];
     cur = &c[slot];
-    bmf_cx.rc.encode(cum, cum+*cur, tot);
+    cx->rc.encode(cum, cum+*cur, tot);
   }
   // Halve or third every counter once the total passes 0x2000, and start the
   // new total at 0x8000 -- the top bit is the flag `tot` masks off above.
@@ -217,9 +217,9 @@ int32_t CounterNode::code_symbol(BMFState* cx, int32_t ctx, int32_t sym) {
                 .bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96)
                 .raw((uint32_t)ctx));
     if constexpr( f_DEC )
-      slot += 2*decode_symbol_tree(cx, strip);
+      slot += 2*cx->decode_symbol_tree(strip);
     else
-      encode_symbol_tree(cx, strip, (sym-5)>>1);
+      cx->encode_symbol_tree(strip, (sym-5)>>1);
   }
   return slot;
 }

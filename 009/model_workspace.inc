@@ -25,7 +25,6 @@ void ModelBlock::free_workspace() {
   free(sym_word);
   free_sym_lists(sel1_list);
   free_sym_lists(sel0_list);
-  model_blocks.give(this);
 }
 
 // A block on the heap, laid out for one image.  Both plane coders wrote the
@@ -33,16 +32,16 @@ void ModelBlock::free_workspace() {
 // the raw pointer if `bmf_new` returned one, and hand back null otherwise --
 // which the caller then dereferenced unconditionally.  That is the binary's
 // behaviour and it stays; the guard is one place now rather than two.
-ModelBlock* new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
+ModelBlock* BMFCodec::new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
   void* raw = model_blocks.take(false);
-  return ((ModelBlock*)raw)->layout_workspace(&bmf_cx, img_w, img_h, img_depth);
+  return ((ModelBlock*)raw)->layout_workspace(this, img_w, img_h, img_depth);
 }
 
 ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth) {
   cx = state;
   int32_t j;
   uint32_t k, m, s, n;
-  bmf_cx.exclusion_gen = 1;
+  cx->exclusion_gen = 1;
   width = img_w;
   height = img_h;
   depth = img_depth;
@@ -105,7 +104,7 @@ ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t 
   memset(ctx_id1, 255, sizeof ctx_id1);
   memset(ctx_id2, 255, sizeof ctx_id2);
   memset(ctx_id3, 255, sizeof ctx_id3);
-  memset(bmf_cx.exclusion_mask, 0, sizeof bmf_cx.exclusion_mask);
+  memset(cx->exclusion_mask, 0, sizeof cx->exclusion_mask);
   sel[0] = nullptr;
   sel[1] = nullptr;
   escape_list = nullptr;

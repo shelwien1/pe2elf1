@@ -99,11 +99,6 @@ struct P1Ctx {
 static inline int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb);
 static inline int32_t nb_resid(const AltP1Block* nb);
 
-// As `AltP2Block`, one file over: the pool holds these by value so it cannot
-// come before the class, and `alt_p1_free` gives one back from inside it.
-struct AltP1Block;
-static void p1_block_give(AltP1Block* p);
-
 struct AltP1Block {
   // How far a cursor sits into its row, and how far past the last sample the
   // row-end mirror reaches.  Both are load-bearing and neither was written
@@ -409,9 +404,9 @@ struct AltP1Block {
   template<int32_t f_DEC>
   void d8_body(uint8_t* src, uint8_t* out) {
     if constexpr( f_DEC )
-      rc_begin_decode();
+      cx->rc_begin_decode();
     else
-      rc_begin_encode();
+      cx->rc_begin_encode();
     // The same bare block as `alt_model_p1`'s, around the same loop.
     for( int32_t y = 0; y<height; ++y ) {
       advance_row();
@@ -437,9 +432,9 @@ struct AltP1Block {
       }
     }
     if constexpr( f_DEC )
-      rc_end_decode();
+      cx->rc_end_decode();
     else
-      rc_end_encode();
+      cx->rc_end_encode();
   }
 
   // One selector's counters, and there are nine of them -- `ctx_w[0]` through
@@ -657,9 +652,6 @@ struct AltP1Block {
   // g++ reports under `-Wuse-after-free`.  All three call sites discarded it;
   // the one that did not, `alt_model_p1_d8_decode`, only passed it on to
   // another caller that did.
-  void alt_p1_free() {
-    p1_block_give(this);
-  }
 
   // The five rows the ring above points into.  Last in the struct so that no
   // member's offset moves: what the ring holds is five pointers, and where they
@@ -698,15 +690,10 @@ struct AltP1Block {
 // 9.61 MB apiece, 38.5 MB of `.bss` -- the largest single thing in this
 // program's image, and the reason the out-of-memory ladder in `test.sh` starts
 // where it does.
-static BlockPool<AltP1Block, 4> p1_blocks;
-
-static AltP1Block* p1_block_take() {
-  return p1_blocks.take(false);
-}
-
-static void p1_block_give(AltP1Block* p) {
-  p1_blocks.give(p);
-}
+// The pool is `BMFCodec::p1_blocks`.  It cannot be here: it holds `AltP1Block`
+// by value and every block holds a `BMFState*`, so the two would have to be
+// complete before each other.  A block therefore does not put itself back --
+// its caller does, which is the one place that has a codec.
 
 static inline int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb) {
   const P1Ctx* r = nb->cursor[0];

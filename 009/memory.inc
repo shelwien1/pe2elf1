@@ -5,13 +5,51 @@
 // with `-DBMF_HIGH_ARENA` and existing for one purpose -- to prove the program
 // does not care where its memory is.  A pointer stored through a 32-bit
 // integer would fault there and nowhere else, which is what `tools/x32.sh` and
-// the high-arena gate (92 of 93 checks) are between them checking.
+// the high-arena gate (110 of 111 checks) are between them checking.
+//
+// **The arena is the one thing left that two codecs share.**  Everything a
+// `BMFCodec` touches is a member of it, so two of them run in one process
+// without meeting -- except here, where the bump pointer and the forty free
+// lists are file-scope by construction and cannot be anything else: an
+// allocator per codec would defeat what this leg exists to prove.  So the four
+// entry points take a lock.  See `bmf_arena_lock` below for why it is a
+// spinlock and not a `std::mutex`.
+//
+// **This lock is there by inspection and not by a test that failed without it**,
+// which is the opposite of how everything else in this tree was justified, so
+// it is worth saying why.  `tools/parallel.cpp` passes against this leg with the
+// lock stubbed out -- eight threads allocating a few dozen times each will not
+// reliably interleave a bump pointer -- and ThreadSanitizer, which would see it
+// on the first access, *will not start against this leg at all*: with
+// `-DBMF_HIGH_ARENA` its own shadow reservation fails before `main`
+// (`ThreadSanitizer: mmap at bad address`), reproducibly and with ASLR off, and
+// the same tree built without the define runs under it fine.  So there is no
+// instrument here that can report, and what stands instead is the code: both
+// `bmf_arena_used += need+16` and the free list's head swap are
+// read-modify-write on shared words, and neither is atomic.
 #if UINTPTR_MAX>0xFFFFFFFFu&&defined(BMF_HIGH_ARENA)
 #include <sys/mman.h>
 #define BMF_ARENA_BYTES ((size_t)768<<20)
 #define BMF_ARENA_AT ((void*)0x0000200000000000ull)
 static char* bmf_arena;
 static size_t bmf_arena_used;
+
+// The whole allocator under one lock, held across a bump or a list push -- tens
+// of instructions, never a syscall except the one `mmap` the first caller makes.
+// A `std::mutex` would be correct too and would pull `<mutex>` and a
+// pthread dependency into a leg whose entire point is that it is the same
+// program somewhere else in the address space; `__atomic_test_and_set` is two
+// instructions, needs no header, and both compilers `tools/sweep.sh` runs have
+// had it for a decade.  The default build has none of this: `malloc` is already
+// thread-safe and the `#if` leaves it alone.
+static volatile char bmf_arena_lock;
+static void bmf_arena_acquire(void) {
+  while( __atomic_test_and_set(&bmf_arena_lock, __ATOMIC_ACQUIRE) )
+    __builtin_ia32_pause();
+}
+static void bmf_arena_release(void) {
+  __atomic_clear(&bmf_arena_lock, __ATOMIC_RELEASE);
+}
 static void bmf_arena_init(void) {
   void* p = mmap(BMF_ARENA_AT, BMF_ARENA_BYTES, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE, -1, 0);
   bmf_arena = (p==MAP_FAILED) ? nullptr : (char*)p;
@@ -38,7 +76,10 @@ static int32_t bmf_bucket_of(size_t n) {
   return min32(b, BMF_BUCKETS-1);
 }
 
-static void*bmf_malloc(size_t n) {
+// The body is what it was; the lock is the wrapper below it, so that what this
+// leg is checking -- the arithmetic on a pointer above 4 GB -- reads the same as
+// it did before anything ran two of these at once.
+static void* bmf_malloc_locked(size_t n) {
   if( !bmf_arena )
     bmf_arena_init();
   int32_t b = bmf_bucket_of(n);
@@ -57,6 +98,13 @@ static void*bmf_malloc(size_t n) {
   return p;
 }
 
+static void*bmf_malloc(size_t n) {
+  bmf_arena_acquire();
+  void* p = bmf_malloc_locked(n);
+  bmf_arena_release();
+  return p;
+}
+
 static void bmf_free(void* p) {
   if( !p )
     return;
@@ -64,8 +112,13 @@ static void bmf_free(void* p) {
   // One comparison, not two: a negative `b` wraps past the bucket count.
   if( (uint32_t)b>=BMF_BUCKETS )
     return;
+  // The read of the bucket word is inside the lock with the write, which is the
+  // whole of what the free list needs: two threads pushing into one bucket would
+  // otherwise both read the same head and one of the two blocks would be lost.
+  bmf_arena_acquire();
   *(void**)p = bmf_bucket[b];
   bmf_bucket[b] = p;
+  bmf_arena_release();
 }
 
 #define malloc bmf_malloc
@@ -112,7 +165,19 @@ struct BlockPool {
   // went through it.  Nothing here is known to need it; keeping it means the
   // question does not have to be answered.
   alignas(4096) T slot[N];
-  uint8_t taken[N];
+
+  // **Zeroed, and the slots deliberately are not.**  A pool used to be a
+  // file-scope static, so `taken` started zero because `.bss` does; a codec on
+  // the heap starts with whatever was there, and `take` would then find no free
+  // slot and call `bmf_fatal`.  The parallel test found this the moment it made
+  // a `BMFCodec` with `new`.
+  //
+  // The slots themselves keep no initialiser: what a reused slot holds was
+  // measured when these pools were introduced -- filling every one with 0xA5 on
+  // take leaves the p1 and model pools green at 111 checks -- so the contents
+  // are not read before they are written, and zeroing 86 MB per codec would
+  // cost that for nothing.
+  uint8_t taken[N] = {};
 
   T* take(bool zero) {
     for( int32_t k = 0; k<N; ++k ) {

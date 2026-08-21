@@ -92,15 +92,15 @@ static inline int32_t residual_bin(int32_t own, int32_t w0, int32_t a,
 // `plane_a` and `plane_b` are byte offsets from this plane to the two it
 // references, which is why they are added to the same base rather than passed
 // as pointers.
-static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
+int32_t BMFCodec::weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
                                 int32_t plane_a, int32_t plane_b,
                                 int32_t w4, int32_t w8) {
   int32_t hist[512];
   memset(hist, 0, sizeof hist);
   const int32_t stride = img->stride;
-  const int32_t left = -bmf_cx.plane_count;
+  const int32_t left = -plane_count;
   const int32_t ofs_up = -stride;
-  const int32_t ofs_ul = -stride-bmf_cx.plane_count;
+  const int32_t ofs_ul = -stride-plane_count;
   const uint8_t *p = plane0-ofs_ul;
   const uint8_t *q = plane0+plane_a-ofs_ul;
   const uint8_t *r = plane0+plane_b-ofs_ul;
@@ -118,7 +118,7 @@ static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
   return estimate_cost(hist, 512);
 }
 
-int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
+int32_t BMFCodec::cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
   // Six histograms of a difference, indexed `value + 512`, in one block --
   // which is what the original had: a single 24,576-byte `memset` over six
   // contiguous members.  A round that named the six turned that clear into
@@ -135,7 +135,7 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   int32_t *const hist_zp = hr.r5;     // dz - (dx + dy)/2
   memset(hists, 0, sizeof hists);
 
-  const int32_t planes = bmf_cx.plane_count;
+  const int32_t planes = plane_count;
   // `*(const uint16_t*)&img->stride` -- the low half of a `uint32_t`, which
   // is a truncation on a little-endian machine and a different field on any
   // other.  Cast the value.

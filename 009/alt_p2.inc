@@ -11,11 +11,11 @@
 // The first call on a row has no weights of its own to predict with, so it
 // seeds them from the mixture instead and returns the mixed prediction
 // unchanged.  `uses` is what tells the two apart.
-inline int32_t NbRow::predict(float (*nb)[4], CtxWeights* sets, int32_t mode) {
+inline int32_t NbRow::predict(BMFState* cx, float (*nb)[4], CtxWeights* sets, int32_t mode) {
   const float* mix = bmf_p2_mix[mode];
   float mixed[7][4], centre, prediction, own;
   int32_t i, j, k;
-  centre = nb_dot(bmf_p2_coef, nb);
+  centre = nb_dot(cx->p2_coef, nb);
   nb[7][0] = centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ )
@@ -72,9 +72,9 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
   uint32_t k;
   uint8_t *src_end = src;
   if constexpr( f_DEC )
-    rc_begin_decode();
+    cx->rc_begin_decode();
   else
-    rc_begin_encode();
+    cx->rc_begin_encode();
   P2Ctx *pix = cursor[0];
   if( width>0 ) {
     uint8_t* p = src;
@@ -149,20 +149,20 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
     }
   }
   if constexpr( f_DEC )
-    rc_end_decode();
+    cx->rc_end_decode();
   else
-    rc_end_encode();
+    cx->rc_end_encode();
 }
 
 // One block allocated, one body run, one block freed.  Only the middle line
 // differs, and the two bodies take their arguments in different orders --
 // which is the decompiler's record of two call sites, not two intentions.
 template<int32_t f_DEC>
-void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+void BMFCodec::alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   AltP2Block *blk;
-  AltP2Block *raw = p2_block_take();
+  AltP2Block *raw = p2_blocks.take(true);
   if( raw )
-    blk = raw->alt_p2_alloc(&bmf_cx, i, 0);
+    blk = raw->alt_p2_alloc(this, i, 0);
   else
     blk = nullptr;
   if constexpr( f_DEC )
@@ -170,13 +170,13 @@ void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   else
     blk->alt_p2_d8_body<0>(src, out, i, height);
   if( blk )
-    blk->alt_p2_free();
+    p2_blocks.give(blk);
 }
 
-void alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+void BMFCodec::alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   alt_model_p2_d8<0>(src, i, height, out);
 }
 
-void alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height) {
+void BMFCodec::alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height) {
   alt_model_p2_d8<1>(nullptr, i, height, out);
 }

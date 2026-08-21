@@ -1641,12 +1641,17 @@ names one, and the adjacency is asserted with `offsetof`.
 
 **The rate and coefficient tables are not constants.** `P2Coef::fold` runs at
 the
-top of an image and `restore` at the bottom, and between them `bmf_p2_coef` and
-`bmf_p2_rate` have been edited in place: coefficient rows 4–6, the cross-plane
+top of an image and `restore` at the bottom, and between them `p2_coef` and
+`p2_rate` have been edited in place: coefficient rows 4–6, the cross-plane
 terms, are folded into rows 0–2 and zeroed, and three rate rows are set to
 `bmf_p2_rate_reset`. A single-plane image and a multi-plane one are running
 different filters out of the same table, so the declared values describe the
 interleaved path and not the `d8` one.
+
+Both are `BMFState` members, one pair per codec, seeded in `reset` from the two
+genuine constants `bmf_p2_coef_init` and `bmf_p2_rate_init`. While they were
+file-scope the borrow was shared between codecs, which is what
+`tools/parallel.cpp` found under ThreadSanitizer.
 
 ### 10.2 which filter — 1088 of them
 
@@ -1702,7 +1707,7 @@ and no reference stream would move to say so.
 
 A second linear stage, `NbRow::predict`, blends **six** weight sets — the six
 pointers in `CtxWeights::row`, each a 7×4 matrix — using the six coefficients of
-`bmf_p2_mix[mode]`, one row of a 4×6 table. `bmf_p2_coef` is separate and
+`bmf_p2_mix[mode]`, one row of a 4×6 table. `p2_coef` is separate and
 earlier: it establishes the centre value the features are measured against.
 
 `predict` hands three numbers back through `bias[0..2]`: the centre the features

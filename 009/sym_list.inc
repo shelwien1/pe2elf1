@@ -127,16 +127,8 @@ struct FreqRec {
   }
 };
 
-#pragma pack(push, 1)
-struct SymEntry {
-  uint16_t sym;
-  uint8_t cnt;
-  void set(uint32_t s, uint32_t c) {
-    sym = (uint16_t)s;
-    cnt = (uint8_t)c;
-  }
-};
-#pragma pack(pop)
+// `SymEntry` is in globals.inc now: `BMFState` holds two arrays of them and
+// needs the type complete.
 
 struct SymList {
   uint32_t n;
@@ -440,22 +432,15 @@ static inline void free_sym_entries(SymList*, uint32_t) {
 // choosing which of that position's four lists codes it, which is what the
 // `4*k + carry` index says; both halves of the coder open with this loop.
 // `nbytes` is `(depth + 7) >> 3` and the caller's array is `SymList[16]`, so
-// `4 * nbytes` is at most 16 and the entries are `16 * 256` of them: 12 KB, a
-// static rather than sixteen allocations.  Neither caller is reentrant -- one
-// walks an alphabet to decode it and the other to encode it, one plane at a
-// time.
-static SymEntry byte_list_ent[16*256];
-
-static inline void init_byte_lists(SymList* list, uint32_t nbytes) {
+// `4 * nbytes` is at most 16 and the entries are `16 * 256` of them.  The
+// storage is `BMFState::byte_list_ent` -- it was a file-scope array until the
+// parallel test caught it: two codecs coding two alphabets at once wrote into
+// the same 12 KB, and `t8g` came out 24 bytes longer in a thread than alone.
+static inline void init_byte_lists(BMFState* cx, SymList* list, uint32_t nbytes) {
   for( uint32_t k = 0; k<4*nbytes; ++k )
-    list[k].init(256, 1, &byte_list_ent[k*256]);
+    list[k].init(256, 1, &cx->byte_list_ent[k*256]);
 }
 
-// The gap list both alphabet coders build when the alphabet is sparser than the
-// depth allows.  Reached only where `depth <= 8`, so `mask` is at most 255 and
-// `mask - n_syms + 2` at most 257 -- which is the size below, and the
-// `BMF_ASSUME` beside each use is where that reasoning is checked.
-static SymEntry gap_list_ent[257];
 
 static inline SymListBlock*sym_list_block(SymList* list) {
   return (SymListBlock*)((uint8_t*)list-__builtin_offsetof(SymListBlock, list));
