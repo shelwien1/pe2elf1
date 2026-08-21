@@ -367,8 +367,7 @@ struct SymList {
     uint32_t result;
     const uint32_t n_u = (uint32_t)n_syms;
     n = n_syms;
-    SymEntry* buf = storage;
-    ent = buf;
+    ent = storage;
     if( dense ) {
       tot = 0;
       live = n_u;
@@ -383,7 +382,7 @@ struct SymList {
       rescale_at = 20*n_u;
       live = 0;
       since_rescale = 18*n_u;
-      memset(buf, 0, 3*n_u);
+      memset(storage, 0, 3*n_u);
     }
     return;
   }
