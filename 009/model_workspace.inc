@@ -21,10 +21,7 @@ static void free_sym_lists(SymList* lists) {
 // hold `this` as a return value wherever MSVC left it there, and a flag whose
 // false arm no caller takes as a parameter.
 void ModelBlock::free_workspace() {
-  free(sym_code);
   free(sym_word);
-  free(run_bucket);
-  free(alpha_map);
   free_sym_lists(sel1_list);
   free_sym_lists(sel0_list);
   free(escape.ent);
@@ -44,7 +41,6 @@ ModelBlock* new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
 ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth) {
   int32_t j;
   uint32_t k, m, s, n;
-  uint32_t w = img_w;
   exclusion_gen = 1;
   width = img_w;
   height = img_h;
@@ -67,13 +63,16 @@ ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t im
     // `w = width` the loop re-did on every record.  The 16 is the two margins:
     // `ModelBlock::kRowMargin` on the left, which is what makes `row[-8]`
     // defined once the cursor has stepped, and `kRowTail` on the right.
-    w = width;
+    //
+    // `w` itself is gone too: it was `img_w` at the top and `width` here, and
+    // its last reader was the `bmf_new(w + 1)` that `run_bucket_store` replaced.
     for( uint32_t r = 0; r<width+(uint32_t)(ModelBlock::kRowMargin+ModelBlock::kRowTail); ++r ) {
       row_cur[j][r].sym = 0;
       for( int32_t i = 0; i<6; ++i ) row_cur[j][r].match[5-i] = 1;
     }
   }
-  uint8_t* runs = (uint8_t*)bmf_new(w+1);
+  BMF_ASSUME(width<=(uint32_t)kMaxWidth);
+  uint8_t* runs = run_bucket_store;
   run_bucket = runs;
   *runs = 0;
   {

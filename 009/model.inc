@@ -830,7 +830,8 @@ struct ModelBlock {
   // selector cursor, and the two selector lists.  Both plane coders wrote this
   // out; the decoder's copy read the same object under two more names.
   void seed_alphabet() {
-    uint8_t* map = (uint8_t*)bmf_new(alphabet);
+    BMF_ASSUME(alphabet>0&&alphabet<=no_symbol+1);
+    uint8_t* map = alpha_map_store;
     alpha_map = map;
     memset(map, 1, alphabet);
     escape_list = &escape;
@@ -855,7 +856,7 @@ struct ModelBlock {
     uint32_t n_1 = rc_decode_flat(cap);
     alphabet = n_1+1;
     if( (int32_t)(n_1+1)<=0x2000 ) {
-      void* codes = bmf_new(sizeof(uint32_t)*(n_1+1));
+      void* codes = sym_code_store;
       // `n_syms` was re-read from `alphabet` at four points of this body, and
       // `codes_p` from `sym_code` at two more, across loops that touch
       // neither.  One read of each.
@@ -1645,6 +1646,14 @@ struct ModelBlock {
     }
   }
 
+  // Three more of this block's buffers, bounded and so members.  `alphabet` is
+  // at most `no_symbol + 1` -- the decoder refuses anything above 0x2000
+  // outright -- and a run bucket is one byte per column plus one.  8 KB, 32 KB
+  // and 64 KB against three `bmf_new` calls and three `free`s an image.
+  uint8_t alpha_map_store[no_symbol+1];
+  uint32_t sym_code_store[no_symbol+1];
+  uint8_t run_bucket_store[kMaxWidth+1];
+
   // The five rows both cursor sets point into, last in the struct so that no
   // member's offset moves.  8 bytes to the record and `kMaxWidth + 16` records
   // to the row: 2.6 MB, against five `bmf_new` calls and five `free`s an image.
@@ -1689,10 +1698,10 @@ static BlockPool<ModelBlock, 1> model_blocks;
 static_assert(offsetof(ModelBlock, bit_root) == 1051720, "_pad1051664 sizes the gap");
 static_assert(offsetof(ModelBlock, escape) == 1078224, "_pad16 sizes the gap");
 static_assert(offsetof(ModelBlock, sel_cur) == 1078304, "_pad22 sizes the gap");
-static_assert(offsetof(ModelBlock, row_store) == 8102552, "_pad25 closes the record");
+static_assert(offsetof(ModelBlock, alpha_map_store) == 8102552, "_pad25 closes the record");
 #else
 static_assert(offsetof(ModelBlock, bit_root) == 1051680, "_pad1051664 sizes the gap");
 static_assert(offsetof(ModelBlock, escape) == 1078184, "_pad16 sizes the gap");
 static_assert(offsetof(ModelBlock, sel_cur) == 1078232, "_pad22 sizes the gap");
-static_assert(offsetof(ModelBlock, row_store) == 8102448, "_pad25 closes the record");
+static_assert(offsetof(ModelBlock, alpha_map_store) == 8102448, "_pad25 closes the record");
 #endif
