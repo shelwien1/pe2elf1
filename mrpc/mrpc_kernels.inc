@@ -3,10 +3,31 @@
 //
 // Kept in the binary rather than in a .cl file next to it: the program is
 // built at run time anyway, and a codec that cannot find its kernels is a
-// codec that cannot compress.  Everything the kernels need to agree with
-// the host about (tap counts, table strides, the padding of the bordered
-// raster) is passed as -D on the build line from MrpcCL::Build, so the
-// two cannot drift.
+// codec that cannot compress.  What the kernels have to agree with the
+// host about comes over in two ways, and which way is the difference
+// between a program that is built once and one that is built per image:
+//
+//   -D on the build line, from MrpcCL::Build, for what is a property of
+//   the codec -- tap counts, table strides, the padding of the bordered
+//   raster, the block size the cube is cut into.  These are the same for
+//   every image mrpc will ever be handed, and they are the ones worth
+//   having as constants: they are the strides the device compiler folds
+//   into addresses, and passing them as arguments instead measured 4x
+//   slower, because it can no longer prove that neighbouring work-items
+//   touch neighbouring memory.
+//
+//   kernel arguments for what is a property of the image -- the
+//   component count, the row stride of the bordered raster, the size of
+//   a plane.  None of those is a stride the vectorizer cares about: they
+//   multiply row and plane numbers, which are uniform across the
+//   vectorized dimension, and the address still moves one element per
+//   work-item.
+//
+// The tap loop runs to NTMAX rather than to the image's actual tap count
+// so that it stays a constant: coefficients and tap offsets past the end
+// are zero, so the extra terms are zero, and 24 percent more prediction
+// work on a 3-component image buys a program that a 4-component one can
+// use too.
 //
 // The kernels mirror the host functions they replace:
 //
@@ -65,7 +86,8 @@ __kernel void predict_cube(__global const uchar* planes,
                            __global short*       errcube,
                            const int tly, const int tlx,
                            const int bh,  const int bw,
-                           const int ncls)
+                           const int ncls,
+                           const int nc,  const int bsw, const int bn)
 {
   const int tx = get_global_id(0);
   const int ty = get_global_id(1);
@@ -75,36 +97,36 @@ __kernel void predict_cube(__global const uchar* planes,
   const int x = tx-HT_L;
 
   if( !((y>=0)&(y<bh)&(x>=0)&(x<bw)) ) {
-    for( int k = 0; k<NC; k++ ) {
+    for( int k = 0; k<nc; k++ ) {
       const short h = halo[(k*TH+ty)*TW+tx];
       for( int c = 0; c<CLGRP; c++ )
         if( c0+c<ncls )
-          errcube[(((c0+c)*NC+k)*TH+ty)*TW+tx] = h;
+          errcube[(((c0+c)*nc+k)*TH+ty)*TW+tx] = h;
     }
     return;
   }
 
-  const int o = (tly+y+PADT)*BSW+(tlx+x+PADL);
-  for( int k = 0; k<NC; k++ ) {
+  const int o = (tly+y+PADT)*bsw+(tlx+x+PADL);
+  for( int k = 0; k<nc; k++ ) {
     int acc[CLGRP];
 #pragma unroll
     for( int c = 0; c<CLGRP; c++ )
       acc[c] = 0;
     __global const int* cf = coef+(c0*MAXC+k)*NTMAX;
-    __global const int* to = tapoff+k*NTPAD;
-    for( int i = 0; i<NTPAD; i++ ) {
+    __global const int* to = tapoff+k*NTMAX;
+    for( int i = 0; i<NTMAX; i++ ) {
       const int v = (int)planes[o+to[i]];
 #pragma unroll
       for( int c = 0; c<CLGRP; c++ )
         acc[c] += v*cf[c*MAXC*NTMAX+i];
     }
-    const int org_ = (int)planes[k*BN+o];
+    const int org_ = (int)planes[k*bn+o];
     for( int c = 0; c<CLGRP; c++ ) {
       if( c0+c>=ncls )
         break;
       const int p = cl_clip(acc[c]);
-      prdcube[(((c0+c)*NC+k)*BSZ+y)*BSZ+x] = (short)p;
-      errcube[(((c0+c)*NC+k)*TH+ty)*TW+tx] = (short)cl_econv(org_, p);
+      prdcube[(((c0+c)*nc+k)*BSZ+y)*BSZ+x] = (short)p;
+      errcube[(((c0+c)*nc+k)*TH+ty)*TW+tx] = (short)cl_econv(org_, p);
     }
   }
 }
@@ -135,7 +157,8 @@ __kernel void pixel_cost(__global const uchar* planes,
                          __global const int*   uw,
                          __global float*       pixcost,
                          const int tly, const int tlx,
-                         const int bh,  const int bw)
+                         const int bh,  const int bw,
+                         const int nc,  const int bsw, const int bn)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -145,11 +168,11 @@ __kernel void pixel_cost(__global const uchar* planes,
     return;
   }
   const int ty = y+HT_T, tx = x+HT_L;
-  const int o = (tly+y+PADT)*BSW+(tlx+x+PADL);
+  const int o = (tly+y+PADT)*bsw+(tlx+x+PADL);
   float c = 0.0f;
 
-  for( int k = 0; k<NC; k++ ) {
-    __global const short* e = errcube+((cl*NC+k)*TH+ty)*TW+tx;
+  for( int k = 0; k<nc; k++ ) {
+    __global const short* e = errcube+((cl*nc+k)*TH+ty)*TW+tx;
     int u = 0;
 #pragma unroll
     for( int i = 0; i<NUM_UPELS; i++ )
@@ -158,17 +181,17 @@ __kernel void pixel_cost(__global const uchar* planes,
     // this pixel's earlier components: if red just missed by 30, green is
     // about to as well
     for( int j = 0; j<k; j++ )
-      u += (int)errcube[((cl*NC+j)*TH+ty)*TW+tx]*64;
+      u += (int)errcube[((cl*nc+j)*TH+ty)*TW+tx]*64;
 #endif
     u >>= 6;
     u = (u>MAX_UPARA) ? MAX_UPARA : u;
 
     const int gr = (int)uq[(cl*MAXC+k)*(MAX_UPARA+1)+u];
-    const int prdc = (int)prdcube[((cl*NC+k)*BSZ+y)*BSZ+x];
+    const int prdc = (int)prdcube[((cl*nc+k)*BSZ+y)*BSZ+x];
     const int q = cl_qprd(prdc);
     const int base = q>>PM_ACC;
     __global const float* cq = costtab+pmoff[k*MRP_GROUP+gr]+(q&(NUM_SUBPM-1))*CSTRIDE;
-    c += cq[base+(int)planes[k*BN+o]]+cq[PMSIZE+base];
+    c += cq[base+(int)planes[k*bn+o]]+cq[PMSIZE+base];
   }
   pixcost[(cl*BSZ+y)*BSZ+x] = c;
 }
@@ -285,15 +308,16 @@ __kernel void group_hist(__global const uchar* org,
                          __global const int*   udx,
                          __global const int*   uw,
                          __global const uint*  cbeg,
-                         __global double*      hist)
+                         __global double*      hist,
+                         const int nc, const int bsw)
 {
   const int gr = get_global_id(0);
   const int k = get_global_id(1);
   const int cl = get_global_id(2);
-  if( k>=NC )
+  if( k>=nc )
     return;
 
-  __global double* h = hist+((size_t)(cl*NC+k)*MRP_GROUP+gr)*(MAX_UPARA+2);
+  __global double* h = hist+((size_t)(cl*nc+k)*MRP_GROUP+gr)*(MAX_UPARA+2);
   for( int i = 0; i<MAX_UPARA+2; i++ )
     h[i] = 0.0;
 
@@ -305,7 +329,7 @@ __kernel void group_hist(__global const uchar* org,
     int u = 0;
 #pragma unroll
     for( int i = 0; i<NUM_UPELS; i++ )
-      u += (int)e[(udy[i]*BSW+udx[i])*NC+k]*uw[i];
+      u += (int)e[(udy[i]*bsw+udx[i])*nc+k]*uw[i];
 #if XUPEL
     for( int j = 0; j<k; j++ )
       u += (int)e[j]*64;
@@ -383,13 +407,13 @@ __kernel void group_dp(__global const double* hist,
                        __global double*       dpbuf,
                        __global short*        trebuf,
                        __global int*          thout,
-                       const int ncls)
+                       const int ncls, const int nc)
 {
   const int cl = get_global_id(0);
   const int k = get_global_id(1);
-  if( cl>=ncls||k>=NC )
+  if( cl>=ncls||k>=nc )
     return;
-  const size_t w = (size_t)(cl*NC+k);
+  const size_t w = (size_t)(cl*nc+k);
 
   __global const double* h0 = hist+w*MRP_GROUP*NU;
   __global double* c0 = cum+w*MRP_GROUP*NU;

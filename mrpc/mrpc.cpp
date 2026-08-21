@@ -1400,7 +1400,7 @@ struct MRPC {
       return 0;
 
     static int tapoff[MAXC*NTMAX];
-    const int np = g_cl.ntpad;
+    const int np = NTMAX; // the kernels' tap loop bound, zero-padded
     for( int k = 0; k<MAXC; k++ )
       for( int i = 0; i<np; i++ )
         tapoff[k*np+i] = (uint(k)<nc&&i<nt[k]) ? int(tpl[k][i]*bn)+tof[k][i] : 0;
@@ -3005,6 +3005,9 @@ int main(int argc, char** argv) {
       case 'V':
         g_clopt.verbose = 1;
         break;
+      case 'k':
+        g_clopt.cache = 1;
+        break;
       case 'd':
         g_clopt.dev = ArgNum(argc, argv, i, "-d");
         break;
@@ -3048,15 +3051,17 @@ int main(int argc, char** argv) {
            "  -p <n>    only look at platform <n> (and number -d within it)\n"
            "  -T <t>    pick by type instead: cpu, gpu, acc\n"
            "  -C        do not use OpenCL at all -- the reference code path\n"
+           "  -k        cache the compiled kernels in the working directory\n"
            "  -V        report what the device compiler had to say\n"
            "\n"
            "With no -d or -T, the first GPU is used, or the first CPU device\n"
            "if there is no GPU.  Anything that goes wrong with the device is\n"
            "reported and the encode continues on the host.\n"
            "\n"
-           "The compiled kernels are cached in the working directory as\n"
-           "<device name>.!cl, and rebuilt whenever the device, the driver, the\n"
-           "kernels or the image geometry change.\n"
+           "-k caches the compiled kernels in the working directory as\n"
+           "<device name>.!cl, and rebuilds them if the device, the driver or\n"
+           "mrpc itself changes.  The kernels do not depend on the image, so\n"
+           "one file serves every image on that device.\n"
            "\n"
            "The image is segmented into %d-odd classes over a quadtree, one\n"
            "linear predictor is fitted per (class, colour component) over\n"

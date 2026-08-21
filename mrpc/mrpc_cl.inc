@@ -148,9 +148,10 @@ struct CLOpts {
   int dev;     // -d, -1 = pick one
   int type;    // -T: 0 any (prefer GPU), 1 cpu, 2 gpu, 3 accelerator
   int verbose; // -V
+  int cache;   // -k, keep the compiled kernels in the working directory
 };
 
-static CLOpts g_clopt = {1, -1, -1, 0, 0};
+static CLOpts g_clopt = {1, -1, -1, 0, 0, 0};
 
 static const char* CLErrStr(cl_int e) {
   switch( e ) {
@@ -282,7 +283,7 @@ static void CLListDevices(FILE* f) {
 
 
 // -------------------------------------------------------------
-// The compiled kernels, cached in the working directory.
+// The compiled kernels, cached in the working directory under -k.
 //
 // Building the program from source costs a second or three on every run,
 // which on a small image is most of the encode.  The device will hand
@@ -290,13 +291,13 @@ static void CLListDevices(FILE* f) {
 // wherever mrpc was run.
 //
 // A binary is only good for the device, the driver, the source and the
-// build options it was made with -- and the options carry the image
-// geometry, so a cache made on one image is stale for another with a
-// different width.  All four are hashed into the header and checked, the
-// binary itself is checksummed against corruption, and anything that does
-// not add up means compiling from source again and overwriting the file.
-// A cache that cannot be written -- a read-only directory -- is not an
-// error, it is just no cache.
+// build options it was made with.  All four are hashed into the header
+// and checked, the binary itself is checksummed against corruption, and
+// anything that does not add up means compiling from source again and
+// overwriting the file.  The options no longer carry the image geometry
+// -- that is what the kernel arguments are for -- so one file serves
+// every image on that device.  A cache that cannot be written -- a
+// read-only directory -- is not an error, it is just no cache.
 // -------------------------------------------------------------
 struct CLCacheHdr {
   char magic[8];
@@ -330,6 +331,7 @@ static qword CLHash(const void* p, size_t n) { // FNV-1a
 struct MrpcCL {
   int active;
   int verbose;
+  int usecache;
   cl_platform_id platform;
   cl_device_id device;
   cl_context ctx;
@@ -350,6 +352,7 @@ struct MrpcCL {
   uint W, H, nc, BS, num_class;
   size_t bn; // plane size, elements
   int ntpad;
+  int a_nc, a_bsw, a_bn; // the same three, as the kernels take them
 
   cl_mem d_planes, d_org, d_prd, d_err, d_grp, d_cpo, d_cpq;
   cl_mem d_coef, d_tapoff, d_uq, d_costtab, d_pmoff;
@@ -410,6 +413,7 @@ struct MrpcCL {
   int Open(const CLOpts &o) {
     memset(this, 0, sizeof(*this));
     verbose = o.verbose;
+    usecache = o.cache;
     CLDevList l;
     l.Enumerate(o.plat);
     if( l.n==0 ) {
@@ -579,29 +583,38 @@ struct MrpcCL {
   }
 
   // --- build ------------------------------------------------------
-  // The image geometry is a compile-time constant for the kernels: nc and
-  // the row stride decide every address they compute, and a device
-  // compiler that knows them vectorizes the tap loops.
+  // Only the codec's own constants go on the build line.  The image's --
+  // component count, row stride, plane size -- are kernel arguments, so
+  // one built program serves every image, which is what makes caching it
+  // per device worth anything.
   int Build(uint W_, uint H_, uint nc_, uint BS_, size_t bn_, int ntmax_, int numclass_, int nfreq) {
     W = W_;
     H = H_;
     nc = nc_;
     BS = BS_;
     bn = bn_;
-    ntpad = (ntmax_+3)&~3;
-    if( ntpad>NTMAX )
-      ntpad = NTMAX; // it indexes a coefficient row, which is NTMAX long
+    (void)ntmax_;
+    ntpad = NTMAX; // the kernels run the tap loop to a constant bound
     num_class = uint(numclass_);
+    // the plane offsets the kernels compute are ints; a raster big enough
+    // to overflow one is a raster no device would allocate anyway
+    if( bn*nc>=size_t(0x7FFFFFFF) ) {
+      fprintf(stderr, "mrpc: opencl: image too large for the device path\n");
+      return 0;
+    }
+    a_nc = int(nc);
+    a_bsw = int(BS);
+    a_bn = int(bn);
 
     char opts[2048];
     snprintf(opts, sizeof(opts),
              "-cl-std=CL1.2 -cl-fast-relaxed-math"
-             " -D NC=%u -D MAXC=%d -D BSW=%u -D BN=%llu -D NTMAX=%d -D NTPAD=%d"
+             " -D MAXC=%d -D NTMAX=%d"
              " -D PADT=%d -D PADL=%d -D HT_T=%d -D HT_L=%d -D HT_R=%d"
              " -D COEF_PREC=%d -D PM_ACC=%d -D NUM_SUBPM=%d -D MAXPRD=%d"
              " -D PMSIZE=%d -D CSTRIDE=%d -D MRP_GROUP=%d -D MAX_UPARA=%d"
              " -D NUM_UPELS=%d -D XUPEL=%d -D SR=%d -D SSR=%d -D NCAND=%d -D COEF_MAX=%d",
-             nc, MAXC, BS, (unsigned long long)bn, NTMAX, ntpad,
+             MAXC, NTMAX,
              PADT, PADL, HT_T, HT_L, HT_R, COEF_PREC, PM_ACC, NUM_SUBPM, MAXPRD,
              PMSIZE, CSTRIDE, MRP_GROUP, MAX_UPARA, NUM_UPELS, XUPEL,
              CL_SR, CL_SSR, CL_NCAND, COEF_MAX);
@@ -616,7 +629,7 @@ struct MrpcCL {
       // second block size is not built at all as things stand
       double t0 = tnow();
       int cached = 0;
-      if( b==0 ) {
+      if( b==0&&usecache ) {
         prog[b] = CacheLoad(o2);
         cached = prog[b]!=0;
       }
@@ -640,11 +653,12 @@ struct MrpcCL {
         e = clBuildProgram(prog[b], 1, &device, o2, 0, 0);
       }
       if( e==CL_SUCCESS ) {
-        if( b==0&&!cached )
+        if( b==0&&usecache&&!cached )
           CacheSave(prog[b], o2);
         if( verbose )
-          fprintf(stderr, "mrpc: opencl: kernels %s %s (%.2fs)\n",
-                  cached ? "from" : "compiled, cached in", cachename, tnow()-t0);
+          fprintf(stderr, "mrpc: opencl: kernels %s (%.2fs)\n",
+                  cached ? "read from the cache" :
+                  usecache ? "compiled, cached" : "compiled", tnow()-t0);
       }
       if( e!=CL_SUCCESS||(verbose&&b==0) ) {
         size_t n = 0;
@@ -810,6 +824,9 @@ struct MrpcCL {
     CLCK(clSetKernelArg(k_predict[b], a++, sizeof(int), &bh), "arg");
     CLCK(clSetKernelArg(k_predict[b], a++, sizeof(int), &bw), "arg");
     CLCK(clSetKernelArg(k_predict[b], a++, sizeof(int), &ncls), "arg");
+    CLCK(clSetKernelArg(k_predict[b], a++, sizeof(int), &a_nc), "arg");
+    CLCK(clSetKernelArg(k_predict[b], a++, sizeof(int), &a_bsw), "arg");
+    CLCK(clSetKernelArg(k_predict[b], a++, sizeof(int), &a_bn), "arg");
     size_t g1[3] = {size_t(tw), size_t(th), size_t((ncls+CL_CLGRP-1)/CL_CLGRP)};
     CLCK(Run(k_predict[b], 3, g1, 0, 0), "predict_cube");
 
@@ -828,6 +845,9 @@ struct MrpcCL {
     CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &tlx), "arg");
     CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &bh), "arg");
     CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &bw), "arg");
+    CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &a_nc), "arg");
+    CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &a_bsw), "arg");
+    CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &a_bn), "arg");
     size_t g2[3] = {size_t(bsz), size_t(bsz), size_t(ncls)};
     CLCK(Run(k_cost[b], 3, g2, 0, 1), "pixel_cost");
 
@@ -941,6 +961,8 @@ struct MrpcCL {
     CLCK(clSetKernelArg(k_hist, a++, sizeof(cl_mem), &d_uw), "arg");
     CLCK(clSetKernelArg(k_hist, a++, sizeof(cl_mem), &d_cbeg), "arg");
     CLCK(clSetKernelArg(k_hist, a++, sizeof(cl_mem), &d_hist), "arg");
+    CLCK(clSetKernelArg(k_hist, a++, sizeof(int), &a_nc), "arg");
+    CLCK(clSetKernelArg(k_hist, a++, sizeof(int), &a_bsw), "arg");
     size_t g[3] = {MRP_GROUP, size_t(nc), size_t(ncls)};
     CLCK(Run(k_hist, 3, g, 0, 4), "group_hist");
     CLCK(clEnqueueReadBuffer(q, d_hist, CL_TRUE, 0,
@@ -965,6 +987,7 @@ struct MrpcCL {
     CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_tre), "arg");
     CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_th), "arg");
     CLCK(clSetKernelArg(k_dp, a++, sizeof(int), &ncls), "arg");
+    CLCK(clSetKernelArg(k_dp, a++, sizeof(int), &a_nc), "arg");
     size_t g[2] = {size_t(ncls), size_t(nc)};
     CLCK(Run(k_dp, 2, g, 0, 6), "group_dp");
     CLCK(clEnqueueReadBuffer(q, d_th, CL_TRUE, 0,

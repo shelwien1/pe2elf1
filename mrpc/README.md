@@ -53,6 +53,19 @@ local memory. The threshold search after it is a 514-state, 16-stage shortest
 path, and there is one per (class, component): 252 of them, all independent,
 and together they were 0.69 s of every iteration.
 
+**What is a constant and what is an argument.** The kernels take the image's
+component count, the row stride of its bordered raster and the size of a plane
+as arguments, so one built program encodes any image. What stays on the `-D`
+line is the codec's own geometry — tap counts, table strides, the padding, the
+block size the cube is cut into — because those are the strides the device
+compiler folds into addresses: passing *them* as arguments measured 4x slower,
+since it can no longer prove that neighbouring work-items touch neighbouring
+memory. The tap loop runs to `NTMAX` rather than to the image's actual tap
+count for the same reason, with zero coefficients past the end; on a
+3-component image that is about 6% more prediction work, and it buys a program
+a 4-component image can use too. Measured against building per image: no
+difference in wall clock on either, and identical output.
+
 Everything else stays on the host: the rangecoder, the quadtree bookkeeping,
 the Gauss-Jordan solve, and the first optimisation loop's `BASE_BSIZE` class
 search — 8x8 pixels is about forty microseconds of arithmetic, which does not
@@ -153,18 +166,19 @@ mrpc -l
   -p <n>    only look at platform <n> (and number -d within it)
   -T <t>    pick by type instead: cpu, gpu, acc
   -C        do not use OpenCL at all -- the reference code path
+  -k        cache the compiled kernels in the working directory
   -V        report what the device compiler had to say, and the device
             time per kernel at the end
 ```
 
-The compiled kernels are cached in the working directory as `<device name>.!cl`
-— `NVIDIA_GeForce_RTX_3090.!cl` — which saves the second or three the device
-compiler costs on every run. The header records hashes of the kernel source,
-the build options (which carry the image geometry, so a cache made on one image
-is stale for another of a different width), the device and driver versions, and
-the binary itself; anything that does not match means compiling from source and
-overwriting the file. A directory it cannot write to is not an error, just no
-cache.
+`-k` caches the compiled kernels in the working directory as
+`<device name>.!cl` — `NVIDIA_GeForce_RTX_3090.!cl` — which saves the second or
+three the device compiler costs on every run. One file serves every image on
+that device: the kernels do not depend on the image (see below). The header
+records hashes of the kernel source, the build options, the device and driver
+versions, and the binary itself; anything that does not match means compiling
+from source and overwriting the file. A directory it cannot write to is not an
+error, just no cache.
 
 With no `-d` or `-T` the first GPU is used, or the first CPU device if there is
 no GPU. Naming a device that is not there stops with status 8; not finding one
