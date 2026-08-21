@@ -2122,3 +2122,49 @@ no instrument that can report, what stands is the code: `bmf_arena_used +=
 need+16` and the free list's head swap are both read-modify-write on shared
 words and neither is atomic.  The default build compiles none of it, because
 `malloc` is already thread-safe.
+
+## The run of copy that was waiting for the class, and a self-test nobody ran
+
+Two loose ends from the round above, both found by running the sweep against the
+tree the class left rather than against the tree it started from.
+
+**`dupblock.py`'s longest run had a note on it saying what would retire it.**
+Five lines: `alt_model_p1` releasing its plane blocks, and `alt_p2_planes_free`
+doing the same thing under a name. The note said the two could not be shared,
+and it was right at the time — the loops differed only in a method name, giving
+both blocks a `release()` had been tried and reverted three files over, and the
+alternatives were a member-function-pointer template or free-function overloads
+plumbed across an include boundary. It ended: *lower it again the moment
+something makes the pair shareable.*
+
+Nothing in this round was aimed at that run. What retired it was the pools
+becoming members of `BMFCodec`, because a block that does not own its own
+release cannot name it differently from its sibling. The only difference left is
+which pool, and a pool is an argument: `BMFCodec::planes_free` is six lines and
+both coders return it. 43 → 38.
+
+So the pattern worth keeping is the *note*, not the merge. A run of copy that
+cannot be shared is usually saying something about the shape above it. Raising
+the ratchet is the honest move when that is the answer — provided the raise
+records what would change it, and provided somebody looks again when the shape
+moves.
+
+**And the smaller one, which is the same defect one level up.** Two tools grew a
+`--selftest` in this round — `dupblock.py`, whose skip decides what counts as
+copy, and `shared.py`, which checks the invariant the class exists for — and
+nothing ran either of them. `sweep.sh` runs `python3 tools/<t>.py bmf.cpp`; the
+flag was never passed.
+
+That is not a small gap, because writing `dupblock.py`'s test is what found that
+its skip had been swallowing `return x;` since the day the tool was written —
+`return` matching the type, `plane_count` matching the declarator. The whole
+value of that discovery evaporates if the test then sits unrun and the skip
+drifts again.
+
+`sweep.sh` now runs `--selftest` on every tool that has one, before the counting
+loop and stopping the sweep if one fails — a tool whose own check fails is not a
+tool reporting zero, and letting it contribute a clean-looking line is worse than
+not running it. The tools are found by grepping for the flag rather than listed,
+so a third that grows one is covered without editing the sweep. Both together
+cost under a tenth of a second. Proven by breaking `dupblock.py`'s keyword list
+and watching the sweep exit 1 and name it.
