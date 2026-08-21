@@ -66,10 +66,28 @@ say 'cross-compile' "$(basename "$tmp/bmf.exe") built, $(stat -c%s "$tmp/bmf.exe
 
 # The memory entry points live here and nowhere else, so this binary is the
 # only one that proves the shims.  `-static` for the reason in the header.
-if ! "$CXXWIN" -std=c++17 -w -O2 -I. -static -o "$tmp/par.exe" \
-        tools/parallel.cpp >"$tmp/par.log" 2>&1; then
-  bad 'cross-compile parallel' "$(grep -m1 'error:' "$tmp/par.log" || echo 'see the log')"
-fi
+#
+# **Twice, because `platform.inc` has two Windows halves.**  The default wants
+# `<windows.h>`, which is the SDK and not the CRT; `BMF_NO_WINDOWS_H` forces the
+# CRT-only fallback that a toolchain with a UCRT and no SDK headers would select
+# on its own through `__has_include`.  A fallback nobody builds is the same
+# guess the shims were before this file existed, and it is the *more* likely
+# path to rot, because the machine that needs it is by definition not this one.
+#
+# Proven distinct: a fault planted in the fallback leaves the default passing
+# and fails only the second, so these are two implementations and not one
+# reached twice.
+for leg in default nosdk; do
+  case $leg in
+    default) flags= ;;
+    nosdk)   flags=-DBMF_NO_WINDOWS_H ;;
+  esac
+  if ! "$CXXWIN" -std=c++17 -w -O2 -I. $flags -static -o "$tmp/par.$leg.exe" \
+          tools/parallel.cpp >"$tmp/par.$leg.log" 2>&1; then
+    bad "cross-compile parallel/$leg" \
+        "$(grep -m1 'error:' "$tmp/par.$leg.log" || echo 'see the log')"
+  fi
+done
 
 if [ "$build_only" = 1 ]; then
   say 'skipped' 'the runs; drop --build for those'
@@ -117,20 +135,21 @@ done
 [ "$differ" = 0 ] && say 'expand' "$n images match the native build" \
                   || bad 'expand' "$differ of $n images differ"
 
-# 3 and 4 -- the shims, and what they leave behind.
+# 3 and 4 -- the shims, and what they leave behind, once per Windows half.
 wtemp="$WINEPREFIX/drive_c/users/$(whoami)/Temp"
-before=$(ls -1 "$wtemp" 2>/dev/null | wc -l)
-if [ -x "$tmp/par.exe" ]; then
-  out=$(timeout 900 "$WINE" "$tmp/par.exe" 2>&1)
+for leg in default nosdk; do
+  [ -x "$tmp/par.$leg.exe" ] || continue
+  before=$(ls -1 "$wtemp" 2>/dev/null | wc -l)
+  out=$(timeout 900 "$WINE" "$tmp/par.$leg.exe" 2>&1)
   rc=$?
   case $out in
-    PASS*) say 'in-memory entry points' "${out%% (*}" ;;
-    *)     bad 'in-memory entry points' "exit $rc -- $(printf '%s\n' "$out" | tail -1)" ;;
+    PASS*) say "in-memory ($leg)" "${out%% (*}" ;;
+    *)     bad "in-memory ($leg)" "exit $rc -- $(printf '%s\n' "$out" | tail -1)" ;;
   esac
   after=$(ls -1 "$wtemp" 2>/dev/null | wc -l)
-  [ "$before" = "$after" ] && say 'temporary files' "none left behind ($after in Temp, as before)" \
-                           || bad 'temporary files' "$before before, $after after -- the shim leaked one"
-fi
+  [ "$before" = "$after" ] && say "temporary files ($leg)" "none left behind" \
+                           || bad "temporary files ($leg)" "$before before, $after after -- it leaked one"
+done
 
 [ "$fails" = 0 ] || { echo "FAILED: $fails of the Windows checks did not answer what they should" >&2; exit 1; }
 echo 'the tree builds and runs for Windows, and answers what the native build answers'

@@ -58,6 +58,19 @@ ALLOWED = {
     # program and the part the codec was never asked to absorb.  It holds the
     # one archive handle a run opens, and `main` calls `bmf_compress` once.
     'arc_store': "main's single archive handle; bmf_compress runs once",
+    # `platform.inc`'s temp-file counter, and the one entry here that is
+    # `thread_local` rather than shared.  It exists only in the Windows arm that
+    # has no SDK headers, where a temporary file's name has to be built by hand
+    # because there is no atomic create to lean on: the name is the process id,
+    # the *address* of this object, and this counter.  A `thread_local` has a
+    # distinct address in each thread, which is what makes two threads unable to
+    # collide -- so being per-thread is not incidental here, it is the mechanism.
+    #
+    # Listed rather than exempted by a rule about `thread_local`, because a
+    # `thread_local` is still file-scope state and the next one might not be
+    # harmless.  Two codecs on one thread share this, and that is correct: they
+    # want different names and the counter is what gives them different names.
+    'bmf_tmp_seq': 'per-thread temp-file counter; its address is the thread key',
     # `read_bmp`'s one padded row of scratch, and the only entry here that costs
     # something.  It is I/O rather than codec -- nothing a `BMFCodec` method
     # reaches -- so it does not weaken what the class claims, but it does mean
@@ -99,7 +112,24 @@ def statements(lines):
             first = i + 1
         if depth == 0 or buf:
             buf += ' ' + code.strip()
-            if code.rstrip().endswith(';') and depth + opens - closes == 0:
+            # **A `}` at depth zero ends a statement too, and leaving it out was
+            # a hole the width of a function definition.**  A function body ends
+            # `}` with no semicolon, so the buffer was never flushed there and
+            # went on collecting -- until the next depth-zero line that *did*
+            # end in `;`, which is the declaration after it.  The two arrived
+            # glued into one string, that string has a `(` in it from the
+            # function's parameter list, and `is_mutable_object` reads a `(`
+            # before the first `=` as "this is a function" and answers None.
+            #
+            # So a global declared immediately below a function definition was
+            # invisible to this tool, which exists to find exactly that.  It
+            # never showed because a `struct ... };` or a prototype usually sits
+            # between and flushes the buffer by ending in `;`.  Found by
+            # planting one and watching this report zero -- see `_PLANTS`, which
+            # now has the shape.
+            tail = code.rstrip()
+            if (tail.endswith(';') or tail.endswith('}')) \
+                    and depth + opens - closes == 0:
                 out.append((first, ' '.join(buf.split())))
                 buf = ''
         depth += opens - closes
@@ -162,6 +192,17 @@ _PLANTS = [
     ('void planted_body() {\n  static const int32_t planted_k = 2;\n}', False),
     ('struct Planted {\n  static uint32_t planted_slot(int32_t b) { return b; }\n};', False),
     ('struct Planted {\n  static const int32_t planted_margin = 4;\n};', False),
+    # **A global directly under a function definition.**  The shape that was
+    # invisible: the body's closing `}` carries no semicolon, so the statement
+    # buffer ran on and swallowed the declaration below it, and the pair read as
+    # a function because of the parameter list.  Both orders are planted, since
+    # only the second was ever broken.
+    ('static int32_t planted_before;\nvoid planted_fn() { }', True),
+    ('void planted_fn() { }\nstatic int32_t planted_after;', True),
+    # And the same with a body that has braces of its own, so the fix is not
+    # just "the first `}` flushes".
+    ('void planted_fn(int32_t k) {\n  if( k ) { k = 0; }\n}\n'
+     'static uint8_t* planted_tail = nullptr;', True),
 ]
 
 

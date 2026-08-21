@@ -41,6 +41,26 @@
 // path and never come through here.
 #ifdef _WIN32
 
+// **Two Windows implementations, and the header decides which.**  The good one
+// wants `<windows.h>`, which is the Windows SDK and not the CRT: a toolchain
+// can have a complete UCRT and no SDK headers at all, which is what a
+// bring-your-own-compiler clang setup often looks like.  `__has_include` is
+// standard C++17 and both clang and MSVC honour it, so the choice needs no
+// configuration -- and `BMF_NO_WINDOWS_H` forces the fallback, which is how the
+// second path is tested on a machine that has both.
+//
+// The difference is worth stating rather than hiding.  With the SDK the file is
+// created by `GetTempFileNameA`, which is atomic and cannot collide, and it is
+// deleted by the *kernel*.  Without it the name has to be built here and the
+// deletion is the CRT's, which means an `abort()` can leave one behind where the
+// SDK path would not.  Neither difference is visible to a caller; both are
+// visible to somebody wondering why a temp directory has a file in it.
+#if __has_include(<windows.h>)&&!defined(BMF_NO_WINDOWS_H)
+#define BMF_WIN_SDK 1
+#endif
+
+#ifdef BMF_WIN_SDK
+
 // `WIN32_LEAN_AND_MEAN` and `NOMINMAX` before the include, and three `#undef`s
 // after it.  This header is included first, so anything it defines is in force
 // over the whole program -- and `windows.h` defines macros named `min`, `max`,
@@ -92,6 +112,51 @@ static FILE* bmf_win_tempfile(void) {
     _close(fd);
   return fp;
 }
+
+#else   // _WIN32 without the SDK headers -- the CRT on its own
+
+#include <process.h>
+
+// The same thing with nothing but the CRT: a name built here, and `"D"` in the
+// mode string, which is the MSVC extension that makes the CRT delete the file
+// when the stream closes.  Confirmed by running it -- the file is gone after
+// `fclose` -- rather than taken from the documentation.
+//
+// **The name has to be unique by construction**, because eight codecs in eight
+// threads come through here and there is no atomic create to fall back on.
+// `"x"` in the mode string would have given one, and this CRT ignores it: a
+// second `fopen(path, "w+bxD")` on a path the first still holds *succeeds*,
+// which was measured and is why the obvious retry loop is not what is here.
+//
+// So three things that cannot repeat: the process id, the address of a
+// thread-local, and a counter inside that thread.  The middle one is the part
+// that does the work -- a `thread_local` has a distinct address in every thread
+// that touches it -- and it costs no header and no atomic, in a file whose
+// point is to need as little as possible from the platform.
+static thread_local uint32_t bmf_tmp_seq;
+
+static FILE* bmf_win_tempfile(void) {
+  const char* dir = getenv("TMP");
+  if( !dir||!*dir )
+    dir = getenv("TEMP");
+  if( !dir||!*dir )
+    dir = ".";
+  char path[1024];
+  const uintptr_t here = (uintptr_t)&bmf_tmp_seq;
+  ++bmf_tmp_seq;
+  // `%llx` against a `uint64_t`, which is exact rather than lucky: this arm is
+  // inside `_WIN32`, and there `uint64_t` *is* `unsigned long long` for both
+  // MSVC and mingw-w64.  Spelled with the named width because that is what this
+  // tree spells and what `unify_types.py` enforces.
+  const int32_t n = snprintf(path, sizeof path, "%s\\bmf%x_%llx_%x.tmp", dir,
+                             (uint32_t)_getpid(), (uint64_t)here,
+                             bmf_tmp_seq);
+  if( n<=0||(size_t)n>=sizeof path )
+    return nullptr;
+  return fopen(path, "w+bD");
+}
+
+#endif  // BMF_WIN_SDK
 
 static FILE* bmf_memopen_read(const void* data, size_t n) {
   FILE* fp = bmf_win_tempfile();

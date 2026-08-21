@@ -2277,3 +2277,61 @@ resolved and every line's origin is one temporary file. Clean by hand, four over
 through the sweep. It is a name rule now, like the three exemptions beside it,
 and the reason is written at the pattern so the next person does not spend the
 afternoon.
+
+## The same report, one toolchain over
+
+The Windows round above was verified with mingw-w64. The next error log came
+from **clang++ against MSVC's UCRT**, which is a different thing, and it carried
+two separate facts.
+
+The first is that the log was from the tree *before* the fix — the failing line
+it quotes, `arc.fp = fmemopen((void*)data, n, "rb");`, no longer exists. Worth
+checking rather than assuming, and it took one `git show`.
+
+The second is the one that mattered: **the gate only ever proved mingw.**
+`platform.inc` reaches for `<windows.h>`, and that is the Windows *SDK*, not the
+CRT. A bring-your-own-compiler clang setup can have a complete UCRT and no SDK
+headers at all — which is exactly what a `C:/VC2019/ucrt/include` in an error
+log suggests. The shim would then fail on the include, one layer past where the
+last one failed.
+
+So there are two Windows halves now, chosen by `__has_include(<windows.h>)`,
+which is standard C++17 and needs no configuration. With the SDK the file comes
+from `GetTempFileNameA` — atomic, cannot collide — and the *kernel* deletes it.
+Without it the name is built here and the CRT deletes it through the `"D"` mode
+flag, confirmed by running it rather than by reading about it.
+
+**The fallback's uniqueness is the interesting part.** Eight codecs in eight
+threads come through it and there is no atomic create to lean on. The obvious
+answer is `"x"` in the mode string and a retry loop; this CRT *ignores* `x` — a
+second `fopen(path, "w+bxD")` on a path the first still holds succeeds, which
+was measured. So uniqueness is by construction instead: the process id, a
+per-thread counter, and the **address** of that counter. A `thread_local` has a
+distinct address in every thread that touches it, so two threads cannot generate
+the same name, and it costs no header and no atomic.
+
+`tools/win.sh` builds and runs both halves, and they are proven distinct: a
+fault planted in the fallback leaves the default passing and fails only the
+second. Four compilers-and-halves compile clean — clang and gcc, SDK and not.
+
+**And the round's real finding, which is not about Windows.** `shared.py` — the
+tool whose entire job is "nothing the codec touches lives at file scope" —
+could not see the new counter. Not because it was `thread_local`: it reported
+zero for a plain `static` in the same place. Its statement scanner flushes its
+buffer on a line ending in `;`, and a function body ends `}` with no semicolon,
+so the buffer ran past the end of the function and swallowed the next
+declaration. The two arrived glued into one string, that string contains the
+function's parameter list, and a `(` before the first `=` reads as "this is a
+function, not an object".
+
+**Any global declared directly beneath a function definition was invisible to
+it**, and had been from the day it was written. It never showed because a
+`struct ... };` or a prototype normally sits between and flushes the buffer by
+ending in `;`. A `}` at depth zero ends a statement now, and `_PLANTS` has the
+shape in both orders plus one with nested braces, so the fix is not merely "the
+first `}` flushes". 13 self-tests became 16.
+
+That is twice in three rounds that adding code to this tree has found a gate
+that could not see it — the ASan pools, and now this. Both were found by the
+same move: write the thing, then check that the tool which should have an
+opinion actually has one.
