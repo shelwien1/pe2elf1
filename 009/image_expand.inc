@@ -143,19 +143,36 @@ bool BMFCodec::expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
   stream.buf = (uint8_t*)bmf_new(hdr.data_size);
   packer_reset();
   uint32_t want = hdr.data_size;
-  if( fread(stream.buf, 1u, hdr.data_size, fp)!=want )
-    return false;
-  if( (img_at->depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
-    plane_predictor = 0;
-    plane_alt_model = 0;
-    unmodel_plane(img_at, img_at->pixels);
-  } else {
-    unmodel_described(img_at, hdr.flags);
+  // **One exit and one `free`, which is a change of shape and not of
+  // behaviour.**  Both refusals below used to `return false` with the coded
+  // buffer still allocated, and for as long as refusing a stream was the last
+  // thing a process ever did that cost nothing.  `expand_from_memory` is what
+  // makes it cost something: the same codec is handed the next stream, so a
+  // caller expanding a hundred and refusing some of them leaked `data_size`
+  // bytes -- an attacker's number -- for each one.
+  //
+  // Justified by reading and not by a probe that went red, and that is worth
+  // being plain about.  The first refusal cannot happen at all: `expand_image`
+  // has already compared `data_size` against what is left in the stream.  The
+  // second needs a stream of the right length whose contents decode to a
+  // different number of bytes, and the decoder calls `bmf_fatal` on most of
+  // those before it gets here.  Nothing in this tree provokes it; what stands
+  // is that a `bmf_new` on one path and a `free` on one of three is wrong on
+  // its face.
+  bool ok = fread(stream.buf, 1u, hdr.data_size, fp)==want;
+  if( ok ) {
+    if( (img_at->depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
+      plane_predictor = 0;
+      plane_alt_model = 0;
+      unmodel_plane(img_at, img_at->pixels);
+    } else {
+      unmodel_described(img_at, hdr.flags);
+    }
+    ok = stream.buf+hdr.data_size==stream.cur;
   }
-  if( stream.buf+hdr.data_size!=stream.cur )
-    return false;
   free(stream.buf);
-  return true;
+  stream.buf = nullptr;
+  return ok;
 }
 
 // **The in-memory entry point**, and the other half of what a caller wants.
@@ -166,6 +183,16 @@ bool BMFCodec::expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
 // The caller frees the image.  `nullptr` means the stream was refused, which is
 // what `expand_image` answers and what the malformed-stream leg of `test.sh`
 // depends on.
+//
+// **`nullptr` is not the only way this fails, and a caller has to know it.**  A
+// stream that can be rejected by inspection -- a bad signature, a length past
+// the end of the buffer, a depth outside 1..4 -- comes back as `nullptr` and
+// leaves the codec usable.  A stream that only falls apart once the arithmetic
+// decoder is inside it calls `bmf_fatal`, which is `noreturn`, and takes the
+// process with it.  That is the original program's design, not this round's,
+// and it is the one thing an in-memory entry point cannot paper over: the
+// decoder has no way to unwind.  `tools/parallel.cpp` checks the recoverable
+// half sixteen times over on one codec and says the same thing at more length.
 BmfImage* BMFCodec::expand_from_memory(const uint8_t* data, size_t n,
                                        CodedTail** tail) {
   // As `compress_to_memory`: each call starts from a fresh codec.

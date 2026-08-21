@@ -89,6 +89,54 @@ static std::vector<uint8_t> expand_once(BMFCodec& cx, const std::vector<uint8_t>
   return out;
 }
 
+// **A codec that refused a stream is still a codec**, and that is only worth
+// checking because the class made it so: before `expand_from_memory` existed, a
+// stream this program would not take ended the process, so whatever the refusal
+// path had not freed did not matter.  Now the same object is handed the next
+// one.
+//
+// Truncation is the refusal this can use, and it is worth writing down why it
+// is the only one.  Corrupting the payload instead was the first attempt, on
+// the theory that a stream of the right length that decodes to the wrong number
+// of bytes reaches furthest in.  It does -- and it never comes back: the
+// arithmetic decoder calls `bmf_fatal(bmf_read_error)` on a stream that does
+// not make sense, which is `noreturn` and takes the process with it.  That is
+// the 1997 program's design and not something this round changes, but it does
+// bound what an in-memory codec can promise: **`expand_from_memory` returns
+// `nullptr` for a stream it can reject by inspection, and exits for one that
+// only falls apart once the decoder is inside it.**
+//
+// So what this checks is the reachable half: a header whose `data_size` runs
+// past the end of the buffer is refused by `expand_image` before anything is
+// allocated, sixteen times over on one codec, and the codec still expands a
+// good stream afterwards.
+static bool refusals_are_clean(const std::vector<uint8_t>& coded) {
+  std::unique_ptr<BMFCodec> cx(new BMFCodec());
+  int32_t refused = 0;
+  for( int32_t r = 0; r<16; ++r ) {
+    BmfImage* img = cx->expand_from_memory(coded.data(), coded.size()/2);
+    if( img )
+      free(img);
+    else
+      ++refused;
+  }
+  // A probe that never provoked the path it is about proves nothing, so it says
+  // so rather than passing quietly.
+  if( refused!=16 ) {
+    fprintf(stderr, "%d of 16 truncated streams were refused -- expected all\n",
+            refused);
+    return false;
+  }
+  // And the codec still works afterwards, which is the other half of the claim.
+  BmfImage* img = cx->expand_from_memory(coded.data(), coded.size());
+  if( !img ) {
+    fprintf(stderr, "a codec that refused a stream would not take a good one\n");
+    return false;
+  }
+  free(img);
+  return true;
+}
+
 int main(int argc, char** argv) {
   bmf_set_denormal_mode();
   const char* files[4] = { "testfiles/t24.bmp", "testfiles/t8g.bmp",
@@ -122,6 +170,9 @@ int main(int argc, char** argv) {
         return 3;
     }
   }
+
+  if( !refusals_are_clean(want_coded[0]) )
+    return 4;
 
   // Eight threads, each with a codec of its own: four compressing, four
   // expanding, and the two directions interleaved so that a compressor and an

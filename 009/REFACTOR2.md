@@ -1939,3 +1939,112 @@ increments `row` in one expression; `BMF_CONV=1` counted it.  `w` in
 `bmf_new(w + 1)`; the same leg said so.  And `left`/`left2` went the same way
 when their free loops became `free_sym_entries`.  A ratchet that counts
 warnings finds this class faster than reading does.
+
+## The codec is a class, and two of them run at once
+
+The ask was that the actual codec become a class -- `main` and the file I/O may
+stay outside, but compressing and expanding an in-memory image have to be
+methods, and it has to be possible to make several of them in one process and
+run them in opposite directions at the same time.
+
+**What was in the way.**  Twenty-three file-scope mutable objects: the coded
+stream, the range coder, the plane descriptors, the deadzone bounds, the model
+tables, the geometry, the exclusion mask, the mode symbols.  Two codecs in one
+process shared every one of them.  That is what a 1997 single-shot compressor
+could afford, and it is what the decompilation had.
+
+**Two classes and not one, and the split point was measured.**  `BMFState` in
+state.inc holds the twenty-three; `BMFCodec` in codec.inc derives from it and
+adds the three block pools.  The pools cannot live in `BMFState` because they
+hold `AltP1Block`, `AltP2Block` and `ModelBlock` *by value* and each of those
+holds a `BMFState*` back.  Splitting at that line is what lets every block
+method stay inline where it already was: `BMFState` is complete before the first
+block class is parsed, and `BMFCodec` is complete before the first thing that
+needs a pool.
+
+Which functions had to be state-level was counted rather than guessed.  Ten are
+called from inside a block class, four of those are already methods of one, and
+the transitive closure of the rest is fourteen.  So fourteen declarations sit in
+`BMFState` and sixty-four are `BMFCodec` methods, and nothing had to be deferred
+out of line or turned into a free function taking a `this`.
+
+**The two entry points.**  `compress_to_memory` and `expand_from_memory` are
+`open_memstream` and `fmemopen` over the file-taking functions rather than a
+second copy of them: a `FILE*` onto a buffer is exactly the shape
+`compress_image` and `expand_image` already took, so the file layer is untouched
+and the codec gained an entry point instead of a fork.  `main` still opens the
+paths and `read_bmp`/`write_bmp` are still the program's, which is what the ask
+allowed for.
+
+**`tools/parallel.cpp` is the check the class exists for**, and it earned its
+place three times over: eight codecs in eight threads, four compressing and four
+expanding, interleaved, three rounds each, every result compared byte for byte
+against what the same codec produced alone.
+
+1. `byte_list_ent` and `gap_list_ent` were still file-scope.  Two codecs at once
+   wrote into the same 12 KB and `t8g` compressed to 43688 bytes in a thread
+   against 43664 alone.  They had survived the census because the allocator
+   round introduced them as *storage* rather than as state.
+2. A heap `BMFCodec` had indeterminate members where a static one had been
+   zeroed, and a codec that had coded once was not in its fresh state any more:
+   three rounds on one codec disagreed with one round.  `reset()`, one `memset`
+   of a standard-layout aggregate, called at both entry points.
+3. **ThreadSanitizer named the third**, which the byte comparison could only say
+   existed: `P2Coef::fold` writing `bmf_p2_coef` while `nb_dot` read it in
+   another thread.  Those two tables read like tuning constants and are not --
+   the model borrows them for the length of one image -- so they became
+   genuinely `const` initialisers and every codec folds its own copy.
+
+**What the legs and the tools found afterwards**, none of it by reading:
+
+  * `-Wshadow` caught `P2Coef p2_coef` shadowing the new member of that name.
+    That warning is in the leg precisely because this tree has no `this->` left
+    to tell a member from a local.
+  * Restoring the p2 tables as members without `alignas(16)` crashed the
+    optimised build inside `nb_dot` and left `-O0` working: the code around them
+    loads them with SSE.  The alignment is written down with the reason now.
+  * Both entry points called `reset()` and *then* read the tail block out of the
+    state it had just cleared, so the recompress channel `main` uses was
+    silently unusable through them and an expanded tail leaked one block per
+    stream.  It is an explicit optional argument on both now.
+  * `methodise.py` reported `ref_transformed` and `alt_p2_start_row` -- a first
+    parameter that is only ever a receiver.  The round that made them that shape
+    is the round that made them free functions taking `this`; they are `BMFState`
+    methods, which is where they can stay put, because `alt_p2_start_row` is
+    about a block and is parsed before `BMFCodec` exists.
+  * LeakSanitizer on the parallel test found 5 MB in four objects -- the test's
+    own sample images, never freed.  Worth fixing rather than filtering: four
+    unfreed images is a page of report standing between a reader and a leak the
+    codec actually had.
+
+**A tool that had to be taught, and a self-test that caught its author twice.**
+`dupblock.py` counts runs of statements written out more than once, and it
+already skips a field list because a struct's members are not statements.
+Sixty-four sorted method declarations put two three-line stretches of
+`codec.inc` into agreement, which took the residue two lines over its ratchet --
+copy that no edit could remove, because the list *is* the class.  Raising the
+ratchet would have recorded a class declaring its methods as a debt, so the skip
+learnt what a prototype is instead.
+
+The `--selftest` written alongside it disagreed twice, and both were real: the
+pattern read `return f(x);` as a prototype -- `return` parsed as the return type
+-- and the planted fixture wrapped its two copies in `void a() {` and
+`void b() {`, which normalise to the same line, so it was measuring its own
+braces.  The keyword guard also un-hid `return x;`, which the *original* field
+pattern had been skipping since the day it was written.  Residue 46 -> 43, and
+the ratchet came down to match.
+
+**The one thing two codecs still share, and it is not settled by a test.**
+Under `-DBMF_HIGH_ARENA` the bump pointer and the forty free lists are
+file-scope by construction -- an allocator per codec would defeat what that leg
+exists to prove -- so the four entry points take a spinlock.  That lock rests on
+inspection, which is the opposite of how everything else here was justified, so
+the code says so: `tools/parallel.cpp` passes against that leg with the lock
+stubbed out, because eight threads allocating a few dozen times each will not
+reliably interleave a bump pointer, and ThreadSanitizer *will not start against
+that leg at all* -- its shadow reservation fails before `main`, reproducibly and
+with ASLR off, while the same tree without the define runs under it fine.  With
+no instrument that can report, what stands is the code: `bmf_arena_used +=
+need+16` and the free list's head swap are both read-modify-write on shared
+words and neither is atomic.  The default build compiles none of it, because
+`malloc` is already thread-safe.
