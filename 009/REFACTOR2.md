@@ -1877,3 +1877,65 @@ still should.  The first reviews the tree at a past state and gives
 its layout table is "a record of where each body went, not something that can be
 run again", with thirty names in it that already did not exist.  A record that
 is updated to match the present is not a record.
+
+## The allocator round: what has a bound, and what does not
+
+The question was which dynamic allocations have a maximum size under 256 MB, and
+those became storage instead of calls.  What made it answerable is that this
+program already refuses everything it cannot size: `read_bmp` takes a width and
+height in 1..65535 and a row no larger than 0xFFFF bytes, `expand_image` refuses
+the same coming back and a plane count outside 1..4, and the alphabet coder
+refuses anything above 0x2000 symbols.  Every bound below is one of those.
+
+**What moved, and what bounds it.**
+
+| was | bound comes from | now |
+| --- | --- | --- |
+| `AltP1Block`, `AltP2Block` | `plane_count` ≤ 4 | `BlockPool<T, 4>` |
+| `ModelBlock` | one at a time, measured | `BlockPool<T, 1>` |
+| five-row rings ×3 | `kMaxWidth` | members of their block |
+| `row0`/`row1` weight rows | `kMaxWidth + 4` | members |
+| the frequency tables | one global pointer | one static array |
+| `read_bmp`'s row scratch | the stride it accepts | one static array |
+| alphabet map, codes, runs | `no_symbol + 1`, `kMaxWidth` | members |
+| the symbol lists and entries | `no_symbol + 1`, fixed per list | members |
+| the archive handle | one per run | one static |
+
+**Two of those bounds are by construction rather than by measurement**, and
+those are the ones worth naming.  The frequency table is reached through a
+single global pointer, so a second one would have to overwrite the first --
+there is nothing to count.  And `expand_alphabet`'s recursion is one level deep
+because the recursive call sets `depth = 8`, which puts the alphabet it then
+reads inside the arm that does not recurse; that is what lets its byte lists be
+one static array rather than a stack of them.
+
+**The rest stay, and stay for the right reason.**  Eleven allocations are sized
+by the image -- `data_size`, `width * height`, `2 * height * width` -- and at
+the widest input this program accepts those reach about 4 GB, which is over the
+line by a factor of sixteen.  They are the pixels and the coded stream, and they
+are exactly what a compressor should be allocating.
+
+**What it cost.**  `.bss` went from about 1 MB to 86.1 MB, and the program's
+floor is now the widest input it accepts rather than the input it was given: a
+16-pixel-wide image carries the same rows a 65535-pixel one does.  What it
+bought is roughly sixteen thousand fewer allocations on an 8192-symbol image --
+`SymList::init` ran twice per symbol -- and a working set that is a
+compile-time constant.
+
+**And it broke a test leg, which is the part worth writing down.**  The
+out-of-memory ladder ran from 4000 KB to 16000 KB looking for the rung where
+`bmf_new` returns null.  With 86 MB in `.bss` every rung died mapping the
+binary's own image before `main`, a SIGSEGV that reads as "died instead of
+reporting" while the program is correct.  Two things were wrong and both are
+fixed by measurement: the ladder's floor is read from the binary with `size`,
+so it cannot go stale behind the pools, and the image it compresses had to grow
+-- with the blocks static, `t1.bmp` needs so little heap that no rung separates
+"cannot map the image" from "succeeds".
+
+**Three loose ends, each caught by a leg within a minute of being made.**  The
+p2 ring seating was written `buf[row++] = row_store[row]`, which reads and
+increments `row` in one expression; `BMF_CONV=1` counted it.  `w` in
+`layout_workspace` lost its last reader when `run_bucket_store` replaced
+`bmf_new(w + 1)`; the same leg said so.  And `left`/`left2` went the same way
+when their free loops became `free_sym_entries`.  A ratchet that counts
+warnings finds this class faster than reading does.

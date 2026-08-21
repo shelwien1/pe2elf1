@@ -91,7 +91,8 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
   rc.encode(n_distinct-1, n_distinct, mask+1);
   uint32_t n_syms = blk1->alphabet;
   if( n_syms<=mask ) {
-    lists[0].init(mask-n_syms+2, 1);
+    BMF_ASSUME(mask-n_syms+2<=257);
+    lists[0].init(mask-n_syms+2, 1, gap_list_ent);
     lists[0].rescale_at = 19*lists[0].n;
     n_syms3 = blk1->alphabet;
     if( n_syms3 ) {

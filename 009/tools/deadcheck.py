@@ -138,6 +138,31 @@ def call_graph(lines):
             for m in re.finditer(r'\?\s*([A-Za-z_]\w*)\s*(?=:)', l):
                 if m.group(1) in free:
                     callers.setdefault(m.group(1), set()).add(n)
+    # **A call outside every body.**  The scan above walks function bodies, so a
+    # name used anywhere else was invisible -- and one place is not exotic: a
+    # `constexpr` function in a member's array bound.
+    # `uint8_t sel1_lists_store[SymListBlock::bytes(no_symbol + 1)];` is a use
+    # of `bytes` that emits no call, and with only bodies scanned the tool
+    # reported it never called while two declarations depended on it.
+    #
+    # So the lines no body covers are scanned too, under one synthetic caller.
+    # The same over-matching argument applies here as above: an edge that should
+    # not be there only makes this more cautious, and a missing edge is a
+    # function reported dead that is not.
+    covered = set()
+    for a, b, _n, _sig, _ in structs.defs(lines):
+        covered.update(range(a, b + 1))
+    for i, l in enumerate(lines):
+        if i in covered or l.lstrip().startswith('//'):
+            continue
+        for m in re.finditer(r'\b([A-Za-z_]\w*)\s*(?:<[^;<>]*>)?\s*\(', l):
+            if m.group(1) in ('if', 'while', 'for', 'switch', 'return',
+                              'sizeof', 'do', 'else', 'catch', 'static_assert',
+                              'alignas', 'offsetof', '__builtin_offsetof'):
+                continue
+            callers.setdefault(shim.get(m.group(1), m.group(1)),
+                               set()).add('<outside any body>')
+
     # A body that only calls itself is not called.  Recursion is a real edge
     # for every other question this graph is asked, but for `is anything left
     # that reaches this`, an edge from a body to itself answers yes about

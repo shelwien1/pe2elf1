@@ -3,13 +3,14 @@
 
 // One bank of symbol lists, and the block behind it.  Written out twice, once
 // for each of the two banks, ten lines apart.
-static void free_sym_lists(SymList* lists) {
-  if( !lists )
-    return;
-  uint32_t n = sym_list_count(lists);
-  for( SymList* p = &lists[n]; p>lists; )
-    free((--p)->ent);
-  free(sym_list_block(lists));
+// Nothing to give back.  Both blocks and every list's entries are members of
+// the `ModelBlock` that owns them, so what this used to do -- walk the lists
+// freeing an `ent` apiece and then free the block -- has no heap behind it.
+//
+// Left as a named no-op rather than deleted at the call sites: the two ends of
+// a block's symbol lists being named is worth keeping, and `deadcheck.py` does
+// not report a function that is called.
+static void free_sym_lists(SymList*) {
 }
 
 // Returns nothing, and takes nothing.  It returned `(void**)this` -- after
@@ -24,7 +25,6 @@ void ModelBlock::free_workspace() {
   free(sym_word);
   free_sym_lists(sel1_list);
   free_sym_lists(sel0_list);
-  free(escape.ent);
   model_blocks.give(this);
 }
 

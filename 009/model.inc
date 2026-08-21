@@ -820,8 +820,8 @@ struct ModelBlock {
   // by weight and 33 for the one that walks by symbol.
   void init_symbol_lists() {
     for( uint32_t s = 0; s<alphabet; ++s ) {
-      sel1_list[s].init(99, 0);
-      sel0_list[s].init(33, 0);
+      sel1_list[s].init(kSel1Syms, 0, &sel1_ent[s*kSel1Syms]);
+      sel0_list[s].init(kSel0Syms, 0, &sel0_ent[s*kSel0Syms]);
     }
   }
 
@@ -835,16 +835,15 @@ struct ModelBlock {
     alpha_map = map;
     memset(map, 1, alphabet);
     escape_list = &escape;
-    escape.init(alphabet, 1);
+    escape.init(alphabet, 1, escape_ent);
     sel_cur = sel;
-    sel1_list = new_sym_lists(alphabet);
-    sel0_list = new_sym_lists(alphabet);
+    sel1_list = new_sym_lists(alphabet, sel1_lists_store);
+    sel0_list = new_sym_lists(alphabet, sel0_lists_store);
     init_symbol_lists();
   }
 
   void expand_alphabet() {
     SymList lists[16];
-    int32_t left2, left;
     uint32_t n_syms, j, carry;
     uint32_t bits = depth;
     uint32_t mask = 0xFFFFFFFF>>(-(uint8_t)depth&31);
@@ -880,7 +879,8 @@ struct ModelBlock {
           }
         }
       } else if( n_syms<=mask ) {
-        lists[0].init(mask-n_syms+2, 1);
+        BMF_ASSUME(mask-n_syms+2<=257);
+        lists[0].init(mask-n_syms+2, 1, gap_list_ent);
         lists[0].rescale_at = 19*lists[0].n;
         if( alphabet ) {
           int32_t run = 0;
@@ -891,14 +891,20 @@ struct ModelBlock {
           }
         }
       }
-      for( left = 15; left>=0; --left )
-        free(lists[left].ent);
+      free_sym_entries(lists, 16);
     } else {
       depth = 8;
       height = height*nbytes;
+      // **One level deep, and that is provable.**  This sets `depth = 8`, so
+      // the inner call's `mask` is 255 and its `cap` 256; `n_1` is then at most
+      // 255 and `n_1 + 1` at most 256, which is inside the `<= 0x2000` arm
+      // above.  The inner call therefore never reaches this `else` and cannot
+      // recurse again -- which is what lets `byte_list_ent` and `gap_list_ent`
+      // be one static array apiece instead of a stack of them.  This call's own
+      // `lists` are cleared and never `init`ed on this path, so there is
+      // nothing of its own in that storage to lose.
       expand_alphabet();
-      for( left2 = 15; left2>=0; --left2 )
-        free(lists[left2].ent);
+      free_sym_entries(lists, 16);
     }
   }
 
@@ -1646,6 +1652,23 @@ struct ModelBlock {
     }
   }
 
+  // The symbol lists' storage.  Two blocks of `alphabet` lists and one entry
+  // array apiece, at a fixed size per list -- 99 entries for a selector-1 list,
+  // 33 for a selector-0 one -- so `sel1_list[s]`'s entries are exactly
+  // `sel1_ent[s * 99 ..]` and nothing has to be tracked.  `escape` is the one
+  // list whose size is the alphabet itself.
+  //
+  // 3.3 MB, and what it replaces is the program's most numerous allocation by
+  // an order of magnitude: two per symbol, so sixteen thousand of them for an
+  // 8192-symbol image, each freed one at a time by `free_sym_lists`.
+  static const int32_t kSel1Syms = 99;
+  static const int32_t kSel0Syms = 33;
+  SymEntry sel1_ent[(no_symbol+1)*kSel1Syms];
+  SymEntry sel0_ent[(no_symbol+1)*kSel0Syms];
+  SymEntry escape_ent[no_symbol+1];
+  alignas(8) uint8_t sel1_lists_store[SymListBlock::bytes(no_symbol+1)];
+  alignas(8) uint8_t sel0_lists_store[SymListBlock::bytes(no_symbol+1)];
+
   // Three more of this block's buffers, bounded and so members.  `alphabet` is
   // at most `no_symbol + 1` -- the decoder refuses anything above 0x2000
   // outright -- and a run bucket is one byte per column plus one.  8 KB, 32 KB
@@ -1698,10 +1721,10 @@ static BlockPool<ModelBlock, 1> model_blocks;
 static_assert(offsetof(ModelBlock, bit_root) == 1051720, "_pad1051664 sizes the gap");
 static_assert(offsetof(ModelBlock, escape) == 1078224, "_pad16 sizes the gap");
 static_assert(offsetof(ModelBlock, sel_cur) == 1078304, "_pad22 sizes the gap");
-static_assert(offsetof(ModelBlock, alpha_map_store) == 8102552, "_pad25 closes the record");
+static_assert(offsetof(ModelBlock, sel1_ent) == 8102552, "_pad25 closes the record");
 #else
 static_assert(offsetof(ModelBlock, bit_root) == 1051680, "_pad1051664 sizes the gap");
 static_assert(offsetof(ModelBlock, escape) == 1078184, "_pad16 sizes the gap");
 static_assert(offsetof(ModelBlock, sel_cur) == 1078232, "_pad22 sizes the gap");
-static_assert(offsetof(ModelBlock, alpha_map_store) == 8102448, "_pad25 closes the record");
+static_assert(offsetof(ModelBlock, sel1_ent) == 8102448, "_pad25 closes the record");
 #endif

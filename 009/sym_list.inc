@@ -353,11 +353,21 @@ struct SymList {
       list[-1].set(s3, c3);
     }
   }
-  void init(int32_t n_syms, int32_t dense) {
+  // `storage` is `n_syms` entries the caller owns.  It was a `bmf_new(3*n_syms)`
+  // here, and this is the one allocation in the program that ran *per symbol*:
+  // `init_symbol_lists` calls this twice for every symbol of the alphabet, so an
+  // 8192-symbol image took sixteen thousand of them and `free_sym_lists` gave
+  // them back one at a time.
+  //
+  // The sizes are fixed per caller -- 99 for a selector-1 list, 33 for a
+  // selector-0 list -- so the storage is a sub-array at a computed offset rather
+  // than an arena with a cursor: `&sel1_ent[s * 99]` needs no bookkeeping and
+  // cannot get out of step with what it handed out.
+  void init(int32_t n_syms, int32_t dense, SymEntry* storage) {
     uint32_t result;
     const uint32_t n_u = (uint32_t)n_syms;
     n = n_syms;
-    SymEntry* buf = (SymEntry*)bmf_new(3*n_syms);
+    SymEntry* buf = storage;
     ent = buf;
     if( dense ) {
       tot = 0;
@@ -397,7 +407,7 @@ static inline void clear_sym_lists(SymList* lists) {
 struct SymListBlock {
   uint32_t n;
   SymList list[0];
-  static uint32_t bytes(uint32_t n) {
+  static constexpr uint32_t bytes(uint32_t n) {
     return __builtin_offsetof(SymListBlock, list)+sizeof(SymList)*n;
   }
 };
@@ -411,29 +421,42 @@ struct SymListBlock {
 // then reads, and the other indexed.  Both mean "clear them all", and the
 // countdown pair also consumed the count it was given, which is why each of
 // those two had to re-read `blk->alphabet` for the next one.
-static SymList* new_sym_lists(uint32_t n) {
-  SymListBlock* block = (SymListBlock*)bmf_new(SymListBlock::bytes(n));
-  if( !block )
-    return nullptr;
+static SymList* new_sym_lists(uint32_t n, void* storage) {
+  SymListBlock* block = (SymListBlock*)storage;
   block->n = n;
   for( uint32_t i = 0; i<n; ++i )
     block->list[i].ent = nullptr;
   return block->list;
 }
 
-static inline void free_sym_entries(SymList* list, uint32_t n) {
-  while( n-- )
-    free(list[n].ent);
+// Nothing to give back, for the reason `free_sym_lists` has none: the entries
+// of a `SymList[16]` come from `byte_list_ent` or `gap_list_ent`, both static.
+// Kept as a named no-op so that the point at which a set of lists is finished
+// with is still written down.
+static inline void free_sym_entries(SymList*, uint32_t) {
 }
 
 // One 256-symbol list per byte position and carry, four to a byte.  The wide
 // alphabet is coded a byte at a time with the carry out of the byte below
 // choosing which of that position's four lists codes it, which is what the
 // `4*k + carry` index says; both halves of the coder open with this loop.
+// `nbytes` is `(depth + 7) >> 3` and the caller's array is `SymList[16]`, so
+// `4 * nbytes` is at most 16 and the entries are `16 * 256` of them: 12 KB, a
+// static rather than sixteen allocations.  Neither caller is reentrant -- one
+// walks an alphabet to decode it and the other to encode it, one plane at a
+// time.
+static SymEntry byte_list_ent[16*256];
+
 static inline void init_byte_lists(SymList* list, uint32_t nbytes) {
   for( uint32_t k = 0; k<4*nbytes; ++k )
-    list[k].init(256, 1);
+    list[k].init(256, 1, &byte_list_ent[k*256]);
 }
+
+// The gap list both alphabet coders build when the alphabet is sparser than the
+// depth allows.  Reached only where `depth <= 8`, so `mask` is at most 255 and
+// `mask - n_syms + 2` at most 257 -- which is the size below, and the
+// `BMF_ASSUME` beside each use is where that reasoning is checked.
+static SymEntry gap_list_ent[257];
 
 static inline SymListBlock*sym_list_block(SymList* list) {
   return (SymListBlock*)((uint8_t*)list-__builtin_offsetof(SymListBlock, list));
