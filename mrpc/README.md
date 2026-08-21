@@ -116,6 +116,30 @@ output on a small image.
 `-C` gives the reference result, and is what to compare against when measuring
 anything else.
 
+### On a discrete GPU
+
+This was written and tuned against a CPU device, and three things about it suit
+that and not a graphics card:
+
+* The class search syncs per block. Block *n+1*'s activity halo is block *n*'s
+  committed errors, so each 32x32 block is a halo upload, two launches and a
+  blocking readback of the cost cube, in that order, 550 times per pass. On a
+  CPU device those are zero-copy and about 9 us; across PCIe they are the whole
+  cost, and the kernels themselves — ten to sixty thousand work-items — do not
+  cover the latency.
+* The threshold DP is 252 work-items, each a long serial double-precision loop.
+  That fills four cores and starves an SM count in the tens; on a consumer card
+  it also runs at the 1/64 fp64 rate, and a launch long enough to trip Windows'
+  two-second driver timeout takes the driver down with it. It now stays on the
+  host on anything that is not a CPU device.
+* Everything that is left on the host — the first loop's class search, the
+  predictor fit — is two thirds of the wall clock already, so the ceiling on
+  what a faster device can buy is what is left of the other third.
+
+So `-T cpu` may well beat `-d <gpu>` on the same machine. Making the class
+search suit a GPU means not synchronising per block, which is a design change,
+not a tuning one.
+
 ## Command line
 
 ```

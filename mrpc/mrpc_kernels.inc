@@ -112,14 +112,18 @@ __kernel void predict_cube(__global const uchar* planes,
 // One work-item per (class, pixel): the body of CalcCost.  The tile is
 // always MAX_BSIZE square, even where the image ends inside it, so that
 // every stride here is a constant the device compiler can fold: with the
-// block size passed in as an argument it cannot prove that neighbouring
-// work-items touch neighbouring memory, and every load becomes a gather.
-// The pixels past the edge are computed and dropped -- the prefix sum
-// above never reaches them.
+// block size in an argument it cannot prove that neighbouring work-items
+// touch neighbouring memory, and every load becomes a gather.  bh and bw
+// are still passed, but only to bound the work -- a pixel past the edge
+// of a clipped block has no prediction in the cube, because predict_cube
+// only wrote the ones inside it, and reading one anyway lands an
+// arbitrary short in cl_qprd and indexes off the end of a cost table.
+// The prefix sum above never reaches these pixels; the device does not
+// know that.
 //
-// The result is left per-pixel rather than summed, because the quadtree above wants the
-// cost of 341 different rectangles of it and a prefix sum answers all of
-// them.
+// The result is left per-pixel rather than summed, because the quadtree
+// wants the cost of 341 different rectangles of it and a prefix sum
+// answers all of them.
 __kernel void pixel_cost(__global const uchar* planes,
                          __global const short* prdcube,
                          __global const short* errcube,
@@ -130,11 +134,16 @@ __kernel void pixel_cost(__global const uchar* planes,
                          __global const int*   udx,
                          __global const int*   uw,
                          __global float*       pixcost,
-                         const int tly, const int tlx)
+                         const int tly, const int tlx,
+                         const int bh,  const int bw)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   const int cl = get_global_id(2);
+  if( (y>=bh)|(x>=bw) ) {
+    pixcost[(cl*BSZ+y)*BSZ+x] = 0.0f;
+    return;
+  }
   const int ty = y+HT_T, tx = x+HT_L;
   const int o = (tly+y+PADT)*BSW+(tlx+x+PADL);
   float c = 0.0f;

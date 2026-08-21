@@ -518,6 +518,21 @@ struct MrpcCL {
         if( e!=CL_SUCCESS )
           return Fail(gk[i].n, e);
       }
+      // ... except the threshold DP, which is 252 work-items that each
+      // run a long serial double-precision loop.  That shape fills a CPU
+      // device and starves a graphics one: a few hundred threads on a
+      // part built for tens of thousands, at the 1/64 fp64 rate a
+      // consumer card runs doubles at, and long enough per launch to
+      // trip Windows' two-second driver timeout.  It stays on the host
+      // for anything that is not a CPU device.
+      cl_device_type dt = 0;
+      clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(dt), &dt, 0);
+      if( !(dt&CL_DEVICE_TYPE_CPU) ) {
+        k_dp = 0;
+        if( verbose )
+          fprintf(stderr, "mrpc: opencl: not a CPU device;"
+                          " the threshold DP stays on the host\n");
+      }
     } else
       fprintf(stderr, "mrpc: opencl: no fp64 on this device;"
                       " the group search stays on the host\n");
@@ -631,6 +646,8 @@ struct MrpcCL {
     CLCK(clSetKernelArg(k_cost[b], a++, sizeof(cl_mem), &d_pixcost), "arg");
     CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &tly), "arg");
     CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &tlx), "arg");
+    CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &bh), "arg");
+    CLCK(clSetKernelArg(k_cost[b], a++, sizeof(int), &bw), "arg");
     size_t g2[3] = {size_t(bsz), size_t(bsz), size_t(ncls)};
     CLCK(Run(k_cost[b], 3, g2, 0, 1), "pixel_cost");
 
