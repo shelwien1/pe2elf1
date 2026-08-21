@@ -236,7 +236,7 @@ struct AltP1Block {
       cur = recon;
       dst[at] = out;
     }
-    alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
+    alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code);
     return cur;
   }
 
@@ -245,7 +245,7 @@ struct AltP1Block {
   // than the encode half by exactly the near-lossless drift control -- the
   // decoder is told which fold was used.
   int32_t decode_sample() {
-    const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]], ctx[1]);
+    const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1]);
     return (uint8_t)((uint8_t)pred+unfold[code]);
   }
 
@@ -421,13 +421,13 @@ struct AltP1Block {
         for( int32_t x = 0; x<width; ++x ) {
           ctx_of(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            const int32_t code = alt_p1_decode_symbol(&counters[ctx[0]],
+            const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]],
                                                       ctx[1]);
             *q = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
           } else {
             const int32_t code = fold_or_refuse(q, *src, (uint8_t)pred, fold,
                                                 fold_hi, unfold);
-            alt_p1_encode_symbol(&counters[ctx[0]], ctx[1], code);
+            alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code);
             ++src;
           }
           record_sample((uint8_t)*q);

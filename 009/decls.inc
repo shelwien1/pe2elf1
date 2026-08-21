@@ -57,7 +57,7 @@ static inline void init_byte_lists(SymList* list, uint32_t nbytes);
 static void free_sym_lists(SymList* lists);
 static inline SymListBlock*sym_list_block(SymList* list);
 static inline uint32_t sym_list_count(const SymList* list);
-static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl);
+static inline FreqPair*bit_tree(BMFState* cx, uint16_t* freq, int32_t lvl);
 static inline int32_t p2_pred(int32_t weighted, int32_t rate);
 static inline int16_t p2_bump(BMFState* cx, int32_t w2, int32_t err, int32_t shift);
 static inline void p2_update(BMFState* cx, P2Count* p, int32_t res, int32_t shift);
@@ -84,10 +84,10 @@ CounterNode*init_counter_node(CounterNode* node);
 // `code_symbol_tree` is a `BMFState` method now and is declared there; the six
 // that had to be, and why, are named in state.inc.
 
-void encode_symbol_tree(uint16_t* freq, int32_t sym);
-void alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym);
-int32_t decode_symbol_tree(uint16_t* freq);
-int32_t alt_p1_decode_symbol(CounterNode* node, int32_t ctx);
+void encode_symbol_tree(BMFState* cx, uint16_t* freq, int32_t sym);
+void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym);
+int32_t decode_symbol_tree(BMFState* cx, uint16_t* freq);
+int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx);
 void rc_end_decode();
 void rc_end_encode();
 static inline bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym);

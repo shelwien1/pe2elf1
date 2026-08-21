@@ -29,7 +29,7 @@ static_assert(sizeof(ReduceNode) == 8,
 //
 // The wide arm below does none of this -- it builds a binary search tree over
 // multi-byte symbols -- and the two shared nothing but a frame and 350 lines.
-static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* src,
+static void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk1, uint8_t* src,
                                    uint32_t mask) {
   int32_t n_distinct, y, bits, shift, prev, s, s_next;
   uint32_t n_syms3, sym_flag[256];
@@ -101,7 +101,7 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
       uint32_t next_id = 0;
       do {
         if( sym_flag[s] ) {
-          lists[0].code_symbol(s-prev);
+          lists[0].code_symbol(cx, s-prev);
           n_syms3 = blk1->alphabet;
           sym_flag[s] = next_id;
           s_next = s+1;
@@ -148,12 +148,12 @@ int32_t BMFState::tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
     if( !node )
       break;
     if( val==tree[node].val ) {
-      bmf_cx.mode_symbol[1] = side;
+      mode_symbol[1] = side;
       return node;
     }
   }
   int32_t alphabet = blk->alphabet;
-  bmf_cx.mode_symbol[1] = side;
+  mode_symbol[1] = side;
   node = (uint16_t)alphabet;
   int32_t alpha = alphabet+1;
   kidp[side] = node;
@@ -208,7 +208,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   };
   clear_sym_lists(lists);
   if( sym_bits<=8 ) {
-    reduce_narrow_alphabet(lists, blk, src, mask);
+    reduce_narrow_alphabet(this, lists, blk, src, mask);
   } else {
     memset(tree, 0, sizeof tree);
     blk->alphabet = 1;
@@ -228,7 +228,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
         if( val!=tree[node].val ) {
           node = 0;
           if( val!=tree[0].val )
-            node = bmf_cx.tree_place(tree, blk, val);
+            node = tree_place(tree, blk, val);
           if( node<0 )
             break;
         }
@@ -240,7 +240,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
     // Both exits of the loop above jumped here past this line, which is the
     // line they set `alpha_n` from.  Leaving the loop runs it.
     alpha_n = blk->alphabet;
-    bmf_cx.rc.encode(alpha_n-1, alpha_n, 0x2001u);
+    rc.encode(alpha_n-1, alpha_n, 0x2001u);
     if( blk->alphabet>0x2000 ) {
       out[1] = (uint8_t*)bmf_new(blk->height*n_kids*blk->width);
       int32_t img_w = blk->width;
@@ -301,7 +301,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       free(old_words);
       void *newbuf = bmf_new(2*blk->height*blk->width);
       blk->sym_word = (uint16_t*)newbuf;
-      bmf_cx.reduce_alphabet(blk, out[1]);
+      reduce_alphabet(blk, out[1]);
       free(out[1]);
     } else {
       // `alpha_m` was re-read from `blk->alphabet` after the list setup and
@@ -317,7 +317,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
         for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si ) {
           word = tree[si].val;
           for( k = 0; k<n_kids; ++k ) {
-            lists[4*k+carry].code_symbol((uint8_t)word);
+            lists[4*k+carry].code_symbol(this, (uint8_t)word);
             carry = (uint8_t)word>>6;
             word >>= 8;
           }

@@ -36,8 +36,8 @@ uint32_t BMFState::alt_init_tables(uint8_t* fold, int8_t* unfold) {
   int32_t in_bucket, bucket;
   uint8_t half;
   uint32_t i, b;
-  BMF_ASSUME(bmf_cx.near_lossless_q==0);
-  int32_t bucket_size = 2*bmf_cx.near_lossless_q+1;
+  BMF_ASSUME(near_lossless_q==0);
+  int32_t bucket_size = 2*near_lossless_q+1;
   unfold[0] = 0;
   unfold[255] = 0x80;
   for( i = 0; i<0x3F; ++i ) {

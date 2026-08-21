@@ -502,11 +502,11 @@ struct ModelBlock {
       // answer from the stage-one coder to three other methods.
       int32_t is_sym;
       if constexpr( f_DEC ) {
-        is_sym = bit_node[ctr_node].decode_context_bit(&bit_root[ctr_fallback]);
+        is_sym = bit_node[ctr_node].decode_context_bit(cx, &bit_root[ctr_fallback]);
         row_cur[5]->sym = sym;
       } else {
         is_sym = sym==row_cur[5]->sym;
-        bit_node[ctr_node].encode_context_bit(&bit_root[ctr_fallback], is_sym);
+        bit_node[ctr_node].encode_context_bit(cx, &bit_root[ctr_fallback], is_sym);
       }
       if( is_sym )
         return sym;
@@ -871,7 +871,7 @@ struct ModelBlock {
           for( uint32_t s = 0; s<alphabet; ++s ) {
             sym_code[s] = 0;
             for( uint32_t b = 0; b<nbytes; ++b ) {
-              uint32_t piece = lists[4*b+carry].decode_symbol_list();
+              uint32_t piece = lists[4*b+carry].decode_symbol_list(cx);
               carry = piece>>6;
               sym_code[s] += piece<<((8*b)&31);
             }
@@ -885,7 +885,7 @@ struct ModelBlock {
         if( alphabet ) {
           int32_t run = 0;
           for( uint32_t s2 = 0; s2<alphabet; ++s2 ) {
-            int32_t gap = lists[0].decode_symbol_list();
+            int32_t gap = lists[0].decode_symbol_list(cx);
             sym_code[s2] = gap+run;
             run += gap+1;
           }
@@ -1360,7 +1360,7 @@ struct ModelBlock {
       if( sel_p>&escape_list )
         bmf_fatal(bmf_read_error);
       if( (*sel_p)->live ) {
-        int32_t lsym = (*sel_p)->decode_symbol_list();
+        int32_t lsym = (*sel_p)->decode_symbol_list(cx);
         row_cur[5]->sym = lsym;
         if( lsym>=0 )
           return idx_s+1;
@@ -1398,7 +1398,7 @@ struct ModelBlock {
                                  .bit<1>(m_up0)
                                  .bit<0>(alpha_map[nb4.up])
                                  .raw(1);
-        bit = esc_ctr[esc_at].decode_context_bit(esc_ctr);
+        bit = esc_ctr[esc_at].decode_context_bit(cx, esc_ctr);
         int32_t msym1c = cx->mode_symbol[1];
         hit = bit;
         *(((uint8_t*)alpha_map)+msym1c) = bit;
@@ -1582,7 +1582,7 @@ struct ModelBlock {
         }
         seed_after_run(cur2, nb4.up);
       }
-      (&esc_ctr[(amap+1)])->encode_context_bit(esc_ctr, run_hit);
+      (&esc_ctr[(amap+1)])->encode_context_bit(cx, esc_ctr, run_hit);
       int32_t msym1 = cx->mode_symbol[1];
       uint8_t *amap_at = (uint8_t*)alpha_map;
       hit = run_hit;
@@ -1644,7 +1644,7 @@ struct ModelBlock {
     SymList **sel_p = load_selectors();
     while( 1 ) {
       if( (*sel_p)->live ) {
-        if( (*sel_p)->code_symbol(row_cur[5]->sym) )
+        if( (*sel_p)->code_symbol(cx, row_cur[5]->sym) )
           return runlen+1;
         sel_p = sel_cur;
       }

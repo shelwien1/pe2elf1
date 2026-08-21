@@ -9,7 +9,7 @@ struct CounterNode {
   // beside the tree coder it calls; `alt_p1_encode_symbol` and
   // `alt_p1_decode_symbol` are the two instantiations under their callers'
   // names.
-  template<int32_t f_DEC> int32_t code_symbol(int32_t ctx, int32_t sym);
+  template<int32_t f_DEC> int32_t code_symbol(BMFState* cx, int32_t ctx, int32_t sym);
 
   // One counter bumped, with the node's total kept in step.  119 sites in
   // `alt_p1_block`'s `update_model` wrote both halves out, and the increment --
@@ -74,8 +74,8 @@ struct FreqPair {
   uint16_t f[2];
 };
 
-static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl) {
-  return (FreqPair*)&freq[2*bmf_cx.level_geom[lvl].tbl_base+8];
+static inline FreqPair*bit_tree(BMFState* cx, uint16_t* freq, int32_t lvl) {
+  return (FreqPair*)&freq[2*cx->level_geom[lvl].tbl_base+8];
 }
 
 // One binary counter with a parent to fall back on, and a three-state life:
@@ -167,16 +167,16 @@ struct BitCtr {
   // and it is kept anyway -- a merge is not the place to decide that a return
   // value is dead.
   template<int32_t f_DEC>
-  int32_t code_context_bit(BitCtr* parent, int32_t bit) {
+  int32_t code_context_bit(BMFState* cx, BitCtr* parent, int32_t bit) {
     int32_t result;
     if( n[0] ) {
       if( !n[1] )
         seed_from(parent);
       const uint32_t tot = summ();
       if constexpr( f_DEC )
-        bit = bmf_cx.rc.decode_bit(n[0], n[1]);
+        bit = cx->rc.decode_bit(n[0], n[1]);
       else
-        bmf_cx.rc.encode_bit(n[0], n[1], bit);
+        cx->rc.encode_bit(n[0], n[1], bit);
       if( tot>limit )
         scale_rare();
       result = n[bit]+kStep;
@@ -189,9 +189,9 @@ struct BitCtr {
       // the next visit knows which side to bump when it seeds.
       const uint32_t p_tot = parent->summ();
       if constexpr( f_DEC )
-        bit = bmf_cx.rc.decode_bit(parent->n[0], parent->n[1]);
+        bit = cx->rc.decode_bit(parent->n[0], parent->n[1]);
       else
-        bmf_cx.rc.encode_bit(parent->n[0], parent->n[1], bit);
+        cx->rc.encode_bit(parent->n[0], parent->n[1], bit);
       if( p_tot>parent->limit )
         parent->scale_rare();
       result = parent->n[bit]+kStep;
@@ -201,12 +201,12 @@ struct BitCtr {
     return f_DEC ? bit : result;
   }
 
-  int32_t encode_context_bit(BitCtr* parent, int32_t bit) {
-    return code_context_bit<0>(parent, bit);
+  int32_t encode_context_bit(BMFState* cx, BitCtr* parent, int32_t bit) {
+    return code_context_bit<0>(cx, parent, bit);
   }
 
-  int32_t decode_context_bit(BitCtr* parent) {
-    return code_context_bit<1>(parent, 0);
+  int32_t decode_context_bit(BMFState* cx, BitCtr* parent) {
+    return code_context_bit<1>(cx, parent, 0);
   }
 };
 

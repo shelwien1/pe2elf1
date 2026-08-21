@@ -43,7 +43,7 @@ int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t *f0 = freq+2;
   uint32_t tot = freq[0];
   if constexpr( f_DEC ) {
-    uint32_t target = bmf_cx.rc.get_freq(tot);
+    uint32_t target = rc.get_freq(tot);
     slot = f0;
     lvl = 0;
     cum = f0[0];
@@ -54,15 +54,15 @@ int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
         cum += *slot;
       } while( cum<=target );
     }
-    bmf_cx.rc.decode(cum-*slot, cum, tot);
+    rc.decode(cum-*slot, cum, tot);
   } else {
-    lvl = bmf_cx.model_geometry[sym];
+    lvl = model_geometry[sym];
     cum = 0;
     for( j = 0; j<(uint32_t)lvl; j++ )
       cum += f0[j];
     slot = &f0[lvl];
     uint32_t cum_hi = cum+*slot;
-    result = bmf_cx.rc.encode(cum, cum_hi, tot);
+    result = rc.encode(cum, cum_hi, tot);
   }
   if( freq[0]>0x4000u ) {
     // The eight level counts halved, and their new total.  Twenty-six lines
@@ -87,8 +87,8 @@ int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
     BMF_ASSUME(total<0x8000u);
     int32_t esc = freq[1];
     freq[0] = total;
-    if( esc<=4*bmf_cx.alt_freq_limit ) {
-      result = 4*(esc>bmf_cx.alt_freq_limit);
+    if( esc<=4*alt_freq_limit ) {
+      result = 4*(esc>alt_freq_limit);
       add = esc-result;
       freq[1] = add;
     } else {
@@ -102,42 +102,42 @@ int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
   freq[0] += freq[1];
   if( lvl<2 )
     return lvl;
-  int32_t mask = bmf_cx.level_geom[lvl].half;
+  int32_t mask = level_geom[lvl].half;
   // The bits the encoder still has to send.  The decoder has none, and every
   // read of this is inside a branch `if constexpr` discards there -- so the 0
   // is never observed and exists only so the declaration can sit here, at the
   // one place the value is produced, rather than in the frame at the top.
   int32_t path = 0;
   if constexpr( !f_DEC )
-    path = sym-bmf_cx.level_geom[lvl].first;
+    path = sym-level_geom[lvl].first;
   int32_t node = 0;
   for( span = 1;; span *= 2 ) {
-    FreqPair *pair = bit_tree(freq, lvl)+span+node;
+    FreqPair *pair = bit_tree(this, freq, lvl)+span+node;
     int32_t f1 = pair->f[1];
     int32_t fa = pair->f[0];
     if constexpr( f_DEC ) {
-      go = bmf_cx.rc.decode_bit(fa, f1);
+      go = rc.decode_bit(fa, f1);
     } else {
       go = (mask&path)!=0;
-      result = bmf_cx.rc.encode_bit(fa, f1, go);
+      result = rc.encode_bit(fa, f1, go);
     }
     fq = pair->f[go];
     if( fq>0x4000u )
       fq = halve_pair(pair, go);
-    pair->f[go] = bmf_cx.alt_freq_init+fq;
+    pair->f[go] = alt_freq_init+fq;
     mask >>= 1;
     node = go+2*node;
     if( !mask )
-      return node+bmf_cx.level_geom[lvl].first;
+      return node+level_geom[lvl].first;
   }
 }
 
-void encode_symbol_tree(uint16_t* freq, int32_t sym) {
-  bmf_cx.code_symbol_tree<0>(freq, sym);
+void encode_symbol_tree(BMFState* cx, uint16_t* freq, int32_t sym) {
+  cx->code_symbol_tree<0>(freq, sym);
 }
 
-int32_t decode_symbol_tree(uint16_t* freq) {
-  return bmf_cx.code_symbol_tree<1>(freq, 0);
+int32_t decode_symbol_tree(BMFState* cx, uint16_t* freq) {
+  return cx->code_symbol_tree<1>(freq, 0);
 }
 
 // One symbol of the one-bit model's alphabet.  The two directions meet at the
@@ -158,7 +158,7 @@ int32_t decode_symbol_tree(uint16_t* freq) {
 // was already happening, and the two totals agree in the low 16 bits that
 // `*freq` and `& 0x7FFF` keep.  The encoder's spellings are the ones kept.
 template<int32_t f_DEC>
-int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
+int32_t CounterNode::code_symbol(BMFState* cx, int32_t ctx, int32_t sym) {
   uint32_t cum;
   int32_t slot;
   uint16_t *cur = c;
@@ -212,26 +212,26 @@ int32_t CounterNode::code_symbol(int32_t ctx, int32_t sym) {
     // Written as `((c[0] + tot + 96 - 2*c[slot]) >> 25) & 0xFFFFFFC0`: an
     // unsigned wrap, a logical shift to 127, and a mask down to 64.  That is
     // this comparison, and it is worth having on the page as one.
-    uint16_t*const strip = bmf_cx.model_strip(
+    uint16_t*const strip = cx->model_strip(
         CtxIdx{}.bit<7>(slot&1)
                 .bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96)
                 .raw((uint32_t)ctx));
     if constexpr( f_DEC )
-      slot += 2*decode_symbol_tree(strip);
+      slot += 2*decode_symbol_tree(cx, strip);
     else
-      encode_symbol_tree(strip, (sym-5)>>1);
+      encode_symbol_tree(cx, strip, (sym-5)>>1);
   }
   return slot;
 }
 
 // The donor pushed a third argument neither body reads.  `tools/deadparam.py`
 // took it and the two it was forwarded from.
-void alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym) {
-  node->code_symbol<0>(ctx, sym);
+void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym) {
+  node->code_symbol<0>(cx, ctx, sym);
 }
 
-int32_t alt_p1_decode_symbol(CounterNode* node, int32_t ctx) {
-  return node->code_symbol<1>(ctx, 0);
+int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx) {
+  return node->code_symbol<1>(cx, ctx, 0);
 }
 
 
@@ -241,18 +241,18 @@ int32_t BMFState::update_binary_pair(uint16_t* _this, int32_t symbol) {
   uint32_t step, f;
   int32_t tot = _this[0];
   if( (uint32_t)tot<=0x8000 ) {
-    int32_t lvl = bmf_cx.model_geometry[symbol];
+    int32_t lvl = model_geometry[symbol];
     step = (_this[1]>>2)&0xFFFFFFE0;
-    if( bmf_cx.plane_predictor==pred_p2 )
+    if( plane_predictor==pred_p2 )
       step = 15*(_this[1]>>5);
     _this[lvl+2] += step+4;
     tot = _this[0]+step+4;
     _this[0] = tot;
     if( symbol>=2 ) {
-      int32_t mask = bmf_cx.level_geom[lvl].half;
-      int32_t path = symbol-bmf_cx.level_geom[lvl].first;
+      int32_t mask = level_geom[lvl].half;
+      int32_t path = symbol-level_geom[lvl].first;
       node = 0;
-      FreqPair *tbl = bit_tree(_this, lvl);
+      FreqPair *tbl = bit_tree(this, _this, lvl);
       int32_t span = 1;
       do {
         FreqPair *pair = tbl+node+span;
@@ -263,7 +263,7 @@ int32_t BMFState::update_binary_pair(uint16_t* _this, int32_t symbol) {
         span *= 2;
         mask >>= 1;
         node = go+2*node;
-        pair->f[go] = f+((bmf_cx.alt_freq_init*((uint32_t)(bmf_cx.plane_predictor==pred_p2)+5))>>3);
+        pair->f[go] = f+((alt_freq_init*((uint32_t)(plane_predictor==pred_p2)+5))>>3);
       } while( mask );
       return 0;
     }

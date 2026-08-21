@@ -2,8 +2,8 @@
 // it reads after one.  The coder itself is rc.inc.
 
 uint32_t BMFState::rc_decode_flat(uint32_t tot) {
-  uint32_t sym = bmf_cx.rc.get_freq(tot);
-  bmf_cx.rc.decode(sym, sym+1, tot);
+  uint32_t sym = rc.get_freq(tot);
+  rc.decode(sym, sym+1, tot);
   return sym;
 }
 
