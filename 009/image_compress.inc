@@ -5,11 +5,11 @@
 // the coded arm with the header it has just filled in and the raw arm with the
 // image's own, which are the same sixteen bytes laid out the same way, and
 // each spelled the block's length into the same function-scope `coded_len`.
-static uint8_t write_member_head(const void* head, const CodedTail* extra, FILE* fp) {
-  uint8_t ok = fwrite(head, 1u, 0x10u, fp)==16;
+static uint8_t write_member_head(const void* head, const CodedTail* extra, BmfStream* io) {
+  uint8_t ok = io->write_exact(head, 0x10u);
   if( extra ) {
     const uint32_t coded_len = extra->len;
-    ok &= fwrite(extra, 1u, coded_len+sizeof(CodedTail), fp)==coded_len+sizeof(CodedTail);
+    ok &= io->write_exact(extra, coded_len+sizeof(CodedTail));
   }
   return ok;
 }
@@ -88,12 +88,10 @@ void BMFCodec::code_image_body(BmfImage* p_i, BmfImage& hdr) {
 // path and no file.
 //
 // It is `compress_image` over a buffer rather than a second copy of it.
-// `bmf_memstream_open` hands back a `FILE*` that writes into a buffer it gives
-// up at the close, which is exactly the shape `compress_image` already takes --
-// so the file layer stays where it is and the codec gains an entry point rather
-// than a fork.  It is `open_memstream` on a POSIX host and a temporary file on
-// Windows, which has no such call; platform.inc has the reasoning, including
-// why the close is a named operation instead of a `fclose`.
+// `BmfStream::in_memory` is a stream that grows to hold what is written to it,
+// which is the shape `compress_image` already takes -- so the file layer is
+// unchanged and the codec gains an entry point rather than a fork.  Nothing
+// here is platform-dependent and nothing touches a disk.
 //
 // The caller frees what comes back.  `nullptr` and a zero length mean the image
 // was refused, which is the same answer `compress_image` gives.
@@ -104,33 +102,23 @@ uint8_t* BMFCodec::compress_to_memory(BmfImage* p_i, size_t* out_len,
   // would have had it dropped between the two lines.
   reset();
   *out_len = 0;
-  char* buf = nullptr;
-  size_t len = 0;
   BmfFile arc;
-  arc.fp = bmf_memstream_open(&buf, &len);
-  if( !arc.fp )
-    return nullptr;
+  arc.io = BmfStream::in_memory();
   const int32_t coded = compress_image(&arc, p_i, tail);
-  // The close is what produces the buffer, so a failing one is a failing
-  // compress however well the coding went: on the Windows side this is where
-  // the bytes are read back, and `buf` stays null if that does not happen.
-  const bool closed = bmf_memstream_close(arc.fp, &buf, &len)==0;
-  arc.fp = nullptr;
-  if( !closed ) {
-    free(buf);
-    return nullptr;
-  }
   if( !coded ) {
-    free(buf);
+    arc.close();
     return nullptr;
   }
-  *out_len = len;
-  return (uint8_t*)buf;
+  // `take` hands the buffer over and leaves the stream holding nothing, so
+  // the `close` below has nothing left to free.
+  uint8_t* out = arc.io.take(out_len);
+  arc.close();
+  return out;
 }
 
 int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
   BmfImage hdr;
-  if( !arc_in->fp )
+  if( !arc_in->io.fp&&!arc_in->io.buf )
     return 0;
   // The walk that was here read every member already in the output and left
   // the file positioned after the last, which is where an appended member had
@@ -149,7 +137,7 @@ int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail
   // more bytes in one literal, of which only the first four were ever written,
   // so the tag it writes could not be read off the line that writes it.
   const uint32_t tag = bmf_tag(bmf_sig_image, '2', '0');
-  if( fwrite(&tag, 4u, 1u, arc_in->fp)!=1 )
+  if( !arc_in->io.write_exact(&tag, 4u) )
     return 0;
   uint8_t bpp = p_i->depth;
   uint32_t pal_bytes = 0;
@@ -170,12 +158,12 @@ int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail
     const int32_t coded_bytes = stream.cur-stream.buf;
     hdr.data_size = (uint32_t)coded_bytes;
     if( (uint32_t)coded_bytes<p_i->data_size ) {
-      const uint8_t ok = write_member_head(&hdr, extra_blk, arc_in->fp);
-      int32_t ok_all = (fwrite(stream.buf, 1u, coded_bytes, arc_in->fp)==(uint32_t)coded_bytes)&ok;
+      const uint8_t ok = write_member_head(&hdr, extra_blk, &arc_in->io);
+      int32_t ok_all = arc_in->io.write_exact(stream.buf, (size_t)coded_bytes)&ok;
       free(stream.buf);
       if( ok_all&&(p_i->depth&depth_palette)!=0 )
-        write_all(&p_i->pixels[p_i->data_size], pal_bytes, arc_in->fp);
-      fflush(arc_in->fp);
+        arc_in->io.write_all(&p_i->pixels[p_i->data_size], pal_bytes);
+      arc_in->io.flush();
       if( ok_all )
         return (int32_t)hdr.data_size;
       return ok_all;
@@ -189,8 +177,8 @@ int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail
   // swaps the header's width, height and stride and leaves the pixel buffer
   // alone, so both ways in write the same bytes -- which is what the `pixels`
   // local said by being assigned the value it already held.
-  const uint8_t ok_raw = write_member_head(p_i, extra_blk, arc_in->fp);
-  uint32_t written = fwrite(p_i->pixels, 1u, pal_bytes+p_i->data_size, arc_in->fp);
+  const uint8_t ok_raw = write_member_head(p_i, extra_blk, &arc_in->io);
+  uint32_t written = (uint32_t)arc_in->io.write(p_i->pixels, pal_bytes+p_i->data_size);
   int32_t data_size = p_i->data_size;
   if( !(ok_raw&(written==data_size+pal_bytes)) )
     return 0;

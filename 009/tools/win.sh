@@ -4,29 +4,32 @@
 #     tools/win.sh              # everything below
 #     tools/win.sh --build      # cross-compile only; no wine, no runs
 #
-# **Why this exists.**  The program grew two in-memory entry points, and they
-# are the one place it reached for something Windows does not have:
-# `open_memstream` and `fmemopen`.  Neither is in MSVC's CRT and neither is in
-# mingw-w64.  That was reported from outside rather than found here, because
-# nothing in this tree had ever pointed a Windows compiler at it — the gate was
-# `g++` and `g++` is happy.
+# **Why this exists.**  The program grew two in-memory entry points and reached
+# for `open_memstream` and `fmemopen` to get them.  Neither is in MSVC's CRT and
+# neither is in mingw-w64, so the tree stopped compiling on Windows — and that
+# was reported from outside rather than found here, because nothing in this tree
+# had ever pointed a Windows compiler at it.  The gate was `g++`, and `g++` is
+# happy.
 #
-# `platform.inc` is the shim, and a shim nobody compiles is a guess.  So this
-# does four things, in order of how much they prove:
+# The first fix was a shim for the two calls, and on Windows that meant a
+# temporary file, `<windows.h>`, and a second implementation for toolchains with
+# no SDK headers.  It worked and it was the wrong shape.  What the codec wants is
+# not a `FILE*` over memory; it is six operations — read, write, seek, tell,
+# end-of-input, close — and `BmfStream` in file.inc is those six over either a
+# file or a buffer.  There is nothing platform-specific left to test, which is
+# why this file is shorter than it was.
+#
+# So it does three things, in order of how much they prove:
 #
 #   1. **it compiles and links** as a PE.  This alone would have caught the
 #      original report: the failure was two undeclared names, nothing subtler.
 #   2. **the same seventeen streams, byte for byte.**  `bmf c` on Windows
 #      against `testfiles/ref_*.bmf`, which is `test.sh`'s own gate run one
 #      platform over, and `bmf d` against what the native build decodes.
-#   3. **the shims themselves.**  Neither `bmf c` nor `bmf d` touches them —
-#      both open a *path* — so steps 1 and 2 can pass with the memory layer
-#      completely broken.  `tools/parallel.cpp` is what goes through
-#      `compress_to_memory` and `expand_from_memory`, so it is the only thing
-#      here that executes a line of the Windows half of `platform.inc`.
-#   4. **nothing is left behind.**  The Windows shim is a temporary file, and a
-#      temporary file that outlives the process is a bug that no byte
-#      comparison can see.  The count before and after has to match.
+#   3. **the in-memory entry points.**  Neither `bmf c` nor `bmf d` touches them
+#      — both open a *path* — so steps 1 and 2 pass with the memory side
+#      completely broken.  `tools/parallel.cpp` is the only thing here that goes
+#      through `compress_to_memory` and `expand_from_memory`.
 #
 # **`-static` on the test binaries and not on the program.**  `parallel.cpp`
 # pulls in libstdc++ for `std::vector` and `std::thread`; under wine that meant
@@ -67,27 +70,15 @@ say 'cross-compile' "$(basename "$tmp/bmf.exe") built, $(stat -c%s "$tmp/bmf.exe
 # The memory entry points live here and nowhere else, so this binary is the
 # only one that proves the shims.  `-static` for the reason in the header.
 #
-# **Twice, because `platform.inc` has two Windows halves.**  The default wants
-# `<windows.h>`, which is the SDK and not the CRT; `BMF_NO_WINDOWS_H` forces the
-# CRT-only fallback that a toolchain with a UCRT and no SDK headers would select
-# on its own through `__has_include`.  A fallback nobody builds is the same
-# guess the shims were before this file existed, and it is the *more* likely
-# path to rot, because the machine that needs it is by definition not this one.
-#
-# Proven distinct: a fault planted in the fallback leaves the default passing
-# and fails only the second, so these are two implementations and not one
-# reached twice.
-for leg in default nosdk; do
-  case $leg in
-    default) flags= ;;
-    nosdk)   flags=-DBMF_NO_WINDOWS_H ;;
-  esac
-  if ! "$CXXWIN" -std=c++17 -w -O2 -I. $flags -static -o "$tmp/par.$leg.exe" \
-          tools/parallel.cpp >"$tmp/par.$leg.log" 2>&1; then
-    bad "cross-compile parallel/$leg" \
-        "$(grep -m1 'error:' "$tmp/par.$leg.log" || echo 'see the log')"
-  fi
-done
+# **This is the binary that proves the stream.**  `bmf c` and `bmf d` open a
+# path, so everything above passes with the in-memory side entirely broken;
+# `parallel.cpp` is the only thing here that goes through `compress_to_memory`
+# and `expand_from_memory`.  Proven: a one-byte error planted in
+# `BmfStream::take` leaves all seventeen streams identical and fails only this.
+if ! "$CXXWIN" -std=c++17 -w -O2 -I. -static -o "$tmp/par.exe" \
+        tools/parallel.cpp >"$tmp/par.log" 2>&1; then
+  bad 'cross-compile parallel' "$(grep -m1 'error:' "$tmp/par.log" || echo 'see the log')"
+fi
 
 if [ "$build_only" = 1 ]; then
   say 'skipped' 'the runs; drop --build for those'
@@ -135,21 +126,15 @@ done
 [ "$differ" = 0 ] && say 'expand' "$n images match the native build" \
                   || bad 'expand' "$differ of $n images differ"
 
-# 3 and 4 -- the shims, and what they leave behind, once per Windows half.
-wtemp="$WINEPREFIX/drive_c/users/$(whoami)/Temp"
-for leg in default nosdk; do
-  [ -x "$tmp/par.$leg.exe" ] || continue
-  before=$(ls -1 "$wtemp" 2>/dev/null | wc -l)
-  out=$(timeout 900 "$WINE" "$tmp/par.$leg.exe" 2>&1)
+# 3 -- the in-memory entry points, which is what the stream class is for.
+if [ -x "$tmp/par.exe" ]; then
+  out=$(timeout 900 "$WINE" "$tmp/par.exe" 2>&1)
   rc=$?
   case $out in
-    PASS*) say "in-memory ($leg)" "${out%% (*}" ;;
-    *)     bad "in-memory ($leg)" "exit $rc -- $(printf '%s\n' "$out" | tail -1)" ;;
+    PASS*) say 'in-memory entry points' "${out%% (*}" ;;
+    *)     bad 'in-memory entry points' "exit $rc -- $(printf '%s\n' "$out" | tail -1)" ;;
   esac
-  after=$(ls -1 "$wtemp" 2>/dev/null | wc -l)
-  [ "$before" = "$after" ] && say "temporary files ($leg)" "none left behind" \
-                           || bad "temporary files ($leg)" "$before before, $after after -- it leaked one"
-done
+fi
 
 [ "$fails" = 0 ] || { echo "FAILED: $fails of the Windows checks did not answer what they should" >&2; exit 1; }
 echo 'the tree builds and runs for Windows, and answers what the native build answers'

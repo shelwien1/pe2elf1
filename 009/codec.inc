@@ -85,7 +85,7 @@ struct BMFCodec : BMFState {
   int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs);
   void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane);
   void drop_alt_model_from_all();
-  bool expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr);
+  bool expand_coded(BmfStream* io, BmfImage* img_at, const BmfImage& hdr);
   BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf);
   void interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane);
   void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane);

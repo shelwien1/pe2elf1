@@ -164,7 +164,6 @@
 #include <pmmintrin.h>
 #include <xmmintrin.h>
 
-#include "platform.inc"
 #include "ida.inc"
 #include "ctxidx.inc"
 #include "memory.inc"

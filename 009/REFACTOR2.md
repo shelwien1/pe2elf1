@@ -2385,3 +2385,52 @@ keeping.** It is in `deadcheck.py` now, as a sixth kind of unreachable code.
 Zero findings on the tree, and each of the six caught when put back one at a
 time. Both numbers matter: the first alone would have been satisfied by a
 check that never speaks.
+
+## The shim was the wrong shape, and the six operations were the right one
+
+Two rounds went into making `open_memstream` and `fmemopen` work on Windows.
+The second one asked why they were there at all, and the answer is that they
+should not have been.
+
+**What the codec wants is not a `FILE*`.** It wants six operations — read,
+write, seek, tell, end-of-input, close — and for as long as the only source was
+a path, `FILE*` was a reasonable name for the thing that has them. The in-memory
+entry points broke that, and the move I made was to keep the name and find a
+`FILE*` over memory: `open_memstream` and `fmemopen`, so nothing above had to
+change. That is what dragged in everything after it. Those two are POSIX-only,
+and a `FILE*` over memory cannot be built on Windows at all — no `fopencookie` —
+so the Windows stand-in had to be a *temporary file*, which needed
+`<windows.h>`, a delete-on-close flag, a hand-built unique name safe for eight
+threads, a second implementation for toolchains with no SDK headers, and a check
+that counted files left in the temp directory.
+
+`BmfStream` is 120 lines and deletes all of it. There is no `platform.inc`, no
+SDK header, no temp file, nothing to clean up if the process dies, and the
+in-memory path no longer touches a disk it never wanted to touch. `bmf.exe` got
+3 KB smaller and the 64-bit conversion ratchet fell from 192 to 190.
+
+**The lesson is about which layer the abstraction goes in.** Both rounds of shim
+were competent work on the wrong question — how do I get `open_memstream` on
+Windows — and no amount of care at that level could have produced a good answer,
+because the premise was that `FILE*` had to stay. Naming what the program
+actually uses is smaller than any shim for what it happened to be written
+against. The tell was there to read: the fix kept growing platform-specific
+special cases, which is usually a layer complaining that it has been asked the
+wrong thing.
+
+**What the tools said about it.** `deadcheck.py` reported `is_memory` and `tell`
+as never called — both were speculative API I had added to the new class because
+a stream "should" have them, and neither had a caller. `covered.py` then wanted
+the four multi-line stream members described by an algorithm document, which is
+the wrong request for the file layer; the existing "file plumbing" exemption
+covered `bmf_open_file` and `bmf_tag` **by name**, so it did not cover a member
+called `over_memory`. It asks what a function *belongs to* now — every member of
+`BmfStream` is the file layer — which is the same structural test the range
+coder exemption already used, and is the rule that will still be right for the
+next member added.
+
+`tools/win.sh` keeps its first two checks and loses the fourth: there are no
+temporary files to count. The third is the one that matters and its ordering is
+proven, not asserted — a one-byte error planted in `BmfStream::take` leaves all
+seventeen streams byte-identical and fails only the in-memory check, because
+`bmf c` and `bmf d` open a path and never touch that code.

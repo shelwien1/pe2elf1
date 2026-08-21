@@ -69,19 +69,25 @@ buys is a claim fuzzing cannot make: every value was tried, not enough of them
 to feel confident. It found four defects §47's fuzzer had not, one of them a
 SIGFPE reachable from four values in 256. §48.
 
-`win.sh` is the one that runs when anything reaches for a libc call. It came
-out of a report from outside — the tree did not compile on Windows, because the
-in-memory entry points use `open_memstream` and `fmemopen` and neither exists
+`win.sh` is the one that runs when anything reaches for a libc call. It came out
+of a report from outside — the tree did not compile on Windows, because the
+in-memory entry points used `open_memstream` and `fmemopen` and neither exists
 there. Nothing here had ever pointed a Windows compiler at the tree, so the gate
-had no way to know. It cross-compiles with mingw-w64, checks the same seventeen
-streams byte for byte in both directions, and then runs `parallel.cpp`, which is
-the only thing that executes a line of the Windows half of `platform.inc` —
-`bmf c` and `bmf d` open a *path* and never touch the shims, so everything else
-here passes with the memory layer entirely broken. Proven: planting a one-byte
-error in the shim leaves the seventeen streams identical and fails only that
-check. It also counts the temporary files before and after, because the Windows
-shim is a temp file and one that outlives the process is a defect no byte
-comparison can see — planting that leaves 89 behind.
+had no way to know.
+
+The first fix was a shim, and on Windows a `FILE*` over memory cannot be built
+at all, so the shim was a temporary file with `<windows.h>` behind it. The
+second fix deleted all of that: what the codec wants is six operations, not a
+`FILE*`, and `BmfStream` in file.inc is those six over either a file or a
+buffer. Nothing platform-specific is left, which is why this script is shorter
+than it was and why there is no `platform.inc`.
+
+It cross-compiles with mingw-w64, checks the same seventeen streams byte for
+byte in both directions, and then runs `parallel.cpp` — the only thing here that
+goes through `compress_to_memory` and `expand_from_memory`, because `bmf c` and
+`bmf d` open a *path*. That ordering matters and is proven rather than asserted:
+a one-byte error planted in `BmfStream::take` leaves all seventeen streams
+byte-identical and fails only the in-memory check.
 
 ## the original six
 

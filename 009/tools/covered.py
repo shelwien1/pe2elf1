@@ -188,7 +188,6 @@ RULES = [
     ('range coder', 'out of scope by the request these documents answer'),
     ('allocator', 'bmf_new / bmf_malloc / the arena -- storage, not coding'),
     ('file plumbing', 'open, close, tag, bytes-left'),
-    ('platform shim', 'platform.inc: what a host lacks, not what the codec does'),
     ('template wrapper', 'body is one call to a <0>/<1> template, which is described'),
     ('one-liner', 'a body of one or two lines with no arithmetic to explain'),
 ]
@@ -252,22 +251,6 @@ RC_NAMES = re.compile(r'^rc_|^(?:pack|unpack)_bits$')
 ALLOC_NAMES = re.compile(r'^bmf_(?:new|malloc|free|page_|arena_|bucket_)')
 FILE_NAMES = re.compile(r'^(?:bmf_(?:open|close)_file|bmf_tag|bmf_tag_version'
                         r'|bytes_left)$')
-# The stand-ins for calls a host does not have -- `platform.inc`, which is
-# `open_memstream` and `fmemopen` today.  What belongs there is decided by the
-# host and not by the codec, so an algorithm document that described
-# `bmf_win_tempfile` would be describing Windows.  The second exemption that is
-# a scope decision rather than a fact about the code, the range coder being the
-# first.
-#
-# **A name rule and not a file rule, and that is worth writing down.**  The
-# obvious spelling is `if file == 'platform.inc'`, and `exempt` is handed the
-# file, so it looks right and it passes when this tool is run by hand.  It
-# exempts nothing under `sweep.sh`, which is the run that gates: the sweep hands
-# every tool the *spliced* unit, where the includes are already resolved and
-# every line's origin is one temporary file.  Written that way this reported
-# clean directly and four over the budget through the sweep, which is the
-# failure that wastes an afternoon.
-SHIM_NAMES = re.compile(r'^bmf_(?:mem(?:open|stream)_|win_)')
 OPEN_TYPE = re.compile(r'^(?:struct|class)\s+(\w+)\s*(?:final\s*)?\{')
 
 
@@ -295,10 +278,15 @@ def exempt(name, file, lines, lo, hi):
         return 'range coder'
     if ALLOC_NAMES.match(name):
         return 'allocator'
-    if FILE_NAMES.match(name):
+    # By the enclosing type, the same way the range coder is done: every
+    # member of `BmfStream` is the file layer -- read, write, seek, close --
+    # whether it is spelled as a name this list knows or not.  The stream
+    # arrived with four members that no rule about spelling would have
+    # covered (`over_file`, `over_memory`, `in_memory`, `seek`), which is the
+    # argument for asking what a function belongs to rather than what it is
+    # called.
+    if FILE_NAMES.match(name) or enclosing(lines, lo) == 'BmfStream':
         return 'file plumbing'
-    if SHIM_NAMES.match(name):
-        return 'platform shim'
     body = [l.split('//')[0].strip() for l in lines[hi:hi + 6]]
     body = [l for l in body if l and l not in ('{', '}')]
     if body and WRAPPER.match(body[0]) and len(body) <= 2:

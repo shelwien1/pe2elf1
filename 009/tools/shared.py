@@ -58,19 +58,6 @@ ALLOWED = {
     # program and the part the codec was never asked to absorb.  It holds the
     # one archive handle a run opens, and `main` calls `bmf_compress` once.
     'arc_store': "main's single archive handle; bmf_compress runs once",
-    # `platform.inc`'s temp-file counter, and the one entry here that is
-    # `thread_local` rather than shared.  It exists only in the Windows arm that
-    # has no SDK headers, where a temporary file's name has to be built by hand
-    # because there is no atomic create to lean on: the name is the process id,
-    # the *address* of this object, and this counter.  A `thread_local` has a
-    # distinct address in each thread, which is what makes two threads unable to
-    # collide -- so being per-thread is not incidental here, it is the mechanism.
-    #
-    # Listed rather than exempted by a rule about `thread_local`, because a
-    # `thread_local` is still file-scope state and the next one might not be
-    # harmless.  Two codecs on one thread share this, and that is correct: they
-    # want different names and the counter is what gives them different names.
-    'bmf_tmp_seq': 'per-thread temp-file counter; its address is the thread key',
     # `read_bmp`'s one padded row of scratch, and the only entry here that costs
     # something.  It is I/O rather than codec -- nothing a `BMFCodec` method
     # reaches -- so it does not weaken what the class claims, but it does mean

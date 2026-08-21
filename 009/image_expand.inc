@@ -131,7 +131,7 @@ void BMFCodec::unmodel_described(BmfImage* img_at, uint8_t flags) {
 // wrong reading, since `arc_in->expand_coded(...)` would be the archive
 // expanding an image.  Its opposite number is declined in that tool for the
 // same sentence; this one did not have to be.
-bool BMFCodec::expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
+bool BMFCodec::expand_coded(BmfStream* io, BmfImage* img_at, const BmfImage& hdr) {
   near_lossless_q = 0;
   alphabet_reduced = 0;
   if( !(hdr.flags&flags_slow) ) {
@@ -159,7 +159,7 @@ bool BMFCodec::expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
   // those before it gets here.  Nothing in this tree provokes it; what stands
   // is that a `bmf_new` on one path and a `free` on one of three is wrong on
   // its face.
-  bool ok = fread(stream.buf, 1u, hdr.data_size, fp)==want;
+  bool ok = io->read(stream.buf, hdr.data_size)==want;
   if( ok ) {
     if( (img_at->depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
       plane_predictor = 0;
@@ -176,12 +176,11 @@ bool BMFCodec::expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
 }
 
 // **The in-memory entry point**, and the other half of what a caller wants.
-// `bmf_memopen_read` is `bmf_memstream_open`'s mirror: a `FILE*` reading a
-// buffer the caller owns, which is the shape `expand_image` already takes.  The
-// file layer is untouched and the codec gains an entry point rather than a fork.
-// It is `fmemopen` on a POSIX host and a temporary file on Windows -- see
-// platform.inc; unlike the write side this one needs no special close, because
-// the buffer is input and plain `fclose` ends the stream on both.
+// `BmfStream::over_memory` is `in_memory`'s mirror: a stream reading a buffer
+// the caller owns, which is the shape `expand_image` already takes.  The file
+// layer is untouched and the codec gains an entry point rather than a fork.
+// The buffer is the caller's and stays the caller's -- `close` on a stream made
+// this way frees nothing, because `cap` is zero and only a grown buffer is ours.
 //
 // The caller frees the image.  `nullptr` means the stream was refused, which is
 // what `expand_image` answers and what the malformed-stream leg of `test.sh`
@@ -201,16 +200,13 @@ BmfImage* BMFCodec::expand_from_memory(const uint8_t* data, size_t n,
   // As `compress_to_memory`: each call starts from a fresh codec.
   reset();
   BmfFile arc;
-  arc.fp = bmf_memopen_read(data, n);
-  if( !arc.fp )
-    return nullptr;
+  arc.io = BmfStream::over_memory(data, n);
   // `&coded_block` and not `tail` directly, because a null one means something
   // different down there: `expand_image` reading no tail also clears
   // `flags_tail` off the image it answers, so a caller that did not ask for the
   // block would get a *different image* rather than the same one without it.
   BmfImage* img = expand_image(&arc, &coded_block);
-  if( arc.fp )
-    fclose(arc.fp);
+  arc.close();
   // The block is the caller's if it asked and nobody's otherwise -- and nobody's
   // has to mean freed here, because the next call's `reset()` zeroes the member
   // without freeing it and every stream carrying a tail would leak one.
@@ -235,40 +231,34 @@ BmfImage* BMFCodec::expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   uint32_t magic;
   if( p_coded_buf )
     *p_coded_buf = nullptr;
-  FILE *fp1 = (arc_in)->fp;
-  if( !fp1 )
+  BmfStream* io = &arc_in->io;
+  if( !io->fp&&!io->buf )
     return nullptr;
   // Skip any member that is not an image, by the length in its eight-byte
   // header, until one is.
   while( 1 ) {
-    if( fread(&magic, 4u, 1u, fp1)!=1 ) {
-      FILE *fp = arc_in->fp;
-      if( feof(fp) )
-        return nullptr;
-      {
-        fclose(fp);
-        arc_in->fp = 0;
-        return nullptr;
-      }
+    if( !io->read_exact(&magic, 4u) ) {
+      // Out of input either way; the only difference was whether the stream
+      // got closed on the way out, and `fail()` closes it.
+      return io->eof() ? nullptr : arc_in->fail();
     }
     if( (uint16_t)magic!=bmf_sig_other )
       break;
     version = bmf_tag_version(magic);
-    if( version!=bmf_version_20||fread(&head, 8u, 1u, arc_in->fp)!=1 )
+    if( version!=bmf_version_20||!io->read_exact(&head, 8u) )
       break;
-    fseek(arc_in->fp, head.len, 1);
-    fp1 = arc_in->fp;
+    io->seek(head.len, SEEK_CUR);
   }
   version = bmf_tag_version(magic);
   if( (uint16_t)magic!=bmf_sig_image||version!=bmf_version_20
-      ||fread(&hdr, 0x10u, 1u, arc_in->fp)!=1 ) {
+      ||!io->read_exact(&hdr, 0x10u) ) {
     return arc_in->fail();
   }
   if( hdr.flags&flags_tail ) {
-    if( !read_exact(&head, 8u, arc_in->fp) )
+    if( !io->read_exact(&head, 8u) )
       return arc_in->fail();
     if( p_coded_buf ) {
-      if( head.len>bytes_left(arc_in->fp) ) {
+      if( head.len>io->bytes_left() ) {
         return arc_in->fail();
       }
       // Up to a word, and up from zero to four: `(len==0)` is what makes an
@@ -281,13 +271,13 @@ BmfImage* BMFCodec::expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
       blk->len = pad_len;
       blk->data[pad_len/4-1] = 0;
       *p_coded_buf = blk;
-      if( !read_exact(blk->data, head.len, arc_in->fp) )
+      if( !io->read_exact(blk->data, head.len) )
         return arc_in->fail();
     } else {
-      fseek(arc_in->fp, head.len, 1);
+      io->seek(head.len, SEEK_CUR);
     }
   }
-  if( hdr.data_size>bytes_left(arc_in->fp) ) {
+  if( hdr.data_size>io->bytes_left() ) {
     return arc_in->fail();
   }
   uint32_t pal_bytes = 3<<(hdr.depth&31);
@@ -315,7 +305,7 @@ BmfImage* BMFCodec::expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     return arc_in->fail();
   }
   if( hdr.flags&flags_coded ) {
-    if( !expand_coded(arc_in->fp, img_at, hdr) ) {
+    if( !expand_coded(io, img_at, hdr) ) {
       return arc_in->fail();
     }
   } else {
@@ -325,13 +315,13 @@ BmfImage* BMFCodec::expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
       return arc_in->fail();
     }
     uint32_t want = hdr.data_size;
-    if( fread(img_at->pixels, 1u, hdr.data_size, arc_in->fp)!=want ) {
+    if( io->read(img_at->pixels, hdr.data_size)!=want ) {
       return arc_in->fail();
     }
   }
   if( hdr.depth&depth_palette ) {
     uint8_t *pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
-    uint32_t got = fread(pal_at, 1u, pal_bytes, arc_in->fp);
+    uint32_t got = (uint32_t)io->read(pal_at, pal_bytes);
     if( got!=pal_bytes ) {
       return arc_in->fail();
     }

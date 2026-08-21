@@ -276,7 +276,7 @@ fi
 # conversions at each width went with the six intermediates, and the leg said
 # "lower it" instead of passing quietly -- which is the whole reason for writing
 # the number down rather than remembering it.
-CONV_RATCHET_64=192
+CONV_RATCHET_64=190
 CONV_RATCHET_32=179
 if [ "${BMF_CONV:-0}" = 1 ]; then
   log=conv.log
