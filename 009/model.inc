@@ -227,7 +227,7 @@ struct ModelBlock {
     int32_t band;
     int32_t pos = sym_pos;
     uint32_t result = (nb)[pos];
-    if( exclusion_mask[result]==exclusion_gen )
+    if( bmf_cx.exclusion_mask[result]==bmf_cx.exclusion_gen )
       return -1;
     bool near = false;
     for( band = 11; band<16; ++band )
@@ -265,14 +265,14 @@ struct ModelBlock {
     if( (far_hit+near_hit==0)&&pos>6 )
       return -1;
     SymList* sel0 = sel0_list;
-    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[mode_symbol[1]].ent), 10, result)).raw(ctx0);
-    SymEntry *list_prev = sel0[mode_symbol[2]].ent;
+    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[bmf_cx.mode_symbol[1]].ent), 10, result)).raw(ctx0);
+    SymEntry *list_prev = sel0[bmf_cx.mode_symbol[2]].ent;
     SymEntry *list_sym = sel0[result].ent;
     // The low three bits: is the symbol near the top of the previous
     // symbol's list, of its own, and of the one before that.
     int32_t fallback = CtxIdx{}.bit<2>(sym_in_top(list_prev, 4, result))
-                               .bit<1>(sym_in_top(list_sym, 10, mode_symbol[2]))
-                               .bit<0>(sym_in_top((sel0[mode_symbol[3]].ent), 6, result));
+                               .bit<1>(sym_in_top(list_sym, 10, bmf_cx.mode_symbol[2]))
+                               .bit<0>(sym_in_top((sel0[bmf_cx.mode_symbol[3]].ent), 6, result));
     int32_t ctx2 = fallback+ctx1;
     if( pos<=14||(ctx2&0xB)!=0 ) {
       ctr_node = CtxIdx{}.above<7>(pos).raw(ctx2);
@@ -292,18 +292,18 @@ struct ModelBlock {
     if( !hit0 ) {
       if( sel==sel_cur ) {
         if( sel[0] ) {
-          sel0_list[mode_symbol[1]].add_weight(row_cur[5]->sym, 3u);
-          sel0_list[row_cur[5]->sym].add_weight(mode_symbol[2], 2u);
-          sel1_list[mode_symbol[1]].add_weight(row_cur[5]->sym, 4u);
-          sel1_list[row_cur[5]->sym].add_weight(mode_symbol[1], 2u);
+          sel0_list[bmf_cx.mode_symbol[1]].add_weight(row_cur[5]->sym, 3u);
+          sel0_list[row_cur[5]->sym].add_weight(bmf_cx.mode_symbol[2], 2u);
+          sel1_list[bmf_cx.mode_symbol[1]].add_weight(row_cur[5]->sym, 4u);
+          sel1_list[row_cur[5]->sym].add_weight(bmf_cx.mode_symbol[1], 2u);
         } else {
-          sel0_list[mode_symbol[2]].add_weight(row_cur[5]->sym, (sym_pos>3)+2);
+          sel0_list[bmf_cx.mode_symbol[2]].add_weight(row_cur[5]->sym, (sym_pos>3)+2);
         }
       } else {
-        sel0_list[mode_symbol[1]].add_weight(row_cur[5]->sym, 3u);
-        sel0_list[row_cur[5]->sym].add_weight(mode_symbol[2], 2u);
-        sel0_list[row_cur[5]->sym].add_weight(mode_symbol[1], 1u);
-        sel1_list[row_cur[5]->sym].add_weight(mode_symbol[1], 2u);
+        sel0_list[bmf_cx.mode_symbol[1]].add_weight(row_cur[5]->sym, 3u);
+        sel0_list[row_cur[5]->sym].add_weight(bmf_cx.mode_symbol[2], 2u);
+        sel0_list[row_cur[5]->sym].add_weight(bmf_cx.mode_symbol[1], 1u);
+        sel1_list[row_cur[5]->sym].add_weight(bmf_cx.mode_symbol[1], 2u);
         cur = sel_cur;
         do {
           prev = cur-1;
@@ -332,9 +332,9 @@ struct ModelBlock {
           cur = sel_cur;
         } while( cur!=sel );
       }
-      if( exclusion_gen==-1 ) {
-        exclusion_gen = 1;
-        uint8_t *buf = (uint8_t*)exclusion_mask;
+      if( bmf_cx.exclusion_gen==-1 ) {
+        bmf_cx.exclusion_gen = 1;
+        uint8_t *buf = (uint8_t*)bmf_cx.exclusion_mask;
         uint32_t blocks = (alphabet+15)>>4;
         do {
           bmf_zero16(buf);
@@ -343,14 +343,14 @@ struct ModelBlock {
         } while( blocks );
         hit1 = hit;
       } else {
-        ++exclusion_gen;
+        ++bmf_cx.exclusion_gen;
         hit1 = hit;
       }
       promoted = hit1&&hit1<=2;
     } else {
       promoted = hit0<=2;
-      if( !promoted&&mode_symbol[3]!=mode_symbol[4] ) {
-        sel0_list[mode_symbol[2]].add_weight(row_cur[5]->sym, 1u);
+      if( !promoted&&bmf_cx.mode_symbol[3]!=bmf_cx.mode_symbol[4] ) {
+        sel0_list[bmf_cx.mode_symbol[2]].add_weight(row_cur[5]->sym, 1u);
         hit1 = hit;
         promoted = hit1&&hit1<=2;
       }
@@ -425,8 +425,8 @@ struct ModelBlock {
   // three lines in `code_pixel` and `decode_pixel`, and the last thing the two
   // still had in common.
   SymList** load_selectors() {
-    sel[0] = &sel0_list[mode_symbol[2]];
-    sel[1] = &sel1_list[mode_symbol[1]];
+    sel[0] = &sel0_list[bmf_cx.mode_symbol[2]];
+    sel[1] = &sel1_list[bmf_cx.mode_symbol[1]];
     return sel_cur;
   }
 
@@ -510,7 +510,7 @@ struct ModelBlock {
       }
       if( is_sym )
         return sym;
-      exclusion_mask[sym] = exclusion_gen;
+      bmf_cx.exclusion_mask[sym] = bmf_cx.exclusion_gen;
     }
     return -1;
   }
@@ -633,10 +633,10 @@ struct ModelBlock {
   }
 
   void exclude_stage_one() {
-    const int8_t gen = exclusion_gen;
+    const int8_t gen = bmf_cx.exclusion_gen;
     for( int32_t k = 1; k<5; ++k )
-      exclusion_mask[mode_symbol[k]] = gen;
-    exclusion_mask[no_symbol] = gen;
+      bmf_cx.exclusion_mask[bmf_cx.mode_symbol[k]] = gen;
+    bmf_cx.exclusion_mask[no_symbol] = gen;
   }
 
   // The four ranked neighbours of the pixel at the cursor, and the four
@@ -647,10 +647,10 @@ struct ModelBlock {
     const PixRec* up = row_cur[6];
     const PixRec* west = row_cur[5];
     const Neighbours n = { up->sym, west[-1].sym, up[1].sym, up[-1].sym };
-    mode_symbol[1] = n.up;
-    mode_symbol[2] = n.left;
-    mode_symbol[3] = n.up_next;
-    mode_symbol[4] = n.upleft;
+    bmf_cx.mode_symbol[1] = n.up;
+    bmf_cx.mode_symbol[2] = n.left;
+    bmf_cx.mode_symbol[3] = n.up_next;
+    bmf_cx.mode_symbol[4] = n.upleft;
     return n;
   }
 
@@ -1318,10 +1318,10 @@ struct ModelBlock {
         const uint32_t bin_tot = ctr->n[0]+ctr->n[1];
         int32_t run_bit;
         if constexpr( f_DEC ) {
-          run_bit = rc.decode_bit(ctr->n[0], ctr->n[1]);
+          run_bit = bmf_cx.rc.decode_bit(ctr->n[0], ctr->n[1]);
         } else {
           run_bit = (len&mask)!=0;
-          rc.encode_bit(ctr->n[0], ctr->n[1], run_bit);
+          bmf_cx.rc.encode_bit(ctr->n[0], ctr->n[1], run_bit);
         }
         if( ctr->limit<bin_tot )
           ctr->scale_rare();
@@ -1399,7 +1399,7 @@ struct ModelBlock {
                                  .bit<0>(alpha_map[nb4.up])
                                  .raw(1);
         bit = esc_ctr[esc_at].decode_context_bit(esc_ctr);
-        int32_t msym1c = mode_symbol[1];
+        int32_t msym1c = bmf_cx.mode_symbol[1];
         hit = bit;
         *(((uint8_t*)alpha_map)+msym1c) = bit;
         // `hit_a` is `hit`, and nothing between here and the end of this block
@@ -1434,7 +1434,7 @@ struct ModelBlock {
           // back out through `s1c`, `s3c`, `s3d` -- and `s1d` eighteen lines
           // below the block, which is what makes slot 1 more than scratch and
           // is why the run's symbol needs a name rather than a deletion.
-          const int32_t run_sym = mode_symbol[1];
+          const int32_t run_sym = bmf_cx.mode_symbol[1];
           pixp->prev = pixp->last;
           row_cur[5]->sym = (uint16_t)run_sym;
           pix_cur->last = (uint16_t)run_sym;
@@ -1474,11 +1474,11 @@ struct ModelBlock {
     auto decode_against = [&](FreqRec* rec) {
       const int32_t total = rec->w[5];
       int32_t cum;
-      const int32_t lvl = rec->find_level(rc.get_freq(total), cum);
+      const int32_t lvl = rec->find_level(bmf_cx.rc.get_freq(total), cum);
       // Before the bump, which is what moves `w[lvl]`.
       const int32_t low = cum-rec->w[lvl];
       rec->bump(lvl);
-      rc.decode(low, cum, total);
+      bmf_cx.rc.decode(low, cum, total);
       hit = lvl;
       return lvl;
     };
@@ -1500,7 +1500,7 @@ struct ModelBlock {
     }
     }
     if( lvl_a ) {
-      row_cur[5]->sym = mode_symbol[lvl_a];
+      row_cur[5]->sym = bmf_cx.mode_symbol[lvl_a];
       return 1;
     }
     return decode_stage_two(nb_sym, 0);
@@ -1583,7 +1583,7 @@ struct ModelBlock {
         seed_after_run(cur2, nb4.up);
       }
       (&esc_ctr[(amap+1)])->encode_context_bit(esc_ctr, run_hit);
-      int32_t msym1 = mode_symbol[1];
+      int32_t msym1 = bmf_cx.mode_symbol[1];
       uint8_t *amap_at = (uint8_t*)alpha_map;
       hit = run_hit;
       amap_at[msym1] = run_hit;
@@ -1606,7 +1606,7 @@ struct ModelBlock {
         // Before the bump, which is what moves `w[lvl]`.
         const uint32_t high = rec->w[lvl]+cum;
         rec->bump(lvl);
-        rc.encode(cum, high, total);
+        bmf_cx.rc.encode(cum, high, total);
         hit = lvl;
         return lvl;
       };

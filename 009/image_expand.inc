@@ -32,21 +32,21 @@
 // flags, then the dc byte and the reference weights those flags call for.  The
 // weights are written biased by 64 and read back the same way.
 static void read_plane_descs() {
-  for( int32_t pl = 0; pl<plane_count; ++pl ) {
+  for( int32_t pl = 0; pl<bmf_cx.plane_count; ++pl ) {
     uint32_t desc = unpack_bits(6);
     int32_t nrefs = desc&3;
-    plane_desc[pl].flags = desc>>2;
-    plane_desc[pl].nrefs = nrefs;
-    plane_desc[nrefs].src_plane = pl;
-    if( !(plane_desc[pl].flags&desc_has_refs) )
+    bmf_cx.plane_desc[pl].flags = desc>>2;
+    bmf_cx.plane_desc[pl].nrefs = nrefs;
+    bmf_cx.plane_desc[nrefs].src_plane = pl;
+    if( !(bmf_cx.plane_desc[pl].flags&desc_has_refs) )
       continue;
-    plane_desc[pl].dc = unpack_bits(8);
+    bmf_cx.plane_desc[pl].dc = unpack_bits(8);
     if( nrefs<=1 )
       continue;
-    plane_desc[pl].weight0 = unpack_bits(8)-64;
-    plane_desc[pl].weight1 = unpack_bits(8)-64;
+    bmf_cx.plane_desc[pl].weight0 = unpack_bits(8)-64;
+    bmf_cx.plane_desc[pl].weight1 = unpack_bits(8)-64;
     if( nrefs>2 )
-      plane_desc[pl].weight2 = unpack_bits(8)-64;
+      bmf_cx.plane_desc[pl].weight2 = unpack_bits(8)-64;
   }
 }
 
@@ -55,10 +55,10 @@ static void read_plane_descs() {
 static void unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
   BmfImage plane_hdr = *img_at;
   plane_hdr.depth = depth_one_plane;
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    const int32_t plane = plane_desc[k].src_plane;
-    plane_predictor = plane_desc[plane].flags&desc_predictor;
-    plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
+  for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
+    const int32_t plane = bmf_cx.plane_desc[k].src_plane;
+    bmf_cx.plane_predictor = bmf_cx.plane_desc[plane].flags&desc_predictor;
+    bmf_cx.plane_alt_model = (bmf_cx.plane_desc[plane].flags&desc_alt_model)!=0;
     unmodel_plane(&plane_hdr, plane_buf);
     // `pred && pred == pred_p1 && !alt` was three nested `if`s with the mode-0
     // arm hanging off the outermost `else`, which is one condition either way.
@@ -68,7 +68,7 @@ static void unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
     // `else` of an `if`/`else if` chain, and `pred_p1` is 1, so testing for it
     // already excludes mode 0.  The function, its declaration and both calls
     // are gone; the enumerator stays, because it is a value in the stream.
-    if( plane_predictor==pred_p1&&!plane_alt_model )
+    if( bmf_cx.plane_predictor==pred_p1&&!bmf_cx.plane_alt_model )
       unpredict_med(plane_buf, img_at->width, img_at->height);
     interleave_plane(img_at, plane_buf, plane);
   }
@@ -77,17 +77,17 @@ static void unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
 // One coded image, then each plane's predictor undone in place: take the plane
 // out, unpredict it, put it back.
 static void unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf) {
-  plane_predictor = plane_desc[0].flags&desc_predictor;
-  plane_alt_model = (plane_desc[0].flags&desc_alt_model)!=0;
+  bmf_cx.plane_predictor = bmf_cx.plane_desc[0].flags&desc_predictor;
+  bmf_cx.plane_alt_model = (bmf_cx.plane_desc[0].flags&desc_alt_model)!=0;
   unmodel_plane(img_at, img_at->pixels);
   // The alternate model leaves this loop nothing to undo; the recovery said so
   // by jumping past it to the `free` that follows, which is the caller's now.
-  if( plane_alt_model )
+  if( bmf_cx.plane_alt_model )
     return;
-  for( int32_t k = 0; k<plane_count; ++k ) {
+  for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
     const int32_t plane = plane_in_order(k);
-    const int32_t pred = plane_predictor;
-    if( (plane_desc[plane].flags&desc_has_refs)==0&&!pred )
+    const int32_t pred = bmf_cx.plane_predictor;
+    if( (bmf_cx.plane_desc[plane].flags&desc_has_refs)==0&&!pred )
       continue;
     deinterleave_plane(img_at, plane_buf, plane);
     if( pred==pred_p1 )
@@ -102,13 +102,13 @@ static void unmodel_described(BmfImage* img_at, uint8_t flags) {
   // The near-lossless nibble, mirroring `image_compress`: present for a single
   // greyscale plane and for three or more, absent otherwise.  Two `goto`s
   // jumped over it; the condition is the encoder's, negated.
-  if( plane_count==1 ? (img_at->depth&depth_grey)!=0 : plane_count>2 ) {
+  if( bmf_cx.plane_count==1 ? (img_at->depth&depth_grey)!=0 : bmf_cx.plane_count>2 ) {
     uint32_t near_lossless = unpack_bits(4);
     if( near_lossless ) {
-      printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
+      printf("\nnear-lossless bmf_cx.stream (E=%d); this build only decodes E=0\n", near_lossless);
       exit(3);
     }
-    near_lossless_q = 0;
+    bmf_cx.near_lossless_q = 0;
   }
   read_plane_descs();
   uint8_t *plane_buf = (uint8_t*)bmf_new(img_at->width*img_at->height);
@@ -132,29 +132,29 @@ static void unmodel_described(BmfImage* img_at, uint8_t flags) {
 // expanding an image.  Its opposite number is declined in that tool for the
 // same sentence; this one did not have to be.
 static bool expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
-  near_lossless_q = 0;
-  alphabet_reduced = 0;
+  bmf_cx.near_lossless_q = 0;
+  bmf_cx.alphabet_reduced = 0;
   if( !(hdr.flags&flags_slow) ) {
     printf("\nwritten in fast mode; this build only decodes -S streams\n");
     exit(3);
   }
-  desc_slow_mode = 1;
-  stream.size = hdr.data_size;
-  stream.buf = (uint8_t*)bmf_new(hdr.data_size);
+  bmf_cx.desc_slow_mode = 1;
+  bmf_cx.stream.size = hdr.data_size;
+  bmf_cx.stream.buf = (uint8_t*)bmf_new(hdr.data_size);
   packer_reset();
   uint32_t want = hdr.data_size;
-  if( fread(stream.buf, 1u, hdr.data_size, fp)!=want )
+  if( fread(bmf_cx.stream.buf, 1u, hdr.data_size, fp)!=want )
     return false;
   if( (img_at->depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
-    plane_predictor = 0;
-    plane_alt_model = 0;
+    bmf_cx.plane_predictor = 0;
+    bmf_cx.plane_alt_model = 0;
     unmodel_plane(img_at, img_at->pixels);
   } else {
     unmodel_described(img_at, hdr.flags);
   }
-  if( stream.buf+hdr.data_size!=stream.cur )
+  if( bmf_cx.stream.buf+hdr.data_size!=bmf_cx.stream.cur )
     return false;
-  free(stream.buf);
+  free(bmf_cx.stream.buf);
   return true;
 }
 
@@ -246,8 +246,8 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   img_at->depth = hdr.depth;
   uint8_t has_coded = p_coded_buf&&*p_coded_buf;
   img_at->flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
-  plane_count = ((hdr.depth&depth_bits)+7)>>3;
-  if( plane_count<1||plane_count>4 ) {
+  bmf_cx.plane_count = ((hdr.depth&depth_bits)+7)>>3;
+  if( bmf_cx.plane_count<1||bmf_cx.plane_count>4 ) {
     return arc_in->fail();
   }
   if( hdr.flags&flags_coded ) {
@@ -273,10 +273,10 @@ BmfImage* expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
     }
   }
   if( img_at->flags&flags_transposed ) {
-    if( (uint64_t)img_at->width*img_at->height*(uint32_t)plane_count>(uint64_t)img_at->data_size ) {
+    if( (uint64_t)img_at->width*img_at->height*(uint32_t)bmf_cx.plane_count>(uint64_t)img_at->data_size ) {
       return arc_in->fail();
     }
-    transpose_image(img_at, plane_count);
+    transpose_image(img_at, bmf_cx.plane_count);
   }
   return img_at;
 }

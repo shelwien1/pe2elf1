@@ -170,6 +170,7 @@
 #include "tables.inc"
 #include "globals.inc"
 #include "rc.inc"
+#include "state.inc"
 #include "decls.inc"
 #include "sym_list.inc"
 #include "bitctr.inc"
@@ -228,7 +229,7 @@ void bmf_compress(const char* InName, const char* OutName) {
         p_i->depth = (Depth|depth_grey)^depth_palette;
     }
   }
-  int32_t coded_len = compress_image(Arc, p_i, coded_block);
+  int32_t coded_len = compress_image(Arc, p_i, bmf_cx.coded_block);
   if( !coded_len )
     bmf_fatal(bmf_write_error, OutName);
   printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i->height*p_i->width));
@@ -241,7 +242,7 @@ void bmf_decompress(const char* InName, const char* OutName) {
     arc = bmf_open_file((BmfFile*)nb, (char*)InName, 1);
   else
     arc = nullptr;
-  BmfImage* p_i = expand_image(arc, &coded_block);
+  BmfImage* p_i = expand_image(arc, &bmf_cx.coded_block);
   // One image in a file: nothing to parse is not the end of a list of members,
   // it is a file that is not one of ours.
   if( !p_i )
@@ -254,8 +255,8 @@ void bmf_decompress(const char* InName, const char* OutName) {
   }
   if( !write_bmp(p_i, (char*)OutName, 1) )
     bmf_fatal(bmf_write_error, OutName);
-  free(coded_block);
-  coded_block = nullptr;
+  free(bmf_cx.coded_block);
+  bmf_cx.coded_block = nullptr;
   free(p_i);
   bmf_close_file(arc);
 }

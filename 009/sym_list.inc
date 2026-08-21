@@ -252,14 +252,14 @@ struct SymList {
     int32_t enc_cum, enc_high, enc_tot;
     int32_t c, c2;
     uint32_t i;
-    int8_t gen = exclusion_gen;
+    int8_t gen = bmf_cx.exclusion_gen;
     uint32_t left = live;
     SymEntry *p = ent-1;
     int32_t cum = 0;
     while( 1 ) {
       ++p;
       int32_t s = p->sym;
-      if( exclusion_mask[s]!=exclusion_gen ) {
+      if( bmf_cx.exclusion_mask[s]!=bmf_cx.exclusion_gen ) {
         c = p->cnt;
         cum += c;
         if( s==want )
@@ -277,13 +277,13 @@ struct SymList {
       enc_tot = tot+cum;
       enc_high = enc_tot;
       do {
-        exclusion_mask[p->sym] = gen;
+        bmf_cx.exclusion_mask[p->sym] = gen;
         --p;
       } while( p>=ent );
       // `result = 0;` and a braced block around the two lines below it, the
       // block being where the decompiler put a `goto`'s landing.  There is one
       // value and it is a literal.
-      rc.encode(enc_cum, enc_high, enc_tot);
+      bmf_cx.rc.encode(enc_cum, enc_high, enc_tot);
       return 0;
     }
     enc_high = cum;
@@ -291,7 +291,7 @@ struct SymList {
     enc_cum = cum-c;
     if( rest ) {
       for( i = 0; i<rest; ++i ) {
-        if( exclusion_mask[p[i+1].sym]==exclusion_gen )
+        if( bmf_cx.exclusion_mask[p[i+1].sym]==bmf_cx.exclusion_gen )
           c2 = 0;
         else
           c2 = p[i+1].cnt;
@@ -300,7 +300,7 @@ struct SymList {
     }
     enc_tot = tot+cum;
     rescale(promote(p));
-    rc.encode(enc_cum, enc_high, enc_tot);
+    bmf_cx.rc.encode(enc_cum, enc_high, enc_tot);
     return 1;
   }
 
@@ -526,12 +526,12 @@ inline int32_t SymList::decode_symbol_list() {
   // readings of every comparison below agree, and the casts say which one the
   // binary made.
   w = list;
-  uint32_t gen = (uint8_t)exclusion_gen;
+  uint32_t gen = (uint8_t)bmf_cx.exclusion_gen;
   int32_t cum = 0;
   // The candidates: every live symbol the encoder has not already offered and
   // had rejected, with their counts summed.
   for( int32_t i = 0; i<(int32_t)live; ++i ) {
-    if( (uint8_t)exclusion_mask[ent[i].sym]==gen ) {
+    if( (uint8_t)bmf_cx.exclusion_mask[ent[i].sym]==gen ) {
       c = 0;
     } else {
       SymEntry *e = &ent[i];
@@ -546,7 +546,7 @@ inline int32_t SymList::decode_symbol_list() {
   // One total, which the frame spelled twice: `cum + tot` went into two slots
   // and the escape path read one while the hit path read the other.
   int32_t tot_all = cum+(int32_t)tot;
-  int32_t target = rc.get_freq(tot_all);
+  int32_t target = bmf_cx.rc.get_freq(tot_all);
   SymEntry *p = list[0];
   rd = &list[1];
   SymEntry *first = list[0];
@@ -563,10 +563,10 @@ inline int32_t SymList::decode_symbol_list() {
       q = first;
       rd2 = &list[1];
       do {
-        exclusion_mask[q->sym] = gen_b;
+        bmf_cx.exclusion_mask[q->sym] = gen_b;
         q = *rd2++;
       } while( q );
-      rc.decode(cum_lo, tot_all, tot_all);
+      bmf_cx.rc.decode(cum_lo, tot_all, tot_all);
       return -1;
     }
   }
@@ -577,6 +577,6 @@ inline int32_t SymList::decode_symbol_list() {
   int32_t result = p->sym;
   uint32_t sym_cum = cum_lo-p->cnt;
   this->rescale(this->promote(p));
-  rc.decode(sym_cum, cum_lo, tot_all);
+  bmf_cx.rc.decode(sym_cum, cum_lo, tot_all);
   return result;
 }

@@ -88,7 +88,7 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
   } else {
     n_distinct = 0;
   }
-  rc.encode(n_distinct-1, n_distinct, mask+1);
+  bmf_cx.rc.encode(n_distinct-1, n_distinct, mask+1);
   uint32_t n_syms = blk1->alphabet;
   if( n_syms<=mask ) {
     BMF_ASSUME(mask-n_syms+2<=257);
@@ -148,12 +148,12 @@ static int32_t tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
     if( !node )
       break;
     if( val==tree[node].val ) {
-      mode_symbol[1] = side;
+      bmf_cx.mode_symbol[1] = side;
       return node;
     }
   }
   int32_t alphabet = blk->alphabet;
-  mode_symbol[1] = side;
+  bmf_cx.mode_symbol[1] = side;
   node = (uint16_t)alphabet;
   int32_t alpha = alphabet+1;
   kidp[side] = node;
@@ -240,7 +240,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
     // Both exits of the loop above jumped here past this line, which is the
     // line they set `alpha_n` from.  Leaving the loop runs it.
     alpha_n = blk->alphabet;
-    rc.encode(alpha_n-1, alpha_n, 0x2001u);
+    bmf_cx.rc.encode(alpha_n-1, alpha_n, 0x2001u);
     if( blk->alphabet>0x2000 ) {
       out[1] = (uint8_t*)bmf_new(blk->height*n_kids*blk->width);
       int32_t img_w = blk->width;

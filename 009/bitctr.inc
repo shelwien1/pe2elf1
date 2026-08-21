@@ -75,7 +75,7 @@ struct FreqPair {
 };
 
 static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl) {
-  return (FreqPair*)&freq[2*level_geom[lvl].tbl_base+8];
+  return (FreqPair*)&freq[2*bmf_cx.level_geom[lvl].tbl_base+8];
 }
 
 // One binary counter with a parent to fall back on, and a three-state life:
@@ -174,9 +174,9 @@ struct BitCtr {
         seed_from(parent);
       const uint32_t tot = summ();
       if constexpr( f_DEC )
-        bit = rc.decode_bit(n[0], n[1]);
+        bit = bmf_cx.rc.decode_bit(n[0], n[1]);
       else
-        rc.encode_bit(n[0], n[1], bit);
+        bmf_cx.rc.encode_bit(n[0], n[1], bit);
       if( tot>limit )
         scale_rare();
       result = n[bit]+kStep;
@@ -189,9 +189,9 @@ struct BitCtr {
       // the next visit knows which side to bump when it seeds.
       const uint32_t p_tot = parent->summ();
       if constexpr( f_DEC )
-        bit = rc.decode_bit(parent->n[0], parent->n[1]);
+        bit = bmf_cx.rc.decode_bit(parent->n[0], parent->n[1]);
       else
-        rc.encode_bit(parent->n[0], parent->n[1], bit);
+        bmf_cx.rc.encode_bit(parent->n[0], parent->n[1], bit);
       if( p_tot>parent->limit )
         parent->scale_rare();
       result = parent->n[bit]+kStep;

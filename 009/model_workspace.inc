@@ -41,7 +41,7 @@ ModelBlock* new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
 ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth) {
   int32_t j;
   uint32_t k, m, s, n;
-  exclusion_gen = 1;
+  bmf_cx.exclusion_gen = 1;
   width = img_w;
   height = img_h;
   depth = img_depth;
@@ -104,7 +104,7 @@ ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t im
   memset(ctx_id1, 255, sizeof ctx_id1);
   memset(ctx_id2, 255, sizeof ctx_id2);
   memset(ctx_id3, 255, sizeof ctx_id3);
-  memset(exclusion_mask, 0, sizeof exclusion_mask);
+  memset(bmf_cx.exclusion_mask, 0, sizeof bmf_cx.exclusion_mask);
   sel[0] = nullptr;
   sel[1] = nullptr;
   escape_list = nullptr;

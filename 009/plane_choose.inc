@@ -280,14 +280,14 @@ static void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024],
     wb = 0;
     wa_slot = 0;
   }
-  plane_desc[3].weight0 = wa_slot;
-  plane_desc[3].weight1 = wb;
-  plane_desc[3].weight2 = wc;
-  plane_desc[3].src_plane = 3;
-  plane_desc[3].nrefs = 3;
+  bmf_cx.plane_desc[3].weight0 = wa_slot;
+  bmf_cx.plane_desc[3].weight1 = wb;
+  bmf_cx.plane_desc[3].weight2 = wc;
+  bmf_cx.plane_desc[3].src_plane = 3;
+  bmf_cx.plane_desc[3].nrefs = 3;
   // Rows 4..7, by the same window and the same layout-read constant
   // as the search above.
-  plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
+  bmf_cx.plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
 }
 
 int32_t choose_plane_coding(BmfImage* img) {
@@ -334,9 +334,9 @@ int32_t choose_plane_coding(BmfImage* img) {
   uint32_t next_plane, row;
   int32_t result, xform, wt8, wt4, pred;
   uint32_t best_cost, best;
-  int32_t n_planes = plane_count;
+  int32_t n_planes = bmf_cx.plane_count;
   int32_t data_size = img->data_size;
-  alphabet_reduced = 1;
+  bmf_cx.alphabet_reduced = 1;
   int32_t row_stride = img->stride;
   const uint8_t* data_end = &img->pixels[data_size];
   memset(hists, 0, sizeof hists);
@@ -354,10 +354,10 @@ int32_t choose_plane_coding(BmfImage* img) {
       for( ; pair<(uint32_t)(n_planes/2); ++pair ) {
         const uint8_t pl_even = 2*pair, pl_odd = 2*pair+1;
         row = 2*pair;
-        plane_desc[row].src_plane = pl_even;
-        plane_desc[row].nrefs = pl_even;
-        plane_desc[row+1].src_plane = pl_odd;
-        plane_desc[row+1].nrefs = pl_odd;
+        bmf_cx.plane_desc[row].src_plane = pl_even;
+        bmf_cx.plane_desc[row].nrefs = pl_even;
+        bmf_cx.plane_desc[row+1].src_plane = pl_odd;
+        bmf_cx.plane_desc[row+1].nrefs = pl_odd;
       }
       next_plane = 2*pair+1;
     } else {
@@ -367,8 +367,8 @@ int32_t choose_plane_coding(BmfImage* img) {
     // `next_plane` is unsigned and `result` is not, so naming the value here
     // is what makes the conversion visible; it was always happening.
     if( (uint32_t)n_planes>(uint32_t)result ) {
-      plane_desc[next_plane-1].src_plane = result;
-      plane_desc[next_plane-1].nrefs = result;
+      bmf_cx.plane_desc[next_plane-1].src_plane = result;
+      bmf_cx.plane_desc[next_plane-1].nrefs = result;
     }
     if( n_planes>=3 ) {
       // The three candidate transforms, costed, cheapest kept.  The
@@ -397,12 +397,12 @@ int32_t choose_plane_coding(BmfImage* img) {
       // two turns of a loop counting down by eight: offsets 56, 48, 40, 32
       // then 24, 16, 8, 0.  Sixty-four bytes, which is one row of the table
       // and `4*sizeof(PlaneDesc)`, so it is one copy.
-      memcpy(plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
+      memcpy(bmf_cx.plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
       best_cost = cand_cost[xform][0];
-      int32_t plane_a = plane_desc[0].src_plane-xform;
-      wt8 = plane_desc[xform].weight1;
-      int32_t plane_b = plane_desc[1].src_plane-xform;
-      wt4 = plane_desc[xform].weight0;
+      int32_t plane_a = bmf_cx.plane_desc[0].src_plane-xform;
+      wt8 = bmf_cx.plane_desc[xform].weight1;
+      int32_t plane_b = bmf_cx.plane_desc[1].src_plane-xform;
+      wt4 = bmf_cx.plane_desc[xform].weight0;
       // Coordinate descent on the two weights, four trials to a turn, each a
       // full pass over the image.  Both axes walk down by one until neither
       // can move four steps past its best, then both walk up the same way; a
@@ -470,8 +470,8 @@ int32_t choose_plane_coding(BmfImage* img) {
         wt4 = 64;
         wt8 = 64;
       }
-      plane_desc[xform].weight0 = wt4;
-      plane_desc[xform].weight1 = wt8;
+      bmf_cx.plane_desc[xform].weight0 = wt4;
+      bmf_cx.plane_desc[xform].weight1 = wt8;
       // The widest 256-entry window of one histogram row, and `pos` is its
       // right edge -- truncated to `int8_t`, which is what makes `dc` a byte.
       //
@@ -482,10 +482,10 @@ int32_t choose_plane_coding(BmfImage* img) {
       // as an array index is not something any gate here can see -- all
       // nineteen images produce byte-identical streams at 0 and at 4, checked
       // -- so the measured value is what stays, with the 4 written down.
-      plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
+      bmf_cx.plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
       // The same window over row 4, which is `hist_c[1024..2047]`.
       result = widest_window(hist_c+1024, 0, 512, 255)+1;
-      plane_desc[plane_b+xform].dc = result;
+      bmf_cx.plane_desc[plane_b+xform].dc = result;
       if( n_planes>=4 ) {
         choose_alpha_plane(img, hists, data_end, row_stride);
       }

@@ -38,11 +38,8 @@ struct CodedTail {
   uint32_t data[0];
 };
 
-alignas(16) static CodedTail* coded_block = nullptr;
 
-alignas(16) static int32_t plane_predictor = 0;
 
-alignas(16) static int32_t plane_alt_model = 0;
 
 // The compressed output, and the bit packer riding on the same bytes.
 //
@@ -69,11 +66,8 @@ struct CodedStream {
   Packer pk;
 };
 
-alignas(16) static CodedStream stream;
 
-static int32_t desc_slow_mode;
 
-static int32_t alphabet_reduced;
 
 // A plane descriptor's `flags` nibble, which is the top four bits of the
 // six-bit word on the wire -- `flags<<2 | nrefs`, packed by `compress_image`
@@ -127,9 +121,7 @@ struct PlaneDesc {
 // references onto two of them and the archive version word used the third.
 // All three are their own storage now, which is what let the array lose the
 // slot and every access lose its `+1`.
-static PlaneDesc plane_desc[4];
 
-static int32_t plane_count;
 
 // The near-lossless quantiser: the residual bucket width is `2*q+1`, so `q=0`
 // is lossless.  Three sites read it -- `alt_init_tables`'s bucket size and
@@ -143,15 +135,10 @@ static int32_t plane_count;
 // Recovering the binary is what this tree is for, so the resolution is to say
 // so, once, here -- the plumbing is correct, complete, and never exercised
 // above a bucket width of one.
-static int32_t near_lossless_q;
 
-static uint8_t model_geometry[128];
 
-static int8_t exclusion_gen;
 
-static int32_t alt_freq_limit;
 
-static int32_t alt_freq_init;
 
 struct LevelGeom {
   uint8_t first;
@@ -160,13 +147,9 @@ struct LevelGeom {
   uint8_t _pad;
 };
 
-static LevelGeom level_geom[8];
 
-static int32_t ctx_bias[4];
 
-static int32_t deadzone_hi;
 
-static int32_t deadzone_lo;
 
 static constexpr int32_t opt_use_filters = 1;
 
@@ -194,14 +177,9 @@ static constexpr int32_t opt_max_error = 0;
 // So the storage stays as the binary has it, and the access is a `memcpy`
 // pair rather than a `uint32_t&` -- which is the same read-modify-write with
 // the alignment told truthfully, and needs no claim about the base at all.
-static uint8_t* hist_scratch;
 
-static inline void hist_bump(int32_t k) {
-  uint32_t n;
-  memcpy(&n, &hist_scratch[4*k], sizeof n);
-  ++n;
-  memcpy(&hist_scratch[4*k], &n, sizeof n);
-}
+// `hist_bump` reads `hist_scratch` and is a `BMFState` method now; see
+// state.inc.
 
 // The exclusion mask: one byte per symbol, stamped with the current generation
 // once the symbol has been offered and rejected, so the next candidate that
@@ -229,7 +207,6 @@ static inline void hist_bump(int32_t k) {
 // something is that round-up.  One array, sized by the clear that is widest.
 static constexpr int32_t no_symbol = 8192;
 
-alignas(16) static int8_t exclusion_mask[(no_symbol+1+15)&~15];
 
 // 520,192 bytes, the same every time, and reached through this one pointer --
 // which is what bounds it to one: a second table would have to overwrite the
@@ -239,18 +216,18 @@ alignas(16) static int8_t exclusion_mask[(no_symbol+1+15)&~15];
 //
 // `uint16_t` and a byte count: `kModelTableBytes` is a byte count in the
 // decompilation and stays one, because nothing divides it by an element size.
-alignas(16) static uint16_t model_table_store[kModelTableBytes/sizeof(uint16_t)];
 
-static uint16_t* model_tables;
 
-static inline uint16_t*model_strip(uint32_t k) {
-  return model_tables+254*k;
-}
+// `model_strip` reads `model_tables` and is a `BMFState` method now; see
+// state.inc.
 
-static int32_t mode_symbol[5];
 
-// **These three stay file-scope, and the stage-2 appendix's reason for moving
-// them does not hold.**  It says `exclusion_gen`, `exclusion_mask` and
+// **These three were file-scope, and the stage-2 appendix's reason for moving
+// them into `ModelBlock` did not hold.**  They are `BMFState` members now,
+// which is a different move for a different reason -- the appendix wanted them
+// inside the one class that seemed to use them, and the measurement below is
+// why that was wrong.  A state object takes all three without having to claim
+// that any one class owns them.  It says `exclusion_gen`, `exclusion_mask` and
 // `mode_symbol` "are used only by `ModelBlock`, so they can become members
 // without a context object".  Measured, they are not:
 //

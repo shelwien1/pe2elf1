@@ -56,7 +56,7 @@ struct P2Freq {
     int32_t c01 = f[1]+f[0];
     uint32_t tot = c01+f[2];
     if constexpr( f_DEC ) {
-      int32_t target = rc.get_freq(tot);
+      int32_t target = bmf_cx.rc.get_freq(tot);
       cum = f[0];
       if( (uint32_t)target>=cum ) {
         if( target>=c01 ) {
@@ -85,9 +85,9 @@ struct P2Freq {
     }
     uint32_t tot_1 = cum+*slot;
     if constexpr( f_DEC )
-      rc.decode(cum, tot_1, tot);
+      bmf_cx.rc.decode(cum, tot_1, tot);
     else
-      rc.encode(cum, tot_1, tot);
+      bmf_cx.rc.encode(cum, tot_1, tot);
     uint16_t f_before = *slot;
     if( *slot>0x4000u ) {
       halve_counts(f, 3);
@@ -112,7 +112,7 @@ struct P2Freq {
     *slot = st+f_before;
     int32_t idx = slot-base;
     if( idx )
-      return idx+2*code_symbol_tree<f_DEC>(model_strip(ctx_pair[idx&1]), (sym-1)>>1);
+      return idx+2*code_symbol_tree<f_DEC>(bmf_cx.model_strip(ctx_pair[idx&1]), (sym-1)>>1);
     return 0;
   }
 
@@ -158,7 +158,7 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
   // An invariant taken from a document rather than from the callers, checked by
   // a leg that runs.
   BMF_ASSUME(shift>=1&&shift<=3);
-  const uint32_t kick = 32u*(uint32_t)((err>deadzone_hi)-(err<deadzone_lo));
+  const uint32_t kick = 32u*(uint32_t)((err>bmf_cx.deadzone_hi)-(err<bmf_cx.deadzone_lo));
   return (int16_t)((uint32_t)w2+((kick+(uint32_t)err+(1u<<(shift-1)))>>shift));
 }
 
@@ -911,12 +911,12 @@ struct AltP2Block {
     }
     // See `alt_init_tables`: this is the second of the three reads of a
     // quantiser nothing in this build sets above zero.
-    BMF_ASSUME(near_lossless_q==0);
-    int32_t dz = 4*near_lossless_q+1;
-    int32_t band = 16*near_lossless_q;
-    has_ref = (plane_desc[plane_desc[plane_idx].src_plane].flags&desc_has_refs)!=0;
-    deadzone_hi = dz;
-    deadzone_lo = -dz;
+    BMF_ASSUME(bmf_cx.near_lossless_q==0);
+    int32_t dz = 4*bmf_cx.near_lossless_q+1;
+    int32_t band = 16*bmf_cx.near_lossless_q;
+    has_ref = (bmf_cx.plane_desc[bmf_cx.plane_desc[plane_idx].src_plane].flags&desc_has_refs)!=0;
+    bmf_cx.deadzone_hi = dz;
+    bmf_cx.deadzone_lo = -dz;
     band_lo = -band-7;
     band_hi = band+8;
     // Two rows of weight-set pointers, one per column plus the four the
@@ -967,7 +967,7 @@ struct AltP2Block {
     // them, counting down with an unrelated initialisation dropped in the
     // middle.
     for( int32_t i = 0; i<4; ++i )
-      ctx_bias[i] = 0;
+      bmf_cx.ctx_bias[i] = 0;
     int32_t lvl = 0;
     cursor[0] = buf[0]+8;
     // `2*pair+++1` -- a post-increment inside the comparison that decides the
@@ -1071,7 +1071,7 @@ static void p2_block_give(AltP2Block* p) {
 // and `y` in the encoder, `xf0`, `dc_flag` and `xf4` in the decoder -- none of
 // which says which plane it is about.
 static bool ref_transformed(int32_t k) {
-  return (plane_desc[plane_desc[k].src_plane].flags&desc_has_refs)!=0;
+  return (bmf_cx.plane_desc[bmf_cx.plane_desc[k].src_plane].flags&desc_has_refs)!=0;
 }
 
 // Every plane made ready for the next row.  Row 0 seeds the neutral record and
@@ -1088,7 +1088,7 @@ static bool ref_transformed(int32_t k) {
 // obvious `seed_history(-width)` here cost eight of the 110 checks -- which is
 // the one thing a double negative spelled through a named local is good at.
 static void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
-  for( int32_t k = 0; k<plane_count; ++k ) {
+  for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
     if( row==0 )
       plane[k]->seed_row0(width);
     else if( row==1 )
@@ -1106,16 +1106,16 @@ static void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
 // `alt_p2_free` writes `plane_count`, which is what makes the re-read say
 // nothing and the `for` say the same thing as the `do`.
 static void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
-  for( int32_t pl = 0; pl<plane_count; ++pl ) {
+  for( int32_t pl = 0; pl<bmf_cx.plane_count; ++pl ) {
     AltP2Block* page = p2_block_take();
     plane[pl] = page->alt_p2_alloc(width, pl);
   }
 }
 
 static int32_t alt_p2_planes_free(AltP2Block** plane) {
-  for( int32_t pl = 0; pl<plane_count; ++pl )
+  for( int32_t pl = 0; pl<bmf_cx.plane_count; ++pl )
     plane[pl]->alt_p2_free();
-  return plane_count;
+  return bmf_cx.plane_count;
 }
 
 // `NbRow::predict` writes `nb[7][0..2]` where `nb` is `p2_row`, a `[7][4]`.

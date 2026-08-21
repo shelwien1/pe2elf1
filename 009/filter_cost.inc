@@ -98,9 +98,9 @@ static int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0,
   int32_t hist[512];
   memset(hist, 0, sizeof hist);
   const int32_t stride = img->stride;
-  const int32_t left = -plane_count;
+  const int32_t left = -bmf_cx.plane_count;
   const int32_t ofs_up = -stride;
-  const int32_t ofs_ul = -stride-plane_count;
+  const int32_t ofs_ul = -stride-bmf_cx.plane_count;
   const uint8_t *p = plane0-ofs_ul;
   const uint8_t *q = plane0+plane_a-ofs_ul;
   const uint8_t *r = plane0+plane_b-ofs_ul;
@@ -135,7 +135,7 @@ int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* cos
   int32_t *const hist_zp = hr.r5;     // dz - (dx + dy)/2
   memset(hists, 0, sizeof hists);
 
-  const int32_t planes = plane_count;
+  const int32_t planes = bmf_cx.plane_count;
   // `*(const uint16_t*)&img->stride` -- the low half of a `uint32_t`, which
   // is a truncation on a little-endian machine and a different field on any
   // other.  Cast the value.

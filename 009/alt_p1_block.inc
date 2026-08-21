@@ -526,7 +526,7 @@ struct AltP1Block {
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, 11);
       if( slot_f>=5 )
-        update_binary_pair(model_strip(CtxIdx{}.bit<7>(slot_f&1)
+        update_binary_pair(bmf_cx.model_strip(CtxIdx{}.bit<7>(slot_f&1)
                                               .bit<6>(node_up[1].escape_high(slot_f))
                                               .raw(ctx_up)),
                            (int32_t)(code_f-5)>>1);
@@ -536,7 +536,7 @@ struct AltP1Block {
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, 13);
       if( slot_f>=5 )
-        update_binary_pair(model_strip(CtxIdx{}.bit<7>(slot_f&1)
+        update_binary_pair(bmf_cx.model_strip(CtxIdx{}.bit<7>(slot_f&1)
                                               .bit<6>(node_dn[-1].escape_high(slot_f))
                                               .raw(ctx_dn)),
                            tree_sym);
@@ -560,8 +560,8 @@ struct AltP1Block {
       const uint32_t key = CtxIdx{}.bit<7>(slot_f&1)
                                    .bit<6>(counters[result].escape_high(slot_f))
                                    .raw(ctx[1]);
-      if( (key&0x38)>=0x38||(update_binary_pair(model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
-        update_binary_pair(model_strip(key-8), tree_sym);
+      if( (key&0x38)>=0x38||(update_binary_pair(bmf_cx.model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
+        update_binary_pair(bmf_cx.model_strip(key-8), tree_sym);
       }
     }
     // The nine selectors.  `update_selector` is what the decompilation

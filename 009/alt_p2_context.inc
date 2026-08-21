@@ -352,10 +352,10 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // What is left reads `.dupleft`, `.dupright`, `.dleft`, `.dup`, `.val`,
   // `.err` and `.mag`, which is seven fields and not the two an accessor pays
   // for.
-  int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1->dupleft+ctx_bias[0]+14*c0[-2].dupleft;
-  int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1->dupright+9*c1[-1].dupright+22*c0[-1].dupright+ctx_bias[1]+19*c0[-2].dupright;
-  int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1->dleft+16*c1[-1].dleft+22*c0[-1].dleft+ctx_bias[2]+19*c0[-2].dleft;
-  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1->dup+25*c0[-1].dup+ctx_bias[3]+17*c0[-2].dup+15*(c3->dup+c2->dup);
+  int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1->dupleft+bmf_cx.ctx_bias[0]+14*c0[-2].dupleft;
+  int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1->dupright+9*c1[-1].dupright+22*c0[-1].dupright+bmf_cx.ctx_bias[1]+19*c0[-2].dupright;
+  int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1->dleft+16*c1[-1].dleft+22*c0[-1].dleft+bmf_cx.ctx_bias[2]+19*c0[-2].dleft;
+  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1->dup+25*c0[-1].dup+bmf_cx.ctx_bias[3]+17*c0[-2].dup+15*(c3->dup+c2->dup);
   int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
   int32_t band = over_thresholds(8*sum4, p2_band_edges, 0, 4, sum_u);
   int32_t den_d = 2*c0[-2].val+2*c0[-1].val;

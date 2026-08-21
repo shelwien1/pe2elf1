@@ -71,7 +71,7 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
       const uint8_t pred = med_predict(p[-1], north, p[-width-1]);
       const int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
       *p = code;
-      hist_bump(code);
+      bmf_cx.hist_bump(code);
     }
     // The first column has no west neighbour, so it takes a plain vertical
     // difference.
@@ -79,7 +79,7 @@ uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
     --p;
     last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
     *p = last;
-    hist_bump(last);
+    bmf_cx.hist_bump(last);
   }
   if( width!=1 ) {
     last = width-1;
@@ -126,7 +126,7 @@ static void strided_copy(uint8_t* dst, int32_t dstep,
 }
 
 static void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane) {
-  strided_copy(dst, 1, &img->pixels[plane], plane_count, bmf_pixels(img));
+  strided_copy(dst, 1, &img->pixels[plane], bmf_cx.plane_count, bmf_pixels(img));
 }
 
 // The inverse.  `colour_transform` reached for the gather by name and
@@ -134,7 +134,7 @@ static void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane)
 // pair; writing them both this way round is what shows that the only
 // difference is which side carries the stride.
 static void interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane) {
-  strided_copy(&img->pixels[plane], plane_count, src, 1, bmf_pixels(img));
+  strided_copy(&img->pixels[plane], bmf_cx.plane_count, src, 1, bmf_pixels(img));
 }
 
 // What a plane's descriptor says about the transform between it and the planes
@@ -183,19 +183,19 @@ struct PlaneTransform {
 
 static PlaneTransform plane_transform(int32_t plane) {
   PlaneTransform t;
-  t.to_ref0 = plane_desc[0].src_plane-plane;
-  t.to_ref1 = plane_desc[1].src_plane-plane;
-  t.mode = plane_desc[plane].nrefs;
-  t.dc = plane_desc[plane].dc;
-  t.wgt1 = plane_desc[plane].weight1;
-  t.wgt0 = plane_desc[plane].weight0;
-  t.wgt2 = plane_desc[plane].weight2;
+  t.to_ref0 = bmf_cx.plane_desc[0].src_plane-plane;
+  t.to_ref1 = bmf_cx.plane_desc[1].src_plane-plane;
+  t.mode = bmf_cx.plane_desc[plane].nrefs;
+  t.dc = bmf_cx.plane_desc[plane].dc;
+  t.wgt1 = bmf_cx.plane_desc[plane].weight1;
+  t.wgt0 = bmf_cx.plane_desc[plane].weight0;
+  t.wgt2 = bmf_cx.plane_desc[plane].weight2;
   t.by_weights = false;
   if( t.mode==2&&t.wgt0+t.wgt1==128 ) {
     if( !t.wgt1 ) {
       t.by_weights = true;
     } else if( !t.wgt0 ) {
-      t.to_ref0 = plane_desc[1].src_plane-plane;
+      t.to_ref0 = bmf_cx.plane_desc[1].src_plane-plane;
       t.by_weights = true;
     }
   }
@@ -228,21 +228,21 @@ static PlaneTransform plane_transform(int32_t plane) {
 template<int32_t f_DEC>
 static void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
   uint8_t* base = &img->pixels[plane];
-  if( !(plane_desc[plane].flags&desc_has_refs) ) {
+  if( !(bmf_cx.plane_desc[plane].flags&desc_has_refs) ) {
     if constexpr( f_DEC )
       interleave_flat(img, side, plane);
     else
       deinterleave_plane(img, side, plane);
     return;
   }
-  int32_t stride = plane_count;
+  int32_t stride = bmf_cx.plane_count;
   int32_t n = bmf_pixels(img);
   const PlaneTransform t = plane_transform(plane);
   // The same dispatch `plane_transform` makes, written the same way round.
   // Here it was two nested `if`s with the one-reference path falling out of
   // the bottom of both, which is `by_weights || nrefs == 1` reached the long
   // way.
-  if( t.by_weights||plane_desc[plane].nrefs==1 ) {
+  if( t.by_weights||bmf_cx.plane_desc[plane].nrefs==1 ) {
     const uint8_t *ref = base+t.to_ref0;
     for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += stride ) {
       if constexpr( f_DEC )
@@ -342,14 +342,14 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
 // as `++k` first and `plane_desc[k - 1]` after it under an `if( plane_count >
 // 0 )` guard that a `for` does not need.
 static int32_t plane_in_order(int32_t k) {
-  const int32_t plane = plane_desc[k].src_plane;
-  plane_predictor = plane_desc[plane].flags&desc_predictor;
+  const int32_t plane = bmf_cx.plane_desc[k].src_plane;
+  bmf_cx.plane_predictor = bmf_cx.plane_desc[plane].flags&desc_predictor;
   return plane;
 }
 
 void transform_planes(BmfImage* p_i) {
   int32_t i;
-  memset(hist_scratch, 0, 4096);
+  memset(bmf_cx.hist_scratch, 0, 4096);
   // A scratch image in the coded buffer: one header's worth of bytes reserved,
   // then a copy of the header, then the pixels.  The reserved run and the
   // header are the same size, which is why `hdr->pixels` is `stream.buf + 32`
@@ -359,33 +359,33 @@ void transform_planes(BmfImage* p_i) {
   // the tree where an object's layout was written as arithmetic instead of
   // declared, which is the row `shape.py` counts first.
   static_assert(sizeof(BmfImage) == 16, "the reserved run is one header");
-  BmfImage *hdr = (BmfImage*)(stream.buf+sizeof(BmfImage));
+  BmfImage *hdr = (BmfImage*)(bmf_cx.stream.buf+sizeof(BmfImage));
   *hdr = *p_i;
   uint8_t* src_pixels = p_i->pixels;
   memcpy(hdr->pixels, p_i->pixels, p_i->data_size);
   uint8_t *tmp = (uint8_t*)bmf_new(p_i->width*p_i->height);
-  for( int32_t k = 0; k<plane_count; ++k ) {
+  for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
     const int32_t plane = plane_in_order(k);
-    const int32_t predictor = plane_predictor;
-    const int32_t alt = (plane_desc[plane].flags&desc_alt_model)!=0;
-    plane_alt_model = alt;
+    const int32_t predictor = bmf_cx.plane_predictor;
+    const int32_t alt = (bmf_cx.plane_desc[plane].flags&desc_alt_model)!=0;
+    bmf_cx.plane_alt_model = alt;
     // A plane is transformed when it has references or a predictor, and not
     // when it carries the alternate model -- that family does its own.  The
     // condition held the whole of the loop body and had nothing after it, so it
     // is a name and an early exit.
     const bool transform_it =
-        ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt;
+        ((bmf_cx.plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt;
     if( !transform_it )
       continue;
     colour_transform(hdr, tmp, plane);
     // `!= pred_p2 && == pred_p1` is `== pred_p1`: the two are distinct
     // values of the same two-bit field, so the outer test can only be
     // true when the inner one is.
-    if( plane_predictor==pred_p1 )
+    if( bmf_cx.plane_predictor==pred_p1 )
       predict_med(tmp, p_i->width, p_i->height);
     int32_t n = p_i->width*p_i->height;
-    int32_t stride = plane_count;
-    if( plane_count==1 ) {
+    int32_t stride = bmf_cx.plane_count;
+    if( bmf_cx.plane_count==1 ) {
       memcpy(&p_i->pixels[plane], tmp, n);
     } else {
       uint8_t *dst = &p_i->pixels[plane];

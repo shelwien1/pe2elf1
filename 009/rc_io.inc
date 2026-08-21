@@ -2,8 +2,8 @@
 // it reads after one.  The coder itself is rc.inc.
 
 uint32_t rc_decode_flat(uint32_t tot) {
-  uint32_t sym = rc.get_freq(tot);
-  rc.decode(sym, sym+1, tot);
+  uint32_t sym = bmf_cx.rc.get_freq(tot);
+  bmf_cx.rc.decode(sym, sym+1, tot);
   return sym;
 }
 
@@ -22,9 +22,9 @@ static void end_plane_stream() {
 template<int32_t f_DEC>
 void rc_end() {
   if constexpr( f_DEC )
-    rc.finish();
+    bmf_cx.rc.finish();
   else
-    rc.flush();
+    bmf_cx.rc.flush();
   end_plane_stream();
 }
 
@@ -43,22 +43,22 @@ void rc_end_encode() {
 // a time, and `stream.pk.free_bits` is left holding what is still owed.  It goes
 // transiently negative on the way, which is the thing to know about it.
 static void packer_rewind() {
-  if( stream.cur==(uint8_t*)stream.pk.word )
+  if( bmf_cx.stream.cur==(uint8_t*)bmf_cx.stream.pk.word )
     return;
-  int32_t bits = stream.pk.free_bits-8;
+  int32_t bits = bmf_cx.stream.pk.free_bits-8;
   if( bits<0 ) {
-    stream.pk.free_bits = bits;
+    bmf_cx.stream.pk.free_bits = bits;
     return;
   }
   // The guard above makes the first turn certain, so the `do` and the `while`
   // are the same walk; this one says its bound before it takes a step.
-  uint8_t* at = stream.cur;
+  uint8_t* at = bmf_cx.stream.cur;
   while( bits>=0 ) {
     --at;
     bits -= 8;
   }
-  stream.cur = at;
-  stream.pk.free_bits = bits;
+  bmf_cx.stream.cur = at;
+  bmf_cx.stream.pk.free_bits = bits;
 }
 
 // Everything an alternate model needs before its first symbol: the residual
@@ -66,12 +66,12 @@ static void packer_rewind() {
 // frequency strips.  None of it is range coding -- `rc_begin` was doing this
 // and the coder's own init in one function, which is why it was 90 lines.
 static uint16_t* begin_plane_stream() {
-  if( plane_predictor==pred_p2 ) {
-    alt_freq_init = 8;
-    alt_freq_limit = 8;
+  if( bmf_cx.plane_predictor==pred_p2 ) {
+    bmf_cx.alt_freq_init = 8;
+    bmf_cx.alt_freq_limit = 8;
   } else {
-    alt_freq_limit = 16;
-    alt_freq_init = 64;
+    bmf_cx.alt_freq_limit = 16;
+    bmf_cx.alt_freq_init = 64;
   }
   // Six levels of a binary symbol tree, laid out end to end.  Level `lvl`
   // holds `2^(lvl-2)` pairs, starts at `first`, and its frequency table
@@ -82,25 +82,25 @@ static uint16_t* begin_plane_stream() {
   //
   // The decompilation wrote all six out, with `at4`..`at7` naming the running
   // offset at four of them and the other two folded into constants.
-  model_geometry[0] = 0;
-  model_geometry[1] = 1;
-  level_geom[2].half = 1;
-  level_geom[2].first = 2;
-  level_geom[2].tbl_base = 0;
-  memset(&model_geometry[2], 2, 2);
+  bmf_cx.model_geometry[0] = 0;
+  bmf_cx.model_geometry[1] = 1;
+  bmf_cx.level_geom[2].half = 1;
+  bmf_cx.level_geom[2].first = 2;
+  bmf_cx.level_geom[2].tbl_base = 0;
+  memset(&bmf_cx.model_geometry[2], 2, 2);
   int32_t slot = 4;
   for( int32_t lvl = 3; lvl<8; ++lvl ) {
-    level_geom[lvl].half = 1<<(lvl-2);
-    level_geom[lvl].first = (uint8_t)slot;
-    level_geom[lvl].tbl_base = (uint8_t)slot-lvl;
-    memset(&model_geometry[slot], lvl, 2*level_geom[lvl].half);
-    slot += 2*level_geom[lvl].half;
+    bmf_cx.level_geom[lvl].half = 1<<(lvl-2);
+    bmf_cx.level_geom[lvl].first = (uint8_t)slot;
+    bmf_cx.level_geom[lvl].tbl_base = (uint8_t)slot-lvl;
+    memset(&bmf_cx.model_geometry[slot], lvl, 2*bmf_cx.level_geom[lvl].half);
+    slot += 2*bmf_cx.level_geom[lvl].half;
   }
   // The model's frequency tables, one allocation.  `0x7F000` is 520192 bytes
   // and the shape behind it is `model_geometry`'s: it is a byte count in the
   // decompilation and stays one, because nothing here divides it by an
   // element size.
-  uint16_t* tbl = model_table_store;
+  uint16_t* tbl = bmf_cx.model_table_store;
   if( tbl ) {
     int32_t k = 0;
     uint16_t *row = tbl;
@@ -110,7 +110,7 @@ static uint16_t* begin_plane_stream() {
     // other, so this is a table and not a loop, and index order is the only
     // thing that lets it be read against the model it seeds.
     const uint16_t seed_row[10] = {
-      635, (uint16_t)(24*alt_freq_limit), 205, 124, 147, 83, 48, 16, 8, 4,
+      635, (uint16_t)(24*bmf_cx.alt_freq_limit), 205, 124, 147, 83, 48, 16, 8, 4,
     };
     for( k = 0; k<0x400; ++k, row += 254 ) {
       memcpy(row, seed_row, sizeof seed_row);
@@ -121,7 +121,7 @@ static uint16_t* begin_plane_stream() {
       }
     }
   }
-  model_tables = tbl;
+  bmf_cx.model_tables = tbl;
   return tbl;
 }
 
@@ -141,13 +141,13 @@ static uint16_t* begin_plane_stream() {
 template<int32_t f_DEC>
 uint16_t*rc_begin() {
   if constexpr( !f_DEC )
-    *stream.pk.word = stream.pk.acc;
+    *bmf_cx.stream.pk.word = bmf_cx.stream.pk.acc;
   packer_rewind();
-  uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
+  uint16_t* tbl = bmf_cx.plane_alt_model ? begin_plane_stream() : nullptr;
   if constexpr( f_DEC )
-    rc.dec_init();
+    bmf_cx.rc.dec_init();
   else
-    rc.enc_init();
+    bmf_cx.rc.enc_init();
   return tbl;
 }
 
@@ -160,10 +160,10 @@ void rc_begin_decode() {
 }
 
 static uint32_t packer_word() {
-  if( stream.cur+4>stream.buf+stream.size )
+  if( bmf_cx.stream.cur+4>bmf_cx.stream.buf+bmf_cx.stream.size )
     bmf_fatal(bmf_read_error);
-  uint32_t w = *(uint32_t*)stream.cur;
-  stream.cur += 4;
+  uint32_t w = *(uint32_t*)bmf_cx.stream.cur;
+  bmf_cx.stream.cur += 4;
   return w;
 }
 
@@ -174,11 +174,11 @@ static uint32_t packer_word() {
 // to live at the far end of this one -- is the one a reader has to remember is
 // part of the reset.
 static void packer_reset() {
-  stream.pk.free_bits = 0;
-  stream.pk.acc = 0;
-  stream.cur = stream.buf;
-  stream.pk.word = (uint32_t*)stream.buf;
-  hist_scratch = stream.buf+stream.size-4096;
+  bmf_cx.stream.pk.free_bits = 0;
+  bmf_cx.stream.pk.acc = 0;
+  bmf_cx.stream.cur = bmf_cx.stream.buf;
+  bmf_cx.stream.pk.word = (uint32_t*)bmf_cx.stream.buf;
+  bmf_cx.hist_scratch = bmf_cx.stream.buf+bmf_cx.stream.size-4096;
 }
 
 // A coded buffer for an image of `data_size` bytes, with the packer rewound
@@ -186,8 +186,8 @@ static void packer_reset() {
 // entry points allocate: the size is written into `stream.size` first because
 // `packer_reset` reads it back to place `hist_scratch` at the far end.
 static void stream_open(uint32_t data_size) {
-  stream.size = data_size+0x20000;
-  stream.buf = (uint8_t*)bmf_new(stream.size);
+  bmf_cx.stream.size = data_size+0x20000;
+  bmf_cx.stream.buf = (uint8_t*)bmf_new(bmf_cx.stream.size);
   packer_reset();
 }
 
@@ -198,7 +198,7 @@ static void stream_open(uint32_t data_size) {
 // `search_filter`, which measures a trial encode and flushes after each -- and
 // the cast is to the type `pk.word` already has, so it said nothing at all.
 static void packer_flush() {
-  *stream.pk.word = stream.pk.acc;
+  *bmf_cx.stream.pk.word = bmf_cx.stream.pk.acc;
 }
 
 // The header's bit stream: the per-plane descriptors, a few bits at a time,
@@ -217,30 +217,30 @@ static void packer_flush() {
 // the count moves on.  Writing the count first would shift the carry-out by the
 // width.
 static void pack_bits(uint32_t word, int32_t n) {
-  if( stream.pk.free_bits<n ) {
-    *stream.pk.word = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
-    stream.pk.word = (uint32_t*)stream.cur;
-    stream.cur += 4;
-    stream.pk.acc = word>>(stream.pk.free_bits&31);
-    stream.pk.free_bits += 32-n;
+  if( bmf_cx.stream.pk.free_bits<n ) {
+    *bmf_cx.stream.pk.word = bmf_cx.stream.pk.acc|(2*(word<<((31-bmf_cx.stream.pk.free_bits)&31)));
+    bmf_cx.stream.pk.word = (uint32_t*)bmf_cx.stream.cur;
+    bmf_cx.stream.cur += 4;
+    bmf_cx.stream.pk.acc = word>>(bmf_cx.stream.pk.free_bits&31);
+    bmf_cx.stream.pk.free_bits += 32-n;
   } else {
-    stream.pk.acc |= word<<(-stream.pk.free_bits&31);
-    stream.pk.free_bits -= n;
+    bmf_cx.stream.pk.acc |= word<<(-bmf_cx.stream.pk.free_bits&31);
+    bmf_cx.stream.pk.free_bits -= n;
   }
 }
 
 static uint32_t unpack_bits(int32_t n) {
   const uint32_t mask = (1u<<n)-1;
   uint32_t v;
-  stream.pk.free_bits -= n;
-  if( stream.pk.free_bits<0 ) {
+  bmf_cx.stream.pk.free_bits -= n;
+  if( bmf_cx.stream.pk.free_bits<0 ) {
     const uint32_t w = packer_word();
-    v = stream.pk.acc|((w<<((stream.pk.free_bits+n)&31))&mask);
-    stream.pk.acc = w>>(-stream.pk.free_bits&31);
-    stream.pk.free_bits += 32;
+    v = bmf_cx.stream.pk.acc|((w<<((bmf_cx.stream.pk.free_bits+n)&31))&mask);
+    bmf_cx.stream.pk.acc = w>>(-bmf_cx.stream.pk.free_bits&31);
+    bmf_cx.stream.pk.free_bits += 32;
   } else {
-    v = stream.pk.acc&mask;
-    stream.pk.acc = stream.pk.acc>>n;
+    v = bmf_cx.stream.pk.acc&mask;
+    bmf_cx.stream.pk.acc = bmf_cx.stream.pk.acc>>n;
   }
   return v;
 }

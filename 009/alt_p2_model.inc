@@ -30,7 +30,7 @@ void AltP2Block::code_banks(int32_t sample16) {
     // the rest of the function five levels in.
     if( !countdown )
       continue;
-    const int32_t w0b = w0+4*((res>deadzone_hi)-(res<deadzone_lo));
+    const int32_t w0b = w0+4*((res>bmf_cx.deadzone_hi)-(res<bmf_cx.deadzone_lo));
     node0->weighted = w0b;
     uint32_t ctxw = bctx;
     // The rate ladder: a counter that keeps seeing a small residual counts
@@ -57,7 +57,7 @@ void AltP2Block::code_banks(int32_t sample16) {
         node0->b1 = countdown;
       }
     }
-    if( alphabet_reduced )
+    if( bmf_cx.alphabet_reduced )
       continue;
     // The mirrored context: the same counter with the top bits of its
     // index flipped, which is the model's guess at what a symmetric
@@ -189,7 +189,7 @@ void AltP2Block::code_banks(int32_t sample16) {
     // sets -- `!(lt ^ of | zf)` over `__OFSUB__` -- because signed
     // less-than *is* `SF != OF`, so `(e_top-deadzone_hi<0) ^ overflow` is
     // the less-than, and not-less-and-not-equal is greater.
-    const int32_t bump = 32*((e_top>deadzone_hi)-(e_top<deadzone_lo));
+    const int32_t bump = 32*((e_top>bmf_cx.deadzone_hi)-(e_top<bmf_cx.deadzone_lo));
     uint32_t w_new = bump+e_top+2;
     // The partial store this was written as -- `LOWORD(w_new) = w_top +
     // (w_new>>2)` -- kept a high half that the next line throws away.
@@ -358,7 +358,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
     const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
     if( code ) {
       bin->f[2-is_dec] += step10;
-      update_binary_pair(model_strip(pair_at), (code-1)>>1);
+      update_binary_pair(bmf_cx.model_strip(pair_at), (code-1)>>1);
     } else {
       bin->f[0] += step10;
     }
@@ -394,8 +394,8 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
   if( code ) {
     int32_t n2_half = (code-1)>>1;
     int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
-    if( hi_nibble>=0xF0||(update_binary_pair(model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
-      update_binary_pair(model_strip(pair_ctx-16), n2_half);
+    if( hi_nibble>=0xF0||(update_binary_pair(bmf_cx.model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
+      update_binary_pair(bmf_cx.model_strip(pair_ctx-16), n2_half);
     }
   }
   P2Freq *prec0 = &frec_step[0];
