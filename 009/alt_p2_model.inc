@@ -101,9 +101,9 @@ void AltP2Block::code_banks(int32_t sample16) {
     // a call has no value to hand back to an `||`.
     int32_t lowbits = ctxw&3;
     if( lowbits<3 )
-      p2_update(&node0[1], res2, 1);
+      p2_update(cx, &node0[1], res2, 1);
     if( lowbits )
-      p2_update(&node0[-1], res2, 2);
+      p2_update(cx, &node0[-1], res2, 2);
     // Three update blocks follow, one per branch, and each walks these
     // eleven bits in order doing four or five things to each: bump the
     // direct counter at shift 2, the rotated one at 3, nudge the record
@@ -210,15 +210,15 @@ void AltP2Block::code_banks(int32_t sample16) {
       // The first arm owns both ends and never touches the record
       // before the direct counter, so it is its own loop.
       for( int32_t k = 0; k<11; ++k ) {
-        p2_update(direct[k], res2, 2);
-        p2_update(rot[k], res2, 3);
+        p2_update(cx, direct[k], res2, 2);
+        p2_update(cx, rot[k], res2, 3);
         p2_nudge(&direct[k][1], res2);
-        p2_update(mirror[k], -res2, 3);
+        p2_update(cx, mirror[k], -res2, 3);
       }
     } else {
       p2_nudge(&mir[-1], -res2, 3);
-      p2_update(direct[0], res2, 2);
-      p2_update(rot[0], res2, 3);
+      p2_update(cx, direct[0], res2, 2);
+      p2_update(cx, rot[0], res2, 3);
       // `lowbits < 3` was assigned into `go` twice on the way here and
       // read once.  This arm runs at `lowbits` of 1, 2 or 3, so the flag
       // is "not the last value", and it is the one line of five that
@@ -226,7 +226,7 @@ void AltP2Block::code_banks(int32_t sample16) {
       walk_bank_bits(direct, mirror, rot, res2, lowbits<3);
       // The one counter whose update straddles the join.  Both arms
       // reached it with the negated residual under a name of their own.
-      p2_update(mirror[10], -res2, 3);
+      p2_update(cx, mirror[10], -res2, 3);
     }
   }
 }
@@ -358,7 +358,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
     const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
     if( code ) {
       bin->f[2-is_dec] += step10;
-      update_binary_pair(bmf_cx.model_strip(pair_at), (code-1)>>1);
+      cx->update_binary_pair(cx->model_strip(pair_at), (code-1)>>1);
     } else {
       bin->f[0] += step10;
     }
@@ -394,8 +394,8 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
   if( code ) {
     int32_t n2_half = (code-1)>>1;
     int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
-    if( hi_nibble>=0xF0||(update_binary_pair(bmf_cx.model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
-      update_binary_pair(bmf_cx.model_strip(pair_ctx-16), n2_half);
+    if( hi_nibble>=0xF0||(cx->update_binary_pair(cx->model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
+      cx->update_binary_pair(cx->model_strip(pair_ctx-16), n2_half);
     }
   }
   P2Freq *prec0 = &frec_step[0];

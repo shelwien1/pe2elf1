@@ -59,13 +59,15 @@ static inline SymListBlock*sym_list_block(SymList* list);
 static inline uint32_t sym_list_count(const SymList* list);
 static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl);
 static inline int32_t p2_pred(int32_t weighted, int32_t rate);
-static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift);
-static inline void p2_update(P2Count* p, int32_t res, int32_t shift);
+static inline int16_t p2_bump(BMFState* cx, int32_t w2, int32_t err, int32_t shift);
+static inline void p2_update(BMFState* cx, P2Count* p, int32_t res, int32_t shift);
 // The default argument lives here and only here, which is where C++ requires
 // it: a default given on the declaration cannot be repeated on the definition
 // in `alt_p2_block.inc`.  Worth saying out loud because the definition reads
 // like a three-argument function and three of its four call sites pass two, so
 // a reader who finds the definition first will look for the 2 and not find it.
+// Takes no state: it spells the bump out rather than calling `p2_bump`, which
+// is the one of these four helpers that does not read the deadzone.
 static inline void p2_nudge(P2Count* p, int32_t res, int32_t shift = 2);
 static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest);
 static inline void p2_rescale(P2Freq* r);
@@ -79,7 +81,8 @@ CounterNode*init_counter_node(CounterNode* node);
 // here for the same reason as everything else in this file: a caller that is
 // itself one of these templates -- P2Freq::code_three_way is -- can sit in a file
 // the definition comes after.
-template<int32_t f_DEC> int32_t code_symbol_tree(uint16_t* freq, int32_t sym);
+// `code_symbol_tree` is a `BMFState` method now and is declared there; the six
+// that had to be, and why, are named in state.inc.
 
 void encode_symbol_tree(uint16_t* freq, int32_t sym);
 void alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym);

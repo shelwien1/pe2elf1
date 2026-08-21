@@ -526,7 +526,7 @@ struct AltP1Block {
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, 11);
       if( slot_f>=5 )
-        update_binary_pair(bmf_cx.model_strip(CtxIdx{}.bit<7>(slot_f&1)
+        cx->update_binary_pair(cx->model_strip(CtxIdx{}.bit<7>(slot_f&1)
                                               .bit<6>(node_up[1].escape_high(slot_f))
                                               .raw(ctx_up)),
                            (int32_t)(code_f-5)>>1);
@@ -536,7 +536,7 @@ struct AltP1Block {
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, 13);
       if( slot_f>=5 )
-        update_binary_pair(bmf_cx.model_strip(CtxIdx{}.bit<7>(slot_f&1)
+        cx->update_binary_pair(cx->model_strip(CtxIdx{}.bit<7>(slot_f&1)
                                               .bit<6>(node_dn[-1].escape_high(slot_f))
                                               .raw(ctx_dn)),
                            tree_sym);
@@ -560,8 +560,8 @@ struct AltP1Block {
       const uint32_t key = CtxIdx{}.bit<7>(slot_f&1)
                                    .bit<6>(counters[result].escape_high(slot_f))
                                    .raw(ctx[1]);
-      if( (key&0x38)>=0x38||(update_binary_pair(bmf_cx.model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
-        update_binary_pair(bmf_cx.model_strip(key-8), tree_sym);
+      if( (key&0x38)>=0x38||(cx->update_binary_pair(cx->model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
+        cx->update_binary_pair(cx->model_strip(key-8), tree_sym);
       }
     }
     // The nine selectors.  `update_selector` is what the decompilation
@@ -571,7 +571,8 @@ struct AltP1Block {
       update_selector(k, slot_f, slot_r, ctx_alt, 1, 2-ctx_w[k].sel);
   }
 
-  AltP1Block*alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane) {
+  AltP1Block*alt_p1_alloc(BMFState* state, int32_t img_w, int32_t img_h, int32_t plane) {
+    cx = state;
     uint32_t ctr = 0;
     width = img_w;
     height = img_h;
@@ -639,7 +640,7 @@ struct AltP1Block {
     // rotation still works and there is nothing to free.
     for( int32_t row = 0; row<5; ++row )
       buf[row] = row_store[row];
-    alt_init_tables(fold, (int8_t*)unfold);
+    cx->alt_init_tables(fold, (int8_t*)unfold);
     // `width + 10` is never negative, so the `> -10` guard the `do` needed is
     // gone with it, and `wid = width` inside the body was a member re-read.
     for( int32_t r = 0; r<width+10; ++r ) {
@@ -669,6 +670,16 @@ struct AltP1Block {
   // deep.  A row's size is `kMaxWidth` and not the image's, which is the trade:
   // a 16-pixel-wide image now carries the same rows a 65535-pixel one does.
   P1Ctx row_store[5][kMaxWidth+kRowMargin+kRowTail];
+
+  // The codec state this block belongs to.  It was reached as a file-scope
+  // `bmf_cx` from every method here; a pointer means two blocks in one process
+  // can belong to two different codecs, which is the whole point of the
+  // exercise.  Set once, by this block's allocator.
+  //
+  // Last in the struct, with the other appended members: putting it first
+  // shifted every offset the decompiled record has and the four `_padN`
+  // assertions said so at once.
+  BMFState* cx;
 };
 
 // The four blocks this model can have live at once.  `alt_model_p1` allocates

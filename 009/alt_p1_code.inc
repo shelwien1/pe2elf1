@@ -79,7 +79,7 @@ int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
   int32_t height = hdr->height;
   for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
     AltP1Block *raw = p1_block_take();
-    plane[k] = raw->alt_p1_alloc(width, height, k);
+    plane[k] = raw->alt_p1_alloc(&bmf_cx, width, height, k);
   }
   int32_t src1 = bmf_cx.plane_desc[1].src_plane;
   int32_t src2 = bmf_cx.plane_desc[2].src_plane;

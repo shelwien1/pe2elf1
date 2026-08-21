@@ -48,7 +48,7 @@ struct P2Freq {
   // different model.  Two methods with one name is not an error the compiler
   // can see, and it made `unstale.py` measure the wrong one.
   template<int32_t f_DEC>
-  int32_t code_three_way(const uint32_t* ctx_pair, int32_t sym) {
+  int32_t code_three_way(BMFState* cx, const uint32_t* ctx_pair, int32_t sym) {
     uint32_t cum;
     uint16_t st, *slot;
     uint16_t down;
@@ -56,7 +56,7 @@ struct P2Freq {
     int32_t c01 = f[1]+f[0];
     uint32_t tot = c01+f[2];
     if constexpr( f_DEC ) {
-      int32_t target = bmf_cx.rc.get_freq(tot);
+      int32_t target = cx->rc.get_freq(tot);
       cum = f[0];
       if( (uint32_t)target>=cum ) {
         if( target>=c01 ) {
@@ -85,9 +85,9 @@ struct P2Freq {
     }
     uint32_t tot_1 = cum+*slot;
     if constexpr( f_DEC )
-      bmf_cx.rc.decode(cum, tot_1, tot);
+      cx->rc.decode(cum, tot_1, tot);
     else
-      bmf_cx.rc.encode(cum, tot_1, tot);
+      cx->rc.encode(cum, tot_1, tot);
     uint16_t f_before = *slot;
     if( *slot>0x4000u ) {
       halve_counts(f, 3);
@@ -112,16 +112,16 @@ struct P2Freq {
     *slot = st+f_before;
     int32_t idx = slot-base;
     if( idx )
-      return idx+2*code_symbol_tree<f_DEC>(bmf_cx.model_strip(ctx_pair[idx&1]), (sym-1)>>1);
+      return idx+2*cx->template code_symbol_tree<f_DEC>(cx->model_strip(ctx_pair[idx&1]), (sym-1)>>1);
     return 0;
   }
 
-  void encode_symbol(const uint32_t* ctx_pair, int32_t sym) {
-    code_three_way<0>(ctx_pair, sym);
+  void encode_symbol(BMFState* cx, const uint32_t* ctx_pair, int32_t sym) {
+    code_three_way<0>(cx, ctx_pair, sym);
   }
 
-  int32_t decode_symbol(const uint32_t* ctx_pair) {
-    return code_three_way<1>(ctx_pair, 0);
+  int32_t decode_symbol(BMFState* cx, const uint32_t* ctx_pair) {
+    return code_three_way<1>(cx, ctx_pair, 0);
   }
 };
 
@@ -143,7 +143,7 @@ static inline int32_t p2_pred(int32_t weighted, int32_t rate) {
   return (weighted+(1<<(rate-1)))>>rate;
 }
 
-static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
+static inline int16_t p2_bump(BMFState* cx, int32_t w2, int32_t err, int32_t shift) {
   // `1u << (shift - 1)` is the rounding term, and the shift is 1, 2 or 3:
   // every caller is `p2_update`, `p2_update_into` or `p2_nudge`, and between
   // them they pass 1 once, 2 four times and 3 eight, plus three `p2_nudge`
@@ -154,11 +154,11 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
   // It was written `>= 2` first, on the plan's word that the shift is 2 or 3,
   // and the `BMF_ASSERTS` leg failed 15 checks on the spot.  The 1 is real and
   // it is *new*: unfolding `code_banks`'s comma chain into statements turned an
-  // expression that spelled its own `+1` and `>>1` into `p2_update(p, res, 1)`.
+  // expression that spelled its own `+1` and `>>1` into `p2_update(cx, p, res, 1)`.
   // An invariant taken from a document rather than from the callers, checked by
   // a leg that runs.
   BMF_ASSUME(shift>=1&&shift<=3);
-  const uint32_t kick = 32u*(uint32_t)((err>bmf_cx.deadzone_hi)-(err<bmf_cx.deadzone_lo));
+  const uint32_t kick = 32u*(uint32_t)((err>cx->deadzone_hi)-(err<cx->deadzone_lo));
   return (int16_t)((uint32_t)w2+((kick+(uint32_t)err+(1u<<(shift-1)))>>shift));
 }
 
@@ -172,9 +172,9 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
 // is the same value here and only here: `p2_pred` uses the rate as two shift
 // counts and masks both with `&31`, and the two readings differ by 256, which
 // is a multiple of 32.
-static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
+static inline void p2_update(BMFState* cx, P2Count* p, int32_t res, int32_t shift) {
   const int32_t w = p->weighted;
-  p->weighted = p2_bump(w, res-p2_pred(w, p->rate), shift);
+  p->weighted = p2_bump(cx, w, res-p2_pred(w, p->rate), shift);
 }
 
 // The same step with the residual kept.  `p2_update` cannot be used at the two
@@ -182,10 +182,10 @@ static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
 // residual, which the caller reads again below, so a helper taking it by value
 // would drop that write.  Both spelled it out with a temporary of their own,
 // `wm0400z` and `wm0400x`.
-static inline void p2_update_into(P2Count* p, int32_t& res, int32_t shift) {
+static inline void p2_update_into(BMFState* cx, P2Count* p, int32_t& res, int32_t shift) {
   const int32_t w = p->weighted;
   res -= p2_pred(w, p->rate);
-  p->weighted = p2_bump(w, res, shift);
+  p->weighted = p2_bump(cx, w, res, shift);
 }
 
 // The rescale on its own.  Two of `alt_p2_model`'s fifty sites compute the
@@ -673,14 +673,14 @@ struct AltP2Block {
                       P2Count*const* rot, int32_t res, bool nudge) {
     for( int32_t k = 0; k<11; ++k ) {
       if( k ) {
-        p2_update(direct[k], res, 2);
-        p2_update(rot[k], res, 3);
+        p2_update(cx, direct[k], res, 2);
+        p2_update(cx, rot[k], res, 3);
       }
       if( nudge )
         p2_nudge(&direct[k][1], res);
-      p2_update(&direct[k][-1], res, 3);
+      p2_update(cx, &direct[k][-1], res, 3);
       if( k<10 )
-        p2_update(mirror[k], -res, 3);
+        p2_update(cx, mirror[k], -res, 3);
     }
   }
 
@@ -752,7 +752,7 @@ struct AltP2Block {
       sample = clean;
       out[at] = recon;
     }
-    freq[ctx].encode_symbol(ctx_pair, code);
+    freq[ctx].encode_symbol(cx, ctx_pair, code);
     alt_p2_model(sample, code, sample-pred);
   }
 
@@ -765,7 +765,7 @@ struct AltP2Block {
   // which fold was used and has nothing to decide.
   void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
     const int32_t pred = alt_p2_context(refa, refb);
-    const int32_t code = freq[ctx].decode_symbol(ctx_pair);
+    const int32_t code = freq[ctx].decode_symbol(cx, ctx_pair);
     const int32_t sample = (uint8_t)(pred+unfold[code]);
     alt_p2_model(sample, code, sample-pred);
     out[at] = sample;
@@ -890,7 +890,8 @@ struct AltP2Block {
     cursor[0]->dval = 0;
   }
 
-  AltP2Block*alt_p2_alloc(int32_t img_w, int32_t plane) {
+  AltP2Block*alt_p2_alloc(BMFState* state, int32_t img_w, int32_t plane) {
+    cx = state;
     uint32_t done;
     uint32_t j, p, n;
     plane_idx = plane;
@@ -911,12 +912,12 @@ struct AltP2Block {
     }
     // See `alt_init_tables`: this is the second of the three reads of a
     // quantiser nothing in this build sets above zero.
-    BMF_ASSUME(bmf_cx.near_lossless_q==0);
-    int32_t dz = 4*bmf_cx.near_lossless_q+1;
-    int32_t band = 16*bmf_cx.near_lossless_q;
-    has_ref = (bmf_cx.plane_desc[bmf_cx.plane_desc[plane_idx].src_plane].flags&desc_has_refs)!=0;
-    bmf_cx.deadzone_hi = dz;
-    bmf_cx.deadzone_lo = -dz;
+    BMF_ASSUME(cx->near_lossless_q==0);
+    int32_t dz = 4*cx->near_lossless_q+1;
+    int32_t band = 16*cx->near_lossless_q;
+    has_ref = (cx->plane_desc[cx->plane_desc[plane_idx].src_plane].flags&desc_has_refs)!=0;
+    cx->deadzone_hi = dz;
+    cx->deadzone_lo = -dz;
     band_lo = -band-7;
     band_hi = band+8;
     // Two rows of weight-set pointers, one per column plus the four the
@@ -967,7 +968,7 @@ struct AltP2Block {
     // them, counting down with an unrelated initialisation dropped in the
     // middle.
     for( int32_t i = 0; i<4; ++i )
-      bmf_cx.ctx_bias[i] = 0;
+      cx->ctx_bias[i] = 0;
     int32_t lvl = 0;
     cursor[0] = buf[0]+8;
     // `2*pair+++1` -- a post-increment inside the comparison that decides the
@@ -1001,7 +1002,7 @@ struct AltP2Block {
       len = (2*n+1==p2_len_edges[len1])+len1;
     }
     ctx = 15;
-    alt_init_tables(fold, unfold);
+    cx->alt_init_tables(fold, unfold);
     // The same three sequences as `AltP1Block`'s, five contexts instead of
     // nine and starting at 64 instead of 32: the middle weight triples, the
     // top is twice the middle, the bottom is zero.  Fifteen assignments in
@@ -1041,6 +1042,16 @@ struct AltP2Block {
   P2Ctx row_store[5][kMaxWidth+kRowMargin+kRowTail];
   NbRow* row0_store[kMaxWidth+4];
   NbRow* row1_store[kMaxWidth+4];
+
+  // The codec state this block belongs to.  It was reached as a file-scope
+  // `bmf_cx` from every method here; a pointer means two blocks in one process
+  // can belong to two different codecs, which is the whole point of the
+  // exercise.  Set once, by this block's allocator.
+  //
+  // Last in the struct, with the other appended members: putting it first
+  // shifted every offset the decompiled record has and the four `_padN`
+  // assertions said so at once.
+  BMFState* cx;
 };
 
 // The four blocks this model can have live at once, in the data segment.  One
@@ -1070,8 +1081,8 @@ static void p2_block_give(AltP2Block* p) {
 // Three of these open each coder, under six names between them -- `xf0`, `np`
 // and `y` in the encoder, `xf0`, `dc_flag` and `xf4` in the decoder -- none of
 // which says which plane it is about.
-static bool ref_transformed(int32_t k) {
-  return (bmf_cx.plane_desc[bmf_cx.plane_desc[k].src_plane].flags&desc_has_refs)!=0;
+static bool ref_transformed(BMFState* cx, int32_t k) {
+  return (cx->plane_desc[cx->plane_desc[k].src_plane].flags&desc_has_refs)!=0;
 }
 
 // Every plane made ready for the next row.  Row 0 seeds the neutral record and
@@ -1087,8 +1098,8 @@ static bool ref_transformed(int32_t k) {
 // `seed_history(-first)` where `first` was itself `-width`, and writing the
 // obvious `seed_history(-width)` here cost eight of the 110 checks -- which is
 // the one thing a double negative spelled through a named local is good at.
-static void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
-  for( int32_t k = 0; k<bmf_cx.plane_count; ++k ) {
+static void alt_p2_start_row(BMFState* cx, AltP2Block** plane, int32_t row, int32_t width) {
+  for( int32_t k = 0; k<cx->plane_count; ++k ) {
     if( row==0 )
       plane[k]->seed_row0(width);
     else if( row==1 )
@@ -1105,17 +1116,17 @@ static void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
 // turn of a loop it is also the bound of.  Nothing in `alt_p2_alloc` or
 // `alt_p2_free` writes `plane_count`, which is what makes the re-read say
 // nothing and the `for` say the same thing as the `do`.
-static void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
-  for( int32_t pl = 0; pl<bmf_cx.plane_count; ++pl ) {
+static void alt_p2_planes_alloc(BMFState* cx, AltP2Block** plane, int32_t width) {
+  for( int32_t pl = 0; pl<cx->plane_count; ++pl ) {
     AltP2Block* page = p2_block_take();
-    plane[pl] = page->alt_p2_alloc(width, pl);
+    plane[pl] = page->alt_p2_alloc(cx, width, pl);
   }
 }
 
-static int32_t alt_p2_planes_free(AltP2Block** plane) {
-  for( int32_t pl = 0; pl<bmf_cx.plane_count; ++pl )
+static int32_t alt_p2_planes_free(BMFState* cx, AltP2Block** plane) {
+  for( int32_t pl = 0; pl<cx->plane_count; ++pl )
     plane[pl]->alt_p2_free();
-  return bmf_cx.plane_count;
+  return cx->plane_count;
 }
 
 // `NbRow::predict` writes `nb[7][0..2]` where `nb` is `p2_row`, a `[7][4]`.

@@ -15,6 +15,10 @@
 // those classes hold a `BMFState*`.  Splitting the state from the pools is what
 // lets every block method stay inline: `BMFState` is complete before the first
 // of them is parsed.
+struct SymList;
+struct ModelBlock;
+struct ReduceNode;
+
 struct BMFState {
   alignas(16) CodedStream stream;
 
@@ -76,6 +80,24 @@ struct BMFState {
   uint16_t* model_strip(uint32_t k) {
     return model_tables+254*k;
   }
+
+  // **The six free functions a block class calls.**  Everything else that
+  // touches this state is a `BMFCodec` method, because `BMFCodec` is complete
+  // before it is parsed.  These six are not: they are reached from inside
+  // `P2Freq`, `SymList`, `BitCtr` and the two alphabet coders, all of which are
+  // defined before the pools exist.  Declared here and defined in their own
+  // files, which is what lets those callers stay where they are.
+  //
+  // The set was computed rather than guessed -- ten functions are called from a
+  // block class, four of those are already methods of one, and the transitive
+  // closure of the rest is these six.
+  template<int32_t f_DEC>
+  int32_t code_symbol_tree(uint16_t* freq, int32_t sym);
+  int32_t update_binary_pair(uint16_t* _this, int32_t symbol);
+  uint32_t rc_decode_flat(uint32_t tot);
+  uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold);
+  int32_t tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val);
+  void reduce_alphabet(ModelBlock* blk, uint8_t* src);
 
   // The coder reads and writes `stream` and needs nothing else of this object,
   // so it takes the stream rather than the state.

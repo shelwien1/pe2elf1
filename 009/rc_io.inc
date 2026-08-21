@@ -1,7 +1,7 @@
 // rc_io.inc -- the range coder's file ends -- what it writes before a stream and what
 // it reads after one.  The coder itself is rc.inc.
 
-uint32_t rc_decode_flat(uint32_t tot) {
+uint32_t BMFState::rc_decode_flat(uint32_t tot) {
   uint32_t sym = bmf_cx.rc.get_freq(tot);
   bmf_cx.rc.decode(sym, sym+1, tot);
   return sym;

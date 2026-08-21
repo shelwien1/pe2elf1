@@ -36,10 +36,10 @@ static int32_t alt_model_p2(BmfImage* p_i, uint8_t* out) {
   p2_coef.fold();
   const int32_t width = p_i->width;
   const int32_t height = p_i->height;
-  alt_p2_planes_alloc(plane, width);
-  const bool ref1_mixed = ref_transformed(1);
-  const bool ref2_mixed = ref_transformed(2);
-  const bool ref3_mixed = ref_transformed(3);
+  alt_p2_planes_alloc(&bmf_cx, plane, width);
+  const bool ref1_mixed = ref_transformed(&bmf_cx, 1);
+  const bool ref2_mixed = ref_transformed(&bmf_cx, 2);
+  const bool ref3_mixed = ref_transformed(&bmf_cx, 3);
   if constexpr( f_DEC )
     rc_begin_decode();
   else
@@ -47,7 +47,7 @@ static int32_t alt_model_p2(BmfImage* p_i, uint8_t* out) {
   int32_t nplanes = bmf_cx.plane_count;
   for( int32_t y = 0; y<height; ++y ) {
     if( nplanes>0 ) {
-      alt_p2_start_row(plane, y, width);
+      alt_p2_start_row(&bmf_cx, plane, y, width);
       nplanes = bmf_cx.plane_count;
     }
     // Each row starts the bias accumulators at zero.  They were four locals in
@@ -100,7 +100,7 @@ static int32_t alt_model_p2(BmfImage* p_i, uint8_t* out) {
   else
     rc_end_encode();
   p2_coef.restore();
-  return alt_p2_planes_free(plane);
+  return alt_p2_planes_free(&bmf_cx, plane);
 }
 
 // The two names `plane.inc` reaches for.  The decode half was a file of its own

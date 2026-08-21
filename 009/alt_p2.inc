@@ -85,11 +85,11 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       ctx_pair[1] = ctx+ctx_delta[q2];
       P2Freq&fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
       if constexpr( f_DEC ) {
-        *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(ctx_pair)]);
+        *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair)]);
       } else {
         code0 = fold_or_refuse(out, *p, (uint16_t)rec[-1].val>>4, fold,
                                fold_hi, unfold);
-        fr.encode_symbol(ctx_pair, code0);
+        fr.encode_symbol(cx, ctx_pair, code0);
         ++p;
       }
       int32_t val = 16*(uint8_t)*out;
@@ -133,13 +133,13 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       for( k = 0; k<(uint32_t)width; ++k ) {
         int32_t pred = alt_p2_context(nullptr, nullptr);
         if constexpr( f_DEC ) {
-          code2 = code = freq[ctx].decode_symbol(pair);
+          code2 = code = freq[ctx].decode_symbol(cx, pair);
           outp[k] = (uint8_t)(pred+(unfold[code]));
         } else {
           code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi,
                                 unfold);
           code2 = code;
-          freq[ctx].encode_symbol(pair, code);
+          freq[ctx].encode_symbol(cx, pair, code);
         }
         alt_p2_model(outp[k], code2, outp[k]-pred);
       }
@@ -162,7 +162,7 @@ void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   AltP2Block *blk;
   AltP2Block *raw = p2_block_take();
   if( raw )
-    blk = raw->alt_p2_alloc(i, 0);
+    blk = raw->alt_p2_alloc(&bmf_cx, i, 0);
   else
     blk = nullptr;
   if constexpr( f_DEC )

@@ -138,7 +138,7 @@ static void reduce_narrow_alphabet(SymList* lists, ModelBlock* blk1, uint8_t* sr
 //
 // `mode_symbol[1]` is the side the leaf was hung on, and it is read by the
 // caller's caller rather than here, so it stays a global write.
-static int32_t tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
+int32_t BMFState::tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
   int32_t node = 0, side;
   uint16_t* kidp;
   while( 1 ) {
@@ -176,7 +176,7 @@ static int32_t tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
 // What is left is `out`, and that one is real: the same eight bytes hold the
 // source cursor's spill early on and an output cursor later, which is what the
 // union recorded and why the slots could not simply be renamed apart.
-void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
+void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   ReduceNode tree[8192];
   SymList lists[16];
   // `out[1]` is the buffer the plane is de-interleaved into and `out[2 + k]`
@@ -228,7 +228,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
         if( val!=tree[node].val ) {
           node = 0;
           if( val!=tree[0].val )
-            node = tree_place(tree, blk, val);
+            node = bmf_cx.tree_place(tree, blk, val);
           if( node<0 )
             break;
         }
@@ -301,7 +301,7 @@ void reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       free(old_words);
       void *newbuf = bmf_new(2*blk->height*blk->width);
       blk->sym_word = (uint16_t*)newbuf;
-      reduce_alphabet(blk, out[1]);
+      bmf_cx.reduce_alphabet(blk, out[1]);
       free(out[1]);
     } else {
       // `alpha_m` was re-read from `blk->alphabet` after the list setup and

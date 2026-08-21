@@ -35,7 +35,7 @@ static inline uint32_t halve_pair(FreqPair* pair, int32_t go) {
 }
 
 template<int32_t f_DEC>
-int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
+int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
   uint32_t cum, j;
   int32_t lvl, result, go, span;
@@ -133,11 +133,11 @@ int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
 }
 
 void encode_symbol_tree(uint16_t* freq, int32_t sym) {
-  code_symbol_tree<0>(freq, sym);
+  bmf_cx.code_symbol_tree<0>(freq, sym);
 }
 
 int32_t decode_symbol_tree(uint16_t* freq) {
-  return code_symbol_tree<1>(freq, 0);
+  return bmf_cx.code_symbol_tree<1>(freq, 0);
 }
 
 // One symbol of the one-bit model's alphabet.  The two directions meet at the
@@ -236,7 +236,7 @@ int32_t alt_p1_decode_symbol(CounterNode* node, int32_t ctx) {
 
 
 
-int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
+int32_t BMFState::update_binary_pair(uint16_t* _this, int32_t symbol) {
   int32_t node;
   uint32_t step, f;
   int32_t tot = _this[0];

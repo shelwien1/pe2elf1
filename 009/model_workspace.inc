@@ -35,10 +35,11 @@ void ModelBlock::free_workspace() {
 // behaviour and it stays; the guard is one place now rather than two.
 ModelBlock* new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
   void* raw = model_blocks.take(false);
-  return ((ModelBlock*)raw)->layout_workspace(img_w, img_h, img_depth);
+  return ((ModelBlock*)raw)->layout_workspace(&bmf_cx, img_w, img_h, img_depth);
 }
 
-ModelBlock*ModelBlock::layout_workspace(int32_t img_w, int32_t img_h, int32_t img_depth) {
+ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth) {
+  cx = state;
   int32_t j;
   uint32_t k, m, s, n;
   bmf_cx.exclusion_gen = 1;

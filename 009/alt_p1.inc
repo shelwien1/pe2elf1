@@ -30,7 +30,7 @@
 // commented: `BMF_ASSUME(near_lossless_q == 0)` at each of the three places
 // that read it, under the `BMF_ASSERTS=1` leg.  A knob no path can turn, and a
 // build that says so.
-uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
+uint32_t BMFState::alt_init_tables(uint8_t* fold, int8_t* unfold) {
   uint8_t even, odd;
   uint32_t done;
   int32_t in_bucket, bucket;
@@ -112,7 +112,7 @@ uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
 // here, twenty-six lines against the encoder's four.
 static AltP1Block* alt_p1_block_alloc(int32_t width, int32_t height) {
   AltP1Block* raw = p1_block_take();
-  return raw ? raw->alt_p1_alloc(width, height, 0) : nullptr;
+  return raw ? raw->alt_p1_alloc(&bmf_cx, width, height, 0) : nullptr;
 }
 
 template<int32_t f_DEC>
