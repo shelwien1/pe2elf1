@@ -1,7 +1,7 @@
 # name -> the address of the body in BMF.exe it was decompiled from.
 # Recovered by tools/addrmap.py from the commits that made each
 # rename; see ALGORITHM.md section 8.
-# 6 names walked back through the log, 87 taken from the previous map (--rederive to walk them all)
+# 137 names walked back through the log, 82 taken from the previous map (--rederive to walk them all)
 compress_image             0x00402FE0
 expand_image               0x00403820
 search_filter              0x004043E0
@@ -12,7 +12,6 @@ transform_planes           0x00407B30
 colour_transform           0x00407EF0
 interleave_plane           0x004081E0
 unpredict_med              0x00410310
-expand_predictor_mode0     0x00410650
 predict_med                0x004108C0
 estimate_cost              0x00411700
 alt_init_tables            0x004118A0
@@ -46,7 +45,6 @@ unmodel_plane              0x00417DB0
 unmodel_plane_slow         0x00417E80
 decode_pixel               0x00418650
 expand_alphabet            0x00419430
-alt_p2_free                0x00419610
 alt_model_p2_d8_encode     0x004197A0
 alt_p2_context             0x0041A130
 alt_p2_model               0x0041CAB0
@@ -54,9 +52,7 @@ alt_model_p2_encode        0x00421930
 alt_p2_alloc               0x004229E0
 alt_model_p2_d8_decode     0x00422D60
 alt_model_p2_decode        0x00423600
-alt_p1_free                0x004244A0
 alt_model_p1_d8_encode     0x00424500
-d8_encode_body             0x00424550
 ctx_of                     0x004248D0
 alt_model_p1_encode        0x00424D90
 alt_p1_alloc               0x004256F0
@@ -74,29 +70,65 @@ alloc_image                0x0042B830
 #   out_of_memory_handler    0x00402E30
 #   bmf_open_archive         0x00402EF0
 #   bmf_close_archive        0x00402FB0
+#   expand_predictor_mode0   0x00410650
 #   init_symbol_list         0x00414860
 #   rescale_counter_pair     0x004148F0
+#   alt_p2_free              0x00419610
 #   alt_p2_d8_encode_body    0x00419800
 #   alt_p2_filter            0x0041C4B0
 #   alt_p2_d8_decode_body    0x00422DB0
+#   alt_p1_free              0x004244A0
+#   d8_encode_body           0x00424550
 #   set_new_handler          0x0042CBB0
 
-# 64 mapped.  71 named bodies have no recorded address:
-#   abs32                     advance_row               alt_model_p1              alt_model_p2_d8
-#   alt_p2_d8_body            begin_plane_stream        bit                       bits
-#   bmf_arena_init            bmf_bucket_of             bmf_close_file            bmf_fatal
-#   bmf_free                  bmf_malloc                bmf_new                   bmf_open_file
-#   bmf_page_alloc            bmf_page_free             bump                      bytes
-#   bytes_left                close                     code_banks                code_context_bit
-#   code_symbol_tree          code_three_way            dec_get                   dec_init
-#   dec_normalise             decode                    decode_bit                digit
-#   emit                      enc_init                  enc_normalise             encode
-#   encode_bit                end_plane_stream          escape_bias               fail
-#   finish                    flush                     fold                      free_sym_lists
-#   get_freq                  init                      init_parent               init_root
-#   nlms_predict_and_correct  nlms_track_two_rows       operator uint32_t         p
-#   pack_bits                 packer_reset              packer_rewind             packer_word
-#   palette                   predict                   raw                       rc_begin
-#   rc_end                    reduce_narrow_alphabet    restore                   scale_rare
-#   seed_from                 set                       set_p                     summ
-#   sym_flag                  unpack_bits               update_selector
+# 60 mapped.  198 named bodies have no recorded address:
+#   BMFState                  GroupFolds                above                     abs32
+#   add_bias                  advance_row               allow_refs_where_present  alt_model_p1
+#   alt_model_p1_d8           alt_model_p2              alt_model_p2_d8           alt_model_plane
+#   alt_p1_block_alloc        alt_p2_d8_body            alt_p2_planes_alloc       alt_p2_planes_free
+#   alt_p2_start_row          begin_plane_stream        begin_row                 bit
+#   bit_of                    bits                      blend                     blend_from
+#   bmf_arena_acquire         bmf_arena_init            bmf_arena_release         bmf_bucket_of
+#   bmf_close_file            bmf_fatal                 bmf_free                  bmf_malloc
+#   bmf_malloc_locked         bmf_new                   bmf_open_file             bmp_rle_encode
+#   bucket_slot               bump                      bump_bank                 bytes
+#   bytes_left                choose_alpha_plane        clear_flags_on_all        close
+#   code_banks                code_colour_plane         code_context_bit          code_image_body
+#   code_plane                code_row_pixels           code_run_length           code_sample
+#   code_symbol_tree          code_three_way            compress_to_memory        constexpr
+#   context_ids               copy_row0_down            d8_body                   dec_get
+#   dec_init                  dec_normalise             decode                    decode_bit
+#   decode_sample             decode_stage_two          deinterleave_plane        descend
+#   digit                     drop_alt_model_from_all   emit                      emit_carry
+#   enc_init                  enc_normalise             encode                    encode_bit
+#   encode_sample             end_plane_stream          escape_high               exclude_stage_one
+#   expand_coded              expand_from_memory        fail                      fill_row_inputs
+#   fill_run                  find_level                finish                    fit_alpha_weights
+#   flush                     fold                      free_sym_lists            get_freq
+#   give                      header_from               hist_bump                 hist_rows
+#   holds                     init                      init_parent               init_root
+#   init_symbol_lists         interleave_flat           intern_ctx                load_neighbours
+#   load_selectors            match_context             match_seed                match_seed_split
+#   med_fold_table            med_unfold_table          model_plane_slow          model_strip
+#   move_up                   new_model_block           new_sym_lists             nlms_predict_and_correct
+#   nlms_step                 nlms_track_two_rows       offer_candidates          offer_to_all
+#   open_pixel                operator operator         operator uint32_t         p
+#   p2_pred_at                pack_bits                 packer_flush              packer_reset
+#   packer_rewind             packer_word               pair_key                  palette
+#   plane_in_order            plane_transform           predict                   promote
+#   rank                      rank_neighbours           raw                       rc_begin
+#   rc_end                    read_plane_descs          read_rle4                 read_rle8
+#   read_rle_op               read_rows                 record_sample             reduce_narrow_alphabet
+#   ref_rows                  ref_transformed           reset                     reset_descriptors
+#   restore                   restore_descriptors       resum                     row
+#   run_scan                  save_descriptors          scale_rare                search_planes
+#   seat_bucket               seat_nb_row               seat_symbol_context       seed_activity
+#   seed_after_run            seed_alphabet             seed_candidates           seed_from
+#   seed_history              seed_pair                 seed_row0                 set
+#   set_p                     slot                      start_row                 step_bank
+#   stream_open               strided_copy              summ                      take
+#   transform_cost            transpose_image           tree_place                trial
+#   unmodel_described         unmodel_planes_apart      unmodel_planes_together   unpack_bits
+#   update_selector           walk_bank_bits            weight_pair_cost          widest_window
+#   write_bmp_palette         write_member_head         write_nibbles             write_plane_descs
+#   write_row                 write_row_at

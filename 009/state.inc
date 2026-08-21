@@ -184,6 +184,22 @@ struct BMFState {
   // hands back to `compress_image`, and this object never owned it.
   void reset() {
     memset(static_cast<void*>(this), 0, sizeof(BMFState));
+    // **The denormal mode is per *thread*, and that is why it is set here.**
+    // `main` sets it once at startup, which was the whole story while there was
+    // one thread; MXCSR is per thread and a new one starts at the default, so a
+    // codec running in a worker would flush denormals where the reference did
+    // not.  The p2 model is float arithmetic, so that is a silently different
+    // stream rather than a crash -- the exact failure this class is supposed to
+    // have made impossible.  Setting it at each entry point sets it on whatever
+    // thread is about to run.
+    //
+    // **No image in the corpus demonstrates it**, and that is worth saying
+    // rather than implying otherwise: a probe that compressed all nineteen with
+    // the mode on and again with it off answered `0 of 19 images differ`.  What
+    // stands is that the original program runs with it on, a threaded caller
+    // would not, and the cost of removing the question is two instructions per
+    // image.
+    bmf_set_denormal_mode();
     // The coder reads and writes `stream` and needs nothing else of this
     // object, so it takes the stream rather than the state.
     rc.st = &stream;

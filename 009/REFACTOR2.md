@@ -2046,6 +2046,21 @@ braces.  The keyword guard also un-hid `return x;`, which the *original* field
 pattern had been skipping since the day it was written.  Residue 46 -> 43, and
 the ratchet came down to match.
 
+**The denormal mode is per thread, and `main` was the only thing setting it.**
+`bmf_set_denormal_mode` writes MXCSR, which every thread has its own copy of and
+which a new thread starts at the default -- so a codec running in a worker
+flushed denormals where the reference did not, and the p2 model is float
+arithmetic, so the failure would have been a silently different stream rather
+than a crash.  `reset()` sets it now, at both entry points, on whatever thread
+is about to run; `tools/parallel.cpp` deliberately does *not* call it, which is
+what makes that program check it.
+
+**No image in the corpus demonstrates it.**  A probe that compressed all
+nineteen with the mode on and again with it off answered `0 of 19 images
+differ`, so this is the arena lock's kind of justification and not the parallel
+test's: what stands is that the original program runs with the mode on, a
+threaded caller would not, and two instructions per image removes the question.
+
 **A codec cannot be copied, and the compiler had to be told.**  Two members
 point back into the object they sit in: `rc.st` is `&stream`, and every pooled
 block holds a `BMFState* cx` naming whichever codec took it.  The copy

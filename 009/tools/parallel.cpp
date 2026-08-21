@@ -178,7 +178,11 @@ static bool refusals_are_clean(const std::vector<uint8_t>& coded) {
 }
 
 int main(int argc, char** argv) {
-  bmf_set_denormal_mode();
+  // **No `bmf_set_denormal_mode()` here, deliberately.**  `main` in bmf.cpp
+  // calls it and this program is not that main; the codec sets it in `reset()`,
+  // on whatever thread is about to run, because MXCSR is per thread and a
+  // worker starts at the default.  Leaving it out here is what makes this
+  // program check that.
   const char* files[4] = { "testfiles/t24.bmp", "testfiles/t8g.bmp",
                            "testfiles/x_ai.bmp", "testfiles/med32.bmp" };
   if( argc>1 )
