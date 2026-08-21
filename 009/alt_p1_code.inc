@@ -199,9 +199,7 @@ int32_t BMFCodec::alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     rc_end_encode();
   // `bmf_new` is fatal, so every slot is populated -- the `if( q )` was the
   // same dead null check 11.1 removed from the p2 side.
-  for( int32_t f = 0; f<plane_count; ++f )
-    p1_blocks.give(plane[f]);
-  return plane_count;
+  return planes_free(p1_blocks, plane);
 }
 
 int32_t BMFCodec::alt_model_p1_encode(BmfImage* hdr, uint8_t* src) {

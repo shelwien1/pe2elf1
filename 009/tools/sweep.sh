@@ -123,6 +123,33 @@ done
   exit 1
 }
 
+# **A tool that carries a self-test gets it run, before its count is believed.**
+# Two tools grew a `--selftest` in the round that wrote this -- `dupblock.py`,
+# whose skip decides what counts as copy, and `shared.py`, which checks the
+# invariant the codec class exists for -- and nothing ran either of them.  A
+# self-test nobody runs is a comment: `dupblock.py`'s skip had been quietly
+# swallowing `return x;` since the day it was written, and it took *writing* the
+# test to find that, which is precisely the value that goes away if the test
+# then sits unrun.
+#
+# They are cheap -- both together are under a tenth of a second -- and the
+# ordering is what matters: a tool whose own check fails is not a tool reporting
+# zero, so this runs before the counting loop and stops the sweep rather than
+# letting a broken filter contribute a clean-looking line.
+#
+# Discovered by `--help`-grepping rather than listed, so a third tool that grows
+# one is covered without editing this file.
+broken=
+for t in tools/*.py; do
+  grep -q '\-\-selftest' "$t" || continue
+  out=$(python3 "$t" --selftest 2>&1) || broken="$broken $(basename "$t")"
+  printf '%-22s %s\n' "$(basename "$t") --selftest" "$(printf '%s\n' "$out" | tail -1)"
+done
+[ -z "$broken" ] || {
+  echo "FAIL: these tools fail their own self-test, so their counts mean nothing:$broken"
+  exit 1
+}
+
 for t in tools/*.py; do
   n=$(basename "$t")
   case $n in

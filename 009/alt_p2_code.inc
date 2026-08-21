@@ -36,12 +36,6 @@ void BMFCodec::alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
   }
 }
 
-int32_t BMFCodec::alt_p2_planes_free(AltP2Block** plane) {
-  for( int32_t pl = 0; pl<plane_count; ++pl )
-    p2_blocks.give(plane[pl]);
-  return plane_count;
-}
-
 template<int32_t f_DEC>
 int32_t BMFCodec::alt_model_p2(BmfImage* p_i, uint8_t* out) {
   AltP2Block* plane[4];
@@ -133,7 +127,7 @@ int32_t BMFCodec::alt_model_p2(BmfImage* p_i, uint8_t* out) {
   else
     rc_end_encode();
   coef_session.restore(this);
-  return alt_p2_planes_free(plane);
+  return planes_free(p2_blocks, plane);
 }
 
 // The two names `plane.inc` reaches for.  The decode half was a file of its own

@@ -127,7 +127,20 @@ MIN_CHARS = 60
 # copy that no edit could remove, because the list *is* the class.  The skip at
 # `FUNC` below reads a prototype as what it is, the three lines went, and what
 # is left is 43.
-BUDGET = 43
+#
+# 43 -> 38, and the five are the pair three paragraphs up.  What made it
+# shareable was not an attempt at it: the codec became a class and the pools
+# became members of that class, so neither block owns its release any more.
+# The blocker was that the two blocks named their release differently; with the
+# release belonging to the pool, the only difference left is *which* pool, and a
+# pool is an argument.  `BMFCodec::planes_free` is six lines and both coders
+# return it.
+#
+# Which is the pattern worth reading off the round trip: a run of copy that
+# cannot be shared is usually saying something about the shape above it.  Raise
+# the number when that is honestly the answer, write down what would change it,
+# and look at the note again when the shape moves.
+BUDGET = 38
 
 # A declaration and nothing else: a type, a name, an optional array bound, a
 # semicolon.  No initialiser, no call, no operator.

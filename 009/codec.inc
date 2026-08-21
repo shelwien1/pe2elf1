@@ -27,6 +27,34 @@ struct BMFCodec : BMFState {
   BlockPool<AltP2Block, 4> p2_blocks;
   BlockPool<ModelBlock, 1> model_blocks;
 
+  // Both alternate coders end the same way: every plane's block back to its
+  // pool, and the plane count as the answer each returns.  The p2 side had a
+  // name for it -- `alt_p2_planes_free` -- and `alt_model_p1` wrote the loop out
+  // again, which is the five-line run `dupblock.py` has been carrying at the top
+  // of its list.
+  //
+  // That run was looked at before and left, on the argument that sharing it
+  // needed a member-function-pointer template or free-function overloads plumbed
+  // across an include boundary, because the two blocks named their release
+  // differently.  Neither block owns its release any more -- the pools do -- so
+  // the only difference left is which pool, and a pool is an argument.
+  //
+  // The alloc sides are deliberately *not* shared: p1's block wants a height and
+  // p2's does not, so they are two functions rather than one with a dead
+  // parameter.
+  //
+  // Defined here, where everything else in this class is declared, because a
+  // member template has to be defined before it is instantiated and both callers
+  // come later in the include list.  Declaring it and defining it in whichever
+  // of the two files is included first would work, and would break the next time
+  // that order moved.
+  template<class T, int32_t N>
+  int32_t planes_free(BlockPool<T, N>& pool, T** plane) {
+    for( int32_t k = 0; k<plane_count; ++k )
+      pool.give(plane[k]);
+    return plane_count;
+  }
+
   // The two the world outside wants: an image in memory becomes a coded stream,
   // and a coded stream becomes an image.  Everything else here is how.
   void allow_refs_where_present();
@@ -98,7 +126,6 @@ struct BMFCodec : BMFState {
   void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out);
   void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
   void alt_p2_planes_alloc(AltP2Block** plane, int32_t width);
-  int32_t alt_p2_planes_free(AltP2Block** plane);
 
   // The two an outside caller wants, and the reason this is a class: an image
   // in memory in, a coded stream in memory out, and back again.  Neither
