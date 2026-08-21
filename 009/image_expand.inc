@@ -176,9 +176,12 @@ bool BMFCodec::expand_coded(FILE* fp, BmfImage* img_at, const BmfImage& hdr) {
 }
 
 // **The in-memory entry point**, and the other half of what a caller wants.
-// `fmemopen` is `open_memstream`'s mirror: a `FILE*` reading a buffer the caller
-// owns, which is the shape `expand_image` already takes.  The file layer is
-// untouched and the codec gains an entry point rather than a fork.
+// `bmf_memopen_read` is `bmf_memstream_open`'s mirror: a `FILE*` reading a
+// buffer the caller owns, which is the shape `expand_image` already takes.  The
+// file layer is untouched and the codec gains an entry point rather than a fork.
+// It is `fmemopen` on a POSIX host and a temporary file on Windows -- see
+// platform.inc; unlike the write side this one needs no special close, because
+// the buffer is input and plain `fclose` ends the stream on both.
 //
 // The caller frees the image.  `nullptr` means the stream was refused, which is
 // what `expand_image` answers and what the malformed-stream leg of `test.sh`
@@ -198,7 +201,7 @@ BmfImage* BMFCodec::expand_from_memory(const uint8_t* data, size_t n,
   // As `compress_to_memory`: each call starts from a fresh codec.
   reset();
   BmfFile arc;
-  arc.fp = fmemopen((void*)data, n, "rb");
+  arc.fp = bmf_memopen_read(data, n);
   if( !arc.fp )
     return nullptr;
   // `&coded_block` and not `tail` directly, because a null one means something

@@ -88,10 +88,12 @@ void BMFCodec::code_image_body(BmfImage* p_i, BmfImage& hdr) {
 // path and no file.
 //
 // It is `compress_image` over a buffer rather than a second copy of it.
-// `open_memstream` hands back a `FILE*` that writes into a `malloc`ed buffer
-// and reports its length, which is exactly the shape `compress_image` already
-// takes -- so the file layer stays where it is and the codec gains an entry
-// point rather than a fork.
+// `bmf_memstream_open` hands back a `FILE*` that writes into a buffer it gives
+// up at the close, which is exactly the shape `compress_image` already takes --
+// so the file layer stays where it is and the codec gains an entry point rather
+// than a fork.  It is `open_memstream` on a POSIX host and a temporary file on
+// Windows, which has no such call; platform.inc has the reasoning, including
+// why the close is a named operation instead of a `fclose`.
 //
 // The caller frees what comes back.  `nullptr` and a zero length mean the image
 // was refused, which is the same answer `compress_image` gives.
@@ -105,12 +107,19 @@ uint8_t* BMFCodec::compress_to_memory(BmfImage* p_i, size_t* out_len,
   char* buf = nullptr;
   size_t len = 0;
   BmfFile arc;
-  arc.fp = open_memstream(&buf, &len);
+  arc.fp = bmf_memstream_open(&buf, &len);
   if( !arc.fp )
     return nullptr;
   const int32_t coded = compress_image(&arc, p_i, tail);
-  fclose(arc.fp);
+  // The close is what produces the buffer, so a failing one is a failing
+  // compress however well the coding went: on the Windows side this is where
+  // the bytes are read back, and `buf` stays null if that does not happen.
+  const bool closed = bmf_memstream_close(arc.fp, &buf, &len)==0;
   arc.fp = nullptr;
+  if( !closed ) {
+    free(buf);
+    return nullptr;
+  }
   if( !coded ) {
     free(buf);
     return nullptr;

@@ -2215,3 +2215,65 @@ because what is being measured is the instrument and not the program: the point
 is that the reach of the gate lives in something that runs, rather than in a
 comment that ages. Proven by removing the poisoning and watching the first case
 flip to silent and the script exit 1.
+
+## It did not compile on Windows, and nothing here could have known
+
+Reported from outside, which is the part worth recording. The tree's gate is
+`g++` on Linux across eight legs, ASan, a fuzzer, a header scan and ~96 tools,
+and none of it can see that `open_memstream` and `fmemopen` do not exist on
+Windows — not in MSVC's CRT and not in mingw-w64, which is msvcrt underneath.
+They arrived with the in-memory entry points two rounds ago and were the only
+two things in the program a Windows compiler rejects. Measured rather than
+guessed: `x86_64-w64-mingw32-g++ -c bmf.cpp` reports exactly two errors and they
+are those two names. Everything else — the SSE intrinsics, the `__builtin_*`,
+the `alignas`, `sys/mman.h` behind its `BMF_HIGH_ARENA` guard — compiles.
+
+**`platform.inc` is the shim, and it is deliberately not named `open_memstream`.**
+Two reasons, of which the second is the real one. A `#define` would claim to be
+the POSIX function and would not be — what is there supports the one shape this
+program uses. And `open_memstream` *cannot* be shimmed under its own name at
+all: its contract is that the buffer and length become valid when the stream is
+**closed**, so a faithful stand-in has to intercept `fclose`, and nothing
+portable can. So the close is a named operation, `bmf_memstream_close`, whose
+POSIX body is a one-line `fclose` that ignores its out-parameters because the
+real function has already written them. The read side needs no such thing: the
+buffer is input and plain `fclose` ends the stream on both hosts.
+
+The Windows half is a temporary file, which is the only thing Windows offers
+that is a `FILE*` and is not a named file somebody has to clean up. Not
+`tmpfile()` — the CRT's version puts its file in the root of the current drive
+and fails for an unelevated process on the system drive, a documented defect
+that has outlived several CRTs. `GetTempFileNameA` puts it where the
+environment says, and `FILE_FLAG_DELETE_ON_CLOSE` makes the deletion the
+kernel's job rather than something an abnormal exit can skip.
+
+**`tools/win.sh` is the point of the round.** A shim nobody compiles is a guess,
+so the host cross-compiles with mingw-w64 and runs the result under wine: the
+same seventeen streams byte for byte in both directions, then `parallel.cpp`,
+then a count of what is left in the temp directory. Each of the four is proven
+able to report, and two of the proofs are the interesting ones:
+
+  * **planting a one-byte error in the shim leaves all seventeen streams
+    identical.** `bmf c` and `bmf d` open a *path* and never touch the memory
+    layer, so the byte comparison — the strongest check this project has — passes
+    with the shims completely broken. Only `parallel.cpp` goes through them.
+  * **planting the removal of `FILE_FLAG_DELETE_ON_CLOSE` leaves the bytes
+    identical too, and 89 files in the temp directory.** A temp file that
+    outlives the process is a defect no stream comparison can see.
+
+**Two tools reported on the new file and both were right.** `unify_types.py`
+found it written in `int`, `long long` and `DWORD` where this tree spells named
+widths — the sweep's write-detector named it, which is what that per-tool
+`cksum` was added for. And `covered.py` went four over its budget, correctly:
+every function should be described by an algorithm document or exempt by a
+stated rule. The rule is that `platform.inc` is what a *host* lacks and not what
+the codec does — the second exemption that is a scope decision rather than a
+fact about the code, the range coder being the first.
+
+That rule was first written as `if file == 'platform.inc'`, which is the
+obvious spelling, reads correctly, and exempts nothing under `sweep.sh`. The
+sweep hands every tool the **spliced** unit, where the includes are already
+resolved and every line's origin is one temporary file. Clean by hand, four over
+through the sweep. It is a name rule now, like the three exemptions beside it,
+and the reason is written at the pattern so the next person does not spend the
+afternoon.

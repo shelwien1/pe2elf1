@@ -69,6 +69,20 @@ buys is a claim fuzzing cannot make: every value was tried, not enough of them
 to feel confident. It found four defects §47's fuzzer had not, one of them a
 SIGFPE reachable from four values in 256. §48.
 
+`win.sh` is the one that runs when anything reaches for a libc call. It came
+out of a report from outside — the tree did not compile on Windows, because the
+in-memory entry points use `open_memstream` and `fmemopen` and neither exists
+there. Nothing here had ever pointed a Windows compiler at the tree, so the gate
+had no way to know. It cross-compiles with mingw-w64, checks the same seventeen
+streams byte for byte in both directions, and then runs `parallel.cpp`, which is
+the only thing that executes a line of the Windows half of `platform.inc` —
+`bmf c` and `bmf d` open a *path* and never touch the shims, so everything else
+here passes with the memory layer entirely broken. Proven: planting a one-byte
+error in the shim leaves the seventeen streams identical and fails only that
+check. It also counts the temporary files before and after, because the Windows
+shim is a temp file and one that outlives the process is a defect no byte
+comparison can see — planting that leaves 89 behind.
+
 ## the original six
 
 All are idempotent — running them on an already-migrated file changes
@@ -577,6 +591,7 @@ them run.
 | `unused.py` | Delete the locals nothing uses, with the compiler saying which | yes |
 | `unwiden.py` | Give a cursor the type its dereferences read, not the one it was declared | yes |
 | `unwrite.py` | Delete a local that is written once and never read | yes |
+| `win.sh` | Build this tree for Windows and run it, on a Linux host |  |
 | `x32.sh` | What the 32-bit build still gets wrong |  |
 | `x64diff.sh` | Do the two pointer widths answer the same on inputs nobody chose? |  |
 
