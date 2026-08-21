@@ -2084,11 +2084,29 @@ int32_t[8]` sitting between the genuine constants and the two tables `P2Coef`
 borrows -- read by one line, written by none, and mutable only because of where
 it happened to be in the file.  It is `constexpr` now.
 
-The tool's `--selftest` plants both halves, because a skip is what turns a
-counting tool off: three mutable shapes it must report -- including
-`alignas(16) static float t[16];`, since stripping `alignas` before looking for
-a parenthesis is what stops every aligned global reading as a function -- and
-five it must not.
+**Its first version looked only at column one**, which would have called a tree
+with `static SymEntry cache[8192];` in the middle of a function body clean --
+within one word of the shape that cost this round two of its three defects. A
+`static` inside a body is file-scope state wearing a smaller scope: one copy for
+the process, written by whichever thread arrives. With that pass added it found
+two more, and both are allowed with their reasons rather than fixed:
+`bmf_compress`'s single archive handle, and `read_bmp`'s padded row of scratch.
+
+The second is the only entry on the list that costs anything. It is I/O and not
+codec -- no `BMFCodec` method reaches it -- so it does not weaken what the class
+claims, but it does mean **`read_bmp` is not reentrant**, and it is static
+because the round before this one asked for exactly that: a block with a known
+maximum becomes storage rather than an allocation. A 64 KB local would satisfy
+both rounds; it is not made here because nothing asked for a threaded reader,
+and the tool says so at the entry rather than leaving the next reader to find
+out.
+
+The `--selftest` plants both halves, because a skip is what turns a counting
+tool off: five mutable shapes it must report -- including `alignas(16) static
+float t[16];`, since stripping `alignas` before looking for a parenthesis is
+what stops every aligned global reading as a function, and a `static` two levels
+deep in a body -- and eight it must not, among them a `static` member function
+and a `static const` member.
 
 **The one thing two codecs still share, and it is not settled by a test.**
 Under `-DBMF_HIGH_ARENA` the bump pointer and the forty free lists are

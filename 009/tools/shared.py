@@ -21,6 +21,12 @@ declares an object rather than a function or a type, and is not `const` or
 `constexpr`.  A `const` table is shared by every codec and that is the point of
 it being const; what matters is whether anything can *write* it.
 
+**And a `static` inside a function**, which is file-scope state wearing a
+smaller scope: one copy for the process, written by whichever thread got there.
+A first version of this looked only at column one and would have called a tree
+with `static SymEntry cache[8192];` in the middle of a body clean -- which is
+within one word of the shape that cost this round two of its three defects.
+
 **What is allowed, and why each one is.**  The list below is the whole of it and
 every entry carries its reason.  Anything else is a finding -- not a suggestion,
 because there is no way for a file-scope mutable to be right here.
@@ -48,6 +54,23 @@ ALLOWED = {
     'bmf_arena_used': 'the high-arena leg; under bmf_arena_lock',
     'bmf_arena_lock': 'the lock itself',
     'bmf_bucket': 'the high-arena leg; under bmf_arena_lock',
+    # A function-local `static` in `bmf_compress`, which is `main`'s side of the
+    # program and the part the codec was never asked to absorb.  It holds the
+    # one archive handle a run opens, and `main` calls `bmf_compress` once.
+    'arc_store': "main's single archive handle; bmf_compress runs once",
+    # `read_bmp`'s one padded row of scratch, and the only entry here that costs
+    # something.  It is I/O rather than codec -- nothing a `BMFCodec` method
+    # reaches -- so it does not weaken what the class claims, but it does mean
+    # **`read_bmp` is not reentrant**: two threads reading BMPs at once would
+    # share this buffer.  `tools/parallel.cpp` reads its four images on the main
+    # thread before any codec exists, which is the shape that is safe.
+    #
+    # It is static rather than a 64 KB local because the round before this one
+    # asked for exactly that: a block with a known maximum becomes storage
+    # instead of an allocation.  Making it a local would satisfy both rounds and
+    # is the obvious next move if anyone wants a threaded reader; it is not made
+    # here because nothing asked for one.
+    'pal_store': 'read_bmp scratch; read_bmp is not reentrant, and is not codec',
 }
 
 # `alignas(N)` is a qualifier on a declaration and has parentheses in it, which
@@ -83,24 +106,43 @@ def statements(lines):
     return out
 
 
+def is_mutable_object(s):
+    """Does this statement define an object that something can write?"""
+    s = ALIGNAS.sub('', s)
+    if NOT_AN_OBJECT.match(s):
+        return None
+    if re.search(r'\b(const|constexpr)\b', s.split('=')[0]):
+        return None
+    # A function -- a prototype, a definition, or a `static` member function --
+    # has a parenthesis in its declarator.  An object's initialiser may have one
+    # (`= f(x)`), so only the part before the first `=` is looked at.
+    if '(' in s.split('=')[0]:
+        return None
+    m = NAME.search(s)
+    return m.group(1) if m else None
+
+
 def findings(path):
     lines = structs.splice(path)[0]
-    out = []
+    out, seen = [], set()
     for line, s in statements(lines):
-        s = ALIGNAS.sub('', s)
-        if NOT_AN_OBJECT.match(s):
+        name = is_mutable_object(s)
+        if name and name not in ALLOWED:
+            out.append((line, name, s[:80]))
+            seen.add(line)
+    # The second pass: a `static` anywhere, at any depth.  Indentation is what
+    # tells it from the first pass's column-one definitions, so the two cannot
+    # report the same line -- but the check is here rather than assumed.
+    for i, l in enumerate(lines):
+        s = l.split('//')[0].strip()
+        if not s.startswith('static ') or i + 1 in seen:
             continue
-        if re.search(r'\b(const|constexpr)\b', s.split('=')[0]):
-            continue
-        # A function -- a prototype or a definition -- has a parenthesis in its
-        # declarator.  An object's initialiser may have one (`= f(x)`), so only
-        # the part before the first `=` is looked at.
-        if '(' in s.split('=')[0]:
-            continue
-        m = NAME.search(s)
-        if not m or m.group(1) in ALLOWED:
-            continue
-        out.append((line, m.group(1), s[:80]))
+        if not l[:1].isspace():
+            continue                    # column one; the first pass owns it
+        name = is_mutable_object(s)
+        if name and name not in ALLOWED:
+            out.append((i + 1, name, s[:80]))
+    out.sort()
     return out
 
 
@@ -113,6 +155,13 @@ _PLANTS = [
     ('void planted_fn(int32_t k);', False),
     ('static int32_t planted_call(int32_t k) { return k; }', False),
     ('typedef int32_t planted_alias;', False),
+    # A `static` inside a body: file-scope state wearing a smaller scope.
+    ('void planted_body() {\n  static int32_t planted_inner;\n}', True),
+    ('void planted_body() {\n  static SymEntry planted_cache[8192];\n}', True),
+    # And the shapes beside it that are not.
+    ('void planted_body() {\n  static const int32_t planted_k = 2;\n}', False),
+    ('struct Planted {\n  static uint32_t planted_slot(int32_t b) { return b; }\n};', False),
+    ('struct Planted {\n  static const int32_t planted_margin = 4;\n};', False),
 ]
 
 
