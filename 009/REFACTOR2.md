@@ -2046,6 +2046,15 @@ braces.  The keyword guard also un-hid `return x;`, which the *original* field
 pattern had been skipping since the day it was written.  Residue 46 -> 43, and
 the ratchet came down to match.
 
+**A codec cannot be copied, and the compiler had to be told.**  Two members
+point back into the object they sit in: `rc.st` is `&stream`, and every pooled
+block holds a `BMFState* cx` naming whichever codec took it.  The copy
+constructor the compiler writes by default takes those pointers verbatim, so
+`BMFCodec b = a;` compiles and gives you a codec whose coder writes into `a`'s
+stream -- silently, and only when two are live, which is the one situation this
+class exists for.  Copy and assignment are `= delete`d, and `BMFCodec b = a;`
+is now an error that names them.
+
 **And a tool for the invariant itself, which is the part that should have
 existed first.**  The class's whole claim is "nothing the codec touches lives at
 file scope", and nothing checked it -- which is why three of this round's

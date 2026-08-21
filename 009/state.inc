@@ -194,5 +194,22 @@ struct BMFState {
   BMFState() {
     reset();
   }
+
+  // **A codec cannot be copied, and the compiler has to be told**, because the
+  // default it would write compiles and is wrong.  Two members point back into
+  // the object they are in: `rc.st` is `&stream`, set two lines above, and each
+  // pooled block holds a `BMFState* cx` set to whichever codec took it.  A copy
+  // gets those pointers verbatim, so the new codec's coder writes into the *old
+  // one's* stream and its blocks read the old one's descriptors -- silently,
+  // and only when two of them are live at once, which is the whole of what this
+  // class was made for.
+  //
+  // Deleted rather than written: there is no caller that wants one.  `main`
+  // keeps a single codec and `tools/parallel.cpp` makes eight with `new`; a
+  // copy would be 86 MB of memcpy that nobody asked for.  Move goes with it --
+  // implicitly, once copy is deleted, but said here so the reason is one thing
+  // and not two.
+  BMFState(const BMFState&) = delete;
+  BMFState& operator=(const BMFState&) = delete;
 };
 
