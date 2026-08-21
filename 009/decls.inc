@@ -1,11 +1,36 @@
-// decls.inc -- every function this program defines, declared before any of it is.
+// decls.inc -- the structs, and the free functions, declared before any of it is.
 //
 // This is what lets the include list in bmf.cpp be a reading order instead of a
 // dependency order: a body can call anything, wherever it ends up, and a class
 // can define its methods in its own body without waiting for what they call.
 // Without it the file has exactly one legal order -- the one the decompiler
 // emitted -- and every one of these units would have to sit where its callers
-// put it.
+// put it.  Deleting this file is not a thought experiment: it was tried, and
+// the answer is 90 errors, the first three of them struct names.
+//
+// **This is not codec.inc, and the two do not overlap.**  A fair question once
+// `BMFCodec` existed is whether this file still has a job, since most of what
+// it used to declare is now a method declared inside the class.  It does, and
+// the split is exactly:
+//
+//   * codec.inc declares `BMFCodec`'s *methods*, inside the class, where C++
+//     requires them and where a method may be defined in any later file;
+//   * this declares the twenty-two *structs* and the twenty-six *free*
+//     functions -- the block helpers, the BMP reader and writer, the file
+//     layer -- none of which belong to a class and none of which C++ will let
+//     a caller reach before it has seen a declaration.
+//
+// The header used to open "every function this program defines", which stopped
+// being true the round the codec became a class and stayed on the page for
+// three more.
+//
+// Six declarations here had gone dead in the same three rounds: `alt_init_tables`,
+// `rc_decode_flat`, `update_binary_pair`, `reduce_alphabet` and the two
+// `alt_model_p1_d8_*` wrappers all became methods, and the line declaring the
+// free function stayed.  That compiles indefinitely -- a declaration with no
+// definition is legal until something calls it -- so nothing said a word, while
+// the file went on telling a reader there was a free `reduce_alphabet` in this
+// program.  `tools/deadcheck.py` has the check now.
 
 // Sixteen parameters here used to be named `unread*` or `unused*`, eight of
 // them `unread_flag`, and this note used to say why they stayed: that the
@@ -73,8 +98,6 @@ static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest
 static inline void p2_rescale(P2Freq* r);
 static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num);
 void bmf_close_file(BmfFile* arc);
-uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold);
-uint32_t rc_decode_flat(uint32_t tot);
 CounterNode*init_counter_node(CounterNode* node);
 // The templates the merged encode/decode pairs are instantiated from, declared
 // here for the same reason as everything else in this file: a caller that is
@@ -86,15 +109,11 @@ CounterNode*init_counter_node(CounterNode* node);
 void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym);
 int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx);
 static inline bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym);
-int32_t update_binary_pair(uint16_t* _this, int32_t symbol);
-void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out);
 BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed);
 int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle);
 static inline int32_t bmf_pixels(const BmfImage* img);
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height);
 int32_t estimate_cost(const int32_t* bin, int32_t n);
-void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
-void reduce_alphabet(ModelBlock* blk, uint8_t* src);
 BmfImage* read_bmp(char* path);
 static uint32_t bytes_left(FILE* fp);
 BmfFile*bmf_open_file(BmfFile* out, char* path, int32_t read_only);

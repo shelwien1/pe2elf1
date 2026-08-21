@@ -304,6 +304,95 @@ def main():
         print('%s: %s is never called' % (path % (a + 1), n.lstrip('_')))
         bad += 1
 
+    # **A free-function declaration with no free definition.**  Six of these had
+    # collected in decls.inc: `alt_init_tables`, `rc_decode_flat`,
+    # `update_binary_pair`, `reduce_alphabet` and the two `alt_model_p1_d8_*`
+    # wrappers all became methods over the rounds that made the codec a class,
+    # and the declaration that used to name the free function stayed behind.
+    #
+    # This compiles forever.  A declaration with no definition is legal until
+    # something calls it, so nothing in the build says a word -- and what is
+    # left reads to a human as "there is a free `reduce_alphabet` in this
+    # program", which there is not.  Worse than noise: a new caller written at
+    # file scope binds to *this* and fails at link, or binds here when the
+    # method was meant.
+    #
+    # A definition is free when the name is not preceded by `::`.  That is the
+    # whole of the rule, and getting it wrong is easy in the quiet direction: a
+    # first version put `:` in the character class before the name, so
+    # `uint32_t BMFState::alt_init_tables(` matched as a free definition and all
+    # six came back live.  A check that cannot report is worse than no check, so
+    # this one is planted below before it is believed.
+    # **Only at file scope, and only in column one.**  Without both, this reads
+    # `return fclose(fp);` as a declaration of `fclose` -- a type token, a name,
+    # a parenthesis and a semicolon are the same shape -- and the first run
+    # answered 598 findings, of which six were real.  A declaration in this tree
+    # is unindented and outside every brace; a statement is neither.
+    # A leading `__attribute__((...))` or `[[...]]` is a qualifier, not the
+    # return type -- `bmf_fatal` carries one at both its declaration and its
+    # definition, and left in place it makes the capture `_` and the search for
+    # a definition fail, which is a false finding at both ends at once.
+    ATTR = re.compile(r'^\s*(?:__attribute__\s*\(\(.*?\)\)|\[\[.*?\]\])\s*')
+    DECL = re.compile(r'^(?:static\s+)?(?:inline\s+)?[A-Za-z_][\w:]*\s*\**\s*'
+                      r'(\w+)\s*\(')
+    # `extern "C"` declarations are the ASan hooks, defined by the sanitizer's
+    # runtime and never by this program.  `static_assert` is the one that stings:
+    # it is a keyword ending in a parenthesis, so the pattern above captures the
+    # `t` of `static_assert` as a function name, and this tree has fourteen of
+    # them.
+    NOT_DECL = re.compile(r'^(?:return|else|using|typedef|extern|friend|template'
+                          r'|delete|throw|new|case|goto|static_assert)\b')
+    # Depth at the *start* of each line, computed once and used by both halves
+    # of this check.  A definition and a declaration are both file-scope things
+    # in column one, and a call is neither.
+    at_depth, d = [], 0
+    for l in lines:
+        at_depth.append(d)
+        d += l.count('{') - l.count('}')
+    top = [(i, ATTR.sub('', lines[i].strip()))
+           for i in range(len(lines))
+           if at_depth[i] == 0 and lines[i][:1] and not lines[i][:1].isspace()
+           and lines[i][:1] != '#']
+    joined = '\n'.join(lines)
+
+    def defined_free(name):
+        """Is there a definition of `name` that is not somebody's method?"""
+        for i, s in top:
+            m = re.search(r'(?:^|[^\w:])(%s)\s*\(' % re.escape(name), s)
+            # **Column one and depth zero, not "anywhere in the file".**  A
+            # looser search read a *call* as a definition: `if( f(a, b) ) {`
+            # ends in a brace just as a signature does, so `update_binary_pair`
+            # -- which became a method and is called from inside one -- came
+            # back defined and its dead declaration went unreported.  Definitions
+            # start a line at file scope; calls do not.
+            if not m or s[:m.start(1)].rstrip().endswith('::'):
+                continue
+            # The body may open on this line or on a later one, for a signature
+            # wrapped across lines.
+            rest = '\n'.join([s[m.end():]] + [lines[j] for j in range(i + 1, i + 6)])
+            if re.match(r'[^;]*\)\s*(?:const\s*)?\{', rest, re.S):
+                return True
+        return False
+
+    # The plants, run every time rather than described: one name nothing defines
+    # must come back undefined, and one the file plainly defines must not.
+    if defined_free('bmf_no_such_free_function'):
+        print('deadcheck: the declaration check cannot report', file=sys.stderr)
+        return 2
+    for i, s in top:
+        # `);` and not merely `;`: a function declaration closes on its
+        # parameter list.  An object definition with an initialiser -- the
+        # `alignas(16) static const uint8_t p2_b1_reload[3] = { ... };` in
+        # tables.inc -- ends `};` and is not a declaration of anything callable.
+        if not s.endswith(');') or NOT_DECL.match(s):
+            continue
+        m = DECL.match(s)
+        if not m or defined_free(m.group(1)):
+            continue
+        print('%s: %s is declared and never defined as a free function'
+              % (path % (i + 1), m.group(1)))
+        bad += 1
+
     print('%d findings' % bad)
     return 1 if bad else 0
 

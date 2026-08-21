@@ -2335,3 +2335,53 @@ That is twice in three rounds that adding code to this tree has found a gate
 that could not see it — the ASan pools, and now this. Both were found by the
 same move: write the thing, then check that the tool which should have an
 opinion actually has one.
+
+## Does decls.inc still have a job?
+
+Asked directly, and the answer is yes — but it was carrying six dead lines, and
+finding that took a checker that had to be fixed twice before it could be
+believed.
+
+**The two files do not overlap.** `codec.inc` declares `BMFCodec`'s methods,
+inside the class, which is where C++ requires them. `decls.inc` declares the
+twenty-two structs and the twenty-six *free* functions — the block helpers, the
+BMP reader and writer, the file layer — none of which belong to a class. Not a
+thought experiment: deleting the include gives 90 errors, the first three of
+them struct names.
+
+**Six of its thirty-two function declarations were dead.**
+`alt_init_tables`, `rc_decode_flat`, `update_binary_pair`, `reduce_alphabet`
+and the two `alt_model_p1_d8_*` wrappers all became methods across the three
+rounds that made the codec a class, and the line declaring the free function
+stayed behind each time. A declaration with no definition is legal until
+something calls it, so the build never said a word — while the file went on
+telling a reader that this program has a free `reduce_alphabet`. The live
+hazard is a new caller written at file scope: it binds to the declaration and
+fails at link, or binds there when the method was meant.
+
+The header had gone stale in the same way, opening "every function this program
+defines" for three rounds after that stopped being true.
+
+**The checker was wrong twice, in both directions, and that is the part worth
+keeping.** It is in `deadcheck.py` now, as a sixth kind of unreachable code.
+
+  1. *Quiet when it should speak.* The first version put `:` in the character
+     class before the name, so `uint32_t BMFState::alt_init_tables(` matched as
+     a free definition and all six came back live. A check that cannot report is
+     worse than no check, so it is planted before it is believed — one name
+     nothing defines must come back dead, one that plainly is defined must not.
+  2. *Loud when it should not be.* Then it read `return fclose(fp);` as a
+     declaration of `fclose` — a type token, a name, a parenthesis and a
+     semicolon are the same shape — and answered 598 findings, of which six were
+     real. Declarations are unindented and outside every brace; statements are
+     neither. With that, `static_assert` still captured the `t` of its own
+     keyword, and an initialised array ending `};` still looked like a
+     prototype.
+  3. *Quiet again, on exactly one of the six.* With definitions searched for
+     anywhere in the file, `if( update_binary_pair(p, s) ) {` matched — a call
+     inside an `if` ends in a brace just as a signature does. So a definition
+     has to start a line at file scope too, the same rule the declarations get.
+
+Zero findings on the tree, and each of the six caught when put back one at a
+time. Both numbers matter: the first alone would have been satisfied by a
+check that never speaks.
