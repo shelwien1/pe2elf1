@@ -547,6 +547,9 @@ struct MrpcCL {
       scan_workers = 8;
     if( scan_workers>64 )
       scan_workers = 64;
+    // pmodel_cost cuts the image into one chunk per compute unit; both
+    // this buffer and the host's have to be sized from that and not from
+    // a number that happened to be larger than a CPU's core count
     pm_chunks = cu;
 
     // --- buffers
@@ -580,7 +583,7 @@ struct MrpcCL {
     d_partials = Buf(CL_MEM_WRITE_ONLY,
                      size_t(MRP_MAXCLASS)*scan_workers*CL_NCAND*sizeof(float), &ee[ne++]);
     d_pmcost = Buf(CL_MEM_WRITE_ONLY,
-                   size_t(MAXC)*MRP_GROUP*NUM_PMODEL*32*sizeof(double), &ee[ne++]);
+                   size_t(MAXC)*MRP_GROUP*NUM_PMODEL*pm_chunks*sizeof(double), &ee[ne++]);
     d_hist = Buf(CL_MEM_READ_WRITE,
                  size_t(MRP_MAXCLASS)*MAXC*MRP_GROUP*(MAX_UPARA+2)*sizeof(double), &ee[ne++]);
     const size_t ndp = size_t(MRP_MAXCLASS)*MAXC*(MAX_UPARA+2);
