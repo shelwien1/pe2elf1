@@ -1,1 +1,7 @@
 tools/perf-baseline
+
+# `tools/sweep.sh` runs every tool against a copy beside the file rather than in
+# /tmp -- some of them resolve the repository from the path they are given.  The
+# copy is removed on exit, but a sweep killed mid-run leaves one, and a
+# `git add -A` in the next commit picks it up.  Twice now.
+.sweep.*
