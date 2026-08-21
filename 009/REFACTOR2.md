@@ -2168,3 +2168,50 @@ not running it. The tools are found by grepping for the flag rather than listed,
 so a third that grows one is covered without editing the sweep. Both together
 cost under a tenth of a second. Proven by breaking `dupblock.py`'s keyword list
 and watching the sweep exit 1 and name it.
+
+## A gate that lost its reach and did not say so
+
+The round above moved the three model blocks off `bmf_page_alloc` and into
+slots of a static array, because their maximum count is four and four is a
+bound. `tools/asan.sh` kept answering *no AddressSanitizer report in 44 runs
+over 19 images*, and the sentence had quietly started covering less ground.
+
+A block from `malloc` has a redzone after it, so a write one byte past the end
+of one was reported. Slots of one array have nothing between them, so the same
+write is a legal store to the live object next door. Probed and confirmed
+silent — in a binary where a `malloc` overflow one line away still reports, so
+the sanitizer was live and simply could not see this any more.
+
+Nothing was wrong with the allocation change and nothing was wrong with
+`asan.sh`. What was wrong is that a gate got weaker as a side effect of an
+unrelated improvement, went on printing the same clean line, and no reader
+could have told. That is the same failure `asan.sh`'s own opening paragraph is
+about — fifteen byte-identical streams saying nothing for nine rounds about a
+frame overflow — one layer up, aimed at the instrument instead of the program.
+
+**The repair.** `BlockPool` poisons the slots nobody holds. At most four planes
+are live, so an overflow crossing out of a block lands in a free neighbour and
+comes back as `use-after-poison`. It compiles to nothing without
+`-fsanitize=address`.
+
+Two gaps stay and are written down as gaps rather than fixed: a one-slot pool
+has no neighbour to poison, and two slots that are both taken have nothing
+between them that any annotation could supply — closing that would mean padding
+every slot with a redzone in every build, which is a real cost for a case the
+free-neighbour poisoning already covers in practice.
+
+**And the part that matters more than the fix.** `tools/asanprobe.cpp` makes the
+reach of the gate runnable in both directions. Three planted cases, each one a
+claim `asan.sh` makes: the overflow into a free slot must report; a `malloc`
+overflow must report, as a control, because without it a build where the
+sanitizer was silently not linked would pass the third case and read as a clean
+result rather than an absent one; and the one-slot case must stay *silent*, so
+that a known gap keeps being known instead of decaying into an assumption.
+`asan.sh` runs all three before it looks at an image and refuses to print a
+count if any of them misbehaves.
+
+A test that demands silence is normally a bad test. It earns its place here
+because what is being measured is the instrument and not the program: the point
+is that the reach of the gate lives in something that runs, rather than in a
+comment that ages. Proven by removing the poisoning and watching the first case
+flip to silent and the script exit 1.

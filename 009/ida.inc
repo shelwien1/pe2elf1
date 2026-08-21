@@ -70,8 +70,13 @@ extern "C" void __asan_unpoison_memory_region(void const volatile*, size_t);
 #  define BMF_ASAN_POISON(p, n)   __asan_poison_memory_region((p), (n))
 #  define BMF_ASAN_UNPOISON(p, n) __asan_unpoison_memory_region((p), (n))
 #else
-#  define BMF_ASAN_POISON(p, n)   ((void)0)
-#  define BMF_ASAN_UNPOISON(p, n) ((void)0)
+// `((void)(p), (void)(n))` and not `((void)0)`: the arguments still have to be
+// *used*, or a wrapper that passes them along has an unused parameter in every
+// build but the sanitizer's -- which is six warnings on the `BMF_WARN` leg, and
+// worse, it means the expressions inside a poison call are only ever compiled
+// when somebody runs ASan.  This way they are type-checked in every build.
+#  define BMF_ASAN_POISON(p, n)   ((void)(p), (void)(n))
+#  define BMF_ASAN_UNPOISON(p, n) ((void)(p), (void)(n))
 #endif
 
 // Named-width min/max/clamp, and the width in the name is the point.
