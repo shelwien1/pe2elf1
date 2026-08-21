@@ -14,10 +14,10 @@ matter costs nothing and makes the results survive the workspace.
 
 | file | wavs3 | vs 2022001 baseline | origin |
 |------|-------|--------------------|--------|
-| `best-2017784.exp`   | 2017784 | -4217 | instance b, through the `G0_MW*` group into `G0_N*` |
+| `best-2015065.exp`   | 2015065 | -6936 | instance c, through `G0_MW*` into the `G0_N*` group |
 | `hybrid-2020503.exp` | 2020503 | -1498 | `merge_opt.pl` round 14, recombining all four instances |
 
-`best-2017784.exp` is the better set and the one to fold into `IDX/` if the
+`best-2015065.exp` is the better set and the one to fold into `IDX/` if the
 tree is to keep a single result.  It is worth keeping the hybrid alongside it
 anyway: the two were produced by different mechanisms and disagree on a
 number of descriptors, so the hybrid is useful material for a later
@@ -25,5 +25,5 @@ number of descriptors, so the hybrid is useful material for a later
 
 To apply one:
 
-    ./import.sh profiles/best-2017784.exp IDX      # fold into the sources
-    ./snapshot.sh --export=profiles/best-2017784.exp out   # or just measure it
+    ./import.sh profiles/best-2015065.exp IDX      # fold into the sources
+    ./snapshot.sh --export=profiles/best-2015065.exp out   # or just measure it
