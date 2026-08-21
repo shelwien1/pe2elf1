@@ -49,6 +49,31 @@ inline uint32_t abs32(int32_t x) {
 #  define BMF_ASSUME(x) ((void)0)
 #endif
 
+// Tell AddressSanitizer that a range is not to be touched, and take it back.
+//
+// Only `BlockPool` uses these, and only for the slots nobody holds -- see the
+// note there for why a pool of blocks needs them where a run of `malloc`s did
+// not.  Nothing outside a `-fsanitize=address` build compiles to anything at
+// all: gcc defines `__SANITIZE_ADDRESS__`, clang answers `__has_feature`, and
+// every other build takes the third arm.
+#if defined(__SANITIZE_ADDRESS__)
+#  define BMF_HAVE_ASAN 1
+#elif defined(__has_feature)
+#  if __has_feature(address_sanitizer)
+#    define BMF_HAVE_ASAN 1
+#  endif
+#endif
+
+#ifdef BMF_HAVE_ASAN
+extern "C" void __asan_poison_memory_region(void const volatile*, size_t);
+extern "C" void __asan_unpoison_memory_region(void const volatile*, size_t);
+#  define BMF_ASAN_POISON(p, n)   __asan_poison_memory_region((p), (n))
+#  define BMF_ASAN_UNPOISON(p, n) __asan_unpoison_memory_region((p), (n))
+#else
+#  define BMF_ASAN_POISON(p, n)   ((void)0)
+#  define BMF_ASAN_UNPOISON(p, n) ((void)0)
+#endif
+
 // Named-width min/max/clamp, and the width in the name is the point.
 //
 // Not `std::min` / `std::clamp`: the call sites mix `int32_t`, `uint32_t` and

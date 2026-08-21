@@ -26,6 +26,35 @@
 # same bargain as `sweep.sh`.  What it is *for* is being run after a lift: a
 # frame whose members become ordinary locals is exactly the change that turns a
 # deliberate walk over neighbours into an overflow.
+#
+# **What this can no longer see on its own, and what was done about it.**  The
+# three model blocks came from `bmf_page_alloc` until the round that gave them
+# proven bounds, and a write past the end of one landed in a `malloc` redzone
+# that ASan reported.  They are slots of a static array now.  Slots of one array
+# have no redzone between them, so the same write became a legal store to the
+# live object next door -- probed, and silent, in a binary where a `malloc`
+# overflow one line away still reported.  Nothing recorded that, and "no
+# AddressSanitizer report in 44 runs" had quietly started covering less than it
+# did.  A gate losing reach without saying so is the failure this file's own
+# opening paragraph is about, one layer up.
+#
+# `BlockPool` poisons the slots nobody holds (see the note there), which puts
+# the redzone back for the case that matters: with at most four planes live, an
+# overflow crossing out of a block lands in a free neighbour and is reported as
+# `use-after-poison`.  Verified both ways -- planted, reported; and the control,
+# a `malloc` overflow in the same binary, still reported.
+#
+# Two gaps stay, and they are gaps rather than oversights:
+#
+#   * a **one-slot pool** has no neighbour to poison, so an overflow past
+#     `model_blocks`' only slot runs into the next member of `BMFCodec`.  Probed
+#     and confirmed silent.
+#   * two slots that are **both taken** have nothing between them and no
+#     annotation can give them anything; closing that would mean padding every
+#     slot with a redzone in every build.
+#
+# So this is stronger than it was a round ago and weaker than it was two, and
+# the difference is written down instead of assumed.
 set -u
 cd "$(dirname "$0")/.."
 
@@ -40,6 +69,53 @@ if ! BMF_OUT="$tmp/bmf" BMF_STATIC=0 BMF_GC=0 ./build.sh \
   tail -20 "$tmp/build" >&2
   exit 2
 fi
+
+# **Does the instrument still report?**  Three planted cases in
+# `tools/asanprobe.cpp`, each one a claim this script makes about its own reach;
+# the file says what each is for and why one of them requires *silence*.  This
+# runs before a single image, because "no report in 44 runs" from a sanitizer
+# that cannot see the pools is the failure this file exists to prevent, pointed
+# at itself.
+#
+# One extra compile onto a run that is already minutes, and it is not optional:
+# a run whose probe misbehaved does not get to print a clean count.  `--selftest`
+# does only this and stops.
+probe() {
+  if ! $CXX -std=c++17 -w -O1 -g -fsanitize=address -fno-omit-frame-pointer \
+          -I. -o "$tmp/probe" tools/asanprobe.cpp >"$tmp/probe.log" 2>&1; then
+    echo "the ASan probe did not build:" >&2
+    tail -20 "$tmp/probe.log" >&2
+    return 2
+  fi
+  probe_bad=0
+  # A: caught by BlockPool's poisoning.  B: the control.  C: the known gap.
+  for want in 'A report' 'B report' 'C silent'; do
+    case=${want%% *} expect=${want##* }
+    "$tmp/probe" "$case" >"$tmp/probe.$case" 2>&1
+    if grep -q 'ERROR: AddressSanitizer' "$tmp/probe.$case"; then got=report
+    else got=silent
+    fi
+    if [ "$got" = "$expect" ]; then
+      printf 'probe %s  %-6s as it should\n' "$case" "$got"
+    else
+      printf 'probe %s  %s, wanted %s\n' "$case" "$got" "$expect" >&2
+      probe_bad=$((probe_bad + 1))
+    fi
+  done
+  [ "$probe_bad" = 0 ] || {
+    echo "the sanitizer does not see what this script claims it sees;" \
+         "the counts below would not mean what they say" >&2
+    return 1
+  }
+  return 0
+}
+
+CXX=${CXX:-g++}
+if [ "${1:-}" = --selftest ]; then
+  probe
+  exit $?
+fi
+probe || exit $?
 
 files=("$@")
 [ "${#files[@]}" -gt 0 ] || files=(testfiles/*.bmp)

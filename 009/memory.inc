@@ -179,11 +179,38 @@ struct BlockPool {
   // cost that for nothing.
   uint8_t taken[N] = {};
 
+  // **A slot nobody holds is poisoned, and that is a gate repair.**  These
+  // blocks came from `bmf_page_alloc` before the round that gave them bounds,
+  // and a write past the end of one landed in a `malloc` redzone that ASan
+  // reported.  Slots of one array have no redzone between them, so that write
+  // now lands in the next slot and is a legal store to a live object: probed
+  // and confirmed silent, against a `malloc` overflow in the same binary that
+  // ASan still reports.  Nothing said so, and "no AddressSanitizer report in 44
+  // runs" had quietly started meaning less than it did.
+  //
+  // Poisoning what is not taken puts the redzone back for the case that
+  // matters -- an overflow crossing out of a block -- because with at most four
+  // planes live the neighbour is usually free.  It does not put one back
+  // between two *taken* slots, and no annotation can: that is one object beside
+  // another with no gap, and closing it would mean padding every slot by a
+  // redzone in every build.
+  //
+  // Compiled away entirely without `-fsanitize=address`; `asan.sh` is the only
+  // thing that turns it on.
+  void unwatch(int32_t k) { BMF_ASAN_UNPOISON(&slot[k], sizeof(T)); }
+  void watch(int32_t k) { BMF_ASAN_POISON(&slot[k], sizeof(T)); }
+
+  // Every slot starts free, so every slot starts poisoned.  A constructor and
+  // not an initialiser because there is nothing to initialise -- the slots
+  // deliberately have no initial value, per the note above.
+  BlockPool() { BMF_ASAN_POISON(slot, sizeof slot); }
+
   T* take(bool zero) {
     for( int32_t k = 0; k<N; ++k ) {
       if( taken[k] )
         continue;
       taken[k] = 1;
+      unwatch(k);
       if( zero )
         memset(&slot[k], 0, sizeof(T));
       return &slot[k];
@@ -195,6 +222,7 @@ struct BlockPool {
     const int32_t k = (int32_t)(p-slot);
     BMF_ASSUME((uint32_t)k<(uint32_t)N);
     taken[k] = 0;
+    watch(k);
   }
 };
 
