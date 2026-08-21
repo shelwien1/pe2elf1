@@ -2434,3 +2434,49 @@ temporary files to count. The third is the one that matters and its ordering is
 proven, not asserted — a one-byte error planted in `BmfStream::take` leaves all
 seventeen streams byte-identical and fails only the in-memory check, because
 `bmf c` and `bmf d` open a path and never touch that code.
+
+## The pair that was declined on a sentence nobody had checked
+
+`model_plane_slow` and `unmodel_plane_slow` are one `code_plane_slow<f_DEC>`
+now. What makes this worth writing down is not the merge but why the pair had
+been left alone: a note above them said the two "really are different and stay
+two methods", and gave the reason — "the encoder seeds fifteen context groups
+and the alphabet before its row walk, and the decoder reads all of that back off
+the stream."
+
+Half of that sentence is true. The decoder reads the **alphabet** back. It seeds
+the fifteen groups itself, from the same constant flag table, to the same
+values. Nobody had checked which half was which, because the two pages look
+nothing alike: the encoder tracks four weights in locals and stores each once,
+the decoder writes 2 into `rec->w[1..4]` and folds them in place, reading each
+back. Same result, opposite spelling, ninety lines apart.
+
+**Measured before touching anything.** Both fold blocks transcribed verbatim
+into a harness and run over all 256 flag bytes by 261 alphabet sizes — 66,816
+combinations, comparing `w[0..4]` and `b14` — agreeing on every one. Perturbing
+one constant makes the harness report 33,408 disagreements, so the zero is a
+measurement and not a silence. The group counters were the same story one level
+down: `0x2000` in the encoder and `no_symbol` in the decoder, which is 8192.
+
+That gave `seed_context_groups`, 73 lines called by both — and the decoder now
+runs the encoder's seeding code, which is the strongest form the claim could
+take. Then `interleave_depth_bytes`, the 35 lines at the bottom of the decoder
+that put a narrow-coded plane's byte-planes back together after the range coder
+has closed — not decoding anything, and the reason the two bodies did not look
+like each other's shape. What was left merged cleanly: 87 and 131 lines became a
+73-line shared seeder, a 35-line named interleave, and a 45-line template with
+three direction-dependent points.
+
+Both instantiations are proven entered rather than assumed — compress runs
+`<0>` eight times and expand runs `<1>` once, neither leaking into the other
+direction — which is the gate the other fourteen merges used.
+
+**The lesson is about which claims get checked.** This tree re-measures the
+*declined* table every sweep, because a share written into a comment rots. It
+had no way to check a decline argued in prose, and prose is exactly where the
+wrong one hid. The tell was in the sentence itself: it explains the encoder at
+length and says of the decoder only that it "reads all of that back". A
+description that detailed on one side and that vague on the other is a
+description written from one side.
+
+Both conversion ratchets fell nine, 190 → 181 and 179 → 170.

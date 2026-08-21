@@ -87,8 +87,8 @@ gate_leg() {                                    # name, expected, env..., -- , b
 
 count_leg 'BMF_WARN=1'   '0'   BMF_WARN=1
 count_leg 'BMF_STRICT=1' '0'   BMF_STRICT=1
-count_leg 'BMF_CONV=1'   '190, at the ratchet' BMF_CONV=1
-count_leg 'BMF_CONV=1 (32)' '179, at the ratchet' BMF_CONV=1 BMF_BITS=32
+count_leg 'BMF_CONV=1'   '181, at the ratchet' BMF_CONV=1
+count_leg 'BMF_CONV=1 (32)' '170, at the ratchet' BMF_CONV=1 BMF_BITS=32
 
 if [ "$fast" = 1 ]; then
   env BMF_X= ./build.sh >/dev/null 2>&1 || true

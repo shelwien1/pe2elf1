@@ -28,7 +28,7 @@
 //
 // ## the encode/decode pairs
 //
-// Fourteen of them are one `template<int32_t f_DEC>` each, instantiated as the
+// Fifteen of them are one `template<int32_t f_DEC>` each, instantiated as the
 // two names their callers use.  What decided which: how many lines the two
 // bodies actually share, measured as a longest common subsequence over the
 // pair.
@@ -40,6 +40,7 @@
 //   P2Freq::code_three_way      49 + 55     alt_model_p2                  3 + 3
 //   AltP1Block::d8_body         30 + 26     code_plane                    1 + 1
 //   code_colour_plane           40 + 43     ModelBlock::code_run_length   26 + 24
+//   ModelBlock::code_plane_slow 87 + 131
 //
 // The last of those is inside the one pair that stays two functions.  A
 // declined pair is a decision about two *bodies*, not a bar on naming what
@@ -80,15 +81,40 @@
 // the tool compared was a four-line wrapper against a twenty-six-line one and
 // the twenty-two lines they really share were on the wrong side of a call.
 //
-// `code_plane` left in two steps.  First the sixteen-line dispatch over the
-// descriptor's model and depth came out as `alt_model_plane<f_DEC>`, taking
-// the pair from 14 shared lines of 170 to 4 of 146.  What was left read as
-// "the main model, which the two do differently" -- and it was not: the
-// decoder's main model was a call to `unmodel_plane_slow` and the encoder's
-// was 130 lines of `blk->` written out in `model_plane`.  Those two bodies
-// really are different and stay two methods; naming the encoder's the way the
-// decoder's was already named left two five-line wrappers with one line
-// between them.
+// `code_plane` left in three steps, and the third is the one worth reading.
+// First the sixteen-line dispatch over the descriptor's model and depth came
+// out as `alt_model_plane<f_DEC>`, taking the pair from 14 shared lines of 170
+// to 4 of 146.  What was left read as "the main model, which the two do
+// differently" -- and it was not: the decoder's main model was a call to
+// `unmodel_plane_slow` and the encoder's was 130 lines of `blk->` written out
+// in `model_plane`.  Naming the encoder's the way the decoder's was already
+// named left two five-line wrappers with one line between them, and this note
+// then said the bodies underneath "really are different and stay two methods".
+//
+// **That sentence was wrong, and it was wrong in the way this table exists to
+// warn about.**  It was written from reading, not from measuring, and what it
+// read was a difference in *spelling*: the encoder seeded its fifteen context
+// groups by tracking four weights in locals and storing each once, and the
+// decoder seeded the same groups by writing 2 into `rec->w[1..4]` and folding
+// them in place.  Two pages that look nothing alike and compute the same
+// values.  Both fold blocks transcribed into a harness and run over all 256
+// flag bytes by 261 alphabet sizes -- 66,816 combinations -- agree on every
+// one, and the harness reports 33,408 disagreements when a constant is
+// perturbed, so that zero is a measurement.  They are `seed_context_groups`
+// now, called by both directions.
+//
+// With that out and the decoder's byte-plane interleave named, the pair is one
+// `code_plane_slow<f_DEC>` with three direction-dependent points: the alphabet
+// (reduced from the pixels or read off the stream, the one genuine
+// difference), the row prologue, and whether the row is copied in before
+// coding or written out after.  87 and 131 lines became a 73-line shared
+// seeder, a 35-line named interleave, and a 45-line template.
+//
+// So the reading that the measurement could not give was not "these are two
+// things" but the opposite, and the tell was there: the previous note explains
+// the *encoder* at length and says of the decoder only that it "reads all of
+// that back off the stream".  It reads the alphabet back.  It seeds the groups
+// itself.  Nobody had checked which.
 //
 // Two pairs are measured and declined, and after the three above came off this
 // table the reason for each is written out rather than left as a share.

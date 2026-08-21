@@ -581,11 +581,33 @@ not in it. The last one always has it.
 
 ### 4.4 what the driver does between pixels
 
-`ModelBlock::model_plane_slow` walks rows and columns; `start_row` rotates the
-five row
+`ModelBlock::code_plane_slow` is the driver, one template instantiated as
+`model_plane_slow` and `unmodel_plane_slow`. It opens the range coder, settles
+the alphabet — the encoder reduces it from the pixels it is about to code, the
+decoder reads that reduction back off the stream, and this is the only place in
+the plane walk where the two directions do different work — then seeds the
+model and walks the rows.
+
+**The seeding is `seed_context_groups`, and both directions run the same code.**
+Fifteen context groups, each with 5×5 rank buckets: for every bucket it plants
+the five level weights from the group's fold flags (§4.2), sets the level count
+`b14`, seats the bucket through `seat_bucket`, and fills that group's 65,536
+`SymPair` counters with `no_symbol`. None of it comes off the stream. The
+decoder can seed it because the flags are a constant table and the alphabet size
+is the one thing it did read.
+
+`seed_alphabet` follows, then the row walk: `start_row` rotates the five row
 buffers one step (`ring_advance`) and seeds the fresh row's match flags against
-symbol 0; and `init_tables()` runs after **every** pixel. That last one is where
-the model learns, and it does seven things in order:
+symbol 0. The encoder copies the row's symbols in before coding it and the
+decoder writes the row out after — `write_row` packs it back to the stored
+depth — and `init_tables()` runs after **every** pixel.
+
+When a plane was coded narrower than it is stored (`depth_raw` below `depth`)
+the decoder's rows land in a scratch buffer as consecutive byte-planes, and
+`interleave_depth_bytes` walks them a byte at a time into the caller's pixels
+once the range coder is closed.
+
+`init_tables` is where the model learns, and it does seven things in order:
 
 1. **Feed the selector lists.** The two per-symbol `SymList` tables learn the
    symbol just coded under the neighbours that would have to find it next time:

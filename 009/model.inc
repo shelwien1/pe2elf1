@@ -1021,24 +1021,32 @@ struct ModelBlock {
     grad[3] = 0;
   }
 
-  // One plane through the main model, encoding.  The mirror of
-  // `unmodel_plane_slow` above, and it was written out inside `model_plane`
-  // where its inverse was a call -- 130 lines of `blk->` against
-  // `blk->unmodel_plane_slow(out)`.
+  // **The fifteen context groups, seeded.**  Both directions do this, and for
+  // as long as they were two bodies they did it in two spellings: the encoder
+  // tracked the four weights in locals and stored each once, the decoder wrote
+  // 2 into `rec->w[1..4]` and folded them in place, reading each back.  Nothing
+  // checked that the two agreed, and the note above this pair asserted they did
+  // not -- "the encoder seeds fifteen context groups and the alphabet before its
+  // row walk, and the decoder reads all of that back off the stream".  The
+  // decoder reads the *alphabet* off the stream.  It seeds the groups itself,
+  // from the same constants, to the same values.
   //
-  // That asymmetry is the same one `AltP1Block::d8_body` had, and it has the
-  // same effect on the measurement: `pairshare.py` was comparing a body
-  // against a call and reporting what the two *wrappers* share.  With both
-  // sides named, the pair is 4 of 146 -- and those four are the allocation
-  // and the free, which is where the two genuinely agree.  The bodies do not:
-  // the encoder seeds fifteen context groups and the alphabet before its row
-  // walk, and the decoder reads all of that back off the stream.
-  void model_plane_slow(uint8_t* pixels) {
+  // Proven rather than eyeballed: both fold blocks transcribed into a harness
+  // and run over all 256 flag bytes by 261 alphabet sizes -- 66,816
+  // combinations, comparing `w[0..4]` and `b14` -- agreeing on every one.  The
+  // harness reports 33,408 disagreements when a single constant is perturbed, so
+  // the zero is a measurement and not a silence.
+  //
+  // The group counters were the same shape one level down: the encoder filled
+  // them with `0x2000` and the decoder with `no_symbol`, which is 8192.  One
+  // constant under two spellings, and the numeric one is gone.
+  //
+  // The encoder's spelling is what stayed, being the shorter of the two and the
+  // one that stores each weight once instead of reading it back.
+  void seed_context_groups() {
     int16_t w1;
-    int32_t w3, w4, y;
     uint16_t w2;
-    cx->rc_begin_encode();
-    cx->reduce_alphabet(this, pixels);
+    int32_t w3, w4;
     int32_t bucket = 0;
     // Fifteen groups, five ranks, five ranks -- constant bounds, so the `do`'s
     // guaranteed first turn was never carrying anything.
@@ -1108,23 +1116,124 @@ struct ModelBlock {
       // `blk->group_ctr[g]` and the local could take the member's name.
       SymPair* gctr = group_ctr[g];
       for( uint32_t gi = 0; gi<0x10000; ++gi ) {
-        gctr[gi].last = 0x2000;
-        gctr[gi].prev = 0x2000;
+        gctr[gi].last = no_symbol;
+        gctr[gi].prev = no_symbol;
       }
     }
+  }
+
+  // **A plane coded narrower than it is stored, put back together.**  When
+  // `depth_raw` differs from `depth` the coder wrote one byte-plane after
+  // another into a scratch buffer -- `nchunk` runs of `chunk` bytes -- and the
+  // pixels the caller asked for are those runs interleaved a byte at a time.
+  //
+  // Thirty-five lines at the bottom of `unmodel_plane_slow` that are not
+  // decoding anything: by the time they run the range coder has been closed.
+  // Lifting them is what leaves that body the shape of its encoder, which is
+  // the reason to lift them rather than a tidy for its own sake.
+  //
+  // `row[19]` and not `row[nchunk]`: `nchunk` is `(depth_raw+7)>>3` and
+  // `depth_raw` is a byte off the stream, so nineteen is what the original
+  // reserved and what bounds it.
+  void interleave_depth_bytes(uint8_t* dst, uint8_t* expand_buf) {
+    uint8_t* row[19];
+    const int32_t n_pix = height*width;
+    const int32_t nchunk = ((int32_t)depth_raw+7)>>3;
+    if( nchunk>0 ) {
+      const int32_t chunk = n_pix/nchunk;
+      // Five rows a turn while five fit, then one at a time.  Both walks set
+      // `row[k] = &expand_buf[chunk*k]`; the unrolled one spells the first of
+      // each five through a running cursor and the other four through the
+      // subscript, which is why they did not look like one thing.
+      int32_t q5 = 0;
+      uint8_t* row_at = expand_buf;
+      for( ; q5<=nchunk-6; q5 += 5, row_at += 5*chunk ) {
+        row[q5] = row_at;
+        for( int32_t n = 0; n<4; ++n ) row[q5+1+n] = &expand_buf[chunk*(q5+1+n)];
+      }
+      for( int32_t q1 = nchunk>=6 ? q5 : 0; q1<nchunk; ++q1 )
+        row[q1] = &expand_buf[chunk*q1];
+    }
+    // `n_pix2 = height*width` was re-read inside the loop; neither factor moves.
+    uint8_t* interleave_at = dst;
+    int32_t q2 = 0;
+    for( int32_t written = 0; written<n_pix; ++written ) {
+      uint8_t* p = row[q2];
+      *interleave_at++ = *p;
+      row[q2] = p+1;
+      if( ++q2==nchunk )
+        q2 = 0;
+    }
+  }
+
+  // **One plane through the main model, in whichever direction.**
+  //
+  // These were two bodies of 87 and 131 lines, and the comment above them said
+  // they were two things: "the encoder seeds fifteen context groups and the
+  // alphabet before its row walk, and the decoder reads all of that back off
+  // the stream".  Half of that is true.  The decoder reads the *alphabet* back;
+  // it seeds the groups itself, from the same constants, to the same values --
+  // which is `seed_context_groups`, measured over 66,816 combinations before it
+  // was merged and not assumed.
+  //
+  // With that out and the decoder's byte-plane interleave named, what is left
+  // is one skeleton with three direction-dependent points:
+  //
+  //   * the alphabet -- reduced from the pixels, or read off the stream.  This
+  //     is the one genuine difference and it is one line either way;
+  //   * the row prologue -- the encoder walks a `sym_word` cursor, the decoder
+  //     sets up an output cursor and, when the plane was coded narrower than it
+  //     is stored, a scratch buffer to write the byte-planes into;
+  //   * the row body -- the encoder copies this row's symbols in before coding,
+  //     the decoder writes the row out after.  `begin_row` and
+  //     `code_row_pixels<f_DEC>` are shared and were always the middle of both.
+  //
+  // The decoder's buffer setup sat between `seed_context_groups` and
+  // `seed_alphabet` and is below both here.  It is a `bmf_new` and three local
+  // assignments -- it reads no model state and writes none -- so where it sits
+  // relative to the seeding cannot be observed, and the seventeen streams say
+  // so.
+  template<int32_t f_DEC>
+  void code_plane_slow(uint8_t* buf) {
+    cx->rc_begin<f_DEC>();
+    if constexpr( f_DEC )
+      expand_alphabet();
+    else
+      cx->reduce_alphabet(this, buf);
+    seed_context_groups();
     seed_alphabet();
-    {
-      // `y1 = y + 1` and two `y = y1` were the counter written through a second
-      // name, and `row_w = width` inside the pixel loop re-read a member the
-      // body never writes -- three dead stores per row.  The `if( height > 0 )`
-      // and the two `if( row_w > 0 )` guards go with the `do`s they protected.
-      //
-      // The four load-modify-store bumps -- `up1 = row_cur[6]; ++up1;
-      // row_cur[6] = up1;` -- are `++row_cur[6]` with the cursor read back
-      // after, which is what `match_seed` wants.
-      uint16_t* word = sym_word;
-      for( y = 0; y<height; ++y ) {
-        begin_row();
+    uint8_t* expand_buf = nullptr;
+    uint8_t* out_at = nullptr;
+    uint16_t* word = nullptr;
+    uint32_t nbytes = 0;
+    if constexpr( f_DEC ) {
+      // `jj` was read as `depth` on both arms of the `if` it straddled, so the
+      // byte count is `depth`'s whether or not the scratch buffer was taken.
+      uint8_t* dst_buf = &buf[-(depth<8)];
+      if( depth!=depth_raw ) {
+        dst_buf = (uint8_t*)bmf_new(height*width+3);
+        expand_buf = dst_buf;
+      }
+      nbytes = (depth+7)>>3;
+      out_at = dst_buf;
+    } else {
+      word = sym_word;
+    }
+    // `y1 = y + 1` and two `y = y1` were the counter written through a second
+    // name, and `row_w = width` inside the pixel loop re-read a member the body
+    // never writes -- three dead stores per row.  The `if( height > 0 )` and the
+    // two `if( row_w > 0 )` guards go with the `do`s they protected: a `for`
+    // over a height of zero runs no turns.
+    //
+    // The four load-modify-store bumps -- `up1 = row_cur[6]; ++up1;
+    // row_cur[6] = up1;` -- are `++row_cur[6]` with the cursor read back after,
+    // which is what `match_seed` wants.
+    for( int32_t y = 0; y<height; ++y ) {
+      begin_row();
+      if constexpr( f_DEC ) {
+        code_row_pixels<1>();
+        out_at = write_row(out_at, nbytes, width);
+      } else {
         for( uint32_t x = 0; x<width; ++x )
           row_cur[5][x].sym = word[x];
         word += width;
@@ -1133,159 +1242,24 @@ struct ModelBlock {
         code_row_pixels<0>();
       }
     }
-    cx->rc_end_encode();
+    cx->rc_end<f_DEC>();
+    if constexpr( f_DEC ) {
+      // The plane was coded at its own depth, so there is nothing to unpack --
+      // and `expand_buf` is null on that path, which is what makes the `free`
+      // unconditional here where the body used to `return` in front of it.
+      if( depth_raw!=depth )
+        interleave_depth_bytes(buf, expand_buf);
+      free(expand_buf);
+    }
+  }
+
+  // The two names `code_plane` reaches for, and they are one line each now.
+  void model_plane_slow(uint8_t* pixels) {
+    code_plane_slow<0>(pixels);
   }
 
   void unmodel_plane_slow(uint8_t* dst) {
-    uint8_t* row[19];
-    uint8_t *out_at, *expand_buf;
-    int32_t g0, done;
-    int32_t lo, w3, w4, w2, lvl_n, n_pix, q2, n_pix2;
-    uint8_t *dst_base = &dst[-(depth<8)];
-    cx->rc_begin_decode();
-    expand_alphabet();
-    int32_t g1 = 0;
-    // The encoder's nest, mirrored -- and the decompiler gave each level two
-    // names, incrementing one and testing the other: `g`/`g0`, `lo`/`lo1`.
-    // `g0 = g` at the top and `g = g0 + 1` at the bottom is one counter, and
-    // `lo1` was a copy of `lo` that `tools/uncopy.py` reported the moment the
-    // loop headers stopped hiding it.
-    for( int32_t g = 0; g<15; ++g ) {
-      int32_t flags = ctx_group_flags[g];
-      ctx_state[flags] = g;
-      g0 = g;
-      // The same six folds `model_plane` hoists.
-      const GroupFolds fold(flags);
-      for( lo = 0; lo<5; ++lo ) {
-        for( int32_t k = 0; k<5; ++k ) {
-          FreqRec *rec = seat_bucket(g, lo, k, g1);
-          int32_t m5 = alphabet;
-          for( int32_t n = 0; n<4; ++n ) rec->w[1+n] = 2;
-          if( fold.w3_double ) {
-            w3 = (uint16_t)(rec->w[4]+rec->w[3]);
-            rec->w[3] = w3;
-            w4 = 0;
-            rec->w[4] = 0;
-          } else {
-            w3 = rec->w[3];
-            w4 = rec->w[4];
-          }
-          if( fold.w4_to_w2 ) {
-            w2 = (uint16_t)(w4+rec->w[2]);
-            rec->w[2] = w2;
-            w4 = 0;
-            rec->w[4] = 0;
-          } else {
-            w2 = rec->w[2];
-          }
-          if( fold.w3_to_w2 ) {
-            w2 = (uint16_t)(w3+w2);
-            rec->w[2] = w2;
-            w3 = 0;
-            rec->w[3] = 0;
-          }
-          if( fold.w4_to_w1 ) {
-            rec->w[1] += w4;
-            w4 = 0;
-            rec->w[4] = 0;
-          }
-          if( fold.w3_to_w1 ) {
-            rec->w[1] += w3;
-            w3 = 0;
-            rec->w[3] = 0;
-          }
-          if( fold.w2_to_w1 ) {
-            rec->w[1] += w2;
-            w2 = 0;
-            rec->w[2] = 0;
-          }
-          lvl_n = (w3!=0)+(w2!=0)+(w4!=0)+2;
-          if( lvl_n<=m5 ) {
-            rec->b14 = lvl_n;
-            rec->w[0] = 2;
-          } else {
-            lvl_n = lvl_n-1;
-            rec->b14 = lvl_n;
-            rec->w[0] = 0;
-          }
-          g1 += rec->seed_pair(lo, k, m5);
-        }
-      }
-      SymPair* gctr = group_ctr[g0];
-      for( int32_t gi = 0; gi<0x10000; ++gi ) {
-        gctr[gi].last = no_symbol;
-        gctr[gi].prev = no_symbol;
-      }
-    }
-    uint8_t *dst_buf = dst_base;
-    seed_alphabet();
-    uint32_t jj = depth;
-    if( jj==depth_raw ) {
-      expand_buf = nullptr;
-    } else {
-      dst_buf = (uint8_t*)bmf_new(height*width+3);
-      jj = depth;
-      expand_buf = dst_buf;
-    }
-    uint32_t nbytes = (jj+7)>>3;
-    if( height>0 ) {
-      // The encoder's row walk, mirrored, and it carried the same three
-      // artefacts: `row_w = width` restated three times inside a body that
-      // never writes `width`, the four cursor bumps as load-modify-store
-      // through a local, and the counter tested in the `while` with a
-      // pre-increment on it.
-      out_at = dst_buf;
-      for( int32_t bucket = 0; bucket<height; ++bucket ) {
-        begin_row();
-        code_row_pixels<1>();
-        out_at = write_row(out_at, nbytes, width);
-      }
-    }
-    cx->rc_end_decode();
-    int32_t bpp_raw = depth_raw;
-    // The plane was coded at its own depth, so there is nothing to unpack:
-    // a guard with nothing after it, holding thirty-nine lines.
-    if( (uint32_t)bpp_raw==depth )
-      return;
-    int32_t nchunk = (bpp_raw+7)>>3;
-    if( nchunk<=0 ) {
-      n_pix = height*width;
-    } else {
-      done = 0;
-      n_pix = height*width;
-      int32_t chunk = n_pix/nchunk;
-      {
-        // Five rows a turn while five fit, then one at a time.  Both walks
-        // set `row[k] = &expand_buf[chunk*k]`; the unrolled one spells the
-        // first of each five through a running cursor and the other four
-        // through the subscript, which is why they did not look like one
-        // thing.
-        int32_t q5 = 0;
-        uint8_t *row_at = expand_buf;
-        for( ; q5<=nchunk-6; q5 += 5, row_at += 5*chunk ) {
-          row[q5] = row_at;
-          for( int32_t n = 0; n<4; ++n ) row[q5+1+n] = &expand_buf[chunk*(q5+1+n)];
-        }
-        done = nchunk>=6 ? q5 : 0;
-      }
-      for( int32_t q1 = done; q1<nchunk; ++q1 )
-        row[q1] = &expand_buf[chunk*q1];
-    }
-    {
-      // `n_pix2 = height*width` was re-read inside the loop; neither factor
-      // moves.
-      uint8_t *interleave_at = dst;
-      n_pix2 = height*width;
-      q2 = 0;
-      for( int32_t written = 0; written<n_pix2; ++written ) {
-        uint8_t *p = row[q2];
-        *interleave_at++ = *p;
-        row[q2] = p+1;
-        if( ++q2==nchunk )
-          q2 = 0;
-      }
-    }
-    free(expand_buf);
+    code_plane_slow<1>(dst);
   }
 
   // The run's length, one bit per bucket level from the top down.  A bit is
