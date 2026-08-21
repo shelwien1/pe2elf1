@@ -92,7 +92,11 @@ alignas(16) static constexpr uint8_t p1_slot_edges[8] = {
   5, 10, 36, 98, 154, 236, 248, 0,
 };
 
-alignas(16) static int32_t p1_level_step[8] = {
+// `constexpr` like the table above it, which it was not until `tools/shared.py`
+// asked why.  Its one reader indexes it and nothing writes it; it sat between
+// the genuine constants and the two mutable tables below and had been read as
+// belonging to the second group by nothing more than where it is.
+alignas(16) static constexpr int32_t p1_level_step[8] = {
   1, 1, 2, 2, 2, 4, 4, 4,
 };
 

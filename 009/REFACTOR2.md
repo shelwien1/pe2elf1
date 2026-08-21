@@ -2046,6 +2046,26 @@ braces.  The keyword guard also un-hid `return x;`, which the *original* field
 pattern had been skipping since the day it was written.  Residue 46 -> 43, and
 the ratchet came down to match.
 
+**And a tool for the invariant itself, which is the part that should have
+existed first.**  The class's whole claim is "nothing the codec touches lives at
+file scope", and nothing checked it -- which is why three of this round's
+defects were found downstream, by watching two codecs disagree about `t8g` and
+by ThreadSanitizer, rather than by one line of a scan.  `tools/shared.py` reads
+the spliced unit for a definition at brace depth zero that declares an object,
+is not `const` or `constexpr`, and is not one of five allowed names, each
+carrying its reason: `main`'s own instance and the four high-arena globals.
+
+It found something on its first run.  `p1_level_step` was a plain `static
+int32_t[8]` sitting between the genuine constants and the two tables `P2Coef`
+borrows -- read by one line, written by none, and mutable only because of where
+it happened to be in the file.  It is `constexpr` now.
+
+The tool's `--selftest` plants both halves, because a skip is what turns a
+counting tool off: three mutable shapes it must report -- including
+`alignas(16) static float t[16];`, since stripping `alignas` before looking for
+a parenthesis is what stops every aligned global reading as a function -- and
+five it must not.
+
 **The one thing two codecs still share, and it is not settled by a test.**
 Under `-DBMF_HIGH_ARENA` the bump pointer and the forty free lists are
 file-scope by construction -- an allocator per codec would defeat what that leg

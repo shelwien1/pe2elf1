@@ -525,6 +525,7 @@ them run.
 | `samecast.py` | Drop a cast that tells the reader nothing: two rules | yes |
 | `sameexpr.py` | One idea written out as an expression in more than one place | yes |
 | `shape.py` | Measure the things REFACTORING3.md is about, so its numbers can be checked | yes |
+| `shared.py` | Mutable state at file scope -- the one thing two codecs would share | yes |
 | `signshift.py` | Find the comparisons written as a shift of a sign bit | yes |
 | `split.py` | Split bmf.cpp into one file per class and per large function | no |
 | `struct-sweep.sh` | Give the largest remaining objects a struct, one at a time, keeping only the ones the gate accepts |  |

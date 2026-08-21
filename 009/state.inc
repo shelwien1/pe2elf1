@@ -161,17 +161,24 @@ struct BMFState {
   SymEntry byte_list_ent[16*256] = {};
   SymEntry gap_list_ent[257] = {};
 
-  // **Back to the state a fresh codec has.**  Every member above is
-  // value-initialised at construction, but a codec that has coded once is not
+  // **Back to the state a fresh codec has**, and the reason there is a function
+  // for it rather than only a constructor: a codec that has coded once is not
   // in that state any more -- the tables, the geometry and the descriptors all
   // carry the last image's setup -- so a *reused* codec answered differently
   // from a new one.  `tools/parallel.cpp` found it: three rounds on one codec
-  // disagreed with one round, and the sizes moved between runs.
+  // disagreed with one round, and the sizes moved between runs.  Both entry
+  // points call this, which is what makes reuse mean anything.
   //
   // A `memset` and not twenty-five assignments: this is a standard-layout
   // aggregate and the constructor is the only thing that makes it non-trivial,
-  // so zeroing it is what the member initialisers above already do -- said once
-  // rather than once per member, and impossible to leave a member out of.
+  // so one zeroing covers every member, said once rather than once per member
+  // and impossible to leave a member out of.
+  //
+  // **This and not the `= {}` above is what guarantees it**, which is worth
+  // being exact about because most members carry one and three do not --
+  // `stream`, `exclusion_mask` and `model_table_store`, the three big ones.
+  // Those initialisers are belt to this braces: they run first and this
+  // overwrites them, so a member added below without one is still zero.
   //
   // `coded_block` is zeroed and not freed: it is a buffer the caller owns and
   // hands back to `compress_image`, and this object never owned it.
