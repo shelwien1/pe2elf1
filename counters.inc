@@ -14,18 +14,18 @@ struct CounterNode {
     uint16_t* cur = c;
     const uint32_t tot = total&0x7FFF;
     if constexpr( f_DEC ) {
-      sym = cx[0].rc.get_freq(tot);
+      sym = cx[0].get_freq(tot);
       cum = c[0];
       while( cum<=(uint32_t)sym )
         cum += *++cur;
-      cx[0].rc.decode(cum-cur[0], cum, tot);
+      cx[0].decode(cum-cur[0], cum, tot);
     } else {
       slot = sym_slot(sym);
       cum = 0;
       for( int32_t k = 0; k<slot; k++ )
         cum += c[k];
       cur = &c[slot];
-      cx[0].rc.encode(cum, cum+cur[0], tot);
+      cx[0].encode(cum, cum+cur[0], tot);
     }
     if( tot>0x2000 ) {
       total = 0x8000;
@@ -120,9 +120,9 @@ struct BitCtr {
         seed_from(parent);
       const uint32_t tot = summ();
       if constexpr( f_DEC )
-        bit = cx[0].rc.decode_bit(n[0], n[1]);
+        bit = cx[0].decode_bit(n[0], n[1]);
       else
-        cx[0].rc.encode_bit(n[0], n[1], bit);
+        cx[0].encode_bit(n[0], n[1], bit);
       if( tot>limit )
         scale_rare();
       result = n[bit]+kStep;
@@ -131,9 +131,9 @@ struct BitCtr {
     } else {
       const uint32_t p_tot = parent[0].summ();
       if constexpr( f_DEC )
-        bit = cx[0].rc.decode_bit(parent[0].n[0], parent[0].n[1]);
+        bit = cx[0].decode_bit(parent[0].n[0], parent[0].n[1]);
       else
-        cx[0].rc.encode_bit(parent[0].n[0], parent[0].n[1], bit);
+        cx[0].encode_bit(parent[0].n[0], parent[0].n[1], bit);
       if( p_tot>parent[0].limit )
         parent[0].scale_rare();
       result = parent[0].n[bit]+kStep;

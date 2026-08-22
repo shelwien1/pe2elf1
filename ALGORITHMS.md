@@ -6,10 +6,13 @@ The identifiers in the source were produced during reverse engineering, so names
 descriptive rather than original.  The source is `bmf.cpp` plus the `.inc` files it
 includes; references below are `file:line` as of this commit.
 
-Range-coder internals (`struct RangeCoder`, `rangecoder.inc:5` — interval arithmetic,
+Range-coder internals (`struct RangeCoder`, `rangecoder.inc:7` — interval arithmetic,
 renormalization, carry handling) are **out of scope** here; the coder is treated as an
 ideal entropy-coding backend that consumes `(cumFreq, freq, totFreq)` triples and
 adaptive bit probabilities. Everything that *produces* those statistics is in scope.
+`RangeCoder` owns the `CodedStream` it writes into and is the base class of
+`BMFState` (`bmf_state.inc:19`), so every model that holds a `BMFState*` calls
+`encode`/`decode`/`encode_bit`/`decode_bit` on it directly.
 
 ---
 
@@ -61,7 +64,7 @@ from reconstructed data only — the classic CM symmetry that makes side informa
 unnecessary.
 
 The build corresponds to `bmf -S -Q9` (slow mode, max search quality): the `opt_*`
-constants (`records.inc:58`) are baked in and, notably, are never read anywhere else
+constants (`records.inc:79`) are baked in and, notably, are never read anywhere else
 in the file — the reconstruction has the option handling constant-folded away.
 
 ### 1.1 Recurring design principles
@@ -120,12 +123,12 @@ range-coded segments matters for understanding the models' entry points.)
   4-byte palette entries, rows padded to 4).
 * Inside a coded payload, a **bit packer** (`Packer`, `records.inc:11`; `pack_bits` /
   `unpack_bits`, `codec.inc:788` — LSB-first accumulation into 32-bit words) and
-  the range coder share one buffer. Raw-bit fields (the 4-bit near-lossless quantizer,
+  the range coder share one buffer — `RangeCoder::stream`. Raw-bit fields (the 4-bit near-lossless quantizer,
   the plane descriptors) are packed first; each plane's range-coded segment is then
-  bracketed by `rc_begin`/`rc_end` (`bmf_state.inc:298`). The range coder's flush
+  bracketed by `rc_begin`/`rc_end` (`bmf_state.inc:282`). The range coder's flush
   writes a 3-byte length, zero-pads so the next byte falls at offset 3 mod 4, then
   writes a `0x97` sentinel as the final byte of that word — leaving the stream 4-byte
-  aligned so the packer can resume word-aligned; `packer_rewind` (`bmf_state.inc:286`)
+  aligned so the packer can resume word-aligned; `packer_rewind` (`records.inc:31`)
   reclaims the packer's partially-used trailing word before the coder starts. Planar
   mode thus produces `plane_count` concatenated range-coded segments after the
   descriptor bits; interleaved ("together") mode produces one.
@@ -166,7 +169,7 @@ range-coded segments matters for understanding the models' entry points.)
 
 There is no fixed RGB→YCbCr-style transform. Instead the encoder chooses, per image,
 a **plane coding order** and per-plane linear predictions from already-coded planes,
-described by `PlaneDesc` (`records.inc:36`):
+described by `PlaneDesc` (`records.inc:57`):
 
 ```
 struct PlaneDesc { uint8 nrefs;      // # reference planes (0..3); doubles as coding-order slot
@@ -295,7 +298,7 @@ plane. (This path wins on images where MED decorrelates well but the residuals s
 have palette-like structure the slow model exploits.)
 
 The alt models use the same zig-zag through a generalized table set
-(`alt_init_tables`, `bmf_state.inc:171`): `unfold[code]` → signed residual (odd codes
+(`alt_init_tables`, `bmf_state.inc:167`): `unfold[code]` → signed residual (odd codes
 negative, even positive), `fold[resid]` → code with **near-lossless bucketing** of
 width `2q+1` (with `q = near_lossless_q = 0` in this build, `fold` degenerates to the
 exact zig-zag), and `fold_hi[resid]` → always-exact code (physically written as
@@ -374,7 +377,7 @@ Tail codes are completed by the shared
 symbol-tree strips, on a strip context that includes the residual sign and a
 tail-dominance flag `2·c[slot] > c[0] + total + 96`.
 
-### 7.5 Symbol-tree strips — log-bucketed magnitude coder (`bmf_state.inc:51`)
+### 7.5 Symbol-tree strips — log-bucketed magnitude coder (`bmf_state.inc:52`)
 
 A shared magnitude coder used by both alt models (and by `CounterNode`'s tail). Each
 context owns a 254-word strip in `model_table_store` (1024 strips): `freq[0]` total,
@@ -389,7 +392,7 @@ above 0x4000). Level seeds: `{205,124,147,83,48,
 (−16 while large, then −4 down to `alt_freq_limit`) — per-context adaptation that
 starts very fast and settles. Model parameters differ by predictor: P1 uses
 `alt_freq_init=64, alt_freq_limit=16`; P2 uses 8/8 (`begin_plane_stream`,
-`bmf_state.inc:245`). `update_binary_pair` (`bmf_state.inc:132`) is a training-only twin used
+`bmf_state.inc:236`). `update_binary_pair` (`bmf_state.inc:133`) is a training-only twin used
 for context-space generalization (reduced increments, no coding).
 
 ---
@@ -408,7 +411,7 @@ The model operates on a dense alphabet 0..A−1 of the values that actually occu
 (`reduce_alphabet` encoder side, `model.inc:315`; `expand_alphabet` decoder side):
 
 * **depth ≤ 8** (`reduce_narrow_alphabet`, `model.inc:214`): presence bitmap over 256
-  values; the distinct count is coded flat (`code_alphabet_size`, `bmf_state.inc:236`:
+  values; the distinct count is coded flat (`code_alphabet_size`, `rangecoder.inc:166`:
   interval `[n−1, n)` of total 2^depth); the value set is transmitted as **gaps
   between consecutive present values in ascending order**, coded with one adaptive
   dense `SymList` of `2^depth − A + 2` symbols. Ids are value-ordered.
@@ -667,7 +670,7 @@ channel raises the others' activity estimates.
   cov/var), plus a catch-up step when a row is re-seated after serving other slots;
   fresh rows are seeded from their neighbours' mixed weights (×0.78) and
   mean-squares (×0.19). SSE denormals are flushed to zero globally
-  (`bmf_set_denormal_mode`, `records.inc:70`) so the float path stays fast.
+  (`bmf_set_denormal_mode`, `records.inc:91`) so the float path stays fast.
 
 ### 10.4 The five-bank bias cascade
 
@@ -818,7 +821,7 @@ Observations from reviewing the source; none affect correctness of this build
 (the codec round-trips bit-exactly), but they are worth knowing when reading or
 modifying the code:
 
-* `opt_*` option constants (`records.inc:58`) are defined but never referenced —
+* `opt_*` option constants (`records.inc:79`) are defined but never referenced —
   the `-S -Q9` configuration is constant-folded into the code.
 * `predict_med` histograms every folded residual into `hist_scratch`
   (tail of the output buffer), but no reader of that histogram survives in this

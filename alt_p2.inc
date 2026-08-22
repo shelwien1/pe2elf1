@@ -34,7 +34,7 @@ struct P2Freq {
     int32_t c01 = f[1]+f[0];
     uint32_t tot = c01+f[2];
     if constexpr( f_DEC ) {
-      int32_t target = cx[0].rc.get_freq(tot);
+      int32_t target = cx[0].get_freq(tot);
       cum = f[0];
       if( (uint32_t)target>=cum ) {
         if( target>=c01 ) {
@@ -63,9 +63,9 @@ struct P2Freq {
     }
     uint32_t tot_1 = cum+slot[0];
     if constexpr( f_DEC )
-      cx[0].rc.decode(cum, tot_1, tot);
+      cx[0].decode(cum, tot_1, tot);
     else
-      cx[0].rc.encode(cum, tot_1, tot);
+      cx[0].encode(cum, tot_1, tot);
     uint16_t f_before = slot[0];
     if( slot[0]>0x4000u ) {
       halve_counts(f, 3);

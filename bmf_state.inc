@@ -13,9 +13,10 @@ uint32_t halve_pair(FreqPair* pair, int32_t go) {
 void end_plane_stream() {
 }
 
-struct BMFState {
-  alignas(16) CodedStream stream;
-  RangeCoder rc;
+// Derives from RangeCoder: the coder and the stream it writes into are part of
+// the coder-facing state, so models holding a BMFState* call encode/decode
+// directly instead of reaching through a member.
+struct BMFState : RangeCoder {
   alignas(16) CodedTail* coded_block;
   alignas(16) int32_t plane_predictor;
   alignas(16) int32_t plane_alt_model;
@@ -56,7 +57,7 @@ struct BMFState {
     uint16_t* f0 = freq+2;
     uint32_t tot = freq[0];
     if constexpr( f_DEC ) {
-      uint32_t target = rc.get_freq(tot);
+      uint32_t target = get_freq(tot);
       slot = f0;
       lvl = 0;
       cum = f0[0];
@@ -67,7 +68,7 @@ struct BMFState {
           cum += slot[0];
         } while( cum<=target );
       }
-      rc.decode(cum-slot[0], cum, tot);
+      decode(cum-slot[0], cum, tot);
     } else {
       lvl = model_geometry[sym];
       cum = 0;
@@ -75,7 +76,7 @@ struct BMFState {
         cum += f0[j];
       slot = &f0[lvl];
       uint32_t cum_hi = cum+slot[0];
-      result = rc.encode(cum, cum_hi, tot);
+      result = encode(cum, cum_hi, tot);
     }
     if( freq[0]>0x4000u ) {
       halve_counts(freq+2, 8);
@@ -110,10 +111,10 @@ struct BMFState {
       int32_t f1 = pair[0].f[1];
       int32_t fa = pair[0].f[0];
       if constexpr( f_DEC ) {
-        go = rc.decode_bit(fa, f1);
+        go = decode_bit(fa, f1);
       } else {
         go = (mask&path)!=0;
-        result = rc.encode_bit(fa, f1, go);
+        result = encode_bit(fa, f1, go);
       }
       fq = pair[0].f[go];
       if( fq>0x4000u ) fq = halve_pair(pair, go);
@@ -162,11 +163,6 @@ struct BMFState {
       }
     }
     return tot;
-  }
-  uint32_t rc_decode_flat(uint32_t tot) {
-    uint32_t sym = rc.get_freq(tot);
-    rc.decode(sym, sym+1, tot);
-    return sym;
   }
   uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
     uint8_t even, odd;
@@ -233,11 +229,6 @@ struct BMFState {
     }
     return b;
   }
-  template <int32_t f_DEC> uint32_t code_alphabet_size(uint32_t n, uint32_t cap) {
-    if constexpr( f_DEC ) return rc_decode_flat(cap)+1;
-    rc.encode(n-1, n, cap);
-    return n;
-  }
   FreqPair*bit_tree(uint16_t* freq, int32_t lvl) {
   return (FreqPair*)&freq[2*level_geom[lvl].tbl_base+8];
   }
@@ -283,26 +274,19 @@ struct BMFState {
     model_tables = tbl;
     return tbl;
   }
-  void packer_rewind() {
-    if( stream.cur==(uint8_t*)stream.pk.word ) return;
-    int32_t bits = stream.pk.free_bits-8;
-    if( bits<0 ) {
-      stream.pk.free_bits = bits;
-      return;
-    }
-    uint8_t* at = stream.cur;
-    while( bits>=0 ) { --at; bits -= 8; }
-    stream.cur = at;
-    stream.pk.free_bits = bits;
-  }
+  // These six stay here rather than in RangeCoder: a plane's range-coded
+  // segment is bracketed by model work the coder knows nothing about — handing
+  // the shared buffer over from the bit packer, and seeding/retiring the
+  // per-plane symbol tables.  The pure coder primitives they call
+  // (enc_init/dec_init/flush/finish) are inherited.
   template <int32_t f_DEC> uint16_t*rc_begin() {
     if constexpr( !f_DEC ) stream.pk.word[0] = stream.pk.acc;
-    packer_rewind();
+    stream.packer_rewind();
     uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
     if constexpr( f_DEC )
-      rc.dec_init();
+      dec_init();
     else
-      rc.enc_init();
+      enc_init();
     return tbl;
   }
   void rc_begin_decode() {
@@ -313,9 +297,9 @@ struct BMFState {
   }
   template <int32_t f_DEC> void rc_end() {
     if constexpr( f_DEC )
-      rc.finish();
+      finish();
     else
-      rc.flush();
+      flush();
     end_plane_stream();
   }
   void rc_end_decode() {
@@ -334,7 +318,6 @@ struct BMFState {
   void Init() {
     memset(static_cast<void*>(this), 0, sizeof(BMFState));
     bmf_set_denormal_mode();
-    rc.st = &stream;
     memcpy(p2_coef, bmf_p2_coef_init, sizeof p2_coef);
     memcpy(p2_rate, bmf_p2_rate_init, sizeof p2_rate);
   }

@@ -1,9 +1,11 @@
 // rangecoder.inc -- the binary range coder: interval arithmetic,
-// renormalisation and carry handling.  Every model feeds this.
+// renormalisation and carry handling, plus the coded stream it writes into.
+// Every model feeds this; BMFState derives from it, so any model holding a
+// BMFState* calls these directly.
 // Included from bmf.cpp; not a standalone translation unit.
 
 struct RangeCoder {
-  CodedStream* st;
+  alignas(16) CodedStream stream;
   static const uint32_t kTop = 0x00800000;
   static const uint32_t kPend = 0x7F800000;
   static const uint32_t kCarry = 0x80000000;
@@ -17,16 +19,8 @@ private:
   uint32_t pending;
   uint32_t rdiv;
   uint32_t bytes;
-  uint8_t*p() {
-    return st[0].cur;
-  }
-
-  void set_p(uint8_t* q) {
-    st[0].cur = q;
-  }
-
   uint8_t dec_get(uint8_t*&q) {
-    if( q>=st[0].buf+st[0].size )
+    if( q>=stream.buf+stream.size )
       bmf_fatal(bmf_read_error);
     return *q++;
   }
@@ -41,7 +35,7 @@ public:
   }
 
   uint8_t*emit_carry(uint32_t carry) {
-    uint8_t* q = p();
+    uint8_t* q = stream.cur;
     *q++ = (uint8_t)(cache+carry);
     for(; pending; --pending )
       *q++ = (uint8_t)(carry-1);
@@ -49,7 +43,7 @@ public:
   }
 
   void emit(uint32_t carry) {
-    set_p(emit_carry(carry));
+    stream.cur = emit_carry(carry);
     cache = (uint8_t)(low>>23);
   }
 
@@ -100,34 +94,32 @@ public:
     *q++ = (uint8_t)(len>>16);
     *q++ = (uint8_t)(len>>8);
     *q++ = (uint8_t)len;
-    while( (uint32_t)(q-st[0].buf)%4!=3 )
+    while( (uint32_t)(q-stream.buf)%4!=3 )
       *q++ = 0;
     *q++ = kMarker;
-    set_p(q);
-    st[0].pk.free_bits = 0;
-    st[0].pk.acc = 0;
-    st[0].pk.word = (uint32_t*)st[0].cur;
+    stream.cur = q;
+    stream.packer_reset();
   }
 
   void dec_init() {
-    uint8_t* q = p();
+    uint8_t* q = stream.cur;
     if( dec_get(q)!=kMarker )
       bmf_fatal(bmf_read_error);
     cache = dec_get(q);
-    set_p(q);
+    stream.cur = q;
     range = 128;
     low = cache>>1;
   }
 
   void dec_normalise() {
-    uint8_t* q = p();
+    uint8_t* q = stream.cur;
     while( range<=kTop ) {
       uint32_t head = (uint32_t)(uint8_t)(cache<<7)|(low<<8);
       cache = dec_get(q);
       low = (cache>>1)|head;
       range <<= 8;
     }
-    set_p(q);
+    stream.cur = q;
   }
 
   uint32_t get_freq(uint32_t tot) {
@@ -157,12 +149,23 @@ public:
 
   void finish() {
     dec_normalise();
-    uint8_t* q = p();
+    uint8_t* q = stream.cur;
     while( dec_get(q)!=kMarker ) {
     }
-    set_p(q);
-    st[0].pk.word = (uint32_t*)st[0].cur;
-    st[0].pk.free_bits = 0;
-    st[0].pk.acc = 0;
+    stream.cur = q;
+    stream.packer_reset();
+  }
+
+  // Uniform coding over [0, tot): every symbol one count wide.
+  uint32_t decode_flat(uint32_t tot) {
+    uint32_t sym = get_freq(tot);
+    decode(sym, sym+1, tot);
+    return sym;
+  }
+
+  template <int32_t f_DEC> uint32_t code_alphabet_size(uint32_t n, uint32_t cap) {
+    if constexpr( f_DEC ) return decode_flat(cap)+1;
+    encode(n-1, n, cap);
+    return n;
   }
 };

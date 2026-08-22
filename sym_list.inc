@@ -208,7 +208,7 @@ struct SymList {
         cx[0].exclusion_mask[p[0].sym] = gen;
         --p;
       } while( p>=ent );
-      cx[0].rc.encode(enc_cum, enc_high, enc_tot);
+      cx[0].encode(enc_cum, enc_high, enc_tot);
       return 0;
     }
     enc_high = cum;
@@ -225,7 +225,7 @@ struct SymList {
     }
     enc_tot = tot+cum;
     rescale(promote(p));
-    cx[0].rc.encode(enc_cum, enc_high, enc_tot);
+    cx[0].encode(enc_cum, enc_high, enc_tot);
     return 1;
   }
 
@@ -314,7 +314,7 @@ struct SymList {
       return -1;
     w[0] = nullptr;
     int32_t tot_all = cum+(int32_t)tot;
-    int32_t target = cx[0].rc.get_freq(tot_all);
+    int32_t target = cx[0].get_freq(tot_all);
     SymEntry* p = list[0];
     rd = &list[1];
     SymEntry* first = list[0];
@@ -332,14 +332,14 @@ struct SymList {
           cx[0].exclusion_mask[q[0].sym] = gen_b;
           q = *rd2++;
         } while( q );
-        cx[0].rc.decode(cum_lo, tot_all, tot_all);
+        cx[0].decode(cum_lo, tot_all, tot_all);
         return -1;
       }
     }
     int32_t result = p[0].sym;
     uint32_t sym_cum = cum_lo-p[0].cnt;
     this[0].rescale(this[0].promote(p));
-    cx[0].rc.decode(sym_cum, cum_lo, tot_all);
+    cx[0].decode(sym_cum, cum_lo, tot_all);
     return result;
   }
 };

@@ -1046,10 +1046,10 @@ struct ModelBlock {
         const uint32_t bin_tot = ctr[0].n[0]+ctr[0].n[1];
         int32_t run_bit;
         if constexpr( f_DEC ) {
-          run_bit = cx[0].rc.decode_bit(ctr[0].n[0], ctr[0].n[1]);
+          run_bit = cx[0].decode_bit(ctr[0].n[0], ctr[0].n[1]);
         } else {
           run_bit = (len&mask)!=0;
-          cx[0].rc.encode_bit(ctr[0].n[0], ctr[0].n[1], run_bit);
+          cx[0].encode_bit(ctr[0].n[0], ctr[0].n[1], run_bit);
         }
         if( ctr[0].limit<bin_tot )
           ctr[0].scale_rare();
@@ -1137,10 +1137,10 @@ struct ModelBlock {
       auto decode_against = [&](FreqRec* rec) {
                               const int32_t total = rec[0].w[5];
                               int32_t cum;
-                              const int32_t lvl = rec[0].find_level(cx[0].rc.get_freq(total), cum);
+                              const int32_t lvl = rec[0].find_level(cx[0].get_freq(total), cum);
                               const int32_t low = cum-rec[0].w[lvl];
                               rec[0].bump(lvl);
-                              cx[0].rc.decode(low, cum, total);
+                              cx[0].decode(low, cum, total);
                               hit = lvl;
                               return lvl;
                             };
@@ -1246,7 +1246,7 @@ struct ModelBlock {
                             const uint32_t total = rec[0].w[5];
                             const uint32_t high = rec[0].w[lvl]+cum;
                             rec[0].bump(lvl);
-                            cx[0].rc.encode(cum, high, total);
+                            cx[0].encode(cum, high, total);
                             hit = lvl;
                             return lvl;
                           };

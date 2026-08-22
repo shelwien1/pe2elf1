@@ -19,6 +19,27 @@ struct CodedStream {
   uint8_t* cur;
   int32_t size;
   Packer pk;
+  // The bit packer and the range coder share this one buffer: the packer fills
+  // words forward from `cur`, then a range-coded segment starts where it left
+  // off.  These two calls are the hand-off in both directions.
+  void packer_reset() {
+    pk.word = (uint32_t*)cur;
+    pk.acc = 0;
+    pk.free_bits = 0;
+  }
+
+  void packer_rewind() {
+    if( cur==(uint8_t*)pk.word ) return;
+    int32_t bits = pk.free_bits-8;
+    if( bits<0 ) {
+      pk.free_bits = bits;
+      return;
+    }
+    uint8_t* at = cur;
+    while( bits>=0 ) { --at; bits -= 8; }
+    cur = at;
+    pk.free_bits = bits;
+  }
 };
 
 enum : uint8_t {
