@@ -269,7 +269,11 @@ struct BMFCodec : BMFState {
     AltP1Block* raw = p1_blocks.take(false);
     return raw ? raw[0].alt_p1_alloc(this, width, height, 0) : nullptr;
   }
-  void choose_plane_coding(BmfImage* img) {
+  // Returns the cheapest whole-image estimate it saw, in the order-0
+  // gradient-domain currency of cost_candidate -- zero when there are too few
+  // planes for that estimate to exist.  It is a poor way to rank two coding
+  // modes, but a fine way to gate an expensive trial.
+  uint32_t choose_plane_coding(BmfImage* img) {
     alignas(16) int32_t hists[8*1024];
     const HistRows hr = hist_rows(hists);
     int32_t*const hist_flat = hr.r0, *const hist_a = hr.r1;
@@ -279,6 +283,7 @@ struct BMFCodec : BMFState {
     uint32_t next_plane, row;
     int32_t result, xform, wt8, wt4, pred;
     uint32_t best_cost, best;
+    uint32_t cheapest_est = 0;
     int32_t n_planes = plane_count;
     int32_t data_size = img[0].data_size;
     alphabet_reduced = 1;
@@ -327,6 +332,7 @@ struct BMFCodec : BMFState {
         bmf_log("  which plane is predicted from the two others:\n");
         for( int32_t cand = 0; cand<3; ++cand )
           bmf_log("    plane %d     %12.1f bytes%s\n", cand, bmf_bytes(cand_total[cand]), cand==xform ? "  <<" : "");
+        cheapest_est = cheapest;
         memcpy(plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
         best_cost = cand_cost[xform][0];
         const uint32_t cost_fit = best_cost;
@@ -409,6 +415,7 @@ struct BMFCodec : BMFState {
         }
       }
     }
+    return cheapest_est;
   }
   void clear_flags_on_all() {
     for( int32_t k = 0; k<plane_count; ++k )
@@ -909,6 +916,12 @@ struct BMFCodec : BMFState {
         return arc_in[0].fail();
       }
     }
+    if( hdr._pad8[0]&pad_ycocg ) {
+      if( plane_count<3 ) {
+        return arc_in[0].fail();
+      }
+      ycocg_inverse(img_at, plane_count);
+    }
     if( hdr.flags&flags_pal_sorted ) {
       // The table went out in the file's own order, so rebuilding the ordering
       // from it gives exactly the permutation the encoder applied.
@@ -1083,7 +1096,7 @@ struct BMFCodec : BMFState {
       reset_descriptors();
       return 0;
     }
-    choose_plane_coding(img);
+    uint32_t cur_est = choose_plane_coding(img);
     bmf_log("[search_filter] %dx%d, %d plane%s, %d bits/pixel raw\n", tile_w, tile_h, plane_count, plane_count==1 ? "" : "s", 8*plane_count);
     BmfImage* tile_img = alloc_image(tile_w, tile_h, img[0].depth&depth_bits, 0, 0);
     stream_open(tile_img[0].data_size);
@@ -1117,7 +1130,7 @@ struct BMFCodec : BMFState {
       save_descriptors(saved_desc);
       for( int32_t k = 0; k<4; ++k ) saved_cost[k] = plane_cost[k];
       transpose_image(tile_img, plane_count);
-      choose_plane_coding(tile_img);
+      const uint32_t t_est = choose_plane_coding(tile_img);
       const PlaneSearch pt = search_planes(tile_img, tile_buf, plane_cost);
       const bool kept_flat = pt.bits+(pt.bits>>12)>=best_bits;
       bmf_log("    %-22s %12.1f bytes%s\n", "transposed", bmf_bytes(pt.bits), kept_flat ? "" : "  <<");
@@ -1128,6 +1141,7 @@ struct BMFCodec : BMFState {
       } else {
         best_bits = pt.bits;
         ps = pt;
+        cur_est = t_est;
         transpose_image(img, plane_count);
       }
     }
@@ -1157,6 +1171,44 @@ struct BMFCodec : BMFState {
           ps = pp;
           permute_indices(img, po.rank);
         }
+      }
+    }
+    if( plane_count>=3 ) {
+      // The colour transform can only form residuals against the original
+      // planes, so a luma smoother than any single channel is out of its
+      // reach.  YCoCg-R reaches it, and the trial decides whether it helps.
+      PlaneDesc saved_desc[4];
+      uint32_t saved_cost[4];
+      save_descriptors(saved_desc);
+      for( int32_t k = 0; k<4; ++k )
+        saved_cost[k] = plane_cost[k];
+      ycocg_forward(tile_img, plane_count);
+      const uint32_t y_est = choose_plane_coding(tile_img);
+      // The lifting has lost every time it has been measured on continuous-tone
+      // colour -- BMF's fitted blend already decorrelates the channels, and the
+      // alt-P2 model reads the reference planes spatially on top of that -- so
+      // the full trial only runs where the cheap estimate says it has a chance.
+      const bool worth_it = y_est<cur_est;
+      PlaneSearch py = ps;
+      if( worth_it )
+        py = search_planes(tile_img, tile_buf, plane_cost);
+      const bool kept_rgb = !worth_it||py.bits+(py.bits>>12)>=best_bits;
+      if( worth_it )
+        bmf_log("    %-22s %12.1f bytes%s\n", "YCoCg-R lifted", bmf_bytes(py.bits), kept_rgb ? "" : "  <<");
+      else
+        bmf_log("    %-22s %12.1f bytes estimated against %.1f, not tried\n", "YCoCg-R lifted",
+                bmf_bytes(y_est), bmf_bytes(cur_est));
+      if( kept_rgb ) {
+        ycocg_inverse(tile_img, plane_count);
+        restore_descriptors(saved_desc);
+        for( int32_t k = 0; k<4; ++k )
+          plane_cost[k] = saved_cost[k];
+      } else {
+        best_bits = py.bits;
+        ps = py;
+        cur_est = y_est;
+        ycocg_forward(img, plane_count);
+        img[0]._pad8[0] |= pad_ycocg;
       }
     }
     free(tile_buf);

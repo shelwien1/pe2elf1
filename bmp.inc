@@ -19,6 +19,12 @@ enum : uint8_t {
   flags_tail = 0x80,
 };
 
+// Bits of the member header's spare byte.  The flags byte is full, and these
+// describe the pixels' representation rather than the coding, so they sit here.
+enum : uint8_t {
+  pad_ycocg = 0x01,
+};
+
 uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {
   return (uint32_t)r<<16|(uint32_t)g<<8|b;
 }

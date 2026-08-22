@@ -512,10 +512,33 @@ degenerates.
    term scaled to the data, and a fallback to the best degenerate form as the
    descent's starting point rather than the fit's output, would stop `(0,0)`
    from ever being the seed. Cheap and strictly safer than what is there.
-2. **Add reversible integer lifting as a candidate.** YCoCg-R is exactly
-   reversible in integers, costs two adds and two shifts per pixel, and beats a
-   fitted linear blend on a large class of photographic content. It slots into
-   the existing candidate list and the existing trial machinery picks it.
+2. **Add reversible integer lifting as a candidate — built, and it loses.**
+   YCoCg-R is exactly reversible in integers (and exactly reversible in *8-bit
+   modular* integers, verified over all 16 777 216 triples: every lifting step
+   reads the stored wrapped value, so Co and Cg need no ninth bit), and it costs
+   two adds and two shifts per pixel. It is now a trial in `search_filter`.
+   **[measured]**, and against the expectation this section carried before it
+   was built, it lost on every multi-plane image in the corpus:
+
+   | image | as-is | YCoCg-R lifted | |
+   |---|---|---|---|
+   | `t24` | 52 852 | 58 340 | +10.4 % |
+   | `t32` | 52 932 | 58 420 | +10.4 % |
+   | `x_ep` | 362 424 | 378 092 | +4.3 % |
+
+   Forcing the lifting on for the whole corpus costs **+3.4 %**. The reason is
+   structural rather than incidental: YCoCg-R's weights are fixed, and BMF's
+   blend already fits its own weights per image, then alt-P2 reads the reference
+   planes *spatially* on top of that. A fixed lifting is strictly less than
+   both. The trial stays — it cannot lose on content where it would win — but it
+   is gated by the cheap estimate rather than run unconditionally, which takes
+   its encode cost from +30 % to +4 %. The estimate got the ranking right on all
+   three images, though it understated the loss on `t24` by 25× (0.4 % against
+   10.4 %), which is §11's point exactly.
+
+   The thing worth taking from this: the gap in the colour path is not the
+   *shape* of the fixed transform, it is that the transform sees one pixel.
+   §8.1, not this.
 3. **Make the blend adaptive.** One global weight pair per image is a strong
    assumption; sky and skin want different weights. Either select the weight pair
    by a small local context, or replace the fixed blend with an LMS filter on the
@@ -558,8 +581,9 @@ degenerate fit and `copy first ref` is genuinely the best of the four options
 there. What it buys is the case the corpus does not contain: an image where the
 fit degenerates *and* no degenerate form is good, where the encoder would ship a
 useless transform with nothing to fall back on. Cheap insurance rather than a
-measured gain. (2) and (3) **[expected]** 1–4 % on multi-plane photographic
-images. (4) **[measured]** nothing for a fixed gamma; **[expected]** small for a
+measured gain. (2) is **[measured]** a 4–10 % *loss* on every multi-plane image
+in this corpus, kept only as a gated trial; (3) **[expected]** 1–4 % on
+multi-plane photographic images. (4) **[measured]** nothing for a fixed gamma; **[expected]** small for a
 fitted curve, and the freedom it establishes matters more than this particular
 use of it.
 
