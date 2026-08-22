@@ -566,13 +566,15 @@ other three.
 
 | image | values | shipped before | with the mode | |
 |---|---|---|---|---|
-| `x_ci` | 4 | 628 116 | 570 488 | **−9.2 %** |
-| `DLRAW` | 16, 4 bpp | 222 494 | 207 578 | **−6.7 %** |
-| `x_ai` | 8 | 144 540 | 133 444 | **−7.7 %** |
-| `f05_200` | 2, 1 bpp | 21 322 | 21 134 | **−0.9 %** |
+| `x_ci` | 4 | 628 116 | 565 080 | **−10.0 %** |
+| `DLRAW` | 16, 4 bpp | 222 494 | 207 134 | **−6.9 %** |
+| `x_ai` | 8 | 144 540 | 132 020 | **−8.7 %** |
+| `f05_200` | 2, 1 bpp | 21 322 | 19 710 | **−7.6 %** |
 | `t1` | 2, 1 bpp | 2 170 | 2 170 | refused, 2 588 |
 
-That is **−4.4 % of the whole corpus** from one mode. Sub-byte-packed planes get
+That is **−4.9 % of the whole corpus** from one mode, at 114 MB of peak
+encoder memory on the worst case (a 16-value plane, whose four tables need
+fifteen counters per bucket). Sub-byte-packed planes get
 it too: the plane is unpacked to a byte per pixel, coded, and packed back, which
 is invisible outside the one function and the header bit that records it. It is
 only offered when the row divides evenly into bytes — otherwise the last byte of
@@ -596,20 +598,31 @@ and sixteen the learning cost turns it around first.
 
 Three things mattered, in order of how much:
 
-1. **Two tables, mixed.** A short four-neighbour table sits under the long one,
+1. **Four context orders, mixed.** Orders of 4 up to as many neighbours as the
+   alphabet allows, spread evenly, each a table of its own, their probabilities
+   combined by §2's mixer. Two orders give `x_ci` 568 960; three give 565 708;
+   four give 565 080; five give 565 168 and are worse. Each order costs about
+   0.19 s of decode across the five files it applies to, so the fourth buys
+   736 bytes for 13 % more decode time on those images — kept, because decode is
+   still 1.6× the original and the budget is 10×.
+
+   How the orders are combined matters more than how many there are. Three ways,
+   in order of how well they worked: A short four-neighbour table sits under the long one,
    direct-indexed and never evicted, and the two estimates are combined. Three
    ways of combining them, in order of how well they worked:
-   *seed only* — a fresh long bucket starts from the short table's current
+   *seed only* — a fresh bucket starts from the next shorter order's current
    probabilities and then ignores it (`x_ci` 578 520, `x_ai` 153 360);
-   *count blend* — `(p_long·n_long + p_short·24)/(n_long + 24)`, so a fresh
-   bucket codes almost entirely from the short context and hands over as it
-   fills (`x_ci` 573 708, `x_ai` 141 956);
-   *§2's logistic mixer* — combine them in the stretch domain with a weight pair
-   per (count bucket, tree node), learned by gradient descent on coding loss
-   (`x_ci` 568 960, `x_ai` 132 524). Seeding those weights where the count blend
-   would put them is worth another 92 bytes; the learning rate is worth much
-   more, and is sharply peaked — one shift either side of 2⁻¹⁸ costs 50 to
-   300 bytes, two shifts costs 27 000.
+   *count blend* — `(p_long·n + p_short·24)/(n + 24)`, so a fresh bucket codes
+   almost entirely from the shorter context and hands over as it fills
+   (`x_ci` 573 708, `x_ai` 141 956);
+   *§2's logistic mixer* — combine them in the stretch domain with a weight per
+   input per (evidence bucket, tree node), learned by gradient descent on coding
+   loss (`x_ci` 568 960, `x_ai` 132 524 at two orders). Seeding those weights
+   where the count blend would put them is worth another 92 bytes; the learning
+   rate is worth much more, and is sharply peaked — one shift either side of
+   2⁻¹⁸ costs 50 to 300 bytes, two shifts costs 27 000. All three orders are
+   still updated on every bit, and a fresh bucket in any of them is still seeded
+   from the order below: seeding and mixing are complements, not alternatives.
 2. **§3's map, on the tree's bits.** Refining the blended probability through an
    adaptive probability map before it reaches the coder is worth 8 500 bytes on
    `x_ai` alone and 2 300 on `DLRAW`. Its context is the *tree node* and nothing

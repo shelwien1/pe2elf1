@@ -117,33 +117,36 @@ void mix_tables_init() {
   mix_tables_ready = true;
 }
 
-struct Mix2 {
+template <int32_t N> struct MixN {
   static const int32_t kSets = 256;
   static const int32_t kShift = 18;
-  int32_t w[kSets][2];
-  int32_t in0, in1, set;
+  int32_t w[kSets][N];
+  int32_t in[N];
+  int32_t set;
 
   void Init() {
     mix_tables_init();
-    for( int32_t k = 0; k<kSets; ++k ) {
-      w[k][0] = 1<<15;
-      w[k][1] = 1<<15;
-    }
-    in0 = 0;
-    in1 = 0;
+    for( int32_t k = 0; k<kSets; ++k )
+      for( int32_t j = 0; j<N; ++j )
+        w[k][j] = (1<<16)/N;
+    for( int32_t j = 0; j<N; ++j )
+      in[j] = 0;
     set = 0;
   }
 
-  void seed(int32_t k, int32_t w0, int32_t w1) {
-    w[k&(kSets-1)][0] = w0;
-    w[k&(kSets-1)][1] = w1;
+  void seed(int32_t k, const int32_t* weights) {
+    for( int32_t j = 0; j<N; ++j )
+      w[k&(kSets-1)][j] = weights[j];
   }
 
-  int32_t mix(int32_t p0, int32_t p1, int32_t ctx) {
+  int32_t mix(const int32_t* p, int32_t ctx) {
     set = ctx&(kSets-1);
-    in0 = mix_stretch[p0>>4];
-    in1 = mix_stretch[p1>>4];
-    int32_t dot = (w[set][0]*in0+w[set][1]*in1)>>16;
+    int32_t dot = 0;
+    for( int32_t j = 0; j<N; ++j ) {
+      in[j] = mix_stretch[p[j]>>4];
+      dot += w[set][j]*in[j];
+    }
+    dot >>= 16;
     if( dot<-2047 )
       dot = -2047;
     if( dot>2047 )
@@ -153,7 +156,12 @@ struct Mix2 {
 
   void update(int32_t bit, int32_t p) {
     const int32_t err = (bit ? 65535 : 0)-p;
-    w[set][0] += (in0*err)>>kShift;
-    w[set][1] += (in1*err)>>kShift;
+    for( int32_t j = 0; j<N; ++j )
+      w[set][j] += (in[j]*err)>>kShift;
   }
 };
+
+using Mix2 = MixN<2>;
+using Mix3 = MixN<3>;
+using Mix4 = MixN<4>;
+using Mix5 = MixN<5>;
