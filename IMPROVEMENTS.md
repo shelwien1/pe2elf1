@@ -904,13 +904,26 @@ predict the sample that followed it, with a confidence that grows with the
 verified match length. Feed the prediction into the mixer of §2 as one more
 model rather than special-casing it.
 
-**Expected [expected].** Near zero on photographs, large on screenshots, maps,
-scanned text, textures, and anything with repeated UI or logo elements — the
-content classes `f05_200` and `DLRAW` hint at but this corpus does not really
-contain.
+**Built, inside the context model [measured].** A hash of the last 12/`bits`
+pixels indexes a table of positions; on a hit the symbol that followed the last
+occurrence is predicted, with a confidence learned per match length, and that
+prediction enters §2's mixer as a fifth input. While the tree path still agrees
+with the predicted symbol it contributes; once it diverges it says nothing.
 
-**Cost.** Small: one hash table, one comparison per pixel. It is the single
-cheapest new *model* to add once §2 exists.
+**[measured]** 1 700 bytes over the four images the mode applies to: `x_ai`
+132 020 → 130 972, `DLRAW` 207 134 → 206 790, `f05_200` 19 710 → 19 598, `x_ci`
+565 080 → 564 888. That is 0.11 % of the corpus — real, and an order of magnitude
+less than the context orders it sits beside, which is the honest shape of this
+proposal on content that has no repeated UI in it. The window length barely
+matters (12, 16, 20, 24 pixels are within 100 bytes of each other; 48 and 96 are
+worse by 700 and 900).
+
+**Still expected [expected]** where the corpus is silent: screenshots, maps,
+scanned text, and anything with repeated UI or logo elements. It is also not
+built for the *other* three models, only for this one, because it needed a mixer
+to enter and this is the only model that has one.
+
+**Cost.** Small: one hash table, one comparison per pixel.
 
 ### 10.1 The same table, used as a predictor
 

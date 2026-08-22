@@ -23,6 +23,9 @@ struct CtxModel {
   // useful: W, N, NW, NE, WW, NN, NEE, NWW, and outward from there.
   static const int32_t kMaxNeighbours = 24;
   static const int32_t kOrders = 4;
+  static const int32_t kInputs = kOrders+1;
+  static const int32_t kMatchBits = 20;
+  static const int32_t kMatchLens = 32;
   static const int32_t kShortNb = 4;
   static const int32_t kTableBits = 20;
   static const int32_t kMidBits = 18;
@@ -46,7 +49,16 @@ struct CtxModel {
   uint32_t* tags[kOrders];
   int32_t recip[kCountCap+1];
   Apm apm;
-  Mix4 mixer;
+  Mix5 mixer;
+  int32_t* match_tab;
+  uint32_t match_p[kMatchLens];
+  uint64_t win;
+  uint64_t win_mask;
+  int32_t match_nb;
+  int32_t match_ptr;
+  int32_t match_len;
+  int32_t match_pred;
+  bool match_path;
   BMFState* cx;
 
   // The distinct values in a plane, in ascending order.  Returns how many there
@@ -90,6 +102,16 @@ struct CtxModel {
     }
     apm.Init();
     mixer.Init();
+    match_tab = nullptr;
+    for( int32_t k = 0; k<kMatchLens; ++k )
+      match_p[k] = 40000u<<16;
+    win = 0;
+    win_mask = 0;
+    match_nb = 0;
+    match_ptr = -1;
+    match_len = 0;
+    match_pred = 0;
+    match_path = false;
     cx = nullptr;
   }
 
@@ -101,6 +123,12 @@ struct CtxModel {
     nodes = (1<<bits)-1;
     // Four orders spread evenly from four neighbours to the longest.  Order 0
     // is direct-indexed and never evicted; the rest are hashed.
+    // The match model's window, in pixels: long enough that a hit means a real
+    // repeat rather than a common local pattern the context tables already have.
+    match_nb = 12/bits;
+    if( match_nb>40 )
+      match_nb = 40;
+    win_mask = match_nb*bits>=64 ? ~0ull : (((uint64_t)1<<(match_nb*bits))-1);
     const int32_t longest = nb_for_bits[bits];
     for( int32_t k = 0; k<kOrders; ++k ) {
       nb[k] = kShortNb+(longest-kShortNb)*k/(kOrders-1);
@@ -117,16 +145,19 @@ struct CtxModel {
     // fewest samples and are the ones that matter most.
     for( int32_t b = 0; b<8; ++b ) {
       const int32_t n = 8*b+4;
-      int32_t weights[kOrders];
+      int32_t weights[kInputs];
       for( int32_t k = 0; k<kOrders-1; ++k )
         weights[k] = 65536*kBlend/(n+kBlend)/(kOrders-1);
       weights[kOrders-1] = 65536*n/(n+kBlend);
+      weights[kOrders] = 0;
       for( int32_t node = 0; node<16; ++node )
         mixer.seed((b<<4)|node, weights);
     }
   }
 
   void alloc_tables() {
+    match_tab = (int32_t*)bmf_new(((size_t)1<<kMatchBits)*sizeof(int32_t));
+    memset(match_tab, 0xFF, ((size_t)1<<kMatchBits)*sizeof(int32_t));
     for( int32_t k = 0; k<kOrders; ++k ) {
       const size_t count = (size_t)1<<table_bits[k];
       ctr[k] = (uint32_t*)bmf_new(count*(size_t)nodes*sizeof(uint32_t));
@@ -141,6 +172,8 @@ struct CtxModel {
   }
 
   void Quit() {
+    free(match_tab);
+    match_tab = nullptr;
     for( int32_t k = 0; k<kOrders; ++k ) {
       free(ctr[k]);
       free(tags[k]);
@@ -182,6 +215,29 @@ struct CtxModel {
     return row;
   }
 
+  // Before coding position `at`: is there a symbol to predict, and does the
+  // tree path start out agreeing with it?
+  void match_begin(const uint8_t* px, int32_t at) {
+    match_path = match_ptr>=0&&match_ptr<at&&match_len>0;
+    match_pred = match_path ? to_idx[px[match_ptr]] : 0;
+  }
+
+  // After coding it: extend the match if it held, otherwise look up where this
+  // window last occurred, and record that this window now ends here.
+  void match_update(const uint8_t* px, int32_t at) {
+    const int32_t idx = to_idx[px[at]];
+    win = ((win<<bits)|(uint64_t)(uint32_t)idx)&win_mask;
+    const uint32_t slot = (uint32_t)((win*0x9E3779B97F4A7C15ull)>>(64-kMatchBits));
+    if( match_ptr>=0&&match_ptr<at&&to_idx[px[match_ptr]]==idx ) {
+      ++match_ptr;
+      ++match_len;
+    } else {
+      match_len = 0;
+      match_ptr = match_tab[slot];
+    }
+    match_tab[slot] = at+1;
+  }
+
   void bump(uint32_t &cell, int32_t target) {
     int32_t p = (int32_t)(cell>>16);
     int32_t n = (int32_t)(cell&0xFFFFu);
@@ -192,11 +248,19 @@ struct CtxModel {
 
   template <int32_t f_DEC> int32_t code_symbol(uint32_t** rows, int32_t sym) {
     int32_t node = 1;
+    const int32_t len_at = match_len<kMatchLens ? match_len : kMatchLens-1;
     for( int32_t b = bits-1; b>=0; --b ) {
       const int32_t at = node-1;
-      int32_t p_in[kOrders];
+      int32_t p_in[kInputs];
       for( int32_t k = 0; k<kOrders; ++k )
         p_in[k] = (int32_t)(rows[k][at]>>16);
+      // The match model's opinion: while the tree path still agrees with the
+      // symbol that followed the last occurrence of this window, predict that
+      // symbol's next bit, with a confidence learned per match length.  Once
+      // the path diverges it says nothing.
+      const int32_t pred_bit = match_path ? (match_pred>>b)&1 : 0;
+      const int32_t conf = (int32_t)(match_p[len_at]>>16);
+      p_in[kOrders] = !match_path ? 32768 : pred_bit ? conf : 65536-conf;
       const int32_t n_long = (int32_t)(rows[kOrders-1][at]&0xFFFFu);
       const int32_t p = mixer.mix(p_in, ((n_long>>3)<<4)|at);
       // The map's context is the tree node and nothing else: the mixer has
@@ -211,6 +275,10 @@ struct CtxModel {
       }
       apm.update(bit);
       mixer.update(bit, p);
+      if( match_path ) {
+        bump(match_p[len_at], bit==pred_bit ? 65535 : 0);
+        match_path = bit==pred_bit;
+      }
       const int32_t target = bit ? 65535 : 0;
       for( int32_t k = 0; k<kOrders; ++k )
         bump(rows[k][at], target);
@@ -247,6 +315,8 @@ struct CtxModel {
     for( int32_t y = 0; y<h; ++y ) {
       uint8_t*const row = px+(size_t)y*w;
       for( int32_t x = 0; x<w; ++x ) {
+        const int32_t at = (int32_t)((size_t)y*w+x);
+        match_begin(px, at);
         const uint32_t key = context_key(px, w, h, x, y);
         uint32_t* rows[kOrders];
         for( int32_t k = 0; k<kOrders; ++k ) {
@@ -257,6 +327,7 @@ struct CtxModel {
           row[x] = to_val[code_symbol<1>(rows, 0)];
         else
           code_symbol<0>(rows, to_idx[row[x]]);
+        match_update(px, at);
       }
     }
     Quit();
