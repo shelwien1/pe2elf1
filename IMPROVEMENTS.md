@@ -531,11 +531,18 @@ degenerates.
 
 **Change.** Three separable things:
 
-1. **Make the fit robust.** The normal equations are regularised by adding 0.1
-   to the determinant and the weights are clamped to [−64, 191]; a proper ridge
-   term scaled to the data, and a fallback to the best degenerate form as the
-   descent's starting point rather than the fit's output, would stop `(0,0)`
-   from ever being the seed. Cheap and strictly safer than what is there.
+1. **Make the fit robust — done, by the seed.** The coordinate descent now
+   starts from the best of the closed-form fit and the three degenerate forms,
+   re-priced in the descent's own currency, rather than always from the fit's
+   output. On `t24` the fit's `(0,0)` is discarded, the descent starts at
+   `(128,0)` and the reported cost of the "least-squares fit" option drops from
+   66 085.8 bytes to 12 414.9 — it now matches the best degenerate form instead
+   of losing to it by 5×. **[measured]** No image in this corpus changes size,
+   because the slack rule was already catching the degenerate case; what this
+   buys is the case the corpus does not contain, where the fit degenerates *and*
+   no degenerate form is good. The normal equations' regularisation (0.1 added
+   to the determinant, weights clamped to [−64, 191]) is untouched; a ridge term
+   scaled to the data is still worth doing.
 2. **Add reversible integer lifting as a candidate — built, and it loses.**
    YCoCg-R is exactly reversible in integers (and exactly reversible in *8-bit
    modular* integers, verified over all 16 777 216 triples: every lifting step
@@ -812,15 +819,16 @@ a reference; the real trial encodes then price that reference at 69 124 bytes
 against 21 652 for coding the plane with no reference at all. The estimator did
 not merely misjudge the margin, it recommended a transform the coder rejects.
 
-**A structural inconsistency [from the code].** The four blend options are not
-even scored on the same histogram. `residual_bin` (`planes.inc:133`) folds the
-fitted blend's residual into **512** bins (`&0x1FF`), while the copy and average
-options are binned into **1024** (`&0x3FF` in `cost_candidate`,
-`codec.inc:575`). Gradient-domain second differences of two 8-bit planes span
-about ±1020, so a *poor* fit wraps and has its entropy measured on merged bins —
-which can only lower it. The bias flatters exactly the fits that deserve it
-least. Whether it ever changes an outcome is untested; making both sides use the
-same range costs nothing either way.
+**A structural inconsistency — fixed.** The four blend options were not even
+scored on the same histogram. `residual_bin` folded the fitted blend's residual
+into **512** bins (`&0x1FF`), while the copy and average options were binned
+into **1024** (`&0x3FF` in `cost_candidate`). Gradient-domain second differences
+of two 8-bit planes span about ±1020, so a *poor* fit wrapped and had its
+entropy measured on merged bins — which can only lower it. The bias flattered
+exactly the fits that deserved it least. Both now use 1024 bins, and
+**[measured]** it changes no outcome on this corpus, as suspected — but it makes
+the two currencies numerically identical, which is what lets the fix in §8 (1)
+re-price its seed without changing units.
 
 **And naive fixes do not automatically help [measured].** Conditioning the same
 estimate on eight buckets of the previous residual's magnitude made it *worse* —
@@ -831,10 +839,15 @@ cannot.
 
 **Change.** In rough order of effort:
 
-1. **Score with an adaptive code, not an entropy.** Sum −log2 *p* under the same
-   kind of counter the real coder uses. It counts the learning cost, so adding
-   context to the estimate stops being free and the estimate stops preferring
-   context sets the coder cannot afford.
+1. **Score with an adaptive code, not an entropy — done.** `estimate_cost` is
+   now the Krichevsky–Trofimov sequential estimator over the bins the residual
+   occupies, rather than the empirical entropy of the same histogram. KT's
+   redundancy over the entropy is exactly the learning cost — about
+   (*K*−1)/2·log2 *N* bits for *K* occupied bins — so adding context to an
+   estimate is no longer free, which is the property the naive-conditioning
+   experiment above was missing. **[measured]** It raises every estimate by
+   about 0.2 % on `t24` and changes no ranking on this corpus; its value is
+   that the next estimator that wants context has to pay for it.
 2. **Match the estimator's domain to the coder's.** The candidate search works on
    gradient-domain second differences while the coder works on spatial
    residuals of the transformed planes; the two agree only approximately.
@@ -844,8 +857,12 @@ cannot.
    already has this machinery and does not use it for the transform decisions is
    the real oddity here.
 
-4. **Count the side information.** The estimate compares residual costs and
-   ignores what each option costs to *describe* — descriptor bits, transmitted
+4. **Count the side information — done for the descriptors.** `search_planes`
+   and `transform_cost` now add each plane's descriptor cost (6 bits, plus 8 for
+   a `dc` and 16 or 24 for weights when the plane takes references) to every
+   trial. **[measured]** No decision on this corpus changes, but a reference now
+   has to earn the three or four bytes it costs to describe. The estimate still
+   compares residual costs and ignores what each option costs to *describe* — descriptor bits, transmitted
    weights, a `dc`, and, if the proposals here land, a palette permutation, an
    orientation, a quantiser, a fitted curve. Today that is tens of bytes and does
    not change any decision; with §5, §6, §11 and §12 in the stream it becomes a

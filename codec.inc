@@ -343,6 +343,26 @@ struct BMFCodec : BMFState {
         const int32_t fit4 = wt4, fit8 = wt8;
         {
           const uint8_t* plane0 = &img[0].pixels[xform];
+          // Seed the descent from the best of the fit and the three degenerate
+          // forms.  The closed-form fit can land on (0,0) -- it does on t24 --
+          // and a +-4 coordinate descent cannot walk out of that, so the search
+          // would otherwise start from a predictor that predicts nothing and
+          // the only thing saving the image would be the slack rule below.
+          // The degenerate costs come from cost_candidate's own histograms, so
+          // a chosen seed is re-priced in the currency the descent minimises.
+          static const int32_t degenerate[3][2] = {{128, 0}, {0, 128}, {64, 64}};
+          uint32_t seed_cost = cand_cost[xform][0];
+          int32_t seed = -1;
+          for( int32_t k = 0; k<3; ++k )
+            if( cand_cost[xform][k+1]<seed_cost ) {
+              seed_cost = cand_cost[xform][k+1];
+              seed = k;
+            }
+          if( seed>=0 ) {
+            wt4 = degenerate[seed][0];
+            wt8 = degenerate[seed][1];
+            best_cost = weight_pair_cost(img, plane0, plane_a, plane_b, wt4, wt8);
+          }
           WeightSearch search = {this, img, plane0, plane_a, plane_b, {wt4, wt8}, best_cost};
           int32_t wt_step = 4;
           search.descend(wt_step, -1);
@@ -1378,7 +1398,7 @@ struct BMFCodec : BMFState {
   }
   int32_t transform_cost(BmfImage* tile_img) {
     transform_planes(tile_img);
-    const int32_t bits = 8*(stream.cur-stream.buf);
+    const int32_t bits = 8*(stream.cur-stream.buf)+descriptor_bits_all();
     packer_flush();
     packer_reset();
     return bits;
@@ -1489,7 +1509,7 @@ struct BMFCodec : BMFState {
     code_plane_descs<0>();
   }
   int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0, int32_t plane_a, int32_t plane_b, int32_t w4, int32_t w8) {
-    int32_t hist[512];
+    int32_t hist[1024];
     memset(hist, 0, sizeof hist);
     const int32_t stride = img[0].stride;
     const int32_t left = -plane_count;
@@ -1505,7 +1525,24 @@ struct BMFCodec : BMFState {
       p -= left;
       r -= left;
     }
-    return estimate_cost(hist, 512);
+    return estimate_cost(hist, 1024);
+  }
+  // What one plane's descriptor costs on the wire, in bits, for a given flags
+  // byte -- see code_plane_descs.  The trials compare residual costs alone,
+  // which on a small image is enough to buy a 20-byte gain with 32 bits of
+  // header; a reference costs three or four bytes to describe and nothing in
+  // the search accounted for it.
+  int32_t descriptor_bits(int32_t plane, int32_t flags) {
+    if( !(flags&desc_has_refs) )
+      return 6;
+    const int32_t nrefs = plane_desc[plane].nrefs;
+    return 6+8+(nrefs>1 ? 16 : 0)+(nrefs>2 ? 8 : 0);
+  }
+  int32_t descriptor_bits_all() {
+    int32_t bits = 0;
+    for( int32_t k = 0; k<plane_count; ++k )
+      bits += descriptor_bits(k, plane_desc[k].flags);
+    return bits;
   }
   PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf, uint32_t* plane_cost) {
     int32_t best_cost = 0, best_flags = 0;
@@ -1513,7 +1550,7 @@ struct BMFCodec : BMFState {
     auto probe_plane = [&](int32_t pl, int32_t flags) {
                          plane_desc[pl].flags = flags;
                          model_planes(tile_img, tile_buf, pl);
-                         int32_t cost = 8*(stream.cur-stream.buf);
+                         int32_t cost = 8*(stream.cur-stream.buf)+descriptor_bits(pl, flags);
                          packer_flush();
                          if( bmf_verbose&&trial_n<8 ) {
                            trial_flags[trial_n] = flags;

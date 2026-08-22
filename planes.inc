@@ -2,29 +2,29 @@
 // MED predictor, the inter-plane blends, and the search's small result records.
 // Included from bmf.cpp; not a standalone translation unit.
 
+// Cost of coding a residual histogram, in bits, as an *adaptive* order-0 code
+// rather than as an entropy: the Krichevsky-Trofimov sequential estimator over
+// the bins the residual actually occupies.  KT's redundancy over the empirical
+// entropy is the learning cost -- about (K-1)/2 * log2(N) bits for K occupied
+// bins -- which is the term a plain entropy sum leaves out, and leaving it out
+// is what makes a wider or more finely conditioned residual look free.  It is
+// still not the code the coder will run, but it is the same *kind* of code, and
+// what this is used for is ranking.
 int32_t estimate_cost(const int32_t* bin, int32_t n) {
-  double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
-  int32_t i;
-  for( i = 0; i+1<n; i += 2 ) {
-    if( bin[i] ) {
-      sum_even += (double)bin[i];
-      ent_even += (double)bin[i]*log((double)bin[i]);
-    }
-    if( bin[i+1] ) {
-      sum_odd += (double)bin[i+1];
-      ent_odd += (double)bin[i+1]*log((double)bin[i+1]);
-    }
-  }
-  double entropy = ent_even+ent_odd;
-  double total = sum_even+sum_odd;
-  for(; i<n; i++ )
+  double total = 0.0, terms = 0.0;
+  int32_t used = 0;
+  for( int32_t i = 0; i<n; ++i )
     if( bin[i] ) {
       total += (double)bin[i];
-      entropy += (double)bin[i]*log((double)bin[i]);
+      terms += lgamma((double)bin[i]+0.5);
+      ++used;
     }
-  if( total!=0.0 )
-    total = total*log(total);
-  return (int32_t)((total-entropy)*1.442695040888963);
+  if( used<2 )
+    return 0;
+  const double half_k = 0.5*(double)used;
+  // lgamma(0.5) is log(sqrt(pi)), once per occupied bin.
+  const double bits = lgamma(total+half_k)-lgamma(half_k)-(terms-(double)used*0.5723649429247001);
+  return (int32_t)(bits*1.442695040888963);
 }
 uint32_t plane_mix2(const PlaneDesc &d, const uint8_t* p0, const uint8_t* p1) {
   return (d.weight0**p0+d.weight1*(uint32_t)p1[0]+40)>>7;
@@ -130,8 +130,14 @@ HistRows hist_rows(int32_t* hists) {
   return {hists, hists+1*1024, hists+2*1024, hists+3*1024, hists+4*1024, hists+5*1024};
 }
 
+// Gradient-domain second differences of two 8-bit planes span about +-1020, so
+// the residual needs the same 1024 bins cost_candidate gives the copy and
+// average options.  Folding the fitted blend into 512 instead merged bins for
+// exactly the fits that wrapped -- the poor ones -- and merging bins can only
+// lower an entropy, so the narrower range flattered the fits that deserved it
+// least.
 int32_t residual_bin(int32_t own, int32_t w0, int32_t a, int32_t w1, uint32_t b) {
-  return ((uint16_t)own-(uint16_t)((w0*a+w1*b+40)>>7)-256)&0x1FF;
+  return ((uint16_t)own-(uint16_t)((w0*a+w1*b+40)>>7)-512)&0x3FF;
 }
 int32_t widest_window(const int32_t* hist, int32_t first, int32_t end, int32_t miss) {
   int32_t sum = 0;
