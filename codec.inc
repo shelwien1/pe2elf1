@@ -306,22 +306,35 @@ struct BMFCodec : BMFState {
         plane_desc[next_plane-1].src_plane = result;
         plane_desc[next_plane-1].nrefs = result;
       }
+      if( n_planes<3 ) {
+        bmf_log("[choose_plane_coding] %d plane%s: no inter-plane blend to search\n",
+                n_planes, n_planes==1 ? "" : "s");
+      }
       if( n_planes>=3 ) {
+        uint32_t cand_total[3];
         xform = 0;
         uint32_t cheapest = cost_candidate(img, 0, cand_desc[0], cand_cost[0]);
+        cand_total[0] = cheapest;
         for( int32_t cand = 1; cand<3; ++cand ) {
           const uint32_t c = cost_candidate(img, cand, cand_desc[cand], cand_cost[0]);
+          cand_total[cand] = c;
           if( c<cheapest ) {
             cheapest = c;
             xform = cand;
           }
         }
+        bmf_log("[choose_plane_coding] %d planes; order-0 entropy of gradient-domain residuals\n", n_planes);
+        bmf_log("  which plane is predicted from the two others:\n");
+        for( int32_t cand = 0; cand<3; ++cand )
+          bmf_log("    plane %d     %12.1f bytes%s\n", cand, bmf_bytes(cand_total[cand]), cand==xform ? "  <<" : "");
         memcpy(plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
         best_cost = cand_cost[xform][0];
+        const uint32_t cost_fit = best_cost;
         int32_t plane_a = plane_desc[0].src_plane-xform;
         wt8 = plane_desc[xform].weight1;
         int32_t plane_b = plane_desc[1].src_plane-xform;
         wt4 = plane_desc[xform].weight0;
+        const int32_t fit4 = wt4, fit8 = wt8;
         {
           const uint8_t* plane0 = &img[0].pixels[xform];
           WeightSearch search = {this, img, plane0, plane_a, plane_b, {wt4, wt8}, best_cost};
@@ -332,6 +345,7 @@ struct BMFCodec : BMFState {
           wt4 = search.w[0];
           best_cost = search.cost;
         }
+        const int32_t des4 = wt4, des8 = wt8;
         uint8_t* px = &img[0].pixels[row_stride+n_planes+xform];
         if( px<data_end ) {
           do {
@@ -371,6 +385,19 @@ struct BMFCodec : BMFState {
         if( !keep3 ) {
           wt4 = 64;
           wt8 = 64;
+        }
+        if( bmf_verbose ) {
+          static const char*const blend[4] = {
+            "least-squares fit", "copy first ref", "copy second ref", "average 64:64",
+          };
+          const uint32_t shown[4] = {best_cost, cand_cost[xform][1], cand_cost[xform][2], cand_cost[xform][3]};
+          bmf_log("  plane %d predicted from plane %d (coded flat) and plane %d (coded as a difference):\n",
+                  xform, plane_desc[0].src_plane, plane_desc[1].src_plane);
+          for( int32_t k = 0; k<4; ++k )
+            bmf_log("    %-18s %12.1f bytes%s\n", blend[k], bmf_bytes(shown[k]), k==pred ? "  <<" : "");
+          bmf_log("    weights (%d,%d) fitted -> (%d,%d) after coordinate descent, %.1f -> %.1f bytes;"
+                  " a degenerate form wins if it comes within %.1f bytes of that\n",
+                  fit4, fit8, des4, des8, bmf_bytes(cost_fit), bmf_bytes(best_cost), bmf_bytes(slack));
         }
         plane_desc[xform].weight0 = wt4;
         plane_desc[xform].weight1 = wt8;
@@ -935,7 +962,7 @@ struct BMFCodec : BMFState {
     PlaneSearch ps = search_planes(tile_img, tile_buf, plane_cost);
     int32_t best_bits = ps.bits;
     bmf_log("  whole-image trials (against the per-plane total):\n");
-    bmf_log("    %-22s %10d bits   (p1=%d p2=%d refs=%d)\n", "planar", ps.bits, ps.n_p1, ps.n_p2, ps.n_refs);
+    bmf_log("    %-22s %12.1f bytes  (p1=%d p2=%d refs=%d)\n", "planar", bmf_bytes(ps.bits), ps.n_p1, ps.n_p2, ps.n_refs);
     {
       transpose_image(tile_img, plane_count);
       int32_t bits_d = 0;
@@ -954,9 +981,9 @@ struct BMFCodec : BMFState {
       if( pk<plane_count )
         bits_d += best_bits+1;
       const bool kept_flat = bits_d+(bits_d>>12)>=best_bits;
-      bmf_log("    %-22s %10d bits   %s", "transposed", bits_d, kept_flat ? "rejected" : "ACCEPTED");
+      bmf_log("    %-22s %12.1f bytes%s", "transposed", bmf_bytes(bits_d), kept_flat ? "" : "  <<");
       if( pk<plane_count )
-        bmf_log(" (abandoned after %d of %d plane%s)", pk, plane_count, plane_count==1 ? "" : "s");
+        bmf_log("  (abandoned after %d of %d plane%s)", pk, plane_count, plane_count==1 ? "" : "s");
       bmf_log("\n");
       if( kept_flat ) {
         transpose_image(tile_img, plane_count);
@@ -972,11 +999,11 @@ struct BMFCodec : BMFState {
         offer_to_all(try_p1);
         int32_t bits_e = transform_cost(tile_img);
         if( bits_e<=best_bits ) {
-          bmf_log("    %-22s %10d bits   ACCEPTED\n", "joint alt-P1", bits_e);
+          bmf_log("    %-22s %12.1f bytes  <<\n", "joint alt-P1", bmf_bytes(bits_e));
           best_bits = bits_e;
           cand = 0;
         } else {
-          bmf_log("    %-22s %10d bits   rejected\n", "joint alt-P1", bits_e);
+          bmf_log("    %-22s %12.1f bytes\n", "joint alt-P1", bmf_bytes(bits_e));
           restore_descriptors(saved);
           cand = 1;
         }
@@ -992,7 +1019,7 @@ struct BMFCodec : BMFState {
         } else {
           const int32_t bits_a = transform_cost(tile_img);
           if( bits_a<=best_bits ) {
-            bmf_log("    %-22s %10d bits   ACCEPTED\n", "joint alt-P2", bits_a);
+            bmf_log("    %-22s %12.1f bytes  <<\n", "joint alt-P2", bmf_bytes(bits_a));
             best_bits = bits_a;
             ps.n_p2 = bits_a;
             if( plane_count-1==ps.n_refs ) {
@@ -1001,13 +1028,13 @@ struct BMFCodec : BMFState {
               save_descriptors(saved);
               allow_refs_where_present();
               int32_t bits2 = transform_cost(tile_img);
-              bmf_log("    %-22s %10d bits   %s\n", "joint alt-P2 + refs", bits2, bits2>bits_a ? "rejected" : "ACCEPTED");
+              bmf_log("    %-22s %12.1f bytes%s\n", "joint alt-P2 + refs", bmf_bytes(bits2), bits2>bits_a ? "" : "  <<");
               if( bits2>bits_a )
                 restore_descriptors(saved);
               cand = 0;
             }
           } else {
-            bmf_log("    %-22s %10d bits   rejected\n", "joint alt-P2", bits_a);
+            bmf_log("    %-22s %12.1f bytes\n", "joint alt-P2", bmf_bytes(bits_a));
             restore_descriptors(saved);
           }
         }
@@ -1022,10 +1049,10 @@ struct BMFCodec : BMFState {
       drop_alt_model_from_all();
       int32_t bits_b = transform_cost(tile_img);
       if( bits_b>best_bits ) {
-        bmf_log("    %-22s %10d bits   rejected\n", "joint, no alt model", bits_b);
+        bmf_log("    %-22s %12.1f bytes\n", "joint, no alt model", bmf_bytes(bits_b));
         restore_descriptors(saved);
       } else {
-        bmf_log("    %-22s %10d bits   ACCEPTED\n", "joint, no alt model", bits_b);
+        bmf_log("    %-22s %12.1f bytes  <<\n", "joint, no alt model", bmf_bytes(bits_b));
         best_bits = bits_b;
         cand = 0;
       }
@@ -1035,10 +1062,10 @@ struct BMFCodec : BMFState {
         memcpy(tile_src, tile_copy, tile_img[0].data_size);
         int32_t bits_c = transform_cost(tile_img);
         if( bits_c<=best_bits ) {
-          bmf_log("    %-22s %10d bits   ACCEPTED\n", "joint, flags cleared", bits_c);
+          bmf_log("    %-22s %12.1f bytes  <<\n", "joint, flags cleared", bmf_bytes(bits_c));
           cand = 0;
         } else {
-          bmf_log("    %-22s %10d bits   rejected\n", "joint, flags cleared", bits_c);
+          bmf_log("    %-22s %12.1f bytes\n", "joint, flags cleared", bmf_bytes(bits_c));
           restore_descriptors(saved);
         }
       }
@@ -1046,9 +1073,9 @@ struct BMFCodec : BMFState {
     }
     free(stream.buf);
     free((uint8_t*)tile_img);
-    bmf_log("  choice: %s, %d bits (%.3f bpp) by the trials' own measure\n",
+    bmf_log("  choice: %s, %.1f bytes (%.3f bpp) by the trials' own measure\n",
             cand ? "planar -- each plane coded separately" : "together -- one joint transform",
-            best_bits, (double)best_bits/(double)(tile_w*tile_h));
+            bmf_bytes(best_bits), (double)best_bits/(double)(tile_w*tile_h));
     log_plane_descs("chosen descriptors");
     return cand;
   }
@@ -1213,12 +1240,17 @@ struct BMFCodec : BMFState {
   }
   PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf, uint32_t* plane_cost) {
     int32_t best_cost = 0, best_flags = 0;
+    int32_t trial_flags[8], trial_cost[8], trial_n = 0;
     auto probe_plane = [&](int32_t pl, int32_t flags) {
                          plane_desc[pl].flags = flags;
                          model_planes(tile_img, tile_buf, pl);
                          int32_t cost = 8*(stream.cur-stream.buf);
                          packer_flush();
-                         bmf_log("      %-9s %10d bits\n", desc_flags_name(flags), cost);
+                         if( bmf_verbose&&trial_n<8 ) {
+                           trial_flags[trial_n] = flags;
+                           trial_cost[trial_n] = cost;
+                           ++trial_n;
+                         }
                          return cost;
                        };
     bool won = false;
@@ -1270,7 +1302,10 @@ struct BMFCodec : BMFState {
       plane_cost[plane_i] = best_cost;
       out.n_refs += flag8!=0;
       plane_desc[plane_i].flags = (uint8_t)best_flags;
-      bmf_log("      -> %-9s %10d bits\n", desc_flags_name(best_flags), best_cost);
+      for( int32_t t = 0; t<trial_n; ++t )
+        bmf_log("      %-9s %12.1f bytes%s\n", desc_flags_name(trial_flags[t]),
+                bmf_bytes(trial_cost[t]), trial_flags[t]==best_flags ? "  <<" : "");
+      trial_n = 0;
     }
     return out;
   }
@@ -1340,6 +1375,16 @@ struct BMFCodec : BMFState {
       wc = 128;
       wb = 0;
       wa_slot = 0;
+    }
+    if( bmf_verbose ) {
+      static const char*const mix[4] = {
+        "least-squares fit", "copy channel 0", "copy channel 1", "copy channel 2",
+      };
+      const uint32_t shown[4] = {cost_lin, cost_c0, cost_c1, cost_c2};
+      bmf_log("  alpha plane predicted from the pixel's three colour bytes:\n");
+      for( int32_t k = 0; k<4; ++k )
+        bmf_log("    %-18s %12.1f bytes%s\n", mix[k], bmf_bytes(shown[k]), k==pred4 ? "  <<" : "");
+      bmf_log("    weights (%d,%d,%d) fitted, (%d,%d,%d) used\n", w.a, w.b, w.c, wa_slot, wb, wc);
     }
     plane_desc[3].weight0 = wa_slot;
     plane_desc[3].weight1 = wb;

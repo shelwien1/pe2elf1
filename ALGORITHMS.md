@@ -56,7 +56,7 @@ actual coded bits** on trial encodes:
 
 There is additionally a standalone **MED pre-filter** path: `pred_p1` *without*
 `desc_alt_model` runs LOCO-I/MED prediction as an explicit in-place transform
-(`predict_med`, `codec.inc:847`) and feeds the folded residuals to the slow model.
+(`predict_med`, `codec.inc:874`) and feeds the folded residuals to the slow model.
 
 Both encoder and decoder are generated from the same templates (`f_DEC` template
 parameter throughout), and every model statistic is updated identically on both sides
@@ -107,13 +107,13 @@ range-coded segments matters for understanding the models' entry points.)
   data_size u32),
   then an optional opaque `CodedTail` block, then the payload, then (for paletted
   images) the raw palette bytes. Auxiliary members are skipped by the reader
-  (`expand_image`, `codec.inc:675`).
+  (`expand_image`, `codec.inc:702`).
 * `depth` packs bit-depth (mask 0x3F) with `depth_grey=0x40` and `depth_palette=0x80`
-  (`codec.inc:675`). `flags` (`bmp.inc:11`) include `flags_transposed`, `flags_slow`,
+  (`codec.inc:702`). `flags` (`bmp.inc:11`) include `flags_transposed`, `flags_slow`,
   `flags_planar` (planes coded separately), `flags_descriptors`, `flags_coded`,
   `flags_tail`.
 * If the coded body is not smaller than the raw pixels, the member is stored **raw**
-  (`compress_image`, `codec.inc:498`) — the format never expands beyond raw + header.
+  (`compress_image`, `codec.inc:525`) — the format never expands beyond raw + header.
   Images with `data_size < 16` are always stored raw. A raw member writes the
   *image's own* header, not the coder's — so its flags byte never carried
   `flags_coded`/`flags_slow`/`flags_descriptors` at all (verified: a random
@@ -122,7 +122,7 @@ range-coded segments matters for understanding the models' entry points.)
   entries, a raw member is always *smaller* than its source BMP (54-byte header,
   4-byte palette entries, rows padded to 4).
 * Inside a coded payload, a **bit packer** (`Packer`, `records.inc:11`; `pack_bits` /
-  `unpack_bits`, `codec.inc:794` — LSB-first accumulation into 32-bit words) and
+  `unpack_bits`, `codec.inc:821` — LSB-first accumulation into 32-bit words) and
   the range coder share one buffer — `RangeCoder::stream`. Raw-bit fields (the 4-bit near-lossless quantizer,
   the plane descriptors) are packed first; each plane's range-coded segment is then
   bracketed by `rc_begin`/`rc_end` (`bmf_state.inc:282`). The range coder's flush
@@ -133,7 +133,7 @@ range-coded segments matters for understanding the models' entry points.)
   mode thus produces `plane_count` concatenated range-coded segments after the
   descriptor bits; interleaved ("together") mode produces one.
 * Per-plane descriptors are coded as raw bit fields (`code_plane_descs`,
-  `codec.inc:474`): 6 bits `(flags<<2)|nrefs` per plane, plus 8-bit `dc` when
+  `codec.inc:501`): 6 bits `(flags<<2)|nrefs` per plane, plus 8-bit `dc` when
   `desc_has_refs`, plus 8-bit weights (bias +64) when `nrefs≥2` (`weight0`,
   `weight1`) and `nrefs>2` (`weight2`).
 * Images are never tiled: one member covers the whole image.
@@ -158,7 +158,7 @@ range-coded segments matters for understanding the models' entry points.)
   than the flat rows.
 * `plane_count = ceil(bits/8)` ∈ 1..4. A "plane" is one byte lane of the interleaved
   pixels, extracted/re-inserted by strided copies (`deinterleave_plane` /
-  `interleave_flat`, `codec.inc:640`).
+  `interleave_flat`, `codec.inc:667`).
 * **Transposition**: the encoder may transpose the whole image (rows↔columns,
   interleaving preserved; `transpose_image`, `bmp.inc:77`) when a trial encode of
   the transposed image is cheaper (§5). The decoder transposes back as its last step.
@@ -180,7 +180,7 @@ struct PlaneDesc { uint8 nrefs;      // # reference planes (0..3); doubles as co
 ```
 
 With coding order O0, O1, O2(, O3=alpha), the forward transform
-(`code_colour_plane<0>`, `codec.inc:390`) produces, all mod 256:
+(`code_colour_plane<0>`, `codec.inc:417`) produces, all mod 256:
 
 * **O0**: raw.
 * **O1** (`nrefs==1`): `O1 − dc − O0` — plain plane difference.
@@ -188,7 +188,7 @@ With coding order O0, O1, O2(, O3=alpha), the forward transform
   the two earlier planes of the *same pixel* (rounding constant 40 ≈ 0.31·128; a
   2-weight blend whose weights sum to 128 with one weight zero — i.e. an exact copy
   of one reference — is collapsed to the single-reference form, `plane_transform`,
-  `codec.inc:827`).
+  `codec.inc:854`).
 * **O3** (`nrefs==3`, the alpha plane): `A − dc − ((w1·ch1 + w0·ch0 + w2·ch2 + 63) >> 7)`
   — a 3-weight mix of the pixel's three colour bytes.
 
@@ -204,6 +204,8 @@ the inter-plane prediction scaled to its internal 16× fixed point (§8.2).
 
 ### How the transform is chosen (encoder heuristic, `choose_plane_coding`, `codec.inc:272`)
 
+Every estimate in this subsection is printed by `bmf c -v` (§5.1).
+
 All heuristic decisions use **order-0 empirical entropy** of residual histograms:
 `estimate_cost` (`planes.inc:5`) computes `Σ nᵢ·log2(N/nᵢ)` bits exactly (no log
 table; the even/odd accumulator split is only an ILP unrolling).
@@ -211,7 +213,7 @@ table; the even/odd accumulator split is only an ILP unrolling).
 For ≥3 planes:
 
 1. Three candidates — which physical channel is the 2-reference "chroma" plane — are
-   costed by `cost_candidate` (`codec.inc:548`). It works in the **gradient domain**:
+   costed by `cost_candidate` (`codec.inc:575`). It works in the **gradient domain**:
    per pixel and per plane, `d = NW + cur − N − W` (a second difference, invariant to
    per-plane DC and to whatever spatial predictor is used later). One pass
    accumulates six 1024-bin histograms (each ref plane flat, ref difference,
@@ -223,7 +225,7 @@ For ≥3 planes:
    copy-refA, copy-refB, average) entropies.
 2. The winning candidate's weights are refined by a greedy 2-axis coordinate descent
    (`WeightSearch`, `codec.inc:12`; step window 4, both directions) on the full
-   histogram cost `weight_pair_cost` (`codec.inc:1195`).
+   histogram cost `weight_pair_cost` (`codec.inc:1222`).
 3. A slack of `min(cost>>7, kSlackMax=0x4000)` (~0.78 %) lets degenerate predictors
    (copy-A / copy-B / 64:64 average) replace the general blend when nearly as good —
    cheaper to model and to store.
@@ -234,11 +236,11 @@ For ≥3 planes:
    O0 gets no dc.
 5. For 32-bit images, the alpha plane gets its own **3-variable closed-form LS fit**
    over 2×2-quad second differences (`fit_alpha_weights`, `planes.inc:156`) with the
-   same one-hot simplification slack (`choose_alpha_plane`, `codec.inc:1277`).
+   same one-hot simplification slack (`choose_alpha_plane`, `codec.inc:1312`).
 
 ---
 
-## 5. Encoder mode search (`search_filter`, `codec.inc:905`)
+## 5. Encoder mode search (`search_filter`, `codec.inc:932`)
 
 Everything past the heuristic layer is decided by **real trial encoding**: run the
 actual model + range coder over the image, count `8·(stream.cur−stream.buf)` bits,
@@ -249,7 +251,7 @@ counter updates in the alt-P2 bank cascade (§10.4; alt-P1 and the slow model ar
 unaffected) — search costs are therefore measured on a slightly cheaper model
 variant than the final encode.
 
-1. **Per-plane search** (`search_planes`, `codec.inc:1214`), in coding order. Trial
+1. **Per-plane search** (`search_planes`, `codec.inc:1241`), in coding order. Trial
    flag sets (`try_*`, `planes.inc:185`; as descriptor flag values: `mode0`=0,
    `p1`=5, `p2`=6, `refs`=8, `refs_p1`=13, `refs_p2`=14): `mode0` (raw plane into
    the slow model), `p1 = pred_p1|alt`, `p2 = pred_p2|alt`, and for non-first
@@ -260,13 +262,13 @@ variant than the final encode.
    abort when a plane exceeds its normal cost by >1/256; adopted only when the total
    wins by >1/4096 — then the real image is transposed and `flags_transposed` set.
 3. **Mode unification trials**, each a full re-encode via `transform_cost`
-   (`codec.inc:1083`): for >2 planes, force P1 on all planes and force P2 on all
+   (`codec.inc:1110`): for >2 planes, force P1 on all planes and force P2 on all
    planes (optionally re-adding refs via `allow_refs_where_present`); separately,
    for >1 plane when no plane chose P2: drop `desc_alt_model` everywhere (explicit
    MED + slow model) and clear all flags (plain interleaved slow model). Any winner
    selects **interleaved** ("together") coding.
 4. Return value: 1 → **planar** mode (each plane its own transform + model + coded
-   segment), 0 → **interleaved** mode (`transform_planes`, `codec.inc:1090`: apply all
+   segment), 0 → **interleaved** mode (`transform_planes`, `codec.inc:1117`: apply all
    transforms in place reading from a pristine copy, then one model pass over the
    interleaved bytes — either one slow-model pass, or the joint multi-plane alt-P1 /
    alt-P2 coders). The trade-off being searched: interleaved coding lets the model
@@ -275,68 +277,94 @@ variant than the final encode.
    spatial structure dominates the inter-channel correlation.
 
 Images of depth ≤ 4 bpp skip the search entirely and go straight to a single
-slow-model pass over the packed data (`code_image_body`, `codec.inc:429`).
+slow-model pass over the packed data (`code_image_body`, `codec.inc:456`).
 
 ### 5.1 Watching the search: `-v`
 
-`bmf c -v in.bmp out` prints every trial's measured bit count, which trial won each
-plane, which whole-image trial was adopted, and the descriptor table the search
-settles on; `bmf d -v in out.bmp` prints the descriptors it reads back off the
-wire. Reporting is print-only — it never touches the coded stream, and without
-`-v` not a byte of output changes.
+`bmf c -v in.bmp out` prints every cost the encoder measures or estimates — the
+colour-transform candidates of §4, then each per-plane coding trial, then each
+whole-image trial — with `<<` on the option that was taken; `bmf d -v in out.bmp`
+prints the descriptors it reads back off the wire. All costs are reported in
+bytes with one decimal: the encoder works in bits internally, and the fraction is
+what is left after dividing by 8. Reporting is print-only — it never touches the
+coded stream, and without `-v` not a byte of output changes.
 
 ```
 $ bmf c -v testfiles/t24.bmp /tmp/t24.bmf
 File testfiles/t24.bmp, image 320x240x24, size - 230400:
+[choose_plane_coding] 3 planes; order-0 entropy of gradient-domain residuals
+  which plane is predicted from the two others:
+    plane 0          81848.8 bytes  <<
+    plane 1          81848.8 bytes
+    plane 2          82028.4 bytes
+  plane 0 predicted from plane 2 (coded flat) and plane 1 (coded as a difference):
+    least-squares fit       65464.0 bytes
+    copy first ref          12405.2 bytes  <<
+    copy second ref         12532.5 bytes
+    average 64:64           15649.8 bytes
+    weights (0,0) fitted -> (-5,-5) after coordinate descent, 65863.1 -> 65464.0 bytes; a degenerate form wins if it comes within 511.4 bytes of that
 [search_filter] 320x240, 3 planes, 24 bits/pixel raw
   per-plane trials (whole-image tile, each plane coded on its own):
     slot 0 = plane 2:
-      slow          470048 bits
-      p1            424416 bits
-      p2            430112 bits
-      -> p1            424416 bits
+      slow           58756.0 bytes
+      p1             53052.0 bytes  <<
+      p2             53764.0 bytes
     slot 1 = plane 1:
-      slow          441856 bits
-      p1            422368 bits
-      p2            425184 bits
-      refs+slow       3808 bits
-      refs+p1          960 bits
-      refs+p2        10624 bits
-      -> refs+p1          960 bits
+      slow           55232.0 bytes
+      p1             52796.0 bytes
+      p2             53148.0 bytes
+      refs+slow        476.0 bytes
+      refs+p1          120.0 bytes  <<
+      refs+p2         1328.0 bytes
     slot 2 = plane 0:
-      slow          421120 bits
-      p1            446432 bits
-      refs+slow       5792 bits
-      refs+p1         7168 bits
-      -> refs+slow       5792 bits
+      slow           52640.0 bytes
+      p1             55804.0 bytes
+      refs+slow        724.0 bytes  <<
+      refs+p1          896.0 bytes
   whole-image trials (against the per-plane total):
-    planar                     431168 bits   (p1=2 p2=0 refs=2)
-    transposed                 852289 bits   rejected (abandoned after 1 of 3 planes)
-    joint alt-P1               436992 bits   rejected
-    joint, no alt model        463712 bits   rejected
-    joint, flags cleared      1312000 bits   rejected
-  choice: planar -- each plane coded separately, 431168 bits (5.614 bpp) by the trials' own measure
+    planar                      53896.0 bytes  (p1=2 p2=0 refs=2)
+    transposed                 106536.1 bytes  (abandoned after 1 of 3 planes)
+    joint alt-P1                54624.0 bytes
+    joint, no alt model         57964.0 bytes
+    joint, flags cleared       164000.0 bytes
+  choice: planar -- each plane coded separately, 53896.0 bytes (5.614 bpp) by the trials' own measure
 [chosen descriptors]
   plane 0: slot 2  refs+slow dc=42  w=(128,0)
   plane 1: slot 1  refs+p1   dc=128
   plane 2: slot 0  p1
+  coded body 53904 bytes vs 230400 raw: shipping the coded member
   actual coded size:  5.615 bpp
 ```
 
+Two different measures are on show. The `[choose_plane_coding]` block is
+**estimated**: order-0 entropy of gradient-domain residual histograms, never a
+real encode, which is why its numbers bear no relation to the coded size. The
+`[search_filter]` block is **measured**: every line is a real model + range-coder
+pass, counted as `8·(stream.cur−stream.buf)`.
+
 The listing shows the pruning of step 1 directly: plane 0 (coding slot 2) never
 gets a `p2` trial, because `p1` did not come within 1/32 of the best so far and no
-earlier plane had chosen P2. It also shows how cheap a referenced plane is once
-its reference is coded — 960 bits against 422 368 for the same plane standalone —
-and that the search's own 431 168 bits (5.614 bpp) is within a thousandth of the
-5.615 bpp actually shipped, since at `-Q9` the "tile" is the whole image and the
-final encode repeats the winning trial almost exactly. The residual difference is
-the descriptor bits plus the alt-P2 counter updates that trials suppress.
+earlier plane had chosen P2. It shows how cheap a referenced plane is once its
+reference is coded — 120 bytes against 52 796 for the same plane standalone — and
+that the search's own 53 896.0 bytes is within a thousandth of the 5.615 bpp
+actually shipped, since at `-Q9` the "tile" is the whole image and the final
+encode repeats the winning trial almost exactly. The residual difference is the
+descriptor bits plus the alt-P2 counter updates that trials suppress.
+
+It also makes §4's slack rule concrete. Here the least-squares fit lands on
+`(0,0)` — it predicts nothing, so its 65 464 bytes is five times what simply
+copying a reference costs, and `copy first ref` wins outright; that is where the
+`w=(128,0)` in the descriptor dump comes from. On `x_ep` the same block reports
+`weights (21,46) fitted -> (19,49) after coordinate descent` and the fit beats
+every degenerate form, which is where that image's `w=(19,49)` comes from. A
+32-bit image adds an `alpha plane predicted from the pixel's three colour bytes`
+block with the same four options.
 
 Trials that do not run are simply absent: `joint alt-P2` appears only when some
 plane chose P2 (or joint alt-P1 won), `joint, no alt model` and `joint, flags
-cleared` only when *no* plane chose P2, and nothing at all is printed for a
-≤ 4 bpp image beyond a line saying the short path was taken. A member whose
-trials lose to storing the pixels raw says so:
+cleared` only when *no* plane chose P2, and a ≤ 4 bpp image prints only a line
+saying the short path was taken. A member whose trials lose to storing the pixels
+raw says so:
 
 ```
   coded body 9424 bytes vs 9216 raw: SHIPPING RAW, the coding lost
@@ -353,7 +381,7 @@ detector** applied as a separate pass:
   `max(W,N)` if `NW ≤ min(W,N)`, else `W+N−NW`.
 * Residuals are **zig-zag folded** to unsigned codes 0,−1,+1,−2,+2,… → 0,1,2,3,4,…
   (`med_fold_table`/`med_unfold`planes.inc:45`.inc:369`).
-* `predict_med` (`codec.inc:847`) runs in place, **back to front**, so it reads
+* `predict_med` (`codec.inc:874`) runs in place, **back to front**, so it reads
   original neighbour values while overwriting; row 0 uses left-DPCM, column 0 uses
   up-DPCM. `unpredict_med` (`planes.inc:77`) is the forward-order mirror over
   reconstructed values.
@@ -378,7 +406,7 @@ it always computes `pred + unfold[code]`.
 ## 7. Shared adaptive-statistics primitives
 
 All models are built from a small set of counter structures. Common idioms: counts
-are halved with **ceiling rounding** (`halve_up(x) = x−(x>>1)`, `bmf_util.inc:104` — a
+are halved with **ceiling rounding** (`halve_up(x) = x−(x>>1)`, `bmf_util.inc:109` — a
 nonzero count never dies), and rescale thresholds grow with use, so every context
 anneals from fast adaptation toward long memory.
 
@@ -989,9 +1017,9 @@ an independent BMP decoder rather than BMF's own reader.
 
 ### 13.2 Cache prefetching
 
-`bmf_prefetch<hint>` (`bmf_util.inc:62`) wraps `_mm_prefetch`; the hint names are
+`bmf_prefetch<hint>` (`bmf_util.inc:67`) wraps `_mm_prefetch`; the hint names are
 `pf_all`/`pf_l2`/`pf_l3`/`pf_once` = `PREFETCHT0`/`T1`/`T2`/`NTA`
-(`bmf_util.inc:57`). There is no write-prefetch wrapper: `PREFETCHW` needs the
+(`bmf_util.inc:62`). There is no write-prefetch wrapper: `PREFETCHW` needs the
 PRFCHW feature, which `-march=haswell` does not include, so `_m_prefetchw` would
 compile down to `PREFETCHT0` anyway.
 

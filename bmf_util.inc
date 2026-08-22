@@ -16,6 +16,11 @@ enum BmfExit {
 // Reporting only prints; it never touches the coded stream.
 int32_t bmf_verbose = 0;
 
+// Every cost the encoder measures or estimates is in bits; -v reports bytes.
+double bmf_bytes(int64_t bits) {
+  return (double)bits/8.0;
+}
+
 PRINTFLIKE(1, 2)
 void bmf_log(const char* fmt, ...) {
   if( !bmf_verbose )
