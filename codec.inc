@@ -499,6 +499,30 @@ struct BMFCodec : BMFState {
     return (int32_t)(stream.cur-stream.buf);
   }
 
+  // One pass over the packed data with the direct context model, which wants a
+  // byte per pixel.  The plane goes out unpacked and comes back packed, so the
+  // representation is invisible outside this function and the flag that records
+  // it.
+  int32_t code_packed_ctx_once(BmfImage* p_i) {
+    const int32_t w = p_i[0].width, h = p_i[0].height;
+    uint8_t*const flat = (uint8_t*)bmf_new((size_t)w*h);
+    unpack_rows(p_i, flat);
+    stream_open(p_i[0].data_size);
+    plane_predictor = pred_ctx;
+    plane_alt_model = 1;
+    alphabet_reduced = 0;
+    BmfImage hdr;
+    hdr.header_from(p_i);
+    hdr.flags = 0;
+    hdr.depth = depth_one_plane;
+    hdr.stride = (uint16_t)w;
+    hdr.data_size = (uint32_t)w*(uint32_t)h;
+    model_plane(&hdr, flat, flat);
+    packer_flush();
+    free(flat);
+    return (int32_t)(stream.cur-stream.buf);
+  }
+
   // The short path's candidate generators, in the order the long path applies
   // its own: geometry first, palette order last, so the decoder undoes them in
   // one reverse sweep for both paths.
@@ -550,6 +574,21 @@ struct BMFCodec : BMFState {
       }
     }
     free(snap);
+    // The direct context model, on the plane unpacked to a byte per pixel.  A
+    // small alphabet is exactly what 1, 2 and 4 bpp data is.
+    if( packed_rows_exact(p_i) ) {
+      const int32_t ctx_len = code_packed_ctx_once(p_i);
+      free(stream.buf);
+      const bool win = ctx_len<best_len;
+      bmf_log("    %-22s %12.1f bytes%s\n", "ctx model, unpacked", (double)ctx_len, win ? "  <<" : "");
+      if( win ) {
+        code_packed_ctx_once(p_i);
+        p_i[0]._pad8[0] |= pad_ctx_packed;
+        hdr.header_from(p_i);
+        hdr.flags = flags_coded|flags_slow|p_i[0].flags;
+        return;
+      }
+    }
     code_packed_once(p_i);
     hdr.header_from(p_i);
     hdr.flags = flags_coded|flags_slow|p_i[0].flags;
@@ -860,7 +899,26 @@ struct BMFCodec : BMFState {
     bool ok = io[0].read(stream.buf, hdr.data_size)==want;
     if( ok ) {
       if( (img_at[0].depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
-        bmf_log("[decoding: short path] no descriptors in the stream, slow model, one plane\n");
+        bmf_log("[decoding: short path] no descriptors in the stream, one plane\n");
+        if( hdr._pad8[0]&pad_ctx_packed ) {
+          const int32_t w = img_at[0].width, h = img_at[0].height;
+          uint8_t*const flat = (uint8_t*)bmf_new((size_t)w*h);
+          plane_predictor = pred_ctx;
+          plane_alt_model = 1;
+          BmfImage flat_hdr;
+          flat_hdr.header_from(img_at);
+          flat_hdr.flags = 0;
+          flat_hdr.depth = depth_one_plane;
+          flat_hdr.stride = (uint16_t)w;
+          flat_hdr.data_size = (uint32_t)w*(uint32_t)h;
+          unmodel_plane(&flat_hdr, flat);
+          pack_rows(img_at, flat);
+          free(flat);
+          ok = stream.buf+hdr.data_size==stream.cur;
+          free(stream.buf);
+          stream.buf = nullptr;
+          return ok;
+        }
         plane_predictor = 0;
         plane_alt_model = 0;
         unmodel_plane(img_at, img_at[0].pixels);

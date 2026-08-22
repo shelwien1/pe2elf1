@@ -23,14 +23,16 @@
 struct CtxModel {
   // Causal neighbours, in the order the entropy sweep found useful: W, N, NW,
   // NE, WW, NN, NEE.  Anything off the raster reads as index 0.
-  static const int32_t kNeighbours = 7;
+  static const int32_t kMaxNeighbours = 24;
+  int32_t neighbours;
+  int32_t nb_for_bits[5];
   static const int32_t kTableBits = 20;
   // A four-neighbour table sits under the long one, direct-indexed and never
   // evicted.  A fresh long bucket is seeded from it rather than from an even
   // coin: a context here sees tens of samples, so where it starts matters as
   // much as how fast it moves.  Both tables are updated on every sample.
   static const int32_t kShortNb = 4;
-  static const int32_t kShortSize = 1<<(4*kShortNb);
+  int32_t short_size;
   static const int32_t kTableSize = 1<<kTableBits;
   // A context here sees tens of samples, not thousands, so a fixed adaptation
   // rate is the wrong shape: it is far too slow while a bucket is new.  Each
@@ -72,6 +74,13 @@ struct CtxModel {
   void Init() {
     for( int32_t k = 0; k<=kCountCap; ++k )
       recip[k] = 65536/(k+2);
+    neighbours = 0;
+    short_size = 0;
+    nb_for_bits[0] = 0;
+    nb_for_bits[1] = 24;
+    nb_for_bits[2] = 10;
+    nb_for_bits[3] = 7;
+    nb_for_bits[4] = 7;
     alpha = 0;
     bits = 0;
     nodes = 0;
@@ -87,6 +96,13 @@ struct CtxModel {
     while( (1<<bits)<alpha )
       ++bits;
     nodes = (1<<bits)-1;
+    // The neighbourhood grows as the alphabet shrinks: a binary plane can
+    // afford far more neighbours per context than a sixteen-value one, and the
+    // useful count is not simply "as many as the key can hold" -- eight
+    // neighbours lose to seven at four and eight values, because the extra
+    // contexts cost more to learn than they save.
+    neighbours = nb_for_bits[bits];
+    short_size = 1<<(bits*kShortNb);
     for( int32_t v = 0; v<256; ++v )
       to_idx[v] = 0;
     for( int32_t k = 0; k<alpha; ++k )
@@ -97,8 +113,8 @@ struct CtxModel {
     ctr = (uint32_t*)bmf_new((size_t)kTableSize*(size_t)nodes*sizeof(uint32_t));
     tag = (uint32_t*)bmf_new((size_t)kTableSize*sizeof(uint32_t));
     memset(tag, 0, (size_t)kTableSize*sizeof(uint32_t));
-    ctr_short = (uint32_t*)bmf_new((size_t)kShortSize*(size_t)nodes*sizeof(uint32_t));
-    for( size_t k = 0; k<(size_t)kShortSize*(size_t)nodes; ++k )
+    ctr_short = (uint32_t*)bmf_new((size_t)short_size*(size_t)nodes*sizeof(uint32_t));
+    for( size_t k = 0; k<(size_t)short_size*(size_t)nodes; ++k )
       ctr_short[k] = 32768u<<16;
   }
 
@@ -113,13 +129,13 @@ struct CtxModel {
 
   // The context key: the neighbours' alphabet indices packed four bits apiece.
   uint32_t context_key(const uint8_t* px, int32_t w, int32_t h, int32_t x, int32_t y) const {
-    static const int8_t dx[kNeighbours] = {-1, 0, -1, 1, -2, 0, 2};
-    static const int8_t dy[kNeighbours] = {0, -1, -1, -1, 0, -2, -1};
+    static const int8_t dx[kMaxNeighbours] = {-1, 0, -1, 1, -2, 0, 2, -2, -1, 1, -3, 0, 2, -2, 3, -3, -4, 0, 1, -1, 3, -3, 4, -4};
+    static const int8_t dy[kMaxNeighbours] = {0, -1, -1, -1, 0, -2, -1, -1, -2, -2, 0, -3, -2, -2, -1, -1, 0, -4, -3, -3, -2, -2, -1, -1};
     uint32_t key = 0;
-    for( int32_t k = 0; k<kNeighbours; ++k ) {
+    for( int32_t k = 0; k<neighbours; ++k ) {
       const int32_t nx = x+dx[k], ny = y+dy[k];
       const uint32_t v = (nx<0||ny<0||nx>=w||ny>=h) ? 0u : to_idx[px[(size_t)ny*w+nx]];
-      key |= v<<(4*k);
+      key |= v<<(bits*k);
     }
     return key;
   }
@@ -203,7 +219,7 @@ struct CtxModel {
       uint8_t*const row = px+(size_t)y*w;
       for( int32_t x = 0; x<w; ++x ) {
         const uint32_t key = context_key(px, w, h, x, y);
-        uint32_t*const srow = &ctr_short[(size_t)(key&(kShortSize-1))*(size_t)nodes];
+        uint32_t*const srow = &ctr_short[(size_t)(key&(uint32_t)(short_size-1))*(size_t)nodes];
         uint32_t*const cell = bucket(key, srow);
         if constexpr( f_DEC )
           row[x] = to_val[code_symbol<1>(cell, srow, 0)];

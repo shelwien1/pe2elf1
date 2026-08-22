@@ -25,6 +25,7 @@ enum : uint8_t {
   pad_ycocg = 0x01,
   pad_flip_x = 0x02,
   pad_flip_y = 0x04,
+  pad_ctx_packed = 0x08,
 };
 
 uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {
@@ -142,6 +143,48 @@ bool packed_bits_ok(const BmfImage* img) {
   const int32_t bits = img[0].depth&depth_bits;
   return !(img[0].flags&flags_packed)||bits==1||bits==2||bits==4;
 }
+
+// Sub-byte-packed rows to one byte per pixel and back.  Only offered when the
+// row divides evenly into bytes: otherwise the last byte of each row carries
+// padding bits that the BMP writer has to reproduce and that a round trip
+// through an unpacked plane would lose.
+bool packed_rows_exact(const BmfImage* img) {
+  if( !(img[0].flags&flags_packed)||!packed_bits_ok(img) )
+    return false;
+  const int32_t bits = img[0].depth&depth_bits;
+  return img[0].width%(8/bits)==0;
+}
+
+void unpack_rows(const BmfImage* img, uint8_t* dst) {
+  const int32_t bits = img[0].depth&depth_bits;
+  const int32_t per = 8/bits;
+  const uint32_t mask = (1u<<bits)-1;
+  const int32_t w = img[0].width, h = img[0].height;
+  for( int32_t y = 0; y<h; ++y ) {
+    const uint8_t*const row = img[0].pixels+(uint32_t)y*img[0].stride;
+    uint8_t*const out = dst+(size_t)y*w;
+    for( int32_t x = 0; x<w; ++x )
+      out[x] = (uint8_t)((row[x/per]>>(8-bits*(x%per+1)))&mask);
+  }
+}
+
+void pack_rows(BmfImage* img, const uint8_t* src) {
+  const int32_t bits = img[0].depth&depth_bits;
+  const int32_t per = 8/bits;
+  const uint32_t mask = (1u<<bits)-1;
+  const int32_t w = img[0].width, h = img[0].height;
+  for( int32_t y = 0; y<h; ++y ) {
+    uint8_t*const row = img[0].pixels+(uint32_t)y*img[0].stride;
+    const uint8_t*const in = src+(size_t)y*w;
+    for( int32_t x = 0; x<w; x += per ) {
+      uint32_t byte = 0;
+      for( int32_t k = 0; k<per; ++k )
+        byte |= (in[x+k]&mask)<<(8-bits*(k+1));
+      row[x/per] = (uint8_t)byte;
+    }
+  }
+}
+
 
 // Mirror about the horizontal axis: whole rows swap, so the packed and
 // byte-interleaved cases are the same code and row padding rides along.

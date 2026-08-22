@@ -566,12 +566,33 @@ other three.
 
 | image | values | shipped before | with the mode | |
 |---|---|---|---|---|
-| `x_ci` | 4 | 628 116 | 573 728 | **−8.7 %** |
-| `x_ai` | 8 | 144 540 | 141 980 | **−1.8 %** |
+| `x_ci` | 4 | 628 116 | 570 564 | **−9.2 %** |
+| `DLRAW` | 16, 4 bpp | 222 494 | 209 874 | **−5.7 %** |
+| `x_ai` | 8 | 144 540 | 141 972 | **−1.8 %** |
+| `f05_200` | 2, 1 bpp | 21 322 | 21 198 | **−0.6 %** |
+| `t1` | 2, 1 bpp | 2 170 | 2 170 | refused, 2 588 |
 
-That is **−2.9 % of the whole corpus** from one mode, and it makes the codec
-*faster* to decode on those files, not slower, because it replaces the slow
-model's rank-and-escape machinery with one hash and a few binary decisions.
+That is **−3.7 % of the whole corpus** from one mode. Sub-byte-packed planes get
+it too: the plane is unpacked to a byte per pixel, coded, and packed back, which
+is invisible outside the one function and the header bit that records it. It is
+only offered when the row divides evenly into bytes — otherwise the last byte of
+each row carries padding the BMP writer has to reproduce and a round trip
+through an unpacked plane would lose it.
+
+**The neighbourhood has to scale with the alphabet [measured].** The key packs
+`bits` per neighbour, so how many fit is bounded, and the useful count is
+bounded well below that:
+
+| values | neighbours | why |
+|---|---|---|
+| 2 | 24 | `f05_200` 21 172 at 24 against 21 476 at 20 and 22 512 at 12 |
+| 4 | 10 | `x_ci` 570 540 at 10, 572 888 at 8, 579 132 at 12 — 4¹⁰ is the table |
+| 8 | 7 | `x_ai` 141 948 at 7, 142 132 at 8, 142 412 at 10 |
+| 16 | 7 | `DLRAW` 209 824 at 7, 210 048 at 8; nine would overflow the 32-bit key |
+
+The turning points are not the key's width. At four values the table saturates
+(4¹⁰ contexts against 2²⁰ buckets) and going further costs collisions; at eight
+and sixteen the learning cost turns it around first.
 
 Three things mattered, in order of how much:
 
@@ -585,19 +606,21 @@ Three things mattered, in order of how much:
 2. **Count-adaptive counters.** A fixed 1/32 rate leaves `x_ci` at 602 560 and
    `x_ai` at 205 844; per-node update counts adapting at 1/(*n*+2) take those to
    581 800 and 172 248. A context here sees tens of samples, not thousands.
-3. **Seven neighbours, not eight.** Eight is better as a static entropy and
-   worse as an adaptive code — `x_ci` 589 780 against 584 588, `x_ai` 181 708
-   against 169 780 — because the extra contexts cost more to learn than they
-   save. The static sweep alone would have chosen wrong.
+3. **The static entropy sweep sizes it wrong.** Eight neighbours are better than
+   seven as a static entropy on both files and worse as an adaptive code before
+   the blend — `x_ci` 589 780 against 584 588, `x_ai` 181 708 against 169 780 —
+   because the extra contexts cost more to learn than they save. After the blend
+   the answer moves again, and differently per alphabet (table above). Size this
+   by trial encodes, not by an entropy.
 
 **The population, and where it stops.** The mode wins where the plane is a small
 set of labels — a posterised or dithered scan, a map, a screenshot. It loses
 outright on continuous tone, which is why it is a trial and why it is refused
 above sixteen values: the context key holds four bits per neighbour, and beyond
-that the number of contexts outruns any table. `t8g` and `t8p` (256 values) never
-see it; `DLRAW` (4 bpp) does not either, because the ≤ 4 bpp short path codes
-packed rows and never reaches the per-plane search. Unpacking a 4-bit plane to
-offer it there is the obvious next step and is not done.
+that the number of contexts outruns any table. `t8g` and `t8p` (256 values) never see it. `t1`
+sees it and refuses: 2 588 against the 2 170 the slow model's run and match
+machinery gets on the same bilevel data, which stays the better tool for line
+art even at 24 neighbours.
 
 **Still expected [expected] for the rest of this section.** Hashed contexts for
 the *slow* model's own tables, joint contexts over two planes' co-located
