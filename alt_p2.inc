@@ -67,7 +67,7 @@ struct P2Freq {
     else
       cx[0].rc.encode(cum, tot_1, tot);
     uint16_t f_before = slot[0];
-    if( *slot>0x4000u ) {
+    if( slot[0]>0x4000u ) {
       halve_counts(f, 3);
       st = step;
       if( st<=256 ) {
@@ -658,7 +658,7 @@ struct AltP2Block {
         if constexpr( f_DEC ) {
           out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair)]);
         } else {
-          code0 = fold_or_refuse(out, *p, (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
+          code0 = fold_or_refuse(out, p[0], (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
           fr.encode_symbol(cx, ctx_pair, code0);
           ++p;
         }

@@ -181,7 +181,7 @@ struct AltP1Block {
             const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1]);
             q[0] = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
           } else {
-            const int32_t code = fold_or_refuse(q, *src, (uint8_t)pred, fold, fold_hi, unfold);
+            const int32_t code = fold_or_refuse(q, src[0], (uint8_t)pred, fold, fold_hi, unfold);
             alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code);
             ++src;
           }
