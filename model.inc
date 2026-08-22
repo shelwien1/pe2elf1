@@ -1296,36 +1296,3 @@ struct ModelBlock {
   PixRec row_store[5][kMaxWidth+kRowMargin+kRowTail];
   BMFState* cx;
 };
-
-
-
-
-
-enum : uint8_t {
-  depth_bits = 0x3F,
-  depth_grey = 0x40,
-  depth_palette = 0x80,
-  depth_one_plane = depth_grey|8,
-};
-
-enum : uint8_t {
-  flags_transposed = 0x02,
-  flags_slow = 0x04,
-  flags_planar = 0x08,
-  flags_descriptors = 0x10,
-  flags_coded = 0x20,
-  flags_packed = 0x40,
-  flags_tail = 0x80,
-};
-
-uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {
-  return (uint32_t)r<<16|(uint32_t)g<<8|b;
-}
-
-void put_u32(uint8_t* at, uint32_t v) {
-  memcpy(at, &v, sizeof v);
-}
-
-uint32_t bmp_grey_entry(uint8_t level) {
-  return bmp_palette_entry(level, level, level);
-}
