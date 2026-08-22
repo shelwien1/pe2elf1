@@ -313,7 +313,7 @@ it always computes `pred + unfold[code]`.
 ## 7. Shared adaptive-statistics primitives
 
 All models are built from a small set of counter structures. Common idioms: counts
-are halved with **ceiling rounding** (`halve_up(x) = x−(x>>1)`, `bmf_util.inc:66` — a
+are halved with **ceiling rounding** (`halve_up(x) = x−(x>>1)`, `bmf_util.inc:90` — a
 nonzero count never dies), and rescale thresholds grow with use, so every context
 anneals from fast adaptation toward long memory.
 
@@ -920,6 +920,58 @@ an independent BMP decoder rather than BMF's own reader.
   the one early return that did not clean up. The process calls `bmf_fatal`
   immediately afterwards, so nothing observable changed; ASan now reports no leaks
   across ~1000 malformed and well-formed fuzz inputs.
+
+### 13.2 Cache prefetching
+
+`bmf_prefetch<hint>` (`bmf_util.inc:48`) wraps `_mm_prefetch`; the hint names are
+`pf_all`/`pf_l2`/`pf_l3`/`pf_once` = `PREFETCHT0`/`T1`/`T2`/`NTA`
+(`bmf_util.inc:43`). There is no write-prefetch wrapper: `PREFETCHW` needs the
+PRFCHW feature, which `-march=haswell` does not include, so `_m_prefetchw` would
+compile down to `PREFETCHT0` anyway.
+
+The only prefetch sites are in `code_banks` (`alt_p2.inc:568`, `alt_p2.inc:585`),
+covering the mirror counter and the 11 direct/mirror/rotated triples of the
+alt-P2 bias cascade — 34 lines of a 640 KB `p2_ctr` whose addresses are all
+derived from `ctxw` before any of them is touched. They are worth having, and
+the hint matters (interleaved A/B, min of 4 rounds, compress+decompress):
+
+| variant | `x_ep` (alt-P2 ×4) | `t8g` (alt-P2) |
+|---|---|---|
+| no prefetch | 13 766 ms | 505 ms |
+| `pf_l3` (`PREFETCHT2`) | 12 549 ms | 483 ms |
+| `pf_all` (`PREFETCHT0`) | **12 219 ms** | **463 ms** |
+
+`PREFETCHT0` over nothing is −6.7 %/−8.3 %; over `PREFETCHT2` it is −2.6 %/−3.3 %.
+`PREFETCHNTA` measured level with `T0`, `T1` between `T0` and `T2`. That ordering
+is what the access pattern predicts: these counters are read *and written* within
+a few hundred instructions and are re-touched on later pixels, so they want to
+land in L1 (`T0`) rather than L2/L3 (`T1`/`T2`); `NTA` also lands in L1 on Intel,
+but its streaming eviction policy is wrong for data this hot. The original build
+used `__builtin_prefetch(p, 0, 1)`, which gcc/clang map to `PREFETCHT2` — the
+weakest of the four here.
+
+**Sites that were tried and dropped.** Cachegrind (`--D1=32K --LL=1M`, so "LL
+miss" ≈ misses past L2) says where the deep misses are, and it is not where the
+D1 misses are:
+
+| function | D1 read misses | past-L2 read misses |
+|---|---|---|
+| `walk_bank_bits` (`t8g`) | 6 348 269 (39 %) | 28 097 (3.8 %) |
+| `AltP1Block::update_selector` (`t8g`) | 1 328 118 (8.2 %) | 520 913 (70 %) |
+| `ModelBlock::open_pixel` (`x_ci`) | 18 947 678 (27 %) | 6 756 736 (54 %) |
+
+Four candidate sites were implemented and A/B'd against this build: prefetching
+alt-P1's nine `update_selector` counter triples (10 MB table), alt-P2's five
+`bump_bank` frequency bins, `open_pixel`'s `sym_ctr` line (1 MB table, read only
+after the `context_ids` chain), and software-pipelining the 34-line burst above
+so it stops overrunning the core's line-fill buffers. Every one of them landed
+inside the ±1.5 % run-to-run noise floor, in both directions, so none were kept.
+Two reasons, both visible in the table: the bulk of the D1 misses are L2 hits
+that out-of-order execution already covers, and the misses that do go deep sit on
+serial dependency chains (context → table → next context) where the address is
+not known any earlier. `code_banks` is the one place in the codec with a batch of
+*independent* scattered addresses known ahead of use — which is presumably why it
+is the one place the original author prefetched.
 
 ---
 

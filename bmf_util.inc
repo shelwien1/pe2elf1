@@ -25,6 +25,30 @@ void bmf_fatal(int32_t Code, ...) {
   exit(Code);
 }
 
+// Cache prefetch.  A hint and nothing more: it never faults (an address the
+// process does not own is simply dropped), never changes a computed value, and
+// can always be deleted without altering the coded stream.  The hint chooses
+// which cache levels the line is pulled into:
+//
+//   pf_all   PREFETCHT0   -- L1+L2+L3; the line is about to be read
+//   pf_l2    PREFETCHT1   -- L2+L3 only, leaving L1 for hotter data
+//   pf_l3    PREFETCHT2   -- L3 only (Intel treats T2 much like T1)
+//   pf_once  PREFETCHNTA  -- streamed data; minimise cache pollution
+//
+// There is no write prefetch here: PREFETCHW needs the PRFCHW feature, which
+// this build's -march=haswell target does not include, so _m_prefetchw would
+// silently compile down to PREFETCHT0 anyway.
+// (`auto`, because the hint is a plain int in clang's <xmmintrin.h> and an
+// `enum _mm_hint` in gcc's.)
+constexpr auto pf_all = _MM_HINT_T0;
+constexpr auto pf_l2 = _MM_HINT_T1;
+constexpr auto pf_l3 = _MM_HINT_T2;
+constexpr auto pf_once = _MM_HINT_NTA;
+
+template <decltype(pf_all) hint = pf_all> INLINE void bmf_prefetch(const void* at) {
+  _mm_prefetch((const char*)at, hint);
+}
+
 inline uint32_t abs32(int32_t x) {
   return x<0 ? 0u-(uint32_t)x : (uint32_t)x;
 }

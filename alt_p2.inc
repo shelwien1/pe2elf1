@@ -565,7 +565,7 @@ struct AltP2Block {
       if( cx[0].alphabet_reduced )
         continue;
       P2Count* mir = &p2_ctr[slot(bank, ctxw^kBankMirrorMask)];
-      __builtin_prefetch(mir, 0, 1);
+      bmf_prefetch<pf_all>(mir);
       const int32_t res2 = nb_sum[2*bank+1]+res;
       int32_t lowbits = ctxw&3;
       if( lowbits<3 )
@@ -582,9 +582,9 @@ struct AltP2Block {
         direct[k] = &bankp[x];
         mirror[k] = &bankp[x^kBankMirrorMask];
         rot[k] = &bankp[p2_ctx_rotate[(x>>2)&3]+(x&0xFFFFFFF3)];
-        __builtin_prefetch(direct[k], 0, 1);
-        __builtin_prefetch(mirror[k], 0, 1);
-        __builtin_prefetch(rot[k], 0, 1);
+        bmf_prefetch<pf_all>(direct[k]);
+        bmf_prefetch<pf_all>(mirror[k]);
+        bmf_prefetch<pf_all>(rot[k]);
       }
       const int32_t neg = -res2;
       const int32_t w_top = mir[0].weighted;
