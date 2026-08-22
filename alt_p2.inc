@@ -7,89 +7,6 @@ struct P2Count {
   int16_t weighted;
 };
 
-// An adaptive probability map over the "is this residual in class 0" decision.
-//
-// alt-P2's five-bank cascade refines the predicted *sample*; once a context is
-// chosen the symbol comes straight out of an adaptive frequency triple with no
-// further refinement.  Nothing in the codec maps a probability to a better
-// probability.  This does, for the one decision that carries most of the bits:
-// the ternary cell is split into "class 0 or not" followed by "which of the two
-// non-zero classes" -- an exact rewrite of the same code by the chain rule --
-// and the first of those two probabilities goes through the map.
-//
-// The map is indexed by a fractional position between two stretch(p) buckets
-// and blends the two entries, updating both in proportion.  Hard bucket
-// boundaries would put a step discontinuity in the correction exactly where the
-// estimate is least certain.
-const int32_t kApmBuckets = 33;
-const double kApmSpan = 8.0;
-int32_t apm_pos[4096];
-uint16_t apm_squash[kApmBuckets];
-bool apm_tables_ready = false;
-
-void apm_tables_init() {
-  if( apm_tables_ready )
-    return;
-  for( int32_t i = 0; i<4096; ++i ) {
-    const double p = ((double)i+0.5)/4096.0;
-    double u = (log(p/(1.0-p))+kApmSpan)/(2.0*kApmSpan)*(double)(kApmBuckets-1);
-    if( u<0.0 )
-      u = 0.0;
-    if( u>(double)(kApmBuckets-1)-1e-9 )
-      u = (double)(kApmBuckets-1)-1e-9;
-    apm_pos[i] = (int32_t)(u*4096.0);
-  }
-  for( int32_t b = 0; b<kApmBuckets; ++b ) {
-    const double s = (double)b/(double)(kApmBuckets-1)*2.0*kApmSpan-kApmSpan;
-    int32_t v = (int32_t)(65536.0/(1.0+exp(-s)));
-    if( v<32 )
-      v = 32;
-    if( v>65504 )
-      v = 65504;
-    apm_squash[b] = (uint16_t)v;
-  }
-  apm_tables_ready = true;
-}
-
-struct P2Apm {
-  static const int32_t kCtx = 16;
-  static const int32_t kRate = 5;
-  uint16_t t[kCtx*kApmBuckets];
-  int32_t at;
-  int32_t frac;
-
-  void Init() {
-    apm_tables_init();
-    for( int32_t c = 0; c<kCtx; ++c )
-      for( int32_t b = 0; b<kApmBuckets; ++b )
-        t[c*kApmBuckets+b] = apm_squash[b];
-    at = 0;
-    frac = 0;
-  }
-
-  // p16 is the cell's own probability that the class is 0, in 1/65536.
-  int32_t refine(int32_t p16, int32_t ctx) {
-    const int32_t pos = apm_pos[p16>>4];
-    at = ctx*kApmBuckets+(pos>>12);
-    frac = pos&0xFFF;
-    const int32_t lo = t[at], hi = t[at+1];
-    const int32_t mapped = lo+(((hi-lo)*frac)>>12);
-    // Half the map's opinion, half the model's: the map has fewer samples per
-    // entry than the cell has, so it is the less certain of the two.
-    const int32_t out = (3*mapped+p16)>>2;
-    return out<32 ? 32 : out>65504 ? 65504 : out;
-  }
-
-  void update(int32_t bit) {
-    const int32_t target = bit ? 65535 : 0;
-    int32_t lo = t[at], hi = t[at+1];
-    lo += ((target-lo)*(4096-frac))>>(12+kRate);
-    hi += ((target-hi)*frac)>>(12+kRate);
-    t[at] = (uint16_t)lo;
-    t[at+1] = (uint16_t)hi;
-  }
-};
-
 struct P2Freq {
   uint16_t step;
   uint16_t f[3];
@@ -109,7 +26,7 @@ struct P2Freq {
     return cut;
   }
 
-  template <int32_t f_DEC> int32_t code_three_way(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, P2Apm* apm, int32_t apm_ctx) {
+  template <int32_t f_DEC> int32_t code_three_way(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, Apm* apm, int32_t apm_ctx) {
     uint16_t st, * slot;
     uint16_t down;
     uint16_t*const base = &f[0];
@@ -167,11 +84,11 @@ struct P2Freq {
     return 0;
   }
 
-  void encode_symbol(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, P2Apm* apm, int32_t apm_ctx) {
+  void encode_symbol(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, Apm* apm, int32_t apm_ctx) {
     code_three_way<0>(cx, ctx_pair, sym, apm, apm_ctx);
   }
 
-  int32_t decode_symbol(BMFState* cx, const uint32_t* ctx_pair, P2Apm* apm, int32_t apm_ctx) {
+  int32_t decode_symbol(BMFState* cx, const uint32_t* ctx_pair, Apm* apm, int32_t apm_ctx) {
     return code_three_way<1>(cx, ctx_pair, 0, apm, apm_ctx);
   }
 };
@@ -342,7 +259,7 @@ struct AltP2Block {
   uint8_t _pad2[2];
   uint32_t ctx;
   uint32_t ctx_pair[2];
-  P2Apm apm;
+  Apm apm;
   int32_t nb_id_used;
   int32_t band_lo;
   int32_t band_hi;
@@ -367,7 +284,7 @@ struct AltP2Block {
   // it), so it is the axis most likely to carry a systematic bias the frequency
   // cell cannot see.
   int32_t apm_context() const {
-    return (int32_t)(ctx&(P2Apm::kCtx-1));
+    return (int32_t)(ctx&(Apm::kCtx-1));
   }
 
   static uint32_t slot(int32_t bank, int32_t ctx) {

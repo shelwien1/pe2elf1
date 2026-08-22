@@ -40,19 +40,6 @@ struct Neighbours {
   }
 };
 
-int32_t cum_below(const uint16_t* w, int32_t lvl) {
-  switch( lvl ) {
-  case 1:
-    return w[0];
-  case 2:
-    return w[0]+w[1];
-  case 3:
-    return w[0]+w[2]+w[1];
-  case 4:
-    return w[5]-w[4];
-  }
-  return 0;
-}
 
 struct GroupFolds {
   int32_t w3_double, w4_to_w2, w3_to_w2, w4_to_w1, w3_to_w1, w2_to_w1;
@@ -98,6 +85,11 @@ struct ModelBlock {
   uint8_t _pad1051664[16];
   BitCtr bit_root[16];
   BitCtr bit_node[4096];
+  // One map per cell kind: the context cell and the bucket cell it falls back
+  // to have different distributions and different amounts of evidence.
+  Apm level_apm[2];
+  // The candidate scan's map, indexed by how deep into the scan we are.
+  Apm cand_apm;
   BitCtr esc_ctr[257];
   BitCtr run_ctr[48];
   uint8_t _pad16[2];
@@ -181,6 +173,9 @@ struct ModelBlock {
     ctx_id3_used = 0;
     ctx_id2_used = 0;
     ctx_id1_used = 0;
+    level_apm[0].Init();
+    level_apm[1].Init();
+    cand_apm.Init();
     memset(ctx_id1, 255, sizeof ctx_id1);
     memset(ctx_id2, 255, sizeof ctx_id2);
     memset(ctx_id3, 255, sizeof ctx_id3);
@@ -580,12 +575,13 @@ struct ModelBlock {
       if( sym<0 )
         continue;
       int32_t is_sym;
+      const int32_t apm_ctx = (int32_t)(sym_pos<7 ? sym_pos : 7);
       if constexpr( f_DEC ) {
-        is_sym = bit_node[ctr_node].decode_context_bit(cx, &bit_root[ctr_fallback]);
+        is_sym = bit_node[ctr_node].template code_context_bit_apm<1>(cx, &bit_root[ctr_fallback], 0, &cand_apm, apm_ctx);
         row_cur[5][0].sym = sym;
       } else {
         is_sym = sym==row_cur[5][0].sym;
-        bit_node[ctr_node].encode_context_bit(cx, &bit_root[ctr_fallback], is_sym);
+        bit_node[ctr_node].template code_context_bit_apm<0>(cx, &bit_root[ctr_fallback], is_sym, &cand_apm, apm_ctx);
       }
       if( is_sym )
         return sym;
@@ -611,6 +607,12 @@ struct ModelBlock {
     int32_t id2;
     intern_ctx(ctx_id2, sig2, ctx_id2_used, id2);
     return id2;
+  }
+
+  // The map's context: the neighbourhood match state the model already groups
+  // its counters by, which is its coarsest activity measure.
+  int32_t level_apm_context() const {
+    return (int32_t)(ctx_state_seen&(Apm::kCtx-1));
   }
 
   static bool intern_ctx(uint16_t* tbl, int32_t sig, uint32_t &used, int32_t &id) {
@@ -1134,13 +1136,8 @@ struct ModelBlock {
     FreqRec* freq = &grid[bucket_idx];
     FreqRec* freq_tbl = &grid[id2+kFreqTableOffset];
     {
-      auto decode_against = [&](FreqRec* rec) {
-                              const int32_t total = rec[0].w[5];
-                              int32_t cum;
-                              const int32_t lvl = rec[0].find_level(cx[0].get_freq(total), cum);
-                              const int32_t low = cum-rec[0].w[lvl];
-                              rec[0].bump(lvl);
-                              cx[0].decode(low, cum, total);
+      auto decode_against = [&](FreqRec* rec, int32_t kind) {
+                              const int32_t lvl = rec[0].template code_level<1>(cx, 0, &level_apm[kind], level_apm_context());
                               hit = lvl;
                               return lvl;
                             };
@@ -1148,14 +1145,14 @@ struct ModelBlock {
       if( tot ) {
         if( tot==1 )
           freq_tbl[0].blend_from(freq[0]);
-        lvl_a = decode_against(freq_tbl);
+        lvl_a = decode_against(freq_tbl, 0);
         if( freq_tbl[0].b14 ) {
           --freq_tbl[0].b14;
           ++freq[0].w[5];
           ++freq[0].w[lvl_a];
         }
       } else {
-        lvl_a = decode_against(freq);
+        lvl_a = decode_against(freq, 1);
         freq_tbl[0].w[5] = freq_tbl[0].w[lvl_a]++!=0;
       }
     }
@@ -1240,13 +1237,8 @@ struct ModelBlock {
     } else {
       FreqRec* binp = &grid[bucket_idx];
       FreqRec* frec = &grid[id2+kFreqTableOffset];
-      auto code_against = [&](FreqRec* rec) {
-                            const int32_t lvl = nb4.rank(rowp[0].sym);
-                            const int32_t cum = cum_below(rec[0].w, lvl);
-                            const uint32_t total = rec[0].w[5];
-                            const uint32_t high = rec[0].w[lvl]+cum;
-                            rec[0].bump(lvl);
-                            cx[0].encode(cum, high, total);
+      auto code_against = [&](FreqRec* rec, int32_t kind) {
+                            const int32_t lvl = rec[0].template code_level<0>(cx, nb4.rank(rowp[0].sym), &level_apm[kind], level_apm_context());
                             hit = lvl;
                             return lvl;
                           };
@@ -1256,14 +1248,14 @@ struct ModelBlock {
           frec[0].blend_from(binp[0]);
           rowp = row_cur[5];
         }
-        lvl_a = code_against(frec);
+        lvl_a = code_against(frec, 0);
         if( frec[0].b14 ) {
           --frec[0].b14;
           ++binp[0].w[5];
           ++binp[0].w[lvl_a];
         }
       } else {
-        lvl_a = code_against(binp);
+        lvl_a = code_against(binp, 1);
         frec[0].w[5] = frec[0].w[lvl_a]++!=0;
       }
       if( lvl_a ) return 1;

@@ -1,6 +1,20 @@
 // sym_list.inc -- FreqRec and SymList: the adaptive frequency records and symbol lists
 // Included from bmf.cpp; not a standalone translation unit.
 
+int32_t cum_below(const uint16_t* w, int32_t lvl) {
+  switch( lvl ) {
+  case 1:
+    return w[0];
+  case 2:
+    return w[0]+w[1];
+  case 3:
+    return w[0]+w[2]+w[1];
+  case 4:
+    return w[5]-w[4];
+  }
+  return 0;
+}
+
 struct FreqRec {
   union {
     uint16_t w[8];
@@ -35,6 +49,75 @@ struct FreqRec {
     if( total>floor_&&(w[lvl]+kick+8<total||w[5]>0x4000u) ) total = rescale(floor_, kick);
     w[5] = kick+total;
     w[lvl] += kick;
+  }
+
+  // Codes the level as "escape or not", then, when it is not an escape, the
+  // level among 1..4 conditioned on that.  The two-part code is exactly the
+  // flat five-way code by the chain rule; what it buys is a binary decision
+  // whose probability a map can refine.  The escape carries most of the bits
+  // here, because a level 1..4 says the pixel matched one of its four ranked
+  // neighbours and an escape sends the symbol to the whole second stage.
+  template <int32_t f_DEC> int32_t code_level(BMFState* cx, int32_t lvl, Apm* apm, int32_t apm_ctx) {
+    const uint32_t total = w[5];
+    const uint32_t rest = total-w[0];
+    if( !rest||!total ) {
+      // No mass outside the escape: the split would need a zero-width
+      // interval, so fall back to the flat code, which handles it as it did.
+      uint32_t cum, high;
+      if constexpr( f_DEC ) {
+        int32_t at;
+        lvl = find_level((int32_t)cx[0].get_freq(total), at);
+        high = (uint32_t)at;
+        cum = high-w[lvl];
+      } else {
+        cum = (uint32_t)cum_below(w, lvl);
+        high = cum+w[lvl];
+      }
+      bump(lvl);
+      if constexpr( f_DEC )
+        cx[0].decode(cum, high, total);
+      else
+        cx[0].encode(cum, high, total);
+      return lvl;
+    }
+    int32_t p16 = (int32_t)(((uint32_t)w[0]*65536u+(total>>1))/total);
+    if( p16<32 )
+      p16 = 32;
+    if( p16>65504 )
+      p16 = 65504;
+    const int32_t p_ref = apm[0].refine(p16, apm_ctx);
+    int32_t escape;
+    if constexpr( f_DEC ) {
+      escape = cx[0].decode_bit(65536-p_ref, p_ref);
+    } else {
+      escape = lvl==0;
+      cx[0].encode_bit(65536-p_ref, p_ref, escape);
+    }
+    apm[0].update(escape);
+    if( escape ) {
+      bump(0);
+      return 0;
+    }
+    uint32_t cum, high;
+    if constexpr( f_DEC ) {
+      const uint32_t target = cx[0].get_freq(rest);
+      cum = 0;
+      high = w[1];
+      lvl = 1;
+      while( lvl<4&&high<=target ) {
+        cum = high;
+        high += w[++lvl];
+      }
+    } else {
+      cum = (uint32_t)cum_below(w, lvl)-w[0];
+      high = cum+w[lvl];
+    }
+    bump(lvl);
+    if constexpr( f_DEC )
+      cx[0].decode(cum, high, rest);
+    else
+      cx[0].encode(cum, high, rest);
+    return lvl;
   }
 
   void blend_from(const FreqRec &src) {

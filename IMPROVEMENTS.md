@@ -185,7 +185,28 @@ interpolating between adjacent buckets and updating both. Chain two or three
 with different contexts — local activity, the previous residual's magnitude
 bucket, the plane index.
 
-**Built for alt-P2 [measured].** The ternary cell is split into "is the residual
+**Built for all three models [measured].** The map itself is `apm.inc`; each
+model splits its highest-traffic decision into a binary one and refines that
+one's probability. Corpus total **−0.24 %** on top of everything before it, but
+that average hides the shape: it is −1.6 % on `x_ai`, −0.9 % on `DLRAW`,
+−0.44 % on `x_ep`, −0.06 % on `x_ci`, and +0.26 % on `f05_200`.
+
+| model | decision split out | where | gain |
+|---|---|---|---|
+| slow | escape (level 0) vs one of the four ranked neighbours | `FreqRec::code_level` | `x_ai` −1.1 %, `DLRAW` −0.96 % |
+| slow | "is it this candidate?" in the stage-two scan | `offer_candidates` | `x_ai` a further −0.5 %, `t1` −0.4 % |
+| alt-P2 | class 0 vs the two non-zero classes | `P2Freq::code_three_way` | `x_ep` −0.44 % |
+
+Each split is exactly the original code by the chain rule and costs nothing on
+its own; what it buys is a binary probability to refine. Decode is 1.16× for the
+three together.
+
+The map contexts that worked are all *coarse* and all things the model already
+computes: the neighbourhood match state for the slow model's escape (its
+counters are grouped by it), the position in the candidate scan for the second
+one, the activity class for alt-P2. See the two failures below.
+
+**alt-P2, in detail [measured].** The ternary cell is split into "is the residual
 in class 0" followed by "which of the two non-zero classes" — an exact rewrite
 of the same code by the chain rule, costing nothing on its own — and the first
 of those probabilities goes through an interpolated map indexed by

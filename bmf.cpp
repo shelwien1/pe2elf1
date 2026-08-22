@@ -27,6 +27,7 @@
 
 #include "bmf_util.inc"
 #include "bmf_tables.inc"
+#include "apm.inc"
 #include "records.inc"
 #include "rangecoder.inc"
 #include "bmf_state.inc"

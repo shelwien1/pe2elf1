@@ -143,6 +143,44 @@ struct BitCtr {
     return f_DEC ? bit : result;
   }
 
+  // The same code, with the counter's probability refined through a map first.
+  // The counter pair still learns exactly as it did; only what reaches the
+  // arithmetic coder changes.
+  template <int32_t f_DEC> int32_t code_context_bit_apm(BMFState* cx, BitCtr* parent, int32_t bit, Apm* apm, int32_t apm_ctx) {
+    BitCtr*const src = n[0] ? this : parent;
+    if( n[0]&&!n[1] )
+      seed_from(parent);
+    const uint32_t f0 = src[0].n[0], f1 = src[0].n[1];
+    int32_t p16 = (int32_t)((f1*65536u+((f0+f1)>>1))/(f0+f1));
+    if( p16<32 )
+      p16 = 32;
+    if( p16>65504 )
+      p16 = 65504;
+    const int32_t p_ref = apm[0].refine(p16, apm_ctx|((src==parent) ? 8 : 0));
+    if constexpr( f_DEC )
+      bit = cx[0].decode_bit(65536-p_ref, p_ref);
+    else
+      cx[0].encode_bit(65536-p_ref, p_ref, bit);
+    apm[0].update(bit);
+    int32_t result;
+    if( src==this ) {
+      const uint32_t tot = summ();
+      if( tot>limit )
+        scale_rare();
+      result = n[bit]+kStep;
+      n[bit] = result;
+      parent[0].n[bit] += tot<kParentBump;
+    } else {
+      const uint32_t p_tot = parent[0].summ();
+      if( p_tot>parent[0].limit )
+        parent[0].scale_rare();
+      result = parent[0].n[bit]+kStep;
+      parent[0].n[bit] = result;
+      n[0] = bit+1;
+    }
+    return f_DEC ? bit : result;
+  }
+
   int32_t encode_context_bit(BMFState* cx, BitCtr* parent, int32_t bit) {
     return code_context_bit<0>(cx, parent, bit);
   }
