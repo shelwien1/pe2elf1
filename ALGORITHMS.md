@@ -354,17 +354,96 @@ descriptor bits plus the alt-P2 counter updates that trials suppress.
 It also makes §4's slack rule concrete. Here the least-squares fit lands on
 `(0,0)` — it predicts nothing, so its 65 464 bytes is five times what simply
 copying a reference costs, and `copy first ref` wins outright; that is where the
-`w=(128,0)` in the descriptor dump comes from. On `x_ep` the same block reports
-`weights (21,46) fitted -> (19,49) after coordinate descent` and the fit beats
-every degenerate form, which is where that image's `w=(19,49)` comes from. A
-32-bit image adds an `alpha plane predicted from the pixel's three colour bytes`
-block with the same four options.
+`w=(128,0)` in the descriptor dump comes from.
 
-Trials that do not run are simply absent: `joint alt-P2` appears only when some
-plane chose P2 (or joint alt-P1 won), `joint, no alt model` and `joint, flags
-cleared` only when *no* plane chose P2, and a ≤ 4 bpp image prints only a line
-saying the short path was taken. A member whose trials lose to storing the pixels
-raw says so:
+`x_ep` exercises everything `t24` does not — four planes, so the alpha block
+appears; a least-squares fit that beats every degenerate form; alt-P2 winning
+every plane; and two whole-image trials adopted in turn:
+
+```
+$ bmf c -v testfiles/x_ep.bmp /tmp/x_ep.bmf
+File testfiles/x_ep.bmp, image 705x800x32, size - 2256000:
+[choose_plane_coding] 4 planes; order-0 entropy of gradient-domain residuals
+  which plane is predicted from the two others:
+    plane 0         550702.6 bytes  <<
+    plane 1         552624.1 bytes
+    plane 2         561658.2 bytes
+  plane 0 predicted from plane 2 (coded flat) and plane 1 (coded as a difference):
+    least-squares fit      140058.1 bytes  <<
+    copy first ref         171751.5 bytes
+    copy second ref        220114.9 bytes
+    average 64:64          175670.2 bytes
+    weights (21,46) fitted -> (19,49) after coordinate descent, 140893.0 -> 140058.1 bytes; a degenerate form wins if it comes within 1094.1 bytes of that
+  alpha plane predicted from the pixel's three colour bytes:
+    least-squares fit       91630.8 bytes  <<
+    copy channel 0         203675.9 bytes
+    copy channel 1         268818.5 bytes
+    copy channel 2         201224.6 bytes
+    weights (-10,-1,-15) fitted, (-10,-1,-15) used
+[search_filter] 705x800, 4 planes, 32 bits/pixel raw
+  per-plane trials (whole-image tile, each plane coded on its own):
+    slot 0 = plane 2:
+      slow          125500.0 bytes
+      p1            115536.0 bytes
+      p2            110740.0 bytes  <<
+    slot 1 = plane 1:
+      p1            185792.0 bytes
+      p2            174632.0 bytes
+      refs+slow     170432.0 bytes
+      refs+p1       160944.0 bytes
+      refs+p2       149080.0 bytes  <<
+    slot 2 = plane 0:
+      p1            119592.0 bytes
+      p2            112872.0 bytes
+      refs+slow      87068.0 bytes
+      refs+p1        84424.0 bytes
+      refs+p2        81420.0 bytes  <<
+    slot 3 = plane 3:
+      p1             24156.0 bytes
+      p2             21652.0 bytes  <<
+      refs+slow      59276.0 bytes
+      refs+p1        61676.0 bytes
+      refs+p2        69124.0 bytes
+  whole-image trials (against the per-plane total):
+    planar                     362892.0 bytes  (p1=0 p2=4 refs=2)
+    transposed                 362424.0 bytes  <<
+    joint alt-P2               331852.0 bytes  <<
+    joint alt-P2 + refs        331936.0 bytes
+  choice: together -- one joint transform, 331852.0 bytes (4.707 bpp) by the trials' own measure
+[chosen descriptors]
+  plane 0: slot 2  refs+p2   dc=237  w=(19,49)
+  plane 1: slot 1  refs+p2   dc=244
+  plane 2: slot 0  p2
+  plane 3: slot 3  p2
+  coded body 330640 bytes vs 2256000 raw: shipping the coded member
+  actual coded size:  4.690 bpp
+```
+
+Two `<<` marks appear in the whole-image block because the marker means *adopted
+at this point*, not *final winner*: the transpose beat the planar total, and the
+joint alt-P2 transform then beat the transpose. The `choice:` line names the mode
+that survives, and `flags 0x36` in §12 records both decisions.
+
+Absences are informative again. Coding slot 0 has no `refs` trials — nothing is
+coded before it — and slots 1–3 have no `slow` trial, because `try_mode0` is
+dropped once any plane picks P2. `joint alt-P1` never appears because no plane
+chose P1, and the two no-alt-model trials never appear because some plane did
+choose P2.
+
+The alpha plane is where the two measures visibly disagree. `choose_plane_coding`
+estimates its three-weight mix at 91 630.8 bytes against 201 224.6 for the best
+single-channel copy, so it fits weights `(-10,-1,-15)` and sets up a reference;
+the real trial encodes then price that reference at 69 124 bytes against 21 652
+for coding the plane standalone, and the standalone form wins. That is why plane 3
+ends up with no `refs` flag despite the transform having fitted weights for it —
+the estimate proposes, the trial encode disposes.
+
+In general: `joint alt-P2` appears only when some plane chose P2 (or joint alt-P1
+won), `joint, no alt model` and `joint, flags cleared` only when *no* plane chose
+P2, an image with fewer than three planes prints `no inter-plane blend to search`
+instead of the transform block, and a ≤ 4 bpp image prints only a line saying the
+short path was taken. A member whose trials lose to storing the pixels raw says
+so:
 
 ```
   coded body 9424 bytes vs 9216 raw: SHIPPING RAW, the coding lost
