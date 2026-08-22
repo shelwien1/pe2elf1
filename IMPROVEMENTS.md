@@ -19,7 +19,7 @@ believe, so every claim below carries one of:
 | **[expected]** | a judgement from how comparable coders behave; no number was produced here |
 
 Nothing below has been implemented. The expected gains are estimates, and the
-only honest way to settle them is §13.
+only honest way to settle them is §15.
 
 ---
 
@@ -43,11 +43,12 @@ only honest way to settle them is §13.
 Two facts about the *encoder* frame everything that follows. Both are
 **[measured]**, from `bmf c -v` (§5.1 of `ALGORITHMS.md`):
 
-* **The mode search is already accurate.** Its own predicted size lands within
-  0.4 % of what actually ships — `t24` 53 896.0 estimated vs 53 904 shipped
-  (+0.01 %), `x_ep` 331 852.0 vs 330 640 (−0.37 %). The encoder is not losing
-  bits to bad decisions; it is losing them to the models it has to choose
-  between.
+* **The mode search costs what it says it will.** Its predicted size for the
+  option it *picks* lands within 0.4 % of what actually ships — `t24` 53 896.0
+  estimated vs 53 904 shipped (+0.01 %), `x_ep` 331 852.0 vs 330 640 (−0.37 %).
+  So the bits are not going into a mis-priced winner; they are going into the
+  models it has to choose between. (This says nothing about the options it
+  *rejects*: §6 (b) shows one trial mis-pricing a rejected option by 2×.)
 * **The models it chooses between are close.** On the planes that carry the
   bulk of a file, the second-best model is within a few per cent of the winner:
   `t24` slot 0 — `p1` 53 052 vs `p2` 53 764 (1.3 %); `t8g` — `p2` 43 212 vs
@@ -91,7 +92,7 @@ language: the slow model codes a symbol through `SymList`/`FreqRec` rank stages
 (`P2Freq::code_three_way`, `alt_p2.inc:29`). Mixing needs all of them binarised
 onto the same decision tree — one shared binarisation of the residual, with each
 model supplying a probability for each bit. That is the real work in this
-proposal, and it is also the enabler for §3, §4 and §9.
+proposal, and it is also the enabler for §3, §4 and §10.
 
 **Expected [expected].** For three models within 1–8 % of each other, mixing
 normally recovers appreciably more than the spread — the models' errors are
@@ -162,7 +163,7 @@ three counts.
 
 The memory saved is not incidental: alt-P1's table is 10 MB because each context
 costs 16 bytes. At 1–2 bytes per context the same budget buys 5–10× more
-contexts, which feeds §6.
+contexts, which feeds §7.
 
 **Expected [expected].** 2–5 % combined, and it makes every other model change
 cheaper in memory.
@@ -236,7 +237,97 @@ and costs nothing at decode. Step 2 adds an encoder-side optimiser and 256 bytes
 
 ---
 
-## 6. Bigger and better-shaped context sets
+## 6. Orientation: the whole dihedral group, and the trial that already exists
+
+**Now [from the code].** The only geometric transform the encoder considers is a
+transpose, applied to the whole image, all planes together
+(`transpose_image(img, plane_count)` inside `search_filter`, `codec.inc:932`).
+There are eight rigid orientations of a raster — identity, two mirrors, three
+rotations, two diagonal flips — and seven of them are never tried. Images of
+≤ 4 bpp never reach `search_filter` at all (`code_image_body`, `codec.inc:456`),
+so they get no orientation trial whatsoever.
+
+**Measured.** Every test image fed to this build in all eight orientations
+(the encoder still runs its own transpose trial on each, so the figures are
+already the best of what it would do with that input):
+
+| image | shipped | identity | mirrorX | mirrorY | rot180 | transpose | rot270 | rot90 | antitrans | best |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `t1` 1 bpp | 2 622 | 2 622 | 2 566 | 2 554 | 2 614 | 2 218 | **2 186** | **2 186** | 2 214 | **−16.6 %** |
+| `t24` | 53 924 | 53 924 | 53 044 | 53 004 | 53 948 | 52 620 | **52 464** | 53 124 | 53 264 | **−2.7 %** |
+| `t32` | 53 996 | 53 996 | 53 312 | 53 260 | 54 020 | **52 700** | 52 720 | 53 392 | 53 348 | **−2.4 %** |
+| `DLRAW` 4 bpp | 225 784 | 225 784 | **224 128** | 224 140 | 225 720 | 225 760 | 224 632 | 224 696 | 225 644 | −0.7 % |
+| `t8g` | 42 896 | 42 896 | **42 780** | 43 144 | 42 804 | 42 896 | 43 144 | **42 780** | 42 804 | −0.3 % |
+| `t8p` | 43 664 | 43 664 | **43 548** | 43 912 | 43 572 | 43 664 | 43 912 | **43 548** | 43 572 | −0.3 % |
+| `x_ai` | 148 780 | 148 780 | **148 564** | 148 984 | 148 684 | 148 780 | 148 984 | **148 564** | 148 684 | −0.1 % |
+| `x_ep` | 330 660 | 330 660 | 330 736 | **330 468** | 330 704 | 330 660 | **330 468** | 330 736 | 330 704 | −0.1 % |
+| `x_ci` | 633 144 | 633 144 | 633 100 | **632 928** | 633 148 | 633 144 | **632 928** | 633 100 | 633 148 | −0.0 % |
+| `f05_200` 1 bpp | 21 286 | **21 286** | 21 538 | 21 346 | 21 442 | 22 678 | 22 882 | 22 826 | 22 658 | 0.0 % |
+
+Three separate findings fall out, and they want three different fixes.
+
+**(a) ≤ 4 bpp images get no orientation trial at all — `t1` loses 16.6 %.** The
+short path in `code_image_body` returns before `search_filter` is called, so a
+bilevel or 4-bit image is coded in whatever orientation it arrived in. `t1` is
+16.6 % cheaper rotated a quarter turn; `DLRAW` 0.7 %; `f05_200` prefers the
+identity, so the trial would cost it nothing. This is the largest single number
+in this document and the cheapest to collect: give the short path the same
+transpose trial the long path has.
+
+**(b) The transpose trial mis-measures on multi-plane images.** For `t24` the
+encoder reports the transposed cost as 106 536 bytes and rejects it — but
+feeding it the transposed image shows the true cost is 52 852:
+
+```
+identity feed:   planar       53896.0 bytes
+                 transposed  106536.1 bytes   (abandoned after 1 of 3 planes)
+transpose feed:  planar       52852.0 bytes
+```
+
+The trial re-codes the transposed planes with the flags and coding order chosen
+for the *original* orientation, and abandons the whole trial as soon as one
+plane exceeds its original cost by more than 1/256. A plane whose best model in
+portrait is not its best model in landscape blows that budget immediately, and
+the remaining planes are never measured — the reported figure is then
+`best_bits + 1` plus whatever was measured, i.e. meaningless.
+
+The abort fires on single-plane images too — `t8g` reports "abandoned after 0 of
+1 planes" — but there its verdict happens to be right on this corpus: feeding
+`t8g` or `x_ai` transposed produces exactly the size the encoder already ships.
+The measurable damage is on multi-plane images, where the trial *additionally*
+reuses a per-plane model choice and coding order fitted to the other
+orientation. **Re-running the per-plane search on the transposed image**, or at
+least widening the abort budget, is worth 2.4 % on `t24` and `t32` on its own,
+before any new orientation is added.
+
+**(c) Beyond transposition, the flips add little.** On multi-plane images the
+transpose captures most of the available gain (`t24`: −2.4 % of the −2.7 %;
+`t32`: the transpose *is* the best). The mirrors matter for `DLRAW` and for the
+≤ 4 bpp class, where they are the entire gain. So the full eight-way search is
+worth having but is not where the value is; (a) and (b) are.
+
+**Per-plane orientation [measured].** The planes of one image do prefer
+different orientations — `t24`'s three planes coded standalone want identity,
+mirrorY (−1.8 %) and transpose (−1.2 %) respectively. But per-plane geometry
+forfeits cross-plane references, because a reference only helps if its samples
+are co-located with the target's, and that is worth vastly more: `t24`'s three
+planes cost 157 980 bytes coded independently against 53 924 with references.
+Trading 100 KB of reference gain for 1 KB of orientation gain is not a trade.
+
+There is one exception worth taking. The plane in **coding slot 0 has no
+references by construction** — nothing is coded before it. Its reconstruction
+can be un-rotated before the other planes reference it, so it can have its own
+orientation for free. On `t24` that plane prefers a transpose by 1.2 %, and it
+is ~98 % of the file.
+
+**Cost.** (a) is a few lines. (b) is re-running an existing search on transposed
+data — encoder time, no format change. The full dihedral search multiplies the
+already-expensive mode search by four; a cheap directional statistic (compare
+the entropy of horizontal against vertical first differences) can pick the two
+or three orientations worth actually trialling.
+
+---
+## 7. Bigger and better-shaped context sets
 
 **Now [from the code].** The slow model interns contexts into fixed direct-mapped
 tables — `ctx_id1[192512]`, `ctx_id2[108800]`, `ctx_id3[712000]`
@@ -267,7 +358,7 @@ multiply per context and loses the exactness the current design enjoys.
 
 ---
 
-## 7. Colour transform: fix the fit, then make it adaptive
+## 8. Colour transform: fix the fit, then make it adaptive
 
 **Now [from the code].** `choose_plane_coding` (`codec.inc:272`) picks which
 plane is predicted from the other two, fits two blend weights by closed-form
@@ -308,6 +399,37 @@ degenerates.
    by a small local context, or replace the fixed blend with an LMS filter on the
    co-located reference samples — the same machinery alt-P2 already runs
    spatially (`NbRow::predict`, `alt_p2.inc:169`), applied across planes.
+4. **Make it nonlinear — but not with a fixed gamma.** The freedom that matters
+   here is that **the predictor does not have to be invertible**. Only the
+   residual coding must be lossless, and it is: the coder subtracts a prediction
+   and codes the exact difference mod 256. So the prediction may be computed
+   through any curve, at any internal precision, at no cost to losslessness — a
+   gamma LUT, a per-channel curve, a fitted monotone map, anything.
+
+   A fixed gamma is not the curve to pick, though. **[measured]**, as a
+   MED-then-order-0 cost with the blend weights re-optimised for each exponent:
+
+   | | `t24`, full plane | `x_ep`, 256×256 crop |
+   |---|---|---|
+   | γ = 0.6 | — | 18 243.6 |
+   | **γ = 1.0 (linear, as now)** | **7 447** | **18 228.6** |
+   | γ ≈ 1.7 | 7 447 | 18 289.7 |
+   | γ = 2.2 | 8 223 | 20 496.5 |
+   | γ ≈ 2.7 | 10 468 | 22 351.7 |
+
+   Linear wins on both, and the direction of the loss is the physical one: 8-bit
+   image data is *already* gamma-encoded, and that encoding is much of why
+   inter-channel correlation is approximately linear in the coded domain.
+   Undoing it moves the data away from where a linear blend works. (Caveat: part
+   of the γ > 1 penalty is round-trip quantisation through the LUT this
+   experiment used; a careful implementation would predict at higher precision
+   and round once. Fair enough to say there is no gain to chase, not fair enough
+   to put a number on the loss.)
+
+   What is worth trying is a curve **fitted to this image's joint channel
+   distribution** and transmitted — a piecewise-linear map with a dozen knots
+   costs a few dozen bytes — or, more simply, letting the LMS filter of (3) see
+   nonlinear features of the reference samples rather than the samples alone.
 
 **Expected.** (1) costs nothing today on `t24` itself — the slack rule catches the
 degenerate fit and `copy first ref` is genuinely the best of the four options
@@ -315,14 +437,16 @@ there. What it buys is the case the corpus does not contain: an image where the
 fit degenerates *and* no degenerate form is good, where the encoder would ship a
 useless transform with nothing to fall back on. Cheap insurance rather than a
 measured gain. (2) and (3) **[expected]** 1–4 % on multi-plane photographic
-images.
+images. (4) **[measured]** nothing for a fixed gamma; **[expected]** small for a
+fitted curve, and the freedom it establishes matters more than this particular
+use of it.
 
 **Cost.** (1) and (2) are small and self-contained. (3) is a per-pixel filter on
 top of the existing transform.
 
 ---
 
-## 8. Multiple prediction filters, mixed
+## 9. Multiple prediction filters, mixed
 
 **Now [from the code].** alt-P2 runs one NLMS filter per context row — 28 float
 taps over spatial and cross-plane features (`fill_row_inputs`,
@@ -345,7 +469,7 @@ Cheaper than it sounds if the extra filters use fewer taps.
 
 ---
 
-## 9. A match model for long-range repetition
+## 10. A match model for long-range repetition
 
 **Measured, with a caveat.** Coding a 320×240 photographic plane, then the same
 plane again in one image:
@@ -381,7 +505,76 @@ cheapest new *model* to add once §2 exists.
 
 ---
 
-## 10. Two-pass parameter transmission
+## 11. Better cost estimation
+
+**Now [from the code].** Every decision in `choose_plane_coding` is made on
+`estimate_cost` (`planes.inc:5`) — the order-0 empirical entropy
+Σ *nᵢ*·log2(*N*/*nᵢ*) of a residual histogram. No adaptation cost, no context, no
+relation to the coder that will actually run. The mode search in `search_filter`
+does not use it — that one trial-encodes for real — so the two halves of the
+encoder judge by different currencies.
+
+**How wrong is it? [measured]** In absolute terms, not very, for a plane like
+`t24`'s plane 2:
+
+| | bytes |
+|---|---|
+| order-0 entropy of the MED residual (what `estimate_cost` measures) | 55 164 |
+| the same, as an adaptive order-0 code (adds the learning cost) | 55 445 |
+| what the real coder achieves (`p1`, from `-v`) | 53 052 |
+
+The estimator is within 4 % of the truth and the learning cost it ignores is
+worth 0.5 %. As a *predictor of size* it is fine.
+
+**Where it fails is ranking [measured].** It is used to choose between options
+whose difference lies in structure the order-0 histogram cannot see. The alpha
+plane of `x_ep` is a clean inversion — `choose_plane_coding` estimates the
+three-weight cross-plane mix at 91 630.8 bytes against 201 224.6 for the best
+single-channel copy, a 2.2× preference, fits weights `(-10,-1,-15)` and sets up
+a reference; the real trial encodes then price that reference at 69 124 bytes
+against 21 652 for coding the plane with no reference at all. The estimator did
+not merely misjudge the margin, it recommended a transform the coder rejects.
+
+**A structural inconsistency [from the code].** The four blend options are not
+even scored on the same histogram. `residual_bin` (`planes.inc:133`) folds the
+fitted blend's residual into **512** bins (`&0x1FF`), while the copy and average
+options are binned into **1024** (`&0x3FF` in `cost_candidate`,
+`codec.inc:575`). Gradient-domain second differences of two 8-bit planes span
+about ±1020, so a *poor* fit wraps and has its entropy measured on merged bins —
+which can only lower it. The bias flatters exactly the fits that deserve it
+least. Whether it ever changes an outcome is untested; making both sides use the
+same range costs nothing either way.
+
+**And naive fixes do not automatically help [measured].** Conditioning the same
+estimate on eight buckets of the previous residual's magnitude made it *worse* —
+55 629 bytes against 55 164 — because eight contexts' worth of learning cost
+outweighed the conditional gain at 76 800 samples. An estimator that adds
+context must also count what the context costs, which a plain entropy sum
+cannot.
+
+**Change.** In rough order of effort:
+
+1. **Score with an adaptive code, not an entropy.** Sum −log2 *p* under the same
+   kind of counter the real coder uses. It counts the learning cost, so adding
+   context to the estimate stops being free and the estimate stops preferring
+   context sets the coder cannot afford.
+2. **Match the estimator's domain to the coder's.** The candidate search works on
+   gradient-domain second differences while the coder works on spatial
+   residuals of the transformed planes; the two agree only approximately.
+3. **Or stop estimating.** The mode search already trial-encodes, and a trial
+   encode on a subsampled region — every fourth row, say — costs a fraction of a
+   full pass and measures the thing that actually matters. That the encoder
+   already has this machinery and does not use it for the transform decisions is
+   the real oddity here.
+
+**Expected [expected].** 0–2 % on its own; the estimator mostly gets the answer
+right today. Its value is that every *other* proposal in this document is
+chosen by it: a mixer, a new orientation, a new colour transform are all only as
+good as the thing deciding when to use them. Fix this before adding candidates
+for it to rank.
+
+---
+## 12. Two-pass parameter transmission
 
 **Now [from the code].** Every model constant is compiled in — counter
 increments, rescale thresholds, the SSE bank reload counters (`p2_b1_reload`),
@@ -407,7 +600,7 @@ slower in proportion to how thoroughly it searches.
 
 ---
 
-## 11. Things that look promising and measured as neutral
+## 13. Things that look promising and measured as neutral
 
 Recorded so they are not proposed again.
 
@@ -428,31 +621,40 @@ Recorded so they are not proposed again.
 
 ---
 
-## 12. Suggested order
+## 14. Suggested order
 
 Roughly by expected gain per unit of work, and respecting what enables what:
 
-1. **§5 step 1** — luminance palette ordering as a *trial*. One extra trial
-   encode, one bit on the wire, no risk once it is chosen rather than imposed,
-   and it is the only item here with a measured win.
-2. **§7 (1) and (2)** — robust fit seed, YCoCg-R candidate. Small, contained,
+1. **§6 (a)** — give the ≤ 4 bpp short path an orientation trial. A few lines
+   for a **measured 16.6 %** on `t1`, and it cannot lose: a trial only adopts an
+   orientation that measures cheaper.
+2. **§6 (b)** — fix the transpose trial's early abort on multi-plane images.
+   **Measured 2.4 %** on `t24` and `t32`, and it is a defect in an existing
+   trial rather than a new feature.
+3. **§5 step 1** — luminance palette ordering as a *trial*. One extra trial
+   encode, one bit on the wire, no risk once it is chosen rather than imposed.
+4. **§11 (1)** — score with an adaptive code rather than a plain entropy. Small,
+   and everything after this is chosen by the estimator.
+5. **§8 (1) and (2)** — robust fit seed, YCoCg-R candidate. Small, contained,
    and the trial machinery already exists to choose between them.
-3. **§4** — counter and state representation. Independent of everything else,
-   and it frees the memory §6 wants.
-4. **Binarisation** — one shared bit decomposition of the residual, every model
+6. **§4** — counter and state representation. Independent of everything else,
+   and it frees the memory §7 wants.
+7. **Binarisation** — one shared bit decomposition of the residual, every model
    supplying a probability per bit. No compression gain on its own; it is the
-   prerequisite for §2, §3 and §9. It replaces each model's symbol coder, so it
+   prerequisite for §2, §3 and §10. It replaces each model's symbol coder, so it
    *will* change the stream and cannot be checked for byte-identity; the bar is
    that it stays lossless and lands within a fraction of a per cent of the
    current sizes on every image, before anything is mixed on top of it.
-5. **§3** — one APM stage. Immediately measurable once (4) exists.
-6. **§2** — the mixer. The big one, and by far the most work.
-7. **§9** — match model, as a new input to the mixer.
-8. **§6, §8, §10** — in whatever order the measurements from (6) suggest.
+8. **§3** — one APM stage. Immediately measurable once (7) exists.
+9. **§2** — the mixer. The big one, and by far the most work.
+10. **§10** — match model, as a new input to the mixer.
+11. **§6 (c), §7, §9, §12** — the full dihedral search, hashed contexts,
+    multi-rate filters, transmitted parameters, in whatever order the
+    measurements from (9) suggest.
 
 ---
 
-## 13. How to evaluate any of this
+## 15. How to evaluate any of this
 
 The harness that kept this reconstruction honest works just as well for
 measuring improvements, with one change of goal: byte-identity stops being the
@@ -466,9 +668,13 @@ success criterion and becomes the *baseline* to beat.
   numbers, always.
 * **The corpus is too small and too photographic.** `testfiles/` has ten images
   and no screenshots, no maps, no scanned text, no rendered UI, no
-  arbitrary-palette art. §5 and §9 are aimed squarely at content it does not
+  arbitrary-palette art. §5 and §10 are aimed squarely at content it does not
   contain, and neither can be judged on it. Before either is implemented the
-  corpus needs those classes added.
+  corpus needs those classes added. §6 has the same problem from the other
+  direction: its largest number, 16.6 %, rests on a single 1 bpp image, and
+  `f05_200` — the only other bilevel file — gains nothing. One image is an
+  anecdote; that item needs a dozen bilevel and 4-bit images before its size is
+  known.
 * **Speed is part of the result.** §2 costs roughly 3× on both sides. A change
   that buys 5 % for 3× the decode time is a different product, and the trade
   should be stated in the same table as the ratios.
