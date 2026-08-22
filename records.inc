@@ -54,6 +54,19 @@ enum : int32_t {
   pred_p2 = 2,
 };
 
+// Name of a descriptor flags byte, for -v output.  Rotating buffers, so one
+// printf can name more than one of them.
+const char*desc_flags_name(int32_t flags) {
+  static char pool[4][16];
+  static int32_t next = 0;
+  char*const name = pool[next];
+  next = (next+1)&3;
+  const int32_t pred = flags&desc_predictor;
+  const char*const base = pred==pred_p2 ? "p2" : pred==pred_p1 ? ((flags&desc_alt_model) ? "p1" : "med") : "slow";
+  snprintf(name, sizeof pool[0], "%s%s", (flags&desc_has_refs) ? "refs+" : "", base);
+  return name;
+}
+
 struct PlaneDesc {
   union {
     int32_t desc_word;

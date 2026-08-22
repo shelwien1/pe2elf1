@@ -12,6 +12,20 @@ enum BmfExit {
   bmf_user_break = 8,
 };
 
+// -v: report the encoder's coding-method trials and the choices it makes.
+// Reporting only prints; it never touches the coded stream.
+int32_t bmf_verbose = 0;
+
+PRINTFLIKE(1, 2)
+void bmf_log(const char* fmt, ...) {
+  if( !bmf_verbose )
+    return;
+  va_list ap;
+  va_start(ap, fmt);
+  vprintf(fmt, ap);
+  va_end(ap);
+}
+
 NOINLINE
 void bmf_fatal(int32_t Code, ...) {
   va_list ap;

@@ -14,10 +14,12 @@
  #define NOINLINE __attribute__((noinline))
  #define ALIGN(n) __attribute__((aligned(n)))
  #define restrict __restrict
+ #define PRINTFLIKE(f, a) __attribute__((format(printf, f, a)))
 #else
  #define INLINE   __forceinline
  #define NOINLINE __declspec(noinline)
  #define ALIGN(n) __declspec(align(n))
+ #define PRINTFLIKE(f, a)
 #endif
 
 #define if_e0(x) if(__builtin_expect((x),0))
@@ -68,6 +70,7 @@ void bmf_compress(const char* InName, const char* OutName) {
   if( !p_i )
     bmf_fatal(bmf_read_error);
   printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i[0].width, p_i[0].height, p_i[0].depth&depth_bits, p_i[0].data_size);
+  bmf_log("\n");
   static BmfFile arc_store;
   BmfFile* Arc = bmf_open_file(&arc_store, (char*)OutName, 0);
   int32_t Depth = p_i[0].depth;
@@ -91,6 +94,7 @@ void bmf_compress(const char* InName, const char* OutName) {
   int32_t coded_len = bmf_codec.compress_image(Arc, p_i, bmf_codec.coded_block);
   if( !coded_len )
     bmf_fatal(bmf_write_error, OutName);
+  bmf_log("  actual coded size: ");
   printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i[0].height*p_i[0].width));
   free(p_i);
 }
@@ -123,16 +127,23 @@ int32_t main(int32_t argc, char** argv) {
   bmf_codec.Init();
   bmf_set_denormal_mode();
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
-  int32_t mode = argc==4&&!args[1][1] ? toupper(args[1][0]) : 0;
+  int32_t at = 2;
+  if( argc==5&&args[2][0]=='-'&&toupper(args[2][1])=='V'&&!args[2][2] ) {
+    bmf_verbose = 1;
+    at = 3;
+  }
+  const int32_t want_argc = at+2;
+  int32_t mode = argc==want_argc&&!args[1][1] ? toupper(args[1][0]) : 0;
   if( mode!='C'&&mode!='D' ) {
     printf("e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
-           "Usage: bmf c input.bmp output     compress, always with -S -Q9\n"
-           "       bmf d input output.bmp     expand\n");
+           "Usage: bmf c [-v] input.bmp output     compress, always with -S -Q9\n"
+           "       bmf d [-v] input output.bmp     expand\n"
+           "       -v   report the coding-method trials and the choices made\n");
     return 1;
   }
   if( mode=='C' )
-    bmf_compress(args[2], args[3]);
+    bmf_compress(args[at], args[at+1]);
   else
-    bmf_decompress(args[2], args[3]);
+    bmf_decompress(args[at], args[at+1]);
   return 0;
 }
