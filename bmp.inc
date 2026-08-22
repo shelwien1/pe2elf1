@@ -420,7 +420,7 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
   while( read_rle_op(fp, run4, byte_in) ) {
     const uint32_t byte = (uint32_t)byte_in;
     if( run4 ) {
-      if( !img[0].holds(row, run4/2+1) )
+      if( !img[0].holds(row, (run4+1+!hi_nibble)/2) )
         return false;
       uint8_t lo = byte&0xF;
       if( hi_nibble ) {
@@ -454,6 +454,7 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
       if( --y<0 )
         return true;
       row = img[0].row(y);
+      hi_nibble = 1;
     } else if( byte==1 ) {
       return true;
     } else if( byte==2 ) {
@@ -468,7 +469,7 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
       }
       row += step;
     } else {
-      if( !img[0].holds(row, (int32_t)byte/2+1) )
+      if( !img[0].holds(row, ((int32_t)byte+1+!hi_nibble)/2) )
         return false;
       if( !read_exact(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, fp) )
         return false;
@@ -546,8 +547,11 @@ BmfImage*read_bmp(char* path) {
     memset(img[0].pixels, 0, img[0].data_size);
     ok = hdr.biCompression==bmp_rle8 ? read_rle8(fp, img, row, pal_buf) : hdr.biCompression==bmp_rle4 ? read_rle4(fp, img, row, pal_buf) : false;
   }
-  if( !ok )
+  if( !ok ) {
+    fclose(fp);
+    free(img);
     return nullptr;
+  }
   fclose(fp);
   return img;
 }
@@ -585,8 +589,8 @@ int32_t write_bmp_palette(const BmfImage* img, uint8_t* out_buf, uint8_t depth, 
     }
     return 4*ncol;
   } else {
-    return 4*ncol;
     memset(out_buf+54, 0, 4*ncol);
+    return 4*ncol;
   }
 }
 
@@ -747,7 +751,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
       out_at += stride;
       p -= stride;
       if( pad ) {
-        ((uint32_t*)out_at)[0] = 0;
+        memset(out_at, 0, pad);
         out_at += pad;
       }
     }

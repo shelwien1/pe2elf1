@@ -53,7 +53,7 @@ actual coded bits** on trial encodes:
 
 There is additionally a standalone **MED pre-filter** path: `pred_p1` *without*
 `desc_alt_model` runs LOCO-I/MED prediction as an explicit in-place transform
-(`predict_med`, `codec.inc:842`) and feeds the folded residuals to the slow model.
+(`predict_med`, `codec.inc:841`) and feeds the folded residuals to the slow model.
 
 Both encoder and decoder are generated from the same templates (`f_DEC` template
 parameter throughout), and every model statistic is updated identically on both sides
@@ -104,13 +104,13 @@ range-coded segments matters for understanding the models' entry points.)
   data_size u32),
   then an optional opaque `CodedTail` block, then the payload, then (for paletted
   images) the raw palette bytes. Auxiliary members are skipped by the reader
-  (`expand_image`, `codec.inc:670`).
+  (`expand_image`, `codec.inc:669`).
 * `depth` packs bit-depth (mask 0x3F) with `depth_grey=0x40` and `depth_palette=0x80`
-  (`codec.inc:670`). `flags` (`bmp.inc:11`) include `flags_transposed`, `flags_slow`,
+  (`codec.inc:669`). `flags` (`bmp.inc:11`) include `flags_transposed`, `flags_slow`,
   `flags_planar` (planes coded separately), `flags_descriptors`, `flags_coded`,
   `flags_tail`.
 * If the coded body is not smaller than the raw pixels, the member is stored **raw**
-  (`compress_image`, `codec.inc:498`) — the format never expands beyond raw + header.
+  (`compress_image`, `codec.inc:497`) — the format never expands beyond raw + header.
   Images with `data_size < 16` are always stored raw. A raw member writes the
   *image's own* header, not the coder's — so its flags byte never carried
   `flags_coded`/`flags_slow`/`flags_descriptors` at all (verified: a random
@@ -119,7 +119,7 @@ range-coded segments matters for understanding the models' entry points.)
   entries, a raw member is always *smaller* than its source BMP (54-byte header,
   4-byte palette entries, rows padded to 4).
 * Inside a coded payload, a **bit packer** (`Packer`, `records.inc:11`; `pack_bits` /
-  `unpack_bits`, `codec.inc:789` — LSB-first accumulation into 32-bit words) and
+  `unpack_bits`, `codec.inc:788` — LSB-first accumulation into 32-bit words) and
   the range coder share one buffer. Raw-bit fields (the 4-bit near-lossless quantizer,
   the plane descriptors) are packed first; each plane's range-coded segment is then
   bracketed by `rc_begin`/`rc_end` (`bmf_state.inc:298`). The range coder's flush
@@ -130,7 +130,7 @@ range-coded segments matters for understanding the models' entry points.)
   mode thus produces `plane_count` concatenated range-coded segments after the
   descriptor bits; interleaved ("together") mode produces one.
 * Per-plane descriptors are coded as raw bit fields (`code_plane_descs`,
-  `codec.inc:474`): 6 bits `(flags<<2)|nrefs` per plane, plus 8-bit `dc` when
+  `codec.inc:473`): 6 bits `(flags<<2)|nrefs` per plane, plus 8-bit `dc` when
   `desc_has_refs`, plus 8-bit weights (bias +64) when `nrefs≥2` (`weight0`,
   `weight1`) and `nrefs>2` (`weight2`).
 * Images are never tiled: one member covers the whole image.
@@ -139,23 +139,23 @@ range-coded segments matters for understanding the models' entry points.)
 
 ## 3. Input handling and internal representation
 
-* `read_bmp` (`bmp.inc:665`) accepts BITMAPINFOHEADER-only bottom-up BMPs with bpp ∈
-  {1,4,8,24,32}, RGB or RLE4/RLE8 compression (full RLE decoders at `bmp.inc:555`/
-  5962, including delta and absolute ops with nibble-alignment handling). Rows are
+* `read_bmp` (`bmp.inc:669`) accepts BITMAPINFOHEADER-only bottom-up BMPs with bpp ∈
+  {1,4,8,24,32}, RGB or RLE4/RLE8 compression (full RLE decoders at `bmp.inc:384`/
+  `bmp.inc:416`, including delta and absolute ops with nibble-alignment handling). Rows are
   stored **top-down**, tightly strided, packed-pixel interleaved (B,G,R[,A] byte
   order); sub-byte depths stay bit-packed. Palettes are stored as 3-byte B,G,R
   triplets immediately after the pixel data (`BmfImage::palette()`, `bmp.inc:13`).
 * **Grey-ramp detection** (`bmf_compress`, `bmf.cpp:63`): a palettized image whose
   palette exactly equals the canonical grey ramp (entry *i* = *i*·(256>>bits) in all
   three channels) is converted to `depth_grey` and its palette dropped — the decoder's
-  `write_bmp_palette` (`bmp.inc:726`) regenerates the identical ramp. Otherwise the
+  `write_bmp_palette` (`bmp.inc:730`) regenerates the identical ramp. Otherwise the
   palette is stored raw (never entropy-coded).
-* On output, `write_bmp` (`bmp.inc:690`) re-encodes 4/8-bit images to RLE4/RLE8
-  (`bmp_rle_encod`bmp.inc:690`764`) and keeps the RLE form only if strictly smaller
+* On output, `write_bmp` (`bmp.inc:694`) re-encodes 4/8-bit images to RLE4/RLE8
+  (`bmp_rle_encode`, `bmp.inc:597`) and keeps the RLE form only if strictly smaller
   than the flat rows.
 * `plane_count = ceil(bits/8)` ∈ 1..4. A "plane" is one byte lane of the interleaved
   pixels, extracted/re-inserted by strided copies (`deinterleave_plane` /
-  `interleave_flat`, `codec.inc:636`).
+  `interleave_flat`, `codec.inc:635`).
 * **Transposition**: the encoder may transpose the whole image (rows↔columns,
   interleaving preserved; `transpose_image`, `bmp.inc:48`) when a trial encode of
   the transposed image is cheaper (§5). The decoder transposes back as its last step.
@@ -177,7 +177,7 @@ struct PlaneDesc { uint8 nrefs;      // # reference planes (0..3); doubles as co
 ```
 
 With coding order O0, O1, O2(, O3=alpha), the forward transform
-(`code_colour_plane<0>`, `codec.inc:391`) produces, all mod 256:
+(`code_colour_plane<0>`, `codec.inc:390`) produces, all mod 256:
 
 * **O0**: raw.
 * **O1** (`nrefs==1`): `O1 − dc − O0` — plain plane difference.
@@ -185,7 +185,7 @@ With coding order O0, O1, O2(, O3=alpha), the forward transform
   the two earlier planes of the *same pixel* (rounding constant 40 ≈ 0.31·128; a
   2-weight blend whose weights sum to 128 with one weight zero — i.e. an exact copy
   of one reference — is collapsed to the single-reference form, `plane_transform`,
-  `codec.inc:822`).
+  `codec.inc:821`).
 * **O3** (`nrefs==3`, the alpha plane): `A − dc − ((w1·ch1 + w0·ch0 + w2·ch2 + 63) >> 7)`
   — a 3-weight mix of the pixel's three colour bytes.
 
@@ -202,13 +202,13 @@ the inter-plane prediction scaled to its internal 16× fixed point (§8.2).
 ### How the transform is chosen (encoder heuristic, `choose_plane_coding`, `codec.inc:272`)
 
 All heuristic decisions use **order-0 empirical entropy** of residual histograms:
-`estimate_cos`codec.inc:272`329`) computes `Σ nᵢ·log2(N/nᵢ)` bits exactly (no log
+`estimate_cost` (`planes.inc:5`) computes `Σ nᵢ·log2(N/nᵢ)` bits exactly (no log
 table; the even/odd accumulator split is only an ILP unrolling).
 
 For ≥3 planes:
 
 1. Three candidates — which physical channel is the 2-reference "chroma" plane — are
-   costed by `cost_candidate` (`codec.inc:544`). It works in the **gradient domain**:
+   costed by `cost_candidate` (`codec.inc:543`). It works in the **gradient domain**:
    per pixel and per plane, `d = NW + cur − N − W` (a second difference, invariant to
    per-plane DC and to whatever spatial predictor is used later). One pass
    accumulates six 1024-bin histograms (each ref plane flat, ref difference,
@@ -220,22 +220,22 @@ For ≥3 planes:
    copy-refA, copy-refB, average) entropies.
 2. The winning candidate's weights are refined by a greedy 2-axis coordinate descent
    (`WeightSearch`, `codec.inc:12`; step window 4, both directions) on the full
-   histogram cost `weight_pair_cost` (`codec.inc:1145`).
+   histogram cost `weight_pair_cost` (`codec.inc:1143`).
 3. A slack of `min(cost>>7, kSlackMax=0x4000)` (~0.78 %) lets degenerate predictors
    (copy-A / copy-B / 64:64 average) replace the general blend when nearly as good —
    cheaper to model and to store.
 4. Per-plane `dc` = position of the heaviest 256-bin window slid over a value-domain
-   residual histogram (`widest_window`, `bmp.inc:460`), +1: the blended (and alpha)
+   residual histogram (`widest_window`, `bmp.inc:461`), +1: the blended (and alpha)
    plane over a 1024-bin histogram of the chosen predictor's residuals, the O1
    difference plane over a 512-bin histogram of the O1−O0 differences; the flat plane
    O0 gets no dc.
 5. For 32-bit images, the alpha plane gets its own **3-variable closed-form LS fit**
-   over 2×2-quad second differences (`fit_alpha_weights`, `bmp.inc:480`) with the
-   same one-hot simplification slack (`choose_alpha_plane`, `codec.inc:1223`).
+   over 2×2-quad second differences (`fit_alpha_weights`, `bmp.inc:481`) with the
+   same one-hot simplification slack (`choose_alpha_plane`, `codec.inc:1221`).
 
 ---
 
-## 5. Encoder mode search (`search_filter`, `codec.inc:901`)
+## 5. Encoder mode search (`search_filter`, `codec.inc:899`)
 
 Everything past the heuristic layer is decided by **real trial encoding**: run the
 actual model + range coder over the image, count `8·(stream.cur−stream.buf)` bits,
@@ -246,8 +246,8 @@ counter updates in the alt-P2 bank cascade (§10.4; alt-P1 and the slow model ar
 unaffected) — search costs are therefore measured on a slightly cheaper model
 variant than the final encode.
 
-1. **Per-plane search** (`search_planes`, `codec.inc:1164`), in coding order. Trial
-   flag sets (`tr`codec.inc:1164`c:508`; as descriptor flag values: `mode0`=0,
+1. **Per-plane search** (`search_planes`, `codec.inc:1162`), in coding order. Trial
+   flag sets (`tr`codec.inc:1162`c:508`; as descriptor flag values: `mode0`=0,
    `p1`=5, `p2`=6, `refs`=8, `refs_p1`=13, `refs_p2`=14): `mode0` (raw plane into
    the slow model), `p1 = pred_p1|alt`, `p2 = pred_p2|alt`, and for non-first
    planes the same three with `desc_has_refs`. Pruning: `try_p2` runs only if P1 came within 1/32 of the
@@ -257,13 +257,13 @@ variant than the final encode.
    abort when a plane exceeds its normal cost by >1/256; adopted only when the total
    wins by >1/4096 — then the real image is transposed and `flags_transposed` set.
 3. **Mode unification trials**, each a full re-encode via `transform_cost`
-   (`codec.inc:1034`): for >2 planes, force P1 on all planes and force P2 on all
+   (`codec.inc:1032`): for >2 planes, force P1 on all planes and force P2 on all
    planes (optionally re-adding refs via `allow_refs_where_present`); separately,
    for >1 plane when no plane chose P2: drop `desc_alt_model` everywhere (explicit
    MED + slow model) and clear all flags (plain interleaved slow model). Any winner
    selects **interleaved** ("together") coding.
 4. Return value: 1 → **planar** mode (each plane its own transform + model + coded
-   segment), 0 → **interleaved** mode (`transform_planes`, `codec.inc:1041`: apply all
+   segment), 0 → **interleaved** mode (`transform_planes`, `codec.inc:1039`: apply all
    transforms in place reading from a pristine copy, then one model pass over the
    interleaved bytes — either one slow-model pass, or the joint multi-plane alt-P1 /
    alt-P2 coders). The trade-off being searched: interleaved coding lets the model
@@ -272,7 +272,7 @@ variant than the final encode.
    spatial structure dominates the inter-channel correlation.
 
 Images of depth ≤ 4 bpp skip the search entirely and go straight to a single
-slow-model pass over the packed data (`code_image_body`, `codec.inc:430`).
+slow-model pass over the packed data (`code_image_body`, `codec.inc:429`).
 
 ---
 
@@ -285,7 +285,7 @@ detector** applied as a separate pass:
   `max(W,N)` if `NW ≤ min(W,N)`, else `W+N−NW`.
 * Residuals are **zig-zag folded** to unsigned codes 0,−1,+1,−2,+2,… → 0,1,2,3,4,…
   (`med_fold_table`/`med_unfold`planes.inc:45`.inc:369`).
-* `predict_med` (`codec.inc:842`) runs in place, **back to front**, so it reads
+* `predict_med` (`codec.inc:841`) runs in place, **back to front**, so it reads
   original neighbour values while overwriting; row 0 uses left-DPCM, column 0 uses
   up-DPCM. `unpredict_med` (`bmp.inc:401`) is the forward-order mirror over
   reconstructed values.
@@ -314,7 +314,7 @@ are halved with **ceiling rounding** (`halve_up(x) = x−(x>>1)`, `bmf_util.inc:
 nonzero count never dies), and rescale thresholds grow with use, so every context
 anneals from fast adaptation toward long memory.
 
-### 7.1 `BitCtr` — binary counter with lazy paren`counters.inc:73`ers.inc:73`)
+### 7.1 `BitCtr` — binary counter with lazy parent seeding (`counters.inc:73`)
 
 `{n[0], n[1], limit}`; p(bit) = `n[bit]/(n0+n1)` fed directly to the bit coder.
 Increment +8 to the coded bit; when the total exceeds `limit`, both counts are
@@ -360,7 +360,7 @@ weakest entry (whose count also flows into `tot`). Dense initialization (all sym
 cnt 1, `tot=0`) yields escape-free terminal lists; sparse initialization (`live=0,
 tot=2`) yields learned lists.
 
-### 7.4 `CounterNode` — 7-slot counter with tai`counters.inc:8`ters.inc:8`)
+### 7.4 `CounterNode` — 7-slot counter with tail buckets (`counters.inc:8`)
 
 Alt-P1's residual-code distribution: slots 0–4 = codes 0..4 (residuals 0, −1, +1,
 −2, +2), slot 5 = all remaining odd codes (negative tail), slot 6 = even tail. Init
@@ -609,7 +609,7 @@ pervasive update-time generalization. All values are carried in **16× fixed poi
 
 ### 10.1 Feature vector
 
-`fill_row_inputs` (`alt_p2.inc:369`) gathers **28 float features** (7 rows × 4 lanes)
+`fill_row_inputs` (`alt_p2.inc:379`) gathers **28 float features** (7 rows × 4 lanes)
 from the causal neighbourhood: rows 0–3 are gradient-adjusted combinations
 (`grad(a,b,c) = a+b−c`, GAP/CALIC-style) of `dval` — the **inter-plane-decorrelated**
 values — including vertical/horizontal extrapolations and long-range taps; rows 4–6
@@ -689,7 +689,7 @@ run4 = final prediction):
   reaching 36157 against bit 15 — so strictly these are arbitrary correlated bits
   the counters learn against, not a guaranteed sign pattern. Each bank is still
   best understood as an SSE/APM stage keyed on the over/undershoot pattern.
-* Updates (`code_banks`, `alt_p2.inc:532`): the exact context integrates the full
+* Updates (`code_banks`, `alt_p2.inc:542`): the exact context integrates the full
   residual, with a small deadzone kick; the learning rate **anneals** 2⁻⁵→2⁻⁸ via a
   countdown (`b1`, reloads `{7,46,197}`) decremented by small residuals
   (`|res|<38`; large residuals leave it untouched), doubling `weighted` on each
@@ -723,7 +723,7 @@ in two stages:
   dense near black/white) | activity class; the odd/even halves use two strip
   contexts offset by ~4 pixel levels.
 
-The ternary context (`seat_symbol_context`, `alt_p2.inc:468`) is a 15 552-point
+The ternary context (`seat_symbol_context`, `alt_p2.inc:478`) is a 15 552-point
 lattice: 16 activity classes (a ~40-tap weighted sum of neighbour residual
 magnitudes quantized by `p2_len_edges`) × 2 flatness bits × **five ternary
 selectors** composed positionally in mixed radix (64·3⁵): prediction-brightness
@@ -731,7 +731,7 @@ class, prediction−N and prediction−W band tests, and the N/W ternary residua
 (replaced, for chroma planes with refs, by reference-plane gradient band tests).
 
 After coding, the frequency lattice is **smeared** (`alt_p2_model`,
-`alt_p2.inc:803`): the ±1 activity-class neighbours get fractional-step updates
+`alt_p2.inc:813`): the ±1 activity-class neighbours get fractional-step updates
 (10/16, 13/16), the sign-mirrored lattice point (all five selectors reflected,
 `mixer_rev`) gets the **negated** residual's ternary slot, the ±1 brightness strips
 are trained via `update_binary_pair`, and each of the five selector digits is
@@ -823,20 +823,26 @@ modifying the code:
 * `predict_med` histograms every folded residual into `hist_scratch`
   (tail of the output buffer), but no reader of that histogram survives in this
   build — likely a vestige of the original's cost estimation.
-* `write_bmp_palette` has a dead `memset` after a `return` in its no-palette`bmp.inc:555`mp.inc:726` area): palette bytes for palette-less ≤8-bit images are written
-  uninitialised (harmless for the depths this build emits, which always have
-  `depth_grey` or `depth_palette` set on ≤8-bit output).
+* `write_bmp_palette` (`bmp.inc:559`) had a `memset` placed *after* the `return`
+  of its no-palette branch, so palette bytes for palette-less ≤8-bit images were
+  left uninitialised. Harmless for the depths this build emits (≤8-bit output
+  always carries `depth_grey` or `depth_palette`), but the two statements are now
+  in the order the code clearly intended.
 * `alt_init_tables` deliberately writes `fold[i+256]` to fill the adjacent
   `fold_hi[256]` member, and reads `fold[-1+…]` via a `neg` pointer — layout-
   dependent by design.
 * The alt-P2 lazy filter pool: `nb_id[1920]` slots map into `nb_weights[1088]`
-  rows with no bound check on the allocation counter; the 1088th distinct slot in
-  one plane would run off the pool. Upstream measurements put the invariant on an
-  empirical footing: a 19-image corpus reaches a high-water mark of 593 distinct
-  slots per plane, an adversarial 2500-tile montage reaches 980, and the union of
-  slots ever seen is 1034 — under the 1088 bound, but by a margin narrow enough
-  that 1088 reads as a measured figure rather than a guessed one. Not enforced in
-  code either here or in the original.
+  rows, and the allocation counter carried no bound — the 1088th distinct slot in
+  one plane would have seated past the end of the pool. Upstream measurements put
+  the invariant on an empirical footing: a 19-image corpus reaches a high-water
+  mark of 593 distinct slots per plane, an adversarial 2500-tile montage reaches
+  980, and the union of slots ever seen is 1034; adversarial images built here
+  reach 940 — under the 1088 bound, but by a margin narrow enough that 1088 reads
+  as a measured figure rather than a guessed one. `seat_nb_row` (`alt_p2.inc:294`)
+  now caps the counter and shares the last seated row once the pool is full.
+  Encoder and decoder reach that branch identically, so a stream that hit it would
+  still decode; only prediction quality would degrade. No known input reaches it,
+  so every stream in the corpus is unaffected.
 * `P2Coef::fold` (`alt_p2.inc:204`) brackets only the **multi-plane** alt-P2 driver
   (`alt_model_p2`, `codec.inc:149`): it element-wise adds the *static seed*
   coefficients of feature rows 4–6 (`bmf_p2_coef_init` rows 4–6, installed at
@@ -866,6 +872,51 @@ modifying the code:
   afterwards do honor each plane's own predictor. The encoder's unification trials
   set predictor/alt flags uniformly before choosing the "together" mode, so the
   slot-0 dispatch is always representative.
+
+### 13.1 Defects found and fixed
+
+None of these changed a single coded byte: the 81-image corpus (12 upstream test
+files plus 69 generated edge cases) produces streams byte-identical to the
+pre-fix baseline, and every image still round-trips losslessly when checked with
+an independent BMP decoder rather than BMF's own reader.
+
+* **RLE4 rows never reset the nibble phase at end-of-line** (`read_rle4`,
+  `bmp.inc:416`). `hi_nibble` tracks whether the next pixel lands in the high or
+  low nibble of the current byte. It is updated by runs and by delta ops, but the
+  end-of-line op only moved `row` to the next scanline — so a row containing an
+  odd number of pixels left the reader half a byte out of phase, and every
+  following row was decoded shifted by one nibble. Rows are byte-aligned in BMP,
+  so the phase must reset with the row. This corrupted any conforming RLE4 file
+  with an odd-length row; a 300-image generated RLE corpus went from 77
+  mis-decodes to zero.
+* **RLE4 row-capacity check was over-strict by one byte** (`read_rle4`,
+  `bmp.inc:416` and `write_nibbles`'s call site). Both sites asked
+  `holds(row, n/2+1)`, which is exact when the run starts on a low nibble but
+  demands one byte too many when it starts on a high nibble and covers an even
+  number of pixels — so a run that exactly filled the last byte of the image was
+  rejected as an overrun. The span is `(n + 1 + !hi_nibble)/2` bytes. This is
+  what made BMF refuse to re-read its own RLE4 output for `s4_bands`.
+* **Misaligned 4-byte store for 1–3 bytes of row padding** (`write_bmp`,
+  `bmp.inc:754`). The padding was zeroed with `((uint32_t*)out_at)[0] = 0`, an
+  unaligned 4-byte write that also ran up to 3 bytes past the row. The excess was
+  overwritten by the next row's `memcpy` and excluded from the coded length, so
+  the file was correct, but the last row wrote past its data. `memset(out_at, 0,
+  pad)` writes exactly the padding; UBSan's only complaint on the corpus is gone.
+* **Dead `memset` after `return`** in `write_bmp_palette`'s no-palette branch
+  (see above).
+* **Indeterminate values read** — `choose_plane_coding` and `predict_med` each
+  returned a scratch local that is never assigned on a degenerate path
+  (`n_planes < 2`, and `height == 1 && width == 1` respectively). Every caller
+  discarded the value, so both are now `void`. `alt_model_p1`'s `cur0/cur1/cur3/
+  want2` were passed into `code_sample` uninitialised in the `f_DEC == 1`
+  instantiation, where the parameter is overwritten by `decode_sample()` before
+  use; they are initialised to 0. Clang's `-Wsometimes-uninitialized` /
+  `-Wconditional-uninitialized` are now clean.
+* **Unbounded NbRow pool index** in `seat_nb_row` (see above).
+* **`read_bmp` leaked the `FILE*` and the image buffer** when RLE decoding failed,
+  the one early return that did not clean up. The process calls `bmf_fatal`
+  immediately afterwards, so nothing observable changed; ASan now reports no leaks
+  across ~1000 malformed and well-formed fuzz inputs.
 
 ---
 

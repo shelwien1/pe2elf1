@@ -253,7 +253,8 @@ using ValRow = RowOf<&P2Ctx::val>;
 struct AltP2Block {
   static const int32_t kRowMargin = 8;
   static const int32_t kRowTail = 5;
-  NbRow nb_weights[1088];
+  static const int32_t kNbRowCount = 1088;
+  NbRow nb_weights[kNbRowCount];
   float p2_row[7][4];
   float bias[4];
   NbRow* nb_cur;
@@ -291,12 +292,20 @@ struct AltP2Block {
   }
 
   void seat_nb_row(int32_t nb_slot, const P2Ctx* c0) {
-    const int32_t at = nb_id[nb_slot];
+    int32_t at = nb_id[nb_slot];
     if( !at ) {
-      nb_id[nb_slot] = ++nb_id_used;
-
-      nb_cur = &nb_weights[nb_id_used];
-      return;
+      if( nb_id_used+1<kNbRowCount ) {
+        nb_id[nb_slot] = ++nb_id_used;
+        nb_cur = &nb_weights[nb_id_used];
+        return;
+      }
+      // nb_slot spans 1920 values but the pool holds only kNbRowCount-1 rows,
+      // so a plane using more than that many distinct contexts would seat past
+      // the end of nb_weights.  Share the last seated row instead.  Encoder and
+      // decoder reach this the same way, so the stream stays decodable; only
+      // prediction quality degrades.
+      at = nb_id_used;
+      nb_id[nb_slot] = at;
     }
     NbRow*const wrow = &nb_weights[at];
     nb_cur = wrow;

@@ -55,8 +55,8 @@ struct BMFCodec : BMFState {
   }
   template <int32_t f_DEC> int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
     AltP1Block* plane[4];
-    int32_t cur0, cur1, cur3;
-    int32_t want2;
+    int32_t cur0 = 0, cur1 = 0, cur3 = 0;
+    int32_t want2 = 0;
     int32_t width = hdr[0].width;
     int32_t height = hdr[0].height;
     for( int32_t k = 0; k<plane_count; ++k ) {
@@ -269,7 +269,7 @@ struct BMFCodec : BMFState {
     AltP1Block* raw = p1_blocks.take(false);
     return raw ? raw[0].alt_p1_alloc(this, width, height, 0) : nullptr;
   }
-  int32_t choose_plane_coding(BmfImage* img) {
+  void choose_plane_coding(BmfImage* img) {
     alignas(16) int32_t hists[8*1024];
     const HistRows hr = hist_rows(hists);
     int32_t*const hist_flat = hr.r0, *const hist_a = hr.r1;
@@ -382,7 +382,6 @@ struct BMFCodec : BMFState {
         }
       }
     }
-    return result;
   }
   void clear_flags_on_all() {
     for( int32_t k = 0; k<plane_count; ++k )
@@ -839,7 +838,7 @@ struct BMFCodec : BMFState {
     }
     return t;
   }
-  uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
+  void predict_med(uint8_t* pixels, int32_t width, int32_t height) {
     uint32_t done, last;
     alignas(16) uint8_t fold[272];
     uint8_t* p = pixels+height*width;
@@ -878,7 +877,6 @@ struct BMFCodec : BMFState {
         q[0] = fold[(uint8_t)last];
       }
     }
-    return last;
   }
   void read_plane_descs() {
     code_plane_descs<1>();
