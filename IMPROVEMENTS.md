@@ -185,14 +185,40 @@ interpolating between adjacent buckets and updating both. Chain two or three
 with different contexts — local activity, the previous residual's magnitude
 bucket, the plane index.
 
-**Expected [expected].** SSE/APM is the cheapest reliable win in context
-modelling: 1–3 % for one stage, a little more for a chain, at a few table
-lookups per coded bit. It is worth doing even without §2, and it composes with
-it.
+**Built for alt-P2 [measured].** The ternary cell is split into "is the residual
+in class 0" followed by "which of the two non-zero classes" — an exact rewrite
+of the same code by the chain rule, costing nothing on its own — and the first
+of those probabilities goes through an interpolated map indexed by
+(stretch(*p*) bucket, activity class). **1 444 bytes on `x_ep`, −0.44 %**, for
+3.5 % of decode time on that file. The map's output is blended 3:1 with the
+cell's own probability; the map alone is worse (−0.30 % instead of −0.44 %), and
+so is trusting it less (1:1, −0.41 %).
+
+Two of this section's other predictions did **not** hold:
+
+* **A wider context dilutes it.** 16 activity classes is the best of
+  {16, 64, 256, 1024} — `x_ep` goes 329 216 → 329 536 → 329 784 → 329 788. The
+  cell it is correcting is already indexed by 15 552 contexts; the map's job is
+  to see a *coarse* systematic bias with enough samples per entry to measure it.
+* **Chaining a second stage on confidence made it worse** — 329 780 against
+  329 216 for one stage — even though the confidence axis is exactly the one the
+  frequency cell cannot see. Two interpolated corrections in series over-correct
+  on this content. The doc's "a little more for a chain" is not free.
+
+Note the −0.44 % is a *whole-file* number, not a residual-stream one, and it
+also shifts search decisions on images that only trial alt-P2: `t24`, `t32`,
+`t8g` and `t8p` each move by 12–16 bytes the other way.
+
+**Expected [expected] for the rest.** SSE/APM remains the cheapest reliable win
+in context modelling, at a few table lookups per coded bit. It is worth doing
+even without §2, and it composes with it.
 
 Two refinements worth building in from the start rather than bolting on:
 
-* **Interpolate, do not snap.** Index the map by a *fractional* position between
+* **Interpolate, do not snap** — done, 33 buckets over stretch(*p*) ∈ [−8, 8],
+  with the two adjacent entries blended by the fractional position and both
+  updated in proportion. 17 buckets is worse (329 604), 49 and 65 are no better
+  (329 228, 329 280). Index the map by a *fractional* position between
   two `stretch(p)` buckets and blend the two entries, updating both in
   proportion. Hard bucket boundaries put a step discontinuity in the correction
   exactly where the estimate is least certain; interpolation costs one multiply
