@@ -98,7 +98,7 @@ constexpr int32_t kMaxWidth = 0xFFFF;
 
 
 struct CtxIdx {
-  uint32_t val = 0;
+  uint32_t val;
   template <int32_t Pos> constexpr CtxIdx &bit(bool b) {
     val += (uint32_t)b<<Pos;
     return this[0];
@@ -137,12 +137,15 @@ struct CtxIdx {
 
 template <class T, int32_t N> struct BlockPool {
   alignas(4096) T slot[N];
-  uint8_t taken[N] = {};
+  uint8_t taken[N];
   void unwatch(int32_t k) {}
 
   void watch(int32_t k) {}
 
-  BlockPool() {}
+  void Init() {
+    for( int32_t k = 0; k<N; ++k )
+      taken[k] = 0;
+  }
 
   T*take(bool zero) {
     for( int32_t k = 0; k<N; ++k ) {
@@ -510,28 +513,28 @@ void end_plane_stream() {
 
 struct BMFState {
   alignas(16) CodedStream stream;
-  RangeCoder rc = {};
-  alignas(16) CodedTail* coded_block = nullptr;
-  alignas(16) int32_t plane_predictor = 0;
-  alignas(16) int32_t plane_alt_model = 0;
-  int32_t desc_slow_mode = {};
-  int32_t alphabet_reduced = {};
-  PlaneDesc plane_desc[4] = {};
-  int32_t plane_count = {};
-  int32_t near_lossless_q = {};
-  uint8_t model_geometry[128] = {};
-  int8_t exclusion_gen = {};
+  RangeCoder rc;
+  alignas(16) CodedTail* coded_block;
+  alignas(16) int32_t plane_predictor;
+  alignas(16) int32_t plane_alt_model;
+  int32_t desc_slow_mode;
+  int32_t alphabet_reduced;
+  PlaneDesc plane_desc[4];
+  int32_t plane_count;
+  int32_t near_lossless_q;
+  uint8_t model_geometry[128];
+  int8_t exclusion_gen;
   alignas(16) int8_t exclusion_mask[(no_symbol+1+15)&~15];
-  int32_t mode_symbol[5] = {};
-  int32_t alt_freq_limit = {};
-  int32_t alt_freq_init = {};
-  LevelGeom level_geom[8] = {};
-  int32_t ctx_bias[4] = {};
-  int32_t deadzone_hi = {};
-  int32_t deadzone_lo = {};
-  uint8_t* hist_scratch = {};
+  int32_t mode_symbol[5];
+  int32_t alt_freq_limit;
+  int32_t alt_freq_init;
+  LevelGeom level_geom[8];
+  int32_t ctx_bias[4];
+  int32_t deadzone_hi;
+  int32_t deadzone_lo;
+  uint8_t* hist_scratch;
   alignas(16) uint16_t model_table_store[kModelTableBytes/sizeof(uint16_t)];
-  uint16_t* model_tables = {};
+  uint16_t* model_tables;
   void hist_bump(int32_t k) {
     uint32_t n;
     memcpy(&n, &hist_scratch[4*k], sizeof n);
@@ -822,11 +825,11 @@ struct BMFState {
   bool ref_transformed(int32_t k) {
     return (plane_desc[plane_desc[k].src_plane].flags&desc_has_refs)!=0;
   }
-  alignas(16) float p2_coef[7][4] = {};
-  alignas(16) float p2_rate[7][4] = {};
-  SymEntry byte_list_ent[16*256] = {};
-  SymEntry gap_list_ent[257] = {};
-  void reset() {
+  alignas(16) float p2_coef[7][4];
+  alignas(16) float p2_rate[7][4];
+  SymEntry byte_list_ent[16*256];
+  SymEntry gap_list_ent[257];
+  void Init() {
     memset(static_cast<void*>(this), 0, sizeof(BMFState));
     bmf_set_denormal_mode();
     rc.st = &stream;
@@ -834,11 +837,6 @@ struct BMFState {
     memcpy(p2_rate, bmf_p2_rate_init, sizeof p2_rate);
   }
 
-  BMFState() {
-    reset();
-  }
-
-  BMFState(const BMFState &) = delete;
   BMFState &operator=(const BMFState &) = delete;
 };
 
@@ -2906,7 +2904,13 @@ int32_t cum_below(const uint16_t* w, int32_t lvl) {
 
 struct GroupFolds {
   int32_t w3_double, w4_to_w2, w3_to_w2, w4_to_w1, w3_to_w1, w2_to_w1;
-  explicit GroupFolds(int32_t flags) : w3_double(flags&ctx_w3_double), w4_to_w2(flags&ctx_w4_to_w2), w3_to_w2(flags&ctx_w3_to_w2), w4_to_w1(flags&ctx_w4_to_w1), w3_to_w1(flags&ctx_w3_to_w1), w2_to_w1(flags&ctx_w2_to_w1) {
+  void Init(int32_t flags) {
+    w3_double = flags&ctx_w3_double;
+    w4_to_w2 = flags&ctx_w4_to_w2;
+    w3_to_w2 = flags&ctx_w3_to_w2;
+    w4_to_w1 = flags&ctx_w4_to_w1;
+    w3_to_w1 = flags&ctx_w3_to_w1;
+    w2_to_w1 = flags&ctx_w2_to_w1;
   }
 };
 
@@ -3735,7 +3739,8 @@ struct ModelBlock {
     for( int32_t g = 0; g<15; ++g ) {
       int32_t flags = ctx_group_flags[g];
       ctx_state[flags] = g;
-      const GroupFolds fold(flags);
+      GroupFolds fold;
+      fold.Init(flags);
       for( int32_t lo = 0; lo<5; ++lo ) {
         for( int32_t hi = 0; hi<5; ++hi ) {
           FreqRec* rec = seat_bucket(g, lo, hi, bucket);
@@ -4339,20 +4344,30 @@ uint32_t bmf_tag(uint16_t sig, char major, char minor) {
 }
 
 struct BmfStream {
-  FILE* fp = nullptr;
-  uint8_t* buf = nullptr;
-  size_t len = 0;
-  size_t cap = 0;
-  size_t pos = 0;
-  bool ran_off = false;
+  FILE* fp;
+  uint8_t* buf;
+  size_t len;
+  size_t cap;
+  size_t pos;
+  bool ran_off;
+  void Init() {
+    fp = nullptr;
+    buf = nullptr;
+    len = 0;
+    cap = 0;
+    pos = 0;
+    ran_off = false;
+  }
   static BmfStream over_file(FILE* f) {
     BmfStream s;
+    s.Init();
     s.fp = f;
     return s;
   }
 
   static BmfStream over_memory(const void* data, size_t n) {
     BmfStream s;
+    s.Init();
     s.buf = (uint8_t*)data;
     s.len = n;
     return s;
@@ -4360,6 +4375,7 @@ struct BmfStream {
 
   static BmfStream in_memory() {
     BmfStream s;
+    s.Init();
     s.cap = 1;
     s.buf = (uint8_t*)bmf_new(1);
     return s;
@@ -4451,6 +4467,10 @@ struct BmfStream {
 
 struct BmfFile {
   BmfStream io;
+  void Init() {
+    io.Init();
+  }
+
   BmfImage*fail() {
     close();
     return nullptr;
@@ -5093,6 +5113,13 @@ uint8_t write_member_head(const void* head, const CodedTail* extra, BmfStream* i
 }
 // ---------------------------------------------------------------------------
 struct BMFCodec : BMFState {
+  void Init() {
+    BMFState::Init();
+    p1_blocks.Init();
+    p2_blocks.Init();
+    model_blocks.Init();
+  }
+
   struct WeightSearch {
     BMFCodec* cx;
     const BmfImage* img;
@@ -6405,7 +6432,7 @@ struct BMFCodec : BMFState {
     }
   }
   uint8_t*compress_to_memory(BmfImage* p_i, size_t* out_len, const CodedTail* tail) {
-    reset();
+    BMFState::Init();
     out_len[0] = 0;
     BmfFile arc;
     arc.io = BmfStream::in_memory();
@@ -6419,7 +6446,7 @@ struct BMFCodec : BMFState {
     return out;
   }
   BmfImage*expand_from_memory(const uint8_t* data, size_t n, CodedTail** tail) {
-    reset();
+    BMFState::Init();
     BmfFile arc;
     arc.io = BmfStream::over_memory(data, n);
     BmfImage* img = expand_image(&arc, &coded_block);
@@ -6516,6 +6543,7 @@ void bmf_decompress(const char* InName, const char* OutName) {
 
 int32_t main(int32_t argc, char** argv) {
   const char*const* args = (const char*const*)argv;
+  bmf_codec.Init();
   bmf_set_denormal_mode();
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
   int32_t mode = argc==4&&!args[1][1] ? toupper(args[1][0]) : 0;
