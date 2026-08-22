@@ -202,17 +202,26 @@ whatever the counts say.
 | model | decision split out | where | gain |
 |---|---|---|---|
 | slow | the five-way level code, as a chain of four binary ones | `FreqRec::code_level` | `x_ai` −2.4 %, `DLRAW` −1.2 % |
-| slow | "is it this candidate?" in the stage-two scan | `offer_candidates` | `x_ai` a further −0.5 %, `t1` −0.4 % |
+| slow | "is it this candidate?" in the stage-two scan | `offer_candidates` | `x_ci` −0.63 %, `DLRAW` −0.24 % |
 | alt-P2 | class 0 vs the two non-zero classes | `P2Freq::code_three_way` | `x_ep` −0.44 % |
 
 Each split is exactly the original code by the chain rule and costs nothing on
 its own; what it buys is a binary probability to refine. Decode is 1.16× for the
 three together.
 
-The map contexts that worked are all *coarse* and all things the model already
-computes: the neighbourhood match state for the slow model's escape (its
-counters are grouped by it), the position in the candidate scan for the second
-one, the activity class for alt-P2. See the two failures below.
+The map contexts that worked are all things the model already computes, and how
+coarse they should be does not follow a single rule — it has to be measured per
+site. The level chain wants the neighbourhood match state **alone** (16 entries;
+adding a bucket or the previous level costs `x_ai` 300 bytes). alt-P2 wants the
+activity class alone (16 beats 64, 256 and 1024). But the candidate scan wants
+the scan position **and** the match state together — 128 entries against 8 —
+and that one is worth 4 000 bytes on `x_ci`, the single largest number in this
+table and the only thing that has moved the corpus's biggest file at all. The
+useful generalisation is not "keep it coarse", it is that the map must be
+indexed by something the cell it corrects is *not* already indexed by: the level
+cells are keyed on the neighbourhood, so more neighbourhood detail is redundant;
+the scan's counter is keyed on the candidate list's shape and knows nothing
+about where in the raster it is.
 
 **alt-P2, in detail [measured].** The ternary cell is split into "is the residual
 in class 0" followed by "which of the two non-zero classes" — an exact rewrite

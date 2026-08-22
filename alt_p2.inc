@@ -284,7 +284,7 @@ struct AltP2Block {
   // it), so it is the axis most likely to carry a systematic bias the frequency
   // cell cannot see.
   int32_t apm_context() const {
-    return (int32_t)(ctx&(Apm::kCtx-1));
+    return (int32_t)(ctx&15);
   }
 
   static uint32_t slot(int32_t bank, int32_t ctx) {

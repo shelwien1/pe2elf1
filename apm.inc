@@ -46,7 +46,7 @@ void apm_tables_init() {
 }
 
 struct Apm {
-  static const int32_t kCtx = 16;
+  static const int32_t kCtx = 256;
   static const int32_t kRate = 5;
   uint16_t t[kCtx*kApmBuckets];
   int32_t at;

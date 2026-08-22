@@ -41,7 +41,7 @@ struct CounterNode {
         p16 = 32;
       if( p16>65504 )
         p16 = 65504;
-      const int32_t p_ref = apm[0].refine(p16, ctx&(Apm::kCtx-1));
+      const int32_t p_ref = apm[0].refine(p16, ctx&15);
       int32_t is_zero;
       if constexpr( f_DEC ) {
         is_zero = cx[0].decode_bit(65536-p_ref, p_ref);
@@ -185,6 +185,9 @@ struct BitCtr {
   }
 
   // The same code, with the counter's probability refined through a map first.
+  // The caller owns the low bits of apm_ctx; the top bit says whether the
+  // counter had any statistics of its own or fell back to its parent, which is
+  // a different enough distribution to be worth separating.
   // The counter pair still learns exactly as it did; only what reaches the
   // arithmetic coder changes.
   template <int32_t f_DEC> int32_t code_context_bit_apm(BMFState* cx, BitCtr* parent, int32_t bit, Apm* apm, int32_t apm_ctx) {
@@ -197,7 +200,7 @@ struct BitCtr {
       p16 = 32;
     if( p16>65504 )
       p16 = 65504;
-    const int32_t p_ref = apm[0].refine(p16, apm_ctx|((src==parent) ? 8 : 0));
+    const int32_t p_ref = apm[0].refine(p16, apm_ctx|((src==parent) ? Apm::kCtx>>1 : 0));
     if constexpr( f_DEC )
       bit = cx[0].decode_bit(65536-p_ref, p_ref);
     else

@@ -576,7 +576,7 @@ struct ModelBlock {
       if( sym<0 )
         continue;
       int32_t is_sym;
-      const int32_t apm_ctx = (int32_t)(sym_pos<7 ? sym_pos : 7);
+      const int32_t apm_ctx = (int32_t)(sym_pos<7 ? sym_pos : 7)|((ctx_state_seen&15)<<3);
       if constexpr( f_DEC ) {
         is_sym = bit_node[ctr_node].template code_context_bit_apm<1>(cx, &bit_root[ctr_fallback], 0, &cand_apm, apm_ctx);
         row_cur[5][0].sym = sym;
@@ -613,7 +613,7 @@ struct ModelBlock {
   // The map's context: the neighbourhood match state the model already groups
   // its counters by, which is its coarsest activity measure.
   int32_t level_apm_context() const {
-    return (int32_t)(ctx_state_seen&(Apm::kCtx-1));
+    return (int32_t)(ctx_state_seen&15);
   }
 
   static bool intern_ctx(uint16_t* tbl, int32_t sig, uint32_t &used, int32_t &id) {
