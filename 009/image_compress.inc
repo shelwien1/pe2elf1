@@ -14,24 +14,6 @@ static uint8_t write_member_head(const void* head, const CodedTail* extra, BmfSt
   return ok;
 }
 
-// The plane descriptors, as `read_plane_descs` reads them back: six bits of
-// count and flags, then the dc byte and the weights the flags call for, each
-// biased by 64.
-void BMFCodec::write_plane_descs() {
-  for( int32_t pl = 0; pl<plane_count; ++pl ) {
-    pack_bits((plane_desc[pl].flags<<2)|plane_desc[pl].nrefs, 6);
-    if( !(plane_desc[pl].flags&desc_has_refs) )
-      continue;
-    pack_bits(plane_desc[pl].dc, 8);
-    if( plane_desc[pl].nrefs<=1u )
-      continue;
-    pack_bits(plane_desc[pl].weight0+64, 8);
-    pack_bits(plane_desc[pl].weight1+64, 8);
-    if( plane_desc[pl].nrefs>2u )
-      pack_bits(plane_desc[pl].weight2+64, 8);
-  }
-}
-
 // The image into `stream`, and the flags its coding needs into `hdr`.  Two
 // shapes: four bits or fewer is one plane straight through, and anything wider
 // gets the filter search, the descriptors, and the planes.  The narrow arm was

@@ -77,9 +77,13 @@ struct BMFCodec : BMFState {
   void clear_flags_on_all();
   template<int32_t f_DEC>
   void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane);
+  template<int32_t f_DEC, typename T>
+  void code_field(T& v, int32_t bits, int32_t bias);
   void code_image_body(BmfImage* p_i, BmfImage& hdr);
   template<int32_t f_DEC>
   void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw);
+  template<int32_t f_DEC>
+  void code_plane_descs();
   void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane);
   int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk);
   int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs);

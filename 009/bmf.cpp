@@ -28,7 +28,7 @@
 //
 // ## the encode/decode pairs
 //
-// Fifteen of them are one `template<int32_t f_DEC>` each, instantiated as the
+// Sixteen of them are one `template<int32_t f_DEC>` each, instantiated as the
 // two names their callers use.  What decided which: how many lines the two
 // bodies actually share, measured as a longest common subsequence over the
 // pair.
@@ -40,7 +40,7 @@
 //   P2Freq::code_three_way      49 + 55     alt_model_p2                  3 + 3
 //   AltP1Block::d8_body         30 + 26     code_plane                    1 + 1
 //   code_colour_plane           40 + 43     ModelBlock::code_run_length   26 + 24
-//   ModelBlock::code_plane_slow 87 + 131
+//   ModelBlock::code_plane_slow 87 + 131     code_plane_descs              14 + 18
 //
 // The last of those is inside the one pair that stays two functions.  A
 // declined pair is a decision about two *bodies*, not a bar on naming what
@@ -116,12 +116,91 @@
 // that back off the stream".  It reads the alphabet back.  It seeds the groups
 // itself.  Nobody had checked which.
 //
-// Two pairs are measured and declined, and after the three above came off this
-// table the reason for each is written out rather than left as a share.
-// `tools/pairshare.py` re-measures both and reports any line that has drifted.
+// Eleven pairs are measured and declined, and after the three above came off
+// this table the reason for each is written out rather than left as a share.
+// `tools/pairshare.py` re-measures every one and reports any line that has
+// drifted.
 //
 //   code_pixel / decode_pixel                         13 of 211 (6%)
 //   predict_med / unpredict_med                        7 of 89 (8%)
+//   reduce_alphabet / expand_alphabet                 10 of 142 (7%)
+//   write_bmp / read_bmp                               8 of 138 (6%)
+//   BMFCodec::compress_image / BMFCodec::expand_image  4 of 137 (3%)
+//   bmf_compress / bmf_decompress                      3 of 54 (6%)
+//   BMFCodec::pack_bits / BMFCodec::unpack_bits        3 of 27 (11%)
+//   AltP2Block::encode_sample / AltP2Block::decode_sample  2 of 24 (8%)
+//   RangeCoder::encode_bit / RangeCoder::decode_bit    4 of 22 (18%)
+//   AltP1Block::encode_sample / AltP1Block::decode_sample  1 of 19 (5%)
+//   RangeCoder::encode / RangeCoder::decode            1 of 14 (7%)
+//
+// **Nine of those eleven rows are new, and none of them is a new decision --
+// they are decisions that had never been written down.**  The table used to
+// hold whatever pairs somebody had thought to put on it, and
+// `tools/pairshare.py` re-measured exactly those, so a pair nobody had named
+// was a pair nobody had measured.  `tools/pairnames.py` enumerates instead: it
+// derives the pairs from the affix conventions the program is named with, and
+// reports any pair that is neither two wrappers on one template nor a row
+// here.  Its count is the thing that has to stay at zero.
+//
+// That hole is not hypothetical.  `code_colour_plane` came through it, and so
+// did `code_plane_descs`, which is on the merged table above -- fourteen lines
+// against eighteen coding one format field for field, sharing two lines by
+// measurement because `pack_bits(w + 64, 8)` and `unpack_bits(8) - 64` have no
+// text in common.  **A share cannot see a pair whose every line is spelled
+// backwards**, so a share is the wrong thing to have been filtering on, and
+// the enumerator does not filter at all.
+//
+// Two rows carry a class because the name alone is ambiguous: `encode_sample`
+// and `decode_sample` are each defined twice, in `AltP1Block` and in
+// `AltP2Block`.  Reading the table by bare name measured one arbitrary pairing
+// of the four and called it a number -- which is what `pairshare.py` did until
+// this round, and it was luck rather than design that no earlier row was an
+// overloaded name.
+//
+// The nine, each in a sentence:
+//
+// **`reduce_alphabet` / `expand_alphabet`** is the interesting one, and the
+// reason it is a decline rather than a merge is that the encoder does a job
+// the decoder does not have: it *builds* the alphabet -- the flag table or the
+// search tree, and the renumbering of the image through it -- and then codes
+// it, while the decoder only reads it back.  What the two genuinely share is
+// the coding, and that has come out by name: `BMFState::code_alphabet_size`,
+// `BMFState::code_symbol_bytes` and `init_gap_list`.  The last of those was
+// three lines that were already character-for-character identical in both
+// halves, which is all a line-based share could ever have seen of this pair.
+// The byte walk was the rest of it and looked like nothing: the encoder shifts
+// a value it has down a byte at a time and the decoder builds one up, which is
+// one loop over one index with one carry rule, written twice.
+//
+// **`write_bmp` / `read_bmp`** are the BMP container, not the codec, and the
+// asymmetry is the format's: the reader dispatches over depth, palette and two
+// RLE encodings and repairs what it can, and the writer emits one shape.
+//
+// **`compress_image` / `expand_image`** are the archive members either way.
+// The reader has to decide what a member is before it can decode it and the
+// writer knows; the coding they wrap is `code_image_body` and `expand_coded`,
+// which are where the direction pair already is.
+//
+// **`bmf_compress` / `bmf_decompress`** are the two entry points `main`
+// parses `c` and `d` into.  Each is a `reset`, a call and an error path.
+//
+// **`pack_bits` / `unpack_bits`** are inverse, and their accumulators run
+// opposite ways: the writer fills a word and flushes it when it overflows, the
+// reader drains one and pulls the next when it runs out.  The shared shape is
+// "did this cross a word boundary", which is an `if` and not a body.
+//
+// **`AltP2Block::encode_sample` / `decode_sample`** and
+// **`AltP1Block::encode_sample` / `decode_sample`** are both the shape
+// `code_pixel` is: the encoder knows the sample and picks the code, testing
+// the reconstruction against a window and falling back to `fold_hi` when it
+// misses, and the decoder is handed the code and unfolds it.  There is no
+// window on the decoder's side because there is nothing left to choose.
+//
+// **`RangeCoder::encode_bit` / `decode_bit`** share the one line that matters
+// -- `f0 * (range / (f0 + f1))` -- and then split: the encoder branches on the
+// bit it was given, the decoder branches on `low >= rt` and *returns* the bit.
+// **`RangeCoder::encode` / `decode`** likewise, where the encoder normalises
+// and returns a width and the decoder works off a division it already has.
 //
 // **`predict_med` walks backwards and `unpredict_med` forwards**, and that is
 // structural rather than a spelling.  The forward transform has to read each

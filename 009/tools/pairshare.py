@@ -30,7 +30,12 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
-ROW = re.compile(r'^//\s+(\w+)\s*/\s*(\w+)\s+(\d+) of (\d+) \((\d+)%\)\s*$')
+import pairnames                                                  # noqa: E402
+
+# The row shape lives in `pairnames.py` along with the class a row may name,
+# because a row is now allowed to say *which* `encode_sample` it means -- there
+# are two.  Both tools read the same table, so they read it the same way.
+ROW = pairnames.ROW
 
 # The nine that *were* merged, named in the table above the declines as
 # `name  a + b`.  Their two bodies no longer exist, so there is nothing to
@@ -46,13 +51,12 @@ TEMPLATE = re.compile(r'template\s*<\s*int(?:32_t)?\s+f_DEC\s*>')
 
 
 def claims(path):
-    """(a, b, shared, total, percent) for every row of the table."""
+    """(a, b, shared, total, percent, classes) for every row of the table."""
     out = []
     for l in open(path).read().split('\n'):
-        m = ROW.match(l)
-        if m:
-            out.append((m.group(1), m.group(2), int(m.group(3)),
-                        int(m.group(4)), int(m.group(5))))
+        r = pairnames.row(l)
+        if r:
+            out.append(r + (pairnames.row_class(l),))
     return out
 
 
@@ -85,10 +89,26 @@ def norm(rows):
             for l in rows if l.split('//')[0].strip()]
 
 
-def measure(bodies, a, b):
-    if a not in bodies or b not in bodies:
+def pick(defs, name, cls):
+    """The definition a row means: the one in `cls` when the row named one.
+
+    A row that names no class and finds more than one definition is ambiguous
+    rather than fine -- it would silently measure whichever came first, which
+    is the bug `pairnames.py` found in this file's own reader.
+    """
+    got = defs.get(name)
+    if not got:
         return None
-    x, y = norm(bodies[a]), norm(bodies[b])
+    if cls:
+        got = [d for d in got if d.cls == cls]
+    return got[0] if len(got) == 1 else None
+
+
+def measure(defs, a, b, classes):
+    da, db = pick(defs, a, classes[0]), pick(defs, b, classes[1])
+    if da is None or db is None:
+        return None
+    x, y = norm(da.body), norm(db.body)
     sm = difflib.SequenceMatcher(None, x, y, autojunk=False)
     shared = sum(n for _i, _j, n in sm.get_matching_blocks())
     total = len(x) + len(y)
@@ -109,16 +129,15 @@ def main():
     for owner, n in lost:
         print('  %-24s the table says one template, and it is not one'
               % ('%s::%s' % (owner, n) if owner else n))
-    bodies = {}
-    for a, b, n, _sig, _d in structs.defs(lines):
-        bodies.setdefault(n, lines[a:b + 1])
+    defs, _declined = pairnames.collect(path)
 
     drift, missing = 0, 0
-    for a, b, shared, total, pct in rows:
-        got = measure(bodies, a, b)
+    for a, b, shared, total, pct, classes in rows:
+        got = measure(defs, a, b, classes)
         if got is None:
             missing += 1
-            print('  %-24s/%-24s  named in the table, not in the unit' % (a, b))
+            print('  %-24s/%-24s  named in the table, not found in the unit '
+                  '(or named twice and the row does not say which)' % (a, b))
             continue
         if got != (shared, total, pct):
             drift += 1

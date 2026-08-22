@@ -101,6 +101,17 @@ struct BMFState {
   uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold);
   int32_t tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val);
   void reduce_alphabet(ModelBlock* blk, uint8_t* src);
+  // **The two halves of the alphabet coder that both directions run.**  The
+  // encoder of an alphabet lives inside `reduce_alphabet`, which also builds
+  // it, and the decoder is `ModelBlock::expand_alphabet`, which has nothing to
+  // build -- so the pair measured at 3% and neither half was ever on a table.
+  // What they share is not the analysis, it is the coding: the size field, and
+  // the byte-at-a-time walk with the carry that picks the next list.
+  template<int32_t f_DEC>
+  uint32_t code_alphabet_size(uint32_t n, uint32_t cap);
+  template<int32_t f_DEC>
+  uint32_t code_symbol_bytes(SymList* lists, uint32_t nbytes, uint32_t val,
+                             int32_t& carry);
 
   // **The eight the block classes reach through `cx`.**  A block is parsed
   // before `BMFCodec` exists, so anything it calls has to be state-level; these

@@ -441,6 +441,22 @@ static inline void init_byte_lists(BMFState* cx, SymList* list, uint32_t nbytes)
     list[k].init(256, 1, &cx->byte_list_ent[k*256]);
 }
 
+// The one list the narrow alphabet is coded through: the gaps between the
+// symbols that occur, so an alphabet of `n_syms` out of `mask + 1` leaves
+// `mask - n_syms + 1` absent and the largest gap is one more than that.
+//
+// **These three lines were the only text `reduce_narrow_alphabet` and
+// `expand_alphabet` had in common**, and they were identical in both -- which
+// is the whole of what a line-based share could see of a pair that codes and
+// decodes the same list.  The rest of what those two share is structure, and
+// `BMFState::code_symbol_bytes` below is the other half of it.
+static inline void init_gap_list(BMFState* cx, SymList* list, uint32_t mask,
+                                 uint32_t n_syms) {
+  BMF_ASSUME(mask-n_syms+2<=257);
+  list[0].init(mask-n_syms+2, 1, cx->gap_list_ent);
+  list[0].rescale_at = 19*list[0].n;
+}
+
 
 static inline SymListBlock*sym_list_block(SymList* list) {
   return (SymListBlock*)((uint8_t*)list-__builtin_offsetof(SymListBlock, list));

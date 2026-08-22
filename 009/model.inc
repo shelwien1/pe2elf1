@@ -844,7 +844,7 @@ struct ModelBlock {
 
   void expand_alphabet() {
     SymList lists[16];
-    uint32_t n_syms, j, carry;
+    uint32_t n_syms, j;
     uint32_t bits = depth;
     uint32_t mask = 0xFFFFFFFF>>(-(uint8_t)depth&31);
     uint32_t nbytes = (bits+7)>>3;
@@ -852,9 +852,8 @@ struct ModelBlock {
     uint32_t cap = mask+1;
     if( bits>8 )
       cap = no_symbol+1;
-    uint32_t n_1 = cx->rc_decode_flat(cap);
-    alphabet = n_1+1;
-    if( (int32_t)(n_1+1)<=0x2000 ) {
+    alphabet = cx->code_alphabet_size<1>(0, cap);
+    if( (int32_t)alphabet<=0x2000 ) {
       void* codes = sym_code_store;
       // `n_syms` was re-read from `alphabet` at four points of this body, and
       // `codes_p` from `sym_code` at two more, across loops that touch
@@ -867,21 +866,12 @@ struct ModelBlock {
         init_byte_lists(cx, lists, nbytes);
         if( n_syms ) {
           // Guarded by `if( alphabet )` above.
-          carry = 0;
-          for( uint32_t s = 0; s<alphabet; ++s ) {
-            sym_code[s] = 0;
-            for( uint32_t b = 0; b<nbytes; ++b ) {
-              uint32_t piece = lists[4*b+carry].decode_symbol_list(cx);
-              carry = piece>>6;
-              sym_code[s] += piece<<((8*b)&31);
-            }
-            carry = (uint8_t)sym_code[s]>>7;
-          }
+          int32_t carry = 0;
+          for( uint32_t s = 0; s<alphabet; ++s )
+            sym_code[s] = cx->code_symbol_bytes<1>(lists, nbytes, 0, carry);
         }
       } else if( n_syms<=mask ) {
-        BMF_ASSUME(mask-n_syms+2<=257);
-        lists[0].init(mask-n_syms+2, 1, cx->gap_list_ent);
-        lists[0].rescale_at = 19*lists[0].n;
+        init_gap_list(cx, lists, mask, n_syms);
         if( alphabet ) {
           int32_t run = 0;
           for( uint32_t s2 = 0; s2<alphabet; ++s2 ) {

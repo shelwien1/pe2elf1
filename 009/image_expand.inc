@@ -28,26 +28,70 @@
 // `BmfImage` scratch for the one-plane decode, and fourteen spill slots each
 // holding a copy of a local that is still live at the read.
 
-// The plane descriptors, six bits each: two of reference count and four of
-// flags, then the dc byte and the reference weights those flags call for.  The
-// weights are written biased by 64 and read back the same way.
-void BMFCodec::read_plane_descs() {
+// One packed field of the descriptor block, either way.  `bias` goes on on the
+// way out and comes off on the way back, which is the whole of the difference
+// between the two loops below.  A reference and not a value in and out, so
+// that a `uint8_t` field and an `int32_t` one are the same call.
+template<int32_t f_DEC, typename T>
+void BMFCodec::code_field(T& v, int32_t bits, int32_t bias) {
+  if constexpr( f_DEC )
+    v = (T)((int32_t)unpack_bits(bits)-bias);
+  else
+    pack_bits((uint32_t)((int32_t)v+bias), bits);
+}
+
+// **The plane descriptors, and the one format both directions spell.**  Six
+// bits of reference count and flags, then the dc byte and the reference
+// weights those flags call for, each biased by 64.
+//
+// This was two bodies with a comment apiece describing the same six fields --
+// which is the duplication saying so out loud, a paragraph written twice
+// because the code was.  Field for field the two agree: the same loop, the
+// same two `continue` guards on the same conditions, the same widths in the
+// same order, the same bias.
+//
+// **Their measured share was 2 lines of 24, and that number meant nothing.**
+// `pack_bits(w+64, 8)` and `unpack_bits(8)-64` have no text in common, so a
+// longest-common-subsequence over lines scores a pair like this at the floor
+// however identical it is -- the same way it scored `code_colour_plane`, whose
+// two halves were also one computation under four spellings.  Neither of these
+// was ever on the table above `bmf.cpp`: nothing enumerated the pairs, so a
+// pair nobody had named was a pair nobody had measured.  `tools/pairnames.py`
+// is what closes that, and it is what found this one.
+//
+// One line is genuinely the decoder's alone.  `src_plane` is not in the stream
+// -- the encoder gets it from the filter search, in `plane_choose.inc` and
+// `filter_cost.inc` -- so the decoder rebuilds it here from the count it has
+// just read.
+template<int32_t f_DEC>
+void BMFCodec::code_plane_descs() {
   for( int32_t pl = 0; pl<plane_count; ++pl ) {
-    uint32_t desc = unpack_bits(6);
-    int32_t nrefs = desc&3;
-    plane_desc[pl].flags = desc>>2;
-    plane_desc[pl].nrefs = nrefs;
-    plane_desc[nrefs].src_plane = pl;
-    if( !(plane_desc[pl].flags&desc_has_refs) )
+    PlaneDesc& d = plane_desc[pl];
+    uint32_t head = (uint32_t)((d.flags<<2)|d.nrefs);
+    code_field<f_DEC>(head, 6, 0);
+    if constexpr( f_DEC ) {
+      d.flags = (uint8_t)(head>>2);
+      d.nrefs = (uint8_t)(head&3);
+      plane_desc[head&3].src_plane = (uint8_t)pl;
+    }
+    if( !(d.flags&desc_has_refs) )
       continue;
-    plane_desc[pl].dc = unpack_bits(8);
-    if( nrefs<=1 )
+    code_field<f_DEC>(d.dc, 8, 0);
+    if( d.nrefs<=1u )
       continue;
-    plane_desc[pl].weight0 = unpack_bits(8)-64;
-    plane_desc[pl].weight1 = unpack_bits(8)-64;
-    if( nrefs>2 )
-      plane_desc[pl].weight2 = unpack_bits(8)-64;
+    code_field<f_DEC>(d.weight0, 8, 64);
+    code_field<f_DEC>(d.weight1, 8, 64);
+    if( d.nrefs>2u )
+      code_field<f_DEC>(d.weight2, 8, 64);
   }
+}
+
+void BMFCodec::read_plane_descs() {
+  code_plane_descs<1>();
+}
+
+void BMFCodec::write_plane_descs() {
+  code_plane_descs<0>();
 }
 
 // Each plane coded on its own, so each is decoded through a header that says

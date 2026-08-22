@@ -88,12 +88,10 @@ static void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk
   } else {
     n_distinct = 0;
   }
-  cx->rc.encode(n_distinct-1, n_distinct, mask+1);
+  cx->code_alphabet_size<0>(n_distinct, mask+1);
   uint32_t n_syms = blk1->alphabet;
   if( n_syms<=mask ) {
-    BMF_ASSUME(mask-n_syms+2<=257);
-    lists[0].init(mask-n_syms+2, 1, cx->gap_list_ent);
-    lists[0].rescale_at = 19*lists[0].n;
+    init_gap_list(cx, lists, mask, n_syms);
     n_syms3 = blk1->alphabet;
     if( n_syms3 ) {
       prev = 0;
@@ -164,6 +162,57 @@ int32_t BMFState::tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
   return node;
 }
 
+// **The alphabet's size, as a flat symbol in `[0, cap)`.**  Both arms of the
+// encoder write it and `expand_alphabet` reads it, and `rc_decode_flat` is
+// already `rc.encode(s, s+1, tot)` read backwards -- so the two are the same
+// field and were spelled as two.  The encoder codes `n - 1`, which is why the
+// decoder's `+1` is here rather than at its one call site.
+template<int32_t f_DEC>
+uint32_t BMFState::code_alphabet_size(uint32_t n, uint32_t cap) {
+  if constexpr( f_DEC )
+    return rc_decode_flat(cap)+1;
+  rc.encode(n-1, n, cap);
+  return n;
+}
+
+// **One symbol of a wide alphabet, a byte at a time, either way.**  The byte
+// being coded picks the list for the byte above it -- `carry` is the top two
+// bits of the byte just coded, and the caller's `4*b + carry` index is what
+// makes this a context.  After the last byte the carry becomes the *bottom*
+// byte's top bit, which carries into the next symbol.
+//
+// The two bodies this came out of are the same loop over the same index with
+// the same two carry updates; what made them look different is that the
+// encoder walks a value it already has and shifts it down, while the decoder
+// builds one up.  Written with the coded byte named in both, they are one
+// body: `piece` is what goes on the stream, and `carry` is a function of it
+// either way.
+//
+// The encoder's `val` comes out of the search tree and the decoder's is
+// assembled here, so the return is the symbol in both directions -- which is
+// also what the trailing carry has to be taken from.
+template<int32_t f_DEC>
+uint32_t BMFState::code_symbol_bytes(SymList* lists, uint32_t nbytes,
+                                     uint32_t val, int32_t& carry) {
+  uint32_t word = val, out = 0;
+  for( uint32_t b = 0; b<nbytes; ++b ) {
+    uint32_t piece;
+    if constexpr( f_DEC ) {
+      piece = lists[4*b+carry].decode_symbol_list(this);
+      out += piece<<((8*b)&31);
+    } else {
+      piece = (uint8_t)word;
+      lists[4*b+carry].code_symbol(this, (uint8_t)piece);
+      word >>= 8;
+    }
+    carry = piece>>6;
+  }
+  if constexpr( !f_DEC )
+    out = val;
+  carry = (uint8_t)out>>7;
+  return out;
+}
+
 // The wide arm: symbols too big for a flag table, so the distinct values go
 // into a binary search tree and the image is renumbered through it.
 //
@@ -186,7 +235,6 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   uint8_t* out[19];
   uint32_t alpha_n, done;
   int32_t node, carry;
-  uint32_t word, k;
   uint8_t *rp;
   uint32_t sym_bits = blk->depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
@@ -240,7 +288,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
     // Both exits of the loop above jumped here past this line, which is the
     // line they set `alpha_n` from.  Leaving the loop runs it.
     alpha_n = blk->alphabet;
-    rc.encode(alpha_n-1, alpha_n, 0x2001u);
+    code_alphabet_size<0>(alpha_n, no_symbol+1);
     if( blk->alphabet>0x2000 ) {
       out[1] = (uint8_t*)bmf_new(blk->height*n_kids*blk->width);
       int32_t img_w = blk->width;
@@ -307,22 +355,15 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
       // `alpha_m` was re-read from `blk->alphabet` after the list setup and
       // again inside the loop below as `si_end`, across walks that touch
       // neither -- the same spilling `expand_alphabet` does on its side.  One
-      // read.  `word` likewise: the byte loop shifts it down and the line after
-      // reloads it, and the only thing the reload feeds is the carry, which
-      // wants the *low* byte.
+      // read.  The byte walk itself is `code_symbol_bytes`, which is where the
+      // reload that fed the trailing carry went: it wants the symbol, and the
+      // symbol is what that returns.
       init_byte_lists(this, lists, n_kids);
       const int32_t alpha_m = blk->alphabet;
       if( alpha_m ) {
         carry = 0;
-        for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si ) {
-          word = tree[si].val;
-          for( k = 0; k<n_kids; ++k ) {
-            lists[4*k+carry].code_symbol(this, (uint8_t)word);
-            carry = (uint8_t)word>>6;
-            word >>= 8;
-          }
-          carry = (uint8_t)tree[si].val>>7;
-        }
+        for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si )
+          code_symbol_bytes<0>(lists, n_kids, tree[si].val, carry);
       }
     }
     free_sym_entries(lists, 16);

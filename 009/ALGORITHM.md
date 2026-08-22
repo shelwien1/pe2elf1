@@ -372,6 +372,25 @@ Everything after this works in the reduced alphabet, so the model's tables are
 sized by what the image actually uses. For depths above 8 the same is done over
 multi-byte values through a hash of distinct words.
 
+The encoder of all this lives inside `reduce_alphabet`, which builds the
+alphabet as well as coding it, and the decoder is `expand_alphabet`, which only
+reads it back — so the two are not one function. What they *do* share is the
+coding, and it is named:
+
+- **`code_alphabet_size<f_DEC>`** is step 1 either way. The size is a flat
+  symbol in `[0, cap)`, where `cap` is `mask + 1` for a narrow alphabet and
+  `no_symbol + 1` for a wide one; the encoder codes `n - 1` and the decoder
+  adds the 1 back.
+- **`init_gap_list`** sets up the single `SymList` step 2 codes gaps through.
+  An alphabet of `n` symbols out of `mask + 1` leaves `mask - n + 1` values
+  absent, so the largest gap is one more than that, which is the list's size.
+- **`code_symbol_bytes<f_DEC>`** is the wide arm: one symbol coded a byte at a
+  time, low byte first, where the top two bits of each byte choose which of the
+  next position's four lists codes the byte above it. After the last byte the
+  carry becomes the *bottom* byte's top bit and carries into the next symbol.
+  The encoder walks a value it already has and shifts it down; the decoder
+  builds one up; the index arithmetic and both carry rules are the same.
+
 ### 4.2 the neighbourhood
 
 `row_cur[0..4]` are five row buffers, rotated one step per row, and
@@ -1015,6 +1034,15 @@ The descriptors are not range coded. They go through `pack_bits`/`unpack_bits`
 in `rc_io.inc`, a plain LSB-first bit packer over 32-bit words, into the **same
 buffer** the coded stream will use — so a member's payload is: the
 near-lossless nibble, the descriptors, and then the range coder's output.
+
+`code_plane_descs<f_DEC>` is the descriptor block itself, one function for both
+directions. Per plane: six bits carrying four of flags and two of reference
+count, then — only if the flags say there are references — the dc byte, and
+then, for two references or more, two or three weights. Every weight is stored
+biased by 64, which is what `code_field<f_DEC>` applies on the way out and
+removes on the way back. One thing is the decoder's alone: `src_plane` is not
+in the stream at all, since the encoder gets it from the filter search, so the
+decoder rebuilds it from the reference count it has just read.
 
 The two meet at `packer_rewind`. The packer writes whole 32-bit words and the
 coder starts at a byte, so before the first symbol is coded the output cursor is
