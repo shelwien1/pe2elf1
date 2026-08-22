@@ -63,6 +63,33 @@ The build corresponds to `bmf -S -Q9` (slow mode, max search quality): the `opt_
 constants (`bmf.cpp:283`–289) are baked in and, notably, are never read anywhere else
 in the file — the reconstruction has the option handling constant-folded away.
 
+### 1.1 Recurring design principles
+
+A few ideas recur across all three models and explain most of the design:
+
+* **Progressive fallback.** Easy pixels exit through cheap paths; hard ones fall
+  through to progressively more general (and more expensive) representations. The
+  slow model is the clearest case: run copy → neighbour-rank hit → candidate flag
+  hit → learned symbol list → dense escape list, with exclusion making each failed
+  stage free for the next.
+* **Predict, then fold.** Wherever the data is numeric, a predictor concentrates
+  the entropy near zero and a zig-zag fold turns the signed residual into a
+  small-code-biased unsigned alphabet.
+* **Statistics sharing instead of probability mixing.** There is no PAQ-style
+  mixer anywhere. Instead, one observation trains many *related* contexts at
+  update time: parent/child inheritance (`BitCtr` seeding, `FreqRec::blend_from`),
+  sign-mirrored contexts trained with the negated residual, Hamming-distance-1 and
+  quantization-neighbour contexts trained at reduced gain (alt-P1's
+  `update_model`, alt-P2's `code_banks` and lattice smearing).
+* **Annealed adaptation.** Nearly every counter starts fast and slows as it
+  matures — growing rescale limits (`BitCtr`), increment schedules
+  (`FreqRec`, tree strips, `P2Freq.step`), rate countdowns (`P2Count`) — and the
+  same maturity measures gate when the generalization updates above are switched
+  off.
+* **Measured rate over heuristics.** Closed-form fits and entropy histograms only
+  seed the search; every mode decision that matters is made by running the real
+  coder and counting bits.
+
 ---
 
 ## 2. Container and stream layout
@@ -231,7 +258,10 @@ variant than the final encode.
    segment), 0 → **interleaved** mode (`transform_planes`, `bmf.cpp:5149`: apply all
    transforms in place reading from a pristine copy, then one model pass over the
    interleaved bytes — either one slow-model pass, or the joint multi-plane alt-P1 /
-   alt-P2 coders).
+   alt-P2 coders). The trade-off being searched: interleaved coding lets the model
+   see cross-byte pixel-word structure directly (and lets the joint alt models use
+   same-pixel cross-plane state), while planar coding wins when each channel's own
+   spatial structure dominates the inter-channel correlation.
 
 Images of depth ≤ 4 bpp skip the search entirely and go straight to a single
 slow-model pass over the packed data (`code_image_body`, `bmf.cpp:6533`).
@@ -344,8 +374,9 @@ context owns a 254-word strip in `model_table_store` (1024 strips): `freq[0]` to
 frequencies, then 122 `FreqPair{f[2]}` binary nodes forming per-level bit trees.
 A value is split Elias-gamma-style: level 0 = 0, level 1 = 1, level 2 = 2–3, level
 *L*≥3 covers 2^(L−1) values; the level is coded from the 8 frequencies, the offset by
-walking the level's binary tree MSB-first (each node a plain dual-count bit model,
-increment `alt_freq_init`, halved above 0x4000). Level seeds: `{205,124,147,83,48,
+walking the level's binary tree MSB-first (each node a plain dual-count bit model
+seeded `{60,36}` — a mild bias toward bit 0 — with increment `alt_freq_init`, halved
+above 0x4000). Level seeds: `{205,124,147,83,48,
 16,8,4}`; increment seeded at `24·alt_freq_limit` and **annealed** at each rescale
 (−16 while large, then −4 down to `alt_freq_limit`) — per-context adaptation that
 starts very fast and settles. Model parameters differ by predictor: P1 uses
