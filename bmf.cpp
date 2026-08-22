@@ -6628,6 +6628,30 @@ int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail
   return data_size;
 }
 
+// ---------------------------------------------------------------------------
+// Layout guards.  Several routines deliberately write past the end of one
+// member into the next (the fold/fold_hi pair filled by alt_init_tables, the
+// bias[] slots NbRow::predict reaches through p2_row, the ModelBlock grid
+// memset that runs one record into its padding), and reset() clears exactly
+// the BMFState subobject.  These assertions make any reordering that would
+// silently break those a build failure instead.
+static_assert(offsetof(AltP1Block, fold_hi)==offsetof(AltP1Block, fold)+256);
+static_assert(offsetof(AltP1Block, unfold)==offsetof(AltP1Block, fold_hi)+256);
+static_assert(offsetof(AltP2Block, fold_hi)==offsetof(AltP2Block, fold)+256);
+static_assert(offsetof(AltP2Block, unfold)==offsetof(AltP2Block, fold_hi)+256);
+static_assert(offsetof(AltP2Block, bias)==offsetof(AltP2Block, p2_row)+sizeof(float)*7*4);
+static_assert(offsetof(ModelBlock, _pad1051664)==offsetof(ModelBlock, grid)+sizeof(FreqRec)*ModelBlock::kFreqGridCount);
+static_assert(offsetof(ModelBlock, grid)+188*sizeof(FreqRec)+0x100000<=offsetof(ModelBlock, bit_root));
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winvalid-offsetof"
+static_assert(offsetof(BMFCodec, p1_blocks)>=sizeof(BMFState));
+#pragma clang diagnostic pop
+static_assert(sizeof(BmfImage)==16&&offsetof(BmfImage, pixels)==16);
+static_assert(offsetof(BmfImage, depth)==10&&offsetof(BmfImage, flags)==11&&offsetof(BmfImage, data_size)==12);
+static_assert(sizeof(CodedTail)==8);
+static_assert(sizeof(BmpHeader)==54);
+static_assert(sizeof(SymEntry)==3);
+
 BMFCodec bmf_codec;
 
 void bmf_compress(const char* InName, const char* OutName) {
