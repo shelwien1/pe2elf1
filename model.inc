@@ -87,7 +87,7 @@ struct ModelBlock {
   BitCtr bit_node[4096];
   // One map per cell kind: the context cell and the bucket cell it falls back
   // to have different distributions and different amounts of evidence.
-  Apm level_apm[2];
+  Apm level_apm[2][4];
   // The candidate scan's map, indexed by how deep into the scan we are.
   Apm cand_apm;
   BitCtr esc_ctr[257];
@@ -173,8 +173,9 @@ struct ModelBlock {
     ctx_id3_used = 0;
     ctx_id2_used = 0;
     ctx_id1_used = 0;
-    level_apm[0].Init();
-    level_apm[1].Init();
+    for( int32_t k = 0; k<2; ++k )
+      for( int32_t j = 0; j<4; ++j )
+        level_apm[k][j].Init();
     cand_apm.Init();
     memset(ctx_id1, 255, sizeof ctx_id1);
     memset(ctx_id2, 255, sizeof ctx_id2);
@@ -1137,7 +1138,7 @@ struct ModelBlock {
     FreqRec* freq_tbl = &grid[id2+kFreqTableOffset];
     {
       auto decode_against = [&](FreqRec* rec, int32_t kind) {
-                              const int32_t lvl = rec[0].template code_level<1>(cx, 0, &level_apm[kind], level_apm_context());
+                              const int32_t lvl = rec[0].template code_level<1>(cx, 0, level_apm[kind], level_apm_context());
                               hit = lvl;
                               return lvl;
                             };
@@ -1238,7 +1239,7 @@ struct ModelBlock {
       FreqRec* binp = &grid[bucket_idx];
       FreqRec* frec = &grid[id2+kFreqTableOffset];
       auto code_against = [&](FreqRec* rec, int32_t kind) {
-                            const int32_t lvl = rec[0].template code_level<0>(cx, nb4.rank(rowp[0].sym), &level_apm[kind], level_apm_context());
+                            const int32_t lvl = rec[0].template code_level<0>(cx, nb4.rank(rowp[0].sym), level_apm[kind], level_apm_context());
                             hit = lvl;
                             return lvl;
                           };

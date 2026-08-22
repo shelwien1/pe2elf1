@@ -187,13 +187,21 @@ bucket, the plane index.
 
 **Built for all three models [measured].** The map itself is `apm.inc`; each
 model splits its highest-traffic decision into a binary one and refines that
-one's probability. Corpus total **−0.24 %** on top of everything before it, but
-that average hides the shape: it is −1.6 % on `x_ai`, −0.9 % on `DLRAW`,
-−0.44 % on `x_ep`, −0.06 % on `x_ci`, and +0.26 % on `f05_200`.
+one's probability. Corpus total **−0.44 %** on top of everything before it, but
+that average hides the shape: it is −2.9 % on `x_ai`, −1.2 % on `DLRAW`,
+−0.44 % on `x_ep`, −0.16 % on `x_ci`, and +0.17 % on `f05_200`.
+
+Splitting the slow model's five-way level code *all the way down* to four binary
+decisions, each with its own map, beats splitting only the escape off
+(`x_ai` 144 460 against 147 092) and beats splitting the escape and level 1
+(144 460 against 144 796), at the same decode speed. Every decision in the chain
+is coded even when the cell gives that level no mass: skipping those would save
+a fraction of a bit and cost the invariant that both sides walk the same chain
+whatever the counts say.
 
 | model | decision split out | where | gain |
 |---|---|---|---|
-| slow | escape (level 0) vs one of the four ranked neighbours | `FreqRec::code_level` | `x_ai` −1.1 %, `DLRAW` −0.96 % |
+| slow | the five-way level code, as a chain of four binary ones | `FreqRec::code_level` | `x_ai` −2.4 %, `DLRAW` −1.2 % |
 | slow | "is it this candidate?" in the stage-two scan | `offer_candidates` | `x_ai` a further −0.5 %, `t1` −0.4 % |
 | alt-P2 | class 0 vs the two non-zero classes | `P2Freq::code_three_way` | `x_ep` −0.44 % |
 
