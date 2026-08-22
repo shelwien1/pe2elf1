@@ -559,6 +559,60 @@ struct BMFCodec : BMFState {
   void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
     code_colour_plane<0>(img, dst, plane);
   }
+  // Writes the colour table after the coded body.  Small palettes go out
+  // verbatim as they always did; larger ones get their own range-coded segment
+  // behind a two-byte length, with kPaletteRaw naming the verbatim fallback so
+  // an incompressible table costs two bytes rather than the coder's framing.
+  void write_palette(BmfStream* io, const uint8_t* pal, uint32_t pal_bytes, uint8_t depth) {
+    if( !palette_is_coded(depth) ) {
+      io[0].write_all(pal, pal_bytes);
+      return;
+    }
+    uint8_t*const copy = (uint8_t*)bmf_new(pal_bytes);
+    memcpy(copy, pal, pal_bytes);
+    stream.size = (int32_t)pal_bytes+1024;
+    stream.buf = (uint8_t*)bmf_new(stream.size);
+    stream.cur = stream.buf;
+    enc_init();
+    PaletteModel model;
+    model.code<0>(this, copy, (int32_t)(pal_bytes/3));
+    flush();
+    const uint32_t coded = (uint32_t)(stream.cur-stream.buf);
+    const bool win = coded<pal_bytes;
+    bmf_log("  palette %u bytes -> %u coded  %s\n", pal_bytes, coded,
+            win ? "<<" : "(shipping the table raw)");
+    const uint16_t len = (uint16_t)(win ? coded : kPaletteRaw);
+    io[0].write_all(&len, 2u);
+    io[0].write_all(win ? stream.buf : pal, win ? coded : pal_bytes);
+    free(stream.buf);
+    stream.buf = nullptr;
+    free(copy);
+  }
+  bool read_palette(BmfStream* io, uint8_t* pal, uint32_t pal_bytes, uint8_t depth) {
+    if( !palette_is_coded(depth) )
+      return io[0].read(pal, pal_bytes)==pal_bytes;
+    uint16_t len = 0;
+    if( !io[0].read_exact(&len, 2u) )
+      return false;
+    if( len==kPaletteRaw )
+      return io[0].read(pal, pal_bytes)==pal_bytes;
+    if( len<2u||len>pal_bytes )
+      return false;
+    stream.size = len;
+    stream.buf = (uint8_t*)bmf_new(len);
+    stream.cur = stream.buf;
+    bool ok = io[0].read(stream.buf, len)==(size_t)len;
+    if( ok ) {
+      dec_init();
+      PaletteModel model;
+      model.code<1>(this, pal, (int32_t)(pal_bytes/3));
+      finish();
+      ok = stream.buf+len==stream.cur;
+    }
+    free(stream.buf);
+    stream.buf = nullptr;
+    return ok;
+  }
   int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
     BmfImage hdr;
     if( !arc_in[0].io.fp&&!arc_in[0].io.buf )
@@ -590,7 +644,7 @@ struct BMFCodec : BMFState {
         int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok;
         free(stream.buf);
         if( ok_all&&(p_i[0].depth&depth_palette)!=0 )
-          arc_in[0].io.write_all(&p_i[0].pixels[p_i[0].data_size], pal_bytes);
+          write_palette(&arc_in[0].io, &p_i[0].pixels[p_i[0].data_size], pal_bytes, p_i[0].depth);
         arc_in[0].io.flush();
         if( ok_all )
           return (int32_t)hdr.data_size;
@@ -783,9 +837,15 @@ struct BMFCodec : BMFState {
     if( hdr.data_size>io[0].bytes_left() ) {
       return arc_in[0].fail();
     }
-    uint32_t pal_bytes = 3<<(hdr.depth&31);
-    if( !(hdr.depth&depth_palette) )
-      pal_bytes = 0;
+    uint32_t pal_bytes = 0;
+    if( hdr.depth&depth_palette ) {
+      // alloc_image only reserves table space for 8 bits and under, so a header
+      // claiming a palette at a greater depth would have the read run off the
+      // end of the image buffer.
+      if( (hdr.depth&depth_bits)>8 )
+        return arc_in[0].fail();
+      pal_bytes = 3u<<(hdr.depth&depth_bits);
+    }
     if( !hdr.width||!hdr.height||(uint32_t)hdr.width*(uint32_t)((((hdr.depth&depth_bits)+7)>>3))>0xFFFFu ) {
       return arc_in[0].fail();
     }
@@ -811,9 +871,12 @@ struct BMFCodec : BMFState {
       }
     }
     if( hdr.depth&depth_palette ) {
-      uint8_t* pal_at = (img_at[0].depth&depth_palette) ? img_at[0].palette() : nullptr;
-      uint32_t got = (uint32_t)io[0].read(pal_at, pal_bytes);
-      if( got!=pal_bytes ) {
+      uint8_t* pal_at = img_at[0].palette();
+      // Only a coded body carries a coded palette; the raw path still writes
+      // the table straight after the pixels in one piece.
+      const bool coded_pal = (hdr.flags&flags_coded)!=0;
+      if( !(coded_pal ? read_palette(io, pal_at, pal_bytes, hdr.depth)
+                      : io[0].read(pal_at, pal_bytes)==pal_bytes) ) {
         return arc_in[0].fail();
       }
     }

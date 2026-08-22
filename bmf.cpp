@@ -37,6 +37,7 @@
 #include "model.inc"
 #include "bmp.inc"
 #include "planes.inc"
+#include "palette.inc"
 #include "codec.inc"
 
 // Layout guards.  Several routines deliberately write past the end of one
