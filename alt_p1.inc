@@ -185,7 +185,7 @@ struct AltP1Block {
             alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code);
             ++src;
           }
-          record_sample((uint8_t)*q);
+          record_sample((uint8_t)q[0]);
           ++q;
         }
         out = q;

@@ -380,7 +380,7 @@ int32_t estimate_cost(const int32_t* bin, int32_t n) {
   return (int32_t)((total-entropy)*1.442695040888963);
 }
 uint32_t plane_mix2(const PlaneDesc &d, const uint8_t* p0, const uint8_t* p1) {
-  return (d.weight0**p0+d.weight1*(uint32_t)*p1+40)>>7;
+  return (d.weight0**p0+d.weight1*(uint32_t)p1[0]+40)>>7;
 }
 
 int32_t plane_mix3(const PlaneDesc &d, const uint8_t* p) {
@@ -456,7 +456,7 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
     return p;
   if( width==1 ) {
     for(; rows_left; --rows_left ) {
-      p[0] = unfold[(uint8_t)*p]+p[-width];
+      p[0] = unfold[(uint8_t)p[0]]+p[-width];
       ++p;
     }
     return p;
@@ -464,11 +464,11 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint8_t* up = &p[-width];
   for(; rows_left; --rows_left ) {
     ++up;
-    p[0] = unfold[(uint8_t)*p]+p[-width];
+    p[0] = unfold[(uint8_t)p[0]]+p[-width];
     ++p;
     for( x_left = width-1; x_left; --x_left ) {
-      const uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
-      p[0] = pred+unfold[(uint8_t)*p];
+      const uint8_t pred = med_predict(p[-1], (uint8_t)up[0], p[-width-1]);
+      p[0] = pred+unfold[(uint8_t)p[0]];
       ++up;
       ++p;
     }
@@ -567,7 +567,7 @@ uint8_t*write_nibbles(uint8_t* at, int32_t &hi, const uint8_t* src, uint32_t n) 
       }
       *at++ = pix;
     } else {
-      *at++ |= (uint8_t)*src>>4;
+      *at++ |= (uint8_t)src[0]>>4;
       if( !left ) {
         hi = 1;
         return at;
@@ -834,7 +834,7 @@ uint8_t*bmp_rle_encode(BmfImage* img, int32_t bits, uint8_t* buf, int32_t rows, 
                        q = p+1;
                        if( p+1>=end )
                          return false;
-                       byte = (uint8_t)*p;
+                       byte = (uint8_t)p[0];
                        run = run_length(p, end);
                        if( run<=2&&(run!=2||lit_len) )
                          return false;
@@ -947,7 +947,7 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
       out_at += stride;
       p -= stride;
       if( pad ) {
-        *(uint32_t*)out_at = 0;
+        ((uint32_t*)out_at)[0] = 0;
         out_at += pad;
       }
     }

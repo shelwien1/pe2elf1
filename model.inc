@@ -232,7 +232,7 @@ struct ModelBlock {
               ++p;
               shift = 8-bpp;
             }
-            const uint32_t sym = mask&(*p>>shift);
+            const uint32_t sym = mask&(p[0]>>shift);
             this[0].alphabet += sym_flag[sym]==0;
             sym_flag[sym] = 1;
             bits = shift;
@@ -1203,7 +1203,7 @@ struct ModelBlock {
         row_cur[5][0].sym = wp;
         pix_cur[0].last = wp;
         PixRec* r3 = row_cur[5];
-        uint32_t rec_word = *(uint32_t*)r3;
+        uint32_t rec_word = ((uint32_t*)r3)[0];
         const int32_t flag_word = r3[0].match2345;
         cur2 = r3+1;
         row_cur[5] = r3+1;

@@ -296,7 +296,7 @@ struct BMFState {
     stream.pk.free_bits = bits;
   }
   template <int32_t f_DEC> uint16_t*rc_begin() {
-    if constexpr( !f_DEC ) *stream.pk.word = stream.pk.acc;
+    if constexpr( !f_DEC ) stream.pk.word[0] = stream.pk.acc;
     packer_rewind();
     uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
     if constexpr( f_DEC )

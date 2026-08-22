@@ -417,7 +417,7 @@ struct BMFCodec : BMFState {
         if constexpr( f_DEC )
           *p = (uint8_t)(blend+t.dc+*side++);
         else
-          *side++ = (uint8_t)(*p-t.dc-blend);
+          *side++ = (uint8_t)(p[0]-t.dc-blend);
       }
     }
   }
@@ -578,7 +578,7 @@ struct BMFCodec : BMFState {
         int32_t west = p[-planes];
         uint8_t* q = p-row_b;
         p += planes;
-        int32_t dz = diag-(*q+west);
+        int32_t dz = diag-(q[0]+west);
         sxz = sxz+(double)dx*(double)dz;
         ++hist_zx[((uint16_t)dz-(uint16_t)dx-512)&0x3FF];
         syz = syz+(double)dy*(double)dz;
@@ -788,7 +788,7 @@ struct BMFCodec : BMFState {
   }
   void pack_bits(uint32_t word, int32_t n) {
     if( stream.pk.free_bits<n ) {
-      *stream.pk.word = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
+      stream.pk.word[0] = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
       stream.pk.word = (uint32_t*)stream.cur;
       stream.cur += 4;
       stream.pk.acc = word>>(stream.pk.free_bits&31);
@@ -799,7 +799,7 @@ struct BMFCodec : BMFState {
     }
   }
   void packer_flush() {
-    *stream.pk.word = stream.pk.acc;
+    stream.pk.word[0] = stream.pk.acc;
   }
   void packer_reset() {
     stream.pk.free_bits = 0;
@@ -810,7 +810,7 @@ struct BMFCodec : BMFState {
   }
   uint32_t packer_word() {
     if( stream.cur+4>stream.buf+stream.size ) bmf_fatal(bmf_read_error);
-    uint32_t w = *(uint32_t*)stream.cur;
+    uint32_t w = ((uint32_t*)stream.cur)[0];
     stream.cur += 4;
     return w;
   }
@@ -850,13 +850,13 @@ struct BMFCodec : BMFState {
         const int32_t north = (uint8_t)*--up;
         --p;
         const uint8_t pred = med_predict(p[-1], north, p[-width-1]);
-        const int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
+        const int32_t code = (uint8_t)fold[(uint8_t)(p[0]-pred)];
         p[0] = code;
         hist_bump(code);
       }
       --up;
       --p;
-      last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
+      last = (uint8_t)fold[(uint8_t)(p[0]-p[-width])];
       p[0] = last;
       hist_bump(last);
     }
@@ -874,7 +874,7 @@ struct BMFCodec : BMFState {
       }
       if( last>(done-1) ) {
         uint8_t* q = p-done;
-        last = (uint8_t)(*q-*((int8_t*)q-1));
+        last = (uint8_t)(q[0]-*((int8_t*)q-1));
         q[0] = fold[(uint8_t)last];
       }
     }

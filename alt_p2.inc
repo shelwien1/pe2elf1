@@ -662,7 +662,7 @@ struct AltP2Block {
           fr.encode_symbol(cx, ctx_pair, code0);
           ++p;
         }
-        int32_t val = 16*(uint8_t)*out;
+        int32_t val = 16*(uint8_t)out[0];
         cursor[0][0].val = val;
         cursor[0][0].dval = val;
         ++out;
