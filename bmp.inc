@@ -1,0 +1,937 @@
+// bmp.inc -- BMP reading and writing, the image container and the file streams
+// Included from bmf.cpp; not a standalone translation unit.
+
+struct BmfImage {
+  uint16_t width;
+  uint16_t height;
+  uint16_t stride;
+  uint8_t _pad8[4];
+  uint8_t depth;
+  uint8_t flags;
+  uint32_t data_size;
+  uint8_t pixels[0];
+  uint8_t*palette() {
+    return pixels+data_size;
+  }
+
+  const uint8_t*palette() const {
+    return pixels+data_size;
+  }
+
+  bool holds(const uint8_t* at, int32_t n) const {
+    return at>=pixels&&at+n<=pixels+data_size;
+  }
+
+  uint8_t*row(int32_t y) {
+    return pixels+y*stride;
+  }
+
+  void header_from(const BmfImage* src) {
+    width = src[0].width;
+    height = src[0].height;
+    stride = src[0].stride;
+    for( int32_t k = 0; k<4; ++k )
+      _pad8[k] = src[0]._pad8[k];
+    depth = src[0].depth;
+    data_size = src[0].data_size;
+  }
+};
+
+void transpose_image_in_place(BmfImage* img, int32_t planes) {
+  uint16_t w = img[0].width;
+  img[0].width = img[0].height;
+  img[0].height = w;
+  img[0].flags ^= flags_transposed;
+  img[0].stride = img[0].width*planes;
+}
+
+void transpose_image(BmfImage* img, int32_t planes) {
+  uint8_t* copy = (uint8_t*)bmf_new(img[0].data_size);
+  memcpy(copy, img[0].pixels, img[0].data_size);
+  const int32_t step = planes*(img[0].height-1);
+  const uint8_t* src = copy;
+  for( int32_t y = 0; y<img[0].height; ++y ) {
+    uint8_t* dst = img[0].pixels+planes*y;
+    for( int32_t x = 0; x<img[0].width; ++x ) {
+      for( int32_t k = 0; k<planes; ++k )
+        *dst++ = *src++;
+      dst += step;
+    }
+  }
+  transpose_image_in_place(img, planes);
+  free(copy);
+}
+
+BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
+  int32_t row_pack, row_bytes, pal_bytes;
+  bool sub_byte_rows = false;
+  uint16_t row16 = img_w;
+  int32_t bits = bpp;
+  if( bpp>=5&&bpp<=7 ) {
+    row_bytes = row16;
+  } else {
+    if( bpp==3 )
+      bits = 4;
+    else if( !packed )
+      bits = max32(bpp, 4);
+    bool byte_rows = bpp!=3&&bits>=8;
+    if( !packed ) {
+      if( !byte_rows&&bits==4 )
+        row16 = ((img_w+7)>>1)&0xFFFC;
+      else
+        row16 = (uint16_t)(((bits+7)>>3)*img_w);
+      row_bytes = row16;
+    } else if( byte_rows ) {
+      row16 = (uint16_t)(((bits+7)>>3)*img_w);
+      row_bytes = row16;
+    } else {
+      if( bits==1 ) {
+        row_pack = (int32_t)(((uint32_t)((img_w+7)>>2)>>29)+img_w+7)>>3;
+      } else if( bits==2 ) {
+        row_pack = (int32_t)(((uint32_t)((img_w+3)>>1)>>30)+img_w+3)>>2;
+      } else {
+        row_pack = (int32_t)(img_w+((uint32_t)(img_w+1)>>31)+1)>>1;
+      }
+      sub_byte_rows = true;
+      row_bytes = (uint16_t)row_pack;
+    }
+  }
+  int32_t data_bytes = row_bytes*img_h;
+  bool has_palette = false;
+  if( palette&&bpp<=8 ) {
+    pal_bytes = 3<<(bpp&31);
+    has_palette = true;
+  } else {
+    pal_bytes = 0;
+  }
+  BmfImage* img = (BmfImage*)bmf_new(data_bytes+pal_bytes+19);
+  if( !img )
+    return nullptr;
+  img[0].width = img_w;
+  img[0].height = img_h;
+  img[0].stride = row_bytes;
+  for( int32_t k = 0; k<4; ++k )
+    img[0]._pad8[k] = 0;
+  img[0].depth = (uint8_t)(bpp|(has_palette ? depth_palette : 0));
+  img[0].flags = sub_byte_rows ? flags_packed : 0;
+  img[0].data_size = data_bytes;
+  if( pal_bytes )
+    memset(img[0].palette(), 0, pal_bytes);
+  return img;
+}
+
+enum : uint32_t {
+  bmp_magic = 'B'|'M'<<8,
+  bmp_hdr_v3 = 40,
+  bmp_rgb = 0,
+  bmp_rle8 = 1,
+  bmp_rle4 = 2,
+};
+
+#pragma pack(push, 1)
+struct BmpHeader {
+  uint16_t bfType;
+  uint32_t bfSize;
+  uint16_t bfReserved1;
+  uint16_t bfReserved2;
+  uint32_t bfOffBits;
+  uint32_t biSize;
+  int32_t biWidth;
+  int32_t biHeight;
+  uint16_t biPlanes;
+  uint16_t biBitCount;
+  uint32_t biCompression;
+  uint32_t biSizeImage;
+  int32_t biXPelsPerMeter;
+  int32_t biYPelsPerMeter;
+  uint32_t biClrUsed;
+  uint32_t biClrImportant;
+};
+#pragma pack(pop)
+
+int32_t bmf_pixels(const BmfImage* img) {
+  return img[0].width*img[0].height;
+}
+
+enum : uint16_t {
+  bmf_sig_image = 0x8A81,
+  bmf_sig_other = 0x9081,
+};
+constexpr int32_t bmf_version_20 = 2<<8;
+int32_t bmf_tag_version(uint32_t tag) {
+  return (((uint8_t)(tag>>16)-'0')<<8)|((uint8_t)(tag>>24)-'0');
+}
+
+uint32_t bmf_tag(uint16_t sig, char major, char minor) {
+  return sig|((uint32_t)(uint8_t)major<<16)|((uint32_t)(uint8_t)minor<<24);
+}
+
+struct BmfStream {
+  FILE* fp;
+  uint8_t* buf;
+  size_t len;
+  size_t cap;
+  size_t pos;
+  bool ran_off;
+  void Init() {
+    fp = nullptr;
+    buf = nullptr;
+    len = 0;
+    cap = 0;
+    pos = 0;
+    ran_off = false;
+  }
+  static BmfStream over_file(FILE* f) {
+    BmfStream s;
+    s.Init();
+    s.fp = f;
+    return s;
+  }
+
+  static BmfStream over_memory(const void* data, size_t n) {
+    BmfStream s;
+    s.Init();
+    s.buf = (uint8_t*)data;
+    s.len = n;
+    return s;
+  }
+
+  static BmfStream in_memory() {
+    BmfStream s;
+    s.Init();
+    s.cap = 1;
+    s.buf = (uint8_t*)bmf_new(1);
+    return s;
+  }
+
+  size_t read(void* dst, size_t n) {
+    if( fp ) return fread(dst, 1u, n, fp);
+    const size_t got = pos>=len ? 0 : (n<len-pos ? n : len-pos);
+    memcpy(dst, buf+pos, got);
+    pos += got;
+    if( got<n ) ran_off = true;
+    return got;
+  }
+
+  size_t write(const void* src, size_t n) {
+    if( fp ) return fwrite(src, 1u, n, fp);
+    if( !cap ) return 0;
+    if( pos+n>cap ) {
+      size_t want = cap;
+      while( want<pos+n ) want *= 2;
+      uint8_t* wider = (uint8_t*)bmf_new(want);
+      memcpy(wider, buf, len);
+      free(buf);
+      buf = wider;
+      cap = want;
+    }
+    memcpy(buf+pos, src, n);
+    pos += n;
+    if( pos>len ) len = pos;
+    return n;
+  }
+
+  bool read_exact(void* dst, size_t n) {
+    return n==0||read(dst, n)==n;
+  }
+
+  bool write_exact(const void* src, size_t n) {
+    return n==0||write(src, n)==n;
+  }
+
+  void write_all(const void* src, size_t n) {
+    if( !write_exact(src, n) ) bmf_fatal(bmf_write_error);
+  }
+
+  bool seek(long off, int32_t whence) {
+    if( fp ) return fseek(fp, off, whence)==0;
+    long at = whence==SEEK_SET ? 0 : whence==SEEK_END ? (long)len : (long)pos;
+    if( at+off<0||(size_t)(at+off)>len ) return false;
+    pos = (size_t)(at+off);
+    return true;
+  }
+
+  bool eof() const {
+    return fp ? feof(fp)!=0 : ran_off;
+  }
+
+  void flush() {
+    if( fp ) fflush(fp);
+  }
+
+  uint32_t bytes_left() {
+    if( !fp ) return (uint32_t)(len-pos);
+    const long here = ftell(fp);
+    if( here<0||fseek(fp, 0, SEEK_END)!=0 ) return 0;
+    const long end = ftell(fp);
+    if( end<0||fseek(fp, here, SEEK_SET)!=0 ) return 0;
+    return (uint32_t)(end-here);
+  }
+
+  uint8_t*take(size_t* out_len) {
+    uint8_t* out = buf;
+    out_len[0] = len;
+    buf = nullptr;
+    cap = len = pos = 0;
+    return out;
+  }
+
+  void close() {
+    if( fp ) {
+      fclose(fp);
+      fp = nullptr;
+    } else if( cap ) {
+      free(buf);
+      buf = nullptr;
+      cap = len = pos = 0;
+    }
+  }
+};
+
+struct BmfFile {
+  BmfStream io;
+  void Init() {
+    io.Init();
+  }
+
+  BmfImage*fail() {
+    close();
+    return nullptr;
+  }
+
+  void close() {
+    io.close();
+  }
+};
+
+void bmf_close_file(BmfFile* arc) {
+  arc[0].close();
+  free(arc);
+}
+
+bool read_exact(void* dst, size_t n, FILE* fp) {
+  return n==0||fread(dst, n, 1u, fp)==1;
+}
+
+BmfFile*bmf_open_file(BmfFile* out, char* path, int32_t read_only) {
+  FILE* fp = fopen(path, read_only ? "rb" : "wb");
+  if( !fp ) bmf_fatal(bmf_no_open, path);
+  out[0].io = BmfStream::over_file(fp);
+  return out;
+}
+void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym) {
+  node[0].code_symbol<0>(cx, ctx, sym);
+}
+
+int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx) {
+  return node[0].code_symbol<1>(cx, ctx, 0);
+}
+int32_t estimate_cost(const int32_t* bin, int32_t n) {
+  double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
+  int32_t i;
+  for( i = 0; i+1<n; i += 2 ) {
+    if( bin[i] ) {
+      sum_even += (double)bin[i];
+      ent_even += (double)bin[i]*log((double)bin[i]);
+    }
+    if( bin[i+1] ) {
+      sum_odd += (double)bin[i+1];
+      ent_odd += (double)bin[i+1]*log((double)bin[i+1]);
+    }
+  }
+  double entropy = ent_even+ent_odd;
+  double total = sum_even+sum_odd;
+  for(; i<n; i++ )
+    if( bin[i] ) {
+      total += (double)bin[i];
+      entropy += (double)bin[i]*log((double)bin[i]);
+    }
+  if( total!=0.0 )
+    total = total*log(total);
+  return (int32_t)((total-entropy)*1.442695040888963);
+}
+uint32_t plane_mix2(const PlaneDesc &d, const uint8_t* p0, const uint8_t* p1) {
+  return (d.weight0**p0+d.weight1*(uint32_t)*p1+40)>>7;
+}
+
+int32_t plane_mix3(const PlaneDesc &d, const uint8_t* p) {
+  return (d.weight1*p[-2]+d.weight0*p[-3]+d.weight2*p[-1]+64)>>7;
+}
+uint8_t med_predict(int32_t west, int32_t north, int32_t northwest) {
+  const int32_t lo = min32(west, north), hi = max32(west, north);
+  if( northwest>=hi )
+    return (uint8_t)lo;
+  if( northwest<=lo )
+    return (uint8_t)hi;
+  return (uint8_t)(west+north-northwest);
+}
+
+void med_fold_table(uint8_t* fold) {
+  for( int32_t j = 0; j<128; ++j ) {
+    fold[j] = (uint8_t)(2*j);
+    fold[128+j] = (uint8_t)(-1-2*j);
+  }
+}
+
+void med_unfold_table(uint8_t* unfold) {
+  unfold[0] = 0;
+  for( int32_t j = 0; j<127; ++j ) {
+    unfold[2*j+1] = (uint8_t)(-1-j);
+    unfold[2*j+2] = (uint8_t)(1+j);
+  }
+  unfold[255] = (uint8_t)(-1-127);
+}
+void strided_copy(uint8_t* dst, int32_t dstep, const uint8_t* src, int32_t sstep, int32_t n) {
+  if( dstep==1&&sstep==1 ) {
+    memcpy(dst, src, n);
+    return;
+  }
+  for( int32_t i = 0; i<n; ++i, dst += dstep, src += sstep )
+    *dst = src[0];
+}
+struct PlaneTransform {
+  int32_t to_ref0, to_ref1, mode, dc, wgt0, wgt1, wgt2;
+  bool by_weights;
+  uint32_t blend(const uint8_t* p) const {
+    if( mode==2 )
+      return (wgt0*(uint32_t)p[to_ref0]+wgt1*(uint32_t)p[to_ref1]+40)>>7;
+    return (wgt1*(uint32_t)p[-2]+wgt0*(uint32_t)p[-3]+wgt2*(uint32_t)p[-1]+63)>>7;
+  }
+};
+uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
+  uint32_t done, k, x_left;
+  alignas(16) uint8_t unfold[256];
+  uint8_t* p = pixels+1;
+  med_unfold_table(unfold);
+  int32_t rows_left = height-1;
+  if( width!=1 ) {
+    uint32_t row_rest = width-1;
+    uint32_t pairs = row_rest/2;
+    if( pairs ) {
+      for( k = 0; k<pairs; ++k ) {
+        uint8_t cur = pixels[2*k]+unfold[pixels[2*k+1]];
+        pixels[2*k+1] = cur;
+        pixels[2*k+2] = cur+(unfold[pixels[2*k+2]]);
+        p = &pixels[2*k+3];
+      }
+      done = 2*k+1;
+    } else {
+      done = 1;
+    }
+    if( row_rest>done-1 ) {
+      pixels[done] = pixels[done-1]+unfold[pixels[done]];
+      p = &pixels[done+1];
+    }
+  }
+  if( height==1 )
+    return p;
+  if( width==1 ) {
+    for(; rows_left; --rows_left ) {
+      p[0] = unfold[(uint8_t)*p]+p[-width];
+      ++p;
+    }
+    return p;
+  }
+  uint8_t* up = &p[-width];
+  for(; rows_left; --rows_left ) {
+    ++up;
+    p[0] = unfold[(uint8_t)*p]+p[-width];
+    ++p;
+    for( x_left = width-1; x_left; --x_left ) {
+      const uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
+      p[0] = pred+unfold[(uint8_t)*p];
+      ++up;
+      ++p;
+    }
+  }
+  return p;
+}
+struct HistRows {
+  int32_t* r0, * r1, * r2, * r3, * r4, * r5;
+};
+
+HistRows hist_rows(int32_t* hists) {
+  return {hists, hists+1*1024, hists+2*1024, hists+3*1024, hists+4*1024, hists+5*1024};
+}
+
+int32_t residual_bin(int32_t own, int32_t w0, int32_t a, int32_t w1, uint32_t b) {
+  return ((uint16_t)own-(uint16_t)((w0*a+w1*b+40)>>7)-256)&0x1FF;
+}
+int32_t widest_window(const int32_t* hist, int32_t first, int32_t end, int32_t miss) {
+  int32_t sum = 0;
+  for( int32_t i = 0; i<256; ++i ) sum += hist[first+i];
+  int32_t best = sum, at = miss;
+  for( int32_t w = first+256; w<end; ++w ) {
+    sum += hist[w]-hist[w-256];
+    if( sum>=best ) {
+      at = w;
+      best = sum;
+    }
+  }
+  return at;
+}
+
+
+
+struct AlphaWeights {
+  int32_t a, b, c;
+};
+
+AlphaWeights fit_alpha_weights(const uint8_t* px, const uint8_t* pp, uint32_t uu) {
+  double Sxx = 0.0, Sxy = 0.0, Sxz = 0.0;
+  double Syy = 0.0, Syz = 0.0, Szz = 0.0;
+  double Sxw = 0.0, Syw = 0.0, Szw = 0.0;
+  for( uint32_t i4 = 0; i4<uu; ++i4 ) {
+    const double dv0 = (double)(px[4*i4]+pp[4*i4+4]-(px[4*i4+4]+pp[4*i4]));
+    const double dv1 = (double)(px[4*i4+1]+pp[4*i4+5]-(px[4*i4+5]+pp[4*i4+1]));
+    const double dv2 = (double)(px[4*i4+2]+pp[4*i4+6]-(px[4*i4+6]+pp[4*i4+2]));
+    const int32_t dv3 = px[4*i4+3]+pp[4*i4+7]-(px[4*i4+7]+pp[4*i4+3]);
+    Sxx += dv0*dv0;
+    Sxy += dv0*dv1;
+    Sxz += dv0*dv2;
+    Syy += dv1*dv1;
+    Syz += dv1*dv2;
+    Szz += dv2*dv2;
+    Sxw += dv0*(double)dv3;
+    Syw += dv1*(double)dv3;
+    Szw += dv2*(double)dv3;
+  }
+  double d1 = Sxx*Szz-Sxz*Sxz;
+  double d2 = 0.0-Sxx*Syz+Sxz*Sxy;
+  double d3 = Sxz*Syz-Sxy*Szz;
+  double inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
+  const int32_t wa = clamp_weight((int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv));
+  const int32_t wb = clamp_weight((int32_t)((d1*Syw+d2*Szw+d3*Sxw)*inv));
+  const int32_t wc = clamp_weight((int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy)));
+  return {wa, wb, wc};
+}
+enum : int32_t {
+  try_mode0 = pred_mode0,
+  try_p1 = pred_p1|desc_alt_model,
+  try_p2 = pred_p2|desc_alt_model,
+  try_refs = desc_has_refs,
+  try_refs_p1 = desc_has_refs|pred_p1|desc_alt_model,
+  try_refs_p2 = desc_has_refs|pred_p2|desc_alt_model,
+};
+struct PlaneSearch {
+  int32_t bits;
+  int32_t n_p1;
+  int32_t n_p2;
+  int32_t n_refs;
+};
+bool read_rle_op(FILE* fp, int32_t &n, int32_t &v) {
+  if( ferror(fp) ) return false;
+  n = fgetc(fp);
+  v = fgetc(fp);
+  return n>=0&&v>=0;
+}
+
+uint8_t*write_nibbles(uint8_t* at, int32_t &hi, const uint8_t* src, uint32_t n) {
+  while( 1 ) {
+    const uint8_t pix = src[0];
+    const uint32_t left = n-1;
+    if( hi ) {
+      if( !left ) {
+        at[0] = src[0]&0xF0;
+        hi = 0;
+        return at;
+      }
+      *at++ = pix;
+    } else {
+      *at++ |= (uint8_t)*src>>4;
+      if( !left ) {
+        hi = 1;
+        return at;
+      }
+      at[0] = 16*(pix&0xF);
+    }
+    ++src;
+    n = left-1;
+    if( !n )
+      return at;
+  }
+}
+
+bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
+  int32_t y = img[0].height-1;
+  int32_t n, v;
+  while( read_rle_op(fp, n, v) ) {
+    if( n ) {
+      if( !img[0].holds(at, n) )
+        return false;
+      memset(at, v, n);
+      at += n;
+    } else if( !v ) {
+      if( --y<0 )
+        return true;
+      at = img[0].row(y);
+    } else if( v==1 ) {
+      return true;
+    } else if( v==2 ) {
+      int32_t dx, dy;
+      if( !read_rle_op(fp, dx, dy) )
+        return false;
+      at += dx-dy*img[0].stride;
+    } else {
+      if( !img[0].holds(at, v) )
+        return false;
+      if( !read_exact(pal_buf, (v+1)&0xFFFFFFFE, fp) )
+        return false;
+      memcpy(at, (uint8_t*)pal_buf, v);
+      at += v;
+    }
+  }
+  return false;
+}
+
+bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
+  int32_t hi_nibble = 1;
+  int32_t y = img[0].height-1;
+  int32_t run4, byte_in;
+  while( read_rle_op(fp, run4, byte_in) ) {
+    const uint32_t byte = (uint32_t)byte_in;
+    if( run4 ) {
+      if( !img[0].holds(row, run4/2+1) )
+        return false;
+      uint8_t lo = byte&0xF;
+      if( hi_nibble ) {
+        int32_t left4b = run4;
+        uint8_t* row3 = row;
+        while( left4b>1 ) {
+          *row3++ = byte;
+          left4b -= 2;
+        }
+        row = row3;
+        hi_nibble = left4b==0;
+        if( left4b )
+          *row3 = byte&0xF0;
+      } else {
+        int32_t left4 = run4;
+        uint8_t* row4 = row;
+        uint8_t cur = row[0];
+        uint32_t hi = byte>>4;
+        uint8_t lo16 = 16*lo;
+        do {
+          *row4++ = hi|cur;
+          cur = lo16;
+          left4 -= 2;
+        } while( left4>0 );
+        row = row4;
+        hi_nibble = left4<0;
+        if( !hi_nibble )
+          *row4 = lo16;
+      }
+    } else if( !byte ) {
+      if( --y<0 )
+        return true;
+      row = img[0].row(y);
+    } else if( byte==1 ) {
+      return true;
+    } else if( byte==2 ) {
+      int32_t dxy, dy4;
+      if( !read_rle_op(fp, dxy, dy4) )
+        return false;
+      int32_t step = (dxy>>1)-dy4*img[0].stride;
+      if( (dxy&1)==1 ) {
+        if( !hi_nibble )
+          ++step;
+        hi_nibble = !hi_nibble;
+      }
+      row += step;
+    } else {
+      if( !img[0].holds(row, (int32_t)byte/2+1) )
+        return false;
+      if( !read_exact(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, fp) )
+        return false;
+      row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, byte);
+    }
+  }
+  return false;
+}
+
+bool read_rows(FILE* fp, BmfImage* img, uint8_t* row, uint32_t stride_pad) {
+  const uint32_t stride = img[0].stride;
+  const uint32_t row_pad = stride_pad-stride;
+  for( int32_t y = img[0].height-1; y>=0; --y ) {
+    if( fread(row, 1u, stride, fp)!=stride )
+      return false;
+    if( row_pad )
+      fseek(fp, row_pad, 1);
+    row -= stride;
+  }
+  return true;
+}
+
+BmfImage*read_bmp(char* path) {
+  uint8_t bmp_bgra[4];
+  int32_t pal_n, i;
+  BmpHeader hdr;
+  FILE* fp = fopen(path, "rb");
+  if( !fp )
+    bmf_fatal(bmf_no_open, path);
+  if( fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=bmp_magic||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=bmp_hdr_v3||hdr.biPlanes!=1 ) {
+    fclose(fp);
+    return nullptr;
+  }
+  {
+    const int32_t bmp_w = hdr.biWidth;
+    const int32_t bmp_h = hdr.biHeight;
+    const int32_t bmp_bpp = hdr.biBitCount;
+    if( bmp_w<=0||bmp_w>0xFFFF||bmp_h<=0||bmp_h>0xFFFF||(bmp_bpp>=8&&(uint32_t)bmp_w*(uint32_t)((bmp_bpp+7)>>3)>0xFFFFu)||(bmp_bpp!=1&&bmp_bpp!=4&&bmp_bpp!=8&&bmp_bpp!=24&&bmp_bpp!=32)||(int32_t)hdr.biClrUsed<0||(bmp_bpp<=8&&(int32_t)hdr.biClrUsed>(1<<bmp_bpp))||hdr.biCompression>bmp_rle4||(hdr.biCompression==bmp_rle8&&bmp_bpp!=8)||(hdr.biCompression==bmp_rle4&&bmp_bpp!=4) ) {
+      fclose(fp);
+      return nullptr;
+    }
+  }
+  BmfImage* img = alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount<=8u, 1);
+  if( !img ) {
+    fclose(fp);
+    return nullptr;
+  }
+  uint32_t stride_pad = (img[0].stride+3)&0xFFFFFFFC;
+  if( hdr.biBitCount<=8u ) {
+    pal_n = 1<<(hdr.biBitCount&31);
+    if( (int32_t)hdr.biClrUsed )
+      pal_n = (int32_t)hdr.biClrUsed;
+    if( pal_n>0 ) {
+      uint8_t* pal = img[0].depth&depth_palette ? img[0].pixels+img[0].data_size : nullptr;
+      for( i = 0; i<pal_n; ++i ) {
+        if( !read_exact(bmp_bgra, 4u, fp) ) {
+          fclose(fp);
+          return nullptr;
+        }
+        pal[3*i+2] = bmp_bgra[2];
+        pal[3*i+1] = bmp_bgra[1];
+        pal[3*i] = bmp_bgra[0];
+      }
+    }
+  }
+  static uint8_t pal_store[65536];
+  void* pal_buf = pal_store;
+
+  uint8_t* row = img[0].pixels+img[0].data_size-img[0].stride;
+  fseek(fp, (int32_t)hdr.bfOffBits, 0);
+  bool ok;
+  if( hdr.biCompression==bmp_rgb ) {
+    ok = read_rows(fp, img, row, stride_pad);
+  } else {
+    memset(img[0].pixels, 0, img[0].data_size);
+    ok = hdr.biCompression==bmp_rle8 ? read_rle8(fp, img, row, pal_buf) : hdr.biCompression==bmp_rle4 ? read_rle4(fp, img, row, pal_buf) : false;
+  }
+  if( !ok )
+    return nullptr;
+  fclose(fp);
+  return img;
+}
+
+int32_t write_bmp_palette(const BmfImage* img, uint8_t* out_buf, uint8_t depth, int32_t bits) {
+  if( bits>8 )
+    return 0;
+  const int32_t ncol = 1<<(bits&31);
+  if( depth&depth_grey ) {
+    uint32_t levels = 0x100u>>(bits&31);
+    uint32_t k = 0;
+    int32_t grey = 0;
+    for(; k<(uint32_t)(ncol/2); ++k, grey += 2*levels ) {
+      put_u32(&out_buf[8*k+54], bmp_grey_entry((uint8_t)grey));
+      put_u32(&out_buf[8*k+58], bmp_grey_entry((uint8_t)(grey+levels)));
+    }
+    const uint32_t at = 2*k+1;
+    if( (at-1)<(uint32_t)ncol )
+      put_u32(&out_buf[4*at+50], bmp_grey_entry((uint8_t)(levels*(at-1))));
+    return 4*ncol;
+  } else if( depth&depth_palette ) {
+    uint32_t pairs = ncol/2;
+    uint32_t j = 0;
+    const uint8_t* pal = img[0].palette();
+    for(; j<pairs; ++j ) {
+      const uint32_t slot = 2*j;
+      const uint8_t* e0 = &pal[6*j], * e1 = &pal[6*j+3];
+      put_u32(&out_buf[4*slot+54], bmp_palette_entry(e0[0], e0[1], e0[2]));
+      put_u32(&out_buf[4*slot+58], bmp_palette_entry(e1[0], e1[1], e1[2]));
+    }
+    const uint32_t at2 = 2*j+1;
+    if( (at2-1)<(uint32_t)ncol ) {
+      const uint8_t* e = img[0].palette()+3*at2-3;
+      put_u32(&out_buf[4*at2+50], bmp_palette_entry(e[0], e[1], e[2]));
+    }
+    return 4*ncol;
+  } else {
+    return 4*ncol;
+    memset(out_buf+54, 0, 4*ncol);
+  }
+}
+
+uint8_t*bmp_rle_encode(BmfImage* img, int32_t bits, uint8_t* buf, int32_t rows, uint32_t stride, int32_t* kind) {
+  if( bits!=4&&bits!=8 )
+    return nullptr;
+  const int32_t nib = bits==4;
+  const int32_t run_max = (0x100u>>(nib&31))-1;
+  kind[0] = nib ? bmp_rle4 : bmp_rle8;
+  uint8_t* out_at = buf, * q = nullptr, * end = nullptr;
+  uint8_t* p = &img[0].pixels[img[0].data_size-stride];
+  uint8_t byte = 0;
+  int32_t lit_len = 0, run = 0;
+  auto flush_literal = [&](const uint8_t* run_end) {
+                         if( nib ? lit_len!=1 : lit_len>=3 ) {
+                           out_at[0] = 0;
+                           out_at[1] = lit_len<<(nib&31);
+                           memcpy(out_at+2, run_end-lit_len, lit_len);
+                           if( lit_len&1 )
+                             out_at[lit_len+2] = 0;
+                           out_at += lit_len+2+(lit_len&1);
+                         } else if( nib ) {
+                           out_at[0] = 2;
+                           out_at[1] = run_end[-1];
+                           out_at += 2;
+                         } else {
+                           if( lit_len==2 ) {
+                             out_at[0] = 1;
+                             out_at[1] = run_end[-2];
+                             out_at += 2;
+                           }
+                           out_at[0] = 1;
+                           out_at[1] = run_end[-1];
+                           out_at += 2;
+                         }
+                       };
+  auto run_length = [](const uint8_t* from, const uint8_t* stop) {
+                      int32_t n = 1;
+                      while( stop>from+n&&from[n]==from[0] )
+                        ++n;
+                      return n;
+                    };
+  auto emit_runs = [&]() {
+                     while( 1 ) {
+                       q = p+1;
+                       if( p+1>=end )
+                         return false;
+                       byte = (uint8_t)*p;
+                       run = run_length(p, end);
+                       if( run<=2&&(run!=2||lit_len) )
+                         return false;
+                       run = min32(run, run_max);
+                       if( lit_len ) {
+                         flush_literal(p);
+                         lit_len = 0;
+                         byte = p[0];
+                       }
+                       out_at[1] = byte;
+                       p += run;
+                       out_at[0] = run<<(nib&31);
+                       out_at += 2;
+                       if( p>=end )
+                         return true;
+                     }
+                   };
+  auto emit_row = [&]() {
+                    end = &p[stride];
+                    if( p>=end )
+                      return;
+                    lit_len = 0;
+                    do {
+                      while( 1 ) {
+                        if( emit_runs() )
+                          return;
+                        ++p;
+                        if( ++lit_len!=run_max )
+                          break;
+                        flush_literal(q);
+                        if( q>=end )
+                          return;
+                        lit_len = 0;
+                      }
+                    } while( q<end );
+                    if( lit_len )
+                      flush_literal(q);
+                  };
+  if( rows>0 ) {
+    for( int32_t row_i = 0; row_i<rows; ++row_i ) {
+      emit_row();
+      out_at[0] = 0;
+      out_at[1] = 0;
+      out_at += 2;
+      p -= 2*stride;
+    }
+  }
+  out_at[0] = 0;
+  out_at[1] = 1;
+  return out_at+2;
+}
+
+int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
+  uint8_t* out_at;
+  int32_t bits, coded_bytes;
+  FILE* fp = fopen(path, "wb");
+  if( !fp )
+    return 0;
+  uint8_t* out_buf = (uint8_t*)bmf_new(img[0].data_size+8*img[0].height+(img[0].data_size>>5)+2048);
+  BmpHeader* bmp = (BmpHeader*)out_buf;
+  bmp[0].biSize = bmp_hdr_v3;
+  bmp[0].bfType = bmp_magic;
+  int32_t rows = img[0].height;
+  bmp[0].bfReserved2 = 0;
+  bmp[0].bfReserved1 = 0;
+  bmp[0].biWidth = img[0].width;
+  bmp[0].biHeight = rows;
+  uint8_t depth = img[0].depth;
+  bmp[0].biPlanes = 1;
+  bits = depth&depth_bits;
+  bmp[0].biBitCount = bits;
+  bmp[0].biClrImportant = 0;
+  bmp[0].biClrUsed = 0;
+  bmp[0].biYPelsPerMeter = 0;
+  bmp[0].biXPelsPerMeter = 0;
+  const int32_t pal_bytes = write_bmp_palette(img, out_buf, depth, bits);
+  uint8_t*const buf = &out_buf[pal_bytes+54];
+  uint32_t stride = img[0].stride;
+  auto finish = [&](int32_t coded) {
+                  bmp[0].biSizeImage = (uint32_t)coded;
+                  uint32_t n_bytes = (uint32_t)(out_at-out_buf);
+                  bmp[0].bfSize = n_bytes;
+                  if( fwrite(out_buf, 1u, n_bytes, fp)!=bmp[0].bfSize )
+                    return 0;
+                  free(out_buf);
+                  fclose(fp);
+                  return 1;
+                };
+  uint32_t off_bits = (uint32_t)(buf-out_buf);
+  const uint32_t data_len = img[0].data_size;
+  bmp[0].bfOffBits = off_bits;
+  out_at = buf;
+  uint8_t* p = &img[0].pixels[data_len-stride];
+  if( want_rle ) {
+    int32_t rle_kind = 0;
+    uint8_t*const rle_end = bmp_rle_encode(img, bits, buf, rows, stride, &rle_kind);
+    if( rle_end&&data_len>(uint32_t)(rle_end-buf) ) {
+      bmp[0].biCompression = rle_kind;
+      out_at = rle_end;
+      return finish(out_at-buf);
+    }
+  }
+  bmp[0].biCompression = bmp_rgb;
+  if( rows<=0 ) {
+    coded_bytes = 0;
+  } else {
+    const uint32_t pad = ((stride+3)&0xFFFFFFFC)-stride;
+    for( int32_t y = 0; y<img[0].height; ++y ) {
+      memcpy(out_at, p, stride);
+      out_at += stride;
+      p -= stride;
+      if( pad ) {
+        *(uint32_t*)out_at = 0;
+        out_at += pad;
+      }
+    }
+    coded_bytes = out_at-buf;
+  }
+  return finish(coded_bytes);
+}
+uint8_t write_member_head(const void* head, const CodedTail* extra, BmfStream* io) {
+  uint8_t ok = io[0].write_exact(head, 0x10u);
+  if( extra ) {
+    const uint32_t coded_len = extra[0].len;
+    ok &= io[0].write_exact(extra, coded_len+sizeof(CodedTail));
+  }
+  return ok;
+}
+// ---------------------------------------------------------------------------
