@@ -596,13 +596,20 @@ and sixteen the learning cost turns it around first.
 
 Three things mattered, in order of how much:
 
-1. **The two-table blend.** A short four-neighbour table sits under the long
-   one, direct-indexed and never evicted, and the coded probability is
-   `(p_long·n_long + p_short·24)/(n_long + 24)` — so a fresh bucket codes almost
-   entirely from the short context and hands over as it fills. Seeding a fresh
-   bucket from the short table and then ignoring it is worth about half as much:
-   `x_ci` 578 520 seeded against 573 708 blended, `x_ai` 153 360 against 141 956,
-   which is the difference between the mode losing on `x_ai` and winning.
+1. **Two tables, mixed.** A short four-neighbour table sits under the long one,
+   direct-indexed and never evicted, and the two estimates are combined. Three
+   ways of combining them, in order of how well they worked:
+   *seed only* — a fresh long bucket starts from the short table's current
+   probabilities and then ignores it (`x_ci` 578 520, `x_ai` 153 360);
+   *count blend* — `(p_long·n_long + p_short·24)/(n_long + 24)`, so a fresh
+   bucket codes almost entirely from the short context and hands over as it
+   fills (`x_ci` 573 708, `x_ai` 141 956);
+   *§2's logistic mixer* — combine them in the stretch domain with a weight pair
+   per (count bucket, tree node), learned by gradient descent on coding loss
+   (`x_ci` 568 960, `x_ai` 132 524). Seeding those weights where the count blend
+   would put them is worth another 92 bytes; the learning rate is worth much
+   more, and is sharply peaked — one shift either side of 2⁻¹⁸ costs 50 to
+   300 bytes, two shifts costs 27 000.
 2. **§3's map, on the tree's bits.** Refining the blended probability through an
    adaptive probability map before it reaches the coder is worth 8 500 bytes on
    `x_ai` alone and 2 300 on `DLRAW`. Its context is the *tree node* and nothing

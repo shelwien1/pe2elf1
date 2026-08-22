@@ -51,6 +51,7 @@ struct CtxModel {
   uint32_t* ctr;
   uint32_t* ctr_short;
   Apm apm;
+  Mix2 mixer;
   int32_t recip[kCountCap+1];
   uint32_t* tag;
   BMFState* cx;
@@ -76,6 +77,17 @@ struct CtxModel {
     for( int32_t k = 0; k<=kCountCap; ++k )
       recip[k] = 65536/(k+2);
     apm.Init();
+    mixer.Init();
+    // Start the mixer where the count blend would be: a weight set whose long
+    // bucket has seen n samples begins at n/(n+24) on the long table and the
+    // rest on the short one.  Gradient descent finds that in a few thousand
+    // samples anyway, but the sets for a barely-filled bucket see the fewest
+    // samples and are exactly the ones that matter most.
+    for( int32_t b = 0; b<8; ++b ) {
+      const int32_t n = 8*b+4;
+      for( int32_t node = 0; node<16; ++node )
+        mixer.seed((b<<4)|node, 65536*n/(n+kBlend), 65536*kBlend/(n+kBlend));
+    }
     neighbours = 0;
     short_size = 0;
     nb_for_bits[0] = 0;
@@ -176,13 +188,9 @@ struct CtxModel {
       const int32_t p_long = (int32_t)(row[at]>>16);
       const int32_t n_long = (int32_t)(row[at]&0xFFFFu);
       const int32_t p_short = (int32_t)(srow[at]>>16);
-      int32_t p = (p_long*n_long+p_short*kBlend)/(n_long+kBlend);
-      if( p<32 )
-        p = 32;
-      if( p>65504 )
-        p = 65504;
-      // The map's context is how much the long bucket has seen and which node
-      // of the tree this is -- neither of which the two tables are keyed on.
+      const int32_t p = mixer.mix(p_long, p_short, ((n_long>>3)<<4)|at);
+      // The map's context is the tree node and nothing else: the mixer has
+      // already used everything else that is available here.
       const int32_t coded = apm.refine(p, at);
       int32_t bit;
       if constexpr( f_DEC ) {
@@ -192,6 +200,7 @@ struct CtxModel {
         cx[0].encode_bit(65536-coded, coded, bit);
       }
       apm.update(bit);
+      mixer.update(bit, p);
       const int32_t target = bit ? 65535 : 0;
       bump(row[at], target);
       bump(srow[at], target);

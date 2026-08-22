@@ -84,3 +84,76 @@ struct Apm {
   }
 };
 
+
+// Logistic mixing: probabilities combined in the stretch domain with weights
+// learned per context by gradient descent on coding loss.  This is the piece
+// IMPROVEMENTS.md section 2 asks for, in its cheapest form -- two inputs, one
+// weight pair per context -- and it is used where two estimates of the same bit
+// already exist side by side.
+int32_t mix_stretch[4096];
+uint16_t mix_squash[4096];
+bool mix_tables_ready = false;
+
+void mix_tables_init() {
+  if( mix_tables_ready )
+    return;
+  for( int32_t i = 0; i<4096; ++i ) {
+    const double p = ((double)i+0.5)/4096.0;
+    double s = 256.0*log(p/(1.0-p));
+    if( s<-2047.0 )
+      s = -2047.0;
+    if( s>2047.0 )
+      s = 2047.0;
+    mix_stretch[i] = (int32_t)s;
+  }
+  for( int32_t x = 0; x<4096; ++x ) {
+    int32_t v = (int32_t)(65536.0/(1.0+exp(-(double)(x-2048)/256.0)));
+    if( v<32 )
+      v = 32;
+    if( v>65504 )
+      v = 65504;
+    mix_squash[x] = (uint16_t)v;
+  }
+  mix_tables_ready = true;
+}
+
+struct Mix2 {
+  static const int32_t kSets = 256;
+  static const int32_t kShift = 18;
+  int32_t w[kSets][2];
+  int32_t in0, in1, set;
+
+  void Init() {
+    mix_tables_init();
+    for( int32_t k = 0; k<kSets; ++k ) {
+      w[k][0] = 1<<15;
+      w[k][1] = 1<<15;
+    }
+    in0 = 0;
+    in1 = 0;
+    set = 0;
+  }
+
+  void seed(int32_t k, int32_t w0, int32_t w1) {
+    w[k&(kSets-1)][0] = w0;
+    w[k&(kSets-1)][1] = w1;
+  }
+
+  int32_t mix(int32_t p0, int32_t p1, int32_t ctx) {
+    set = ctx&(kSets-1);
+    in0 = mix_stretch[p0>>4];
+    in1 = mix_stretch[p1>>4];
+    int32_t dot = (w[set][0]*in0+w[set][1]*in1)>>16;
+    if( dot<-2047 )
+      dot = -2047;
+    if( dot>2047 )
+      dot = 2047;
+    return mix_squash[dot+2048];
+  }
+
+  void update(int32_t bit, int32_t p) {
+    const int32_t err = (bit ? 65535 : 0)-p;
+    w[set][0] += (in0*err)>>kShift;
+    w[set][1] += (in1*err)>>kShift;
+  }
+};
