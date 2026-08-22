@@ -110,7 +110,13 @@ range-coded segments matters for understanding the models' entry points.)
   `flags_tail`.
 * If the coded body is not smaller than the raw pixels, the member is stored **raw**
   (`compress_image`, `bmf.cpp:6582`) — the format never expands beyond raw + header.
-  Images with `data_size < 16` are always stored raw.
+  Images with `data_size < 16` are always stored raw. A raw member writes the
+  *image's own* header, not the coder's — so its flags byte never carried
+  `flags_coded`/`flags_slow`/`flags_descriptors` at all (verified: a random
+  24-bit image produces flags `0x00` and a file of exactly 20 + w·h·3 bytes).
+  Since BMF stores rows unpadded with a 20-byte header and 3-byte palette
+  entries, a raw member is always *smaller* than its source BMP (54-byte header,
+  4-byte palette entries, rows padded to 4).
 * Inside a coded payload, a **bit packer** (`Packer`, `bmf.cpp:236`; `pack_bits` /
   `unpack_bits`, `bmf.cpp:3538`/3551 — LSB-first accumulation into 32-bit words) and
   the range coder share one buffer. Raw-bit fields (the 4-bit near-lossless quantizer,
@@ -240,9 +246,10 @@ unaffected) — search costs are therefore measured on a slightly cheaper model
 variant than the final encode.
 
 1. **Per-plane search** (`search_planes`, `bmf.cpp:5708`), in coding order. Trial
-   flag sets (`try_*`, `bmf.cpp:5647`): `mode0` (raw plane into the slow model),
-   `p1 = pred_p1|alt`, `p2 = pred_p2|alt`, and for non-first planes the same three
-   with `desc_has_refs`. Pruning: `try_p2` runs only if P1 came within 1/32 of the
+   flag sets (`try_*`, `bmf.cpp:5647`; as descriptor flag values: `mode0`=0,
+   `p1`=5, `p2`=6, `refs`=8, `refs_p1`=13, `refs_p2`=14): `mode0` (raw plane into
+   the slow model), `p1 = pred_p1|alt`, `p2 = pred_p2|alt`, and for non-first
+   planes the same three with `desc_has_refs`. Pruning: `try_p2` runs only if P1 came within 1/32 of the
    best so far (or another plane already chose P2); `try_mode0` is skipped entirely
    once any plane chose P2. Cheapest flags win per plane.
 2. **Transpose trial**: each plane re-encoded on the transposed image, with early
@@ -480,8 +487,19 @@ symbols added to the exclusion set.
 concrete candidate symbols is assembled: the context pair's last two symbols; an
 8-entry **move-to-front cache** keyed by a 16-bit pair key (`bit-reverse(N)·8 −
 first-differing-neighbour` — the bit reversal spreads N across the key space); then
-22 spatial neighbours in roughly increasing distance (WW, NNE, NN, … out to 4 rows
-up / 7 columns left). For each surviving candidate one adaptive bit "pixel == this
+22 spatial neighbours in roughly increasing distance. Writing `r5` for the
+current row at the current column and `r6..r9` for one to four rows up, the
+exact probe order (`load_neighbours`, `bmf.cpp:2438`) is:
+
+```
+10 r5[-2]  11 r6[+2]  12 r7[+1]  13 r7[ 0]  14 r6[-2]  15 r7[-1]
+16 r5[-3]  17 r6[+3]  18 r6[+4]  19 r5[-4]  20 r6[-3]  21 r7[+2]
+22 r8[ 0]  23 r7[-2]  24 r5[-5]  25 r8[+1]  26 r6[+5]  27 r9[ 0]
+28 r5[-7]  29 r8[-1]  30 r6[+7]  31 r7[+3]
+```
+
+Slots 11–15 are the "near band" and 16–31 the "far band" of the support
+context below. For each surviving candidate one adaptive bit "pixel == this
 candidate?" is coded. The binary context (`pixel_context`, `bmf.cpp:2115`) combines
 spatial support (is the candidate WW / in the near band / in the far band) with
 **co-occurrence support** from the stage-3 lists (is the candidate in the top-k of
@@ -605,7 +623,11 @@ plane 1, planes ≥2, and the no-reference (greyscale) path.
 prediction), signed `err`/absolute `aerr` against the NLMS prediction, four
 directional absolute gradients, a ternary residual `sign` with an
 activity-dependent deadzone, and the residual magnitude `mag`. Five-row ring with
-mirrored margins; row 0/1 have dedicated neutral-prior seeders.
+mirrored margins; row 0/1 have dedicated seeders whose constants (`val=256`,
+`aerr=512`, `dup=1024`, `mag=3`, `err=−16`, …) describe a never-seen
+neighbourhood as *moderately active with a small error* rather than flat — a
+deliberate prior, since the top of an image is where flatness is least safe to
+assume.
 
 In the multi-plane driver (`alt_model_p2`, `bmf.cpp:4865`) planes are coded
 **interleaved per pixel** (0→1→2→3), so a later plane sees the earlier planes'
@@ -657,10 +679,15 @@ run4 = final prediction):
   `bias = (weighted + 2^(rate−1)) >> rate`, i.e. LMS with step 2⁻ʳᵃᵗᵉ.
 * A bank's 15-bit context = 4 bits of coarse quantization (`ctx_quant`: 2 bits of
   running-prediction/brightness thresholds + 2 bits of activity thresholds, per-bank
-  magic constants) + **11 sign bits** of differential tests: does the running
-  prediction over/undershoot specific neighbour extrapolations, Laplacians,
-  inter-plane consistency terms, pooled neighbour-error signs. Each bank is an
-  SSE/APM stage keyed on the *pattern* of over/undershoot.
+  magic constants) + **11 single-bit features**: each is bit *k* of a signed
+  differential test (does the running prediction over/undershoot specific
+  neighbour extrapolations, Laplacians, inter-plane consistency terms, pooled
+  neighbour-error signs). For a difference bounded below 2^k the extracted bit is
+  its sign, but several of the tested expressions carry the unbounded running
+  prediction — upstream instrumentation over a 19-image corpus measured one term
+  reaching 36157 against bit 15 — so strictly these are arbitrary correlated bits
+  the counters learn against, not a guaranteed sign pattern. Each bank is still
+  best understood as an SSE/APM stage keyed on the over/undershoot pattern.
 * Updates (`code_banks`, `bmf.cpp:4688`): the exact context integrates the full
   residual, with a small deadzone kick; the learning rate **anneals** 2⁻⁵→2⁻⁸ via a
   countdown (`b1`, reloads `{7,46,197}`) decremented by small residuals
@@ -684,8 +711,12 @@ in two stages:
 * **Ternary split** (`P2Freq{step; f[3]}`, `bmf.cpp:1460`): zero / negative (odd
   codes) / positive (even codes), from `f[]` with adaptive increment `step` that
   starts at 4096 and anneals toward 16 through the rescale schedule (halve counts at
-  a 16384 slot cap; step >>=1 / −32 / −2 by range). `step` doubles as a **maturity
-  meter** gating all generalization (below).
+  a 16384 slot cap; step >>=1 above 256, −32 down to 32, −2 through the 17..32
+  band — a band that is exercised in practice: perturbing the −2 changes the
+  coded sizes of three of the ten test images). The `{2048, 2816, 2816}` seed
+  starts each context biased *against* the zero residual, 2048 vs 5632 for the
+  two sign classes together. `step` doubles as a **maturity meter** gating all
+  generalization (below).
 * **Magnitude** `(code−1)>>1` via the shared symbol-tree strips (§7.5), on a strip
   context = plane | 15-level brightness bucket of the prediction (`p2_ctx_edges`,
   dense near black/white) | activity class; the odd/even halves use two strip
@@ -730,7 +761,57 @@ lossless; the ±16 drift guard still exists but never fires at q=0.
 
 ---
 
-## 12. Review notes — oddities and reconstruction artifacts
+## 12. Measured behaviour on the test corpus
+
+Which model actually runs is a per-plane, per-image decision; the table below is
+read out of the streams this build produces for `testfiles/` (`depth`/`flags` are
+bytes 14/15 of the member header; models parsed from the descriptor bits, listed
+in coding order). Verified locally against this build; the same values appear in
+the upstream reconstruction's reference streams.
+
+| image | BMP | depth | flags | path | model(s), coding order |
+|---|---|---|---|---|---|
+| `t1` | 1 bpp palette | `0x81` | `0x64` | ≤4 bpp short path | slow |
+| `f05_200` | 1 bpp palette | `0x81` | `0x64` | short path | slow |
+| `DLRAW` | 4 bpp palette | `0x84` | `0x64` | short path | slow |
+| `x_ai` | 8 bpp grey ramp | `0x48` | `0x3e` | planar, transposed | slow |
+| `x_ci` | 8 bpp grey ramp | `0x48` | `0x3c` | planar | slow |
+| `t8g` | 8 bpp grey ramp | `0x48` | `0x3c` | planar | alt-P2 |
+| `t8p` | 8 bpp palette | `0x88` | `0x3c` | planar | alt-P2 |
+| `t24` | 24 bpp | `0x18` | `0x3c` | planar | alt-P1, alt-P1, slow |
+| `t32` | 32 bpp | `0x20` | `0x3c` | planar | alt-P1, alt-P1, slow, alt-P1 |
+| `x_ep` | 32 bpp | `0x20` | `0x36` | interleaved, transposed | alt-P2 ×4 |
+
+Descriptor examples (wire values; per *physical* plane, `nrefs` = coding slot):
+
+```
+t24   p0: flags=8  (slow+refs)  nrefs=2  dc=42  w=(128,0)   — coded third
+      p1: flags=13 (p1+refs)    nrefs=1  dc=128             — coded second
+      p2: flags=5  (p1)         nrefs=0                     — coded first
+x_ep  p0: flags=14 (p2+refs)    nrefs=2  dc=237 w=(19,49)
+      p1: flags=14 (p2+refs)    nrefs=1  dc=244
+      p2: flags=6  (p2)         nrefs=0
+      p3: flags=6  (p2)         nrefs=3   (no dc/weights on the wire — has_refs clear)
+```
+
+Concrete takeaways: the model choice is genuinely per plane (`t24` mixes alt-P1
+and the slow model in one stream); the file subformat does not determine the
+model above 4 bpp (`x_ci` and `t8g` are both 8-bit grey and land on different
+models; `t8g`/`t8p` are the same pixels under different palettes and land on the
+same one); coding order is a searched permutation (`t24` codes planes 2, 1, 0,
+and its slot-0 blend weight `(128,0)` is the degenerate copy-one-reference
+form); and a noise image reaches alt-P2, loses to raw, and ships as a raw
+member with flags `0x00` (verified with a random 24-bit image: exactly
+20 + 3·w·h bytes, 24.000 bpp).
+
+The upstream corpus adds cases ours lacks (reported there, not verifiable here):
+an image whose whole-image trials win as interleaved MED + slow model — the only
+way `pred_p1` without `desc_alt_model` (descriptor flags 1/9) reaches a stream —
+and interleaved joint alt-P1.
+
+---
+
+## 13. Review notes — oddities and reconstruction artifacts
 
 Observations from reviewing the source; none affect correctness of this build
 (the codec round-trips bit-exactly), but they are worth knowing when reading or
@@ -749,15 +830,27 @@ modifying the code:
   `fold_hi[256]` member, and reads `fold[-1+…]` via a `neg` pointer — layout-
   dependent by design.
 * The alt-P2 lazy filter pool: `nb_id[1920]` slots map into `nb_weights[1088]`
-  rows with no bound check on the allocation counter; the context geometry
-  (saturating band-5 rows) appears to keep the live slot count under 1088, but the
-  invariant is not enforced in code.
-* `P2Coef::fold` (`bmf.cpp:1613`) brackets each alt-P2 image: it element-wise adds
-  the *static seed* coefficients of feature rows 4–6 (`bmf_p2_coef_init` rows 4–6,
-  installed at `BMFState::reset`) into rows 0–2 — i.e. into the static weights of
-  *different* features — zeroes rows 4–6 and resets their NLMS rates to 0.0024 for
-  the duration of the image, restoring everything afterwards. Whether the
-  cross-feature addition is intentional is unclear.
+  rows with no bound check on the allocation counter; the 1088th distinct slot in
+  one plane would run off the pool. Upstream measurements put the invariant on an
+  empirical footing: a 19-image corpus reaches a high-water mark of 593 distinct
+  slots per plane, an adversarial 2500-tile montage reaches 980, and the union of
+  slots ever seen is 1034 — under the 1088 bound, but by a margin narrow enough
+  that 1088 reads as a measured figure rather than a guessed one. Not enforced in
+  code either here or in the original.
+* `P2Coef::fold` (`bmf.cpp:1613`) brackets only the **multi-plane** alt-P2 driver
+  (`alt_model_p2`, `bmf.cpp:4867`): it element-wise adds the *static seed*
+  coefficients of feature rows 4–6 (`bmf_p2_coef_init` rows 4–6, installed at
+  `BMFState::reset`) into rows 0–2 — i.e. into the static weights of *different*
+  features — zeroes rows 4–6 and resets their NLMS rates to 0.0024 for the
+  duration of the image, restoring everything afterwards. The single-plane `_d8_`
+  path never calls it and runs with the declared 7-row table intact, so the
+  planar and interleaved alt-P2 paths use *different* static predictors out of
+  the same table. Whether the cross-feature addition is intentional is unclear.
+* `widest_window`'s DC scans start at histogram entry 4 rather than 0. The
+  upstream reconstruction traces this to the original computing the start from
+  the low four bits of an `alignas(16)` stack address (always 4), and reports
+  byte-identical streams with 0 and 4 over its corpus — an accidental constant,
+  kept for fidelity.
 * In `search_filter`, `ps.n_p2 = bits_a;` overwrites the P2 plane *count* with a
   bit count after the all-P2 unification wins — type-wise a quirk, but it is
   load-bearing: the (nonzero) value makes the later `!ps.n_p2` gate skip the
@@ -776,7 +869,7 @@ modifying the code:
 
 ---
 
-## 13. Key constants
+## 14. Key constants
 
 | constant | value | role |
 |---|---|---|
