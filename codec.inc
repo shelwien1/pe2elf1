@@ -1321,7 +1321,7 @@ struct BMFCodec : BMFState {
     }
   }
   uint8_t*compress_to_memory(BmfImage* p_i, size_t* out_len, const CodedTail* tail) {
-    BMFState::Init();
+    Init();
     out_len[0] = 0;
     BmfFile arc;
     arc.io = BmfStream::in_memory();
@@ -1335,7 +1335,7 @@ struct BMFCodec : BMFState {
     return out;
   }
   BmfImage*expand_from_memory(const uint8_t* data, size_t n, CodedTail** tail) {
-    BMFState::Init();
+    Init();
     BmfFile arc;
     arc.io = BmfStream::over_memory(data, n);
     BmfImage* img = expand_image(&arc, &coded_block);

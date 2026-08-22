@@ -25,7 +25,8 @@
 
 #include "bmf_util.inc"
 #include "bmf_tables.inc"
-#include "bmf_stream.inc"
+#include "records.inc"
+#include "rangecoder.inc"
 #include "bmf_state.inc"
 #include "sym_list.inc"
 #include "counters.inc"
@@ -33,6 +34,7 @@
 #include "alt_p2.inc"
 #include "model.inc"
 #include "bmp.inc"
+#include "planes.inc"
 #include "codec.inc"
 
 // Layout guards.  Several routines deliberately write past the end of one

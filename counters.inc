@@ -204,6 +204,11 @@ struct P1Ctx {
 };
 
 
-void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym);
 
-int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx);
+void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym) {
+  node[0].code_symbol<0>(cx, ctx, sym);
+}
+
+int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx) {
+  return node[0].code_symbol<1>(cx, ctx, 0);
+}

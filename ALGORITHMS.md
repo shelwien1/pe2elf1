@@ -6,7 +6,7 @@ The identifiers in the source were produced during reverse engineering, so names
 descriptive rather than original.  The source is `bmf.cpp` plus the `.inc` files it
 includes; references below are `file:line` as of this commit.
 
-Range-coder internals (`struct RangeCoder`, `bmf_stream.inc:108` — interval arithmetic,
+Range-coder internals (`struct RangeCoder`, `rangecoder.inc:5` — interval arithmetic,
 renormalization, carry handling) are **out of scope** here; the coder is treated as an
 ideal entropy-coding backend that consumes `(cumFreq, freq, totFreq)` triples and
 adaptive bit probabilities. Everything that *produces* those statistics is in scope.
@@ -61,7 +61,7 @@ from reconstructed data only — the classic CM symmetry that makes side informa
 unnecessary.
 
 The build corresponds to `bmf -S -Q9` (slow mode, max search quality): the `opt_*`
-constants (`bmf_stream.inc:57`) are baked in and, notably, are never read anywhere else
+constants (`records.inc:58`) are baked in and, notably, are never read anywhere else
 in the file — the reconstruction has the option handling constant-folded away.
 
 ### 1.1 Recurring design principles
@@ -98,7 +98,7 @@ A few ideas recur across all three models and explain most of the design:
 (Summary only — this is framing, not compression, but the interleaving of raw bits and
 range-coded segments matters for understanding the models' entry points.)
 
-* A BMF file is a sequence of members: 4-byte tag (`bmf_tag`, `bmp.inc:165`; image
+* A BMF file is a sequence of members: 4-byte tag (`bmf_tag`, `bmp.inc:194`; image
   signature `0x8A81`, auxiliary `0x9081`, version chars `'2','0'`), then a 16-byte
   `BmfImage` header (width/height/stride u16, 4 unused pad bytes, depth u8, flags u8,
   data_size u32),
@@ -106,7 +106,7 @@ range-coded segments matters for understanding the models' entry points.)
   images) the raw palette bytes. Auxiliary members are skipped by the reader
   (`expand_image`, `codec.inc:670`).
 * `depth` packs bit-depth (mask 0x3F) with `depth_grey=0x40` and `depth_palette=0x80`
-  (`bmp.inc:4`). `flags` (`bmp.inc:11`) include `flags_transposed`, `flags_slow`,
+  (`codec.inc:670`). `flags` (`bmp.inc:11`) include `flags_transposed`, `flags_slow`,
   `flags_planar` (planes coded separately), `flags_descriptors`, `flags_coded`,
   `flags_tail`.
 * If the coded body is not smaller than the raw pixels, the member is stored **raw**
@@ -118,7 +118,7 @@ range-coded segments matters for understanding the models' entry points.)
   Since BMF stores rows unpadded with a 20-byte header and 3-byte palette
   entries, a raw member is always *smaller* than its source BMP (54-byte header,
   4-byte palette entries, rows padded to 4).
-* Inside a coded payload, a **bit packer** (`Packer`, `bmf_stream.inc:10`; `pack_bits` /
+* Inside a coded payload, a **bit packer** (`Packer`, `records.inc:11`; `pack_bits` /
   `unpack_bits`, `codec.inc:789` — LSB-first accumulation into 32-bit words) and
   the range coder share one buffer. Raw-bit fields (the 4-bit near-lossless quantizer,
   the plane descriptors) are packed first; each plane's range-coded segment is then
@@ -150,8 +150,8 @@ range-coded segments matters for understanding the models' entry points.)
   three channels) is converted to `depth_grey` and its palette dropped — the decoder's
   `write_bmp_palette` (`bmp.inc:726`) regenerates the identical ramp. Otherwise the
   palette is stored raw (never entropy-coded).
-* On output, `write_bmp` (`bmp.inc:861`) re-encodes 4/8-bit images to RLE4/RLE8
-  (`bmp_rle_encode`, `bmp.inc:764`) and keeps the RLE form only if strictly smaller
+* On output, `write_bmp` (`bmp.inc:690`) re-encodes 4/8-bit images to RLE4/RLE8
+  (`bmp_rle_encod`bmp.inc:690`764`) and keeps the RLE form only if strictly smaller
   than the flat rows.
 * `plane_count = ceil(bits/8)` ∈ 1..4. A "plane" is one byte lane of the interleaved
   pixels, extracted/re-inserted by strided copies (`deinterleave_plane` /
@@ -166,7 +166,7 @@ range-coded segments matters for understanding the models' entry points.)
 
 There is no fixed RGB→YCbCr-style transform. Instead the encoder chooses, per image,
 a **plane coding order** and per-plane linear predictions from already-coded planes,
-described by `PlaneDesc` (`bmf_stream.inc:35`):
+described by `PlaneDesc` (`records.inc:36`):
 
 ```
 struct PlaneDesc { uint8 nrefs;      // # reference planes (0..3); doubles as coding-order slot
@@ -202,7 +202,7 @@ the inter-plane prediction scaled to its internal 16× fixed point (§8.2).
 ### How the transform is chosen (encoder heuristic, `choose_plane_coding`, `codec.inc:272`)
 
 All heuristic decisions use **order-0 empirical entropy** of residual histograms:
-`estimate_cost` (`bmp.inc:329`) computes `Σ nᵢ·log2(N/nᵢ)` bits exactly (no log
+`estimate_cos`codec.inc:272`329`) computes `Σ nᵢ·log2(N/nᵢ)` bits exactly (no log
 table; the even/odd accumulator split is only an ILP unrolling).
 
 For ≥3 planes:
@@ -247,7 +247,7 @@ unaffected) — search costs are therefore measured on a slightly cheaper model
 variant than the final encode.
 
 1. **Per-plane search** (`search_planes`, `codec.inc:1164`), in coding order. Trial
-   flag sets (`try_*`, `bmp.inc:508`; as descriptor flag values: `mode0`=0,
+   flag sets (`tr`codec.inc:1164`c:508`; as descriptor flag values: `mode0`=0,
    `p1`=5, `p2`=6, `refs`=8, `refs_p1`=13, `refs_p2`=14): `mode0` (raw plane into
    the slow model), `p1 = pred_p1|alt`, `p2 = pred_p2|alt`, and for non-first
    planes the same three with `desc_has_refs`. Pruning: `try_p2` runs only if P1 came within 1/32 of the
@@ -284,7 +284,7 @@ detector** applied as a separate pass:
 * `med_predict(W, N, NW)` (`bmp.inc:360`): returns `min(W,N)` if `NW ≥ max(W,N)`,
   `max(W,N)` if `NW ≤ min(W,N)`, else `W+N−NW`.
 * Residuals are **zig-zag folded** to unsigned codes 0,−1,+1,−2,+2,… → 0,1,2,3,4,…
-  (`med_fold_table`/`med_unfold_table`, `bmp.inc:369`).
+  (`med_fold_table`/`med_unfold`planes.inc:45`.inc:369`).
 * `predict_med` (`codec.inc:842`) runs in place, **back to front**, so it reads
   original neighbour values while overwriting; row 0 uses left-DPCM, column 0 uses
   up-DPCM. `unpredict_med` (`bmp.inc:401`) is the forward-order mirror over
@@ -314,7 +314,7 @@ are halved with **ceiling rounding** (`halve_up(x) = x−(x>>1)`, `bmf_util.inc:
 nonzero count never dies), and rescale thresholds grow with use, so every context
 anneals from fast adaptation toward long memory.
 
-### 7.1 `BitCtr` — binary counter with lazy parent seeding (`counters.inc:73`)
+### 7.1 `BitCtr` — binary counter with lazy paren`counters.inc:73`ers.inc:73`)
 
 `{n[0], n[1], limit}`; p(bit) = `n[bit]/(n0+n1)` fed directly to the bit coder.
 Increment +8 to the coded bit; when the total exceeds `limit`, both counts are
@@ -360,7 +360,7 @@ weakest entry (whose count also flows into `tot`). Dense initialization (all sym
 cnt 1, `tot=0`) yields escape-free terminal lists; sparse initialization (`live=0,
 tot=2`) yields learned lists.
 
-### 7.4 `CounterNode` — 7-slot counter with tail classes (`counters.inc:8`)
+### 7.4 `CounterNode` — 7-slot counter with tai`counters.inc:8`ters.inc:8`)
 
 Alt-P1's residual-code distribution: slots 0–4 = codes 0..4 (residuals 0, −1, +1,
 −2, +2), slot 5 = all remaining odd codes (negative tail), slot 6 = even tail. Init
@@ -667,7 +667,7 @@ channel raises the others' activity estimates.
   cov/var), plus a catch-up step when a row is re-seated after serving other slots;
   fresh rows are seeded from their neighbours' mixed weights (×0.78) and
   mean-squares (×0.19). SSE denormals are flushed to zero globally
-  (`bmf_set_denormal_mode`, `bmf_stream.inc:69`) so the float path stays fast.
+  (`bmf_set_denormal_mode`, `records.inc:70`) so the float path stays fast.
 
 ### 10.4 The five-bank bias cascade
 
@@ -818,13 +818,12 @@ Observations from reviewing the source; none affect correctness of this build
 (the codec round-trips bit-exactly), but they are worth knowing when reading or
 modifying the code:
 
-* `opt_*` option constants (`bmf_stream.inc:57`) are defined but never referenced —
+* `opt_*` option constants (`records.inc:58`) are defined but never referenced —
   the `-S -Q9` configuration is constant-folded into the code.
 * `predict_med` histograms every folded residual into `hist_scratch`
   (tail of the output buffer), but no reader of that histogram survives in this
   build — likely a vestige of the original's cost estimation.
-* `write_bmp_palette` has a dead `memset` after a `return` in its no-palette branch
-  (`bmp.inc:726` area): palette bytes for palette-less ≤8-bit images are written
+* `write_bmp_palette` has a dead `memset` after a `return` in its no-palette`bmp.inc:555`mp.inc:726` area): palette bytes for palette-less ≤8-bit images are written
   uninitialised (harmless for the depths this build emits, which always have
   `depth_grey` or `depth_palette` set on ≤8-bit output).
 * `alt_init_tables` deliberately writes `fold[i+256]` to fill the adjacent

@@ -216,11 +216,11 @@ struct ModelBlock {
     uint32_t n_syms3, sym_flag[256];
     memset(sym_flag, 0, sizeof sym_flag);
     bool packed = this[0].depth<8;
-    int32_t height = this[0].height;
+    int32_t rows = this[0].height;
     this[0].alphabet = 0;
     if( packed ) {
       n_distinct = 0;
-      if( height ) {
+      if( rows ) {
         const uint8_t* p = src-1;
         int32_t at = 0;
         const int32_t bpp = this[0].depth;
@@ -241,7 +241,7 @@ struct ModelBlock {
         }
         n_distinct = this[0].alphabet;
       }
-    } else if( height&&this[0].width ) {
+    } else if( rows&&this[0].width ) {
       const uint8_t* q = src;
       const uint32_t n_pix = this[0].height*this[0].width;
       for( uint32_t idx = 0; idx<n_pix; ++idx ) {
