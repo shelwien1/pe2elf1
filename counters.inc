@@ -8,24 +8,65 @@ int32_t sym_slot(int32_t code) {
 struct CounterNode {
   uint16_t total;
   uint16_t c[7];
-  template <int32_t f_DEC> int32_t code_symbol(BMFState* cx, int32_t ctx, int32_t sym) {
+  // Slot 0 -- the residual the predictor got exactly right -- carries most of
+  // this cell's bits, so it is split off the seven-way code as a binary
+  // decision and refined through a map before the flat code over the rest.  The
+  // split is exactly the same code by the chain rule.
+  template <int32_t f_DEC> int32_t code_symbol(BMFState* cx, int32_t ctx, int32_t sym, Apm* apm) {
     uint32_t cum;
     int32_t slot;
     uint16_t* cur = c;
     const uint32_t tot = total&0x7FFF;
-    if constexpr( f_DEC ) {
-      sym = cx[0].get_freq(tot);
-      cum = c[0];
-      while( cum<=(uint32_t)sym )
-        cum += *++cur;
-      cx[0].decode(cum-cur[0], cum, tot);
+    const uint32_t rest = tot-c[0];
+    if( !rest ) {
+      // Nothing outside slot 0 has mass; the split would need a zero-width
+      // interval, so code it flat as it was.
+      if constexpr( f_DEC ) {
+        sym = cx[0].get_freq(tot);
+        cum = c[0];
+        while( cum<=(uint32_t)sym )
+          cum += *++cur;
+        cx[0].decode(cum-cur[0], cum, tot);
+      } else {
+        slot = sym_slot(sym);
+        cum = 0;
+        for( int32_t k = 0; k<slot; k++ )
+          cum += c[k];
+        cur = &c[slot];
+        cx[0].encode(cum, cum+cur[0], tot);
+      }
     } else {
-      slot = sym_slot(sym);
-      cum = 0;
-      for( int32_t k = 0; k<slot; k++ )
-        cum += c[k];
-      cur = &c[slot];
-      cx[0].encode(cum, cum+cur[0], tot);
+      int32_t p16 = (int32_t)(((uint32_t)c[0]*65536u+(tot>>1))/tot);
+      if( p16<32 )
+        p16 = 32;
+      if( p16>65504 )
+        p16 = 65504;
+      const int32_t p_ref = apm[0].refine(p16, ctx&(Apm::kCtx-1));
+      int32_t is_zero;
+      if constexpr( f_DEC ) {
+        is_zero = cx[0].decode_bit(65536-p_ref, p_ref);
+      } else {
+        is_zero = sym_slot(sym)==0;
+        cx[0].encode_bit(65536-p_ref, p_ref, is_zero);
+      }
+      apm[0].update(is_zero);
+      if( !is_zero ) {
+        cur = &c[1];
+        if constexpr( f_DEC ) {
+          sym = cx[0].get_freq(rest);
+          cum = c[1];
+          while( cum<=(uint32_t)sym )
+            cum += *++cur;
+          cx[0].decode(cum-cur[0], cum, rest);
+        } else {
+          slot = sym_slot(sym);
+          cum = 0;
+          for( int32_t k = 1; k<slot; k++ )
+            cum += c[k];
+          cur = &c[slot];
+          cx[0].encode(cum, cum+cur[0], rest);
+        }
+      }
     }
     if( tot>0x2000 ) {
       total = 0x8000;
@@ -243,10 +284,10 @@ struct P1Ctx {
 
 
 
-void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym) {
-  node[0].code_symbol<0>(cx, ctx, sym);
+void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym, Apm* apm) {
+  node[0].code_symbol<0>(cx, ctx, sym, apm);
 }
 
-int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx) {
-  return node[0].code_symbol<1>(cx, ctx, 0);
+int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, Apm* apm) {
+  return node[0].code_symbol<1>(cx, ctx, 0, apm);
 }

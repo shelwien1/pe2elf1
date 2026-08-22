@@ -8,6 +8,7 @@ struct AltP1Block {
   int32_t height;
   int32_t pred;
   int32_t ctx[5];
+  Apm slot_apm;
   CtxWeight ctx_w[9];
   P1Ctx* buf[5];
   P1Ctx* cursor[5];
@@ -59,12 +60,12 @@ struct AltP1Block {
       cur = recon;
       dst[at] = out;
     }
-    alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code);
+    alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code, &slot_apm);
     return cur;
   }
 
   int32_t decode_sample() {
-    const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1]);
+    const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1], &slot_apm);
     return (uint8_t)((uint8_t)pred+unfold[code]);
   }
 
@@ -178,11 +179,11 @@ struct AltP1Block {
         for( int32_t x = 0; x<width; ++x ) {
           ctx_of(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1]);
+            const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1], &slot_apm);
             q[0] = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
           } else {
             const int32_t code = fold_or_refuse(q, src[0], (uint8_t)pred, fold, fold_hi, unfold);
-            alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code);
+            alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code, &slot_apm);
             ++src;
           }
           record_sample((uint8_t)q[0]);
@@ -277,6 +278,7 @@ struct AltP1Block {
 
   AltP1Block*alt_p1_alloc(BMFState* state, int32_t img_w, int32_t img_h, int32_t plane) {
     cx = state;
+    slot_apm.Init();
     uint32_t ctr = 0;
     width = img_w;
     height = img_h;
