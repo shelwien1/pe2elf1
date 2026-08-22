@@ -464,35 +464,64 @@ struct BMFCodec : BMFState {
     return (int32_t)(stream.cur-stream.buf);
   }
 
-  // Images of <=4 bpp never reach search_filter, so they never get the
-  // transpose trial the long path has -- and orientation is worth more here
-  // than anywhere else in the codec.  Run that one trial.
+  // Applies one short-path candidate, or undoes it: bit 0 transposes, bit 1
+  // puts the palette in luminance order.
+  void apply_packed_cand(BmfImage* p_i, int32_t cand, const PaletteOrder &po, bool undo) {
+    if( undo ) {
+      if( cand&2 )
+        permute_indices(p_i, po.ord);
+      if( cand&1 )
+        transpose_image(p_i, 1);
+    } else {
+      if( cand&1 )
+        transpose_image(p_i, 1);
+      if( cand&2 )
+        permute_indices(p_i, po.rank);
+    }
+  }
+  const char*packed_cand_name(int32_t cand) {
+    static const char*const names[4] = {"flat", "transposed", "luma order", "transposed + luma"};
+    return names[cand&3];
+  }
+
+  // Images of <=4 bpp never reach search_filter, so they never get the trials
+  // the long path has -- and orientation and palette order are worth more on
+  // this data than anywhere else in the codec.  Try each available combination
+  // with one trial encode, then re-code the winner.
   void code_packed_body(BmfImage* p_i, BmfImage &hdr) {
-    if( packed_transpose_ok(p_i) ) {
+    PaletteOrder po;
+    const bool has_order = palette_order_of(p_i, &po);
+    const bool can_flip = packed_transpose_ok(p_i);
+    int32_t best_cand = 0, best_len = 0;
+    if( can_flip||has_order ) {
+      // Transposing rewrites the pixels from a copy, so the original has to be
+      // put back between candidates rather than transformed back in place.
       uint8_t*const keep = (uint8_t*)bmf_new(p_i[0].data_size);
       memcpy(keep, p_i[0].pixels, p_i[0].data_size);
-      const int32_t flat = code_packed_once(p_i);
-      free(stream.buf);
-      memcpy(p_i[0].pixels, keep, p_i[0].data_size);
-      transpose_image(p_i, 1);
-      const int32_t flip = code_packed_once(p_i);
-      bmf_log("[orientation] %d bpp short path: flat %d bytes, transposed %d bytes  %s\n",
-              p_i[0].depth&depth_bits, flat, flip, flip<flat ? "TRANSPOSED" : "kept flat");
-      if( flip<flat ) {
-        free(keep);
-        hdr.header_from(p_i);
-        hdr.flags = flags_coded|flags_slow|p_i[0].flags;
-        return;
+      bmf_log("[short path] %d bpp, whole-image trials:\n", p_i[0].depth&depth_bits);
+      for( int32_t cand = 0; cand<4; ++cand ) {
+        if( ((cand&1)&&!can_flip)||((cand&2)&&!has_order) )
+          continue;
+        apply_packed_cand(p_i, cand, po, false);
+        const int32_t len = code_packed_once(p_i);
+        free(stream.buf);
+        const bool win = !best_len||len<best_len;
+        bmf_log("    %-22s %12.1f bytes%s\n", packed_cand_name(cand), (double)len, win ? "  <<" : "");
+        if( win ) {
+          best_len = len;
+          best_cand = cand;
+        }
+        apply_packed_cand(p_i, cand, po, true);
+        memcpy(p_i[0].pixels, keep, p_i[0].data_size);
       }
-      free(stream.buf);
-      transpose_image(p_i, 1);
-      memcpy(p_i[0].pixels, keep, p_i[0].data_size);
       free(keep);
+      apply_packed_cand(p_i, best_cand, po, false);
     } else {
-      bmf_log("[orientation] %d bpp short path: transpose not offered (packed sizes differ)\n",
-              p_i[0].depth&depth_bits);
+      bmf_log("[short path] %d bpp: no orientation or palette trial available\n", p_i[0].depth&depth_bits);
     }
     code_packed_once(p_i);
+    hdr.header_from(p_i);
+    hdr.flags = flags_coded|flags_slow|p_i[0].flags;
   }
 
   void code_image_body(BmfImage* p_i, BmfImage &hdr) {
@@ -503,10 +532,10 @@ struct BMFCodec : BMFState {
     const uint32_t filtered = search_filter(p_i);
     hdr.flags |= flags_descriptors;
     const uint32_t data_bytes = p_i[0].data_size;
-    if( p_i[0].flags&flags_transposed ) {
-      hdr.header_from(p_i);
-      hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
-    }
+    // search_filter may have transposed the image or reordered its palette, and
+    // both show up as flags on p_i; take the geometry and the flags from it.
+    hdr.header_from(p_i);
+    hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
     stream_open(data_bytes);
     if( plane_count==1 ? (p_i[0].depth&depth_grey)!=0 : plane_count>2 ) {
       near_lossless_q = 0;
@@ -880,6 +909,15 @@ struct BMFCodec : BMFState {
         return arc_in[0].fail();
       }
     }
+    if( hdr.flags&flags_pal_sorted ) {
+      // The table went out in the file's own order, so rebuilding the ordering
+      // from it gives exactly the permutation the encoder applied.
+      PaletteOrder po;
+      if( !palette_order_of(img_at, &po) ) {
+        return arc_in[0].fail();
+      }
+      permute_indices(img_at, po.ord);
+    }
     if( img_at[0].flags&flags_transposed ) {
       // Sub-byte-packed images transpose only when both orientations occupy the
       // same number of bytes; byte-interleaved ones need room for w*h*planes.
@@ -1091,6 +1129,34 @@ struct BMFCodec : BMFState {
         best_bits = pt.bits;
         ps = pt;
         transpose_image(img, plane_count);
+      }
+    }
+    {
+      // Palette order.  Both sides derive the luminance ordering from the table
+      // itself, so choosing it costs one flag bit and no side information; the
+      // table always goes out in the file's original order.
+      PaletteOrder po;
+      if( palette_order_of(img, &po) ) {
+        PlaneDesc saved_desc[4];
+        uint32_t saved_cost[4];
+        save_descriptors(saved_desc);
+        for( int32_t k = 0; k<4; ++k )
+          saved_cost[k] = plane_cost[k];
+        permute_indices(tile_img, po.rank);
+        choose_plane_coding(tile_img);
+        const PlaneSearch pp = search_planes(tile_img, tile_buf, plane_cost);
+        const bool kept_order = pp.bits+(pp.bits>>12)>=best_bits;
+        bmf_log("    %-22s %12.1f bytes%s\n", "palette in luma order", bmf_bytes(pp.bits), kept_order ? "" : "  <<");
+        if( kept_order ) {
+          permute_indices(tile_img, po.ord);
+          restore_descriptors(saved_desc);
+          for( int32_t k = 0; k<4; ++k )
+            plane_cost[k] = saved_cost[k];
+        } else {
+          best_bits = pp.bits;
+          ps = pp;
+          permute_indices(img, po.rank);
+        }
       }
     }
     free(tile_buf);

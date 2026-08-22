@@ -9,6 +9,7 @@ enum : uint8_t {
 };
 
 enum : uint8_t {
+  flags_pal_sorted = 0x01,
   flags_transposed = 0x02,
   flags_slow = 0x04,
   flags_planar = 0x08,
