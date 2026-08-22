@@ -23,7 +23,7 @@ otherwise-reasonable ideas die on it:
   free on the side that matters.
 
 Killed outright by that budget, and named here because the source documents in
-§16 propose them: recursive least squares in place of the 28-tap NLMS (O(n²) per
+§18 propose them: recursive least squares in place of the 28-tap NLMS (O(n²) per
 sample, ~30× the current predictor cost), per-pixel structure tensors with an
 `arctan`, dynamically grown context trees (CTW/MML) with per-pixel allocation,
 and every neural variant — MLP, CNN, PixelCNN, transformer, hierarchical VAE.
@@ -40,7 +40,7 @@ believe, so every claim below carries one of:
 | **[expected]** | a judgement from how comparable coders behave; no number was produced here |
 
 Nothing below has been implemented. The expected gains are estimates, and the
-only honest way to settle them is §15. §16 lists the outside review documents
+only honest way to settle them is §15. §18 lists the outside review documents
 this incorporates and the errors found in them.
 
 ---
@@ -569,7 +569,7 @@ top of the existing transform.
 ### 8.1 The transform sees one pixel; the model sees a neighbourhood
 
 **[from the code].** This is the sharpest structural gap in the colour path, and
-three of the review documents in §16 found it independently. `code_colour_plane`
+three of the review documents in §18 found it independently. `code_colour_plane`
 (`codec.inc:417`) forms the inter-plane residual from the **co-located sample
 only**: `O2 − dc − ((w0·O0 + w1·O1 + 40) >> 7)`. Nothing in the external
 transform looks at a reference plane's *neighbours*. alt-P2 does — rows 4–6 of
@@ -649,7 +649,7 @@ wavelet or a pyramid rewrite:
 * **A few long taps.** Add `W−16`, `W−32`, `N−8`, `N−16` as additional NLMS
   inputs. They cost four multiplies and let the filter represent slow variation
   the short taps have to chase. Adding them as *taps* rather than as context
-  bits matters — §16 records that as the one thing the outside documents most
+  bits matters — §18 records that as the one thing the outside documents most
   consistently agreed on, and it is the opposite of what more context bits do to
   a table this size.
 * **A transmitted vertical period.** Measure the row-to-row autocorrelation once
@@ -858,6 +858,14 @@ Recorded so they are not proposed again.
   against 53 024 as two independently coded halves — **0.3 % [measured]**, and
   both halves chose the *same* model anyway. Whole-image model selection is not
   obviously leaving anything on the table for this kind of mixed content.
+* **Recomposing RGB into a palette.** Measured twice, both losses: a 13-colour
+  synthetic UI image costs 84.8 % more as an 8-bit index plane than as 24-bit
+  RGB, and a false-colour map built with deliberately uncorrelated channels —
+  the case designed to defeat cross-plane prediction — still costs 63.2 % more.
+  §16 explains why. A larger-than-256 palette does not change the argument.
+* **Recomposing a palette image into RGB**, the reverse direction: +12.6 % on
+  `t8p`, +0.1 % on `t8g`. The existing grey-ramp special case is at the right
+  scope.
 * **Better mode-search decisions.** The search's own estimate is within 0.4 % of
   the shipped size (§1), so there is essentially nothing to win by making the
   search smarter *about the options it already has*. Its cost model is fine; its
@@ -865,7 +873,7 @@ Recorded so they are not proposed again.
   and §11 are both about exactly that.)
 
 A note on the first item, because it is the one place this document disagrees
-with everything in §16. Six of the eight review documents put tiling or region
+with everything in §18. Six of the eight review documents put tiling or region
 partitioning in their top three, some as the single largest lever. The
 measurement above says 0.3 % on the one composite this corpus can build, and
 both halves chose the same model anyway. Both can be true: the consensus is
@@ -899,37 +907,49 @@ weighted by the speed budget — items that cost the *decoder* nothing come firs
 
 **Cheap, and some of them pay for later items in decode time:**
 
-5. **§10.2** — a run/skip mode for alt-P1 and alt-P2. Compression *and* decode
+5. **§17 (1) and (5)** — stop hardwiring alpha to the last coding slot and stop
+   forcing its transform to use three references. Both are deletions, and the
+   forced reference measurably loses by 3× on the only real alpha channel in the
+   corpus.
+6. **§10.2** — a run/skip mode for alt-P1 and alt-P2. Compression *and* decode
    speed on exactly the images the alt models win, which buys budget for §2.
-6. **§9.1** — a few long taps and a transmitted vertical period. Four multiplies
+   §17 (4) is the same token applied to alpha, where one value covers 77 % of
+   the plane.
+7. **§16** — a representation trial: nibble-split each ≥ 8-bit plane, widen
+   ≤ 4-bit data. One or two header bits and one more trial encode, for a
+   **measured −47 %** where it applies and 0 % where it does not.
+8. **§9.1** — a few long taps and a transmitted vertical period. Four multiplies
    and one header byte.
-7. **§11 (1) and (4)** — score with an adaptive code, and count the side
+9. **§11 (1) and (4)** — score with an adaptive code, and count the side
    information. Small, and everything after this is chosen by the estimator —
    which matters more with every option the list above adds.
-8. **§8 (1) and (2)** — robust fit seed, YCoCg-R candidate. Contained, and the
-   trial machinery already exists to choose between them.
-9. **§3** — one interpolated APM stage on alt-P2, whose probabilities are
-   already binary-ish. Measurable without waiting for the binarisation below.
+10. **§8 (1) and (2)** — robust fit seed, YCoCg-R candidate. Contained, and the
+    trial machinery already exists to choose between them.
+11. **§17 (2) and (3)** — alpha as a colour-plane context, and encoder detection
+    of the premultiplied / constant-under-transparent conventions. Needs (5)
+    above first.
+12. **§3** — one interpolated APM stage on alt-P2, whose probabilities are
+    already binary-ish. Measurable without waiting for the binarisation below.
 
 **Structural, in order:**
 
-10. **§4** — counter and state representation, plus a forgetting policy.
+13. **§4** — counter and state representation, plus a forgetting policy.
     Independent of everything else, and it frees the memory §7 wants.
-11. **§8.1** — make the cross-plane prediction spatial. The sharpest structural
+14. **§8.1** — make the cross-plane prediction spatial. The sharpest structural
     gap in the colour path, and self-contained.
-12. **Binarisation** — one shared bit decomposition of the residual, every model
+15. **Binarisation** — one shared bit decomposition of the residual, every model
     supplying a probability per bit. No compression gain on its own; it is the
     prerequisite for §2, §3 across all models, and §10. It replaces each model's
     symbol coder, so it *will* change the stream and cannot be checked for
     byte-identity; the bar is that it stays lossless and lands within a fraction
     of a per cent of the current sizes on every image, before anything is mixed
     on top of it.
-13. **§2, in the cheap order** — mix *within* alt-P2 first (its NLMS prediction
+16. **§2, in the cheap order** — mix *within* alt-P2 first (its NLMS prediction
     against its five bias banks; no second model, nearly free), measure, and
     only then mix across models. If the cross-model mixer misses the decode
     budget, the within-model mixer still stands.
-14. **§10 and §10.1** — the match model, as both a probability and a predictor.
-15. **§6 (c), §7, §9, §12** — the full dihedral search, hashed contexts,
+17. **§10 and §10.1** — the match model, as both a probability and a predictor.
+18. **§6 (c), §7, §9, §12** — the full dihedral search, hashed contexts,
     multi-rate filters, transmitted parameters, in whatever order the
     measurements from (13) suggest.
 
@@ -959,7 +979,11 @@ success criterion and becomes the *baseline* to beat.
   direction: its largest number, 16.6 %, rests on a single 1 bpp image, and
   `f05_200` — the only other bilevel file — gains nothing. One image is an
   anecdote; that item needs a dozen bilevel and 4-bit images before its size is
-  known.
+  known. §16 and §17 add two more missing populations: images whose bytes are
+  packed fields rather than magnitudes (tile maps, indexed scientific data,
+  structured palettes), and RGBA files carrying the premultiplied-alpha
+  convention. Both of those sections' largest claims rest on constructed inputs
+  because the corpus has no natural ones.
 * **Speed is part of the result, and it has a hard number.** Decode must not
   leave its current class; encode may cost about 2×. Every measurement table
   should carry encode and decode time next to the ratio, because several items
@@ -980,7 +1004,173 @@ success criterion and becomes the *baseline* to beat.
 
 ---
 
-## 16. Sources: what the review documents added, and what they got wrong
+## 16. Pixel decomposition and recomposition
+
+**Now [from the code].** The plane structure is dictated entirely by the file's
+depth: `plane_count = ((depth&depth_bits)+7)>>3` (`codec.inc:534`), planes are
+whole byte lanes of the interleaved pixel, and nothing ever changes that. There
+is no way to split an 8-bit plane into narrower ones, no way to merge three
+8-bit planes into one wider symbol, and depths ≤ 4 bpp stay bit-packed and skip
+the search entirely (`code_image_body`, `codec.inc:456`). The one exception is
+grey-ramp detection (`bmf_compress`, `bmf.cpp:67`), which is a recomposition —
+it recognises that an 8-bit paletted image *is* a grey image and retags it — but
+it fires only on the exact canonical ramp.
+
+**[measured].** Six representation changes, each applied to real or constructed
+inputs and put through this build:
+
+| change | image | as-is | changed | |
+|---|---|---|---|---|
+| 8 bpp → two nibble planes, refs available | `t8g` | 42 896 | 48 728 | **+13.6 %** |
+| 8 bpp → two nibble planes, refs available | `t8p` | 43 664 | 48 728 | **+11.6 %** |
+| 8 bpp → two nibble planes | *structured bit-fields* | 1 848 | **976** | **−47.2 %** |
+| 24 bpp → 8 bpp palette (13 colours) | *synthetic UI* | 868 | 1 604 | **+84.8 %** |
+| 24 bpp → 8 bpp palette (24 uncorrelated colours) | *false-colour map* | 1 140 | 1 860 | **+63.2 %** |
+| 8 bpp palette → 24 bpp through the palette | `t8p` | 43 664 | 49 176 | +12.6 % |
+| 8 bpp grey → 24 bpp | `t8g` | 42 896 | 42 924 | +0.1 % |
+| 4 bpp → widened to 8 bpp (skips the short path) | `DLRAW` | 225 784 | **224 868** | **−0.4 %** |
+| 1 bpp → widened to 8 bpp | `t1` | 2 622 | 2 952 | +12.6 % |
+| 1 bpp → widened to 8 bpp | `f05_200` | 21 286 | 22 112 | +3.9 % |
+
+The structured-bit-fields row is an image built to be the case decomposition is
+*for*: an 8-bit index whose high nibble is a hue in large blobs and whose low
+nibble is an independent vertical ramp. Splitting it into two planes nearly
+halves the file. The same operation on continuous-tone data costs 12–14 %.
+
+### 16.1 What the numbers say
+
+**Plane decomposition is worth having, as a trial.** The spread between −47 % and
++14 % is not noise about a mean, it is two different populations: data whose
+byte is a *packed record of independent fields* (indices into a structured
+palette, tile IDs, flag bytes, some scientific and map data) and data whose byte
+is a *magnitude* (anything continuous-tone). BMF has no way to tell them apart
+by inspection and does not need one — it already trial-encodes, so the decision
+is "code the plane both ways, keep the cheaper, spend one bit". Note the win
+comes with cross-plane references available; the nibble planes are strongly
+dependent and the ref machinery is what makes the split cheap.
+
+**Recomposition RGB → palette is a robust loss and should not be built.** Both
+constructions lose heavily, including the one designed to defeat cross-plane
+prediction by giving the palette uncorrelated channels. The reason is
+structural: BMF already does palette-like modelling *three times over*. Each
+plane gets its own alphabet reduction and neighbour-rank coding in the slow
+model, and the cross-plane references then remove what the three have in common.
+Collapsing to one index plane throws away the numeric adjacency that MED and the
+magnitude coders depend on, and replaces three easy alphabets with one hard one.
+This also answers the "palette larger than BMP allows" version: the problem is
+not the 256-entry cap, it is that an index plane is a worse representation for
+this codec than three byte planes.
+
+**Recomposition palette → RGB is a loss too**, for the mirror-image reason: it
+turns one plane into three and costs 12.6 % on `t8p`. The grey case is neutral
+(+0.1 %) because BMF already recognises it. So the existing grey-ramp
+recomposition is at the right scope; generalising it is not indicated.
+
+**Depth widening is depth-dependent and small.** 4-bit data gains 0.4 % from
+being widened into the full search; 1-bit data loses 4–13 %, because the packed
+representation is genuinely better for bilevel content and the slow model
+handles it directly. This is a useful correction to the intuition — shared by one
+of the review documents (§18) — that the ≤ 4 bpp short path is simply costing
+compression. It costs a little at 4 bits and saves a lot at 1 bit. What the short
+path *does* unambiguously cost is the orientation trial: 16.6 % on `t1` (§6 (a)),
+which is an order of magnitude more than the widening question either way.
+
+**Change.** One extra decision at the top of the search, alongside orientation
+and palette order: **the representation**. Candidates worth trialling, in the
+order the measurements justify:
+
+1. split each ≥ 8-bit plane into two nibble planes (large win on field-packed
+   data, ~13 % loss on continuous tone, so it must be measured not assumed);
+2. widen ≤ 4-bit data into the full search (small win at 4 bits, loss at 1);
+3. *not* RGB ↔ palette in either direction.
+
+Each is a bit or two of header and one more trial encode, which fits the
+encoder's 2× budget; the decoder pays only the inverse permutation of bytes.
+
+**Expected.** **[measured]** −47 % on field-packed 8-bit data, 0 % on everything
+else once it is a trial rather than a rule. The population that benefits is not
+in `testfiles/` at all, which is the same gap §15 identifies for §5 and §10.
+
+---
+
+## 17. Alpha is hardwired last, and its structure is unexploited
+
+**Now [from the code].** Two constraints, both invisible in the descriptor
+format and both costly:
+
+* **Alpha is always physical plane 3 and always coding slot 3.**
+  `choose_alpha_plane` (`codec.inc:1312`) ends with
+  `plane_desc[3].src_plane = 3; plane_desc[3].nrefs = 3;` — assigned, not
+  searched. Every other plane's position in the coding order is chosen by the
+  candidate search; alpha's is a constant. So alpha may reference the three
+  colour planes, and **nothing may ever reference alpha**.
+* **Its transform is forced to use all three colour planes.** The alpha
+  predictor is a 3-weight mix fitted over 2×2 quads, and §11 measured the
+  outcome on `x_ep`: the fit estimates 91 630.8 bytes against 201 224.6 for the
+  best single-channel copy, sets up the reference — and the real trial encodes
+  then price that reference at 69 124 bytes against 21 652 for coding alpha with
+  no reference at all. Alpha is over-constrained in the direction it does not
+  want and under-served in the direction it does.
+
+**[measured] — how much structure is there?** In `x_ep`, splitting the colour
+planes by a 3-way alpha class:
+
+| | pixels | RGB order-0 | after MED spatial prediction |
+|---|---|---|---|
+| `alpha == 0` | 17 809 (3.2 %) | **3.67 bpp** | 3.86 bpp/plane |
+| `0 < alpha < 255` | 109 040 (19.3 %) | 13.19 bpp | 7.95 bpp/plane |
+| `alpha == 255` | 437 151 (77.5 %) | 13.53 bpp | 8.23 bpp/plane |
+
+Raw colour under transparent pixels is **3.7× cheaper** than under opaque ones.
+Most of that is spatial — transparent regions are flat, and MED already gets it
+— but not all: conditioning the *MED residual* on the alpha class still recovers
+**1.32 %** of the colour residual stream (573 941.7 → 566 348.7 bytes, order-0).
+That is a real number for a context the codec cannot currently form, because the
+plane it would need is coded afterwards.
+
+**On the "alpha = 0 forces RGB = 0" convention.** It does not hold in `x_ep`:
+**0 of** the 17 809 fully transparent pixels are exactly `(0,0,0)`. Where it does
+hold — premultiplied-alpha pipelines, and the output of encoders that normalise
+transparent pixels — it is an exact functional dependency and those pixels' RGB
+becomes free. Worth distinguishing carefully from what WebP and PNG optimisers
+actually do: they **choose** the RGB under transparent pixels to minimise size,
+which is lossy at the byte level. BMF must reproduce the input bytes exactly and
+cannot do that. What it can do is *predict* them, and it currently does not even
+try.
+
+**Change**, cheapest first:
+
+1. **Let the coding order search reach alpha.** Delete the two hardwired
+   assignments and let alpha compete for a coding slot like any other plane. On
+   an image with the premultiplied convention this alone is most of the gain,
+   because alpha-first makes the dependency available to the colour planes.
+2. **Use quantised alpha as a colour-plane context.** Three buckets (0,
+   translucent, 255) as extra context bits on the colour planes' activity
+   contexts. **[measured]** 1.32 % of the colour residual stream on `x_ep`, and
+   it needs (1) first.
+3. **Detect the exact cases in the encoder and signal them.** "RGB is constant
+   wherever alpha == 0" and "RGB is premultiplied by alpha" are two-line scans
+   over the image. When either holds, a header flag makes the affected pixels'
+   colour bytes cost essentially nothing. This is the case that pays 100 %
+   rather than 1.3 %, and it is the one the question is really about.
+4. **Give alpha a run mode.** 77.5 % of `x_ep`'s alpha is a single value.
+   §10.2's skip token applies here more strongly than anywhere else in the
+   codec.
+5. **Stop forcing the alpha transform to use three references.** Let the
+   existing trial machinery choose alpha's reference set the way it chooses
+   every other plane's — the measurement above shows the forced version losing
+   by 3× on the one 32-bit image in the corpus that has a real alpha channel.
+
+**Cost.** (1) and (5) are deletions. (2) is context bits. (3) is an encoder scan
+and a flag. (4) is §10.2. Nothing here costs the decoder measurable time.
+
+**Expected.** **[measured]** ~1.3 % on `x_ep` from (2); **[expected]** near-total
+elimination of transparent-pixel colour cost on files that carry the
+premultiplied convention, which this corpus does not contain — `t32`'s alpha is
+synthetic and `x_ep`'s is a genuine but unnormalised alpha channel.
+
+---
+## 18. Sources: what the review documents added, and what they got wrong
 
 This document was revised against eight independent reviews of the same codec
 (`gem`, `gpt`, `grok`, `kimi`, `mmax`, `perp`, `qwen`, `zai`). They are worth
@@ -1001,10 +1191,17 @@ the failure modes are systematic.
 | Change-point **plasticity** and counter **aging** | `gpt`, `grok` | §4 |
 | Residual **magnitude correlation across planes** as context | `grok` | §8.2 |
 | A **transmitted vertical period** as one extra tap | `mmax` | §9.1 |
-| Long-range taps belong in the **predictor**, not in more context bits | `gpt` | §9.1, and the closing note of §16 |
+| Long-range taps belong in the **predictor**, not in more context bits | `gpt` | §9.1, and the closing note of §18 |
 | Alphabet ordering is the same lever as palette ordering, one layer down | `gem` | §5.2 |
 | Side information must be **counted** in the cost estimate; search transform and model **jointly** | `perp`, `gpt`, `grok` | §11 |
 | The transpose trial's abort threshold should be adaptive | `grok` | independent confirmation of §6 (b) |
+| Bit-plane / sub-byte plane decomposition | `grok` §4, `kimi` §5.2 | §16 — measured: −47 % on field-packed data, +13 % on continuous tone |
+| Alpha deserves its own handling | `grok` §7 | §17 — measured: alpha is hardwired to the last coding slot |
+
+Two topics were raised by none of the eight and are §16 and §17 below:
+**recomposition** (RGB ↔ palette, depth widening — measured, and a loss in
+every direction tried) and the fact that **alpha's coding slot is a constant,
+not a search result**, so nothing in the image can ever reference it.
 
 ### Errors of fact
 
@@ -1040,6 +1237,14 @@ the failure modes are systematic.
   5–10 % it claims to save on early pixels. The decodable version of the idea is
   §12: fit a small number of *parameters* in a first pass and put those in the
   header.
+* **`mmax` §7.3 argues the ≤ 4 bpp short path "loses compression because the alt
+  models are never tried".** Half right, and the half that is wrong is the
+  larger half. Widening `DLRAW` from 4 bpp into the full search gains 0.4 %;
+  widening `t1` and `f05_200` from 1 bpp *loses* 12.6 % and 3.9 %, because the
+  packed representation genuinely suits bilevel data. What the short path
+  actually costs is the orientation trial — 16.6 % on `t1` (§6 (a)), an order of
+  magnitude more than the model question in either direction. Fix the trial, not
+  the representation.
 * **`zai` §2: alt-P1 is "~13 MB per plane".** 629 856 × 16 = 10.08 MB.
 * **Seven of the eight propose replacing the range coder with ANS**, two of
   them as their opening section, with claimed *rate* gains of "marginal"
