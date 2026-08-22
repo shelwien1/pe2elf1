@@ -50,6 +50,7 @@ struct CtxModel {
   int32_t nodes;
   uint32_t* ctr;
   uint32_t* ctr_short;
+  Apm apm;
   int32_t recip[kCountCap+1];
   uint32_t* tag;
   BMFState* cx;
@@ -74,6 +75,7 @@ struct CtxModel {
   void Init() {
     for( int32_t k = 0; k<=kCountCap; ++k )
       recip[k] = 65536/(k+2);
+    apm.Init();
     neighbours = 0;
     short_size = 0;
     nb_for_bits[0] = 0;
@@ -174,8 +176,14 @@ struct CtxModel {
       const int32_t p_long = (int32_t)(row[at]>>16);
       const int32_t n_long = (int32_t)(row[at]&0xFFFFu);
       const int32_t p_short = (int32_t)(srow[at]>>16);
-      const int32_t p = (p_long*n_long+p_short*kBlend)/(n_long+kBlend);
-      const int32_t coded = p<32 ? 32 : p>65504 ? 65504 : p;
+      int32_t p = (p_long*n_long+p_short*kBlend)/(n_long+kBlend);
+      if( p<32 )
+        p = 32;
+      if( p>65504 )
+        p = 65504;
+      // The map's context is how much the long bucket has seen and which node
+      // of the tree this is -- neither of which the two tables are keyed on.
+      const int32_t coded = apm.refine(p, at);
       int32_t bit;
       if constexpr( f_DEC ) {
         bit = cx[0].decode_bit(65536-coded, coded);
@@ -183,6 +191,7 @@ struct CtxModel {
         bit = (sym>>b)&1;
         cx[0].encode_bit(65536-coded, coded, bit);
       }
+      apm.update(bit);
       const int32_t target = bit ? 65535 : 0;
       bump(row[at], target);
       bump(srow[at], target);

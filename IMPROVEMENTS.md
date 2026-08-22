@@ -566,13 +566,13 @@ other three.
 
 | image | values | shipped before | with the mode | |
 |---|---|---|---|---|
-| `x_ci` | 4 | 628 116 | 570 564 | **−9.2 %** |
-| `DLRAW` | 16, 4 bpp | 222 494 | 209 874 | **−5.7 %** |
-| `x_ai` | 8 | 144 540 | 141 972 | **−1.8 %** |
-| `f05_200` | 2, 1 bpp | 21 322 | 21 198 | **−0.6 %** |
+| `x_ci` | 4 | 628 116 | 570 488 | **−9.2 %** |
+| `DLRAW` | 16, 4 bpp | 222 494 | 207 578 | **−6.7 %** |
+| `x_ai` | 8 | 144 540 | 133 444 | **−7.7 %** |
+| `f05_200` | 2, 1 bpp | 21 322 | 21 134 | **−0.9 %** |
 | `t1` | 2, 1 bpp | 2 170 | 2 170 | refused, 2 588 |
 
-That is **−3.7 % of the whole corpus** from one mode. Sub-byte-packed planes get
+That is **−4.4 % of the whole corpus** from one mode. Sub-byte-packed planes get
 it too: the plane is unpacked to a byte per pixel, coded, and packed back, which
 is invisible outside the one function and the header bit that records it. It is
 only offered when the row divides evenly into bytes — otherwise the last byte of
@@ -603,10 +603,18 @@ Three things mattered, in order of how much:
    bucket from the short table and then ignoring it is worth about half as much:
    `x_ci` 578 520 seeded against 573 708 blended, `x_ai` 153 360 against 141 956,
    which is the difference between the mode losing on `x_ai` and winning.
-2. **Count-adaptive counters.** A fixed 1/32 rate leaves `x_ci` at 602 560 and
+2. **§3's map, on the tree's bits.** Refining the blended probability through an
+   adaptive probability map before it reaches the coder is worth 8 500 bytes on
+   `x_ai` alone and 2 300 on `DLRAW`. Its context is the *tree node* and nothing
+   else — 15 entries. Adding the long bucket's count to it, which is the obvious
+   confidence axis, makes it worse (`x_ai` 134 228 against 133 444), for the same
+   reason a finer context loses everywhere else in §3: the blend has already
+   used that count, so splitting the map by it divides the evidence without
+   adding anything.
+3. **Count-adaptive counters.** A fixed 1/32 rate leaves `x_ci` at 602 560 and
    `x_ai` at 205 844; per-node update counts adapting at 1/(*n*+2) take those to
    581 800 and 172 248. A context here sees tens of samples, not thousands.
-3. **The static entropy sweep sizes it wrong.** Eight neighbours are better than
+4. **The static entropy sweep sizes it wrong.** Eight neighbours are better than
    seven as a static entropy on both files and worse as an adaptive code before
    the blend — `x_ci` 589 780 against 584 588, `x_ai` 181 708 against 169 780 —
    because the extra contexts cost more to learn than they save. After the blend
