@@ -500,6 +500,18 @@ struct SymList;
 struct ModelBlock;
 struct ReduceNode;
 struct AltP2Block;
+struct FreqPair {
+  uint16_t f[2];
+};
+
+uint32_t halve_pair(FreqPair* pair, int32_t go) {
+  halve_counts(pair[0].f, 2);
+  return pair[0].f[go];
+}
+
+void end_plane_stream() {
+}
+
 struct BMFState {
   alignas(16) CodedStream stream;
   RangeCoder rc = {};
@@ -542,6 +554,10 @@ struct BMFState {
   uint32_t rc_decode_flat(uint32_t tot);
   uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold);
   template <int32_t f_DEC> uint32_t code_alphabet_size(uint32_t n, uint32_t cap);
+  FreqPair*bit_tree(uint16_t* freq, int32_t lvl) {
+  return (FreqPair*)&freq[2*level_geom[lvl].tbl_base+8];
+  }
+
   uint16_t*begin_plane_stream();
   void packer_rewind();
   template <int32_t f_DEC> uint16_t*rc_begin();
@@ -582,8 +598,8 @@ struct BmfStream;
 struct BmfFile;
 struct BmfImage;
 void p2_nudge(P2Count* p, int32_t res, int32_t shift = 2);
-void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym);
-int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx);
+
+
 
 struct FreqRec {
   union {
@@ -958,6 +974,10 @@ inline int32_t SymList::decode_symbol_list(BMFState* cx) {
   return result;
 }
 
+int32_t sym_slot(int32_t code) {
+  return code<5 ? code : 6-(code&1);
+}
+
 struct CounterNode {
   uint16_t total;
   uint16_t c[7];
@@ -971,20 +991,14 @@ struct CounterNode {
     return 2u*c[slot]>(total&0x7FFFu)+c[0];
   }
 };
-int32_t sym_slot(int32_t code) {
-  return code<5 ? code : 6-(code&1);
-}
+
 
 struct SymPair {
   uint16_t last;
   uint16_t prev;
 };
-struct FreqPair {
-  uint16_t f[2];
-};
-FreqPair*bit_tree(BMFState* cx, uint16_t* freq, int32_t lvl) {
-  return (FreqPair*)&freq[2*cx[0].level_geom[lvl].tbl_base+8];
-}
+
+
 
 struct BitCtr {
   uint16_t n[2];
@@ -1119,8 +1133,10 @@ struct P1Ctx {
   uint8_t mag;
 };
 
-int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb);
-int32_t nb_resid(const AltP1Block* nb);
+
+void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym);
+
+int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx);
 
 struct AltP1Block {
   static const int32_t kRowMargin = 4;
@@ -1198,6 +1214,15 @@ struct AltP1Block {
       update_model();
     for( int32_t k = 0; k<5; ++k )
       ++cursor[k];
+  }
+
+  int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb) {
+    const P1Ctx* r = nb[0].cursor[0];
+    return here-(uint32_t)guess+r[-1].sym-r[-2].sym;
+  }
+
+  int32_t nb_resid(const AltP1Block* nb) {
+    return nb[0].cursor[0][-1].sym-nb[0].pred;
   }
 
   int32_t ctx_of(AltP1Block* nb0, AltP1Block* nb1) {
@@ -1440,14 +1465,9 @@ struct AltP1Block {
   BMFState* cx;
 };
 
-int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb) {
-  const P1Ctx* r = nb[0].cursor[0];
-  return here-(uint32_t)guess+r[-1].sym-r[-2].sym;
-}
 
-int32_t nb_resid(const AltP1Block* nb) {
-  return nb[0].cursor[0][-1].sym-nb[0].pred;
-}
+
+
 
 struct P2Count {
   int8_t rate;
@@ -1601,6 +1621,15 @@ struct P2Ctx {
   uint8_t mag;
 };
 
+// NbRow and CtxWeights are mutually recursive: CtxWeights holds NbRow pointers,
+// and NbRow::predict blends through a CtxWeights.  One of the two must be
+// introduced ahead of the other.
+struct NbRow;
+
+struct CtxWeights {
+  NbRow* row[6];
+};
+
 struct NbRow {
   float w[15][4];
   uint32_t uses;
@@ -1629,6 +1658,33 @@ struct P2Coef {
     memcpy(cx[0].p2_rate[4], saved_rate, sizeof saved_rate);
   }
 };
+
+int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2, int32_t sum, int32_t s0, int32_t s1, int32_t s2) {
+  return CtxIdx{}.bits<13, 2>((run>r0)+(run>r1)+(run>r2)).bits<11, 2>((sum>s0)+(sum>s1)+(sum>s2));
+}
+
+int32_t over_thresholds(int32_t n, const int32_t* t, int32_t lo, int32_t hi, int32_t scale) {
+  int32_t over = 0;
+  for( int32_t k = hi; k>=lo; --k ) over += n>scale*t[k];
+  return over;
+}
+
+const int32_t p2_band_edges[5] = {43, 17, 9, 5, 2};
+
+int32_t grad(int32_t a, int32_t b, int32_t c) {
+  return a+b-c;
+}
+
+template <int16_t P2Ctx::* Field> struct RowOf {
+  const P2Ctx* row;
+  int32_t operator()(int32_t i) const {
+    return row[i].*Field;
+  }
+};
+
+using DvalRow = RowOf<&P2Ctx::dval>;
+
+using ValRow = RowOf<&P2Ctx::val>;
 
 struct AltP2Block {
   static const int32_t kRowMargin = 8;
@@ -1977,9 +2033,7 @@ bool BMFState::ref_transformed(int32_t k) {
 }
 
 
-struct CtxWeights {
-  NbRow* row[6];
-};
+
 
 struct PixRec {
   union {
@@ -2038,6 +2092,14 @@ struct GroupFolds {
   int32_t w3_double, w4_to_w2, w3_to_w2, w4_to_w1, w3_to_w1, w2_to_w1;
   explicit GroupFolds(int32_t flags) : w3_double(flags&ctx_w3_double), w4_to_w2(flags&ctx_w4_to_w2), w3_to_w2(flags&ctx_w3_to_w2), w4_to_w1(flags&ctx_w4_to_w1), w3_to_w1(flags&ctx_w3_to_w1), w2_to_w1(flags&ctx_w2_to_w1) {
   }
+};
+
+void free_sym_lists(SymList*) {
+}
+
+struct ReduceNode {
+  uint32_t val;
+  uint16_t kid[2];
 };
 
 struct ModelBlock {
@@ -2101,6 +2163,83 @@ struct ModelBlock {
   uint16_t ctx_id3[712000];
   ModelBlock*layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth);
   void free_workspace();
+  void reduce_narrow_alphabet(SymList* lists, uint8_t* src, uint32_t mask) {
+    int32_t n_distinct, y, bits, shift, prev, s, s_next;
+    uint32_t n_syms3, sym_flag[256];
+    memset(sym_flag, 0, sizeof sym_flag);
+    bool packed = this[0].depth<8;
+    int32_t height = this[0].height;
+    this[0].alphabet = 0;
+    if( packed ) {
+      n_distinct = 0;
+      if( height ) {
+        const uint8_t* p = src-1;
+        int32_t at = 0;
+        const int32_t bpp = this[0].depth;
+        for( y = 0; y<this[0].height; ++y ) {
+          bits = 0;
+          for( uint32_t x = 0; x<this[0].width; ++x, ++at ) {
+            shift = bits-bpp;
+            if( shift<0 ) {
+              ++p;
+              shift = 8-bpp;
+            }
+            const uint32_t sym = mask&(*p>>shift);
+            this[0].alphabet += sym_flag[sym]==0;
+            sym_flag[sym] = 1;
+            bits = shift;
+            this[0].sym_word[at] = sym;
+          }
+        }
+        n_distinct = this[0].alphabet;
+      }
+    } else if( height&&this[0].width ) {
+      const uint8_t* q = src;
+      const uint32_t n_pix = this[0].height*this[0].width;
+      for( uint32_t idx = 0; idx<n_pix; ++idx ) {
+        const int32_t sym2 = *q++;
+        this[0].alphabet += sym_flag[sym2]==0;
+        sym_flag[sym2] = 1;
+        this[0].sym_word[idx] = sym2;
+      }
+      n_distinct = this[0].alphabet;
+    } else {
+      n_distinct = 0;
+    }
+    cx[0].code_alphabet_size<0>(n_distinct, mask+1);
+    uint32_t n_syms = this[0].alphabet;
+    if( n_syms<=mask ) {
+      init_gap_list(cx, lists, mask, n_syms);
+      n_syms3 = this[0].alphabet;
+      if( n_syms3 ) {
+        prev = 0;
+        s = 0;
+        uint32_t next_id = 0;
+        do {
+          if( sym_flag[s] ) {
+            lists[0].code_symbol(cx, s-prev);
+            n_syms3 = this[0].alphabet;
+            sym_flag[s] = next_id;
+            s_next = s+1;
+            prev = s+1;
+            ++next_id;
+          } else {
+            s_next = s+1;
+          }
+          s = s_next;
+        } while( next_id<n_syms3 );
+      }
+      {
+        const uint32_t n_pix = this[0].height*this[0].width;
+        for( uint32_t m = 0; m<n_pix; ++m )
+          this[0].sym_word[m] = sym_flag[this[0].sym_word[m]];
+      }
+      free_sym_entries(lists, 16);
+    } else {
+      free_sym_entries(lists, 16);
+    }
+  }
+
   int32_t tree_place(ReduceNode* tree, uint32_t val);
   void reduce_alphabet(uint8_t* src);
   int32_t pixel_context(uint32_t* nb) {
@@ -3409,8 +3548,7 @@ uint32_t BMFState::rc_decode_flat(uint32_t tot) {
   return sym;
 }
 
-void end_plane_stream() {
-}
+
 
 template <int32_t f_DEC> void BMFState::rc_end() {
   if constexpr( f_DEC )
@@ -3556,10 +3694,7 @@ uint32_t BMFCodec::unpack_bits(int32_t n) {
   return v;
 }
 
-uint32_t halve_pair(FreqPair* pair, int32_t go) {
-  halve_counts(pair[0].f, 2);
-  return pair[0].f[go];
-}
+
 
 template <int32_t f_DEC> int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
@@ -3619,7 +3754,7 @@ template <int32_t f_DEC> int32_t BMFState::code_symbol_tree(uint16_t* freq, int3
     path = sym-level_geom[lvl].first;
   int32_t node = 0;
   for( span = 1;; span *= 2 ) {
-    FreqPair* pair = bit_tree(this, freq, lvl)+span+node;
+    FreqPair* pair = bit_tree(freq, lvl)+span+node;
     int32_t f1 = pair[0].f[1];
     int32_t fa = pair[0].f[0];
     if constexpr( f_DEC ) {
@@ -3714,7 +3849,7 @@ int32_t BMFState::update_binary_pair(uint16_t* _this, int32_t symbol) {
       int32_t mask = level_geom[lvl].half;
       int32_t path = symbol-level_geom[lvl].first;
       node = 0;
-      FreqPair* tbl = bit_tree(this, _this, lvl);
+      FreqPair* tbl = bit_tree(_this, lvl);
       int32_t span = 1;
       do {
         FreqPair* pair = tbl+node+span;
@@ -3758,8 +3893,7 @@ int32_t estimate_cost(const int32_t* bin, int32_t n) {
   return (int32_t)((total-entropy)*1.442695040888963);
 }
 
-void free_sym_lists(SymList*) {
-}
+
 
 void ModelBlock::free_workspace() {
   free(sym_word);
@@ -3846,87 +3980,9 @@ ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t 
   return this;
 }
 
-struct ReduceNode {
-  uint32_t val;
-  uint16_t kid[2];
-};
 
-void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk1, uint8_t* src, uint32_t mask) {
-  int32_t n_distinct, y, bits, shift, prev, s, s_next;
-  uint32_t n_syms3, sym_flag[256];
-  memset(sym_flag, 0, sizeof sym_flag);
-  bool packed = blk1[0].depth<8;
-  int32_t height = blk1[0].height;
-  blk1[0].alphabet = 0;
-  if( packed ) {
-    n_distinct = 0;
-    if( height ) {
-      const uint8_t* p = src-1;
-      int32_t at = 0;
-      const int32_t bpp = blk1[0].depth;
-      for( y = 0; y<blk1[0].height; ++y ) {
-        bits = 0;
-        for( uint32_t x = 0; x<blk1[0].width; ++x, ++at ) {
-          shift = bits-bpp;
-          if( shift<0 ) {
-            ++p;
-            shift = 8-bpp;
-          }
-          const uint32_t sym = mask&(*p>>shift);
-          blk1[0].alphabet += sym_flag[sym]==0;
-          sym_flag[sym] = 1;
-          bits = shift;
-          blk1[0].sym_word[at] = sym;
-        }
-      }
-      n_distinct = blk1[0].alphabet;
-    }
-  } else if( height&&blk1[0].width ) {
-    const uint8_t* q = src;
-    const uint32_t n_pix = blk1[0].height*blk1[0].width;
-    for( uint32_t idx = 0; idx<n_pix; ++idx ) {
-      const int32_t sym2 = *q++;
-      blk1[0].alphabet += sym_flag[sym2]==0;
-      sym_flag[sym2] = 1;
-      blk1[0].sym_word[idx] = sym2;
-    }
-    n_distinct = blk1[0].alphabet;
-  } else {
-    n_distinct = 0;
-  }
-  cx[0].code_alphabet_size<0>(n_distinct, mask+1);
-  uint32_t n_syms = blk1[0].alphabet;
-  if( n_syms<=mask ) {
-    init_gap_list(cx, lists, mask, n_syms);
-    n_syms3 = blk1[0].alphabet;
-    if( n_syms3 ) {
-      prev = 0;
-      s = 0;
-      uint32_t next_id = 0;
-      do {
-        if( sym_flag[s] ) {
-          lists[0].code_symbol(cx, s-prev);
-          n_syms3 = blk1[0].alphabet;
-          sym_flag[s] = next_id;
-          s_next = s+1;
-          prev = s+1;
-          ++next_id;
-        } else {
-          s_next = s+1;
-        }
-        s = s_next;
-      } while( next_id<n_syms3 );
-    }
-    {
-      const uint32_t n_pix = blk1[0].height*blk1[0].width;
-      for( uint32_t m = 0; m<n_pix; ++m )
-        blk1[0].sym_word[m] = sym_flag[blk1[0].sym_word[m]];
-    }
-    free_sym_entries(lists, 16);
-  } else {
-    free_sym_entries(lists, 16);
-  }
-}
+
+
 
 int32_t ModelBlock::tree_place(ReduceNode* tree, uint32_t val) {
   int32_t node = 0, side;
@@ -3997,7 +4053,7 @@ void ModelBlock::reduce_alphabet(uint8_t* src) {
                 };
   clear_sym_lists(lists);
   if( sym_bits<=8 ) {
-    reduce_narrow_alphabet(cx, lists, this, src, mask);
+    reduce_narrow_alphabet(lists, src, mask);
   } else {
     memset(tree, 0, sizeof tree);
     alphabet = 1;
@@ -4398,31 +4454,18 @@ void BMFCodec::alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height) {
   alt_model_p2_d8<1>(nullptr, i, height, out);
 }
 
-int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2, int32_t sum, int32_t s0, int32_t s1, int32_t s2) {
-  return CtxIdx{}.bits<13, 2>((run>r0)+(run>r1)+(run>r2)).bits<11, 2>((sum>s0)+(sum>s1)+(sum>s2));
-}
 
-int32_t over_thresholds(int32_t n, const int32_t* t, int32_t lo, int32_t hi, int32_t scale) {
-  int32_t over = 0;
-  for( int32_t k = hi; k>=lo; --k ) over += n>scale*t[k];
-  return over;
-}
 
-const int32_t p2_band_edges[5] = {43, 17, 9, 5, 2};
 
-int32_t grad(int32_t a, int32_t b, int32_t c) {
-  return a+b-c;
-}
 
-template <int16_t P2Ctx::* Field> struct RowOf {
-  const P2Ctx* row;
-  int32_t operator()(int32_t i) const {
-    return row[i].*Field;
-  }
-};
 
-using DvalRow = RowOf<&P2Ctx::dval>;
-using ValRow = RowOf<&P2Ctx::val>;
+
+
+
+
+
+
+
 
 AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* refb) {
   P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
