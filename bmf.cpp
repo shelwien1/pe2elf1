@@ -101,33 +101,33 @@ struct CtxIdx {
   uint32_t val = 0;
   template <int32_t Pos> constexpr CtxIdx &bit(bool b) {
     val += (uint32_t)b<<Pos;
-    return *this;
+    return this[0];
   }
 
   template <int32_t Pos, int32_t W> constexpr CtxIdx &bits(uint32_t v) {
     val += (v&((1u<<W)-1))<<Pos;
-    return *this;
+    return this[0];
   }
 
   template <uint32_t Stride, uint32_t Radix> constexpr CtxIdx &digit(uint32_t v) {
 
     val += Stride*v;
-    return *this;
+    return this[0];
   }
 
   template <int32_t Pos> constexpr CtxIdx &bit_of(uint32_t v) {
     val |= v&(1u<<Pos);
-    return *this;
+    return this[0];
   }
 
   template <int32_t Pos> constexpr CtxIdx &above(uint32_t v) {
     val += v<<Pos;
-    return *this;
+    return this[0];
   }
 
   constexpr CtxIdx &raw(uint32_t v) {
     val += v;
-    return *this;
+    return this[0];
   }
 
   constexpr operator uint32_t() const {
@@ -347,15 +347,15 @@ private:
   uint32_t rdiv;
   uint32_t bytes;
   uint8_t*p() {
-    return st->cur;
+    return st[0].cur;
   }
 
   void set_p(uint8_t* q) {
-    st->cur = q;
+    st[0].cur = q;
   }
 
   uint8_t dec_get(uint8_t*&q) {
-    if( q>=st->buf+st->size )
+    if( q>=st[0].buf+st[0].size )
       bmf_fatal(bmf_read_error);
     return *q++;
   }
@@ -429,13 +429,13 @@ public:
     *q++ = (uint8_t)(len>>16);
     *q++ = (uint8_t)(len>>8);
     *q++ = (uint8_t)len;
-    while( (uint32_t)(q-st->buf)%4!=3 )
+    while( (uint32_t)(q-st[0].buf)%4!=3 )
       *q++ = 0;
     *q++ = kMarker;
     set_p(q);
-    st->pk.free_bits = 0;
-    st->pk.acc = 0;
-    st->pk.word = (uint32_t*)st->cur;
+    st[0].pk.free_bits = 0;
+    st[0].pk.acc = 0;
+    st[0].pk.word = (uint32_t*)st[0].cur;
   }
 
   void dec_init() {
@@ -490,9 +490,9 @@ public:
     while( dec_get(q)!=kMarker ) {
     }
     set_p(q);
-    st->pk.word = (uint32_t*)st->cur;
-    st->pk.free_bits = 0;
-    st->pk.acc = 0;
+    st[0].pk.word = (uint32_t*)st[0].cur;
+    st[0].pk.free_bits = 0;
+    st[0].pk.acc = 0;
   }
 };
 
@@ -629,7 +629,7 @@ struct FreqRec {
     const int32_t scale = src.b15;
     int32_t kept[5];
     for( int32_t i = 0; i<5; ++i ) kept[i] = scale*w[i];
-    *this = src;
+    this[0] = src;
     b14 *= 8;
     const int32_t total = w[5];
     for( int32_t i = 0; i<5; ++i ) w[i] = (uint16_t)(kept[i]+(21*w[i]+total-1)/total);
@@ -677,35 +677,35 @@ struct SymList {
     do {
       prev = cur;
       ++cur;
-      int32_t half = (bias+(uint32_t)cur->cnt)>>1;
-      cur->cnt = half;
+      int32_t half = (bias+(uint32_t)cur[0].cnt)>>1;
+      cur[0].cnt = half;
       if( cur!=ent ) {
         SymEntry* up = cur-1;
-        int32_t up_cnt = up->cnt;
+        int32_t up_cnt = up[0].cnt;
         if( half>up_cnt ) {
-          uint16_t keep = cur->sym;
-          cur->set(up->sym, up_cnt);
+          uint16_t keep = cur[0].sym;
+          cur[0].set(up[0].sym, up_cnt);
           if( up!=ent ) {
             do {
               back = up-1;
-              int32_t back_cnt = back->cnt;
+              int32_t back_cnt = back[0].cnt;
               if( half<=back_cnt )
                 break;
-              up->set(back->sym, back_cnt);
+              up[0].set(back[0].sym, back_cnt);
               --up;
             } while( back!=ent );
           }
-          up->set(keep, half);
+          up[0].set(keep, half);
         }
       }
       --n_left;
     } while( n_left );
     running = tot;
-    if( !cur->cnt ) {
+    if( !cur[0].cnt ) {
       do {
         ++n_left;
         tot = ++running;
-        last_cnt = prev->cnt;
+        last_cnt = prev[0].cnt;
         --prev;
       } while( !last_cnt );
       live -= n_left;
@@ -718,31 +718,31 @@ struct SymList {
 
   int32_t move_up(SymEntry* p) {
     if( p==ent )
-      return p->cnt;
-    uint16_t s_a = p->sym;
-    uint8_t c_a = p->cnt;
+      return p[0].cnt;
+    uint16_t s_a = p[0].sym;
+    uint8_t c_a = p[0].cnt;
     SymEntry* q = p-1;
-    *p = *q;
-    q->set(s_a, c_a);
+    p[0] = q[0];
+    q[0].set(s_a, c_a);
     if( q==ent )
-      return q->cnt;
+      return q[0].cnt;
     while( 1 ) {
-      int32_t top = q->cnt;
+      int32_t top = q[0].cnt;
       SymEntry* r = q-1;
-      if( top<=r->cnt )
+      if( top<=r[0].cnt )
         return top;
-      uint16_t s_b = q->sym;
-      uint8_t c_b = q->cnt;
-      *q = *r;
-      r->set(s_b, c_b);
+      uint16_t s_b = q[0].sym;
+      uint8_t c_b = q[0].cnt;
+      q[0] = r[0];
+      r[0].set(s_b, c_b);
       --q;
       if( r==ent )
-        return r->cnt;
+        return r[0].cnt;
     }
   }
 
   int32_t promote(SymEntry* p) {
-    p->cnt += 4;
+    p[0].cnt += 4;
     since_rescale += 4;
     return move_up(p);
   }
@@ -751,15 +751,15 @@ struct SymList {
     int32_t enc_cum, enc_high, enc_tot;
     int32_t c, c2;
     uint32_t i;
-    int8_t gen = cx->exclusion_gen;
+    int8_t gen = cx[0].exclusion_gen;
     uint32_t left = live;
     SymEntry* p = ent-1;
     int32_t cum = 0;
     while( 1 ) {
       ++p;
-      int32_t s = p->sym;
-      if( cx->exclusion_mask[s]!=cx->exclusion_gen ) {
-        c = p->cnt;
+      int32_t s = p[0].sym;
+      if( cx[0].exclusion_mask[s]!=cx[0].exclusion_gen ) {
+        c = p[0].cnt;
         cum += c;
         if( s==want )
           break;
@@ -772,10 +772,10 @@ struct SymList {
       enc_tot = tot+cum;
       enc_high = enc_tot;
       do {
-        cx->exclusion_mask[p->sym] = gen;
+        cx[0].exclusion_mask[p[0].sym] = gen;
         --p;
       } while( p>=ent );
-      cx->rc.encode(enc_cum, enc_high, enc_tot);
+      cx[0].rc.encode(enc_cum, enc_high, enc_tot);
       return 0;
     }
     enc_high = cum;
@@ -783,7 +783,7 @@ struct SymList {
     enc_cum = cum-c;
     if( rest ) {
       for( i = 0; i<rest; ++i ) {
-        if( cx->exclusion_mask[p[i+1].sym]==cx->exclusion_gen )
+        if( cx[0].exclusion_mask[p[i+1].sym]==cx[0].exclusion_gen )
           c2 = 0;
         else
           c2 = p[i+1].cnt;
@@ -792,7 +792,7 @@ struct SymList {
     }
     enc_tot = tot+cum;
     rescale(promote(p));
-    cx->rc.encode(enc_cum, enc_high, enc_tot);
+    cx[0].rc.encode(enc_cum, enc_high, enc_tot);
     return 1;
   }
 
@@ -802,12 +802,12 @@ struct SymList {
     uint32_t n_live = live;
     SymEntry* p = list;
     uint32_t left = n_live;
-    while( left&&p->sym!=want ) {
+    while( left&&p[0].sym!=want ) {
       ++p;
       --left;
     }
     if( left ) {
-      p->cnt += add;
+      p[0].cnt += add;
       since_rescale += add;
       rescale(move_up(p));
       return;
@@ -824,13 +824,13 @@ struct SymList {
     list += n_live;
     live = n_live+1;
     tot = recycled+tot+1;
-    list->cnt = 2;
-    list->sym = want;
+    list[0].cnt = 2;
+    list[0].sym = want;
     since_rescale += 4;
     if( list!=ent ) {
-      uint16_t s3 = list->sym;
-      uint8_t c3 = list->cnt;
-      *list = list[-1];
+      uint16_t s3 = list[0].sym;
+      uint8_t c3 = list[0].cnt;
+      list[0] = list[-1];
       list[-1].set(s3, c3);
     }
   }
@@ -877,10 +877,10 @@ struct SymListBlock {
 
 SymList*new_sym_lists(uint32_t n, void* storage) {
   SymListBlock* block = (SymListBlock*)storage;
-  block->n = n;
+  block[0].n = n;
   for( uint32_t i = 0; i<n; ++i )
-    block->list[i].ent = nullptr;
-  return block->list;
+    block[0].list[i].ent = nullptr;
+  return block[0].list;
 }
 
 void free_sym_entries(SymList*, uint32_t) {
@@ -888,11 +888,11 @@ void free_sym_entries(SymList*, uint32_t) {
 
 void init_byte_lists(BMFState* cx, SymList* list, uint32_t nbytes) {
   for( uint32_t k = 0; k<4*nbytes; ++k )
-    list[k].init(256, 1, &cx->byte_list_ent[k*256]);
+    list[k].init(256, 1, &cx[0].byte_list_ent[k*256]);
 }
 
 void init_gap_list(BMFState* cx, SymList* list, uint32_t mask, uint32_t n_syms) {
-  list[0].init(mask-n_syms+2, 1, cx->gap_list_ent);
+  list[0].init(mask-n_syms+2, 1, cx[0].gap_list_ent);
   list[0].rescale_at = 19*list[0].n;
 }
 
@@ -901,7 +901,7 @@ SymListBlock*sym_list_block(SymList* list) {
 }
 
 uint32_t sym_list_count(const SymList* list) {
-  return sym_list_block((SymList*)list)->n;
+  return sym_list_block((SymList*)list)[0].n;
 }
 
 bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym) {
@@ -915,29 +915,29 @@ inline int32_t SymList::decode_symbol_list(BMFState* cx) {
   SymEntry** w, ** rd, ** rd2;
   int32_t c;
   w = list;
-  uint32_t gen = (uint8_t)cx->exclusion_gen;
+  uint32_t gen = (uint8_t)cx[0].exclusion_gen;
   int32_t cum = 0;
   for( int32_t i = 0; i<(int32_t)live; ++i ) {
-    if( (uint8_t)cx->exclusion_mask[ent[i].sym]==gen ) {
+    if( (uint8_t)cx[0].exclusion_mask[ent[i].sym]==gen ) {
       c = 0;
     } else {
       SymEntry* e = &ent[i];
-      c = e->cnt;
+      c = e[0].cnt;
       *w++ = e;
     }
     cum += c;
   }
   if( !cum )
     return -1;
-  *w = nullptr;
+  w[0] = nullptr;
   int32_t tot_all = cum+(int32_t)tot;
-  int32_t target = cx->rc.get_freq(tot_all);
+  int32_t target = cx[0].rc.get_freq(tot_all);
   SymEntry* p = list[0];
   rd = &list[1];
   SymEntry* first = list[0];
   uint32_t cum_lo = 0;
   while( 1 ) {
-    cum_lo += p->cnt;
+    cum_lo += p[0].cnt;
     if( cum_lo>(uint32_t)target )
       break;
     p = *rd++;
@@ -946,17 +946,17 @@ inline int32_t SymList::decode_symbol_list(BMFState* cx) {
       q = first;
       rd2 = &list[1];
       do {
-        cx->exclusion_mask[q->sym] = gen_b;
+        cx[0].exclusion_mask[q[0].sym] = gen_b;
         q = *rd2++;
       } while( q );
-      cx->rc.decode(cum_lo, tot_all, tot_all);
+      cx[0].rc.decode(cum_lo, tot_all, tot_all);
       return -1;
     }
   }
-  int32_t result = p->sym;
-  uint32_t sym_cum = cum_lo-p->cnt;
-  this->rescale(this->promote(p));
-  cx->rc.decode(sym_cum, cum_lo, tot_all);
+  int32_t result = p[0].sym;
+  uint32_t sym_cum = cum_lo-p[0].cnt;
+  this[0].rescale(this[0].promote(p));
+  cx[0].rc.decode(sym_cum, cum_lo, tot_all);
   return result;
 }
 
@@ -985,7 +985,7 @@ struct FreqPair {
   uint16_t f[2];
 };
 FreqPair*bit_tree(BMFState* cx, uint16_t* freq, int32_t lvl) {
-  return (FreqPair*)&freq[2*cx->level_geom[lvl].tbl_base+8];
+  return (FreqPair*)&freq[2*cx[0].level_geom[lvl].tbl_base+8];
 }
 
 struct BitCtr {
@@ -1021,14 +1021,14 @@ struct BitCtr {
 
   void seed_from(BitCtr* parent) {
     const int32_t first = n[0]-1;
-    const int32_t par0 = parent->n[0];
-    const int32_t par_tot = par0+parent->n[1];
+    const int32_t par0 = parent[0].n[0];
+    const int32_t par_tot = par0+parent[0].n[1];
     n[0] = (par_tot+(par0<<6)-64)/par_tot;
-    n[1] = ((parent->n[1]<<6)+par_tot-64)/par_tot;
+    n[1] = ((parent[0].n[1]<<6)+par_tot-64)/par_tot;
     n[first] += kSeedBump;
     limit = kSeedLimit;
-    const int32_t par_n = parent->n[first];
-    parent->n[first] = par_n-3*(par_n>3);
+    const int32_t par_n = parent[0].n[first];
+    parent[0].n[first] = par_n-3*(par_n>3);
   }
 
   template <int32_t f_DEC> int32_t code_context_bit(BMFState* cx, BitCtr* parent, int32_t bit) {
@@ -1038,24 +1038,24 @@ struct BitCtr {
         seed_from(parent);
       const uint32_t tot = summ();
       if constexpr( f_DEC )
-        bit = cx->rc.decode_bit(n[0], n[1]);
+        bit = cx[0].rc.decode_bit(n[0], n[1]);
       else
-        cx->rc.encode_bit(n[0], n[1], bit);
+        cx[0].rc.encode_bit(n[0], n[1], bit);
       if( tot>limit )
         scale_rare();
       result = n[bit]+kStep;
       n[bit] = result;
-      parent->n[bit] += tot<kParentBump;
+      parent[0].n[bit] += tot<kParentBump;
     } else {
-      const uint32_t p_tot = parent->summ();
+      const uint32_t p_tot = parent[0].summ();
       if constexpr( f_DEC )
-        bit = cx->rc.decode_bit(parent->n[0], parent->n[1]);
+        bit = cx[0].rc.decode_bit(parent[0].n[0], parent[0].n[1]);
       else
-        cx->rc.encode_bit(parent->n[0], parent->n[1], bit);
-      if( p_tot>parent->limit )
-        parent->scale_rare();
-      result = parent->n[bit]+kStep;
-      parent->n[bit] = result;
+        cx[0].rc.encode_bit(parent[0].n[0], parent[0].n[1], bit);
+      if( p_tot>parent[0].limit )
+        parent[0].scale_rare();
+      result = parent[0].n[bit]+kStep;
+      parent[0].n[bit] = result;
       n[0] = bit+1;
     }
     return f_DEC ? bit : result;
@@ -1071,26 +1071,26 @@ struct BitCtr {
 };
 
 CounterNode*init_counter_node(CounterNode* node) {
-  node->c[0] = 8;
-  node->c[1] = 2;
-  node->c[2] = 2;
-  node->c[3] = 2;
-  node->c[4] = 2;
-  node->c[5] = 3;
-  node->c[6] = 3;
-  node->total = 22;
+  node[0].c[0] = 8;
+  node[0].c[1] = 2;
+  node[0].c[2] = 2;
+  node[0].c[3] = 2;
+  node[0].c[4] = 2;
+  node[0].c[5] = 3;
+  node[0].c[6] = 3;
+  node[0].total = 22;
   return node;
 }
 
 template <class Unfold> uint8_t fold_or_refuse(uint8_t* dst, int32_t src, int32_t pred, const uint8_t* fold, const uint8_t* fold_hi, const Unfold* unfold) {
   const int32_t resid = (uint8_t)(src-pred);
   const uint8_t recon = unfold[fold[resid]]+pred;
-  const int32_t drift = *dst-(uint8_t)(recon+*dst-src);
+  const int32_t drift = dst[0]-(uint8_t)(recon+dst[0]-src);
   if( drift<-16||drift>16 ) {
-    *dst = (uint8_t)src;
+    dst[0] = (uint8_t)src;
     return fold_hi[resid];
   }
-  *dst = recon;
+  dst[0] = recon;
   return fold[resid];
 }
 
@@ -1192,9 +1192,9 @@ struct AltP1Block {
   }
 
   void record_sample(int32_t val) {
-    cursor[0]->sym = val;
-    cursor[0]->mag = abs32(val-pred);
-    ctx[3+ctx[2]] += cursor[0]->mag-cursor[0][-4].mag-(cursor[4][-2].mag-cursor[4][6].mag)-(cursor[2][-2].mag-cursor[2][6].mag);
+    cursor[0][0].sym = val;
+    cursor[0][0].mag = abs32(val-pred);
+    ctx[3+ctx[2]] += cursor[0][0].mag-cursor[0][-4].mag-(cursor[4][-2].mag-cursor[4][6].mag)-(cursor[2][-2].mag-cursor[2][6].mag);
     ctx[2] = ctx[2]==0;
     if( counters[ctx[0]].total<0x4000u )
       update_model();
@@ -1207,7 +1207,7 @@ struct AltP1Block {
     int32_t act_all;
     uint32_t quiet;
     P1Ctx* cursor1 = cursor[1];
-    int32_t guess = cursor1->sym;
+    int32_t guess = cursor1[0].sym;
     P1Ctx* cur = cursor[0];
     int32_t west = cur[-1].sym;
     int32_t northwest = cursor1[-1].sym;
@@ -1228,15 +1228,15 @@ struct AltP1Block {
     }
     pred = guess;
     P1Ctx* cursor2 = cursor[2];
-    int32_t act = cursor1[-1].mag+cur[-3].mag+3*(cursor1[1].mag+cursor2->mag)+6*cur[-1].mag+4*(cursor1->mag+cur[-2].mag)+2*(cursor2[2].mag+cursor1[2].mag+cur[-4].mag);
+    int32_t act = cursor1[-1].mag+cur[-3].mag+3*(cursor1[1].mag+cursor2[0].mag)+6*cur[-1].mag+4*(cursor1[0].mag+cur[-2].mag)+2*(cursor2[2].mag+cursor1[2].mag+cur[-4].mag);
     const int32_t west_grad = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
-    const int32_t north_grad = -guess-cursor1->sym+cursor1[1].sym+cur[-1].sym;
+    const int32_t north_grad = -guess-cursor1[0].sym+cursor1[1].sym+cur[-1].sym;
     if( nb0 ) {
-      const P1Ctx* r0 = nb0->cursor[0];
+      const P1Ctx* r0 = nb0[0].cursor[0];
       if( nb1 ) {
-        const P1Ctx* r1 = nb1->cursor[0];
+        const P1Ctx* r1 = nb1[0].cursor[0];
         act_all = act+2*(r1[-1].mag+r0[-1].mag);
-        ctx_w[5].sel = cursor1->sym-(uint32_t)guess+r0[-1].sym-nb0->cursor[1][-1].sym;
+        ctx_w[5].sel = cursor1[0].sym-(uint32_t)guess+r0[-1].sym-nb0[0].cursor[1][-1].sym;
         ctx_w[6].sel = cross_grad(cur[-1].sym, guess, nb0);
         ctx_w[7].sel = cross_grad(cur[-1].sym, guess, nb1);
         ctx_w[8].sel = nb_resid(nb1);
@@ -1253,13 +1253,13 @@ struct AltP1Block {
       }
     } else {
       P1Ctx* cursor4 = cursor[4];
-      act_all = cursor4->mag+cursor2[-2].mag+cursor1[3].mag+act+cursor4[2].mag;
+      act_all = cursor4[0].mag+cursor2[-2].mag+cursor1[3].mag+act+cursor4[2].mag;
       ctx_w[5].sel = west_grad;
-      ctx_w[6].sel = 2*cursor1->sym-cursor2->sym-(uint32_t)guess;
+      ctx_w[6].sel = 2*cursor1[0].sym-cursor2[0].sym-(uint32_t)guess;
       ctx_w[7].sel = north_grad;
       ctx_w[8].sel = -3*(cur[-2].sym-cur[-1].sym)+cur[-3].sym-(uint32_t)guess;
       ctx_w[3].sel = cursor1[2].sym-(uint32_t)guess;
-      quiet = cur->mag+cursor4->mag+cursor[3]->mag+cursor2->mag+cursor1->mag==0;
+      quiet = cur[0].mag+cursor4[0].mag+cursor[3][0].mag+cursor2[0].mag+cursor1[0].mag==0;
     }
     int32_t act_q = (act_all+7)>>4;
     int32_t act_lvl = level_of[act_q];
@@ -1267,7 +1267,7 @@ struct AltP1Block {
     ctx[0] = act_lvl;
     ctx[1] = group_of[act_q]+slot_of[(uint32_t)guess];
     ctx_w[0].sel = (guess>216)+(guess>22);
-    ctx_w[1].sel = tri_sign(cursor1[-1].sym-cursor1->sym);
+    ctx_w[1].sel = tri_sign(cursor1[-1].sym-cursor1[0].sym);
     ctx_w[2].sel = tri_sign(cursor1[-1].sym-cur[-1].sym);
     ctx_w[3].sel = tri_sign(ctx_w[3].sel);
     ctx_w[4].sel = tri_sign(cursor1[1].sym-guess, step);
@@ -1281,9 +1281,9 @@ struct AltP1Block {
 
   template <int32_t f_DEC> void d8_body(uint8_t* src, uint8_t* out) {
     if constexpr( f_DEC )
-      cx->rc_begin_decode();
+      cx[0].rc_begin_decode();
     else
-      cx->rc_begin_encode();
+      cx[0].rc_begin_encode();
     for( int32_t y = 0; y<height; ++y ) {
       advance_row();
       seed_activity(false);
@@ -1293,7 +1293,7 @@ struct AltP1Block {
           ctx_of(nullptr, nullptr);
           if constexpr( f_DEC ) {
             const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1]);
-            *q = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
+            q[0] = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
           } else {
             const int32_t code = fold_or_refuse(q, *src, (uint8_t)pred, fold, fold_hi, unfold);
             alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code);
@@ -1306,9 +1306,9 @@ struct AltP1Block {
       }
     }
     if constexpr( f_DEC )
-      cx->rc_end_decode();
+      cx[0].rc_end_decode();
     else
-      cx->rc_end_encode();
+      cx[0].rc_end_encode();
   }
 
   void update_selector(int32_t k, int32_t slot_f, int32_t slot_r, uint32_t ctx_alt, int32_t alt_lo, int32_t alt_hi) {
@@ -1347,8 +1347,8 @@ struct AltP1Block {
   }
 
   void update_model() {
-    const uint32_t code_f = fold[(uint8_t)(cursor[0]->sym-(uint8_t)pred)];
-    const int32_t code_r = fold[(uint8_t)((uint8_t)pred-cursor[0]->sym)];
+    const uint32_t code_f = fold[(uint8_t)(cursor[0][0].sym-(uint8_t)pred)];
+    const int32_t code_r = fold[(uint8_t)((uint8_t)pred-cursor[0][0].sym)];
     const int32_t tree_sym = (int32_t)(code_f-5)>>1;
     const int32_t slot_f = sym_slot(code_f);
     const int32_t slot_r = sym_slot(code_r);
@@ -1361,14 +1361,14 @@ struct AltP1Block {
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, 11);
       if( slot_f>=5 )
-        cx->update_binary_pair(cx->model_strip(CtxIdx{}.bit<7>(slot_f&1).bit<6>(node_up[1].escape_high(slot_f)).raw(ctx_up)), (int32_t)(code_f-5)>>1);
+        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<7>(slot_f&1).bit<6>(node_up[1].escape_high(slot_f)).raw(ctx_up)), (int32_t)(code_f-5)>>1);
     }
     if( result&7 ) {
       CounterNode* node_dn = &counters[result];
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, 13);
       if( slot_f>=5 )
-        cx->update_binary_pair(cx->model_strip(CtxIdx{}.bit<7>(slot_f&1).bit<6>(node_dn[-1].escape_high(slot_f)).raw(ctx_dn)), tree_sym);
+        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<7>(slot_f&1).bit<6>(node_dn[-1].escape_high(slot_f)).raw(ctx_dn)), tree_sym);
     }
     if( counters[result].total>=kCounterNudgeLimit )
       return;
@@ -1380,8 +1380,8 @@ struct AltP1Block {
     }
     if( slot_f>=5 ) {
       const uint32_t key = CtxIdx{}.bit<7>(slot_f&1).bit<6>(counters[result].escape_high(slot_f)).raw(ctx[1]);
-      if( (key&0x38)>=0x38||(cx->update_binary_pair(cx->model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
-        cx->update_binary_pair(cx->model_strip(key-8), tree_sym);
+      if( (key&0x38)>=0x38||(cx[0].update_binary_pair(cx[0].model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
+        cx[0].update_binary_pair(cx[0].model_strip(key-8), tree_sym);
       }
     }
     update_selector(0, slot_f, slot_r, ctx_alt, 0, 1);
@@ -1426,7 +1426,7 @@ struct AltP1Block {
     }
     for( int32_t row = 0; row<5; ++row )
       buf[row] = row_store[row];
-    cx->alt_init_tables(fold, (int8_t*)unfold);
+    cx[0].alt_init_tables(fold, (int8_t*)unfold);
     for( int32_t r = 0; r<width+10; ++r ) {
       for( int32_t i = 0; i<5; ++i )
         buf[4-i][r].sym = 72;
@@ -1443,12 +1443,12 @@ struct AltP1Block {
 };
 
 int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb) {
-  const P1Ctx* r = nb->cursor[0];
+  const P1Ctx* r = nb[0].cursor[0];
   return here-(uint32_t)guess+r[-1].sym-r[-2].sym;
 }
 
 int32_t nb_resid(const AltP1Block* nb) {
-  return nb->cursor[0][-1].sym-nb->pred;
+  return nb[0].cursor[0][-1].sym-nb[0].pred;
 }
 
 struct P2Count {
@@ -1484,7 +1484,7 @@ struct P2Freq {
     int32_t c01 = f[1]+f[0];
     uint32_t tot = c01+f[2];
     if constexpr( f_DEC ) {
-      int32_t target = cx->rc.get_freq(tot);
+      int32_t target = cx[0].rc.get_freq(tot);
       cum = f[0];
       if( (uint32_t)target>=cum ) {
         if( target>=c01 ) {
@@ -1511,12 +1511,12 @@ struct P2Freq {
         slot = &f[0];
       }
     }
-    uint32_t tot_1 = cum+*slot;
+    uint32_t tot_1 = cum+slot[0];
     if constexpr( f_DEC )
-      cx->rc.decode(cum, tot_1, tot);
+      cx[0].rc.decode(cum, tot_1, tot);
     else
-      cx->rc.encode(cum, tot_1, tot);
-    uint16_t f_before = *slot;
+      cx[0].rc.encode(cum, tot_1, tot);
+    uint16_t f_before = slot[0];
     if( *slot>0x4000u ) {
       halve_counts(f, 3);
       st = step;
@@ -1527,19 +1527,19 @@ struct P2Freq {
           down = 32;
         st = st-down;
         step = st;
-        f_before = *slot;
+        f_before = slot[0];
       } else {
         st = (uint32_t)st>>1;
         step = st;
-        f_before = *slot;
+        f_before = slot[0];
       }
     } else {
       st = step;
     }
-    *slot = st+f_before;
+    slot[0] = st+f_before;
     int32_t idx = slot-base;
     if( idx )
-      return idx+2*cx->template code_symbol_tree<f_DEC>(cx->model_strip(ctx_pair[idx&1]), (sym-1)>>1);
+      return idx+2*cx[0].template code_symbol_tree<f_DEC>(cx[0].model_strip(ctx_pair[idx&1]), (sym-1)>>1);
     return 0;
   }
 
@@ -1557,28 +1557,28 @@ int32_t p2_pred(int32_t weighted, int32_t rate) {
 }
 
 int16_t p2_bump(BMFState* cx, int32_t w2, int32_t err, int32_t shift) {
-  const uint32_t kick = 32u*(uint32_t)((err>cx->deadzone_hi)-(err<cx->deadzone_lo));
+  const uint32_t kick = 32u*(uint32_t)((err>cx[0].deadzone_hi)-(err<cx[0].deadzone_lo));
   return (int16_t)((uint32_t)w2+((kick+(uint32_t)err+(1u<<(shift-1)))>>shift));
 }
 
 void p2_update(BMFState* cx, P2Count* p, int32_t res, int32_t shift) {
-  const int32_t w = p->weighted;
-  p->weighted = p2_bump(cx, w, res-p2_pred(w, p->rate), shift);
+  const int32_t w = p[0].weighted;
+  p[0].weighted = p2_bump(cx, w, res-p2_pred(w, p[0].rate), shift);
 }
 
 void p2_update_into(BMFState* cx, P2Count* p, int32_t &res, int32_t shift) {
-  const int32_t w = p->weighted;
-  res -= p2_pred(w, p->rate);
-  p->weighted = p2_bump(cx, w, res, shift);
+  const int32_t w = p[0].weighted;
+  res -= p2_pred(w, p[0].rate);
+  p[0].weighted = p2_bump(cx, w, res, shift);
 }
 
 void p2_rescale(P2Freq* r) {
-  if( r->f[0]+r->f[1]+r->f[2]>kP2FreqRescaleTotal ) r->rescale_three_way();
+  if( r[0].f[0]+r[0].f[1]+r[0].f[2]>kP2FreqRescaleTotal ) r[0].rescale_three_way();
 }
 
 void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num) {
   p2_rescale(r);
-  r->f[slot] += (num*(uint32_t)r->step)>>4;
+  r[0].f[slot] += (num*(uint32_t)r[0].step)>>4;
 }
 
 void p2_bump_sides(P2Freq* group, int32_t ctx15, int32_t lo, int32_t slot, uint32_t up, uint32_t dn) {
@@ -1587,7 +1587,7 @@ void p2_bump_sides(P2Freq* group, int32_t ctx15, int32_t lo, int32_t slot, uint3
 }
 
 void p2_nudge(P2Count* p, int32_t res, int32_t shift) {
-  p->weighted = (int16_t)((uint16_t)p->weighted+((uint32_t)(res-p2_pred(p->weighted, p->rate)+(1<<(shift-1)))>>shift));
+  p[0].weighted = (int16_t)((uint16_t)p[0].weighted+((uint32_t)(res-p2_pred(p[0].weighted, p[0].rate)+(1<<(shift-1)))>>shift));
 }
 
 struct P2Ctx {
@@ -1614,21 +1614,21 @@ struct P2Coef {
   float saved_coef[7][4];
   float saved_rate[3][4];
   void fold(BMFState* cx) {
-    memcpy(saved_coef, cx->p2_coef, sizeof saved_coef);
-    memcpy(saved_rate, cx->p2_rate[4], sizeof saved_rate);
+    memcpy(saved_coef, cx[0].p2_coef, sizeof saved_coef);
+    memcpy(saved_rate, cx[0].p2_rate[4], sizeof saved_rate);
     for( int32_t k = 0; k<4; ++k ) {
       for( int32_t i = 0; i<3; ++i )
-        cx->p2_coef[i][k] += cx->p2_coef[4+i][k];
+        cx[0].p2_coef[i][k] += cx[0].p2_coef[4+i][k];
       for( int32_t i = 0; i<3; ++i )
-        cx->p2_coef[4+i][k] = 0;
+        cx[0].p2_coef[4+i][k] = 0;
       for( int32_t i = 0; i<3; ++i )
-        cx->p2_rate[4+i][k] = bmf_p2_rate_reset;
+        cx[0].p2_rate[4+i][k] = bmf_p2_rate_reset;
     }
   }
 
   void restore(BMFState* cx) {
-    memcpy(cx->p2_coef, saved_coef, sizeof saved_coef);
-    memcpy(cx->p2_rate[4], saved_rate, sizeof saved_rate);
+    memcpy(cx[0].p2_coef, saved_coef, sizeof saved_coef);
+    memcpy(cx[0].p2_rate[4], saved_rate, sizeof saved_rate);
   }
 };
 
@@ -1682,8 +1682,8 @@ struct AltP2Block {
     }
     NbRow*const wrow = &nb_weights[at];
     nb_cur = wrow;
-    const float err = ((float)c0[-1].val-(nb_dot(wrow->w, p2_row)+bias[0]))*2.0999999f;
-    const float floor_ = 7744.0f*wrow->w[14][2];
+    const float err = ((float)c0[-1].val-(nb_dot(wrow[0].w, p2_row)+bias[0]))*2.0999999f;
+    const float floor_ = 7744.0f*wrow[0].w[14][2];
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
         nlms_step(wrow, j, k, p2_row[j][k], err, bmf_p2_ms_rate, floor_);
@@ -1709,14 +1709,14 @@ struct AltP2Block {
   uint8_t _pad3[8];
 
   void nlms_step(NbRow* row, int32_t j, int32_t k, float x, float err, float ms_rate, float floor_) {
-    const float ms = row->w[7+j][k]+(x*x-row->w[7+j][k])*ms_rate;
-    row->w[7+j][k] = ms;
-    row->w[j][k] += cx->p2_rate[j][k]*err*x/(ms+floor_);
+    const float ms = row[0].w[7+j][k]+(x*x-row[0].w[7+j][k])*ms_rate;
+    row[0].w[7+j][k] = ms;
+    row[0].w[j][k] += cx[0].p2_rate[j][k]*err*x/(ms+floor_);
   }
 
   void nlms_track_two_rows(NbRow* fast, NbRow* slow, float err_fast, float err_slow, float conf) {
-    const float floor_fast = 26896.0f*fast->w[14][2];
-    const float floor_slow = 5041.0f*slow->w[14][2];
+    const float floor_fast = 26896.0f*fast[0].w[14][2];
+    const float floor_slow = 5041.0f*slow[0].w[14][2];
     const float rate_slow = 0.013f*conf;
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k ) {
@@ -1727,13 +1727,13 @@ struct AltP2Block {
   }
 
   void nlms_predict_and_correct(NbRow* row, float sample, float bias0) {
-    const float err = sample-(bias0+nb_dot(row->w, p2_row));
-    const float ms_scale = row->w[14][2];
+    const float err = sample-(bias0+nb_dot(row[0].w, p2_row));
+    const float ms_scale = row[0].w[14][2];
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
-        row->w[j][k] += cx->p2_rate[j][k]*err*p2_row[j][k]/(row->w[7+j][k]+ms_scale*529.0f);
-    ++row->uses;
-    row->w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
+        row[0].w[j][k] += cx[0].p2_rate[j][k]*err*p2_row[j][k]/(row[0].w[7+j][k]+ms_scale*529.0f);
+    ++row[0].uses;
+    row[0].w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
 
   struct P2RefRows {
@@ -1871,8 +1871,8 @@ struct AltP2Block {
     row1 = was_row0;
     cur = row0+2;
     above = row1+2;
-    cur[-1] = *above;
-    cur[-2] = *above;
+    cur[-1] = above[0];
+    cur[-2] = above[0];
     memset(p2_row, 0, 15);
     for( int32_t i = 0; i<4; ++i ) bias[i] = 0.0f;
     memset(p2_row, 0, sizeof p2_row);
@@ -1887,7 +1887,7 @@ struct AltP2Block {
       P2Ctx*const up = cursor[1];
       for( int32_t i = 0; i<7; ++i ) here[-2-i] = up[1+i];
     }
-    cursor[0]->dval = 0;
+    cursor[0][0].dval = 0;
   }
 
   AltP2Block*alt_p2_alloc(BMFState* state, int32_t img_w, int32_t plane) {
@@ -1907,11 +1907,11 @@ struct AltP2Block {
       freq[e].step = 4096;
     }
 
-    int32_t dz = 4*cx->near_lossless_q+1;
-    int32_t band = 16*cx->near_lossless_q;
-    has_ref = (cx->plane_desc[cx->plane_desc[plane_idx].src_plane].flags&desc_has_refs)!=0;
-    cx->deadzone_hi = dz;
-    cx->deadzone_lo = -dz;
+    int32_t dz = 4*cx[0].near_lossless_q+1;
+    int32_t band = 16*cx[0].near_lossless_q;
+    has_ref = (cx[0].plane_desc[cx[0].plane_desc[plane_idx].src_plane].flags&desc_has_refs)!=0;
+    cx[0].deadzone_hi = dz;
+    cx[0].deadzone_lo = -dz;
     band_lo = -band-7;
     band_hi = band+8;
     row0 = row0_store;
@@ -1943,7 +1943,7 @@ struct AltP2Block {
       buf[row] = row_store[row];
     memset(buf[0], 0, row_bytes);
     for( int32_t i = 0; i<4; ++i )
-      cx->ctx_bias[i] = 0;
+      cx[0].ctx_bias[i] = 0;
     int32_t lvl = 0;
     cursor[0] = buf[0]+8;
     for( uint32_t pair = 0; pair<0x82; ++pair ) {
@@ -1960,7 +1960,7 @@ struct AltP2Block {
       len = (2*n+1==p2_len_edges[len1])+len1;
     }
     ctx = 15;
-    cx->alt_init_tables(fold, unfold);
+    cx[0].alt_init_tables(fold, unfold);
     for( int32_t c = 0, w1 = 64; c<5; ++c, w1 *= 3 ) {
       ctx_w[c].w[0] = 0;
       ctx_w[c].w[1] = w1;
@@ -1981,10 +1981,10 @@ bool BMFState::ref_transformed(int32_t k) {
 void BMFState::alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
   for( int32_t k = 0; k<plane_count; ++k ) {
     if( row==0 )
-      plane[k]->seed_row0(width);
+      plane[k][0].seed_row0(width);
     else if( row==1 )
-      plane[k]->seed_history(width);
-    plane[k]->start_row();
+      plane[k][0].seed_history(width);
+    plane[k][0].start_row();
   }
 }
 
@@ -2116,7 +2116,7 @@ struct ModelBlock {
     int32_t band;
     int32_t pos = sym_pos;
     uint32_t result = (nb)[pos];
-    if( cx->exclusion_mask[result]==cx->exclusion_gen )
+    if( cx[0].exclusion_mask[result]==cx[0].exclusion_gen )
       return -1;
     bool near = false;
     for( band = 11; band<16; ++band )
@@ -2130,10 +2130,10 @@ struct ModelBlock {
     if( (far_hit+near_hit==0)&&pos>6 )
       return -1;
     SymList* sel0 = sel0_list;
-    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[cx->mode_symbol[1]].ent), 10, result)).raw(ctx0);
-    SymEntry* list_prev = sel0[cx->mode_symbol[2]].ent;
+    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[cx[0].mode_symbol[1]].ent), 10, result)).raw(ctx0);
+    SymEntry* list_prev = sel0[cx[0].mode_symbol[2]].ent;
     SymEntry* list_sym = sel0[result].ent;
-    int32_t fallback = CtxIdx{}.bit<2>(sym_in_top(list_prev, 4, result)).bit<1>(sym_in_top(list_sym, 10, cx->mode_symbol[2])).bit<0>(sym_in_top((sel0[cx->mode_symbol[3]].ent), 6, result));
+    int32_t fallback = CtxIdx{}.bit<2>(sym_in_top(list_prev, 4, result)).bit<1>(sym_in_top(list_sym, 10, cx[0].mode_symbol[2])).bit<0>(sym_in_top((sel0[cx[0].mode_symbol[3]].ent), 6, result));
     int32_t ctx2 = fallback+ctx1;
     if( pos<=14||(ctx2&0xB)!=0 ) {
       ctr_node = CtxIdx{}.above<7>(pos).raw(ctx2);
@@ -2153,49 +2153,49 @@ struct ModelBlock {
     if( !hit0 ) {
       if( sel==sel_cur ) {
         if( sel[0] ) {
-          sel0_list[cx->mode_symbol[1]].add_weight(row_cur[5]->sym, 3u);
-          sel0_list[row_cur[5]->sym].add_weight(cx->mode_symbol[2], 2u);
-          sel1_list[cx->mode_symbol[1]].add_weight(row_cur[5]->sym, 4u);
-          sel1_list[row_cur[5]->sym].add_weight(cx->mode_symbol[1], 2u);
+          sel0_list[cx[0].mode_symbol[1]].add_weight(row_cur[5][0].sym, 3u);
+          sel0_list[row_cur[5][0].sym].add_weight(cx[0].mode_symbol[2], 2u);
+          sel1_list[cx[0].mode_symbol[1]].add_weight(row_cur[5][0].sym, 4u);
+          sel1_list[row_cur[5][0].sym].add_weight(cx[0].mode_symbol[1], 2u);
         } else {
-          sel0_list[cx->mode_symbol[2]].add_weight(row_cur[5]->sym, (sym_pos>3)+2);
+          sel0_list[cx[0].mode_symbol[2]].add_weight(row_cur[5][0].sym, (sym_pos>3)+2);
         }
       } else {
-        sel0_list[cx->mode_symbol[1]].add_weight(row_cur[5]->sym, 3u);
-        sel0_list[row_cur[5]->sym].add_weight(cx->mode_symbol[2], 2u);
-        sel0_list[row_cur[5]->sym].add_weight(cx->mode_symbol[1], 1u);
-        sel1_list[row_cur[5]->sym].add_weight(cx->mode_symbol[1], 2u);
+        sel0_list[cx[0].mode_symbol[1]].add_weight(row_cur[5][0].sym, 3u);
+        sel0_list[row_cur[5][0].sym].add_weight(cx[0].mode_symbol[2], 2u);
+        sel0_list[row_cur[5][0].sym].add_weight(cx[0].mode_symbol[1], 1u);
+        sel1_list[row_cur[5][0].sym].add_weight(cx[0].mode_symbol[1], 2u);
         cur = sel_cur;
         do {
           prev = cur-1;
           sel_cur = prev;
-          list = *prev;
-          uint16_t want = row_cur[5]->sym;
-          uint32_t n_live = list->live;
-          SymEntry* ent = list->ent;
-          if( n_live==list->n ) {
-            list->live = --n_live;
-            recycled = list->ent[n_live].cnt;
+          list = prev[0];
+          uint16_t want = row_cur[5][0].sym;
+          uint32_t n_live = list[0].live;
+          SymEntry* ent = list[0].ent;
+          if( n_live==list[0].n ) {
+            list[0].live = --n_live;
+            recycled = list[0].ent[n_live].cnt;
           } else {
             recycled = 1;
           }
           SymEntry* slot = &ent[n_live];
-          list->live = n_live+1;
-          list->tot = recycled+list->tot+1;
-          slot->set(want, 2);
-          list->since_rescale += 4;
-          if( slot!=list->ent ) {
-            uint16_t sym = slot->sym;
-            uint8_t cnt = slot->cnt;
+          list[0].live = n_live+1;
+          list[0].tot = recycled+list[0].tot+1;
+          slot[0].set(want, 2);
+          list[0].since_rescale += 4;
+          if( slot!=list[0].ent ) {
+            uint16_t sym = slot[0].sym;
+            uint8_t cnt = slot[0].cnt;
             slot[0] = slot[-1];
             slot[-1].set(sym, cnt);
           }
           cur = sel_cur;
         } while( cur!=sel );
       }
-      if( cx->exclusion_gen==-1 ) {
-        cx->exclusion_gen = 1;
-        uint8_t* buf = (uint8_t*)cx->exclusion_mask;
+      if( cx[0].exclusion_gen==-1 ) {
+        cx[0].exclusion_gen = 1;
+        uint8_t* buf = (uint8_t*)cx[0].exclusion_mask;
         uint32_t blocks = (alphabet+15)>>4;
         do {
           bmf_zero16(buf);
@@ -2204,20 +2204,20 @@ struct ModelBlock {
         } while( blocks );
         hit1 = hit;
       } else {
-        ++cx->exclusion_gen;
+        ++cx[0].exclusion_gen;
         hit1 = hit;
       }
       promoted = hit1&&hit1<=2;
     } else {
       promoted = hit0<=2;
-      if( !promoted&&cx->mode_symbol[3]!=cx->mode_symbol[4] ) {
-        sel0_list[cx->mode_symbol[2]].add_weight(row_cur[5]->sym, 1u);
+      if( !promoted&&cx[0].mode_symbol[3]!=cx[0].mode_symbol[4] ) {
+        sel0_list[cx[0].mode_symbol[2]].add_weight(row_cur[5][0].sym, 1u);
         hit1 = hit;
         promoted = hit1&&hit1<=2;
       }
     }
     if( !promoted ) {
-      int32_t just = row_cur[5]->sym;
+      int32_t just = row_cur[5][0].sym;
       if( just!=sym_cache[0] ) {
         int32_t k = 7;
         for( int32_t i = 1; i<7; ++i )
@@ -2230,17 +2230,17 @@ struct ModelBlock {
         sym_cache[0] = just;
       }
     }
-    pix_cur->prev = pix_cur->last;
-    pix_cur->last = row_cur[5]->sym;
+    pix_cur[0].prev = pix_cur[0].last;
+    pix_cur[0].last = row_cur[5][0].sym;
     {
       PixRec*const here = row_cur[5];
       PixRec*const up = row_cur[6];
-      here->match[0] = here->sym==up->sym;
-      here->match[1] = here->sym==here[-1].sym;
-      here->match[2] = here->sym==up[1].sym;
-      here->match[3] = here->sym==up[-1].sym;
-      here->match[4] = here->sym==up[2].sym;
-      here->match[5] = here->sym==up[3].sym;
+      here[0].match[0] = here[0].sym==up[0].sym;
+      here[0].match[1] = here[0].sym==here[-1].sym;
+      here[0].match[2] = here[0].sym==up[1].sym;
+      here[0].match[3] = here[0].sym==up[-1].sym;
+      here[0].match[4] = here[0].sym==up[2].sym;
+      here[0].match[5] = here[0].sym==up[3].sym;
     }
     ++row_cur[5];
     ++row_cur[6];
@@ -2259,23 +2259,23 @@ struct ModelBlock {
   }
 
   SymList**load_selectors() {
-    sel[0] = &sel0_list[cx->mode_symbol[2]];
-    sel[1] = &sel1_list[cx->mode_symbol[1]];
+    sel[0] = &sel0_list[cx[0].mode_symbol[2]];
+    sel[1] = &sel1_list[cx[0].mode_symbol[1]];
     return sel_cur;
   }
 
   void start_row() {
-    row_cur[5]->match[1] = row_cur[5][-1].sym==0;
-    row_cur[5]->match[3] = row_cur[6][-1].sym==0;
+    row_cur[5][0].match[1] = row_cur[5][-1].sym==0;
+    row_cur[5][0].match[3] = row_cur[6][-1].sym==0;
     ring_advance(row_cur, row_cur+5, kRowMargin);
     uint8_t zero = row_cur[6][1].sym==0;
-    row_cur[5]->match[2] = zero;
+    row_cur[5][0].match[2] = zero;
     row_cur[5][-1].match[4] = zero;
     row_cur[5][-2].match[5] = zero;
     zero = row_cur[6][2].sym==0;
-    row_cur[5]->match[4] = zero;
+    row_cur[5][0].match[4] = zero;
     row_cur[5][-1].match[5] = zero;
-    row_cur[5]->match[5] = row_cur[6][3].sym==0;
+    row_cur[5][0].match[5] = row_cur[6][3].sym==0;
   }
 
   template <int32_t f_DEC> int32_t offer_candidates(int32_t* nb_sym) {
@@ -2286,14 +2286,14 @@ struct ModelBlock {
       int32_t is_sym;
       if constexpr( f_DEC ) {
         is_sym = bit_node[ctr_node].decode_context_bit(cx, &bit_root[ctr_fallback]);
-        row_cur[5]->sym = sym;
+        row_cur[5][0].sym = sym;
       } else {
-        is_sym = sym==row_cur[5]->sym;
+        is_sym = sym==row_cur[5][0].sym;
         bit_node[ctr_node].encode_context_bit(cx, &bit_root[ctr_fallback], is_sym);
       }
       if( is_sym )
         return sym;
-      cx->exclusion_mask[sym] = cx->exclusion_gen;
+      cx[0].exclusion_mask[sym] = cx[0].exclusion_gen;
     }
     return -1;
   }
@@ -2306,9 +2306,9 @@ struct ModelBlock {
     PixRec*const row = row_cur[5];
     const int32_t bucket_at = ctx_bucket[state+cap];
     bucket_idx = bucket_at;
-    const int32_t up_m0 = cur6->match[0];
+    const int32_t up_m0 = cur6[0].match[0];
     const uint32_t nb2 = CtxIdx{}.bit<3>(row[-2].match[2]).bit<2>(row[-2].match[5]).bit<1>(row[-2].match[4]).bit<0>(row[-1].match[1]);
-    const uint32_t sig1 = CtxIdx{}.bit<7>(grad[3]==0).bit<6>(grad[2]==0).bit<5>(grad[1]==0).bit<4>(grad[0]==0).bit<9>(up9->match[0]&r8->match[0]&up_m0&r7->match[0]).bit<8>(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1]).above<10>(bucket_at).raw(nb2);
+    const uint32_t sig1 = CtxIdx{}.bit<7>(grad[3]==0).bit<6>(grad[2]==0).bit<5>(grad[1]==0).bit<4>(grad[0]==0).bit<9>(up9[0].match[0]&r8[0].match[0]&up_m0&r7[0].match[0]).bit<8>(up9[0].match[1]&r8[0].match[1]&r7[0].match[1]&cur6[0].match[1]).above<10>(bucket_at).raw(nb2);
     int32_t id1;
     intern_ctx(ctx_id1, sig1, ctx_id1_used, id1);
     const uint32_t sig2 = CtxIdx{}.bit<2>(cur6[1].match[3]).bit<1>(up_m0).bit<0>(row[-1].match[5]).above<3>(id1);
@@ -2345,25 +2345,25 @@ struct ModelBlock {
   }
 
   void exclude_stage_one() {
-    const int8_t gen = cx->exclusion_gen;
+    const int8_t gen = cx[0].exclusion_gen;
     for( int32_t k = 1; k<5; ++k )
-      cx->exclusion_mask[cx->mode_symbol[k]] = gen;
-    cx->exclusion_mask[no_symbol] = gen;
+      cx[0].exclusion_mask[cx[0].mode_symbol[k]] = gen;
+    cx[0].exclusion_mask[no_symbol] = gen;
   }
 
   Neighbours rank_neighbours() {
     const PixRec* up = row_cur[6];
     const PixRec* west = row_cur[5];
-    const Neighbours n = {up->sym, west[-1].sym, up[1].sym, up[-1].sym};
-    cx->mode_symbol[1] = n.up;
-    cx->mode_symbol[2] = n.left;
-    cx->mode_symbol[3] = n.up_next;
-    cx->mode_symbol[4] = n.upleft;
+    const Neighbours n = {up[0].sym, west[-1].sym, up[1].sym, up[-1].sym};
+    cx[0].mode_symbol[1] = n.up;
+    cx[0].mode_symbol[2] = n.left;
+    cx[0].mode_symbol[3] = n.up_next;
+    cx[0].mode_symbol[4] = n.upleft;
     return n;
   }
 
   uint32_t match_context(const Neighbours &n, const PixRec* up, const PixRec* west) const {
-    return CtxIdx{}.bit<5>(west[-1].match[2]).bit<4>(west[-1].match[4]).bit<3>(up[1].match[1]).bit<2>(n.up_next==n.upleft).bit<1>(west[-1].match[0]).bit<0>(up->match[1]);
+    return CtxIdx{}.bit<5>(west[-1].match[2]).bit<4>(west[-1].match[4]).bit<3>(up[1].match[1]).bit<2>(n.up_next==n.upleft).bit<1>(west[-1].match[0]).bit<0>(up[0].match[1]);
   }
 
   uint16_t pair_key(const Neighbours &n, const PixRec* west) const {
@@ -2385,23 +2385,23 @@ struct ModelBlock {
     ctx_state_seen = state;
     SymPair*const pair = &group_ctr[state][key];
     pix_cur = pair;
-    const int32_t cap = 15*nb4.rank(pair->last)+75*nb4.rank(pair->prev);
+    const int32_t cap = 15*nb4.rank(pair[0].last)+75*nb4.rank(pair[0].prev);
     int32_t id2 = context_ids(state, cap);
     if( (int32_t)alphabet<32 ) {
       int32_t id3_used = ctx_id3_used;
       int32_t sig3 = CtxIdx{}.bits<0, 4>(nb4.left).above<4>(id2);
       uint16_t* id3p = &ctx_id3[sig3];
-      id2 = *id3p;
+      id2 = id3p[0];
       if( id2==0xFFFF ) {
         if( id3_used>kCtxId3Limit )
           sig3 |= 0xF;
         id3p = &ctx_id3[sig3];
-        id2 = *id3p;
+        id2 = id3p[0];
       }
       if( id2>=id3_used ) {
-        *id3p = id3_used;
+        id3p[0] = id3_used;
         ++ctx_id3_used;
-        id2 = *id3p;
+        id2 = id3p[0];
       }
     }
     return id2;
@@ -2409,9 +2409,9 @@ struct ModelBlock {
 
   void fill_run(int32_t sym, uint32_t head_word, uint32_t flags_word, uint32_t n) {
     for( uint32_t k = 0; k<n; ++k ) {
-      pix_cur->prev = sym;
-      row_cur[5]->head4 = head_word;
-      row_cur[5]->match2345 = flags_word;
+      pix_cur[0].prev = sym;
+      row_cur[5][0].head4 = head_word;
+      row_cur[5][0].match2345 = flags_word;
       ++row_cur[5];
     }
   }
@@ -2428,8 +2428,8 @@ struct ModelBlock {
   }
 
   void seed_candidates(int32_t* nb_sym) {
-    nb_sym[0] = pix_cur->last;
-    nb_sym[1] = pix_cur->prev;
+    nb_sym[0] = pix_cur[0].last;
+    nb_sym[1] = pix_cur[0].prev;
     for( int32_t c = 0; c<8; ++c )
       nb_sym[2+c] = sym_cache[c];
     load_neighbours(nb_sym);
@@ -2440,7 +2440,7 @@ struct ModelBlock {
     nb_sym[10] = r5[-2].sym;
     nb_sym[11] = r6[2].sym;
     nb_sym[12] = r7[1].sym;
-    nb_sym[13] = r7->sym;
+    nb_sym[13] = r7[0].sym;
     nb_sym[14] = r6[-2].sym;
     nb_sym[15] = r7[-1].sym;
     nb_sym[16] = r5[-3].sym;
@@ -2449,12 +2449,12 @@ struct ModelBlock {
     nb_sym[19] = r5[-4].sym;
     nb_sym[20] = r6[-3].sym;
     nb_sym[21] = r7[2].sym;
-    nb_sym[22] = r8->sym;
+    nb_sym[22] = r8[0].sym;
     nb_sym[23] = r7[-2].sym;
     nb_sym[24] = r5[-5].sym;
     nb_sym[25] = r8[1].sym;
     nb_sym[26] = r6[5].sym;
-    nb_sym[27] = row_cur[9]->sym;
+    nb_sym[27] = row_cur[9][0].sym;
     nb_sym[28] = r5[-7].sym;
     nb_sym[29] = r8[-1].sym;
     nb_sym[30] = r6[7].sym;
@@ -2490,7 +2490,7 @@ struct ModelBlock {
     uint32_t cap = mask+1;
     if( bits>8 )
       cap = no_symbol+1;
-    alphabet = cx->code_alphabet_size<1>(0, cap);
+    alphabet = cx[0].code_alphabet_size<1>(0, cap);
     if( (int32_t)alphabet<=0x2000 ) {
       void* codes = sym_code_store;
       n_syms = alphabet;
@@ -2502,7 +2502,7 @@ struct ModelBlock {
         if( n_syms ) {
           int32_t carry = 0;
           for( uint32_t s = 0; s<alphabet; ++s )
-            sym_code[s] = cx->code_symbol_bytes<1>(lists, nbytes, 0, carry);
+            sym_code[s] = cx[0].code_symbol_bytes<1>(lists, nbytes, 0, carry);
         }
       } else if( n_syms<=mask ) {
         init_gap_list(cx, lists, mask, n_syms);
@@ -2543,7 +2543,7 @@ struct ModelBlock {
       SymEntry* out_ent = (SymEntry*)out_at;
       for( uint32_t step = 0; step<width; ++step, ++out_ent ) {
         const uint32_t code = sym_code[row_cur[0][step+8].sym];
-        out_ent->set((uint16_t)code, (uint8_t)(code>>16));
+        out_ent[0].set((uint16_t)code, (uint8_t)(code>>16));
       }
       return (uint8_t*)out_ent;
     }
@@ -2561,7 +2561,7 @@ struct ModelBlock {
         bits = 8-bpp;
         *++out_bits = code<<(8-bpp);
       } else {
-        *out_bits |= code<<bits;
+        out_bits[0] |= code<<bits;
       }
     }
     return out_bits;
@@ -2601,7 +2601,7 @@ struct ModelBlock {
           FreqRec* rec = seat_bucket(g, lo, hi, bucket);
           int32_t alpha = alphabet;
           w1 = 2;
-          rec->w[0] = 2;
+          rec[0].w[0] = 2;
           w2 = 2;
           w3 = 2;
           w4 = 2;
@@ -2620,36 +2620,36 @@ struct ModelBlock {
           if( fold.w4_to_w1 ) {
             w1 = w4+2;
             w4 = 0;
-            rec->w[4] = 0;
+            rec[0].w[4] = 0;
           } else {
-            rec->w[4] = w4;
+            rec[0].w[4] = w4;
           }
           if( fold.w3_to_w1 ) {
             w1 += w3;
             w3 = 0;
-            rec->w[3] = 0;
+            rec[0].w[3] = 0;
           } else {
-            rec->w[3] = w3;
+            rec[0].w[3] = w3;
           }
           if( fold.w2_to_w1 ) {
-            rec->w[1] = w2+w1;
+            rec[0].w[1] = w2+w1;
             w2 = 0;
-            rec->w[2] = 0;
+            rec[0].w[2] = 0;
           } else {
-            rec->w[2] = w2;
-            rec->w[1] = w1;
+            rec[0].w[2] = w2;
+            rec[0].w[1] = w1;
           }
           int32_t has3 = w3!=0;
           int32_t has4 = w4!=0;
           if( w2 ) w2 = 1;
           int32_t lvl = has4+has3+w2+2;
           if( lvl<=alpha ) {
-            rec->b14 = lvl;
+            rec[0].b14 = lvl;
           } else {
-            rec->b14 = has4+has3+w2+1;
-            rec->w[0] = 0;
+            rec[0].b14 = has4+has3+w2+1;
+            rec[0].w[0] = 0;
           }
-          bucket += rec->seed_pair(lo, hi, alpha);
+          bucket += rec[0].seed_pair(lo, hi, alpha);
         }
       }
       SymPair* gctr = group_ctr[g];
@@ -2680,7 +2680,7 @@ struct ModelBlock {
     int32_t q2 = 0;
     for( int32_t written = 0; written<n_pix; ++written ) {
       uint8_t* p = row[q2];
-      *interleave_at++ = *p;
+      *interleave_at++ = p[0];
       row[q2] = p+1;
       if( ++q2==nchunk )
         q2 = 0;
@@ -2688,11 +2688,11 @@ struct ModelBlock {
   }
 
   template <int32_t f_DEC> void code_plane_slow(uint8_t* buf) {
-    cx->rc_begin<f_DEC>();
+    cx[0].rc_begin<f_DEC>();
     if constexpr( f_DEC )
       expand_alphabet();
     else
-      cx->reduce_alphabet(this, buf);
+      cx[0].reduce_alphabet(this, buf);
     seed_context_groups();
     seed_alphabet();
     uint8_t* expand_buf = nullptr;
@@ -2722,7 +2722,7 @@ struct ModelBlock {
         code_row_pixels<0>();
       }
     }
-    cx->rc_end<f_DEC>();
+    cx[0].rc_end<f_DEC>();
     if constexpr( f_DEC ) {
       if( depth_raw!=depth )
         interleave_depth_bytes(buf, expand_buf);
@@ -2746,17 +2746,17 @@ struct ModelBlock {
     do {
       if( (mask|seen)<cap ) {
         BitCtr* ctr = &run_ctr[CtxIdx{}.bits<0, 4>(bucket).digit<16, 3>((seen==0)+(bucket==top))];
-        const uint32_t bin_tot = ctr->n[0]+ctr->n[1];
+        const uint32_t bin_tot = ctr[0].n[0]+ctr[0].n[1];
         int32_t run_bit;
         if constexpr( f_DEC ) {
-          run_bit = cx->rc.decode_bit(ctr->n[0], ctr->n[1]);
+          run_bit = cx[0].rc.decode_bit(ctr[0].n[0], ctr[0].n[1]);
         } else {
           run_bit = (len&mask)!=0;
-          cx->rc.encode_bit(ctr->n[0], ctr->n[1], run_bit);
+          cx[0].rc.encode_bit(ctr[0].n[0], ctr[0].n[1], run_bit);
         }
-        if( ctr->limit<bin_tot )
-          ctr->scale_rare();
-        ctr->n[run_bit] += 8;
+        if( ctr[0].limit<bin_tot )
+          ctr[0].scale_rare();
+        ctr[0].n[run_bit] += 8;
         if( run_bit )
           idx |= mask;
         seen |= idx&mask;
@@ -2775,9 +2775,9 @@ struct ModelBlock {
     SymList** sel_p = load_selectors();
     while( 1 ) {
       if( sel_p>&escape_list ) bmf_fatal(bmf_read_error);
-      if( (*sel_p)->live ) {
-        int32_t lsym = (*sel_p)->decode_symbol_list(cx);
-        row_cur[5]->sym = lsym;
+      if( (sel_p[0])[0].live ) {
+        int32_t lsym = (sel_p[0])[0].decode_symbol_list(cx);
+        row_cur[5][0].sym = lsym;
         if( lsym>=0 ) return idx_s+1;
         sel_p = sel_cur;
       }
@@ -2801,7 +2801,7 @@ struct ModelBlock {
         int32_t bucket = run_bucket[idx1];
         int32_t esc_at = CtxIdx{}.above<3>(bucket).bit<2>(up2[run+3].match[1]&up2[run+2].match[1]).bit<1>(m_up0).bit<0>(alpha_map[nb4.up]).raw(1);
         bit = esc_ctr[esc_at].decode_context_bit(cx, esc_ctr);
-        int32_t msym1c = cx->mode_symbol[1];
+        int32_t msym1c = cx[0].mode_symbol[1];
         hit = bit;
         *(((uint8_t*)alpha_map)+msym1c) = bit;
         const int32_t hit_a = hit;
@@ -2816,15 +2816,15 @@ struct ModelBlock {
           row_cur[8] = r8b+idx_s-hit_a;
           PixRec* rec = row_cur[5];
           row_cur[9] = row_cur[9]+idx_s-hit_a;
-          rec->match2345 = 0x01010101;
-          row_cur[5]->head4 = 0x01010101;
+          rec[0].match2345 = 0x01010101;
+          row_cur[5][0].head4 = 0x01010101;
           SymPair* pixp = pix_cur;
-          const int32_t run_sym = cx->mode_symbol[1];
-          pixp->prev = pixp->last;
-          row_cur[5]->sym = (uint16_t)run_sym;
-          pix_cur->last = (uint16_t)run_sym;
-          const int32_t flags_word = row_cur[5]->match2345;
-          const int32_t head_word = row_cur[5]->head4;
+          const int32_t run_sym = cx[0].mode_symbol[1];
+          pixp[0].prev = pixp[0].last;
+          row_cur[5][0].sym = (uint16_t)run_sym;
+          pix_cur[0].last = (uint16_t)run_sym;
+          const int32_t flags_word = row_cur[5][0].match2345;
+          const int32_t head_word = row_cur[5][0].head4;
           ++row_cur[5];
           fill_run(run_sym, head_word, flags_word, idx_s-hit_a-1);
           seed_after_run(row_cur[5], run_sym);
@@ -2838,32 +2838,32 @@ struct ModelBlock {
     FreqRec* freq_tbl = &grid[id2+kFreqTableOffset];
     {
       auto decode_against = [&](FreqRec* rec) {
-                              const int32_t total = rec->w[5];
+                              const int32_t total = rec[0].w[5];
                               int32_t cum;
-                              const int32_t lvl = rec->find_level(cx->rc.get_freq(total), cum);
-                              const int32_t low = cum-rec->w[lvl];
-                              rec->bump(lvl);
-                              cx->rc.decode(low, cum, total);
+                              const int32_t lvl = rec[0].find_level(cx[0].rc.get_freq(total), cum);
+                              const int32_t low = cum-rec[0].w[lvl];
+                              rec[0].bump(lvl);
+                              cx[0].rc.decode(low, cum, total);
                               hit = lvl;
                               return lvl;
                             };
-      const int32_t tot = freq_tbl->w[5];
+      const int32_t tot = freq_tbl[0].w[5];
       if( tot ) {
         if( tot==1 )
-          freq_tbl->blend_from(*freq);
+          freq_tbl[0].blend_from(freq[0]);
         lvl_a = decode_against(freq_tbl);
-        if( freq_tbl->b14 ) {
-          --freq_tbl->b14;
-          ++freq->w[5];
-          ++freq->w[lvl_a];
+        if( freq_tbl[0].b14 ) {
+          --freq_tbl[0].b14;
+          ++freq[0].w[5];
+          ++freq[0].w[lvl_a];
         }
       } else {
         lvl_a = decode_against(freq);
-        freq_tbl->w[5] = freq_tbl->w[lvl_a]++!=0;
+        freq_tbl[0].w[5] = freq_tbl[0].w[lvl_a]++!=0;
       }
     }
     if( lvl_a ) {
-      row_cur[5]->sym = cx->mode_symbol[lvl_a];
+      row_cur[5][0].sym = cx[0].mode_symbol[lvl_a];
       return 1;
     }
     return decode_stage_two(nb_sym, 0);
@@ -2889,7 +2889,7 @@ struct ModelBlock {
       const int32_t bucket = run_bucket[run_len];
       amap = CtxIdx{}.bit<2>(run_pair).bit<1>(m_up0).above<3>(bucket).bit<0>(alpha_map[nb4.up]);
       runlen = 0;
-      if( rowp->sym==nb4.up ) {
+      if( rowp[0].sym==nb4.up ) {
         do ++runlen; while( runlen<run_len&&rowp[runlen].sym==nb4.up );
       }
       const int32_t run_hit = runlen==run_len;
@@ -2899,15 +2899,15 @@ struct ModelBlock {
         PixRec* row_cur9 = row_cur[9];
         row_cur[8] = row_cur[8]+runlen-run_hit;
         row_cur[9] = row_cur9+runlen-run_hit;
-        rowp->match2345 = 0x01010101;
-        row_cur[5]->head4 = 0x01010101;
-        pix_cur->prev = pix_cur->last;
+        rowp[0].match2345 = 0x01010101;
+        row_cur[5][0].head4 = 0x01010101;
+        pix_cur[0].prev = pix_cur[0].last;
         uint16_t wp = nb4.up;
-        row_cur[5]->sym = wp;
-        pix_cur->last = wp;
+        row_cur[5][0].sym = wp;
+        pix_cur[0].last = wp;
         PixRec* r3 = row_cur[5];
         uint32_t rec_word = *(uint32_t*)r3;
-        const int32_t flag_word = r3->match2345;
+        const int32_t flag_word = r3[0].match2345;
         cur2 = r3+1;
         row_cur[5] = r3+1;
         if( runlen-run_hit!=1 ) {
@@ -2921,9 +2921,9 @@ struct ModelBlock {
             done = 1;
           }
           if( (uint32_t)run_left>(done-1) ) {
-            pix_cur->prev = nb4.up;
-            row_cur[5]->head4 = rec_word;
-            row_cur[5]->match2345 = flag_word;
+            pix_cur[0].prev = nb4.up;
+            row_cur[5][0].head4 = rec_word;
+            row_cur[5][0].match2345 = flag_word;
             PixRec* cur5p1b = row_cur[5]+1;
             row_cur[5] = cur5p1b;
             cur2 = cur5p1b;
@@ -2931,8 +2931,8 @@ struct ModelBlock {
         }
         seed_after_run(cur2, nb4.up);
       }
-      (&esc_ctr[(amap+1)])->encode_context_bit(cx, esc_ctr, run_hit);
-      int32_t msym1 = cx->mode_symbol[1];
+      (&esc_ctr[(amap+1)])[0].encode_context_bit(cx, esc_ctr, run_hit);
+      int32_t msym1 = cx[0].mode_symbol[1];
       uint8_t* amap_at = (uint8_t*)alpha_map;
       hit = run_hit;
       amap_at[msym1] = run_hit;
@@ -2944,30 +2944,30 @@ struct ModelBlock {
       FreqRec* binp = &grid[bucket_idx];
       FreqRec* frec = &grid[id2+kFreqTableOffset];
       auto code_against = [&](FreqRec* rec) {
-                            const int32_t lvl = nb4.rank(rowp->sym);
-                            const int32_t cum = cum_below(rec->w, lvl);
-                            const uint32_t total = rec->w[5];
-                            const uint32_t high = rec->w[lvl]+cum;
-                            rec->bump(lvl);
-                            cx->rc.encode(cum, high, total);
+                            const int32_t lvl = nb4.rank(rowp[0].sym);
+                            const int32_t cum = cum_below(rec[0].w, lvl);
+                            const uint32_t total = rec[0].w[5];
+                            const uint32_t high = rec[0].w[lvl]+cum;
+                            rec[0].bump(lvl);
+                            cx[0].rc.encode(cum, high, total);
                             hit = lvl;
                             return lvl;
                           };
-      const uint32_t grid_kind = frec->w[5];
+      const uint32_t grid_kind = frec[0].w[5];
       if( grid_kind ) {
         if( grid_kind==1 ) {
-          frec->blend_from(*binp);
+          frec[0].blend_from(binp[0]);
           rowp = row_cur[5];
         }
         lvl_a = code_against(frec);
-        if( frec->b14 ) {
-          --frec->b14;
-          ++binp->w[5];
-          ++binp->w[lvl_a];
+        if( frec[0].b14 ) {
+          --frec[0].b14;
+          ++binp[0].w[5];
+          ++binp[0].w[lvl_a];
         }
       } else {
         lvl_a = code_against(binp);
-        frec->w[5] = frec->w[lvl_a]++!=0;
+        frec[0].w[5] = frec[0].w[lvl_a]++!=0;
       }
       if( lvl_a ) return 1;
       runlen = 0;
@@ -2978,8 +2978,8 @@ struct ModelBlock {
     if( offer_candidates<0>(nb_sym)>=0 ) return runlen+1;
     SymList** sel_p = load_selectors();
     while( 1 ) {
-      if( (*sel_p)->live ) {
-        if( (*sel_p)->code_symbol(cx, row_cur[5]->sym) ) return runlen+1;
+      if( (sel_p[0])[0].live ) {
+        if( (sel_p[0])[0].code_symbol(cx, row_cur[5][0].sym) ) return runlen+1;
         sel_p = sel_cur;
       }
       sel_cur = ++sel_p;
@@ -3133,32 +3133,32 @@ struct BmfImage {
   }
 
   void header_from(const BmfImage* src) {
-    width = src->width;
-    height = src->height;
-    stride = src->stride;
+    width = src[0].width;
+    height = src[0].height;
+    stride = src[0].stride;
     for( int32_t k = 0; k<4; ++k )
-      _pad8[k] = src->_pad8[k];
-    depth = src->depth;
-    data_size = src->data_size;
+      _pad8[k] = src[0]._pad8[k];
+    depth = src[0].depth;
+    data_size = src[0].data_size;
   }
 };
 
 void transpose_image_in_place(BmfImage* img, int32_t planes) {
-  uint16_t w = img->width;
-  img->width = img->height;
-  img->height = w;
-  img->flags ^= flags_transposed;
-  img->stride = img->width*planes;
+  uint16_t w = img[0].width;
+  img[0].width = img[0].height;
+  img[0].height = w;
+  img[0].flags ^= flags_transposed;
+  img[0].stride = img[0].width*planes;
 }
 
 void transpose_image(BmfImage* img, int32_t planes) {
-  uint8_t* copy = (uint8_t*)bmf_new(img->data_size);
-  memcpy(copy, img->pixels, img->data_size);
-  const int32_t step = planes*(img->height-1);
+  uint8_t* copy = (uint8_t*)bmf_new(img[0].data_size);
+  memcpy(copy, img[0].pixels, img[0].data_size);
+  const int32_t step = planes*(img[0].height-1);
   const uint8_t* src = copy;
-  for( int32_t y = 0; y<img->height; ++y ) {
-    uint8_t* dst = img->pixels+planes*y;
-    for( int32_t x = 0; x<img->width; ++x ) {
+  for( int32_t y = 0; y<img[0].height; ++y ) {
+    uint8_t* dst = img[0].pixels+planes*y;
+    for( int32_t x = 0; x<img[0].width; ++x ) {
       for( int32_t k = 0; k<planes; ++k )
         *dst++ = *src++;
       dst += step;
@@ -3213,16 +3213,16 @@ BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette,
   BmfImage* img = (BmfImage*)bmf_new(data_bytes+pal_bytes+19);
   if( !img )
     return nullptr;
-  img->width = img_w;
-  img->height = img_h;
-  img->stride = row_bytes;
+  img[0].width = img_w;
+  img[0].height = img_h;
+  img[0].stride = row_bytes;
   for( int32_t k = 0; k<4; ++k )
-    img->_pad8[k] = 0;
-  img->depth = (uint8_t)(bpp|(has_palette ? depth_palette : 0));
-  img->flags = sub_byte_rows ? flags_packed : 0;
-  img->data_size = data_bytes;
+    img[0]._pad8[k] = 0;
+  img[0].depth = (uint8_t)(bpp|(has_palette ? depth_palette : 0));
+  img[0].flags = sub_byte_rows ? flags_packed : 0;
+  img[0].data_size = data_bytes;
   if( pal_bytes )
-    memset(img->palette(), 0, pal_bytes);
+    memset(img[0].palette(), 0, pal_bytes);
   return img;
 }
 
@@ -3256,7 +3256,7 @@ struct BmpHeader {
 #pragma pack(pop)
 
 int32_t bmf_pixels(const BmfImage* img) {
-  return img->width*img->height;
+  return img[0].width*img[0].height;
 }
 
 enum : uint16_t {
@@ -3365,7 +3365,7 @@ struct BmfStream {
 
   uint8_t*take(size_t* out_len) {
     uint8_t* out = buf;
-    *out_len = len;
+    out_len[0] = len;
     buf = nullptr;
     cap = len = pos = 0;
     return out;
@@ -3396,7 +3396,7 @@ struct BmfFile {
 };
 
 void bmf_close_file(BmfFile* arc) {
-  arc->close();
+  arc[0].close();
   free(arc);
 }
 
@@ -3407,7 +3407,7 @@ bool read_exact(void* dst, size_t n, FILE* fp) {
 BmfFile*bmf_open_file(BmfFile* out, char* path, int32_t read_only) {
   FILE* fp = fopen(path, read_only ? "rb" : "wb");
   if( !fp ) bmf_fatal(bmf_no_open, path);
-  out->io = BmfStream::over_file(fp);
+  out[0].io = BmfStream::over_file(fp);
   return out;
 }
 
@@ -3565,8 +3565,8 @@ uint32_t BMFCodec::unpack_bits(int32_t n) {
 }
 
 uint32_t halve_pair(FreqPair* pair, int32_t go) {
-  halve_counts(pair->f, 2);
-  return pair->f[go];
+  halve_counts(pair[0].f, 2);
+  return pair[0].f[go];
 }
 
 template <int32_t f_DEC> int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
@@ -3585,17 +3585,17 @@ template <int32_t f_DEC> int32_t BMFState::code_symbol_tree(uint16_t* freq, int3
       do {
         ++slot;
         ++lvl;
-        cum += *slot;
+        cum += slot[0];
       } while( cum<=target );
     }
-    rc.decode(cum-*slot, cum, tot);
+    rc.decode(cum-slot[0], cum, tot);
   } else {
     lvl = model_geometry[sym];
     cum = 0;
     for( j = 0; j<(uint32_t)lvl; j++ )
       cum += f0[j];
     slot = &f0[lvl];
-    uint32_t cum_hi = cum+*slot;
+    uint32_t cum_hi = cum+slot[0];
     result = rc.encode(cum, cum_hi, tot);
   }
   if( freq[0]>0x4000u ) {
@@ -3617,7 +3617,7 @@ template <int32_t f_DEC> int32_t BMFState::code_symbol_tree(uint16_t* freq, int3
   } else {
     add = freq[1];
   }
-  *slot += add;
+  slot[0] += add;
   freq[0] += freq[1];
   if( lvl<2 )
     return lvl;
@@ -3628,17 +3628,17 @@ template <int32_t f_DEC> int32_t BMFState::code_symbol_tree(uint16_t* freq, int3
   int32_t node = 0;
   for( span = 1;; span *= 2 ) {
     FreqPair* pair = bit_tree(this, freq, lvl)+span+node;
-    int32_t f1 = pair->f[1];
-    int32_t fa = pair->f[0];
+    int32_t f1 = pair[0].f[1];
+    int32_t fa = pair[0].f[0];
     if constexpr( f_DEC ) {
       go = rc.decode_bit(fa, f1);
     } else {
       go = (mask&path)!=0;
       result = rc.encode_bit(fa, f1, go);
     }
-    fq = pair->f[go];
+    fq = pair[0].f[go];
     if( fq>0x4000u ) fq = halve_pair(pair, go);
-    pair->f[go] = alt_freq_init+fq;
+    pair[0].f[go] = alt_freq_init+fq;
     mask >>= 1;
     node = go+2*node;
     if( !mask ) return node+level_geom[lvl].first;
@@ -3659,18 +3659,18 @@ template <int32_t f_DEC> int32_t CounterNode::code_symbol(BMFState* cx, int32_t 
   uint16_t* cur = c;
   const uint32_t tot = total&0x7FFF;
   if constexpr( f_DEC ) {
-    sym = cx->rc.get_freq(tot);
+    sym = cx[0].rc.get_freq(tot);
     cum = c[0];
     while( cum<=(uint32_t)sym )
       cum += *++cur;
-    cx->rc.decode(cum-*cur, cum, tot);
+    cx[0].rc.decode(cum-cur[0], cum, tot);
   } else {
     slot = sym_slot(sym);
     cum = 0;
     for( int32_t k = 0; k<slot; k++ )
       cum += c[k];
     cur = &c[slot];
-    cx->rc.encode(cum, cum+*cur, tot);
+    cx[0].rc.encode(cum, cum+cur[0], tot);
   }
   if( tot>0x2000 ) {
     total = 0x8000;
@@ -3684,26 +3684,26 @@ template <int32_t f_DEC> int32_t CounterNode::code_symbol(BMFState* cx, int32_t 
       total += nf;
     }
   }
-  *cur += 32;
+  cur[0] += 32;
   const int32_t result = total+32;
   total = result;
   slot = cur-c;
   if( slot>=5 ) {
-    uint16_t*const strip = cx->model_strip(CtxIdx{}.bit<7>(slot&1).bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96).raw((uint32_t)ctx));
+    uint16_t*const strip = cx[0].model_strip(CtxIdx{}.bit<7>(slot&1).bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96).raw((uint32_t)ctx));
     if constexpr( f_DEC )
-      slot += 2*cx->decode_symbol_tree(strip);
+      slot += 2*cx[0].decode_symbol_tree(strip);
     else
-      cx->encode_symbol_tree(strip, (sym-5)>>1);
+      cx[0].encode_symbol_tree(strip, (sym-5)>>1);
   }
   return slot;
 }
 
 void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym) {
-  node->code_symbol<0>(cx, ctx, sym);
+  node[0].code_symbol<0>(cx, ctx, sym);
 }
 
 int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx) {
-  return node->code_symbol<1>(cx, ctx, 0);
+  return node[0].code_symbol<1>(cx, ctx, 0);
 }
 
 int32_t BMFState::update_binary_pair(uint16_t* _this, int32_t symbol) {
@@ -3727,13 +3727,13 @@ int32_t BMFState::update_binary_pair(uint16_t* _this, int32_t symbol) {
       do {
         FreqPair* pair = tbl+node+span;
         int32_t go = (mask&path)!=0;
-        f = pair->f[go];
+        f = pair[0].f[go];
         if( f>0x2000 )
           f = halve_pair(pair, go);
         span *= 2;
         mask >>= 1;
         node = go+2*node;
-        pair->f[go] = f+((alt_freq_init*((uint32_t)(plane_predictor==pred_p2)+5))>>3);
+        pair[0].f[go] = f+((alt_freq_init*((uint32_t)(plane_predictor==pred_p2)+5))>>3);
       } while( mask );
       return 0;
     }
@@ -3777,14 +3777,14 @@ void ModelBlock::free_workspace() {
 
 ModelBlock*BMFCodec::new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
   void* raw = model_blocks.take(false);
-  return ((ModelBlock*)raw)->layout_workspace(this, img_w, img_h, img_depth);
+  return ((ModelBlock*)raw)[0].layout_workspace(this, img_w, img_h, img_depth);
 }
 
 ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth) {
   cx = state;
   int32_t j;
   uint32_t k, m, s, n;
-  cx->exclusion_gen = 1;
+  cx[0].exclusion_gen = 1;
   width = img_w;
   height = img_h;
   depth = img_depth;
@@ -3804,7 +3804,7 @@ ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t 
 
   uint8_t* runs = run_bucket_store;
   run_bucket = runs;
-  *runs = 0;
+  runs[0] = 0;
   {
     uint8_t bucket = 0;
     for( uint32_t x = 0; x<width; ++x ) {
@@ -3831,7 +3831,7 @@ ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t 
   memset(ctx_id1, 255, sizeof ctx_id1);
   memset(ctx_id2, 255, sizeof ctx_id2);
   memset(ctx_id3, 255, sizeof ctx_id3);
-  memset(cx->exclusion_mask, 0, sizeof cx->exclusion_mask);
+  memset(cx[0].exclusion_mask, 0, sizeof cx[0].exclusion_mask);
   sel[0] = nullptr;
   sel[1] = nullptr;
   escape_list = nullptr;
@@ -3863,50 +3863,50 @@ void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk1, uint
   int32_t n_distinct, y, bits, shift, prev, s, s_next;
   uint32_t n_syms3, sym_flag[256];
   memset(sym_flag, 0, sizeof sym_flag);
-  bool packed = blk1->depth<8;
-  int32_t height = blk1->height;
-  blk1->alphabet = 0;
+  bool packed = blk1[0].depth<8;
+  int32_t height = blk1[0].height;
+  blk1[0].alphabet = 0;
   if( packed ) {
     n_distinct = 0;
     if( height ) {
       const uint8_t* p = src-1;
       int32_t at = 0;
-      const int32_t bpp = blk1->depth;
-      for( y = 0; y<blk1->height; ++y ) {
+      const int32_t bpp = blk1[0].depth;
+      for( y = 0; y<blk1[0].height; ++y ) {
         bits = 0;
-        for( uint32_t x = 0; x<blk1->width; ++x, ++at ) {
+        for( uint32_t x = 0; x<blk1[0].width; ++x, ++at ) {
           shift = bits-bpp;
           if( shift<0 ) {
             ++p;
             shift = 8-bpp;
           }
           const uint32_t sym = mask&(*p>>shift);
-          blk1->alphabet += sym_flag[sym]==0;
+          blk1[0].alphabet += sym_flag[sym]==0;
           sym_flag[sym] = 1;
           bits = shift;
-          blk1->sym_word[at] = sym;
+          blk1[0].sym_word[at] = sym;
         }
       }
-      n_distinct = blk1->alphabet;
+      n_distinct = blk1[0].alphabet;
     }
-  } else if( height&&blk1->width ) {
+  } else if( height&&blk1[0].width ) {
     const uint8_t* q = src;
-    const uint32_t n_pix = blk1->height*blk1->width;
+    const uint32_t n_pix = blk1[0].height*blk1[0].width;
     for( uint32_t idx = 0; idx<n_pix; ++idx ) {
       const int32_t sym2 = *q++;
-      blk1->alphabet += sym_flag[sym2]==0;
+      blk1[0].alphabet += sym_flag[sym2]==0;
       sym_flag[sym2] = 1;
-      blk1->sym_word[idx] = sym2;
+      blk1[0].sym_word[idx] = sym2;
     }
-    n_distinct = blk1->alphabet;
+    n_distinct = blk1[0].alphabet;
   } else {
     n_distinct = 0;
   }
-  cx->code_alphabet_size<0>(n_distinct, mask+1);
-  uint32_t n_syms = blk1->alphabet;
+  cx[0].code_alphabet_size<0>(n_distinct, mask+1);
+  uint32_t n_syms = blk1[0].alphabet;
   if( n_syms<=mask ) {
     init_gap_list(cx, lists, mask, n_syms);
-    n_syms3 = blk1->alphabet;
+    n_syms3 = blk1[0].alphabet;
     if( n_syms3 ) {
       prev = 0;
       s = 0;
@@ -3914,7 +3914,7 @@ void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk1, uint
       do {
         if( sym_flag[s] ) {
           lists[0].code_symbol(cx, s-prev);
-          n_syms3 = blk1->alphabet;
+          n_syms3 = blk1[0].alphabet;
           sym_flag[s] = next_id;
           s_next = s+1;
           prev = s+1;
@@ -3926,9 +3926,9 @@ void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk1, uint
       } while( next_id<n_syms3 );
     }
     {
-      const uint32_t n_pix = blk1->height*blk1->width;
+      const uint32_t n_pix = blk1[0].height*blk1[0].width;
       for( uint32_t m = 0; m<n_pix; ++m )
-        blk1->sym_word[m] = sym_flag[blk1->sym_word[m]];
+        blk1[0].sym_word[m] = sym_flag[blk1[0].sym_word[m]];
     }
     free_sym_entries(lists, 16);
   } else {
@@ -3950,12 +3950,12 @@ int32_t BMFState::tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
       return node;
     }
   }
-  int32_t alphabet = blk->alphabet;
+  int32_t alphabet = blk[0].alphabet;
   mode_symbol[1] = side;
   node = (uint16_t)alphabet;
   int32_t alpha = alphabet+1;
   kidp[side] = node;
-  blk->alphabet = alpha;
+  blk[0].alphabet = alpha;
   if( alpha>0x2000 )
     return -1;
   tree[node].val = val;
@@ -3995,7 +3995,7 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   uint32_t alpha_n, done;
   int32_t node, carry;
   uint8_t* rp;
-  uint32_t sym_bits = blk->depth;
+  uint32_t sym_bits = blk[0].depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
   uint32_t n_kids = (sym_bits+7)>>3;
   auto load32 = [](const uint8_t* at) {
@@ -4008,10 +4008,10 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
     reduce_narrow_alphabet(this, lists, blk, src, mask);
   } else {
     memset(tree, 0, sizeof tree);
-    blk->alphabet = 1;
+    blk[0].alphabet = 1;
     tree[0].val = mask&load32(src);
-    blk->sym_word[0] = 0;
-    if( (uint32_t)(blk->height*blk->width)>1 ) {
+    blk[0].sym_word[0] = 0;
+    if( (uint32_t)(blk[0].height*blk[0].width)>1 ) {
       uint8_t* p = src;
       node = 0;
       uint32_t written = 1;
@@ -4023,16 +4023,16 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
           if( val!=tree[0].val ) node = tree_place(tree, blk, val);
           if( node<0 ) break;
         }
-        blk->sym_word[written++] = node;
-        if( written>=(uint32_t)(blk->height*blk->width) ) break;
+        blk[0].sym_word[written++] = node;
+        if( written>=(uint32_t)(blk[0].height*blk[0].width) ) break;
       }
     }
-    alpha_n = blk->alphabet;
+    alpha_n = blk[0].alphabet;
     code_alphabet_size<0>(alpha_n, no_symbol+1);
-    if( blk->alphabet>0x2000 ) {
-      out[1] = (uint8_t*)bmf_new(blk->height*n_kids*blk->width);
-      int32_t img_w = blk->width;
-      int32_t img_h = blk->height;
+    if( blk[0].alphabet>0x2000 ) {
+      out[1] = (uint8_t*)bmf_new(blk[0].height*n_kids*blk[0].width);
+      int32_t img_w = blk[0].width;
+      int32_t img_h = blk[0].height;
       uint32_t plane_size;
       if( n_kids ) {
         plane_size = img_h*img_w;
@@ -4064,17 +4064,17 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
           }
         }
       }
-      uint16_t* old_words = blk->sym_word;
-      blk->height = n_kids*img_h;
-      blk->depth = 8;
+      uint16_t* old_words = blk[0].sym_word;
+      blk[0].height = n_kids*img_h;
+      blk[0].depth = 8;
       free(old_words);
-      void* newbuf = bmf_new(2*blk->height*blk->width);
-      blk->sym_word = (uint16_t*)newbuf;
+      void* newbuf = bmf_new(2*blk[0].height*blk[0].width);
+      blk[0].sym_word = (uint16_t*)newbuf;
       reduce_alphabet(blk, out[1]);
       free(out[1]);
     } else {
       init_byte_lists(this, lists, n_kids);
-      const int32_t alpha_m = blk->alphabet;
+      const int32_t alpha_m = blk[0].alphabet;
       if( alpha_m ) {
         carry = 0;
         for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si )
@@ -4153,12 +4153,12 @@ uint32_t BMFState::alt_init_tables(uint8_t* fold, int8_t* unfold) {
 
 AltP1Block*BMFCodec::alt_p1_block_alloc(int32_t width, int32_t height) {
   AltP1Block* raw = p1_blocks.take(false);
-  return raw ? raw->alt_p1_alloc(this, width, height, 0) : nullptr;
+  return raw ? raw[0].alt_p1_alloc(this, width, height, 0) : nullptr;
 }
 
 template <int32_t f_DEC> void BMFCodec::alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height, uint8_t* out) {
   AltP1Block* blk = alt_p1_block_alloc(width, height);
-  blk->d8_body<f_DEC>(src, out);
+  blk[0].d8_body<f_DEC>(src, out);
   if( blk ) p1_blocks.give(blk);
 }
 
@@ -4182,11 +4182,11 @@ template <int32_t f_DEC> int32_t BMFCodec::alt_model_p1(BmfImage* hdr, uint8_t* 
   AltP1Block* plane[4];
   int32_t cur0, cur1, cur3;
   int32_t want2;
-  int32_t width = hdr->width;
-  int32_t height = hdr->height;
+  int32_t width = hdr[0].width;
+  int32_t height = hdr[0].height;
   for( int32_t k = 0; k<plane_count; ++k ) {
     AltP1Block* raw = p1_blocks.take(false);
-    plane[k] = raw->alt_p1_alloc(this, width, height, k);
+    plane[k] = raw[0].alt_p1_alloc(this, width, height, k);
   }
   int32_t src1 = plane_desc[1].src_plane;
   int32_t src2 = plane_desc[2].src_plane;
@@ -4206,15 +4206,15 @@ template <int32_t f_DEC> int32_t BMFCodec::alt_model_p1(BmfImage* hdr, uint8_t* 
     rc_begin_encode();
   for( uint32_t y = 0; y<(uint32_t)height; ++y ) {
     for( int32_t p = 0; p<plane_count; ++p ) {
-      plane[p]->advance_row();
-      plane[p]->seed_activity(true);
+      plane[p][0].advance_row();
+      plane[p][0].seed_activity(true);
     }
     {
       auto code_sample = [&](int32_t n, AltP1Block* a, AltP1Block* b, int32_t off, int32_t val) {
                            AltP1Block*const blk = plane[n];
-                           blk->ctx_of(a, b);
-                           val = f_DEC ? blk->decode_sample() : blk->encode_sample(buf, off, val);
-                           blk->record_sample(val);
+                           blk[0].ctx_of(a, b);
+                           val = f_DEC ? blk[0].decode_sample() : blk[0].encode_sample(buf, off, val);
+                           blk[0].record_sample(val);
                            return val;
                          };
       auto fold_from = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix) {
@@ -4276,16 +4276,16 @@ inline int32_t NbRow::predict(BMFState* cx, float (*nb)[4], CtxWeights* sets, in
   const float* mix = bmf_p2_mix[mode];
   float mixed[7][4], centre, prediction, own;
   int32_t i, j, k;
-  centre = nb_dot(cx->p2_coef, nb);
+  centre = nb_dot(cx[0].p2_coef, nb);
   nb[7][0] = centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ )
       nb[j][k] -= centre;
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
-      mixed[j][k] = mix[0]*sets->row[0]->w[j][k];
+      mixed[j][k] = mix[0]*sets[0].row[0][0].w[j][k];
       for( i = 1; i<6; i++ )
-        mixed[j][k] += mix[i]*sets->row[i]->w[j][k];
+        mixed[j][k] += mix[i]*sets[0].row[i][0].w[j][k];
     }
   prediction = nb_dot(mixed, nb)+centre;
   nb[7][2] = prediction;
@@ -4297,7 +4297,7 @@ inline int32_t NbRow::predict(BMFState* cx, float (*nb)[4], CtxWeights* sets, in
   for( j = 0; j<7; j++ )
     for( k = 0; k<4; k++ ) {
       w[j][k] = mixed[j][k]*bmf_p2_decay;
-      w[j+7][k] = sets->row[0]->w[j+7][k]*bmf_p2_seed;
+      w[j+7][k] = sets[0].row[0][0].w[j+7][k]*bmf_p2_seed;
     }
   w[14][0] = 47.0f;
   w[14][1] = 169.2f;
@@ -4312,9 +4312,9 @@ template <int32_t f_DEC> void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* 
   uint32_t k;
   uint8_t* src_end = src;
   if constexpr( f_DEC )
-    cx->rc_begin_decode();
+    cx[0].rc_begin_decode();
   else
-    cx->rc_begin_encode();
+    cx[0].rc_begin_encode();
   P2Ctx* pix = cursor[0];
   if( width>0 ) {
     uint8_t* p = src;
@@ -4325,26 +4325,26 @@ template <int32_t f_DEC> void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* 
       ctx_pair[1] = ctx+ctx_delta[q2];
       P2Freq &fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
       if constexpr( f_DEC ) {
-        *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair)]);
+        out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair)]);
       } else {
         code0 = fold_or_refuse(out, *p, (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
         fr.encode_symbol(cx, ctx_pair, code0);
         ++p;
       }
       int32_t val = 16*(uint8_t)*out;
-      cursor[0]->val = val;
-      cursor[0]->dval = val;
+      cursor[0][0].val = val;
+      cursor[0][0].dval = val;
       ++out;
-      int32_t err = (int16_t)(rec->val-rec[-1].val);
-      rec->err = err;
+      int32_t err = (int16_t)(rec[0].val-rec[-1].val);
+      rec[0].err = err;
       int32_t adiff = abs32(err);
-      cursor[0]->aerr = adiff;
-      cursor[0]->dupright = adiff;
-      cursor[0]->dupleft = adiff;
-      cursor[0]->dup = adiff;
-      cursor[0]->dleft = (uint32_t)cursor[0]->dup>>1;
-      cursor[0]->mag = 2;
-      cursor[0]->sign = (cursor[0]->err<=0)+(cursor[0]->err<0);
+      cursor[0][0].aerr = adiff;
+      cursor[0][0].dupright = adiff;
+      cursor[0][0].dupleft = adiff;
+      cursor[0][0].dup = adiff;
+      cursor[0][0].dleft = (uint32_t)cursor[0][0].dup>>1;
+      cursor[0][0].mag = 2;
+      cursor[0][0].sign = (cursor[0][0].err<=0)+(cursor[0][0].err<0);
       pix = cursor[0]+1;
       cursor[0] = pix;
     }
@@ -4378,22 +4378,22 @@ template <int32_t f_DEC> void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* 
     }
   }
   if constexpr( f_DEC )
-    cx->rc_end_decode();
+    cx[0].rc_end_decode();
   else
-    cx->rc_end_encode();
+    cx[0].rc_end_encode();
 }
 
 template <int32_t f_DEC> void BMFCodec::alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   AltP2Block* blk;
   AltP2Block* raw = p2_blocks.take(true);
   if( raw )
-    blk = raw->alt_p2_alloc(this, i, 0);
+    blk = raw[0].alt_p2_alloc(this, i, 0);
   else
     blk = nullptr;
   if constexpr( f_DEC )
-    blk->alt_p2_d8_body<1>(nullptr, out, i, height);
+    blk[0].alt_p2_d8_body<1>(nullptr, out, i, height);
   else
-    blk->alt_p2_d8_body<0>(src, out, i, height);
+    blk[0].alt_p2_d8_body<0>(src, out, i, height);
   if( blk )
     p2_blocks.give(blk);
 }
@@ -4453,13 +4453,13 @@ AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* ref
   p2_row[3][2] = (float)grad(d1(1), (d1(2)+d1(0))>>1, d2(2));
   p2_row[3][3] = (float)d3(0);
   if( refa ) {
-    const P2Refs refs{ref_rows(refa->cursor), ref_rows(refb->cursor)};
+    const P2Refs refs{ref_rows(refa[0].cursor), ref_rows(refb[0].cursor)};
     P2Ctx*const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;
     P2Ctx*const rb0 = refs.b.r0, *const rb1 = refs.b.r1, *const rb2 = refs.b.r2;
     const ValRow a0{ra0}, a1{ra1}, a2{ra2}, b0{rb0}, b1{rb1}, b2{rb2};
     const bool no_ref = has_ref==0;
     if( !no_ref ) {
-      const float bias_l = (float)c0->dval;
+      const float bias_l = (float)c0[0].dval;
       for( int32_t j = 0; j<4; ++j )
         for( int32_t k = 0; k<4; ++k )
           p2_row[j][k] += bias_l;
@@ -4474,7 +4474,7 @@ AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* ref
         p2_row[5][0] = (float)grad(v1(1), b1(2), b2(3));
         p2_row[5][1] = (float)grad(v0(-2), b0(0), b0(-2));
         p2_row[5][2] = (float)grad(v1(0), b0(0), b1(0));
-        p2_row[5][3] = (float)(v0(-2)+ra0->err);
+        p2_row[5][3] = (float)(v0(-2)+ra0[0].err);
         if( no_ref ) {
           p2_row[6][0] = (float)grad(v0(-2), a0(0), a0(-2));
           p2_row[6][1] = (float)grad(v2(0), a0(0), a2(0));
@@ -4497,8 +4497,8 @@ AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* ref
         p2_row[5][3] = (float)grad(v0(-2), b0(0), b0(-2));
         p2_row[6][0] = (float)grad(v2(0), b0(0), b2(0));
         p2_row[6][1] = (float)(grad(b0(-2), b0(0), v0(-2))+2*(v0(-1)-b0(-1)));
-        p2_row[6][2] = (float)(v0(-2)+rb0->err);
-        p2_row[6][3] = (float)(v2(0)+ra0->err);
+        p2_row[6][2] = (float)(v0(-2)+rb0[0].err);
+        p2_row[6][3] = (float)(v2(0)+ra0[0].err);
       }
     } else {
       p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
@@ -4535,26 +4535,26 @@ AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* ref
 int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs &refs) {
   P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
   int32_t flat_a, flat_b;
-  int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1->mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4->mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3->mag+c2[-1].mag+c2[2].mag);
+  int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1[0].mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4[0].mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3[0].mag+c2[-1].mag+c2[2].mag);
   const int32_t lo_band = band_lo, hi_band = band_hi;
   ctx_w[0].sel = (run4<1840)+(run4<272);
-  ctx_w[1].sel = (run4-c1->val<=hi_band)+(run4-c1->val<lo_band);
+  ctx_w[1].sel = (run4-c1[0].val<=hi_band)+(run4-c1[0].val<lo_band);
   int32_t d_run4 = run4-c0[-1].val;
   bool in_band = d_run4<=hi_band;
   ctx_w[2].sel = in_band+(d_run4<lo_band);
-  ctx_w[3].sel = c1->sign;
+  ctx_w[3].sel = c1[0].sign;
   ctx_w[4].sel = c0[-1].sign;
   int32_t magsum = magsum_own;
-  int32_t magu = c2[0].mag+c1->mag;
+  int32_t magu = c2[0].mag+c1[0].mag;
   int32_t magl = c0[-1].mag+c0[-2].mag;
   if( refs.a.r0 ) {
-    int32_t mag = refs.b.r0->mag;
-    int32_t mag_ref1 = refs.b.r1->mag+refs.a.r1->mag;
-    int32_t mag_ref0 = mag+refs.a.r0->mag;
+    int32_t mag = refs.b.r0[0].mag;
+    int32_t mag_ref1 = refs.b.r1[0].mag+refs.a.r1[0].mag;
+    int32_t mag_ref0 = mag+refs.a.r0[0].mag;
     magsum = mag_ref1+magsum_own+4*mag_ref0+2*(refs.a.r0[-1].mag+refs.b.r0[-1].mag);
     flat_a = mag_ref0+magl+refs.b.r0[-2].mag+refs.b.r0[-1].mag+refs.a.r0[-2].mag+refs.a.r0[-1].mag;
     if( has_ref ) {
-      const int32_t d_run4b = run4-c1->dval-c0[0].dval;
+      const int32_t d_run4b = run4-c1[0].dval-c0[0].dval;
       if( d_run4b<lo_band||d_run4b>hi_band ) {
         const int32_t d_run4c = run4-c0[-1].dval-c0[0].dval;
         flat_b = d_run4c>=lo_band&&hi_band>=d_run4c;
@@ -4562,21 +4562,21 @@ int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs &refs) {
         flat_b = 1;
       }
     } else {
-      flat_b = mag_ref1+mag_ref0+magu+refs.b.r2->mag+refs.a.r2->mag;
+      flat_b = mag_ref1+mag_ref0+magu+refs.b.r2[0].mag+refs.a.r2[0].mag;
     }
     if( plane_idx==1 ) {
-      int32_t d_ra_ra1 = refs.a.r0->val-refs.a.r1->val;
+      int32_t d_ra_ra1 = refs.a.r0[0].val-refs.a.r1[0].val;
       ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
-      int32_t d_ra_left = refs.a.r0->val-refs.a.r0[-1].val;
+      int32_t d_ra_left = refs.a.r0[0].val-refs.a.r0[-1].val;
       ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
     } else if( (int32_t)plane_idx>1 ) {
-      int32_t d_rb_rb1 = refs.b.r0->val-refs.b.r1->val;
+      int32_t d_rb_rb1 = refs.b.r0[0].val-refs.b.r1[0].val;
       ctx_w[3].sel = (d_rb_rb1<=hi_band)+(d_rb_rb1<lo_band);
-      int32_t d_rb_left = refs.b.r0->val-refs.b.r0[-1].val;
+      int32_t d_rb_left = refs.b.r0[0].val-refs.b.r0[-1].val;
       in_band = d_rb_left<=hi_band;
       ctx_w[4].sel = in_band+(d_rb_left<lo_band);
-      int32_t ra0_val = refs.a.r0->val;
-      int32_t d_ra_ra1b = ra0_val-(refs.a.r1)->val;
+      int32_t ra0_val = refs.a.r0[0].val;
+      int32_t d_ra_ra1b = ra0_val-(refs.a.r1)[0].val;
       in_band = lo_band<=d_ra_ra1b;
       if( in_band&&d_ra_ra1b<=hi_band ) {
         flat_a = 1;
@@ -4587,7 +4587,7 @@ int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs &refs) {
     }
   } else {
     flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
-    flat_b = c4->mag+c3->mag+magu+c0[0].mag;
+    flat_b = c4[0].mag+c3[0].mag+magu+c0[0].mag;
   }
   const int32_t ctx15 = magsum>=960 ? 15 : nb_ctx[magsum>>3];
   const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
@@ -4603,15 +4603,15 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   uint32_t ctx0, ctx1, ctx2;
   uint32_t ctx0_lo;
   P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
-  int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1->dupleft+cx->ctx_bias[0]+14*c0[-2].dupleft;
-  int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1->dupright+9*c1[-1].dupright+22*c0[-1].dupright+cx->ctx_bias[1]+19*c0[-2].dupright;
-  int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1->dleft+16*c1[-1].dleft+22*c0[-1].dleft+cx->ctx_bias[2]+19*c0[-2].dleft;
-  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1->dup+25*c0[-1].dup+cx->ctx_bias[3]+17*c0[-2].dup+15*(c3->dup+c2->dup);
+  int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1[0].dupleft+cx[0].ctx_bias[0]+14*c0[-2].dupleft;
+  int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1[0].dupright+9*c1[-1].dupright+22*c0[-1].dupright+cx[0].ctx_bias[1]+19*c0[-2].dupright;
+  int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1[0].dleft+16*c1[-1].dleft+22*c0[-1].dleft+cx[0].ctx_bias[2]+19*c0[-2].dleft;
+  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1[0].dup+25*c0[-1].dup+cx[0].ctx_bias[3]+17*c0[-2].dup+15*(c3[0].dup+c2[0].dup);
   int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
   int32_t band = over_thresholds(8*sum4, p2_band_edges, 0, 4, sum_u);
   int32_t den_d = 2*c0[-2].val+2*c0[-1].val;
-  int32_t num_b = c1[1].val+(c1->val+2*c0[-1].val);
-  int32_t num_d = 16*(c2[2].val+c2->val+c1[1].val+c2[-1].val);
+  int32_t num_b = c1[1].val+(c1[0].val+2*c0[-1].val);
+  int32_t num_d = 16*(c2[2].val+c2[0].val+c1[1].val+c2[-1].val);
   int32_t gA = over_thresholds(sum_all, bmf_p2_thresholds[band], 9, 12, 1);
   int32_t gB = over_thresholds(num_b, bmf_p2_thresholds[band], 6, 8, 1);
   int32_t gC = over_thresholds(16*sum_ur, bmf_p2_thresholds[band], 3, 5, sum_ul);
@@ -4634,17 +4634,17 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     mode = 2;
   if( min32(best01, c)>d )
     mode = 3;
-  const int32_t filt = nb_cur->predict(cx, (float (*)[4]) p2_row, &weights, mode);
+  const int32_t filt = nb_cur[0].predict(cx, (float (*)[4]) p2_row, &weights, mode);
   pred_prev = (uint16_t)filt;
-  int32_t g3pair = c0[-1].aerr+c1->aerr;
+  int32_t g3pair = c0[-1].aerr+c1[0].aerr;
   if( refa )
-    g3pair += (rb0->aerr+ra0->aerr)>>1;
+    g3pair += (rb0[0].aerr+ra0[0].aerr)>>1;
   int32_t g3sum = c1[3].aerr+c1[-1].aerr+c0[-1].aerr+c0[-3].aerr+c0[-4].aerr+c0[-2].aerr;
-  ctx0_lo = CtxIdx{}.bit<19>(c1[1].err+c1->err+c1[-1].err+c0[-1].err<0).bit<18>(c3->err+c0[-2].err+2*c0[-4].err<0).bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0).bit<16>(c0[-1].err<0).bit_of<15>((uint16_t)c0[-3].err).bits<13, 2>((filt>3536)+(filt>720)+(filt>288)).bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
+  ctx0_lo = CtxIdx{}.bit<19>(c1[1].err+c1[0].err+c1[-1].err+c0[-1].err<0).bit<18>(c3[0].err+c0[-2].err+2*c0[-4].err<0).bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0).bit<16>(c0[-1].err<0).bit_of<15>((uint16_t)c0[-3].err).bits<13, 2>((filt>3536)+(filt>720)+(filt>288)).bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
   if( refa ) {
-    ctx0 = CtxIdx{}.bit<25>(rb0[-1].err<0).bit<24>(rb0->err<0).bit<23>(ra0[-1].err<0).bit<22>(rb0->err+rb0[-2].err<0).bit<21>(ra0[-2].err+ra0->err<0).bit<20>(c0[-2].err<0).raw(ctx0_lo);
+    ctx0 = CtxIdx{}.bit<25>(rb0[-1].err<0).bit<24>(rb0[0].err<0).bit<23>(ra0[-1].err<0).bit<22>(rb0[0].err+rb0[-2].err<0).bit<21>(ra0[-2].err+ra0[0].err<0).bit<20>(c0[-2].err<0).raw(ctx0_lo);
   } else {
-    ctx0 = CtxIdx{}.bit<25>(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err<0).bit<24>(c2[1].err+c2->err+c0[-4].err+c0[-8].err<0).bit<23>(c0[-4].err+c0[-6].err<0).bit<22>(c0[-4].err<0).bit<21>(c0[-5].err<0).bit<20>(c0[-7].err<0).raw(ctx0_lo);
+    ctx0 = CtxIdx{}.bit<25>(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err<0).bit<24>(c2[1].err+c2[0].err+c0[-4].err+c0[-8].err<0).bit<23>(c0[-4].err+c0[-6].err<0).bit<22>(c0[-4].err<0).bit<21>(c0[-5].err<0).bit<20>(c0[-7].err<0).raw(ctx0_lo);
   }
   const int32_t run0 = step_bank(0, ctx0, filt);
   int32_t nb4_4 = c4[4].val;
@@ -4655,32 +4655,32 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t d_up5 = up5-run0;
   if( refa ) {
     int32_t dv_now = c0[0].dval;
-    ctx1 = CtxIdx{}.bit_of<25>(c0[-1].val+ra0->val-ra0[-1].val-run0).bit<24>(ra2->dval+ra1->dval-2*ra0->dval<0).bit_of<23>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval)).bit_of<22>(dv_now+c0[-5].dval-run0).bit_of<21>(dv_now+c1->dval+rb1[2].dval-rb2[2].dval-run0).bit_of<20>(dv_now+c0[-1].dval+rb0->dval-rb0[-1].dval-run0).bit_of<19>(c2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0).bit_of<18>(dv_now+c1[2].dval+ra0->dval-ra1[2].dval-run0).bit_of<17>(d_up5).bit_of<16>(d_up).bit_of<15>(d_run0).raw(ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
+    ctx1 = CtxIdx{}.bit_of<25>(c0[-1].val+ra0[0].val-ra0[-1].val-run0).bit<24>(ra2[0].dval+ra1[0].dval-2*ra0[0].dval<0).bit_of<23>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval)).bit_of<22>(dv_now+c0[-5].dval-run0).bit_of<21>(dv_now+c1[0].dval+rb1[2].dval-rb2[2].dval-run0).bit_of<20>(dv_now+c0[-1].dval+rb0[0].dval-rb0[-1].dval-run0).bit_of<19>(c2[-1].dval+dv_now+ra0[0].dval-ra2[-1].dval-run0).bit_of<18>(dv_now+c1[2].dval+ra0[0].dval-ra1[2].dval-run0).bit_of<17>(d_up5).bit_of<16>(d_up).bit_of<15>(d_run0).raw(ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
   } else {
     int32_t d_run0b = run0-c0[-3].val;
-    ctx1 = CtxIdx{}.bit_of<25>(nb4_4-c3->val+run0-c1[4].val).bit_of<24>(c1[-5].val-c1[-2].val+d_run0b).bit_of<23>(d_run0b+c1[2].val-up5).bit_of<22>(c4[3].val-c2[2].val+run0-c2[1].val).bit_of<21>(c4[-1].val-c3->val+run0-c1[-1].val).bit_of<20>(c1->val-c1[2].val+run0-c0[-2].val).bit_of<19>(-d_up5).bit_of<18>(-d_up).bit_of<17>(run0-c4[2].val).bit_of<16>(run0-c4[-3].val).bit_of<15>(-d_run0).raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
+    ctx1 = CtxIdx{}.bit_of<25>(nb4_4-c3[0].val+run0-c1[4].val).bit_of<24>(c1[-5].val-c1[-2].val+d_run0b).bit_of<23>(d_run0b+c1[2].val-up5).bit_of<22>(c4[3].val-c2[2].val+run0-c2[1].val).bit_of<21>(c4[-1].val-c3[0].val+run0-c1[-1].val).bit_of<20>(c1[0].val-c1[2].val+run0-c0[-2].val).bit_of<19>(-d_up5).bit_of<18>(-d_up).bit_of<17>(run0-c4[2].val).bit_of<16>(run0-c4[-3].val).bit_of<15>(-d_run0).raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
   }
   const int32_t run1 = step_bank(1, ctx1, run0);
-  int32_t cx2_val0 = c2->val;
-  int32_t cx1_val = c1->val;
+  int32_t cx2_val0 = c2[0].val;
+  int32_t cx1_val = c1[0].val;
   int32_t dvsum2 = c0[-2].val-run1;
   int32_t lap = c0[-2].val+run1-2*c0[-1].val;
   int32_t dtop2 = cx2_val0-run1;
   if( refa ) {
     int32_t dv1 = c1[1].dval;
-    int32_t d_ra = ra0->val-run1;
-    ctx2 = CtxIdx{}.bit_of<25>(c0[0].dval+c1[-1].dval-run1-(c2->dval-dv1)).bit_of<24>(c0[0].dval+c0[-1].dval-run1-(c1->dval-dv1)).bit_of<23>(rb0->val-run1+cx2_val0-rb2->val).bit_of<22>(d_ra+cx2_val0-ra2->val).bit_of<21>(d_ra+c1[-1].val-ra1[-1].val).bit_of<20>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1).bit_of<19>(2*cx1_val-run1-cx2_val0).bit_of<18>(-lap).bit_of<17>(dtop2).bit_of<16>(dvsum2).bit_of<15>(208-rb0->val).raw(ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
+    int32_t d_ra = ra0[0].val-run1;
+    ctx2 = CtxIdx{}.bit_of<25>(c0[0].dval+c1[-1].dval-run1-(c2[0].dval-dv1)).bit_of<24>(c0[0].dval+c0[-1].dval-run1-(c1[0].dval-dv1)).bit_of<23>(rb0[0].val-run1+cx2_val0-rb2[0].val).bit_of<22>(d_ra+cx2_val0-ra2[0].val).bit_of<21>(d_ra+c1[-1].val-ra1[-1].val).bit_of<20>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1).bit_of<19>(2*cx1_val-run1-cx2_val0).bit_of<18>(-lap).bit_of<17>(dtop2).bit_of<16>(dvsum2).bit_of<15>(208-rb0[0].val).raw(ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
   } else {
-    ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-c3->val).bit_of<24>(run1+c4->val-(c2[2].val+c2[-2].val)).bit_of<23>(c3[2].val-c2[-1].val+run1-c1[3].val).bit_of<22>(c3[1].val-c1[1].val-dtop2).bit_of<21>(c3->val-cx1_val-dtop2).bit_of<20>(lap).bit_of<19>(run1-c4[3].val).bit_of<18>(c3[1].val-run1).bit_of<17>(run1-c4->val).bit_of<16>(run1-c3[-2].val).bit_of<15>(-dvsum2).raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
+    ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-c3[0].val).bit_of<24>(run1+c4[0].val-(c2[2].val+c2[-2].val)).bit_of<23>(c3[2].val-c2[-1].val+run1-c1[3].val).bit_of<22>(c3[1].val-c1[1].val-dtop2).bit_of<21>(c3[0].val-cx1_val-dtop2).bit_of<20>(lap).bit_of<19>(run1-c4[3].val).bit_of<18>(c3[1].val-run1).bit_of<17>(run1-c4[0].val).bit_of<16>(run1-c3[-2].val).bit_of<15>(-dvsum2).raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
   }
   const int32_t run2 = step_bank(2, ctx2, run1);
   int32_t run_dv3 = run2-c0[0].dval;
-  const uint32_t ctx3 = CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val).bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1->dval)>>1)+run_dv3).bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val).bit_of<22>(-(c2[2].val+run2-2*c1[1].val)).bit_of<21>(c1[-2].dval-c0[-2].val+run2-c1->dval).bit_of<20>(run2-c1[3].val).bit_of<19>(run_dv3-c2[1].dval).bit_of<18>(run2-c3->val).bit_of<17>(2*run2-c1->dval-(c1->val+c0[0].dval)).bit_of<16>(run2-c0[-1].dval-c0[0].dval).bit_of<15>(run2-c0[-3].val).raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9));
+  const uint32_t ctx3 = CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val).bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1[0].dval)>>1)+run_dv3).bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val).bit_of<22>(-(c2[2].val+run2-2*c1[1].val)).bit_of<21>(c1[-2].dval-c0[-2].val+run2-c1[0].dval).bit_of<20>(run2-c1[3].val).bit_of<19>(run_dv3-c2[1].dval).bit_of<18>(run2-c3[0].val).bit_of<17>(2*run2-c1[0].dval-(c1[0].val+c0[0].dval)).bit_of<16>(run2-c0[-1].dval-c0[0].dval).bit_of<15>(run2-c0[-3].val).raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9));
   const int32_t run3 = step_bank(3, ctx3, run2);
   int32_t dv_now4 = c0[0].dval;
   int32_t run_dv4 = run3-dv_now4;
-  int32_t run_up4 = run3+c3->val;
-  const uint32_t ctx4 = CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1->val)>>2)).bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4)).bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval)).bit_of<22>(run3-c0[-3].dval-dv_now4-(c1->val-c1[-3].val)).bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval)).bit_of<20>(c2[-2].val+run3-2*c1[-1].val).bit_of<19>(c2->dval-2*c1->dval+run_dv4).bit_of<18>((run3-c0[-1].val)-(c1->val-c1[-1].val)).bit_of<17>(run_dv4-c1[4].dval).bit_of<16>(run_dv4-c1[-2].dval).bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4).raw(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10));
+  int32_t run_up4 = run3+c3[0].val;
+  const uint32_t ctx4 = CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1[0].val)>>2)).bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4)).bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval)).bit_of<22>(run3-c0[-3].dval-dv_now4-(c1[0].val-c1[-3].val)).bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval)).bit_of<20>(c2[-2].val+run3-2*c1[-1].val).bit_of<19>(c2[0].dval-2*c1[0].dval+run_dv4).bit_of<18>((run3-c0[-1].val)-(c1[0].val-c1[-1].val)).bit_of<17>(run_dv4-c1[4].dval).bit_of<16>(run_dv4-c1[-2].dval).bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4).raw(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10));
   const int32_t run4 = step_bank(4, ctx4, run3);
   return seat_symbol_context(run4, refs);
 }
@@ -4690,26 +4690,26 @@ void AltP2Block::code_banks(int32_t sample16) {
     const int32_t bctx = bank_ctx[bank];
     const int32_t res = sample16-nb_sum[2*bank];
     P2Count* node0 = &p2_ctr[slot(bank, bctx)];
-    const int32_t w0 = res+(uint16_t)node0->weighted;
-    node0->weighted = w0;
-    int32_t countdown = node0->b1;
+    const int32_t w0 = res+(uint16_t)node0[0].weighted;
+    node0[0].weighted = w0;
+    int32_t countdown = node0[0].b1;
     if( !countdown )
       continue;
-    const int32_t w0b = w0+4*((res>cx->deadzone_hi)-(res<cx->deadzone_lo));
-    node0->weighted = w0b;
+    const int32_t w0b = w0+4*((res>cx[0].deadzone_hi)-(res<cx[0].deadzone_lo));
+    node0[0].weighted = w0b;
     uint32_t ctxw = bctx;
     if( (int32_t)abs32(res)<38 ) {
       --countdown;
-      if( !countdown&&(uint8_t)node0->rate<8u ) {
-        const int32_t from = node0->rate;
-        node0->rate = (uint8_t)(from+1);
-        node0->b1 = p2_b1_reload[from-5];
-        node0->weighted = 2*w0b;
+      if( !countdown&&(uint8_t)node0[0].rate<8u ) {
+        const int32_t from = node0[0].rate;
+        node0[0].rate = (uint8_t)(from+1);
+        node0[0].b1 = p2_b1_reload[from-5];
+        node0[0].weighted = 2*w0b;
       } else {
-        node0->b1 = countdown;
+        node0[0].b1 = countdown;
       }
     }
-    if( cx->alphabet_reduced )
+    if( cx[0].alphabet_reduced )
       continue;
     P2Count* mir = &p2_ctr[slot(bank, ctxw^kBankMirrorMask)];
     __builtin_prefetch(mir, 0, 1);
@@ -4736,7 +4736,7 @@ void AltP2Block::code_banks(int32_t sample16) {
     const int32_t neg = -res2;
     const int32_t w_top = mir[0].weighted;
     const int32_t e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
-    const int32_t bump = 32*((e_top>cx->deadzone_hi)-(e_top<cx->deadzone_lo));
+    const int32_t bump = 32*((e_top>cx[0].deadzone_hi)-(e_top<cx[0].deadzone_lo));
     uint32_t w_new = bump+e_top+2;
     mir[0].weighted = (int16_t)(w_top+(w_new>>2));
     if( lowbits<3 )
@@ -4763,24 +4763,24 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
   int32_t sample16 = 16*sample_in;
   P2Ctx*const c0 = cursor[0];
   P2Ctx*const c1 = cursor[1];
-  c0->val = 16*sample_in;
-  c0->dval = c0->val-c0->dval;
+  c0[0].val = 16*sample_in;
+  c0[0].dval = c0[0].val-c0[0].dval;
   c0[1].dval = 0;
   const int32_t dead = (ctx_lo>6)+(ctx_lo>4)+2*(ctx_lo>9);
-  c0->sign = (resid_in<=dead)+(resid_in<-dead);
-  c0->mag = abs32(resid_in);
+  c0[0].sign = (resid_in<=dead)+(resid_in<-dead);
+  c0[0].mag = abs32(resid_in);
   float sample = (float)sample16;
   int32_t dl = sample16-c0[-1].val;
-  c0->dleft = abs32(dl);
-  int32_t du = sample16-c1->val;
-  c0->dup = abs32(du);
+  c0[0].dleft = abs32(dl);
+  int32_t du = sample16-c1[0].val;
+  c0[0].dup = abs32(du);
   int32_t dul = sample16-c1[-1].val;
-  c0->dupleft = abs32(dul);
+  c0[0].dupleft = abs32(dul);
   int32_t dur = sample16-c1[1].val;
-  c0->dupright = abs32(dur);
+  c0[0].dupright = abs32(dur);
   int32_t resid = (int16_t)(sample16-pred_prev);
-  c0->err = resid;
-  c0->aerr = abs32(resid);
+  c0[0].err = resid;
+  c0[0].aerr = abs32(resid);
   NbRow* wrow_cur = nb_cur;
   NbRow* wrow_b = cur[-1];
   const float centre = bias[0];
@@ -4788,17 +4788,17 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
   const float own = bias[2];
   const float err_own = sample-own;
   const float d_pred = mixed-own;
-  const float cov = (((err_own*d_pred)-wrow_cur->w[14][0])*0.001f)+wrow_cur->w[14][0];
-  const float var = (wrow_cur->w[14][1]+0.000099999997f)+(((d_pred*d_pred)-wrow_cur->w[14][1])*0.001f);
-  wrow_cur->w[14][1] = var;
+  const float cov = (((err_own*d_pred)-wrow_cur[0].w[14][0])*0.001f)+wrow_cur[0].w[14][0];
+  const float var = (wrow_cur[0].w[14][1]+0.000099999997f)+(((d_pred*d_pred)-wrow_cur[0].w[14][1])*0.001f);
+  wrow_cur[0].w[14][1] = var;
   float cov_kept = 0.1f*var;
   if( cov_kept<=cov )
     cov_kept = fminf(var, cov);
-  wrow_cur->w[14][0] = cov_kept;
+  wrow_cur[0].w[14][0] = cov_kept;
   const float conf = (1.0f-(cov_kept/(var+576.0f)))*2.0f;
   nlms_track_two_rows(wrow_cur, wrow_b, (sample-mixed)*2.5999999f, err_own*conf, conf);
   nlms_predict_and_correct(wrow_cur, sample, centre);
-  *cur = nb_cur;
+  cur[0] = nb_cur;
   ++cur;
   ++above;
   code_banks(sample16);
@@ -4820,10 +4820,10 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
                  p2_rescale(bin);
                  const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
                  if( code ) {
-                   bin->f[2-is_dec] += step10;
-                   cx->update_binary_pair(cx->model_strip(pair_at), (code-1)>>1);
+                   bin[0].f[2-is_dec] += step10;
+                   cx[0].update_binary_pair(cx[0].model_strip(pair_at), (code-1)>>1);
                  } else {
-                   bin->f[0] += step10;
+                   bin[0].f[0] += step10;
                  }
                };
   if( ctx15<15 )
@@ -4841,8 +4841,8 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
   if( code ) {
     int32_t n2_half = (code-1)>>1;
     int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
-    if( hi_nibble>=0xF0||(cx->update_binary_pair(cx->model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
-      cx->update_binary_pair(cx->model_strip(pair_ctx-16), n2_half);
+    if( hi_nibble>=0xF0||(cx[0].update_binary_pair(cx[0].model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
+      cx[0].update_binary_pair(cx[0].model_strip(pair_ctx-16), n2_half);
     }
   }
   P2Freq* prec0 = &frec_step[0];
@@ -4858,7 +4858,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
 void BMFCodec::alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
   for( int32_t pl = 0; pl<plane_count; ++pl ) {
     AltP2Block* page = p2_blocks.take(true);
-    plane[pl] = page->alt_p2_alloc(this, width, pl);
+    plane[pl] = page[0].alt_p2_alloc(this, width, pl);
   }
 }
 
@@ -4866,8 +4866,8 @@ template <int32_t f_DEC> int32_t BMFCodec::alt_model_p2(BmfImage* p_i, uint8_t* 
   AltP2Block* plane[4];
   P2Coef coef_session;
   coef_session.fold(this);
-  const int32_t width = p_i->width;
-  const int32_t height = p_i->height;
+  const int32_t width = p_i[0].width;
+  const int32_t height = p_i[0].height;
   alt_p2_planes_alloc(plane, width);
   const bool ref1_mixed = ref_transformed(1);
   const bool ref2_mixed = ref_transformed(2);
@@ -4887,22 +4887,22 @@ template <int32_t f_DEC> int32_t BMFCodec::alt_model_p2(BmfImage* p_i, uint8_t* 
     for( int32_t x = 0; x<width; ++x ) {
       for( int32_t j = 0; j<4; ++j )
         ctx_bias[j] >>= 3;
-      plane[0]->code_sample<f_DEC>(out, plane_desc[0].src_plane, plane[2], plane[1]);
-      plane[0]->add_bias(ctx_bias);
+      plane[0][0].code_sample<f_DEC>(out, plane_desc[0].src_plane, plane[2], plane[1]);
+      plane[0][0].add_bias(ctx_bias);
       int16_t seed1 = 0;
       if( ref1_mixed )
         seed1 = 16*out[plane_desc[0].src_plane];
-      plane[1]->cursor[0]->dval = seed1;
-      plane[1]->code_sample<f_DEC>(out, plane_desc[1].src_plane, plane[0], plane[2]);
-      plane[1]->add_bias(ctx_bias);
+      plane[1][0].cursor[0][0].dval = seed1;
+      plane[1][0].code_sample<f_DEC>(out, plane_desc[1].src_plane, plane[0], plane[2]);
+      plane[1][0].add_bias(ctx_bias);
       int16_t seed2 = 0;
       if( ref2_mixed ) {
         const PlaneDesc &mix = plane_desc[plane_desc[2].src_plane];
         seed2 = (mix.weight1*out[plane_desc[1].src_plane]+mix.weight0*out[plane_desc[0].src_plane])>>3;
       }
-      plane[2]->cursor[0]->dval = seed2;
-      plane[2]->code_sample<f_DEC>(out, plane_desc[2].src_plane, plane[0], plane[1]);
-      plane[2]->add_bias(ctx_bias);
+      plane[2][0].cursor[0][0].dval = seed2;
+      plane[2][0].code_sample<f_DEC>(out, plane_desc[2].src_plane, plane[0], plane[1]);
+      plane[2][0].add_bias(ctx_bias);
       nplanes = plane_count;
       if( plane_count>=4 ) {
         int16_t seed3 = 0;
@@ -4910,9 +4910,9 @@ template <int32_t f_DEC> int32_t BMFCodec::alt_model_p2(BmfImage* p_i, uint8_t* 
           const PlaneDesc &mix = plane_desc[plane_desc[3].src_plane];
           seed3 = (mix.weight2*out[2]+mix.weight1*out[1]+mix.weight0*out[0])>>3;
         }
-        plane[3]->cursor[0]->dval = seed3;
-        plane[3]->code_sample<f_DEC>(out, f_DEC ? 3 : plane_desc[3].src_plane, plane[2], plane[0]);
-        plane[3]->add_bias(ctx_bias);
+        plane[3][0].cursor[0][0].dval = seed3;
+        plane[3][0].code_sample<f_DEC>(out, f_DEC ? 3 : plane_desc[3].src_plane, plane[2], plane[0]);
+        plane[3][0].add_bias(ctx_bias);
         nplanes = plane_count;
       }
       out += nplanes;
@@ -4971,13 +4971,13 @@ uint32_t BMFCodec::predict_med(uint8_t* pixels, int32_t width, int32_t height) {
       --p;
       const uint8_t pred = med_predict(p[-1], north, p[-width-1]);
       const int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
-      *p = code;
+      p[0] = code;
       hist_bump(code);
     }
     --up;
     --p;
     last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
-    *p = last;
+    p[0] = last;
     hist_bump(last);
   }
   if( width!=1 ) {
@@ -4995,7 +4995,7 @@ uint32_t BMFCodec::predict_med(uint8_t* pixels, int32_t width, int32_t height) {
     if( last>(done-1) ) {
       uint8_t* q = p-done;
       last = (uint8_t)(*q-*((int8_t*)q-1));
-      *q = fold[(uint8_t)last];
+      q[0] = fold[(uint8_t)last];
     }
   }
   return last;
@@ -5007,15 +5007,15 @@ void strided_copy(uint8_t* dst, int32_t dstep, const uint8_t* src, int32_t sstep
     return;
   }
   for( int32_t i = 0; i<n; ++i, dst += dstep, src += sstep )
-    *dst = *src;
+    *dst = src[0];
 }
 
 void BMFCodec::deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane) {
-  strided_copy(dst, 1, &img->pixels[plane], plane_count, bmf_pixels(img));
+  strided_copy(dst, 1, &img[0].pixels[plane], plane_count, bmf_pixels(img));
 }
 
 void BMFCodec::interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane) {
-  strided_copy(&img->pixels[plane], plane_count, src, 1, bmf_pixels(img));
+  strided_copy(&img[0].pixels[plane], plane_count, src, 1, bmf_pixels(img));
 }
 
 struct PlaneTransform {
@@ -5050,7 +5050,7 @@ PlaneTransform BMFCodec::plane_transform(int32_t plane) {
 }
 
 template <int32_t f_DEC> void BMFCodec::code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
-  uint8_t* base = &img->pixels[plane];
+  uint8_t* base = &img[0].pixels[plane];
   if( !(plane_desc[plane].flags&desc_has_refs) ) {
     if constexpr( f_DEC )
       interleave_flat(img, side, plane);
@@ -5120,7 +5120,7 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
     return p;
   if( width==1 ) {
     for(; rows_left; --rows_left ) {
-      *p = unfold[(uint8_t)*p]+p[-width];
+      p[0] = unfold[(uint8_t)*p]+p[-width];
       ++p;
     }
     return p;
@@ -5128,11 +5128,11 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint8_t* up = &p[-width];
   for(; rows_left; --rows_left ) {
     ++up;
-    *p = unfold[(uint8_t)*p]+p[-width];
+    p[0] = unfold[(uint8_t)*p]+p[-width];
     ++p;
     for( x_left = width-1; x_left; --x_left ) {
       const uint8_t pred = med_predict(p[-1], (uint8_t)*up, p[-width-1]);
-      *p = pred+unfold[(uint8_t)*p];
+      p[0] = pred+unfold[(uint8_t)*p];
       ++up;
       ++p;
     }
@@ -5151,10 +5151,10 @@ void BMFCodec::transform_planes(BmfImage* p_i) {
   memset(hist_scratch, 0, 4096);
 
   BmfImage* hdr = (BmfImage*)(stream.buf+sizeof(BmfImage));
-  *hdr = *p_i;
-  uint8_t* src_pixels = p_i->pixels;
-  memcpy(hdr->pixels, p_i->pixels, p_i->data_size);
-  uint8_t* tmp = (uint8_t*)bmf_new(p_i->width*p_i->height);
+  hdr[0] = p_i[0];
+  uint8_t* src_pixels = p_i[0].pixels;
+  memcpy(hdr[0].pixels, p_i[0].pixels, p_i[0].data_size);
+  uint8_t* tmp = (uint8_t*)bmf_new(p_i[0].width*p_i[0].height);
   for( int32_t k = 0; k<plane_count; ++k ) {
     const int32_t plane = plane_in_order(k);
     const int32_t predictor = plane_predictor;
@@ -5165,13 +5165,13 @@ void BMFCodec::transform_planes(BmfImage* p_i) {
       continue;
     colour_transform(hdr, tmp, plane);
     if( plane_predictor==pred_p1 )
-      predict_med(tmp, p_i->width, p_i->height);
-    int32_t n = p_i->width*p_i->height;
+      predict_med(tmp, p_i[0].width, p_i[0].height);
+    int32_t n = p_i[0].width*p_i[0].height;
     int32_t stride = plane_count;
     if( plane_count==1 ) {
-      memcpy(&p_i->pixels[plane], tmp, n);
+      memcpy(&p_i[0].pixels[plane], tmp, n);
     } else {
-      uint8_t* dst = &p_i->pixels[plane];
+      uint8_t* dst = &p_i[0].pixels[plane];
       int32_t ofs = 0;
       for( i = 0; i<n; ++i ) {
         dst[ofs] = tmp[i];
@@ -5189,18 +5189,18 @@ template <int32_t f_DEC> bool BMFCodec::alt_model_plane(BmfImage* p_i, uint8_t* 
   const bool p1 = plane_predictor==pred_p1;
   if( !p1&&plane_predictor!=pred_p2 )
     return true;
-  const bool d8 = (p_i->depth&depth_bits)==8;
+  const bool d8 = (p_i[0].depth&depth_bits)==8;
   if( d8 ) {
     if constexpr( f_DEC ) {
       if( p1 )
-        alt_model_p1_d8_decode(pixels, p_i->width, p_i->height);
+        alt_model_p1_d8_decode(pixels, p_i[0].width, p_i[0].height);
       else
-        alt_model_p2_d8_decode(pixels, p_i->width, p_i->height);
+        alt_model_p2_d8_decode(pixels, p_i[0].width, p_i[0].height);
     } else {
       if( p1 )
-        alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
+        alt_model_p1_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
       else
-        alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
+        alt_model_p2_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
     }
   } else if constexpr( f_DEC ) {
     if( p1 )
@@ -5219,12 +5219,12 @@ template <int32_t f_DEC> bool BMFCodec::alt_model_plane(BmfImage* p_i, uint8_t* 
 template <int32_t f_DEC> void BMFCodec::code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   if( alt_model_plane<f_DEC>(p_i, pixels, raw) )
     return;
-  ModelBlock* blk = new_model_block(p_i->width, p_i->height, p_i->depth&depth_bits);
+  ModelBlock* blk = new_model_block(p_i[0].width, p_i[0].height, p_i[0].depth&depth_bits);
   if constexpr( f_DEC )
-    blk->unmodel_plane_slow(pixels);
+    blk[0].unmodel_plane_slow(pixels);
   else
-    blk->model_plane_slow(pixels);
-  blk->free_workspace();
+    blk[0].model_plane_slow(pixels);
+  blk[0].free_workspace();
   model_blocks.give(blk);
 }
 
@@ -5242,10 +5242,10 @@ void BMFCodec::model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
   colour_transform(img, pixels, plane);
   memset(hist_scratch, 0, 1024);
   {
-    BmfImage hdr = *img;
+    BmfImage hdr = img[0];
     hdr.depth = depth_one_plane;
     if( plane_predictor==pred_p1&&!plane_alt_model )
-      predict_med(pixels, img->width, img->height);
+      predict_med(pixels, img[0].width, img[0].height);
     model_plane(&hdr, pixels, pixels);
   }
 }
@@ -5265,16 +5265,16 @@ int32_t residual_bin(int32_t own, int32_t w0, int32_t a, int32_t w1, uint32_t b)
 int32_t BMFCodec::weight_pair_cost(const BmfImage* img, const uint8_t* plane0, int32_t plane_a, int32_t plane_b, int32_t w4, int32_t w8) {
   int32_t hist[512];
   memset(hist, 0, sizeof hist);
-  const int32_t stride = img->stride;
+  const int32_t stride = img[0].stride;
   const int32_t left = -plane_count;
   const int32_t ofs_up = -stride;
   const int32_t ofs_ul = -stride-plane_count;
   const uint8_t* p = plane0-ofs_ul;
   const uint8_t* q = plane0+plane_a-ofs_ul;
   const uint8_t* r = plane0+plane_b-ofs_ul;
-  for( int32_t n = img->width*(img->height-1)-1; n; --n ) {
-    const int32_t cur = *q;
-    ++hist[residual_bin(p[ofs_ul]+*p-p[ofs_up]-p[left], w4, q[ofs_ul]+cur-q[ofs_up]-q[left], w8, r[ofs_ul]+*r-r[ofs_up]-(uint32_t)r[left])];
+  for( int32_t n = img[0].width*(img[0].height-1)-1; n; --n ) {
+    const int32_t cur = q[0];
+    ++hist[residual_bin(p[ofs_ul]+p[0]-p[ofs_up]-p[left], w4, q[ofs_ul]+cur-q[ofs_up]-q[left], w8, r[ofs_ul]+r[0]-r[ofs_up]-(uint32_t)r[left])];
     q -= left;
     p -= left;
     r -= left;
@@ -5293,11 +5293,11 @@ int32_t BMFCodec::cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uin
   int32_t*const hist_zp = hr.r5;
   memset(hists, 0, sizeof hists);
   const int32_t planes = plane_count;
-  const uint32_t row_b = img->stride;
+  const uint32_t row_b = img[0].stride;
   int32_t d1 = (cand+1)%3-cand;
   int32_t d2 = (cand+2)%3-cand;
-  uint8_t* img_end = &img->pixels[img->data_size];
-  uint8_t* base = img->pixels;
+  uint8_t* img_end = &img[0].pixels[img[0].data_size];
+  uint8_t* base = img[0].pixels;
   double syz = 0.0, syy = 0.0, sxz = 0.0, sxy = 0.0, sxx = 0.0;
   pd[cand].nrefs = 2;
   pd[2].src_plane = (uint8_t)cand;
@@ -5315,7 +5315,7 @@ int32_t BMFCodec::cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uin
       syy = syy+(double)dy*(double)dy;
       sxy = sxy+(double)dx*(double)dy;
       ++hist_yx[((uint16_t)dy-(uint16_t)dx-512)&0x3FF];
-      int32_t diag = p[-step]+*p;
+      int32_t diag = p[-step]+p[0];
       int32_t west = p[-planes];
       uint8_t* q = p-row_b;
       p += planes;
@@ -5365,7 +5365,7 @@ int32_t BMFCodec::cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uin
   pd[0].src_plane = (uint8_t)idx1;
   pd[idx2].nrefs = 1;
   pd[1].src_plane = (uint8_t)idx2;
-  if( img->data_size>0x1000000u )
+  if( img[0].data_size>0x1000000u )
     return cost+cost_yx+costs[rec];
   uint32_t lo2 = costs[rec];
   uint32_t lo3 = costs[rec+2];
@@ -5399,7 +5399,7 @@ struct WeightSearch {
   int32_t trial(int32_t axis, int32_t cand, int32_t step) {
     int32_t pair[2] = {w[0], w[1]};
     pair[axis] = cand;
-    const uint32_t c = cx->weight_pair_cost(img, plane0, plane_a, plane_b, pair[0], pair[1]);
+    const uint32_t c = cx[0].weight_pair_cost(img, plane0, plane_a, plane_b, pair[0], pair[1]);
     if( c<cost ) {
       cost = c;
       w[axis] = cand;
@@ -5456,7 +5456,7 @@ AlphaWeights fit_alpha_weights(const uint8_t* px, const uint8_t* pp, uint32_t uu
 void BMFCodec::choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024], const uint8_t* data_end, int32_t row_stride) {
   const HistRows hr = hist_rows(hists);
   memset(hists, 0, sizeof hists);
-  const uint8_t*const px = img->pixels;
+  const uint8_t*const px = img[0].pixels;
   const uint8_t*const pp = &px[row_stride];
   const uint32_t uu = &px[row_stride+4]<data_end ? (uint32_t)((data_end-1-pp)/4) : 0;
   const AlphaWeights w = fit_alpha_weights(px, pp, uu);
@@ -5539,10 +5539,10 @@ int32_t BMFCodec::choose_plane_coding(BmfImage* img) {
   int32_t result, xform, wt8, wt4, pred;
   uint32_t best_cost, best;
   int32_t n_planes = plane_count;
-  int32_t data_size = img->data_size;
+  int32_t data_size = img[0].data_size;
   alphabet_reduced = 1;
-  int32_t row_stride = img->stride;
-  const uint8_t* data_end = &img->pixels[data_size];
+  int32_t row_stride = img[0].stride;
+  const uint8_t* data_end = &img[0].pixels[data_size];
   memset(hists, 0, sizeof hists);
   memset(cand_desc, 0, sizeof cand_desc);
   if( n_planes>0 ) {
@@ -5582,7 +5582,7 @@ int32_t BMFCodec::choose_plane_coding(BmfImage* img) {
       int32_t plane_b = plane_desc[1].src_plane-xform;
       wt4 = plane_desc[xform].weight0;
       {
-        const uint8_t* plane0 = &img->pixels[xform];
+        const uint8_t* plane0 = &img[0].pixels[xform];
         WeightSearch search = {this, img, plane0, plane_a, plane_b, {wt4, wt8}, best_cost};
         int32_t wt_step = 4;
         search.descend(wt_step, -1);
@@ -5591,7 +5591,7 @@ int32_t BMFCodec::choose_plane_coding(BmfImage* img) {
         wt4 = search.w[0];
         best_cost = search.cost;
       }
-      uint8_t* px = &img->pixels[row_stride+n_planes+xform];
+      uint8_t* px = &img[0].pixels[row_stride+n_planes+xform];
       if( px<data_end ) {
         do {
           int32_t c2 = px[plane_b];
@@ -5599,7 +5599,7 @@ int32_t BMFCodec::choose_plane_coding(BmfImage* img) {
           int32_t c1 = px[plane_a];
           int32_t c1w = c1*wt4;
           ++hist_c[c2-c1+1280];
-          int32_t c0 = *px+512;
+          int32_t c0 = px[0]+512;
           px += n_planes;
           int32_t bin0 = ((uint16_t)c0-(uint16_t)((uint32_t)(c2w+c1w+40)>>7))&0x3FF;
           ++hist_flat[bin0];
@@ -5770,28 +5770,28 @@ uint32_t BMFCodec::search_filter(BmfImage* img) {
   uint32_t plane_cost[4];
   uint8_t* tile_buf;
   int32_t tile_h, y0, cand, pl_k;
-  int32_t tile_w = img->width;
-  tile_h = img->height;
+  int32_t tile_w = img[0].width;
+  tile_h = img[0].height;
   if( tile_w<4||tile_h<3 ) {
     reset_descriptors();
     return 0;
   }
   choose_plane_coding(img);
-  BmfImage* tile_img = alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
-  stream_open(tile_img->data_size);
+  BmfImage* tile_img = alloc_image(tile_w, tile_h, img[0].depth&depth_bits, 0, 0);
+  stream_open(tile_img[0].data_size);
   tile_buf = (uint8_t*)bmf_new(tile_h*tile_w);
-  y0 = (img->height-tile_h)>>1;
-  int32_t dx = img->width-tile_w;
-  int32_t off_y = y0*img->stride;
-  uint8_t* srcp = img->pixels+plane_count*(dx>>1)+off_y;
-  uint8_t* tile_src = tile_img->pixels;
+  y0 = (img[0].height-tile_h)>>1;
+  int32_t dx = img[0].width-tile_w;
+  int32_t off_y = y0*img[0].stride;
+  uint8_t* srcp = img[0].pixels+plane_count*(dx>>1)+off_y;
+  uint8_t* tile_src = tile_img[0].pixels;
   if( tile_h>0 ) {
-    int32_t row_bytes = tile_img->stride;
-    uint8_t* dstp = tile_img->pixels;
+    int32_t row_bytes = tile_img[0].stride;
+    uint8_t* dstp = tile_img[0].pixels;
     for( int32_t y = 0; y<tile_h; ++y ) {
       memcpy(dstp, srcp, row_bytes);
       dstp += row_bytes;
-      srcp += img->stride;
+      srcp += img[0].stride;
     }
   }
   PlaneSearch ps = search_planes(tile_img, tile_buf, plane_cost);
@@ -5865,8 +5865,8 @@ uint32_t BMFCodec::search_filter(BmfImage* img) {
     cand = 1;
   }
   if( !ps.n_p2&&plane_count>1 ) {
-    uint8_t* tile_copy = (uint8_t*)bmf_new(tile_img->data_size);
-    memcpy(tile_copy, tile_src, tile_img->data_size);
+    uint8_t* tile_copy = (uint8_t*)bmf_new(tile_img[0].data_size);
+    memcpy(tile_copy, tile_src, tile_img[0].data_size);
     save_descriptors(saved);
     drop_alt_model_from_all();
     int32_t bits_b = transform_cost(tile_img);
@@ -5879,7 +5879,7 @@ uint32_t BMFCodec::search_filter(BmfImage* img) {
     if( ps.n_refs+ps.n_p1 ) {
       save_descriptors(saved);
       clear_flags_on_all();
-      memcpy(tile_src, tile_copy, tile_img->data_size);
+      memcpy(tile_src, tile_copy, tile_img[0].data_size);
       int32_t bits_c = transform_cost(tile_img);
       if( bits_c<=best_bits ) {
         cand = 0;
@@ -5903,11 +5903,11 @@ bool read_rle_op(FILE* fp, int32_t &n, int32_t &v) {
 
 uint8_t*write_nibbles(uint8_t* at, int32_t &hi, const uint8_t* src, uint32_t n) {
   while( 1 ) {
-    const uint8_t pix = *src;
+    const uint8_t pix = src[0];
     const uint32_t left = n-1;
     if( hi ) {
       if( !left ) {
-        *at = *src&0xF0;
+        at[0] = src[0]&0xF0;
         hi = 0;
         return at;
       }
@@ -5918,7 +5918,7 @@ uint8_t*write_nibbles(uint8_t* at, int32_t &hi, const uint8_t* src, uint32_t n) 
         hi = 1;
         return at;
       }
-      *at = 16*(pix&0xF);
+      at[0] = 16*(pix&0xF);
     }
     ++src;
     n = left-1;
@@ -5928,27 +5928,27 @@ uint8_t*write_nibbles(uint8_t* at, int32_t &hi, const uint8_t* src, uint32_t n) 
 }
 
 bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
-  int32_t y = img->height-1;
+  int32_t y = img[0].height-1;
   int32_t n, v;
   while( read_rle_op(fp, n, v) ) {
     if( n ) {
-      if( !img->holds(at, n) )
+      if( !img[0].holds(at, n) )
         return false;
       memset(at, v, n);
       at += n;
     } else if( !v ) {
       if( --y<0 )
         return true;
-      at = img->row(y);
+      at = img[0].row(y);
     } else if( v==1 ) {
       return true;
     } else if( v==2 ) {
       int32_t dx, dy;
       if( !read_rle_op(fp, dx, dy) )
         return false;
-      at += dx-dy*img->stride;
+      at += dx-dy*img[0].stride;
     } else {
-      if( !img->holds(at, v) )
+      if( !img[0].holds(at, v) )
         return false;
       if( !read_exact(pal_buf, (v+1)&0xFFFFFFFE, fp) )
         return false;
@@ -5961,12 +5961,12 @@ bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
 
 bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
   int32_t hi_nibble = 1;
-  int32_t y = img->height-1;
+  int32_t y = img[0].height-1;
   int32_t run4, byte_in;
   while( read_rle_op(fp, run4, byte_in) ) {
     const uint32_t byte = (uint32_t)byte_in;
     if( run4 ) {
-      if( !img->holds(row, run4/2+1) )
+      if( !img[0].holds(row, run4/2+1) )
         return false;
       uint8_t lo = byte&0xF;
       if( hi_nibble ) {
@@ -5983,7 +5983,7 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
       } else {
         int32_t left4 = run4;
         uint8_t* row4 = row;
-        uint8_t cur = *row;
+        uint8_t cur = row[0];
         uint32_t hi = byte>>4;
         uint8_t lo16 = 16*lo;
         do {
@@ -5999,14 +5999,14 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
     } else if( !byte ) {
       if( --y<0 )
         return true;
-      row = img->row(y);
+      row = img[0].row(y);
     } else if( byte==1 ) {
       return true;
     } else if( byte==2 ) {
       int32_t dxy, dy4;
       if( !read_rle_op(fp, dxy, dy4) )
         return false;
-      int32_t step = (dxy>>1)-dy4*img->stride;
+      int32_t step = (dxy>>1)-dy4*img[0].stride;
       if( (dxy&1)==1 ) {
         if( !hi_nibble )
           ++step;
@@ -6014,7 +6014,7 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
       }
       row += step;
     } else {
-      if( !img->holds(row, (int32_t)byte/2+1) )
+      if( !img[0].holds(row, (int32_t)byte/2+1) )
         return false;
       if( !read_exact(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, fp) )
         return false;
@@ -6025,9 +6025,9 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
 }
 
 bool read_rows(FILE* fp, BmfImage* img, uint8_t* row, uint32_t stride_pad) {
-  const uint32_t stride = img->stride;
+  const uint32_t stride = img[0].stride;
   const uint32_t row_pad = stride_pad-stride;
-  for( int32_t y = img->height-1; y>=0; --y ) {
+  for( int32_t y = img[0].height-1; y>=0; --y ) {
     if( fread(row, 1u, stride, fp)!=stride )
       return false;
     if( row_pad )
@@ -6062,13 +6062,13 @@ BmfImage*read_bmp(char* path) {
     fclose(fp);
     return nullptr;
   }
-  uint32_t stride_pad = (img->stride+3)&0xFFFFFFFC;
+  uint32_t stride_pad = (img[0].stride+3)&0xFFFFFFFC;
   if( hdr.biBitCount<=8u ) {
     pal_n = 1<<(hdr.biBitCount&31);
     if( (int32_t)hdr.biClrUsed )
       pal_n = (int32_t)hdr.biClrUsed;
     if( pal_n>0 ) {
-      uint8_t* pal = img->depth&depth_palette ? img->pixels+img->data_size : nullptr;
+      uint8_t* pal = img[0].depth&depth_palette ? img[0].pixels+img[0].data_size : nullptr;
       for( i = 0; i<pal_n; ++i ) {
         if( !read_exact(bmp_bgra, 4u, fp) ) {
           fclose(fp);
@@ -6083,13 +6083,13 @@ BmfImage*read_bmp(char* path) {
   static uint8_t pal_store[65536];
   void* pal_buf = pal_store;
 
-  uint8_t* row = img->pixels+img->data_size-img->stride;
+  uint8_t* row = img[0].pixels+img[0].data_size-img[0].stride;
   fseek(fp, (int32_t)hdr.bfOffBits, 0);
   bool ok;
   if( hdr.biCompression==bmp_rgb ) {
     ok = read_rows(fp, img, row, stride_pad);
   } else {
-    memset(img->pixels, 0, img->data_size);
+    memset(img[0].pixels, 0, img[0].data_size);
     ok = hdr.biCompression==bmp_rle8 ? read_rle8(fp, img, row, pal_buf) : hdr.biCompression==bmp_rle4 ? read_rle4(fp, img, row, pal_buf) : false;
   }
   if( !ok )
@@ -6117,7 +6117,7 @@ int32_t write_bmp_palette(const BmfImage* img, uint8_t* out_buf, uint8_t depth, 
   } else if( depth&depth_palette ) {
     uint32_t pairs = ncol/2;
     uint32_t j = 0;
-    const uint8_t* pal = img->palette();
+    const uint8_t* pal = img[0].palette();
     for(; j<pairs; ++j ) {
       const uint32_t slot = 2*j;
       const uint8_t* e0 = &pal[6*j], * e1 = &pal[6*j+3];
@@ -6126,7 +6126,7 @@ int32_t write_bmp_palette(const BmfImage* img, uint8_t* out_buf, uint8_t depth, 
     }
     const uint32_t at2 = 2*j+1;
     if( (at2-1)<(uint32_t)ncol ) {
-      const uint8_t* e = img->palette()+3*at2-3;
+      const uint8_t* e = img[0].palette()+3*at2-3;
       put_u32(&out_buf[4*at2+50], bmp_palette_entry(e[0], e[1], e[2]));
     }
     return 4*ncol;
@@ -6141,30 +6141,30 @@ uint8_t*bmp_rle_encode(BmfImage* img, int32_t bits, uint8_t* buf, int32_t rows, 
     return nullptr;
   const int32_t nib = bits==4;
   const int32_t run_max = (0x100u>>(nib&31))-1;
-  *kind = nib ? bmp_rle4 : bmp_rle8;
+  kind[0] = nib ? bmp_rle4 : bmp_rle8;
   uint8_t* out_at = buf, * q = nullptr, * end = nullptr;
-  uint8_t* p = &img->pixels[img->data_size-stride];
+  uint8_t* p = &img[0].pixels[img[0].data_size-stride];
   uint8_t byte = 0;
   int32_t lit_len = 0, run = 0;
   auto flush_literal = [&](const uint8_t* run_end) {
                          if( nib ? lit_len!=1 : lit_len>=3 ) {
-                           *out_at = 0;
+                           out_at[0] = 0;
                            out_at[1] = lit_len<<(nib&31);
                            memcpy(out_at+2, run_end-lit_len, lit_len);
                            if( lit_len&1 )
                              out_at[lit_len+2] = 0;
                            out_at += lit_len+2+(lit_len&1);
                          } else if( nib ) {
-                           *out_at = 2;
+                           out_at[0] = 2;
                            out_at[1] = run_end[-1];
                            out_at += 2;
                          } else {
                            if( lit_len==2 ) {
-                             *out_at = 1;
+                             out_at[0] = 1;
                              out_at[1] = run_end[-2];
                              out_at += 2;
                            }
-                           *out_at = 1;
+                           out_at[0] = 1;
                            out_at[1] = run_end[-1];
                            out_at += 2;
                          }
@@ -6188,11 +6188,11 @@ uint8_t*bmp_rle_encode(BmfImage* img, int32_t bits, uint8_t* buf, int32_t rows, 
                        if( lit_len ) {
                          flush_literal(p);
                          lit_len = 0;
-                         byte = *p;
+                         byte = p[0];
                        }
                        out_at[1] = byte;
                        p += run;
-                       *out_at = run<<(nib&31);
+                       out_at[0] = run<<(nib&31);
                        out_at += 2;
                        if( p>=end )
                          return true;
@@ -6222,13 +6222,13 @@ uint8_t*bmp_rle_encode(BmfImage* img, int32_t bits, uint8_t* buf, int32_t rows, 
   if( rows>0 ) {
     for( int32_t row_i = 0; row_i<rows; ++row_i ) {
       emit_row();
-      *out_at = 0;
+      out_at[0] = 0;
       out_at[1] = 0;
       out_at += 2;
       p -= 2*stride;
     }
   }
-  *out_at = 0;
+  out_at[0] = 0;
   out_at[1] = 1;
   return out_at+2;
 }
@@ -6239,56 +6239,56 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   FILE* fp = fopen(path, "wb");
   if( !fp )
     return 0;
-  uint8_t* out_buf = (uint8_t*)bmf_new(img->data_size+8*img->height+(img->data_size>>5)+2048);
+  uint8_t* out_buf = (uint8_t*)bmf_new(img[0].data_size+8*img[0].height+(img[0].data_size>>5)+2048);
   BmpHeader* bmp = (BmpHeader*)out_buf;
-  bmp->biSize = bmp_hdr_v3;
-  bmp->bfType = bmp_magic;
-  int32_t rows = img->height;
-  bmp->bfReserved2 = 0;
-  bmp->bfReserved1 = 0;
-  bmp->biWidth = img->width;
-  bmp->biHeight = rows;
-  uint8_t depth = img->depth;
-  bmp->biPlanes = 1;
+  bmp[0].biSize = bmp_hdr_v3;
+  bmp[0].bfType = bmp_magic;
+  int32_t rows = img[0].height;
+  bmp[0].bfReserved2 = 0;
+  bmp[0].bfReserved1 = 0;
+  bmp[0].biWidth = img[0].width;
+  bmp[0].biHeight = rows;
+  uint8_t depth = img[0].depth;
+  bmp[0].biPlanes = 1;
   bits = depth&depth_bits;
-  bmp->biBitCount = bits;
-  bmp->biClrImportant = 0;
-  bmp->biClrUsed = 0;
-  bmp->biYPelsPerMeter = 0;
-  bmp->biXPelsPerMeter = 0;
+  bmp[0].biBitCount = bits;
+  bmp[0].biClrImportant = 0;
+  bmp[0].biClrUsed = 0;
+  bmp[0].biYPelsPerMeter = 0;
+  bmp[0].biXPelsPerMeter = 0;
   const int32_t pal_bytes = write_bmp_palette(img, out_buf, depth, bits);
   uint8_t*const buf = &out_buf[pal_bytes+54];
-  uint32_t stride = img->stride;
+  uint32_t stride = img[0].stride;
   auto finish = [&](int32_t coded) {
-                  bmp->biSizeImage = (uint32_t)coded;
+                  bmp[0].biSizeImage = (uint32_t)coded;
                   uint32_t n_bytes = (uint32_t)(out_at-out_buf);
-                  bmp->bfSize = n_bytes;
-                  if( fwrite(out_buf, 1u, n_bytes, fp)!=bmp->bfSize )
+                  bmp[0].bfSize = n_bytes;
+                  if( fwrite(out_buf, 1u, n_bytes, fp)!=bmp[0].bfSize )
                     return 0;
                   free(out_buf);
                   fclose(fp);
                   return 1;
                 };
   uint32_t off_bits = (uint32_t)(buf-out_buf);
-  const uint32_t data_len = img->data_size;
-  bmp->bfOffBits = off_bits;
+  const uint32_t data_len = img[0].data_size;
+  bmp[0].bfOffBits = off_bits;
   out_at = buf;
-  uint8_t* p = &img->pixels[data_len-stride];
+  uint8_t* p = &img[0].pixels[data_len-stride];
   if( want_rle ) {
     int32_t rle_kind = 0;
     uint8_t*const rle_end = bmp_rle_encode(img, bits, buf, rows, stride, &rle_kind);
     if( rle_end&&data_len>(uint32_t)(rle_end-buf) ) {
-      bmp->biCompression = rle_kind;
+      bmp[0].biCompression = rle_kind;
       out_at = rle_end;
       return finish(out_at-buf);
     }
   }
-  bmp->biCompression = bmp_rgb;
+  bmp[0].biCompression = bmp_rgb;
   if( rows<=0 ) {
     coded_bytes = 0;
   } else {
     const uint32_t pad = ((stride+3)&0xFFFFFFFC)-stride;
-    for( int32_t y = 0; y<img->height; ++y ) {
+    for( int32_t y = 0; y<img[0].height; ++y ) {
       memcpy(out_at, p, stride);
       out_at += stride;
       p -= stride;
@@ -6340,7 +6340,7 @@ void BMFCodec::write_plane_descs() {
 }
 
 void BMFCodec::unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
-  BmfImage plane_hdr = *img_at;
+  BmfImage plane_hdr = img_at[0];
   plane_hdr.depth = depth_one_plane;
   for( int32_t k = 0; k<plane_count; ++k ) {
     const int32_t plane = plane_desc[k].src_plane;
@@ -6348,7 +6348,7 @@ void BMFCodec::unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
     plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
     unmodel_plane(&plane_hdr, plane_buf);
     if( plane_predictor==pred_p1&&!plane_alt_model )
-      unpredict_med(plane_buf, img_at->width, img_at->height);
+      unpredict_med(plane_buf, img_at[0].width, img_at[0].height);
     interleave_plane(img_at, plane_buf, plane);
   }
 }
@@ -6356,7 +6356,7 @@ void BMFCodec::unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
 void BMFCodec::unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf) {
   plane_predictor = plane_desc[0].flags&desc_predictor;
   plane_alt_model = (plane_desc[0].flags&desc_alt_model)!=0;
-  unmodel_plane(img_at, img_at->pixels);
+  unmodel_plane(img_at, img_at[0].pixels);
   if( plane_alt_model )
     return;
   for( int32_t k = 0; k<plane_count; ++k ) {
@@ -6366,13 +6366,13 @@ void BMFCodec::unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf) {
       continue;
     deinterleave_plane(img_at, plane_buf, plane);
     if( pred==pred_p1 )
-      unpredict_med(plane_buf, img_at->width, img_at->height);
+      unpredict_med(plane_buf, img_at[0].width, img_at[0].height);
     interleave_plane(img_at, plane_buf, plane);
   }
 }
 
 void BMFCodec::unmodel_described(BmfImage* img_at, uint8_t flags) {
-  if( plane_count==1 ? (img_at->depth&depth_grey)!=0 : plane_count>2 ) {
+  if( plane_count==1 ? (img_at[0].depth&depth_grey)!=0 : plane_count>2 ) {
     uint32_t near_lossless = unpack_bits(4);
     if( near_lossless ) {
       printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
@@ -6381,7 +6381,7 @@ void BMFCodec::unmodel_described(BmfImage* img_at, uint8_t flags) {
     near_lossless_q = 0;
   }
   read_plane_descs();
-  uint8_t* plane_buf = (uint8_t*)bmf_new(img_at->width*img_at->height);
+  uint8_t* plane_buf = (uint8_t*)bmf_new(img_at[0].width*img_at[0].height);
   if( flags&flags_planar )
     unmodel_planes_apart(img_at, plane_buf);
   else
@@ -6401,12 +6401,12 @@ bool BMFCodec::expand_coded(BmfStream* io, BmfImage* img_at, const BmfImage &hdr
   stream.buf = (uint8_t*)bmf_new(hdr.data_size);
   packer_reset();
   uint32_t want = hdr.data_size;
-  bool ok = io->read(stream.buf, hdr.data_size)==want;
+  bool ok = io[0].read(stream.buf, hdr.data_size)==want;
   if( ok ) {
-    if( (img_at->depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
+    if( (img_at[0].depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
       plane_predictor = 0;
       plane_alt_model = 0;
-      unmodel_plane(img_at, img_at->pixels);
+      unmodel_plane(img_at, img_at[0].pixels);
     } else {
       unmodel_described(img_at, hdr.flags);
     }
@@ -6438,83 +6438,83 @@ BmfImage*BMFCodec::expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
   uint32_t magic;
   if( p_coded_buf )
     *p_coded_buf = nullptr;
-  BmfStream* io = &arc_in->io;
-  if( !io->fp&&!io->buf )
+  BmfStream* io = &arc_in[0].io;
+  if( !io[0].fp&&!io[0].buf )
     return nullptr;
   while( 1 ) {
-    if( !io->read_exact(&magic, 4u) ) {
-      return io->eof() ? nullptr : arc_in->fail();
+    if( !io[0].read_exact(&magic, 4u) ) {
+      return io[0].eof() ? nullptr : arc_in[0].fail();
     }
     if( (uint16_t)magic!=bmf_sig_other )
       break;
     version = bmf_tag_version(magic);
-    if( version!=bmf_version_20||!io->read_exact(&head, 8u) )
+    if( version!=bmf_version_20||!io[0].read_exact(&head, 8u) )
       break;
-    io->seek(head.len, SEEK_CUR);
+    io[0].seek(head.len, SEEK_CUR);
   }
   version = bmf_tag_version(magic);
-  if( (uint16_t)magic!=bmf_sig_image||version!=bmf_version_20||!io->read_exact(&hdr, 0x10u) ) {
-    return arc_in->fail();
+  if( (uint16_t)magic!=bmf_sig_image||version!=bmf_version_20||!io[0].read_exact(&hdr, 0x10u) ) {
+    return arc_in[0].fail();
   }
   if( hdr.flags&flags_tail ) {
-    if( !io->read_exact(&head, 8u) )
-      return arc_in->fail();
+    if( !io[0].read_exact(&head, 8u) )
+      return arc_in[0].fail();
     if( p_coded_buf ) {
-      if( head.len>io->bytes_left() ) {
-        return arc_in->fail();
+      if( head.len>io[0].bytes_left() ) {
+        return arc_in[0].fail();
       }
       uint32_t pad_len = (head.len+(head.len==0)+3)&0xFFFFFFFC;
       CodedTail* blk = (CodedTail*)bmf_new(pad_len+sizeof(CodedTail));
-      blk->tag = head.tag;
-      blk->len = pad_len;
-      blk->data[pad_len/4-1] = 0;
-      *p_coded_buf = blk;
-      if( !io->read_exact(blk->data, head.len) )
-        return arc_in->fail();
+      blk[0].tag = head.tag;
+      blk[0].len = pad_len;
+      blk[0].data[pad_len/4-1] = 0;
+      p_coded_buf[0] = blk;
+      if( !io[0].read_exact(blk[0].data, head.len) )
+        return arc_in[0].fail();
     } else {
-      io->seek(head.len, SEEK_CUR);
+      io[0].seek(head.len, SEEK_CUR);
     }
   }
-  if( hdr.data_size>io->bytes_left() ) {
-    return arc_in->fail();
+  if( hdr.data_size>io[0].bytes_left() ) {
+    return arc_in[0].fail();
   }
   uint32_t pal_bytes = 3<<(hdr.depth&31);
   if( !(hdr.depth&depth_palette) )
     pal_bytes = 0;
   if( !hdr.width||!hdr.height||(uint32_t)hdr.width*(uint32_t)((((hdr.depth&depth_bits)+7)>>3))>0xFFFFu ) {
-    return arc_in->fail();
+    return arc_in[0].fail();
   }
   BmfImage* img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);
-  img_at->depth = hdr.depth;
-  uint8_t has_coded = p_coded_buf&&*p_coded_buf;
-  img_at->flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
+  img_at[0].depth = hdr.depth;
+  uint8_t has_coded = p_coded_buf&&p_coded_buf[0];
+  img_at[0].flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
   plane_count = ((hdr.depth&depth_bits)+7)>>3;
   if( plane_count<1||plane_count>4 ) {
-    return arc_in->fail();
+    return arc_in[0].fail();
   }
   if( hdr.flags&flags_coded ) {
     if( !expand_coded(io, img_at, hdr) ) {
-      return arc_in->fail();
+      return arc_in[0].fail();
     }
   } else {
-    if( hdr.data_size>img_at->data_size ) {
-      return arc_in->fail();
+    if( hdr.data_size>img_at[0].data_size ) {
+      return arc_in[0].fail();
     }
     uint32_t want = hdr.data_size;
-    if( io->read(img_at->pixels, hdr.data_size)!=want ) {
-      return arc_in->fail();
+    if( io[0].read(img_at[0].pixels, hdr.data_size)!=want ) {
+      return arc_in[0].fail();
     }
   }
   if( hdr.depth&depth_palette ) {
-    uint8_t* pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
-    uint32_t got = (uint32_t)io->read(pal_at, pal_bytes);
+    uint8_t* pal_at = (img_at[0].depth&depth_palette) ? img_at[0].palette() : nullptr;
+    uint32_t got = (uint32_t)io[0].read(pal_at, pal_bytes);
     if( got!=pal_bytes ) {
-      return arc_in->fail();
+      return arc_in[0].fail();
     }
   }
-  if( img_at->flags&flags_transposed ) {
-    if( (uint64_t)img_at->width*img_at->height*(uint32_t)plane_count>(uint64_t)img_at->data_size ) {
-      return arc_in->fail();
+  if( img_at[0].flags&flags_transposed ) {
+    if( (uint64_t)img_at[0].width*img_at[0].height*(uint32_t)plane_count>(uint64_t)img_at[0].data_size ) {
+      return arc_in[0].fail();
     }
     transpose_image(img_at, plane_count);
   }
@@ -6522,32 +6522,32 @@ BmfImage*BMFCodec::expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
 }
 
 uint8_t write_member_head(const void* head, const CodedTail* extra, BmfStream* io) {
-  uint8_t ok = io->write_exact(head, 0x10u);
+  uint8_t ok = io[0].write_exact(head, 0x10u);
   if( extra ) {
-    const uint32_t coded_len = extra->len;
-    ok &= io->write_exact(extra, coded_len+sizeof(CodedTail));
+    const uint32_t coded_len = extra[0].len;
+    ok &= io[0].write_exact(extra, coded_len+sizeof(CodedTail));
   }
   return ok;
 }
 
 void BMFCodec::code_image_body(BmfImage* p_i, BmfImage &hdr) {
-  if( (p_i->depth&depth_bits)<=4 ) {
-    stream_open(p_i->data_size);
+  if( (p_i[0].depth&depth_bits)<=4 ) {
+    stream_open(p_i[0].data_size);
     plane_predictor = 0;
     plane_alt_model = 0;
     alphabet_reduced = 0;
-    model_plane(p_i, p_i->pixels, p_i->pixels);
+    model_plane(p_i, p_i[0].pixels, p_i[0].pixels);
     return;
   }
   const uint32_t filtered = search_filter(p_i);
   hdr.flags |= flags_descriptors;
-  const uint32_t data_bytes = p_i->data_size;
-  if( p_i->flags&flags_transposed ) {
+  const uint32_t data_bytes = p_i[0].data_size;
+  if( p_i[0].flags&flags_transposed ) {
     hdr.header_from(p_i);
-    hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i->flags;
+    hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
   }
   stream_open(data_bytes);
-  if( plane_count==1 ? (p_i->depth&depth_grey)!=0 : plane_count>2 ) {
+  if( plane_count==1 ? (p_i[0].depth&depth_grey)!=0 : plane_count>2 ) {
     near_lossless_q = 0;
     pack_bits(0, 4);
   }
@@ -6555,7 +6555,7 @@ void BMFCodec::code_image_body(BmfImage* p_i, BmfImage &hdr) {
   write_plane_descs();
   if( filtered ) {
     hdr.flags |= flags_planar;
-    uint8_t* plane_buf = (uint8_t*)bmf_new(p_i->width*p_i->height);
+    uint8_t* plane_buf = (uint8_t*)bmf_new(p_i[0].width*p_i[0].height);
     for( int32_t k = 0; k<plane_count; ++k )
       model_planes(p_i, plane_buf, plane_desc[k].src_plane);
     free(plane_buf);
@@ -6566,7 +6566,7 @@ void BMFCodec::code_image_body(BmfImage* p_i, BmfImage &hdr) {
 
 uint8_t*BMFCodec::compress_to_memory(BmfImage* p_i, size_t* out_len, const CodedTail* tail) {
   reset();
-  *out_len = 0;
+  out_len[0] = 0;
   BmfFile arc;
   arc.io = BmfStream::in_memory();
   const int32_t coded = compress_image(&arc, p_i, tail);
@@ -6581,46 +6581,46 @@ uint8_t*BMFCodec::compress_to_memory(BmfImage* p_i, size_t* out_len, const Coded
 
 int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
   BmfImage hdr;
-  if( !arc_in->io.fp&&!arc_in->io.buf )
+  if( !arc_in[0].io.fp&&!arc_in[0].io.buf )
     return 0;
   if( extra_blk )
-    p_i->flags |= flags_tail;
+    p_i[0].flags |= flags_tail;
   near_lossless_q = 0;
   hdr.header_from(p_i);
-  hdr.flags = p_i->flags;
-  plane_count = ((p_i->depth&depth_bits)+7)>>3;
+  hdr.flags = p_i[0].flags;
+  plane_count = ((p_i[0].depth&depth_bits)+7)>>3;
   const uint32_t tag = bmf_tag(bmf_sig_image, '2', '0');
-  if( !arc_in->io.write_exact(&tag, 4u) )
+  if( !arc_in[0].io.write_exact(&tag, 4u) )
     return 0;
-  uint8_t bpp = p_i->depth;
+  uint8_t bpp = p_i[0].depth;
   uint32_t pal_bytes = 0;
   if( bpp&depth_palette )
     pal_bytes = 3<<(bpp&31);
-  if( p_i->data_size>=0x10u ) {
+  if( p_i[0].data_size>=0x10u ) {
     desc_slow_mode = 1;
     hdr.flags |= flags_coded|flags_slow;
     code_image_body(p_i, hdr);
     packer_flush();
     const int32_t coded_bytes = stream.cur-stream.buf;
     hdr.data_size = (uint32_t)coded_bytes;
-    if( (uint32_t)coded_bytes<p_i->data_size ) {
-      const uint8_t ok = write_member_head(&hdr, extra_blk, &arc_in->io);
-      int32_t ok_all = arc_in->io.write_exact(stream.buf, (size_t)coded_bytes)&ok;
+    if( (uint32_t)coded_bytes<p_i[0].data_size ) {
+      const uint8_t ok = write_member_head(&hdr, extra_blk, &arc_in[0].io);
+      int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok;
       free(stream.buf);
-      if( ok_all&&(p_i->depth&depth_palette)!=0 )
-        arc_in->io.write_all(&p_i->pixels[p_i->data_size], pal_bytes);
-      arc_in->io.flush();
+      if( ok_all&&(p_i[0].depth&depth_palette)!=0 )
+        arc_in[0].io.write_all(&p_i[0].pixels[p_i[0].data_size], pal_bytes);
+      arc_in[0].io.flush();
       if( ok_all )
         return (int32_t)hdr.data_size;
       return ok_all;
     }
     free(stream.buf);
-    if( p_i->flags&flags_transposed )
+    if( p_i[0].flags&flags_transposed )
       transpose_image(p_i, plane_count);
   }
-  const uint8_t ok_raw = write_member_head(p_i, extra_blk, &arc_in->io);
-  uint32_t written = (uint32_t)arc_in->io.write(p_i->pixels, pal_bytes+p_i->data_size);
-  int32_t data_size = p_i->data_size;
+  const uint8_t ok_raw = write_member_head(p_i, extra_blk, &arc_in[0].io);
+  uint32_t written = (uint32_t)arc_in[0].io.write(p_i[0].pixels, pal_bytes+p_i[0].data_size);
+  int32_t data_size = p_i[0].data_size;
   if( !(ok_raw&(written==data_size+pal_bytes)) )
     return 0;
   return data_size;
@@ -6633,17 +6633,17 @@ void bmf_compress(const char* InName, const char* OutName) {
   BmfImage* p_i = read_bmp((char*)InName);
   if( !p_i )
     bmf_fatal(bmf_read_error);
-  printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i->width, p_i->height, p_i->depth&depth_bits, p_i->data_size);
+  printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i[0].width, p_i[0].height, p_i[0].depth&depth_bits, p_i[0].data_size);
   static BmfFile arc_store;
   BmfFile* Arc = bmf_open_file(&arc_store, (char*)OutName, 0);
-  int32_t Depth = p_i->depth;
+  int32_t Depth = p_i[0].depth;
   if( Depth&depth_palette ) {
     if( Depth&depth_grey ) {
-      p_i->depth = Depth^depth_palette;
+      p_i[0].depth = Depth^depth_palette;
     } else {
       int32_t Colours = 1<<(Depth&depth_bits);
       int32_t Step = 0x100u>>(Depth&depth_bits);
-      const uint8_t* Palette = p_i->palette();
+      const uint8_t* Palette = p_i[0].palette();
       int32_t Grey = 0;
       for( i = 0; i<Colours; ++i ) {
         if( Palette[3*i]!=Grey||Palette[3*i+1]!=Grey||Palette[3*i+2]!=Grey )
@@ -6651,13 +6651,13 @@ void bmf_compress(const char* InName, const char* OutName) {
         Grey += Step;
       }
       if( i>=Colours )
-        p_i->depth = (Depth|depth_grey)^depth_palette;
+        p_i[0].depth = (Depth|depth_grey)^depth_palette;
     }
   }
   int32_t coded_len = bmf_codec.compress_image(Arc, p_i, bmf_codec.coded_block);
   if( !coded_len )
     bmf_fatal(bmf_write_error, OutName);
-  printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i->height*p_i->width));
+  printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i[0].height*p_i[0].width));
   free(p_i);
 }
 
@@ -6670,8 +6670,8 @@ void bmf_decompress(const char* InName, const char* OutName) {
   BmfImage* p_i = bmf_codec.expand_image(arc, &bmf_codec.coded_block);
   if( !p_i )
     bmf_fatal(bmf_bad_file, InName);
-  printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i->width, p_i->height, p_i->depth&depth_bits, p_i->data_size);
-  int32_t Depth = p_i->depth&depth_bits;
+  printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i[0].width, p_i[0].height, p_i[0].depth&depth_bits, p_i[0].data_size);
+  int32_t Depth = p_i[0].depth&depth_bits;
   if( Depth==2||Depth==15||Depth==16 ) {
     printf("%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
     exit(5);
