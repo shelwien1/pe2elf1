@@ -496,10 +496,6 @@ public:
   }
 };
 
-struct SymList;
-struct ModelBlock;
-struct ReduceNode;
-struct AltP2Block;
 struct FreqPair {
   uint16_t f[2];
 };
@@ -547,26 +543,285 @@ struct BMFState {
     return model_tables+254*k;
   }
 
-  template <int32_t f_DEC> int32_t code_symbol_tree(uint16_t* freq, int32_t sym);
-  void encode_symbol_tree(uint16_t* freq, int32_t sym);
-  int32_t decode_symbol_tree(uint16_t* freq);
-  int32_t update_binary_pair(uint16_t* _this, int32_t symbol);
-  uint32_t rc_decode_flat(uint32_t tot);
-  uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold);
-  template <int32_t f_DEC> uint32_t code_alphabet_size(uint32_t n, uint32_t cap);
+  template <int32_t f_DEC> int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {
+    uint16_t add;
+    uint32_t cum, j;
+    int32_t lvl, result, go, span;
+    uint16_t fq, * slot;
+    uint16_t* f0 = freq+2;
+    uint32_t tot = freq[0];
+    if constexpr( f_DEC ) {
+      uint32_t target = rc.get_freq(tot);
+      slot = f0;
+      lvl = 0;
+      cum = f0[0];
+      if( cum<=target ) {
+        do {
+          ++slot;
+          ++lvl;
+          cum += slot[0];
+        } while( cum<=target );
+      }
+      rc.decode(cum-slot[0], cum, tot);
+    } else {
+      lvl = model_geometry[sym];
+      cum = 0;
+      for( j = 0; j<(uint32_t)lvl; j++ )
+        cum += f0[j];
+      slot = &f0[lvl];
+      uint32_t cum_hi = cum+slot[0];
+      result = rc.encode(cum, cum_hi, tot);
+    }
+    if( freq[0]>0x4000u ) {
+      halve_counts(freq+2, 8);
+      uint16_t total = 0;
+      for( int32_t k = 2; k<10; ++k )
+        total += freq[k];
+
+      int32_t esc = freq[1];
+      freq[0] = total;
+      if( esc<=4*alt_freq_limit ) {
+        result = 4*(esc>alt_freq_limit);
+        add = esc-result;
+        freq[1] = add;
+      } else {
+        add = esc-16;
+        freq[1] = add;
+      }
+    } else {
+      add = freq[1];
+    }
+    slot[0] += add;
+    freq[0] += freq[1];
+    if( lvl<2 )
+      return lvl;
+    int32_t mask = level_geom[lvl].half;
+    int32_t path = 0;
+    if constexpr( !f_DEC )
+      path = sym-level_geom[lvl].first;
+    int32_t node = 0;
+    for( span = 1;; span *= 2 ) {
+      FreqPair* pair = bit_tree(freq, lvl)+span+node;
+      int32_t f1 = pair[0].f[1];
+      int32_t fa = pair[0].f[0];
+      if constexpr( f_DEC ) {
+        go = rc.decode_bit(fa, f1);
+      } else {
+        go = (mask&path)!=0;
+        result = rc.encode_bit(fa, f1, go);
+      }
+      fq = pair[0].f[go];
+      if( fq>0x4000u ) fq = halve_pair(pair, go);
+      pair[0].f[go] = alt_freq_init+fq;
+      mask >>= 1;
+      node = go+2*node;
+      if( !mask ) return node+level_geom[lvl].first;
+    }
+  }
+  void encode_symbol_tree(uint16_t* freq, int32_t sym) {
+    code_symbol_tree<0>(freq, sym);
+  }
+  int32_t decode_symbol_tree(uint16_t* freq) {
+    return code_symbol_tree<1>(freq, 0);
+  }
+  int32_t update_binary_pair(uint16_t* _this, int32_t symbol) {
+    int32_t node;
+    uint32_t step, f;
+    int32_t tot = _this[0];
+    if( (uint32_t)tot<=0x8000 ) {
+      int32_t lvl = model_geometry[symbol];
+      step = (_this[1]>>2)&0xFFFFFFE0;
+      if( plane_predictor==pred_p2 )
+        step = 15*(_this[1]>>5);
+      _this[lvl+2] += step+4;
+      tot = _this[0]+step+4;
+      _this[0] = tot;
+      if( symbol>=2 ) {
+        int32_t mask = level_geom[lvl].half;
+        int32_t path = symbol-level_geom[lvl].first;
+        node = 0;
+        FreqPair* tbl = bit_tree(_this, lvl);
+        int32_t span = 1;
+        do {
+          FreqPair* pair = tbl+node+span;
+          int32_t go = (mask&path)!=0;
+          f = pair[0].f[go];
+          if( f>0x2000 )
+            f = halve_pair(pair, go);
+          span *= 2;
+          mask >>= 1;
+          node = go+2*node;
+          pair[0].f[go] = f+((alt_freq_init*((uint32_t)(plane_predictor==pred_p2)+5))>>3);
+        } while( mask );
+        return 0;
+      }
+    }
+    return tot;
+  }
+  uint32_t rc_decode_flat(uint32_t tot) {
+    uint32_t sym = rc.get_freq(tot);
+    rc.decode(sym, sym+1, tot);
+    return sym;
+  }
+  uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold) {
+    uint8_t even, odd;
+    uint32_t done;
+    int32_t in_bucket, bucket;
+    uint8_t half;
+    uint32_t i, b;
+
+    int32_t bucket_size = 2*near_lossless_q+1;
+    unfold[0] = 0;
+    unfold[255] = 0x80;
+    for( i = 0; i<0x3F; ++i ) {
+      unfold[4*i+2] = (int8_t)(2*i+1);
+      unfold[4*i+1] = (int8_t)(-2*i-1);
+      unfold[4*i+4] = (int8_t)(2*i+2);
+      unfold[4*i+3] = (int8_t)(-2*i-2);
+    }
+    unfold[254] = 127;
+    unfold[253] = -127;
+    fold[0] = 0;
+    uint32_t lo = 1;
+    fold[128] = (uint8_t)-1;
+    {
+      uint32_t span = 128-lo;
+      uint32_t pairs = (128-lo)/2;
+      half = 0;
+      in_bucket = 1;
+      {
+        uint32_t k = 0;
+        int32_t ofs = 0;
+        uint8_t* pos = &fold[lo];
+        uint8_t* neg = fold-lo;
+        for(; k<pairs; ++k, ofs -= 2 ) {
+          bucket = bucket_size;
+          int32_t bucket_1 = in_bucket-1;
+          if( bucket_1 )
+            bucket = bucket_1;
+          else
+            ++half;
+          even = 2*half;
+          pos[2*k] = even;
+          odd = 2*half-1;
+          in_bucket = bucket-1;
+          neg[ofs+256] = odd;
+          if( bucket==1 ) {
+            in_bucket = bucket_size;
+            even = 2*++half;
+            odd = 2*half-1;
+          }
+          pos[2*k+1] = even;
+          neg[ofs+255] = odd;
+        }
+        done = 2*k+1;
+      }
+      if( (done-1)<span ) {
+        if( in_bucket==1 ) half = half+1;
+        fold[lo-1+done] = 2*half;
+        fold[257-lo-done] = 2*half-1;
+      }
+    }
+    for( b = 0; b<0x80; ++b ) {
+      fold[(uint8_t)((uint8_t*)unfold)[2*b]+256] = 2*b;
+      fold[(uint8_t)((uint8_t*)unfold)[2*b+1]+256] = 2*b+1;
+    }
+    return b;
+  }
+  template <int32_t f_DEC> uint32_t code_alphabet_size(uint32_t n, uint32_t cap) {
+    if constexpr( f_DEC ) return rc_decode_flat(cap)+1;
+    rc.encode(n-1, n, cap);
+    return n;
+  }
   FreqPair*bit_tree(uint16_t* freq, int32_t lvl) {
   return (FreqPair*)&freq[2*level_geom[lvl].tbl_base+8];
   }
 
-  uint16_t*begin_plane_stream();
-  void packer_rewind();
-  template <int32_t f_DEC> uint16_t*rc_begin();
-  void rc_begin_decode();
-  uint16_t*rc_begin_encode();
-  template <int32_t f_DEC> void rc_end();
-  void rc_end_decode();
-  void rc_end_encode();
-  bool ref_transformed(int32_t k);
+  uint16_t*begin_plane_stream() {
+    if( plane_predictor==pred_p2 ) {
+      alt_freq_init = 8;
+      alt_freq_limit = 8;
+    } else {
+      alt_freq_limit = 16;
+      alt_freq_init = 64;
+    }
+    model_geometry[0] = 0;
+    model_geometry[1] = 1;
+    level_geom[2].half = 1;
+    level_geom[2].first = 2;
+    level_geom[2].tbl_base = 0;
+    memset(&model_geometry[2], 2, 2);
+    int32_t slot = 4;
+    for( int32_t lvl = 3; lvl<8; ++lvl ) {
+      level_geom[lvl].half = 1<<(lvl-2);
+      level_geom[lvl].first = (uint8_t)slot;
+      level_geom[lvl].tbl_base = (uint8_t)slot-lvl;
+      memset(&model_geometry[slot], lvl, 2*level_geom[lvl].half);
+      slot += 2*level_geom[lvl].half;
+    }
+    uint16_t* tbl = model_table_store;
+    if( tbl ) {
+      int32_t k = 0;
+      uint16_t* row = tbl;
+      const uint16_t seed_row[10] = {
+        635, (uint16_t)(24*alt_freq_limit), 205, 124, 147, 83, 48, 16, 8, 4,
+      };
+      for( k = 0; k<0x400; ++k, row += 254 ) {
+        memcpy(row, seed_row, sizeof seed_row);
+        FreqPair* seed = (FreqPair*)&row[10];
+        for( uint32_t i = 0; i<0x7A; ++i ) {
+          seed[i].f[0] = 60;
+          seed[i].f[1] = 36;
+        }
+      }
+    }
+    model_tables = tbl;
+    return tbl;
+  }
+  void packer_rewind() {
+    if( stream.cur==(uint8_t*)stream.pk.word ) return;
+    int32_t bits = stream.pk.free_bits-8;
+    if( bits<0 ) {
+      stream.pk.free_bits = bits;
+      return;
+    }
+    uint8_t* at = stream.cur;
+    while( bits>=0 ) { --at; bits -= 8; }
+    stream.cur = at;
+    stream.pk.free_bits = bits;
+  }
+  template <int32_t f_DEC> uint16_t*rc_begin() {
+    if constexpr( !f_DEC ) *stream.pk.word = stream.pk.acc;
+    packer_rewind();
+    uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
+    if constexpr( f_DEC )
+      rc.dec_init();
+    else
+      rc.enc_init();
+    return tbl;
+  }
+  void rc_begin_decode() {
+    rc_begin<1>();
+  }
+  uint16_t*rc_begin_encode() {
+    return rc_begin<0>();
+  }
+  template <int32_t f_DEC> void rc_end() {
+    if constexpr( f_DEC )
+      rc.finish();
+    else
+      rc.flush();
+    end_plane_stream();
+  }
+  void rc_end_decode() {
+    rc_end<1>();
+  }
+  void rc_end_encode() {
+    rc_end<0>();
+  }
+  bool ref_transformed(int32_t k) {
+    return (plane_desc[plane_desc[k].src_plane].flags&desc_has_refs)!=0;
+  }
   alignas(16) float p2_coef[7][4] = {};
   alignas(16) float p2_rate[7][4] = {};
   SymEntry byte_list_ent[16*256] = {};
@@ -587,17 +842,6 @@ struct BMFState {
   BMFState &operator=(const BMFState &) = delete;
 };
 
-struct CounterNode;
-struct AltP1Block;
-struct SymListBlock;
-struct FreqPair;
-struct P2Count;
-struct P2Freq;
-struct CtxWeights;
-struct BmfStream;
-struct BmfFile;
-struct BmfImage;
-void p2_nudge(P2Count* p, int32_t res, int32_t shift = 2);
 
 
 
@@ -759,7 +1003,26 @@ struct SymList {
     return move_up(p);
   }
 
-  template <int32_t f_DEC> uint32_t code_symbol_bytes(BMFState* cx, uint32_t nbytes, uint32_t val, int32_t &carry);
+  template <int32_t f_DEC> uint32_t code_symbol_bytes(BMFState* cx, uint32_t nbytes, uint32_t val, int32_t &carry) {
+    SymList*const lists = this;
+    uint32_t word = val, out = 0;
+    for( uint32_t b = 0; b<nbytes; ++b ) {
+      uint32_t piece;
+      if constexpr( f_DEC ) {
+        piece = lists[4*b+carry].decode_symbol_list(cx);
+        out += piece<<((8*b)&31);
+      } else {
+        piece = (uint8_t)word;
+        lists[4*b+carry].code_symbol(cx, (uint8_t)piece);
+        word >>= 8;
+      }
+      carry = piece>>6;
+    }
+    if constexpr( !f_DEC )
+      out = val;
+    carry = (uint8_t)out>>7;
+    return out;
+  }
 
   int32_t code_symbol(BMFState* cx, int32_t want) {
     int32_t enc_cum, enc_high, enc_tot;
@@ -873,7 +1136,56 @@ struct SymList {
     return;
   }
 
-  int32_t decode_symbol_list(BMFState* cx);
+  inline int32_t decode_symbol_list(BMFState* cx) {
+    SymEntry* list[no_symbol+1];
+    SymEntry* q;
+    SymEntry** w, ** rd, ** rd2;
+    int32_t c;
+    w = list;
+    uint32_t gen = (uint8_t)cx[0].exclusion_gen;
+    int32_t cum = 0;
+    for( int32_t i = 0; i<(int32_t)live; ++i ) {
+      if( (uint8_t)cx[0].exclusion_mask[ent[i].sym]==gen ) {
+        c = 0;
+      } else {
+        SymEntry* e = &ent[i];
+        c = e[0].cnt;
+        *w++ = e;
+      }
+      cum += c;
+    }
+    if( !cum )
+      return -1;
+    w[0] = nullptr;
+    int32_t tot_all = cum+(int32_t)tot;
+    int32_t target = cx[0].rc.get_freq(tot_all);
+    SymEntry* p = list[0];
+    rd = &list[1];
+    SymEntry* first = list[0];
+    uint32_t cum_lo = 0;
+    while( 1 ) {
+      cum_lo += p[0].cnt;
+      if( cum_lo>(uint32_t)target )
+        break;
+      p = *rd++;
+      if( !p ) {
+        int8_t gen_b = (int8_t)gen;
+        q = first;
+        rd2 = &list[1];
+        do {
+          cx[0].exclusion_mask[q[0].sym] = gen_b;
+          q = *rd2++;
+        } while( q );
+        cx[0].rc.decode(cum_lo, tot_all, tot_all);
+        return -1;
+      }
+    }
+    int32_t result = p[0].sym;
+    uint32_t sym_cum = cum_lo-p[0].cnt;
+    this[0].rescale(this[0].promote(p));
+    cx[0].rc.decode(sym_cum, cum_lo, tot_all);
+    return result;
+  }
 };
 
 void clear_sym_lists(SymList* lists) {
@@ -922,58 +1234,6 @@ bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym) {
   while( n-- ) if( ent[n].sym==sym ) return true;
   return false;
 }
-
-inline int32_t SymList::decode_symbol_list(BMFState* cx) {
-  SymEntry* list[no_symbol+1];
-  SymEntry* q;
-  SymEntry** w, ** rd, ** rd2;
-  int32_t c;
-  w = list;
-  uint32_t gen = (uint8_t)cx[0].exclusion_gen;
-  int32_t cum = 0;
-  for( int32_t i = 0; i<(int32_t)live; ++i ) {
-    if( (uint8_t)cx[0].exclusion_mask[ent[i].sym]==gen ) {
-      c = 0;
-    } else {
-      SymEntry* e = &ent[i];
-      c = e[0].cnt;
-      *w++ = e;
-    }
-    cum += c;
-  }
-  if( !cum )
-    return -1;
-  w[0] = nullptr;
-  int32_t tot_all = cum+(int32_t)tot;
-  int32_t target = cx[0].rc.get_freq(tot_all);
-  SymEntry* p = list[0];
-  rd = &list[1];
-  SymEntry* first = list[0];
-  uint32_t cum_lo = 0;
-  while( 1 ) {
-    cum_lo += p[0].cnt;
-    if( cum_lo>(uint32_t)target )
-      break;
-    p = *rd++;
-    if( !p ) {
-      int8_t gen_b = (int8_t)gen;
-      q = first;
-      rd2 = &list[1];
-      do {
-        cx[0].exclusion_mask[q[0].sym] = gen_b;
-        q = *rd2++;
-      } while( q );
-      cx[0].rc.decode(cum_lo, tot_all, tot_all);
-      return -1;
-    }
-  }
-  int32_t result = p[0].sym;
-  uint32_t sym_cum = cum_lo-p[0].cnt;
-  this[0].rescale(this[0].promote(p));
-  cx[0].rc.decode(sym_cum, cum_lo, tot_all);
-  return result;
-}
-
 int32_t sym_slot(int32_t code) {
   return code<5 ? code : 6-(code&1);
 }
@@ -981,7 +1241,50 @@ int32_t sym_slot(int32_t code) {
 struct CounterNode {
   uint16_t total;
   uint16_t c[7];
-  template <int32_t f_DEC> int32_t code_symbol(BMFState* cx, int32_t ctx, int32_t sym);
+  template <int32_t f_DEC> int32_t code_symbol(BMFState* cx, int32_t ctx, int32_t sym) {
+    uint32_t cum;
+    int32_t slot;
+    uint16_t* cur = c;
+    const uint32_t tot = total&0x7FFF;
+    if constexpr( f_DEC ) {
+      sym = cx[0].rc.get_freq(tot);
+      cum = c[0];
+      while( cum<=(uint32_t)sym )
+        cum += *++cur;
+      cx[0].rc.decode(cum-cur[0], cum, tot);
+    } else {
+      slot = sym_slot(sym);
+      cum = 0;
+      for( int32_t k = 0; k<slot; k++ )
+        cum += c[k];
+      cur = &c[slot];
+      cx[0].rc.encode(cum, cum+cur[0], tot);
+    }
+    if( tot>0x2000 ) {
+      total = 0x8000;
+      int32_t lo = 256;
+      for( int32_t k = 6; k>=0; --k )
+        if( c[k]<lo )
+          lo = c[k];
+      for( int32_t k = 6; k>=0; --k ) {
+        const uint16_t nf = lo<=1 ? c[k]-(c[k]>>1) : (c[k]+2)/3;
+        c[k] = nf;
+        total += nf;
+      }
+    }
+    cur[0] += 32;
+    const int32_t result = total+32;
+    total = result;
+    slot = cur-c;
+    if( slot>=5 ) {
+      uint16_t*const strip = cx[0].model_strip(CtxIdx{}.bit<7>(slot&1).bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96).raw((uint32_t)ctx));
+      if constexpr( f_DEC )
+        slot += 2*cx[0].decode_symbol_tree(strip);
+      else
+        cx[0].encode_symbol_tree(strip, (sym-5)>>1);
+    }
+    return slot;
+  }
   void bump(int32_t slot, uint32_t n) {
     c[slot] += n;
     total += n;
@@ -1604,7 +1907,7 @@ void p2_bump_sides(P2Freq* group, int32_t ctx15, int32_t lo, int32_t slot, uint3
   if( ctx15>lo ) p2_freq_add(&group[-1], slot, dn);
 }
 
-void p2_nudge(P2Count* p, int32_t res, int32_t shift) {
+void p2_nudge(P2Count* p, int32_t res, int32_t shift = 2) {
   p[0].weighted = (int16_t)((uint16_t)p[0].weighted+((uint32_t)(res-p2_pred(p[0].weighted, p[0].rate)+(1<<(shift-1)))>>shift));
 }
 
@@ -1634,7 +1937,39 @@ struct NbRow {
   float w[15][4];
   uint32_t uses;
   uint32_t _pad[3];
-  int32_t predict(BMFState* cx, float (*nb)[4], CtxWeights* sets, int32_t mode);
+  inline int32_t predict(BMFState* cx, float (*nb)[4], CtxWeights* sets, int32_t mode) {
+    const float* mix = bmf_p2_mix[mode];
+    float mixed[7][4], centre, prediction, own;
+    int32_t i, j, k;
+    centre = nb_dot(cx[0].p2_coef, nb);
+    nb[7][0] = centre;
+    for( j = 0; j<7; j++ )
+      for( k = 0; k<4; k++ )
+        nb[j][k] -= centre;
+    for( j = 0; j<7; j++ )
+      for( k = 0; k<4; k++ ) {
+        mixed[j][k] = mix[0]*sets[0].row[0][0].w[j][k];
+        for( i = 1; i<6; i++ )
+          mixed[j][k] += mix[i]*sets[0].row[i][0].w[j][k];
+      }
+    prediction = nb_dot(mixed, nb)+centre;
+    nb[7][2] = prediction;
+    if( uses ) {
+      own = centre+nb_dot(w, nb);
+      nb[7][1] = own;
+      return (int32_t)(prediction+((own-prediction)*w[14][0])/w[14][1]);
+    }
+    for( j = 0; j<7; j++ )
+      for( k = 0; k<4; k++ ) {
+        w[j][k] = mixed[j][k]*bmf_p2_decay;
+        w[j+7][k] = sets[0].row[0][0].w[j+7][k]*bmf_p2_seed;
+      }
+    w[14][0] = 47.0f;
+    w[14][1] = 169.2f;
+    w[14][2] = 1.0f;
+    nb[7][1] = prediction;
+    return (int32_t)prediction;
+  }
 };
 
 struct P2Coef {
@@ -1802,9 +2137,241 @@ struct AltP2Block {
     return {ring[0]-1, ring[1]-1, ring[2]-1};
   }
 
-  P2Refs fill_row_inputs(AltP2Block* refa, AltP2Block* refb);
-  int32_t seat_symbol_context(int32_t run4, const P2Refs &refs);
-  void code_banks(int32_t sample16);
+  P2Refs fill_row_inputs(AltP2Block* refa, AltP2Block* refb) {
+    P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
+    const DvalRow d0{c0}, d1{c1}, d2{c2}, d3{c3};
+    const ValRow v0{c0}, v1{c1}, v2{c2}, v3{c3}, v4{c4};
+    p2_row[0][0] = (float)d1(0);
+    p2_row[0][1] = (float)d1(1);
+    p2_row[0][2] = (float)grad(d0(-1), d1(0), d1(-1));
+    p2_row[0][3] = (float)grad(d0(-2), d1(0), d1(-2));
+    p2_row[1][0] = (float)grad(d1(-1), d1(0), d2(-1));
+    p2_row[1][1] = (float)(-3*(d2(0)-d1(0))+d3(0));
+    p2_row[1][2] = (float)grad(d0(-1), d1(2), d1(1));
+    p2_row[1][3] = (float)grad(d0(-2), d1(1), d1(-1));
+    p2_row[2][0] = (float)(2*d0(-1)-d0(-2));
+    p2_row[2][1] = (float)grad(d0(-3), d1(0), d1(-3));
+    p2_row[2][2] = (float)grad(d2(0), d1(1), d3(1));
+    p2_row[2][3] = (float)d0(-3);
+    p2_row[3][0] = (float)grad(d1(-2), d1(0), d2(-2));
+    p2_row[3][1] = (float)grad(d0(-2), d1(-1), d1(-3));
+    p2_row[3][2] = (float)grad(d1(1), (d1(2)+d1(0))>>1, d2(2));
+    p2_row[3][3] = (float)d3(0);
+    if( refa ) {
+      const P2Refs refs{ref_rows(refa[0].cursor), ref_rows(refb[0].cursor)};
+      P2Ctx*const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;
+      P2Ctx*const rb0 = refs.b.r0, *const rb1 = refs.b.r1, *const rb2 = refs.b.r2;
+      const ValRow a0{ra0}, a1{ra1}, a2{ra2}, b0{rb0}, b1{rb1}, b2{rb2};
+      const bool no_ref = has_ref==0;
+      if( !no_ref ) {
+        const float bias_l = (float)c0[0].dval;
+        for( int32_t j = 0; j<4; ++j )
+          for( int32_t k = 0; k<4; ++k )
+            p2_row[j][k] += bias_l;
+      }
+      const int32_t plane = (int32_t)plane_idx;
+      if( plane ) {
+        if( plane==1 ) {
+          p2_row[4][0] = (float)(d0(0)+d1(3));
+          p2_row[4][1] = (float)grad(v0(-2), a1(2), a1(0));
+          p2_row[4][2] = (float)grad(v1(1), a0(-1), a1(0));
+          p2_row[4][3] = (float)grad(v0(-1), a1(0), a1(-1));
+          p2_row[5][0] = (float)grad(v1(1), b1(2), b2(3));
+          p2_row[5][1] = (float)grad(v0(-2), b0(0), b0(-2));
+          p2_row[5][2] = (float)grad(v1(0), b0(0), b1(0));
+          p2_row[5][3] = (float)(v0(-2)+ra0[0].err);
+          if( no_ref ) {
+            p2_row[6][0] = (float)grad(v0(-2), a0(0), a0(-2));
+            p2_row[6][1] = (float)grad(v2(0), a0(0), a2(0));
+            p2_row[6][2] = (float)(grad(a2(0), a0(0), v2(0))+2*(v1(0)-a1(0)));
+            p2_row[6][3] = (float)(v0(-1)+v1(-1)+a1(-2)+a0(0)-a0(-1)-a1(-1)-v1(-2));
+          } else {
+            p2_row[6][0] = (float)v1(0);
+            p2_row[6][1] = (float)v0(-3);
+            p2_row[6][2] = (float)grad(v0(-1), a0(-1), a0(-2));
+            p2_row[6][3] = (float)grad(v0(-3), v0(-1), v0(-4));
+          }
+        } else {
+          p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
+          p2_row[4][1] = (float)grad(v0(-1), a0(-1), a0(-2));
+          p2_row[4][2] = (float)grad(v1(1), a1(0), a2(1));
+          p2_row[4][3] = (float)grad(v0(-2), a1(2), a1(0));
+          p2_row[5][0] = (float)grad(v1(0), a0(-2), a1(-2));
+          p2_row[5][1] = (float)grad(v1(0), a0(0), a1(0));
+          p2_row[5][2] = (float)grad(v0(-2), a0(0), a0(-2));
+          p2_row[5][3] = (float)grad(v0(-2), b0(0), b0(-2));
+          p2_row[6][0] = (float)grad(v2(0), b0(0), b2(0));
+          p2_row[6][1] = (float)(grad(b0(-2), b0(0), v0(-2))+2*(v0(-1)-b0(-1)));
+          p2_row[6][2] = (float)(v0(-2)+rb0[0].err);
+          p2_row[6][3] = (float)(v2(0)+ra0[0].err);
+        }
+      } else {
+        p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
+        p2_row[4][1] = (float)grad(v0(-5), v1(0), v1(-5));
+        p2_row[4][2] = (float)grad(v0(-4), v1(0), v1(-4));
+        p2_row[4][3] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
+        p2_row[5][0] = (float)grad(v0(-2), a0(0), a0(-2));
+        p2_row[5][1] = (float)grad(v1(1), a1(1), a2(2));
+        p2_row[5][2] = (float)grad(v1(-2), a1(2), a2(0));
+        p2_row[5][3] = (float)(grad(a0(-2), a0(0), v0(-2))+2*(v0(-1)-a0(-1)));
+        p2_row[6][0] = (float)grad(v2(1), b0(0), b2(1));
+        p2_row[6][1] = (float)grad(v0(-2), b0(0), b0(-2));
+        p2_row[6][2] = (float)grad(v0(-1), b1(1), b1(0));
+        p2_row[6][3] = (float)grad(v1(1), b1(2), b2(3));
+      }
+      return refs;
+    } else {
+      p2_row[4][0] = (float)grad(v1(3), v1(0), v2(3));
+      p2_row[4][1] = (float)grad(v0(-4), v1(0), v1(-4));
+      p2_row[4][2] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
+      p2_row[4][3] = (float)grad(v2(-1), v1(1), v3(0));
+      p2_row[5][0] = (float)grad(v3(1), v1(0), v4(1));
+      p2_row[5][1] = (float)v1(3);
+      p2_row[5][2] = (float)grad(v0(-3), v0(-1), v0(-4));
+      p2_row[5][3] = (float)grad(v0(-1), v3(0), v3(-1));
+      p2_row[6][0] = (float)grad(v0(-5), v1(0), v1(-5));
+      p2_row[6][1] = (float)v4(0);
+      p2_row[6][2] = (float)grad(v0(-5), v0(-1), v0(-6));
+      p2_row[6][3] = (float)v1(-6);
+      return {};
+    }
+  }
+  int32_t seat_symbol_context(int32_t run4, const P2Refs &refs) {
+    P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
+    int32_t flat_a, flat_b;
+    int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1[0].mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4[0].mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3[0].mag+c2[-1].mag+c2[2].mag);
+    const int32_t lo_band = band_lo, hi_band = band_hi;
+    ctx_w[0].sel = (run4<1840)+(run4<272);
+    ctx_w[1].sel = (run4-c1[0].val<=hi_band)+(run4-c1[0].val<lo_band);
+    int32_t d_run4 = run4-c0[-1].val;
+    bool in_band = d_run4<=hi_band;
+    ctx_w[2].sel = in_band+(d_run4<lo_band);
+    ctx_w[3].sel = c1[0].sign;
+    ctx_w[4].sel = c0[-1].sign;
+    int32_t magsum = magsum_own;
+    int32_t magu = c2[0].mag+c1[0].mag;
+    int32_t magl = c0[-1].mag+c0[-2].mag;
+    if( refs.a.r0 ) {
+      int32_t mag = refs.b.r0[0].mag;
+      int32_t mag_ref1 = refs.b.r1[0].mag+refs.a.r1[0].mag;
+      int32_t mag_ref0 = mag+refs.a.r0[0].mag;
+      magsum = mag_ref1+magsum_own+4*mag_ref0+2*(refs.a.r0[-1].mag+refs.b.r0[-1].mag);
+      flat_a = mag_ref0+magl+refs.b.r0[-2].mag+refs.b.r0[-1].mag+refs.a.r0[-2].mag+refs.a.r0[-1].mag;
+      if( has_ref ) {
+        const int32_t d_run4b = run4-c1[0].dval-c0[0].dval;
+        if( d_run4b<lo_band||d_run4b>hi_band ) {
+          const int32_t d_run4c = run4-c0[-1].dval-c0[0].dval;
+          flat_b = d_run4c>=lo_band&&hi_band>=d_run4c;
+        } else {
+          flat_b = 1;
+        }
+      } else {
+        flat_b = mag_ref1+mag_ref0+magu+refs.b.r2[0].mag+refs.a.r2[0].mag;
+      }
+      if( plane_idx==1 ) {
+        int32_t d_ra_ra1 = refs.a.r0[0].val-refs.a.r1[0].val;
+        ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
+        int32_t d_ra_left = refs.a.r0[0].val-refs.a.r0[-1].val;
+        ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
+      } else if( (int32_t)plane_idx>1 ) {
+        int32_t d_rb_rb1 = refs.b.r0[0].val-refs.b.r1[0].val;
+        ctx_w[3].sel = (d_rb_rb1<=hi_band)+(d_rb_rb1<lo_band);
+        int32_t d_rb_left = refs.b.r0[0].val-refs.b.r0[-1].val;
+        in_band = d_rb_left<=hi_band;
+        ctx_w[4].sel = in_band+(d_rb_left<lo_band);
+        int32_t ra0_val = refs.a.r0[0].val;
+        int32_t d_ra_ra1b = ra0_val-(refs.a.r1)[0].val;
+        in_band = lo_band<=d_ra_ra1b;
+        if( in_band&&d_ra_ra1b<=hi_band ) {
+          flat_a = 1;
+        } else {
+          int32_t d_ra_leftb = ra0_val-refs.a.r0[-1].val;
+          flat_a = d_ra_leftb>=lo_band&&d_ra_leftb<=hi_band;
+        }
+      }
+    } else {
+      flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
+      flat_b = c4[0].mag+c3[0].mag+magu+c0[0].mag;
+    }
+    const int32_t ctx15 = magsum>=960 ? 15 : nb_ctx[magsum>>3];
+    const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
+    ctx_pair[0] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx+4]);
+    ctx_pair[1] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx]);
+    ctx = CtxIdx{}.bits<0, 4>(ctx15).bit<4>(flat_a==0).bit<5>(flat_b==0).raw(mixer_fwd(ctx_w, 5));
+    return ctx_idx;
+  }
+  void code_banks(int32_t sample16) {
+    for( uint32_t bank = 0; bank<5; ++bank ) {
+      const int32_t bctx = bank_ctx[bank];
+      const int32_t res = sample16-nb_sum[2*bank];
+      P2Count* node0 = &p2_ctr[slot(bank, bctx)];
+      const int32_t w0 = res+(uint16_t)node0[0].weighted;
+      node0[0].weighted = w0;
+      int32_t countdown = node0[0].b1;
+      if( !countdown )
+        continue;
+      const int32_t w0b = w0+4*((res>cx[0].deadzone_hi)-(res<cx[0].deadzone_lo));
+      node0[0].weighted = w0b;
+      uint32_t ctxw = bctx;
+      if( (int32_t)abs32(res)<38 ) {
+        --countdown;
+        if( !countdown&&(uint8_t)node0[0].rate<8u ) {
+          const int32_t from = node0[0].rate;
+          node0[0].rate = (uint8_t)(from+1);
+          node0[0].b1 = p2_b1_reload[from-5];
+          node0[0].weighted = 2*w0b;
+        } else {
+          node0[0].b1 = countdown;
+        }
+      }
+      if( cx[0].alphabet_reduced )
+        continue;
+      P2Count* mir = &p2_ctr[slot(bank, ctxw^kBankMirrorMask)];
+      __builtin_prefetch(mir, 0, 1);
+      const int32_t res2 = nb_sum[2*bank+1]+res;
+      int32_t lowbits = ctxw&3;
+      if( lowbits<3 )
+        p2_update(cx, &node0[1], res2, 1);
+      if( lowbits )
+        p2_update(cx, &node0[-1], res2, 2);
+      P2Count* bankp = &p2_ctr[slot(bank, 0)];
+      static const uint32_t p2_bank_bits[11] = {
+        0x4000, 0x2000, 0x1000, 0x800, 0x400, 0x200, 0x100, 0x80, 0x40, 0x20, 0x10,
+      };
+      P2Count* direct[11], * mirror[11], * rot[11];
+      for( int32_t k = 0; k<11; ++k ) {
+        const uint32_t x = ctxw^p2_bank_bits[k];
+        direct[k] = &bankp[x];
+        mirror[k] = &bankp[x^kBankMirrorMask];
+        rot[k] = &bankp[p2_ctx_rotate[(x>>2)&3]+(x&0xFFFFFFF3)];
+        __builtin_prefetch(direct[k], 0, 1);
+        __builtin_prefetch(mirror[k], 0, 1);
+        __builtin_prefetch(rot[k], 0, 1);
+      }
+      const int32_t neg = -res2;
+      const int32_t w_top = mir[0].weighted;
+      const int32_t e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
+      const int32_t bump = 32*((e_top>cx[0].deadzone_hi)-(e_top<cx[0].deadzone_lo));
+      uint32_t w_new = bump+e_top+2;
+      mir[0].weighted = (int16_t)(w_top+(w_new>>2));
+      if( lowbits<3 )
+        p2_nudge(&mir[1], -res2);
+      if( lowbits<=0 ) {
+        for( int32_t k = 0; k<11; ++k ) {
+          p2_update(cx, direct[k], res2, 2);
+          p2_update(cx, rot[k], res2, 3);
+          p2_nudge(&direct[k][1], res2);
+          p2_update(cx, mirror[k], -res2, 3);
+        }
+      } else {
+        p2_nudge(&mir[-1], -res2, 3);
+        p2_update(cx, direct[0], res2, 2);
+        p2_update(cx, rot[0], res2, 3);
+        walk_bank_bits(direct, mirror, rot, res2, lowbits<3);
+        p2_update(cx, mirror[10], -res2, 3);
+      }
+    }
+  }
   void walk_bank_bits(P2Count*const* direct, P2Count*const* mirror, P2Count*const* rot, int32_t res, bool nudge) {
     for( int32_t k = 0; k<11; ++k ) {
       if( k ) {
@@ -1841,9 +2408,265 @@ struct AltP2Block {
     }
   }
 
-  template <int32_t f_DEC> void alt_p2_d8_body(uint8_t* src, uint8_t* out, int32_t width, int32_t height);
-  int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb);
-  uint32_t alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in);
+  template <int32_t f_DEC> void alt_p2_d8_body(uint8_t* src, uint8_t* out, int32_t width, int32_t height) {
+    int32_t j, code0, code;
+    uint8_t* outp, code2;
+    uint32_t k;
+    uint8_t* src_end = src;
+    if constexpr( f_DEC )
+      cx[0].rc_begin_decode();
+    else
+      cx[0].rc_begin_encode();
+    P2Ctx* pix = cursor[0];
+    if( width>0 ) {
+      uint8_t* p = src;
+      for( j = 0; j<width; ++j ) {
+        P2Ctx* rec = cursor[0];
+        int32_t q2 = rec[-1].val>>4;
+        ctx_pair[0] = ctx+ctx_delta[q2+4];
+        ctx_pair[1] = ctx+ctx_delta[q2];
+        P2Freq &fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
+        if constexpr( f_DEC ) {
+          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair)]);
+        } else {
+          code0 = fold_or_refuse(out, *p, (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
+          fr.encode_symbol(cx, ctx_pair, code0);
+          ++p;
+        }
+        int32_t val = 16*(uint8_t)*out;
+        cursor[0][0].val = val;
+        cursor[0][0].dval = val;
+        ++out;
+        int32_t err = (int16_t)(rec[0].val-rec[-1].val);
+        rec[0].err = err;
+        int32_t adiff = abs32(err);
+        cursor[0][0].aerr = adiff;
+        cursor[0][0].dupright = adiff;
+        cursor[0][0].dupleft = adiff;
+        cursor[0][0].dup = adiff;
+        cursor[0][0].dleft = (uint32_t)cursor[0][0].dup>>1;
+        cursor[0][0].mag = 2;
+        cursor[0][0].sign = (cursor[0][0].err<=0)+(cursor[0][0].err<0);
+        pix = cursor[0]+1;
+        cursor[0] = pix;
+      }
+      if constexpr( !f_DEC )
+        src_end = p;
+    }
+    seed_history(width);
+    if( height>1 ) {
+      uint32_t* pair = ctx_pair;
+      outp = out;
+      for( uint32_t y = 0; y<(uint32_t)(height-1); ++y ) {
+        uint8_t* srcp = src_end;
+        start_row();
+        if( width<=0 )
+          continue;
+        for( k = 0; k<(uint32_t)width; ++k ) {
+          int32_t pred = alt_p2_context(nullptr, nullptr);
+          if constexpr( f_DEC ) {
+            code2 = code = freq[ctx].decode_symbol(cx, pair);
+            outp[k] = (uint8_t)(pred+(unfold[code]));
+          } else {
+            code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
+            code2 = code;
+            freq[ctx].encode_symbol(cx, pair, code);
+          }
+          alt_p2_model(outp[k], code2, outp[k]-pred);
+        }
+        if constexpr( !f_DEC )
+          src_end = &srcp[width];
+        outp = &outp[width];
+      }
+    }
+    if constexpr( f_DEC )
+      cx[0].rc_end_decode();
+    else
+      cx[0].rc_end_encode();
+  }
+  int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
+    CtxWeights weights;
+    int32_t nb_slot;
+    uint32_t ctx0, ctx1, ctx2;
+    uint32_t ctx0_lo;
+    P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
+    int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1[0].dupleft+cx[0].ctx_bias[0]+14*c0[-2].dupleft;
+    int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1[0].dupright+9*c1[-1].dupright+22*c0[-1].dupright+cx[0].ctx_bias[1]+19*c0[-2].dupright;
+    int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1[0].dleft+16*c1[-1].dleft+22*c0[-1].dleft+cx[0].ctx_bias[2]+19*c0[-2].dleft;
+    int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1[0].dup+25*c0[-1].dup+cx[0].ctx_bias[3]+17*c0[-2].dup+15*(c3[0].dup+c2[0].dup);
+    int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
+    int32_t band = over_thresholds(8*sum4, p2_band_edges, 0, 4, sum_u);
+    int32_t den_d = 2*c0[-2].val+2*c0[-1].val;
+    int32_t num_b = c1[1].val+(c1[0].val+2*c0[-1].val);
+    int32_t num_d = 16*(c2[2].val+c2[0].val+c1[1].val+c2[-1].val);
+    int32_t gA = over_thresholds(sum_all, bmf_p2_thresholds[band], 9, 12, 1);
+    int32_t gB = over_thresholds(num_b, bmf_p2_thresholds[band], 6, 8, 1);
+    int32_t gC = over_thresholds(16*sum_ur, bmf_p2_thresholds[band], 3, 5, sum_ul);
+    int32_t gD = over_thresholds(num_d, bmf_p2_thresholds[band], 0, 2, den_d);
+    nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD).digit<64, 5>(gA).digit<320, 6>(band);
+    seat_nb_row(nb_slot, c0);
+    const P2Refs refs = fill_row_inputs(refa, refb);
+    P2Ctx*const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;
+    P2Ctx*const rb0 = refs.b.r0, *const rb1 = refs.b.r1, *const rb2 = refs.b.r2;
+    weights.row[0] = cur[-1];
+    weights.row[1] = above[1];
+    weights.row[2] = above[2];
+    weights.row[3] = cur[-2];
+    weights.row[4] = above[0];
+    weights.row[5] = cur[0];
+    const int32_t a = 16*sum4, b = 14*sum_u, c = 13*sum_ur, d = 11*sum_ul;
+    const int32_t best01 = min32(a, b);
+    int32_t mode = (best01==a) ? 0 : 1;
+    if( best01>c )
+      mode = 2;
+    if( min32(best01, c)>d )
+      mode = 3;
+    const int32_t filt = nb_cur[0].predict(cx, (float (*)[4]) p2_row, &weights, mode);
+    pred_prev = (uint16_t)filt;
+    int32_t g3pair = c0[-1].aerr+c1[0].aerr;
+    if( refa )
+      g3pair += (rb0[0].aerr+ra0[0].aerr)>>1;
+    int32_t g3sum = c1[3].aerr+c1[-1].aerr+c0[-1].aerr+c0[-3].aerr+c0[-4].aerr+c0[-2].aerr;
+    ctx0_lo = CtxIdx{}.bit<19>(c1[1].err+c1[0].err+c1[-1].err+c0[-1].err<0).bit<18>(c3[0].err+c0[-2].err+2*c0[-4].err<0).bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0).bit<16>(c0[-1].err<0).bit_of<15>((uint16_t)c0[-3].err).bits<13, 2>((filt>3536)+(filt>720)+(filt>288)).bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
+    if( refa ) {
+      ctx0 = CtxIdx{}.bit<25>(rb0[-1].err<0).bit<24>(rb0[0].err<0).bit<23>(ra0[-1].err<0).bit<22>(rb0[0].err+rb0[-2].err<0).bit<21>(ra0[-2].err+ra0[0].err<0).bit<20>(c0[-2].err<0).raw(ctx0_lo);
+    } else {
+      ctx0 = CtxIdx{}.bit<25>(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err<0).bit<24>(c2[1].err+c2[0].err+c0[-4].err+c0[-8].err<0).bit<23>(c0[-4].err+c0[-6].err<0).bit<22>(c0[-4].err<0).bit<21>(c0[-5].err<0).bit<20>(c0[-7].err<0).raw(ctx0_lo);
+    }
+    const int32_t run0 = step_bank(0, ctx0, filt);
+    int32_t nb4_4 = c4[4].val;
+    sum_all = ((g3pair<<9)+sum_all)>>13;
+    int32_t d_run0 = c0[-5].val-run0;
+    int32_t d_up = nb4_4-run0;
+    int32_t up5 = c1[5].val;
+    int32_t d_up5 = up5-run0;
+    if( refa ) {
+      int32_t dv_now = c0[0].dval;
+      ctx1 = CtxIdx{}.bit_of<25>(c0[-1].val+ra0[0].val-ra0[-1].val-run0).bit<24>(ra2[0].dval+ra1[0].dval-2*ra0[0].dval<0).bit_of<23>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval)).bit_of<22>(dv_now+c0[-5].dval-run0).bit_of<21>(dv_now+c1[0].dval+rb1[2].dval-rb2[2].dval-run0).bit_of<20>(dv_now+c0[-1].dval+rb0[0].dval-rb0[-1].dval-run0).bit_of<19>(c2[-1].dval+dv_now+ra0[0].dval-ra2[-1].dval-run0).bit_of<18>(dv_now+c1[2].dval+ra0[0].dval-ra1[2].dval-run0).bit_of<17>(d_up5).bit_of<16>(d_up).bit_of<15>(d_run0).raw(ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
+    } else {
+      int32_t d_run0b = run0-c0[-3].val;
+      ctx1 = CtxIdx{}.bit_of<25>(nb4_4-c3[0].val+run0-c1[4].val).bit_of<24>(c1[-5].val-c1[-2].val+d_run0b).bit_of<23>(d_run0b+c1[2].val-up5).bit_of<22>(c4[3].val-c2[2].val+run0-c2[1].val).bit_of<21>(c4[-1].val-c3[0].val+run0-c1[-1].val).bit_of<20>(c1[0].val-c1[2].val+run0-c0[-2].val).bit_of<19>(-d_up5).bit_of<18>(-d_up).bit_of<17>(run0-c4[2].val).bit_of<16>(run0-c4[-3].val).bit_of<15>(-d_run0).raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
+    }
+    const int32_t run1 = step_bank(1, ctx1, run0);
+    int32_t cx2_val0 = c2[0].val;
+    int32_t cx1_val = c1[0].val;
+    int32_t dvsum2 = c0[-2].val-run1;
+    int32_t lap = c0[-2].val+run1-2*c0[-1].val;
+    int32_t dtop2 = cx2_val0-run1;
+    if( refa ) {
+      int32_t dv1 = c1[1].dval;
+      int32_t d_ra = ra0[0].val-run1;
+      ctx2 = CtxIdx{}.bit_of<25>(c0[0].dval+c1[-1].dval-run1-(c2[0].dval-dv1)).bit_of<24>(c0[0].dval+c0[-1].dval-run1-(c1[0].dval-dv1)).bit_of<23>(rb0[0].val-run1+cx2_val0-rb2[0].val).bit_of<22>(d_ra+cx2_val0-ra2[0].val).bit_of<21>(d_ra+c1[-1].val-ra1[-1].val).bit_of<20>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1).bit_of<19>(2*cx1_val-run1-cx2_val0).bit_of<18>(-lap).bit_of<17>(dtop2).bit_of<16>(dvsum2).bit_of<15>(208-rb0[0].val).raw(ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
+    } else {
+      ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-c3[0].val).bit_of<24>(run1+c4[0].val-(c2[2].val+c2[-2].val)).bit_of<23>(c3[2].val-c2[-1].val+run1-c1[3].val).bit_of<22>(c3[1].val-c1[1].val-dtop2).bit_of<21>(c3[0].val-cx1_val-dtop2).bit_of<20>(lap).bit_of<19>(run1-c4[3].val).bit_of<18>(c3[1].val-run1).bit_of<17>(run1-c4[0].val).bit_of<16>(run1-c3[-2].val).bit_of<15>(-dvsum2).raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
+    }
+    const int32_t run2 = step_bank(2, ctx2, run1);
+    int32_t run_dv3 = run2-c0[0].dval;
+    const uint32_t ctx3 = CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val).bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1[0].dval)>>1)+run_dv3).bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val).bit_of<22>(-(c2[2].val+run2-2*c1[1].val)).bit_of<21>(c1[-2].dval-c0[-2].val+run2-c1[0].dval).bit_of<20>(run2-c1[3].val).bit_of<19>(run_dv3-c2[1].dval).bit_of<18>(run2-c3[0].val).bit_of<17>(2*run2-c1[0].dval-(c1[0].val+c0[0].dval)).bit_of<16>(run2-c0[-1].dval-c0[0].dval).bit_of<15>(run2-c0[-3].val).raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9));
+    const int32_t run3 = step_bank(3, ctx3, run2);
+    int32_t dv_now4 = c0[0].dval;
+    int32_t run_dv4 = run3-dv_now4;
+    int32_t run_up4 = run3+c3[0].val;
+    const uint32_t ctx4 = CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1[0].val)>>2)).bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4)).bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval)).bit_of<22>(run3-c0[-3].dval-dv_now4-(c1[0].val-c1[-3].val)).bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval)).bit_of<20>(c2[-2].val+run3-2*c1[-1].val).bit_of<19>(c2[0].dval-2*c1[0].dval+run_dv4).bit_of<18>((run3-c0[-1].val)-(c1[0].val-c1[-1].val)).bit_of<17>(run_dv4-c1[4].dval).bit_of<16>(run_dv4-c1[-2].dval).bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4).raw(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10));
+    const int32_t run4 = step_bank(4, ctx4, run3);
+    return seat_symbol_context(run4, refs);
+  }
+  uint32_t alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid_in) {
+    int32_t ctx_lo = ctx&0xF;
+    int32_t sample16 = 16*sample_in;
+    P2Ctx*const c0 = cursor[0];
+    P2Ctx*const c1 = cursor[1];
+    c0[0].val = 16*sample_in;
+    c0[0].dval = c0[0].val-c0[0].dval;
+    c0[1].dval = 0;
+    const int32_t dead = (ctx_lo>6)+(ctx_lo>4)+2*(ctx_lo>9);
+    c0[0].sign = (resid_in<=dead)+(resid_in<-dead);
+    c0[0].mag = abs32(resid_in);
+    float sample = (float)sample16;
+    int32_t dl = sample16-c0[-1].val;
+    c0[0].dleft = abs32(dl);
+    int32_t du = sample16-c1[0].val;
+    c0[0].dup = abs32(du);
+    int32_t dul = sample16-c1[-1].val;
+    c0[0].dupleft = abs32(dul);
+    int32_t dur = sample16-c1[1].val;
+    c0[0].dupright = abs32(dur);
+    int32_t resid = (int16_t)(sample16-pred_prev);
+    c0[0].err = resid;
+    c0[0].aerr = abs32(resid);
+    NbRow* wrow_cur = nb_cur;
+    NbRow* wrow_b = cur[-1];
+    const float centre = bias[0];
+    const float mixed = bias[1];
+    const float own = bias[2];
+    const float err_own = sample-own;
+    const float d_pred = mixed-own;
+    const float cov = (((err_own*d_pred)-wrow_cur[0].w[14][0])*0.001f)+wrow_cur[0].w[14][0];
+    const float var = (wrow_cur[0].w[14][1]+0.000099999997f)+(((d_pred*d_pred)-wrow_cur[0].w[14][1])*0.001f);
+    wrow_cur[0].w[14][1] = var;
+    float cov_kept = 0.1f*var;
+    if( cov_kept<=cov )
+      cov_kept = fminf(var, cov);
+    wrow_cur[0].w[14][0] = cov_kept;
+    const float conf = (1.0f-(cov_kept/(var+576.0f)))*2.0f;
+    nlms_track_two_rows(wrow_cur, wrow_b, (sample-mixed)*2.5999999f, err_own*conf, conf);
+    nlms_predict_and_correct(wrow_cur, sample, centre);
+    cur[0] = nb_cur;
+    ++cur;
+    ++above;
+    code_banks(sample16);
+    int32_t ctx_l = ctx;
+    ++cursor[0];
+    P2Freq* frec = &freq[ctx_l];
+    ++cursor[1];
+    ++cursor[2];
+    ++cursor[3];
+    ++cursor[4];
+    const uint32_t step0 = frec[0].step;
+    if( step0<=0x10 )
+      return step0;
+    int32_t is_dec = code&1;
+    int32_t ctx15 = ctx_l&0xF;
+    uint32_t pair_ctx = ctx_pair[code&1];
+    auto nudge = [&](int32_t at, uint32_t num, uint32_t pair_at) {
+                   P2Freq*const bin = &frec[at];
+                   p2_rescale(bin);
+                   const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
+                   if( code ) {
+                     bin[0].f[2-is_dec] += step10;
+                     cx[0].update_binary_pair(cx[0].model_strip(pair_at), (code-1)>>1);
+                   } else {
+                     bin[0].f[0] += step10;
+                   }
+                 };
+    if( ctx15<15 )
+      nudge(1, 10, pair_ctx+1);
+    if( ctx15>0 )
+      nudge(-1, 13, pair_ctx-1);
+    if( freq[ctx].step<=0x1Au )
+      return ctx;
+    int32_t fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
+    if( !fold[(uint8_t)-resid_in] )
+      fold_sel = fold[(uint8_t)-resid_in];
+    const uint32_t step_ctx = CtxIdx{}.bits<0, 6>(ctx).raw(mixer_rev(ctx_w, 5));
+    P2Freq* frec_step = &freq[step_ctx];
+    p2_bump_sides(frec_step, ctx15, 0, fold_sel, 4, 4);
+    if( code ) {
+      int32_t n2_half = (code-1)>>1;
+      int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
+      if( hi_nibble>=0xF0||(cx[0].update_binary_pair(cx[0].model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
+        cx[0].update_binary_pair(cx[0].model_strip(pair_ctx-16), n2_half);
+      }
+    }
+    P2Freq* prec0 = &frec_step[0];
+    p2_freq_add(prec0, fold_sel, 6);
+    if( !plane_idx||freq[ctx].step>0x100u ) {
+      is_dec = code ? 2-is_dec : 0;
+      for( int32_t k = 0; k<5; ++k )
+        bump_bank(k, step_ctx, ctx15, fold_sel, is_dec);
+    }
+    return step_ctx;
+  }
   void encode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
     int32_t sample = out[at];
     const int32_t pred = alt_p2_context(refa, refb);
@@ -2028,13 +2851,6 @@ struct AltP2Block {
   NbRow* row1_store[kMaxWidth+4];
   BMFState* cx;
 };
-bool BMFState::ref_transformed(int32_t k) {
-  return (plane_desc[plane_desc[k].src_plane].flags&desc_has_refs)!=0;
-}
-
-
-
-
 struct PixRec {
   union {
     struct {
@@ -2161,8 +2977,84 @@ struct ModelBlock {
   uint16_t ctx_id1[192512];
   uint16_t ctx_id2[108800];
   uint16_t ctx_id3[712000];
-  ModelBlock*layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth);
-  void free_workspace();
+  ModelBlock*layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth) {
+    cx = state;
+    int32_t j;
+    uint32_t k, m, s, n;
+    cx[0].exclusion_gen = 1;
+    width = img_w;
+    height = img_h;
+    depth = img_depth;
+    depth_raw = img_depth;
+    escape.ent = nullptr;
+    sym_code = nullptr;
+    for( j = 0; j<5; ++j ) {
+      PixRec* buf = row_store[j];
+      row_cur[j] = buf;
+      row_cur[j+5] = buf+ModelBlock::kRowMargin+1;
+      for( uint32_t r = 0; r<width+(uint32_t)(ModelBlock::kRowMargin+ModelBlock::kRowTail); ++r ) {
+        row_cur[j][r].sym = 0;
+        for( int32_t i = 0; i<6; ++i )
+          row_cur[j][r].match[5-i] = 1;
+      }
+    }
+
+    uint8_t* runs = run_bucket_store;
+    run_bucket = runs;
+    runs[0] = 0;
+    {
+      uint8_t bucket = 0;
+      for( uint32_t x = 0; x<width; ++x ) {
+        bucket += x==2u<<(bucket&31);
+        run_bucket[x+1] = bucket;
+      }
+    }
+    memset(sym_rev, 0, sizeof sym_rev);
+    for( k = 0; k<0x2000; ++k ) {
+      uint16_t rev = sym_rev[k];
+      int32_t bits = k;
+      for( m = 0; m<0xD; ++m ) {
+        rev += rev+(bits&1);
+        bits >>= 1;
+      }
+      sym_rev[k] = rev;
+    }
+    for( s = 0; s<0x2000; ++s )
+      sym_rev[s] *= 8;
+    memset(&grid[188], 0, 0x100000);
+    ctx_id3_used = 0;
+    ctx_id2_used = 0;
+    ctx_id1_used = 0;
+    memset(ctx_id1, 255, sizeof ctx_id1);
+    memset(ctx_id2, 255, sizeof ctx_id2);
+    memset(ctx_id3, 255, sizeof ctx_id3);
+    memset(cx[0].exclusion_mask, 0, sizeof cx[0].exclusion_mask);
+    sel[0] = nullptr;
+    sel[1] = nullptr;
+    escape_list = nullptr;
+    for( n = 0; n<0x40000; ++n ) {
+      sym_ctr[2*n] = no_symbol;
+      sym_ctr[2*n+1] = no_symbol;
+    }
+    for( uint32_t k8 = 0; k8<8; ++k8 ) {
+      bit_root[2*k8].init_root();
+      bit_root[2*k8+1].init_root();
+    }
+    memset(bit_node, 0, sizeof bit_node);
+    sym_word = (uint16_t*)bmf_new(2*height*width);
+    esc_ctr[0].init_parent();
+    memset(&esc_ctr[1], 0, 1536);
+    for( uint32_t k24 = 0; k24<0x18; ++k24 ) {
+      run_ctr[2*k24].init_parent();
+      run_ctr[2*k24+1].init_parent();
+    }
+    return this;
+  }
+  void free_workspace() {
+    free(sym_word);
+    free_sym_lists(sel1_list);
+    free_sym_lists(sel0_list);
+  }
   void reduce_narrow_alphabet(SymList* lists, uint8_t* src, uint32_t mask) {
     int32_t n_distinct, y, bits, shift, prev, s, s_next;
     uint32_t n_syms3, sym_flag[256];
@@ -2240,8 +3132,126 @@ struct ModelBlock {
     }
   }
 
-  int32_t tree_place(ReduceNode* tree, uint32_t val);
-  void reduce_alphabet(uint8_t* src);
+  int32_t tree_place(ReduceNode* tree, uint32_t val) {
+    int32_t node = 0, side;
+    uint16_t* kidp;
+    while( 1 ) {
+      side = tree[node].val<val;
+      kidp = tree[node].kid;
+      node = kidp[side];
+      if( !node )
+        break;
+      if( val==tree[node].val ) {
+        cx[0].mode_symbol[1] = side;
+        return node;
+      }
+    }
+    cx[0].mode_symbol[1] = side;
+    node = (uint16_t)alphabet;
+    int32_t alpha = alphabet+1;
+    kidp[side] = node;
+    alphabet = alpha;
+    if( alpha>0x2000 )
+      return -1;
+    tree[node].val = val;
+    return node;
+  }
+  void reduce_alphabet(uint8_t* src) {
+    ReduceNode tree[8192];
+    SymList lists[16];
+    uint8_t* out[19];
+    uint32_t alpha_n, done;
+    int32_t node, carry;
+    uint8_t* rp;
+    uint32_t sym_bits = depth;
+    uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
+    uint32_t n_kids = (sym_bits+7)>>3;
+    auto load32 = [](const uint8_t* at) {
+                    uint32_t v;
+                    memcpy(&v, at, sizeof v);
+                    return v;
+                  };
+    clear_sym_lists(lists);
+    if( sym_bits<=8 ) {
+      reduce_narrow_alphabet(lists, src, mask);
+    } else {
+      memset(tree, 0, sizeof tree);
+      alphabet = 1;
+      tree[0].val = mask&load32(src);
+      sym_word[0] = 0;
+      if( (uint32_t)(height*width)>1 ) {
+        uint8_t* p = src;
+        node = 0;
+        uint32_t written = 1;
+        while( 1 ) {
+          p += n_kids;
+          uint32_t val = mask&load32(p);
+          if( val!=tree[node].val ) {
+            node = 0;
+            if( val!=tree[0].val ) node = tree_place(tree, val);
+            if( node<0 ) break;
+          }
+          sym_word[written++] = node;
+          if( written>=(uint32_t)(height*width) ) break;
+        }
+      }
+      alpha_n = alphabet;
+      cx[0].code_alphabet_size<0>(alpha_n, no_symbol+1);
+      if( alphabet>0x2000 ) {
+        out[1] = (uint8_t*)bmf_new(height*n_kids*width);
+        int32_t img_w = width;
+        int32_t img_h = height;
+        uint32_t plane_size;
+        if( n_kids ) {
+          plane_size = img_h*img_w;
+          if( n_kids>>1 ) {
+            uint8_t* half = out[1]+img_h*img_w;
+            uint32_t pairs = 0;
+            for(; pairs<n_kids>>1; ++pairs ) {
+              const uint32_t slot_a = 2*pairs;
+              const uint32_t off = 2*pairs*plane_size;
+              out[slot_a+2] = out[1]+off;
+              out[slot_a+3] = &half[off];
+            }
+            done = 2*pairs+1;
+          } else {
+            done = 1;
+          }
+          if( n_kids>(done-1) )
+            out[done+1] = out[1]+img_h* -img_w+plane_size*done;
+        } else {
+          plane_size = img_h*img_w;
+        }
+        if( plane_size ) {
+          rp = src;
+          if( n_kids ) {
+            for( uint32_t moved = 0; moved<plane_size; ++moved ) {
+              for( uint32_t c = 0; c<n_kids; ++c )
+                *out[c+2]++ = rp[c];
+              rp += n_kids;
+            }
+          }
+        }
+        uint16_t* old_words = sym_word;
+        height = n_kids*img_h;
+        depth = 8;
+        free(old_words);
+        void* newbuf = bmf_new(2*height*width);
+        sym_word = (uint16_t*)newbuf;
+        reduce_alphabet(out[1]);
+        free(out[1]);
+      } else {
+        init_byte_lists(cx, lists, n_kids);
+        const int32_t alpha_m = alphabet;
+        if( alpha_m ) {
+          carry = 0;
+          for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si )
+            lists[0].code_symbol_bytes<0>(cx, n_kids, tree[si].val, carry);
+        }
+      }
+      free_sym_entries(lists, 16);
+    }
+  }
   int32_t pixel_context(uint32_t* nb) {
     int32_t band;
     int32_t pos = sym_pos;
@@ -3130,84 +4140,9 @@ struct ModelBlock {
   BMFState* cx;
 };
 
-struct PlaneTransform;
 
-struct PlaneSearch;
 
-struct BMFCodec : BMFState {
-  BlockPool<AltP1Block, 4> p1_blocks;
-  BlockPool<AltP2Block, 4> p2_blocks;
-  BlockPool<ModelBlock, 1> model_blocks;
 
-  template <class T, int32_t N> int32_t planes_free(BlockPool<T, N> &pool, T** plane) {
-    for( int32_t k = 0; k<plane_count; ++k ) pool.give(plane[k]);
-    return plane_count;
-  }
-
-  void allow_refs_where_present();
-  template <int32_t f_DEC> int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf);
-  int32_t alt_model_p1_decode(BmfImage* hdr, uint8_t* out);
-  int32_t alt_model_p1_encode(BmfImage* hdr, uint8_t* src);
-  template <int32_t f_DEC> int32_t alt_model_p2(BmfImage* p_i, uint8_t* out);
-  template <int32_t f_DEC> void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out);
-  void alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height);
-  void alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out);
-  int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out);
-  int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2);
-  template <int32_t f_DEC> bool alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw);
-  AltP1Block*alt_p1_block_alloc(int32_t width, int32_t height);
-  int32_t choose_plane_coding(BmfImage* img);
-  void clear_flags_on_all();
-  template <int32_t f_DEC> void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane);
-  template <int32_t f_DEC, typename T> void code_field(T &v, int32_t bits, int32_t bias);
-  void code_image_body(BmfImage* p_i, BmfImage &hdr);
-  template <int32_t f_DEC> void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw);
-  template <int32_t f_DEC> void code_plane_descs();
-  void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane);
-  int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk);
-  int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs);
-  void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane);
-  void drop_alt_model_from_all();
-  bool expand_coded(BmfStream* io, BmfImage* img_at, const BmfImage &hdr);
-  BmfImage*expand_image(BmfFile* arc_in, CodedTail** p_coded_buf);
-  void interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane);
-  void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane);
-  void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw);
-  void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane);
-  ModelBlock*new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth);
-  void offer_to_all(int32_t want);
-  void pack_bits(uint32_t word, int32_t n);
-  void packer_flush();
-  void packer_reset();
-  uint32_t packer_word();
-  int32_t plane_in_order(int32_t k);
-  PlaneTransform plane_transform(int32_t plane);
-  uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height);
-  void read_plane_descs();
-  void reset_descriptors();
-  void restore_descriptors(const PlaneDesc* saved);
-  void save_descriptors(PlaneDesc* saved);
-  uint32_t search_filter(BmfImage* img);
-  void stream_open(uint32_t data_size);
-  int32_t transform_cost(BmfImage* tile_img);
-  void transform_planes(BmfImage* p_i);
-  void unmodel_described(BmfImage* img_at, uint8_t flags);
-  void unmodel_plane(BmfImage* p_i, uint8_t* out);
-  void unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf);
-  void unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf);
-  uint32_t unpack_bits(int32_t n);
-  void write_plane_descs();
-  int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0, int32_t plane_a, int32_t plane_b, int32_t w4, int32_t w8);
-  PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf, uint32_t* plane_cost);
-  void choose_alpha_plane(BmfImage*img, int32_t(&hists)[8*1024], const uint8_t*data_end, int32_t row_stride);
-  template <int32_t f_DEC> void alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height, uint8_t* out);
-  void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out);
-  void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
-  void alt_p2_planes_alloc(AltP2Block** plane, int32_t width);
-  void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width);
-  uint8_t*compress_to_memory(BmfImage* p_i, size_t* out_len, const CodedTail* tail = nullptr);
-  BmfImage*expand_from_memory(const uint8_t* data, size_t n, CodedTail** tail = nullptr);
-};
 
 enum : uint8_t {
   depth_bits = 0x3F,
@@ -3541,290 +4476,6 @@ BmfFile*bmf_open_file(BmfFile* out, char* path, int32_t read_only) {
   out[0].io = BmfStream::over_file(fp);
   return out;
 }
-
-uint32_t BMFState::rc_decode_flat(uint32_t tot) {
-  uint32_t sym = rc.get_freq(tot);
-  rc.decode(sym, sym+1, tot);
-  return sym;
-}
-
-
-
-template <int32_t f_DEC> void BMFState::rc_end() {
-  if constexpr( f_DEC )
-    rc.finish();
-  else
-    rc.flush();
-  end_plane_stream();
-}
-
-void BMFState::rc_end_decode() {
-  rc_end<1>();
-}
-
-void BMFState::rc_end_encode() {
-  rc_end<0>();
-}
-
-void BMFState::packer_rewind() {
-  if( stream.cur==(uint8_t*)stream.pk.word ) return;
-  int32_t bits = stream.pk.free_bits-8;
-  if( bits<0 ) {
-    stream.pk.free_bits = bits;
-    return;
-  }
-  uint8_t* at = stream.cur;
-  while( bits>=0 ) { --at; bits -= 8; }
-  stream.cur = at;
-  stream.pk.free_bits = bits;
-}
-
-uint16_t*BMFState::begin_plane_stream() {
-  if( plane_predictor==pred_p2 ) {
-    alt_freq_init = 8;
-    alt_freq_limit = 8;
-  } else {
-    alt_freq_limit = 16;
-    alt_freq_init = 64;
-  }
-  model_geometry[0] = 0;
-  model_geometry[1] = 1;
-  level_geom[2].half = 1;
-  level_geom[2].first = 2;
-  level_geom[2].tbl_base = 0;
-  memset(&model_geometry[2], 2, 2);
-  int32_t slot = 4;
-  for( int32_t lvl = 3; lvl<8; ++lvl ) {
-    level_geom[lvl].half = 1<<(lvl-2);
-    level_geom[lvl].first = (uint8_t)slot;
-    level_geom[lvl].tbl_base = (uint8_t)slot-lvl;
-    memset(&model_geometry[slot], lvl, 2*level_geom[lvl].half);
-    slot += 2*level_geom[lvl].half;
-  }
-  uint16_t* tbl = model_table_store;
-  if( tbl ) {
-    int32_t k = 0;
-    uint16_t* row = tbl;
-    const uint16_t seed_row[10] = {
-      635, (uint16_t)(24*alt_freq_limit), 205, 124, 147, 83, 48, 16, 8, 4,
-    };
-    for( k = 0; k<0x400; ++k, row += 254 ) {
-      memcpy(row, seed_row, sizeof seed_row);
-      FreqPair* seed = (FreqPair*)&row[10];
-      for( uint32_t i = 0; i<0x7A; ++i ) {
-        seed[i].f[0] = 60;
-        seed[i].f[1] = 36;
-      }
-    }
-  }
-  model_tables = tbl;
-  return tbl;
-}
-
-template <int32_t f_DEC> uint16_t*BMFState::rc_begin() {
-  if constexpr( !f_DEC ) *stream.pk.word = stream.pk.acc;
-  packer_rewind();
-  uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
-  if constexpr( f_DEC )
-    rc.dec_init();
-  else
-    rc.enc_init();
-  return tbl;
-}
-
-uint16_t*BMFState::rc_begin_encode() {
-  return rc_begin<0>();
-}
-
-void BMFState::rc_begin_decode() {
-  rc_begin<1>();
-}
-
-uint32_t BMFCodec::packer_word() {
-  if( stream.cur+4>stream.buf+stream.size ) bmf_fatal(bmf_read_error);
-  uint32_t w = *(uint32_t*)stream.cur;
-  stream.cur += 4;
-  return w;
-}
-
-void BMFCodec::packer_reset() {
-  stream.pk.free_bits = 0;
-  stream.pk.acc = 0;
-  stream.cur = stream.buf;
-  stream.pk.word = (uint32_t*)stream.buf;
-  hist_scratch = stream.buf+stream.size-4096;
-}
-
-void BMFCodec::stream_open(uint32_t data_size) {
-  stream.size = data_size+0x20000;
-  stream.buf = (uint8_t*)bmf_new(stream.size);
-  packer_reset();
-}
-
-void BMFCodec::packer_flush() {
-  *stream.pk.word = stream.pk.acc;
-}
-
-void BMFCodec::pack_bits(uint32_t word, int32_t n) {
-  if( stream.pk.free_bits<n ) {
-    *stream.pk.word = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
-    stream.pk.word = (uint32_t*)stream.cur;
-    stream.cur += 4;
-    stream.pk.acc = word>>(stream.pk.free_bits&31);
-    stream.pk.free_bits += 32-n;
-  } else {
-    stream.pk.acc |= word<<(-stream.pk.free_bits&31);
-    stream.pk.free_bits -= n;
-  }
-}
-
-uint32_t BMFCodec::unpack_bits(int32_t n) {
-  const uint32_t mask = (1u<<n)-1;
-  uint32_t v;
-  stream.pk.free_bits -= n;
-  if( stream.pk.free_bits<0 ) {
-    const uint32_t w = packer_word();
-    v = stream.pk.acc|((w<<((stream.pk.free_bits+n)&31))&mask);
-    stream.pk.acc = w>>(-stream.pk.free_bits&31);
-    stream.pk.free_bits += 32;
-  } else {
-    v = stream.pk.acc&mask;
-    stream.pk.acc = stream.pk.acc>>n;
-  }
-  return v;
-}
-
-
-
-template <int32_t f_DEC> int32_t BMFState::code_symbol_tree(uint16_t* freq, int32_t sym) {
-  uint16_t add;
-  uint32_t cum, j;
-  int32_t lvl, result, go, span;
-  uint16_t fq, * slot;
-  uint16_t* f0 = freq+2;
-  uint32_t tot = freq[0];
-  if constexpr( f_DEC ) {
-    uint32_t target = rc.get_freq(tot);
-    slot = f0;
-    lvl = 0;
-    cum = f0[0];
-    if( cum<=target ) {
-      do {
-        ++slot;
-        ++lvl;
-        cum += slot[0];
-      } while( cum<=target );
-    }
-    rc.decode(cum-slot[0], cum, tot);
-  } else {
-    lvl = model_geometry[sym];
-    cum = 0;
-    for( j = 0; j<(uint32_t)lvl; j++ )
-      cum += f0[j];
-    slot = &f0[lvl];
-    uint32_t cum_hi = cum+slot[0];
-    result = rc.encode(cum, cum_hi, tot);
-  }
-  if( freq[0]>0x4000u ) {
-    halve_counts(freq+2, 8);
-    uint16_t total = 0;
-    for( int32_t k = 2; k<10; ++k )
-      total += freq[k];
-
-    int32_t esc = freq[1];
-    freq[0] = total;
-    if( esc<=4*alt_freq_limit ) {
-      result = 4*(esc>alt_freq_limit);
-      add = esc-result;
-      freq[1] = add;
-    } else {
-      add = esc-16;
-      freq[1] = add;
-    }
-  } else {
-    add = freq[1];
-  }
-  slot[0] += add;
-  freq[0] += freq[1];
-  if( lvl<2 )
-    return lvl;
-  int32_t mask = level_geom[lvl].half;
-  int32_t path = 0;
-  if constexpr( !f_DEC )
-    path = sym-level_geom[lvl].first;
-  int32_t node = 0;
-  for( span = 1;; span *= 2 ) {
-    FreqPair* pair = bit_tree(freq, lvl)+span+node;
-    int32_t f1 = pair[0].f[1];
-    int32_t fa = pair[0].f[0];
-    if constexpr( f_DEC ) {
-      go = rc.decode_bit(fa, f1);
-    } else {
-      go = (mask&path)!=0;
-      result = rc.encode_bit(fa, f1, go);
-    }
-    fq = pair[0].f[go];
-    if( fq>0x4000u ) fq = halve_pair(pair, go);
-    pair[0].f[go] = alt_freq_init+fq;
-    mask >>= 1;
-    node = go+2*node;
-    if( !mask ) return node+level_geom[lvl].first;
-  }
-}
-
-void BMFState::encode_symbol_tree(uint16_t* freq, int32_t sym) {
-  code_symbol_tree<0>(freq, sym);
-}
-
-int32_t BMFState::decode_symbol_tree(uint16_t* freq) {
-  return code_symbol_tree<1>(freq, 0);
-}
-
-template <int32_t f_DEC> int32_t CounterNode::code_symbol(BMFState* cx, int32_t ctx, int32_t sym) {
-  uint32_t cum;
-  int32_t slot;
-  uint16_t* cur = c;
-  const uint32_t tot = total&0x7FFF;
-  if constexpr( f_DEC ) {
-    sym = cx[0].rc.get_freq(tot);
-    cum = c[0];
-    while( cum<=(uint32_t)sym )
-      cum += *++cur;
-    cx[0].rc.decode(cum-cur[0], cum, tot);
-  } else {
-    slot = sym_slot(sym);
-    cum = 0;
-    for( int32_t k = 0; k<slot; k++ )
-      cum += c[k];
-    cur = &c[slot];
-    cx[0].rc.encode(cum, cum+cur[0], tot);
-  }
-  if( tot>0x2000 ) {
-    total = 0x8000;
-    int32_t lo = 256;
-    for( int32_t k = 6; k>=0; --k )
-      if( c[k]<lo )
-        lo = c[k];
-    for( int32_t k = 6; k>=0; --k ) {
-      const uint16_t nf = lo<=1 ? c[k]-(c[k]>>1) : (c[k]+2)/3;
-      c[k] = nf;
-      total += nf;
-    }
-  }
-  cur[0] += 32;
-  const int32_t result = total+32;
-  total = result;
-  slot = cur-c;
-  if( slot>=5 ) {
-    uint16_t*const strip = cx[0].model_strip(CtxIdx{}.bit<7>(slot&1).bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96).raw((uint32_t)ctx));
-    if constexpr( f_DEC )
-      slot += 2*cx[0].decode_symbol_tree(strip);
-    else
-      cx[0].encode_symbol_tree(strip, (sym-5)>>1);
-  }
-  return slot;
-}
-
 void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t sym) {
   node[0].code_symbol<0>(cx, ctx, sym);
 }
@@ -3832,42 +4483,6 @@ void alt_p1_encode_symbol(BMFState* cx, CounterNode* node, int32_t ctx, int32_t 
 int32_t alt_p1_decode_symbol(BMFState* cx, CounterNode* node, int32_t ctx) {
   return node[0].code_symbol<1>(cx, ctx, 0);
 }
-
-int32_t BMFState::update_binary_pair(uint16_t* _this, int32_t symbol) {
-  int32_t node;
-  uint32_t step, f;
-  int32_t tot = _this[0];
-  if( (uint32_t)tot<=0x8000 ) {
-    int32_t lvl = model_geometry[symbol];
-    step = (_this[1]>>2)&0xFFFFFFE0;
-    if( plane_predictor==pred_p2 )
-      step = 15*(_this[1]>>5);
-    _this[lvl+2] += step+4;
-    tot = _this[0]+step+4;
-    _this[0] = tot;
-    if( symbol>=2 ) {
-      int32_t mask = level_geom[lvl].half;
-      int32_t path = symbol-level_geom[lvl].first;
-      node = 0;
-      FreqPair* tbl = bit_tree(_this, lvl);
-      int32_t span = 1;
-      do {
-        FreqPair* pair = tbl+node+span;
-        int32_t go = (mask&path)!=0;
-        f = pair[0].f[go];
-        if( f>0x2000 )
-          f = halve_pair(pair, go);
-        span *= 2;
-        mask >>= 1;
-        node = go+2*node;
-        pair[0].f[go] = f+((alt_freq_init*((uint32_t)(plane_predictor==pred_p2)+5))>>3);
-      } while( mask );
-      return 0;
-    }
-  }
-  return tot;
-}
-
 int32_t estimate_cost(const int32_t* bin, int32_t n) {
   double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
   int32_t i;
@@ -3892,332 +4507,6 @@ int32_t estimate_cost(const int32_t* bin, int32_t n) {
     total = total*log(total);
   return (int32_t)((total-entropy)*1.442695040888963);
 }
-
-
-
-void ModelBlock::free_workspace() {
-  free(sym_word);
-  free_sym_lists(sel1_list);
-  free_sym_lists(sel0_list);
-}
-
-ModelBlock*BMFCodec::new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
-  void* raw = model_blocks.take(false);
-  return ((ModelBlock*)raw)[0].layout_workspace(this, img_w, img_h, img_depth);
-}
-
-ModelBlock*ModelBlock::layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth) {
-  cx = state;
-  int32_t j;
-  uint32_t k, m, s, n;
-  cx[0].exclusion_gen = 1;
-  width = img_w;
-  height = img_h;
-  depth = img_depth;
-  depth_raw = img_depth;
-  escape.ent = nullptr;
-  sym_code = nullptr;
-  for( j = 0; j<5; ++j ) {
-    PixRec* buf = row_store[j];
-    row_cur[j] = buf;
-    row_cur[j+5] = buf+ModelBlock::kRowMargin+1;
-    for( uint32_t r = 0; r<width+(uint32_t)(ModelBlock::kRowMargin+ModelBlock::kRowTail); ++r ) {
-      row_cur[j][r].sym = 0;
-      for( int32_t i = 0; i<6; ++i )
-        row_cur[j][r].match[5-i] = 1;
-    }
-  }
-
-  uint8_t* runs = run_bucket_store;
-  run_bucket = runs;
-  runs[0] = 0;
-  {
-    uint8_t bucket = 0;
-    for( uint32_t x = 0; x<width; ++x ) {
-      bucket += x==2u<<(bucket&31);
-      run_bucket[x+1] = bucket;
-    }
-  }
-  memset(sym_rev, 0, sizeof sym_rev);
-  for( k = 0; k<0x2000; ++k ) {
-    uint16_t rev = sym_rev[k];
-    int32_t bits = k;
-    for( m = 0; m<0xD; ++m ) {
-      rev += rev+(bits&1);
-      bits >>= 1;
-    }
-    sym_rev[k] = rev;
-  }
-  for( s = 0; s<0x2000; ++s )
-    sym_rev[s] *= 8;
-  memset(&grid[188], 0, 0x100000);
-  ctx_id3_used = 0;
-  ctx_id2_used = 0;
-  ctx_id1_used = 0;
-  memset(ctx_id1, 255, sizeof ctx_id1);
-  memset(ctx_id2, 255, sizeof ctx_id2);
-  memset(ctx_id3, 255, sizeof ctx_id3);
-  memset(cx[0].exclusion_mask, 0, sizeof cx[0].exclusion_mask);
-  sel[0] = nullptr;
-  sel[1] = nullptr;
-  escape_list = nullptr;
-  for( n = 0; n<0x40000; ++n ) {
-    sym_ctr[2*n] = no_symbol;
-    sym_ctr[2*n+1] = no_symbol;
-  }
-  for( uint32_t k8 = 0; k8<8; ++k8 ) {
-    bit_root[2*k8].init_root();
-    bit_root[2*k8+1].init_root();
-  }
-  memset(bit_node, 0, sizeof bit_node);
-  sym_word = (uint16_t*)bmf_new(2*height*width);
-  esc_ctr[0].init_parent();
-  memset(&esc_ctr[1], 0, 1536);
-  for( uint32_t k24 = 0; k24<0x18; ++k24 ) {
-    run_ctr[2*k24].init_parent();
-    run_ctr[2*k24+1].init_parent();
-  }
-  return this;
-}
-
-
-
-
-
-int32_t ModelBlock::tree_place(ReduceNode* tree, uint32_t val) {
-  int32_t node = 0, side;
-  uint16_t* kidp;
-  while( 1 ) {
-    side = tree[node].val<val;
-    kidp = tree[node].kid;
-    node = kidp[side];
-    if( !node )
-      break;
-    if( val==tree[node].val ) {
-      cx[0].mode_symbol[1] = side;
-      return node;
-    }
-  }
-  cx[0].mode_symbol[1] = side;
-  node = (uint16_t)alphabet;
-  int32_t alpha = alphabet+1;
-  kidp[side] = node;
-  alphabet = alpha;
-  if( alpha>0x2000 )
-    return -1;
-  tree[node].val = val;
-  return node;
-}
-
-template <int32_t f_DEC> uint32_t BMFState::code_alphabet_size(uint32_t n, uint32_t cap) {
-  if constexpr( f_DEC ) return rc_decode_flat(cap)+1;
-  rc.encode(n-1, n, cap);
-  return n;
-}
-
-template <int32_t f_DEC> uint32_t SymList::code_symbol_bytes(BMFState* cx, uint32_t nbytes, uint32_t val, int32_t &carry) {
-  SymList*const lists = this;
-  uint32_t word = val, out = 0;
-  for( uint32_t b = 0; b<nbytes; ++b ) {
-    uint32_t piece;
-    if constexpr( f_DEC ) {
-      piece = lists[4*b+carry].decode_symbol_list(cx);
-      out += piece<<((8*b)&31);
-    } else {
-      piece = (uint8_t)word;
-      lists[4*b+carry].code_symbol(cx, (uint8_t)piece);
-      word >>= 8;
-    }
-    carry = piece>>6;
-  }
-  if constexpr( !f_DEC )
-    out = val;
-  carry = (uint8_t)out>>7;
-  return out;
-}
-
-void ModelBlock::reduce_alphabet(uint8_t* src) {
-  ReduceNode tree[8192];
-  SymList lists[16];
-  uint8_t* out[19];
-  uint32_t alpha_n, done;
-  int32_t node, carry;
-  uint8_t* rp;
-  uint32_t sym_bits = depth;
-  uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
-  uint32_t n_kids = (sym_bits+7)>>3;
-  auto load32 = [](const uint8_t* at) {
-                  uint32_t v;
-                  memcpy(&v, at, sizeof v);
-                  return v;
-                };
-  clear_sym_lists(lists);
-  if( sym_bits<=8 ) {
-    reduce_narrow_alphabet(lists, src, mask);
-  } else {
-    memset(tree, 0, sizeof tree);
-    alphabet = 1;
-    tree[0].val = mask&load32(src);
-    sym_word[0] = 0;
-    if( (uint32_t)(height*width)>1 ) {
-      uint8_t* p = src;
-      node = 0;
-      uint32_t written = 1;
-      while( 1 ) {
-        p += n_kids;
-        uint32_t val = mask&load32(p);
-        if( val!=tree[node].val ) {
-          node = 0;
-          if( val!=tree[0].val ) node = tree_place(tree, val);
-          if( node<0 ) break;
-        }
-        sym_word[written++] = node;
-        if( written>=(uint32_t)(height*width) ) break;
-      }
-    }
-    alpha_n = alphabet;
-    cx[0].code_alphabet_size<0>(alpha_n, no_symbol+1);
-    if( alphabet>0x2000 ) {
-      out[1] = (uint8_t*)bmf_new(height*n_kids*width);
-      int32_t img_w = width;
-      int32_t img_h = height;
-      uint32_t plane_size;
-      if( n_kids ) {
-        plane_size = img_h*img_w;
-        if( n_kids>>1 ) {
-          uint8_t* half = out[1]+img_h*img_w;
-          uint32_t pairs = 0;
-          for(; pairs<n_kids>>1; ++pairs ) {
-            const uint32_t slot_a = 2*pairs;
-            const uint32_t off = 2*pairs*plane_size;
-            out[slot_a+2] = out[1]+off;
-            out[slot_a+3] = &half[off];
-          }
-          done = 2*pairs+1;
-        } else {
-          done = 1;
-        }
-        if( n_kids>(done-1) )
-          out[done+1] = out[1]+img_h* -img_w+plane_size*done;
-      } else {
-        plane_size = img_h*img_w;
-      }
-      if( plane_size ) {
-        rp = src;
-        if( n_kids ) {
-          for( uint32_t moved = 0; moved<plane_size; ++moved ) {
-            for( uint32_t c = 0; c<n_kids; ++c )
-              *out[c+2]++ = rp[c];
-            rp += n_kids;
-          }
-        }
-      }
-      uint16_t* old_words = sym_word;
-      height = n_kids*img_h;
-      depth = 8;
-      free(old_words);
-      void* newbuf = bmf_new(2*height*width);
-      sym_word = (uint16_t*)newbuf;
-      reduce_alphabet(out[1]);
-      free(out[1]);
-    } else {
-      init_byte_lists(cx, lists, n_kids);
-      const int32_t alpha_m = alphabet;
-      if( alpha_m ) {
-        carry = 0;
-        for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si )
-          lists[0].code_symbol_bytes<0>(cx, n_kids, tree[si].val, carry);
-      }
-    }
-    free_sym_entries(lists, 16);
-  }
-}
-
-uint32_t BMFState::alt_init_tables(uint8_t* fold, int8_t* unfold) {
-  uint8_t even, odd;
-  uint32_t done;
-  int32_t in_bucket, bucket;
-  uint8_t half;
-  uint32_t i, b;
-
-  int32_t bucket_size = 2*near_lossless_q+1;
-  unfold[0] = 0;
-  unfold[255] = 0x80;
-  for( i = 0; i<0x3F; ++i ) {
-    unfold[4*i+2] = (int8_t)(2*i+1);
-    unfold[4*i+1] = (int8_t)(-2*i-1);
-    unfold[4*i+4] = (int8_t)(2*i+2);
-    unfold[4*i+3] = (int8_t)(-2*i-2);
-  }
-  unfold[254] = 127;
-  unfold[253] = -127;
-  fold[0] = 0;
-  uint32_t lo = 1;
-  fold[128] = (uint8_t)-1;
-  {
-    uint32_t span = 128-lo;
-    uint32_t pairs = (128-lo)/2;
-    half = 0;
-    in_bucket = 1;
-    {
-      uint32_t k = 0;
-      int32_t ofs = 0;
-      uint8_t* pos = &fold[lo];
-      uint8_t* neg = fold-lo;
-      for(; k<pairs; ++k, ofs -= 2 ) {
-        bucket = bucket_size;
-        int32_t bucket_1 = in_bucket-1;
-        if( bucket_1 )
-          bucket = bucket_1;
-        else
-          ++half;
-        even = 2*half;
-        pos[2*k] = even;
-        odd = 2*half-1;
-        in_bucket = bucket-1;
-        neg[ofs+256] = odd;
-        if( bucket==1 ) {
-          in_bucket = bucket_size;
-          even = 2*++half;
-          odd = 2*half-1;
-        }
-        pos[2*k+1] = even;
-        neg[ofs+255] = odd;
-      }
-      done = 2*k+1;
-    }
-    if( (done-1)<span ) {
-      if( in_bucket==1 ) half = half+1;
-      fold[lo-1+done] = 2*half;
-      fold[257-lo-done] = 2*half-1;
-    }
-  }
-  for( b = 0; b<0x80; ++b ) {
-    fold[(uint8_t)((uint8_t*)unfold)[2*b]+256] = 2*b;
-    fold[(uint8_t)((uint8_t*)unfold)[2*b+1]+256] = 2*b+1;
-  }
-  return b;
-}
-
-AltP1Block*BMFCodec::alt_p1_block_alloc(int32_t width, int32_t height) {
-  AltP1Block* raw = p1_blocks.take(false);
-  return raw ? raw[0].alt_p1_alloc(this, width, height, 0) : nullptr;
-}
-
-template <int32_t f_DEC> void BMFCodec::alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height, uint8_t* out) {
-  AltP1Block* blk = alt_p1_block_alloc(width, height);
-  blk[0].d8_body<f_DEC>(src, out);
-  if( blk ) p1_blocks.give(blk);
-}
-
-void BMFCodec::alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
-  alt_model_p1_d8<0>(src, i, height, out);
-}
-
-void BMFCodec::alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
-  alt_model_p1_d8<1>(nullptr, i, height, out);
-}
-
 uint32_t plane_mix2(const PlaneDesc &d, const uint8_t* p0, const uint8_t* p1) {
   return (d.weight0**p0+d.weight1*(uint32_t)*p1+40)>>7;
 }
@@ -4225,760 +4514,6 @@ uint32_t plane_mix2(const PlaneDesc &d, const uint8_t* p0, const uint8_t* p1) {
 int32_t plane_mix3(const PlaneDesc &d, const uint8_t* p) {
   return (d.weight1*p[-2]+d.weight0*p[-3]+d.weight2*p[-1]+64)>>7;
 }
-
-template <int32_t f_DEC> int32_t BMFCodec::alt_model_p1(BmfImage* hdr, uint8_t* buf) {
-  AltP1Block* plane[4];
-  int32_t cur0, cur1, cur3;
-  int32_t want2;
-  int32_t width = hdr[0].width;
-  int32_t height = hdr[0].height;
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    AltP1Block* raw = p1_blocks.take(false);
-    plane[k] = raw[0].alt_p1_alloc(this, width, height, k);
-  }
-  int32_t src1 = plane_desc[1].src_plane;
-  int32_t src2 = plane_desc[2].src_plane;
-  int32_t src3 = plane_desc[3].src_plane;
-  uint8_t fl1 = plane_desc[src1].flags;
-  uint8_t fl2 = plane_desc[src2].flags;
-  uint8_t fl3 = plane_desc[src3].flags;
-  int32_t dc2 = plane_desc[src2].dc;
-  int32_t dc1 = plane_desc[src1].dc;
-  int32_t xf1 = fl1&8;
-  int8_t dc3 = plane_desc[src3].dc;
-  int32_t xf2 = fl2&8;
-  int32_t xf3 = fl3&8;
-  if constexpr( f_DEC )
-    rc_begin_decode();
-  else
-    rc_begin_encode();
-  for( uint32_t y = 0; y<(uint32_t)height; ++y ) {
-    for( int32_t p = 0; p<plane_count; ++p ) {
-      plane[p][0].advance_row();
-      plane[p][0].seed_activity(true);
-    }
-    {
-      auto code_sample = [&](int32_t n, AltP1Block* a, AltP1Block* b, int32_t off, int32_t val) {
-                           AltP1Block*const blk = plane[n];
-                           blk[0].ctx_of(a, b);
-                           val = f_DEC ? blk[0].decode_sample() : blk[0].encode_sample(buf, off, val);
-                           blk[0].record_sample(val);
-                           return val;
-                         };
-      auto fold_from = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix) {
-                         const int32_t v = buf[off];
-                         return xf ? v-dc-mix : v;
-                       };
-      auto unfold_to = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix, int32_t val) {
-                         if( xf )
-                           val += dc+mix;
-                         buf[off] = val;
-                       };
-      for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
-        int32_t off0 = plane_desc[0].src_plane;
-        if constexpr( !f_DEC )
-          cur0 = fold_from(off0, 0, 0, 0);
-        cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
-        int32_t off1 = plane_desc[1].src_plane;
-        if constexpr( f_DEC )
-          unfold_to(off0, 0, 0, 0, cur0);
-        else
-          cur1 = (uint8_t)fold_from(off1, xf1, dc1, buf[off0]);
-        cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
-        int32_t off2 = plane_desc[2].src_plane;
-        if constexpr( f_DEC )
-          unfold_to(off1, xf1, dc1, buf[off0], cur1);
-        else
-          want2 = (uint8_t)fold_from(off2, xf2, dc2, plane_mix2(plane_desc[off2], buf+off0, buf+off1));
-        want2 = code_sample(2, plane[1], plane[0], off2, want2);
-        if constexpr( f_DEC )
-          unfold_to(off2, xf2, dc2, plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
-        if( plane_count>=4 ) {
-          int32_t off3 = plane_desc[3].src_plane;
-          if constexpr( !f_DEC )
-            cur3 = (uint8_t)fold_from(off3, xf3, dc3, plane_mix3(plane_desc[off3], buf+off3));
-          cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
-          if constexpr( f_DEC )
-            unfold_to(off3, xf3, dc3, plane_mix3(plane_desc[off3], buf+off3), cur3);
-        }
-        buf += plane_count;
-      }
-    }
-  }
-  if constexpr( f_DEC )
-    rc_end_decode();
-  else
-    rc_end_encode();
-  return planes_free(p1_blocks, plane);
-}
-
-int32_t BMFCodec::alt_model_p1_encode(BmfImage* hdr, uint8_t* src) {
-  return alt_model_p1<0>(hdr, src);
-}
-
-int32_t BMFCodec::alt_model_p1_decode(BmfImage* hdr, uint8_t* out) {
-  return alt_model_p1<1>(hdr, out);
-}
-
-inline int32_t NbRow::predict(BMFState* cx, float (*nb)[4], CtxWeights* sets, int32_t mode) {
-  const float* mix = bmf_p2_mix[mode];
-  float mixed[7][4], centre, prediction, own;
-  int32_t i, j, k;
-  centre = nb_dot(cx[0].p2_coef, nb);
-  nb[7][0] = centre;
-  for( j = 0; j<7; j++ )
-    for( k = 0; k<4; k++ )
-      nb[j][k] -= centre;
-  for( j = 0; j<7; j++ )
-    for( k = 0; k<4; k++ ) {
-      mixed[j][k] = mix[0]*sets[0].row[0][0].w[j][k];
-      for( i = 1; i<6; i++ )
-        mixed[j][k] += mix[i]*sets[0].row[i][0].w[j][k];
-    }
-  prediction = nb_dot(mixed, nb)+centre;
-  nb[7][2] = prediction;
-  if( uses ) {
-    own = centre+nb_dot(w, nb);
-    nb[7][1] = own;
-    return (int32_t)(prediction+((own-prediction)*w[14][0])/w[14][1]);
-  }
-  for( j = 0; j<7; j++ )
-    for( k = 0; k<4; k++ ) {
-      w[j][k] = mixed[j][k]*bmf_p2_decay;
-      w[j+7][k] = sets[0].row[0][0].w[j+7][k]*bmf_p2_seed;
-    }
-  w[14][0] = 47.0f;
-  w[14][1] = 169.2f;
-  w[14][2] = 1.0f;
-  nb[7][1] = prediction;
-  return (int32_t)prediction;
-}
-
-template <int32_t f_DEC> void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int32_t width, int32_t height) {
-  int32_t j, code0, code;
-  uint8_t* outp, code2;
-  uint32_t k;
-  uint8_t* src_end = src;
-  if constexpr( f_DEC )
-    cx[0].rc_begin_decode();
-  else
-    cx[0].rc_begin_encode();
-  P2Ctx* pix = cursor[0];
-  if( width>0 ) {
-    uint8_t* p = src;
-    for( j = 0; j<width; ++j ) {
-      P2Ctx* rec = cursor[0];
-      int32_t q2 = rec[-1].val>>4;
-      ctx_pair[0] = ctx+ctx_delta[q2+4];
-      ctx_pair[1] = ctx+ctx_delta[q2];
-      P2Freq &fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
-      if constexpr( f_DEC ) {
-        out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair)]);
-      } else {
-        code0 = fold_or_refuse(out, *p, (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
-        fr.encode_symbol(cx, ctx_pair, code0);
-        ++p;
-      }
-      int32_t val = 16*(uint8_t)*out;
-      cursor[0][0].val = val;
-      cursor[0][0].dval = val;
-      ++out;
-      int32_t err = (int16_t)(rec[0].val-rec[-1].val);
-      rec[0].err = err;
-      int32_t adiff = abs32(err);
-      cursor[0][0].aerr = adiff;
-      cursor[0][0].dupright = adiff;
-      cursor[0][0].dupleft = adiff;
-      cursor[0][0].dup = adiff;
-      cursor[0][0].dleft = (uint32_t)cursor[0][0].dup>>1;
-      cursor[0][0].mag = 2;
-      cursor[0][0].sign = (cursor[0][0].err<=0)+(cursor[0][0].err<0);
-      pix = cursor[0]+1;
-      cursor[0] = pix;
-    }
-    if constexpr( !f_DEC )
-      src_end = p;
-  }
-  seed_history(width);
-  if( height>1 ) {
-    uint32_t* pair = ctx_pair;
-    outp = out;
-    for( uint32_t y = 0; y<(uint32_t)(height-1); ++y ) {
-      uint8_t* srcp = src_end;
-      start_row();
-      if( width<=0 )
-        continue;
-      for( k = 0; k<(uint32_t)width; ++k ) {
-        int32_t pred = alt_p2_context(nullptr, nullptr);
-        if constexpr( f_DEC ) {
-          code2 = code = freq[ctx].decode_symbol(cx, pair);
-          outp[k] = (uint8_t)(pred+(unfold[code]));
-        } else {
-          code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
-          code2 = code;
-          freq[ctx].encode_symbol(cx, pair, code);
-        }
-        alt_p2_model(outp[k], code2, outp[k]-pred);
-      }
-      if constexpr( !f_DEC )
-        src_end = &srcp[width];
-      outp = &outp[width];
-    }
-  }
-  if constexpr( f_DEC )
-    cx[0].rc_end_decode();
-  else
-    cx[0].rc_end_encode();
-}
-
-template <int32_t f_DEC> void BMFCodec::alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
-  AltP2Block* blk;
-  AltP2Block* raw = p2_blocks.take(true);
-  if( raw )
-    blk = raw[0].alt_p2_alloc(this, i, 0);
-  else
-    blk = nullptr;
-  if constexpr( f_DEC )
-    blk[0].alt_p2_d8_body<1>(nullptr, out, i, height);
-  else
-    blk[0].alt_p2_d8_body<0>(src, out, i, height);
-  if( blk )
-    p2_blocks.give(blk);
-}
-
-void BMFCodec::alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
-  alt_model_p2_d8<0>(src, i, height, out);
-}
-
-void BMFCodec::alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height) {
-  alt_model_p2_d8<1>(nullptr, i, height, out);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-AltP2Block::P2Refs AltP2Block::fill_row_inputs(AltP2Block* refa, AltP2Block* refb) {
-  P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
-  const DvalRow d0{c0}, d1{c1}, d2{c2}, d3{c3};
-  const ValRow v0{c0}, v1{c1}, v2{c2}, v3{c3}, v4{c4};
-  p2_row[0][0] = (float)d1(0);
-  p2_row[0][1] = (float)d1(1);
-  p2_row[0][2] = (float)grad(d0(-1), d1(0), d1(-1));
-  p2_row[0][3] = (float)grad(d0(-2), d1(0), d1(-2));
-  p2_row[1][0] = (float)grad(d1(-1), d1(0), d2(-1));
-  p2_row[1][1] = (float)(-3*(d2(0)-d1(0))+d3(0));
-  p2_row[1][2] = (float)grad(d0(-1), d1(2), d1(1));
-  p2_row[1][3] = (float)grad(d0(-2), d1(1), d1(-1));
-  p2_row[2][0] = (float)(2*d0(-1)-d0(-2));
-  p2_row[2][1] = (float)grad(d0(-3), d1(0), d1(-3));
-  p2_row[2][2] = (float)grad(d2(0), d1(1), d3(1));
-  p2_row[2][3] = (float)d0(-3);
-  p2_row[3][0] = (float)grad(d1(-2), d1(0), d2(-2));
-  p2_row[3][1] = (float)grad(d0(-2), d1(-1), d1(-3));
-  p2_row[3][2] = (float)grad(d1(1), (d1(2)+d1(0))>>1, d2(2));
-  p2_row[3][3] = (float)d3(0);
-  if( refa ) {
-    const P2Refs refs{ref_rows(refa[0].cursor), ref_rows(refb[0].cursor)};
-    P2Ctx*const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;
-    P2Ctx*const rb0 = refs.b.r0, *const rb1 = refs.b.r1, *const rb2 = refs.b.r2;
-    const ValRow a0{ra0}, a1{ra1}, a2{ra2}, b0{rb0}, b1{rb1}, b2{rb2};
-    const bool no_ref = has_ref==0;
-    if( !no_ref ) {
-      const float bias_l = (float)c0[0].dval;
-      for( int32_t j = 0; j<4; ++j )
-        for( int32_t k = 0; k<4; ++k )
-          p2_row[j][k] += bias_l;
-    }
-    const int32_t plane = (int32_t)plane_idx;
-    if( plane ) {
-      if( plane==1 ) {
-        p2_row[4][0] = (float)(d0(0)+d1(3));
-        p2_row[4][1] = (float)grad(v0(-2), a1(2), a1(0));
-        p2_row[4][2] = (float)grad(v1(1), a0(-1), a1(0));
-        p2_row[4][3] = (float)grad(v0(-1), a1(0), a1(-1));
-        p2_row[5][0] = (float)grad(v1(1), b1(2), b2(3));
-        p2_row[5][1] = (float)grad(v0(-2), b0(0), b0(-2));
-        p2_row[5][2] = (float)grad(v1(0), b0(0), b1(0));
-        p2_row[5][3] = (float)(v0(-2)+ra0[0].err);
-        if( no_ref ) {
-          p2_row[6][0] = (float)grad(v0(-2), a0(0), a0(-2));
-          p2_row[6][1] = (float)grad(v2(0), a0(0), a2(0));
-          p2_row[6][2] = (float)(grad(a2(0), a0(0), v2(0))+2*(v1(0)-a1(0)));
-          p2_row[6][3] = (float)(v0(-1)+v1(-1)+a1(-2)+a0(0)-a0(-1)-a1(-1)-v1(-2));
-        } else {
-          p2_row[6][0] = (float)v1(0);
-          p2_row[6][1] = (float)v0(-3);
-          p2_row[6][2] = (float)grad(v0(-1), a0(-1), a0(-2));
-          p2_row[6][3] = (float)grad(v0(-3), v0(-1), v0(-4));
-        }
-      } else {
-        p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
-        p2_row[4][1] = (float)grad(v0(-1), a0(-1), a0(-2));
-        p2_row[4][2] = (float)grad(v1(1), a1(0), a2(1));
-        p2_row[4][3] = (float)grad(v0(-2), a1(2), a1(0));
-        p2_row[5][0] = (float)grad(v1(0), a0(-2), a1(-2));
-        p2_row[5][1] = (float)grad(v1(0), a0(0), a1(0));
-        p2_row[5][2] = (float)grad(v0(-2), a0(0), a0(-2));
-        p2_row[5][3] = (float)grad(v0(-2), b0(0), b0(-2));
-        p2_row[6][0] = (float)grad(v2(0), b0(0), b2(0));
-        p2_row[6][1] = (float)(grad(b0(-2), b0(0), v0(-2))+2*(v0(-1)-b0(-1)));
-        p2_row[6][2] = (float)(v0(-2)+rb0[0].err);
-        p2_row[6][3] = (float)(v2(0)+ra0[0].err);
-      }
-    } else {
-      p2_row[4][0] = (float)grad(v0(-3), v0(-1), v0(-4));
-      p2_row[4][1] = (float)grad(v0(-5), v1(0), v1(-5));
-      p2_row[4][2] = (float)grad(v0(-4), v1(0), v1(-4));
-      p2_row[4][3] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
-      p2_row[5][0] = (float)grad(v0(-2), a0(0), a0(-2));
-      p2_row[5][1] = (float)grad(v1(1), a1(1), a2(2));
-      p2_row[5][2] = (float)grad(v1(-2), a1(2), a2(0));
-      p2_row[5][3] = (float)(grad(a0(-2), a0(0), v0(-2))+2*(v0(-1)-a0(-1)));
-      p2_row[6][0] = (float)grad(v2(1), b0(0), b2(1));
-      p2_row[6][1] = (float)grad(v0(-2), b0(0), b0(-2));
-      p2_row[6][2] = (float)grad(v0(-1), b1(1), b1(0));
-      p2_row[6][3] = (float)grad(v1(1), b1(2), b2(3));
-    }
-    return refs;
-  } else {
-    p2_row[4][0] = (float)grad(v1(3), v1(0), v2(3));
-    p2_row[4][1] = (float)grad(v0(-4), v1(0), v1(-4));
-    p2_row[4][2] = (float)((v2(0)+3*v1(1)-4*v2(1))-(((v1(2)-v1(0)-(v3(2)-v3(0)))>>1)-v3(1)));
-    p2_row[4][3] = (float)grad(v2(-1), v1(1), v3(0));
-    p2_row[5][0] = (float)grad(v3(1), v1(0), v4(1));
-    p2_row[5][1] = (float)v1(3);
-    p2_row[5][2] = (float)grad(v0(-3), v0(-1), v0(-4));
-    p2_row[5][3] = (float)grad(v0(-1), v3(0), v3(-1));
-    p2_row[6][0] = (float)grad(v0(-5), v1(0), v1(-5));
-    p2_row[6][1] = (float)v4(0);
-    p2_row[6][2] = (float)grad(v0(-5), v0(-1), v0(-6));
-    p2_row[6][3] = (float)v1(-6);
-    return {};
-  }
-}
-
-int32_t AltP2Block::seat_symbol_context(int32_t run4, const P2Refs &refs) {
-  P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
-  int32_t flat_a, flat_b;
-  int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1[0].mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4[0].mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3[0].mag+c2[-1].mag+c2[2].mag);
-  const int32_t lo_band = band_lo, hi_band = band_hi;
-  ctx_w[0].sel = (run4<1840)+(run4<272);
-  ctx_w[1].sel = (run4-c1[0].val<=hi_band)+(run4-c1[0].val<lo_band);
-  int32_t d_run4 = run4-c0[-1].val;
-  bool in_band = d_run4<=hi_band;
-  ctx_w[2].sel = in_band+(d_run4<lo_band);
-  ctx_w[3].sel = c1[0].sign;
-  ctx_w[4].sel = c0[-1].sign;
-  int32_t magsum = magsum_own;
-  int32_t magu = c2[0].mag+c1[0].mag;
-  int32_t magl = c0[-1].mag+c0[-2].mag;
-  if( refs.a.r0 ) {
-    int32_t mag = refs.b.r0[0].mag;
-    int32_t mag_ref1 = refs.b.r1[0].mag+refs.a.r1[0].mag;
-    int32_t mag_ref0 = mag+refs.a.r0[0].mag;
-    magsum = mag_ref1+magsum_own+4*mag_ref0+2*(refs.a.r0[-1].mag+refs.b.r0[-1].mag);
-    flat_a = mag_ref0+magl+refs.b.r0[-2].mag+refs.b.r0[-1].mag+refs.a.r0[-2].mag+refs.a.r0[-1].mag;
-    if( has_ref ) {
-      const int32_t d_run4b = run4-c1[0].dval-c0[0].dval;
-      if( d_run4b<lo_band||d_run4b>hi_band ) {
-        const int32_t d_run4c = run4-c0[-1].dval-c0[0].dval;
-        flat_b = d_run4c>=lo_band&&hi_band>=d_run4c;
-      } else {
-        flat_b = 1;
-      }
-    } else {
-      flat_b = mag_ref1+mag_ref0+magu+refs.b.r2[0].mag+refs.a.r2[0].mag;
-    }
-    if( plane_idx==1 ) {
-      int32_t d_ra_ra1 = refs.a.r0[0].val-refs.a.r1[0].val;
-      ctx_w[3].sel = (d_ra_ra1<=hi_band)+(d_ra_ra1<lo_band);
-      int32_t d_ra_left = refs.a.r0[0].val-refs.a.r0[-1].val;
-      ctx_w[4].sel = (d_ra_left<=hi_band)+(d_ra_left<lo_band);
-    } else if( (int32_t)plane_idx>1 ) {
-      int32_t d_rb_rb1 = refs.b.r0[0].val-refs.b.r1[0].val;
-      ctx_w[3].sel = (d_rb_rb1<=hi_band)+(d_rb_rb1<lo_band);
-      int32_t d_rb_left = refs.b.r0[0].val-refs.b.r0[-1].val;
-      in_band = d_rb_left<=hi_band;
-      ctx_w[4].sel = in_band+(d_rb_left<lo_band);
-      int32_t ra0_val = refs.a.r0[0].val;
-      int32_t d_ra_ra1b = ra0_val-(refs.a.r1)[0].val;
-      in_band = lo_band<=d_ra_ra1b;
-      if( in_band&&d_ra_ra1b<=hi_band ) {
-        flat_a = 1;
-      } else {
-        int32_t d_ra_leftb = ra0_val-refs.a.r0[-1].val;
-        flat_a = d_ra_leftb>=lo_band&&d_ra_leftb<=hi_band;
-      }
-    }
-  } else {
-    flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
-    flat_b = c4[0].mag+c3[0].mag+magu+c0[0].mag;
-  }
-  const int32_t ctx15 = magsum>=960 ? 15 : nb_ctx[magsum>>3];
-  const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
-  ctx_pair[0] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx+4]);
-  ctx_pair[1] = CtxIdx{}.bits<0, 4>(ctx15).raw(ctx_delta[ctx_idx]);
-  ctx = CtxIdx{}.bits<0, 4>(ctx15).bit<4>(flat_a==0).bit<5>(flat_b==0).raw(mixer_fwd(ctx_w, 5));
-  return ctx_idx;
-}
-
-int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
-  CtxWeights weights;
-  int32_t nb_slot;
-  uint32_t ctx0, ctx1, ctx2;
-  uint32_t ctx0_lo;
-  P2Ctx*const c0 = cursor[0], *const c1 = cursor[1], *const c2 = cursor[2], *const c3 = cursor[3], *const c4 = cursor[4];
-  int32_t sum_ul = 21*c2[-1].dupleft+12*c1[3].dupleft+16*c1[2].dupleft+22*c1[1].dupleft+(23*c0[-1].dupleft)+20*c1[0].dupleft+cx[0].ctx_bias[0]+14*c0[-2].dupleft;
-  int32_t sum_ur = 17*c2[-2].dupright+21*c1[2].dupright+15*c1[1].dupright+25*c1[0].dupright+9*c1[-1].dupright+22*c0[-1].dupright+cx[0].ctx_bias[1]+19*c0[-2].dupright;
-  int32_t sum4 = 17*c1[3].dleft+15*c1[2].dleft+21*c1[1].dleft+18*c1[0].dleft+16*c1[-1].dleft+22*c0[-1].dleft+cx[0].ctx_bias[2]+19*c0[-2].dleft;
-  int32_t sum_u = 14*c1[3].dup+23*c1[1].dup+19*c1[0].dup+25*c0[-1].dup+cx[0].ctx_bias[3]+17*c0[-2].dup+15*(c3[0].dup+c2[0].dup);
-  int32_t sum_all = sum4+sum_u+sum_ul+sum_ur;
-  int32_t band = over_thresholds(8*sum4, p2_band_edges, 0, 4, sum_u);
-  int32_t den_d = 2*c0[-2].val+2*c0[-1].val;
-  int32_t num_b = c1[1].val+(c1[0].val+2*c0[-1].val);
-  int32_t num_d = 16*(c2[2].val+c2[0].val+c1[1].val+c2[-1].val);
-  int32_t gA = over_thresholds(sum_all, bmf_p2_thresholds[band], 9, 12, 1);
-  int32_t gB = over_thresholds(num_b, bmf_p2_thresholds[band], 6, 8, 1);
-  int32_t gC = over_thresholds(16*sum_ur, bmf_p2_thresholds[band], 3, 5, sum_ul);
-  int32_t gD = over_thresholds(num_d, bmf_p2_thresholds[band], 0, 2, den_d);
-  nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD).digit<64, 5>(gA).digit<320, 6>(band);
-  seat_nb_row(nb_slot, c0);
-  const P2Refs refs = fill_row_inputs(refa, refb);
-  P2Ctx*const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;
-  P2Ctx*const rb0 = refs.b.r0, *const rb1 = refs.b.r1, *const rb2 = refs.b.r2;
-  weights.row[0] = cur[-1];
-  weights.row[1] = above[1];
-  weights.row[2] = above[2];
-  weights.row[3] = cur[-2];
-  weights.row[4] = above[0];
-  weights.row[5] = cur[0];
-  const int32_t a = 16*sum4, b = 14*sum_u, c = 13*sum_ur, d = 11*sum_ul;
-  const int32_t best01 = min32(a, b);
-  int32_t mode = (best01==a) ? 0 : 1;
-  if( best01>c )
-    mode = 2;
-  if( min32(best01, c)>d )
-    mode = 3;
-  const int32_t filt = nb_cur[0].predict(cx, (float (*)[4]) p2_row, &weights, mode);
-  pred_prev = (uint16_t)filt;
-  int32_t g3pair = c0[-1].aerr+c1[0].aerr;
-  if( refa )
-    g3pair += (rb0[0].aerr+ra0[0].aerr)>>1;
-  int32_t g3sum = c1[3].aerr+c1[-1].aerr+c0[-1].aerr+c0[-3].aerr+c0[-4].aerr+c0[-2].aerr;
-  ctx0_lo = CtxIdx{}.bit<19>(c1[1].err+c1[0].err+c1[-1].err+c0[-1].err<0).bit<18>(c3[0].err+c0[-2].err+2*c0[-4].err<0).bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0).bit<16>(c0[-1].err<0).bit_of<15>((uint16_t)c0[-3].err).bits<13, 2>((filt>3536)+(filt>720)+(filt>288)).bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
-  if( refa ) {
-    ctx0 = CtxIdx{}.bit<25>(rb0[-1].err<0).bit<24>(rb0[0].err<0).bit<23>(ra0[-1].err<0).bit<22>(rb0[0].err+rb0[-2].err<0).bit<21>(ra0[-2].err+ra0[0].err<0).bit<20>(c0[-2].err<0).raw(ctx0_lo);
-  } else {
-    ctx0 = CtxIdx{}.bit<25>(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err<0).bit<24>(c2[1].err+c2[0].err+c0[-4].err+c0[-8].err<0).bit<23>(c0[-4].err+c0[-6].err<0).bit<22>(c0[-4].err<0).bit<21>(c0[-5].err<0).bit<20>(c0[-7].err<0).raw(ctx0_lo);
-  }
-  const int32_t run0 = step_bank(0, ctx0, filt);
-  int32_t nb4_4 = c4[4].val;
-  sum_all = ((g3pair<<9)+sum_all)>>13;
-  int32_t d_run0 = c0[-5].val-run0;
-  int32_t d_up = nb4_4-run0;
-  int32_t up5 = c1[5].val;
-  int32_t d_up5 = up5-run0;
-  if( refa ) {
-    int32_t dv_now = c0[0].dval;
-    ctx1 = CtxIdx{}.bit_of<25>(c0[-1].val+ra0[0].val-ra0[-1].val-run0).bit<24>(ra2[0].dval+ra1[0].dval-2*ra0[0].dval<0).bit_of<23>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval)).bit_of<22>(dv_now+c0[-5].dval-run0).bit_of<21>(dv_now+c1[0].dval+rb1[2].dval-rb2[2].dval-run0).bit_of<20>(dv_now+c0[-1].dval+rb0[0].dval-rb0[-1].dval-run0).bit_of<19>(c2[-1].dval+dv_now+ra0[0].dval-ra2[-1].dval-run0).bit_of<18>(dv_now+c1[2].dval+ra0[0].dval-ra1[2].dval-run0).bit_of<17>(d_up5).bit_of<16>(d_up).bit_of<15>(d_run0).raw(ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
-  } else {
-    int32_t d_run0b = run0-c0[-3].val;
-    ctx1 = CtxIdx{}.bit_of<25>(nb4_4-c3[0].val+run0-c1[4].val).bit_of<24>(c1[-5].val-c1[-2].val+d_run0b).bit_of<23>(d_run0b+c1[2].val-up5).bit_of<22>(c4[3].val-c2[2].val+run0-c2[1].val).bit_of<21>(c4[-1].val-c3[0].val+run0-c1[-1].val).bit_of<20>(c1[0].val-c1[2].val+run0-c0[-2].val).bit_of<19>(-d_up5).bit_of<18>(-d_up).bit_of<17>(run0-c4[2].val).bit_of<16>(run0-c4[-3].val).bit_of<15>(-d_run0).raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
-  }
-  const int32_t run1 = step_bank(1, ctx1, run0);
-  int32_t cx2_val0 = c2[0].val;
-  int32_t cx1_val = c1[0].val;
-  int32_t dvsum2 = c0[-2].val-run1;
-  int32_t lap = c0[-2].val+run1-2*c0[-1].val;
-  int32_t dtop2 = cx2_val0-run1;
-  if( refa ) {
-    int32_t dv1 = c1[1].dval;
-    int32_t d_ra = ra0[0].val-run1;
-    ctx2 = CtxIdx{}.bit_of<25>(c0[0].dval+c1[-1].dval-run1-(c2[0].dval-dv1)).bit_of<24>(c0[0].dval+c0[-1].dval-run1-(c1[0].dval-dv1)).bit_of<23>(rb0[0].val-run1+cx2_val0-rb2[0].val).bit_of<22>(d_ra+cx2_val0-ra2[0].val).bit_of<21>(d_ra+c1[-1].val-ra1[-1].val).bit_of<20>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1).bit_of<19>(2*cx1_val-run1-cx2_val0).bit_of<18>(-lap).bit_of<17>(dtop2).bit_of<16>(dvsum2).bit_of<15>(208-rb0[0].val).raw(ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
-  } else {
-    ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-c3[0].val).bit_of<24>(run1+c4[0].val-(c2[2].val+c2[-2].val)).bit_of<23>(c3[2].val-c2[-1].val+run1-c1[3].val).bit_of<22>(c3[1].val-c1[1].val-dtop2).bit_of<21>(c3[0].val-cx1_val-dtop2).bit_of<20>(lap).bit_of<19>(run1-c4[3].val).bit_of<18>(c3[1].val-run1).bit_of<17>(run1-c4[0].val).bit_of<16>(run1-c3[-2].val).bit_of<15>(-dvsum2).raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
-  }
-  const int32_t run2 = step_bank(2, ctx2, run1);
-  int32_t run_dv3 = run2-c0[0].dval;
-  const uint32_t ctx3 = CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val).bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1[0].dval)>>1)+run_dv3).bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val).bit_of<22>(-(c2[2].val+run2-2*c1[1].val)).bit_of<21>(c1[-2].dval-c0[-2].val+run2-c1[0].dval).bit_of<20>(run2-c1[3].val).bit_of<19>(run_dv3-c2[1].dval).bit_of<18>(run2-c3[0].val).bit_of<17>(2*run2-c1[0].dval-(c1[0].val+c0[0].dval)).bit_of<16>(run2-c0[-1].dval-c0[0].dval).bit_of<15>(run2-c0[-3].val).raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9));
-  const int32_t run3 = step_bank(3, ctx3, run2);
-  int32_t dv_now4 = c0[0].dval;
-  int32_t run_dv4 = run3-dv_now4;
-  int32_t run_up4 = run3+c3[0].val;
-  const uint32_t ctx4 = CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1[0].val)>>2)).bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4)).bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval)).bit_of<22>(run3-c0[-3].dval-dv_now4-(c1[0].val-c1[-3].val)).bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval)).bit_of<20>(c2[-2].val+run3-2*c1[-1].val).bit_of<19>(c2[0].dval-2*c1[0].dval+run_dv4).bit_of<18>((run3-c0[-1].val)-(c1[0].val-c1[-1].val)).bit_of<17>(run_dv4-c1[4].dval).bit_of<16>(run_dv4-c1[-2].dval).bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4).raw(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10));
-  const int32_t run4 = step_bank(4, ctx4, run3);
-  return seat_symbol_context(run4, refs);
-}
-
-void AltP2Block::code_banks(int32_t sample16) {
-  for( uint32_t bank = 0; bank<5; ++bank ) {
-    const int32_t bctx = bank_ctx[bank];
-    const int32_t res = sample16-nb_sum[2*bank];
-    P2Count* node0 = &p2_ctr[slot(bank, bctx)];
-    const int32_t w0 = res+(uint16_t)node0[0].weighted;
-    node0[0].weighted = w0;
-    int32_t countdown = node0[0].b1;
-    if( !countdown )
-      continue;
-    const int32_t w0b = w0+4*((res>cx[0].deadzone_hi)-(res<cx[0].deadzone_lo));
-    node0[0].weighted = w0b;
-    uint32_t ctxw = bctx;
-    if( (int32_t)abs32(res)<38 ) {
-      --countdown;
-      if( !countdown&&(uint8_t)node0[0].rate<8u ) {
-        const int32_t from = node0[0].rate;
-        node0[0].rate = (uint8_t)(from+1);
-        node0[0].b1 = p2_b1_reload[from-5];
-        node0[0].weighted = 2*w0b;
-      } else {
-        node0[0].b1 = countdown;
-      }
-    }
-    if( cx[0].alphabet_reduced )
-      continue;
-    P2Count* mir = &p2_ctr[slot(bank, ctxw^kBankMirrorMask)];
-    __builtin_prefetch(mir, 0, 1);
-    const int32_t res2 = nb_sum[2*bank+1]+res;
-    int32_t lowbits = ctxw&3;
-    if( lowbits<3 )
-      p2_update(cx, &node0[1], res2, 1);
-    if( lowbits )
-      p2_update(cx, &node0[-1], res2, 2);
-    P2Count* bankp = &p2_ctr[slot(bank, 0)];
-    static const uint32_t p2_bank_bits[11] = {
-      0x4000, 0x2000, 0x1000, 0x800, 0x400, 0x200, 0x100, 0x80, 0x40, 0x20, 0x10,
-    };
-    P2Count* direct[11], * mirror[11], * rot[11];
-    for( int32_t k = 0; k<11; ++k ) {
-      const uint32_t x = ctxw^p2_bank_bits[k];
-      direct[k] = &bankp[x];
-      mirror[k] = &bankp[x^kBankMirrorMask];
-      rot[k] = &bankp[p2_ctx_rotate[(x>>2)&3]+(x&0xFFFFFFF3)];
-      __builtin_prefetch(direct[k], 0, 1);
-      __builtin_prefetch(mirror[k], 0, 1);
-      __builtin_prefetch(rot[k], 0, 1);
-    }
-    const int32_t neg = -res2;
-    const int32_t w_top = mir[0].weighted;
-    const int32_t e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
-    const int32_t bump = 32*((e_top>cx[0].deadzone_hi)-(e_top<cx[0].deadzone_lo));
-    uint32_t w_new = bump+e_top+2;
-    mir[0].weighted = (int16_t)(w_top+(w_new>>2));
-    if( lowbits<3 )
-      p2_nudge(&mir[1], -res2);
-    if( lowbits<=0 ) {
-      for( int32_t k = 0; k<11; ++k ) {
-        p2_update(cx, direct[k], res2, 2);
-        p2_update(cx, rot[k], res2, 3);
-        p2_nudge(&direct[k][1], res2);
-        p2_update(cx, mirror[k], -res2, 3);
-      }
-    } else {
-      p2_nudge(&mir[-1], -res2, 3);
-      p2_update(cx, direct[0], res2, 2);
-      p2_update(cx, rot[0], res2, 3);
-      walk_bank_bits(direct, mirror, rot, res2, lowbits<3);
-      p2_update(cx, mirror[10], -res2, 3);
-    }
-  }
-}
-
-uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid_in) {
-  int32_t ctx_lo = ctx&0xF;
-  int32_t sample16 = 16*sample_in;
-  P2Ctx*const c0 = cursor[0];
-  P2Ctx*const c1 = cursor[1];
-  c0[0].val = 16*sample_in;
-  c0[0].dval = c0[0].val-c0[0].dval;
-  c0[1].dval = 0;
-  const int32_t dead = (ctx_lo>6)+(ctx_lo>4)+2*(ctx_lo>9);
-  c0[0].sign = (resid_in<=dead)+(resid_in<-dead);
-  c0[0].mag = abs32(resid_in);
-  float sample = (float)sample16;
-  int32_t dl = sample16-c0[-1].val;
-  c0[0].dleft = abs32(dl);
-  int32_t du = sample16-c1[0].val;
-  c0[0].dup = abs32(du);
-  int32_t dul = sample16-c1[-1].val;
-  c0[0].dupleft = abs32(dul);
-  int32_t dur = sample16-c1[1].val;
-  c0[0].dupright = abs32(dur);
-  int32_t resid = (int16_t)(sample16-pred_prev);
-  c0[0].err = resid;
-  c0[0].aerr = abs32(resid);
-  NbRow* wrow_cur = nb_cur;
-  NbRow* wrow_b = cur[-1];
-  const float centre = bias[0];
-  const float mixed = bias[1];
-  const float own = bias[2];
-  const float err_own = sample-own;
-  const float d_pred = mixed-own;
-  const float cov = (((err_own*d_pred)-wrow_cur[0].w[14][0])*0.001f)+wrow_cur[0].w[14][0];
-  const float var = (wrow_cur[0].w[14][1]+0.000099999997f)+(((d_pred*d_pred)-wrow_cur[0].w[14][1])*0.001f);
-  wrow_cur[0].w[14][1] = var;
-  float cov_kept = 0.1f*var;
-  if( cov_kept<=cov )
-    cov_kept = fminf(var, cov);
-  wrow_cur[0].w[14][0] = cov_kept;
-  const float conf = (1.0f-(cov_kept/(var+576.0f)))*2.0f;
-  nlms_track_two_rows(wrow_cur, wrow_b, (sample-mixed)*2.5999999f, err_own*conf, conf);
-  nlms_predict_and_correct(wrow_cur, sample, centre);
-  cur[0] = nb_cur;
-  ++cur;
-  ++above;
-  code_banks(sample16);
-  int32_t ctx_l = ctx;
-  ++cursor[0];
-  P2Freq* frec = &freq[ctx_l];
-  ++cursor[1];
-  ++cursor[2];
-  ++cursor[3];
-  ++cursor[4];
-  const uint32_t step0 = frec[0].step;
-  if( step0<=0x10 )
-    return step0;
-  int32_t is_dec = code&1;
-  int32_t ctx15 = ctx_l&0xF;
-  uint32_t pair_ctx = ctx_pair[code&1];
-  auto nudge = [&](int32_t at, uint32_t num, uint32_t pair_at) {
-                 P2Freq*const bin = &frec[at];
-                 p2_rescale(bin);
-                 const uint32_t step10 = (num*(uint32_t)frec[at].step)>>4;
-                 if( code ) {
-                   bin[0].f[2-is_dec] += step10;
-                   cx[0].update_binary_pair(cx[0].model_strip(pair_at), (code-1)>>1);
-                 } else {
-                   bin[0].f[0] += step10;
-                 }
-               };
-  if( ctx15<15 )
-    nudge(1, 10, pair_ctx+1);
-  if( ctx15>0 )
-    nudge(-1, 13, pair_ctx-1);
-  if( freq[ctx].step<=0x1Au )
-    return ctx;
-  int32_t fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
-  if( !fold[(uint8_t)-resid_in] )
-    fold_sel = fold[(uint8_t)-resid_in];
-  const uint32_t step_ctx = CtxIdx{}.bits<0, 6>(ctx).raw(mixer_rev(ctx_w, 5));
-  P2Freq* frec_step = &freq[step_ctx];
-  p2_bump_sides(frec_step, ctx15, 0, fold_sel, 4, 4);
-  if( code ) {
-    int32_t n2_half = (code-1)>>1;
-    int32_t hi_nibble = (uint8_t)pair_ctx&0xF0;
-    if( hi_nibble>=0xF0||(cx[0].update_binary_pair(cx[0].model_strip(pair_ctx+16), n2_half), hi_nibble>0) ) {
-      cx[0].update_binary_pair(cx[0].model_strip(pair_ctx-16), n2_half);
-    }
-  }
-  P2Freq* prec0 = &frec_step[0];
-  p2_freq_add(prec0, fold_sel, 6);
-  if( !plane_idx||freq[ctx].step>0x100u ) {
-    is_dec = code ? 2-is_dec : 0;
-    for( int32_t k = 0; k<5; ++k )
-      bump_bank(k, step_ctx, ctx15, fold_sel, is_dec);
-  }
-  return step_ctx;
-}
-
-void BMFCodec::alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    if( row==0 )
-      plane[k][0].seed_row0(width);
-    else if( row==1 )
-      plane[k][0].seed_history(width);
-    plane[k][0].start_row();
-  }
-}
-
-void BMFCodec::alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
-  for( int32_t pl = 0; pl<plane_count; ++pl ) {
-    AltP2Block* page = p2_blocks.take(true);
-    plane[pl] = page[0].alt_p2_alloc(this, width, pl);
-  }
-}
-
-template <int32_t f_DEC> int32_t BMFCodec::alt_model_p2(BmfImage* p_i, uint8_t* out) {
-  AltP2Block* plane[4];
-  P2Coef coef_session;
-  coef_session.fold(this);
-  const int32_t width = p_i[0].width;
-  const int32_t height = p_i[0].height;
-  alt_p2_planes_alloc(plane, width);
-  const bool ref1_mixed = ref_transformed(1);
-  const bool ref2_mixed = ref_transformed(2);
-  const bool ref3_mixed = ref_transformed(3);
-  if constexpr( f_DEC )
-    rc_begin_decode();
-  else
-    rc_begin_encode();
-  int32_t nplanes = plane_count;
-  for( int32_t y = 0; y<height; ++y ) {
-    if( nplanes>0 ) {
-      alt_p2_start_row(plane, y, width);
-      nplanes = plane_count;
-    }
-    for( int32_t j = 0; j<4; ++j )
-      ctx_bias[j] = 0;
-    for( int32_t x = 0; x<width; ++x ) {
-      for( int32_t j = 0; j<4; ++j )
-        ctx_bias[j] >>= 3;
-      plane[0][0].code_sample<f_DEC>(out, plane_desc[0].src_plane, plane[2], plane[1]);
-      plane[0][0].add_bias(ctx_bias);
-      int16_t seed1 = 0;
-      if( ref1_mixed )
-        seed1 = 16*out[plane_desc[0].src_plane];
-      plane[1][0].cursor[0][0].dval = seed1;
-      plane[1][0].code_sample<f_DEC>(out, plane_desc[1].src_plane, plane[0], plane[2]);
-      plane[1][0].add_bias(ctx_bias);
-      int16_t seed2 = 0;
-      if( ref2_mixed ) {
-        const PlaneDesc &mix = plane_desc[plane_desc[2].src_plane];
-        seed2 = (mix.weight1*out[plane_desc[1].src_plane]+mix.weight0*out[plane_desc[0].src_plane])>>3;
-      }
-      plane[2][0].cursor[0][0].dval = seed2;
-      plane[2][0].code_sample<f_DEC>(out, plane_desc[2].src_plane, plane[0], plane[1]);
-      plane[2][0].add_bias(ctx_bias);
-      nplanes = plane_count;
-      if( plane_count>=4 ) {
-        int16_t seed3 = 0;
-        if( ref3_mixed ) {
-          const PlaneDesc &mix = plane_desc[plane_desc[3].src_plane];
-          seed3 = (mix.weight2*out[2]+mix.weight1*out[1]+mix.weight0*out[0])>>3;
-        }
-        plane[3][0].cursor[0][0].dval = seed3;
-        plane[3][0].code_sample<f_DEC>(out, f_DEC ? 3 : plane_desc[3].src_plane, plane[2], plane[0]);
-        plane[3][0].add_bias(ctx_bias);
-        nplanes = plane_count;
-      }
-      out += nplanes;
-    }
-  }
-  if constexpr( f_DEC )
-    rc_end_decode();
-  else
-    rc_end_encode();
-  coef_session.restore(this);
-  return planes_free(p2_blocks, plane);
-}
-
-int32_t BMFCodec::alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
-  return alt_model_p2<0>(p_i, a2);
-}
-
-int32_t BMFCodec::alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
-  return alt_model_p2<1>(p_i, out);
-}
-
 uint8_t med_predict(int32_t west, int32_t north, int32_t northwest) {
   const int32_t lo = min32(west, north), hi = max32(west, north);
   if( northwest>=hi )
@@ -5003,49 +4538,6 @@ void med_unfold_table(uint8_t* unfold) {
   }
   unfold[255] = (uint8_t)(-1-127);
 }
-
-uint32_t BMFCodec::predict_med(uint8_t* pixels, int32_t width, int32_t height) {
-  uint32_t done, last;
-  alignas(16) uint8_t fold[272];
-  uint8_t* p = pixels+height*width;
-  uint8_t* up = &p[-width];
-  med_fold_table(fold);
-  for( int32_t rows_left = height-1; rows_left; --rows_left ) {
-    for( int32_t x_left = width-1; x_left; --x_left ) {
-      const int32_t north = (uint8_t)*--up;
-      --p;
-      const uint8_t pred = med_predict(p[-1], north, p[-width-1]);
-      const int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
-      p[0] = code;
-      hist_bump(code);
-    }
-    --up;
-    --p;
-    last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
-    p[0] = last;
-    hist_bump(last);
-  }
-  if( width!=1 ) {
-    last = width-1;
-    const int32_t pairs = last/2;
-    {
-      uint32_t k = 0;
-      for( int32_t ofs = 0; k<(uint32_t)pairs; ++k, ofs -= 2 ) {
-        const uint8_t left = p[ofs-2];
-        p[ofs-1] = fold[(uint8_t)(p[ofs-1]-left)];
-        p[ofs-2] = fold[(uint8_t)(left-p[ofs-3])];
-      }
-      done = 2*k+1;
-    }
-    if( last>(done-1) ) {
-      uint8_t* q = p-done;
-      last = (uint8_t)(*q-*((int8_t*)q-1));
-      q[0] = fold[(uint8_t)last];
-    }
-  }
-  return last;
-}
-
 void strided_copy(uint8_t* dst, int32_t dstep, const uint8_t* src, int32_t sstep, int32_t n) {
   if( dstep==1&&sstep==1 ) {
     memcpy(dst, src, n);
@@ -5054,15 +4546,6 @@ void strided_copy(uint8_t* dst, int32_t dstep, const uint8_t* src, int32_t sstep
   for( int32_t i = 0; i<n; ++i, dst += dstep, src += sstep )
     *dst = src[0];
 }
-
-void BMFCodec::deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane) {
-  strided_copy(dst, 1, &img[0].pixels[plane], plane_count, bmf_pixels(img));
-}
-
-void BMFCodec::interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane) {
-  strided_copy(&img[0].pixels[plane], plane_count, src, 1, bmf_pixels(img));
-}
-
 struct PlaneTransform {
   int32_t to_ref0, to_ref1, mode, dc, wgt0, wgt1, wgt2;
   bool by_weights;
@@ -5072,70 +4555,6 @@ struct PlaneTransform {
     return (wgt1*(uint32_t)p[-2]+wgt0*(uint32_t)p[-3]+wgt2*(uint32_t)p[-1]+63)>>7;
   }
 };
-
-PlaneTransform BMFCodec::plane_transform(int32_t plane) {
-  PlaneTransform t;
-  t.to_ref0 = plane_desc[0].src_plane-plane;
-  t.to_ref1 = plane_desc[1].src_plane-plane;
-  t.mode = plane_desc[plane].nrefs;
-  t.dc = plane_desc[plane].dc;
-  t.wgt1 = plane_desc[plane].weight1;
-  t.wgt0 = plane_desc[plane].weight0;
-  t.wgt2 = plane_desc[plane].weight2;
-  t.by_weights = false;
-  if( t.mode==2&&t.wgt0+t.wgt1==128 ) {
-    if( !t.wgt1 ) {
-      t.by_weights = true;
-    } else if( !t.wgt0 ) {
-      t.to_ref0 = plane_desc[1].src_plane-plane;
-      t.by_weights = true;
-    }
-  }
-  return t;
-}
-
-template <int32_t f_DEC> void BMFCodec::code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
-  uint8_t* base = &img[0].pixels[plane];
-  if( !(plane_desc[plane].flags&desc_has_refs) ) {
-    if constexpr( f_DEC )
-      interleave_flat(img, side, plane);
-    else
-      deinterleave_plane(img, side, plane);
-    return;
-  }
-  int32_t stride = plane_count;
-  int32_t n = bmf_pixels(img);
-  const PlaneTransform t = plane_transform(plane);
-  if( t.by_weights||plane_desc[plane].nrefs==1 ) {
-    const uint8_t* ref = base+t.to_ref0;
-    for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += stride ) {
-      if constexpr( f_DEC )
-        base[ofs] = ref[ofs]+t.dc+side[i];
-      else
-        side[i] = base[ofs]-t.dc-ref[ofs];
-    }
-    return;
-  }
-  if( t.mode==2||t.mode==3 ) {
-    uint8_t* p = base;
-    for( int32_t left = n; left; --left, p += stride ) {
-      const uint32_t blend = t.blend(p);
-      if constexpr( f_DEC )
-        *p = (uint8_t)(blend+t.dc+*side++);
-      else
-        *side++ = (uint8_t)(*p-t.dc-blend);
-    }
-  }
-}
-
-void BMFCodec::interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
-  code_colour_plane<1>(img, src, plane);
-}
-
-void BMFCodec::colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
-  code_colour_plane<0>(img, dst, plane);
-}
-
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done, k, x_left;
   alignas(16) uint8_t unfold[256];
@@ -5184,117 +4603,6 @@ uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   }
   return p;
 }
-
-int32_t BMFCodec::plane_in_order(int32_t k) {
-  const int32_t plane = plane_desc[k].src_plane;
-  plane_predictor = plane_desc[plane].flags&desc_predictor;
-  return plane;
-}
-
-void BMFCodec::transform_planes(BmfImage* p_i) {
-  int32_t i;
-  memset(hist_scratch, 0, 4096);
-
-  BmfImage* hdr = (BmfImage*)(stream.buf+sizeof(BmfImage));
-  hdr[0] = p_i[0];
-  uint8_t* src_pixels = p_i[0].pixels;
-  memcpy(hdr[0].pixels, p_i[0].pixels, p_i[0].data_size);
-  uint8_t* tmp = (uint8_t*)bmf_new(p_i[0].width*p_i[0].height);
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    const int32_t plane = plane_in_order(k);
-    const int32_t predictor = plane_predictor;
-    const int32_t alt = (plane_desc[plane].flags&desc_alt_model)!=0;
-    plane_alt_model = alt;
-    const bool transform_it = ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt;
-    if( !transform_it )
-      continue;
-    colour_transform(hdr, tmp, plane);
-    if( plane_predictor==pred_p1 )
-      predict_med(tmp, p_i[0].width, p_i[0].height);
-    int32_t n = p_i[0].width*p_i[0].height;
-    int32_t stride = plane_count;
-    if( plane_count==1 ) {
-      memcpy(&p_i[0].pixels[plane], tmp, n);
-    } else {
-      uint8_t* dst = &p_i[0].pixels[plane];
-      int32_t ofs = 0;
-      for( i = 0; i<n; ++i ) {
-        dst[ofs] = tmp[i];
-        ofs += stride;
-      }
-    }
-  }
-  free(tmp);
-  model_plane(p_i, src_pixels, src_pixels);
-}
-
-template <int32_t f_DEC> bool BMFCodec::alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
-  if( !plane_alt_model )
-    return false;
-  const bool p1 = plane_predictor==pred_p1;
-  if( !p1&&plane_predictor!=pred_p2 )
-    return true;
-  const bool d8 = (p_i[0].depth&depth_bits)==8;
-  if( d8 ) {
-    if constexpr( f_DEC ) {
-      if( p1 )
-        alt_model_p1_d8_decode(pixels, p_i[0].width, p_i[0].height);
-      else
-        alt_model_p2_d8_decode(pixels, p_i[0].width, p_i[0].height);
-    } else {
-      if( p1 )
-        alt_model_p1_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
-      else
-        alt_model_p2_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
-    }
-  } else if constexpr( f_DEC ) {
-    if( p1 )
-      alt_model_p1_decode(p_i, pixels);
-    else
-      alt_model_p2_decode(p_i, pixels);
-  } else {
-    if( p1 )
-      alt_model_p1_encode(p_i, pixels);
-    else
-      alt_model_p2_encode(p_i, pixels);
-  }
-  return true;
-}
-
-template <int32_t f_DEC> void BMFCodec::code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
-  if( alt_model_plane<f_DEC>(p_i, pixels, raw) )
-    return;
-  ModelBlock* blk = new_model_block(p_i[0].width, p_i[0].height, p_i[0].depth&depth_bits);
-  if constexpr( f_DEC )
-    blk[0].unmodel_plane_slow(pixels);
-  else
-    blk[0].model_plane_slow(pixels);
-  blk[0].free_workspace();
-  model_blocks.give(blk);
-}
-
-void BMFCodec::model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
-  code_plane<0>(p_i, pixels, raw);
-}
-
-void BMFCodec::unmodel_plane(BmfImage* p_i, uint8_t* out) {
-  code_plane<1>(p_i, out, nullptr);
-}
-
-void BMFCodec::model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
-  plane_predictor = plane_desc[plane].flags&desc_predictor;
-  plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
-  colour_transform(img, pixels, plane);
-  memset(hist_scratch, 0, 1024);
-  {
-    BmfImage hdr = img[0];
-    hdr.depth = depth_one_plane;
-    if( plane_predictor==pred_p1&&!plane_alt_model )
-      predict_med(pixels, img[0].width, img[0].height);
-    model_plane(&hdr, pixels, pixels);
-  }
-}
-
 struct HistRows {
   int32_t* r0, * r1, * r2, * r3, * r4, * r5;
 };
@@ -5306,120 +4614,6 @@ HistRows hist_rows(int32_t* hists) {
 int32_t residual_bin(int32_t own, int32_t w0, int32_t a, int32_t w1, uint32_t b) {
   return ((uint16_t)own-(uint16_t)((w0*a+w1*b+40)>>7)-256)&0x1FF;
 }
-
-int32_t BMFCodec::weight_pair_cost(const BmfImage* img, const uint8_t* plane0, int32_t plane_a, int32_t plane_b, int32_t w4, int32_t w8) {
-  int32_t hist[512];
-  memset(hist, 0, sizeof hist);
-  const int32_t stride = img[0].stride;
-  const int32_t left = -plane_count;
-  const int32_t ofs_up = -stride;
-  const int32_t ofs_ul = -stride-plane_count;
-  const uint8_t* p = plane0-ofs_ul;
-  const uint8_t* q = plane0+plane_a-ofs_ul;
-  const uint8_t* r = plane0+plane_b-ofs_ul;
-  for( int32_t n = img[0].width*(img[0].height-1)-1; n; --n ) {
-    const int32_t cur = q[0];
-    ++hist[residual_bin(p[ofs_ul]+p[0]-p[ofs_up]-p[left], w4, q[ofs_ul]+cur-q[ofs_up]-q[left], w8, r[ofs_ul]+r[0]-r[ofs_up]-(uint32_t)r[left])];
-    q -= left;
-    p -= left;
-    r -= left;
-  }
-  return estimate_cost(hist, 512);
-}
-
-int32_t BMFCodec::cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
-  alignas(16) int32_t hists[6*1024];
-  const HistRows hr = hist_rows(hists);
-  int32_t*const hist_x = hr.r0;
-  int32_t*const hist_y = hr.r1;
-  int32_t*const hist_yx = hr.r2;
-  int32_t*const hist_zx = hr.r3;
-  int32_t*const hist_zy = hr.r4;
-  int32_t*const hist_zp = hr.r5;
-  memset(hists, 0, sizeof hists);
-  const int32_t planes = plane_count;
-  const uint32_t row_b = img[0].stride;
-  int32_t d1 = (cand+1)%3-cand;
-  int32_t d2 = (cand+2)%3-cand;
-  uint8_t* img_end = &img[0].pixels[img[0].data_size];
-  uint8_t* base = img[0].pixels;
-  double syz = 0.0, syy = 0.0, sxz = 0.0, sxy = 0.0, sxx = 0.0;
-  pd[cand].nrefs = 2;
-  pd[2].src_plane = (uint8_t)cand;
-  uint8_t* p = &base[cand+row_b+planes];
-  if( p<img_end ) {
-    const int32_t a_n = d1-row_b, a_w = d1-planes, a_nw = d1-row_b-planes;
-    const int32_t b_n = d2-row_b, b_w = d2-planes, b_nw = d2-row_b-planes;
-    const int32_t step = row_b+planes;
-    do {
-      int32_t dx = p[a_nw]+p[d1]-(p[a_n]+p[a_w]);
-      ++hist_x[dx+512];
-      int32_t dy = p[b_nw]+p[d2]-(p[b_n]+p[b_w]);
-      sxx = sxx+(double)dx*(double)dx;
-      ++hist_y[dy+512];
-      syy = syy+(double)dy*(double)dy;
-      sxy = sxy+(double)dx*(double)dy;
-      ++hist_yx[((uint16_t)dy-(uint16_t)dx-512)&0x3FF];
-      int32_t diag = p[-step]+p[0];
-      int32_t west = p[-planes];
-      uint8_t* q = p-row_b;
-      p += planes;
-      int32_t dz = diag-(*q+west);
-      sxz = sxz+(double)dx*(double)dz;
-      ++hist_zx[((uint16_t)dz-(uint16_t)dx-512)&0x3FF];
-      syz = syz+(double)dy*(double)dz;
-      ++hist_zy[((uint16_t)dz-(uint16_t)dy-512)&0x3FF];
-      int32_t bin = ((uint16_t)dz-(uint16_t)((uint32_t)(((dx+dy)<<6)+40)>>7)-512)&0x3FF;
-      ++hist_zp[bin];
-    } while( p<img_end );
-  }
-  double inv = 128.0/(0.1-sxy*sxy+sxx*syy);
-  double w1f = (syy*sxz-sxy*syz)*inv;
-  double w2f = inv*(sxx*syz-sxy*sxz);
-  int32_t wa = clamp_weight((int32_t)w1f);
-  int32_t wb = clamp_weight((int32_t)w2f);
-  int32_t rec = 4*cand;
-  costs[rec] = weight_pair_cost(img, &base[cand], d1, d2, wa, wb);
-  costs[rec+1] = estimate_cost(hist_zx, 1024);
-  costs[rec+2] = estimate_cost(hist_zy, 1024);
-  costs[rec+3] = estimate_cost(hist_zp, 1024);
-  int32_t cost = estimate_cost(hist_x, 1024);
-  int32_t cost_y = estimate_cost(hist_y, 1024);
-  int32_t cost_yx = estimate_cost(hist_yx, 1024);
-  int32_t c2 = cost_yx;
-  int32_t lo1 = c2;
-  if( cost<c2 )
-    lo1 = cost;
-  if( cost_y<c2 )
-    c2 = cost_y;
-  int32_t s1 = cost_y+lo1;
-  int32_t s2 = cost+c2;
-  int32_t best = s2;
-  if( s1<s2 ) {
-    best = s1;
-    cost = cost_y;
-    swap32(d1, d2);
-    swap32(costs[rec+1], costs[rec+2]);
-    swap32(wa, wb);
-  }
-  pd[cand].weight0 = wa;
-  pd[cand].weight1 = wb;
-  int32_t idx1 = cand+d1;
-  int32_t idx2 = cand+d2;
-  pd[idx1].nrefs = 0;
-  pd[0].src_plane = (uint8_t)idx1;
-  pd[idx2].nrefs = 1;
-  pd[1].src_plane = (uint8_t)idx2;
-  if( img[0].data_size>0x1000000u )
-    return cost+cost_yx+costs[rec];
-  uint32_t lo2 = costs[rec];
-  uint32_t lo3 = costs[rec+2];
-  lo2 = umin32(lo2, costs[rec+1]);
-  lo3 = umin32(lo3, costs[rec+3]);
-  lo3 = umin32(lo3, lo2);
-  return best+lo3;
-}
-
 int32_t widest_window(const int32_t* hist, int32_t first, int32_t end, int32_t miss) {
   int32_t sum = 0;
   for( int32_t i = 0; i<256; ++i ) sum += hist[first+i];
@@ -5434,36 +4628,7 @@ int32_t widest_window(const int32_t* hist, int32_t first, int32_t end, int32_t m
   return at;
 }
 
-struct WeightSearch {
-  BMFCodec* cx;
-  const BmfImage* img;
-  const uint8_t* plane0;
-  int32_t plane_a, plane_b;
-  int32_t w[2];
-  uint32_t cost;
-  int32_t trial(int32_t axis, int32_t cand, int32_t step) {
-    int32_t pair[2] = {w[0], w[1]};
-    pair[axis] = cand;
-    const uint32_t c = cx[0].weight_pair_cost(img, plane0, plane_a, plane_b, pair[0], pair[1]);
-    if( c<cost ) {
-      cost = c;
-      w[axis] = cand;
-    }
-    return w[axis]+step;
-  }
 
-  void descend(int32_t step, int32_t dir) {
-    int32_t at[2] = {w[0]+dir, w[1]+dir};
-    int32_t end[2] = {w[0]+dir*step, w[1]+dir*step};
-    while( dir*at[0]<dir*end[0]||dir*at[1]<dir*end[1] ) {
-      for( int32_t k = 0; k<2; ++k )
-        if( dir*at[k]<dir*end[k]&&(dir<0 ? at[k]>=kWeightMin : at[k]<kWeightMax+1) )
-          end[k] = trial(k, at[k], dir*step);
-      at[0] += dir;
-      at[1] += dir;
-    }
-  }
-};
 
 struct AlphaWeights {
   int32_t a, b, c;
@@ -5497,198 +4662,6 @@ AlphaWeights fit_alpha_weights(const uint8_t* px, const uint8_t* pp, uint32_t uu
   const int32_t wc = clamp_weight((int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy)));
   return {wa, wb, wc};
 }
-
-void BMFCodec::choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024], const uint8_t* data_end, int32_t row_stride) {
-  const HistRows hr = hist_rows(hists);
-  memset(hists, 0, sizeof hists);
-  const uint8_t*const px = img[0].pixels;
-  const uint8_t*const pp = &px[row_stride];
-  const uint32_t uu = &px[row_stride+4]<data_end ? (uint32_t)((data_end-1-pp)/4) : 0;
-  const AlphaWeights w = fit_alpha_weights(px, pp, uu);
-  int32_t wa_slot = w.a, wb = w.b, wc = w.c;
-  for( uint32_t quad = 0; quad<uu; ++quad ) {
-    int32_t nx0 = px[4*quad+4];
-    int32_t dg0 = px[4*quad]+pp[4*quad+4];
-    int32_t dn0 = pp[4*quad];
-    int32_t ad0 = nx0+dn0;
-    int32_t dnx1 = pp[4*quad+5];
-    const int32_t g0 = dg0-ad0;
-    int32_t dn1 = pp[4*quad+1];
-    int32_t nx2 = px[4*quad+6];
-    const int32_t g1 = px[4*quad+1]+dnx1-(px[4*quad+5]+dn1);
-    int32_t dnx2 = pp[4*quad+6];
-    int32_t g2 = px[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
-    uint16_t g1w = (uint16_t)(px[4*quad+3]+pp[4*quad+7]-pp[4*quad+3]-px[4*quad+7]);
-    int16_t g1_lo = (int16_t)g1;
-    g1w = g1w-512;
-    int32_t pa = g1*wb+g0*wa_slot;
-    int32_t pb = g2*wc;
-    ++hr.r1[(g1w-(int16_t)g0)&0x3FF];
-    int32_t bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
-    ++hr.r0[bin_lin];
-    ++hr.r2[(g1w-g1_lo)&0x3FF];
-    g1w = g1w-g2;
-    ++hr.r3[g1w&0x3FF];
-    const int32_t alpha = pp[4*quad+7]+256;
-    int32_t bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad+5]+wa_slot*pp[4*quad+4]+wc*(uint32_t)pp[4*quad+6]+63)>>7)+256)&0x3FF;
-    ++hr.r3[bin_lin2+1024];
-    int32_t r0 = alpha-pp[4*quad+4];
-    ++hr.r3[r0+2048];
-    int32_t r1 = alpha-pp[4*quad+5];
-    ++hr.r3[r1+3072];
-    int32_t r2 = alpha-pp[4*quad+6];
-    ++hr.r3[r2+4096];
-  }
-  uint32_t cost_lin = estimate_cost(hr.r0, 1024);
-  uint32_t best4 = (cost_lin>>7)+cost_lin;
-  const uint32_t cost_c0 = estimate_cost(hr.r1, 1024);
-  const bool pick0 = cost_c0<best4;
-  if( pick0 ) {
-    best4 = cost_c0;
-    wa_slot = 128;
-    wc = 0;
-    wb = 0;
-  }
-  const uint32_t cost_c1 = estimate_cost(hr.r2, 1024);
-  int32_t pred4 = pick0;
-  if( cost_c1<best4 ) {
-    best4 = cost_c1;
-    pred4 = 2;
-    wb = 128;
-    wc = 0;
-    wa_slot = 0;
-  }
-  const uint32_t cost_c2 = estimate_cost(hr.r3, 1024);
-  if( cost_c2<best4 ) {
-    pred4 = 3;
-    wc = 128;
-    wb = 0;
-    wa_slot = 0;
-  }
-  plane_desc[3].weight0 = wa_slot;
-  plane_desc[3].weight1 = wb;
-  plane_desc[3].weight2 = wc;
-  plane_desc[3].src_plane = 3;
-  plane_desc[3].nrefs = 3;
-  plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
-}
-
-int32_t BMFCodec::choose_plane_coding(BmfImage* img) {
-  alignas(16) int32_t hists[8*1024];
-  const HistRows hr = hist_rows(hists);
-  int32_t*const hist_flat = hr.r0, *const hist_a = hr.r1;
-  int32_t*const hist_b = hr.r2, *const hist_c = hr.r3;
-  uint32_t cand_cost[3][4];
-  PlaneDesc cand_desc[3][4];
-  uint32_t next_plane, row;
-  int32_t result, xform, wt8, wt4, pred;
-  uint32_t best_cost, best;
-  int32_t n_planes = plane_count;
-  int32_t data_size = img[0].data_size;
-  alphabet_reduced = 1;
-  int32_t row_stride = img[0].stride;
-  const uint8_t* data_end = &img[0].pixels[data_size];
-  memset(hists, 0, sizeof hists);
-  memset(cand_desc, 0, sizeof cand_desc);
-  if( n_planes>0 ) {
-    if( n_planes/2 ) {
-      uint32_t pair = 0;
-      for(; pair<(uint32_t)(n_planes/2); ++pair ) {
-        const uint8_t pl_even = 2*pair, pl_odd = 2*pair+1;
-        row = 2*pair;
-        plane_desc[row].src_plane = pl_even;
-        plane_desc[row].nrefs = pl_even;
-        plane_desc[row+1].src_plane = pl_odd;
-        plane_desc[row+1].nrefs = pl_odd;
-      }
-      next_plane = 2*pair+1;
-    } else {
-      next_plane = 1;
-    }
-    result = next_plane-1;
-    if( (uint32_t)n_planes>(uint32_t)result ) {
-      plane_desc[next_plane-1].src_plane = result;
-      plane_desc[next_plane-1].nrefs = result;
-    }
-    if( n_planes>=3 ) {
-      xform = 0;
-      uint32_t cheapest = cost_candidate(img, 0, cand_desc[0], cand_cost[0]);
-      for( int32_t cand = 1; cand<3; ++cand ) {
-        const uint32_t c = cost_candidate(img, cand, cand_desc[cand], cand_cost[0]);
-        if( c<cheapest ) {
-          cheapest = c;
-          xform = cand;
-        }
-      }
-      memcpy(plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
-      best_cost = cand_cost[xform][0];
-      int32_t plane_a = plane_desc[0].src_plane-xform;
-      wt8 = plane_desc[xform].weight1;
-      int32_t plane_b = plane_desc[1].src_plane-xform;
-      wt4 = plane_desc[xform].weight0;
-      {
-        const uint8_t* plane0 = &img[0].pixels[xform];
-        WeightSearch search = {this, img, plane0, plane_a, plane_b, {wt4, wt8}, best_cost};
-        int32_t wt_step = 4;
-        search.descend(wt_step, -1);
-        search.descend(wt_step, +1);
-        wt8 = search.w[1];
-        wt4 = search.w[0];
-        best_cost = search.cost;
-      }
-      uint8_t* px = &img[0].pixels[row_stride+n_planes+xform];
-      if( px<data_end ) {
-        do {
-          int32_t c2 = px[plane_b];
-          int32_t c2w = c2*wt8;
-          int32_t c1 = px[plane_a];
-          int32_t c1w = c1*wt4;
-          ++hist_c[c2-c1+1280];
-          int32_t c0 = px[0]+512;
-          px += n_planes;
-          int32_t bin0 = ((uint16_t)c0-(uint16_t)((uint32_t)(c2w+c1w+40)>>7))&0x3FF;
-          ++hist_flat[bin0];
-          ++hist_a[c0-c1];
-          ++hist_b[c0-c2];
-          ++hist_c[(c0-((uint32_t)(((c1+c2)<<6)+40)>>7))];
-        } while( px<data_end );
-      }
-      const uint32_t slack = umin32(best_cost>>7, kSlackMax);
-      best = slack+best_cost;
-      uint32_t cost_flat = cand_cost[xform][1];
-      bool cheaper = cost_flat<best;
-      if( cost_flat<best ) {
-        best = cost_flat;
-        wt4 = 128;
-        wt8 = 0;
-      }
-      pred = cheaper;
-      if( cand_cost[xform][2]<best ) {
-        best = cand_cost[xform][2];
-        pred = 2;
-        wt4 = 0;
-        wt8 = 128;
-      }
-      bool keep3 = best<=cand_cost[xform][3];
-      if( best>cand_cost[xform][3] )
-        pred = 3;
-      if( !keep3 ) {
-        wt4 = 64;
-        wt8 = 64;
-      }
-      plane_desc[xform].weight0 = wt4;
-      plane_desc[xform].weight1 = wt8;
-      plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
-      result = widest_window(hist_c+1024, 0, 512, 255)+1;
-      plane_desc[plane_b+xform].dc = result;
-      if( n_planes>=4 ) {
-        choose_alpha_plane(img, hists, data_end, row_stride);
-      }
-    }
-  }
-  return result;
-}
-
 enum : int32_t {
   try_mode0 = pred_mode0,
   try_p1 = pred_p1|desc_alt_model,
@@ -5697,248 +4670,12 @@ enum : int32_t {
   try_refs_p1 = desc_has_refs|pred_p1|desc_alt_model,
   try_refs_p2 = desc_has_refs|pred_p2|desc_alt_model,
 };
-void BMFCodec::save_descriptors(PlaneDesc* saved) {
-  for( int32_t k = 0; k<4; ++k )
-    saved[k] = plane_desc[k];
-}
-
-void BMFCodec::restore_descriptors(const PlaneDesc* saved) {
-  for( int32_t k = 0; k<4; ++k )
-    plane_desc[k] = saved[k];
-}
-
-void BMFCodec::offer_to_all(int32_t want) {
-  for( int32_t k = 0; k<plane_count; ++k )
-    plane_desc[k].flags = (plane_desc[k].flags&desc_has_refs)|want;
-}
-
-void BMFCodec::drop_alt_model_from_all() {
-  for( int32_t k = 0; k<plane_count; ++k )
-    plane_desc[k].flags &= ~desc_alt_model;
-}
-
-void BMFCodec::clear_flags_on_all() {
-  for( int32_t k = 0; k<plane_count; ++k )
-    plane_desc[k].flags = 0;
-}
-
-void BMFCodec::reset_descriptors() {
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    plane_desc[k].flags = 0;
-    plane_desc[k].src_plane = k;
-    plane_desc[k].nrefs = k;
-  }
-}
-
-void BMFCodec::allow_refs_where_present() {
-  for( int32_t k = 0; k<plane_count; ++k )
-    plane_desc[k].flags |= plane_desc[k].nrefs!=0 ? desc_has_refs : 0;
-}
-
-int32_t BMFCodec::transform_cost(BmfImage* tile_img) {
-  transform_planes(tile_img);
-  const int32_t bits = 8*(stream.cur-stream.buf);
-  packer_flush();
-  packer_reset();
-  return bits;
-}
-
 struct PlaneSearch {
   int32_t bits;
   int32_t n_p1;
   int32_t n_p2;
   int32_t n_refs;
 };
-
-PlaneSearch BMFCodec::search_planes(BmfImage* tile_img, uint8_t* tile_buf, uint32_t* plane_cost) {
-  int32_t best_cost = 0, best_flags = 0;
-  auto probe_plane = [&](int32_t pl, int32_t flags) {
-                       plane_desc[pl].flags = flags;
-                       model_planes(tile_img, tile_buf, pl);
-                       int32_t cost = 8*(stream.cur-stream.buf);
-                       packer_flush();
-                       return cost;
-                     };
-  bool won = false;
-  auto probe_keep = [&](int32_t pl, int32_t flags) {
-                      const int32_t cost = probe_plane(pl, flags);
-                      packer_reset();
-                      won = cost<best_cost;
-                      if( won ) {
-                        best_cost = cost;
-                        best_flags = flags;
-                      }
-                      return cost;
-                    };
-  PlaneSearch out = {0, 0, 0, 0};
-  for( int32_t pi = 0; pi<plane_count; ++pi ) {
-    const int32_t plane_i = plane_desc[pi].src_plane;
-    if( out.n_p2 ) {
-      best_cost = 0x7FFFFFFF;
-    } else {
-      best_cost = probe_plane(plane_i, try_mode0);
-      packer_reset();
-      if( best_cost!=0x7FFFFFFF )
-        best_flags = 0;
-    }
-    const int32_t bits_f5 = probe_keep(plane_i, try_p1);
-    if( bits_f5<best_cost+(best_cost>>5)||out.n_p2 )
-      probe_keep(plane_i, try_p2);
-    int32_t pred;
-    if( pi ) {
-      probe_keep(plane_i, try_refs);
-      const int32_t bits_f13 = probe_keep(plane_i, try_refs_p1);
-      pred = best_flags&desc_predictor;
-      if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
-        probe_keep(plane_i, try_refs_p2);
-        if( won )
-          pred = pred_p2;
-      }
-    } else {
-      pred = best_flags&desc_predictor;
-    }
-    const int32_t flag8 = (uint8_t)best_flags&desc_has_refs;
-    out.bits += best_cost;
-    out.n_p2 += pred==pred_p2;
-    if( pred!=pred_p1 )
-      pred = pred_mode0;
-    out.n_p1 += pred;
-    plane_cost[plane_i] = best_cost;
-    out.n_refs += flag8!=0;
-    plane_desc[plane_i].flags = (uint8_t)best_flags;
-  }
-  return out;
-}
-
-uint32_t BMFCodec::search_filter(BmfImage* img) {
-  PlaneDesc saved[4];
-  uint32_t plane_cost[4];
-  uint8_t* tile_buf;
-  int32_t tile_h, y0, cand, pl_k;
-  int32_t tile_w = img[0].width;
-  tile_h = img[0].height;
-  if( tile_w<4||tile_h<3 ) {
-    reset_descriptors();
-    return 0;
-  }
-  choose_plane_coding(img);
-  BmfImage* tile_img = alloc_image(tile_w, tile_h, img[0].depth&depth_bits, 0, 0);
-  stream_open(tile_img[0].data_size);
-  tile_buf = (uint8_t*)bmf_new(tile_h*tile_w);
-  y0 = (img[0].height-tile_h)>>1;
-  int32_t dx = img[0].width-tile_w;
-  int32_t off_y = y0*img[0].stride;
-  uint8_t* srcp = img[0].pixels+plane_count*(dx>>1)+off_y;
-  uint8_t* tile_src = tile_img[0].pixels;
-  if( tile_h>0 ) {
-    int32_t row_bytes = tile_img[0].stride;
-    uint8_t* dstp = tile_img[0].pixels;
-    for( int32_t y = 0; y<tile_h; ++y ) {
-      memcpy(dstp, srcp, row_bytes);
-      dstp += row_bytes;
-      srcp += img[0].stride;
-    }
-  }
-  PlaneSearch ps = search_planes(tile_img, tile_buf, plane_cost);
-  int32_t best_bits = ps.bits;
-  {
-    transpose_image(tile_img, plane_count);
-    int32_t bits_d = 0;
-    int32_t pk = 0;
-    while( pk<plane_count ) {
-      pl_k = plane_desc[pk].src_plane;
-      model_planes(tile_img, tile_buf, pl_k);
-      const int32_t bits = 8*(stream.cur-stream.buf);
-      packer_flush();
-      bits_d += bits;
-      packer_reset();
-      if( (uint32_t)(bits-(bits>>8))>plane_cost[pl_k] )
-        break;
-      ++pk;
-    }
-    if( pk<plane_count )
-      bits_d += best_bits+1;
-    if( bits_d+(bits_d>>12)>=best_bits ) {
-      transpose_image(tile_img, plane_count);
-    } else {
-      best_bits = bits_d;
-      transpose_image(img, plane_count);
-    }
-  }
-  free(tile_buf);
-  if( plane_count>2 ) {
-    if( ps.n_p1 ) {
-      save_descriptors(saved);
-      offer_to_all(try_p1);
-      int32_t bits_e = transform_cost(tile_img);
-      if( bits_e<=best_bits ) {
-        best_bits = bits_e;
-        cand = 0;
-      } else {
-        restore_descriptors(saved);
-        cand = 1;
-      }
-    } else {
-      cand = 1;
-    }
-    if( ps.n_p2+(cand==0) ) {
-      save_descriptors(saved);
-      offer_to_all(try_p2);
-      if( plane_count==ps.n_p2&&plane_count-1==ps.n_refs ) {
-        cand = 0;
-      } else {
-        const int32_t bits_a = transform_cost(tile_img);
-        if( bits_a<=best_bits ) {
-          best_bits = bits_a;
-          ps.n_p2 = bits_a;
-          if( plane_count-1==ps.n_refs ) {
-            cand = 0;
-          } else {
-            save_descriptors(saved);
-            allow_refs_where_present();
-            int32_t bits2 = transform_cost(tile_img);
-            if( bits2>bits_a )
-              restore_descriptors(saved);
-            cand = 0;
-          }
-        } else {
-          restore_descriptors(saved);
-        }
-      }
-    }
-  } else {
-    cand = 1;
-  }
-  if( !ps.n_p2&&plane_count>1 ) {
-    uint8_t* tile_copy = (uint8_t*)bmf_new(tile_img[0].data_size);
-    memcpy(tile_copy, tile_src, tile_img[0].data_size);
-    save_descriptors(saved);
-    drop_alt_model_from_all();
-    int32_t bits_b = transform_cost(tile_img);
-    if( bits_b>best_bits ) {
-      restore_descriptors(saved);
-    } else {
-      best_bits = bits_b;
-      cand = 0;
-    }
-    if( ps.n_refs+ps.n_p1 ) {
-      save_descriptors(saved);
-      clear_flags_on_all();
-      memcpy(tile_src, tile_copy, tile_img[0].data_size);
-      int32_t bits_c = transform_cost(tile_img);
-      if( bits_c<=best_bits ) {
-        cand = 0;
-      } else {
-        restore_descriptors(saved);
-      }
-    }
-    free(tile_copy);
-  }
-  free(stream.buf);
-  free((uint8_t*)tile_img);
-  return cand;
-}
-
 bool read_rle_op(FILE* fp, int32_t &n, int32_t &v) {
   if( ferror(fp) ) return false;
   n = fgetc(fp);
@@ -6346,226 +5083,6 @@ int32_t write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   }
   return finish(coded_bytes);
 }
-
-template <int32_t f_DEC, typename T> void BMFCodec::code_field(T &v, int32_t bits, int32_t bias) {
-  if constexpr( f_DEC )
-    v = (T)((int32_t)unpack_bits(bits)-bias);
-  else
-    pack_bits((uint32_t)((int32_t)v+bias), bits);
-}
-
-template <int32_t f_DEC> void BMFCodec::code_plane_descs() {
-  for( int32_t pl = 0; pl<plane_count; ++pl ) {
-    PlaneDesc &d = plane_desc[pl];
-    uint32_t head = (uint32_t)((d.flags<<2)|d.nrefs);
-    code_field<f_DEC>(head, 6, 0);
-    if constexpr( f_DEC ) {
-      d.flags = (uint8_t)(head>>2);
-      d.nrefs = (uint8_t)(head&3);
-      plane_desc[head&3].src_plane = (uint8_t)pl;
-    }
-    if( !(d.flags&desc_has_refs) )
-      continue;
-    code_field<f_DEC>(d.dc, 8, 0);
-    if( d.nrefs<=1u )
-      continue;
-    code_field<f_DEC>(d.weight0, 8, 64);
-    code_field<f_DEC>(d.weight1, 8, 64);
-    if( d.nrefs>2u )
-      code_field<f_DEC>(d.weight2, 8, 64);
-  }
-}
-
-void BMFCodec::read_plane_descs() {
-  code_plane_descs<1>();
-}
-
-void BMFCodec::write_plane_descs() {
-  code_plane_descs<0>();
-}
-
-void BMFCodec::unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
-  BmfImage plane_hdr = img_at[0];
-  plane_hdr.depth = depth_one_plane;
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    const int32_t plane = plane_desc[k].src_plane;
-    plane_predictor = plane_desc[plane].flags&desc_predictor;
-    plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
-    unmodel_plane(&plane_hdr, plane_buf);
-    if( plane_predictor==pred_p1&&!plane_alt_model )
-      unpredict_med(plane_buf, img_at[0].width, img_at[0].height);
-    interleave_plane(img_at, plane_buf, plane);
-  }
-}
-
-void BMFCodec::unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf) {
-  plane_predictor = plane_desc[0].flags&desc_predictor;
-  plane_alt_model = (plane_desc[0].flags&desc_alt_model)!=0;
-  unmodel_plane(img_at, img_at[0].pixels);
-  if( plane_alt_model )
-    return;
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    const int32_t plane = plane_in_order(k);
-    const int32_t pred = plane_predictor;
-    if( (plane_desc[plane].flags&desc_has_refs)==0&&!pred )
-      continue;
-    deinterleave_plane(img_at, plane_buf, plane);
-    if( pred==pred_p1 )
-      unpredict_med(plane_buf, img_at[0].width, img_at[0].height);
-    interleave_plane(img_at, plane_buf, plane);
-  }
-}
-
-void BMFCodec::unmodel_described(BmfImage* img_at, uint8_t flags) {
-  if( plane_count==1 ? (img_at[0].depth&depth_grey)!=0 : plane_count>2 ) {
-    uint32_t near_lossless = unpack_bits(4);
-    if( near_lossless ) {
-      printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
-      exit(3);
-    }
-    near_lossless_q = 0;
-  }
-  read_plane_descs();
-  uint8_t* plane_buf = (uint8_t*)bmf_new(img_at[0].width*img_at[0].height);
-  if( flags&flags_planar )
-    unmodel_planes_apart(img_at, plane_buf);
-  else
-    unmodel_planes_together(img_at, plane_buf);
-  free(plane_buf);
-}
-
-bool BMFCodec::expand_coded(BmfStream* io, BmfImage* img_at, const BmfImage &hdr) {
-  near_lossless_q = 0;
-  alphabet_reduced = 0;
-  if( !(hdr.flags&flags_slow) ) {
-    printf("\nwritten in fast mode; this build only decodes -S streams\n");
-    exit(3);
-  }
-  desc_slow_mode = 1;
-  stream.size = hdr.data_size;
-  stream.buf = (uint8_t*)bmf_new(hdr.data_size);
-  packer_reset();
-  uint32_t want = hdr.data_size;
-  bool ok = io[0].read(stream.buf, hdr.data_size)==want;
-  if( ok ) {
-    if( (img_at[0].depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
-      plane_predictor = 0;
-      plane_alt_model = 0;
-      unmodel_plane(img_at, img_at[0].pixels);
-    } else {
-      unmodel_described(img_at, hdr.flags);
-    }
-    ok = stream.buf+hdr.data_size==stream.cur;
-  }
-  free(stream.buf);
-  stream.buf = nullptr;
-  return ok;
-}
-
-BmfImage*BMFCodec::expand_from_memory(const uint8_t* data, size_t n, CodedTail** tail) {
-  reset();
-  BmfFile arc;
-  arc.io = BmfStream::over_memory(data, n);
-  BmfImage* img = expand_image(&arc, &coded_block);
-  arc.close();
-  if( tail )
-    *tail = coded_block;
-  else
-    free(coded_block);
-  coded_block = nullptr;
-  return img;
-}
-
-BmfImage*BMFCodec::expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
-  BmfImage hdr;
-  CodedTail head;
-  int32_t version;
-  uint32_t magic;
-  if( p_coded_buf )
-    *p_coded_buf = nullptr;
-  BmfStream* io = &arc_in[0].io;
-  if( !io[0].fp&&!io[0].buf )
-    return nullptr;
-  while( 1 ) {
-    if( !io[0].read_exact(&magic, 4u) ) {
-      return io[0].eof() ? nullptr : arc_in[0].fail();
-    }
-    if( (uint16_t)magic!=bmf_sig_other )
-      break;
-    version = bmf_tag_version(magic);
-    if( version!=bmf_version_20||!io[0].read_exact(&head, 8u) )
-      break;
-    io[0].seek(head.len, SEEK_CUR);
-  }
-  version = bmf_tag_version(magic);
-  if( (uint16_t)magic!=bmf_sig_image||version!=bmf_version_20||!io[0].read_exact(&hdr, 0x10u) ) {
-    return arc_in[0].fail();
-  }
-  if( hdr.flags&flags_tail ) {
-    if( !io[0].read_exact(&head, 8u) )
-      return arc_in[0].fail();
-    if( p_coded_buf ) {
-      if( head.len>io[0].bytes_left() ) {
-        return arc_in[0].fail();
-      }
-      uint32_t pad_len = (head.len+(head.len==0)+3)&0xFFFFFFFC;
-      CodedTail* blk = (CodedTail*)bmf_new(pad_len+sizeof(CodedTail));
-      blk[0].tag = head.tag;
-      blk[0].len = pad_len;
-      blk[0].data[pad_len/4-1] = 0;
-      p_coded_buf[0] = blk;
-      if( !io[0].read_exact(blk[0].data, head.len) )
-        return arc_in[0].fail();
-    } else {
-      io[0].seek(head.len, SEEK_CUR);
-    }
-  }
-  if( hdr.data_size>io[0].bytes_left() ) {
-    return arc_in[0].fail();
-  }
-  uint32_t pal_bytes = 3<<(hdr.depth&31);
-  if( !(hdr.depth&depth_palette) )
-    pal_bytes = 0;
-  if( !hdr.width||!hdr.height||(uint32_t)hdr.width*(uint32_t)((((hdr.depth&depth_bits)+7)>>3))>0xFFFFu ) {
-    return arc_in[0].fail();
-  }
-  BmfImage* img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);
-  img_at[0].depth = hdr.depth;
-  uint8_t has_coded = p_coded_buf&&p_coded_buf[0];
-  img_at[0].flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
-  plane_count = ((hdr.depth&depth_bits)+7)>>3;
-  if( plane_count<1||plane_count>4 ) {
-    return arc_in[0].fail();
-  }
-  if( hdr.flags&flags_coded ) {
-    if( !expand_coded(io, img_at, hdr) ) {
-      return arc_in[0].fail();
-    }
-  } else {
-    if( hdr.data_size>img_at[0].data_size ) {
-      return arc_in[0].fail();
-    }
-    uint32_t want = hdr.data_size;
-    if( io[0].read(img_at[0].pixels, hdr.data_size)!=want ) {
-      return arc_in[0].fail();
-    }
-  }
-  if( hdr.depth&depth_palette ) {
-    uint8_t* pal_at = (img_at[0].depth&depth_palette) ? img_at[0].palette() : nullptr;
-    uint32_t got = (uint32_t)io[0].read(pal_at, pal_bytes);
-    if( got!=pal_bytes ) {
-      return arc_in[0].fail();
-    }
-  }
-  if( img_at[0].flags&flags_transposed ) {
-    if( (uint64_t)img_at[0].width*img_at[0].height*(uint32_t)plane_count>(uint64_t)img_at[0].data_size ) {
-      return arc_in[0].fail();
-    }
-    transpose_image(img_at, plane_count);
-  }
-  return img_at;
-}
-
 uint8_t write_member_head(const void* head, const CodedTail* extra, BmfStream* io) {
   uint8_t ok = io[0].write_exact(head, 0x10u);
   if( extra ) {
@@ -6574,104 +5091,1348 @@ uint8_t write_member_head(const void* head, const CodedTail* extra, BmfStream* i
   }
   return ok;
 }
+// ---------------------------------------------------------------------------
+struct BMFCodec : BMFState {
+  struct WeightSearch {
+    BMFCodec* cx;
+    const BmfImage* img;
+    const uint8_t* plane0;
+    int32_t plane_a, plane_b;
+    int32_t w[2];
+    uint32_t cost;
+    int32_t trial(int32_t axis, int32_t cand, int32_t step) {
+      int32_t pair[2] = {w[0], w[1]};
+      pair[axis] = cand;
+      const uint32_t c = cx[0].weight_pair_cost(img, plane0, plane_a, plane_b, pair[0], pair[1]);
+      if( c<cost ) {
+        cost = c;
+        w[axis] = cand;
+      }
+      return w[axis]+step;
+    }
 
-void BMFCodec::code_image_body(BmfImage* p_i, BmfImage &hdr) {
-  if( (p_i[0].depth&depth_bits)<=4 ) {
-    stream_open(p_i[0].data_size);
-    plane_predictor = 0;
-    plane_alt_model = 0;
-    alphabet_reduced = 0;
-    model_plane(p_i, p_i[0].pixels, p_i[0].pixels);
-    return;
+    void descend(int32_t step, int32_t dir) {
+      int32_t at[2] = {w[0]+dir, w[1]+dir};
+      int32_t end[2] = {w[0]+dir*step, w[1]+dir*step};
+      while( dir*at[0]<dir*end[0]||dir*at[1]<dir*end[1] ) {
+        for( int32_t k = 0; k<2; ++k )
+          if( dir*at[k]<dir*end[k]&&(dir<0 ? at[k]>=kWeightMin : at[k]<kWeightMax+1) )
+            end[k] = trial(k, at[k], dir*step);
+        at[0] += dir;
+        at[1] += dir;
+      }
+    }
+  };
+
+  BlockPool<AltP1Block, 4> p1_blocks;
+  BlockPool<AltP2Block, 4> p2_blocks;
+  BlockPool<ModelBlock, 1> model_blocks;
+
+  template <class T, int32_t N> int32_t planes_free(BlockPool<T, N> &pool, T** plane) {
+    for( int32_t k = 0; k<plane_count; ++k ) pool.give(plane[k]);
+    return plane_count;
   }
-  const uint32_t filtered = search_filter(p_i);
-  hdr.flags |= flags_descriptors;
-  const uint32_t data_bytes = p_i[0].data_size;
-  if( p_i[0].flags&flags_transposed ) {
-    hdr.header_from(p_i);
-    hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
-  }
-  stream_open(data_bytes);
-  if( plane_count==1 ? (p_i[0].depth&depth_grey)!=0 : plane_count>2 ) {
-    near_lossless_q = 0;
-    pack_bits(0, 4);
-  }
-  alphabet_reduced = 0;
-  write_plane_descs();
-  if( filtered ) {
-    hdr.flags |= flags_planar;
-    uint8_t* plane_buf = (uint8_t*)bmf_new(p_i[0].width*p_i[0].height);
+
+  void allow_refs_where_present() {
     for( int32_t k = 0; k<plane_count; ++k )
-      model_planes(p_i, plane_buf, plane_desc[k].src_plane);
-    free(plane_buf);
-  } else {
-    transform_planes(p_i);
+      plane_desc[k].flags |= plane_desc[k].nrefs!=0 ? desc_has_refs : 0;
   }
-}
-
-uint8_t*BMFCodec::compress_to_memory(BmfImage* p_i, size_t* out_len, const CodedTail* tail) {
-  reset();
-  out_len[0] = 0;
-  BmfFile arc;
-  arc.io = BmfStream::in_memory();
-  const int32_t coded = compress_image(&arc, p_i, tail);
-  if( !coded ) {
-    arc.close();
-    return nullptr;
+  template <int32_t f_DEC> int32_t alt_model_p1(BmfImage* hdr, uint8_t* buf) {
+    AltP1Block* plane[4];
+    int32_t cur0, cur1, cur3;
+    int32_t want2;
+    int32_t width = hdr[0].width;
+    int32_t height = hdr[0].height;
+    for( int32_t k = 0; k<plane_count; ++k ) {
+      AltP1Block* raw = p1_blocks.take(false);
+      plane[k] = raw[0].alt_p1_alloc(this, width, height, k);
+    }
+    int32_t src1 = plane_desc[1].src_plane;
+    int32_t src2 = plane_desc[2].src_plane;
+    int32_t src3 = plane_desc[3].src_plane;
+    uint8_t fl1 = plane_desc[src1].flags;
+    uint8_t fl2 = plane_desc[src2].flags;
+    uint8_t fl3 = plane_desc[src3].flags;
+    int32_t dc2 = plane_desc[src2].dc;
+    int32_t dc1 = plane_desc[src1].dc;
+    int32_t xf1 = fl1&8;
+    int8_t dc3 = plane_desc[src3].dc;
+    int32_t xf2 = fl2&8;
+    int32_t xf3 = fl3&8;
+    if constexpr( f_DEC )
+      rc_begin_decode();
+    else
+      rc_begin_encode();
+    for( uint32_t y = 0; y<(uint32_t)height; ++y ) {
+      for( int32_t p = 0; p<plane_count; ++p ) {
+        plane[p][0].advance_row();
+        plane[p][0].seed_activity(true);
+      }
+      {
+        auto code_sample = [&](int32_t n, AltP1Block* a, AltP1Block* b, int32_t off, int32_t val) {
+                             AltP1Block*const blk = plane[n];
+                             blk[0].ctx_of(a, b);
+                             val = f_DEC ? blk[0].decode_sample() : blk[0].encode_sample(buf, off, val);
+                             blk[0].record_sample(val);
+                             return val;
+                           };
+        auto fold_from = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix) {
+                           const int32_t v = buf[off];
+                           return xf ? v-dc-mix : v;
+                         };
+        auto unfold_to = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix, int32_t val) {
+                           if( xf )
+                             val += dc+mix;
+                           buf[off] = val;
+                         };
+        for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
+          int32_t off0 = plane_desc[0].src_plane;
+          if constexpr( !f_DEC )
+            cur0 = fold_from(off0, 0, 0, 0);
+          cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
+          int32_t off1 = plane_desc[1].src_plane;
+          if constexpr( f_DEC )
+            unfold_to(off0, 0, 0, 0, cur0);
+          else
+            cur1 = (uint8_t)fold_from(off1, xf1, dc1, buf[off0]);
+          cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
+          int32_t off2 = plane_desc[2].src_plane;
+          if constexpr( f_DEC )
+            unfold_to(off1, xf1, dc1, buf[off0], cur1);
+          else
+            want2 = (uint8_t)fold_from(off2, xf2, dc2, plane_mix2(plane_desc[off2], buf+off0, buf+off1));
+          want2 = code_sample(2, plane[1], plane[0], off2, want2);
+          if constexpr( f_DEC )
+            unfold_to(off2, xf2, dc2, plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
+          if( plane_count>=4 ) {
+            int32_t off3 = plane_desc[3].src_plane;
+            if constexpr( !f_DEC )
+              cur3 = (uint8_t)fold_from(off3, xf3, dc3, plane_mix3(plane_desc[off3], buf+off3));
+            cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
+            if constexpr( f_DEC )
+              unfold_to(off3, xf3, dc3, plane_mix3(plane_desc[off3], buf+off3), cur3);
+          }
+          buf += plane_count;
+        }
+      }
+    }
+    if constexpr( f_DEC )
+      rc_end_decode();
+    else
+      rc_end_encode();
+    return planes_free(p1_blocks, plane);
   }
-  uint8_t* out = arc.io.take(out_len);
-  arc.close();
-  return out;
-}
-
-int32_t BMFCodec::compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
-  BmfImage hdr;
-  if( !arc_in[0].io.fp&&!arc_in[0].io.buf )
-    return 0;
-  if( extra_blk )
-    p_i[0].flags |= flags_tail;
-  near_lossless_q = 0;
-  hdr.header_from(p_i);
-  hdr.flags = p_i[0].flags;
-  plane_count = ((p_i[0].depth&depth_bits)+7)>>3;
-  const uint32_t tag = bmf_tag(bmf_sig_image, '2', '0');
-  if( !arc_in[0].io.write_exact(&tag, 4u) )
-    return 0;
-  uint8_t bpp = p_i[0].depth;
-  uint32_t pal_bytes = 0;
-  if( bpp&depth_palette )
-    pal_bytes = 3<<(bpp&31);
-  if( p_i[0].data_size>=0x10u ) {
-    desc_slow_mode = 1;
-    hdr.flags |= flags_coded|flags_slow;
-    code_image_body(p_i, hdr);
-    packer_flush();
-    const int32_t coded_bytes = stream.cur-stream.buf;
-    hdr.data_size = (uint32_t)coded_bytes;
-    if( (uint32_t)coded_bytes<p_i[0].data_size ) {
-      const uint8_t ok = write_member_head(&hdr, extra_blk, &arc_in[0].io);
-      int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok;
+  int32_t alt_model_p1_decode(BmfImage* hdr, uint8_t* out) {
+    return alt_model_p1<1>(hdr, out);
+  }
+  int32_t alt_model_p1_encode(BmfImage* hdr, uint8_t* src) {
+    return alt_model_p1<0>(hdr, src);
+  }
+  template <int32_t f_DEC> int32_t alt_model_p2(BmfImage* p_i, uint8_t* out) {
+    AltP2Block* plane[4];
+    P2Coef coef_session;
+    coef_session.fold(this);
+    const int32_t width = p_i[0].width;
+    const int32_t height = p_i[0].height;
+    alt_p2_planes_alloc(plane, width);
+    const bool ref1_mixed = ref_transformed(1);
+    const bool ref2_mixed = ref_transformed(2);
+    const bool ref3_mixed = ref_transformed(3);
+    if constexpr( f_DEC )
+      rc_begin_decode();
+    else
+      rc_begin_encode();
+    int32_t nplanes = plane_count;
+    for( int32_t y = 0; y<height; ++y ) {
+      if( nplanes>0 ) {
+        alt_p2_start_row(plane, y, width);
+        nplanes = plane_count;
+      }
+      for( int32_t j = 0; j<4; ++j )
+        ctx_bias[j] = 0;
+      for( int32_t x = 0; x<width; ++x ) {
+        for( int32_t j = 0; j<4; ++j )
+          ctx_bias[j] >>= 3;
+        plane[0][0].code_sample<f_DEC>(out, plane_desc[0].src_plane, plane[2], plane[1]);
+        plane[0][0].add_bias(ctx_bias);
+        int16_t seed1 = 0;
+        if( ref1_mixed )
+          seed1 = 16*out[plane_desc[0].src_plane];
+        plane[1][0].cursor[0][0].dval = seed1;
+        plane[1][0].code_sample<f_DEC>(out, plane_desc[1].src_plane, plane[0], plane[2]);
+        plane[1][0].add_bias(ctx_bias);
+        int16_t seed2 = 0;
+        if( ref2_mixed ) {
+          const PlaneDesc &mix = plane_desc[plane_desc[2].src_plane];
+          seed2 = (mix.weight1*out[plane_desc[1].src_plane]+mix.weight0*out[plane_desc[0].src_plane])>>3;
+        }
+        plane[2][0].cursor[0][0].dval = seed2;
+        plane[2][0].code_sample<f_DEC>(out, plane_desc[2].src_plane, plane[0], plane[1]);
+        plane[2][0].add_bias(ctx_bias);
+        nplanes = plane_count;
+        if( plane_count>=4 ) {
+          int16_t seed3 = 0;
+          if( ref3_mixed ) {
+            const PlaneDesc &mix = plane_desc[plane_desc[3].src_plane];
+            seed3 = (mix.weight2*out[2]+mix.weight1*out[1]+mix.weight0*out[0])>>3;
+          }
+          plane[3][0].cursor[0][0].dval = seed3;
+          plane[3][0].code_sample<f_DEC>(out, f_DEC ? 3 : plane_desc[3].src_plane, plane[2], plane[0]);
+          plane[3][0].add_bias(ctx_bias);
+          nplanes = plane_count;
+        }
+        out += nplanes;
+      }
+    }
+    if constexpr( f_DEC )
+      rc_end_decode();
+    else
+      rc_end_encode();
+    coef_session.restore(this);
+    return planes_free(p2_blocks, plane);
+  }
+  template <int32_t f_DEC> void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+    AltP2Block* blk;
+    AltP2Block* raw = p2_blocks.take(true);
+    if( raw )
+      blk = raw[0].alt_p2_alloc(this, i, 0);
+    else
+      blk = nullptr;
+    if constexpr( f_DEC )
+      blk[0].alt_p2_d8_body<1>(nullptr, out, i, height);
+    else
+      blk[0].alt_p2_d8_body<0>(src, out, i, height);
+    if( blk )
+      p2_blocks.give(blk);
+  }
+  void alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height) {
+    alt_model_p2_d8<1>(nullptr, i, height, out);
+  }
+  void alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+    alt_model_p2_d8<0>(src, i, height, out);
+  }
+  int32_t alt_model_p2_decode(BmfImage* p_i, uint8_t* out) {
+    return alt_model_p2<1>(p_i, out);
+  }
+  int32_t alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
+    return alt_model_p2<0>(p_i, a2);
+  }
+  template <int32_t f_DEC> bool alt_model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+    if( !plane_alt_model )
+      return false;
+    const bool p1 = plane_predictor==pred_p1;
+    if( !p1&&plane_predictor!=pred_p2 )
+      return true;
+    const bool d8 = (p_i[0].depth&depth_bits)==8;
+    if( d8 ) {
+      if constexpr( f_DEC ) {
+        if( p1 )
+          alt_model_p1_d8_decode(pixels, p_i[0].width, p_i[0].height);
+        else
+          alt_model_p2_d8_decode(pixels, p_i[0].width, p_i[0].height);
+      } else {
+        if( p1 )
+          alt_model_p1_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
+        else
+          alt_model_p2_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
+      }
+    } else if constexpr( f_DEC ) {
+      if( p1 )
+        alt_model_p1_decode(p_i, pixels);
+      else
+        alt_model_p2_decode(p_i, pixels);
+    } else {
+      if( p1 )
+        alt_model_p1_encode(p_i, pixels);
+      else
+        alt_model_p2_encode(p_i, pixels);
+    }
+    return true;
+  }
+  AltP1Block*alt_p1_block_alloc(int32_t width, int32_t height) {
+    AltP1Block* raw = p1_blocks.take(false);
+    return raw ? raw[0].alt_p1_alloc(this, width, height, 0) : nullptr;
+  }
+  int32_t choose_plane_coding(BmfImage* img) {
+    alignas(16) int32_t hists[8*1024];
+    const HistRows hr = hist_rows(hists);
+    int32_t*const hist_flat = hr.r0, *const hist_a = hr.r1;
+    int32_t*const hist_b = hr.r2, *const hist_c = hr.r3;
+    uint32_t cand_cost[3][4];
+    PlaneDesc cand_desc[3][4];
+    uint32_t next_plane, row;
+    int32_t result, xform, wt8, wt4, pred;
+    uint32_t best_cost, best;
+    int32_t n_planes = plane_count;
+    int32_t data_size = img[0].data_size;
+    alphabet_reduced = 1;
+    int32_t row_stride = img[0].stride;
+    const uint8_t* data_end = &img[0].pixels[data_size];
+    memset(hists, 0, sizeof hists);
+    memset(cand_desc, 0, sizeof cand_desc);
+    if( n_planes>0 ) {
+      if( n_planes/2 ) {
+        uint32_t pair = 0;
+        for(; pair<(uint32_t)(n_planes/2); ++pair ) {
+          const uint8_t pl_even = 2*pair, pl_odd = 2*pair+1;
+          row = 2*pair;
+          plane_desc[row].src_plane = pl_even;
+          plane_desc[row].nrefs = pl_even;
+          plane_desc[row+1].src_plane = pl_odd;
+          plane_desc[row+1].nrefs = pl_odd;
+        }
+        next_plane = 2*pair+1;
+      } else {
+        next_plane = 1;
+      }
+      result = next_plane-1;
+      if( (uint32_t)n_planes>(uint32_t)result ) {
+        plane_desc[next_plane-1].src_plane = result;
+        plane_desc[next_plane-1].nrefs = result;
+      }
+      if( n_planes>=3 ) {
+        xform = 0;
+        uint32_t cheapest = cost_candidate(img, 0, cand_desc[0], cand_cost[0]);
+        for( int32_t cand = 1; cand<3; ++cand ) {
+          const uint32_t c = cost_candidate(img, cand, cand_desc[cand], cand_cost[0]);
+          if( c<cheapest ) {
+            cheapest = c;
+            xform = cand;
+          }
+        }
+        memcpy(plane_desc, cand_desc[xform], sizeof cand_desc[xform]);
+        best_cost = cand_cost[xform][0];
+        int32_t plane_a = plane_desc[0].src_plane-xform;
+        wt8 = plane_desc[xform].weight1;
+        int32_t plane_b = plane_desc[1].src_plane-xform;
+        wt4 = plane_desc[xform].weight0;
+        {
+          const uint8_t* plane0 = &img[0].pixels[xform];
+          WeightSearch search = {this, img, plane0, plane_a, plane_b, {wt4, wt8}, best_cost};
+          int32_t wt_step = 4;
+          search.descend(wt_step, -1);
+          search.descend(wt_step, +1);
+          wt8 = search.w[1];
+          wt4 = search.w[0];
+          best_cost = search.cost;
+        }
+        uint8_t* px = &img[0].pixels[row_stride+n_planes+xform];
+        if( px<data_end ) {
+          do {
+            int32_t c2 = px[plane_b];
+            int32_t c2w = c2*wt8;
+            int32_t c1 = px[plane_a];
+            int32_t c1w = c1*wt4;
+            ++hist_c[c2-c1+1280];
+            int32_t c0 = px[0]+512;
+            px += n_planes;
+            int32_t bin0 = ((uint16_t)c0-(uint16_t)((uint32_t)(c2w+c1w+40)>>7))&0x3FF;
+            ++hist_flat[bin0];
+            ++hist_a[c0-c1];
+            ++hist_b[c0-c2];
+            ++hist_c[(c0-((uint32_t)(((c1+c2)<<6)+40)>>7))];
+          } while( px<data_end );
+        }
+        const uint32_t slack = umin32(best_cost>>7, kSlackMax);
+        best = slack+best_cost;
+        uint32_t cost_flat = cand_cost[xform][1];
+        bool cheaper = cost_flat<best;
+        if( cost_flat<best ) {
+          best = cost_flat;
+          wt4 = 128;
+          wt8 = 0;
+        }
+        pred = cheaper;
+        if( cand_cost[xform][2]<best ) {
+          best = cand_cost[xform][2];
+          pred = 2;
+          wt4 = 0;
+          wt8 = 128;
+        }
+        bool keep3 = best<=cand_cost[xform][3];
+        if( best>cand_cost[xform][3] )
+          pred = 3;
+        if( !keep3 ) {
+          wt4 = 64;
+          wt8 = 64;
+        }
+        plane_desc[xform].weight0 = wt4;
+        plane_desc[xform].weight1 = wt8;
+        plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
+        result = widest_window(hist_c+1024, 0, 512, 255)+1;
+        plane_desc[plane_b+xform].dc = result;
+        if( n_planes>=4 ) {
+          choose_alpha_plane(img, hists, data_end, row_stride);
+        }
+      }
+    }
+    return result;
+  }
+  void clear_flags_on_all() {
+    for( int32_t k = 0; k<plane_count; ++k )
+      plane_desc[k].flags = 0;
+  }
+  template <int32_t f_DEC> void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
+    uint8_t* base = &img[0].pixels[plane];
+    if( !(plane_desc[plane].flags&desc_has_refs) ) {
+      if constexpr( f_DEC )
+        interleave_flat(img, side, plane);
+      else
+        deinterleave_plane(img, side, plane);
+      return;
+    }
+    int32_t stride = plane_count;
+    int32_t n = bmf_pixels(img);
+    const PlaneTransform t = plane_transform(plane);
+    if( t.by_weights||plane_desc[plane].nrefs==1 ) {
+      const uint8_t* ref = base+t.to_ref0;
+      for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += stride ) {
+        if constexpr( f_DEC )
+          base[ofs] = ref[ofs]+t.dc+side[i];
+        else
+          side[i] = base[ofs]-t.dc-ref[ofs];
+      }
+      return;
+    }
+    if( t.mode==2||t.mode==3 ) {
+      uint8_t* p = base;
+      for( int32_t left = n; left; --left, p += stride ) {
+        const uint32_t blend = t.blend(p);
+        if constexpr( f_DEC )
+          *p = (uint8_t)(blend+t.dc+*side++);
+        else
+          *side++ = (uint8_t)(*p-t.dc-blend);
+      }
+    }
+  }
+  template <int32_t f_DEC, typename T> void code_field(T &v, int32_t bits, int32_t bias) {
+    if constexpr( f_DEC )
+      v = (T)((int32_t)unpack_bits(bits)-bias);
+    else
+      pack_bits((uint32_t)((int32_t)v+bias), bits);
+  }
+  void code_image_body(BmfImage* p_i, BmfImage &hdr) {
+    if( (p_i[0].depth&depth_bits)<=4 ) {
+      stream_open(p_i[0].data_size);
+      plane_predictor = 0;
+      plane_alt_model = 0;
+      alphabet_reduced = 0;
+      model_plane(p_i, p_i[0].pixels, p_i[0].pixels);
+      return;
+    }
+    const uint32_t filtered = search_filter(p_i);
+    hdr.flags |= flags_descriptors;
+    const uint32_t data_bytes = p_i[0].data_size;
+    if( p_i[0].flags&flags_transposed ) {
+      hdr.header_from(p_i);
+      hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
+    }
+    stream_open(data_bytes);
+    if( plane_count==1 ? (p_i[0].depth&depth_grey)!=0 : plane_count>2 ) {
+      near_lossless_q = 0;
+      pack_bits(0, 4);
+    }
+    alphabet_reduced = 0;
+    write_plane_descs();
+    if( filtered ) {
+      hdr.flags |= flags_planar;
+      uint8_t* plane_buf = (uint8_t*)bmf_new(p_i[0].width*p_i[0].height);
+      for( int32_t k = 0; k<plane_count; ++k )
+        model_planes(p_i, plane_buf, plane_desc[k].src_plane);
+      free(plane_buf);
+    } else {
+      transform_planes(p_i);
+    }
+  }
+  template <int32_t f_DEC> void code_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+    if( alt_model_plane<f_DEC>(p_i, pixels, raw) )
+      return;
+    ModelBlock* blk = new_model_block(p_i[0].width, p_i[0].height, p_i[0].depth&depth_bits);
+    if constexpr( f_DEC )
+      blk[0].unmodel_plane_slow(pixels);
+    else
+      blk[0].model_plane_slow(pixels);
+    blk[0].free_workspace();
+    model_blocks.give(blk);
+  }
+  template <int32_t f_DEC> void code_plane_descs() {
+    for( int32_t pl = 0; pl<plane_count; ++pl ) {
+      PlaneDesc &d = plane_desc[pl];
+      uint32_t head = (uint32_t)((d.flags<<2)|d.nrefs);
+      code_field<f_DEC>(head, 6, 0);
+      if constexpr( f_DEC ) {
+        d.flags = (uint8_t)(head>>2);
+        d.nrefs = (uint8_t)(head&3);
+        plane_desc[head&3].src_plane = (uint8_t)pl;
+      }
+      if( !(d.flags&desc_has_refs) )
+        continue;
+      code_field<f_DEC>(d.dc, 8, 0);
+      if( d.nrefs<=1u )
+        continue;
+      code_field<f_DEC>(d.weight0, 8, 64);
+      code_field<f_DEC>(d.weight1, 8, 64);
+      if( d.nrefs>2u )
+        code_field<f_DEC>(d.weight2, 8, 64);
+    }
+  }
+  void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
+    code_colour_plane<0>(img, dst, plane);
+  }
+  int32_t compress_image(BmfFile* arc_in, BmfImage* p_i, const CodedTail* extra_blk) {
+    BmfImage hdr;
+    if( !arc_in[0].io.fp&&!arc_in[0].io.buf )
+      return 0;
+    if( extra_blk )
+      p_i[0].flags |= flags_tail;
+    near_lossless_q = 0;
+    hdr.header_from(p_i);
+    hdr.flags = p_i[0].flags;
+    plane_count = ((p_i[0].depth&depth_bits)+7)>>3;
+    const uint32_t tag = bmf_tag(bmf_sig_image, '2', '0');
+    if( !arc_in[0].io.write_exact(&tag, 4u) )
+      return 0;
+    uint8_t bpp = p_i[0].depth;
+    uint32_t pal_bytes = 0;
+    if( bpp&depth_palette )
+      pal_bytes = 3<<(bpp&31);
+    if( p_i[0].data_size>=0x10u ) {
+      desc_slow_mode = 1;
+      hdr.flags |= flags_coded|flags_slow;
+      code_image_body(p_i, hdr);
+      packer_flush();
+      const int32_t coded_bytes = stream.cur-stream.buf;
+      hdr.data_size = (uint32_t)coded_bytes;
+      if( (uint32_t)coded_bytes<p_i[0].data_size ) {
+        const uint8_t ok = write_member_head(&hdr, extra_blk, &arc_in[0].io);
+        int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok;
+        free(stream.buf);
+        if( ok_all&&(p_i[0].depth&depth_palette)!=0 )
+          arc_in[0].io.write_all(&p_i[0].pixels[p_i[0].data_size], pal_bytes);
+        arc_in[0].io.flush();
+        if( ok_all )
+          return (int32_t)hdr.data_size;
+        return ok_all;
+      }
       free(stream.buf);
-      if( ok_all&&(p_i[0].depth&depth_palette)!=0 )
-        arc_in[0].io.write_all(&p_i[0].pixels[p_i[0].data_size], pal_bytes);
-      arc_in[0].io.flush();
-      if( ok_all )
-        return (int32_t)hdr.data_size;
-      return ok_all;
+      if( p_i[0].flags&flags_transposed )
+        transpose_image(p_i, plane_count);
+    }
+    const uint8_t ok_raw = write_member_head(p_i, extra_blk, &arc_in[0].io);
+    uint32_t written = (uint32_t)arc_in[0].io.write(p_i[0].pixels, pal_bytes+p_i[0].data_size);
+    int32_t data_size = p_i[0].data_size;
+    if( !(ok_raw&(written==data_size+pal_bytes)) )
+      return 0;
+    return data_size;
+  }
+  int32_t cost_candidate(BmfImage* img, int32_t cand, PlaneDesc* pd, uint32_t* costs) {
+    alignas(16) int32_t hists[6*1024];
+    const HistRows hr = hist_rows(hists);
+    int32_t*const hist_x = hr.r0;
+    int32_t*const hist_y = hr.r1;
+    int32_t*const hist_yx = hr.r2;
+    int32_t*const hist_zx = hr.r3;
+    int32_t*const hist_zy = hr.r4;
+    int32_t*const hist_zp = hr.r5;
+    memset(hists, 0, sizeof hists);
+    const int32_t planes = plane_count;
+    const uint32_t row_b = img[0].stride;
+    int32_t d1 = (cand+1)%3-cand;
+    int32_t d2 = (cand+2)%3-cand;
+    uint8_t* img_end = &img[0].pixels[img[0].data_size];
+    uint8_t* base = img[0].pixels;
+    double syz = 0.0, syy = 0.0, sxz = 0.0, sxy = 0.0, sxx = 0.0;
+    pd[cand].nrefs = 2;
+    pd[2].src_plane = (uint8_t)cand;
+    uint8_t* p = &base[cand+row_b+planes];
+    if( p<img_end ) {
+      const int32_t a_n = d1-row_b, a_w = d1-planes, a_nw = d1-row_b-planes;
+      const int32_t b_n = d2-row_b, b_w = d2-planes, b_nw = d2-row_b-planes;
+      const int32_t step = row_b+planes;
+      do {
+        int32_t dx = p[a_nw]+p[d1]-(p[a_n]+p[a_w]);
+        ++hist_x[dx+512];
+        int32_t dy = p[b_nw]+p[d2]-(p[b_n]+p[b_w]);
+        sxx = sxx+(double)dx*(double)dx;
+        ++hist_y[dy+512];
+        syy = syy+(double)dy*(double)dy;
+        sxy = sxy+(double)dx*(double)dy;
+        ++hist_yx[((uint16_t)dy-(uint16_t)dx-512)&0x3FF];
+        int32_t diag = p[-step]+p[0];
+        int32_t west = p[-planes];
+        uint8_t* q = p-row_b;
+        p += planes;
+        int32_t dz = diag-(*q+west);
+        sxz = sxz+(double)dx*(double)dz;
+        ++hist_zx[((uint16_t)dz-(uint16_t)dx-512)&0x3FF];
+        syz = syz+(double)dy*(double)dz;
+        ++hist_zy[((uint16_t)dz-(uint16_t)dy-512)&0x3FF];
+        int32_t bin = ((uint16_t)dz-(uint16_t)((uint32_t)(((dx+dy)<<6)+40)>>7)-512)&0x3FF;
+        ++hist_zp[bin];
+      } while( p<img_end );
+    }
+    double inv = 128.0/(0.1-sxy*sxy+sxx*syy);
+    double w1f = (syy*sxz-sxy*syz)*inv;
+    double w2f = inv*(sxx*syz-sxy*sxz);
+    int32_t wa = clamp_weight((int32_t)w1f);
+    int32_t wb = clamp_weight((int32_t)w2f);
+    int32_t rec = 4*cand;
+    costs[rec] = weight_pair_cost(img, &base[cand], d1, d2, wa, wb);
+    costs[rec+1] = estimate_cost(hist_zx, 1024);
+    costs[rec+2] = estimate_cost(hist_zy, 1024);
+    costs[rec+3] = estimate_cost(hist_zp, 1024);
+    int32_t cost = estimate_cost(hist_x, 1024);
+    int32_t cost_y = estimate_cost(hist_y, 1024);
+    int32_t cost_yx = estimate_cost(hist_yx, 1024);
+    int32_t c2 = cost_yx;
+    int32_t lo1 = c2;
+    if( cost<c2 )
+      lo1 = cost;
+    if( cost_y<c2 )
+      c2 = cost_y;
+    int32_t s1 = cost_y+lo1;
+    int32_t s2 = cost+c2;
+    int32_t best = s2;
+    if( s1<s2 ) {
+      best = s1;
+      cost = cost_y;
+      swap32(d1, d2);
+      swap32(costs[rec+1], costs[rec+2]);
+      swap32(wa, wb);
+    }
+    pd[cand].weight0 = wa;
+    pd[cand].weight1 = wb;
+    int32_t idx1 = cand+d1;
+    int32_t idx2 = cand+d2;
+    pd[idx1].nrefs = 0;
+    pd[0].src_plane = (uint8_t)idx1;
+    pd[idx2].nrefs = 1;
+    pd[1].src_plane = (uint8_t)idx2;
+    if( img[0].data_size>0x1000000u )
+      return cost+cost_yx+costs[rec];
+    uint32_t lo2 = costs[rec];
+    uint32_t lo3 = costs[rec+2];
+    lo2 = umin32(lo2, costs[rec+1]);
+    lo3 = umin32(lo3, costs[rec+3]);
+    lo3 = umin32(lo3, lo2);
+    return best+lo3;
+  }
+  void deinterleave_plane(const BmfImage* img, uint8_t* dst, int32_t plane) {
+    strided_copy(dst, 1, &img[0].pixels[plane], plane_count, bmf_pixels(img));
+  }
+  void drop_alt_model_from_all() {
+    for( int32_t k = 0; k<plane_count; ++k )
+      plane_desc[k].flags &= ~desc_alt_model;
+  }
+  bool expand_coded(BmfStream* io, BmfImage* img_at, const BmfImage &hdr) {
+    near_lossless_q = 0;
+    alphabet_reduced = 0;
+    if( !(hdr.flags&flags_slow) ) {
+      printf("\nwritten in fast mode; this build only decodes -S streams\n");
+      exit(3);
+    }
+    desc_slow_mode = 1;
+    stream.size = hdr.data_size;
+    stream.buf = (uint8_t*)bmf_new(hdr.data_size);
+    packer_reset();
+    uint32_t want = hdr.data_size;
+    bool ok = io[0].read(stream.buf, hdr.data_size)==want;
+    if( ok ) {
+      if( (img_at[0].depth&depth_bits)<=4||(hdr.flags&flags_descriptors)==0 ) {
+        plane_predictor = 0;
+        plane_alt_model = 0;
+        unmodel_plane(img_at, img_at[0].pixels);
+      } else {
+        unmodel_described(img_at, hdr.flags);
+      }
+      ok = stream.buf+hdr.data_size==stream.cur;
     }
     free(stream.buf);
-    if( p_i[0].flags&flags_transposed )
-      transpose_image(p_i, plane_count);
+    stream.buf = nullptr;
+    return ok;
   }
-  const uint8_t ok_raw = write_member_head(p_i, extra_blk, &arc_in[0].io);
-  uint32_t written = (uint32_t)arc_in[0].io.write(p_i[0].pixels, pal_bytes+p_i[0].data_size);
-  int32_t data_size = p_i[0].data_size;
-  if( !(ok_raw&(written==data_size+pal_bytes)) )
-    return 0;
-  return data_size;
-}
+  BmfImage*expand_image(BmfFile* arc_in, CodedTail** p_coded_buf) {
+    BmfImage hdr;
+    CodedTail head;
+    int32_t version;
+    uint32_t magic;
+    if( p_coded_buf )
+      *p_coded_buf = nullptr;
+    BmfStream* io = &arc_in[0].io;
+    if( !io[0].fp&&!io[0].buf )
+      return nullptr;
+    while( 1 ) {
+      if( !io[0].read_exact(&magic, 4u) ) {
+        return io[0].eof() ? nullptr : arc_in[0].fail();
+      }
+      if( (uint16_t)magic!=bmf_sig_other )
+        break;
+      version = bmf_tag_version(magic);
+      if( version!=bmf_version_20||!io[0].read_exact(&head, 8u) )
+        break;
+      io[0].seek(head.len, SEEK_CUR);
+    }
+    version = bmf_tag_version(magic);
+    if( (uint16_t)magic!=bmf_sig_image||version!=bmf_version_20||!io[0].read_exact(&hdr, 0x10u) ) {
+      return arc_in[0].fail();
+    }
+    if( hdr.flags&flags_tail ) {
+      if( !io[0].read_exact(&head, 8u) )
+        return arc_in[0].fail();
+      if( p_coded_buf ) {
+        if( head.len>io[0].bytes_left() ) {
+          return arc_in[0].fail();
+        }
+        uint32_t pad_len = (head.len+(head.len==0)+3)&0xFFFFFFFC;
+        CodedTail* blk = (CodedTail*)bmf_new(pad_len+sizeof(CodedTail));
+        blk[0].tag = head.tag;
+        blk[0].len = pad_len;
+        blk[0].data[pad_len/4-1] = 0;
+        p_coded_buf[0] = blk;
+        if( !io[0].read_exact(blk[0].data, head.len) )
+          return arc_in[0].fail();
+      } else {
+        io[0].seek(head.len, SEEK_CUR);
+      }
+    }
+    if( hdr.data_size>io[0].bytes_left() ) {
+      return arc_in[0].fail();
+    }
+    uint32_t pal_bytes = 3<<(hdr.depth&31);
+    if( !(hdr.depth&depth_palette) )
+      pal_bytes = 0;
+    if( !hdr.width||!hdr.height||(uint32_t)hdr.width*(uint32_t)((((hdr.depth&depth_bits)+7)>>3))>0xFFFFu ) {
+      return arc_in[0].fail();
+    }
+    BmfImage* img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);
+    img_at[0].depth = hdr.depth;
+    uint8_t has_coded = p_coded_buf&&p_coded_buf[0];
+    img_at[0].flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
+    plane_count = ((hdr.depth&depth_bits)+7)>>3;
+    if( plane_count<1||plane_count>4 ) {
+      return arc_in[0].fail();
+    }
+    if( hdr.flags&flags_coded ) {
+      if( !expand_coded(io, img_at, hdr) ) {
+        return arc_in[0].fail();
+      }
+    } else {
+      if( hdr.data_size>img_at[0].data_size ) {
+        return arc_in[0].fail();
+      }
+      uint32_t want = hdr.data_size;
+      if( io[0].read(img_at[0].pixels, hdr.data_size)!=want ) {
+        return arc_in[0].fail();
+      }
+    }
+    if( hdr.depth&depth_palette ) {
+      uint8_t* pal_at = (img_at[0].depth&depth_palette) ? img_at[0].palette() : nullptr;
+      uint32_t got = (uint32_t)io[0].read(pal_at, pal_bytes);
+      if( got!=pal_bytes ) {
+        return arc_in[0].fail();
+      }
+    }
+    if( img_at[0].flags&flags_transposed ) {
+      if( (uint64_t)img_at[0].width*img_at[0].height*(uint32_t)plane_count>(uint64_t)img_at[0].data_size ) {
+        return arc_in[0].fail();
+      }
+      transpose_image(img_at, plane_count);
+    }
+    return img_at;
+  }
+  void interleave_flat(BmfImage* img, const uint8_t* src, int32_t plane) {
+    strided_copy(&img[0].pixels[plane], plane_count, src, 1, bmf_pixels(img));
+  }
+  void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
+    code_colour_plane<1>(img, src, plane);
+  }
+  void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
+    code_plane<0>(p_i, pixels, raw);
+  }
+  void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
+    plane_predictor = plane_desc[plane].flags&desc_predictor;
+    plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
+    colour_transform(img, pixels, plane);
+    memset(hist_scratch, 0, 1024);
+    {
+      BmfImage hdr = img[0];
+      hdr.depth = depth_one_plane;
+      if( plane_predictor==pred_p1&&!plane_alt_model )
+        predict_med(pixels, img[0].width, img[0].height);
+      model_plane(&hdr, pixels, pixels);
+    }
+  }
+  ModelBlock*new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
+    void* raw = model_blocks.take(false);
+    return ((ModelBlock*)raw)[0].layout_workspace(this, img_w, img_h, img_depth);
+  }
+  void offer_to_all(int32_t want) {
+    for( int32_t k = 0; k<plane_count; ++k )
+      plane_desc[k].flags = (plane_desc[k].flags&desc_has_refs)|want;
+  }
+  void pack_bits(uint32_t word, int32_t n) {
+    if( stream.pk.free_bits<n ) {
+      *stream.pk.word = stream.pk.acc|(2*(word<<((31-stream.pk.free_bits)&31)));
+      stream.pk.word = (uint32_t*)stream.cur;
+      stream.cur += 4;
+      stream.pk.acc = word>>(stream.pk.free_bits&31);
+      stream.pk.free_bits += 32-n;
+    } else {
+      stream.pk.acc |= word<<(-stream.pk.free_bits&31);
+      stream.pk.free_bits -= n;
+    }
+  }
+  void packer_flush() {
+    *stream.pk.word = stream.pk.acc;
+  }
+  void packer_reset() {
+    stream.pk.free_bits = 0;
+    stream.pk.acc = 0;
+    stream.cur = stream.buf;
+    stream.pk.word = (uint32_t*)stream.buf;
+    hist_scratch = stream.buf+stream.size-4096;
+  }
+  uint32_t packer_word() {
+    if( stream.cur+4>stream.buf+stream.size ) bmf_fatal(bmf_read_error);
+    uint32_t w = *(uint32_t*)stream.cur;
+    stream.cur += 4;
+    return w;
+  }
+  int32_t plane_in_order(int32_t k) {
+    const int32_t plane = plane_desc[k].src_plane;
+    plane_predictor = plane_desc[plane].flags&desc_predictor;
+    return plane;
+  }
+  PlaneTransform plane_transform(int32_t plane) {
+    PlaneTransform t;
+    t.to_ref0 = plane_desc[0].src_plane-plane;
+    t.to_ref1 = plane_desc[1].src_plane-plane;
+    t.mode = plane_desc[plane].nrefs;
+    t.dc = plane_desc[plane].dc;
+    t.wgt1 = plane_desc[plane].weight1;
+    t.wgt0 = plane_desc[plane].weight0;
+    t.wgt2 = plane_desc[plane].weight2;
+    t.by_weights = false;
+    if( t.mode==2&&t.wgt0+t.wgt1==128 ) {
+      if( !t.wgt1 ) {
+        t.by_weights = true;
+      } else if( !t.wgt0 ) {
+        t.to_ref0 = plane_desc[1].src_plane-plane;
+        t.by_weights = true;
+      }
+    }
+    return t;
+  }
+  uint32_t predict_med(uint8_t* pixels, int32_t width, int32_t height) {
+    uint32_t done, last;
+    alignas(16) uint8_t fold[272];
+    uint8_t* p = pixels+height*width;
+    uint8_t* up = &p[-width];
+    med_fold_table(fold);
+    for( int32_t rows_left = height-1; rows_left; --rows_left ) {
+      for( int32_t x_left = width-1; x_left; --x_left ) {
+        const int32_t north = (uint8_t)*--up;
+        --p;
+        const uint8_t pred = med_predict(p[-1], north, p[-width-1]);
+        const int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
+        p[0] = code;
+        hist_bump(code);
+      }
+      --up;
+      --p;
+      last = (uint8_t)fold[(uint8_t)(*p-p[-width])];
+      p[0] = last;
+      hist_bump(last);
+    }
+    if( width!=1 ) {
+      last = width-1;
+      const int32_t pairs = last/2;
+      {
+        uint32_t k = 0;
+        for( int32_t ofs = 0; k<(uint32_t)pairs; ++k, ofs -= 2 ) {
+          const uint8_t left = p[ofs-2];
+          p[ofs-1] = fold[(uint8_t)(p[ofs-1]-left)];
+          p[ofs-2] = fold[(uint8_t)(left-p[ofs-3])];
+        }
+        done = 2*k+1;
+      }
+      if( last>(done-1) ) {
+        uint8_t* q = p-done;
+        last = (uint8_t)(*q-*((int8_t*)q-1));
+        q[0] = fold[(uint8_t)last];
+      }
+    }
+    return last;
+  }
+  void read_plane_descs() {
+    code_plane_descs<1>();
+  }
+  void reset_descriptors() {
+    for( int32_t k = 0; k<plane_count; ++k ) {
+      plane_desc[k].flags = 0;
+      plane_desc[k].src_plane = k;
+      plane_desc[k].nrefs = k;
+    }
+  }
+  void restore_descriptors(const PlaneDesc* saved) {
+    for( int32_t k = 0; k<4; ++k )
+      plane_desc[k] = saved[k];
+  }
+  void save_descriptors(PlaneDesc* saved) {
+    for( int32_t k = 0; k<4; ++k )
+      saved[k] = plane_desc[k];
+  }
+  uint32_t search_filter(BmfImage* img) {
+    PlaneDesc saved[4];
+    uint32_t plane_cost[4];
+    uint8_t* tile_buf;
+    int32_t tile_h, y0, cand, pl_k;
+    int32_t tile_w = img[0].width;
+    tile_h = img[0].height;
+    if( tile_w<4||tile_h<3 ) {
+      reset_descriptors();
+      return 0;
+    }
+    choose_plane_coding(img);
+    BmfImage* tile_img = alloc_image(tile_w, tile_h, img[0].depth&depth_bits, 0, 0);
+    stream_open(tile_img[0].data_size);
+    tile_buf = (uint8_t*)bmf_new(tile_h*tile_w);
+    y0 = (img[0].height-tile_h)>>1;
+    int32_t dx = img[0].width-tile_w;
+    int32_t off_y = y0*img[0].stride;
+    uint8_t* srcp = img[0].pixels+plane_count*(dx>>1)+off_y;
+    uint8_t* tile_src = tile_img[0].pixels;
+    if( tile_h>0 ) {
+      int32_t row_bytes = tile_img[0].stride;
+      uint8_t* dstp = tile_img[0].pixels;
+      for( int32_t y = 0; y<tile_h; ++y ) {
+        memcpy(dstp, srcp, row_bytes);
+        dstp += row_bytes;
+        srcp += img[0].stride;
+      }
+    }
+    PlaneSearch ps = search_planes(tile_img, tile_buf, plane_cost);
+    int32_t best_bits = ps.bits;
+    {
+      transpose_image(tile_img, plane_count);
+      int32_t bits_d = 0;
+      int32_t pk = 0;
+      while( pk<plane_count ) {
+        pl_k = plane_desc[pk].src_plane;
+        model_planes(tile_img, tile_buf, pl_k);
+        const int32_t bits = 8*(stream.cur-stream.buf);
+        packer_flush();
+        bits_d += bits;
+        packer_reset();
+        if( (uint32_t)(bits-(bits>>8))>plane_cost[pl_k] )
+          break;
+        ++pk;
+      }
+      if( pk<plane_count )
+        bits_d += best_bits+1;
+      if( bits_d+(bits_d>>12)>=best_bits ) {
+        transpose_image(tile_img, plane_count);
+      } else {
+        best_bits = bits_d;
+        transpose_image(img, plane_count);
+      }
+    }
+    free(tile_buf);
+    if( plane_count>2 ) {
+      if( ps.n_p1 ) {
+        save_descriptors(saved);
+        offer_to_all(try_p1);
+        int32_t bits_e = transform_cost(tile_img);
+        if( bits_e<=best_bits ) {
+          best_bits = bits_e;
+          cand = 0;
+        } else {
+          restore_descriptors(saved);
+          cand = 1;
+        }
+      } else {
+        cand = 1;
+      }
+      if( ps.n_p2+(cand==0) ) {
+        save_descriptors(saved);
+        offer_to_all(try_p2);
+        if( plane_count==ps.n_p2&&plane_count-1==ps.n_refs ) {
+          cand = 0;
+        } else {
+          const int32_t bits_a = transform_cost(tile_img);
+          if( bits_a<=best_bits ) {
+            best_bits = bits_a;
+            ps.n_p2 = bits_a;
+            if( plane_count-1==ps.n_refs ) {
+              cand = 0;
+            } else {
+              save_descriptors(saved);
+              allow_refs_where_present();
+              int32_t bits2 = transform_cost(tile_img);
+              if( bits2>bits_a )
+                restore_descriptors(saved);
+              cand = 0;
+            }
+          } else {
+            restore_descriptors(saved);
+          }
+        }
+      }
+    } else {
+      cand = 1;
+    }
+    if( !ps.n_p2&&plane_count>1 ) {
+      uint8_t* tile_copy = (uint8_t*)bmf_new(tile_img[0].data_size);
+      memcpy(tile_copy, tile_src, tile_img[0].data_size);
+      save_descriptors(saved);
+      drop_alt_model_from_all();
+      int32_t bits_b = transform_cost(tile_img);
+      if( bits_b>best_bits ) {
+        restore_descriptors(saved);
+      } else {
+        best_bits = bits_b;
+        cand = 0;
+      }
+      if( ps.n_refs+ps.n_p1 ) {
+        save_descriptors(saved);
+        clear_flags_on_all();
+        memcpy(tile_src, tile_copy, tile_img[0].data_size);
+        int32_t bits_c = transform_cost(tile_img);
+        if( bits_c<=best_bits ) {
+          cand = 0;
+        } else {
+          restore_descriptors(saved);
+        }
+      }
+      free(tile_copy);
+    }
+    free(stream.buf);
+    free((uint8_t*)tile_img);
+    return cand;
+  }
+  void stream_open(uint32_t data_size) {
+    stream.size = data_size+0x20000;
+    stream.buf = (uint8_t*)bmf_new(stream.size);
+    packer_reset();
+  }
+  int32_t transform_cost(BmfImage* tile_img) {
+    transform_planes(tile_img);
+    const int32_t bits = 8*(stream.cur-stream.buf);
+    packer_flush();
+    packer_reset();
+    return bits;
+  }
+  void transform_planes(BmfImage* p_i) {
+    int32_t i;
+    memset(hist_scratch, 0, 4096);
 
-// ---------------------------------------------------------------------------
+    BmfImage* hdr = (BmfImage*)(stream.buf+sizeof(BmfImage));
+    hdr[0] = p_i[0];
+    uint8_t* src_pixels = p_i[0].pixels;
+    memcpy(hdr[0].pixels, p_i[0].pixels, p_i[0].data_size);
+    uint8_t* tmp = (uint8_t*)bmf_new(p_i[0].width*p_i[0].height);
+    for( int32_t k = 0; k<plane_count; ++k ) {
+      const int32_t plane = plane_in_order(k);
+      const int32_t predictor = plane_predictor;
+      const int32_t alt = (plane_desc[plane].flags&desc_alt_model)!=0;
+      plane_alt_model = alt;
+      const bool transform_it = ((plane_desc[plane].flags&desc_has_refs)!=0||predictor)&&!alt;
+      if( !transform_it )
+        continue;
+      colour_transform(hdr, tmp, plane);
+      if( plane_predictor==pred_p1 )
+        predict_med(tmp, p_i[0].width, p_i[0].height);
+      int32_t n = p_i[0].width*p_i[0].height;
+      int32_t stride = plane_count;
+      if( plane_count==1 ) {
+        memcpy(&p_i[0].pixels[plane], tmp, n);
+      } else {
+        uint8_t* dst = &p_i[0].pixels[plane];
+        int32_t ofs = 0;
+        for( i = 0; i<n; ++i ) {
+          dst[ofs] = tmp[i];
+          ofs += stride;
+        }
+      }
+    }
+    free(tmp);
+    model_plane(p_i, src_pixels, src_pixels);
+  }
+  void unmodel_described(BmfImage* img_at, uint8_t flags) {
+    if( plane_count==1 ? (img_at[0].depth&depth_grey)!=0 : plane_count>2 ) {
+      uint32_t near_lossless = unpack_bits(4);
+      if( near_lossless ) {
+        printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
+        exit(3);
+      }
+      near_lossless_q = 0;
+    }
+    read_plane_descs();
+    uint8_t* plane_buf = (uint8_t*)bmf_new(img_at[0].width*img_at[0].height);
+    if( flags&flags_planar )
+      unmodel_planes_apart(img_at, plane_buf);
+    else
+      unmodel_planes_together(img_at, plane_buf);
+    free(plane_buf);
+  }
+  void unmodel_plane(BmfImage* p_i, uint8_t* out) {
+    code_plane<1>(p_i, out, nullptr);
+  }
+  void unmodel_planes_apart(BmfImage* img_at, uint8_t* plane_buf) {
+    BmfImage plane_hdr = img_at[0];
+    plane_hdr.depth = depth_one_plane;
+    for( int32_t k = 0; k<plane_count; ++k ) {
+      const int32_t plane = plane_desc[k].src_plane;
+      plane_predictor = plane_desc[plane].flags&desc_predictor;
+      plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
+      unmodel_plane(&plane_hdr, plane_buf);
+      if( plane_predictor==pred_p1&&!plane_alt_model )
+        unpredict_med(plane_buf, img_at[0].width, img_at[0].height);
+      interleave_plane(img_at, plane_buf, plane);
+    }
+  }
+  void unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf) {
+    plane_predictor = plane_desc[0].flags&desc_predictor;
+    plane_alt_model = (plane_desc[0].flags&desc_alt_model)!=0;
+    unmodel_plane(img_at, img_at[0].pixels);
+    if( plane_alt_model )
+      return;
+    for( int32_t k = 0; k<plane_count; ++k ) {
+      const int32_t plane = plane_in_order(k);
+      const int32_t pred = plane_predictor;
+      if( (plane_desc[plane].flags&desc_has_refs)==0&&!pred )
+        continue;
+      deinterleave_plane(img_at, plane_buf, plane);
+      if( pred==pred_p1 )
+        unpredict_med(plane_buf, img_at[0].width, img_at[0].height);
+      interleave_plane(img_at, plane_buf, plane);
+    }
+  }
+  uint32_t unpack_bits(int32_t n) {
+    const uint32_t mask = (1u<<n)-1;
+    uint32_t v;
+    stream.pk.free_bits -= n;
+    if( stream.pk.free_bits<0 ) {
+      const uint32_t w = packer_word();
+      v = stream.pk.acc|((w<<((stream.pk.free_bits+n)&31))&mask);
+      stream.pk.acc = w>>(-stream.pk.free_bits&31);
+      stream.pk.free_bits += 32;
+    } else {
+      v = stream.pk.acc&mask;
+      stream.pk.acc = stream.pk.acc>>n;
+    }
+    return v;
+  }
+  void write_plane_descs() {
+    code_plane_descs<0>();
+  }
+  int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0, int32_t plane_a, int32_t plane_b, int32_t w4, int32_t w8) {
+    int32_t hist[512];
+    memset(hist, 0, sizeof hist);
+    const int32_t stride = img[0].stride;
+    const int32_t left = -plane_count;
+    const int32_t ofs_up = -stride;
+    const int32_t ofs_ul = -stride-plane_count;
+    const uint8_t* p = plane0-ofs_ul;
+    const uint8_t* q = plane0+plane_a-ofs_ul;
+    const uint8_t* r = plane0+plane_b-ofs_ul;
+    for( int32_t n = img[0].width*(img[0].height-1)-1; n; --n ) {
+      const int32_t cur = q[0];
+      ++hist[residual_bin(p[ofs_ul]+p[0]-p[ofs_up]-p[left], w4, q[ofs_ul]+cur-q[ofs_up]-q[left], w8, r[ofs_ul]+r[0]-r[ofs_up]-(uint32_t)r[left])];
+      q -= left;
+      p -= left;
+      r -= left;
+    }
+    return estimate_cost(hist, 512);
+  }
+  PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf, uint32_t* plane_cost) {
+    int32_t best_cost = 0, best_flags = 0;
+    auto probe_plane = [&](int32_t pl, int32_t flags) {
+                         plane_desc[pl].flags = flags;
+                         model_planes(tile_img, tile_buf, pl);
+                         int32_t cost = 8*(stream.cur-stream.buf);
+                         packer_flush();
+                         return cost;
+                       };
+    bool won = false;
+    auto probe_keep = [&](int32_t pl, int32_t flags) {
+                        const int32_t cost = probe_plane(pl, flags);
+                        packer_reset();
+                        won = cost<best_cost;
+                        if( won ) {
+                          best_cost = cost;
+                          best_flags = flags;
+                        }
+                        return cost;
+                      };
+    PlaneSearch out = {0, 0, 0, 0};
+    for( int32_t pi = 0; pi<plane_count; ++pi ) {
+      const int32_t plane_i = plane_desc[pi].src_plane;
+      if( out.n_p2 ) {
+        best_cost = 0x7FFFFFFF;
+      } else {
+        best_cost = probe_plane(plane_i, try_mode0);
+        packer_reset();
+        if( best_cost!=0x7FFFFFFF )
+          best_flags = 0;
+      }
+      const int32_t bits_f5 = probe_keep(plane_i, try_p1);
+      if( bits_f5<best_cost+(best_cost>>5)||out.n_p2 )
+        probe_keep(plane_i, try_p2);
+      int32_t pred;
+      if( pi ) {
+        probe_keep(plane_i, try_refs);
+        const int32_t bits_f13 = probe_keep(plane_i, try_refs_p1);
+        pred = best_flags&desc_predictor;
+        if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
+          probe_keep(plane_i, try_refs_p2);
+          if( won )
+            pred = pred_p2;
+        }
+      } else {
+        pred = best_flags&desc_predictor;
+      }
+      const int32_t flag8 = (uint8_t)best_flags&desc_has_refs;
+      out.bits += best_cost;
+      out.n_p2 += pred==pred_p2;
+      if( pred!=pred_p1 )
+        pred = pred_mode0;
+      out.n_p1 += pred;
+      plane_cost[plane_i] = best_cost;
+      out.n_refs += flag8!=0;
+      plane_desc[plane_i].flags = (uint8_t)best_flags;
+    }
+    return out;
+  }
+  void choose_alpha_plane(BmfImage* img, int32_t (&hists)[8*1024], const uint8_t* data_end, int32_t row_stride) {
+    const HistRows hr = hist_rows(hists);
+    memset(hists, 0, sizeof hists);
+    const uint8_t*const px = img[0].pixels;
+    const uint8_t*const pp = &px[row_stride];
+    const uint32_t uu = &px[row_stride+4]<data_end ? (uint32_t)((data_end-1-pp)/4) : 0;
+    const AlphaWeights w = fit_alpha_weights(px, pp, uu);
+    int32_t wa_slot = w.a, wb = w.b, wc = w.c;
+    for( uint32_t quad = 0; quad<uu; ++quad ) {
+      int32_t nx0 = px[4*quad+4];
+      int32_t dg0 = px[4*quad]+pp[4*quad+4];
+      int32_t dn0 = pp[4*quad];
+      int32_t ad0 = nx0+dn0;
+      int32_t dnx1 = pp[4*quad+5];
+      const int32_t g0 = dg0-ad0;
+      int32_t dn1 = pp[4*quad+1];
+      int32_t nx2 = px[4*quad+6];
+      const int32_t g1 = px[4*quad+1]+dnx1-(px[4*quad+5]+dn1);
+      int32_t dnx2 = pp[4*quad+6];
+      int32_t g2 = px[4*quad+2]+dnx2-(nx2+pp[4*quad+2]);
+      uint16_t g1w = (uint16_t)(px[4*quad+3]+pp[4*quad+7]-pp[4*quad+3]-px[4*quad+7]);
+      int16_t g1_lo = (int16_t)g1;
+      g1w = g1w-512;
+      int32_t pa = g1*wb+g0*wa_slot;
+      int32_t pb = g2*wc;
+      ++hr.r1[(g1w-(int16_t)g0)&0x3FF];
+      int32_t bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
+      ++hr.r0[bin_lin];
+      ++hr.r2[(g1w-g1_lo)&0x3FF];
+      g1w = g1w-g2;
+      ++hr.r3[g1w&0x3FF];
+      const int32_t alpha = pp[4*quad+7]+256;
+      int32_t bin_lin2 = ((uint16_t)alpha-(uint16_t)((wb*pp[4*quad+5]+wa_slot*pp[4*quad+4]+wc*(uint32_t)pp[4*quad+6]+63)>>7)+256)&0x3FF;
+      ++hr.r3[bin_lin2+1024];
+      int32_t r0 = alpha-pp[4*quad+4];
+      ++hr.r3[r0+2048];
+      int32_t r1 = alpha-pp[4*quad+5];
+      ++hr.r3[r1+3072];
+      int32_t r2 = alpha-pp[4*quad+6];
+      ++hr.r3[r2+4096];
+    }
+    uint32_t cost_lin = estimate_cost(hr.r0, 1024);
+    uint32_t best4 = (cost_lin>>7)+cost_lin;
+    const uint32_t cost_c0 = estimate_cost(hr.r1, 1024);
+    const bool pick0 = cost_c0<best4;
+    if( pick0 ) {
+      best4 = cost_c0;
+      wa_slot = 128;
+      wc = 0;
+      wb = 0;
+    }
+    const uint32_t cost_c1 = estimate_cost(hr.r2, 1024);
+    int32_t pred4 = pick0;
+    if( cost_c1<best4 ) {
+      best4 = cost_c1;
+      pred4 = 2;
+      wb = 128;
+      wc = 0;
+      wa_slot = 0;
+    }
+    const uint32_t cost_c2 = estimate_cost(hr.r3, 1024);
+    if( cost_c2<best4 ) {
+      pred4 = 3;
+      wc = 128;
+      wb = 0;
+      wa_slot = 0;
+    }
+    plane_desc[3].weight0 = wa_slot;
+    plane_desc[3].weight1 = wb;
+    plane_desc[3].weight2 = wc;
+    plane_desc[3].src_plane = 3;
+    plane_desc[3].nrefs = 3;
+    plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
+  }
+  template <int32_t f_DEC> void alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height, uint8_t* out) {
+    AltP1Block* blk = alt_p1_block_alloc(width, height);
+    blk[0].d8_body<f_DEC>(src, out);
+    if( blk ) p1_blocks.give(blk);
+  }
+  void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+    alt_model_p1_d8<0>(src, i, height, out);
+  }
+  void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height) {
+    alt_model_p1_d8<1>(nullptr, i, height, out);
+  }
+  void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
+    for( int32_t pl = 0; pl<plane_count; ++pl ) {
+      AltP2Block* page = p2_blocks.take(true);
+      plane[pl] = page[0].alt_p2_alloc(this, width, pl);
+    }
+  }
+  void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
+    for( int32_t k = 0; k<plane_count; ++k ) {
+      if( row==0 )
+        plane[k][0].seed_row0(width);
+      else if( row==1 )
+        plane[k][0].seed_history(width);
+      plane[k][0].start_row();
+    }
+  }
+  uint8_t*compress_to_memory(BmfImage* p_i, size_t* out_len, const CodedTail* tail) {
+    reset();
+    out_len[0] = 0;
+    BmfFile arc;
+    arc.io = BmfStream::in_memory();
+    const int32_t coded = compress_image(&arc, p_i, tail);
+    if( !coded ) {
+      arc.close();
+      return nullptr;
+    }
+    uint8_t* out = arc.io.take(out_len);
+    arc.close();
+    return out;
+  }
+  BmfImage*expand_from_memory(const uint8_t* data, size_t n, CodedTail** tail) {
+    reset();
+    BmfFile arc;
+    arc.io = BmfStream::over_memory(data, n);
+    BmfImage* img = expand_image(&arc, &coded_block);
+    arc.close();
+    if( tail )
+      *tail = coded_block;
+    else
+      free(coded_block);
+    coded_block = nullptr;
+    return img;
+  }
+};
+
 // Layout guards.  Several routines deliberately write past the end of one
 // member into the next (the fold/fold_hi pair filled by alt_init_tables, the
 // bias[] slots NbRow::predict reaches through p2_row, the ModelBlock grid
