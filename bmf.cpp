@@ -541,10 +541,7 @@ struct BMFState {
   int32_t update_binary_pair(uint16_t* _this, int32_t symbol);
   uint32_t rc_decode_flat(uint32_t tot);
   uint32_t alt_init_tables(uint8_t* fold, int8_t* unfold);
-  int32_t tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val);
-  void reduce_alphabet(ModelBlock* blk, uint8_t* src);
   template <int32_t f_DEC> uint32_t code_alphabet_size(uint32_t n, uint32_t cap);
-  template <int32_t f_DEC> uint32_t code_symbol_bytes(SymList* lists, uint32_t nbytes, uint32_t val, int32_t &carry);
   uint16_t*begin_plane_stream();
   void packer_rewind();
   template <int32_t f_DEC> uint16_t*rc_begin();
@@ -554,7 +551,6 @@ struct BMFState {
   void rc_end_decode();
   void rc_end_encode();
   bool ref_transformed(int32_t k);
-  void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width);
   alignas(16) float p2_coef[7][4] = {};
   alignas(16) float p2_rate[7][4] = {};
   SymEntry byte_list_ent[16*256] = {};
@@ -746,6 +742,8 @@ struct SymList {
     since_rescale += 4;
     return move_up(p);
   }
+
+  template <int32_t f_DEC> uint32_t code_symbol_bytes(BMFState* cx, uint32_t nbytes, uint32_t val, int32_t &carry);
 
   int32_t code_symbol(BMFState* cx, int32_t want) {
     int32_t enc_cum, enc_high, enc_tot;
@@ -1978,15 +1976,6 @@ bool BMFState::ref_transformed(int32_t k) {
   return (plane_desc[plane_desc[k].src_plane].flags&desc_has_refs)!=0;
 }
 
-void BMFState::alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
-  for( int32_t k = 0; k<plane_count; ++k ) {
-    if( row==0 )
-      plane[k][0].seed_row0(width);
-    else if( row==1 )
-      plane[k][0].seed_history(width);
-    plane[k][0].start_row();
-  }
-}
 
 struct CtxWeights {
   NbRow* row[6];
@@ -2112,6 +2101,8 @@ struct ModelBlock {
   uint16_t ctx_id3[712000];
   ModelBlock*layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth);
   void free_workspace();
+  int32_t tree_place(ReduceNode* tree, uint32_t val);
+  void reduce_alphabet(uint8_t* src);
   int32_t pixel_context(uint32_t* nb) {
     int32_t band;
     int32_t pos = sym_pos;
@@ -2502,7 +2493,7 @@ struct ModelBlock {
         if( n_syms ) {
           int32_t carry = 0;
           for( uint32_t s = 0; s<alphabet; ++s )
-            sym_code[s] = cx[0].code_symbol_bytes<1>(lists, nbytes, 0, carry);
+            sym_code[s] = lists[0].code_symbol_bytes<1>(cx, nbytes, 0, carry);
         }
       } else if( n_syms<=mask ) {
         init_gap_list(cx, lists, mask, n_syms);
@@ -2692,7 +2683,7 @@ struct ModelBlock {
     if constexpr( f_DEC )
       expand_alphabet();
     else
-      cx[0].reduce_alphabet(this, buf);
+      reduce_alphabet(buf);
     seed_context_groups();
     seed_alphabet();
     uint8_t* expand_buf = nullptr;
@@ -3074,6 +3065,7 @@ struct BMFCodec : BMFState {
   void alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out);
   void alt_model_p1_d8_decode(uint8_t* out, int32_t i, int32_t height);
   void alt_p2_planes_alloc(AltP2Block** plane, int32_t width);
+  void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width);
   uint8_t*compress_to_memory(BmfImage* p_i, size_t* out_len, const CodedTail* tail = nullptr);
   BmfImage*expand_from_memory(const uint8_t* data, size_t n, CodedTail** tail = nullptr);
 };
@@ -3936,7 +3928,7 @@ void reduce_narrow_alphabet(BMFState* cx, SymList* lists, ModelBlock* blk1, uint
   }
 }
 
-int32_t BMFState::tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
+int32_t ModelBlock::tree_place(ReduceNode* tree, uint32_t val) {
   int32_t node = 0, side;
   uint16_t* kidp;
   while( 1 ) {
@@ -3946,16 +3938,15 @@ int32_t BMFState::tree_place(ReduceNode* tree, ModelBlock* blk, uint32_t val) {
     if( !node )
       break;
     if( val==tree[node].val ) {
-      mode_symbol[1] = side;
+      cx[0].mode_symbol[1] = side;
       return node;
     }
   }
-  int32_t alphabet = blk[0].alphabet;
-  mode_symbol[1] = side;
+  cx[0].mode_symbol[1] = side;
   node = (uint16_t)alphabet;
   int32_t alpha = alphabet+1;
   kidp[side] = node;
-  blk[0].alphabet = alpha;
+  alphabet = alpha;
   if( alpha>0x2000 )
     return -1;
   tree[node].val = val;
@@ -3968,16 +3959,17 @@ template <int32_t f_DEC> uint32_t BMFState::code_alphabet_size(uint32_t n, uint3
   return n;
 }
 
-template <int32_t f_DEC> uint32_t BMFState::code_symbol_bytes(SymList* lists, uint32_t nbytes, uint32_t val, int32_t &carry) {
+template <int32_t f_DEC> uint32_t SymList::code_symbol_bytes(BMFState* cx, uint32_t nbytes, uint32_t val, int32_t &carry) {
+  SymList*const lists = this;
   uint32_t word = val, out = 0;
   for( uint32_t b = 0; b<nbytes; ++b ) {
     uint32_t piece;
     if constexpr( f_DEC ) {
-      piece = lists[4*b+carry].decode_symbol_list(this);
+      piece = lists[4*b+carry].decode_symbol_list(cx);
       out += piece<<((8*b)&31);
     } else {
       piece = (uint8_t)word;
-      lists[4*b+carry].code_symbol(this, (uint8_t)piece);
+      lists[4*b+carry].code_symbol(cx, (uint8_t)piece);
       word >>= 8;
     }
     carry = piece>>6;
@@ -3988,14 +3980,14 @@ template <int32_t f_DEC> uint32_t BMFState::code_symbol_bytes(SymList* lists, ui
   return out;
 }
 
-void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
+void ModelBlock::reduce_alphabet(uint8_t* src) {
   ReduceNode tree[8192];
   SymList lists[16];
   uint8_t* out[19];
   uint32_t alpha_n, done;
   int32_t node, carry;
   uint8_t* rp;
-  uint32_t sym_bits = blk[0].depth;
+  uint32_t sym_bits = depth;
   uint32_t mask = 0xFFFFFFFF>>(-sym_bits&31);
   uint32_t n_kids = (sym_bits+7)>>3;
   auto load32 = [](const uint8_t* at) {
@@ -4005,13 +3997,13 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
                 };
   clear_sym_lists(lists);
   if( sym_bits<=8 ) {
-    reduce_narrow_alphabet(this, lists, blk, src, mask);
+    reduce_narrow_alphabet(cx, lists, this, src, mask);
   } else {
     memset(tree, 0, sizeof tree);
-    blk[0].alphabet = 1;
+    alphabet = 1;
     tree[0].val = mask&load32(src);
-    blk[0].sym_word[0] = 0;
-    if( (uint32_t)(blk[0].height*blk[0].width)>1 ) {
+    sym_word[0] = 0;
+    if( (uint32_t)(height*width)>1 ) {
       uint8_t* p = src;
       node = 0;
       uint32_t written = 1;
@@ -4020,19 +4012,19 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
         uint32_t val = mask&load32(p);
         if( val!=tree[node].val ) {
           node = 0;
-          if( val!=tree[0].val ) node = tree_place(tree, blk, val);
+          if( val!=tree[0].val ) node = tree_place(tree, val);
           if( node<0 ) break;
         }
-        blk[0].sym_word[written++] = node;
-        if( written>=(uint32_t)(blk[0].height*blk[0].width) ) break;
+        sym_word[written++] = node;
+        if( written>=(uint32_t)(height*width) ) break;
       }
     }
-    alpha_n = blk[0].alphabet;
-    code_alphabet_size<0>(alpha_n, no_symbol+1);
-    if( blk[0].alphabet>0x2000 ) {
-      out[1] = (uint8_t*)bmf_new(blk[0].height*n_kids*blk[0].width);
-      int32_t img_w = blk[0].width;
-      int32_t img_h = blk[0].height;
+    alpha_n = alphabet;
+    cx[0].code_alphabet_size<0>(alpha_n, no_symbol+1);
+    if( alphabet>0x2000 ) {
+      out[1] = (uint8_t*)bmf_new(height*n_kids*width);
+      int32_t img_w = width;
+      int32_t img_h = height;
       uint32_t plane_size;
       if( n_kids ) {
         plane_size = img_h*img_w;
@@ -4064,21 +4056,21 @@ void BMFState::reduce_alphabet(ModelBlock* blk, uint8_t* src) {
           }
         }
       }
-      uint16_t* old_words = blk[0].sym_word;
-      blk[0].height = n_kids*img_h;
-      blk[0].depth = 8;
+      uint16_t* old_words = sym_word;
+      height = n_kids*img_h;
+      depth = 8;
       free(old_words);
-      void* newbuf = bmf_new(2*blk[0].height*blk[0].width);
-      blk[0].sym_word = (uint16_t*)newbuf;
-      reduce_alphabet(blk, out[1]);
+      void* newbuf = bmf_new(2*height*width);
+      sym_word = (uint16_t*)newbuf;
+      reduce_alphabet(out[1]);
       free(out[1]);
     } else {
-      init_byte_lists(this, lists, n_kids);
-      const int32_t alpha_m = blk[0].alphabet;
+      init_byte_lists(cx, lists, n_kids);
+      const int32_t alpha_m = alphabet;
       if( alpha_m ) {
         carry = 0;
         for( uint32_t si = 0; si<(uint32_t)alpha_m; ++si )
-          code_symbol_bytes<0>(lists, n_kids, tree[si].val, carry);
+          lists[0].code_symbol_bytes<0>(cx, n_kids, tree[si].val, carry);
       }
     }
     free_sym_entries(lists, 16);
@@ -4853,6 +4845,16 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t code, int32_t resid
       bump_bank(k, step_ctx, ctx15, fold_sel, is_dec);
   }
   return step_ctx;
+}
+
+void BMFCodec::alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {
+  for( int32_t k = 0; k<plane_count; ++k ) {
+    if( row==0 )
+      plane[k][0].seed_row0(width);
+    else if( row==1 )
+      plane[k][0].seed_history(width);
+    plane[k][0].start_row();
+  }
 }
 
 void BMFCodec::alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
