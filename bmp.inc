@@ -23,6 +23,8 @@ enum : uint8_t {
 // describe the pixels' representation rather than the coding, so they sit here.
 enum : uint8_t {
   pad_ycocg = 0x01,
+  pad_flip_x = 0x02,
+  pad_flip_y = 0x04,
 };
 
 uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {
@@ -131,6 +133,67 @@ void transpose_image_packed(BmfImage* img) {
   transpose_image_in_place(img, 1);
   img[0].stride = (uint16_t)dst_stride;
   free(copy);
+}
+
+// True when a packed image's sub-byte layout follows from its depth, which is
+// what the bit-level geometry below assumes.  Depth 3 packs into 4-bit fields
+// and so does not qualify.
+bool packed_bits_ok(const BmfImage* img) {
+  const int32_t bits = img[0].depth&depth_bits;
+  return !(img[0].flags&flags_packed)||bits==1||bits==2||bits==4;
+}
+
+// Mirror about the horizontal axis: whole rows swap, so the packed and
+// byte-interleaved cases are the same code and row padding rides along.
+void flip_image_y(BmfImage* img, int32_t planes) {
+  (void)planes;
+  const uint32_t stride = img[0].stride;
+  uint8_t*const px = img[0].pixels;
+  uint8_t* tmp = (uint8_t*)bmf_new(stride);
+  for( int32_t y = 0, z = img[0].height-1; y<z; ++y, --z ) {
+    memcpy(tmp, px+(uint32_t)y*stride, stride);
+    memcpy(px+(uint32_t)y*stride, px+(uint32_t)z*stride, stride);
+    memcpy(px+(uint32_t)z*stride, tmp, stride);
+  }
+  free(tmp);
+  img[0]._pad8[0] ^= pad_flip_y;
+}
+
+// Mirror about the vertical axis.  Only the pixels are reversed: the slots past
+// the last pixel of a packed row are row padding the BMP writer has to
+// reproduce byte for byte, so they stay where they are.
+void flip_image_x(BmfImage* img, int32_t planes) {
+  const uint32_t stride = img[0].stride;
+  const int32_t w = img[0].width, h = img[0].height;
+  uint8_t*const px = img[0].pixels;
+  if( img[0].flags&flags_packed ) {
+    const int32_t bits = img[0].depth&depth_bits;
+    const int32_t per = 8/bits;
+    const uint32_t mask = (1u<<bits)-1;
+    uint8_t* row_copy = (uint8_t*)bmf_new(stride);
+    for( int32_t y = 0; y<h; ++y ) {
+      uint8_t*const row = px+(uint32_t)y*stride;
+      memcpy(row_copy, row, stride);
+      for( int32_t x = 0; x<w; ++x ) {
+        const int32_t src = w-1-x;
+        const uint32_t v = (row_copy[src/per]>>(8-bits*(src%per+1)))&mask;
+        const int32_t sh = 8-bits*(x%per+1);
+        row[x/per] = (uint8_t)((row[x/per]&~(mask<<sh))|(v<<sh));
+      }
+    }
+    free(row_copy);
+  } else {
+    uint8_t tmp[4];
+    for( int32_t y = 0; y<h; ++y ) {
+      uint8_t*const row = px+(uint32_t)y*stride;
+      for( int32_t x = 0, z = w-1; x<z; ++x, --z ) {
+        memcpy(tmp, row+(uint32_t)x*planes, (size_t)planes);
+        memcpy(row+(uint32_t)x*planes, row+(uint32_t)z*planes, (size_t)planes);
+        memcpy(row+(uint32_t)z*planes, tmp, (size_t)planes);
+      }
+    }
+  }
+  img[0]._pad8[0] ^= pad_flip_x;
 }
 
 void transpose_image(BmfImage* img, int32_t planes) {

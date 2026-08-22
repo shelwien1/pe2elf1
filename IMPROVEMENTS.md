@@ -422,11 +422,31 @@ orientation. **Re-running the per-plane search on the transposed image**, or at
 least widening the abort budget, is worth 2.4 % on `t24` and `t32` on its own,
 before any new orientation is added.
 
-**(c) Beyond transposition, the flips add little.** On multi-plane images the
-transpose captures most of the available gain (`t24`: −2.4 % of the −2.7 %;
-`t32`: the transpose *is* the best). The mirrors matter for `DLRAW` and for the
-≤ 4 bpp class, where they are the entire gain. So the full eight-way search is
-worth having but is not where the value is; (a) and (b) are.
+**(c) Beyond transposition, the flips add little — built, and only the short
+path kept them.** On multi-plane images the transpose captures most of the
+available gain (`t24`: −2.4 % of the −2.7 %; `t32`: the transpose *is* the
+best). The mirrors matter for `DLRAW` and for the ≤ 4 bpp class, where they are
+the entire gain.
+
+Both mirrors were built as greedy trials on top of the transpose, in both paths,
+and measured. **[measured]** In the ≤ 4 bpp short path they are worth 1 104
+bytes — `DLRAW` −0.48 %, `t1` a further −1.4 % on top of the transpose, reaching
+the 2 186 the eight-way table predicts — for about 20 % more of a cheap search.
+Kept. In the long path they are worth 568 bytes, 0.036 % of the corpus, and cost
+**60 % of total encode time**, because every candidate orientation needs its own
+full per-plane search (that is (b)'s whole point) and the flips add two of them.
+Dropped.
+
+**The orientation decision cannot be delegated to a crop [measured].** The
+obvious way to make the search affordable is to decide geometry on a bounded
+centred crop and search only the winner whole. It does not work: a 1-megapixel
+crop of `x_ai` does not show the 9.6 % its full raster gains from a transpose, so
+the crop rejects it and the file ends up **+10.6 %**. Two megapixels was enough
+for the transpose but still lost the mirrors' verdict. Geometry is a
+whole-raster property on exactly the content where it matters most.
+
+So the full eight-way search is worth having where searches are cheap, and is
+not where the value is otherwise; (a) and (b) are.
 
 **Per-plane orientation [measured].** The planes of one image do prefer
 different orientations — `t24`'s three planes coded standalone want identity,
@@ -442,11 +462,15 @@ can be un-rotated before the other planes reference it, so it can have its own
 orientation for free. On `t24` that plane prefers a transpose by 1.2 %, and it
 is ~98 % of the file.
 
-**Cost.** (a) is a few lines. (b) is re-running an existing search on transposed
-data — encoder time, no format change. The full dihedral search multiplies the
-already-expensive mode search by four; a cheap directional statistic (compare
-the entropy of horizontal against vertical first differences) can pick the two
-or three orientations worth actually trialling.
+**Cost [measured].** (a) is a few lines. (b) is re-running an existing search on
+transposed data — encoder time, no format change, and it is where the encode
+cost of this section actually goes: it takes the corpus encode from 1.00× to
+1.27×, because the old trial was cheap only by virtue of aborting. The full
+dihedral search multiplies that again. A cheap directional statistic does *not*
+rescue it: an order-0 cost of the MED residual was tried as a gate and is blind
+to the transpose outright (MED is symmetric in its N and W neighbours) and
+uncorrelated with the mirrors' real verdict — on `x_ci` it ranked the winning
+mirror last.
 
 ---
 ## 7. Bigger and better-shaped context sets
