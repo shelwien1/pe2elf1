@@ -74,7 +74,63 @@ void transpose_image_in_place(BmfImage* img, int32_t planes) {
   img[0].stride = img[0].width*planes;
 }
 
+// Row stride in bytes of a sub-byte-packed image of the given width.
+uint32_t packed_stride(int32_t w, int32_t bits) {
+  if( bits==1 )
+    return (uint32_t)(w+7)>>3;
+  if( bits==2 )
+    return (uint32_t)(w+3)>>2;
+  return (uint32_t)(w+1)>>1;
+}
+
+// A packed image may only be transposed in place when both orientations occupy
+// the same number of bytes: the buffer is sized for one of them, the palette
+// sits immediately after the pixels, and the decoder has to transpose back in
+// place as well.  The encoder only offers the transposed orientation when this
+// holds, so the decoder can rely on it.
+bool packed_transpose_ok(const BmfImage* img) {
+  if( !(img[0].flags&flags_packed) )
+    return false;
+  const int32_t bits = img[0].depth&depth_bits;
+  if( bits!=1&&bits!=2&&bits!=4 )
+    return false;
+  return packed_stride(img[0].width, bits)*(uint32_t)img[0].height
+      ==packed_stride(img[0].height, bits)*(uint32_t)img[0].width;
+}
+
+void transpose_image_packed(BmfImage* img) {
+  if( !packed_transpose_ok(img) )
+    return;
+  const int32_t bits = img[0].depth&depth_bits;
+  const int32_t w = img[0].width, h = img[0].height;
+  const uint32_t src_stride = img[0].stride;
+  const uint32_t dst_stride = packed_stride(h, bits);
+  const int32_t per = 8/bits;
+  const uint32_t mask = (1u<<bits)-1;
+  uint8_t* copy = (uint8_t*)bmf_new(img[0].data_size);
+  memcpy(copy, img[0].pixels, img[0].data_size);
+  memset(img[0].pixels, 0, dst_stride*(uint32_t)w);
+  for( int32_t y = 0; y<h; ++y ) {
+    const uint8_t*const row = copy+(uint32_t)y*src_stride;
+    uint8_t*const col = img[0].pixels+(uint32_t)(y/per);
+    const int32_t shift = 8-bits*(y%per+1);
+    for( int32_t x = 0; x<w; ++x ) {
+      const uint32_t v = (row[x/per]>>(8-bits*(x%per+1)))&mask;
+      col[(uint32_t)x*dst_stride] |= (uint8_t)(v<<shift);
+    }
+  }
+  img[0].stride = (uint16_t)dst_stride;
+  img[0].data_size = dst_stride*(uint32_t)w;
+  transpose_image_in_place(img, 1);
+  img[0].stride = (uint16_t)dst_stride;
+  free(copy);
+}
+
 void transpose_image(BmfImage* img, int32_t planes) {
+  if( img[0].flags&flags_packed ) {
+    transpose_image_packed(img);
+    return;
+  }
   uint8_t* copy = (uint8_t*)bmf_new(img[0].data_size);
   memcpy(copy, img[0].pixels, img[0].data_size);
   const int32_t step = planes*(img[0].height-1);

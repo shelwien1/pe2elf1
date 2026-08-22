@@ -453,14 +453,51 @@ struct BMFCodec : BMFState {
     else
       pack_bits((uint32_t)((int32_t)v+bias), bits);
   }
+  // One slow-model pass over the packed data, leaving the result in `stream`.
+  int32_t code_packed_once(BmfImage* p_i) {
+    stream_open(p_i[0].data_size);
+    plane_predictor = 0;
+    plane_alt_model = 0;
+    alphabet_reduced = 0;
+    model_plane(p_i, p_i[0].pixels, p_i[0].pixels);
+    packer_flush();
+    return (int32_t)(stream.cur-stream.buf);
+  }
+
+  // Images of <=4 bpp never reach search_filter, so they never get the
+  // transpose trial the long path has -- and orientation is worth more here
+  // than anywhere else in the codec.  Run that one trial.
+  void code_packed_body(BmfImage* p_i, BmfImage &hdr) {
+    if( packed_transpose_ok(p_i) ) {
+      uint8_t*const keep = (uint8_t*)bmf_new(p_i[0].data_size);
+      memcpy(keep, p_i[0].pixels, p_i[0].data_size);
+      const int32_t flat = code_packed_once(p_i);
+      free(stream.buf);
+      memcpy(p_i[0].pixels, keep, p_i[0].data_size);
+      transpose_image(p_i, 1);
+      const int32_t flip = code_packed_once(p_i);
+      bmf_log("[orientation] %d bpp short path: flat %d bytes, transposed %d bytes  %s\n",
+              p_i[0].depth&depth_bits, flat, flip, flip<flat ? "TRANSPOSED" : "kept flat");
+      if( flip<flat ) {
+        free(keep);
+        hdr.header_from(p_i);
+        hdr.flags = flags_coded|flags_slow|p_i[0].flags;
+        return;
+      }
+      free(stream.buf);
+      transpose_image(p_i, 1);
+      memcpy(p_i[0].pixels, keep, p_i[0].data_size);
+      free(keep);
+    } else {
+      bmf_log("[orientation] %d bpp short path: transpose not offered (packed sizes differ)\n",
+              p_i[0].depth&depth_bits);
+    }
+    code_packed_once(p_i);
+  }
+
   void code_image_body(BmfImage* p_i, BmfImage &hdr) {
     if( (p_i[0].depth&depth_bits)<=4 ) {
-      bmf_log("[search_filter] skipped: %d bpp takes the short path (slow model, no trials)\n", p_i[0].depth&depth_bits);
-      stream_open(p_i[0].data_size);
-      plane_predictor = 0;
-      plane_alt_model = 0;
-      alphabet_reduced = 0;
-      model_plane(p_i, p_i[0].pixels, p_i[0].pixels);
+      code_packed_body(p_i, hdr);
       return;
     }
     const uint32_t filtered = search_filter(p_i);
@@ -781,7 +818,12 @@ struct BMFCodec : BMFState {
       }
     }
     if( img_at[0].flags&flags_transposed ) {
-      if( (uint64_t)img_at[0].width*img_at[0].height*(uint32_t)plane_count>(uint64_t)img_at[0].data_size ) {
+      // Sub-byte-packed images transpose only when both orientations occupy the
+      // same number of bytes; byte-interleaved ones need room for w*h*planes.
+      const bool fits = (img_at[0].flags&flags_packed)
+                        ? packed_transpose_ok(img_at)
+                        : (uint64_t)img_at[0].width*img_at[0].height*(uint32_t)plane_count<=(uint64_t)img_at[0].data_size;
+      if( !fits ) {
         return arc_in[0].fail();
       }
       transpose_image(img_at, plane_count);
@@ -964,31 +1006,27 @@ struct BMFCodec : BMFState {
     bmf_log("  whole-image trials (against the per-plane total):\n");
     bmf_log("    %-22s %12.1f bytes  (p1=%d p2=%d refs=%d)\n", "planar", bmf_bytes(ps.bits), ps.n_p1, ps.n_p2, ps.n_refs);
     {
+      // The transposed orientation gets its own full per-plane search.  The
+      // old trial re-coded the transposed planes with the transform, coding
+      // order and model chosen for the *other* orientation and abandoned the
+      // whole trial as soon as one plane exceeded its original cost by 1/256 --
+      // which mispriced the transpose by 2x on multi-plane images.
+      PlaneDesc saved_desc[4];
+      uint32_t saved_cost[4];
+      save_descriptors(saved_desc);
+      for( int32_t k = 0; k<4; ++k ) saved_cost[k] = plane_cost[k];
       transpose_image(tile_img, plane_count);
-      int32_t bits_d = 0;
-      int32_t pk = 0;
-      while( pk<plane_count ) {
-        pl_k = plane_desc[pk].src_plane;
-        model_planes(tile_img, tile_buf, pl_k);
-        const int32_t bits = 8*(stream.cur-stream.buf);
-        packer_flush();
-        bits_d += bits;
-        packer_reset();
-        if( (uint32_t)(bits-(bits>>8))>plane_cost[pl_k] )
-          break;
-        ++pk;
-      }
-      if( pk<plane_count )
-        bits_d += best_bits+1;
-      const bool kept_flat = bits_d+(bits_d>>12)>=best_bits;
-      bmf_log("    %-22s %12.1f bytes%s", "transposed", bmf_bytes(bits_d), kept_flat ? "" : "  <<");
-      if( pk<plane_count )
-        bmf_log("  (abandoned after %d of %d plane%s)", pk, plane_count, plane_count==1 ? "" : "s");
-      bmf_log("\n");
+      choose_plane_coding(tile_img);
+      const PlaneSearch pt = search_planes(tile_img, tile_buf, plane_cost);
+      const bool kept_flat = pt.bits+(pt.bits>>12)>=best_bits;
+      bmf_log("    %-22s %12.1f bytes%s\n", "transposed", bmf_bytes(pt.bits), kept_flat ? "" : "  <<");
       if( kept_flat ) {
         transpose_image(tile_img, plane_count);
+        restore_descriptors(saved_desc);
+        for( int32_t k = 0; k<4; ++k ) plane_cost[k] = saved_cost[k];
       } else {
-        best_bits = bits_d;
+        best_bits = pt.bits;
+        ps = pt;
         transpose_image(img, plane_count);
       }
     }
