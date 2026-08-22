@@ -237,6 +237,14 @@ struct BMFCodec : BMFState {
     if( !plane_alt_model )
       return false;
     const bool p1 = plane_predictor==pred_p1;
+    if( plane_predictor==pred_ctx ) {
+      CtxModel ctx_model;
+      ctx_model.Init();
+      if constexpr( !f_DEC )
+        ctx_model.set_alphabet(CtxModel::scan_alphabet(pixels, p_i[0].width*p_i[0].height, ctx_model.to_val));
+      ctx_model.template code_plane<f_DEC>(this, pixels, p_i[0].width, p_i[0].height);
+      return true;
+    }
     if( !p1&&plane_predictor!=pred_p2 )
       return true;
     const bool d8 = (p_i[0].depth&depth_bits)==8;
@@ -1544,6 +1552,17 @@ struct BMFCodec : BMFState {
       bits += descriptor_bits(k, plane_desc[k].flags);
     return bits;
   }
+  // Whether the direct context model can code this plane at all.  The plane
+  // buffer is filled by the trial itself, so the alphabet is scanned from the
+  // image: a single 8-bit plane is the interleaved buffer.
+  bool ctx_model_ok(BmfImage* tile_img, uint8_t* tile_buf, int32_t plane) {
+    (void)tile_buf;
+    if( plane_count!=1||(tile_img[0].depth&depth_bits)!=8||plane!=0 )
+      return false;
+    uint8_t vals[CtxModel::kMaxAlpha];
+    const int32_t n = tile_img[0].width*tile_img[0].height;
+    return CtxModel::scan_alphabet(tile_img[0].pixels, n, vals)<=CtxModel::kMaxAlpha;
+  }
   PlaneSearch search_planes(BmfImage* tile_img, uint8_t* tile_buf, uint32_t* plane_cost) {
     int32_t best_cost = 0, best_flags = 0;
     int32_t trial_flags[8], trial_cost[8], trial_n = 0;
@@ -1586,6 +1605,12 @@ struct BMFCodec : BMFState {
       const int32_t bits_f5 = probe_keep(plane_i, try_p1);
       if( bits_f5<best_cost+(best_cost>>5)||out.n_p2 )
         probe_keep(plane_i, try_p2);
+      // The direct context model, offered only to a single 8-bit plane of at
+      // most sixteen distinct values -- that is what its context key can hold,
+      // and outside that population it loses to the other three by a wide
+      // enough margin that the trial is not worth its encode time.
+      if( ctx_model_ok(tile_img, tile_buf, plane_i) )
+        probe_keep(plane_i, try_ctx);
       int32_t pred;
       if( pi ) {
         probe_keep(plane_i, try_refs);

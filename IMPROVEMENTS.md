@@ -549,19 +549,59 @@ set is capped by the table's shape, and `kCtxId3Limit = 53248`
 `5·32768` (`alt_p2.inc:287`) and its frequency cells 15 552 (`alt_p2.inc:334`).
 These are 1999 memory budgets.
 
-**Change.** Hashed contexts with checksummed slots, the standard construction:
-hash the signature, keep a small tag in the bucket to detect collisions, evict
-on the priority the model prefers (usually lowest total count). That decouples
-the *shape* of a context from the size of its table, which allows:
+**The `kCtxId3Limit` cliff costs nothing [measured].** Widening `ctx_id3` to
+32-bit ids, growing `grid` to match and raising the limit from 53 248 to 700 000
+— so that no context is ever merged — is worth **4 bytes** on `x_ci`, the
+largest image in the corpus and the one that actually hits the limit
+(61 847 ids against a 53 248 cap), and costs `DLRAW` 60. The cliff is not where
+the loss is; the *shape* of the context is.
 
-* longer spatial contexts (more neighbours, larger quantised gradients);
-* contexts the current interning cannot express, e.g. joint contexts over two
-  planes' co-located residuals;
-* dropping the `kCtxId3Limit` cliff.
+**The shape is [measured], and it is worth a great deal.** `ctx_model.inc` is a
+direct context model: a plane of at most sixteen distinct values is coded by
+conditioning on the joint pattern of seven causal neighbours (W, N, NW, NE, WW,
+NN, NEE) packed four bits apiece and hashed into a tagged direct-mapped table,
+with the symbol coded through a binary tree of count-adaptive counters. It is a
+fourth coding mode, chosen per plane by the same trial that chooses between the
+other three.
 
-**Expected [expected].** 2–6 %, more on large images where the current tables
-saturate and less on small ones where they never fill. Combines with §4 —
-cheaper counters mean more contexts for the same memory.
+| image | values | shipped before | with the mode | |
+|---|---|---|---|---|
+| `x_ci` | 4 | 628 116 | 573 728 | **−8.7 %** |
+| `x_ai` | 8 | 144 540 | 141 980 | **−1.8 %** |
+
+That is **−2.9 % of the whole corpus** from one mode, and it makes the codec
+*faster* to decode on those files, not slower, because it replaces the slow
+model's rank-and-escape machinery with one hash and a few binary decisions.
+
+Three things mattered, in order of how much:
+
+1. **The two-table blend.** A short four-neighbour table sits under the long
+   one, direct-indexed and never evicted, and the coded probability is
+   `(p_long·n_long + p_short·24)/(n_long + 24)` — so a fresh bucket codes almost
+   entirely from the short context and hands over as it fills. Seeding a fresh
+   bucket from the short table and then ignoring it is worth about half as much:
+   `x_ci` 578 520 seeded against 573 708 blended, `x_ai` 153 360 against 141 956,
+   which is the difference between the mode losing on `x_ai` and winning.
+2. **Count-adaptive counters.** A fixed 1/32 rate leaves `x_ci` at 602 560 and
+   `x_ai` at 205 844; per-node update counts adapting at 1/(*n*+2) take those to
+   581 800 and 172 248. A context here sees tens of samples, not thousands.
+3. **Seven neighbours, not eight.** Eight is better as a static entropy and
+   worse as an adaptive code — `x_ci` 589 780 against 584 588, `x_ai` 181 708
+   against 169 780 — because the extra contexts cost more to learn than they
+   save. The static sweep alone would have chosen wrong.
+
+**The population, and where it stops.** The mode wins where the plane is a small
+set of labels — a posterised or dithered scan, a map, a screenshot. It loses
+outright on continuous tone, which is why it is a trial and why it is refused
+above sixteen values: the context key holds four bits per neighbour, and beyond
+that the number of contexts outruns any table. `t8g` and `t8p` (256 values) never
+see it; `DLRAW` (4 bpp) does not either, because the ≤ 4 bpp short path codes
+packed rows and never reaches the per-plane search. Unpacking a 4-bit plane to
+offer it there is the obvious next step and is not done.
+
+**Still expected [expected] for the rest of this section.** Hashed contexts for
+the *slow* model's own tables, joint contexts over two planes' co-located
+residuals, and the memory that §4 would free are all untouched.
 
 **Cost.** Moderate; touches the slow model's context path. Hashing costs a
 multiply per context and loses the exactness the current design enjoys.

@@ -52,6 +52,7 @@ enum : int32_t {
   pred_mode0 = 0,
   pred_p1 = 1,
   pred_p2 = 2,
+  pred_ctx = 3,
 };
 
 // Name of a descriptor flags byte, for -v output.  Rotating buffers, so one
@@ -62,7 +63,7 @@ const char*desc_flags_name(int32_t flags) {
   char*const name = pool[next];
   next = (next+1)&3;
   const int32_t pred = flags&desc_predictor;
-  const char*const base = pred==pred_p2 ? "p2" : pred==pred_p1 ? ((flags&desc_alt_model) ? "p1" : "med") : "slow";
+  const char*const base = pred==pred_ctx ? "ctx" : pred==pred_p2 ? "p2" : pred==pred_p1 ? ((flags&desc_alt_model) ? "p1" : "med") : "slow";
   snprintf(name, sizeof pool[0], "%s%s", (flags&desc_has_refs) ? "refs+" : "", base);
   return name;
 }

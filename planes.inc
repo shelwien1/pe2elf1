@@ -191,6 +191,7 @@ enum : int32_t {
   try_mode0 = pred_mode0,
   try_p1 = pred_p1|desc_alt_model,
   try_p2 = pred_p2|desc_alt_model,
+  try_ctx = pred_ctx|desc_alt_model,
   try_refs = desc_has_refs,
   try_refs_p1 = desc_has_refs|pred_p1|desc_alt_model,
   try_refs_p2 = desc_has_refs|pred_p2|desc_alt_model,

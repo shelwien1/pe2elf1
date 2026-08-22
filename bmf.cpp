@@ -35,6 +35,7 @@
 #include "counters.inc"
 #include "alt_p1.inc"
 #include "alt_p2.inc"
+#include "ctx_model.inc"
 #include "model.inc"
 #include "bmp.inc"
 #include "planes.inc"
