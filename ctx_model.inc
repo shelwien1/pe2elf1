@@ -26,7 +26,10 @@ struct CtxModel {
   static const int32_t kInputs = kOrders+1;
   // Table widths are heap-allocated from a runtime count, so unlike the
   // sizes above they do not have to be constant expressions and stay live
-  // for the optimizer.
+  // for the optimizer.  The ceilings are what bounds the sweep's memory: the
+  // longest order costs 4*nodes bytes per row, so 22 bits is about 250 MB and
+  // 26 would be four gigabytes -- the clamp is the contract, and here it is
+  // the difference between a slow tuning pass and an OOM.
   // Declared here, defined below the class.  In the tuning build an IDX value
   // is a read from a patchable object, and an in-class initializer has to be a
   // constant expression; an out-of-class definition may be dynamic.  The
@@ -100,10 +103,12 @@ struct CtxModel {
     // the table saturates, at eight and sixteen the learning cost turns it
     // around first, at two values it keeps paying out to 24.
     nb_for_bits[0] = 0;
-    nb_for_bits[1] = CM_nb_for_bits_1;
-    nb_for_bits[2] = CM_nb_for_bits_2;
-    nb_for_bits[3] = CM_nb_for_bits_3;
-    nb_for_bits[4] = CM_nb_for_bits_4;
+    // Clamped to the neighbour table's length: these index dx[]/dy[], and the
+    // probe multiplies them up before set_alphabet sees them.
+    nb_for_bits[1] = idx_clamp(CM_nb_for_bits_1, 1, kMaxNeighbours);
+    nb_for_bits[2] = idx_clamp(CM_nb_for_bits_2, 1, kMaxNeighbours);
+    nb_for_bits[3] = idx_clamp(CM_nb_for_bits_3, 1, kMaxNeighbours);
+    nb_for_bits[4] = idx_clamp(CM_nb_for_bits_4, 1, kMaxNeighbours);
     chosen_nb = 0;
     alpha = 0;
     bits = 0;
@@ -144,7 +149,8 @@ struct CtxModel {
     if( match_nb>CM_match_cap )
       match_nb = CM_match_cap;
     win_mask = match_nb*bits>=64 ? ~0ull : (((uint64_t)1<<(match_nb*bits))-1);
-    const int32_t longest = chosen_nb ? chosen_nb : nb_for_bits[bits];
+    const int32_t longest = idx_clamp(chosen_nb ? chosen_nb : nb_for_bits[bits],
+                                     kShortNb, kMaxNeighbours);
     for( int32_t k = 0; k<kOrders; ++k ) {
       nb[k] = kShortNb+(longest-kShortNb)*k/(kOrders-1);
       table_bits[k] = k==0 ? bits*kShortNb : (k==kOrders-1 ? kTableBits : kMidBits);
@@ -383,7 +389,7 @@ struct CtxModel {
     int32_t best = longest;
     uint64_t best_cost = ~(uint64_t)0;
     for( int32_t k = 0; k<4; ++k ) {
-      const int32_t n = want[k]<2 ? 2 : want[k];
+      const int32_t n = idx_clamp(want[k], 2, kMaxNeighbours);
       if( k&&n==want[k-1] )
         continue;
       chosen_nb = n;
@@ -445,10 +451,10 @@ struct CtxModel {
   }
 };
 
-const int32_t CtxModel::kMatchBits = idx_clamp(CM_match_bits, 8, 26);
+const int32_t CtxModel::kMatchBits = idx_clamp(CM_match_bits, 8, 24);
 const int32_t CtxModel::kShortNb = idx_clamp(CM_short_nb, 1, CM_max_neighbours);
-const int32_t CtxModel::kTableBits = idx_clamp(CM_table_bits, 8, 26);
-const int32_t CtxModel::kMidBits = idx_clamp(CM_mid_bits, 8, 26);
+const int32_t CtxModel::kTableBits = idx_clamp(CM_table_bits, 8, 22);
+const int32_t CtxModel::kMidBits = idx_clamp(CM_mid_bits, 8, 22);
 const int32_t CtxModel::kCountCap = idx_clamp(CM_count_cap, 1, CtxModel::kCountCapMax);
 const int32_t CtxModel::kBlend = CM_blend;
 const int32_t CtxModel::kProbePixels = 1<<idx_clamp(CM_probe_shift, 12, 24);

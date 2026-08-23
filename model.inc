@@ -106,7 +106,8 @@ struct ModelBlock {
   uint8_t ctx_bucket[375];
   uint8_t _pad25[1];
   static uint32_t bucket_slot(int32_t group, int32_t last, int32_t prev) {
-    return CtxIdx{}.digit<IX_model_ix_p0, IX_model_ix_w0>(group).digit<IX_model_ix_p1, IX_model_ix_w1>(last).digit<IX_model_ix_p2, IX_model_ix_w2>(prev);
+    return idx_bound(CtxIdx{}.digit<IX_model_ix_p0, IX_model_ix_w0>(group).digit<IX_model_ix_p1, IX_model_ix_w1>(last).digit<IX_model_ix_p2, IX_model_ix_w2>(prev),
+                     sizeof ((ModelBlock*)0)->ctx_bucket);
   }
 
   FreqRec*seat_bucket(int32_t group, int32_t last, int32_t prev, int32_t bucket) {
@@ -428,8 +429,10 @@ struct ModelBlock {
     int32_t fallback = CtxIdx{}.bit<IX_model_fallback_p0>(sym_in_top(list_prev, MB_top_depth_1, result)).bit<IX_model_fallback_p1>(sym_in_top(list_sym, MB_top_depth_2, cx[0].mode_symbol[2])).bit<IX_model_fallback_p2>(sym_in_top((sel0[cx[0].mode_symbol[3]].ent), MB_top_depth_3, result));
     int32_t ctx2 = fallback+ctx1;
     if( pos<=MB_pos_split||(ctx2&0xB)!=0 ) {
-      ctr_node = CtxIdx{}.above<IX_model_ctr_node_p0>(pos).raw(ctx2);
-      ctr_fallback = CtxIdx{}.bit<IX_model_ctr_fallback_p0>(pos>MB_pos_deep).raw(fallback);
+      ctr_node = (int32_t)idx_bound(CtxIdx{}.above<IX_model_ctr_node_p0>(pos).raw(ctx2),
+                                   sizeof bit_node/sizeof bit_node[0]);
+      ctr_fallback = (int32_t)idx_bound(CtxIdx{}.bit<IX_model_ctr_fallback_p0>(pos>MB_pos_deep).raw(fallback),
+                                       sizeof bit_root/sizeof bit_root[0]);
     } else {
       return -1;
     }
@@ -679,7 +682,8 @@ struct ModelBlock {
     nb4 = rank_neighbours();
     const int32_t nb = match_context(nb4, up, west);
     const int32_t key = pair_key(nb4, west);
-    sym_cache = &sym_ctr[CtxIdx{}.above<IX_model_sym_cache_p0>(key)];
+    sym_cache = &sym_ctr[idx_bound(CtxIdx{}.above<IX_model_sym_cache_p0>(key),
+                                  sizeof sym_ctr/sizeof sym_ctr[0])];
     const int32_t state = ctx_state[nb];
     ctx_state_seen = state;
     SymPair*const pair = &group_ctr[state][key];
@@ -1045,7 +1049,8 @@ struct ModelBlock {
     int32_t seen = 0;
     do {
       if( (mask|seen)<cap ) {
-        BitCtr* ctr = &run_ctr[CtxIdx{}.bits<IX_model_ctr_p0, IX_model_ctr_w0>(bucket).digit<IX_model_ctr_p1, IX_model_ctr_w1>((seen==0)+(bucket==top))];
+        BitCtr* ctr = &run_ctr[idx_bound(CtxIdx{}.bits<IX_model_ctr_p0, IX_model_ctr_w0>(bucket).digit<IX_model_ctr_p1, IX_model_ctr_w1>((seen==0)+(bucket==top)),
+                                         sizeof run_ctr/sizeof run_ctr[0])];
         const uint32_t bin_tot = ctr[0].n[0]+ctr[0].n[1];
         int32_t run_bit;
         if constexpr( f_DEC ) {

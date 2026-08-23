@@ -117,7 +117,9 @@ struct SymPair {
 // in-class initializer has to be one -- so they sit at namespace scope instead,
 // where a dynamic initializer is fine.  The names are unqualified at every use
 // site, so nothing else changes.
-static const uint32_t kStep = CN_step;
+// A step of zero leaves both counts at zero for ever, and the pair is
+// divided by its own total.
+static const uint32_t kStep = (uint32_t)idx_clamp(CN_step, 1, 1<<14);
 static const uint32_t kSeedBump = CN_seed_bump;
 static const uint32_t kSeedLimit = CN_seed_limit;
 static const uint32_t kLimitStep = CN_limit_step;

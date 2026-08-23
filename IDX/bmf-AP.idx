@@ -22,7 +22,7 @@ Number adapt_cap_max,    1,0!11111111
 Const 0
 
 Number span,             1,0!100000000000
--Number rate,             1,0!101
+Number rate,              1,0!101
 Number map_weight,       1,0!11
 
 # Clamps on a probability leaving either stage.

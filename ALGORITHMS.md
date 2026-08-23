@@ -6,6 +6,13 @@ The identifiers in the source were produced during reverse engineering, so names
 descriptive rather than original.  The source is `bmf.cpp` plus the `.inc` files it
 includes; references below are `file:line` as of this commit.
 
+Every tunable number the algorithms below use — thresholds, counter bumps,
+adaptation rates, NLMS seeds, context-index layouts, quantiser ladders — is
+declared in `IDX/*.idx` rather than written into the sources, and reaches them
+through the generated headers in `MOD/`. Build with `./mk.sh release` to ship
+or `./mk.sh` to tune; see `IDX-NOTES.md` for what moved where and
+`IDX-FORMAT.md` for the declaration format.
+
 Range-coder internals (`struct RangeCoder`, `rangecoder.inc:7` — interval arithmetic,
 renormalization, carry handling) are **out of scope** here; the coder is treated as an
 ideal entropy-coding backend that consumes `(cumFreq, freq, totFreq)` triples and

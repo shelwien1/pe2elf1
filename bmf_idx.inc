@@ -52,6 +52,15 @@ static inline constexpr int32_t idx_clamp(int32_t v, int32_t lo, int32_t hi) {
   return v<lo ? lo : v>hi ? hi : v;
 }
 
+// The same contract for a context index that addresses a fixed-size table.
+// A table's size follows from the layout parameters that build its index, so
+// moving one of those can put the index past the end -- IDX/sweep.py finds
+// exactly this, and it is the consumer's job to bound it, not the sweep's job
+// to avoid it.  Folding to a no-op is not possible here: the index is data.
+static inline uint32_t idx_bound(uint32_t v, uint32_t n) {
+  return v<n ? v : n-1;
+}
+
 // What idx2inc.pl's generated code spells.  A Const-mode threshold mapping with
 // more than eight buckets becomes a lookup table declared `byte`, indexed
 // through __min/__max; the tuning mode uses the mapping object instead.

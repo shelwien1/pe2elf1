@@ -15,6 +15,11 @@
 // and blends the two entries, updating both in proportion.  Hard bucket
 // boundaries would put a step discontinuity in the correction exactly where the
 // estimate is least certain.
+// Clamped, and ordered: a ceiling swept to zero leaves the range coder a
+// zero-width interval, and a floor above the ceiling inverts every clamp.
+const int32_t kProbFloor = idx_clamp(AP_p_floor, 1, 1<<14);
+const int32_t kProbCeil = idx_clamp(AP_p_ceil, kProbFloor+1, 65535);
+
 const int32_t kApmBuckets = AP_buckets;
 // The span is carried as 1/256 of a stretch unit so it can be an integer
 // parameter; 2048 is the 8.0 it replaces.
@@ -38,10 +43,10 @@ void apm_tables_init() {
   for( int32_t b = 0; b<kApmBuckets; ++b ) {
     const double s = (double)b/(double)(kApmBuckets-1)*2.0*kApmSpan-kApmSpan;
     int32_t v = (int32_t)(65536.0/(1.0+exp(-s)));
-    if( v<AP_p_floor )
-      v = AP_p_floor;
-    if( v>AP_p_ceil )
-      v = AP_p_ceil;
+    if( v<kProbFloor )
+      v = kProbFloor;
+    if( v>kProbCeil )
+      v = kProbCeil;
     apm_squash[b] = (uint16_t)v;
   }
   apm_tables_ready = true;
@@ -78,7 +83,7 @@ struct Apm {
     // entry than the cell has, so it is the less certain of the two.
     const int32_t w = idx_clamp(AP_map_weight, 1, 15);
     const int32_t out = (w*mapped+p16)/(w+1);
-    return out<AP_p_floor ? AP_p_floor : out>AP_p_ceil ? AP_p_ceil : out;
+    return out<kProbFloor ? kProbFloor : out>kProbCeil ? kProbCeil : out;
   }
 
   void update(int32_t bit) {
@@ -121,10 +126,10 @@ void mix_tables_init() {
   }
   for( int32_t x = 0; x<4096; ++x ) {
     int32_t v = (int32_t)(65536.0/(1.0+exp(-(double)(x-kMixCentre)/(double)AP_stretch_scale)));
-    if( v<AP_p_floor )
-      v = AP_p_floor;
-    if( v>AP_p_ceil )
-      v = AP_p_ceil;
+    if( v<kProbFloor )
+      v = kProbFloor;
+    if( v>kProbCeil )
+      v = kProbCeil;
     mix_squash[x] = (uint16_t)v;
   }
   mix_tables_ready = true;
