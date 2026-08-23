@@ -841,6 +841,24 @@ all of them to the §2 mixer). Fast filters track edges and texture changes; slo
 filters win on stationary regions; a single rate is a compromise between the two
 on every pixel.
 
+**What was built instead, and what it was worth [measured].** Not a second
+filter — a second and third *context* for the decision the filter feeds. alt-P2's
+frequency cell is keyed on 15 552 contexts (seat and level together with the
+neighbours' five sign classes) and is the sparsest estimate in the model; two
+coarse views of the same decision, one keyed on the seat and level alone (64
+cells) and one on the sign classes alone (243), now go into a three-input §2
+mixer beside it. **`x_ep` −552 bytes, −0.17 %, for 2.4 % of that file's decode
+time.** Small, and a useful bound on how much of alt-P2's cost is context
+sparsity rather than prediction quality: not much. The filter itself is
+untouched, so §9's own proposal remains **[expected]**.
+
+**A mixer must start where the model already is.** Seeded at a third each, the
+same change *doubled* the cost of a 64×48 alpha gradient (648 → 1372 bytes): on
+a plane of a few thousand pixels the mixer never finishes unlearning its
+initialisation. Seeded at "trust the cell, the coarse views must earn their
+weight" it is a gain on every image. The same applies to the mixer in §7, whose
+weights are seeded where a count-weighted blend would put them.
+
 **Expected [expected].** 1–3 % on the alt-P2 path — which is where the bits are
 on `x_ep` and `t8g`, the two most expensive files in the corpus.
 
@@ -862,7 +880,12 @@ wavelet or a pyramid rewrite:
   bits matters — §18 records that as the one thing the outside documents most
   consistently agreed on, and it is the opposite of what more context bits do to
   a table this size.
-* **A transmitted vertical period.** Measure the row-to-row autocorrelation once
+* **A transmitted vertical period — [measured] not on this corpus.** The
+  row-to-row match rate for `x_ci` decays monotonically (61 %, 47 %, 41 %, 40 %,
+  39 %, … 37 % at lag 32) and for `x_ai` is flat (92 % down to 89 %). Neither has
+  a dominant period for a transmitted lag to find, and the horizontal
+  autocorrelations look the same. The idea stands for fences, blinds, facades
+  and halftones; this corpus has none. Measure the row-to-row autocorrelation once
   in the encoder for lags in {2, 4, 8, 16, 32}, put the winning lag in the
   header, and add the pixel at that lag as one more tap. Fences, blinds,
   facades, halftones and scanned text all have a dominant vertical period; the
@@ -1271,6 +1294,16 @@ nibble is an independent vertical ramp. Splitting it into two planes nearly
 halves the file. The same operation on continuous-tone data costs 12–14 %.
 
 ### 16.1 What the numbers say
+
+**Re-measured against the current codec.** Splitting `t8p` and `t8g` into two
+4-bit planes and coding each with everything this document has added since —
+including the small-alphabet context model of §7, which a nibble plane is
+squarely in the population for — still loses: 47 632 bytes against 42 990 and
+42 912, +10.8 % and +11.0 %, almost exactly the +11.6 % and +13.6 % measured
+before any of it. (The two files' index planes are identical; they differ only
+in their palettes, which is why the split costs both the same.) The population
+that would gain is still not in the corpus, and the plane restructuring the
+trial needs is still not built.
 
 **Plane decomposition is worth having, as a trial.** The spread between −47 % and
 +14 % is not noise about a mean, it is two different populations: data whose

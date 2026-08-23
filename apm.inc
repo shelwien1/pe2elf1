@@ -165,3 +165,38 @@ using Mix2 = MixN<2>;
 using Mix3 = MixN<3>;
 using Mix4 = MixN<4>;
 using Mix5 = MixN<5>;
+
+// A probability with its own update count, adapting at 1/(n+2) until the count
+// anneals.  Packed into one word: probability high, count low.  A context that
+// sees tens of samples needs this; a fixed rate is far too slow while it is new.
+const int32_t kAdaptCap = 60;
+int32_t adapt_recip[kAdaptCap+1];
+bool adapt_tables_ready = false;
+
+void adapt_tables_init() {
+  if( adapt_tables_ready )
+    return;
+  for( int32_t k = 0; k<=kAdaptCap; ++k )
+    adapt_recip[k] = 65536/(k+2);
+  adapt_tables_ready = true;
+}
+
+uint32_t adapt_init() {
+  return 32768u<<16;
+}
+
+int32_t adapt_p(uint32_t cell) {
+  return (int32_t)(cell>>16);
+}
+
+int32_t adapt_n(uint32_t cell) {
+  return (int32_t)(cell&0xFFFFu);
+}
+
+void adapt_bump(uint32_t &cell, int32_t target) {
+  int32_t p = adapt_p(cell);
+  int32_t n = adapt_n(cell);
+  p += (int32_t)(((int64_t)(target-p)*adapt_recip[n])>>16);
+  n += n<kAdaptCap;
+  cell = ((uint32_t)p<<16)|(uint32_t)n;
+}
