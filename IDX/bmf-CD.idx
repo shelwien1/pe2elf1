@@ -1,0 +1,37 @@
+
+Prefix CD
+Debug 1
+
+# ---------------------------------------------------------------------
+# Codec-level decisions: the numbers that pick a representation rather
+# than code a pixel.  They never appear on the wire, but they decide what
+# does, so moving one moves the output.
+# ---------------------------------------------------------------------
+
+# The cross-plane blend weight scale.  weight_shift and weight_scale are
+# one number in two forms -- the consumer derives the scale from the shift
+# so they cannot drift -- and weight_round is the rounding offset applied
+# before the shift.  weight_bias and weight_bits are the wire field the
+# fitted weights travel in.
+Const 0
+
+Number weight_shift,     1,0!111
+Number weight_round,     1,0!101000
+Number weight_bits,      1,0!1000
+Number weight_bias,      1,0!1000000
+
+# The least-squares fit's ridge term, as the denominator of a unit
+# fraction.  A ridge of 0.1 is not a dyadic rational, so it cannot go in
+# as an exact mantissa the way the NLMS constants do; 1.0/10.0 in double
+# is bit-for-bit the double the literal 0.1 denotes, which a fixed-point
+# approximation would not be.
+
+Number fit_ridge_den,    1,0!1010
+
+# The DC window search: how wide a window it starts from on each of the
+# two histograms, and the sentinel each stops at.
+
+Number dc_window_lo,     1,0!100
+Number dc_window_hi,     1,0!10000000000
+Number dc_diff_lo,       1,0!0
+Number dc_diff_hi,       1,0!1000000000

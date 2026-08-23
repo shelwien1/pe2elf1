@@ -1,0 +1,29 @@
+
+Prefix GL
+Debug 1
+
+# ---------------------------------------------------------------------
+# Limits and scales the whole codec shares.
+# ---------------------------------------------------------------------
+
+# Structural: array bounds and wire-format masks.
+Const 1
+
+Number max_width,        1,0!1111111111111111
+Number no_symbol,        1,0!10000000000000
+Number model_table_bytes,  1,0!1111111000000000000
+Number bank_mirror_mask,  1,0!111111111110000
+Number p2_row_pad,       1,0!11101010
+
+# The NLMS weight box, the rescale point of the P2 frequency table, the
+# third context table's occupancy limit, and how much worse than the
+# fitted blend a degenerate one may be and still win (a fraction of the
+# fitted cost, capped).
+Const 0
+
+Number weight_min_neg,   1,0!1000000
+Number weight_max,       1,0!10111111
+Number p2_freq_rescale_total,  1,0!111010000000000
+Number ctx_id3_limit,    1,0!1101000000000000
+Number slack_shift,      1,0!111
+Number slack_max,        1,0!100000000000000

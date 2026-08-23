@@ -96,7 +96,7 @@ constexpr int32_t opt_filter_template = 0;
 constexpr int32_t opt_pack_output = 1;
 constexpr int32_t opt_search_quality = 9;
 constexpr int32_t opt_max_error = 0;
-constexpr int32_t no_symbol = 8192;
+constexpr int32_t no_symbol = GL_no_symbol;
 
 void bmf_zero16(void* p) {
   memset(p, 0, 16);

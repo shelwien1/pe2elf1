@@ -84,17 +84,26 @@ uint32_t umin32(uint32_t a, uint32_t b) {
   return a<b ? a : b;
 }
 
+// The cross-plane blend weight scale, in two forms.  The shift is the
+// parameter and the scale is derived from it, so a sweep cannot leave the two
+// disagreeing -- which would put a factor of two between the weights the
+// encoder fits and the divisor it applies them with.
+const int32_t kWeightShift = idx_clamp(CD_weight_shift, 1, 16);
+const int32_t kWeightScale = 1<<kWeightShift;
+
 int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {
   return v<lo ? lo : v>hi ? hi : v;
 }
 
-constexpr int32_t kWeightMin = -64, kWeightMax = 191;
-constexpr uint32_t kSlackMax = 0x4000;
-constexpr int32_t kP2FreqRescaleTotal = 29696;
-constexpr int32_t kP2RowPad = 234;
-constexpr int32_t kCtxId3Limit = 53248;
-constexpr uint32_t kModelTableBytes = 0x7F000u;
-constexpr uint32_t kBankMirrorMask = 0x7FF0;
+// The weight floor is declared as its magnitude: an IDX pattern is unsigned,
+// and a sign that can be flipped by the optimizer is not a knob, it is a bug.
+const int32_t kWeightMin = -GL_weight_min_neg, kWeightMax = GL_weight_max;
+const uint32_t kSlackMax = GL_slack_max;
+const int32_t kP2FreqRescaleTotal = GL_p2_freq_rescale_total;
+const int32_t kP2RowPad = GL_p2_row_pad;
+const int32_t kCtxId3Limit = GL_ctx_id3_limit;
+const uint32_t kModelTableBytes = GL_model_table_bytes;
+const uint32_t kBankMirrorMask = GL_bank_mirror_mask;
 template <class T> void swap32(T &a, T &b) {
   const T t = a;
   a = b;
@@ -114,7 +123,7 @@ void halve_counts(uint16_t* c, int32_t n) {
     c[k] = (uint16_t)halve_up(c[k]);
 }
 
-constexpr int32_t kMaxWidth = 0xFFFF;
+const int32_t kMaxWidth = GL_max_width;
 
 
 struct CtxIdx {

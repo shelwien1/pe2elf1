@@ -1,0 +1,41 @@
+
+Prefix MB
+Debug 1
+
+# ---------------------------------------------------------------------
+# ModelBlock: the original rank-and-escape pixel model.
+# ---------------------------------------------------------------------
+
+# Structural: these size members.
+Const 1
+
+Number row_margin,       1,0!111
+Number row_tail,         1,0!1001
+Number freq_table_offset,  1,0!10111100
+Number freq_grid_count,  1,0!10000000010111011
+Number sel1_syms,        1,0!1100011
+Number sel0_syms,        1,0!100001
+
+# pixel_context: which neighbour ranks count as a near hit and which as a
+# far one, how deep into a symbol list a membership test looks, and the
+# rank positions the context switches shape at.
+Const 0
+
+Number near_lo,          1,0!1011
+Number near_hi,          1,0!10000
+Number far_hi,           1,0!100000
+Number exact_rank,       1,0!1010
+Number top_depth_0,      1,0!1010
+Number top_depth_1,      1,0!100
+Number top_depth_2,      1,0!1010
+Number top_depth_3,      1,0!110
+Number pos_bare,         1,0!110
+Number pos_split,        1,0!1110
+Number pos_deep,         1,0!1001
+
+# The map context: how far up the rank ladder it separates positions
+# before it stops caring, and the alphabet size below which the symbol
+# cache is keyed differently.
+
+Number apm_pos_cap,      1,0!111
+Number small_alphabet,   1,0!100000

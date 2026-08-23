@@ -72,15 +72,15 @@ struct ModelBlock {
   uint32_t ctx_id3_used;
   uint32_t hit;
   uint32_t ctx_state_seen;
-  static const int32_t kRowMargin = 7;
-  static const int32_t kRowTail = 9;
+  static const int32_t kRowMargin = MB_row_margin;
+  static const int32_t kRowTail = MB_row_tail;
   uint32_t bucket_idx;
   uint32_t sym_pos;
   uint32_t ctr_fallback;
   uint32_t ctr_node;
   PixRec* row_cur[10];
-  static const int32_t kFreqTableOffset = 188;
-  static const int32_t kFreqGridCount = 65723;
+  static const int32_t kFreqTableOffset = MB_freq_table_offset;
+  static const int32_t kFreqGridCount = MB_freq_grid_count;
   FreqRec grid[kFreqGridCount];
   uint8_t _pad1051664[16];
   BitCtr bit_root[16];
@@ -411,25 +411,25 @@ struct ModelBlock {
     if( cx[0].exclusion_mask[result]==cx[0].exclusion_gen )
       return -1;
     bool near = false;
-    for( band = 11; band<16; ++band )
+    for( band = MB_near_lo; band<MB_near_hi; ++band )
       near |= result==nb[band];
     bool far = false;
-    for( band = 16; band<32; ++band )
+    for( band = MB_near_hi; band<MB_far_hi; ++band )
       far |= result==nb[band];
-    int32_t near_hit = CtxIdx{}.bit<6>(result==nb[10]).bit<5>(near);
+    int32_t near_hit = CtxIdx{}.bit<6>(result==nb[MB_exact_rank]).bit<5>(near);
     int32_t far_hit = CtxIdx{}.bit<4>(far);
     int32_t ctx0 = far_hit+near_hit;
-    if( (far_hit+near_hit==0)&&pos>6 )
+    if( (far_hit+near_hit==0)&&pos>MB_pos_bare )
       return -1;
     SymList* sel0 = sel0_list;
-    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[cx[0].mode_symbol[1]].ent), 10, result)).raw(ctx0);
+    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[cx[0].mode_symbol[1]].ent), MB_top_depth_0, result)).raw(ctx0);
     SymEntry* list_prev = sel0[cx[0].mode_symbol[2]].ent;
     SymEntry* list_sym = sel0[result].ent;
-    int32_t fallback = CtxIdx{}.bit<2>(sym_in_top(list_prev, 4, result)).bit<1>(sym_in_top(list_sym, 10, cx[0].mode_symbol[2])).bit<0>(sym_in_top((sel0[cx[0].mode_symbol[3]].ent), 6, result));
+    int32_t fallback = CtxIdx{}.bit<2>(sym_in_top(list_prev, MB_top_depth_1, result)).bit<1>(sym_in_top(list_sym, MB_top_depth_2, cx[0].mode_symbol[2])).bit<0>(sym_in_top((sel0[cx[0].mode_symbol[3]].ent), MB_top_depth_3, result));
     int32_t ctx2 = fallback+ctx1;
-    if( pos<=14||(ctx2&0xB)!=0 ) {
+    if( pos<=MB_pos_split||(ctx2&0xB)!=0 ) {
       ctr_node = CtxIdx{}.above<7>(pos).raw(ctx2);
-      ctr_fallback = CtxIdx{}.bit<3>(pos>9).raw(fallback);
+      ctr_fallback = CtxIdx{}.bit<3>(pos>MB_pos_deep).raw(fallback);
     } else {
       return -1;
     }
@@ -576,7 +576,7 @@ struct ModelBlock {
       if( sym<0 )
         continue;
       int32_t is_sym;
-      const int32_t apm_ctx = (int32_t)(sym_pos<7 ? sym_pos : 7)|((ctx_state_seen&15)<<3);
+      const int32_t apm_ctx = (int32_t)(sym_pos<MB_apm_pos_cap ? sym_pos : MB_apm_pos_cap)|((ctx_state_seen&15)<<3);
       if constexpr( f_DEC ) {
         is_sym = bit_node[ctr_node].template code_context_bit_apm<1>(cx, &bit_root[ctr_fallback], 0, &cand_apm, apm_ctx);
         row_cur[5][0].sym = sym;
@@ -686,7 +686,7 @@ struct ModelBlock {
     pix_cur = pair;
     const int32_t cap = 15*nb4.rank(pair[0].last)+75*nb4.rank(pair[0].prev);
     int32_t id2 = context_ids(state, cap);
-    if( (int32_t)alphabet<32 ) {
+    if( (int32_t)alphabet<MB_small_alphabet ) {
       int32_t id3_used = ctx_id3_used;
       int32_t sig3 = CtxIdx{}.bits<0, 4>(nb4.left).above<4>(id2);
       uint16_t* id3p = &ctx_id3[sig3];
@@ -1276,8 +1276,8 @@ struct ModelBlock {
     }
   }
 
-  static const int32_t kSel1Syms = 99;
-  static const int32_t kSel0Syms = 33;
+  static const int32_t kSel1Syms = MB_sel1_syms;
+  static const int32_t kSel0Syms = MB_sel0_syms;
   SymEntry sel1_ent[(no_symbol+1)*kSel1Syms];
   SymEntry sel0_ent[(no_symbol+1)*kSel0Syms];
   SymEntry escape_ent[no_symbol+1];

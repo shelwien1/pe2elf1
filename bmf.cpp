@@ -25,8 +25,10 @@
 #define if_e0(x) if(__builtin_expect((x),0))
 #define if_e1(x) if(__builtin_expect((x),1))
 
-#include "bmf_util.inc"
+// The IDX bridge comes first: every file below may name a parameter, and the
+// bridge needs nothing from them (IDX-FORMAT.md sec.12).
 #include "bmf_idx.inc"
+#include "bmf_util.inc"
 #include "bmf_tables.inc"
 #include "apm.inc"
 #include "records.inc"

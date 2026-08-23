@@ -360,7 +360,8 @@ struct BMFCodec : BMFState {
           // the only thing saving the image would be the slack rule below.
           // The degenerate costs come from cost_candidate's own histograms, so
           // a chosen seed is re-priced in the currency the descent minimises.
-          static const int32_t degenerate[3][2] = {{128, 0}, {0, 128}, {64, 64}};
+          const int32_t degenerate[3][2] = {{kWeightScale, 0}, {0, kWeightScale},
+                                            {kWeightScale/2, kWeightScale/2}};
           uint32_t seed_cost = cand_cost[xform][0];
           int32_t seed = -1;
           for( int32_t k = 0; k<3; ++k )
@@ -392,20 +393,20 @@ struct BMFCodec : BMFState {
             ++hist_c[c2-c1+1280];
             int32_t c0 = px[0]+512;
             px += n_planes;
-            int32_t bin0 = ((uint16_t)c0-(uint16_t)((uint32_t)(c2w+c1w+40)>>7))&0x3FF;
+            int32_t bin0 = ((uint16_t)c0-(uint16_t)((uint32_t)(c2w+c1w+CD_weight_round)>>kWeightShift))&0x3FF;
             ++hist_flat[bin0];
             ++hist_a[c0-c1];
             ++hist_b[c0-c2];
-            ++hist_c[(c0-((uint32_t)(((c1+c2)<<6)+40)>>7))];
+            ++hist_c[(c0-((uint32_t)((((c1+c2)*kWeightScale)>>1)+CD_weight_round)>>kWeightShift))];
           } while( px<data_end );
         }
-        const uint32_t slack = umin32(best_cost>>7, kSlackMax);
+        const uint32_t slack = umin32(best_cost>>idx_clamp(GL_slack_shift, 1, 24), kSlackMax);
         best = slack+best_cost;
         uint32_t cost_flat = cand_cost[xform][1];
         bool cheaper = cost_flat<best;
         if( cost_flat<best ) {
           best = cost_flat;
-          wt4 = 128;
+          wt4 = kWeightScale;
           wt8 = 0;
         }
         pred = cheaper;
@@ -413,14 +414,14 @@ struct BMFCodec : BMFState {
           best = cand_cost[xform][2];
           pred = 2;
           wt4 = 0;
-          wt8 = 128;
+          wt8 = kWeightScale;
         }
         bool keep3 = best<=cand_cost[xform][3];
         if( best>cand_cost[xform][3] )
           pred = 3;
         if( !keep3 ) {
-          wt4 = 64;
-          wt8 = 64;
+          wt4 = kWeightScale/2;
+          wt8 = kWeightScale/2;
         }
         if( bmf_verbose ) {
           static const char*const blend[4] = {
@@ -437,8 +438,8 @@ struct BMFCodec : BMFState {
         }
         plane_desc[xform].weight0 = wt4;
         plane_desc[xform].weight1 = wt8;
-        plane_desc[xform].dc = widest_window(hists+1024*pred, 4, 1024, -1)+1;
-        result = widest_window(hist_c+1024, 0, 512, 255)+1;
+        plane_desc[xform].dc = widest_window(hists+1024*pred, CD_dc_window_lo, CD_dc_window_hi, -1)+1;
+        result = widest_window(hist_c+1024, CD_dc_diff_lo, CD_dc_diff_hi, 255)+1;
         plane_desc[plane_b+xform].dc = result;
         if( n_planes>=4 ) {
           choose_alpha_plane(img, hists, data_end, row_stride);
@@ -651,10 +652,10 @@ struct BMFCodec : BMFState {
       code_field<f_DEC>(d.dc, 8, 0);
       if( d.nrefs<=1u )
         continue;
-      code_field<f_DEC>(d.weight0, 8, 64);
-      code_field<f_DEC>(d.weight1, 8, 64);
+      code_field<f_DEC>(d.weight0, CD_weight_bits, CD_weight_bias);
+      code_field<f_DEC>(d.weight1, CD_weight_bits, CD_weight_bias);
       if( d.nrefs>2u )
-        code_field<f_DEC>(d.weight2, 8, 64);
+        code_field<f_DEC>(d.weight2, CD_weight_bits, CD_weight_bias);
     }
   }
   void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {
@@ -829,11 +830,11 @@ struct BMFCodec : BMFState {
         ++hist_zx[((uint16_t)dz-(uint16_t)dx-512)&0x3FF];
         syz = syz+(double)dy*(double)dz;
         ++hist_zy[((uint16_t)dz-(uint16_t)dy-512)&0x3FF];
-        int32_t bin = ((uint16_t)dz-(uint16_t)((uint32_t)(((dx+dy)<<6)+40)>>7)-512)&0x3FF;
+        int32_t bin = ((uint16_t)dz-(uint16_t)((uint32_t)((((dx+dy)*kWeightScale)>>1)+CD_weight_round)>>kWeightShift)-512)&0x3FF;
         ++hist_zp[bin];
       } while( p<img_end );
     }
-    double inv = 128.0/(0.1-sxy*sxy+sxx*syy);
+    double inv = (double)kWeightScale/((1.0/(double)idx_clamp(CD_fit_ridge_den, 1, 1<<20))-sxy*sxy+sxx*syy);
     double w1f = (syy*sxz-sxy*syz)*inv;
     double w2f = inv*(sxx*syz-sxy*sxz);
     int32_t wa = clamp_weight((int32_t)w1f);
@@ -1137,7 +1138,7 @@ struct BMFCodec : BMFState {
     t.wgt0 = plane_desc[plane].weight0;
     t.wgt2 = plane_desc[plane].weight2;
     t.by_weights = false;
-    if( t.mode==2&&t.wgt0+t.wgt1==128 ) {
+    if( t.mode==2&&t.wgt0+t.wgt1==kWeightScale ) {
       if( !t.wgt1 ) {
         t.by_weights = true;
       } else if( !t.wgt0 ) {
@@ -1876,7 +1877,7 @@ struct BMFCodec : BMFState {
     plane_desc[3].weight2 = fitted[plane_desc[2].src_plane&3];
     plane_desc[3].src_plane = 3;
     plane_desc[3].nrefs = 3;
-    plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;
+    plane_desc[3].dc = widest_window(hists+1024*(4+pred4), CD_dc_window_lo, CD_dc_window_hi, -1)+1;
   }
   template <int32_t f_DEC> void alt_model_p1_d8(uint8_t* src, int32_t width, int32_t height, uint8_t* out) {
     AltP1Block* blk = alt_p1_block_alloc(width, height);
