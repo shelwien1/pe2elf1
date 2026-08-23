@@ -325,3 +325,36 @@ Number q2_thr_0,      1,0!1110011
 Number q2_thr_1,      1,0!10001
 Number g3_up_shift,   1,0!1001
 Number g3_dn_shift,   1,0!1101
+
+# ---------------------------------------------------------------------
+# Context indices, as Index declarations rather than CtxIdx chains.
+#
+# bmf packs a context into bit fields and pulls sub-contexts back out with
+# shifts, which is a mixed radix whose radices happen to be powers of two --
+# and MakeIndex accumulates most-significant factor first, which is the order
+# the chains were written in.  So these build the same integer the CtxIdx
+# chain built, and the declaration is now the thing that decides the layout:
+# the radices are the parameters, and _Volume follows from them, so the table
+# a context addresses is sized by its own declaration.
+#
+# The quantised inputs arrive already computed where their thresholds are too
+# wide to spell as a bitmap -- alt-P2's gradient ladders run to 145408, and a
+# pattern spanning that is not a search space, it is a denial of service.
+# Those stay Numbers; see the threshold blocks above.
+# ---------------------------------------------------------------------
+
+# The neighbour-row seat: four two-bit gradient classes under a five-way
+# activity class under the band.  Volume 1920, which is what nb_id holds.
+
+Index NbSlot
+ ADD 6: band
+ ADD 5: gA
+ ADD 4: gB
+ ADD 4: gC
+ ADD 4: gD
+
+# The per-bank counter slot: a fifteen-bit context under a five-way bank.
+
+Index BankSlot
+ ADD 5: bank
+ ADD 32768: ctx

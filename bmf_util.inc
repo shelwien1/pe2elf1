@@ -94,15 +94,6 @@ const int32_t kWeightShift = idx_clamp(CD_weight_shift, 1, 16);
 // than 1/2^shift of its own cost to displace it.  kKeepShift guards the
 // representation trials (transpose, mirror, palette order, colour space),
 // kModelShift the per-plane model choice.
-// The slow model's bucket index: three radices, and the strides that follow
-// from them.  See ModelBlock::bucket_slot for why they are derived.
-const int32_t kBucketR0 = idx_clamp(IX_model_ix_w0, 1, 64);
-const int32_t kBucketR1 = idx_clamp(IX_model_ix_w1, 1, 64);
-const int32_t kBucketR2 = idx_clamp(IX_model_ix_w2, 1, 64);
-const int32_t kBucketS0 = 1;
-const int32_t kBucketS1 = kBucketR0;
-const int32_t kBucketS2 = kBucketR0*kBucketR1;
-
 const int32_t kKeepShift = idx_clamp(CD_keep_shift, 1, 24);
 const int32_t kModelShift = idx_clamp(CD_model_shift, 1, 24);
 const int32_t kWeightScale = 1<<kWeightShift;

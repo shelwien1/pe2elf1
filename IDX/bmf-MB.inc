@@ -3,19 +3,12 @@
 
 uint32_t MakeBucket( uint32_t prev, uint32_t last, uint32_t group ) {
   int32_t Bucket;
-
-  Bucket = 0;
-  Bucket = Bucket*(5) + (prev);
-  Bucket = Bucket*(5) + (last);
-  Bucket = Bucket*(15) + (group);
+  MakeIndex Bucket
   return (uint32_t)Bucket;
 }
 
 uint32_t MakeRunCtr( uint32_t novel, uint32_t bucket ) {
   int32_t RunCtr;
-
-  RunCtr = 0;
-  RunCtr = RunCtr*(3) + (novel);
-  RunCtr = RunCtr*(16) + (bucket);
+  MakeIndex RunCtr
   return (uint32_t)RunCtr;
 }

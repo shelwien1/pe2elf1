@@ -1,5 +1,7 @@
 
 
+
+
 static const int P2_coef_00 = (13421773+0) * (-1);
 static const int P2_coef_01 = (9395241+0) * (-1);
 static const int P2_coef_02 = (5033165+0) * (1);
@@ -254,6 +256,8 @@ static const int P2_g3_up_shift = (9+0) * (1);
 static const int P2_g3_dn_shift = (13+0) * (1);
 
 
+static const int P2_BankSlot_Volume = 1* 5* 32768; // 163840
+static const int P2_NbSlot_Volume = 1* 6* 5* 4* 4* 4; // 1920
 
 struct P2_T { 
 #undef USE_NEW

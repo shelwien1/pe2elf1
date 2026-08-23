@@ -87,10 +87,12 @@ static inline constexpr int32_t __max(int32_t a, int32_t b) {
 #include "MOD/bmf-CD_h.inc"
 #include "MOD/bmf-IX_h.inc"
 
-// The quantiser ladders: declarations, then the builders the Index blocks
-// generate.
+// The quantiser ladders and the context indices: declarations, then the
+// builders the Index blocks generate.
 #include "MOD/bmf-QZ_h.inc"
 #include "MOD/bmf-QZ_p.inc"
+#include "MOD/bmf-P2_p.inc"
+#include "MOD/bmf-MB_p.inc"
 
 // A parameter that has to be a template argument.
 //

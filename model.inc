@@ -91,7 +91,7 @@ struct ModelBlock {
   // The candidate scan's map, indexed by how deep into the scan we are.
   Apm cand_apm;
   BitCtr esc_ctr[257];
-  BitCtr run_ctr[48];
+  BitCtr run_ctr[MB_RunCtr_Volume];
   uint8_t _pad16[2];
   SymList escape;
   SymList* sel1_list;
@@ -103,17 +103,16 @@ struct ModelBlock {
   uint16_t* sym_word;
   uint32_t* sym_code;
   uint8_t ctx_state[64];
-  uint8_t ctx_bucket[375];
+  uint8_t ctx_bucket[MB_Bucket_Volume];
   uint8_t _pad25[1];
-  // The strides come from the radices rather than sitting beside them as
-  // parameters of their own.  A mixed-radix index whose strides do not match
-  // its radices is not a bijection, and a sweep that moved one without the
-  // other collapsed two contexts onto one grid record -- which the model then
-  // divided by an empty frequency total.  Deriving them makes that
-  // unrepresentable; kBucketS0 is 1 by construction.
+  // One declaration, in IDX/bmf-MB.idx, decides both the radices and the
+  // strides -- the generator derives the strides from the radices, so a
+  // mixed-radix index whose strides do not match its radices is no longer
+  // something the sources can express.  ctx_bucket is sized by the same
+  // declaration's Volume, so moving a radix moves the table with it.
   static uint32_t bucket_slot(int32_t group, int32_t last, int32_t prev) {
-    return idx_bound(CtxIdx{}.digit<kBucketS0, kBucketR0>(group).digit<kBucketS1, kBucketR1>(last).digit<kBucketS2, kBucketR2>(prev),
-                     sizeof ((ModelBlock*)0)->ctx_bucket);
+    return idx_bound(MakeBucket((uint32_t)prev, (uint32_t)last, (uint32_t)group),
+                     MB_Bucket_Volume);
   }
 
   FreqRec*seat_bucket(int32_t group, int32_t last, int32_t prev, int32_t bucket) {
@@ -600,13 +599,13 @@ struct ModelBlock {
     return -1;
   }
 
-  int32_t context_ids(int32_t state, int32_t cap) {
+  int32_t context_ids(uint32_t bucket_slot_at) {
     PixRec*const cur6 = row_cur[6];
     PixRec*const r8 = row_cur[8];
     PixRec*const r7 = row_cur[7];
     PixRec*const up9 = row_cur[9];
     PixRec*const row = row_cur[5];
-    const int32_t bucket_at = ctx_bucket[state+cap];
+    const int32_t bucket_at = ctx_bucket[idx_bound(bucket_slot_at, MB_Bucket_Volume)];
     bucket_idx = bucket_at;
     const int32_t up_m0 = cur6[0].match[0];
     const uint32_t nb2 = CtxIdx{}.bit<IX_model_nb2_p0>(row[-2].match[2]).bit<IX_model_nb2_p1>(row[-2].match[5]).bit<IX_model_nb2_p2>(row[-2].match[4]).bit<IX_model_nb2_p3>(row[-1].match[1]);
@@ -698,8 +697,11 @@ struct ModelBlock {
     ctx_state_seen = state;
     SymPair*const pair = &group_ctr[idx_bound((uint32_t)state, sizeof group_ctr/sizeof group_ctr[0])][key];
     pix_cur = pair;
-    const int32_t cap = kBucketS1*nb4.rank(pair[0].last)+kBucketS2*nb4.rank(pair[0].prev);
-    int32_t id2 = context_ids(state, cap);
+    // The same index seat_bucket writes through, built by the same
+    // declaration -- state is the group factor, the two ranks the others.
+    int32_t id2 = context_ids(MakeBucket((uint32_t)nb4.rank(pair[0].prev),
+                                         (uint32_t)nb4.rank(pair[0].last),
+                                         (uint32_t)state));
     if( (int32_t)alphabet<MB_small_alphabet ) {
       int32_t id3_used = ctx_id3_used;
       // Bounded like the other two interned tables; this one does not go
@@ -1062,8 +1064,8 @@ struct ModelBlock {
     int32_t seen = 0;
     do {
       if( (mask|seen)<cap ) {
-        BitCtr* ctr = &run_ctr[idx_bound(CtxIdx{}.bits<IX_model_ctr_p0, IX_model_ctr_w0>(bucket).digit<IX_model_ctr_p1, IX_model_ctr_w1>((seen==0)+(bucket==top)),
-                                         sizeof run_ctr/sizeof run_ctr[0])];
+        BitCtr* ctr = &run_ctr[idx_bound(MakeRunCtr((uint32_t)((seen==0)+(bucket==top)), (uint32_t)bucket),
+                                         MB_RunCtr_Volume)];
         const uint32_t bin_tot = ctr[0].n[0]+ctr[0].n[1];
         int32_t run_bit;
         if constexpr( f_DEC ) {

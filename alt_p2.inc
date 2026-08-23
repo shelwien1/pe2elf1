@@ -296,8 +296,9 @@ struct AltP2Block {
   uint8_t fold_hi[256];
   int8_t unfold[256];
   uint8_t nb_ctx[120];
-  int16_t nb_id[1920];
-  static const int32_t kP2CounterCount = 5*32768;
+  int16_t nb_id[P2_NbSlot_Volume];
+  // Sized by its own index declaration rather than beside it.
+  static const int32_t kP2CounterCount = P2_BankSlot_Volume;
   P2Count p2_ctr[kP2CounterCount];
 
   // The map's context.  ctx's low digit is the activity class the rest of the
@@ -309,7 +310,7 @@ struct AltP2Block {
   }
 
   static uint32_t slot(int32_t bank, int32_t ctx) {
-    return CtxIdx{}.bits<IX_p2_ix1_p0, IX_p2_ix1_w0>(ctx).digit<IX_p2_ix1_p1, IX_p2_ix1_w1>(bank);
+    return MakeBankSlot((uint32_t)bank, (uint32_t)ctx);
   }
 
   void seat_nb_row(int32_t nb_slot, const P2Ctx* c0) {
@@ -782,7 +783,7 @@ struct AltP2Block {
     int32_t gB = over_thresholds(num_b, bmf_p2_thresholds[band], 6, 8, 1);
     int32_t gC = over_thresholds(16*sum_ur, bmf_p2_thresholds[band], 3, 5, sum_ul);
     int32_t gD = over_thresholds(num_d, bmf_p2_thresholds[band], 0, 2, den_d);
-    nb_slot = CtxIdx{}.bits<IX_p2_nb_slot_p0, IX_p2_nb_slot_w0>(gB).bits<IX_p2_nb_slot_p1, IX_p2_nb_slot_w1>(gC).bits<IX_p2_nb_slot_p2, IX_p2_nb_slot_w2>(gD).digit<IX_p2_nb_slot_p3, IX_p2_nb_slot_w3>(gA).digit<IX_p2_nb_slot_p4, IX_p2_nb_slot_w4>(band);
+    nb_slot = (int32_t)MakeNbSlot((uint32_t)band, (uint32_t)gA, (uint32_t)gB, (uint32_t)gC, (uint32_t)gD);
     seat_nb_row(nb_slot, c0);
     const P2Refs refs = fill_row_inputs(refa, refb);
     P2Ctx*const ra0 = refs.a.r0, *const ra1 = refs.a.r1, *const ra2 = refs.a.r2;

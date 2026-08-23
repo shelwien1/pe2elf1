@@ -3,21 +3,12 @@
 
 uint32_t MakeNbSlot( uint32_t band, uint32_t gA, uint32_t gB, uint32_t gC, uint32_t gD ) {
   int32_t NbSlot;
-
-  NbSlot = 0;
-  NbSlot = NbSlot*(6) + (band);
-  NbSlot = NbSlot*(5) + (gA);
-  NbSlot = NbSlot*(4) + (gB);
-  NbSlot = NbSlot*(4) + (gC);
-  NbSlot = NbSlot*(4) + (gD);
+  MakeIndex NbSlot
   return (uint32_t)NbSlot;
 }
 
 uint32_t MakeBankSlot( uint32_t bank, uint32_t ctx ) {
   int32_t BankSlot;
-
-  BankSlot = 0;
-  BankSlot = BankSlot*(5) + (bank);
-  BankSlot = BankSlot*(32768) + (ctx);
+  MakeIndex BankSlot
   return (uint32_t)BankSlot;
 }

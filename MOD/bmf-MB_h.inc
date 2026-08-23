@@ -1,5 +1,7 @@
 
 
+
+
 static const int MB_row_margin = (7+0) * (1);
 static const int MB_row_tail = (9+0) * (1);
 static const int MB_freq_table_offset = (188+0) * (1);
@@ -36,6 +38,8 @@ static const int MB_group_flags_13 = (56+0) * (1);
 static const int MB_group_flags_14 = (63+0) * (1);
 
 
+static const int MB_Bucket_Volume = 1* 5* 5* 15; // 375
+static const int MB_RunCtr_Volume = 1* 3* 16; // 48
 
 struct MB_T { 
 #undef USE_NEW
