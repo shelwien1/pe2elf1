@@ -2,7 +2,7 @@
 // Included from bmf.cpp; not a standalone translation unit.
 
 int32_t sym_slot(int32_t code) {
-  return code<5 ? code : 6-(code&1);
+  return code<CN_slot_split ? code : CN_slot_top-(code&1);
 }
 
 struct CounterNode {
@@ -68,28 +68,29 @@ struct CounterNode {
         }
       }
     }
-    if( tot>0x2000 ) {
+    if( tot>CN_rescale_at ) {
       total = 0x8000;
       int32_t lo = 256;
       for( int32_t k = 6; k>=0; --k )
         if( c[k]<lo )
           lo = c[k];
       for( int32_t k = 6; k>=0; --k ) {
-        const uint16_t nf = lo<=1 ? c[k]-(c[k]>>1) : (c[k]+2)/3;
+        const uint16_t nf = lo<=1 ? c[k]-(c[k]>>idx_clamp(CN_halve_shift, 1, 15))
+                                 : (c[k]+CN_rescale_round)/idx_clamp(CN_rescale_div, 2, 64);
         c[k] = nf;
         total += nf;
       }
     }
-    cur[0] += 32;
-    const int32_t result = total+32;
+    cur[0] += CN_bump;
+    const int32_t result = total+CN_bump;
     total = result;
     slot = cur-c;
-    if( slot>=5 ) {
-      uint16_t*const strip = cx[0].model_strip(CtxIdx{}.bit<7>(slot&1).bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+96).raw((uint32_t)ctx));
+    if( slot>=CN_slot_split ) {
+      uint16_t*const strip = cx[0].model_strip(CtxIdx{}.bit<7>(slot&1).bit<6>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+CN_escape_bias).raw((uint32_t)ctx));
       if constexpr( f_DEC )
         slot += 2*cx[0].decode_symbol_tree(strip);
       else
-        cx[0].encode_symbol_tree(strip, (sym-5)>>1);
+        cx[0].encode_symbol_tree(strip, (sym-CN_slot_split)>>1);
     }
     return slot;
   }
@@ -111,27 +112,33 @@ struct SymPair {
 
 
 
+// These were in-class static members.  In the tuning build an IDX value is a
+// read from a patchable object rather than a constant expression, and an
+// in-class initializer has to be one -- so they sit at namespace scope instead,
+// where a dynamic initializer is fine.  The names are unqualified at every use
+// site, so nothing else changes.
+static const uint32_t kStep = CN_step;
+static const uint32_t kSeedBump = CN_seed_bump;
+static const uint32_t kSeedLimit = CN_seed_limit;
+static const uint32_t kLimitStep = CN_limit_step;
+static const uint32_t kMaxLimit = CN_max_limit;
+static const uint32_t kParentBump = CN_parent_bump;
+
 struct BitCtr {
   uint16_t n[2];
   uint16_t limit;
-  static const uint32_t kStep = 8;
-  static const uint32_t kSeedBump = 4;
-  static const uint32_t kSeedLimit = 512;
-  static const uint32_t kLimitStep = 64;
-  static const uint32_t kMaxLimit = 0x4000;
-  static const uint32_t kParentBump = 0x88;
   uint32_t summ() const {
     return n[0]+n[1];
   }
 
   void init_parent() {
     n[0] = n[1] = kStep/2;
-    limit = 72;
+    limit = CN_parent_limit;
   }
 
   void init_root() {
-    n[0] = 40;
-    n[1] = 16;
+    n[0] = CN_root_n0;
+    n[1] = CN_root_n1;
     limit = kSeedLimit;
   }
 
@@ -146,12 +153,12 @@ struct BitCtr {
     const int32_t first = n[0]-1;
     const int32_t par0 = parent[0].n[0];
     const int32_t par_tot = par0+parent[0].n[1];
-    n[0] = (par_tot+(par0<<6)-64)/par_tot;
-    n[1] = ((parent[0].n[1]<<6)+par_tot-64)/par_tot;
+    n[0] = (par_tot+(par0-1)*CN_seed_scale)/par_tot;
+    n[1] = (par_tot+((int32_t)parent[0].n[1]-1)*CN_seed_scale)/par_tot;
     n[first] += kSeedBump;
     limit = kSeedLimit;
     const int32_t par_n = parent[0].n[first];
-    parent[0].n[first] = par_n-3*(par_n>3);
+    parent[0].n[first] = par_n-CN_seed_decay*(par_n>CN_seed_decay);
   }
 
   template <int32_t f_DEC> int32_t code_context_bit(BMFState* cx, BitCtr* parent, int32_t bit) {
@@ -196,10 +203,10 @@ struct BitCtr {
       seed_from(parent);
     const uint32_t f0 = src[0].n[0], f1 = src[0].n[1];
     int32_t p16 = (int32_t)((f1*65536u+((f0+f1)>>1))/(f0+f1));
-    if( p16<32 )
-      p16 = 32;
-    if( p16>65504 )
-      p16 = 65504;
+    if( p16<CN_p16_floor )
+      p16 = CN_p16_floor;
+    if( p16>CN_p16_ceil )
+      p16 = CN_p16_ceil;
     const int32_t p_ref = apm[0].refine(p16, apm_ctx|((src==parent) ? Apm::kCtx>>1 : 0));
     if constexpr( f_DEC )
       bit = cx[0].decode_bit(65536-p_ref, p_ref);
@@ -235,14 +242,14 @@ struct BitCtr {
 };
 
 CounterNode*init_counter_node(CounterNode* node) {
-  node[0].c[0] = 8;
-  node[0].c[1] = 2;
-  node[0].c[2] = 2;
-  node[0].c[3] = 2;
-  node[0].c[4] = 2;
-  node[0].c[5] = 3;
-  node[0].c[6] = 3;
-  node[0].total = 22;
+  node[0].c[0] = CN_seed_0;
+  node[0].c[1] = CN_seed_1;
+  node[0].c[2] = CN_seed_2;
+  node[0].c[3] = CN_seed_3;
+  node[0].c[4] = CN_seed_4;
+  node[0].c[5] = CN_seed_5;
+  node[0].c[6] = CN_seed_6;
+  node[0].total = CN_seed_0+CN_seed_1+CN_seed_2+CN_seed_3+CN_seed_4+CN_seed_5+CN_seed_6;
   return node;
 }
 
@@ -250,7 +257,7 @@ template <class Unfold> uint8_t fold_or_refuse(uint8_t* dst, int32_t src, int32_
   const int32_t resid = (uint8_t)(src-pred);
   const uint8_t recon = unfold[fold[resid]]+pred;
   const int32_t drift = dst[0]-(uint8_t)(recon+dst[0]-src);
-  if( drift<-16||drift>16 ) {
+  if( drift<-CN_drift_limit||drift>CN_drift_limit ) {
     dst[0] = (uint8_t)src;
     return fold_hi[resid];
   }

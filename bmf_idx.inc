@@ -44,6 +44,16 @@ static inline constexpr double idx_d(int64_t v, int32_t k) {
   return (double)v/(double)((uint64_t)1<<k);
 }
 
+// A parameter used as a divisor, a shift or a size is a crash when the
+// optimizer sweeps it to zero, and sweeping it is the point.  The clamp belongs
+// at the point of use, not in the .idx: the pattern is the search space, the
+// clamp is the contract (IDX-FORMAT.md sec.5).
+static inline constexpr int32_t idx_clamp(int32_t v, int32_t lo, int32_t hi) {
+  return v<lo ? lo : v>hi ? hi : v;
+}
+
 #include "sh_mapping.inc"
 
 #include "MOD/bmf-P2_h.inc"
+#include "MOD/bmf-P1_h.inc"
+#include "MOD/bmf-CN_h.inc"

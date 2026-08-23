@@ -40,17 +40,24 @@ alignas(16) static const int32_t bmf_p2_thresholds[6][13] = {
 };
 alignas(16) static const int32_t p2_b1_reload[3] = {P2_b1_reload_0, P2_b1_reload_1, P2_b1_reload_2};
 
-alignas(16) static constexpr uint8_t p1_level_edges[8] = {
-  1, 2, 4, 8, 14, 35, 103, 0,
+// The P1 ladders.  int32_t rather than uint8_t for the same reason as the P2
+// pair above: in the tuning build these are load-time reads, and narrowing one
+// in an aggregate initialiser is only allowed from a constant expression.
+alignas(16) static const int32_t p1_level_edges[8] = {
+  P1_level_edge_0, P1_level_edge_1, P1_level_edge_2, P1_level_edge_3,
+  P1_level_edge_4, P1_level_edge_5, P1_level_edge_6, 0,
 };
-alignas(16) static constexpr uint8_t p1_group_edges[8] = {
-  1, 3, 6, 10, 16, 27, 52, 0,
+alignas(16) static const int32_t p1_group_edges[8] = {
+  P1_group_edge_0, P1_group_edge_1, P1_group_edge_2, P1_group_edge_3,
+  P1_group_edge_4, P1_group_edge_5, P1_group_edge_6, 0,
 };
-alignas(16) static constexpr uint8_t p1_slot_edges[8] = {
-  5, 10, 36, 98, 154, 236, 248, 0,
+alignas(16) static const int32_t p1_slot_edges[8] = {
+  P1_slot_edge_0, P1_slot_edge_1, P1_slot_edge_2, P1_slot_edge_3,
+  P1_slot_edge_4, P1_slot_edge_5, P1_slot_edge_6, 0,
 };
-alignas(16) static constexpr int32_t p1_level_step[8] = {
-  1, 1, 2, 2, 2, 4, 4, 4,
+alignas(16) static const int32_t p1_level_step[8] = {
+  P1_level_step_0, P1_level_step_1, P1_level_step_2, P1_level_step_3,
+  P1_level_step_4, P1_level_step_5, P1_level_step_6, P1_level_step_7,
 };
 
 // The NLMS cascade: seed coefficients, per-tap adaptation rates, and the

@@ -1,0 +1,59 @@
+
+Prefix CN
+Debug 1
+
+# ---------------------------------------------------------------------
+# The adaptive counters shared by every model: the seven-slot CounterNode
+# and the binary BitCtr pair.
+# ---------------------------------------------------------------------
+
+# The symbol alphabet's shape: codes below slot_split are their own slot,
+# the rest fold onto the top two.  slot_split appears at four use sites and
+# is one parameter so they cannot drift apart.
+Const 1
+
+Number slot_split,       1,0!101
+Number slot_top,         1,0!110
+
+# CounterNode: the seed counts, the increment per hit, the rescale
+# threshold and how the rescale divides.  The seeded total is the sum of
+# the seeds rather than its own parameter, so it stays consistent when the
+# optimizer moves them.
+Const 0
+
+Number seed_0,           1,0!1000
+Number seed_1,           1,0!10
+Number seed_2,           1,0!10
+Number seed_3,           1,0!10
+Number seed_4,           1,0!10
+Number seed_5,           1,0!11
+Number seed_6,           1,0!11
+Number bump,             1,0!100000
+Number rescale_at,       1,0!10000000000000
+Number halve_shift,      1,0!1
+Number rescale_round,    1,0!10
+Number rescale_div,      1,0!11
+Number escape_bias,      1,0!1100000
+Number nudge_limit,      1,0!110011001100
+
+# BitCtr: the increment, the seeding bump and decay, the rescale ladder
+# and the parent-credit threshold.
+
+Number step,             1,0!1000
+Number seed_bump,        1,0!100
+Number seed_limit,       1,0!1000000000
+Number limit_step,       1,0!1000000
+Number max_limit,        1,0!100000000000000
+Number parent_bump,      1,0!10001000
+Number parent_limit,     1,0!1001000
+Number root_n0,          1,0!101000
+Number root_n1,          1,0!10000
+Number seed_scale,       1,0!1000000
+Number seed_decay,       1,0!11
+
+# Clamps on what reaches the arithmetic coder, and the reconstruction
+# drift a folded residual is allowed before it refuses to fold.
+
+Number p16_floor,        1,0!100000
+Number p16_ceil,         1,0!1111111111100000
+Number drift_limit,      1,0!10000

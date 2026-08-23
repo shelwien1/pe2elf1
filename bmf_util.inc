@@ -91,7 +91,6 @@ int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {
 constexpr int32_t kWeightMin = -64, kWeightMax = 191;
 constexpr uint32_t kSlackMax = 0x4000;
 constexpr int32_t kP2FreqRescaleTotal = 29696;
-constexpr uint32_t kCounterNudgeLimit = 0xCCC;
 constexpr int32_t kP2RowPad = 234;
 constexpr int32_t kCtxId3Limit = 53248;
 constexpr uint32_t kModelTableBytes = 0x7F000u;
