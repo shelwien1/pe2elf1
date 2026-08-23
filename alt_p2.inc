@@ -295,7 +295,7 @@ struct AltP2Block {
   int16_t nb_id[P2_NbSlot_Volume];
   // Sized by its own index declaration rather than beside it.
   static const int32_t kP2CounterCount = P2_ctr_max;
-  P2Count p2_ctr[kP2CounterCount];
+  P2Count p2_ctr[kP2CounterCount+1];
 
   // The map's context.  ctx's low digit is the activity class the rest of the
   // model already reads as one (the deadzone in alt_p2_model is derived from
@@ -355,8 +355,8 @@ struct AltP2Block {
 
   // The frozen capacity, not the live Volume: see freq_max in the .idx.
   static const int32_t kP2FreqCount = P2_freq_max;
-  P2Freq freq[kP2FreqCount];
-  uint32_t pz_fast[kP2FreqCount];
+  P2Freq freq[kP2FreqCount+1];
+  uint32_t pz_fast[kP2FreqCount+1];
 
   // Every access to the two big tables goes through these.  The context that
   // indexes them is built from the IX layout parameters and then has offsets
@@ -365,6 +365,11 @@ struct AltP2Block {
   // assembled at a dozen sites.  One compare beside a table lookup that already
   // misses cache; the shipping build folds the size, not the compare, because
   // the index is data.
+  // Bounded to the capacity, with one spare element beyond it: several callers
+  // reach a neighbouring cell with [+1] off what this returns, and bounding to
+  // the last element would put that one past the end.  The [-1] side is
+  // guarded by the callers, which only take it when the low context bits are
+  // non-zero.
   P2Freq &freq_at(int32_t i) {
     return freq[idx_bound((uint32_t)i, kP2FreqCount)];
   }
@@ -618,7 +623,6 @@ struct AltP2Block {
         p2_update(cx, &node0[1], res2, P2_up_near);
       if( lowbits )
         p2_update(cx, &node0[-1], res2, P2_up_direct);
-      P2Count* bankp = &ctr_at(slot(bank, 0));
       static const uint32_t p2_bank_bits[P2_fan] = {
         P2_bank_bit_00, P2_bank_bit_01, P2_bank_bit_02, P2_bank_bit_03,
         P2_bank_bit_04, P2_bank_bit_05, P2_bank_bit_06, P2_bank_bit_07,
@@ -626,10 +630,13 @@ struct AltP2Block {
       };
       P2Count* direct[P2_fan], * mirror[P2_fan], * rot[P2_fan];
       for( int32_t k = 0; k<P2_fan; ++k ) {
+        // Through slot() rather than as an offset off bankp: the base is
+        // bounded but base+x is not, and x follows the context, which a
+        // widened threshold bitmap can grow past the table.
         const uint32_t x = ctxw^p2_bank_bits[k];
-        direct[k] = &bankp[x];
-        mirror[k] = &bankp[x^kBankMirrorMask];
-        rot[k] = &bankp[p2_ctx_rotate[(x>>2)&3]+(x&0xFFFFFFF3)];
+        direct[k] = &ctr_at(slot(bank, (int32_t)x));
+        mirror[k] = &ctr_at(slot(bank, (int32_t)(x^kBankMirrorMask)));
+        rot[k] = &ctr_at(slot(bank, p2_ctx_rotate[(x>>2)&3]+(int32_t)(x&0xFFFFFFF3)));
         bmf_prefetch<pf_all>(direct[k]);
         bmf_prefetch<pf_all>(mirror[k]);
         bmf_prefetch<pf_all>(rot[k]);
