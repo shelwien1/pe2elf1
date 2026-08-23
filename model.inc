@@ -102,7 +102,7 @@ struct ModelBlock {
   SymList** sel_cur;
   uint16_t* sym_word;
   uint32_t* sym_code;
-  uint8_t ctx_state[64];
+  uint8_t ctx_state[MB_MatchCtx_Volume];
   uint8_t ctx_bucket[MB_Bucket_Volume];
   uint8_t _pad25[1];
   // One declaration, in IDX/bmf-MB.idx, decides both the radices and the
@@ -123,14 +123,14 @@ struct ModelBlock {
   uint8_t* run_bucket;
   uint8_t* alpha_map;
   uint8_t grad[4];
-  uint16_t sym_ctr[524288];
+  uint16_t sym_ctr[MB_SymCache_Volume];
   SymPair group_ctr[15][65536];
   uint16_t* sym_cache;
   SymPair* pix_cur;
   uint16_t sym_rev[8192];
-  uint16_t ctx_id1[192512];
-  uint16_t ctx_id2[108800];
-  uint16_t ctx_id3[712000];
+  uint16_t ctx_id1[MB_Sig1_Volume];
+  uint16_t ctx_id2[MB_Sig2_Volume];
+  uint16_t ctx_id3[MB_Sig3_Volume];
   ModelBlock*layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth) {
     cx = state;
     int32_t j;
@@ -613,11 +613,14 @@ struct ModelBlock {
     const int32_t bucket_at = ctx_bucket[idx_bound(bucket_slot_at, MB_Bucket_Volume)];
     bucket_idx = bucket_at;
     const int32_t up_m0 = cur6[0].match[0];
-    const uint32_t nb2 = CtxIdx{}.bit<IX_model_nb2_p0>(row[-2].match[2]).bit<IX_model_nb2_p1>(row[-2].match[5]).bit<IX_model_nb2_p2>(row[-2].match[4]).bit<IX_model_nb2_p3>(row[-1].match[1]);
-    const uint32_t sig1 = CtxIdx{}.bit<IX_model_sig1_p0>(grad[3]==0).bit<IX_model_sig1_p1>(grad[2]==0).bit<IX_model_sig1_p2>(grad[1]==0).bit<IX_model_sig1_p3>(grad[0]==0).bit<IX_model_sig1_p4>(up9[0].match[0]&r8[0].match[0]&up_m0&r7[0].match[0]).bit<IX_model_sig1_p5>(up9[0].match[1]&r8[0].match[1]&r7[0].match[1]&cur6[0].match[1]).above<IX_model_sig1_p6>(bucket_at).raw(nb2);
+    const uint32_t nb2 = MakeNB2(row[-2].match[2], row[-2].match[5], row[-2].match[4], row[-1].match[1]);
+    const uint32_t sig1 = MakeSig1((uint32_t)bucket_at,
+                                  up9[0].match[0]&r8[0].match[0]&up_m0&r7[0].match[0],
+                                  up9[0].match[1]&r8[0].match[1]&r7[0].match[1]&cur6[0].match[1],
+                                  grad[3]==0, grad[2]==0, grad[1]==0, grad[0]==0, nb2);
     int32_t id1;
     intern_ctx(ctx_id1, sizeof ctx_id1/sizeof ctx_id1[0], sig1, ctx_id1_used, id1);
-    const uint32_t sig2 = CtxIdx{}.bit<IX_model_sig2_p0>(cur6[1].match[3]).bit<IX_model_sig2_p1>(up_m0).bit<IX_model_sig2_p2>(row[-1].match[5]).above<IX_model_sig2_p3>(id1);
+    const uint32_t sig2 = MakeSig2((uint32_t)id1, cur6[1].match[3], up_m0, row[-1].match[5]);
     int32_t id2;
     intern_ctx(ctx_id2, sizeof ctx_id2/sizeof ctx_id2[0], sig2, ctx_id2_used, id2);
     return id2;
@@ -679,7 +682,8 @@ struct ModelBlock {
   }
 
   uint32_t match_context(const Neighbours &n, const PixRec* up, const PixRec* west) const {
-    return CtxIdx{}.bit<IX_model_ix1_p0>(west[-1].match[2]).bit<IX_model_ix1_p1>(west[-1].match[4]).bit<IX_model_ix1_p2>(up[1].match[1]).bit<IX_model_ix1_p3>(n.up_next==n.upleft).bit<IX_model_ix1_p4>(west[-1].match[0]).bit<IX_model_ix1_p5>(up[0].match[1]);
+    return MakeMatchCtx(west[-1].match[2], west[-1].match[4], up[1].match[1],
+                        n.up_next==n.upleft, west[-1].match[0], up[0].match[1]);
   }
 
   uint16_t pair_key(const Neighbours &n, const PixRec* west) const {
@@ -696,8 +700,7 @@ struct ModelBlock {
     nb4 = rank_neighbours();
     const int32_t nb = match_context(nb4, up, west);
     const int32_t key = pair_key(nb4, west);
-    sym_cache = &sym_ctr[idx_bound(CtxIdx{}.above<IX_model_sym_cache_p0>(key),
-                                  sizeof sym_ctr/sizeof sym_ctr[0])];
+    sym_cache = &sym_ctr[idx_bound(MakeSymCache((uint32_t)key, 0), MB_SymCache_Volume)];
     const int32_t state = ctx_state[idx_bound((uint32_t)nb, sizeof ctx_state)];
     ctx_state_seen = state;
     SymPair*const pair = &group_ctr[idx_bound((uint32_t)state, sizeof group_ctr/sizeof group_ctr[0])][key];
@@ -711,8 +714,8 @@ struct ModelBlock {
       int32_t id3_used = ctx_id3_used;
       // Bounded like the other two interned tables; this one does not go
       // through intern_ctx because it retries at a folded signature.
-      int32_t sig3 = (int32_t)idx_bound(CtxIdx{}.bits<IX_model_sig3_p0, IX_model_sig3_w0>(nb4.left).above<IX_model_sig3_p1>(id2),
-                                       sizeof ctx_id3/sizeof ctx_id3[0]);
+      int32_t sig3 = (int32_t)idx_bound(MakeSig3((uint32_t)id2, (uint32_t)nb4.left),
+                                       MB_Sig3_Volume);
       uint16_t* id3p = &ctx_id3[sig3];
       id2 = id3p[0];
       if( id2==0xFFFF ) {

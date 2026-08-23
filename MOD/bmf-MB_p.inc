@@ -52,3 +52,72 @@ uint32_t MakeCandFallback( uint32_t deep, uint32_t fallback ) {
   CandFallback = CandFallback*(8) + (fallback);
   return (uint32_t)CandFallback;
 }
+
+uint32_t MakeNB2( uint32_t a, uint32_t b, uint32_t c, uint32_t d ) {
+  int32_t NB2;
+
+  NB2 = 0;
+  NB2 = NB2*(2) + (a);
+  NB2 = NB2*(2) + (b);
+  NB2 = NB2*(2) + (c);
+  NB2 = NB2*(2) + (d);
+  return (uint32_t)NB2;
+}
+
+uint32_t MakeSig1( uint32_t bucket, uint32_t m0, uint32_t m1,
+                   uint32_t g3, uint32_t g2, uint32_t g1, uint32_t g0, uint32_t nb2 ) {
+  int32_t Sig1;
+
+  Sig1 = 0;
+  Sig1 = Sig1*(MB_freq_table_offset) + (bucket);
+  Sig1 = Sig1*(2) + (m0);
+  Sig1 = Sig1*(2) + (m1);
+  Sig1 = Sig1*(2) + (g3);
+  Sig1 = Sig1*(2) + (g2);
+  Sig1 = Sig1*(2) + (g1);
+  Sig1 = Sig1*(2) + (g0);
+  Sig1 = Sig1*(MB_NB2_Volume) + (nb2);
+  return (uint32_t)Sig1;
+}
+
+uint32_t MakeSig2( uint32_t id1, uint32_t a, uint32_t b, uint32_t c ) {
+  int32_t Sig2;
+
+  Sig2 = 0;
+  Sig2 = Sig2*(MB_id1_range) + (id1);
+  Sig2 = Sig2*(2) + (a);
+  Sig2 = Sig2*(2) + (b);
+  Sig2 = Sig2*(2) + (c);
+  return (uint32_t)Sig2;
+}
+
+uint32_t MakeSig3( uint32_t id2, uint32_t left ) {
+  int32_t Sig3;
+
+  Sig3 = 0;
+  Sig3 = Sig3*(MB_id2_range) + (id2);
+  Sig3 = Sig3*(16) + (left);
+  return (uint32_t)Sig3;
+}
+
+uint32_t MakeMatchCtx( uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e, uint32_t f ) {
+  int32_t MatchCtx;
+
+  MatchCtx = 0;
+  MatchCtx = MatchCtx*(2) + (a);
+  MatchCtx = MatchCtx*(2) + (b);
+  MatchCtx = MatchCtx*(2) + (c);
+  MatchCtx = MatchCtx*(2) + (d);
+  MatchCtx = MatchCtx*(2) + (e);
+  MatchCtx = MatchCtx*(2) + (f);
+  return (uint32_t)MatchCtx;
+}
+
+uint32_t MakeSymCache( uint32_t key, uint32_t slot ) {
+  int32_t SymCache;
+
+  SymCache = 0;
+  SymCache = SymCache*(65536) + (key);
+  SymCache = SymCache*(8) + (slot);
+  return (uint32_t)SymCache;
+}

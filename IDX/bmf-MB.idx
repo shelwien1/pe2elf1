@@ -102,3 +102,60 @@ Index CandNode
 Index CandFallback
  ADD 2: deep
  ADD 8: fallback
+
+# How many interned contexts each of the three tables can hold.  Frozen: they
+# multiply a Volume, and a Volume has to fold.
+
+Const 1
+
+Number id1_range,      1,0!11010100100000
+Number id2_range,      1,0!1010110111010100
+
+Const 0
+
+# The signature chain.  Four neighbour-match flags make NB2; NB2 under six more
+# flags and the frequency bucket makes Sig1, whose Volume is 192512 -- what
+# ctx_id1 holds.  Sig2 and Sig3 are the same story for the other two tables.
+
+Index NB2
+ ADD 2: a
+ ADD 2: b
+ ADD 2: c
+ ADD 2: d
+
+Index Sig1
+ ADD %M%freq_table_offset: bucket
+ ADD 2: m0
+ ADD 2: m1
+ ADD 2: g3
+ ADD 2: g2
+ ADD 2: g1
+ ADD 2: g0
+ ADD %M%NB2_Volume: nb2
+
+Index Sig2
+ ADD %M%id1_range: id1
+ ADD 2: a
+ ADD 2: b
+ ADD 2: c
+
+Index Sig3
+ ADD %M%id2_range: id2
+ ADD 16: left
+
+# The neighbourhood match state, six flags.  Volume 64, which is what
+# ctx_state holds.
+
+Index MatchCtx
+ ADD 2: a
+ ADD 2: b
+ ADD 2: c
+ ADD 2: d
+ ADD 2: e
+ ADD 2: f
+
+# The move-to-front symbol cache: eight slots per pair key.
+
+Index SymCache
+ ADD 65536: key
+ ADD 8: slot
