@@ -17,3 +17,6 @@ merge.tmp.pak
 mergetimes.!!!
 hybrid-snap/
 climber-snap/
+
+# personal permission settings
+.claude/settings.local.json
