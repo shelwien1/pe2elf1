@@ -224,8 +224,10 @@ struct CtxModel {
   // The context key: the neighbours' alphabet indices packed `bits` apiece,
   // nearest first, so a shorter order is a prefix of a longer one.
   uint32_t context_key(const uint8_t* px, int32_t w, int32_t h, int32_t x, int32_t y) const {
-    static const int8_t dx[kMaxNeighbours] = {-1, 0, -1, 1, -2, 0, 2, -2, -1, 1, -3, 0, 2, -2, 3, -3, -4, 0, 1, -1, 3, -3, 4, -4};
-    static const int8_t dy[kMaxNeighbours] = {0, -1, -1, -1, 0, -2, -1, -1, -2, -2, 0, -3, -2, -2, -1, -1, 0, -4, -3, -3, -2, -2, -1, -1};
+    static const int32_t dx[kMaxNeighbours] = {
+      CM_dx_00, CM_dx_01, CM_dx_02, CM_dx_03, CM_dx_04, CM_dx_05, CM_dx_06, CM_dx_07, CM_dx_08, CM_dx_09, CM_dx_10, CM_dx_11, CM_dx_12, CM_dx_13, CM_dx_14, CM_dx_15, CM_dx_16, CM_dx_17, CM_dx_18, CM_dx_19, CM_dx_20, CM_dx_21, CM_dx_22, CM_dx_23};
+    static const int32_t dy[kMaxNeighbours] = {
+      CM_dy_00, CM_dy_01, CM_dy_02, CM_dy_03, CM_dy_04, CM_dy_05, CM_dy_06, CM_dy_07, CM_dy_08, CM_dy_09, CM_dy_10, CM_dy_11, CM_dy_12, CM_dy_13, CM_dy_14, CM_dy_15, CM_dy_16, CM_dy_17, CM_dy_18, CM_dy_19, CM_dy_20, CM_dy_21, CM_dy_22, CM_dy_23};
     uint32_t key = 0;
     for( int32_t k = 0; k<nb[kOrders-1]; ++k ) {
       const int32_t nx = x+dx[k], ny = y+dy[k];

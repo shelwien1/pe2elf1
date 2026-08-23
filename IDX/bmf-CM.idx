@@ -85,3 +85,59 @@ Number key_hash,         1,0!10011110001101110111100110110001
 # The seeded cell probability, in 1/65536.
 
 Number cell_seed,        1,0!1000000000000000
+
+# The causal neighbourhood, in the order an entropy sweep over the corpus found
+# useful: W, N, NW, NE, WW, NN, NEE, NWW, and outward from there.  Both the
+# offsets and their order are a design choice -- the order decides which
+# neighbours the shorter context orders see, since a shorter order is a prefix
+# of a longer one.  A negative offset rides on mult=-1 so a sweep moves the
+# distance and leaves the direction alone.
+
+Number dx_00,         -1,0!1
+Number dy_00,          1,0!0
+Number dx_01,          1,0!0
+Number dy_01,         -1,0!1
+Number dx_02,         -1,0!1
+Number dy_02,         -1,0!1
+Number dx_03,          1,0!1
+Number dy_03,         -1,0!1
+Number dx_04,         -1,0!10
+Number dy_04,          1,0!0
+Number dx_05,          1,0!0
+Number dy_05,         -1,0!10
+Number dx_06,          1,0!10
+Number dy_06,         -1,0!1
+Number dx_07,         -1,0!10
+Number dy_07,         -1,0!1
+Number dx_08,         -1,0!1
+Number dy_08,         -1,0!10
+Number dx_09,          1,0!1
+Number dy_09,         -1,0!10
+Number dx_10,         -1,0!11
+Number dy_10,          1,0!0
+Number dx_11,          1,0!0
+Number dy_11,         -1,0!11
+Number dx_12,          1,0!10
+Number dy_12,         -1,0!10
+Number dx_13,         -1,0!10
+Number dy_13,         -1,0!10
+Number dx_14,          1,0!11
+Number dy_14,         -1,0!1
+Number dx_15,         -1,0!11
+Number dy_15,         -1,0!1
+Number dx_16,         -1,0!100
+Number dy_16,          1,0!0
+Number dx_17,          1,0!0
+Number dy_17,         -1,0!100
+Number dx_18,          1,0!1
+Number dy_18,         -1,0!11
+Number dx_19,         -1,0!1
+Number dy_19,         -1,0!11
+Number dx_20,          1,0!11
+Number dy_20,         -1,0!10
+Number dx_21,         -1,0!11
+Number dy_21,         -1,0!10
+Number dx_22,          1,0!100
+Number dy_22,         -1,0!1
+Number dx_23,         -1,0!100
+Number dy_23,         -1,0!1

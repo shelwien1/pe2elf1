@@ -32,6 +32,36 @@ pdesc( MB_apm_pos_cap_, 0, "111" );
 static const int MB_apm_pos_cap = MB_apm_pos_cap_.value * (1);
 pdesc( MB_small_alphabet_, 0, "100000" );
 static const int MB_small_alphabet = MB_small_alphabet_.value * (1);
+pdesc( MB_group_flags_00_, 0, "0" );
+static const int MB_group_flags_00 = MB_group_flags_00_.value * (1);
+pdesc( MB_group_flags_01_, 0, "1" );
+static const int MB_group_flags_01 = MB_group_flags_01_.value * (1);
+pdesc( MB_group_flags_02_, 0, "10" );
+static const int MB_group_flags_02 = MB_group_flags_02_.value * (1);
+pdesc( MB_group_flags_03_, 0, "100" );
+static const int MB_group_flags_03 = MB_group_flags_03_.value * (1);
+pdesc( MB_group_flags_04_, 0, "1000" );
+static const int MB_group_flags_04 = MB_group_flags_04_.value * (1);
+pdesc( MB_group_flags_05_, 0, "1010" );
+static const int MB_group_flags_05 = MB_group_flags_05_.value * (1);
+pdesc( MB_group_flags_06_, 0, "1101" );
+static const int MB_group_flags_06 = MB_group_flags_06_.value * (1);
+pdesc( MB_group_flags_07_, 0, "10000" );
+static const int MB_group_flags_07 = MB_group_flags_07_.value * (1);
+pdesc( MB_group_flags_08_, 0, "10001" );
+static const int MB_group_flags_08 = MB_group_flags_08_.value * (1);
+pdesc( MB_group_flags_09_, 0, "10110" );
+static const int MB_group_flags_09 = MB_group_flags_09_.value * (1);
+pdesc( MB_group_flags_10_, 0, "100000" );
+static const int MB_group_flags_10 = MB_group_flags_10_.value * (1);
+pdesc( MB_group_flags_11_, 0, "100011" );
+static const int MB_group_flags_11 = MB_group_flags_11_.value * (1);
+pdesc( MB_group_flags_12_, 0, "100100" );
+static const int MB_group_flags_12 = MB_group_flags_12_.value * (1);
+pdesc( MB_group_flags_13_, 0, "111000" );
+static const int MB_group_flags_13 = MB_group_flags_13_.value * (1);
+pdesc( MB_group_flags_14_, 0, "111111" );
+static const int MB_group_flags_14 = MB_group_flags_14_.value * (1);
 
 
 

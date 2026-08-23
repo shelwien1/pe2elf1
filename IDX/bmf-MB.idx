@@ -39,3 +39,24 @@ Number pos_deep,         1,0!1001
 
 Number apm_pos_cap,      1,0!111
 Number small_alphabet,   1,0!100000
+
+# The fifteen seeded context groups.  Each entry is a set of flags saying which
+# of six neighbour relations that group conditions on, so this is the slow
+# model's context menu -- and the one table in it that is a design choice
+# rather than an ordering.
+
+Number group_flags_00,  1,0!0
+Number group_flags_01,  1,0!1
+Number group_flags_02,  1,0!10
+Number group_flags_03,  1,0!100
+Number group_flags_04,  1,0!1000
+Number group_flags_05,  1,0!1010
+Number group_flags_06,  1,0!1101
+Number group_flags_07,  1,0!10000
+Number group_flags_08,  1,0!10001
+Number group_flags_09,  1,0!10110
+Number group_flags_10,  1,0!100000
+Number group_flags_11,  1,0!100011
+Number group_flags_12,  1,0!100100
+Number group_flags_13,  1,0!111000
+Number group_flags_14,  1,0!111111

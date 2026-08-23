@@ -7,8 +7,14 @@
 // The float tables read their values back through idx_f, which is exact:
 // see the comment on idx_f in bmf_idx.inc for why that matters here.
 
-alignas(16) static const uint8_t ctx_group_flags[32] = {
-  0, 1, 2, 4, 8, 10, 13, 16, 17, 22, 32, 35, 36, 56, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+// The slow model's context menu: one flag set per seeded group, saying which
+// neighbour relations that group conditions on.
+alignas(16) static const int32_t ctx_group_flags[32] = {
+  MB_group_flags_00, MB_group_flags_01, MB_group_flags_02, MB_group_flags_03,
+  MB_group_flags_04, MB_group_flags_05, MB_group_flags_06, MB_group_flags_07,
+  MB_group_flags_08, MB_group_flags_09, MB_group_flags_10, MB_group_flags_11,
+  MB_group_flags_12, MB_group_flags_13, MB_group_flags_14,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
 // The bank rotation applied to the P2 context every fourth column.
