@@ -275,7 +275,7 @@ struct AltP2Block {
   uint32_t ctx_pair[2];
   Apm apm;
   Mix4 class_mix;
-  uint32_t pz_seat[64];
+  uint32_t pz_seat[P2_seat_max];
   uint32_t pz_signs[243];
   int32_t nb_id_used;
   int32_t band_lo;
@@ -294,7 +294,7 @@ struct AltP2Block {
   uint8_t nb_ctx[120];
   int16_t nb_id[P2_NbSlot_Volume];
   // Sized by its own index declaration rather than beside it.
-  static const int32_t kP2CounterCount = P2_BankSlot_Volume;
+  static const int32_t kP2CounterCount = P2_ctr_max;
   P2Count p2_ctr[kP2CounterCount];
 
   // The map's context.  ctx's low digit is the activity class the rest of the
@@ -353,8 +353,8 @@ struct AltP2Block {
     return run;
   }
 
-  // Sized by its own index declaration.
-  static const int32_t kP2FreqCount = P2_P2Ctx_Volume;
+  // The frozen capacity, not the live Volume: see freq_max in the .idx.
+  static const int32_t kP2FreqCount = P2_freq_max;
   P2Freq freq[kP2FreqCount];
   uint32_t pz_fast[kP2FreqCount];
 
@@ -522,7 +522,9 @@ struct AltP2Block {
     int32_t flat_a, flat_b;
     int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1[0].mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4[0].mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3[0].mag+c2[-1].mag+c2[2].mag);
     const int32_t lo_band = band_lo, hi_band = band_hi;
-    ctx_w[0].sel = (int32_t)MakeRun4Sel(-run4);
+    // Clamped to the weight row: a wider bitmap means more buckets than the
+    // three weights a selector has.
+    ctx_w[0].sel = (int32_t)idx_bound(MakeRun4Sel(-run4), 3);
     ctx_w[1].sel = (run4-c1[0].val<=hi_band)+(run4-c1[0].val<lo_band);
     int32_t d_run4 = run4-c0[-1].val;
     bool in_band = d_run4<=hi_band;
@@ -709,12 +711,12 @@ struct AltP2Block {
         // putting it back in place -- the same shift MakeCtxPair applies.
         ctx_pair[0] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2+4], 0);
         ctx_pair[1] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2], 0);
-        P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[MakeQ2Sel(-q2)]+ctx_w[4].w[1]);
+        P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[idx_bound(MakeQ2Sel(-q2), 3)]+ctx_w[4].w[1]);
         if constexpr( f_DEC ) {
-          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
+          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
         } else {
           code0 = fold_or_refuse(out, p[0], (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
-          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
           ++p;
         }
         int32_t val = 16*(uint8_t)out[0];
@@ -749,12 +751,12 @@ struct AltP2Block {
         for( k = 0; k<(uint32_t)width; ++k ) {
           int32_t pred = alt_p2_context(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
             code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
             code2 = code;
-            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
           }
           alt_p2_model(outp[k], code2, outp[k]-pred);
         }
@@ -965,13 +967,13 @@ struct AltP2Block {
       sample = clean;
       out[at] = recon;
     }
-    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
     alt_p2_model(sample, code, sample-pred);
   }
 
   void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
     const int32_t pred = alt_p2_context(refa, refb);
-    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
     const int32_t sample = (uint8_t)(pred+unfold[code]);
     alt_p2_model(sample, code, sample-pred);
     out[at] = sample;

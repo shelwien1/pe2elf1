@@ -66,10 +66,14 @@ def run(patched):
         try:
             e = subprocess.run([bin_, 'c', img, out_c], capture_output=True,
                                timeout=300)
-            if e.returncode or not os.path.exists(out_c):
-                return 'encode %s rc=%s' % (img, e.returncode)
+            if e.returncode < 0:
+                return 'encode %s killed by signal %d' % (img, -e.returncode)
+            if e.returncode:
+                return None      # refused, not crashed -- see below
             e = subprocess.run([bin_, 'd', out_c, out_o], capture_output=True,
                                timeout=300)
+            if e.returncode < 0:
+                return 'decode %s killed by signal %d' % (img, -e.returncode)
             if e.returncode or not os.path.exists(out_o):
                 return 'decode %s rc=%s' % (img, e.returncode)
         except subprocess.TimeoutExpired:

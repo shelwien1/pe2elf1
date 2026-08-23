@@ -167,7 +167,7 @@ struct AltP1Block {
     int32_t step = p1_level_step[(uint32_t)act_lvl];
     ctx[0] = act_lvl;
     ctx[1] = group_of[act_q]+slot_of[(uint32_t)guess];
-    ctx_w[0].sel = (int32_t)MakeGuess((int32_t)guess);
+    ctx_w[0].sel = (int32_t)idx_bound(MakeGuess((int32_t)guess), 3);
     ctx_w[1].sel = tri_sign(cursor1[-1].sym-cursor1[0].sym);
     ctx_w[2].sel = tri_sign(cursor1[-1].sym-cur[-1].sym);
     ctx_w[3].sel = tri_sign(ctx_w[3].sel);
