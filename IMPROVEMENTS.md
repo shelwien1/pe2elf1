@@ -846,11 +846,20 @@ per-pixel weighted blend loses.
 
 ## 9. Multiple prediction filters, mixed
 
-**Now [from the code].** alt-P2 runs one NLMS filter per context row — 28 float
-taps over spatial and cross-plane features (`fill_row_inputs`,
-`alt_p2.inc:378`), with 1088 filter rows selected by a 1920-value context
-(`seat_nb_row`, `alt_p2.inc:294`) at a single adaptation rate per tap
-(`bmf_p2_rate_init`).
+**Correction: alt-P2 already does this.** The claim below — that alt-P2 runs
+*one* filter at *a single* adaptation rate — is wrong, and the correction is the
+most useful thing in this section. `nlms_track_two_rows` (`alt_p2.inc`) drives
+the same 28 taps into **two** filter rows at deliberately different rates: the
+seated row at 0.05 with a normalisation floor of 26 896, and the previous
+pixel's row at 0.013·*conf* with a floor of 5 041. `NbRow::predict` then blends
+the seated row's output against the six-way context-set blend by
+`w[14][0]/w[14][1]` — a running covariance over a running variance, which *is*
+"blend their outputs by inverse recent squared error". Fast filter, slow filter,
+confidence-weighted blend: the proposal, already built, in 1999.
+
+**Now [from the code].** alt-P2 runs a two-rate NLMS pair per context row — 28
+float taps over spatial and cross-plane features (`fill_row_inputs`), with 1088
+filter rows selected by a 1920-value context (`seat_nb_row`).
 
 **Change.** Run two or three filters over the same features at clearly different
 adaptation rates and blend their outputs by inverse recent squared error (or feed
@@ -876,12 +885,14 @@ initialisation. Seeded at "trust the cell, the coarse views must earn their
 weight" it is a gain on every image. The same applies to the mixer in §7, whose
 weights are seeded where a count-weighted blend would put them.
 
-**Expected [expected].** 1–3 % on the alt-P2 path — which is where the bits are
-on `x_ep` and `t8g`, the two most expensive files in the corpus.
+**What is left of this section [expected].** A *third* rate, or per-tap rates
+selected by a local activity class, are still untried; the two-rate pair and its
+confidence blend are already there. Given that adding four taps to the existing
+pair costs 0.15–0.45 % on exactly the files this section aimed at, the
+prior on a third filter should be lower than the 1–3 % below.
 
 **Cost.** Linear in the number of filters, on the codec's hottest loop
 (`walk_bank_bits` and `code_banks` are already 31 % of instructions on `t8g`).
-Cheaper than it sounds if the extra filters use fewer taps.
 
 ### 9.1 The taps are all short-range
 
@@ -891,12 +902,26 @@ representation of structure at any larger scale: a slow gradient across a sky, a
 periodic texture, a repeated row. Two cheap ways in, neither of which is a
 wavelet or a pyramid rewrite:
 
-* **A few long taps.** Add `W−16`, `W−32`, `N−8`, `N−16` as additional NLMS
-  inputs. They cost four multiplies and let the filter represent slow variation
-  the short taps have to chase. Adding them as *taps* rather than as context
-  bits matters — §18 records that as the one thing the outside documents most
-  consistently agreed on, and it is the opposite of what more context bits do to
-  a table this size.
+* **A few long taps — built, and they lose [measured].** An eighth tap row was
+  added to the filter (28 taps → 32), with the row buffers' left margin raised
+  from 8 columns to 32 to reach that far, in four forms:
+
+  | eighth row | `x_ep` | `t8g` | `t24` |
+  |---|---|---|---|
+  | *(none — as shipped)* | **328 476** | **42 912** | 52 604 |
+  | raw `W−8, W−12, W−16, W−24` | 329 476 | 43 096 | 52 500 |
+  | gradients against `W−1` | 329 260 | 43 100 | 52 596 |
+  | smoothed gradients (pairs averaged) | 328 948 | 43 100 | 52 596 |
+  | gradients, learning rate ÷3 | 329 180 | 43 092 | **52 560** |
+
+  Every form costs `x_ep` and `t8g` — the two files where alt-P2 carries the
+  bits — between 0.15 % and 0.45 %, and buys `t24` at most 44 bytes. The
+  explanation is in the structure the correction above describes: the taps are
+  shared across 1088 seated filter rows *and* a six-way blend of context sets,
+  so four more of them is four more things every row has to learn from the few
+  hundred samples it sees. This is the one item §18 records the outside
+  documents agreeing on most consistently, and on this corpus it is a loss.
+  Reverted.
 * **A transmitted vertical period — [measured] not on this corpus.** The
   row-to-row match rate for `x_ci` decays monotonically (61 %, 47 %, 41 %, 40 %,
   39 %, … 37 % at lag 32) and for `x_ai` is flat (92 % down to 89 %). Neither has
