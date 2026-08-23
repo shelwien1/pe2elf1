@@ -4,3 +4,8 @@
 /1
 /2
 *.o
+/export.!!!
+/opttimes.!!!
+/IDX/*-const*
+/IDX/*_h.inc
+/IDX/*_p.inc

@@ -1,0 +1,254 @@
+
+Prefix P2
+Debug 1
+
+# ---------------------------------------------------------------------
+# alt-P2: the 28-tap NLMS predictor cascade.
+#
+# Every float here is stored as the exact mantissa of the float32 it
+# replaces, with its own binary exponent applied by the consumer, so the
+# port reproduces the pre-port stream byte for byte.  A round fixed-point
+# scale would have moved every rate by a fraction of a per cent.
+# ---------------------------------------------------------------------
+
+# NLMS seed coefficients, one per tap row/column.
+Const 0
+
+Number coef_00,      -1,0!110011001100110011001101 # -0.05
+Number coef_01,      -1,0!100011110101110000101001 # -0.07
+Number coef_02,       1,0!10011001100110011001101  # 0.3
+Number coef_03,       1,0!1011100001010001111011   # 0.18
+Number coef_10,      -1,0!111101011100001010001111 # -0.03
+Number coef_11,       1,0!10100011110101110000101  # 0.04
+Number coef_12,       1,0!111101011100001010001111 # 0.06
+Number coef_13,      -1,0!10100011110101110000101  # -0.01
+Number coef_20,       1,0!111101011100001010001111 # 0.06
+Number coef_21,       1,0!10100011110101110000101  # 0.16
+Number coef_22,       1,0!0                        # 0.0
+Number coef_23,      -1,0!10100011110101110000101  # -0.01
+Number coef_30,      -1,0!110011001100110011001101 # -0.1
+Number coef_31,      -1,0!10100011110101110000101  # -0.02
+Number coef_32,       1,0!110011001100110011001101 # 0.05
+Number coef_33,       1,0!110011001100110011001101 # 0.05
+Number coef_40,       1,0!111101011100001010001111 # 0.06
+Number coef_41,       1,0!0                        # 0.0
+Number coef_42,       1,0!10100011110101110000101  # 0.04
+Number coef_43,       1,0!10100011110101110000101  # 0.02
+Number coef_50,       1,0!10100011110101110000101  # 0.04
+Number coef_51,       1,0!10100011110101110000101  # 0.02
+Number coef_52,       1,0!10100011110101110000101  # 0.04
+Number coef_53,       1,0!110011001100110011001101 # 0.05
+Number coef_60,       1,0!100011110101110000101001 # 0.07
+Number coef_61,       1,0!0                        # 0.0
+Number coef_62,       1,0!111101011100001010001111 # 0.03
+Number coef_63,       1,0!10100011110101110000101  # 0.02
+
+# Per-tap adaptation rates.  The cascade is ordered fast to slow.
+
+Number rate_00,       1,0!1011000011110010011111   # 0.0108
+Number rate_01,       1,0!111000100001100101100101 # 0.0069
+Number rate_02,       1,0!1011000011110010011111   # 0.0054
+Number rate_03,       1,0!101010100110010011000011 # 0.0052
+Number rate_10,       1,0!100010011010000000100111 # 0.0042
+Number rate_11,       1,0!100010011010000000100111 # 0.0042
+Number rate_12,       1,0!100010011010000000100111 # 0.0042
+Number rate_13,       1,0!1111111110010111001001   # 0.0039
+Number rate_20,       1,0!11100101011000000100001  # 0.0035
+Number rate_21,       1,0!11100101011000000100001  # 0.0035
+Number rate_22,       1,0!1011011110000000001101   # 0.0028
+Number rate_23,       1,0!1011011110000000001101   # 0.0028
+Number rate_30,       1,0!1011000011110010011111   # 0.0027
+Number rate_31,       1,0!101010100110010011000011 # 0.0026
+Number rate_32,       1,0!101010100110010011000011 # 0.0026
+Number rate_33,       1,0!10011101010010010101001  # 0.0024
+Number rate_40,       1,0!100101101011101110011001 # 0.0023
+Number rate_41,       1,0!100101101011101110011001 # 0.0023
+Number rate_42,       1,0!1001000000101101111      # 0.0022
+Number rate_43,       1,0!100010011010000000100111 # 0.0021
+Number rate_50,       1,0!1111100100001001011011   # 0.0019
+Number rate_51,       1,0!1111100100001001011011   # 0.0019
+Number rate_52,       1,0!110111101101001010001001 # 0.0017
+Number rate_53,       1,0!110111101101001010001001 # 0.0017
+Number rate_60,       1,0!11000100100110111010011  # 0.0015
+Number rate_61,       1,0!11000100100110111010011  # 0.0015
+Number rate_62,       1,0!1001000000101101111      # 0.0011
+Number rate_63,       1,0!11101011111011011111101  # 0.0009
+
+# Blend weights over the six cascade outputs, one set per mode.
+
+Number mix_00,        1,0!110011001100110011001101 # 0.4
+Number mix_01,        1,0!110011001100110011001101 # 0.1
+Number mix_02,        1,0!10011001100110011001101  # 0.15
+Number mix_03,        1,0!111010111000010100011111 # 0.23
+Number mix_04,        1,0!10100011110101110000101  # 0.04
+Number mix_05,        1,0!111101011100001010001111 # 0.03
+Number mix_10,        1,0!100001010001111010111    # 0.26
+Number mix_11,        1,0!111010111000010100011111 # 0.23
+Number mix_12,        1,0!100001010001111010111    # 0.13
+Number mix_13,        1,0!111101011100001010001111 # 0.12
+Number mix_14,        1,0!10011001100110011001101  # 0.15
+Number mix_15,        1,0!111101011100001010001111 # 0.12
+Number mix_20,        1,0!100010100011110101110001 # 0.27
+Number mix_21,        1,0!11100001010001111010111  # 0.22
+Number mix_22,        1,0!100001010001111010111    # 0.26
+Number mix_23,        1,0!10100011110101110000101  # 0.08
+Number mix_24,        1,0!111101011100001010001111 # 0.12
+Number mix_25,        1,0!110011001100110011001101 # 0.05
+Number mix_30,        1,0!10011001100110011001101  # 0.3
+Number mix_31,        1,0!100011110101110000101001 # 0.14
+Number mix_32,        1,0!10100011110101110000101  # 0.08
+Number mix_33,        1,0!11100001010001111010111  # 0.22
+Number mix_34,        1,0!1011100001010001111011   # 0.18
+Number mix_35,        1,0!1011100001010001111011   # 0.09
+
+# Scalar rates: the reset rate, the mean-square rate, the trace decay
+# and the initial weight.
+
+Number rate_reset,    1,0!10011101010010010101001  # 0.0024
+Number ms_rate,       1,0!101111000110101001111111 # 0.023
+Number decay,         1,0!1100011110101110000101   # 0.78
+Number seed,          1,0!1100001010001111010111   # 0.19
+
+# ---------------------------------------------------------------------
+# Context quantisers.  These are thresholds, not sizes, so they stay live.
+# ---------------------------------------------------------------------
+
+# Delta-context edges: the ladder the P2 context level climbs.
+
+Number ctx_edge_00,   1,0!10001
+Number ctx_edge_01,   1,0!10100
+Number ctx_edge_02,   1,0!11011
+Number ctx_edge_03,   1,0!100101
+Number ctx_edge_04,   1,0!110001
+Number ctx_edge_05,   1,0!1000110
+Number ctx_edge_06,   1,0!1011101
+Number ctx_edge_07,   1,0!1111100
+Number ctx_edge_08,   1,0!10011101
+Number ctx_edge_09,   1,0!10111111
+Number ctx_edge_10,   1,0!11001101
+Number ctx_edge_11,   1,0!11100100
+Number ctx_edge_12,   1,0!11101011
+Number ctx_edge_13,   1,0!11101100
+Number ctx_edge_14,   1,0!11101101
+
+# Run-length context edges.
+
+Number len_edge_00,   1,0!100
+Number len_edge_01,   1,0!110
+Number len_edge_02,   1,0!1000
+Number len_edge_03,   1,0!1011
+Number len_edge_04,   1,0!1110
+Number len_edge_05,   1,0!10001
+Number len_edge_06,   1,0!10101
+Number len_edge_07,   1,0!11001
+Number len_edge_08,   1,0!11110
+Number len_edge_09,   1,0!100101
+Number len_edge_10,   1,0!101101
+Number len_edge_11,   1,0!110111
+Number len_edge_12,   1,0!1000011
+Number len_edge_13,   1,0!1010111
+Number len_edge_14,   1,0!1111000
+
+# Band edges, and the four-way threshold sets they select.
+
+Number band_edge_0,   1,0!101011
+Number band_edge_1,   1,0!10001
+Number band_edge_2,   1,0!1001
+Number band_edge_3,   1,0!101
+Number band_edge_4,   1,0!10
+
+Number thr_0_00,      1,0!110
+Number thr_0_01,      1,0!1110
+Number thr_0_02,      1,0!11100
+Number thr_0_03,      1,0!100
+Number thr_0_04,      1,0!1000
+Number thr_0_05,      1,0!11010
+Number thr_0_06,      1,0!1000000000000
+Number thr_0_07,      1,0!1100000000000
+Number thr_0_08,      1,0!11001100000000
+Number thr_0_09,      1,0!10100000000000
+Number thr_0_10,      1,0!11100000000000
+Number thr_0_11,      1,0!110100000000000
+Number thr_0_12,      1,0!1001000000000000
+
+Number thr_1_00,      1,0!100
+Number thr_1_01,      1,0!1111
+Number thr_1_02,      1,0!101010
+Number thr_1_03,      1,0!1
+Number thr_1_04,      1,0!1000
+Number thr_1_05,      1,0!10011
+Number thr_1_06,      1,0!101000000000
+Number thr_1_07,      1,0!1101100000000
+Number thr_1_08,      1,0!10110000000000
+Number thr_1_09,      1,0!10100000000000
+Number thr_1_10,      1,0!111000000000000
+Number thr_1_11,      1,0!10001100000000000
+Number thr_1_12,      1,0!100010000000000000
+
+Number thr_2_00,      1,0!101
+Number thr_2_01,      1,0!1110
+Number thr_2_02,      1,0!10101
+Number thr_2_03,      1,0!100
+Number thr_2_04,      1,0!1001
+Number thr_2_05,      1,0!11001
+Number thr_2_06,      1,0!111100000000
+Number thr_2_07,      1,0!10000100000000
+Number thr_2_08,      1,0!10111100000000
+Number thr_2_09,      1,0!100000000000000
+Number thr_2_10,      1,0!110100000000000
+Number thr_2_11,      1,0!1010100000000000
+Number thr_2_12,      1,0!10100100000000000
+
+Number thr_3_00,      1,0!110
+Number thr_3_01,      1,0!1011
+Number thr_3_02,      1,0!10100
+Number thr_3_03,      1,0!101
+Number thr_3_04,      1,0!1011
+Number thr_3_05,      1,0!10111
+Number thr_3_06,      1,0!101100000000
+Number thr_3_07,      1,0!1011100000000
+Number thr_3_08,      1,0!10100100000000
+Number thr_3_09,      1,0!101100000000000
+Number thr_3_10,      1,0!1000000000000000
+Number thr_3_11,      1,0!1100100000000000
+Number thr_3_12,      1,0!100000000000000000
+
+Number thr_4_00,      1,0!0
+Number thr_4_01,      1,0!1011
+Number thr_4_02,      1,0!11110
+Number thr_4_03,      1,0!111
+Number thr_4_04,      1,0!1101
+Number thr_4_05,      1,0!10110
+Number thr_4_06,      1,0!1000100000000
+Number thr_4_07,      1,0!10000100000000
+Number thr_4_08,      1,0!11101000000000
+Number thr_4_09,      1,0!100000000000000
+Number thr_4_10,      1,0!1001100000000000
+Number thr_4_11,      1,0!1110000000000000
+Number thr_4_12,      1,0!10111000000000000
+
+Number thr_5_00,      1,0!111
+Number thr_5_01,      1,0!1010
+Number thr_5_02,      1,0!11111
+Number thr_5_03,     -1,0!1
+Number thr_5_04,      1,0!1011
+Number thr_5_05,      1,0!10101
+Number thr_5_06,     -1,0!100000000
+Number thr_5_07,      1,0!10000000000
+Number thr_5_08,      1,0!1011100000000
+Number thr_5_09,     -1,0!100000000000
+Number thr_5_10,     -1,0!100000000000
+Number thr_5_11,     -1,0!100000000000
+Number thr_5_12,      1,0!100011100000000000
+
+# The bank rotation and the b1 reload ladder.
+
+Number rotate_0,      1,0!100
+Number rotate_1,      1,0!1000
+Number rotate_2,      1,0!1100
+Number rotate_3,      1,0!1000
+
+Number b1_reload_0,   1,0!111
+Number b1_reload_1,   1,0!101110
+Number b1_reload_2,   1,0!11000101
+

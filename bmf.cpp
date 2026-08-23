@@ -26,6 +26,7 @@
 #define if_e1(x) if(__builtin_expect((x),1))
 
 #include "bmf_util.inc"
+#include "bmf_idx.inc"
 #include "bmf_tables.inc"
 #include "apm.inc"
 #include "records.inc"

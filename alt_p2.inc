@@ -242,7 +242,7 @@ int32_t over_thresholds(int32_t n, const int32_t* t, int32_t lo, int32_t hi, int
   return over;
 }
 
-const int32_t p2_band_edges[5] = {43, 17, 9, 5, 2};
+const int32_t p2_band_edges[5] = {P2_band_edge_0, P2_band_edge_1, P2_band_edge_2, P2_band_edge_3, P2_band_edge_4};
 
 int32_t grad(int32_t a, int32_t b, int32_t c) {
   return a+b-c;
