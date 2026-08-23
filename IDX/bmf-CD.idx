@@ -35,3 +35,23 @@ Number dc_window_lo,     1,0!100
 Number dc_window_hi,     1,0!10000000000
 Number dc_diff_lo,       1,0!0
 Number dc_diff_hi,       1,0!1000000000
+
+# Decision margins.  A representation that is only marginally better is not
+# worth the risk of a different code path, so several trials keep the incumbent
+# unless the challenger wins by more than a fraction of its cost.  Each is the
+# shift in "beats it by more than 1/2^shift".
+
+Number keep_shift,     1,0!1100
+Number model_shift,    1,0!101
+
+# Strip splitting: the trial is only run when the two halves of a plane differ
+# enough in alphabet size to plausibly want different coding modes -- the height
+# below which a split is pointless, the alphabet size that counts as small, the
+# ratio and the offset in the "much larger" test, and the shortest strip worth
+# coding.
+
+Number strip_min_h,    1,0!100000
+Number strip_small,    1,0!10000
+Number strip_ratio,    1,0!10
+Number strip_offset,   1,0!1000
+Number strip_min_rows, 1,0!1000

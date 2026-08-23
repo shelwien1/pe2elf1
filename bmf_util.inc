@@ -89,6 +89,13 @@ uint32_t umin32(uint32_t a, uint32_t b) {
 // disagreeing -- which would put a factor of two between the weights the
 // encoder fits and the divisor it applies them with.
 const int32_t kWeightShift = idx_clamp(CD_weight_shift, 1, 16);
+
+// The two decision margins: a challenger has to beat the incumbent by more
+// than 1/2^shift of its own cost to displace it.  kKeepShift guards the
+// representation trials (transpose, mirror, palette order, colour space),
+// kModelShift the per-plane model choice.
+const int32_t kKeepShift = idx_clamp(CD_keep_shift, 1, 24);
+const int32_t kModelShift = idx_clamp(CD_model_shift, 1, 24);
 const int32_t kWeightScale = 1<<kWeightShift;
 
 int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {

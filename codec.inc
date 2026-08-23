@@ -1233,7 +1233,7 @@ struct BMFCodec : BMFState {
     apply_geometry(tile_img, op);
     const uint32_t est = choose_plane_coding(tile_img);
     const PlaneSearch pt = search_planes(tile_img, tile_buf, plane_cost);
-    const bool kept = pt.bits+(pt.bits>>12)>=best_bits;
+    const bool kept = pt.bits+(pt.bits>>kKeepShift)>=best_bits;
     bmf_log("    %-22s %12.1f bytes%s\n", name, bmf_bytes(pt.bits), kept ? "" : "  <<");
     if( kept ) {
       apply_geometry(tile_img, op);
@@ -1356,7 +1356,7 @@ struct BMFCodec : BMFState {
         permute_indices(tile_img, po.rank);
         choose_plane_coding(tile_img);
         const PlaneSearch pp = search_planes(tile_img, tile_buf, plane_cost);
-        const bool kept_order = pp.bits+(pp.bits>>12)>=best_bits;
+        const bool kept_order = pp.bits+(pp.bits>>kKeepShift)>=best_bits;
         bmf_log("    %-22s %12.1f bytes%s\n", "palette in luma order", bmf_bytes(pp.bits), kept_order ? "" : "  <<");
         if( kept_order ) {
           permute_indices(tile_img, po.ord);
@@ -1389,7 +1389,7 @@ struct BMFCodec : BMFState {
       PlaneSearch py = ps;
       if( worth_it )
         py = search_planes(tile_img, tile_buf, plane_cost);
-      const bool kept_rgb = !worth_it||py.bits+(py.bits>>12)>=best_bits;
+      const bool kept_rgb = !worth_it||py.bits+(py.bits>>kKeepShift)>=best_bits;
       if( worth_it )
         bmf_log("    %-22s %12.1f bytes%s\n", "YCoCg-R lifted", bmf_bytes(py.bits), kept_rgb ? "" : "  <<");
       else
@@ -1426,7 +1426,7 @@ struct BMFCodec : BMFState {
       for( int32_t k = 0; k<2; ++k ) {
         move_alpha_to(k ? 0 : 2);
         const PlaneSearch pa = search_planes(tile_img, tile_buf, plane_cost);
-        const bool kept_order = pa.bits+(pa.bits>>12)>=best_bits;
+        const bool kept_order = pa.bits+(pa.bits>>kKeepShift)>=best_bits;
         bmf_log("    %-22s %12.1f bytes%s\n", where[k], bmf_bytes(pa.bits), kept_order ? "" : "  <<");
         if( kept_order ) {
           restore_descriptors(saved_desc);
@@ -1755,7 +1755,7 @@ struct BMFCodec : BMFState {
           best_flags = 0;
       }
       const int32_t bits_f5 = probe_keep(plane_i, try_p1);
-      if( bits_f5<best_cost+(best_cost>>5)||out.n_p2 )
+      if( bits_f5<best_cost+(best_cost>>kModelShift)||out.n_p2 )
         probe_keep(plane_i, try_p2);
       // The direct context model, offered only to a single 8-bit plane of at
       // most sixteen distinct values -- that is what its context key can hold,
@@ -1768,7 +1768,7 @@ struct BMFCodec : BMFState {
         probe_keep(plane_i, try_refs);
         const int32_t bits_f13 = probe_keep(plane_i, try_refs_p1);
         pred = best_flags&desc_predictor;
-        if( pred==pred_p2||best_cost+(best_cost>>5)>bits_f13 ) {
+        if( pred==pred_p2||best_cost+(best_cost>>kModelShift)>bits_f13 ) {
           probe_keep(plane_i, try_refs_p2);
           if( won )
             pred = pred_p2;

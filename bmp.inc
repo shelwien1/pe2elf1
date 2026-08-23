@@ -343,7 +343,7 @@ BmfImage*strip_image(const BmfImage* img, int32_t y0, int32_t y1) {
 // it never fires, so the strip trial costs nothing here.
 bool strips_worth_trying(const BmfImage* img) {
   const int32_t h = img[0].height;
-  if( h<32||(img[0].flags&flags_packed) )
+  if( h<CD_strip_min_h||(img[0].flags&flags_packed) )
     return false;
   const int32_t planes = ((img[0].depth&depth_bits)+7)>>3;
   if( planes!=1 )
@@ -363,7 +363,8 @@ bool strips_worth_trying(const BmfImage* img) {
   }
   const int32_t lo = counts[0]<counts[1] ? counts[0] : counts[1];
   const int32_t hi = counts[0]<counts[1] ? counts[1] : counts[0];
-  return (lo<=16)!=(hi<=16)||hi>=2*lo+8;
+  return (lo<=CD_strip_small)!=(hi<=CD_strip_small)
+         ||hi>=CD_strip_ratio*lo+CD_strip_offset;
 }
 
 enum : uint32_t {

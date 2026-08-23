@@ -105,7 +105,7 @@ int32_t bmf_compress_body(BmfFile* arc, BmfImage* p_i) {
     uint8_t* buf[kMaxStrips] = {nullptr, nullptr, nullptr, nullptr};
     size_t len[kMaxStrips] = {0, 0, 0, 0};
     size_t total = 0;
-    bool ok = height/n>=8;
+    bool ok = height/n>=CD_strip_min_rows;
     for( int32_t k = 0; ok&&k<n; ++k ) {
       const int32_t y0 = (int32_t)((int64_t)height*k/n), y1 = (int32_t)((int64_t)height*(k+1)/n);
       BmfImage* part = strip_image(p_i, y0, y1);
