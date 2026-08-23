@@ -316,9 +316,11 @@ crash the program when swept is a bug in the consumer. It flips pattern bits at
 random across every parameter at once and round-trips images through the patched
 binary, looking for a crash, a hang, or a round trip that stops matching.
 
-Driven to each parameter's two extremes one at a time -- which is what it does
-by default -- it found thirteen unguarded on the first pass and four more that
-only showed up once those were fixed, in five kinds, all now closed:
+Driven to each parameter's two extremes one at a time — which is what it does
+by default — it now reports **0 of 1030**. Getting there took six passes:
+each round of fixes let the sweep reach further in, and the `Index` port opened
+new ground, because a declaration whose Volume contains a live mapping's `Size`
+can grow past the array that Volume sized. Seven kinds, all now closed:
 
 * A probability ceiling swept to zero leaves the range coder a zero-width
   interval, and a floor above the ceiling inverts every clamp. The two are
@@ -338,6 +340,19 @@ only showed up once those were fixed, in five kinds, all now closed:
   nothing to contribute, so the guard is the answer rather than a paper-over —
   and the collapse now shows up where it happens rather than three layers away.
 
-That last one took two rounds of guessing from signal numbers before the
-obvious move worked: build with `-fsanitize=integer-divide-by-zero`, patch the
-single parameter, and let it name the line.
+* A table sized by a Volume, bounded by that Volume, and grown by a widened
+  bitmap: the check grew along with the context and stopped checking anything.
+  Those tables are sized and bounded by a frozen capacity now, and carry one
+  spare element past it, because several callers reach a neighbour with `[+1]`.
+* An index reached by adding to a bounded base pointer, which is not the same
+  thing as a bounded index.
+
+Twice the fastest route was a sanitizer rather than another round of reasoning
+from signal numbers: build with `-fsanitize=address` or
+`-fsanitize=integer-divide-by-zero`, patch the one parameter, and let it name
+the line.
+
+A **refusal is not a failure**. Some values are genuinely unworkable — a mixer
+granularity that no longer matches the fields packed under it — and the codec
+exits with a status rather than pressing on, which `opt.pl` scores as infinite
+cost and reverts. The test accepts a positive exit status and rejects a signal.
