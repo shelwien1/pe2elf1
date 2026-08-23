@@ -83,8 +83,8 @@ struct ModelBlock {
   static const int32_t kFreqGridCount = MB_freq_grid_count;
   FreqRec grid[kFreqGridCount];
   uint8_t _pad1051664[16];
-  BitCtr bit_root[16];
-  BitCtr bit_node[4096];
+  BitCtr bit_root[MB_CandFallback_Volume];
+  BitCtr bit_node[MB_CandNode_Volume];
   // One map per cell kind: the context cell and the bucket cell it falls back
   // to have different distributions and different amounts of evidence.
   Apm level_apm[2][4];
@@ -422,22 +422,27 @@ struct ModelBlock {
     bool far = false;
     for( band = MB_near_hi; band<MB_far_hi; ++band )
       far |= result==nb[band];
-    int32_t near_hit = CtxIdx{}.bit<IX_model_near_hit_p0>(result==nb[MB_exact_rank]).bit<IX_model_near_hit_p1>(near);
-    int32_t far_hit = CtxIdx{}.bit<IX_model_far_hit_p0>(far);
-    int32_t ctx0 = far_hit+near_hit;
-    if( (far_hit+near_hit==0)&&pos>MB_pos_bare )
+    const bool exact = result==nb[MB_exact_rank];
+    // The bare test was on the packed value being zero, which is the same as
+    // none of the three hits firing.
+    if( !exact&&!near&&!far&&pos>MB_pos_bare )
       return -1;
     SymList* sel0 = sel0_list;
-    int32_t ctx1 = CtxIdx{}.bit<IX_model_ctx1_p0>(sym_in_top((sel0[cx[0].mode_symbol[1]].ent), MB_top_depth_0, result)).raw(ctx0);
     SymEntry* list_prev = sel0[cx[0].mode_symbol[2]].ent;
     SymEntry* list_sym = sel0[result].ent;
-    int32_t fallback = CtxIdx{}.bit<IX_model_fallback_p0>(sym_in_top(list_prev, MB_top_depth_1, result)).bit<IX_model_fallback_p1>(sym_in_top(list_sym, MB_top_depth_2, cx[0].mode_symbol[2])).bit<IX_model_fallback_p2>(sym_in_top((sel0[cx[0].mode_symbol[3]].ent), MB_top_depth_3, result));
-    int32_t ctx2 = fallback+ctx1;
+    const int32_t ctx2 = (int32_t)MakeCandCtx(
+        exact, near, far,
+        sym_in_top((sel0[cx[0].mode_symbol[1]].ent), MB_top_depth_0, result),
+        sym_in_top(list_prev, MB_top_depth_1, result),
+        sym_in_top(list_sym, MB_top_depth_2, cx[0].mode_symbol[2]),
+        sym_in_top((sel0[cx[0].mode_symbol[3]].ent), MB_top_depth_3, result));
     if( pos<=MB_pos_split||(ctx2&0xB)!=0 ) {
-      ctr_node = (int32_t)idx_bound(CtxIdx{}.above<IX_model_ctr_node_p0>(pos).raw(ctx2),
-                                   sizeof bit_node/sizeof bit_node[0]);
-      ctr_fallback = (int32_t)idx_bound(CtxIdx{}.bit<IX_model_ctr_fallback_p0>(pos>MB_pos_deep).raw(fallback),
-                                       sizeof bit_root/sizeof bit_root[0]);
+      ctr_node = (int32_t)idx_bound(MakeCandNode((uint32_t)pos, (uint32_t)ctx2),
+                                   MB_CandNode_Volume);
+      // The fallback is the low three factors of the same index.
+      ctr_fallback = (int32_t)idx_bound(MakeCandFallback((uint32_t)(pos>MB_pos_deep),
+                                                        (uint32_t)ctx2&7u),
+                                       MB_CandFallback_Volume);
     } else {
       return -1;
     }

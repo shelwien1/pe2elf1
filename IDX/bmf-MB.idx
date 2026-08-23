@@ -79,3 +79,26 @@ Index Bucket
 Index RunCtr
  ADD 3: novel
  ADD 16: bucket
+
+# The candidate context: three neighbourhood-hit flags over four
+# list-membership flags.  Volume 128.
+
+Index CandCtx
+ ADD 2: exact
+ ADD 2: near
+ ADD 2: far
+ ADD 2: in_top
+ ADD 2: in_prev
+ ADD 2: in_sym
+ ADD 2: in_sel
+
+# The counter node it addresses, under the rank position.  Volume 4096, which
+# is what bit_node holds -- and the fallback pair's is 16, which is bit_root.
+
+Index CandNode
+ ADD 32: pos
+ ADD %M%CandCtx_Volume: ctx
+
+Index CandFallback
+ ADD 2: deep
+ ADD 8: fallback
