@@ -299,11 +299,21 @@ three counts.
   rate costs `x_ci` 20 000 bytes and `x_ai` 33 000. Where a context sees tens of
   samples the adaptation schedule is worth far more than it is here, where a
   cell sees thousands.
-* **State machines instead of counts.** Replace the count pair with an 8-bit
-  state (bit history) indexing an adaptive probability table, as in the
-  `nex()`/`StateMap` construction. It is smaller per context — 1 byte against
-  6 — and better, because the table entry is shared across all contexts in the
-  same state and therefore learns far faster.
+* **State machines instead of counts — built alongside, and worth 8 bytes
+  [measured].** `BitCtr` gained an 8-bit bit history indexing a table shared by
+  every context in the same state, mixed with the count pair's own estimate
+  (mixed rather than replacing it, so it could only help). `t24` −4, `t32` −4,
+  and every other corpus image byte-identical. Reverted: a 16 KB table and a
+  mix per scan bit is not worth 8 bytes.
+
+  The reason it has so little to work on is worth stating, because it is a
+  consequence of §7 rather than a fact about state machines. `BitCtr` codes the
+  slow model's stage-two candidate scan, and the images that escape to that scan
+  most — `x_ci`, `x_ai`, `DLRAW`, `f05_200` — now go to the context model
+  instead. What is left on `BitCtr` is a thin tail. The construction is still
+  the right one for a model that leans on it; this codec no longer does. Its
+  other advantage — 1 byte per context against 6 — is a memory argument for §7,
+  and §7's model has its own representation.
 
 The memory saved is not incidental: alt-P1's table is 10 MB because each context
 costs 16 bytes. At 1–2 bytes per context the same budget buys 5–10× more
@@ -340,9 +350,15 @@ independent of each other:
   from its parent statistics. This keeps long-term memory while restoring some
   ability to track — the standard answer to annealed counters on large inputs.
 
-**Expected [expected].** 2–5 % combined for the counter changes, plus something
-unquantified for the forgetting policy — most visible on the largest images,
-which is where the corpus is weakest at telling us.
+**[measured] rather than expected, now that all three are built.** The dual-rate
+counter is worth 188 bytes on `x_ep`; the state machine 8 bytes on `t24` and
+`t32`; the forgetting policy nothing at all, at any setting. Against the 2–5 %
+this section expected, the combined measured total is under 0.02 % — and the one
+place the same ideas *were* worth a great deal is §7's context model, whose
+count-adaptive counters are worth 20 000 bytes on `x_ci` against a fixed rate.
+The lesson is not that counter representation does not matter. It is that it
+matters where a context sees tens of samples, and every context in this codec
+that saw tens of samples has been moved to a model that already does this.
 
 **Cost.** Localised — `counters.inc` plus the update sites. Independent of §2.
 
