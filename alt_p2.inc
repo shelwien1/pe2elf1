@@ -202,9 +202,9 @@ struct NbRow {
         w[j][k] = mixed[j][k]*bmf_p2_decay;
         w[j+7][k] = sets[0].row[0][0].w[j+7][k]*bmf_p2_seed;
       }
-    w[14][0] = 47.0f;
-    w[14][1] = 169.2f;
-    w[14][2] = 1.0f;
+    w[14][0] = idx_f(P2_cov_seed, 0);
+    w[14][1] = idx_f(P2_var_seed, 16);
+    w[14][2] = idx_f(P2_msscale_seed, 0);
     nb[7][1] = prediction;
     return (int32_t)prediction;
   }
@@ -330,8 +330,8 @@ struct AltP2Block {
     }
     NbRow*const wrow = &nb_weights[at];
     nb_cur = wrow;
-    const float err = ((float)c0[-1].val-(nb_dot(wrow[0].w, p2_row)+bias[0]))*2.0999999f;
-    const float floor_ = 7744.0f*wrow[0].w[14][2];
+    const float err = ((float)c0[-1].val-(nb_dot(wrow[0].w, p2_row)+bias[0]))*idx_f(P2_seat_gain, 21);
+    const float floor_ = idx_f(P2_seat_floor, 0)*wrow[0].w[14][2];
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
         nlms_step(wrow, j, k, p2_row[j][k], err, bmf_p2_ms_rate, floor_);
@@ -364,13 +364,13 @@ struct AltP2Block {
   }
 
   void nlms_track_two_rows(NbRow* fast, NbRow* slow, float err_fast, float err_slow, float conf) {
-    const float floor_fast = 26896.0f*fast[0].w[14][2];
-    const float floor_slow = 5041.0f*slow[0].w[14][2];
-    const float rate_slow = 0.013f*conf;
+    const float floor_fast = idx_f(P2_floor_fast, 0)*fast[0].w[14][2];
+    const float floor_slow = idx_f(P2_floor_slow, 0)*slow[0].w[14][2];
+    const float rate_slow = idx_f(P2_rate_slow, 28)*conf;
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k ) {
         const float x = p2_row[j][k];
-        nlms_step(fast, j, k, x, err_fast, 0.05f, floor_fast);
+        nlms_step(fast, j, k, x, err_fast, idx_f(P2_ms_rate_fast, 28), floor_fast);
         nlms_step(slow, j, k, x, err_slow, rate_slow, floor_slow);
       }
   }
@@ -380,9 +380,9 @@ struct AltP2Block {
     const float ms_scale = row[0].w[14][2];
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
-        row[0].w[j][k] += cx[0].p2_rate[j][k]*err*p2_row[j][k]/(row[0].w[7+j][k]+ms_scale*529.0f);
+        row[0].w[j][k] += cx[0].p2_rate[j][k]*err*p2_row[j][k]/(row[0].w[7+j][k]+ms_scale*idx_f(P2_ms_floor, 0));
     ++row[0].uses;
-    row[0].w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
+    row[0].w[14][2] = ms_scale+((idx_f(P2_msscale_target, 0)-ms_scale)*idx_f(P2_msscale_rate, 36));
   }
 
   struct P2RefRows {
@@ -787,7 +787,7 @@ struct AltP2Block {
     if( refa )
       g3pair += (rb0[0].aerr+ra0[0].aerr)>>1;
     int32_t g3sum = c1[3].aerr+c1[-1].aerr+c0[-1].aerr+c0[-3].aerr+c0[-4].aerr+c0[-2].aerr;
-    ctx0_lo = CtxIdx{}.bit<19>(c1[1].err+c1[0].err+c1[-1].err+c0[-1].err<0).bit<18>(c3[0].err+c0[-2].err+2*c0[-4].err<0).bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0).bit<16>(c0[-1].err<0).bit_of<15>((uint16_t)c0[-3].err).bits<13, 2>((filt>3536)+(filt>720)+(filt>288)).bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
+    ctx0_lo = CtxIdx{}.bit<19>(c1[1].err+c1[0].err+c1[-1].err+c0[-1].err<0).bit<18>(c3[0].err+c0[-2].err+2*c0[-4].err<0).bit<17>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0).bit<16>(c0[-1].err<0).bit_of<15>((uint16_t)c0[-3].err).bits<13, 2>((filt>P2_filt_thr_0)+(filt>P2_filt_thr_1)+(filt>P2_filt_thr_2)).bits<11, 2>(((g3pair+g3sum)>P2_g3_thr_0)+((g3pair+g3sum)>P2_g3_thr_1)+((g3pair+g3sum)>P2_g3_thr_2));
     if( refa ) {
       ctx0 = CtxIdx{}.bit<25>(rb0[-1].err<0).bit<24>(rb0[0].err<0).bit<23>(ra0[-1].err<0).bit<22>(rb0[0].err+rb0[-2].err<0).bit<21>(ra0[-2].err+ra0[0].err<0).bit<20>(c0[-2].err<0).raw(ctx0_lo);
     } else {
@@ -802,10 +802,10 @@ struct AltP2Block {
     int32_t d_up5 = up5-run0;
     if( refa ) {
       int32_t dv_now = c0[0].dval;
-      ctx1 = CtxIdx{}.bit_of<25>(c0[-1].val+ra0[0].val-ra0[-1].val-run0).bit<24>(ra2[0].dval+ra1[0].dval-2*ra0[0].dval<0).bit_of<23>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval)).bit_of<22>(dv_now+c0[-5].dval-run0).bit_of<21>(dv_now+c1[0].dval+rb1[2].dval-rb2[2].dval-run0).bit_of<20>(dv_now+c0[-1].dval+rb0[0].dval-rb0[-1].dval-run0).bit_of<19>(c2[-1].dval+dv_now+ra0[0].dval-ra2[-1].dval-run0).bit_of<18>(dv_now+c1[2].dval+ra0[0].dval-ra1[2].dval-run0).bit_of<17>(d_up5).bit_of<16>(d_up).bit_of<15>(d_run0).raw(ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
+      ctx1 = CtxIdx{}.bit_of<25>(c0[-1].val+ra0[0].val-ra0[-1].val-run0).bit<24>(ra2[0].dval+ra1[0].dval-2*ra0[0].dval<0).bit_of<23>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval)).bit_of<22>(dv_now+c0[-5].dval-run0).bit_of<21>(dv_now+c1[0].dval+rb1[2].dval-rb2[2].dval-run0).bit_of<20>(dv_now+c0[-1].dval+rb0[0].dval-rb0[-1].dval-run0).bit_of<19>(c2[-1].dval+dv_now+ra0[0].dval-ra2[-1].dval-run0).bit_of<18>(dv_now+c1[2].dval+ra0[0].dval-ra1[2].dval-run0).bit_of<17>(d_up5).bit_of<16>(d_up).bit_of<15>(d_run0).raw(ctx_quant(run0, P2_q0a_r0, P2_q0a_r1, P2_q0a_r2, sum_all, P2_q0a_s0, P2_q0a_s1, P2_q0a_s2));
     } else {
       int32_t d_run0b = run0-c0[-3].val;
-      ctx1 = CtxIdx{}.bit_of<25>(nb4_4-c3[0].val+run0-c1[4].val).bit_of<24>(c1[-5].val-c1[-2].val+d_run0b).bit_of<23>(d_run0b+c1[2].val-up5).bit_of<22>(c4[3].val-c2[2].val+run0-c2[1].val).bit_of<21>(c4[-1].val-c3[0].val+run0-c1[-1].val).bit_of<20>(c1[0].val-c1[2].val+run0-c0[-2].val).bit_of<19>(-d_up5).bit_of<18>(-d_up).bit_of<17>(run0-c4[2].val).bit_of<16>(run0-c4[-3].val).bit_of<15>(-d_run0).raw(ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11));
+      ctx1 = CtxIdx{}.bit_of<25>(nb4_4-c3[0].val+run0-c1[4].val).bit_of<24>(c1[-5].val-c1[-2].val+d_run0b).bit_of<23>(d_run0b+c1[2].val-up5).bit_of<22>(c4[3].val-c2[2].val+run0-c2[1].val).bit_of<21>(c4[-1].val-c3[0].val+run0-c1[-1].val).bit_of<20>(c1[0].val-c1[2].val+run0-c0[-2].val).bit_of<19>(-d_up5).bit_of<18>(-d_up).bit_of<17>(run0-c4[2].val).bit_of<16>(run0-c4[-3].val).bit_of<15>(-d_run0).raw(ctx_quant(run0, P2_q0b_r0, P2_q0b_r1, P2_q0b_r2, sum_all, P2_q0b_s0, P2_q0b_s1, P2_q0b_s2));
     }
     const int32_t run1 = step_bank(1, ctx1, run0);
     int32_t cx2_val0 = c2[0].val;
@@ -816,18 +816,18 @@ struct AltP2Block {
     if( refa ) {
       int32_t dv1 = c1[1].dval;
       int32_t d_ra = ra0[0].val-run1;
-      ctx2 = CtxIdx{}.bit_of<25>(c0[0].dval+c1[-1].dval-run1-(c2[0].dval-dv1)).bit_of<24>(c0[0].dval+c0[-1].dval-run1-(c1[0].dval-dv1)).bit_of<23>(rb0[0].val-run1+cx2_val0-rb2[0].val).bit_of<22>(d_ra+cx2_val0-ra2[0].val).bit_of<21>(d_ra+c1[-1].val-ra1[-1].val).bit_of<20>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1).bit_of<19>(2*cx1_val-run1-cx2_val0).bit_of<18>(-lap).bit_of<17>(dtop2).bit_of<16>(dvsum2).bit_of<15>(208-rb0[0].val).raw(ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
+      ctx2 = CtxIdx{}.bit_of<25>(c0[0].dval+c1[-1].dval-run1-(c2[0].dval-dv1)).bit_of<24>(c0[0].dval+c0[-1].dval-run1-(c1[0].dval-dv1)).bit_of<23>(rb0[0].val-run1+cx2_val0-rb2[0].val).bit_of<22>(d_ra+cx2_val0-ra2[0].val).bit_of<21>(d_ra+c1[-1].val-ra1[-1].val).bit_of<20>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1).bit_of<19>(2*cx1_val-run1-cx2_val0).bit_of<18>(-lap).bit_of<17>(dtop2).bit_of<16>(dvsum2).bit_of<15>(P2_rb_bias-rb0[0].val).raw(ctx_quant(run1, P2_q1a_r0, P2_q1a_r1, P2_q1a_r2, sum_all, P2_q1a_s0, P2_q1a_s1, P2_q1a_s2));
     } else {
-      ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-c3[0].val).bit_of<24>(run1+c4[0].val-(c2[2].val+c2[-2].val)).bit_of<23>(c3[2].val-c2[-1].val+run1-c1[3].val).bit_of<22>(c3[1].val-c1[1].val-dtop2).bit_of<21>(c3[0].val-cx1_val-dtop2).bit_of<20>(lap).bit_of<19>(run1-c4[3].val).bit_of<18>(c3[1].val-run1).bit_of<17>(run1-c4[0].val).bit_of<16>(run1-c3[-2].val).bit_of<15>(-dvsum2).raw(ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13));
+      ctx2 = CtxIdx{}.bit_of<25>(run1+3*(cx2_val0-cx1_val)-c3[0].val).bit_of<24>(run1+c4[0].val-(c2[2].val+c2[-2].val)).bit_of<23>(c3[2].val-c2[-1].val+run1-c1[3].val).bit_of<22>(c3[1].val-c1[1].val-dtop2).bit_of<21>(c3[0].val-cx1_val-dtop2).bit_of<20>(lap).bit_of<19>(run1-c4[3].val).bit_of<18>(c3[1].val-run1).bit_of<17>(run1-c4[0].val).bit_of<16>(run1-c3[-2].val).bit_of<15>(-dvsum2).raw(ctx_quant(run1, P2_q1b_r0, P2_q1b_r1, P2_q1b_r2, sum_all, P2_q1b_s0, P2_q1b_s1, P2_q1b_s2));
     }
     const int32_t run2 = step_bank(2, ctx2, run1);
     int32_t run_dv3 = run2-c0[0].dval;
-    const uint32_t ctx3 = CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val).bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1[0].dval)>>1)+run_dv3).bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val).bit_of<22>(-(c2[2].val+run2-2*c1[1].val)).bit_of<21>(c1[-2].dval-c0[-2].val+run2-c1[0].dval).bit_of<20>(run2-c1[3].val).bit_of<19>(run_dv3-c2[1].dval).bit_of<18>(run2-c3[0].val).bit_of<17>(2*run2-c1[0].dval-(c1[0].val+c0[0].dval)).bit_of<16>(run2-c0[-1].dval-c0[0].dval).bit_of<15>(run2-c0[-3].val).raw(ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9));
+    const uint32_t ctx3 = CtxIdx{}.bit_of<25>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val).bit_of<24>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1[0].dval)>>1)+run_dv3).bit_of<23>(c2[-3].val-c1[-2].val+run2-c1[-1].val).bit_of<22>(-(c2[2].val+run2-2*c1[1].val)).bit_of<21>(c1[-2].dval-c0[-2].val+run2-c1[0].dval).bit_of<20>(run2-c1[3].val).bit_of<19>(run_dv3-c2[1].dval).bit_of<18>(run2-c3[0].val).bit_of<17>(2*run2-c1[0].dval-(c1[0].val+c0[0].dval)).bit_of<16>(run2-c0[-1].dval-c0[0].dval).bit_of<15>(run2-c0[-3].val).raw(ctx_quant(run2, P2_q2_r0, P2_q2_r1, P2_q2_r2, sum_all, P2_q2_s0, P2_q2_s1, P2_q2_s2));
     const int32_t run3 = step_bank(3, ctx3, run2);
     int32_t dv_now4 = c0[0].dval;
     int32_t run_dv4 = run3-dv_now4;
     int32_t run_up4 = run3+c3[0].val;
-    const uint32_t ctx4 = CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1[0].val)>>2)).bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4)).bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval)).bit_of<22>(run3-c0[-3].dval-dv_now4-(c1[0].val-c1[-3].val)).bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval)).bit_of<20>(c2[-2].val+run3-2*c1[-1].val).bit_of<19>(c2[0].dval-2*c1[0].dval+run_dv4).bit_of<18>((run3-c0[-1].val)-(c1[0].val-c1[-1].val)).bit_of<17>(run_dv4-c1[4].dval).bit_of<16>(run_dv4-c1[-2].dval).bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4).raw(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10));
+    const uint32_t ctx4 = CtxIdx{}.bit_of<25>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1[0].val)>>2)).bit_of<24>(run_up4-c0[-2].val-(c3[2].dval+dv_now4)).bit_of<23>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval)).bit_of<22>(run3-c0[-3].dval-dv_now4-(c1[0].val-c1[-3].val)).bit_of<21>(run_up4-dv_now4-(c1[1].val+c2[-1].dval)).bit_of<20>(c2[-2].val+run3-2*c1[-1].val).bit_of<19>(c2[0].dval-2*c1[0].dval+run_dv4).bit_of<18>((run3-c0[-1].val)-(c1[0].val-c1[-1].val)).bit_of<17>(run_dv4-c1[4].dval).bit_of<16>(run_dv4-c1[-2].dval).bit_of<15>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4).raw(ctx_quant(run3, P2_q3_r0, P2_q3_r1, P2_q3_r2, sum_all, P2_q3_s0, P2_q3_s1, P2_q3_s2));
     const int32_t run4 = step_bank(4, ctx4, run3);
     return seat_symbol_context(run4, refs);
   }
@@ -861,15 +861,15 @@ struct AltP2Block {
     const float own = bias[2];
     const float err_own = sample-own;
     const float d_pred = mixed-own;
-    const float cov = (((err_own*d_pred)-wrow_cur[0].w[14][0])*0.001f)+wrow_cur[0].w[14][0];
-    const float var = (wrow_cur[0].w[14][1]+0.000099999997f)+(((d_pred*d_pred)-wrow_cur[0].w[14][1])*0.001f);
+    const float cov = (((err_own*d_pred)-wrow_cur[0].w[14][0])*idx_f(P2_cov_rate, 33))+wrow_cur[0].w[14][0];
+    const float var = (wrow_cur[0].w[14][1]+idx_f(P2_var_floor, 37))+(((d_pred*d_pred)-wrow_cur[0].w[14][1])*idx_f(P2_var_rate, 33));
     wrow_cur[0].w[14][1] = var;
-    float cov_kept = 0.1f*var;
+    float cov_kept = idx_f(P2_cov_keep, 27)*var;
     if( cov_kept<=cov )
       cov_kept = fminf(var, cov);
     wrow_cur[0].w[14][0] = cov_kept;
-    const float conf = (1.0f-(cov_kept/(var+576.0f)))*2.0f;
-    nlms_track_two_rows(wrow_cur, wrow_b, (sample-mixed)*2.5999999f, err_own*conf, conf);
+    const float conf = (1.0f-(cov_kept/(var+idx_f(P2_conf_floor, 0))))*idx_f(P2_conf_gain, 0);
+    nlms_track_two_rows(wrow_cur, wrow_b, (sample-mixed)*idx_f(P2_mix_gain, 21), err_own*conf, conf);
     nlms_predict_and_correct(wrow_cur, sample, centre);
     cur[0] = nb_cur;
     ++cur;
@@ -1053,7 +1053,7 @@ struct AltP2Block {
     band_lo = -band-7;
     band_hi = band+8;
     row0 = row0_store;
-    nb_weights[0].w[14][2] = 1.0f;
+    nb_weights[0].w[14][2] = idx_f(P2_msscale_seed, 0);
     row1 = row1_store;
     cur = row0+img_w+2;
     if( img_w>-4 ) {
