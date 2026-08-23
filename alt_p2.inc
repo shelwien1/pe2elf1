@@ -576,8 +576,8 @@ struct AltP2Block {
     }
     const int32_t ctx15 = magsum>=P2_magsum_cap ? 15 : nb_ctx[magsum>>idx_clamp(P2_magsum_shift, 1, 12)];
     const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
-    ctx_pair[0] = CtxIdx{}.bits<IX_p2_ctx_pair_p0, IX_p2_ctx_pair_w0>(ctx15).raw(ctx_delta[ctx_idx+4]);
-    ctx_pair[1] = CtxIdx{}.bits<IX_p2_ctx_pair1_p0, IX_p2_ctx_pair1_w0>(ctx15).raw(ctx_delta[ctx_idx]);
+    ctx_pair[0] = MakeCtxPair((uint32_t)ctx_delta[ctx_idx+4], (uint32_t)ctx15);
+    ctx_pair[1] = MakeCtxPair((uint32_t)ctx_delta[ctx_idx], (uint32_t)ctx15);
     ctx = (int32_t)MakeP2Ctx(mixer_fwd(ctx_w, 5)>>kP2MixShift, (uint32_t)(flat_b==0),
                             (uint32_t)(flat_a==0), (uint32_t)ctx15);
     return ctx_idx;
@@ -705,8 +705,10 @@ struct AltP2Block {
       for( j = 0; j<width; ++j ) {
         P2Ctx* rec = cursor[0];
         int32_t q2 = rec[-1].val>>4;
-        ctx_pair[0] = ctx+ctx_delta[q2+4];
-        ctx_pair[1] = ctx+ctx_delta[q2];
+        // The delta is stored as its own digit, so reaching the strip means
+        // putting it back in place -- the same shift MakeCtxPair applies.
+        ctx_pair[0] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2+4], 0);
+        ctx_pair[1] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2], 0);
         P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<P2_q2_thr_0)+(q2<P2_q2_thr_1)]+ctx_w[4].w[1]);
         if constexpr( f_DEC ) {
           out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
@@ -1106,7 +1108,7 @@ struct AltP2Block {
       cx[0].ctx_bias[i] = 0;
     cursor[0] = buf[0]+8;
     for( uint32_t i = 0; i<0x104; ++i )
-      ctx_delta[i] = CtxIdx{}.above<IX_p2_ctx_delta_p0>(plane_idx).bits<IX_p2_ctx_delta_p1, IX_p2_ctx_delta_w1>(MakeP2Ctx(i));
+      ctx_delta[i] = (int32_t)MakeCtxDelta(plane_idx, MakeP2Ctx(i));
     for( n = 0; n<0x78; ++n )
       nb_ctx[n] = (int32_t)MakeP2Len((uint32_t)n);
     ctx = 15;

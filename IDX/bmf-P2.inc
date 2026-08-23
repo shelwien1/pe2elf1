@@ -78,3 +78,15 @@ uint32_t MakeP2Step( uint32_t msum, uint32_t ctx ) {
   MakeIndex P2Step
   return (uint32_t)P2Step;
 }
+
+uint32_t MakeCtxDelta( uint32_t plane, uint32_t lvl ) {
+  int32_t CtxDelta;
+  MakeIndex CtxDelta
+  return (uint32_t)CtxDelta;
+}
+
+uint32_t MakeCtxPair( uint32_t delta, uint32_t ctx15 ) {
+  int32_t CtxPair;
+  MakeIndex CtxPair
+  return (uint32_t)CtxPair;
+}

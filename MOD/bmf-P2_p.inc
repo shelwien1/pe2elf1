@@ -203,3 +203,21 @@ uint32_t MakeP2Step( uint32_t msum, uint32_t ctx ) {
   P2Step = P2Step*(64) + (ctx);
   return (uint32_t)P2Step;
 }
+
+uint32_t MakeCtxDelta( uint32_t plane, uint32_t lvl ) {
+  int32_t CtxDelta;
+
+  CtxDelta = 0;
+  CtxDelta = CtxDelta*(4) + (plane);
+  CtxDelta = CtxDelta*(16) + (lvl);
+  return (uint32_t)CtxDelta;
+}
+
+uint32_t MakeCtxPair( uint32_t delta, uint32_t ctx15 ) {
+  int32_t CtxPair;
+
+  CtxPair = 0;
+  CtxPair = CtxPair*(P2_CtxDelta_Volume) + (delta);
+  CtxPair = CtxPair*(16) + (ctx15);
+  return (uint32_t)CtxPair;
+}

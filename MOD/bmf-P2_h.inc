@@ -13,6 +13,8 @@
 
 
 
+
+
 pdesc( P2_coef_00_, 0, "110011001100110011001101" );
 static const int P2_coef_00 = P2_coef_00_.value * (-1);
 pdesc( P2_coef_01_, 0, "100011110101110000101001" );
@@ -534,6 +536,8 @@ static const int P2_Ctx2a_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 
 static const int P2_Ctx2b_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
 static const int P2_Ctx3_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
 static const int P2_Ctx4_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
+static const int P2_CtxDelta_Volume = 1* 4* 16; // 64
+static const int P2_CtxPair_Volume = 1* P2_CtxDelta_Volume* 16; // 0
 static const int P2_NbSlot_Volume = 1* 6* 5* 4* 4* 4; // 1920
 static const int P2_P2Ctx_Volume = 1* P2_ctxw_range* 2* 2* 16; // 0
 static const int P2_P2Step_Volume = 1* P2_ctxw_range* 64; // 0

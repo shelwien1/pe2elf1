@@ -507,3 +507,16 @@ Index P2Ctx
 Index P2Step
  ADD %M%ctxw_range: msum
  ADD 64: ctx
+
+# The delta context and the pair built on it.  ctx_pair addresses a frequency
+# strip, and CtxPair's Volume is 1024 -- which is exactly how many 254-entry
+# strips the model arena holds, so the arena's capacity and the context that
+# indexes it come from the same declaration.
+
+Index CtxDelta
+ ADD 4: plane
+ ADD 16: lvl
+
+Index CtxPair
+ ADD %M%CtxDelta_Volume: delta
+ ADD 16: ctx15
