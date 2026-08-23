@@ -9,3 +9,5 @@
 /IDX/*-const*
 /IDX/*_h.inc
 /IDX/*_p.inc
+__pycache__/
+*.pyc
