@@ -43,6 +43,7 @@ struct CtxModel {
   int32_t bits;
   int32_t nodes;
   int32_t nb_for_bits[5];
+  int32_t chosen_nb;
   int32_t nb[kOrders];
   int32_t table_bits[kOrders];
   uint32_t* ctr[kOrders];
@@ -60,6 +61,7 @@ struct CtxModel {
   int32_t match_pred;
   bool match_path;
   BMFState* cx;
+  uint64_t measured;
 
   // The distinct values in a plane, in ascending order.  Returns how many there
   // are, which may exceed kMaxAlpha -- the caller decides.
@@ -91,6 +93,7 @@ struct CtxModel {
     nb_for_bits[2] = 10;
     nb_for_bits[3] = 7;
     nb_for_bits[4] = 7;
+    chosen_nb = 0;
     alpha = 0;
     bits = 0;
     nodes = 0;
@@ -113,6 +116,7 @@ struct CtxModel {
     match_pred = 0;
     match_path = false;
     cx = nullptr;
+    measured = 0;
   }
 
   void set_alphabet(int32_t a) {
@@ -129,7 +133,7 @@ struct CtxModel {
     if( match_nb>40 )
       match_nb = 40;
     win_mask = match_nb*bits>=64 ? ~0ull : (((uint64_t)1<<(match_nb*bits))-1);
-    const int32_t longest = nb_for_bits[bits];
+    const int32_t longest = chosen_nb ? chosen_nb : nb_for_bits[bits];
     for( int32_t k = 0; k<kOrders; ++k ) {
       nb[k] = kShortNb+(longest-kShortNb)*k/(kOrders-1);
       table_bits[k] = k==0 ? bits*kShortNb : (k==kOrders-1 ? kTableBits : kMidBits);
@@ -138,11 +142,22 @@ struct CtxModel {
       to_idx[v] = 0;
     for( int32_t k = 0; k<alpha; ++k )
       to_idx[to_val[k]] = (uint8_t)k;
+  }
+
+
+  // Everything that adapts, back to where a fresh plane starts.  The encoder
+  // prices several neighbourhood lengths before it codes, and each of those
+  // passes leaves state behind; the decoder only ever makes the coding pass, so
+  // every pass has to begin identically or the two walk different models.
+  void reset_state() {
+    apm.Init();
+    mixer.Init();
     // Start the mixer where a count-weighted blend would be: a weight set whose
     // longest bucket has seen n samples begins at n/(n+24) on that table and
     // splits the rest between the shorter ones.  Descent finds this in a few
     // thousand samples anyway, but the sets for a barely-filled bucket see the
-    // fewest samples and are the ones that matter most.
+    // fewest samples and are the ones that matter most.  The match model starts
+    // with no weight at all: it has to earn it.
     for( int32_t b = 0; b<8; ++b ) {
       const int32_t n = 8*b+4;
       int32_t weights[kInputs];
@@ -153,6 +168,13 @@ struct CtxModel {
       for( int32_t node = 0; node<16; ++node )
         mixer.seed((b<<4)|node, weights);
     }
+    for( int32_t k = 0; k<kMatchLens; ++k )
+      match_p[k] = 40000u<<16;
+    win = 0;
+    match_ptr = -1;
+    match_len = 0;
+    match_pred = 0;
+    match_path = false;
   }
 
   void alloc_tables() {
@@ -246,7 +268,9 @@ struct CtxModel {
     cell = ((uint32_t)p<<16)|(uint32_t)n;
   }
 
-  template <int32_t f_DEC> int32_t code_symbol(uint32_t** rows, int32_t sym) {
+  // f_MEASURE prices the plane without running the coder, so a choice that has
+  // to go on the wire can be made on a crop for a fraction of a trial encode.
+  template <int32_t f_DEC, int32_t f_MEASURE> int32_t code_symbol(uint32_t** rows, int32_t sym) {
     int32_t node = 1;
     const int32_t len_at = match_len<kMatchLens ? match_len : kMatchLens-1;
     for( int32_t b = bits-1; b>=0; --b ) {
@@ -267,7 +291,10 @@ struct CtxModel {
       // already used everything else available here.
       const int32_t coded = apm.refine(p, at);
       int32_t bit;
-      if constexpr( f_DEC ) {
+      if constexpr( f_MEASURE ) {
+        bit = (sym>>b)&1;
+        measured += (uint64_t)bit_cost(coded, bit);
+      } else if constexpr( f_DEC ) {
         bit = cx[0].decode_bit(65536-coded, coded);
       } else {
         bit = (sym>>b)&1;
@@ -294,23 +321,87 @@ struct CtxModel {
     if constexpr( f_DEC ) {
       const int32_t a = (int32_t)cx[0].decode_flat(kMaxAlpha)+1;
       set_alphabet(a);
+      chosen_nb = (int32_t)cx[0].decode_flat(kMaxNeighbours)+1;
+      set_alphabet(a);
       for( int32_t k = 0; k<alpha; ++k )
         to_val[k] = (uint8_t)cx[0].decode_flat(256);
       set_alphabet(a);
     } else {
       cx[0].encode((uint32_t)alpha-1, (uint32_t)alpha, kMaxAlpha);
+      cx[0].encode((uint32_t)nb[kOrders-1]-1u, (uint32_t)nb[kOrders-1], kMaxNeighbours);
       for( int32_t k = 0; k<alpha; ++k )
         cx[0].encode(to_val[k], (uint32_t)to_val[k]+1u, 256);
     }
   }
 
-  template <int32_t f_DEC> void code_plane(BMFState* state, uint8_t* px, int32_t w, int32_t h) {
+  // Which neighbourhood length to use, priced on a bounded centred crop rather
+  // than assumed.  Unlike orientation (which is a whole-raster property and
+  // cannot be decided on a crop), this is a question about local statistics,
+  // and a megapixel answers it as well as nine.  The winner goes on the wire.
+  static const int32_t kProbePixels = 1<<17;
+  int32_t choose_neighbours(BMFState* state, const uint8_t* px, int32_t w, int32_t h) {
+    bit_cost_init();
+    // Bands spread over the whole raster rather than one centred block: a
+    // centre crop of x_ai does not look like x_ai, and picking on one costs
+    // that file 2000 bytes.  Full width, so only the band joins break a
+    // vertical context.
+    const int32_t bands = 8;
+    const int32_t pw = w;
+    int32_t ph = h;
+    if( (int64_t)pw*ph>kProbePixels )
+      ph = (int32_t)(kProbePixels/pw);
+    if( ph<bands*2 )
+      ph = h<bands*2 ? h : bands*2;
+    if( ph>h )
+      ph = h;
+    const int32_t per = ph/bands;
+    uint8_t*const crop = (uint8_t*)bmf_new((size_t)pw*ph);
+    int32_t at = 0;
+    for( int32_t b = 0; b<bands&&at<ph; ++b ) {
+      const int32_t rows = b==bands-1 ? ph-at : per;
+      const int32_t from = h<=ph ? at : (int32_t)((int64_t)b*(h-rows)/(bands-1));
+      for( int32_t y = 0; y<rows&&at<ph; ++y, ++at )
+        memcpy(crop+(size_t)at*pw, px+(size_t)(from+y)*w, (size_t)pw);
+    }
+    ph = at;
+    const int32_t longest = nb_for_bits[bits];
+    const int32_t want[4] = {longest, (longest*5+3)/6, (longest*2+1)/3, (longest+1)/2};
+    int32_t best = longest;
+    uint64_t best_cost = ~(uint64_t)0;
+    for( int32_t k = 0; k<4; ++k ) {
+      const int32_t n = want[k]<2 ? 2 : want[k];
+      if( k&&n==want[k-1] )
+        continue;
+      chosen_nb = n;
+      set_alphabet(alpha);
+      measured = 0;
+      code_plane<0, 1>(state, crop, pw, ph);
+      bmf_log("    ctx model: %2d neighbours prices the crop at %.1f bytes\n", n, (double)measured/2048.0);
+      // The probe sees a fraction of the plane, and a longer context needs more
+      // data to pay off, so the probe is biased toward short ones.  A shorter
+      // candidate has to win by more than 1/64 to be believed.
+      const uint64_t priced = k ? measured+(measured>>6) : measured;
+      if( priced<best_cost ) {
+        best_cost = priced;
+        best = n;
+      }
+    }
+    free(crop);
+    chosen_nb = best;
+    set_alphabet(alpha);
+    return best;
+  }
+
+  template <int32_t f_DEC, int32_t f_MEASURE = 0> void code_plane(BMFState* state, uint8_t* px, int32_t w, int32_t h) {
     cx = state;
-    if constexpr( f_DEC )
-      cx[0].rc_begin_decode();
-    else
-      cx[0].rc_begin_encode();
-    code_alphabet<f_DEC>();
+    if constexpr( !f_MEASURE ) {
+      if constexpr( f_DEC )
+        cx[0].rc_begin_decode();
+      else
+        cx[0].rc_begin_encode();
+      code_alphabet<f_DEC>();
+    }
+    reset_state();
     alloc_tables();
     for( int32_t y = 0; y<h; ++y ) {
       uint8_t*const row = px+(size_t)y*w;
@@ -323,17 +414,19 @@ struct CtxModel {
           const uint32_t sub = nb[k]>=nb[kOrders-1] ? key : key&(((uint32_t)1<<(bits*nb[k]))-1u);
           rows[k] = bucket(k, sub, k ? rows[k-1] : nullptr);
         }
-        if constexpr( f_DEC )
-          row[x] = to_val[code_symbol<1>(rows, 0)];
+        if constexpr( f_DEC&&!f_MEASURE )
+          row[x] = to_val[code_symbol<1, 0>(rows, 0)];
         else
-          code_symbol<0>(rows, to_idx[row[x]]);
+          code_symbol<0, f_MEASURE>(rows, to_idx[row[x]]);
         match_update(px, at);
       }
     }
     Quit();
-    if constexpr( f_DEC )
-      cx[0].rc_end_decode();
-    else
-      cx[0].rc_end_encode();
+    if constexpr( !f_MEASURE ) {
+      if constexpr( f_DEC )
+        cx[0].rc_end_decode();
+      else
+        cx[0].rc_end_encode();
+    }
   }
 };

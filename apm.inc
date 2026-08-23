@@ -166,6 +166,27 @@ using Mix3 = MixN<3>;
 using Mix4 = MixN<4>;
 using Mix5 = MixN<5>;
 
+// Cost of coding a bit at a 16-bit probability, in 1/256 bits.  Used to price a
+// model's choices without running the coder.
+int32_t bit_cost_tab[4096];
+bool bit_cost_ready = false;
+
+void bit_cost_init() {
+  if( bit_cost_ready )
+    return;
+  for( int32_t i = 0; i<4096; ++i ) {
+    const double p = ((double)i+0.5)/4096.0;
+    bit_cost_tab[i] = (int32_t)(-256.0*log2(p));
+  }
+  bit_cost_ready = true;
+}
+
+// bit==1 costs -log2(p), bit==0 costs -log2(1-p).
+int32_t bit_cost(int32_t p16, int32_t bit) {
+  const int32_t q = bit ? p16 : 65536-p16;
+  return bit_cost_tab[(q>>4)&4095];
+}
+
 // A probability with its own update count, adapting at 1/(n+2) until the count
 // anneals.  Packed into one word: probability high, count low.  A context that
 // sees tens of samples needs this; a fixed rate is far too slow while it is new.

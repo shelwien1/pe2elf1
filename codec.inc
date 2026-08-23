@@ -240,8 +240,10 @@ struct BMFCodec : BMFState {
     if( plane_predictor==pred_ctx ) {
       CtxModel ctx_model;
       ctx_model.Init();
-      if constexpr( !f_DEC )
+      if constexpr( !f_DEC ) {
         ctx_model.set_alphabet(CtxModel::scan_alphabet(pixels, p_i[0].width*p_i[0].height, ctx_model.to_val));
+        ctx_model.choose_neighbours(this, pixels, p_i[0].width, p_i[0].height);
+      }
       ctx_model.template code_plane<f_DEC>(this, pixels, p_i[0].width, p_i[0].height);
       return true;
     }

@@ -1089,10 +1089,42 @@ the quantiser edges and the adaptation rates are the obvious ones — optimise
 them per image against the true coded size, and send them in a header. A few
 hundred bits of side information is free at any interesting file size.
 
-**Expected [expected].** 1–3 %, and more on content far from whatever the
-constants were tuned on. Note this is *not* parameter tweaking in the sense the
-brief excludes: the algorithmic change is making the parameters per-image and
-transmitted rather than global and fixed.
+**Built for one parameter [measured].** The context model of §7 now prices four
+neighbourhood lengths on a sample of the plane and puts the winner on the wire.
+Two pieces made that affordable and honest:
+
+* **A measure mode.** `CtxModel::code_plane` can run the whole model and
+  accumulate −log2 *p* per bit instead of coding, so a candidate is priced in
+  the model's own currency for a fraction of a trial encode — which is §11 (3)'s
+  proposal, arrived at from the other direction.
+* **Bands, not a crop, and a bias.** The sample is eight bands spread over the
+  raster: a centred crop of `x_ai` does not look like `x_ai` and picking on one
+  costs that file 2 000 bytes. And because the sample is smaller than the plane,
+  a longer context has less data to pay off with, so the probe is biased toward
+  short ones — a shorter candidate has to win by 1/64 to be believed. Without
+  that correction `x_ai` still lost 144 bytes.
+
+**[measured] and it is nearly a wash here: 36 bytes.** `t1` −44 (it wants 20
+neighbours where the compiled default for bilevel data is 24), `DLRAW` −12,
+`x_ci` −4, `x_ai` +4. It costs 7 % of encode time. The reason it is so small is
+the corpus, not the mechanism: there is essentially *one* image per bit-depth
+class, so the compiled defaults were fitted to the same images the probe is now
+choosing for. The value shows on a class with two members — `t1` and `f05_200`
+are both bilevel and want different lengths, and only one of them could be right
+before.
+
+**A hazard this exposed, worth stating generally.** An encoder-side pricing pass
+leaves adaptive state behind. The first version desynchronised every image the
+mode touched, because the probe's match model and mixer carried into the coding
+pass and the decoder — which only ever makes the coding pass — started fresh.
+Any two-pass parameter search needs an explicit reset of everything that adapts,
+and that reset has to run on the *decoder's* single pass too.
+
+**Expected [expected] for the rest.** The quantiser edges and adaptation rates
+are untouched, and are where this section's 1–3 % was supposed to come from.
+Note this is *not* parameter tweaking in the sense the brief excludes: the
+algorithmic change is making the parameters per-image and transmitted rather
+than global and fixed.
 
 **Cost.** Encoder-only complexity plus a header field, but the encoder gets
 slower in proportion to how thoroughly it searches.
