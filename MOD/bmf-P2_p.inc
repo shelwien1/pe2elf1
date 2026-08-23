@@ -237,3 +237,19 @@ uint32_t MakeQ2Sel( int32_t nq2 ) {
   P2_q.inc( Q2Sel, nq2 );
   return (uint32_t)Q2Sel;
 }
+
+uint32_t MakeSeat( int32_t ctx ) {
+  int32_t Seat;
+
+  Seat = 0;
+  P2_mseat.inc( Seat, ctx );
+  return (uint32_t)Seat;
+}
+
+uint32_t MakeCellMap( int32_t ctx ) {
+  int32_t CellMap;
+
+  CellMap = 0;
+  P2_mcell.inc( CellMap, ctx );
+  return (uint32_t)CellMap;
+}

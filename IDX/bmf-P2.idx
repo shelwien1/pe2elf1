@@ -485,3 +485,15 @@ Index Run4Sel
 
 Index Q2Sel
  q: nq2, -114!100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+
+# Two coarse views of the cell context, as bitmasks over it.  The seat view
+# keeps the six low bits -- the delta class and the two flatness flags -- and
+# the map view keeps four of them.  A masking keeps the 1 positions and packs
+# them contiguously, so which bits a coarse view is built from is a
+# declaration rather than an & repeated at six call sites.
+
+Index Seat
+ mseat: ctx, &00000000111111
+
+Index CellMap
+ mcell: ctx, &00000000001111

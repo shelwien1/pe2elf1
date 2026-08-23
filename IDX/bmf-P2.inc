@@ -102,3 +102,15 @@ uint32_t MakeQ2Sel( int32_t nq2 ) {
   MakeIndex Q2Sel
   return (uint32_t)Q2Sel;
 }
+
+uint32_t MakeSeat( int32_t ctx ) {
+  int32_t Seat;
+  MakeIndex Seat
+  return (uint32_t)Seat;
+}
+
+uint32_t MakeCellMap( int32_t ctx ) {
+  int32_t CellMap;
+  MakeIndex CellMap
+  return (uint32_t)CellMap;
+}

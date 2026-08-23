@@ -302,7 +302,7 @@ struct AltP2Block {
   // it), so it is the axis most likely to carry a systematic bias the frequency
   // cell cannot see.
   int32_t apm_context() const {
-    return (int32_t)(ctx&15);
+    return (int32_t)MakeCellMap(ctx);
   }
 
   static uint32_t slot(int32_t bank, int32_t ctx) {
@@ -711,10 +711,10 @@ struct AltP2Block {
         ctx_pair[1] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2], 0);
         P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[MakeQ2Sel(-q2)]+ctx_w[4].w[1]);
         if constexpr( f_DEC ) {
-          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
+          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
         } else {
           code0 = fold_or_refuse(out, p[0], (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
-          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
           ++p;
         }
         int32_t val = 16*(uint8_t)out[0];
@@ -749,12 +749,12 @@ struct AltP2Block {
         for( k = 0; k<(uint32_t)width; ++k ) {
           int32_t pred = alt_p2_context(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
             code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
             code2 = code;
-            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
           }
           alt_p2_model(outp[k], code2, outp[k]-pred);
         }
@@ -965,13 +965,13 @@ struct AltP2Block {
       sample = clean;
       out[at] = recon;
     }
-    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
     alt_p2_model(sample, code, sample-pred);
   }
 
   void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
     const int32_t pred = alt_p2_context(refa, refb);
-    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
+    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[MakeSeat(ctx)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
     const int32_t sample = (uint8_t)(pred+unfold[code]);
     alt_p2_model(sample, code, sample-pred);
     out[at] = sample;
