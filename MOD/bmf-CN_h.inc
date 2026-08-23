@@ -1,5 +1,6 @@
 
 
+
 static const int CN_slot_split = (5+0) * (1);
 static const int CN_slot_top = (6+0) * (1);
 pdesc( CN_seed_0_, 0, "1000" );
@@ -60,6 +61,7 @@ pdesc( CN_drift_limit_, 0, "10000" );
 static const int CN_drift_limit = CN_drift_limit_.value * (1);
 
 
+static const int CN_Strip_Volume = 1* 4* 2* 2* 64; // 1024
 
 struct CN_T { 
 #undef USE_NEW

@@ -29,12 +29,6 @@ Debug 1
 # One block per index, in source order.
 Const 0
 
-Number p1_ix_p0,         1,0!111
-Number p1_ix_p1,         1,0!110
-Number p1_ix1_p0,        1,0!111
-Number p1_ix1_p1,        1,0!110
-Number p1_key_p0,        1,0!111
-Number p1_key_p1,        1,0!110
 Number p1_group_of_p0,   1,0!1000
 Number p1_group_of_p1,   1,0!0
 Number p1_group_of_w1,   1,0!11
@@ -105,8 +99,6 @@ Number p2_ctx4_e7,       1,0!10010
 Number p2_ctx4_e8,       1,0!10001
 Number p2_ctx4_e9,       1,0!10000
 Number p2_ctx4_e10,      1,0!1111
-Number counters_strip_p0,  1,0!111
-Number counters_strip_p1,  1,0!110
 Number model_near_hit_p0,  1,0!110
 Number model_near_hit_p1,  1,0!101
 Number model_far_hit_p0,  1,0!100

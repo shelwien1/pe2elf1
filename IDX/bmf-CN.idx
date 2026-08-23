@@ -57,3 +57,18 @@ Number seed_decay,       1,0!11
 Number p16_floor,        1,0!100000
 Number p16_ceil,         1,0!1111111111100000
 Number drift_limit,      1,0!10000
+
+# ---------------------------------------------------------------------
+# The frequency-strip context, shared by alt-P1 and the seven-slot counter.
+#
+# A strip is addressed by the plane, the coded slot's parity, whether the
+# counter's escape is running high, and six bits of the caller's context.
+# Volume 1024 -- which is how many 254-entry strips the model arena holds, so
+# the arena's capacity follows from this declaration.
+# ---------------------------------------------------------------------
+
+Index Strip
+ ADD 4: plane
+ ADD 2: parity
+ ADD 2: escape_high
+ ADD 64: low

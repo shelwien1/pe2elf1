@@ -1,17 +1,5 @@
 
 
-pdesc( IX_p1_ix_p0_, 0, "111" );
-static const int IX_p1_ix_p0 = IX_p1_ix_p0_.value * (1);
-pdesc( IX_p1_ix_p1_, 0, "110" );
-static const int IX_p1_ix_p1 = IX_p1_ix_p1_.value * (1);
-pdesc( IX_p1_ix1_p0_, 0, "111" );
-static const int IX_p1_ix1_p0 = IX_p1_ix1_p0_.value * (1);
-pdesc( IX_p1_ix1_p1_, 0, "110" );
-static const int IX_p1_ix1_p1 = IX_p1_ix1_p1_.value * (1);
-pdesc( IX_p1_key_p0_, 0, "111" );
-static const int IX_p1_key_p0 = IX_p1_key_p0_.value * (1);
-pdesc( IX_p1_key_p1_, 0, "110" );
-static const int IX_p1_key_p1 = IX_p1_key_p1_.value * (1);
 pdesc( IX_p1_group_of_p0_, 0, "1000" );
 static const int IX_p1_group_of_p0 = IX_p1_group_of_p0_.value * (1);
 pdesc( IX_p1_group_of_p1_, 0, "0" );
@@ -152,10 +140,6 @@ pdesc( IX_p2_ctx4_e9_, 0, "10000" );
 static const int IX_p2_ctx4_e9 = IX_p2_ctx4_e9_.value * (1);
 pdesc( IX_p2_ctx4_e10_, 0, "1111" );
 static const int IX_p2_ctx4_e10 = IX_p2_ctx4_e10_.value * (1);
-pdesc( IX_counters_strip_p0_, 0, "111" );
-static const int IX_counters_strip_p0 = IX_counters_strip_p0_.value * (1);
-pdesc( IX_counters_strip_p1_, 0, "110" );
-static const int IX_counters_strip_p1 = IX_counters_strip_p1_.value * (1);
 pdesc( IX_model_near_hit_p0_, 0, "110" );
 static const int IX_model_near_hit_p0 = IX_model_near_hit_p0_.value * (1);
 pdesc( IX_model_near_hit_p1_, 0, "101" );

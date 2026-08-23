@@ -3,11 +3,6 @@
 
 uint32_t MakeStrip( uint32_t plane, uint32_t parity, uint32_t escape_high, uint32_t low ) {
   int32_t Strip;
-
-  Strip = 0;
-  Strip = Strip*(4) + (plane);
-  Strip = Strip*(2) + (parity);
-  Strip = Strip*(2) + (escape_high);
-  Strip = Strip*(64) + (low);
+  MakeIndex Strip
   return (uint32_t)Strip;
 }

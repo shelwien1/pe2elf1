@@ -268,14 +268,14 @@ struct AltP1Block {
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, P1_bump_up);
       if( slot_f>=CN_slot_split )
-        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<IX_p1_ix_p0>(slot_f&1).bit<IX_p1_ix_p1>(node_up[1].escape_high(slot_f)).raw(ctx_up)), tree_sym);
+        cx[0].update_binary_pair(cx[0].model_strip(MakeStrip(ctx_up>>8, (uint32_t)slot_f&1u, node_up[1].escape_high(slot_f), ctx_up&63u)), tree_sym);
     }
     if( result&7 ) {
       CounterNode* node_dn = &ctr_at(result);
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, P1_bump_dn);
       if( slot_f>=CN_slot_split )
-        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<IX_p1_ix1_p0>(slot_f&1).bit<IX_p1_ix1_p1>(node_dn[-1].escape_high(slot_f)).raw(ctx_dn)), tree_sym);
+        cx[0].update_binary_pair(cx[0].model_strip(MakeStrip((uint32_t)ctx_dn>>8, (uint32_t)slot_f&1u, node_dn[-1].escape_high(slot_f), (uint32_t)ctx_dn&63u)), tree_sym);
     }
     if( ctr_at(result).total>=CN_nudge_limit )
       return;
@@ -286,7 +286,8 @@ struct AltP1Block {
       node_alt[-1].bump(slot_r, P1_nudge_dn);
     }
     if( slot_f>=CN_slot_split ) {
-      const uint32_t key = CtxIdx{}.bit<IX_p1_key_p0>(slot_f&1).bit<IX_p1_key_p1>(ctr_at(result).escape_high(slot_f)).raw(ctx[1]);
+      const uint32_t key = MakeStrip((uint32_t)ctx[1]>>8, (uint32_t)slot_f&1u,
+                                    ctr_at(result).escape_high(slot_f), (uint32_t)ctx[1]&63u);
       if( (key&0x38)>=0x38||(cx[0].update_binary_pair(cx[0].model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
         cx[0].update_binary_pair(cx[0].model_strip(key-8), tree_sym);
       }

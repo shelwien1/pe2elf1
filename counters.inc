@@ -86,7 +86,9 @@ struct CounterNode {
     total = result;
     slot = cur-c;
     if( slot>=CN_slot_split ) {
-      uint16_t*const strip = cx[0].model_strip(CtxIdx{}.bit<IX_counters_strip_p0>(slot&1).bit<IX_counters_strip_p1>(2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+CN_escape_bias).raw((uint32_t)ctx));
+      uint16_t*const strip = cx[0].model_strip(MakeStrip((uint32_t)ctx>>8, (uint32_t)slot&1u,
+                                                        2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+CN_escape_bias,
+                                                        (uint32_t)ctx&63u));
       if constexpr( f_DEC )
         slot += 2*cx[0].decode_symbol_tree(strip);
       else
