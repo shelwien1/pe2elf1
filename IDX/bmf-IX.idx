@@ -29,12 +29,6 @@ Debug 1
 # One block per index, in source order.
 Const 0
 
-Number p1_result_p0,     1,0!0
-Number p1_result_w0,     1,0!11
-Number p1_result_p1,     1,0!11
-Number p1_result_p2,     1,0!100
-Number p1_ctx_alt_p0,    1,0!0
-Number p1_ctx_alt_w0,    1,0!101
 Number p1_ix_p0,         1,0!111
 Number p1_ix_p1,         1,0!110
 Number p1_ix1_p0,        1,0!111
@@ -49,10 +43,6 @@ Number p2_ctx_pair_p0,   1,0!0
 Number p2_ctx_pair_w0,   1,0!100
 Number p2_ctx_pair1_p0,  1,0!0
 Number p2_ctx_pair1_w0,  1,0!100
-Number p2_ctx_p0,        1,0!0
-Number p2_ctx_w0,        1,0!100
-Number p2_ctx_p1,        1,0!100
-Number p2_ctx_p2,        1,0!101
 Number p2_ctx0_lo_e4,    1,0!1111
 Number p2_ctx1_e0,       1,0!11001
 Number p2_ctx1_e2,       1,0!10111
@@ -119,8 +109,6 @@ Number p2_ctx4_e7,       1,0!10010
 Number p2_ctx4_e8,       1,0!10001
 Number p2_ctx4_e9,       1,0!10000
 Number p2_ctx4_e10,      1,0!1111
-Number p2_step_ctx_p0,   1,0!0
-Number p2_step_ctx_w0,   1,0!110
 Number p2_ctx_delta_p0,  1,0!1000
 Number p2_ctx_delta_p1,  1,0!100
 Number p2_ctx_delta_w1,  1,0!100

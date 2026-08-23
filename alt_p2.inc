@@ -353,7 +353,8 @@ struct AltP2Block {
     return run;
   }
 
-  static const int32_t kP2FreqCount = 15552;
+  // Sized by its own index declaration.
+  static const int32_t kP2FreqCount = P2_P2Ctx_Volume;
   P2Freq freq[kP2FreqCount];
   uint32_t pz_fast[kP2FreqCount];
 
@@ -577,7 +578,8 @@ struct AltP2Block {
     const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
     ctx_pair[0] = CtxIdx{}.bits<IX_p2_ctx_pair_p0, IX_p2_ctx_pair_w0>(ctx15).raw(ctx_delta[ctx_idx+4]);
     ctx_pair[1] = CtxIdx{}.bits<IX_p2_ctx_pair1_p0, IX_p2_ctx_pair1_w0>(ctx15).raw(ctx_delta[ctx_idx]);
-    ctx = CtxIdx{}.bits<IX_p2_ctx_p0, IX_p2_ctx_w0>(ctx15).bit<IX_p2_ctx_p1>(flat_a==0).bit<IX_p2_ctx_p2>(flat_b==0).raw(mixer_fwd(ctx_w, 5));
+    ctx = (int32_t)MakeP2Ctx(mixer_fwd(ctx_w, 5)>>kP2MixShift, (uint32_t)(flat_b==0),
+                            (uint32_t)(flat_a==0), (uint32_t)ctx15);
     return ctx_idx;
   }
   void code_banks(int32_t sample16) {
@@ -928,7 +930,7 @@ struct AltP2Block {
     int32_t fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
     if( !fold[(uint8_t)-resid_in] )
       fold_sel = fold[(uint8_t)-resid_in];
-    const uint32_t step_ctx = CtxIdx{}.bits<IX_p2_step_ctx_p0, IX_p2_step_ctx_w0>(ctx).raw(mixer_rev(ctx_w, 5));
+    const uint32_t step_ctx = MakeP2Step(mixer_rev(ctx_w, 5)>>kP2MixShift, (uint32_t)ctx&63u);
     P2Freq* frec_step = &freq_at(step_ctx);
     p2_bump_sides(frec_step, ctx15, 0, fold_sel, 4, 4);
     if( code ) {
@@ -1124,7 +1126,7 @@ struct AltP2Block {
     for( int32_t k = 0; k<243; ++k )
       pz_signs[k] = adapt_init();
     cx[0].alt_init_tables(fold, unfold);
-    for( int32_t c = 0, w1 = 64; c<5; ++c, w1 *= 3 ) {
+    for( int32_t c = 0, w1 = 1<<kP2MixShift; c<5; ++c, w1 *= P2_ctxw_ratio ) {
       ctx_w[c].w[0] = 0;
       ctx_w[c].w[1] = w1;
       ctx_w[c].w[2] = 2*w1;

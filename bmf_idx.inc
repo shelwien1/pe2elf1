@@ -92,6 +92,7 @@ static inline constexpr int32_t __max(int32_t a, int32_t b) {
 #include "MOD/bmf-QZ_h.inc"
 #include "MOD/bmf-QZ_p.inc"
 #include "MOD/bmf-P2_p.inc"
+#include "MOD/bmf-P1_p.inc"
 #include "MOD/bmf-MB_p.inc"
 
 // A parameter that has to be a template argument.

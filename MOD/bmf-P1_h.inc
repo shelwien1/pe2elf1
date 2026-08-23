@@ -1,5 +1,7 @@
 
 
+
+
 static const int P1_row_margin = (4+0) * (1);
 static const int P1_row_tail = (6+0) * (1);
 static const int P1_counter_count = (629856+0) * (1);
@@ -16,8 +18,10 @@ static const int P1_level_step_4 = (2+0) * (1);
 static const int P1_level_step_5 = (4+0) * (1);
 static const int P1_level_step_6 = (4+0) * (1);
 static const int P1_level_step_7 = (4+0) * (1);
-static const int P1_ctxw_seed = (32+0) * (1);
+static const int P1_ctxw_shift = (5+0) * (1);
 static const int P1_ctxw_ratio = (3+0) * (1);
+pdesc( P1_ctxw_range_, 0, "100110011100011" );
+static const int P1_ctxw_range = P1_ctxw_range_.value * (1);
 static const int P1_sel1_ctr = (6+0) * (1);
 static const int P1_sel1_up = (4+0) * (1);
 static const int P1_sel1_dn = (3+0) * (1);
@@ -35,6 +39,8 @@ static const int P1_nudge_up = (7+0) * (1);
 static const int P1_nudge_dn = (5+0) * (1);
 
 
+static const int P1_P1Alt_Volume = 1* P1_ctxw_range* 32; // 0
+static const int P1_P1Result_Volume = 1* P1_ctxw_range* 2* 2* 8; // 0
 
 struct P1_T { 
 #undef USE_NEW

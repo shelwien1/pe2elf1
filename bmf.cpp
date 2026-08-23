@@ -237,8 +237,28 @@ void bmf_decompress(const char* InName, const char* OutName) {
   bmf_close_file(arc);
 }
 
+// The declared invariants a sweep can break but a compiler cannot check.
+//
+// Two selector mixers hand their sum to an index as its most significant
+// factor, which works only because the weights are multiples of 1<<ctxw_shift
+// and the factors packed under the sum multiply to exactly that.  In the
+// shipping build both sides are literals and this folds away; in the tuning
+// build the shift is a load-time read, so it is checked once here rather than
+// trusted.  A mismatch would alias contexts silently instead of failing.
+static void idx_check_invariants(void) {
+  if( P1_P1Result_Volume!=(P1_ctxw_range<<kP1MixShift)
+      ||P1_P1Alt_Volume!=(P1_ctxw_range<<kP1MixShift)
+      ||P2_P2Ctx_Volume!=(P2_ctxw_range<<kP2MixShift)
+      ||P2_P2Step_Volume!=(P2_ctxw_range<<kP2MixShift) ) {
+    fprintf(stderr, "IDX: a mixer's granularity no longer matches the fields packed "
+                    "under it -- see ctxw_shift in IDX/bmf-P1.idx and IDX/bmf-P2.idx\n");
+    exit(6);
+  }
+}
+
 int32_t main(int32_t argc, char** argv) {
   const char*const* args = (const char*const*)argv;
+  idx_check_invariants();
   bmf_codec.Init();
   bmf_set_denormal_mode();
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");

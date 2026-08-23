@@ -18,7 +18,9 @@ struct AltP1Block {
   uint8_t fold_hi[256];
   uint8_t unfold[256];
   int32_t group_of[512];
-  static const int32_t kP1CounterCount = P1_counter_count;
+  // Sized by its own index declaration.  The Volume folds in both builds:
+  // ctxw_range is frozen, being 3^9 rather than a knob of its own.
+  static const int32_t kP1CounterCount = P1_P1Result_Volume;
   CounterNode counters[kP1CounterCount];
 
   // The selector mixer's weights are seeded geometrically and then added to and
@@ -173,7 +175,13 @@ struct AltP1Block {
     ctx_w[5].sel = tri_sign(ctx_w[5].sel, step);
     for( int32_t k = 6; k<=8; ++k )
       ctx_w[k].sel = tri_sign(ctx_w[k].sel);
-    int32_t result = CtxIdx{}.bits<IX_p1_result_p0, IX_p1_result_w0>(act_lvl).bit<IX_p1_result_p1>(ctx[3+ctx[2]]==0).bit<IX_p1_result_p2>(quiet).raw(mixer_fwd(ctx_w, 9));
+    // The mixer sum is the most significant factor, so it enters as its own
+    // digit rather than as an offset: its weights are multiples of
+    // 1<<ctxw_shift, and the three packed factors fill exactly that many
+    // low bits.  alt_p1_alloc checks the two agree.
+    int32_t result = (int32_t)MakeP1Result(mixer_fwd(ctx_w, 9)>>kP1MixShift,
+                                          (uint32_t)quiet, (uint32_t)(ctx[3+ctx[2]]==0),
+                                          (uint32_t)act_lvl);
     ctx[0] = result;
     return result;
   }
@@ -251,7 +259,7 @@ struct AltP1Block {
     const int32_t tree_sym = (int32_t)(code_f-CN_slot_split)>>1;
     const int32_t slot_f = sym_slot(code_f);
     const int32_t slot_r = sym_slot(code_r);
-    uint32_t ctx_alt = CtxIdx{}.bits<IX_p1_ctx_alt_p0, IX_p1_ctx_alt_w0>(ctx[0]).raw(mixer_rev(ctx_w, 9));
+    uint32_t ctx_alt = MakeP1Alt(mixer_rev(ctx_w, 9)>>kP1MixShift, (uint32_t)ctx[0]&31u);
     CounterNode* node_alt = &ctr_at(ctx_alt);
     node_alt[0].bump(slot_r, P1_bump_alt);
     const int32_t result = ctx[0];
@@ -308,7 +316,7 @@ struct AltP1Block {
     }
     for( k = 0; k<0x100; ++k )
       slot_of[k] = (uint8_t)CtxIdx{}.above<IX_p1_slot_of_p0>(MakeSlot((uint32_t)k));
-    for( int32_t c = 0, w1 = P1_ctxw_seed; c<9; ++c, w1 *= P1_ctxw_ratio ) {
+    for( int32_t c = 0, w1 = 1<<kP1MixShift; c<9; ++c, w1 *= P1_ctxw_ratio ) {
       ctx_w[c].w[0] = 0;
       ctx_w[c].w[1] = w1;
       ctx_w[c].w[2] = 2*w1;

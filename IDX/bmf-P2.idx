@@ -480,3 +480,26 @@ Index Ctx4
  ADD 2: f10
  ADD 4: qr
  ADD 4: qs
+
+# The P2 selector mixer: five ternary weights, geometric in ctxw_ratio, at a
+# granularity of 1<<ctxw_shift.  ctxw_range is 3^5.
+
+Number ctxw_shift,    1,0!110
+Number ctxw_ratio,    1,0!11
+-Number ctxw_range,     1,0!11110011
+
+# The frequency-cell context: the mixer's sum over the delta class and two
+# flatness flags.  Volume 15552, which is what freq[] holds.
+
+Index P2Ctx
+ ADD %M%ctxw_range: msum
+ ADD 2: flat_b
+ ADD 2: flat_a
+ ADD 16: ctx15
+
+# The step context: the same mixer read the other way, over six bits of the
+# cell context.
+
+Index P2Step
+ ADD %M%ctxw_range: msum
+ ADD 64: ctx

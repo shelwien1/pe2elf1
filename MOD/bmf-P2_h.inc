@@ -11,6 +11,8 @@
 
 
 
+
+
 static const int P2_coef_00 = (13421773+0) * (-1);
 static const int P2_coef_01 = (9395241+0) * (-1);
 static const int P2_coef_02 = (5033165+0) * (1);
@@ -263,6 +265,10 @@ static const int P2_q2_thr_0 = (115+0) * (1);
 static const int P2_q2_thr_1 = (17+0) * (1);
 static const int P2_g3_up_shift = (9+0) * (1);
 static const int P2_g3_dn_shift = (13+0) * (1);
+static const int P2_ctxw_shift = (6+0) * (1);
+static const int P2_ctxw_ratio = (3+0) * (1);
+pdesc( P2_ctxw_range_, 0, "11110011" );
+static const int P2_ctxw_range = P2_ctxw_range_.value * (1);
 
 
 static const int P2_BankSlot_Volume = 1* 5* 32768; // 163840
@@ -276,6 +282,8 @@ static const int P2_Ctx2b_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 
 static const int P2_Ctx3_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
 static const int P2_Ctx4_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
 static const int P2_NbSlot_Volume = 1* 6* 5* 4* 4* 4; // 1920
+static const int P2_P2Ctx_Volume = 1* P2_ctxw_range* 2* 2* 16; // 0
+static const int P2_P2Step_Volume = 1* P2_ctxw_range* 64; // 0
 
 struct P2_T { 
 #undef USE_NEW

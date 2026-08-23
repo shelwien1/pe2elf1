@@ -3,20 +3,12 @@
 
 uint32_t MakeP1Result( uint32_t msum, uint32_t quiet, uint32_t flag, uint32_t lvl ) {
   int32_t P1Result;
-
-  P1Result = 0;
-  P1Result = P1Result*(P1_ctxw_range) + (msum);
-  P1Result = P1Result*(2) + (quiet);
-  P1Result = P1Result*(2) + (flag);
-  P1Result = P1Result*(8) + (lvl);
+  MakeIndex P1Result
   return (uint32_t)P1Result;
 }
 
 uint32_t MakeP1Alt( uint32_t msum, uint32_t ctx0 ) {
   int32_t P1Alt;
-
-  P1Alt = 0;
-  P1Alt = P1Alt*(P1_ctxw_range) + (msum);
-  P1Alt = P1Alt*(32) + (ctx0);
+  MakeIndex P1Alt
   return (uint32_t)P1Alt;
 }

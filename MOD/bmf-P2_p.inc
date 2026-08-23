@@ -183,3 +183,23 @@ uint32_t MakeCtx4( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t 
   Ctx4 = Ctx4*(4) + (qs);
   return (uint32_t)Ctx4;
 }
+
+uint32_t MakeP2Ctx( uint32_t msum, uint32_t flat_b, uint32_t flat_a, uint32_t ctx15 ) {
+  int32_t P2Ctx;
+
+  P2Ctx = 0;
+  P2Ctx = P2Ctx*(P2_ctxw_range) + (msum);
+  P2Ctx = P2Ctx*(2) + (flat_b);
+  P2Ctx = P2Ctx*(2) + (flat_a);
+  P2Ctx = P2Ctx*(16) + (ctx15);
+  return (uint32_t)P2Ctx;
+}
+
+uint32_t MakeP2Step( uint32_t msum, uint32_t ctx ) {
+  int32_t P2Step;
+
+  P2Step = 0;
+  P2Step = P2Step*(P2_ctxw_range) + (msum);
+  P2Step = P2Step*(64) + (ctx);
+  return (uint32_t)P2Step;
+}

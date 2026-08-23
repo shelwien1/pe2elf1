@@ -43,11 +43,15 @@ Number level_step_5,     1,0!100
 Number level_step_6,     1,0!100
 Number level_step_7,     1,0!100
 
-# The selector mixer: the seed weight of the first of nine context
-# weights and the ratio between successive ones.
+# The selector mixer: nine ternary weights, geometric in ctxw_ratio.  The seed
+# is a shift rather than a weight because the mixer's sum is the most
+# significant factor of the P1Result index below and the packed fields fill
+# exactly that many low bits -- the two have to agree, and the codec checks
+# they do at startup.  ctxw_range is 3^9, the number of distinct sums.
 
-Number ctxw_seed,        1,0!100000
+Number ctxw_shift,       1,0!101
 Number ctxw_ratio,       1,0!11
+-Number ctxw_range,        1,0!100110011100011
 
 # Counter bumps, sel==1: the centre cell and its two ladder neighbours.
 
@@ -74,3 +78,23 @@ Number bump_up,          1,0!1011
 Number bump_dn,          1,0!1101
 Number nudge_up,         1,0!111
 Number nudge_dn,         1,0!101
+
+# ---------------------------------------------------------------------
+# Context indices.  See the note in bmf-P2.idx.
+# ---------------------------------------------------------------------
+
+# The counter context: the selector mixer's sum over the activity level, a
+# flag and the quiet bit.  Volume 629856, which is what counters[] holds.
+
+Index P1Result
+ ADD %M%ctxw_range: msum
+ ADD 2: quiet
+ ADD 2: flag
+ ADD 8: lvl
+
+# The alternate context: the same mixer read the other way, over five bits of
+# the current context.
+
+Index P1Alt
+ ADD %M%ctxw_range: msum
+ ADD 32: ctx0

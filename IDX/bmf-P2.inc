@@ -66,3 +66,15 @@ uint32_t MakeCtx4( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t 
   MakeIndex Ctx4
   return (uint32_t)Ctx4;
 }
+
+uint32_t MakeP2Ctx( uint32_t msum, uint32_t flat_b, uint32_t flat_a, uint32_t ctx15 ) {
+  int32_t P2Ctx;
+  MakeIndex P2Ctx
+  return (uint32_t)P2Ctx;
+}
+
+uint32_t MakeP2Step( uint32_t msum, uint32_t ctx ) {
+  int32_t P2Step;
+  MakeIndex P2Step
+  return (uint32_t)P2Step;
+}

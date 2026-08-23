@@ -1,11 +1,5 @@
 
 
-static const int IX_p1_result_p0 = (0+0) * (1);
-static const int IX_p1_result_w0 = (3+0) * (1);
-static const int IX_p1_result_p1 = (3+0) * (1);
-static const int IX_p1_result_p2 = (4+0) * (1);
-static const int IX_p1_ctx_alt_p0 = (0+0) * (1);
-static const int IX_p1_ctx_alt_w0 = (5+0) * (1);
 static const int IX_p1_ix_p0 = (7+0) * (1);
 static const int IX_p1_ix_p1 = (6+0) * (1);
 static const int IX_p1_ix1_p0 = (7+0) * (1);
@@ -20,10 +14,6 @@ static const int IX_p2_ctx_pair_p0 = (0+0) * (1);
 static const int IX_p2_ctx_pair_w0 = (4+0) * (1);
 static const int IX_p2_ctx_pair1_p0 = (0+0) * (1);
 static const int IX_p2_ctx_pair1_w0 = (4+0) * (1);
-static const int IX_p2_ctx_p0 = (0+0) * (1);
-static const int IX_p2_ctx_w0 = (4+0) * (1);
-static const int IX_p2_ctx_p1 = (4+0) * (1);
-static const int IX_p2_ctx_p2 = (5+0) * (1);
 static const int IX_p2_ctx0_lo_e4 = (15+0) * (1);
 static const int IX_p2_ctx1_e0 = (25+0) * (1);
 static const int IX_p2_ctx1_e2 = (23+0) * (1);
@@ -90,8 +80,6 @@ static const int IX_p2_ctx4_e7 = (18+0) * (1);
 static const int IX_p2_ctx4_e8 = (17+0) * (1);
 static const int IX_p2_ctx4_e9 = (16+0) * (1);
 static const int IX_p2_ctx4_e10 = (15+0) * (1);
-static const int IX_p2_step_ctx_p0 = (0+0) * (1);
-static const int IX_p2_step_ctx_w0 = (6+0) * (1);
 static const int IX_p2_ctx_delta_p0 = (8+0) * (1);
 static const int IX_p2_ctx_delta_p1 = (4+0) * (1);
 static const int IX_p2_ctx_delta_w1 = (4+0) * (1);

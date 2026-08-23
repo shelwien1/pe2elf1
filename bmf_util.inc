@@ -94,6 +94,14 @@ const int32_t kWeightShift = idx_clamp(CD_weight_shift, 1, 16);
 // than 1/2^shift of its own cost to displace it.  kKeepShift guards the
 // representation trials (transpose, mirror, palette order, colour space),
 // kModelShift the per-plane model choice.
+// The selector mixers' granularity.  Each mixer's weights are multiples of
+// 1<<shift, and the fields packed under the sum in the corresponding index
+// fill exactly that many low bits -- so the sum enters the index as its own
+// digit and no division is needed to extract it.  The codec checks the two
+// agree at startup rather than trusting the declaration.
+const int32_t kP1MixShift = idx_clamp(P1_ctxw_shift, 0, 16);
+const int32_t kP2MixShift = idx_clamp(P2_ctxw_shift, 0, 16);
+
 const int32_t kKeepShift = idx_clamp(CD_keep_shift, 1, 24);
 const int32_t kModelShift = idx_clamp(CD_model_shift, 1, 24);
 const int32_t kWeightScale = 1<<kWeightShift;
