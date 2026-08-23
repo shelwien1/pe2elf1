@@ -52,9 +52,11 @@ for.
 | `bmf-IX.idx` | `IX` | every context index's bit positions, field widths and radix strides |
 | `bmf-QZ.idx` | `QZ` | the five monotone quantiser ladders, as `Index` threshold mappings |
 
-655 parameters, 6665 pattern bits. Both `IDX/opt.pl` and `IDX/sweep.py` print
-those two numbers when they start, so they are checkable rather than
-remembered.
+670 declarations across the eleven modules, of which 648 are live in the tuning
+build -- the other 22 are the frozen structural ones, which have no mapping
+object to patch -- for 6646 pattern bits. Both `IDX/opt.pl` and `IDX/sweep.py`
+print the live count and the bit budget when they start, so those numbers are
+checkable rather than remembered.
 
 ---
 

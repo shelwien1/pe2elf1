@@ -17,6 +17,13 @@ Debug 1
 # through a reference-typed non-type parameter -- see IDXP in bmf_idx.inc
 # and IDX-FORMAT.md sec.8.  <site>_pN is the Nth argument's position or
 # stride, <site>_wN its field width or radix.
+#
+# One site per index, not one per statement: the odd and even halves of a
+# ladder-filling loop used to be two chains with two sets of parameters, and
+# when the ladders became threshold mappings the loops collapsed into one.
+# The seven parameters that named the vanished half are gone with it -- a
+# declaration with no consumer is pattern bits the optimizer spends for
+# nothing.
 # ---------------------------------------------------------------------
 
 # One block per index, in source order.
@@ -37,11 +44,7 @@ Number p1_key_p1,        1,0!110
 Number p1_group_of_p0,   1,0!1000
 Number p1_group_of_p1,   1,0!0
 Number p1_group_of_w1,   1,0!11
-Number p1_group_of1_p0,  1,0!1000
-Number p1_group_of1_p1,  1,0!0
-Number p1_group_of1_w1,  1,0!11
 Number p1_slot_of_p0,    1,0!11
-Number p1_slot_of1_p0,   1,0!11
 Number p2_ix_p0,         1,0!1101
 Number p2_ix_w0,         1,0!10
 Number p2_ix_p1,         1,0!1011
@@ -160,9 +163,6 @@ Number p2_step_ctx_w0,   1,0!110
 Number p2_ctx_delta_p0,  1,0!1000
 Number p2_ctx_delta_p1,  1,0!100
 Number p2_ctx_delta_w1,  1,0!100
-Number p2_ctx_delta1_p0,  1,0!1000
-Number p2_ctx_delta1_p1,  1,0!100
-Number p2_ctx_delta1_w1,  1,0!100
 Number counters_strip_p0,  1,0!111
 Number counters_strip_p1,  1,0!110
 Number model_ix_w0,      1,0!1111
