@@ -27,7 +27,7 @@ struct P2Freq {
   }
 
   template <int32_t f_DEC> int32_t code_three_way(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, Apm* apm,
-                                                 int32_t apm_ctx, int32_t mix_ctx, Mix3* mixer, uint32_t* seat, uint32_t* signs) {
+                                                 int32_t apm_ctx, int32_t mix_ctx, Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast) {
     uint16_t st, * slot;
     uint16_t down;
     uint16_t*const base = &f[0];
@@ -41,7 +41,7 @@ struct P2Freq {
     // views of it -- one keyed on the seat and level alone, one on the
     // neighbours' sign classes alone.  The cell is keyed on both together and
     // so is the sparsest of the three; the coarse ones carry it while it fills.
-    const int32_t p_in[3] = {p16, adapt_p(seat[0]), adapt_p(signs[0])};
+    const int32_t p_in[4] = {p16, adapt_p(seat[0]), adapt_p(signs[0]), (int32_t)(fast[0]>>16)};
     const int32_t p_mix = mixer[0].mix(p_in, mix_ctx);
     const int32_t p_ref = apm[0].refine(p_mix, apm_ctx);
     int32_t zero;
@@ -56,6 +56,11 @@ struct P2Freq {
     const int32_t zero_target = zero ? 65535 : 0;
     adapt_bump(seat[0], zero_target);
     adapt_bump(signs[0], zero_target);
+    // A second, deliberately fast estimate of the same cell: the frequency
+    // triple anneals as it fills, so it tracks a change of texture slowly.  One
+    // fixed-rate probability beside it is section 4's dual-rate counter, and
+    // the mixer decides how much to believe it.
+    fast[0] = (uint32_t)((int32_t)(fast[0]>>16)+((zero_target-(int32_t)(fast[0]>>16))>>2))<<16;
     if( zero ) {
       slot = &f[0];
     } else {
@@ -96,13 +101,13 @@ struct P2Freq {
   }
 
   void encode_symbol(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, Apm* apm, int32_t apm_ctx, int32_t mix_ctx,
-                     Mix3* mixer, uint32_t* seat, uint32_t* signs) {
-    code_three_way<0>(cx, ctx_pair, sym, apm, apm_ctx, mix_ctx, mixer, seat, signs);
+                     Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast) {
+    code_three_way<0>(cx, ctx_pair, sym, apm, apm_ctx, mix_ctx, mixer, seat, signs, fast);
   }
 
   int32_t decode_symbol(BMFState* cx, const uint32_t* ctx_pair, Apm* apm, int32_t apm_ctx, int32_t mix_ctx,
-                        Mix3* mixer, uint32_t* seat, uint32_t* signs) {
-    return code_three_way<1>(cx, ctx_pair, 0, apm, apm_ctx, mix_ctx, mixer, seat, signs);
+                        Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast) {
+    return code_three_way<1>(cx, ctx_pair, 0, apm, apm_ctx, mix_ctx, mixer, seat, signs, fast);
   }
 };
 
@@ -273,7 +278,7 @@ struct AltP2Block {
   uint32_t ctx;
   uint32_t ctx_pair[2];
   Apm apm;
-  Mix3 class_mix;
+  Mix4 class_mix;
   uint32_t pz_seat[64];
   uint32_t pz_signs[243];
   int32_t nb_id_used;
@@ -349,6 +354,7 @@ struct AltP2Block {
 
   static const int32_t kP2FreqCount = 15552;
   P2Freq freq[kP2FreqCount];
+  uint32_t pz_fast[kP2FreqCount];
   uint8_t _pad3[8];
 
   void nlms_step(NbRow* row, int32_t j, int32_t k, float x, float err, float ms_rate, float floor_) {
@@ -681,10 +687,10 @@ struct AltP2Block {
         ctx_pair[1] = ctx+ctx_delta[q2];
         P2Freq &fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
         if constexpr( f_DEC ) {
-          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243])]);
+          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx])]);
         } else {
           code0 = fold_or_refuse(out, p[0], (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
-          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243]);
+          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
           ++p;
         }
         int32_t val = 16*(uint8_t)out[0];
@@ -719,12 +725,12 @@ struct AltP2Block {
         for( k = 0; k<(uint32_t)width; ++k ) {
           int32_t pred = alt_p2_context(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            code2 = code = freq[ctx].decode_symbol(cx, pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243]);
+            code2 = code = freq[ctx].decode_symbol(cx, pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
             code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
             code2 = code;
-            freq[ctx].encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243]);
+            freq[ctx].encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
           }
           alt_p2_model(outp[k], code2, outp[k]-pred);
         }
@@ -935,13 +941,13 @@ struct AltP2Block {
       sample = clean;
       out[at] = recon;
     }
-    freq[ctx].encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243]);
+    freq[ctx].encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
     alt_p2_model(sample, code, sample-pred);
   }
 
   void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
     const int32_t pred = alt_p2_context(refa, refb);
-    const int32_t code = freq[ctx].decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243]);
+    const int32_t code = freq[ctx].decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
     const int32_t sample = (uint8_t)(pred+unfold[code]);
     alt_p2_model(sample, code, sample-pred);
     out[at] = sample;
@@ -1032,6 +1038,7 @@ struct AltP2Block {
       p2_ctr[j].b1 = 2;
     }
     for( uint32_t e = 0; e<(uint32_t)kP2FreqCount; ++e ) {
+      pz_fast[e] = adapt_init();
       freq[e].f[0] = 2048;
       freq[e].f[1] = 2816;
       freq[e].f[2] = 2816;
@@ -1098,8 +1105,8 @@ struct AltP2Block {
     // weight.  A mixer that starts at a third each has to unlearn that, and on
     // a plane of a few thousand pixels it never finishes -- which doubled the
     // cost of a 64x48 alpha gradient.
-    for( int32_t k = 0; k<Mix3::kSets; ++k ) {
-      const int32_t weights[3] = {65536, 0, 0};
+    for( int32_t k = 0; k<Mix4::kSets; ++k ) {
+      const int32_t weights[4] = {65536, 0, 0, 0};
       class_mix.seed(k, weights);
     }
     for( int32_t k = 0; k<64; ++k )

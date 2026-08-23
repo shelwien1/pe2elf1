@@ -286,11 +286,19 @@ three counts.
 
 **Change.** Two independent, well-established upgrades:
 
-* **Dual-rate counters.** Keep two probabilities per context, one fast-adapting
-  and one slow, and mix them (or feed both to the §2 mixer). This tracks
-  non-stationary regions without giving up precision in stationary ones, which
-  is exactly what the fixed `limit` schedule is trying and failing to do with
-  one number.
+* **Dual-rate counters — built for alt-P2, and small [measured].** A second
+  probability per frequency cell at a fixed 1/4 rate, beside the annealing
+  triple, as a fourth input to that model's mixer: **`x_ep` −188 bytes**, at no
+  measurable decode cost. Rates of 1/8, 1/16, 1/32 and 1/64 are all worse, which
+  says the useful second estimate is a *very* fast one — the triple already
+  covers everything slower. The gain is 0.06 % of the file, so on this content
+  the fixed schedule was not costing much.
+
+  The same idea in a different form is what made the §7 context model work at
+  all: its counters adapt at 1/(*n*+2), and replacing that with a fixed 1/32
+  rate costs `x_ci` 20 000 bytes and `x_ai` 33 000. Where a context sees tens of
+  samples the adaptation schedule is worth far more than it is here, where a
+  cell sees thousands.
 * **State machines instead of counts.** Replace the count pair with an 8-bit
   state (bit history) indexing an adaptive probability table, as in the
   `nex()`/`StateMap` construction. It is smaller per context — 1 byte against
@@ -812,12 +820,21 @@ per-pixel weighted blend loses.
   activity contexts costs a few context bits and no arithmetic. The alt models
   already interleave the planes of a pixel, so the value is available at the
   right moment.
-* **A better DC than a histogram peak.** `dc` is chosen once per plane as the
-  position of the heaviest 256-wide window over a residual histogram
-  (`widest_window`, `planes.inc:136`). That is a global mode; the actual bias
-  drifts across the image. An on-line adaptive bias — or two, selected by an
-  activity class — removes the residual DC that currently leaks into the models
-  and has to be re-learned by every context separately.
+* **A better DC than a histogram peak — built, and it loses [measured].** `dc`
+  is chosen once per plane as the position of the heaviest 256-wide window over
+  a residual histogram (`widest_window`). Tracking it instead — transmitting the
+  same value as a starting point and then moving it with each coded residual —
+  costs `t24` **+3.3 %** (52 604 → 54 352) at its best rate, and a sign-tracking
+  (median-seeking) version costs +1.5 %. Every rate tried was worse than the
+  fixed value.
+
+  The reason is that `dc` is not a bias in the statistical sense. It is a
+  **window offset**: `widest_window` picks the placement that keeps the whole
+  residual distribution inside one 256-wide window so that nothing wraps mod
+  256. Moving it mid-plane shifts where the wrap falls, splitting a contiguous
+  residual alphabet into two pieces at the ends — which is exactly what the slow
+  model's alphabet reduction cannot absorb. Chasing the mean of a distribution
+  whose *placement* is the point is the wrong operation.
 * **Concrete nonlinear terms**, if §8's item (4) is pursued: products
   `O0·O1/256`, absolute differences `|O0 − O1|`, and a gradient-sign cross-term.
   Saturation and clipping make cross-channel behaviour genuinely nonlinear near
