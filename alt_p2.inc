@@ -338,7 +338,7 @@ struct AltP2Block {
   }
 
   int32_t p2_pred_at(int32_t bank, int32_t bctx) {
-    const P2Count &c = p2_ctr[slot(bank, bctx)];
+    const P2Count &c = ctr_at(slot(bank, bctx));
     return p2_pred(c.weighted, c.rate);
   }
 
@@ -355,6 +355,25 @@ struct AltP2Block {
   static const int32_t kP2FreqCount = 15552;
   P2Freq freq[kP2FreqCount];
   uint32_t pz_fast[kP2FreqCount];
+
+  // Every access to the two big tables goes through these.  The context that
+  // indexes them is built from the IX layout parameters and then has offsets
+  // added to it, so a swept bit position walks off the end -- and unlike the
+  // slow model's tables there is no single choke point to bound, the index is
+  // assembled at a dozen sites.  One compare beside a table lookup that already
+  // misses cache; the shipping build folds the size, not the compare, because
+  // the index is data.
+  P2Freq &freq_at(int32_t i) {
+    return freq[idx_bound((uint32_t)i, kP2FreqCount)];
+  }
+
+  uint32_t &fast_at(int32_t i) {
+    return pz_fast[idx_bound((uint32_t)i, kP2FreqCount)];
+  }
+
+  P2Count &ctr_at(uint32_t i) {
+    return p2_ctr[idx_bound(i, kP2CounterCount)];
+  }
   uint8_t _pad3[8];
 
   void nlms_step(NbRow* row, int32_t j, int32_t k, float x, float err, float ms_rate, float floor_) {
@@ -564,7 +583,7 @@ struct AltP2Block {
     for( uint32_t bank = 0; bank<5; ++bank ) {
       const int32_t bctx = bank_ctx[bank];
       const int32_t res = sample16-nb_sum[2*bank];
-      P2Count* node0 = &p2_ctr[slot(bank, bctx)];
+      P2Count* node0 = &ctr_at(slot(bank, bctx));
       const int32_t w0 = res+(uint16_t)node0[0].weighted;
       node0[0].weighted = w0;
       int32_t countdown = node0[0].b1;
@@ -586,7 +605,7 @@ struct AltP2Block {
       }
       if( cx[0].alphabet_reduced )
         continue;
-      P2Count* mir = &p2_ctr[slot(bank, ctxw^kBankMirrorMask)];
+      P2Count* mir = &ctr_at(slot(bank, ctxw^kBankMirrorMask));
       bmf_prefetch<pf_all>(mir);
       const int32_t res2 = nb_sum[2*bank+1]+res;
       int32_t lowbits = ctxw&3;
@@ -594,7 +613,7 @@ struct AltP2Block {
         p2_update(cx, &node0[1], res2, 1);
       if( lowbits )
         p2_update(cx, &node0[-1], res2, 2);
-      P2Count* bankp = &p2_ctr[slot(bank, 0)];
+      P2Count* bankp = &ctr_at(slot(bank, 0));
       static const uint32_t p2_bank_bits[11] = {
         0x4000, 0x2000, 0x1000, 0x800, 0x400, 0x200, 0x100, 0x80, 0x40, 0x20, 0x10,
       };
@@ -649,20 +668,20 @@ struct AltP2Block {
   void bump_bank(int32_t k, uint32_t step_v, int32_t ctx15, int32_t fold_sel, int32_t is_dec) {
     const int32_t sel = ctx_w[k].sel;
     if( sel==1 ) {
-      p2_freq_add(&freq[ctx_w[k].w[0]+step_v-ctx_w[k].w[1]], fold_sel, 4);
+      p2_freq_add(&freq_at(ctx_w[k].w[0]+step_v-ctx_w[k].w[1]), fold_sel, 4);
       const uint32_t off = ctx-ctx_w[k].w[1];
-      P2Freq*const group = &freq[off+ctx_w[k].w[0]];
+      P2Freq*const group = &freq_at(off+ctx_w[k].w[0]);
       const uint32_t next_group = ctx_w[k].w[2]+off;
       p2_freq_add(&group[0], is_dec, 3);
       if( ctx15<15 ) {
         p2_freq_add(&group[1], is_dec, 4);
-        p2_freq_add(&freq[next_group+1], is_dec, 2);
+        p2_freq_add(&freq_at(next_group+1), is_dec, 2);
       }
       if( ctx15>2 )
         p2_freq_add(&group[-1], is_dec, 6);
     } else {
-      p2_freq_add(&freq[step_v+ctx_w[k].w[1]-ctx_w[k].w[2-sel]], fold_sel, 7);
-      P2Freq*const group = &freq[ctx_w[k].w[1]+(ctx-ctx_w[k].w[sel])];
+      p2_freq_add(&freq_at(step_v+ctx_w[k].w[1]-ctx_w[k].w[2-sel]), fold_sel, 7);
+      P2Freq*const group = &freq_at(ctx_w[k].w[1]+(ctx-ctx_w[k].w[sel]));
       p2_freq_add(&group[0], is_dec, 7);
       p2_bump_sides(group, ctx15, 0, is_dec, 5, 6);
     }
@@ -685,12 +704,12 @@ struct AltP2Block {
         int32_t q2 = rec[-1].val>>4;
         ctx_pair[0] = ctx+ctx_delta[q2+4];
         ctx_pair[1] = ctx+ctx_delta[q2];
-        P2Freq &fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<P2_q2_thr_0)+(q2<P2_q2_thr_1)]+ctx_w[4].w[1]];
+        P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<P2_q2_thr_0)+(q2<P2_q2_thr_1)]+ctx_w[4].w[1]);
         if constexpr( f_DEC ) {
-          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx])]);
+          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
         } else {
           code0 = fold_or_refuse(out, p[0], (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
-          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
+          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
           ++p;
         }
         int32_t val = 16*(uint8_t)out[0];
@@ -725,12 +744,12 @@ struct AltP2Block {
         for( k = 0; k<(uint32_t)width; ++k ) {
           int32_t pred = alt_p2_context(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            code2 = code = freq[ctx].decode_symbol(cx, pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
+            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
             code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
             code2 = code;
-            freq[ctx].encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
+            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
           }
           alt_p2_model(outp[k], code2, outp[k]-pred);
         }
@@ -877,7 +896,7 @@ struct AltP2Block {
     code_banks(sample16);
     int32_t ctx_l = ctx;
     ++cursor[0];
-    P2Freq* frec = &freq[ctx_l];
+    P2Freq* frec = &freq_at(ctx_l);
     ++cursor[1];
     ++cursor[2];
     ++cursor[3];
@@ -903,13 +922,13 @@ struct AltP2Block {
       nudge(1, 10, pair_ctx+1);
     if( ctx15>0 )
       nudge(-1, 13, pair_ctx-1);
-    if( freq[ctx].step<=0x1Au )
+    if( freq_at(ctx).step<=0x1Au )
       return ctx;
     int32_t fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
     if( !fold[(uint8_t)-resid_in] )
       fold_sel = fold[(uint8_t)-resid_in];
     const uint32_t step_ctx = CtxIdx{}.bits<IX_p2_step_ctx_p0, IX_p2_step_ctx_w0>(ctx).raw(mixer_rev(ctx_w, 5));
-    P2Freq* frec_step = &freq[step_ctx];
+    P2Freq* frec_step = &freq_at(step_ctx);
     p2_bump_sides(frec_step, ctx15, 0, fold_sel, 4, 4);
     if( code ) {
       int32_t n2_half = (code-1)>>1;
@@ -920,7 +939,7 @@ struct AltP2Block {
     }
     P2Freq* prec0 = &frec_step[0];
     p2_freq_add(prec0, fold_sel, 6);
-    if( !plane_idx||freq[ctx].step>0x100u ) {
+    if( !plane_idx||freq_at(ctx).step>0x100u ) {
       is_dec = code ? 2-is_dec : 0;
       for( int32_t k = 0; k<5; ++k )
         bump_bank(k, step_ctx, ctx15, fold_sel, is_dec);
@@ -941,13 +960,13 @@ struct AltP2Block {
       sample = clean;
       out[at] = recon;
     }
-    freq[ctx].encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
+    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
     alt_p2_model(sample, code, sample-pred);
   }
 
   void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
     const int32_t pred = alt_p2_context(refa, refb);
-    const int32_t code = freq[ctx].decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx]);
+    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
     const int32_t sample = (uint8_t)(pred+unfold[code]);
     alt_p2_model(sample, code, sample-pred);
     out[at] = sample;

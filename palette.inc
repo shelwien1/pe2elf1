@@ -32,8 +32,9 @@ struct PalCtr {
   static const int32_t kLimit;
   uint16_t n[2];
   void Init() {
-    n[0] = PA_seed;
-    n[1] = PA_seed;
+    // A seed of zero is a zero-width interval the first time the pair codes.
+    n[0] = (uint16_t)idx_clamp(PA_seed, 1, 1<<14);
+    n[1] = (uint16_t)idx_clamp(PA_seed, 1, 1<<14);
   }
   template <int32_t f_DEC> int32_t code(RangeCoder* rc, int32_t bit) {
     if constexpr( f_DEC )
@@ -49,8 +50,10 @@ struct PalCtr {
   }
 };
 
-const int32_t PalCtr::kStep = PA_step;
-const int32_t PalCtr::kLimit = PA_limit;
+// Both floored at one: a step of zero never moves the pair, and a limit of
+// zero halves it on every bit until both counts are one.
+const int32_t PalCtr::kStep = idx_clamp(PA_step, 1, 1<<14);
+const int32_t PalCtr::kLimit = idx_clamp(PA_limit, 4, 1<<15);
 
 struct PaletteModel {
   // A byte goes out through a binary tree: 255 internal nodes, indexed the

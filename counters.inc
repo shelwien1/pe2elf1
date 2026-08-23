@@ -245,14 +245,17 @@ struct BitCtr {
 };
 
 CounterNode*init_counter_node(CounterNode* node) {
-  node[0].c[0] = CN_seed_0;
-  node[0].c[1] = CN_seed_1;
-  node[0].c[2] = CN_seed_2;
-  node[0].c[3] = CN_seed_3;
-  node[0].c[4] = CN_seed_4;
-  node[0].c[5] = CN_seed_5;
-  node[0].c[6] = CN_seed_6;
-  node[0].total = CN_seed_0+CN_seed_1+CN_seed_2+CN_seed_3+CN_seed_4+CN_seed_5+CN_seed_6;
+  // Every seed is at least one: a slot seeded at zero is a zero-width
+  // interval the moment the coder is asked to code it.
+  node[0].c[0] = (uint16_t)idx_clamp(CN_seed_0, 1, 4096);
+  node[0].c[1] = (uint16_t)idx_clamp(CN_seed_1, 1, 4096);
+  node[0].c[2] = (uint16_t)idx_clamp(CN_seed_2, 1, 4096);
+  node[0].c[3] = (uint16_t)idx_clamp(CN_seed_3, 1, 4096);
+  node[0].c[4] = (uint16_t)idx_clamp(CN_seed_4, 1, 4096);
+  node[0].c[5] = (uint16_t)idx_clamp(CN_seed_5, 1, 4096);
+  node[0].c[6] = (uint16_t)idx_clamp(CN_seed_6, 1, 4096);
+  node[0].total = (uint16_t)(node[0].c[0]+node[0].c[1]+node[0].c[2]+node[0].c[3]
+                            +node[0].c[4]+node[0].c[5]+node[0].c[6]);
   return node;
 }
 

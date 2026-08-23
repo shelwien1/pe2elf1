@@ -148,7 +148,10 @@ struct AltP1Block {
       ctx_w[3].sel = cursor1[2].sym-(uint32_t)guess;
       quiet = cur[0].mag+cursor4[0].mag+cursor[3][0].mag+cursor2[0].mag+cursor1[0].mag==0;
     }
-    int32_t act_q = (act_all+P1_act_round)>>idx_clamp(P1_act_shift, 1, 8);
+    // Bounded to the ladder tables: a shallower shift leaves more of the
+    // activity sum in the index than level_of and group_of have room for.
+    int32_t act_q = (int32_t)idx_bound((uint32_t)((act_all+P1_act_round)>>idx_clamp(P1_act_shift, 1, 8)),
+                                      sizeof level_of);
     int32_t act_lvl = level_of[act_q];
     int32_t step = p1_level_step[(uint32_t)act_lvl];
     ctx[0] = act_lvl;

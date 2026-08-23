@@ -1279,6 +1279,12 @@ struct ModelBlock {
     if( offer_candidates<0>(nb_sym)>=0 ) return runlen+1;
     SymList** sel_p = load_selectors();
     while( 1 ) {
+      // The same guard the decoder's copy of this walk has always had.  The
+      // escape list is the last one and always codes, so reaching past it means
+      // every list went empty -- which a rescale schedule swept to its extreme
+      // can do, and which walked off the end of the array here while the
+      // decoder refused cleanly.
+      if( sel_p>&escape_list ) bmf_fatal(bmf_read_error);
       if( (sel_p[0])[0].live ) {
         if( (sel_p[0])[0].code_symbol(cx, row_cur[5][0].sym) ) return runlen+1;
         sel_p = sel_cur;
