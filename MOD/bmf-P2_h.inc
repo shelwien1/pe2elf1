@@ -2,6 +2,15 @@
 
 
 
+
+
+
+
+
+
+
+
+
 static const int P2_coef_00 = (13421773+0) * (-1);
 static const int P2_coef_01 = (9395241+0) * (-1);
 static const int P2_coef_02 = (5033165+0) * (1);
@@ -257,6 +266,15 @@ static const int P2_g3_dn_shift = (13+0) * (1);
 
 
 static const int P2_BankSlot_Volume = 1* 5* 32768; // 163840
+static const int P2_Ctx0Lo_Volume = 1* 2* 2* 2* 2* 2* 4* 4; // 512
+static const int P2_Ctx0a_Volume = 1* 2* 2* 2* 2* 2* 2* P2_Ctx0Lo_Volume; // 0
+static const int P2_Ctx0b_Volume = 1* 2* 2* 2* 2* 2* 2* P2_Ctx0Lo_Volume; // 0
+static const int P2_Ctx1a_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
+static const int P2_Ctx1b_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
+static const int P2_Ctx2a_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
+static const int P2_Ctx2b_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
+static const int P2_Ctx3_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
+static const int P2_Ctx4_Volume = 1* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 2* 4* 4; // 32768
 static const int P2_NbSlot_Volume = 1* 6* 5* 4* 4* 4; // 1920
 
 struct P2_T { 

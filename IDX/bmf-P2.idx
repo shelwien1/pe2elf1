@@ -358,3 +358,125 @@ Index NbSlot
 Index BankSlot
  ADD 5: bank
  ADD 32768: ctx
+
+# The five bank contexts.  Eleven flags over a quantiser pair apiece,
+# Volume 32768 -- which is the ctx radix of BankSlot above, so how wide the
+# per-bank counter table is now follows from how many flags the context
+# declares rather than from a number written beside it.
+
+Index Ctx0Lo
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 4: f5
+ ADD 4: f6
+
+Index Ctx0a
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD P2_Ctx0Lo_Volume: lo
+
+Index Ctx0b
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD P2_Ctx0Lo_Volume: lo
+
+Index Ctx1a
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD 2: f6
+ ADD 2: f7
+ ADD 2: f8
+ ADD 2: f9
+ ADD 2: f10
+ ADD 4: qr
+ ADD 4: qs
+
+Index Ctx1b
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD 2: f6
+ ADD 2: f7
+ ADD 2: f8
+ ADD 2: f9
+ ADD 2: f10
+ ADD 4: qr
+ ADD 4: qs
+
+Index Ctx2a
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD 2: f6
+ ADD 2: f7
+ ADD 2: f8
+ ADD 2: f9
+ ADD 2: f10
+ ADD 4: qr
+ ADD 4: qs
+
+Index Ctx2b
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD 2: f6
+ ADD 2: f7
+ ADD 2: f8
+ ADD 2: f9
+ ADD 2: f10
+ ADD 4: qr
+ ADD 4: qs
+
+Index Ctx3
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD 2: f6
+ ADD 2: f7
+ ADD 2: f8
+ ADD 2: f9
+ ADD 2: f10
+ ADD 4: qr
+ ADD 4: qs
+
+Index Ctx4
+ ADD 2: f0
+ ADD 2: f1
+ ADD 2: f2
+ ADD 2: f3
+ ADD 2: f4
+ ADD 2: f5
+ ADD 2: f6
+ ADD 2: f7
+ ADD 2: f8
+ ADD 2: f9
+ ADD 2: f10
+ ADD 4: qr
+ ADD 4: qs

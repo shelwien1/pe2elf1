@@ -232,10 +232,6 @@ struct P2Coef {
   }
 };
 
-int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2, int32_t sum, int32_t s0, int32_t s1, int32_t s2) {
-  return CtxIdx{}.bits<IX_p2_ix_p0, IX_p2_ix_w0>((run>r0)+(run>r1)+(run>r2)).bits<IX_p2_ix_p1, IX_p2_ix_w1>((sum>s0)+(sum>s1)+(sum>s2));
-}
-
 int32_t over_thresholds(int32_t n, const int32_t* t, int32_t lo, int32_t hi, int32_t scale) {
   int32_t over = 0;
   for( int32_t k = hi; k>=lo; --k ) over += n>scale*t[k];
@@ -344,7 +340,11 @@ struct AltP2Block {
   }
 
   int32_t step_bank(int32_t bank_no, uint32_t word, int32_t run_in) {
-    const int32_t bank = (int32_t)(word>>11);
+    // The context arrives as the bank value.  It used to arrive shifted up by
+    // eleven and be shifted straight back down here, which was the CtxIdx
+    // chain placing its fields at absolute bit positions; the Index
+    // declaration places them by order, so the shift has nothing left to do.
+    const int32_t bank = (int32_t)word;
     bank_ctx[bank_no] = bank;
     const int32_t pred = p2_pred_at(bank_no, bank);
     nb_sum[2*bank_no+1] = pred;
@@ -807,11 +807,11 @@ struct AltP2Block {
     if( refa )
       g3pair += (rb0[0].aerr+ra0[0].aerr)>>1;
     int32_t g3sum = c1[3].aerr+c1[-1].aerr+c0[-1].aerr+c0[-3].aerr+c0[-4].aerr+c0[-2].aerr;
-    ctx0_lo = CtxIdx{}.bit<IX_p2_ctx0_lo_p0>(c1[1].err+c1[0].err+c1[-1].err+c0[-1].err<0).bit<IX_p2_ctx0_lo_p1>(c3[0].err+c0[-2].err+2*c0[-4].err<0).bit<IX_p2_ctx0_lo_p2>(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0).bit<IX_p2_ctx0_lo_p3>(c0[-1].err<0).bit_of<IX_p2_ctx0_lo_p4>((uint16_t)c0[-3].err).bits<IX_p2_ctx0_lo_p5, IX_p2_ctx0_lo_w5>((filt>P2_filt_thr_0)+(filt>P2_filt_thr_1)+(filt>P2_filt_thr_2)).bits<IX_p2_ctx0_lo_p6, IX_p2_ctx0_lo_w6>(((g3pair+g3sum)>P2_g3_thr_0)+((g3pair+g3sum)>P2_g3_thr_1)+((g3pair+g3sum)>P2_g3_thr_2));
+    ctx0_lo = MakeCtx0Lo((uint32_t)(c1[1].err+c1[0].err+c1[-1].err+c0[-1].err<0), (uint32_t)(c3[0].err+c0[-2].err+2*c0[-4].err<0), (uint32_t)(c1[-3].err+c0[-3].err+c0[-5].err+c0[-7].err<0), (uint32_t)(c0[-1].err<0), (uint32_t)(((uint32_t)((uint16_t)c0[-3].err)>>IX_p2_ctx0_lo_e4)&1u), (uint32_t)((filt>P2_filt_thr_0)+(filt>P2_filt_thr_1)+(filt>P2_filt_thr_2)), (uint32_t)(((g3pair+g3sum)>P2_g3_thr_0)+((g3pair+g3sum)>P2_g3_thr_1)+((g3pair+g3sum)>P2_g3_thr_2)));
     if( refa ) {
-      ctx0 = CtxIdx{}.bit<IX_p2_ctx0_p0>(rb0[-1].err<0).bit<IX_p2_ctx0_p1>(rb0[0].err<0).bit<IX_p2_ctx0_p2>(ra0[-1].err<0).bit<IX_p2_ctx0_p3>(rb0[0].err+rb0[-2].err<0).bit<IX_p2_ctx0_p4>(ra0[-2].err+ra0[0].err<0).bit<IX_p2_ctx0_p5>(c0[-2].err<0).raw(ctx0_lo);
+      ctx0 = MakeCtx0a((uint32_t)(rb0[-1].err<0), (uint32_t)(rb0[0].err<0), (uint32_t)(ra0[-1].err<0), (uint32_t)(rb0[0].err+rb0[-2].err<0), (uint32_t)(ra0[-2].err+ra0[0].err<0), (uint32_t)(c0[-2].err<0), (uint32_t)(ctx0_lo));
     } else {
-      ctx0 = CtxIdx{}.bit<IX_p2_ctx01_p0>(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err<0).bit<IX_p2_ctx01_p1>(c2[1].err+c2[0].err+c0[-4].err+c0[-8].err<0).bit<IX_p2_ctx01_p2>(c0[-4].err+c0[-6].err<0).bit<IX_p2_ctx01_p3>(c0[-4].err<0).bit<IX_p2_ctx01_p4>(c0[-5].err<0).bit<IX_p2_ctx01_p5>(c0[-7].err<0).raw(ctx0_lo);
+      ctx0 = MakeCtx0b((uint32_t)(c1[3].err+c0[-3].err+c0[-7].err+c0[-5].err<0), (uint32_t)(c2[1].err+c2[0].err+c0[-4].err+c0[-8].err<0), (uint32_t)(c0[-4].err+c0[-6].err<0), (uint32_t)(c0[-4].err<0), (uint32_t)(c0[-5].err<0), (uint32_t)(c0[-7].err<0), (uint32_t)(ctx0_lo));
     }
     const int32_t run0 = step_bank(0, ctx0, filt);
     int32_t nb4_4 = c4[4].val;
@@ -822,10 +822,10 @@ struct AltP2Block {
     int32_t d_up5 = up5-run0;
     if( refa ) {
       int32_t dv_now = c0[0].dval;
-      ctx1 = CtxIdx{}.bit_of<IX_p2_ctx1_p0>(c0[-1].val+ra0[0].val-ra0[-1].val-run0).bit<IX_p2_ctx1_p1>(ra2[0].dval+ra1[0].dval-2*ra0[0].dval<0).bit_of<IX_p2_ctx1_p2>(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval)).bit_of<IX_p2_ctx1_p3>(dv_now+c0[-5].dval-run0).bit_of<IX_p2_ctx1_p4>(dv_now+c1[0].dval+rb1[2].dval-rb2[2].dval-run0).bit_of<IX_p2_ctx1_p5>(dv_now+c0[-1].dval+rb0[0].dval-rb0[-1].dval-run0).bit_of<IX_p2_ctx1_p6>(c2[-1].dval+dv_now+ra0[0].dval-ra2[-1].dval-run0).bit_of<IX_p2_ctx1_p7>(dv_now+c1[2].dval+ra0[0].dval-ra1[2].dval-run0).bit_of<IX_p2_ctx1_p8>(d_up5).bit_of<IX_p2_ctx1_p9>(d_up).bit_of<IX_p2_ctx1_p10>(d_run0).raw(ctx_quant(run0, P2_q0a_r0, P2_q0a_r1, P2_q0a_r2, sum_all, P2_q0a_s0, P2_q0a_s1, P2_q0a_s2));
+      ctx1 = MakeCtx1a((uint32_t)(((uint32_t)(c0[-1].val+ra0[0].val-ra0[-1].val-run0)>>IX_p2_ctx1_e0)&1u), (uint32_t)(ra2[0].dval+ra1[0].dval-2*ra0[0].dval<0), (uint32_t)(((uint32_t)(dv_now+c0[-3].dval-run0-(c1[2].dval-c1[5].dval))>>IX_p2_ctx1_e2)&1u), (uint32_t)(((uint32_t)(dv_now+c0[-5].dval-run0)>>IX_p2_ctx1_e3)&1u), (uint32_t)(((uint32_t)(dv_now+c1[0].dval+rb1[2].dval-rb2[2].dval-run0)>>IX_p2_ctx1_e4)&1u), (uint32_t)(((uint32_t)(dv_now+c0[-1].dval+rb0[0].dval-rb0[-1].dval-run0)>>IX_p2_ctx1_e5)&1u), (uint32_t)(((uint32_t)(c2[-1].dval+dv_now+ra0[0].dval-ra2[-1].dval-run0)>>IX_p2_ctx1_e6)&1u), (uint32_t)(((uint32_t)(dv_now+c1[2].dval+ra0[0].dval-ra1[2].dval-run0)>>IX_p2_ctx1_e7)&1u), (uint32_t)(((uint32_t)(d_up5)>>IX_p2_ctx1_e8)&1u), (uint32_t)(((uint32_t)(d_up)>>IX_p2_ctx1_e9)&1u), (uint32_t)(((uint32_t)(d_run0)>>IX_p2_ctx1_e10)&1u), (uint32_t)((run0>P2_q0a_r0)+(run0>P2_q0a_r1)+(run0>P2_q0a_r2)), (uint32_t)((sum_all>P2_q0a_s0)+(sum_all>P2_q0a_s1)+(sum_all>P2_q0a_s2)));
     } else {
       int32_t d_run0b = run0-c0[-3].val;
-      ctx1 = CtxIdx{}.bit_of<IX_p2_ctx11_p0>(nb4_4-c3[0].val+run0-c1[4].val).bit_of<IX_p2_ctx11_p1>(c1[-5].val-c1[-2].val+d_run0b).bit_of<IX_p2_ctx11_p2>(d_run0b+c1[2].val-up5).bit_of<IX_p2_ctx11_p3>(c4[3].val-c2[2].val+run0-c2[1].val).bit_of<IX_p2_ctx11_p4>(c4[-1].val-c3[0].val+run0-c1[-1].val).bit_of<IX_p2_ctx11_p5>(c1[0].val-c1[2].val+run0-c0[-2].val).bit_of<IX_p2_ctx11_p6>(-d_up5).bit_of<IX_p2_ctx11_p7>(-d_up).bit_of<IX_p2_ctx11_p8>(run0-c4[2].val).bit_of<IX_p2_ctx11_p9>(run0-c4[-3].val).bit_of<IX_p2_ctx11_p10>(-d_run0).raw(ctx_quant(run0, P2_q0b_r0, P2_q0b_r1, P2_q0b_r2, sum_all, P2_q0b_s0, P2_q0b_s1, P2_q0b_s2));
+      ctx1 = MakeCtx1b((uint32_t)(((uint32_t)(nb4_4-c3[0].val+run0-c1[4].val)>>IX_p2_ctx11_e0)&1u), (uint32_t)(((uint32_t)(c1[-5].val-c1[-2].val+d_run0b)>>IX_p2_ctx11_e1)&1u), (uint32_t)(((uint32_t)(d_run0b+c1[2].val-up5)>>IX_p2_ctx11_e2)&1u), (uint32_t)(((uint32_t)(c4[3].val-c2[2].val+run0-c2[1].val)>>IX_p2_ctx11_e3)&1u), (uint32_t)(((uint32_t)(c4[-1].val-c3[0].val+run0-c1[-1].val)>>IX_p2_ctx11_e4)&1u), (uint32_t)(((uint32_t)(c1[0].val-c1[2].val+run0-c0[-2].val)>>IX_p2_ctx11_e5)&1u), (uint32_t)(((uint32_t)(-d_up5)>>IX_p2_ctx11_e6)&1u), (uint32_t)(((uint32_t)(-d_up)>>IX_p2_ctx11_e7)&1u), (uint32_t)(((uint32_t)(run0-c4[2].val)>>IX_p2_ctx11_e8)&1u), (uint32_t)(((uint32_t)(run0-c4[-3].val)>>IX_p2_ctx11_e9)&1u), (uint32_t)(((uint32_t)(-d_run0)>>IX_p2_ctx11_e10)&1u), (uint32_t)((run0>P2_q0b_r0)+(run0>P2_q0b_r1)+(run0>P2_q0b_r2)), (uint32_t)((sum_all>P2_q0b_s0)+(sum_all>P2_q0b_s1)+(sum_all>P2_q0b_s2)));
     }
     const int32_t run1 = step_bank(1, ctx1, run0);
     int32_t cx2_val0 = c2[0].val;
@@ -836,18 +836,18 @@ struct AltP2Block {
     if( refa ) {
       int32_t dv1 = c1[1].dval;
       int32_t d_ra = ra0[0].val-run1;
-      ctx2 = CtxIdx{}.bit_of<IX_p2_ctx2_p0>(c0[0].dval+c1[-1].dval-run1-(c2[0].dval-dv1)).bit_of<IX_p2_ctx2_p1>(c0[0].dval+c0[-1].dval-run1-(c1[0].dval-dv1)).bit_of<IX_p2_ctx2_p2>(rb0[0].val-run1+cx2_val0-rb2[0].val).bit_of<IX_p2_ctx2_p3>(d_ra+cx2_val0-ra2[0].val).bit_of<IX_p2_ctx2_p4>(d_ra+c1[-1].val-ra1[-1].val).bit_of<IX_p2_ctx2_p5>(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1).bit_of<IX_p2_ctx2_p6>(2*cx1_val-run1-cx2_val0).bit_of<IX_p2_ctx2_p7>(-lap).bit_of<IX_p2_ctx2_p8>(dtop2).bit_of<IX_p2_ctx2_p9>(dvsum2).bit_of<IX_p2_ctx2_p10>(P2_rb_bias-rb0[0].val).raw(ctx_quant(run1, P2_q1a_r0, P2_q1a_r1, P2_q1a_r2, sum_all, P2_q1a_s0, P2_q1a_s1, P2_q1a_s2));
+      ctx2 = MakeCtx2a((uint32_t)(((uint32_t)(c0[0].dval+c1[-1].dval-run1-(c2[0].dval-dv1))>>IX_p2_ctx2_e0)&1u), (uint32_t)(((uint32_t)(c0[0].dval+c0[-1].dval-run1-(c1[0].dval-dv1))>>IX_p2_ctx2_e1)&1u), (uint32_t)(((uint32_t)(rb0[0].val-run1+cx2_val0-rb2[0].val)>>IX_p2_ctx2_e2)&1u), (uint32_t)(((uint32_t)(d_ra+cx2_val0-ra2[0].val)>>IX_p2_ctx2_e3)&1u), (uint32_t)(((uint32_t)(d_ra+c1[-1].val-ra1[-1].val)>>IX_p2_ctx2_e4)&1u), (uint32_t)(((uint32_t)(c0[0].dval-c0[-2].dval+2*c0[-1].dval-run1)>>IX_p2_ctx2_e5)&1u), (uint32_t)(((uint32_t)(2*cx1_val-run1-cx2_val0)>>IX_p2_ctx2_e6)&1u), (uint32_t)(((uint32_t)(-lap)>>IX_p2_ctx2_e7)&1u), (uint32_t)(((uint32_t)(dtop2)>>IX_p2_ctx2_e8)&1u), (uint32_t)(((uint32_t)(dvsum2)>>IX_p2_ctx2_e9)&1u), (uint32_t)(((uint32_t)(P2_rb_bias-rb0[0].val)>>IX_p2_ctx2_e10)&1u), (uint32_t)((run1>P2_q1a_r0)+(run1>P2_q1a_r1)+(run1>P2_q1a_r2)), (uint32_t)((sum_all>P2_q1a_s0)+(sum_all>P2_q1a_s1)+(sum_all>P2_q1a_s2)));
     } else {
-      ctx2 = CtxIdx{}.bit_of<IX_p2_ctx21_p0>(run1+3*(cx2_val0-cx1_val)-c3[0].val).bit_of<IX_p2_ctx21_p1>(run1+c4[0].val-(c2[2].val+c2[-2].val)).bit_of<IX_p2_ctx21_p2>(c3[2].val-c2[-1].val+run1-c1[3].val).bit_of<IX_p2_ctx21_p3>(c3[1].val-c1[1].val-dtop2).bit_of<IX_p2_ctx21_p4>(c3[0].val-cx1_val-dtop2).bit_of<IX_p2_ctx21_p5>(lap).bit_of<IX_p2_ctx21_p6>(run1-c4[3].val).bit_of<IX_p2_ctx21_p7>(c3[1].val-run1).bit_of<IX_p2_ctx21_p8>(run1-c4[0].val).bit_of<IX_p2_ctx21_p9>(run1-c3[-2].val).bit_of<IX_p2_ctx21_p10>(-dvsum2).raw(ctx_quant(run1, P2_q1b_r0, P2_q1b_r1, P2_q1b_r2, sum_all, P2_q1b_s0, P2_q1b_s1, P2_q1b_s2));
+      ctx2 = MakeCtx2b((uint32_t)(((uint32_t)(run1+3*(cx2_val0-cx1_val)-c3[0].val)>>IX_p2_ctx21_e0)&1u), (uint32_t)(((uint32_t)(run1+c4[0].val-(c2[2].val+c2[-2].val))>>IX_p2_ctx21_e1)&1u), (uint32_t)(((uint32_t)(c3[2].val-c2[-1].val+run1-c1[3].val)>>IX_p2_ctx21_e2)&1u), (uint32_t)(((uint32_t)(c3[1].val-c1[1].val-dtop2)>>IX_p2_ctx21_e3)&1u), (uint32_t)(((uint32_t)(c3[0].val-cx1_val-dtop2)>>IX_p2_ctx21_e4)&1u), (uint32_t)(((uint32_t)(lap)>>IX_p2_ctx21_e5)&1u), (uint32_t)(((uint32_t)(run1-c4[3].val)>>IX_p2_ctx21_e6)&1u), (uint32_t)(((uint32_t)(c3[1].val-run1)>>IX_p2_ctx21_e7)&1u), (uint32_t)(((uint32_t)(run1-c4[0].val)>>IX_p2_ctx21_e8)&1u), (uint32_t)(((uint32_t)(run1-c3[-2].val)>>IX_p2_ctx21_e9)&1u), (uint32_t)(((uint32_t)(-dvsum2)>>IX_p2_ctx21_e10)&1u), (uint32_t)((run1>P2_q1b_r0)+(run1>P2_q1b_r1)+(run1>P2_q1b_r2)), (uint32_t)((sum_all>P2_q1b_s0)+(sum_all>P2_q1b_s1)+(sum_all>P2_q1b_s2)));
     }
     const int32_t run2 = step_bank(2, ctx2, run1);
     int32_t run_dv3 = run2-c0[0].dval;
-    const uint32_t ctx3 = CtxIdx{}.bit_of<IX_p2_ctx3_p0>(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val).bit_of<IX_p2_ctx3_p1>(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1[0].dval)>>1)+run_dv3).bit_of<IX_p2_ctx3_p2>(c2[-3].val-c1[-2].val+run2-c1[-1].val).bit_of<IX_p2_ctx3_p3>(-(c2[2].val+run2-2*c1[1].val)).bit_of<IX_p2_ctx3_p4>(c1[-2].dval-c0[-2].val+run2-c1[0].dval).bit_of<IX_p2_ctx3_p5>(run2-c1[3].val).bit_of<IX_p2_ctx3_p6>(run_dv3-c2[1].dval).bit_of<IX_p2_ctx3_p7>(run2-c3[0].val).bit_of<IX_p2_ctx3_p8>(2*run2-c1[0].dval-(c1[0].val+c0[0].dval)).bit_of<IX_p2_ctx3_p9>(run2-c0[-1].dval-c0[0].dval).bit_of<IX_p2_ctx3_p10>(run2-c0[-3].val).raw(ctx_quant(run2, P2_q2_r0, P2_q2_r1, P2_q2_r2, sum_all, P2_q2_s0, P2_q2_s1, P2_q2_s2));
+    const uint32_t ctx3 = MakeCtx3((uint32_t)(((uint32_t)(3*(c0[-2].val-c0[-1].val)+run2-c0[-3].val)>>IX_p2_ctx3_e0)&1u), (uint32_t)(((uint32_t)(c2[1].dval-((uint32_t)(c1[1].dval+c1[2].dval+c1[-1].dval+c1[0].dval)>>1)+run_dv3)>>IX_p2_ctx3_e1)&1u), (uint32_t)(((uint32_t)(c2[-3].val-c1[-2].val+run2-c1[-1].val)>>IX_p2_ctx3_e2)&1u), (uint32_t)(((uint32_t)(-(c2[2].val+run2-2*c1[1].val))>>IX_p2_ctx3_e3)&1u), (uint32_t)(((uint32_t)(c1[-2].dval-c0[-2].val+run2-c1[0].dval)>>IX_p2_ctx3_e4)&1u), (uint32_t)(((uint32_t)(run2-c1[3].val)>>IX_p2_ctx3_e5)&1u), (uint32_t)(((uint32_t)(run_dv3-c2[1].dval)>>IX_p2_ctx3_e6)&1u), (uint32_t)(((uint32_t)(run2-c3[0].val)>>IX_p2_ctx3_e7)&1u), (uint32_t)(((uint32_t)(2*run2-c1[0].dval-(c1[0].val+c0[0].dval))>>IX_p2_ctx3_e8)&1u), (uint32_t)(((uint32_t)(run2-c0[-1].dval-c0[0].dval)>>IX_p2_ctx3_e9)&1u), (uint32_t)(((uint32_t)(run2-c0[-3].val)>>IX_p2_ctx3_e10)&1u), (uint32_t)((run2>P2_q2_r0)+(run2>P2_q2_r1)+(run2>P2_q2_r2)), (uint32_t)((sum_all>P2_q2_s0)+(sum_all>P2_q2_s1)+(sum_all>P2_q2_s2)));
     const int32_t run3 = step_bank(3, ctx3, run2);
     int32_t dv_now4 = c0[0].dval;
     int32_t run_dv4 = run3-dv_now4;
     int32_t run_up4 = run3+c3[0].val;
-    const uint32_t ctx4 = CtxIdx{}.bit_of<IX_p2_ctx4_p0>(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1[0].val)>>2)).bit_of<IX_p2_ctx4_p1>(run_up4-c0[-2].val-(c3[2].dval+dv_now4)).bit_of<IX_p2_ctx4_p2>(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval)).bit_of<IX_p2_ctx4_p3>(run3-c0[-3].dval-dv_now4-(c1[0].val-c1[-3].val)).bit_of<IX_p2_ctx4_p4>(run_up4-dv_now4-(c1[1].val+c2[-1].dval)).bit_of<IX_p2_ctx4_p5>(c2[-2].val+run3-2*c1[-1].val).bit_of<IX_p2_ctx4_p6>(c2[0].dval-2*c1[0].dval+run_dv4).bit_of<IX_p2_ctx4_p7>((run3-c0[-1].val)-(c1[0].val-c1[-1].val)).bit_of<IX_p2_ctx4_p8>(run_dv4-c1[4].dval).bit_of<IX_p2_ctx4_p9>(run_dv4-c1[-2].dval).bit_of<IX_p2_ctx4_p10>((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4).raw(ctx_quant(run3, P2_q3_r0, P2_q3_r1, P2_q3_r2, sum_all, P2_q3_s0, P2_q3_s1, P2_q3_s2));
+    const uint32_t ctx4 = MakeCtx4((uint32_t)(((uint32_t)(run3-((uint32_t)(c1[1].val+c1[-1].val+2*c1[0].val)>>2))>>IX_p2_ctx4_e0)&1u), (uint32_t)(((uint32_t)(run_up4-c0[-2].val-(c3[2].dval+dv_now4))>>IX_p2_ctx4_e1)&1u), (uint32_t)(((uint32_t)(run3-2*c0[-2].dval-(dv_now4-c0[-4].dval))>>IX_p2_ctx4_e2)&1u), (uint32_t)(((uint32_t)(run3-c0[-3].dval-dv_now4-(c1[0].val-c1[-3].val))>>IX_p2_ctx4_e3)&1u), (uint32_t)(((uint32_t)(run_up4-dv_now4-(c1[1].val+c2[-1].dval))>>IX_p2_ctx4_e4)&1u), (uint32_t)(((uint32_t)(c2[-2].val+run3-2*c1[-1].val)>>IX_p2_ctx4_e5)&1u), (uint32_t)(((uint32_t)(c2[0].dval-2*c1[0].dval+run_dv4)>>IX_p2_ctx4_e6)&1u), (uint32_t)(((uint32_t)((run3-c0[-1].val)-(c1[0].val-c1[-1].val))>>IX_p2_ctx4_e7)&1u), (uint32_t)(((uint32_t)(run_dv4-c1[4].dval)>>IX_p2_ctx4_e8)&1u), (uint32_t)(((uint32_t)(run_dv4-c1[-2].dval)>>IX_p2_ctx4_e9)&1u), (uint32_t)(((uint32_t)((uint16_t)run3-(uint16_t)c0[-4].dval-(uint16_t)dv_now4)>>IX_p2_ctx4_e10)&1u), (uint32_t)((run3>P2_q3_r0)+(run3>P2_q3_r1)+(run3>P2_q3_r2)), (uint32_t)((sum_all>P2_q3_s0)+(sum_all>P2_q3_s1)+(sum_all>P2_q3_s2)));
     const int32_t run4 = step_bank(4, ctx4, run3);
     return seat_symbol_context(run4, refs);
   }
