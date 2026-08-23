@@ -30,27 +30,6 @@ Number guess_thr_1,      1,0!10110
 # The level, group and slot ladders: three monotone quantisers over the
 # activity and the predicted value, and the dead-zone width per level.
 
-Number level_edge_0,     1,0!1
-Number level_edge_1,     1,0!10
-Number level_edge_2,     1,0!100
-Number level_edge_3,     1,0!1000
-Number level_edge_4,     1,0!1110
-Number level_edge_5,     1,0!100011
-Number level_edge_6,     1,0!1100111
-Number group_edge_0,     1,0!1
-Number group_edge_1,     1,0!11
-Number group_edge_2,     1,0!110
-Number group_edge_3,     1,0!1010
-Number group_edge_4,     1,0!10000
-Number group_edge_5,     1,0!11011
-Number group_edge_6,     1,0!110100
-Number slot_edge_0,      1,0!101
-Number slot_edge_1,      1,0!1010
-Number slot_edge_2,      1,0!100100
-Number slot_edge_3,      1,0!1100010
-Number slot_edge_4,      1,0!10011010
-Number slot_edge_5,      1,0!11101100
-Number slot_edge_6,      1,0!11111000
 Number level_step_0,     1,0!1
 Number level_step_1,     1,0!1
 Number level_step_2,     1,0!10

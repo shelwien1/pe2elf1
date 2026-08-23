@@ -286,27 +286,16 @@ struct AltP1Block {
       init_counter_node(&counters[ctr++]);
     while( ctr<kP1CounterCount );
     pred = 0;
-    int32_t lvl = 0;
-    int32_t grp = 0;
+    // The three ladders come from IDX threshold mappings: MakeLevel(x) is the
+    // number of level edges below x, which is exactly what walking the edge
+    // list a step at a time used to compute.
     int32_t k = 0;
-    for( k = 0; k<0x100; ++k ) {
-      level_of[2*k] = lvl;
-      const int32_t lvl1 = (2*k==p1_level_edges[lvl])+lvl;
-      group_of[2*k] = CtxIdx{}.above<IX_p1_group_of_p0>(plane).bits<IX_p1_group_of_p1, IX_p1_group_of_w1>(grp);
-      level_of[2*k+1] = lvl1;
-      const int32_t odd = 2*k+1;
-      const int32_t grp1 = (2*k==p1_group_edges[grp])+grp;
-      lvl = (odd==p1_level_edges[lvl1])+lvl1;
-      group_of[2*k+1] = CtxIdx{}.above<IX_p1_group_of1_p0>(plane).bits<IX_p1_group_of1_p1, IX_p1_group_of1_w1>(grp1);
-      grp = (odd==p1_group_edges[grp1])+grp1;
+    for( k = 0; k<0x200; ++k ) {
+      level_of[k] = (uint8_t)MakeLevel((uint32_t)k);
+      group_of[k] = CtxIdx{}.above<IX_p1_group_of_p0>(plane).bits<IX_p1_group_of_p1, IX_p1_group_of_w1>(MakeGroup((uint32_t)k));
     }
-    int32_t slot = 0;
-    for( uint32_t pair = 0; pair<0x80; ++pair ) {
-      slot_of[2*pair] = CtxIdx{}.above<IX_p1_slot_of_p0>(slot);
-      const int32_t slot1 = (2*pair==p1_slot_edges[slot])+slot;
-      slot_of[2*pair+1] = CtxIdx{}.above<IX_p1_slot_of1_p0>(slot1);
-      slot = (2*pair+1==p1_slot_edges[slot1])+slot1;
-    }
+    for( k = 0; k<0x100; ++k )
+      slot_of[k] = (uint8_t)CtxIdx{}.above<IX_p1_slot_of_p0>(MakeSlot((uint32_t)k));
     for( int32_t c = 0, w1 = P1_ctxw_seed; c<9; ++c, w1 *= P1_ctxw_ratio ) {
       ctx_w[c].w[0] = 0;
       ctx_w[c].w[1] = w1;

@@ -24,10 +24,13 @@ if command -v perl >/dev/null 2>&1; then
     case "$b" in *-const) continue;; esac
     if [ "$mode" = release ]; then
       sed 's/^Const 0/Const 1/' "$f" > "IDX/$b-const.idx"
+      # idx2inc.pl finds the template by swapping .idx for .inc, so the copy
+      # needs one too; a module with no Index has no template and needs none.
+      [ -f "IDX/$b.inc" ] && cp "IDX/$b.inc" "IDX/$b-const.inc"
       ( cd IDX && perl idx2inc.pl "$b-const.idx" 0 >/dev/null )
       mv "IDX/$b-const_h.inc" "MOD/${b}_h.inc"
       [ -f "IDX/$b-const_p.inc" ] && mv "IDX/$b-const_p.inc" "MOD/${b}_p.inc"
-      rm -f "IDX/$b-const.idx"
+      rm -f "IDX/$b-const.idx" "IDX/$b-const.inc"
     else
       ( cd IDX && perl idx2inc.pl "$b.idx" 1 >/dev/null )
       mv "IDX/${b}_h.inc" "MOD/${b}_h.inc"

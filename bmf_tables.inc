@@ -16,17 +16,6 @@ alignas(16) static const int32_t p2_ctx_rotate[4] = {
   P2_rotate_0, P2_rotate_1, P2_rotate_2, P2_rotate_3,
 };
 
-// The delta-context ladder and the run-length ladder: two monotone quantiser
-// edge lists, climbed a step at a time as the model walks its context space.
-// They are int32_t rather than uint8_t because in the tuning build the values
-// are load-time reads, and a narrowing conversion in an aggregate initialiser
-// is only allowed from a constant expression.
-alignas(16) static const int32_t p2_ctx_edges[16] = {
-  P2_ctx_edge_00, P2_ctx_edge_01, P2_ctx_edge_02, P2_ctx_edge_03, P2_ctx_edge_04, P2_ctx_edge_05, P2_ctx_edge_06, P2_ctx_edge_07, P2_ctx_edge_08, P2_ctx_edge_09, P2_ctx_edge_10, P2_ctx_edge_11, P2_ctx_edge_12, P2_ctx_edge_13, P2_ctx_edge_14, 0,
-};
-alignas(16) static const int32_t p2_len_edges[32] = {
-  P2_len_edge_00, P2_len_edge_01, P2_len_edge_02, P2_len_edge_03, P2_len_edge_04, P2_len_edge_05, P2_len_edge_06, P2_len_edge_07, P2_len_edge_08, P2_len_edge_09, P2_len_edge_10, P2_len_edge_11, P2_len_edge_12, P2_len_edge_13, P2_len_edge_14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-};
 
 // Four threshold triples per band, selected by p2_band_edges: the gradient,
 // neighbour-count, up-right and down-run quantisers that build the P2 slot.
@@ -40,21 +29,6 @@ alignas(16) static const int32_t bmf_p2_thresholds[6][13] = {
 };
 alignas(16) static const int32_t p2_b1_reload[3] = {P2_b1_reload_0, P2_b1_reload_1, P2_b1_reload_2};
 
-// The P1 ladders.  int32_t rather than uint8_t for the same reason as the P2
-// pair above: in the tuning build these are load-time reads, and narrowing one
-// in an aggregate initialiser is only allowed from a constant expression.
-alignas(16) static const int32_t p1_level_edges[8] = {
-  P1_level_edge_0, P1_level_edge_1, P1_level_edge_2, P1_level_edge_3,
-  P1_level_edge_4, P1_level_edge_5, P1_level_edge_6, 0,
-};
-alignas(16) static const int32_t p1_group_edges[8] = {
-  P1_group_edge_0, P1_group_edge_1, P1_group_edge_2, P1_group_edge_3,
-  P1_group_edge_4, P1_group_edge_5, P1_group_edge_6, 0,
-};
-alignas(16) static const int32_t p1_slot_edges[8] = {
-  P1_slot_edge_0, P1_slot_edge_1, P1_slot_edge_2, P1_slot_edge_3,
-  P1_slot_edge_4, P1_slot_edge_5, P1_slot_edge_6, 0,
-};
 alignas(16) static const int32_t p1_level_step[8] = {
   P1_level_step_0, P1_level_step_1, P1_level_step_2, P1_level_step_3,
   P1_level_step_4, P1_level_step_5, P1_level_step_6, P1_level_step_7,

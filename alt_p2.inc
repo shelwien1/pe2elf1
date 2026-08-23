@@ -1082,21 +1082,11 @@ struct AltP2Block {
     memset(buf[0], 0, row_bytes);
     for( int32_t i = 0; i<4; ++i )
       cx[0].ctx_bias[i] = 0;
-    int32_t lvl = 0;
     cursor[0] = buf[0]+8;
-    for( uint32_t pair = 0; pair<0x82; ++pair ) {
-      ctx_delta[2*pair] = CtxIdx{}.above<IX_p2_ctx_delta_p0>(plane_idx).bits<IX_p2_ctx_delta_p1, IX_p2_ctx_delta_w1>(lvl);
-      const int32_t lvl1 = (2*pair==p2_ctx_edges[lvl])+lvl;
-      ctx_delta[2*pair+1] = CtxIdx{}.above<IX_p2_ctx_delta1_p0>(plane_idx).bits<IX_p2_ctx_delta1_p1, IX_p2_ctx_delta1_w1>(lvl1);
-      lvl = (2*pair+1==p2_ctx_edges[lvl1])+lvl1;
-    }
-    int32_t len = 0;
-    for( n = 0; n<0x3C; ++n ) {
-      nb_ctx[2*n] = len;
-      int32_t len1 = (2*n==p2_len_edges[len])+len;
-      nb_ctx[2*n+1] = len1;
-      len = (2*n+1==p2_len_edges[len1])+len1;
-    }
+    for( uint32_t i = 0; i<0x104; ++i )
+      ctx_delta[i] = CtxIdx{}.above<IX_p2_ctx_delta_p0>(plane_idx).bits<IX_p2_ctx_delta_p1, IX_p2_ctx_delta_w1>(MakeP2Ctx(i));
+    for( n = 0; n<0x78; ++n )
+      nb_ctx[n] = (int32_t)MakeP2Len((uint32_t)n);
     ctx = 15;
     apm.Init();
     adapt_tables_init();

@@ -52,6 +52,19 @@ static inline constexpr int32_t idx_clamp(int32_t v, int32_t lo, int32_t hi) {
   return v<lo ? lo : v>hi ? hi : v;
 }
 
+// What idx2inc.pl's generated code spells.  A Const-mode threshold mapping with
+// more than eight buckets becomes a lookup table declared `byte`, indexed
+// through __min/__max; the tuning mode uses the mapping object instead.
+typedef unsigned char byte;
+
+static inline constexpr int32_t __min(int32_t a, int32_t b) {
+  return a<b ? a : b;
+}
+
+static inline constexpr int32_t __max(int32_t a, int32_t b) {
+  return a>b ? a : b;
+}
+
 #include "sh_mapping.inc"
 
 #include "MOD/bmf-P2_h.inc"
@@ -64,6 +77,11 @@ static inline constexpr int32_t idx_clamp(int32_t v, int32_t lo, int32_t hi) {
 #include "MOD/bmf-MB_h.inc"
 #include "MOD/bmf-CD_h.inc"
 #include "MOD/bmf-IX_h.inc"
+
+// The quantiser ladders: declarations, then the builders the Index blocks
+// generate.
+#include "MOD/bmf-QZ_h.inc"
+#include "MOD/bmf-QZ_p.inc"
 
 // A parameter that has to be a template argument.
 //
