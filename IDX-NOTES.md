@@ -292,10 +292,23 @@ current position, not its best — which is legal but probably not what you mean
 ## 9. The tests
 
 ```sh
-./mk.sh && ./t.sh              # round trip, tuning build
-./mk.sh release && ./t.sh      # round trip, shipping build
+./check.sh                     # both builds, against the corpus manifest
+./mk.sh && sh IDX/roundtrip.sh # every parameter reachable by the tuning loop
 python3 IDX/sweep.py           # the clamp test
 ```
+
+`check.sh` is the two-build contract. Run it rather than a bare `./mk.sh` and a
+verify: a build that fails to compile leaves the previous binary or none, and a
+verify script pointed at a missing file produces an empty manifest, which diffs
+against the baseline as every stream missing and reads exactly like a mismatch.
+It refuses if the binary is not there.
+
+`roundtrip.sh` is the tuning loop without the tuning. `opt.pl` finds parameters
+by scanning the executable for `!MAP!` and folds its results back with
+`import.pl`; both halves have to agree about names, and a parameter `opt.pl`
+cannot find is one the optimizer silently never moves. Exporting the patterns
+the binary already holds and importing them again must leave the `.idx` sources
+byte-identical.
 
 `sweep.py` is what `IDX-FORMAT.md` §5 asks for: a pattern is a search space and
 the optimizer will visit the ends of it, so anything used as a size, a shift or
