@@ -7,7 +7,11 @@
 # manifest, which reads like a mismatch or, worse, like a pass.
 set -e
 S=/tmp/claude-0/-home-user-pe2elf1/319c4029-94eb-5d39-9c49-e09a1ca282a4/scratchpad
-for mode in release tuning; do
+# Tuning first, release last, so the tree is left holding the shipping MOD/ --
+# the form that is checked in.  Ending in tuning mode leaves sixteen modified
+# files that look like build droppings and are not: MOD/ is a build input, and
+# committing the tuning form makes ./gc.sh alone produce a patchable binary.
+for mode in tuning release; do
   rm -f bmf
   if [ "$mode" = release ]; then ./mk.sh release >/dev/null; else ./mk.sh >/dev/null; fi
   [ -x ./bmf ] || { echo "$mode: BUILD FAILED"; exit 1; }
