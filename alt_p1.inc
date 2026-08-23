@@ -327,7 +327,7 @@ struct AltP1Block {
     cx[0].alt_init_tables(fold, (int8_t*)unfold);
     for( int32_t r = 0; r<width+10; ++r ) {
       for( int32_t i = 0; i<5; ++i )
-        buf[4-i][r].sym = 72;
+        buf[4-i][r].sym = P1_border_sym;
       for( int32_t i = 0; i<5; ++i )
         buf[4-i][r].mag = 0;
     }

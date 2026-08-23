@@ -72,3 +72,10 @@ Index Strip
  ADD 2: parity
  ADD 2: escape_high
  ADD 64: low
+
+# The probability map's context for the zero/non-zero split: which bits of the
+# caller's context it conditions on.  A masking, so which bits those are is a
+# declaration rather than an & at the use site.
+
+Index SlotMap
+ mslot: ctx, &00000000001111

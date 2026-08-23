@@ -26,7 +26,11 @@ Const 0
 Number act_round,        1,0!111
 Number act_shift,        1,0!100
 
-# The neighbourhood magnitude sum below which a pixel counts as quiet.
+# The symbol the border rows are seeded with, and the neighbourhood magnitude
+# sum below which a pixel counts as quiet.
+
+Number border_sym,       1,0!1001000
+
 
 Number quiet_thr,        1,0!10000
 

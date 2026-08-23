@@ -11,3 +11,11 @@ uint32_t MakeStrip( uint32_t plane, uint32_t parity, uint32_t escape_high, uint3
   Strip = Strip*(64) + (low);
   return (uint32_t)Strip;
 }
+
+uint32_t MakeSlotMap( int32_t ctx ) {
+  int32_t SlotMap;
+
+  SlotMap = 0;
+  SlotMap = (SlotMap<<4) + (((ctx)&15)); // 00000000001111
+  return (uint32_t)SlotMap;
+}

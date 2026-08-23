@@ -5,7 +5,7 @@ uint32_t MakeLevel( uint32_t x ) {
   int32_t Level;
 
   Level = 0;
-  QZ_ql.inc( Level, x );
+  Level = Level*8 + ((x>1+(1-1))+(x>2+(1-1))+(x>4+(1-1))+(x>8+(1-1))+(x>14+(1-1))+(x>35+(1-1))+(x>103+(1-1)));
   return (uint32_t)Level;
 }
 
@@ -13,7 +13,7 @@ uint32_t MakeGroup( uint32_t x ) {
   int32_t Group;
 
   Group = 0;
-  QZ_qg.inc( Group, x );
+  Group = Group*8 + ((x>1+(1-1))+(x>3+(1-1))+(x>6+(1-1))+(x>10+(1-1))+(x>16+(1-1))+(x>27+(1-1))+(x>52+(1-1)));
   return (uint32_t)Group;
 }
 
@@ -21,7 +21,7 @@ uint32_t MakeSlot( uint32_t x ) {
   int32_t Slot;
 
   Slot = 0;
-  QZ_qs.inc( Slot, x );
+  Slot = Slot*8 + ((x>5+(1-1))+(x>10+(1-1))+(x>36+(1-1))+(x>98+(1-1))+(x>154+(1-1))+(x>236+(1-1))+(x>248+(1-1)));
   return (uint32_t)Slot;
 }
 
@@ -29,7 +29,7 @@ uint32_t MakeP2Ctx( uint32_t x ) {
   int32_t P2Ctx;
 
   P2Ctx = 0;
-  QZ_qc.inc( P2Ctx, x );
+  P2Ctx = P2Ctx*16 + QZ_qc[__min(260,__max(0,x-(1-1)))];
   return (uint32_t)P2Ctx;
 }
 
@@ -37,6 +37,6 @@ uint32_t MakeP2Len( uint32_t x ) {
   int32_t P2Len;
 
   P2Len = 0;
-  QZ_qn.inc( P2Len, x );
+  P2Len = P2Len*16 + QZ_qn[__min(121,__max(0,x-(1-1)))];
   return (uint32_t)P2Len;
 }

@@ -41,7 +41,7 @@ struct CounterNode {
         p16 = kProbFloor;
       if( p16>kProbCeil )
         p16 = kProbCeil;
-      const int32_t p_ref = apm[0].refine(p16, ctx&15);
+      const int32_t p_ref = apm[0].refine(p16, (int32_t)MakeSlotMap(ctx));
       int32_t is_zero;
       if constexpr( f_DEC ) {
         is_zero = cx[0].decode_bit(65536-p_ref, p_ref);
