@@ -22,6 +22,13 @@ in §5.
 `MOD/` is checked in, so the tree builds without perl; `mk.sh` regenerates it
 when perl is present. A stale `MOD/` compiles fine and codes differently.
 
+The checked-in form is the shipping one, so `./gc.sh` alone -- no perl, no
+`mk.sh` -- gives the folded build. Which means **`./mk.sh` with no argument
+leaves the tree dirty**: it rewrites `MOD/` into the tuning form, which is a
+real change to a real build input, not a stray artefact. `./mk.sh release`
+puts it back. Commit the tuning headers only if you mean the next person's
+`./gc.sh` to produce a binary with 655 patchable mapping objects in it.
+
 The shipping build times the same as the pre-port binary — 3.73 s encode,
 0.83 s decode on `x_ci` against 3.77 and 0.81 — so the folding is real. The
 tuning build pays about 6 % on decode for the indirection, which is what it is
