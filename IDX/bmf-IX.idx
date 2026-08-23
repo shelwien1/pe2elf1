@@ -1,0 +1,219 @@
+
+Prefix IX
+Debug 1
+
+# ---------------------------------------------------------------------
+# Context-index layouts.
+#
+# Every context index in the codec is a chain of CtxIdx calls that place
+# quantised values and flags at fixed bit positions.  The thresholds those
+# values come from are declared in the other modules; this one declares
+# where each result lands.  That is a tuning decision in its own right:
+# alt-P2 pulls a bank number out of a context with a plain shift, so which
+# bit a flag sits at decides whether it is part of the bank or part of the
+# row within it.
+#
+# The positions are template arguments, which an IDX value can only reach
+# through a reference-typed non-type parameter -- see IDXP in bmf_idx.inc
+# and IDX-FORMAT.md sec.8.  <site>_pN is the Nth argument's position or
+# stride, <site>_wN its field width or radix.
+# ---------------------------------------------------------------------
+
+# One block per index, in source order.
+Const 0
+
+Number p1_result_p0,     1,0!0
+Number p1_result_w0,     1,0!11
+Number p1_result_p1,     1,0!11
+Number p1_result_p2,     1,0!100
+Number p1_ctx_alt_p0,    1,0!0
+Number p1_ctx_alt_w0,    1,0!101
+Number p1_ix_p0,         1,0!111
+Number p1_ix_p1,         1,0!110
+Number p1_ix1_p0,        1,0!111
+Number p1_ix1_p1,        1,0!110
+Number p1_key_p0,        1,0!111
+Number p1_key_p1,        1,0!110
+Number p1_group_of_p0,   1,0!1000
+Number p1_group_of_p1,   1,0!0
+Number p1_group_of_w1,   1,0!11
+Number p1_group_of1_p0,  1,0!1000
+Number p1_group_of1_p1,  1,0!0
+Number p1_group_of1_w1,  1,0!11
+Number p1_slot_of_p0,    1,0!11
+Number p1_slot_of1_p0,   1,0!11
+Number p2_ix_p0,         1,0!1101
+Number p2_ix_w0,         1,0!10
+Number p2_ix_p1,         1,0!1011
+Number p2_ix_w1,         1,0!10
+Number p2_ix1_p0,        1,0!0
+Number p2_ix1_w0,        1,0!1111
+Number p2_ix1_p1,        1,0!1000000000000000
+Number p2_ix1_w1,        1,0!101
+Number p2_ctx_pair_p0,   1,0!0
+Number p2_ctx_pair_w0,   1,0!100
+Number p2_ctx_pair1_p0,  1,0!0
+Number p2_ctx_pair1_w0,  1,0!100
+Number p2_ctx_p0,        1,0!0
+Number p2_ctx_w0,        1,0!100
+Number p2_ctx_p1,        1,0!100
+Number p2_ctx_p2,        1,0!101
+Number p2_nb_slot_p0,    1,0!100
+Number p2_nb_slot_w0,    1,0!10
+Number p2_nb_slot_p1,    1,0!10
+Number p2_nb_slot_w1,    1,0!10
+Number p2_nb_slot_p2,    1,0!0
+Number p2_nb_slot_w2,    1,0!10
+Number p2_nb_slot_p3,    1,0!1000000
+Number p2_nb_slot_w3,    1,0!101
+Number p2_nb_slot_p4,    1,0!101000000
+Number p2_nb_slot_w4,    1,0!110
+Number p2_ctx0_lo_p0,    1,0!10011
+Number p2_ctx0_lo_p1,    1,0!10010
+Number p2_ctx0_lo_p2,    1,0!10001
+Number p2_ctx0_lo_p3,    1,0!10000
+Number p2_ctx0_lo_p4,    1,0!1111
+Number p2_ctx0_lo_p5,    1,0!1101
+Number p2_ctx0_lo_w5,    1,0!10
+Number p2_ctx0_lo_p6,    1,0!1011
+Number p2_ctx0_lo_w6,    1,0!10
+Number p2_ctx0_p0,       1,0!11001
+Number p2_ctx0_p1,       1,0!11000
+Number p2_ctx0_p2,       1,0!10111
+Number p2_ctx0_p3,       1,0!10110
+Number p2_ctx0_p4,       1,0!10101
+Number p2_ctx0_p5,       1,0!10100
+Number p2_ctx01_p0,      1,0!11001
+Number p2_ctx01_p1,      1,0!11000
+Number p2_ctx01_p2,      1,0!10111
+Number p2_ctx01_p3,      1,0!10110
+Number p2_ctx01_p4,      1,0!10101
+Number p2_ctx01_p5,      1,0!10100
+Number p2_ctx1_p0,       1,0!11001
+Number p2_ctx1_p1,       1,0!11000
+Number p2_ctx1_p2,       1,0!10111
+Number p2_ctx1_p3,       1,0!10110
+Number p2_ctx1_p4,       1,0!10101
+Number p2_ctx1_p5,       1,0!10100
+Number p2_ctx1_p6,       1,0!10011
+Number p2_ctx1_p7,       1,0!10010
+Number p2_ctx1_p8,       1,0!10001
+Number p2_ctx1_p9,       1,0!10000
+Number p2_ctx1_p10,      1,0!1111
+Number p2_ctx11_p0,      1,0!11001
+Number p2_ctx11_p1,      1,0!11000
+Number p2_ctx11_p2,      1,0!10111
+Number p2_ctx11_p3,      1,0!10110
+Number p2_ctx11_p4,      1,0!10101
+Number p2_ctx11_p5,      1,0!10100
+Number p2_ctx11_p6,      1,0!10011
+Number p2_ctx11_p7,      1,0!10010
+Number p2_ctx11_p8,      1,0!10001
+Number p2_ctx11_p9,      1,0!10000
+Number p2_ctx11_p10,     1,0!1111
+Number p2_ctx2_p0,       1,0!11001
+Number p2_ctx2_p1,       1,0!11000
+Number p2_ctx2_p2,       1,0!10111
+Number p2_ctx2_p3,       1,0!10110
+Number p2_ctx2_p4,       1,0!10101
+Number p2_ctx2_p5,       1,0!10100
+Number p2_ctx2_p6,       1,0!10011
+Number p2_ctx2_p7,       1,0!10010
+Number p2_ctx2_p8,       1,0!10001
+Number p2_ctx2_p9,       1,0!10000
+Number p2_ctx2_p10,      1,0!1111
+Number p2_ctx21_p0,      1,0!11001
+Number p2_ctx21_p1,      1,0!11000
+Number p2_ctx21_p2,      1,0!10111
+Number p2_ctx21_p3,      1,0!10110
+Number p2_ctx21_p4,      1,0!10101
+Number p2_ctx21_p5,      1,0!10100
+Number p2_ctx21_p6,      1,0!10011
+Number p2_ctx21_p7,      1,0!10010
+Number p2_ctx21_p8,      1,0!10001
+Number p2_ctx21_p9,      1,0!10000
+Number p2_ctx21_p10,     1,0!1111
+Number p2_ctx3_p0,       1,0!11001
+Number p2_ctx3_p1,       1,0!11000
+Number p2_ctx3_p2,       1,0!10111
+Number p2_ctx3_p3,       1,0!10110
+Number p2_ctx3_p4,       1,0!10101
+Number p2_ctx3_p5,       1,0!10100
+Number p2_ctx3_p6,       1,0!10011
+Number p2_ctx3_p7,       1,0!10010
+Number p2_ctx3_p8,       1,0!10001
+Number p2_ctx3_p9,       1,0!10000
+Number p2_ctx3_p10,      1,0!1111
+Number p2_ctx4_p0,       1,0!11001
+Number p2_ctx4_p1,       1,0!11000
+Number p2_ctx4_p2,       1,0!10111
+Number p2_ctx4_p3,       1,0!10110
+Number p2_ctx4_p4,       1,0!10101
+Number p2_ctx4_p5,       1,0!10100
+Number p2_ctx4_p6,       1,0!10011
+Number p2_ctx4_p7,       1,0!10010
+Number p2_ctx4_p8,       1,0!10001
+Number p2_ctx4_p9,       1,0!10000
+Number p2_ctx4_p10,      1,0!1111
+Number p2_step_ctx_p0,   1,0!0
+Number p2_step_ctx_w0,   1,0!110
+Number p2_ctx_delta_p0,  1,0!1000
+Number p2_ctx_delta_p1,  1,0!100
+Number p2_ctx_delta_w1,  1,0!100
+Number p2_ctx_delta1_p0,  1,0!1000
+Number p2_ctx_delta1_p1,  1,0!100
+Number p2_ctx_delta1_w1,  1,0!100
+Number counters_strip_p0,  1,0!111
+Number counters_strip_p1,  1,0!110
+Number model_ix_p0,      1,0!1
+Number model_ix_w0,      1,0!1111
+Number model_ix_p1,      1,0!1111
+Number model_ix_w1,      1,0!101
+Number model_ix_p2,      1,0!1001011
+Number model_ix_w2,      1,0!101
+Number model_near_hit_p0,  1,0!110
+Number model_near_hit_p1,  1,0!101
+Number model_far_hit_p0,  1,0!100
+Number model_ctx1_p0,    1,0!11
+Number model_fallback_p0,  1,0!10
+Number model_fallback_p1,  1,0!1
+Number model_fallback_p2,  1,0!0
+Number model_ctr_node_p0,  1,0!111
+Number model_ctr_fallback_p0,  1,0!11
+Number model_nb2_p0,     1,0!11
+Number model_nb2_p1,     1,0!10
+Number model_nb2_p2,     1,0!1
+Number model_nb2_p3,     1,0!0
+Number model_sig1_p0,    1,0!111
+Number model_sig1_p1,    1,0!110
+Number model_sig1_p2,    1,0!101
+Number model_sig1_p3,    1,0!100
+Number model_sig1_p4,    1,0!1001
+Number model_sig1_p5,    1,0!1000
+Number model_sig1_p6,    1,0!1010
+Number model_sig2_p0,    1,0!10
+Number model_sig2_p1,    1,0!1
+Number model_sig2_p2,    1,0!0
+Number model_sig2_p3,    1,0!11
+Number model_ix1_p0,     1,0!101
+Number model_ix1_p1,     1,0!100
+Number model_ix1_p2,     1,0!11
+Number model_ix1_p3,     1,0!10
+Number model_ix1_p4,     1,0!1
+Number model_ix1_p5,     1,0!0
+Number model_sym_cache_p0,  1,0!11
+Number model_sig3_p0,    1,0!0
+Number model_sig3_w0,    1,0!100
+Number model_sig3_p1,    1,0!100
+Number model_ctr_p0,     1,0!0
+Number model_ctr_w0,     1,0!100
+Number model_ctr_p1,     1,0!10000
+Number model_ctr_w1,     1,0!11
+Number model_esc_at_p0,  1,0!11
+Number model_esc_at_p1,  1,0!10
+Number model_esc_at_p2,  1,0!1
+Number model_esc_at_p3,  1,0!0
+Number model_amap_p0,    1,0!10
+Number model_amap_p1,    1,0!1
+Number model_amap_p2,    1,0!11
+Number model_amap_p3,    1,0!0

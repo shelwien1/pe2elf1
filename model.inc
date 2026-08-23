@@ -106,7 +106,7 @@ struct ModelBlock {
   uint8_t ctx_bucket[375];
   uint8_t _pad25[1];
   static uint32_t bucket_slot(int32_t group, int32_t last, int32_t prev) {
-    return CtxIdx{}.digit<1, 15>(group).digit<15, 5>(last).digit<75, 5>(prev);
+    return CtxIdx{}.digit<IX_model_ix_p0, IX_model_ix_w0>(group).digit<IX_model_ix_p1, IX_model_ix_w1>(last).digit<IX_model_ix_p2, IX_model_ix_w2>(prev);
   }
 
   FreqRec*seat_bucket(int32_t group, int32_t last, int32_t prev, int32_t bucket) {
@@ -416,20 +416,20 @@ struct ModelBlock {
     bool far = false;
     for( band = MB_near_hi; band<MB_far_hi; ++band )
       far |= result==nb[band];
-    int32_t near_hit = CtxIdx{}.bit<6>(result==nb[MB_exact_rank]).bit<5>(near);
-    int32_t far_hit = CtxIdx{}.bit<4>(far);
+    int32_t near_hit = CtxIdx{}.bit<IX_model_near_hit_p0>(result==nb[MB_exact_rank]).bit<IX_model_near_hit_p1>(near);
+    int32_t far_hit = CtxIdx{}.bit<IX_model_far_hit_p0>(far);
     int32_t ctx0 = far_hit+near_hit;
     if( (far_hit+near_hit==0)&&pos>MB_pos_bare )
       return -1;
     SymList* sel0 = sel0_list;
-    int32_t ctx1 = CtxIdx{}.bit<3>(sym_in_top((sel0[cx[0].mode_symbol[1]].ent), MB_top_depth_0, result)).raw(ctx0);
+    int32_t ctx1 = CtxIdx{}.bit<IX_model_ctx1_p0>(sym_in_top((sel0[cx[0].mode_symbol[1]].ent), MB_top_depth_0, result)).raw(ctx0);
     SymEntry* list_prev = sel0[cx[0].mode_symbol[2]].ent;
     SymEntry* list_sym = sel0[result].ent;
-    int32_t fallback = CtxIdx{}.bit<2>(sym_in_top(list_prev, MB_top_depth_1, result)).bit<1>(sym_in_top(list_sym, MB_top_depth_2, cx[0].mode_symbol[2])).bit<0>(sym_in_top((sel0[cx[0].mode_symbol[3]].ent), MB_top_depth_3, result));
+    int32_t fallback = CtxIdx{}.bit<IX_model_fallback_p0>(sym_in_top(list_prev, MB_top_depth_1, result)).bit<IX_model_fallback_p1>(sym_in_top(list_sym, MB_top_depth_2, cx[0].mode_symbol[2])).bit<IX_model_fallback_p2>(sym_in_top((sel0[cx[0].mode_symbol[3]].ent), MB_top_depth_3, result));
     int32_t ctx2 = fallback+ctx1;
     if( pos<=MB_pos_split||(ctx2&0xB)!=0 ) {
-      ctr_node = CtxIdx{}.above<7>(pos).raw(ctx2);
-      ctr_fallback = CtxIdx{}.bit<3>(pos>MB_pos_deep).raw(fallback);
+      ctr_node = CtxIdx{}.above<IX_model_ctr_node_p0>(pos).raw(ctx2);
+      ctr_fallback = CtxIdx{}.bit<IX_model_ctr_fallback_p0>(pos>MB_pos_deep).raw(fallback);
     } else {
       return -1;
     }
@@ -600,11 +600,11 @@ struct ModelBlock {
     const int32_t bucket_at = ctx_bucket[state+cap];
     bucket_idx = bucket_at;
     const int32_t up_m0 = cur6[0].match[0];
-    const uint32_t nb2 = CtxIdx{}.bit<3>(row[-2].match[2]).bit<2>(row[-2].match[5]).bit<1>(row[-2].match[4]).bit<0>(row[-1].match[1]);
-    const uint32_t sig1 = CtxIdx{}.bit<7>(grad[3]==0).bit<6>(grad[2]==0).bit<5>(grad[1]==0).bit<4>(grad[0]==0).bit<9>(up9[0].match[0]&r8[0].match[0]&up_m0&r7[0].match[0]).bit<8>(up9[0].match[1]&r8[0].match[1]&r7[0].match[1]&cur6[0].match[1]).above<10>(bucket_at).raw(nb2);
+    const uint32_t nb2 = CtxIdx{}.bit<IX_model_nb2_p0>(row[-2].match[2]).bit<IX_model_nb2_p1>(row[-2].match[5]).bit<IX_model_nb2_p2>(row[-2].match[4]).bit<IX_model_nb2_p3>(row[-1].match[1]);
+    const uint32_t sig1 = CtxIdx{}.bit<IX_model_sig1_p0>(grad[3]==0).bit<IX_model_sig1_p1>(grad[2]==0).bit<IX_model_sig1_p2>(grad[1]==0).bit<IX_model_sig1_p3>(grad[0]==0).bit<IX_model_sig1_p4>(up9[0].match[0]&r8[0].match[0]&up_m0&r7[0].match[0]).bit<IX_model_sig1_p5>(up9[0].match[1]&r8[0].match[1]&r7[0].match[1]&cur6[0].match[1]).above<IX_model_sig1_p6>(bucket_at).raw(nb2);
     int32_t id1;
     intern_ctx(ctx_id1, sig1, ctx_id1_used, id1);
-    const uint32_t sig2 = CtxIdx{}.bit<2>(cur6[1].match[3]).bit<1>(up_m0).bit<0>(row[-1].match[5]).above<3>(id1);
+    const uint32_t sig2 = CtxIdx{}.bit<IX_model_sig2_p0>(cur6[1].match[3]).bit<IX_model_sig2_p1>(up_m0).bit<IX_model_sig2_p2>(row[-1].match[5]).above<IX_model_sig2_p3>(id1);
     int32_t id2;
     intern_ctx(ctx_id2, sig2, ctx_id2_used, id2);
     return id2;
@@ -662,7 +662,7 @@ struct ModelBlock {
   }
 
   uint32_t match_context(const Neighbours &n, const PixRec* up, const PixRec* west) const {
-    return CtxIdx{}.bit<5>(west[-1].match[2]).bit<4>(west[-1].match[4]).bit<3>(up[1].match[1]).bit<2>(n.up_next==n.upleft).bit<1>(west[-1].match[0]).bit<0>(up[0].match[1]);
+    return CtxIdx{}.bit<IX_model_ix1_p0>(west[-1].match[2]).bit<IX_model_ix1_p1>(west[-1].match[4]).bit<IX_model_ix1_p2>(up[1].match[1]).bit<IX_model_ix1_p3>(n.up_next==n.upleft).bit<IX_model_ix1_p4>(west[-1].match[0]).bit<IX_model_ix1_p5>(up[0].match[1]);
   }
 
   uint16_t pair_key(const Neighbours &n, const PixRec* west) const {
@@ -679,7 +679,7 @@ struct ModelBlock {
     nb4 = rank_neighbours();
     const int32_t nb = match_context(nb4, up, west);
     const int32_t key = pair_key(nb4, west);
-    sym_cache = &sym_ctr[CtxIdx{}.above<3>(key)];
+    sym_cache = &sym_ctr[CtxIdx{}.above<IX_model_sym_cache_p0>(key)];
     const int32_t state = ctx_state[nb];
     ctx_state_seen = state;
     SymPair*const pair = &group_ctr[state][key];
@@ -688,7 +688,7 @@ struct ModelBlock {
     int32_t id2 = context_ids(state, cap);
     if( (int32_t)alphabet<MB_small_alphabet ) {
       int32_t id3_used = ctx_id3_used;
-      int32_t sig3 = CtxIdx{}.bits<0, 4>(nb4.left).above<4>(id2);
+      int32_t sig3 = CtxIdx{}.bits<IX_model_sig3_p0, IX_model_sig3_w0>(nb4.left).above<IX_model_sig3_p1>(id2);
       uint16_t* id3p = &ctx_id3[sig3];
       id2 = id3p[0];
       if( id2==0xFFFF ) {
@@ -1045,7 +1045,7 @@ struct ModelBlock {
     int32_t seen = 0;
     do {
       if( (mask|seen)<cap ) {
-        BitCtr* ctr = &run_ctr[CtxIdx{}.bits<0, 4>(bucket).digit<16, 3>((seen==0)+(bucket==top))];
+        BitCtr* ctr = &run_ctr[CtxIdx{}.bits<IX_model_ctr_p0, IX_model_ctr_w0>(bucket).digit<IX_model_ctr_p1, IX_model_ctr_w1>((seen==0)+(bucket==top))];
         const uint32_t bin_tot = ctr[0].n[0]+ctr[0].n[1];
         int32_t run_bit;
         if constexpr( f_DEC ) {
@@ -1099,7 +1099,7 @@ struct ModelBlock {
       if( (uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&up1[3].match[1]&up1[2].match[1]&up1[1].match[1]&up1[0].match[1]&up1[0].match[0]&(int8_t)up1[-1].match[1])&up2[3].match[1] ) {
         const int32_t idx1 = run_scan(up1, up2, width-x, m_up0, run);
         int32_t bucket = run_bucket[idx1];
-        int32_t esc_at = CtxIdx{}.above<3>(bucket).bit<2>(up2[run+3].match[1]&up2[run+2].match[1]).bit<1>(m_up0).bit<0>(alpha_map[nb4.up]).raw(1);
+        int32_t esc_at = CtxIdx{}.above<IX_model_esc_at_p0>(bucket).bit<IX_model_esc_at_p1>(up2[run+3].match[1]&up2[run+2].match[1]).bit<IX_model_esc_at_p2>(m_up0).bit<IX_model_esc_at_p3>(alpha_map[nb4.up]).raw(1);
         bit = esc_ctr[esc_at].decode_context_bit(cx, esc_ctr);
         int32_t msym1c = cx[0].mode_symbol[1];
         hit = bit;
@@ -1182,7 +1182,7 @@ struct ModelBlock {
       const int32_t run_len = run_scan(cur6c, up2, width-x, m_up0, run);
       int32_t run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
       const int32_t bucket = run_bucket[run_len];
-      amap = CtxIdx{}.bit<2>(run_pair).bit<1>(m_up0).above<3>(bucket).bit<0>(alpha_map[nb4.up]);
+      amap = CtxIdx{}.bit<IX_model_amap_p0>(run_pair).bit<IX_model_amap_p1>(m_up0).above<IX_model_amap_p2>(bucket).bit<IX_model_amap_p3>(alpha_map[nb4.up]);
       runlen = 0;
       if( rowp[0].sym==nb4.up ) {
         do ++runlen; while( runlen<run_len&&rowp[runlen].sym==nb4.up );

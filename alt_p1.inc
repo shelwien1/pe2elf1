@@ -161,7 +161,7 @@ struct AltP1Block {
     ctx_w[5].sel = tri_sign(ctx_w[5].sel, step);
     for( int32_t k = 6; k<=8; ++k )
       ctx_w[k].sel = tri_sign(ctx_w[k].sel);
-    int32_t result = CtxIdx{}.bits<0, 3>(act_lvl).bit<3>(ctx[3+ctx[2]]==0).bit<4>(quiet).raw(mixer_fwd(ctx_w, 9));
+    int32_t result = CtxIdx{}.bits<IX_p1_result_p0, IX_p1_result_w0>(act_lvl).bit<IX_p1_result_p1>(ctx[3+ctx[2]]==0).bit<IX_p1_result_p2>(quiet).raw(mixer_fwd(ctx_w, 9));
     ctx[0] = result;
     return result;
   }
@@ -239,7 +239,7 @@ struct AltP1Block {
     const int32_t tree_sym = (int32_t)(code_f-CN_slot_split)>>1;
     const int32_t slot_f = sym_slot(code_f);
     const int32_t slot_r = sym_slot(code_r);
-    uint32_t ctx_alt = CtxIdx{}.bits<0, 5>(ctx[0]).raw(mixer_rev(ctx_w, 9));
+    uint32_t ctx_alt = CtxIdx{}.bits<IX_p1_ctx_alt_p0, IX_p1_ctx_alt_w0>(ctx[0]).raw(mixer_rev(ctx_w, 9));
     CounterNode* node_alt = &counters[ctx_alt];
     node_alt[0].bump(slot_r, P1_bump_alt);
     const int32_t result = ctx[0];
@@ -248,14 +248,14 @@ struct AltP1Block {
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, P1_bump_up);
       if( slot_f>=CN_slot_split )
-        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<7>(slot_f&1).bit<6>(node_up[1].escape_high(slot_f)).raw(ctx_up)), tree_sym);
+        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<IX_p1_ix_p0>(slot_f&1).bit<IX_p1_ix_p1>(node_up[1].escape_high(slot_f)).raw(ctx_up)), tree_sym);
     }
     if( result&7 ) {
       CounterNode* node_dn = &counters[result];
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, P1_bump_dn);
       if( slot_f>=CN_slot_split )
-        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<7>(slot_f&1).bit<6>(node_dn[-1].escape_high(slot_f)).raw(ctx_dn)), tree_sym);
+        cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<IX_p1_ix1_p0>(slot_f&1).bit<IX_p1_ix1_p1>(node_dn[-1].escape_high(slot_f)).raw(ctx_dn)), tree_sym);
     }
     if( counters[result].total>=CN_nudge_limit )
       return;
@@ -266,7 +266,7 @@ struct AltP1Block {
       node_alt[-1].bump(slot_r, P1_nudge_dn);
     }
     if( slot_f>=CN_slot_split ) {
-      const uint32_t key = CtxIdx{}.bit<7>(slot_f&1).bit<6>(counters[result].escape_high(slot_f)).raw(ctx[1]);
+      const uint32_t key = CtxIdx{}.bit<IX_p1_key_p0>(slot_f&1).bit<IX_p1_key_p1>(counters[result].escape_high(slot_f)).raw(ctx[1]);
       if( (key&0x38)>=0x38||(cx[0].update_binary_pair(cx[0].model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
         cx[0].update_binary_pair(cx[0].model_strip(key-8), tree_sym);
       }
@@ -292,19 +292,19 @@ struct AltP1Block {
     for( k = 0; k<0x100; ++k ) {
       level_of[2*k] = lvl;
       const int32_t lvl1 = (2*k==p1_level_edges[lvl])+lvl;
-      group_of[2*k] = CtxIdx{}.above<8>(plane).bits<0, 3>(grp);
+      group_of[2*k] = CtxIdx{}.above<IX_p1_group_of_p0>(plane).bits<IX_p1_group_of_p1, IX_p1_group_of_w1>(grp);
       level_of[2*k+1] = lvl1;
       const int32_t odd = 2*k+1;
       const int32_t grp1 = (2*k==p1_group_edges[grp])+grp;
       lvl = (odd==p1_level_edges[lvl1])+lvl1;
-      group_of[2*k+1] = CtxIdx{}.above<8>(plane).bits<0, 3>(grp1);
+      group_of[2*k+1] = CtxIdx{}.above<IX_p1_group_of1_p0>(plane).bits<IX_p1_group_of1_p1, IX_p1_group_of1_w1>(grp1);
       grp = (odd==p1_group_edges[grp1])+grp1;
     }
     int32_t slot = 0;
     for( uint32_t pair = 0; pair<0x80; ++pair ) {
-      slot_of[2*pair] = CtxIdx{}.above<3>(slot);
+      slot_of[2*pair] = CtxIdx{}.above<IX_p1_slot_of_p0>(slot);
       const int32_t slot1 = (2*pair==p1_slot_edges[slot])+slot;
-      slot_of[2*pair+1] = CtxIdx{}.above<3>(slot1);
+      slot_of[2*pair+1] = CtxIdx{}.above<IX_p1_slot_of1_p0>(slot1);
       slot = (2*pair+1==p1_slot_edges[slot1])+slot1;
     }
     for( int32_t c = 0, w1 = P1_ctxw_seed; c<9; ++c, w1 *= P1_ctxw_ratio ) {

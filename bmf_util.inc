@@ -126,30 +126,40 @@ void halve_counts(uint16_t* c, int32_t n) {
 const int32_t kMaxWidth = GL_max_width;
 
 
+// A context index under construction: values and flags placed at fixed bit
+// positions and radix strides, chained left to right.
+//
+// The positions are IDX parameters, so they are template arguments of
+// reference type (IDXP) rather than plain ints -- the shipping build binds
+// literals and folds every shift, the tuning build binds the mapping objects
+// opt.pl patches, and the call sites are spelled identically.  The chaining
+// methods are no longer constexpr for the same reason: in the tuning build
+// their bodies read a runtime object, and a constexpr function that can never
+// be constant-evaluated is ill-formed.  Nothing evaluated one at compile time.
 struct CtxIdx {
   uint32_t val;
-  template <int32_t Pos> constexpr CtxIdx &bit(bool b) {
+  template <IDXP(Pos)> INLINE CtxIdx &bit(bool b) {
     val += (uint32_t)b<<Pos;
     return this[0];
   }
 
-  template <int32_t Pos, int32_t W> constexpr CtxIdx &bits(uint32_t v) {
+  template <IDXP(Pos), IDXP(W)> INLINE CtxIdx &bits(uint32_t v) {
     val += (v&((1u<<W)-1))<<Pos;
     return this[0];
   }
 
-  template <uint32_t Stride, uint32_t Radix> constexpr CtxIdx &digit(uint32_t v) {
-
-    val += Stride*v;
+  template <IDXP(Stride), IDXP(Radix)> INLINE CtxIdx &digit(uint32_t v) {
+    (void)Radix;   // documents the radix; the stride is what the index uses
+    val += (uint32_t)Stride*v;
     return this[0];
   }
 
-  template <int32_t Pos> constexpr CtxIdx &bit_of(uint32_t v) {
+  template <IDXP(Pos)> INLINE CtxIdx &bit_of(uint32_t v) {
     val |= v&(1u<<Pos);
     return this[0];
   }
 
-  template <int32_t Pos> constexpr CtxIdx &above(uint32_t v) {
+  template <IDXP(Pos)> INLINE CtxIdx &above(uint32_t v) {
     val += v<<Pos;
     return this[0];
   }
