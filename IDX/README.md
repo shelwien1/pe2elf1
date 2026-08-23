@@ -13,6 +13,7 @@ this codec. This is what the files here are.
 | `sweep.py` | the clamp test — every parameter to both extremes, looking for a crash or a lost round trip |
 | `roundtrip.sh` | proves `opt.pl` can reach every declared parameter and `import.pl` puts each back where it came from |
 | `f2idx.py` | writes a float32 as the exact dyadic integer a `.idx` carries, plus the exponent its consumer applies |
+| `annotate.py` | refreshes the readable comment above each mapping — run it after an `import.pl`, which moves the edges and leaves the comment stale |
 
 `../mk.sh` drives the first of these; `../check.sh` runs the two-build
 contract.

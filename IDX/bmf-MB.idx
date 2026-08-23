@@ -182,4 +182,5 @@ Index EscCtx
 # conditions on.  The coarsest activity measure the model has.
 
 Index LevelMap
+ # mlvl: keeps bits 0, 1, 2, 3 of a 8-bit context
  mlvl: state, &00001111

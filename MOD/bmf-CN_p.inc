@@ -16,6 +16,6 @@ uint32_t MakeSlotMap( int32_t ctx ) {
   int32_t SlotMap;
 
   SlotMap = 0;
-  SlotMap = (SlotMap<<4) + (((ctx)&15)); // 00000000001111
+  CN_mslot.inc( SlotMap, ctx );
   return (uint32_t)SlotMap;
 }

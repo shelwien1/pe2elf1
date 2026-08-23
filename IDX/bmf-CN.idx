@@ -78,4 +78,5 @@ Index Strip
 # declaration rather than an & at the use site.
 
 Index SlotMap
+ # mslot: keeps bits 0, 1, 2, 3 of a 14-bit context
  mslot: ctx, &00000000001111

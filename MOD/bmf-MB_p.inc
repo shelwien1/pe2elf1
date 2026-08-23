@@ -137,6 +137,6 @@ uint32_t MakeLevelMap( int32_t state ) {
   int32_t LevelMap;
 
   LevelMap = 0;
-  LevelMap = (LevelMap<<4) + (((state)&15)); // 00001111
+  MB_mlvl.inc( LevelMap, state );
   return (uint32_t)LevelMap;
 }
