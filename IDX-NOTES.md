@@ -27,7 +27,7 @@ The checked-in form is the shipping one, so `./gc.sh` alone -- no perl, no
 leaves the tree dirty**: it rewrites `MOD/` into the tuning form, which is a
 real change to a real build input, not a stray artefact. `./mk.sh release`
 puts it back. Commit the tuning headers only if you mean the next person's
-`./gc.sh` to produce a binary with 502 patchable mapping objects in it.
+`./gc.sh` to produce a binary with 515 patchable mapping objects in it.
 
 The shipping build times the same as the pre-port binary — 3.73 s encode,
 0.83 s decode on `x_ci` against 3.77 and 0.81 — so the folding is real. The
@@ -52,14 +52,13 @@ for.
 | `bmf-IX.idx` | `IX` | the surviving bit_of extraction bits: which bit of an expression carries a flag |
 | `bmf-QZ.idx` | `QZ` | the five monotone quantiser ladders |
 
-Every module except `QZ` and `IX` also carries `Index` declarations; §6 lists
-what they size.
+Every module except `QZ` and `IX` also carries `Index` declarations -- 41 of
+them across five modules -- and §6 lists what they size.
 
-670 declarations across the eleven modules, of which 648 are live in the tuning
-build -- the other 22 are the frozen structural ones, which have no mapping
-object to patch -- for 6646 pattern bits. Both `IDX/opt.pl` and `IDX/sweep.py`
-print the live count and the bit budget when they start, so those numbers are
-checkable rather than remembered.
+537 declarations in all: 515 live in the tuning build, the other 22 frozen
+because they size something or multiply a Volume. 28067 pattern bits. Both
+`IDX/opt.pl` and `IDX/sweep.py` print the live count and the bit budget when
+they start, so those numbers are checkable rather than remembered.
 
 ---
 
@@ -240,7 +239,7 @@ band edges and two of its four gradient quantisers scale their thresholds by
 another variable, which no static pattern can express. Those keep integer edges.
 `tri_sign`'s dead zone is over an unbounded difference, so it does too.
 
-**What it costs.** 6646 pattern bits became 26165, and 20211 of those are the
+**What it costs.** 6646 pattern bits became 28067, and 20211 of those are the
 eight threshold bitmaps. They are the first place to put a `!` when a pass is
 taking too long, and both tools print the budget on startup so the cost is
 visible before the pass rather than after.

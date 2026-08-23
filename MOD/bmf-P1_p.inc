@@ -34,6 +34,6 @@ uint32_t MakeGuess( int32_t guess ) {
   int32_t Guess;
 
   Guess = 0;
-  Guess = Guess*3 + ((guess>22+(1-1))+(guess>216+(1-1)));
+  P1_g.inc( Guess, guess );
   return (uint32_t)Guess;
 }
