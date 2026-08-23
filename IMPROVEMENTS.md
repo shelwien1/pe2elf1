@@ -1158,11 +1158,25 @@ Recorded so they are not proposed again.
   costs 159 060 — **0.7 % worse [measured]**. The learning cost of a fresh model
   is already small at this image size, and the seam costs more than the warm
   start saves. Might still pay on many small planes; does not pay here.
-* **Region-adaptive model selection.** A 320×480 image whose top half is a
-  photograph and bottom half synthetic graphics costs 53 208 bytes as one image
-  against 53 024 as two independently coded halves — **0.3 % [measured]**, and
-  both halves chose the *same* model anyway. Whole-image model selection is not
-  obviously leaving anything on the table for this kind of mixed content.
+* **Region-adaptive model selection — was 0.3 %, is now 5 %, and is built.**
+  The original measurement stands for the codec it was made on: a 320×480
+  photograph-over-graphics composite cost 53 208 bytes whole against 53 024 as
+  two halves, and *both halves chose the same model*. That is the whole
+  explanation, and it stopped being true the moment §7's context model gave the
+  search a mode that some content wants and other content does not. Re-measured:
+  a 640×480 image, line art over photographic grey, costs 83 088 bytes whole
+  against **78 896** as two halves — **−5.05 %** — and the halves choose `ctx`
+  and `slow` respectively.
+
+  It is now a trial. `bmf_compress_body` offers the image as one member or as
+  2 or 4 horizontal strips, each with its own full model search, and ships the
+  smaller; the strip count rides in the first member's second spare header byte
+  and the decoder concatenates that many members. Splitting is attempted only
+  when the halves' alphabet sizes differ enough to plausibly want different
+  modes — one pass, and on this corpus it never fires, so the trial costs
+  nothing here. Four strips lost to two on the composite (80 424 against
+  78 896): each strip pays its own model warm-up, which is the same effect the
+  first item in this list measures from the other side.
 * **Recomposing RGB into a palette.** Measured twice, both losses: a 13-colour
   synthetic UI image costs 84.8 % more as an 8-bit index plane than as 24-bit
   RGB, and a false-colour map built with deliberately uncorrelated channels —
@@ -1177,18 +1191,20 @@ Recorded so they are not proposed again.
   menu is the problem. (This does not extend to options it prices badly — §6 (b)
   and §11 are both about exactly that.)
 
-A note on the first item, because it is the one place this document disagrees
-with everything in §18. Six of the eight review documents put tiling or region
+A note on the second item, because it is the one place this document disagreed
+with everything in §18 — and the disagreement has resolved in §18's favour. Six of the eight review documents put tiling or region
 partitioning in their top three, some as the single largest lever. The
 measurement above says 0.3 % on the one composite this corpus can build, and
 both halves chose the same model anyway. Both can be true: the consensus is
 drawn from screenshots, maps, document scans and UI captures — content with
 genuinely disjoint regions, and content `testfiles/` does not contain. The
-honest position is that region adaptivity is **unmeasured here, not disproven**,
-and that the corpus has to grow (§15) before it can be ranked rather than
-argued about. What the measurement does rule out is the strong form of the
-claim: that a photograph with a synthetic region in it is leaving several per
-cent on the table. It is not.
+honest position was that region adaptivity is **unmeasured here, not
+disproven**. That was right, and the reviews were right: with a model menu wide
+enough for regions to disagree about, the same experiment gives 5 %. The lesson
+is narrower than "tiling is good" — **region adaptivity is worth exactly as much
+as the disagreement between regions about the model menu**, so it has to be
+re-measured every time the menu grows. It was worth nothing when the menu held
+three models that all suited continuous tone.
 
 ---
 
