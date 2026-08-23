@@ -112,6 +112,12 @@ Two couplings are expressed rather than assumed, so a sweep cannot break them:
   encoder fits and the divisor that applies them.
 * `CounterNode`'s seeded total is the sum of its seven seeds rather than its own
   number, so moving a seed cannot leave the total inconsistent.
+* The slow model's bucket index is a mixed radix, and its strides are derived
+  from its radices rather than declared beside them. A mixed-radix index whose
+  strides do not match its radices is not a bijection; a sweep that moved one
+  without the other collapsed two contexts onto one frequency record, and the
+  model then divided by an empty total. Deriving them makes that
+  unrepresentable, and removes two parameters that were never independent.
 
 ---
 
@@ -243,3 +249,20 @@ a divisor needs a range check at the point of use, and a parameter that can
 crash the program when swept is a bug in the consumer. It flips pattern bits at
 random across every parameter at once and round-trips images through the patched
 binary, looking for a crash, a hang, or a round trip that stops matching.
+
+Driven to each parameter's two extremes one at a time it found thirteen of the
+563 unguarded, in four kinds, all now fixed:
+
+* A probability ceiling swept to zero leaves the range coder a zero-width
+  interval, and a floor above the ceiling inverts every clamp. The two are
+  clamped and ordered against each other now.
+* A counter step of zero leaves both counts at zero for ever, and the pair is
+  then divided by its own total. So does a step of one, more subtly: the parent
+  seed is `kStep/2`.
+* The context model's neighbour counts index a table of 24 offsets, and the
+  probe multiplies them up before anything else sees them.
+* Several context indices address fixed-size tables. Those get `idx_bound` at
+  the point of use — the one clamp here that cannot fold away, because the index
+  is data — and every `CtxIdx` shift is bounded to 0..31, since a swept position
+  is otherwise an out-of-range shift, which is undefined behaviour rather than a
+  bad index.

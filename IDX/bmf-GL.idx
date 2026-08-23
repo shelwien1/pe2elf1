@@ -27,3 +27,14 @@ Number p2_freq_rescale_total,  1,0!111010000000000
 Number ctx_id3_limit,    1,0!1101000000000000
 Number slack_shift,      1,0!111
 Number slack_max,        1,0!100000000000000
+
+# The symbol lists' rescale and escape schedule: the seed weight's shift, the
+# count above which a rescale is forced regardless of the schedule, the
+# occupancy ratio below which halving carries a rounding bias, the escape
+# weight's floor, and the kick it takes when the list outgrows that floor.
+
+Number seed_shift,           1,0!101
+Number rescale_force,        1,0!11111011
+Number rescale_bias_ratio,   1,0!10100
+Number escape_floor,         1,0!100000000
+Number escape_kick,          1,0!1111

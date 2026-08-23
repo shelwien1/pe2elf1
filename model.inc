@@ -105,8 +105,14 @@ struct ModelBlock {
   uint8_t ctx_state[64];
   uint8_t ctx_bucket[375];
   uint8_t _pad25[1];
+  // The strides come from the radices rather than sitting beside them as
+  // parameters of their own.  A mixed-radix index whose strides do not match
+  // its radices is not a bijection, and a sweep that moved one without the
+  // other collapsed two contexts onto one grid record -- which the model then
+  // divided by an empty frequency total.  Deriving them makes that
+  // unrepresentable; kBucketS0 is 1 by construction.
   static uint32_t bucket_slot(int32_t group, int32_t last, int32_t prev) {
-    return idx_bound(CtxIdx{}.digit<IX_model_ix_p0, IX_model_ix_w0>(group).digit<IX_model_ix_p1, IX_model_ix_w1>(last).digit<IX_model_ix_p2, IX_model_ix_w2>(prev),
+    return idx_bound(CtxIdx{}.digit<kBucketS0, kBucketR0>(group).digit<kBucketS1, kBucketR1>(last).digit<kBucketS2, kBucketR2>(prev),
                      sizeof ((ModelBlock*)0)->ctx_bucket);
   }
 
@@ -684,11 +690,11 @@ struct ModelBlock {
     const int32_t key = pair_key(nb4, west);
     sym_cache = &sym_ctr[idx_bound(CtxIdx{}.above<IX_model_sym_cache_p0>(key),
                                   sizeof sym_ctr/sizeof sym_ctr[0])];
-    const int32_t state = ctx_state[nb];
+    const int32_t state = ctx_state[idx_bound((uint32_t)nb, sizeof ctx_state)];
     ctx_state_seen = state;
-    SymPair*const pair = &group_ctr[state][key];
+    SymPair*const pair = &group_ctr[idx_bound((uint32_t)state, sizeof group_ctr/sizeof group_ctr[0])][key];
     pix_cur = pair;
-    const int32_t cap = 15*nb4.rank(pair[0].last)+75*nb4.rank(pair[0].prev);
+    const int32_t cap = kBucketS1*nb4.rank(pair[0].last)+kBucketS2*nb4.rank(pair[0].prev);
     int32_t id2 = context_ids(state, cap);
     if( (int32_t)alphabet<MB_small_alphabet ) {
       int32_t id3_used = ctx_id3_used;

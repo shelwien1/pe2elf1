@@ -4,6 +4,8 @@ pdesc( CD_weight_shift_, 0, "111" );
 static const int CD_weight_shift = CD_weight_shift_.value * (1);
 pdesc( CD_weight_round_, 0, "101000" );
 static const int CD_weight_round = CD_weight_round_.value * (1);
+pdesc( CD_weight_round3_, 0, "1000000" );
+static const int CD_weight_round3 = CD_weight_round3_.value * (1);
 pdesc( CD_weight_bits_, 0, "1000" );
 static const int CD_weight_bits = CD_weight_bits_.value * (1);
 pdesc( CD_weight_bias_, 0, "1000000" );

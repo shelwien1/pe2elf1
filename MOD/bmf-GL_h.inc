@@ -17,6 +17,16 @@ pdesc( GL_slack_shift_, 0, "111" );
 static const int GL_slack_shift = GL_slack_shift_.value * (1);
 pdesc( GL_slack_max_, 0, "100000000000000" );
 static const int GL_slack_max = GL_slack_max_.value * (1);
+pdesc( GL_seed_shift_, 0, "101" );
+static const int GL_seed_shift = GL_seed_shift_.value * (1);
+pdesc( GL_rescale_force_, 0, "11111011" );
+static const int GL_rescale_force = GL_rescale_force_.value * (1);
+pdesc( GL_rescale_bias_ratio_, 0, "10100" );
+static const int GL_rescale_bias_ratio = GL_rescale_bias_ratio_.value * (1);
+pdesc( GL_escape_floor_, 0, "100000000" );
+static const int GL_escape_floor = GL_escape_floor_.value * (1);
+pdesc( GL_escape_kick_, 0, "1111" );
+static const int GL_escape_kick = GL_escape_kick_.value * (1);
 
 
 

@@ -26,7 +26,7 @@ struct FreqRec {
   };
   bool seed_pair(int32_t lo, int32_t hi, int32_t alphabet_lvl) {
     if( !w[lo]||!w[hi]||b14>alphabet_lvl ) return false;
-    const int16_t weight = (uint8_t)(1<<((5-b14)&31));
+    const int16_t weight = (uint8_t)(1<<((GL_seed_shift-b14)&31));
     b15 = weight;
     w[6] = weight<<6;
     w[lo] += weight;
@@ -66,10 +66,10 @@ struct FreqRec {
     for( int32_t k = 0; k<4; ++k ) {
       const uint32_t here = w[k];
       int32_t p16 = rest ? (int32_t)((here*65536u+(rest>>1))/rest) : 32768;
-      if( p16<32 )
-        p16 = 32;
-      if( p16>65504 )
-        p16 = 65504;
+      if( p16<kProbFloor )
+        p16 = kProbFloor;
+      if( p16>kProbCeil )
+        p16 = kProbCeil;
       const int32_t p_ref = apm[k].refine(p16, apm_ctx);
       int32_t is_k;
       if constexpr( f_DEC ) {
@@ -109,12 +109,12 @@ struct FreqRec {
   uint16_t rescale(uint16_t escape_floor, uint8_t &kick) {
     halve_counts(w, 5);
     const uint16_t sum = resum();
-    if( escape_floor<256&&!b14 ) {
-      escape_floor = 256;
-      w[6] = 256;
+    if( escape_floor<GL_escape_floor&&!b14 ) {
+      escape_floor = GL_escape_floor;
+      w[6] = GL_escape_floor;
     }
-    if( sum>escape_floor&&kick<15 ) {
-      kick = 15;
+    if( sum>escape_floor&&kick<GL_escape_kick ) {
+      kick = GL_escape_kick;
       b15 = kick;
     }
     return sum;
@@ -132,10 +132,10 @@ struct SymList {
     int32_t last_cnt;
     uint32_t n_left, running, since, due = rescale_at;
     SymEntry* back;
-    if( count<=251&&due>=since_rescale )
+    if( count<=GL_rescale_force&&due>=since_rescale )
       return false;
     n_left = live;
-    int32_t bias = due<20*n;
+    int32_t bias = due<GL_rescale_bias_ratio*n;
     SymEntry* cur = ent-1;
     SymEntry* prev = cur;
     do {

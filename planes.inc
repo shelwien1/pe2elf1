@@ -27,11 +27,11 @@ int32_t estimate_cost(const int32_t* bin, int32_t n) {
   return (int32_t)(bits*1.442695040888963);
 }
 uint32_t plane_mix2(const PlaneDesc &d, const uint8_t* p0, const uint8_t* p1) {
-  return (d.weight0**p0+d.weight1*(uint32_t)p1[0]+40)>>7;
+  return (d.weight0**p0+d.weight1*(uint32_t)p1[0]+CD_weight_round)>>kWeightShift;
 }
 
 int32_t plane_mix3(const PlaneDesc &d, const uint8_t* p) {
-  return (d.weight1*p[-2]+d.weight0*p[-3]+d.weight2*p[-1]+64)>>7;
+  return (d.weight1*p[-2]+d.weight0*p[-3]+d.weight2*p[-1]+CD_weight_round3)>>kWeightShift;
 }
 uint8_t med_predict(int32_t west, int32_t north, int32_t northwest) {
   const int32_t lo = min32(west, north), hi = max32(west, north);
@@ -186,7 +186,8 @@ AlphaWeights fit_alpha_weights(const uint8_t* px, const uint8_t* pp, uint32_t uu
   double d1 = Sxx*Szz-Sxz*Sxz;
   double d2 = 0.0-Sxx*Syz+Sxz*Sxy;
   double d3 = Sxz*Syz-Sxy*Szz;
-  double inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
+  double inv = (double)kWeightScale/(Syy*d1+Syz*d2+Sxy*d3
+                                    +(1.0/(double)idx_clamp(CD_fit_ridge_den, 1, 1<<20)));
   const int32_t wa = clamp_weight((int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv));
   const int32_t wb = clamp_weight((int32_t)((d1*Syw+d2*Szw+d3*Sxw)*inv));
   const int32_t wc = clamp_weight((int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy)));

@@ -134,7 +134,8 @@ struct BitCtr {
   }
 
   void init_parent() {
-    n[0] = n[1] = kStep/2;
+    // Never zero: seed_from divides by the parent's total.
+    n[0] = n[1] = (uint16_t)(kStep/2 ? kStep/2 : 1);
     limit = CN_parent_limit;
   }
 

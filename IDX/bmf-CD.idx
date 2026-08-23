@@ -10,13 +10,15 @@ Debug 1
 
 # The cross-plane blend weight scale.  weight_shift and weight_scale are
 # one number in two forms -- the consumer derives the scale from the shift
-# so they cannot drift -- and weight_round is the rounding offset applied
+# so they cannot drift -- and weight_round/weight_round3 are the rounding
+# offsets applied
 # before the shift.  weight_bias and weight_bits are the wire field the
 # fitted weights travel in.
 Const 0
 
 Number weight_shift,     1,0!111
 Number weight_round,     1,0!101000
+Number weight_round3,    1,0!1000000
 Number weight_bits,      1,0!1000
 Number weight_bias,      1,0!1000000
 

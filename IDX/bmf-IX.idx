@@ -165,11 +165,8 @@ Number p2_ctx_delta1_p1,  1,0!100
 Number p2_ctx_delta1_w1,  1,0!100
 Number counters_strip_p0,  1,0!111
 Number counters_strip_p1,  1,0!110
-Number model_ix_p0,      1,0!1
 Number model_ix_w0,      1,0!1111
-Number model_ix_p1,      1,0!1111
 Number model_ix_w1,      1,0!101
-Number model_ix_p2,      1,0!1001011
 Number model_ix_w2,      1,0!101
 Number model_near_hit_p0,  1,0!110
 Number model_near_hit_p1,  1,0!101
