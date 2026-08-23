@@ -21,21 +21,32 @@
 struct CtxModel {
   // Causal neighbours, in the order an entropy sweep over the corpus found them
   // useful: W, N, NW, NE, WW, NN, NEE, NWW, and outward from there.
-  static const int32_t kMaxNeighbours = 24;
-  static const int32_t kOrders = 4;
+  static const int32_t kMaxNeighbours = CM_max_neighbours;
+  static const int32_t kOrders = CM_orders;
   static const int32_t kInputs = kOrders+1;
-  static const int32_t kMatchBits = 20;
-  static const int32_t kMatchLens = 32;
-  static const int32_t kShortNb = 4;
-  static const int32_t kTableBits = 20;
-  static const int32_t kMidBits = 18;
+  // Table widths are heap-allocated from a runtime count, so unlike the
+  // sizes above they do not have to be constant expressions and stay live
+  // for the optimizer.
+  // Declared here, defined below the class.  In the tuning build an IDX value
+  // is a read from a patchable object, and an in-class initializer has to be a
+  // constant expression; an out-of-class definition may be dynamic.  The
+  // shipping build initializes the same names from literals and folds them.
+  static const int32_t kMatchBits;
+  static const int32_t kMatchLens = CM_match_lens;
+  static const int32_t kShortNb;
+  static const int32_t kTableBits;
+  static const int32_t kMidBits;
   // A context here sees tens of samples, not thousands, so a fixed adaptation
   // rate is the wrong shape: it is far too slow while a bucket is new.  Each
   // node carries its own update count and adapts at 1/(n+2), annealing to a
   // fixed floor -- the schedule the KT estimator implies.
-  static const int32_t kCountCap = 60;
-  static const int32_t kBlend = 24;
-  static const int32_t kMaxAlpha = 16;
+  // recip[] is sized by the frozen ceiling; the cap itself stays live
+  // underneath it, so the optimizer can move the anneal point without the
+  // member array's size following it.
+  static const int32_t kCountCapMax = CM_count_cap_max;
+  static const int32_t kCountCap;
+  static const int32_t kBlend;
+  static const int32_t kMaxAlpha = CM_max_alpha;
 
   uint8_t to_idx[256];
   uint8_t to_val[kMaxAlpha];
@@ -48,7 +59,7 @@ struct CtxModel {
   int32_t table_bits[kOrders];
   uint32_t* ctr[kOrders];
   uint32_t* tags[kOrders];
-  int32_t recip[kCountCap+1];
+  int32_t recip[kCountCapMax+1];
   Apm apm;
   Mix5 mixer;
   int32_t* match_tab;
@@ -81,18 +92,18 @@ struct CtxModel {
   }
 
   void Init() {
-    for( int32_t k = 0; k<=kCountCap; ++k )
-      recip[k] = 65536/(k+2);
+    for( int32_t k = 0; k<=kCountCapMax; ++k )
+      recip[k] = 65536/(k+idx_clamp(CM_adapt_offset, 1, 64));
     // The longest neighbourhood, by alphabet.  The key packs one index per
     // neighbour, so how many fit is bounded -- but the useful count is bounded
     // well below that, and for different reasons at each size: at four values
     // the table saturates, at eight and sixteen the learning cost turns it
     // around first, at two values it keeps paying out to 24.
     nb_for_bits[0] = 0;
-    nb_for_bits[1] = 24;
-    nb_for_bits[2] = 10;
-    nb_for_bits[3] = 7;
-    nb_for_bits[4] = 7;
+    nb_for_bits[1] = CM_nb_for_bits_1;
+    nb_for_bits[2] = CM_nb_for_bits_2;
+    nb_for_bits[3] = CM_nb_for_bits_3;
+    nb_for_bits[4] = CM_nb_for_bits_4;
     chosen_nb = 0;
     alpha = 0;
     bits = 0;
@@ -107,7 +118,7 @@ struct CtxModel {
     mixer.Init();
     match_tab = nullptr;
     for( int32_t k = 0; k<kMatchLens; ++k )
-      match_p[k] = 40000u<<16;
+      match_p[k] = (uint32_t)CM_match_seed<<16;
     win = 0;
     win_mask = 0;
     match_nb = 0;
@@ -129,9 +140,9 @@ struct CtxModel {
     // is direct-indexed and never evicted; the rest are hashed.
     // The match model's window, in pixels: long enough that a hit means a real
     // repeat rather than a common local pattern the context tables already have.
-    match_nb = 12/bits;
-    if( match_nb>40 )
-      match_nb = 40;
+    match_nb = CM_match_span/bits;
+    if( match_nb>CM_match_cap )
+      match_nb = CM_match_cap;
     win_mask = match_nb*bits>=64 ? ~0ull : (((uint64_t)1<<(match_nb*bits))-1);
     const int32_t longest = chosen_nb ? chosen_nb : nb_for_bits[bits];
     for( int32_t k = 0; k<kOrders; ++k ) {
@@ -159,7 +170,7 @@ struct CtxModel {
     // fewest samples and are the ones that matter most.  The match model starts
     // with no weight at all: it has to earn it.
     for( int32_t b = 0; b<8; ++b ) {
-      const int32_t n = 8*b+4;
+      const int32_t n = (b<<CM_nbucket_shift)+(1<<idx_clamp(CM_nbucket_shift-1, 0, 12));
       int32_t weights[kInputs];
       for( int32_t k = 0; k<kOrders-1; ++k )
         weights[k] = 65536*kBlend/(n+kBlend)/(kOrders-1);
@@ -169,7 +180,7 @@ struct CtxModel {
         mixer.seed((b<<4)|node, weights);
     }
     for( int32_t k = 0; k<kMatchLens; ++k )
-      match_p[k] = 40000u<<16;
+      match_p[k] = (uint32_t)CM_match_seed<<16;
     win = 0;
     match_ptr = -1;
     match_len = 0;
@@ -188,7 +199,7 @@ struct CtxModel {
         memset(tags[k], 0, count*sizeof(uint32_t));
       } else {
         for( size_t j = 0; j<count*(size_t)nodes; ++j )
-          ctr[0][j] = 32768u<<16;
+          ctr[0][j] = (uint32_t)CM_cell_seed<<16;
       }
     }
   }
@@ -225,7 +236,7 @@ struct CtxModel {
   uint32_t*bucket(int32_t k, uint32_t key, const uint32_t* seed) {
     if( !k )
       return &ctr[0][(size_t)(key&(((uint32_t)1<<table_bits[0])-1u))*(size_t)nodes];
-    const uint32_t hashed = key*2654435761u;
+    const uint32_t hashed = key*(uint32_t)CM_key_hash;
     const uint32_t slot = hashed>>(32-table_bits[k]);
     const uint32_t want = hashed|1u;
     uint32_t*const row = &ctr[k][(size_t)slot*(size_t)nodes];
@@ -286,7 +297,7 @@ struct CtxModel {
       const int32_t conf = (int32_t)(match_p[len_at]>>16);
       p_in[kOrders] = !match_path ? 32768 : pred_bit ? conf : 65536-conf;
       const int32_t n_long = (int32_t)(rows[kOrders-1][at]&0xFFFFu);
-      const int32_t p = mixer.mix(p_in, ((n_long>>3)<<4)|at);
+      const int32_t p = mixer.mix(p_in, ((n_long>>idx_clamp(CM_nbucket_shift, 1, 12))<<4)|at);
       // The map's context is the tree node and nothing else: the mixer has
       // already used everything else available here.
       const int32_t coded = apm.refine(p, at);
@@ -338,14 +349,14 @@ struct CtxModel {
   // than assumed.  Unlike orientation (which is a whole-raster property and
   // cannot be decided on a crop), this is a question about local statistics,
   // and a megapixel answers it as well as nine.  The winner goes on the wire.
-  static const int32_t kProbePixels = 1<<17;
+  static const int32_t kProbePixels;
   int32_t choose_neighbours(BMFState* state, const uint8_t* px, int32_t w, int32_t h) {
     bit_cost_init();
     // Bands spread over the whole raster rather than one centred block: a
     // centre crop of x_ai does not look like x_ai, and picking on one costs
     // that file 2000 bytes.  Full width, so only the band joins break a
     // vertical context.
-    const int32_t bands = 8;
+    const int32_t bands = idx_clamp(CM_probe_bands, 1, 64);
     const int32_t pw = w;
     int32_t ph = h;
     if( (int64_t)pw*ph>kProbePixels )
@@ -365,7 +376,10 @@ struct CtxModel {
     }
     ph = at;
     const int32_t longest = nb_for_bits[bits];
-    const int32_t want[4] = {longest, (longest*5+3)/6, (longest*2+1)/3, (longest+1)/2};
+    const int32_t want[4] = {longest,
+                             (longest*CM_probe_num_1+CM_probe_round_1)/idx_clamp(CM_probe_den_1, 1, 64),
+                             (longest*CM_probe_num_2+CM_probe_round_2)/idx_clamp(CM_probe_den_2, 1, 64),
+                             (longest*CM_probe_num_3+CM_probe_round_3)/idx_clamp(CM_probe_den_3, 1, 64)};
     int32_t best = longest;
     uint64_t best_cost = ~(uint64_t)0;
     for( int32_t k = 0; k<4; ++k ) {
@@ -380,7 +394,7 @@ struct CtxModel {
       // The probe sees a fraction of the plane, and a longer context needs more
       // data to pay off, so the probe is biased toward short ones.  A shorter
       // candidate has to win by more than 1/64 to be believed.
-      const uint64_t priced = k ? measured+(measured>>6) : measured;
+      const uint64_t priced = k ? measured+(measured>>idx_clamp(CM_probe_bias, 1, 20)) : measured;
       if( priced<best_cost ) {
         best_cost = priced;
         best = n;
@@ -430,3 +444,11 @@ struct CtxModel {
     }
   }
 };
+
+const int32_t CtxModel::kMatchBits = idx_clamp(CM_match_bits, 8, 26);
+const int32_t CtxModel::kShortNb = idx_clamp(CM_short_nb, 1, CM_max_neighbours);
+const int32_t CtxModel::kTableBits = idx_clamp(CM_table_bits, 8, 26);
+const int32_t CtxModel::kMidBits = idx_clamp(CM_mid_bits, 8, 26);
+const int32_t CtxModel::kCountCap = idx_clamp(CM_count_cap, 1, CtxModel::kCountCapMax);
+const int32_t CtxModel::kBlend = CM_blend;
+const int32_t CtxModel::kProbePixels = 1<<idx_clamp(CM_probe_shift, 12, 24);

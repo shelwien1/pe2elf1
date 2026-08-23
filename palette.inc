@@ -24,12 +24,16 @@ bool palette_is_coded(uint8_t depth) {
 // One adaptive binary counter.  The pair feeds RangeCoder::encode_bit directly,
 // so the two counts are the frequencies rather than a probability.
 struct PalCtr {
-  static const int32_t kStep = 24;
-  static const int32_t kLimit = 4096;
+  // Declared here, defined below the class.  In the tuning build an IDX value
+  // is a read from a patchable object, and an in-class initializer has to be a
+  // constant expression; an out-of-class definition may be dynamic.  The
+  // shipping build initializes the same names from literals and folds them.
+  static const int32_t kStep;
+  static const int32_t kLimit;
   uint16_t n[2];
   void Init() {
-    n[0] = 1;
-    n[1] = 1;
+    n[0] = PA_seed;
+    n[1] = PA_seed;
   }
   template <int32_t f_DEC> int32_t code(RangeCoder* rc, int32_t bit) {
     if constexpr( f_DEC )
@@ -45,13 +49,16 @@ struct PalCtr {
   }
 };
 
+const int32_t PalCtr::kStep = PA_step;
+const int32_t PalCtr::kLimit = PA_limit;
+
 struct PaletteModel {
   // A byte goes out through a binary tree: 255 internal nodes, indexed the
   // usual way from the root at 1.
-  static const int32_t kTree = 256;
+  static const int32_t kTree = PA_tree;
   // Residual contexts: one per channel, split on whether the previous residual
   // in that channel was zero.
-  static const int32_t kResCtx = 6;
+  static const int32_t kResCtx = PA_res_ctx;
   PalCtr repeat[2];        // this entry repeats the previous one
   PalCtr channel_eq[2];    // this channel repeats the one before it in the entry
   PalCtr res[kResCtx][kTree];

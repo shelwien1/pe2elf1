@@ -1,0 +1,45 @@
+
+Prefix AP
+Debug 1
+
+# ---------------------------------------------------------------------
+# The adaptive probability map and the logistic mixer, shared by every
+# model that has a decision worth refining.
+# ---------------------------------------------------------------------
+
+# Structural: bucket and context counts size member arrays.
+Const 1
+
+Number buckets,          1,0!100001
+Number map_ctx,          1,0!100000000
+Number mix_sets,         1,0!100000000
+Number adapt_cap_max,    1,0!11111111
+
+# The map: how far into the stretch domain the buckets reach (in 1/256 of
+# a stretch unit), how fast an entry moves, and how much of its opinion is
+# taken against the model's own.  The map has fewer samples per entry than
+# the cell does, so it is the less certain of the two.
+Const 0
+
+Number span,             1,0!100000000000
+-Number rate,             1,0!101
+Number map_weight,       1,0!11
+
+# Clamps on a probability leaving either stage.
+
+Number p_floor,          1,0!100000
+Number p_ceil,           1,0!1111111111100000
+
+# The mixer: the stretch scale (in 1/256 units per nat) and the
+# gradient-descent shift.
+
+Number stretch_scale,    1,0!100000000
+Number mix_shift,        1,0!10010
+
+# The count-adaptive counter shared outside CtxModel: the anneal cap, the
+# offset in the 1/(n+offset) schedule, and the probability a fresh cell
+# starts at.
+
+Number adapt_cap,        1,0!111100
+Number adapt_offset,     1,0!10
+Number cell_seed,        1,0!1000000000000000

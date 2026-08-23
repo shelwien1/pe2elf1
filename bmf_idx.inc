@@ -57,3 +57,6 @@ static inline constexpr int32_t idx_clamp(int32_t v, int32_t lo, int32_t hi) {
 #include "MOD/bmf-P2_h.inc"
 #include "MOD/bmf-P1_h.inc"
 #include "MOD/bmf-CN_h.inc"
+#include "MOD/bmf-CM_h.inc"
+#include "MOD/bmf-AP_h.inc"
+#include "MOD/bmf-PA_h.inc"

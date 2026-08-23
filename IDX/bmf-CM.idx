@@ -1,0 +1,87 @@
+
+Prefix CM
+Debug 1
+
+# ---------------------------------------------------------------------
+# CtxModel: the direct context model for small-alphabet planes.
+#
+# The table widths are live rather than frozen -- every table here is
+# heap-allocated from a runtime count, so nothing needs them to be constant
+# expressions, and how wide a hashed order should be is exactly the kind of
+# question the optimizer is for.
+# ---------------------------------------------------------------------
+
+# Structural: these size members, so they must fold.
+Const 1
+
+Number max_neighbours,   1,0!11000
+Number orders,           1,0!100
+Number max_alpha,        1,0!10000
+Number match_lens,       1,0!100000
+Number count_cap_max,    1,0!11111111
+
+# Table widths, in bits: the direct-mapped short order, the two hashed
+# middle orders and the longest.  All allocated from a runtime count.
+Const 0
+
+Number short_nb,         1,0!100
+Number table_bits,       1,0!10100
+Number mid_bits,         1,0!10010
+Number match_bits,       1,0!10100
+
+# How many neighbours the longest order sees, by alphabet width: one entry
+# per bit count.  At four values the table saturates; at eight and sixteen
+# the learning cost turns it around first; at two it keeps paying to 24.
+
+Number nb_for_bits_1,    1,0!11000
+Number nb_for_bits_2,    1,0!1010
+Number nb_for_bits_3,    1,0!111
+Number nb_for_bits_4,    1,0!111
+
+# Counter adaptation: the cap the 1/(n+2) schedule anneals to, and the
+# offset in that schedule.
+
+Number count_cap,        1,0!111100
+Number adapt_offset,     1,0!10
+
+# The mixer: the count-weighted blend the weights are seeded from, the
+# width of the evidence bucket that selects a weight set, and the
+# gradient-descent shift.
+
+Number blend,            1,0!11000
+Number nbucket_shift,    1,0!11
+
+# The match model: the window length in pixels is match_span/bits, capped;
+# the per-length confidence starts here.
+
+Number match_span,       1,0!1100
+Number match_cap,        1,0!101000
+Number match_seed,       1,0!1001110001000000
+
+# The neighbourhood probe: how many pixels it prices, how many bands it
+# spreads them over, the three shorter candidates it tries as sixths of
+# the longest, and the bias toward short contexts a crop-priced answer
+# needs (a shorter candidate must win by more than 1/2^probe_bias).
+
+Number probe_shift,      1,0!10001
+Number probe_bands,      1,0!1000
+Number probe_num_1,      1,0!101
+Number probe_den_1,      1,0!110
+Number probe_round_1,    1,0!11
+Number probe_num_2,      1,0!10
+Number probe_den_2,      1,0!11
+Number probe_round_2,    1,0!1
+Number probe_num_3,      1,0!1
+Number probe_den_3,      1,0!10
+Number probe_round_3,    1,0!1
+Number probe_bias,       1,0!110
+
+# The two hash multipliers: Knuth's 32-bit constant for the context key,
+# the 64-bit one for the match window.  Declared so they are visible and
+# movable, frozen because a hash multiplier has no gradient to climb.
+
+Number key_hash,         1,0!10011110001101110111100110110001
+
+# The seeded cell probability, in 1/65536.
+
+Number cell_seed,        1,0!1000000000000000

@@ -15,8 +15,10 @@
 // and blends the two entries, updating both in proportion.  Hard bucket
 // boundaries would put a step discontinuity in the correction exactly where the
 // estimate is least certain.
-const int32_t kApmBuckets = 33;
-const double kApmSpan = 8.0;
+const int32_t kApmBuckets = AP_buckets;
+// The span is carried as 1/256 of a stretch unit so it can be an integer
+// parameter; 2048 is the 8.0 it replaces.
+const double kApmSpan = idx_d(AP_span, 8);
 int32_t apm_pos[4096];
 uint16_t apm_squash[kApmBuckets];
 bool apm_tables_ready = false;
@@ -36,18 +38,22 @@ void apm_tables_init() {
   for( int32_t b = 0; b<kApmBuckets; ++b ) {
     const double s = (double)b/(double)(kApmBuckets-1)*2.0*kApmSpan-kApmSpan;
     int32_t v = (int32_t)(65536.0/(1.0+exp(-s)));
-    if( v<32 )
-      v = 32;
-    if( v>65504 )
-      v = 65504;
+    if( v<AP_p_floor )
+      v = AP_p_floor;
+    if( v>AP_p_ceil )
+      v = AP_p_ceil;
     apm_squash[b] = (uint16_t)v;
   }
   apm_tables_ready = true;
 }
 
 struct Apm {
-  static const int32_t kCtx = 256;
-  static const int32_t kRate = 5;
+  static const int32_t kCtx = AP_map_ctx;
+  // Declared here, defined below the class.  In the tuning build an IDX value
+  // is a read from a patchable object, and an in-class initializer has to be a
+  // constant expression; an out-of-class definition may be dynamic.  The
+  // shipping build initializes the same names from literals and folds them.
+  static const int32_t kRate;
   uint16_t t[kCtx*kApmBuckets];
   int32_t at;
   int32_t frac;
@@ -70,8 +76,9 @@ struct Apm {
     const int32_t mapped = lo+(((hi-lo)*frac)>>12);
     // Half the map's opinion, half the model's: the map has fewer samples per
     // entry than the cell has, so it is the less certain of the two.
-    const int32_t out = (3*mapped+p16)>>2;
-    return out<32 ? 32 : out>65504 ? 65504 : out;
+    const int32_t w = idx_clamp(AP_map_weight, 1, 15);
+    const int32_t out = (w*mapped+p16)/(w+1);
+    return out<AP_p_floor ? AP_p_floor : out>AP_p_ceil ? AP_p_ceil : out;
   }
 
   void update(int32_t bit) {
@@ -84,12 +91,16 @@ struct Apm {
   }
 };
 
+const int32_t Apm::kRate = idx_clamp(AP_rate, 1, 12);
+
 
 // Logistic mixing: probabilities combined in the stretch domain with weights
 // learned per context by gradient descent on coding loss.  This is the piece
 // IMPROVEMENTS.md section 2 asks for, in its cheapest form -- two inputs, one
 // weight pair per context -- and it is used where two estimates of the same bit
 // already exist side by side.
+// The mixer's stretch table spans [-kMixCentre, kMixCentre).
+const int32_t kMixCentre = 2048;
 int32_t mix_stretch[4096];
 uint16_t mix_squash[4096];
 bool mix_tables_ready = false;
@@ -99,27 +110,38 @@ void mix_tables_init() {
     return;
   for( int32_t i = 0; i<4096; ++i ) {
     const double p = ((double)i+0.5)/4096.0;
-    double s = 256.0*log(p/(1.0-p));
-    if( s<-2047.0 )
-      s = -2047.0;
-    if( s>2047.0 )
-      s = 2047.0;
+    double s = (double)AP_stretch_scale*log(p/(1.0-p));
+    // The clip is the table's own half-width, not a number of its own:
+    // mix() indexes mix_squash by dot+kMixCentre.
+    if( s<-(double)(kMixCentre-1) )
+      s = -(double)(kMixCentre-1);
+    if( s>(double)(kMixCentre-1) )
+      s = (double)(kMixCentre-1);
     mix_stretch[i] = (int32_t)s;
   }
   for( int32_t x = 0; x<4096; ++x ) {
-    int32_t v = (int32_t)(65536.0/(1.0+exp(-(double)(x-2048)/256.0)));
-    if( v<32 )
-      v = 32;
-    if( v>65504 )
-      v = 65504;
+    int32_t v = (int32_t)(65536.0/(1.0+exp(-(double)(x-kMixCentre)/(double)AP_stretch_scale)));
+    if( v<AP_p_floor )
+      v = AP_p_floor;
+    if( v>AP_p_ceil )
+      v = AP_p_ceil;
     mix_squash[x] = (uint16_t)v;
   }
   mix_tables_ready = true;
 }
 
+// The learning rate sits at namespace scope, not as a static member of the
+// template.  A static data member of a class template is *unordered* dynamic
+// initialization: it may run before the mapping objects the tuning build reads
+// its value from, in which case the shift comes out as the clamp floor and the
+// tuning build silently learns at a different rate from the shipping build --
+// the corpus caught it as fourteen streams differing between the two.
+// Non-template statics defined after the MOD/ includes are ordered within the
+// translation unit and do not have this problem.
+static const int32_t kMixShift = idx_clamp(AP_mix_shift, 8, 24);
+
 template <int32_t N> struct MixN {
-  static const int32_t kSets = 256;
-  static const int32_t kShift = 18;
+  static const int32_t kSets = AP_mix_sets;
   int32_t w[kSets][N];
   int32_t in[N];
   int32_t set;
@@ -147,17 +169,17 @@ template <int32_t N> struct MixN {
       dot += w[set][j]*in[j];
     }
     dot >>= 16;
-    if( dot<-2047 )
-      dot = -2047;
-    if( dot>2047 )
-      dot = 2047;
-    return mix_squash[dot+2048];
+    if( dot<-(kMixCentre-1) )
+      dot = -(kMixCentre-1);
+    if( dot>kMixCentre-1 )
+      dot = kMixCentre-1;
+    return mix_squash[dot+kMixCentre];
   }
 
   void update(int32_t bit, int32_t p) {
     const int32_t err = (bit ? 65535 : 0)-p;
     for( int32_t j = 0; j<N; ++j )
-      w[set][j] += (in[j]*err)>>kShift;
+      w[set][j] += (in[j]*err)>>kMixShift;
   }
 };
 
@@ -190,20 +212,21 @@ int32_t bit_cost(int32_t p16, int32_t bit) {
 // A probability with its own update count, adapting at 1/(n+2) until the count
 // anneals.  Packed into one word: probability high, count low.  A context that
 // sees tens of samples needs this; a fixed rate is far too slow while it is new.
-const int32_t kAdaptCap = 60;
-int32_t adapt_recip[kAdaptCap+1];
+const int32_t kAdaptCapMax = AP_adapt_cap_max;
+const int32_t kAdaptCap = idx_clamp(AP_adapt_cap, 1, kAdaptCapMax);
+int32_t adapt_recip[kAdaptCapMax+1];
 bool adapt_tables_ready = false;
 
 void adapt_tables_init() {
   if( adapt_tables_ready )
     return;
-  for( int32_t k = 0; k<=kAdaptCap; ++k )
-    adapt_recip[k] = 65536/(k+2);
+  for( int32_t k = 0; k<=kAdaptCapMax; ++k )
+    adapt_recip[k] = 65536/(k+idx_clamp(AP_adapt_offset, 1, 64));
   adapt_tables_ready = true;
 }
 
 uint32_t adapt_init() {
-  return 32768u<<16;
+  return (uint32_t)AP_cell_seed<<16;
 }
 
 int32_t adapt_p(uint32_t cell) {

@@ -1,0 +1,21 @@
+
+Prefix PA
+Debug 1
+
+# ---------------------------------------------------------------------
+# The palette model: the entries themselves go out through this, ahead of
+# the image.
+# ---------------------------------------------------------------------
+
+# Structural: the byte tree and the residual context count size arrays.
+Const 1
+
+Number tree,             1,0!100000000
+Number res_ctx,          1,0!110
+
+# The binary counter: seed, increment and the total it halves at.
+Const 0
+
+Number seed,             1,0!1
+Number step,             1,0!11000
+Number limit,            1,0!1000000000000

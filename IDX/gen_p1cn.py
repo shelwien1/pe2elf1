@@ -4,9 +4,10 @@
 import sys
 
 sys.path.insert(0, 'IDX')
+from idxgen import emit, rewrite
 
 
-def emit(path, prefix, banner, blocks):
+def _unused_emit(path, prefix, banner, blocks):
     out = ['', 'Prefix %s' % prefix, 'Debug 1', '']
     out += banner
     const = None
@@ -24,7 +25,7 @@ def emit(path, prefix, banner, blocks):
     open(path, 'w').write('\n'.join(out) + '\n')
 
 
-def rewrite(path, subs):
+def _unused_rewrite(path, subs):
     src = open(path).read()
     for old, new, count in subs:
         n = src.count(old)
