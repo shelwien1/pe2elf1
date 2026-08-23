@@ -231,7 +231,15 @@ struct CtxModel {
     uint32_t key = 0;
     for( int32_t k = 0; k<nb[kOrders-1]; ++k ) {
       const int32_t nx = x+dx[k], ny = y+dy[k];
-      const uint32_t v = (nx<0||ny<0||nx>=w||ny>=h) ? 0u : to_idx[px[(size_t)ny*w+nx]];
+      // Outside the raster, or not yet coded.  The causality test is not
+      // decoration: the offsets are IDX parameters, and one swept to dy>0 -- or
+      // to dy==0 with dx>=0 -- names a pixel the encoder can read and the
+      // decoder cannot, so the two would walk different models and the stream
+      // would not decode.  Every shipping offset is causal, so this costs
+      // nothing and refuses the rest identically on both sides.
+      const bool unknown = nx<0||ny<0||nx>=w||ny>=h
+                           ||dy[k]>0||(dy[k]==0&&dx[k]>=0);
+      const uint32_t v = unknown ? 0u : to_idx[px[(size_t)ny*w+nx]];
       key |= v<<(bits*k);
     }
     return key;

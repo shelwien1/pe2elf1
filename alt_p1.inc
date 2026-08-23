@@ -20,6 +20,15 @@ struct AltP1Block {
   int32_t group_of[512];
   static const int32_t kP1CounterCount = P1_counter_count;
   CounterNode counters[kP1CounterCount];
+
+  // The selector mixer's weights are seeded geometrically and then added to and
+  // subtracted from a context to reach a neighbouring cell, so a swept seed or
+  // ratio walks past the end of the table.  Every access goes through here; the
+  // shipping build folds the bound's operand, not the compare, because the
+  // index is data.
+  CounterNode &ctr_at(uint32_t i) {
+    return counters[idx_bound(i, kP1CounterCount)];
+  }
   void advance_row() {
     {
       P1Ctx*const here = cursor[0];
@@ -60,12 +69,12 @@ struct AltP1Block {
       cur = recon;
       dst[at] = out;
     }
-    alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code, &slot_apm);
+    alt_p1_encode_symbol(cx, &ctr_at(ctx[0]), ctx[1], code, &slot_apm);
     return cur;
   }
 
   int32_t decode_sample() {
-    const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1], &slot_apm);
+    const int32_t code = alt_p1_decode_symbol(cx, &ctr_at(ctx[0]), ctx[1], &slot_apm);
     return (uint8_t)((uint8_t)pred+unfold[code]);
   }
 
@@ -74,7 +83,7 @@ struct AltP1Block {
     cursor[0][0].mag = abs32(val-pred);
     ctx[3+ctx[2]] += cursor[0][0].mag-cursor[0][-4].mag-(cursor[4][-2].mag-cursor[4][6].mag)-(cursor[2][-2].mag-cursor[2][6].mag);
     ctx[2] = ctx[2]==0;
-    if( counters[ctx[0]].total<0x4000u )
+    if( ctr_at(ctx[0]).total<0x4000u )
       update_model();
     for( int32_t k = 0; k<5; ++k )
       ++cursor[k];
@@ -182,11 +191,11 @@ struct AltP1Block {
         for( int32_t x = 0; x<width; ++x ) {
           ctx_of(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            const int32_t code = alt_p1_decode_symbol(cx, &counters[ctx[0]], ctx[1], &slot_apm);
+            const int32_t code = alt_p1_decode_symbol(cx, &ctr_at(ctx[0]), ctx[1], &slot_apm);
             q[0] = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
           } else {
             const int32_t code = fold_or_refuse(q, src[0], (uint8_t)pred, fold, fold_hi, unfold);
-            alt_p1_encode_symbol(cx, &counters[ctx[0]], ctx[1], code, &slot_apm);
+            alt_p1_encode_symbol(cx, &ctr_at(ctx[0]), ctx[1], code, &slot_apm);
             ++src;
           }
           record_sample((uint8_t)q[0]);
@@ -207,8 +216,8 @@ struct AltP1Block {
     const int32_t here = ctx[0];
     if( sel==1 ) {
       int32_t mid = here-cw.w[1];
-      CounterNode* lo = &counters[mid+cw.w[0]];
-      CounterNode* hi = &counters[cw.w[2]+mid];
+      CounterNode* lo = &ctr_at(mid+cw.w[0]);
+      CounterNode* hi = &ctr_at(cw.w[2]+mid);
       lo[0].bump(slot_f, P1_sel1_ctr);
       hi[0].bump(slot_f, P1_sel1_ctr);
       if( (here&7)!=7 ) {
@@ -220,9 +229,9 @@ struct AltP1Block {
         hi[-1].bump(slot_f, P1_sel1_dn);
       }
     } else {
-      counters[cw.w[2-sel]+here-cw.w[sel]].bump(slot_f, P1_selN_far);
-      CounterNode* mid = &counters[cw.w[1]+here-cw.w[sel]];
-      CounterNode* alt = &counters[ctx_alt+cw.w[alt_lo]-cw.w[alt_hi]];
+      ctr_at(cw.w[2-sel]+here-cw.w[sel]).bump(slot_f, P1_selN_far);
+      CounterNode* mid = &ctr_at(cw.w[1]+here-cw.w[sel]);
+      CounterNode* alt = &ctr_at(ctx_alt+cw.w[alt_lo]-cw.w[alt_hi]);
       mid[0].bump(slot_f, P1_selN_mid);
       alt[0].bump(slot_r, P1_selN_alt);
       if( (here&7)!=7 ) {
@@ -243,24 +252,24 @@ struct AltP1Block {
     const int32_t slot_f = sym_slot(code_f);
     const int32_t slot_r = sym_slot(code_r);
     uint32_t ctx_alt = CtxIdx{}.bits<IX_p1_ctx_alt_p0, IX_p1_ctx_alt_w0>(ctx[0]).raw(mixer_rev(ctx_w, 9));
-    CounterNode* node_alt = &counters[ctx_alt];
+    CounterNode* node_alt = &ctr_at(ctx_alt);
     node_alt[0].bump(slot_r, P1_bump_alt);
     const int32_t result = ctx[0];
     if( (result&7)!=7 ) {
-      CounterNode* node_up = &counters[result];
+      CounterNode* node_up = &ctr_at(result);
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, P1_bump_up);
       if( slot_f>=CN_slot_split )
         cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<IX_p1_ix_p0>(slot_f&1).bit<IX_p1_ix_p1>(node_up[1].escape_high(slot_f)).raw(ctx_up)), tree_sym);
     }
     if( result&7 ) {
-      CounterNode* node_dn = &counters[result];
+      CounterNode* node_dn = &ctr_at(result);
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, P1_bump_dn);
       if( slot_f>=CN_slot_split )
         cx[0].update_binary_pair(cx[0].model_strip(CtxIdx{}.bit<IX_p1_ix1_p0>(slot_f&1).bit<IX_p1_ix1_p1>(node_dn[-1].escape_high(slot_f)).raw(ctx_dn)), tree_sym);
     }
-    if( counters[result].total>=CN_nudge_limit )
+    if( ctr_at(result).total>=CN_nudge_limit )
       return;
     if( (result&7u)<7 ) {
       node_alt[1].bump(slot_r, P1_nudge_up);
@@ -269,7 +278,7 @@ struct AltP1Block {
       node_alt[-1].bump(slot_r, P1_nudge_dn);
     }
     if( slot_f>=CN_slot_split ) {
-      const uint32_t key = CtxIdx{}.bit<IX_p1_key_p0>(slot_f&1).bit<IX_p1_key_p1>(counters[result].escape_high(slot_f)).raw(ctx[1]);
+      const uint32_t key = CtxIdx{}.bit<IX_p1_key_p0>(slot_f&1).bit<IX_p1_key_p1>(ctr_at(result).escape_high(slot_f)).raw(ctx[1]);
       if( (key&0x38)>=0x38||(cx[0].update_binary_pair(cx[0].model_strip(key+8), tree_sym), (key&0x38)!=0) ) {
         cx[0].update_binary_pair(cx[0].model_strip(key-8), tree_sym);
       }
