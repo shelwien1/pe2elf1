@@ -45,8 +45,9 @@ for.
 | `bmf-IX.idx` | `IX` | every context index's bit positions, field widths and radix strides |
 | `bmf-QZ.idx` | `QZ` | the five monotone quantiser ladders, as `Index` threshold mappings |
 
-573 parameters. `IDX/opt.pl` prints the exact count and the total pattern-bit
-budget when it starts, so that number is checkable rather than remembered.
+575 parameters, 6417 pattern bits. Both `IDX/opt.pl` and `IDX/sweep.py` print
+those two numbers when they start, so they are checkable rather than
+remembered.
 
 ---
 
@@ -251,8 +252,9 @@ crash the program when swept is a bug in the consumer. It flips pattern bits at
 random across every parameter at once and round-trips images through the patched
 binary, looking for a crash, a hang, or a round trip that stops matching.
 
-Driven to each parameter's two extremes one at a time it found thirteen of the
-563 unguarded, in four kinds, all now fixed:
+Driven to each parameter's two extremes one at a time -- which is what it does
+by default -- it found thirteen unguarded on the first pass and four more that
+only showed up once those were fixed, in five kinds, all now closed:
 
 * A probability ceiling swept to zero leaves the range coder a zero-width
   interval, and a floor above the ceiling inverts every clamp. The two are
@@ -267,3 +269,11 @@ Driven to each parameter's two extremes one at a time it found thirteen of the
   is data — and every `CtxIdx` shift is bounded to 0..31, since a swept position
   is otherwise an out-of-range shift, which is undefined behaviour rather than a
   bad index.
+* A record seeded from a coarser one divides by that record's total, and a
+  collapsed context index leaves the coarse record empty. An empty source has
+  nothing to contribute, so the guard is the answer rather than a paper-over —
+  and the collapse now shows up where it happens rather than three layers away.
+
+That last one took two rounds of guessing from signal numbers before the
+obvious move worked: build with `-fsanitize=integer-divide-by-zero`, patch the
+single parameter, and let it name the line.
