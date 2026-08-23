@@ -27,6 +27,10 @@ pdesc( GL_escape_floor_, 0, "100000000" );
 static const int GL_escape_floor = GL_escape_floor_.value * (1);
 pdesc( GL_escape_kick_, 0, "1111" );
 static const int GL_escape_kick = GL_escape_kick_.value * (1);
+pdesc( GL_blend_share_, 0, "10101" );
+static const int GL_blend_share = GL_blend_share_.value * (1);
+pdesc( GL_blend_lvl_scale_, 0, "1000" );
+static const int GL_blend_lvl_scale = GL_blend_lvl_scale_.value * (1);
 
 
 

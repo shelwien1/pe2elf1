@@ -45,8 +45,8 @@ for.
 | `bmf-IX.idx` | `IX` | every context index's bit positions, field widths and radix strides |
 | `bmf-QZ.idx` | `QZ` | the five monotone quantiser ladders, as `Index` threshold mappings |
 
-Around 560 parameters. `IDX/opt.pl` prints the exact count and the total
-pattern-bit budget when it starts.
+573 parameters. `IDX/opt.pl` prints the exact count and the total pattern-bit
+budget when it starts, so that number is checkable rather than remembered.
 
 ---
 
@@ -100,9 +100,10 @@ shifts. Two cases worth naming because they look tunable and are not:
 
 * `lo = 256` in `CounterNode`'s rescale is the start of a minimum scan whose
   only use is a `lo<=1` test. Any value above 1 gives the same answer.
-* `digit<Stride, Radix>`'s radix is unused by the body — the stride is what the
-  index uses. It is declared anyway, because it documents the radix and a
-  reader who changes one should see the other.
+* `digit<Stride, Radix>`'s radix is unused by the method body — only the stride
+  reaches the index. It is declared anyway, and the slow model's bucket index
+  reads the radices to derive its strides, which is what makes that index safe
+  to sweep (below).
 
 Two couplings are expressed rather than assumed, so a sweep cannot break them:
 

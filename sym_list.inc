@@ -94,9 +94,14 @@ struct FreqRec {
     int32_t kept[5];
     for( int32_t i = 0; i<5; ++i ) kept[i] = scale*w[i];
     this[0] = src;
-    b14 *= 8;
+    b14 *= GL_blend_lvl_scale;
     const int32_t total = w[5];
-    for( int32_t i = 0; i<5; ++i ) w[i] = (uint16_t)(kept[i]+(21*w[i]+total-1)/total);
+    // An empty source has nothing to contribute, and dividing by its total is
+    // how a swept context-index parameter that collapses two contexts onto one
+    // record shows up -- as a division by zero here rather than as a bad index
+    // where the collapse happened.
+    for( int32_t i = 0; i<5; ++i )
+      w[i] = (uint16_t)(kept[i]+(total ? (GL_blend_share*w[i]+total-1)/total : 0));
     resum();
   }
 

@@ -38,3 +38,10 @@ Number rescale_force,        1,0!11111011
 Number rescale_bias_ratio,   1,0!10100
 Number escape_floor,         1,0!100000000
 Number escape_kick,          1,0!1111
+
+# Blending a frequency record from a coarser one: how much of the coarse
+# record's shape is mixed in (out of its own total), and the factor the
+# alphabet level is scaled by when it is.
+
+Number blend_share,          1,0!10101
+Number blend_lvl_scale,      1,0!1000
