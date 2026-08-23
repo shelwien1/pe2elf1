@@ -27,6 +27,10 @@ Number act_shift,        1,0!100
 Number guess_thr_0,      1,0!11011000
 Number guess_thr_1,      1,0!10110
 
+# The neighbourhood magnitude sum below which a pixel counts as quiet.
+
+Number quiet_thr,        1,0!10000
+
 # The level, group and slot ladders: three monotone quantisers over the
 # activity and the predicted value, and the dead-zone width per level.
 

@@ -54,7 +54,7 @@ struct AltP1Block {
     int32_t code = fold[resid];
     const int32_t recon = (uint8_t)(unfold[code]+p);
     const int32_t out = (uint8_t)(recon+dst[at]-cur);
-    if( dst[at]-out<-16||dst[at]-out>16 ) {
+    if( dst[at]-out<-CN_drift_limit||dst[at]-out>CN_drift_limit ) {
       code = fold_hi[resid];
     } else {
       cur = recon;
@@ -128,7 +128,7 @@ struct AltP1Block {
         ctx_w[7].sel = cross_grad(cur[-1].sym, guess, nb1);
         ctx_w[8].sel = nb_resid(nb1);
         ctx_w[3].sel = nb_resid(nb0);
-        quiet = (r1[-1].mag+r0[-1].mag<16);
+        quiet = (r1[-1].mag+r0[-1].mag<P1_quiet_thr);
       } else {
         act_all = cursor1[3].mag+act+3*r0[-1].mag;
         ctx_w[5].sel = west_grad;

@@ -37,10 +37,10 @@ struct CounterNode {
       }
     } else {
       int32_t p16 = (int32_t)(((uint32_t)c[0]*65536u+(tot>>1))/tot);
-      if( p16<32 )
-        p16 = 32;
-      if( p16>65504 )
-        p16 = 65504;
+      if( p16<kProbFloor )
+        p16 = kProbFloor;
+      if( p16>kProbCeil )
+        p16 = kProbCeil;
       const int32_t p_ref = apm[0].refine(p16, ctx&15);
       int32_t is_zero;
       if constexpr( f_DEC ) {

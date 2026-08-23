@@ -11,6 +11,8 @@ pdesc( P1_guess_thr_0_, 0, "11011000" );
 static const int P1_guess_thr_0 = P1_guess_thr_0_.value * (1);
 pdesc( P1_guess_thr_1_, 0, "10110" );
 static const int P1_guess_thr_1 = P1_guess_thr_1_.value * (1);
+pdesc( P1_quiet_thr_, 0, "10000" );
+static const int P1_quiet_thr = P1_quiet_thr_.value * (1);
 pdesc( P1_level_step_0_, 0, "1" );
 static const int P1_level_step_0 = P1_level_step_0_.value * (1);
 pdesc( P1_level_step_1_, 0, "1" );

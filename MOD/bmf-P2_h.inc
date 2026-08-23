@@ -472,6 +472,38 @@ pdesc( P2_q3_s1_, 0, "10101" );
 static const int P2_q3_s1 = P2_q3_s1_.value * (1);
 pdesc( P2_q3_s2_, 0, "1010" );
 static const int P2_q3_s2 = P2_q3_s2_.value * (1);
+pdesc( P2_cell_cap_, 0, "100000000000000" );
+static const int P2_cell_cap = P2_cell_cap_.value * (1);
+pdesc( P2_step_lo_, 0, "100000" );
+static const int P2_step_lo = P2_step_lo_.value * (1);
+pdesc( P2_step_hi_, 0, "100000000" );
+static const int P2_step_hi = P2_step_hi_.value * (1);
+pdesc( P2_step_tiny_, 0, "10000" );
+static const int P2_step_tiny = P2_step_tiny_.value * (1);
+pdesc( P2_step_down_lo_, 0, "10" );
+static const int P2_step_down_lo = P2_step_down_lo_.value * (1);
+pdesc( P2_step_down_hi_, 0, "100000" );
+static const int P2_step_down_hi = P2_step_down_hi_.value * (1);
+pdesc( P2_fast_shift_, 0, "10" );
+static const int P2_fast_shift = P2_fast_shift_.value * (1);
+pdesc( P2_run4_thr_0_, 0, "11100110000" );
+static const int P2_run4_thr_0 = P2_run4_thr_0_.value * (1);
+pdesc( P2_run4_thr_1_, 0, "100010000" );
+static const int P2_run4_thr_1 = P2_run4_thr_1_.value * (1);
+pdesc( P2_magsum_cap_, 0, "1111000000" );
+static const int P2_magsum_cap = P2_magsum_cap_.value * (1);
+pdesc( P2_magsum_shift_, 0, "11" );
+static const int P2_magsum_shift = P2_magsum_shift_.value * (1);
+pdesc( P2_flat_resid_, 0, "100110" );
+static const int P2_flat_resid = P2_flat_resid_.value * (1);
+pdesc( P2_q2_thr_0_, 0, "1110011" );
+static const int P2_q2_thr_0 = P2_q2_thr_0_.value * (1);
+pdesc( P2_q2_thr_1_, 0, "10001" );
+static const int P2_q2_thr_1 = P2_q2_thr_1_.value * (1);
+pdesc( P2_g3_up_shift_, 0, "1001" );
+static const int P2_g3_up_shift = P2_g3_up_shift_.value * (1);
+pdesc( P2_g3_dn_shift_, 0, "1101" );
+static const int P2_g3_dn_shift = P2_g3_dn_shift_.value * (1);
 
 
 

@@ -298,3 +298,30 @@ Number q3_s0,           1,0!100111
 Number q3_s1,           1,0!10101
 Number q3_s2,           1,0!1010
 
+# The ternary frequency cell's rescale schedule: the count a slot may reach
+# before the triple is halved, the two step thresholds the decrement ladder
+# turns at, the decrements themselves, and the fast counter's rate shift.
+
+Number cell_cap,      1,0!100000000000000
+Number step_lo,       1,0!100000
+Number step_hi,       1,0!100000000
+Number step_tiny,     1,0!10000
+Number step_down_lo,  1,0!10
+Number step_down_hi,  1,0!100000
+Number fast_shift,    1,0!10
+
+# Context thresholds inside the P2 model: the two run-length edges of the
+# selector's first weight, the magnitude sum above which the context saturates
+# and the shift that quantises it below that, the residual magnitude the model
+# treats as flat, the two second-difference edges, and the gradient blend's
+# two shifts.
+
+Number run4_thr_0,    1,0!11100110000
+Number run4_thr_1,    1,0!100010000
+Number magsum_cap,    1,0!1111000000
+Number magsum_shift,  1,0!11
+Number flat_resid,    1,0!100110
+Number q2_thr_0,      1,0!1110011
+Number q2_thr_1,      1,0!10001
+Number g3_up_shift,   1,0!1001
+Number g3_dn_shift,   1,0!1101

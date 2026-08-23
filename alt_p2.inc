@@ -14,11 +14,11 @@ struct P2Freq {
     uint32_t cut = f[2]>>1;
     halve_counts(f, 3);
     uint32_t budget = step;
-    if( budget<=0x100 ) {
-      if( step<=0x20u )
-        cut = budget>16 ? 2 : 0;
+    if( budget<=(uint32_t)P2_step_hi ) {
+      if( step<=(uint32_t)P2_step_lo )
+        cut = budget>(uint32_t)P2_step_tiny ? P2_step_down_lo : 0;
       else
-        cut = 32;
+        cut = P2_step_down_hi;
       step = budget-cut;
     } else {
       step >>= 1;
@@ -33,10 +33,10 @@ struct P2Freq {
     uint16_t*const base = &f[0];
     const uint32_t tot = (uint32_t)f[0]+f[1]+f[2];
     int32_t p16 = (int32_t)(((uint32_t)f[0]*65536u+(tot>>1))/tot);
-    if( p16<32 )
-      p16 = 32;
-    if( p16>65504 )
-      p16 = 65504;
+    if( p16<kProbFloor )
+      p16 = kProbFloor;
+    if( p16>kProbCeil )
+      p16 = kProbCeil;
     // Three estimates of the same decision, mixed: this cell, and two coarse
     // views of it -- one keyed on the seat and level alone, one on the
     // neighbours' sign classes alone.  The cell is keyed on both together and
@@ -60,7 +60,7 @@ struct P2Freq {
     // triple anneals as it fills, so it tracks a change of texture slowly.  One
     // fixed-rate probability beside it is section 4's dual-rate counter, and
     // the mixer decides how much to believe it.
-    fast[0] = (uint32_t)((int32_t)(fast[0]>>16)+((zero_target-(int32_t)(fast[0]>>16))>>2))<<16;
+    fast[0] = (uint32_t)((int32_t)(fast[0]>>16)+((zero_target-(int32_t)(fast[0]>>16))>>idx_clamp(P2_fast_shift, 1, 15)))<<16;
     if( zero ) {
       slot = &f[0];
     } else {
@@ -74,14 +74,14 @@ struct P2Freq {
       slot = hi_class ? &f[2] : &f[1];
     }
     uint16_t f_before = slot[0];
-    if( slot[0]>0x4000u ) {
+    if( slot[0]>(uint32_t)P2_cell_cap ) {
       halve_counts(f, 3);
       st = step;
-      if( st<=256 ) {
-        if( st<=32 )
-          down = st>16 ? 2 : 0;
+      if( st<=P2_step_hi ) {
+        if( st<=P2_step_lo )
+          down = st>P2_step_tiny ? P2_step_down_lo : 0;
         else
-          down = 32;
+          down = P2_step_down_hi;
         st = st-down;
         step = st;
         f_before = slot[0];
@@ -501,7 +501,7 @@ struct AltP2Block {
     int32_t flat_a, flat_b;
     int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1[0].mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4[0].mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3[0].mag+c2[-1].mag+c2[2].mag);
     const int32_t lo_band = band_lo, hi_band = band_hi;
-    ctx_w[0].sel = (run4<1840)+(run4<272);
+    ctx_w[0].sel = (run4<P2_run4_thr_0)+(run4<P2_run4_thr_1);
     ctx_w[1].sel = (run4-c1[0].val<=hi_band)+(run4-c1[0].val<lo_band);
     int32_t d_run4 = run4-c0[-1].val;
     bool in_band = d_run4<=hi_band;
@@ -553,7 +553,7 @@ struct AltP2Block {
       flat_a = magl+c0[-3].mag+c0[-4].mag+c0[-5].mag;
       flat_b = c4[0].mag+c3[0].mag+magu+c0[0].mag;
     }
-    const int32_t ctx15 = magsum>=960 ? 15 : nb_ctx[magsum>>3];
+    const int32_t ctx15 = magsum>=P2_magsum_cap ? 15 : nb_ctx[magsum>>idx_clamp(P2_magsum_shift, 1, 12)];
     const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
     ctx_pair[0] = CtxIdx{}.bits<IX_p2_ctx_pair_p0, IX_p2_ctx_pair_w0>(ctx15).raw(ctx_delta[ctx_idx+4]);
     ctx_pair[1] = CtxIdx{}.bits<IX_p2_ctx_pair1_p0, IX_p2_ctx_pair1_w0>(ctx15).raw(ctx_delta[ctx_idx]);
@@ -573,7 +573,7 @@ struct AltP2Block {
       const int32_t w0b = w0+4*((res>cx[0].deadzone_hi)-(res<cx[0].deadzone_lo));
       node0[0].weighted = w0b;
       uint32_t ctxw = bctx;
-      if( (int32_t)abs32(res)<38 ) {
+      if( (int32_t)abs32(res)<P2_flat_resid ) {
         --countdown;
         if( !countdown&&(uint8_t)node0[0].rate<8u ) {
           const int32_t from = node0[0].rate;
@@ -685,7 +685,7 @@ struct AltP2Block {
         int32_t q2 = rec[-1].val>>4;
         ctx_pair[0] = ctx+ctx_delta[q2+4];
         ctx_pair[1] = ctx+ctx_delta[q2];
-        P2Freq &fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
+        P2Freq &fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<P2_q2_thr_0)+(q2<P2_q2_thr_1)]+ctx_w[4].w[1]];
         if constexpr( f_DEC ) {
           out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &pz_fast[ctx])]);
         } else {
@@ -795,7 +795,7 @@ struct AltP2Block {
     }
     const int32_t run0 = step_bank(0, ctx0, filt);
     int32_t nb4_4 = c4[4].val;
-    sum_all = ((g3pair<<9)+sum_all)>>13;
+    sum_all = ((g3pair<<idx_clamp(P2_g3_up_shift, 0, 20))+sum_all)>>idx_clamp(P2_g3_dn_shift, 1, 20);
     int32_t d_run0 = c0[-5].val-run0;
     int32_t d_up = nb4_4-run0;
     int32_t up5 = c1[5].val;
@@ -935,7 +935,7 @@ struct AltP2Block {
     const int32_t was = out[at];
     const int32_t clean = (uint8_t)(pred+unfold[code]);
     const int32_t recon = (uint8_t)(clean+was-sample);
-    if( was-recon<-16||was-recon>16 ) {
+    if( was-recon<-CN_drift_limit||was-recon>CN_drift_limit ) {
       code = fold_hi[resid];
     } else {
       sample = clean;
