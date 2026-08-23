@@ -341,9 +341,9 @@ struct AltP2Block {
 
   int32_t step_bank(int32_t bank_no, uint32_t word, int32_t run_in) {
     // The context arrives as the bank value.  It used to arrive shifted up by
-    // eleven and be shifted straight back down here, which was the CtxIdx
-    // chain placing its fields at absolute bit positions; the Index
-    // declaration places them by order, so the shift has nothing left to do.
+    // eleven and be shifted straight back down here, from when the context was
+    // assembled at absolute bit positions; an Index declaration places its
+    // factors by order, so the shift has nothing left to do.
     const int32_t bank = (int32_t)word;
     bank_ctx[bank_no] = bank;
     const int32_t pred = p2_pred_at(bank_no, bank);
