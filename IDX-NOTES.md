@@ -33,19 +33,19 @@ for.
 
 | module | prefix | what is in it |
 |---|---|---|
-| `bmf-P2.idx` | `P2` | the 28-tap NLMS cascade: seed coefficients, per-tap rates, blend weights, the covariance/variance EMAs and their floors, the per-bank context quantisers |
+| `bmf-P2.idx` | `P2` | the 28-tap NLMS cascade: seed coefficients, per-tap rates, blend weights, the covariance/variance EMAs and their floors, the per-bank context quantisers, the ternary cell's rescale schedule |
 | `bmf-P1.idx` | `P1` | the MED-residual model: twelve counter bumps, the activity quantiser, the guess thresholds, the selector mixer's seed and ratio |
 | `bmf-CN.idx` | `CN` | the counters both models share: `CounterNode`'s seeds, increment, rescale point and divisor; `BitCtr`'s step, seeding and rescale ladder |
-| `bmf-CM.idx` | `CM` | `CtxModel`: table widths, neighbours per alphabet size, the match window, the anneal schedule, the whole neighbourhood probe |
+| `bmf-CM.idx` | `CM` | `CtxModel`: the causal neighbourhood itself, table widths, neighbours per alphabet size, the match window, the anneal schedule, the whole neighbourhood probe |
 | `bmf-AP.idx` | `AP` | the probability map's span, rate and blend; the mixer's stretch scale and learning rate |
 | `bmf-PA.idx` | `PA` | the palette model's counter |
-| `bmf-MB.idx` | `MB` | the slow model's context shape: near/far rank bands, list-membership depths, the positions the context changes shape at |
-| `bmf-GL.idx` | `GL` | limits the whole codec shares: the NLMS weight box, rescale points, occupancy limits, the degenerate-blend slack |
+| `bmf-MB.idx` | `MB` | the slow model's context menu and shape: the fifteen seeded groups' flags, near/far rank bands, list-membership depths, the positions the context changes shape at |
+| `bmf-GL.idx` | `GL` | limits the whole codec shares: the NLMS weight box, rescale points, occupancy limits, the degenerate-blend slack, the symbol lists' rescale and escape schedule |
 | `bmf-CD.idx` | `CD` | decisions that pick a representation rather than code a pixel: the blend weight scale, the least-squares ridge, the DC window search |
 | `bmf-IX.idx` | `IX` | every context index's bit positions, field widths and radix strides |
 | `bmf-QZ.idx` | `QZ` | the five monotone quantiser ladders, as `Index` threshold mappings |
 
-575 parameters, 6417 pattern bits. Both `IDX/opt.pl` and `IDX/sweep.py` print
+655 parameters, 6665 pattern bits. Both `IDX/opt.pl` and `IDX/sweep.py` print
 those two numbers when they start, so they are checkable rather than
 remembered.
 
