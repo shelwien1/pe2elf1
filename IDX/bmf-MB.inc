@@ -74,3 +74,9 @@ uint32_t MakeEscCtx( uint32_t bucket, uint32_t run_pair, uint32_t m_up0, uint32_
   MakeIndex EscCtx
   return (uint32_t)EscCtx;
 }
+
+uint32_t MakeLevelMap( int32_t state ) {
+  int32_t LevelMap;
+  MakeIndex LevelMap
+  return (uint32_t)LevelMap;
+}

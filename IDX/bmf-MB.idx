@@ -40,6 +40,14 @@ Number pos_deep,         1,0!1001
 Number apm_pos_cap,      1,0!111
 Number small_alphabet,   1,0!100000
 
+# How many seeded context groups there are, and their flags.
+
+Const 1
+
+Number group_count,     1,0!1111
+
+Const 0
+
 # The fifteen seeded context groups.  Each entry is a set of flags saying which
 # of six neighbour relations that group conditions on, so this is the slow
 # model's context menu -- and the one table in it that is a design choice
@@ -169,3 +177,9 @@ Index EscCtx
  ADD 2: run_pair
  ADD 2: m_up0
  ADD 2: alpha
+
+# The level map's context: which bits of the neighbourhood match state it
+# conditions on.  The coarsest activity measure the model has.
+
+Index LevelMap
+ mlvl: state, &00001111

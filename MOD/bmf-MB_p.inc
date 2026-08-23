@@ -132,3 +132,11 @@ uint32_t MakeEscCtx( uint32_t bucket, uint32_t run_pair, uint32_t m_up0, uint32_
   EscCtx = EscCtx*(2) + (alpha);
   return (uint32_t)EscCtx;
 }
+
+uint32_t MakeLevelMap( int32_t state ) {
+  int32_t LevelMap;
+
+  LevelMap = 0;
+  LevelMap = (LevelMap<<4) + (((state)&15)); // 00001111
+  return (uint32_t)LevelMap;
+}

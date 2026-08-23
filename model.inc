@@ -630,7 +630,7 @@ struct ModelBlock {
   // The map's context: the neighbourhood match state the model already groups
   // its counters by, which is its coarsest activity measure.
   int32_t level_apm_context() const {
-    return (int32_t)(ctx_state_seen&15);
+    return (int32_t)MakeLevelMap(ctx_state_seen);
   }
 
   // The signature is a context built from IDX layout parameters, so it is
@@ -919,7 +919,7 @@ struct ModelBlock {
     uint16_t w2;
     int32_t w3, w4;
     int32_t bucket = 0;
-    for( int32_t g = 0; g<15; ++g ) {
+    for( int32_t g = 0; g<MB_group_count; ++g ) {
       int32_t flags = ctx_group_flags[g];
       ctx_state[flags] = g;
       GroupFolds fold;
