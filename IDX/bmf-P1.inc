@@ -18,3 +18,9 @@ uint32_t MakeP1Low( uint32_t slot, uint32_t grp ) {
   MakeIndex P1Low
   return (uint32_t)P1Low;
 }
+
+uint32_t MakeGuess( int32_t guess ) {
+  int32_t Guess;
+  MakeIndex Guess
+  return (uint32_t)Guess;
+}

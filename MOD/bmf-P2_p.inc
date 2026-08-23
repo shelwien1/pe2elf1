@@ -31,8 +31,8 @@ uint32_t MakeCtx0Lo( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_
   Ctx0Lo = Ctx0Lo*(2) + (f2);
   Ctx0Lo = Ctx0Lo*(2) + (f3);
   Ctx0Lo = Ctx0Lo*(2) + (f4);
-  Ctx0Lo = Ctx0Lo*4 + ((filt>288+(1-1))+(filt>720+(1-1))+(filt>3536+(1-1)));
-  Ctx0Lo = Ctx0Lo*4 + ((g3>240+(1-1))+(g3>400+(1-1))+(g3>752+(1-1)));
+  P2_qf.inc( Ctx0Lo, filt );
+  P2_qg.inc( Ctx0Lo, g3 );
   return (uint32_t)Ctx0Lo;
 }
 
@@ -79,8 +79,8 @@ uint32_t MakeCtx1a( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t
   Ctx1a = Ctx1a*(2) + (f8);
   Ctx1a = Ctx1a*(2) + (f9);
   Ctx1a = Ctx1a*(2) + (f10);
-  Ctx1a = Ctx1a*4 + ((run>144+(1-1))+(run>1056+(1-1))+(run>2256+(1-1)));
-  Ctx1a = Ctx1a*4 + ((sum>10+(1-1))+(sum>24+(1-1))+(sum>55+(1-1)));
+  P2_qr_ctx1a.inc( Ctx1a, run );
+  P2_qs_ctx1a.inc( Ctx1a, sum );
   return (uint32_t)Ctx1a;
 }
 
@@ -99,8 +99,8 @@ uint32_t MakeCtx1b( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t
   Ctx1b = Ctx1b*(2) + (f8);
   Ctx1b = Ctx1b*(2) + (f9);
   Ctx1b = Ctx1b*(2) + (f10);
-  Ctx1b = Ctx1b*4 + ((run>240+(1-1))+(run>1024+(1-1))+(run>2400+(1-1)));
-  Ctx1b = Ctx1b*4 + ((sum>11+(1-1))+(sum>24+(1-1))+(sum>39+(1-1)));
+  P2_qr_ctx1b.inc( Ctx1b, run );
+  P2_qs_ctx1b.inc( Ctx1b, sum );
   return (uint32_t)Ctx1b;
 }
 
@@ -119,8 +119,8 @@ uint32_t MakeCtx2a( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t
   Ctx2a = Ctx2a*(2) + (f8);
   Ctx2a = Ctx2a*(2) + (f9);
   Ctx2a = Ctx2a*(2) + (f10);
-  Ctx2a = Ctx2a*4 + ((run>640+(1-1))+(run>1280+(1-1))+(run>2576+(1-1)));
-  Ctx2a = Ctx2a*4 + ((sum>4+(1-1))+(sum>12+(1-1))+(sum>33+(1-1)));
+  P2_qr_ctx2a.inc( Ctx2a, run );
+  P2_qs_ctx2a.inc( Ctx2a, sum );
   return (uint32_t)Ctx2a;
 }
 
@@ -139,8 +139,8 @@ uint32_t MakeCtx2b( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t
   Ctx2b = Ctx2b*(2) + (f8);
   Ctx2b = Ctx2b*(2) + (f9);
   Ctx2b = Ctx2b*(2) + (f10);
-  Ctx2b = Ctx2b*4 + ((run>688+(1-1))+(run>1216+(1-1))+(run>2464+(1-1)));
-  Ctx2b = Ctx2b*4 + ((sum>13+(1-1))+(sum>25+(1-1))+(sum>58+(1-1)));
+  P2_qr_ctx2b.inc( Ctx2b, run );
+  P2_qs_ctx2b.inc( Ctx2b, sum );
   return (uint32_t)Ctx2b;
 }
 
@@ -159,8 +159,8 @@ uint32_t MakeCtx3( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t 
   Ctx3 = Ctx3*(2) + (f8);
   Ctx3 = Ctx3*(2) + (f9);
   Ctx3 = Ctx3*(2) + (f10);
-  Ctx3 = Ctx3*4 + ((run>592+(1-1))+(run>1568+(1-1))+(run>2896+(1-1)));
-  Ctx3 = Ctx3*4 + ((sum>9+(1-1))+(sum>19+(1-1))+(sum>37+(1-1)));
+  P2_qr_ctx3.inc( Ctx3, run );
+  P2_qs_ctx3.inc( Ctx3, sum );
   return (uint32_t)Ctx3;
 }
 
@@ -179,8 +179,8 @@ uint32_t MakeCtx4( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t 
   Ctx4 = Ctx4*(2) + (f8);
   Ctx4 = Ctx4*(2) + (f9);
   Ctx4 = Ctx4*(2) + (f10);
-  Ctx4 = Ctx4*4 + ((run>368+(1-1))+(run>1952+(1-1))+(run>3056+(1-1)));
-  Ctx4 = Ctx4*4 + ((sum>10+(1-1))+(sum>21+(1-1))+(sum>39+(1-1)));
+  P2_qr_ctx4.inc( Ctx4, run );
+  P2_qs_ctx4.inc( Ctx4, sum );
   return (uint32_t)Ctx4;
 }
 
@@ -220,4 +220,20 @@ uint32_t MakeCtxPair( uint32_t delta, uint32_t ctx15 ) {
   CtxPair = CtxPair*(P2_CtxDelta_Volume) + (delta);
   CtxPair = CtxPair*(16) + (ctx15);
   return (uint32_t)CtxPair;
+}
+
+uint32_t MakeRun4Sel( int32_t nrun4 ) {
+  int32_t Run4Sel;
+
+  Run4Sel = 0;
+  P2_r.inc( Run4Sel, nrun4 );
+  return (uint32_t)Run4Sel;
+}
+
+uint32_t MakeQ2Sel( int32_t nq2 ) {
+  int32_t Q2Sel;
+
+  Q2Sel = 0;
+  P2_q.inc( Q2Sel, nq2 );
+  return (uint32_t)Q2Sel;
 }

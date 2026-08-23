@@ -29,3 +29,11 @@ uint32_t MakeP1Low( uint32_t slot, uint32_t grp ) {
   P1Low = P1Low*(8) + (grp);
   return (uint32_t)P1Low;
 }
+
+uint32_t MakeGuess( int32_t guess ) {
+  int32_t Guess;
+
+  Guess = 0;
+  P1_g.inc( Guess, guess );
+  return (uint32_t)Guess;
+}

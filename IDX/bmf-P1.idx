@@ -19,13 +19,12 @@ Number row_tail,         1,0!110
 Number counter_count,    1,0!10011001110001100000
 
 # Activity quantiser: the rounding offset and shift that turn the summed
-# neighbourhood activity into a table row, and the two guess thresholds.
+# neighbourhood activity into a table row.  (The guess thresholds it used to
+# sit beside are a threshold mapping now -- see Index Guess below.)
 Const 0
 
 Number act_round,        1,0!111
 Number act_shift,        1,0!100
-Number guess_thr_0,      1,0!11011000
-Number guess_thr_1,      1,0!10110
 
 # The neighbourhood magnitude sum below which a pixel counts as quiet.
 
@@ -110,3 +109,8 @@ Index P1Alt
 Index P1Low
  ADD 8: slot
  ADD 8: grp
+
+# The predicted-value selector: two edges over the MED prediction.
+
+Index Guess
+ g: guess, 1!0000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001

@@ -90,3 +90,15 @@ uint32_t MakeCtxPair( uint32_t delta, uint32_t ctx15 ) {
   MakeIndex CtxPair
   return (uint32_t)CtxPair;
 }
+
+uint32_t MakeRun4Sel( int32_t nrun4 ) {
+  int32_t Run4Sel;
+  MakeIndex Run4Sel
+  return (uint32_t)Run4Sel;
+}
+
+uint32_t MakeQ2Sel( int32_t nq2 ) {
+  int32_t Q2Sel;
+  MakeIndex Q2Sel
+  return (uint32_t)Q2Sel;
+}

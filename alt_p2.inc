@@ -522,7 +522,7 @@ struct AltP2Block {
     int32_t flat_a, flat_b;
     int32_t magsum_own = c1[5].mag+c1[4].mag+c1[-3].mag+c1[-4].mag+3*(c1[2].mag+c2[1].mag)+7*c1[0].mag+6*c1[1].mag+c0[-6].mag+c0[-7].mag+c0[-8].mag+8*c0[-1].mag+c4[2].mag+c4[1].mag+c4[0].mag+c4[-1].mag+c0[-4].mag+c0[-5].mag+(c3[2].mag+c3[1].mag+c3[-1].mag+c3[-2].mag+c4[-2].mag+c2[5].mag+c2[4].mag+c2[3].mag+c2[-2].mag+c2[-3].mag)+4*(c1[-1].mag+c0[-2].mag+c2[0].mag)+2*(c1[-2].mag+c1[3].mag+c0[-3].mag+c3[0].mag+c2[-1].mag+c2[2].mag);
     const int32_t lo_band = band_lo, hi_band = band_hi;
-    ctx_w[0].sel = (run4<P2_run4_thr_0)+(run4<P2_run4_thr_1);
+    ctx_w[0].sel = (int32_t)MakeRun4Sel(-run4);
     ctx_w[1].sel = (run4-c1[0].val<=hi_band)+(run4-c1[0].val<lo_band);
     int32_t d_run4 = run4-c0[-1].val;
     bool in_band = d_run4<=hi_band;
@@ -709,7 +709,7 @@ struct AltP2Block {
         // putting it back in place -- the same shift MakeCtxPair applies.
         ctx_pair[0] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2+4], 0);
         ctx_pair[1] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2], 0);
-        P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<P2_q2_thr_0)+(q2<P2_q2_thr_1)]+ctx_w[4].w[1]);
+        P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[MakeQ2Sel(-q2)]+ctx_w[4].w[1]);
         if constexpr( f_DEC ) {
           out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)(ctx&15), &class_mix, &pz_seat[ctx&63], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
         } else {
