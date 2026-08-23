@@ -1371,28 +1371,67 @@ which is lossy at the byte level. BMF must reproduce the input bytes exactly and
 cannot do that. What it can do is *predict* them, and it currently does not even
 try.
 
+**Corrections from building it.** Two of this section's premises were wrong, and
+one of its items was already done.
+
+* **(5) was already the case.** `search_planes` trials alpha's reference set
+  exactly like every other plane's and picks *no reference* on `x_ep`: 21 652
+  against 59 276 for the cheapest reference-using form. What is over-constrained
+  is the *estimate* in `choose_alpha_plane`, not the choice. The estimate's
+  three-weight fit is only ever used when the trial takes references anyway.
+* **(1) does not pay, even on the population it was designed for [measured].**
+  Alpha's slot is now searched — `move_alpha_to`, offered when the encoder
+  detects one of the conventions in (3). It loses everywhere:
+
+  | | shipped | alpha in slot 2 | alpha coded first |
+  |---|---|---|---|
+  | `x_ep` | 361 595 | — | 416 618 (+15 %) |
+  | `t32` | 52 915 | — | 105 775 (+100 %) |
+  | synthetic premultiplied RGBA | 79 635 | 79 636 | 131 279 (+65 %) |
+
+  The reason alpha-first is catastrophic is structural: **references always come
+  from the planes in coding slots 0 and 1**, so alpha in slot 0 costs *every*
+  colour plane a colour reference and buys it an alpha one. Slot 2 is the
+  arrangement this section actually wants — alpha keeps two colour references
+  and becomes slot 3's third reference — and it is a *tie* on genuinely
+  premultiplied data.
+
+  That last number is the interesting one. Premultiplication is
+  **multiplicative** and BMF's cross-plane prediction is a **linear** blend:
+  `b = B·a/255` is not predictable from `a` by any fixed weight. The tool this
+  convention needs is §8.2's product term `O0·O1/256`, not a coding order. This
+  section's expectation of "near-total elimination of transparent-pixel colour
+  cost" cannot be met by reordering alone.
+
 **Change**, cheapest first:
 
-1. **Let the coding order search reach alpha.** Delete the two hardwired
-   assignments and let alpha compete for a coding slot like any other plane. On
-   an image with the premultiplied convention this alone is most of the gain,
-   because alpha-first makes the dependency available to the colour planes.
+1. **Let the coding order search reach alpha** — built, and it loses; see above.
+   Kept because the detection in (3) makes it free on images without the
+   convention, and because it is the prerequisite for anything that would use
+   alpha as a reference once a nonlinear term exists to use it with.
 2. **Use quantised alpha as a colour-plane context.** Three buckets (0,
    translucent, 255) as extra context bits on the colour planes' activity
    contexts. **[measured]** 1.32 % of the colour residual stream on `x_ep`, and
    it needs (1) first.
-3. **Detect the exact cases in the encoder and signal them.** "RGB is constant
-   wherever alpha == 0" and "RGB is premultiplied by alpha" are two-line scans
-   over the image. When either holds, a header flag makes the affected pixels'
-   colour bytes cost essentially nothing. This is the case that pays 100 %
-   rather than 1.3 %, and it is the one the question is really about.
+3. **Detect the exact cases in the encoder** — the scan is built
+   (`alpha_convention`): one pass reports how many fully transparent pixels
+   there are, whether they all share one colour, and whether every colour byte
+   is bounded by the alpha. `x_ep` has 17 809 transparent pixels in many
+   colours and is not premultiplied; `t32` has 299, likewise. So neither
+   convention is in this corpus and the scan's only present job is to keep (1)'s
+   trial from costing encode time. Signalling the convention in a header flag
+   and making the affected colour bytes free is *not* built, and on the evidence
+   above it needs a nonlinear cross-plane term rather than a flag.
 4. **Give alpha a run mode.** 77.5 % of `x_ep`'s alpha is a single value.
    §10.2's skip token applies here more strongly than anywhere else in the
    codec.
-5. **Stop forcing the alpha transform to use three references.** Let the
-   existing trial machinery choose alpha's reference set the way it chooses
-   every other plane's — the measurement above shows the forced version losing
-   by 3× on the one 32-bit image in the corpus that has a real alpha channel.
+5. **Stop forcing the alpha transform to use three references** — already the
+   case; see the corrections above. What *was* hardwired and is now fixed is
+   `PlaneTransform`'s three-reference blend, which read the three bytes before
+   the target rather than the planes in coding slots 0, 1 and 2. Those are the
+   same thing only while alpha is physical plane 3 *and* pinned to slot 3, so
+   the blend could not have survived (1). The weights are now stored in slot
+   order to match; the corpus is unchanged by the rewrite.
 
 **Cost.** (1) and (5) are deletions. (2) is context bits. (3) is an encoder scan
 and a flag. (4) is §10.2. Nothing here costs the decoder measurable time.

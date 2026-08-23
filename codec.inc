@@ -1124,6 +1124,7 @@ struct BMFCodec : BMFState {
     PlaneTransform t;
     t.to_ref0 = plane_desc[0].src_plane-plane;
     t.to_ref1 = plane_desc[1].src_plane-plane;
+    t.to_ref2 = plane_desc[2].src_plane-plane;
     t.mode = plane_desc[plane].nrefs;
     t.dc = plane_desc[plane].dc;
     t.wgt1 = plane_desc[plane].weight1;
@@ -1254,6 +1255,59 @@ struct BMFCodec : BMFState {
     }
     return tile;
   }
+  // Does this image carry a convention that makes alpha worth coding first?
+  // Two are worth detecting, both a single scan: every fully transparent pixel
+  // shares one colour (so that colour is a function of the alpha), or every
+  // colour byte is bounded by the alpha (premultiplied).  Where neither holds,
+  // alpha carries no information about the colour planes and putting it in slot
+  // 0 only costs them a useful reference -- 15% on x_ep, 100% on t32.
+  bool alpha_convention(const BmfImage* img) {
+    const uint8_t* p = img[0].pixels;
+    const uint8_t*const end = p+img[0].data_size;
+    bool premultiplied = true, one_colour = true;
+    uint32_t transparent = 0;
+    uint8_t first[3] = {0, 0, 0};
+    for(; p+4<=end; p += 4 ) {
+      const int32_t a = p[3];
+      if( p[0]>a||p[1]>a||p[2]>a )
+        premultiplied = false;
+      if( !a ) {
+        if( !transparent ) {
+          first[0] = p[0];
+          first[1] = p[1];
+          first[2] = p[2];
+        } else if( p[0]!=first[0]||p[1]!=first[1]||p[2]!=first[2] ) {
+          one_colour = false;
+        }
+        ++transparent;
+      }
+    }
+    const bool worth_it = premultiplied||(one_colour&&transparent>=(img[0].data_size>>8));
+    bmf_log("  alpha: %u fully transparent pixels, %s, %s -> %s\n", transparent,
+            premultiplied ? "premultiplied" : "not premultiplied",
+            one_colour ? "all one colour under alpha=0" : "many colours under alpha=0",
+            worth_it ? "coding order searched" : "alpha stays last");
+    return worth_it;
+  }
+  // Move physical plane 3 to a given coding slot, keeping the others in order.
+  // Slot and reference count are the same field, so a plane's slot is also how
+  // many planes it may reference: slot 0 references nothing, slots 1 and 2
+  // reference the planes in slots 0 and 1, and slot 3 references all three.
+  void move_alpha_to(int32_t slot) {
+    uint8_t order[4];
+    int32_t at = 0;
+    for( int32_t s = 0; s<4; ++s ) {
+      if( at==slot )
+        ++at;
+      if( plane_desc[s].src_plane!=3 )
+        order[at++] = plane_desc[s].src_plane;
+    }
+    order[slot] = 3;
+    for( int32_t s = 0; s<4; ++s )
+      plane_desc[s].src_plane = order[s];
+    for( int32_t s = 0; s<4; ++s )
+      plane_desc[order[s]].nrefs = (uint8_t)s;
+  }
   uint32_t search_filter(BmfImage* img) {
     PlaneDesc saved[4];
     uint32_t plane_cost[4];
@@ -1345,6 +1399,39 @@ struct BMFCodec : BMFState {
         cur_est = y_est;
         ycocg_forward(img, plane_count);
         img[0]._pad8[0] |= pad_ycocg;
+      }
+    }
+    if( plane_count==4&&alpha_convention(img) ) {
+      // Alpha is assigned coding slot 3 rather than searched for one, so
+      // nothing may ever reference it -- and on an image where the colour under
+      // a transparent pixel is a function of the alpha, that is the one
+      // reference worth having.  Offer the order that makes it available.
+      PlaneDesc saved_desc[4];
+      uint32_t saved_cost[4];
+      save_descriptors(saved_desc);
+      for( int32_t k = 0; k<4; ++k )
+        saved_cost[k] = plane_cost[k];
+      // Slot 2 rather than slot 0: references always come from the planes in
+      // slots 0 and 1, so putting alpha there would cost every colour plane a
+      // colour reference for an alpha one.  In slot 2 alpha keeps two colour
+      // references for itself and becomes the third reference of slot 3.
+      static const char*const where[2] = {"alpha in slot 2", "alpha coded first"};
+      for( int32_t k = 0; k<2; ++k ) {
+        move_alpha_to(k ? 0 : 2);
+        const PlaneSearch pa = search_planes(tile_img, tile_buf, plane_cost);
+        const bool kept_order = pa.bits+(pa.bits>>12)>=best_bits;
+        bmf_log("    %-22s %12.1f bytes%s\n", where[k], bmf_bytes(pa.bits), kept_order ? "" : "  <<");
+        if( kept_order ) {
+          restore_descriptors(saved_desc);
+          for( int32_t j = 0; j<4; ++j )
+            plane_cost[j] = saved_cost[j];
+        } else {
+          best_bits = pa.bits;
+          ps = pa;
+          save_descriptors(saved_desc);
+          for( int32_t j = 0; j<4; ++j )
+            saved_cost[j] = plane_cost[j];
+        }
       }
     }
     free(tile_buf);
@@ -1775,9 +1862,12 @@ struct BMFCodec : BMFState {
         bmf_log("    %-18s %12.1f bytes%s\n", mix[k], bmf_bytes(shown[k]), k==pred4 ? "  <<" : "");
       bmf_log("    weights (%d,%d,%d) fitted, (%d,%d,%d) used\n", w.a, w.b, w.c, wa_slot, wb, wc);
     }
-    plane_desc[3].weight0 = wa_slot;
-    plane_desc[3].weight1 = wb;
-    plane_desc[3].weight2 = wc;
+    // Stored in coding-slot order, which is what PlaneTransform::blend reads.
+    // The fit is per physical plane: wa for plane 0, wb for 1, wc for 2.
+    const int32_t fitted[4] = {wa_slot, wb, wc, 0};
+    plane_desc[3].weight0 = fitted[plane_desc[0].src_plane&3];
+    plane_desc[3].weight1 = fitted[plane_desc[1].src_plane&3];
+    plane_desc[3].weight2 = fitted[plane_desc[2].src_plane&3];
     plane_desc[3].src_plane = 3;
     plane_desc[3].nrefs = 3;
     plane_desc[3].dc = widest_window(hists+1024*(4+pred4), 4, 1024, -1)+1;

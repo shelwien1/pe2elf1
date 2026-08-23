@@ -66,12 +66,17 @@ void strided_copy(uint8_t* dst, int32_t dstep, const uint8_t* src, int32_t sstep
     *dst = src[0];
 }
 struct PlaneTransform {
-  int32_t to_ref0, to_ref1, mode, dc, wgt0, wgt1, wgt2;
+  int32_t to_ref0, to_ref1, to_ref2, mode, dc, wgt0, wgt1, wgt2;
   bool by_weights;
+  // The three-reference form used to read the three bytes *before* this one,
+  // which is the same thing only while the plane taking three references is
+  // physical plane 3 with the colour planes ahead of it in slot order.  It now
+  // names the planes in coding slots 0, 1 and 2, and the weights are stored in
+  // slot order to match.
   uint32_t blend(const uint8_t* p) const {
     if( mode==2 )
       return (wgt0*(uint32_t)p[to_ref0]+wgt1*(uint32_t)p[to_ref1]+40)>>7;
-    return (wgt1*(uint32_t)p[-2]+wgt0*(uint32_t)p[-3]+wgt2*(uint32_t)p[-1]+63)>>7;
+    return (wgt0*(uint32_t)p[to_ref0]+wgt1*(uint32_t)p[to_ref1]+wgt2*(uint32_t)p[to_ref2]+63)>>7;
   }
 };
 uint8_t*unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
