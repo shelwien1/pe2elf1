@@ -102,3 +102,11 @@ Index P1Result
 Index P1Alt
  ADD %M%ctxw_range: msum
  ADD 32: ctx0
+
+# The two halves of the strip context, built into separate tables and added:
+# the activity group is the low factor, the predicted-value slot the one above
+# it.  Volume 64, which is the low radix of CN's Strip index.
+
+Index P1Low
+ ADD 8: slot
+ ADD 8: grp

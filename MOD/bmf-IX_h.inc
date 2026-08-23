@@ -1,13 +1,5 @@
 
 
-pdesc( IX_p1_group_of_p0_, 0, "1000" );
-static const int IX_p1_group_of_p0 = IX_p1_group_of_p0_.value * (1);
-pdesc( IX_p1_group_of_p1_, 0, "0" );
-static const int IX_p1_group_of_p1 = IX_p1_group_of_p1_.value * (1);
-pdesc( IX_p1_group_of_w1_, 0, "11" );
-static const int IX_p1_group_of_w1 = IX_p1_group_of_w1_.value * (1);
-pdesc( IX_p1_slot_of_p0_, 0, "11" );
-static const int IX_p1_slot_of_p0 = IX_p1_slot_of_p0_.value * (1);
 pdesc( IX_p2_ctx0_lo_e4_, 0, "1111" );
 static const int IX_p2_ctx0_lo_e4 = IX_p2_ctx0_lo_e4_.value * (1);
 pdesc( IX_p2_ctx1_e0_, 0, "11001" );
@@ -140,22 +132,6 @@ pdesc( IX_p2_ctx4_e9_, 0, "10000" );
 static const int IX_p2_ctx4_e9 = IX_p2_ctx4_e9_.value * (1);
 pdesc( IX_p2_ctx4_e10_, 0, "1111" );
 static const int IX_p2_ctx4_e10 = IX_p2_ctx4_e10_.value * (1);
-pdesc( IX_model_esc_at_p0_, 0, "11" );
-static const int IX_model_esc_at_p0 = IX_model_esc_at_p0_.value * (1);
-pdesc( IX_model_esc_at_p1_, 0, "10" );
-static const int IX_model_esc_at_p1 = IX_model_esc_at_p1_.value * (1);
-pdesc( IX_model_esc_at_p2_, 0, "1" );
-static const int IX_model_esc_at_p2 = IX_model_esc_at_p2_.value * (1);
-pdesc( IX_model_esc_at_p3_, 0, "0" );
-static const int IX_model_esc_at_p3 = IX_model_esc_at_p3_.value * (1);
-pdesc( IX_model_amap_p0_, 0, "10" );
-static const int IX_model_amap_p0 = IX_model_amap_p0_.value * (1);
-pdesc( IX_model_amap_p1_, 0, "1" );
-static const int IX_model_amap_p1 = IX_model_amap_p1_.value * (1);
-pdesc( IX_model_amap_p2_, 0, "11" );
-static const int IX_model_amap_p2 = IX_model_amap_p2_.value * (1);
-pdesc( IX_model_amap_p3_, 0, "0" );
-static const int IX_model_amap_p3 = IX_model_amap_p3_.value * (1);
 
 
 

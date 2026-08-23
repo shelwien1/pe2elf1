@@ -11,6 +11,7 @@
 
 
 
+
 static const int MB_row_margin = (7+0) * (1);
 static const int MB_row_tail = (9+0) * (1);
 static const int MB_freq_table_offset = (188+0) * (1);
@@ -81,6 +82,7 @@ static const int MB_Bucket_Volume = 1* 5* 5* 15; // 375
 static const int MB_CandCtx_Volume = 1* 2* 2* 2* 2* 2* 2* 2; // 128
 static const int MB_CandFallback_Volume = 1* 2* 8; // 16
 static const int MB_CandNode_Volume = 1* 32* MB_CandCtx_Volume; // 0
+static const int MB_EscCtx_Volume = 1* 32* 2* 2* 2; // 256
 static const int MB_MatchCtx_Volume = 1* 2* 2* 2* 2* 2* 2; // 64
 static const int MB_NB2_Volume = 1* 2* 2* 2* 2; // 16
 static const int MB_RunCtr_Volume = 1* 3* 16; // 48

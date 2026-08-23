@@ -159,3 +159,13 @@ Index MatchCtx
 Index SymCache
  ADD 65536: key
  ADD 8: slot
+
+# The run-escape context: the run bucket over three flags.  Volume 256, and
+# esc_ctr holds one more than that -- entry zero is the parent the whole space
+# falls back to, which is why the two sites index it one-based.
+
+Index EscCtx
+ ADD 32: bucket
+ ADD 2: run_pair
+ ADD 2: m_up0
+ ADD 2: alpha

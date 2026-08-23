@@ -90,7 +90,8 @@ struct ModelBlock {
   Apm level_apm[2][4];
   // The candidate scan's map, indexed by how deep into the scan we are.
   Apm cand_apm;
-  BitCtr esc_ctr[257];
+  // One more than the context space: entry zero is the parent.
+  BitCtr esc_ctr[MB_EscCtx_Volume+1];
   BitCtr run_ctr[MB_RunCtr_Volume];
   uint8_t _pad16[2];
   SymList escape;
@@ -201,7 +202,7 @@ struct ModelBlock {
     memset(bit_node, 0, sizeof bit_node);
     sym_word = (uint16_t*)bmf_new(2*height*width);
     esc_ctr[0].init_parent();
-    memset(&esc_ctr[1], 0, 1536);
+    memset(&esc_ctr[1], 0, sizeof(BitCtr)*MB_EscCtx_Volume);
     for( uint32_t k24 = 0; k24<0x18; ++k24 ) {
       run_ctr[2*k24].init_parent();
       run_ctr[2*k24+1].init_parent();
@@ -1127,7 +1128,9 @@ struct ModelBlock {
       if( (uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&up1[3].match[1]&up1[2].match[1]&up1[1].match[1]&up1[0].match[1]&up1[0].match[0]&(int8_t)up1[-1].match[1])&up2[3].match[1] ) {
         const int32_t idx1 = run_scan(up1, up2, width-x, m_up0, run);
         int32_t bucket = run_bucket[idx1];
-        int32_t esc_at = CtxIdx{}.above<IX_model_esc_at_p0>(bucket).bit<IX_model_esc_at_p1>(up2[run+3].match[1]&up2[run+2].match[1]).bit<IX_model_esc_at_p2>(m_up0).bit<IX_model_esc_at_p3>(alpha_map[nb4.up]).raw(1);
+        int32_t esc_at = (int32_t)MakeEscCtx((uint32_t)bucket,
+                                            up2[run+3].match[1]&up2[run+2].match[1],
+                                            (uint32_t)m_up0, alpha_map[nb4.up])+1;
         bit = esc_ctr[esc_at].decode_context_bit(cx, esc_ctr);
         int32_t msym1c = cx[0].mode_symbol[1];
         hit = bit;
@@ -1210,7 +1213,8 @@ struct ModelBlock {
       const int32_t run_len = run_scan(cur6c, up2, width-x, m_up0, run);
       int32_t run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
       const int32_t bucket = run_bucket[run_len];
-      amap = CtxIdx{}.bit<IX_model_amap_p0>(run_pair).bit<IX_model_amap_p1>(m_up0).above<IX_model_amap_p2>(bucket).bit<IX_model_amap_p3>(alpha_map[nb4.up]);
+      amap = (int32_t)MakeEscCtx((uint32_t)bucket, (uint32_t)run_pair,
+                                (uint32_t)m_up0, alpha_map[nb4.up]);
       runlen = 0;
       if( rowp[0].sym==nb4.up ) {
         do ++runlen; while( runlen<run_len&&rowp[runlen].sym==nb4.up );

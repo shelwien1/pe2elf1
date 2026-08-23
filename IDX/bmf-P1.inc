@@ -12,3 +12,9 @@ uint32_t MakeP1Alt( uint32_t msum, uint32_t ctx0 ) {
   MakeIndex P1Alt
   return (uint32_t)P1Alt;
 }
+
+uint32_t MakeP1Low( uint32_t slot, uint32_t grp ) {
+  int32_t P1Low;
+  MakeIndex P1Low
+  return (uint32_t)P1Low;
+}

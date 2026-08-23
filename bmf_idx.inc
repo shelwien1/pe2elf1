@@ -96,29 +96,4 @@ static inline constexpr int32_t __max(int32_t a, int32_t b) {
 #include "MOD/bmf-P1_p.inc"
 #include "MOD/bmf-MB_p.inc"
 
-// A parameter that has to be a template argument.
-//
-// In the shipping build an IDX value is a literal and can be a non-type
-// template argument like any other integer.  In the tuning build it is a read
-// from a patchable object -- not a constant expression, and therefore not a
-// template argument at all.  A non-type template parameter of *reference* type
-// takes both: `const int32_t&` binds an object with static storage duration
-// however that object was initialized, so the same call site compiles under
-// either build and only the shipping one folds.  That is IDX-FORMAT.md sec.8,
-// and it is what lets the context indices' bit positions be parameters at all.
-//
-// USE_NEW comes from the generated headers above, so this has to follow them.
-#if USE_NEW
- #define IDXP(name) const int32_t& name
-#else
- #define IDXP(name) int32_t name
-#endif
 
-// Instantiating on an object with internal linkage gives the instantiated type
-// internal linkage too, which GCC warns about under -Wsubobject-linkage.  The
-// warning is right in general -- separate translation units would each get a
-// different type under one name -- and vacuous here, because bmf is a single
-// translation unit.  clang has no such warning.
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic ignored "-Wsubobject-linkage"
-#endif

@@ -313,10 +313,10 @@ struct AltP1Block {
     int32_t k = 0;
     for( k = 0; k<0x200; ++k ) {
       level_of[k] = (uint8_t)MakeLevel((uint32_t)k);
-      group_of[k] = CtxIdx{}.above<IX_p1_group_of_p0>(plane).bits<IX_p1_group_of_p1, IX_p1_group_of_w1>(MakeGroup((uint32_t)k));
+      group_of[k] = (int32_t)MakeStrip((uint32_t)plane, 0, 0, MakeP1Low(0, MakeGroup((uint32_t)k)));
     }
     for( k = 0; k<0x100; ++k )
-      slot_of[k] = (uint8_t)CtxIdx{}.above<IX_p1_slot_of_p0>(MakeSlot((uint32_t)k));
+      slot_of[k] = (uint8_t)MakeP1Low(MakeSlot((uint32_t)k), 0);
     for( int32_t c = 0, w1 = 1<<kP1MixShift; c<9; ++c, w1 *= P1_ctxw_ratio ) {
       ctx_w[c].w[0] = 0;
       ctx_w[c].w[1] = w1;

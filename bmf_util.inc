@@ -141,53 +141,6 @@ void halve_counts(uint16_t* c, int32_t n) {
 const int32_t kMaxWidth = GL_max_width;
 
 
-// A context index under construction: values and flags placed at fixed bit
-// positions and radix strides, chained left to right.
-//
-// The positions are IDX parameters, so they are template arguments of
-// reference type (IDXP) rather than plain ints -- the shipping build binds
-// literals and folds every shift, the tuning build binds the mapping objects
-// opt.pl patches, and the call sites are spelled identically.  The chaining
-// methods are no longer constexpr for the same reason: in the tuning build
-// their bodies read a runtime object, and a constexpr function that can never
-// be constant-evaluated is ill-formed.  Nothing evaluated one at compile time.
-struct CtxIdx {
-  uint32_t val;
-  template <IDXP(Pos)> INLINE CtxIdx &bit(bool b) {
-    val += (uint32_t)b<<idx_clamp(Pos, 0, 31);
-    return this[0];
-  }
-
-  template <IDXP(Pos), IDXP(W)> INLINE CtxIdx &bits(uint32_t v) {
-    val += (v&((1u<<idx_clamp(W, 0, 31))-1))<<idx_clamp(Pos, 0, 31);
-    return this[0];
-  }
-
-  template <IDXP(Stride), IDXP(Radix)> INLINE CtxIdx &digit(uint32_t v) {
-    (void)Radix;   // documents the radix; the stride is what the index uses
-    val += (uint32_t)Stride*v;
-    return this[0];
-  }
-
-  template <IDXP(Pos)> INLINE CtxIdx &bit_of(uint32_t v) {
-    val |= v&(1u<<idx_clamp(Pos, 0, 31));
-    return this[0];
-  }
-
-  template <IDXP(Pos)> INLINE CtxIdx &above(uint32_t v) {
-    val += v<<idx_clamp(Pos, 0, 31);
-    return this[0];
-  }
-
-  constexpr CtxIdx &raw(uint32_t v) {
-    val += v;
-    return this[0];
-  }
-
-  constexpr operator uint32_t() const {
-    return val;
-  }
-};
 
 template <class T, int32_t N> struct BlockPool {
   alignas(4096) T slot[N];

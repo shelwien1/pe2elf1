@@ -2,6 +2,7 @@
 
 
 
+
 static const int P1_row_margin = (4+0) * (1);
 static const int P1_row_tail = (6+0) * (1);
 static const int P1_counter_count = (629856+0) * (1);
@@ -69,6 +70,7 @@ static const int P1_nudge_dn = P1_nudge_dn_.value * (1);
 
 
 static const int P1_P1Alt_Volume = 1* P1_ctxw_range* 32; // 0
+static const int P1_P1Low_Volume = 1* 8* 8; // 64
 static const int P1_P1Result_Volume = 1* P1_ctxw_range* 2* 2* 8; // 0
 
 struct P1_T { 

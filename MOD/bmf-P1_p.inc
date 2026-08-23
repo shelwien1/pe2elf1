@@ -20,3 +20,12 @@ uint32_t MakeP1Alt( uint32_t msum, uint32_t ctx0 ) {
   P1Alt = P1Alt*(32) + (ctx0);
   return (uint32_t)P1Alt;
 }
+
+uint32_t MakeP1Low( uint32_t slot, uint32_t grp ) {
+  int32_t P1Low;
+
+  P1Low = 0;
+  P1Low = P1Low*(8) + (slot);
+  P1Low = P1Low*(8) + (grp);
+  return (uint32_t)P1Low;
+}

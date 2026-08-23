@@ -121,3 +121,14 @@ uint32_t MakeSymCache( uint32_t key, uint32_t slot ) {
   SymCache = SymCache*(8) + (slot);
   return (uint32_t)SymCache;
 }
+
+uint32_t MakeEscCtx( uint32_t bucket, uint32_t run_pair, uint32_t m_up0, uint32_t alpha ) {
+  int32_t EscCtx;
+
+  EscCtx = 0;
+  EscCtx = EscCtx*(32) + (bucket);
+  EscCtx = EscCtx*(2) + (run_pair);
+  EscCtx = EscCtx*(2) + (m_up0);
+  EscCtx = EscCtx*(2) + (alpha);
+  return (uint32_t)EscCtx;
+}

@@ -68,3 +68,9 @@ uint32_t MakeSymCache( uint32_t key, uint32_t slot ) {
   MakeIndex SymCache
   return (uint32_t)SymCache;
 }
+
+uint32_t MakeEscCtx( uint32_t bucket, uint32_t run_pair, uint32_t m_up0, uint32_t alpha ) {
+  int32_t EscCtx;
+  MakeIndex EscCtx
+  return (uint32_t)EscCtx;
+}
