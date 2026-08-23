@@ -76,11 +76,14 @@ Number probe_den_3,      1,0!10
 Number probe_round_3,    1,0!1
 Number probe_bias,       1,0!110
 
-# The two hash multipliers: Knuth's 32-bit constant for the context key,
-# the 64-bit one for the match window.  Declared so they are visible and
-# movable, frozen because a hash multiplier has no gradient to climb.
+# Knuth's multiplicative-hash constant for the context key, declared as its
+# half: the consumer forms 2*key_hash+1, so the multiplier is odd whatever the
+# optimizer does to it -- an even one would throw away the key's low bit -- and
+# the declared value stays inside int, which 2654435761 does not.
+# (The match window's 64-bit golden-ratio constant stays a literal: it will not
+# fit an int parameter, and a hash multiplier has no gradient to climb anyway.)
 
-Number key_hash,         1,0!10011110001101110111100110110001
+Number key_hash,         1,0!1001111000110111011110011011000
 
 # The seeded cell probability, in 1/65536.
 

@@ -51,7 +51,11 @@ Number level_step_7,     1,0!100
 
 Number ctxw_shift,       1,0!101
 Number ctxw_ratio,       1,0!11
--Number ctxw_range,        1,0!100110011100011
+Const 1
+
+Number ctxw_range,        1,0!100110011100011
+
+Const 0
 
 # Counter bumps, sel==1: the centre cell and its two ladder neighbours.
 

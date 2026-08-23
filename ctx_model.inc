@@ -252,7 +252,7 @@ struct CtxModel {
   uint32_t*bucket(int32_t k, uint32_t key, const uint32_t* seed) {
     if( !k )
       return &ctr[0][(size_t)(key&(((uint32_t)1<<table_bits[0])-1u))*(size_t)nodes];
-    const uint32_t hashed = key*(uint32_t)CM_key_hash;
+    const uint32_t hashed = key*(2u*(uint32_t)CM_key_hash+1u);
     const uint32_t slot = hashed>>(32-table_bits[k]);
     const uint32_t want = hashed|1u;
     uint32_t*const row = &ctr[k][(size_t)slot*(size_t)nodes];
