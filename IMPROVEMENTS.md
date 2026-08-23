@@ -318,10 +318,24 @@ into a very large image (`x_ci` is 4.5 M pixels), where every context has long
 since annealed to its slowest rate and stops tracking anything. Two cheap fixes,
 independent of each other:
 
-* **Plasticity on change.** Keep a rolling prediction loss; when it jumps,
-  temporarily re-raise `limit`'s plasticity for the affected contexts rather
-  than changing the global schedule. Change-point detection on one scalar is a
-  handful of instructions per pixel.
+* **Plasticity on change — built, and `limit` turns out not to matter at all
+  [measured].** A surprise trigger was added to `BitCtr`: a bit the counter
+  thought unlikely (by ratios of 2, 4 and 8) pulls `limit` back by 1, 4 or 8
+  steps. Every one of the twelve settings produces output **byte-identical** to
+  the shipped stream on `t8g`, `t8p`, `t24`, `t32`, `DLRAW`, `f05_200` and
+  `x_ci`. So does pinning `limit` to its seed value of 512 unconditionally on
+  every update — which is the most aggressive possible version of this
+  proposal.
+
+  It is not that the trigger never fires: instrumenting the limits shows them
+  reaching 4 928 on `t24` and 13 184 on `x_ci` against a 512 seed, spread across
+  all eight buckets of the anneal. The schedule is real and doing nothing
+  measurable to the stream. I could not fully account for that, and record it
+  as a measurement rather than an explanation — but it does answer this
+  section's premise directly: **whatever `BitCtr`'s annealing schedule is
+  costing on this corpus, it is less than one byte per image.** Any work on the
+  forgetting policy should start by finding content where the schedule matters
+  at all.
 * **Aging.** Every few hundred thousand samples, re-seed a fraction of the table
   from its parent statistics. This keeps long-term memory while restoring some
   ability to track — the standard answer to annealed counters on large inputs.
@@ -786,8 +800,29 @@ top of the existing transform.
 
 ### 8.1 The transform sees one pixel; the model sees a neighbourhood
 
-**[from the code].** This is the sharpest structural gap in the colour path, and
-three of the review documents in §18 found it independently. `code_colour_plane`
+**[measured] — it is worth exactly nothing, and the reason is instructive.**
+Fitting the best `gx`, `gy` in
+`own − blend(ref) − (gx·(ref[x,y]−ref[x−1,y]) + gy·(ref[x,y]−ref[x,y−1]))>>7`
+by exhaustive search over ±48 in steps of 16, scored as order-0 entropy of the
+residual:
+
+| | best weights | residual |
+|---|---|---|
+| `t24` plane 0 from plane 1 (as shipped, `w = (0,128)`) | `(0,0)` | 75 974.1 → 75 974.1 |
+| `x_ep` plane 0 from planes 2,1 (`w = (19,49)`) | `(0,0)` | 172 046.1 → 172 046.1 |
+
+Zero, on both, with the optimum sitting exactly at "no correction". The premise
+is backwards. The section argues that edges in a reference plane are spatially
+aligned with edges in the target, so seeing the reference's gradient lets the
+predictor cross an edge instead of smearing over it. Alignment is real — and it
+is precisely why there is nothing left to collect: **the transform is a
+difference, so a gradient shared between the two planes has already cancelled.**
+What survives in `own − blend(ref)` is the part of the target's gradient the
+reference does *not* have, and by construction the reference's own gradient
+cannot predict that.
+
+Three of the review documents in §18 found this gap independently, and all three
+were reasoning about a predictor rather than about a difference. `code_colour_plane`
 (`codec.inc:417`) forms the inter-plane residual from the **co-located sample
 only**: `O2 − dc − ((w0·O0 + w1·O1 + 40) >> 7)`. Nothing in the external
 transform looks at a reference plane's *neighbours*. alt-P2 does — rows 4–6 of
@@ -835,12 +870,24 @@ per-pixel weighted blend loses.
   residual alphabet into two pieces at the ends — which is exactly what the slow
   model's alphabet reduction cannot absorb. Chasing the mean of a distribution
   whose *placement* is the point is the wrong operation.
-* **Concrete nonlinear terms**, if §8's item (4) is pursued: products
-  `O0·O1/256`, absolute differences `|O0 − O1|`, and a gradient-sign cross-term.
-  Saturation and clipping make cross-channel behaviour genuinely nonlinear near
-  extremes, which is where a linear fit mispredicts worst — and unlike a gamma
-  curve, these terms cost two multiplies and are fitted by the machinery that
-  already fits the linear ones.
+* **Concrete nonlinear terms — the information is real and the codec already
+  has it [measured].** Added to the same linear blend and scored the same way:
+  on `x_ep`'s three-plane blend, a product term `O0·O1/256` is worth **−3.6 %**
+  of the residual entropy and an absolute difference `|O0 − O1|` is worth
+  **−14.5 %**. That is a large, genuine signal, and it is the term §17 needed
+  and could not get from a coding order.
+
+  It cannot be collected where it was proposed, and it is not missing where it
+  matters. The external transform runs on exactly one plane in this corpus
+  (`t24`/`t32`'s plane 0, which is `refs+slow`); there the product term is worth
+  **0.04 %**. Every plane whose blend would benefit is alt-coded, and the alt
+  models do not use the external transform at all. Swapping `|a−b|` or
+  `a·b/256` in for one of alt-P2's twelve cross-plane taps was tried in three
+  placements and each costs `x_ep` 32–48 bytes: the tap it displaces is worth
+  more, which says alt-P2's NLMS plus its context modelling already collects
+  what the order-0 number is measuring. On `t24` — where the transform does run
+  — the terms are worth 0.04 %, so a descriptor bit and two transmitted weights
+  would not pay for themselves.
 
 ---
 
