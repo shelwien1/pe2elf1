@@ -137,7 +137,7 @@ void p2_rescale(P2Freq* r) {
 
 void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num) {
   p2_rescale(r);
-  r[0].f[slot] += (num*(uint32_t)r[0].step)>>4;
+  r[0].f[slot] += (num*(uint32_t)r[0].step)>>idx_clamp(P2_add_shift, 0, 15);
 }
 
 void p2_bump_sides(P2Freq* group, int32_t ctx15, int32_t lo, int32_t slot, uint32_t up, uint32_t dn) {
@@ -145,7 +145,7 @@ void p2_bump_sides(P2Freq* group, int32_t ctx15, int32_t lo, int32_t slot, uint3
   if( ctx15>lo ) p2_freq_add(&group[-1], slot, dn);
 }
 
-void p2_nudge(P2Count* p, int32_t res, int32_t shift = 2) {
+void p2_nudge(P2Count* p, int32_t res, int32_t shift = P2_nudge_shift) {
   p[0].weighted = (int16_t)((uint16_t)p[0].weighted+((uint32_t)(res-p2_pred(p[0].weighted, p[0].rate)+(1<<(shift-1)))>>shift));
 }
 
@@ -615,15 +615,17 @@ struct AltP2Block {
       const int32_t res2 = nb_sum[2*bank+1]+res;
       int32_t lowbits = ctxw&3;
       if( lowbits<3 )
-        p2_update(cx, &node0[1], res2, 1);
+        p2_update(cx, &node0[1], res2, P2_up_near);
       if( lowbits )
-        p2_update(cx, &node0[-1], res2, 2);
+        p2_update(cx, &node0[-1], res2, P2_up_direct);
       P2Count* bankp = &ctr_at(slot(bank, 0));
-      static const uint32_t p2_bank_bits[11] = {
-        0x4000, 0x2000, 0x1000, 0x800, 0x400, 0x200, 0x100, 0x80, 0x40, 0x20, 0x10,
+      static const uint32_t p2_bank_bits[P2_fan] = {
+        P2_bank_bit_00, P2_bank_bit_01, P2_bank_bit_02, P2_bank_bit_03,
+        P2_bank_bit_04, P2_bank_bit_05, P2_bank_bit_06, P2_bank_bit_07,
+        P2_bank_bit_08, P2_bank_bit_09, P2_bank_bit_10,
       };
-      P2Count* direct[11], * mirror[11], * rot[11];
-      for( int32_t k = 0; k<11; ++k ) {
+      P2Count* direct[P2_fan], * mirror[P2_fan], * rot[P2_fan];
+      for( int32_t k = 0; k<P2_fan; ++k ) {
         const uint32_t x = ctxw^p2_bank_bits[k];
         direct[k] = &bankp[x];
         mirror[k] = &bankp[x^kBankMirrorMask];
@@ -635,57 +637,57 @@ struct AltP2Block {
       const int32_t neg = -res2;
       const int32_t w_top = mir[0].weighted;
       const int32_t e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
-      const int32_t bump = 32*((e_top>cx[0].deadzone_hi)-(e_top<cx[0].deadzone_lo));
-      uint32_t w_new = bump+e_top+2;
-      mir[0].weighted = (int16_t)(w_top+(w_new>>2));
+      const int32_t bump = P2_kick*((e_top>cx[0].deadzone_hi)-(e_top<cx[0].deadzone_lo));
+      uint32_t w_new = bump+e_top+P2_kick_round;
+      mir[0].weighted = (int16_t)(w_top+(w_new>>idx_clamp(P2_kick_shift, 0, 15)));
       if( lowbits<3 )
         p2_nudge(&mir[1], -res2);
       if( lowbits<=0 ) {
-        for( int32_t k = 0; k<11; ++k ) {
-          p2_update(cx, direct[k], res2, 2);
-          p2_update(cx, rot[k], res2, 3);
+        for( int32_t k = 0; k<P2_fan; ++k ) {
+          p2_update(cx, direct[k], res2, P2_up_direct);
+          p2_update(cx, rot[k], res2, P2_up_rot);
           p2_nudge(&direct[k][1], res2);
-          p2_update(cx, mirror[k], -res2, 3);
+          p2_update(cx, mirror[k], -res2, P2_up_rot);
         }
       } else {
-        p2_nudge(&mir[-1], -res2, 3);
-        p2_update(cx, direct[0], res2, 2);
-        p2_update(cx, rot[0], res2, 3);
+        p2_nudge(&mir[-1], -res2, P2_nudge_far);
+        p2_update(cx, direct[0], res2, P2_up_direct);
+        p2_update(cx, rot[0], res2, P2_up_rot);
         walk_bank_bits(direct, mirror, rot, res2, lowbits<3);
-        p2_update(cx, mirror[10], -res2, 3);
+        p2_update(cx, mirror[P2_fan-1], -res2, P2_up_rot);
       }
     }
   }
   void walk_bank_bits(P2Count*const* direct, P2Count*const* mirror, P2Count*const* rot, int32_t res, bool nudge) {
-    for( int32_t k = 0; k<11; ++k ) {
+    for( int32_t k = 0; k<P2_fan; ++k ) {
       if( k ) {
-        p2_update(cx, direct[k], res, 2);
-        p2_update(cx, rot[k], res, 3);
+        p2_update(cx, direct[k], res, P2_up_direct);
+        p2_update(cx, rot[k], res, P2_up_rot);
       }
       if( nudge )
         p2_nudge(&direct[k][1], res);
-      p2_update(cx, &direct[k][-1], res, 3);
-      if( k<10 )
-        p2_update(cx, mirror[k], -res, 3);
+      p2_update(cx, &direct[k][-1], res, P2_up_rot);
+      if( k<P2_fan_mirror )
+        p2_update(cx, mirror[k], -res, P2_up_rot);
     }
   }
 
   void bump_bank(int32_t k, uint32_t step_v, int32_t ctx15, int32_t fold_sel, int32_t is_dec) {
     const int32_t sel = ctx_w[k].sel;
     if( sel==1 ) {
-      p2_freq_add(&freq_at(ctx_w[k].w[0]+step_v-ctx_w[k].w[1]), fold_sel, 4);
+      p2_freq_add(&freq_at(ctx_w[k].w[0]+step_v-ctx_w[k].w[1]), fold_sel, P2_add_up);
       const uint32_t off = ctx-ctx_w[k].w[1];
       P2Freq*const group = &freq_at(off+ctx_w[k].w[0]);
       const uint32_t next_group = ctx_w[k].w[2]+off;
       p2_freq_add(&group[0], is_dec, 3);
       if( ctx15<15 ) {
         p2_freq_add(&group[1], is_dec, 4);
-        p2_freq_add(&freq_at(next_group+1), is_dec, 2);
+        p2_freq_add(&freq_at(next_group+1), is_dec, P2_add_dn);
       }
       if( ctx15>2 )
         p2_freq_add(&group[-1], is_dec, 6);
     } else {
-      p2_freq_add(&freq_at(step_v+ctx_w[k].w[1]-ctx_w[k].w[2-sel]), fold_sel, 7);
+      p2_freq_add(&freq_at(step_v+ctx_w[k].w[1]-ctx_w[k].w[2-sel]), fold_sel, P2_add_step);
       P2Freq*const group = &freq_at(ctx_w[k].w[1]+(ctx-ctx_w[k].w[sel]));
       p2_freq_add(&group[0], is_dec, 7);
       p2_bump_sides(group, ctx15, 0, is_dec, 5, 6);

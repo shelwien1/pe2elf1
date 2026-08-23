@@ -515,3 +515,53 @@ Number ctr_max,       1,0!101000000000000000
 Number seat_max,      1,0!1000000
 
 Const 0
+
+# The bank fan: how many neighbouring counter cells each coded residual
+# updates, and at what shift.  A larger shift is a gentler update; the three
+# classes are the cell reached directly, its rotation, and its mirror.
+
+Const 1
+
+# Frozen: it sizes the three pointer arrays and the bit table.
+Number fan,           1,0!1011
+
+Const 0
+
+Number fan_mirror,    1,0!1010
+Number up_near,       1,0!1
+Number up_direct,     1,0!10
+Number up_rot,        1,0!11
+Number nudge_shift,   1,0!10
+Number nudge_far,     1,0!11
+
+# The ternary cell's neighbour bumps: the amount added to the cell above, the
+# cell below, and the step cell.
+
+Number add_up,        1,0!100
+Number add_dn,        1,0!10
+Number add_step,      1,0!111
+Number add_shift,     1,0!100
+
+# The mirror cell's dead-zone kick, its rounding offset and its shift.
+
+Number kick,          1,0!100000
+Number kick_round,    1,0!10
+Number kick_shift,    1,0!10
+
+# Which bits of the bank context the fan flips, one per neighbour.
+
+Const 1
+
+Number bank_bit_00,   1,0!100000000000000
+Number bank_bit_01,   1,0!10000000000000
+Number bank_bit_02,   1,0!1000000000000
+Number bank_bit_03,   1,0!100000000000
+Number bank_bit_04,   1,0!10000000000
+Number bank_bit_05,   1,0!1000000000
+Number bank_bit_06,   1,0!100000000
+Number bank_bit_07,   1,0!10000000
+Number bank_bit_08,   1,0!1000000
+Number bank_bit_09,   1,0!100000
+Number bank_bit_10,   1,0!10000
+
+Const 0
