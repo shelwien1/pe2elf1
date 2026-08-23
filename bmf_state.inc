@@ -45,8 +45,14 @@ struct BMFState : RangeCoder {
     memcpy(&hist_scratch[4*k], &n, sizeof n);
   }
 
+  // Every model reaches its 254-entry frequency strip through here, and the
+  // index is a context assembled from IDX layout parameters.  One bound at the
+  // choke point covers alt-P1, alt-P2, the counters and the slow model; without
+  // it a swept field width sends the pointer past the arena.
+  static const uint32_t kModelStripSize = 254;
+  static const uint32_t kModelStrips = kModelTableBytes/(kModelStripSize*sizeof(uint16_t));
   uint16_t*model_strip(uint32_t k) {
-    return model_tables+254*k;
+    return model_tables+kModelStripSize*idx_bound(k, kModelStrips);
   }
 
   template <int32_t f_DEC> int32_t code_symbol_tree(uint16_t* freq, int32_t sym) {

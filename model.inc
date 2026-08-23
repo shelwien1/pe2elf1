@@ -612,10 +612,10 @@ struct ModelBlock {
     const uint32_t nb2 = CtxIdx{}.bit<IX_model_nb2_p0>(row[-2].match[2]).bit<IX_model_nb2_p1>(row[-2].match[5]).bit<IX_model_nb2_p2>(row[-2].match[4]).bit<IX_model_nb2_p3>(row[-1].match[1]);
     const uint32_t sig1 = CtxIdx{}.bit<IX_model_sig1_p0>(grad[3]==0).bit<IX_model_sig1_p1>(grad[2]==0).bit<IX_model_sig1_p2>(grad[1]==0).bit<IX_model_sig1_p3>(grad[0]==0).bit<IX_model_sig1_p4>(up9[0].match[0]&r8[0].match[0]&up_m0&r7[0].match[0]).bit<IX_model_sig1_p5>(up9[0].match[1]&r8[0].match[1]&r7[0].match[1]&cur6[0].match[1]).above<IX_model_sig1_p6>(bucket_at).raw(nb2);
     int32_t id1;
-    intern_ctx(ctx_id1, sig1, ctx_id1_used, id1);
+    intern_ctx(ctx_id1, sizeof ctx_id1/sizeof ctx_id1[0], sig1, ctx_id1_used, id1);
     const uint32_t sig2 = CtxIdx{}.bit<IX_model_sig2_p0>(cur6[1].match[3]).bit<IX_model_sig2_p1>(up_m0).bit<IX_model_sig2_p2>(row[-1].match[5]).above<IX_model_sig2_p3>(id1);
     int32_t id2;
-    intern_ctx(ctx_id2, sig2, ctx_id2_used, id2);
+    intern_ctx(ctx_id2, sizeof ctx_id2/sizeof ctx_id2[0], sig2, ctx_id2_used, id2);
     return id2;
   }
 
@@ -625,11 +625,15 @@ struct ModelBlock {
     return (int32_t)(ctx_state_seen&15);
   }
 
-  static bool intern_ctx(uint16_t* tbl, int32_t sig, uint32_t &used, int32_t &id) {
-    const bool minted = tbl[sig]==0xFFFF;
+  // The signature is a context built from IDX layout parameters, so it is
+  // bounded here rather than at each of the three call sites -- the table's own
+  // length, passed in, since the three differ.
+  static bool intern_ctx(uint16_t* tbl, size_t n, int32_t sig, uint32_t &used, int32_t &id) {
+    const uint32_t at = idx_bound((uint32_t)sig, (uint32_t)n);
+    const bool minted = tbl[at]==0xFFFF;
     if( minted )
-      tbl[sig] = used++;
-    id = tbl[sig];
+      tbl[at] = used++;
+    id = tbl[at];
     return minted;
   }
 
@@ -698,7 +702,10 @@ struct ModelBlock {
     int32_t id2 = context_ids(state, cap);
     if( (int32_t)alphabet<MB_small_alphabet ) {
       int32_t id3_used = ctx_id3_used;
-      int32_t sig3 = CtxIdx{}.bits<IX_model_sig3_p0, IX_model_sig3_w0>(nb4.left).above<IX_model_sig3_p1>(id2);
+      // Bounded like the other two interned tables; this one does not go
+      // through intern_ctx because it retries at a folded signature.
+      int32_t sig3 = (int32_t)idx_bound(CtxIdx{}.bits<IX_model_sig3_p0, IX_model_sig3_w0>(nb4.left).above<IX_model_sig3_p1>(id2),
+                                       sizeof ctx_id3/sizeof ctx_id3[0]);
       uint16_t* id3p = &ctx_id3[sig3];
       id2 = id3p[0];
       if( id2==0xFFFF ) {
