@@ -994,6 +994,10 @@ struct BMFCodec : BMFState {
     }
     BmfImage* img_at = alloc_image(hdr.width, hdr.height, hdr.depth&depth_bits, (hdr.depth&depth_palette)!=0, 1);
     img_at[0].depth = hdr.depth;
+    // The spare header bytes describe the pixels rather than the coding, so
+    // they have to reach the caller: one of them carries the strip count.
+    for( int32_t k = 0; k<4; ++k )
+      img_at[0]._pad8[k] = hdr._pad8[k];
     uint8_t has_coded = p_coded_buf&&p_coded_buf[0];
     img_at[0].flags |= (hdr.flags&flags_transposed)|(has_coded ? flags_tail : 0);
     plane_count = ((hdr.depth&depth_bits)+7)>>3;

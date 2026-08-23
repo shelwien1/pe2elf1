@@ -318,6 +318,54 @@ BmfImage*alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette,
   return img;
 }
 
+// A horizontal strip of an image, as an image in its own right: rows [y0, y1)
+// with the same width, depth, stride and palette.  Region adaptivity is built
+// out of these -- each strip gets its own model search, so a page that is line
+// art at the top and a photograph at the bottom need not code both with one
+// model.
+BmfImage*strip_image(const BmfImage* img, int32_t y0, int32_t y1) {
+  const int32_t rows = y1-y0;
+  BmfImage* out = alloc_image(img[0].width, rows, img[0].depth&depth_bits,
+                              (img[0].depth&depth_palette)!=0, (img[0].flags&flags_packed)!=0);
+  out[0].depth = img[0].depth;
+  out[0].flags = img[0].flags&(uint8_t)~(flags_transposed|flags_tail);
+  const uint32_t span = img[0].stride<out[0].stride ? img[0].stride : out[0].stride;
+  for( int32_t y = 0; y<rows; ++y )
+    memcpy(out[0].pixels+(uint32_t)y*out[0].stride, img[0].pixels+(uint32_t)(y0+y)*img[0].stride, span);
+  if( img[0].depth&depth_palette )
+    memcpy(out[0].palette(), img[0].palette(), (size_t)3u<<(img[0].depth&depth_bits));
+  return out;
+}
+
+// How many distinct values each half of a plane holds.  Two halves that want
+// different coding modes are what makes a split pay, and a large difference in
+// alphabet size is the cheapest signal of that -- one pass, and on this corpus
+// it never fires, so the strip trial costs nothing here.
+bool strips_worth_trying(const BmfImage* img) {
+  const int32_t h = img[0].height;
+  if( h<32||(img[0].flags&flags_packed) )
+    return false;
+  const int32_t planes = ((img[0].depth&depth_bits)+7)>>3;
+  if( planes!=1 )
+    return false;
+  int32_t counts[2] = {0, 0};
+  for( int32_t half = 0; half<2; ++half ) {
+    uint8_t seen[256];
+    memset(seen, 0, sizeof seen);
+    const int32_t y0 = half ? h/2 : 0, y1 = half ? h : h/2;
+    for( int32_t y = y0; y<y1; ++y ) {
+      const uint8_t*const row = img[0].pixels+(uint32_t)y*img[0].stride;
+      for( int32_t x = 0; x<img[0].width; ++x )
+        seen[row[x]] = 1;
+    }
+    for( int32_t v = 0; v<256; ++v )
+      counts[half] += seen[v];
+  }
+  const int32_t lo = counts[0]<counts[1] ? counts[0] : counts[1];
+  const int32_t hi = counts[0]<counts[1] ? counts[1] : counts[0];
+  return (lo<=16)!=(hi<=16)||hi>=2*lo+8;
+}
+
 enum : uint32_t {
   bmp_magic = 'B'|'M'<<8,
   bmp_hdr_v3 = 40,
