@@ -34,8 +34,20 @@ public:
     cache = kMarker;
   }
 
+  // The one place coded bytes reach memory, and so the one place to check that
+  // they still fit.  stream_open sizes the buffer at the raw data plus 128 KB,
+  // which holds for any probability a working model produces -- but a swept
+  // parameter need not produce one.  AP_p_ceil at its low extreme pins every
+  // probability into [kProbFloor, kProbFloor+1], about 32/65536, so each coded
+  // bit costs eleven and the stream runs an order of magnitude past the buffer;
+  // IDX/sweep.py found this as a bus error on t24.  Bailing here rather than
+  // clamping the probability wider covers every parameter that can inflate the
+  // stream, not just this one, and bmf_fatal exits non-zero, which is what the
+  // sweep reads as a refusal rather than a crash.
   uint8_t*emit_carry(uint32_t carry) {
     uint8_t* q = stream.cur;
+    if( q+1+(size_t)pending>stream.buf+stream.size )
+      bmf_fatal(bmf_write_error, "<coded stream: model expands past the buffer>");
     *q++ = (uint8_t)(cache+carry);
     for(; pending; --pending )
       *q++ = (uint8_t)(carry-1);

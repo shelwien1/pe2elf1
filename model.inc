@@ -411,19 +411,30 @@ struct ModelBlock {
       free_sym_entries(lists, 16);
     }
   }
+  // nb_sym is 32 entries (see decode_stage_two and its encode counterpart).
+  // The four ranks below walk it and every one is an IDX parameter, so a sweep
+  // can send a loop off the end: MB_far_hi at its extreme reads nb[32..62],
+  // which is stack rather than unmapped memory and so does not fault -- it just
+  // feeds the encoder and the decoder different garbage, which IDX/sweep.py
+  // caught as a decode failure on t24.  The shipped 11/16/32/10 are all inside
+  // the array, so bounding them moves no stream.
+  static const int32_t kNbSymSlots = 32;
   int32_t pixel_context(uint32_t* nb) {
     int32_t band;
     int32_t pos = sym_pos;
     uint32_t result = (nb)[pos];
     if( cx[0].exclusion_mask[result]==cx[0].exclusion_gen )
       return -1;
+    const int32_t near_lo = idx_clamp(MB_near_lo, 0, kNbSymSlots);
+    const int32_t near_hi = idx_clamp(MB_near_hi, near_lo, kNbSymSlots);
+    const int32_t far_hi = idx_clamp(MB_far_hi, near_hi, kNbSymSlots);
     bool near = false;
-    for( band = MB_near_lo; band<MB_near_hi; ++band )
+    for( band = near_lo; band<near_hi; ++band )
       near |= result==nb[band];
     bool far = false;
-    for( band = MB_near_hi; band<MB_far_hi; ++band )
+    for( band = near_hi; band<far_hi; ++band )
       far |= result==nb[band];
-    const bool exact = result==nb[MB_exact_rank];
+    const bool exact = result==nb[idx_clamp(MB_exact_rank, 0, kNbSymSlots-1)];
     // The bare test was on the packed value being zero, which is the same as
     // none of the three hits firing.
     if( !exact&&!near&&!far&&pos>MB_pos_bare )
