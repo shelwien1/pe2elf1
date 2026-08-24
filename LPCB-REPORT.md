@@ -122,10 +122,27 @@ reconstruction, and everything below is a measurement or a perturbation probe on
 
 GraLIC is **2.12× faster to encode, 1.60× faster to decode, and uses ~3× less memory**, and
 its entire model state is ≤2.58 MB of static `.bss`. An independent 2024 benchmark reports
-the same shape. **No decode-speed budget explains the 2.6 %.** IMPROVEMENTS.md's §0 rules out
+the same shape. Two paired single-file runs on this machine, both reproducing their published
+sizes to the byte:
+
+```
+olympus_xz1_16  10.2 Mpx photograph   gralic  enc 11.9 s  dec 14.2 s   7 364 246 B
+                                      bmf     enc 93.9 s  dec 22.5 s   7 621 760 B
+PIA13833         8.4 Mpx render       gralic  enc  5.8 s  dec  8.9 s     985 583 B
+                                      bmf     enc 40.7 s  dec  1.6 s   1 068 248 B
+```
+
+— and gralic is running under wine, so those are pessimistic for it. On the photographs, the
+population that carries 63 % of the deficit, gralic is **7.9× faster to encode and 1.58×
+faster to decode** while producing a smaller file. (PIA13833 is the honest counter-example:
+on a 1 bpp render BMF's cheap alt‑P1 path decodes 5.6× faster than gralic. BMF's decode cost
+is model-dependent in a way gralic's is not.)
+
+**No decode-speed budget explains the 2.6 % on photographs.** IMPROVEMENTS.md §0 rules out
 several proposals on the grounds that decode "must stay in the same class it is now" — but
-the coder that beats BMF is already in a *better* class on both axes with a fortieth of the
-memory. The constraint is real as a design preference; it is not what is costing the bytes.
+the coder that beats BMF is already in a *better* class on both axes there, with a fortieth
+of the memory. The constraint is reasonable as a design preference; it is not what is costing
+the bytes, and it should not by itself veto a proposal.
 
 **What it does**, from perturbation probes: planar, three sequential per-plane segments; one
 pass; **no trial search at all**, where BMF runs ~30 whole-image trial encodes per file; the
