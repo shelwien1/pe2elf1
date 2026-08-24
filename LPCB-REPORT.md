@@ -330,6 +330,29 @@ Decode on the full 10 Mpx `olympus_xz1_16`, three paired runs on a quiet machine
 (IMPROVEMENTS.md measured the *existing* zero-decision map at 3.5 % of decode). Nowhere near
 the 10× budget §0 of IMPROVEMENTS.md sets.
 
+### Why it works, and how it ties to §6
+
+If §6 is right that the photographic deficit lives in the cross-plane channel, then a fix
+that recovers sub-pixel precision should pay *more* on colour than on isolated planes — because
+the inter-plane seed `(w1·O1 + w0·O0) >> 3` produces a genuinely fractional prediction almost
+every time, where a purely spatial predictor over integer neighbours often lands on or near an
+integer. Rounding destroys information that exists *because* the prediction is a blend.
+
+Extracting each 1024² crop's three components as independent 8-bit greyscale images and
+running fix A on them, against the same pixels coded as colour:
+
+| crop | Σ 3 planes, HEAD | + fix A | Δ | same pixels as RGB, HEAD | + fix A | Δ |
+|---|---:|---:|---:|---:|---:|---:|
+| olympus_xz1_16 | 1 090 044 | 1 085 928 | **−0.378 %** | 883 792 | 872 296 | **−1.301 %** |
+| canon_1100d_02 | 1 093 104 | 1 086 172 | −0.634 % | 988 524 | 978 100 | −1.055 % |
+| fujifilm_x100_03 | 980 936 | 971 776 | −0.934 % | 748 408 | 728 196 | −2.701 % |
+| sony_a55_06 | 993 900 | 985 172 | −0.878 % | 864 204 | 849 636 | −1.686 % |
+
+**Roughly 40–70 % of fix A's gain is cross-plane-specific** (mean ≈56 %), which is the
+prediction the mechanism makes and a second, independent line of support for §6. It also
+explains why the fix is worth so much less on the PIA group (−0.618 % measured at full size):
+those files use references least.
+
 Context-shape sweep for the sign map (1024² crops, 11 files):
 
 | APM context | all | photographic subset |
@@ -461,6 +484,12 @@ completely different direction.
 So segment A's 15.9 MB splits roughly **11.3–13.4 MB cross-plane** against **2.5–4.6 MB
 single-plane 2‑D**. Everything BMF does inside a plane is competitive; what it does
 *between* planes is not.
+
+**This is confirmed from the other direction by fix A.** §4 shows that recovering the
+prediction's sub-pixel phase pays 40–70 % more on colour than on the same pixels as isolated
+planes — because the inter-plane seed produces a fractional prediction almost every time and
+a spatial predictor over integers does not. A fix aimed at the cross-plane channel behaves
+like one; that is two independent measurements pointing at the same place.
 
 Two things this does **not** mean. It is not that BMF's colour transform is mis-fitted — a
 direct sweep of the shipped weight finds it 32 bytes from the coder's own optimum (§8.0), and
