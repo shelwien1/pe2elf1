@@ -13,55 +13,55 @@ uint32_t MakeBankSlot( uint32_t bank, uint32_t ctx ) {
   return (uint32_t)BankSlot;
 }
 
-uint32_t MakeCtx0Lo( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, int32_t filt, int32_t g3 ) {
+uint32_t MakeCtx0Lo( uint32_t flags, int32_t filt, int32_t g3 ) {
   int32_t Ctx0Lo;
   MakeIndex Ctx0Lo
   return (uint32_t)Ctx0Lo;
 }
 
-uint32_t MakeCtx0a( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t lo ) {
+uint32_t MakeCtx0a( uint32_t flags, uint32_t lo ) {
   int32_t Ctx0a;
   MakeIndex Ctx0a
   return (uint32_t)Ctx0a;
 }
 
-uint32_t MakeCtx0b( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t lo ) {
+uint32_t MakeCtx0b( uint32_t flags, uint32_t lo ) {
   int32_t Ctx0b;
   MakeIndex Ctx0b
   return (uint32_t)Ctx0b;
 }
 
-uint32_t MakeCtx1a( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t f6, uint32_t f7, uint32_t f8, uint32_t f9, uint32_t f10, int32_t run, int32_t sum ) {
+uint32_t MakeCtx1a( uint32_t flags, int32_t run, int32_t sum ) {
   int32_t Ctx1a;
   MakeIndex Ctx1a
   return (uint32_t)Ctx1a;
 }
 
-uint32_t MakeCtx1b( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t f6, uint32_t f7, uint32_t f8, uint32_t f9, uint32_t f10, int32_t run, int32_t sum ) {
+uint32_t MakeCtx1b( uint32_t flags, int32_t run, int32_t sum ) {
   int32_t Ctx1b;
   MakeIndex Ctx1b
   return (uint32_t)Ctx1b;
 }
 
-uint32_t MakeCtx2a( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t f6, uint32_t f7, uint32_t f8, uint32_t f9, uint32_t f10, int32_t run, int32_t sum ) {
+uint32_t MakeCtx2a( uint32_t flags, int32_t run, int32_t sum ) {
   int32_t Ctx2a;
   MakeIndex Ctx2a
   return (uint32_t)Ctx2a;
 }
 
-uint32_t MakeCtx2b( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t f6, uint32_t f7, uint32_t f8, uint32_t f9, uint32_t f10, int32_t run, int32_t sum ) {
+uint32_t MakeCtx2b( uint32_t flags, int32_t run, int32_t sum ) {
   int32_t Ctx2b;
   MakeIndex Ctx2b
   return (uint32_t)Ctx2b;
 }
 
-uint32_t MakeCtx3( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t f6, uint32_t f7, uint32_t f8, uint32_t f9, uint32_t f10, int32_t run, int32_t sum ) {
+uint32_t MakeCtx3( uint32_t flags, int32_t run, int32_t sum ) {
   int32_t Ctx3;
   MakeIndex Ctx3
   return (uint32_t)Ctx3;
 }
 
-uint32_t MakeCtx4( uint32_t f0, uint32_t f1, uint32_t f2, uint32_t f3, uint32_t f4, uint32_t f5, uint32_t f6, uint32_t f7, uint32_t f8, uint32_t f9, uint32_t f10, int32_t run, int32_t sum ) {
+uint32_t MakeCtx4( uint32_t flags, int32_t run, int32_t sum ) {
   int32_t Ctx4;
   MakeIndex Ctx4
   return (uint32_t)Ctx4;

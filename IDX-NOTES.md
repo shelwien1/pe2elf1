@@ -55,12 +55,13 @@ for.
 Every module except `QZ` and `IX` also carries `Index` declarations -- 41 of
 them across five modules -- and §6 lists what they size.
 
-495 declarations in all: 490 live in the tuning build, the other 5 frozen
-because an `Index` block multiplies them by `%M%`. 6572 pattern bits. Both
+504 declarations in all: 499 live in the tuning build, the other 5 frozen
+because an `Index` block multiplies them by `%M%`. 6655 pattern bits, 83 of
+which are the alt-P2 bank masks of §4.1. Both
 `IDX/opt.pl` and `IDX/sweep.py` print the live count and the bit budget when
 they start, so those numbers are checkable rather than remembered.
 
-The live count is 490 rather than 507 because nine mappings carry a leading
+The live count is 499 rather than 516 because nine mappings carry a leading
 `!` (§5), and the totals moved twice: 42 declarations that were frozen left
 the `.idx` files entirely (§4), and freezing the quantiser ladders took the
 bit budget from 28067 to 6572 -- which is what `opt.pl` costs scale with.
@@ -155,6 +156,49 @@ Two couplings are expressed rather than assumed, so a sweep cannot break them:
   number, so moving a seed cannot leave the total inconsistent.
 * Every mixed radix derives its strides from its radices, because the generator
   does — see §7.
+
+### 4.1 A binary factor should be a mask, not an `ADD 2`
+
+`ADD 2: f` fixes a test into the index: the context is always twice as wide for
+it, and no amount of tuning can ask whether it earns that. The same test as one
+bit of a masked word can be dropped, which halves the volume and doubles the
+samples per context. IDX-FORMAT.md §4 puts it plainly -- "which wins is a
+question for the optimizer rather than for the author".
+
+The nine alt-P2 bank contexts are declared that way now: 83 `ADD 2` factors
+became nine `&` masks, with the call site packing its tests into one word
+through `p2_flags`. The shipping build folds each to a single `(flags & 2047)`,
+so it costs nothing there; the tuning build gets nine more patchable mappings,
+and 83 bits the optimizer could not previously reach.
+
+Only these nine could move. A live mask's `Size` is a runtime value, so a
+factor built from one makes its `_Volume` runtime too -- and the slow model's
+blocks (`CandCtx`, `Sig1`, `Sig2`, `MatchCtx`, `NB2`, `EscCtx`, 30 more binary
+factors) size arrays from their Volumes, which would make those arrays VLAs in a
+struct. `P1Result` and `P2Ctx` are worse still: array-sized *and* checked by
+`idx_check_invariants` against `ctxw_range << mix_shift`. The banks are free
+because their Volumes are referenced nowhere -- they address a fixed 5 x 32768
+arena through `MakeBankSlot` and `idx_bound`, so a narrower bank simply uses
+fewer of its 32768 slots. Freeing the other 36 means giving those tables a
+frozen upper bound and bounding the index at the use site, which is what
+`freq_max`, `ctr_max` and `seat_max` already do.
+
+**What it is worth, measured rather than assumed.** Dropping one flag at a time
+across all 83, over three LPCB files: 18 are individually negative, best
+`Ctx3` bit 6 at -612 bytes on 3.76 MB. They do not compose. Dropping all 18
+together *costs* +1848 there and +2796 on the internal corpus; dropping `Ctx3`'s
+five, which summed to -1464 apiece, costs +680. Holding bit 6 off and retrying
+each of `Ctx3`'s other ten makes every one of them strictly positive, the
+cheapest at +220 -- so a hill-climb converges after one step. The flags are
+correlated: drop one and the survivors absorb its information, so the second
+drop takes away what the first was leaning on.
+
+The whole prize is that one bit, -612 on LPCB and -148 on the internal corpus.
+These contexts are not starved -- 82 to 930 samples each on real images, in
+`P2Count` bias counters, which are running weighted averages rather than
+frequency tables and converge on far fewer samples than a histogram needs. The
+declaration is right regardless: it costs nothing shipped, and the search space
+should describe what could be tuned rather than what someone already decided.
 
 ---
 
