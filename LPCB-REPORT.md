@@ -21,7 +21,7 @@ roughly **20 of the 25 MB**:
 
 | fix | what it is | measured |
 |---|---|---|
-| **A** | give alt‑P2's **sign** and **zero** decisions the sub‑pixel remainder that `pred = (run4+7)>>4` throws away | **−1.98 %** on full-size photographs (4 files, all four cameras); patch included, lossless |
+| **A** | give alt‑P2's **sign** and **zero** decisions the sub‑pixel remainder that `pred = (run4+7)>>4` throws away | **−2.12 %** on full-size photographs (one per camera), **−1.10 %** over all 107 files on crops → **12–16 MB**; patch included, lossless |
 | **B** | let alt‑P1/alt‑P2 **renumber a sparse value set**, as the slow model already does | **−11 % to −15 %** on the comb-histogram NASA files; free elsewhere |
 
 The 2 MB regression has a single cause, isolated by a 25-revision bisect: commit
@@ -163,38 +163,62 @@ fraction, not the extra stage.
 On 5 crops (3 photographs + the 2 largest comb-histogram NASA frames), against HEAD's
 4 482 680 bytes: sign map alone 4 426 688 (−1.249 %), **both 4 423 008 (−1.331 %)**.
 
-Full-size LPCB files, byte-measured:
+**Full-size LPCB files, byte-measured, one per camera:**
 
 | file | gralic | BMF HEAD | BMF + fix A | vs HEAD | vs gralic |
 |---|---:|---:|---:|---:|---:|
-| olympus_xz1_16 | 7 364 246 | 7 621 760 | 7 494 868 | −1.665 % | +1.774 % |
-| fujifilm_x100_03 | 7 382 712 | 7 401 244 | 7 179 436 | −2.997 % | **−2.753 %** |
-| canon_1100d_02 | 10 321 388 | 10 240 716 | 10 105 820 | −1.317 % | **−2.089 %** |
-| sony_a55_06 | 11 077 283 | 11 245 828 | 11 005 084 | −2.141 % | **−0.652 %** |
-| **total** | 36 145 629 | 36 509 548 | **35 785 208** | **−1.984 %** | **−0.997 %** (was +1.007 %) |
+| canon_1100d_02 | 10 321 388 | 10 240 716 | 10 103 652 | −1.338 % | **−2.110 %** |
+| fujifilm_x100_03 | 7 382 712 | 7 401 244 | 7 150 488 | −3.388 % | **−3.146 %** |
+| olympus_xz1_16 | 7 364 246 | 7 621 760 | 7 490 140 | −1.727 % | +1.710 % |
+| sony_a55_06 | 11 077 283 | 11 245 828 | 10 990 444 | −2.271 % | **−0.784 %** |
+| **total** | 36 145 629 | 36 509 548 | **35 734 724** | **−2.122 %** | **−1.137 %** (was +1.007 %) |
 | STA13453 | 9 262 192 | 8 758 720 | 8 196 244 | −6.421 % | −11.51 % |
 
-One file per camera, all four cameras. The group goes from 1.0 % **behind** gralic to 1.0 %
-**ahead**, and three of the four files now beat gralic outright.
+The group goes from 1.0 % **behind** gralic to 1.1 % **ahead**, and three of the four files
+now beat gralic outright.
+
+**All 107 files, 1024² crops** (sign map only — the weaker of the two halves):
+
+| group | n | HEAD | + fix A | Δ |
+|---|---:|---:|---:|---:|
+| STA | 20 | 15 886 304 | 15 538 572 | **−2.189 %** |
+| fujifilm_x100 | 12 | 9 910 624 | 9 734 304 | −1.779 % |
+| canon_1100d | 11 | 10 151 928 | 10 030 236 | −1.199 % |
+| sony_a55 | 12 | 12 712 196 | 12 599 632 | −0.885 % |
+| olympus_xz1 | 27 | 30 088 464 | 29 885 336 | −0.675 % |
+| PIA | 25 | 14 874 720 | 14 810 680 | −0.431 % |
+| **all** | **107** | 93 624 236 | 92 598 760 | **−1.095 %** |
+
+Applying each file's crop ratio to its full size projects **−11.6 MB**, taking the corpus
+from +2.593 % to **+1.403 %** against gralic. That is a floor on three counts: the crops
+under-state (the same four files give −2.12 % at full size against −1.35 % on their crops),
+this run used the sign map alone, and the crop sample is a 1 Mpx window of a 10–46 Mpx
+image. The honest range is **12–16 MB**.
+
+The fix costs bytes on **5 of 107** crops; the worst is sony_a55_11 at +1 244 bytes
+(+0.06 %), then STA13456 +504, PIA13812 +100, olympus_xz1_21 +92, olympus_xz1_20 +80.
 
 Verification: lossless round-trip on all ten `testfiles/` images and on the LPCB crops
-tested; the 1024² crop benchmark shows no file losing more than 108 bytes.
+tested. `signfix.patch` applies cleanly to a pristine `706fa6f` checkout and reproduces
+these sizes to the byte.
 
-Cost: one interpolated table lookup and update per non-zero residual — the same per-symbol
-cost as the zero-decision map that already ships — and 16.9 KB of table.
+Cost: one interpolated table lookup and update per non-zero residual (61 % of samples) — the
+same per-symbol cost as the zero-decision map that already ships — plus 16.9 KB of table.
+Decode measured at **+4 % to +13 %** over four paired runs on a loaded machine; the numbers
+are noisy but the ceiling is set by the work added, and IMPROVEMENTS.md measured the
+*existing* zero-decision map at 3.5 % of decode. Either way this is far inside the 10×
+budget §0 of IMPROVEMENTS.md sets.
 
-Context-shape sweep (1024² crops, 11 files):
+Context-shape sweep for the sign map (1024² crops, 11 files):
 
 | APM context | all | photographic subset |
 |---|---:|---:|
-| `frac` alone (16) | −0.974 % | −1.410 % |
-| `frac × activity` (256) | −1.030 % | −1.535 % |
-| `frac × plane × coarse activity` (256) | −0.976 % | −1.413 % |
-| **`frac × coarse activity` (128)** | **−1.035 %** | **−1.543 %** |
+| phase alone (16) | −0.974 % | −1.410 % |
+| phase × activity (256) | −1.030 % | −1.535 % |
+| phase × plane × coarse activity (256) | −0.976 % | −1.413 % |
+| **phase × coarse activity (128)** | **−1.035 %** | **−1.543 %** |
 
-The choice barely matters; `frac` itself is doing the work. Note the crops **understate**
-the gain — the same files at full size give −2.0 %, because the map amortises over 10–16 Mpx
-instead of 1 Mpx.
+The choice barely matters; the phase itself is doing the work.
 
 ---
 
@@ -241,8 +265,8 @@ The two fixes are additive to slightly super-additive, and renumbering is **exac
 where the histogram is dense — so it can be applied unconditionally, with the value set on
 the wire (50–90 bytes; the slow model's gap coder already exists).
 
-The `-v` trial logs localise it to the alt models. PIA13912 crop, per-plane trial costs,
-as-is → renumbered:
+The `-v` trial logs localise it to the alt models. A separate 2000² crop of PIA13912,
+per-plane trial costs, as-is → renumbered:
 
 ```
 slot0 slow      1 997 104 -> 1 997 084   (-0.001 %)   <- slow already renumbers internally
@@ -301,15 +325,65 @@ Monotone across quintiles of the homogeneous camera subset:
 **Where BMF's two best models are nearly tied, BMF loses to gralic; where one model clearly
 dominates, BMF is competitive.** A near-tie is exactly the condition under which a mixture
 beats a selection. Only 44 of 321 decisions are within 1 %, so a *better chooser* is worth
-nothing; the mass sits in the 1–5 % band, which is where two models genuinely both carry
-signal.
+nothing; the mass sits in the 1–5 % band.
 
-This is IMPROVEMENTS.md §2, and the LPCB corpus makes the case for it far more strongly than
-`testfiles/` did.
+### But size the prize from per-pixel costs, not from trial margins
+
+The 30.8 MB figure is the wrong unit and it flatters the proposal — it is a difference of two
+*totals*, and one model can dominate the other pixel-by-pixel while the totals differ by 3 %.
+So the models were instrumented to emit exact per-pixel bit costs and the pooling was computed
+directly, over 13 crops × 3 planes:
+
+| per-pixel cost correlation | corr(p1,p2) | corr(slow,p2) | corr(slow,p1) |
+|---|---:|---:|---:|
+| olympus_xz1_21 p0 | 0.794 | 0.434 | 0.471 |
+| STA13453 p1 | 0.506 | 0.299 | 0.498 |
+| PIA13882 | — | — | 0.770 |
+
+| what you build | measured gain |
+|---|---:|
+| region / row-level model switching (per-row oracle) | **−0.01 % to −0.56 %** |
+| fixed-weight per-plane linear pool, `p1` + `p2` | −0.82 % |
+| the same with references, `refs+p1` + `refs+p2` | **−1.50 %** (NASA −1.88 %) |
+| three-model fixed pool | −1.54 % to −2.27 % |
+| **per-pixel oracle (the ceiling for any pooling)** | **−14.7 % to −16.1 %** |
+
+Three things follow. The models' errors *are* substantially independent — correlations of
+0.30–0.80 and a 15 % oracle ceiling — so IMPROVEMENTS.md §2's claim is right. Its *evidence*
+(trial margins) does not support it, and its *estimate* of "5–15 % overall" is high by
+roughly an order of magnitude for the mechanism proposed: a defensible band for a real
+context-conditioned logistic mixer is **2–5 %**, i.e. 30–80 % of the gralic gap on cameras.
+And **region-adaptive model selection is refuted outright at ≤ 0.56 %** — do not build
+tiling or block-level switching.
+
+The cheap first step is not the full mixer. It is a **per-plane fixed-weight linear pool of
+alt‑P1 and alt‑P2**, the two models `search_planes` already trial-encodes on nearly every
+plane: `−log2(w·P₁(v) + (1−w)·P₂(v))` needs only each model's probability for the symbol it
+is about to code, which both already compute; the weight is a few bits in the plane
+descriptor (`codec.inc:1695` has 6 bits today with room for more). **−0.82 % / −1.50 %
+measured**, no binarisation rewrite, and the mode search gets *smaller* because it no longer
+has to choose. Two individual cases show what is on the table: PIA13894 p1 goes
+slow 348 740 / p1 310 362 / p2 296 688 → 3-way pool **244 164 (−17.7 %)**, oracle −49 %.
+
+One more thing worth knowing: `CtxModel` already contains **the codec's only logistic mixer**
+(`Mix5`, `apm.inc:148`) **and its only match model** — both behind a gate no LPCB image can
+pass (§7). Lifting `Mix5` into the alt models is worth more than anything done to `CtxModel`
+itself.
 
 ---
 
 ## 6. Smaller defects, all confirmed in the source
+
+**6.0 — Where the colour transform earns nothing, BMF loses most.** Nine files end with
+**no reference planes at all** (5 STA, 4 PIA). They are the worst group in the corpus:
+**+5.88 %** against gralic on 86.2 MB, versus +2.26 % for the 86 files with two referenced
+planes. Two things are *not* the cause. The weight fit is essentially optimal — sweeping the
+shipped `w=(112,−11)` on an olympus crop finds a best point only **32 bytes (0.0036 %)**
+below what the encoder chose, so the order-0 gradient-domain fit, the coordinate descent and
+the 1/128 quantisation are all fine. And a fixed RCT is much worse (§9). What is left is
+*which* plane goes in *which* slot — decided by the order-0 gradient proxy on margins under
+0.1 % on **39 of 107** files and under 1 % on **86 of 107**, and never checked by a trial
+encode — and what the transform cannot express at all (6.1).
 
 **6.1 — Slot 1's colour gain is hardwired to 1.0.** The slot‑2 plane gets fitted weights
 (`plane_mix2`, `codec.inc:119`; `seed2 = (w1·O1 + w0·O0) >> 3`, `codec.inc:181`), but slot 1
@@ -380,6 +454,22 @@ the frequency lattice, the magnitude strip and both maps, is a constant over mos
 pixels that matter. A naive equal-population ladder is *not* the fix (it loses on
 mid-activity content); a per-image fitted one, transmitted, would be — `nb_ctx[]` is already
 rebuilt per plane at `alt_p2.inc:1123`.
+
+**6.7b — The slow model's only value-conditioned context tier is dead on this corpus.**
+`id3` is gated at `alphabet < MB_small_alphabet = 32` (`model.inc:716`), and the minimum
+post-reduction alphabet on a non-reference LPCB plane is **67**. The slow model therefore has
+no magnitude-aware context anywhere on this corpus. Its tables are only 3–25 % occupied
+(`ctx_id1` capped at 13 600, peaks at 4 672; `ctx_id2` capped at 44 500, peaks at 14 884) —
+there is no capacity pressure, the features are the limit. Raising the gate, or replacing
+"the left symbol" with a coarse bucket of it, is the cheapest structural change available to
+the slow model and it targets the escape path that eats 48 % of pixels on PIA13882.
+
+**6.7c — The joint alt‑P1 driver is dead code here.** `alt_model_p1` (`codec.inc:56`) plus
+~100 lines of cross-plane selector logic in `ctx_of` (`alt_p1.inc:132`) never execute in any
+shipped stream on this corpus. Per-plane alt‑P1 beats alt‑P2 by 7–11 % on the comb files
+while *joint* alt‑P1 loses to joint alt‑P2 on the one file it was measured on, which suggests
+the joint variant's cross-plane selectors are worse than the single-plane ones they replace.
+If the mixing work needs budget, this is the first thing to retire or fix.
 
 **6.9 — The bias cascade is a net loss on the highest-rate content.** Disabling all five
 banks costs +1.38 % on a mid-rate photographic proxy and +3.50 % on `x_ep`, but **gains
@@ -500,17 +590,18 @@ which files use which model). That set is 340 MB and runs end to end in about 20
 
 | # | change | expected | effort | risk | evidence |
 |---|---|---:|---|---|---|
-| 1 | **Fix A** — sub-pixel sign map (`signfix.patch`) | **−10 to −14 MB** | done: 142-line diff, one file | very low; no file lost more than 108 B | **measured end-to-end** |
+| 1 | **Fix A** — sub-pixel phase on the sign and zero maps (`signfix.patch`) | **−12 to −16 MB** | done: 153-line diff, one file | very low; 5 of 107 crops lose, worst +0.06 % | **measured end-to-end on all 107** |
 | 2 | **Fix B** — alphabet renumbering for alt‑P1/alt‑P2 | **≈ −8.8 MB** | moderate: per-plane value set on the wire, decoder mirror; `reduce_narrow_alphabet` already exists | low; exactly free on dense histograms | **measured** (external bijection) |
 | 3 | Build the LPCB crop corpus into `check.sh` and re-tune | unknown, plausibly ≥ −1 % | low | none | see §7 |
 | 4 | Give the **magnitude level code** the same treatment as §3 gave the zero decision: binarise it and put a map on each bit | some of the 21–29 % it spends | moderate; it is shared `code_symbol_tree` machinery | medium | bit accounting §2 |
 | 5 | Fitted weight on the **slot‑1** plane (§6.1) | small but broad | low; wire format already carries it | low | 51.4 % of rows want k ≠ 128 |
 | 6 | Price the **joint** mode, and offer reference removal as well as addition (§6.2) | ~0.3 MB shown, likely more | low | low | 12/20 adoptions won 322 KB |
-| 7 | **Mix alt‑P1 and alt‑P2** instead of choosing (IMPROVEMENTS §2, §15) | 24.05 MB of disagreement on the table; a third of it is ~9 MB | large; needs the shared binarisation first | high, and the decode budget is the constraint | §5, r = −0.71 |
+| 7 | **Per-plane fixed-weight pool of alt‑P1 and alt‑P2** | **−0.82 % / −1.50 %** ≈ −8 to −13 MB | moderate; both models already compute the probability, weight goes in the descriptor | medium; 2× decode on the final pass | **measured** per-pixel, §5 |
+| 8 | Context-conditioned logistic mixer (the real IMPROVEMENTS §2) | 2–5 % projected; oracle ceiling is 15 % | large; needs the shared binarisation first | high, and the decode budget is the constraint | §5 |
+| — | ~~region / tile-level model switching~~ | **≤ 0.56 %** | — | — | **refuted**, §5 |
 
-Items 1–3 are days of work for the large majority of the gap. Item 7 is the real structural
-answer and the one the LPCB data argues for most strongly, but it is also the one
-IMPROVEMENTS.md correctly puts last.
+Items 1–3 are days of work for the large majority of the gap. Items 7–8 are the structural
+answer; 7 is affordable now and 8 is the one IMPROVEMENTS.md correctly puts last.
 
 ---
 
@@ -526,9 +617,25 @@ Worth stating explicitly, because several are plausible and all were tested:
   +9.71 % (canon). BMF's own fitted `refs` transform beats a fixed RCT on every camera.
 * **Noise level.** `delta_bpp` against `std_mean` over the 62 photographs: R² = 0.002.
 * **Container overhead, palettes, alpha, near-lossless.** All 107 files are 24 bpp / 3 planes,
-  none takes the ≤4 bpp short path, none is palettised, none has alpha.
+  none takes the ≤4 bpp short path, none is palettised, none has alpha. `bmf − body == 20`
+  on all 107 rows exactly; container plus every scrap of side information is
+  107×20 + 597 B of descriptors + ≈1 100 B of range-coder framing ≈ **3.8 KB, 0.00039 %** of
+  the corpus — one part in 6 600 of the gap.
+* **The colour weight fit, the coordinate descent and the 1/128 quantisation** — 32 bytes
+  from the coder's own optimum on the one image where it was swept directly (§6.0).
 * **The `kCtxId3Limit` cliff** and the other 1999-era table caps: measured at 4 bytes on the
-  file that hits them.
+  file that hits them. The slow model's tables run 3–25 % occupied on this corpus.
+* **Region / tile / row-level model switching.** A per-row oracle over all three models is
+  worth −0.01 % to −0.56 %. The per-plane choice the encoder already makes is close to the
+  per-row optimum.
+* **A run mode.** Ablated at ≤ 1.5 %; it is a decode-speed feature, not a ratio feature.
+* **A match model.** Only 11 of 107 files have any duplicate rows, and 8 of those 11 are files
+  BMF already wins.
+* **Widening the magnitude strip's context.** Three widenings were built with the table
+  enlarged so nothing collides: +2 flatness bits, +quantised |e_W|,|e_N|, +the residual's
+  sign. All are a wash or a loss on realistic photographic magnitudes. A strip has no parent
+  and no mixing partner, so a new axis must pay its own learning cost immediately — which is
+  the mechanical reason the way in is mixing, not a bigger table.
 
 ---
 
