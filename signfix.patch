@@ -1,0 +1,153 @@
+--- a/alt_p2.inc
++++ b/alt_p2.inc
+@@ -27,7 +27,8 @@
+   }
+ 
+   template <int32_t f_DEC> int32_t code_three_way(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, Apm* apm,
+-                                                 int32_t apm_ctx, int32_t mix_ctx, Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast) {
++                                                 int32_t apm_ctx, int32_t mix_ctx, Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast,
++                                                 Apm* sign_apm, int32_t sign_ctx) {
+     uint16_t st, * slot;
+     uint16_t down;
+     uint16_t*const base = &f[0];
+@@ -65,11 +66,32 @@
+       slot = &f[0];
+     } else {
+       int32_t hi_class;
+-      if constexpr( f_DEC ) {
+-        hi_class = cx[0].decode_bit(f[1], f[2]);
+-      } else {
+-        hi_class = !(sym&1);
+-        cx[0].encode_bit(f[1], f[2], hi_class);
++      // Which side of zero the residual fell on.  The cell's two counts are
++      // close to even on continuous tone -- 0.89 to 0.97 bits a symbol on the
++      // LPCB photographs, a quarter of everything the model spends -- because
++      // every context axis this cell has is built from *bands* of the running
++      // prediction and from neighbour signs, and none of them can see which way
++      // the prediction leaned inside the pixel it was rounded to.
++      //
++      // predict() carries run4 at 16x and seat_symbol_context rounds it,
++      // pred = (run4+7)>>4.  The four bits that rounding throws away are a
++      // direct statement about the sign: run4 just above a pixel boundary means
++      // the true value sits below the prediction, and the residual leans
++      // negative.  Keep them and refine the cell's estimate through a map keyed
++      // on them, the way section 3 of IMPROVEMENTS.md does the zero decision.
++      {
++        const uint32_t f12 = (uint32_t)f[1]+(uint32_t)f[2];
++        int32_t p16 = (int32_t)(((uint32_t)f[2]*65536u+(f12>>1))/f12);
++        if( p16<kProbFloor ) p16 = kProbFloor;
++        if( p16>kProbCeil ) p16 = kProbCeil;
++        const int32_t p_ref = sign_apm[0].refine(p16, sign_ctx);
++        if constexpr( f_DEC ) {
++          hi_class = cx[0].decode_bit(65536-p_ref, p_ref);
++        } else {
++          hi_class = !(sym&1);
++          cx[0].encode_bit(65536-p_ref, p_ref, hi_class);
++        }
++        sign_apm[0].update(hi_class);
+       }
+       slot = hi_class ? &f[2] : &f[1];
+     }
+@@ -101,13 +123,13 @@
+   }
+ 
+   void encode_symbol(BMFState* cx, const uint32_t* ctx_pair, int32_t sym, Apm* apm, int32_t apm_ctx, int32_t mix_ctx,
+-                     Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast) {
+-    code_three_way<0>(cx, ctx_pair, sym, apm, apm_ctx, mix_ctx, mixer, seat, signs, fast);
++                     Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast, Apm* sign_apm, int32_t sign_ctx) {
++    code_three_way<0>(cx, ctx_pair, sym, apm, apm_ctx, mix_ctx, mixer, seat, signs, fast, sign_apm, sign_ctx);
+   }
+ 
+   int32_t decode_symbol(BMFState* cx, const uint32_t* ctx_pair, Apm* apm, int32_t apm_ctx, int32_t mix_ctx,
+-                        Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast) {
+-    return code_three_way<1>(cx, ctx_pair, 0, apm, apm_ctx, mix_ctx, mixer, seat, signs, fast);
++                        Mix4* mixer, uint32_t* seat, uint32_t* signs, uint32_t* fast, Apm* sign_apm, int32_t sign_ctx) {
++    return code_three_way<1>(cx, ctx_pair, 0, apm, apm_ctx, mix_ctx, mixer, seat, signs, fast, sign_apm, sign_ctx);
+   }
+ };
+ 
+@@ -273,7 +295,9 @@
+   uint8_t _pad2[2];
+   uint32_t ctx;
+   uint32_t ctx_pair[2];
++  int32_t sign_map_ctx = 0;
+   Apm apm;
++  Apm sign_apm;
+   Mix4 class_mix;
+   uint32_t pz_seat[P2_seat_max];
+   uint32_t pz_signs[243];
+@@ -302,7 +326,9 @@
+   // it), so it is the axis most likely to carry a systematic bias the frequency
+   // cell cannot see.
+   int32_t apm_context() const {
+-    return (int32_t)MakeCellMap(ctx);
++    // The zero decision wants the phase too: a prediction that landed close to
++    // a lattice point is likelier to have hit it exactly.
++    return (int32_t)((((uint32_t)sign_map_ctx>>3)&15u)<<4)|(int32_t)MakeCellMap(ctx);
+   }
+ 
+   static uint32_t slot(int32_t bank, int32_t ctx) {
+@@ -583,6 +609,11 @@
+     }
+     const int32_t ctx15 = magsum>=P2_magsum_cap ? 15 : nb_ctx[magsum>>idx_clamp(P2_magsum_shift, 1, 12)];
+     const int32_t ctx_idx = clamp32((run4+7)>>4, 0, 255);
++    // The sub-pixel remainder the rounding above discards, kept for the sign
++    // decision; see code_three_way.  Sixteen fractions by eight activity
++    // classes is 128 of the map's 256 contexts, which measured better here than
++    // the fraction alone (16) or the full activity class (256).
++    sign_map_ctx = (int32_t)((((uint32_t)(run4+7)&15u)<<3)|((uint32_t)ctx15>>1));
+     ctx_pair[0] = MakeCtxPair((uint32_t)ctx_delta[ctx_idx+4], (uint32_t)ctx15);
+     ctx_pair[1] = MakeCtxPair((uint32_t)ctx_delta[ctx_idx], (uint32_t)ctx15);
+     ctx = (int32_t)MakeP2Ctx(mixer_fwd(ctx_w, 5)>>kP2MixShift, (uint32_t)(flat_b==0),
+@@ -722,10 +753,10 @@
+         ctx_pair[1] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2], 0);
+         P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[idx_bound(MakeQ2Sel(-q2), 3)]+ctx_w[4].w[1]);
+         if constexpr( f_DEC ) {
+-          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx))]);
++          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx)]);
+         } else {
+           code0 = fold_or_refuse(out, p[0], (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
+-          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
++          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+           ++p;
+         }
+         int32_t val = 16*(uint8_t)out[0];
+@@ -760,12 +791,12 @@
+         for( k = 0; k<(uint32_t)width; ++k ) {
+           int32_t pred = alt_p2_context(nullptr, nullptr);
+           if constexpr( f_DEC ) {
+-            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
++            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+             outp[k] = (uint8_t)(pred+(unfold[code]));
+           } else {
+             code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
+             code2 = code;
+-            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
++            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+           }
+           alt_p2_model(outp[k], code2, outp[k]-pred);
+         }
+@@ -976,13 +1007,13 @@
+       sample = clean;
+       out[at] = recon;
+     }
+-    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
++    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+     alt_p2_model(sample, code, sample-pred);
+   }
+ 
+   void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
+     const int32_t pred = alt_p2_context(refa, refb);
+-    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx));
++    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+     const int32_t sample = (uint8_t)(pred+unfold[code]);
+     alt_p2_model(sample, code, sample-pred);
+     out[at] = sample;
+@@ -1124,6 +1155,7 @@
+       nb_ctx[n] = (int32_t)MakeP2Len((uint32_t)n);
+     ctx = 15;
+     apm.Init();
++    sign_apm.Init();
+     adapt_tables_init();
+     class_mix.Init();
+     // Start at "trust this cell": the two coarse views have to earn their
