@@ -20,3 +20,6 @@ climber-snap/
 
 # personal permission settings
 .claude/settings.local.json
+
+# rawadpcm build product
+rawadpcm
