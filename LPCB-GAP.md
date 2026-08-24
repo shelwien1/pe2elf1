@@ -19,6 +19,40 @@ Four findings:
 4. **Two plausible-looking explanations are wrong**, and both would otherwise be
    the obvious next thing to build (§5).
 
+> **Revised against `claude/bmf-lpcb-performance-hdzfzy`.** That branch's
+> `LPCB-REPORT.md` is a deeper investigation of the same question, and it
+> refutes two things below by building them. The corrections are marked
+> **[corrected]** where they occur; in summary:
+>
+> * **§3's split between the sign and the magnitude is wrong.** My
+>   instrumentation totals every coder pass, and BMF makes 4.33 of them per
+>   sample — so the figures are dominated by trial encodes rather than by the
+>   stream that ships. Attributed to the final encode only, the sign is ~26%
+>   and the magnitude ~26%, not the ~20/50 split I reported. The headline the
+>   section was written to support survives unchanged: about half the output
+>   comes from decisions with no mixing and no secondary estimation.
+> * **§6's A2 — widening `CtxPair` — is refuted.** All three axes I proposed
+>   (the flatness flags, neighbour magnitudes, the residual sign) were built
+>   with the table enlarged so nothing collides, and all are a wash or a loss.
+>   The reason is mechanical and is the useful part: a frequency strip has no
+>   parent and no mixing partner, so a new axis has to repay its own learning
+>   cost immediately. The way in is mixing, not a bigger table.
+> * **§5's dismissal of cross-component structure was tested on the wrong
+>   thing.** My correlation asks whether a *nonlinear value-domain map* would
+>   pay, and the answer to that is still no. But splitting photographs into
+>   single planes and running both codecs on each shows BMF at parity with
+>   gralic on one real plane, with **71–84% of each photograph's outcome
+>   decided in the cross-plane channel**. The prize is a cross-plane predictor
+>   that sees a *neighbourhood*, which is not what I tested.
+>
+> Confirmed rather than corrected: §4's renumbering proposal, measured there at
+> **5.37 MB** across all six candidates at full size — and it needs a trial
+> gate, without which `PIA13915` loses 3.24%. §5's acquittal of the
+> plane-coding search (648 of 648 slot searches pick the cheapest trial). And
+> §7.1's regression, bisected there to a single commit, `12b7be4`, the adaptive
+> probability map on alt-P2's class decision — with the IDX/MOD port measured
+> byte-neutral on real photographs across all 26 commits.
+
 ---
 
 ## 1. The numbers
@@ -114,6 +148,17 @@ proportions are what to read.)
 | `STA13782` | 20.1% | 16.5% | **46.3%** | **17.1%** | **63.4%** |
 | `canon_eos_1100d_01` | 42.8% | 26.0% | **30.1%** | **1.1%** | **31.2%** |
 
+**[corrected] These percentages count every coder pass, not the one that ships.**
+BMF makes 4.33 passes per sample (§5), so a stage's share here is its share of
+all trial encoding, and the trials use different predictors from the winner.
+`claude/bmf-lpcb-performance-hdzfzy` instruments the final encode only and gets,
+on four photographs: zero flag 42–58%, **sign 24–27%**, **magnitude level
+16–29%**, low bits 1–3%. So the magnitude is about a quarter of the shipped
+stream, not half, and the sign is as large as it is — which is why the sign
+patch (§7.2) moved as much as it did. What the table was written to show is
+unaffected: sign plus magnitude plus low bits is still about half the output,
+and none of it had mixing or an APM before that patch.
+
 Cost per event tells the same story from the other side. On `olympus_xz1_24` the
 magnitude bucket costs 1.868 bits per event and the within-bucket bits cost 0.898
 — the latter is 10% off incompressible.
@@ -200,6 +245,21 @@ files with the most nonlinear headroom include BMF's largest win on the corpus
 +26.79%, 5.081 bpp). GraLIC is not beating BMF by exploiting a nonlinearity BMF
 cannot express.
 
+**[corrected] That acquits the wrong defendant.** The correlation above asks
+whether a nonlinear *value-domain* map between components would pay, and the
+answer to that is still no. It says nothing about the cross-plane *channel*.
+`claude/bmf-lpcb-performance-hdzfzy` settles that directly: split photographs
+into single 8-bit planes and run both codecs on each plane and on the colour
+image. On one real photographic plane BMF is at parity with gralic — mean gap
+B +0.006%, R −0.256%, G +1.091% — while **71–84% of each photograph's outcome is
+decided in the cross-plane channel**, and that channel sets the sign of the
+result. Segment A's deficit is roughly 11–13 MB cross-plane against 2.5–4.6 MB
+inside a plane. What is missing is a cross-plane predictor that sees a
+*neighbourhood* rather than the co-located pixel; the fitted colour transform
+itself is within 32 bytes of the coder's own optimum, and stacking a fixed RCT
+on top costs 2–10%. C1 below is aimed at this and is badly undersized: it is
+the largest item on the list, not the last.
+
 **The plane-coding search.** BMF encodes the image three times to choose between
 planar, transposed, and joint coding. On `STA13845` the three trials come in at
 45,829,014 / 45,791,558 / 44,237,350 bytes — a 3.5% spread, and the best is
@@ -236,9 +296,22 @@ Cost: decode roughly +40–60%. Well inside the stated budget (decode must not
 become ~10× slower); the §5 finding that two-thirds of encode time buys a 3.5%
 selection spread says where to reclaim it from if needed.
 
-### A2 — Widen `CtxPair` to the context that already exists
+### A2 — Widen `CtxPair` to the context that already exists — **[corrected] refuted**
 
-**Reach: same 50%, and it is nearly free.**
+**This does not work, and the reason it does not is the useful part.**
+`claude/bmf-lpcb-performance-hdzfzy` built all three of the axes proposed below
+— the two flatness bits, quantised `|e_W|`/`|e_N|`, and the residual's sign —
+each with the table enlarged so nothing collides, and every one is a wash or a
+loss on realistic photographic magnitudes. A frequency strip has no parent
+distribution and no mixing partner, so an added axis must repay its own learning
+cost from its own counts, immediately. Dilution beats the extra information.
+That is a general result about this coder, not a fact about these three axes:
+**the way into the magnitude is mixing, not a bigger table**, which makes A1 the
+item and A2 not a cheaper route to it. The rest of this subsection is left as
+written because the diagnosis it starts from — that the stage is
+under-conditioned — is still right; the proposed remedy is what fails.
+
+Reach: same stage as A1.
 
 `flat_a == 0`, `flat_b == 0`, and 2–3 bits of `mixer_fwd(ctx_w, 5) >> kP2MixShift`
 are computed one statement above the point where `ctx_pair` is built. Adding them
@@ -275,7 +348,12 @@ is left in the parameter space.
 
 ### B1 — Value-set renumbering as a pre-pass
 
-**Reach: 32% of the corpus gap, concentrated in 8 files; up to 1.87 bpp on the worst.**
+**Reach: 32% of the corpus gap, concentrated in 8 files; up to 1.87 bpp on the
+worst. [corrected] Measured at 5.37 MB** on `claude/bmf-lpcb-performance-hdzfzy`,
+across all six candidates at full size — and **it must be a gated trial**:
+without the gate `PIA13915` loses 3.24%, which is the most useful thing anyone
+learned about it. The structural cause is named there too: the slow model calls
+`reduce_alphabet`, and alt-P1 and alt-P2 never do.
 
 Per component, scan the image, build the used-value set, and if `|S| < 256`
 renumber to `0..|S|−1` before prediction. Ship the set as a 256-bit mask in the
@@ -288,9 +366,13 @@ files where the mask is full. This is self-contained, does not touch the coder,
 and is the only item here that can be validated against a figure `bmgstat`
 already prints.
 
-### C1 — Cross-plane reference as *context*, not as a predictor
+### C1 — Cross-plane reference as *context*, not as a predictor — **[corrected] this is item 1**
 
-**Reach: the tone-curved class again, and it is what §5 rules out doing linearly.**
+**Reach: 11–13 MB, the largest single item here.** It is placed last below
+because §5 mis-scoped it; see the correction there. The plane-split experiment
+puts 71–84% of every photograph's outcome in the cross-plane channel, and the
+camera families carry 63% of the corpus deficit. Nothing in this list is worth
+as much, and nothing in it has been costed as little.
 
 BMF uses the reference plane through a least-squares affine fit and through
 linear NLMS taps, both of which cap out at the affine residual. Feeding a
@@ -335,7 +417,18 @@ predictor chosen for each slot) and per-plane trial costs that move by under 0.1
 in both directions — some planes better, more of them worse. Nothing chose
 wrongly; the coder simply got marginally worse on large noisy planes.
 
-The likely mechanism is the one §3 describes from the other side. Those changes
+**[corrected] It has a single cause, and it has been isolated.**
+`claude/bmf-lpcb-performance-hdzfzy` bisected 25 revisions and attributes 98.6%
+of the regression to `12b7be4`, the adaptive probability map on alt-P2's class
+decision — tuned on one 705×800 synthetic image, and a net loss on every real
+photograph. Deleting it lands slightly *under* the pre-IMPROVEMENTS build. The
+same bisect measures the whole IDX/MOD port, all 26 commits, as **exactly
+byte-neutral** on real photographs, which is the claim that series was built to
+support. And the fix is not a revert: the sign patch of §7.2 is the same
+machinery given the axis the map was missing.
+
+The mechanism below is what I inferred before that bisect existed; it is
+consistent with it but the bisect is the evidence. Those changes
 added adaptive stages — APMs, a mixer — to the *zero flag* and to the tree bits
 of the other models. On the internal 81-image corpus, where those stages carry
 most of the budget, that won 7.1%. On a 10-megapixel camera photo the zero flag
@@ -394,6 +487,11 @@ the corpus-scale extrapolations are estimates.
 * Re-encodes in §7 with the current `./mk.sh release` build, and with
   `773b305` (the last commit before `IMPROVEMENTS.md`) built in a detached
   worktree.
+* Figures marked **[corrected]** come from `LPCB-REPORT.md` on
+  `claude/bmf-lpcb-performance-hdzfzy`, which measures on the full corpus where
+  this report measures on a sample, and which built three of the proposals here
+  rather than costing them. Where the two disagree, that branch is right and
+  this one says so at the point of disagreement.
 
 Eleven of the 107 images were retrieved from the corpus tarball, so §7 is a
 measured sample and not a corpus figure; §1, §2, §4 and §5 are over all 107.

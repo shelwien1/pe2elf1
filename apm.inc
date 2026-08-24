@@ -73,9 +73,18 @@ struct Apm {
   }
 
   // p16 is the cell's own probability that the class is 0, in 1/65536.
+  //
+  // The context is bounded here rather than at each call site.  Every caller
+  // builds it from an Index or a mask whose width is an IDX parameter, so a
+  // sweep can widen one past kCtx -- IDX/sweep.py caught exactly that on
+  // CN_mslot, whose mask normally keeps four bits of a fourteen-bit context
+  // and at its extreme keeps all fourteen, indexing a 256-context table with
+  // 16383 and taking the encoder down with SIGSEGV.  Guarding inside refine
+  // covers all six call sites at once and cannot be forgotten by a seventh;
+  // update() is covered too, since it works from the `at` set here.
   int32_t refine(int32_t p16, int32_t ctx) {
     const int32_t pos = apm_pos[p16>>4];
-    at = ctx*kApmBuckets+(pos>>12);
+    at = (int32_t)idx_bound((uint32_t)ctx, (uint32_t)kCtx)*kApmBuckets+(pos>>12);
     frac = pos&0xFFF;
     const int32_t lo = t[at], hi = t[at+1];
     const int32_t mapped = lo+(((hi-lo)*frac)>>12);
