@@ -72,15 +72,16 @@ struct ModelBlock {
   uint32_t ctx_id3_used;
   uint32_t hit;
   uint32_t ctx_state_seen;
-  static const int32_t kRowMargin = MB_row_margin;
-  static const int32_t kRowTail = MB_row_tail;
+  static const int32_t kGroupCount = 15;  // rows in ctx_group_flags
+  static const int32_t kRowMargin = 7;   // columns of context the slow model reaches left
+  static const int32_t kRowTail = 9;     // and right
   uint32_t bucket_idx;
   uint32_t sym_pos;
   uint32_t ctr_fallback;
   uint32_t ctr_node;
   PixRec* row_cur[10];
   static const int32_t kFreqTableOffset = MB_freq_table_offset;
-  static const int32_t kFreqGridCount = MB_freq_grid_count;
+  static const int32_t kFreqGridCount = 65723;  // entries in the frequency grid
   FreqRec grid[kFreqGridCount];
   uint8_t _pad1051664[16];
   BitCtr bit_root[MB_CandFallback_Volume];
@@ -930,7 +931,7 @@ struct ModelBlock {
     uint16_t w2;
     int32_t w3, w4;
     int32_t bucket = 0;
-    for( int32_t g = 0; g<MB_group_count; ++g ) {
+    for( int32_t g = 0; g<kGroupCount; ++g ) {
       int32_t flags = ctx_group_flags[g];
       ctx_state[flags] = g;
       GroupFolds fold;
@@ -1325,8 +1326,8 @@ struct ModelBlock {
     }
   }
 
-  static const int32_t kSel1Syms = MB_sel1_syms;
-  static const int32_t kSel0Syms = MB_sel0_syms;
+  static const int32_t kSel1Syms = 99;   // symbols the rank-1 selector list holds
+  static const int32_t kSel0Syms = 33;   // and the rank-0 list
   SymEntry sel1_ent[(no_symbol+1)*kSel1Syms];
   SymEntry sel0_ent[(no_symbol+1)*kSel0Syms];
   SymEntry escape_ent[no_symbol+1];

@@ -10,10 +10,6 @@ Debug 1
 # Structural: bucket and context counts size member arrays.
 Const 1
 
-Number buckets,          1,0!100001
-Number map_ctx,          1,0!100000000
-Number mix_sets,         1,0!100000000
-Number adapt_cap_max,    1,0!11111111
 
 # The map: how far into the stretch domain the buckets reach (in 1/256 of
 # a stretch unit), how fast an entry moves, and how much of its opinion is

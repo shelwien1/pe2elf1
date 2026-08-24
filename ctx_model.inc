@@ -21,8 +21,8 @@
 struct CtxModel {
   // Causal neighbours, in the order an entropy sweep over the corpus found them
   // useful: W, N, NW, NE, WW, NN, NEE, NWW, and outward from there.
-  static const int32_t kMaxNeighbours = CM_max_neighbours;
-  static const int32_t kOrders = CM_orders;
+  static const int32_t kMaxNeighbours = 24;  // the causal menu has 24 entries
+  static const int32_t kOrders = 4;    // four tables, one per order
   static const int32_t kInputs = kOrders+1;
   // Table widths are heap-allocated from a runtime count, so unlike the
   // sizes above they do not have to be constant expressions and stay live
@@ -35,7 +35,7 @@ struct CtxModel {
   // constant expression; an out-of-class definition may be dynamic.  The
   // shipping build initializes the same names from literals and folds them.
   static const int32_t kMatchBits;
-  static const int32_t kMatchLens = CM_match_lens;
+  static const int32_t kMatchLens = 32;  // match-length buckets
   static const int32_t kShortNb;
   static const int32_t kTableBits;
   static const int32_t kMidBits;
@@ -46,10 +46,10 @@ struct CtxModel {
   // recip[] is sized by the frozen ceiling; the cap itself stays live
   // underneath it, so the optimizer can move the anneal point without the
   // member array's size following it.
-  static const int32_t kCountCapMax = CM_count_cap_max;
+  static const int32_t kCountCapMax = 255;  // the cap is a byte
   static const int32_t kCountCap;
   static const int32_t kBlend;
-  static const int32_t kMaxAlpha = CM_max_alpha;
+  static const int32_t kMaxAlpha = 16; // the model is offered planes of at most 16 values
 
   uint8_t to_idx[256];
   uint8_t to_val[kMaxAlpha];
@@ -462,7 +462,7 @@ struct CtxModel {
 };
 
 const int32_t CtxModel::kMatchBits = idx_clamp(CM_match_bits, 8, 24);
-const int32_t CtxModel::kShortNb = idx_clamp(CM_short_nb, 1, CM_max_neighbours);
+const int32_t CtxModel::kShortNb = idx_clamp(CM_short_nb, 1, kMaxNeighbours);
 const int32_t CtxModel::kTableBits = idx_clamp(CM_table_bits, 8, 22);
 const int32_t CtxModel::kMidBits = idx_clamp(CM_mid_bits, 8, 22);
 const int32_t CtxModel::kCountCap = idx_clamp(CM_count_cap, 1, CtxModel::kCountCapMax);

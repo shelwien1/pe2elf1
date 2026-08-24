@@ -9,12 +9,7 @@ Debug 1
 # Structural: these size members.
 Const 1
 
-Number row_margin,       1,0!111
-Number row_tail,         1,0!1001
 Number freq_table_offset,  1,0!10111100
-Number freq_grid_count,  1,0!10000000010111011
-Number sel1_syms,        1,0!1100011
-Number sel0_syms,        1,0!100001
 
 # pixel_context: which neighbour ranks count as a near hit and which as a
 # far one, how deep into a symbol list a membership test looks, and the
@@ -44,7 +39,6 @@ Number small_alphabet,   1,0!100000
 
 Const 1
 
-Number group_count,     1,0!1111
 
 Const 0
 

@@ -1,9 +1,5 @@
 
 
-static const int AP_buckets = (33+0) * (1);
-static const int AP_map_ctx = (256+0) * (1);
-static const int AP_mix_sets = (256+0) * (1);
-static const int AP_adapt_cap_max = (255+0) * (1);
 static const int AP_span = (2048+0) * (1);
 static const int AP_rate = (5+0) * (1);
 static const int AP_map_weight = (3+0) * (1);

@@ -528,9 +528,6 @@ Index CellMap
 
 Const 1
 
-Number freq_max,      1,0!11110011000000
-Number ctr_max,       1,0!101000000000000000
-Number seat_max,      1,0!1000000
 
 Const 0
 
@@ -541,7 +538,6 @@ Const 0
 Const 1
 
 # Frozen: it sizes the three pointer arrays and the bit table.
-Number fan,           1,0!1011
 
 Const 0
 
@@ -570,16 +566,5 @@ Number kick_shift,    1,0!10
 
 Const 1
 
-Number bank_bit_00,   1,0!100000000000000
-Number bank_bit_01,   1,0!10000000000000
-Number bank_bit_02,   1,0!1000000000000
-Number bank_bit_03,   1,0!100000000000
-Number bank_bit_04,   1,0!10000000000
-Number bank_bit_05,   1,0!1000000000
-Number bank_bit_06,   1,0!100000000
-Number bank_bit_07,   1,0!10000000
-Number bank_bit_08,   1,0!1000000
-Number bank_bit_09,   1,0!100000
-Number bank_bit_10,   1,0!10000
 
 Const 0

@@ -2,8 +2,6 @@
 
 
 
-static const int CN_slot_split = (5+0) * (1);
-static const int CN_slot_top = (6+0) * (1);
 static const int CN_seed_0 = (8+0) * (1);
 static const int CN_seed_1 = (2+0) * (1);
 static const int CN_seed_2 = (2+0) * (1);

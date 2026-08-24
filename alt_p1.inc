@@ -2,8 +2,8 @@
 // Included from bmf.cpp; not a standalone translation unit.
 
 struct AltP1Block {
-  static const int32_t kRowMargin = P1_row_margin;
-  static const int32_t kRowTail = P1_row_tail;
+  static const int32_t kRowMargin = 4;   // columns of context alt-P1 reaches left
+  static const int32_t kRowTail = 6;     // and right
   int32_t width;
   int32_t height;
   int32_t pred;
@@ -256,7 +256,7 @@ struct AltP1Block {
   void update_model() {
     const uint32_t code_f = fold[(uint8_t)(cursor[0][0].sym-(uint8_t)pred)];
     const int32_t code_r = fold[(uint8_t)((uint8_t)pred-cursor[0][0].sym)];
-    const int32_t tree_sym = (int32_t)(code_f-CN_slot_split)>>1;
+    const int32_t tree_sym = (int32_t)(code_f-kSlotSplit)>>1;
     const int32_t slot_f = sym_slot(code_f);
     const int32_t slot_r = sym_slot(code_r);
     uint32_t ctx_alt = MakeP1Alt(mixer_rev(ctx_w, 9)>>kP1MixShift, (uint32_t)ctx[0]&31u);
@@ -267,14 +267,14 @@ struct AltP1Block {
       CounterNode* node_up = &ctr_at(result);
       uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, P1_bump_up);
-      if( slot_f>=CN_slot_split )
+      if( slot_f>=kSlotSplit )
         cx[0].update_binary_pair(cx[0].model_strip(MakeStrip(ctx_up>>8, (uint32_t)slot_f&1u, node_up[1].escape_high(slot_f), ctx_up&63u)), tree_sym);
     }
     if( result&7 ) {
       CounterNode* node_dn = &ctr_at(result);
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].bump(slot_f, P1_bump_dn);
-      if( slot_f>=CN_slot_split )
+      if( slot_f>=kSlotSplit )
         cx[0].update_binary_pair(cx[0].model_strip(MakeStrip((uint32_t)ctx_dn>>8, (uint32_t)slot_f&1u, node_dn[-1].escape_high(slot_f), (uint32_t)ctx_dn&63u)), tree_sym);
     }
     if( ctr_at(result).total>=CN_nudge_limit )
@@ -285,7 +285,7 @@ struct AltP1Block {
     if( result&7 ) {
       node_alt[-1].bump(slot_r, P1_nudge_dn);
     }
-    if( slot_f>=CN_slot_split ) {
+    if( slot_f>=kSlotSplit ) {
       const uint32_t key = MakeStrip((uint32_t)ctx[1]>>8, (uint32_t)slot_f&1u,
                                     ctr_at(result).escape_high(slot_f), (uint32_t)ctx[1]&63u);
       if( (key&0x38)>=0x38||(cx[0].update_binary_pair(cx[0].model_strip(key+8), tree_sym), (key&0x38)!=0) ) {

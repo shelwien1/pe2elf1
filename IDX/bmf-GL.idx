@@ -9,11 +9,6 @@ Debug 1
 # Structural: array bounds and wire-format masks.
 Const 1
 
-Number max_width,        1,0!1111111111111111
-Number no_symbol,        1,0!10000000000000
-Number model_table_bytes,  1,0!1111111000000000000
-Number bank_mirror_mask,  1,0!111111111110000
-Number p2_row_pad,       1,0!11101010
 
 # The NLMS weight box, the rescale point of the P2 frequency table, the
 # third context table's occupancy limit, and how much worse than the

@@ -14,9 +14,6 @@ Debug 1
 # arrays and drive template arguments.
 Const 1
 
-Number row_margin,       1,0!100
-Number row_tail,         1,0!110
-Number counter_count,    1,0!10011001110001100000
 
 # Activity quantiser: the rounding offset and shift that turn the summed
 # neighbourhood activity into a table row.  (The guess thresholds it used to

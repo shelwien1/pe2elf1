@@ -49,7 +49,9 @@ struct BMFState : RangeCoder {
   // index is a context assembled from IDX layout parameters.  One bound at the
   // choke point covers alt-P1, alt-P2, the counters and the slow model; without
   // it a swept field width sends the pointer past the arena.
-  static const uint32_t kModelStripSize = 254;
+  // Both from bmf_util.inc, where the arena is sized as strips*CtxPair_Volume;
+  // reading them back rather than restating 254 keeps the cut and the size the
+  // same statement.
   static const uint32_t kModelStrips = kModelTableBytes/(kModelStripSize*sizeof(uint16_t));
   uint16_t*model_strip(uint32_t k) {
     return model_tables+kModelStripSize*idx_bound(k, kModelStrips);

@@ -4,9 +4,6 @@
 
 
 
-static const int P1_row_margin = (4+0) * (1);
-static const int P1_row_tail = (6+0) * (1);
-static const int P1_counter_count = (629856+0) * (1);
 static const int P1_act_round = (7+0) * (1);
 static const int P1_act_shift = (4+0) * (1);
 static const int P1_border_sym = (72+0) * (1);

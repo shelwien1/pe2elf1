@@ -58,10 +58,10 @@ const int32_t PalCtr::kLimit = idx_clamp(PA_limit, 4, 1<<15);
 struct PaletteModel {
   // A byte goes out through a binary tree: 255 internal nodes, indexed the
   // usual way from the root at 1.
-  static const int32_t kTree = PA_tree;
+  static const int32_t kTree = 256;    // one tree node per palette entry
   // Residual contexts: one per channel, split on whether the previous residual
   // in that channel was zero.
-  static const int32_t kResCtx = PA_res_ctx;
+  static const int32_t kResCtx = 6;    // residual contexts
   PalCtr repeat[2];        // this entry repeats the previous one
   PalCtr channel_eq[2];    // this channel repeats the one before it in the entry
   PalCtr res[kResCtx][kTree];

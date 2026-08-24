@@ -14,11 +14,6 @@ Debug 1
 # Structural: these size members, so they must fold.
 Const 1
 
-Number max_neighbours,   1,0!11000
-Number orders,           1,0!100
-Number max_alpha,        1,0!10000
-Number match_lens,       1,0!100000
-Number count_cap_max,    1,0!11111111
 
 # Table widths, in bits: the direct-mapped short order, the two hashed
 # middle orders and the longest.  All allocated from a runtime count.

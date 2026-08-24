@@ -1,10 +1,5 @@
 
 
-static const int CM_max_neighbours = (24+0) * (1);
-static const int CM_orders = (4+0) * (1);
-static const int CM_max_alpha = (16+0) * (1);
-static const int CM_match_lens = (32+0) * (1);
-static const int CM_count_cap_max = (255+0) * (1);
 static const int CM_short_nb = (4+0) * (1);
 static const int CM_table_bits = (20+0) * (1);
 static const int CM_mid_bits = (18+0) * (1);

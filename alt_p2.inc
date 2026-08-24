@@ -1,6 +1,34 @@
 // alt_p2.inc -- AltP2Block: the NLMS predictor, bias-bank cascade and residual coder (predictor 2)
 // Included from bmf.cpp; not a standalone translation unit.
 
+// The bias banks fan out over the set bits of kBankMirrorMask, highest first.
+// The fan width and the eleven bit values used to be twelve more numbers
+// declared beside the mask -- which is the shape of defect CD_weight_bits was:
+// values carrying no gradient of their own that an edit or a sweep can put out
+// of step with the one thing they must agree with.  Derived from the mask they
+// cannot disagree with it.  (P2_fan_mirror, how many of these positions also
+// take the mirror update, is a real parameter and stays one.)
+struct BankFan {
+  uint32_t bit[32];
+  int32_t n;
+};
+
+static constexpr BankFan bank_fan_of(uint32_t mask) {
+  BankFan f{};
+  for( int32_t i = 31; i>=0; --i )
+    if( mask&(1u<<i) )
+      f.bit[f.n++] = 1u<<i;
+  return f;
+}
+
+static constexpr BankFan kBankFanBits = bank_fan_of(kBankMirrorMask);
+static constexpr int32_t kBankFan = kBankFanBits.n;
+static const uint32_t*const p2_bank_bits = kBankFanBits.bit;
+static_assert(kBankFan>0, "the bias banks need at least one bit to mirror over");
+
+// Seats the sign map keeps, one per low cell context.
+static const int32_t kSeatCount = 64;
+
 struct P2Count {
   int8_t rate;
   uint8_t b1;
@@ -299,7 +327,7 @@ struct AltP2Block {
   Apm apm;
   Apm sign_apm;
   Mix4 class_mix;
-  uint32_t pz_seat[P2_seat_max];
+  uint32_t pz_seat[kSeatCount];
   uint32_t pz_signs[243];
   int32_t nb_id_used;
   int32_t band_lo;
@@ -318,7 +346,7 @@ struct AltP2Block {
   uint8_t nb_ctx[120];
   int16_t nb_id[P2_NbSlot_Volume];
   // Sized by its own index declaration rather than beside it.
-  static const int32_t kP2CounterCount = P2_ctr_max;
+  static const int32_t kP2CounterCount = 163840;  // bias counters
   P2Count p2_ctr[kP2CounterCount+1];
 
   // The map's context.  ctx's low digit is the activity class the rest of the
@@ -380,7 +408,7 @@ struct AltP2Block {
   }
 
   // The frozen capacity, not the live Volume: see freq_max in the .idx.
-  static const int32_t kP2FreqCount = P2_freq_max;
+  static const int32_t kP2FreqCount = 15552;   // cells in the P2 frequency lattice
   P2Freq freq[kP2FreqCount+1];
   uint32_t pz_fast[kP2FreqCount+1];
 
@@ -654,13 +682,8 @@ struct AltP2Block {
         p2_update(cx, &node0[1], res2, P2_up_near);
       if( lowbits )
         p2_update(cx, &node0[-1], res2, P2_up_direct);
-      static const uint32_t p2_bank_bits[P2_fan] = {
-        P2_bank_bit_00, P2_bank_bit_01, P2_bank_bit_02, P2_bank_bit_03,
-        P2_bank_bit_04, P2_bank_bit_05, P2_bank_bit_06, P2_bank_bit_07,
-        P2_bank_bit_08, P2_bank_bit_09, P2_bank_bit_10,
-      };
-      P2Count* direct[P2_fan], * mirror[P2_fan], * rot[P2_fan];
-      for( int32_t k = 0; k<P2_fan; ++k ) {
+      P2Count* direct[kBankFan], * mirror[kBankFan], * rot[kBankFan];
+      for( int32_t k = 0; k<kBankFan; ++k ) {
         // Through slot() rather than as an offset off bankp: the base is
         // bounded but base+x is not, and x follows the context, which a
         // widened threshold bitmap can grow past the table.
@@ -681,7 +704,7 @@ struct AltP2Block {
       if( lowbits<3 )
         p2_nudge(&mir[1], -res2);
       if( lowbits<=0 ) {
-        for( int32_t k = 0; k<P2_fan; ++k ) {
+        for( int32_t k = 0; k<kBankFan; ++k ) {
           p2_update(cx, direct[k], res2, P2_up_direct);
           p2_update(cx, rot[k], res2, P2_up_rot);
           p2_nudge(&direct[k][1], res2);
@@ -692,12 +715,12 @@ struct AltP2Block {
         p2_update(cx, direct[0], res2, P2_up_direct);
         p2_update(cx, rot[0], res2, P2_up_rot);
         walk_bank_bits(direct, mirror, rot, res2, lowbits<3);
-        p2_update(cx, mirror[P2_fan-1], -res2, P2_up_rot);
+        p2_update(cx, mirror[kBankFan-1], -res2, P2_up_rot);
       }
     }
   }
   void walk_bank_bits(P2Count*const* direct, P2Count*const* mirror, P2Count*const* rot, int32_t res, bool nudge) {
-    for( int32_t k = 0; k<P2_fan; ++k ) {
+    for( int32_t k = 0; k<kBankFan; ++k ) {
       if( k ) {
         p2_update(cx, direct[k], res, P2_up_direct);
         p2_update(cx, rot[k], res, P2_up_rot);
@@ -753,10 +776,10 @@ struct AltP2Block {
         ctx_pair[1] = ctx+MakeCtxPair((uint32_t)ctx_delta[q2], 0);
         P2Freq &fr = freq_at(ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[idx_bound(MakeQ2Sel(-q2), 3)]+ctx_w[4].w[1]);
         if constexpr( f_DEC ) {
-          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx)]);
+          out[0] = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), kSeatCount)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx)]);
         } else {
           code0 = fold_or_refuse(out, p[0], (uint16_t)rec[-1].val>>4, fold, fold_hi, unfold);
-          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+          fr.encode_symbol(cx, ctx_pair, code0, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), kSeatCount)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
           ++p;
         }
         int32_t val = 16*(uint8_t)out[0];
@@ -791,12 +814,12 @@ struct AltP2Block {
         for( k = 0; k<(uint32_t)width; ++k ) {
           int32_t pred = alt_p2_context(nullptr, nullptr);
           if constexpr( f_DEC ) {
-            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+            code2 = code = freq_at(ctx).decode_symbol(cx, pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), kSeatCount)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
             code = fold_or_refuse(&outp[k], srcp[k], pred, fold, fold_hi, unfold);
             code2 = code;
-            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+            freq_at(ctx).encode_symbol(cx, pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), kSeatCount)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
           }
           alt_p2_model(outp[k], code2, outp[k]-pred);
         }
@@ -1007,13 +1030,13 @@ struct AltP2Block {
       sample = clean;
       out[at] = recon;
     }
-    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+    freq_at(ctx).encode_symbol(cx, ctx_pair, code, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), kSeatCount)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
     alt_p2_model(sample, code, sample-pred);
   }
 
   void decode_sample(uint8_t* out, int32_t at, AltP2Block* refa, AltP2Block* refb) {
     const int32_t pred = alt_p2_context(refa, refb);
-    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), P2_seat_max)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
+    const int32_t code = freq_at(ctx).decode_symbol(cx, ctx_pair, &apm, apm_context(), (int32_t)MakeCellMap(ctx), &class_mix, &pz_seat[idx_bound(MakeSeat(ctx), kSeatCount)], &pz_signs[(ctx>>6)%243], &fast_at(ctx), &sign_apm, sign_map_ctx);
     const int32_t sample = (uint8_t)(pred+unfold[code]);
     alt_p2_model(sample, code, sample-pred);
     out[at] = sample;

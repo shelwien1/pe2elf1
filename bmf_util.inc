@@ -115,10 +115,18 @@ int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {
 const int32_t kWeightMin = -GL_weight_min_neg, kWeightMax = GL_weight_max;
 const uint32_t kSlackMax = GL_slack_max;
 const int32_t kP2FreqRescaleTotal = GL_p2_freq_rescale_total;
-const int32_t kP2RowPad = GL_p2_row_pad;
+const int32_t kP2RowPad = 234;     // slack columns alt-P2 pads each row with
 const int32_t kCtxId3Limit = GL_ctx_id3_limit;
-const uint32_t kModelTableBytes = GL_model_table_bytes;
-const uint32_t kBankMirrorMask = GL_bank_mirror_mask;
+// The frequency arena, sized from the index that addresses it rather than
+// carried as its own number: model_strip() cuts it into 254-entry uint16 rows
+// and CtxPair is what selects a row, so the arena holds exactly one row per
+// context by construction.  As two independent numbers -- it was 520192 in the
+// .idx, which is 1024*254*2 -- widening the context silently overflows the
+// arena, or leaves it oversized, with nothing to say the two had drifted.
+const uint32_t kModelStripSize = 254;
+const uint32_t kModelTableBytes =
+    (uint32_t)P2_CtxPair_Volume*kModelStripSize*(uint32_t)sizeof(uint16_t);
+const uint32_t kBankMirrorMask = 0x7FF0u;  // bits 4..14: the fan the bias banks mirror over
 template <class T> void swap32(T &a, T &b) {
   const T t = a;
   a = b;
@@ -138,7 +146,7 @@ void halve_counts(uint16_t* c, int32_t n) {
     c[k] = (uint16_t)halve_up(c[k]);
 }
 
-const int32_t kMaxWidth = GL_max_width;
+const int32_t kMaxWidth = 65535;   // the width field on the wire is 16 bits
 
 
 

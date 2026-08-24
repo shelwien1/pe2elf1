@@ -652,10 +652,16 @@ struct BMFCodec : BMFState {
       code_field<f_DEC>(d.dc, 8, 0);
       if( d.nrefs<=1u )
         continue;
-      code_field<f_DEC>(d.weight0, CD_weight_bits, CD_weight_bias);
-      code_field<f_DEC>(d.weight1, CD_weight_bits, CD_weight_bias);
+      // The wire field the fitted cross-plane weights travel in.  Format, not
+      // tuning: a wider field only wastes header bits, and a narrower one
+      // truncates the weight and shortens the header, so the decoder reads
+      // every later field from the wrong offset.  The neighbouring 6 and 8
+      // above are literals for the same reason.
+      const int32_t kWeightBits = 8, kWeightBias = 64;
+      code_field<f_DEC>(d.weight0, kWeightBits, kWeightBias);
+      code_field<f_DEC>(d.weight1, kWeightBits, kWeightBias);
       if( d.nrefs>2u )
-        code_field<f_DEC>(d.weight2, CD_weight_bits, CD_weight_bias);
+        code_field<f_DEC>(d.weight2, kWeightBits, kWeightBias);
     }
   }
   void colour_transform(BmfImage* img, uint8_t* dst, int32_t plane) {

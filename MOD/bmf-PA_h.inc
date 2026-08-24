@@ -1,7 +1,5 @@
 
 
-static const int PA_tree = (256+0) * (1);
-static const int PA_res_ctx = (6+0) * (1);
 static const int PA_seed = (1+0) * (1);
 static const int PA_step = (24+0) * (1);
 static const int PA_limit = (4096+0) * (1);

@@ -55,10 +55,15 @@ for.
 Every module except `QZ` and `IX` also carries `Index` declarations -- 41 of
 them across five modules -- and §6 lists what they size.
 
-537 declarations in all: 515 live in the tuning build, the other 22 frozen
-because they size something or multiply a Volume. 28067 pattern bits. Both
+495 declarations in all: 490 live in the tuning build, the other 5 frozen
+because an `Index` block multiplies them by `%M%`. 6572 pattern bits. Both
 `IDX/opt.pl` and `IDX/sweep.py` print the live count and the bit budget when
 they start, so those numbers are checkable rather than remembered.
+
+The live count is 490 rather than 507 because nine mappings carry a leading
+`!` (§5), and the totals moved twice: 42 declarations that were frozen left
+the `.idx` files entirely (§4), and freezing the quantiser ladders took the
+bit budget from 28067 to 6572 -- which is what `opt.pl` costs scale with.
 
 ---
 
@@ -99,11 +104,35 @@ would not be.
 
 ## 4. What is *not* a parameter
 
-Declared but frozen (`Const 1`), because they size arrays or drive template
-arguments and must stay constant expressions: `kMaxNeighbours`, `kOrders`,
-`kMaxAlpha`, `kMatchLens`, `kP1CounterCount`, `kFreqGridCount`, `no_symbol`,
-`kMaxWidth`, and the row margins. They are in the `.idx` files so there is one
-place to look, not because the optimizer can move them.
+**A number the optimizer cannot move does not belong in a `.idx` file.** The
+port originally declared them anyway and froze them with `Const 1`, on the
+argument that one place to look beats two. That argument was wrong, and
+`CD_weight_bits` is why: it is the width of the descriptor's wire field, it was
+declared beside the tuning constants, and an optimizer run moved it to zero --
+which truncates the weight, shortens the header, desynchronises the bitstream
+and makes `x_ep` fail to decode. A declaration is an invitation to search. For
+a value with no compression gradient, the search can only find damage.
+
+So 42 of them now live in C++, each at the site that already gave it a name:
+`kMaxNeighbours`, `kOrders` and `kMaxAlpha` in `ctx_model.inc`; `kMaxWidth` and
+`kP2RowPad` in `bmf_util.inc`; `no_symbol` in `records.inc`; the row margins
+beside the models that reach over them; the descriptor's field width inside the
+function that writes it. Three were not numbers at all but derivations, and are
+written as such:
+
+* `kModelTableBytes` is `P2_CtxPair_Volume * kModelStripSize * 2` -- the arena
+  holds exactly one 254-entry strip per context, so sizing it from the index
+  that addresses it means widening the context cannot overflow it. It used to
+  be the literal 520192 sitting next to a Volume of 1024.
+* `kBankFan` and the eleven `p2_bank_bits` are the set bits of
+  `kBankMirrorMask`, highest first, extracted by a `constexpr`. Twelve numbers
+  that could disagree with the mask became none.
+* `P1_counter_count` was simply dead -- `alt_p1.inc` sizes its array from
+  `P1_P1Result_Volume` -- and is deleted.
+
+Five stay declared and frozen, because an `Index` block multiplies them by
+`%M%` and the generator can only read `.idx`: `P1_ctxw_range`, `P2_ctxw_range`,
+`MB_freq_table_offset`, `MB_id1_range` and `MB_id2_range`.
 
 Not declared at all, because they cannot change behaviour or are not numbers in
 the tuning sense: the range coder's carry and marker constants, histogram

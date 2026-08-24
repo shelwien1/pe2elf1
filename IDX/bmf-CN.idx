@@ -12,8 +12,6 @@ Debug 1
 # is one parameter so they cannot drift apart.
 Const 1
 
-Number slot_split,       1,0!101
-Number slot_top,         1,0!110
 
 # CounterNode: the seed counts, the increment per hit, the rescale
 # threshold and how the rescale divides.  The seeded total is the sum of

@@ -20,7 +20,7 @@
 const int32_t kProbFloor = idx_clamp(AP_p_floor, 1, 1<<14);
 const int32_t kProbCeil = idx_clamp(AP_p_ceil, kProbFloor+1, 65535);
 
-const int32_t kApmBuckets = AP_buckets;
+const int32_t kApmBuckets = 33;    // 32 spans, plus the endpoint refine() interpolates to
 // The span is carried as 1/256 of a stretch unit so it can be an integer
 // parameter; 2048 is the 8.0 it replaces.
 const double kApmSpan = idx_d(AP_span, 8);
@@ -53,7 +53,7 @@ void apm_tables_init() {
 }
 
 struct Apm {
-  static const int32_t kCtx = AP_map_ctx;
+  static const int32_t kCtx = 256;   // contexts the map is sized for
   // Declared here, defined below the class.  In the tuning build an IDX value
   // is a read from a patchable object, and an in-class initializer has to be a
   // constant expression; an out-of-class definition may be dynamic.  The
@@ -155,7 +155,7 @@ void mix_tables_init() {
 static const int32_t kMixShift = idx_clamp(AP_mix_shift, 8, 24);
 
 template <int32_t N> struct MixN {
-  static const int32_t kSets = AP_mix_sets;
+  static const int32_t kSets = 256;  // weight sets the mixer is sized for
   int32_t w[kSets][N];
   int32_t in[N];
   int32_t set;
@@ -226,7 +226,7 @@ int32_t bit_cost(int32_t p16, int32_t bit) {
 // A probability with its own update count, adapting at 1/(n+2) until the count
 // anneals.  Packed into one word: probability high, count low.  A context that
 // sees tens of samples needs this; a fixed rate is far too slow while it is new.
-const int32_t kAdaptCapMax = AP_adapt_cap_max;
+const int32_t kAdaptCapMax = 255;  // the cap is a byte
 const int32_t kAdaptCap = idx_clamp(AP_adapt_cap, 1, kAdaptCapMax);
 int32_t adapt_recip[kAdaptCapMax+1];
 bool adapt_tables_ready = false;

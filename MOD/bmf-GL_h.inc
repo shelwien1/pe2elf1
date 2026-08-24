@@ -1,10 +1,5 @@
 
 
-static const int GL_max_width = (65535+0) * (1);
-static const int GL_no_symbol = (8192+0) * (1);
-static const int GL_model_table_bytes = (520192+0) * (1);
-static const int GL_bank_mirror_mask = (32752+0) * (1);
-static const int GL_p2_row_pad = (234+0) * (1);
 static const int GL_weight_min_neg = (64+0) * (1);
 static const int GL_weight_max = (191+0) * (1);
 static const int GL_p2_freq_rescale_total = (29696+0) * (1);

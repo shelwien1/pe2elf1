@@ -3,8 +3,6 @@
 static const int CD_weight_shift = (7+0) * (1);
 static const int CD_weight_round = (40+0) * (1);
 static const int CD_weight_round3 = (64+0) * (1);
-static const int CD_weight_bits = (8+0) * (1);
-static const int CD_weight_bias = (64+0) * (1);
 static const int CD_fit_ridge_den = (10+0) * (1);
 static const int CD_dc_window_lo = (4+0) * (1);
 static const int CD_dc_window_hi = (1024+0) * (1);

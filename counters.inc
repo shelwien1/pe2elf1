@@ -1,8 +1,15 @@
 // counters.inc -- the adaptive counters: CounterNode, BitCtr, and the context mixers
 // Included from bmf.cpp; not a standalone translation unit.
 
+// The seven-way code's fold: codes below the split stand for themselves, and
+// the rest fold in pairs onto the top two slots.  Both numbers describe that
+// shape rather than trading anything off against it, so they are literals here
+// and not tunable parameters.
+const int32_t kSlotSplit = 5;
+const int32_t kSlotTop = 6;
+
 int32_t sym_slot(int32_t code) {
-  return code<CN_slot_split ? code : CN_slot_top-(code&1);
+  return code<kSlotSplit ? code : kSlotTop-(code&1);
 }
 
 struct CounterNode {
@@ -85,14 +92,14 @@ struct CounterNode {
     const int32_t result = total+CN_bump;
     total = result;
     slot = cur-c;
-    if( slot>=CN_slot_split ) {
+    if( slot>=kSlotSplit ) {
       uint16_t*const strip = cx[0].model_strip(MakeStrip((uint32_t)ctx>>8, (uint32_t)slot&1u,
                                                         2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+CN_escape_bias,
                                                         (uint32_t)ctx&63u));
       if constexpr( f_DEC )
         slot += 2*cx[0].decode_symbol_tree(strip);
       else
-        cx[0].encode_symbol_tree(strip, (sym-CN_slot_split)>>1);
+        cx[0].encode_symbol_tree(strip, (sym-kSlotSplit)>>1);
     }
     return slot;
   }
