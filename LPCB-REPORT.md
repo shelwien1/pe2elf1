@@ -6,11 +6,11 @@ NASA/ESA frames, plus 62 camera photographs from four bodies
 
 **Standings.**
 
-| | bytes | bpp (corpus) |
+| | bytes | vs gralic |
 |---|---:|---:|
-| gralic 1.1 | 971 986 179 | |
-| BMF (`claude/bmf-codec-build-test-nghv6u` @ `706fa6f`) | 997 191 732 | |
-| **gap** | **+25 205 553** | **+2.593 %** |
+| gralic 1.1 | 971 986 179 | — |
+| BMF (`claude/bmf-codec-build-test-nghv6u` @ `706fa6f`) | 997 191 732 | +25 205 553 (**+2.593 %**) |
+| BMF + `signfix.patch` (this branch) | **984 132 352** | +12 146 173 (**+1.250 %**) |
 
 Everything below was produced by running the codec. The build reproduces the reported
 sizes exactly (`PIA13833` → 1 068 248 bytes, matching `lpcbs.txt` to the byte), so the
