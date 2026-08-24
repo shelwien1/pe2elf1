@@ -204,10 +204,10 @@ these sizes to the byte.
 
 Cost: one interpolated table lookup and update per non-zero residual (61 % of samples) — the
 same per-symbol cost as the zero-decision map that already ships — plus 16.9 KB of table.
-Decode measured at **+4 % to +13 %** over four paired runs on a loaded machine; the numbers
-are noisy but the ceiling is set by the work added, and IMPROVEMENTS.md measured the
-*existing* zero-decision map at 3.5 % of decode. Either way this is far inside the 10×
-budget §0 of IMPROVEMENTS.md sets.
+Decode on the full 10 Mpx `olympus_xz1_16`, three paired runs on a quiet machine:
+**+2.0 %, −8.3 %, +3.8 %** — i.e. inside the noise, and bounded above by the work added
+(IMPROVEMENTS.md measured the *existing* zero-decision map at 3.5 % of decode). Nowhere near
+the 10× budget §0 of IMPROVEMENTS.md sets.
 
 Context-shape sweep for the sign map (1024² crops, 11 files):
 
@@ -484,21 +484,29 @@ that regime. Gating the read-out or the anneal on activity class is the obvious 
 ## 7. The 2 MB regression: one commit, and why nothing caught it
 
 Building `49a0a08` (the commit that *adds* IMPROVEMENTS.md, i.e. before any of the work it
-proposed landed) and comparing against `706fa6f` on 1024² crops:
+proposed landed) and comparing against `706fa6f` over all 107 crops:
 
-| group | n | HEAD vs 49a0a08 |
-|---|---:|---:|
-| NASA (PIA+STA) | 45 | −0.006 % |
-| canon_1100d | 11 | **+0.127 %** |
-| fujifilm_x100 | 9 | **+0.137 %** |
+| group | n | 49a0a08 | HEAD | Δ |
+|---|---:|---:|---:|---:|
+| fujifilm_x100 | 12 | 9 897 932 | 9 910 624 | **+0.128 %** |
+| canon_1100d | 11 | 10 139 036 | 10 151 928 | **+0.127 %** |
+| sony_a55 | 12 | 12 697 108 | 12 712 196 | +0.119 % |
+| olympus_xz1 | 27 | 30 061 596 | 30 088 464 | +0.089 % |
+| STA | 20 | 15 873 296 | 15 886 304 | +0.082 % |
+| PIA | 25 | 14 889 584 | 14 874 720 | −0.100 % |
+| **photographs** | **62** | 62 795 672 | 62 863 212 | **+0.108 %** |
+| all | 107 | 93 558 552 | 93 624 236 | +0.070 % |
 
-HEAD is larger on 46 of the 65 crops measured. Same direction, same class as the 2 MB you
-measured on the full corpus.
+HEAD is larger on **88 of 107** crops, smaller on 19, identical on none. Projected to full
+size that is **+0.96 MB**; crops under-state map effects by roughly 1.9× here (fix A is
+−1.10 % on crops and −2.12 % at full size on the same files), which puts the true figure
+around 1.8 MB — consistent with the ~2 MB you measured.
 
 ### Which commit
 
 25 revisions between `49a0a08` and HEAD were built and run over three photographic crops
-(canon_1100d_02 + fujifilm_x100_03 + olympus_xz1_16, 2 618 104 bytes at the base):
+(canon_1100d_02 + fujifilm_x100_03 + olympus_xz1_16, 2 618 104 bytes at the base — a figure
+that an independently rebuilt `49a0a08` in a separate tree reproduces to the byte):
 
 | revision | | total | Δ |
 |---|---|---:|---:|
@@ -678,3 +686,17 @@ git apply ../signfix.patch && ./gc.sh
 `crop.py` builds the 1024² validation corpus; `bench.sh` runs a binary over it.
 Bit accounting is a 40-line patch to `rangecoder.inc` (`−log2 p` per call site, keyed by a
 scoped `bmf_site`); it does not change the coded stream.
+
+---
+
+## Files in this branch
+
+| file | what |
+|---|---|
+| `LPCB-REPORT.md` | this document |
+| `signfix.patch` | fix A, against `alt_p2.inc` at `706fa6f` of `claude/bmf-codec-build-test-nghv6u`; applies cleanly to a pristine checkout |
+| `crop.py` | builds the 1024² validation corpus from the LPCB BMPs |
+| `bench.sh` | runs a `bmf` binary over that corpus and prints `<name> <bytes>` |
+| `lpcb.csv` | per-file join of gralic/BMF sizes, the bmgstat statistics and the `-v` choices |
+| `crop-results.csv` | every number behind §3 and §7: per file, gralic and BMF at full size, and the crop at `49a0a08`, at HEAD, and at HEAD + fix A |
+| `bisect-results.txt` | the 25-revision bisect, `<sha> <bytes over three photographic crops>` |
