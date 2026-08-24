@@ -166,6 +166,19 @@ Volume sizing `counters[]` a runtime value, which is a variable-length array in
 a struct, which does not compile. A line meant to be frozen belongs in its own
 `Const 1` section.
 
+**`-` is not the way to freeze a knob; `!` is.** The two prefixes look
+interchangeable and are not. `-` toggles `Const`, which decides whether the
+value is a literal or a live `mapping` object -- so it changes what the shipping
+build *is*, and per the paragraph above it changes it the wrong way. `!` toggles
+`Debug`, which decides only whether the descriptor string starts with `!MAP!`;
+the object built is identical and the value compiles in exactly as written, so
+the coded stream cannot move. Freezing is a statement about the optimizer's
+search space, so `!` is the one that means it. An outside profile arrived with
+eight quantiser ladders carrying `-` where `!` was meant: the shipping build
+came back carrying eight live mapping objects and 91 KB of extra binary, coding
+identically but no longer folded. Converting them to `!` left every stream
+byte-for-byte unchanged, which is the check that tells the two apart.
+
 **A folded comparison uses its operand's type.** A threshold mapping converts
 its argument to `int`; the comparisons the shipping build folds it into use
 whatever the parameter was declared as. One builder took its quantiser inputs

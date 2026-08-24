@@ -29,7 +29,7 @@ uint32_t MakeP2Ctx( uint32_t x ) {
   int32_t P2Ctx;
 
   P2Ctx = 0;
-  P2Ctx = P2Ctx*16 + QZ_qc[__min(260,__max(0,x-(1-1)))];
+  P2Ctx = P2Ctx*31 + QZ_qc[__min(260,__max(0,x-(1-1)))];
   return (uint32_t)P2Ctx;
 }
 
@@ -37,6 +37,6 @@ uint32_t MakeP2Len( uint32_t x ) {
   int32_t P2Len;
 
   P2Len = 0;
-  P2Len = P2Len*16 + QZ_qn[__min(121,__max(0,x-(1-1)))];
+  P2Len = P2Len*10 + QZ_qn[__min(121,__max(0,x-(1-1)))];
   return (uint32_t)P2Len;
 }
