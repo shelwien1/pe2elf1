@@ -38,7 +38,14 @@ while args and args[0].startswith('--'):
         args = args[2:]
     else:
         sys.exit('unknown option %s' % args[0])
-images = args or ['testfiles/t1.bmp', 'testfiles/t8p.bmp']
+# The default set has to reach every coding path a parameter can sit in, not
+# just the fast ones.  t1 and t8p are a 1-bit and an 8-bit palette image, and
+# neither is multi-plane -- so code_plane_descs takes its `nrefs<=1` early
+# return and the cross-plane descriptor fields are never written.  A profile
+# that set CD_weight_bits to 0 therefore swept clean here while corrupting
+# every multi-plane image in the corpus.  t24 is the cheapest image in the
+# tree that codes plane references, and it is in the list for that reason.
+images = args or ['testfiles/t1.bmp', 'testfiles/t8p.bmp', 'testfiles/t24.bmp']
 
 data = bytearray(open(exe, 'rb').read())
 maps = []

@@ -4,23 +4,41 @@ Debug 1
 
 # ---------------------------------------------------------------------
 # Codec-level decisions: the numbers that pick a representation rather
-# than code a pixel.  They never appear on the wire, but they decide what
-# does, so moving one moves the output.
+# than code a pixel.  Almost none of them appear on the wire, but they
+# decide what does, so moving one moves the output.  The two that *are*
+# wire format are frozen below and say so.
 # ---------------------------------------------------------------------
 
 # The cross-plane blend weight scale.  weight_shift and weight_scale are
 # one number in two forms -- the consumer derives the scale from the shift
 # so they cannot drift -- and weight_round/weight_round3 are the rounding
-# offsets applied
-# before the shift.  weight_bias and weight_bits are the wire field the
-# fitted weights travel in.
+# offsets applied before the shift.
 Const 0
 
 Number weight_shift,     1,0!111
 Number weight_round,     1,0!101000
 Number weight_round3,    1,0!1000000
+
+# weight_bits and weight_bias are the wire field the fitted weights travel
+# in: code_plane_descs writes weight+bias as a weight_bits-wide field and
+# the decoder reads the same width back.  That makes them format, not
+# tuning.  A wider field only wastes header bits; a narrower one truncates
+# the weight *and* shortens the header, so the decoder reads the next field
+# from the wrong offset and the bitstream desynchronises -- weight_bits 8
+# -> 0 corrupts every multi-plane image and makes x_ep fail outright.
+# There is no compression gradient here for an optimizer to climb, so the
+# declaration takes them out of the search space rather than relying on a
+# clamp at the point of use.
+#
+# Const 1 rather than a leading "-": "-" toggles Const, so a "-" line in a
+# Const 0 section goes *live* under ./mk.sh release, which is the opposite
+# of frozen (IDX-NOTES.md sec.5).
+Const 1
+
 Number weight_bits,      1,0!1000
 Number weight_bias,      1,0!1000000
+
+Const 0
 
 # The least-squares fit's ridge term, as the denominator of a unit
 # fraction.  A ridge of 0.1 is not a dyadic rational, so it cannot go in
