@@ -18,11 +18,13 @@ numbers in `bmfv/` and `lpcbs.txt` and the numbers measured here are the same co
 
 **Three headline results, all from running the codec rather than reading it.**
 
-1. **A fix that is written and measured.** alt‑P2 throws away the sub‑pixel remainder of its
-   own prediction (`pred = (run4+7)>>4`) and then spends a quarter of the corpus coding a
-   residual sign at 0.89–0.97 bits. Feeding those four bits back gives **−2.12 %** on
-   full-size photographs, one per camera, taking that group from 1.0 % behind gralic to
-   1.1 % ahead. `signfix.patch`, one file, lossless, decode unchanged. §4.
+1. **A fix that is written, and measured on every file in the corpus.** alt‑P2 throws away
+   the sub‑pixel remainder of its own prediction (`pred = (run4+7)>>4`) and then spends a
+   quarter of the corpus coding a residual sign at 0.89–0.97 bits. Feeding those four bits
+   back is worth **13.06 MB — the corpus goes 997 191 732 → 984 132 352, and the gap to
+   gralic +2.593 % → +1.250 %.** BMF now wins 43 of 107 files instead of 24, and beats gralic
+   outright on the STA and canon groups. 153 lines in one file, lossless, decode unchanged.
+   §4.
 2. **A second fix, measured at full size by an independent line of work.** alt‑P1 and
    alt‑P2 never renumber a sparse value set; the slow model does. Nine NASA frames have
    comb histograms and carry +9.0 MB. Renumbering recovers **5.37 MB** measured on all six
@@ -39,10 +41,12 @@ The 2 MB regression has a single cause, isolated by a 25-revision bisect: commit
 synthetic image and a **net loss on every real photograph**. Fix A supersedes it — same
 machinery, right context axis. §9.
 
-Numbers in this report are labelled by how they were obtained. **Full-size** means a whole
-LPCB file encoded end to end; **crop** means a 1024² or 2048² centre window. Crops are not
-reliable: of four crop-derived predictions for fix B, one undershot, one overshot by 2.5×,
-one was close and **one had the wrong sign**.
+Numbers are labelled by how they were obtained. **Full-size** means a whole LPCB file encoded
+end to end; **crop** means a 1024² or 2048² centre window. Crops are a screen, not a source of
+figures: of four crop-derived predictions for fix B, one undershot, one overshot by 2.5×, one
+was close and **one had the wrong sign**; for fix A the 107-crop benchmark said −1.095 % where
+the true corpus answer is −1.310 %. Fixes A and B, and the regression bisect's baseline, are
+all full-size.
 
 ---
 
@@ -284,40 +288,34 @@ fraction, not the extra stage.
 On 5 crops (3 photographs + the 2 largest comb-histogram NASA frames), against HEAD's
 4 482 680 bytes: sign map alone 4 426 688 (−1.249 %), **both 4 423 008 (−1.331 %)**.
 
-**Full-size LPCB files, byte-measured, one per camera:**
+**Every file in the corpus, encoded end to end.** Not a projection, not a crop:
 
-| file | gralic | BMF HEAD | BMF + fix A | vs HEAD | vs gralic |
-|---|---:|---:|---:|---:|---:|
-| canon_1100d_02 | 10 321 388 | 10 240 716 | 10 103 652 | −1.338 % | **−2.110 %** |
-| fujifilm_x100_03 | 7 382 712 | 7 401 244 | 7 150 488 | −3.388 % | **−3.146 %** |
-| olympus_xz1_16 | 7 364 246 | 7 621 760 | 7 490 140 | −1.727 % | +1.710 % |
-| sony_a55_06 | 11 077 283 | 11 245 828 | 10 990 444 | −2.271 % | **−0.784 %** |
-| **total** | 36 145 629 | 36 509 548 | **35 734 724** | **−2.122 %** | **−1.137 %** (was +1.007 %) |
-| STA13453 | 9 262 192 | 8 758 720 | 8 196 244 | −6.421 % | −11.51 % |
+| group | n | gralic | BMF HEAD | BMF + fix A | vs HEAD | HEAD vs gralic | **+fix A vs gralic** |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| STA | 20 | 215 452 127 | 219 869 144 | 215 123 376 | **−2.158 %** | +2.050 % | **−0.153 %** |
+| fujifilm_x100 | 12 | 107 541 044 | 110 379 216 | 108 025 808 | −2.132 % | +2.639 % | +0.451 % |
+| canon_1100d | 11 | 112 639 020 | 113 998 788 | 112 479 188 | −1.333 % | +1.207 % | **−0.142 %** |
+| sony_a55 | 12 | 184 498 637 | 187 804 432 | 185 926 516 | −1.000 % | +1.792 % | +0.774 % |
+| olympus_xz1 | 27 | 275 904 889 | 284 288 580 | 282 225 920 | −0.726 % | +3.039 % | +2.291 % |
+| PIA | 25 | 75 950 462 | 80 851 572 | 80 351 544 | −0.618 % | +6.453 % | +5.795 % |
+| **all** | **107** | **971 986 179** | **997 191 732** | **984 132 352** | **−1.310 %** | **+2.593 %** | **+1.250 %** |
 
-The group goes from 1.0 % **behind** gralic to 1.1 % **ahead**, and three of the four files
-now beat gralic outright.
+**13 059 380 bytes.** The corpus gap halves, from +2.593 % to +1.250 %; the photographs go
+from +2.334 % to +1.186 %; BMF now wins **43 of 107 files instead of 24**, and beats gralic
+outright on the STA and canon groups. Smaller on 95 files, larger on 7, identical on 5. The
+worst regression in the corpus is **sony_a55_11 at +18 372 bytes (+0.059 %)**, then
+olympus_xz1_21 +0.013 %; nothing else exceeds +0.05 %.
 
-**All 107 files, 1024² crops** (sign map only — the weaker of the two halves):
+The group ordering is itself a result, and not the one I expected. The fix pays *least* on
+olympus (−0.726 %), which is the group with the largest deficit (+3.04 %) and the highest bit
+rate (8.29 bpp mean); it pays most on the low-rate groups. That is the same signal as gralic's
+own noise-versus-smoothing probe (§2): **the sub-pixel phase carries information in proportion
+to how well the pixel was predicted**, so it recovers the least exactly where the residuals
+are largest. Fix A does not fix olympus, and nothing in this report does.
 
-| group | n | HEAD | + fix A | Δ |
-|---|---:|---:|---:|---:|
-| STA | 20 | 15 886 304 | 15 538 572 | **−2.189 %** |
-| fujifilm_x100 | 12 | 9 910 624 | 9 734 304 | −1.779 % |
-| canon_1100d | 11 | 10 151 928 | 10 030 236 | −1.199 % |
-| sony_a55 | 12 | 12 712 196 | 12 599 632 | −0.885 % |
-| olympus_xz1 | 27 | 30 088 464 | 29 885 336 | −0.675 % |
-| PIA | 25 | 14 874 720 | 14 810 680 | −0.431 % |
-| **all** | **107** | 93 624 236 | 92 598 760 | **−1.095 %** |
-
-Applying each file's crop ratio to its full size projects **−11.6 MB**, taking the corpus
-from +2.593 % to **+1.403 %** against gralic. That is a floor on three counts: the crops
-under-state (the same four files give −2.12 % at full size against −1.35 % on their crops),
-this run used the sign map alone, and the crop sample is a 1 Mpx window of a 10–46 Mpx
-image. The honest range is **12–16 MB**.
-
-The fix costs bytes on **5 of 107** crops; the worst is sony_a55_11 at +1 244 bytes
-(+0.06 %), then STA13456 +504, PIA13812 +100, olympus_xz1_21 +92, olympus_xz1_20 +80.
+For the record, the crop benchmark predicted −1.095 % where the true answer is −1.310 %,
+and got the group *ordering* right except for swapping fuji and STA. As a cheap screen it
+works; as a source of numbers to quote it does not.
 
 Verification: lossless round-trip on all ten `testfiles/` images and on the LPCB crops
 tested. `signfix.patch` applies cleanly to a pristine `706fa6f` checkout and reproduces
@@ -927,7 +925,7 @@ fix B's remaining segment-B files overlap slightly with fix A's NASA gains.
 
 | # | change | expected | effort | speed | risk | evidence |
 |---|---|---:|---|---|---|---|
-| **1** | **Fix A** — sub-pixel phase on alt‑P2's sign and zero maps (`signfix.patch`) | see below | done: 153-line diff, one file | decode within noise | very low; 5 of 107 crops lose, worst +0.06 % | **measured**, full size ×6 + all 107 crops |
+| **1** | **Fix A** — sub-pixel phase on alt‑P2's sign and zero maps (`signfix.patch`) | **13.06 MB** | done: 153-line diff, one file | decode within noise | very low; 7 of 107 files lose, worst +0.059 % | **measured, all 107 files at full size** |
 | **2** | **Fix B** — alphabet renumbering for the alt models, **as a gated trial** | **5.4–6.0 MB** | ~100 lines, one bitstream field ≤96 B/file; `reduce_narrow_alphabet` is the precedent | +5–8 % encode, <1 % decode | low, *given the gate* — without it PIA13915 loses 3.24 % | **measured at full size on all six candidates** |
 | **3** | Delete the `codec.inc:1749` `slow` suppression (§8.6b) | small alone; **a precondition for 2** | one line | +encode | none | 189/321 slots; it is what breaks PIA13915 |
 | **4** | Put a bit-rate-spanning LPCB corpus into `opt.lst` and run `IDX/opt.pl` for the first time | ≈1 MB shown from 3 of 518 parameters, most of it inside fix A; rest unknown | low engineer-hours, ~11 h machine after freezing the ladders | free | medium — `AP_p_ceil` gained 4 bytes on four files and costs +7.6 % elsewhere | §9 |
@@ -953,11 +951,16 @@ which renumbering already closes for a fiftieth of the effort — while **on the
 that carry 63 % of the deficit, gralic beats PAQ8im**. Whatever BMF is missing on olympus is
 not paq.
 
-**An honest total.** The demonstrated, full-size-measured fixes are items 1 and 2. Beyond
-them the attributed mechanisms come to roughly 1.5–2.5 MB, and **the largest single line in a
-truthful budget is still "unattributed", and it is the camera photographs**: of segment A's
-15.9 MB, §6 places 11–13 MB in the cross-plane channel, where no fix has been built or
-costed.
+**An honest total.** Items 1 and 2 are demonstrated at full size and come to **≈18.5 MB of
+the 25.2 MB** — fix A's 13.06 MB measured on all 107 files, plus fix B's 5.37 MB measured on
+all six candidates, less a small overlap on the comb files that fix A also improves. Beyond
+them the attributed mechanisms come to roughly 1.5–2.5 MB.
+
+What is left is **olympus**, and it is not small: +2.29 % after fix A, on the group carrying
+the largest share of the remaining deficit. It is the highest-rate group, which is exactly
+where fix A's mechanism has least to give, and §6 puts most of its loss in the cross-plane
+channel, where nothing has been built or costed. Item 8 is aimed at it and is the honest
+answer to "what next".
 
 ---
 
@@ -1059,9 +1062,21 @@ git clone -b claude/bmf-codec-build-test-nghv6u <repo> bmf && cd bmf && ./gc.sh
 git apply ../signfix.patch && ./gc.sh
 ```
 
-`crop.py` builds the 1024² validation corpus; `bench.sh` runs a binary over it.
-Bit accounting is a 40-line patch to `rangecoder.inc` (`−log2 p` per call site, keyed by a
-scoped `bmf_site`); it does not change the coded stream.
+```
+# the validation corpus this report argues for
+for f in LPCB-bmp/*.bmp; do python3 crop.py "$f" crops/$(basename $f) 1024 1024; done
+./bench.sh ./bmf head           # 107 encodes, ~20 min on 4 cores
+
+# the per-plane decomposition of section 6
+python3 plane.py crops/olympus_xz1_16.bmp p1.bmp 1     # 8-bit grey, one component
+
+# gralic, for comparison (Win32 demo binary, runs under wine)
+/usr/lib/wine/wine Gralic111d.exe c out.gra in.ppm
+```
+
+Bit accounting is a 40-line patch to `rangecoder.inc` — accumulate `−log2 p` in `encode` and
+`encode_bit` into a bucket chosen by a scoped `bmf_site`, reset on `enc_init`, dump on
+`flush`. It does not change the coded stream, which is the check that it is correct.
 
 ---
 
@@ -1072,7 +1087,8 @@ scoped `bmf_site`); it does not change the coded stream.
 | `LPCB-REPORT.md` | this document |
 | `signfix.patch` | fix A, against `alt_p2.inc` at `706fa6f` of `claude/bmf-codec-build-test-nghv6u`; applies cleanly to a pristine checkout |
 | `crop.py` | builds the 1024² validation corpus from the LPCB BMPs |
+| `plane.py` | extracts one component of a 24-bit BMP as an 8-bit greyscale BMP (§6) |
 | `bench.sh` | runs a `bmf` binary over that corpus and prints `<name> <bytes>` |
 | `lpcb.csv` | per-file join of gralic/BMF sizes, the bmgstat statistics and the `-v` choices |
-| `crop-results.csv` | every number behind §4 and §9: per file, gralic and BMF at full size, and the crop at `49a0a08`, at HEAD, and at HEAD + fix A |
+| `results.csv` | every number behind §4 and §9, per file: gralic, BMF HEAD and **BMF + fix A at full size**, plus the 1024² crop at `49a0a08`, at HEAD and with fix A |
 | `bisect-results.txt` | the 25-revision bisect, `<sha> <bytes over three photographic crops>` |
