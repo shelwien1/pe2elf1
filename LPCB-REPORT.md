@@ -207,9 +207,16 @@ split like this — full images, final encode, not trials:
 | magnitude low bits | 1.7 % | 2.7 % | 0.9 % | 1.3 % | binary tree |
 
 Cost per symbol of the sign bit: **0.9572 / 0.9694 / 0.9370 / 0.8867 bits**. A quarter of
-everything BMF spends on this corpus goes on a decision it is coding at 89–97 % of a fair
-coin — and it is the one decision in the codec that received none of the modern machinery.
-IMPROVEMENTS.md §3's APM went on the *zero* decision only; §2's mixer likewise.
+everything BMF spends on this corpus goes on a decision it codes at 89–97 % of a fair coin,
+out of a raw pair of counts. Add the magnitude level and **about half the corpus is coded by
+the two decisions that got none of the modern machinery**: IMPROVEMENTS.md §3's APM went on
+the *zero* decision only, and §2's mixer likewise. Fix A is what happens when the sign gets
+the same treatment; the magnitude is still waiting (§10, item 7 territory).
+
+Both stages sit *downstream* of the prediction, which is worth keeping in view: §2's
+noise-versus-smoothing probe says BMF's deficit is in the **low-residual** regime, so a
+better coder for large residuals was never going to be the answer. Fix A works because the
+sub-pixel phase is a statement about the *prediction*, not about the residual.
 
 ---
 
@@ -477,6 +484,12 @@ within 0.3 % of gralic on B and R; on the same pixels as colour the gap is 1.1 %
 
 ## 7. Where a mixer would and would not help
 
+Mixing the models instead of choosing one is IMPROVEMENTS.md §2 and it is the recommendation
+every line of this investigation converged on independently. It is also the one whose size
+is most often overstated, including by me earlier in this report, so it gets measured twice
+here: once the easy way, which is wrong, and once properly.
+
+### The easy way, and why it flatters the proposal
 
 Mining all 107 `-v` transcripts (321 per-plane searches on the adopted representation):
 
@@ -539,9 +552,16 @@ Three things follow. The models' errors *are* substantially independent — corr
 0.30–0.80 and a 15 % oracle ceiling — so IMPROVEMENTS.md §2's claim is right. Its *evidence*
 (trial margins) does not support it, and its *estimate* of "5–15 % overall" is high by
 roughly an order of magnitude for the mechanism proposed: a defensible band for a real
-context-conditioned logistic mixer is **2–5 %**, i.e. 30–80 % of the gralic gap on cameras.
-And **region-adaptive model selection is refuted outright at ≤ 0.56 %** — do not build
-tiling or block-level switching.
+context-conditioned logistic mixer is **2–5 %**, i.e. 30–80 % of the gralic gap on cameras —
+and even that band is a projection, since the fixed-weight pools use post-hoc fitted weights
+on 1024² crops of 13 files and require running both models on both sides. And
+**region-adaptive model selection is refuted outright at ≤ 0.56 %** — do not build tiling or
+block-level switching.
+
+Set against §6, this whole avenue is also aimed at the wrong half of the problem: the pooling
+gains are gains on *single-plane* modelling, which is where BMF is already at parity with
+gralic. A mixer would help the NASA files (`refs+p1`+`refs+p2` is −1.88 % there) more than
+the cameras that carry 63 % of the deficit.
 
 The cheap first step is not the full mixer. It is a **per-plane fixed-weight linear pool of
 alt‑P1 and alt‑P2**, the two models `search_planes` already trial-encodes on nearly every
