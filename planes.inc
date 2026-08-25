@@ -221,6 +221,77 @@ int32_t ycocg_half(uint32_t v) {
   return (int32_t)(int8_t)(uint8_t)v>>1;
 }
 
+// Value-set renumbering.  Nine LPCB frames have been through a tone curve or a
+// quantiser and use 74-248 of the 256 levels, spaced with gaps of 2 and 3 --
+// every residual is then a multiple of the gap, and alt-P1 and alt-P2 spend a
+// coding decision per sample on a low bit that never varies.  The slow model
+// already renumbers (reduce_alphabet), but it is a much weaker coder, so the
+// search can have renumbering or good modelling and never both.  Doing it here,
+// before the plane search, gives the strong model a dense alphabet.
+//
+// Per plane: a 256-bit used-value mask, and the map is "rank among used values"
+// -- monotone, so the neighbour differences the predictors work on keep their
+// order.  The mask is the whole side information, 32 bytes a plane, and it goes
+// out with the plane descriptors.
+//
+// Whether it pays is not decidable from the histogram: PIA13915 uses 248 levels
+// of 256 and renumbering costs it 2.29%, while PIA13812 uses 120 and gains
+// 21.9%.  So this is a trial like the transpose and the YCoCg lift, not a
+// heuristic -- see search_filter.
+void remap_masks(const BmfImage* img, int32_t planes, uint8_t* masks) {
+  memset(masks, 0, 32u*(uint32_t)planes);
+  const uint8_t* p = img[0].pixels;
+  const uint8_t*const end = p+img[0].data_size;
+  for(; p+planes<=end; p += planes )
+    for( int32_t k = 0; k<planes; ++k )
+      masks[32*k+(p[k]>>3)] |= (uint8_t)(1u<<(p[k]&7));
+}
+
+// How many values each plane actually uses.  A plane at 256 has nothing to gain
+// and is left alone, which is what makes the gate free on the 97 files of the
+// corpus that have no comb at all.
+int32_t remap_used(const uint8_t* mask) {
+  int32_t n = 0;
+  for( int32_t i = 0; i<32; ++i )
+    for( int32_t b = 0; b<8; ++b )
+      n += (mask[i]>>b)&1;
+  return n;
+}
+
+// value -> rank, and rank -> value, built from the mask alone so both sides
+// derive the identical map from the identical 32 bytes.
+void remap_build(const uint8_t* mask, uint8_t* fwd, uint8_t* inv) {
+  int32_t n = 0;
+  for( int32_t v = 0; v<256; ++v )
+    if( (mask[v>>3]>>(v&7))&1 ) {
+      fwd[v] = (uint8_t)n;
+      inv[n] = (uint8_t)v;
+      ++n;
+    }
+  // Values the image never uses still need a defined image, or a decoder fed a
+  // corrupt stream walks off inv[].  They fold onto the last used rank.
+  for( int32_t v = 0, last = 0; v<256; ++v ) {
+    if( (mask[v>>3]>>(v&7))&1 ) last = fwd[v];
+    else fwd[v] = (uint8_t)last;
+  }
+  for( int32_t k = n; k<256; ++k )
+    inv[k] = inv[n ? n-1 : 0];
+}
+
+void remap_apply(BmfImage* img, int32_t planes, const uint8_t* masks, int32_t inverse) {
+  uint8_t map[4][256];
+  for( int32_t k = 0; k<planes; ++k ) {
+    uint8_t fwd[256], inv[256];
+    remap_build(masks+32*k, fwd, inv);
+    memcpy(map[k], inverse ? inv : fwd, 256);
+  }
+  uint8_t* p = img[0].pixels;
+  const uint8_t*const end = p+img[0].data_size;
+  for(; p+planes<=end; p += planes )
+    for( int32_t k = 0; k<planes; ++k )
+      p[k] = map[k][p[k]];
+}
+
 void ycocg_forward(BmfImage* img, int32_t planes) {
   uint8_t* p = img[0].pixels;
   const uint8_t*const end = p+img[0].data_size;

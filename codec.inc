@@ -727,6 +727,11 @@ struct BMFCodec : BMFState {
   // geometry does not compose back into the identity -- a transpose and a
   // mirror do not commute.
   void restore_representation(BmfImage* p_i) {
+    if( p_i[0]._pad8[0]&pad_remap ) {
+      remap_apply(p_i, plane_count, remap_mask, 1);
+      p_i[0]._pad8[0] &= (uint8_t)~pad_remap;
+      remap_active = 0;
+    }
     if( p_i[0]._pad8[0]&pad_ycocg ) {
       ycocg_inverse(p_i, plane_count);
       p_i[0]._pad8[0] &= (uint8_t)~pad_ycocg;
@@ -773,7 +778,12 @@ struct BMFCodec : BMFState {
               (uint32_t)coded_bytes<p_i[0].data_size ? "shipping the coded member" : "SHIPPING RAW, the coding lost");
       if( (uint32_t)coded_bytes<p_i[0].data_size ) {
         const uint8_t ok = write_member_head(&hdr, extra_blk, &arc_in[0].io);
-        int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok;
+        // The renumbering masks ride between the head and the coded body, the
+        // way the palette rides after it: 32 bytes a plane of raw bitmap, and
+        // nothing in the stream depends on them but the final expansion.
+        const uint8_t ok_mask = remap_active
+            ? arc_in[0].io.write_exact(remap_mask, 32u*(size_t)plane_count) : 1;
+        int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok&ok_mask;
         free(stream.buf);
         if( ok_all&&(p_i[0].depth&depth_palette)!=0 )
           write_palette(&arc_in[0].io, &p_i[0].pixels[p_i[0].data_size], pal_bytes, p_i[0].depth);
@@ -901,6 +911,13 @@ struct BMFCodec : BMFState {
       exit(3);
     }
     desc_slow_mode = 1;
+    // The masks sit between the head and the body, so they come off the stream
+    // before it, and the map is rebuilt from the same 32 bytes a plane the
+    // encoder wrote.
+    remap_active = (hdr._pad8[0]&pad_remap)!=0;
+    if( remap_active
+        &&io[0].read(remap_mask, 32u*(size_t)plane_count)!=32u*(size_t)plane_count )
+      return false;
     stream.size = hdr.data_size;
     stream.buf = (uint8_t*)bmf_new(hdr.data_size);
     packer_reset();
@@ -1034,6 +1051,8 @@ struct BMFCodec : BMFState {
         return arc_in[0].fail();
       }
     }
+    if( hdr._pad8[0]&pad_remap )
+      remap_apply(img_at, plane_count, remap_mask, 1);
     if( hdr._pad8[0]&pad_ycocg ) {
       if( plane_count<3 ) {
         return arc_in[0].fail();
@@ -1341,6 +1360,49 @@ struct BMFCodec : BMFState {
     int32_t best_bits = ps.bits;
     bmf_log("  whole-image trials (against the per-plane total):\n");
     bmf_log("    %-22s %12.1f bytes  (p1=%d p2=%d refs=%d)\n", "planar", bmf_bytes(ps.bits), ps.n_p1, ps.n_p2, ps.n_refs);
+    // Value-set renumbering, tried before the geometry so that everything after
+    // it searches the dense alphabet.  planes.inc says why it cannot be decided
+    // from the histogram; this is the trial that decides it, and it costs a
+    // pass only on an image that has a comb at all.
+    remap_active = 0;
+    if( plane_count<=4 ) {
+      uint8_t masks[128];
+      remap_masks(img, plane_count, masks);
+      int32_t missing = 0;
+      for( int32_t k = 0; k<plane_count; ++k )
+        missing += 256-remap_used(masks+32*k);
+      if( missing>0 ) {
+        PlaneDesc saved_desc[4];
+        uint32_t saved_cost[4];
+        save_descriptors(saved_desc);
+        for( int32_t k = 0; k<4; ++k )
+          saved_cost[k] = plane_cost[k];
+        remap_apply(tile_img, plane_count, masks, 0);
+        const uint32_t r_est = choose_plane_coding(tile_img);
+        const PlaneSearch pr = search_planes(tile_img, tile_buf, plane_cost);
+        // The masks are side information and the trial has to pay for them,
+        // or a plane missing one value would renumber for a net loss.
+        const int32_t mask_bits = 8*32*plane_count;
+        const bool kept_raw = pr.bits+mask_bits>=best_bits;
+        bmf_log("    %-22s %12.1f bytes  (%d of %d values unused, %d bytes of mask)%s\n",
+                "renumbered", bmf_bytes(pr.bits+mask_bits), missing, 256*plane_count,
+                mask_bits>>3, kept_raw ? "" : "  <<");
+        if( kept_raw ) {
+          remap_apply(tile_img, plane_count, masks, 1);
+          restore_descriptors(saved_desc);
+          for( int32_t k = 0; k<4; ++k )
+            plane_cost[k] = saved_cost[k];
+        } else {
+          best_bits = pr.bits+mask_bits;
+          ps = pr;
+          cur_est = r_est;
+          remap_apply(img, plane_count, masks, 0);
+          img[0]._pad8[0] |= pad_remap;
+          memcpy(remap_mask, masks, 32u*(uint32_t)plane_count);
+          remap_active = 1;
+        }
+      }
+    }
     // Only the transpose.  The mirrors were built and measured here too: they
     // are worth 0.04% of the corpus and cost 60% of encode time, because every
     // orientation needs its own full per-plane search and the decision cannot
@@ -1674,6 +1736,12 @@ struct BMFCodec : BMFState {
   void write_plane_descs() {
     code_plane_descs<0>();
   }
+  // Set while a remapped image is being coded, so code_plane_descs knows to
+  // carry the masks.  It is derived from the header flag on the way in and from
+  // the search's decision on the way out.
+  int32_t remap_active = 0;
+  uint8_t remap_mask[128];
+
   int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0, int32_t plane_a, int32_t plane_b, int32_t w4, int32_t w8) {
     int32_t hist[1024];
     memset(hist, 0, sizeof hist);

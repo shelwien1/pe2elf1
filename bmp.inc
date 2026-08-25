@@ -26,6 +26,7 @@ enum : uint8_t {
   pad_flip_x = 0x02,
   pad_flip_y = 0x04,
   pad_ctx_packed = 0x08,
+  pad_remap = 0x10,
 };
 
 uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {
