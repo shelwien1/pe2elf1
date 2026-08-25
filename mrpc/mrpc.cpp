@@ -22,9 +22,12 @@ typedef unsigned int uint;
 
 // -------------------------------------------------------------
 // BMP.  What the codec wants is a raster and its geometry; what it does
-// not want is to know how a file said so.  Anything that is not a 24 or
-// 32bpp uncompressed raster gets compressed as one undifferentiated
-// blob, which is what the library does with an image-less call.
+// not want is to know how a file said so.  An 8bpp file is one component
+// per pixel and its palette is just more header -- bfOffBits already
+// points past it, so it rides along in the head blob and comes back
+// bit-identical without the codec ever seeing it.  Anything that is not
+// an 8, 24 or 32bpp uncompressed raster gets compressed as one
+// undifferentiated blob, which is what an image-less call does.
 // -------------------------------------------------------------
 static uint get16(const byte* p) {
   return p[0]|(p[1]<<8);
@@ -61,8 +64,8 @@ struct BmpInfo {
     uint comp = get32(d+30);
     if( isz<40||pl!=1||comp!=0 )
       return;
-    if( bpp!=24&&bpp!=32 )
-      return; // RGB / RGBA only
+    if( bpp!=8&&bpp!=24&&bpp!=32 )
+      return; // 8bpp indices, RGB or RGBA
     if( w<=0||h==0 )
       return;
     uint H_ = uint(h<0 ? -h : h), W_ = uint(w);
@@ -221,8 +224,10 @@ static void Usage(const char* argv0) {
          "linear predictor per (class, colour component), and codes the\n"
          "residual with a generalized-Gaussian model picked by the local\n"
          "activity.  Class map, coefficients and quantiser are optimized\n"
-         "against measured code length and transmitted.  Anything that is not\n"
-         "a 24/32bpp raster falls back to order 1.\n",
+         "against measured code length and transmitted.  8bpp files -- grey\n"
+         "or paletted -- are coded as one component, with the palette carried\n"
+         "through as part of the header.  Anything that is not an 8, 24 or\n"
+         "32bpp uncompressed raster falls back to order 1.\n",
          argv0, argv0);
 }
 

@@ -3059,7 +3059,7 @@ struct Codec : MRPCIO {
     out->data = 0;
     out->size = 0;
     if( im&&(!im->data||im->width==0||im->height==0||
-             im->ncomp<3||im->ncomp>MAXC||im->stride<im->width*im->ncomp) )
+             im->ncomp<1||im->ncomp>MAXC||im->stride<im->width*im->ncomp) )
       return MRPC_ERR_ARG;
     if( headlen>0xFFFFFFFFu||taillen>0xFFFFFFFFu )
       return MRPC_ERR_ARG;
@@ -3133,7 +3133,7 @@ struct Codec : MRPCIO {
       st = CodeVar(0);
       // a stream that is not ours, or is truncated, decodes to whatever
       // the models make of zeroes; it does not get to name an allocation
-      if( w==0||h==0||w>(1u<<20)||h>(1u<<20)||ncc<3||ncc>MAXC||
+      if( w==0||h==0||w>(1u<<20)||h>(1u<<20)||ncc<1||ncc>MAXC||
           st<w*ncc||size_t(st)*h>(size_t(1)<<32) )
         return MRPC_ERR_DATA;
     }

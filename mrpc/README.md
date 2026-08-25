@@ -87,6 +87,41 @@ it loads at run time, and no MinGW runtime. Which CRT it holds is exactly why
 allocator that gave it, and across a DLL boundary the caller's `free` may not
 be that one.
 
+### 8bpp, grey and paletted
+
+One component per pixel works and is lossless. The frontend takes an 8bpp BMP
+and hands the index field over as a one-component raster; the palette needs no
+special handling at all, because `bfOffBits` already points past it, so it
+rides along in the head blob and comes back bit-identical without the codec
+ever seeing it. `bmp8.py` makes both kinds out of a 24 or 32bpp file, which is
+where the files below came from.
+
+What the codec does with them is a different question, and the answer depends
+on what the index means. Against `xz -9`, on the raster:
+
+| | mrpc | `xz -9` | |
+| --- | --- | --- | --- |
+| `PIA13882_crop256_gray` 256x256 | **46,382** | 47,384 | mrpc 2% better |
+| `PIA13882_crop256_pal` (256 colours) | 46,885 | **43,580** | xz 7% better |
+| `t24_gray` 320x240 | **55,564** | 59,600 | mrpc 7% better |
+| `t24_pal` (256 colours) | 48,334 | **30,796** | xz 36% better |
+
+A grey index is a luminance: neighbouring pixels have neighbouring values, the
+predictor works, and the codec is ahead. A palette index is a label, and
+neighbouring pixels have neighbouring *labels* only by accident — there is
+nothing for a predictor to find, while the repetition in a label map is exactly
+what an LZ eats. `t24` is graphic art with flat regions, which is the worst
+case for this and the best case for `xz`; the satellite photo is textured, and
+the gap is small.
+
+I thought palette *ordering* was the lever — sort the palette by luma and the
+indices become monotone in brightness — and it is not: re-indexing both files
+that way made mrpc **worse**, 48,581 against 46,885 and 52,525 against 48,334.
+Luma is a poor one-dimensional embedding of a three-dimensional palette, and
+median cut's own order already groups colours that occur together. If paletted
+images matter, the thing to model is the index field as a label map, not the
+palette's order.
+
 ### The stream is self-describing now
 
 It has to be: a library that takes a raster cannot recover the geometry by
@@ -351,3 +386,4 @@ exercised.
 | `Makefile`, `gc.bat` | Linux and Windows builds |
 | `t.sh` | round-trip and reference check, through the command line |
 | `t_lib.c` | the same through the C API, in C — and against `libmrpc.a`, `libmrpc.so` or `mrpc.dll` unchanged |
+| `bmp8.py` | 8bpp grey and paletted BMPs out of a 24/32bpp one, for testing the one-component path |

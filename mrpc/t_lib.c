@@ -6,6 +6,7 @@
 
      * a synthetic raster round-trips through memory, bit for bit,
        including row padding and the head and tail blobs;
+     * so does a one-component one, which is what an 8bpp image is;
      * an image-less call -- what a frontend does with a file it could
        not parse -- round-trips too;
      * a damaged stream is refused rather than believed;
@@ -140,6 +141,31 @@ int main(void) {
     check(rc!=MRPC_OK, "truncated stream is refused");
   }
   mrpc_free(blob.data);
+
+  /* --- one component: an 8bpp image, as a paletted BMP carries it -- */
+  {
+    const unsigned GW = 83, GH = 44, GSTRIDE = (83+3)&~3;
+    unsigned char* g = make_raster(GW, GH, 1, GSTRIDE);
+    mrpc_image gi;
+    memset(&gi, 0, sizeof(gi));
+    gi.width = GW;
+    gi.height = GH;
+    gi.ncomp = 1;
+    gi.stride = GSTRIDE;
+    gi.data = g;
+    rc = mrpc_compress(c, &gi, 0, 0, 0, 0, &blob);
+    check(rc==MRPC_OK, "mrpc_compress, one component");
+    rc = mrpc_decompress(c, blob.data, blob.size, &out, &h2, &t2);
+    check(rc==MRPC_OK&&out.ncomp==1&&out.width==GW&&out.height==GH,
+          "one component comes back as one");
+    check(out.data&&memcmp(out.data, g, (size_t)GSTRIDE*GH)==0,
+          "one-component raster is bit-identical");
+    mrpc_free(out.data);
+    mrpc_free(h2.data);
+    mrpc_free(t2.data);
+    mrpc_free(blob.data);
+    free(g);
+  }
 
   /* --- no image at all: a file the frontend could not parse -------- */
   {

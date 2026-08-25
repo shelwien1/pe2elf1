@@ -65,13 +65,17 @@ extern "C" {
 #define MRPC_MAX_COMP  4  /* RGB and RGBA, in the order the raster has them */
 
 /* An image as the codec sees it: one interleaved raster, `stride` bytes
-   per row, `ncomp` bytes per pixel.  Rows may be padded -- the padding
+   per row, `ncomp` bytes per pixel.  One component is a grey image or a
+   field of palette indices -- the codec predicts whatever the bytes are
+   and codes the residual, which is lossless either way, though indices
+   into an arbitrary palette are labels rather than magnitudes and there
+   is not much for a predictor to find in them.  Rows may be padded -- the padding
    is compressed too, so a raster with row padding round-trips exactly.
    `data` is stride*height bytes and belongs to whoever allocated it;
    mrpc_decompress allocates one and hands it over. */
 typedef struct {
   unsigned       width, height;
-  unsigned       ncomp;  /* 3 or 4 */
+  unsigned       ncomp;  /* 1 (grey or palette indices) to 4 (RGBA) */
   unsigned       stride; /* >= width*ncomp */
   unsigned char* data;
 } mrpc_image;
