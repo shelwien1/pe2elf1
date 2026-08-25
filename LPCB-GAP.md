@@ -303,8 +303,13 @@ every new stream decoded back and compared pixel for pixel:
 | `PIA13812` | 1,294,036 | 1,294,036 | — |
 | `STA13900` | 1,910,720 | 1,910,720 | — |
 | `PIA13785` | 1,855,980 | **1,797,872** | −3.13% |
-| `PIA13882` | 2,714,592 | **2,385,216** | −12.13% |
+| `PIA13882` | 2,714,592 | **2,240,400** | −17.47% |
 | `PIA13915` | 14,421,652 | **14,239,660** | −1.26% |
+
+(`PIA13882`'s figure is the two-tier map *and* the selector fix of the next
+section together; the map alone took it to 2,385,216.)  −714,292 bytes over the
+ten, every stream decoded back and compared pixel for pixel, and no file larger
+than it was.
 
 The seven unchanged files are the point as much as the three that move: the
 incumbent margin means a plane with no light tail in its histogram keeps the
