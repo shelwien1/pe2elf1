@@ -258,6 +258,23 @@ int32_t remap_used(const uint8_t* mask) {
   return n;
 }
 
+// Holes strictly inside the used range -- which is the only thing renumbering
+// can remove.  A plane using a contiguous 230 of 256 levels has none: mapping
+// it to 0..229 just subtracts the minimum, and the predictors work on
+// differences, so that is a no-op they already absorb.  Every olympus_xz1 frame
+// is exactly that shape, so counting distinct values alone would put all 27 of
+// them through a trial that cannot win.
+int32_t remap_holes(const uint8_t* mask) {
+  int32_t lo = -1, hi = -1, n = 0;
+  for( int32_t v = 0; v<256; ++v )
+    if( (mask[v>>3]>>(v&7))&1 ) {
+      if( lo<0 ) lo = v;
+      hi = v;
+      ++n;
+    }
+  return n ? (hi-lo+1)-n : 0;
+}
+
 // value -> rank, and rank -> value, built from the mask alone so both sides
 // derive the identical map from the identical 32 bytes.
 void remap_build(const uint8_t* mask, uint8_t* fwd, uint8_t* inv) {

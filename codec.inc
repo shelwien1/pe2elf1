@@ -1368,10 +1368,10 @@ struct BMFCodec : BMFState {
     if( plane_count<=4 ) {
       uint8_t masks[128];
       remap_masks(img, plane_count, masks);
-      int32_t missing = 0;
+      int32_t holes = 0;
       for( int32_t k = 0; k<plane_count; ++k )
-        missing += 256-remap_used(masks+32*k);
-      if( missing>0 ) {
+        holes += remap_holes(masks+32*k);
+      if( holes>0 ) {
         PlaneDesc saved_desc[4];
         uint32_t saved_cost[4];
         save_descriptors(saved_desc);
@@ -1380,12 +1380,19 @@ struct BMFCodec : BMFState {
         remap_apply(tile_img, plane_count, masks, 0);
         const uint32_t r_est = choose_plane_coding(tile_img);
         const PlaneSearch pr = search_planes(tile_img, tile_buf, plane_cost);
-        // The masks are side information and the trial has to pay for them,
-        // or a plane missing one value would renumber for a net loss.
+        // The masks are side information and the trial has to pay for them, and
+        // then to clear kKeepShift on top like every other representation trial
+        // -- the transpose, the palette order and the colour space all require
+        // a challenger to beat the incumbent by a fraction of its own cost.  A
+        // bare comparison is not enough here for a reason worth stating: on the
+        // files that adopt the joint transform, the trial ledger is not the
+        // stream that ships, so a 64-byte win on the ledger can be a 124-byte
+        // loss in the file.  Every real winner clears this by percent.
         const int32_t mask_bits = 8*32*plane_count;
-        const bool kept_raw = pr.bits+mask_bits>=best_bits;
-        bmf_log("    %-22s %12.1f bytes  (%d of %d values unused, %d bytes of mask)%s\n",
-                "renumbered", bmf_bytes(pr.bits+mask_bits), missing, 256*plane_count,
+        const int32_t r_bits = pr.bits+mask_bits;
+        const bool kept_raw = r_bits+(r_bits>>kKeepShift)>=best_bits;
+        bmf_log("    %-22s %12.1f bytes  (%d interior gap%s, %d bytes of mask)%s\n",
+                "renumbered", bmf_bytes(r_bits), holes, holes==1 ? "" : "s",
                 mask_bits>>3, kept_raw ? "" : "  <<");
         if( kept_raw ) {
           remap_apply(tile_img, plane_count, masks, 1);
@@ -1393,7 +1400,7 @@ struct BMFCodec : BMFState {
           for( int32_t k = 0; k<4; ++k )
             plane_cost[k] = saved_cost[k];
         } else {
-          best_bits = pr.bits+mask_bits;
+          best_bits = r_bits;
           ps = pr;
           cur_est = r_est;
           remap_apply(img, plane_count, masks, 0);
