@@ -449,12 +449,12 @@ static INLINE int DecSP(const SPMod &p) {
 #ifdef MRP_OPENCL
 #include "mrpc_cl.inc"
 #else
-// so that the option parser reads the same in both builds
+// so that the options mean the same in both builds
 struct CLOpts {
-  int use, plat, dev, type, verbose;
+  int use, plat, dev, type, verbose, cache;
 };
 
-static CLOpts g_clopt = {0, -1, -1, 0, 0};
+static CLOpts g_clopt = {0, -1, -1, 0, 0, 0};
 #endif
 
 // -------------------------------------------------------------

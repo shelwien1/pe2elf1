@@ -56,7 +56,7 @@ static long rss_kb(void) {
   FILE* f = fopen("/proc/self/statm", "r");
   if( f ) {
     long pages = 0;
-    if( fscanf(f, "%*ld %ld", &pages)==1 )
+    if( fscanf(f, "%*s %ld", &pages)==1 )
       n = pages*(sysconf(_SC_PAGESIZE)/1024);
     fclose(f);
   }
