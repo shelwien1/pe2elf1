@@ -48,7 +48,27 @@
  * partial final block, which is where a data chunk usually stops.  On wavs3
  * four of the seven regions come out byte-exact and the rest within 45 bytes.
  *
+ * SPEED.  Everything costs decoding: a candidate region is decoded once per
+ * stride, once per code width, and the tool exists to be pointed at files that
+ * may hold no ADPCM at all.  Four things carry it, in the order they were worth
+ * (7.97s -> 1.04s on wavs3, and 0.31s -> 0.14s on 3 MB that holds nothing):
+ *
+ *   * Strides that are exact multiples of a better-confirmed one are dropped
+ *     before anything is decoded -- ba=36 always drags 72, 108 and 144 along,
+ *     and they are the same grid read through too wide a window (try_anchor).
+ *   * Candidates are ranked on 128 KB and only the winner is decoded whole; a
+ *     capped chain length must NOT be allowed to set that limit, or a rejected
+ *     candidate decodes to end of file (chain_span).
+ *   * The NLMS predictor, which is 70% of the decode, runs on 16-bit lanes:
+ *     madd_epi16 for the dot product, mulhrs_epi16 plus a saturating add for
+ *     the weight update, 16 taps per AVX2 register (see NLMS).  Scalar, SSE4.1
+ *     and AVX2 produce identical output; RAWADPCM_ISA forces one of them.
+ *   * The stride search walks the signature map a word at a time and steps
+ *     through set bits, instead of testing every stride -- on material with no
+ *     ADPCM in it that loop was 71% of the program (try_anchor).
+ *
  * build:  sh mkraw.sh    (or: g++ -std=gnu++17 -O2 rawadpcm.cpp -o rawadpcm)
+ *         ARCH=-march=native inlines the kernels instead of dispatching, ~3%
  * test:   sh traw.sh
  */
 
@@ -77,40 +97,25 @@ template<class T> static inline T tmin( T a, T b ) { return a<b ? a : b; }
 template<class T> static inline T tmax( T a, T b ) { return a>b ? a : b; }
 
 /*---------------------------------------------------------------- log2LUT --*/
-/* lpsort's table, unchanged: LOG2(a)-LOG2(b) is log2(b/a) in 1/65536 bits, so
-   a probability p/SCALE costs LOG2(SCALE)-LOG2(p). */
+/* lpsort's log, kept as the function rather than as its table.  LOG2(a)-LOG2(b)
+   is log2(b/a) in 1/65536 bits, so a probability p/SCALE costs
+   LOG2(SCALE)-LOG2(p).  lpsort fills 32769 entries because its FSM file can
+   name any of them; here the only caller is the counter table's own setup,
+   which asks for 513 values once, and building the other 32256 was 10% of the
+   program on a small input. */
 
-struct log2LUT {
+enum { LOG2_PRECISION = 16 };
 
-  enum {
-    LUTsize = 32768+1,
-    Precision = 16
-  };
-
-  uint LUT[LUTsize];
-
-  uint operator() ( uint i ) const {
-    return LUT[i];
+static uint LOG2( uint i ) {
+  uint k = 0;
+  qword w = i;
+  for( uint j=0; j<LOG2_PRECISION; j++ ) {
+    w = w*w;
+    k = k+k;
+    while( w>=(1ULL<<32) ) w = (w+1)>>1, k++;
   }
-
-  constexpr uint Calc( uint i ) const {
-    uint k=0;
-    qword w = i;
-    for( uint j=0; j<Precision; j++ ) {
-      w = w * w;
-      k = k + k;
-      while( w>=(1ULL<<32) ) w=(w+1)>>1, k++;
-    }
-    return k;
-  }
-
-  void Init( void ) {
-    for( uint i=0; i<LUTsize; i++ ) LUT[i] = Calc(i);
-  }
-
-};
-
-static log2LUT LOG2;
+  return k;
+}
 
 /*------------------------------------------------------------ counter FSM --*/
 
@@ -190,22 +195,23 @@ static const u16 NZCC[][3] = {
 
 enum { N_STATES = sizeof(NZCC)/sizeof(NZCC[0]) };
 
-struct fsm {
+struct fsm {         // 16 bytes on purpose: indexing it is a shift, not a multiply
   u16 s[2];      // next state after bits 0,1
+  u16 pad[2];
   uint cc[2];    // what bits 0,1 cost there, in 1/65536 bits
 };
 
 static fsm FSM[N_STATES];
 
 static void init_fsm() {
-  LOG2.Init();
   for( uint i=0; i<N_STATES; i++ ) {
     uint P = NZCC[i][2];
     P = P<1 ? 1 : P>SCALE-1 ? SCALE-1 : P;
     FSM[i].s[0] = NZCC[i][0]<N_STATES ? NZCC[i][0] : 0;
     FSM[i].s[1] = NZCC[i][1]<N_STATES ? NZCC[i][1] : 0;
-    FSM[i].cc[0] = LOG2(SCALE)-LOG2(P);
-    FSM[i].cc[1] = LOG2(SCALE)-LOG2(SCALE-P);
+    const uint lsc = LOG2(SCALE);
+    FSM[i].cc[0] = lsc-LOG2(P);
+    FSM[i].cc[1] = lsc-LOG2(SCALE-P);
   }
 }
 
@@ -293,8 +299,20 @@ static inline int code_magnitude( int code, int step, int bps ) {
   return mag;
 }
 
-static inline i32 ima_apply( i32 pcm, int code, int step, int bps ) {
-  int mag = code_magnitude(code,step,bps);
+/* What a code reconstructs to, for every (width, step index, code): a
+   bps-1-trip loop of shifts and adds per decoded sample, which profiled at 4%
+   of the program, replaced by 23 KB of table built once. */
+static i32 ima_mag[4][89][16];
+
+static void init_ima_tables() {
+  for( int b=2; b<=5; b++ )
+    for( int ix=0; ix<89; ix++ )
+      for( int c=0; c<16; c++ )
+        ima_mag[b-2][ix][c] = code_magnitude(c&((1<<(b-1))-1), step_table[ix], b);
+}
+
+static inline i32 ima_apply_m( i32 pcm, int code, const i32* magrow, int bps ) {
+  int mag = magrow[code&15];
   pcm += (code&(1<<(bps-1))) ? -mag : mag;
   return pcm<-32768 ? -32768 : pcm>32767 ? 32767 : pcm;
 }
@@ -303,9 +321,17 @@ static inline int ima_quantize( i32 diff, int step, int bps, int& leftover ) {
   const int nb = bps-1;
   int code = 0;
   i32 a = diff<0 ? -diff : diff;
-  for( int i=0; i<nb; i++ ) {
-    i32 w = step>>i;
-    if( a>=w ) { code |= 1<<(nb-1-i); a -= w; }
+  if( nb==3 ) {                     // 4-bit, which is nearly everything: unrolled
+    if( a>=step ) { code |= 4; a -= step; }
+    i32 w = step>>1;
+    if( a>=w ) { code |= 2; a -= w; }
+    w = step>>2;
+    if( a>=w ) { code |= 1; a -= w; }
+  } else {
+    for( int i=0; i<nb; i++ ) {
+      i32 w = step>>i;
+      if( a>=w ) { code |= 1<<(nb-1-i); a -= w; }
+    }
   }
   leftover = int(a>0x7FFF ? 0x7FFF : a);
   return code|(diff<0 ? 1<<nb : 0);
@@ -361,44 +387,193 @@ static void init_ms_map() {
 
 /*------------------------------------------------------------------ NLMS ---*/
 /* One per channel, over the reconstructed signal.  Integer NLMS, initialised to
-   linear extrapolation so it predicts something useful from the first sample. */
+   linear extrapolation so it predicts something useful from the first sample.
+   This is the whole cost of the tool: two passes over 32 taps for every decoded
+   sample, and a candidate region gets decoded several times over (once per
+   stride, once per code width).  Profiled at 71% of all instructions before the
+   rewrite below.
+ *
+ * WHY 16-BIT LANES.  The reconstructed signal IS 16-bit, so the history is i16
+ * for free; putting the weights there too gets 16 taps per AVX2 register
+ * instead of the 4 an i32/i64 kernel manages, and turns the update into one
+ * multiply-high-round-scale plus one saturating add per lane.  xadpcm cannot do
+ * this -- its predictor has to reproduce bit for bit between encoder and
+ * decoder, so xad_simd.inc keeps every product at full 64 bits and says so.
+ * Here the predictor only feeds a detector's estimate: nothing in the container
+ * depends on its arithmetic, so the representation is free to be chosen for
+ * speed.  Weights live in Q13 clamped to +-20000, which is +-2.4 in real terms
+ * -- wide enough for the linear extrapolator it starts as, and narrow enough
+ * that a madd_epi16 lane (two products) cannot leave i32.
+ *
+ * WHY IT IS STILL BIT-EXACT ACROSS BUILDS.  The dot product accumulates into
+ * i64 and two's-complement addition is associative, so folding lanes at the end
+ * reproduces the scalar sum exactly; each madd lane is bounded by the weight
+ * clamp, so nothing overflows on the way.  The update is elementwise, and the
+ * scalar reference spells out mulhrs's own rounding ((a*b >> 14) + 1) >> 1 and
+ * the saturating add's clamp, so the two paths agree value for value.  Same
+ * detections whatever the binary was built for.
+ *
+ * WHY THE HISTORY SLIDES.  Shifting 24 elements per sample was 3% on its own
+ * and cannot vectorise across a lane boundary.  The buffer is twice the filter
+ * length and the window walks backwards through it, so a push is one store; the
+ * copy back to the top happens once every 32 samples. */
+
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+#define RAW_X86 1
+#include <immintrin.h>
+#else
+#define RAW_X86 0
+#endif
+
+enum { NLMS_N = 32, NLMS_WSH = 13, NLMS_MUSH = 3, NLMS_WCLAMP = 20000 };
+
+/* The scalar reference, and the portable fallback.  raw_adapt_c spells out what
+   _mm256_mulhrs_epi16 and _mm256_adds_epi16 do, so the vector kernels are a
+   transcription of it rather than an approximation. */
+static i64 raw_dot_c( const i16* w, const i16* h, int n ) {
+  i64 s = 0;
+  for( int i=0; i<n; i++ ) s += i64(i32(w[i])*i32(h[i]));
+  return s;
+}
+
+static void raw_adapt_c( i16* w, const i16* h, int n, int tq ) {
+  for( int i=0; i<n; i++ ) {
+    int dw = ((i32(h[i])*tq>>14)+1)>>1;             // mulhrs
+    int nw = i32(w[i])+dw;
+    if( nw>32767 ) nw = 32767;                      // adds_epi16
+    if( nw<-32768 ) nw = -32768;
+    if( nw>NLMS_WCLAMP ) nw = NLMS_WCLAMP;
+    if( nw<-NLMS_WCLAMP ) nw = -NLMS_WCLAMP;
+    w[i] = i16(nw);
+  }
+}
+
+#if RAW_X86
+
+#define RAW_T_AVX2 __attribute__((target("avx2")))
+#define RAW_T_SSE4 __attribute__((target("sse4.1,ssse3")))
+
+RAW_T_AVX2
+static i64 raw_dot_avx2( const i16* w, const i16* h, int n ) {
+  __m256i acc = _mm256_setzero_si256();
+  for( int i=0; i<n; i += 16 ) {
+    __m256i p = _mm256_madd_epi16(_mm256_loadu_si256((const __m256i*)(w+i)),
+                                  _mm256_loadu_si256((const __m256i*)(h+i)));
+    acc = _mm256_add_epi64(acc, _mm256_cvtepi32_epi64(_mm256_castsi256_si128(p)));
+    acc = _mm256_add_epi64(acc, _mm256_cvtepi32_epi64(_mm256_extracti128_si256(p, 1)));
+  }
+  __m128i q = _mm_add_epi64(_mm256_castsi256_si128(acc), _mm256_extracti128_si256(acc, 1));
+  return i64(_mm_cvtsi128_si64(q))+i64(_mm_extract_epi64(q, 1));
+}
+
+RAW_T_AVX2
+static void raw_adapt_avx2( i16* w, const i16* h, int n, int tq ) {
+  const __m256i t = _mm256_set1_epi16(short(tq));
+  const __m256i lo = _mm256_set1_epi16(short(-NLMS_WCLAMP));
+  const __m256i hi = _mm256_set1_epi16(short(NLMS_WCLAMP));
+  for( int i=0; i<n; i += 16 ) {
+    __m256i dw = _mm256_mulhrs_epi16(_mm256_loadu_si256((const __m256i*)(h+i)), t);
+    __m256i wv = _mm256_adds_epi16(_mm256_loadu_si256((const __m256i*)(w+i)), dw);
+    _mm256_storeu_si256((__m256i*)(w+i), _mm256_min_epi16(_mm256_max_epi16(wv, lo), hi));
+  }
+}
+
+RAW_T_SSE4
+static i64 raw_dot_sse4( const i16* w, const i16* h, int n ) {
+  __m128i acc = _mm_setzero_si128();
+  for( int i=0; i<n; i += 8 ) {
+    __m128i p = _mm_madd_epi16(_mm_loadu_si128((const __m128i*)(w+i)),
+                               _mm_loadu_si128((const __m128i*)(h+i)));
+    acc = _mm_add_epi64(acc, _mm_cvtepi32_epi64(p));
+    acc = _mm_add_epi64(acc, _mm_cvtepi32_epi64(_mm_shuffle_epi32(p, 0x0E)));
+  }
+  return i64(_mm_cvtsi128_si64(acc))+i64(_mm_extract_epi64(acc, 1));
+}
+
+RAW_T_SSE4
+static void raw_adapt_sse4( i16* w, const i16* h, int n, int tq ) {
+  const __m128i t = _mm_set1_epi16(short(tq));
+  const __m128i lo = _mm_set1_epi16(short(-NLMS_WCLAMP));
+  const __m128i hi = _mm_set1_epi16(short(NLMS_WCLAMP));
+  for( int i=0; i<n; i += 8 ) {
+    __m128i dw = _mm_mulhrs_epi16(_mm_loadu_si128((const __m128i*)(h+i)), t);
+    __m128i wv = _mm_adds_epi16(_mm_loadu_si128((const __m128i*)(w+i)), dw);
+    _mm_storeu_si128((__m128i*)(w+i), _mm_min_epi16(_mm_max_epi16(wv, lo), hi));
+  }
+}
+
+#endif // RAW_X86
+
+/* Dispatch.  When the translation unit is already being built for AVX2 the
+   kernels are called directly and inline into the sample loop; otherwise one
+   CPUID check at startup picks between them, at the cost of an indirect call
+   twice per sample against 32 taps of work. */
+#if RAW_X86 && defined(__AVX2__)
+  #define raw_dot   raw_dot_avx2
+  #define raw_adapt raw_adapt_avx2
+  static void raw_simd_init() {}
+  static const char* raw_simd_name() { return "avx2 (compiled in)"; }
+#elif RAW_X86
+  static i64 (*raw_dot)( const i16*, const i16*, int ) = raw_dot_c;
+  static void (*raw_adapt)( i16*, const i16*, int, int ) = raw_adapt_c;
+  static const char* raw_simd_which = "scalar";
+  static void raw_simd_init() {
+    __builtin_cpu_init();
+    /* RAWADPCM_ISA=scalar|sse4|avx2 forces a kernel.  All three produce the
+       same numbers -- that is what the i64 accumulation and the spelled-out
+       mulhrs/adds semantics are for -- so it is a way to check that, and to
+       measure what the vector paths are worth on a given machine. */
+    const char* force = getenv("RAWADPCM_ISA");
+    if( force&&!strcmp(force,"scalar") ) return;
+    bool a2 = __builtin_cpu_supports("avx2")&&!(force&&!strcmp(force,"sse4"));
+    if( a2 ) {
+      raw_dot = raw_dot_avx2; raw_adapt = raw_adapt_avx2; raw_simd_which = "avx2";
+    } else if( __builtin_cpu_supports("sse4.1") ) {
+      raw_dot = raw_dot_sse4; raw_adapt = raw_adapt_sse4; raw_simd_which = "sse4.1";
+    }
+  }
+  static const char* raw_simd_name() { return raw_simd_which; }
+#else
+  #define raw_dot   raw_dot_c
+  #define raw_adapt raw_adapt_c
+  static void raw_simd_init() {}
+  static const char* raw_simd_name() { return "scalar"; }
+#endif
 
 struct NLMS {
-  enum { N = 24, WSH = 16, MUSH = 3 };
-  i32 w[N], h[N];
+  enum { N = NLMS_N, WSH = NLMS_WSH, MUSH = NLMS_MUSH, HN = 2*N };
+  alignas(32) i16 w[N];
+  alignas(32) i16 hbuf[HN];   // the window is hbuf[hp .. hp+N), newest first
+  int hp;
   i64 energy;
 
   void Init() {
     memset(w,0,sizeof(w));
-    memset(h,0,sizeof(h));
-    w[0] = 2<<WSH;
+    memset(hbuf,0,sizeof(hbuf));
+    w[0] = 2<<WSH;            // linear extrapolation: 2*x[-1] - x[-2]
     w[1] = -(1<<WSH);
+    hp = N;
     energy = 1<<16;
   }
 
   i32 predict() const {
-    i64 s = 0;
-    for( int i=0; i<N; i++ ) s += i64(w[i])*i64(h[i]);
-    s >>= WSH;
-    return clip16(s);
+    return clip16(raw_dot(w, hbuf+hp, N)>>WSH);
   }
 
   void update( i32 x, i32 p ) {
     i64 e = i64(x)-i64(p);
-    i64 t = (e<<(WSH+16))/(energy+1);
-    for( int i=0; i<N; i++ ) {
-      i64 dw = (t*i64(h[i]))>>(16+MUSH);
-      if( dw> (1<<14) ) dw =  (1<<14);
-      if( dw< -(1<<14) ) dw = -(1<<14);
-      i64 nw = i64(w[i])+dw;
-      if( nw> (1<<24) ) nw =  (1<<24);
-      if( nw< -(1<<24) ) nw = -(1<<24);
-      w[i] = i32(nw);
-    }
-    energy += i64(x)*i64(x)-i64(h[N-1])*i64(h[N-1]);
+    /* The NLMS step, folded into one i16 multiplier: the weight change is
+       mu*e*h[i]/energy in real terms, so in Q(WSH) with mulhrs supplying the
+       2^-15 it is h[i] * (e << (WSH+15-MUSH)) / energy. */
+    i64 t = (e<<(WSH+15-MUSH))/(energy+1);
+    int tq = int(t>32767 ? 32767 : t<-32767 ? -32767 : t);
+    if( tq ) raw_adapt(w, hbuf+hp, N, tq);
+
+    i32 out = hbuf[hp+N-1];   // the sample about to leave the window
+    energy += i64(x)*i64(x)-i64(out)*i64(out);
     if( energy<(1<<16) ) energy = 1<<16;
-    for( int i=N-1; i>0; i-- ) h[i] = h[i-1];
-    h[0] = x;
+    if( hp==0 ) { memcpy(hbuf+N, hbuf, N*sizeof(i16)); hp = N; }
+    hbuf[--hp] = i16(x);
   }
 };
 
@@ -452,25 +627,40 @@ struct SigMap {
     n = sz;
     pop = 0;
     hdr = fmt==FMT_MS ? 7*nch : 4*nch;
-    b.assign(sz/8+2, 0);
+    b.assign(sz/8+16, 0);   // padded so the word scan below can read past the end
     for( size_t i=0; i+size_t(hdr)<=sz; i++ )
       if( sig_at(d,sz,i,fmt,nch) ) { b[i>>3] |= u8(1u<<(i&7)); pop++; }
   }
   double density() const { return n ? double(pop)/double(n) : 0.0; }
+  // 64 positions at a time, for the stride search
+  u64 word( size_t wi ) const { u64 v; memcpy(&v, &b[wi*8], 8); return v; }
   inline bool operator()( size_t i ) const {
     return i+size_t(hdr)<=n && ((b[i>>3]>>(i&7))&1);
   }
 };
 
-/* Capped: L only ranks the strides against each other, and anything that
-   reaches the cap is already past every explanation but "this is the grid".
-   run_region walks the real extent itself, stopping at the first header that
-   does not line up, so nothing is lost by not counting further. */
+/* Two of these, and the difference is what they are for.
+   chain_len is capped, because L only ranks the strides against each other and
+   anything reaching the cap is already past every explanation but "this is the
+   grid"; it is called for every stride at every anchor, so the cap is what
+   keeps enumeration cheap.
+   chain_span is not capped, because it sets the LIMIT a full decode runs to,
+   and there the cap is not a saving but a disaster: a capped L reads as "no
+   idea where this ends", the limit falls back to the end of the file, and a
+   rejected candidate decodes megabytes it was never going to be scored on.
+   That one line was 539 MB of the 569 MB this program decoded for wavs3. It is
+   only ever called for the handful of strides that survive screening. */
 enum { CHAIN_CAP = 1024 };
 
 static size_t chain_len( const SigMap& S, size_t ba, size_t start, size_t stop ) {
   size_t L = 0, p = start;
   while( p<stop && S(p) ) { L++; p += ba; if( L>=CHAIN_CAP ) break; }
+  return L;
+}
+
+static size_t chain_span( const SigMap& S, size_t ba, size_t start, size_t stop ) {
+  size_t L = 0, p = start;
+  while( p<stop && S(p) ) { L++; p += ba; }
   return L;
 }
 
@@ -493,7 +683,7 @@ struct RegionResult {
 // not drift the argmax past the real end of the audio
 static i64 EPS_PER_BYTE = 3277;   // 0.05 bit
 
-static std::vector<i64> g_bgain;
+static std::vector<i32> g_bgain;
 static std::vector<u8>  g_cbuf[MAXCH];
 
 static u64 STAT_runs, STAT_runbytes;
@@ -506,8 +696,11 @@ static bool run_region( const u8* d, size_t n, const Hyp& hy, size_t start, size
   if( limit>n ) limit = n;
 
   SYM.Init();
-  u8 xsym[MAXCH];
-  memset(xsym,0,sizeof(xsym));
+  /* Which neighbour each channel reads, and that neighbour's bucket, both kept
+     ready rather than recomputed per code -- the select and the bucketing were
+     5% of the program between them. */
+  uint xb[MAXCH], xk[MAXCH];
+  for( int k=0; k<MAXCH; k++ ) { xb[k] = 0; xk[k] = uint(nch>1 ? (k ? 0 : nch-1) : 0); }
   Ch ch[MAXCH];
   for( int k=0; k<nch; k++ ) {
     memset(&ch[k],0,sizeof(Ch));
@@ -528,8 +721,8 @@ static bool run_region( const u8* d, size_t n, const Hyp& hy, size_t start, size
   while( pos+size_t(hdr)<=limit ) {
     size_t len = tmin<size_t>(ba, limit-pos);
     if( !sig_at(d,n,pos,fmt,nch) ) break;
-    i64* bg = &g_bgain[0];
-    memset(bg,0,len*sizeof(i64));
+    i32* bg = &g_bgain[0];
+    memset(bg,0,len*sizeof(i32));
     const u8* blk = d+pos;
 
     if( fmt==FMT_IMA ) {
@@ -556,19 +749,20 @@ static bool run_region( const u8* d, size_t n, const Hyp& hy, size_t start, size
           Ch& c = ch[k];
           int code = int(get_bits(&g_cbuf[k][0], bitpos, bps));
           int step = step_table[c.index];
+          const i32* magrow = ima_mag[bps-2][c.index];
           i32 rhat = c.pd.predict();
           int leftover;
           int qhat = ima_quantize(rhat-c.pcm, step, bps, leftover);
           int base = step>>(bps-1);
           int conf = (2*leftover>=2*base+1);
           int bucket = tmin(7, c.index>>4);
-          uint ctx = uint(((qhat*2+conf)*8+bucket)*SYM_XB+int(xbucket(uint(xsym[nch>1 ? (k?0:nch-1) : 0]),bps)));
+          uint ctx = uint(((qhat*2+conf)*8+bucket)*SYM_XB)+xb[xk[k]];
           uint cost = SYM.Update(ctx, uint(code), bps);
-          xsym[k] = u8(code);
+          xb[k] = xbucket(uint(code), bps);
           size_t off = size_t(hdr)+(j&~size_t(3))*size_t(nch)+size_t(k*4)+(j&3);
-          if( off<len ) bg[off] += (i64(bps)<<16)-i64(cost);
+          if( off<len ) bg[off] += i32(uint(bps)<<16)-i32(cost);
           mbits += cost; nsym++;
-          c.pcm = ima_apply(c.pcm, code, step, bps);
+          c.pcm = ima_apply_m(c.pcm, code, magrow, bps);
           c.index = index_update(c.index, code, bps);
           c.pd.update(c.pcm, rhat);
         }
@@ -609,10 +803,10 @@ static bool run_region( const u8* d, size_t n, const Hyp& hy, size_t start, size
           int qhat = ms_quantize(i64(rhat)-i64(P), c.delta, err);
           int conf = (err>=0);
           int bucket = tmin(7, ms_dlog(c.delta)>>1);
-          uint ctx = uint(((MS_M[qhat]*2+conf)*8+bucket)*SYM_XB+int(xbucket(uint(xsym[nch>1 ? (k?0:nch-1) : 0]),4)));
+          uint ctx = uint(((MS_M[qhat]*2+conf)*8+bucket)*SYM_XB)+xb[xk[k]];
           uint cost = SYM.Update(ctx, MS_M[nib], 4);
-          xsym[k] = MS_M[nib];
-          if( off<len ) bg[off] += (i64(4)<<16)-i64(cost);
+          xb[k] = xbucket(MS_M[nib], 4);
+          if( off<len ) bg[off] += i32(4u<<16)-i32(cost);
           mbits += cost; nsym++;
           i32 v = ms_apply(P, nib, c.delta);
           c.s2 = c.s1; c.s1 = v;
@@ -622,7 +816,7 @@ static bool run_region( const u8* d, size_t n, const Hyp& hy, size_t start, size
     }
 
     for( size_t j=0; j<len; j++ ) {
-      gain += bg[j]-EPS_PER_BYTE;
+      gain += i64(bg[j])-EPS_PER_BYTE;
       if( gain>best ) { best = gain; bestend = pos+j+1; bestm = mbits; bestsym = nsym; }
     }
 
@@ -865,6 +1059,7 @@ struct HypDesc {
   int fmt, nch;
   SigMap sm;
   size_t conf, minba, step;
+  u64 smask;                  // bits 0, step, 2*step, ... within a word
   const char* name() const { return fmt==FMT_MS ? "MS " : "IMA"; }
 };
 
@@ -874,6 +1069,8 @@ static void prepare( HypDesc& H, const u8* d, size_t n, int fmt, int nch ) {
   size_t mb = fmt==FMT_MS ? size_t(7*nch+4) : size_t(8*nch);
   H.minba = ((mb+H.step-1)/H.step)*H.step;
   H.sm.build(d,n,fmt,nch);
+  H.smask = 0;
+  for( size_t j=0; j<64; j += H.step ) H.smask |= 1ULL<<j;
 
   /* How many block headers have to line up before a stride is worth decoding.
      A signature is not rare -- inside real ADPCM the IMA one holds at 15% of
@@ -897,7 +1094,7 @@ static void prepare( HypDesc& H, const u8* d, size_t n, int fmt, int nch ) {
 /* Try one hypothesis at one anchor.  Returns the best region it can defend
    there, or false. */
 static bool try_anchor( const u8* d, size_t n, const u64* gpfx, const HypDesc& H,
-                        size_t i, size_t stop, Seg& best ) {
+                        size_t i, size_t stop, double incumbent, Seg& best ) {
   const int fmt = H.fmt, nch = H.nch;
   const int hdr = fmt==FMT_MS ? 7*nch : 4*nch;
   const size_t step = H.step, minba = H.minba, conf = H.conf;
@@ -911,17 +1108,47 @@ static bool try_anchor( const u8* d, size_t n, const u64* gpfx, const HypDesc& H
      shortest stride breaks the ties. */
   struct Cand { size_t ba, L; };
   static std::vector<Cand> cands;
+  /* Walked one WORD of the signature map at a time rather than one stride at a
+     time.  The first of the `conf` tests is "is there a signature at i+ba", and
+     for most ba the answer is no -- on material that holds no ADPCM at all,
+     which is most of what a detector is pointed at, this loop and its bit tests
+     were 71% of the program.  Masking the map to the strides that are legal
+     here and stepping through the set bits with a count-trailing-zeros skips
+     every ba that was never going to pass, and the rest of the confirmations
+     only run where the first one held.
+     The mask is constant across words because every step this uses (2 for MS,
+     4*channels for IMA) is a power of two dividing 64, so the phase a word
+     starts on never changes. */
   cands.clear();
-  for( size_t ba=minba; ba<=OPT.max_ba && i+ba*(conf-1)+size_t(hdr)<=stop; ba+=step ) {
-    bool ok = true;
-    for( size_t r=1; r<conf; r++ ) if( !SM(i+r*ba) ) { ok = false; break; }
-    if( !ok ) continue;
-    size_t L = chain_len(SM,ba,i,stop);
-    STAT_chain += L; STAT_cand++;
-    if( L<conf ) continue;
-    if( tmin<size_t>(stop-i, L*ba)<OPT.min_len ) continue;
-    Cand cc; cc.ba = ba; cc.L = L;
-    cands.push_back(cc);
+  size_t bamax = OPT.max_ba;
+  if( conf>1 ) {
+    if( stop<i+size_t(hdr) ) return false;
+    size_t room = (stop-size_t(hdr)-i)/(conf-1);
+    if( room<bamax ) bamax = room;
+  }
+  if( bamax>=minba ) {
+    size_t plo = i+minba, phi = i+bamax;
+    if( phi+size_t(hdr)>n ) phi = (n>=size_t(hdr)) ? n-size_t(hdr) : 0;
+    const u64 pm = H.smask<<(plo&(step-1));
+    for( size_t w=plo>>6, wend=phi>>6; w<=wend && plo<=phi; w++ ) {
+      u64 v = SM.word(w)&pm;
+      if( w==(plo>>6) ) v &= ~0ULL<<(plo&63);
+      if( w==wend ) { uint hb = uint(phi&63); v &= (hb==63) ? ~0ULL : ((1ULL<<(hb+1))-1); }
+      while( v ) {
+        size_t p = (w<<6)+size_t(__builtin_ctzll(v));
+        v &= v-1;
+        size_t ba = p-i;
+        bool ok = true;
+        for( size_t r=2; r<conf; r++ ) if( !SM(i+r*ba) ) { ok = false; break; }
+        if( !ok ) continue;
+        size_t L = chain_len(SM,ba,i,stop);
+        STAT_chain += L; STAT_cand++;
+        if( L<conf ) continue;
+        if( tmin<size_t>(stop-i, L*ba)<OPT.min_len ) continue;
+        Cand cc; cc.ba = ba; cc.L = L;
+        cands.push_back(cc);
+      }
+    }
   }
   if( cands.empty() ) return false;
   std::sort(cands.begin(),cands.end(),[]( const Cand& a, const Cand& b ){
@@ -929,16 +1156,53 @@ static bool try_anchor( const u8* d, size_t n, const u64* gpfx, const HypDesc& H
     return a.ba<b.ba;
   });
 
-  bool have = false; i64 bestgain = 0;
+  /* Drop any stride that is an exact multiple of one that already confirmed
+     MORE headers: that is not a second hypothesis, it is the same grid read
+     through a window four times too wide, and it can only model worse.  Real
+     ba=36 brings 72, 108 and 144 with it every time, and screening and ranking
+     all four was most of what this function decoded.  Dropping them is safe in
+     the direction that matters: for a true ba=72 region to be beaten here,
+     ba=36 would have to confirm more headers than it, which means a signature
+     landing mid-block for the whole chain -- 0.15^14 on the measured density. */
+  {
+    size_t keep = 0;
+    for( size_t a=0; a<cands.size(); a++ ) {
+      bool covered = false;
+      for( size_t b=0; b<keep; b++ )
+        if( cands[a].ba%cands[b].ba==0 ) { covered = true; break; }
+      if( !covered ) cands[keep++] = cands[a];
+    }
+    cands.resize(keep);
+  }
+
+  bool have = false;
   size_t ntry = tmin<size_t>(cands.size(), 4);
   if( OPT.verbose>1 ) {
     fprintf(stderr,"    %s%d anchor %llu: %llu cands, top:",H.name(),nch,(unsigned long long)i,(unsigned long long)cands.size());
     for( size_t t=0; t<ntry; t++ ) fprintf(stderr," ba=%llu L=%llu",(unsigned long long)cands[t].ba,(unsigned long long)cands[t].L);
     fprintf(stderr,"\n");
   }
+  /* The screen bar.  Its floor is deliberately a low fixed number rather than a
+     fraction of the accept threshold: it sees only the first 4 KB, and a wav is
+     allowed to open quietly.  Its job is to throw out geometry that is plainly
+     wrong, not to make the accept decision -- that is what the full run is for.
+     What DOES raise it is an incumbent: when a region has already been claimed
+     here and this call is only looking for something better, a candidate that
+     cannot match three quarters of the incumbent's rate over 4 KB is not going
+     to beat it over 700, and a full decode to prove that is the single most
+     expensive thing this program can do. */
+  const double bar = tmax(tmin(OPT.min_gain*0.5, 0.15), incumbent*0.75);
+
+  int widths[4] = {4,2,3,5};
+  int nw = (fmt==FMT_MS) ? 1 : (OPT.all_widths ? 4 : 1);
+
+  struct Plan { size_t ba, limit; int bps; double gs; };
+  Plan plan[8]; size_t np = 0;
+
   for( size_t t=0; t<ntry; t++ ) {
     size_t ba = cands[t].ba;
-    size_t limit = (cands[t].L>=size_t(CHAIN_CAP)) ? stop : tmin<size_t>(stop, i+cands[t].L*ba);
+    size_t L = cands[t].L>=size_t(CHAIN_CAP) ? chain_span(SM,ba,i,stop) : cands[t].L;
+    size_t limit = tmin<size_t>(stop, i+L*ba);
 
     /* Is there anything here worth taking out?  Free, from the prefix sum, and
        it has to be asked over the whole candidate span rather than over the
@@ -951,71 +1215,87 @@ static bool try_anchor( const u8* d, size_t n, const u64* gpfx, const HypDesc& H
       if( dens<OPT.min_dense*0.5 ) continue;
     }
 
-    /* Screen on a short prefix before paying for the whole run.  The screen
-       applies the same two tests the region has to pass, at half strength: it
-       is there to throw out a stride that is merely a coarse multiple of a real
-       one, and to throw out silence, both of which would otherwise cost a full
-       decode. */
     size_t screen = tmin<size_t>(limit, i+tmax<size_t>(4*ba, 4096));
-    int widths[4] = {4,2,3,5};
-    int nw = (fmt==FMT_MS) ? 1 : (OPT.all_widths ? 4 : 1);
-    /* The screen bar is deliberately a low fixed number rather than a fraction
-       of the real one: it sees only the first 4 KB, and a wav is allowed to
-       open quietly.  Its job is to throw out geometry that is plainly wrong,
-       not to make the accept decision -- that is what the full run is for. */
-    const double bar = tmin(OPT.min_gain*0.5, 0.15);
 
-    /* Code width.  4 bits is what nearly everything is, so it is screened
-       first and the others only if it does not already look right.  What the
-       screen may NOT do is pick the width outright: on a wav that opens quietly
-       the first 4 KB rank the widths by noise, and one bad ranking costs the
-       whole region (this is how a 251 KB IMA file came out three blocks short).
-       So an alternative width has to look clearly better on the screen just to
-       earn a full run, and the full runs decide between themselves.
+    /* Code width.  4 bits is what nearly everything is, so it is screened first
+       and the others only if it does not already look right.  What the screen
+       may NOT do is pick the width outright: on a wav that opens quietly the
+       first 4 KB rank the widths by noise, and one bad ranking costs the whole
+       region (this is how a 251 KB IMA file came out three blocks short).  So an
+       alternative width has to look clearly better on the screen just to earn a
+       full run, and the full runs decide between themselves.
        There is no fast path that skips the alternatives when 4 bits already
        looks good, and that is deliberate: 2-bit ADPCM read as 4-bit codes
-       screens perfectly respectably -- packed codes keep some of their
-       structure through the wrong window -- so any bar low enough to be worth
-       having would take that reading and never ask. */
+       screens perfectly respectably -- packed codes keep some of their structure
+       through the wrong window -- so any bar low enough to be worth having would
+       take that reading and never ask. */
     double gs = 0;
-    int runw[2]; int nr = 0;
     {
       Hyp hy{fmt,nch,4,int(ba)};
       RegionResult r;
       if( run_region(d,n,hy,i,screen,r) ) {
         gs = double(r.gain)/65536.0/double(r.end-r.start);
-        if( gs>=bar ) runw[nr++] = 4;
+        if( gs>=bar && np<DIM(plan) ) { Plan p{ba,limit,4,gs}; plan[np++] = p; }
       }
-      {
-        int alt = 0; double ag = gs+0.25;
-        for( int wi=1; wi<nw; wi++ ) {
-          Hyp h2{fmt,nch,widths[wi],int(ba)};
-          RegionResult r2;
-          if( !run_region(d,n,h2,i,screen,r2) ) continue;
-          double g = double(r2.gain)/65536.0/double(r2.end-r2.start);
-          if( g>=bar && g>ag ) { ag = g; alt = widths[wi]; }
-        }
-        if( alt ) runw[nr++] = alt;
+      int alt = 0; double ag = gs+0.25;
+      for( int wi=1; wi<nw; wi++ ) {
+        Hyp h2{fmt,nch,widths[wi],int(ba)};
+        RegionResult r2;
+        if( !run_region(d,n,h2,i,screen,r2) ) continue;
+        double g = double(r2.gain)/65536.0/double(r2.end-r2.start);
+        if( g>=bar && g>ag ) { ag = g; alt = widths[wi]; }
       }
+      if( alt && np<DIM(plan) ) { Plan p{ba,limit,alt,ag}; plan[np++] = p; gs = tmax(gs,ag); }
     }
-    if( !nr ) continue;
+  }
 
-    for( int wi=0; wi<nr; wi++ ) {
-      Hyp hy{fmt,nch,runw[wi],int(ba)};
-      RegionResult r;
-      if( !run_region(d,n,hy,i,limit,r) ) continue;
-      Seg s;
-      bool ok = accept_region(gpfx,r,hy,s);
-      if( OPT.verbose>1 ) {
-        double L2 = double(r.end>r.start ? r.end-r.start : 1);
-        fprintf(stderr,"      %s%d ba=%llu bps=%d -> [%llu,%llu) len=%.0f gain %.3f model %.3f gen %.3f  %s\n",
-          H.name(),nch,(unsigned long long)ba,runw[wi],(unsigned long long)r.start,(unsigned long long)r.end,L2,
-          double(r.gain)/65536.0/L2, double(r.model_bits)/65536.0/L2,
-          double(generic_bits(gpfx,r.start,r.end))/65536.0/L2, ok?"accept":"reject");
-      }
-      if( !ok ) continue;
-      if( !have || s.gain>bestgain ) { best = s; bestgain = s.gain; have = true; }
+  /* Now rank what survived, and only then decode anything at full length.
+     A candidate region can be 1.7 MB, and at an anchor with four strides and a
+     spare code width that was eight full decodes to answer a question the first
+     128 KB already answers: on wavs3 the true ba=36 pulls 2.86 bits/byte where
+     ba=72 pulls 1.55, and no amount of further audio reverses that.  Ranking on
+     4 KB does NOT work -- it was tried, and it picked ba=144 over ba=36 on two
+     of the seven regions -- but 128 KB has never disagreed with the full run.
+     The bounded runs are skipped entirely when the candidate is shorter than
+     the bound, since then they ARE the full run. */
+  enum { RANK_SPAN = 128*1024 };
+  struct Ranked { int t; double rate; RegionResult r; bool full; };
+  Ranked rk[8]; size_t nr2 = 0;
+  for( size_t t=0; t<np; t++ ) {
+    size_t rl = tmin<size_t>(plan[t].limit, i+size_t(RANK_SPAN));
+    Hyp hy{fmt,nch,plan[t].bps,int(plan[t].ba)};
+    RegionResult r;
+    if( !run_region(d,n,hy,i,rl,r) ) continue;
+    double rate = double(r.gain)/65536.0/double(r.end-r.start);
+    if( rate<=incumbent*0.75 ) continue;
+    Ranked e; e.t = int(t); e.rate = rate; e.r = r; e.full = (rl>=plan[t].limit);
+    rk[nr2++] = e;
+  }
+  for( size_t a=1; a<nr2; a++ )   // at most 8 of them; std::sort here only got gcc confused
+    for( size_t b=a; b>0 && rk[b-1].rate<rk[b].rate; b-- ) { Ranked tmp = rk[b-1]; rk[b-1] = rk[b]; rk[b] = tmp; }
+
+  /* Decode at full length in ranked order and stop at the first one that is
+     accepted.  Stopping is the point -- the ranking is what the 128 KB was for
+     -- but falling through matters too: the top-ranked stride can still fail
+     the accept tests, and giving up there once cost a 725 KB stereo region,
+     which was then read as mono by the next hypothesis along at two thirds of
+     the gain. */
+  for( size_t q=0; q<nr2; q++ ) {
+    int t = rk[q].t;
+    Hyp hy{fmt,nch,plan[t].bps,int(plan[t].ba)};
+    RegionResult r = rk[q].r;
+    if( !rk[q].full && !run_region(d,n,hy,i,plan[t].limit,r) ) continue;
+    Seg s;
+    bool ok = accept_region(gpfx,r,hy,s);
+    if( OPT.verbose>1 ) {
+      double L2 = double(r.end>r.start ? r.end-r.start : 1);
+      fprintf(stderr,"      %s%d ba=%llu bps=%d -> [%llu,%llu) len=%.0f gain %.3f model %.3f gen %.3f  %s\n",
+        H.name(),nch,(unsigned long long)plan[t].ba,plan[t].bps,
+        (unsigned long long)r.start,(unsigned long long)r.end,L2,
+        double(r.gain)/65536.0/L2, double(r.model_bits)/65536.0/L2,
+        double(generic_bits(gpfx,r.start,r.end))/65536.0/L2, ok?"accept":"reject");
     }
+    if( ok ) { best = s; have = true; break; }
   }
   return have;
 }
@@ -1052,7 +1332,7 @@ static void scan_all( const u8* d, size_t n, const u64* gpfx, HypDesc* HD, int n
     for( int h=0; h<nh; h++ ) {
       if( !HD[h].sm(i) ) continue;
       Seg s;
-      if( !try_anchor(d,n,gpfx,HD[h],i,n,s) ) continue;
+      if( !try_anchor(d,n,gpfx,HD[h],i,n,0.0,s) ) continue;
       if( !have || s.gain>best.gain ) { best = s; have = true; }
     }
 
@@ -1074,7 +1354,8 @@ static void scan_all( const u8* d, size_t n, const u64* gpfx, HypDesc* HD, int n
         for( int h=0; h<nh; h++ ) {
           if( !HD[h].sm(j) ) continue;
           Seg s;
-          if( !try_anchor(d,n,gpfx,HD[h],j,n,s) ) continue;
+          double rate = double(best.gain)/65536.0/double(best.end-best.start);
+          if( !try_anchor(d,n,gpfx,HD[h],j,n,rate,s) ) continue;
           if( s.gain>best.gain ) best = s;
         }
       }
@@ -1109,7 +1390,8 @@ static int encode( const char* inp, const char* outp, const char* prefix ) {
   gpfx[0] = 0;
   for( size_t i=0; i<n; i++ ) gpfx[i+1] = gpfx[i]+O1.Update(d[i]);
   if( OPT.verbose && n )
-    fprintf(stderr,"order-1 over the whole input: %.3f bits/byte\n", double(gpfx[n])/65536.0/double(n));
+    fprintf(stderr,"order-1 over the whole input: %.3f bits/byte  [%s kernels]\n",
+            double(gpfx[n])/65536.0/double(n), raw_simd_name());
 
   static const int hyps[4][2] = {{FMT_IMA,1},{FMT_IMA,2},{FMT_MS,1},{FMT_MS,2}};
   HypDesc HD[4];
@@ -1289,6 +1571,8 @@ static void usage() {
     "  -p BITS       order-1 density a 4 KB window needs before an anchor is decoded (default 5.0)\n"
     "  -x SCALE      what to scale the code model by to estimate xadpcm (default 0.8)\n"
     "  -l BYTES      how far past a working anchor to keep looking for a better one (default 64)\n"
+    "\n"
+    "RAWADPCM_ISA=scalar|sse4|avx2 forces the predictor kernels; all three agree.\n"
     );
 }
 
@@ -1316,6 +1600,8 @@ int main( int argc, char** argv ) {
 
   crc_init();
   init_ms_map();
+  init_ima_tables();
+  raw_simd_init();
   init_fsm();
 
   if( mode=='c' ) return encode(argv[2],argv[3],argv[4]);
