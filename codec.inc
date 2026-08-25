@@ -1356,8 +1356,100 @@ struct BMFCodec : BMFState {
     for( int32_t s = 0; s<4; ++s )
       plane_desc[order[s]].nrefs = (uint8_t)s;
   }
-  uint32_t search_filter(BmfImage* img) {
+  // The mode-unification trials as one scoreable unit: given a per-plane search
+  // result on the tile, return the cheapest total over the planar and the joint
+  // forms, and set `cand` to which won.  It is a function rather than a stretch
+  // of search_filter because the renumbering trial has to be scored in the same
+  // currency -- see the candidate loop there for why the planar total alone
+  // ranks value maps wrongly.
+  //
+  // transform_planes writes the colour transform through the tile's pixels, so
+  // a caller running this speculatively must snapshot them first; the
+  // descriptor table is left holding whatever won.
+  int32_t mode_search(BmfImage* tile_img, uint8_t* tile_src, PlaneSearch &ps,
+                      int32_t best_bits, int32_t &cand) {
     PlaneDesc saved[4];
+    if( plane_count>2 ) {
+      if( ps.n_p1 ) {
+        save_descriptors(saved);
+        offer_to_all(try_p1);
+        int32_t bits_e = transform_cost(tile_img);
+        if( bits_e<=best_bits ) {
+          bmf_log("    %-22s %12.1f bytes  <<\n", "joint alt-P1", bmf_bytes(bits_e));
+          best_bits = bits_e;
+          cand = 0;
+        } else {
+          bmf_log("    %-22s %12.1f bytes\n", "joint alt-P1", bmf_bytes(bits_e));
+          restore_descriptors(saved);
+          cand = 1;
+        }
+      } else {
+        cand = 1;
+      }
+      if( ps.n_p2+(cand==0) ) {
+        save_descriptors(saved);
+        offer_to_all(try_p2);
+        if( plane_count==ps.n_p2&&plane_count-1==ps.n_refs ) {
+          bmf_log("    %-22s adopted unmeasured (every plane already chose it)\n", "joint alt-P2");
+          cand = 0;
+        } else {
+          const int32_t bits_a = transform_cost(tile_img);
+          if( bits_a<=best_bits ) {
+            bmf_log("    %-22s %12.1f bytes  <<\n", "joint alt-P2", bmf_bytes(bits_a));
+            best_bits = bits_a;
+            ps.n_p2 = bits_a;
+            if( plane_count-1==ps.n_refs ) {
+              cand = 0;
+            } else {
+              save_descriptors(saved);
+              allow_refs_where_present();
+              int32_t bits2 = transform_cost(tile_img);
+              bmf_log("    %-22s %12.1f bytes%s\n", "joint alt-P2 + refs", bmf_bytes(bits2), bits2>bits_a ? "" : "  <<");
+              if( bits2>bits_a )
+                restore_descriptors(saved);
+              cand = 0;
+            }
+          } else {
+            bmf_log("    %-22s %12.1f bytes\n", "joint alt-P2", bmf_bytes(bits_a));
+            restore_descriptors(saved);
+          }
+        }
+      }
+    } else {
+      cand = 1;
+    }
+    if( !ps.n_p2&&plane_count>1 ) {
+      uint8_t* tile_copy = (uint8_t*)bmf_new(tile_img[0].data_size);
+      memcpy(tile_copy, tile_src, tile_img[0].data_size);
+      save_descriptors(saved);
+      drop_alt_model_from_all();
+      int32_t bits_b = transform_cost(tile_img);
+      if( bits_b>best_bits ) {
+        bmf_log("    %-22s %12.1f bytes\n", "joint, no alt model", bmf_bytes(bits_b));
+        restore_descriptors(saved);
+      } else {
+        bmf_log("    %-22s %12.1f bytes  <<\n", "joint, no alt model", bmf_bytes(bits_b));
+        best_bits = bits_b;
+        cand = 0;
+      }
+      if( ps.n_refs+ps.n_p1 ) {
+        save_descriptors(saved);
+        clear_flags_on_all();
+        memcpy(tile_src, tile_copy, tile_img[0].data_size);
+        int32_t bits_c = transform_cost(tile_img);
+        if( bits_c<=best_bits ) {
+          bmf_log("    %-22s %12.1f bytes  <<\n", "joint, flags cleared", bmf_bytes(bits_c));
+          cand = 0;
+        } else {
+          bmf_log("    %-22s %12.1f bytes\n", "joint, flags cleared", bmf_bytes(bits_c));
+          restore_descriptors(saved);
+        }
+      }
+      free(tile_copy);
+    }
+    return best_bits;
+  }
+  uint32_t search_filter(BmfImage* img) {
     uint32_t plane_cost[4];
     int32_t cand, pl_k;
     int32_t tile_w = img[0].width;
@@ -1538,84 +1630,7 @@ struct BMFCodec : BMFState {
       }
     }
     free(tile_buf);
-    if( plane_count>2 ) {
-      if( ps.n_p1 ) {
-        save_descriptors(saved);
-        offer_to_all(try_p1);
-        int32_t bits_e = transform_cost(tile_img);
-        if( bits_e<=best_bits ) {
-          bmf_log("    %-22s %12.1f bytes  <<\n", "joint alt-P1", bmf_bytes(bits_e));
-          best_bits = bits_e;
-          cand = 0;
-        } else {
-          bmf_log("    %-22s %12.1f bytes\n", "joint alt-P1", bmf_bytes(bits_e));
-          restore_descriptors(saved);
-          cand = 1;
-        }
-      } else {
-        cand = 1;
-      }
-      if( ps.n_p2+(cand==0) ) {
-        save_descriptors(saved);
-        offer_to_all(try_p2);
-        if( plane_count==ps.n_p2&&plane_count-1==ps.n_refs ) {
-          bmf_log("    %-22s adopted unmeasured (every plane already chose it)\n", "joint alt-P2");
-          cand = 0;
-        } else {
-          const int32_t bits_a = transform_cost(tile_img);
-          if( bits_a<=best_bits ) {
-            bmf_log("    %-22s %12.1f bytes  <<\n", "joint alt-P2", bmf_bytes(bits_a));
-            best_bits = bits_a;
-            ps.n_p2 = bits_a;
-            if( plane_count-1==ps.n_refs ) {
-              cand = 0;
-            } else {
-              save_descriptors(saved);
-              allow_refs_where_present();
-              int32_t bits2 = transform_cost(tile_img);
-              bmf_log("    %-22s %12.1f bytes%s\n", "joint alt-P2 + refs", bmf_bytes(bits2), bits2>bits_a ? "" : "  <<");
-              if( bits2>bits_a )
-                restore_descriptors(saved);
-              cand = 0;
-            }
-          } else {
-            bmf_log("    %-22s %12.1f bytes\n", "joint alt-P2", bmf_bytes(bits_a));
-            restore_descriptors(saved);
-          }
-        }
-      }
-    } else {
-      cand = 1;
-    }
-    if( !ps.n_p2&&plane_count>1 ) {
-      uint8_t* tile_copy = (uint8_t*)bmf_new(tile_img[0].data_size);
-      memcpy(tile_copy, tile_src, tile_img[0].data_size);
-      save_descriptors(saved);
-      drop_alt_model_from_all();
-      int32_t bits_b = transform_cost(tile_img);
-      if( bits_b>best_bits ) {
-        bmf_log("    %-22s %12.1f bytes\n", "joint, no alt model", bmf_bytes(bits_b));
-        restore_descriptors(saved);
-      } else {
-        bmf_log("    %-22s %12.1f bytes  <<\n", "joint, no alt model", bmf_bytes(bits_b));
-        best_bits = bits_b;
-        cand = 0;
-      }
-      if( ps.n_refs+ps.n_p1 ) {
-        save_descriptors(saved);
-        clear_flags_on_all();
-        memcpy(tile_src, tile_copy, tile_img[0].data_size);
-        int32_t bits_c = transform_cost(tile_img);
-        if( bits_c<=best_bits ) {
-          bmf_log("    %-22s %12.1f bytes  <<\n", "joint, flags cleared", bmf_bytes(bits_c));
-          cand = 0;
-        } else {
-          bmf_log("    %-22s %12.1f bytes\n", "joint, flags cleared", bmf_bytes(bits_c));
-          restore_descriptors(saved);
-        }
-      }
-      free(tile_copy);
-    }
+    best_bits = mode_search(tile_img, tile_src, ps, best_bits, cand);
     free(stream.buf);
     free((uint8_t*)tile_img);
     bmf_log("  choice: %s, %.1f bytes (%.3f bpp) by the trials' own measure\n",
