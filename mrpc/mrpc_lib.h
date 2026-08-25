@@ -24,6 +24,39 @@
 
 #include <stddef.h>
 
+/* --- exports -------------------------------------------------------
+   On ELF the attribute is unconditional: it costs nothing in a static
+   build, and it is what survives -fvisibility=hidden, which is how a
+   shared library ends up with no surface at all.
+
+   Windows cannot do that, because the two sides are different keywords.
+   Building the DLL wants MRPC_BUILD_DLL, using one wants MRPC_DLL, and
+   with neither the header describes a static library, which is what the
+   Makefile here builds by default.
+
+       cl /LD  /DMRPC_BUILD_DLL mrpc_lib.cpp
+       gcc -shared -DMRPC_BUILD_DLL ... -Wl,--out-implib,libmrpc.dll.a
+
+   The calling convention is spelled out because a DLL outlives the
+   compiler flags it was built with: on 32-bit Windows /Gz or /Gr would
+   otherwise change it out from under the header.  -------------------- */
+#if defined(_WIN32)||defined(__CYGWIN__)
+#  if defined(MRPC_BUILD_DLL)
+#    define MRPC_API __declspec(dllexport)
+#  elif defined(MRPC_DLL)
+#    define MRPC_API __declspec(dllimport)
+#  else
+#    define MRPC_API
+#  endif
+#  define MRPC_CALL __cdecl
+#elif defined(__GNUC__)&&(__GNUC__>=4)
+#  define MRPC_API __attribute__((visibility("default")))
+#  define MRPC_CALL
+#else
+#  define MRPC_API
+#  define MRPC_CALL
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -78,12 +111,12 @@ typedef struct mrpc_ctx mrpc_ctx;
    opts may be null for the defaults.  The context carries the device,
    the compiled kernels and every buffer the codec reuses, so compressing
    a hundred images through one context opens the device once. */
-mrpc_ctx*   mrpc_init(const mrpc_opts* opts);
-void        mrpc_quit(mrpc_ctx* c);
+MRPC_API mrpc_ctx*   MRPC_CALL mrpc_init(const mrpc_opts* opts);
+MRPC_API void        MRPC_CALL mrpc_quit(mrpc_ctx* c);
 
 /* What the context actually opened -- "[GPU] NVIDIA GeForce RTX 3090
    (NVIDIA CUDA)" -- or "host" if it is not using a device. */
-const char* mrpc_device_used(mrpc_ctx* c);
+MRPC_API const char* MRPC_CALL mrpc_device_used(mrpc_ctx* c);
 
 /* --- compression ---------------------------------------------------
    head and tail are carried through the stream with an order-1 model
@@ -94,20 +127,24 @@ const char* mrpc_device_used(mrpc_ctx* c);
    frontend does with a file it could not parse as an image.
 
    *out is allocated here; free it with mrpc_free. */
-int mrpc_compress(mrpc_ctx* c, const mrpc_image* img,
-                  const void* head, size_t headlen,
-                  const void* tail, size_t taillen,
-                  mrpc_blob* out);
+MRPC_API int MRPC_CALL mrpc_compress(mrpc_ctx* c, const mrpc_image* img,
+                                     const void* head, size_t headlen,
+                                     const void* tail, size_t taillen,
+                                     mrpc_blob* out);
 
 /* img->data, head->data and tail->data are allocated here; free each
    with mrpc_free.  Any of the three outputs may be null if you do not
    want it.  An image the stream does not carry comes back with
    width == 0 and data == 0. */
-int mrpc_decompress(mrpc_ctx* c, const void* data, size_t size,
-                    mrpc_image* img, mrpc_blob* head, mrpc_blob* tail);
+MRPC_API int MRPC_CALL mrpc_decompress(mrpc_ctx* c, const void* data, size_t size,
+                                       mrpc_image* img, mrpc_blob* head,
+                                       mrpc_blob* tail);
 
-void        mrpc_free(void* p);
-const char* mrpc_error(int rc);
+/* Everything the library allocated goes back through here, and only
+   here: across a DLL boundary the caller's free() may not be the one
+   that allocated it. */
+MRPC_API void        MRPC_CALL mrpc_free(void* p);
+MRPC_API const char* MRPC_CALL mrpc_error(int rc);
 
 /* --- devices -------------------------------------------------------
    For a frontend that wants to show what is available.  Counting them
@@ -125,8 +162,8 @@ typedef struct {
   size_t             max_work_group;
 } mrpc_device;
 
-int mrpc_device_count(void);
-int mrpc_device_get(int index, mrpc_device* out); /* MRPC_OK or MRPC_ERR_ARG */
+MRPC_API int MRPC_CALL mrpc_device_count(void);
+MRPC_API int MRPC_CALL mrpc_device_get(int index, mrpc_device* out); /* MRPC_OK or ERR_ARG */
 
 #ifdef __cplusplus
 }

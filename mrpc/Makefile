@@ -19,6 +19,28 @@ LIBSRC = mrpc_lib.cpp mrpc_lib.h mrpc_cl.inc mrpc_kernels.inc sh_common.inc sh_v
 
 all: mrpc
 
+# --- shared ----------------------------------------------------------
+# Built with -fvisibility=hidden on purpose: that is what a shared
+# library should be built with, and it is what makes the attributes in
+# mrpc_lib.h load-bearing.  `make exports` prints what comes out, which
+# should be the nine functions in the header and nothing else.
+libmrpc.so: $(LIBSRC)
+	$(CXX) $(CXXFLAGS) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden \
+	  -DMRP_OPENCL -shared mrpc_lib.cpp -o $@ $(LDLIBS)
+
+exports: libmrpc.so
+	@nm -D --defined-only libmrpc.so | grep " T \| W " || true
+
+# and the same for Windows.  -static-libgcc/-static-libstdc++ so the DLL
+# does not drag the MinGW runtime along with it; the import library is
+# what a caller links against, though LoadLibrary works too -- the
+# exports are undecorated __cdecl.
+mrpc.dll: $(LIBSRC) winsdk/CL/cl.h
+	$(WINCXX) $(WINFLAGS_DLL) -DMRP_OPENCL -DMRPC_BUILD_DLL -isystem winsdk \
+	  -shared mrpc_lib.cpp -o $@ -Wl,--out-implib,libmrpc.dll.a
+
+dll: mrpc.dll
+
 libmrpc.a: mrpc_lib.o
 	$(AR) rcs $@ $^
 
@@ -40,9 +62,9 @@ t_lib: t_lib.c mrpc_lib.h libmrpc.a
 test: t_lib
 	./t_lib
 
-.PHONY: all clean devices windows test
+.PHONY: all clean devices windows test exports dll
 clean:
-	rm -f mrpc mrpc-nocl mrpc.exe t_lib *.o *.a
+	rm -f mrpc mrpc-nocl mrpc.exe t_lib t_dll.exe *.o *.a *.so *.dll
 	rm -rf winsdk
 
 devices: mrpc
@@ -62,6 +84,8 @@ devices: mrpc
 WINCXX     ?= x86_64-w64-mingw32-g++
 WINARCH    ?= haswell
 WINFLAGS   ?= -O2 -std=c++17 -march=$(WINARCH) -mtune=$(WINARCH) -DNDEBUG -w -static
+WINFLAGS_DLL ?= -O2 -std=c++17 -march=$(WINARCH) -mtune=$(WINARCH) -DNDEBUG -w \
+                -static-libgcc -static-libstdc++
 CL_HEADERS ?= /usr/include/CL
 
 windows: mrpc.exe

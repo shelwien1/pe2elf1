@@ -3216,7 +3216,7 @@ static const size_t MRPC_CTX_ALIGN = 64;
 
 extern "C" {
 
-mrpc_ctx* mrpc_init(const mrpc_opts* opts) {
+MRPC_API mrpc_ctx* MRPC_CALL mrpc_init(const mrpc_opts* opts) {
   size_t n = (sizeof(mrpc_ctx)+MRPC_CTX_ALIGN-1)&~(MRPC_CTX_ALIGN-1);
   mrpc_ctx* c = (mrpc_ctx*)aligned_alloc(MRPC_CTX_ALIGN, n);
   if( !c )
@@ -3248,14 +3248,14 @@ mrpc_ctx* mrpc_init(const mrpc_opts* opts) {
   return c;
 }
 
-void mrpc_quit(mrpc_ctx* c) {
+MRPC_API void MRPC_CALL mrpc_quit(mrpc_ctx* c) {
   if( !c )
     return;
   c->cd.Quit();
   aligned_free(c);
 }
 
-const char* mrpc_device_used(mrpc_ctx* c) {
+MRPC_API const char* MRPC_CALL mrpc_device_used(mrpc_ctx* c) {
   static char buf[1024];
   (void)c;
 #ifdef MRP_OPENCL
@@ -3267,27 +3267,28 @@ const char* mrpc_device_used(mrpc_ctx* c) {
   return "host";
 }
 
-int mrpc_compress(mrpc_ctx* c, const mrpc_image* img,
-                  const void* head, size_t headlen,
-                  const void* tail, size_t taillen,
-                  mrpc_blob* out) {
+MRPC_API int MRPC_CALL mrpc_compress(mrpc_ctx* c, const mrpc_image* img,
+                                     const void* head, size_t headlen,
+                                     const void* tail, size_t taillen,
+                                     mrpc_blob* out) {
   if( !c )
     return MRPC_ERR_ARG;
   return c->cd.Compress(img, head, headlen, tail, taillen, out);
 }
 
-int mrpc_decompress(mrpc_ctx* c, const void* data, size_t size,
-                    mrpc_image* img, mrpc_blob* head, mrpc_blob* tail) {
+MRPC_API int MRPC_CALL mrpc_decompress(mrpc_ctx* c, const void* data, size_t size,
+                                       mrpc_image* img, mrpc_blob* head,
+                                       mrpc_blob* tail) {
   if( !c )
     return MRPC_ERR_ARG;
   return c->cd.Decompress(data, size, img, head, tail);
 }
 
-void mrpc_free(void* p) {
+MRPC_API void MRPC_CALL mrpc_free(void* p) {
   free(p);
 }
 
-const char* mrpc_error(int rc) {
+MRPC_API const char* MRPC_CALL mrpc_error(int rc) {
   switch( rc ) {
     case MRPC_OK:
       return "ok";
@@ -3304,7 +3305,7 @@ const char* mrpc_error(int rc) {
   }
 }
 
-int mrpc_device_count(void) {
+MRPC_API int MRPC_CALL mrpc_device_count(void) {
 #ifdef MRP_OPENCL
   CLDevList l;
   l.Enumerate(-1);
@@ -3314,7 +3315,7 @@ int mrpc_device_count(void) {
 #endif
 }
 
-int mrpc_device_get(int index, mrpc_device* out) {
+MRPC_API int MRPC_CALL mrpc_device_get(int index, mrpc_device* out) {
 #ifdef MRP_OPENCL
   if( !out )
     return MRPC_ERR_ARG;

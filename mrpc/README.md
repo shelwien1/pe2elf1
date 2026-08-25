@@ -63,6 +63,30 @@ mrpc_decompress(c, blob, bloblen, &img, &head, &tail);
 builds `t_lib` — which is C, not C++, so that the header has to be what it
 claims — and runs it.
 
+### Shared
+
+```sh
+make libmrpc.so   # ELF, built -fvisibility=hidden
+make exports      # what came out of it
+make dll          # mrpc.dll and libmrpc.dll.a, cross-built
+```
+
+The nine functions in the header carry `MRPC_API`, and nothing else in the
+library does, so `make exports` lists those nine and no more. On ELF the
+attribute is `visibility("default")` and unconditional — it costs a static
+build nothing and it is the thing that survives `-fvisibility=hidden`, which is
+what leaves a shared library with no surface at all. Windows cannot do that,
+because export and import are different keywords: define `MRPC_BUILD_DLL` when
+building the DLL and `MRPC_DLL` when using one, and with neither the header
+describes the static library. The exports are undecorated `__cdecl`, so
+`GetProcAddress` finds them by the names in the header.
+
+`mrpc.dll` imports `KERNEL32` and `msvcrt` and nothing else — no OpenCL, which
+it loads at run time, and no MinGW runtime. Which CRT it holds is exactly why
+`mrpc_free` exists: memory the library allocated has to go back to the
+allocator that gave it, and across a DLL boundary the caller's `free` may not
+be that one.
+
 ### The stream is self-describing now
 
 It has to be: a library that takes a raster cannot recover the geometry by
@@ -326,4 +350,4 @@ exercised.
 | `mrpc.cpp` | the frontend: options, BMP, files, and nothing else |
 | `Makefile`, `gc.bat` | Linux and Windows builds |
 | `t.sh` | round-trip and reference check, through the command line |
-| `t_lib.c` | the same through the C API, in C |
+| `t_lib.c` | the same through the C API, in C — and against `libmrpc.a`, `libmrpc.so` or `mrpc.dll` unchanged |
