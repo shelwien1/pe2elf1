@@ -9,7 +9,7 @@ that cannot be derived from the codes into a small side file, so that
 `c` followed by `d` reproduces the input exactly.
 
 ```
-mtf2ima c|d [-q] [-bN] input output metainfo.bin
+mtf2ima c|d [-q] [-bN] input output [metainfo.bin]
 
   c = repack into the other format (.fwse <-> IMA wav, detected from the
       input's magic)
@@ -18,6 +18,14 @@ mtf2ima c|d [-q] [-bN] input output metainfo.bin
   -q  quiet
   -bN IMA block size in bytes for c (default 2048), rounded down to
       4*channels*(groups+1)
+```
+
+Name `metainfo.bin` and it is a separate file; leave it out and it travels
+inside the output itself, so `c` and `d` each take one file:
+
+```
+mtf2ima c sound.fwse sound.wav      # one wav, metainfo included
+mtf2ima d sound.wav  sound2.fwse    # byte-identical to sound.fwse
 ```
 
 ## Why the two formats line up
@@ -60,6 +68,25 @@ measured against the source it comes out at r ≈ −0.22 on average over the
 sample set, |r| ≤ 0.6. The file is a container for the code stream; restoring
 the audio means restoring the source file, which is what `d` does.
 
+## Where the metainfo goes
+
+Both containers have room for it, so the separate file is optional.
+
+* **RIFF** is a chunk list, so the metainfo becomes an `M2I1` chunk placed
+  after the `data` chunk. The payload keeps its canonical offset 60, `data`
+  stays a normal chunk, and every decoder skips a chunk id it does not know —
+  ffmpeg decodes such a file to the same PCM, bit for bit, as the two-file
+  version. Cost is 8 bytes of chunk header plus a pad byte.
+* **FWSE** has a 1 KiB header of which the demuxer reads only the first 0x1c
+  bytes; the rest is `0xCC` filler in every sample seen. The metainfo goes in
+  at 0x2c, behind its own magic and length, and costs **nothing at all** until
+  it outgrows the filler — past that the header grows and `start_offset`, which
+  the demuxer honours, grows with it (verified up to a 21 KB metainfo).
+
+Since the metainfo never describes the container it rides in, there is no
+circularity: it is built first, and only the file-size and `start_offset`
+fields around it depend on its length.
+
 ## Geometry
 
 Both formats pack two codes of one channel per byte, so a chunk of the MTF
@@ -93,8 +120,10 @@ make
 
 ## Verification
 
-`test/roundtrip.sh [-v] file…|dir` repacks and restores every file and checks
-that the restore is byte-identical and that ffmpeg accepts the repack.
+`test/roundtrip.sh [-v] file…|dir` repacks and restores every file both ways —
+separate metainfo and metainfo inside the output — and checks that each restore
+is byte-identical, that ffmpeg accepts both repacks, and that the two decode to
+the same PCM.
 
 `test/mtf_check.py orig.fwse packed.wav [orig.pcm]` is the stronger check: it
 reads the codes back out of the produced IMA wav, maps them to MT Framework
@@ -107,9 +136,10 @@ Against the 408-file MT Framework sample set (mono, 48 kHz, 9.6 MB of payload)
 and ffmpeg 6.1.1:
 
 ```
-408 ok, 0 failed; 10098116 bytes in, 9725140 repacked, 84107 metainfo
+408 ok, 0 failed; 10098116 bytes in,
+                  9725140 repacked + 84107 metainfo, 9812598 single-file
 408/408 files: codes recovered from the IMA wav, MTF-decoded == ffmpeg,
-               all block headers == MTF state
+               all block headers == MTF state    (both modes)
 ```
 
 Metainfo runs about 200 bytes per file, nearly all of it the opaque middle of
@@ -121,4 +151,7 @@ Also verified: both directions on 1- and 2-channel data, ffmpeg-encoded IMA
 wavs at block sizes 1024/2048/4096 repacked to `.fwse` and decoded back by
 ffmpeg, and a 116-case matrix of edge geometries (empty payload, 1–15 byte
 payloads, odd lengths, payloads not a multiple of the group size, runt final
-blocks, minimum-size blocks, non-multiple-of-`4*channels` block sizes).
+blocks, minimum-size blocks, non-multiple-of-`4*channels` block sizes), each in
+both modes. Feeding a single-file output back in as a source nests correctly:
+the outer restore is byte-identical and the inner metainfo still recovers the
+original `.fwse`.

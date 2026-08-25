@@ -68,7 +68,16 @@
  * pair.  The forward direction runs its own inverse in memory before writing
  * anything.
  *
- * Usage:  mtf2ima c|d [-q] [-bN] input output metainfo.bin
+ * The metainfo does not have to be a separate file.  Both containers have room
+ * for it: RIFF is a chunk list, so it goes in an "M2I1" chunk after the data
+ * chunk, where the payload keeps its canonical offset and every decoder skips
+ * what it does not know; FWSE has a 1 KiB header of which only the first 0x1c
+ * bytes are read and the rest is 0xCC filler, so it goes in there at 0x2c, for
+ * free until it outgrows the filler -- past that the header grows and
+ * start_offset, which the demuxer honours, grows with it.  Naming the metainfo
+ * file is what asks for it separately.
+ *
+ * Usage:  mtf2ima c|d [-q] [-bN] input output [metainfo.bin]
  */
 
 #include <stdio.h>
@@ -88,16 +97,19 @@
 #define MAX_CHANS       2       // the fwse demuxer accepts 1 or 2
 #define CANON_IMA       60      // riff 12 + fmt 8+20 + fact 8+4 + data 8
 #define FWSE_HEAD       0x400   // start_offset of every known .fwse
+#define FWSE_META_OFF   0x2c    // first byte of the header no known .fwse uses
 #define DEF_ALIGN       2048    // default IMA block size, exact for 1 and 2 ch
 
 static const char *sign_on =
     "\n MTF2IMA  lossless MT Framework ADPCM <-> IMA-ADPCM structural repack  version 1.0\n\n";
 
 static const char *usage =
-    " Usage:    mtf2ima c|d [-q] [-bN] input output metainfo.bin\n\n"
+    " Usage:    mtf2ima c|d [-q] [-bN] input output [metainfo.bin]\n\n"
     "           c = repack into the other format (.fwse <-> IMA wav, detected\n"
     "               from the input's magic)\n"
     "           d = rebuild the original file from output + metainfo.bin\n\n"
+    "           without metainfo.bin the metainfo travels inside the output\n"
+    "           itself, in an M2I1 chunk of the wav or in the FWSE header\n\n"
     "           the code stream is carried across unchanged, so the output is a\n"
     "           conformant file of the other format but not the same audio\n\n"
     " Options:  -q  = quiet\n"
@@ -727,13 +739,13 @@ static void parse_wav (const uint8_t *f, size_t fsize, Src *w, const char *name,
 static int ima_block_samples (int chans, int align) { return (align - 4 * chans) * 2 / chans + 1; }
 
 static void build_ima_head (Buf &out, int chans, uint32_t rate, int align,
-    uint32_t num_samples, uint32_t data_size)
+    uint32_t num_samples, uint32_t data_size, uint32_t extra)
 {
     uint8_t h [CANON_IMA];
     int spb = ima_block_samples (chans, align);
 
     memcpy (h, "RIFF", 4);
-    wr32 (h + 4, (uint32_t) (CANON_IMA - 8) + data_size);
+    wr32 (h + 4, (uint32_t) (CANON_IMA - 8) + data_size + (data_size & 1) + extra);
     memcpy (h + 8, "WAVE", 4);
 
     memcpy (h + 12, "fmt ", 4);
@@ -761,15 +773,25 @@ static void build_ima_head (Buf &out, int chans, uint32_t rate, int align,
  * the rest follows what the samples look like, 0xCC filler over an opaque
  * middle that no encoder outside MT Framework can fill in. */
 
-static void build_fwse_head (Buf &out, int chans, uint32_t rate, uint32_t data_size)
+static size_t fwse_head_size (size_t msize)
 {
-    uint8_t h [FWSE_HEAD];
+    size_t need = msize ? FWSE_META_OFF + 8 + msize : 0;
 
-    memset (h, 0xcc, sizeof (h));
+    return need <= FWSE_HEAD ? FWSE_HEAD : ((need + 15) & ~(size_t) 15);
+}
+
+static void build_fwse_head (Buf &out, int chans, uint32_t rate, uint32_t data_size,
+    const uint8_t *meta, size_t msize)
+{
+    size_t hs = fwse_head_size (msize);
+    uint8_t *h = (uint8_t *) malloc (hs);
+
+    if (!h) die ("out of memory");
+    memset (h, 0xcc, hs);
     memcpy (h, "FWSE", 4);
     wr32 (h + 4, 2);                                            // version
-    wr32 (h + 8, FWSE_HEAD + data_size);                        // file size
-    wr32 (h + 12, FWSE_HEAD);                                   // start offset
+    wr32 (h + 8, (uint32_t) hs + data_size);                    // file size
+    wr32 (h + 12, (uint32_t) hs);                               // start offset
     wr32 (h + 16, (uint32_t) chans);
     wr32 (h + 20, chans ? data_size * 2 / (uint32_t) chans : 0);
     wr32 (h + 24, rate);
@@ -778,7 +800,45 @@ static void build_fwse_head (Buf &out, int chans, uint32_t rate, uint32_t data_s
     wr32 (h + 36, 0xffffffffu);
     wr32 (h + 40, 0);
 
-    out.put (h, sizeof (h));
+    if (msize) {                                                // into the filler
+        memcpy (h + FWSE_META_OFF, MI_MAGIC, 4);
+        wr32 (h + FWSE_META_OFF + 4, (uint32_t) msize);
+        memcpy (h + FWSE_META_OFF + 8, meta, msize);
+    }
+
+    out.put (h, hs);
+    free (h);
+}
+
+/*--------------------------- the embedded metainfo ---------------------------*/
+
+// an M2I1 chunk anywhere in the RIFF chunk list
+static const uint8_t *find_wav_meta (const uint8_t *f, size_t fsize, size_t *msize)
+{
+    for (size_t pos = 12; pos + 8 <= fsize;) {
+        uint32_t size = rd32 (f + pos + 4);
+        size_t body = pos + 8;
+        uint32_t avail = (uint32_t) (body + size <= fsize ? size : fsize - body);
+
+        if (!memcmp (f + pos, MI_MAGIC, 4)) { *msize = avail; return f + body; }
+
+        pos = body + size + (size & 1);
+    }
+
+    return NULL;
+}
+
+// the fixed spot in the FWSE header filler, inside whatever start_offset says
+static const uint8_t *find_fwse_meta (const uint8_t *f, size_t start, size_t *msize)
+{
+    if (start < FWSE_META_OFF + 8 || memcmp (f + FWSE_META_OFF, MI_MAGIC, 4)) return NULL;
+
+    uint32_t size = rd32 (f + FWSE_META_OFF + 4);
+
+    if (size > start - (FWSE_META_OFF + 8)) return NULL;
+
+    *msize = size;
+    return f + FWSE_META_OFF + 8;
 }
 
 /* Fields of the stored source header that are functions of what is stored
@@ -909,16 +969,32 @@ static void convert (const char *infile, const char *outfile, const char *metafi
     meta.put (s.rsvx.d, s.rsvx.n);
 
     Buf out;
+    int embed = !metafile;
 
-    if (c.src_format == SRC_MTF)
-        build_ima_head (out, c.chans, w.rate, c.align, (uint32_t) samples, (uint32_t) dst.n);
-    else
-        build_fwse_head (out, c.chans, w.rate, (uint32_t) dst.n);
+    if (c.src_format == SRC_MTF) {
+        uint32_t extra = embed ? (uint32_t) (8 + meta.n + (meta.n & 1)) : 0;
 
-    out.put (dst.d, dst.n);
-    if (c.src_format == SRC_MTF && (dst.n & 1)) out.put (0);    // RIFF chunks are padded
+        build_ima_head (out, c.chans, w.rate, c.align, (uint32_t) samples, (uint32_t) dst.n, extra);
+        out.put (dst.d, dst.n);
+        if (dst.n & 1) out.put (0);                             // RIFF chunks are padded
 
-    save_file (metafile, meta.d, meta.n);
+        if (embed) {
+            uint8_t ch [8];
+
+            memcpy (ch, MI_MAGIC, 4);
+            wr32 (ch + 4, (uint32_t) meta.n);
+            out.put (ch, 8);
+            out.put (meta.d, meta.n);
+            if (meta.n & 1) out.put (0);
+        }
+    }
+    else {
+        build_fwse_head (out, c.chans, w.rate, (uint32_t) dst.n,
+            embed ? meta.d : NULL, embed ? meta.n : 0);
+        out.put (dst.d, dst.n);
+    }
+
+    if (!embed) save_file (metafile, meta.d, meta.n);
     save_file (outfile, out.d, out.n);
 
     if (!quiet) {
@@ -930,7 +1006,9 @@ static void convert (const char *infile, const char *outfile, const char *metafi
             fprintf (stderr, ", block %d", c.align);
 
         fprintf (stderr, "\n meta:    %s, %lu bytes = %lu hdr + %lu riff%s + %lu odd + %lu %s\n",
-            metafile, (unsigned long) meta.n, (unsigned long) fixed,
+            embed ? (c.src_format == SRC_MTF ? "in the wav's M2I1 chunk" : "in the FWSE header")
+                  : metafile,
+            (unsigned long) meta.n, (unsigned long) fixed,
             (unsigned long) s.head.n, (flags & MI_FLAG_RLE) ? " (rle)" : "",
             (unsigned long) (s.side.n + w.tail_size),
             (unsigned long) (s.pred.n + s.sidx.n + s.rsvx.n),
@@ -947,20 +1025,37 @@ static void convert (const char *infile, const char *outfile, const char *metafi
 
 static void restore (const char *infile, const char *outfile, const char *metafile)
 {
-    size_t fsize, msize;
+    size_t fsize, msize = 0;
     uint8_t *file = load_file (infile, &fsize);
-    uint8_t *mfile = load_file (metafile, &msize);
+    uint8_t *mfile = NULL;
+    const uint8_t *mdata = NULL;
+    const char *mname = metafile;
     Src w;
     Ctx c;
     int dst_align = 0, dst_spb = 0;
 
-    if (msize < 12 || memcmp (mfile, MI_MAGIC, 4))
-        die ("not an mtf2ima metainfo file:", metafile);
+    if (metafile)
+        mdata = mfile = load_file (metafile, &msize);
+    else {
+        mname = infile;
+
+        if (fsize >= 4 && !memcmp (file, "FWSE", 4))
+            mdata = (fsize >= 16) ? find_fwse_meta (file, rd32 (file + 12) < fsize
+                ? rd32 (file + 12) : fsize, &msize) : NULL;
+        else if (fsize >= 12 && !memcmp (file, "RIFF", 4))
+            mdata = find_wav_meta (file, fsize, &msize);
+
+        if (!mdata)
+            die ("no metainfo inside, and none named on the command line:", infile);
+    }
+
+    if (msize < 12 || memcmp (mdata, MI_MAGIC, 4))
+        die ("not an mtf2ima metainfo file:", mname);
 
     Cursor m;
-    m.set (mfile + 4, msize - 4, metafile);
+    m.set (mdata + 4, msize - 4, mname);
 
-    if (m.byte () != MI_VERSION) die ("metainfo written by a different mtf2ima version:", metafile);
+    if (m.byte () != MI_VERSION) die ("metainfo written by a different mtf2ima version:", mname);
 
     c.src_format = m.byte ();
     c.chans = m.byte ();
@@ -985,7 +1080,7 @@ static void restore (const char *infile, const char *outfile, const char *metafi
 
     if ((c.src_format != SRC_MTF && c.src_format != SRC_IMA) ||
         c.chans < 1 || c.chans > MAX_CHANS || c.align < 4 * c.chans)
-            die ("corrupt metainfo from", metafile);
+            die ("corrupt metainfo from", mname);
 
     // the converted file: an IMA wav if the source was FWSE, an FWSE if it was a wav
     if (c.src_format == SRC_MTF) {
@@ -999,18 +1094,18 @@ static void restore (const char *infile, const char *outfile, const char *metafi
 
     size_t stored = head_bytes + tail_size + side_size + pred_size + sidx_size + rsvx_size;
 
-    if (m.p + stored > m.n) die ("truncated metainfo from", metafile);
+    if (m.p + stored > m.n) die ("truncated metainfo from", mname);
 
-    const uint8_t *q = mfile + 4 + m.p;
+    const uint8_t *q = mdata + 4 + m.p;
     Cursor hc;
-    hc.set (q, head_bytes, metafile); q += head_bytes;
+    hc.set (q, head_bytes, mname); q += head_bytes;
     const uint8_t *tail = q; q += tail_size;
 
     Joined in;
-    in.side.set (q, side_size, metafile); q += side_size;
-    in.pred.set (q, pred_size, metafile); q += pred_size;
-    in.sidx.set (q, sidx_size, metafile); q += sidx_size;
-    in.rsvx.set (q, rsvx_size, metafile);
+    in.side.set (q, side_size, mname); q += side_size;
+    in.pred.set (q, pred_size, mname); q += pred_size;
+    in.sidx.set (q, sidx_size, mname); q += sidx_size;
+    in.rsvx.set (q, rsvx_size, mname);
 
     if (crc32_buf (file + w.data_off, w.data_size) != crc_dst)
         die ("sample stream does not match this metainfo (mismatched pair?):", infile);
@@ -1018,7 +1113,10 @@ static void restore (const char *infile, const char *outfile, const char *metafi
     if (!quiet)
         fprintf (stderr, " input:   %s, %s, %lu data bytes\n meta:    %s, %lu bytes\n",
             infile, c.src_format == SRC_MTF ? "IMA-ADPCM" : "MT Framework ADPCM",
-            (unsigned long) w.data_size, metafile, (unsigned long) msize);
+            (unsigned long) w.data_size,
+            metafile ? metafile : (c.src_format == SRC_MTF ? "in the wav's M2I1 chunk"
+                                                           : "in the FWSE header"),
+            (unsigned long) msize);
 
     Buf out;
 
@@ -1087,13 +1185,14 @@ int main (int argc, char **argv)
         }
     }
 
-    if (!mode || !infile || !outfile || !metafile) {
+    if (!mode || !infile || !outfile) {
         fprintf (stderr, "%s%s", sign_on, usage);
         return 1;
     }
 
-    if (!strcmp (infile, outfile) || !strcmp (metafile, infile) || !strcmp (metafile, outfile))
-        die ("input, output and metainfo files must all differ");
+    if (!strcmp (infile, outfile) ||
+        (metafile && (!strcmp (metafile, infile) || !strcmp (metafile, outfile))))
+            die ("input, output and metainfo files must all differ");
 
     if (mode == 'c')
         convert (infile, outfile, metafile);
