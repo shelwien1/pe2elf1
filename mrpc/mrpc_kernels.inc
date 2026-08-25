@@ -34,6 +34,9 @@
 //   predict_cube  SetPrdBuf, for every class at once, into a tile that
 //                 carries the activity halo with it
 //   pixel_cost    the body of CalcCost, per (class, pixel)
+//   batch_block   the same two together, for the first optimisation
+//                 loop's small blocks -- a chunk of blocks per launch
+//                 instead of one, and the tile kept private
 //   coef_scan     the 11x3 candidate sweep of OptimizeCoef, for every
 //                 class at once -- classes touch disjoint pixels and
 //                 disjoint coefficients, so nothing is reordered by it
@@ -194,6 +197,124 @@ __kernel void pixel_cost(__global const uchar* planes,
     c += cq[base+(int)planes[k*bn+o]]+cq[PMSIZE+base];
   }
   pixcost[(cl*BSZ+y)*BSZ+x] = c;
+}
+
+// ---- the first loop's class search, in bulk -----------------------
+//
+// The second loop's blocks are MAX_BSIZE and carry a quadtree, so they
+// are decided one at a time and each one's activity halo is the last
+// one's committed errors.  The first loop's are BASE_BSIZE with no
+// quadtree under them -- one argmin over classes per block -- and there
+// are sixteen times as many.  One launch per block never paid for
+// itself, so they were left on the host, where they were the single
+// largest item in the encode: 28 GMAC an iteration on one core.
+//
+// Here they go in chunks instead: every block in the chunk, every class,
+// one launch.  What that costs is the halo -- a block's neighbours are
+// no longer committed by the time it is measured, so every block sees
+// the error planes as the pass started.  The decisions still happen on
+// the host, in raster order, so the move-to-front state the class costs
+// come from is exactly what it was.
+//
+// One work-item is one (block, class), and the tile it needs -- 8x8
+// predictions and a 13x11 error field with the activity halo around it
+// -- lives in private memory for the length of that work-item.  Cutting
+// it in two, a predict pass and a cost pass over global cubes, costs
+// more than it saves twice over: the halo cells have no prediction to
+// make but sit in the same vector as the ones that do, and the cubes
+// themselves are gigabytes of traffic an iteration.  Here nothing
+// leaves the work-item but one float.
+__kernel void batch_block(__global const uchar* planes,
+                          __global const int*   coef,
+                          __global const int*   tapoff,
+                          __global const short* errB,
+                          __global const uchar* uq,
+                          __global const float* costtab,
+                          __global const int*   pmoff,
+                          __global const int*   udy,
+                          __global const int*   udx,
+                          __global const int*   uw,
+                          __global float*       blockcost,
+                          const int nbx, const int b0, const int nblk,
+                          const int ncls, const int nc,
+                          const int bsw, const int bn,
+                          const int W, const int H)
+{
+  const int cl = get_global_id(0);
+  const int bi = get_global_id(1);
+  if( cl>=ncls||bi>=nblk )
+    return;
+  const int blk = b0+bi;
+  const int tly = (blk/nbx)*B8, tlx = (blk%nbx)*B8;
+  const int bh = (tly+B8<H) ? B8 : H-tly;
+  const int bw = (tlx+B8<W) ? B8 : W-tlx;
+
+  // The activity measure only ever looks up and to the left, so one
+  // raster pass can predict a pixel and charge for it at once: nothing
+  // it reads is anything this pass has not already written.  Only the
+  // error field has to be kept, and only the rows the halo reaches --
+  // four of them, rolling.  That is 208 shorts of private memory, which
+  // is what makes this fit in a work-item at all.
+#define ER (HT_T+1)
+#define EW (B8+HT_L+HT_R)
+#define EAT(k, yy, xx) et[(((yy)&(ER-1))*MAXC+(k))*EW+(xx)+HT_L]
+#if (ER&(ER-1))
+#error "the rolling row index masks, so HT_T+1 has to be a power of two"
+#endif
+  short et[ER*MAXC*EW];
+
+  // the halo above: committed errors, as the pass found them
+  for( int y = -HT_T; y<0; y++ ) {
+    const int o = ((tly+y+PADT)*bsw+(tlx+PADL))*nc;
+    for( int x = -HT_L; x<B8+HT_R; x++ )
+      for( int k = 0; k<nc; k++ )
+        EAT(k, y, x) = errB[o+x*nc+k];
+  }
+
+  float c = 0.0f;
+  for( int y = 0; y<bh; y++ ) {
+    // the halo to the left and to the right of this row, likewise
+    const int oh = ((tly+y+PADT)*bsw+(tlx+PADL))*nc;
+    for( int x = -HT_L; x<0; x++ )
+      for( int k = 0; k<nc; k++ )
+        EAT(k, y, x) = errB[oh+x*nc+k];
+    for( int x = bw; x<B8+HT_R; x++ )
+      for( int k = 0; k<nc; k++ )
+        EAT(k, y, x) = errB[oh+x*nc+k];
+
+    for( int x = 0; x<bw; x++ ) {
+      const int o = (tly+y+PADT)*bsw+(tlx+x+PADL);
+      for( int k = 0; k<nc; k++ ) {
+        __global const int* cf = coef+(cl*MAXC+k)*NTMAX;
+        __global const int* to = tapoff+k*NTMAX;
+        int v = 0;
+        for( int i = 0; i<NTMAX; i++ )
+          v += (int)planes[o+to[i]]*cf[i];
+        v = cl_clip(v);
+        EAT(k, y, x) = (short)cl_econv((int)planes[k*bn+o], v);
+
+        int u = 0;
+#pragma unroll
+        for( int i = 0; i<NUM_UPELS; i++ )
+          u += (int)EAT(k, y+udy[i], x+udx[i])*uw[i];
+#if XUPEL
+        for( int j = 0; j<k; j++ )
+          u += (int)EAT(j, y, x)*64;
+#endif
+        u >>= 6;
+        u = (u>MAX_UPARA) ? MAX_UPARA : u;
+        const int gr = (int)uq[(cl*MAXC+k)*(MAX_UPARA+1)+u];
+        const int q = cl_qprd(v);
+        const int base = q>>PM_ACC;
+        __global const float* cq = costtab+pmoff[k*MRP_GROUP+gr]+(q&(NUM_SUBPM-1))*CSTRIDE;
+        c += cq[base+(int)planes[k*bn+o]]+cq[PMSIZE+base];
+      }
+    }
+  }
+#undef EAT
+#undef EW
+#undef ER
+  blockcost[(size_t)bi*ncls+cl] = c;
 }
 
 // ---- the coefficient search ---------------------------------------
@@ -401,59 +522,94 @@ __kernel void pmodel_cost(__global const uchar* org,
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
 #define NU (MAX_UPARA+2)
 
-__kernel void group_dp(__global const double* hist,
-                       __global double*       cum,
-                       __global const double* thcost,
-                       __global double*       dpbuf,
-                       __global short*        trebuf,
-                       __global int*          thout,
-                       const int ncls, const int nc)
+// The DP, in three kernels rather than one work-item per problem.
+//
+// One work-item per (class, component) is 60 of them on a small image --
+// four cores' worth at best, each grinding a 16-stage, 514-state
+// shortest path serially, and it was the largest single item on the
+// device.  It does not have to be serial: within a stage, every th1
+// reads dp[] as the previous stage left it -- the writes go to dp[th1]
+// and the reads to dp[t < th1], which the descending loop has not
+// reached yet -- so all 514 of them are independent.  Staging it as 16
+// launches over (th1, component, class) turns 60 work-items into thirty
+// thousand, with no barriers and no local memory: the launch boundary is
+// the barrier.
+//
+// The tie-break has to be kept exactly.  The serial loop starts from
+// th0 = th1 and takes a t only on a strict improvement, scanning
+// upwards, so the winner is the lowest t that beats it; each work-item
+// here reproduces that scan for its own th1.
+
+__kernel void dp_prefix(__global const double* hist,
+                        __global double*       cum,
+                        __global double*       dp0,
+                        __global short*        trebuf,
+                        const int nc, const int ncls)
 {
-  const int cl = get_global_id(0);
+  const int gr = get_global_id(0);
   const int k = get_global_id(1);
-  if( cl>=ncls||k>=nc )
+  const int cl = get_global_id(2);
+  if( k>=nc||cl>=ncls )
     return;
   const size_t w = (size_t)(cl*nc+k);
-
-  __global const double* h0 = hist+w*MRP_GROUP*NU;
-  __global double* c0 = cum+w*MRP_GROUP*NU;
-  for( int gr = 0; gr<MRP_GROUP; gr++ ) {
-    __global const double* h = h0+gr*NU;
-    __global double* c = c0+gr*NU;
-    double s = 0.0;
-    for( int u = 0; u<NU; u++ ) {
-      s += h[u];
-      c[u] = s;
-    }
-  }
-
-  __global double* dp = dpbuf+w*NU;
-  __global short* tre = trebuf+w*MRP_GROUP*NU;
+  __global const double* h = hist+(w*MRP_GROUP+gr)*NU;
+  __global double* c = cum+(w*MRP_GROUP+gr)*NU;
+  double s = 0.0;
   for( int u = 0; u<NU; u++ ) {
-    dp[u] = c0[u];
-    tre[u] = 0;
+    s += h[u];
+    c[u] = s;
   }
-  for( int gr = 1; gr<MRP_GROUP; gr++ ) {
-    __global const double* c = c0+gr*NU;
-    __global const short* tp = tre+(gr-1)*NU;
-    __global short* tc = tre+gr*NU;
-    for( int th1 = NU-1; th1>=0; th1-- ) {
-      int th0 = th1;
-      double mc = dp[th1]-c[th1]+thcost[0]+thcost[th0-tp[th0]];
-      for( int t = 0; t<th1; t++ ) {
-        double cc = dp[t]-c[t]+thcost[th1-t]+thcost[t-tp[t]];
-        if( cc<mc ) {
-          mc = cc;
-          th0 = t;
-        }
-      }
-      dp[th1] = mc+c[th1];
-      tc[th1] = (short)th0;
-      if( gr==MRP_GROUP-1 )
-        break;
+  if( gr==0 ) // the first stage's dp is the first group's own cost,
+    for( int u = 0; u<NU; u++ ) { // and it came from nowhere
+      dp0[w*NU+u] = c[u];
+      trebuf[w*MRP_GROUP*NU+u] = 0;
+    }
+}
+
+__kernel void dp_stage(__global const double* cum,
+                       __global const double* thcost,
+                       __global const double* dpin,
+                       __global double*       dpout,
+                       __global short*        trebuf,
+                       const int gr, const int nc, const int ncls)
+{
+  const int th1 = get_global_id(0);
+  const int k = get_global_id(1);
+  const int cl = get_global_id(2);
+  if( th1>=NU||k>=nc||cl>=ncls )
+    return;
+  const size_t w = (size_t)(cl*nc+k);
+  __global const double* c = cum+(w*MRP_GROUP+gr)*NU;
+  __global const double* dpi = dpin+w*NU;
+  __global const short* tp = trebuf+(w*MRP_GROUP+(gr-1))*NU;
+  __global short* tc = trebuf+(w*MRP_GROUP+gr)*NU;
+
+  int th0 = th1;
+  double mc = dpi[th1]-c[th1]+thcost[0]+thcost[th0-tp[th0]];
+  for( int t = 0; t<th1; t++ ) {
+    double cc = dpi[t]-c[t]+thcost[th1-t]+thcost[t-tp[t]];
+    if( cc<mc ) {
+      mc = cc;
+      th0 = t;
     }
   }
+  dpout[w*NU+th1] = mc+c[th1];
+  tc[th1] = (short)th0;
+}
 
+// stage 0's back-pointers are all zero, and the walk back is 16 steps
+__kernel void dp_back(__global short* trebuf,
+                      __global int*   thout,
+                      const int nc, const int ncls)
+{
+  const int k = get_global_id(0);
+  const int cl = get_global_id(1);
+  if( k>=nc||cl>=ncls )
+    return;
+  const size_t w = (size_t)(cl*nc+k);
+  __global short* tre = trebuf+w*MRP_GROUP*NU;
+  for( int u = 0; u<NU; u++ )
+    tre[u] = 0;
   int t = NU-1;
   for( int gr = MRP_GROUP-1; gr>0; gr-- ) {
     t = (int)tre[gr*NU+t];
@@ -461,6 +617,7 @@ __kernel void group_dp(__global const double* hist,
   }
   thout[(cl*MAXC+k)*MRP_GROUP+MRP_GROUP-1] = MAX_UPARA+1;
 }
+
 #endif
 
 )CLC";

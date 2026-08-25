@@ -168,11 +168,36 @@ coefficient, so the class loop can be turned inside out without changing the
 sequence of shifts any one class sees. `prd` and `errB` stay on the device for
 the length of the pass.
 
-**The group quantiser** (`group_hist`, `group_dp`, `pmodel_cost`). The
-histogram is one work-item per (class, component, group) — no atomics, no
-local memory. The threshold search after it is a 514-state, 16-stage shortest
-path, and there is one per (class, component): 252 of them, all independent,
-and together they were 0.69 s of every iteration.
+**The first loop's class search** (`batch_block`). The first optimisation loop
+cuts the image into `BASE_BSIZE` blocks with no quadtree under them, so a
+block is one argmin over classes and there are sixteen times as many of them
+as there are quadtree blocks. One launch each never paid for itself and they
+were left on the host, where they were the largest single item in the encode:
+28 GMAC an iteration on one core. They now go a row of blocks at a time —
+every block in the row, every class, one launch — and one work-item is one
+(block, class): it predicts the block and charges for it in a single raster
+pass, keeping the four error rows the activity measure reaches in private
+memory, so nothing leaves the work-item but one float. The decisions stay on
+the host in raster order, so the move-to-front state the class costs come from
+is what it always was; what is approximated is the halo, which is committed
+above the row and one pass stale within it. Splitting it into a predict pass
+and a cost pass over global cubes measured 2.3x slower: the halo cells have no
+prediction to make but sit in the same vector as the ones that do, and the
+cubes are gigabytes of traffic an iteration.
+
+**The group quantiser** (`group_hist`, `dp_prefix`, `dp_stage`, `dp_back`,
+`pmodel_cost`). The histogram is one work-item per (class, component, group) —
+no atomics, no local memory. The threshold search after it is a 514-state,
+16-stage shortest path, one per (class, component). Run as one work-item per
+problem that is 252 of them — four cores' worth at best, and it was the
+largest item on the device for a small image. It does not have to be serial:
+within a stage every candidate threshold reads the previous stage's costs and
+writes only its own, so a stage is fully parallel and the launch boundary is
+the barrier. As sixteen staged launches over (threshold, component, class) it
+is thirty thousand work-items instead of 252, and bit-identical: the serial
+tie-break — scan upward from `th0 == th1`, take a candidate only on a strict
+improvement — is reproduced by each work-item for its own threshold. Measured
+on a 256x256 image: 1.79 s to 0.42 s, byte-identical output.
 
 **What is a constant and what is an argument.** The kernels take the image's
 component count, the row stride of its bordered raster and the size of a plane
@@ -188,39 +213,49 @@ a 4-component image can use too. Measured against building per image: no
 difference in wall clock on either, and identical output.
 
 Everything else stays on the host: the rangecoder, the quadtree bookkeeping,
-the Gauss-Jordan solve, and the first optimisation loop's `BASE_BSIZE` class
-search — 8x8 pixels is about forty microseconds of arithmetic, which does not
-pay for two launches and a readback (measured: a shade slower than just doing
-it).
+and the Gauss-Jordan solve.
 
 ## Results
 
-Intel CPU Runtime for OpenCL, 4 cores at 2.8 GHz — so the ceiling here is four
+Intel CPU Runtime for OpenCL, 4 cores at 2.1 GHz -- so the ceiling here is four
 cores plus the runtime's 16-way vectorization, not a GPU.
 
 | image | host (`-C`) | device | | output, host | device | |
 | --- | --- | --- | --- | --- | --- | --- |
-| `t24.bmp` 320x240x3 | 14.4 s | 6.8 s | 2.1x | 98,862 | 99,001 | +0.14% |
-| `x_ep.bmp` 705x800x4 | 163.3 s | 48.7 s | 3.4x | 321,332 | 322,454 | +0.35% |
+| `t24.bmp` 320x240x3 | 13.3 s | 4.3 s | 3.1x | 98,868 | 99,245 | +0.38% |
+| `PIA13882_crop256.bmp` 256x256x3 | 11.6 s | 4.1 s | 2.8x | 121,182 | 121,423 | +0.20% |
+| `20000171A.bmp` 4096x512x4 | 516.3 s | 101.5 s | 5.1x | 2,754,981 | 2,751,292 | -0.13% |
 
-At a fixed iteration count (`-DMAX_ITER=8 -DEXTRA_ITER=99`, so both runs do the
-same number of passes) `x_ep.bmp` is 108.0 s against 46.0 s, 321,949 against
-322,454 bytes.
+The large image is where the parallel form pays: the encode is long enough for
+the searches to dominate everything around them, and the first loop's class
+search -- the batched one -- is 28 GMAC an iteration that used to be one core's
+work.
 
 Device time on that encode, by kernel:
 
 ```
-predict_cube    3.55 s     5750 launches    618 us each
-pixel_cost      2.15 s     5750 launches    374 us each
-coef_scan       5.64 s     1580 launches   3572 us each
-group_dp        3.08 s       18 launches 171319 us each
-group_hist      0.73 s       18 launches  40563 us each
-pmodel_cost     0.34 s       10 launches  33785 us each
-coef_apply      0.35 s     4052 launches     85 us each
+predict_cube   20.22 s    34816 launches    581 us each
+batch_block    18.55 s      384 launches  48320 us each
+pixel_cost     10.59 s    34816 launches    304 us each
+coef_scan       8.09 s     2686 launches   3012 us each
+group_hist      1.70 s       23 launches  73738 us each
+coef_apply      1.43 s    20666 launches     69 us each
+dp_stage        1.37 s      345 launches   3961 us each
+pmodel_cost     0.90 s       17 launches  52719 us each
+dp_prefix       0.03 s       23 launches   1306 us each
+dp_back         0.00 s       23 launches     49 us each
 ```
 
-The 33 s that is not on the device is the first loop's class search, the
-predictor fit, and the full-image `PredictRegion`/`CalcCost` between passes.
+63 s of the 98 s that encode spends after the header, against 19% before the
+first loop's class search and the threshold DP moved across. The launch count
+went the other way -- 458,752 launches for the first loop's blocks if each one
+is its own launch, 384 if a row of blocks is -- which is the whole point: a
+launch is about 10 us of nothing, and there were more of them than there was
+arithmetic to cover them.
+
+What is left on the host is the predictor fit (`FitPredictor`, 2 s an
+iteration), the full-image `PredictRegion`/`CalcCost` between passes, and the
+rangecoder.
 
 ### Why the output is not identical
 
@@ -237,15 +272,18 @@ exactly what the host does; further down it differs wherever two adjacent
 sub-blocks end up with different classes. The smaller one is arithmetic:
 sums that the host makes in one order, a parallel reduction makes in another.
 
-Neither is a bias. On `x_ep.bmp` at a fixed iteration count, against the host's
-321,949 bytes: with the class search left on the host it is 321,908, with the
-coefficient sweep left on the host it is 321,953, with both on the device it is
-322,454. Either one alone lands on the host's answer to within tens of bytes,
-including one that is *smaller*; together they perturb the search into a
-slightly different local optimum. The group search is not in that list because
-it is bit-exact — its histogram bins and its dynamic program are in double on
-the device precisely because in float they were not, and that cost 0.7% of the
-output on a small image.
+The batched first-loop search adds a third of the same kind: a block is
+measured against the error planes as its row of blocks began, so the row above
+it is committed but its neighbours to the left and right are one pass stale.
+
+None of the three is a bias, and on a large image they are not even a loss --
+`20000171A.bmp` comes out 0.13% *smaller* on the device than on the host,
+because the perturbed search lands in a different local optimum and that one
+happens to be better. The group search is not in the list at all because it is
+bit-exact: its histogram bins and its dynamic program are in double on the
+device precisely because in float they were not, and that cost 0.7% of the
+output on a small image. The staged form of the DP is bit-exact against the
+serial one as well, tie-break included.
 
 `-C` gives the reference result, and is what to compare against when measuring
 anything else.
@@ -255,24 +293,31 @@ anything else.
 This was written and tuned against a CPU device, and three things about it suit
 that and not a graphics card:
 
-* The class search syncs per block. Block *n+1*'s activity halo is block *n*'s
-  committed errors, so each 32x32 block is a halo upload, two launches and a
+* The second loop's class search syncs per block. Block *n+1*'s activity halo
+  is block *n*'s committed errors, so each 32x32 block is a halo upload, two launches and a
   blocking readback of the cost cube, in that order, 550 times per pass. On a
   CPU device those are zero-copy and about 9 us; across PCIe they are the whole
   cost, and the kernels themselves — ten to sixty thousand work-items — do not
   cover the latency.
-* The threshold DP is 252 work-items, each a long serial double-precision loop.
-  That fills four cores and starves an SM count in the tens; on a consumer card
-  it also runs at the 1/64 fp64 rate, and a launch long enough to trip Windows'
-  two-second driver timeout takes the driver down with it. It now stays on the
-  host on anything that is not a CPU device.
-* Everything that is left on the host — the first loop's class search, the
-  predictor fit — is two thirds of the wall clock already, so the ceiling on
-  what a faster device can buy is what is left of the other third.
+* The threshold DP is thirty thousand work-items now rather than 252, but every
+  one of them is double precision, and on a consumer card that runs at the 1/64
+  fp64 rate. It stays on the host on anything that is not a CPU device, which
+  also keeps a launch from being long enough to trip Windows' two-second driver
+  timeout and take the driver down with it.
+* `batch_block` keeps a 208-short error tile per work-item in private memory.
+  On a CPU device that is stack; on a GPU it is registers, and at that size it
+  will spill to local memory, which is slower but still local. A GPU port would
+  want the block's tile in `__local` shared by a work-group of classes instead.
 
-So `-T cpu` may well beat `-d <gpu>` on the same machine. Making the class
-search suit a GPU means not synchronising per block, which is a design change,
-not a tuning one.
+The first loop's class search is no longer on that list: it syncs once per row
+of blocks rather than once per block, which is 64 launches an iteration on the
+image above instead of 32,768, and each one is 48 ms of arithmetic. That much
+does cover PCIe.
+
+So `-T cpu` may well beat `-d <gpu>` on the same machine. Making the quadtree
+class search suit a GPU means not synchronising per block -- the same move
+`batch_block` makes for the first loop, but with a quadtree under each block to
+keep consistent, which is a design change and not a tuning one.
 
 ## Command line
 

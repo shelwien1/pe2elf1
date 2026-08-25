@@ -343,14 +343,18 @@ struct MrpcCL {
   cl_command_queue q;
   cl_program prog[2];
   cl_kernel k_predict[2], k_cost[2];
-  cl_kernel k_scan, k_apply, k_hist, k_pmod, k_dp;
+  cl_kernel k_scan, k_apply, k_hist, k_pmod;
+  cl_kernel k_bblk;
+  cl_kernel k_dp_prefix, k_dp_stage, k_dp_back;
   size_t scan_workers, pm_chunks;
   cl_ulong lmem;
   // -V accounting: device time per kernel, and how often it was asked
-  double kms[8];
-  long kn[8];
+  double kms[10];
+  long kn[10];
   static const char* KName(int i) {
-    static const char* n[8] = {"predict_cube", "pixel_cost", "coef_scan", "coef_apply", "group_hist", "pmodel_cost", "group_dp", ""};
+    static const char* n[10] = {"predict_cube", "pixel_cost", "coef_scan", "coef_apply",
+                                "group_hist", "pmodel_cost", "dp_prefix", "dp_stage", "dp_back",
+                                "batch_block"};
     return n[i];
   }
 
@@ -363,7 +367,10 @@ struct MrpcCL {
   cl_mem d_coef, d_tapoff, d_uq, d_costtab, d_pmoff;
   cl_mem d_udy, d_udx, d_uw, d_cA, d_cB, d_cbeg;
   cl_mem d_halo, d_prdcube, d_errcube, d_pixcost, d_partials, d_hist, d_pmcost;
-  cl_mem d_cum, d_dp, d_tre, d_th, d_thcost;
+  cl_mem d_bcost;
+  int bchunk; // blocks per batched launch
+  float* blockcost;
+  cl_mem d_cum, d_dp, d_dp2, d_tre, d_th, d_thcost;
 
   char cachename[256]; // <device name>.!cl
 
@@ -404,7 +411,7 @@ struct MrpcCL {
     if( !verbose )
       return;
     fprintf(f, "mrpc: opencl: device time\n");
-    for( int i = 0; i<7; i++ )
+    for( int i = 0; i<10; i++ )
       if( kn[i] )
         fprintf(f, "  %-14s %8.2f s  %9ld launches  %6.1f us each\n",
                 KName(i), kms[i]/1000.0, kn[i], kms[i]*1000.0/double(kn[i]));
@@ -606,11 +613,13 @@ struct MrpcCL {
              " -D PADT=%d -D PADL=%d -D HT_T=%d -D HT_L=%d -D HT_R=%d"
              " -D COEF_PREC=%d -D PM_ACC=%d -D NUM_SUBPM=%d -D MAXPRD=%d"
              " -D PMSIZE=%d -D CSTRIDE=%d -D MRP_GROUP=%d -D MAX_UPARA=%d"
-             " -D NUM_UPELS=%d -D XUPEL=%d -D SR=%d -D SSR=%d -D NCAND=%d -D COEF_MAX=%d",
+             " -D NUM_UPELS=%d -D XUPEL=%d -D SR=%d -D SSR=%d -D NCAND=%d -D COEF_MAX=%d"
+             " -D B8=%d -D TW8=%d -D TH8=%d",
              MAXC, NTMAX,
              PADT, PADL, HT_T, HT_L, HT_R, COEF_PREC, PM_ACC, NUM_SUBPM, MAXPRD,
              PMSIZE, CSTRIDE, MRP_GROUP, MAX_UPARA, NUM_UPELS, XUPEL,
-             CL_SR, CL_SSR, CL_NCAND, COEF_MAX);
+             CL_SR, CL_SSR, CL_NCAND, COEF_MAX,
+             BASE_BSIZE, BASE_BSIZE+HT_L+HT_R, BASE_BSIZE+HT_T);
 
     cl_int e = CL_SUCCESS;
     CacheName();
@@ -681,8 +690,9 @@ struct MrpcCL {
     struct {
       const char* n;
       cl_kernel* k;
-    } ks[] = {{"coef_scan", &k_scan}, {"coef_apply", &k_apply}};
-    for( int i = 0; i<2; i++ ) {
+    } ks[] = {{"coef_scan", &k_scan}, {"coef_apply", &k_apply},
+              {"batch_block", &k_bblk}};
+    for( int i = 0; i<int(sizeof(ks)/sizeof(ks[0])); i++ ) {
       *ks[i].k = clCreateKernel(prog[0], ks[i].n, &e);
       if( e!=CL_SUCCESS )
         return Fail(ks[i].n, e);
@@ -691,13 +701,15 @@ struct MrpcCL {
     // so on a device without them it stays on the host entirely.
     cl_device_fp_config fp64 = 0;
     clGetDeviceInfo(device, CL_DEVICE_DOUBLE_FP_CONFIG, sizeof(fp64), &fp64, 0);
-    k_dp = k_hist = k_pmod = 0;
+    k_dp_prefix = k_dp_stage = k_dp_back = k_hist = k_pmod = 0;
     if( fp64 ) {
       struct {
         const char* n;
         cl_kernel* k;
-      } gk[] = {{"group_hist", &k_hist}, {"pmodel_cost", &k_pmod}, {"group_dp", &k_dp}};
-      for( int i = 0; i<3; i++ ) {
+      } gk[] = {{"group_hist", &k_hist}, {"pmodel_cost", &k_pmod},
+                {"dp_prefix", &k_dp_prefix}, {"dp_stage", &k_dp_stage},
+                {"dp_back", &k_dp_back}};
+      for( int i = 0; i<int(sizeof(gk)/sizeof(gk[0])); i++ ) {
         *gk[i].k = clCreateKernel(prog[0], gk[i].n, &e);
         if( e!=CL_SUCCESS )
           return Fail(gk[i].n, e);
@@ -712,7 +724,7 @@ struct MrpcCL {
       cl_device_type dt = 0;
       clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(dt), &dt, 0);
       if( !(dt&CL_DEVICE_TYPE_CPU) ) {
-        k_dp = 0;
+        k_dp_prefix = k_dp_stage = k_dp_back = 0;
         if( verbose )
           fprintf(stderr, "mrpc: opencl: not a CPU device;"
                           " the threshold DP stays on the host\n");
@@ -760,7 +772,9 @@ struct MrpcCL {
     const size_t npix = size_t(W)*H;
     const size_t cubepix = size_t(MRP_MAXCLASS)*MAX_BSIZE*MAX_BSIZE;
     const size_t cubetile = size_t(MRP_MAXCLASS)*THMAX*TWMAX;
-    cl_int ee[32];
+    // one slot per Buf below, and a few spare: overrunning this is a
+    // stack smash that only shows up when a buffer is added
+    cl_int ee[64];
     int ne = 0;
     d_planes = Buf(CL_MEM_READ_ONLY, bn*nc+size_t(MAX_BSIZE+8)*BS, &ee[ne++]);
     d_org = Buf(CL_MEM_READ_ONLY, bn*nc, &ee[ne++]);
@@ -786,14 +800,19 @@ struct MrpcCL {
     d_pixcost = Buf(CL_MEM_WRITE_ONLY, cubepix*sizeof(float), &ee[ne++]);
     d_partials = Buf(CL_MEM_WRITE_ONLY,
                      size_t(MRP_MAXCLASS)*scan_workers*CL_NCAND*sizeof(float), &ee[ne++]);
+    // the first loop's batch.  Nothing but the costs crosses the bus, so
+    // the chunk is only as large as the answer: a class's cost per block.
+    bchunk = 4096;
+    d_bcost = Buf(CL_MEM_WRITE_ONLY, size_t(bchunk)*MRP_MAXCLASS*sizeof(float), &ee[ne++]);
     d_pmcost = Buf(CL_MEM_WRITE_ONLY,
                    size_t(MAXC)*MRP_GROUP*NUM_PMODEL*pm_chunks*sizeof(double), &ee[ne++]);
     d_hist = Buf(CL_MEM_READ_WRITE,
                  size_t(MRP_MAXCLASS)*MAXC*MRP_GROUP*(MAX_UPARA+2)*sizeof(double), &ee[ne++]);
     const size_t ndp = size_t(MRP_MAXCLASS)*MAXC*(MAX_UPARA+2);
-    if( k_dp ) {
+    if( k_dp_stage ) {
       d_cum = Buf(CL_MEM_READ_WRITE, ndp*MRP_GROUP*sizeof(double), &ee[ne++]);
       d_dp = Buf(CL_MEM_READ_WRITE, ndp*sizeof(double), &ee[ne++]);
+      d_dp2 = Buf(CL_MEM_READ_WRITE, ndp*sizeof(double), &ee[ne++]);
       d_tre = Buf(CL_MEM_READ_WRITE, ndp*MRP_GROUP*sizeof(short), &ee[ne++]);
       d_th = Buf(CL_MEM_WRITE_ONLY, size_t(MRP_MAXCLASS)*MAXC*MRP_GROUP*sizeof(int), &ee[ne++]);
       d_thcost = Buf(CL_MEM_READ_ONLY, (MAX_UPARA+2)*sizeof(double), &ee[ne++]);
@@ -807,6 +826,7 @@ struct MrpcCL {
     partials = new float[size_t(MRP_MAXCLASS)*scan_workers*CL_NCAND];
     pmcost = new double[size_t(MAXC)*MRP_GROUP*NUM_PMODEL*pm_chunks];
     psum = new double[size_t(MRP_MAXCLASS)*(MAX_BSIZE+1)*(MAX_BSIZE+1)];
+    blockcost = new float[size_t(bchunk)*MRP_MAXCLASS];
 
     active = 1;
     return 1;
@@ -821,7 +841,8 @@ struct MrpcCL {
                    &d_coef, &d_tapoff, &d_uq, &d_costtab, &d_pmoff,
                    &d_udy, &d_udx, &d_uw, &d_cA, &d_cB, &d_cbeg,
                    &d_halo, &d_prdcube, &d_errcube, &d_pixcost, &d_partials,
-                   &d_hist, &d_pmcost, &d_cum, &d_dp, &d_tre, &d_th, &d_thcost};
+                   &d_hist, &d_pmcost, &d_cum, &d_dp, &d_dp2, &d_tre, &d_th, &d_thcost,
+                   &d_bcost};
     for( int i = 0; i<int(sizeof(m)/sizeof(m[0])); i++ )
       if( *m[i] ) {
         clReleaseMemObject(*m[i]);
@@ -832,6 +853,8 @@ struct MrpcCL {
     delete[] partials;
     delete[] pmcost;
     delete[] psum;
+    delete[] blockcost;
+    blockcost = 0;
     halo = 0;
     pixcost = 0;
     partials = 0;
@@ -844,7 +867,8 @@ struct MrpcCL {
     if( !ctx )
       return;
     BuffersQuit();
-    cl_kernel k[] = {k_predict[0], k_cost[0], k_scan, k_apply, k_hist, k_pmod, k_dp};
+    cl_kernel k[] = {k_predict[0], k_cost[0], k_scan, k_apply, k_hist, k_pmod,
+                     k_bblk, k_dp_prefix, k_dp_stage, k_dp_back};
     for( int i = 0; i<int(sizeof(k)/sizeof(k[0])); i++ )
       if( k[i] )
         clReleaseKernel(k[i]);
@@ -935,6 +959,40 @@ struct MrpcCL {
         }
       }
     }
+    return 1;
+  }
+
+  // --- the first loop's blocks, a chunk at a time -------------------
+  // blockcost comes back as [block][class]; the caller decides.
+  int BlockBatch(int nbx, int b0, int nblk, int ncls) {
+    const int a_nbx = nbx, a_b0 = b0, a_nblk = nblk, a_ncls = ncls;
+    const int a_W = int(W), a_H = int(H);
+    int a = 0;
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_planes), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_coef), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_tapoff), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_err), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_uq), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_costtab), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_pmoff), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_udy), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_udx), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_uw), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(cl_mem), &d_bcost), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_nbx), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_b0), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_nblk), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_ncls), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_nc), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_bsw), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_bn), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_W), "arg");
+    CLCK(clSetKernelArg(k_bblk, a++, sizeof(int), &a_H), "arg");
+    size_t g[2] = {size_t(ncls), size_t(nblk)};
+    CLCK(Run(k_bblk, 2, g, 0, 9), "batch_block");
+    CLCK(clEnqueueReadBuffer(q, d_bcost, CL_TRUE, 0,
+                             size_t(nblk)*ncls*sizeof(float), blockcost, 0, 0, 0),
+         "read blockcost");
     return 1;
   }
 
@@ -1033,21 +1091,51 @@ struct MrpcCL {
   // the side cost of a threshold, and th comes back as the host's
   // th[class][component][group].
   int GroupDPCL(int ncls, const double* thcost, int* th) {
-    if( !k_dp )
+    if( !k_dp_stage )
       return 0;
     if( !Write(d_thcost, thcost, (MAX_UPARA+2)*sizeof(double), "thcost") )
       return 0;
+    const int nci = int(nc);
+    size_t g3[3] = {MRP_GROUP, size_t(nc), size_t(ncls)};
+
     int a = 0;
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_hist), "arg");
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_cum), "arg");
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_thcost), "arg");
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_dp), "arg");
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_tre), "arg");
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(cl_mem), &d_th), "arg");
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(int), &ncls), "arg");
-    CLCK(clSetKernelArg(k_dp, a++, sizeof(int), &a_nc), "arg");
-    size_t g[2] = {size_t(ncls), size_t(nc)};
-    CLCK(Run(k_dp, 2, g, 0, 6), "group_dp");
+    CLCK(clSetKernelArg(k_dp_prefix, a++, sizeof(cl_mem), &d_hist), "arg");
+    CLCK(clSetKernelArg(k_dp_prefix, a++, sizeof(cl_mem), &d_cum), "arg");
+    CLCK(clSetKernelArg(k_dp_prefix, a++, sizeof(cl_mem), &d_dp), "arg");
+    CLCK(clSetKernelArg(k_dp_prefix, a++, sizeof(cl_mem), &d_tre), "arg");
+    CLCK(clSetKernelArg(k_dp_prefix, a++, sizeof(int), &nci), "arg");
+    CLCK(clSetKernelArg(k_dp_prefix, a++, sizeof(int), &ncls), "arg");
+    CLCK(Run(k_dp_prefix, 3, g3, 0, 6), "dp_prefix");
+
+    // one launch per stage, ping-ponging dp: the launch boundary is what
+    // makes every th1 in a stage see the previous stage's dp and only
+    // that, which is the property the serial loop had for free
+    size_t gs[3] = {MAX_UPARA+2, size_t(nc), size_t(ncls)};
+    cl_mem in = d_dp, out = d_dp2;
+    for( int gr = 1; gr<MRP_GROUP; gr++ ) {
+      a = 0;
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(cl_mem), &d_cum), "arg");
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(cl_mem), &d_thcost), "arg");
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(cl_mem), &in), "arg");
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(cl_mem), &out), "arg");
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(cl_mem), &d_tre), "arg");
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(int), &gr), "arg");
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(int), &nci), "arg");
+      CLCK(clSetKernelArg(k_dp_stage, a++, sizeof(int), &ncls), "arg");
+      CLCK(Run(k_dp_stage, 3, gs, 0, 7), "dp_stage");
+      cl_mem t = in;
+      in = out;
+      out = t;
+    }
+
+    size_t gb[2] = {size_t(nc), size_t(ncls)};
+    a = 0;
+    CLCK(clSetKernelArg(k_dp_back, a++, sizeof(cl_mem), &d_tre), "arg");
+    CLCK(clSetKernelArg(k_dp_back, a++, sizeof(cl_mem), &d_th), "arg");
+    CLCK(clSetKernelArg(k_dp_back, a++, sizeof(int), &nci), "arg");
+    CLCK(clSetKernelArg(k_dp_back, a++, sizeof(int), &ncls), "arg");
+    CLCK(Run(k_dp_back, 2, gb, 0, 8), "dp_back");
+
     CLCK(clEnqueueReadBuffer(q, d_th, CL_TRUE, 0,
                              size_t(MRP_MAXCLASS)*MAXC*MRP_GROUP*sizeof(int),
                              th, 0, 0, 0), "read th");

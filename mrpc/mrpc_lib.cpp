@@ -1593,6 +1593,61 @@ struct MRPC {
     return qtcost;
   }
 
+
+  // The first loop's class search, with the measuring batched onto the
+  // device and the deciding left here.  Each chunk of blocks comes back
+  // as a cost per (block, class); the loop below then walks them in
+  // raster order exactly as the host path does, so MtfClass sees the
+  // same neighbours and the class costs are the ones that will be paid.
+  // What is approximated is the activity halo: a block is measured
+  // against the error planes as the pass began rather than against its
+  // neighbours' decisions, which is the same trade the quadtree cube
+  // already makes inside a block.
+  cost_t OptimizeClassBatch() {
+    const uint bs = BASE_BSIZE;
+    const int nbx = int((W+bs-1)/bs), nby = int((H+bs-1)/bs);
+    for( int i = 0; i<num_class; i++ )
+      mtfbuf[i] = i;
+    uint mark = 0;
+    for( int by = 0; by<nby; by++ ) {
+      const uint y = uint(by)*bs;
+      const uint bry = (y+bs<H) ? y+bs : H;
+      for( int x0 = 0; x0<nbx; x0 += g_cl.bchunk ) {
+        int n = nbx-x0;
+        if( n>g_cl.bchunk )
+          n = g_cl.bchunk;
+        if( !g_cl.BlockBatch(nbx, by*nbx+x0, n, num_class) )
+          return OptimizeClassHost();
+        for( int bi = 0; bi<n; bi++ ) {
+          const uint x = uint(x0+bi)*bs;
+          const uint brx = (x+bs<W) ? x+bs : W;
+          MtfClass(y, x, bs, W);
+          const float* bc = g_cl.blockcost+size_t(bi)*num_class;
+          cost_t mc = 1e30;
+          int mcl = 0;
+          for( int cl = 0; cl<num_class; cl++ ) {
+            cost_t c = class_cost[mtfbuf[cl]]+cost_t(bc[cl]);
+            if( c<mc ) {
+              mc = c;
+              mcl = cl;
+            }
+          }
+          SetCls(mcl, y, x, bry, brx);
+        }
+      }
+      // the row is decided: predict it for real, and let the device have
+      // it before the next row measures against it
+      PredictRegion(y, 0, bry, W);
+      if( !CLClassState(y, bry) )
+        return OptimizeClassHost();
+      if( g_prog&&nby>=8&&uint(by+1)*8/uint(nby)>mark ) {
+        mark = uint(by+1)*8/uint(nby);
+        PROG(".");
+      }
+    }
+    return CalcCost(0, 0, H, W);
+  }
+
   cost_t OptimizeClassCL() {
     int level = (opt_loop>1) ? QT_DEPTH : 0;
     uint blksize = (opt_loop>1) ? MAX_BSIZE : BASE_BSIZE;
@@ -1632,12 +1687,17 @@ struct MRPC {
 
   cost_t OptimizeClass() {
 #ifdef MRP_OPENCL
-    // The first loop's blocks are BASE_BSIZE and have no quadtree under
-    // them: the cube is then one node's work for one node, and 8x8
-    // pixels does not pay for a launch.  The host does those.
-    if( MRP_CL_CLASS&&opt_loop>1&&g_cl.active&&CLSync(cl_up==0) ) {
+    if( MRP_CL_CLASS&&g_cl.active&&CLSync(cl_up==0) ) {
       cl_up = 1;
-      return OptimizeClassCL();
+      if( opt_loop>1 )
+        return OptimizeClassCL();
+      // The first loop's blocks are BASE_BSIZE and have no quadtree
+      // under them: the cube is then one node's work for one node, and
+      // 8x8 pixels does not pay for a launch.  Those go through the
+      // batched path instead -- a chunk of blocks and every class in one
+      // launch -- and to the host if the device has not got it.
+      if( g_cl.k_bblk&&CLClassState() )
+        return OptimizeClassBatch();
     }
 #endif
     return OptimizeClassHost();
@@ -1937,6 +1997,17 @@ struct MRPC {
     return g_cl.Write(g_cl.d_cpo, cpo, npix*sizeof(uint), "cpo")&&
            g_cl.Write(g_cl.d_cpq, cpq, npix*sizeof(uint), "cpq")&&
            g_cl.Write(g_cl.d_cbeg, cb32, size_t(num_class+1)*sizeof(uint), "cbeg");
+  }
+
+  // the batched search reads the committed error planes on the device.
+  // Rows [y0, y1) of them, which is what one row of blocks just changed;
+  // y0 == y1 == 0 means all of it, which is how the pass starts.
+  int CLClassState(uint y0 = 0, uint y1 = 0) {
+    const size_t row = BS*nc*sizeof(short);
+    if( y1<=y0 )
+      return g_cl.Write(g_cl.d_err, errB, size_t(H+PADT)*row, "err");
+    return g_cl.Write(g_cl.d_err, errB+size_t(y0+PADT)*BS*nc,
+                      size_t(y1-y0)*row, "err", size_t(y0+PADT)*row);
   }
 
   int CLState(int with_grp) {
