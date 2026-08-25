@@ -7,3 +7,6 @@ winsdk/
 *.!cl
 *.a
 t_lib
+*.so
+*.dll
+t_dll.exe
