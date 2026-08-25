@@ -28,6 +28,9 @@ enum : uint8_t {
   pad_flip_y = 0x04,
   pad_ctx_packed = 0x08,
   pad_remap = 0x10,
+  // The renumbering map is two-tier: each plane's used mask is followed by a
+  // dense-set mask, and the dense values take the low ranks.  See remap_build.
+  pad_remap_split = 0x20,
 };
 
 uint32_t bmp_palette_entry(uint8_t b, uint8_t g, uint8_t r) {

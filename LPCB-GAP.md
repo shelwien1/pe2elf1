@@ -3,7 +3,7 @@
 A study of the 107-image LPCB corpus, the 25 MB GraLIC is ahead by, which files
 that gap lives in, and what in BMF is producing it.
 
-Four findings:
+Five findings:
 
 1. **The gap is two unrelated problems wearing one number.** 99 continuous-tone
    images lose a uniform +0.134 bpp; 8 tone-curved images lose +0.475 bpp and
@@ -18,6 +18,11 @@ Four findings:
    the pre-IMPROVEMENTS build on the same files (§7).
 4. **Two plausible-looking explanations are wrong**, and both would otherwise be
    the obvious next thing to build (§5).
+5. **Renumbering as first built had a failure mode worth more than the feature.**
+   On `PIA13882`, two rows of caption — 0.135% of the pixels — cost 12.3% of the
+   file, because a rank map over the used values de-regularises a step-2 lattice
+   to seat them. A two-tier map fixes it: −12.13% on that file, which turns an
+   11.07% loss to gralic into a 2.40% win (§4.1).
 
 > **Revised against `claude/bmf-lpcb-performance-hdzfzy`.** That branch's
 > `LPCB-REPORT.md` is a deeper investigation of the same question, and it
@@ -226,6 +231,64 @@ still one arithmetic decision per sample instead of none.
 The other seven: `PIA13882` (+11.72%, 1.119 remap), `PIA13912` (+15.05%, 0.669),
 `PIA13815` (−6.15%, 0.468), `PIA13785` (+13.20%, 0.283), `STA13845` (+8.24%,
 0.257), `STA13843` (+0.94%, 0.119), `PIA13799` (−41.85%, 0.103).
+
+### 4.1 The rank map's failure mode — two rows of caption
+
+Renumbering as first built maps a value to its **rank among the used values**.
+That is right when every used value carries weight, and it fails hard when a
+handful do not.  `PIA13882` is the case, and it explains the whole of that
+file's deficit.
+
+The image is 1533 × 1484.  Rows 0–1481 use **100 / 95 / 85** values per plane,
+on a step-2 lattice.  The last two rows are an off-lattice colour bar, and they
+carry 82 / 91 / 92 values of their own:
+
+| coded extent | size | bpp | distinct per plane |
+|---|---|---|---|
+| rows 0–1481 | 2,379,876 | 8.380 | 100 / 95 / 85 |
+| rows 0–1482 | 2,553,556 | 8.986 | 143 / 129 / 118 |
+| rows 0–1483 (whole) | 2,714,592 | 9.546 | 182 / 186 / 177 |
+
+**0.135% of the pixels cost 12.3% of the file.**  The mechanism is the map, not
+the strip's own content: once the strip's values are interleaved into the
+lattice, a step of 2 in the original becomes a step of 1, 2 or 3 depending on
+where it lands, so the map de-regularises 99.87% of the image in order to seat
+0.13% of it.  Model selection then also flips from alt-P2 to slow.
+
+The same defect shows up as a **whole-versus-tiled inversion**, which is what
+made it visible.  Coding the image as 16 independent tiles — each paying its own
+header and restarting its models — beats coding it whole:
+
+| | whole | sum of 4×4 tiles | whole − sum |
+|---|---|---|---|
+| bmf | 2,714,592 | 2,245,292 | **+469,300 (+20.90%)** |
+| gralic | 2,444,091 | 2,398,955 | +45,136 (+1.88%) |
+
+gralic pays the 1.9% a model restart costs.  BMF pays 20.9%, because tiling
+isolates the strip into one tile and leaves the other fifteen their lattice.
+Nearly all of it is the two-piece split: top ¾ + bottom ¼ coded separately is
+2,252,028, within 0.3% of the 4×4 sum, so the penalty is **not** a function of
+window size.
+
+**The fix, built:** the map is now two-tier.  Values above a frequency floor
+take the low, contiguous ranks; the rest of the used set follows above them.
+The floor is chosen per plane from a ladder of `npix>>10` .. `npix>>16`, ranked
+by the KT cost of the plane's MED residual under the candidate map — one pass
+over the plane, not a model encode — with the plain rank map as incumbent and
+`kKeepShift` as the margin, so a plane with no light tail keeps the plain map.
+On `PIA13882` the probe cuts the dense sets at 100 / 93 / 85 values:
+
+| | size | bpp | vs gralic |
+|---|---|---|---|
+| before | 2,714,592 | 9.546 | +11.07% |
+| **after** | **2,385,216** | **8.387** | **−2.40%** |
+
+−12.13%, and the file flips from BMF's second-worst relative loss on the corpus
+to a win.  The reach is wider than one file: at a 1/10,000 floor, five of the
+eighteen locally held LPCB frames drop below three quarters of their used-value
+count — `STA13456` (740→397), `PIA13882` (545→279), `PIA13872` (743→536),
+`sony_a55_07` (532→355), `STA13900` (768→612) — and the MED probe picks the
+two-tier map on `PIA13785`, `PIA13915` and `STA13845` as well.
 
 ---
 
@@ -484,6 +547,11 @@ the corpus-scale extrapolations are estimates.
   four coding sites of `code_three_way` and `code_symbol_tree`) run on four
   images from the corpus tarball. The instrumentation lives outside the tree and
   is not part of the shipping codec.
+* §4.1 measured directly: eighteen LPCB frames were retrieved and re-encoded
+  with `./mk.sh release` before and after the two-tier map, and gralic 1.11's
+  own demo binary was run on the same pixels under wine (PNM input) rather than
+  read out of `lpcbs.txt` — it reproduces both the `lpcbs.txt` figure for
+  `PIA13882` and the 256-crop figure, so the comparison is like for like.
 * Re-encodes in §7 with the current `./mk.sh release` build, and with
   `773b305` (the last commit before `IMPROVEMENTS.md`) built in a detached
   worktree.

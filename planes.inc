@@ -226,13 +226,28 @@ struct PlaneSearch {
 // of 256 and renumbering costs it 2.29%, while PIA13812 uses 120 and gains
 // 21.9%.  So this is a trial like the transpose, not a
 // heuristic -- see search_filter.
-void remap_masks(const BmfImage* img, int32_t planes, uint8_t* masks) {
-  memset(masks, 0, 32u*(uint32_t)planes);
+// Per-plane value histograms.  Both masks are cut from these, and the split
+// threshold needs the counts, not just the occupancy.
+void remap_hist(const BmfImage* img, int32_t planes, int32_t* hist) {
+  memset(hist, 0, 256u*sizeof(int32_t)*(uint32_t)planes);
   const uint8_t* p = img[0].pixels;
   const uint8_t*const end = p+img[0].data_size;
   for(; p+planes<=end; p += planes )
     for( int32_t k = 0; k<planes; ++k )
-      masks[32*k+(p[k]>>3)] |= (uint8_t)(1u<<(p[k]&7));
+      ++hist[256*k+p[k]];
+}
+
+// The values a plane's histogram puts at or above `floor_`.  At floor_ == 1
+// that is the used-value mask; above it, the dense set of the split map.
+void remap_mask_from_hist(const int32_t* hist, int32_t floor_, uint8_t* mask) {
+  memset(mask, 0, 32);
+  for( int32_t v = 0; v<256; ++v )
+    if( hist[v]>=floor_ )
+      mask[v>>3] |= (uint8_t)(1u<<(v&7));
+}
+
+inline int32_t remap_bit(const uint8_t* mask, int32_t v) {
+  return (mask[v>>3]>>(v&7))&1;
 }
 
 // How many values each plane actually uses.  A plane at 256 has nothing to gain
@@ -263,24 +278,41 @@ int32_t remap_holes(const uint8_t* mask) {
   return n ? (hi-lo+1)-n : 0;
 }
 
-// value -> rank, and rank -> value, built from the mask alone so both sides
-// derive the identical map from the identical 32 bytes.
-void remap_build(const uint8_t* mask, uint8_t* fwd, uint8_t* inv) {
+// value -> rank, and rank -> value, built from the masks alone so both sides
+// derive the identical map from the identical bytes.
+//
+// `dense` is a subset of `used` and goes first, in value order, so the values
+// that carry the plane's weight occupy a contiguous run 0..K-1; the rest of the
+// used set follows at K..U-1.  Passing dense == used gives the plain rank map.
+//
+// The subset is what makes renumbering survive an image with a caption strip.
+// PIA13882 is 1533x1484 of step-2 lattice -- 100, 95 and 85 values a plane --
+// with two rows of off-lattice colour bar at the bottom.  Those two rows are
+// 0.135% of the pixels and they carry 82, 91 and 92 values of their own.  A
+// plain rank map interleaves them into the lattice, so a step of 2 in the
+// original becomes a step of 1, 2 or 3 depending on where it lands: the map
+// de-regularises 99.87% of the image to seat 0.13% of it.  The file goes from
+// 8.38 bpp to 9.55.  Keeping the strip's values out of the dense run costs
+// those two rows their prediction and gets the rest of the image its lattice
+// back, which is worth 15.8% of that file.
+void remap_build(const uint8_t* used, const uint8_t* dense, uint8_t* fwd, uint8_t* inv) {
+  memset(fwd, 0, 256);
   int32_t n = 0;
   for( int32_t v = 0; v<256; ++v )
-    if( (mask[v>>3]>>(v&7))&1 ) {
+    if( remap_bit(used, v)&&remap_bit(dense, v) ) {
       fwd[v] = (uint8_t)n;
       inv[n] = (uint8_t)v;
       ++n;
     }
-  // Values the image never uses still need a defined image, or a decoder fed a
-  // corrupt stream walks off inv[].  They fold onto the last used rank.
-  for( int32_t v = 0, last = 0; v<256; ++v ) {
-    if( (mask[v>>3]>>(v&7))&1 ) last = fwd[v];
-    else fwd[v] = (uint8_t)last;
-  }
-  if( !n ) {                    // only reachable from a corrupt mask
-    memset(fwd, 0, 256);
+  for( int32_t v = 0; v<256; ++v )
+    if( remap_bit(used, v)&&!remap_bit(dense, v) ) {
+      fwd[v] = (uint8_t)n;
+      inv[n] = (uint8_t)v;
+      ++n;
+    }
+  // Ranks the image never reaches still need a defined image, or a decoder fed
+  // a corrupt stream walks off inv[].
+  if( !n ) {
     memset(inv, 0, 256);
     return;
   }
@@ -288,11 +320,35 @@ void remap_build(const uint8_t* mask, uint8_t* fwd, uint8_t* inv) {
     inv[k] = inv[n-1];
 }
 
-void remap_apply(BmfImage* img, int32_t planes, const uint8_t* masks, int32_t inverse) {
+// KT cost of one plane's MED residual under a candidate value map, in bits.
+// This is what the split threshold is chosen with: it is not the coder's cost,
+// but a value map that moves the file moves this by whole bits, and running it
+// costs one pass over the plane instead of a full model encode.
+int32_t remap_probe(const BmfImage* img, int32_t planes, int32_t k, const uint8_t* map) {
+  int32_t bin[256];
+  memset(bin, 0, sizeof bin);
+  const int32_t w = img[0].width, h = img[0].height, stride = img[0].stride;
+  const uint8_t* pix = img[0].pixels;
+  for( int32_t y = 0; y<h; ++y ) {
+    const uint8_t*const row = pix+(size_t)y*stride;
+    const uint8_t*const up = y ? row-stride : nullptr;
+    for( int32_t x = 0; x<w; ++x ) {
+      const int32_t at = x*planes+k;
+      const int32_t west = x ? map[row[at-planes]] : (up ? map[up[at]] : 0);
+      const int32_t north = up ? map[up[at]] : west;
+      const int32_t nw = (up&&x) ? map[up[at-planes]] : north;
+      ++bin[(uint8_t)(map[row[at]]-med_predict(west, north, nw))];
+    }
+  }
+  return estimate_cost(bin, 256);
+}
+
+void remap_apply(BmfImage* img, int32_t planes, const uint8_t* used,
+                 const uint8_t* dense, int32_t inverse) {
   uint8_t map[4][256];
   for( int32_t k = 0; k<planes; ++k ) {
     uint8_t fwd[256], inv[256];
-    remap_build(masks+32*k, fwd, inv);
+    remap_build(used+32*k, (dense ? dense : used)+32*k, fwd, inv);
     memcpy(map[k], inverse ? inv : fwd, 256);
   }
   uint8_t* p = img[0].pixels;

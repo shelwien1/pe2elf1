@@ -286,6 +286,40 @@ variant than the final encode.
 Images of depth ≤ 4 bpp skip the search entirely and go straight to a single
 slow-model pass over the packed data (`code_image_body`, `codec.inc:456`).
 
+### 5.0 Value-set renumbering (`planes.inc`, `codec.inc:search_filter`)
+
+Tried before the geometry, so every search downstream of it sees the dense
+alphabet.  Per plane the encoder builds a 256-bit used-value mask and maps each
+value to its rank in that set, which is monotone, so the neighbour differences
+the predictors work on keep their order.  The masks are the whole side
+information -- 32 bytes a plane -- and they ride between the member head and the
+coded body.  Whether it pays is not decidable from the histogram (`PIA13915`
+uses 248 levels and renumbering costs it 2.29%; `PIA13812` uses 120 and gains
+21.9%), so it is a gated trial like the transpose, and it has to clear
+`kKeepShift` on top of the mask cost.
+
+**The map is two-tier.**  A plain rank map is right only when every used value
+carries real weight.  `PIA13882` is 1533x1484 of step-2 lattice -- 100, 95 and
+85 values a plane -- with two rows of off-lattice colour bar at the bottom
+carrying 82, 91 and 92 values of their own.  Those two rows are 0.135% of the
+pixels, and a plain rank map interleaves their values into the lattice, so a
+step of 2 in the original becomes a step of 1, 2 or 3 depending on where it
+lands: the map de-regularises 99.87% of the image to seat 0.13% of it.  Cutting
+the file at row 1481 codes it at 8.380 bpp; the last two rows take it to 9.546.
+
+So each plane also gets a **dense mask**, a subset of the used mask whose values
+take the low, contiguous ranks; the rest of the used set follows above them.
+The dense set is cut at a frequency floor chosen per plane from a ladder of
+`npix>>10` .. `npix>>16` (`kRareShiftLo`/`kRareShiftHi`), ranked by
+`remap_probe` -- the KT cost of the plane's MED residual under the candidate map,
+one pass over the plane rather than a model encode.  The plain rank map is the
+incumbent and a rung has to beat it by `kKeepShift`, so a plane with no light
+tail in its histogram keeps the plain map and nothing is spent.  When any plane
+splits, `pad_remap_split` goes in the header and a second 32 bytes a plane
+ships.  On `PIA13882` the probe cuts the dense sets at 100, 93 and 85 values and
+the file goes from 2,714,592 to 2,385,216 bytes (-12.13%), from 11.07% behind
+gralic to 2.4% ahead of it.
+
 ### 5.1 Watching the search: `-v`
 
 `bmf c -v in.bmp out` prints every cost the encoder measures or estimates — the

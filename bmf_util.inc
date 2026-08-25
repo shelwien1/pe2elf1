@@ -104,6 +104,15 @@ const int32_t kP2MixShift = idx_clamp(P2_ctxw_shift, 0, 16);
 
 const int32_t kKeepShift = idx_clamp(CD_keep_shift, 1, 24);
 const int32_t kModelShift = idx_clamp(CD_model_shift, 1, 24);
+
+// The ladder of frequency floors the two-tier renumbering map is cut at: a
+// value is dense when the plane's histogram gives it at least npix>>shift of
+// the samples.  The right rung is per plane and per image -- PIA13757 wants no
+// split at all, PIA13785 wants >>11, PIA13810 wants >>15 -- so all of them get
+// probed and the cheapest wins.  The range stops at >>10 because 1/1024 of an
+// image is already a visible feature, and at >>16 because below that the floor
+// stops excluding anything on the frames that have a strip.
+const int32_t kRareShiftLo = 10, kRareShiftHi = 16;
 const int32_t kWeightScale = 1<<kWeightShift;
 
 int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {

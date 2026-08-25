@@ -728,9 +728,10 @@ struct BMFCodec : BMFState {
   // mirror do not commute.
   void restore_representation(BmfImage* p_i) {
     if( p_i[0]._pad8[0]&pad_remap ) {
-      remap_apply(p_i, plane_count, remap_mask, 1);
-      p_i[0]._pad8[0] &= (uint8_t)~pad_remap;
+      remap_apply(p_i, plane_count, remap_mask, remap_split ? remap_dense : nullptr, 1);
+      p_i[0]._pad8[0] &= (uint8_t)~(pad_remap|pad_remap_split);
       remap_active = 0;
+      remap_split = 0;
     }
     if( p_i[0].flags&flags_pal_sorted ) {
       PaletteOrder po;
@@ -760,6 +761,7 @@ struct BMFCodec : BMFState {
     // invariant is worth holding anyway, because the failure is a silently
     // unreadable archive rather than a wrong pixel.
     remap_active = 0;
+    remap_split = 0;
     hdr.header_from(p_i);
     hdr.flags = p_i[0].flags;
     plane_count = ((p_i[0].depth&depth_bits)+7)>>3;
@@ -782,11 +784,14 @@ struct BMFCodec : BMFState {
       if( (uint32_t)coded_bytes<p_i[0].data_size ) {
         const uint8_t ok = write_member_head(&hdr, extra_blk, &arc_in[0].io);
         // The renumbering masks ride between the head and the coded body, the
-        // way the palette rides after it: 32 bytes a plane of raw bitmap, and
+        // way the palette rides after it: 32 bytes a plane of raw bitmap -- the
+        // used set, and under pad_remap_split the dense set after it -- and
         // nothing in the stream depends on them but the final expansion.
         const uint8_t ok_mask = remap_active
             ? arc_in[0].io.write_exact(remap_mask, 32u*(size_t)plane_count) : 1;
-        int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok&ok_mask;
+        const uint8_t ok_dense = (remap_active&&remap_split)
+            ? arc_in[0].io.write_exact(remap_dense, 32u*(size_t)plane_count) : 1;
+        int32_t ok_all = arc_in[0].io.write_exact(stream.buf, (size_t)coded_bytes)&ok&ok_mask&ok_dense;
         free(stream.buf);
         if( ok_all&&(p_i[0].depth&depth_palette)!=0 )
           write_palette(&arc_in[0].io, &p_i[0].pixels[p_i[0].data_size], pal_bytes, p_i[0].depth);
@@ -915,11 +920,16 @@ struct BMFCodec : BMFState {
     }
     desc_slow_mode = 1;
     // The masks sit between the head and the body, so they come off the stream
-    // before it, and the map is rebuilt from the same 32 bytes a plane the
-    // encoder wrote.
+    // before it, and the map is rebuilt from the same bytes the encoder wrote:
+    // the used set, then the dense set when the header says the map is
+    // two-tier.
     remap_active = (hdr._pad8[0]&pad_remap)!=0;
+    remap_split = remap_active&&(hdr._pad8[0]&pad_remap_split)!=0;
     if( remap_active
         &&io[0].read(remap_mask, 32u*(size_t)plane_count)!=32u*(size_t)plane_count )
+      return false;
+    if( remap_split
+        &&io[0].read(remap_dense, 32u*(size_t)plane_count)!=32u*(size_t)plane_count )
       return false;
     stream.size = hdr.data_size;
     stream.buf = (uint8_t*)bmf_new(hdr.data_size);
@@ -1032,6 +1042,7 @@ struct BMFCodec : BMFState {
       return arc_in[0].fail();
     }
     remap_active = 0;
+    remap_split = 0;
     if( hdr.flags&flags_coded ) {
       if( !expand_coded(io, img_at, hdr) ) {
         return arc_in[0].fail();
@@ -1056,7 +1067,7 @@ struct BMFCodec : BMFState {
       }
     }
     if( remap_active )
-      remap_apply(img_at, plane_count, remap_mask, 1);
+      remap_apply(img_at, plane_count, remap_mask, remap_split ? remap_dense : nullptr, 1);
     if( hdr._pad8[0]&pad_ycocg ) {
       // Written by a build that still had the YCoCg-R lifting.  Refusing is the
       // only honest answer: without the inverse these pixels cannot be
@@ -1370,19 +1381,58 @@ struct BMFCodec : BMFState {
     // from the histogram; this is the trial that decides it, and it costs a
     // pass only on an image that has a comb at all.
     remap_active = 0;
+    remap_split = 0;
     if( plane_count<=4 ) {
-      uint8_t masks[128];
-      remap_masks(img, plane_count, masks);
+      uint8_t masks[128], dense[128];
+      int32_t hist[4*256];
+      remap_hist(img, plane_count, hist);
+      for( int32_t k = 0; k<plane_count; ++k )
+        remap_mask_from_hist(hist+256*k, 1, masks+32*k);
       int32_t holes = 0;
       for( int32_t k = 0; k<plane_count; ++k )
         holes += remap_holes(masks+32*k);
       if( holes>0 ) {
+        // Which values get the low, contiguous ranks.  The plain rank map is
+        // the incumbent -- every value dense -- and each rung of the floor
+        // ladder is a challenger that has to beat it on the MED probe by
+        // kKeepShift of its own cost, the same margin the trials downstream
+        // use.  A plane whose histogram has no light tail sees every rung
+        // reproduce the incumbent's mask and keeps it.
+        int32_t split_any = 0;
+        const int64_t npix = (int64_t)img[0].width*img[0].height;
+        for( int32_t k = 0; k<plane_count; ++k ) {
+          uint8_t fwd[256], inv[256], cand[32];
+          memcpy(dense+32*k, masks+32*k, 32);
+          remap_build(masks+32*k, masks+32*k, fwd, inv);
+          int32_t best_probe = remap_probe(img, plane_count, k, fwd);
+          int32_t chose = -1;
+          for( int32_t sh = kRareShiftLo; sh<=kRareShiftHi; ++sh ) {
+            const int32_t floor_ = max32(2, (int32_t)(npix>>sh));
+            remap_mask_from_hist(hist+256*k, floor_, cand);
+            if( !memcmp(cand, masks+32*k, 32) )
+              continue;
+            remap_build(masks+32*k, cand, fwd, inv);
+            const int32_t c = remap_probe(img, plane_count, k, fwd);
+            if( c+(c>>kKeepShift)<best_probe ) {
+              best_probe = c;
+              chose = sh;
+              memcpy(dense+32*k, cand, 32);
+            }
+          }
+          if( chose>=0 ) {
+            split_any = 1;
+            bmf_log("    plane %d dense set cut at 1/%d of the samples: %d of %d values\n",
+                    k, 1<<chose, remap_used(dense+32*k), remap_used(masks+32*k));
+          }
+        }
+        remap_split = split_any;
+        const uint8_t*const dense_at = split_any ? dense : nullptr;
         PlaneDesc saved_desc[4];
         uint32_t saved_cost[4];
         save_descriptors(saved_desc);
         for( int32_t k = 0; k<4; ++k )
           saved_cost[k] = plane_cost[k];
-        remap_apply(tile_img, plane_count, masks, 0);
+        remap_apply(tile_img, plane_count, masks, dense_at, 0);
         const uint32_t r_est = choose_plane_coding(tile_img);
         const PlaneSearch pr = search_planes(tile_img, tile_buf, plane_cost);
         // The masks are side information and the trial has to pay for them, and
@@ -1393,24 +1443,28 @@ struct BMFCodec : BMFState {
         // files that adopt the joint transform, the trial ledger is not the
         // stream that ships, so a 64-byte win on the ledger can be a 124-byte
         // loss in the file.  Every real winner clears this by percent.
-        const int32_t mask_bits = 8*32*plane_count;
+        const int32_t mask_bits = 8*32*plane_count*(split_any ? 2 : 1);
         const int32_t r_bits = pr.bits+mask_bits;
         const bool kept_raw = r_bits+(r_bits>>kKeepShift)>=best_bits;
-        bmf_log("    %-22s %12.1f bytes  (%d interior gap%s, %d bytes of mask)%s\n",
+        bmf_log("    %-22s %12.1f bytes  (%d interior gap%s, %d bytes of mask%s)%s\n",
                 "renumbered", bmf_bytes(r_bits), holes, holes==1 ? "" : "s",
-                mask_bits>>3, kept_raw ? "" : "  <<");
+                mask_bits>>3, split_any ? ", two-tier" : "", kept_raw ? "" : "  <<");
         if( kept_raw ) {
-          remap_apply(tile_img, plane_count, masks, 1);
+          remap_apply(tile_img, plane_count, masks, dense_at, 1);
           restore_descriptors(saved_desc);
           for( int32_t k = 0; k<4; ++k )
             plane_cost[k] = saved_cost[k];
+          remap_split = 0;
         } else {
           best_bits = r_bits;
           ps = pr;
           cur_est = r_est;
-          remap_apply(img, plane_count, masks, 0);
+          remap_apply(img, plane_count, masks, dense_at, 0);
           img[0]._pad8[0] |= pad_remap;
+          if( split_any )
+            img[0]._pad8[0] |= pad_remap_split;
           memcpy(remap_mask, masks, 32u*(uint32_t)plane_count);
+          memcpy(remap_dense, dense, 32u*(uint32_t)plane_count);
           remap_active = 1;
         }
       }
@@ -1714,7 +1768,10 @@ struct BMFCodec : BMFState {
   // carry the masks.  It is derived from the header flag on the way in and from
   // the search's decision on the way out.
   int32_t remap_active = 0;
+  // Set when the map is two-tier, in which case remap_dense also ships.
+  int32_t remap_split = 0;
   uint8_t remap_mask[128];
+  uint8_t remap_dense[128];
 
   int32_t weight_pair_cost(const BmfImage* img, const uint8_t* plane0, int32_t plane_a, int32_t plane_b, int32_t w4, int32_t w8) {
     int32_t hist[1024];
