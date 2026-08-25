@@ -313,33 +313,60 @@ plain rank map, so `PIA13812`, which gains 21.9% from that map, is untouched.
 plain renumbering, losing 2.29% to it, and the two-tier map is the first form of
 the transform it accepts.
 
-#### The rung the probe picks is not the rung that codes best — unresolved
+#### The rung the probe picks is not the rung that codes best — and why
 
-The floor ladder is ranked by an order-0 KT measure of the MED residual, and on
+The floor ladder was ranked by an order-0 KT measure of the MED residual, and on
 `PIA13882` that measure is demonstrably wrong.  Forcing the `>>10` rung — dense
 sets of 96 / 89 / 85 rather than the probe's 100 / 93 / 85 — gives **2,240,400
-bytes, 7.878 bpp**: another −6.07%, and 8.33% *ahead* of gralic rather than
-2.40%.  The probe ranks that map 0.86% *worse*.
+bytes, 7.878 bpp**: another −6.07%.  The probe ranks that map 0.86% *worse*.
 
-Two things make this hard to fix, and both are worth recording:
+The cause is not the probe's precision.  **The trial was scored in the wrong
+currency.**  It compared value maps by the *planar* per-plane total, and it runs
+before `try_geometry` and the mode-unification trials — so a map that is worse
+planar and much better jointly was rejected:
 
-* **A real trial would not find it either.** The trial ledger scores the winning
-  map at 2,425,690 bytes against the shipped map's 2,385,062 — it prefers the
-  same wrong one — and then the file it actually produces is 2,240,400.  The
-  ledger and the final encode disagree by 8%, because the map tips the
-  downstream plane-coding search onto a different branch.  So the signal that
-  distinguishes these maps is the final encoded size and nothing cheaper.
-* **The direction does not generalise.** Biasing the ladder toward the more
-  aggressive rung was built and measured.  Loosely (any rung within 1/16, ladder
-  extended to `>>8`) it cuts at 1/256 and gives 2,591,364 — worse than shipping.
-  Tightly (within 1/64, ladder unchanged) it lands exactly on 96 / 89 / 85 and
-  takes `PIA13882` to 2,240,400 — but it takes `PIA13785` from 1,797,872 to
-  1,842,636, +2.49%.  One file each way is a coin flip fitted to one file, so it
-  was reverted rather than shipped.
+| `PIA13882` map | planar total | joint | true file |
+|---|---|---|---|
+| 100 / 93 / 85 (probe) | 2,385,062 | 2,385,006 — joint gains 0.00% | 2,385,216 |
+| 96 / 89 / 85 (`>>10`) | 2,425,690 — 1.7% worse | 2,279,270 — joint gains **6.0%** | **2,240,400** |
 
-What is left on the table is about 6% of `PIA13882` and an unknown amount
-elsewhere, behind a selector problem that neither the probe nor the existing
-trial machinery can answer.
+How far off that currency is shows up everywhere: on `PIA13799` the planar
+figure is ~175,000 against a shipped total of 87,734, and on `PIA13915`
+15,344,442 against 14,421,630.
+
+Sweeping every rung against the true coded size, on all three frames that adopt
+the map, ranks the candidate rankers:
+
+| ranker | cost | `PIA13882` | `PIA13785` | `PIA13915` |
+|---|---|---|---|---|
+| MED probe | free | `>>12` ✗ | ≈right | `>>15` ✗ |
+| planar total | free | `>>12` ✗ | `>>10` ✗ | `>>16` ✓ |
+| `r_est`, the inter-plane estimate `choose_plane_coding` already computes | free | ranks the true best **last** ✗ | — | — |
+| **total after the mode search** | one search per candidate | **`>>10` ✓** | **`>>11` ✓** | **`>>16` ✓** |
+
+Every free signal is wrong, and one is wrong backwards, so this could not be
+fixed with a better heuristic.  Two cheap repairs were built and measured and
+neither works: **extending the ladder** past `>>16` changes nothing on any of
+the three (`PIA13915` still picks `>>15`, so the ladder's top was never the
+binding constraint), and **biasing toward the aggressive rung** wins 144,816
+bytes on `PIA13882` and loses 44,764 on `PIA13785` — one file each way, which is
+fitting to one file.
+
+**What shipped** is the measurement rather than a heuristic: the trial puts up
+two candidate dense sets — the probe's per-plane pick and the most aggressive
+rung — and scores them, and the incumbent, through `search_planes` *and*
+`mode_search`.  Two rather than the whole ladder because that shortlist contains
+the optimum on both frames where the rung matters, at one extra search instead
+of seven.
+
+| | before | after | |
+|---|---|---|---|
+| `PIA13785` | 1,797,872 | 1,797,872 | probe's cut wins, 1,808,077 vs 1,915,081 |
+| `PIA13882` | 2,385,216 | **2,240,400** | aggressive wins, 2,279,462 vs 2,385,062 — **−6.07%** |
+
+`PIA13882` ends up **8.33% smaller than gralic**, having been 11.07% larger
+before the two-tier map.  What is left on the table is `PIA13915`'s 7,584 bytes
+(0.05%), where the true optimum sits at a rung neither candidate proposes.
 
 ---
 

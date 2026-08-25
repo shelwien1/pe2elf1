@@ -309,12 +309,23 @@ the file at row 1481 codes it at 8.380 bpp; the last two rows take it to 9.546.
 
 So each plane also gets a **dense mask**, a subset of the used mask whose values
 take the low, contiguous ranks; the rest of the used set follows above them.
-The dense set is cut at a frequency floor chosen per plane from a ladder of
-`npix>>10` .. `npix>>16` (`kRareShiftLo`/`kRareShiftHi`), ranked by
-`remap_probe` -- the KT cost of the plane's MED residual under the candidate map,
-one pass over the plane rather than a model encode.  The plain rank map is the
-incumbent and a rung has to beat it by `kKeepShift`, so a plane with no light
-tail in its histogram keeps the plain map and nothing is spent.  When any plane
+The dense set is cut at a frequency floor from a ladder of `npix>>10` ..
+`npix>>16` (`kRareShiftLo`/`kRareShiftHi`).  `remap_probe` -- the KT cost of the
+plane's MED residual under a candidate map, one pass over the plane rather than
+a model encode -- proposes a floor per plane, and the most aggressive rung of
+the ladder is the second candidate.  Both, and the plain rank map they are
+challenging, are then scored through `search_planes` *and* `mode_search`.
+
+That last part is the whole point.  Scoring them by the planar per-plane total
+alone ranks them wrongly, and by more than they differ: the renumbering decision
+is made before the geometry and mode-unification trials, so a map that is worse
+planar and better jointly used to lose.  On `PIA13882` the winning map is 1.7%
+worse planar and 4.4% better jointly, and the file it produces is 6.07% smaller
+than the one the planar total picks.  Every cheaper signal was measured against
+the true sizes over the whole ladder and ranks these maps wrongly -- including
+the inter-plane estimate `choose_plane_coding` already computes, which ranks
+`PIA13882`'s true best last of three.  A plane with no light tail in its
+histogram still proposes nothing, so nothing is spent on it.  When any plane
 splits, `pad_remap_split` goes in the header and a second 32 bytes a plane
 ships.  On `PIA13882` the probe cuts the dense sets at 100, 93 and 85 values and
 the file goes from 2,714,592 to 2,385,216 bytes (-12.13%), from 11.07% behind
