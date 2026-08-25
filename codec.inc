@@ -1475,7 +1475,7 @@ struct BMFCodec : BMFState {
     remap_active = 0;
     remap_split = 0;
     if( plane_count<=4 ) {
-      uint8_t masks[128], dense[128];
+      uint8_t masks[128], dense[128], aggr[128];
       int32_t hist[4*256];
       remap_hist(img, plane_count, hist);
       for( int32_t k = 0; k<plane_count; ++k )
@@ -1484,31 +1484,40 @@ struct BMFCodec : BMFState {
       for( int32_t k = 0; k<plane_count; ++k )
         holes += remap_holes(masks+32*k);
       if( holes>0 ) {
-        // Which values get the low, contiguous ranks.  The plain rank map is
-        // the incumbent -- every value dense -- and each rung of the floor
-        // ladder is a challenger that has to beat it on the MED probe by
-        // kKeepShift of its own cost, the same margin the trials downstream
-        // use.  A plane whose histogram has no light tail sees every rung
-        // reproduce the incumbent's mask and keeps it.
+        // Which values get the low, contiguous ranks.  Two candidate dense
+        // sets are put up against the plain rank map:
+        //
+        //   dense[]  the MED probe's pick, a floor chosen per plane from the
+        //            ladder -- cheap, one pass over the plane per rung;
+        //   aggr[]   the most aggressive rung of the ladder on every plane.
+        //
+        // Two, because the probe is a poor ranker and the shortlist is what
+        // rescues it.  On PIA13882 the probe ranks its own pick 0.9% ahead of
+        // the aggressive cut and the file the aggressive cut produces is 6.07%
+        // smaller; on PIA13785 the probe's pick is right and the aggressive one
+        // is 0.3% worse.  Neither ordering generalises, so both are measured.
         int32_t split_any = 0;
         const int64_t npix = (int64_t)img[0].width*img[0].height;
         for( int32_t k = 0; k<plane_count; ++k ) {
-          uint8_t fwd[256], inv[256], cand[32];
+          uint8_t fwd[256], inv[256], cand_mask[32];
           memcpy(dense+32*k, masks+32*k, 32);
+          memcpy(aggr+32*k, masks+32*k, 32);
           remap_build(masks+32*k, masks+32*k, fwd, inv);
           int32_t best_probe = remap_probe(img, plane_count, k, fwd);
           int32_t chose = -1;
           for( int32_t sh = kRareShiftLo; sh<=kRareShiftHi; ++sh ) {
             const int32_t floor_ = max32(2, (int32_t)(npix>>sh));
-            remap_mask_from_hist(hist+256*k, floor_, cand);
-            if( !memcmp(cand, masks+32*k, 32) )
+            remap_mask_from_hist(hist+256*k, floor_, cand_mask);
+            if( !memcmp(cand_mask, masks+32*k, 32) )
               continue;
-            remap_build(masks+32*k, cand, fwd, inv);
+            if( sh==kRareShiftLo )
+              memcpy(aggr+32*k, cand_mask, 32);
+            remap_build(masks+32*k, cand_mask, fwd, inv);
             const int32_t c = remap_probe(img, plane_count, k, fwd);
             if( c+(c>>kKeepShift)<best_probe ) {
               best_probe = c;
               chose = sh;
-              memcpy(dense+32*k, cand, 32);
+              memcpy(dense+32*k, cand_mask, 32);
             }
           }
           if( chose>=0 ) {
@@ -1517,56 +1526,74 @@ struct BMFCodec : BMFState {
                     k, 1<<chose, remap_used(dense+32*k), remap_used(masks+32*k));
           }
         }
-        remap_split = split_any;
-        const uint8_t*const dense_at = split_any ? dense : nullptr;
+        const bool aggr_differs = memcmp(aggr, dense, 32u*(uint32_t)plane_count)!=0;
+        // Every candidate is scored the way the file is actually coded -- the
+        // per-plane search *and* the mode-unification trials -- because the
+        // planar total on its own ranks value maps wrongly, and by more than
+        // the maps differ.  See mode_search.
         PlaneDesc saved_desc[4];
         uint32_t saved_cost[4];
         save_descriptors(saved_desc);
         for( int32_t k = 0; k<4; ++k )
           saved_cost[k] = plane_cost[k];
-        remap_apply(tile_img, plane_count, masks, dense_at, 0);
-        const uint32_t r_est = choose_plane_coding(tile_img);
-        const PlaneSearch pr = search_planes(tile_img, tile_buf, plane_cost);
-        // The masks are side information and the trial has to pay for them, and
-        // then to clear kKeepShift on top like every other representation trial
-        // -- the transpose, the palette order and the colour space all require
-        // a challenger to beat the incumbent by a fraction of its own cost.  A
-        // bare comparison is not enough here for a reason worth stating: on the
-        // files that adopt the joint transform, the trial ledger is not the
-        // stream that ships, so a 64-byte win on the ledger can be a 124-byte
-        // loss in the file.  Every real winner clears this by percent.
+        uint8_t* pristine = (uint8_t*)bmf_new(tile_img[0].data_size);
+        memcpy(pristine, tile_src, tile_img[0].data_size);
+        // The incumbent, in the same currency.
+        int32_t inc_cand = 1;
+        PlaneSearch inc_ps = ps;
+        const int32_t inc_bits = mode_search(tile_img, tile_src, inc_ps, ps.bits, inc_cand);
+        memcpy(tile_src, pristine, tile_img[0].data_size);
+        restore_descriptors(saved_desc);
+        for( int32_t k = 0; k<4; ++k )
+          plane_cost[k] = saved_cost[k];
         const int32_t mask_bits = 8*32*plane_count*(split_any ? 2 : 1);
-        const int32_t r_bits = pr.bits+mask_bits;
-        const bool kept_raw = r_bits+(r_bits>>kKeepShift)>=best_bits;
-        bmf_log("    %-22s %12.1f bytes  (%d interior gap%s, %d bytes of mask%s)%s\n",
-                "renumbered", bmf_bytes(r_bits), holes, holes==1 ? "" : "s",
-                mask_bits>>3, split_any ? ", two-tier" : "", kept_raw ? "" : "  <<");
-        if( kept_raw ) {
-          remap_apply(tile_img, plane_count, masks, dense_at, 1);
+        int32_t best_total = inc_bits;
+        int32_t which = -1;                    // -1 incumbent, 0 probe, 1 aggressive
+        for( int32_t c = 0; c<(aggr_differs ? 2 : 1); ++c ) {
+          const uint8_t*const set = c ? aggr : dense;
+          const bool c_split = c ? true : (split_any!=0);
+          const int32_t c_mask_bits = 8*32*plane_count*(c_split ? 2 : 1);
+          remap_apply(tile_img, plane_count, masks, c_split ? set : nullptr, 0);
+          choose_plane_coding(tile_img);
+          PlaneSearch pc = search_planes(tile_img, tile_buf, plane_cost);
+          int32_t c_cand = 1;
+          const int32_t total = mode_search(tile_img, tile_src, pc, pc.bits, c_cand)+c_mask_bits;
+          memcpy(tile_src, pristine, tile_img[0].data_size);
           restore_descriptors(saved_desc);
           for( int32_t k = 0; k<4; ++k )
             plane_cost[k] = saved_cost[k];
-          remap_split = 0;
-        } else {
-          best_bits = r_bits;
-          ps = pr;
-          cur_est = r_est;
-          remap_apply(img, plane_count, masks, dense_at, 0);
+          bmf_log("    %-22s %12.1f bytes  (%d interior gap%s, %d bytes of mask%s)\n",
+                  c ? "renumbered, aggressive" : "renumbered", bmf_bytes(total),
+                  holes, holes==1 ? "" : "s", c_mask_bits>>3, c_split ? ", two-tier" : "");
+          // The margin every representation trial has to clear, as before.
+          if( total+(total>>kKeepShift)<best_total ) {
+            best_total = total;
+            which = c;
+          }
+        }
+        free(pristine);
+        if( which>=0 ) {
+          const uint8_t*const set = which ? aggr : dense;
+          const bool c_split = which ? true : (split_any!=0);
+          remap_split = c_split;
+          remap_apply(tile_img, plane_count, masks, c_split ? set : nullptr, 0);
+          cur_est = choose_plane_coding(tile_img);
+          ps = search_planes(tile_img, tile_buf, plane_cost);
+          best_bits = ps.bits+8*32*plane_count*(c_split ? 2 : 1);
+          remap_apply(img, plane_count, masks, c_split ? set : nullptr, 0);
           img[0]._pad8[0] |= pad_remap;
-          if( split_any )
+          if( c_split )
             img[0]._pad8[0] |= pad_remap_split;
           memcpy(remap_mask, masks, 32u*(uint32_t)plane_count);
-          memcpy(remap_dense, dense, 32u*(uint32_t)plane_count);
+          memcpy(remap_dense, set, 32u*(uint32_t)plane_count);
           remap_active = 1;
+          bmf_log("    %-22s adopted (%s cut)\n", "renumbering",
+                  which ? "aggressive" : "probe's");
+        } else {
+          bmf_log("    %-22s kept raw\n", "renumbering");
         }
       }
     }
-    // Only the transpose.  The mirrors were built and measured here too: they
-    // are worth 0.04% of the corpus and cost 60% of encode time, because every
-    // orientation needs its own full per-plane search and the decision cannot
-    // be delegated to a crop -- a megapixel of x_ai does not show the 9.6% its
-    // whole raster gets from a transpose.  They stay in the <=4 bpp short path,
-    // where the searches are cheap and they are worth three times as much.
     try_geometry(geo_transpose, "transposed", img, tile_img, tile_buf, plane_cost, ps, best_bits, cur_est);
     {
       // Palette order.  Both sides derive the luminance ordering from the table
