@@ -290,6 +290,53 @@ count — `STA13456` (740→397), `PIA13882` (545→279), `PIA13872` (743→536)
 `sony_a55_07` (532→355), `STA13900` (768→612) — and the MED probe picks the
 two-tier map on `PIA13785`, `PIA13915` and `STA13845` as well.
 
+Measured against a `HEAD`-built reference over the frames held locally, with
+every new stream decoded back and compared pixel for pixel:
+
+| file | before | after | |
+|---|---|---|---|
+| `PIA13799` | 87,756 | 87,756 | — |
+| `PIA13913` | 403,216 | 403,216 | — |
+| `STA13456` | 1,093,604 | 1,093,604 | — |
+| `PIA13872` | 190,144 | 190,144 | — |
+| `STA13782` | 935,760 | 935,760 | — |
+| `PIA13812` | 1,294,036 | 1,294,036 | — |
+| `STA13900` | 1,910,720 | 1,910,720 | — |
+| `PIA13785` | 1,855,980 | **1,797,872** | −3.13% |
+| `PIA13882` | 2,714,592 | **2,385,216** | −12.13% |
+
+The seven unchanged files are the point as much as the two that move: the
+incumbent margin means a plane with no light tail in its histogram keeps the
+plain rank map, so `PIA13812`, which gains 21.9% from that map, is untouched.
+
+#### The rung the probe picks is not the rung that codes best — unresolved
+
+The floor ladder is ranked by an order-0 KT measure of the MED residual, and on
+`PIA13882` that measure is demonstrably wrong.  Forcing the `>>10` rung — dense
+sets of 96 / 89 / 85 rather than the probe's 100 / 93 / 85 — gives **2,240,400
+bytes, 7.878 bpp**: another −6.07%, and 8.33% *ahead* of gralic rather than
+2.40%.  The probe ranks that map 0.86% *worse*.
+
+Two things make this hard to fix, and both are worth recording:
+
+* **A real trial would not find it either.** The trial ledger scores the winning
+  map at 2,425,690 bytes against the shipped map's 2,385,062 — it prefers the
+  same wrong one — and then the file it actually produces is 2,240,400.  The
+  ledger and the final encode disagree by 8%, because the map tips the
+  downstream plane-coding search onto a different branch.  So the signal that
+  distinguishes these maps is the final encoded size and nothing cheaper.
+* **The direction does not generalise.** Biasing the ladder toward the more
+  aggressive rung was built and measured.  Loosely (any rung within 1/16, ladder
+  extended to `>>8`) it cuts at 1/256 and gives 2,591,364 — worse than shipping.
+  Tightly (within 1/64, ladder unchanged) it lands exactly on 96 / 89 / 85 and
+  takes `PIA13882` to 2,240,400 — but it takes `PIA13785` from 1,797,872 to
+  1,842,636, +2.49%.  One file each way is a coin flip fitted to one file, so it
+  was reverted rather than shipped.
+
+What is left on the table is about 6% of `PIA13882` and an unknown amount
+elsewhere, behind a selector problem that neither the probe nor the existing
+trial machinery can answer.
+
 ---
 
 ## 5. What does *not* explain the gap
