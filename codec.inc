@@ -732,10 +732,6 @@ struct BMFCodec : BMFState {
       p_i[0]._pad8[0] &= (uint8_t)~pad_remap;
       remap_active = 0;
     }
-    if( p_i[0]._pad8[0]&pad_ycocg ) {
-      ycocg_inverse(p_i, plane_count);
-      p_i[0]._pad8[0] &= (uint8_t)~pad_ycocg;
-    }
     if( p_i[0].flags&flags_pal_sorted ) {
       PaletteOrder po;
       if( palette_order_of(p_i, &po) )
@@ -757,6 +753,13 @@ struct BMFCodec : BMFState {
     if( extra_blk )
       p_i[0].flags |= flags_tail;
     near_lossless_q = 0;
+    // Per image, beside the other coding state.  Only search_filter sets this,
+    // and the <=4bpp path returns before reaching it, so without a reset here a
+    // packed member following a renumbered one ships stale masks its own header
+    // never announces.  No single-image encode can reach that today; the
+    // invariant is worth holding anyway, because the failure is a silently
+    // unreadable archive rather than a wrong pixel.
+    remap_active = 0;
     hdr.header_from(p_i);
     hdr.flags = p_i[0].flags;
     plane_count = ((p_i[0].depth&depth_bits)+7)>>3;
@@ -1028,6 +1031,7 @@ struct BMFCodec : BMFState {
     if( plane_count<1||plane_count>4 ) {
       return arc_in[0].fail();
     }
+    remap_active = 0;
     if( hdr.flags&flags_coded ) {
       if( !expand_coded(io, img_at, hdr) ) {
         return arc_in[0].fail();
@@ -1051,13 +1055,14 @@ struct BMFCodec : BMFState {
         return arc_in[0].fail();
       }
     }
-    if( hdr._pad8[0]&pad_remap )
+    if( remap_active )
       remap_apply(img_at, plane_count, remap_mask, 1);
     if( hdr._pad8[0]&pad_ycocg ) {
-      if( plane_count<3 ) {
-        return arc_in[0].fail();
-      }
-      ycocg_inverse(img_at, plane_count);
+      // Written by a build that still had the YCoCg-R lifting.  Refusing is the
+      // only honest answer: without the inverse these pixels cannot be
+      // reproduced, and decoding them anyway would be silently wrong.
+      printf("\nstream uses YCoCg-R lifting, which this build no longer implements\n");
+      exit(3);
     }
     if( hdr.flags&flags_pal_sorted ) {
       // The table went out in the file's own order, so rebuilding the ordering
@@ -1443,44 +1448,6 @@ struct BMFCodec : BMFState {
           ps = pp;
           permute_indices(img, po.rank);
         }
-      }
-    }
-    if( plane_count>=3 ) {
-      // The colour transform can only form residuals against the original
-      // planes, so a luma smoother than any single channel is out of its
-      // reach.  YCoCg-R reaches it, and the trial decides whether it helps.
-      PlaneDesc saved_desc[4];
-      uint32_t saved_cost[4];
-      save_descriptors(saved_desc);
-      for( int32_t k = 0; k<4; ++k )
-        saved_cost[k] = plane_cost[k];
-      ycocg_forward(tile_img, plane_count);
-      const uint32_t y_est = choose_plane_coding(tile_img);
-      // The lifting has lost every time it has been measured on continuous-tone
-      // colour -- BMF's fitted blend already decorrelates the channels, and the
-      // alt-P2 model reads the reference planes spatially on top of that -- so
-      // the full trial only runs where the cheap estimate says it has a chance.
-      const bool worth_it = y_est<cur_est;
-      PlaneSearch py = ps;
-      if( worth_it )
-        py = search_planes(tile_img, tile_buf, plane_cost);
-      const bool kept_rgb = !worth_it||py.bits+(py.bits>>kKeepShift)>=best_bits;
-      if( worth_it )
-        bmf_log("    %-22s %12.1f bytes%s\n", "YCoCg-R lifted", bmf_bytes(py.bits), kept_rgb ? "" : "  <<");
-      else
-        bmf_log("    %-22s %12.1f bytes estimated against %.1f, not tried\n", "YCoCg-R lifted",
-                bmf_bytes(y_est), bmf_bytes(cur_est));
-      if( kept_rgb ) {
-        ycocg_inverse(tile_img, plane_count);
-        restore_descriptors(saved_desc);
-        for( int32_t k = 0; k<4; ++k )
-          plane_cost[k] = saved_cost[k];
-      } else {
-        best_bits = py.bits;
-        ps = py;
-        cur_est = y_est;
-        ycocg_forward(img, plane_count);
-        img[0]._pad8[0] |= pad_ycocg;
       }
     }
     if( plane_count==4&&alpha_convention(img) ) {

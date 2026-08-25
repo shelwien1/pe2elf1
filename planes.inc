@@ -209,18 +209,6 @@ struct PlaneSearch {
   int32_t n_refs;
 };
 
-// YCoCg-R: reversible integer lifting, applied to the three colour bytes of
-// each pixel.  BMF's own transform cannot express it -- that one forms
-// residuals against the *original* planes and never replaces a plane by a
-// combination of them -- so a smoother luma than any single channel is out of
-// its reach.  Co and Cg nominally need nine bits; wrapping them into a byte
-// costs nothing here, because every lifting step reads the stored wrapped
-// value and the inverse applies the same shifts to the same bytes.  Pixels are
-// stored blue first; the lifted image keeps luma in plane 0.
-int32_t ycocg_half(uint32_t v) {
-  return (int32_t)(int8_t)(uint8_t)v>>1;
-}
-
 // Value-set renumbering.  Nine LPCB frames have been through a tone curve or a
 // quantiser and use 74-248 of the 256 levels, spaced with gaps of 2 and 3 --
 // every residual is then a multiple of the gap, and alt-P1 and alt-P2 spend a
@@ -236,7 +224,7 @@ int32_t ycocg_half(uint32_t v) {
 //
 // Whether it pays is not decidable from the histogram: PIA13915 uses 248 levels
 // of 256 and renumbering costs it 2.29%, while PIA13812 uses 120 and gains
-// 21.9%.  So this is a trial like the transpose and the YCoCg lift, not a
+// 21.9%.  So this is a trial like the transpose, not a
 // heuristic -- see search_filter.
 void remap_masks(const BmfImage* img, int32_t planes, uint8_t* masks) {
   memset(masks, 0, 32u*(uint32_t)planes);
@@ -291,8 +279,13 @@ void remap_build(const uint8_t* mask, uint8_t* fwd, uint8_t* inv) {
     if( (mask[v>>3]>>(v&7))&1 ) last = fwd[v];
     else fwd[v] = (uint8_t)last;
   }
+  if( !n ) {                    // only reachable from a corrupt mask
+    memset(fwd, 0, 256);
+    memset(inv, 0, 256);
+    return;
+  }
   for( int32_t k = n; k<256; ++k )
-    inv[k] = inv[n ? n-1 : 0];
+    inv[k] = inv[n-1];
 }
 
 void remap_apply(BmfImage* img, int32_t planes, const uint8_t* masks, int32_t inverse) {
@@ -309,29 +302,4 @@ void remap_apply(BmfImage* img, int32_t planes, const uint8_t* masks, int32_t in
       p[k] = map[k][p[k]];
 }
 
-void ycocg_forward(BmfImage* img, int32_t planes) {
-  uint8_t* p = img[0].pixels;
-  const uint8_t*const end = p+img[0].data_size;
-  for(; p+planes<=end; p += planes ) {
-    const uint32_t b = p[0], g = p[1], r = p[2];
-    const uint32_t co = (r-b)&255u;
-    const uint32_t t = (b+(uint32_t)ycocg_half(co))&255u;
-    const uint32_t cg = (g-t)&255u;
-    p[0] = (uint8_t)((t+(uint32_t)ycocg_half(cg))&255u);
-    p[1] = (uint8_t)cg;
-    p[2] = (uint8_t)co;
-  }
-}
 
-void ycocg_inverse(BmfImage* img, int32_t planes) {
-  uint8_t* p = img[0].pixels;
-  const uint8_t*const end = p+img[0].data_size;
-  for(; p+planes<=end; p += planes ) {
-    const uint32_t y = p[0], cg = p[1], co = p[2];
-    const uint32_t t = (y-(uint32_t)ycocg_half(cg))&255u;
-    const uint32_t b = (t-(uint32_t)ycocg_half(co))&255u;
-    p[0] = (uint8_t)b;
-    p[1] = (uint8_t)((cg+t)&255u);
-    p[2] = (uint8_t)((b+co)&255u);
-  }
-}

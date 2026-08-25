@@ -22,7 +22,8 @@ enum : uint8_t {
 // Bits of the member header's spare byte.  The flags byte is full, and these
 // describe the pixels' representation rather than the coding, so they sit here.
 enum : uint8_t {
-  pad_ycocg = 0x01,
+  pad_ycocg = 0x01,   // retired: the YCoCg-R lifting.  Reserved, never set,
+                      // and a stream carrying it is refused rather than mis-decoded.
   pad_flip_x = 0x02,
   pad_flip_y = 0x04,
   pad_ctx_packed = 0x08,
