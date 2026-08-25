@@ -304,10 +304,14 @@ every new stream decoded back and compared pixel for pixel:
 | `STA13900` | 1,910,720 | 1,910,720 | — |
 | `PIA13785` | 1,855,980 | **1,797,872** | −3.13% |
 | `PIA13882` | 2,714,592 | **2,385,216** | −12.13% |
+| `PIA13915` | 14,421,652 | **14,239,660** | −1.26% |
 
-The seven unchanged files are the point as much as the two that move: the
+The seven unchanged files are the point as much as the three that move: the
 incumbent margin means a plane with no light tail in its histogram keeps the
 plain rank map, so `PIA13812`, which gains 21.9% from that map, is untouched.
+`PIA13915` is the useful case at the other end — it is the frame that *declines*
+plain renumbering, losing 2.29% to it, and the two-tier map is the first form of
+the transform it accepts.
 
 #### The rung the probe picks is not the rung that codes best — unresolved
 
