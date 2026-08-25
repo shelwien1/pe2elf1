@@ -1,0 +1,134 @@
+/* -------------------------------------------------------------
+   mrpc_lib.h -- lossless image compression on MRP's scheme.
+
+   The codec segments an image over a quadtree, fits a linear predictor
+   per (class, colour component), picks a probability model per pixel by
+   local activity, and optimises all of that against measured code
+   length.  The encoder's optimisation loop runs on an OpenCL device
+   where there is one; the decoder is serial and always runs on the host.
+
+   Everything here is in memory: a raster goes in, a blob comes out, and
+   the other way round.  No files, no paths, no stdio.  The one thing
+   the library will touch on its own is <device name>.!cl in the working
+   directory, and only when opts.cache_kernels says so.
+
+   Lifetime is explicit.  mrpc_init hands back a context, mrpc_quit
+   gives it back, and nothing the library allocates outlives the call
+   that returned it except through mrpc_free.
+
+   Not thread safe: one call on one context at a time.  Two contexts in
+   two threads share the coder's scratch and will corrupt each other.
+   ------------------------------------------------------------- */
+#ifndef MRPC_LIB_H
+#define MRPC_LIB_H
+
+#include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define MRPC_VERSION   1
+#define MRPC_MAX_COMP  4  /* RGB and RGBA, in the order the raster has them */
+
+/* An image as the codec sees it: one interleaved raster, `stride` bytes
+   per row, `ncomp` bytes per pixel.  Rows may be padded -- the padding
+   is compressed too, so a raster with row padding round-trips exactly.
+   `data` is stride*height bytes and belongs to whoever allocated it;
+   mrpc_decompress allocates one and hands it over. */
+typedef struct {
+  unsigned       width, height;
+  unsigned       ncomp;  /* 3 or 4 */
+  unsigned       stride; /* >= width*ncomp */
+  unsigned char* data;
+} mrpc_image;
+
+/* A block the library allocated.  Release it with mrpc_free. */
+typedef struct {
+  unsigned char* data;
+  size_t         size;
+} mrpc_blob;
+
+/* Which device does the encoder's arithmetic.  A zeroed mrpc_opts is
+   valid and means: OpenCL on, first GPU or else first CPU device, no
+   kernel cache, quiet. */
+typedef struct {
+  int use_opencl;    /* 0 = everything on the host */
+  int platform;      /* index, or -1 for any */
+  int device;        /* index as mrpc_device_get counts them, or -1 */
+  int device_type;   /* MRPC_DEV_*, when device < 0 */
+  int cache_kernels; /* keep the compiled kernels in the working directory */
+  int verbose;       /* device build log and per-kernel timings on stderr */
+  int progress;      /* 0 = silent, 1 = if the image is big, 2 = always */
+} mrpc_opts;
+
+enum { MRPC_DEV_ANY = 0, MRPC_DEV_CPU, MRPC_DEV_GPU, MRPC_DEV_ACC };
+
+enum {
+  MRPC_OK = 0,
+  MRPC_ERR_ARG = -1,    /* a null pointer, or geometry the codec cannot take */
+  MRPC_ERR_MEM = -2,    /* out of memory */
+  MRPC_ERR_DATA = -3,   /* the blob is not one of ours, or is truncated */
+  MRPC_ERR_VERSION = -4 /* it is ours, but from a later format */
+};
+
+typedef struct mrpc_ctx mrpc_ctx;
+
+/* --- lifetime ------------------------------------------------------
+   opts may be null for the defaults.  The context carries the device,
+   the compiled kernels and every buffer the codec reuses, so compressing
+   a hundred images through one context opens the device once. */
+mrpc_ctx*   mrpc_init(const mrpc_opts* opts);
+void        mrpc_quit(mrpc_ctx* c);
+
+/* What the context actually opened -- "[GPU] NVIDIA GeForce RTX 3090
+   (NVIDIA CUDA)" -- or "host" if it is not using a device. */
+const char* mrpc_device_used(mrpc_ctx* c);
+
+/* --- compression ---------------------------------------------------
+   head and tail are carried through the stream with an order-1 model
+   and handed back by mrpc_decompress: a file format's header and
+   trailer ride along with the raster it wraps.  Either may be null.
+
+   img may be null, which compresses head and tail alone -- what a
+   frontend does with a file it could not parse as an image.
+
+   *out is allocated here; free it with mrpc_free. */
+int mrpc_compress(mrpc_ctx* c, const mrpc_image* img,
+                  const void* head, size_t headlen,
+                  const void* tail, size_t taillen,
+                  mrpc_blob* out);
+
+/* img->data, head->data and tail->data are allocated here; free each
+   with mrpc_free.  Any of the three outputs may be null if you do not
+   want it.  An image the stream does not carry comes back with
+   width == 0 and data == 0. */
+int mrpc_decompress(mrpc_ctx* c, const void* data, size_t size,
+                    mrpc_image* img, mrpc_blob* head, mrpc_blob* tail);
+
+void        mrpc_free(void* p);
+const char* mrpc_error(int rc);
+
+/* --- devices -------------------------------------------------------
+   For a frontend that wants to show what is available.  Counting them
+   does not need a context: it is what you call before you make one. */
+typedef struct {
+  char               name[256];
+  char               platform[256];
+  char               version[128];
+  char               driver[128];
+  int                type; /* MRPC_DEV_* */
+  int                units;
+  int                clock_mhz;
+  unsigned long long global_mem;
+  unsigned long long local_mem;
+  size_t             max_work_group;
+} mrpc_device;
+
+int mrpc_device_count(void);
+int mrpc_device_get(int index, mrpc_device* out); /* MRPC_OK or MRPC_ERR_ARG */
+
+#ifdef __cplusplus
+}
+#endif
+#endif

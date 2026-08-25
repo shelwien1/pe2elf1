@@ -1,14 +1,76 @@
 # mrpc on OpenCL
 
-`mrpc` is a lossless RGB/RGBA BMP compressor on MRP's scheme: it segments the
+`mrpc` is a lossless RGB/RGBA image compressor on MRP's scheme: it segments the
 image over a quadtree, fits a linear predictor per (class, colour component),
 picks a probability model per pixel by local activity, and optimises all of
 that against measured code length. It is a two-pass coder, and the second pass
 is where the hours go.
 
-This port moves the encoder's optimisation loop to an OpenCL device and adds
-the command line for choosing one. The bitstream format is unchanged, the
-decoder is untouched, and `-C` still runs the original code path byte for byte.
+The encoder's optimisation loop runs on an OpenCL device. The codec is a
+library — `mrpc_lib.h`, in-memory, C linkage — and `mrpc.cpp` is a command line
+on top of it that knows about BMP and files so the library does not have to.
+
+## The library
+
+```c
+#include "mrpc_lib.h"
+
+mrpc_opts opt = {0};
+opt.use_opencl = 1;
+opt.platform = opt.device = -1;
+
+mrpc_ctx* c = mrpc_init(&opt);
+
+mrpc_image img = {0};
+img.width = w; img.height = h; img.ncomp = 3; img.stride = stride;
+img.data = raster;
+
+mrpc_blob out;
+mrpc_compress(c, &img, hdr, hdrlen, 0, 0, &out);   /* raster -> blob */
+...
+mrpc_free(out.data);
+mrpc_quit(c);
+```
+
+and back:
+
+```c
+mrpc_image img; mrpc_blob head, tail;
+mrpc_decompress(c, blob, bloblen, &img, &head, &tail);
+/* img.data, head.data, tail.data are yours; mrpc_free each */
+```
+
+* **One class does both directions.** `Codec` in `mrpc_lib.cpp` is the whole
+  codec: `Init`, `Compress`, `Decompress`, `Quit`. `mrpc_ctx` is one of them.
+* **Explicit lifetime, everywhere.** No constructors, no destructors, nothing
+  that runs on its own: every type in the library has `Init` and `Quit`, and
+  each is called by the thing that owns it. What used to be function statics —
+  the group histogram, the class list, the sweep buffers — belongs to the
+  context now, because a leak per call is a leak in a library. `t_lib` runs 60
+  round trips through one context and watches the process not grow.
+* **The device belongs to the context**, not to the image: `mrpc_init` opens it
+  and builds the kernels, so a hundred images through one context compile
+  nothing after the first.
+* **head and tail** are arbitrary bytes carried through the stream with an
+  order-1 model — a file format's header and trailer riding along with the
+  raster. `img` may be null, which compresses those alone: what a frontend does
+  with a file it could not parse.
+* The library **never exits, never prints to stdout, and touches no file**
+  except the kernel cache, and only when asked. It is not thread safe: one call
+  on one context at a time.
+
+`make` builds `libmrpc.a` and the `mrpc` frontend against it; `make test`
+builds `t_lib` — which is C, not C++, so that the header has to be what it
+claims — and runs it.
+
+### The stream is self-describing now
+
+It has to be: a library that takes a raster cannot recover the geometry by
+parsing a BMP header the way the old container did. Width, height, component
+count, stride and the head and tail lengths are coded into the stream, in
+variable-length fields. That costs three to five bytes against the old
+container, and **files written by earlier builds do not decode** — the frontend
+writes the library's blob and nothing else.
 
 ## Where the time was
 
@@ -256,9 +318,12 @@ exercised.
 
 | | |
 | --- | --- |
-| `mrpc.cpp` | the codec; the device paths sit next to the host ones they mirror |
+| `mrpc_lib.h` | the library's whole surface: image in, blob out, C linkage |
+| `mrpc_lib.cpp` | the codec; the device paths sit next to the host ones they mirror |
 | `mrpc_cl.inc` | device selection, buffers, launches — the whole OpenCL host side |
 | `mrpc_kernels.inc` | the kernels, as a string, built at run time |
-| `sh_common.inc`, `sh_v2f.inc` | the shared front end and rangecoder |
+| `sh_common.inc`, `sh_v2f.inc` | the shared helpers and the rangecoder, which codes to memory as well as to a file |
+| `mrpc.cpp` | the frontend: options, BMP, files, and nothing else |
 | `Makefile`, `gc.bat` | Linux and Windows builds |
-| `t.sh` | round-trip and reference check |
+| `t.sh` | round-trip and reference check, through the command line |
+| `t_lib.c` | the same through the C API, in C |

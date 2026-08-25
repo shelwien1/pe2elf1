@@ -5,3 +5,5 @@ mrpc-nocl
 *.mrp
 winsdk/
 *.!cl
+*.a
+t_lib

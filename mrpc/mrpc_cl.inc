@@ -44,7 +44,8 @@ __declspec(dllimport) CL_PROC __stdcall GetProcAddress(void*, const char*);
         F(clCreateBuffer) F(clSetKernelArg) F(clEnqueueNDRangeKernel)      \
         F(clEnqueueReadBuffer) F(clEnqueueWriteBuffer) F(clWaitForEvents)  \
         F(clGetEventProfilingInfo) F(clReleaseEvent) F(clGetProgramInfo)   \
-        F(clCreateProgramWithBinary) F(clReleaseProgram)
+        F(clCreateProgramWithBinary) F(clReleaseProgram) F(clReleaseKernel)  \
+        F(clReleaseMemObject) F(clReleaseCommandQueue) F(clReleaseContext)
 #define CL_EACH_OPT(F) F(clCreateCommandQueueWithProperties) F(clCreateCommandQueue)
 
 #define CL_TDEF(n) typedef decltype(&::n) t_##n;
@@ -97,6 +98,10 @@ static int CLLoadICD(void) {
 #define clGetProgramInfo             pfn_clGetProgramInfo
 #define clCreateProgramWithBinary    pfn_clCreateProgramWithBinary
 #define clReleaseProgram             pfn_clReleaseProgram
+#define clReleaseKernel              pfn_clReleaseKernel
+#define clReleaseMemObject           pfn_clReleaseMemObject
+#define clReleaseCommandQueue        pfn_clReleaseCommandQueue
+#define clReleaseContext             pfn_clReleaseContext
 
 #else
 static int CLLoadICD(void) {
@@ -587,24 +592,12 @@ struct MrpcCL {
   // component count, row stride, plane size -- are kernel arguments, so
   // one built program serves every image, which is what makes caching it
   // per device worth anything.
-  int Build(uint W_, uint H_, uint nc_, uint BS_, size_t bn_, int ntmax_, int numclass_, int nfreq) {
-    W = W_;
-    H = H_;
-    nc = nc_;
-    BS = BS_;
-    bn = bn_;
-    (void)ntmax_;
+  // The program depends on nothing about the image, so it is built once
+  // per context; the buffers are sized from the image, so they are not.
+  int Program() {
+    if( prog[0] )
+      return 1;
     ntpad = NTMAX; // the kernels run the tap loop to a constant bound
-    num_class = uint(numclass_);
-    // the plane offsets the kernels compute are ints; a raster big enough
-    // to overflow one is a raster no device would allocate anyway
-    if( bn*nc>=size_t(0x7FFFFFFF) ) {
-      fprintf(stderr, "mrpc: opencl: image too large for the device path\n");
-      return 0;
-    }
-    a_nc = int(nc);
-    a_bsw = int(BS);
-    a_bn = int(bn);
 
     char opts[2048];
     snprintf(opts, sizeof(opts),
@@ -743,7 +736,27 @@ struct MrpcCL {
     // a number that happened to be larger than a CPU's core count
     pm_chunks = cu;
 
-    // --- buffers
+    return 1;
+  }
+
+  int Buffers(uint W_, uint H_, uint nc_, uint BS_, size_t bn_, int numclass_, int nfreq) {
+    BuffersQuit();
+    W = W_;
+    H = H_;
+    nc = nc_;
+    BS = BS_;
+    bn = bn_;
+    num_class = uint(numclass_);
+    // the plane offsets the kernels compute are ints; a raster big enough
+    // to overflow one is a raster no device would allocate anyway
+    if( bn*nc>=size_t(0x7FFFFFFF) ) {
+      fprintf(stderr, "mrpc: opencl: image too large for the device path\n");
+      return 0;
+    }
+    a_nc = int(nc);
+    a_bsw = int(BS);
+    a_bn = int(bn);
+
     const size_t npix = size_t(W)*H;
     const size_t cubepix = size_t(MRP_MAXCLASS)*MAX_BSIZE*MAX_BSIZE;
     const size_t cubetile = size_t(MRP_MAXCLASS)*THMAX*TWMAX;
@@ -797,6 +810,51 @@ struct MrpcCL {
 
     active = 1;
     return 1;
+  }
+
+  // --- giving it all back -------------------------------------------
+  // Every buffer the last image needed.  The context, the queue and the
+  // program outlive this: another image can follow without opening the
+  // device or compiling anything again.
+  void BuffersQuit() {
+    cl_mem* m[] = {&d_planes, &d_org, &d_prd, &d_err, &d_grp, &d_cpo, &d_cpq,
+                   &d_coef, &d_tapoff, &d_uq, &d_costtab, &d_pmoff,
+                   &d_udy, &d_udx, &d_uw, &d_cA, &d_cB, &d_cbeg,
+                   &d_halo, &d_prdcube, &d_errcube, &d_pixcost, &d_partials,
+                   &d_hist, &d_pmcost, &d_cum, &d_dp, &d_tre, &d_th, &d_thcost};
+    for( int i = 0; i<int(sizeof(m)/sizeof(m[0])); i++ )
+      if( *m[i] ) {
+        clReleaseMemObject(*m[i]);
+        *m[i] = 0;
+      }
+    delete[] halo;
+    delete[] pixcost;
+    delete[] partials;
+    delete[] pmcost;
+    delete[] psum;
+    halo = 0;
+    pixcost = 0;
+    partials = 0;
+    pmcost = 0;
+    psum = 0;
+    active = 0;
+  }
+
+  void Quit() {
+    if( !ctx )
+      return;
+    BuffersQuit();
+    cl_kernel k[] = {k_predict[0], k_cost[0], k_scan, k_apply, k_hist, k_pmod, k_dp};
+    for( int i = 0; i<int(sizeof(k)/sizeof(k[0])); i++ )
+      if( k[i] )
+        clReleaseKernel(k[i]);
+    for( int b = 0; b<CL_NBS; b++ )
+      if( prog[b] )
+        clReleaseProgram(prog[b]);
+    if( q )
+      clReleaseCommandQueue(q);
+    clReleaseContext(ctx);
+    memset(this, 0, sizeof(*this));
   }
 
   int Write(cl_mem b, const void* p, size_t n, const char* what, size_t off = 0) {

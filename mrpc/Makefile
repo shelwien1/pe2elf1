@@ -1,22 +1,48 @@
-# mrpc -- lossless BMP compressor, with the encoder's optimisation loop
-# on OpenCL.  `make` builds with OpenCL, `make mrpc-nocl` without.
+# mrpc -- lossless BMP compression, with the encoder's optimisation loop
+# on OpenCL.
+#
+#   make            the library and the command line, with OpenCL
+#   make mrpc-nocl  the same without: no OpenCL headers or loader needed
+#   make windows    mrpc.exe, cross-built with MinGW-w64
+#   make test       round-trip the library through its C API
+#
+# The library is mrpc_lib.cpp behind mrpc_lib.h; mrpc.cpp is a frontend
+# that includes nothing else.
 
 CXX      ?= g++
+CC       ?= gcc
 CXXFLAGS ?= -O2 -std=c++17 -march=native -DNDEBUG -w
+CFLAGS   ?= -O2 -std=c99 -Wall
 LDLIBS   ?= -lOpenCL
+
+LIBSRC = mrpc_lib.cpp mrpc_lib.h mrpc_cl.inc mrpc_kernels.inc sh_common.inc sh_v2f.inc
 
 all: mrpc
 
-mrpc: mrpc.cpp mrpc_cl.inc mrpc_kernels.inc sh_common.inc sh_v2f.inc
-	$(CXX) $(CXXFLAGS) -DMRP_OPENCL mrpc.cpp $(LDLIBS) -o $@
+libmrpc.a: mrpc_lib.o
+	$(AR) rcs $@ $^
+
+mrpc_lib.o: $(LIBSRC)
+	$(CXX) $(CXXFLAGS) -DMRP_OPENCL -c mrpc_lib.cpp -o $@
+
+mrpc: mrpc.cpp mrpc_lib.h libmrpc.a
+	$(CXX) $(CXXFLAGS) mrpc.cpp libmrpc.a $(LDLIBS) -o $@
 
 # the reference build: no device, no OpenCL headers needed
-mrpc-nocl: mrpc.cpp sh_common.inc sh_v2f.inc
-	$(CXX) $(CXXFLAGS) mrpc.cpp -o $@
+mrpc-nocl: mrpc.cpp $(LIBSRC)
+	$(CXX) $(CXXFLAGS) -c mrpc_lib.cpp -o mrpc_lib_nocl.o
+	$(CXX) $(CXXFLAGS) mrpc.cpp mrpc_lib_nocl.o -o $@
 
-.PHONY: all clean devices windows
+# t_lib is C, not C++: if it compiles, the header is what it claims to be
+t_lib: t_lib.c mrpc_lib.h libmrpc.a
+	$(CC) $(CFLAGS) t_lib.c libmrpc.a $(LDLIBS) -lstdc++ -lm -o $@
+
+test: t_lib
+	./t_lib
+
+.PHONY: all clean devices windows test
 clean:
-	rm -f mrpc mrpc-nocl mrpc.exe
+	rm -f mrpc mrpc-nocl mrpc.exe t_lib *.o *.a
 	rm -rf winsdk
 
 devices: mrpc
@@ -43,5 +69,6 @@ windows: mrpc.exe
 winsdk/CL/cl.h: $(CL_HEADERS)/cl.h
 	mkdir -p winsdk && cp -r $(CL_HEADERS) winsdk/
 
-mrpc.exe: mrpc.cpp mrpc_cl.inc mrpc_kernels.inc sh_common.inc sh_v2f.inc winsdk/CL/cl.h
-	$(WINCXX) $(WINFLAGS) -DMRP_OPENCL -isystem winsdk mrpc.cpp -o $@
+mrpc.exe: mrpc.cpp $(LIBSRC) winsdk/CL/cl.h
+	$(WINCXX) $(WINFLAGS) -DMRP_OPENCL -isystem winsdk -c mrpc_lib.cpp -o mrpc_lib_win.o
+	$(WINCXX) $(WINFLAGS) mrpc.cpp mrpc_lib_win.o -o $@
