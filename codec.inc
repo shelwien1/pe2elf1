@@ -1526,7 +1526,18 @@ struct BMFCodec : BMFState {
                     k, 1<<chose, remap_used(dense+32*k), remap_used(masks+32*k));
           }
         }
-        const bool aggr_differs = memcmp(aggr, dense, 32u*(uint32_t)plane_count)!=0;
+        // The aggressive rung is a *refinement* of a decision to split, not an
+        // alternative to not splitting.  When the probe declines every rung on
+        // every plane, that is evidence the histogram has no light tail, and
+        // overriding it with the hardest cut in the ladder ignores the only
+        // signal there is rather than sharpening it -- on PIA13812, which wants
+        // the plain rank map and gains 21.9% from it, the trial scores the
+        // aggressive cut 28,187 bytes better and the file it makes is 23,844
+        // bytes worse.  The trial is not the shipped stream: it runs the
+        // cheaper alphabet_reduced model variant, and that bias does not cancel
+        // between a 120-value alphabet and an 89-value one.
+        const bool aggr_differs = split_any
+            &&memcmp(aggr, dense, 32u*(uint32_t)plane_count)!=0;
         // Every candidate is scored the way the file is actually coded -- the
         // per-plane search *and* the mode-unification trials -- because the
         // planar total on its own ranks value maps wrongly, and by more than

@@ -363,6 +363,18 @@ of seven.
 |---|---|---|---|
 | `PIA13785` | 1,797,872 | 1,797,872 | probe's cut wins, 1,808,077 vs 1,915,081 |
 | `PIA13882` | 2,385,216 | **2,240,400** | aggressive wins, 2,279,462 vs 2,385,062 — **−6.07%** |
+| `PIA13812` | 1,294,036 | 1,294,036 | no aggressive candidate offered — see below |
+
+**The aggressive candidate is offered only when the probe already chose to split
+at least one plane**, and that gate was put in by a regression rather than by
+taste.  Without it, `PIA13812` — which wants the plain rank map and gains 21.9%
+from it — goes to 1,317,880, **+1.84%**: the trial scores the aggressive cut
+28,187 bytes *better* and the file it produces is 23,844 bytes *worse*, a
+52,031-byte mis-ranking.  The trial is not the shipped stream; it runs the
+cheaper `alphabet_reduced` model variant (§5) and that bias does not cancel
+between a 120-value alphabet and an 89-value one.  So the scoring is good enough
+to *refine* a split the probe already wants, and not good enough to *invent* one
+against the probe's judgement.  That is the honest limit of it.
 
 `PIA13882` ends up **8.33% smaller than gralic**, having been 11.07% larger
 before the two-tier map.  What is left on the table is `PIA13915`'s 7,584 bytes
