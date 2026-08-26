@@ -46,7 +46,14 @@
 #define MRP_CLASS    0   // predictor classes; 0 = pick from the image size
 #endif
 #ifndef MRP_MAXCLASS
-#define MRP_MAXCLASS 63
+#define MRP_MAXCLASS 63  // MRP's own cap.  Nothing in the codec needs it to be
+                         // this: raise it and every array that depends on it
+                         // grows linearly, up to 255 where the class map's
+                         // byte runs out.  Measured, raising it is not worth
+                         // it -- see TUNING.md.  It is part of the format:
+                         // the class count is coded over MRP_MAXCLASS+1
+                         // symbols, so a stream written at one setting will
+                         // not decode under another.
 #endif
 #ifndef MRP_GROUP
 #define MRP_GROUP    16  // activity groups, i.e. probability models in use
@@ -526,7 +533,9 @@ struct MRPC {
   short* errB; // bordered |2e|, same layout as org
   short* upara;
   char* grp;
-  char* cls; // one class per pixel, shared by components
+  byte* cls; // one class per pixel, shared by components.  Unsigned on
+             // purpose: signed char put a ceiling of 127 on
+             // MRP_MAXCLASS that had nothing to do with the codec.
 
   int nt[MAXC];
   int toff[MAXC][NTMAX];
@@ -821,7 +830,7 @@ struct MRPC {
   // ---------------------------------------------------------------
   void PredictRegion(uint y0, uint x0, uint y1, uint x1) {
     for( uint y = y0; y<y1; y++ ) {
-      const char* pc = cls+size_t(y)*W;
+      const byte* pc = cls+size_t(y)*W;
       uint x = x0;
 #if defined(__AVX2__)
       // eight at a time as long as the class holds; the quadtree bottoms
@@ -878,7 +887,7 @@ struct MRPC {
       const short* pe = errB+OI(y, x0);
       short* pu = upara+PI(y, x0);
       char* pg = grp+PI(y, x0);
-      const char* pc = cls+size_t(y)*W+x0;
+      const byte* pc = cls+size_t(y)*W+x0;
       for( uint x = x0; x<x1; x++ ) {
         int cl = int(*pc++);
 #if defined(__AVX2__)
@@ -956,7 +965,7 @@ struct MRPC {
       uint bx = uint(size_t(idx[k])%nbx)*BASE_BSIZE;
       for( uint i = 0; i<BASE_BSIZE; i++ )
         for( uint j = 0; j<BASE_BSIZE; j++ )
-          cls[size_t(by+i)*W+bx+j] = char(cl);
+          cls[size_t(by+i)*W+bx+j] = byte(cl);
     }
     delete[] idx;
     delete[] var;
@@ -990,7 +999,7 @@ struct MRPC {
         const int* to = toff[k];
         for( int b = 0; b<(tnb ? tnb : 1); b++ )
           for( uint y = (tnb ? tb0[b] : 0); y<(tnb ? tb1[b] : H); y++ ) {
-            const char* pc = cls+size_t(y)*W;
+            const byte* pc = cls+size_t(y)*W;
             const byte* p = org+OI(y, 0);
             const char* pg = grp+PI(y, 0);
             for( uint x = 0; x<W; x++, p += nc, pg += nc ) {
@@ -1160,7 +1169,7 @@ struct MRPC {
       const short* pr = prd+PI(y, 0);
       const short* pe = errB+OI(y, 0);
       short* pu = upara+PI(y, 0);
-      const char* pc = cls+size_t(y)*W;
+      const byte* pc = cls+size_t(y)*W;
       for( uint x = 0; x<W; x++, p += nc, pr += nc, pe += nc, pu += nc ) {
         int cl = int(pc[x]);
 #if defined(__AVX2__)
@@ -1301,7 +1310,7 @@ struct MRPC {
       const short* eb = errbuf+bp+size_t(y%bufsize)*bufsize*nc;
       short* pr = prd+PI(y, tlx);
       short* pe = errB+OI(y, tlx);
-      char* pc = cls+size_t(y)*W+tlx;
+      byte* pc = cls+size_t(y)*W+tlx;
       for( uint x = tlx; x<brx; x++, pb += nc, eb += nc, pr += nc, pe += nc ) {
         *pc++ = char(cl);
         for( uint k = 0; k<nc; k++ ) {
@@ -2557,7 +2566,7 @@ struct MRPCIO : MRPC {
       }
     for( uint y = tly; y<bry; y++ )
       for( uint x = tlx; x<brx; x++ )
-        cls[size_t(y)*W+x] = char(cl);
+        cls[size_t(y)*W+x] = byte(cl);
   }
 
   // --- the image ----------------------------------------------------
@@ -2597,7 +2606,7 @@ struct MRPCIO : MRPC {
       BorderLeft(y);
       byte* p = org+OI(y, 0);
       short* pe = errB+OI(y, 0);
-      const char* pc = cls+size_t(y)*W;
+      const byte* pc = cls+size_t(y)*W;
       for( uint x = 0; x<W; x++, p += nc, pe += nc ) {
         int cl = int(pc[x]);
         for( uint k = 0; k<nc; k++ ) {
@@ -2723,7 +2732,7 @@ struct Codec : MRPCIO {
     upara = new short[size_t(W)*H*nc];
     grp = new char[size_t(W)*H*nc];
     memset(grp, 0, size_t(W)*H*nc);
-    cls = new char[size_t(W)*H];
+    cls = new byte[size_t(W)*H];
     memset(cls, 0, size_t(W)*H);
     coef = new int[MRP_MAXCLASS][MAXC][NTMAX];
     memset(coef, 0, size_t(MRP_MAXCLASS)*MAXC*NTMAX*sizeof(int));
@@ -3051,7 +3060,7 @@ struct Codec : MRPCIO {
     InitClass();
 
     // saved best of each loop
-    char* cls_s = new char[size_t(W)*H];
+    byte* cls_s = new byte[size_t(W)*H];
     int (*coef_s)[MAXC][NTMAX] = new int[MRP_MAXCLASS][MAXC][NTMAX];
     static int th_s[MRP_MAXCLASS][MAXC][MRP_GROUP];
     int pm_s[MAXC][MRP_GROUP];
@@ -3176,7 +3185,7 @@ struct Codec : MRPCIO {
   void Dump(const char* tag) {
     unsigned long hc = 0, hp = 0, ht = 0, hm = 0;
     for( size_t i = 0; i<size_t(W)*H; i++ )
-      hc = hc*1000003+(unsigned char)cls[i];
+      hc = hc*1000003+cls[i];
     for( int cl = 0; cl<num_class; cl++ )
       for( uint k = 0; k<nc; k++ ) {
         for( int i = 0; i<NTMAX; i++ )

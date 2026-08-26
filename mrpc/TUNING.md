@@ -129,6 +129,46 @@ care about -- where a sweep is cheap and you can see which mode you are in.
 The real fix is not a better heuristic; it is whatever makes the class search
 stop collapsing.
 
+### Can it go past 63?
+
+Yes, and it is not worth it.
+
+Nothing in the codec needs the cap to be 63. Every array that depends on it
+grows linearly and none of them is bit-packed; the only real ceiling was that
+the class map was a `char*`, and on x86 `char` is signed, so a class index
+above 127 read back negative. That is now a `byte*`, which moves the ceiling
+to 255 and is byte-identical at the default cap. `-DMRP_MAXCLASS=255 -n 200`
+round-trips.
+
+What it buys, on the two images whose optimum was clipped at 63:
+
+| classes | 48 | 63 | 80 | 100 | 127 | 160 | 200 | 255 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `t24.bmp` | 86424 | 81591 | 88602 | 82157 | **80195** | 88943 | 90486 | 83360 |
+| `t24_pal.bmp` | 42706 | **41170** | 44033 | 43481 | 42468 | 42579 | 44414 | 41467 |
+
+`t24.bmp` does best at 127, 1.7% under its best-at-63 -- and the row swings
+13% between adjacent settings, so that 1.7% is smaller than the noise it sits
+in. `t24_pal.bmp` does best at 63 and every larger setting is worse. It is
+the bimodality again, and at these counts the sampling is coarse enough that
+picking 127 over 63 is picking a lottery ticket.
+
+The costs are real, though. Both searches are linear in the class count, so
+255 classes is about four times the encode. And three buffers scale with the
+cap rather than the count -- the group histogram, its prefix sums and the
+threshold DP's -- so the *cap* alone costs memory whether or not the classes
+get used:
+
+| `MRP_MAXCLASS` | `cbuf` | `d_hist` | `d_cum` |
+| --- | --- | --- | --- |
+| 63 | 16.6 MB | 16.6 MB | 16.6 MB |
+| 127 | 33.4 MB | 33.4 MB | 33.4 MB |
+| 255 | 67.1 MB | 67.1 MB | 67.1 MB |
+
+So the default stays at 63. It is also part of the format -- the class count
+is coded over `MRP_MAXCLASS+1` symbols -- so a stream written by a build with
+a different cap will not decode.
+
 ### And the trial, which is off by default
 
 The alternative to predicting the count is measuring it: run one pass of each
