@@ -235,8 +235,32 @@ static const int NTMAX = PRD_ORDER+(MAXC-1)*XPRD_ORDER+MAXC;
 static const int PADL = UPEL_DIST+2, PADR = UPEL_DIST+2, PADT = UPEL_DIST+2;
 
 // MRP's causal neighbourhood, in distance order (common.c, dyx[]).
-static const int DYX[][2] = {{0, -1}, {-1, 0}, {0, -2}, {-1, -1}, {-2, 0}, {-1, 1}, {0, -3}, {-1, -2}, {-2, -1}, {-3, 0}, {-2, 1}, {-1, 2}, {0, -4}, {-1, -3}, {-2, -2}, {-3, -1}, {-4, 0}, {-3, 1}, {-2, 2}, {-1, 3}, {0, -5}, {-1, -4}, {-2, -3}, {-3, -2}, {-4, -1}, {-5, 0}, {-4, 1}, {-3, 2}, {-2, 3}, {-1, 4}, {0, -6}, {-1, -5}, {-2, -4}, {-3, -3}, {-4, -2}, {-5, -1}, {-6, 0}, {-5, 1}, {-4, 2}, {-3, 3}, {-2, 4}, {-1, 5}};
+static constexpr int DYX[][2] = {{0, -1}, {-1, 0}, {0, -2}, {-1, -1}, {-2, 0}, {-1, 1}, {0, -3}, {-1, -2}, {-2, -1}, {-3, 0}, {-2, 1}, {-1, 2}, {0, -4}, {-1, -3}, {-2, -2}, {-3, -1}, {-4, 0}, {-3, 1}, {-2, 2}, {-1, 3}, {0, -5}, {-1, -4}, {-2, -3}, {-3, -2}, {-4, -1}, {-5, 0}, {-4, 1}, {-3, 2}, {-2, 3}, {-1, 4}, {0, -6}, {-1, -5}, {-2, -4}, {-3, -3}, {-4, -2}, {-5, -1}, {-6, 0}, {-5, 1}, {-4, 2}, {-3, 3}, {-2, 4}, {-1, 5}};
 static const int NDYX = int(sizeof(DYX)/sizeof(DYX[0]));
+
+// The tap tables must reach no further than the padding.  DYX is in
+// distance order, so a PRD_ORDER of n uses its first n entries, and the
+// furthest of those in each direction is what has to fit.  Without this
+// -DPRD_ORDER=42 builds and then reads outside the plane: DYX[30] is
+// (0,-6), which wants PADL >= 6, and DYX[36] is (-6,0), which wants
+// PADT >= 6, where both are UPEL_DIST+2 = 5.
+enum { RCH_UP = 0, RCH_LEFT = 1, RCH_RIGHT = 2 };
+static constexpr int DyxReach(int n, int which) {
+  int m = 0;
+  for( int i = 0; i<n&&i<NDYX; i++ ) {
+    int v = (which==RCH_UP) ? -DYX[i][0] : (which==RCH_LEFT) ? -DYX[i][1] : DYX[i][1];
+    if( v>m )
+      m = v;
+  }
+  return m;
+}
+static const int TAPS_MAX = (PRD_ORDER>XPRD_ORDER) ? PRD_ORDER : XPRD_ORDER;
+static_assert(DyxReach(TAPS_MAX, RCH_UP)<=PADT,
+              "PRD_ORDER/XPRD_ORDER reach above the top padding; raise UPEL_DIST");
+static_assert(DyxReach(TAPS_MAX, RCH_LEFT)<=PADL,
+              "PRD_ORDER/XPRD_ORDER reach left of the padding; raise UPEL_DIST");
+static_assert(DyxReach(TAPS_MAX, RCH_RIGHT)<=PADR,
+              "PRD_ORDER/XPRD_ORDER reach right of the padding; raise UPEL_DIST");
 
 // The sigma ladder the groups are drawn from (common.c, sigma_a[]).
 // The scale ladder the groups are drawn from.  MRP's own (common.c,

@@ -438,6 +438,7 @@ exercised.
 | `t.sh` | round-trip and reference check, through the command line |
 | `t_lib.c` | the same through the C API, in C — and against `libmrpc.a`, `libmrpc.so` or `mrpc.dll` unchanged |
 | `bmp8.py` | 8bpp grey and paletted BMPs out of a 24/32bpp one, for testing the one-component path |
+| `ALGORITHM.md` | how the codec works, end to end |
 | `ENTROPY.md` | where the bits go: the rangecoder, the probability model, and what a PAQ-style component would be worth |
 | `TUNING.md` | the class count and the shape of the model: what was measured, what moved, and what did not |
 | `tools/entropy_probe.patch` | the measurement harness those numbers come from |
