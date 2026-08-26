@@ -423,8 +423,82 @@ untested in both.
 | a ridge term on the least-squares fit | worse at every lambda over five orders of magnitude |
 | capping the fit weighting ratio | noise |
 | raising `MRP_MAXCLASS` past 63 | 1.7 % on one image inside a 13 % swing; nothing on the rest |
+| mirroring the left and right borders | +1.4 % on a 32-wide strip, +0.05 % on a full image — worse |
+| point-reflecting them | worse still, +1.7 % |
+| shearing the top border | neutral, within 0.1 % either way |
 
-The first six say the same thing and it is a compliment to the codec: **the
+### Borders: replication is right, and it is not an accident
+
+**[measured].** The border cells that a predictor reads off the edge of the
+image are currently edge replication with a lag (`ALGORITHM.md` §2). The
+obvious alternative is mirroring — `(y,-j) := pixel(y-1,j)`,
+`(y,W-1+j) := pixel(y,W-1-j)` — which is causal in both cases and gives the
+border real image content instead of one repeated value. The vertical mirror
+is *not* available: cell `(-1,x)` is first read by pixel `(0,x-3)` through the
+tap `(-1,3)`, so a source at `(0,x-1)` is not coded yet; the causal version of
+that idea is a shear, `(-j,x) := pixel(0, x-PADR-j)`.
+
+Costing the same image under every rule **with the model held fixed** (see
+`tools/border_probe.patch`, and the note below on why it has to be done this
+way):
+
+| | mirror L/R | shear top | both | point reflection |
+| --- | --- | --- | --- | --- |
+| `t24n0`, 32x240 | **+1.36 %** | +0.04 % | +1.39 % | **+1.72 %** |
+| `t24n2`, 32x240 | **+1.42 %** | −0.09 % | +1.44 % | +1.17 % |
+| `pian0`, 32x256 | +0.18 % | −0.01 % | +0.18 % | +0.18 % |
+| `t24.bmp` | +0.05 % | +0.00 % | +0.06 % | +0.06 % |
+| `t24_pal.bmp` | +0.23 % | +0.10 % | +0.33 % | +0.20 % |
+| `PIA13882_crop256` | +0.02 % | −0.00 % | +0.02 % | +0.01 % |
+
+Every mirror is worse, and the loss **scales with how much of the image the
+border reaches** — 1.4 % on a 32-column strip where the border covers 10 of 32
+columns, 0.05 % on a full image where it covers 10 of 320. That scaling is the
+signature of a genuinely worse border rather than an optimisation artefact.
+Confirmed symmetrically: with the model optimised *under the mirror*,
+replication is still cheaper (−0.35 %, −0.26 % on the strips; −0.02 % on
+`t24.bmp`). Both directions agree.
+
+**Why.** The border's job is to supply the best estimate of what lies off the
+edge, and the coefficients are fitted globally. Replication says "the same as
+the edge": every fabricated tap carries one value, so their joint contribution
+is `(sum of those coefficients) x edge value` — one well-conditioned term the
+least-squares fit handles exactly. Mirroring makes those taps carry *different*
+values tracing a ramp that runs back into the picture, and that ramp is a false
+signal — it has no relation to what is actually off the edge, so the fitted
+coefficients can only cancel it on average. Point reflection extrapolates the
+same ramp with twice the amplitude, which is why it is worse again.
+
+This is the standard distinction and it cuts the other way from the usual
+intuition: mirroring is the right extension for *filtering*, where it avoids a
+discontinuity and the ringing that follows. It is the wrong extension for
+*prediction*, where the max-entropy continuation of an unknown region is flat.
+
+There is a second effect specific to mrpc. The **error plane** is extended
+too, and it feeds the activity measure that selects the probability model's
+width. Under replication an edge pixel inherits the previous row's edge
+activity; under mirroring it inherits activity from one to five columns
+*inside* the image, which is generally higher — so edge pixels are handed
+wider distributions than they have earned.
+
+### A note on method, which applies to everything above
+
+This is the first measurement in this session that resolved a sub-1 % model
+change cleanly, and the technique is the reason. Encoding twice and comparing
+sizes cannot do it: the search swings 10-30 % between adjacent class counts on
+a small image, so the noise is two orders of magnitude larger than the signal.
+The 16-tile corpus does not fix it either — mirrored borders measured
+**+0.03 % to +0.75 % mean with a ±12 % spread** that way, which is
+indistinguishable from nothing, and on 17 narrow strips it measured
+**−0.82 % mean with a ±30 % spread**, which would have been indistinguishable
+from a *win*.
+
+Holding the model fixed and re-costing the same pixels removes the search from
+the measurement. Any model change that can be expressed as "same symbols,
+different probability or prediction" should be measured this way first, and only
+then end-to-end.
+
+The first six items say the same thing and it is a compliment to the codec: **the
 two-pass search has already found the best static model available to it.**
 Every remaining gain has to come from something the search structurally cannot
 do — which is why §3, §4 and §5 are all about adding a *learned* component

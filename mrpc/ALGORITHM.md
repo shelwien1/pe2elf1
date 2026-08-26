@@ -57,6 +57,12 @@ replication with a lag:
   top   (-j, x)      := pixel (0, x-PADR-1)
 ```
 
+Replication rather than mirroring is deliberate and measured: mirroring the
+left and right borders costs 1.4 % on a 32-column strip and is worse on every
+image tried, because a mirrored border is a ramp running back into the picture
+that has no relation to what lies off the edge, and the fitted coefficients can
+only cancel it on average. See `MODEL-IMPROVEMENTS.md` §10.
+
 The lag on the top row is what makes this work during the coding pass: the
 earliest reader of cell `(-j, x)` is pixel `(0, x-PADR)`, which is coded
 after `(0, x-PADR-1)`. So every border cell is filled from a pixel that is

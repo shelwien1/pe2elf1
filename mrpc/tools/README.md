@@ -34,3 +34,32 @@ only on symbols already coded.
 
 `MRPC_DUMP` writes `{cl, k, gr, sub, u, base, r, bits}` per symbol for
 offline work.
+
+## border_probe.patch
+
+The border rules of `ALGORITHM.md` §2, made switchable at run time, plus a
+probe that costs the same image under every rule **with the model held
+fixed**.
+
+    MRPC_BORDER=n        use rule n for the whole encode (default 0)
+    MRPC_BORDER_PROBE=1  after the search, re-fill the borders under every
+                         rule in turn, re-predict, and print CalcCost for each
+
+    0  replication, as shipped:  (y,-j)=(y-1,0)  (y,W-1+j)=(y,W-1)  (-j,x)=(0,x-PADR-1)
+    1  mirror:                   (y,-j)=(y-1,j)  (y,W-1+j)=(y,W-1-j)
+    2  sheared top:              (-j,x)=(0,x-PADR-j)
+    3  1 and 2
+    5  point reflection:         (y,-j)=2*(y-1,0)-(y-1,j), clamped; and right likewise
+
+`MRPC_BORDER_PROBE` is the useful part, and not only for borders.  mrpc's
+search is chaotic -- output swings 10-30% between adjacent class counts, and
+a compiler inlining difference moves it 0.12% -- so a change worth a few
+tenths of a percent cannot be measured by encoding twice and comparing sizes;
+the noise is two orders of magnitude larger than the signal.  Holding the
+model fixed and re-costing the *same* pixels removes the search from the
+measurement entirely.
+
+The one bias it has: the model was optimised under whichever rule was in
+force, so the others are at a disadvantage.  Run it under two different rules
+and compare the diagonal -- if A beats B under both A's model and B's, the
+result is real.

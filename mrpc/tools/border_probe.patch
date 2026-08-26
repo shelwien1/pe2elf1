@@ -1,0 +1,188 @@
+--- mrpc_lib.cpp	2026-08-26 03:07:22.654203031 +0000
++++ /tmp/bp/mrpc_lib.cpp	2026-08-26 04:18:02.303095795 +0000
+@@ -45,6 +45,11 @@
+ #ifndef MRP_CLASS
+ #define MRP_CLASS    0   // predictor classes; 0 = pick from the image size
+ #endif
++#ifndef BORDER
++#define BORDER        0  // 1 = mirror the left and right borders instead of
++                         // replicating the edge pixel; 2 = shear the top
++                         // border so its rows differ; 3 = both
++#endif
+ #ifndef MRP_MAXCLASS
+ #define MRP_MAXCLASS 63  // MRP's own cap.  Nothing in the codec needs it to be
+                          // this: raise it and every array that depends on it
+@@ -214,6 +219,8 @@
+ }
+ #endif
+ 
++static int g_border = BORDER;
++static void border_from_env() { const char* e = getenv("MRPC_BORDER"); if( e ) g_border = atoi(e); }
+ static double t_start = 0.0;
+ static int g_prog = 0;
+ #define PROG(...)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+@@ -744,6 +751,19 @@
+   void BorderLeft(uint y) {
+     byte* p = org+OI(y, 0);
+     short* e = errB+OI(y, 0);
++if( g_border&1 ) {
++    // mirrored: (y,-j) := pixel(y-1, j).  The previous row, reflected --
++    // so the border carries a gradient instead of a constant.  It has to
++    // come from row y-1: cell (y,-j) is read by pixel (y,0), the first of
++    // the row, so nothing on row y is coded yet.
++    for( int j = 1; j<=PADL; j++ ) {
++      int c = (j<int(W)) ? j : int(W)-1;
++      for( uint k = 0; k<nc; k++ ) {
++        p[-j*int(nc)+int(k)] = (y>0) ? p[(-int(BS)+c)*int(nc)+int(k)] : 128;
++        e[-j*int(nc)+int(k)] = (y>0) ? e[(-int(BS)+c)*int(nc)+int(k)] : 0;
++      }
++    }
++    } else {
+     byte sv[MAXC];
+     short se[MAXC];
+     for( uint k = 0; k<nc; k++ ) {
+@@ -755,48 +775,73 @@
+         p[-j*int(nc)+int(k)] = sv[k];
+         e[-j*int(nc)+int(k)] = se[k];
+       }
++    }
+   }
+ 
+   void BorderRight(uint y) {
+     byte* p = org+OI(y, W-1);
+     short* e = errB+OI(y, W-1);
+-    for( int j = 1; j<=PADR; j++ )
++    for( int j = 1; j<=PADR; j++ ) {
++      int c = 0;
++      if( g_border&5 )
++        c = (j<int(W)) ? -j : -(int(W)-1);
+       for( uint k = 0; k<nc; k++ ) {
+-        p[j*int(nc)+int(k)] = p[k];
+-        e[j*int(nc)+int(k)] = e[k];
++        if( g_border&4 ) {
++          int v = 2*int(p[k])-int(p[c*int(nc)+int(k)]);
++          p[j*int(nc)+int(k)] = byte(v<0 ? 0 : v>255 ? 255 : v);
++          int w = 2*int(e[k])-int(e[c*int(nc)+int(k)]);
++          e[j*int(nc)+int(k)] = short(w<0 ? 0 : w);
++        } else {
++          p[j*int(nc)+int(k)] = p[c*int(nc)+int(k)];
++          e[j*int(nc)+int(k)] = e[c*int(nc)+int(k)];
++        }
+       }
++    }
+   }
+ 
+-  // the cell (-j, x) for every j, from pixel (0, src)
+-  void BorderTopCol(int x, int src) {
+-    if( x<-PADL||x>=int(W)+PADR )
++  // the cell (-j, x), from pixel (0, src)
++  void BorderTopOne(int j, int x, int src) {
++    if( x<-PADL||x>=int(W)+PADR||src<0 )
+       return;
+-    byte* s = org+OI(0, 0)+size_t(src)*nc;
+-    short* q = errB+OI(0, 0)+size_t(src)*nc;
+-    for( int j = 1; j<=PADT; j++ ) {
+-      byte* p = org+OI(0, 0)+(-j*int(BS)+x)*int(nc);
+-      short* e = errB+OI(0, 0)+(-j*int(BS)+x)*int(nc);
+-      for( uint k = 0; k<nc; k++ ) {
+-        p[k] = s[k];
+-        e[k] = q[k];
+-      }
++    if( src>int(W)-1 )
++      src = int(W)-1;
++    const byte* s = org+OI(0, 0)+size_t(src)*nc;
++    const short* q = errB+OI(0, 0)+size_t(src)*nc;
++    byte* p = org+OI(0, 0)+(-j*int(BS)+x)*int(nc);
++    short* e = errB+OI(0, 0)+(-j*int(BS)+x)*int(nc);
++    for( uint k = 0; k<nc; k++ ) {
++      p[k] = s[k];
++      e[k] = q[k];
+     }
+   }
+ 
++  // Everything the coding of pixel (0,x) makes available above the image.
++  //
++  // The top border can only be filled from row 0 and only from columns
++  // strictly left of whoever reads it, so a vertical mirror is not
++  // available: cell (-1,x) is first read by pixel (0,x-3) through the tap
++  // (-1,3), which is coded before (0,x-1).  What is available is a
++  // different *shift* per border row -- (-j,x) := pixel(0, x-PADR-j) --
++  // so the PADT rows above the image are a shear of row 0 rather than
++  // PADT identical copies of it.
++  void BorderTopFrom(int x) {
++    if( g_border&2 ) {
++      for( int j = 1; j<=PADT; j++ )
++        if( x+PADR+j<int(W)+PADR )
++          BorderTopOne(j, x+PADR+j, x);
++    } else if( x+PADR+1<int(W)+PADR )
++      for( int j = 1; j<=PADT; j++ )
++        BorderTopOne(j, x+PADR+1, x);
++  }
++
+   // encoder-side: the whole border at once, org already loaded
+   void FillBorders() {
+     for( uint y = 0; y<H; y++ ) {
+       BorderLeft(y);
+       BorderRight(y);
+     }
+-    for( int x = -PADL; x<int(W)+PADR; x++ ) {
+-      int s = x-PADR-1;
+-      if( s<0 )
+-        continue; // stays at the 128/0 fill
+-      if( s>int(W)-1 )
+-        s = int(W)-1;
+-      BorderTopCol(x, s);
+-    }
++    for( uint x = 0; x<W; x++ )
++      BorderTopFrom(int(x));
+   }
+ 
+   // org -> planes.  Encoder only: the decoder predicts one pixel at a
+@@ -2649,8 +2694,8 @@
+           }
+           pe[k] = short(Econv(int(p[k]), v));
+         }
+-        if( y==0&&int(x)+PADR+1<int(W)+PADR )
+-          BorderTopCol(int(x)+PADR+1, int(x));
++        if( y==0 )
++          BorderTopFrom(int(x));
+       }
+       BorderRight(y);
+     }
+@@ -3180,6 +3225,28 @@
+ #endif
+     }
+     LOAD();
++    if( getenv("MRPC_BORDER_PROBE") ) {
++      const int save = g_border;
++      double c[8];
++      for( int b = 0; b<6; b++ ) {
++        if( b==4 ) continue;
++        g_border = b;
++        ResetBorders();
++        FillBorders();
++        BuildPlanes();
++        PredictRegion(0, 0, H, W);
++        c[b] = double(CalcCost(0, 0, H, W));
++      }
++      fprintf(stderr, "border probe, model held fixed: ");
++      for( int b = 0; b<6; b++ )
++        if( b!=4 )
++        fprintf(stderr, "  %d:%.0fB %+.3f%%", b, c[b]/8.0, 100.0*(c[b]-c[0])/c[0]);
++      fprintf(stderr, "\n");
++      g_border = save;
++      ResetBorders();
++      FillBorders();
++      BuildPlanes();
++    }
+     PredictRegion(0, 0, H, W);
+     CalcCost(0, 0, H, W);
+     CodeClass(1); // refresh qindex and the costs
+@@ -3317,6 +3384,7 @@
+ 
+     // a two-pass coder that says nothing for an hour is
+     // indistinguishable from a hung one, but only if asked
++    border_from_env();
+     g_prog = (prog_req>1)||(prog_req==1&&im&&
+                             double(im->width)*double(im->height)>=MRP_PROGMIN);
+     t_start = tnow();
