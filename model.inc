@@ -133,7 +133,11 @@ struct ModelBlock {
   uint16_t ctx_id1[MB_Sig1_Volume];
   uint16_t ctx_id2[MB_Sig2_Volume];
   uint16_t ctx_id3[MB_Sig3_Volume];
-  ModelBlock*layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth) {
+  // See alt_p2_alloc for what `keep` means.  Here it holds the frequency grid
+  // and the context maps that index it, the bit tree, the escape and run
+  // counters and the two APMs; the row records, the run-length buckets, the
+  // per-tile symbol word buffer and the exclusion mask belong to the new tile.
+  ModelBlock*layout_workspace(BMFState* state, int32_t img_w, int32_t img_h, int32_t img_depth, int32_t keep = 0) {
     cx = state;
     int32_t j;
     uint32_t k, m, s, n;
@@ -177,37 +181,41 @@ struct ModelBlock {
     }
     for( s = 0; s<0x2000; ++s )
       sym_rev[s] *= 8;
-    memset(&grid[188], 0, 0x100000);
-    ctx_id3_used = 0;
-    ctx_id2_used = 0;
-    ctx_id1_used = 0;
-    for( int32_t k = 0; k<2; ++k )
-      for( int32_t j = 0; j<4; ++j )
-        level_apm[k][j].Init();
-    cand_apm.Init();
-    memset(ctx_id1, 255, sizeof ctx_id1);
-    memset(ctx_id2, 255, sizeof ctx_id2);
-    memset(ctx_id3, 255, sizeof ctx_id3);
+    if( !keep ) {
+      memset(&grid[188], 0, 0x100000);
+      ctx_id3_used = 0;
+      ctx_id2_used = 0;
+      ctx_id1_used = 0;
+      for( int32_t k = 0; k<2; ++k )
+        for( int32_t j = 0; j<4; ++j )
+          level_apm[k][j].Init();
+      cand_apm.Init();
+      memset(ctx_id1, 255, sizeof ctx_id1);
+      memset(ctx_id2, 255, sizeof ctx_id2);
+      memset(ctx_id3, 255, sizeof ctx_id3);
+    }
     memset(cx[0].exclusion_mask, 0, sizeof cx[0].exclusion_mask);
     sel[0] = nullptr;
     sel[1] = nullptr;
     escape_list = nullptr;
-    for( n = 0; n<0x40000; ++n ) {
-      sym_ctr[2*n] = no_symbol;
-      sym_ctr[2*n+1] = no_symbol;
+    if( !keep ) {
+      for( n = 0; n<0x40000; ++n ) {
+        sym_ctr[2*n] = no_symbol;
+        sym_ctr[2*n+1] = no_symbol;
+      }
+      for( uint32_t k8 = 0; k8<8; ++k8 ) {
+        bit_root[2*k8].init_root();
+        bit_root[2*k8+1].init_root();
+      }
+      memset(bit_node, 0, sizeof bit_node);
+      esc_ctr[0].init_parent();
+      memset(&esc_ctr[1], 0, sizeof(BitCtr)*MB_EscCtx_Volume);
+      for( uint32_t k24 = 0; k24<0x18; ++k24 ) {
+        run_ctr[2*k24].init_parent();
+        run_ctr[2*k24+1].init_parent();
+      }
     }
-    for( uint32_t k8 = 0; k8<8; ++k8 ) {
-      bit_root[2*k8].init_root();
-      bit_root[2*k8+1].init_root();
-    }
-    memset(bit_node, 0, sizeof bit_node);
     sym_word = (uint16_t*)bmf_new(2*height*width);
-    esc_ctr[0].init_parent();
-    memset(&esc_ctr[1], 0, sizeof(BitCtr)*MB_EscCtx_Volume);
-    for( uint32_t k24 = 0; k24<0x18; ++k24 ) {
-      run_ctr[2*k24].init_parent();
-      run_ctr[2*k24+1].init_parent();
-    }
     return this;
   }
   void free_workspace() {

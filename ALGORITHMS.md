@@ -143,7 +143,11 @@ range-coded segments matters for understanding the models' entry points.)
   `codec.inc:501`): 6 bits `(flags<<2)|nrefs` per plane, plus 8-bit `dc` when
   `desc_has_refs`, plus 8-bit weights (bias +64) when `nrefs≥2` (`weight0`,
   `weight1`) and `nrefs>2` (`weight2`).
-* Images are never tiled: one member covers the whole image.
+* By default one member covers the whole image. `bmf cN` (N in 4..12) instead cuts
+  it into tiles of `1<<N` and gives each its own descriptor table; the tile shift
+  travels in the third spare header byte (`_pad8[2]`, zero when untiled), so the
+  decoder needs no flag of its own. The tiles share **one member, one stream and
+  one set of models** — nothing is flushed or reseeded at a boundary. See §5.4.
 
 ---
 
@@ -500,6 +504,73 @@ so:
 ```
   coded body 9424 bytes vs 9216 raw: SHIPPING RAW, the coding lost
 ```
+
+---
+
+### 5.4 Tiled coding (`bmf cN`, `code_image_tiled` / `unmodel_tiled`)
+
+`bmf cN` cuts the image into tiles of `1<<N` and searches the descriptor table
+per tile.  §4.2 of `LPCB-GAP.md` is the measurement it exists for: on a frame
+whose regions want different models, one global descriptor table costs 20.7%,
+and the naive form of the fix -- sixteen independent members -- spends 7.1% of
+that restarting the models.  So the tiles here share everything except the
+descriptors.
+
+**Geometry.** The cut is by whole tiles: `count = max(1, n>>N)` along each axis,
+boundaries at `k<<N`, and the last tile takes the remainder.  A short edge is
+absorbed rather than coded as a sliver, so a 260x260 image under `c8` is a
+single 260x260 tile and under `c7` four tiles of 130.
+
+**What stays whole-image.** `search_filter` still runs once, before any tile.
+Transposition, the two flips, palette order and the renumbering map are
+properties of the *pixels*, they travel in the member header and its mask
+block, and there is one of each per member -- so they cannot vary by tile and
+are not searched again.  What varies is the descriptor table, and only that.
+
+**Stream layout.** One member, one `stream_open`, one packer.  The 4-bit
+near-lossless field is written once; then each tile contributes a 1-bit planar
+flag, its descriptor table (§2), and its range-coded segments, in the same
+packer/coder interleave an untiled member uses -- repeated per tile rather than
+once per image.
+
+**Two encoder passes, and why.** The descriptor search prices candidates by
+coding the tile for real, through the same model blocks the shipped stream is
+carried in.  A search between two coded tiles would leave those blocks holding
+the last *trial* rather than the last *tile*, and the decoder -- which never
+searches -- would carry something else.  So every tile is searched first,
+against cold models, and its answer recorded; the second pass then codes the
+tiles back to back with nothing between them, which is the sequence the decoder
+sees.  The consequence is that the search prices every tile as if it were the
+first, which overstates the cost of the later ones; the decisions are still
+per-tile, but they are made against a colder model than the one that codes
+them.
+
+**Carrying the models.** `alt_p1_alloc`, `alt_p2_alloc` and `layout_workspace`
+take a `keep` flag.  With it set they rebuild only what the new tile's geometry
+requires -- row buffers and cursors, the running context and prediction -- and
+what its descriptors require -- the reference flag, the deadzone, the bands --
+and rebuild the pure tables because that is cheaper than deciding not to.  What
+they keep is everything learned: alt-P1's counters, selector weights and slot
+map; alt-P2's bias counters, frequency cells, both APMs, the class mixer, the
+seat and sign tables, the `ctx_w` selectors and the seated `NbRow` pool; the
+slow model's frequency grid with the context maps that index it, its bit tree,
+escape and run counters and its two APMs.  The row *records* are cleared either
+way: a tile's first row has no north neighbour.
+
+Seeding is tracked **per block**, not per pass (`BlockPool::seeded`).  Which
+tile first reaches a given model depends on the descriptors -- an image whose
+first four tiles all choose alt-P2 does not touch the slow model until the
+fifth -- and a global "this is not the first tile" flag gets that wrong
+asymmetrically: the encoder's blocks have been through the search pass and the
+decoder's have not.  That mismatch is a stream that does not decode, and it is
+what the per-block flag prevents.
+
+Two smaller consequences.  The slow model's pool went from one block to four,
+so a planar tile's planes each keep their own statistics rather than being
+merged into the lowest free block.  And `transform_planes`, which has always
+borrowed the head of the stream buffer to hold its untransformed copy, gets a
+buffer of its own when tiling: by the second tile the head of the stream holds
+the first one.
 
 ---
 

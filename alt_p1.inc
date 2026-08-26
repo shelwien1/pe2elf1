@@ -297,15 +297,21 @@ struct AltP1Block {
       update_selector(k, slot_f, slot_r, ctx_alt, 1, 2-ctx_w[k].sel);
   }
 
-  AltP1Block*alt_p1_alloc(BMFState* state, int32_t img_w, int32_t img_h, int32_t plane) {
+  // See alt_p2_alloc for what `keep` means: this block is the same one this
+  // coding slot used on the previous tile, and its counters and selector
+  // weights carry over.  The row buffers, the cursors and the running
+  // prediction belong to the new tile and are rebuilt either way.
+  AltP1Block*alt_p1_alloc(BMFState* state, int32_t img_w, int32_t img_h, int32_t plane, int32_t keep = 0) {
     cx = state;
-    slot_apm.Init();
-    uint32_t ctr = 0;
     width = img_w;
     height = img_h;
-    do
-      init_counter_node(&counters[ctr++]);
-    while( ctr<kP1CounterCount );
+    if( !keep ) {
+      slot_apm.Init();
+      uint32_t ctr = 0;
+      do
+        init_counter_node(&counters[ctr++]);
+      while( ctr<kP1CounterCount );
+    }
     pred = 0;
     // The three ladders come from IDX threshold mappings: MakeLevel(x) is the
     // number of level edges below x, which is exactly what walking the edge
@@ -317,11 +323,12 @@ struct AltP1Block {
     }
     for( k = 0; k<0x100; ++k )
       slot_of[k] = (uint8_t)MakeP1Low(MakeSlot((uint32_t)k), 0);
-    for( int32_t c = 0, w1 = 1<<kP1MixShift; c<9; ++c, w1 *= P1_ctxw_ratio ) {
-      ctx_w[c].w[0] = 0;
-      ctx_w[c].w[1] = w1;
-      ctx_w[c].w[2] = 2*w1;
-    }
+    if( !keep )
+      for( int32_t c = 0, w1 = 1<<kP1MixShift; c<9; ++c, w1 *= P1_ctxw_ratio ) {
+        ctx_w[c].w[0] = 0;
+        ctx_w[c].w[1] = w1;
+        ctx_w[c].w[2] = 2*w1;
+      }
     for( int32_t row = 0; row<5; ++row )
       buf[row] = row_store[row];
     cx[0].alt_init_tables(fold, (int8_t*)unfold);

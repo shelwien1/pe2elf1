@@ -4,6 +4,10 @@
 struct BMFCodec : BMFState {
   void Init() {
     BMFState::Init();
+    // Neither of these lives in the BMFState subobject that Init clears.
+    xform_scratch = nullptr;
+    model_keep = 0;
+    model_slot = 0;
     p1_blocks.Init();
     p2_blocks.Init();
     model_blocks.Init();
@@ -42,7 +46,15 @@ struct BMFCodec : BMFState {
 
   BlockPool<AltP1Block, 4> p1_blocks;
   BlockPool<AltP2Block, 4> p2_blocks;
-  BlockPool<ModelBlock, 1> model_blocks;
+  // Four, not one, so that a planar tile's four planes each keep their own
+  // statistics across a tile boundary; take() alone would hand them all the
+  // lowest free block and merge four models into one.  The extra slots are
+  // untouched pages until a tiled planar encode reaches them.
+  BlockPool<ModelBlock, 4> model_blocks;
+  // Which of those four the plane about to be coded owns: its coding slot,
+  // set beside plane_predictor and plane_alt_model at every site that chooses
+  // a plane.  Only meaningful while model_keep is set.
+  int32_t model_slot = 0;
 
   template <class T, int32_t N> int32_t planes_free(BlockPool<T, N> &pool, T** plane) {
     for( int32_t k = 0; k<plane_count; ++k ) pool.give(plane[k]);
@@ -60,8 +72,10 @@ struct BMFCodec : BMFState {
     int32_t width = hdr[0].width;
     int32_t height = hdr[0].height;
     for( int32_t k = 0; k<plane_count; ++k ) {
-      AltP1Block* raw = p1_blocks.take(false);
-      plane[k] = raw[0].alt_p1_alloc(this, width, height, k);
+      const int32_t keep = model_keep&&p1_blocks.was_seeded(k);
+      AltP1Block* raw = p1_blocks.take_slot(k, false);
+      p1_blocks.mark_seeded(k);
+      plane[k] = raw[0].alt_p1_alloc(this, width, height, k, keep);
     }
     int32_t src1 = plane_desc[1].src_plane;
     int32_t src2 = plane_desc[2].src_plane;
@@ -209,9 +223,11 @@ struct BMFCodec : BMFState {
   }
   template <int32_t f_DEC> void alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
     AltP2Block* blk;
-    AltP2Block* raw = p2_blocks.take(true);
+    const int32_t keep = model_keep&&p2_blocks.was_seeded(0);
+    AltP2Block* raw = p2_blocks.take_slot(0, !keep);
+    p2_blocks.mark_seeded(0);
     if( raw )
-      blk = raw[0].alt_p2_alloc(this, i, 0);
+      blk = raw[0].alt_p2_alloc(this, i, 0, keep);
     else
       blk = nullptr;
     if constexpr( f_DEC )
@@ -276,8 +292,10 @@ struct BMFCodec : BMFState {
     return true;
   }
   AltP1Block*alt_p1_block_alloc(int32_t width, int32_t height) {
-    AltP1Block* raw = p1_blocks.take(false);
-    return raw ? raw[0].alt_p1_alloc(this, width, height, 0) : nullptr;
+    const int32_t keep = model_keep&&p1_blocks.was_seeded(0);
+    AltP1Block* raw = p1_blocks.take_slot(0, false);
+    p1_blocks.mark_seeded(0);
+    return raw ? raw[0].alt_p1_alloc(this, width, height, 0, keep) : nullptr;
   }
   // Returns the cheapest whole-image estimate it saw, in the order-0
   // gradient-domain currency of cost_candidate -- zero when there are too few
@@ -597,13 +615,221 @@ struct BMFCodec : BMFState {
     hdr.flags = flags_coded|flags_slow|p_i[0].flags;
   }
 
+  // ---- Tiled coding ------------------------------------------------------
+  //
+  // `bmf cN` cuts the image into tiles of 1<<N and gives each its own
+  // descriptor table.  Section 4.2 of LPCB-GAP.md is why: on a frame whose
+  // regions want different models, choosing once for the whole image costs
+  // 20.7%, and the sixteen-member tiling that measured it paid 7.1% to restart
+  // the models.  So the tiles here share one member, one open stream and one
+  // set of models: only the descriptors change at a boundary.
+  //
+  // The cut is by whole tiles.  A remainder narrower than a full tile is
+  // absorbed into the last one rather than coded as a sliver, so a 260x260
+  // image under c8 is a single 260x260 tile, and under c7 four tiles of 130.
+  static int32_t tile_count(int32_t n, int32_t shift) {
+    const int32_t c = n>>shift;
+    return c<1 ? 1 : c;
+  }
+  // Set while tiles are being coded, so the model blocks keep what they have
+  // learned instead of starting the next tile from their seeds.  Off for the
+  // first tile, and off through every trial: the searches code the tile for
+  // real, and their models must not reach the shipped stream.
+  int32_t model_keep = 0;
+
+  // Open a run of tiles that share their models: every block seeds itself on
+  // the tile that first reaches it and carries on from there.
+  void begin_carried_models() {
+    p1_blocks.unseed();
+    p2_blocks.unseed();
+    model_blocks.unseed();
+    model_keep = 1;
+  }
+
+  void tile_frame(BmfImage* tile, int32_t w, int32_t h) {
+    tile[0].width = (uint16_t)w;
+    tile[0].height = (uint16_t)h;
+    tile[0].stride = (uint16_t)(w*plane_count);
+    tile[0].data_size = (uint32_t)w*(uint32_t)h*(uint32_t)plane_count;
+  }
+  void tile_gather(const BmfImage* img, BmfImage* tile, int32_t x0, int32_t y0) {
+    const uint8_t* src = img[0].pixels+(uint32_t)y0*img[0].stride+(uint32_t)x0*(uint32_t)plane_count;
+    uint8_t* dst = tile[0].pixels;
+    for( int32_t y = 0; y<tile[0].height; ++y, src += img[0].stride, dst += tile[0].stride )
+      memcpy(dst, src, tile[0].stride);
+  }
+  void tile_scatter(BmfImage* img, const BmfImage* tile, int32_t x0, int32_t y0) {
+    uint8_t* dst = img[0].pixels+(uint32_t)y0*img[0].stride+(uint32_t)x0*(uint32_t)plane_count;
+    const uint8_t* src = tile[0].pixels;
+    for( int32_t y = 0; y<tile[0].height; ++y, dst += img[0].stride, src += tile[0].stride )
+      memcpy(dst, src, tile[0].stride);
+  }
+  // The descriptor half of search_filter, for one tile.  Geometry, palette
+  // order and renumbering belong to the whole image and were settled before
+  // this ran; what is left is which model each plane gets and whether the
+  // planes are coded apart or together.  The trials code the tile for real, so
+  // they get a stream buffer of their own and the carried models are held back
+  // while they run.  Returns 1 for planar, 0 for the joint transform.
+  int32_t search_tile_descs(BmfImage* tile) {
+    if( tile[0].width<4||tile[0].height<3 ) {
+      reset_descriptors();
+      return 0;
+    }
+    const CodedStream saved_stream = stream;
+    uint8_t*const saved_hist = hist_scratch;
+    const int32_t saved_keep = model_keep;
+    uint8_t*const saved_xform = xform_scratch;
+    model_keep = 0;
+    xform_scratch = nullptr;
+    uint8_t*const pristine = (uint8_t*)bmf_new(tile[0].data_size);
+    memcpy(pristine, tile[0].pixels, tile[0].data_size);
+    stream_open(tile[0].data_size);
+    uint32_t plane_cost[4];
+    choose_plane_coding(tile);
+    uint8_t*const tile_buf = (uint8_t*)bmf_new((size_t)tile[0].width*tile[0].height);
+    PlaneSearch ps = search_planes(tile, tile_buf, plane_cost);
+    int32_t cand = 1;
+    mode_search(tile, tile[0].pixels, ps, ps.bits, cand);
+    free(tile_buf);
+    free(stream.buf);
+    memcpy(tile[0].pixels, pristine, tile[0].data_size);
+    free(pristine);
+    stream = saved_stream;
+    hist_scratch = saved_hist;
+    model_keep = saved_keep;
+    xform_scratch = saved_xform;
+    return cand;
+  }
+  // One tile's share of the stream: its planar flag, its descriptor table, and
+  // its pixels.  The same two calls code_image_body makes, per tile.
+  void code_tile_body(BmfImage* tile, int32_t planar) {
+    pack_bits(planar ? 1u : 0u, 1);
+    alphabet_reduced = 0;
+    write_plane_descs();
+    if( planar ) {
+      uint8_t*const plane_buf = (uint8_t*)bmf_new((size_t)tile[0].width*tile[0].height);
+      for( int32_t k = 0; k<plane_count; ++k )
+        model_planes(tile, plane_buf, plane_desc[k].src_plane);
+      free(plane_buf);
+    } else {
+      transform_planes(tile);
+    }
+  }
+  // Tiled encoding runs in two passes, and it has to.
+  //
+  // The descriptor search codes the tile for real to price each candidate, so
+  // it runs the models -- the same blocks the shipped stream is carried in.  A
+  // search between two coded tiles would leave those blocks holding the last
+  // trial rather than the last tile, and the decoder, which never searches,
+  // would carry something else.  So every tile is searched first, against cold
+  // models, and its answer recorded; the second pass then codes the tiles back
+  // to back with nothing between them, which is the sequence the decoder sees.
+  void code_image_tiled(BmfImage* p_i, BmfImage &hdr, int32_t shift) {
+    const int32_t img_w = p_i[0].width, img_h = p_i[0].height;
+    const int32_t nx = tile_count(img_w, shift), ny = tile_count(img_h, shift);
+    const int32_t n_tiles = nx*ny;
+    hdr.header_from(p_i);
+    hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
+    // The last tile on each axis is the widest, because it takes the remainder.
+    const int32_t max_w = img_w-((nx-1)<<shift), max_h = img_h-((ny-1)<<shift);
+    BmfImage*const tile = alloc_image(max_w, max_h, p_i[0].depth&depth_bits, 0, 0);
+    PlaneDesc*const chosen = (PlaneDesc*)bmf_new(sizeof(PlaneDesc)*4u*(size_t)n_tiles);
+    uint8_t*const planar_of = (uint8_t*)bmf_new((size_t)n_tiles);
+    bmf_log("[tiles] %d x %d tiles of up to %dx%d, one stream, models carried across\n",
+            nx, ny, max_w, max_h);
+    for( int32_t t = 0; t<n_tiles; ++t ) {
+      const int32_t ty = t/nx, tx = t%nx;
+      const int32_t y0 = ty<<shift, y1 = ty+1==ny ? img_h : (ty+1)<<shift;
+      const int32_t x0 = tx<<shift, x1 = tx+1==nx ? img_w : (tx+1)<<shift;
+      tile_frame(tile, x1-x0, y1-y0);
+      tile_gather(p_i, tile, x0, y0);
+      planar_of[t] = (uint8_t)search_tile_descs(tile);
+      save_descriptors(chosen+4*t);
+      bmf_log("[tile %d,%d] %dx%d at %d,%d -- %s\n", ty, tx, x1-x0, y1-y0, x0, y0,
+              planar_of[t] ? "planar" : "together");
+      log_plane_descs("chosen descriptors");
+    }
+    stream_open(p_i[0].data_size);
+    if( plane_count==1 ? (p_i[0].depth&depth_grey)!=0 : plane_count>2 ) {
+      near_lossless_q = 0;
+      pack_bits(0, 4);
+    }
+    xform_scratch = (uint8_t*)bmf_new(2u*sizeof(BmfImage)+(size_t)tile[0].data_size);
+    begin_carried_models();
+    for( int32_t t = 0; t<n_tiles; ++t ) {
+      const int32_t ty = t/nx, tx = t%nx;
+      const int32_t y0 = ty<<shift, y1 = ty+1==ny ? img_h : (ty+1)<<shift;
+      const int32_t x0 = tx<<shift, x1 = tx+1==nx ? img_w : (tx+1)<<shift;
+      tile_frame(tile, x1-x0, y1-y0);
+      tile_gather(p_i, tile, x0, y0);
+      restore_descriptors(chosen+4*t);
+      code_tile_body(tile, planar_of[t]);
+    }
+    model_keep = 0;
+    free(xform_scratch);
+    xform_scratch = nullptr;
+    free(planar_of);
+    free((uint8_t*)chosen);
+    free((uint8_t*)tile);
+  }
+  void unmodel_tiled(BmfImage* img_at, int32_t shift) {
+    const int32_t img_w = img_at[0].width, img_h = img_at[0].height;
+    const int32_t nx = tile_count(img_w, shift), ny = tile_count(img_h, shift);
+    if( plane_count==1 ? (img_at[0].depth&depth_grey)!=0 : plane_count>2 ) {
+      if( unpack_bits(4) ) {
+        printf("\nnear-lossless stream (E>0); this build only decodes E=0\n");
+        exit(3);
+      }
+      near_lossless_q = 0;
+    }
+    const int32_t max_w = img_w-((nx-1)<<shift), max_h = img_h-((ny-1)<<shift);
+    BmfImage*const tile = alloc_image(max_w, max_h, img_at[0].depth&depth_bits, 0, 0);
+    uint8_t*const plane_buf = (uint8_t*)bmf_new((size_t)max_w*max_h);
+    bmf_log("[tiles] %d x %d tiles of up to %dx%d\n", nx, ny, max_w, max_h);
+    begin_carried_models();
+    for( int32_t ty = 0; ty<ny; ++ty ) {
+      const int32_t y0 = ty<<shift, y1 = ty+1==ny ? img_h : (ty+1)<<shift;
+      for( int32_t tx = 0; tx<nx; ++tx ) {
+        const int32_t x0 = tx<<shift, x1 = tx+1==nx ? img_w : (tx+1)<<shift;
+        tile_frame(tile, x1-x0, y1-y0);
+        const int32_t planar = (int32_t)unpack_bits(1);
+        alphabet_reduced = 0;
+        read_plane_descs();
+        bmf_log("[tile %d,%d] %dx%d at %d,%d -- %s\n", ty, tx, x1-x0, y1-y0, x0, y0,
+                planar ? "planar" : "together");
+        log_plane_descs("decoding");
+        if( planar )
+          unmodel_planes_apart(tile, plane_buf);
+        else
+          unmodel_planes_together(tile, plane_buf);
+        tile_scatter(img_at, tile, x0, y0);
+      }
+    }
+    model_keep = 0;
+    free(plane_buf);
+    free((uint8_t*)tile);
+  }
+
   void code_image_body(BmfImage* p_i, BmfImage &hdr) {
     if( (p_i[0].depth&depth_bits)<=4 ) {
+      // The packed path codes the plane whole and has no descriptor table to
+      // vary, so it ignores a tile size rather than half-honouring one.  Clear
+      // the header byte so the stream does not claim what it does not carry.
+      p_i[0]._pad8[2] = 0;
       code_packed_body(p_i, hdr);
       return;
     }
     const uint32_t filtered = search_filter(p_i);
     hdr.flags |= flags_descriptors;
+    // Tiled coding takes over from here.  search_filter still runs first and
+    // still runs once: geometry, palette order and the renumbering map are
+    // properties of the image and travel in its header, so they cannot vary
+    // by tile.  What varies by tile is the descriptor table, and that is
+    // searched again per tile below.
+    if( p_i[0]._pad8[2] ) {
+      code_image_tiled(p_i, hdr, p_i[0]._pad8[2]);
+      return;
+    }
     const uint32_t data_bytes = p_i[0].data_size;
     // search_filter may have transposed the image or reordered its palette, and
     // both show up as flags on p_i; take the geometry and the flags from it.
@@ -962,7 +1188,10 @@ struct BMFCodec : BMFState {
         plane_alt_model = 0;
         unmodel_plane(img_at, img_at[0].pixels);
       } else {
-        unmodel_described(img_at, hdr.flags);
+        if( hdr._pad8[2] )
+          unmodel_tiled(img_at, hdr._pad8[2]);
+        else
+          unmodel_described(img_at, hdr.flags);
       }
       ok = stream.buf+hdr.data_size==stream.cur;
     }
@@ -1117,6 +1346,7 @@ struct BMFCodec : BMFState {
   void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
     plane_predictor = plane_desc[plane].flags&desc_predictor;
     plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
+    model_slot = plane_desc[plane].nrefs;
     colour_transform(img, pixels, plane);
     memset(hist_scratch, 0, 1024);
     {
@@ -1128,8 +1358,10 @@ struct BMFCodec : BMFState {
     }
   }
   ModelBlock*new_model_block(int32_t img_w, int32_t img_h, int32_t img_depth) {
-    void* raw = model_blocks.take(false);
-    return ((ModelBlock*)raw)[0].layout_workspace(this, img_w, img_h, img_depth);
+    const int32_t keep = model_keep&&model_blocks.was_seeded(model_slot);
+    void* raw = model_blocks.take_slot(model_slot, false);
+    model_blocks.mark_seeded(model_slot);
+    return ((ModelBlock*)raw)[0].layout_workspace(this, img_w, img_h, img_depth, keep);
   }
   void offer_to_all(int32_t want) {
     for( int32_t k = 0; k<plane_count; ++k )
@@ -1712,11 +1944,19 @@ struct BMFCodec : BMFState {
     packer_reset();
     return bits;
   }
+  // Where transform_planes keeps its untransformed copy of the tile.  Coding
+  // one image into one stream, the head of that stream is free until the range
+  // coder reaches it, so it has always been borrowed for this.  Tiled coding
+  // breaks that: the head holds earlier tiles by the time the second one is
+  // transformed, so the tiled path hands over a buffer of its own.  Null means
+  // "borrow the stream", which is what every untiled encode does.
+  uint8_t* xform_scratch = nullptr;
+
   void transform_planes(BmfImage* p_i) {
     int32_t i;
     memset(hist_scratch, 0, 4096);
 
-    BmfImage* hdr = (BmfImage*)(stream.buf+sizeof(BmfImage));
+    BmfImage* hdr = (BmfImage*)((xform_scratch ? xform_scratch : stream.buf)+sizeof(BmfImage));
     hdr[0] = p_i[0];
     uint8_t* src_pixels = p_i[0].pixels;
     memcpy(hdr[0].pixels, p_i[0].pixels, p_i[0].data_size);
@@ -1746,6 +1986,8 @@ struct BMFCodec : BMFState {
       }
     }
     free(tmp);
+    // One model codes the interleaved planes, so it owns slot 0 alone.
+    model_slot = 0;
     model_plane(p_i, src_pixels, src_pixels);
   }
   void unmodel_described(BmfImage* img_at, uint8_t flags) {
@@ -1776,6 +2018,7 @@ struct BMFCodec : BMFState {
       const int32_t plane = plane_desc[k].src_plane;
       plane_predictor = plane_desc[plane].flags&desc_predictor;
       plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
+      model_slot = plane_desc[plane].nrefs;
       unmodel_plane(&plane_hdr, plane_buf);
       if( plane_predictor==pred_p1&&!plane_alt_model )
         unpredict_med(plane_buf, img_at[0].width, img_at[0].height);
@@ -1785,6 +2028,7 @@ struct BMFCodec : BMFState {
   void unmodel_planes_together(BmfImage* img_at, uint8_t* plane_buf) {
     plane_predictor = plane_desc[0].flags&desc_predictor;
     plane_alt_model = (plane_desc[0].flags&desc_alt_model)!=0;
+    model_slot = 0;
     unmodel_plane(img_at, img_at[0].pixels);
     if( plane_alt_model )
       return;
@@ -2050,8 +2294,10 @@ struct BMFCodec : BMFState {
   }
   void alt_p2_planes_alloc(AltP2Block** plane, int32_t width) {
     for( int32_t pl = 0; pl<plane_count; ++pl ) {
-      AltP2Block* page = p2_blocks.take(true);
-      plane[pl] = page[0].alt_p2_alloc(this, width, pl);
+      const int32_t keep = model_keep&&p2_blocks.was_seeded(pl);
+      AltP2Block* page = p2_blocks.take_slot(pl, !keep);
+      p2_blocks.mark_seeded(pl);
+      plane[pl] = page[0].alt_p2_alloc(this, width, pl, keep);
     }
   }
   void alt_p2_start_row(AltP2Block** plane, int32_t row, int32_t width) {

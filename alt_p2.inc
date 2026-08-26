@@ -1127,22 +1127,30 @@ struct AltP2Block {
     cursor[0][0].dval = 0;
   }
 
-  AltP2Block*alt_p2_alloc(BMFState* state, int32_t img_w, int32_t plane) {
+  // `keep` is set for every tile after the first of a tiled encode: the block
+  // is the same one this plane used last tile, and everything it learned there
+  // is still wanted.  What is redone either belongs to the new tile's geometry
+  // (the row buffers, the cursors, the running context) or to its descriptors
+  // (the reference flag, the deadzone, the bands), and the pure tables are
+  // rebuilt because rebuilding them is cheaper than deciding not to.
+  AltP2Block*alt_p2_alloc(BMFState* state, int32_t img_w, int32_t plane, int32_t keep = 0) {
     cx = state;
     uint32_t done;
     uint32_t j, p, n;
     plane_idx = plane;
-    for( j = 0; j<(uint32_t)kP2CounterCount; ++j ) {
-      p2_ctr[j].weighted = 0;
-      p2_ctr[j].rate = 5;
-      p2_ctr[j].b1 = 2;
-    }
-    for( uint32_t e = 0; e<(uint32_t)kP2FreqCount; ++e ) {
-      pz_fast[e] = adapt_init();
-      freq[e].f[0] = 2048;
-      freq[e].f[1] = 2816;
-      freq[e].f[2] = 2816;
-      freq[e].step = 4096;
+    if( !keep ) {
+      for( j = 0; j<(uint32_t)kP2CounterCount; ++j ) {
+        p2_ctr[j].weighted = 0;
+        p2_ctr[j].rate = 5;
+        p2_ctr[j].b1 = 2;
+      }
+      for( uint32_t e = 0; e<(uint32_t)kP2FreqCount; ++e ) {
+        pz_fast[e] = adapt_init();
+        freq[e].f[0] = 2048;
+        freq[e].f[1] = 2816;
+        freq[e].f[2] = 2816;
+        freq[e].step = 4096;
+      }
     }
 
     int32_t dz = 4*cx[0].near_lossless_q+1;
@@ -1153,7 +1161,8 @@ struct AltP2Block {
     band_lo = -band-7;
     band_hi = band+8;
     row0 = row0_store;
-    nb_weights[0].w[14][2] = idx_f(P2_msscale_seed, 0);
+    if( !keep )
+      nb_weights[0].w[14][2] = idx_f(P2_msscale_seed, 0);
     row1 = row1_store;
     cur = row0+img_w+2;
     if( img_w>-4 ) {
@@ -1188,27 +1197,29 @@ struct AltP2Block {
     for( n = 0; n<0x78; ++n )
       nb_ctx[n] = (int32_t)MakeP2Len((uint32_t)n);
     ctx = 15;
-    apm.Init();
-    sign_apm.Init();
     adapt_tables_init();
-    class_mix.Init();
-    // Start at "trust this cell": the two coarse views have to earn their
-    // weight.  A mixer that starts at a third each has to unlearn that, and on
-    // a plane of a few thousand pixels it never finishes -- which doubled the
-    // cost of a 64x48 alpha gradient.
-    for( int32_t k = 0; k<Mix4::kSets; ++k ) {
-      const int32_t weights[4] = {65536, 0, 0, 0};
-      class_mix.seed(k, weights);
-    }
-    for( int32_t k = 0; k<64; ++k )
-      pz_seat[k] = adapt_init();
-    for( int32_t k = 0; k<243; ++k )
-      pz_signs[k] = adapt_init();
     cx[0].alt_init_tables(fold, unfold);
-    for( int32_t c = 0, w1 = 1<<kP2MixShift; c<5; ++c, w1 *= P2_ctxw_ratio ) {
-      ctx_w[c].w[0] = 0;
-      ctx_w[c].w[1] = w1;
-      ctx_w[c].w[2] = 2*w1;
+    if( !keep ) {
+      apm.Init();
+      sign_apm.Init();
+      class_mix.Init();
+      // Start at "trust this cell": the two coarse views have to earn their
+      // weight.  A mixer that starts at a third each has to unlearn that, and on
+      // a plane of a few thousand pixels it never finishes -- which doubled the
+      // cost of a 64x48 alpha gradient.
+      for( int32_t k = 0; k<Mix4::kSets; ++k ) {
+        const int32_t weights[4] = {65536, 0, 0, 0};
+        class_mix.seed(k, weights);
+      }
+      for( int32_t k = 0; k<64; ++k )
+        pz_seat[k] = adapt_init();
+      for( int32_t k = 0; k<243; ++k )
+        pz_signs[k] = adapt_init();
+      for( int32_t c = 0, w1 = 1<<kP2MixShift; c<5; ++c, w1 *= P2_ctxw_ratio ) {
+        ctx_w[c].w[0] = 0;
+        ctx_w[c].w[1] = w1;
+        ctx_w[c].w[2] = 2*w1;
+      }
     }
     return this;
   }

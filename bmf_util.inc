@@ -162,13 +162,41 @@ const int32_t kMaxWidth = 65535;   // the width field on the wire is 16 bits
 template <class T, int32_t N> struct BlockPool {
   alignas(4096) T slot[N];
   uint8_t taken[N];
+  // Whether this slot has been seeded since the coding pass began.  Tiled
+  // coding carries a model's statistics from tile to tile, but the first tile
+  // that reaches a given model still has to seed it, and which tile that is
+  // depends on the descriptors -- an image whose first four tiles all choose
+  // alt-P2 does not touch the slow model until the fifth.  A global "this is
+  // not the first tile" flag gets that wrong, and gets it wrong asymmetrically:
+  // the encoder's blocks have been through the descriptor search and the
+  // decoder's have not, so the two would carry different state and the stream
+  // would not decode.  Seeding is per block, and it is this flag.
+  uint8_t seeded[N];
   void unwatch(int32_t k) {}
 
   void watch(int32_t k) {}
 
   void Init() {
-    for( int32_t k = 0; k<N; ++k )
+    for( int32_t k = 0; k<N; ++k ) {
       taken[k] = 0;
+      seeded[k] = 0;
+    }
+  }
+
+  // Called at the start of a coding pass: every block seeds itself again the
+  // first time that pass reaches it.
+  void unseed() {
+    for( int32_t k = 0; k<N; ++k )
+      seeded[k] = 0;
+  }
+
+  bool was_seeded(int32_t k) const {
+    return k>=0&&k<N&&seeded[k]!=0;
+  }
+
+  void mark_seeded(int32_t k) {
+    if( k>=0&&k<N )
+      seeded[k] = 1;
   }
 
   T*take(bool zero) {
@@ -183,6 +211,20 @@ template <class T, int32_t N> struct BlockPool {
     }
     bmf_fatal(bmf_no_memory);
     return 0;
+  }
+
+  // A named slot rather than the first free one.  Tiled coding carries a
+  // model's statistics from one tile to the next, which only means anything if
+  // the same coding slot comes back to the same block; take() would hand every
+  // slot the lowest free one and merge them.
+  T*take_slot(int32_t k, bool zero) {
+    if( k<0||k>=N||taken[k] )
+      return take(zero);
+    taken[k] = 1;
+    unwatch(k);
+    if( zero )
+      memset(&slot[k], 0, sizeof(T));
+    return &slot[k];
   }
 
   void give(T* p) {

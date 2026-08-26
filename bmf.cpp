@@ -83,8 +83,21 @@ BMFCodec bmf_codec;
 // a homogeneous image it costs nothing.
 const int32_t kMaxStrips = 4;
 
+// Tile size for `bmf cN`, as the shift N; zero when the image is coded whole.
+// It travels in the member header's third spare byte, so the decoder needs no
+// switch of its own.
+int32_t bmf_tile_shift = 0;
+
 int32_t bmf_compress_body(BmfFile* arc, BmfImage* p_i) {
   const int32_t height = p_i[0].height;
+  if( bmf_tile_shift ) {
+    // Tiles are the region scheme here; the strip search below is the other
+    // one, and running both would have them bid against each other for the
+    // same adaptivity.  Tiles win because they carry their models across a
+    // boundary and strips do not.
+    p_i[0]._pad8[2] = (uint8_t)bmf_tile_shift;
+    return bmf_codec.compress_image(arc, p_i, bmf_codec.coded_block);
+  }
   // compress_to_memory re-Inits the codec, and the tail pointer lives in the
   // state it clears, so hold it here.
   CodedTail*const tail = bmf_codec.coded_block;
@@ -268,12 +281,35 @@ int32_t main(int32_t argc, char** argv) {
     at = 3;
   }
   const int32_t want_argc = at+2;
-  int32_t mode = argc==want_argc&&!args[1][1] ? toupper(args[1][0]) : 0;
+  // "c" codes the image whole; "cN" cuts it into tiles of 1<<N and gives each
+  // its own descriptor table, in one stream and with the models carried
+  // across.  N runs from 4 (16-pixel tiles) to 12 (4096), which brackets every
+  // size worth measuring: below 4 the descriptor tables outweigh the pixels,
+  // and above 12 a tile is most images.
+  const int32_t kTileShiftMin = 4, kTileShiftMax = 12;
+  int32_t mode = 0;
+  if( argc==want_argc ) {
+    const char*const w = args[1];
+    if( !w[1] ) {
+      mode = toupper(w[0]);
+    } else if( toupper(w[0])=='C'&&!w[2]&&isdigit((unsigned char)w[1]) ) {
+      const int32_t n = w[1]-'0';
+      if( n>=kTileShiftMin&&n<=kTileShiftMax ) {
+        mode = 'C';
+        bmf_tile_shift = n;
+      } else {
+        printf("tile shift %d is outside %d..%d\n", n, kTileShiftMin, kTileShiftMax);
+        return 1;
+      }
+    }
+  }
   if( mode!='C'&&mode!='D' ) {
     printf("e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
-           "Usage: bmf c [-v] input.bmp output     compress, always with -S -Q9\n"
-           "       bmf d [-v] input output.bmp     expand\n"
-           "       -v   report the coding-method trials and the choices made\n");
+           "Usage: bmf c  [-v] input.bmp output    compress, always with -S -Q9\n"
+           "       bmf cN [-v] input.bmp output    compress in tiles of 1<<N, N in %d..%d\n"
+           "       bmf d  [-v] input output.bmp    expand\n"
+           "       -v   report the coding-method trials and the choices made\n",
+           kTileShiftMin, kTileShiftMax);
     return 1;
   }
   if( mode=='C' )
