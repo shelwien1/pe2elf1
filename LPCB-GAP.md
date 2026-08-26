@@ -885,7 +885,7 @@ rather than the affine bound. Given §5, this is not a corpus-wide win and shoul
 be scoped to the files where `bmgstat` shows the two diverging — but on those it
 is 1.5–1.9 bpp, and with A2 in place it is another `ADD` line in the same Index.
 
-### D1 — Let the descriptor change within the image, without restarting the models
+### D1 — Let the descriptor change within the image, without restarting the models — **built**
 
 **Reach: 20.7% on the measured frame; unknown on the corpus, and that is the
 first thing to find out.**  §4.2 measures it directly: on `PIA13915`'s worst
@@ -904,10 +904,51 @@ piece of work on this list as well as the largest number.
 
 The second of those questions is already answered: the same split on the crop
 where BMF wins gives −332 bytes, a flat zero.  Region-level disagreement tracks
-the deficit rather than the codec, which is the strongest argument on this list
-for building the thing.  What remains cheap and worth doing first is running the
-free-vs-forced split across the eighteen retrieved LPCB frames, to see how much
-of the corpus deficit sits on frames whose regions disagree.
+the deficit rather than the codec, which is the strongest argument for building
+the thing.
+
+**This is now built** -- `bmf cN`, section 5.4 of `ALGORITHMS.md`.  Tiles of
+`1<<N` with a descriptor table each, one member, one stream, and the models
+carried across every boundary.  On the two crops, against gralic 1.11 measured
+on the same pixels:
+
+| | bytes | vs whole | vs gralic |
+|---|---|---|---|
+| losing crop 2,1 -- gralic 527,173 | | | |
+| whole image | 572,796 | | +8.65% |
+| `c9`, 512px tiles | 563,316 | −1.66% | +6.85% |
+| `c8`, 256px tiles | 535,536 | −6.50% | +1.59% |
+| `c7`, 128px tiles | 530,140 | −7.45% | +0.56% |
+| **`c6`, 64px tiles** | **517,920** | **−9.58%** | **−1.76%** |
+| `c5`, 32px tiles | 524,404 | −8.45% | −0.53% |
+| winning crop 0,3 -- gralic 958,025 | | | |
+| whole image | 870,600 | | −9.13% |
+| `c9` | 870,552 | −0.01% | −9.13% |
+| `c8` | 874,960 | +0.50% | −8.67% |
+| `c7` | 884,732 | +1.62% | −7.65% |
+| `c6` | 905,048 | +3.96% | −5.53% |
+
+The asymmetry the free-vs-forced split predicted is exactly what the built
+codec does.  On the frame whose regions disagree, an 8.65% loss becomes a 1.76%
+win -- a swing of 10.4 points -- and finer tiles keep paying down to 64 pixels
+before the per-tile descriptor tables and the row-context restarts turn it
+round.  On the frame whose regions agree, every tiling is a loss that grows as
+the tiles shrink, which is the same overhead with nothing to buy.
+
+It does not reach the −13.63% the sixteen independent members measured, and the
+reason is instructive: those tiles each re-ran the *whole* of `search_filter`,
+so each got its own renumbering map, its own transposition and its own palette
+order.  Those are properties of the pixels, they travel in the member header,
+and a single member has one of each -- so a shared-stream tiling cannot have
+them.  Section 4.1 says what the renumbering map alone is worth on this family.
+Per-tile renumbering inside one member is the obvious next thing to cost.
+
+What remains, and is cheap: run the free-vs-forced split across the eighteen
+retrieved LPCB frames, to see how much of the corpus deficit sits on frames
+whose regions disagree, and then run `c6` over the whole set.  Encoding is the
+constraint -- every tile gets the full descriptor search, so `x_ci` at `c5` is
+4,400 searches -- and a cheaper per-tile trial is the first thing to look at if
+the sweep is worth having.
 
 ---
 
