@@ -1,0 +1,443 @@
+--- mrpc_lib.cpp	2026-08-25 20:48:53.846560314 +0000
++++ /tmp/ent/mrpc_lib.cpp	2026-08-25 23:55:50.566320502 +0000
+@@ -260,6 +260,7 @@
+   int size, id;
+   uint* freq;
+   uint* cumfreq;
++  double* exact; // cumulative pdf, before it was quantised into freq[]
+   float* cost;    // -log2 freq[k]
+   float* subcost; // +log2 of the window total that starts at base
+ };
+@@ -299,6 +300,11 @@
+     for( int i = 0; i<pm->size; i++ ) {
+       pm->freq[i] = uint(norm*pdf[i*NUM_SUBPM+j])+MIN_FREQ;
+       pm->cumfreq[i+1] = pm->cumfreq[i]+pm->freq[i];
++      if( pm->exact ) {
++        if( i==0 )
++          pm->exact[0] = 0.0;
++        pm->exact[i+1] = pm->exact[i]+norm*pdf[i*NUM_SUBPM+j]+double(MIN_FREQ);
++      }
+     }
+     pm++;
+   }
+@@ -311,6 +317,7 @@
+ struct PModSet {
+   PMod* pm;      // [group][shape][subposition]
+   uint* freqblk; // the frequency and cumulative tables, one block
++  double* exactblk;
+   float* costblk;// and the code lengths the optimiser reads
+   int n;
+ 
+@@ -320,6 +327,8 @@
+   void Quit() {
+     delete[] pm;
+     delete[] freqblk;
++    delete[] exactblk;
++    exactblk = 0;
+     delete[] costblk;
+     pm = 0;
+     freqblk = 0;
+@@ -336,10 +345,12 @@
+   n = MRP_GROUP*num_pm*NUM_SUBPM;
+   pm = new PMod[n];
+   freqblk = new uint[size_t(n)*(PMSIZE*2+1)];
++  exactblk = new double[size_t(n)*(PMSIZE+1)];
+   for( int i = 0; i<n; i++ ) {
+     pm[i].size = PMSIZE;
+     pm[i].freq = freqblk+size_t(i)*(PMSIZE*2+1);
+     pm[i].cumfreq = pm[i].freq+PMSIZE;
++    pm[i].exact = exactblk+size_t(i)*(PMSIZE+1);
+     pm[i].cost = 0;
+     pm[i].subcost = 0;
+   }
+@@ -441,6 +452,237 @@
+   return i;
+ }
+ 
++
++// -------------------------------------------------------------
++// Measurement only: what the coder would have paid under other models,
++// charged on exactly the symbols the real coder saw.  Nothing here is
++// in the bitstream; MRPC_MIX turns it on.
++// -------------------------------------------------------------
++struct Fenwick {                 // counts over the 511 residual positions
++  double t[PMSIZE+1];
++  double all;
++  void Init() { memset(t, 0, sizeof(t)); all = 0.0; }
++  void Add(int i, double v) {
++    for( int x = i+1; x<=PMSIZE; x += x&(-x) )
++      t[x] += v;
++    all += v;
++  }
++  double Sum(int i) const {      // counts strictly below i
++    double s = 0.0;
++    for( int x = i; x>0; x -= x&(-x) )
++      s += t[x];
++    return s;
++  }
++};
++
++
++// A Bayesian mixture of ready-made experts: no counts to learn, no side
++// information, and the decoder can run it because the weights depend
++// only on symbols already coded.  w_i <- w_i * p_i(x), renormalised,
++// with a floor that lets the mixture switch back.
++struct ExpertMix {
++  const char* name;
++  int nctx, nexp;
++  double* w;
++  double cost;
++  void Init(const char* nm, int nc, int ne) {
++    name = nm;
++    nctx = nc;
++    nexp = ne;
++    w = new double[size_t(nc)*ne];
++    for( size_t i = 0; i<size_t(nc)*ne; i++ )
++      w[i] = 1.0/double(ne);
++    cost = 0.0;
++  }
++  void Quit() {
++    delete[] w;
++    w = 0;
++  }
++  void Charge(int c, const double* p) {
++    double* ww = w+size_t(c)*nexp;
++    double q = 0.0;
++    for( int i = 0; i<nexp; i++ )
++      q += ww[i]*p[i];
++    if( q<1e-300 )
++      q = 1e-300;
++    cost += -log(q)/log(2.0);
++    const double floorw = 0.002;
++    double sum = 0.0;
++    for( int i = 0; i<nexp; i++ ) {
++      ww[i] = ww[i]*p[i]/q;
++      sum += ww[i];
++    }
++    for( int i = 0; i<nexp; i++ )
++      ww[i] = (1.0-floorw*double(nexp))*(ww[i]/sum)+floorw;
++  }
++};
++
++
++// Secondary estimation, PAQ's APM in the shape this alphabet wants: keep
++// the static pmf and learn one multiplicative correction per band of the
++// residual.  32 numbers a context instead of 511, and the cumulative the
++// decoder needs is 32 lookups into the static table it already has.
++static const int SSEB = 32;
++static INLINE int SseBand(int r) {
++  int a = (r<0) ? -r : r;
++  int l = 0;
++  while( a>0&&l<15 ) {
++    a >>= 1;
++    l++;
++  }
++  int q = (l<15) ? l : 15;
++  return (r<0) ? 15-q : 16+q;
++}
++
++struct SseMix {
++  const char* name;
++  int nctx;
++  double* cnt;   // what turned up in each band
++  double* exp_;  // what the static model expected there
++  double cost;
++  int bs[SSEB+1];   // the band boundaries, in symbol coordinates
++  void Init(const char* nm, int n) {
++    name = nm;
++    nctx = n;
++    cnt = new double[size_t(n)*SSEB];
++    exp_ = new double[size_t(n)*SSEB];
++    for( size_t i = 0; i<size_t(n)*SSEB; i++ )
++      cnt[i] = exp_[i] = 0.0;
++    cost = 0.0;
++    // SseBand is monotone in r, so each band is one run of symbols
++    for( int b = 0; b<=SSEB; b++ )
++      bs[b] = -1;
++    for( int sym = 0; sym<PMSIZE; sym++ ) {
++      int b = SseBand(sym-MAXVAL);
++      if( bs[b]<0 )
++        bs[b] = sym;
++    }
++    bs[SSEB] = PMSIZE;
++    for( int b = SSEB-1; b>=0; b-- )
++      if( bs[b]<0 )
++        bs[b] = bs[b+1];
++  }
++  void Quit() {
++    delete[] cnt;
++    delete[] exp_;
++    cnt = 0;
++    exp_ = 0;
++  }
++  void Charge(int c, const PMod* pm, int sym, int lo, int hi) {
++    double* cn = cnt+size_t(c)*SSEB;
++    double* ex = exp_+size_t(c)*SSEB;
++    const double A = 8.0;
++    double tot = double(pm->cumfreq[hi]-pm->cumfreq[lo]);
++    double pb[SSEB], z = 0.0;
++    for( int b = 0; b<SSEB; b++ ) {
++      int a = bs[b]<lo ? lo : bs[b];
++      int e = bs[b+1]>hi ? hi : bs[b+1];
++      double m = (e>a) ? double(pm->cumfreq[e]-pm->cumfreq[a])/tot : 0.0;
++      pb[b] = m*(cn[b]+A)/(ex[b]+A);
++      z += pb[b];
++    }
++    int bb = SseBand(sym-MAXVAL);
++    double ps = double(pm->freq[sym])/tot;
++    int a = bs[bb]<lo ? lo : bs[bb];
++    int e = bs[bb+1]>hi ? hi : bs[bb+1];
++    double mb = double(pm->cumfreq[e]-pm->cumfreq[a])/tot;
++    double q = (mb>0.0) ? (ps/mb)*(pb[bb]/z) : 1e-12;
++    if( q<1e-300 )
++      q = 1e-300;
++    cost += -log(q)/log(2.0);
++    for( int b = 0; b<SSEB; b++ ) {
++      int a2 = bs[b]<lo ? lo : bs[b];
++      int e2 = bs[b+1]>hi ? hi : bs[b+1];
++      if( e2>a2 )
++        ex[b] += double(pm->cumfreq[e2]-pm->cumfreq[a2])/tot;
++    }
++    cn[bb] += 1.0;
++  }
++};
++
++static const int MIXW = 6;
++static const double MIXWV[MIXW] = {0.0, 0.05, 0.10, 0.20, 0.35, 0.50};
++
++struct MixCtx {
++  const char* name;
++  int nctx;
++  double limit;   // halve the counts past this, to favour what is recent
++  Fenwick* f;
++  double* raw;
++  double cost[MIXW];
++  double acost;   // with a per-context adapted weight
++  float* w;       // that weight
++  void Init(const char* nm, int n, double lim = 0.0) {
++    name = nm;
++    nctx = n;
++    limit = lim;
++    raw = lim ? new double[size_t(n)*PMSIZE] : 0;
++    if( raw )
++      memset(raw, 0, size_t(n)*PMSIZE*sizeof(double));
++    f = new Fenwick[n];
++    for( int i = 0; i<n; i++ )
++      f[i].Init();
++    for( int i = 0; i<MIXW; i++ )
++      cost[i] = 0.0;
++    acost = 0.0;
++    w = new float[n];
++    for( int i = 0; i<n; i++ )
++      w[i] = 0.10f;
++  }
++  void Quit() {
++    delete[] f;
++    delete[] w;
++    delete[] raw;
++    f = 0;
++    w = 0;
++    raw = 0;
++  }
++  // ps: the static model's probability of the symbol, already conditioned
++  // on the window; lo/hi: the window in residual coordinates
++  void Charge(int c, int sym, double ps, int lo, int hi) {
++    Fenwick &fw = f[c];
++    double tot = fw.Sum(hi)-fw.Sum(lo);
++    double cnt = fw.Sum(sym+1)-fw.Sum(sym);
++    const double A = 0.05;                  // prior mass per symbol
++    double pa = (cnt+A)/(tot+A*double(hi-lo));
++    for( int i = 0; i<MIXW; i++ ) {
++      double q = (1.0-MIXWV[i])*ps+MIXWV[i]*pa;
++      cost[i] += -log(q)/log(2.0);
++    }
++    double ww = double(w[c]);
++    double q = (1.0-ww)*ps+ww*pa;
++    acost += -log(q)/log(2.0);
++    // one gradient step on the log loss: d/dw -log((1-w)ps + w pa)
++    double g = (pa-ps)/q;
++    ww += 0.02*g;
++    if( ww<0.0 )
++      ww = 0.0;
++    if( ww>0.9 )
++      ww = 0.9;
++    w[c] = float(ww);
++    fw.Add(sym, 1.0);
++    if( raw ) {
++      double* rc = raw+size_t(c)*PMSIZE;
++      rc[sym] += 1.0;
++      if( fw.all>limit ) {   // halve, and rebuild the tree from the counts
++        fw.Init();
++        for( int i = 0; i<PMSIZE; i++ ) {
++          rc[i] *= 0.5;
++          if( rc[i]>0.0 )
++            fw.Add(i, rc[i]);
++        }
++      }
++    }
++  }
++  void Report(FILE* o, double base, long n) const {
++    fprintf(o, "  %-28s", name);
++    for( int i = 1; i<MIXW; i++ )
++      fprintf(o, " %+6.2f%%", 100.0*(base-cost[i])/base);
++    fprintf(o, "   adaptive-w %+6.2f%%  (%.0f B)\n",
++            100.0*(base-acost)/base, acost/8.0);
++  }
++};
++
+ // -------------------------------------------------------------
+ // The OpenCL layer sits between the tables above and the codec below:
+ // it needs the strides of the cost tables and the geometry constants,
+@@ -2535,7 +2777,42 @@
+     }
+   }
+ 
++  FILE* g_dump; double g_bits; long g_nsym; size_t g_pos0;
++  double g_exact;          // the same symbols under the unquantised pdf
++  int g_mix;
++  MixCtx mx[5];
++  ExpertMix ex[2];
++  SseMix sse[2];
++  short g_prev[MAXC];      // the last residual of each component, for a context
+   void CodeImage(int dec) {
++    g_dump = 0;
++    g_mix = 0;
++    if( !dec ) {
++      const char* dn = getenv("MRPC_DUMP");
++      if( dn ) {
++        g_dump = fopen(dn, "wb");
++        g_bits = 0.0;
++        g_exact = 0.0;
++        g_nsym = 0;
++        g_pos0 = rc.pos;
++      }
++      if( getenv("MRPC_MIX") ) {
++        g_mix = 1;
++        g_bits = 0.0;
++        g_exact = 0.0;
++        g_nsym = 0;
++        mx[0].Init("(comp, group)", MAXC*MRP_GROUP);
++        mx[1].Init("(comp, group, subpixel)", MAXC*MRP_GROUP*NUM_SUBPM);
++        mx[2].Init("(comp, class)", MAXC*MRP_MAXCLASS);
++        mx[3].Init("(comp, group, |left err|)", MAXC*MRP_GROUP*4);
++        mx[4].Init("(comp, group, subpixel), recent 4k", MAXC*MRP_GROUP*NUM_SUBPM, 4096.0);
++        sse[0].Init("32-band correction on (comp, group)", MAXC*MRP_GROUP);
++        sse[1].Init("32-band correction on (comp, group, subpixel)", MAXC*MRP_GROUP*NUM_SUBPM);
++        ex[0].Init("sigma: the group and its two neighbours", MAXC*MRP_GROUP, 3);
++        ex[1].Init("shape: every shape at this group", MAXC*MRP_GROUP, num_pm);
++        memset(g_prev, 0, sizeof(g_prev));
++      }
++    }
+     ResetBorders();
+     for( uint y = 0; y<H; y++ ) {
+       BorderLeft(y);
+@@ -2556,6 +2833,62 @@
+             p[k] = byte(s-base);
+           } else {
+             s = base+int(p[k]);
++            if( g_mix ) {
++              const int lo = base, hi = base+MAXVAL+1;
++              double tot = double(pm->cumfreq[hi]-pm->cumfreq[lo]);
++              double ps = double(pm->freq[s])/tot;
++              g_bits += -log(ps)/log(2.0);
++              double et = pm->exact[hi]-pm->exact[lo];
++              g_exact += -log((pm->exact[s+1]-pm->exact[s])/et)/log(2.0);
++              g_nsym++;
++              int pv = int(g_prev[k]), ap = pv<0 ? -pv : pv;
++              int mg = (ap<2) ? 0 : (ap<6) ? 1 : (ap<16) ? 2 : 3;
++              const int c0 = int(k)*MRP_GROUP+gr;
++              mx[0].Charge(c0, s, ps, lo, hi);
++              mx[1].Charge(c0*NUM_SUBPM+(q&(NUM_SUBPM-1)), s, ps, lo, hi);
++              mx[2].Charge(int(k)*MRP_MAXCLASS+cl, s, ps, lo, hi);
++              mx[3].Charge(c0*4+mg, s, ps, lo, hi);
++              mx[4].Charge(c0*NUM_SUBPM+(q&(NUM_SUBPM-1)), s, ps, lo, hi);
++              sse[0].Charge(c0, pm, s, lo, hi);
++              sse[1].Charge(c0*NUM_SUBPM+(q&(NUM_SUBPM-1)), pm, s, lo, hi);
++              {   // the same symbol under neighbouring sigmas
++                double pe[3];
++                for( int d = -1; d<=1; d++ ) {
++                  int g2 = gr+d;
++                  if( g2<0 )
++                    g2 = 0;
++                  if( g2>=MRP_GROUP )
++                    g2 = MRP_GROUP-1;
++                  const PMod* p2 = pml[k][g2]+(q&(NUM_SUBPM-1));
++                  double t2 = double(p2->cumfreq[hi]-p2->cumfreq[lo]);
++                  pe[d+1] = double(p2->freq[s])/t2;
++                }
++                ex[0].Charge(c0, pe);
++              }
++              if( num_pm>1 ) {   // and under every shape at this group
++                double pe[NUM_PMODEL];
++                for( int i = 0; i<num_pm; i++ ) {
++                  const PMod* p2 = pmodels+(size_t(gr)*num_pm+i)*NUM_SUBPM+(q&(NUM_SUBPM-1));
++                  double t2 = double(p2->cumfreq[hi]-p2->cumfreq[lo]);
++                  pe[i] = double(p2->freq[s])/t2;
++                }
++                ex[1].Charge(c0, pe);
++              }
++              g_prev[k] = short(s-MAXVAL);
++            }
++            if( g_dump ) {
++              // cl, k, gr, sub, u, base, r, cost-in-bits
++              struct Rec { unsigned char cl, k, gr, sub; unsigned short u, base; short r; float bits; } rec;
++              rec.cl = (unsigned char)cl; rec.k = (unsigned char)k;
++              rec.gr = (unsigned char)gr; rec.sub = (unsigned char)(q&(NUM_SUBPM-1));
++              rec.u = (unsigned short)u; rec.base = (unsigned short)base;
++              rec.r = (short)(s-MAXVAL);
++              double tot = double(pm->cumfreq[base+MAXVAL+1]-pm->cumfreq[base]);
++              rec.bits = float(-log(double(pm->freq[s])/tot)/log(2.0));
++              g_bits += rec.bits;
++              g_nsym++;
++              fwrite(&rec, sizeof(rec), 1, g_dump);
++            }
+             EncSym(pm, base, base+MAXVAL+1, s);
+           }
+           pe[k] = short(Econv(int(p[k]), v));
+@@ -2565,6 +2898,46 @@
+       }
+       BorderRight(y);
+     }
++    if( g_mix ) {
++      fprintf(stderr,
++        "\n--- entropy coding, measured on %ld symbols ------------------\n"
++        "  mrpc as it is                %10.0f B  %6.4f bits/symbol\n"
++        "  same model, unquantised pdf  %10.0f B  %+.3f%%  (frequency-table cost)\n"
++        "  mixing an adaptive model in, by weight:\n"
++        "  %-28s %7s %7s %7s %7s %7s\n",
++        g_nsym, g_bits/8.0, g_bits/double(g_nsym),
++        g_exact/8.0, 100.0*(g_exact-g_bits)/g_bits,
++        "context of the adaptive part", "w=.05", "w=.10", "w=.20", "w=.35", "w=.50");
++      for( int i = 0; i<5; i++ ) {
++        mx[i].Report(stderr, g_bits, g_nsym);
++        mx[i].Quit();
++      }
++      for( int i = 0; i<2; i++ ) {
++        fprintf(stderr, "  %-42s %+6.2f%%  (%.0f B)\n", sse[i].name,
++                100.0*(g_bits-sse[i].cost)/g_bits, sse[i].cost/8.0);
++        sse[i].Quit();
++      }
++      fprintf(stderr, "  mixing ready-made experts instead -- nothing learned, nothing sent:\n");
++      for( int i = 0; i<2; i++ ) {
++        if( i==1&&num_pm<=1 )
++          continue;
++        fprintf(stderr, "  %-42s %+6.2f%%  (%.0f B)\n", ex[i].name,
++                100.0*(g_bits-ex[i].cost)/g_bits, ex[i].cost/8.0);
++      }
++      for( int i = 0; i<2; i++ )
++        ex[i].Quit();
++      fprintf(stderr, "  (+%% = smaller than mrpc as it is)\n");
++      g_mix = 0;
++    }
++    if( g_dump ) {
++      fclose(g_dump);
++      g_dump = 0;
++      double emitted = double(rc.pos-g_pos0)*8.0;
++      fprintf(stderr, "dump: %ld symbols  model %.0f bits (%.0f B)  coder emitted %.0f bits (%zu B)"
++                      "  loss %.1f bits = %.4f%% = %.6f bits/symbol\n",
++              g_nsym, g_bits, g_bits/8.0, emitted, rc.pos-g_pos0,
++              emitted-g_bits, 100.0*(emitted-g_bits)/g_bits, (emitted-g_bits)/double(g_nsym));
++    }
+   }
+ };
+ 
