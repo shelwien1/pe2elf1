@@ -421,14 +421,42 @@ crops pick the same joint refs+p2 configuration) and not adaptation.  It is the
 colour channel, which is the same place §5's correction puts 71--84% of a
 photograph's outcome -- now with a per-crop predictor to test a fix against.
 
-Not established: *which* part of the cross-plane path is weak.  A probe
-comparing prediction in the value domain against the residual domain returned
-both variants worse than independent MED, which contradicts the codec's own
-trials choosing refs+p2 on these crops, so the probe does not model the pipeline
-faithfully -- a global least-squares fit scored by order-0 entropy, where the
-codec fits per plane and scores with alt-P2.  It is recorded as inconclusive
-rather than read as a result.  Settling it means instrumenting the real
-transform.
+#### Attributed: it is the cross-plane channel, not the spatial model
+
+Coding each crop's three planes as independent greyscale images separates the
+two halves of each codec, and the answer is unambiguous:
+
+| crop | bmf cross-plane gain | gralic | bmf vs gralic, independent | colour |
+|---|---|---|---|---|
+| 2,1 (bmf loses) | 7.72% | **16.51%** | **−1.69%** | **+8.65%** |
+| 0,3 (bmf wins) | 5.65% | 3.22% | −6.79% | −9.13% |
+
+**On both crops BMF's spatial model is the better one.**  Coding the planes
+separately it is 1.69% and 6.79% ahead.  The outcome flips entirely on the
+colour channel: where gralic pulls 16.51% out of it against BMF's 7.72%, BMF
+loses by 8.65%; where gralic pulls only 3.22% against BMF's 5.65%, BMF wins by
+9.13%.  On the losing crop gralic extracts 2.1x what BMF does from the same
+cross-plane redundancy.
+
+#### And it is not the colour transform's blend choice
+
+The obvious suspect is the fitted blend in `choose_plane_coding`, which on crop
+2,1 discards its own least-squares fit: the fit estimates 262,082 bytes against
+263,769 for a plain copy of the reference plane, and the copy wins because the
+1,687-byte margin falls inside the 2,047-byte degenerate-form tolerance
+(`GL_slack_shift`, a 128th of the fitted cost, capped by `GL_slack_max`).
+
+That suspect is innocent.  Removing the tolerance flips the choice -- `-v` shows
+the `<<` move from "copy first ref" to "least-squares fit" -- and the coded file
+is **byte-identical**, 572,796 either way, on both crops.  The blend that
+machinery picks does not reach the shipped stream here at all: it is an estimate
+that gates and seeds, and the per-plane search then chooses `refs+p2`, whose
+reference handling is alt-P2's own.
+
+So the gap is in **how alt-P2 uses the reference planes**, which is where §6's
+C1 already points -- cross-plane reference as *context* rather than as a
+predictor -- and these two crops are the test case for it: same size, same
+frame, opposite outcomes, differing in one measured property.
 ---
 
 ## 5. What does *not* explain the gap
