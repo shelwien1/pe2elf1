@@ -153,6 +153,34 @@ in. `t24_pal.bmp` does best at 63 and every larger setting is worse. It is
 the bimodality again, and at these counts the sampling is coarse enough that
 picking 127 over 63 is picking a lottery ticket.
 
+And the case the cap was most obviously binding on -- `20000171A.bmp`,
+4096x512, 2.1M pixels, where MRP's rule extrapolates to **232 classes** and
+gets 63 -- turns out not to care at all:
+
+| classes | bytes | vs 63 | encode |
+| --- | --- | --- | --- |
+| 63 | 2,751,355 | — | 108 s |
+| **96** | **2,749,300** | **-0.075%** | 128 s |
+| 127 | 2,752,511 | +0.042% | 133 s |
+| 160 | 2,750,949 | -0.015% | 178 s |
+| 200 | 2,754,516 | +0.115% | 203 s |
+| 232 | 2,756,781 | +0.197% | 177 s |
+
+0.27% across a 3.7x range of class counts, and the best is 96 -- 0.07% under
+63, for 19% more encode time. 232, which is precisely what the heuristic
+asks for, is the worst row in the table.
+
+Two things follow. The cap is not costing this image anything, so there is
+nothing to collect by raising it. And MRP's rule is wrong at the top end as
+well as the bottom -- it wants 232 where the truth is 63 to 96 -- it is
+simply that the cap has been quietly saving it.
+
+It is also the image where the class count matters *least* of everything
+tested: 0.27% here against 30% swings on a 160x128 tile. At 2.1M pixels every
+class has 33k pixels and 850 samples a coefficient even at 63, so the fits
+are all well determined and the class map is doing real work instead of
+running a lottery. The instability is a small-image problem.
+
 The costs are real, though. Both searches are linear in the class count, so
 255 classes is about four times the encode. And three buffers scale with the
 cap rather than the count -- the group histogram, its prefix sums and the
