@@ -167,6 +167,9 @@ range-coded segments matters for understanding the models' entry points.)
   three channels) is converted to `depth_grey` and its palette dropped — the decoder's
   `write_bmp_palette` (`bmp.inc:559`) regenerates the identical ramp. Otherwise the
   palette is stored raw (never entropy-coded).
+* An RLE row that encodes more pixels than the image is wide is **clipped at the
+  row**, not refused: some encoders pad the row out to a four-byte boundary
+  first, which the format provides for only on uncompressed rows.  See §13.1.
 * On output, `write_bmp` (`bmp.inc:694`) re-encodes 4/8-bit images to RLE4/RLE8
   (`bmp_rle_encode`, `bmp.inc:597`) and keeps the RLE form only if strictly smaller
   than the flat rows.
@@ -635,6 +638,15 @@ t24     5.467 bpp plotted   5.478 coded      x_ai   0.229   0.232
 t8g     4.477               4.484            x_ci   1.001   1.002
 t32     5.473               5.486            x_ep   4.497   4.500
 ```
+
+Name a **third file** and an RGBA source splits: the second file gets the three
+colour planes as a 24-bit image, the third gets the alpha plane's codelengths as
+8-bit greyscale.  Worth having, because a 32-bit plot is a 32-bit BMP whose
+fourth channel is the alpha plane's cost — and a viewer that composites alpha
+then hides every pixel whose alpha cost nothing, which on a mostly-opaque image
+is most of them.  A source with no alpha plane says so and leaves the third file
+alone.  Either form also prints the mean bits a sample per plane, which is the
+number the picture is about.
 
 Images of 4 bpp or less are refused: they are coded packed, several pixels to a
 byte, with no component to charge.  `plot_on` is false on every normal encode,
@@ -1247,6 +1259,20 @@ None of these changed a single coded byte: the 81-image corpus (12 upstream test
 files plus 69 generated edge cases) produces streams byte-identical to the
 pre-fix baseline, and every image still round-trips losslessly when checked with
 an independent BMP decoder rather than BMF's own reader.
+
+* **An RLE row wider than the image refused the whole file** (`read_rle8` /
+  `read_rle4`, `bmp.inc:607`). Both decoders advanced a pointer and bounded it
+  against the *image*, so a row encoding more pixels than the image is wide
+  either spilled into its neighbour or, once the pointer reached the end of the
+  buffer, failed the read outright — `bmf c` answered "Read error!" and coded
+  nothing. Encoders exist that pad an RLE row to a four-byte boundary before the
+  end-of-line marker, which the format provides for only on uncompressed rows: a
+  2409-wide sample encodes 2412 pixels a row, three of them padding, and BMF
+  refused all 8.5 million pixels to avoid keeping three bytes a row it should
+  drop. Both decoders now track the row and clip to it, keeping the whole-image
+  bound as a backstop; input is still consumed in full so the stream stays in
+  step. No file that decoded before decodes differently — the clip only engages
+  where the old code either overran a row or gave up.
 
 * **Joint alt-P2's fourth slot assumed the identity coding order** (`alt_model_p2`,
   `codec.inc:203`). Slots 0..2 name their plane through `plane_desc[k].src_plane`

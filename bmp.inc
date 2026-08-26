@@ -604,50 +604,83 @@ uint8_t*write_nibbles(uint8_t* at, int32_t &hi, const uint8_t* src, uint32_t n) 
   }
 }
 
+// How much of a run fits in what is left of the row.
+//
+// A run-length row is supposed to encode exactly `width` pixels, but encoders
+// exist that pad it out to a four-byte boundary first -- padding belongs to
+// uncompressed rows, and the format makes no provision for it here.  Refusing
+// such a file outright costs the whole image to save three bytes a row, and
+// every other decoder simply drops the surplus, so this one does too.  It also
+// contains the more general case: a row that overruns for any reason is
+// clipped at the row rather than spilled into its neighbour.
+int32_t rle_room(const uint8_t* at, const uint8_t* row_end, int32_t want) {
+  const ptrdiff_t left = row_end-at;
+  if( left<=0 )
+    return 0;
+  return want<(int32_t)left ? want : (int32_t)left;
+}
+
 bool read_rle8(FILE* fp, BmfImage* img, uint8_t* at, void* pal_buf) {
+  const int32_t width = img[0].width;
+  const int32_t stride = img[0].stride;
   int32_t y = img[0].height-1;
+  // Tracked beside `at` rather than derived from y, so a delta op moves both
+  // and the clip stays right afterwards.
+  uint8_t* row_start = at;
   int32_t n, v;
   while( read_rle_op(fp, n, v) ) {
     if( n ) {
-      if( !img[0].holds(at, n) )
+      const int32_t fits = rle_room(at, row_start+width, n);
+      if( fits&&!img[0].holds(at, fits) )
         return false;
-      memset(at, v, n);
-      at += n;
+      memset(at, v, fits);
+      at += fits;
     } else if( !v ) {
       if( --y<0 )
         return true;
       at = img[0].row(y);
+      row_start = at;
     } else if( v==1 ) {
       return true;
     } else if( v==2 ) {
       int32_t dx, dy;
       if( !read_rle_op(fp, dx, dy) )
         return false;
-      at += dx-dy*img[0].stride;
+      at += dx-dy*stride;
+      row_start -= dy*stride;
     } else {
-      if( !img[0].holds(at, v) )
-        return false;
+      // The input is consumed in full even when the pixels are not kept.
       if( !read_exact(pal_buf, (v+1)&0xFFFFFFFE, fp) )
         return false;
-      memcpy(at, (uint8_t*)pal_buf, v);
-      at += v;
+      const int32_t fits = rle_room(at, row_start+width, v);
+      if( fits&&!img[0].holds(at, fits) )
+        return false;
+      memcpy(at, (uint8_t*)pal_buf, fits);
+      at += fits;
     }
   }
   return false;
 }
 
 bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
+  // The pixel count is tracked here rather than the byte address, because a
+  // four-bit row ends mid-byte as often as not.  See rle_room: a row that
+  // encodes past the image width is clipped, not refused.
+  const int32_t width = img[0].width;
+  int32_t px = 0;
   int32_t hi_nibble = 1;
   int32_t y = img[0].height-1;
   int32_t run4, byte_in;
   while( read_rle_op(fp, run4, byte_in) ) {
     const uint32_t byte = (uint32_t)byte_in;
     if( run4 ) {
-      if( !img[0].holds(row, (run4+1+!hi_nibble)/2) )
+      const int32_t take = px<width ? (run4<width-px ? run4 : width-px) : 0;
+      if( take&&!img[0].holds(row, (take+1+!hi_nibble)/2) )
         return false;
       uint8_t lo = byte&0xF;
-      if( hi_nibble ) {
-        int32_t left4b = run4;
+      if( !take ) {
+      } else if( hi_nibble ) {
+        int32_t left4b = take;
         uint8_t* row3 = row;
         while( left4b>1 ) {
           *row3++ = byte;
@@ -658,7 +691,7 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
         if( left4b )
           *row3 = byte&0xF0;
       } else {
-        int32_t left4 = run4;
+        int32_t left4 = take;
         uint8_t* row4 = row;
         uint8_t cur = row[0];
         uint32_t hi = byte>>4;
@@ -673,11 +706,13 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
         if( !hi_nibble )
           *row4 = lo16;
       }
+      px += take;
     } else if( !byte ) {
       if( --y<0 )
         return true;
       row = img[0].row(y);
       hi_nibble = 1;
+      px = 0;
     } else if( byte==1 ) {
       return true;
     } else if( byte==2 ) {
@@ -691,12 +726,18 @@ bool read_rle4(FILE* fp, BmfImage* img, uint8_t* row, void* pal_buf) {
         hi_nibble = !hi_nibble;
       }
       row += step;
+      px += dxy;
     } else {
-      if( !img[0].holds(row, ((int32_t)byte+1+!hi_nibble)/2) )
-        return false;
+      // Consumed in full even when the pixels are not all kept.
       if( !read_exact(pal_buf, (((byte+1)>>1)+1)&0xFFFFFFFE, fp) )
         return false;
-      row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, byte);
+      const int32_t want = (int32_t)byte;
+      const int32_t take = px<width ? (want<width-px ? want : width-px) : 0;
+      if( take&&!img[0].holds(row, (take+1+!hi_nibble)/2) )
+        return false;
+      if( take )
+        row = write_nibbles(row, hi_nibble, (const uint8_t*)pal_buf, (uint32_t)take);
+      px += take;
     }
   }
   return false;

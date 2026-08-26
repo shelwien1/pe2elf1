@@ -208,7 +208,23 @@ void bmf_compress(const char* InName, const char* OutName) {
 // it charges to a component is the colour-transformed residual actually coded
 // there, not the original sample -- which is the honest reading, since that is
 // what the stream spends its bits on.
-void bmf_plot(const char* InName, const char* OutName) {
+// One plot image's worth of components lifted out of another: `count` of them
+// starting at `first`, out of `planes_in`.  A single component comes out grey,
+// so a viewer shows it as an image rather than as a colour channel.
+BmfImage*plot_take_planes(const BmfImage* src, int32_t first, int32_t count, int32_t planes_in) {
+  BmfImage*const out = alloc_image(src[0].width, src[0].height, 8*count, 0, 0);
+  const uint8_t*const p = src[0].pixels;
+  uint8_t*const q = out[0].pixels;
+  const uint32_t n = (uint32_t)src[0].width*(uint32_t)src[0].height;
+  for( uint32_t k = 0; k<n; ++k )
+    for( int32_t c = 0; c<count; ++c )
+      q[k*(uint32_t)count+(uint32_t)c] = p[k*(uint32_t)planes_in+(uint32_t)(first+c)];
+  if( count==1 )
+    out[0].depth |= depth_grey;
+  return out;
+}
+
+void bmf_plot(const char* InName, const char* OutName, const char* AlphaName) {
   BmfImage* p_i = read_bmp((char*)InName);
   if( !p_i )
     bmf_fatal(bmf_read_error);
@@ -228,16 +244,53 @@ void bmf_plot(const char* InName, const char* OutName) {
   BmfImage* plot = bmf_codec.plot_image();
   if( !plot )
     bmf_fatal(bmf_write_error, OutName);
+  const int32_t planes = ((p_i[0].depth&depth_bits)+7)>>3;
+  const uint32_t npix = (uint32_t)plot[0].height*(uint32_t)plot[0].width;
   // The mean over every component, which is the coded size the same run would
   // have produced -- a check that the plot and the stream agree.
   double total = 0.0;
   for( uint32_t k = 0; k<plot[0].data_size; ++k )
     total += plot[0].pixels[k]/16.0;
-  printf("%6.3f bpp plotted", total/(double)(plot[0].height*plot[0].width));
+  printf("%6.3f bpp plotted", total/(double)npix);
   if( len )
-    printf(", %6.3f bpp coded", (double)len*8.0/(double)(plot[0].height*plot[0].width));
+    printf(", %6.3f bpp coded", (double)len*8.0/(double)npix);
   printf("\n");
-  if( !write_bmp(plot, (char*)OutName, 0) )
+  // Per plane, which is the number the picture is actually about.
+  {
+    static const char*const chan = "BGRA";
+    printf("  bits a sample:");
+    for( int32_t c = 0; c<planes; ++c ) {
+      double sum = 0.0;
+      for( uint32_t k = 0; k<npix; ++k )
+        sum += plot[0].pixels[k*(uint32_t)planes+(uint32_t)c]/16.0;
+      printf("  %c %.3f", planes==1 ? 'Y' : chan[c], sum/(double)npix);
+    }
+    printf("\n");
+  }
+  // With a third name and an alpha plane to put in it, the colour components go
+  // out on their own and the alpha plane's costs become a greyscale image of
+  // their own.  Worth having: a 32-bit plot is a 32-bit BMP, and a viewer that
+  // composites alpha hides every pixel whose alpha cost nothing -- which on a
+  // mostly-opaque image is most of them.
+  bool ok = true;
+  if( AlphaName&&planes==4 ) {
+    BmfImage*const rgb = plot_take_planes(plot, 0, 3, 4);
+    BmfImage*const alpha = plot_take_planes(plot, 3, 1, 4);
+    ok = write_bmp(rgb, (char*)OutName, 0)!=0;
+    if( ok&&!write_bmp(alpha, (char*)AlphaName, 0) ) {
+      free(alpha);
+      free(rgb);
+      bmf_fatal(bmf_write_error, AlphaName);
+    }
+    free(alpha);
+    free(rgb);
+  } else {
+    if( AlphaName )
+      printf("  %dx8 bits a pixel, no alpha plane: %s not written\n",
+             planes, AlphaName);
+    ok = write_bmp(plot, (char*)OutName, 0)!=0;
+  }
+  if( !ok )
     bmf_fatal(bmf_write_error, OutName);
   free(plot);
   free(p_i);
@@ -323,11 +376,12 @@ int32_t main(int32_t argc, char** argv) {
   bmf_set_denormal_mode();
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
   int32_t at = 2;
-  if( argc==5&&args[2][0]=='-'&&toupper(args[2][1])=='V'&&!args[2][2] ) {
+  if( argc>=5&&args[2][0]=='-'&&toupper(args[2][1])=='V'&&!args[2][2] ) {
     bmf_verbose = 1;
     at = 3;
   }
-  const int32_t want_argc = at+2;
+  // 'p' takes an optional third name; everything else takes exactly two.
+  const int32_t nfiles = argc>at ? argc-at : 0;
   // "c" codes the image whole; "cN" cuts it into tiles of 1<<N and gives each
   // its own descriptor table, in one stream and with the models carried
   // across.  N runs from 4 (16-pixel tiles) to 12 (4096), which brackets every
@@ -335,7 +389,7 @@ int32_t main(int32_t argc, char** argv) {
   // and above 12 a tile is most images.
   const int32_t kTileShiftMin = 4, kTileShiftMax = 12;
   int32_t mode = 0;
-  if( argc==want_argc ) {
+  if( nfiles>=2 ) {
     const char*const w = args[1];
     if( !w[1] ) {
       mode = toupper(w[0]);
@@ -350,13 +404,19 @@ int32_t main(int32_t argc, char** argv) {
       }
     }
   }
+  if( mode=='P' ? (nfiles<2||nfiles>3) : nfiles!=2 )
+    mode = 0;
   if( mode!='C'&&mode!='D'&&mode!='P' ) {
     printf("e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
            "Usage: bmf c  [-v] input.bmp output    compress, always with -S -Q9\n"
            "       bmf cN [-v] input.bmp output    compress in tiles of 1<<N, N in %d..%d\n"
            "       bmf d  [-v] input output.bmp    expand\n"
-           "       bmf p  [-v] input.bmp plot.bmp  plot each component's codelength,\n"
-           "                                       one byte in 4.4 fixed point\n"
+           "       bmf p  [-v] input.bmp plot.bmp [alpha.bmp]\n"
+           "                                       plot each component's codelength, one\n"
+           "                                       byte in 4.4 fixed point.  Name a third\n"
+           "                                       file and an RGBA source puts its colour\n"
+           "                                       planes in the second and its alpha plane\n"
+           "                                       in the third, as greyscale\n"
            "       -v   report the coding-method trials and the choices made\n",
            kTileShiftMin, kTileShiftMax);
     return 1;
@@ -364,7 +424,7 @@ int32_t main(int32_t argc, char** argv) {
   if( mode=='C' )
     bmf_compress(args[at], args[at+1]);
   else if( mode=='P' )
-    bmf_plot(args[at], args[at+1]);
+    bmf_plot(args[at], args[at+1], nfiles>2 ? args[at+2] : nullptr);
   else
     bmf_decompress(args[at], args[at+1]);
   return 0;
