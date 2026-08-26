@@ -231,6 +231,13 @@ the searches to dominate everything around them, and the first loop's class
 search -- the batched one -- is 28 GMAC an iteration that used to be one core's
 work.
 
+Those output sizes predate the residual correction and the per-image
+coefficient clamp, which are worth **2.26 % on the mean** of the reference
+corpus (`MODEL-IMPROVEMENTS.md` §14); the times are within a few percent of
+what the codec does now, since neither change touches the search. The
+device-against-host comparison is what this table is for, and that is
+unaffected.
+
 Device time on that encode, by kernel:
 
 ```
@@ -335,9 +342,21 @@ mrpc -l
   -k        cache the compiled kernels in the working directory
   -n <n>    use <n> predictor classes (2..63) instead of the number the
             image size suggests
+  -t        encode the image both ways round and keep the smaller file
   -V        report what the device compiler had to say, and the device
             time per kernel at the end
 ```
+
+`-t` runs the whole search twice, once on the image and once on its
+transpose, and keeps whichever came out smaller.  Nothing about the taps, the
+activity neighbourhood or the quadtree is symmetric, so a picture with
+vertical structure is not the same picture to this codec as one with
+horizontal structure.  On the reference corpus the transpose is smaller on
+ten of twenty-four tiles, by up to 4.8 %, and larger on the rest, by up to
+39 %; as a trial it is worth **0.41 % on the mean** and cannot lose on any
+image.  It costs two encodes — measured at 2.2-2.4x — and nothing at all to
+decode, which is why it is not the default.  `MODEL-IMPROVEMENTS.md` §14 has
+the per-image numbers.
 
 `-n` sets the class count directly.  The default comes from the image size,
 which is demonstrably not where the right answer lives -- see `TUNING.md` --
@@ -443,3 +462,5 @@ exercised.
 | `TUNING.md` | the class count and the shape of the model: what was measured, what moved, and what did not |
 | `MODEL-IMPROVEMENTS.md` | where the model could compress better, read against Shkarin's BMF |
 | `tools/entropy_probe.patch` | the measurement harness those numbers come from |
+| `tools/border_probe.patch` | every border rule, costed with the model held fixed |
+| `tools/nlms_probe.patch`, `tools/resid_fit.py` | a learned correction on the predictor, and why there is nothing for it to learn |

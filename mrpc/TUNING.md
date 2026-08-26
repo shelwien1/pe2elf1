@@ -348,3 +348,18 @@ weighting.
 | `NUM_SHAPE` | 16 | generalized-Gaussian shapes in the family |
 | `NUM_TAIL` | 5 | tail weights the family is multiplied by; 1 = the codec as it was |
 | `SIGMA_LO`, `SIGMA_HI` | 0.15, 30.89 | the ends of the scale ladder |
+| `MRPC_MINSAMP`, `MIN_SAMP` | 0 | least-squares samples a coefficient a class must hold to survive the search; 0 = off |
+| `MRPC_CRANGE` | — | pin the transmitted coefficient clamp instead of choosing it |
+| `MRPC_SSE` | — | pin the residual correction instead of trialling it |
+| `MRPC_PROG` | — | force the progress trace on, whatever the caller asked for |
+
+## What the coefficient measurements turned into
+
+§6 of `MODEL-IMPROVEMENTS.md` read the tap experiments here as saying the
+coefficient quantiser was the binding constraint, and proposed retuning the
+coder for a wider range as an *enabler*. It is a gain in its own right, and
+only on single-component images: `+-4` measures -4.2 % on `piap_0` and -3.0 %
+on `t24p_0` while costing +4.4 % on one 24-bit tile. The clamp is now chosen
+per image and transmitted rather than compiled in. What it does *not* do is
+make more taps pay -- that part of §6 was right about the diagnosis and wrong
+about the remedy, and `MODEL-IMPROVEMENTS.md` §14 has the rest.

@@ -168,6 +168,51 @@ lookup table built from the transmitted thresholds.
 
 Every one of these reads is of a value the decoder already has.
 
+### The residual correction
+
+Everything above is static: a table built before the first bit is written and
+indexed by the transmitted class, threshold and shape. That is what makes the
+two-pass search exact -- a symbol's cost does not depend on when it is coded
+-- and it is also the ceiling on what the search can find.
+
+One thing adapts. The static pmf is kept and a multiplicative correction is
+learned per band of the residual as the image is coded:
+
+```
+  p'(s)  proportional to  p(s) * r[ctx][band(s)]
+```
+
+`SseBand` is sign-and-magnitude and monotone in the residual, so each band is
+one contiguous *run of symbols*, and that factors exactly:
+
+```
+  p'(s) = P(band) * p(s | band)
+```
+
+The second factor is the static table untouched -- `EncSym` over the band's
+own sub-range of the same `cumfreq` array, no new state and no new
+arithmetic. Only the first factor is corrected, and it is a couple of dozen
+numbers. With `r == 1` the two stages cost exactly what the one stage cost,
+so this is a strict generalisation of MRP's coder rather than a replacement.
+
+`r` is learned by a gradient step on the log loss -- in the log domain and
+therefore multiplicatively -- off the same quantised probabilities the coder
+just used, on integers. The encoder and the decoder walk it in lockstep with
+no floating point in the loop.
+
+Four things about it are chosen per image and named in `params`:
+
+| | |
+| --- | --- |
+| whether it runs at all | so it can never lose to the codec without it |
+| what `ctx` is | `(component, group)`, or that plus the subpixel position, or plus how big the residual to the left was |
+| how the bands are cut | log2 of the magnitude (18 bands); or exact to 7 and log2 beyond (28); or exact to 15 (42) |
+| how `r` is estimated | the gradient step, or observed over expected with a prior, or the gradient step on a count-scheduled rate |
+
+They are chosen by trial, not by rule -- see `ChooseSse` in §5. The search
+above is not told about any of this: it optimises the static model, and the
+correction runs only in the final coding pass.
+
 ## 5. What the encoder searches for
 
 ### Component order
@@ -181,6 +226,19 @@ The trial fits one predictor with no classes on a subset of rows --
 `TRIAL_PIX = 262144` pixels spread over `TRIAL_BANDS = 6` bands rather than
 one contiguous stripe, because one stripe of a 4096-wide image can be nothing
 like the rest of it.
+
+### The coefficient clamp
+
+`ChooseCoefRange` sets how wide a predictor coefficient may be, out of
+`{2, 4, 8}` in units of 1.0, and transmits it. It bounds the alphabet the
+coefficient coder works over, so widening it costs bits on every tap of every
+class whether any of them needed the room or not. A photograph does not: the
+fit lands well inside +-2. A single-component plane can, because there are no
+cross-component taps to carry the level and the twenty spatial taps have to
+do all of it -- and if the plane is palette *indices* rather than a picture,
+the optimal filter has large cancelling coefficients that +-2 throws away.
+The rule is `nc == 1` gets +-4, and `MODEL-IMPROVEMENTS.md` §14 has why it is
+a rule rather than a trial.
 
 ### The initial class map
 
@@ -272,6 +330,28 @@ successive passes cover different pairings. Cost is evaluated over the class's
 own pixel list, subsampled to at most `COEF_MAX = 4096` pixels and scaled back
 up, with the side cost of the two coefficients added in absolute bits.
 
+### ChooseSse -- the model trial
+
+After both loops, and before anything is written, `CodeImage` is run in a
+third mode: it walks the same loop and totals up the exact code length
+without emitting. `ChooseSse` does that once for each candidate residual
+model and keeps the smallest.
+
+The coding loop is a small fraction of an encode -- the optimisation above it
+runs twenty iterations of three searches over the same pixels -- so seven of
+them do not show above the run-to-run noise of an encode: 5.51 s against
+5.35 s and 5.46 s against 5.60 s on the same image, either side of zero.
+Zero is one of the candidates, so the correction cannot lose to the codec
+without it.
+
+### The orientation trial
+
+`-t` encodes the image both ways round and keeps the smaller file. It is two
+full searches, which is why it is not the default; it costs nothing at all to
+decode. `LoadOrg` and `StoreOrg` are the only two places the caller's raster
+meets the codec's buffer, so transposing there is a gather rather than a
+copy, and only `CodePad` still speaks the raster's own geometry.
+
 ## 6. What goes in the stream
 
 Everything below `params` is coded with `SPMod`, a parametric substitute for
@@ -282,9 +362,12 @@ and the encoder tries all sixteen, keeps the cheapest, and sends `m` first.
 There is nothing adaptive anywhere in the side information; the encoder knows
 the whole histogram before it writes a bit, so it just names the model.
 
-**Class count and component order** (`CodeParams`) -- flat over
-`MRP_MAXCLASS+1` and `nc` respectively. Note this makes `MRP_MAXCLASS` part
-of the format.
+**The residual model, the coefficient clamp, the class count and the
+component order** (`CodeParams`) -- the model as a varint, the clamp flat
+over three, then flat over `MRP_MAXCLASS+1` and `nc`. Note this makes
+`MRP_MAXCLASS` part of the format. `CodeParams` is written *after* the search
+rather than before it, because the class count is not settled until the
+search stops.
 
 **Class map** (`CodeClass`). Walked in the same order the decoder will walk
 it. Each quadtree node emits a split flag under a context built from whether
@@ -335,7 +418,7 @@ bytes to say so.
 ## 7. The decoder
 
 ```
-  CodeParams(1)       class count, component order
+  CodeParams(1)       residual model, coefficient clamp, class count, order
   DecodeClassMap()    quadtree + MTF class per leaf
   DecodePredictor()   coefficients
   DecodeThreshold()   thresholds -> uq, and the model index per group
@@ -344,9 +427,10 @@ bytes to say so.
 ```
 
 There is no search, no optimisation and no OpenCL. It is O(pixels x taps),
-about 276 ns a pixel-component on a 2.1 GHz core, and single-threaded by
-construction -- pixel *n*'s prediction and activity both depend on pixel
-*n-1*'s decoded value.
+about 276 ns a pixel-component on a 2.1 GHz core before the residual
+correction and 2.09x that with it -- 0.383 s against 0.801 s over 2.26M
+symbols -- and single-threaded by construction: pixel *n*'s prediction and
+activity both depend on pixel *n-1*'s decoded value.
 
 The decoder builds one probability table per `(group, sub)` rather than the
 encoder's `16 x 80 x 8`, since the stream tells it which family member each
@@ -379,7 +463,8 @@ much for a linear predictor to find in them.
 | `PRD_ORDER` | 20 | same-component taps (max 30: `PADL`) |
 | `XPRD_ORDER` | 6 | cross-component taps, each other component |
 | `XCUR` | 1 | also tap this pixel's earlier components |
-| `COEF_PREC` | 6 | fraction bits in a coefficient; range ±2.0 |
+| `COEF_PREC` | 6 | fraction bits in a coefficient |
+| `CRANGE` | 2, 4, 8 | the clamps it may be transmitted with |
 | `NUM_SHAPE` x `NUM_TAIL` | 16 x 5 | the model family |
 | `PM_ACC` | 3 | sub-pixel positioning of the pmf |
 | `MRP_GROUP` | 16 | activity groups |
@@ -392,6 +477,9 @@ much for a linear predictor to find in them.
 | `MRP_MAXCLASS` | 63 | class cap; part of the format |
 | `MAX_ITER` / `EXTRA_ITER` | 20 / 4 | iterations, and patience |
 | `MAX_TOTFREQ` | 2^20 | frequency table total |
+| `SSEB` | 48 | the most bands any residual-correction rule uses |
+| `SSE_TOT` | 2^16 | the band stage's frequency total |
+| `SSE_RATE` | 5 | log2 of the correction's reciprocal step size |
 
 `PRD_ORDER` and `XPRD_ORDER` are checked at compile time against the padding:
 `DYX[30]` is `(0,-6)` and `DYX[36]` is `(-6,0)`, both of which reach outside
@@ -410,3 +498,4 @@ silent out-of-bounds read.
 | `README.md` | the device port |
 | `ENTROPY.md` | where the bits go, measured |
 | `TUNING.md` | the class count and the model family, measured |
+| `MODEL-IMPROVEMENTS.md` | what else was tried, and what it measured |

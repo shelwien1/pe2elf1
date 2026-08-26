@@ -190,8 +190,47 @@
 #ifndef TRIAL_BANDS
 #define TRIAL_BANDS  6
 #endif
+#ifndef MIN_SAMP
+#define MIN_SAMP     0   // least-squares samples per coefficient a class has
+                         // to hold to stay alive.  0 disables the check and
+                         // is the codec that chooses its class count up
+                         // front; see MergeStarved.
+#endif
 #define MAX_TOTFREQ (1<<20)
 #define MIN_FREQ 1
+
+#ifndef MRP_SSE
+#define MRP_SSE    0x11  // Secondary estimation on the residual: the static
+                         // pmf is kept and one multiplicative correction per
+                         // band of the residual is learned as the image is
+                         // coded -- a couple of dozen numbers a context
+                         // rather than 511, and decodable, because
+                         // everything it depends on is already in the
+                         // stream.  Three fields:
+                         //
+                         //   [3:0]  what the correction is keyed on
+                         //     0 = off; the codec without it, byte for byte
+                         //     1 = (component, activity group)
+                         //     2 = ... and the subpixel position
+                         //     3 = ... and how big the residual to the left
+                         //         was, in four steps
+                         //     4 = ... to the left and above, three each
+                         //   [7:4]  how the residual is banded
+                         //     0 = log2 of the magnitude         18 bands
+                         //     1 = exact to 7, log2 beyond       28 bands
+                         //     2 = exact to 15, log2 beyond      42 bands
+                         //   [11:8] how the correction is estimated
+                         //     0 = a gradient step at a fixed rate
+                         //     1 = observed over expected, with a prior
+                         //     2 = a gradient step on a count-scheduled rate
+                         //
+                         // This is only the default the trial falls back on:
+                         // ChooseSse picks one per image and the stream says
+                         // which.  MRPC_SSE pins it for a measurement.
+#endif
+#ifndef SSE_RATE
+#define SSE_RATE      5  // log2 of the reciprocal adaptation rate
+#endif
 
 
 #include "mrpc_lib.h"
@@ -228,7 +267,12 @@ static const int NUM_UPELS = UPEL_DIST*(UPEL_DIST+1);
 static const int NUM_SUBPM = 1<<PM_ACC;
 static const int MAXVAL = 255;
 static const int MAXPRD = MAXVAL<<COEF_PREC;
-static const int MAX_COEF = 2<<COEF_PREC;
+// The clamp on a predictor coefficient, in units of 1.0.  It bounds the
+// alphabet the coefficient coder works over, so it travels in the stream:
+// the encoder picks one of these from the fit it just did.
+static const int CRANGE[] = {2, 4, 8};
+static const int NCRANGE = int(sizeof(CRANGE)/sizeof(CRANGE[0]));
+static const int MAX_COEF = 8<<COEF_PREC;
 static const int PMSIZE = MAXVAL*2+1;     // the shifted pmf window
 static const int MIN_BSIZE = MAX_BSIZE>>QT_DEPTH;
 static const int NTMAX = PRD_ORDER+(MAXC-1)*XPRD_ORDER+MAXC;
@@ -529,6 +573,287 @@ static INLINE int DecSP(const SPMod &p) {
 }
 
 // -------------------------------------------------------------
+// Secondary estimation
+// -------------------------------------------------------------
+// Everything above this point is static: a table built before the first
+// bit is written, indexed by the transmitted class, threshold and shape.
+// The search that chose those tables is exact precisely because a
+// symbol's cost does not depend on when it is coded, and that is also
+// the ceiling on what the search can find -- the best static model.
+//
+// This is the one piece that adapts.  It keeps the static pmf and learns
+// a multiplicative correction per band of the residual:
+//
+//     p'(s)  proportional to  p(s) * r[ctx][band(s)]
+//
+// which factors, because SseBand is monotone in the residual and so each
+// band is one contiguous run of symbols:
+//
+//     p'(s) = P(band) * p(s | band)
+//
+// The second factor is the static table unchanged -- EncSym over the
+// band's own sub-range, the same cumfreq array, no new state.  Only the
+// first factor is corrected, and it is a couple of dozen numbers.  With
+// r == 1 the two
+// stages cost exactly what the one stage cost, so this is a strict
+// generalisation rather than a replacement.
+//
+// r is learned by a gradient step on the log loss, in the log domain and
+// therefore multiplicatively:
+//
+//     r[b] *= 1 + rate*([b == observed] - P(b))
+//
+// whose fixed point is the r that makes the model's band distribution
+// match the empirical one.  It runs on integers, off the same quantised
+// P the coder used, so the encoder and the decoder walk it identically.
+static const int SSEB = 48;         // the most any rule below uses
+static const int SSE_TOT = 1<<16;   // the band stage codes against this
+static const uint SSE_ONE = 1<<16;  // r == 1
+static const uint SSE_MIN = 1<<8;
+static const uint SSE_MAX = 1<<24;
+// the counting estimator's prior, in units of one symbol's worth of mass
+static const uint SSE_A = 8u*uint(SSE_TOT);
+static const uint SSE_HALF = 1u<<29; // halve the counts before they overflow
+
+// How the residual is banded.  Coarse enough that a context sees each band
+// often, fine enough that a band is a place the static family can be wrong
+// in one direction.  All three rules are sign-and-magnitude and monotone in
+// the residual, which is what makes a band one contiguous run of symbols
+// and the second stage a plain sub-range of the table already there.
+//
+//   0  log2 of the magnitude                            18 bands
+//   1  exact to 7, log2 beyond                          28 bands
+//   2  exact to 15, log2 beyond                         42 bands
+//
+// Rule 1 is both finer and smaller than rule 0: it spends its resolution
+// where the residual actually lives instead of spreading it evenly over
+// eight octaves that between them hold a percent of the mass.
+static INLINE int SseIlog(int a) {
+  int l = 0;
+  while( a>0&&l<15 ) {
+    a >>= 1;
+    l++;
+  }
+  return l;
+}
+
+static INLINE int SseHalf(int rule, int a) {
+  switch( rule ) {
+    case 1:  return (a<8) ? a : 5+SseIlog(a);
+    case 2:  return (a<16) ? a : 12+SseIlog(a);
+    default: return SseIlog(a);
+  }
+}
+
+static INLINE int SseNHalf(int rule) {
+  return SseHalf(rule, 255)+1;
+}
+
+static INLINE int SseBand(int rule, int r) {
+  int n = SseNHalf(rule);
+  int a = (r<0) ? -r : r;
+  int q = SseHalf(rule, a);
+  return (r<0) ? n-1-q : n+q;
+}
+
+// The starved-class floor is an encoder decision -- the class count it
+// settles on is transmitted -- so it can be swept without touching the
+// stream format or rebuilding.
+static int g_minsamp = -1;
+static INLINE int MinSamp() {
+  if( g_minsamp<0 ) {
+    const char* e = getenv("MRPC_MINSAMP");
+    g_minsamp = e ? atoi(e) : MIN_SAMP;
+    if( g_minsamp<0 )
+      g_minsamp = 0;
+  }
+  return g_minsamp;
+}
+
+// the build default, overridable for a measurement without a rebuild
+static int SseDefault() {
+  const char* e = getenv("MRPC_SSE");
+  int v = e ? int(strtol(e, 0, 0)) : MRP_SSE;
+  if( v<0 )
+    v = 0;
+  if( (v&15)>4 )
+    v = (v&~15)|4;
+  if( ((v>>4)&15)>2 )
+    v = (v&~0xF0)|(2<<4);
+  if( ((v>>8)&15)>2 )
+    v = (v&~0xF00)|(2<<8);
+  return v;
+}
+
+struct SseMod {
+  uint* r;        // [ctx][band], 16.16 -- the correction itself
+  uint* e;        // [ctx][band] -- and, for the counting estimator, how
+  uint* o;        //   much mass the static model put there against how
+                  //   much actually turned up
+  uint* n;        // [ctx] symbols seen, for the count-scheduled rate
+  int nctx;
+  int nb;         // bands this rule uses
+  int est;        // 0 gradient step, 1 counts, 2 scheduled gradient
+  int bs[SSEB+1]; // band boundaries in symbol coordinates
+  byte bmap[PMSIZE];
+
+  void Init(int nc_) {
+    nctx = nc_;
+    r = new uint[size_t(nc_)*SSEB];
+    e = new uint[size_t(nc_)*SSEB];
+    o = new uint[size_t(nc_)*SSEB];
+    n = new uint[size_t(nc_)];
+    est = 0;
+    SetRule(0);
+  }
+
+  void SetRule(int rule) {
+    nb = 2*SseNHalf(rule);
+    // SseBand is monotone, so the band of a symbol is a range of symbols
+    for( int b = 0; b<=nb; b++ )
+      bs[b] = -1;
+    for( int sym = 0; sym<PMSIZE; sym++ ) {
+      int b = SseBand(rule, sym-MAXVAL);
+      bmap[sym] = byte(b);
+      if( bs[b]<0 )
+        bs[b] = sym;
+    }
+    bs[nb] = PMSIZE;
+    for( int b = nb-1; b>=0; b-- )
+      if( bs[b]<0 )
+        bs[b] = bs[b+1];
+    Reset();
+  }
+
+  void Reset() {
+    if( !r )
+      return;
+    for( size_t i = 0; i<size_t(nctx)*SSEB; i++ ) {
+      r[i] = SSE_ONE;
+      e[i] = SSE_A;
+      o[i] = SSE_A;
+    }
+    for( int i = 0; i<nctx; i++ )
+      n[i] = 0;
+  }
+
+  void Quit() {
+    delete[] r;
+    delete[] e;
+    delete[] o;
+    delete[] n;
+    r = 0;
+    e = 0;
+    o = 0;
+    n = 0;
+  }
+
+  // The band distribution for one symbol: static mass times correction,
+  // renormalised to SSE_TOT exactly.  Bands the window does not reach get
+  // frequency 0 and cannot be coded; every band it does reach gets at
+  // least 1.  `f0` comes back with the same thing uncorrected, which is
+  // what the counting estimator has to accumulate.
+  INLINE void Bands(int ctx, const PMod* pm, int lo, int hi,
+                    uint* f, uint* f0, uint* cum, int* a0, int* a1) const {
+    const uint* rc_ = r+size_t(ctx)*SSEB;
+    const uint* ec = e+size_t(ctx)*SSEB;
+    const uint* oc = o+size_t(ctx)*SSEB;
+    qword w[SSEB], m[SSEB], Z = 0;
+    for( int b = 0; b<nb; b++ ) {
+      int a = (bs[b]<lo) ? lo : bs[b];
+      int z = (bs[b+1]>hi) ? hi : bs[b+1];
+      a0[b] = a;
+      a1[b] = z;
+      m[b] = (z>a) ? qword(pm->cumfreq[z]-pm->cumfreq[a]) : 0;
+      // the correction, either as the running gradient estimate or as the
+      // ratio of observed to expected, folded straight into the weight
+      w[b] = (est==1) ? (m[b]*oc[b])/qword(ec[b] ? ec[b] : 1) : ((m[b]*rc_[b])>>16);
+      Z += w[b];
+    }
+    // one reciprocal, then a multiply a band: no division in the loop
+    qword inv = (qword(SSE_TOT)<<32)/(Z ? Z : 1);
+    uint T = 0;
+    int mx = 0;
+    for( int b = 0; b<nb; b++ ) {
+      uint v = 0;
+      if( a1[b]>a0[b] ) {
+        v = uint((w[b]*inv)>>32);
+        if( v==0 )
+          v = 1;
+      }
+      f[b] = v;
+      T += v;
+      if( v>f[mx] )
+        mx = b;
+    }
+    // The rounding slack goes to the largest band.  T can be up to nb over
+    // SSE_TOT, from the floor of 1 on bands the window reaches; the largest
+    // band holds at least SSE_TOT/nb, which is two orders of magnitude more
+    // than that, so this never empties it.
+    f[mx] = (T<=uint(SSE_TOT)) ? f[mx]+(uint(SSE_TOT)-T) : f[mx]-(T-uint(SSE_TOT));
+    cum[0] = 0;
+    for( int b = 0; b<nb; b++ )
+      cum[b+1] = cum[b]+f[b];
+    if( est==1 ) {
+      qword tot = qword(pm->cumfreq[hi]-pm->cumfreq[lo]);
+      qword iv = (qword(SSE_TOT)<<32)/(tot ? tot : 1);
+      for( int b = 0; b<nb; b++ )
+        f0[b] = uint((m[b]*iv)>>32);
+    }
+  }
+
+  // Estimator 0: one gradient step on the log loss, off the quantised
+  // probabilities the coder just used.  Its fixed point is the r that
+  // makes the model's band distribution match the empirical one, and its
+  // rate is a fixed shift -- so it stays near no correction on a context
+  // it has seen too little of, which is what the images the static family
+  // already fits want.
+  //
+  // Estimator 1: the ratio of what turned up to what the static model
+  // expected, with a prior.  Sharper early -- a context here sees on the
+  // order of a thousand symbols and has a couple of dozen bands to learn
+  // -- at the cost of a divide a band, and with no shrinkage beyond the
+  // prior.
+  INLINE void Update(int ctx, const uint* f, const uint* f0, int bb) {
+    if( est!=1 ) {
+      uint* rc_ = r+size_t(ctx)*SSEB;
+      // Estimator 2 schedules the rate off how much of this context has
+      // been seen: 1/4 on the first few symbols, settling to 1/2^SSE_RATE.
+      // A context here sees on the order of a thousand symbols and has a
+      // couple of dozen bands to learn, so most of what a fixed rate can
+      // ever learn it learns in the first tenth of the image.
+      int sh = SSE_RATE;
+      if( est==2 ) {
+        uint m2 = ++n[ctx];
+        sh = 2;
+        while( sh<SSE_RATE&&(m2>>sh) )
+          sh++;
+      }
+      for( int b = 0; b<nb; b++ ) {
+        int g = int((b==bb) ? uint(SSE_TOT) : 0u)-int(f[b]);
+        qword d = (qword(rc_[b])*qword(g<0 ? -g : g))>>(16+sh);
+        qword v = (g<0) ? (qword(rc_[b])>d ? qword(rc_[b])-d : 0) : qword(rc_[b])+d;
+        rc_[b] = uint(v<qword(SSE_MIN) ? qword(SSE_MIN) : (v>qword(SSE_MAX) ? qword(SSE_MAX) : v));
+      }
+      return;
+    }
+    uint* ec = e+size_t(ctx)*SSEB;
+    uint* oc = o+size_t(ctx)*SSEB;
+    qword sum = 0;
+    for( int b = 0; b<nb; b++ ) {
+      ec[b] += f0[b];
+      sum += ec[b];
+    }
+    oc[bb] += uint(SSE_TOT);
+    if( sum>qword(SSE_HALF) )
+      for( int b = 0; b<nb; b++ ) {
+        ec[b] = (ec[b]>>1)+1;
+        oc[b] = (oc[b]>>1)+1;
+      }
+  }
+};
+
+// -------------------------------------------------------------
 // The OpenCL layer sits between the tables above and the codec below:
 // it needs the strides of the cost tables and the geometry constants,
 // and the codec needs to be able to call it.
@@ -549,6 +874,11 @@ static CLOpts g_clopt = {0, -1, -1, 0, 0, 0};
 // -------------------------------------------------------------
 struct MRPC {
   uint W, H, nc, stride, BS;
+  uint iw, ih;   // the raster's own width and height.  They are W and H
+                 // unless the image is being coded transposed, in which
+                 // case W and H are the other way round and only LoadOrg,
+                 // StoreOrg and CodePad still speak the raster's geometry.
+  int tflip;
   int num_class;
   int ord[MAXC]; // coding position -> component of the raster
 
@@ -578,6 +908,37 @@ struct MRPC {
   int pm_idx[MAXC][MRP_GROUP];
 
   PModSet pmset; // owns pmodels
+  SseMod sse;    // the one adaptive part of the model
+  // Which model this stream carries, in the fields MRP_SSE describes.  It
+  // travels in `params` rather than being compiled in, so that one build
+  // decodes any stream rather than quietly producing garbage, and so that
+  // the encoder can choose per image -- see ChooseSse.
+  int sse_on;
+  // Where the correction is keyed.  Beyond (component, activity group) the
+  // useful axis turns out not to be a finer description of the prediction
+  // but a coarse description of the neighbourhood's *last* residual: the
+  // static model has no notion of "nothing has been happening here", and a
+  // flat region is exactly where its tails are most wrong.  Which of them
+  // wins depends on how many symbols the image has, so all of them are on
+  // the menu and none of them is the rule.
+  static INLINE int BC4(int r) {
+    int a = (r<0) ? -r : r;
+    return (a>3) ? 3 : ((a>1) ? 2 : a);
+  }
+  static INLINE int BC3(int r) {
+    int a = (r<0) ? -r : r;
+    return (a>1) ? 2 : a;
+  }
+  INLINE int SseCtx(uint k, int gr, int q, int lf, int ab) const {
+    int c = int(k*MRP_GROUP)+gr;
+    switch( sse_on&15 ) {
+      case 2:  return c*NUM_SUBPM+(q&(NUM_SUBPM-1));
+      case 3:  return c*4+BC4(lf);
+      case 4:  return (c*3+BC3(lf))*3+BC3(ab);
+      default: return c;
+    }
+  }
+  static const int SSE_NCTX = MAXC*MRP_GROUP*(NUM_SUBPM>9 ? NUM_SUBPM : 9);
   PMod* pmodels;
   int num_pm;
   PMod* pml[MAXC][MRP_GROUP];
@@ -589,6 +950,8 @@ struct MRPC {
   cost_t qtflag_cost[QT_DEPTH<<3];
   cost_t th_cost[MAX_UPARA+2];
   cost_t coef_cost[16][MAX_COEF+1];
+  int mxc;       // the clamp this image settled on, CRANGE[crange]<<COEF_PREC
+  int crange;
   int coef_m[MAXC][NTMAX];
   int qtctx[QT_DEPTH<<3];
   int qtree_code[QT_DEPTH<<2];
@@ -1088,11 +1451,11 @@ struct MRPC {
           int q = int(d);
           if( double(q)>d )
             q--;
-          if( q<-MAX_COEF ) {
-            q = -MAX_COEF;
+          if( q<-mxc ) {
+            q = -mxc;
             d = q;
-          } else if( q>MAX_COEF ) {
-            q = MAX_COEF;
+          } else if( q>mxc ) {
+            q = mxc;
             d = q;
           }
           coef[cl][k][i] = q;
@@ -1108,7 +1471,7 @@ struct MRPC {
               d = mat[piv[i]][n];
               j = i;
             }
-          if( coef[cl][k][j]<MAX_COEF )
+          if( coef[cl][k][j]<mxc )
             coef[cl][k][j]++;
           mat[piv[j]][n] = 0.0;
         }
@@ -1793,6 +2156,112 @@ struct MRPC {
   }
 
   // ---------------------------------------------------------------
+  // Starved classes
+  // ---------------------------------------------------------------
+  // The class count is chosen up front from the pixel count alone, and on
+  // a small image that is how the search falls apart: 24 classes x 34 taps
+  // over 20k pixels is 25 samples a coefficient, the per-class fits chase
+  // noise, the class search cannot tell the classes apart, and the
+  // segmentation collapses -- 2 of 24 classes ever used and a quadtree of
+  // two leaves.  Output against class count is then bimodal rather than
+  // smooth, which is why every attempt to fix this by *moving* the count
+  // was worse on average: a rule that moves it sometimes moves it across
+  // the boundary.
+  //
+  // This removes classes that have starved instead.  After each class
+  // search, any class holding fewer than MIN_SAMP pixels per coefficient
+  // it has to fit is folded into the surviving class whose predictor is
+  // closest to it, and the labels are compacted.  The count only ever
+  // falls, it falls to something the image can actually fit, and no
+  // decision about it is made before the segmentation has been seen.
+  //
+  // Measured on the codec as it was, a floor of 16 samples a coefficient
+  // was worth -0.246% mean and -0.297% total on the corpus.  Measured
+  // again with the residual correction and the per-image coefficient
+  // clamp in place it is +0.241% mean and -0.125% total, and the +-5%
+  // per-image spread never went away: four tiles pay 2.1-4.7% while the
+  // other twenty gain.  So it is off by default -- MRPC_MINSAMP turns it
+  // on -- because the correction was already buying most of what it buys,
+  // and because a change that costs 5% on a sixth of the corpus to gain
+  // 0.1% on the total is not one to make on this evidence.
+  //
+  // Returns 1 if anything was merged, so the caller knows to refresh the
+  // side costs, the predictions and the cost.
+  int MergeStarved() {
+    const int ms = MinSamp();
+    if( !ms||num_class<2 )
+      return 0;
+    int ntmax = 0;
+    for( uint k = 0; k<nc; k++ )
+      if( nt[k]>ntmax )
+        ntmax = nt[k];
+    const size_t floor_ = size_t(ms)*size_t(ntmax);
+    size_t cnt[MRP_MAXCLASS];
+    for( int cl = 0; cl<num_class; cl++ )
+      cnt[cl] = 0;
+    for( size_t i = 0; i<size_t(W)*H; i++ )
+      cnt[cls[i]]++;
+    // never empty the image: if everything is starved, the largest class
+    // survives on its own
+    int live[MRP_MAXCLASS], nlive = 0, big = 0;
+    for( int cl = 0; cl<num_class; cl++ ) {
+      if( cnt[cl]>cnt[big] )
+        big = cl;
+      if( cnt[cl]>=floor_ )
+        live[nlive++] = cl;
+    }
+    if( nlive==num_class )
+      return 0;
+    if( nlive==0 ) {
+      live[0] = big;
+      nlive = 1;
+    }
+    // each dead class goes to the live one it already resembles, measured
+    // on the coefficients rather than on position: two regions with the
+    // same filter code the same whether or not they touch
+    int map[MRP_MAXCLASS];
+    for( int cl = 0; cl<num_class; cl++ )
+      map[cl] = -1;
+    for( int i = 0; i<nlive; i++ )
+      map[live[i]] = i;
+    for( int cl = 0; cl<num_class; cl++ ) {
+      if( map[cl]>=0 )
+        continue;
+      double bd = 1e300;
+      int bi = 0;
+      for( int i = 0; i<nlive; i++ ) {
+        double d = 0;
+        for( uint k = 0; k<nc; k++ )
+          for( int t = 0; t<nt[k]; t++ ) {
+            double e = double(coef[cl][k][t]-coef[live[i]][k][t]);
+            d += e*e;
+          }
+        if( d<bd ) {
+          bd = d;
+          bi = i;
+        }
+      }
+      map[cl] = bi;
+    }
+    for( size_t i = 0; i<size_t(W)*H; i++ )
+      cls[i] = byte(map[cls[i]]);
+    // compact the per-class tables the same way, so that a merge does not
+    // throw away the fit the survivors already have
+    for( int i = 0; i<nlive; i++ ) {
+      if( live[i]==i )
+        continue;
+      memcpy(coef[i], coef[live[i]], sizeof(coef[0]));
+      memcpy(th[i], th[live[i]], sizeof(th[0]));
+      memcpy(uq[i], uq[live[i]], sizeof(uq[0]));
+    }
+    num_class = nlive;
+#ifdef MRP_OPENCL
+    cl_up = 0; // the device's copy of all of that is now wrong
+#endif
+    return 1;
+  }
+
+  // ---------------------------------------------------------------
   // Coefficient search: move weight between two taps of one predictor,
   // keeping their sum, and take the best of the 11x3 shifts.  Trading
   // between taps rather than moving one at a time is what keeps the DC
@@ -1806,14 +2275,14 @@ struct MRPC {
       int y = cf[p1]+i-(SR>>1);
       if( y<0 )
         y = -y;
-      if( y>MAX_COEF )
-        y = MAX_COEF;
+      if( y>mxc )
+        y = mxc;
       for( int j = 0; j<SSR; j++ ) {
         int x = cf[p2]-(i-(SR>>1))-(j-(SSR>>1));
         if( x<0 )
           x = -x;
-        if( x>MAX_COEF )
-          x = MAX_COEF;
+        if( x>mxc )
+          x = mxc;
         side[n] = coef_cost[coef_m[k][p1]][y]+coef_cost[coef_m[k][p2]][x];
         cbuf[n++] = 0.0;
       }
@@ -1944,14 +2413,14 @@ struct MRPC {
         b = i;
     int i = (b/SSR)-(SR>>1), j = (b%SSR)-(SSR>>1);
     int y = cf[p1]+i, x = cf[p2]-i-j;
-    if( y<-MAX_COEF )
-      y = -MAX_COEF;
-    else if( y>MAX_COEF )
-      y = MAX_COEF;
-    if( x<-MAX_COEF )
-      x = -MAX_COEF;
-    else if( x>MAX_COEF )
-      x = MAX_COEF;
+    if( y<-mxc )
+      y = -mxc;
+    else if( y>mxc )
+      y = mxc;
+    if( x<-mxc )
+      x = -mxc;
+    else if( x>mxc )
+      x = mxc;
     i = y-cf[p1];
     j = x-cf[p2];
     if( i==0&&j==0 )
@@ -2038,14 +2507,14 @@ struct MRPC {
       int y = cf[p1]+i-(SR>>1);
       if( y<0 )
         y = -y;
-      if( y>MAX_COEF )
-        y = MAX_COEF;
+      if( y>mxc )
+        y = mxc;
       for( int j = 0; j<SSR; j++ ) {
         int x = cf[p2]-(i-(SR>>1))-(j-(SSR>>1));
         if( x<0 )
           x = -x;
-        if( x>MAX_COEF )
-          x = MAX_COEF;
+        if( x>mxc )
+          x = mxc;
         cbuf[n] = scan[n]*cost_t(st)+coef_cost[coef_m[k][p1]][y]+coef_cost[coef_m[k][p2]][x];
         n++;
       }
@@ -2056,14 +2525,14 @@ struct MRPC {
         b = i;
     int i = (b/SSR)-(SR>>1), j = (b%SSR)-(SSR>>1);
     int y = cf[p1]+i, x = cf[p2]-i-j;
-    if( y<-MAX_COEF )
-      y = -MAX_COEF;
-    else if( y>MAX_COEF )
-      y = MAX_COEF;
-    if( x<-MAX_COEF )
-      x = -MAX_COEF;
-    else if( x>MAX_COEF )
-      x = MAX_COEF;
+    if( y<-mxc )
+      y = -mxc;
+    else if( y>mxc )
+      y = mxc;
+    if( x<-mxc )
+      x = -mxc;
+    else if( x>mxc )
+      x = mxc;
     i = y-cf[p1];
     j = x-cf[p2];
     if( i==0&&j==0 )
@@ -2224,8 +2693,8 @@ struct MRPCIO : MRPC {
 
   void SetCoefCost() {
     for( int m = 0; m<16; m++ ) {
-      sp.Set(MAX_COEF+1, m);
-      for( int c = 0; c<=MAX_COEF; c++ )
+      sp.Set(mxc+1, m);
+      for( int c = 0; c<=mxc; c++ )
         coef_cost[m][c] = sp.Cost(c)+(c!=0 ? 1.0 : 0.0);
     }
     for( uint k = 0; k<nc; k++ )
@@ -2270,7 +2739,7 @@ struct MRPCIO : MRPC {
           SPMod q;
           q.Set(16, -1);
           EncSP(q, mm);
-          sp.Set(MAX_COEF+1, mm);
+          sp.Set(mxc+1, mm);
           for( int cl = 0; cl<num_class; cl++ ) {
             int v = coef[cl][k][i], s = (v<0);
             if( v<0 )
@@ -2290,7 +2759,7 @@ struct MRPCIO : MRPC {
         SPMod q;
         q.Set(16, -1);
         int mm = DecSP(q);
-        sp.Set(MAX_COEF+1, mm);
+        sp.Set(mxc+1, mm);
         for( int cl = 0; cl<num_class; cl++ ) {
           int v = DecSP(sp);
           if( v>0 ) {
@@ -2624,15 +3093,31 @@ struct MRPCIO : MRPC {
     }
   }
 
-  void CodeImage(int dec) {
+  // dec: 0 encode, 1 decode, 2 measure -- walk the same loop and total up
+  // the exact code length without emitting anything.  The measure mode is
+  // what makes the model below a trial rather than a guess.
+  cost_t CodeImage(int dec) {
+    cost_t total = 0;
     ResetBorders();
+    sse.est = (sse_on>>8)&15;
+    sse.SetRule((sse_on>>4)&15);
+    // the residual of the pixel to the left and of the one above, for the
+    // neighbourhood contexts.  A row of the latter, one entry a component.
+    int lastr[MAXC];
+    short* rowr = new short[size_t(W)*nc];
+    memset(rowr, 0, size_t(W)*nc*sizeof(short));
+    uint f[SSEB], f0[SSEB], cum[SSEB+1];
+    int a0[SSEB], a1[SSEB];
     for( uint y = 0; y<H; y++ ) {
       BorderLeft(y);
       byte* p = org+OI(y, 0);
       short* pe = errB+OI(y, 0);
       const byte* pc = cls+size_t(y)*W;
+      for( uint k = 0; k<nc; k++ )
+        lastr[k] = 0;
       for( uint x = 0; x<W; x++, p += nc, pe += nc ) {
         int cl = int(pc[x]);
+        short* rr = rowr+size_t(x)*nc;
         for( uint k = 0; k<nc; k++ ) {
           int v = Clip(Predict(k, p, coef[cl][k]));
           int u = Activity(k, pe);
@@ -2640,7 +3125,38 @@ struct MRPCIO : MRPC {
           int q = Qprd(v), base = q>>PM_ACC;
           const PMod* pm = pml[k][gr]+(q&(NUM_SUBPM-1));
           int s;
-          if( dec ) {
+          if( sse_on&15 ) {
+            // the band first, against the corrected distribution, then
+            // the symbol within it, against the static table untouched
+            int sc = SseCtx(k, gr, q, lastr[k], int(rr[k]));
+            sse.Bands(sc, pm, base, base+MAXVAL+1, f, f0, cum, a0, a1);
+            int bb;
+            if( dec==2 ) {
+              s = base+int(p[k]);
+              bb = int(sse.bmap[s]);
+              total += -log(double(f[bb])/double(SSE_TOT))/log(2.0)
+                       -log(double(pm->freq[s])/double(pm->cumfreq[a1[bb]]-pm->cumfreq[a0[bb]]))/log(2.0);
+            } else if( dec ) {
+              uint vv = rc.rc_GetFreq(SSE_TOT);
+              bb = 0;
+              // bounded on the right as well: a truncated stream can hand
+              // back a value the table does not cover
+              while( bb<sse.nb-1&&cum[bb+1]<=vv )
+                bb++;
+              rc.rc_Process(cum[bb], f[bb], SSE_TOT);
+              s = DecSym(pm, a0[bb], a1[bb]);
+              p[k] = byte(s-base);
+            } else {
+              s = base+int(p[k]);
+              bb = int(sse.bmap[s]);
+              rc.rc_Process(cum[bb], f[bb], SSE_TOT);
+              EncSym(pm, a0[bb], a1[bb], s);
+            }
+            sse.Update(sc, f, f0, bb);
+          } else if( dec==2 ) {
+            s = base+int(p[k]);
+            total += -log(double(pm->freq[s])/double(pm->cumfreq[base+MAXVAL+1]-pm->cumfreq[base]))/log(2.0);
+          } else if( dec ) {
             s = DecSym(pm, base, base+MAXVAL+1);
             p[k] = byte(s-base);
           } else {
@@ -2648,12 +3164,80 @@ struct MRPCIO : MRPC {
             EncSym(pm, base, base+MAXVAL+1, s);
           }
           pe[k] = short(Econv(int(p[k]), v));
+          lastr[k] = int(p[k])-((v+(1<<(COEF_PREC-1)))>>COEF_PREC);
+          rr[k] = short(lastr[k]);
         }
         if( y==0&&int(x)+PADR+1<int(W)+PADR )
           BorderTopCol(int(x)+PADR+1, int(x));
       }
       BorderRight(y);
     }
+    delete[] rowr;
+    return total;
+  }
+
+  // How wide the predictor coefficients are allowed to be.
+  //
+  // MRP clamps them at +-2.0 and the alphabet the coefficient coder works
+  // over follows from that, so it is not free: widening it costs bits on
+  // every tap of every class whether any of them needed the room or not.
+  // On a photograph none do -- the fit lands well inside +-2 and the
+  // clamp costs nothing.  On a single-component plane it is a different
+  // problem: there are no cross-component taps to carry the level, the
+  // twenty spatial taps have to do all of it, and if the plane is palette
+  // indices rather than a picture the optimal filter has large cancelling
+  // coefficients that +-2 throws away.  Measured, +-4 is worth -4.2% on
+  // piap_0 and -3.0% on t24p_0, costs +0.2% on the greyscale tiles, and
+  // costs +4.4% on a 24-bit one.
+  //
+  // So it is chosen per image and transmitted.  It would be better chosen
+  // by trial, and it cannot be: the effect does not appear until the
+  // second optimisation loop -- loop 1's cost is *identical* across the
+  // three ranges on two of the four tiles above and ranks them backwards
+  // on a third -- so there is no cheap proxy, and a real trial is three
+  // full searches.  MRPC_CRANGE pins it for a measurement.
+  void ChooseCoefRange() {
+    crange = 0;
+    if( nc==1 )
+      crange = 1;
+    if( const char* ce = getenv("MRPC_CRANGE") ) {
+      int r = atoi(ce);
+      crange = (r<0) ? 0 : (r>=NCRANGE ? NCRANGE-1 : r);
+    }
+    mxc = CRANGE[crange]<<COEF_PREC;
+    SetCoefCost();
+    FitPredictor(1);
+    PredictRegion(0, 0, H, W);
+    PROG("mrpc: coefficients +-%d\n", CRANGE[crange]);
+  }
+
+  // Which residual model this image gets.  Every candidate is one extra
+  // pass of the coding loop, and the coding loop is a percent of an
+  // encode -- the optimisation above it runs twenty iterations of three
+  // searches over the same pixels -- so this is close to free, and it
+  // ends the guessing: a small image with 61k symbols cannot afford the
+  // contexts a 260k-symbol one pays for, and no rule from the pixel count
+  // gets that right on a picture-by-picture basis.  0 is in the list, so
+  // the trial cannot lose to the codec without the correction.
+  void ChooseSse() {
+    static const int CAND[] = {0, 0x001, 0x011, 0x013, 0x111, 0x113, 0x211};
+    const char* e = getenv("MRPC_SSE");
+    if( e ) { // a measurement pins it
+      sse_on = SseDefault();
+      return;
+    }
+    int best = 0;
+    cost_t bc = 1e30;
+    for( int i = 0; i<int(sizeof(CAND)/sizeof(CAND[0])); i++ ) {
+      sse_on = CAND[i];
+      cost_t c = CodeImage(2);
+      PROG(" %.0f", c/8.0);
+      if( c<bc ) {
+        bc = c;
+        best = CAND[i];
+      }
+    }
+    sse_on = best;
   }
 };
 
@@ -2673,6 +3257,8 @@ struct Codec : MRPCIO {
   int geom;       // ImgInit has run
   int prog_req;   // what the caller asked for: 0 quiet, 1 if big, 2 always
   int class_req;  // and how many classes: 0 for whatever the image suggests
+  int trial_flip; // and whether to encode both orientations and keep the
+                  // smaller: two encodes, no decode cost
 
   // How many predictor classes this image gets.  The caller's number wins;
   // -DMRP_CLASS pins it at build time; otherwise MRP's own rule, which is
@@ -2706,11 +3292,13 @@ struct Codec : MRPCIO {
     memset(this, 0, sizeof(*this));
     o1 = (BC(*)[256]) new BC[256*256];
     hdr = (BC(*)[256]) new BC[4*256];
+    sse.Init(SSE_NCTX);
   }
 
   void Quit() {
     ImgQuit();
     pmset.Quit();
+    sse.Quit();
     delete[](BC*) o1;
     delete[](BC*) hdr;
     o1 = 0;
@@ -2839,11 +3427,20 @@ struct Codec : MRPCIO {
   // the stored raster -> the bordered buffer, in coding order
   void LoadOrg() {
     for( uint y = 0; y<H; y++ ) {
-      const byte* s = img+size_t(y)*stride;
       byte* d = org+OI(y, 0);
-      for( uint x = 0; x<W; x++, s += nc, d += nc )
-        for( uint k = 0; k<nc; k++ )
-          d[k] = s[ord[k]];
+      if( tflip ) {
+        // column y of the raster becomes row y of the image the codec
+        // sees.  No second buffer: the gather is the transpose.
+        const byte* s = img+size_t(y)*nc;
+        for( uint x = 0; x<W; x++, s += stride, d += nc )
+          for( uint k = 0; k<nc; k++ )
+            d[k] = s[ord[k]];
+      } else {
+        const byte* s = img+size_t(y)*stride;
+        for( uint x = 0; x<W; x++, s += nc, d += nc )
+          for( uint k = 0; k<nc; k++ )
+            d[k] = s[ord[k]];
+      }
     }
     FillBorders();
     BuildPlanes();
@@ -2852,11 +3449,18 @@ struct Codec : MRPCIO {
   void StoreOrg() {
     memset(img, 0, pixbytes);
     for( uint y = 0; y<H; y++ ) {
-      byte* d = img+size_t(y)*stride;
       const byte* s = org+OI(y, 0);
-      for( uint x = 0; x<W; x++, s += nc, d += nc )
-        for( uint k = 0; k<nc; k++ )
-          d[ord[k]] = s[k];
+      if( tflip ) {
+        byte* d = img+size_t(y)*nc;
+        for( uint x = 0; x<W; x++, s += nc, d += stride )
+          for( uint k = 0; k<nc; k++ )
+            d[ord[k]] = s[k];
+      } else {
+        byte* d = img+size_t(y)*stride;
+        for( uint x = 0; x<W; x++, s += nc, d += nc )
+          for( uint k = 0; k<nc; k++ )
+            d[ord[k]] = s[k];
+      }
     }
   }
 
@@ -3029,7 +3633,18 @@ struct Codec : MRPCIO {
 
   // --- encoder ---------------------------------------------------
   void CodeParams(int dec) {
+    if( dec )
+      sse_on = int(CodeVar(0));
+    else
+      CodeVar(uint(sse_on));
     SPMod u;
+    u.Set(NCRANGE, -1);
+    if( dec )
+      crange = DecSP(u);
+    else
+      EncSP(u, crange);
+    mxc = CRANGE[crange]<<COEF_PREC;
+    SetCoefCost();
     u.Set(MRP_MAXCLASS+1, -1);
     if( dec )
       num_class = DecSP(u);
@@ -3045,6 +3660,11 @@ struct Codec : MRPCIO {
   }
 
   void Encode() {
+    // the widest clamp until ChooseCoefRange narrows it: the component
+    // order trial below fits predictors too, and a clamp of zero would
+    // give it nothing to choose between
+    crange = NCRANGE-1;
+    mxc = MAX_COEF;
     num_pm = NUM_PMODEL;
     pmset.Init(num_pm, 0);
     pmset.Costs();
@@ -3080,14 +3700,15 @@ struct Codec : MRPCIO {
       ChooseClass();
       PROG("  -> %d classes  (%.1fs)\n", num_class, tnow()-tc);
     }
-    CodeParams(0); // after ChooseOrder and ChooseClass: it is what they picked
     InitClass();
+    ChooseCoefRange();
 
     // saved best of each loop
     byte* cls_s = new byte[size_t(W)*H];
     int (*coef_s)[MAXC][NTMAX] = new int[MRP_MAXCLASS][MAXC][NTMAX];
     static int th_s[MRP_MAXCLASS][MAXC][MRP_GROUP];
     int pm_s[MAXC][MRP_GROUP];
+    int ncl_s = num_class;
     // the quadtree travels with the class map it describes: restoring one
     // without the other emits flags for a segmentation that is no longer
     // there, and the decoder fills blocks the encoder never coded
@@ -3096,6 +3717,7 @@ struct Codec : MRPCIO {
       qt_s[l] = new char[size_t(qtw[l])*qth[l]];
 #define SAVE()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
         do {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                \
+          ncl_s = num_class;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
           memcpy(cls_s, cls, size_t(W)*H);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                \
           memcpy(coef_s, coef, size_t(num_class)*MAXC*NTMAX*sizeof(int));                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             \
           memcpy(th_s, th, sizeof(th));                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
@@ -3105,12 +3727,14 @@ struct Codec : MRPCIO {
         } while( 0 )
 #define LOAD()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
         do {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                \
+          num_class = ncl_s;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
           memcpy(cls, cls_s, size_t(W)*H);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                \
           memcpy(coef, coef_s, size_t(num_class)*MAXC*NTMAX*sizeof(int));                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             \
           memcpy(th, th_s, sizeof(th));                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
           memcpy(pm_idx, pm_s, sizeof(pm_idx));                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             \
           for( int l = 0; l<QT_DEPTH; l++ )                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
-          memcpy(qtmap[l], qt_s[l], size_t(qtw[l])*qth[l]);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             \
+          memcpy(qtmap[l], qt_s[l], size_t(qtw[l])*qth[l]);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            \
+          DefaultSideCosts();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             \
           SetPmodels();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
           RebuildUq();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      \
         } while( 0 )
@@ -3136,6 +3760,16 @@ struct Codec : MRPCIO {
       if( c<best ) {
         best = c;
         SAVE();
+      }
+      // and only then shed starved classes, so that the state before a
+      // merge is already in the snapshot: if the smaller model does not
+      // earn its place over the next few iterations, LOAD puts the larger
+      // one back and the merge has cost nothing but time
+      if( MergeStarved() ) {
+        DefaultSideCosts();
+        PredictRegion(0, 0, H, W);
+        CalcCost(0, 0, H, W);
+        last = it; // give the smaller model the same patience
       }
       if( it-last>=EXTRA_ITER )
         break;
@@ -3171,6 +3805,12 @@ struct Codec : MRPCIO {
         best = c;
         SAVE();
       }
+      if( MergeStarved() ) {
+        DefaultSideCosts();
+        PredictRegion(0, 0, H, W);
+        CalcCost(0, 0, H, W);
+        last = it;
+      }
 #if OPT_PRED
       if( it-last>=EXTRA_ITER )
         break;
@@ -3195,6 +3835,15 @@ struct Codec : MRPCIO {
 #endif
     // --- write it out
     PROG("mrpc: writing");
+    // the last thing decided and the first thing written: which residual
+    // model this image gets, costed rather than guessed
+    PROG(" model");
+    ChooseSse();
+    PROG(" %#x", sse_on);
+    // CodeParams goes here rather than before the search, because the
+    // class count is not settled until the search stops -- MergeStarved
+    // can still be shedding classes on the last iteration
+    CodeParams(0);
     CodeClass(0);
     CodePredictor(0);
     CodeThreshold(0);
@@ -3291,10 +3940,10 @@ struct Codec : MRPCIO {
 
   // the row padding is not part of the raster and is rarely zero
   void CodePad(int dec) {
-    if( stride<=W*nc )
+    if( stride<=iw*nc )
       return;
-    for( uint y = 0; y<H; y++ )
-      for( uint x = W*nc; x<stride; x++ ) {
+    for( uint y = 0; y<ih; y++ )
+      for( uint x = iw*nc; x<stride; x++ ) {
         byte* q = img+size_t(y)*stride+x;
         uint v = CodeBits(o1[2], dec ? 0 : uint(*q), 8);
         if( dec )
@@ -3319,12 +3968,17 @@ struct Codec : MRPCIO {
     // indistinguishable from a hung one, but only if asked
     g_prog = (prog_req>1)||(prog_req==1&&im&&
                             double(im->width)*double(im->height)>=MRP_PROGMIN);
+    // ... and MRPC_PROG turns it on for a measurement without going
+    // through the caller, which is how the numbers in the markdown next
+    // to this file were collected
+    if( const char* pe = getenv("MRPC_PROG") )
+      g_prog = atoi(pe);
     t_start = tnow();
 
     ResetModels();
     rc.StartEncodeMem();
     CodeU8(MRPC_VERSION);
-    CodeU8(im ? 1 : 0);
+    CodeU8(uint(im ? (1|(tflip ? 2 : 0)) : 0));
     CodeVar(uint(headlen));
     CodeVar(uint(taillen));
     if( im ) {
@@ -3335,8 +3989,10 @@ struct Codec : MRPCIO {
     }
     CodeBytes((const byte*)head, 0, headlen);
     if( im ) {
-      ImgInit(im->width, im->height, im->ncomp, im->stride);
-      pixbytes = uint(size_t(im->stride)*im->height);
+      iw = im->width;
+      ih = im->height;
+      ImgInit(tflip ? ih : iw, tflip ? iw : ih, im->ncomp, im->stride);
+      pixbytes = uint(size_t(im->stride)*ih);
       img = (byte*)im->data; // borrowed: the encoder only reads it
       own_img = 0;
       Encode();
@@ -3351,6 +4007,47 @@ struct Codec : MRPCIO {
     out->size = rc.len;
     rc.MemQuit();
     return out->data ? MRPC_OK : MRPC_ERR_MEM;
+  }
+
+  // The orientation trial.
+  //
+  // mrpc already tries all nc! component orders and nothing else.  A
+  // picture with horizontal structure and one with vertical structure are
+  // the same picture to a codec that can code either -- but not to this
+  // one, whose taps, activity neighbourhood and quadtree all run one way.
+  // Measured on the corpus, coding transposed is worse on average (+1.6%
+  // mean, dominated by one tile at +39%) and better on ten of twenty-four,
+  // by up to 4.8%; as a trial that keeps the smaller of the two it is
+  // -0.41% mean on top of everything else here, and cannot lose.
+  //
+  // It costs exactly two encodes, which is why it is off by default: the
+  // trial is a second full search -- measured at 2.2-2.4x -- and there is
+  // no cheap proxy for it any more than there was for the coefficient
+  // range.  -t turns it on.
+  int CompressTrial(const mrpc_image* im, const void* head, size_t headlen,
+                    const void* tail, size_t taillen, mrpc_blob* out) {
+    tflip = 0;
+    if( !trial_flip||!im||im->width<2||im->height<2 )
+      return Compress(im, head, headlen, tail, taillen, out);
+    mrpc_blob a;
+    a.data = 0;
+    a.size = 0;
+    int ra = Compress(im, head, headlen, tail, taillen, &a);
+    if( ra!=MRPC_OK ) {
+      free(a.data);
+      tflip = 0;
+      return Compress(im, head, headlen, tail, taillen, out);
+    }
+    tflip = 1;
+    int rb = Compress(im, head, headlen, tail, taillen, out);
+    if( rb!=MRPC_OK||out->size>=a.size ) {
+      free(out->data);
+      out->data = a.data;
+      out->size = a.size;
+      return MRPC_OK;
+    }
+    free(a.data);
+    return MRPC_OK;
   }
 
   int Decompress(const void* data, size_t size, mrpc_image* im,
@@ -3374,7 +4071,9 @@ struct Codec : MRPCIO {
     rc.StartDecodeMem(data, size);
     if( CodeU8(0)!=MRPC_VERSION )
       return MRPC_ERR_VERSION;
-    const uint has = CodeU8(0);
+    const uint hb = CodeU8(0);
+    const uint has = hb&1;
+    tflip = (hb>>1)&1;
     const uint headlen = CodeVar(0), taillen = CodeVar(0);
     uint w = 0, h = 0, ncc = 0, st = 0;
     if( has ) {
@@ -3401,7 +4100,9 @@ struct Codec : MRPCIO {
     CodeBytes(0, hp, headlen);
 
     if( has ) {
-      ImgInit(w, h, ncc, st);
+      iw = w;
+      ih = h;
+      ImgInit(tflip ? h : w, tflip ? w : h, ncc, st);
       pixbytes = uint(size_t(st)*h);
       img = (byte*)malloc(pixbytes);
       own_img = 1;
@@ -3476,6 +4177,7 @@ MRPC_API mrpc_ctx* MRPC_CALL mrpc_init(const mrpc_opts* opts) {
   c->cd.Init();
   c->cd.prog_req = opts ? opts->progress : 0;
   c->cd.class_req = opts ? opts->num_class : 0;
+  c->cd.trial_flip = opts ? opts->trial_flip : 0;
   g_clopt.use = opts ? opts->use_opencl : 1;
   g_clopt.plat = opts ? opts->platform : -1;
   g_clopt.dev = opts ? opts->device : -1;
@@ -3526,7 +4228,7 @@ MRPC_API int MRPC_CALL mrpc_compress(mrpc_ctx* c, const mrpc_image* img,
                                      mrpc_blob* out) {
   if( !c )
     return MRPC_ERR_ARG;
-  return c->cd.Compress(img, head, headlen, tail, taillen, out);
+  return c->cd.CompressTrial(img, head, headlen, tail, taillen, out);
 }
 
 MRPC_API int MRPC_CALL mrpc_decompress(mrpc_ctx* c, const void* data, size_t size,

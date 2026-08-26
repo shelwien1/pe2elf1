@@ -112,3 +112,66 @@ The one bias it has: the model was optimised under whichever rule was in
 force, so the others are at a disadvantage.  Run it under two different rules
 and compare the diagonal -- if A beats B under both A's model and B's, the
 result is real.
+
+## nlms_probe.patch, resid_fit.py
+
+An 8-tap integer NLMS correction on top of the transmitted predictor --
+`MODEL-IMPROVEMENTS.md` §5, "the largest expected gain" -- plus the dump that
+shows there is nothing for it to learn.
+
+    cp *.cpp *.inc *.h /tmp/probe/ && cd /tmp/probe
+    patch -p0 < tools/nlms_probe.patch
+    g++ -O2 -std=c++17 -march=native -DNDEBUG -w mrpc.cpp mrpc_lib.cpp -o mrpc-np
+
+    MRPC_SSE=0x1001 MRPC_NLDBG=1 ./mrpc-np -C c image.bmp /dev/null
+    MRPC_RDUMP=/tmp/r.bin ./mrpc-np -C c image.bmp /dev/null
+    python3 tools/resid_fit.py /tmp/r.bin
+
+`MRPC_SSE`'s high nibble turns the correction on: `0x1000` keys it on the
+component, `0x2000` on `(component, activity group)`; the low bits are the
+residual model as usual, so `0x1001` is the correction with the shipped
+residual coder underneath it.  `MRPC_NLDBG` prints the learned weights and
+what the correction did to the mean absolute error it was supposed to be
+reducing.  With the correction off the encoder is byte-identical to the one
+it patches.
+
+`MRPC_RDUMP` writes the signed residual of the *base* prediction as
+`{int32 W, H, nc}` then one short per component per pixel in raster order,
+and `resid_fit.py` fits it three ways -- one global least-squares filter on
+the eight nearest causal neighbours, the same by IRLS so that outliers cannot
+drive it, and a separate fit per 32x32 block handed over free of charge.
+That last one is an oracle: no online learner can beat a filter refitted per
+block and transmitted at no cost.
+
+All three come within 0.02 bits of doing nothing, and two of them lose:
+
+    t24_0   base 6.059 bits   global LS 7.101   robust 6.311   oracle 7.810
+    pia_0       15.908                 15.926          15.896         15.910
+    big0        10.665                 10.664          10.664         10.649
+    t24p_0       4.306                  5.022           4.492          5.005
+
+Which is the answer, and it is structural rather than a tuning failure.
+mrpc's weighted least squares already makes the residual orthogonal to the
+taps, and with 20 same-component plus 6-per-other-component taps the tap set
+very nearly spans the neighbours' residuals too -- a neighbour's residual is
+a linear combination of pixels that are mostly inside this pixel's own
+neighbourhood.  BMF runs an NLMS filter because it has no two-pass search to
+fit one; mrpc has one, and running both solves the same problem twice.
+
+Where least squares appears to win it is chasing outliers: `t24_0`'s green
+plane goes from RMSE 40.5 to 36.8 while its mean absolute error goes *up*,
+because the residual is that heavy-tailed and the coder pays for the typical
+symbol rather than the extreme one.
+
+`resid_fit.py` only asks about the eight nearest neighbours.  The same dump
+answers §9's transmitted vertical period in four lines, and the answer is the
+same -- the largest self-correlation of any plane at any vertical lag from 1
+to 64 is 0.080, on `t24p_0` at p = 62, which is worth 0.6 % of the variance
+and is the best of sixty-four candidates measured on twelve thousand samples:
+
+    import numpy as np, struct
+    d = open('/tmp/r.bin','rb').read(); W,H,NC = struct.unpack('<iii', d[:12])
+    a = np.frombuffer(d[12:], dtype='<i2').reshape(H,W,NC).astype(float)
+    for k in range(NC):
+        r = a[:,:,k] - a[:,:,k].mean(); v = (r*r).mean()
+        print(k, max((abs((r[p:]*r[:-p]).mean()/v), p) for p in range(1, 65)))

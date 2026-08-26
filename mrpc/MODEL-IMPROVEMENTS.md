@@ -19,6 +19,12 @@ one:
 | **[from the code]** | a structural fact, checkable by reading the named function |
 | **[expected]** | a judgement from how comparable coders behave; no number here |
 
+> **§1-§13 are the proposal, written before any of it was built. §14 is what
+> happened when it was.** Three items shipped and are worth **-2.259 % mean**
+> on the corpus; three were measured and refuted, one of them the item this
+> document called the largest expected gain. Where §14 disagrees with the
+> section above it, §14 has the numbers.
+
 ---
 
 ## 0. First, a name collision that has to be cleared up
@@ -536,6 +542,10 @@ have rather than one it had at the wrong value.
 
 ## 11. Suggested order
 
+*Written before any of it was built. §14 says what each item actually cost
+and bought, and the order below turned out to be roughly right about the
+first two and wrong about the sixth.*
+
 **Measured, bounded downside, no change to the search:**
 
 1. **§4** — the 32-band APM. +0.15 % to +10.5 %, worst case −0.12 %, ~1.5-2x
@@ -596,3 +606,274 @@ The lesson of this session, at some cost:
 * `ALGORITHMS.md`, `IMPROVEMENTS.md` — BMF v2.01 reconstructed, and its own
   improvement list. Used for structure and for where to look; its numbers
   describe its corpus, which except for `x_ep` is not this one.
+
+---
+
+## 14. What was built from this list, and what it measured
+
+Everything below is on the 24-tile corpus, scored as the mean of per-image
+percentages against the codec as it stood when §1-§13 were written, and
+verified by round-tripping every image through both code paths.
+
+Cost, since §12 insists it is part of the result. The default encoder is
+**0.89-0.96x** the old one -- the model trial's seven extra coding passes
+cost less than what the coefficient clamp saves the search -- and that holds
+at scale: 705x800x4 goes from 251.5 s to 242.2 s.
+
+The decoder is **2.09x** on that image, 0.383 s to 0.801 s over 2.26M
+symbols. The small tiles measure 0.99-1.31x, but that is process startup
+rather than the codec; 2.09x is the honest per-symbol number and it is the
+price of the band stage -- a couple of dozen 64-bit multiplies, one
+reciprocal and a gradient step per symbol, against a decoder that was doing
+very little else. It is well inside a budget of 10x, and `ChooseSse` can
+always answer "off" on an image where it is not worth paying.
+
+`-t` is 2.2-2.4x to encode and free to decode.
+
+**The default encoder is now -2.259 % mean, -1.043 % total.** Nineteen of
+twenty-four tiles improve, by 0.09 % to 10.34 %; the other five rise by at
+most 0.031 %, which is the model word in the header on an image whose model
+the trial turned off. With `-t` it is **-2.654 % mean, -1.305 % total**.
+
+| | | |
+| --- | --- | --- |
+| §4 the residual band correction | **shipped**, and it is most of the gain | -1.449 % mean at one fixed setting |
+| §4b choosing the correction per image | **shipped** | it is a trial, so it cannot lose |
+| §6 the coefficient clamp, per image | **shipped** | -4.2 % / -3.0 % on two palette tiles |
+| §7 the orientation trial | **shipped behind `-t`** | a further -0.413 % mean, 2.4x encode |
+| §3 more context for the correction | measured, **not shipped** | every axis that adds parameters loses |
+| §8 merging starved classes | measured, **not shipped** (`MRPC_MINSAMP`) | +0.24 % mean, -0.13 % total |
+| §5 an NLMS correction on the predictor | measured, **refuted** | there is nothing left to correct |
+| §9's run mode | not built, and the reason is a result | the correction's zero band already is one |
+| §9's palette ordering as a trial | not attempted, and why | every candidate is a full search |
+| §9's vertical period | measured, **refuted** | best correlation over 64 lags is 0.08 |
+
+### §4, and the shape it actually took
+
+The proposal was a 32-band multiplicative correction on the residual. What
+went in is that, with the observation that makes it *free*: `SseBand` is
+monotone in the residual, so each band is one contiguous run of symbols, and
+
+```
+    p'(s) = P(band) * p(s | band)
+```
+
+factors exactly. The second factor is the static table untouched -- `EncSym`
+over the band's own sub-range of the same `cumfreq` array, no new state, no
+new arithmetic. Only the first factor is corrected, and it is a couple of
+dozen numbers. With the correction at 1 the two stages cost exactly what the
+one stage cost, so this is a strict generalisation of the old coder rather
+than a replacement for it, and everything the two-pass search decided still
+means what it meant.
+
+The correction is learned by a gradient step on the log loss, in the log
+domain and therefore multiplicatively, on integers, off the same quantised
+probabilities the coder just used -- so the encoder and decoder walk it in
+lockstep with no floating point in the loop.
+
+The search is not told about any of this: it optimises the static model, and
+the correction runs only in the final coding pass. That is option 1 of §3,
+and the measured gains are delivered gains rather than upper bounds.
+
+### §4b, the part that was not in the plan
+
+Four separate attempts to give the correction more context all lost, and
+they lost in the same way:
+
+| | |
+| --- | --- |
+| the subpixel position of the prediction (8x contexts) | +0.093 % |
+| the residual to the left, in four steps (4x) | worse on two of three probes |
+| the residual to the left and above (9x) | worse still |
+| 42 bands instead of 28 | +0.145 % |
+
+...and yet on `big0`, the one 262k-symbol tile, the left-residual context
+*wins* by 0.09 %. The axis these disagree on is not the model, it is the
+image: a 61k-symbol tile cannot afford contexts a 262k-symbol one pays for,
+and there is no rule from the pixel count that gets it right per picture --
+`TUNING.md` spent a session establishing that for the class count.
+
+So the encoder tries them. The coding loop is a small fraction of an encode
+-- the optimisation above it runs twenty iterations of three searches over
+the same pixels -- so `CodeImage` grew a measure mode that totals up the
+exact code length without emitting anything, and `ChooseSse` runs it once per
+candidate and keeps the best. Seven of them do not show above the run-to-run
+noise: 5.51 s against 5.35 s and 5.46 s against 5.60 s on the same image,
+either side of zero. Zero is one of them, so the correction cannot lose to
+the codec without it, and the winner is three nibbles at the front of
+`params`.
+
+This is the same lesson as the palette ordering in §9 and it is worth stating
+plainly: **on this codec, a trial beats a rule every time the trial is
+affordable.** The rest of §14 is mostly about when it is not.
+
+### §6, which turned out to be a gain and not an enabler
+
+§6 predicted that widening the coefficient clamp was an enabler with no gain
+of its own. It has one. A flat `+-4` measures -2.4 % to -4.0 % on four 8-bit
+tiles, +0.2 % on two greyscale ones and **+5.2 %** on one 24-bit tile -- the
+signature of a parameter that wants choosing per image, not setting.
+
+The mechanism is not precision. It is that a single-component plane has no
+cross-component taps to carry the level, so the twenty spatial taps have to
+do all of it; and if the plane is palette *indices* rather than a picture,
+the optimal filter has large cancelling coefficients that `+-2` throws away.
+
+It could not be made a trial. The effect does not appear until the second
+optimisation loop: loop 1's cost is **identical** across the three clamps on
+two of the four tiles and ranks them backwards on a third, so there is no
+cheap proxy, and a real trial is three full searches. What shipped is the
+narrowest honest rule -- single-component images get `+-4` -- with the value
+transmitted rather than compiled in, so a better rule needs no format change.
+`MRPC_CRANGE` pins it for a measurement.
+
+### §7, measured in full
+
+| | | | |
+| --- | --- | --- | --- |
+| transposed is smaller on | 10 of 24 | best single gain | -4.81 % (`t24p_0`) |
+| transposed is larger on | 14 of 24 | worst single loss | +38.69 % (`t24_0`) |
+| imposed | **+1.589 % mean** | as a trial, measured alone | **-0.578 % mean** |
+| | | as a trial, on top of section 4 | **-0.413 % mean** |
+
+Confirming §7's own numbers and its caveat. It ships behind `-t` rather than
+by default because the trial is a second full search: two encodes, and no
+cheap proxy for the same reason §6 has none. It costs nothing at all to
+decode, and the decoder needs no new code -- `LoadOrg` and `StoreOrg` are the
+only two places the raster meets the codec's buffer, and transposing there is
+a gather, not a copy.
+
+### §5, refuted, and the reason is structural
+
+This was "the largest expected gain". It is not a gain at all, and the
+measurement that kills it is four lines of least squares rather than a codec
+change.
+
+An 8-tap integer NLMS correction on top of the transmitted predictor, keyed
+on the component and on the activity group, seeded from zero and fed the
+neighbouring signed residuals, **raised** the mean absolute error on
+`t24_0` from 5.214 to 5.975 and the file from 15,423 to 19,280 bytes. That
+is not a tuning problem. Dumping the residual plane and fitting it offline:
+
+| | base | global LS | robust (IRLS) | oracle, refit per 32x32 |
+| --- | --- | --- | --- | --- |
+| `t24_0`, sum over components | 6.059 bits | 7.101 | 6.311 | 7.810 |
+| `pia_0` | 15.908 | 15.926 | 15.896 | 15.910 |
+| `big0` | 10.665 | 10.664 | 10.664 | 10.649 |
+| `t24p_0` | 4.306 | 5.022 | 4.492 | 5.005 |
+
+An **oracle** — a separate least-squares fit per 32x32 block, which no
+online learner can beat — buys 0.016 bits on `big0` and loses on everything
+else. Where least squares appears to win on the sum of squares it loses on
+the entropy: `t24_0`'s green plane goes from RMSE 40.5 to 36.8 while its mean
+absolute error goes *up*, because the correlation that exists is entirely in
+a handful of outliers and the fit chases them.
+
+Why: mrpc's weighted least squares already makes the residual orthogonal to
+the taps, and with 20 same-component plus 6-per-other-component taps the tap
+set very nearly spans the neighbours' residuals as well -- a neighbour's
+residual is a linear combination of pixels that are mostly inside this
+pixel's own neighbourhood. There is no information in the neighbouring
+residuals that the transmitted predictor has not already used.
+
+**§5's premise was that mrpc's classes are a transmitted version of BMF's
+seated NLMS rows. They are; that is exactly why adding NLMS on top buys
+nothing.** BMF's filter is learned online precisely because it has no
+two-pass search to fit it. mrpc has one. The two solve the same problem, and
+running them in series solves it twice.
+
+The probe is `tools/nlms_probe.patch` and `tools/resid_fit.py`.
+
+### §8, which stopped paying once the rest was in
+
+`MergeStarved` folds any class holding fewer than `MRPC_MINSAMP` pixels per
+coefficient into the surviving class whose predictor is closest, compacts the
+labels, and lets the search continue -- so the count only ever falls, it
+falls to something the image can fit, and no decision about it is made before
+the segmentation has been seen. `CodeParams` moved to after the search so
+that what goes in the stream is the count the segmentation ended up with.
+
+Measured on the codec as it was, a floor of 16 samples a coefficient was
+worth **-0.246 % mean, -0.297 % total**. Measured again with §4 and §6 in
+place it is **+0.241 % mean, -0.125 % total** -- and the +-5 % per-image
+spread never went away: six tiles pay 0.8-4.7 % while the other eighteen
+gain 0.06-2.9 %. The merge is doing something the residual correction was
+already doing.
+
+It is off by default and reachable through `MRPC_MINSAMP`, because the total
+still favours it and someone measuring on larger images should have it to
+hand.
+
+### §9's run mode, which the correction turned out to be
+
+A run/skip mode was proposed for planes where one value covers most of the
+area. It was not built, and the reason is a result rather than a schedule:
+the correction's zero band **is** `residual == 0`, and its probability is
+exactly what the correction learns and re-learns per context. Charged on its
+own, before the coefficient clamp and the trial, the correction is worth
+-9.35 % on `t24_0`, -4.34 % on `t24p_1` and -2.82 % on `piap_0` -- the
+flattest planes in the corpus, and that is the mechanism. An explicit run
+mode
+would signal what this infers, at the cost of a bitstream change and an
+interaction with an activity measure that has no notion of "nothing
+happened".
+
+### §9's palette ordering, and why it stayed a proposal
+
+§9 measured an *imposed* luma sort as +27.9 % and +3.1 %, and proposed
+revisiting it as a trial with one bit in the stream and an ordering chosen to
+minimise coded size. It was not attempted, and the reason is the one that
+also stopped §6 and §7 from becoming trials: cost. Every other trial here
+re-runs something cheap -- a coding pass for §4b, a whole search for §7. A
+palette ordering changes the *image*, so each candidate is a full search, and
+there are 256! of them; even a greedy pairwise descent is dozens of encodes.
+
+It is also not the codec's to make. mrpc receives the palette inside the
+opaque `head` blob and never looks at it; the permutation and its inverse
+belong to whatever wrote the BMP. That is a frontend change with a codec
+budget attached, and it is the one item on this list that is still worth
+someone's afternoon -- `t24p_0` and `piap_0` are the tiles that responded
+most to everything else here, which is a hint about where the remaining
+redundancy is.
+
+### §9's vertical period, tested on the residual and not worth a tap
+
+"A transmitted vertical period is the cheap idea in both codecs and is
+untested in both." It is now tested here, and it is not there. Taking the
+same residual dumps §5 used and correlating each plane with itself at every
+vertical lag from 1 to 64:
+
+| | largest \|rho\| over 64 lags | at |
+| --- | --- | --- |
+| `t24p_0` | 0.080 | p = 62 |
+| `t24_0` | 0.038 | p = 63 |
+| `big0` | 0.041 | p = 3 |
+| `pia_0` | 0.043 | p = 2 |
+
+A linear tap at correlation `rho` removes `rho^2` of the variance, so the best
+of those is worth 0.6 % of the variance -- about five thousandths of a bit --
+and it is the largest of sixty-four candidates on twelve thousand samples,
+where the noise floor on `rho` is already 0.009. Nothing else clears 0.05.
+BMF measured four long taps as a loss on its own corpus; this is the same
+answer arrived at without building anything.
+
+### What the whole exercise says
+
+The six items §1-§6 said the same thing: the two-pass search has already
+found the best static model available to it. That reading survives, and it
+now has a sharper edge. Every gain here came from one of exactly two places:
+
+1. **A learned component beside the transmitted one, in the one domain
+   where the search structurally cannot look** -- the probability, not the
+   prediction. §4 works and §5 does not, and the asymmetry is not an
+   accident: least squares already solved the prediction problem, and
+   nothing solved the "is this family the right shape here" problem.
+2. **Letting the encoder choose instead of guessing.** §4b and §7 are both
+   trials; §6 is a rule only because its trial is unaffordable, and it is
+   transmitted so that it can stop being one.
+
+And every attempt to add parameters -- finer bands, more context, more taps,
+more classes -- lost, at every size in this corpus. That is not a statement
+about these particular parameters. It is a statement about 61,440 symbols.
+
+---

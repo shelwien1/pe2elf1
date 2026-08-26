@@ -277,6 +277,21 @@ would not change at all.
 
 ---
 
+## What happened to it
+
+The 32-band correction in the section above was built. It is in the codec,
+it is what `sse_on` selects, and on the 24-tile corpus it is worth
+**-1.449 % mean** at one fixed setting and rather more once the encoder is
+allowed to choose the setting per image.
+
+The "architectural obstacle" turned out not to be one: the correction factors
+into a band index coded against a corrected distribution and a symbol coded
+within that band against the static table untouched, so the two-pass search
+is left exactly as it was and only the final coding pass changes.
+`ALGORITHM.md` §4 has the shape of it and `MODEL-IMPROVEMENTS.md` §14 has the
+per-image numbers, the cost, and the four ways of adding context to it that
+did not pay.
+
 ## Appendix: how this was measured
 
 An instrumented encoder (`MRPC_MIX=1`) charges each alternative model on

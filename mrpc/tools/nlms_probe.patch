@@ -1,0 +1,239 @@
+--- mrpc_lib.cpp
++++ mrpc_lib.cpp
+@@ -650,6 +650,7 @@
+ // The starved-class floor is an encoder decision -- the class count it
+ // settles on is transmitted -- so it can be swept without touching the
+ // stream format or rebuilding.
++static double g_nl0 = 0, g_nl1 = 0, g_nln = 0;
+ static int g_minsamp = -1;
+ static INLINE int MinSamp() {
+   if( g_minsamp<0 ) {
+@@ -843,6 +844,87 @@
+ };
+ 
+ // -------------------------------------------------------------
++// A learned correction beside the transmitted predictor
++// -------------------------------------------------------------
++// The transmitted predictor is a per-(class, component) linear filter,
++// fitted by weighted least squares over the whole image and quantised to
++// six fractional bits.  It is optimal on average and fixed everywhere,
++// which is exactly the shape of thing a per-pixel learner complements:
++// the filter carries the structure, the learner carries what is left of
++// it locally.
++//
++// The features are the signed residuals at the nearest causal neighbours
++// -- what the transmitted filter has just been getting wrong around here.
++// Least squares makes the residual orthogonal to the *taps*, so it is
++// already unbiased against them; it does not make it orthogonal to the
++// neighbouring residuals, because those depend on pixels outside this
++// pixel's tap set, and it is global, so locally the residual stays
++// correlated even where it is globally orthogonal.  That correlation is
++// what this picks up.
++//
++// All integer: this runs on both sides of the stream and has to give the
++// same answer on both, which floating point compiled twice does not
++// reliably do.
++#ifndef NLMS_N
++#define NLMS_N        8  // taps of the correction
++#endif
++#ifndef NLMS_RATE
++#define NLMS_RATE     2  // log2 of the reciprocal step size
++#endif
++static const int NLMS_FLOOR = 1024;      // damps the normalisation
++static const int NLMS_WMAX = 4<<16;      // 16.16, and +-4 is plenty
++
++struct NlmsMod {
++  int* w;   // [ctx][NLMS_N], 16.16
++  int nctx;
++  int nt_;
++
++  void Init(int n, int taps) {
++    nctx = n;
++    nt_ = taps;
++    w = new int[size_t(n)*NLMS_N];
++    Reset();
++  }
++
++  void Reset() {
++    if( w )
++      for( size_t i = 0; i<size_t(nctx)*NLMS_N; i++ )
++        w[i] = 0;
++  }
++
++  void Quit() {
++    delete[] w;
++    w = 0;
++  }
++
++  // the correction, in the predictor's own fixed point
++  INLINE int Corr(int ctx, const int* d) const {
++    const int* wc = w+size_t(ctx)*NLMS_N;
++    qword acc = 0;
++    long long a = 0;
++    for( int i = 0; i<nt_; i++ )
++      a += (long long) wc[i]*d[i];
++    (void) acc;
++    return int(a>>(16-COEF_PREC));
++  }
++
++  // one normalised least-mean-squares step.  err is in the predictor's
++  // fixed point, so the shift that brings it back to pixel units is
++  // folded into the step.
++  INLINE void Learn(int ctx, const int* d, int err) {
++    int* wc = w+size_t(ctx)*NLMS_N;
++    long long en = NLMS_FLOOR;
++    for( int i = 0; i<nt_; i++ )
++      en += (long long) d[i]*d[i];
++    for( int i = 0; i<nt_; i++ ) {
++      long long g = ((long long) err*d[i])<<(16-COEF_PREC-NLMS_RATE);
++      int v = wc[i]+int(g/en);
++      wc[i] = (v<-NLMS_WMAX) ? -NLMS_WMAX : (v>NLMS_WMAX ? NLMS_WMAX : v);
++    }
++  }
++};
++
++// -------------------------------------------------------------
+ // The OpenCL layer sits between the tables above and the codec below:
+ // it needs the strides of the cost tables and the geometry constants,
+ // and the codec needs to be able to call it.
+@@ -897,7 +979,15 @@
+   int pm_idx[MAXC][MRP_GROUP];
+ 
+   PModSet pmset; // owns pmodels
+-  SseMod sse;    // the one adaptive part of the model
++  SseMod sse;    // the two adaptive parts of the model
++  NlmsMod nlms;
++  size_t ebn;    // the size of the plane below
++  short* errS;   // signed residual of the base prediction, bordered like
++                 // org.  Only the correction reads it; the border cells
++                 // stay zero, which is causal and the same on both sides.
++  // bits [15:12] of the model word: 0 off, 1 keyed on the component,
++  // 2 on (component, activity group).
++  int nlms_on;
+   // Which model this stream carries: 0 none, 1 corrected on (component,
+   // activity group), 2 also on the subpixel position of the prediction.
+   // It is a build default that travels in the header, so that one build
+@@ -3088,22 +3178,36 @@
+     int lastr[MAXC];
+     short* rowr = new short[size_t(W)*nc];
+     memset(rowr, 0, size_t(W)*nc*sizeof(short));
++    nlms_on = (sse_on>>12)&15;
++    nlms.Reset();
++    if( errS )
++      memset(errS, 0, ebn*sizeof(short));
++    int d[NLMS_N];
+     uint f[SSEB], f0[SSEB], cum[SSEB+1];
+     int a0[SSEB], a1[SSEB];
+     for( uint y = 0; y<H; y++ ) {
+       BorderLeft(y);
+       byte* p = org+OI(y, 0);
+       short* pe = errB+OI(y, 0);
++      short* ps = errS+OI(y, 0);
+       const byte* pc = cls+size_t(y)*W;
+       for( uint k = 0; k<nc; k++ )
+         lastr[k] = 0;
+-      for( uint x = 0; x<W; x++, p += nc, pe += nc ) {
++      for( uint x = 0; x<W; x++, p += nc, pe += nc, ps += nc ) {
+         int cl = int(pc[x]);
+         short* rr = rowr+size_t(x)*nc;
+         for( uint k = 0; k<nc; k++ ) {
+           int v = Clip(Predict(k, p, coef[cl][k]));
+           int u = Activity(k, pe);
+           int gr = int(uq[cl][k][u]);
++          int nx = 0, v0 = v;
++          if( nlms_on ) {
++            const int* to = toff[k];
++            for( int i = 0; i<NLMS_N; i++ )
++              d[i] = int(ps[to[i]]);
++            nx = (nlms_on>1) ? int(k*MRP_GROUP)+gr : int(k);
++            v = Clip(v+nlms.Corr(nx, d));
++          }
+           int q = Qprd(v), base = q>>PM_ACC;
+           const PMod* pm = pml[k][gr]+(q&(NUM_SUBPM-1));
+           int s;
+@@ -3144,6 +3248,15 @@
+             EncSym(pm, base, base+MAXVAL+1, s);
+           }
+           pe[k] = short(Econv(int(p[k]), v));
++          if( nlms_on ) {
++            int err = (int(p[k])<<COEF_PREC)-v;
++            int r0 = (int(p[k])<<COEF_PREC)-v0;
++            g_nl0 += (r0<0) ? -r0 : r0;
++            g_nl1 += (err<0) ? -err : err;
++            g_nln++;
++            ps[k] = short((r0+(1<<(COEF_PREC-1)))>>COEF_PREC);
++            nlms.Learn(nx, d, err);
++          }
+           lastr[k] = int(p[k])-((v+(1<<(COEF_PREC-1)))>>COEF_PREC);
+           rr[k] = short(lastr[k]);
+         }
+@@ -3273,12 +3386,14 @@
+     o1 = (BC(*)[256]) new BC[256*256];
+     hdr = (BC(*)[256]) new BC[4*256];
+     sse.Init(SSE_NCTX);
++    nlms.Init(MAXC*MRP_GROUP, NLMS_N);
+   }
+ 
+   void Quit() {
+     ImgQuit();
+     pmset.Quit();
+     sse.Quit();
++    nlms.Quit();
+     delete[](BC*) o1;
+     delete[](BC*) hdr;
+     o1 = 0;
+@@ -3320,6 +3435,9 @@
+     memset(org, 128, bn);
+     errB = new short[bn];
+     memset(errB, 0, bn*sizeof(short));
++    errS = new short[bn];
++    memset(errS, 0, bn*sizeof(short));
++    ebn = bn;
+     prd = new short[size_t(W)*H*nc];
+     upara = new short[size_t(W)*H*nc];
+     grp = new char[size_t(W)*H*nc];
+@@ -3363,6 +3481,7 @@
+       return;
+     delete[] org;
+     delete[] errB;
++    delete[] errS;
+     delete[] prd;
+     delete[] upara;
+     delete[] grp;
+@@ -3385,6 +3504,7 @@
+     own_img = 0;
+     org = 0;
+     errB = 0;
++    errS = 0;
+     prd = 0;
+     upara = 0;
+     grp = 0;
+@@ -3826,6 +3946,28 @@
+     CodePredictor(0);
+     CodeThreshold(0);
+     CodeImage(0);
++    // the harness: the residual plane as the codec left it, and what the
++    // correction did to the error it was supposed to be reducing
++    if( getenv("MRPC_RDUMP") ) {
++      FILE* fo = fopen(getenv("MRPC_RDUMP"), "wb");
++      if( fo ) {
++        int hd[3] = {int(W), int(H), int(nc)};
++        fwrite(hd, sizeof(hd), 1, fo);
++        for( uint y = 0; y<H; y++ )
++          fwrite(errS+OI(y, 0), sizeof(short), size_t(W)*nc, fo);
++        fclose(fo);
++      }
++    }
++    if( getenv("MRPC_NLDBG")&&g_nln ) {
++      for( uint c = 0; c<nc; c++ ) {
++        fprintf(stderr, "nlms w[%u]:", c);
++        for( int i = 0; i<NLMS_N; i++ )
++          fprintf(stderr, " %+.4f", double(nlms.w[c*NLMS_N+i])/65536.0);
++        fprintf(stderr, "\n");
++      }
++      fprintf(stderr, "nlms: mean|e| base %.3f -> corrected %.3f over %.0f\n",
++              g_nl0/g_nln/64.0, g_nl1/g_nln/64.0, g_nln);
++    }
+     PROG(" ... done  [%.0fs]\n", tnow()-t_start);
+ #ifdef MRP_OPENCL
+     g_cl.Report(stderr);
