@@ -45,11 +45,60 @@ fixed**.
     MRPC_BORDER_PROBE=1  after the search, re-fill the borders under every
                          rule in turn, re-predict, and print CalcCost for each
 
-    0  replication, as shipped:  (y,-j)=(y-1,0)  (y,W-1+j)=(y,W-1)  (-j,x)=(0,x-PADR-1)
-    1  mirror:                   (y,-j)=(y-1,j)  (y,W-1+j)=(y,W-1-j)
-    2  sheared top:              (-j,x)=(0,x-PADR-j)
-    3  1 and 2
-    5  point reflection:         (y,-j)=2*(y-1,0)-(y-1,j), clamped; and right likewise
+The rule number is two overlapping things.  Bits 1/2/4 pick *where the border
+cell is copied from*, and compose:
+
+    1  mirror the left and right edges, instead of replicating them:
+         (y,-j) := pixel(y-1, j)          (row 0 has no source: value 128, error 0)
+         (y,W-1+j) := pixel(y, W-1-j)
+       it has to come from row y-1 on the left: cell (y,-j) is read by pixel
+       (y,0), the first of the row, so nothing on row y is coded yet
+    2  shear the top border instead of repeating one column:
+         (-j,x) := pixel(0, x-PADR-j)
+       a vertical mirror is not available -- cell (-1,x) is first read by
+       pixel (0,x-3) through tap (-1,3), which is coded before (0,x-1)
+    4  point-reflect the right edge, extrapolating away from it:
+         (y,W-1+j) := 2*pixel(y,W-1) - pixel(y,W-1-j), clamped
+       (the left edge has no point-reflection variant; 4 acts on the right only)
+
+Values 8..11 and 13..15 instead replace what is *written* into a cell, and are
+matched exactly rather than by bit, so they do not compose with each other or
+with 1/2/4.  8..11 set the sample; 13..15 set its entry in the `errB` activity
+plane, leaving the sample replicated:
+
+    8   0                       every border cell black
+    9   128                     flat mid-grey
+    10  e + (128-e)*j/(span+1)  linear decay from the edge value to mid-grey
+    11  e + (m_k-e)*j/(span+1)  linear decay to that component's plane mean
+    13  0                       "off the edge is perfectly smooth"
+    14  q - q*j/(span+1)        activity decaying to zero away from the edge
+    15  2*q                     "off the edge is twice as active"
+
+`e`/`q` are the edge cell's sample and error, `j` the distance out, `span` the
+pad width on that side (`PADL`, `PADR` or `PADT`).
+
+So the useful values are:
+
+    0   replication, as shipped:  (y,-j)=(y-1,0)  (y,W-1+j)=(y,W-1)  (-j,x)=(0,x-PADR-1)
+    1   mirror left and right
+    2   sheared top
+    3   1 and 2
+    5   mirror left, point-reflect right
+    8   all zero
+    9   flat mid-grey
+    10  decay to mid-grey
+    11  decay to the plane mean
+    12  point-reflect right only (identical to 4 -- bit 8 falls through the
+        exact-match switch)
+    13  border errors zeroed
+    14  border errors halved
+    15  border errors doubled
+
+`MRPC_BORDER_PROBE` walks 0,1,2,3,5,8,9,10,11,12,13,14,15.  All twelve
+alternatives cost more than replication, in proportion to how far the fill
+departs from the edge value; `../MODEL-IMPROVEMENTS.md` §10 has the table and
+the reason (about half the taps of a column-0 pixel read outside, and the
+coefficients carry a DC gain of 1 they cannot re-fit per column).
 
 `MRPC_BORDER_PROBE` is the useful part, and not only for borders.  mrpc's
 search is chaotic -- output swings 10-30% between adjacent class counts, and

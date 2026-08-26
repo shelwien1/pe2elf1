@@ -1,5 +1,5 @@
 --- mrpc_lib.cpp	2026-08-26 03:07:22.654203031 +0000
-+++ /tmp/bp/mrpc_lib.cpp	2026-08-26 04:18:02.303095795 +0000
++++ /tmp/bf/mrpc_lib.cpp	2026-08-26 04:31:46.761653200 +0000
 @@ -45,6 +45,11 @@
  #ifndef MRP_CLASS
  #define MRP_CLASS    0   // predictor classes; 0 = pick from the image size
@@ -21,7 +21,37 @@
  static double t_start = 0.0;
  static int g_prog = 0;
  #define PROG(...)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-@@ -744,6 +751,19 @@
+@@ -557,6 +564,29 @@
+   short* errB; // bordered |2e|, same layout as org
+   short* upara;
+   char* grp;
++  int dcv[MAXC];   // per-component mean of org, for the decay rules
++  // The value of a border cell `j` away from an edge whose pixel is `e`.
++  // Rules 8..11 are the "not a fixed copy" family: 8 zero, 9 neutral grey,
++  // 10 decay to grey, 11 decay to the plane's own mean.
++  INLINE int BVal(int e, int j, uint k, int span) const {
++    switch( g_border ) {
++      case 8:  return 0;
++      case 9:  return 128;
++      case 10: return e+(128-e)*j/(span+1);
++      case 11: return e+(dcv[k]-e)*j/(span+1);
++      default: return e;
++    }
++  }
++  // and of its error.  13 says the region off the edge is smooth, 14 half
++  // as active as the edge, 15 twice.
++  INLINE int BErr(int q, int j, int span) const {
++    switch( g_border ) {
++      case 13: return 0;
++      case 14: return q-q*j/(span+1);
++      case 15: return 2*q;
++      default: return q;
++    }
++  }
+   byte* cls; // one class per pixel, shared by components.  Unsigned on
+              // purpose: signed char put a ceiling of 127 on
+              // MRP_MAXCLASS that had nothing to do with the codec.
+@@ -744,6 +774,19 @@
    void BorderLeft(uint y) {
      byte* p = org+OI(y, 0);
      short* e = errB+OI(y, 0);
@@ -41,9 +71,16 @@
      byte sv[MAXC];
      short se[MAXC];
      for( uint k = 0; k<nc; k++ ) {
-@@ -755,48 +775,73 @@
-         p[-j*int(nc)+int(k)] = sv[k];
-         e[-j*int(nc)+int(k)] = se[k];
+@@ -752,51 +795,95 @@
+     }
+     for( int j = 1; j<=PADL; j++ )
+       for( uint k = 0; k<nc; k++ ) {
+-        p[-j*int(nc)+int(k)] = sv[k];
+-        e[-j*int(nc)+int(k)] = se[k];
++        int v = BVal(int(sv[k]), j, k, PADL);
++        p[-j*int(nc)+int(k)] = byte(v<0 ? 0 : v>255 ? 255 : v);
++        int q = BErr(int(se[k]), j, PADL);
++        e[-j*int(nc)+int(k)] = short(q<0 ? 0 : q);
        }
 +    }
    }
@@ -65,8 +102,10 @@
 +          int w = 2*int(e[k])-int(e[c*int(nc)+int(k)]);
 +          e[j*int(nc)+int(k)] = short(w<0 ? 0 : w);
 +        } else {
-+          p[j*int(nc)+int(k)] = p[c*int(nc)+int(k)];
-+          e[j*int(nc)+int(k)] = e[c*int(nc)+int(k)];
++          int v = BVal(int(p[c*int(nc)+int(k)]), j, k, PADR);
++          p[j*int(nc)+int(k)] = byte(v<0 ? 0 : v>255 ? 255 : v);
++          int q = BErr(int(e[c*int(nc)+int(k)]), j, PADR);
++          e[j*int(nc)+int(k)] = short(q<0 ? 0 : q);
 +        }
        }
 +    }
@@ -95,8 +134,10 @@
 +    byte* p = org+OI(0, 0)+(-j*int(BS)+x)*int(nc);
 +    short* e = errB+OI(0, 0)+(-j*int(BS)+x)*int(nc);
 +    for( uint k = 0; k<nc; k++ ) {
-+      p[k] = s[k];
-+      e[k] = q[k];
++      int v = BVal(int(s[k]), j, k, PADT);
++      p[k] = byte(v<0 ? 0 : v>255 ? 255 : v);
++      int w = BErr(int(q[k]), j, PADT);
++      e[k] = short(w<0 ? 0 : w);
      }
    }
  
@@ -120,7 +161,20 @@
 +  }
 +
    // encoder-side: the whole border at once, org already loaded
++  void ComputeDC() {
++    for( uint k = 0; k<nc; k++ ) {
++      double t = 0.0;
++      for( uint y = 0; y<H; y++ ) {
++        const byte* r = org+OI(y, 0);
++        for( uint x = 0; x<W; x++ )
++          t += double(r[x*nc+k]);
++      }
++      dcv[k] = int(t/(double(W)*double(H))+0.5);
++    }
++  }
++
    void FillBorders() {
++    ComputeDC();
      for( uint y = 0; y<H; y++ ) {
        BorderLeft(y);
        BorderRight(y);
@@ -138,7 +192,7 @@
    }
  
    // org -> planes.  Encoder only: the decoder predicts one pixel at a
-@@ -2649,8 +2694,8 @@
+@@ -2649,8 +2736,8 @@
            }
            pe[k] = short(Econv(int(p[k]), v));
          }
@@ -149,26 +203,26 @@
        }
        BorderRight(y);
      }
-@@ -3180,6 +3225,28 @@
+@@ -3180,6 +3267,28 @@
  #endif
      }
      LOAD();
 +    if( getenv("MRPC_BORDER_PROBE") ) {
 +      const int save = g_border;
-+      double c[8];
-+      for( int b = 0; b<6; b++ ) {
-+        if( b==4 ) continue;
++      double c[16];
++      static const int MODES[] = {0,1,2,3,5,8,9,10,11,12,13,14,15};
++      for( int mi = 0; mi<int(sizeof(MODES)/sizeof(MODES[0])); mi++ ) {
++        int b = MODES[mi];
 +        g_border = b;
 +        ResetBorders();
 +        FillBorders();
 +        BuildPlanes();
 +        PredictRegion(0, 0, H, W);
-+        c[b] = double(CalcCost(0, 0, H, W));
++        c[mi] = double(CalcCost(0, 0, H, W));
 +      }
 +      fprintf(stderr, "border probe, model held fixed: ");
-+      for( int b = 0; b<6; b++ )
-+        if( b!=4 )
-+        fprintf(stderr, "  %d:%.0fB %+.3f%%", b, c[b]/8.0, 100.0*(c[b]-c[0])/c[0]);
++      for( int mi = 0; mi<int(sizeof(MODES)/sizeof(MODES[0])); mi++ )
++        fprintf(stderr, "  %d:%+.3f%%", MODES[mi], 100.0*(c[mi]-c[0])/c[0]);
 +      fprintf(stderr, "\n");
 +      g_border = save;
 +      ResetBorders();
@@ -178,7 +232,7 @@
      PredictRegion(0, 0, H, W);
      CalcCost(0, 0, H, W);
      CodeClass(1); // refresh qindex and the costs
-@@ -3317,6 +3384,7 @@
+@@ -3317,6 +3426,7 @@
  
      // a two-pass coder that says nothing for an hour is
      // indistinguishable from a hung one, but only if asked

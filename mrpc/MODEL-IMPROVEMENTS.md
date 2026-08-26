@@ -423,63 +423,89 @@ untested in both.
 | a ridge term on the least-squares fit | worse at every lambda over five orders of magnitude |
 | capping the fit weighting ratio | noise |
 | raising `MRP_MAXCLASS` past 63 | 1.7 % on one image inside a 13 % swing; nothing on the rest |
-| mirroring the left and right borders | +1.4 % on a 32-wide strip, +0.05 % on a full image — worse |
-| point-reflecting them | worse still, +1.7 % |
-| shearing the top border | neutral, within 0.1 % either way |
+| any border fill other than edge replication | twelve tried, all worse, in proportion to how far they depart from the edge value |
 
-### Borders: replication is right, and it is not an accident
+### Borders: replication is right, and it is a local optimum in every direction
 
-**[measured].** The border cells that a predictor reads off the edge of the
-image are currently edge replication with a lag (`ALGORITHM.md` §2). The
-obvious alternative is mirroring — `(y,-j) := pixel(y-1,j)`,
-`(y,W-1+j) := pixel(y,W-1-j)` — which is causal in both cases and gives the
-border real image content instead of one repeated value. The vertical mirror
-is *not* available: cell `(-1,x)` is first read by pixel `(0,x-3)` through the
-tap `(-1,3)`, so a source at `(0,x-1)` is not coded yet; the causal version of
-that idea is a shear, `(-j,x) := pixel(0, x-PADR-j)`.
+**[measured].** The border cells a predictor reads off the edge are currently
+edge replication with a lag (`ALGORITHM.md` §2). Twelve alternatives were
+costed against it — mirrors, gradients, constants, decays, and three that
+change only the *error* plane — each on the same image with the model held
+fixed (`tools/border_probe.patch`).
 
-Costing the same image under every rule **with the model held fixed** (see
-`tools/border_probe.patch`, and the note below on why it has to be done this
-way):
+Every one of them loses. Ordered by how much:
 
-| | mirror L/R | shear top | both | point reflection |
-| --- | --- | --- | --- | --- |
-| `t24n0`, 32x240 | **+1.36 %** | +0.04 % | +1.39 % | **+1.72 %** |
-| `t24n2`, 32x240 | **+1.42 %** | −0.09 % | +1.44 % | +1.17 % |
-| `pian0`, 32x256 | +0.18 % | −0.01 % | +0.18 % | +0.18 % |
-| `t24.bmp` | +0.05 % | +0.00 % | +0.06 % | +0.06 % |
-| `t24_pal.bmp` | +0.23 % | +0.10 % | +0.33 % | +0.20 % |
-| `PIA13882_crop256` | +0.02 % | −0.00 % | +0.02 % | +0.01 % |
+| rule | `t24n0` 32x240 | `t24n2` 32x240 | `pian0` 32x256 | `bign0` 32x512 | `t24.bmp` |
+| --- | --- | --- | --- | --- | --- |
+| **0 replicate the edge** | **0** | **0** | **0** | **0** | **0** |
+| 2 shear the top border | +0.04 % | −0.09 % | −0.01 % | +0.03 % | +0.00 % |
+| 12 point-reflect the right edge | +0.84 % | +0.19 % | +0.03 % | +0.20 % | +0.05 % |
+| 14 border errors halved | +0.88 % | +0.25 % | +0.05 % | +0.20 % | +0.05 % |
+| 1 mirror the left and right edges | +1.36 % | +1.42 % | +0.18 % | −0.03 % | +0.05 % |
+| 5 mirror left, point-reflect right | +1.72 % | +1.17 % | +0.18 % | +0.09 % | +0.06 % |
+| 13 border errors zeroed | +1.72 % | +1.20 % | +0.19 % | +0.13 % | +0.08 % |
+| 15 border errors doubled | +1.76 % | +1.19 % | +0.19 % | +0.13 % | +0.06 % |
+| 11 decay to the plane mean | +5.98 % | +4.37 % | +0.18 % | +0.82 % | +0.48 % |
+| 9 flat mid-grey (128) | +10.05 % | +7.96 % | +0.33 % | +23.63 % | +1.11 % |
+| 10 decay to mid-grey | +14.38 % | +8.57 % | +0.12 % | +23.79 % | +0.84 % |
+| **8 all zero** | **+23.90 %** | **+29.48 %** | +3.53 % | **+79.22 %** | +1.91 % |
 
-Every mirror is worse, and the loss **scales with how much of the image the
-border reaches** — 1.4 % on a 32-column strip where the border covers 10 of 32
-columns, 0.05 % on a full image where it covers 10 of 320. That scaling is the
-signature of a genuinely worse border rather than an optimisation artefact.
-Confirmed symmetrically: with the model optimised *under the mirror*,
-replication is still cheaper (−0.35 %, −0.26 % on the strips; −0.02 % on
-`t24.bmp`). Both directions agree.
+The ranking is a monotone function of exactly one quantity: **how far the fill
+departs from the value at the edge.** Replicate (zero departure) wins; a point
+reflection on one edge departs a little and costs a little; a mirror on both
+departs more; a decay to the plane's mean more again; flat grey more; zero
+most, and zero is a catastrophe — +79 % on a strip of the 4096x512 image,
+whose planes sit nowhere near zero.
 
-**Why.** The border's job is to supply the best estimate of what lies off the
-edge, and the coefficients are fitted globally. Replication says "the same as
-the edge": every fabricated tap carries one value, so their joint contribution
-is `(sum of those coefficients) x edge value` — one well-conditioned term the
-least-squares fit handles exactly. Mirroring makes those taps carry *different*
-values tracing a ramp that runs back into the picture, and that ramp is a false
-signal — it has no relation to what is actually off the edge, so the fitted
-coefficients can only cancel it on average. Point reflection extrapolates the
-same ramp with twice the amplitude, which is why it is worse again.
+**Why, and it is not subtle.** The predictor is `v = Σ cᵢ·p[o+tᵢ]`, and the
+coefficients are fitted with a DC gain of about 1 — they have to be, or the
+prediction darkens. For a pixel in column 0, **10 of the 20 same-component
+taps reach outside**, including tap 0 = `(0,-1)`, the nearest neighbour and
+the largest coefficient in any predictor. So roughly half the predictor's
+weight lands on fabricated data. If those cells carry the edge value, their
+joint contribution is `(Σ_outside cᵢ)·edge ≈ (half the gain)·edge`, and the
+prediction still lands near the local value. If they carry anything a distance
+δ away from it, the prediction is biased by `(Σ_outside cᵢ)·δ` — and the
+coefficients cannot correct for it, because they are shared with the interior
+pixels where the same taps carry real data.
 
-This is the standard distinction and it cuts the other way from the usual
-intuition: mirroring is the right extension for *filtering*, where it avoids a
-discontinuity and the ringing that follows. It is the wrong extension for
-*prediction*, where the max-entropy continuation of an unknown region is flat.
+A biased predictor is the most expensive thing this codec can have. That is
+the whole result, and it says the search space is exhausted: any *fixed* rule
+that departs from the edge value is worse in proportion to how far it departs,
+so there is no better fixed rule to find.
 
-There is a second effect specific to mrpc. The **error plane** is extended
-too, and it feeds the activity measure that selects the probability model's
-width. Under replication an edge pixel inherits the previous row's edge
-activity; under mirroring it inherits activity from one to five columns
-*inside* the image, which is generally higher — so edge pixels are handed
-wider distributions than they have earned.
+**The regression numbers say the same thing from the other side.** Fitting
+`p(x+j)` on `p(x)` over `PIA13882` gives slopes 0.90, 0.80, 0.71, 0.65, 0.60
+for j = 1..5 — real shrinkage toward the mean, which is why "decay to the mean"
+looks principled. It is principled for estimating *that pixel*. It is wrong
+here, because the border is not being read on its own; it is being read through
+coefficients whose gain is fixed by the interior.
+
+**The error plane is not a separate lever either.** It feeds the activity
+measure that picks the distribution's width, so it looked like somewhere the
+border could help without touching prediction. Zeroing it costs +1.72 %,
+doubling it +1.76 %, halving it +0.88 % — symmetric around the replicated
+value, which is therefore about right.
+
+**What is left.** Nothing that is a fixed function of the edge. Two things
+that are not:
+
+* **Real content, where it exists.** If mrpc ever codes an image in strips or
+  tiles (`IMPROVEMENTS.md` §13 measures 5 % for region adaptivity once the
+  model menu is wide enough to make regions disagree), the border between two
+  strips should be the neighbouring strip's actual pixels, not a replication.
+  That is the one border fill guaranteed to beat this one, and it only exists
+  if the image is split.
+* **The codec's own prediction, extended.** Filling the border with what the
+  model would predict there — rather than with a copy — is the only
+  non-constant rule that does not introduce a bias, because it is by
+  construction the conditional mean. It is also circular to compute and would
+  have to be approximated; untested, and the prior after the table above
+  should be low.
+
+And the honest scale: on a normally-shaped image the whole question is worth
+**0.02 % to 0.06 %**. It only becomes a percent-scale question on strips narrow
+enough for the border to cover a third of the width.
 
 ### A note on method, which applies to everything above
 
