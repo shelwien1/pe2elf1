@@ -698,6 +698,27 @@ Finer tiling keeps paying, which is what a decision-locality story predicts and
 an adaptation story does not: 8x8 tiles of 128x128 give 477,596, −16.62% against
 the whole crop and 9.40% *below* gralic.
 
+The control settles whether this is a property of the codec or of the deficit.
+The same split on the crop where BMF *beats* gralic comfortably:
+
+| 4x4 split | whole | free tiles | forced tiles | decision |
+|---|---|---|---|---|
+| losing crop 2,1 (4.370 bpp) | 572,796 | 494,700 (−13.63%) | 613,268 (+7.07%) | 118,568 (**20.70%**) |
+| winning crop 0,3 (6.642 bpp) | 870,600 | 886,180 (+1.79%) | 885,848 (+1.75%) | −332 (**−0.04%**) |
+
+On the winning crop the freedom to choose per region is worth **nothing** -- the
+tiles' own picks come out 332 bytes *worse* than the global one, which is search
+noise around zero.  All of that crop's +1.79% is restart cost, and its regions
+agree with each other about the model.
+
+So region-level disagreement is not something BMF suffers everywhere.  It appears
+exactly where BMF loses to gralic and is absent where it wins, which promotes it
+from "a large number on one frame" to a candidate explanation for the deficit
+itself.  (The restart cost differs too -- 7.07% against 1.75% -- because the
+losing crop is the smoother of the two at 4.37 bpp against 6.64, so the fixed
+cost of re-learning is a larger share of a smaller budget.)
+
+
 Two things stand between this and a design:
 
 * `transform_it` requires `!alt`, so a region that switches from `refs+p2` to
@@ -881,10 +902,12 @@ state carried across the switch.  That is a format change, and it drags the
 colour transform with it (`transform_it` is `!alt`-gated), so it is the largest
 piece of work on this list as well as the largest number.
 
-Before building it, two cheap checks: run the free-vs-forced tile split over the
-eighteen retrieved LPCB frames to see whether 20.7% is this frame or the corpus,
-and check the winning crops -- if regions disagree about the model everywhere,
-this is general; if only where BMF loses, it *is* the deficit.
+The second of those questions is already answered: the same split on the crop
+where BMF wins gives −332 bytes, a flat zero.  Region-level disagreement tracks
+the deficit rather than the codec, which is the strongest argument on this list
+for building the thing.  What remains cheap and worth doing first is running the
+free-vs-forced split across the eighteen retrieved LPCB frames, to see how much
+of the corpus deficit sits on frames whose regions disagree.
 
 ---
 
