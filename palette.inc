@@ -37,7 +37,7 @@ struct PalCtr {
     n[1] = (uint16_t)idx_clamp(PA_seed, 1, 1<<14);
   }
   template <int32_t f_DEC> int32_t code(RangeCoder* rc, int32_t bit) {
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       bit = rc[0].decode_bit(n[0], n[1]);
     else
       rc[0].encode_bit(n[0], n[1], bit);
@@ -101,12 +101,12 @@ struct PaletteModel {
       uint8_t*const e = pal+3*i;
       if( i>0 ) {
         int32_t same = 0;
-        if constexpr( !f_DEC )
+        if constexpr( f_DEC!=1 )
           same = (e[0]==prev[0])&(e[1]==prev[1])&(e[2]==prev[2]);
         same = repeat[prev_repeat].template code<f_DEC>(rc, same);
         prev_repeat = same;
         if( same ) {
-          if constexpr( f_DEC ) {
+          if constexpr( f_DEC==1 ) {
             e[0] = prev[0];
             e[1] = prev[1];
             e[2] = prev[2];
@@ -117,21 +117,21 @@ struct PaletteModel {
       for( int32_t c = 0; c<3; ++c ) {
         if( c>0 ) {
           int32_t eq = 0;
-          if constexpr( !f_DEC )
+          if constexpr( f_DEC!=1 )
             eq = e[c]==e[c-1];
           eq = channel_eq[c-1].template code<f_DEC>(rc, eq);
           if( eq ) {
-            if constexpr( f_DEC )
+            if constexpr( f_DEC==1 )
               e[c] = e[c-1];
             last_zero[c] = (uint8_t)(e[c]==prev[c]);
             continue;
           }
         }
         int32_t d = 0;
-        if constexpr( !f_DEC )
+        if constexpr( f_DEC!=1 )
           d = (e[c]-prev[c])&255;
         d = code_byte<f_DEC>(rc, 2*c+last_zero[c], d);
-        if constexpr( f_DEC )
+        if constexpr( f_DEC==1 )
           e[c] = (uint8_t)(prev[c]+d);
         last_zero[c] = (uint8_t)(d==0);
       }

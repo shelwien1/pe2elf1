@@ -6,6 +6,12 @@
 
 struct RangeCoder {
   alignas(16) CodedStream stream;
+  // Plot mode ('p', f_DEC==2): the cost in bits of everything coded since the
+  // last sample boundary.  The models charge it to a component and clear it.
+  // plot_on is false on every normal encode, so the two tests below are a
+  // predictable not-taken branch and nothing else.
+  double plot_bits;
+  int32_t plot_on;
   static const uint32_t kTop = 0x00800000;
   static const uint32_t kPend = 0x7F800000;
   static const uint32_t kCarry = 0x80000000;
@@ -75,6 +81,8 @@ public:
 
   uint32_t encode(uint32_t cum, uint32_t high, uint32_t tot) {
     enc_normalise();
+    if_e0( plot_on )
+      plot_bits += log2((double)tot/(double)(high-cum));
     uint32_t r = range/tot;
     uint32_t below = r*cum;
     uint32_t width = r*(high-cum);
@@ -85,6 +93,8 @@ public:
 
   uint32_t encode_bit(uint32_t f0, uint32_t f1, int32_t bit) {
     enc_normalise();
+    if_e0( plot_on )
+      plot_bits += log2((double)(f0+f1)/(double)(bit ? f1 : f0));
     uint32_t rt = f0*(range/(f0+f1));
     if( bit ) {
       low += rt;
@@ -176,7 +186,7 @@ public:
   }
 
   template <int32_t f_DEC> uint32_t code_alphabet_size(uint32_t n, uint32_t cap) {
-    if constexpr( f_DEC ) return decode_flat(cap)+1;
+    if constexpr( f_DEC==1 ) return decode_flat(cap)+1;
     encode(n-1, n, cap);
     return n;
   }

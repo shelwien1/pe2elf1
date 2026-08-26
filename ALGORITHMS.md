@@ -128,6 +128,8 @@ range-coded segments matters for understanding the models' entry points.)
   Since BMF stores rows unpadded with a 20-byte header and 3-byte palette
   entries, a raw member is always *smaller* than its source BMP (54-byte header,
   4-byte palette entries, rows padded to 4).
+* A third command reads no stream at all: `bmf p` codes the image and writes each
+  component's codelength as a BMP instead of the coded bytes (§5.5).
 * Inside a coded payload, a **bit packer** (`Packer`, `records.inc:11`; `pack_bits` /
   `unpack_bits`, `codec.inc:821` — LSB-first accumulation into 32-bit words) and
   the range coder share one buffer — `RangeCoder::stream`. Raw-bit fields (the 4-bit near-lossless quantizer,
@@ -584,6 +586,60 @@ merged into the lowest free block.  And `transform_planes`, which has always
 borrowed the head of the stream buffer to hold its untransformed copy, gets a
 buffer of its own when tiling: by the second tile the head of the stream holds
 the first one.
+
+---
+
+### 5.5 Plot mode (`bmf p`, `f_DEC==2`)
+
+`bmf p in.bmp plot.bmp` codes the image exactly as `bmf c` does and writes, in
+place of the stream, what each colour component cost: one byte per component in
+**4.4 fixed point** -- four integer bits of codelength and four fractional, so
+`0x28` reads as 2.5 bits and the scale saturates at 15.9375.  The output carries
+the input's geometry and depth, so a 24-bit image plots as a 24-bit image whose
+blue, green and red channels hold the blue, green and red codelengths.
+
+**It is the encoder, not a model of it.**  The coding templates take a third
+value: `f_DEC==0` encodes, `1` decodes, `2` plots.  Every branch that asks "am I
+decoding?" is written `f_DEC==1`, so 2 follows the encode path through all of
+it -- the same descriptors, the same colour transform, the same model state.
+The only thing plot adds is that `RangeCoder::encode` and `encode_bit`
+accumulate `-log2(p)` while `plot_on` is set, and each model charges the total
+to the component it just coded and clears it.
+
+Six places charge a sample, one per model per addressing mode: `AltP2Block`'s
+`code_sample` and the two loops of `alt_p2_d8_body`, `AltP1Block::d8_body` and
+the per-sample lambda in `alt_model_p1`, `ModelBlock::code_row_pixels`, and
+`CtxModel::code_plane`.  A run coded as one symbol spreads its cost evenly over
+the pixels it covers, so a run-coded flat region reads as flat rather than as
+one expensive pixel followed by free ones.
+
+**What lands where.**  Interleaved coding walks the image itself, so a sample's
+component is its position; planar coding walks one plane's own buffer, so the
+plane's offset with `plane_count` stride.  `plot_walk` sets that pair before
+each model starts.  The map is armed only after the representation search has
+settled, so it holds the pass that ships rather than a trial, and the geometry
+is undone on the way out -- the renumbering map substitutes values without
+moving them, so only transposition and the flips apply.
+
+**What it charges, and what it does not.**  The cost lands on the
+*colour-transformed residual* actually coded at that component, not on the
+original sample, which is the honest reading since that is what the stream
+spends its bits on.  Bits that belong to no sample -- the member header, the
+descriptor fields the bit packer writes, and each range-coded segment's flush --
+are not charged to any pixel, so the plotted total runs a little under the coded
+size.  On the test corpus the two agree to between 0.09% and 1.3%, the gap being
+largest on the smallest images, where the fixed framing is the largest share:
+
+```
+t24     5.467 bpp plotted   5.478 coded      x_ai   0.229   0.232
+t8g     4.477               4.484            x_ci   1.001   1.002
+t32     5.473               5.486            x_ep   4.497   4.500
+```
+
+Images of 4 bpp or less are refused: they are coded packed, several pixels to a
+byte, with no component to charge.  `plot_on` is false on every normal encode,
+so the two tests it adds to the range coder are a predictable not-taken branch;
+encode timing over `x_ci` is unchanged within noise.
 
 ---
 

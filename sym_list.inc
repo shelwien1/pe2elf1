@@ -72,7 +72,7 @@ struct FreqRec {
         p16 = kProbCeil;
       const int32_t p_ref = apm[k].refine(p16, apm_ctx);
       int32_t is_k;
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         is_k = cx[0].decode_bit(65536-p_ref, p_ref);
       } else {
         is_k = lvl==k;
@@ -221,7 +221,7 @@ struct SymList {
     uint32_t word = val, out = 0;
     for( uint32_t b = 0; b<nbytes; ++b ) {
       uint32_t piece;
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         piece = lists[4*b+carry].decode_symbol_list(cx);
         out += piece<<((8*b)&31);
       } else {
@@ -231,7 +231,7 @@ struct SymList {
       }
       carry = piece>>6;
     }
-    if constexpr( !f_DEC )
+    if constexpr( f_DEC!=1 )
       out = val;
     carry = (uint8_t)out>>7;
     return out;

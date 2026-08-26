@@ -196,6 +196,53 @@ void bmf_compress(const char* InName, const char* OutName) {
   free(p_i);
 }
 
+// `bmf p in.bmp out.bmp` -- code the image exactly as `bmf c` does and write,
+// instead of the stream, what each colour component cost: one byte per
+// component in 4.4 fixed point, four integer bits of codelength and four
+// fractional, so 0x28 reads as 2.5 bits.  The output has the input's geometry
+// and depth, so a 24-bit image plots as a 24-bit image whose blue, green and
+// red channels are the blue, green and red codelengths.
+//
+// The costs are the encoder's own: plot is the f_DEC==2 instantiation of the
+// same templates, and every branch that asks "am I decoding?" answers no.  What
+// it charges to a component is the colour-transformed residual actually coded
+// there, not the original sample -- which is the honest reading, since that is
+// what the stream spends its bits on.
+void bmf_plot(const char* InName, const char* OutName) {
+  BmfImage* p_i = read_bmp((char*)InName);
+  if( !p_i )
+    bmf_fatal(bmf_read_error);
+  if( (p_i[0].depth&depth_bits)<8 ) {
+    printf("%s: plot needs at least 8 bits a pixel; %d bpp is coded packed, "
+           "with no component to charge\n", InName, p_i[0].depth&depth_bits);
+    exit(3);
+  }
+  printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i[0].width, p_i[0].height,
+         p_i[0].depth&depth_bits, p_i[0].data_size);
+  bmf_log("\n");
+  bmf_plot_want = 1;
+  size_t len = 0;
+  uint8_t* coded = bmf_codec.compress_to_memory(p_i, &len, nullptr);
+  bmf_plot_want = 0;
+  free(coded);
+  BmfImage* plot = bmf_codec.plot_image();
+  if( !plot )
+    bmf_fatal(bmf_write_error, OutName);
+  // The mean over every component, which is the coded size the same run would
+  // have produced -- a check that the plot and the stream agree.
+  double total = 0.0;
+  for( uint32_t k = 0; k<plot[0].data_size; ++k )
+    total += plot[0].pixels[k]/16.0;
+  printf("%6.3f bpp plotted", total/(double)(plot[0].height*plot[0].width));
+  if( len )
+    printf(", %6.3f bpp coded", (double)len*8.0/(double)(plot[0].height*plot[0].width));
+  printf("\n");
+  if( !write_bmp(plot, (char*)OutName, 0) )
+    bmf_fatal(bmf_write_error, OutName);
+  free(plot);
+  free(p_i);
+}
+
 void bmf_decompress(const char* InName, const char* OutName) {
   BmfFile* arc;
   if( void* nb = bmf_new(sizeof(BmfFile)) )
@@ -303,17 +350,21 @@ int32_t main(int32_t argc, char** argv) {
       }
     }
   }
-  if( mode!='C'&&mode!='D' ) {
+  if( mode!='C'&&mode!='D'&&mode!='P' ) {
     printf("e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
            "Usage: bmf c  [-v] input.bmp output    compress, always with -S -Q9\n"
            "       bmf cN [-v] input.bmp output    compress in tiles of 1<<N, N in %d..%d\n"
            "       bmf d  [-v] input output.bmp    expand\n"
+           "       bmf p  [-v] input.bmp plot.bmp  plot each component's codelength,\n"
+           "                                       one byte in 4.4 fixed point\n"
            "       -v   report the coding-method trials and the choices made\n",
            kTileShiftMin, kTileShiftMax);
     return 1;
   }
   if( mode=='C' )
     bmf_compress(args[at], args[at+1]);
+  else if( mode=='P' )
+    bmf_plot(args[at], args[at+1]);
   else
     bmf_decompress(args[at], args[at+1]);
   return 0;

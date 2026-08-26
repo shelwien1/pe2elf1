@@ -611,7 +611,7 @@ struct ModelBlock {
         continue;
       int32_t is_sym;
       const int32_t apm_ctx = (int32_t)(sym_pos<MB_apm_pos_cap ? sym_pos : MB_apm_pos_cap)|((ctx_state_seen&15)<<3);
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         is_sym = bit_node[ctr_node].template code_context_bit_apm<1>(cx, &bit_root[ctr_fallback], 0, &cand_apm, apm_ctx);
         row_cur[5][0].sym = sym;
       } else {
@@ -914,9 +914,15 @@ struct ModelBlock {
     return out_bits;
   }
 
-  template <int32_t f_DEC> void code_row_pixels() {
+  // `row_at` is the row's first component in the buffer the plot map tracks;
+  // code_pixel returns how many pixels its symbol covered, so a run charges
+  // its cost across all of them rather than to the pixel that opened it.
+  template <int32_t f_DEC> void code_row_pixels(int32_t row_at) {
     for( uint32_t x2 = 0; x2<width; ) {
-      x2 += f_DEC ? decode_pixel(x2) : code_pixel(x2);
+      const int32_t n = f_DEC==1 ? decode_pixel(x2) : code_pixel(x2);
+      if constexpr( f_DEC==2 )
+        cx[0].plot_note(row_at+(int32_t)x2, n);
+      x2 += (uint32_t)n;
       init_tables();
     }
   }
@@ -1037,7 +1043,7 @@ struct ModelBlock {
 
   template <int32_t f_DEC> void code_plane_slow(uint8_t* buf) {
     cx[0].rc_begin<f_DEC>();
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       expand_alphabet();
     else
       reduce_alphabet(buf);
@@ -1047,7 +1053,7 @@ struct ModelBlock {
     uint8_t* out_at = nullptr;
     uint16_t* word = nullptr;
     uint32_t nbytes = 0;
-    if constexpr( f_DEC ) {
+    if constexpr( f_DEC==1 ) {
       uint8_t* dst_buf = &buf[-(depth<8)];
       if( depth!=depth_raw ) {
         dst_buf = (uint8_t*)bmf_new(height*width+3);
@@ -1060,22 +1066,26 @@ struct ModelBlock {
     }
     for( int32_t y = 0; y<height; ++y ) {
       begin_row();
-      if constexpr( f_DEC ) {
-        code_row_pixels<1>();
+      if constexpr( f_DEC==1 ) {
+        code_row_pixels<1>(0);
         out_at = write_row(out_at, nbytes, width);
       } else {
         for( uint32_t x = 0; x<width; ++x )
           row_cur[5][x].sym = word[x];
         word += width;
-        code_row_pixels<0>();
+        code_row_pixels<f_DEC>(y*(int32_t)width);
       }
     }
     cx[0].rc_end<f_DEC>();
-    if constexpr( f_DEC ) {
+    if constexpr( f_DEC==1 ) {
       if( depth_raw!=depth )
         interleave_depth_bytes(buf, expand_buf);
       free(expand_buf);
     }
+  }
+
+  void plot_plane_slow(uint8_t* pixels) {
+    code_plane_slow<2>(pixels);
   }
 
   void model_plane_slow(uint8_t* pixels) {
@@ -1097,7 +1107,7 @@ struct ModelBlock {
                                          MB_RunCtr_Volume)];
         const uint32_t bin_tot = ctr[0].n[0]+ctr[0].n[1];
         int32_t run_bit;
-        if constexpr( f_DEC ) {
+        if constexpr( f_DEC==1 ) {
           run_bit = cx[0].decode_bit(ctr[0].n[0], ctr[0].n[1]);
         } else {
           run_bit = (len&mask)!=0;

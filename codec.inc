@@ -1,6 +1,10 @@
 // codec.inc -- BMFCodec: the plane pipeline, the mode search and the container layer
 // Included from bmf.cpp; not a standalone translation unit.
 
+// Set by the 'p' command.  A file-scope flag rather than codec state because
+// compress_to_memory re-Inits the codec, which would clear it.
+int32_t bmf_plot_want = 0;
+
 struct BMFCodec : BMFState {
   void Init() {
     BMFState::Init();
@@ -89,7 +93,7 @@ struct BMFCodec : BMFState {
     int8_t dc3 = plane_desc[src3].dc;
     int32_t xf2 = fl2&8;
     int32_t xf3 = fl3&8;
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       rc_begin_decode();
     else
       rc_begin_encode();
@@ -102,8 +106,10 @@ struct BMFCodec : BMFState {
         auto code_sample = [&](int32_t n, AltP1Block* a, AltP1Block* b, int32_t off, int32_t val) {
                              AltP1Block*const blk = plane[n];
                              blk[0].ctx_of(a, b);
-                             val = f_DEC ? blk[0].decode_sample() : blk[0].encode_sample(buf, off, val);
+                             val = f_DEC==1 ? blk[0].decode_sample() : blk[0].encode_sample(buf, off, val);
                              blk[0].record_sample(val);
+                             if constexpr( f_DEC==2 )
+                               plot_note_ptr(buf+off, 1);
                              return val;
                            };
         auto fold_from = [&](int32_t off, int32_t xf, int32_t dc, int32_t mix) {
@@ -117,36 +123,36 @@ struct BMFCodec : BMFState {
                          };
         for( uint32_t x = 0; x<(uint32_t)width; ++x ) {
           int32_t off0 = plane_desc[0].src_plane;
-          if constexpr( !f_DEC )
+          if constexpr( f_DEC!=1 )
             cur0 = fold_from(off0, 0, 0, 0);
           cur0 = code_sample(0, nullptr, nullptr, off0, cur0);
           int32_t off1 = plane_desc[1].src_plane;
-          if constexpr( f_DEC )
+          if constexpr( f_DEC==1 )
             unfold_to(off0, 0, 0, 0, cur0);
           else
             cur1 = (uint8_t)fold_from(off1, xf1, dc1, buf[off0]);
           cur1 = code_sample(1, plane[0], nullptr, off1, cur1);
           int32_t off2 = plane_desc[2].src_plane;
-          if constexpr( f_DEC )
+          if constexpr( f_DEC==1 )
             unfold_to(off1, xf1, dc1, buf[off0], cur1);
           else
             want2 = (uint8_t)fold_from(off2, xf2, dc2, plane_mix2(plane_desc[off2], buf+off0, buf+off1));
           want2 = code_sample(2, plane[1], plane[0], off2, want2);
-          if constexpr( f_DEC )
+          if constexpr( f_DEC==1 )
             unfold_to(off2, xf2, dc2, plane_mix2(plane_desc[off2], buf+off0, buf+off1), want2);
           if( plane_count>=4 ) {
             int32_t off3 = plane_desc[3].src_plane;
-            if constexpr( !f_DEC )
+            if constexpr( f_DEC!=1 )
               cur3 = (uint8_t)fold_from(off3, xf3, dc3, plane_mix3(plane_desc[off3], buf+off3));
             cur3 = code_sample(3, plane[2], plane[1], off3, cur3);
-            if constexpr( f_DEC )
+            if constexpr( f_DEC==1 )
               unfold_to(off3, xf3, dc3, plane_mix3(plane_desc[off3], buf+off3), cur3);
           }
           buf += plane_count;
         }
       }
     }
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       rc_end_decode();
     else
       rc_end_encode();
@@ -168,7 +174,7 @@ struct BMFCodec : BMFState {
     const bool ref1_mixed = ref_transformed(1);
     const bool ref2_mixed = ref_transformed(2);
     const bool ref3_mixed = ref_transformed(3);
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       rc_begin_decode();
     else
       rc_begin_encode();
@@ -230,7 +236,7 @@ struct BMFCodec : BMFState {
         out += nplanes;
       }
     }
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       rc_end_decode();
     else
       rc_end_encode();
@@ -246,10 +252,10 @@ struct BMFCodec : BMFState {
       blk = raw[0].alt_p2_alloc(this, i, 0, keep);
     else
       blk = nullptr;
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       blk[0].alt_p2_d8_body<1>(nullptr, out, i, height);
     else
-      blk[0].alt_p2_d8_body<0>(src, out, i, height);
+      blk[0].alt_p2_d8_body<f_DEC>(src, out, i, height);
     if( blk )
       p2_blocks.give(blk);
   }
@@ -272,7 +278,7 @@ struct BMFCodec : BMFState {
     if( plane_predictor==pred_ctx ) {
       CtxModel ctx_model;
       ctx_model.Init();
-      if constexpr( !f_DEC ) {
+      if constexpr( f_DEC!=1 ) {
         ctx_model.set_alphabet(CtxModel::scan_alphabet(pixels, p_i[0].width*p_i[0].height, ctx_model.to_val));
         ctx_model.choose_neighbours(this, pixels, p_i[0].width, p_i[0].height);
       }
@@ -283,27 +289,29 @@ struct BMFCodec : BMFState {
       return true;
     const bool d8 = (p_i[0].depth&depth_bits)==8;
     if( d8 ) {
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         if( p1 )
           alt_model_p1_d8_decode(pixels, p_i[0].width, p_i[0].height);
         else
           alt_model_p2_d8_decode(pixels, p_i[0].width, p_i[0].height);
       } else {
+        // f_DEC, not 0: the wrappers name the encoder and would drop the plot
+        // instantiation on the floor.
         if( p1 )
-          alt_model_p1_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
+          alt_model_p1_d8<f_DEC>(pixels, p_i[0].width, p_i[0].height, raw);
         else
-          alt_model_p2_d8_encode(pixels, p_i[0].width, p_i[0].height, raw);
+          alt_model_p2_d8<f_DEC>(pixels, p_i[0].width, p_i[0].height, raw);
       }
-    } else if constexpr( f_DEC ) {
+    } else if constexpr( f_DEC==1 ) {
       if( p1 )
         alt_model_p1_decode(p_i, pixels);
       else
         alt_model_p2_decode(p_i, pixels);
     } else {
       if( p1 )
-        alt_model_p1_encode(p_i, pixels);
+        alt_model_p1<f_DEC>(p_i, pixels);
       else
-        alt_model_p2_encode(p_i, pixels);
+        alt_model_p2<f_DEC>(p_i, pixels);
     }
     return true;
   }
@@ -489,7 +497,7 @@ struct BMFCodec : BMFState {
   template <int32_t f_DEC> void code_colour_plane(BmfImage* img, uint8_t* side, int32_t plane) {
     uint8_t* base = &img[0].pixels[plane];
     if( !(plane_desc[plane].flags&desc_has_refs) ) {
-      if constexpr( f_DEC )
+      if constexpr( f_DEC==1 )
         interleave_flat(img, side, plane);
       else
         deinterleave_plane(img, side, plane);
@@ -501,7 +509,7 @@ struct BMFCodec : BMFState {
     if( t.by_weights||plane_desc[plane].nrefs==1 ) {
       const uint8_t* ref = base+t.to_ref0;
       for( int32_t i = 0, ofs = 0; i<n; ++i, ofs += stride ) {
-        if constexpr( f_DEC )
+        if constexpr( f_DEC==1 )
           base[ofs] = ref[ofs]+t.dc+side[i];
         else
           side[i] = base[ofs]-t.dc-ref[ofs];
@@ -512,7 +520,7 @@ struct BMFCodec : BMFState {
       uint8_t* p = base;
       for( int32_t left = n; left; --left, p += stride ) {
         const uint32_t blend = t.blend(p);
-        if constexpr( f_DEC )
+        if constexpr( f_DEC==1 )
           *p = (uint8_t)(blend+t.dc+*side++);
         else
           *side++ = (uint8_t)(p[0]-t.dc-blend);
@@ -520,7 +528,7 @@ struct BMFCodec : BMFState {
     }
   }
   template <int32_t f_DEC, typename T> void code_field(T &v, int32_t bits, int32_t bias) {
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       v = (T)((int32_t)unpack_bits(bits)-bias);
     else
       pack_bits((uint32_t)((int32_t)v+bias), bits);
@@ -723,7 +731,7 @@ struct BMFCodec : BMFState {
     code_field<f_DEC>(flip_x, 1, 0);
     code_field<f_DEC>(flip_y, 1, 0);
     code_field<f_DEC>(kind, 2, 0);
-    if constexpr( f_DEC ) {
+    if constexpr( f_DEC==1 ) {
       flags8 = (uint8_t)(transposed ? flags_transposed : 0);
       pad8 = (uint8_t)((flip_x ? pad_flip_x : 0)|(flip_y ? pad_flip_y : 0));
       remap_kind = (uint8_t)kind;
@@ -737,7 +745,7 @@ struct BMFCodec : BMFState {
     for( int32_t k = 0; k<32*rows; ++k ) {
       uint32_t byte = masks[k];
       code_field<f_DEC>(byte, 8, 0);
-      if constexpr( f_DEC )
+      if constexpr( f_DEC==1 )
         masks[k] = (uint8_t)byte;
     }
   }
@@ -954,6 +962,7 @@ struct BMFCodec : BMFState {
     hdr.header_from(p_i);
     hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
     stream_open(data_bytes);
+    plot_arm(p_i);
     if( plane_count==1 ? (p_i[0].depth&depth_grey)!=0 : plane_count>2 ) {
       near_lossless_q = 0;
       pack_bits(0, 4);
@@ -974,8 +983,10 @@ struct BMFCodec : BMFState {
     if( alt_model_plane<f_DEC>(p_i, pixels, raw) )
       return;
     ModelBlock* blk = new_model_block(p_i[0].width, p_i[0].height, p_i[0].depth&depth_bits);
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       blk[0].unmodel_plane_slow(pixels);
+    else if constexpr( f_DEC==2 )
+      blk[0].plot_plane_slow(pixels);
     else
       blk[0].model_plane_slow(pixels);
     blk[0].free_workspace();
@@ -986,7 +997,7 @@ struct BMFCodec : BMFState {
       PlaneDesc &d = plane_desc[pl];
       uint32_t head = (uint32_t)((d.flags<<2)|d.nrefs);
       code_field<f_DEC>(head, 6, 0);
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         d.flags = (uint8_t)(head>>2);
         d.nrefs = (uint8_t)(head&3);
         plane_desc[head&3].src_plane = (uint8_t)pl;
@@ -1458,10 +1469,20 @@ struct BMFCodec : BMFState {
   void interleave_plane(BmfImage* img, uint8_t* src, int32_t plane) {
     code_colour_plane<1>(img, src, plane);
   }
+  // The same call the encoder makes, sent to the plot instantiation while a map
+  // is armed.  f_DEC==2 is the encoder everywhere it matters -- every branch
+  // that asks "am I decoding?" answers no -- so the coding is identical and the
+  // costs are the ones the shipped stream is made of.
   void model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
-    code_plane<0>(p_i, pixels, raw);
+    if( plot_map )
+      code_plane<2>(p_i, pixels, raw);
+    else
+      code_plane<0>(p_i, pixels, raw);
   }
   void model_planes(BmfImage* img, uint8_t* pixels, int32_t plane) {
+    // One plane's own buffer: its samples are this plane's component of every
+    // pixel, so they land plane_count apart starting at the plane itself.
+    plot_walk(pixels, plane, plane_count);
     plane_predictor = plane_desc[plane].flags&desc_predictor;
     plane_alt_model = (plane_desc[plane].flags&desc_alt_model)!=0;
     model_slot = plane_desc[plane].nrefs;
@@ -2050,6 +2071,52 @@ struct BMFCodec : BMFState {
       bmf_log("\n");
     }
   }
+  // ---- Plot mode -----------------------------------------------------------
+
+  // Armed once the representation search has settled, so the map is filled by
+  // the pass that ships rather than by a trial.  The geometry is recorded here
+  // too: search_filter may have transposed or flipped the image, and the plot
+  // has to come back out in the orientation the caller handed in.
+  void plot_arm(BmfImage* p_i) {
+    if( !bmf_plot_want||plot_map )
+      return;
+    plot_len = p_i[0].data_size;
+    plot_map = (uint8_t*)bmf_new(plot_len);
+    memset(plot_map, 0, plot_len);
+    plot_w = p_i[0].width;
+    plot_h = p_i[0].height;
+    plot_flags = p_i[0].flags;
+    plot_pad = p_i[0]._pad8[0];
+    plot_bits = 0.0;
+    plot_on = 1;
+  }
+
+  // The map as an image in the caller's own orientation.  The renumbering map
+  // substitutes values without moving them, so it does not apply here; only the
+  // geometry does, and it comes off in the order restore_representation uses.
+  BmfImage*plot_image() {
+    if( !plot_map )
+      return nullptr;
+    BmfImage*const out = alloc_image(plot_w, plot_h, 8*plane_count, 0, 0);
+    memcpy(out[0].pixels, plot_map, plot_len);
+    out[0].flags = plot_flags&flags_transposed;
+    out[0]._pad8[0] = plot_pad&(uint8_t)(pad_flip_x|pad_flip_y);
+    if( out[0]._pad8[0]&pad_flip_x )
+      flip_image_x(out, plane_count);
+    if( out[0]._pad8[0]&pad_flip_y )
+      flip_image_y(out, plane_count);
+    if( out[0].flags&flags_transposed )
+      transpose_image(out, plane_count);
+    out[0].flags = 0;
+    out[0]._pad8[0] = 0;
+    if( plane_count==1 )
+      out[0].depth |= depth_grey;
+    free(plot_map);
+    plot_map = nullptr;
+    plot_on = 0;
+    return out;
+  }
+
   void stream_open(uint32_t data_size) {
     stream.size = data_size+0x20000;
     stream.buf = (uint8_t*)bmf_new(stream.size);
@@ -2106,6 +2173,8 @@ struct BMFCodec : BMFState {
     free(tmp);
     // One model codes the interleaved planes, so it owns slot 0 alone.
     model_slot = 0;
+    // and it walks the image itself, one sample per component in order.
+    plot_walk(src_pixels, 0, 1);
     model_plane(p_i, src_pixels, src_pixels);
   }
   void unmodel_described(BmfImage* img_at, uint8_t flags) {

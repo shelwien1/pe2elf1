@@ -36,6 +36,56 @@ struct BMFState : RangeCoder {
   int32_t deadzone_hi;
   int32_t deadzone_lo;
   uint8_t* hist_scratch;
+  // ---- Plot mode -----------------------------------------------------------
+  //
+  // `bmf p in.bmp out.bmp` codes the image exactly as `bmf c` does and writes,
+  // instead of the stream, one byte per colour component holding what that
+  // component cost: 4.4 fixed point, four integer bits of codelength and four
+  // fractional, so 0x28 is 2.5 bits.  The coding is the encoder's own, sample
+  // for sample -- plot is f_DEC==2 and every branch that asks "am I decoding?"
+  // answers no -- so the numbers are the ones the shipped stream is made of.
+  uint8_t* plot_map;          // one byte per component, or null when not plotting
+  uint16_t plot_w, plot_h;    // the geometry the coding used
+  uint8_t plot_flags, plot_pad;
+  const uint8_t* plot_origin; // the buffer the model walks
+  uint32_t plot_len;          // components in plot_map
+  int32_t plot_base;          // component of the first sample the model codes
+  int32_t plot_stride;        // components between one sample and the next
+
+  // Point the map at the buffer a model is about to walk.  Interleaved coding
+  // walks the image itself, so base 0 and stride 1; planar coding walks one
+  // plane's own buffer, so the plane's offset and one pixel's worth of stride.
+  void plot_walk(const uint8_t* origin, int32_t base, int32_t stride) {
+    plot_origin = origin;
+    plot_base = base;
+    plot_stride = stride;
+    plot_bits = 0.0;
+  }
+
+  // Charge everything coded since the last call to n components from `idx`.
+  // A run coded as one symbol spreads its cost evenly over the pixels it
+  // covers, which is what makes a run-coded flat region read as flat rather
+  // than as one expensive pixel followed by free ones.
+  void plot_note(int32_t idx, int32_t n) {
+    const double each = plot_bits/(double)(n<1 ? 1 : n);
+    plot_bits = 0.0;
+    if( !plot_map )
+      return;
+    // 4.4 saturates at 15.9375 bits, which is beyond what a byte-valued
+    // component can cost, so only a pathological sample clips.
+    const double q = each*16.0+0.5;
+    const uint8_t v = (uint8_t)(q<=0.0 ? 0 : (q>=255.0 ? 255 : (int32_t)q));
+    for( int32_t k = 0; k<n; ++k ) {
+      const int64_t at = (int64_t)plot_base+(int64_t)(idx+k)*(int64_t)plot_stride;
+      if( at>=0&&(uint64_t)at<(uint64_t)plot_len )
+        plot_map[at] = v;
+    }
+  }
+
+  void plot_note_ptr(const uint8_t* p, int32_t n) {
+    plot_note((int32_t)(p-plot_origin), n);
+  }
+
   alignas(16) uint16_t model_table_store[kModelTableBytes/sizeof(uint16_t)];
   uint16_t* model_tables;
   void hist_bump(int32_t k) {
@@ -64,7 +114,7 @@ struct BMFState : RangeCoder {
     uint16_t fq, * slot;
     uint16_t* f0 = freq+2;
     uint32_t tot = freq[0];
-    if constexpr( f_DEC ) {
+    if constexpr( f_DEC==1 ) {
       uint32_t target = get_freq(tot);
       slot = f0;
       lvl = 0;
@@ -111,14 +161,14 @@ struct BMFState : RangeCoder {
       return lvl;
     int32_t mask = level_geom[lvl].half;
     int32_t path = 0;
-    if constexpr( !f_DEC )
+    if constexpr( f_DEC!=1 )
       path = sym-level_geom[lvl].first;
     int32_t node = 0;
     for( span = 1;; span *= 2 ) {
       FreqPair* pair = bit_tree(freq, lvl)+span+node;
       int32_t f1 = pair[0].f[1];
       int32_t fa = pair[0].f[0];
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         go = decode_bit(fa, f1);
       } else {
         go = (mask&path)!=0;
@@ -288,10 +338,10 @@ struct BMFState : RangeCoder {
   // per-plane symbol tables.  The pure coder primitives they call
   // (enc_init/dec_init/flush/finish) are inherited.
   template <int32_t f_DEC> uint16_t*rc_begin() {
-    if constexpr( !f_DEC ) stream.pk.word[0] = stream.pk.acc;
+    if constexpr( f_DEC!=1 ) stream.pk.word[0] = stream.pk.acc;
     stream.packer_rewind();
     uint16_t* tbl = plane_alt_model ? begin_plane_stream() : nullptr;
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       dec_init();
     else
       enc_init();
@@ -304,7 +354,7 @@ struct BMFState : RangeCoder {
     return rc_begin<0>();
   }
   template <int32_t f_DEC> void rc_end() {
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       finish();
     else
       flush();

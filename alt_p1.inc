@@ -187,7 +187,7 @@ struct AltP1Block {
   }
 
   template <int32_t f_DEC> void d8_body(uint8_t* src, uint8_t* out) {
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       cx[0].rc_begin_decode();
     else
       cx[0].rc_begin_encode();
@@ -198,7 +198,7 @@ struct AltP1Block {
         uint8_t* q = out;
         for( int32_t x = 0; x<width; ++x ) {
           ctx_of(nullptr, nullptr);
-          if constexpr( f_DEC ) {
+          if constexpr( f_DEC==1 ) {
             const int32_t code = alt_p1_decode_symbol(cx, &ctr_at(ctx[0]), ctx[1], &slot_apm);
             q[0] = (uint8_t)((uint8_t)pred+unfold[(uint8_t)code]);
           } else {
@@ -207,12 +207,14 @@ struct AltP1Block {
             ++src;
           }
           record_sample((uint8_t)q[0]);
+          if constexpr( f_DEC==2 )
+            cx[0].plot_note_ptr(q, 1);
           ++q;
         }
         out = q;
       }
     }
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       cx[0].rc_end_decode();
     else
       cx[0].rc_end_encode();

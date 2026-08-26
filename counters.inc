@@ -28,7 +28,7 @@ struct CounterNode {
     if( !rest ) {
       // Nothing outside slot 0 has mass; the split would need a zero-width
       // interval, so code it flat as it was.
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         sym = cx[0].get_freq(tot);
         cum = c[0];
         while( cum<=(uint32_t)sym )
@@ -50,7 +50,7 @@ struct CounterNode {
         p16 = kProbCeil;
       const int32_t p_ref = apm[0].refine(p16, (int32_t)MakeSlotMap(ctx));
       int32_t is_zero;
-      if constexpr( f_DEC ) {
+      if constexpr( f_DEC==1 ) {
         is_zero = cx[0].decode_bit(65536-p_ref, p_ref);
       } else {
         is_zero = sym_slot(sym)==0;
@@ -59,7 +59,7 @@ struct CounterNode {
       apm[0].update(is_zero);
       if( !is_zero ) {
         cur = &c[1];
-        if constexpr( f_DEC ) {
+        if constexpr( f_DEC==1 ) {
           sym = cx[0].get_freq(rest);
           cum = c[1];
           while( cum<=(uint32_t)sym )
@@ -96,7 +96,7 @@ struct CounterNode {
       uint16_t*const strip = cx[0].model_strip(MakeStrip((uint32_t)ctx>>8, (uint32_t)slot&1u,
                                                         2u*c[slot]>c[0]+(uint32_t)(result&0x7FFF)+CN_escape_bias,
                                                         (uint32_t)ctx&63u));
-      if constexpr( f_DEC )
+      if constexpr( f_DEC==1 )
         slot += 2*cx[0].decode_symbol_tree(strip);
       else
         cx[0].encode_symbol_tree(strip, (sym-kSlotSplit)>>1);
@@ -179,7 +179,7 @@ struct BitCtr {
       if( !n[1] )
         seed_from(parent);
       const uint32_t tot = summ();
-      if constexpr( f_DEC )
+      if constexpr( f_DEC==1 )
         bit = cx[0].decode_bit(n[0], n[1]);
       else
         cx[0].encode_bit(n[0], n[1], bit);
@@ -190,7 +190,7 @@ struct BitCtr {
       parent[0].n[bit] += tot<kParentBump;
     } else {
       const uint32_t p_tot = parent[0].summ();
-      if constexpr( f_DEC )
+      if constexpr( f_DEC==1 )
         bit = cx[0].decode_bit(parent[0].n[0], parent[0].n[1]);
       else
         cx[0].encode_bit(parent[0].n[0], parent[0].n[1], bit);
@@ -200,7 +200,7 @@ struct BitCtr {
       parent[0].n[bit] = result;
       n[0] = bit+1;
     }
-    return f_DEC ? bit : result;
+    return f_DEC==1 ? bit : result;
   }
 
   // The same code, with the counter's probability refined through a map first.
@@ -220,7 +220,7 @@ struct BitCtr {
     if( p16>CN_p16_ceil )
       p16 = CN_p16_ceil;
     const int32_t p_ref = apm[0].refine(p16, apm_ctx|((src==parent) ? Apm::kCtx>>1 : 0));
-    if constexpr( f_DEC )
+    if constexpr( f_DEC==1 )
       bit = cx[0].decode_bit(65536-p_ref, p_ref);
     else
       cx[0].encode_bit(65536-p_ref, p_ref, bit);
@@ -241,7 +241,7 @@ struct BitCtr {
       parent[0].n[bit] = result;
       n[0] = bit+1;
     }
-    return f_DEC ? bit : result;
+    return f_DEC==1 ? bit : result;
   }
 
   int32_t encode_context_bit(BMFState* cx, BitCtr* parent, int32_t bit) {

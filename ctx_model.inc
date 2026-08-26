@@ -321,7 +321,7 @@ struct CtxModel {
       if constexpr( f_MEASURE ) {
         bit = (sym>>b)&1;
         measured += (uint64_t)bit_cost(coded, bit);
-      } else if constexpr( f_DEC ) {
+      } else if constexpr( f_DEC==1 ) {
         bit = cx[0].decode_bit(65536-coded, coded);
       } else {
         bit = (sym>>b)&1;
@@ -345,7 +345,7 @@ struct CtxModel {
   // size and one per value.  At most seventeen bytes, against a plane the mode
   // only wins on when it is worth thousands.
   template <int32_t f_DEC> void code_alphabet() {
-    if constexpr( f_DEC ) {
+    if constexpr( f_DEC==1 ) {
       const int32_t a = (int32_t)cx[0].decode_flat(kMaxAlpha)+1;
       set_alphabet(a);
       chosen_nb = (int32_t)cx[0].decode_flat(kMaxNeighbours)+1;
@@ -425,7 +425,7 @@ struct CtxModel {
   template <int32_t f_DEC, int32_t f_MEASURE = 0> void code_plane(BMFState* state, uint8_t* px, int32_t w, int32_t h) {
     cx = state;
     if constexpr( !f_MEASURE ) {
-      if constexpr( f_DEC )
+      if constexpr( f_DEC==1 )
         cx[0].rc_begin_decode();
       else
         cx[0].rc_begin_encode();
@@ -444,16 +444,18 @@ struct CtxModel {
           const uint32_t sub = nb[k]>=nb[kOrders-1] ? key : key&(((uint32_t)1<<(bits*nb[k]))-1u);
           rows[k] = bucket(k, sub, k ? rows[k-1] : nullptr);
         }
-        if constexpr( f_DEC&&!f_MEASURE )
+        if constexpr( f_DEC==1&&!f_MEASURE )
           row[x] = to_val[code_symbol<1, 0>(rows, 0)];
         else
           code_symbol<0, f_MEASURE>(rows, to_idx[row[x]]);
+        if constexpr( f_DEC==2&&!f_MEASURE )
+          cx[0].plot_note_ptr(&row[x], 1);
         match_update(px, at);
       }
     }
     Quit();
     if constexpr( !f_MEASURE ) {
-      if constexpr( f_DEC )
+      if constexpr( f_DEC==1 )
         cx[0].rc_end_decode();
       else
         cx[0].rc_end_encode();
