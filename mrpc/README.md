@@ -441,4 +441,5 @@ exercised.
 | `ALGORITHM.md` | how the codec works, end to end |
 | `ENTROPY.md` | where the bits go: the rangecoder, the probability model, and what a PAQ-style component would be worth |
 | `TUNING.md` | the class count and the shape of the model: what was measured, what moved, and what did not |
+| `MODEL-IMPROVEMENTS.md` | where the model could compress better, read against Shkarin's BMF |
 | `tools/entropy_probe.patch` | the measurement harness those numbers come from |
