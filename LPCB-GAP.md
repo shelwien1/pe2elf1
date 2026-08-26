@@ -634,9 +634,10 @@ transform fit, the contexts, the alphabet -- refit per tile:
 | 4x4 tiles, 256x256 | **494,700** | **−13.63%** | **−6.16%** |
 
 −13.63% *including* sixteen separate member headers, and enough to turn an 8.65%
-loss into a 6.16% win.  That is the largest single effect measured on this frame,
-and it is not specific to the colour channel -- it is local adaptation of
-everything at once.  Perfecting the *global* transform weights, by contrast, is
+loss into a 6.16% win.  That is the largest single effect measured on this frame.
+It is *not* "local adaptation of everything at once" -- the next section takes it
+apart, and adaptation locality turns out to be a loss.  Perfecting the *global*
+transform weights, by contrast, is
 worth 544 bytes (0.095%): forcing `w=(128,0)` beats the fitted pair, and the
 optimum is sharp -- `(120,8)` is already worse than the fit, and past `(104,24)`
 the per-plane trial gate rejects references entirely and the weights stop
@@ -645,6 +646,69 @@ mattering, which is that gate working exactly as intended.
 (Plane 2 of the winning crop shows headroom and deficit are not the same axis: a
 global fit gets 2.4% there and blocks get 77%, yet BMF wins that crop
 comfortably.  Anything built on this has to clear the trial gate on both.)
+
+#### Taking the −13.63% apart: it is *which model*, and nothing else
+
+Sub-tiling changes three things at once -- which descriptors each region picks,
+how the transform is fitted, and where the models start from.  A dump/load hook
+on `plane_desc[]` separates them: encode each tile twice, once free and once with
+the whole crop's chosen descriptor set forced onto it.  Every forced stream below
+was decoded back and compared against its source, so these are real encodings and
+not trial estimates.
+
+| sixteen 256x256 tiles | coded | vs whole crop |
+|---|---|---|
+| whole crop, one global descriptor set | 572,796 | |
+| each tile free to choose | 494,700 | **−13.63%** |
+| all tiles forced to the whole-image choice | 613,268 | **+7.07%** |
+
+**Adaptation locality is a loss.** Sixteen model restarts on the same
+descriptors cost 7.07%; the contexts and the alphabet do not want to be
+re-learned per tile.  The freedom to choose *differently* per tile is worth
+118,568 bytes -- 20.70% of the whole crop -- and pays for the restarts three
+times over.
+
+Splitting the descriptor word says which part of the choice carries it:
+
+| what is local | coded | vs whole | share of the 118,568 |
+|---|---|---|---|
+| everything | 494,700 | −13.63% | 100% |
+| **model, slot and refs flag** (dc + weights global) | **497,876** | **−13.08%** | **97.3%** |
+| dc + blend weights (flags global) | 612,792 | +6.98% | 0.4% |
+| nothing | 613,268 | +7.07% | — |
+
+So the transform-parameter axis is finished as a subject: refitting `dc` and the
+blend per tile recovers 476 of 118,568 bytes.  What the frame wants is a
+different *model* in different places, which is the one decision BMF makes once
+per image.
+
+The shape of it is visible in the tiles' own choices.  Seven of the sixteen pick
+plain `slow` -- the `ModelBlock` path, no references -- and they are the cheap,
+smooth tiles: 104,528 bytes free, 21.1% of the tiled total.  Forced onto the
+global `refs+p2` they cost 205,296, a factor of **1.96**, and that alone is 85%
+of the whole decision gain.  The other nine are busy and want the alt models.
+
+The global trial is not making a mistake here; it is choosing between two options
+that are nearly tied *globally* and wildly apart *locally*.  Forcing the whole
+crop onto the smooth tiles' `slow` set costs 577,708 against 572,796 -- **+0.86%**.
+Within 1% over the image, 2x per tile over half of it.  A single global pick
+cannot be right, and no refinement of the trial's cost estimate would change that.
+
+Finer tiling keeps paying, which is what a decision-locality story predicts and
+an adaptation story does not: 8x8 tiles of 128x128 give 477,596, −16.62% against
+the whole crop and 9.40% *below* gralic.
+
+Two things stand between this and a design:
+
+* `transform_it` requires `!alt`, so a region that switches from `refs+p2` to
+  `slow` also switches the colour transform on.  Per-region descriptors are not a
+  model swap; they move the transform boundary with them.
+* `search_filter` sets `tile_w = img[0].width`, `tile_h = img[0].height`.  v2.01
+  has no sub-image tile in the stream at all, so the measurement above buys its
+  locality with sixteen separate member headers.  Carrying a descriptor switch
+  in-stream is a format change, and the +7.07% restart figure is the budget it
+  must *avoid* spending: switch the descriptor, keep the model state.
+
 ---
 
 ## 5. What does *not* explain the gap
@@ -800,6 +864,28 @@ rather than the affine bound. Given §5, this is not a corpus-wide win and shoul
 be scoped to the files where `bmgstat` shows the two diverging — but on those it
 is 1.5–1.9 bpp, and with A2 in place it is another `ADD` line in the same Index.
 
+### D1 — Let the descriptor change within the image, without restarting the models
+
+**Reach: 20.7% on the measured frame; unknown on the corpus, and that is the
+first thing to find out.**  §4.2 measures it directly: on `PIA13915`'s worst
+crop, the freedom to pick a different model per 256x256 region is worth 118,568
+bytes, 97.3% of which is the model/slot/refs choice rather than any transform
+parameter.  Seven of sixteen regions want `ModelBlock` and nine want an alt
+model, and the global trial has to answer for all of them with one word.
+
+The measurement also prices the naive implementation out: sixteen independent
+tiles pay 7.07% to restart the contexts and the alphabet.  So the shape is a
+descriptor *switch* carried in the stream -- a per-band or per-block code
+selecting among the descriptor sets the search already produced -- with model
+state carried across the switch.  That is a format change, and it drags the
+colour transform with it (`transform_it` is `!alt`-gated), so it is the largest
+piece of work on this list as well as the largest number.
+
+Before building it, two cheap checks: run the free-vs-forced tile split over the
+eighteen retrieved LPCB frames to see whether 20.7% is this frame or the corpus,
+and check the winning crops -- if regions disagree about the model everywhere,
+this is general; if only where BMF loses, it *is* the deficit.
+
 ---
 
 ## 7. The supplied numbers are already out of date
@@ -907,6 +993,10 @@ the corpus-scale extrapolations are estimates.
   own demo binary was run on the same pixels under wine (PNM input) rather than
   read out of `lpcbs.txt` — it reproduces both the `lpcbs.txt` figure for
   `PIA13882` and the 256-crop figure, so the comparison is like for like.
+* The free-vs-forced tile split in §4.2 uses a temporary `plane_desc[]`
+  dump/load hook, kept outside the tree: with neither environment variable set
+  the patched build is byte-identical to the shipping one, and every forced
+  stream in that section was decoded back and compared against its source.
 * Re-encodes in §7 with the current `./mk.sh release` build, and with
   `773b305` (the last commit before `IMPROVEMENTS.md`) built in a detached
   worktree.
