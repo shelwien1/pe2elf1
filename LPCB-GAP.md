@@ -311,6 +311,18 @@ section together; the map alone took it to 2,385,216.)  −714,292 bytes over th
 ten, every stream decoded back and compared pixel for pixel, and no file larger
 than it was.
 
+**That total understates the transform by 4.6x**, because the ten are the small
+and medium frames.  `PIA13912`, at 111 MB the second largest here, was never in
+that set and is the biggest single winner on the corpus:
+
+| | | | |
+|---|---|---|---|
+| `PIA13912` | 27,843,508 | **24,530,548** | **−11.90%** |
+
+against gralic's 24,268,444 that is **+14.73% → +1.08%**: from the corpus's
+second-worst frame to near parity, on one transform.  `STA13845` (138 MB) is the
+remaining unmeasured adopter and is likely to move as well.
+
 The seven unchanged files are the point as much as the three that move: the
 incumbent margin means a plane with no light tail in its histogram keeps the
 plain rank map, so `PIA13812`, which gains 21.9% from that map, is untouched.
@@ -385,6 +397,38 @@ against the probe's judgement.  That is the honest limit of it.
 before the two-tier map.  What is left on the table is `PIA13915`'s 7,584 bytes
 (0.05%), where the true optimum sits at a rung neither candidate proposes.
 
+
+### 4.2 What is left on `PIA13915` is the colour channel
+
+With the map in, the largest measured gap among the frames held locally is
+`PIA13915` at +4.90%, and crops localise it cleanly.  Sixteen 1024x1024 crops,
+both codecs on the same pixels:
+
+| | corr with the deficit |
+|---|---|
+| cross-plane spread, `std(plane0 − plane1)` | **+0.800** |
+| MED residual entropy | +0.066 |
+| flat fraction | +0.077 |
+
+The split is nearly clean: every crop with a cross-plane spread at or above 18.5
+loses to gralic, worst +8.65%; every crop at or below 14.7 wins, best −9.13%.
+Crops 1,1 and 1,2 make the point without the statistics -- 211/209/217 against
+210/207/217 distinct values, 30.2% against 29.0% flat, and +7.23% against
+−5.74%, differing in cross-plane spread 25.1 against 10.0.
+
+So on this frame the deficit is not the alphabet, not the model choice (all
+crops pick the same joint refs+p2 configuration) and not adaptation.  It is the
+colour channel, which is the same place §5's correction puts 71--84% of a
+photograph's outcome -- now with a per-crop predictor to test a fix against.
+
+Not established: *which* part of the cross-plane path is weak.  A probe
+comparing prediction in the value domain against the residual domain returned
+both variants worse than independent MED, which contradicts the codec's own
+trials choosing refs+p2 on these crops, so the probe does not model the pipeline
+faithfully -- a global least-squares fit scored by order-0 entropy, where the
+codec fits per plane and scores with alt-P2.  It is recorded as inconclusive
+rather than read as a result.  Settling it means instrumenting the real
+transform.
 ---
 
 ## 5. What does *not* explain the gap
