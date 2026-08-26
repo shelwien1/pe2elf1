@@ -575,56 +575,76 @@ Which also narrows the earlier claim: "folding into magsum captures nothing" is
 true of `magsum`, and false of alt-P2 as a whole -- the information arrives by a
 route the probe did not model.
 
-#### Ablation: alt-P2's cross-plane routes are worth 0.25%, the transform is worth the rest
+#### Ablation: where the cross-plane gain actually is
 
-Disabling each route in turn -- the NLMS reference-error taps, `ctx0`'s
-reference sign flags, the reference magnitudes in `magsum`/`flat_a` -- and then
-all three at once:
+**Two claims in an earlier revision of this section were wrong and are corrected
+here.**  They were: that the colour transform does the bulk of BMF's cross-plane
+work, and that the transform's fitted weights never reach the shipped stream.
 
-| dropped | crop 2,1 | crop 0,3 |
-|---|---|---|
-| NLMS reference-error taps | +136 (+0.02%) | +388 (+0.04%) |
-| `ctx0` reference sign flags | +464 (+0.08%) | +1,076 (+0.12%) |
-| reference magnitudes in `magsum` | +520 (+0.09%) | +1,320 (+0.15%) |
-| **all three** | **+1,392 (+0.24%)** | **+2,720 (+0.31%)** |
+The first is refuted by one line of `transform_planes`:
 
-All of alt-P2's internal cross-plane machinery is worth a quarter of a per cent.
-The plane-split measurement puts BMF's *total* cross-plane gain at 7.72% and
-5.65%, so **the other ~7.5 points are the colour transform** -- `desc_has_refs`
-subtracting a reference blend from the plane values before alt-P2 sees them.
-BMF's cross-plane work is a global linear blend per plane, and the model's own
-taps are, next to it, noise.
+    const bool transform_it = ((flags&desc_has_refs)!=0||predictor)&&!alt;
 
-That also explains the null result above without appeal to the NLMS tap: the map
-axis was competing with a transform that had already removed the bulk.
+**An alt model skips the colour transform.**  Both crops code as `p2` /
+`refs+p2` / `refs+p2` -- every plane on an alt model -- so no colour transform
+runs on them at all.  `desc_has_refs` with an alt model means the *model* is
+handed the reference planes as context, through the `refa`/`refb` cursors.  The
+cross-plane context this frame wants is already the mechanism in use; the
+question is only whether it is rich enough.
 
-#### And the blend is global where the relationship is not
+The second is refuted by forcing the weights: overriding
+`plane_desc[xform].weight0/1` to a plain copy moves the coded file by −544 bytes,
+so they do reach the stream.  The byte-identical result that produced the wrong
+claim came from `choose_plane_coding` being called several times -- initial,
+renumbering trial, geometry, palette -- and the patch flipping a decision printed
+by an earlier call without changing the last one, which is the call whose
+descriptors ship.  One observation, over-read.
 
-Refitting the same linear blend per block instead of per plane:
+Ablating alt-P2's reference routes one at a time on crop 2,1:
 
-| | global | 256x256 blocks | 64x64 blocks | extra |
-|---|---|---|---|---|
-| 2,1 plane 1 (BMF loses) | 60.9% | 87.7% | **95.4%** | **+34.5 pts** |
-| 2,1 plane 2 | 61.1% | 70.4% | **86.6%** | **+25.5 pts** |
-| 0,3 plane 1 (BMF wins) | 96.0% | 96.6% | 97.1% | +1.1 pts |
-| 0,3 plane 2 | 2.4% | 51.7% | 77.0% | +74.5 pts |
+| dropped | cost |
+|---|---|
+| NLMS reference-error taps | +136 (+0.02%) |
+| `ctx0` reference sign flags | +464 (+0.08%) |
+| reference magnitudes in `magsum` | +520 (+0.09%) |
+| `ctx1`'s thirteen reference terms | +688 (+0.12%) |
+| **`ctx_w` cross-plane band selectors** | **+10,408 (+1.82%)** |
+| every route at once | +10,408 (+1.82%) |
 
-On the crop BMF loses, a global fit leaves 39% and 34% of the plane's variance
-unremoved that a 64x64 fit recovers.  On the crop it wins, plane 1 -- where BMF
-is 6.79% ahead of gralic on independent planes and holds the lead through the
-colour channel -- the global fit already reaches 96% and blocks add a point.
+So alt-P2's explicit cross-plane machinery is worth 1.82%, and nearly all of it
+is four band comparisons -- `refs.a.r0[0].val-refs.a.r1[0].val` and its three
+siblings -- feeding the selector weights.  The taps, the sign flags, the
+magnitudes and the thirteen `ctx1` terms together are a quarter of a per cent.
+Ablating everything costs no more than ablating the selectors alone.
 
-So the shape of the deficit is: BMF's cross-plane transform is a *single global
-linear blend per plane*, it does well exactly where that model fits, and
-PIA13915's losing crop is a frame where the relationship varies across the
-image.  That is a different proposal from C1's -- not the reference as context,
-but the blend as a *local* rather than a global fit -- and it is the one the
-measurements support.
+That leaves the plane-split's 7.72% only partly accounted for.  The remainder is
+**interleaved coding itself**: this crop chooses "together", one model pass over
+the interleaved bytes, where cross-plane structure reaches the model through the
+byte sequence rather than through any named reference route.
 
-(Plane 2 of the winning crop shows the two are not the same axis: a global fit
-gets 2.4% there and blocks get 77%, yet BMF wins that crop comfortably.  Headroom
-in the transform is not the same as a deficit against gralic, and a proposal
-built on this needs to clear the trial gate on both.)
+#### What locality is worth, measured
+
+Re-coding the crop as independent sub-tiles makes every local decision -- the
+transform fit, the contexts, the alphabet -- refit per tile:
+
+| | coded | vs whole | vs gralic |
+|---|---|---|---|
+| whole crop | 572,796 | | +8.65% |
+| 2x2 tiles, 512x512 | 548,236 | −4.29% | +4.00% |
+| 4x4 tiles, 256x256 | **494,700** | **−13.63%** | **−6.16%** |
+
+−13.63% *including* sixteen separate member headers, and enough to turn an 8.65%
+loss into a 6.16% win.  That is the largest single effect measured on this frame,
+and it is not specific to the colour channel -- it is local adaptation of
+everything at once.  Perfecting the *global* transform weights, by contrast, is
+worth 544 bytes (0.095%): forcing `w=(128,0)` beats the fitted pair, and the
+optimum is sharp -- `(120,8)` is already worse than the fit, and past `(104,24)`
+the per-plane trial gate rejects references entirely and the weights stop
+mattering, which is that gate working exactly as intended.
+
+(Plane 2 of the winning crop shows headroom and deficit are not the same axis: a
+global fit gets 2.4% there and blocks get 77%, yet BMF wins that crop
+comfortably.  Anything built on this has to clear the trial gate on both.)
 ---
 
 ## 5. What does *not* explain the gap
