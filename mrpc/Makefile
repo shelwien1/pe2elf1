@@ -23,7 +23,7 @@ all: mrpc
 # Built with -fvisibility=hidden on purpose: that is what a shared
 # library should be built with, and it is what makes the attributes in
 # mrpc_lib.h load-bearing.  `make exports` prints what comes out, which
-# should be the nine functions in the header and nothing else.
+# should be the ten functions in the header and nothing else.
 libmrpc.so: $(LIBSRC)
 	$(CXX) $(CXXFLAGS) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 	  -DMRP_OPENCL -shared mrpc_lib.cpp -o $@ $(LDLIBS)

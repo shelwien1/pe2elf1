@@ -344,6 +344,36 @@ them do not show above the run-to-run noise of an encode: 5.51 s against
 Zero is one of the candidates, so the correction cannot lose to the codec
 without it.
 
+### The four modes of the coding loop
+
+`CodeImage` is one loop with four jobs, and the job is a template parameter
+rather than an argument -- three of the four are not the encoder, and the
+encoder should not be paying a branch a symbol for them. At `-O2` every test
+on it folds away and each mode compiles to the loop it actually needs; the
+dispatcher underneath is the only place the mode is a value.
+
+| | |
+| --- | --- |
+| `CI_ENC` | read `org`, emit |
+| `CI_DEC` | read the stream, write `org` |
+| `CI_COST` | read `org`, emit nothing, total up the exact code length |
+| `CI_PLOT` | encode, and record where every bit went |
+
+`CI_COST` is what makes `ChooseSse` above a trial. `CI_PLOT` is what `mrpc p`
+runs: the same search and the same coder, with each symbol's code length
+written into a raster of the caller's geometry in 4.4 fixed point -- through
+the same address mapping `StoreOrg` uses, so a transposed encode plots the
+right way up and the components come back in the order they went in. The
+stream it produces is thrown away; the picture of the cost is the output.
+
+`CI_PLOT` emits rather than costing, and that is the point of it: the
+correction is a state machine driven by what the coder just did, so a
+cost-only pass and a real encode walk it along the same trajectory only
+because they make the same decisions in the same order. Charging the symbols
+without coding them would describe a file nobody wrote. The check is that
+the exact total `p` reports agrees to the byte with what `ChooseSse` measured
+for the model it picked -- 14,647 B on `t24_0`, both.
+
 ### The orientation trial
 
 `-t` encodes the image both ways round and keeps the smaller file. It is two

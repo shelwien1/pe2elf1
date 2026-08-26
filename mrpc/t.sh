@@ -5,6 +5,9 @@
 # what is checked is that each decodes back to the original, and what is
 # reported is what each cost.
 #
+# The plot is checked too, since it runs the same encoder: `p` has to
+# produce a file of the input's own geometry and say what it cost.
+#
 #   ./t.sh img.bmp [img.bmp ...]
 
 M=${MRPC:-./mrpc}
@@ -19,6 +22,12 @@ for f in "$@"; do
   $M -C c "$f" "$T/b.mrp" >/dev/null 2>&1 || { echo "$f: encode (host) failed";   fail=1; continue; }
   $M    d "$T/a.mrp" "$T/a.bmp" >/dev/null 2>&1
   $M    d "$T/b.mrp" "$T/b.bmp" >/dev/null 2>&1
+  $M -C p "$f" "$T/p.bmp" 2>/dev/null >/dev/null || { echo "$f: plot failed"; fail=1; continue; }
+  # the plot is the input's header and a raster of the same geometry, and
+  # nothing else -- so it is the input's size less whatever trailed it
+  if [ ! -s "$T/p.bmp" ] || [ "$(wc -c <"$T/p.bmp")" -gt "$(wc -c <"$f")" ]; then
+    echo "$(basename "$f"): the plot is not the shape of the image"; fail=1
+  fi
   a=$(wc -c <"$T/a.mrp"); b=$(wc -c <"$T/b.mrp")
   d=$(awk "BEGIN{printf \"%+.3f%%\", 100*($a-$b)/$b}")
   printf '%-28s %10s %10s %8s' "$(basename "$f")" "$a" "$b" "$d"
@@ -29,5 +38,5 @@ for f in "$@"; do
     fail=1
   fi
 done
-rm -f "$T/err" "$T/a.mrp" "$T/b.mrp" "$T/a.bmp" "$T/b.bmp"
+rm -f "$T/err" "$T/a.mrp" "$T/b.mrp" "$T/a.bmp" "$T/b.bmp" "$T/p.bmp"
 exit $fail

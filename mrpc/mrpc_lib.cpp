@@ -879,6 +879,8 @@ struct MRPC {
                  // case W and H are the other way round and only LoadOrg,
                  // StoreOrg and CodePad still speak the raster's geometry.
   int tflip;
+  byte* plotbuf;     // where CI_PLOT writes, in the caller's raster
+  double plot_bits;  // and what it came to before the rounding
   int num_class;
   int ord[MAXC]; // coding position -> component of the raster
 
@@ -3093,10 +3095,26 @@ struct MRPCIO : MRPC {
     }
   }
 
-  // dec: 0 encode, 1 decode, 2 measure -- walk the same loop and total up
-  // the exact code length without emitting anything.  The measure mode is
-  // what makes the model below a trial rather than a guess.
-  cost_t CodeImage(int dec) {
+  // What CodeImage is doing this pass.  It is a template parameter rather
+  // than an argument because three of these four modes are not the encoder
+  // and the encoder should not be paying a branch a symbol for them: at
+  // -O2 every `CI` test below folds away and each mode compiles to the
+  // loop it actually needs.  The dispatcher underneath is the only place
+  // the mode is a run-time value.
+  //
+  //   CI_ENC   read org, emit
+  //   CI_DEC   read the stream, write org
+  //   CI_COST  read org, emit nothing, total up the exact code length --
+  //            which is what makes ChooseSse a trial rather than a guess
+  //   CI_PLOT  encode, and record where every bit went
+  enum { CI_ENC = 0, CI_DEC = 1, CI_COST = 2, CI_PLOT = 3 };
+
+  static INLINE cost_t Bits(uint fr, uint tot) {
+    return -log(double(fr)/double(tot))/log(2.0);
+  }
+
+  template<int CI>
+  cost_t CodeImageT() {
     cost_t total = 0;
     ResetBorders();
     sse.est = (sse_on>>8)&15;
@@ -3125,18 +3143,14 @@ struct MRPCIO : MRPC {
           int q = Qprd(v), base = q>>PM_ACC;
           const PMod* pm = pml[k][gr]+(q&(NUM_SUBPM-1));
           int s;
+          cost_t bits = 0;
           if( sse_on&15 ) {
             // the band first, against the corrected distribution, then
             // the symbol within it, against the static table untouched
             int sc = SseCtx(k, gr, q, lastr[k], int(rr[k]));
             sse.Bands(sc, pm, base, base+MAXVAL+1, f, f0, cum, a0, a1);
             int bb;
-            if( dec==2 ) {
-              s = base+int(p[k]);
-              bb = int(sse.bmap[s]);
-              total += -log(double(f[bb])/double(SSE_TOT))/log(2.0)
-                       -log(double(pm->freq[s])/double(pm->cumfreq[a1[bb]]-pm->cumfreq[a0[bb]]))/log(2.0);
-            } else if( dec ) {
+            if( CI==CI_DEC ) {
               uint vv = rc.rc_GetFreq(SSE_TOT);
               bb = 0;
               // bounded on the right as well: a truncated stream can hand
@@ -3149,19 +3163,38 @@ struct MRPCIO : MRPC {
             } else {
               s = base+int(p[k]);
               bb = int(sse.bmap[s]);
-              rc.rc_Process(cum[bb], f[bb], SSE_TOT);
-              EncSym(pm, a0[bb], a1[bb], s);
+              if( CI!=CI_COST ) {
+                rc.rc_Process(cum[bb], f[bb], SSE_TOT);
+                EncSym(pm, a0[bb], a1[bb], s);
+              }
+              if( CI==CI_COST||CI==CI_PLOT )
+                bits = Bits(f[bb], uint(SSE_TOT))+
+                       Bits(pm->freq[s], pm->cumfreq[a1[bb]]-pm->cumfreq[a0[bb]]);
             }
             sse.Update(sc, f, f0, bb);
-          } else if( dec==2 ) {
-            s = base+int(p[k]);
-            total += -log(double(pm->freq[s])/double(pm->cumfreq[base+MAXVAL+1]-pm->cumfreq[base]))/log(2.0);
-          } else if( dec ) {
+          } else if( CI==CI_DEC ) {
             s = DecSym(pm, base, base+MAXVAL+1);
             p[k] = byte(s-base);
           } else {
             s = base+int(p[k]);
-            EncSym(pm, base, base+MAXVAL+1, s);
+            if( CI!=CI_COST )
+              EncSym(pm, base, base+MAXVAL+1, s);
+            if( CI==CI_COST||CI==CI_PLOT )
+              bits = Bits(pm->freq[s], pm->cumfreq[base+MAXVAL+1]-pm->cumfreq[base]);
+          }
+          if( CI==CI_COST )
+            total += bits;
+          if( CI==CI_PLOT ) {
+            plot_bits += bits;
+            // 4.4 fixed point, saturating: a symbol can cost more than
+            // sixteen bits and the byte cannot say so.  The address is
+            // the raster's, not the codec's -- same mapping StoreOrg
+            // uses, so a transposed encode plots the right way up and
+            // the components come back in the order they went in.
+            byte* pl = plotbuf+(tflip ? size_t(x)*stride+size_t(y)*nc
+                                      : size_t(y)*stride+size_t(x)*nc);
+            int b16 = int(bits*16.0+0.5);
+            pl[ord[k]] = byte(b16>255 ? 255 : b16);
           }
           pe[k] = short(Econv(int(p[k]), v));
           lastr[k] = int(p[k])-((v+(1<<(COEF_PREC-1)))>>COEF_PREC);
@@ -3174,6 +3207,16 @@ struct MRPCIO : MRPC {
     }
     delete[] rowr;
     return total;
+  }
+
+  // ... and the one place the mode is a value rather than a type.
+  cost_t CodeImage(int ci) {
+    switch( ci ) {
+      case CI_DEC:  return CodeImageT<CI_DEC>();
+      case CI_COST: return CodeImageT<CI_COST>();
+      case CI_PLOT: return CodeImageT<CI_PLOT>();
+      default:      return CodeImageT<CI_ENC>();
+    }
   }
 
   // How wide the predictor coefficients are allowed to be.
@@ -3230,7 +3273,7 @@ struct MRPCIO : MRPC {
     cost_t bc = 1e30;
     for( int i = 0; i<int(sizeof(CAND)/sizeof(CAND[0])); i++ ) {
       sse_on = CAND[i];
-      cost_t c = CodeImage(2);
+      cost_t c = CodeImage(CI_COST);
       PROG(" %.0f", c/8.0);
       if( c<bc ) {
         bc = c;
@@ -3847,7 +3890,7 @@ struct Codec : MRPCIO {
     CodeClass(0);
     CodePredictor(0);
     CodeThreshold(0);
-    CodeImage(0);
+    CodeImage(plotbuf ? CI_PLOT : CI_ENC);
     PROG(" ... done  [%.0fs]\n", tnow()-t_start);
 #ifdef MRP_OPENCL
     g_cl.Report(stderr);
@@ -3899,7 +3942,7 @@ struct Codec : MRPCIO {
 #if MRP_VERBOSE
     Dump("dec");
 #endif
-    CodeImage(1);
+    CodeImage(CI_DEC);
   }
 
   // --- the stream's own header --------------------------------------
@@ -4047,6 +4090,76 @@ struct Codec : MRPCIO {
       return MRPC_OK;
     }
     free(a.data);
+    return MRPC_OK;
+  }
+
+  // Where the bits went.
+  //
+  // The same encode, to the byte, with the code length of every component
+  // written into a raster of the caller's geometry as it is coded: no
+  // second model, no second pass, and no branch in the encoder that does
+  // not want one -- CI_PLOT is a separate instantiation of the coding
+  // loop, so `c` and `p` share the search and share nothing else.
+  //
+  // The stream it produces is thrown away.  That is the point: what comes
+  // back is the picture of the cost, and it sums to the size of the file
+  // `c` would have written, give or take what saturated.
+  int Plot(const mrpc_image* im, mrpc_image* out, double* bits) {
+    // cleared before anything can go wrong, so that a caller who ignores
+    // the return code is looking at an empty image rather than a stack
+    if( bits )
+      *bits = 0.0;
+    if( out )
+      memset(out, 0, sizeof(*out));
+    if( !out||!im )
+      return MRPC_ERR_ARG;
+    if( !im->data||im->width==0||im->height==0||im->ncomp<1||
+        im->ncomp>MAXC||im->stride<im->width*im->ncomp )
+      return MRPC_ERR_ARG;
+    const size_t n = size_t(im->stride)*im->height;
+    byte* best = 0;
+    size_t bestsz = 0;
+    double bestbits = 0.0;
+    int rc = MRPC_ERR_MEM;
+    // ... and if the orientation trial is on, the plot of whichever way
+    // round won, so that `p` describes the file `c` would have written
+    for( int t = 0; t<=(trial_flip ? 1 : 0); t++ ) {
+      byte* pb = (byte*)calloc(n ? n : 1, 1);
+      if( !pb )
+        break;
+      mrpc_blob blob;
+      blob.data = 0;
+      blob.size = 0;
+      tflip = t;
+      plotbuf = pb;
+      plot_bits = 0.0;
+      int r = Compress(im, 0, 0, 0, 0, &blob);
+      plotbuf = 0;
+      if( r==MRPC_OK&&(!best||blob.size<bestsz) ) {
+        free(best);
+        best = pb;
+        bestsz = blob.size;
+        bestbits = plot_bits;
+        rc = MRPC_OK;
+      } else {
+        free(pb);
+        if( r!=MRPC_OK )
+          rc = r;
+      }
+      free(blob.data);
+    }
+    tflip = 0;
+    if( rc!=MRPC_OK ) {
+      free(best);
+      return rc;
+    }
+    out->width = im->width;
+    out->height = im->height;
+    out->ncomp = im->ncomp;
+    out->stride = im->stride;
+    out->data = best;
+    if( bits )
+      *bits = bestbits;
     return MRPC_OK;
   }
 
@@ -4237,6 +4350,16 @@ MRPC_API int MRPC_CALL mrpc_decompress(mrpc_ctx* c, const void* data, size_t siz
   if( !c )
     return MRPC_ERR_ARG;
   return c->cd.Decompress(data, size, img, head, tail);
+}
+
+MRPC_API int MRPC_CALL mrpc_plot(mrpc_ctx* c, const mrpc_image* img,
+                                 mrpc_image* out, double* bits) {
+  if( !c ) {
+    if( bits )
+      *bits = 0.0;
+    return MRPC_ERR_ARG;
+  }
+  return c->cd.Plot(img, out, bits);
 }
 
 MRPC_API void MRPC_CALL mrpc_free(void* p) {

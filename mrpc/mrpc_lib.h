@@ -151,6 +151,24 @@ MRPC_API int MRPC_CALL mrpc_decompress(mrpc_ctx* c, const void* data, size_t siz
                                        mrpc_image* img, mrpc_blob* head,
                                        mrpc_blob* tail);
 
+/* Where the bits went.  Encodes img exactly as mrpc_compress would --
+   same search, same model, same stream -- and instead of the stream
+   hands back a raster of the same geometry whose every component byte is
+   the code length of that component, in 4.4 fixed point: sixteenths of a
+   bit, saturating at 15.9375.  Components come back in the order they
+   went in, so the plot lines up with the image channel for channel.
+
+   out->data is allocated here; free it with mrpc_free.  Unlike
+   mrpc_compress this one wants an image: there is nothing to plot about
+   a blob.
+
+   bits, if given, receives the exact total before rounding.  It is worth
+   asking for: a symbol that costs less than a thirty-second of a bit --
+   and on a flat plane most of them do -- rounds to a zero byte, so the
+   raster adds up to slightly less than the image really cost. */
+MRPC_API int MRPC_CALL mrpc_plot(mrpc_ctx* c, const mrpc_image* img,
+                                 mrpc_image* out, double* bits);
+
 /* Everything the library allocated goes back through here, and only
    here: across a DLL boundary the caller's free() may not be the one
    that allocated it. */

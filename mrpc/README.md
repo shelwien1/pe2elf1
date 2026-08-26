@@ -40,6 +40,15 @@ mrpc_decompress(c, blob, bloblen, &img, &head, &tail);
 /* img.data, head.data, tail.data are yours; mrpc_free each */
 ```
 
+and, instead of the stream, a picture of what it would have cost:
+
+```c
+mrpc_image plot; double bits;
+mrpc_plot(c, &img, &plot, &bits);
+/* same geometry; every component byte is that component's code length
+   in 4.4 fixed point.  `bits` is the exact total before the rounding. */
+```
+
 * **One class does both directions.** `Codec` in `mrpc_lib.cpp` is the whole
   codec: `Init`, `Compress`, `Decompress`, `Quit`. `mrpc_ctx` is one of them.
 * **Explicit lifetime, everywhere.** No constructors, no destructors, nothing
@@ -51,6 +60,12 @@ mrpc_decompress(c, blob, bloblen, &img, &head, &tail);
 * **The device belongs to the context**, not to the image: `mrpc_init` opens it
   and builds the kernels, so a hundred images through one context compile
   nothing after the first.
+* **The plot costs the encoder nothing.** `CodeImage` is a template on what
+  the pass is for — encode, decode, cost, plot — and the dispatcher underneath
+  it is the only place that is a run-time value, so the three modes that are
+  not the encoder do not put a branch a symbol in the encoder. `mrpc_plot`
+  runs the same search and the same coder as `mrpc_compress`; only the
+  instantiation differs.
 * **head and tail** are arbitrary bytes carried through the stream with an
   order-1 model — a file format's header and trailer riding along with the
   raster. `img` may be null, which compresses those alone: what a frontend does
@@ -71,8 +86,8 @@ make exports      # what came out of it
 make dll          # mrpc.dll and libmrpc.dll.a, cross-built
 ```
 
-The nine functions in the header carry `MRPC_API`, and nothing else in the
-library does, so `make exports` lists those nine and no more. On ELF the
+The ten functions in the header carry `MRPC_API`, and nothing else in the
+library does, so `make exports` lists those ten and no more. On ELF the
 attribute is `visibility("default")` and unconditional — it costs a static
 build nothing and it is the thing that survives `-fvisibility=hidden`, which is
 what leaves a shared library with no surface at all. Windows cannot do that,
@@ -332,7 +347,7 @@ keep consistent, which is a design change and not a tuning one.
 mrpc [options] <mode> <input> <output>
 mrpc -l
 
-  <mode>    'c' compress, 'd' decompress
+  <mode>    'c' compress, 'd' decompress, 'p' plot
 
   -l        list the OpenCL platforms and devices, and exit
   -d <n>    use device <n>, numbered as -l prints it
@@ -346,6 +361,30 @@ mrpc -l
   -V        report what the device compiler had to say, and the device
             time per kernel at the end
 ```
+
+`p` encodes the image exactly as `c` does — same search, same model, same
+stream — throws the stream away, and writes a BMP of the same geometry
+instead.  Every component byte is the code length of that component in 4.4
+fixed point: sixteenths of a bit, saturating at 15.9375.  So the picture is a
+map of where the file's bits went, channel for channel, and it is a real map
+rather than an estimate — the exact figure it prints agrees to the byte with
+what the encoder's own model trial measured.
+
+```
+$ mrpc -C p t24_0.bmp plot.bmp
+mrpc: 61440 symbols, 116972 bits = 14621 B raster, 14647 B exact, mean 1.907 b/symbol, 4 saturated
+```
+
+The raster reads slightly low because a symbol costing less than a
+thirty-second of a bit rounds to a zero byte, and on a flat plane most of
+them do; the exact figure is what the coder charged.  The difference between
+that and the file `c` writes is the class map, the predictors and the
+thresholds.  A one-component plot gets a grey ramp for a palette, since a
+code length is not a palette index and the plot is meant to be looked at.
+What the plot file carries is the input's header and a raster the same shape;
+anything that trailed the pixel data in the input does not come along.  `-t`
+applies: the plot is of whichever orientation won, mapped back the right way
+up.
 
 `-t` runs the whole search twice, once on the image and once on its
 transpose, and keeps whichever came out smaller.  Nothing about the taps, the

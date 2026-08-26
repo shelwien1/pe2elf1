@@ -167,6 +167,35 @@ int main(void) {
     free(g);
   }
 
+  /* --- the plot: same geometry, and it adds up ---------------------- */
+  {
+    mrpc_image pl, pl2;
+    double bits = 0.0;
+    unsigned long sum = 0;
+    unsigned yy, xx;
+    rc = mrpc_compress(c, &in, 0, 0, 0, 0, &blob);
+    check(rc==MRPC_OK, "mrpc_compress, for the plot to be measured against");
+    rc = mrpc_plot(c, &in, &pl, &bits);
+    check(rc==MRPC_OK&&pl.data!=0, "mrpc_plot");
+    check(pl.width==W&&pl.height==H&&pl.ncomp==NC&&pl.stride==STRIDE,
+          "the plot has the image's geometry");
+    for( yy = 0; yy<pl.height; yy++ ) {
+      const unsigned char* r = pl.data+(size_t)yy*pl.stride;
+      for( xx = 0; xx<pl.width*pl.ncomp; xx++ )
+        sum += r[xx];
+    }
+    /* the raster rounds down and the stream carries side information on
+       top of the raster, so what is checked is the order, not equality:
+       plot <= exact <= file */
+    check(bits>0.0&&(double)sum/16.0<=bits+1.0, "the raster does not overstate the cost");
+    check(bits/8.0<=(double)blob.size, "and the cost does not exceed the file");
+    check(bits/8.0>(double)blob.size*0.5, "... but accounts for most of it");
+    rc = mrpc_plot(c, 0, &pl2, 0);
+    check(rc==MRPC_ERR_ARG&&pl2.data==0, "a plot of nothing is refused");
+    mrpc_free(pl.data);
+    mrpc_free(blob.data);
+  }
+
   /* --- no image at all: a file the frontend could not parse -------- */
   {
     unsigned char junk[1000];

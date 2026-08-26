@@ -198,7 +198,7 @@ static void Usage(const char* argv0) {
          "Usage: %s [options] <mode> <input> <output>\n"
          "       %s -l\n"
          "\n"
-         "  <mode>    'c' compress, 'd' decompress\n"
+         "  <mode>    'c' compress, 'd' decompress, 'p' plot\n"
          "\n"
          "Options (the encoder's optimisation loop runs on an OpenCL device;\n"
          "the decoder is serial and always runs on the host):\n"
@@ -215,6 +215,13 @@ static void Usage(const char* argv0) {
          "            Two encodes, nothing at the decoder; worth 0.41%% on the\n"
          "            reference corpus and never worse on any image of it\n"
          "  -V        report what the device compiler had to say\n"
+         "\n"
+         "'p' encodes the image exactly as 'c' does, throws the stream away, and\n"
+         "writes a BMP of the same geometry instead: every component byte is\n"
+         "the code length of that component in 4.4 fixed point -- sixteenths\n"
+         "of a bit, saturating at 15.9375 -- so the picture is a map of where\n"
+         "the file's bits went, channel for channel.  A one-component plot\n"
+         "gets a grey ramp for a palette so that it can be looked at.\n"
          "\n"
          "With no -d or -T, the first GPU is used, or the first CPU device\n"
          "if there is no GPU.  Anything that goes wrong with the device is\n"
@@ -306,7 +313,12 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  const int dec = (pos[0][0]=='d');
+  const char mode = pos[0][0];
+  if( (mode!='c'&&mode!='d'&&mode!='p')||pos[0][1] ) {
+    fprintf(stderr, "mrpc: mode is 'c', 'd' or 'p', not \"%s\"\n", pos[0]);
+    return 1;
+  }
+  const int dec = (mode=='d');
 
   File in;
   in.Init();
@@ -327,7 +339,72 @@ int main(int argc, char** argv) {
     fprintf(stderr, "mrpc: device: %s\n", mrpc_device_used(ctx));
 
   int rc = MRPC_OK, ret = 0;
-  if( !dec ) {
+  if( mode=='p' ) {
+    // --- plot: the same encode, and a picture of what it cost
+    BmpInfo b;
+    b.Parse(in.data, in.size);
+    if( !b.ok ) {
+      fprintf(stderr, "mrpc: %s is not a raster this can plot\n", pos[1]);
+      mrpc_quit(ctx);
+      in.Quit();
+      return 3;
+    }
+    mrpc_image im, pl;
+    double exact = 0.0;
+    memset(&im, 0, sizeof(im));
+    im.width = b.W;
+    im.height = b.H;
+    im.ncomp = b.nc;
+    im.stride = b.stride;
+    im.data = in.data+b.off;
+    rc = mrpc_plot(ctx, &im, &pl, &exact);
+    if( rc==MRPC_OK ) {
+      // the input's own header, so the plot is the same shape of file as
+      // the image it describes -- except that a palette maps indices to
+      // colours and a code length is not an index, so a one-component
+      // plot gets a grey ramp instead and can be looked at
+      byte* hdr = (byte*)malloc(b.off ? b.off : 1);
+      if( hdr ) {
+        memcpy(hdr, in.data, b.off);
+        if( b.nc==1&&b.off>=HDR0+1024 )
+          for( uint i = 0; i<256; i++ ) {
+            byte* e = hdr+b.off-1024+i*4;
+            e[0] = e[1] = e[2] = byte(i);
+            e[3] = 0;
+          }
+        if( !File::Write(pos[2], hdr, b.off, pl.data, size_t(pl.stride)*pl.height, 0, 0) ) {
+          fprintf(stderr, "mrpc: cannot write %s\n", pos[2]);
+          ret = 4;
+        }
+        free(hdr);
+      } else {
+        rc = MRPC_ERR_MEM;
+      }
+      // what the raster adds up to, against what the encode actually
+      // cost -- they differ by the symbols too cheap to round to a
+      // sixteenth of a bit, and on a flat plane that is most of them
+      double bits = 0;
+      size_t sat = 0;
+      for( uint y = 0; y<pl.height; y++ ) {
+        const byte* r = pl.data+size_t(y)*pl.stride;
+        for( uint i = 0; i<pl.width*pl.ncomp; i++ ) {
+          bits += double(r[i]);
+          if( r[i]==255 )
+            sat++;
+        }
+      }
+      bits /= 16.0;
+      const double n = double(pl.width)*pl.height*pl.ncomp;
+      fprintf(stderr, "mrpc: %.0f symbols, %.0f bits = %.0f B raster,"
+                      " %.0f B exact, mean %.3f b/symbol",
+              n, bits, bits/8.0, exact/8.0, exact/n);
+      if( sat )
+        fprintf(stderr, ", %llu saturated", (unsigned long long)sat);
+      fprintf(stderr, "\n");
+      mrpc_free(pl.data);
+    }
+    b.Quit();
+  } else if( !dec ) {
     // --- compress: split the file into header, raster and trailer
     BmpInfo b;
     b.Parse(in.data, in.size);
