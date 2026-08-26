@@ -38,6 +38,10 @@
 //   mrpc d out.mrp back.bmp
 // -------------------------------------------------------------
 
+#ifndef CLASS_TRIAL
+#define CLASS_TRIAL  0   // 1 = measure the class count instead of predicting
+                         // it: one pass of each loop per candidate
+#endif
 #ifndef MRP_CLASS
 #define MRP_CLASS    0   // predictor classes; 0 = pick from the image size
 #endif
@@ -46,6 +50,12 @@
 #endif
 #ifndef MRP_GROUP
 #define MRP_GROUP    16  // activity groups, i.e. probability models in use
+#endif
+#ifndef SIGMA_LO
+#define SIGMA_LO   0.15  // the scale ladder those groups draw from
+#endif
+#ifndef SIGMA_HI
+#define SIGMA_HI  30.89
 #endif
 #ifndef PRD_ORDER
 #define PRD_ORDER    20  // causal taps on the component being predicted
@@ -59,9 +69,21 @@
 #ifndef COEF_PREC
 #define COEF_PREC     6  // fixed-point bits of a predictor coefficient
 #endif
-#ifndef NUM_PMODEL
-#define NUM_PMODEL   16  // generalized-Gaussian shapes to choose among
+#ifndef NUM_SHAPE
+#define NUM_SHAPE    16  // generalized-Gaussian shapes to choose among
 #endif
+#ifndef NUM_TAIL
+#define NUM_TAIL      5  // ... times this many tail weights.  A generalized
+                         // Gaussian's tail is tied to its peak -- one shape
+                         // parameter sets both -- and real residuals do not
+                         // oblige.  Mixing a little uniform mass in unties
+                         // them, which is the one degree of freedom the
+                         // family is missing; see TUNING.md.  1 is the codec
+                         // without it, byte for byte.  Five costs nothing
+                         // measurable in time -- the model search is under a
+                         // percent of the encode -- and 42 MB of tables.
+#endif
+#define NUM_PMODEL (NUM_SHAPE*NUM_TAIL)
 #ifndef PM_ACC
 #define PM_ACC        3  // bits of the prediction's fraction the pmf sees
 #endif
@@ -210,7 +232,33 @@ static const int DYX[][2] = {{0, -1}, {-1, 0}, {0, -2}, {-1, -1}, {-2, 0}, {-1, 
 static const int NDYX = int(sizeof(DYX)/sizeof(DYX[0]));
 
 // The sigma ladder the groups are drawn from (common.c, sigma_a[]).
-static const double SIGMA[16] = {0.15, 0.26, 0.38, 0.57, 0.83, 1.18, 1.65, 2.31, 3.22, 4.47, 6.19, 8.55, 11.80, 16.27, 22.42, 30.89};
+// The scale ladder the groups are drawn from.  MRP's own (common.c,
+// sigma_a[]) is sixteen steps from 0.15 to 30.89, very nearly geometric
+// with a ratio of 1.378, and it is the *only* place the model's scale
+// comes from: the threshold DP chooses which activities land in which
+// group, but not what sigma that group has.  So a group whose residuals
+// want a scale between two rungs, or above the top one, gets the nearest
+// rung and pays for it.  SIGMA_LO/SIGMA_HI generate the ladder instead,
+// so both can be moved.
+struct SigmaLadder {
+  double v[MRP_GROUP];
+  void Init() {
+    if( MRP_GROUP==16&&SIGMA_LO==0.15&&SIGMA_HI==30.89 ) {
+      // MRP's own numbers, to the digit, so the default is unchanged
+      static const double a[16] = {0.15, 0.26, 0.38, 0.57, 0.83, 1.18, 1.65, 2.31,
+                                   3.22, 4.47, 6.19, 8.55, 11.80, 16.27, 22.42, 30.89};
+      for( int i = 0; i<16; i++ )
+        v[i] = a[i];
+      return;
+    }
+    double r = pow(double(SIGMA_HI)/double(SIGMA_LO), 1.0/double(MRP_GROUP-1));
+    double x = SIGMA_LO;
+    for( int i = 0; i<MRP_GROUP; i++, x *= r )
+      v[i] = x;
+  }
+};
+static SigmaLadder g_sigma;
+#define SIGMA (g_sigma.v)
 static const double QTREE_PROB[7] = {0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95};
 
 typedef double cost_t;
@@ -276,8 +324,14 @@ static double lngammaf(double x) {
 // One (sigma, shape) pair -> NUM_SUBPM shifted frequency tables, as
 // common.c's set_freqtable: the pdf is sampled NUM_SUBPM times per integer
 // so the table can be indexed by the fraction of the prediction.
+// How much of the mass each tail weight spreads flat under the curve.
+static const double TAILW[8] = {0.0, 1.0/1024, 1.0/256, 1.0/64,
+                                1.0/32, 1.0/16, 1.0/8, 1.0/4};
+
 static void set_freqtable(PMod* pm, double* pdf, int center, int idx, double sigma) {
-  double shape = (idx<0) ? 2.0 : 3.2*(idx+1)/double(NUM_PMODEL);
+  int shp = (idx<0) ? -1 : idx%NUM_SHAPE;
+  double tw = (idx<0) ? 0.0 : TAILW[(idx/NUM_SHAPE)&7];
+  double shape = (idx<0) ? 2.0 : 3.2*(shp+1)/double(NUM_SHAPE);
   double beta = exp(0.5*(lngammaf(3.0/shape)-lngammaf(1.0/shape)))/sigma;
   double sw = 1.0/double(NUM_SUBPM);
   int n = pm->size*NUM_SUBPM;
@@ -294,10 +348,12 @@ static void set_freqtable(PMod* pm, double* pdf, int center, int idx, double sig
     double norm = 0.0;
     for( int i = 0; i<pm->size; i++ )
       norm += pdf[i*NUM_SUBPM+j];
-    norm = double(MAX_TOTFREQ-pm->size*MIN_FREQ)/norm+1e-8;
+    const double budget = double(MAX_TOTFREQ-pm->size*MIN_FREQ);
+    const double flat = tw*budget/double(pm->size);
+    norm = (1.0-tw)*budget/norm+1e-8;
     pm->cumfreq[0] = 0;
     for( int i = 0; i<pm->size; i++ ) {
-      pm->freq[i] = uint(norm*pdf[i*NUM_SUBPM+j])+MIN_FREQ;
+      pm->freq[i] = uint(norm*pdf[i*NUM_SUBPM+j]+flat)+MIN_FREQ;
       pm->cumfreq[i+1] = pm->cumfreq[i]+pm->freq[i];
     }
     pm++;
@@ -2583,6 +2639,32 @@ struct Codec : MRPCIO {
   int own_img;    // 1 when it is ours to free: the decoder allocates one
   int geom;       // ImgInit has run
   int prog_req;   // what the caller asked for: 0 quiet, 1 if big, 2 always
+  int class_req;  // and how many classes: 0 for whatever the image suggests
+
+  // How many predictor classes this image gets.  The caller's number wins;
+  // -DMRP_CLASS pins it at build time; otherwise MRP's own rule, which is
+  // linear in the pixel count.
+  //
+  // That rule is demonstrably not the optimum -- swept against the truth it
+  // is wrong by up to 27%, in both directions, and the right number depends
+  // on the picture rather than its size: two 192x192 crops with the same
+  // pixel count want 45 classes and 6.  Three replacements were measured
+  // over a corpus and every one of them was worse on average, because the
+  // objective is bimodal (see TUNING.md) and any rule that moves the count
+  // sometimes lands in the bad mode and loses 20%.  MRP's rule is not good
+  // at predicting the optimum; it is good at staying out of trouble, and
+  // that turns out to be the more valuable property.  -n is how you do
+  // better on an image you care about.
+  int ClassCount() const {
+    if( class_req>0 )
+      return (class_req>MRP_MAXCLASS) ? MRP_MAXCLASS : (class_req<2 ? 2 : class_req);
+    int n = MRP_CLASS ? MRP_CLASS : int(10.4e-5*double(W)*double(H)+13.8);
+    if( n>MRP_MAXCLASS )
+      n = MRP_MAXCLASS;
+    if( n<2 )
+      n = 2;
+    return n;
+  }
   BC (*o1)[256];  // the order-1 model the head and tail bytes go through
   BC (*hdr)[256]; // and the one the stream's own header goes through
 
@@ -2627,7 +2709,7 @@ struct Codec : MRPCIO {
     nc = nc_;
     stride = stride_;
     BS = W+PADL+PADR;
-    num_class = MRP_CLASS ? MRP_CLASS : int(10.4e-5*double(W)*double(H)+13.8);
+    num_class = ClassCount();
     if( num_class>MRP_MAXCLASS )
       num_class = MRP_MAXCLASS;
     if( num_class<2 )
@@ -2773,6 +2855,65 @@ struct Codec : MRPCIO {
     return c;
   }
 
+
+  // ---------------------------------------------------------------
+  // How many classes.  MRP's rule was linear in the pixel count, and
+  // measured against a sweep it is wrong by up to 27% -- because the
+  // right number depends on the picture and not on its size.  Two 192x192
+  // crops with the same pixel count want 45 classes and 6.
+  //
+  // So it is measured rather than predicted.  One iteration of the first
+  // loop at each candidate, and the whole file's cost -- side information
+  // included, which is what pays for a class -- decides.  Against a full
+  // sweep of seven counts on five images that picks the sweep's own
+  // winner four times out of five, and loses 0.39% on the fifth.
+  //
+  // It costs one loop-1 iteration per candidate.  -n skips it entirely.
+  cost_t TrialClass(int n) {
+    num_class = n;
+    InitClass();
+    opt_loop = 1;
+    DesignPredictor(1);
+    OptimizeGroup();
+    OptimizeClass();
+    // and one pass of the second loop, which is the one that matters here:
+    // the first loop segments into flat 8x8 blocks, so it cannot see what a
+    // quadtree does with a large class count, and a trial that stops after
+    // it ranks every count within a percent of every other and then picks
+    // the smallest.  Measured, that is the difference between a trial that
+    // agrees with a full sweep and one that does not.
+    opt_loop = 2;
+#if OPT_PRED
+    OptimizePredictor();
+#endif
+    cost_t side = CodePredictor(1);
+    OptimizeGroup();
+    side += CodeThreshold(1);
+    cost_t c = OptimizeClass();
+    side += CodeClass(1);
+    return c+side;
+  }
+
+  void ChooseClass() {
+    static const int CAND[] = {6, 10, 16, 24, 34, 45, 63};
+    int best = 0;
+    cost_t bc = 1e30;
+    for( int i = 0; i<int(sizeof(CAND)/sizeof(CAND[0])); i++ ) {
+      int n = CAND[i];
+      if( n>MRP_MAXCLASS )
+        n = MRP_MAXCLASS;
+      if( i&&n<=best )
+        continue; // the cap folded this one onto the last
+      cost_t c = TrialClass(n);
+      PROG(" %d:%.0f", n, c/8.0);
+      if( c<bc ) {
+        bc = c;
+        best = n;
+      }
+    }
+    num_class = best;
+  }
+
   // Bands for the trial: a fixed pixel budget spread evenly down the
   // image, so a wide picture is sampled in more places rather than in one
   // deeper stripe.
@@ -2877,7 +3018,7 @@ struct Codec : MRPCIO {
     pmodels = pmset.pm;
     for( uint k = 0; k<nc; k++ )
       for( int g = 0; g<MRP_GROUP; g++ )
-        pm_idx[k][g] = NUM_PMODEL>>1;
+        pm_idx[k][g] = NUM_SHAPE>>1; // the middle shape, no extra tail
     SetPmodels();
     SetCoefCost();
     DefaultSideCosts();
@@ -2900,7 +3041,13 @@ struct Codec : MRPCIO {
     PROG("  (%.1fs)\n", tnow()-t0);
     PROG("mrpc: -DMRP_CLASS=n and -DMAX_ITER=n are the time dials;"
          " both searches are linear in the class count\n");
-    CodeParams(0); // after ChooseOrder: it is what it picked
+    if( CLASS_TRIAL&&!class_req&&!MRP_CLASS&&W*H>=4096 ) {
+      double tc = tnow();
+      PROG("mrpc: class trial");
+      ChooseClass();
+      PROG("  -> %d classes  (%.1fs)\n", num_class, tnow()-tc);
+    }
+    CodeParams(0); // after ChooseOrder and ChooseClass: it is what they picked
     InitClass();
 
     // saved best of each loop
@@ -3292,8 +3439,10 @@ MRPC_API mrpc_ctx* MRPC_CALL mrpc_init(const mrpc_opts* opts) {
   mrpc_ctx* c = (mrpc_ctx*)aligned_alloc(MRPC_CTX_ALIGN, n);
   if( !c )
     return 0;
+  g_sigma.Init();
   c->cd.Init();
   c->cd.prog_req = opts ? opts->progress : 0;
+  c->cd.class_req = opts ? opts->num_class : 0;
   g_clopt.use = opts ? opts->use_opencl : 1;
   g_clopt.plat = opts ? opts->platform : -1;
   g_clopt.dev = opts ? opts->device : -1;

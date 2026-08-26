@@ -209,6 +209,8 @@ static void Usage(const char* argv0) {
          "  -T <t>    pick by type instead: cpu, gpu, acc\n"
          "  -C        do not use OpenCL at all -- the reference code path\n"
          "  -k        cache the compiled kernels in the working directory\n"
+         "  -n <n>    use <n> predictor classes (2..63) instead of the number\n"
+         "            the image size suggests\n"
          "  -V        report what the device compiler had to say\n"
          "\n"
          "With no -d or -T, the first GPU is used, or the first CPU device\n"
@@ -219,6 +221,11 @@ static void Usage(const char* argv0) {
          "<device name>.!cl, and rebuilds them if the device, the driver or\n"
          "mrpc itself changes.  The kernels do not depend on the image, so\n"
          "one file serves every image on that device.\n"
+         "\n"
+         "More classes fit the image more closely, and cost their\n"
+         "coefficients, their share of the class map, and time -- both\n"
+         "searches are linear in the count.  The default grows with the log\n"
+         "of the pixel count and caps at 63.\n"
          "\n"
          "The codec segments the image into classes over a quadtree, fits one\n"
          "linear predictor per (class, colour component), and codes the\n"
@@ -261,6 +268,9 @@ int main(int argc, char** argv) {
         break;
       case 'k':
         opt.cache_kernels = 1;
+        break;
+      case 'n':
+        opt.num_class = ArgNum(argc, argv, i, "-n");
         break;
       case 'd':
         opt.device = ArgNum(argc, argv, i, "-d");

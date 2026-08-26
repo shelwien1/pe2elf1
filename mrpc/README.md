@@ -333,9 +333,15 @@ mrpc -l
   -T <t>    pick by type instead: cpu, gpu, acc
   -C        do not use OpenCL at all -- the reference code path
   -k        cache the compiled kernels in the working directory
+  -n <n>    use <n> predictor classes (2..63) instead of the number the
+            image size suggests
   -V        report what the device compiler had to say, and the device
             time per kernel at the end
 ```
+
+`-n` sets the class count directly.  The default comes from the image size,
+which is demonstrably not where the right answer lives -- see `TUNING.md` --
+so on an image worth the trouble, sweep it.
 
 `-k` caches the compiled kernels in the working directory as
 `<device name>.!cl` — `NVIDIA_GeForce_RTX_3090.!cl` — which saves the second or
@@ -433,4 +439,5 @@ exercised.
 | `t_lib.c` | the same through the C API, in C — and against `libmrpc.a`, `libmrpc.so` or `mrpc.dll` unchanged |
 | `bmp8.py` | 8bpp grey and paletted BMPs out of a 24/32bpp one, for testing the one-component path |
 | `ENTROPY.md` | where the bits go: the rangecoder, the probability model, and what a PAQ-style component would be worth |
+| `TUNING.md` | the class count and the shape of the model: what was measured, what moved, and what did not |
 | `tools/entropy_probe.patch` | the measurement harness those numbers come from |

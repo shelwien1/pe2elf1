@@ -97,6 +97,9 @@ typedef struct {
   int cache_kernels; /* keep the compiled kernels in the working directory */
   int verbose;       /* device build log and per-kernel timings on stderr */
   int progress;      /* 0 = silent, 1 = if the image is big, 2 = always */
+  int num_class;     /* predictor classes: 0 = pick from the image, else 2..63.
+                        More classes fit the image more closely and cost side
+                        information and time; both searches are linear in it. */
 } mrpc_opts;
 
 enum { MRPC_DEV_ANY = 0, MRPC_DEV_CPU, MRPC_DEV_GPU, MRPC_DEV_ACC };
