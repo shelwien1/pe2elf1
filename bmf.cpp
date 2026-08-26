@@ -9,6 +9,14 @@
 #include <pmmintrin.h>
 #include <xmmintrin.h>
 
+// MSVC's <stdlib.h> spells __min and __max as function-like macros.  The
+// generated tables in MOD/ call them, and bmf_idx.inc defines them as constexpr
+// functions for every other compiler; left standing, the macros mangle that
+// definition and the build fails.  Undefining them here -- after the standard
+// headers and before bmf_idx.inc -- lets the real functions through.
+#undef __min
+#undef __max
+
 #ifdef __GNUC__
  #define INLINE   __attribute__((always_inline)) inline
  #define NOINLINE __attribute__((noinline))
@@ -236,6 +244,9 @@ void bmf_plot(const char* InName, const char* OutName, const char* AlphaName) {
   printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i[0].width, p_i[0].height,
          p_i[0].depth&depth_bits, p_i[0].data_size);
   bmf_log("\n");
+  // pN plots what cN would code, so the tile shift has to reach the header the
+  // same way the compress path puts it there.
+  p_i[0]._pad8[2] = (uint8_t)bmf_tile_shift;
   bmf_plot_want = 1;
   size_t len = 0;
   uint8_t* coded = bmf_codec.compress_to_memory(p_i, &len, nullptr);
@@ -391,16 +402,24 @@ int32_t main(int32_t argc, char** argv) {
   int32_t mode = 0;
   if( nfiles>=2 ) {
     const char*const w = args[1];
+    const int32_t verb = toupper((unsigned char)w[0]);
     if( !w[1] ) {
-      mode = toupper(w[0]);
-    } else if( toupper(w[0])=='C'&&!w[2]&&isdigit((unsigned char)w[1]) ) {
-      const int32_t n = w[1]-'0';
-      if( n>=kTileShiftMin&&n<=kTileShiftMax ) {
-        mode = 'C';
+      mode = verb;
+    } else if( verb=='C'||verb=='P' ) {
+      // A tile shift, read as a number rather than a digit: the range runs to
+      // 12, so c10 and c12 have to parse as well as c8.  Every character after
+      // the letter has to be part of that number, or the word is not a command.
+      int32_t k = 1;
+      while( isdigit((unsigned char)w[k]) )
+        ++k;
+      if( k>1&&!w[k] ) {
+        const int32_t n = atoi(w+1);
+        if( n<kTileShiftMin||n>kTileShiftMax ) {
+          printf("tile shift %d is outside %d..%d\n", n, kTileShiftMin, kTileShiftMax);
+          return 1;
+        }
+        mode = verb;
         bmf_tile_shift = n;
-      } else {
-        printf("tile shift %d is outside %d..%d\n", n, kTileShiftMin, kTileShiftMax);
-        return 1;
       }
     }
   }
@@ -411,12 +430,13 @@ int32_t main(int32_t argc, char** argv) {
            "Usage: bmf c  [-v] input.bmp output    compress, always with -S -Q9\n"
            "       bmf cN [-v] input.bmp output    compress in tiles of 1<<N, N in %d..%d\n"
            "       bmf d  [-v] input output.bmp    expand\n"
-           "       bmf p  [-v] input.bmp plot.bmp [alpha.bmp]\n"
+           "       bmf pN [-v] input.bmp plot.bmp [alpha.bmp]\n"
            "                                       plot each component's codelength, one\n"
            "                                       byte in 4.4 fixed point.  Name a third\n"
            "                                       file and an RGBA source puts its colour\n"
            "                                       planes in the second and its alpha plane\n"
-           "                                       in the third, as greyscale\n"
+           "                                       in the third, as greyscale.  N tiles it,\n"
+           "                                       as for c\n"
            "       -v   report the coding-method trials and the choices made\n",
            kTileShiftMin, kTileShiftMax);
     return 1;

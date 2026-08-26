@@ -639,6 +639,14 @@ t8g     4.477               4.484            x_ci   1.001   1.002
 t32     5.473               5.486            x_ep   4.497   4.500
 ```
 
+`bmf pN` plots what `bmf cN` codes: each tile's models walk the tile, so its
+costs land in a tile-sized map, get that tile's own geometry undone and are
+scattered into the frame exactly as its pixels are.  The plotted total then
+tracks the tiled coded size the same way -- on `PIA13915`'s worst crop, `p7`
+plots 3.583 bpp against `c7`'s 3.636 and `p8` plots 3.780 against 3.799.  The
+gap widens as the tiles shrink, which is the per-tile framing: more tiles, more
+bits belonging to no sample.
+
 Name a **third file** and an RGBA source splits: the second file gets the three
 colour planes as a 24-bit image, the third gets the alpha plane's codelengths as
 8-bit greyscale.  Worth having, because a 32-bit plot is a 32-bit BMP whose
@@ -1259,6 +1267,13 @@ None of these changed a single coded byte: the 81-image corpus (12 upstream test
 files plus 69 generated edge cases) produces streams byte-identical to the
 pre-fix baseline, and every image still round-trips losslessly when checked with
 an independent BMP decoder rather than BMF's own reader.
+
+* **`__min` / `__max` are macros in MSVC's `<stdlib.h>`** (`bmf.cpp:12`). The
+  tables `idx2inc.pl` generates into `MOD/` call them, and `bmf_idx.inc` defines
+  them as constexpr functions for the compilers that do not have them; left
+  standing, the macros expand inside that definition and the build fails. They
+  are undefined at the top of `bmf.cpp`, after the standard headers and before
+  `bmf_idx.inc`, which is a no-op everywhere else.
 
 * **An RLE row wider than the image refused the whole file** (`read_rle8` /
   `read_rle4`, `bmp.inc:607`). Both decoders advanced a pointer and bounded it

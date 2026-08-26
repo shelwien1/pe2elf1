@@ -842,6 +842,17 @@ struct BMFCodec : BMFState {
       pack_bits(0, 4);
     }
     xform_scratch = (uint8_t*)bmf_new(2u*sizeof(BmfImage)+(size_t)big*big*plane_count);
+    // Plot mode tiles too.  Each tile's models walk the tile, so its costs land
+    // in a tile-sized map, get that tile's own geometry undone, and are
+    // scattered into the frame exactly as its pixels are.
+    BmfImage* plot_all = nullptr;
+    BmfImage* plot_one = nullptr;
+    if( bmf_plot_want ) {
+      plot_all = alloc_image(img_w, img_h, 8*plane_count, 0, 0);
+      memset(plot_all[0].pixels, 0, plot_all[0].data_size);
+      plot_one = alloc_image(big, big, 8*plane_count, 0, 0);
+      plot_on = 1;
+    }
     begin_carried_models();
     for( int32_t t = 0; t<n_tiles; ++t ) {
       tile_frame(tile, rec[t].cw, rec[t].ch);
@@ -851,11 +862,36 @@ struct BMFCodec : BMFState {
       tile[0]._pad8[0] = rec[t].pad8;
       memcpy(tile[0].pixels, coded_pix+rec[t].off, tile[0].data_size);
       restore_descriptors(rec[t].desc);
+      if( plot_one ) {
+        tile_frame(plot_one, rec[t].cw, rec[t].ch);
+        memset(plot_one[0].pixels, 0, plot_one[0].data_size);
+        plot_map = plot_one[0].pixels;
+        plot_len = plot_one[0].data_size;
+        plot_bits = 0.0;
+      }
       uint32_t planar = rec[t].planar;
       code_field<0>(planar, 1, 0);
       code_tile_repr<0>(tile, rec[t].flags8, rec[t].pad8, rec[t].remap_kind,
                         rec_mask+2*mask_row*t);
       code_tile_body(tile, (int32_t)planar);
+      if( plot_one ) {
+        plot_ungeometry(plot_one, rec[t].flags8, rec[t].pad8);
+        tile_scatter(plot_all, plot_one, (t%nx)<<shift, (t/nx)<<shift);
+        plot_map = nullptr;
+      }
+    }
+    if( plot_all ) {
+      // Handed on in the frame's own orientation, so plot_image has nothing
+      // left to undo.
+      plot_len = plot_all[0].data_size;
+      plot_map = (uint8_t*)bmf_new(plot_len);
+      memcpy(plot_map, plot_all[0].pixels, plot_len);
+      plot_w = (uint16_t)img_w;
+      plot_h = (uint16_t)img_h;
+      plot_flags = 0;
+      plot_pad = 0;
+      free((uint8_t*)plot_one);
+      free((uint8_t*)plot_all);
     }
     model_keep = 0;
     // Every map that mattered went out inside the stream, per tile.
@@ -2094,21 +2130,28 @@ struct BMFCodec : BMFState {
   // The map as an image in the caller's own orientation.  The renumbering map
   // substitutes values without moving them, so it does not apply here; only the
   // geometry does, and it comes off in the order restore_representation uses.
+  // Undo on a map of costs what restore_representation undoes on the pixels,
+  // minus the renumbering: that substitutes values without moving them, so it
+  // does not apply to a byte that says what a position cost.
+  void plot_ungeometry(BmfImage* m, uint8_t flags8, uint8_t pad8) {
+    m[0].flags = flags8&flags_transposed;
+    m[0]._pad8[0] = pad8&(uint8_t)(pad_flip_x|pad_flip_y);
+    if( m[0]._pad8[0]&pad_flip_x )
+      flip_image_x(m, plane_count);
+    if( m[0]._pad8[0]&pad_flip_y )
+      flip_image_y(m, plane_count);
+    if( m[0].flags&flags_transposed )
+      transpose_image(m, plane_count);
+    m[0].flags = 0;
+    m[0]._pad8[0] = 0;
+  }
+
   BmfImage*plot_image() {
     if( !plot_map )
       return nullptr;
     BmfImage*const out = alloc_image(plot_w, plot_h, 8*plane_count, 0, 0);
     memcpy(out[0].pixels, plot_map, plot_len);
-    out[0].flags = plot_flags&flags_transposed;
-    out[0]._pad8[0] = plot_pad&(uint8_t)(pad_flip_x|pad_flip_y);
-    if( out[0]._pad8[0]&pad_flip_x )
-      flip_image_x(out, plane_count);
-    if( out[0]._pad8[0]&pad_flip_y )
-      flip_image_y(out, plane_count);
-    if( out[0].flags&flags_transposed )
-      transpose_image(out, plane_count);
-    out[0].flags = 0;
-    out[0]._pad8[0] = 0;
+    plot_ungeometry(out, plot_flags, plot_pad);
     if( plane_count==1 )
       out[0].depth |= depth_grey;
     free(plot_map);
