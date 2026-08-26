@@ -184,10 +184,16 @@ template <class T, int32_t N> struct BlockPool {
   }
 
   // Called at the start of a coding pass: every block seeds itself again the
-  // first time that pass reaches it.
+  // first time that pass reaches it, and every block is free.  Both halves
+  // matter.  The encoder searches before it codes and the decoder does not, so
+  // a block still marked taken when the coding pass begins would send the
+  // encoder's take_slot to its fallback and the decoder's to the named slot --
+  // two different blocks for the same plane, and a stream that cannot decode.
   void unseed() {
-    for( int32_t k = 0; k<N; ++k )
+    for( int32_t k = 0; k<N; ++k ) {
+      taken[k] = 0;
       seeded[k] = 0;
+    }
   }
 
   bool was_seeded(int32_t k) const {

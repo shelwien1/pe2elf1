@@ -204,10 +204,26 @@ struct BMFCodec : BMFState {
           int16_t seed3 = 0;
           if( ref3_mixed ) {
             const PlaneDesc &mix = plane_desc[plane_desc[3].src_plane];
-            seed3 = (mix.weight2*out[2]+mix.weight1*out[1]+mix.weight0*out[0])>>3;
+            // By coding slot, the way seed2 above reads its two.  The weights
+            // are stored in slot order (see choose_plane_coding), and the three
+            // planes that are decoded by the time this runs are the ones in
+            // slots 0..2 -- which are 0,1,2 only while the coding order is the
+            // identity.  The alpha-order trial exists to make it something
+            // else, and then the encoder read a source byte where the decoder
+            // read one it had not written yet.
+            seed3 = (mix.weight2*out[plane_desc[2].src_plane]
+                     +mix.weight1*out[plane_desc[1].src_plane]
+                     +mix.weight0*out[plane_desc[0].src_plane])>>3;
           }
           plane[3][0].cursor[0][0].dval = seed3;
-          plane[3][0].code_sample<f_DEC>(out, f_DEC ? 3 : plane_desc[3].src_plane, plane[2], plane[0]);
+          // Slots 0..2 above name their plane through src_plane on both sides;
+          // this one read a literal 3 when decoding, which is the same number
+          // only while alpha stays in slot 3.  The alpha-order trial exists to
+          // move it, and a tile that took that trial then encoded one plane and
+          // decoded another.  Nothing already decodable changes: the encoder
+          // always used src_plane, so a stream this used to disagree about was
+          // not being decoded correctly in the first place.
+          plane[3][0].code_sample<f_DEC>(out, plane_desc[3].src_plane, plane[2], plane[0]);
           plane[3][0].add_bias(ctx_bias);
           nplanes = plane_count;
         }
@@ -664,46 +680,70 @@ struct BMFCodec : BMFState {
     for( int32_t y = 0; y<tile[0].height; ++y, dst += img[0].stride, src += tile[0].stride )
       memcpy(dst, src, tile[0].stride);
   }
-  // The descriptor half of search_filter, for one tile.  Geometry, palette
-  // order and renumbering belong to the whole image and were settled before
-  // this ran; what is left is which model each plane gets and whether the
-  // planes are coded apart or together.  The trials code the tile for real, so
-  // they get a stream buffer of their own and the carried models are held back
-  // while they run.  Returns 1 for planar, 0 for the joint transform.
-  int32_t search_tile_descs(BmfImage* tile) {
-    if( tile[0].width<4||tile[0].height<3 ) {
-      reset_descriptors();
-      return 0;
-    }
+  // The whole of search_filter, run on one tile.  Not a subset of it: a tile
+  // that only got the descriptor half came out 8.25% worse than the same tile
+  // coded as its own file, and every point of that was the renumbering map --
+  // which is worth 5.4% chosen per tile against 1.8% chosen per image on
+  // `PIA13915`, because a 256x256 region uses a far smaller slice of a
+  // tone-curved alphabet than the frame does.  So the tile gets the real
+  // search, and what it decides about its own representation travels with it.
+  //
+  // The trials code the tile for real, so they run on a stream buffer of their
+  // own with the carried models held back.  Returns 1 for planar, 0 for the
+  // joint transform, and leaves the tile holding its transformed pixels.
+  int32_t search_tile(BmfImage* tile) {
     const CodedStream saved_stream = stream;
     uint8_t*const saved_hist = hist_scratch;
     const int32_t saved_keep = model_keep;
     uint8_t*const saved_xform = xform_scratch;
     model_keep = 0;
     xform_scratch = nullptr;
-    uint8_t*const pristine = (uint8_t*)bmf_new(tile[0].data_size);
-    memcpy(pristine, tile[0].pixels, tile[0].data_size);
-    stream_open(tile[0].data_size);
-    uint32_t plane_cost[4];
-    choose_plane_coding(tile);
-    uint8_t*const tile_buf = (uint8_t*)bmf_new((size_t)tile[0].width*tile[0].height);
-    PlaneSearch ps = search_planes(tile, tile_buf, plane_cost);
-    int32_t cand = 1;
-    mode_search(tile, tile[0].pixels, ps, ps.bits, cand);
-    free(tile_buf);
-    free(stream.buf);
-    memcpy(tile[0].pixels, pristine, tile[0].data_size);
-    free(pristine);
+    tile[0].flags = 0;
+    tile[0]._pad8[0] = 0;
+    remap_active = 0;
+    remap_split = 0;
+    const int32_t planar = (int32_t)search_filter(tile);
     stream = saved_stream;
     hist_scratch = saved_hist;
     model_keep = saved_keep;
     xform_scratch = saved_xform;
-    return cand;
+    return planar;
+  }
+  // A tile's representation, as it travels in the stream: what search_filter
+  // decided about the pixels before any model saw them.  The member header
+  // carries one of each of these for an untiled image; a tiled member carries
+  // one per tile, here, because they are what makes a tile worth searching.
+  template <int32_t f_DEC> void code_tile_repr(BmfImage* tile, uint8_t &flags8, uint8_t &pad8,
+                                               uint8_t &remap_kind, uint8_t* masks) {
+    uint32_t transposed = (flags8&flags_transposed)!=0;
+    uint32_t flip_x = (pad8&pad_flip_x)!=0;
+    uint32_t flip_y = (pad8&pad_flip_y)!=0;
+    uint32_t kind = remap_kind;
+    code_field<f_DEC>(transposed, 1, 0);
+    code_field<f_DEC>(flip_x, 1, 0);
+    code_field<f_DEC>(flip_y, 1, 0);
+    code_field<f_DEC>(kind, 2, 0);
+    if constexpr( f_DEC ) {
+      flags8 = (uint8_t)(transposed ? flags_transposed : 0);
+      pad8 = (uint8_t)((flip_x ? pad_flip_x : 0)|(flip_y ? pad_flip_y : 0));
+      remap_kind = (uint8_t)kind;
+    }
+    if( !kind )
+      return;
+    // The used set per plane, then the dense set when the map is two-tier --
+    // the same 32 bytes a plane an untiled member writes between its head and
+    // its body, in the stream instead because there is one per tile.
+    const int32_t rows = (kind>1 ? 2 : 1)*plane_count;
+    for( int32_t k = 0; k<32*rows; ++k ) {
+      uint32_t byte = masks[k];
+      code_field<f_DEC>(byte, 8, 0);
+      if constexpr( f_DEC )
+        masks[k] = (uint8_t)byte;
+    }
   }
   // One tile's share of the stream: its planar flag, its descriptor table, and
   // its pixels.  The same two calls code_image_body makes, per tile.
   void code_tile_body(BmfImage* tile, int32_t planar) {
-    pack_bits(planar ? 1u : 0u, 1);
     alphabet_reduced = 0;
     write_plane_descs();
     if( planar ) {
@@ -715,38 +755,77 @@ struct BMFCodec : BMFState {
       transform_planes(tile);
     }
   }
+  // What one tile decided about itself, carried from the search pass to the
+  // coding pass.  `off` is where the tile's transformed pixels sit in the
+  // scratch image: pass 1 keeps them rather than re-deriving them, so pass 2
+  // is guaranteed to code exactly what pass 1 priced.
+  struct TileRec {
+    PlaneDesc desc[4];
+    uint32_t off;
+    uint16_t cw, ch;      // coded geometry, which a transposed tile swaps
+    uint8_t planar, flags8, pad8, remap_kind;
+  };
+
   // Tiled encoding runs in two passes, and it has to.
   //
-  // The descriptor search codes the tile for real to price each candidate, so
-  // it runs the models -- the same blocks the shipped stream is carried in.  A
-  // search between two coded tiles would leave those blocks holding the last
-  // trial rather than the last tile, and the decoder, which never searches,
-  // would carry something else.  So every tile is searched first, against cold
+  // The search codes the tile for real to price each candidate, so it runs the
+  // models -- the same blocks the shipped stream is carried in.  A search
+  // between two coded tiles would leave those blocks holding the last trial
+  // rather than the last tile, and the decoder, which never searches, would
+  // carry something else.  So every tile is searched first, against cold
   // models, and its answer recorded; the second pass then codes the tiles back
   // to back with nothing between them, which is the sequence the decoder sees.
   void code_image_tiled(BmfImage* p_i, BmfImage &hdr, int32_t shift) {
     const int32_t img_w = p_i[0].width, img_h = p_i[0].height;
     const int32_t nx = tile_count(img_w, shift), ny = tile_count(img_h, shift);
     const int32_t n_tiles = nx*ny;
+    // Nothing about the frame's own representation is searched or shipped: the
+    // tiles own all of it, and a member-level flag here would be applied to the
+    // whole frame a second time on the way out.
+    remap_active = 0;
+    remap_split = 0;
+    p_i[0]._pad8[0] = 0;
+    p_i[0].flags &= (uint8_t)~(flags_transposed|flags_pal_sorted|flags_planar);
     hdr.header_from(p_i);
     hdr.flags = flags_coded|flags_descriptors|flags_slow|p_i[0].flags;
     // The last tile on each axis is the widest, because it takes the remainder.
     const int32_t max_w = img_w-((nx-1)<<shift), max_h = img_h-((ny-1)<<shift);
-    BmfImage*const tile = alloc_image(max_w, max_h, p_i[0].depth&depth_bits, 0, 0);
-    PlaneDesc*const chosen = (PlaneDesc*)bmf_new(sizeof(PlaneDesc)*4u*(size_t)n_tiles);
-    uint8_t*const planar_of = (uint8_t*)bmf_new((size_t)n_tiles);
+    const int32_t big = max32(max_w, max_h);
+    // Square, because a tile search may transpose the tile.
+    BmfImage*const tile = alloc_image(big, big, p_i[0].depth&depth_bits, 0, 0);
+    TileRec*const rec = (TileRec*)bmf_new(sizeof(TileRec)*(size_t)n_tiles);
+    const int32_t mask_row = 32*plane_count;
+    uint8_t*const rec_mask = (uint8_t*)bmf_new(2u*(size_t)mask_row*(size_t)n_tiles);
+    uint8_t*const coded_pix = (uint8_t*)bmf_new(p_i[0].data_size);
     bmf_log("[tiles] %d x %d tiles of up to %dx%d, one stream, models carried across\n",
             nx, ny, max_w, max_h);
+    uint32_t at = 0;
     for( int32_t t = 0; t<n_tiles; ++t ) {
       const int32_t ty = t/nx, tx = t%nx;
       const int32_t y0 = ty<<shift, y1 = ty+1==ny ? img_h : (ty+1)<<shift;
       const int32_t x0 = tx<<shift, x1 = tx+1==nx ? img_w : (tx+1)<<shift;
       tile_frame(tile, x1-x0, y1-y0);
       tile_gather(p_i, tile, x0, y0);
-      planar_of[t] = (uint8_t)search_tile_descs(tile);
-      save_descriptors(chosen+4*t);
-      bmf_log("[tile %d,%d] %dx%d at %d,%d -- %s\n", ty, tx, x1-x0, y1-y0, x0, y0,
-              planar_of[t] ? "planar" : "together");
+      rec[t].planar = (uint8_t)search_tile(tile);
+      save_descriptors(rec[t].desc);
+      rec[t].flags8 = tile[0].flags&flags_transposed;
+      rec[t].pad8 = tile[0]._pad8[0]&(uint8_t)(pad_flip_x|pad_flip_y);
+      rec[t].remap_kind = (uint8_t)(remap_active ? (remap_split ? 2 : 1) : 0);
+      if( rec[t].remap_kind ) {
+        memcpy(rec_mask+2*mask_row*t, remap_mask, (size_t)mask_row);
+        if( rec[t].remap_kind>1 )
+          memcpy(rec_mask+2*mask_row*t+mask_row, remap_dense, (size_t)mask_row);
+      }
+      rec[t].cw = tile[0].width;
+      rec[t].ch = tile[0].height;
+      rec[t].off = at;
+      memcpy(coded_pix+at, tile[0].pixels, tile[0].data_size);
+      at += tile[0].data_size;
+      bmf_log("[tile %d,%d] %dx%d at %d,%d -- %s%s%s%s\n", ty, tx, x1-x0, y1-y0, x0, y0,
+              rec[t].planar ? "planar" : "together",
+              (rec[t].flags8&flags_transposed) ? ", transposed" : "",
+              rec[t].pad8 ? ", flipped" : "",
+              rec[t].remap_kind ? (rec[t].remap_kind>1 ? ", renumbered two-tier" : ", renumbered") : "");
       log_plane_descs("chosen descriptors");
     }
     stream_open(p_i[0].data_size);
@@ -754,22 +833,31 @@ struct BMFCodec : BMFState {
       near_lossless_q = 0;
       pack_bits(0, 4);
     }
-    xform_scratch = (uint8_t*)bmf_new(2u*sizeof(BmfImage)+(size_t)tile[0].data_size);
+    xform_scratch = (uint8_t*)bmf_new(2u*sizeof(BmfImage)+(size_t)big*big*plane_count);
     begin_carried_models();
     for( int32_t t = 0; t<n_tiles; ++t ) {
-      const int32_t ty = t/nx, tx = t%nx;
-      const int32_t y0 = ty<<shift, y1 = ty+1==ny ? img_h : (ty+1)<<shift;
-      const int32_t x0 = tx<<shift, x1 = tx+1==nx ? img_w : (tx+1)<<shift;
-      tile_frame(tile, x1-x0, y1-y0);
-      tile_gather(p_i, tile, x0, y0);
-      restore_descriptors(chosen+4*t);
-      code_tile_body(tile, planar_of[t]);
+      tile_frame(tile, rec[t].cw, rec[t].ch);
+      // Present the tile exactly as the decoder will hold it, so nothing that
+      // reads a header field can differ between the two.
+      tile[0].flags = rec[t].flags8;
+      tile[0]._pad8[0] = rec[t].pad8;
+      memcpy(tile[0].pixels, coded_pix+rec[t].off, tile[0].data_size);
+      restore_descriptors(rec[t].desc);
+      uint32_t planar = rec[t].planar;
+      code_field<0>(planar, 1, 0);
+      code_tile_repr<0>(tile, rec[t].flags8, rec[t].pad8, rec[t].remap_kind,
+                        rec_mask+2*mask_row*t);
+      code_tile_body(tile, (int32_t)planar);
     }
     model_keep = 0;
+    // Every map that mattered went out inside the stream, per tile.
+    remap_active = 0;
+    remap_split = 0;
     free(xform_scratch);
     xform_scratch = nullptr;
-    free(planar_of);
-    free((uint8_t*)chosen);
+    free(coded_pix);
+    free(rec_mask);
+    free((uint8_t*)rec);
     free((uint8_t*)tile);
   }
   void unmodel_tiled(BmfImage* img_at, int32_t shift) {
@@ -783,25 +871,54 @@ struct BMFCodec : BMFState {
       near_lossless_q = 0;
     }
     const int32_t max_w = img_w-((nx-1)<<shift), max_h = img_h-((ny-1)<<shift);
-    BmfImage*const tile = alloc_image(max_w, max_h, img_at[0].depth&depth_bits, 0, 0);
-    uint8_t*const plane_buf = (uint8_t*)bmf_new((size_t)max_w*max_h);
+    const int32_t big = max32(max_w, max_h);
+    BmfImage*const tile = alloc_image(big, big, img_at[0].depth&depth_bits, 0, 0);
+    uint8_t*const plane_buf = (uint8_t*)bmf_new((size_t)big*big);
     bmf_log("[tiles] %d x %d tiles of up to %dx%d\n", nx, ny, max_w, max_h);
     begin_carried_models();
     for( int32_t ty = 0; ty<ny; ++ty ) {
       const int32_t y0 = ty<<shift, y1 = ty+1==ny ? img_h : (ty+1)<<shift;
       for( int32_t tx = 0; tx<nx; ++tx ) {
         const int32_t x0 = tx<<shift, x1 = tx+1==nx ? img_w : (tx+1)<<shift;
-        tile_frame(tile, x1-x0, y1-y0);
-        const int32_t planar = (int32_t)unpack_bits(1);
+        uint32_t planar = 0;
+        code_field<1>(planar, 1, 0);
+        uint8_t flags8 = 0, pad8 = 0, remap_kind = 0;
+        // Both tiers land here first: remap_mask holds one tier's worth, and a
+        // two-tier map is two of them.
+        uint8_t tile_masks[256];
+        code_tile_repr<1>(tile, flags8, pad8, remap_kind, tile_masks);
+        if( remap_kind ) {
+          memcpy(remap_mask, tile_masks, 32u*(size_t)plane_count);
+          if( remap_kind>1 )
+            memcpy(remap_dense, tile_masks+32*plane_count, 32u*(size_t)plane_count);
+        }
+        // A transposed tile was coded in the other orientation.
+        if( flags8&flags_transposed )
+          tile_frame(tile, y1-y0, x1-x0);
+        else
+          tile_frame(tile, x1-x0, y1-y0);
+        tile[0].flags = flags8;
+        // restore_representation reads the map's presence off the same spare
+        // byte an untiled member uses, so the kind has to land there too.
+        tile[0]._pad8[0] = (uint8_t)(pad8
+            |(remap_kind ? pad_remap : 0)|(remap_kind>1 ? pad_remap_split : 0));
+        remap_active = remap_kind!=0;
+        remap_split = remap_kind>1;
         alphabet_reduced = 0;
         read_plane_descs();
-        bmf_log("[tile %d,%d] %dx%d at %d,%d -- %s\n", ty, tx, x1-x0, y1-y0, x0, y0,
-                planar ? "planar" : "together");
+        bmf_log("[tile %d,%d] %dx%d at %d,%d -- %s%s%s%s\n", ty, tx, x1-x0, y1-y0, x0, y0,
+                planar ? "planar" : "together",
+                (flags8&flags_transposed) ? ", transposed" : "",
+                pad8 ? ", flipped" : "",
+                remap_kind ? (remap_kind>1 ? ", renumbered two-tier" : ", renumbered") : "");
         log_plane_descs("decoding");
         if( planar )
           unmodel_planes_apart(tile, plane_buf);
         else
           unmodel_planes_together(tile, plane_buf);
+        // Undo what the tile's own search decided, exactly as an untiled member
+        // undoes it, before the pixels go back into the frame.
+        restore_representation(tile);
         tile_scatter(img_at, tile, x0, y0);
       }
     }
@@ -819,17 +936,18 @@ struct BMFCodec : BMFState {
       code_packed_body(p_i, hdr);
       return;
     }
-    const uint32_t filtered = search_filter(p_i);
-    hdr.flags |= flags_descriptors;
-    // Tiled coding takes over from here.  search_filter still runs first and
-    // still runs once: geometry, palette order and the renumbering map are
-    // properties of the image and travel in its header, so they cannot vary
-    // by tile.  What varies by tile is the descriptor table, and that is
-    // searched again per tile below.
+    // Tiled coding takes over before the whole-image search, not after it.
+    // Every tile runs the full search on itself, so a global one would only be
+    // overridden -- and worse than that, its renumbering map and geometry
+    // would land in the member header, where the decoder applies them to the
+    // whole frame on top of what each tile already undid.
     if( p_i[0]._pad8[2] ) {
+      hdr.flags |= flags_descriptors;
       code_image_tiled(p_i, hdr, p_i[0]._pad8[2]);
       return;
     }
+    const uint32_t filtered = search_filter(p_i);
+    hdr.flags |= flags_descriptors;
     const uint32_t data_bytes = p_i[0].data_size;
     // search_filter may have transposed the image or reordered its palette, and
     // both show up as flags on p_i; take the geometry and the flags from it.

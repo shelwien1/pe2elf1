@@ -144,7 +144,8 @@ range-coded segments matters for understanding the models' entry points.)
   `desc_has_refs`, plus 8-bit weights (bias +64) when `nrefs≥2` (`weight0`,
   `weight1`) and `nrefs>2` (`weight2`).
 * By default one member covers the whole image. `bmf cN` (N in 4..12) instead cuts
-  it into tiles of `1<<N` and gives each its own descriptor table; the tile shift
+  it into tiles of `1<<N` and gives each its own search -- descriptors, geometry
+  and renumbering map alike; the tile shift
   travels in the third spare header byte (`_pad8[2]`, zero when untiled), so the
   decoder needs no flag of its own. The tiles share **one member, one stream and
   one set of models** — nothing is flushed or reseeded at a boundary. See §5.4.
@@ -521,17 +522,29 @@ boundaries at `k<<N`, and the last tile takes the remainder.  A short edge is
 absorbed rather than coded as a sliver, so a 260x260 image under `c8` is a
 single 260x260 tile and under `c7` four tiles of 130.
 
-**What stays whole-image.** `search_filter` still runs once, before any tile.
-Transposition, the two flips, palette order and the renumbering map are
-properties of the *pixels*, they travel in the member header and its mask
-block, and there is one of each per member -- so they cannot vary by tile and
-are not searched again.  What varies is the descriptor table, and only that.
+**Every tile runs the whole search, not part of it.**  The first version of
+this ran only the descriptor half per tile and left geometry and the
+renumbering map to a single whole-image `search_filter`.  That came out 8.25%
+*worse* than coding the same tiles as sixteen separate files -- which should be
+impossible, since sharing models and dropping fifteen headers can only help --
+and the whole of the difference was the renumbering map.  Chosen per tile it is
+worth 5.4% on `PIA13915`'s worst crop against 1.8% chosen per image, because a
+256x256 region uses a far smaller slice of a tone-curved alphabet than the frame
+does.  With renumbering switched off on both sides the two agreed to 0.22%.
+
+So the tile gets `search_filter` itself, and the whole-image call is skipped
+rather than run first: its map and its geometry would land in the member header,
+where the decoder applies them to the whole frame on top of what each tile
+already undid.  A tiled member's header carries no representation flags at all.
 
 **Stream layout.** One member, one `stream_open`, one packer.  The 4-bit
 near-lossless field is written once; then each tile contributes a 1-bit planar
-flag, its descriptor table (§2), and its range-coded segments, in the same
-packer/coder interleave an untiled member uses -- repeated per tile rather than
-once per image.
+flag, its representation (1 bit transposed, 1 bit each flip, 2 bits of
+renumbering kind, then 32 bytes a plane of mask per tier when the kind is not
+zero), its descriptor table (§2), and its range-coded segments -- the same
+packer/coder interleave an untiled member uses, repeated per tile.  On the way
+out each tile is handed to `restore_representation`, exactly as an untiled
+member is, before its pixels go back into the frame.
 
 **Two encoder passes, and why.** The descriptor search prices candidates by
 coding the tile for real, through the same model blocks the shipped stream is
@@ -1178,6 +1191,21 @@ None of these changed a single coded byte: the 81-image corpus (12 upstream test
 files plus 69 generated edge cases) produces streams byte-identical to the
 pre-fix baseline, and every image still round-trips losslessly when checked with
 an independent BMP decoder rather than BMF's own reader.
+
+* **Joint alt-P2's fourth slot assumed the identity coding order** (`alt_model_p2`,
+  `codec.inc:203`). Slots 0..2 name their plane through `plane_desc[k].src_plane`
+  on both sides. Slot 3 did not, in two places: the sample it coded was
+  `f_DEC ? 3 : plane_desc[3].src_plane`, and its reference seed read
+  `out[0], out[1], out[2]` by physical index rather than by slot. Both are the
+  same number only while alpha stays in slot 3 -- and the alpha-order trial
+  (§5) exists to move it. A member that took that trial then encoded one plane
+  and decoded another, and read a source byte where the decoder had a byte it
+  had not written yet. Neither is reachable on the corpus, which is why the
+  streams are unchanged: the alpha trial never wins on the one 4-plane image
+  there *and* lands in joint alt-P2. Tiling reaches it easily, because a tile
+  small enough to be mostly transparent takes the trial where the frame does
+  not. Found by a tiled `x_ep` that decoded twelve tiles and diverged on the
+  thirteenth.
 
 * **RLE4 rows never reset the nibble phase at end-of-line** (`read_rle4`,
   `bmp.inc:416`). `hi_nibble` tracks whether the next pixel lands in the high or

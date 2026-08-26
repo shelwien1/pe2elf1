@@ -908,47 +908,63 @@ the deficit rather than the codec, which is the strongest argument for building
 the thing.
 
 **This is now built** -- `bmf cN`, section 5.4 of `ALGORITHMS.md`.  Tiles of
-`1<<N` with a descriptor table each, one member, one stream, and the models
-carried across every boundary.  On the two crops, against gralic 1.11 measured
-on the same pixels:
+`1<<N`, each running the whole of `search_filter` on itself, in one member, one
+stream, with the models carried across every boundary.  On the two crops,
+against gralic 1.11 measured on the same pixels:
 
 | | bytes | vs whole | vs gralic |
 |---|---|---|---|
 | losing crop 2,1 -- gralic 527,173 | | | |
 | whole image | 572,796 | | +8.65% |
-| `c9`, 512px tiles | 563,316 | −1.66% | +6.85% |
-| `c8`, 256px tiles | 535,536 | −6.50% | +1.59% |
-| `c7`, 128px tiles | 530,140 | −7.45% | +0.56% |
-| **`c6`, 64px tiles** | **517,920** | **−9.58%** | **−1.76%** |
-| `c5`, 32px tiles | 524,404 | −8.45% | −0.53% |
+| `c9`, 512px tiles | 547,328 | −4.45% | +3.82% |
+| `c8`, 256px tiles | 497,888 | −13.08% | −5.56% |
+| **`c7`, 128px tiles** | **476,604** | **−16.79%** | **−9.59%** |
+| `c6`, 64px tiles | 476,924 | −16.74% | −9.53% |
 | winning crop 0,3 -- gralic 958,025 | | | |
 | whole image | 870,600 | | −9.13% |
-| `c9` | 870,552 | −0.01% | −9.13% |
-| `c8` | 874,960 | +0.50% | −8.67% |
-| `c7` | 884,732 | +1.62% | −7.65% |
-| `c6` | 905,048 | +3.96% | −5.53% |
+| `c9` | 870,936 | +0.04% | −9.09% |
+| `c8` | 881,960 | +1.30% | −7.94% |
+| `c7` | 894,748 | +2.77% | −6.60% |
+| `c6` | 940,028 | +7.97% | −1.88% |
 
-The asymmetry the free-vs-forced split predicted is exactly what the built
-codec does.  On the frame whose regions disagree, an 8.65% loss becomes a 1.76%
-win -- a swing of 10.4 points -- and finer tiles keep paying down to 64 pixels
-before the per-tile descriptor tables and the row-context restarts turn it
-round.  On the frame whose regions agree, every tiling is a loss that grows as
-the tiles shrink, which is the same overhead with nothing to buy.
+The asymmetry the free-vs-forced split predicted is exactly what the built codec
+does.  On the frame whose regions disagree, an 8.65% loss becomes a 9.59% win --
+a swing of 18.2 points -- and it goes past the −13.63% the sixteen independent
+members measured, which is what sharing the models and dropping fifteen headers
+should buy on top.  On the frame whose regions agree, every tiling is a loss
+that grows as the tiles shrink: the same overhead with nothing to buy.
 
-It does not reach the −13.63% the sixteen independent members measured, and the
-reason is instructive: those tiles each re-ran the *whole* of `search_filter`,
-so each got its own renumbering map, its own transposition and its own palette
-order.  Those are properties of the pixels, they travel in the member header,
-and a single member has one of each -- so a shared-stream tiling cannot have
-them.  Section 4.1 says what the renumbering map alone is worth on this family.
-Per-tile renumbering inside one member is the obvious next thing to cost.
+**Getting there took correcting the first attempt, and the correction is the
+lesson.**  That version searched only the *descriptors* per tile and left
+geometry and the renumbering map to one whole-image `search_filter`.  It reached
+−6.50% at 256px against the sixteen files' −13.63% -- 8.25% *worse* than coding
+the same tiles as separate files, which cannot be right when the in-memory
+version also shares its models and saves fifteen headers.  Switching renumbering
+off on both sides closed the gap to 0.22%, so all of it was the map:
+
+| | whole | in-memory, 256px | sixteen separate files | gap |
+|---|---|---|---|---|
+| with renumbering | 572,796 | 535,536 (−6.50%) | 494,700 (−13.63%) | +8.25% |
+| renumbering off | 583,204 | 524,128 (−10.13%) | 522,952 (−10.33%) | +0.22% |
+
+Chosen per tile the map is worth 5.4% here; chosen per image, 1.8%.  Three times
+more valuable per region than per frame, because a 256x256 patch uses a far
+smaller slice of a tone-curved alphabet than the frame does -- which is §4.1's
+finding at a smaller scale.  So each tile now runs the whole of `search_filter`
+and carries what it decides in the stream, and the whole-image call is skipped
+rather than run first.
+
+Two latent defects surfaced on the way, both in joint alt-P2's fourth slot and
+both invisible until a tile took the alpha-order trial that a whole frame does
+not; `ALGORITHMS.md` §13.1 has them.  Neither changes a byte of the untiled
+corpus.
 
 What remains, and is cheap: run the free-vs-forced split across the eighteen
 retrieved LPCB frames, to see how much of the corpus deficit sits on frames
-whose regions disagree, and then run `c6` over the whole set.  Encoding is the
-constraint -- every tile gets the full descriptor search, so `x_ci` at `c5` is
-4,400 searches -- and a cheaper per-tile trial is the first thing to look at if
-the sweep is worth having.
+whose regions disagree, and then run `c7` over the whole set.  Encoding is the
+constraint -- every tile gets a full `search_filter`, so `x_ci` at `c5` is 4,400
+of them -- and a cheaper per-tile trial is the first thing to look at if the
+sweep is worth having.
 
 ---
 
