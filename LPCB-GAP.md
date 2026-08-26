@@ -320,8 +320,20 @@ that set and is the biggest single winner on the corpus:
 | `PIA13912` | 27,843,508 | **24,530,548** | **−11.90%** |
 
 against gralic's 24,268,444 that is **+14.73% → +1.08%**: from the corpus's
-second-worst frame to near parity, on one transform.  `STA13845` (138 MB) is the
-remaining unmeasured adopter and is likely to move as well.
+second-worst frame to near parity, on one transform.
+
+`STA13845`, at 138 MB the largest frame here and the other one left unmeasured,
+moves as much:
+
+| | | | |
+|---|---|---|---|
+| `STA13845` | 43,897,864 | **39,504,640** | **−10.01%** |
+
+against gralic's 40,892,954 that is **+7.35% → −3.39%** -- from a loss to a win.
+
+The two of them are **7.70 MB**, against the 714,292 bytes the ten smaller
+frames account for.  The transform's value is almost all in the frames too large
+to have been in the A/B set.
 
 The seven unchanged files are the point as much as the three that move: the
 incumbent margin means a plane with no light tail in its histogram keeps the
