@@ -529,6 +529,42 @@ expect it.  What this frame wants is C1: the cross-plane reference as context.
 The 64-bucket figure is an upper bound on what an implementation would keep --
 no learning cost, no mixing, two crops of one frame.  It sets the direction, not
 the payoff.
+
+#### Built as an APM axis, and it is worth nothing -- the probe's baseline was wrong
+
+The implementable form of C1 looked settled.  `mag_ref0` -- the two reference
+planes' `|err|` at this pixel -- is already computed in `seat_symbol_context`,
+goes into `magsum` weighted 4, and conditioning on it *separately* measured 0.219
+and 0.729 bpp on the losing crop against 0.026 and 0.008 on the winning one,
+while folding it into the activity sum measured a wash.  So: cut it into four
+buckets and multiply it into the contexts of alt-P2's two probability maps
+(`Apm` templated on its context count, 256 -> 1024, the axis zero on planes with
+no references).
+
+It builds, it round-trips, and it is worth **nothing**:
+
+| crop | before | after |
+|---|---|---|
+| 2,1 (BMF loses) | 572,796 | 572,800 |
+| 0,3 (BMF wins) | 870,600 | 870,628 |
+
+Four and twenty-eight bytes *worse*.  The axis does fire -- a no-op would be
+byte-identical -- so it splits the maps' contexts and the added learning cost
+cancels whatever it finds.
+
+**The probe's baseline was the wrong model.**  It measured
+`H(residual | activity x ref bucket)` against a *MED* residual, and MED has no
+cross-plane predictor at all.  alt-P2 does: `ra0[0].err` is an NLMS input tap
+(`p2_row[5][3]`), so the co-located reference error already reaches the
+predictor at the finest level, before any context or map sees it.  The 0.2--0.7
+bpp was headroom over MED, not over alt-P2.
+
+Which also narrows the earlier claim: "folding into magsum captures nothing" is
+true of `magsum`, and false of alt-P2 as a whole -- the information arrives by a
+route the probe did not model.  The gap against gralic in this channel is real
+and still unexplained; what is now known is that it is not reachable by
+conditioning the maps on the reference magnitude, because the predictor has
+already had it.
 ---
 
 ## 5. What does *not* explain the gap
