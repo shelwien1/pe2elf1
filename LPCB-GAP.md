@@ -457,6 +457,34 @@ So the gap is in **how alt-P2 uses the reference planes**, which is where §6's
 C1 already points -- cross-plane reference as *context* rather than as a
 predictor -- and these two crops are the test case for it: same size, same
 frame, opposite outcomes, differing in one measured property.
+
+#### The redundancy gralic finds there is not linearly available
+
+Fitting each plane's MED residual from the other two planes' residuals says how
+much of the cross-plane structure a *predictor* can reach, and the answer runs
+backwards from the obvious guess:
+
+| crop | residual variance a linear cross-plane fit removes | gralic's colour gain | BMF's |
+|---|---|---|---|
+| 2,1 (BMF loses) | 19.5% / 20.2% / 1.6% | **16.51%** | 7.72% |
+| 0,3 (BMF wins) | 56.1% / 54.9% / 3.9% | 3.22% | **5.65%** |
+
+The crop BMF *wins* has nearly three times more linearly available cross-plane
+redundancy, and BMF beats gralic at taking it -- 5.65% against 3.22%.  The crop
+BMF loses has little, and gralic still pulls 16.51% out of the colour channel.
+Whatever gralic exploits there is invisible to a linear fit on the residuals.
+
+That is the shape BMF's machinery would predict of itself: its cross-plane path
+is predominantly *predictive* -- NLMS taps on `ra0[0].err`, fitted blends,
+reference values differenced into the context indices -- so it does well exactly
+where linear structure is abundant and falls behind where it is not.
+
+Held against §5: that section found nonlinear cross-component structure
+uncorrelated with the gap across the corpus (r = −0.045), measured as `H(T|S)`
+against the affine residual in the *value* domain over 107 images.  This is two
+crops of one frame in the *residual* domain.  It does not overturn §5 and is not
+offered as doing so; reconciling them means running the residual-domain version
+corpus-wide.
 ---
 
 ## 5. What does *not* explain the gap
