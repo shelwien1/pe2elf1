@@ -573,10 +573,58 @@ bpp was headroom over MED, not over alt-P2.
 
 Which also narrows the earlier claim: "folding into magsum captures nothing" is
 true of `magsum`, and false of alt-P2 as a whole -- the information arrives by a
-route the probe did not model.  The gap against gralic in this channel is real
-and still unexplained; what is now known is that it is not reachable by
-conditioning the maps on the reference magnitude, because the predictor has
-already had it.
+route the probe did not model.
+
+#### Ablation: alt-P2's cross-plane routes are worth 0.25%, the transform is worth the rest
+
+Disabling each route in turn -- the NLMS reference-error taps, `ctx0`'s
+reference sign flags, the reference magnitudes in `magsum`/`flat_a` -- and then
+all three at once:
+
+| dropped | crop 2,1 | crop 0,3 |
+|---|---|---|
+| NLMS reference-error taps | +136 (+0.02%) | +388 (+0.04%) |
+| `ctx0` reference sign flags | +464 (+0.08%) | +1,076 (+0.12%) |
+| reference magnitudes in `magsum` | +520 (+0.09%) | +1,320 (+0.15%) |
+| **all three** | **+1,392 (+0.24%)** | **+2,720 (+0.31%)** |
+
+All of alt-P2's internal cross-plane machinery is worth a quarter of a per cent.
+The plane-split measurement puts BMF's *total* cross-plane gain at 7.72% and
+5.65%, so **the other ~7.5 points are the colour transform** -- `desc_has_refs`
+subtracting a reference blend from the plane values before alt-P2 sees them.
+BMF's cross-plane work is a global linear blend per plane, and the model's own
+taps are, next to it, noise.
+
+That also explains the null result above without appeal to the NLMS tap: the map
+axis was competing with a transform that had already removed the bulk.
+
+#### And the blend is global where the relationship is not
+
+Refitting the same linear blend per block instead of per plane:
+
+| | global | 256x256 blocks | 64x64 blocks | extra |
+|---|---|---|---|---|
+| 2,1 plane 1 (BMF loses) | 60.9% | 87.7% | **95.4%** | **+34.5 pts** |
+| 2,1 plane 2 | 61.1% | 70.4% | **86.6%** | **+25.5 pts** |
+| 0,3 plane 1 (BMF wins) | 96.0% | 96.6% | 97.1% | +1.1 pts |
+| 0,3 plane 2 | 2.4% | 51.7% | 77.0% | +74.5 pts |
+
+On the crop BMF loses, a global fit leaves 39% and 34% of the plane's variance
+unremoved that a 64x64 fit recovers.  On the crop it wins, plane 1 -- where BMF
+is 6.79% ahead of gralic on independent planes and holds the lead through the
+colour channel -- the global fit already reaches 96% and blocks add a point.
+
+So the shape of the deficit is: BMF's cross-plane transform is a *single global
+linear blend per plane*, it does well exactly where that model fits, and
+PIA13915's losing crop is a frame where the relationship varies across the
+image.  That is a different proposal from C1's -- not the reference as context,
+but the blend as a *local* rather than a global fit -- and it is the one the
+measurements support.
+
+(Plane 2 of the winning crop shows the two are not the same axis: a global fit
+gets 2.4% there and blocks get 77%, yet BMF wins that crop comfortably.  Headroom
+in the transform is not the same as a deficit against gralic, and a proposal
+built on this needs to clear the trial gate on both.)
 ---
 
 ## 5. What does *not* explain the gap
