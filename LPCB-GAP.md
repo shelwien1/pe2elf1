@@ -485,6 +485,50 @@ against the affine residual in the *value* domain over 107 images.  This is two
 crops of one frame in the *residual* domain.  It does not overturn §5 and is not
 offered as doing so; reconciling them means running the residual-domain version
 corpus-wide.
+
+#### It is conditioning, not repetition -- so not a match model
+
+"Not linearly available" covers several mechanisms, and they call for different
+machinery: a nonlinear pointwise map, a *context-conditioned* relationship, a
+spatially varying linear one, or long-range repetition.  Only the last is what a
+match model catches, and the two can be told apart by measurement.
+
+Conditioning each plane's MED residual on the other two -- as **context**,
+quantised to 64 buckets, not as a predictor:
+
+| crop | plane 0 | plane 1 |
+|---|---|---|
+| 2,1 (BMF loses) | 3.516 → 2.954, gain **0.562** | 2.596 → 1.656, gain **0.940** |
+| 0,3 (BMF wins) | 3.678 → 3.257, gain 0.421 | 3.545 → 3.133, gain 0.411 |
+
+About 1.5 bpp across two planes on the losing crop, where the *linear* fit on the
+same data reached only 19.5% and 20.2% of the variance -- and the conditioning
+gain is largest exactly where BMF loses.  That is the signature of information
+that is present but unreachable by a predictor.
+
+Repetition points the other way:
+
+| crop | pixels repeating a (W,N,NW) triple seen before | of those, same value |
+|---|---|---|
+| 2,1 (BMF loses) | 94.1% | 37.0% |
+| 0,3 (BMF wins) | 96.4% | 25.1% |
+
+Recurrence is near-universal on *both* crops and barely differs, so it cannot
+explain a deficit that appears on only one.  That is the trap §10 of
+IMPROVEMENTS.md already documents: the contexts *already* memorise recurring
+neighbourhoods -- an 8x8-tiled image costs 1.9x the tile, not 64x -- so
+recurrence alone is not headroom.  And §10's match model is not a proposal but a
+measurement: hashed 12-pixel context feeding the mixer, worth **1,700 bytes over
+four images, 0.11% of the corpus**, two orders of magnitude under the 8.65% here.
+
+So the answer to "does this call for an LZ-style match model" is no.  A match
+model is a real but small win, aimed at repetition the contexts do not already
+hold -- screenshots, UI, maps, scanned text, which is where §10 itself says to
+expect it.  What this frame wants is C1: the cross-plane reference as context.
+
+The 64-bucket figure is an upper bound on what an implementation would keep --
+no learning cost, no mixing, two crops of one frame.  It sets the direction, not
+the payoff.
 ---
 
 ## 5. What does *not* explain the gap
