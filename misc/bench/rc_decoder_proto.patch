@@ -1,19 +1,21 @@
 --- a/rc_config.inc
 +++ b/rc_config.inc
-@@ -8,6 +8,40 @@
+@@ -8,6 +8,42 @@
  // SCALElog and friends live here rather than in FSM.cpp because rc.inc, the
  // kernel build options in rc_cl.cpp and the model all need them; FSM.cpp
  // includes this file for them.
 +// ---------------------------------------------------------------------------
 +//  Decoder prototype knobs -- see rc_decoder_opencl_plan_v1.md. All four
-+//  default to off, and the default build is byte-identical to a tree without
-+//  them.
++//  default to off, and the default build's output is byte-identical to a
++//  tree without them (the decode loop itself is restructured, so the binary
++//  is not).
 +// ---------------------------------------------------------------------------
 +
 +// S independent order-0 models, byte i using model i%RC_STRIPE. Breaks the
 +// decoder's cross-byte model dependency, which is the only thing in the
 +// decoder that creates parallelism. Format change: encoder and decoder must
-+// agree on S. Measured free -- see the plan, section 4.2. 1 = off.
++// agree on S. Must be a power of two (the selection is a mask). Measured
++// free -- see the plan, section 4.2. 1 = off.
 +#ifndef RC_STRIPE
 +#define RC_STRIPE 1
 +#endif
@@ -51,7 +53,7 @@
  
    static const int  RC_f_DEC  = f_DEC;    // so RangecoderN can read it back
  
-@@ -171,7 +172,17 @@
+@@ -171,7 +172,18 @@
  
    void ShiftCode( uint n ) {
      code -= rpre; rpre = 0;   // mirrors ShiftLow's deferred update
@@ -59,7 +61,8 @@
 +    // Branchless counted refill. n is 0..2 for the binary coder (rc_Renorm's
 +    // count), so the two bytes the shift can need are always the two at ptr --
 +    // read both unconditionally, shift in the ones that count, advance by n.
-+    // Reading one byte past the substream is safe: rc_Read pads FF_PADSIZE.
++    // Reading a byte or two past the substream is safe: rc_Read pads each
++    // substream with FF_PADSIZE bytes of 0xFF.
 +    uint v = (uint(ptr[0])<<8) + ptr[1];
 +    code = (code<<(n*8)) + (v>>((2-n)*8));
 +    ptr += n;
@@ -291,7 +294,7 @@
  
      while(1) {
  
-@@ -36,17 +36,55 @@
+@@ -36,17 +36,58 @@
          } blksize=c;
        } else blksize=BLKSIZE;
  
@@ -304,17 +307,20 @@
 +        uint nb = blksize & ~(S-1);
 +        uint ctxv[S], bv[S], stv[S], pv[S];
 +        for( i=0; i<nb*8; i+=8*S ) {
++          // byte i/8+t uses model (i/8+t)%RC_STRIPE -- same rule as the
++          // encoder. Only when RC_DECILV==RC_STRIPE does that reduce to t.
++          uint sb = i>>3;
 +          for( uint t=0; t<S; t++ ) ctxv[t]=1;
 +          for( j=0; j<8; j++ ) {
 +            for( uint t=0; t<S; t++ ) {
-+              stv[t] = stats[t][ctxv[t]-1].state;
++              stv[t] = stats[(sb+t)&(RC_STRIPE-1)][ctxv[t]-1].state;
 +              pv[t]  = pp[stv[t]];
 +            }
 +            for( uint t=0; t<S; t++ ) {
 +              rc.rc_Process( (i+t*8+j) % RCNUM, pv[t], bv[t] );
 +            }
 +            for( uint t=0; t<S; t++ ) {
-+              stats[t][ctxv[t]-1].Update( stv[t], bv[t] );
++              stats[(sb+t)&(RC_STRIPE-1)][ctxv[t]-1].Update( stv[t], bv[t] );
 +              ctxv[t] = ctxv[t]*2 + bv[t];
 +            }
 +          }

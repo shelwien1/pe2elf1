@@ -24,24 +24,25 @@ transfer. The measured consequence:
 | What would offloading the whole coder buy? | **1.33x** (gcc) / **1.38x** (clang) — and it is not expressible |
 | What would offloading the whole model buy? | 1.40x / 1.38x — likewise |
 | What does the loop scaffolding cost? | 1.7 / 1.0 clk/bit out of 16.7 / 13.8 |
-| Does speculative decoding shorten the chain? | **No** — measured 2.2x *worse* than the serial form (§3) |
+| Does speculative decoding shorten the chain? | **No** — measured 1.5–2.2x *worse* than the serial form (§3) |
 | Is there device-scale parallelism available at all? | Only after a format change (§4) |
 | What does that format change cost in compression? | **Nothing** — it *gains* 0.14–0.47% (§4.2) |
-| What does it buy on the host today? | **+19% (gcc) / +43% (clang)**, size −0.30% (§4.3) |
-| What would a 16-lane vector decoder cost, naively ported? | 10.8–14.0 clk/bit — i.e. **no faster than scalar** (§5.2) |
-| What would it cost with the right layout? | **3.82 clk/bit → 3.6x** (§5.3) |
+| What does it buy on the host today? | **+11–19% (gcc) / +29–43% (clang)**, size −0.30% (§4.3) |
+| What would a 16-lane vector decoder cost, naively ported? | 16.7–17.1 clk/bit — i.e. **no faster than scalar** (§5.1) |
+| What would it cost with the right layout? | **3.8–4.4 clk/bit → ≈3–4x** (§5.3) |
 
 So the plan is not "port the decode loop to OpenCL". It is:
 
 1. **Branchless counted refill** (§4.4) — a prerequisite, not an optimisation. With the
    current branchy `ShiftCode` any attempt to interleave streams *loses* 33%.
-2. **Model striping** (§4) — `S` independent order-0 models, byte *i* using model *i%S*.
-   This is the only thing in the whole analysis that creates parallelism, it is free in
-   compression, and it costs the encoder's kernel nothing.
+2. **Model striping** (§4) — `S` independent order-0 models, byte *i* using model *i%S*,
+   with the host decode loop restructured to carry `S` bytes at once. This is the only thing
+   in the whole analysis that creates parallelism, it is free in compression, and it costs
+   the encoder's kernel nothing.
 3. **Only then** the vector/OpenCL kernel (§5, §6), and only with the layout changes in §5.4 —
    a straight port of today's model loses to the scalar code it replaces.
 
-Steps 1 and 2 are worth +43% on the host on their own and are the entry ticket for step 3.
+Steps 1 and 2 are worth +29–43% (clang) on the host on their own and are the entry ticket for step 3.
 Step 3 needs one further change that is *not* free (§5.4, the arithmetic counter) and whose
 compression cost has to be measured before it is committed to.
 
@@ -104,8 +105,8 @@ the block structure and the output side identical:
 | 1 — coder free | 26.62 | 33.27 | 12.54 | 10.03 |
 | 2 — model free | 27.90 | 33.31 | 11.96 | 10.02 |
 
-Pinned to one core, best of five, two builds each; these are the most stable numbers in this
-document (§10).
+Pinned to one core, best of five iterations, two to three runs each; these are the most
+stable numbers in this document (§10).
 
 ### 1.3 What that rules out
 
@@ -128,7 +129,7 @@ of this document is about which of those two is available.
 ## 2. Where the decoder's time goes
 
 Six more probes, same harness, decomposing the chain. These were taken on the 100 MB file
-unpinned at three iterations, so they carry the ±10% noise floor of §10 — read the large
+unpinned at three iterations, so they carry the unpinned noise floor of §10 — read the large
 effects, not the small ones. Baseline under those conditions: 19.75 / 23.52 MB/s.
 
 | probe | what | gcc | clang | gcc clk/bit | clang clk/bit |
@@ -215,18 +216,19 @@ with no format change and no compression change. Worth measuring.
 from *both* sides (the bit is a compare of `p` against a per-depth value that does not depend
 on the model — which, per §3.1, is exactly the decoder's situation):
 
-| | clk/bit |
-|---|---|
-| serial: eight dependent model steps per byte | **4.92** |
-| speculative: two depth-4 rounds per byte | **10.90** |
+| | serial | speculative |
+|---|---|---|
+| gcc, morning session | 4.9 | 10.9 |
+| gcc, a slower session hours later | 5.5–5.6 | 9.5–9.6 |
+| clang | 5.3 | 8.1 |
 
-Speculation is **2.2x worse**, repeatably.
+Speculation is **1.5–2.2x worse**, in every session and under both compilers.
 
-The reason is the number in the first row, not the second. That benchmark folds `p` into the
-counter cell, so the serial chain is *one* L1 load plus an `imul` and a compare — 4.9 clk/bit.
+The reason is the first column, not the second. That benchmark folds `p` into the
+counter cell, so the serial chain is *one* L1 load plus an `imul` and a compare — ~5 clk/bit.
 A chain that short has nothing left for speculation to hide: the fixed cost of a round
 (the four masked loads, the permute, the mask extraction) already exceeds four steps of it,
-and the mask walk adds ~3 clk per bit on top of a chain that was ~5.
+and the mask walk adds its own serial cost on top of a chain that was ~5.
 
 This is the general shape of the result, and it is worth stating as a rule:
 
@@ -276,8 +278,15 @@ produces `pbit[]`; `rc_kernel.c` reads `pbit` and knows nothing about counters. 
 saying out loud, because it means this format change costs the existing device path nothing —
 not a recompile of the kernel, not a re-measurement.
 
-Implemented behind `RC_STRIPE`, round-trip verified at *S* = 1, 2, 4, 8, 16, 32, 64 on the
-full `t.sh` corpus plus `book1` and a 100 MB file.
+Implemented behind `RC_STRIPE` (a power of two — the selection is a mask). Round-trip
+verified at *S* = 1, 2, 4, 8, 16, 32, 64 on `book1` and a 100 MB file, and on the full
+`t.sh` corpus — host *and* device encodes — for the default build, `S=2`,
+`S=16/ILV=8`, and `S=4/ILV=2` with `RC_FOLDP=1`. The corpus run caught a real bug in the
+first version of the prototype: the interleaved loop indexed the model by position within
+the group instead of by byte number, which coincides only when `RC_DECILV==RC_STRIPE`, so
+`ILV<STRIPE` mis-decoded. The fix (`stats[(byte+t)%S]`) was A/B-measured as free. That is
+what the corpus is for; the plan's own §10 rule — verify byte-for-byte, never trust "it
+looks right" — applies to the prototype too.
 
 ### 4.2 Compression cost: none — it is a gain
 
@@ -315,12 +324,20 @@ With striping plus the branchless refill of §4.4, and the decode loop restructu
 | config | csize | gcc | clang |
 |---|---|---|---|
 | pristine | 17,819,829 | 19.83 | 23.45 |
-| branchless refill only | 17,819,829 | 22.46 (+13%) | 26.24 (+12%) |
+| restructured byte loop + branchless refill (S=1) | 17,819,829 | 22.46 (+13%) | 26.24 (+12%) |
 | **S = ILV = 2** | 17,767,111 (−0.30%) | **23.66 (+19%)** | **33.57 (+43%)** |
 | S = ILV = 4 | 17,735,253 (−0.47%) | 23.47 (+18%) | 31.89 (+36%) |
 
-Round-trip verified at every entry. This is a real, shippable host gain that also makes the
-file smaller.
+Round-trip verified at every entry. Note the second row is not the refill alone: it also
+replaces the bit loop's `i%8` bookkeeping with a per-byte loop, and the two are not
+separable in this configuration (the refill alone is *slower*, §4.4).
+
+A second session hours later — after the VM had slowed by ~12% on identical binaries (§10) —
+reproduced the shape with smaller margins: pristine 20.97 → 27.05 at S=ILV=2 (+29%) under
+clang, 17.12 → 19.06 (+11%) under gcc, same csize, round-trip verified. The honest headline
+is therefore the range **+11–19% (gcc) / +29–43% (clang)**: the ratio itself moves with the
+machine's state, and a reader on quiet hardware should re-measure rather than quote either
+endpoint.
 
 ### 4.4 The branchless refill is a prerequisite, not an optimisation
 
@@ -345,7 +362,8 @@ The replacement is four lines:
 ```cpp
 // n is 0..2 for the binary coder, so the two bytes the shift can need are
 // always the two at ptr: read both, shift in the ones that count, advance by n.
-// Reading one byte past the substream is safe -- rc_Read pads FF_PADSIZE.
+// Reading a byte or two past the substream is safe -- rc_Read pads each
+// substream with FF_PADSIZE bytes of 0xFF.
 uint v = (uint(ptr[0])<<8) + ptr[1];
 code = (code<<(n*8)) + (v>>((2-n)*8));
 ptr += n;
@@ -355,8 +373,8 @@ Note it is *slower* on its own at ILV=1 under both compilers (19.62 vs 22.02, 27
 — which is exactly what `RC.txt`'s `054` measurement found when `ShiftCodeN` was tried and
 rejected. That measurement was right and is still right; it was answering a different
 question. `rc_vectorized_design_v1.md` §6.2 asks for it to be re-measured "in the current
-framework" — the answer is that it only pays once something else needs it to, and §4.3's
-+13% for "branchless refill only" under the striped loop shows it does pay there.
+framework" — the answer is that it only pays once something else needs it to, and the table
+above is that need: at ILV≥2 the branchless form wins by 30–65% (gcc).
 
 ### 4.5 Why scalar interleaving saturates at *S*=2–4
 
@@ -379,24 +397,31 @@ not the destination; it is the proof that the parallelism exists.
 ## 5. What a 16-lane vector decoder actually costs
 
 `misc/bench/rc_vecdec_shape.cpp` runs the exact dependency chain and instruction mix of a
-16-lane striped decoder step, in six layouts. Arbitrary data, so the numbers are shape, not
-correctness. gcc, AVX-512F/BW/DQ/VL, ±3% across runs:
+16-lane striped decoder step, in seven layouts. Arbitrary data, so the numbers are shape, not
+correctness. gcc, AVX-512F/BW/DQ/VL, pinned, ±3% within a session:
 
 | layout | gathers on chain | total gather/scatter per bit | clk/bit |
 |---|---|---|---|
-| chain only, separate `pp[]`, model write-back removed | 2 | 3 G | 7.4 |
-| realistic, cell = `{state}` | 2 | 3 G + 1 S | 13.5–14.0 |
-| realistic, cell = `{state,p}` | 1 | 3 G + 1 S | 10.8–11.1 |
-| ... model scatter removed | 1 | 3 G | 7.9–8.2 |
-| ... scatters batched at the byte boundary | 1 | 3 G + 8 S/byte | 9.7–10.0 |
-| **target: contiguous refill + arithmetic counter** | **1** | **1 G + 1 S** | **3.82** |
+| chain only, separate `pp[]`, model write-back removed | 2 | 3 G | 9.0–9.4 |
+| realistic, cell = `{state}` | 2 | 4 G + 1 S | 16.7–17.1 |
+| realistic, cell = `{state,p}` | 1 | 3 G + 1 S | 11.6–11.7 |
+| ... model scatter removed | 1 | 3 G | 9.2–9.4 |
+| ... scatters batched at the byte boundary | 1 | 3 G + 8 S/byte | 11.6–11.8 |
+| **target: contiguous refill + arithmetic counter** | **1** | **1 G + 1 S** | **4.4** |
+| ... target, but the refill left as a gather | 1 | 2 G + 1 S | 7.3–7.5 |
 
 Reference: the real scalar decoder on the same box is 13.79 (clang) / 16.70 (gcc) clk/bit.
+An earlier build of the benchmark (before the last row existed) measured every row 15–25%
+lower — 13.5–14.0 for the naive port, 3.82 for the target — with the same ordering (except
+the batched-scatter row, which trades places with the row above it within noise — §5.2) and
+similar ratios. All seven variants share one compiled loop, so adding one changes the code
+of the rest; the rows within one build are directly comparable, the absolute clk/bit
+carries that build-to-build spread (§10).
 
 ### 5.1 The naive port loses
 
 A direct translation of today's `model1.inc` inner loop to 16 work-items is the second row:
-**13.5–14.0 clk/bit, the same as the scalar code it replaces.** Every part of the step that
+**16.7–17.1 clk/bit, the same as the scalar code it replaces.** Every part of the step that
 is an indexed memory access becomes a gather or a scatter, and there are four of them:
 
 1. `code` refill — each lane reads from its own substream at its own offset → **gather**.
@@ -411,31 +436,35 @@ to AVX-512.
 
 ### 5.2 Which of them actually costs
 
-Removing the model scatter takes 10.8 → 8.0; batching the eight scatters of a byte makes it
-*worse* (9.9, register pressure). So no single one dominates — it is the count. The way out
-is to reduce the count, not to reschedule.
+Removing the model scatter takes 11.6 → 9.3. Batching the eight scatters of a byte at the
+byte boundary is a wash: it measured ~1 clk/bit *better* in one build of the benchmark
+(10.8 → 9.9) and dead even in another (11.6 vs 11.7) — inside the build-to-build spread, so
+rescheduling the scatter buys nothing reliable. No single access dominates — it is the
+count. The way out is to reduce the count, not to reschedule.
 
 ### 5.3 The target shape
 
-The last row — one gather and one scatter per bit — reaches **3.82 clk/bit**, i.e. **3.6x**
-the best scalar decoder and **4.4x** the gcc one. That is the same order as the encoder's
-measured device win (3.95–5.53x), and it is the number the plan is aimed at.
+The target row — one gather and one scatter per bit — reaches **4.4 clk/bit** in the current
+build of the benchmark, 3.82 in the earlier one: **≈3–4x** the scalar decoder. That is the
+same order as the encoder's measured device win (3.95–5.53x), and it is the number the plan
+is aimed at.
 
 ### 5.4 What has to change to get there
 
 Three changes, and the first two are the ones that need judgement:
 
 * **Fold `p` into the counter cell** (`{word state; word p;}`), so reading a counter gives the
-  probability without the second lookup. Takes one gather off the chain: 13.5 → 10.8 clk/bit
-  vector, a repeatable 1.25x. *On the scalar host it is a 4% loss* (29.5–30.2 → 28.5–28.7,
-  clang) — the `pp[]` load is nearly free scalar (§2) and folding doubles the counter array
+  probability without the second lookup. Takes one gather off the chain: 16.7–17.1 → 11.6
+  clk/bit vector (1.45x; the earlier build measured the same change as 1.25x). *On the
+  scalar host it is a small loss* (~4%: 29.5–30.2 → 28.5–28.7 clang, unpinned, at the edge
+  of this box's noise) — the `pp[]` load is nearly free scalar (§2) and folding doubles the counter array
   and adds a lookup to the write-back. **This is a vector-only optimisation**, and a good
   illustration of why the device port has to be designed against the vector cost model.
   No compression impact, no format impact.
 * **Replace the FSM/`pp` table pair with an arithmetic counter** stored in the cell, e.g.
   `p += (bit ? -p : (SCALE-p)) >> rate`. This is what removes gathers 3 and 4 outright — the
   update becomes pure arithmetic on data already in registers. It is the single largest term
-  in getting from 10.8 to 3.82. **It is also a compression change**, and the only item in this
+  in getting from 11.6 to 4.4. **It is also a compression change**, and the only item in this
   plan whose cost is not yet measured. The FSM machines (`nzcc.txt`, `FSM0.txt`) are tuned;
   a shift-counter will not match them for free. Measure before committing (§7, item 5).
 * **Make the refill contiguous.** In the current container each lane's substream is a separate
@@ -443,7 +472,9 @@ Three changes, and the first two are the ones that need judgement:
   proposes the interleaved-write layout for the encoder — each 16-bit group's output packed
   contiguously, the decoder computing every `n_j` before it needs any byte. That is the same
   change, and the decoder is where it pays: one contiguous load per group instead of sixteen
-  scattered ones. Worth ~3 clk/bit here.
+  scattered ones. Measured directly by the benchmark's last two rows — the target with the
+  refill left as a gather runs 7.3–7.5 against 4.4, so the contiguous refill is worth
+  **~3 clk/bit** of the target's budget.
 
 ---
 
@@ -505,17 +536,17 @@ uses. Say so in the code, so nobody re-litigates it.
 
 | # | item | cost | risk | expected |
 |---|---|---|---|---|
-| 1 | Branchless counted refill in `ShiftCode`, behind a knob | hours | none — bit-exact | +13% host, prerequisite for everything |
+| 1 | Branchless counted refill in `ShiftCode`, behind a knob | hours | none — bit-exact | slightly negative alone; the +33% swing appears once interleaved (§4.4) |
 | 2 | `RC_STRIPE`: *S* independent models, byte *i* → model *i%S* | a day | format fork | free / −0.3% size |
-| 3 | `RC_DECILV`: decode *S* bytes at once on the host | a day | none beyond 2 | +19% gcc / +43% clang combined |
+| 3 | `RC_DECILV`: decode *S* bytes at once on the host | a day | none beyond 2 | +11–19% gcc / +29–43% clang combined |
 | 4 | Fold `p` into the counter cell, behind a knob, **off by default on the host** | hours | none | −4% scalar, 1.25x vector — for item 6 |
-| 5 | **Measure** an arithmetic counter against the FSM machines | days | compression | decides whether 3.82 clk/bit is reachable |
-| 6 | The vector decoder as AVX-512 intrinsics first, OpenCL second | weeks | high | 3.6x if 5 lands, ~1.0x if it does not |
-| 7 | Interleaved container layout (shared with encoder §6.3) | weeks | format fork | ~3 clk/bit of item 6's budget |
+| 5 | **Measure** an arithmetic counter against the FSM machines | days | compression | decides whether §5.3's target is reachable |
+| 6 | The vector decoder as AVX-512 intrinsics first, OpenCL second | weeks | high | ≈3–4x if 5 lands, ~1.0x if it does not |
+| 7 | Interleaved container layout (shared with encoder §6.3) | weeks | format fork | ~3 clk/bit of item 6's budget (measured, §5.4) |
 
 Items 1–3 are independent of everything else and are worth doing on their own merits. Item 5
 is the gate: **if the arithmetic counter costs more than a few tenths of a percent, item 6 is
-not worth starting**, because §5.2 says the FSM-table version of the vector decoder is no
+not worth starting**, because §5.1 says the FSM-table version of the vector decoder is no
 faster than the scalar one it replaces.
 
 Note the ordering of item 6 — intrinsics before OpenCL, the reverse of what was done for the
@@ -553,11 +584,11 @@ Recorded so they are not re-tried:
 | idea | measured | verdict |
 |---|---|---|
 | Offload the coder to a device, encoder-style | ceiling 1.33–1.38x, and not expressible (§1) | dead |
-| Depth-4 speculative decoding over the bit tree | 10.90 vs 4.92 clk/bit — 2.2x worse (§3.3) | dead as a chain-shortener |
-| Load `FSM[state]` as one dword and select `s[bit]` (§6.1 bullet 1 of the design doc) | model chain 12.79 → 11.38 clk/bit, but the **full step** 16.90 → 22.40 (gcc), 14.19 → 14.61 (clang) | dead — helps only the probe, not the decoder |
+| Depth-4 speculative decoding over the bit tree | ~10 vs ~5 clk/bit — 1.5–2.2x worse (§3.3) | dead as a chain-shortener |
+| Load `FSM[state]` as one dword and select `s[bit]` (§6.1 bullet 1 of the design doc) | model chain 12.79 → 11.38 clk/bit (gcc; clang's *regresses*, 10.40 → 11.62), and the **full step** 16.90 → 22.40 (gcc), 14.19 → 14.61 (clang) | dead — at best it helps the gcc probe, and it hurts the decoder |
 | **Deferred counter update** (§6.1 bullet 3 of the design doc) | see below | retired |
-| Fold `p` into the cell, on the host | 29.5–30.2 → 28.5–28.7 MB/s (clang) | vector-only (§5.4) |
-| Batching the vector model scatters at the byte boundary | 10.8 → 9.9 clk/bit, worse | dead |
+| Fold `p` into the cell, on the host | 29.5–30.2 → 28.5–28.7 MB/s (clang, unpinned — at the edge of noise) | vector-only (§5.4) |
+| Batching the vector model scatters at the byte boundary | ~1 clk/bit better in one build, dead even in another (§5.2) | no reliable effect; obsoleted by the arithmetic counter |
 
 The deferred counter update deserves its own note, because the design doc rates it highly and
 the measurement is decisive. Within a byte the bit tree visits eight *distinct* cells and never
@@ -571,7 +602,8 @@ proposal; given that the free version buys zero, there is no reason to pay for t
 
 One more, from the same family: adding a second and third independent model chain to the real
 decode step costs 19.75 → 17.74 → 16.85 (gcc) and 23.52 → 19.84 → 18.98 (clang), i.e. about
-1.9 clk/bit per extra chain against a 16.9 clk/bit step. That is the ILP evidence that §4 is
+1.5–1.9 clk/bit per extra chain against a 16.9 clk/bit step (the first chain costs more
+than the second). That is the ILP evidence that §4 is
 built on — extra streams are cheap — but note it is *not* a speedup on its own, and the naive
 projection from it (~1.6x at *S*=2) overshot the measured +19–43% by a wide margin. The
 scalar interleave collects a fraction of the available ILP; §4.5 says why, and §5 is where the
@@ -590,28 +622,38 @@ document's, so **compare ratios, never absolutes, across the two**.
 both `book1` repeated. Sizes are exact multiples of `BLKSIZE` so every probe does the same
 number of blocks. `clk/bit = 2.8e9 / (MB/s × 2^20 × 8)`.
 
-**Noise.** This box is a shared VM and its noise floor is the main hazard here. Two separate
-effects, both material:
+**Noise.** This box is a shared VM and its noise floor is the main hazard here. Three
+separate effects, all observed on *identical binaries* and all material:
 
-* *Run-to-run*: ±10% at three iterations, under ±3% pinned (`taskset -c 2`) at five or more.
-  Every number in §1.2 and §4.3 is pinned and best-of-4-or-more, and those are the load-bearing
-  ones. The tables in §2 and §4.4 are unpinned at three iterations — read directions and large
-  effects only.
-* *Build-to-build*: **±15% from code layout alone**, for changes that are provably no-ops. The
-  same `RC_FOLDP=0` build measured 19.72 and 30.15 MB/s in two different trees. This one bit
-  me: an early reading of §5.4's fold-`p` change came out as +43% and was noise. **Never
-  compare across trees**; only ever compare knobs within one tree, built the same way, pinned.
+* *Run-to-run, unpinned*: swings up to ±25%. The same `RC_FOLDP=0` binary measured 19.72 and
+  30.15 MB/s in two unpinned runs an hour apart. This one bit me: an early reading of §5.4's
+  fold-`p` change came out as +43% and was that swing, not the change. An unpinned single
+  reading proves nothing here.
+* *Run-to-run, pinned* (`taskset -c 2`, five or more iterations): ±2–3%. Every number in
+  §1.2, §4.3 and §5 is pinned and best-of-4-or-more; the tables in §2 and §4.4 are unpinned
+  at three iterations — read directions and large effects only.
+* *Machine drift across hours*: the whole box slowed ~12% between the morning and afternoon
+  sessions — pristine clang went 23.45 → 20.97 on the same binary, pinned, and every
+  benchmark row in §5 shifted with it. Worse, ratios move too, not just absolutes: striping's
+  win read +43% in the morning session and +29% in the afternoon one (§4.3). Hence the rules
+  used throughout: **a baseline is only valid for the session it was measured in** — re-run
+  the pristine build alongside every comparison — and a ratio that two sessions disagree on
+  is quoted as a range, not a number.
 
 **Harness.** The probes are `#if RC_PROBE==n` variants of `model1.inc`'s inner loop, keeping
 the loop, the block structure and the output side byte-for-byte identical and swapping only
-the step. Blocks are counted rather than terminated on the short-block flag (`RC_PROBE_BLOCKS`),
-since the probes that remove the coder cannot decode the block header. `PROBE=12` (the deferred
-write-back) is the one probe that produces correct output, and it is checked with `cmp` against
-the source file.
+the step; they are shipped as `misc/bench/rc_decoder_probes.patch`. Blocks are counted rather
+than terminated on the short-block flag (`RC_PROBE_BLOCKS`), since the probes that remove the
+coder cannot decode the block header. `PROBE=12` (the deferred write-back) is the one probe
+that produces correct output, and it is checked with `cmp` against the source file.
 
-The striping, branchless-refill and interleave work is real code, not a probe: `RC_STRIPE`,
-`RC_DECREFILL` and `RC_DECILV` round-trip on the full `t.sh` corpus at every value measured.
+The striping, branchless-refill and interleave work is real code, not a probe — shipped as
+`misc/bench/rc_decoder_proto.patch` — and `RC_STRIPE`, `RC_DECREFILL`, `RC_DECILV` and
+`RC_FOLDP` round-trip byte-for-byte at every value measured; the configurations named in
+§4.1 also pass the full `t.sh` corpus, device encodes included.
 
-The two vector benchmarks are in `misc/bench/` and are the source of §3.3 and §5. They are
-shape benchmarks — arbitrary data through the real chain — and they must be built with gcc:
-clang dead-codes two of the `rc_vecdec_shape` variants and reports 0.00 clk/bit for them.
+The two shape benchmarks are in `misc/bench/` and are the source of §3.3 and §5 — arbitrary
+data through the real dependency chain and instruction mix. The plan's numbers are gcc's,
+pinned; clang compiles both benchmarks and preserves every verdict (speculation still loses,
+the target row still wins), but its absolute rows differ by 10–20%, so do not mix compilers
+within a table.
