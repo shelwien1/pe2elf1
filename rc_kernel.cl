@@ -448,9 +448,13 @@ __kernel void rc_encode(
   /*  to 100.3, kernel 417us up to 510us. At RCNUM=16 it is the other way round, */
   /*  +12%, because there the kernel is not yet bandwidth-bound. Measured both. */
   /*  */
-  /*  Splitting the loop so the trip count is uniform does not help either: the */
-  /*  mask is on the work-item, not on k, so it survives, and the second loop is */
-  /*  another copy of the coder. 46 branches to 81. */
+  /*  Two other ways round it, both measured and both worse. Splitting the loop */
+  /*  so the trip count is uniform: the mask is on the work-item, not on k, so it */
+  /*  survives, and the second loop is another copy of the coder -- 81 branches. */
+  /*  Loading unconditionally past the end (with slack in the buffer) and putting */
+  /*  only rc_process under the mask: the compiler then predicates the whole */
+  /*  coder, 1398 instructions against 898, and nine of the per-lane loads */
+  /*  survive anyway. No faster. */
   for( uint32_t k=id; k<nbits; k+=RCNUM ) {
     uint32_t b = pbit[k];
     rc_process( b&0x7FFF, b>>15 );

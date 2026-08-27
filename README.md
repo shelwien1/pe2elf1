@@ -375,24 +375,40 @@ register width is not being set by a pointer.
 
 ### Where the last 46 branches are
 
-Tracked down by hand, on the fixed kernel at a work-group of 16:
+Tracked down on the fixed kernel at a work-group of 16, and then confirmed
+against a decompilation of it:
 
 | | count | on the hot path? |
 | --- | --- | --- |
-| `pbit[k]`, scalarised | 30 | **yes, every iteration** |
-| prologue and the scalar remainder path | 13 | no — once per launch |
-| main loop back-edge, and one guard | 2 | necessary |
+| `pbit[k]`, scalarised — its guard and 30 lane tests | 31 | **yes, every iteration** |
+| the scalar remainder path, and the two guards that dispatch to it | 13 | no — 2 run once, 11 never |
+| main loop back-edge | 1 | necessary |
 | `rc_quit`'s flush loop | 1 | once per block |
 
-The 30 are the same disease as the byte scatter, on the load side. A
+The runtime's kernel opens with
+
+```
+cmp r8,0x10      ; r8 = the local work-group size
+jae 548          ; >= 16  -> the vectorised loop
+test r8b,0xf     ; work-group % 16
+je  536          ; == 0   -> skip the scalar tail entirely
+```
+
+so what looked like a prologue is a *complete second copy of the coder*, scalar,
+for the work-items left over when the work-group is not a multiple of the vector
+width — its own header bits, its own `k += RCNUM` loop, its own fully unrolled
+minimal flush, its own `outlen`/`outcarry` stores. At a work-group of 16 it is
+dead code and only the two dispatch tests execute, once per launch.
+
+The 31 are the same disease as the byte scatter, on the load side. A
 work-group can be launched partly filled, so the runtime's vectorised kernel
 always carries a lane mask, and the load is therefore masked — and a masked
 16-bit load has no instruction behind it, because AVX-512 has no 16-bit gather
 any more than it has a byte scatter. So it becomes sixteen of extract the
 address, `vpbroadcastw`, `vpblendd`, test the lane's mask bit, branch.
 
-They can be removed, and it is not worth it. Widening `pbit` to 32 bits takes
-the kernel to 17 branches and 5 extracts — but the array is then 2 MB a block
+They can be removed, and none of the three ways is worth it. Widening `pbit` to
+32 bits takes the kernel to 17 branches and 5 extracts — but the array is then 2 MB a block
 instead of 1 MB, over the bus and through the kernel's own reads, and at the
 geometry that matters it costs more than the branches do:
 
@@ -403,10 +419,14 @@ geometry that matters it costs more than the branches do:
 
 At RCNUM=16 the kernel is not yet bandwidth-bound and the branches dominate;
 at RCNUM=64 it is, and they do not. The fast geometry is the one worth keeping,
-so `pbit` stays 16-bit and the branches stay. Splitting the loop to make the
-trip count uniform does not help either — the mask is on the work-item, not on
-`k`, so it survives, and the second loop is another copy of the coder: 46
-branches becomes 81.
+so `pbit` stays 16-bit and the branches stay.
+
+The other two ways are worse outright. Splitting the loop to make the trip count
+uniform: the mask is on the work-item, not on `k`, so it survives, and the
+second loop is another copy of the coder — 81 branches. Loading unconditionally
+past the end, with slack in the buffer, and putting only `rc_process` under the
+mask: the compiler predicates the whole coder, 1398 instructions against 898,
+nine of the per-lane loads survive anyway, and it measures no faster.
 
 ### More lanes, now that lanes are cheap
 
