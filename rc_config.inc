@@ -6,7 +6,7 @@
 // parameterised by class name).
 //
 // SCALElog and friends live here rather than in FSM.cpp because rc.inc, the
-// kernel build options in rc_cl.cpp and the model all need them; FSM.cpp
+// kernel build mapping in build.sh and the model all need them; FSM.cpp
 // includes this file for them.
 enum { SCALElog=15, SCALE=1<<SCALElog, mSCALE=SCALE-1, hSCALE=SCALE/2, eSCALE=16*SCALE };
 
@@ -159,28 +159,14 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_STRICT_BLKSIZE 0
 #endif
 
-// 1 = build the OpenCL path: the carryless coding pass runs as a kernel, one
-// work-item per lane. Only that pass -- the carry-propagating fallback and the
-// whole decoder stay on the host, and so does everything when there is no
-// device (-C, or none found). Needs an ICD loader to link against.
-#ifndef RC_OPENCL
-#define RC_OPENCL 0
-#endif
-
-// 1 = build the ISPC path instead: the same coding pass, from the same
-// generated rc_kernel.cl, compiled by ispc at build time into this executable
-// and called as a function -- no OpenCL runtime, no JIT, no -k cache. The two
-// backends serve the same CL_* names, so exactly one may be built; build.sh
-// picks ISPC when an ispc compiler is on the path and OpenCL otherwise.
+// 1 = build the ISPC path: the encoder's carryless coding pass, compiled by
+// ispc at build time from the generated rc_kernel.ispc and called as a
+// function. Only that pass -- the carry-propagating fallback stays on the
+// host, and so does everything with -C or in a build without ispc. The
+// decoder's split path (RC_DECSPLIT) rides on the same kernel object.
+// build.sh sets this when an ispc compiler is on the path.
 #ifndef RC_ISPC
 #define RC_ISPC 0
-#endif
-
-// either backend: what model0.inc's device path is guarded by
-#define RC_DEVICE (RC_OPENCL || RC_ISPC)
-
-#if RC_OPENCL && RC_ISPC
-#error RC_OPENCL and RC_ISPC both define the CL_* backend -- pick one
 #endif
 
 // Blocks scheduled on the device at once.
@@ -192,7 +178,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // written block by block in sequence.
 //
 // 1 is the unpipelined coder -- submit, wait, write -- and is what a build
-// without OpenCL uses whatever this says. Past the point where the device
+// without a backend uses whatever this says. Past the point where the worker
 // stops being the thing waited on, more slots only cost memory: each is a
 // BLKSIZE*8 word cache plus RCNUM substream rows, about 2 MB at the default
 // geometry, on the host and again on the device.
@@ -200,55 +186,45 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // A constant rather than a macro: it is an array bound in three places, and
 // the geometry constants next to it (BLKSIZE, RCNUM) are enums for the same
 // reason.
-static const uint RC_CL_NBLK = 8;
+static const uint RC_DEV_NBLK = 8;
 
 // 1 = the kernel buffers each lane's output and writes it a dword at a time
 // instead of a byte at a time.
 //
 // A byte store to a per-lane address cannot be vectorised at all: there is no
-// byte scatter in AVX-512, or in any other SIMD ISA worth naming. So when the
-// runtime vectorises the kernel across work-items, every such store becomes
-// extract the address from the vector, store, test the lane's mask bit,
-// branch -- once per lane, per byte. In a dump of the built kernel that is
-// ~250 scalar byte stores and ~500 branches, and it is why a wider work-group
-// measures slower rather than faster.
-//
-// vpscatterdd does exist, so a per-lane dword store is one masked instruction
-// and no branches. The cost is carrying a 64-bit accumulator and a byte count
-// per lane, and flushing the last few bytes at rc_quit.
-//
-// -1, the default, decides by the work-group actually chosen: the accumulator
-// is only worth its arithmetic when the store it replaces would have been
-// scalarised, which is to say when the kernel is being vectorised across
-// work-items at all. At a work-group of 1 -- the CPU default, see RC_CL_LWS --
-// a byte store is just a byte store, and the plain one measures faster.
-#ifndef RC_CL_WORDOUT
-#define RC_CL_WORDOUT (-1)
+// byte scatter in AVX-512, or in any other SIMD ISA worth naming, so every
+// such store scalarises into extract-the-address, store, mask test, branch --
+// once per lane, per byte. vpscatterdd does exist, so a per-lane dword store
+// is one masked instruction and no branches. The cost is carrying a 32-bit
+// accumulator and a byte count per lane, and flushing at rc_quit.
+// build.sh maps -1 to 1: under ispc the word path is the one that vectorises.
+#ifndef RC_DEV_WORDOUT
+#define RC_DEV_WORDOUT (-1)
 #endif
 
-// Sub-group width for intel_sub_group_block_read_us, 0 for a plain indexed
-// load, -1 to decide by what the device offers.
+// 1 = the decoder's split path: each bit's decision stays scalar (the model
+// is serial; see rc_split_ispc_v1.md), one compare against a per-lane
+// threshold, and everything else a lane owes -- range/code update, renorm,
+// refill, the next threshold -- runs 16 lanes at a time in the ispc batch.
+// Exact: the stream and the output are bit-identical to the fused decoder,
+// which stays the reference and is what a build without ispc runs.
 //
-// This is the one annotation that fixes the load. A per-work-item indexed
-// access always becomes a gather -- Intel's vectoriser does no contiguity
-// analysis, so even outlen[id] compiles to a scatter -- and AVX-512 has no
-// 16-bit gather, so pbit[k] came back as sixteen per-lane loads behind sixteen
-// mask tests. intel_sub_group_block_read_us reads the run co-operatively from a
-// *uniform* pointer, so there is no per-lane index left to gather from. Kernel
-// time 932us to 495us at RCNUM=16, 414us to 281us at RCNUM=64.
-//
-// It needs cl_intel_subgroups_short, a sub-group as wide as the work-group, and
-// RCNUM a multiple of that.
-#ifndef RC_CL_BLOCKREAD
-#define RC_CL_BLOCKREAD (-1)
+// Off by default because it is *slower* on the reference box (see the
+// measurements in rc_split_ispc_v1.md section 9.2): the batch costs a nearly
+// flat ~8-10 clk/bit where the fused coder's inline work costs ~4-6 on
+// ordinary data, and only hostile (high-entropy, mispredicting) streams
+// reverse that. A knob, not a default, until a machine says otherwise.
+// Needs RC_ISPC, RCNUM a multiple of 16, and RC_RANGE64=0; anything else
+// quietly keeps the fused decoder.
+#ifndef RC_DECSPLIT
+#define RC_DECSPLIT 0
 #endif
 
-// Work-group size for the coding kernel. 0 lets the runtime choose; otherwise
-// it must divide RCNUM. On Intel's CPU runtime a work-group is vectorised
-// across its work-items and scheduled on one core, so this trades vector width
-// against how many cores the launch reaches.
-#ifndef RC_CL_LWS
-#define RC_CL_LWS 0
+// what the split actually compiles under; anything else is the fused decoder
+#if RC_DECSPLIT && RC_ISPC && ((RC_RCNUM%16)==0) && !RC_RANGE64
+#define RC_DECSPLIT_ON 1
+#else
+#define RC_DECSPLIT_ON 0
 #endif
 
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder

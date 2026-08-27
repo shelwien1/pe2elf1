@@ -1,77 +1,53 @@
 /*   rc_kernel.c -- the device-side coder, as functions. */
 /*  */
-/*   Named .c rather than .cl because that is what it is to an editor: C, which */
-/*   is close enough to OpenCL C to highlight and index properly. It is the */
-/*   source; rc_kernel.cl and then rc_kernel.inc are generated from it, and */
-/*   rc_kernel.cl is consumed twice: embedded by txt2inc.pl for the OpenCL */
-/*   runtime to JIT, and compiled directly by ispc (with -DRC_ISPC=1) into the */
-/*   executable -- one generated file, two backends. The entry points at the */
-/*   bottom are the only code that differs between them. */
-/*   mk_kernel.sh runs the chain, build.sh runs mk_kernel.sh when this file is */
-/*   newer: */
+/*   Named .c rather than .ispc because that is what it is to an editor: C, */
+/*   which is close enough to ISPC's language to highlight and index properly. */
+/*   It is the source; rc_kernel.ispc is generated from it and compiled by ispc */
+/*   at build time straight into the executable. mk_kernel.sh runs the chain, */
+/*   build.sh runs mk_kernel.sh when this file is newer: */
 /*  */
 /*     rc_kernel.c  --rc_macro.pl-->  functions turned into #define/#enddef */
 /*                  --defines.pl -->  ... into real multi-line macros */
-/*                  --txt2inc.pl -->  ... into C string literals */
+/*                                    ... and that is rc_kernel.ispc */
 /*  */
 /*   The coder is macros for the same reason sh_v1xN_macro.inc's is: a lane's */
-/*   state has to be plain private scalars in the kernel, with no pointer to an */
-/*   aggregate anywhere for the vectoriser to give up on, and that costs about */
-/*   6%. Writing them as functions here and generating the macros keeps that */
-/*   without hand-maintained backslashes. */
+/*   state has to be plain private scalars, with no pointer to an aggregate */
+/*   anywhere for the vectoriser to give up on. Writing them as functions here */
+/*   and generating the macros keeps that without hand-maintained backslashes. */
 /*  */
 /*   So the coder functions below take only their real arguments and reach the */
 /*   lane state -- low, range, rpre, ffnum, nout, o -- by name. They are macro */
 /*   bodies, not functions, however much they look like functions; that is the */
 /*   one thing to keep in mind when editing this file. */
 /*  */
-/*   Only the carryless coder is here. The carry-propagating twin is a serial */
-/*   Cache/FF-run state machine with a data-dependent inner loop, and it only */
-/*   runs on the blocks the fast path had to hand back, so it stays on the host. */
-/*   So does the decoder. */
+/*   Two entry points: rc_encode, the carryless coding pass over a block's */
+/*   cached {p;bit} pairs, and rc_decode_batch, the decoder split's per-group */
+/*   lane update (see rc_split_ispc_v1.md). The carry-propagating twin is a */
+/*   serial Cache/FF-run state machine and stays on the host; so does the */
+/*   decoder's model, always. */
 /*  */
-/*   What the host and the device have to agree on comes over as -D, from */
-/*   RcCL::Program: RCNUM, SCALElog, LOWBYTES, CODBYTES, RC_LOWSPLIT, the block */
-/*   size and the output stride. Every one of them is a compile-time constant on */
-/*   the host side too, so there is nothing to pass per launch except the block. */
+/*   What the host and the kernel have to agree on comes over as -D from */
+/*   build.sh, which maps the RC_* configuration to these names: RCNUM, */
+/*   SCALElog, hSCALE, LOWBYTES, CODBYTES, RC_LOWSPLIT, BLKFULL, RC_DEV_WORDOUT, */
+/*   RC_RANGE64, RC_RENORM_TAIL. OUTSTRIDE and OUTCAP arrive as arguments. */
 /*  */
 /*   The output must be byte-identical to the host coder -- it is the same */
 /*   integer arithmetic in the same order -- and t.sh checks exactly that by */
 /*   comparing a device encode against -C. */
 
-/*  [[static const char RC_CL_SRC]] */
-
-#if RC_CL_BLOCKREAD
-#pragma OPENCL EXTENSION cl_intel_subgroups : enable
-#pragma OPENCL EXTENSION cl_intel_subgroups_short : enable
-#endif
-
-/*  OpenCL C has no <stdint.h>, but it does not need one: char, short, int and */
-/*  long are exactly 8, 16, 32 and 64 bits wide by definition, not "at least". */
-/*  These are a spelling, so the kernel reads like the host code next to it. */
-/*  */
-/*  ISPC compiles this same generated file (see the entry points at the end): */
-/*  its fixed-width names are spelled differently, and that is the whole of the */
-/*  difference at this level. One thing does not carry over as text: an ISPC */
-/*  integer literal suffixed UL is still 32 bits, so every 64-bit constant */
-/*  below is built with an explicit (uint64_t) cast, which OpenCL C accepts */
-/*  identically. */
-#if RC_ISPC
+/*  ISPC has no <stdint.h>; these are a spelling, so the kernel reads like the */
+/*  host code next to it. One thing to know when editing: an ISPC integer */
+/*  literal suffixed UL is still 32 bits, so every 64-bit constant below is */
+/*  built with an explicit (uint64_t) cast. */
 typedef unsigned int8  uint8_t;
 typedef unsigned int16 uint16_t;
 typedef unsigned int32 uint32_t;
 typedef unsigned int64 uint64_t;
-#else
-typedef uchar  uint8_t;
-typedef ushort uint16_t;
-typedef uint   uint32_t;
-typedef ulong  uint64_t;
-#endif
 
 #define LOWBITS (LOWBYTES*8)
 #define SKIP    (LOWBYTES-CODBYTES)
 
-/*  the row in dwords, for RC_CL_WORDOUT's capacity test */
+/*  the row in dwords, for RC_DEV_WORDOUT's capacity test */
 #define OUTWCAP ((SKIP+OUTCAP)/4)
 
 #define sTOP 0x01000000u
@@ -153,8 +129,8 @@ typedef ulong  uint64_t;
 }
 
 /*  sh is 0, 8 or 16. The select in the split version is not an optimisation: a */
-/*  32-bit shift by 32-sh with sh==0 is a shift by 32, which OpenCL takes modulo */
-/*  32 and turns into a shift by nothing at all. */
+/*  32-bit shift by 32-sh with sh==0 is a shift by 32, which shift semantics */
+/*  take modulo 32 and turn into a shift by nothing at all. */
 
 #define low_shl_split(sh) {\
   uint32_t _hi = ((sh)==0) ? 0u : (lowl >> (32-(sh)));\
@@ -225,7 +201,7 @@ typedef ulong  uint64_t;
 /*   -- and outlen reports the payload alone. Past the capacity the substream */
 /*   did not fit, and nout keeps counting so the host can see by how much. */
 /*  */
-/*   RC_CL_WORDOUT picks how a lane's bytes reach its row. */
+/*   RC_DEV_WORDOUT picks how a lane's bytes reach its row. */
 /*  */
 /*   A byte store to a per-lane address does not vectorise, at all: there is no */
 /*   byte scatter in AVX-512, and no other SIMD ISA has one either. So when the */
@@ -295,7 +271,7 @@ typedef ulong  uint64_t;
 \
 }
 
-#if RC_CL_WORDOUT
+#if RC_DEV_WORDOUT
  #define RC_OUT_DECL uint32_t acc = 0, nacc = 0, wpos = 0
  #define rc_put(c) rc_put_word(c)
  #define RC_TAIL() rc_tail_word()
@@ -355,7 +331,7 @@ typedef ulong  uint64_t;
 \
 }
 
-#if RC_CL_WORDOUT
+#if RC_DEV_WORDOUT
  #define rc_shiftlow(nsh) rc_shiftlow_word(nsh)
 #else
  #define rc_shiftlow(nsh) rc_shiftlow_byte(nsh)
@@ -381,8 +357,8 @@ typedef ulong  uint64_t;
 /*  The counted 0/1/2-byte shift is exact for a binary coder: the unit is */
 /*  range>>SCALElog >= 2^9, so one step cannot take range below 2^8. */
 #define rc_renorm() {\
-  /* the ternaries are for ISPC, where a comparison is a bool and bool+bool\
-     does not parse; OpenCL C compiles them to the same select */\
+  /* ternaries because an ISPC comparison is a bool, and bool+bool\
+     does not parse */\
   uint32_t _nsh = (range<sTOP ? 1u:0u) + (range<gTOP ? 1u:0u);\
   rc_shiftlow(_nsh);\
   range <<= _nsh*8;\
@@ -427,26 +403,21 @@ typedef ulong  uint64_t;
 /*   Not turned into a macro: rc_macro.pl only converts `type name(args) {`, and */
 /*   this signature spans lines. */
 /*  --------------------------------------------------------------------------- */
-#if RC_ISPC
-
-/*  The ISPC side of the same kernel. Every coder macro above expands here */
-/*  unchanged; what differs is only the launch shape. OpenCL runs RCNUM */
-/*  work-items and the runtime vectorises across them; ISPC runs one gang and */
-/*  `foreach` walks the RCNUM lanes through it, a gang-width at a time, so the */
-/*  same code covers RCNUM above and below the gang size. */
+/*  One block, RCNUM lanes: `foreach` walks them through the gang a */
+/*  gang-width at a time, so the same code covers RCNUM above and below the */
+/*  gang size. Lane id codes, in this order: the block-length flag if it is */
+/*  lane 0, then the length bits that fall to it, then every bit of the block */
+/*  whose index is id mod RCNUM -- which is model0.inc's order, bit for bit. */
 /*  */
-/*  There is no RC_CL_BLOCKREAD here and nothing is lost by that: inside */
-/*  foreach the induction variable is known linear, so `pbit[k]` with */
-/*  k = id + m*RCNUM is a unit-stride access and ISPC emits one contiguous */
-/*  vector load -- the very thing the OpenCL path needed the Intel sub-group */
-/*  extension for. Build with RC_CL_BLOCKREAD=0; the pragma block at the top */
-/*  is skipped by the same setting. */
+/*  Inside foreach the induction variable is known linear, so `pbit[k]` with */
+/*  k = id + m*RCNUM is a unit-stride access and ispc emits one contiguous */
+/*  vector load, not a gather. (The retired OpenCL backend needed the Intel */
+/*  sub-group block-read extension for the same effect.) */
 /*  */
 /*  OUTSTRIDE and OUTCAP arrive as arguments rather than -D: they come from */
 /*  RCio's template geometry, which the C++ side computes, and a uniform */
 /*  argument costs the kernel nothing while sparing the build a second copy of */
-/*  that arithmetic. The names match the -D spelling on purpose -- OUTWCAP and */
-/*  the coder macros above pick whichever is in scope. */
+/*  that arithmetic. */
 export void rc_encode(
     const uniform uint16_t pbit[],   /*  nbits entries, packed (bit<<15)|p */
     uniform uint32_t nbits,
@@ -490,112 +461,72 @@ export void rc_encode(
   }
 }
 
-#else  /*  the OpenCL entry */
-
-#if RC_CL_BLOCKREAD
-__attribute__((intel_reqd_sub_group_size(RC_CL_BLOCKREAD)))
-#endif
-__kernel void rc_encode(
-    __global const uint16_t* restrict pbit,   /*  nbits entries, packed (bit<<15)|p */
-#if RC_CL_BLOCKREAD
-    const uint32_t ngroups,          /*  whole RCNUM-wide groups of coded bits */
-    const uint32_t ntail,            /*  and the bits left over, < RCNUM */
-#else
-    const uint32_t nbits,
-#endif
-    const uint32_t blksize,
-    __global uint8_t* restrict out,  /*  RCNUM rows of OUTSTRIDE */
-    __global uint32_t* restrict outlen,
-    __global uint32_t* restrict outcarry )
+/*  --------------------------------------------------------------------------- */
+/*   The decoder split's batch: one 16-lane pass of everything the per-bit */
+/*   scalar loop deferred. The scalar side (rc_vec.inc) decides each bit with */
+/*   one compare, p <= T[lane] -- exact, because for integers */
+/*   code >= (range>>SCALElog)*p is p <= floor(code/(range>>SCALElog)) -- and */
+/*   logs {p;bit}; every 16 bits this consumes the log and brings the 16 lanes */
+/*   of that group current: the range/code update, the counted renorm, the */
+/*   refill, and the next T. See rc_split_ispc_v1.md for the design and the */
+/*   measured cost model. */
+/*  */
+/*   The {p;bit} pairs arrive packed in four u64 arguments -- by value, so that */
+/*   direction of the scalar/vector handoff never touches memory. pos[] holds */
+/*   absolute 32-bit offsets into base, which is the whole slot's row block, so */
+/*   no per-lane pointer exists anywhere. look[] is each lane's next four */
+/*   stream bytes, loaded at the END of the previous batch: the refill consumes */
+/*   it before the gather that refreshes it, which moves the gather's latency */
+/*   off this batch's chain and under the caller's next scalar phase. Reading a */
+/*   few bytes past a substream's end lands in rc_Read's FF padding, same as */
+/*   the fused decoder's own overreads. */
+/*  */
+/*   The division is exact: code and ru are exactly representable in a double, */
+/*   the quotient is below 2^23, and the true quotient is at least 2^-17 away */
+/*   from the next integer while the rounding error is below 2^-30 -- so */
+/*   floor() can only be one short, and the single conditional increment */
+/*   repairs it. The state fingerprint checks in misc/bench/rc_splitdec.cpp */
+/*   verify the whole arrangement bit for bit against the fused coder. */
+/*  */
+/*   Not turned into a macro: the signature spans lines, same as rc_encode. */
+export void rc_decode_batch(
+    uniform uint32_t range[], uniform uint32_t code[], uniform uint32_t pos[],
+    uniform uint32_t ru[],    uniform uint32_t T[],    uniform uint32_t look[],
+    const uniform uint8_t base[],
+    uniform uint64_t pk0, uniform uint64_t pk1,
+    uniform uint64_t pk2, uniform uint64_t pk3 )
 {
-  const uint32_t id = get_global_id(0);
+  uint32_t r = range[programIndex];
+  uint32_t c = code[programIndex];
+  uint32_t q = pos[programIndex];
+  uint32_t u = ru[programIndex];
+  uint32_t d = look[programIndex];
 
-  LOW_DECL;
-  RC_OUT_DECL;
-  rangetype range = RANGE_INIT;
-  uint32_t rpre = 0, ffnum = 0, nout = 0;
-  /*  uniform bases; the per-lane part is a 32-bit index, so the scatter is by */
-  /*  32-bit index (vpscatterdd) and not by 64-bit pointer (vpscatterqd) */
-  __global uint8_t*  ob = out;
-  __global uint32_t* ow = (__global uint32_t*)out;
-  const uint32_t obase  = id*OUTSTRIDE;
-  const uint32_t owbase = id*(OUTSTRIDE/4);
+  uint64_t pks = programIndex<4 ? pk0 : programIndex<8 ? pk1
+               : programIndex<12 ? pk2 : pk3;
+  uint32_t pbv = (uint32_t)((pks>>((programIndex&3)*16)) & 0xFFFF);
+  uint32_t p   = pbv>>1;
+  uint32_t bit = pbv&1;
 
-  const uint32_t flag = (blksize!=BLKFULL);
+  uint32_t rp = u*p;
+  r = bit ? r-rp : rp;
+  c = bit ? c-rp : c;
 
-  if( id==0 ) rc_process( hSCALE, flag );
+  uint32_t n  = (r<sTOP ? 1u:0u) + (r<gTOP ? 1u:0u);
+  uint32_t sh = n*8;
+  uint32_t w  = ((d&0xFF)<<8) | ((d>>8)&0xFF);
+  c = (c<<sh) + (w>>(16-sh));
+  r = r<<sh;
+  q = q+n;
 
-  if( flag )
-    for( uint32_t j=id; j<16; j+=RCNUM )
-      rc_process( hSCALE, (blksize>>(15-j))&1 );
+  look[programIndex] = *((const uint32_t*)(&base[q]));
 
-  /*  30 of this kernel's 46 branches are this one load, and none of the obvious */
-  /*  ways round it works, because the reason is not the obvious one. */
-  /*  */
-  /*  Intel's vectoriser gives every per-work-item indexed access a gather or a */
-  /*  scatter. It does no contiguity analysis at all: outlen[id] below, where the */
-  /*  index *is* the work-item id and the mask is all ones, compiles to */
-  /*  vpscatterqd. So pbit[k] is a gather no matter what k looks like. */
-  /*  */
-  /*  AVX-512 has gathers for 32- and 64-bit elements and none for 16-bit, the */
-  /*  same way it has no byte scatter. pbit is ushort, so there is no instruction */
-  /*  to emit and the compiler unrolls it into sixteen of extract the address, */
-  /*  vpbroadcastw, vpblendd, test the lane's mask bit, branch. */
-  /*  */
-  /*  Which means anything aimed at the *mask* is aimed at the wrong thing, and */
-  /*  three tries confirm it: */
-  /*  */
-  /*    - loop split so the trip count is uniform        46 branches -> 81 */
-  /*    - unconditional load past the end, work masked   46 -> 53, 1398 insns */
-  /*    - bit count passed pre-divided as ngroups*RCNUM  46 -> 62, 1594 insns */
-  /*  */
-  /*  all still gather, all bigger. Widening pbit to 32 bits is the only thing */
-  /*  that works -- it becomes one vpgatherdd, 46 branches -> 17 -- and it is not */
-  /*  worth it: the array doubles to 2 MB a block, over the bus and through the */
-  /*  kernel's own reads, and at RCNUM=64 with a work-group of 16, where the */
-  /*  kernel is already bandwidth-bound, that costs more than the branches do: */
-  /*  112.0 MB/s down to 100.3, kernel 417us up to 510us. At RCNUM=16 it is the */
-  /*  other way round, +12%. Measured all of it. */
-  /*  */
-  /*  The one remaining option is a different lane mapping -- each work-item */
-  /*  reading a contiguous run rather than every RCNUM'th bit, so the load could */
-  /*  be a vload16. That changes which bit lands in which substream, so it is a */
-  /*  format change and a departure from sh_v1xN.inc's interleave. Not done. */
-#if RC_CL_BLOCKREAD
-  /*  intel_sub_group_block_read_us: the whole sub-group reads one contiguous run */
-  /*  of ushorts, lane l taking element l, as a single wide load. The pointer is */
-  /*  uniform, so there is no per-lane index for the vectoriser to turn into a */
-  /*  gather -- which is the one thing that was wrong with the plain load. */
-  /*  */
-  /*  It is a collective, so every lane has to reach it: hence the pre-divided */
-  /*  count. ngroups whole groups run with a trip count that cannot differ */
-  /*  between lanes, and the ntail leftover bits are read the plain way, once. */
-  const uint32_t sgbase = id - get_sub_group_local_id();
-  uint32_t k = id, kb = sgbase;
+  u = r>>15;
+  double fq  = (double)c/(double)u;
+  uint32_t t = (uint32_t)floor(fq);
+  uint32_t dd = c - t*u;
+  if( dd>=u ) t += 1;
 
-  for( uint32_t m=0; m<ngroups; m++ ) {
-    uint32_t b = intel_sub_group_block_read_us( pbit + kb );
-    rc_process( b&0x7FFF, b>>15 );
-    k += RCNUM; kb += RCNUM;
-  }
-
-  if( id < ntail ) {
-    uint32_t b = pbit[k];
-    rc_process( b&0x7FFF, b>>15 );
-  }
-#else
-  for( uint32_t k=id; k<nbits; k+=RCNUM ) {
-    uint32_t b = pbit[k];
-    rc_process( b&0x7FFF, b>>15 );
-  }
-#endif
-
-  rc_quit();
-  RC_TAIL();
-
-  /*  a lane that coded nothing can stop inside the prefix and owes nothing */
-  outlen[id]   = nout>SKIP ? nout-SKIP : 0;
-  outcarry[id] = ffnum;
+  range[programIndex]=r; code[programIndex]=c; pos[programIndex]=q;
+  ru[programIndex]=u; T[programIndex]=t;
 }
-
-#endif  /*  RC_ISPC */

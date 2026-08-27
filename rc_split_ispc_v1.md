@@ -342,8 +342,45 @@ extension outright — and 38 branches against the OpenCL build's 46. And on thi
 per varying value, so `build.sh` defaults the *kernel* to the split form — stream-neutral,
 so the host keeps its own preference and the output does not move.
 
-The decoder in this build is the scalar one, per §7, and the whole codec now round-trips
-with no OpenCL anywhere in the process.
+### 9.2 The decoder split, in the real codec
+
+The split of §1–§6 is now real code too, behind `RC_DECSPLIT`: `rc_decode_batch` in
+`rc_kernel.c` (always present in the kernel object), the scalar side in `rc_vec.inc`, one
+`rc_Bulk` call in `model1.inc` where the model enters strict `i%RCNUM` order. The block's
+header bits run fused — their lane sequence revisits lane 0 immediately, which the group
+rotation cannot express — and `rc_Bulk` converts the lanes to split state after them; a
+partial group at block end is dropped, which is exact because none of its lanes is read
+again. No format change, no interface change: `rc_Process(rcidx,p,bit)` as before, and the
+fused decoder remains the reference and the fallback for any configuration the split does
+not cover (`RCNUM%16!=0`, `RC_RANGE64`, no ispc).
+
+Verified through the full `t.sh` corpus at `RC_DECSPLIT=1` × {default, `RCNUM=64`,
+`LOWBYTES=5`, `LOWSPLIT=1`} — 768 checks, byte-exact.
+
+Measured, same-session pinned, real codec, 30 MB:
+
+| decoder | text MB/s | random MB/s |
+|---|---|---|
+| fused (default) | 19.8–20.0 | 18.5 |
+| split, RCNUM=16 | 14.1 | 13.8 |
+| split, RCNUM=64 | 14.3 | — |
+
+**0.71–0.75x — the cost model of §7 held** (it projected ~0.8x), and even the harness's
+one hopeful case does not transfer: real random input is not hostile enough (§6.4), and
+RCNUM=64's pipelining win is eaten by the per-call C-ABI state round-trip exactly as §6.3
+measured. So the knob defaults to off, the fused decoder stays what the codec runs, and
+`RC_DECSPLIT=1` is one flag away on a machine whose memory subsystem prices the batch
+differently — the box here is a 2.8 GHz VM, and §8's headroom list is untouched.
+
+### 9.3 OpenCL, removed
+
+With the ISPC backend equal-or-better everywhere it was measured, the OpenCL path is gone
+from the tree: `rc_cl.cpp`, the embedded `rc_kernel.inc`, the `txt2inc.pl` step, the `-k`
+binary cache and the `-d/-p/-T` device options, the ICD machinery, the `RC_CL_*` knobs.
+The kernel source generates to `rc_kernel.ispc` (the `.cl` name retired with the JIT), the
+host API is `DEV_*` in `rc_dev.h`, and a build without ispc is simply the host coder —
+`-C` always, nothing to fall back from. What this document's earlier sections say about
+the OpenCL backend describes a tree that ends at the commit this section arrived in.
 
 ## 10. Measurement notes
 

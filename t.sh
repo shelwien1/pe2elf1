@@ -2,7 +2,7 @@
 # Round-trip matrix. Every config encodes and decodes each test file and the
 # result is compared byte for byte against the input.
 #
-# When the build has a usable OpenCL device, each file is also encoded on it
+# When the build has a usable device kernel, each file is also encoded with it
 # and that output is compared against the host encode -- not just for size, but
 # byte for byte. The kernel is the same integer arithmetic in the same order as
 # the host coder, so anything else is a bug.

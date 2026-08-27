@@ -3,36 +3,34 @@
 #   ./build.sh -DRCNUM=8 -DRC_LOWBYTES=6
 set -e
 
-# OPENCL=1 (the default when an ICD loader is present) builds the device path;
-# OPENCL=0 leaves it out entirely and links against nothing extra.
 CXX=${CXX:-g++}
 OPTS="-fomit-frame-pointer -fno-stack-protector -fno-stack-check -fno-rtti -fno-exceptions -fstrict-aliasing"
 INCS="-DNDEBUG -I. -ILib3"
 DIRNAM=$(basename "$(pwd)")
 
-# rc_kernel.cl and rc_kernel.inc are generated from rc_kernel.c -- the kernel
-# is kept as OpenCL C so an editor can highlight it. Both generated files are
-# committed, so perl is only needed by whoever edits the kernel.
-if [ rc_kernel.c -nt rc_kernel.inc ]; then
+# rc_kernel.ispc is generated from rc_kernel.c -- the kernel is kept as C so
+# an editor can highlight it. The generated file is committed, so perl is only
+# needed by whoever edits the kernel.
+if [ rc_kernel.c -nt rc_kernel.ispc ]; then
   if command -v perl >/dev/null 2>&1; then
     ./mk_kernel.sh
   else
-    echo "warning: rc_kernel.c is newer than rc_kernel.inc, and perl is missing" >&2
+    echo "warning: rc_kernel.c is newer than rc_kernel.ispc, and perl is missing" >&2
   fi
 fi
 
-# Backend pick: ISPC when an ispc compiler is around (ISPC=path overrides
-# where to find it, ISPC=0 refuses it), OpenCL otherwise as before. The two
-# serve the same CL_* API, so exactly one is built -- see rc_config.inc.
+# Device path: the ispc-compiled coding kernel. Built whenever an ispc
+# compiler is around (ISPC=path says where, ISPC=0 refuses it); without one
+# the coder builds host-only and -C is simply always in effect.
 if [ -z "$ISPC" ]; then
   if command -v ispc >/dev/null 2>&1; then ISPC=ispc; else ISPC=0; fi
 fi
 
 if [ "$ISPC" != 0 ]; then
-  # The kernel constants are compile-time on both sides. The OpenCL path
-  # passes them to the JIT at run time; here the same set goes to ispc now,
-  # so the RC_* overrides on our command line have to be mapped to the
-  # kernel's own names, with the rc_config.inc defaults for the rest.
+  # The kernel constants are compile-time on both sides, so the RC_*
+  # overrides on our command line are mapped to the kernel's own names here,
+  # with the rc_config.inc defaults for the rest.
+  #
   # K_LS starts at 1, not the host's 0: the split low is stream-neutral and
   # the ispc kernel measures ~5% faster with it (the 64-bit accumulator costs
   # two zmm per varying). An explicit -DRC_LOWSPLIT still sets both sides.
@@ -45,45 +43,29 @@ if [ "$ISPC" != 0 ]; then
     -DRC_LOWSPLIT=*)    K_LS=${a#*=};;
     -DRC_RENORM_TAIL=*) K_RT=${a#*=};;
     -DRC_RANGE64=*)     K_R64=${a#*=};;
-    -DRC_CL_WORDOUT=*)  K_WO=${a#*=};;
+    -DRC_DEV_WORDOUT=*) K_WO=${a#*=};;
   esac; done
-  # -1 = auto; for ispc the word path is the one that vectorises
+  # -1 = auto; under ispc the word path is the one that vectorises
   [ "$K_WO" = "-1" ] && K_WO=1
 
   # two targets and a dispatcher, so one binary runs on AVX2 and AVX-512 alike
   rm -f rc_kernel_ispc*.o
   "$ISPC" --target=avx512skx-x16,avx2-i32x16 --arch=x86-64 -O2 --pic \
-    -DRC_ISPC=1 -DRCNUM=$K_RCNUM -DSCALElog=15 -DhSCALE=16384 \
+    -DRCNUM=$K_RCNUM -DSCALElog=15 -DhSCALE=16384 \
     -DLOWBYTES=$K_LB -DCODBYTES=$K_CB -DRC_LOWSPLIT=$K_LS -DBLKFULL=$K_BLK \
-    -DRC_CL_WORDOUT=$K_WO -DRC_CL_BLOCKREAD=0 \
-    -DRC_RANGE64=$K_R64 -DRC_RENORM_TAIL=$K_RT \
-    rc_kernel.cl -o rc_kernel_ispc.o -h rc_kernel_ispc.h
+    -DRC_DEV_WORDOUT=$K_WO -DRC_RANGE64=$K_R64 -DRC_RENORM_TAIL=$K_RT \
+    rc_kernel.ispc -o rc_kernel_ispc.o -h rc_kernel_ispc.h
 
-  CLDEF="-DRC_OPENCL=0 -DRC_ISPC=1"
+  CLDEF="-DRC_ISPC=1"
   CLLIB="rc_kernel_ispc*.o -pthread"
-  OPENCL=ispc
+  BACKEND=ispc
 else
-
-if [ -z "$OPENCL" ]; then
-  if [ -e /usr/include/CL/cl.h ]; then OPENCL=1; else OPENCL=0; fi
-fi
-if [ "$OPENCL" = 1 ]; then
-  CLDEF="-DRC_OPENCL=1"; CLLIB="-lOpenCL"
-  # -DRC_CL_DYNAMIC=1 asks for the Windows arrangement: open the ICD loader by
-  # hand rather than link it. That is the point of the flag here -- it is the
-  # only way to compile and run that path on Linux, where it is otherwise
-  # skipped entirely.
-  for a in "$@"; do
-    case "$a" in -DRC_CL_DYNAMIC=1) CLLIB="-ldl";; esac
-  done
-else
-  CLDEF="-DRC_OPENCL=0"; CLLIB=""
-fi
-
+  CLDEF="-DRC_ISPC=0"; CLLIB=""
+  BACKEND=host-only
 fi
 
 $CXX -std=gnu++11 -O3 $INCS $OPTS $CLDEF "-D__DIRNAM__=$DIRNAM" "$@" \
-     coder.cpp FSM.cpp rc_cl.cpp rc_ispc.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp \
+     coder.cpp FSM.cpp rc_ispc.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp \
      $CLLIB -o coder
 
-echo "built ./coder (backend=$OPENCL)"
+echo "built ./coder (backend=$BACKEND)"

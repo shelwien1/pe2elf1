@@ -5,7 +5,7 @@
 #include "FSM.cpp"
 
 #include "rc_config.inc"
-#include "rc_cl.h"
+#include "rc_dev.h"
 #include "rc_io.inc"
 
 // rc.inc is the scalar rangecoder of sh_v1xN_s.cpp, and it is included twice:

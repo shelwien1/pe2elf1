@@ -32,5 +32,5 @@ if exist rc_kernel_macro.c del rc_kernel_macro.c
 if exist rc_kernel_macro_U.c del rc_kernel_macro_U.c
 where perl >nul 2>nul && perl txt2inc.pl -raw rc_kernel.cl rc_kernel.inc
 
-%gcc% -g -std=gnu++1z -O9 -Ofast %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp rc_cl.cpp rc_ispc.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp -o coder.exe %*
+%gcc% -g -std=gnu++1z -O9 -Ofast %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp rc_ispc.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp -o coder.exe %*
 

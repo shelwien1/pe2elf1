@@ -6,7 +6,7 @@ struct Model<0> : Coroutine, Predictor {
   // Slots the encoder can have coding at once. Only the device path uses more
   // than one -- the host coder is synchronous, so a second slot would be a
   // couple of megabytes it never looks at.
-  static const uint NSLOT = RC_DEVICE ? RC_CL_NBLK : 1;
+  static const uint NSLOT = RC_ISPC ? RC_DEV_NBLK : 1;
 
   typedef RCio<BLKSIZE,RCNUM,NSLOT> t_RCio;
 
@@ -45,8 +45,8 @@ struct Model<0> : Coroutine, Predictor {
   uint Init( void* p ) {
     uint r = Predictor::Init(p);
     if( r==0 ) {
-      CL_Geometry( t_RCio::rowsize, t_RCio::tmpbufsize );
-      CL_Init();
+      DEV_Geometry( t_RCio::rowsize, t_RCio::tmpbufsize );
+      DEV_Init();
     }
     return r;
   }
@@ -133,8 +133,8 @@ struct Model<0> : Coroutine, Predictor {
   void drain_one( void ) {
     uint s = head;
 
-#if RC_DEVICE && !RC_FORCE_CARRY
-    if( CL_Collect( s, rcio.rows(s), t_RCio::rowsize ) ) {
+#if RC_ISPC && !RC_FORCE_CARRY
+    if( DEV_Collect( s, rcio.rows(s), t_RCio::rowsize ) ) {
       uint ncarry = 0, novf = 0;
       for( uint i=0; i<RCNUM; i++ ) {
         ncarry += slot[s].carry[i];
@@ -182,7 +182,7 @@ struct Model<0> : Coroutine, Predictor {
 
       uint queued = 0;
 
-#if RC_DEVICE && !RC_FORCE_CARRY
+#if RC_ISPC && !RC_FORCE_CARRY
       // Device path: the carryless coding pass, RCNUM lanes as RCNUM
       // work-items, writing straight into the substream rows rc_Write reads.
       // Submitting does not block, so the next block's model pass runs while
@@ -191,8 +191,8 @@ struct Model<0> : Coroutine, Predictor {
       // RC_FORCE_CARRY takes the device out: only the carryless coder has a
       // kernel, so "always use the carry twin" and "code on the device" are
       // not both possible, and the knob exists to exercise the twin.
-      if( CL_Active() ) {
-        if( CL_Submit( tail, S.pbit, blksize*8, blksize, S.lens, S.carry ) ) {
+      if( DEV_Active() ) {
+        if( DEV_Submit( tail, S.pbit, blksize*8, blksize, S.lens, S.carry ) ) {
           tail = (tail+1)%NSLOT; nq++; queued = 1;
         } else {
           // the device gave up with blocks still queued behind it -- those were

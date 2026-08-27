@@ -36,6 +36,12 @@ struct Model<1> : Coroutine, Predictor {
         } blksize=c;
       } else blksize=BLKSIZE;
 
+#if RC_DECSPLIT_ON
+      // header decoded; the model enters strict i%RCNUM order here, which is
+      // what the split's group rotation needs -- see rc_vec.inc
+      rc.rc_Bulk( rcio );
+#endif
+
       for( i=0; i<blksize*8; i++ ) {
         j = i % RCNUM;
 
