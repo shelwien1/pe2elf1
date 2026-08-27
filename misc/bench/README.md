@@ -34,3 +34,19 @@ design (all except `RC_PROBE=12`); they exist to be timed.
 
 The two patches touch the same files and are alternatives -- apply one or
 the other, not both.
+
+`rc_splitdec.cpp` + `rc_splitdec.ispc` are the exact fused-vs-split decoder
+harness behind `rc_split_ispc_v1.md`: NL interleaved lanes, a serial FSM
+model, and the batched-coder split in intrinsics and in ISPC. Unlike the
+shape benchmarks, every variant is verified bit-identical against the fused
+reference. Needs ISPC (one static binary from github.com/ispc/ispc/releases;
+1.24.0 was used) and AVX-512:
+
+    ispc --target=avx512skx-x16 --arch=x86-64 -O2 --pic rc_splitdec.ispc \
+         -o rc_splitdec_ispc.o -h rc_splitdec_ispc.h
+    g++ -O3 -march=native -I. rc_splitdec.cpp rc_splitdec_ispc.o -o rc_splitdec
+    ./rc_splitdec <GHz>          # cold mode (max-entropy)
+    ./rc_splitdec <GHz> hot      # hot mode (skewed, no refill)
+
+A variant printing anything but [identical]/[ref] is broken; the timing of a
+broken run means nothing.
