@@ -1,0 +1,11 @@
+coder
+coder.exe
+*.o
+*.obj
+*.exp
+*.profraw
+*.profdata
+log.txt
+test/
+1
+2
