@@ -52,86 +52,109 @@
  #define RANGE_INIT 0xFFFFFFFFu
 #endif
 
-typedef struct {
-  ulong low;                // low accumulator, LOWBITS wide
-  rangetype range;
-  uint  rpre;               // the unit, scaled to the low delta by rc_process
-  uint  ffnum;              // carries that escaped -- the flag, not an FF run
-  uint  n;                  // bytes stored, the zero prefix included
-  __global uchar* o;
-} rc_t;
+// The coder's state, as plain private scalars rather than a struct. A struct
+// ought to be scalarised before the runtime vectorises across work-items, and
+// on this runtime it is -- but leaving that to the compiler is a bet, and
+// these are the same six values sh_v1xN.inc keeps as separate ALIGN(VECSIZE)
+// arrays for exactly this reason. The bodies below are macros for the same
+// reason sh_v1xN_macro.inc's are: so there is no pointer to a private
+// aggregate anywhere for the vectoriser to give up on.
+#define RC_DECL                                                              \
+  ulong low = 0;              /* low accumulator, LOWBITS wide            */ \
+  rangetype range = RANGE_INIT;                                              \
+  uint rpre = 0;              /* the unit, scaled to the low delta        */ \
+  uint ffnum = 0;             /* carries that escaped -- a flag, not a run */ \
+  uint nout = 0;              /* bytes stored, the zero prefix included   */ \
+  __global uchar* o = out + (size_t)get_global_id(0)*OUTSTRIDE
 
 // The row is laid out as the host's: SKIP bytes of zero prefix, then the
 // payload. The prefix is stored rather than tested for -- same as RC_IO::put --
 // and outlen reports the payload alone. Past the capacity the substream did not
-// fit, and n keeps counting so the host can see by how much.
-inline void rc_put( rc_t* s, uchar c ) {
-  if( s->n<SKIP+OUTCAP ) s->o[s->n] = c;
-  s->n++;
-}
+// fit, and nout keeps counting so the host can see by how much.
+#define rc_put(c)                                                            \
+  do { if( nout<SKIP+OUTCAP ) o[nout] = (uchar)(c); nout++; } while(0)
 
-// low += rpre, then n bytes out of the top. A carry out of the accumulator
+#if LOWBYTES==8
+ #define RC_CARRYOUT(l) ((uint)((l)<low))
+#else
+ #define RC_CARRYOUT(l) ((uint)((l)>LOW_MASK))
+#endif
+
+// low += rpre, then nsh bytes out of the top. A carry out of the accumulator
 // only raises the flag: it has LOWBYTES-CODBYTES bytes of headroom to travel
 // through before it could reach an already-emitted byte, and if it ever gets
 // out the host re-codes the block with the carry-propagating twin.
-inline void rc_shiftlow( rc_t* s, uint nsh ) {
-  ulong l = s->low + s->rpre;
-#if LOWBYTES==8
-  uint c = (l<s->low);
-#else
-  uint c = (l>LOW_MASK);
-#endif
-  s->low  = l & LOW_MASK;
-  s->rpre = 0;
-  s->ffnum += c;
-
-  for( ; nsh!=0; nsh-- ) {
-    rc_put( s, (uchar)(s->low>>(LOWBITS-8)) );
-    s->low = (s->low<<8) & LOW_MASK;
-  }
-}
+//
+// sh_v1xN.inc's ShiftLowN: store the window unconditionally and advance the
+// cursor by nsh, rather than loop nsh times. nsh is 0, 1 or 2 and differs
+// between lanes, so the loop was the one place a 16-way vectorised kernel had
+// to diverge -- every lane paying for the widest. Both bytes go out every
+// time; at nsh<2 the cursor does not move past the second, so the next store
+// overwrites it. The last one can leave a byte of rubbish just past the
+// substream, inside the row's padding and past the length the host is told,
+// which is why nothing reads it.
+//
+// sh_v1xN.inc writes backwards, which is what lets it do this in one 16-bit
+// store; that layout would reverse the substream against the host coder and
+// the decoder, so here it is two byte stores going forwards. The branch is
+// what cost, not the store width -- a single vstore2 measured slower.
+#define rc_shiftlow(nsh)                                                     \
+  do {                                                                       \
+    ulong _l = low + rpre;                                                   \
+    ffnum += RC_CARRYOUT(_l);                                                \
+    rpre = 0;                                                                \
+    if( nout < SKIP+OUTCAP ) {                                               \
+      o[nout  ] = (uchar)(_l>>(LOWBITS- 8));                                 \
+      o[nout+1] = (uchar)(_l>>(LOWBITS-16));                                 \
+    }                                                                        \
+    nout += (nsh);                                                           \
+    low = (_l<<((nsh)*8)) & LOW_MASK;                                        \
+  } while(0)
 
 // The counted 0/1/2-byte shift is exact for a binary coder: the unit is
 // range>>SCALElog >= 2^9, so one step cannot take range below 2^8.
-inline void rc_renorm( rc_t* s ) {
-  uint nsh = (s->range<sTOP) + (s->range<gTOP);
-  rc_shiftlow( s, nsh );
-  s->range <<= nsh*8;
 #if RC_RENORM_TAIL
-  while( s->range<sTOP ) { rc_shiftlow( s, 1 ); s->range <<= 8; }
+ #define RC_RENORM_TAIL_LOOP() \
+   while( range<sTOP ) { rc_shiftlow(1); range <<= 8; }
+#else
+ #define RC_RENORM_TAIL_LOOP() do {} while(0)
 #endif
-}
 
-inline void rc_process( rc_t* s, uint freq, uint bit ) {
-  rc_renorm( s );
-  s->rpre = (uint)(s->range>>SCALElog);
+#define rc_renorm()                                                          \
+  do {                                                                       \
+    uint _nsh = (range<sTOP) + (range<gTOP);                                 \
+    rc_shiftlow(_nsh);                                                       \
+    range <<= _nsh*8;                                                        \
+    RC_RENORM_TAIL_LOOP();                                                   \
+  } while(0)
 
-  s->rpre *= freq;
-
-  s->range -= s->rpre;
-
-  s->range = bit ? s->range : (rangetype)s->rpre;
-  s->rpre &= (uint)(-(int)bit);
-}
+#define rc_process(freq,bit)                                                 \
+  do {                                                                       \
+    uint _b = (bit);                                                         \
+    rc_renorm();                                                             \
+    rpre = (uint)(range>>SCALElog);                                          \
+    rpre *= (freq);                                                          \
+    range -= rpre;                                                           \
+    range = _b ? range : (rangetype)rpre;                                    \
+    rpre &= (uint)(-(int)_b);                                                \
+  } while(0)
 
 // The minimal flush: set as many low bytes as still leave low < high and drop
 // them, because the decoder reads 0xFF past the end of a substream and rc_Read
 // pads with exactly that.
-inline void rc_quit( rc_t* s ) {
-  rc_renorm( s );
-
-  uint nn = LOWBYTES;
-  ulong llow = s->low;
-  ulong high = llow + (ulong)s->range;
-  uint  hic  = (high<llow);          // llow+range can leave the ulong at LOWBYTES==8
-
-  for( uint i=0; i<LOWBYTES; i++ ) {
-    ulong mask = ((1UL<<((i+1)*4))<<((i+1)*4))-1UL;
-    if( hic || ((llow|mask)<high) ) { llow |= mask; nn--; }
-  }
-
-  for( uint i=0; i<nn; i++ ) rc_put( s, (uchar)(llow>>(LOWBITS-8-i*8)) );
-}
+#define rc_quit()                                                            \
+  do {                                                                       \
+    rc_renorm();                                                             \
+    uint  _nn = LOWBYTES;                                                    \
+    ulong _lo = low;                                                         \
+    ulong _hi = _lo + (ulong)range;                                          \
+    uint  _hc = (_hi<_lo);   /* _lo+range can leave the ulong at LOWBYTES==8 */\
+    for( uint _i=0; _i<LOWBYTES; _i++ ) {                                    \
+      ulong _m = ((1UL<<((_i+1)*4))<<((_i+1)*4))-1UL;                        \
+      if( _hc || ((_lo|_m)<_hi) ) { _lo |= _m; _nn--; }                      \
+    }                                                                        \
+    for( uint _i=0; _i<_nn; _i++ ) rc_put( _lo>>(LOWBITS-8-_i*8) );          \
+  } while(0)
 
 // One block, RCNUM work-items. Lane id codes, in this order: the block-length
 // flag if it is lane 0, then the length bits that fall to it, then every bit
@@ -147,31 +170,25 @@ __kernel void rc_encode(
 {
   const uint id = get_global_id(0);
 
-  rc_t s;
-  s.low   = 0;
-  s.range = RANGE_INIT;
-  s.rpre  = 0;
-  s.ffnum = 0;
-  s.n     = 0;
-  s.o     = out + (size_t)id*OUTSTRIDE;
+  RC_DECL;
 
   const uint flag = (blksize!=BLKFULL);
 
-  if( id==0 ) rc_process( &s, hSCALE, flag );
+  if( id==0 ) rc_process( hSCALE, flag );
 
   if( flag )
     for( uint j=id; j<16; j+=RCNUM )
-      rc_process( &s, hSCALE, (blksize>>(15-j))&1 );
+      rc_process( hSCALE, (blksize>>(15-j))&1 );
 
   for( uint k=id; k<nbits; k+=RCNUM ) {
     uint b = pbit[k];
-    rc_process( &s, b&0x7FFF, b>>15 );
+    rc_process( b&0x7FFF, b>>15 );
   }
 
-  rc_quit( &s );
+  rc_quit();
 
   // a lane that coded nothing can stop inside the prefix and owes nothing
-  outlen[id]   = s.n>SKIP ? s.n-SKIP : 0;
-  outcarry[id] = s.ffnum;
+  outlen[id]   = nout>SKIP ? nout-SKIP : 0;
+  outcarry[id] = ffnum;
 }
 

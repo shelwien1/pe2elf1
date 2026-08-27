@@ -170,35 +170,43 @@ A 4-core CPU device at 2.1 GHz — so the ceiling is four cores plus the
 runtime's vectorization, not a GPU. Encoding a 10 MB file (text and random),
 host and device alternating, best of the repeats:
 
-| | host | device | | already done when collected |
-| --- | --- | --- | --- | --- |
-| `RC_CL_NBLK` 1 (no pipeline) | 14.5 MB/s | 47.0 MB/s | 3.25x | 0 of 153 |
-| 4 | 14.5 | 57.6 | 3.98x | 122 of 153 |
-| 8 | 14.4 | 60.9 | **4.22x** | 141 of 153 |
-| 16 | 14.3 | 62.5 | 4.39x | 148 of 153 |
-
-Output byte-identical in every one. It plateaus around 8, which is the default;
-each slot past that is about 2 MB of host memory and as much again on the
-device, for a couple of percent. On `book1`, which is twelve blocks rather than
-153, the default is 19.7 MB/s against 60.3 — 3.06x, the pipeline having less to
-fill.
-
-The work-group size is the other trade, because a group is vectorised across
-its work-items *and* scheduled on one compute unit. At RCNUM=16 on this device,
-before the pipeline existed:
-
-| work-group | groups | | |
+| | host | device | |
 | --- | --- | --- | --- |
-| 16 | 1 | 16-way vector, one core | 1.7x |
-| 8 | 2 | | 2.2x |
-| 4 | 4 | 4-way vector, four cores | **3.0x** |
-| 2 | 8 | | 3.0x |
-| runtime's choice | | | 1.7x |
+| `book1` 768,771 | 18.8 MB/s | 74.3 MB/s | 3.95x |
+| 10 MB text | 18.6 | 76.3 | 4.11x |
+| 10 MB random | 13.7 | 75.5 | 5.53x |
 
-Cores win over vector width, because the lanes' byte writes are a scatter —
-RCNUM rows `OUTSTRIDE` apart — and widening that does not help. So the default
-is one work-group per compute unit, rounded to something that divides RCNUM;
-`RC_CL_LWS` overrides it.
+Output byte-identical in every one. The pipeline is what the second of those
+columns rests on: at `RC_CL_NBLK` 1 the same build does 47 MB/s, and 0 of 153
+blocks are finished when collected against 141 at the default 8. It plateaus
+around 4 to 12; each slot is about 2 MB of host memory and as much again on the
+device.
+
+The work-group size is the other trade, and the earlier version of this table
+got it wrong by never measuring the interesting end of it. A group is
+vectorised across its work-items *and* scheduled on one compute unit, so the
+reasoning was "cores beat vector width, use one group per compute unit". The
+real answer is further along the same line: use no vectorisation across
+work-items at all.
+
+| work-group | | txt 10 MB | random 10 MB |
+| --- | --- | --- | --- |
+| 1 | one work-item per group | **72.9 MB/s** | **75.2** |
+| 2 | | 71.3 | 70.0 |
+| 4 | one group per compute unit | 61.6 | 61.6 |
+| 8 | | 52.7 | 53.4 |
+| 16 | 16-way vector, one core | 31.1 | 31.6 |
+
+A lane's output is a byte store into its own row, RCNUM rows `OUTSTRIDE` apart,
+so widening the group turns every store into a scatter and the scatters cost
+more than the width pays. The lanes still run in parallel at a work-group of 1
+— 16 groups over 4 cores — they just run as scalar code. Intel's compile-time
+remark still says "successfully vectorized (16)", because that is the vectorised
+variant being compiled; at a local size of 1 the runtime does not use it.
+
+So the default is 1 on a CPU device. Elsewhere there is no measurement to go on
+and it is left to the runtime, whose preferred multiple is the whole point of
+the SIMD width on a GPU. `RC_CL_LWS` overrides either.
 
 Raising RCNUM does not help: it costs output (+0.1% at 32, +0.3% at 64, from
 the extra flushes) and measures slower, because the work per launch is the same
@@ -210,6 +218,37 @@ coding throughput than it bought in overlap: 32 MB/s against 45. And reading
 each lane's substream back separately is RCNUM enqueues per block of a few
 kilobytes each — all overhead — so `Collect` maps the slot's buffer once and
 copies out of it instead.
+
+### The shape of the kernel
+
+Two things about how the kernel is written, both taken from `sh_v1xN.inc` and
+both worth more than they look.
+
+**The byte window is stored unconditionally.** `ShiftLow` emits 0, 1 or 2 bytes
+per step, and how many differs between lanes. Written as a loop that is the one
+place the coder diverges, and every lane pays for the widest. Instead both
+bytes go out every time and only the cursor advances by `nsh`; at `nsh<2` the
+next store overwrites the second. The last one can leave a byte of rubbish just
+past the substream, inside the row's padding and past the length the host is
+told, which is why nothing reads it. Worth about 6%.
+
+`sh_v1xN.inc` writes *backwards*, which is what lets it do this in a single
+16-bit store — the little-endian store lands the two bytes in the right order
+when the cursor runs down. Here that would reverse each substream against the
+host coder and the decoder, so it is two byte stores going forwards instead.
+The branch is what cost, not the store width: a single `vstore2` (legal
+unaligned, `uchar2` needs only 8-bit alignment) measured slower than the pair.
+
+**The state is scalars, not a struct.** A struct in private memory ought to be
+scalarised before the runtime vectorises across work-items, and on this runtime
+it is — the kernel vectorised either way. It is still worth about 6% to not
+leave it to the compiler, which is why the bodies are macros over six named
+locals, the same six values `sh_v1xN.inc` keeps as separate `ALIGN(VECSIZE)`
+arrays. It also means the kernel reads as one lane's worth of straight-line
+scalar work, which is what the work-group of 1 above wants it to be.
+
+Together with the work-group change, that is 56.3 MB/s to 76.3 on 10 MB of
+text, and 55.3 to 75.5 on 10 MB of random.
 
 ### The kernel is OpenCL, not a string literal
 

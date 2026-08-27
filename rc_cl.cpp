@@ -442,14 +442,31 @@ struct RcCL {
   void PickLWS( void ) {
     lws = RC_CL_LWS;
     if( lws!=0 ) return;
-    cl_uint cu = 1;
-    clGetDeviceInfo( device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cu), &cu, 0 );
-    if( cu<1 ) cu = 1;
-    lws = RCNUM/cu;
-    if( lws<1 ) lws = 1;
-    while( lws>1 && (RCNUM%lws)!=0 ) lws--;
+
+    // On a CPU device: one work-item per group, which is to say no vectorising
+    // across work-items at all. That reads wrong and measures right. A group is
+    // vectorised across its work-items, but a lane's output is a byte store into
+    // its own row -- RCNUM rows OUTSTRIDE apart -- so widening turns every store
+    // into a scatter, and the scatters cost more than the width pays. Measured
+    // on 10 MB, RCNUM=16, four compute units:
+    //
+    //     work-group  1     2     4     8    16
+    //     MB/s       75.2  70.0  61.6  53.4  31.6
+    //
+    // The lanes still run in parallel -- 16 groups over 4 cores -- they just run
+    // as scalar code. That is also why the kernel is written the way it is:
+    // whatever a work-group ends up being, the coder is one lane's worth of
+    // straight-line scalar work with no divergence in it.
+    //
+    // Elsewhere, no measurement to go on: leave it to the runtime, whose
+    // preferred multiple is the whole point of the SIMD width on a GPU.
+    cl_device_type dt = 0;
+    clGetDeviceInfo( device, CL_DEVICE_TYPE, sizeof(dt), &dt, 0 );
+    lws = (dt & CL_DEVICE_TYPE_CPU) ? 1 : 0;
+
     size_t mx = 0;
-    if( clGetKernelWorkGroupInfo( k_enc[0], device, CL_KERNEL_WORK_GROUP_SIZE,
+    if( lws>1 &&
+        clGetKernelWorkGroupInfo( k_enc[0], device, CL_KERNEL_WORK_GROUP_SIZE,
                                   sizeof(mx), &mx, 0 )==CL_SUCCESS && mx>0 )
       while( lws>mx ) lws >>= 1;
   }
@@ -486,9 +503,12 @@ struct RcCL {
     if( verbose ) {
       char d[768]; Describe( d, sizeof(d) );
       fprintf( stderr, "coder: opencl: %s\n", d );
+      char wg[32];
+      if( lws ) snprintf( wg, sizeof(wg), "%d", int(lws) );
+      else      snprintf( wg, sizeof(wg), "runtime's choice" );
       fprintf( stderr, "coder: opencl: kernel built in %.2fs, %d lanes per launch, "
-                       "work-group %d, %d block%s in flight\n",
-               buildsec, int(RCNUM), int(lws),
+                       "work-group %s, %d block%s in flight\n",
+               buildsec, int(RCNUM), wg,
                int(RC_CL_NBLK), RC_CL_NBLK==1?"":"s" );
     }
     return active;
