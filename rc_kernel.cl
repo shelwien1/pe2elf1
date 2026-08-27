@@ -403,12 +403,12 @@ typedef ulong  uint64_t;
 /*   this signature spans lines. */
 /*  --------------------------------------------------------------------------- */
 __kernel void rc_encode(
-    __global const uint16_t* pbit,   /*  nbits entries, packed (bit<<15)|p */
+    __global const uint16_t* restrict pbit,   /*  nbits entries, packed (bit<<15)|p */
     const uint32_t nbits,
     const uint32_t blksize,
-    __global uint8_t* out,           /*  RCNUM rows of OUTSTRIDE */
-    __global uint32_t* outlen,
-    __global uint32_t* outcarry )
+    __global uint8_t* restrict out,  /*  RCNUM rows of OUTSTRIDE */
+    __global uint32_t* restrict outlen,
+    __global uint32_t* restrict outcarry )
 {
   const uint32_t id = get_global_id(0);
 
@@ -431,6 +431,26 @@ __kernel void rc_encode(
     for( uint32_t j=id; j<16; j+=RCNUM )
       rc_process( hSCALE, (blksize>>(15-j))&1 );
 
+  /*  30 of this kernel's 46 branches are this one load. */
+  /*  */
+  /*  A work-group can be launched partly filled, so the runtime's vectorised */
+  /*  kernel always carries a lane mask, and this load is therefore masked. A */
+  /*  masked 16-bit load has no instruction behind it: AVX-512 has no 16-bit */
+  /*  gather, the same way it has no byte scatter. So the compiler scalarises */
+  /*  it into sixteen of extract the address, vpbroadcastw, vpblendd, test the */
+  /*  lane's mask bit, branch -- every iteration, on the hot path. */
+  /*  */
+  /*  Widening pbit to 32 bits removes them: 46 branches to 17, 26 extracts to */
+  /*  5. It is not worth it. The array is then 2 MB a block instead of 1 MB, */
+  /*  both over the bus and through the kernel's own reads, and at the geometry */
+  /*  that matters -- RCNUM=64, work-group 16, where the kernel is already */
+  /*  bandwidth-bound -- that costs more than the branches do: 123.8 MB/s down */
+  /*  to 100.3, kernel 417us up to 510us. At RCNUM=16 it is the other way round, */
+  /*  +12%, because there the kernel is not yet bandwidth-bound. Measured both. */
+  /*  */
+  /*  Splitting the loop so the trip count is uniform does not help either: the */
+  /*  mask is on the work-item, not on k, so it survives, and the second loop is */
+  /*  another copy of the coder. 46 branches to 81. */
   for( uint32_t k=id; k<nbits; k+=RCNUM ) {
     uint32_t b = pbit[k];
     rc_process( b&0x7FFF, b>>15 );

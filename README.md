@@ -373,6 +373,41 @@ and the accumulator's shifts replace a store that was only ever a store. Hence
 `RC_LOWSPLIT=1` also finally earns its keep — 72.3 against 69.2 — now that the
 register width is not being set by a pointer.
 
+### Where the last 46 branches are
+
+Tracked down by hand, on the fixed kernel at a work-group of 16:
+
+| | count | on the hot path? |
+| --- | --- | --- |
+| `pbit[k]`, scalarised | 30 | **yes, every iteration** |
+| prologue and the scalar remainder path | 13 | no — once per launch |
+| main loop back-edge, and one guard | 2 | necessary |
+| `rc_quit`'s flush loop | 1 | once per block |
+
+The 30 are the same disease as the byte scatter, on the load side. A
+work-group can be launched partly filled, so the runtime's vectorised kernel
+always carries a lane mask, and the load is therefore masked — and a masked
+16-bit load has no instruction behind it, because AVX-512 has no 16-bit gather
+any more than it has a byte scatter. So it becomes sixteen of extract the
+address, `vpbroadcastw`, `vpblendd`, test the lane's mask bit, branch.
+
+They can be removed, and it is not worth it. Widening `pbit` to 32 bits takes
+the kernel to 17 branches and 5 extracts — but the array is then 2 MB a block
+instead of 1 MB, over the bus and through the kernel's own reads, and at the
+geometry that matters it costs more than the branches do:
+
+| | 16-bit `pbit` | 32-bit `pbit` |
+| --- | --- | --- |
+| RCNUM=16, work-group 16 | 74.9 MB/s, 865 us | **80.8, 755 us** |
+| RCNUM=64, work-group 16 | **112.0 MB/s, 417 us** | 100.3, 510 us |
+
+At RCNUM=16 the kernel is not yet bandwidth-bound and the branches dominate;
+at RCNUM=64 it is, and they do not. The fast geometry is the one worth keeping,
+so `pbit` stays 16-bit and the branches stay. Splitting the loop to make the
+trip count uniform does not help either — the mask is on the work-item, not on
+`k`, so it survives, and the second loop is another copy of the coder: 46
+branches becomes 81.
+
 ### More lanes, now that lanes are cheap
 
 Raising RCNUM used to measure slower, because every extra lane was another
@@ -383,9 +418,9 @@ four cores:
 | RCNUM | work-group | | kernel | output vs RCNUM=16 |
 | --- | --- | --- | --- | --- |
 | 16 | 1 | 71.6 / 70.4 MB/s | 974 us | — |
-| 16 | 16 | 63.3 / 74.4 | 846 us | — |
+| 16 | 16 | 74.9 / 73.7 | 865 us | — |
 | 32 | 16 | 99.0 / 92.7 | 627 us | +0.10% |
-| 64 | 16 | **123.8 / 120.3** | 422 us | +0.29% |
+| 64 | 16 | **112.0 / 103.5** | 417 us | +0.29% |
 | 64 | 32 | 103.5 / 101.7 | 504 us | +0.29% |
 
 1.7x over the best that was reachable before, for 0.29% of output — the extra
