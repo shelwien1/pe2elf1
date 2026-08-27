@@ -46,8 +46,10 @@ carry-propagating fallback, and the compressed format.
 | `rc_vec.inc` | `RangecoderN` — the RCNUM-lane wrapper, based on `sh_v1xN.inc` |
 | `rc_config.inc` | block geometry and the rangecoder knobs |
 | `rc_cl.h`, `rc_cl.cpp` | device selection, buffers, launches — the whole OpenCL host side |
-| `rc_kernel.cl` | the coding kernel, built at run time |
-| `rc_kernel.inc` | ... wrapped up as C string literals by `txt2inc.pl` |
+| `rc_kernel0.cl` | the coding kernel, built at run time |
+| `rc_kernel.cl` | ... with its functions generated into macros |
+| `rc_kernel.inc` | ... wrapped up as C string literals |
+| `mk_kernel.sh` | runs those two passes — `rc_macro.pl`, `defines.pl`, `txt2inc.pl` |
 | `model.inc` | includes `rc.inc` twice, once per carry mode |
 | `model0.inc` / `model1.inc` | encoder / decoder |
 | `predict.inc`, `counter.inc`, `FSM.cpp` | the model, unchanged |
@@ -120,7 +122,7 @@ The encoder's carryless coding pass, and nothing else.
 That pass was already the parallel one: bit *i* of a block goes to lane
 *i % RCNUM* and no lane reads another's state, which is what `sh_v1xN.inc`'s
 hand-written SIMD version was built on and what the perl macro pass existed to
-set up. `rc_kernel.cl` is the same coder as one work-item per lane, and Intel's
+set up. `rc_kernel0.cl` is the same coder as one work-item per lane, and Intel's
 CPU runtime reports `Kernel "rc_encode" was successfully vectorized (16)` — the
 vector rangecoder, from scalar source.
 
@@ -250,23 +252,55 @@ scalar work, which is what the work-group of 1 above wants it to be.
 Together with the work-group change, that is 56.3 MB/s to 76.3 on 10 MB of
 text, and 55.3 to 75.5 on 10 MB of random.
 
-### The kernel is OpenCL, not a string literal
+### The kernel is OpenCL, and the macros are generated
 
-`rc_kernel.cl` is the kernel, as ordinary OpenCL C that an editor can highlight
-and a device compiler could be pointed at directly. `txt2inc.pl` wraps it up as
-`rc_kernel.inc` — one `static const char RC_CL_SRC[]` of string literals —
-which is what `rc_cl.cpp` includes and hands to `clCreateProgramWithSource`.
+`rc_kernel0.cl` is the kernel, as ordinary OpenCL C that an editor can
+highlight. Three perl passes turn it into what `rc_cl.cpp` compiles:
 
-The generated file is committed, so perl is only needed by whoever edits the
-kernel. `build.sh` and the batch files regenerate it when `rc_kernel.cl` is
-newer, and say so; without perl they warn and build the committed one.
+```
+rc_kernel0.cl  --rc_macro.pl-->  each function becomes #define / #enddef
+               --defines.pl -->  ... a real multi-line macro
+               --txt2inc.pl -->  ... C string literals: RC_CL_SRC
+```
 
-Two things about the generator are worth knowing if you edit the kernel. It is
-run `-raw`, because the default doubles `%` for `printf` — and this string is
-not a format, so a `k%RCNUM` would otherwise reach the device compiler as
-`k%%RCNUM`. And everything above the `[[...]]` marker line is preamble: the
-design notes at the top of `rc_kernel.cl` stay out of the generated string
-rather than being shipped to the device on every run.
+`mk_kernel.sh` runs the chain; `build.sh` and the batch files run it when
+`rc_kernel0.cl` is newer, and warn instead if perl is missing. Both generated
+files are committed, so perl is only wanted by whoever edits the kernel.
+
+The macro pass is not decoration. The coder has to compile to plain private
+scalars with no pointer to an aggregate for the vectoriser to give up on, which
+is worth about 6% — so the bodies have to be macros, and generating them beats
+maintaining a screen of trailing backslashes by hand.
+
+What that costs is that the coder functions are macro bodies, however much they
+look like functions: they take only their real arguments and reach the lane
+state — `low`, `range`, `rpre`, `ffnum`, `nout`, `o` — by name. It is the same
+arrangement as `sh_v1xN_macro.inc`, for the same reason. Two consequences worth
+knowing before editing:
+
+* **A macro body cannot hold `#if`.** Anything conditional lives in an ordinary
+  `#define` in the preamble — that is what the `LOW_` macros and
+  `RC_RENORM_TAIL_LOOP` are.
+* **`txt2inc.pl` runs `-raw`**, because its default doubles `%` for `printf`
+  and this string is not a format: a `k%RCNUM` would otherwise reach the device
+  compiler as `k%%RCNUM`. Everything above the `[[...]]` marker is preamble and
+  stays out of the string.
+
+Three small changes to the scripts, all additive. `rc_macro.pl` now requires
+the return type and function name to be identifiers — as written, `([^\s]+)`
+also matches a bare `(`, so a line like `if( a || ((b)<c) ) {` looked like a
+function and became a macro definition. `defines.pl` now only opens a block for
+a `#define` with nothing after its parameter list, which is what `rc_macro.pl`
+emits; it was treating every `#define` that way, so an ordinary
+`#define LOWBITS (LOWBYTES*8)` collected the rest of the file. And `txt2inc.pl`
+grew `-raw` and an optional declaration in the marker.
+
+### Types
+
+OpenCL C has no `<stdint.h>` and does not need one: `char`, `short`, `int` and
+`long` are exactly 8, 16, 32 and 64 bits wide *by definition* there, not "at
+least". So `uint` already is `uint32_t`. The kernel typedefs the stdint
+spellings anyway and uses them, so it reads like the host code beside it.
 
 ### Opening the loader by hand
 
@@ -341,7 +375,7 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_BLKSIZE` | `1<<16` | bytes per block |
 | `RC_RCNUM` | 16 | substreams per block |
 | `RC_LOWBYTES` | 8 | width of the low accumulator, 4..8 — the carry headroom |
-| `RC_LOWSPLIT` | 0 | hold `low` as two uints instead of one qword (stream-neutral) |
+| `RC_LOWSPLIT` | 0 | hold `low` as two uints instead of one qword (stream-neutral); host and kernel both |
 | `RC_RANGE64` | 0 | 1 = `range` starts at `1<<32` instead of `0xFFFFFFFF` |
 | `RC_RENORM_TAIL` | 0 | renorm tail loop; dead for a binary coder |
 | `RC_FORCE_CARRY` | 0 | 1 = always use the carry twin, never the fast path |
@@ -367,21 +401,31 @@ bound in three places. Change it in `rc_config.inc`.
 
 `sh_v1xN_s.cpp` defaults this on: in the vector coder two uint lanes map onto
 one ymm each where a qword lane needs two. There is no vector coder here — the
-host coder is scalar, and the kernel holds `low` as one `ulong` whatever this
-says — so the reason is gone. Measured, best of five alternating rounds:
+host coder is scalar and the kernel is one lane per work-item — so the reason
+is gone. Measured:
 
 | | split=1 | split=0 | |
 | --- | --- | --- | --- |
-| carryless, `RC_LOWBYTES=8`, `book1` | 19.75 MB/s | 19.84 MB/s | -0.5% |
-| carryless, `RC_LOWBYTES=8`, 10 MB | 14.37 | 14.56 | -1.3% |
-| carry twin, `RC_LOWBYTES=4`, `book1` | 19.59 | 20.08 | -2.4% |
-| decoder, any | — | — | none |
+| host, carryless, `RC_LOWBYTES=8`, `book1` | 19.75 MB/s | 19.84 MB/s | -0.5% |
+| host, carryless, `RC_LOWBYTES=8`, 10 MB | 14.37 | 14.56 | -1.3% |
+| host, carry twin, `RC_LOWBYTES=4`, `book1` | 19.59 | 20.08 | -2.4% |
+| host, decoder, any | — | — | none |
+| device, 10 MB text | 68.8 | 78.4 | -12.2% |
+| device, 10 MB random | 69.0 | 78.2 | -11.8% |
 
 Output byte-identical in every pair, which is the point of calling it
 stream-neutral. The decoder is untouched by construction: `low_Add`, `low_Top`
 and `low_Shift8` are all under `if( f_DEC==0 )`. The carry twin at
-`RC_LOWBYTES=4` loses most, because `LOWBITS` is 32 there and the split version
-shifts a `lowh` that the mask then clears anyway. So the default is 0 here.
+`RC_LOWBYTES=4` loses most on the host, because `LOWBITS` is 32 there and the
+split version shifts a `lowh` that the mask then clears anyway. So the default
+is 0.
+
+The kernel carries the same knob, and loses more by it — 12% — for the same
+reason and one more: at `RC_LOWSPLIT=1` a shift of the pair by 0, 8 or 16 bits
+needs a select, because a 32-bit shift by `32-0` is a shift by 32, which OpenCL
+takes modulo 32 and turns into no shift at all. It is there because a device
+with no native 64-bit integer has no choice, and that is most GPUs — where the
+numbers above should invert.
 
 ### The zero prefix
 

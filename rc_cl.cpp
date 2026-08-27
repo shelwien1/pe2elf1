@@ -393,11 +393,11 @@ struct RcCL {
     snprintf( opts, sizeof(opts),
               "-cl-std=CL1.2"
               " -D RCNUM=%d -D SCALElog=%d -D hSCALE=%d"
-              " -D LOWBYTES=%d -D CODBYTES=%d -D BLKFULL=%u"
+              " -D LOWBYTES=%d -D CODBYTES=%d -D RC_LOWSPLIT=%d -D BLKFULL=%u"
               " -D OUTSTRIDE=%u -D OUTCAP=%u"
               " -D RC_RANGE64=%d -D RC_RENORM_TAIL=%d",
               int(RCNUM), int(SCALElog), int(hSCALE),
-              int(RC_LOWBYTES), int(RC_CODBYTES), unsigned(BLKSIZE),
+              int(RC_LOWBYTES), int(RC_CODBYTES), int(RC_LOWSPLIT), unsigned(BLKSIZE),
               unsigned(stride), unsigned(cap),
               int(RC_RANGE64), int(RC_RENORM_TAIL) );
 
