@@ -403,7 +403,8 @@ struct RcCL {
 
     cl_int e = CL_SUCCESS;
     double t0 = tnow();
-    prog = clCreateProgramWithSource( ctx, 1, &RC_CL_SRC, 0, &e );
+    const char* src = RC_CL_SRC;   // an array now, not a pointer -- see rc_kernel.cl
+    prog = clCreateProgramWithSource( ctx, 1, &src, 0, &e );
     if( e!=CL_SUCCESS ) return Fail( "clCreateProgramWithSource", e );
     e = clBuildProgram( prog, 1, &device, opts, 0, 0 );
     buildsec = tnow()-t0;

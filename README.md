@@ -46,7 +46,8 @@ carry-propagating fallback, and the compressed format.
 | `rc_vec.inc` | `RangecoderN` — the RCNUM-lane wrapper, based on `sh_v1xN.inc` |
 | `rc_config.inc` | block geometry and the rangecoder knobs |
 | `rc_cl.h`, `rc_cl.cpp` | device selection, buffers, launches — the whole OpenCL host side |
-| `rc_kernel.inc` | the coding kernel, as a string, built at run time |
+| `rc_kernel.cl` | the coding kernel, built at run time |
+| `rc_kernel.inc` | ... wrapped up as C string literals by `txt2inc.pl` |
 | `model.inc` | includes `rc.inc` twice, once per carry mode |
 | `model0.inc` / `model1.inc` | encoder / decoder |
 | `predict.inc`, `counter.inc`, `FSM.cpp` | the model, unchanged |
@@ -119,7 +120,7 @@ The encoder's carryless coding pass, and nothing else.
 That pass was already the parallel one: bit *i* of a block goes to lane
 *i % RCNUM* and no lane reads another's state, which is what `sh_v1xN.inc`'s
 hand-written SIMD version was built on and what the perl macro pass existed to
-set up. `rc_kernel.inc` is the same coder as one work-item per lane, and Intel's
+set up. `rc_kernel.cl` is the same coder as one work-item per lane, and Intel's
 CPU runtime reports `Kernel "rc_encode" was successfully vectorized (16)` — the
 vector rangecoder, from scalar source.
 
@@ -209,6 +210,24 @@ coding throughput than it bought in overlap: 32 MB/s against 45. And reading
 each lane's substream back separately is RCNUM enqueues per block of a few
 kilobytes each — all overhead — so `Collect` maps the slot's buffer once and
 copies out of it instead.
+
+### The kernel is OpenCL, not a string literal
+
+`rc_kernel.cl` is the kernel, as ordinary OpenCL C that an editor can highlight
+and a device compiler could be pointed at directly. `txt2inc.pl` wraps it up as
+`rc_kernel.inc` — one `static const char RC_CL_SRC[]` of string literals —
+which is what `rc_cl.cpp` includes and hands to `clCreateProgramWithSource`.
+
+The generated file is committed, so perl is only needed by whoever edits the
+kernel. `build.sh` and the batch files regenerate it when `rc_kernel.cl` is
+newer, and say so; without perl they warn and build the committed one.
+
+Two things about the generator are worth knowing if you edit the kernel. It is
+run `-raw`, because the default doubles `%` for `printf` — and this string is
+not a format, so a `k%RCNUM` would otherwise reach the device compiler as
+`k%%RCNUM`. And everything above the `[[...]]` marker line is preamble: the
+design notes at the top of `rc_kernel.cl` stay out of the generated string
+rather than being shipped to the device on every run.
 
 ### Opening the loader by hand
 

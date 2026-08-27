@@ -10,6 +10,18 @@ OPTS="-fomit-frame-pointer -fno-stack-protector -fno-stack-check -fno-rtti -fno-
 INCS="-DNDEBUG -I. -ILib3"
 DIRNAM=$(basename "$(pwd)")
 
+# rc_kernel.inc is generated from rc_kernel.cl -- the kernel is kept as OpenCL C
+# so an editor can highlight it. The generated file is committed, so perl is
+# only needed by whoever edits the kernel.
+if [ rc_kernel.cl -nt rc_kernel.inc ]; then
+  if command -v perl >/dev/null 2>&1; then
+    perl txt2inc.pl -raw rc_kernel.cl rc_kernel.inc
+    echo "regenerated rc_kernel.inc from rc_kernel.cl"
+  else
+    echo "warning: rc_kernel.cl is newer than rc_kernel.inc, and perl is missing" >&2
+  fi
+fi
+
 if [ -z "$OPENCL" ]; then
   if [ -e /usr/include/CL/cl.h ]; then OPENCL=1; else OPENCL=0; fi
 fi
