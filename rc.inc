@@ -292,10 +292,23 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
 #else
 
-      if( (Cache!=uint(-1)) && ((n!=0) || (Cache+Carry!=0xFF)) ) put( byte(Cache+Carry) );
-      if( (n==0) && (Carry==0) ) FFNum=0; // they're also FFs
-      for( i=0; i<FFNum; i++ ) put( byte(0xFF+Carry) );
-      for( i=0; i<n; i++ ) put( byte(llow>>(LOWBITS-8-i*8)) );
+      if( (n==0) && (Carry==0) ) {
+        // Everything still to write is one run of 0xFF: the Cache byte, when
+        // it is one, and FFNum more. The decoder reads 0xFF past the end of a
+        // substream, so the tail of that run need not be written -- but
+        // rc_Read's padding is RC_FF_PADSIZE and the run is as long as the
+        // data makes it, so only RC_FF_TRIM of it may go. sh_v1xN_c.inc and
+        // sh_v1xN_s.cpp drop the whole run; on a block whose flush leaves more
+        // than the padding behind, that decodes to the wrong bytes.
+        uint run  = FFNum + ((Cache!=uint(-1)) && (Cache==0xFF));
+        uint keep = (run>RC_FF_TRIM) ? run-RC_FF_TRIM : 0;
+        if( (Cache!=uint(-1)) && (Cache!=0xFF) ) put( byte(Cache) );
+        for( i=0; i<keep; i++ ) put( byte(0xFF) );
+      } else {
+        if( Cache!=uint(-1) ) put( byte(Cache+Carry) );
+        for( i=0; i<FFNum; i++ ) put( byte(0xFF+Carry) );
+        for( i=0; i<n; i++ ) put( byte(llow>>(LOWBITS-8-i*8)) );
+      }
 
 #endif
 

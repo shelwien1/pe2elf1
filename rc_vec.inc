@@ -23,10 +23,10 @@ struct RangecoderN {
 
   // Bind every lane to its own substream buffer in the RCio and reset it.
   template< class IO >
-  void rc_Init( IO& io ) {
+  void rc_Init( IO& io, uint slot=0 ) {
     for( uint i=0; i<RCNUM; i++ ) {
-      if( f_DEC==0 ) rc[i].StartEncode( io.buf(i), IO::tmpbufsize );
-      else           rc[i].StartDecode( io.buf(i) );
+      if( f_DEC==0 ) rc[i].StartEncode( io.buf(i,slot), IO::tmpbufsize );
+      else           rc[i].StartDecode( io.buf(i,slot) );
     }
   }
 

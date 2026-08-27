@@ -142,22 +142,49 @@ What stays on the host:
 `RC_FORCE_CARRY=1` takes the device out of the build, since only the carryless
 coder has a kernel.
 
+### Blocks in flight
+
+Block *n+1*'s model pass depends only on the input, not on how block *n* was
+coded, so the host can be modelling ahead while the device codes. `RC_CL_NBLK`
+slots make that possible: one `{p;bit}` cache and one set of substream rows
+each, filled in order and collected in order, so the output is still written
+block by block in sequence. A block is only ever written after every block
+submitted before it, whatever happened to either.
+
+Two things had to be right for the pipeline to be real rather than notional,
+and both are easy to get wrong quietly:
+
+* **`clFlush` after submitting.** Without it a runtime is free to sit on the
+  queue until something blocks on it, which is the pipeline not happening. The
+  `-V` line counts how many blocks were already finished when they were
+  collected — without the flush it was 0 of 153.
+* **A second queue for the readbacks.** They are enqueued at collect time,
+  behind everything already queued, so waiting for them on the submit queue
+  waits for every block still in flight. That one `clFinish` cost the whole
+  pipeline: every block was done when collected and it was still no faster.
+
 ### What it costs and buys
 
 A 4-core CPU device at 2.1 GHz — so the ceiling is four cores plus the
-runtime's vectorization, not a GPU. Best of three runs of five iterations each,
-host and device alternating:
+runtime's vectorization, not a GPU. Encoding a 10 MB file (text and random),
+host and device alternating, best of the repeats:
 
-| file | host | device | | output |
+| | host | device | | already done when collected |
 | --- | --- | --- | --- | --- |
-| `book1` 768,771 | 18.94 MB/s | 42.44 MB/s | 2.24x | 456,441, identical |
-| 10,000,000 (text + random) | 14.14 MB/s | 43.24 MB/s | 3.06x | identical |
+| `RC_CL_NBLK` 1 (no pipeline) | 14.5 MB/s | 47.0 MB/s | 3.25x | 0 of 153 |
+| 4 | 14.5 | 57.6 | 3.98x | 122 of 153 |
+| 8 | 14.4 | 60.9 | **4.22x** | 141 of 153 |
+| 16 | 14.3 | 62.5 | 4.39x | 148 of 153 |
 
-Per launch, on the 10 MB file: 153 blocks, 900 µs of device time each, of which
-the `pbit` upload is about 12%.
+Output byte-identical in every one. It plateaus around 8, which is the default;
+each slot past that is about 2 MB of host memory and as much again on the
+device, for a couple of percent. On `book1`, which is twelve blocks rather than
+153, the default is 19.7 MB/s against 60.3 — 3.06x, the pipeline having less to
+fill.
 
-The work-group size is the whole trade, because a group is vectorised across
-its work-items *and* scheduled on one compute unit. At RCNUM=16 on this device:
+The work-group size is the other trade, because a group is vectorised across
+its work-items *and* scheduled on one compute unit. At RCNUM=16 on this device,
+before the pipeline existed:
 
 | work-group | groups | | |
 | --- | --- | --- | --- |
@@ -172,22 +199,26 @@ RCNUM rows `OUTSTRIDE` apart — and widening that does not help. So the default
 is one work-group per compute unit, rounded to something that divides RCNUM;
 `RC_CL_LWS` overrides it.
 
-Raising RCNUM does not help either: it costs output (+0.1% at 32, +0.3% at 64,
-from the extra flushes) and measures slower, because the work per launch is the
-same and only the number of lanes changes.
+Raising RCNUM does not help: it costs output (+0.1% at 32, +0.3% at 64, from
+the extra flushes) and measures slower, because the work per launch is the same
+and only the number of lanes changes.
+
+Two things measured and rejected. Partitioning the CPU device to leave a core
+for the host thread (`clCreateSubDevices` by counts, 3 units of 4) cost more in
+coding throughput than it bought in overlap: 32 MB/s against 45. And reading
+each lane's substream back separately is RCNUM enqueues per block of a few
+kilobytes each — all overhead — so `Collect` maps the slot's buffer once and
+copies out of it instead.
 
 ### What is left on the table
 
-* **The model pass and the coding pass could overlap.** Block *n+1*'s model
-  pass depends only on the input, not on how block *n* was coded, so the
-  kernel could run while the host models the next block. That is the single
-  biggest win still available — it would hide most of the device time — and it
-  needs a second `pbit` buffer and a second set of substream rows.
 * **The scattered writes.** Interleaving the lanes' output and de-interleaving
   it on the host is the `clset` experiment in the original `RC.txt`; it is what
   the 7 scatters in the vectorizer's report are.
-* **`pbit` is copied to the device every block.** It is 12% of the launch. A
-  `CL_MEM_USE_HOST_PTR` buffer with map/unmap would be free on a CPU device.
+* **`pbit` is copied to the device every block.** A `CL_MEM_USE_HOST_PTR`
+  buffer would be free on a CPU device, but the map that makes it correct is a
+  blocking command on an in-order queue, which is the pipeline undone again —
+  it wants a queue per slot.
 * **No kernel binary cache**, so the device compiler costs about 0.25 s per
   run. The program is built before the timing loop, so it does not land in a
   measurement, but it is still a quarter second.
@@ -242,11 +273,30 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_STRICT_BLKSIZE` | 0 | reject an unsafe `BLKSIZE`/`RCNUM` pair at compile time |
 | `RC_OPENCL` | auto | 1 = build the device path (`build.sh` sets it when `CL/cl.h` is there) |
 | `RC_CL_LWS` | 0 | work-group size; 0 = one group per compute unit |
+| `RC_FF_TRIM` | 32 | most bytes the flush may leave for the decoder's 0xFF padding |
+| `RC_FF_PADSIZE` | derived | that padding — must cover the trim plus `RC_LOWBYTES` |
 | `CORO_FAKE` | 0 | 1 = straight-through instead of the setjmp coroutine |
 
 `BLKSIZE` and `RCNUM` are enums, not macros, because `rc_io.inc` and
 `rc_vec.inc` take template parameters of those names — hence the `RC_` prefix on
-the overrides.
+the overrides. `RC_CL_NBLK` is a constant for the same reason: it is an array
+bound in three places. Change it in `rc_config.inc`.
+
+### The trailing 0xFF run
+
+The decoder reads `0xFF` past the end of a substream, because `rc_Read` pads it
+with them, and that is what lets `rc_Quit` leave the tail of its flush out. The
+carry-propagating coder's flush drops a whole trailing `0xFF` run — and that
+run is as long as the data makes it: 6384 bytes on a repeating `{0xFF,0x00}`.
+`sh_v1xN_c.inc` and `sh_v1xN_s.cpp` drop it unconditionally, and a block whose
+flush leaves more behind than the padding covers then decodes to the wrong
+bytes, silently, with both ends exiting 0.
+
+So the trim is capped at `RC_FF_TRIM` and the padding is derived from it. The
+carryless coder is unaffected — it commits its `0xFF`s during `ShiftLow` rather
+than trimming them — which is why the default configuration never showed it;
+but the carry coder is the fallback there too. `test/ff0`, `test/ff7` and
+`test/ffmix` in `t.sh` are the regression.
 
 ### The `BLKSIZE` / `RCNUM` limit
 

@@ -101,7 +101,10 @@ static int CLLoadICD( void ) {
 #define clEnqueueWriteBuffer      pfn_clEnqueueWriteBuffer
 #define clWaitForEvents           pfn_clWaitForEvents
 #define clFinish                  pfn_clFinish
+#define clEnqueueMapBuffer        pfn_clEnqueueMapBuffer
+#define clEnqueueUnmapMemObject   pfn_clEnqueueUnmapMemObject
 #define clGetEventProfilingInfo   pfn_clGetEventProfilingInfo
+#define clGetEventInfo            pfn_clGetEventInfo
 #define clReleaseEvent            pfn_clReleaseEvent
 #define clReleaseProgram          pfn_clReleaseProgram
 #define clReleaseKernel           pfn_clReleaseKernel
@@ -252,11 +255,21 @@ struct RcCL {
   cl_device_id   device;
   cl_platform_id platform;
   cl_context     ctx;
-  cl_command_queue q;
+  // Two queues. Submits go on q, in order, so the launches run in the order
+  // the blocks were modelled. The payload readbacks go on q2, because they are
+  // enqueued at collect time -- behind everything already queued on q -- and
+  // waiting for them on q would wait for every block still in flight, which is
+  // the pipeline undone.
+  cl_command_queue q, q2;
   cl_program     prog;
-  cl_kernel      k_enc;
 
-  cl_mem d_pbit, d_out, d_len, d_carry;
+  // One kernel object and one set of buffers per slot: the arguments differ
+  // per launch, and a slot's are live from its submit until its collect.
+  cl_kernel k_enc[RC_CL_NBLK];
+  cl_mem d_pbit[RC_CL_NBLK], d_out[RC_CL_NBLK], d_len[RC_CL_NBLK], d_carry[RC_CL_NBLK];
+  cl_event ev_done[RC_CL_NBLK];   // the last read of that slot's launch
+  cl_event ev_kern[RC_CL_NBLK];   // -V only
+  uint*    h_len[RC_CL_NBLK];     // where that slot's lengths are landing
 
   // The substream buffer rows the kernel writes, matching RCio::tmpbuf.
   // Filled in at Init from what the model passes to CL_EncodeBlock.
@@ -265,9 +278,11 @@ struct RcCL {
   size_t lws;       // work-group size, see PickLWS
 
   double kms;    // device time in the kernel
-  double wms;    // wall clock inside CL_EncodeBlock
-  double ups;    // wall clock uploading pbit
+  double sms;    // wall clock the host spends in CL_Submit
+  double cms;    // ... and in CL_Collect, which is where it waits
   long   nlaunch;
+  long   nready;   // collects that found the block already coded -- how much
+                   // of the device time the pipeline actually hid
   double buildsec;
 
   int Fail( const char* what, cl_int e ) {
@@ -316,10 +331,13 @@ struct RcCL {
     device   = l.dev[pick];
 
     cl_int e = CL_SUCCESS;
+
     cl_context_properties props[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
     ctx = clCreateContext( props, 1, &device, 0, 0, &e );
     if( e!=CL_SUCCESS ) return Fail( "clCreateContext", e );
     q = CLMakeQueue( ctx, device, verbose, &e );
+    if( e!=CL_SUCCESS ) return Fail( "clCreateCommandQueue", e );
+    q2 = CLMakeQueue( ctx, device, 0, &e );
     if( e!=CL_SUCCESS ) return Fail( "clCreateCommandQueue", e );
     return 1;
   }
@@ -370,8 +388,10 @@ struct RcCL {
     }
     if( e!=CL_SUCCESS ) return Fail( "clBuildProgram", e );
 
-    k_enc = clCreateKernel( prog, "rc_encode", &e );
-    if( e!=CL_SUCCESS ) return Fail( "rc_encode", e );
+    for( uint i=0; i<RC_CL_NBLK; i++ ) {
+      k_enc[i] = clCreateKernel( prog, "rc_encode", &e );
+      if( e!=CL_SUCCESS ) return Fail( "rc_encode", e );
+    }
     return 1;
   }
 
@@ -395,21 +415,23 @@ struct RcCL {
     if( lws<1 ) lws = 1;
     while( lws>1 && (RCNUM%lws)!=0 ) lws--;
     size_t mx = 0;
-    if( clGetKernelWorkGroupInfo( k_enc, device, CL_KERNEL_WORK_GROUP_SIZE,
+    if( clGetKernelWorkGroupInfo( k_enc[0], device, CL_KERNEL_WORK_GROUP_SIZE,
                                   sizeof(mx), &mx, 0 )==CL_SUCCESS && mx>0 )
       while( lws>mx ) lws >>= 1;
   }
 
   int Buffers( void ) {
     cl_int e = CL_SUCCESS;
-    d_pbit = clCreateBuffer( ctx, CL_MEM_READ_ONLY, size_t(BLKSIZE)*8*sizeof(word), 0, &e );
-    if( e!=CL_SUCCESS ) return Fail( "buffer pbit", e );
-    d_out = clCreateBuffer( ctx, CL_MEM_WRITE_ONLY, size_t(RCNUM)*stride, 0, &e );
-    if( e!=CL_SUCCESS ) return Fail( "buffer out", e );
-    d_len = clCreateBuffer( ctx, CL_MEM_WRITE_ONLY, size_t(RCNUM)*sizeof(uint), 0, &e );
-    if( e!=CL_SUCCESS ) return Fail( "buffer len", e );
-    d_carry = clCreateBuffer( ctx, CL_MEM_WRITE_ONLY, size_t(RCNUM)*sizeof(uint), 0, &e );
-    if( e!=CL_SUCCESS ) return Fail( "buffer carry", e );
+    for( uint i=0; i<RC_CL_NBLK; i++ ) {
+      d_pbit[i] = clCreateBuffer( ctx, CL_MEM_READ_ONLY, size_t(BLKSIZE)*8*sizeof(word), 0, &e );
+      if( e!=CL_SUCCESS ) return Fail( "buffer pbit", e );
+      d_out[i] = clCreateBuffer( ctx, CL_MEM_WRITE_ONLY, size_t(RCNUM)*stride, 0, &e );
+      if( e!=CL_SUCCESS ) return Fail( "buffer out", e );
+      d_len[i] = clCreateBuffer( ctx, CL_MEM_WRITE_ONLY, size_t(RCNUM)*sizeof(uint), 0, &e );
+      if( e!=CL_SUCCESS ) return Fail( "buffer len", e );
+      d_carry[i] = clCreateBuffer( ctx, CL_MEM_WRITE_ONLY, size_t(RCNUM)*sizeof(uint), 0, &e );
+      if( e!=CL_SUCCESS ) return Fail( "buffer carry", e );
+    }
     return 1;
   }
 
@@ -431,13 +453,18 @@ struct RcCL {
       char d[768]; Describe( d, sizeof(d) );
       fprintf( stderr, "coder: opencl: %s\n", d );
       fprintf( stderr, "coder: opencl: kernel built in %.2fs, %d lanes per launch, "
-                       "work-group %d\n", buildsec, int(RCNUM), int(lws) );
+                       "work-group %d, %d block%s in flight\n",
+               buildsec, int(RCNUM), int(lws),
+               int(RC_CL_NBLK), RC_CL_NBLK==1?"":"s" );
     }
     return active;
   }
 
-  int Encode( const word* pbit, uint nbits, uint blksize,
-              byte* tmpbuf, uint stride_, uint* lens, uint* carries ) {
+  // Queue the whole of one block: the {p;bit} upload, the launch, and the
+  // lengths and carry counts coming back. Nothing here blocks, so the host is
+  // free to model the next block while this one codes.
+  int Submit( uint slot, const word* pbit, uint nbits, uint blksize,
+              uint* lens, uint* carries ) {
     if( !active ) return 0;
     double w0 = tnow();
     cl_int e;
@@ -445,80 +472,117 @@ struct RcCL {
     // pbit is the only thing that crosses per block: nbits packed pairs, two
     // bytes each. Sending only the used prefix rather than the whole array is
     // what keeps that near the size of the block on a short one.
-    double u0 = tnow();
-    e = clEnqueueWriteBuffer( q, d_pbit, CL_TRUE, 0, size_t(nbits)*sizeof(word), pbit, 0, 0, 0 );
+    e = clEnqueueWriteBuffer( q, d_pbit[slot], CL_FALSE, 0,
+                              size_t(nbits)*sizeof(word), pbit, 0, 0, 0 );
     if( e!=CL_SUCCESS ) return Fail( "write pbit", e );
-    ups += (tnow()-u0)*1000.0;
 
+    cl_kernel k = k_enc[slot];
     uint a = 0;
-    if( (e=clSetKernelArg(k_enc, a++, sizeof(cl_mem), &d_pbit ))!=CL_SUCCESS ) return Fail( "arg pbit", e );
-    if( (e=clSetKernelArg(k_enc, a++, sizeof(uint),   &nbits  ))!=CL_SUCCESS ) return Fail( "arg nbits", e );
-    if( (e=clSetKernelArg(k_enc, a++, sizeof(uint),   &blksize))!=CL_SUCCESS ) return Fail( "arg blksize", e );
-    if( (e=clSetKernelArg(k_enc, a++, sizeof(cl_mem), &d_out  ))!=CL_SUCCESS ) return Fail( "arg out", e );
-    if( (e=clSetKernelArg(k_enc, a++, sizeof(cl_mem), &d_len  ))!=CL_SUCCESS ) return Fail( "arg len", e );
-    if( (e=clSetKernelArg(k_enc, a++, sizeof(cl_mem), &d_carry))!=CL_SUCCESS ) return Fail( "arg carry", e );
+    if( (e=clSetKernelArg(k, a++, sizeof(cl_mem), &d_pbit[slot] ))!=CL_SUCCESS ) return Fail( "arg pbit", e );
+    if( (e=clSetKernelArg(k, a++, sizeof(uint),   &nbits        ))!=CL_SUCCESS ) return Fail( "arg nbits", e );
+    if( (e=clSetKernelArg(k, a++, sizeof(uint),   &blksize      ))!=CL_SUCCESS ) return Fail( "arg blksize", e );
+    if( (e=clSetKernelArg(k, a++, sizeof(cl_mem), &d_out[slot]  ))!=CL_SUCCESS ) return Fail( "arg out", e );
+    if( (e=clSetKernelArg(k, a++, sizeof(cl_mem), &d_len[slot]  ))!=CL_SUCCESS ) return Fail( "arg len", e );
+    if( (e=clSetKernelArg(k, a++, sizeof(cl_mem), &d_carry[slot]))!=CL_SUCCESS ) return Fail( "arg carry", e );
 
-    // One work-item per lane. The lanes are what the runtime vectorises
-    // across, and a work-group is what it schedules on a core, so the local
-    // size is the whole trade: RCNUM makes one vectorised group on one core,
-    // a smaller one spreads groups over cores at a narrower vector width.
     const size_t gws = RCNUM;
-    cl_event ev = 0;
-    e = clEnqueueNDRangeKernel( q, k_enc, 1, 0, &gws, lws?&lws:0, 0, 0, verbose?&ev:0 );
+    e = clEnqueueNDRangeKernel( q, k, 1, 0, &gws, lws?&lws:0, 0, 0,
+                                verbose ? &ev_kern[slot] : 0 );
     if( e!=CL_SUCCESS ) return Fail( "rc_encode", e );
-    if( verbose ) {
-      clWaitForEvents( 1, &ev );
-      cl_ulong t0=0, t1=0;
-      clGetEventProfilingInfo( ev, CL_PROFILING_COMMAND_START, sizeof(t0), &t0, 0 );
-      clGetEventProfilingInfo( ev, CL_PROFILING_COMMAND_END,   sizeof(t1), &t1, 0 );
-      kms += double(t1-t0)/1e6;
-      clReleaseEvent( ev );
-    }
     nlaunch++;
 
-    e = clEnqueueReadBuffer( q, d_len, CL_TRUE, 0, size_t(RCNUM)*sizeof(uint), lens, 0, 0, 0 );
+    e = clEnqueueReadBuffer( q, d_len[slot], CL_FALSE, 0, size_t(RCNUM)*sizeof(uint),
+                             lens, 0, 0, 0 );
     if( e!=CL_SUCCESS ) return Fail( "read len", e );
-    e = clEnqueueReadBuffer( q, d_carry, CL_TRUE, 0, size_t(RCNUM)*sizeof(uint), carries, 0, 0, 0 );
+    e = clEnqueueReadBuffer( q, d_carry[slot], CL_FALSE, 0, size_t(RCNUM)*sizeof(uint),
+                             carries, 0, 0, &ev_done[slot] );
     if( e!=CL_SUCCESS ) return Fail( "read carry", e );
 
-    // Only the bytes each lane actually produced come back, so the readback is
-    // the size of the compressed block and not of the buffer. A lane that
-    // overflowed is left for the caller to notice: its payload is truncated
-    // and unusable either way.
-    uint ncarry = 0, novf = 0;
-    for( uint i=0; i<RCNUM; i++ ) { ncarry += carries[i]; novf += (lens[i]>cap); }
-    if( ncarry==0 && novf==0 ) {
-      for( uint i=0; i<RCNUM; i++ ) {
-        if( lens[i]==0 ) continue;
-        e = clEnqueueReadBuffer( q, d_out, CL_FALSE, size_t(i)*stride_, lens[i],
-                                 tmpbuf+size_t(i)*stride_, 0, 0, 0 );
-        if( e!=CL_SUCCESS ) return Fail( "read out", e );
-      }
-      if( (e=clFinish(q))!=CL_SUCCESS ) return Fail( "clFinish", e );
+    // Without this the runtime is free to sit on the queue until something
+    // blocks on it, which is the whole pipeline not happening.
+    if( (e=clFlush(q))!=CL_SUCCESS ) return Fail( "clFlush", e );
+
+    h_len[slot] = lens;
+    sms += (tnow()-w0)*1000.0;
+    return 1;
+  }
+
+  // Wait for a slot's launch and bring its substreams back. Only the bytes
+  // each lane actually produced are read, so the readback is the size of the
+  // compressed block and not of the buffer. A lane that overflowed is left for
+  // the caller to notice: its payload is truncated and unusable either way.
+  int Collect( uint slot, byte* rows, uint stride_ ) {
+    if( !active ) return 0;
+    double w0 = tnow();
+    cl_int e;
+
+    if( ev_done[slot] ) {
+      cl_int st = 0;
+      if( clGetEventInfo( ev_done[slot], CL_EVENT_COMMAND_EXECUTION_STATUS,
+                          sizeof(st), &st, 0 )==CL_SUCCESS && st==CL_COMPLETE )
+        nready++;
+      e = clWaitForEvents( 1, &ev_done[slot] );
+      clReleaseEvent( ev_done[slot] );
+      ev_done[slot] = 0;
+      if( e!=CL_SUCCESS ) { if( ev_kern[slot] ) { clReleaseEvent(ev_kern[slot]); ev_kern[slot]=0; } return Fail( "wait", e ); }
+    }
+    if( verbose && ev_kern[slot] ) {
+      cl_ulong t0=0, t1=0;
+      clGetEventProfilingInfo( ev_kern[slot], CL_PROFILING_COMMAND_START, sizeof(t0), &t0, 0 );
+      clGetEventProfilingInfo( ev_kern[slot], CL_PROFILING_COMMAND_END,   sizeof(t1), &t1, 0 );
+      kms += double(t1-t0)/1e6;
+      clReleaseEvent( ev_kern[slot] );
+      ev_kern[slot] = 0;
     }
 
-    wms += (tnow()-w0)*1000.0;
+    const uint* lens = h_len[slot];
+    uint novf = 0;
+    for( uint i=0; i<RCNUM; i++ ) novf += (lens[i]>cap);
+    if( novf==0 ) {
+      // One map rather than RCNUM reads. Only a few kilobytes of each row are
+      // used, so a read per lane is all enqueue overhead -- and there are
+      // RCNUM of them per block. Mapping the whole thing once costs two
+      // commands, and on a CPU device the map itself is free.
+      void* p = clEnqueueMapBuffer( q2, d_out[slot], CL_TRUE, CL_MAP_READ, 0,
+                                    size_t(RCNUM)*stride_, 0, 0, 0, &e );
+      if( e!=CL_SUCCESS ) return Fail( "map out", e );
+      for( uint i=0; i<RCNUM; i++ )
+        if( lens[i] ) memcpy( rows+size_t(i)*stride_, (byte*)p+size_t(i)*stride_, lens[i] );
+      e = clEnqueueUnmapMemObject( q2, d_out[slot], p, 0, 0, 0 );
+      if( e!=CL_SUCCESS ) return Fail( "unmap out", e );
+      if( (e=clFinish(q2))!=CL_SUCCESS ) return Fail( "clFinish", e );
+    }
+
+    cms += (tnow()-w0)*1000.0;
     return 1;
   }
 
   void Report( FILE* f ) {
     if( !verbose || !nlaunch ) return;
-    fprintf( f, "coder: opencl: rc_encode %8.2f ms device, %8.2f ms wall "
-                "(%.2f ms upload) over %ld launches, %.1f us each\n",
-             kms, wms, ups, nlaunch, wms*1000.0/double(nlaunch) );
+    fprintf( f, "coder: opencl: rc_encode %8.2f ms device over %ld launches, "
+                "%.1f us each\n", kms, nlaunch, kms*1000.0/double(nlaunch) );
+    fprintf( f, "coder: opencl: host %8.2f ms queueing, %8.2f ms collecting; "
+                "%ld of %ld blocks were already done when collected\n",
+             sms, cms, nready, nlaunch );
   }
 
   void Quit( void ) {
     if( !tried ) return;
-    if( d_pbit )  clReleaseMemObject( d_pbit );
-    if( d_out )   clReleaseMemObject( d_out );
-    if( d_len )   clReleaseMemObject( d_len );
-    if( d_carry ) clReleaseMemObject( d_carry );
-    if( k_enc )   clReleaseKernel( k_enc );
-    if( prog )    clReleaseProgram( prog );
-    if( q )       clReleaseCommandQueue( q );
-    if( ctx )     clReleaseContext( ctx );
-    d_pbit=d_out=d_len=d_carry=0; k_enc=0; prog=0; q=0; ctx=0;
+    for( uint i=0; i<RC_CL_NBLK; i++ ) {
+      if( ev_done[i] ) { clWaitForEvents(1,&ev_done[i]); clReleaseEvent(ev_done[i]); ev_done[i]=0; }
+      if( ev_kern[i] ) { clReleaseEvent(ev_kern[i]); ev_kern[i]=0; }
+      if( d_pbit[i] )  clReleaseMemObject( d_pbit[i] );
+      if( d_out[i] )   clReleaseMemObject( d_out[i] );
+      if( d_len[i] )   clReleaseMemObject( d_len[i] );
+      if( d_carry[i] ) clReleaseMemObject( d_carry[i] );
+      if( k_enc[i] )   clReleaseKernel( k_enc[i] );
+      d_pbit[i]=d_out[i]=d_len[i]=d_carry[i]=0; k_enc[i]=0;
+    }
+    if( prog ) clReleaseProgram( prog );
+    if( q )    clReleaseCommandQueue( q );
+    if( q2 )   clReleaseCommandQueue( q2 );
+    if( ctx )  clReleaseContext( ctx );
+    prog=0; q=0; q2=0; ctx=0;
     active = 0; tried = 0;
   }
 };
@@ -537,9 +601,13 @@ void CL_Geometry( uint stride, uint cap ) { g_stride = stride; g_cap = cap; }
 
 int CL_Init( void ) { return g_cl.Init( g_stride, g_cap ); }
 
-int CL_EncodeBlock( const word* pbit, uint nbits, uint blksize,
-                    byte* tmpbuf, uint stride, uint* lens, uint* carries ) {
-  return g_cl.Encode( pbit, nbits, blksize, tmpbuf, stride, lens, carries );
+int CL_Submit( uint slot, const word* pbit, uint nbits, uint blksize,
+               uint* lens, uint* carries ) {
+  return g_cl.Submit( slot, pbit, nbits, blksize, lens, carries );
+}
+
+int CL_Collect( uint slot, byte* rows, uint stride ) {
+  return g_cl.Collect( slot, rows, stride );
 }
 
 #else  // RC_OPENCL==0
@@ -551,7 +619,8 @@ void CL_Enable( int ) {}
 int  CL_Active( void ) { return 0; }
 int  CL_Init( void ) { return 0; }
 void CL_Geometry( uint, uint ) {}
-int  CL_EncodeBlock( const word*, uint, uint, byte*, uint, uint*, uint* ) { return 0; }
+int  CL_Submit( uint, const word*, uint, uint, uint*, uint* ) { return 0; }
+int  CL_Collect( uint, byte*, uint ) { return 0; }
 void CL_Report( FILE* ) {}
 void CL_Quit( void ) {}
 

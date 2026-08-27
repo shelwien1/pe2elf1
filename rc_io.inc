@@ -72,15 +72,18 @@ struct RC_IO {
 //  rangecoder data (a flag bit plus 16 bits when the block is short), see
 //  model0.inc / model1.inc.
 //----------------------------------------------------------------------------
-template< int BLKSIZE, int RCNUM >
+template< int BLKSIZE, int RCNUM, int NSLOT >
 struct RCio {
   typedef byte* __restrict prbyte;
 
-  // 0xFF run the decoder is allowed to read past the end of a substream. The
-  // encoder's flush drops up to LOWBYTES tail bytes, and the decoder runs
-  // CODBYTES ahead of the encoder, so it over-reads by at most a handful of
-  // bytes; 64 is well clear of that.
-  static const uint RC_FF_PADSIZE = 64;
+  // The 0xFF run the decoder is allowed to read past the end of a substream.
+  // It has to cover both things rc_Quit can leave out: the minimal flush's own
+  // tail, which is at most LOWBYTES, and the trailing 0xFF run the
+  // carry-propagating coder drops, which is capped at RC_FF_TRIM precisely so
+  // that this constant can exist -- see rc_config.inc.
+  static const uint FF_PADSIZE = RC_FF_PADSIZE;
+  static_assert( FF_PADSIZE >= RC_FF_TRIM + RC_LOWBYTES,
+    "RC_FF_PADSIZE must cover RC_FF_TRIM plus the minimal flush's own tail" );
 
   // Worst case output for one lane: bits_per_lane (plus the 17 block-length
   // header bits, which all land in the low lanes) at SCALElog bits each, since
@@ -108,14 +111,19 @@ struct RCio {
 
   // Row stride of tmpbuf. The OpenCL path writes its lanes into rows of
   // exactly this pitch, so the payload readback lands where rc_Write expects.
-  static const uint rowsize = tmpbufsize+RC_FF_PADSIZE;
+  static const uint rowsize = tmpbufsize+FF_PADSIZE;
 
-  ALIGN(4096) byte tmpbuf[RCNUM][rowsize];
+  // NSLOT sets of substream rows. The decoder wants one; the encoder wants one
+  // per block it can have in flight on the device, because a block's rows are
+  // what the kernel writes into and they have to stay put until that block is
+  // collected and written out.
+  ALIGN(4096) byte tmpbuf[NSLOT][RCNUM][rowsize];
 
-  byte* buf( uint rcidx ) { return &tmpbuf[rcidx][0]; }
+  byte* buf( uint rcidx, uint slot=0 ) { return &tmpbuf[slot][rcidx][0]; }
+  byte* rows( uint slot=0 ) { return &tmpbuf[slot][0][0]; }
 
   NOINLINE
-  void rc_Read( Coroutine& C ) {
+  void rc_Read( Coroutine& C, uint slot=0 ) {
     uint rcidx,i,l,n;
 
     uint rclen[RCNUM];
@@ -135,16 +143,16 @@ struct RCio {
         // than spin -- the FF padding below fills the hole and the block
         // decodes to garbage, which is the best a truncated file can do.
         if_e0( n==0 ) break;
-        memcpy( &tmpbuf[rcidx][i], (prbyte)C.inpptr, n );
+        memcpy( &tmpbuf[slot][rcidx][i], (prbyte)C.inpptr, n );
         C.inpptr += n;
       }
-      for( i=0; i<RC_FF_PADSIZE; i++ ) tmpbuf[rcidx][l+i] = 0xFF;
+      for( i=0; i<FF_PADSIZE; i++ ) tmpbuf[slot][rcidx][l+i] = 0xFF;
     } // rcidx
   }
 
   template< class RCV >
   NOINLINE
-  void rc_Write( Coroutine& C, RCV& rc ) {
+  void rc_Write( Coroutine& C, RCV& rc, uint slot=0 ) {
     uint rcidx,i,l,n;
 
     uint rclen[RCNUM];
@@ -159,7 +167,7 @@ struct RCio {
       l = rclen[rcidx];
       for( i=0; i<l; i+=n ) {
         C.chkout(); n = Min<uint>( l-i, C.getoutlen() );
-        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][i], n );
+        memcpy( (prbyte)C.outptr, &tmpbuf[slot][rcidx][i], n );
         C.outptr += n;
       }
     } // rcidx

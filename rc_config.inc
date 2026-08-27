@@ -151,12 +151,50 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_OPENCL 0
 #endif
 
+// Blocks scheduled on the device at once.
+//
+// Block n+1's model pass depends only on the input, not on how block n was
+// coded, so the host can be modelling ahead while the device codes. The ring
+// is what makes that possible: one {p;bit} cache and one set of substream rows
+// per slot, filled in order and collected in order, so the output is still
+// written block by block in sequence.
+//
+// 1 is the unpipelined coder -- submit, wait, write -- and is what a build
+// without OpenCL uses whatever this says. Past the point where the device
+// stops being the thing waited on, more slots only cost memory: each is a
+// BLKSIZE*8 word cache plus RCNUM substream rows, about 2 MB at the default
+// geometry, on the host and again on the device.
+//
+// A constant rather than a macro: it is an array bound in three places, and
+// the geometry constants next to it (BLKSIZE, RCNUM) are enums for the same
+// reason.
+static const uint RC_CL_NBLK = 8;
+
 // Work-group size for the coding kernel. 0 lets the runtime choose; otherwise
 // it must divide RCNUM. On Intel's CPU runtime a work-group is vectorised
 // across its work-items and scheduled on one core, so this trades vector width
 // against how many cores the launch reaches.
 #ifndef RC_CL_LWS
 #define RC_CL_LWS 0
+#endif
+
+// The decoder reads 0xFF past the end of a substream, because rc_Read pads it
+// with them, and that is what lets rc_Quit leave the tail of its flush out.
+// Two numbers have to agree for it to be safe:
+//
+//   RC_FF_TRIM     the most bytes rc_Quit may leave out
+//   RC_FF_PADSIZE  the 0xFF run rc_Read writes past each substream
+//
+// and the pad has to cover the trim plus the LOWBYTES the minimal flush drops
+// on its own. The carry-propagating coder's flush drops a whole trailing 0xFF
+// run, and that run is as long as the data makes it -- 6384 bytes on a
+// repeating {0xFF,0x00} -- so the trim has to be capped rather than assumed
+// small. Leaving it uncapped decodes to the wrong bytes, silently.
+#ifndef RC_FF_TRIM
+#define RC_FF_TRIM 32
+#endif
+#ifndef RC_FF_PADSIZE
+#define RC_FF_PADSIZE (RC_FF_TRIM + 2*RC_LOWBYTES + 16)
 #endif
 
 // Bounds-check every byte the encoder writes into its substream buffer. The

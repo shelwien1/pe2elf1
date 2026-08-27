@@ -19,6 +19,10 @@ mkdir -p test
 [ -f test/ff ]      || head -c 300000 /dev/zero | tr '\0' '\377' > test/ff
 [ -f test/zero ]    || head -c 300000 /dev/zero > test/zero
 [ -f test/rand ]    || head -c 300000 /dev/urandom > test/rand
+# the carry coder's flush drops a trailing 0xFF run; these make long ones
+[ -f test/ff0 ]     || python3 -c "import sys;sys.stdout.buffer.write(b'\xff\x00'*33000)" > test/ff0
+[ -f test/ff7 ]     || python3 -c "import sys;sys.stdout.buffer.write((b'\xff'*7+b'\x00')*8250)" > test/ff7
+[ -f test/ffmix ]   || cat book1 test/ff0 > test/ffmix
 [ -f test/book1 ]   || cp book1 test/book1
 
 pass=0; fail=0; devruns=0

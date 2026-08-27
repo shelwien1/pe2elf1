@@ -39,20 +39,29 @@ void CL_Enable( int on );
 
 int  CL_Active( void );
 
-// Code one block's cached {p;bit} pairs on the device, carryless.
+// Queue one block's cached {p;bit} pairs for the carryless coder, and come
+// back for it later. Split in two so the host can model the next block while
+// the device codes this one -- see RC_CL_NBLK.
 //
+//   slot    which of the RC_CL_NBLK slots; the caller's ring index
 //   pbit    nbits packed (bit<<15)|p pairs, bit k belonging to lane k%RCNUM
 //   blksize the block's length in bytes, for the block-length header bits
-//   tmpbuf  RCNUM rows of `stride` bytes -- the substream buffers
-//   lens    out: bytes each lane produced (> the row capacity means it did
-//           not fit, same condition the host path reports)
-//   carries out: carries that escaped each lane. Any non-zero and the block
-//           has to be re-coded on the host with the carry-propagating twin.
+//   lens    filled by the time CL_Collect returns: bytes each lane produced
+//           (> the row capacity means it did not fit, the same condition the
+//           host path reports)
+//   carries likewise: carries that escaped each lane. Any non-zero and the
+//           block has to be re-coded with the carry-propagating twin.
 //
-// Returns 1 on success. On failure the device path is switched off for the
-// rest of the run and the caller falls back to the host coder.
-int  CL_EncodeBlock( const word* pbit, uint nbits, uint blksize,
-                     byte* tmpbuf, uint stride, uint* lens, uint* carries );
+// CL_Submit does not block, and pbit, lens and carries must stay put until
+// the matching CL_Collect. Both return 1 on success; on failure the device
+// path is switched off for the rest of the run and the caller codes the block
+// on the host -- including the ones still queued, which come first.
+int  CL_Submit( uint slot, const word* pbit, uint nbits, uint blksize,
+                uint* lens, uint* carries );
+
+// Wait for slot's launch and read its substreams into RCNUM rows of `stride`
+// bytes at `rows`. Only the bytes each lane produced are read back.
+int  CL_Collect( uint slot, byte* rows, uint stride );
 
 // -V: device time, and how much of the wall clock the launches cost
 void CL_Report( FILE* f );
