@@ -194,6 +194,21 @@ static const uint RC_CL_NBLK = 8;
 #define RC_CL_LWS 0
 #endif
 
+// Width of the code register, in bytes. 4 everywhere -- it is what the decoder
+// holds and what sTOP/gTOP are written against -- but named, because the zero
+// prefix below is the difference between it and the low accumulator.
+#ifndef RC_CODBYTES
+#define RC_CODBYTES 4
+#endif
+
+// The encoder's leading zero prefix. Additions land in the bottom 32 bits of
+// low while ShiftLow emits the top byte, so the top has not been reached yet;
+// that lag is the point of the wide accumulator, and the prefix is not part of
+// the stream. It is written into the substream row like any other byte and
+// dropped by rc_Write, which starts each lane's payload past it -- rather than
+// tested for in put(), which is the coder's one hot store.
+#define RC_SKIP (RC_LOWBYTES - RC_CODBYTES)
+
 // The decoder reads 0xFF past the end of a substream, because rc_Read pads it
 // with them, and that is what lets rc_Quit leave the tail of its flush out.
 // Two numbers have to agree for it to be safe:

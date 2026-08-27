@@ -397,7 +397,7 @@ struct RcCL {
               " -D OUTSTRIDE=%u -D OUTCAP=%u"
               " -D RC_RANGE64=%d -D RC_RENORM_TAIL=%d",
               int(RCNUM), int(SCALElog), int(hSCALE),
-              int(RC_LOWBYTES), 4, unsigned(BLKSIZE),
+              int(RC_LOWBYTES), int(RC_CODBYTES), unsigned(BLKSIZE),
               unsigned(stride), unsigned(cap),
               int(RC_RANGE64), int(RC_RENORM_TAIL) );
 
@@ -579,8 +579,12 @@ struct RcCL {
       void* p = clEnqueueMapBuffer( q2, d_out[slot], CL_TRUE, CL_MAP_READ, 0,
                                     size_t(RCNUM)*stride_, 0, 0, 0, &e );
       if( e!=CL_SUCCESS ) return Fail( "map out", e );
+      // from the row start, so the zero prefix comes across with the payload
+      // and the rows stay laid out exactly as the host coder leaves them --
+      // rc_Write reads both the same way.
       for( uint i=0; i<RCNUM; i++ )
-        if( lens[i] ) memcpy( rows+size_t(i)*stride_, (byte*)p+size_t(i)*stride_, lens[i] );
+        if( lens[i] ) memcpy( rows+size_t(i)*stride_, (byte*)p+size_t(i)*stride_,
+                              RC_SKIP+lens[i] );
       e = clEnqueueUnmapMemObject( q2, d_out[slot], p, 0, 0, 0 );
       if( e!=CL_SUCCESS ) return Fail( "unmap out", e );
       if( (e=clFinish(q2))!=CL_SUCCESS ) return Fail( "clFinish", e );

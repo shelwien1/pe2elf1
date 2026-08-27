@@ -33,7 +33,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
   static const int  RC_f_DEC  = f_DEC;    // so RangecoderN can read it back
 
-  static const uint CODBYTES = 4;
+  static const uint CODBYTES = RC_CODBYTES;
   static const uint LOWBYTES = RC_LOWBYTES;
   static const uint LOWBITS  = LOWBYTES*8;
   static const uint sTOP     = 0x01000000U;

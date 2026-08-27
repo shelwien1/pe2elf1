@@ -28,6 +28,7 @@
 static const char* RC_CL_SRC = R"CLC(
 
 #define LOWBITS (LOWBYTES*8)
+#define SKIP    (LOWBYTES-CODBYTES)
 
 #if LOWBYTES==8
  #define LOW_MASK 0xFFFFFFFFFFFFFFFFUL
@@ -51,17 +52,16 @@ typedef struct {
   rangetype range;
   uint  rpre;               // the unit, scaled to the low delta by rc_process
   uint  ffnum;              // carries that escaped -- the flag, not an FF run
-  uint  skip;               // leading zero bytes still to drop
-  uint  n;                  // bytes handed to put, dropped ones included
+  uint  n;                  // bytes stored, the zero prefix included
   __global uchar* o;
 } rc_t;
 
-// The first LOWBYTES-CODBYTES bytes are the zero prefix and are not part of
-// the stream; past OUTCAP the substream did not fit, and n keeps counting so
-// the host can see by how much.
+// The row is laid out as the host's: SKIP bytes of zero prefix, then the
+// payload. The prefix is stored rather than tested for -- same as RC_IO::put --
+// and outlen reports the payload alone. Past the capacity the substream did not
+// fit, and n keeps counting so the host can see by how much.
 inline void rc_put( rc_t* s, uchar c ) {
-  if( s->skip ) { s->skip--; return; }
-  if( s->n<OUTCAP ) s->o[s->n] = c;
+  if( s->n<SKIP+OUTCAP ) s->o[s->n] = c;
   s->n++;
 }
 
@@ -147,7 +147,6 @@ __kernel void rc_encode(
   s.range = RANGE_INIT;
   s.rpre  = 0;
   s.ffnum = 0;
-  s.skip  = LOWBYTES-CODBYTES;
   s.n     = 0;
   s.o     = out + (size_t)id*OUTSTRIDE;
 
@@ -166,7 +165,8 @@ __kernel void rc_encode(
 
   rc_quit( &s );
 
-  outlen[id]   = s.n;
+  // a lane that coded nothing can stop inside the prefix and owes nothing
+  outlen[id]   = s.n>SKIP ? s.n-SKIP : 0;
   outcarry[id] = s.ffnum;
 }
 

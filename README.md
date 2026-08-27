@@ -295,6 +295,7 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_OPENCL` | auto | 1 = build the device path (`build.sh` sets it when `CL/cl.h` is there) |
 | `RC_CL_LWS` | 0 | work-group size; 0 = one group per compute unit |
 | `RC_CL_DYNAMIC` | 1 on Windows | open the ICD loader at run time instead of linking it |
+| `RC_CODBYTES` | 4 | width of the code register |
 | `RC_FF_TRIM` | 32 | most bytes the flush may leave for the decoder's 0xFF padding |
 | `RC_FF_PADSIZE` | derived | that padding — must cover the trim plus `RC_LOWBYTES` |
 | `CORO_FAKE` | 0 | 1 = straight-through instead of the setjmp coroutine |
@@ -323,6 +324,37 @@ stream-neutral. The decoder is untouched by construction: `low_Add`, `low_Top`
 and `low_Shift8` are all under `if( f_DEC==0 )`. The carry twin at
 `RC_LOWBYTES=4` loses most, because `LOWBITS` is 32 there and the split version
 shifts a `lowh` that the mask then clears anyway. So the default is 0 here.
+
+### The zero prefix
+
+The encoder's first `RC_LOWBYTES - RC_CODBYTES` bytes are zero: additions land
+in the bottom 32 bits of `low` while `ShiftLow` emits the top byte, so the top
+has not been reached yet. That lag is the point of the wide accumulator, and
+the prefix is not part of the stream.
+
+`sh_v1xN_s.cpp` drops it with a counter tested inside `put()`. Here the row
+carries it instead — `StartEncode` leaves `RC_SKIP` bytes in front of the
+payload, `put()` stores every byte it is handed, and `rc_Write` starts each
+lane at `beg`. Same bytes on the wire; one fewer test in the coder's only hot
+store. The kernel lays its rows out the same way, so `Collect` copies from the
+row start and `rc_Write` reads host-coded and device-coded rows identically.
+
+A lane can stop *inside* the prefix and owe the stream nothing — 16 block-length
+header bits spread over 64 lanes leaves most of them with no work at all — so
+both `rc_len()` and the kernel's `outlen` floor at zero rather than wrapping.
+
+It measured as roughly free on the host and about 3% on the device:
+
+| | before | after | |
+| --- | --- | --- | --- |
+| host, `book1` | 18.99 MB/s | 18.78 | -1.1% |
+| host, 10 MB random | 13.96 | 13.86 | -0.7% |
+| device, `book1` | 60.77 | 62.22 | +2.4% |
+| device, 10 MB random | 57.05 | 58.76 | +3.0% |
+
+Output byte-identical throughout. No host gain was on offer: `if_e0` had
+already pinned the branch as not-taken, and what is left is struct layout —
+`RC_IO` lost a member, which moves every element of `RangecoderN`'s array.
 
 ### The trailing 0xFF run
 

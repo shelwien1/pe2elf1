@@ -15,10 +15,9 @@
 template< class Rangecoder >
 struct RC_IO {
 
-  byte* __restrict beg;   // start of this lane's substream buffer
-  byte* __restrict ptr;   // cursor
+  byte* __restrict beg;   // start of this lane's payload
+  byte* __restrict ptr;   // cursor -- encoding, it starts RC_SKIP before beg
   byte* __restrict end;   // one past the last writable byte (encoder only)
-  uint  Skip;             // encoder: leading zero bytes still to drop
   uint  f_OVF;            // encoder: set if the substream did not fit
 
   // Reads past the end of the substream return 0xFF. That is not an accident:
@@ -28,24 +27,24 @@ struct RC_IO {
   // byte(getc()) gives past EOF, which is how sh_v1xN_s.cpp got it for free.
   byte get( void ) { return *ptr++; }
 
-  // The encoder's first LOWBYTES-CODBYTES bytes are the zero prefix: additions
-  // land in the bottom 32 bits of low while ShiftLow emits the top byte, so the
-  // top has not been reached yet. That lag is the point of the wide accumulator,
-  // and the prefix is not part of the stream. This is the buffer equivalent of
-  // rc_Write's ofs = LOWBYTES+1-CODBYTES in sh_v1xN_io.inc; the +1 there is the
-  // Cache byte, which the Cache!=-1 guard in rc.inc's ShiftLow accounts for.
+  // No prefix test here. The zero prefix (RC_SKIP bytes -- see rc_config.inc)
+  // is stored like any other byte, into the room StartEncode left for it ahead
+  // of beg, and rc_Write starts the payload at beg. put() is the coder's one
+  // hot store, and this is the buffer equivalent of rc_Write's
+  // ofs = LOWBYTES+1-CODBYTES in sh_v1xN_io.inc; the +1 there is the Cache
+  // byte, which the Cache!=-1 guard in rc.inc's ShiftLow accounts for.
   void put( byte c ) {
-    if_e0( Skip ) { Skip--; return; }
 #if RC_IO_CHECK
     if_e0( ptr>=end ) { f_OVF=1; return; }
 #endif
     *ptr++ = c;
   }
 
+  // bufsize is the payload capacity; the prefix sits in front of it, so the row
+  // has to be RC_SKIP longer than that -- which is what RCio::rowsize is.
   void StartEncode( byte* buf, uint bufsize ) {
-    beg = ptr = buf; end = buf+bufsize;
+    ptr = buf; beg = buf+RC_SKIP; end = beg+bufsize;
     f_OVF = 0;
-    Skip = Rangecoder::LOWBYTES - Rangecoder::CODBYTES;
     ((Rangecoder*)this)->rc_Init();
   }
 
@@ -53,12 +52,14 @@ struct RC_IO {
 
   void StartDecode( byte* buf ) {
     beg = ptr = buf; end = 0;
-    f_OVF = 0; Skip = 0;
+    f_OVF = 0;
     ((Rangecoder*)this)->rc_Init();
   }
 
-  // encoder: bytes written so far, i.e. this lane's substream length
-  uint rc_len( void ) const { return ptr-beg; }
+  // encoder: payload bytes written, i.e. this lane's substream length. A lane
+  // that coded nothing can stop inside the prefix -- 16 header bits over 64
+  // lanes leaves most of them with no work -- and owes the stream nothing.
+  uint rc_len( void ) const { return ptr>beg ? uint(ptr-beg) : 0; }
 };
 
 
@@ -111,7 +112,7 @@ struct RCio {
 
   // Row stride of tmpbuf. The OpenCL path writes its lanes into rows of
   // exactly this pitch, so the payload readback lands where rc_Write expects.
-  static const uint rowsize = tmpbufsize+FF_PADSIZE;
+  static const uint rowsize = RC_SKIP+tmpbufsize+FF_PADSIZE;
 
   // NSLOT sets of substream rows. The decoder wants one; the encoder wants one
   // per block it can have in flight on the device, because a block's rows are
@@ -167,7 +168,7 @@ struct RCio {
       l = rclen[rcidx];
       for( i=0; i<l; i+=n ) {
         C.chkout(); n = Min<uint>( l-i, C.getoutlen() );
-        memcpy( (prbyte)C.outptr, &tmpbuf[slot][rcidx][i], n );
+        memcpy( (prbyte)C.outptr, &tmpbuf[slot][rcidx][RC_SKIP+i], n );
         C.outptr += n;
       }
     } // rcidx
