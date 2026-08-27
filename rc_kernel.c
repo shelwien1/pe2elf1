@@ -1,8 +1,12 @@
-//  rc_kernel.c -- the OpenCL C side, as functions.
+//  rc_kernel.c -- the device-side coder, as functions.
 //
 //  Named .c rather than .cl because that is what it is to an editor: C, which
 //  is close enough to OpenCL C to highlight and index properly. It is the
-//  source; rc_kernel.cl and then rc_kernel.inc are generated from it.
+//  source; rc_kernel.cl and then rc_kernel.inc are generated from it, and
+//  rc_kernel.cl is consumed twice: embedded by txt2inc.pl for the OpenCL
+//  runtime to JIT, and compiled directly by ispc (with -DRC_ISPC=1) into the
+//  executable -- one generated file, two backends. The entry points at the
+//  bottom are the only code that differs between them.
 //  mk_kernel.sh runs the chain, build.sh runs mk_kernel.sh when this file is
 //  newer:
 //
@@ -45,10 +49,24 @@
 // OpenCL C has no <stdint.h>, but it does not need one: char, short, int and
 // long are exactly 8, 16, 32 and 64 bits wide by definition, not "at least".
 // These are a spelling, so the kernel reads like the host code next to it.
+//
+// ISPC compiles this same generated file (see the entry points at the end):
+// its fixed-width names are spelled differently, and that is the whole of the
+// difference at this level. One thing does not carry over as text: an ISPC
+// integer literal suffixed UL is still 32 bits, so every 64-bit constant
+// below is built with an explicit (uint64_t) cast, which OpenCL C accepts
+// identically.
+#if RC_ISPC
+typedef unsigned int8  uint8_t;
+typedef unsigned int16 uint16_t;
+typedef unsigned int32 uint32_t;
+typedef unsigned int64 uint64_t;
+#else
 typedef uchar  uint8_t;
 typedef ushort uint16_t;
 typedef uint   uint32_t;
 typedef ulong  uint64_t;
+#endif
 
 #define LOWBITS (LOWBYTES*8)
 #define SKIP    (LOWBYTES-CODBYTES)
@@ -61,7 +79,7 @@ typedef ulong  uint64_t;
 
 #if RC_RANGE64
  typedef uint64_t rangetype;
- #define RANGE_INIT (1UL<<32)
+ #define RANGE_INIT ((uint64_t)1<<32)
 #else
  typedef uint32_t rangetype;
  #define RANGE_INIT 0xFFFFFFFFu
@@ -89,10 +107,10 @@ typedef ulong  uint64_t;
 // Both masks unconditionally: they are constants, and the variants that use
 // them are compiled only when expanded.
 #if LOWBYTES==8
- #define LOW_MASK  0xFFFFFFFFFFFFFFFFUL
+ #define LOW_MASK  ((uint64_t)0-1)
  #define LOWH_MASK 0xFFFFFFFFu
 #else
- #define LOW_MASK  ((1UL<<LOWBITS)-1UL)
+ #define LOW_MASK  (((uint64_t)1<<LOWBITS)-1)
  #define LOWH_MASK ((1u<<(LOWBITS-32))-1u)   /* 0 at LOWBYTES==4 */
 #endif
 
@@ -348,7 +366,9 @@ void rc_renorm_tail_off( void ) {
 // The counted 0/1/2-byte shift is exact for a binary coder: the unit is
 // range>>SCALElog >= 2^9, so one step cannot take range below 2^8.
 void rc_renorm( void ) {
-  uint32_t _nsh = (range<sTOP) + (range<gTOP);
+  /* the ternaries are for ISPC, where a comparison is a bool and bool+bool
+     does not parse; OpenCL C compiles them to the same select */
+  uint32_t _nsh = (range<sTOP ? 1u:0u) + (range<gTOP ? 1u:0u);
   rc_shiftlow(_nsh);
   range <<= _nsh*8;
   RC_RENORM_TAIL_LOOP();
@@ -371,11 +391,11 @@ void rc_quit( void ) {
   rc_renorm();
   uint32_t _nn = LOWBYTES;
   uint64_t _lo = LOW_GET();
-  uint64_t _hi = _lo + (uint64_t)range;
-  uint32_t _hc = (_hi<_lo);   /* _lo+range can leave the uint64_t at LOWBYTES==8 */
+  uint64_t _qh = _lo + (uint64_t)range;
+  uint32_t _hc = (_qh<_lo);   /* _lo+range can leave the uint64_t at LOWBYTES==8 */
   for( uint32_t _i=0; _i<LOWBYTES; _i++ ) {
-    uint64_t _m = ((1UL<<((_i+1)*4))<<((_i+1)*4))-1UL;
-    if( _hc || ((_lo|_m)<_hi) ) { _lo |= _m; _nn--; }
+    uint64_t _m = (((uint64_t)1<<((_i+1)*4))<<((_i+1)*4))-1;
+    if( _hc || ((_lo|_m)<_qh) ) { _lo |= _m; _nn--; }
   }
   for( uint32_t _i=0; _i<_nn; _i++ ) rc_put( _lo>>(LOWBITS-8-_i*8) );
 }
@@ -389,6 +409,71 @@ void rc_quit( void ) {
 //  Not turned into a macro: rc_macro.pl only converts `type name(args) {`, and
 //  this signature spans lines.
 // ---------------------------------------------------------------------------
+#if RC_ISPC
+
+// The ISPC side of the same kernel. Every coder macro above expands here
+// unchanged; what differs is only the launch shape. OpenCL runs RCNUM
+// work-items and the runtime vectorises across them; ISPC runs one gang and
+// `foreach` walks the RCNUM lanes through it, a gang-width at a time, so the
+// same code covers RCNUM above and below the gang size.
+//
+// There is no RC_CL_BLOCKREAD here and nothing is lost by that: inside
+// foreach the induction variable is known linear, so `pbit[k]` with
+// k = id + m*RCNUM is a unit-stride access and ISPC emits one contiguous
+// vector load -- the very thing the OpenCL path needed the Intel sub-group
+// extension for. Build with RC_CL_BLOCKREAD=0; the pragma block at the top
+// is skipped by the same setting.
+//
+// OUTSTRIDE and OUTCAP arrive as arguments rather than -D: they come from
+// RCio's template geometry, which the C++ side computes, and a uniform
+// argument costs the kernel nothing while sparing the build a second copy of
+// that arithmetic. The names match the -D spelling on purpose -- OUTWCAP and
+// the coder macros above pick whichever is in scope.
+export void rc_encode(
+    const uniform uint16_t pbit[],   // nbits entries, packed (bit<<15)|p
+    uniform uint32_t nbits,
+    uniform uint32_t blksize,
+    uniform uint8_t  out[],          // RCNUM rows of OUTSTRIDE
+    uniform uint32_t outlen[],
+    uniform uint32_t outcarry[],
+    uniform uint32_t OUTSTRIDE,
+    uniform uint32_t OUTCAP )
+{
+  uniform uint8_t*  uniform ob = out;
+  uniform uint32_t* uniform ow = (uniform uint32_t* uniform)out;
+
+  foreach( id = 0 ... RCNUM ) {
+
+    LOW_DECL;
+    RC_OUT_DECL;
+    rangetype range = RANGE_INIT;
+    uint32_t rpre = 0, ffnum = 0, nout = 0;
+    const uint32_t obase  = id*OUTSTRIDE;
+    const uint32_t owbase = id*(OUTSTRIDE/4);
+
+    const uint32_t flag = (blksize!=BLKFULL);
+
+    if( id==0 ) rc_process( hSCALE, flag );
+
+    if( flag )
+      for( uint32_t j=id; j<16; j+=RCNUM )
+        rc_process( hSCALE, (blksize>>(15-j))&1 );
+
+    for( uint32_t k=id; k<nbits; k+=RCNUM ) {
+      uint32_t b = pbit[k];
+      rc_process( b&0x7FFF, b>>15 );
+    }
+
+    rc_quit();
+    RC_TAIL();
+
+    outlen[id]   = nout>SKIP ? nout-SKIP : 0;
+    outcarry[id] = ffnum;
+  }
+}
+
+#else  // the OpenCL entry
+
 #if RC_CL_BLOCKREAD
 __attribute__((intel_reqd_sub_group_size(RC_CL_BLOCKREAD)))
 #endif
@@ -494,3 +579,5 @@ __kernel void rc_encode(
   outlen[id]   = nout>SKIP ? nout-SKIP : 0;
   outcarry[id] = ffnum;
 }
+
+#endif  // RC_ISPC

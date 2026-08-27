@@ -167,6 +167,22 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_OPENCL 0
 #endif
 
+// 1 = build the ISPC path instead: the same coding pass, from the same
+// generated rc_kernel.cl, compiled by ispc at build time into this executable
+// and called as a function -- no OpenCL runtime, no JIT, no -k cache. The two
+// backends serve the same CL_* names, so exactly one may be built; build.sh
+// picks ISPC when an ispc compiler is on the path and OpenCL otherwise.
+#ifndef RC_ISPC
+#define RC_ISPC 0
+#endif
+
+// either backend: what model0.inc's device path is guarded by
+#define RC_DEVICE (RC_OPENCL || RC_ISPC)
+
+#if RC_OPENCL && RC_ISPC
+#error RC_OPENCL and RC_ISPC both define the CL_* backend -- pick one
+#endif
+
 // Blocks scheduled on the device at once.
 //
 // Block n+1's model pass depends only on the input, not on how block n was

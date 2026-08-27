@@ -844,7 +844,8 @@ int CL_Collect( uint slot, byte* rows, uint stride ) {
   return g_cl.Collect( slot, rows, stride );
 }
 
-#else  // RC_OPENCL==0
+#elif !RC_ISPC  // no backend at all: the stubs. With RC_ISPC the same
+                // names come from rc_ispc.cpp, and g_clopt above is shared.
 
 void CL_ListDevices( FILE* f ) {
   fprintf( f, "this build has no OpenCL support (rebuild with RC_OPENCL=1)\n" );

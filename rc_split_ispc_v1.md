@@ -302,6 +302,49 @@ AVX-512 units ISPC reaches with a function call. Porting it:
 This is the concrete recommendation of the document: **do the encoder port**; keep the
 decoder split on the shelf with its cost model until §8 moves the batch under ~5 clk/bit.
 
+### 9.1 The port, done and measured
+
+The port above is now implemented in this tree. One generated file serves both backends —
+`rc_kernel.cl` is embedded for the OpenCL JIT *and* compiled by ispc with `-DRC_ISPC=1`,
+so `mk_kernel.sh` did not change at all; the source grew an ISPC entry point (a `foreach`
+over the RCNUM lanes around the same coder macros), fixed-width typedefs, and two
+portability repairs that OpenCL C accepts identically (explicit `(uint64_t)` casts, since
+an ISPC `UL` literal stays 32 bits, and ternaries where `bool+bool` appeared). The host
+side is `rc_ispc.cpp`: the same `CL_*` names, a worker thread where OpenCL had command
+queues, `RC_ISPC_THREAD=0` for the synchronous fallback. `build.sh` prefers ISPC when an
+`ispc` binary is present (`ISPC=0` refuses it), maps the `RC_*` overrides to the kernel's
+`-D` names, and builds `avx512skx-x16` plus `avx2-i32x16` with ispc's dispatcher so one
+binary runs on both.
+
+Correctness: eight configurations (`RCNUM` 8/16/64, `RC_LOWSPLIT`, `RC_LOWBYTES` 5/6/8,
+`RC_RANGE64`, both output paths) through the full `t.sh` corpus — 768 checks, every device
+encode byte-identical to `-C`. The OpenCL and no-backend builds still pass beside it.
+
+Same-session pinned A/B on 30 MB of text:
+
+| encoder | MB/s | kernel µs/block |
+|---|---|---|
+| host coder (`-C`) | 18.0 | — |
+| OpenCL backend, all cores | 85.7 | 581 |
+| OpenCL backend, 2 cores | 90.9 | — |
+| **ISPC backend, worker thread, 2 cores** | **88.9–91.7** | **483–519** |
+| ISPC backend, all cores | 92.7 | — |
+| ISPC backend, synchronous, 1 core | 40.7 | 878 |
+| ISPC backend, worker thread, 1 core | 44.2 | — |
+
+Equal to OpenCL within this box's noise, with a kernel ~15% faster per block and the
+startup JIT — measured at **2.81 s** here, the entire reason `-k` existed — gone, along
+with the ICD loader, the binary cache, both command queues and the asynchronous-failure
+machinery. Two codegen notes: the ispc kernel has **zero gathers** — inside `foreach` the
+`pbit[k]` read is provably unit-stride, which replaces the Intel sub-group block-read
+extension outright — and 38 branches against the OpenCL build's 46. And on this backend
+`RC_LOWSPLIT=1` wins (~5%, 468 vs 549 µs/block): the 64-bit low accumulator costs two zmm
+per varying value, so `build.sh` defaults the *kernel* to the split form — stream-neutral,
+so the host keeps its own preference and the output does not move.
+
+The decoder in this build is the scalar one, per §7, and the whole codec now round-trips
+with no OpenCL anywhere in the process.
+
 ## 10. Measurement notes
 
 Same box, compilers and discipline as `rc_decoder_opencl_plan_v1.md` §10 — 4-vCPU 2.8 GHz

@@ -21,6 +21,49 @@ if [ rc_kernel.c -nt rc_kernel.inc ]; then
   fi
 fi
 
+# Backend pick: ISPC when an ispc compiler is around (ISPC=path overrides
+# where to find it, ISPC=0 refuses it), OpenCL otherwise as before. The two
+# serve the same CL_* API, so exactly one is built -- see rc_config.inc.
+if [ -z "$ISPC" ]; then
+  if command -v ispc >/dev/null 2>&1; then ISPC=ispc; else ISPC=0; fi
+fi
+
+if [ "$ISPC" != 0 ]; then
+  # The kernel constants are compile-time on both sides. The OpenCL path
+  # passes them to the JIT at run time; here the same set goes to ispc now,
+  # so the RC_* overrides on our command line have to be mapped to the
+  # kernel's own names, with the rc_config.inc defaults for the rest.
+  # K_LS starts at 1, not the host's 0: the split low is stream-neutral and
+  # the ispc kernel measures ~5% faster with it (the 64-bit accumulator costs
+  # two zmm per varying). An explicit -DRC_LOWSPLIT still sets both sides.
+  K_RCNUM=16 K_BLK=65536 K_LB=8 K_CB=4 K_LS=1 K_RT=0 K_R64=0 K_WO=-1
+  for a in "$@"; do case "$a" in
+    -DRC_RCNUM=*)       K_RCNUM=${a#*=};;
+    -DRC_BLKSIZE=*)     K_BLK=${a#*=};;
+    -DRC_LOWBYTES=*)    K_LB=${a#*=};;
+    -DRC_CODBYTES=*)    K_CB=${a#*=};;
+    -DRC_LOWSPLIT=*)    K_LS=${a#*=};;
+    -DRC_RENORM_TAIL=*) K_RT=${a#*=};;
+    -DRC_RANGE64=*)     K_R64=${a#*=};;
+    -DRC_CL_WORDOUT=*)  K_WO=${a#*=};;
+  esac; done
+  # -1 = auto; for ispc the word path is the one that vectorises
+  [ "$K_WO" = "-1" ] && K_WO=1
+
+  # two targets and a dispatcher, so one binary runs on AVX2 and AVX-512 alike
+  rm -f rc_kernel_ispc*.o
+  "$ISPC" --target=avx512skx-x16,avx2-i32x16 --arch=x86-64 -O2 --pic \
+    -DRC_ISPC=1 -DRCNUM=$K_RCNUM -DSCALElog=15 -DhSCALE=16384 \
+    -DLOWBYTES=$K_LB -DCODBYTES=$K_CB -DRC_LOWSPLIT=$K_LS -DBLKFULL=$K_BLK \
+    -DRC_CL_WORDOUT=$K_WO -DRC_CL_BLOCKREAD=0 \
+    -DRC_RANGE64=$K_R64 -DRC_RENORM_TAIL=$K_RT \
+    rc_kernel.cl -o rc_kernel_ispc.o -h rc_kernel_ispc.h
+
+  CLDEF="-DRC_OPENCL=0 -DRC_ISPC=1"
+  CLLIB="rc_kernel_ispc*.o -pthread"
+  OPENCL=ispc
+else
+
 if [ -z "$OPENCL" ]; then
   if [ -e /usr/include/CL/cl.h ]; then OPENCL=1; else OPENCL=0; fi
 fi
@@ -37,8 +80,10 @@ else
   CLDEF="-DRC_OPENCL=0"; CLLIB=""
 fi
 
+fi
+
 $CXX -std=gnu++11 -O3 $INCS $OPTS $CLDEF "-D__DIRNAM__=$DIRNAM" "$@" \
-     coder.cpp FSM.cpp rc_cl.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp \
+     coder.cpp FSM.cpp rc_cl.cpp rc_ispc.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp \
      $CLLIB -o coder
 
-echo "built ./coder (opencl=$OPENCL)"
+echo "built ./coder (backend=$OPENCL)"

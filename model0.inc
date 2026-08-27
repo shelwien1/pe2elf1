@@ -6,7 +6,7 @@ struct Model<0> : Coroutine, Predictor {
   // Slots the encoder can have coding at once. Only the device path uses more
   // than one -- the host coder is synchronous, so a second slot would be a
   // couple of megabytes it never looks at.
-  static const uint NSLOT = RC_OPENCL ? RC_CL_NBLK : 1;
+  static const uint NSLOT = RC_DEVICE ? RC_CL_NBLK : 1;
 
   typedef RCio<BLKSIZE,RCNUM,NSLOT> t_RCio;
 
@@ -133,7 +133,7 @@ struct Model<0> : Coroutine, Predictor {
   void drain_one( void ) {
     uint s = head;
 
-#if RC_OPENCL && !RC_FORCE_CARRY
+#if RC_DEVICE && !RC_FORCE_CARRY
     if( CL_Collect( s, rcio.rows(s), t_RCio::rowsize ) ) {
       uint ncarry = 0, novf = 0;
       for( uint i=0; i<RCNUM; i++ ) {
@@ -182,7 +182,7 @@ struct Model<0> : Coroutine, Predictor {
 
       uint queued = 0;
 
-#if RC_OPENCL && !RC_FORCE_CARRY
+#if RC_DEVICE && !RC_FORCE_CARRY
       // Device path: the carryless coding pass, RCNUM lanes as RCNUM
       // work-items, writing straight into the substream rows rc_Write reads.
       // Submitting does not block, so the next block's model pass runs while

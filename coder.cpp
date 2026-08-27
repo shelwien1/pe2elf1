@@ -85,7 +85,11 @@ static void usage( void ) {
           "  -V        report the device and what its kernel cost\n"
           "  -k [file] cache the built kernel binary and reuse it next run\n"
           "            (default coder_kernel.bin, rebuilt when anything it\n"
-          "             was built from changes)\n" );
+          "             was built from changes)\n"
+          "\n"
+          "  an ISPC-backend build (see build.sh) has no devices to pick or\n"
+          "  kernel to cache: -d, -p, -T and -k are accepted and ignored,\n"
+          "  -l describes the compiled-in kernel, -C and -V work as above\n" );
 }
 
 // Pull the options out of argv, leaving the positional arguments compacted at
