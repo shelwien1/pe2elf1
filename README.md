@@ -400,12 +400,18 @@ width — its own header bits, its own `k += RCNUM` loop, its own fully unrolled
 minimal flush, its own `outlen`/`outcarry` stores. At a work-group of 16 it is
 dead code and only the two dispatch tests execute, once per launch.
 
-The 31 are the same disease as the byte scatter, on the load side. A
-work-group can be launched partly filled, so the runtime's vectorised kernel
-always carries a lane mask, and the load is therefore masked — and a masked
-16-bit load has no instruction behind it, because AVX-512 has no 16-bit gather
-any more than it has a byte scatter. So it becomes sixteen of extract the
-address, `vpbroadcastw`, `vpblendd`, test the lane's mask bit, branch.
+The 31 are the same disease as the byte scatter, on the load side — and the
+reason is blunter than it first looks.
+
+**Intel's vectoriser gives every per-work-item indexed access a gather or a
+scatter, with no contiguity analysis at all.** `outlen[id]`, where the index
+*is* the work-item id and the mask is all ones (`kxnorb k2,k0,k0`), compiles to
+`vpscatterqd`. So `pbit[k]` is a gather whatever `k` looks like. AVX-512 has
+gathers for 32- and 64-bit elements and none for 16-bit, so with `ushort` there
+is no instruction to emit and the compiler unrolls it into sixteen of extract
+the address, `vpbroadcastw`, `vpblendd`, test the lane's mask bit, branch.
+
+That is why everything aimed at the *mask* misses.
 
 They can be removed, and none of the three ways is worth it. Widening `pbit` to
 32 bits takes the kernel to 17 branches and 5 extracts — but the array is then 2 MB a block
@@ -421,12 +427,24 @@ At RCNUM=16 the kernel is not yet bandwidth-bound and the branches dominate;
 at RCNUM=64 it is, and they do not. The fast geometry is the one worth keeping,
 so `pbit` stays 16-bit and the branches stay.
 
-The other two ways are worse outright. Splitting the loop to make the trip count
-uniform: the mask is on the work-item, not on `k`, so it survives, and the
-second loop is another copy of the coder — 81 branches. Loading unconditionally
-past the end, with slack in the buffer, and putting only `rc_process` under the
-mask: the compiler predicates the whole coder, 1398 instructions against 898,
-nine of the per-lane loads survive anyway, and it measures no faster.
+Three tries at the mask, all bigger and none of them removing the gather:
+
+| | branches | instructions |
+| --- | --- | --- |
+| as shipped | 46 | 898 |
+| loop split so the trip count is uniform | 81 | 1240 |
+| unconditional load past the end, work masked | 53 | 1398 |
+| bit count passed pre-divided, `ngroups*RCNUM` | 62 | 1594 |
+
+The last is the tidiest version of the idea — hand the kernel the bit count
+already divided, so "multiple of RCNUM" is syntactically visible and the hot
+loop is a plain count — and it makes no difference either, for the reason
+above: the index is per-lane, so it gathers.
+
+The one remaining option is a different lane mapping: each work-item reading a
+contiguous run rather than every RCNUM'th bit, so the load could be a
+`vload16`. That changes which bit lands in which substream — a format change,
+and a departure from `sh_v1xN.inc`'s interleave. Not done.
 
 ### More lanes, now that lanes are cheap
 

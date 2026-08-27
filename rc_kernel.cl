@@ -431,30 +431,38 @@ __kernel void rc_encode(
     for( uint32_t j=id; j<16; j+=RCNUM )
       rc_process( hSCALE, (blksize>>(15-j))&1 );
 
-  /*  30 of this kernel's 46 branches are this one load. */
+  /*  30 of this kernel's 46 branches are this one load, and none of the obvious */
+  /*  ways round it works, because the reason is not the obvious one. */
   /*  */
-  /*  A work-group can be launched partly filled, so the runtime's vectorised */
-  /*  kernel always carries a lane mask, and this load is therefore masked. A */
-  /*  masked 16-bit load has no instruction behind it: AVX-512 has no 16-bit */
-  /*  gather, the same way it has no byte scatter. So the compiler scalarises */
-  /*  it into sixteen of extract the address, vpbroadcastw, vpblendd, test the */
-  /*  lane's mask bit, branch -- every iteration, on the hot path. */
+  /*  Intel's vectoriser gives every per-work-item indexed access a gather or a */
+  /*  scatter. It does no contiguity analysis at all: outlen[id] below, where the */
+  /*  index *is* the work-item id and the mask is all ones, compiles to */
+  /*  vpscatterqd. So pbit[k] is a gather no matter what k looks like. */
   /*  */
-  /*  Widening pbit to 32 bits removes them: 46 branches to 17, 26 extracts to */
-  /*  5. It is not worth it. The array is then 2 MB a block instead of 1 MB, */
-  /*  both over the bus and through the kernel's own reads, and at the geometry */
-  /*  that matters -- RCNUM=64, work-group 16, where the kernel is already */
-  /*  bandwidth-bound -- that costs more than the branches do: 123.8 MB/s down */
-  /*  to 100.3, kernel 417us up to 510us. At RCNUM=16 it is the other way round, */
-  /*  +12%, because there the kernel is not yet bandwidth-bound. Measured both. */
+  /*  AVX-512 has gathers for 32- and 64-bit elements and none for 16-bit, the */
+  /*  same way it has no byte scatter. pbit is ushort, so there is no instruction */
+  /*  to emit and the compiler unrolls it into sixteen of extract the address, */
+  /*  vpbroadcastw, vpblendd, test the lane's mask bit, branch. */
   /*  */
-  /*  Two other ways round it, both measured and both worse. Splitting the loop */
-  /*  so the trip count is uniform: the mask is on the work-item, not on k, so it */
-  /*  survives, and the second loop is another copy of the coder -- 81 branches. */
-  /*  Loading unconditionally past the end (with slack in the buffer) and putting */
-  /*  only rc_process under the mask: the compiler then predicates the whole */
-  /*  coder, 1398 instructions against 898, and nine of the per-lane loads */
-  /*  survive anyway. No faster. */
+  /*  Which means anything aimed at the *mask* is aimed at the wrong thing, and */
+  /*  three tries confirm it: */
+  /*  */
+  /*    - loop split so the trip count is uniform        46 branches -> 81 */
+  /*    - unconditional load past the end, work masked   46 -> 53, 1398 insns */
+  /*    - bit count passed pre-divided as ngroups*RCNUM  46 -> 62, 1594 insns */
+  /*  */
+  /*  all still gather, all bigger. Widening pbit to 32 bits is the only thing */
+  /*  that works -- it becomes one vpgatherdd, 46 branches -> 17 -- and it is not */
+  /*  worth it: the array doubles to 2 MB a block, over the bus and through the */
+  /*  kernel's own reads, and at RCNUM=64 with a work-group of 16, where the */
+  /*  kernel is already bandwidth-bound, that costs more than the branches do: */
+  /*  112.0 MB/s down to 100.3, kernel 417us up to 510us. At RCNUM=16 it is the */
+  /*  other way round, +12%. Measured all of it. */
+  /*  */
+  /*  The one remaining option is a different lane mapping -- each work-item */
+  /*  reading a contiguous run rather than every RCNUM'th bit, so the load could */
+  /*  be a vload16. That changes which bit lands in which substream, so it is a */
+  /*  format change and a departure from sh_v1xN.inc's interleave. Not done. */
   for( uint32_t k=id; k<nbits; k+=RCNUM ) {
     uint32_t b = pbit[k];
     rc_process( b&0x7FFF, b>>15 );
