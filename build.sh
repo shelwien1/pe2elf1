@@ -15,6 +15,13 @@ if [ -z "$OPENCL" ]; then
 fi
 if [ "$OPENCL" = 1 ]; then
   CLDEF="-DRC_OPENCL=1"; CLLIB="-lOpenCL"
+  # -DRC_CL_DYNAMIC=1 asks for the Windows arrangement: open the ICD loader by
+  # hand rather than link it. That is the point of the flag here -- it is the
+  # only way to compile and run that path on Linux, where it is otherwise
+  # skipped entirely.
+  for a in "$@"; do
+    case "$a" in -DRC_CL_DYNAMIC=1) CLLIB="-ldl";; esac
+  done
 else
   CLDEF="-DRC_OPENCL=0"; CLLIB=""
 fi

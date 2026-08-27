@@ -36,16 +36,44 @@ CLOpts g_clopt = {1, -1, -1, 0, 0};
 // executable that imports OpenCL.dll statically will not start at all on a
 // machine that has no OpenCL installed -- which would put -C out of reach
 // exactly where it is needed. So there the loader is opened by hand, and not
-// finding it is one more reason to run on the host. Everywhere else these are
-// the real symbols. (This is mrpc_cl.inc's arrangement, and untested here.)
+// finding it is one more reason to run on the host. (This is mrpc_cl.inc's
+// arrangement.)
+//
+// Elsewhere the real symbols are linked and this whole block is skipped -- so
+// nothing here gets compiled by the build most of the testing runs on, and a
+// name added to one of the two lists below but not the other builds fine and
+// then fails on Windows only. It has done exactly that. RC_CL_DYNAMIC=1 forces
+// the same path onto Linux, over dlopen, so `./build.sh -DRC_CL_DYNAMIC=1`
+// compiles and runs it; t.sh does that build.
 // -------------------------------------------------------------
-#if defined(_WIN32)||defined(_MSC_VER)
+#ifndef RC_CL_DYNAMIC
+ #if defined(_WIN32)||defined(_MSC_VER)
+  #define RC_CL_DYNAMIC 1
+ #else
+  #define RC_CL_DYNAMIC 0
+ #endif
+#endif
 
+#if RC_CL_DYNAMIC
+
+#if defined(_WIN32)||defined(_MSC_VER)
 extern "C" {
 typedef int(__stdcall* CL_PROC)();
 __declspec(dllimport) void* __stdcall LoadLibraryA(const char*);
 __declspec(dllimport) CL_PROC __stdcall GetProcAddress(void*, const char*);
 }
+#define CL_DLOPEN()   LoadLibraryA("OpenCL.dll")
+#define CL_DLSYM(h,n) GetProcAddress(h,n)
+#else
+#include <dlfcn.h>
+static void* CL_dlopen( void ) {
+  void* h = dlopen( "libOpenCL.so.1", RTLD_LAZY );
+  if( !h ) h = dlopen( "libOpenCL.so", RTLD_LAZY );
+  return h;
+}
+#define CL_DLOPEN()   CL_dlopen()
+#define CL_DLSYM(h,n) dlsym(h,n)
+#endif
 
 #define CL_EACH(F)                                                          \
         F(clGetPlatformIDs) F(clGetPlatformInfo) F(clGetDeviceIDs)          \
@@ -53,8 +81,10 @@ __declspec(dllimport) CL_PROC __stdcall GetProcAddress(void*, const char*);
         F(clBuildProgram) F(clGetProgramBuildInfo) F(clCreateKernel)        \
         F(clGetKernelWorkGroupInfo) F(clCreateBuffer) F(clSetKernelArg)     \
         F(clEnqueueNDRangeKernel) F(clEnqueueReadBuffer)                    \
-        F(clEnqueueWriteBuffer) F(clWaitForEvents) F(clFinish)              \
-        F(clGetEventProfilingInfo) F(clReleaseEvent) F(clReleaseProgram)    \
+        F(clEnqueueWriteBuffer) F(clWaitForEvents) F(clFinish) F(clFlush)  \
+        F(clEnqueueMapBuffer) F(clEnqueueUnmapMemObject)                    \
+        F(clGetEventProfilingInfo) F(clGetEventInfo)                        \
+        F(clReleaseEvent) F(clReleaseProgram)                               \
         F(clReleaseKernel) F(clReleaseMemObject) F(clReleaseCommandQueue)   \
         F(clReleaseContext)
 #define CL_EACH_OPT(F) F(clCreateCommandQueueWithProperties) F(clCreateCommandQueue)
@@ -70,13 +100,13 @@ CL_EACH_OPT(CL_PTR)
 
 static int CLLoadICD( void ) {
   if( pfn_clGetPlatformIDs ) return 1;
-  void* h = LoadLibraryA("OpenCL.dll");
+  void* h = CL_DLOPEN();
   if( !h ) return 0;
   int ok = 1;
-#define CL_GET(n) pfn_##n = (t_##n)GetProcAddress(h,#n); if( !pfn_##n ) ok = 0;
+#define CL_GET(n) pfn_##n = (t_##n)CL_DLSYM(h,#n); if( !pfn_##n ) ok = 0;
   CL_EACH(CL_GET)
 #undef CL_GET
-#define CL_GETOPT(n) pfn_##n = (t_##n)GetProcAddress(h,#n);
+#define CL_GETOPT(n) pfn_##n = (t_##n)CL_DLSYM(h,#n);
   CL_EACH_OPT(CL_GETOPT)
 #undef CL_GETOPT
   if( !pfn_clCreateCommandQueueWithProperties && !pfn_clCreateCommandQueue ) ok = 0;
@@ -101,6 +131,7 @@ static int CLLoadICD( void ) {
 #define clEnqueueWriteBuffer      pfn_clEnqueueWriteBuffer
 #define clWaitForEvents           pfn_clWaitForEvents
 #define clFinish                  pfn_clFinish
+#define clFlush                   pfn_clFlush
 #define clEnqueueMapBuffer        pfn_clEnqueueMapBuffer
 #define clEnqueueUnmapMemObject   pfn_clEnqueueUnmapMemObject
 #define clGetEventProfilingInfo   pfn_clGetEventProfilingInfo
@@ -109,6 +140,8 @@ static int CLLoadICD( void ) {
 #define clReleaseProgram          pfn_clReleaseProgram
 #define clReleaseKernel           pfn_clReleaseKernel
 #define clReleaseMemObject        pfn_clReleaseMemObject
+#define clCreateCommandQueueWithProperties pfn_clCreateCommandQueueWithProperties
+#define clCreateCommandQueue      pfn_clCreateCommandQueue
 #define clReleaseCommandQueue     pfn_clReleaseCommandQueue
 #define clReleaseContext          pfn_clReleaseContext
 
@@ -130,7 +163,7 @@ static double tnow( void ) {
 // for is the only property either takes.
 static cl_command_queue CLMakeQueue( cl_context ctx, cl_device_id d, int prof, cl_int* e ) {
   const cl_queue_properties qp[] = { CL_QUEUE_PROPERTIES, CL_QUEUE_PROFILING_ENABLE, 0 };
-#if defined(_WIN32)||defined(_MSC_VER)
+#if RC_CL_DYNAMIC
   if( !pfn_clCreateCommandQueueWithProperties )
     return pfn_clCreateCommandQueue( ctx, d, prof ? CL_QUEUE_PROFILING_ENABLE : 0, e );
 #endif

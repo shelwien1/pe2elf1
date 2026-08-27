@@ -210,6 +210,27 @@ each lane's substream back separately is RCNUM enqueues per block of a few
 kilobytes each — all overhead — so `Collect` maps the slot's buffer once and
 copies out of it instead.
 
+### Opening the loader by hand
+
+Windows has no import library to link the ICD loader against, and an executable
+that imports `OpenCL.dll` statically will not start at all on a machine without
+OpenCL — which would put `-C` out of reach exactly where it is needed. So there
+the loader is opened by hand: two X-macro lists name every `cl*` entry point,
+one generating the function pointers and one redirecting the calls onto them.
+
+Everywhere else the real symbols are linked and that whole block is skipped —
+so it is not compiled by the build the testing runs on, and a name added to one
+list but not the other builds clean here and fails on Windows only. It has done
+exactly that, twice over: `clFlush`, `clGetEventInfo`, `clEnqueueMapBuffer` and
+`clEnqueueUnmapMemObject` all went in with the pipeline and none reached the
+lists.
+
+`RC_CL_DYNAMIC=1` forces the same arrangement onto Linux over `dlopen`, so
+`./build.sh -DRC_CL_DYNAMIC=1` compiles it, links it — a missing redirect is an
+undefined reference — and runs it against a real device. Keeping that
+configuration in the `t.sh` sweep is what makes the lists checkable without a
+Windows box.
+
 ### What is left on the table
 
 * **The scattered writes.** Interleaving the lanes' output and de-interleaving
@@ -273,6 +294,7 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_STRICT_BLKSIZE` | 0 | reject an unsafe `BLKSIZE`/`RCNUM` pair at compile time |
 | `RC_OPENCL` | auto | 1 = build the device path (`build.sh` sets it when `CL/cl.h` is there) |
 | `RC_CL_LWS` | 0 | work-group size; 0 = one group per compute unit |
+| `RC_CL_DYNAMIC` | 1 on Windows | open the ICD loader at run time instead of linking it |
 | `RC_FF_TRIM` | 32 | most bytes the flush may leave for the decoder's 0xFF padding |
 | `RC_FF_PADSIZE` | derived | that padding — must cover the trim plus `RC_LOWBYTES` |
 | `CORO_FAKE` | 0 | 1 = straight-through instead of the setjmp coroutine |
@@ -378,15 +400,20 @@ The host coder is scalar now, so the `target("avx2,…")` attributes on
 ## Testing
 
 ```
-./t.sh "" "-DRC_RCNUM=8" "-DRC_LOWBYTES=5" "-DRC_FORCE_CARRY=1"
+./t.sh "" "-DRC_RCNUM=8" "-DRC_LOWBYTES=5" "-DRC_FORCE_CARRY=1" "-DRC_CL_DYNAMIC=1"
 ```
 
 Each config is built and round-trips a set of files — empty, 1 byte, exactly
-`BLKSIZE`, `BLKSIZE+1`, `2*BLKSIZE`, all-`0xFF`, all-zero, 300KB random, `book1`
-— against both FSM tables, comparing byte for byte. Where there is a device, it
-also encodes each file on it and checks that output against the host encode
-byte for byte, and fails if the device quietly fell back — which is the failure
-mode a size comparison would hide.
+`BLKSIZE`, `BLKSIZE+1`, `2*BLKSIZE`, all-`0xFF`, all-zero, 300KB random,
+`ff0`/`ff7`/`ffmix` for the flush's trailing `0xFF` run, `book1` — against both
+FSM tables, comparing byte for byte. Where there is a device, it also encodes
+each file on it and checks that output against the host encode byte for byte,
+and fails if the device quietly fell back — which is the failure mode a size
+comparison would hide.
+
+Worth keeping `-DRC_CL_DYNAMIC=1` in the sweep: it is the only configuration
+that compiles the hand-rolled ICD loader outside Windows, and a missing entry
+in its lists is invisible everywhere else.
 
 ## Usage
 
