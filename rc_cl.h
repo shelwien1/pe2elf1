@@ -18,6 +18,7 @@ struct CLOpts {
   int dev;      // -d, -1 = pick one
   int type;     // -T: 0 any (prefer GPU), 1 cpu, 2 gpu, 3 accelerator
   int verbose;  // -V
+  const char* kcache; // -k: cache the built binary here, 0 = do not
 };
 
 extern CLOpts g_clopt;

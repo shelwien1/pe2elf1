@@ -21,7 +21,7 @@
 #include "rc_config.inc"
 #include "rc_cl.h"
 
-CLOpts g_clopt = {1, -1, -1, 0, 0};
+CLOpts g_clopt = {1, -1, -1, 0, 0, 0};
 
 #if RC_OPENCL
 
@@ -79,6 +79,7 @@ static void* CL_dlopen( void ) {
         F(clGetPlatformIDs) F(clGetPlatformInfo) F(clGetDeviceIDs)          \
         F(clGetDeviceInfo) F(clCreateContext) F(clCreateProgramWithSource)  \
         F(clBuildProgram) F(clGetProgramBuildInfo) F(clCreateKernel)        \
+        F(clCreateProgramWithBinary) F(clGetProgramInfo)                    \
         F(clGetKernelWorkGroupInfo) F(clCreateBuffer) F(clSetKernelArg)     \
         F(clEnqueueNDRangeKernel) F(clEnqueueReadBuffer)                    \
         F(clEnqueueWriteBuffer) F(clWaitForEvents) F(clFinish) F(clFlush)  \
@@ -120,6 +121,8 @@ static int CLLoadICD( void ) {
 #define clGetDeviceInfo           pfn_clGetDeviceInfo
 #define clCreateContext           pfn_clCreateContext
 #define clCreateProgramWithSource pfn_clCreateProgramWithSource
+#define clCreateProgramWithBinary pfn_clCreateProgramWithBinary
+#define clGetProgramInfo          pfn_clGetProgramInfo
 #define clBuildProgram            pfn_clBuildProgram
 #define clGetProgramBuildInfo     pfn_clGetProgramBuildInfo
 #define clCreateKernel            pfn_clCreateKernel
@@ -317,6 +320,7 @@ struct RcCL {
   long   nready;   // collects that found the block already coded -- how much
                    // of the device time the pipeline actually hid
   double buildsec;
+  int    cached;   // the build came out of -k's file
 
   int Fail( const char* what, cl_int e ) {
     fprintf( stderr, "\ncoder: opencl: %s: %s\n", what, CLErrStr(e) );
@@ -386,6 +390,114 @@ struct RcCL {
               CLInfoStr(device,CL_DEVICE_NAME,d,sizeof(d)), p );
   }
 
+  // -k: cache the built program binary next to nothing in particular and reuse
+  // it. Building the kernel costs a fifth of a second here and rather more on
+  // some runtimes, every run, for a program that only changes when the source
+  // or the geometry does.
+  //
+  // Which is the whole difficulty: a stale binary does not fail, it silently
+  // codes with the wrong geometry. So the file records everything the binary
+  // was built from -- the device and driver it was built for, the -D options,
+  // and the length and hash of the kernel source -- and any mismatch rebuilds.
+  // The binary is hashed too, and that is not belt and braces: a driver will
+  // happily accept a binary with bytes flipped in the middle of it and code
+  // with the result. Tested -- it built without complaint and produced the
+  // wrong stream. Nothing here is a security boundary, only a check that the
+  // file is the one that was written.
+
+  static const char* Magic( void ) { return "RCCLKRN2"; }   // 8 bytes, no NUL
+
+  static uint Hash( const void* p, size_t n ) {     // FNV-1a
+    const byte* b = (const byte*)p;
+    uint h = 2166136261u;
+    for( size_t i=0; i<n; i++ ) { h ^= b[i]; h *= 16777619u; }
+    return h;
+  }
+
+  // name+vendor+driver+version, which is what a binary is actually tied to
+  void CacheKey( char* d, size_t n ) {
+    char a[256]="", b[256]="", c[256]="", v[256]="";
+    clGetDeviceInfo( device, CL_DEVICE_NAME,    sizeof(a), a, 0 );
+    clGetDeviceInfo( device, CL_DEVICE_VENDOR,  sizeof(b), b, 0 );
+    clGetDeviceInfo( device, CL_DRIVER_VERSION, sizeof(c), c, 0 );
+    clGetDeviceInfo( device, CL_DEVICE_VERSION, sizeof(v), v, 0 );
+    snprintf( d, n, "%s|%s|%s|%s", a, b, c, v );
+  }
+
+  static int RdU32( FILE* f, uint& x ) { return fread( &x, 1, 4, f )==4; }
+  static int RdStr( FILE* f, char* d, size_t n ) {
+    uint l; if( !RdU32(f,l) || l>=n ) return 0;
+    if( fread( d, 1, l, f )!=l ) return 0;
+    d[l] = 0; return 1;
+  }
+
+  // Returns 1 with prog built from the cached binary, 0 to build from source.
+  int LoadCached( const char* opts, size_t srclen ) {
+    FILE* f = fopen( g_clopt.kcache, "rb" );
+    if( !f ) return 0;
+
+    char m[8]; char dev[1024]; char opt[1024];
+    uint slen = 0, shash = 0, bhash = 0, blen = 0;
+    char key[1024]; CacheKey( key, sizeof(key) );
+
+    int ok = fread( m, 1, 8, f )==8 && memcmp( m, Magic(), 8 )==0
+          && RdStr( f, dev, sizeof(dev) ) && strcmp( dev, key )==0
+          && RdStr( f, opt, sizeof(opt) ) && strcmp( opt, opts )==0
+          && RdU32( f, slen ) && slen==uint(srclen)
+          && RdU32( f, shash ) && shash==Hash( RC_CL_SRC, srclen )
+          && RdU32( f, bhash ) && RdU32( f, blen ) && blen>0;
+
+    byte* bin = 0;
+    if( ok ) {
+      bin = new byte[blen];
+      ok = fread( bin, 1, blen, f )==blen && Hash( bin, blen )==bhash;
+    }
+    fclose( f );
+    if( !ok ) { delete[] bin; return 0; }
+
+    cl_int e = CL_SUCCESS, bst = CL_SUCCESS;
+    size_t bl = blen;
+    const unsigned char* bp = bin;
+    prog = clCreateProgramWithBinary( ctx, 1, &device, &bl, &bp, &bst, &e );
+    delete[] bin;
+    if( e!=CL_SUCCESS || bst!=CL_SUCCESS ) { prog = 0; return 0; }
+
+    // still required, and cheap: this is where the binary is accepted
+    if( clBuildProgram( prog, 1, &device, opts, 0, 0 )!=CL_SUCCESS ) {
+      clReleaseProgram( prog ); prog = 0; return 0;
+    }
+    return 1;
+  }
+
+  void SaveCached( const char* opts, size_t srclen ) {
+    size_t blen = 0;
+    if( clGetProgramInfo( prog, CL_PROGRAM_BINARY_SIZES, sizeof(blen), &blen, 0 )!=CL_SUCCESS
+        || blen==0 ) return;
+
+    byte* bin = new byte[blen];
+    unsigned char* bp = bin;
+    if( clGetProgramInfo( prog, CL_PROGRAM_BINARIES, sizeof(bp), &bp, 0 )!=CL_SUCCESS ) {
+      delete[] bin; return;
+    }
+
+    FILE* f = fopen( g_clopt.kcache, "wb" );
+    if( !f ) { delete[] bin; return; }
+
+    char key[1024]; CacheKey( key, sizeof(key) );
+    uint kl = uint(strlen(key)), ol = uint(strlen(opts));
+    uint sl = uint(srclen), sh = Hash( RC_CL_SRC, srclen ), bl = uint(blen);
+    uint bh = Hash( bin, blen );
+    fwrite( Magic(), 1, 8, f );
+    fwrite( &kl, 1, 4, f ); fwrite( key,  1, kl, f );
+    fwrite( &ol, 1, 4, f ); fwrite( opts, 1, ol, f );
+    fwrite( &sl, 1, 4, f );
+    fwrite( &sh, 1, 4, f );
+    fwrite( &bh, 1, 4, f );
+    fwrite( &bl, 1, 4, f ); fwrite( bin, 1, bl, f );
+    fclose( f );
+    delete[] bin;
+  }
+
   int Program( void ) {
     // Everything the kernel needs is a compile-time constant on this side
     // too, so there is nothing to pass per launch except the block itself.
@@ -403,6 +515,11 @@ struct RcCL {
 
     cl_int e = CL_SUCCESS;
     double t0 = tnow();
+    const size_t srclen = sizeof(RC_CL_SRC)-1;
+
+    cached = g_clopt.kcache ? LoadCached( opts, srclen ) : 0;
+    if( cached ) { buildsec = tnow()-t0; return Kernels(); }
+
     const char* src = RC_CL_SRC;   // an array now, not a pointer -- see rc_kernel.cl
     prog = clCreateProgramWithSource( ctx, 1, &src, 0, &e );
     if( e!=CL_SUCCESS ) return Fail( "clCreateProgramWithSource", e );
@@ -422,6 +539,13 @@ struct RcCL {
     }
     if( e!=CL_SUCCESS ) return Fail( "clBuildProgram", e );
 
+    if( g_clopt.kcache ) SaveCached( opts, srclen );
+
+    return Kernels();
+  }
+
+  int Kernels( void ) {
+    cl_int e = CL_SUCCESS;
     for( uint i=0; i<RC_CL_NBLK; i++ ) {
       k_enc[i] = clCreateKernel( prog, "rc_encode", &e );
       if( e!=CL_SUCCESS ) return Fail( "rc_encode", e );
@@ -506,9 +630,9 @@ struct RcCL {
       char wg[32];
       if( lws ) snprintf( wg, sizeof(wg), "%d", int(lws) );
       else      snprintf( wg, sizeof(wg), "runtime's choice" );
-      fprintf( stderr, "coder: opencl: kernel built in %.2fs, %d lanes per launch, "
+      fprintf( stderr, "coder: opencl: kernel %s in %.2fs, %d lanes per launch, "
                        "work-group %s, %d block%s in flight\n",
-               buildsec, int(RCNUM), wg,
+               cached ? "loaded" : "built", buildsec, int(RCNUM), wg,
                int(RC_CL_NBLK), RC_CL_NBLK==1?"":"s" );
     }
     return active;

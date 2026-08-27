@@ -46,7 +46,7 @@ carry-propagating fallback, and the compressed format.
 | `rc_vec.inc` | `RangecoderN` — the RCNUM-lane wrapper, based on `sh_v1xN.inc` |
 | `rc_config.inc` | block geometry and the rangecoder knobs |
 | `rc_cl.h`, `rc_cl.cpp` | device selection, buffers, launches — the whole OpenCL host side |
-| `rc_kernel0.cl` | the coding kernel, built at run time |
+| `rc_kernel.c` | the coding kernel, built at run time |
 | `rc_kernel.cl` | ... with its functions generated into macros |
 | `rc_kernel.inc` | ... wrapped up as C string literals |
 | `mk_kernel.sh` | runs those two passes — `rc_macro.pl`, `defines.pl`, `txt2inc.pl` |
@@ -122,7 +122,7 @@ The encoder's carryless coding pass, and nothing else.
 That pass was already the parallel one: bit *i* of a block goes to lane
 *i % RCNUM* and no lane reads another's state, which is what `sh_v1xN.inc`'s
 hand-written SIMD version was built on and what the perl macro pass existed to
-set up. `rc_kernel0.cl` is the same coder as one work-item per lane, and Intel's
+set up. `rc_kernel.c` is the same coder as one work-item per lane, and Intel's
 CPU runtime reports `Kernel "rc_encode" was successfully vectorized (16)` — the
 vector rangecoder, from scalar source.
 
@@ -254,17 +254,17 @@ text, and 55.3 to 75.5 on 10 MB of random.
 
 ### The kernel is OpenCL, and the macros are generated
 
-`rc_kernel0.cl` is the kernel, as ordinary OpenCL C that an editor can
+`rc_kernel.c` is the kernel, as ordinary OpenCL C that an editor can
 highlight. Three perl passes turn it into what `rc_cl.cpp` compiles:
 
 ```
-rc_kernel0.cl  --rc_macro.pl-->  each function becomes #define / #enddef
+rc_kernel.c  --rc_macro.pl-->  each function becomes #define / #enddef
                --defines.pl -->  ... a real multi-line macro
                --txt2inc.pl -->  ... C string literals: RC_CL_SRC
 ```
 
 `mk_kernel.sh` runs the chain; `build.sh` and the batch files run it when
-`rc_kernel0.cl` is newer, and warn instead if perl is missing. Both generated
+`rc_kernel.c` is newer, and warn instead if perl is missing. Both generated
 files are committed, so perl is only wanted by whoever edits the kernel.
 
 The macro pass is not decoration. The coder has to compile to plain private
@@ -302,6 +302,32 @@ OpenCL C has no `<stdint.h>` and does not need one: `char`, `short`, `int` and
 least". So `uint` already is `uint32_t`. The kernel typedefs the stdint
 spellings anyway and uses them, so it reads like the host code beside it.
 
+### `-k`, the kernel binary cache
+
+Building the kernel costs about 0.2 s here and over 2 s on a cold runtime,
+every run, for a program that only changes when its source or the geometry
+does. `-k` writes the built binary to `coder_kernel.bin` — `-k<file>` for
+somewhere else — and reuses it: 0.00 s instead.
+
+The difficulty is that a stale binary does not fail, it quietly codes with the
+wrong geometry. So the file records everything the binary was built from, and
+any mismatch rebuilds:
+
+* the device — name, vendor, driver version, OpenCL version, compared verbatim
+* the `-D` options, which carry RCNUM, the block size, the row stride,
+  `RC_LOWBYTES`, `RC_LOWSPLIT` and the rest
+* the length and a hash of the kernel source
+* a hash of the binary itself
+
+That last one is not belt and braces. Flipping 64 bytes in the middle of the
+stored binary, this driver accepted it without complaint and coded with the
+result — a wrong stream from a cache file that had been sitting on disk. With
+the hash it rebuilds instead. Truncated, empty and garbage files were already
+caught by the length and magic checks; corruption in place was not.
+
+`-k` takes its filename attached only (`-kFILE`, not `-k FILE`), because a bare
+`-k` must not swallow the input filename after it.
+
 ### Opening the loader by hand
 
 Windows has no import library to link the ICD loader against, and an executable
@@ -332,9 +358,6 @@ Windows box.
   buffer would be free on a CPU device, but the map that makes it correct is a
   blocking command on an in-order queue, which is the pipeline undone again —
   it wants a queue per slot.
-* **No kernel binary cache**, so the device compiler costs about 0.25 s per
-  run. The program is built before the timing loop, so it does not land in a
-  measurement, but it is still a quarter second.
 
 ### On a discrete GPU
 
@@ -560,6 +583,7 @@ coder [options] c|d input output FSM_file [n_iter] [test_output]
   -T <t>    pick by type instead: cpu, gpu, acc
   -C        do not use OpenCL at all -- the reference code path
   -V        report the device and what its kernel cost
+  -k [file] cache the built kernel binary and reuse it next run
 ```
 
 With no `-d` or `-T` the first GPU is used, or the first CPU device if there is

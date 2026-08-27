@@ -10,14 +10,14 @@ OPTS="-fomit-frame-pointer -fno-stack-protector -fno-stack-check -fno-rtti -fno-
 INCS="-DNDEBUG -I. -ILib3"
 DIRNAM=$(basename "$(pwd)")
 
-# rc_kernel.cl and rc_kernel.inc are generated from rc_kernel0.cl -- the kernel
+# rc_kernel.cl and rc_kernel.inc are generated from rc_kernel.c -- the kernel
 # is kept as OpenCL C so an editor can highlight it. Both generated files are
 # committed, so perl is only needed by whoever edits the kernel.
-if [ rc_kernel0.cl -nt rc_kernel.inc ]; then
+if [ rc_kernel.c -nt rc_kernel.inc ]; then
   if command -v perl >/dev/null 2>&1; then
     ./mk_kernel.sh
   else
-    echo "warning: rc_kernel0.cl is newer than rc_kernel.inc, and perl is missing" >&2
+    echo "warning: rc_kernel.c is newer than rc_kernel.inc, and perl is missing" >&2
   fi
 fi
 

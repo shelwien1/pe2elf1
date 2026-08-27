@@ -82,7 +82,10 @@ static void usage( void ) {
           "  -p <n>    only look at platform <n> (and number -d within it)\n"
           "  -T <t>    pick by type instead: cpu, gpu, acc\n"
           "  -C        do not use OpenCL at all -- the reference code path\n"
-          "  -V        report the device and what its kernel cost\n" );
+          "  -V        report the device and what its kernel cost\n"
+          "  -k [file] cache the built kernel binary and reuse it next run\n"
+          "            (default coder_kernel.bin, rebuilt when anything it\n"
+          "             was built from changes)\n" );
 }
 
 // Pull the options out of argv, leaving the positional arguments compacted at
@@ -94,7 +97,9 @@ static int parse_opts( int argc, char** argv ) {
     char* a = argv[i];
     if( a[0]!='-' || a[1]==0 ) { argv[n++] = a; continue; }
     char o = a[1];
-    // only -d, -p and -T take a value, attached or as the next argument
+    // only -d, -p and -T take a value, attached or as the next argument.
+    // -k takes an optional one, attached only: a bare -k must not swallow the
+    // next argument, which is the input file.
     const char* v = 0;
     if( o=='d' || o=='p' || o=='T' ) {
       v = a[2] ? a+2 : ((i+1<argc) ? argv[++i] : 0);
@@ -103,6 +108,7 @@ static int parse_opts( int argc, char** argv ) {
     switch( o ) {
       case 'C': g_clopt.use = 0; break;
       case 'V': g_clopt.verbose = 1; break;
+      case 'k': g_clopt.kcache = a[2] ? a+2 : "coder_kernel.bin"; break;
       case 'l': g_clopt.use = -1; break;              // handled in main
       case 'd': g_clopt.dev  = atoi(v); break;
       case 'p': g_clopt.plat = atoi(v); break;

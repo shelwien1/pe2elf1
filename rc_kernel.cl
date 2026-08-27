@@ -1,12 +1,14 @@
-/*   rc_kernel0.cl -- the OpenCL C side, as functions. */
+/*   rc_kernel.c -- the OpenCL C side, as functions. */
 /*  */
-/*   This is the source; rc_kernel.cl is generated from it and rc_kernel.inc */
-/*   from that. mk_kernel.sh runs the chain, build.sh runs mk_kernel.sh when */
-/*   this file is newer: */
+/*   Named .c rather than .cl because that is what it is to an editor: C, which */
+/*   is close enough to OpenCL C to highlight and index properly. It is the */
+/*   source; rc_kernel.cl and then rc_kernel.inc are generated from it. */
+/*   mk_kernel.sh runs the chain, build.sh runs mk_kernel.sh when this file is */
+/*   newer: */
 /*  */
-/*     rc_kernel0.cl  --rc_macro.pl-->  functions turned into #define/#enddef */
-/*                    --defines.pl -->  ... into real multi-line macros */
-/*                    --txt2inc.pl -->  ... into C string literals */
+/*     rc_kernel.c  --rc_macro.pl-->  functions turned into #define/#enddef */
+/*                  --defines.pl -->  ... into real multi-line macros */
+/*                  --txt2inc.pl -->  ... into C string literals */
 /*  */
 /*   The coder is macros for the same reason sh_v1xN_macro.inc's is: a lane's */
 /*   state has to be plain private scalars in the kernel, with no pointer to an */
