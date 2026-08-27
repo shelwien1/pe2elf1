@@ -112,7 +112,10 @@ struct RCio {
 
   // Row stride of tmpbuf. The OpenCL path writes its lanes into rows of
   // exactly this pitch, so the payload readback lands where rc_Write expects.
-  static const uint rowsize = RC_SKIP+tmpbufsize+FF_PADSIZE;
+  // Rounded up to 4 so a row start is dword-aligned: the kernel writes each
+  // lane's substream a dword at a time, because AVX-512 has no byte scatter --
+  // see RC_CL_WORDOUT in rc_kernel.c.
+  static const uint rowsize = ((RC_SKIP+tmpbufsize+FF_PADSIZE)+3) & ~3u;
 
   // NSLOT sets of substream rows. The decoder wants one; the encoder wants one
   // per block it can have in flight on the device, because a block's rows are

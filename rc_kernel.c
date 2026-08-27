@@ -48,6 +48,9 @@ typedef ulong  uint64_t;
 #define LOWBITS (LOWBYTES*8)
 #define SKIP    (LOWBYTES-CODBYTES)
 
+// the row in dwords, for RC_CL_WORDOUT's capacity test
+#define OUTWCAP ((SKIP+OUTCAP)/4)
+
 #define sTOP 0x01000000u
 #define gTOP 0x00010000u
 
@@ -185,14 +188,88 @@ void low_shl_word( uint32_t sh ) {
 //  The coder. Everything from here to the kernel becomes a macro.
 // ---------------------------------------------------------------------------
 
-// The row is laid out as the host's: SKIP bytes of zero prefix, then the
-// payload. The prefix is stored rather than tested for -- same as RC_IO::put --
-// and outlen reports the payload alone. Past the capacity the substream did not
-// fit, and nout keeps counting so the host can see by how much.
-void rc_put( uint32_t c ) {
-  if( nout < SKIP+OUTCAP ) o[nout] = (uint8_t)(c);
+// ---------------------------------------------------------------------------
+//  The output stage.
+//
+//  The row is laid out as the host's: SKIP bytes of zero prefix, then the
+//  payload. The prefix is stored rather than tested for -- same as RC_IO::put
+//  -- and outlen reports the payload alone. Past the capacity the substream
+//  did not fit, and nout keeps counting so the host can see by how much.
+//
+//  RC_CL_WORDOUT picks how a lane's bytes reach its row.
+//
+//  A byte store to a per-lane address does not vectorise, at all: there is no
+//  byte scatter in AVX-512, and no other SIMD ISA has one either. So when the
+//  runtime vectorises across work-items, each one becomes extract the address
+//  out of the vector, scalar store, test the lane's mask bit, branch -- once
+//  per lane, per byte. Disassembling the built kernel: 517 conditional
+//  branches and 347 vector extracts feeding 76 scalar byte stores, for a coder
+//  whose arithmetic is maybe forty instructions. It is why a wider work-group
+//  measures slower rather than faster.
+//
+//  vpscatterdd does exist. So the word path buffers each lane's bytes in a
+//  64-bit accumulator and lets a whole dword go at once, to a dword-aligned
+//  per-lane slot -- one masked instruction for every lane, no branch. What it
+//  costs is the accumulator, a byte count, and flushing the last few bytes at
+//  the end of the block.
+// ---------------------------------------------------------------------------
+
+// Append win (nsh bytes, low end first) to the lane's output.
+//
+// Everything here is 32-bit on purpose. A 64-bit value costs two zmm registers
+// at sixteen lanes, so the compiler splits every operation on it with
+// vextracti64x4 and widens whatever feeds it with vpmovzxdq -- and a 64-bit
+// *address* is worse still, because it turns the store into vpscatterqd,
+// scatter by 64-bit index, which cannot hold sixteen indices in one register
+// either. So the row is addressed as a uniform base and a 32-bit index rather
+// than a per-lane pointer, and the accumulator holds four bytes rather than
+// eight.
+//
+// The partial dword is stored every time and rewritten until it is full, which
+// is what lets four bytes be enough: there is never a fifth byte to hold, only
+// a spill to carry into the next slot. Bytes past nout in the last slot are
+// rubbish the host never reads, the same as the byte path's spare byte.
+void rc_emit( uint32_t win, uint32_t nsh ) {
+  uint32_t _sh = nacc*8;
+  uint32_t _hi = (_sh==0) ? 0u : ((win) >> (32-_sh));
+  acc |= (win) << _sh;
+
+  if( wpos < OUTWCAP ) ow[owbase+wpos] = acc;
+
+  nacc += (nsh);
+  nout += (nsh);
+
+  uint32_t _full = (nacc>=4);
+  wpos += _full;
+  acc   = _full ? _hi : acc;
+  nacc -= _full*4;
+}
+
+void rc_put_word( uint32_t c ) {
+  rc_emit( (c)&0xFF, 1 );
+}
+
+void rc_put_byte( uint32_t c ) {
+  if( nout < SKIP+OUTCAP ) ob[obase+nout] = (uint8_t)(c);
   nout++;
 }
+
+// nothing to do: the word path has already stored the partial dword
+void rc_tail_word( void ) {
+}
+
+void rc_tail_byte( void ) {
+}
+
+#if RC_CL_WORDOUT
+ #define RC_OUT_DECL uint32_t acc = 0, nacc = 0, wpos = 0
+ #define rc_put(c) rc_put_word(c)
+ #define RC_TAIL() rc_tail_word()
+#else
+ #define RC_OUT_DECL uint32_t _unused_out = 0
+ #define rc_put(c) rc_put_byte(c)
+ #define RC_TAIL() rc_tail_byte()
+#endif
 
 // low += rpre, then nsh bytes out of the top. A carry out of the accumulator
 // only raises the flag: it has LOWBYTES-CODBYTES bytes of headroom to travel
@@ -212,7 +289,7 @@ void rc_put( uint32_t c ) {
 // store; that layout would reverse the substream against the host coder and
 // the decoder, so here it is two byte stores going forwards. The branch is
 // what cost, not the store width -- a single vstore2 measured slower.
-void rc_shiftlow( uint32_t nsh ) {
+void rc_shiftlow_byte( uint32_t nsh ) {
   uint32_t carry;
   LOW_ADDC(carry);
   uint32_t b0 = LOW_B0();
@@ -220,12 +297,33 @@ void rc_shiftlow( uint32_t nsh ) {
   ffnum += carry;
   rpre = 0;
   if( nout < SKIP+OUTCAP ) {
-    o[nout  ] = (uint8_t)b0;
-    o[nout+1] = (uint8_t)b1;
+    ob[obase+nout  ] = (uint8_t)b0;
+    ob[obase+nout+1] = (uint8_t)b1;
   }
-  nout += nsh;
-  LOW_SHL(nsh*8);
+  nout += (nsh);
+  LOW_SHL((nsh)*8);
 }
+
+// The same window, appended to the accumulator instead of stored. Here the
+// spare byte has to be masked off rather than overwritten: nothing comes along
+// behind it to do that.
+void rc_shiftlow_word( uint32_t nsh ) {
+  uint32_t carry;
+  LOW_ADDC(carry);
+  uint32_t b0 = LOW_B0();
+  uint32_t b1 = LOW_B1();
+  ffnum += carry;
+  rpre = 0;
+  uint32_t _w = (((b0)&0xFF) | (((b1)&0xFF)<<8)) & ((1u<<((nsh)*8))-1u);
+  rc_emit( _w, (nsh) );
+  LOW_SHL((nsh)*8);
+}
+
+#if RC_CL_WORDOUT
+ #define rc_shiftlow(nsh) rc_shiftlow_word(nsh)
+#else
+ #define rc_shiftlow(nsh) rc_shiftlow_byte(nsh)
+#endif
 
 // The optional tail loop, the same shape as the LOW_ variants: both written
 // out, the #if picks. It goes after rc_shiftlow because it calls it.
@@ -297,9 +395,15 @@ __kernel void rc_encode(
   const uint32_t id = get_global_id(0);
 
   LOW_DECL;
+  RC_OUT_DECL;
   rangetype range = RANGE_INIT;
   uint32_t rpre = 0, ffnum = 0, nout = 0;
-  __global uint8_t* o = out + (size_t)id*OUTSTRIDE;
+  // uniform bases; the per-lane part is a 32-bit index, so the scatter is by
+  // 32-bit index (vpscatterdd) and not by 64-bit pointer (vpscatterqd)
+  __global uint8_t*  ob = out;
+  __global uint32_t* ow = (__global uint32_t*)out;
+  const uint32_t obase  = id*OUTSTRIDE;
+  const uint32_t owbase = id*(OUTSTRIDE/4);
 
   const uint32_t flag = (blksize!=BLKFULL);
 
@@ -315,6 +419,7 @@ __kernel void rc_encode(
   }
 
   rc_quit();
+  RC_TAIL();
 
   // a lane that coded nothing can stop inside the prefix and owes nothing
   outlen[id]   = nout>SKIP ? nout-SKIP : 0;

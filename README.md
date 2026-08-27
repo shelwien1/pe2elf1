@@ -310,7 +310,90 @@ OpenCL C has no `<stdint.h>` and does not need one: `char`, `short`, `int` and
 least". So `uint` already is `uint32_t`. The kernel typedefs the stdint
 spellings anyway and uses them, so it reads like the host code beside it.
 
-### `-k`, the kernel binary cache
+### Why a wide work-group was slow: the byte scatter
+
+`ocl2elf.py` carves the native AVX-512 object out of what `-k` caches, so the
+built kernel can be disassembled and counted:
+
+| | instructions | conditional branches | scalar byte stores | vector extracts |
+| --- | --- | --- | --- | --- |
+| byte stores, work-group 4 | 2596 | 488 | 63 | 330 |
+| dword accumulator, work-group 16 | 859 | 46 | 0 | 26 |
+
+488 branches, for a coder whose arithmetic is maybe forty instructions. They
+are not divergence in the coder — there is one `kortestw` in the whole kernel.
+They are the output.
+
+**A byte store to a per-lane address cannot be vectorised.** There is no byte
+scatter in AVX-512 — no `vpscatterb`, in any subset — and no other SIMD ISA has
+one. So when the runtime vectorises across work-items, every `o[nout] = b`
+becomes: extract the lane's address out of the vector register, scalar store,
+test the lane's mask bit, branch. Once per lane, per byte, at every expansion
+of `rc_shiftlow`. In the disassembly that is `vextracti32x4` / `vpextrq` →
+`mov BYTE PTR [rax]` → `test dl, 0x20` → `jz`, sixteen deep.
+
+That is the work-group answer too. The chain is per *lane*, so its cost scales
+with the work-group while the useful work does not — every measurement got
+worse as the group got wider, and a work-group of 1 was fastest.
+
+And it is why `RC_LOWSPLIT` could not help. The kernel was not using 32-byte
+vectors: every arithmetic instruction in the dump was on `zmm`, the 32-bit ones
+included. The vectoriser picks one width for the kernel, and the widest thing
+in it was a *pointer* — `o` was a per-lane `__global uchar*`, 64 bits, so the
+store became `vpscatterqd`, scatter by 64-bit index, which needs two `zmm` for
+sixteen lanes. Everything else got dragged along: `vpmovzxdq` to widen the
+32-bit lanes into 64-bit indices, `vextracti64x4` to split what would not fit.
+Splitting `low` into halves buys nothing when the register width is set by
+something else, and it adds the widening back.
+
+So two things were wrong, and both had to go:
+
+* **The store granularity.** `RC_CL_WORDOUT` buffers each lane's output in an
+  accumulator and lets a whole dword go at once — `vpscatterdd`, one masked
+  instruction covering every lane, no branch. The partial dword is stored every
+  time and rewritten until it is full, which is what keeps the accumulator to
+  four bytes: there is never a fifth byte to hold, only a spill to carry.
+* **The address width.** The row is addressed as a uniform base and a 32-bit
+  index rather than a per-lane pointer, so the scatter takes 32-bit indices and
+  sixteen of them fit in one register. Nothing in the output stage is 64 bits
+  wide any more.
+
+Measured, 10 MB of text and 10 MB of random:
+
+| | byte stores | dword accumulator |
+| --- | --- | --- |
+| work-group 16, `RC_LOWSPLIT=1` | 36.3 / 34.6 MB/s | **72.3 / 70.5** |
+| work-group 16, `RC_LOWSPLIT=0` | 36.3 / 34.6 | 69.2 / 70.9 |
+| work-group 1 | 71.6 / 70.4 | 57.7 / 58.1 |
+
+Exactly 2x at a full-width work-group, which is where the problem was, and
+about 20% *slower* at a work-group of 1, where there is no vectorisation to fix
+and the accumulator's shifts replace a store that was only ever a store. Hence
+`RC_CL_WORDOUT=-1`, the default: decide by the work-group actually chosen.
+`RC_LOWSPLIT=1` also finally earns its keep — 72.3 against 69.2 — now that the
+register width is not being set by a pointer.
+
+### More lanes, now that lanes are cheap
+
+Raising RCNUM used to measure slower, because every extra lane was another
+scalarised store chain. With the store fixed it does what it looks like it
+should, and a work-group of 16 with RCNUM=64 is four full-width groups over
+four cores:
+
+| RCNUM | work-group | | kernel | output vs RCNUM=16 |
+| --- | --- | --- | --- | --- |
+| 16 | 1 | 71.6 / 70.4 MB/s | 974 us | — |
+| 16 | 16 | 63.3 / 74.4 | 846 us | — |
+| 32 | 16 | 99.0 / 92.7 | 627 us | +0.10% |
+| 64 | 16 | **123.8 / 120.3** | 422 us | +0.29% |
+| 64 | 32 | 103.5 / 101.7 | 504 us | +0.29% |
+
+1.7x over the best that was reachable before, for 0.29% of output — the extra
+flushes of 64 substreams rather than 16. The defaults are left alone because
+that is a trade to make deliberately, not one to inherit: `-DRC_RCNUM=64
+-DRC_CL_LWS=16` takes it.
+
+### `-k`, the kernel binary cache### `-k`, the kernel binary cache
 
 Building the kernel costs about 0.2 s here and over 2 s on a cold runtime,
 every run, for a program that only changes when its source or the geometry
@@ -416,7 +499,8 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_IO_CHECK` | 1 | bounds-check encoder writes |
 | `RC_STRICT_BLKSIZE` | 0 | reject an unsafe `BLKSIZE`/`RCNUM` pair at compile time |
 | `RC_OPENCL` | auto | 1 = build the device path (`build.sh` sets it when `CL/cl.h` is there) |
-| `RC_CL_LWS` | 0 | work-group size; 0 = one group per compute unit |
+| `RC_CL_LWS` | 0 | work-group size; 0 = let the runtime choose |
+| `RC_CL_WORDOUT` | -1 | kernel writes dwords not bytes; -1 = whenever the work-group is > 1 |
 | `RC_CL_DYNAMIC` | 1 on Windows | open the ICD loader at run time instead of linking it |
 | `RC_CODBYTES` | 4 | width of the code register |
 | `RC_FF_TRIM` | 32 | most bytes the flush may leave for the decoder's 0xFF padding |

@@ -499,6 +499,10 @@ struct RcCL {
   }
 
   int Program( void ) {
+    // -1 means decide by the work-group: the dword accumulator only pays for
+    // itself when the byte store it replaces would have been scalarised.
+    const int wordout = (RC_CL_WORDOUT>=0) ? RC_CL_WORDOUT : (lws==1 ? 0 : 1);
+
     // Everything the kernel needs is a compile-time constant on this side
     // too, so there is nothing to pass per launch except the block itself.
     char opts[1024];
@@ -506,10 +510,12 @@ struct RcCL {
               "-cl-std=CL1.2"
               " -D RCNUM=%d -D SCALElog=%d -D hSCALE=%d"
               " -D LOWBYTES=%d -D CODBYTES=%d -D RC_LOWSPLIT=%d -D BLKFULL=%u"
+              " -D RC_CL_WORDOUT=%d"
               " -D OUTSTRIDE=%u -D OUTCAP=%u"
               " -D RC_RANGE64=%d -D RC_RENORM_TAIL=%d",
               int(RCNUM), int(SCALElog), int(hSCALE),
               int(RC_LOWBYTES), int(RC_CODBYTES), int(RC_LOWSPLIT), unsigned(BLKSIZE),
+              wordout,
               unsigned(stride), unsigned(cap),
               int(RC_RANGE64), int(RC_RENORM_TAIL) );
 
@@ -565,7 +571,7 @@ struct RcCL {
   // runtime choose, which it does worse.
   void PickLWS( void ) {
     lws = RC_CL_LWS;
-    if( lws!=0 ) return;
+    if( lws!=0 ) { Clamp(); return; }
 
     // On a CPU device: one work-item per group, which is to say no vectorising
     // across work-items at all. That reads wrong and measures right. A group is
@@ -588,10 +594,18 @@ struct RcCL {
     clGetDeviceInfo( device, CL_DEVICE_TYPE, sizeof(dt), &dt, 0 );
     lws = (dt & CL_DEVICE_TYPE_CPU) ? 1 : 0;
 
+    Clamp();
+  }
+
+  // The device's limit rather than the kernel's, because this now runs before
+  // the kernel exists -- Program() needs to know the work-group to pick the
+  // output stage. The two differ only for a kernel that runs out of registers
+  // or local memory, which this one cannot.
+  void Clamp( void ) {
     size_t mx = 0;
     if( lws>1 &&
-        clGetKernelWorkGroupInfo( k_enc[0], device, CL_KERNEL_WORK_GROUP_SIZE,
-                                  sizeof(mx), &mx, 0 )==CL_SUCCESS && mx>0 )
+        clGetDeviceInfo( device, CL_DEVICE_MAX_WORK_GROUP_SIZE,
+                         sizeof(mx), &mx, 0 )==CL_SUCCESS && mx>0 )
       while( lws>mx ) lws >>= 1;
   }
 
@@ -621,9 +635,9 @@ struct RcCL {
 #endif
     if( !Open() ) return 0;
     active = 1;                       // so Fail() reports the fallback
+    PickLWS();
     if( !Program() ) return 0;
     if( !Buffers() ) return 0;
-    PickLWS();
     if( verbose ) {
       char d[768]; Describe( d, sizeof(d) );
       fprintf( stderr, "coder: opencl: %s\n", d );

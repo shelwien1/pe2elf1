@@ -186,6 +186,30 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // reason.
 static const uint RC_CL_NBLK = 8;
 
+// 1 = the kernel buffers each lane's output and writes it a dword at a time
+// instead of a byte at a time.
+//
+// A byte store to a per-lane address cannot be vectorised at all: there is no
+// byte scatter in AVX-512, or in any other SIMD ISA worth naming. So when the
+// runtime vectorises the kernel across work-items, every such store becomes
+// extract the address from the vector, store, test the lane's mask bit,
+// branch -- once per lane, per byte. In a dump of the built kernel that is
+// ~250 scalar byte stores and ~500 branches, and it is why a wider work-group
+// measures slower rather than faster.
+//
+// vpscatterdd does exist, so a per-lane dword store is one masked instruction
+// and no branches. The cost is carrying a 64-bit accumulator and a byte count
+// per lane, and flushing the last few bytes at rc_quit.
+//
+// -1, the default, decides by the work-group actually chosen: the accumulator
+// is only worth its arithmetic when the store it replaces would have been
+// scalarised, which is to say when the kernel is being vectorised across
+// work-items at all. At a work-group of 1 -- the CPU default, see RC_CL_LWS --
+// a byte store is just a byte store, and the plain one measures faster.
+#ifndef RC_CL_WORDOUT
+#define RC_CL_WORDOUT (-1)
+#endif
+
 // Work-group size for the coding kernel. 0 lets the runtime choose; otherwise
 // it must divide RCNUM. On Intel's CPU runtime a work-group is vectorised
 // across its work-items and scheduled on one core, so this trades vector width
