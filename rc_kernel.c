@@ -68,36 +68,86 @@ typedef ulong  uint64_t;
 //  here because a device without native 64-bit integers has no such choice,
 //  and that is most GPUs.
 //
-//  These are macros rather than part of the coder below because a coder
-//  function becomes a macro body, and a macro body cannot hold #if.
+//  Every variant is written out as a function under its own name and the #if
+//  at the end of the section picks one. A coder function becomes a macro body
+//  and a macro body cannot hold #if, so this is the only shape the choice can
+//  take -- and it beats four hand-written blocks of backslashes.
+//
+//  The unpicked variants are still defined, as macros nothing expands. That is
+//  why the split ones may name lowl and lowh while the other pair names low:
+//  only one pair is ever reached.
 // ---------------------------------------------------------------------------
 
+// Both masks unconditionally: they are constants, and the variants that use
+// them are compiled only when expanded.
+#if LOWBYTES==8
+ #define LOW_MASK  0xFFFFFFFFFFFFFFFFUL
+ #define LOWH_MASK 0xFFFFFFFFu
+#else
+ #define LOW_MASK  ((1UL<<LOWBITS)-1UL)
+ #define LOWH_MASK ((1u<<(LOWBITS-32))-1u)   /* 0 at LOWBYTES==4 */
+#endif
+
+// low += rpre, with cv left holding the carry out of LOWBITS. cv is an out
+// parameter -- these are macros, so the type on it is only there to be parsed.
+//
+// The LOWBYTES==8 / <8 split is rc.inc's low_Add: at 8 there is no bit left
+// above the accumulator to hold the overflow, so the test has to be on the
+// addition itself.
+
+void low_addc_split8( uint32_t cv ) {
+  uint32_t _cf = (lowl+rpre < lowl);
+  lowl += rpre;
+  (cv) = (lowh+_cf < lowh);
+  lowh += _cf;
+}
+
+void low_addc_splitn( uint32_t cv ) {
+  uint32_t _cf = (lowl+rpre < lowl);
+  lowl += rpre;
+  lowh += _cf;
+  (cv) = (lowh > LOWH_MASK);
+  lowh &= LOWH_MASK;
+}
+
+void low_addc_word8( uint32_t cv ) {
+  uint64_t _t = low + rpre;
+  (cv) = (_t < low);
+  low = _t;
+}
+
+void low_addc_wordn( uint32_t cv ) {
+  uint64_t _t = low + rpre;
+  (cv) = (_t > LOW_MASK);
+  low = _t & LOW_MASK;
+}
+
+// sh is 0, 8 or 16. The select in the split version is not an optimisation: a
+// 32-bit shift by 32-sh with sh==0 is a shift by 32, which OpenCL takes modulo
+// 32 and turns into a shift by nothing at all.
+
+void low_shl_split( uint32_t sh ) {
+  uint32_t _hi = ((sh)==0) ? 0u : (lowl >> (32-(sh)));
+  lowh = ((lowh<<(sh)) | _hi) & LOWH_MASK;
+  lowl <<= (sh);
+}
+
+void low_shl_word( uint32_t sh ) {
+  low = (low<<(sh)) & LOW_MASK;
+}
+
+// Which variant. LOW_DECL and the three below it stay ordinary defines: a
+// declaration must land in the caller's scope rather than inside a block, and
+// the other three are expressions, which a generated macro -- a { } body --
+// cannot be.
 #if RC_LOWSPLIT
 
- #if LOWBYTES==8
-  #define LOWH_MASK 0xFFFFFFFFu
- #else
-  #define LOWH_MASK ((1u<<(LOWBITS-32))-1u)   /* 0 at LOWBYTES==4 */
- #endif
-
  #define LOW_DECL uint32_t lowl = 0, lowh = 0
-
- // low += rpre; cv = the carry out of LOWBITS. The LOWBYTES==8 / <8 split is
- // rc.inc's low_Add: at 8 there is no bit left above the accumulator to hold
- // the overflow, so the test has to be on the addition itself.
+ #define LOW_SHL(sh) low_shl_split(sh)
  #if LOWBYTES==8
-  #define LOW_ADDC(cv)                                                        \
-    uint32_t _cf = (lowl+rpre < lowl);                                        \
-    lowl += rpre;                                                             \
-    (cv) = (lowh+_cf < lowh);                                                 \
-    lowh += _cf;
+  #define LOW_ADDC(cv) low_addc_split8(cv)
  #else
-  #define LOW_ADDC(cv)                                                        \
-    uint32_t _cf = (lowl+rpre < lowl);                                        \
-    lowl += rpre;                                                             \
-    lowh += _cf;                                                              \
-    (cv) = (lowh > LOWH_MASK);                                                \
-    lowh &= LOWH_MASK;
+  #define LOW_ADDC(cv) low_addc_splitn(cv)
  #endif
 
  // the top two bytes. Which half they live in depends on LOWBYTES: the top
@@ -113,51 +163,22 @@ typedef ulong  uint64_t;
   #define LOW_B1() (lowl>>(LOWBITS-16))
  #endif
 
- // sh is 0, 8 or 16. The select is not an optimisation: a 32-bit shift by
- // 32-sh with sh==0 is a shift by 32, which OpenCL takes modulo 32 and turns
- // into a shift by nothing at all.
- #define LOW_SHL(sh)                                                          \
-   uint32_t _hi = ((sh)==0) ? 0u : (lowl >> (32-(sh)));                       \
-   lowh = ((lowh<<(sh)) | _hi) & LOWH_MASK;                                   \
-   lowl <<= (sh);
-
  #define LOW_GET() (((uint64_t)lowh<<32) | lowl)
 
 #else
 
- #if LOWBYTES==8
-  #define LOW_MASK 0xFFFFFFFFFFFFFFFFUL
- #else
-  #define LOW_MASK ((1UL<<LOWBITS)-1UL)
- #endif
-
  #define LOW_DECL uint64_t low = 0
-
+ #define LOW_SHL(sh) low_shl_word(sh)
  #if LOWBYTES==8
-  #define LOW_ADDC(cv)                                                        \
-    uint64_t _t = low + rpre;                                                 \
-    (cv) = (_t < low);                                                        \
-    low = _t;
+  #define LOW_ADDC(cv) low_addc_word8(cv)
  #else
-  #define LOW_ADDC(cv)                                                        \
-    uint64_t _t = low + rpre;                                                 \
-    (cv) = (_t > LOW_MASK);                                                   \
-    low = _t & LOW_MASK;
+  #define LOW_ADDC(cv) low_addc_wordn(cv)
  #endif
 
  #define LOW_B0() ((uint32_t)(low>>(LOWBITS- 8)))
  #define LOW_B1() ((uint32_t)(low>>(LOWBITS-16)))
- #define LOW_SHL(sh) low = (low<<(sh)) & LOW_MASK;
  #define LOW_GET() (low)
 
-#endif
-
-// The optional tail loop, out here for the same reason as the LOW_ macros: it
-// is an #if, and it lands inside a macro body.
-#if RC_RENORM_TAIL
- #define RC_RENORM_TAIL_LOOP() while( range<sTOP ) { rc_shiftlow(1); range <<= 8; }
-#else
- #define RC_RENORM_TAIL_LOOP() do{}while(0)
 #endif
 
 // ---------------------------------------------------------------------------
@@ -193,7 +214,7 @@ void rc_put( uint32_t c ) {
 // what cost, not the store width -- a single vstore2 measured slower.
 void rc_shiftlow( uint32_t nsh ) {
   uint32_t carry;
-  LOW_ADDC(carry)
+  LOW_ADDC(carry);
   uint32_t b0 = LOW_B0();
   uint32_t b1 = LOW_B1();
   ffnum += carry;
@@ -203,8 +224,23 @@ void rc_shiftlow( uint32_t nsh ) {
     o[nout+1] = (uint8_t)b1;
   }
   nout += nsh;
-  LOW_SHL(nsh*8)
+  LOW_SHL(nsh*8);
 }
+
+// The optional tail loop, the same shape as the LOW_ variants: both written
+// out, the #if picks. It goes after rc_shiftlow because it calls it.
+void rc_renorm_tail_on( void ) {
+  while( range<sTOP ) { rc_shiftlow(1); range <<= 8; }
+}
+
+void rc_renorm_tail_off( void ) {
+}
+
+#if RC_RENORM_TAIL
+ #define RC_RENORM_TAIL_LOOP() rc_renorm_tail_on()
+#else
+ #define RC_RENORM_TAIL_LOOP() rc_renorm_tail_off()
+#endif
 
 // The counted 0/1/2-byte shift is exact for a binary coder: the unit is
 // range>>SCALElog >= 2^9, so one step cannot take range below 2^8.

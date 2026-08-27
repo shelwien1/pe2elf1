@@ -278,9 +278,17 @@ state — `low`, `range`, `rpre`, `ffnum`, `nout`, `o` — by name. It is the sa
 arrangement as `sh_v1xN_macro.inc`, for the same reason. Two consequences worth
 knowing before editing:
 
-* **A macro body cannot hold `#if`.** Anything conditional lives in an ordinary
-  `#define` in the preamble — that is what the `LOW_` macros and
-  `RC_RENORM_TAIL_LOOP` are.
+* **A macro body cannot hold `#if`.** So a value with variants — the low
+  accumulator, the optional renorm tail — has each variant written out as its
+  own function, and an `#if` afterwards picks one with a plain
+  `#define LOW_ADDC(cv) low_addc_word8(cv)`. The unpicked ones are still
+  defined, as macros nothing expands, which is why the split variants can name
+  `lowl`/`lowh` while the other pair names `low`.
+* **What cannot be a function.** `LOW_DECL` declares the lane state, so it has
+  to land in the caller's scope rather than inside a generated `{ }` body;
+  `LOW_B0`, `LOW_B1` and `LOW_GET` are expressions, and a `{ }` body is not
+  one. Those four stay ordinary `#define`s. Everything else with code in it is
+  generated — there is not a backslash continuation left in `rc_kernel.c`.
 * **`txt2inc.pl` runs `-raw`**, because its default doubles `%` for `printf`
   and this string is not a format: a `k%RCNUM` would otherwise reach the device
   compiler as `k%%RCNUM`. Everything above the `[[...]]` marker is preamble and
