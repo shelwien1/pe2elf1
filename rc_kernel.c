@@ -37,6 +37,11 @@
 
 // [[static const char RC_CL_SRC]]
 
+#if RC_CL_BLOCKREAD
+#pragma OPENCL EXTENSION cl_intel_subgroups : enable
+#pragma OPENCL EXTENSION cl_intel_subgroups_short : enable
+#endif
+
 // OpenCL C has no <stdint.h>, but it does not need one: char, short, int and
 // long are exactly 8, 16, 32 and 64 bits wide by definition, not "at least".
 // These are a spelling, so the kernel reads like the host code next to it.
@@ -384,9 +389,17 @@ void rc_quit( void ) {
 //  Not turned into a macro: rc_macro.pl only converts `type name(args) {`, and
 //  this signature spans lines.
 // ---------------------------------------------------------------------------
+#if RC_CL_BLOCKREAD
+__attribute__((intel_reqd_sub_group_size(RC_CL_BLOCKREAD)))
+#endif
 __kernel void rc_encode(
     __global const uint16_t* restrict pbit,   // nbits entries, packed (bit<<15)|p
+#if RC_CL_BLOCKREAD
+    const uint32_t ngroups,          // whole RCNUM-wide groups of coded bits
+    const uint32_t ntail,            // and the bits left over, < RCNUM
+#else
     const uint32_t nbits,
+#endif
     const uint32_t blksize,
     __global uint8_t* restrict out,  // RCNUM rows of OUTSTRIDE
     __global uint32_t* restrict outlen,
@@ -445,10 +458,34 @@ __kernel void rc_encode(
   // reading a contiguous run rather than every RCNUM'th bit, so the load could
   // be a vload16. That changes which bit lands in which substream, so it is a
   // format change and a departure from sh_v1xN.inc's interleave. Not done.
+#if RC_CL_BLOCKREAD
+  // intel_sub_group_block_read_us: the whole sub-group reads one contiguous run
+  // of ushorts, lane l taking element l, as a single wide load. The pointer is
+  // uniform, so there is no per-lane index for the vectoriser to turn into a
+  // gather -- which is the one thing that was wrong with the plain load.
+  //
+  // It is a collective, so every lane has to reach it: hence the pre-divided
+  // count. ngroups whole groups run with a trip count that cannot differ
+  // between lanes, and the ntail leftover bits are read the plain way, once.
+  const uint32_t sgbase = id - get_sub_group_local_id();
+  uint32_t k = id, kb = sgbase;
+
+  for( uint32_t m=0; m<ngroups; m++ ) {
+    uint32_t b = intel_sub_group_block_read_us( pbit + kb );
+    rc_process( b&0x7FFF, b>>15 );
+    k += RCNUM; kb += RCNUM;
+  }
+
+  if( id < ntail ) {
+    uint32_t b = pbit[k];
+    rc_process( b&0x7FFF, b>>15 );
+  }
+#else
   for( uint32_t k=id; k<nbits; k+=RCNUM ) {
     uint32_t b = pbit[k];
     rc_process( b&0x7FFF, b>>15 );
   }
+#endif
 
   rc_quit();
   RC_TAIL();

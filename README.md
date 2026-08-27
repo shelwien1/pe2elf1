@@ -411,40 +411,66 @@ gathers for 32- and 64-bit elements and none for 16-bit, so with `ushort` there
 is no instruction to emit and the compiler unrolls it into sixteen of extract
 the address, `vpbroadcastw`, `vpblendd`, test the lane's mask bit, branch.
 
-That is why everything aimed at the *mask* misses.
-
-They can be removed, and none of the three ways is worth it. Widening `pbit` to
-32 bits takes the kernel to 17 branches and 5 extracts — but the array is then 2 MB a block
-instead of 1 MB, over the bus and through the kernel's own reads, and at the
-geometry that matters it costs more than the branches do:
-
-| | 16-bit `pbit` | 32-bit `pbit` |
-| --- | --- | --- |
-| RCNUM=16, work-group 16 | 74.9 MB/s, 865 us | **80.8, 755 us** |
-| RCNUM=64, work-group 16 | **112.0 MB/s, 417 us** | 100.3, 510 us |
-
-At RCNUM=16 the kernel is not yet bandwidth-bound and the branches dominate;
-at RCNUM=64 it is, and they do not. The fast geometry is the one worth keeping,
-so `pbit` stays 16-bit and the branches stay.
-
-Three tries at the mask, all bigger and none of them removing the gather:
+That is why everything aimed at the *mask* misses. Three tries, all bigger and
+none of them removing the gather:
 
 | | branches | instructions |
 | --- | --- | --- |
-| as shipped | 46 | 898 |
+| plain indexed load | 46 | 898 |
 | loop split so the trip count is uniform | 81 | 1240 |
 | unconditional load past the end, work masked | 53 | 1398 |
 | bit count passed pre-divided, `ngroups*RCNUM` | 62 | 1594 |
 
-The last is the tidiest version of the idea — hand the kernel the bit count
-already divided, so "multiple of RCNUM" is syntactically visible and the hot
-loop is a plain count — and it makes no difference either, for the reason
-above: the index is per-lane, so it gathers.
+### `intel_sub_group_block_read_us`
 
-The one remaining option is a different lane mapping: each work-item reading a
-contiguous run rather than every RCNUM'th bit, so the load could be a
-`vload16`. That changes which bit lands in which substream — a format change,
-and a departure from `sh_v1xN.inc`'s interleave. Not done.
+What does fix it is an annotation, and OpenCL has one for exactly this.
+`cl_intel_subgroups_short` provides `intel_sub_group_block_read_us`: the whole
+sub-group reads one contiguous run of `ushort`s co-operatively, lane *l* taking
+element *l*, from a **uniform** pointer. No per-lane index survives for the
+vectoriser to turn into a gather, so there is nothing to scalarise.
+
+It is a collective, so every lane of the sub-group has to reach it — which is
+what the pre-divided bit count is finally for. `ngroups` whole RCNUM-wide groups
+run with a trip count that cannot differ between lanes; the `ntail` bits left
+over are read the plain way, once a block. On its own the pre-divided count
+changed nothing; it is the block read that needs it.
+
+| | txt 10 MB | random 10 MB | kernel |
+| --- | --- | --- | --- |
+| indexed load, RCNUM=16 | 72.7 MB/s | 70.8 | 932 us |
+| **block read, RCNUM=16** | **110.4** | **111.7** | **495 us** |
+| indexed load, RCNUM=64 | 120.3 | 123.5 | 414 us |
+| **block read, RCNUM=64** | 112.2 | 126.3 | **281 us** |
+
+Kernel time roughly halves. Note the instruction count goes *up* — 898 to 1961
+— which is why counting instructions was the wrong measure all along: the
+gather was the cost, not the code size. At RCNUM=64 the end-to-end number barely
+moves, because by then the host's model pass is the bottleneck rather than the
+device.
+
+`RC_CL_BLOCKREAD` defaults to -1, meaning decide at run time: the extension has
+to be there, the work-group has to equal the sub-group width, and RCNUM has to
+be a multiple of it. Everywhere else the plain indexed load stands.
+
+That also puts the work-group back where the first version of this file had it
+for the wrong reason. A group of 1 was right only while every per-lane access
+was being scalarised; with the dword scatter and the block read both in, a
+full-width group is fastest again, so the CPU default is 16 when the block read
+is available and 1 when it is not. Default build, no flags:
+
+| | `book1` | txt 10 MB | random 10 MB | kernel |
+| --- | --- | --- | --- | --- |
+| before | 71.9 MB/s | 70.3 | 73.5 | 809 us |
+| after | **108.2** | **112.1** | **103.4** | **506 us** |
+
+What is left is a different lane mapping — each work-item reading a contiguous
+run rather than every RCNUM'th bit. That changes which bit lands in which
+substream, so it is a format change and a departure from `sh_v1xN.inc`'s
+interleave. Not done.
+
+Widening `pbit` to 32 bits also removes the gather (one `vpgatherdd`, 17
+branches) and is no longer interesting: it doubles the array to 2 MB a block,
+and the block read costs nothing.
 
 ### More lanes, now that lanes are cheap
 
@@ -572,8 +598,9 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_IO_CHECK` | 1 | bounds-check encoder writes |
 | `RC_STRICT_BLKSIZE` | 0 | reject an unsafe `BLKSIZE`/`RCNUM` pair at compile time |
 | `RC_OPENCL` | auto | 1 = build the device path (`build.sh` sets it when `CL/cl.h` is there) |
-| `RC_CL_LWS` | 0 | work-group size; 0 = let the runtime choose |
+| `RC_CL_LWS` | 0 | work-group size; 0 = 16 on a CPU with the block read, else 1 |
 | `RC_CL_WORDOUT` | -1 | kernel writes dwords not bytes; -1 = whenever the work-group is > 1 |
+| `RC_CL_BLOCKREAD` | -1 | sub-group width for `intel_sub_group_block_read_us`; -1 = when the device offers it |
 | `RC_CL_DYNAMIC` | 1 on Windows | open the ICD loader at run time instead of linking it |
 | `RC_CODBYTES` | 4 | width of the code register |
 | `RC_FF_TRIM` | 32 | most bytes the flush may leave for the decoder's 0xFF padding |

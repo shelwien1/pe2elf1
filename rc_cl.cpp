@@ -320,7 +320,8 @@ struct RcCL {
   long   nready;   // collects that found the block already coded -- how much
                    // of the device time the pipeline actually hid
   double buildsec;
-  int    cached;   // the build came out of -k's file
+  int    cached;     // the build came out of -k's file
+  int    blockread;  // the kernel takes its bit count pre-divided
 
   int Fail( const char* what, cl_int e ) {
     fprintf( stderr, "\ncoder: opencl: %s: %s\n", what, CLErrStr(e) );
@@ -498,10 +499,31 @@ struct RcCL {
     delete[] bin;
   }
 
+  // cl_intel_subgroups_short is what intel_sub_group_block_read_us needs. It is
+  // an Intel extension; everywhere else the plain indexed load stands.
+  int HasBlockRead( void ) {
+    size_t n = 0;
+    if( clGetDeviceInfo( device, CL_DEVICE_EXTENSIONS, 0, 0, &n )!=CL_SUCCESS || n==0 ) return 0;
+    char* e = new char[n+1];
+    int ok = 0;
+    if( clGetDeviceInfo( device, CL_DEVICE_EXTENSIONS, n, e, 0 )==CL_SUCCESS ) {
+      e[n] = 0;
+      ok = (strstr( e, "cl_intel_subgroups_short" )!=0);
+    }
+    delete[] e;
+    return ok;
+  }
+
   int Program( void ) {
     // -1 means decide by the work-group: the dword accumulator only pays for
     // itself when the byte store it replaces would have been scalarised.
     const int wordout = (RC_CL_WORDOUT>=0) ? RC_CL_WORDOUT : (lws==1 ? 0 : 1);
+
+    // The block read wants a sub-group exactly as wide as the work-group, and
+    // RCNUM a multiple of it so every group's slice is whole.
+    blockread = RC_CL_BLOCKREAD;
+    if( blockread<0 )
+      blockread = ( lws>1 && (RCNUM%lws)==0 && HasBlockRead() ) ? int(lws) : 0;
 
     // Everything the kernel needs is a compile-time constant on this side
     // too, so there is nothing to pass per launch except the block itself.
@@ -510,12 +532,12 @@ struct RcCL {
               "-cl-std=CL1.2"
               " -D RCNUM=%d -D SCALElog=%d -D hSCALE=%d"
               " -D LOWBYTES=%d -D CODBYTES=%d -D RC_LOWSPLIT=%d -D BLKFULL=%u"
-              " -D RC_CL_WORDOUT=%d"
+              " -D RC_CL_WORDOUT=%d -D RC_CL_BLOCKREAD=%d"
               " -D OUTSTRIDE=%u -D OUTCAP=%u"
               " -D RC_RANGE64=%d -D RC_RENORM_TAIL=%d",
               int(RCNUM), int(SCALElog), int(hSCALE),
               int(RC_LOWBYTES), int(RC_CODBYTES), int(RC_LOWSPLIT), unsigned(BLKSIZE),
-              wordout,
+              wordout, blockread,
               unsigned(stride), unsigned(cap),
               int(RC_RANGE64), int(RC_RENORM_TAIL) );
 
@@ -592,7 +614,15 @@ struct RcCL {
     // preferred multiple is the whole point of the SIMD width on a GPU.
     cl_device_type dt = 0;
     clGetDeviceInfo( device, CL_DEVICE_TYPE, sizeof(dt), &dt, 0 );
-    lws = (dt & CL_DEVICE_TYPE_CPU) ? 1 : 0;
+    lws = 0;
+    if( dt & CL_DEVICE_TYPE_CPU ) {
+      // A work-group of 1 was right only while every per-lane memory access was
+      // being scalarised. With the dword scatter and the sub-group block read
+      // both in, a full-width group is the fastest thing again -- 110 MB/s
+      // against 71 -- so take 16 when the block read is available and RCNUM
+      // divides by it, and fall back to 1 when it is not.
+      lws = ( (RCNUM%16)==0 && HasBlockRead() ) ? 16 : 1;
+    }
 
     Clamp();
   }
@@ -645,9 +675,10 @@ struct RcCL {
       if( lws ) snprintf( wg, sizeof(wg), "%d", int(lws) );
       else      snprintf( wg, sizeof(wg), "runtime's choice" );
       fprintf( stderr, "coder: opencl: kernel %s in %.2fs, %d lanes per launch, "
-                       "work-group %s, %d block%s in flight\n",
+                       "work-group %s, %d block%s in flight%s\n",
                cached ? "loaded" : "built", buildsec, int(RCNUM), wg,
-               int(RC_CL_NBLK), RC_CL_NBLK==1?"":"s" );
+               int(RC_CL_NBLK), RC_CL_NBLK==1?"":"s",
+               blockread ? ", sub-group block read" : "" );
     }
     return active;
   }
@@ -671,7 +702,14 @@ struct RcCL {
     cl_kernel k = k_enc[slot];
     uint a = 0;
     if( (e=clSetKernelArg(k, a++, sizeof(cl_mem), &d_pbit[slot] ))!=CL_SUCCESS ) return Fail( "arg pbit", e );
-    if( (e=clSetKernelArg(k, a++, sizeof(uint),   &nbits        ))!=CL_SUCCESS ) return Fail( "arg nbits", e );
+    // the block read is a collective, so that kernel wants the count pre-divided
+    if( blockread ) {
+      const uint ngroups = nbits/RCNUM, ntail = nbits%RCNUM;
+      if( (e=clSetKernelArg(k, a++, sizeof(uint), &ngroups))!=CL_SUCCESS ) return Fail( "arg ngroups", e );
+      if( (e=clSetKernelArg(k, a++, sizeof(uint), &ntail  ))!=CL_SUCCESS ) return Fail( "arg ntail", e );
+    } else {
+      if( (e=clSetKernelArg(k, a++, sizeof(uint), &nbits  ))!=CL_SUCCESS ) return Fail( "arg nbits", e );
+    }
     if( (e=clSetKernelArg(k, a++, sizeof(uint),   &blksize      ))!=CL_SUCCESS ) return Fail( "arg blksize", e );
     if( (e=clSetKernelArg(k, a++, sizeof(cl_mem), &d_out[slot]  ))!=CL_SUCCESS ) return Fail( "arg out", e );
     if( (e=clSetKernelArg(k, a++, sizeof(cl_mem), &d_len[slot]  ))!=CL_SUCCESS ) return Fail( "arg len", e );

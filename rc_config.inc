@@ -210,6 +210,23 @@ static const uint RC_CL_NBLK = 8;
 #define RC_CL_WORDOUT (-1)
 #endif
 
+// Sub-group width for intel_sub_group_block_read_us, 0 for a plain indexed
+// load, -1 to decide by what the device offers.
+//
+// This is the one annotation that fixes the load. A per-work-item indexed
+// access always becomes a gather -- Intel's vectoriser does no contiguity
+// analysis, so even outlen[id] compiles to a scatter -- and AVX-512 has no
+// 16-bit gather, so pbit[k] came back as sixteen per-lane loads behind sixteen
+// mask tests. intel_sub_group_block_read_us reads the run co-operatively from a
+// *uniform* pointer, so there is no per-lane index left to gather from. Kernel
+// time 932us to 495us at RCNUM=16, 414us to 281us at RCNUM=64.
+//
+// It needs cl_intel_subgroups_short, a sub-group as wide as the work-group, and
+// RCNUM a multiple of that.
+#ifndef RC_CL_BLOCKREAD
+#define RC_CL_BLOCKREAD (-1)
+#endif
+
 // Work-group size for the coding kernel. 0 lets the runtime choose; otherwise
 // it must divide RCNUM. On Intel's CPU runtime a work-group is vectorised
 // across its work-items and scheduled on one core, so this trades vector width
