@@ -262,7 +262,7 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_BLKSIZE` | `1<<16` | bytes per block |
 | `RC_RCNUM` | 16 | substreams per block |
 | `RC_LOWBYTES` | 8 | width of the low accumulator, 4..8 — the carry headroom |
-| `RC_LOWSPLIT` | 1 | hold `low` as two uints instead of one qword (stream-neutral) |
+| `RC_LOWSPLIT` | 0 | hold `low` as two uints instead of one qword (stream-neutral) |
 | `RC_RANGE64` | 0 | 1 = `range` starts at `1<<32` instead of `0xFFFFFFFF` |
 | `RC_RENORM_TAIL` | 0 | renorm tail loop; dead for a binary coder |
 | `RC_FORCE_CARRY` | 0 | 1 = always use the carry twin, never the fast path |
@@ -281,6 +281,26 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 `rc_vec.inc` take template parameters of those names — hence the `RC_` prefix on
 the overrides. `RC_CL_NBLK` is a constant for the same reason: it is an array
 bound in three places. Change it in `rc_config.inc`.
+
+### `RC_LOWSPLIT`
+
+`sh_v1xN_s.cpp` defaults this on: in the vector coder two uint lanes map onto
+one ymm each where a qword lane needs two. There is no vector coder here — the
+host coder is scalar, and the kernel holds `low` as one `ulong` whatever this
+says — so the reason is gone. Measured, best of five alternating rounds:
+
+| | split=1 | split=0 | |
+| --- | --- | --- | --- |
+| carryless, `RC_LOWBYTES=8`, `book1` | 19.75 MB/s | 19.84 MB/s | -0.5% |
+| carryless, `RC_LOWBYTES=8`, 10 MB | 14.37 | 14.56 | -1.3% |
+| carry twin, `RC_LOWBYTES=4`, `book1` | 19.59 | 20.08 | -2.4% |
+| decoder, any | — | — | none |
+
+Output byte-identical in every pair, which is the point of calling it
+stream-neutral. The decoder is untouched by construction: `low_Add`, `low_Top`
+and `low_Shift8` are all under `if( f_DEC==0 )`. The carry twin at
+`RC_LOWBYTES=4` loses most, because `LOWBITS` is 32 there and the split version
+shifts a `lowh` that the mask then clears anyway. So the default is 0 here.
 
 ### The trailing 0xFF run
 

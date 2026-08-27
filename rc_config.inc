@@ -73,8 +73,24 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
 // 1 = hold the low accumulator as two uints instead of one qword. Stream-
 // neutral: it is the same accumulator, so output is byte-identical either way.
+//
+// sh_v1xN_s.cpp defaults this on, because in the vector coder two uint lanes
+// map onto one ymm each where a qword lane needs two. There is no vector coder
+// here -- the host coder is scalar and the kernel holds low as one ulong
+// whatever this says -- so the reason is gone, and measuring says so:
+//
+//                                      split=1   split=0
+//   carryless, LOWBYTES=8, book1        19.75     19.84   -0.5%
+//   carryless, LOWBYTES=8, 10 MB        14.37     14.56   -1.3%
+//   carry twin, LOWBYTES=4, book1       19.59     20.08   -2.4%
+//   decoder, any                          --        --     none
+//
+// The decoder is untouched by construction: low_Add, low_Top and low_Shift8
+// are all under `if( f_DEC==0 )`. The carry twin at LOWBYTES=4 loses most,
+// because there LOWBITS is 32 and the split version shifts a lowh that the
+// mask then clears anyway.
 #ifndef RC_LOWSPLIT
-#define RC_LOWSPLIT 1
+#define RC_LOWSPLIT 0
 #endif
 
 // 0 = sh_v1xN's `uint range = 0xFFFFFFFF`.
