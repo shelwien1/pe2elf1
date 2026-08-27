@@ -5,7 +5,8 @@
 #include "common.inc"
 #endif
 
-enum { SCALElog=15, SCALE=1<<SCALElog, mSCALE=SCALE-1, hSCALE=SCALE/2, eSCALE=16*SCALE };
+#include "rc_config.inc"   // SCALElog and friends
+
 enum { N_STATES=32768 };
 
 EXTERN word pp[N_STATES];

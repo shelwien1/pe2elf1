@@ -106,7 +106,11 @@ struct RCio {
     "drop RC_STRICT_BLKSIZE and rely on the runtime guard." );
 #endif
 
-  ALIGN(4096) byte tmpbuf[RCNUM][tmpbufsize+RC_FF_PADSIZE];
+  // Row stride of tmpbuf. The OpenCL path writes its lanes into rows of
+  // exactly this pitch, so the payload readback lands where rc_Write expects.
+  static const uint rowsize = tmpbufsize+RC_FF_PADSIZE;
+
+  ALIGN(4096) byte tmpbuf[RCNUM][rowsize];
 
   byte* buf( uint rcidx ) { return &tmpbuf[rcidx][0]; }
 

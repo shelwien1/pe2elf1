@@ -4,6 +4,8 @@
 #include "rc_config.inc"
 #include "file_api.inc"
 
+#include "rc_cl.h"
+
 #include "misc/timer.h"
 #include "misc/valloc.inc"
 #include "misc/model.h"
@@ -59,7 +61,7 @@ char c_res[256];
 char d_res[256];
 char t_res[256];
 
-// coder c|d input_file output_file FSM_file [n_iter] [test_output_file]
+// coder [options] c|d input_file output_file FSM_file [n_iter] [test_output_file]
 //
 //   coder c book1 1 FSM0.txt          -- encode
 //   coder d 1     2 FSM0.txt          -- decode
@@ -67,13 +69,58 @@ char t_res[256];
 //
 // The FSM file is the counter state machine loaded by Predictor::Init; both
 // ends need the same one.
+//
+// The options are all about the OpenCL path, which only the encoder's
+// carryless coding pass uses -- see rc_cl.cpp. They are stripped out of argv
+// before anything else looks at it, so the positional arguments are where they
+// always were.
+static void usage( void ) {
+  printf( "coder [options] c|d input output FSM_file [n_iter] [test_output]\n"
+          "\n"
+          "  -l        list the OpenCL platforms and devices, and exit\n"
+          "  -d <n>    use device <n>, numbered as -l prints it\n"
+          "  -p <n>    only look at platform <n> (and number -d within it)\n"
+          "  -T <t>    pick by type instead: cpu, gpu, acc\n"
+          "  -C        do not use OpenCL at all -- the reference code path\n"
+          "  -V        report the device and what its kernel cost\n" );
+}
+
+// Pull the options out of argv, leaving the positional arguments compacted at
+// the front. Called again on the recursive test-mode invocation, where there
+// are none left and g_clopt already says what was asked for.
+static int parse_opts( int argc, char** argv ) {
+  int n = 1;
+  for( int i=1; i<argc; i++ ) {
+    char* a = argv[i];
+    if( a[0]!='-' || a[1]==0 ) { argv[n++] = a; continue; }
+    char o = a[1];
+    // only -d, -p and -T take a value, attached or as the next argument
+    const char* v = 0;
+    if( o=='d' || o=='p' || o=='T' ) {
+      v = a[2] ? a+2 : ((i+1<argc) ? argv[++i] : 0);
+      if( !v ) { fprintf( stderr, "coder: -%c wants a value\n", o ); usage(); exit(1); }
+    }
+    switch( o ) {
+      case 'C': g_clopt.use = 0; break;
+      case 'V': g_clopt.verbose = 1; break;
+      case 'l': g_clopt.use = -1; break;              // handled in main
+      case 'd': g_clopt.dev  = atoi(v); break;
+      case 'p': g_clopt.plat = atoi(v); break;
+      case 'T': g_clopt.type = (v[0]=='c') ? 1 : (v[0]=='g') ? 2 : 3; break;
+      default:  fprintf( stderr, "coder: unknown option -%c\n", o ); usage(); exit(1);
+    }
+  }
+  return n;
+}
+
 int main( int argc, char** argv ) {
   uint i,r,c;
 
-  if( argc<5 ) {
-    printf( "coder c|d input output FSM_file [n_iter] [test_output]\n" );
-    return 1;
-  }
+  argc = parse_opts( argc, argv );
+
+  if( g_clopt.use<0 ) { CL_ListDevices(stdout); return 0; }
+
+  if( argc<5 ) { usage(); return 1; }
 
   // test mode: encode, then decode back, then log both timings
   if( argc>6 ) {
@@ -101,6 +148,12 @@ int main( int argc, char** argv ) {
     return 0;
   }
 
+  uint f_DEC = (argv[1][0]=='d');
+
+  // The device is the encoder's, and it is opened once: C_init runs per
+  // processfile, and n_iter runs that as many times as it is asked to.
+  CL_Enable( f_DEC==0 );
+
   uint M_size = Max(C_get_object_size<0>(),C_get_object_size<1>());
   void* M = VAlloc(M_size); if( M==0 ) return 5;
   if( (r = C_init<0>(M,argv[4])) ) { printf( "C_init error %i\n", r ); return 1; };
@@ -110,7 +163,6 @@ int main( int argc, char** argv ) {
 
   if( processfile_init() ) return 6;
 
-  uint f_DEC = (argv[1][0]=='d');
   qword f_len = f.size();
   uint n_iter = argc>5?atoi(argv[5]):1;
 
@@ -138,6 +190,9 @@ int main( int argc, char** argv ) {
   }
 
   printf( "\n" );
+
+  CL_Report( stderr );
+  CL_Quit();
 
   f.close();
   g.close();

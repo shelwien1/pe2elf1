@@ -34,6 +34,6 @@ set icl=C:\IntelM0316\bin-cl64\icl2d.bat
 set icl=C:\IntelN0320\bin-intel64\icl2d.bat -D__attribute__(x)#
 set icl=C:\IntelN2420\bin-cl64\icl2d.bat -mllvm -loopopt=0 /clang:-fno-unsafe-math-optimizations
 
-call %icl% "/D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp misc/lock_thread.cpp
+call %icl% "/D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp rc_cl.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp misc/lock_thread.cpp
 
 del *.exp *.obj*  >nul 2>&1

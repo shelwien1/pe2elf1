@@ -45,9 +45,9 @@ copy /b C:\VC2019\bin\amd64\link.exe .
 
 for /D %%a in (.) do set DIRNAM=%%~na
 
-%gcc% -s -std=c++11 -O9 -Ofast %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp -o coder.exe %*
+%gcc% -s -std=c++11 -O9 -Ofast %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp rc_cl.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp -o coder.exe %*
 
-rem %gcc% -S -fverbose-asm -mllvm --x86-asm-syntax=intel  -std=c++11 -O9 -Ofast %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp
+rem %gcc% -S -fverbose-asm -mllvm --x86-asm-syntax=intel  -std=c++11 -O9 -Ofast %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp rc_cl.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp
 
 del link.exe
 

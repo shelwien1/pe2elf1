@@ -3,13 +3,19 @@
 A port of the `069-lowl+lowh` coder onto the scalar rangecoder from
 `sh_v1xN_s.cpp`. The framework, the model and the compressed format are the
 originals; the SIMD rangecoder and the perl passes that generated it are gone,
-replaced by RCNUM plain instances of the scalar coder.
+replaced by RCNUM plain instances of the scalar coder — and the encoder's
+carryless coding pass optionally runs as an OpenCL kernel, where the device
+compiler does the vectorising the perl pass used to set up.
 
 ```
 ./build.sh
 ./coder c book1 1 FSM0.txt     # encode
 ./coder d 1     2 FSM0.txt     # decode
 cmp book1 2
+
+./coder -l                     # what devices are there
+./coder -V c book1 1 FSM0.txt  # encode on one, with the timings
+./coder -C c book1 1 FSM0.txt  # the reference path, no device
 ```
 
 ## What changed, and what did not
@@ -39,6 +45,8 @@ carry-propagating fallback, and the compressed format.
 | `rc_io.inc` | `RC_IO` (per-lane byte cursor) and `RCio` (block I/O, substream size headers) |
 | `rc_vec.inc` | `RangecoderN` — the RCNUM-lane wrapper, based on `sh_v1xN.inc` |
 | `rc_config.inc` | block geometry and the rangecoder knobs |
+| `rc_cl.h`, `rc_cl.cpp` | device selection, buffers, launches — the whole OpenCL host side |
+| `rc_kernel.inc` | the coding kernel, as a string, built at run time |
 | `model.inc` | includes `rc.inc` twice, once per carry mode |
 | `model0.inc` / `model1.inc` | encoder / decoder |
 | `predict.inc`, `counter.inc`, `FSM.cpp` | the model, unchanged |
@@ -104,6 +112,93 @@ Lowering `RC_LOWBYTES` is the cheap way to exercise that path. On `book1`:
 Identical output either way, which is the invariant: the two coders hand `put()`
 the same byte sequence, just offset by one step.
 
+## On the device
+
+The encoder's carryless coding pass, and nothing else.
+
+That pass was already the parallel one: bit *i* of a block goes to lane
+*i % RCNUM* and no lane reads another's state, which is what `sh_v1xN.inc`'s
+hand-written SIMD version was built on and what the perl macro pass existed to
+set up. `rc_kernel.inc` is the same coder as one work-item per lane, and Intel's
+CPU runtime reports `Kernel "rc_encode" was successfully vectorized (16)` — the
+vector rangecoder, from scalar source.
+
+**The output is byte-identical to the host coder.** It is the same integer
+arithmetic in the same order, so anything else would be a bug, and `t.sh`
+compares a device encode against `-C` byte for byte rather than by size.
+
+What stays on the host:
+
+* **The carry-propagating twin.** It is a serial `Cache`/FF-run state machine
+  with a data-dependent inner loop, and it only runs on the blocks the fast
+  path had to hand back. The device reports each lane's escaped-carry count
+  along with its length, and a non-zero one re-codes that block on the host
+  exactly as before — the fallback did not change, it just has a second caller.
+* **The decoder**, entirely. A decoder that needs a device to read a file is
+  not a decoder.
+* **The model.** It is serial by construction: each bit's probability depends
+  on the ones before it.
+
+`RC_FORCE_CARRY=1` takes the device out of the build, since only the carryless
+coder has a kernel.
+
+### What it costs and buys
+
+A 4-core CPU device at 2.1 GHz — so the ceiling is four cores plus the
+runtime's vectorization, not a GPU. Best of three runs of five iterations each,
+host and device alternating:
+
+| file | host | device | | output |
+| --- | --- | --- | --- | --- |
+| `book1` 768,771 | 18.94 MB/s | 42.44 MB/s | 2.24x | 456,441, identical |
+| 10,000,000 (text + random) | 14.14 MB/s | 43.24 MB/s | 3.06x | identical |
+
+Per launch, on the 10 MB file: 153 blocks, 900 µs of device time each, of which
+the `pbit` upload is about 12%.
+
+The work-group size is the whole trade, because a group is vectorised across
+its work-items *and* scheduled on one compute unit. At RCNUM=16 on this device:
+
+| work-group | groups | | |
+| --- | --- | --- | --- |
+| 16 | 1 | 16-way vector, one core | 1.7x |
+| 8 | 2 | | 2.2x |
+| 4 | 4 | 4-way vector, four cores | **3.0x** |
+| 2 | 8 | | 3.0x |
+| runtime's choice | | | 1.7x |
+
+Cores win over vector width, because the lanes' byte writes are a scatter —
+RCNUM rows `OUTSTRIDE` apart — and widening that does not help. So the default
+is one work-group per compute unit, rounded to something that divides RCNUM;
+`RC_CL_LWS` overrides it.
+
+Raising RCNUM does not help either: it costs output (+0.1% at 32, +0.3% at 64,
+from the extra flushes) and measures slower, because the work per launch is the
+same and only the number of lanes changes.
+
+### What is left on the table
+
+* **The model pass and the coding pass could overlap.** Block *n+1*'s model
+  pass depends only on the input, not on how block *n* was coded, so the
+  kernel could run while the host models the next block. That is the single
+  biggest win still available — it would hide most of the device time — and it
+  needs a second `pbit` buffer and a second set of substream rows.
+* **The scattered writes.** Interleaving the lanes' output and de-interleaving
+  it on the host is the `clset` experiment in the original `RC.txt`; it is what
+  the 7 scatters in the vectorizer's report are.
+* **`pbit` is copied to the device every block.** It is 12% of the launch. A
+  `CL_MEM_USE_HOST_PTR` buffer with map/unmap would be free on a CPU device.
+* **No kernel binary cache**, so the device compiler costs about 0.25 s per
+  run. The program is built before the timing loop, so it does not land in a
+  measurement, but it is still a quarter second.
+
+### On a discrete GPU
+
+Untried. The launch is RCNUM work-items — sixteen — which is nothing for a GPU,
+and each block is an upload, a launch and a blocking readback. Making this suit
+a graphics card means many blocks in flight at once, which is the pipelining
+above and then some.
+
 ## Compressed format
 
 Unchanged from `sh_v1xN_io.inc`. Per block:
@@ -145,6 +240,8 @@ Everything lives in `rc_config.inc` and can be overridden from the command line:
 | `RC_CARRYLESS_WARN` | 0 | the demo's "lost carries" warning |
 | `RC_IO_CHECK` | 1 | bounds-check encoder writes |
 | `RC_STRICT_BLKSIZE` | 0 | reject an unsafe `BLKSIZE`/`RCNUM` pair at compile time |
+| `RC_OPENCL` | auto | 1 = build the device path (`build.sh` sets it when `CL/cl.h` is there) |
+| `RC_CL_LWS` | 0 | work-group size; 0 = one group per compute unit |
 | `CORO_FAKE` | 0 | 1 = straight-through instead of the setjmp coroutine |
 
 `BLKSIZE` and `RCNUM` are enums, not macros, because `rc_io.inc` and
@@ -175,14 +272,38 @@ it is left out.)
 
 ## Building
 
-**Linux / gcc:** `./build.sh [extra -D flags]`
+**Linux / gcc:** `./build.sh [extra -D flags]`. It builds the OpenCL path when
+`CL/cl.h` is present; `OPENCL=0 ./build.sh` leaves it out and links against
+nothing extra.
+
+The device path needs an ICD loader, headers, and a runtime for whatever it
+should run on. For a CPU device that is Intel's, from the oneAPI apt
+repository:
+
+```sh
+sudo apt-get install ocl-icd-libopencl1 opencl-headers clinfo
+# Intel's CPU runtime is not in the distro repositories:
+curl -fsSL https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+  | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+  | sudo tee /etc/apt/sources.list.d/oneAPI.list
+sudo apt-get update && sudo apt-get install intel-oneapi-runtime-opencl
+clinfo -l        # Platform #0: Intel(R) OpenCL -- Device #0: ... CPU
+```
 
 **Windows:** `g.bat` (MinGW), `gc.bat` (clang-cl), `c.bat` (ICL/ICX). `c.bat` no
-longer runs perl. `Lib3/file_api.inc` picks `file_api_win.inc` on `_WIN32` and
-`file_api_std.inc` elsewhere; force the portable one with `-DFILE_API_STD`.
+longer runs perl. These build without OpenCL; add `-DRC_OPENCL=1` and
+`rc_cl.cpp` to turn it on. There is no import library for the ICD loader on
+Windows and an executable that imports `OpenCL.dll` statically will not start
+on a machine without it — which would put `-C` out of reach exactly where it is
+needed — so `rc_cl.cpp` opens the loader by hand there, as `mrpc_cl.inc` does.
+That path compiles but has not been run here.
 
-The coder is scalar now, so the `target("avx2,…")` attributes on `do_process`
-are gone.
+`Lib3/file_api.inc` picks `file_api_win.inc` on `_WIN32` and `file_api_std.inc`
+elsewhere; force the portable one with `-DFILE_API_STD`.
+
+The host coder is scalar now, so the `target("avx2,…")` attributes on
+`do_process` are gone.
 
 ## Testing
 
@@ -192,13 +313,28 @@ are gone.
 
 Each config is built and round-trips a set of files — empty, 1 byte, exactly
 `BLKSIZE`, `BLKSIZE+1`, `2*BLKSIZE`, all-`0xFF`, all-zero, 300KB random, `book1`
-— against both FSM tables, comparing byte for byte.
+— against both FSM tables, comparing byte for byte. Where there is a device, it
+also encodes each file on it and checks that output against the host encode
+byte for byte, and fails if the device quietly fell back — which is the failure
+mode a size comparison would hide.
 
 ## Usage
 
 ```
-coder c|d input output FSM_file [n_iter] [test_output]
+coder [options] c|d input output FSM_file [n_iter] [test_output]
+
+  -l        list the OpenCL platforms and devices, and exit
+  -d <n>    use device <n>, numbered as -l prints it
+  -p <n>    only look at platform <n> (and number -d within it)
+  -T <t>    pick by type instead: cpu, gpu, acc
+  -C        do not use OpenCL at all -- the reference code path
+  -V        report the device and what its kernel cost
 ```
+
+With no `-d` or `-T` the first GPU is used, or the first CPU device if there is
+no GPU. Naming a device that is not there, or anything going wrong with one
+later, falls back to the host coder with a note on stderr: the block format and
+the fallback do not care where a block was coded.
 
 `FSM_file` is the counter state machine `Predictor::Init` loads (`FSM0.txt`,
 `nzcc.txt`); both ends need the same one. `n_iter` repeats the run for timing.

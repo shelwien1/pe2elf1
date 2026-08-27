@@ -5,8 +5,10 @@
 // in rc.inc (which is sh_v1xN_s.cpp's, moved here unchanged apart from being
 // parameterised by class name).
 //
-// SCALElog / SCALE / hSCALE come from FSM.cpp, which model.inc includes first;
-// rc.inc uses SCALElog for the counter scale, exactly as sh_v1xN_s.cpp does.
+// SCALElog and friends live here rather than in FSM.cpp because rc.inc, the
+// kernel build options in rc_cl.cpp and the model all need them; FSM.cpp
+// includes this file for them.
+enum { SCALElog=15, SCALE=1<<SCALElog, mSCALE=SCALE-1, hSCALE=SCALE/2, eSCALE=16*SCALE };
 
 // 0 = the real setjmp/stack-copy coroutine of Lib3/coro3b.inc, so the coder
 // streams through fixed 64K buffers.
@@ -113,7 +115,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
 // 1 = skip the carryless fast path in the encoder and always code with the
 // carry-propagating twin. Testing knob: it makes the fallback coder the only
-// producer, so its output gets exercised on every block.
+// producer, so its output gets exercised on every block. Only the carryless
+// coder has a kernel, so this also takes the OpenCL path out of the build.
+//
+// Note the two coders' output is not always identical: where the block ends in
+// a run of 0xFF the carry twin trims them at the flush and the carryless coder
+// has already written them. Both decode.
 #ifndef RC_FORCE_CARRY
 #define RC_FORCE_CARRY 0
 #endif
@@ -134,6 +141,22 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // largest safe BLKSIZE for the configured RCNUM.
 #ifndef RC_STRICT_BLKSIZE
 #define RC_STRICT_BLKSIZE 0
+#endif
+
+// 1 = build the OpenCL path: the carryless coding pass runs as a kernel, one
+// work-item per lane. Only that pass -- the carry-propagating fallback and the
+// whole decoder stay on the host, and so does everything when there is no
+// device (-C, or none found). Needs an ICD loader to link against.
+#ifndef RC_OPENCL
+#define RC_OPENCL 0
+#endif
+
+// Work-group size for the coding kernel. 0 lets the runtime choose; otherwise
+// it must divide RCNUM. On Intel's CPU runtime a work-group is vectorised
+// across its work-items and scheduled on one core, so this trades vector width
+// against how many cores the launch reaches.
+#ifndef RC_CL_LWS
+#define RC_CL_LWS 0
 #endif
 
 // Bounds-check every byte the encoder writes into its substream buffer. The
