@@ -22,9 +22,15 @@ fi
 # Device path: the ispc-compiled coding kernel. Built whenever an ispc
 # compiler is around (ISPC=path says where, ISPC=0 refuses it); without one
 # the coder builds host-only and -C is simply always in effect.
+#
+# One explicit target, no dispatcher: ISPC_TARGET picks it, and the binary
+# runs only on machines that have that ISA.
+#   ISPC_TARGET=avx512skx-x16   AVX-512 (the default)
+#   ISPC_TARGET=avx2-i32x16     AVX2
 if [ -z "$ISPC" ]; then
   if command -v ispc >/dev/null 2>&1; then ISPC=ispc; else ISPC=0; fi
 fi
+ISPC_TARGET=${ISPC_TARGET:-avx512skx-x16}
 
 if [ "$ISPC" != 0 ]; then
   # The kernel constants are compile-time on both sides, so the RC_*
@@ -48,17 +54,16 @@ if [ "$ISPC" != 0 ]; then
   # -1 = auto; under ispc the word path is the one that vectorises
   [ "$K_WO" = "-1" ] && K_WO=1
 
-  # two targets and a dispatcher, so one binary runs on AVX2 and AVX-512 alike
   rm -f rc_kernel_ispc*.o
-  "$ISPC" --target=avx512skx-x16,avx2-i32x16 --arch=x86-64 -O2 --pic \
+  "$ISPC" --target=$ISPC_TARGET --arch=x86-64 -O2 --pic \
     -DRCNUM=$K_RCNUM -DSCALElog=15 -DhSCALE=16384 \
     -DLOWBYTES=$K_LB -DCODBYTES=$K_CB -DRC_LOWSPLIT=$K_LS -DBLKFULL=$K_BLK \
     -DRC_DEV_WORDOUT=$K_WO -DRC_RANGE64=$K_R64 -DRC_RENORM_TAIL=$K_RT \
     rc_kernel.ispc -o rc_kernel_ispc.o -h rc_kernel_ispc.h
 
-  CLDEF="-DRC_ISPC=1"
-  CLLIB="rc_kernel_ispc*.o -pthread"
-  BACKEND=ispc
+  CLDEF="-DRC_ISPC=1 -DRC_ISPC_TARGET=$ISPC_TARGET"
+  CLLIB="rc_kernel_ispc.o"
+  BACKEND="ispc/$ISPC_TARGET"
 else
   CLDEF="-DRC_ISPC=0"; CLLIB=""
   BACKEND=host-only

@@ -382,6 +382,36 @@ host API is `DEV_*` in `rc_dev.h`, and a build without ispc is simply the host c
 `-C` always, nothing to fall back from. What this document's earlier sections say about
 the OpenCL backend describes a tree that ends at the commit this section arrived in.
 
+### 9.4 Simplified to the original's shape
+
+Two structural follow-ups, on request, both after the numbers above:
+
+* **The encoder is synchronous again** — model a block, code a block, the original
+  sh_v1xN arrangement. The worker thread, the slot ring, `RC_DEV_NBLK`, the `NSLOT`
+  dimension of `RCio` and the Submit/Collect API are gone; `DEV_Encode` is one call that
+  codes straight into the substream rows, and `rc_ispc.cpp` is ~60 lines. What the thread
+  was buying on the 4-vCPU reference box was real — 91 MB/s down to 42 single-core — but
+  it was bought with machinery; on the user's AVX-512 box the synchronous original hit the
+  same ~135 MB/s the threaded ISPC build did, which is the number that decided this.
+* **One explicit ispc target, no dispatcher**: `ISPC_TARGET=avx512skx-x16` (default) or
+  `avx2-i32x16` in `build.sh`, `set ispctarg=` in `gc.bat`, one object on the link line.
+  Both targets pass the corpus byte-identically.
+
+And one more negative result, from re-reading the original rather than trusting memory:
+`sh_v1xN.inc`'s own decode split (its `RC_DECDIV` double-quotient decision plus batched
+renorm) keeps the multiply and the range update *scalar per bit* on the lane arrays, with
+no `{p;bit}` log at all — only the code-fold, renorm, refill and division are batched.
+Rebuilt that shape through the ispc call boundary and measured it in the real codec:
+**10.2–10.7 MB/s against shape A's 12.1 and the fused 17.0** (same session). What made it
+right for the original — everything inlined into one loop clang could schedule across —
+is exactly what a C-ABI batch call takes away: the scalar-written `range[]`/`rpm[]`
+arrays are re-read by the batch a few instructions later and hit the store-forwarding
+hazard that shape A's by-value qwords were designed around, and the extra per-bit scalar
+work buys nothing back. Shape A stays; the original's decode split does not survive
+translation to a function boundary. (Incidentally the original's `_val` double compare
+and this document's floor+fixup threshold are the same exactness argument in two forms —
+the 2^-17 gap between attainable quotients and the next integer.)
+
 ## 10. Measurement notes
 
 Same box, compilers and discipline as `rc_decoder_opencl_plan_v1.md` §10 — 4-vCPU 2.8 GHz

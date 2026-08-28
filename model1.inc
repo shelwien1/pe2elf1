@@ -5,7 +5,7 @@ struct Model<1> : Coroutine, Predictor {
 
   ALIGN(64) Counter stats[0x100];   // order0
 
-  ALIGN(4096) RCio<BLKSIZE,RCNUM,1> rcio;
+  ALIGN(4096) RCio<BLKSIZE,RCNUM> rcio;
 
   // Either class out of rc.inc decodes: RC_CARRYLESS only changes ShiftLow and
   // rc_Quit, which are encode-only. The carry twin is used here to match what

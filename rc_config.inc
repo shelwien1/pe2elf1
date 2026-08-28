@@ -169,25 +169,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_ISPC 0
 #endif
 
-// Blocks scheduled on the device at once.
-//
-// Block n+1's model pass depends only on the input, not on how block n was
-// coded, so the host can be modelling ahead while the device codes. The ring
-// is what makes that possible: one {p;bit} cache and one set of substream rows
-// per slot, filled in order and collected in order, so the output is still
-// written block by block in sequence.
-//
-// 1 is the unpipelined coder -- submit, wait, write -- and is what a build
-// without a backend uses whatever this says. Past the point where the worker
-// stops being the thing waited on, more slots only cost memory: each is a
-// BLKSIZE*8 word cache plus RCNUM substream rows, about 2 MB at the default
-// geometry, on the host and again on the device.
-//
-// A constant rather than a macro: it is an array bound in three places, and
-// the geometry constants next to it (BLKSIZE, RCNUM) are enums for the same
-// reason.
-static const uint RC_DEV_NBLK = 8;
-
 // 1 = the kernel buffers each lane's output and writes it a dword at a time
 // instead of a byte at a time.
 //

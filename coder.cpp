@@ -139,10 +139,6 @@ int main( int argc, char** argv ) {
 
   uint f_DEC = (argv[1][0]=='d');
 
-  // The device is the encoder's, and it is opened once: C_init runs per
-  // processfile, and n_iter runs that as many times as it is asked to.
-  DEV_Enable( f_DEC==0 );
-
   uint M_size = Max(C_get_object_size<0>(),C_get_object_size<1>());
   void* M = VAlloc(M_size); if( M==0 ) return 5;
   if( (r = C_init<0>(M,argv[4])) ) { printf( "C_init error %i\n", r ); return 1; };
@@ -181,7 +177,6 @@ int main( int argc, char** argv ) {
   printf( "\n" );
 
   DEV_Report( stderr );
-  DEV_Quit();
 
   f.close();
   g.close();

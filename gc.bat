@@ -30,17 +30,19 @@ rem these are the defaults (RCNUM=16, BLKSIZE=65536, LOWBYTES=8, CODBYTES=4).
 rem RC_LOWSPLIT=1 here is kernel-only and stream-neutral: the split low
 rem accumulator measures ~5% faster under ispc while the host keeps the
 rem 64-bit one -- see build.sh's mapping for which -DRC_* sets what.
-rem Two targets and a dispatcher, so the exe runs on AVX2 and AVX-512 alike.
+rem One explicit target, no dispatcher -- pick the line for the machine.
 rem
 rem -DRC_DECSPLIT=1 on the C++ line below enables the split decoder (the
 rem batch kernel is always in the object); measure it, it is off by default
 rem for a reason -- rc_split_ispc_v1.md section 9.2.
 rem ---------------------------------------------------------------------------
 set ispc=C:\ispc260625\bin\ispc.exe
+set ispctarg=avx512skx-x16
+rem set ispctarg=avx2-i32x16
 
 del rc_kernel_ispc*.obj rc_kernel_ispc*.h
 
-%ispc% --target=avx512skx-x16,avx2-i32x16 --arch=x86-64 -O2 ^
+%ispc% --target=%ispctarg% --arch=x86-64 -O2 ^
  -DRCNUM=16 -DSCALElog=15 -DhSCALE=16384 ^
  -DLOWBYTES=8 -DCODBYTES=4 -DRC_LOWSPLIT=1 -DBLKFULL=65536 ^
  -DRC_DEV_WORDOUT=1 -DRC_RANGE64=0 -DRC_RENORM_TAIL=0 ^
@@ -53,9 +55,7 @@ set INCLUDE=
 
 rem -DUNICODE -D_UNICODE 
 
-rem RC_ISPC_THREAD=0 drops <thread> from rc_ispc.cpp (the worker becomes a
-rem synchronous call in DEV_Collect) if the static MSVC STL link objects to it.
-set backend=-DRC_ISPC=1
+set backend=-DRC_ISPC=1 -DRC_ISPC_TARGET=%ispctarg%
 
 set incs=-std=c++17 -DSTRICT -DNDEBUG -DWIN32 -D_WIN32 -I../Lib3 -Drestrict=__restrict %backend% ^
 -D_CRT_SECURE_NO_WARNINGS ^
@@ -110,7 +110,7 @@ for /D %%a in (.) do set DIRNAM=%%~na
 
 rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% -static mrpc.cpp mrpc_lib.cpp OpenCL.lib -o mrpc.exe
 
-%gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp rc_ispc.cpp rc_kernel_ispc.obj rc_kernel_ispc_avx512skx.obj rc_kernel_ispc_avx2.obj -o coder.exe 
+%gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp rc_ispc.cpp rc_kernel_ispc.obj -o coder.exe 
 
 rem -o coder.exe -fsanitize=bounds
 rem -S -fverbose-asm -mllvm --x86-asm-syntax=intel 

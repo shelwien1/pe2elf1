@@ -27,13 +27,13 @@ struct RangecoderN {
 
   // Bind every lane to its own substream buffer in the RCio and reset it.
   template< class IO >
-  void rc_Init( IO& io, uint slot=0 ) {
+  void rc_Init( IO& io ) {
 #if RC_DECSPLIT_ON
     s_bulk = 0;   // header bits run fused; rc_Bulk switches the mode
 #endif
     for( uint i=0; i<RCNUM; i++ ) {
-      if( f_DEC==0 ) rc[i].StartEncode( io.buf(i,slot), IO::tmpbufsize );
-      else           rc[i].StartDecode( io.buf(i,slot) );
+      if( f_DEC==0 ) rc[i].StartEncode( io.buf(i), IO::tmpbufsize );
+      else           rc[i].StartDecode( io.buf(i) );
     }
   }
 
@@ -63,8 +63,8 @@ struct RangecoderN {
   // one lazy step, exactly rc.inc's rc_Renorm+ShiftCode, then the lane's
   // state as the batch keeps it: eager, rpre folded, threshold ready
   template< class IO >
-  void rc_Bulk( IO& io, uint slot=0 ) {
-    s_base = io.rows(slot);
+  void rc_Bulk( IO& io ) {
+    s_base = io.rows();
     for( uint i=0; i<RCNUM; i++ ) {
       t_RC& r = rc[i];
       uint n = (r.range<t_RC::sTOP) + (r.range<t_RC::gTOP);
