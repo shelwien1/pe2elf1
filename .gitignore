@@ -1,0 +1,21 @@
+# built binaries and the tag build.sh records for log.txt
+coder
+coder_*
+*.tag
+*.exe
+*.o
+
+# generated from rc.inc by mk_kernel.sh, once per configuration -- see the
+# comment at the top of that script
+rc_kernel0.c
+rc_kernel1.c
+rc_vecD.inc
+
+# t.sh scratch
+t.enc
+t.dec
+t.ref
+
+# test corpus, fetched by get_enwik8.sh
+/enwik8
+/enwik8.zip

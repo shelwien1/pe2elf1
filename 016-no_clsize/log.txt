@@ -1,0 +1,4 @@
+
+ 70.86MB/s 1.346s 41.89MB/s  2.276s 62,513,092 // 016-no_clsize RCNUM=16 LB=8  avx512
+ 78.50MB/s 1.215s 44.39MB/s  2.148s 62,513,092 // 016-no_clsize RCNUM=16 LB=8 LOWSPLIT=1  avx512
+ 73.70MB/s 1.294s 44.41MB/s  2.147s 62,513,092 // 016-no_clsize RCNUM=16 LB=8  avx2

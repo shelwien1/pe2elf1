@@ -1,0 +1,313 @@
+--- a/rc_config.inc
++++ b/rc_config.inc
+@@ -8,6 +8,13 @@
+ // SCALElog and friends live here rather than in FSM.cpp because rc.inc, the
+ // kernel build options in rc_cl.cpp and the model all need them; FSM.cpp
+ // includes this file for them.
++#ifndef RC_PROBE
++#define RC_PROBE 0
++#endif
++#ifndef RC_PROBE_BLOCKS
++#define RC_PROBE_BLOCKS 1526
++#endif
++
+ enum { SCALElog=15, SCALE=1<<SCALElog, mSCALE=SCALE-1, hSCALE=SCALE/2, eSCALE=16*SCALE };
+ 
+ // 0 = the real setjmp/stack-copy coroutine of Lib3/coro3b.inc, so the coder
+--- a/counter.inc
++++ b/counter.inc
+@@ -1,20 +1,26 @@
+-
+-struct Counter {
+-  word state; 
+-  const uint P() const { return pp[state]; } //FSM[state].pp; }
+-  void Update( uint bit ) { 
+-//    state = FSM[state].s[bit]; 
+-    uint delta = ((byte*)&FSM[state])-((byte*)&FSM[0]);
+-    byte* __restrict p = (byte*)&FSM[0].s[bit];
+-    p += delta;
+-    state = (word&)p[0];
+-  }
+-  void Update( uint _state, uint bit ) { 
+-//    state = FSM[state].s[bit]; 
+-    uint delta = ((byte*)&FSM[_state])-((byte*)&FSM[0]);
+-    byte* __restrict p = (byte*)&FSM[0].s[bit];
+-    p += delta;
+-    state = (word&)p[0];
+-  }
+-};
+-
++
++struct Counter {
++  word state; 
++  const uint P() const { return pp[state]; } //FSM[state].pp; }
++  void Update( uint bit ) { 
++//    state = FSM[state].s[bit]; 
++    uint delta = ((byte*)&FSM[state])-((byte*)&FSM[0]);
++    byte* __restrict p = (byte*)&FSM[0].s[bit];
++    p += delta;
++    state = (word&)p[0];
++  }
++  void Update( uint _state, uint bit ) { 
++//    state = FSM[state].s[bit]; 
++    uint delta = ((byte*)&FSM[_state])-((byte*)&FSM[0]);
++    byte* __restrict p = (byte*)&FSM[0].s[bit];
++    p += delta;
++    state = (word&)p[0];
++  }
++
++  // Probe only: load the whole 4-byte FSM entry and select s[bit], instead of
++  // building the address out of bit. One load, no address dependency on bit.
++  void Update2( uint _state, uint bit ) {
++    uint pair = *(const uint*)&FSM[_state];
++    state = word( bit ? (pair>>16) : (pair&0xFFFF) );
++  }
++};
+--- a/predict.inc
++++ b/predict.inc
+@@ -1,46 +1,51 @@
+-
+-struct Predictor {
+-
+-  uint ctx,ctz;  // o0 aligned bit context
+-
+-  Counter* __restrict cty;
+-
+-  void P_Init( Counter* p0_, uint p_size ) { 
+-    Counter* __restrict P_p = p0_;
+-    for( uint i=0; i<p_size; i++ ) P_p[i].state=0; 
+-    ctx=1; cty=P_p-1;
+-  }
+-
+-  void P_S( uint& _s ) {  
+-    _s = cty[ctx].state;   
+-  }
+-
+-  void P_byte( void* p_, uint& c ) { 
+-    c = ctx&0xFF; ctx=1; 
+-  }
+-
+-  void P_ctxfix() {
+-  }
+-
+-  void P_update( uint state, uint bit ) {
+-    cty[ctx].Update( state, bit );   
+-    (ctx*=2)+=bit;
+-  }
+-
+-  uint Init( void* _p ) {
+-    uint r = 0;
+-    if( _p!=0 ) {
+-      char* fnam = (char*)_p;
+-      FILE* h = fopen( fnam, "rb" ); if( h==0 ) r=4; else {
+-        if( FSM[0].Load(h) ) r=5;
+-        fclose(h);
+-      }
+-    }
+-    return r;
+-  }
+-
+-  void* Save( void* r0 = 0 ) { return 0; }
+-
+-  uint Quit( void ) { return 0; }
+-
+-};
++
++struct Predictor {
++
++  uint ctx,ctz;  // o0 aligned bit context
++
++  Counter* __restrict cty;
++
++  void P_Init( Counter* p0_, uint p_size ) { 
++    Counter* __restrict P_p = p0_;
++    for( uint i=0; i<p_size; i++ ) P_p[i].state=0; 
++    ctx=1; cty=P_p-1;
++  }
++
++  void P_S( uint& _s ) {  
++    _s = cty[ctx].state;   
++  }
++
++  void P_byte( void* p_, uint& c ) { 
++    c = ctx&0xFF; ctx=1; 
++  }
++
++  void P_ctxfix() {
++  }
++
++  void P_update( uint state, uint bit ) {
++    cty[ctx].Update( state, bit );   
++    (ctx*=2)+=bit;
++  }
++
++  void P_update2( uint state, uint bit ) {
++    cty[ctx].Update2( state, bit );
++    (ctx*=2)+=bit;
++  }
++
++  uint Init( void* _p ) {
++    uint r = 0;
++    if( _p!=0 ) {
++      char* fnam = (char*)_p;
++      FILE* h = fopen( fnam, "rb" ); if( h==0 ) r=4; else {
++        if( FSM[0].Load(h) ) r=5;
++        fclose(h);
++      }
++    }
++    return r;
++  }
++
++  void* Save( void* r0 = 0 ) { return 0; }
++
++  uint Quit( void ) { return 0; }
++
++};
+--- a/model1.inc
++++ b/model1.inc
+@@ -4,6 +4,10 @@
+   static const uint f_DEC=1;
+ 
+   ALIGN(64) Counter stats[0x100];   // order0
++#if RC_PROBE>=9
++  ALIGN(64) Counter stats2[0x100];  // probe: a second, independent model chain
++  uint ctx2;
++#endif
+ 
+   ALIGN(4096) RCio<BLKSIZE,RCNUM,1> rcio;
+ 
+@@ -19,6 +23,13 @@
+   NOINLINE
+   void do_process() {
+     uint c,i,j,bit=0,p,blksize,state;
++    uint nblk=0; (void)nblk;
++#if RC_PROBE==12
++    uint lag_ctx[8], lag_st[8], lag_bit[8];
++#endif
++#if RC_PROBE>=9
++    ctx2 = 1; for( i=0; i<0x100; i++ ) stats2[i].state=0;
++#endif
+ 
+     P_Init(stats,DIM(stats));
+ 
+@@ -27,6 +38,9 @@
+       rcio.rc_Read( (*this) );
+       rc.rc_Init( rcio );
+ 
++#if RC_PROBE
++      blksize = BLKSIZE;
++#else
+       rc.rc_Process( 0, hSCALE, bit );
+ 
+       if( bit ) {
+@@ -35,20 +49,109 @@
+           c = c*2 + (bit>0);
+         } blksize=c;
+       } else blksize=BLKSIZE;
++#endif
+ 
+       for( i=0; i<blksize*8; i++ ) {
+         j = i % RCNUM;
+ 
++#if RC_PROBE==0
+         P_S(state); p=pp[state];
+ 
+         rc.rc_Process( j, p, bit );
+ 
+         P_update( state, bit );
++#elif RC_PROBE==1
++        // model only: the whole FSM chain, no rangecoder at all
++        P_S(state); p=pp[state];
++        bit = (p>>7)&1;
++        P_update( state, bit );
++#elif RC_PROBE==2
++        // coder only: RCNUM decode lanes, no model chain
++        p = 0x2000 + (j&7);
++        rc.rc_Process( j, p, bit );
++#elif RC_PROBE==3
++        // model chain with both successors loaded and selected on bit
++        P_S(state); p=pp[state];
++        bit = (p>>7)&1;
++        P_update2( state, bit );
++#elif RC_PROBE==12
++        // Counter write-back deferred to the byte boundary. Within a byte the
++        // bit tree visits eight distinct cells and never reads one twice, so
++        // this is bit-identical to updating in place -- it only moves the
++        // stores off the intra-byte chain.
++        P_S(state); p=pp[state];
++
++        rc.rc_Process( j, p, bit );
++
++        lag_ctx[i&7]=ctx; lag_st[i&7]=state; lag_bit[i&7]=bit;
++        (ctx*=2)+=bit;
++#elif RC_PROBE==8
++        // model chain without the counter write-back
++        P_S(state); p=pp[state];
++        bit = (p>>7)&1;
++        (ctx*=2)+=bit;
++#elif RC_PROBE==9
++        // two independent model chains in one thread
++        P_S(state); p=pp[state];
++        bit = (p>>7)&1;
++        P_update( state, bit );
++        { uint s2=stats2[ctx2].state; uint p2=pp[s2]; uint b2=(p2>>7)&1;
++          stats2[ctx2].Update(s2,b2); ctx2=(ctx2*2+b2)&0xFF; }
++#elif RC_PROBE==10
++        // the real decode step, plus one extra independent model chain
++        P_S(state); p=pp[state];
++
++        rc.rc_Process( j, p, bit );
++
++        P_update( state, bit );
++        { uint s2=stats2[ctx2].state; uint p2=pp[s2]; uint b2=(p2>>7)&1;
++          stats2[ctx2].Update(s2,b2); ctx2=(ctx2*2+b2)&0xFF; }
++#elif RC_PROBE==11
++        // the real decode step, plus two extra independent model chains
++        P_S(state); p=pp[state];
++
++        rc.rc_Process( j, p, bit );
++
++        P_update( state, bit );
++        { uint s2=stats2[ctx2].state; uint p2=pp[s2]; uint b2=(p2>>7)&1;
++          stats2[ctx2].Update(s2,b2); ctx2=(ctx2*2+b2)&0xFF; }
++        { uint s3=stats2[ctx2^0x55].state; uint p3=pp[s3]; uint b3=(p3>>7)&1;
++          stats2[ctx2^0x55].Update(s3,b3); }
++#elif RC_PROBE==5
++        // neither: loop overhead and the output side only
++        bit = (i>>3)&1;
++#elif RC_PROBE==6
++        // model chain without the pp[] lookup
++        P_S(state); p=0x2000;
++        bit = (state>>7)&1;
++        P_update( state, bit );
++#elif RC_PROBE==7
++        // model chain without the cty[] lookup (pp[] load only)
++        state = (state*1103515245u+12345u)&0x7FFF; p=pp[state];
++        bit = (p>>7)&1;
++        ctx = (ctx*2+bit)&0xFF;
++#elif RC_PROBE==4
++        // full step, but the FSM successor pair is loaded as one dword
++        P_S(state); p=pp[state];
++
++        rc.rc_Process( j, p, bit );
++
++        P_update2( state, bit );
++#endif
+ 
+-        if_e0( i%8==7 ) { P_byte(stats,c); put0(c); }
++        if_e0( i%8==7 ) {
++#if RC_PROBE==12
++          for( uint k=0; k<8; k++ ) cty[lag_ctx[k]].Update( lag_st[k], lag_bit[k] );
++#endif
++          P_byte(stats,c); put0(c);
++        }
+       }
+ 
++#if RC_PROBE
++      if( ++nblk >= RC_PROBE_BLOCKS ) break;
++#else
+       if( blksize<BLKSIZE ) break;
++#endif
+ 
+       chkout();
+     }
