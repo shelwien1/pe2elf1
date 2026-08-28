@@ -237,6 +237,19 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
  #define RC_UNROLL
 #endif
 
+// Where the decoder's coder state lives: 1 = a local on the coroutine stack,
+// 0 = a member of the model object. Measured opposite ways by compiler on the
+// reference box: clang wants the local (with the refill-only cursor store it
+// is what lets its alias analysis schedule the unrolled bodies, 34.9 -> 36.5),
+// gcc wants the member (the local costs it 25.7 -> 20.3). Overridable.
+#ifndef RC_DEC_LOCAL
+#if defined(__clang__) || defined(__INTEL_LLVM_COMPILER)
+#define RC_DEC_LOCAL 1
+#else
+#define RC_DEC_LOCAL 0
+#endif
+#endif
+
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
 // prefix below is the difference between it and the low accumulator.

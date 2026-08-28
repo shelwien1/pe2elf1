@@ -133,7 +133,7 @@ struct RangecoderN {
 #endif
 #if RC_DECSOA_ON
     if( f_DEC ) {
-      uint r=d_range[rcidx], c=d_code[rcidx], q=d_pos[rcidx];
+      uint r=d_range[rcidx], c=d_code[rcidx];
       c -= d_rpre[rcidx];
       // Branchy renorm, the original Rangecoder1's: ~91% of bits refill
       // nothing and pay two predicted-not-taken tests, where the counted
@@ -141,22 +141,48 @@ struct RangecoderN {
       // bounds arithmetic on every bit. On the scalar decode path branchy
       // wins -- the same measurement the original made (RC.txt, 054) and
       // this port initially ignored.
+      //
+      // The cursor handling differs by compiler, measured both ways: clang
+      // wants it touched only inside the refill (the original's shape,
+      // 34.9 -> 36.5 on the reference box) but only once the coder is a
+      // stack local -- through `this` the conditional store wrecks its
+      // alias scheduling (35.2 -> 25.4). gcc is the mirror image: the
+      // conditional store costs it a third (23.6 -> 17.4), the
+      // unconditional form does not.
+#if defined(__clang__) || defined(__INTEL_LLVM_COMPILER)
       if_e0( r<t_RC::sTOP ) {
+        uint q = d_pos[rcidx];
         if_e0( r<t_RC::gTOP ) {
           r <<= 16;
-          c = (c<<16) + (uint(d_base[q])<<8) + d_base[q+1]; q += 2;
+          c = (c<<16) + (uint(d_base[q])<<8) + d_base[q+1];
+          d_pos[rcidx] = q+2;
         } else {
           r <<= 8;
-          c = (c<<8) + d_base[q]; q += 1;
+          c = (c<<8) + d_base[q];
+          d_pos[rcidx] = q+1;
         }
       }
+#else
+      {
+        uint q = d_pos[rcidx];
+        if_e0( r<t_RC::sTOP ) {
+          if_e0( r<t_RC::gTOP ) {
+            r <<= 16;
+            c = (c<<16) + (uint(d_base[q])<<8) + d_base[q+1]; q += 2;
+          } else {
+            r <<= 8;
+            c = (c<<8) + d_base[q]; q += 1;
+          }
+        }
+        d_pos[rcidx] = q;
+      }
+#endif
       uint rp = (r>>SCALElog)*freq;
       bit = (c>=rp);
       r -= rp;
       d_range[rcidx] = bit ? r : rp;
       d_rpre[rcidx]  = rp & (0-bit);
       d_code[rcidx]  = c;
-      d_pos[rcidx]   = q;
       return;
     }
 #endif

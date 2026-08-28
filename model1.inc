@@ -10,15 +10,28 @@ struct Model<1> : Coroutine, Predictor {
   // Either class out of rc.inc decodes: RC_CARRYLESS only changes ShiftLow and
   // rc_Quit, which are encode-only. The carry twin is used here to match what
   // the original decoded with.
-  ALIGN(64) RangecoderN<BLKSIZE,RCNUM, Rangecoder_CY<1> > rc;
 
   // outbuf has to hold a whole block: the decode loop writes blksize bytes with
   // the unchecked put0 and only calls chkout() once, at the block boundary.
   static_assert( int(outbufsize)>=int(BLKSIZE), "outbufsize must be at least BLKSIZE" );
 
+#if !RC_DEC_LOCAL
+  ALIGN(64) RangecoderN<BLKSIZE,RCNUM, Rangecoder_CY<1> > rc;
+#endif
+
   NOINLINE
   void do_process() {
     uint c,i,j,bit=0,p,blksize,state;
+
+#if RC_DEC_LOCAL
+    // The coder on the coroutine stack, the original's arrangement: a local
+    // provably escapes nowhere, so stores through the counter and output
+    // pointers cannot alias it and clang keeps the lane state scheduled
+    // across the unrolled bodies. ~2.5KB at RCNUM=16 (~10KB at 64) against
+    // the coroutine's 64KB pad. gcc prefers the member -- RC_DEC_LOCAL in
+    // rc_config.inc has the numbers.
+    ALIGN(64) RangecoderN<BLKSIZE,RCNUM, Rangecoder_CY<1> > rc;
+#endif
 
     P_Init(stats,DIM(stats));
 
