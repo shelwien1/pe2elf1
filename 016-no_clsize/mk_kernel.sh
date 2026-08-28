@@ -18,6 +18,22 @@ set -e
 cd "$(dirname "$0")"
 CPP="${CPP:-cc -E}"
 
+# A Windows compiler path arrives with backslashes -- gc.bat's %gcc% is
+# C:\clangN10x\bin\clang++.exe -- and to sh a word with no forward slash in it
+# is a command NAME, looked up in PATH, not a path. It never resolves:
+#
+#   mk_kernel.sh: line 21: C:\clangN10x\bin\clang++.exe: command not found
+#
+# Backslashes are a legal separator for the Windows exec either way, so swap
+# them and the same string becomes a path sh will run. Harmless everywhere
+# else: a backslash in a compiler path is not a thing on POSIX.
+case "$CPP" in
+  *\\*) CPP=`printf '%s' "$CPP" | tr '\\' '/'` ;;
+esac
+
+# $CPP is deliberately unquoted below, so it can carry flags -- which means its
+# words are split on whitespace and cannot be shell-quoted. A path with spaces
+# in it has to reach us already escaped, or as a short name.
 $CPP -P -x c++ -DRC_VECOUT=1 -DRC_CARRYLESS=1 "$@"   -imacros rc_config.inc rc.inc > rc_kernel0.c
 
 perl ../Lib3/rc_soa.pl rc_kernel0.c

@@ -24,7 +24,13 @@ rem  the compile has to decide for itself is left as a macro for it to define
 rem  (see model.inc).
 rem
 rem  This runs BEFORE the PATH below is replaced, while sh is still findable.
-set CPP=%gcc% -E
+rem  Only the executable, not the rest of %gcc%: mk_kernel.sh preprocesses
+rem  rc.inc, which includes nothing, and it word-splits $CPP -- so a quoted
+rem  -include argument would not survive the trip. mk_kernel.sh turns the
+rem  backslashes into slashes itself, because to sh a word without one is a
+rem  command name and not a path.
+for /f "tokens=1" %%x in ("%gcc%") do set CPPEXE=%%x
+set CPP=%CPPEXE% -E
 sh mk_kernel.sh %defs%
 if errorlevel 1 (
   echo gc.bat: mk_kernel.sh failed -- refusing to build against a stale rc_vecD.inc
