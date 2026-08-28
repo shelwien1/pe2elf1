@@ -27,6 +27,21 @@ struct Predictor {
     (ctx*=2)+=bit;
   }
 
+  // The same two, against a caller-held context. A pass that walks a whole
+  // block wants ctx in a register, and cannot get it: the store to
+  // cty[ctx].state may-alias this->ctx -- ctx is a loaded index, so nothing
+  // bounds it -- and LICM gives up, leaving ctx written once per input byte.
+  // Handing the context in by reference sidesteps the aliasing question
+  // entirely. Identical arithmetic, identical traffic through cty[].
+  void P_S_L( uint _c, uint& _s ) {
+    _s = cty[_c].state;
+  }
+
+  void P_update_L( uint& _c, uint state, uint bit ) {
+    cty[_c].Update( state, bit );
+    (_c*=2)+=bit;
+  }
+
   uint Init( void* _p ) {
     uint r = 0;
     if( _p!=0 ) {

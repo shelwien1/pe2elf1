@@ -285,7 +285,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
     tmpptr -= n;
 #if RC_LOWSPLIT
-    uint _hi = (sh==0) ? 0u : (lowl >> (32-sh));
+    // sh is 0, 8 or 16, so splitting the shift keeps both counts <= 16 and
+    // the sh==0 case falls out as 0 on its own -- (x>>16)>>16 is a defined
+    // pair of 32-bit shifts where x>>32 is not. That drops the vpcmpeqd and
+    // vpandn the ternary compiled to in each half of the sweep.
+    uint _hi = (lowl >> 16) >> (16-sh);
     lowh = ((lowh<<sh) | _hi) & uint(LOW_MASK>>32);
     lowl <<= sh;
 #else

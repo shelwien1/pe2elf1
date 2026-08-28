@@ -224,16 +224,27 @@ struct Model<0> : Coroutine, Predictor {
 
       chkinp(); blksize=getinplen(); if( blksize>BLKSIZE ) blksize=BLKSIZE;
 
-      // model pass: precalc {p;bit} pairs for the whole block
-      for( i=0; i<blksize; i++ ) {
-        c = get0();
-        for( j=0; j<8; j++ ) {
-          P_S(state); p=pp[state];
-          bit = (c>>(7-j))&1;
-          pbit[i*8+j] = (bit<<15)+p;
-          P_update( state, bit );
+      // model pass: precalc {p;bit} pairs for the whole block.
+      //
+      // Out of locals, because neither cursor gets promoted otherwise: the
+      // store to cty[ctx].state may-alias this->ctx, and inpptr is union-
+      // overlaid with pin[] (coro3b.inc), so both were stored once per input
+      // byte -- and the ctx store is the same constant every time. Same
+      // arithmetic, same traffic through cty[]; both are written back once
+      // per block.
+      { byte* __restrict ip = inpptr;
+        uint lctx = ctx;
+        for( i=0; i<blksize; i++ ) {
+          c = *ip++;                      // get0(), against the local cursor
+          for( j=0; j<8; j++ ) {
+            P_S_L(lctx,state); p=pp[state];
+            bit = (c>>(7-j))&1;
+            pbit[i*8+j] = (bit<<15)+p;
+            P_update_L( lctx, state, bit );
+          }
+          lctx = 1;                       // P_byte: resets the bit context
         }
-        { uint cc=0; P_byte(stats,cc); } // resets the bit context
+        inpptr = ip; ctx = lctx;
       }
 
 #if RC_VEC && !RC_FORCE_CARRY
