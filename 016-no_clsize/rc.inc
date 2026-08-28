@@ -57,6 +57,17 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #if RC_STATS
   uint  n_carry; // isn't expected to be used on enough data to overflow
 #endif
+#if RC_VECOUT && RC_SCATTER
+  // ShiftLow's store, staged rather than performed: the dword and the tmpbase
+  // offset it belongs at. rc_Flush commits one; model0.inc commits a whole
+  // group with one scatter. See RC_SCATTER in rc_config.inc.
+  uint  stcl, stad;
+  // so the compile can tell it is looking at a kernel generated for the same
+  // RC_SCATTER it was built with -- model0.inc static_asserts on it
+  enum { SCATTER_GEN = 1 };
+#elif RC_VECOUT
+  enum { SCATTER_GEN = 0 };
+#endif
 
 #if RC_STATS
   #define RC_CARRY_COUNT(c) (n_carry+=(c))
@@ -252,7 +263,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #else
     uint cl = lowl;
 #endif
+#if RC_SCATTER
+    stcl = cl; stad = tmpptr-2;   // committed by rc_Flush / RC_FLUSHALL
+#else
     (uint&)tmpbase[tmpptr-2] = cl;
+#endif
 #else
 #if RC_LOWBYTES==8
     qword cl = lowc;
@@ -271,6 +286,14 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     lowc = (lowc<<sh) & LOW_MASK;
 #endif
   }
+
+#if RC_SCATTER
+  // Commit the store ShiftLow staged. One lane at a time -- for the paths that
+  // code one lane at a time; the sweep uses model0.inc's scatter instead.
+  void rc_Flush( void ) {
+    (uint&)tmpbase[stad] = stcl;
+  }
+#endif
 
   // Encode: the counted shift. Decode: the branchy nested refill with the
   // cursor touched only inside it -- ~91% of bits pass two predicted tests
@@ -368,6 +391,12 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     n_carry = 0;
 #endif
     range = RC_RANGE_INIT;
+#if RC_VECOUT && RC_SCATTER
+    // where the first ShiftLow's store would land anyway: the row's zero
+    // prefix, which rc_Write drops. Keeps a flush before the first ShiftLow
+    // -- there is none today -- from writing somewhere it should not.
+    stcl = 0; stad = tmpptr-2;
+#endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
   }
 
@@ -376,6 +405,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   void rc_Quit( void ) {
     if( f_DEC==0 ) {
       rc_Renorm();
+#if RC_SCATTER
+      // before the put1 run below, which overwrites the top of the staged
+      // dword -- exactly what it does to the direct store
+      rc_Flush();
+#endif
 
       uint i, n = LOWBYTES;
 #if RC_LOWSPLIT

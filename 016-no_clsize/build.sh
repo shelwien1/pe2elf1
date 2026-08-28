@@ -70,8 +70,11 @@ done
 DIRNAM=$(basename "$PWD")
 
 #--- the generated vector coder ----------------------------------------------
-# rc.inc -> rc_vecD.inc, against this build's -D set. Not committed: it is
-# derived, and it is derived differently for every configuration.
+# rc.inc -> rc_vecD.inc, against this build's -D set AND its -march: the
+# generator has to resolve rc_config.inc exactly the way the compile will, and
+# RC_SCATTER keys off __AVX512F__. model0.inc static_asserts that the two
+# agreed. Not committed: it is derived, and derived differently for every
+# configuration.
 #
 # Only when the configuration actually has one. RC_VEC=0 leaves the models on
 # the scalar coder and never includes rc_vecD.inc, and RC_RANGE64=1 turns
@@ -84,7 +87,7 @@ if [ "$rc_vec" = 0 ]; then
   echo "build.sh: RC_VEC=0, scalar coder only -- skipping mk_kernel.sh"
   rm -f rc_vecD.inc
 else
-  CPP="$CXX -E" ./mk_kernel.sh "$@"
+  CPP="$CXX $archflags -E" ./mk_kernel.sh "$@"
 fi
 
 #--- compile -----------------------------------------------------------------

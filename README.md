@@ -45,8 +45,8 @@ for byte. A roundtrip alone would not catch a vector coder that emits a
 *different* valid stream, which is why the second check is there.
 
     == ../enwik8 (100000000 bytes), 10 encode passes, FSM ../FSM0.txt
-    enc  66.04MB/s 1.444s   #10
-    dec  32.36MB/s 2.947s   #1
+    enc  75.14MB/s 1.269s   #10
+    dec  34.88MB/s 2.733s   #1
     == roundtrip
        ok: decoded output matches the input
     == vector stream vs the -C scalar reference
@@ -66,11 +66,22 @@ against it -- so pass them to `build.sh`, or to `t.sh`, which forwards them:
 Nothing generated is committed, and `build.sh` regenerates it every time, so
 switching configurations needs no clean.
 
+`RC_SCATTER` is the one knob that keys off the target rather than the `-D` set.
+The coder's one hot store goes to a per-lane address, and the sweep is straight-
+line code, so SLP -- which is what vectorizes it -- emits an address extract
+plus a scalar store per lane instead of a scatter, which it never forms. With
+`RC_SCATTER` on, `ShiftLow` stages the store in `stcl[]`/`stad[]` (contiguous
+array stores, which SLP does vectorize) and the model commits a whole group
+with one `vpscatterdd`. It turns on by itself for clang + AVX-512 at
+`RCNUM%16==0`, and is off everywhere else, where staging would only cost.
+The stream does not change either way -- `t.sh` checks that.
+
 | `build.sh`                | |
 |---|---|
 | `ARCH=skylake-avx512`     | the `-march`/`-mtune` target (default `native`, probed -- an unsupported one drops out with a warning instead of failing the build) |
 | `CXX=g++`                 | gcc builds correctly and produces byte-identical streams, but does not vectorize the lane sweep: about half the encode speed |
 | `LTO=0`                   | skip `-flto`/`lld` (used when both are available; a failed LTO link falls back on its own) |
+| `OPT='-O3 -mprefer-vector-width=512'` plus `-DRC_SCATTER_W=16` | the wide scatter, if you want to measure it -- slower here |
 | `STATIC=1`, `OUT=`, `STD=`, `OPT=` | link static, name the binary, pick the standard and the optimization level |
 
 | `t.sh`                    | |

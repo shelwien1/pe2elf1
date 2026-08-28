@@ -7,8 +7,11 @@
 #   rc_macro.pl  functions into #define/#enddef blocks
 #   defines.pl   ... into real multi-line macros
 #
-# The output depends on the RC_* configuration, so build.sh runs this every
-# build with the current -D set; nothing here is committed.
+# The output depends on the RC_* configuration -- and on the target, since
+# RC_SCATTER keys off __AVX512F__ -- so build.sh runs this every build with the
+# current -D set and CPP="$CXX $archflags -E"; nothing here is committed.
+# Running it by hand without those flags produces a kernel the compile will
+# reject (model0.inc static_asserts on RC_SCATTER).
 #   mk_kernel.sh [-Dname=value ...]
 set -e
 cd "$(dirname "$0")"

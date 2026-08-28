@@ -1,4 +1,33 @@
 
+// Committing the store ShiftLow staged (rc.inc's stcl/stad), when RC_SCATTER
+// says it is staged at all. RC_FLUSHALL is the whole group in one go: the
+// arrays are RCNUM lanes of dword and dword-offset, which is exactly a
+// vpscatterdd, and it is the instruction SLP will not produce on its own.
+//
+// RC_SCATTER_W lanes per scatter -- it has to match the width the sweep's
+// arithmetic came out at, see rc_config.inc. RCNUM is a multiple of 16 either
+// way, RC_SCATTER requires it. Unaligned loads: the lane arrays carry VECSIZE
+// alignment, which is not the scatter's width.
+#if RC_SCATTER
+#define RC_FLUSH1( k ) rc_Flush(k)
+#if RC_SCATTER_W==16
+#define RC_FLUSHALL()                                                    \
+  { for( uint _k=0; _k<RCNUM; _k+=16 )                                   \
+      _mm512_i32scatter_epi32( (void*)tmpbase,                           \
+        _mm512_loadu_si512( (const void*)&stad[_k] ),                    \
+        _mm512_loadu_si512( (const void*)&stcl[_k] ), 1 ); }
+#else
+#define RC_FLUSHALL()                                                    \
+  { for( uint _k=0; _k<RCNUM; _k+=8 )                                    \
+      _mm256_i32scatter_epi32( (void*)tmpbase,                           \
+        _mm256_loadu_si256( (const __m256i*)&stad[_k] ),                 \
+        _mm256_loadu_si256( (const __m256i*)&stcl[_k] ), 1 ); }
+#endif
+#else
+#define RC_FLUSH1( k ) ((void)0)
+#define RC_FLUSHALL()  ((void)0)
+#endif
+
 template<>
 struct Model<0> : Coroutine, Predictor {
   static const uint f_DEC=0;
@@ -116,6 +145,10 @@ struct Model<0> : Coroutine, Predictor {
     // sh_v1xN's arrangement, from the same rc.inc as the scalar reference
     // and the carry twin. Locals, so the sweep's stores alias nothing.
 #include "rc_vecD.inc"
+    static_assert( SCATTER_GEN == RC_SCATTER,
+      "rc_vecD.inc was generated with a different RC_SCATTER than this build. "
+      "mk_kernel.sh has to see the same -march and -D set as the compile; "
+      "build.sh passes both." );
 #endif
 
     P_Init(stats,DIM(stats));
@@ -150,13 +183,16 @@ struct Model<0> : Coroutine, Predictor {
         // stages its word at [tmpptr..tmpptr+1] (see rc.inc)
         for( j=0; j<RCNUM; j++ ) { tmpptr[j] = (j+1)*t_RCio::rowsize-2; rc_Init(j); }
 
+        // The block-length header codes one lane at a time, and comes back
+        // to lane 0 -- the flag bit stages it, then j=0 stages it again --
+        // so these commit per bit rather than per group.
         bit = (blksize!=BLKSIZE);
-        rc_Process( 0, hSCALE, bit );
+        rc_Process( 0, hSCALE, bit ); RC_FLUSH1( 0 );
 
         if( bit ) {
           for( j=0; j<16; j++ ) {
             bit = (blksize>>(15-j))&1;
-            rc_Process( j%RCNUM, hSCALE, bit );
+            rc_Process( j%RCNUM, hSCALE, bit ); RC_FLUSH1( j%RCNUM );
           }
         }
 
@@ -164,6 +200,9 @@ struct Model<0> : Coroutine, Predictor {
           uint blksize0 = blksize*8;
           uint blksize1 = blksize0 - (blksize0%RCNUM);
 
+          // One rc_Process per lane per group, so the RCNUM staged stores
+          // are RCNUM distinct addresses in RCNUM distinct rows and the
+          // group can commit them together.
           for( i=0; i<blksize1; i+=RCNUM ) {
             RC_UNROLL
             for( j=0; j<RCNUM; j++ ) {
@@ -171,12 +210,14 @@ struct Model<0> : Coroutine, Predictor {
               uint f = b&0x7FFF; b >>= 15;
               rc_Process( j, f, b );
             }
+            RC_FLUSHALL();
           }
 
+          // fewer than RCNUM bits left: consecutive i, so still one lane each
           for( ; i<blksize0; i++ ) {
             uint b = pbit[i];
             uint f = b&0x7FFF; b >>= 15;
-            rc_Process( i%RCNUM, f, b );
+            rc_Process( i%RCNUM, f, b ); RC_FLUSH1( i%RCNUM );
           }
         }
 
@@ -224,3 +265,6 @@ struct Model<0> : Coroutine, Predictor {
   }
 
 };
+
+#undef RC_FLUSH1
+#undef RC_FLUSHALL

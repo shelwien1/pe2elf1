@@ -218,6 +218,58 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #error the vector kernel carries a 32-bit range -- RC_RANGE64 stays scalar
 #endif
 
+// 1 = ShiftLow stages its store in the lane arrays instead of performing it,
+// and the model commits a whole group of them with one vpscatterdd -- see
+// stcl/stad in rc.inc and RC_FLUSHALL in model0.inc.
+//
+// The store is the coder's one hot store, and it goes to a per-lane address.
+// SLP -- which is what handles the unrolled RCNUM-lane sweep, since the sweep
+// is straight-line code and not a loop -- never forms a scatter: it vectorizes
+// the arithmetic and then emits an address extract plus a scalar store per
+// lane, 32 uops per group. Staging into stcl[]/stad[] leaves the sweep with
+// nothing but contiguous array stores, which SLP does vectorize, and moves
+// the scattering to one intrinsic after the group.
+//
+// Only where that trade is available: AVX-512 for the scatter, RCNUM a whole
+// number of 16-lane scatters, RC_LOWSPLIT for the 32-bit store shape (at
+// LOWSPLIT=0 with LOWBYTES=8 the store is a qword and would want a different
+// scatter), and clang, because the trade is with SLP -- gcc does not vectorize
+// the sweep at all, so staging buys it nothing and costs it two arrays of real
+// memory traffic (22.97 -> 19.06 MB/s here). Everywhere else the store stays
+// exactly where it is: without a scatter the staged form is strictly worse.
+//
+// Nothing about the stream changes: the same dword lands at the same address
+// with the same bytes, one group later, and the encoder never reads tmpbase
+// while coding. t.sh checks that against the scalar coder.
+#ifndef RC_SCATTER
+# if defined(__AVX512F__) && defined(__clang__) && RC_VEC && RC_LOWSPLIT && (RC_RCNUM%16)==0
+#  define RC_SCATTER 1
+# else
+#  define RC_SCATTER 0
+# endif
+#endif
+
+// Lanes per scatter: 16 (vpscatterdd zmm) or 8 (the AVX512VL ymm form).
+//
+// This has to match the width the sweep's arithmetic came out at, not the
+// widest the target has. clang defaults to -mprefer-vector-width=256 on
+// skylake-avx512 and later, so the staged arrays live in ymm halves; asking
+// for a 16-lane scatter there makes it spill both halves and reload them as
+// one zmm, and the 32-byte store under a 64-byte load cannot store-forward.
+// Measured on cascadelake: 49.6 MB/s that way against 66.4 for the direct
+// store, where the 8-lane scatter is 66.9.
+//
+// So: 8 wherever the ymm form exists, and pair -mprefer-vector-width=512 with
+// -DRC_SCATTER_W=16 if you want to try the wide one (72.1 MB/s here, still
+// behind the 8-lane default).
+#ifndef RC_SCATTER_W
+# ifdef __AVX512VL__
+#  define RC_SCATTER_W 8
+# else
+#  define RC_SCATTER_W 16
+# endif
+#endif
+
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
 // prefix below is the difference between it and the low accumulator.
