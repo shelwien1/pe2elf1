@@ -43,7 +43,7 @@ As the profile was taken -- the inline store, before any of the changes below:
       coding sweep                   47.35   46%
         of which the ShiftLow store  14.71   31% of the sweep
 
-and where it stands now, after sections 3 and 10:
+and where it stands now, after sections 3 and 9:
 
     encode total                     89.46 cyc/grp   (72.32 MB/s)
       model pass                     51.41   57%
