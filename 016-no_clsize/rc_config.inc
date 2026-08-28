@@ -241,32 +241,41 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // Nothing about the stream changes: the same dword lands at the same address
 // with the same bytes, one group later, and the encoder never reads tmpbase
 // while coding. t.sh checks that against the scalar coder.
-#ifndef RC_SCATTER
-# if defined(__AVX512F__) && defined(__clang__) && RC_VEC && RC_LOWSPLIT && (RC_RCNUM%16)==0
-#  define RC_SCATTER 1
-# else
-#  define RC_SCATTER 0
-# endif
-#endif
-
-// Lanes per scatter: 16 (vpscatterdd zmm) or 8 (the AVX512VL ymm form).
+// Lanes per commit, and which instruction commits them:
+//   16  vpscatterdd zmm      (AVX-512F)
+//    8  vpscatterdd ymm      (AVX-512VL)
+//    0  no scatter at all -- a block of RCNUM scalar stores (AVX2 and below)
 //
-// This has to match the width the sweep's arithmetic came out at, not the
-// widest the target has. clang defaults to -mprefer-vector-width=256 on
-// skylake-avx512 and later, so the staged arrays live in ymm halves; asking
+// On AVX-512 this has to match the width the sweep's arithmetic came out at,
+// not the widest the target has. clang defaults to -mprefer-vector-width=256
+// on skylake-avx512 and later, so the staged arrays live in ymm halves; asking
 // for a 16-lane scatter there makes it spill both halves and reload them as
 // one zmm, and the 32-byte store under a 64-byte load cannot store-forward.
 // Measured on cascadelake: 49.6 MB/s that way against 66.4 for the direct
-// store, where the 8-lane scatter is 66.9.
-//
-// So: 8 wherever the ymm form exists, and pair -mprefer-vector-width=512 with
-// -DRC_SCATTER_W=16 if you want to try the wide one (72.1 MB/s here, still
-// behind the 8-lane default).
+// store, where the 8-lane scatter is 66.9. Pair -mprefer-vector-width=512 with
+// -DRC_SCATTER_W=16 if you want to measure the wide one (72.1 MB/s here,
+// still behind the 8-lane default).
 #ifndef RC_SCATTER_W
-# ifdef __AVX512VL__
+# if defined(__AVX512VL__)
 #  define RC_SCATTER_W 8
-# else
+# elif defined(__AVX512F__)
 #  define RC_SCATTER_W 16
+# else
+#  define RC_SCATTER_W 0
+# endif
+#endif
+
+#ifndef RC_SCATTER
+# if !defined(__clang__) || !RC_VEC || !RC_LOWSPLIT
+#  define RC_SCATTER 0
+# elif RC_SCATTER_W==0
+   // the scalar block: no ISA requirement, but it is a straight trade of port-5
+   // shuffles for port-4 stores and the staged arrays cost registers, so it
+   // stops paying as RCNUM grows. Measured on AVX2/cascadelake, 20 MB of
+   // enwik8: RCNUM=8 +3.3%, RCNUM=16 +6.6%, RCNUM=32 -3.2%.
+#  define RC_SCATTER (RC_RCNUM<=16)
+# else
+#  define RC_SCATTER ((RC_RCNUM%16)==0)
 # endif
 #endif
 
@@ -288,28 +297,39 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //      `./coder c <file> /dev/null ../FSM0.txt 6`; do not put it through t.sh,
 //      whose decode step would be handed a stream that does not decode.
 //
-// 0..3 all produce the same stream -- t.sh checks each -- but on cascadelake
-// only 0 and 1 are worth having. 20 MB of enwik8, clang 18, best of 6x5:
+// At RC_SCATTER_W==0 there is no mask, so only 0 (always commit) and non-zero
+// (branch past a group where no lane emitted a byte) differ there.
 //
-//   0  unmasked                              75.9 MB/s
-//   1  masked                                74.7
-//   2  masked + branch                       54.2
-//   3  unmasked + branch                     53.8
-//   9  probe: no scatter                     77.6
-//   -  probe: masked with the mask forced 0  74.8
+// 0..3 all produce the same stream -- t.sh checks each. On cascadelake only 0
+// and 1 are worth having, on either target. 20 MB of enwik8, clang 18, best of
+// 6x5 (the box turbos to 3.235 GHz measured, not its 2.8 GHz base -- every
+// cycle figure in this file is at the measured clock):
 //
-// The probes are the whole story. A vpscatterdd whose mask is empty costs
-// what one with a full mask costs, so masking cannot buy anything here and 1
-// only pays for the stn array. And 0 against 9 puts the scatter's ENTIRE cost
-// at 1.6 cycles per 16-bit group, against 26.6 for the sweep and 73.8 for the
-// encode -- so 2.2% of encode is the ceiling on every scheme that aims to
-// scatter less often, while the branch that would collect it is taken about a
-// quarter of the time, twice per group, and costs 28%.
+//   AVX-512, -march=native            AVX2, -march=skylake
+//   0  unmasked          75.9 MB/s    0  block of scalar stores  66.9 MB/s
+//   1  masked            74.7         3  + branch, 1 per group   60.0
+//   2  masked + branch   54.2         3  + branch, 1 per 8 lanes 50.0
+//   3  unmasked + branch 53.8         9  probe: no commit        75.1
+//   9  probe: no scatter 77.6
+//   -  probe: mask forced 0  74.8
+//
+// The probes are the whole story. On AVX-512 a vpscatterdd whose mask is empty
+// costs what one with a full mask costs, so masking cannot buy anything and 1
+// only pays for the stn array; and 0 against 9 puts the scatter's ENTIRE cost
+// at 1.85 cycles per 16-bit group against 30.8 for the sweep and 85.3 for the
+// encode, so 2.2% of encode is the ceiling on every scheme that aims to
+// scatter less often.
+//
+// On AVX2 the commit is worth far more -- 10.6 cycles per group -- and the
+// branch STILL loses: one branch per group, taken about a quarter of the time
+// and unpredictable, costs 11.2 cycles where it could save at most 2.8. Two
+// branches cost 32.6. There is no frequency at which this pays; it is the
+// misprediction, not the work.
 //
 // Where scatter cost scales with the number of active lanes -- Ice Lake and
-// later, Zen 4 -- 1 is the one to try: same instruction count, no branch, and
-// ~1.3 lanes of work instead of 16. Build 9 first: if 0 and 9 are close on
-// your machine too, nothing in this direction can pay there either.
+// later, Zen 4 -- 1 is the one to try on AVX-512: same instruction count, no
+// branch, ~1.3 lanes of work instead of 16. Build 9 first: if 0 and 9 are
+// close on your machine too, nothing in this direction can pay there either.
 #ifndef RC_SCATTER_SKIP
 #define RC_SCATTER_SKIP 0
 #endif

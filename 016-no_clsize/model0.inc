@@ -12,6 +12,33 @@
 
 #define RC_FLUSH1( k ) rc_Flush(k)
 
+// RC_SCATTER_W==0 -- no scatter instruction on this target, so the group
+// commits as a straight block of RCNUM scalar stores read back out of the
+// staged arrays. That is still the whole point: the arrays got there as
+// contiguous vector stores, so the address extraction the inline store needed
+// -- 24 vpextrd plus 4 vextracti128 per group, every one of them on port 5 --
+// is gone, and what is left lands on the store port instead. Measured on AVX2
+// (skylake, RCNUM=16, 20 MB of enwik8): 103.1 -> 96.7 cycles per 16-bit group.
+//
+// Only RC_SCATTER_SKIP 0 (always commit) and non-zero (branch past a group
+// where no lane emitted a byte) mean anything here; there is no mask to apply.
+#if RC_SCATTER_W==0
+
+#define RC_COMMIT_ALL()                                                  \
+  { RC_UNROLL for( uint _i=0; _i<RCNUM; _i++ )                           \
+      (uint&)tmpbase[stad[_i]] = stcl[_i]; }
+
+#if RC_SCATTER_SKIP==0
+#define RC_FLUSHALL() RC_COMMIT_ALL()
+#else
+#define RC_FLUSHALL()                                                    \
+  { uint _z = 0;                                                         \
+    RC_UNROLL for( uint _i=0; _i<RCNUM; _i++ ) _z |= stn[_i];            \
+    if_e0( _z ) RC_COMMIT_ALL() }
+#endif
+
+#else
+
 // One sub-group: load the staged lanes, work out which of them owe a store,
 // and scatter under RC_SCATTER_SKIP's reading of that. RC_SCATTER_W lanes at
 // a time, and the compare gives a k-mask directly -- the scatter's own mask
@@ -60,6 +87,8 @@
 #define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
     RC_SCATTER_GROUP( _k, RC_NE0, (void)_m ) }
 #endif
+
+#endif  /* RC_SCATTER_W==0 */
 
 #else
 #define RC_FLUSH1( k ) ((void)0)
