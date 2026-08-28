@@ -4,7 +4,6 @@
 #include "rc_config.inc"
 #include "file_api.inc"
 
-#include "rc_dev.h"
 
 #include "misc/timer.h"
 #include "misc/valloc.inc"
@@ -70,32 +69,26 @@ char t_res[256];
 // The FSM file is the counter state machine loaded by Predictor::Init; both
 // ends need the same one.
 //
-// The options are all about the device path -- the ispc-compiled coding
-// kernel only the encoder uses, see rc_ispc.cpp. They are stripped out of
-// argv before anything else looks at it, so the positional arguments are
-// where they always were. (The retired OpenCL backend's -d/-p/-T device
-// selection and the -k binary cache went with it: there is nothing to pick
-// and nothing built at run time.)
+// One option: -C runs the scalar reference coder instead of the generated
+// vector one -- same rc.inc, and t.sh compares their streams byte for byte.
+int g_use_vec = 1;
+
 static void usage( void ) {
-  printf( "coder [options] c|d input output FSM_file [n_iter] [test_output]\n"
+  printf( "coder [-C] c|d input output FSM_file [n_iter] [test_output]\n"
           "\n"
-          "  -l        describe the compiled-in coding kernel, and exit\n"
-          "  -C        do not use it -- the reference code path\n"
-          "  -V        report what the kernel cost\n" );
+          "  -C        the scalar reference coder, not the vector one\n" );
 }
 
 // Pull the options out of argv, leaving the positional arguments compacted at
 // the front. Called again on the recursive test-mode invocation, where there
-// are none left and g_devopt already says what was asked for.
+// are none left and g_use_vec already says what was asked for.
 static int parse_opts( int argc, char** argv ) {
   int n = 1;
   for( int i=1; i<argc; i++ ) {
     char* a = argv[i];
     if( a[0]!='-' || a[1]==0 ) { argv[n++] = a; continue; }
     switch( a[1] ) {
-      case 'C': g_devopt.use = 0; break;
-      case 'V': g_devopt.verbose = 1; break;
-      case 'l': g_devopt.use = -1; break;              // handled in main
+      case 'C': g_use_vec = 0; break;
       default:  fprintf( stderr, "coder: unknown option -%c\n", a[1] ); usage(); exit(1);
     }
   }
@@ -106,8 +99,6 @@ int main( int argc, char** argv ) {
   uint i,r,c;
 
   argc = parse_opts( argc, argv );
-
-  if( g_devopt.use<0 ) { DEV_ListDevices(stdout); return 0; }
 
   if( argc<5 ) { usage(); return 1; }
 
@@ -176,7 +167,6 @@ int main( int argc, char** argv ) {
 
   printf( "\n" );
 
-  DEV_Report( stderr );
 
   f.close();
   g.close();

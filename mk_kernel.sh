@@ -1,23 +1,26 @@
 #!/bin/sh
-# rc_kernel.c -> rc_kernel.ispc
+# rc.inc -> rc_kernel0.c -> rc_kernel1.c -> rc_vecD.inc
 #
-# The perl scripts name their output after the input's extension, so the source
-# being .c is what keeps the names apart:
+#   $CPP -E      resolves the #if forest against the build's configuration
+#                (RC_VECOUT=1 picks the vector-shape coder bodies)
+#   rc_soa.pl    lane state to [RCNUM] arrays, rcidx threaded through
+#   rc_macro.pl  functions into #define/#enddef blocks
+#   defines.pl   ... into real multi-line macros
 #
-#   rc_kernel.c -> rc_kernel_macro.c -> rc_kernel_macro_D.c -> rc_kernel.ispc
-#
-#   rc_macro.pl  turns each function into a #define / #enddef block
-#   defines.pl   turns those into real multi-line macros (and emits the #undefs,
-#                which a single-use kernel has no need of)
-#
-# The generated file is committed, so perl is only wanted by whoever edits the
-# kernel; ispc compiles it at build time (build.sh, gc.bat). build.sh calls
-# this when rc_kernel.c is newer.
+# The output depends on the RC_* configuration, so build.sh runs this every
+# build with the current -D set; nothing here is committed.
+#   mk_kernel.sh [-Dname=value ...]
 set -e
 cd "$(dirname "$0")"
-perl rc_macro.pl rc_kernel.c
-perl defines.pl  rc_kernel_macro.c
-mv  rc_kernel_macro_D.c rc_kernel.ispc
-rm -f rc_kernel_macro.c rc_kernel_macro_U.c
+CPP="${CPP:-cc -E}"
 
-echo "regenerated rc_kernel.ispc from rc_kernel.c"
+$CPP -P -x c++ -DRC_VECOUT=1 -DRC_CARRYLESS=1 "$@" \
+  -imacros rc_config.inc rc.inc > rc_kernel0.c
+
+perl rc_soa.pl rc_kernel0.c
+perl rc_macro.pl rc_kernel1.c
+perl defines.pl  rc_kernel1_macro.c
+mv rc_kernel1_macro_D.c rc_vecD.inc
+rm -f rc_kernel1_macro.c rc_kernel1_macro_U.c
+
+echo "generated rc_vecD.inc from rc.inc"

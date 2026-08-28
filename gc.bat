@@ -11,42 +11,22 @@ for %%a in (IDX\*.idx) do (
 
 :skip
 
-rem The macro chain runs the repo's own perl scripts now, not ../Lib3's: the
-rem current rc_kernel.c needs the fixed rc_macro.pl (function names must be
-rem identifiers) and defines.pl (nothing after the parameter list opens a
-rem block) that sit next to it, and txt2inc.pl's non-greedy marker.
-perl rc_macro.pl rc_kernel.c
-perl defines.pl  rc_kernel_macro.c
+rem The vector coder is generated from rc.inc for this configuration: clang's
+rem preprocessor resolves the #if forest (RC_VECOUT=1 picks the vector-shape
+rem coder bodies), rc_soa.pl turns the lane state into [RCNUM] arrays, and
+rem the rc_macro.pl/defines.pl chain makes macros of it, included inside
+rem do_process -- sh_v1xN's arrangement, one source. Pass the same -DRC_*
+rem here as on the compile line below (RC_LOWBYTES/RC_LOWSPLIT/RC_CODBYTES).
+set cpp=C:\clangN10x\bin\clang++.exe -E -P -x c++
 
-if exist rc_kernel_macro_D.c  move /y rc_kernel_macro_D.c rc_kernel.ispc >nul
+%cpp% -DRC_VECOUT=1 -DRC_CARRYLESS=1 -imacros rc_config.inc rc.inc > rc_kernel0.c
+perl rc_soa.pl rc_kernel0.c
+perl rc_macro.pl rc_kernel1.c
+perl defines.pl  rc_kernel1_macro.c
 
-del rc_kernel_macro.c rc_kernel_macro_U.c
+if exist rc_kernel1_macro_D.c  move /y rc_kernel1_macro_D.c rc_vecD.inc >nul
 
-rem ---------------------------------------------------------------------------
-rem The coding kernel, compiled into the exe; rc_ispc.cpp is the host side.
-rem
-rem The -D values must match the RC_* configuration of the C++ build below --
-rem these are the defaults (RCNUM=16, BLKSIZE=65536, LOWBYTES=8, CODBYTES=4).
-rem RC_LOWSPLIT=1 here is kernel-only and stream-neutral: the split low
-rem accumulator measures ~5% faster under ispc while the host keeps the
-rem 64-bit one -- see build.sh's mapping for which -DRC_* sets what.
-rem One explicit target, no dispatcher -- pick the line for the machine.
-rem
-rem -DRC_DECSPLIT=1 on the C++ line below enables the split decoder (the
-rem batch kernel is always in the object); measure it, it is off by default
-rem for a reason -- rc_split_ispc_v1.md section 9.2.
-rem ---------------------------------------------------------------------------
-set ispc=C:\ispc260625\bin\ispc.exe
-set ispctarg=avx512skx-x16
-rem set ispctarg=avx2-i32x16
-
-del rc_kernel_ispc*.obj rc_kernel_ispc*.h
-
-%ispc% --target=%ispctarg% --arch=x86-64 -O2 ^
- -DRCNUM=16 -DSCALElog=15 -DhSCALE=16384 ^
- -DLOWBYTES=8 -DCODBYTES=4 -DRC_LOWSPLIT=1 -DBLKFULL=65536 ^
- -DRC_DEV_WORDOUT=1 -DRC_RANGE64=0 -DRC_RENORM_TAIL=0 ^
- rc_kernel.ispc -o rc_kernel_ispc.obj -h rc_kernel_ispc.h
+del rc_kernel1_macro.c rc_kernel1_macro_U.c
 
 set path=C:\VC\link64
 rem C:\VC2019\bin\amd64;
@@ -55,9 +35,7 @@ set INCLUDE=
 
 rem -DUNICODE -D_UNICODE 
 
-set backend=-DRC_ISPC=1 -DRC_ISPC_TARGET=%ispctarg%
-
-set incs=-std=c++17 -DSTRICT -DNDEBUG -DWIN32 -D_WIN32 -I../Lib3 -Drestrict=__restrict %backend% ^
+set incs=-std=c++17 -DSTRICT -DNDEBUG -DWIN32 -D_WIN32 -I../Lib3 -Drestrict=__restrict ^
 -D_CRT_SECURE_NO_WARNINGS ^
 -D_CRT_SECURE_NO_DEPRECATE ^
 -D_CRT_DISABLE_PERFCRIT_LOCKS ^
@@ -110,7 +88,7 @@ for /D %%a in (.) do set DIRNAM=%%~na
 
 rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% -static mrpc.cpp mrpc_lib.cpp OpenCL.lib -o mrpc.exe
 
-%gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp rc_ispc.cpp rc_kernel_ispc.obj -o coder.exe 
+%gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% -static "-D__DIRNAM__=%DIRNAM%" coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp -o coder.exe 
 
 rem -o coder.exe -fsanitize=bounds
 rem -S -fverbose-asm -mllvm --x86-asm-syntax=intel 

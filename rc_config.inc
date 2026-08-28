@@ -159,15 +159,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_STRICT_BLKSIZE 0
 #endif
 
-// 1 = build the ISPC path: the encoder's carryless coding pass, compiled by
-// ispc at build time from the generated rc_kernel.ispc and called as a
-// function. Only that pass -- the carry-propagating fallback stays on the
-// host, and so does everything with -C or in a build without ispc. The
-// decoder's split path (RC_DECSPLIT) rides on the same kernel object.
-// build.sh sets this when an ispc compiler is on the path.
-#ifndef RC_ISPC
-#define RC_ISPC 0
-#endif
 
 // 1 = the kernel buffers each lane's output and writes it a dword at a time
 // instead of a byte at a time.
@@ -183,46 +174,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_DEV_WORDOUT (-1)
 #endif
 
-// 1 = the decoder's split path: each bit's decision stays scalar (the model
-// is serial; see rc_split_ispc_v1.md), one compare against a per-lane
-// threshold, and everything else a lane owes -- range/code update, renorm,
-// refill, the next threshold -- runs 16 lanes at a time in the ispc batch.
-// Exact: the stream and the output are bit-identical to the fused decoder,
-// which stays the reference and is what a build without ispc runs.
-//
-// Off by default because it is *slower* on the reference box (see the
-// measurements in rc_split_ispc_v1.md section 9.2): the batch costs a nearly
-// flat ~8-10 clk/bit where the fused coder's inline work costs ~4-6 on
-// ordinary data, and only hostile (high-entropy, mispredicting) streams
-// reverse that. A knob, not a default, until a machine says otherwise.
-// Needs RC_ISPC, RCNUM a multiple of 16, and RC_RANGE64=0; anything else
-// quietly keeps the fused decoder.
-#ifndef RC_DECSPLIT
-#define RC_DECSPLIT 0
-#endif
-
-// The decoder's lane state as structure-of-arrays -- range[RCNUM],
-// code[RCNUM], rpre[RCNUM], pos[RCNUM], four compact cache lines -- instead
-// of RCNUM full coder objects. The other half of what made the original
-// sh_v1xN decoder fast (RC_UNROLL below is the first half), and pure host
-// C++: no ispc anywhere in it. Same arithmetic, same bytes read, same
-// stream. 0 falls back to the object-per-lane decoder.
-#ifndef RC_DECSOA
-#define RC_DECSOA 1
-#endif
-
-#if RC_DECSOA && !RC_RANGE64
-#define RC_DECSOA_ON 1
-#else
-#define RC_DECSOA_ON 0
-#endif
-
-// what the split actually compiles under; anything else is the fused decoder
-#if RC_DECSPLIT && RC_ISPC && RC_DECSOA_ON && ((RC_RCNUM%16)==0)
-#define RC_DECSPLIT_ON 1
-#else
-#define RC_DECSPLIT_ON 0
-#endif
 
 // Full unroll of a group loop whose trip count is RCNUM: with j constant in
 // every unrolled body, rc[j]'s fields become fixed addresses and the
@@ -237,14 +188,34 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
  #define RC_UNROLL
 #endif
 
-// Where the decoder's coder state lives: 1 = a local on the coroutine stack,
-// 0 = a member of the model object. The local is what lets clang's alias
-// analysis keep the lane state scheduled across the unrolled bodies
-// (34.9 -> 36.5 on the reference box, together with the refill-only cursor
-// store in rc_vec.inc); tuned for clang, which is what this coder is built
-// with -- gcc happens to prefer 0, measured 25.7 vs 20.3.
-#ifndef RC_DEC_LOCAL
-#define RC_DEC_LOCAL 1
+
+// 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
+// vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
+// coder is built from. Never set in a normal compilation.
+#ifndef RC_VECOUT
+#define RC_VECOUT 0
+#endif
+
+// 1 = the models drive the generated lane-array coder (rc_vecD.inc, built
+// from this same rc.inc by mk_kernel.sh) -- sh_v1xN's arrangement: the
+// encoder's pbit sweep auto-vectorizes across the lanes, the decoder gets
+// the unrolled group loop over local arrays. The scalar coder stays compiled
+// beside it: it is the -C reference and the carry-propagating fallback,
+// built from the same source. 0 = scalar only.
+#ifndef RC_VEC
+#define RC_VEC 1
+#endif
+
+#if RC_RANGE64   // the vector kernel carries a 32-bit range
+#undef RC_VEC
+#define RC_VEC 0
+#endif
+
+#if RC_VECOUT && !RC_CARRYLESS
+#error the vector kernel is the carryless coder -- generate with RC_CARRYLESS=1
+#endif
+#if RC_VECOUT && RC_RANGE64
+#error the vector kernel carries a 32-bit range -- RC_RANGE64 stays scalar
 #endif
 
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder

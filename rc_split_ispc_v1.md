@@ -480,3 +480,71 @@ it — plus a compaction pass: the clset design (071), which lost to the direct 
 AVX-512 and remains the one credible AVX2 route, as a target-specific variant. Effort is
 a kernel rework plus host compaction; on a machine with AVX-512 the straight answer
 remains `ISPC_TARGET=avx512skx-x16` (80 vs 60 through the downclock).
+
+### 9.6 ISPC dropped: the coder generated from `rc.inc`, the 069 way
+
+Sections 9.4–9.5 left the port in an unstable place: the decoder reshaped to the
+original's scalar form and at parity, the encoder split between an ISPC kernel that is
+excellent on AVX-512 and pathological on AVX2, and a second copy of the coder
+(`rc_kernel.c`) to keep in sync with `rc.inc` by hand. The resolution is the one 069 had
+all along: no separate vector language, no separate vector source — make clang
+auto-vectorize the one coder, by generating the lane-array macro form from `rc.inc`
+itself. ISPC is gone (`rc_ispc.cpp`, `rc_kernel.ispc`, `rc_kernel.c`, `rc_dev.h`
+deleted), and the build needs only a C preprocessor and perl.
+
+**The pipeline** (`mk_kernel.sh`, run by `build.sh`/`gc.bat` for the exact `-D`
+configuration being built):
+
+    cc -E -P -x c++ -DRC_VECOUT=1 -DRC_CARRYLESS=1 [config -Ds] \
+       -imacros rc_config.inc  rc.inc            >  rc_kernel0.c
+    perl rc_soa.pl   rc_kernel0.c                # -> rc_kernel1.c
+    perl rc_macro.pl rc_kernel1.c                # -> rc_kernel1_macro.c
+    perl defines.pl  rc_kernel1_macro.c          # -> rc_vecD.inc
+
+The C preprocessor resolves the `#if` forest of `rc.inc` for one configuration
+(`-imacros` supplies the config's macros without pasting its text, so `RCNUM`,
+`SCALElog` etc. stay symbolic and bind at the include site). `rc_soa.pl` is the new
+step: fields become `ALIGN(VECSIZE) T name[RCNUM];` arrays, every method grows a
+`uint rcidx` first argument, every field mention becomes `name[rcidx]`, byte I/O
+becomes cursor arrays over one buffer (`tmpptr[RCNUM]` + `tmpbase`), value-returning
+helpers are dropped (a macro cannot return a value; their bodies are inlined in the
+`RC_VECOUT` variants inside `rc.inc`), and duplicate overload names get `_2` suffixes.
+The existing `rc_macro.pl` + `defines.pl` chain — unchanged, the same scripts 069
+shipped — then turns those functions into multi-line macros and the declarations into
+plain statements, so `#include "rc_vecD.inc"` inside `do_process` makes the whole
+coder state **function locals**: the alias-freedom clang needs, per §9.4's ablation.
+
+`rc.inc` carries small `#if RC_VECOUT` variant bodies for the few methods whose scalar
+form can't survive macro-ization (ShiftLow's output store becomes one unconditional
+little-endian word store plus `tmpptr += n`; Renorm and Quit inline their helper
+calls). Everything else — and both scalar coders — is the same text.
+
+**Three coders, one source.** The generated `rc_vecD.inc` is the carryless fast coder;
+when a block's `FFNum[]` shows escaped carries, `model0` re-encodes it with the
+carry-propagating twin — the plain `RangecoderN<…,Rangecoder_CY>` template
+instantiation of the very same `rc.inc`. The `-C` switch selects the scalar carryless
+reference the same way. Nothing is duplicated; a change to `rc.inc` reaches all three
+on the next build. `-DRC_RANGE64=1` (no vector form) and `-DRC_VEC=0` keep the pure
+scalar build.
+
+**Measured** (reference box, clang, `-march=haswell`, external pinned timing, 069
+rebuilt in the same session):
+
+| coder | encode MB/s | decode MB/s |
+|---|---|---|
+| 069 original | 52.49 | 35.63 |
+| this, generated coder | 49.84 | 35.81 |
+
+Decode at parity, encode at 95%. The encoder's pbit sweep genuinely auto-vectorizes —
+`model0::do_process` disassembles to 295 ymm-register lines — and the residual ~5%
+matches the one structural difference left: 069 emits each lane's bytes as reversed
+single-word stores into its private tail, where this format's forward substreams pay a
+two-byte read-modify store per renorm. Output is byte-identical to the scalar `-C`
+coder and to the previous builds' format on the first build of the pipeline, and the
+full `t.sh` matrix (default, `RCNUM=8`, `RCNUM=64`, `RC_LOWSPLIT=1`, `RC_LOWBYTES=5`,
+`RC_LOWBYTES=6 RC_LOWSPLIT=1`, `RC_FORCE_CARRY=1`, `RC_VEC=0` — 384 checks) is green.
+
+With that, §8's ledger closes: the batched split, OpenCL, and ISPC are all removed
+from the tree, each for the measured reason recorded above, and the codec is back to
+one source file and a four-line generation step — 069's architecture, carried over to
+the carryless/forward-stream format.

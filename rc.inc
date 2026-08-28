@@ -132,6 +132,8 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
   }
 
+#if !RC_VECOUT
+
   void ShiftLow( uint n ) {
 
     uint c = low_Add();
@@ -191,26 +193,126 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
   }
 
+#else // RC_VECOUT ---------------------------------------------------------
+  //
+  //  The vector-shape twins. Reachable only through mk_kernel.sh, which
+  //  resolves this file with RC_VECOUT=1 (and RC_CARRYLESS=1) and turns the
+  //  lane state into [RCNUM] arrays -- see rc_soa.pl. They address the
+  //  output through the flat cursor the generated prelude declares
+  //  (tmpbase + tmpptr), never through RC_IO, and inline the low_* helpers
+  //  because a value-returning function cannot become a macro. A scalar
+  //  build never compiles this branch, and the arithmetic is line for line
+  //  the scalar coder's -- t.sh checks the streams byte for byte.
+
+  // sh_v1xN's ShiftLowN with the store turned around for this port's
+  // forward substreams: counted shift, both top bytes stored unconditionally
+  // as one little-endian word, cursor advanced by n so a short shift is
+  // overwritten by the next one. The per-byte loop is what scalarised the
+  // sweep in the OpenCL and ispc ports; the branch was the cost, never the
+  // store width.
+  void ShiftLow( uint n ) {
+    uint sh = n*8;
+#if RC_LOWSPLIT
+    uint _cf = (lowl+rpre < lowl);
+    lowl += rpre;
+#if RC_LOWBYTES==8
+    uint _cy = (lowh+_cf < lowh);
+    lowh += _cf;
+#else
+    lowh += _cf;
+    uint _cy = (lowh > uint(LOW_MASK>>32));
+    lowh &= uint(LOW_MASK>>32);
+#endif
+#else
+#if RC_LOWBYTES==8
+    qword _t = lowc + rpre;
+    uint _cy = (_t < lowc);
+    lowc = _t;
+#else
+    qword _t = lowc + rpre;
+    uint _cy = (_t > LOW_MASK);
+    lowc = _t & LOW_MASK;
+#endif
+#endif
+    rpre = 0;
+    RC_CARRY_COUNT(_cy);
+    FFNum += _cy;   // ShiftLowN: "use as flag"
+#if RC_LOWSPLIT
+#if RC_LOWBYTES>=6
+    uint _b0 = (lowh>>(RC_LOWBYTES*8-40)) & 0xFF;
+    uint _b1 = (lowh>>(RC_LOWBYTES*8-48)) & 0xFF;
+#elif RC_LOWBYTES==5
+    uint _b0 = lowh & 0xFF;
+    uint _b1 = (lowl>>24) & 0xFF;
+#else
+    uint _b0 = (lowl>>24) & 0xFF;
+    uint _b1 = (lowl>>16) & 0xFF;
+#endif
+#else
+    uint _b0 = uint(lowc>>(LOWBITS-8)) & 0xFF;
+    uint _b1 = uint(lowc>>(LOWBITS-16)) & 0xFF;
+#endif
+    (word&)tmpbase[tmpptr] = word(_b0 | (_b1<<8));
+    tmpptr += n;
+#if RC_LOWSPLIT
+    uint _hi = (sh==0) ? 0u : (lowl >> (32-sh));
+    lowh = ((lowh<<sh) | _hi) & uint(LOW_MASK>>32);
+    lowl <<= sh;
+#else
+    lowc = (lowc<<sh) & LOW_MASK;
+#endif
+  }
+
+  // Encode: the counted shift. Decode: the branchy nested refill with the
+  // cursor touched only inside it -- ~91% of bits pass two predicted tests
+  // and do nothing else, the shape rc_split_ispc_v1.md section 9.5 measured.
+  void rc_Renorm( void ) {
+    if( f_DEC==0 ) {
+      uint n = (range<sTOP) + (range<gTOP);
+      ShiftLow( n );
+      range <<= n*8;
+    }
+    if( f_DEC==1 ) {
+      code -= rpre;
+      rpre = 0;
+      if_e0( range<sTOP ) {
+        uint _q = tmpptr;
+        if_e0( range<gTOP ) {
+          range <<= 16;
+          code = (code<<16) + (uint(tmpbase[_q])<<8) + tmpbase[_q+1];
+          tmpptr = _q+2;
+        } else {
+          range <<= 8;
+          code = (code<<8) + tmpbase[_q];
+          tmpptr = _q+1;
+        }
+      }
+    }
+  }
+
+#endif // RC_VECOUT
+
   // sh_v1xN_macro.inc's rc_Process, unchanged apart from dropping rcidx (the
   // lane index now selects the instance, not the array slot). freq is P(bit==0)
   // scaled to SCALE. This is the entry point the model uses.
   INLINE
   void rc_Process( uint freq, uint& _bit ) {
-    uint bit = _bit;
+    uint _b = _bit;   // not `bit`: as a macro, callers pass a variable named
+                      // bit, and `uint bit = bit;` would self-initialize
 
     rc_Renorm();
     rpre = range>>SCALElog;
 
     rpre *= freq;
 
-    if( f_DEC ) bit = (code>=rpre);
+    if( f_DEC ) _b = (code>=rpre);
 
     range -= rpre;
 
-    range = bit ? range : rpre;
-    rpre &= -bit;
+    range = _b ? range : rpre;
+    rpre &= -_b;
 
-    _bit = bit;
+    _bit = _b;
   }
 
   // Decode needs the unit before it can pick the symbol, so this is where the
@@ -260,6 +362,30 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
   }
 
+#if RC_VECOUT
+  // the carryless minimal flush, low_Get inlined
+  void rc_Quit( void ) {
+    if( f_DEC==0 ) {
+      rc_Renorm();
+
+      uint i, n = LOWBYTES;
+#if RC_LOWSPLIT
+      qword llow = (qword(lowh)<<32) + lowl;
+#else
+      qword llow = lowc;
+#endif
+      qword high = llow + range;
+      uint  hic  = (high<llow);
+
+      for( i=0; i<LOWBYTES; i++ ) {
+        qword mask = ((1ULL<<((i+1)*4))<<((i+1)*4))-1;
+        if( hic || ((llow|mask)<high) ) llow|=mask, --n;
+      }
+
+      for( i=0; i<n; i++ ) put( byte(llow>>(LOWBITS-8-i*8)) );
+    }
+  }
+#else
   void rc_Quit( void ) {
     if( f_DEC==0 ) {
       rc_Renorm();   // applies the last pending rpre
@@ -317,6 +443,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
     }
   }
+#endif // RC_VECOUT
 
 };
 

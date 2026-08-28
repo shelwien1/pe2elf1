@@ -13,15 +13,14 @@ struct Model<0> : Coroutine, Predictor {
   // (bit<<15)+p -- p is clamped to [1,SCALE-1], so the pair fits a word.
   //
   // The model runs ahead over the whole block first, so the coding pass never
-  // touches the model. That is what let the original interleave RCNUM lanes
-  // in one SIMD sweep; it is also what lets a block be re-coded from scratch
-  // when the carryless coder loses a carry.
+  // touches the model. That is what lets the vector coder sweep RCNUM lanes
+  // at once, and what lets a block be re-coded from scratch when the
+  // carryless pass loses a carry.
   ALIGN(4096) word pbit[BLKSIZE*8];
 
-  // what the kernel reports back, shaped so rc_Write can take it directly
+  // what the vector pass reports, shaped so rc_Write can take it directly
   struct t_res {
     uint lens[RCNUM];
-    uint carry[RCNUM];
     uint rc_len( uint i ) { return lens[i]; }
   } res;
 
@@ -35,12 +34,11 @@ struct Model<0> : Coroutine, Predictor {
     return Predictor::Init(p);
   }
 
-  // One full coding pass over the cached block. Every coder takes it, which
-  // is the whole point of caching {p;bit}: a re-code re-runs this and nothing
-  // else. Bit i of the block goes to lane i%RCNUM.
-  //
-  // The kernel in rc_kernel.c walks the same order per lane; it has to, or
-  // the two would not produce the same stream.
+  // One full scalar coding pass over the cached block. Both scalar coders
+  // take it: the -C reference (carryless, checked against the vector pass
+  // byte for byte by t.sh) and the carry-propagating twin a lost carry
+  // falls back to. Bit i of the block goes to lane i%RCNUM -- the vector
+  // pass in do_process walks the same order, it has to.
   template< class RC >
   void proc_block( RC& rc, uint blksize ) {
     uint i,j,c,bit;
@@ -62,7 +60,6 @@ struct Model<0> : Coroutine, Predictor {
     uint blksize1 = blksize0 - (blksize0%RCNUM);
 
     for( i=0; i<blksize1; i+=RCNUM ) {
-      RC_UNROLL
       for( j=0; j<RCNUM; j++ ) {
         uint b = pbit[i+j];
         uint p = b&0x7FFF; b >>= 15;
@@ -79,8 +76,8 @@ struct Model<0> : Coroutine, Predictor {
     rc.rc_Quit();
   }
 
-  // The carry-propagating twin, on the host. Reached from either coding path
-  // when a carry escaped the carryless one.
+  // The carry-propagating twin. Reached from either coding path when a carry
+  // escaped the carryless one.
   void recode_with_carry( uint blksize ) {
 #if RC_TRACE_FALLBACK
     fprintf( stderr, "coder: block re-coded on the host, carry lost\n" );
@@ -91,10 +88,9 @@ struct Model<0> : Coroutine, Predictor {
     rcio.rc_Write( (*this), rcY );
   }
 
-  // Code the block on the host and write it out: carryless first, re-code
-  // with the carry-propagating twin if any lane let a carry escape. At
-  // RC_LOWBYTES=8 that is a ~2^-33 event per step, so the second pass
-  // practically never runs.
+  // The scalar reference path (-C): carryless first, re-code with the twin
+  // if any lane let a carry escape. At RC_LOWBYTES=8 that is a ~2^-33 event
+  // per step, so the second pass practically never runs.
   void host_block( uint blksize ) {
 #if RC_FORCE_CARRY
     recode_with_carry( blksize );
@@ -115,6 +111,13 @@ struct Model<0> : Coroutine, Predictor {
   void do_process() {
     uint c,i,j,bit,p,blksize,state;
 
+#if RC_VEC
+    // The generated coder: lane state as local arrays, methods as macros --
+    // sh_v1xN's arrangement, from the same rc.inc as the scalar reference
+    // and the carry twin. Locals, so the sweep's stores alias nothing.
+#include "rc_vecD.inc"
+#endif
+
     P_Init(stats,DIM(stats));
 
     while(1) {
@@ -133,23 +136,61 @@ struct Model<0> : Coroutine, Predictor {
         { uint cc=0; P_byte(stats,cc); } // resets the bit context
       }
 
-      // Coding pass, model then code, one block at a time -- the original
-      // sh_v1xN arrangement. The kernel writes straight into the substream
-      // rows rc_Write reads; a carry that escaped the carryless pass sends
-      // the block to the host twin, RC_FORCE_CARRY sends every block (only
-      // the carryless coder has a kernel).
-#if RC_ISPC && !RC_FORCE_CARRY
-      if( DEV_Encode( pbit, blksize*8, blksize, rcio.rows(),
-                      t_RCio::rowsize, t_RCio::tmpbufsize,
-                      res.lens, res.carry ) ) {
+#if RC_VEC && !RC_FORCE_CARRY
+      // The vector coding pass: the carryless coder over all RCNUM lanes,
+      // straight into the substream rows. The unrolled sweep is what clang
+      // auto-vectorizes -- constant lane indices over local arrays, exactly
+      // the original sh_v1xN encode side. A lane that lost a carry (FFNum)
+      // sends the whole block to the scalar twin.
+      if_e1( g_use_vec ) {
+
+        tmpbase = rcio.rows();
+        for( j=0; j<RCNUM; j++ ) { tmpptr[j] = j*t_RCio::rowsize; rc_Init(j); }
+
+        bit = (blksize!=BLKSIZE);
+        rc_Process( 0, hSCALE, bit );
+
+        if( bit ) {
+          for( j=0; j<16; j++ ) {
+            bit = (blksize>>(15-j))&1;
+            rc_Process( j%RCNUM, hSCALE, bit );
+          }
+        }
+
+        {
+          uint blksize0 = blksize*8;
+          uint blksize1 = blksize0 - (blksize0%RCNUM);
+
+          for( i=0; i<blksize1; i+=RCNUM ) {
+            RC_UNROLL
+            for( j=0; j<RCNUM; j++ ) {
+              uint b = pbit[i+j];
+              uint f = b&0x7FFF; b >>= 15;
+              rc_Process( j, f, b );
+            }
+          }
+
+          for( ; i<blksize0; i++ ) {
+            uint b = pbit[i];
+            uint f = b&0x7FFF; b >>= 15;
+            rc_Process( i%RCNUM, f, b );
+          }
+        }
+
+        for( j=0; j<RCNUM; j++ ) rc_Quit(j);
+
         uint ncarry = 0, novf = 0;
-        for( uint k=0; k<RCNUM; k++ ) {
-          ncarry += res.carry[k];
-          novf   += (res.lens[k]>t_RCio::tmpbufsize);
+        for( j=0; j<RCNUM; j++ ) {
+          uint len = tmpptr[j] - j*t_RCio::rowsize;
+          len = len>RC_SKIP ? len-RC_SKIP : 0;
+          res.lens[j] = len;
+          ncarry += FFNum[j];
+          novf   += (len>t_RCio::tmpbufsize);
         }
         if_e0( novf!=0 ) rc_overflow();
         if( ncarry==0 ) rcio.rc_Write( (*this), res );
         else            recode_with_carry( blksize );
+
       } else
 #endif
         host_block( blksize );

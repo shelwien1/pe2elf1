@@ -9,5 +9,6 @@ log.txt
 test/
 1
 2
-coder_kernel.bin
-rc_kernel_ispc*.h
+rc_kernel0.c
+rc_kernel1.c
+rc_vecD.inc
