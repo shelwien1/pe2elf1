@@ -36,17 +36,29 @@ of the unrolled RCNUM-lane sweep, two input bytes.
 
 ## The budget
 
+As the profile was taken -- the inline store, before any of the changes below:
+
     encode total                    102.41 cyc/grp   (63.18 MB/s)
       model pass                     55.06   54%
       coding sweep                   47.35   46%
         of which the ShiftLow store  14.71   31% of the sweep
+
+and where it stands now, after sections 3 and 10:
+
+    encode total                     89.46 cyc/grp   (72.32 MB/s)
+      model pass                     51.41   57%
+      coding sweep                   38.06   43%
+        of which the staged commit    9.45   25% of the sweep
 
 For contrast, the same tree at `-march=native` (AVX-512, `RC_SCATTER=1`):
 84.42 total, 55.06 model pass, 29.36 sweep, 1.96 of that the scatter. **The
 model pass costs the same on both targets. The entire AVX2/AVX-512 gap is the
 sweep, and almost all of that is the store.**
 
-## 1. The model pass -- 54%, and it is at the ceiling
+Sections 1-8 are the as-profiled state (the left-hand budget above); section
+9 is what was done about it and section 10 where that leaves things.
+
+## 1. The model pass -- 54% then, 57% now, and at the ceiling either way
 
 One iteration of `BB11_8` is one input byte: 111 instructions, ~110
 fused-domain uops, measured 27.53 cycles. Skylake renames 4 uops/cycle and the
@@ -72,7 +84,8 @@ GOT load rather than keeping a base register:
 
 12 `GOTPCREL` loads in `do_process`, 6 in the model-pass loop alone.
 `-fno-pie -no-pie` removes all 12. Measured **-2.64 cyc/grp** on the inline
-build. Cheap and free of risk; not made the default here because it is a
+build -- but only **-0.85** on the staged build that shipped, which has fewer
+registers under pressure, so freeing the two GOT bases buys less. Cheap and free of risk; not made the default here because it is a
 packaging decision (no ASLR for the executable), so it is left as
 `OPT='-O3 -fno-pie -no-pie' ./build.sh`.
 
@@ -87,7 +100,7 @@ Two things that look like they should help the model pass and do not:
   loop is rename-bound, not miss-stalled. A prefetch is another uop against
   the binding constraint.
 
-## 2. The coding sweep -- 46%, saturated on two ceilings at once
+## 2. The coding sweep -- 46% then, 43% now, saturated on two ceilings at once
 
 One iteration of `BB11_14` is 16 coded bits: 134 instructions, 161
 fused-domain uops, 125 of them into the p0/p1/p5 ALU pool. Measured 42.05
@@ -245,20 +258,35 @@ store port at 62% and the load ports at 42%. The only lever is fewer uops.
 the p0/p1/p5 ceiling simultaneously. Again: fewer uops, which is exactly what
 staging does.
 
-**The staged sweep has one real stall, and it is the dominant part of its
-remaining cost.** The commit reads back `stad[]`/`stcl[]` with 4-byte scalar
-loads, which the sweep just wrote with 32-byte vector stores. Skylake will not
-forward a 32-byte store to a narrower load, so each load waits for the store
-to reach L1:
+**The staged sweep is the same story, with one item I could not pin down.**
+Its commit costs 7.1 cyc/grp, and a probe that reads cold arrays instead of
+the just-staged ones is 6.1 of that faster:
 
-    staged, committed        93.97 cyc/grp
-    staged, cold arrays      87.78          <- same 16 stores, no forwarding
-    staged, no commit at all  85.70
+    A  staged, committed                       94.01 cyc/grp
+    B  staged, address fresh / value cold      96.01
+    C  staged, both cold                       87.96
+    D  staged, no commit at all                86.92
 
-**The 16 stores themselves cost 2.08 cycles. The forwarding stall costs
-6.20** -- 75% of the commit.
+The obvious reading of A against C is store-to-load forwarding: the commit
+reads back with 4-byte scalar loads what the sweep wrote with 32-byte vector
+stores, and Skylake does not forward that. **The probes do not support it.**
+C also loses the four staging stores (nothing reads the arrays, so DSE takes
+them), and B -- which should sit halfway, with two staging stores and sixteen
+dependent loads -- is *slower than either endpoint*. A cost that is not
+monotonic in the thing it is supposed to scale with is not that thing.
 
-Two attempts to remove it, both worse:
+A fused-uop count says the same: the staged sweep is 154 fused uops against a
+38.06-cycle measurement, i.e. 4.05/cycle against a 4-wide rename -- there is no
+room in the loop for a 6-cycle stall of any kind. What A-vs-C measures is
+mostly the four staging stores and the register allocation that goes with
+them.
+
+So: the commit costs 7.1 cyc/grp, of which the 32 loads and 16 stores account
+for ~1.0 (C against D) and the staging stores and their scheduling account for
+the rest. Whether a forwarding stall is in there is not resolved by these
+probes.
+
+Two attempts to space the stores from the loads, both worse:
 
 - **Park the group and commit it one iteration later**, so the loads are a
   full group away from the stores. Copying the staged arrays aside costs the
@@ -269,10 +297,8 @@ Two attempts to remove it, both worse:
   forwarding to a 4-byte load is supported: the arithmetic then runs 4 lanes
   at a time and the loop loses far more than it gains -- 51.70 MB/s.
 
-So ~6 cyc/grp (6% of encode) sits behind a store-forwarding rule, and the two
-obvious ways out both cost more than the stall. Getting it would need the
-staged values to reach memory as narrow stores without the arithmetic getting
-narrower -- which SLP will not do from this source shape.
+Both fail for the same reason the accounting predicts: the loop is at the
+rename ceiling, so anything added costs more than the scheduling it buys.
 
 ## 8. Everything measured, in one table
 
@@ -283,7 +309,7 @@ narrower -- which SLP will not do from this source shape.
 | inline store (`RC_SCATTER=0`) | 63.18 | 102.41 | +0.00 |
 | **staged store (now default)** | **68.85** | **93.97** | **-8.43** |
 | inline + `-fno-pie` | 64.85 | 99.77 | -2.64 |
-| staged + `-fno-pie` | 69.48 | 93.12 | -9.29 |
+| staged + `-fno-pie` | 69.48 | 93.12 | -9.29 (i.e. -0.85 over staged) |
 | prefetch `pbit` +128 | 63.69 | 101.59 | -0.82 (noise) |
 | `pp` fused into `FSM` | 61.14 | 105.82 | +3.42 |
 | chunked model/sweep, 2048 | 57.42 | 112.68 | +10.27 |
@@ -295,23 +321,58 @@ narrower -- which SLP will not do from this source shape.
 | *probe* staged, no commit | 75.50 | 85.70 | -16.71 |
 | *probe* staged, cold arrays | 73.71 | 87.78 | -14.63 |
 
-## 9. What is left
+## 9. Acting on it: three fewer uops per bit
 
-After staging, encode is 93.97 cyc/grp: **55.06 model pass (59%)**, 38.91
-sweep (41%). Of the sweep, 8.28 is the commit (6.20 of it the forwarding
-stall) and ~30 is the rangecoder arithmetic, which sits at the rename and ALU
-ceilings.
+Both loops sit against the 4-wide rename ceiling with every port slack, so the
+only lever is a shorter instruction stream. Three places had one to give, all
+three stream-identical, and all three help the AVX-512 build as well:
+
+- **One scaled index for the FSM step** (`counter.inc`). `FSM[s].s[bit]` was a
+  base plus two scaled terms, which cannot fold into one addressing mode, so
+  clang materialised the FSM base into a register on six of the eight bit
+  slots -- a `leaq (,%rbit,2)` plus an `addq %rFSM` ahead of every load. It is
+  `((word*)FSM)[s*2+bit]`: same word, same address, one index, the whole
+  address folded into the load. **-4.29 cyc/grp.**
+- **The model pass out of locals** (`model0.inc`, `predict.inc`). The store to
+  `cty[ctx].state` may-alias `this->ctx` -- `ctx` is a loaded index, nothing
+  bounds it -- and `inpptr` is union-overlaid with `pin[]`, so neither cursor
+  was promoted and both were stored once per input byte; the `ctx` store was
+  the same constant every time. `P_S_L`/`P_update_L` take the context by
+  reference, which sidesteps the aliasing question. **-3.74.**
+- **No guard on the high-word extract** (`rc.inc`). `(sh==0) ? 0u : (lowl >>
+  (32-sh))` existed only because `x>>32` is UB; `sh` is 0, 8 or 16, so
+  `(lowl>>16)>>(16-sh)` is the same value with both counts <= 16 and no guard,
+  dropping the `vpcmpeqd`/`vpandn` pair in each half of the sweep. **-1.49.**
+
+Together, at 20 MB:
+
+    AVX2    -march=skylake   69.36 -> 71.93 MB/s   93.28 -> 89.95 cyc/grp
+    AVX-512 -march=native    75.43 -> 80.47        85.77 -> 80.40
+
+Full enwik8 after: **AVX2 72.16 MB/s encode / 35.07 decode, AVX-512 79.68 /
+37.57**, 62,513,092 bytes on both. The `counter.inc` change is on the
+decoder's path too, which is where its decode gain comes from.
+
+## 10. What is left
+
+Encode is 89.46 cyc/grp: **51.41 model pass (57%)**, 38.06 sweep (43%). Of the
+sweep, 9.45 is the commit and ~29 is the rangecoder arithmetic, at the rename
+and ALU ceilings.
 
 In rough order of what is actually available:
 
-1. `-fno-pie` -- 2.6 cyc/grp, one flag, no risk. A packaging call.
-2. The forwarding stall -- 6.2 cyc/grp, but no cheap way in from this source
-   shape (section 7).
-3. The model pass is 59% of encode and pinned at the 4-wide rename ceiling.
-   Only a smaller instruction stream moves it; the layout experiments here
-   (fusing the tables, prefetching, chunking) all lost. That is where the next
-   real win would have to come from, and it would have to be an algorithmic
-   change to the counter update, not a scheduling one.
+1. `-fno-pie` -- **0.85 cyc/grp on the current default**, one flag, no risk. (It
+   measured 2.64 on the pre-staging inline build, which is the figure to ignore:
+   the staged loop has fewer registers under pressure, so freeing the two GOT
+   bases buys less. It is a packaging call either way -- no ASLR for the
+   executable.)
+2. The commit's 7-9 cyc/grp. Section 7 says what is and is not known about it;
+   the two obvious ways in both lose.
+3. The model pass is 57% of encode and pinned at the rename ceiling. Only a
+   shorter instruction stream moves it; every layout experiment here (fusing
+   the tables, prefetching, chunking) lost, and the three wins above were all
+   addressing-mode and aliasing, not algorithm. The next real one would have to
+   change what the counter update *does*.
 
 ## Reproducing
 
