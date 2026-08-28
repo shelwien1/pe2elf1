@@ -76,6 +76,13 @@ with one `vpscatterdd`. It turns on by itself for clang + AVX-512 at
 `RCNUM%16==0`, and is off everywhere else, where staging would only cost.
 The stream does not change either way -- `t.sh` checks that.
 
+`misc/avx2_profile.md` is the measured breakdown of where encode time goes on
+the AVX2 target -- the model pass against the rename ceiling, the sweep against
+rename and the ALU ports at once, what the store costs and why staging it wins
+there too, and the things that did not work (prefetch, chunking, skip branches,
+fusing the tables). `misc/clk.c` measures the core clock the figures are
+against, which is not the one `/proc/cpuinfo` reports.
+
 `RC_SCATTER_SKIP` sits on top of it: a lane whose renorm emitted nothing owes
 no store, and only about 1.3 of 16 lanes owe one, so the scatter can be masked
 down to them or branched past entirely. Both are correct and both lose on
