@@ -15,43 +15,50 @@
 template< class Rangecoder >
 struct RC_IO {
 
-  byte* __restrict beg;   // start of this lane's payload
-  byte* __restrict ptr;   // cursor -- encoding, it starts RC_SKIP before beg
-  byte* __restrict end;   // one past the last writable byte (encoder only)
+  // sh_v1xN's arrangement: the substream is written and read BACKWARDS.
+  // The cursor starts at the top of the lane's row and every get/put
+  // decrements, so the coder's stream order is descending addresses and
+  // rc_Write's plain ascending memcpy stores the payload last-emitted-first.
+  byte* __restrict beg;   // top of this lane's payload (its first byte)
+  byte* __restrict ptr;   // cursor -- encoding, it starts RC_SKIP above beg
+  byte* __restrict end;   // one below the last writable byte (encoder only)
   uint  f_OVF;            // encoder: set if the substream did not fit
 
   // Reads past the end of the substream return 0xFF. That is not an accident:
-  // RCio::rc_Read pads each substream with RC_FF_PADSIZE bytes of 0xFF, which
-  // is what rc_Quit's minimal flush relies on -- it drops the tail bytes the
-  // decoder can reconstruct as 0xFF, and only writes the rest. It is also what
-  // byte(getc()) gives past EOF, which is how sh_v1xN_s.cpp got it for free.
-  byte get( void ) { return *ptr++; }
+  // RCio::rc_Read pads the RC_FF_PADSIZE bytes below each substream with
+  // 0xFF, which is what rc_Quit's minimal flush relies on -- it drops the
+  // tail bytes the decoder can reconstruct as 0xFF, and only writes the rest.
+  // It is also what byte(getc()) gives past EOF, which is how sh_v1xN_s.cpp
+  // got it for free.
+  byte get( void ) { return *ptr--; }
 
   // No prefix test here. The zero prefix (RC_SKIP bytes -- see rc_config.inc)
-  // is stored like any other byte, into the room StartEncode left for it ahead
-  // of beg, and rc_Write starts the payload at beg. put() is the coder's one
-  // hot store, and this is the buffer equivalent of rc_Write's
-  // ofs = LOWBYTES+1-CODBYTES in sh_v1xN_io.inc; the +1 there is the Cache
-  // byte, which the Cache!=-1 guard in rc.inc's ShiftLow accounts for.
+  // is stored like any other byte, into the room above beg, and rc_Write's
+  // payload copy stops below it. put() is the coder's one hot store; the
+  // top-of-row start is the buffer equivalent of rc_Write's
+  // tmpbufsize-1-ofs in sh_v1xN_io.inc.
   void put( byte c ) {
 #if RC_IO_CHECK
-    if_e0( ptr>=end ) { f_OVF=1; return; }
+    if_e0( ptr<=end ) { f_OVF=1; return; }
 #endif
-    *ptr++ = c;
+    *ptr-- = c;
   }
 
-  // bufsize is the payload capacity; the prefix sits in front of it, so the row
-  // has to be RC_SKIP longer than that -- which is what RCio::rowsize is.
-  void StartEncode( byte* buf, uint bufsize ) {
-    ptr = buf; beg = buf+RC_SKIP; end = beg+bufsize;
+  // top is the highest byte of the lane's row (where the first emitted byte
+  // goes); bufsize is the payload capacity, and the prefix sits above it --
+  // RCio::rowsize covers both plus the pad below.
+  void StartEncode( byte* top, uint bufsize ) {
+    ptr = top; beg = top-RC_SKIP; end = beg-bufsize;
     f_OVF = 0;
     ((Rangecoder*)this)->rc_Init();
   }
 
   void FinishEncode( void ) { ((Rangecoder*)this)->rc_Quit(); }
 
-  void StartDecode( byte* buf ) {
-    beg = ptr = buf; end = 0;
+  // top is the payload's first byte: its highest address, since rc_Read put
+  // the chunk back in file order and the file holds it last-emitted-first.
+  void StartDecode( byte* top ) {
+    beg = ptr = top; end = 0;
     f_OVF = 0;
     ((Rangecoder*)this)->rc_Init();
   }
@@ -59,7 +66,7 @@ struct RC_IO {
   // encoder: payload bytes written, i.e. this lane's substream length. A lane
   // that coded nothing can stop inside the prefix -- 16 header bits over 64
   // lanes leaves most of them with no work -- and owes the stream nothing.
-  uint rc_len( void ) const { return ptr>beg ? uint(ptr-beg) : 0; }
+  uint rc_len( void ) const { return ptr<beg ? uint(beg-ptr) : 0; }
 };
 
 
@@ -118,8 +125,15 @@ struct RCio {
   static const uint rowsize = ((RC_SKIP+tmpbufsize+FF_PADSIZE)+3) & ~3u;
 
   // One set of substream rows: the decoder reads a block into them, the
-  // encoder's kernel writes a block straight into them.
+  // encoder writes a block straight into them. Each lane's substream sits at
+  // the TOP of its row and grows down (see RC_IO above); the payload chunk in
+  // the file is that region copied ascending, i.e. last-emitted-first, so the
+  // decoder places it back ascending and walks it from its top.
   ALIGN(4096) byte tmpbuf[RCNUM][rowsize];
+
+  // decoder: the substream lengths of the current block, from rc_Read's
+  // headers -- the decode cursors start at FF_PADSIZE-1+rclen[rcidx].
+  uint rclen[RCNUM];
 
   byte* buf( uint rcidx ) { return &tmpbuf[rcidx][0]; }
   byte* rows( void ) { return &tmpbuf[0][0]; }
@@ -128,7 +142,6 @@ struct RCio {
   void rc_Read( Coroutine& C ) {
     uint rcidx,i,l,n;
 
-    uint rclen[RCNUM];
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l  = byte(C.get());
       l += byte(C.get())*256;
@@ -145,10 +158,11 @@ struct RCio {
         // than spin -- the FF padding below fills the hole and the block
         // decodes to garbage, which is the best a truncated file can do.
         if_e0( n==0 ) break;
-        memcpy( &tmpbuf[rcidx][i], (prbyte)C.inpptr, n );
+        memcpy( &tmpbuf[rcidx][FF_PADSIZE+i], (prbyte)C.inpptr, n );
         C.inpptr += n;
       }
-      for( i=0; i<FF_PADSIZE; i++ ) tmpbuf[rcidx][l+i] = 0xFF;
+      // the decoder reads downward, so the over-read pad sits BELOW the chunk
+      for( i=0; i<FF_PADSIZE; i++ ) tmpbuf[rcidx][i] = 0xFF;
     } // rcidx
   }
 
@@ -169,7 +183,10 @@ struct RCio {
       l = rclen[rcidx];
       for( i=0; i<l; i+=n ) {
         C.chkout(); n = Min<uint>( l-i, C.getoutlen() );
-        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][RC_SKIP+i], n );
+        // the payload spans [rowsize-RC_SKIP-l, rowsize-1-RC_SKIP]: its top
+        // byte sits RC_SKIP below the row top (above it, the zero prefix),
+        // and the ascending copy emits it last-emitted-first
+        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][rowsize-RC_SKIP-l+i], n );
         C.outptr += n;
       }
     } // rcidx

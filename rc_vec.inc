@@ -21,12 +21,15 @@ struct RangecoderN {
 
   ALIGN(VECSIZE) t_RC rc[RCNUM];
 
-  // Bind every lane to its own substream buffer in the RCio and reset it.
+  // Bind every lane to its own substream row in the RCio and reset it.
+  // Both directions run BACKWARDS (sh_v1xN's arrangement): the encoder's
+  // first byte goes to the top of the row, the decoder's first byte is the
+  // top of the chunk rc_Read placed at FF_PADSIZE.
   template< class IO >
   void rc_Init( IO& io ) {
     for( uint i=0; i<RCNUM; i++ ) {
-      if( f_DEC==0 ) rc[i].StartEncode( io.buf(i), IO::tmpbufsize );
-      else           rc[i].StartDecode( io.buf(i) );
+      if( f_DEC==0 ) rc[i].StartEncode( io.buf(i)+IO::rowsize-1, IO::tmpbufsize );
+      else           rc[i].StartDecode( io.buf(i)+IO::FF_PADSIZE-1+io.rclen[i] );
     }
   }
 

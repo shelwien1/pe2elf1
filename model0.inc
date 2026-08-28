@@ -145,7 +145,10 @@ struct Model<0> : Coroutine, Predictor {
       if_e1( g_use_vec ) {
 
         tmpbase = rcio.rows();
-        for( j=0; j<RCNUM; j++ ) { tmpptr[j] = j*t_RCio::rowsize; rc_Init(j); }
+        // the substreams grow DOWN from the top of each row; the cursor
+        // starts one below the first byte's slot because ShiftLow's store
+        // stages its word at [tmpptr..tmpptr+1] (see rc.inc)
+        for( j=0; j<RCNUM; j++ ) { tmpptr[j] = (j+1)*t_RCio::rowsize-2; rc_Init(j); }
 
         bit = (blksize!=BLKSIZE);
         rc_Process( 0, hSCALE, bit );
@@ -181,7 +184,7 @@ struct Model<0> : Coroutine, Predictor {
 
         uint ncarry = 0, novf = 0;
         for( j=0; j<RCNUM; j++ ) {
-          uint len = tmpptr[j] - j*t_RCio::rowsize;
+          uint len = ((j+1)*t_RCio::rowsize-1) - tmpptr[j];
           len = len>RC_SKIP ? len-RC_SKIP : 0;
           res.lens[j] = len;
           ncarry += FFNum[j];

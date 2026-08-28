@@ -113,10 +113,12 @@ print $O <<"HDR";
 // Include inside do_process: the declarations become locals there, which is
 // what lets the compiler prove nothing aliases them. The includer provides
 // f_DEC, sets tmpbase and tmpptr[], then drives the rc_* macros.
+// The substreams run BACKWARDS (sh_v1xN's arrangement): both cursors
+// decrement, see rc_io.inc.
 ALIGN(VECSIZE) uint tmpptr[RCNUM];
 byte* __restrict tmpbase;
-#define get1( k ) (tmpbase[tmpptr[k]++])
-#define put1( k, x ) (void)(tmpbase[tmpptr[k]++] = byte(x))
+#define get1( k ) (tmpbase[tmpptr[k]--])
+#define put1( k, x ) (void)(tmpbase[tmpptr[k]--] = byte(x))
 
 HDR
 print $O @decl, "\n", @body;

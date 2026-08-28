@@ -541,33 +541,43 @@ attributed at first to the one structural difference: 069 emits each lane's byte
 reversed single-word stores into its private tail, where this format's forward
 substreams must put the *top* byte first, against the store's little-endian order.
 
-That attribution was half right. The byte order does force a swap — but a 16-bit swap
-is one instruction, and the emit had spelled it out instead as two byte extracts, two
-masks, and an or:
+The forward emit had spelled that swap out as two byte extracts, two masks, and an or
+— five ALU ops plus the store against 069's single shift plus raw word store — and an
+interim fix rewrote it as a bswap16 idiom clang folds into the store (`shr; movbe`),
+worth +12% encode on its own. But the right answer was the one 069 actually
+implements, and it needs no swap at all: **the substreams run backwards.** `put1` and
+`get1` both decrement, `ShiftLowN` stores `cl` — low aligned so its top byte is `cl`'s
+top byte — with a plain little-endian store ending at `tmpptr+1` and commits 0..2
+staged bytes by the counted decrement, `rc_Write` memcpys the used region ascending
+(so the file holds each lane's chunk last-emitted-first), and the decoder starts at
+the chunk's top and walks down, over-reading into the 0xFF pad *below* it. With the
+cursor running down, the LE store lands the bytes in stream order by itself:
 
-    uint _b0 = uint(lowc>>(LOWBITS-8)) & 0xFF;          // 5 ALU ops + store
-    uint _b1 = uint(lowc>>(LOWBITS-16)) & 0xFF;
-    (word&)tmpbase[tmpptr] = word(_b0 | (_b1<<8));
+    qword cl = lowc;                       // LOWBYTES==8: zero shifts
+    (qword&)tmpbase[tmpptr-6] = cl;        // top byte at tmpptr+1
+    tmpptr -= n;
 
-against 069's single shift + raw word store. Rewritten as the bswap16 idiom —
+(one shift where low is narrower or split; whole `lowh` as-is for split LOWBYTES==8).
+Adopted end-to-end: the generated coder, `RC_IO`'s scalar cursors, `RCio`'s chunk
+placement, both models' cursor init — so the lane chunks in the container are now
+byte-reversed relative to the earlier forward builds, the one deliberate format
+change in this whole port, and the encoder–scalar–twin byte-identity checks all
+moved over with it.
 
-    uint _w = uint(lowc >> (LOWBITS-16));               // 1-2 ops + store
-    (word&)tmpbase[tmpptr] = word( (_w>>8) | (_w<<8) );
+Same-session three-way, interleaved and pinned (the box ran globally slower that day
+— 069 itself re-timed at 40.0–40.4 enc / 28.8 dec — so the ratios are the signal):
+encode **reversed 49.3–49.9 MB/s** vs bswap-form 47.2–47.9 vs pre-fix 42.1, decode at
+parity throughout (29.3/29.7/28.8). `model0::do_process` shrank from 1879 to 1210
+instructions. The port now encodes ~23% ahead of 069 on the same box with decode at
+parity — the "layout cost" ran the other way: the forward layout was costing the
+port, and 069's reversed layout is simply the better fit for a little-endian store.
 
-clang folds the swap into the store (`shr; movbe` with `-march=haswell`, `rol $8; movw`
-without — either way op-parity with 069's emit), in all the `RC_LOWSPLIT`/`RC_LOWBYTES`
-variants. Same-session interleaved A/B: encode 42.1 → 47.3 MB/s (+12%), identical
-output — and against 069 rebuilt in that same session (40.6 enc / 29.4 dec; the box ran
-globally slower that day, the ratios are the signal), the port encodes **~16% ahead**
-with decode still at parity (29.8). The ~5% "layout cost" of the forward streams was
-never structural; it was the swap written so the compiler couldn't see it.
-
-Output is byte-identical to the scalar `-C`
-coder and to the previous builds' format on the first build of the pipeline, and the
-full `t.sh` matrix (default, `RCNUM=8`, `RCNUM=64`, `RC_LOWSPLIT=1`, `RC_LOWBYTES=5`,
-`RC_LOWBYTES=6 RC_LOWSPLIT=1`, `RC_FORCE_CARRY=1`, `RC_VEC=0` — 384 checks) is green.
+Vector-vs-scalar `-C` output stayed byte-identical on the first build after the flip,
+and the full `t.sh` matrix — grown to cover every emit variant (default, `RCNUM=8`,
+`RCNUM=64`, `RC_LOWSPLIT=1`, `RC_LOWBYTES=4/5/6/7` split and non-split,
+`RC_FORCE_CARRY=1`, `RC_VEC=0`) — is green, 528 checks.
 
 With that, §8's ledger closes: the batched split, OpenCL, and ISPC are all removed
 from the tree, each for the measured reason recorded above, and the codec is back to
-one source file and a four-line generation step — 069's architecture, carried over to
-the carryless/forward-stream format.
+one source file and a four-line generation step — 069's architecture, reversed
+substreams included, carried over to the carryless format.

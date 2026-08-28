@@ -36,7 +36,9 @@ struct Model<1> : Coroutine, Predictor {
 
 #if RC_VEC
       tmpbase = rcio.rows();
-      for( j=0; j<RCNUM; j++ ) { tmpptr[j] = j*rcio.rowsize; rc_Init(j); }
+      // each cursor starts at the top of its lane's chunk and reads DOWN,
+      // running into the 0xFF pad below it past the end of the substream
+      for( j=0; j<RCNUM; j++ ) { tmpptr[j] = j*rcio.rowsize + rcio.FF_PADSIZE-1 + rcio.rclen[j]; rc_Init(j); }
 #else
       rc.rc_Init( rcio );
 #endif

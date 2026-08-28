@@ -204,12 +204,15 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   //  build never compiles this branch, and the arithmetic is line for line
   //  the scalar coder's -- t.sh checks the streams byte for byte.
 
-  // sh_v1xN's ShiftLowN with the store turned around for this port's
-  // forward substreams: counted shift, both top bytes stored unconditionally
-  // as one little-endian word, cursor advanced by n so a short shift is
-  // overwritten by the next one. The per-byte loop is what scalarised the
-  // sweep in the OpenCL and ispc ports; the branch was the cost, never the
-  // store width.
+  // sh_v1xN's ShiftLowN: the substream is written BACKWARDS (tmpptr
+  // decrements), which is what makes the store free -- the plain
+  // little-endian store of low's top bytes lands them in stream order
+  // with no byte extraction or swapping. cl is low aligned so low's top
+  // byte is cl's top byte (zero or one shift per config); the store
+  // stages sizeof(cl) bytes ending at tmpptr+1 and the counted decrement
+  // commits 0..2 of them, so a short shift is simply overwritten by the
+  // next store. The per-byte loop is what scalarised the sweep in the
+  // OpenCL and ispc ports; the branch was the cost, never the store.
   void ShiftLow( uint n ) {
     uint sh = n*8;
 #if RC_LOWSPLIT
@@ -237,25 +240,29 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     rpre = 0;
     RC_CARRY_COUNT(_cy);
     FFNum += _cy;   // ShiftLowN: "use as flag"
-    // the top 16 bits of low, top byte in the high half; every variant
-    // leaves _w with nothing above bit 15
+    // cl's top byte lands at tmpptr+1, the next at tmpptr, the rest
+    // below as staging that later stores overwrite
 #if RC_LOWSPLIT
-#if RC_LOWBYTES>=6
-    uint _w = lowh >> (RC_LOWBYTES*8-48);
+#if RC_LOWBYTES==8
+    uint cl = lowh;
+#elif RC_LOWBYTES>=6
+    uint cl = lowh << (64-LOWBITS);
 #elif RC_LOWBYTES==5
-    uint _w = (lowh<<8) | (lowl>>24);
+    uint cl = (lowh<<24) | (lowl>>8);
 #else
-    uint _w = lowl >> 16;
+    uint cl = lowl;
 #endif
+    (uint&)tmpbase[tmpptr-2] = cl;
 #else
-    uint _w = uint(lowc >> (LOWBITS-16));
+#if RC_LOWBYTES==8
+    qword cl = lowc;
+    (qword&)tmpbase[tmpptr-6] = cl;
+#else
+    uint cl = uint(lowc >> (LOWBITS-32));
+    (uint&)tmpbase[tmpptr-2] = cl;
 #endif
-    // the forward stream wants the top byte first, so the LE word store
-    // needs the halves swapped -- as a bswap16 idiom it folds into the
-    // store (shr+movbe), where extracting the bytes and or-ing them back
-    // costs four extra ALU ops per lane per bit
-    (word&)tmpbase[tmpptr] = word( (_w>>8) | (_w<<8) );
-    tmpptr += n;
+#endif
+    tmpptr -= n;
 #if RC_LOWSPLIT
     uint _hi = (sh==0) ? 0u : (lowl >> (32-sh));
     lowh = ((lowh<<sh) | _hi) & uint(LOW_MASK>>32);
@@ -281,12 +288,12 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
         uint _q = tmpptr;
         if_e0( range<gTOP ) {
           range <<= 16;
-          code = (code<<16) + (uint(tmpbase[_q])<<8) + tmpbase[_q+1];
-          tmpptr = _q+2;
+          code = (code<<16) + (uint(tmpbase[_q])<<8) + tmpbase[_q-1];
+          tmpptr = _q-2;
         } else {
           range <<= 8;
           code = (code<<8) + tmpbase[_q];
-          tmpptr = _q+1;
+          tmpptr = _q-1;
         }
       }
     }
@@ -384,6 +391,9 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
         if( hic || ((llow|mask)<high) ) llow|=mask, --n;
       }
 
+      // the cursor sits below ShiftLow's staging pair; the next stream
+      // byte belongs one up (sh_v1xN_macro.inc's ++tmpptr before put1)
+      tmpptr += 1;
       for( i=0; i<n; i++ ) put( byte(llow>>(LOWBITS-8-i*8)) );
     }
   }
