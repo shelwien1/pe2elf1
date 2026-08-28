@@ -64,7 +64,13 @@ against it -- so pass them to `build.sh`, or to `t.sh`, which forwards them:
     ./t.sh "-DRC_RCNUM=32 -DRC_LOWBYTES=4"      # one argument works too
 
 Nothing generated is committed, and `build.sh` regenerates it every time, so
-switching configurations needs no clean.
+switching configurations needs no clean. The generated kernel depends on the
+`-D` set and on nothing else -- not on the target, not on which compiler
+preprocesses it -- so any build script can generate it with whatever is at
+hand; `gc.bat` uses its own `%defs%` and compiler. A `-D` set that does not
+match between the generation and the compile is a build error, not a silently
+wrong coder: `rc_config.inc`'s `RC_KERNEL_CONF` is baked into the kernel and
+checked against the build.
 
 `RC_SCATTER` is the one knob that keys off the target rather than the `-D` set.
 The coder's one hot store goes to a per-lane address, and the sweep is straight-

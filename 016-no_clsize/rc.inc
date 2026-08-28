@@ -57,17 +57,18 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #if RC_STATS
   uint  n_carry; // isn't expected to be used on enough data to overflow
 #endif
-#if RC_VECOUT && RC_SCATTER
-  // ShiftLow's store, staged rather than performed: the dword, the tmpbase
-  // offset it belongs at, and the renorm count that says whether it is a
-  // store at all. rc_Flush commits one; model0.inc commits a whole group
-  // with one scatter. See RC_SCATTER in rc_config.inc.
+#if RC_VECOUT
+  // Where ShiftLow's store goes when the build stages it instead of performing
+  // it: the dword, the tmpbase offset it belongs at, and the renorm count that
+  // says whether it is a store at all. Declared unconditionally, because the
+  // generated kernel must not depend on anything but the -D set -- whether
+  // they are used is RC_SCATTER's business, decided at COMPILE time by
+  // RC_STAGE_CL / RC_FLUSH_ONE (model.inc). When it is off, nothing writes
+  // them and they cost nothing.
   uint  stcl, stad, stn;
-  // so the compile can tell it is looking at a kernel generated for the same
-  // RC_SCATTER it was built with -- model0.inc static_asserts on it
-  enum { SCATTER_GEN = 1 };
-#elif RC_VECOUT
-  enum { SCATTER_GEN = 0 };
+
+  // what this kernel was generated against; model0.inc checks it
+  enum { KERNEL_CONF = RC_KERNEL_CONF };
 #endif
 
 #if RC_STATS
@@ -269,16 +270,14 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #else
     uint cl = lowl;
 #endif
-#if RC_SCATTER
-    // n==0 stages without committing: the cursor does not move, so the next
-    // store of this lane writes this exact window again and every byte here
-    // is overwritten before anything reads the row. RC_SCATTER_SKIP is what
-    // acts on it -- and it is the common case, the coder emits about 0.08
-    // bytes per coded bit.
-    stcl = cl; stad = tmpptr-2; stn = n;
-#else
-    (uint&)tmpbase[tmpptr-2] = cl;
-#endif
+    // The store -- performed here, or staged for the group to commit, which
+    // is RC_STAGE_CL's business and the compile's, not the generator's.
+    // Staged, n==0 means the store is dead: the cursor does not move, so this
+    // lane's next store writes this exact window again and every byte here is
+    // overwritten before anything reads the row. That is the common case --
+    // the coder emits about 0.08 bytes per coded bit -- and RC_SCATTER_SKIP
+    // is what acts on it.
+    RC_STAGE_CL( rcidx, tmpptr-2, cl, n );
 #else
 #if RC_LOWBYTES==8
     qword cl = lowc;
@@ -313,14 +312,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     lowc = (lowc<<sh) & LOW_MASK;
 #endif
   }
-
-#if RC_SCATTER
-  // Commit the store ShiftLow staged. One lane at a time -- for the paths that
-  // code one lane at a time; the sweep uses model0.inc's scatter instead.
-  void rc_Flush( void ) {
-    (uint&)tmpbase[stad] = stcl;
-  }
-#endif
 
   // Encode: the counted shift. Decode: the branchy nested refill with the
   // cursor touched only inside it -- ~91% of bits pass two predicted tests
@@ -422,11 +413,12 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     n_carry = 0;
 #endif
     range = RC_RANGE_INIT;
-#if RC_VECOUT && RC_SCATTER
-    // where the first ShiftLow's store would land anyway: the row's zero
-    // prefix, which rc_Write drops. Keeps a flush before the first ShiftLow
-    // -- there is none today -- from writing somewhere it should not.
-    stcl = 0; stad = tmpptr-2; stn = 0;
+#if RC_VECOUT
+    // Seed the staging at where the first ShiftLow's store would land anyway:
+    // the row's zero prefix, which rc_Write drops. Keeps a commit before the
+    // first ShiftLow -- there is none today -- from writing somewhere it
+    // should not. A no-op when the build is not staging.
+    RC_STAGE_INIT( rcidx, tmpptr-2 );
 #endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
   }
@@ -436,11 +428,10 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   void rc_Quit( void ) {
     if( f_DEC==0 ) {
       rc_Renorm();
-#if RC_SCATTER
-      // before the put1 run below, which overwrites the top of the staged
-      // dword -- exactly what it does to the direct store
-      rc_Flush();
-#endif
+      // commit the staged store before the put1 run below, which overwrites
+      // the top of that dword -- exactly what it does to the direct store.
+      // A no-op when the build is not staging.
+      RC_FLUSH_ONE( rcidx );
 
       uint i, n = LOWBYTES;
 #if RC_LOWSPLIT

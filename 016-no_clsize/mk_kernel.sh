@@ -7,11 +7,12 @@
 #   rc_macro.pl  functions into #define/#enddef blocks
 #   defines.pl   ... into real multi-line macros
 #
-# The output depends on the RC_* configuration -- and on the target, since
-# RC_SCATTER keys off __AVX512F__ -- so build.sh runs this every build with the
-# current -D set and CPP="$CXX $archflags -E"; nothing here is committed.
-# Running it by hand without those flags produces a kernel the compile will
-# reject (model0.inc static_asserts on RC_SCATTER).
+# The output depends on the RC_* configuration and on NOTHING ELSE -- not on
+# the target, not on which compiler preprocesses it. Anything the compile has
+# to decide for itself (whether the store is staged, and what commits it) is
+# left as a macro for the compile to define; see model.inc. So build.sh and
+# gc.bat can run this with whatever preprocessor is at hand, as long as the -D
+# set matches. Nothing here is committed.
 #   mk_kernel.sh [-Dname=value ...]
 set -e
 cd "$(dirname "$0")"

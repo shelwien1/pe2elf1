@@ -189,6 +189,24 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 
+// A fingerprint of everything the generated kernel is resolved against.
+// mk_kernel.sh bakes it into rc_vecD.inc and the compile static_asserts the
+// same expression, so a kernel generated with one -D set and compiled with
+// another is a build error rather than a silently wrong coder -- which is the
+// whole reason build.sh takes its -D set as arguments and gc.bat has one
+// %defs%.
+//
+// Only knobs that reach the GENERATOR belong here. Nothing target-derived:
+// the kernel does not depend on the ISA, and anything the compile decides for
+// itself is a macro the compile defines (see model.inc). RC_VECOUT and
+// RC_CARRYLESS are excluded too -- mk_kernel.sh forces them, and the compile
+// sets RC_CARRYLESS both ways.
+#define RC_KERNEL_CONF ( RC_RCNUM + 64*RC_LOWBYTES + 2048*RC_LOWSPLIT      \
+                       + 8192*RC_CODBYTES + 131072*RC_RANGE64             \
+                       + 262144*RC_SHIFT_SAT + 524288*RC_STATS            \
+                       + 1048576*RC_VECSIZE + RC_BLKSIZE/16               \
+                       + 4096*(RC_FF_TRIM&63) )
+
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
 // coder is built from. Never set in a normal compilation.
