@@ -142,14 +142,11 @@ struct RangecoderN {
       // wins -- the same measurement the original made (RC.txt, 054) and
       // this port initially ignored.
       //
-      // The cursor handling differs by compiler, measured both ways: clang
-      // wants it touched only inside the refill (the original's shape,
-      // 34.9 -> 36.5 on the reference box) but only once the coder is a
-      // stack local -- through `this` the conditional store wrecks its
-      // alias scheduling (35.2 -> 25.4). gcc is the mirror image: the
-      // conditional store costs it a third (23.6 -> 17.4), the
-      // unconditional form does not.
-#if defined(__clang__) || defined(__INTEL_LLVM_COMPILER)
+      // The cursor is touched only inside the refill -- nothing on the ~91%
+      // no-refill path. This shape is tuned for clang (34.9 -> 36.5 on the
+      // reference box, and it needs RC_DEC_LOCAL): gcc prefers an
+      // unconditional load/store of the cursor (this form costs it a third),
+      // but clang is what this coder is built with.
       if_e0( r<t_RC::sTOP ) {
         uint q = d_pos[rcidx];
         if_e0( r<t_RC::gTOP ) {
@@ -162,21 +159,6 @@ struct RangecoderN {
           d_pos[rcidx] = q+1;
         }
       }
-#else
-      {
-        uint q = d_pos[rcidx];
-        if_e0( r<t_RC::sTOP ) {
-          if_e0( r<t_RC::gTOP ) {
-            r <<= 16;
-            c = (c<<16) + (uint(d_base[q])<<8) + d_base[q+1]; q += 2;
-          } else {
-            r <<= 8;
-            c = (c<<8) + d_base[q]; q += 1;
-          }
-        }
-        d_pos[rcidx] = q;
-      }
-#endif
       uint rp = (r>>SCALElog)*freq;
       bit = (c>=rp);
       r -= rp;
