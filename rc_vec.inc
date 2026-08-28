@@ -134,10 +134,22 @@ struct RangecoderN {
 #if RC_DECSOA_ON
     if( f_DEC ) {
       uint r=d_range[rcidx], c=d_code[rcidx], q=d_pos[rcidx];
-      uint n = (r<t_RC::sTOP) + (r<t_RC::gTOP);
       c -= d_rpre[rcidx];
-      for( uint k=n; k!=0; k-- ) c = (c<<8) + d_base[q++];
-      r <<= n*8;
+      // Branchy renorm, the original Rangecoder1's: ~91% of bits refill
+      // nothing and pay two predicted-not-taken tests, where the counted
+      // branchless form pays its compares, the variable shift and the
+      // bounds arithmetic on every bit. On the scalar decode path branchy
+      // wins -- the same measurement the original made (RC.txt, 054) and
+      // this port initially ignored.
+      if_e0( r<t_RC::sTOP ) {
+        if_e0( r<t_RC::gTOP ) {
+          r <<= 16;
+          c = (c<<16) + (uint(d_base[q])<<8) + d_base[q+1]; q += 2;
+        } else {
+          r <<= 8;
+          c = (c<<8) + d_base[q]; q += 1;
+        }
+      }
       uint rp = (r>>SCALElog)*freq;
       bit = (c>=rp);
       r -= rp;

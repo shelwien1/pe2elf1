@@ -412,57 +412,51 @@ translation to a function boundary. (Incidentally the original's `_val` double c
 and this document's floor+fixup threshold are the same exactness argument in two forms —
 the 2^-17 gap between attainable quotients and the next integer.)
 
-### 9.5 The decode gap was never vectorization
+### 9.5 The decode gap, settled by disassembly
 
-The user's cross-check that settled it: on the same AVX2-built machine, the original
-sh_v1xN decodes at 42.7 MB/s and this port at 28.6. Reading the original again with that
-number in hand: its shipping decoder (`Rangecoder1`, the one 071's `model1.inc` actually
-uses — the SIMD `Rangecoder` decoder sits under `#if 0`) is *scalar*. What it has that the
-port's didn't is shape: `#pragma unroll(RCNUM)` on the group loop, which makes the lane
-index a compile-time constant in every body — lane state at fixed addresses, the
-byte-boundary test `(j&7)==7` decided at compile time — over SoA lane arrays, with
-likely/unlikely annotations. No SIMD anywhere on the decode path.
+The user's cross-check that started this: on the same AVX2-built machine, the original
+sh_v1xN decodes at 42.7 MB/s and this port at 28.6 — and the claim that the original's
+decoder auto-vectorizes (SoA arrays, `[rcidx]` everywhere). Settled empirically against
+the real 069 tree, rebuilt on the reference box with the same clang and flags:
 
-Both halves are now in the port. `RC_UNROLL` on the group loops (decoder and the host
-coder's `proc_block`): decode 17.0 → 23.8 (gcc, **+40%**) / 29.5 (clang, **+73%**), host
-encode 16.5 → 27.0/31.2, byte-identical, full corpus green. `RC_DECSOA` (default on):
-the decoder's lane state as four compact arrays instead of RCNUM full coder objects —
-measured neutral on this box once the unroll has made every offset constant (16 lanes fit
-L1 either way), kept because it is the original's structure, the split's `rc_Bulk` now
-converts from it trivially, and a larger RCNUM or a smaller cache prices it differently.
+**Where the vector code is.** 069's `Model<1>::do_process` does contain vector code —
+139 xmm/ymm instructions (`vpinsrb`, `vpshufb`, `vpor` …) — and every one of them sits in
+the **per-block setup**: clang SLP-vectorizes the sixteen lanes' pointer/`code`
+initialization. The per-bit hot loop — sixteen unrolled bodies of ~26 instructions, one
+`imul` each — contains **zero** vector instructions. So the auto-vectorization is real
+and the hot decode path is scalar; both statements are true, and the decode speed lives
+in the scalar body's shape. (069's `model1.inc` uses `Rangecoder1` from `sh_v1xN_c.inc`,
+a plain class — the macro-generated coder serves `model0`; the SIMD `Rangecoder` decoder
+sits under `#if 0`.)
 
-This also reframes the split's standing: the unroll lifted the fused decoder by more than
-it lifted the split (splitA 12.1 → 17.9 clang, fused 17.0 → 29.5), so the gap *widened* —
-the fused decoder had been mis-shaped, not the split under-credited.
+**The three ingredients of that shape, now all in the port:**
 
-And the same cross-check exposes the encoder's ISA dependence. At ISA parity on the
+1. `RC_UNROLL` — `#pragma unroll(RCNUM)` on the group loop, lane index a compile-time
+   constant in every body, byte-boundary test decided at compile time.
+2. `RC_DECSOA` — the lane state as four compact arrays, the original's structure.
+3. **The branchy renorm** — the decisive one. `Rangecoder1` refills inside two
+   predicted-not-taken tests, so the ~91% of bits with no refill pay nothing; the port
+   had the counted branchless form everywhere, which is right for the vectorized encoder
+   and wrong for the scalar decoder — the exact measurement the original had already made
+   (`RC.txt`, 054: ShiftCodeN 62.91 → 51.66) and the port had inherited backwards.
+
+Head to head on the reference box — same clang, `-march=haswell`, same input, external
+timing, pinned: **069 original 33.9–35.8 MB/s, port before 28.6, port now 35.2.**
+Parity. (gcc trails at 26.4 on the same source; the original was always a clang/icx
+coder.) Full corpus green, `RC_DECSOA=0` keeps the old path.
+
+This also reframes the split's standing one more time: the fused decoder gained another
+~25% while the split did not, so the split's deficit widened again — every improvement to
+the scalar loop is an improvement to the thing the split has to beat.
+
+And the same 069 cross-check exposes the encoder's ISA dependence. At ISA parity on the
 user's machine, ispc-AVX2 encodes at 46 MB/s against the original's AVX2 60; on this box
-the AVX2-x8 kernel runs 1380 µs/block against AVX-512's 495. The kernel's output path is
-the dword scatter — `vpscatterdd` — and AVX2 has no scatter of any width, so ispc
-scalarises every lane's store into extract/store/branch, the exact pathology the OpenCL
-byte path had on AVX-512. The original's AVX2 encoder never paid it because its output
-design (reverse-order 16-bit stores, later the clset row) was AVX2-native. So: on
-AVX-512 the ispc kernel wins even through the downclock (80 vs 60 on the user's box);
-an AVX2 build that has to match the original needs an AVX2-shaped output path — the
-clset-style row store that lost on AVX-512 (`rc_vectorized_design_v1.md` §3.15/§6.3) is
-the natural candidate, unmeasured under ispc. Recorded as the open item it is.
-
-## 10. Measurement notes
-
-Same box, compilers and discipline as `rc_decoder_opencl_plan_v1.md` §10 — 4-vCPU 2.8 GHz
-Xeon VM, AVX-512F/BW/CD/DQ/VL, gcc 13.3.0, pinned best-of-4, baselines re-run in-session
-(the VM drifted again during this work and was caught doing it: a +23% RCNUM=64 reading
-that vanished in the same-session A/B, §3). ISPC 1.24.0 (LLVM 17),
-`--target=avx512skx-x16 --arch=x86-64 -O2 --pic`. The harness's absolute clk/bit is not the
-real decoder's (its model is synthetic; its two modes bracket, §6.1) — cross-variant deltas
-within a mode are the data, and the real-coder anchors of §6.4 are separate pinned runs of
-`./coder`. Build:
-
-```
-ispc --target=avx512skx-x16 --arch=x86-64 -O2 --pic rc_splitdec.ispc -o rc_splitdec_ispc.o -h rc_splitdec_ispc.h
-g++ -O3 -march=native -I. rc_splitdec.cpp rc_splitdec_ispc.o -o rc_splitdec
-./rc_splitdec <GHz> [hot]
-```
-
-Every variant prints `[identical]` against its NL's reference or the run is void; the
-`refill:` line reports the mode's bytes/bit so the bracketing claim stays checkable.
+the AVX2-x8 kernel runs 1380 µs/block against AVX-512's 495, and 069's whole
+single-thread encoder does 52.5 next to the ispc-AVX-512 sync path's 59. The kernel's
+output is the dword scatter — `vpscatterdd` — and AVX2 has no scatter of any width, so
+ispc scalarises every lane store, the pathology the OpenCL byte path had on AVX-512. The
+original's AVX2 encoder never paid it because its output design (reverse-order 16-bit
+stores, later the clset row) was AVX2-native. On AVX-512 the ispc kernel wins even
+through the downclock (80 vs 60 on the user's box); an AVX2 build that must match the
+original needs an AVX2-shaped output path — the clset-style row store that lost on
+AVX-512 is the natural candidate, unmeasured under ispc. Recorded as the open item it is.
