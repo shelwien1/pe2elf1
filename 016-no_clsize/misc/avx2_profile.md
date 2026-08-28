@@ -360,6 +360,61 @@ Full enwik8 after: **AVX2 72.16 MB/s encode / 35.07 decode, AVX-512 79.68 /
 37.57**, 62,513,092 bytes on both. The `counter.inc` change is on the
 decoder's path too, which is where its decode gain comes from.
 
+## 9b. A second pass, and a lesson about measuring
+
+An adversarial pass over the disassembly produced four more candidates. Three
+paid, one did not, and the one that did not turned out to be the most useful
+thing in the round.
+
+**Taken:**
+
+- **The model pass out of line** (`model0.inc`). It has no vector code, but
+  inside `do_process` it was paying for `do_process`'s: the generated kernel's
+  `ALIGN(VECSIZE)` lane arrays force `andq $-32, %rsp` in the prologue, and
+  dynamic stack realignment needs a frame pointer -- so `-fomit-frame-pointer`
+  is overridden and `%rbp` leaves the allocator for the whole function, while
+  the coding pass's hoisted values hold further registers across all 65536
+  iterations of a loop that never touches them. Out of line it gets its own
+  frame, no realignment and a full register file: 112 -> 108 instructions,
+  and the last two spills gone. **+2.8%.**
+- **`FFNum` as a no-carry mask** (`rc.inc`). It was accumulated as a count and
+  read only as a flag, with a `+1` fixup at the fold. `FFNum &= _cy - 1` is
+  one `vpand` of a compare clang already has in hand: the sweep trades two
+  `vpaddd` for two `vpand` and the fold loses its fixup. The scalar coders keep
+  the count. **+1.4%.**
+- **A guard on the `rowsize` stride** (`rc_io.inc`). All RCNUM lane cursors are
+  `rowsize` apart and all are written every group, so the stride decides how
+  they spread over L1d's sets and the dTLB's: `j*stride mod P` takes
+  `P/gcd(stride,P)` values, so they stay distinct only while
+  `gcd(stride,P)*RCNUM <= P`. Nothing defended that. It holds with three orders
+  of margin today (`rowsize` = 61612 = 4*73*211), which is exactly why a change
+  to `RC_FF_TRIM`, `RC_LOWBYTES`, `SCALElog` or `BLKSIZE` could quietly break
+  it. Compile-time only, and verified to fire with its message at
+  `-DRC_FF_PADSIZE=3989`, where `rowsize` lands on 65536.
+
+Together, round-robin over 8 rounds, medians:
+
+    AVX2    -march=skylake   57.18 -> 59.84 MB/s   +4.65%
+    AVX-512 -march=native     66.07 -> 66.06        -0.02%  (neutral)
+    decode  (10 rounds)       29.80 -> 29.91        +0.35%  (unaffected)
+
+**Not taken: the BMI2 `rorx` bit extract.** `bit = (c>>(7-j))&1` costs a `movl`
+to preserve `c`; `rorx` is three-operand and would not. clang's demanded-bits
+fold sees that only bit 0 of the rotate is ever used and turns it straight back
+into the shift it replaced -- the generated model loop is instruction-for-
+instruction identical, `rorx` count 0 either way. The estimate rested on
+codegen that does not happen, and there is no way to force it from this source
+without making more of the rotate live.
+
+**The lesson.** Best-of-N on this box has a ~2% spread, which is the same size
+as everything in this round. What separated signal from noise was having two
+changes that *cannot* do anything -- the `rorx` variant, whose codegen is
+byte-identical, and the `static_assert`, which is compile-time only -- and
+measuring them alongside. Round-robin medians put both at exactly baseline
+(0.00% and -0.05%) where best-of-N put them at +1.8% and +1.0%. Any figure in
+this document under ~1% should be read as a no-op unless a control was
+measured with it.
+
 ## 10. What is left
 
 Encode is 89.46 cyc/grp: **51.41 model pass (57%)**, 38.06 sweep (43%). Of the
@@ -375,11 +430,12 @@ In rough order of what is actually available:
    executable.)
 2. The commit's 7-9 cyc/grp. Section 7 says what is and is not known about it;
    the two obvious ways in both lose.
-3. The model pass is 57% of encode and pinned at the rename ceiling. Only a
-   shorter instruction stream moves it; every layout experiment here (fusing
-   the tables, prefetching, chunking) lost, and the three wins above were all
-   addressing-mode and aliasing, not algorithm. The next real one would have to
-   change what the counter update *does*.
+3. The model pass is the majority of encode and pinned at the rename ceiling.
+   Only a shorter instruction stream moves it; every layout experiment here
+   (fusing the tables, prefetching, chunking) lost, and every win so far has
+   been addressing-mode, aliasing or register pressure -- never the algorithm.
+   Section 9b took the last of the mechanical ones. The next real win would
+   have to change what the counter update *does*.
 
 ## Reproducing
 
