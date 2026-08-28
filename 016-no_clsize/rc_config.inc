@@ -334,6 +334,42 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_SCATTER_SKIP 0
 #endif
 
+// 1 = ShiftLow extracts the high word as a single variable shift,
+// `lowl >> (32-sh)`, and relies on the shift SATURATING to zero when sh==0
+// makes the count 32. 0 = the portable double shift, `(lowl>>16)>>(16-sh)`,
+// which is the same value with both counts <= 16.
+//
+// Saturation is a property of the target, and the targets disagree:
+//
+//   x86 SIMD   vpsrlvd / vpsrld     count >= 32 -> 0      saturates
+//   ARM NEON   ushl (negative)      shift >= 32 -> 0      saturates
+//   x86 scalar shr                  count & 31  -> lowl   WRONG
+//   OpenCL     `x >> n`             n & 31      -> lowl   WRONG (spec 6.3.j)
+//   CUDA C     `x >> n`             undefined             (PTX shr.u32 clamps)
+//   C / C++    `x >> n`             undefined for n >= 32
+//
+// so 1 is only ever correct for a hand-written kernel on a target in the top
+// two rows. In the C build it is undefined behaviour at sh==0, and a compiler
+// is free to make the whole ShiftLow disappear.
+//
+// It is also SLOWER here, which is the reason the default is 0 rather than a
+// portability compromise. clang will not fold the C-level poison into the one
+// vpsrlvd the hardware would allow; it canonicalises around it and emits more,
+// not less. AVX2, -march=skylake, RCNUM=16, 20 MB of enwik8, sweep loop
+// instruction counts and best of 6x6:
+//
+//   0  (lowl>>16)>>(16-sh)         144 insns   58.20 MB/s   <- default
+//   1  lowl>>(32-sh)               153         56.20
+//   -  uint(qword(lowl)>>(32-sh))  170         53.13
+//
+// The third is the well-defined way to ask for the same thing -- a 64-bit
+// shift by 32 is perfectly legal -- and it is the worst of the three: clang
+// widens the lane to 64 bits and emits vpsrlvq, four lanes per ymm instead of
+// eight. All three produce the same stream.
+#ifndef RC_SHIFT_SAT
+#define RC_SHIFT_SAT 0
+#endif
+
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
 // prefix below is the difference between it and the low accumulator.

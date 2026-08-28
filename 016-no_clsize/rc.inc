@@ -289,7 +289,19 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // the sh==0 case falls out as 0 on its own -- (x>>16)>>16 is a defined
     // pair of 32-bit shifts where x>>32 is not. That drops the vpcmpeqd and
     // vpandn the ternary compiled to in each half of the sweep.
+    //
+    // x86 SIMD and NEON would give the same answer from the single shift
+    // `lowl >> (32-sh)`, because their variable shift saturates to zero past
+    // the lane width -- but scalar x86 masks the count and OpenCL defines the
+    // shift as `x >> (n & 31)`, so that form is target-specific and undefined
+    // in C. RC_SHIFT_SAT in rc_config.inc has it, with the measurements: it
+    // is slower here, because clang will not fold the poison into the one
+    // instruction the hardware would allow.
+#if RC_SHIFT_SAT
+    uint _hi = lowl >> (32-sh);
+#else
     uint _hi = (lowl >> 16) >> (16-sh);
+#endif
     lowh = ((lowh<<sh) | _hi) & uint(LOW_MASK>>32);
     lowl <<= sh;
 #else

@@ -12,6 +12,13 @@ Machine: Intel Xeon, cascadelake (family 6, model 85, stepping 7), 4 vCPU,
 enwik8, `./coder c /tmp/e20 /dev/null ../FSM0.txt 6`, best of 6 iterations
 across 5-6 runs.
 
+**Absolute MB/s is not portable across sessions.** The numbers below are all
+from one container instance. A later instance, same clock and same binaries,
+ran the identical build at 58 MB/s where this one ran it at 72 -- a ~20%
+host-side difference with nothing changed. Every comparison here is
+within-instance and every conclusion is a ratio; take the absolute column as
+scale, not as a target.
+
 **The clock is not the one `/proc/cpuinfo` reports.** It says 2.8 GHz; a
 dependent-`add` chain measures the core actually running at **3.235 GHz**.
 Every cycle figure below is at the measured clock. This matters: at 2.8 GHz
