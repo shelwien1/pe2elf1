@@ -237,22 +237,24 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     rpre = 0;
     RC_CARRY_COUNT(_cy);
     FFNum += _cy;   // ShiftLowN: "use as flag"
+    // the top 16 bits of low, top byte in the high half; every variant
+    // leaves _w with nothing above bit 15
 #if RC_LOWSPLIT
 #if RC_LOWBYTES>=6
-    uint _b0 = (lowh>>(RC_LOWBYTES*8-40)) & 0xFF;
-    uint _b1 = (lowh>>(RC_LOWBYTES*8-48)) & 0xFF;
+    uint _w = lowh >> (RC_LOWBYTES*8-48);
 #elif RC_LOWBYTES==5
-    uint _b0 = lowh & 0xFF;
-    uint _b1 = (lowl>>24) & 0xFF;
+    uint _w = (lowh<<8) | (lowl>>24);
 #else
-    uint _b0 = (lowl>>24) & 0xFF;
-    uint _b1 = (lowl>>16) & 0xFF;
+    uint _w = lowl >> 16;
 #endif
 #else
-    uint _b0 = uint(lowc>>(LOWBITS-8)) & 0xFF;
-    uint _b1 = uint(lowc>>(LOWBITS-16)) & 0xFF;
+    uint _w = uint(lowc >> (LOWBITS-16));
 #endif
-    (word&)tmpbase[tmpptr] = word(_b0 | (_b1<<8));
+    // the forward stream wants the top byte first, so the LE word store
+    // needs the halves swapped -- as a bswap16 idiom it folds into the
+    // store (shr+movbe), where extracting the bytes and or-ing them back
+    // costs four extra ALU ops per lane per bit
+    (word&)tmpbase[tmpptr] = word( (_w>>8) | (_w<<8) );
     tmpptr += n;
 #if RC_LOWSPLIT
     uint _hi = (sh==0) ? 0u : (lowl >> (32-sh));

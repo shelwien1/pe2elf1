@@ -536,10 +536,33 @@ rebuilt in the same session):
 | this, generated coder | 49.84 | 35.81 |
 
 Decode at parity, encode at 95%. The encoder's pbit sweep genuinely auto-vectorizes —
-`model0::do_process` disassembles to 295 ymm-register lines — and the residual ~5%
-matches the one structural difference left: 069 emits each lane's bytes as reversed
-single-word stores into its private tail, where this format's forward substreams pay a
-two-byte read-modify store per renorm. Output is byte-identical to the scalar `-C`
+`model0::do_process` disassembles to 295 ymm-register lines — leaving a residual ~5%
+attributed at first to the one structural difference: 069 emits each lane's bytes as
+reversed single-word stores into its private tail, where this format's forward
+substreams must put the *top* byte first, against the store's little-endian order.
+
+That attribution was half right. The byte order does force a swap — but a 16-bit swap
+is one instruction, and the emit had spelled it out instead as two byte extracts, two
+masks, and an or:
+
+    uint _b0 = uint(lowc>>(LOWBITS-8)) & 0xFF;          // 5 ALU ops + store
+    uint _b1 = uint(lowc>>(LOWBITS-16)) & 0xFF;
+    (word&)tmpbase[tmpptr] = word(_b0 | (_b1<<8));
+
+against 069's single shift + raw word store. Rewritten as the bswap16 idiom —
+
+    uint _w = uint(lowc >> (LOWBITS-16));               // 1-2 ops + store
+    (word&)tmpbase[tmpptr] = word( (_w>>8) | (_w<<8) );
+
+clang folds the swap into the store (`shr; movbe` with `-march=haswell`, `rol $8; movw`
+without — either way op-parity with 069's emit), in all the `RC_LOWSPLIT`/`RC_LOWBYTES`
+variants. Same-session interleaved A/B: encode 42.1 → 47.3 MB/s (+12%), identical
+output — and against 069 rebuilt in that same session (40.6 enc / 29.4 dec; the box ran
+globally slower that day, the ratios are the signal), the port encodes **~16% ahead**
+with decode still at parity (29.8). The ~5% "layout cost" of the forward streams was
+never structural; it was the swap written so the compiler couldn't see it.
+
+Output is byte-identical to the scalar `-C`
 coder and to the previous builds' format on the first build of the pipeline, and the
 full `t.sh` matrix (default, `RCNUM=8`, `RCNUM=64`, `RC_LOWSPLIT=1`, `RC_LOWBYTES=5`,
 `RC_LOWBYTES=6 RC_LOWSPLIT=1`, `RC_FORCE_CARRY=1`, `RC_VEC=0` — 384 checks) is green.
