@@ -9,20 +9,54 @@
 // way, RC_SCATTER requires it. Unaligned loads: the lane arrays carry VECSIZE
 // alignment, which is not the scatter's width.
 #if RC_SCATTER
+
 #define RC_FLUSH1( k ) rc_Flush(k)
+
+// One sub-group: load the staged lanes, work out which of them owe a store,
+// and scatter under RC_SCATTER_SKIP's reading of that. RC_SCATTER_W lanes at
+// a time, and the compare gives a k-mask directly -- the scatter's own mask
+// operand -- so testing the lanes and masking them costs the same one
+// instruction.
 #if RC_SCATTER_W==16
-#define RC_FLUSHALL()                                                    \
-  { for( uint _k=0; _k<RCNUM; _k+=16 )                                   \
-      _mm512_i32scatter_epi32( (void*)tmpbase,                           \
-        _mm512_loadu_si512( (const void*)&stad[_k] ),                    \
-        _mm512_loadu_si512( (const void*)&stcl[_k] ), 1 ); }
+#define RC_SCATTER_GROUP( k, MK, SCAT )                                  \
+  { __m512i _a = _mm512_loadu_si512( (const void*)&stad[k] );            \
+    __m512i _v = _mm512_loadu_si512( (const void*)&stcl[k] );            \
+    __mmask16 _m = MK( _mm512_loadu_si512( (const void*)&stn[k] ),       \
+                       _mm512_setzero_si512() );                         \
+    SCAT; }
+#define RC_SCAT_M   _mm512_mask_i32scatter_epi32( (void*)tmpbase, _m, _a, _v, 1 )
+#define RC_SCAT_U   _mm512_i32scatter_epi32( (void*)tmpbase, _a, _v, 1 )
+#define RC_NE0      _mm512_cmpneq_epi32_mask
+#define RC_EQ0      _mm512_cmpeq_epi32_mask
+#define RC_FULL     0xFFFFu
 #else
-#define RC_FLUSHALL()                                                    \
-  { for( uint _k=0; _k<RCNUM; _k+=8 )                                    \
-      _mm256_i32scatter_epi32( (void*)tmpbase,                           \
-        _mm256_loadu_si256( (const __m256i*)&stad[_k] ),                 \
-        _mm256_loadu_si256( (const __m256i*)&stcl[_k] ), 1 ); }
+#define RC_SCATTER_GROUP( k, MK, SCAT )                                  \
+  { __m256i _a = _mm256_loadu_si256( (const __m256i*)&stad[k] );         \
+    __m256i _v = _mm256_loadu_si256( (const __m256i*)&stcl[k] );         \
+    __mmask8 _m = MK( _mm256_loadu_si256( (const __m256i*)&stn[k] ),     \
+                      _mm256_setzero_si256() );                          \
+    SCAT; }
+#define RC_SCAT_M   _mm256_mask_i32scatter_epi32( (void*)tmpbase, _m, _a, _v, 1 )
+#define RC_SCAT_U   _mm256_i32scatter_epi32( (void*)tmpbase, _a, _v, 1 )
+#define RC_NE0      _mm256_cmpneq_epi32_mask
+#define RC_EQ0      _mm256_cmpeq_epi32_mask
+#define RC_FULL     0xFFu
 #endif
+
+#if   RC_SCATTER_SKIP==0
+#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
+    RC_SCATTER_GROUP( _k, RC_NE0, RC_SCAT_U ) }
+#elif RC_SCATTER_SKIP==1
+#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
+    RC_SCATTER_GROUP( _k, RC_NE0, RC_SCAT_M ) }
+#elif RC_SCATTER_SKIP==2
+#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
+    RC_SCATTER_GROUP( _k, RC_NE0, if_e0( _m ) RC_SCAT_M ) }
+#else
+#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
+    RC_SCATTER_GROUP( _k, RC_EQ0, if_e1( _m!=RC_FULL ) RC_SCAT_U ) }
+#endif
+
 #else
 #define RC_FLUSH1( k ) ((void)0)
 #define RC_FLUSHALL()  ((void)0)

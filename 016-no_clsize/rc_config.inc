@@ -270,6 +270,43 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 # endif
 #endif
 
+// What to do about the lanes that staged nothing. A ShiftLow with n==0 leaves
+// the cursor where it was, so the window it staged is written again by that
+// lane's next store before anything reads the row: its store is dead and can
+// simply not happen. And that is the common case -- the coder emits about
+// 0.08 bytes per coded bit, so a lane renormalises on about one bit in
+// thirteen, only ~1.3 of 16 lanes owe a store, and a whole group stages
+// nothing about a quarter of the time.
+//
+//   0  scatter every lane every group
+//   1  scatter under a k-mask of the lanes with n!=0
+//   2  the same, and branch past the scatter when that mask is empty
+//   3  scatter every lane, but branch past the whole thing when every n is 0
+//
+// All four produce the same stream -- t.sh checks each of them -- but on
+// cascadelake only 0 and 1 are worth having:
+//
+//   0  unmasked                              75.9 MB/s
+//   1  masked                                74.7
+//   2  masked + branch                       54.2
+//   3  unmasked + branch                     53.8
+//   -  probe: masked with the mask forced 0  74.8
+//   -  probe: no scatter at all              77.1
+//
+// The two probes are the whole story. A vpscatterdd whose mask is empty costs
+// what one with a full mask costs, so masking cannot buy anything here and 1
+// only pays for the stn array; and the scatter's entire cost is the 3% between
+// 74.8 and 77.1, so there is almost nothing for a branch to save -- while the
+// branch itself is taken about a quarter of the time, twice per 16 coded bits,
+// which is 28%.
+//
+// Where scatter cost scales with the number of active lanes -- Ice Lake and
+// later, Zen 4 -- 1 is the one to try: same instruction count, no branch, and
+// ~1.3 lanes of work instead of 16.
+#ifndef RC_SCATTER_SKIP
+#define RC_SCATTER_SKIP 0
+#endif
+
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
 // prefix below is the difference between it and the low accumulator.

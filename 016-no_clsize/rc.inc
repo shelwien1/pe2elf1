@@ -58,10 +58,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   uint  n_carry; // isn't expected to be used on enough data to overflow
 #endif
 #if RC_VECOUT && RC_SCATTER
-  // ShiftLow's store, staged rather than performed: the dword and the tmpbase
-  // offset it belongs at. rc_Flush commits one; model0.inc commits a whole
-  // group with one scatter. See RC_SCATTER in rc_config.inc.
-  uint  stcl, stad;
+  // ShiftLow's store, staged rather than performed: the dword, the tmpbase
+  // offset it belongs at, and the renorm count that says whether it is a
+  // store at all. rc_Flush commits one; model0.inc commits a whole group
+  // with one scatter. See RC_SCATTER in rc_config.inc.
+  uint  stcl, stad, stn;
   // so the compile can tell it is looking at a kernel generated for the same
   // RC_SCATTER it was built with -- model0.inc static_asserts on it
   enum { SCATTER_GEN = 1 };
@@ -264,7 +265,12 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     uint cl = lowl;
 #endif
 #if RC_SCATTER
-    stcl = cl; stad = tmpptr-2;   // committed by rc_Flush / RC_FLUSHALL
+    // n==0 stages without committing: the cursor does not move, so the next
+    // store of this lane writes this exact window again and every byte here
+    // is overwritten before anything reads the row. RC_SCATTER_SKIP is what
+    // acts on it -- and it is the common case, the coder emits about 0.08
+    // bytes per coded bit.
+    stcl = cl; stad = tmpptr-2; stn = n;
 #else
     (uint&)tmpbase[tmpptr-2] = cl;
 #endif
@@ -395,7 +401,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // where the first ShiftLow's store would land anyway: the row's zero
     // prefix, which rc_Write drops. Keeps a flush before the first ShiftLow
     // -- there is none today -- from writing somewhere it should not.
-    stcl = 0; stad = tmpptr-2;
+    stcl = 0; stad = tmpptr-2; stn = 0;
 #endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
   }

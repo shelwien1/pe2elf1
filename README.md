@@ -45,8 +45,8 @@ for byte. A roundtrip alone would not catch a vector coder that emits a
 *different* valid stream, which is why the second check is there.
 
     == ../enwik8 (100000000 bytes), 10 encode passes, FSM ../FSM0.txt
-    enc  75.14MB/s 1.269s   #10
-    dec  34.88MB/s 2.733s   #1
+    enc  76.02MB/s 1.254s   #10
+    dec  36.05MB/s 2.644s   #1
     == roundtrip
        ok: decoded output matches the input
     == vector stream vs the -C scalar reference
@@ -75,6 +75,12 @@ array stores, which SLP does vectorize) and the model commits a whole group
 with one `vpscatterdd`. It turns on by itself for clang + AVX-512 at
 `RCNUM%16==0`, and is off everywhere else, where staging would only cost.
 The stream does not change either way -- `t.sh` checks that.
+
+`RC_SCATTER_SKIP` sits on top of it: a lane whose renorm emitted nothing owes
+no store, and only about 1.3 of 16 lanes owe one, so the scatter can be masked
+down to them or branched past entirely. Both are correct and both lose on
+cascadelake -- the comment in `rc_config.inc` has the measurements and says
+which machines they should win on.
 
 | `build.sh`                | |
 |---|---|
