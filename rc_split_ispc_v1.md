@@ -412,6 +412,41 @@ translation to a function boundary. (Incidentally the original's `_val` double c
 and this document's floor+fixup threshold are the same exactness argument in two forms —
 the 2^-17 gap between attainable quotients and the next integer.)
 
+### 9.5 The decode gap was never vectorization
+
+The user's cross-check that settled it: on the same AVX2-built machine, the original
+sh_v1xN decodes at 42.7 MB/s and this port at 28.6. Reading the original again with that
+number in hand: its shipping decoder (`Rangecoder1`, the one 071's `model1.inc` actually
+uses — the SIMD `Rangecoder` decoder sits under `#if 0`) is *scalar*. What it has that the
+port's didn't is shape: `#pragma unroll(RCNUM)` on the group loop, which makes the lane
+index a compile-time constant in every body — lane state at fixed addresses, the
+byte-boundary test `(j&7)==7` decided at compile time — over SoA lane arrays, with
+likely/unlikely annotations. No SIMD anywhere on the decode path.
+
+Both halves are now in the port. `RC_UNROLL` on the group loops (decoder and the host
+coder's `proc_block`): decode 17.0 → 23.8 (gcc, **+40%**) / 29.5 (clang, **+73%**), host
+encode 16.5 → 27.0/31.2, byte-identical, full corpus green. `RC_DECSOA` (default on):
+the decoder's lane state as four compact arrays instead of RCNUM full coder objects —
+measured neutral on this box once the unroll has made every offset constant (16 lanes fit
+L1 either way), kept because it is the original's structure, the split's `rc_Bulk` now
+converts from it trivially, and a larger RCNUM or a smaller cache prices it differently.
+
+This also reframes the split's standing: the unroll lifted the fused decoder by more than
+it lifted the split (splitA 12.1 → 17.9 clang, fused 17.0 → 29.5), so the gap *widened* —
+the fused decoder had been mis-shaped, not the split under-credited.
+
+And the same cross-check exposes the encoder's ISA dependence. At ISA parity on the
+user's machine, ispc-AVX2 encodes at 46 MB/s against the original's AVX2 60; on this box
+the AVX2-x8 kernel runs 1380 µs/block against AVX-512's 495. The kernel's output path is
+the dword scatter — `vpscatterdd` — and AVX2 has no scatter of any width, so ispc
+scalarises every lane's store into extract/store/branch, the exact pathology the OpenCL
+byte path had on AVX-512. The original's AVX2 encoder never paid it because its output
+design (reverse-order 16-bit stores, later the clset row) was AVX2-native. So: on
+AVX-512 the ispc kernel wins even through the downclock (80 vs 60 on the user's box);
+an AVX2 build that has to match the original needs an AVX2-shaped output path — the
+clset-style row store that lost on AVX-512 (`rc_vectorized_design_v1.md` §3.15/§6.3) is
+the natural candidate, unmeasured under ispc. Recorded as the open item it is.
+
 ## 10. Measurement notes
 
 Same box, compilers and discipline as `rc_decoder_opencl_plan_v1.md` §10 — 4-vCPU 2.8 GHz

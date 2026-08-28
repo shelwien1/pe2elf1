@@ -42,6 +42,33 @@ struct Model<1> : Coroutine, Predictor {
       rc.rc_Bulk( rcio );
 #endif
 
+      // The group form of the loop: RCNUM is a compile-time constant, so the
+      // fully unrolled inner loop makes j a constant in every body -- rc[j]
+      // becomes fixed addresses and (j&7)==7 a compile-time test, the same
+      // shape (and the same pragma) that made the original sh_v1xN decoder
+      // fast. Needs RCNUM%8==0 so byte boundaries land on constant j; other
+      // geometries take the plain loop below.
+#if (RC_RCNUM%8)==0
+      {
+        uint nb1 = blksize*8 - (blksize*8)%RCNUM;
+        for( i=0; i<nb1; i+=RCNUM ) {
+          RC_UNROLL
+          for( j=0; j<RCNUM; j++ ) {
+            P_S(state); p=pp[state];
+            rc.rc_Process( j, p, bit );
+            P_update( state, bit );
+            if( (j&7)==7 ) { P_byte(stats,c); put0(c); }
+          }
+        }
+        for( i=nb1; i<blksize*8; i++ ) {
+          j = i % RCNUM;
+          P_S(state); p=pp[state];
+          rc.rc_Process( j, p, bit );
+          P_update( state, bit );
+          if_e0( i%8==7 ) { P_byte(stats,c); put0(c); }
+        }
+      }
+#else
       for( i=0; i<blksize*8; i++ ) {
         j = i % RCNUM;
 
@@ -53,6 +80,7 @@ struct Model<1> : Coroutine, Predictor {
 
         if_e0( i%8==7 ) { P_byte(stats,c); put0(c); }
       }
+#endif
 
       if( blksize<BLKSIZE ) break;
 

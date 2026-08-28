@@ -201,11 +201,40 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_DECSPLIT 0
 #endif
 
+// The decoder's lane state as structure-of-arrays -- range[RCNUM],
+// code[RCNUM], rpre[RCNUM], pos[RCNUM], four compact cache lines -- instead
+// of RCNUM full coder objects. The other half of what made the original
+// sh_v1xN decoder fast (RC_UNROLL below is the first half), and pure host
+// C++: no ispc anywhere in it. Same arithmetic, same bytes read, same
+// stream. 0 falls back to the object-per-lane decoder.
+#ifndef RC_DECSOA
+#define RC_DECSOA 1
+#endif
+
+#if RC_DECSOA && !RC_RANGE64
+#define RC_DECSOA_ON 1
+#else
+#define RC_DECSOA_ON 0
+#endif
+
 // what the split actually compiles under; anything else is the fused decoder
-#if RC_DECSPLIT && RC_ISPC && ((RC_RCNUM%16)==0) && !RC_RANGE64
+#if RC_DECSPLIT && RC_ISPC && RC_DECSOA_ON && ((RC_RCNUM%16)==0)
 #define RC_DECSPLIT_ON 1
 #else
 #define RC_DECSPLIT_ON 0
+#endif
+
+// Full unroll of a group loop whose trip count is RCNUM: with j constant in
+// every unrolled body, rc[j]'s fields become fixed addresses and the
+// bit-position tests become compile-time -- which is most of what made the
+// original sh_v1xN decoder fast (its "#pragma unroll(RCNUM)"), and none of it
+// is vectorization.
+#if defined(__clang__) || defined(__INTEL_LLVM_COMPILER)
+ #define RC_UNROLL _Pragma("unroll")
+#elif defined(__GNUC__)
+ #define RC_UNROLL _Pragma("GCC unroll 64")
+#else
+ #define RC_UNROLL
 #endif
 
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder

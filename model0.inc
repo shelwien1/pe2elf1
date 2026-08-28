@@ -62,6 +62,7 @@ struct Model<0> : Coroutine, Predictor {
     uint blksize1 = blksize0 - (blksize0%RCNUM);
 
     for( i=0; i<blksize1; i+=RCNUM ) {
+      RC_UNROLL
       for( j=0; j<RCNUM; j++ ) {
         uint b = pbit[i+j];
         uint p = b&0x7FFF; b >>= 15;

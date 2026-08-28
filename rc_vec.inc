@@ -25,11 +25,33 @@ struct RangecoderN {
 
   ALIGN(VECSIZE) t_RC rc[RCNUM];
 
+#if RC_DECSOA_ON
+  // Decode-side lane state, SoA: what the original kept as range[RCNUM] and
+  // friends, and what the kernels keep in vector registers. The rc[] objects
+  // above go unused on decode; the arithmetic below is rc.inc's rc_Process /
+  // ShiftCode line for line, reading the same bytes in the same order.
+  ALIGN(64) uint d_range[RCNUM], d_code[RCNUM], d_rpre[RCNUM], d_pos[RCNUM];
+  byte* d_base;
+#endif
+
   // Bind every lane to its own substream buffer in the RCio and reset it.
   template< class IO >
   void rc_Init( IO& io ) {
 #if RC_DECSPLIT_ON
     s_bulk = 0;   // header bits run fused; rc_Bulk switches the mode
+#endif
+#if RC_DECSOA_ON
+    if( f_DEC ) {
+      d_base = io.rows();
+      for( uint i=0; i<RCNUM; i++ ) {
+        uint q = uint( io.buf(i) - d_base );
+        uint c = 0;
+        for( uint k=0; k<t_RC::CODBYTES; k++ ) c = (c<<8) + d_base[q++];
+        d_range[i] = 0xFFFFFFFFu; d_rpre[i] = 0;
+        d_code[i] = c; d_pos[i] = q;
+      }
+      return;
+    }
 #endif
     for( uint i=0; i<RCNUM; i++ ) {
       if( f_DEC==0 ) rc[i].StartEncode( io.buf(i), IO::tmpbufsize );
@@ -64,20 +86,21 @@ struct RangecoderN {
   // state as the batch keeps it: eager, rpre folded, threshold ready
   template< class IO >
   void rc_Bulk( IO& io ) {
-    s_base = io.rows();
+    s_base = d_base;
+    (void)io;
     for( uint i=0; i<RCNUM; i++ ) {
-      t_RC& r = rc[i];
-      uint n = (r.range<t_RC::sTOP) + (r.range<t_RC::gTOP);
-      r.code -= r.rpre; r.rpre = 0;
-      for( uint k=n; k!=0; k-- ) r.code = (r.code<<8) + r.get();
-      r.range <<= n*8;
-      s_range[i] = uint(r.range);
-      s_code[i]  = r.code;
-      s_pos[i]   = uint(r.ptr - s_base);
-      s_ru[i]    = uint(r.range)>>SCALElog;
-      s_T[i]     = s_code[i]/s_ru[i];
-      s_look[i]  = r.ptr[0] | (uint(r.ptr[1])<<8)
-                 | (uint(r.ptr[2])<<16) | (uint(r.ptr[3])<<24);
+      uint r=d_range[i], c=d_code[i], q=d_pos[i];
+      uint n = (r<t_RC::sTOP) + (r<t_RC::gTOP);
+      c -= d_rpre[i];
+      for( uint k=n; k!=0; k-- ) c = (c<<8) + s_base[q++];
+      r <<= n*8;
+      s_range[i] = r;
+      s_code[i]  = c;
+      s_pos[i]   = q;
+      s_ru[i]    = r>>SCALElog;
+      s_T[i]     = c/s_ru[i];
+      s_look[i]  = s_base[q] | (uint(s_base[q+1])<<8)
+                 | (uint(s_base[q+2])<<16) | (uint(s_base[q+3])<<24);
     }
     s_cnt=0; s_qbase=0; s_bulk=1;
   }
@@ -105,6 +128,23 @@ struct RangecoderN {
       s_pb[s_cnt] = word((freq<<1)|b);
       bit = b;
       if( ++s_cnt==16 ) dec_batch();
+      return;
+    }
+#endif
+#if RC_DECSOA_ON
+    if( f_DEC ) {
+      uint r=d_range[rcidx], c=d_code[rcidx], q=d_pos[rcidx];
+      uint n = (r<t_RC::sTOP) + (r<t_RC::gTOP);
+      c -= d_rpre[rcidx];
+      for( uint k=n; k!=0; k-- ) c = (c<<8) + d_base[q++];
+      r <<= n*8;
+      uint rp = (r>>SCALElog)*freq;
+      bit = (c>=rp);
+      r -= rp;
+      d_range[rcidx] = bit ? r : rp;
+      d_rpre[rcidx]  = rp & (0-bit);
+      d_code[rcidx]  = c;
+      d_pos[rcidx]   = q;
       return;
     }
 #endif
