@@ -106,10 +106,17 @@ if [ "${LTO:-1}" = 1 ] && [ "$is_clang" = 1 ] && command -v ld.lld >/dev/null 2>
 fi
 
 rm -f "$OUT"
+# The LTO attempt's stderr is held rather than discarded: it is only noise when
+# the attempt fails and we are about to retry, and it is the compiler's
+# warnings when it succeeds.
+err=$(mktemp)
+trap 'rm -f "$err"' EXIT
 # shellcheck disable=SC2086
-if [ -n "$lto" ] && ! $CXX $flags $lto "$@" $src -o "$OUT" 2>/dev/null; then
+if [ -n "$lto" ] && ! $CXX $flags $lto "$@" $src -o "$OUT" 2>"$err"; then
   echo "build.sh: -flto link failed, rebuilding without it" >&2
   lto=
+elif [ -s "$err" ]; then
+  cat "$err" >&2
 fi
 # shellcheck disable=SC2086
 [ -f "$OUT" ] || $CXX $flags $lto "$@" $src -o "$OUT"

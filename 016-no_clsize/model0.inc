@@ -52,9 +52,13 @@
 #elif RC_SCATTER_SKIP==2
 #define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
     RC_SCATTER_GROUP( _k, RC_NE0, if_e0( _m ) RC_SCAT_M ) }
-#else
+#elif RC_SCATTER_SKIP==3
 #define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
     RC_SCATTER_GROUP( _k, RC_EQ0, if_e1( _m!=RC_FULL ) RC_SCAT_U ) }
+#else
+#warning "RC_SCATTER_SKIP=9 drops the scatter: this build does not encode correctly"
+#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
+    RC_SCATTER_GROUP( _k, RC_NE0, (void)_m ) }
 #endif
 
 #else

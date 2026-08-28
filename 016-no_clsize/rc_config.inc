@@ -282,27 +282,34 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //   1  scatter under a k-mask of the lanes with n!=0
 //   2  the same, and branch past the scatter when that mask is empty
 //   3  scatter every lane, but branch past the whole thing when every n is 0
+//   9  probe: no scatter at all. Does NOT encode correctly -- it is here to
+//      measure what the scatter costs on a given machine, which is what says
+//      whether any of this is worth doing there. Time it with a plain encode,
+//      `./coder c <file> /dev/null ../FSM0.txt 6`; do not put it through t.sh,
+//      whose decode step would be handed a stream that does not decode.
 //
-// All four produce the same stream -- t.sh checks each of them -- but on
-// cascadelake only 0 and 1 are worth having:
+// 0..3 all produce the same stream -- t.sh checks each -- but on cascadelake
+// only 0 and 1 are worth having. 20 MB of enwik8, clang 18, best of 6x5:
 //
 //   0  unmasked                              75.9 MB/s
 //   1  masked                                74.7
 //   2  masked + branch                       54.2
 //   3  unmasked + branch                     53.8
+//   9  probe: no scatter                     77.6
 //   -  probe: masked with the mask forced 0  74.8
-//   -  probe: no scatter at all              77.1
 //
-// The two probes are the whole story. A vpscatterdd whose mask is empty costs
+// The probes are the whole story. A vpscatterdd whose mask is empty costs
 // what one with a full mask costs, so masking cannot buy anything here and 1
-// only pays for the stn array; and the scatter's entire cost is the 3% between
-// 74.8 and 77.1, so there is almost nothing for a branch to save -- while the
-// branch itself is taken about a quarter of the time, twice per 16 coded bits,
-// which is 28%.
+// only pays for the stn array. And 0 against 9 puts the scatter's ENTIRE cost
+// at 1.6 cycles per 16-bit group, against 26.6 for the sweep and 73.8 for the
+// encode -- so 2.2% of encode is the ceiling on every scheme that aims to
+// scatter less often, while the branch that would collect it is taken about a
+// quarter of the time, twice per group, and costs 28%.
 //
 // Where scatter cost scales with the number of active lanes -- Ice Lake and
 // later, Zen 4 -- 1 is the one to try: same instruction count, no branch, and
-// ~1.3 lanes of work instead of 16.
+// ~1.3 lanes of work instead of 16. Build 9 first: if 0 and 9 are close on
+// your machine too, nothing in this direction can pay there either.
 #ifndef RC_SCATTER_SKIP
 #define RC_SCATTER_SKIP 0
 #endif
