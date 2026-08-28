@@ -251,7 +251,12 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
     rpre = 0;
     RC_CARRY_COUNT(_cy);
-    FFNum += _cy;   // ShiftLowN: "use as flag"
+    // "use as flag", literally. The generated kernel's only reader is
+    // model0.inc's ncarry fold, which tests against zero, so carry the
+    // NO-CARRY predicate as an all-ones mask instead of a count: `_cy-1` is
+    // that mask, and the accumulate becomes one vpand of a compare result
+    // clang already has in hand, with no +1 fixup at the fold.
+    FFNum &= _cy - 1;
     // cl's top byte lands at tmpptr+1, the next at tmpptr, the rest
     // below as staging that later stores overwrite
 #if RC_LOWSPLIT
@@ -407,7 +412,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     low_Init();
     rpre  = 0;
     Carry = 0;
+#if RC_VECOUT
+    FFNum = uint(-1);   // the no-carry mask of ShiftLow above
+#else
     FFNum = 0;
+#endif
     Cache = -1;
 #if RC_STATS
     n_carry = 0;

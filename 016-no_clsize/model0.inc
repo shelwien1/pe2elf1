@@ -203,6 +203,38 @@ struct Model<0> : Coroutine, Predictor {
 #endif
   }
 
+  // The model pass, out of line on purpose. It precalcs the {p;bit} pair for
+  // every bit of the block, and it has no vector code -- but inside
+  // do_process it was paying for do_process's. The generated kernel's
+  // ALIGN(VECSIZE) lane arrays force `andq $-32, %rsp` in the prologue, and
+  // dynamic stack realignment needs a frame pointer, so -fomit-frame-pointer
+  // is overridden and %rbp leaves the allocator for the whole function; the
+  // coding pass's hoisted values hold further registers across every one of
+  // the 65536 iterations this loop runs. Out of line it gets its own frame,
+  // no realignment, and a full register file. One call per block.
+  //
+  // Out of locals for the same reason it was before: cty[ctx].state's store
+  // may-alias this->ctx, and inpptr is union-overlaid with pin[]
+  // (coro3b.inc), so neither cursor is promoted and both would be stored once
+  // per input byte -- and the ctx store is the same constant every time.
+  NOINLINE
+  void model_pass( uint blksize ) {
+    uint c,i,j,bit,p,state;
+    byte* __restrict ip = inpptr;
+    uint lctx = ctx;
+    for( i=0; i<blksize; i++ ) {
+      c = *ip++;                          // get0(), against the local cursor
+      for( j=0; j<8; j++ ) {
+        P_S_L(lctx,state); p=pp[state];
+        bit = (c>>(7-j))&1;
+        pbit[i*8+j] = (bit<<15)+p;
+        P_update_L( lctx, state, bit );
+      }
+      lctx = 1;                           // P_byte: resets the bit context
+    }
+    inpptr = ip; ctx = lctx;
+  }
+
   NOINLINE
   void do_process() {
     uint c,i,j,bit,p,blksize,state;
@@ -224,28 +256,7 @@ struct Model<0> : Coroutine, Predictor {
 
       chkinp(); blksize=getinplen(); if( blksize>BLKSIZE ) blksize=BLKSIZE;
 
-      // model pass: precalc {p;bit} pairs for the whole block.
-      //
-      // Out of locals, because neither cursor gets promoted otherwise: the
-      // store to cty[ctx].state may-alias this->ctx, and inpptr is union-
-      // overlaid with pin[] (coro3b.inc), so both were stored once per input
-      // byte -- and the ctx store is the same constant every time. Same
-      // arithmetic, same traffic through cty[]; both are written back once
-      // per block.
-      { byte* __restrict ip = inpptr;
-        uint lctx = ctx;
-        for( i=0; i<blksize; i++ ) {
-          c = *ip++;                      // get0(), against the local cursor
-          for( j=0; j<8; j++ ) {
-            P_S_L(lctx,state); p=pp[state];
-            bit = (c>>(7-j))&1;
-            pbit[i*8+j] = (bit<<15)+p;
-            P_update_L( lctx, state, bit );
-          }
-          lctx = 1;                       // P_byte: resets the bit context
-        }
-        inpptr = ip; ctx = lctx;
-      }
+      model_pass( blksize );
 
 #if RC_VEC && !RC_FORCE_CARRY
       // The vector coding pass: the carryless coder over all RCNUM lanes,
@@ -301,16 +312,16 @@ struct Model<0> : Coroutine, Predictor {
 
         for( j=0; j<RCNUM; j++ ) rc_Quit(j);
 
-        uint ncarry = 0, novf = 0;
+        uint ncarry = uint(-1), novf = 0;
         for( j=0; j<RCNUM; j++ ) {
           uint len = ((j+1)*t_RCio::rowsize-1) - tmpptr[j];
           len = len>RC_SKIP ? len-RC_SKIP : 0;
           res.lens[j] = len;
-          ncarry += FFNum[j];
+          ncarry &= FFNum[j];
           novf   += (len>t_RCio::tmpbufsize);
         }
         if_e0( novf!=0 ) rc_overflow();
-        if( ncarry==0 ) rcio.rc_Write( (*this), res );
+        if( ncarry!=0 ) rcio.rc_Write( (*this), res );   // no lane lost a carry
         else            recode_with_carry( blksize );
 
       } else

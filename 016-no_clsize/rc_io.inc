@@ -124,6 +124,24 @@ struct RCio {
   // see RC_DEV_WORDOUT in rc_kernel.c.
   static const uint rowsize = ((RC_SKIP+tmpbufsize+FF_PADSIZE)+3) & ~3u;
 
+  // rowsize is also the stride between the RCNUM lane cursors, and all of them
+  // are hot and written every group (model0.inc: tmpptr[j] = (j+1)*rowsize-2).
+  // The stride therefore decides how the cursors spread over L1d's 64 sets
+  // (64x64B = 4096) and the L1 dTLB's sets (16x4096 = 65536): j*stride mod P
+  // takes P/gcd(stride,P) distinct values, so the cursors stay on distinct
+  // sets only while gcd(stride,P)*RCNUM <= P. Nothing in the & ~3u above
+  // defends that -- a change to RC_FF_TRIM, RC_LOWBYTES, SCALElog or BLKSIZE
+  // could land rowsize on a multiple of 4096 and put all RCNUM cursors into
+  // one 8-way L1 set. It holds by a wide margin today (rowsize=61612=4*73*211,
+  // gcd 4 either way), which is exactly why it would go unnoticed.
+  static constexpr uint sgcd( uint a, uint b ) { return b ? sgcd(b,a%b) : a; }
+  static_assert( sgcd(rowsize,4096)*RCNUM <= 4096,
+    "RCio::rowsize crowds the RCNUM lane cursors into too few L1d sets -- "
+    "nudge RC_FF_PADSIZE by 4" );
+  static_assert( sgcd(rowsize,65536)*RCNUM <= 65536,
+    "RCio::rowsize crowds the RCNUM lane cursors into too few L1 dTLB sets -- "
+    "nudge RC_FF_PADSIZE by 4" );
+
   // One set of substream rows: the decoder reads a block into them, the
   // encoder writes a block straight into them. Each lane's substream sits at
   // the TOP of its row and grows down (see RC_IO above); the payload chunk in
