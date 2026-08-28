@@ -458,5 +458,25 @@ ispc scalarises every lane store, the pathology the OpenCL byte path had on AVX-
 original's AVX2 encoder never paid it because its output design (reverse-order 16-bit
 stores, later the clset row) was AVX2-native. On AVX-512 the ispc kernel wins even
 through the downclock (80 vs 60 on the user's box); an AVX2 build that must match the
-original needs an AVX2-shaped output path — the clset-style row store that lost on
-AVX-512 is the natural candidate, unmeasured under ispc. Recorded as the open item it is.
+original needs an AVX2-shaped output path.
+
+Decompiling both ispc objects (the user's Hex-Rays dumps) makes the AVX2 pathology exact.
+The AVX-512 kernel: 16 scatter instructions and 13 branches in the whole object. The AVX2
+kernel: **80 scalar stores, 136 extracts, 203 branches** — every `rc_emit` site is a
+movemask, a branch per lane, and an extract-address/extract-value/store pair per set bit,
+executed *per coded bit*, because the emit stores the partial dword unconditionally and
+the capacity mask is almost always all-true.
+
+The obvious fix — store only when the dword completes, ~5x fewer emit events — was
+implemented, verified byte-identical, and measured **slower on both targets** (AVX-512
+493 → 615 µs/block, AVX2 1371 → 1538): with the all-true mask, the branch chains are
+perfectly predicted and cost only their instruction count, while the sparse
+data-dependent mask trades those predictable instructions for mispredicts, and adds mask
+arithmetic to the AVX-512 scatter for nothing. Reverted; the negative result is the
+point: on AVX2 the emit's cost is *count*, not prediction, and only removing per-lane
+indexed stores entirely can cut it. That means a unit-stride row store — lane-linear
+addressing that ispc provably compiles to one vector store, the pbit load already proves
+it — plus a compaction pass: the clset design (071), which lost to the direct scatter on
+AVX-512 and remains the one credible AVX2 route, as a target-specific variant. Effort is
+a kernel rework plus host compaction; on a machine with AVX-512 the straight answer
+remains `ISPC_TARGET=avx512skx-x16` (80 vs 60 through the downclock).
