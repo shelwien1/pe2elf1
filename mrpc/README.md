@@ -108,7 +108,7 @@ One component per pixel works and is lossless. The frontend takes an 8bpp BMP
 and hands the index field over as a one-component raster; the palette needs no
 special handling at all, because `bfOffBits` already points past it, so it
 rides along in the head blob and comes back bit-identical without the codec
-ever seeing it. `bmp8.py` makes both kinds out of a 24 or 32bpp file, which is
+ever seeing it. `bmpn.py` makes both kinds out of a 24 or 32bpp file, which is
 where the files below came from.
 
 What the codec does with them is a different question, and the answer depends
@@ -142,6 +142,47 @@ Luma is a poor one-dimensional embedding of a three-dimensional palette, and
 median cut's own order already groups colours that occur together. If paletted
 images matter, the thing to model is the index field as a label map, not the
 palette's order.
+
+### 1 and 4bpp, packed
+
+Below a byte a BMP row is packed, and the codec reads bytes, so the frontend
+widens a row on the way in and packs it again on the way out. What it widens is
+the **whole row** — `stride*8/bpp` pixels, not `width` — because BMP pads every
+row out to four bytes and those trailing bits are file content like any other.
+Widening the row whole makes the map from row to raster onto, so the round trip
+is exact by construction rather than by a separate blob spliced back in; the
+padding arrives as up to seven extra columns of whatever it held, which is a
+constant in every file anyone writes and costs nothing to code. Nothing else
+changes: it is the same one-component path 8bpp uses, and the palette still
+rides through in the head blob untouched.
+
+The two depths behave very differently, and neither the way I expected:
+
+| | | mrpc | `xz -9` | |
+| --- | --- | --- | --- | --- |
+| `DLRAW.bmp` | 816x1200 4bpp | **274,491** | 286,496 | mrpc 4% better |
+| `f05_200.bmp` | 1728x2339 1bpp | **24,992** | 35,388 | mrpc 29% better |
+
+A bilevel scan is the case where a predictive coder ought to be at its worst —
+two values, so the residual is in {-1,0,1} and there is no magnitude to model —
+and it is instead where the margin is largest, at 0.099 bits per pixel. What
+carries it is the class map: a scanned page is enormous flat white with thin
+structure on it, the quadtree isolates the text, and the per-class predictor
+plus activity model amounts to a context model over the causal neighbourhood.
+The 4bpp file is closer, and closer for the reason the 8bpp table already
+gives — it is paletted graphic art, which is what `xz` is best at.
+
+Widening is the frontend's business, so `mrpc_lib.h` is unchanged and the
+stream format is unchanged: what the library sees is a one-component raster of
+`stride*8/bpp` by `height`, and a decoder tells it apart from an 8bpp file by
+the header that comes back in the head blob. Since the stream did not change,
+the version byte did not either — which does mean a packed file written by this
+build and decoded by an earlier one comes back with the widened raster in place
+of the packed one, silently. Earlier builds could not encode these depths as
+images at all (they fell through to the whole-file blob, which this build still
+decodes), so the only way to meet that is to mix the two. A `p` plot of a packed file gets a
+fresh 8bpp header of the widened geometry, since a code length in 4.4 fixed
+point does not fit in four bits, let alone one.
 
 ### The stream is self-describing now
 
@@ -558,7 +599,7 @@ exercised.
 | `Makefile`, `gc.bat` | Linux and Windows builds |
 | `t.sh` | round-trip and reference check, through the command line |
 | `t_lib.c` | the same through the C API, in C — and against `libmrpc.a`, `libmrpc.so` or `mrpc.dll` unchanged |
-| `bmp8.py` | 8bpp grey and paletted BMPs out of a 24/32bpp one, for testing the one-component path |
+| `bmpn.py` | 1, 4 and 8bpp grey and paletted BMPs out of a 24/32bpp one, for testing the one-component path and the packed depths |
 | `ALGORITHM.md` | how the codec works, end to end |
 | `ENTROPY.md` | where the bits go: the rangecoder, the probability model, and what a PAQ-style component would be worth |
 | `TUNING.md` | the class count and the shape of the model: what was measured, what moved, and what did not |

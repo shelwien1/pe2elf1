@@ -26,8 +26,17 @@ typedef unsigned int uint;
 // per pixel and its palette is just more header -- bfOffBits already
 // points past it, so it rides along in the head blob and comes back
 // bit-identical without the codec ever seeing it.  Anything that is not
-// an 8, 24 or 32bpp uncompressed raster gets compressed as one
+// a 1, 4, 8, 24 or 32bpp uncompressed raster gets compressed as one
 // undifferentiated blob, which is what an image-less call does.
+//
+// 1 and 4bpp are packed, and the codec reads bytes, so those two are
+// widened to one byte per pixel on the way in and packed again on the
+// way out.  The width it is widened to is the whole row -- `stride*8/bpp`
+// pixels, not `width` -- so that the map from row to raster is onto and
+// the round trip is exact by construction: BMP pads every row to four
+// bytes, and those trailing bits are file content like any other.  It
+// costs at most seven columns of whatever the padding happens to hold,
+// which is constant in every file anyone writes and therefore free.
 // -------------------------------------------------------------
 static uint get16(const byte* p) {
   return p[0]|(p[1]<<8);
@@ -37,10 +46,23 @@ static uint get32(const byte* p) {
   return p[0]|(p[1]<<8)|(p[2]<<16)|(uint(p[3])<<24);
 }
 
+static void put32(byte* p, uint v) {
+  p[0] = byte(v);
+  p[1] = byte(v>>8);
+  p[2] = byte(v>>16);
+  p[3] = byte(v>>24);
+}
+
 static const uint HDR0 = 54; // BITMAPFILEHEADER + BITMAPINFOHEADER
 
 struct BmpInfo {
   uint ok, off, W, H, nc, stride, pixbytes;
+  uint bits; // bits per pixel as the file has them: 1, 4, 8, 24 or 32
+  uint uW;   // pixels per row once widened -- W for 8bpp and up
+
+  int Packed() const {
+    return bits<8;
+  }
 
   void Init() {
     memset(this, 0, sizeof(*this));
@@ -49,7 +71,45 @@ struct BmpInfo {
   void Quit() {
   }
 
-  void Parse(const byte* d, size_t flen) {
+  // Widen one packed row into one byte per pixel.  BMP puts the leftmost
+  // pixel in the most significant bits of the first byte, both at 1bpp
+  // and at 4bpp.
+  void Widen(const byte* src, byte* dst) const {
+    for( uint y = 0; y<H; y++ ) {
+      const byte* r = src+size_t(y)*stride;
+      byte* o = dst+size_t(y)*uW;
+      if( bits==4 )
+        for( uint x = 0; x<uW; x++ )
+          o[x] = byte((r[x>>1]>>((x&1) ? 0 : 4))&15);
+      else
+        for( uint x = 0; x<uW; x++ )
+          o[x] = byte((r[x>>3]>>(7-(x&7)))&1);
+    }
+  }
+
+  // And back.  uW covers the row exactly, so every bit of every output
+  // byte is written and nothing has to be cleared first.
+  void Narrow(const byte* src, byte* dst) const {
+    for( uint y = 0; y<H; y++ ) {
+      const byte* r = src+size_t(y)*uW;
+      byte* o = dst+size_t(y)*stride;
+      if( bits==4 )
+        for( uint x = 0; x<uW; x += 2 )
+          o[x>>1] = byte(((r[x]&15)<<4)|(r[x+1]&15));
+      else
+        for( uint x = 0; x<uW; x += 8 ) {
+          uint b = 0;
+          for( uint j = 0; j<8; j++ )
+            b = (b<<1)|(r[x+j]&1);
+          o[x>>3] = byte(b);
+        }
+    }
+  }
+
+  // hdronly parses a header that is not followed by its raster -- which
+  // is what comes back from the decoder, where the raster is a separate
+  // allocation and the head blob stops at bfOffBits.
+  void Parse(const byte* d, size_t flen, int hdronly = 0) {
     Init();
     if( flen<HDR0 )
       return;
@@ -64,8 +124,8 @@ struct BmpInfo {
     uint comp = get32(d+30);
     if( isz<40||pl!=1||comp!=0 )
       return;
-    if( bpp!=8&&bpp!=24&&bpp!=32 )
-      return; // 8bpp indices, RGB or RGBA
+    if( bpp!=1&&bpp!=4&&bpp!=8&&bpp!=24&&bpp!=32 )
+      return; // bilevel, 4 or 8bpp indices, RGB or RGBA
     if( w<=0||h==0 )
       return;
     uint H_ = uint(h<0 ? -h : h), W_ = uint(w);
@@ -73,17 +133,26 @@ struct BmpInfo {
       return;
     if( o<14+isz )
       return;
+    if( W_>(0xFFFFFFFFu-31)/bpp )
+      return;
     uint st = ((W_*bpp+31)/32)*4;
-    if( st==0||H_>(0xFFFFFFFFu/st) )
+    if( st==0||H_>(0xFFFFFFFFu/st)||st>(0xFFFFFFFFu/8) )
       return;
     uint pix = st*H_;
-    if( pix>flen-o )
+    if( !hdronly&&pix>flen-o )
+      return;
+    // a packed row is widened whole, so the codec sees the padding bits
+    // as columns rather than as a blob that has to be spliced back in
+    uint uw = (bpp<8) ? st*8/bpp : W_;
+    if( H_>(0xFFFFFFFFu/uw) )
       return;
     ok = 1;
     off = o;
     W = W_;
     H = H_;
-    nc = bpp/8;
+    bits = bpp;
+    uW = uw;
+    nc = (bpp<8) ? 1 : bpp/8;
     stride = st;
     pixbytes = pix;
   }
@@ -193,7 +262,7 @@ static int ArgNum(int argc, char** argv, int &i, const char* opt) {
 }
 
 static void Usage(const char* argv0) {
-  printf("mrpc - lossless RGB/RGBA BMP compressor on MRP's scheme\n"
+  printf("mrpc - lossless BMP compressor on MRP's scheme\n"
          "\n"
          "Usage: %s [options] <mode> <input> <output>\n"
          "       %s -l\n"
@@ -230,7 +299,9 @@ static void Usage(const char* argv0) {
          "the code length of that component in 4.4 fixed point -- sixteenths\n"
          "of a bit, saturating at 15.9375 -- so the picture is a map of where\n"
          "the file's bits went, channel for channel.  A one-component plot\n"
-         "gets a grey ramp for a palette so that it can be looked at.\n"
+         "gets a grey ramp for a palette so that it can be looked at, and a\n"
+         "1 or 4bpp input gets an 8bpp plot of the widened width, since a\n"
+         "code length does not fit in its depth.\n"
          "\n"
          "With no -d or -T, the first GPU is used, or the first CPU device\n"
          "if there is no GPU.  Anything that goes wrong with the device is\n"
@@ -250,10 +321,14 @@ static void Usage(const char* argv0) {
          "linear predictor per (class, colour component), and codes the\n"
          "residual with a generalized-Gaussian model picked by the local\n"
          "activity.  Class map, coefficients and quantiser are optimized\n"
-         "against measured code length and transmitted.  8bpp files -- grey\n"
-         "or paletted -- are coded as one component, with the palette carried\n"
-         "through as part of the header.  Anything that is not an 8, 24 or\n"
-         "32bpp uncompressed raster falls back to order 1.\n",
+         "against measured code length and transmitted.  1, 4 and 8bpp files\n"
+         "-- grey, bilevel or paletted -- are coded as one component, with\n"
+         "the palette carried through as part of the header.  A packed 1 or\n"
+         "4bpp raster is widened to a byte per pixel for the codec and packed\n"
+         "again on the way out, a whole row at a time, so the bits BMP pads\n"
+         "each row with are carried through as columns and come back exactly.\n"
+         "Anything that is not a 1, 4, 8, 24 or 32bpp uncompressed raster\n"
+         "falls back to order 1.\n",
          argv0, argv0);
 }
 
@@ -369,22 +444,53 @@ int main(int argc, char** argv) {
     im.ncomp = b.nc;
     im.stride = b.stride;
     im.data = in.data+b.off;
-    rc = mrpc_plot(ctx, &im, &pl, &exact);
+    byte* wide = 0;
+    if( b.Packed() ) {
+      wide = (byte*)malloc(size_t(b.uW)*b.H);
+      if( !wide )
+        rc = MRPC_ERR_MEM;
+      else {
+        b.Widen(in.data+b.off, wide);
+        im.width = b.uW;
+        im.stride = b.uW;
+        im.data = wide;
+      }
+    }
+    if( rc==MRPC_OK )
+      rc = mrpc_plot(ctx, &im, &pl, &exact);
     if( rc==MRPC_OK ) {
       // the input's own header, so the plot is the same shape of file as
-      // the image it describes -- except that a palette maps indices to
-      // colours and a code length is not an index, so a one-component
-      // plot gets a grey ramp instead and can be looked at
-      byte* hdr = (byte*)malloc(b.off ? b.off : 1);
+      // the image it describes -- except for two things.  A palette maps
+      // indices to colours and a code length is not an index, so a
+      // one-component plot gets a grey ramp instead and can be looked at;
+      // and a packed file cannot hold a code length in its own depth at
+      // all, so it gets a fresh 8bpp header of the widened geometry.
+      const uint hlen = b.Packed() ? HDR0+1024 : b.off;
+      byte* hdr = (byte*)malloc(hlen ? hlen : 1);
       if( hdr ) {
-        memcpy(hdr, in.data, b.off);
-        if( b.nc==1&&b.off>=HDR0+1024 )
+        if( b.Packed() ) {
+          memset(hdr, 0, hlen);
+          hdr[0] = 'B';
+          hdr[1] = 'M';
+          put32(hdr+2, uint(hlen+size_t(pl.stride)*pl.height));
+          put32(hdr+10, hlen);
+          put32(hdr+14, 40);
+          put32(hdr+18, pl.width);
+          put32(hdr+22, pl.height);
+          put32(hdr+26, 1|(8<<16)); // planes 1, 8bpp
+          put32(hdr+34, uint(size_t(pl.stride)*pl.height));
+          put32(hdr+46, 256);
+          put32(hdr+50, 256);
+        } else {
+          memcpy(hdr, in.data, b.off);
+        }
+        if( b.nc==1&&hlen>=HDR0+1024 )
           for( uint i = 0; i<256; i++ ) {
-            byte* e = hdr+b.off-1024+i*4;
+            byte* e = hdr+hlen-1024+i*4;
             e[0] = e[1] = e[2] = byte(i);
             e[3] = 0;
           }
-        if( !File::Write(pos[2], hdr, b.off, pl.data, size_t(pl.stride)*pl.height, 0, 0) ) {
+        if( !File::Write(pos[2], hdr, hlen, pl.data, size_t(pl.stride)*pl.height, 0, 0) ) {
           fprintf(stderr, "mrpc: cannot write %s\n", pos[2]);
           ret = 4;
         }
@@ -415,6 +521,7 @@ int main(int argc, char** argv) {
       fprintf(stderr, "\n");
       mrpc_free(pl.data);
     }
+    free(wide);
     b.Quit();
   } else if( !dec ) {
     // --- compress: split the file into header, raster and trailer
@@ -429,11 +536,24 @@ int main(int argc, char** argv) {
       im.stride = b.stride;
       im.data = in.data+b.off;
     }
+    byte* wide = 0;
+    if( b.ok&&b.Packed() ) {
+      wide = (byte*)malloc(size_t(b.uW)*b.H);
+      if( !wide )
+        rc = MRPC_ERR_MEM;
+      else {
+        b.Widen(in.data+b.off, wide);
+        im.width = b.uW;
+        im.stride = b.uW;
+        im.data = wide;
+      }
+    }
     const size_t tailoff = b.ok ? b.off+b.pixbytes : in.size;
     mrpc_blob out;
-    rc = mrpc_compress(ctx, b.ok ? &im : 0,
-                       in.data, b.ok ? b.off : in.size,
-                       in.data+tailoff, in.size-tailoff, &out);
+    if( rc==MRPC_OK )
+      rc = mrpc_compress(ctx, b.ok ? &im : 0,
+                         in.data, b.ok ? b.off : in.size,
+                         in.data+tailoff, in.size-tailoff, &out);
     if( rc==MRPC_OK ) {
       if( !File::Write(pos[2], out.data, out.size, 0, 0, 0, 0) ) {
         fprintf(stderr, "mrpc: cannot write %s\n", pos[2]);
@@ -441,6 +561,7 @@ int main(int argc, char** argv) {
       }
       mrpc_free(out.data);
     }
+    free(wide);
     b.Quit();
   } else {
     // --- decompress: and put the file back together in that order
@@ -448,12 +569,35 @@ int main(int argc, char** argv) {
     mrpc_blob head, tail;
     rc = mrpc_decompress(ctx, in.data, in.size, &im, &head, &tail);
     if( rc==MRPC_OK ) {
-      if( !File::Write(pos[2], head.data, head.size,
-                       im.data, im.data ? size_t(im.stride)*im.height : 0,
+      // a 1 or 4bpp file went in one byte per pixel and has to go back
+      // packed; the header that came back with it says which, and the
+      // widened width has to be the one the encoder would have chosen
+      byte* packed = 0;
+      const byte* ras = im.data;
+      size_t raslen = im.data ? size_t(im.stride)*im.height : 0;
+      if( im.data&&head.size>=HDR0 ) {
+        BmpInfo b;
+        b.Parse(head.data, head.size, 1);
+        if( b.ok&&b.Packed()&&b.off==head.size&&im.ncomp==1&&
+            im.width==b.uW&&im.stride==b.uW&&im.height==b.H ) {
+          packed = (byte*)malloc(size_t(b.stride)*b.H);
+          if( !packed )
+            rc = MRPC_ERR_MEM;
+          else {
+            b.Narrow(im.data, packed);
+            ras = packed;
+            raslen = size_t(b.stride)*b.H;
+          }
+        }
+        b.Quit();
+      }
+      if( rc==MRPC_OK&&
+          !File::Write(pos[2], head.data, head.size, ras, raslen,
                        tail.data, tail.size) ) {
         fprintf(stderr, "mrpc: cannot write %s\n", pos[2]);
         ret = 4;
       }
+      free(packed);
       mrpc_free(head.data);
       mrpc_free(tail.data);
       mrpc_free(im.data);

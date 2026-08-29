@@ -6,7 +6,8 @@
 # reported is what each cost.
 #
 # The plot is checked too, since it runs the same encoder: `p` has to
-# produce a file of the input's own geometry and say what it cost.
+# produce a file of the input's own geometry and say what it cost -- of
+# the widened geometry, at 8bpp, if the input was 1 or 4bpp packed.
 #
 #   ./t.sh img.bmp [img.bmp ...]
 
@@ -24,8 +25,16 @@ for f in "$@"; do
   $M    d "$T/b.mrp" "$T/b.bmp" >/dev/null 2>&1
   $M -C p "$f" "$T/p.bmp" 2>/dev/null >/dev/null || { echo "$f: plot failed"; fail=1; continue; }
   # the plot is the input's header and a raster of the same geometry, and
-  # nothing else -- so it is the input's size less whatever trailed it
-  if [ ! -s "$T/p.bmp" ] || [ "$(wc -c <"$T/p.bmp")" -gt "$(wc -c <"$f")" ]; then
+  # nothing else -- so it is the input's size less whatever trailed it.
+  # A 1 or 4bpp file is the exception: a code length does not fit in its
+  # depth, so its plot is an 8bpp file of the widened width and is bigger
+  # by exactly the ratio of the depths
+  bpp=$(od -An -tu2 -j28 -N2 "$f" | tr -d ' ')
+  case "$bpp" in
+    1|4) lim=$(( ($(wc -c <"$f") * 8 / bpp) + 1078 )) ;;
+    *)   lim=$(wc -c <"$f") ;;
+  esac
+  if [ ! -s "$T/p.bmp" ] || [ "$(wc -c <"$T/p.bmp")" -gt "$lim" ]; then
     echo "$(basename "$f"): the plot is not the shape of the image"; fail=1
   fi
   a=$(wc -c <"$T/a.mrp"); b=$(wc -c <"$T/b.mrp")

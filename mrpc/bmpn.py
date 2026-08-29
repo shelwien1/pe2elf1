@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 # -------------------------------------------------------------
-# bmp8.py -- 8bpp BMPs out of 24/32bpp ones, for testing the codec's
-# one-component path.
+# bmpn.py -- 1, 4 and 8bpp BMPs out of 24/32bpp ones, for testing the
+# codec's one-component path and the two packed depths below it.
 #
-#   ./bmp8.py in.bmp            writes in_gray.bmp and in_pal.bmp
-#   ./bmp8.py in.bmp -gray      just the grey one
-#   ./bmp8.py in.bmp -pal 64    a 64-colour palette
+#   ./bmpn.py in.bmp             writes in_gray.bmp and in_pal.bmp
+#   ./bmpn.py in.bmp -gray       just the grey one
+#   ./bmpn.py in.bmp -pal 64     a 64-colour palette
+#   ./bmpn.py in.bmp -bpp 4      16 levels and 16 colours, packed two to a byte
+#   ./bmpn.py in.bmp -bpp 1      bilevel
+#
+# -bpp caps the palette: -bpp 4 means at most 16 entries and -bpp 1 at
+# most two, and the raster is packed at that depth with the leftmost
+# pixel in the most significant bits, which is what BMP means by 1 and
+# 4bpp.  The suffix carries the depth, so -bpp 4 writes in_gray4.bmp.
 #
 # Two kinds, because they are different problems for a predictive coder:
 #
@@ -46,27 +53,45 @@ def read_bmp(path):
     return w, h, px, flip
 
 
-def write_bmp8(path, w, h, idx, pal, flip):
-    stride = (w + 3) & ~3
-    off = 54 + 1024
+def write_bmp(path, w, h, idx, pal, flip, bits=8):
+    """One row per row, padded to four bytes.  At 1 and 4bpp the leftmost
+    pixel goes in the most significant bits, and whatever is left over at
+    the end of a row is zero -- mrpc round-trips those bits too, so they
+    are as much a part of the test as the pixels are."""
+    ncol = 1 << bits
+    stride = ((w * bits + 31) // 32) * 4
+    off = 54 + 4 * ncol
     raster = bytearray()
     for y in range(h):
-        raster += bytes(idx[y]) + bytes(stride - w)
+        row = bytearray(stride)
+        if bits == 8:
+            row[:w] = bytes(idx[y])
+        elif bits == 4:
+            for x in range(w):
+                row[x >> 1] |= (idx[y][x] & 15) << (0 if (x & 1) else 4)
+        else:
+            for x in range(w):
+                row[x >> 3] |= (idx[y][x] & 1) << (7 - (x & 7))
+        raster += row
     hdr = b'BM' + struct.pack('<IHHI', off + len(raster), 0, 0, off)
-    hdr += struct.pack('<IiiHHIIiiII', 40, w, -h if flip else h, 1, 8, 0,
-                       len(raster), 2835, 2835, 256, 0)
+    hdr += struct.pack('<IiiHHIIiiII', 40, w, -h if flip else h, 1, bits, 0,
+                       len(raster), 2835, 2835, ncol, 0)
     table = bytearray()
-    for i in range(256):
+    for i in range(ncol):
         r, g, b = pal[i] if i < len(pal) else (0, 0, 0)
         table += bytes((b, g, r, 0))
     open(path, 'wb').write(hdr + bytes(table) + bytes(raster))
     return off + len(raster)
 
 
-def to_gray(w, h, px):
-    """Rec.601 luma, and the identity palette: index == grey level."""
-    idx = [bytes((77 * r + 150 * g + 29 * b + 128) >> 8 for (r, g, b) in row) for row in px]
-    return idx, [(i, i, i) for i in range(256)]
+def to_gray(w, h, px, bits=8):
+    """Rec.601 luma.  At 8bpp the palette is the identity ramp, so an
+    index *is* a grey level; below that it is the ramp of the levels that
+    are left, and the index is that level's rank."""
+    n = 1 << bits
+    idx = [bytes(((77 * r + 150 * g + 29 * b + 128) >> 8) * (n - 1) // 255
+                 for (r, g, b) in row) for row in px]
+    return idx, [(i * 255 // (n - 1),) * 3 for i in range(n)]
 
 
 def to_palette(w, h, px, ncol=256):
@@ -94,7 +119,7 @@ def to_palette(w, h, px, ncol=256):
     for bx in boxes:
         n = len(bx)
         pal.append(tuple(sum(p[k] for p in bx) // n for k in range(3)))
-    while len(pal) < 256:
+    while len(pal) < ncol:
         pal.append((0, 0, 0))
 
     # nearest palette entry, on a cache since an image has far fewer
@@ -116,26 +141,36 @@ def to_palette(w, h, px, ncol=256):
 
 def main(argv):
     if len(argv) < 2:
-        print(__doc__ or 'usage: bmp8.py in.bmp [-gray] [-pal [ncolours]]')
+        print('usage: bmpn.py in.bmp [-gray] [-pal [ncolours]] [-bpp 1|4|8]')
         return 1
     src = argv[1]
     want_gray = '-gray' in argv or '-pal' not in argv
     want_pal = '-pal' in argv or '-gray' not in argv
-    ncol = 256
+    bits = 8
+    if '-bpp' in argv:
+        i = argv.index('-bpp')
+        if i + 1 >= len(argv) or argv[i + 1] not in ('1', '4', '8'):
+            raise SystemExit('-bpp takes 1, 4 or 8')
+        bits = int(argv[i + 1])
+    ncol = 1 << bits
     if '-pal' in argv:
         i = argv.index('-pal')
         if i + 1 < len(argv) and argv[i + 1].isdigit():
             ncol = int(argv[i + 1])
+    if ncol > (1 << bits):
+        raise SystemExit('%d colours do not fit in %d bits' % (ncol, bits))
+    tag = '' if bits == 8 else str(bits)
     base = os.path.splitext(src)[0]
     w, h, px, flip = read_bmp(src)
     if want_gray:
-        idx, pal = to_gray(w, h, px)
-        n = write_bmp8(base + '_gray.bmp', w, h, idx, pal, flip)
-        print('%s_gray.bmp  %dx%d 8bpp grey  %d B' % (base, w, h, n))
+        idx, pal = to_gray(w, h, px, bits)
+        n = write_bmp(base + '_gray%s.bmp' % tag, w, h, idx, pal, flip, bits)
+        print('%s_gray%s.bmp  %dx%d %dbpp grey  %d B' % (base, tag, w, h, bits, n))
     if want_pal:
         idx, pal = to_palette(w, h, px, ncol)
-        n = write_bmp8(base + '_pal.bmp', w, h, idx, pal, flip)
-        print('%s_pal.bmp   %dx%d 8bpp %d-colour palette  %d B' % (base, w, h, ncol, n))
+        n = write_bmp(base + '_pal%s.bmp' % tag, w, h, idx, pal, flip, bits)
+        print('%s_pal%s.bmp   %dx%d %dbpp %d-colour palette  %d B'
+              % (base, tag, w, h, bits, ncol, n))
     return 0
 
 
