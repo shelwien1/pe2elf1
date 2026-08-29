@@ -133,7 +133,7 @@ struct Model<0> : Coroutine, PredictorE {
   // (coro3b.inc), so neither cursor is promoted and both would be stored once
   // per input byte -- and the ctx store is the same constant every time.
   NOINLINE
-  void model_pass( uint blksize ) {
+  void model_pass( uint blksize, word* __restrict dst ) {
     uint c,i,j,bit,p,state;
     byte* __restrict ip = inpptr;
     uint lctx = ctx;
@@ -142,13 +142,71 @@ struct Model<0> : Coroutine, PredictorE {
       for( j=0; j<8; j++ ) {
         P_S_L(lctx,state); p=P_P(state);
         bit = (c>>(7-j))&1;
-        pbit[i*8+j] = (bit<<15)+p;
+        dst[i*8+j] = (bit<<15)+p;
         P_update_L( lctx, state, bit );
       }
       lctx = 1;                           // P_byte: resets the bit context
     }
     inpptr = ip; ctx = lctx;
   }
+  void model_pass( uint blksize ) { model_pass( blksize, pbit ); }
+
+#if RC_THREADS
+  // The worker: one job per block, each job the block's chunks in order.
+  static void th_worker( void ) {
+    uint spin = 0;
+    for(;;) {
+      while( g_th.job.load(std::memory_order_acquire)==g_th.done ) {
+        if( g_th.quit.load(std::memory_order_relaxed) ) return;
+        th_spin(spin);
+      }
+      // th_quit wakes this the same way a block does, so the flag has to be
+      // re-checked HERE too -- otherwise the worker runs one phantom job,
+      // fills the ring nobody is draining, and join() never returns.
+      if( g_th.quit.load(std::memory_order_relaxed) ) return;
+      g_th.done = g_th.job.load(std::memory_order_relaxed);
+      Model<0>* Q = (Model<0>*)g_th.obj;
+      uint blk = g_th.blk;
+      for( uint c0=0, cb=0; c0<blk; c0+=RC_CHUNK_N, cb++ ) {
+        uint cn = blk-c0; if( cn>RC_CHUNK_N ) cn = RC_CHUNK_N;
+        uint p = g_th.prod.load(std::memory_order_relaxed);
+        while( p - g_th.cons.load(std::memory_order_acquire) >= RC_NBUF ) {
+          if( g_th.quit.load(std::memory_order_relaxed) ) return;
+          th_spin(spin);
+        }
+        Q->model_pass( cn, Q->pbit + (cb%RC_NBUF)*(RC_CHUNK_N*8) );
+        g_th.prod.store( p+1, std::memory_order_release );
+      }
+    }
+  }
+
+  void th_init( void ) {
+    if( g_thread.joinable() ) return;
+    g_th.prod = 0; g_th.cons = 0; g_th.job = 0; g_th.quit = 0;
+    g_th.done = 0; g_th.mine = 0; g_th.obj = this;
+    g_thread = std::thread( th_worker );
+  }
+  void th_start( uint blk ) {
+    g_th.obj = this; g_th.blk = blk;
+    g_th.job.fetch_add( 1, std::memory_order_release );
+  }
+  void th_wait_chunk( void ) {
+    uint spin = 0;
+    while( g_th.prod.load(std::memory_order_acquire) <= g_th.mine ) th_spin(spin);
+  }
+  void th_done_chunk( void ) {
+    g_th.mine++;
+    g_th.cons.store( g_th.mine, std::memory_order_release );
+  }
+  // Called before do_process's final yield, and before anything that needs the
+  // model state the worker owns (the carry fallback rewinds it).
+  void th_quit( void ) {
+    if( !g_thread.joinable() ) return;
+    g_th.quit.store( 1, std::memory_order_relaxed );
+    g_th.job.fetch_add( 1, std::memory_order_release );
+    g_thread.join();
+  }
+#endif
 
   NOINLINE
   void do_process() {
@@ -166,6 +224,9 @@ struct Model<0> : Coroutine, PredictorE {
 #endif
 
     P_Init(stats,DIM(stats));
+#if RC_THREADS
+    th_init();
+#endif
 
     while(1) {
 
@@ -211,10 +272,16 @@ struct Model<0> : Coroutine, PredictorE {
         // travels between them is CHUNK*16 bytes instead of 1 MB. RC_CHUNK is
         // even, so every chunk is a whole number of RCNUM-bit groups and bit i
         // still lands in lane i%RCNUM exactly as the scalar reference puts it.
-        for( uint _c0=0; _c0<blksize; _c0+=RC_CHUNK_N ) {
+#if RC_THREADS
+        th_start( blksize );
+#endif
+        for( uint _c0=0, _cb=0; _c0<blksize; _c0+=RC_CHUNK_N, _cb++ ) {
           uint _cn = blksize-_c0; if( _cn>RC_CHUNK_N ) _cn = RC_CHUNK_N;
-#if RC_CHUNK
-          model_pass( _cn );
+          word* __restrict _pb = pbit + (_cb%RC_NBUF)*(RC_CHUNK_N*8);
+#if RC_THREADS
+          th_wait_chunk();                 // the worker filled _pb
+#elif RC_CHUNK
+          model_pass( _cn, _pb );
 #endif
         {
           uint blksize0 = _cn*8;
@@ -226,7 +293,7 @@ struct Model<0> : Coroutine, PredictorE {
           for( i=0; i<blksize1; i+=RCNUM ) {
             RC_UNROLL
             for( j=0; j<RCNUM; j++ ) {
-              uint b = pbit[i+j];
+              uint b = _pb[i+j];
               uint f = b&0x7FFF; b >>= 15;
               rc_Process( j, f, b );
             }
@@ -235,11 +302,14 @@ struct Model<0> : Coroutine, PredictorE {
 
           // fewer than RCNUM bits left: consecutive i, so still one lane each
           for( ; i<blksize0; i++ ) {
-            uint b = pbit[i];
+            uint b = _pb[i];
             uint f = b&0x7FFF; b >>= 15;
             rc_Process( i%RCNUM, f, b ); RC_FLUSH_ONE( i%RCNUM );
           }
         }
+#if RC_THREADS
+          th_done_chunk();
+#endif
         }
 
         for( j=0; j<RCNUM; j++ ) rc_Quit(j);
@@ -280,6 +350,9 @@ struct Model<0> : Coroutine, PredictorE {
 
     }
 
+#if RC_THREADS
+    th_quit();
+#endif
     yield(this,0);
   }
 
@@ -289,6 +362,12 @@ struct Model<0> : Coroutine, PredictorE {
   // RCNUM whose worst case fits 0xFFFF (see RCio::rc_worst).
   NOINLINE
   void rc_overflow( void ) {
+#if RC_THREADS
+    // exit() runs the inline g_thread's destructor, and destroying a joinable
+    // std::thread calls std::terminate -- which would turn this message into
+    // an abort.
+    th_quit();
+#endif
     fprintf( stderr, "coder: substream overflow -- BLKSIZE=%i is too large for "
                      "RCNUM=%i, the 2-byte length header tops out at %i bytes "
                      "per lane. Rebuild with RC_BLKSIZE<=%i or a higher RC_RCNUM.\n",
