@@ -54,47 +54,24 @@ typedef struct predictor_config{
 int local_sum(input_feature_t input_params, predictor_config_t predictor_params,
     unsigned int x, unsigned int y, unsigned int z, unsigned short int * samples);
 
-#ifdef NO_COMPUTE_LOCAL
 /// Computes the local differences (central and directional) for the given sample
 /// and puts them in the pre-allocated local_difference array
 int get_central_difference(input_feature_t input_params, predictor_config_t predictor_params,
     int * central_difference, unsigned short int * samples, unsigned int x, unsigned int y, unsigned int z);
 int get_directional_difference(input_feature_t input_params, predictor_config_t predictor_params,
     int directional_difference[3], unsigned short int * samples, unsigned int x, unsigned int y, unsigned int z);
-#endif
 
-#ifndef NO_COMPUTE_LOCAL
-/// Computes the local differences for the whole image and saves them in the local_differences
-/// array
-int compute_local_differences(input_feature_t input_params, predictor_config_t predictor_params,
-    int *** local_differences, unsigned short int * samples);
-#endif
 
-#ifndef NO_COMPUTE_LOCAL
-/// Given the prediction error, it updates the weight matrix (local and
-/// prediction weights per band).
-void update_weights(int * weights, input_feature_t input_params, predictor_config_t predictor_params,
-    unsigned int x, unsigned int y, unsigned int z, int error, int ** local_differences, unsigned short * samples);
-#else
 /// Given the prediction error, it updates the weight matrix (local and
 /// prediction weights per band).
 void update_weights(int * weights, input_feature_t input_params, predictor_config_t predictor_params,
     unsigned int x, unsigned int y, unsigned int z, int error, unsigned short * samples);
-#endif
 
-#ifndef NO_COMPUTE_LOCAL
-/// given the local differences and the samples, it computes the scaled predicted
-/// sample value
-int compute_predicted_sample(input_feature_t input_params, predictor_config_t predictor_params,
-    unsigned int x, unsigned int y, unsigned int z, unsigned int s_min, unsigned int s_mid, unsigned int s_max,
-    int ** local_differences, unsigned short int * samples, int * weights);
-#else
 /// given the local differences and the samples, it computes the scaled predicted
 /// sample value
 int compute_predicted_sample(input_feature_t input_params, predictor_config_t predictor_params,
     unsigned int x, unsigned int y, unsigned int z, unsigned int s_min, unsigned int s_mid, unsigned int s_max,
     unsigned short int * samples, int * weights);
-#endif
 
 void init_weights(int * weights, predictor_config_t predictor_params, unsigned int z);
 

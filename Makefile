@@ -5,9 +5,9 @@
 
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g
-# NO_COMPUTE_LOCAL keeps the predictor from materialising four whole local
-# difference cubes; NDEBUG is what the reference implementation ships with.
-DEFS     := -DNDEBUG -DNO_COMPUTE_LOCAL
+# NDEBUG is what the reference implementation ships with; it now only drops a
+# handful of assertions, so the coder builds and behaves the same without it.
+DEFS     := -DNDEBUG
 WARN     := -Wall -Wextra -Wno-unused-function -Wno-unused-parameter \
             -Wno-sign-compare -Wno-write-strings -Wno-format
 LDLIBS   := -lm

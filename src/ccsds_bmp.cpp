@@ -1027,7 +1027,8 @@ int main(int argc, char** argv) {
 // at the end because it is the library underneath the coder above, not part of
 // it; the headers at the top are what the coder above was written against.
 // Each of these is a standalone translation unit in its own right and includes
-// the headers it needs, so nothing here depends on the order.
+// the headers it needs, so nothing here depends on the order -- and nothing
+// depends on which -D flags the build happens to pass, either.
 
 #include "ccsds123/utils.c"
 #include "ccsds123/predictor.c"

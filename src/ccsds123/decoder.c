@@ -29,7 +29,9 @@ if You have been advised of the possibility of such damages.
 XXXXXXXXXXXXXXXXXXXXXXX
 */
 
-#ifdef WIN32
+// MODIFIED: guarded, so that a build which already defines this on the command line
+// does not get a macro redefinition warning out of every file that repeats it.
+#if defined(WIN32) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
@@ -601,52 +603,10 @@ int read_header(FILE * compressedStream, input_feature_t *input_params, encoder_
         return -1;
     }
 
-    // !!!!!!!!!!!!!! DEBUGGING STATEMENTS !!!!!!!!!!!!!
-#ifndef NDEBUG
-    printf("Dimensions: x, y, z = %d, %d, %d\n", input_params->x_size, input_params->y_size, input_params->z_size);
-    if(input_params->signed_samples == 0)
-        printf("Unsigned samples\n");
-    else
-        printf("Signed samples\n");
-    printf("Dynamic Range = %d\n", input_params->dyn_range);
-    if(encoder_params->out_interleaving == BI)
-        printf("Encoding: BI - interleaving %d\n", encoder_params->out_interleaving_depth);
-    else
-        printf("Encoding: BSQ\n");
-    printf("Word length = %d\n", encoder_params->out_wordsize);
-
-    printf("Prediction bands = %d\n", predictor_params->user_input_pred_bands);
-    if(predictor_params->full != 0)
-        printf("Full prediction\n");
-    else
-        printf("Reduced prediction\n");
-    if(predictor_params->neighbour_sum != 0)
-        printf("Neighbor Oriented sum\n");
-    else
-        printf("Column Oriented sum\n");
-    printf("Regsiter size = %d\n", predictor_params->register_size);
-    printf("Weight Resolution = %d\n", predictor_params->weight_resolution);
-    printf("Weight Update Scaling Exponent Change = %d\n", predictor_params->weight_interval);
-    printf("Weight Update Scaling Exponent Init = %d\n", predictor_params->weight_initial);
-    printf("Weight Update Scaling Exponent Final = %d\n", predictor_params->weight_final);
-    printf("Weight Init Resolution = %d\n", predictor_params->weight_init_resolution);
-    if(predictor_params->weight_init_table){
-        printf("Custom weights - table included\n");
-    }
-
-    if(encoder_params->encoding_method == BLOCK){
-        printf("Block Adaptive Encoder\n");
-        printf("Block Size = %d\n", encoder_params->block_size);
-        printf("Ref Sample Interval = %d\n", encoder_params->ref_interval);
-    }else{
-        printf("Sample Adaptive Encoder\n");
-        printf("Unary length = %d\n", encoder_params->u_max);
-        printf("Rescaling counter = %d\n", encoder_params->y_star);
-        printf("Initial Exponent = %d\n", encoder_params->y_0);
-        printf("Acc Init Constant = %d\n", encoder_params->k);
-    }
-    fflush(stdout);
-#endif
+    // MODIFIED: a block of unconditional printf()s describing the header used to sit
+    // here, active in any build without NDEBUG.  It wrote to stdout, so it landed in
+    // the middle of whatever the caller was doing.  What it printed is available from
+    // the coder's own --verbose.
     
     return 0;
 }

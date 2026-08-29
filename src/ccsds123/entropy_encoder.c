@@ -30,7 +30,9 @@ LOSSLESS MULTISPECTRAL & HYPERSPECTRAL IMAGE COMPRESSION
 as of 09/11/2011.
 */
 
-#ifdef WIN32
+// MODIFIED: guarded, so that a build which already defines this on the command line
+// does not get a macro redefinition warning out of every file that repeats it.
+#if defined(WIN32) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
@@ -93,12 +95,11 @@ int encode_pixel(unsigned int x, unsigned int y, unsigned int z, unsigned int * 
         }
     }
     
-#ifndef NDEBUG
-    if(*written_bytes > (((input_params.dyn_range + 7)/8)*input_params.x_size*input_params.y_size*input_params.z_size)){
-        fprintf(stderr, "Error in encode_pixel, writing outside the compressed_stream boundaries: it means that the compressed image is greater than the original\n");
-        return -1;
-    }
-#endif
+    // MODIFIED: a bounds check used to sit here, comparing against the uncompressed
+    // size of the residuals on the assumption that coding never expands.  It does, on
+    // an incompressible image, so a build without NDEBUG refused to encode one at all.
+    // encode_to_buffer sizes the work buffer for the real worst case and checks the
+    // coded length against it once at the end, which is where the check belongs.
     return 0;
 }
 
@@ -392,12 +393,7 @@ int create_block(input_feature_t input_params, encoder_config_t encoder_params, 
         }
         *segment_idx = 0;
     }
-#ifndef NDEBUG
-    if(*written_bytes > (((input_params.dyn_range + 7)/8)*input_params.x_size*input_params.y_size*input_params.z_size)){
-        fprintf(stderr, "Error in create_block, writing outside the compressed_stream boundaries: it means that the compressed image is greater than the original\n");
-        return -1;
-    }
-#endif
+    // MODIFIED: the same wrong bounds check as in encode_pixel; see there.
     return 0;
 }
 

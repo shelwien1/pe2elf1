@@ -28,7 +28,9 @@ if You have been advised of the possibility of such damages.
 XXXXXXXXXXXXXXXXXXXXXXX
 */
 
-#ifdef WIN32
+// MODIFIED: guarded, so that a build which already defines this on the command line
+// does not get a macro redefinition warning out of every file that repeats it.
+#if defined(WIN32) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 

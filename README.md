@@ -33,6 +33,12 @@ The whole coder is one translation unit: `src/ccsds_bmp.cpp` includes the two
 single compiler invocation. No dependencies beyond a C++ compiler and libm.
 Python 3 is needed for the tests only.
 
+It builds with g++ or clang++, on Linux or Windows, and it does not care which
+`-D` flags you pass it — there is no combination that compiles but misbehaves.
+That was worth arranging, because the reference implementation had two:
+
+    clang++ -O2 -DNDEBUG -DWIN32 -Isrc -o ccsds.exe src/ccsds_bmp.cpp
+
 ## What it does
 
 | image | source | BMP | PNG (zlib -9) | ccsds | coder chosen |
@@ -222,6 +228,31 @@ meant no translation unit could include both — a combined coder has to.
 - `mod_star` shifted a negative value in both directions and formed 2^63 in a
   signed `long long` at a 64 bit register size. Reducing modulo 2^R with
   unsigned arithmetic picks the same representative without either.
+
+**Portability.** The reference implementation had settings you had to get right
+before it would work, and getting them wrong failed in ways that did not look
+like a build problem:
+
+- `NO_COMPUTE_LOCAL` chose between computing each local difference where it is
+  needed and building four whole cubes of them up front. Only `predictor.c` ever
+  had the choice: `unpredict.c` calls the compute-them-here forms unconditionally,
+  so the precomputing branch could encode but never decode, and a build that did
+  not define the flag did not compile at all. The branch is gone, along with every
+  `#ifdef` that selected it.
+- Without `NDEBUG`, two bounds checks compared the coded length against the
+  uncompressed size of the residuals, on the same assumption that coding never
+  expands that undersized the buffer. A debug build refused to encode an
+  incompressible image. They are gone; `encode_to_buffer` checks the length that
+  matters once, against the buffer it actually allocated. A block of `printf()`s
+  that dumped the decoded header to stdout in the same builds is gone too.
+- `utils.h` defined a function-like macro named `log2` for every `WIN32` build.
+  `log2` has been in the C runtime since C99, so it was only ever needed by Visual
+  C++ before 2013 — and in a single translation unit the header is reached before
+  `<math.h>`, where the macro rewrites the C library's own declaration and the
+  compile fails inside `math.h`. It is now guarded down to the compilers that
+  need it.
+- `_CRT_SECURE_NO_WARNINGS` was defined unguarded in all five files, which warns
+  once per file if the build already defines it on the command line.
 
 **Robustness.** A coded stream is untrusted input, and the decoder used to trust
 it: none of the header reads were checked, a zero band interleaving depth

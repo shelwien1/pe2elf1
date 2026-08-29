@@ -33,7 +33,13 @@ predictor
 
 #define MIN(x, y) ((x) < (y) ? x : y)
 
-#ifdef WIN32
+// MODIFIED: this used to be defined for every WIN32 build.  log2 has been in the C
+// runtime since C99, and both MinGW and clang have always had it, so the macro was
+// only ever needed by Visual C++ before 2013 -- and a function-like macro named log2
+// in a header is actively harmful: when this header is reached before <math.h>, as it
+// is in a single translation unit build, it rewrites math.h's own declaration of log2
+// and the compile fails inside the C library.
+#if defined(WIN32) && defined(_MSC_VER) && _MSC_VER < 1800 && !defined(log2)
 #define log2(x) (log((double)(x))/log((double)2))
 #endif
 

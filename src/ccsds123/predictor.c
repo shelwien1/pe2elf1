@@ -30,7 +30,9 @@ LOSSLESS MULTISPECTRAL & HYPERSPECTRAL IMAGE COMPRESSION
 as of 09/11/2011.
 */
 
-#ifdef WIN32
+// MODIFIED: guarded, so that a build which already defines this on the command line
+// does not get a macro redefinition warning out of every file that repeats it.
+#if defined(WIN32) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
@@ -90,7 +92,6 @@ int local_sum(input_feature_t input_params, predictor_config_t predictor_params,
     return sum;
 }
 
-#ifdef NO_COMPUTE_LOCAL
 int get_central_difference(input_feature_t input_params, predictor_config_t predictor_params,
     int * central_difference, unsigned short int * samples, unsigned int x, unsigned int y, unsigned int z){
 
@@ -145,97 +146,18 @@ int get_directional_difference(input_feature_t input_params, predictor_config_t 
     return 0;
 }
 
-#endif
-
-#ifndef NO_COMPUTE_LOCAL
-/// Computes the local differences for the whole image and saves them in the local_differences
-/// array; note that the image input to this procedure is assumed to be in BSQ format
-int compute_local_differences(input_feature_t input_params, predictor_config_t predictor_params,
-    int *** local_differences, unsigned short int * samples){
-    unsigned int x = 0, y = 0, z = 0;
-
-    // First I have to allocate the memory to hold the result
-    if(predictor_params.full != 0)
-        *local_differences = (int **)malloc(sizeof(int)*4);
-    else
-        *local_differences = (int **)malloc(sizeof(int));
-    if(*local_differences == NULL){
-        fprintf(stderr, "Error in allocating memory for building the local differences matrices\n");
-        return -1;
-    }
-    if(((*local_differences)[0] = (int *)malloc(sizeof(int)*input_params.x_size*input_params.y_size*input_params.z_size)) == NULL){
-        fprintf(stderr, "Error in allocating %d bytes for holding the local differences matrix\n", sizeof(int)*input_params.x_size*input_params.y_size*input_params.z_size);
-        return -1;
-    }
-    if(predictor_params.full != 0){
-        int i = 0;
-        for(i = 1; i < 4; i++){
-            if(((*local_differences)[i] = (int *)malloc(sizeof(int)*input_params.x_size*input_params.y_size*input_params.z_size)) == NULL){
-                fprintf(stderr, "Error in allocating %d bytes for holding the local differences matrix %d\n", sizeof(int)*input_params.x_size*input_params.y_size*input_params.z_size, i);
-                return -1;
-            }
-        }
-    }
-
-    // Ok, now I can actually start the computation
-    // Central difference computed: it is common both to reduced and
-    // full prediction mode
-    for(z = 0; z < input_params.z_size; z++){
-        for(y = 0, x = 1; y < input_params.y_size; y++, x = 0){
-            for(; x < input_params.x_size; x++){
-                int local_sum_temp = local_sum(input_params, predictor_params, x, y, z, samples);
-#ifndef NDEBUG
-                if(local_sum_temp == 0x80000000){
-                    return -1;
-                }
-#endif
-                MATRIX_BSQ_INDEX((*local_differences)[0], input_params, x, y, z) = 4*MATRIX_BSQ_INDEX(samples, input_params, x, y, z) - local_sum_temp;
-            }
-        }
-    }
-    if(predictor_params.full != 0){
-        //full prediction mode, the differences in the local_differences vector are
-        //in this order: central, north, west, north-west
-        for(z = 0; z < input_params.z_size; z++){
-            for(y = 0; y < input_params.y_size; y++){
-                for(x = 0; x < input_params.x_size; x++){
-                    if(y > 0){
-                        int local_sum_temp = local_sum(input_params, predictor_params, x, y, z, samples);
-#ifndef NDEBUG
-                        if(local_sum_temp == 0x80000000){
-                            return -1;
-                        }
-#endif
-                        MATRIX_BSQ_INDEX((*local_differences)[1], input_params, x, y, z) = 4*MATRIX_BSQ_INDEX(samples, input_params, x, y - 1, z) - local_sum_temp;
-                        if(x > 0){
-                            MATRIX_BSQ_INDEX((*local_differences)[2], input_params, x, y, z) = 4*MATRIX_BSQ_INDEX(samples, input_params, x - 1, y, z) - local_sum_temp;
-                            MATRIX_BSQ_INDEX((*local_differences)[3], input_params, x, y, z) = 4*MATRIX_BSQ_INDEX(samples, input_params, x - 1, y - 1, z) - local_sum_temp;
-                        }else{
-                            MATRIX_BSQ_INDEX((*local_differences)[2], input_params, 0, y, z) = MATRIX_BSQ_INDEX((*local_differences)[1], input_params, 0, y, z);
-                            MATRIX_BSQ_INDEX((*local_differences)[3], input_params, 0, y, z) = MATRIX_BSQ_INDEX((*local_differences)[1], input_params, 0, y, z);
-                        }
-                    }else{
-                        MATRIX_BSQ_INDEX((*local_differences)[1], input_params, x, 0, z) = 0;
-                        MATRIX_BSQ_INDEX((*local_differences)[2], input_params, x, 0, z) = 0;
-                        MATRIX_BSQ_INDEX((*local_differences)[3], input_params, x, 0, z) = 0;
-                    }
-                }
-            }
-        }
-    }
-    return 0;
-}
-#endif
+// MODIFIED: compute_local_differences() used to live here, behind
+// "#ifndef NO_COMPUTE_LOCAL", building four whole int cubes of local differences up
+// front instead of computing each one where it is needed.  It is gone, along with
+// every #ifdef that chose between the two: unpredict.c only ever called the
+// compute-them-here forms, so the precomputing branch could encode but never decode,
+// and a build that did not happen to define NO_COMPUTE_LOCAL did not compile at all.
+// The remaining path is the one both halves of the codec were using.
 
 /// Given the prediction error, it updates the weight matrix (local and
 /// prediction weights per band).
-#ifndef NO_COMPUTE_LOCAL
-void update_weights(int *weights, input_feature_t input_params, predictor_config_t predictor_params,
-    unsigned int x, unsigned int y, unsigned int z, int error, int ** local_differences, unsigned short int * samples){
-#else
 void update_weights(int *weights, input_feature_t input_params, predictor_config_t predictor_params,
     unsigned int x, unsigned int y, unsigned int z, int error, unsigned short int * samples){
-#endif
         int i = 0;
     int weight_limit = 0x1 << (predictor_params.weight_resolution + 2);
     int sign_error = error < 0 ? -1 : 1;
@@ -252,30 +174,20 @@ void update_weights(int *weights, input_feature_t input_params, predictor_config
     if(z > 0){
         int cur_pred_bands = z < predictor_params.pred_bands ? z : predictor_params.pred_bands;
         for(i = 0; i < cur_pred_bands; i++){
-#ifdef NO_COMPUTE_LOCAL
             int central_difference = 0;
             if(get_central_difference(input_params, predictor_params, &central_difference, samples, x, y, z - i - 1) < 0){
                 fprintf(stderr, "Error in getting the central differences for band %d", z -i);
             }
-#endif
 
             if(scaling_exp > 0){
-#ifndef NO_COMPUTE_LOCAL
-                weights[i] = weights[i] + ((((sign_error*(MATRIX_BSQ_INDEX(local_differences[0], input_params, x, y, z - i - 1))) >> scaling_exp) + 1) >> 1);
-#else
                 weights[i] = weights[i] + ((((sign_error*central_difference) >> scaling_exp) + 1) >> 1);
-#endif
             }else{
-#ifndef NO_COMPUTE_LOCAL
-                weights[i] = weights[i] + ((((sign_error*(MATRIX_BSQ_INDEX(local_differences[0], input_params, x, y, z - i - 1)))*(0x1 << -1*scaling_exp)) + 1) >> 1);
-#else
                 // MODIFIED: a left shift of a negative value, which is what a negative
                 // scaling exponent asks for here, is undefined behaviour before C++20.
                 // Multiplying by the same power of two says exactly what was meant, is
                 // bit for bit what the compilers this was built with already produced,
                 // and lets the whole codec run clean under the sanitizers.
                 weights[i] = weights[i] + ((((sign_error*central_difference)*(0x1 << -1*scaling_exp)) + 1) >> 1);
-#endif
             }
             if(weights[i] < (-1*weight_limit)){
                 weights[i] = -1*weight_limit;
@@ -286,26 +198,16 @@ void update_weights(int *weights, input_feature_t input_params, predictor_config
         }
     }
     if(predictor_params.full != 0){
-#ifdef NO_COMPUTE_LOCAL
         int directional_difference[3];
         if(get_directional_difference(input_params, predictor_params, directional_difference, samples, x, y, z) < 0){
             fprintf(stderr, "Error in getting the directional differences");
         }
-#endif
 
         for(i = 0; i < 3; i++){
             if(scaling_exp > 0){
-#ifndef NO_COMPUTE_LOCAL
-                weights[predictor_params.pred_bands + i] = weights[predictor_params.pred_bands + i] + ((((sign_error*(MATRIX_BSQ_INDEX(local_differences[i + 1], input_params, x, y, z))) >> scaling_exp) + 1) >> 1);
-#else
                 weights[predictor_params.pred_bands + i] = weights[predictor_params.pred_bands + i] + ((((sign_error*directional_difference[i]) >> scaling_exp) + 1) >> 1);
-#endif
             }else{
-#ifndef NO_COMPUTE_LOCAL
-                weights[predictor_params.pred_bands + i] = weights[predictor_params.pred_bands + i] + ((((sign_error*(MATRIX_BSQ_INDEX(local_differences[i + 1], input_params, x, y, z)))*(0x1 << -1*scaling_exp)) + 1) >> 1);
-#else
                 weights[predictor_params.pred_bands + i] = weights[predictor_params.pred_bands + i] + ((((sign_error*directional_difference[i])*(0x1 << -1*scaling_exp)) + 1) >> 1);
-#endif
             }
             if(weights[predictor_params.pred_bands + i] < (-1*weight_limit)){
                 weights[predictor_params.pred_bands + i] = -1*weight_limit;
@@ -317,19 +219,11 @@ void update_weights(int *weights, input_feature_t input_params, predictor_config
     }
 }
 
-#ifndef NO_COMPUTE_LOCAL
-/// given the local differences and the samples, it computes the scaled predicted
-/// sample value
-int compute_predicted_sample(input_feature_t input_params, predictor_config_t predictor_params,
-    unsigned int x, unsigned int y, unsigned int z, unsigned int s_min, unsigned int s_mid, unsigned int s_max,
-    int ** local_differences, unsigned short int * samples, int * weights){
-#else
 /// given the local differences and the samples, it computes the scaled predicted
 /// sample value
 int compute_predicted_sample(input_feature_t input_params, predictor_config_t predictor_params,
     unsigned int x, unsigned int y, unsigned int z, unsigned int s_min, unsigned int s_mid, unsigned int s_max,
     unsigned short int * samples, int * weights){
-#endif
     long long scaled_predicted = 0;
     long long diff_predicted = 0;
     int i = 0;
@@ -343,36 +237,24 @@ int compute_predicted_sample(input_feature_t input_params, predictor_config_t pr
         if(z > 0){
             int cur_pred_bands = z < predictor_params.pred_bands ? z : predictor_params.pred_bands;
             for(i = 0; i < cur_pred_bands; i++){
-#ifdef NO_COMPUTE_LOCAL
                 int central_difference = 0;
                 if(get_central_difference(input_params, predictor_params, &central_difference, samples, x, y, z - i - 1) < 0){
                     fprintf(stderr, "Error in getting the central differences for band %d", z -i);
                 }
 //                 fprintf(stderr, "central_difference=%d\n", central_difference);
-#endif
 
-#ifndef NO_COMPUTE_LOCAL
-                diff_predicted += ((long long)weights[i])*(long long)(MATRIX_BSQ_INDEX(local_differences[0], input_params, x, y, z - i - 1));
-#else
                 diff_predicted += ((long long)weights[i])*(long long)central_difference;
-#endif
             }
         }
         if(predictor_params.full != 0){
-#ifdef NO_COMPUTE_LOCAL
             int directional_difference[3];
             if(get_directional_difference(input_params, predictor_params, directional_difference, samples, x, y, z) < 0){
                 fprintf(stderr, "Error in getting the directional differences");
             }
 //             fprintf(stderr, "directional_difference[0]=%d, directional_difference[1]=%d, directional_difference[2]=%d\n", directional_difference[0], directional_difference[1], directional_difference[2]);
-#endif
 
             for(i = 0; i < 3; i++){
-#ifndef NO_COMPUTE_LOCAL
-                diff_predicted += ((long long)weights[predictor_params.pred_bands + i])*(long long)(MATRIX_BSQ_INDEX(local_differences[i + 1], input_params, x, y, z));
-#else
                 diff_predicted += ((long long)weights[predictor_params.pred_bands + i])*(long long)directional_difference[i];
-#endif
             }
         }
 
@@ -490,30 +372,15 @@ int predict(input_feature_t input_params, predictor_config_t predictor_params, c
 /// MODIFIED: the body of predict(), over samples already held in memory in BSQ order.
 int predict_samples(input_feature_t input_params, predictor_config_t predictor_params,
     unsigned short int * samples, unsigned short int * residuals){
-    // Calls the various routines to parse the input file and
-    // to compute the mapped residuals. The steps are:
-    // - parse input file (with signed/unsigned conversion and converting to BSQ)
-    // - create local differences matrix
-    // - now, for each pixel in the image, I compute_predicted_sample,
-    //   update the weights and compute the mapped residual which is added to the residuals matrix
+    // Calls the various routines to compute the mapped residuals: for each pixel in
+    // the image, compute_predicted_sample, update the weights, and compute the mapped
+    // residual which is added to the residuals matrix.
     unsigned int s_min = 0;
     unsigned int s_max = (0x1 << input_params.dyn_range) - 1;
     unsigned int s_mid = 0x1 << (input_params.dyn_range - 1);
-#ifndef NO_COMPUTE_LOCAL
-    int ** local_differences = NULL;
-#endif
     unsigned int x = 0, y = 0, z = 0;
     int * weights = NULL;
     int weights_len = predictor_params.pred_bands + (predictor_params.full != 0 ? 3 : 0);
-    
-#ifndef NO_COMPUTE_LOCAL
-    // Computes the local differences to be used in the prediction process; local_differences is a matrix
-    // as if contains the local differences (central, north, west, north-west) for every sample in the image
-    // (with samples expressed with a linear array)
-    if(compute_local_differences(input_params, predictor_params, &local_differences, samples) < 0){
-        return -1;
-    }
-#endif
 
     // MODIFIED: reduced prediction mode over a single band needs no weights at all, and
     // a zero-sized allocation is free to come back NULL, which the check below would
@@ -534,13 +401,8 @@ int predict_samples(input_feature_t input_params, predictor_config_t predictor_p
                 int error = 0;
                 
                 // prediction of the current sample and saving the residual
-#ifndef NO_COMPUTE_LOCAL
-                predicted_sample = compute_predicted_sample(input_params, predictor_params,
-                    x, y, z, s_min, s_mid, s_max, local_differences, samples, weights);
-#else
                 predicted_sample = compute_predicted_sample(input_params, predictor_params,
                     x, y, z, s_min, s_mid, s_max, samples, weights);
-#endif
 //                 fprintf(stderr, "(%d, %d, %d) = predicted_sample=%d\n", x, y, z, predicted_sample);
 //                 fprintf(stderr, "sample=%d\n", MATRIX_BSQ_INDEX(samples, input_params, x, y, z));
                 mapped_residual = compute_mapped_residual(input_params, x, y, z,
@@ -552,11 +414,7 @@ int predict_samples(input_feature_t input_params, predictor_config_t predictor_p
                 }else{
                     // finally I can update the weights, preparing for the prediction of the next sample
                     error = 2*(MATRIX_BSQ_INDEX(samples, input_params, x, y, z)) - predicted_sample;
-#ifndef NO_COMPUTE_LOCAL
-                    update_weights(weights, input_params, predictor_params, x, y, z, error, local_differences, samples);
-#else
                     update_weights(weights, input_params, predictor_params, x, y, z, error, samples);
-#endif
                 }
             }
         }
@@ -565,24 +423,6 @@ int predict_samples(input_feature_t input_params, predictor_config_t predictor_p
     if(weights != NULL){
         free(weights);
     }
-
-#ifndef NO_COMPUTE_LOCAL
-    if(local_differences != NULL){
-        if(predictor_params.full != 0){
-            int i = 0;
-            for(i = 0; i < 4; i++){
-                if(local_differences[i] != NULL){
-                    free(local_differences[i]);
-                }
-            }
-        }else{
-            if(local_differences[0] != NULL){
-                free(local_differences[0]);
-            }
-        }
-        free(local_differences);
-    }
-#endif
 
     return 0;
 }
