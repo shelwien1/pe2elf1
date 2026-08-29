@@ -103,6 +103,14 @@ On `-march=skylake`, against the same source one round earlier: encode
 and 40.43 -> 47.55. Compressed size unchanged everywhere -- 62,513,092 bytes
 for enwik8, as before.
 
+`t.sh` checks one build; `t_matrix.sh` checks that the `-D` space still holds
+together -- every knob at its non-default setting, plus the configurations that
+compile the vector coder out entirely (`RC_VEC=0`, `RC_FORCE_CARRY=1`) and the
+geometries (`RC_RCNUM=8/32`, `RC_LOWSPLIT=0`, `CORO_FAKE=1`). That is where
+breakage actually happens: a knob that moves work between two paths can look
+fine at the defaults and segfault at `RC_VEC=0`, which is exactly what
+`RC_CHUNK` did until the matrix caught it.
+
 `build.sh` takes `CXX`, so a different toolchain is one variable away. Newer is
 not faster here: clang 23.1.0 builds a byte-identical stream 7.4% slower than
 clang 18.1.3 on AVX2 and 6.1% slower on AVX-512, from a sweep loop that is two

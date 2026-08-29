@@ -114,7 +114,7 @@ for my $l (@body) {
   $l =~ s/\bget\(\s*\)/get1(rcidx)/g;
   $l =~ s/\bput\(\s*/put1( rcidx, /g;
   # field mentions
-  $l =~ s/\b($fieldpat)\b(?!\s*[\[\w])/$1 . '[' . ($fold{$1} eq 'RCNUM' ? 'rcidx' : "rcidx%$fold{$1}") . ']'/ge if @fields;
+  $l =~ s/\b($fieldpat)\b(?!\s*[\[\w])/$1 . '[' . ($fold{$1} eq 'RCNUM' ? 'rcidx' : "RC_FOLD(rcidx,$fold{$1})") . ']'/ge if @fields;
   # tmpptr is the prelude's per-lane cursor
   $l =~ s/\btmpptr\b(?!\s*\[)/tmpptr[rcidx]/g;
 }
@@ -129,7 +129,7 @@ print $O <<"HDR";
 // decrement, see rc_io.inc.
 RC_KALIGN uint tmpptr[RCNUM];
 byte* __restrict tmpbase;
-#define get1( k ) (tmpbase[tmpptr[k]--])
+// A SOA_FOLD field has N slots for RCNUM lanes; at N>=RCNUM the fold is the\n// identity and disappears at compile time rather than relying on the compiler\n// to fold a modulo by a power of two.\n#define RC_FOLD( i, n ) ( (n)>=RCNUM ? (i) : (i)%(n) )\n#define get1( k ) (tmpbase[tmpptr[k]--])
 #define put1( k, x ) (void)(tmpbase[tmpptr[k]--] = byte(x))
 
 HDR

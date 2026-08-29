@@ -291,9 +291,12 @@ struct Model<0> : Coroutine, PredictorE {
       } else
 #endif
       {
-#if RC_CHUNK && RC_VEC && !RC_FORCE_CARRY
-        // the scalar reference wants the whole block cached at once, and when
-        // the vector path is chunked nobody has cached it yet
+#if RC_CHUNK
+        // RC_CHUNK skips the model pass above, because the chunked vector path
+        // does it a chunk at a time. Every path that reaches host_block needs
+        // the whole block cached, and that is not only the -C path: RC_VEC=0
+        // and RC_FORCE_CARRY=1 both compile the chunked loop out entirely, so
+        // this cannot be conditioned on either of them.
         model_pass( blksize );
 #endif
         host_block( blksize );
