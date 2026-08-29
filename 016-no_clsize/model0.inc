@@ -18,6 +18,17 @@ struct Model<0> : Coroutine, PredictorE {
   // carryless pass loses a carry.
   ALIGN(4096) word pbit[BLKSIZE*8];
 
+#if RC_CHUNK
+  // The carry fallback re-codes the whole block out of pbit[], and the chunked
+  // pass only ever holds one chunk of it. So the model is snapshotted before
+  // the pass and the fallback rewinds and re-caches the block in full. The
+  // snapshot is ~2 KB once per block; the restore runs about once in 2^33
+  // coding steps, which is to say never.
+  ALIGN(64) t_Counter ctysave[0x200];
+  byte* inpsave;
+  uint  ctxsave;
+#endif
+
   // what the vector pass reports, shaped so rc_Write can take it directly
   struct t_res {
     uint lens[RCNUM];
@@ -191,6 +202,10 @@ struct Model<0> : Coroutine, PredictorE {
           }
         }
 
+#if RC_CHUNK
+        inpsave = inpptr; ctxsave = ctx;
+        memcpy( ctysave, stats, sizeof(stats) );
+#endif
         // RC_CHUNK: model pass and sweep interleaved over CHUNK input bytes
         // at a time, both working the low end of pbit[] so the buffer that
         // travels between them is CHUNK*16 bytes instead of 1 MB. RC_CHUNK is
@@ -239,7 +254,16 @@ struct Model<0> : Coroutine, PredictorE {
         }
         if_e0( novf!=0 ) rc_overflow();
         if( ncarry!=0 ) rcio.rc_Write( (*this), res );   // no lane lost a carry
-        else            recode_with_carry( blksize );
+        else {
+#if RC_CHUNK
+          // rewind the model and cache the whole block, which is what
+          // proc_block reads
+          inpptr = inpsave; ctx = ctxsave;
+          memcpy( stats, ctysave, sizeof(stats) );
+          model_pass( blksize );
+#endif
+          recode_with_carry( blksize );
+        }
 
       } else
 #endif
