@@ -542,35 +542,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 #define RC_CHUNK_N ( RC_CHUNK ? RC_CHUNK : RC_BLKSIZE )
 
-// 1 = run the encoder's model pass on a second thread, overlapped with the
-// coding sweep. See thread.inc. Encoder only, and it needs RC_CHUNK: the two
-// sides hand chunks to each other through a ring of RC_NBUF buffers carved out
-// of pbit[], and with no chunking there is only one chunk per block and
-// nothing to overlap. Stream-neutral -- the work is identical and in the same
-// order, only on two cores.
-#ifndef RC_THREADS
-#define RC_THREADS 0
-#endif
-#if RC_THREADS && !RC_CHUNK
-#error "RC_THREADS needs RC_CHUNK -- there is nothing to overlap otherwise"
-#endif
-
-// Buffers in the pbit[] ring. 2 is enough to overlap, and it is also what
-// keeps the producer's buffer and the consumer's adjacent rather than
-// RC_NBUF-1 chunks apart. Measured, encode, -march=skylake:
-//
-//   CHUNK/NBUF   512/2   512/4  1024/2  2048/2  2048/4  4096/2
-//   vs 1 thread  +66.5   +65.7   +65.2   +64.1   +64.9   +61.2
-//
-// i.e. flat, and the default RC_CHUNK is left where the single-threaded build
-// wants it rather than retuned for this.
-#ifndef RC_NBUF
-#define RC_NBUF ( RC_THREADS ? 2 : 1 )
-#endif
-#if RC_THREADS && (RC_NBUF*RC_CHUNK_N*8 > RC_BLKSIZE*8)
-#error "RC_NBUF*RC_CHUNK is larger than pbit[]"
-#endif
-
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
 // prefix below is the difference between it and the low accumulator.

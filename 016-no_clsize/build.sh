@@ -62,12 +62,6 @@ fi
 
 # gc.bat's option set, minus the ones that only mean something in MSVC mode.
 opts="-fomit-frame-pointer -fno-stack-protector -fstrict-aliasing"
-# RC_THREADS puts the model pass on a std::thread. Probed rather than assumed
-# so a toolchain without it still builds the single-threaded default.
-for f in -pthread; do
-  try_flag "$f" && opts="$opts $f"
-done
-
 for f in -fno-stack-clash-protection -fgnu-keywords; do
   try_flag $f && opts="$opts $f"
 done

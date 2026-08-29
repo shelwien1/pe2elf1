@@ -34,8 +34,6 @@ extern int g_use_vec;   // -C: the scalar reference coder
 
 #include "predict.inc"
 
-#include "thread.inc"
-
 
 //  Staging the coder's one hot store, and committing it.
 //

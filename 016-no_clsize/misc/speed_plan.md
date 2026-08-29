@@ -21,15 +21,13 @@ moved, on any target, in any configuration.
 | | encode | decode |
 |---|---|---|
 | **`-march=skylake` (AVX2)** | | |
-| baseline (before this round) | 72.72 | 39.83 |
-| defaults now | **78.90 (+8.5%)** | **47.31 (+18.8%)** |
-| defaults + `RC_THREADS=1` | **128.49 (+76.7%)** | 47.33 (+18.8%) |
-| *control* | +1.15% | -1.21% |
+| baseline (before this round) | 72.77 | 39.79 |
+| now | **78.62 (+8.0%)** | **46.86 (+17.8%)** |
+| *control* | -0.45% | +0.30% |
 | **`-march=native` (AVX-512)** | | |
-| baseline | 80.82 | 39.88 |
-| defaults now | 81.79 (+1.2%) | **46.95 (+17.8%)** |
-| defaults + `RC_THREADS=1` | **121.57 (+50.4%)** | 46.95 (+17.7%) |
-| *control* | +0.22% | +1.24% |
+| baseline | 81.28 | 40.43 |
+| now | **83.02 (+2.1%)** | **47.55 (+17.6%)** |
+| *control* | +0.01% | -0.23% |
 
 Item by item:
 
@@ -40,7 +38,7 @@ Item by item:
 | 3 | decode: shrink the loop body | lost at every unroll factor, -7.6% to -30% |
 | 4 | AVX-512 at 512-bit | lost, -3.2% encode, and it halves the sweep loop |
 | 5 | interleave model pass and sweep | **TAKEN** -- `RC_CHUNK=2048`, encode +3% on both targets |
-| 6 | model pass on a second thread | **TAKEN** -- `RC_THREADS=1`, encode +64%, decode untouched |
+| 6 | model pass on a second thread | measured +64% encode, then **REMOVED** -- see below |
 | 7 | `-fno-pie` | marginal: encode +0.4%, decode +2.5% on AVX2; a packaging call |
 
 What the plan got right and wrong:
@@ -61,8 +59,15 @@ What the plan got right and wrong:
   instruction stream and both lose. Item 2's own failure is what identified the
   reason: once item 1 took the dependent load off the chain, decode stopped
   being chain-bound, so the lever it was aiming at had already moved.
-- **Right about item 6 being the largest, and about the ceiling.** 1/0.57 =
-  1.75x predicted, 1.77x measured on AVX2.
+- **Right about item 6 being the largest, and about the ceiling** -- 1/0.57 =
+  1.75x predicted, 1.77x measured on AVX2 -- and wrong to have listed it at
+  all. It is not a rangecoder change. Overlapping the model pass with the
+  sweep on a second thread makes the *program* faster by using another core;
+  it does not make a single core code a bit faster, which is what everything
+  else here is about, and it is orthogonal to the coder in the sense that it
+  would work just as well on a coder that had had none of the other work done
+  to it. The code was written, measured at +64% encode with a byte-identical
+  stream, and then taken back out. What is left of it is this paragraph.
 
 One bug came out of it: `RC_CHUNK` as first written broke the carry fallback,
 which re-codes a whole block out of `pbit[]` that the chunked pass no longer
@@ -296,7 +301,9 @@ loop overhead and the sweep's lost run length, and chunking is dead for good.
 
 ## 6. Two-thread software pipeline for encode
 
-*The largest structural win available, and the largest change.*
+*Tried, measured at +64% encode, and REMOVED -- see the results section. It is
+not a rangecoder change: it buys another core, not a faster coder. The rest of
+this section is the plan as written.*
 
 `model_pass` and the coding sweep are already separated by a buffer -- that is
 what `pbit` is. They are 57% and 43% of encode. Running the model pass for
