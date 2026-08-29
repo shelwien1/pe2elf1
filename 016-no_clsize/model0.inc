@@ -5,7 +5,7 @@ struct Model<0> : Coroutine, PredictorE {
 
   typedef RCio<BLKSIZE,RCNUM> t_RCio;
 
-  ALIGN(64) t_Counter stats[0x100];   // order0
+  ALIGN(64) t_Counter stats[0x200];   // order0
 
   ALIGN(4096) t_RCio rcio;
 
@@ -160,7 +160,9 @@ struct Model<0> : Coroutine, PredictorE {
 
       chkinp(); blksize=getinplen(); if( blksize>BLKSIZE ) blksize=BLKSIZE;
 
+#if !RC_CHUNK
       model_pass( blksize );
+#endif
 
 #if RC_VEC && !RC_FORCE_CARRY
       // The vector coding pass: the carryless coder over all RCNUM lanes,
@@ -189,8 +191,18 @@ struct Model<0> : Coroutine, PredictorE {
           }
         }
 
+        // RC_CHUNK: model pass and sweep interleaved over CHUNK input bytes
+        // at a time, both working the low end of pbit[] so the buffer that
+        // travels between them is CHUNK*16 bytes instead of 1 MB. RC_CHUNK is
+        // even, so every chunk is a whole number of RCNUM-bit groups and bit i
+        // still lands in lane i%RCNUM exactly as the scalar reference puts it.
+        for( uint _c0=0; _c0<blksize; _c0+=RC_CHUNK_N ) {
+          uint _cn = blksize-_c0; if( _cn>RC_CHUNK_N ) _cn = RC_CHUNK_N;
+#if RC_CHUNK
+          model_pass( _cn );
+#endif
         {
-          uint blksize0 = blksize*8;
+          uint blksize0 = _cn*8;
           uint blksize1 = blksize0 - (blksize0%RCNUM);
 
           // One rc_Process per lane per group, so the RCNUM staged stores
@@ -213,6 +225,7 @@ struct Model<0> : Coroutine, PredictorE {
             rc_Process( i%RCNUM, f, b ); RC_FLUSH_ONE( i%RCNUM );
           }
         }
+        }
 
         for( j=0; j<RCNUM; j++ ) rc_Quit(j);
 
@@ -230,7 +243,14 @@ struct Model<0> : Coroutine, PredictorE {
 
       } else
 #endif
+      {
+#if RC_CHUNK && RC_VEC && !RC_FORCE_CARRY
+        // the scalar reference wants the whole block cached at once, and when
+        // the vector path is chunked nobody has cached it yet
+        model_pass( blksize );
+#endif
         host_block( blksize );
+      }
 
       if( blksize<BLKSIZE ) break;
 

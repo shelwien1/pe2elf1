@@ -3,7 +3,7 @@ template<>
 struct Model<1> : Coroutine, PredictorD {
   static const uint f_DEC=1;
 
-  ALIGN(64) t_Counter stats[0x100];   // order0
+  ALIGN(64) t_Counter stats[0x200];   // order0
 
   ALIGN(4096) RCio<BLKSIZE,RCNUM> rcio;
 
@@ -69,8 +69,41 @@ struct Model<1> : Coroutine, PredictorD {
 #if (RC_RCNUM%8)==0
       {
         uint nb1 = blksize*8 - (blksize*8)%RCNUM;
+#if   RC_DEC_UNROLL==0
+#define RC_UNROLL_DEC RC_UNROLL
+#elif RC_DEC_UNROLL==1
+#define RC_UNROLL_DEC _Pragma("nounroll")
+#elif RC_DEC_UNROLL==2
+#define RC_UNROLL_DEC _Pragma("unroll 2")
+#elif RC_DEC_UNROLL==4
+#define RC_UNROLL_DEC _Pragma("unroll 4")
+#elif RC_DEC_UNROLL==8
+#define RC_UNROLL_DEC _Pragma("unroll 8")
+#else
+#error "RC_DEC_UNROLL must be 0, 1, 2, 4 or 8"
+#endif
+#if RC_EAGER_CTY
+        // Same loop, with the counter fetched a bit ahead: `state` for bit j+1
+        // is one half of the pair loaded at bit j, so the load is off the
+        // critical chain and only a select remains on it. j is a compile-time
+        // constant here (RC_UNROLL over a constant RCNUM), so both (j&7) tests
+        // vanish.
+        qword kids = 0; uint state1 = 0;
         for( i=0; i<nb1; i+=RCNUM ) {
-          RC_UNROLL
+          RC_UNROLL_DEC
+          for( j=0; j<RCNUM; j++ ) {
+            if( (j&7)==0 ) { ctx=1; state1=cty[1].Get(); kids=P_kids(1); }
+            state = state1; p=P_P(state);
+            rc_Process( j, p, bit );
+            cty[ctx].Update( state, bit );
+            (ctx*=2)+=bit;
+            if( (j&7)!=7 ) { state1 = P_sel(kids,bit); kids = P_kids(ctx); }
+            else { P_byte(stats,c); put0(c); }
+          }
+        }
+#else
+        for( i=0; i<nb1; i+=RCNUM ) {
+          RC_UNROLL_DEC
           for( j=0; j<RCNUM; j++ ) {
             P_S(state); p=P_P(state);
 #if RC_VEC
@@ -82,6 +115,7 @@ struct Model<1> : Coroutine, PredictorD {
             if( (j&7)==7 ) { P_byte(stats,c); put0(c); }
           }
         }
+#endif
         for( i=nb1; i<blksize*8; i++ ) {
           j = i % RCNUM;
           P_S(state); p=P_P(state);

@@ -468,6 +468,80 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_FUSE_PP_DEC 1
 #endif
 
+// 1 = the decoder fetches the next counter a bit early. See P_kids in
+// predict.inc: the two children of a context are adjacent, so both come in one
+// 8-byte load whose address is known a bit ahead, and the next bit picks its
+// half with a select rather than waiting on a load. Needs the fused counter --
+// with a bare state the load it removes is still followed by pp[state], and
+// the chain is no shorter.
+//
+// Decoder only. The encoder's model pass is rename-bound; there an extra load
+// per bit to save latency it is not paying is strictly worse.
+//
+// MEASURED, AND IT LOSES: -3.37% decode on -march=skylake against a +0.09%
+// control, byte-identical stream. It does shorten the chain -- the select is a
+// cmov, not a branch -- but it costs ~6 instructions per bit (the pair load,
+// the shift, the cmov and the register moves around a 64-bit value) and the
+// loop goes from 405 to 506 instructions per group of 16 bits.
+//
+// Which says what the decoder became once RC_FUSE_PP removed the second load:
+// at 8.77 cyc/bit over ~25 instructions it is running ~2.9 IPC out of a
+// 1756-byte loop body, i.e. it is now FRONT-END bound, not chain-bound. The
+// lever moved. Kept at 0 for the record and because a machine with more fetch
+// bandwidth could flip it.
+#ifndef RC_EAGER_CTY
+#define RC_EAGER_CTY 0
+#endif
+#if RC_EAGER_CTY && !RC_FUSE_PP_DEC
+#error "RC_EAGER_CTY needs RC_FUSE_PP_DEC=1"
+#endif
+
+// How far to unroll the DECODER's group loop. 0 = fully (RCNUM bodies, the
+// shape sh_v1xN's decoder had and the reason RC_UNROLL exists); 1 = not at
+// all; 2/4/8 = that many bodies.
+//
+// The full unroll makes j a compile-time constant, so the lane arrays become
+// fixed addresses and (j&7)==7 a compile-time test. It also stamps out RCNUM
+// copies of rc_Renorm's byte refill -- the branchy part ~91% of bits skip --
+// which is what makes the decode loop 1756 bytes against the encode sweep's
+// 902 for the same 16 bits. Once RC_FUSE_PP took the dependent load off the
+// per-bit chain the decoder stopped being chain-bound (see RC_EAGER_CTY), so
+// which side of that trade wins is worth re-asking.
+#ifndef RC_DEC_UNROLL
+#define RC_DEC_UNROLL 0
+#endif
+
+// Chunk size, in input bytes, for interleaving the model pass with the coding
+// sweep. 0 = off, the model pass runs once over the whole block.
+//
+// pbit[] is BLKSIZE*8 words -- 1 MB written and 1 MB read per 64 KB block, 32
+// bytes of traffic per input byte, for a value produced and consumed in the
+// same order. Chunking makes that buffer CHUNK*16 bytes and keeps it in L1.
+// Must be even so each chunk is a whole number of RCNUM-bit groups.
+//
+// misc/avx2_profile.md section 8 has "chunked model/sweep, 2048" at +10.27
+// cyc/grp, i.e. a loss, and blames tmpbuf evicting FSM+pp from L2. That
+// mechanism was never real -- FSM0.txt has 256 states, so the model's whole
+// working set is 2 KB -- and this version wins. The difference is where pbit
+// is indexed: both passes work its low end and the chunk is rewritten in
+// place, so the buffer between them is 32 KB at CHUNK=2048 rather than a 1 MB
+// window that walks. Measured, encode, byte-identical stream:
+//
+//     CHUNK      256    512   1024   2048   4096   8192
+//     skylake  +3.84  +3.53  +4.16  +3.69  +3.17  +3.77   (control -0.95)
+//     rerun       --  +2.64  +2.58  +3.18     --     --    (control +0.02)
+//     native      --     --     -- +2.56     --     --    (control -0.18)
+//
+// Flat across two decades of chunk size, which says it is the traffic and not
+// a cache-capacity knee. Decode is untouched -- it has no model pass to split.
+#ifndef RC_CHUNK
+#define RC_CHUNK 2048
+#endif
+#if RC_CHUNK && (RC_CHUNK&1)
+#error "RC_CHUNK must be even"
+#endif
+#define RC_CHUNK_N ( RC_CHUNK ? RC_CHUNK : RC_BLKSIZE )
+
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
 // prefix below is the difference between it and the low accumulator.
