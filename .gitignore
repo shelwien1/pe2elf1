@@ -1,0 +1,9 @@
+# build output
+/ccsds
+*.o
+
+# generated test corpus and scratch
+/test/bmp/
+*.ccsds
+__pycache__/
+*.pyc
