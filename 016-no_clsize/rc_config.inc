@@ -455,13 +455,23 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // per input byte, all port 5 -- to merge eight 2-byte pbit stores into two wide
 // ones. It is not a knob away: `-fno-slp-vectorize` also scalarises the coding
 // sweep (-63.9%), and clang does not forward it to the LTO backend anyway.
-// So the encoder keeps the plain counter there and the decoder takes the win.
+//
+// And it does not survive a compiler upgrade. clang 23.1.0 still emits the
+// gather (12 vpinsrd instead of 16) and is FASTER for it. Same box, same
+// source, -march=native, -Ofast -std=c++23, 20 MB of enwik8:
+//
+//   clang 18.1.3   encode 85.09 -> 77.09   -9.41%   (control -0.14%)
+//   clang 23.1.0   encode 81.25 -> 84.48   +3.98%   (control +0.17%)
+//
+// So the default follows the compiler, and the cut sits between the two
+// versions actually measured -- 19..22 are untested, and this is one -D away
+// in either direction if a build lands on the wrong side of it.
 #ifndef RC_FUSE_PP_ENC
-#if defined(__clang__) && defined(__AVX512F__)
-#define RC_FUSE_PP_ENC 0
-#else
-#define RC_FUSE_PP_ENC 1
-#endif
+# if defined(__clang__) && defined(__AVX512F__) && (__clang_major__ < 19)
+#  define RC_FUSE_PP_ENC 0
+# else
+#  define RC_FUSE_PP_ENC 1
+# endif
 #endif
 
 #ifndef RC_FUSE_PP_DEC

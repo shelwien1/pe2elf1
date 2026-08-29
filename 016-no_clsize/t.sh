@@ -8,6 +8,7 @@
 #
 #   TESTFILE=../book1 ./t.sh    what to code (default: ../enwik8)
 #   NITER=3 ./t.sh              encode passes to time (default: 10)
+#   NITERD=3 ./t.sh             decode passes to time (default: same as NITER)
 #   FSM=../FSM1.txt ./t.sh      the counter state machine (default: ../FSM0.txt)
 #   KEEP=1 ./t.sh               leave t.enc / t.dec / t.ref behind
 #
@@ -17,7 +18,7 @@
 # Then three things happen, in this order:
 #
 #   1. coder's own test mode encodes the file NITER times, decodes the result
-#      once, and appends the best encode and decode timings to log.txt. t.sh
+#      NITERD times, and appends the best encode and decode timings to log.txt. t.sh
 #      tags that line with the compiler and ISA build.sh recorded, which is
 #      the "avx512" / "avx2" column the existing lines carry.
 #   2. the decoded file is compared against the input.
@@ -32,6 +33,7 @@ cd "$(dirname "$0")"
 
 IN=${TESTFILE:-../enwik8}
 NITER=${NITER:-10}
+NITERD=${NITERD:-$NITER}
 FSM=${FSM:-../FSM0.txt}
 CODER=./coder
 
@@ -54,11 +56,11 @@ fi
 insize=$(wc -c < "$IN")
 lines0=$(wc -l < log.txt 2>/dev/null || echo 0)
 
-echo "== $IN ($insize bytes), $NITER encode passes, FSM $FSM"
+echo "== $IN ($insize bytes), $NITER encode / $NITERD decode passes, FSM $FSM"
 rm -f "$enc" "$dec" "$ref"
 
 # encode x NITER, decode x1, append to log.txt -- this is what t.bat runs
-"$CODER" c "$IN" "$enc" "$FSM" "$NITER" "$dec"
+"$CODER" c "$IN" "$enc" "$FSM" "$NITER" "$dec" "$NITERD"
 
 encsize=$(wc -c < "$enc")
 

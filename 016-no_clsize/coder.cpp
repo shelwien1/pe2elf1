@@ -60,11 +60,12 @@ char c_res[256];
 char d_res[256];
 char t_res[256];
 
-// coder [options] c|d input_file output_file FSM_file [n_iter] [test_output_file]
+// coder [options] c|d in out FSM_file [n_iter] [test_output_file] [n_iter_dec]
 //
 //   coder c book1 1 FSM0.txt          -- encode
 //   coder d 1     2 FSM0.txt          -- decode
 //   coder c book1 1 FSM0.txt 10 2     -- encode x10, decode, append log.txt
+//   coder c book1 1 FSM0.txt 10 2 10  -- ... and decode x10 as well
 //
 // The FSM file is the counter state machine loaded by Predictor::Init; both
 // ends need the same one.
@@ -74,7 +75,7 @@ char t_res[256];
 int g_use_vec = 1;
 
 static void usage( void ) {
-  printf( "coder [-C] c|d input output FSM_file [n_iter] [test_output]\n"
+  printf( "coder [-C] c|d in out FSM_file [n_iter] [test_output] [n_iter_dec]\n"
           "\n"
           "  -C        the scalar reference coder, not the vector one\n" );
 }
@@ -105,7 +106,7 @@ int main( int argc, char** argv ) {
   // test mode: encode, then decode back, then log both timings
   if( argc>6 ) {
     char* argv_c[] = { argv[0], (char*)"c", argv[2],argv[3],argv[4],argv[5] };
-    char* argv_d[] = { argv[0], (char*)"d", argv[3],argv[6],argv[4],(char*)"1" };
+    char* argv_d[] = { argv[0], (char*)"d", argv[3],argv[6],argv[4],(argc<=7?(char*)"1":argv[7]) };
     uint r = 0;
     if( r==0 ) r = main( DIM(argv_c), argv_c );
     if( r==0 ) main( DIM(argv_c), argv_d );
