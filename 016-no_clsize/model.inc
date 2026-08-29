@@ -67,8 +67,10 @@ extern int g_use_vec;   // -C: the scalar reference coder
 // is gone, and what is left lands on the store port instead. Measured on AVX2
 // (skylake, RCNUM=16, 20 MB of enwik8): 103.1 -> 96.7 cycles per 16-bit group.
 //
-// Only RC_SCATTER_SKIP 0 (always commit) and non-zero (branch past a group
-// where no lane emitted a byte) mean anything here; there is no mask to apply.
+// There is no mask to apply here, so RC_SCATTER_SKIP 1..3 all read as the one
+// thing that is left: branch past a group where no lane emitted a byte. 9 is
+// the probe, and it means on this path what it means on the other -- no commit
+// at all, so the two targets can be asked the same question.
 #if RC_SCATTER_W==0
 
 #define RC_COMMIT_ALL()                                                  \
@@ -77,6 +79,9 @@ extern int g_use_vec;   // -C: the scalar reference coder
 
 #if RC_SCATTER_SKIP==0
 #define RC_FLUSHALL() RC_COMMIT_ALL()
+#elif RC_SCATTER_SKIP==9
+#warning "RC_SCATTER_SKIP=9 drops the commit: this build does not encode correctly"
+#define RC_FLUSHALL() ((void)0)
 #else
 #define RC_FLUSHALL()                                                    \
   { uint _z = 0;                                                         \

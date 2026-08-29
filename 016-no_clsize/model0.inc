@@ -221,6 +221,11 @@ struct Model<0> : Coroutine, PredictorE {
           model_pass( _cn );
 #endif
         {
+#if RC_PROBE_MODELONLY
+          // the probe: time the model pass with the sweep taken out from
+          // under it, and leave the substreams empty -- see rc_config.inc
+          continue;                    // continues the CHUNK loop only
+#endif
           uint blksize0 = _cn*8;
           uint blksize1 = blksize0 - (blksize0%RCNUM);
 
@@ -265,6 +270,10 @@ struct Model<0> : Coroutine, PredictorE {
         }
         }
 
+#if RC_PROBE_MODELONLY
+        { for( j=0; j<RCNUM; j++ ) res.lens[j]=0;
+          rcio.rc_Write( (*this), res ); }
+#else
         for( j=0; j<RCNUM; j++ ) rc_Quit(j);
 
         uint ncarry = uint(-1), novf = 0;
@@ -287,6 +296,7 @@ struct Model<0> : Coroutine, PredictorE {
 #endif
           recode_with_carry( blksize );
         }
+#endif  // RC_PROBE_MODELONLY
 
       } else
 #endif

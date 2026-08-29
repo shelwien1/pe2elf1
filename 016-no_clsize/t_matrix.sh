@@ -58,6 +58,8 @@ run "-DRC_FF_LANES=8"
 run "-DRC_SWEEP_NEGIDX=1"
 run "-DRC_FOLD_RPRE=1"
 run "-DRC_SHIFT_SAT=1"
+run "-DRC_SCATTER_SKIP=1"
+run "-DRC_SCATTER_W=0"
 
 # combinations that have bitten before: a knob that moves work between paths
 run "-DRC_CHUNK=0 -DRC_VEC=0"

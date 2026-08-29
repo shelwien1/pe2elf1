@@ -352,6 +352,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // later, Zen 4 -- 1 is the one to try on AVX-512: same instruction count, no
 // branch, ~1.3 lanes of work instead of 16. Build 9 first: if 0 and 9 are
 // close on your machine too, nothing in this direction can pay there either.
+//
+// 9 drops the commit on BOTH paths, so the same probe answers the same
+// question on AVX2 -- what the block of RCNUM scalar stores costs there. It
+// used to fall into the "non-zero means branch" reading at RC_SCATTER_W==0,
+// which measured the branch instead and made the two targets incomparable.
+// See misc/avx2_vs_avx512.md for what the pair of probes is for.
 #ifndef RC_SCATTER_SKIP
 #define RC_SCATTER_SKIP 0
 #endif
@@ -711,6 +717,30 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 #ifndef RC_FF_PADSIZE
 #define RC_FF_PADSIZE (RC_FF_TRIM + 2*RC_LOWBYTES + 16)
+#endif
+
+// Probe: run the encoder's model pass and skip the coding sweep entirely.
+// Does NOT encode correctly -- it writes empty substreams -- so it is timed
+// with a plain encode to /dev/null (or nul), never through t.sh:
+//
+//   OUT=probe ./build.sh -DRC_PROBE_MODELONLY=1
+//   ./probe c ../enwik8 /dev/null ../FSM0.txt 5
+//
+// The encoder is two passes over the block that share nothing but pbit[]: a
+// scalar model pass, which is the same code on every target, and the vector
+// sweep. This says how the time splits between them, and it is the first
+// number to have before reading anything into a sweep-side knob -- on the box
+// misc/avx2_vs_avx512.md was written on the model pass is 48% of encode, so
+// halving the sweep's instruction count moves encode by 13%, not by 50%.
+//
+// Pair it with RC_SCATTER_SKIP=9 to split the sweep again, into arithmetic
+// and commit. The three builds decompose encode completely:
+//
+//   RC_PROBE_MODELONLY=1        model
+//   RC_SCATTER_SKIP=9           model + sweep arithmetic
+//   (neither)                   model + sweep arithmetic + commit
+#ifndef RC_PROBE_MODELONLY
+#define RC_PROBE_MODELONLY 0
 #endif
 
 // Bounds-check every byte the encoder writes into its substream buffer. The
