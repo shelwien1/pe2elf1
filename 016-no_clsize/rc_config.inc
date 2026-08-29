@@ -427,6 +427,47 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_FOLD_RPRE 0
 #endif
 
+// 1 = fold pp[] into the counter step. The model carries {p:16, state:16} per
+// context instead of a bare state, and FSM2[state*2+bit] (a dword, still ONE
+// scaled index) already holds the next state's probability -- so the step
+// reads one table where it read two, and the probability arrives WITH the
+// counter instead of one dependent load later.
+//
+// Stream-neutral: identical p, identical states, identical output.
+//
+// Set per MODEL, because the two disagree. The decoder is chain-bound: its
+// per-bit critical path is the cty load, then pp[state] whose address is that
+// load's result, then the multiply, the compare and the context update. Taking
+// the second load off that chain is worth ~18% on BOTH targets, and a probe
+// that breaks only that load (p computed from state, so the stream diverges but
+// the shape does not) says 20.3% is the ceiling.
+//
+// The encoder's model pass is rename-bound, not chain-bound, and clang
+// micro-fuses `add pp(,%state,2),%p` into one instruction -- so the load being
+// removed was never costing an instruction slot, and what happens instead is
+// target-dependent codegen luck:
+//
+//   -march=skylake        (AVX2)     encode +2.71%   decode +17.97%
+//   -march=native         (AVX-512)  encode -4.39%   decode +18.26%
+//
+// The AVX-512 loss is SLP: with p arriving as a dword, clang decides to build
+// the eight {bit,p} pairs of a byte into vectors -- 16 `vpinsrd` and 10 `vmovd`
+// per input byte, all port 5 -- to merge eight 2-byte pbit stores into two wide
+// ones. It is not a knob away: `-fno-slp-vectorize` also scalarises the coding
+// sweep (-63.9%), and clang does not forward it to the LTO backend anyway.
+// So the encoder keeps the plain counter there and the decoder takes the win.
+#ifndef RC_FUSE_PP_ENC
+#if defined(__clang__) && defined(__AVX512F__)
+#define RC_FUSE_PP_ENC 0
+#else
+#define RC_FUSE_PP_ENC 1
+#endif
+#endif
+
+#ifndef RC_FUSE_PP_DEC
+#define RC_FUSE_PP_DEC 1
+#endif
+
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
 // prefix below is the difference between it and the low accumulator.

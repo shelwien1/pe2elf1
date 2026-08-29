@@ -1,11 +1,11 @@
 
 template<>
-struct Model<0> : Coroutine, Predictor {
+struct Model<0> : Coroutine, PredictorE {
   static const uint f_DEC=0;
 
   typedef RCio<BLKSIZE,RCNUM> t_RCio;
 
-  ALIGN(64) Counter stats[0x100];   // order0
+  ALIGN(64) t_Counter stats[0x100];   // order0
 
   ALIGN(4096) t_RCio rcio;
 
@@ -31,7 +31,7 @@ struct Model<0> : Coroutine, Predictor {
   ALIGN(64) t_RC_safe rcY;
 
   uint Init( void* p ) {
-    return Predictor::Init(p);
+    return PredictorE::Init(p);
   }
 
   // One full scalar coding pass over the cached block. Both scalar coders
@@ -129,7 +129,7 @@ struct Model<0> : Coroutine, Predictor {
     for( i=0; i<blksize; i++ ) {
       c = *ip++;                          // get0(), against the local cursor
       for( j=0; j<8; j++ ) {
-        P_S_L(lctx,state); p=pp[state];
+        P_S_L(lctx,state); p=P_P(state);
         bit = (c>>(7-j))&1;
         pbit[i*8+j] = (bit<<15)+p;
         P_update_L( lctx, state, bit );

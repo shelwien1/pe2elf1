@@ -1,9 +1,9 @@
 
 template<>
-struct Model<1> : Coroutine, Predictor {
+struct Model<1> : Coroutine, PredictorD {
   static const uint f_DEC=1;
 
-  ALIGN(64) Counter stats[0x100];   // order0
+  ALIGN(64) t_Counter stats[0x100];   // order0
 
   ALIGN(4096) RCio<BLKSIZE,RCNUM> rcio;
 
@@ -72,7 +72,7 @@ struct Model<1> : Coroutine, Predictor {
         for( i=0; i<nb1; i+=RCNUM ) {
           RC_UNROLL
           for( j=0; j<RCNUM; j++ ) {
-            P_S(state); p=pp[state];
+            P_S(state); p=P_P(state);
 #if RC_VEC
             rc_Process( j, p, bit );
 #else
@@ -84,7 +84,7 @@ struct Model<1> : Coroutine, Predictor {
         }
         for( i=nb1; i<blksize*8; i++ ) {
           j = i % RCNUM;
-          P_S(state); p=pp[state];
+          P_S(state); p=P_P(state);
 #if RC_VEC
           rc_Process( j, p, bit );
 #else
@@ -97,7 +97,7 @@ struct Model<1> : Coroutine, Predictor {
 #else
       for( i=0; i<blksize*8; i++ ) {
         j = i % RCNUM;
-        P_S(state); p=pp[state];
+        P_S(state); p=P_P(state);
 #if RC_VEC
         rc_Process( j, p, bit );
 #else
