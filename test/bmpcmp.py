@@ -39,7 +39,7 @@ def read_bmp(path):
     else:
         rows = unrle(data[off_bits:], width, height, used, 8 if compression == 1 else 4)
     return dict(width=width, height=height, bpp=bpp, palette=palette, rows=rows,
-                planes=planes)
+                planes=planes, compression=compression)
 
 
 def unrle(data, width, height, used, bpp):
@@ -115,6 +115,12 @@ def compare(path_a, path_b):
     for key in ("width", "height", "bpp"):
         if a[key] != b[key]:
             return "%s differs: %s vs %s" % (key, a[key], b[key])
+    # The rows are expected to come back the way the source had them.  Stored rows
+    # are the one allowed substitution: the writer falls back to them when the
+    # run-length encoding would come out larger than the pixels it encodes.
+    if b["compression"] not in (a["compression"], 0):
+        return "row encoding differs: source %d, decoded %d" % (
+            a["compression"], b["compression"])
     if a["bpp"] <= 8:
         # The coder always writes a full palette; the source may have declared a
         # shorter one, so only the entries the source actually carried are compared.

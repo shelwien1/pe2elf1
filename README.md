@@ -115,6 +115,17 @@ remove, and the transform's chroma planes need a ninth bit, which widens the
 dynamic range of the whole cube. The option is there because the trade-off
 depends on the image and the measurement was made on a synthetic corpus.
 
+### Row encoding (decompression)
+
+    --rle              write run-length encoded rows
+    --no-rle           write stored rows
+
+By default the rows come back the way the source had them, which is what makes a
+round trip reproduce the original file and not just its pixels. When the source
+was run-length encoded the writer re-encodes it; when the encoding would come out
+larger than the pixels it encodes, it falls back to stored rows on its own, so
+asking for `--rle` is never a way to make the file bigger.
+
 Permuting the colour planes to put green first — so that blue and red are both
 predicted from it — was measured too, and came out level. The planes are coded
 in the order the bytes sit in a BMP pixel.
@@ -145,7 +156,8 @@ BMP was turned into a cube.
 0    "CCB1"
 4    u8    bits per pixel
 5    u8    flags: 1 unpacked sub-byte source, 2 palette,
-                  4 row padding table, 8 colour transform
+                  4 row padding table, 8 colour transform,
+                  16 run-length encoded rows
 6    u16   width           (little endian)
 8    u16   height
 10   u16   palette entries
@@ -157,13 +169,18 @@ BMP was turned into a cube.
 ## Losslessness
 
 `make check` round trips the corpus in `test/bmp` through fourteen coder
-settings and asserts two things per run.
+settings and asserts three things per run.
 
 The decoded BMP depicts the same image as the source: same geometry, same
-palette, same pixels. It is not compared byte for byte with the source, because
-the coder rebuilds the file header rather than carrying the original's — an RLE
-source comes back stored plainly, a short declared palette comes back full, and
-the resolution fields come back zero.
+palette, same pixels. Its rows are encoded the way the source's were, stored or
+run-length encoded — the one allowed substitution being stored rows in place of
+an encoding that would have come out larger.
+
+It is still not compared byte for byte with the source in general, because the
+coder rebuilds the file header rather than carrying the original's: a short
+declared palette comes back full, and the resolution fields come back zero. For
+a source whose header the writer would have produced anyway, the round trip does
+reproduce the file exactly.
 
 Then that decoded BMP, coded and decoded again, comes back byte for byte
 identical. Once a BMP has been through the coder it is a fixed point, padding

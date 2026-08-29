@@ -86,6 +86,66 @@ def noise24(width, height):
     return rows[::-1]
 
 
+def rle8_encode(rows):
+    """Rows top-down to a BI_RLE8 stream, which the file stores bottom-up.
+
+    Deliberately not the encoding the coder's own writer would choose -- runs are
+    emitted greedily and literals only when a run would not pay -- so the reader
+    is tested against a stream it did not produce.
+    """
+    out = bytearray()
+    for row in reversed(rows):
+        x = 0
+        while x < len(row):
+            n = 1
+            while x + n < len(row) and row[x + n] == row[x] and n < 255:
+                n += 1
+            if n >= 3:
+                out += bytes((n, row[x]))
+                x += n
+                continue
+            lit = [row[x]]
+            x += 1
+            while x < len(row) and len(lit) < 255:
+                n = 1
+                while x + n < len(row) and row[x + n] == row[x] and n < 4:
+                    n += 1
+                if n >= 3:
+                    break
+                lit.append(row[x])
+                x += 1
+            if len(lit) >= 3:
+                out += bytes((0, len(lit))) + bytes(lit)
+                if len(lit) & 1:
+                    out += b"\0"
+            else:
+                for v in lit:
+                    out += bytes((1, v))
+        out += bytes((0, 0))
+    out += bytes((0, 1))
+    return bytes(out)
+
+
+def rle4_encode(rows):
+    """Rows top-down to a BI_RLE4 stream.  Runs only, alternating two nibbles."""
+    out = bytearray()
+    for row in reversed(rows):
+        x = 0
+        while x < len(row):
+            n = 1
+            while x + n < len(row) and row[x + n] == row[x + (n & 1)] and n < 254:
+                n += 1
+            if n < 2:
+                n = 1
+            hi = row[x]
+            lo = row[x + 1] if n > 1 else row[x]
+            out += bytes((n, (hi << 4) | (lo & 0xF)))
+            x += n
+        out += bytes((0, 0))
+    out += bytes((0, 1))
+    return bytes(out)
+
+
 def main(out_dir):
     os.makedirs(out_dir, exist_ok=True)
     p = lambda name: os.path.join(out_dir, name)
@@ -135,9 +195,10 @@ def main(out_dir):
               for y in range(32)]
     write_bmp(p("mono1even.bmp"), 48, 32, 1, rows1e[::-1], palette=pal1)
 
-    # A run-length encoded 8 bpp source: the reader has to expand it, and what
-    # comes back out is the same pixels stored plainly.
-    #   rows of a flat colour, 16 wide, 8 tall
+    # Run-length encoded sources.  The reader has to expand these, and the writer
+    # has to put them back: a round trip is expected to reproduce the source's row
+    # encoding, not just its pixels.
+    #   flat rows, the simplest case
     rle = bytearray()
     for y in range(8):
         rle += bytes((16, y * 3))          # a run of 16 pixels
@@ -145,6 +206,32 @@ def main(out_dir):
     rle += bytes((0, 1))                   # end of bitmap
     write_bmp(p("rle8.bmp"), 16, 8, 8, None, palette=pal8, compression=BI_RLE8,
               pixel_data=bytes(rle))
+
+    #   runs and literal stretches together, at a width that is not a multiple of
+    #   four, and with runs longer than the 255 a single opcode can carry
+    rows = []
+    for y in range(37):
+        row = []
+        x = 0
+        while x < 300:
+            if (x // 7 + y) % 3:
+                n = min(300 - x, 4 + (x + y) % 260)    # a run, sometimes over 255
+                row += [(x + y * 5) % 256] * n
+                x += n
+            else:
+                n = min(300 - x, 5 + (y % 4))          # a literal stretch
+                row += [(x + k * 31 + y) % 256 for k in range(n)]
+                x += n
+        rows.append(row)
+    write_bmp(p("rle8mix.bmp"), 300, 37, 8, None, palette=pal8, compression=BI_RLE8,
+              pixel_data=rle8_encode(rows))
+
+    #   the four bit encoding, which pairs pixels into every opcode.  Long runs,
+    #   so the encoding is actually smaller than storing the rows -- the writer
+    #   falls back to stored rows when it is not, and then there is no RLE4 to test.
+    rows4 = [[(x // 17 + y // 3) % 16 for x in range(90)] for y in range(21)]
+    write_bmp(p("rle4.bmp"), 90, 21, 4, None, palette=pal4, compression=BI_RLE4,
+              pixel_data=rle4_encode(rows4))
 
     names = sorted(os.listdir(out_dir))
     print("wrote %d files into %s" % (len(names), out_dir))

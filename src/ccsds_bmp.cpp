@@ -45,6 +45,7 @@ enum : uint8_t {
   cc_palette = 0x02,
   cc_row_pad = 0x04,    // an explicit table of the rows' padding bits follows
   cc_rct = 0x08,        // the colour planes were run through the reversible transform
+  cc_rle = 0x10,        // the source BMP stored its rows run-length encoded
 };
 
 struct CcHeader {
@@ -88,6 +89,9 @@ struct Options {
   int32_t w_final;
   // Container
   int32_t rct;
+  // Decompression: -1 writes the rows back the way the source had them, 0 forces
+  // them stored, 1 forces them run-length encoded.
+  int32_t rle;
   int32_t verbose;
 };
 
@@ -109,6 +113,7 @@ void options_defaults(Options* o) {
   o[0].w_initial = -2;
   o[0].w_final = 5;
   o[0].rct = 0;
+  o[0].rle = -1;
   o[0].verbose = 0;
 }
 
@@ -153,7 +158,14 @@ const char usage_text[] =
   "                           YCoCg-R transform before prediction.  Off by default:\n"
   "                           CCSDS 123 learns the inter-band weights itself, and on\n"
   "                           every image measured the transform came out larger\n"
-  "      --no-rct             code the colour planes as they are (default)\n";
+  "      --no-rct             code the colour planes as they are (default)\n"
+  "\n"
+  "decompression:\n"
+  "      --rle                write run-length encoded rows\n"
+  "      --no-rle             write stored rows\n"
+  "                           by default the rows come back the way the source had\n"
+  "                           them, which is what makes a round trip reproduce the\n"
+  "                           original file byte for byte rather than just its pixels\n";
 
 void usage(FILE* to) {
   fputs(usage_text, to);
@@ -554,6 +566,24 @@ void image_from_samples(BmfImage* img, const CubeShape* s, const uint16_t* sampl
   }
 }
 
+// The compression field of a BMP's info header, or -1 if the file does not have
+// one to read.  bmp.inc's reader decodes run-length encoded rows into plain ones
+// and does not say that it did, but the writer can put them back, so the coder
+// asks the file itself rather than modifying the reader.
+int32_t bmp_compression(const char* path) {
+  FILE* fp = fopen(path, "rb");
+  if( !fp )
+    return -1;
+  uint8_t head[34];
+  const bool got = fread(head, 1, sizeof head, fp)==sizeof head;
+  fclose(fp);
+  if( !got||head[0]!='B'||head[1]!='M' )
+    return -1;
+  uint32_t compression;
+  memcpy(&compression, head+30, sizeof compression);
+  return (int32_t)compression;
+}
+
 // ---------------------------------------------------------------------------
 // Container header
 
@@ -673,6 +703,10 @@ int32_t compress(const char* in_path, const char* out_path, const Options* o) {
     head.flags |= cc_unpacked;
   if( shape.rct )
     head.flags |= cc_rct;
+  // bmp_rgb is 0; anything else is one of the run-length encodings, which the
+  // writer picks by depth, so which one it was does not have to be recorded.
+  if( bmp_compression(in_path)>0 )
+    head.flags |= cc_rle;
   if( img[0].depth&depth_palette ) {
     head.flags |= cc_palette;
     head.pal_entries = (uint16_t)(1u<<(bpp&31));
@@ -795,8 +829,9 @@ int32_t compress(const char* in_path, const char* out_path, const Options* o) {
 
   if( o[0].verbose ) {
     fprintf(stderr, "%s -> %s\n", in_path, out_path);
-    fprintf(stderr, "  bmp         %u x %u, %d bpp%s%s\n", img[0].width, img[0].height, bpp,
-            (img[0].depth&depth_palette) ? ", palette" : "", shape.rct ? ", colour transform" : "");
+    fprintf(stderr, "  bmp         %u x %u, %d bpp%s%s%s\n", img[0].width, img[0].height, bpp,
+            (img[0].depth&depth_palette) ? ", palette" : "", shape.rct ? ", colour transform" : "",
+            (head.flags&cc_rle) ? ", run-length encoded rows" : "");
     describe(&in_params, &pred_params, &enc_params);
     const double pixels = (double)img[0].width*img[0].height;
     fprintf(stderr, "  stream      %ld bytes, %.4f bits/pixel, %.4f bits/sample\n",
@@ -897,14 +932,19 @@ int32_t decompress(const char* in_path, const char* out_path, const Options* o) 
     memcpy(img[0].palette(), palette, (size_t)3*head.pal_entries);
   free(samples);
 
-  const int32_t ok = write_bmp(img, (char*)out_path, 0);
+  // Rows go back the way the source had them unless asked otherwise.  write_bmp
+  // falls back to stored rows on its own when the encoding would come out larger,
+  // so asking for it is never a way to make the file worse.
+  const int32_t want_rle = o[0].rle<0 ? ((head.flags&cc_rle) ? 1 : 0) : o[0].rle;
+  const int32_t ok = write_bmp(img, (char*)out_path, want_rle);
   if( !ok )
     fprintf(stderr, "error: cannot write %s\n", out_path);
 
   if( ok&&o[0].verbose ) {
     fprintf(stderr, "%s -> %s\n", in_path, out_path);
-    fprintf(stderr, "  bmp         %u x %u, %d bpp%s%s\n", img[0].width, img[0].height, head.bpp,
-            head.pal_entries ? ", palette" : "", shape.rct ? ", colour transform" : "");
+    fprintf(stderr, "  bmp         %u x %u, %d bpp%s%s%s\n", img[0].width, img[0].height, head.bpp,
+            head.pal_entries ? ", palette" : "", shape.rct ? ", colour transform" : "",
+            want_rle ? ", run-length encoded rows" : "");
     describe(&in_params, &pred_params, nullptr);
   }
 
@@ -976,6 +1016,10 @@ int main(int argc, char** argv) {
       o.rct = 1;
     } else if( !strcmp(arg, "--no-rct") ) {
       o.rct = 0;
+    } else if( !strcmp(arg, "--rle") ) {
+      o.rle = 1;
+    } else if( !strcmp(arg, "--no-rle") ) {
+      o.rle = 0;
     } else if( !strcmp(arg, "-k")||!strcmp(arg, "--k") ) {
       ok = opt_value(argc, argv, &i, inline_at, &o.k);
     } else if( !strcmp(arg, "--u-max") ) {

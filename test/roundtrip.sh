@@ -84,6 +84,35 @@ for bmp in "$bmps"/*.bmp; do
   done
 done > "$work/log" 2>&1
 
+# The row encoding is a decompression-time choice, so it gets its own pass: the
+# default reproduces the source's, and either can be forced.
+{
+  printf 'row encoding overrides\n'
+  for bmp in "$bmps"/*.bmp; do
+    name=$(basename "$bmp" .bmp)
+    stream=$work/enc.$name.cc
+    $bin c "$bmp" "$stream" >/dev/null 2>&1 || continue
+    for opt in --rle --no-rle; do
+      out=$work/enc.$name$opt.bmp
+      if ! $bin d $opt "$stream" "$out" >/dev/null 2>&1; then
+        printf '  FAIL %-24s %-8s decompression failed\n' "$name" "$opt"
+        continue
+      fi
+      # bmpcmp compares pixels; the encoding itself is read straight out of the
+      # info header, since forcing one is exactly what is under test here.
+      got=$(python3 -c "import struct,sys; print(struct.unpack_from('<I', open(sys.argv[1],'rb').read(), 30)[0])" "$out")
+      want_stored=$([ "$opt" = "--no-rle" ] && echo yes || echo no)
+      if ! python3 "$root/test/bmpcmp.py" "$bmp" "$out" >/dev/null 2>&1; then
+        printf '  FAIL %-24s %-8s pixels differ\n' "$name" "$opt"
+      elif [ "$want_stored" = yes ] && [ "$got" != 0 ]; then
+        printf '  FAIL %-24s %-8s wanted stored rows, got %s\n' "$name" "$opt" "$got"
+      else
+        printf '  ok   %-24s %-8s compression %s\n' "$name" "$opt" "$got"
+      fi
+    done
+  done
+} >> "$work/log" 2>&1
+
 cat "$work/log"
 runs=$(grep -c '^  \(ok\|FAIL\) ' "$work/log")
 fails=$(grep -c '^  FAIL ' "$work/log")
