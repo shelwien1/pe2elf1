@@ -486,6 +486,57 @@ The accumulator knobs are not an alternative -- `RC_LOWSPLIT=0` costs the same
 two ymm per eight lanes that `lowl`+`lowh` do, and `RC_LOWBYTES` below 7 makes
 the carry fallback fire constantly.
 
+## 9d. clang 23.1.0 against clang 18.1.3 -- a 6-7% regression
+
+The official `LLVM-23.1.0-Linux-X64` release build, against the Ubuntu 24.04
+system clang 18.1.3, same source, same flags. 20 MB of enwik8, medians of
+best-of-6 over 8 round-robin runs, with a copy of the clang-18 binary in the
+rotation as the noise control.
+
+| build | AVX2 `-march=skylake` | AVX-512 `-march=native` |
+|---|---|---|
+| clang 18.1.3, `-O3 -flto` (build.sh default) | 73.84 | 81.71 |
+| clang 23.1.0, `-O3 -flto` | 68.41 (**-7.36%**) | 76.72 (**-6.11%**) |
+| *control* -- the clang-18 binary again | +0.53% | +0.57% |
+
+All four binaries produce a byte-identical stream, decode their own output,
+and match the `-C` scalar reference.
+
+**It is not a lost transform.** The AVX2 sweep loop is 143 instructions / ~156
+fused uops under clang 23 against 145 / ~157 under clang 18 -- and 864 bytes
+against 908, spanning 27 32-byte lines instead of 29, with the loop head
+32-byte aligned instead of 16. Same 16 payload stores, same 11 spill stores,
+same two `vpmulld`. The AVX-512 build still forms both `vpscatterdd` and still
+runs 256-bit. By every static measure clang 23's loop should be the faster one;
+it runs about 20% slower.
+
+**And it is in the sweep, not the model pass.** `-C` -- the model pass plus the
+scalar reference coder -- is 28.54 against 28.77 MB/s, i.e. unchanged. The
+model pass is ~22% of that path's time, so a regression of this size there
+would have shown. Nor is it a stack-offset artifact: the gap holds within half
+a percent across seven environment paddings that walk the frame's page offset.
+
+**On AVX2, most of it is LTO-specific.** Medians of best-of-5 over 5 rounds:
+
+| | AVX2 | AVX-512 |
+|---|---|---|
+| clang 18, `-flto` | 73.30 | 81.76 |
+| clang 18, no LTO | 72.90 (-0.55%) | 79.48 (-2.79%) |
+| clang 23, `-flto` | 68.48 (-6.58%) | 76.20 (-6.80%) |
+| clang 23, `-O2 -flto` | 70.90 (-3.27%) | -- |
+| clang 23, no LTO | **71.85 (-1.98%)** | 76.76 (-6.12%) |
+
+LTO is worth +0.55% to clang 18 on AVX2 and costs clang 23 4.6%; on AVX-512 it
+is worth +2.8% to clang 18 and nothing either way to clang 23. So the best
+clang 23 build here is `LTO=0 ./build.sh`, and it is still 2% behind the clang
+18 default on AVX2 and 6% behind on AVX-512.
+
+Nothing to act on in the source -- the codegen difference is scheduling and
+register allocation inside a loop whose shape did not change. Recorded so the
+next person who upgrades a toolchain and sees the encoder slow down knows it
+is the compiler and not their edit. `build.sh` takes `CXX`, so
+`CXX=/path/to/clang++ LTO=0 ./build.sh` reproduces the best of the above.
+
 ## 10. What is left
 
 Encode is 89.46 cyc/grp: **51.41 model pass (57%)**, 38.06 sweep (43%). Of the

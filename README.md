@@ -82,6 +82,12 @@ with one `vpscatterdd`. It turns on by itself for clang + AVX-512 at
 `RCNUM%16==0`, and is off everywhere else, where staging would only cost.
 The stream does not change either way -- `t.sh` checks that.
 
+`build.sh` takes `CXX`, so a different toolchain is one variable away. Newer is
+not faster here: clang 23.1.0 builds a byte-identical stream 7.4% slower than
+clang 18.1.3 on AVX2 and 6.1% slower on AVX-512, from a sweep loop that is two
+instructions *shorter*. `misc/avx2_profile.md` section 9d has the numbers and
+the localization.
+
 `misc/avx2_profile.md` is the measured breakdown of where encode time goes on
 the AVX2 target -- the model pass against the rename ceiling, the sweep against
 rename and the ALU ports at once, what the store costs and why staging it wins
