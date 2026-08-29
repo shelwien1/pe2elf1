@@ -415,6 +415,47 @@ measuring them alongside. Round-robin medians put both at exactly baseline
 this document under ~1% should be read as a no-op unless a control was
 measured with it.
 
+## 9c. Annotating the AVX2 listing, and the one thing it suggested
+
+`misc/model0_process_skl.asm` is the disassembly of `Model<0>::do_process`
+from the Windows clang-18 `-march=skylake` build, annotated block by block.
+Its accounting of the sweep:
+
+    145 instructions per group of 16 coded bits
+     29 stores = 16 payload (RC_FLUSHALL) + 13 spills
+     30 loads  = 2 pbit + 14 staged-array reloads + 14 spill reloads
+    ~17 p5 uops, ~158 fused uops
+
+against the 38.06 cyc/grp of section 10: ~4.1 fused uops/cycle on a 4-wide
+rename, with the store port at 76% and p5 at 45%. Same conclusion as
+sections 2 and 7, now from the instruction stream rather than from probes.
+27 of those ~158 uops are spill traffic, because the live vector state is 19
+ymm (six lane arrays x 2, the stcl/stad staging x 2, three constants) in a
+16-register file.
+
+One candidate came out of reading it and was measured:
+
+**Not taken: reading `pbit` as signed.** The bit test spends 4 p5 uops per
+group -- two `vpmovzxwd` to widen `p` and two `vpmovsxwd` to widen the bit
+mask -- widening the same load twice. One `vpmovsxwd ymm, m128` per half
+would serve both, `vpand 0x7fff` for `p` and `vpsrad 31` for the mask.
+Reading the pair through a `const short*` in the sweep does not get clang
+there: it keeps both widenings and adds a `vpcmpgtw`. Stream byte-identical,
+and **2.1% slower** -- 71.80 against 73.34 MB/s, medians of best-of-6 over 6
+round-robin runs on 20 MB. (Those absolute numbers are from a later container
+than section 8's; only the ratio carries.)
+
+The item worth having is the one that is not reachable by rewording the
+sweep: apply `rc_Process`'s `rpre` to `low` immediately instead of deferring
+it to the next `ShiftLow`. Nothing reads `low` in between, so it is the same
+arithmetic in the same order -- the carry detection and the FFNum mask move
+from `ShiftLow` into `rc_Process` -- but `rpre` stops being loop-carried and
+two ymm come free. Unmeasured: `rc_Process` is shared with the decoder, which
+needs `rpre` for `code -= rpre`, so it wants an `RC_VECOUT`-only variant.
+The accumulator knobs are not an alternative -- `RC_LOWSPLIT=0` costs the
+same two ymm per eight lanes that `lowl`+`lowh` do, and `RC_LOWBYTES` below 7
+makes the carry fallback fire constantly.
+
 ## 10. What is left
 
 Encode is 89.46 cyc/grp: **51.41 model pass (57%)**, 38.06 sweep (43%). Of the
@@ -430,7 +471,11 @@ In rough order of what is actually available:
    executable.)
 2. The commit's 7-9 cyc/grp. Section 7 says what is and is not known about it;
    the two obvious ways in both lose.
-3. The model pass is the majority of encode and pinned at the rename ceiling.
+3. Freeing `rpre` from the sweep's live set -- section 9c. Two ymm out of a
+   19-ymm working set in a 16-register file, which is where the sweep's 27
+   uops of spill traffic come from. Unmeasured, and it needs an
+   `RC_VECOUT`-only `rc_Process`.
+4. The model pass is the majority of encode and pinned at the rename ceiling.
    Only a shorter instruction stream moves it; every layout experiment here
    (fusing the tables, prefetching, chunking) lost, and every win so far has
    been addressing-mode, aliasing or register pressure -- never the algorithm.
