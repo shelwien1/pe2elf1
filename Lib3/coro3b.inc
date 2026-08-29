@@ -106,7 +106,6 @@ struct Coroutine {
 
   byte get0( void ) { return pin[0].get0(); }
   void put0( uint c ) { pin[1].put0(c); }
-  void put0w( uint w ) { pin[1].put0w(w); }
 
   uint getinplen() { return pin[0].getinplen(); } //-V110
   uint getoutlen() { return pin[1].getoutlen(); } //-V110

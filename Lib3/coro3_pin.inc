@@ -30,11 +30,6 @@ struct coro3_pin: coro3_pin_0 {
   byte get0( void ) { return *ptr++; }
   void put0( uint c ) { *ptr++ = c; }
 
-  // Two bytes at once, low byte first. The decoder's group is RCNUM/8 output
-  // bytes and they finish together, so the pair is one store rather than two.
-  // Unchecked like put0 -- the caller does the one chkout per block.
-  void put0w( uint w ) { (word&)*ptr = w; ptr += 2; }
-
   uint get( void ) { 
     m0:
     if_e0( ptr>=end ) {

@@ -42,4 +42,18 @@ perl ../Lib3/defines.pl  rc_kernel1_macro.c
 mv rc_kernel1_macro_D.c rc_vecD.inc
 rm -f rc_kernel1_macro.c rc_kernel1_macro_U.c
 
+# Lib3 is shared and syncs separately from this directory, and a stale
+# rc_soa.pl produces a kernel that COMPILES -- it just hardcodes
+# ALIGN(VECSIZE) and ignores SOA_FOLD, so RC_DEC_ALIGN and RC_FF_LANES
+# silently do nothing. Fail here instead, where the cause is obvious.
+for feat in RC_KALIGN RC_FOLD; do
+  grep -q "$feat" rc_vecD.inc || {
+    echo "mk_kernel.sh: ../Lib3/rc_soa.pl is out of date -- the generated" >&2
+    echo "  kernel has no $feat. Sync Lib3 with this directory; an old" >&2
+    echo "  generator builds fine and quietly ignores RC_DEC_ALIGN and" >&2
+    echo "  RC_FF_LANES." >&2
+    exit 1
+  }
+done
+
 echo "generated rc_vecD.inc from rc.inc"

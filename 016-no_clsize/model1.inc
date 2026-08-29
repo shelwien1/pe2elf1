@@ -17,6 +17,14 @@ struct Model<1> : Coroutine, PredictorD {
   // the unchecked put0 and only calls chkout() once, at the block boundary.
   static_assert( int(outbufsize)>=int(BLKSIZE), "outbufsize must be at least BLKSIZE" );
 
+  // RC_DEC_PUTW's paired output store. Defined here rather than in Lib3
+  // because Lib3 is shared with other projects and syncs separately -- a knob
+  // in this directory must not need a matching Lib3. Both coroutine headers
+  // expose outptr (coro3b.inc has it in the union pin[] aliases, so this is
+  // the same cursor put0 advances), and put0 is *outptr++ = c with the one
+  // chkout per block done by the caller, so the pair is unchecked the same way.
+  void put0pair( uint w ) { (word&)*outptr = w; outptr += 2; }
+
   NOINLINE
   void do_process() {
     uint c,i,j,bit=0,p,blksize,state;
@@ -127,7 +135,7 @@ struct Model<1> : Coroutine, PredictorD {
             }
 #if RC_DEC_PUTW
             RC_UNROLL
-            for( uint m=0; m<NB; m+=2 ) put0w( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
+            for( uint m=0; m<NB; m+=2 ) put0pair( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
 #else
             RC_UNROLL for( uint m=0; m<NB; m++ ) put0( lctx[m]&0xFF );
 #endif
@@ -198,7 +206,7 @@ struct Model<1> : Coroutine, PredictorD {
             // hold the first across its eight bits and store the pair once.
             // j is constant here, so the (j&8) test folds away.
             if( (j&7)==7 ) { P_byte(stats,c);
-              if( (j&8)==0 ) cpair = c; else put0w( cpair + (c<<8) ); }
+              if( (j&8)==0 ) cpair = c; else put0pair( cpair + (c<<8) ); }
 #else
             if( (j&7)==7 ) { P_byte(stats,c); put0(c); }
 #endif
