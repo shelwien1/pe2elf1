@@ -82,6 +82,12 @@ with one `vpscatterdd`. It turns on by itself for clang + AVX-512 at
 `RCNUM%16==0`, and is off everywhere else, where staging would only cost.
 The stream does not change either way -- `t.sh` checks that.
 
+`misc/speed_plan.md` is what to try next, ranked: it starts from the fact that
+decode costs 1.86x what encode does and has never been profiled, and from the
+fact that `FSM0.txt` has 256 live states -- so the model's whole working set is
+2 KB, which retires the cache-footprint explanation two of the older negative
+results were written against.
+
 `build.sh` takes `CXX`, so a different toolchain is one variable away. Newer is
 not faster here: clang 23.1.0 builds a byte-identical stream 7.4% slower than
 clang 18.1.3 on AVX2 and 6.1% slower on AVX-512, from a sweep loop that is two
