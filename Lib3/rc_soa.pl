@@ -47,7 +47,7 @@ while( $i < @L ) {
     if( $l =~ /^\s*(uint|qword|word|byte|rangetype)\s+(\w+(?:\s*,\s*\w+)*)\s*;/ ) {
       my ($t,$names) = ($1,$2);
       for my $n (split /\s*,\s*/, $names) { push @fields, $n; }
-      push @decl, "ALIGN(VECSIZE) $t ".join("[RCNUM], ", split /\s*,\s*/, $names)."[RCNUM];\n";
+      push @decl, "RC_KALIGN $t ".join("[RCNUM], ", split /\s*,\s*/, $names)."[RCNUM];\n";
       $i++; next;
     }
     # statics pass through as declarations
@@ -115,7 +115,7 @@ print $O <<"HDR";
 // f_DEC, sets tmpbase and tmpptr[], then drives the rc_* macros.
 // The substreams run BACKWARDS (sh_v1xN's arrangement): both cursors
 // decrement, see rc_io.inc.
-ALIGN(VECSIZE) uint tmpptr[RCNUM];
+RC_KALIGN uint tmpptr[RCNUM];
 byte* __restrict tmpbase;
 #define get1( k ) (tmpbase[tmpptr[k]--])
 #define put1( k, x ) (void)(tmpbase[tmpptr[k]--] = byte(x))

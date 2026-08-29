@@ -22,6 +22,7 @@ struct Coroutine {
   void put( uint c ) { *outptr++ = c; }
   byte get0( void ) { return *inpptr++; }
   void put0( uint c ) { *outptr++ = c; }
+  void put0w( uint w ) { (word&)*outptr = w; outptr += 2; }
 
   uint get4( void ) { 
     uint* __restrict ptr4 = (uint*)inpptr;

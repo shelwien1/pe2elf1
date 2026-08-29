@@ -158,7 +158,11 @@ struct Model<0> : Coroutine, PredictorE {
     // The generated coder: lane state as local arrays, methods as macros --
     // sh_v1xN's arrangement, from the same rc.inc as the scalar reference
     // and the carry twin. Locals, so the sweep's stores alias nothing.
+// The sweep reads and writes the lane arrays as vectors, so they carry vector
+// alignment. The decoder's copy does not -- see model1.inc.
+#define RC_KALIGN ALIGN(VECSIZE)
 #include "rc_vecD.inc"
+#undef  RC_KALIGN
     static_assert( KERNEL_CONF == RC_KERNEL_CONF,
       "rc_vecD.inc was generated against a different RC_* configuration than "
       "this build. Re-run mk_kernel.sh with the same -D set -- build.sh takes "

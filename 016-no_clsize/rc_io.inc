@@ -92,6 +92,12 @@ struct RCio {
   static const uint FF_PADSIZE = RC_FF_PADSIZE;
   static_assert( FF_PADSIZE >= RC_FF_TRIM + RC_LOWBYTES,
     "RC_FF_PADSIZE must cover RC_FF_TRIM plus the minimal flush's own tail" );
+#if RC_LOAD32
+  // RC_LOAD32's refill window reaches three bytes below the cursor, so the pad
+  // has to cover three more than the cursor itself can descend to.
+  static_assert( FF_PADSIZE >= RC_FF_TRIM + RC_LOWBYTES + 3,
+    "RC_LOAD32 reads tmpbase[tmpptr-3]; RC_FF_PADSIZE must cover it" );
+#endif
 
   // Worst case output for one lane: bits_per_lane (plus the 17 block-length
   // header bits, which all land in the low lanes) at SCALElog bits each, since

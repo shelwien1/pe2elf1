@@ -206,7 +206,9 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 262144*RC_SHIFT_SAT + 524288*RC_STATS            \
                        + 1048576*RC_VECSIZE + RC_BLKSIZE/16               \
                        + 4096*(RC_FF_TRIM&63)                     \
-                       + 33554432*RC_FOLD_RPRE )
+                       + 33554432*RC_FOLD_RPRE            \
+                       + 67108864*RC_LOAD32               \
+                       + 134217728*RC_DEC_COLD )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -551,6 +553,103 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #error "RC_CHUNK must be even"
 #endif
 #define RC_CHUNK_N ( RC_CHUNK ? RC_CHUNK : RC_BLKSIZE )
+
+// How the decoder's model loop is shaped. 0 = the member context, one byte at
+// a time (the original). 1 = the same order with a caller-held context. 2 = the
+// wavefront: the group's RCNUM/8 bytes stepped together, so their 8-step
+// context chains overlap instead of running end to end. See model1.inc and
+// misc/speed_plan_next.md 1.1/1.2. All three code the same stream.
+//
+// MEASURED, AND BOTH LOSE -- -march=skylake, decode, control +0.08%:
+//
+//   0  member ctx, byte at a time    405 insns/group    47.43 MB/s
+//   1  caller-held ctx               444                43.34   -8.62%
+//   2  wavefront                     447                45.20   -4.69%
+//
+// The premise of 1 holds: the member ctx really is 10 memory references per
+// group -- two loads of cty, two of ctx, four stores of ctx, two of the reset
+// constant -- because the store to cty[ctx] may-alias this->ctx and nothing
+// bounds a loaded index. It is just not what the loop is short of. Holding the
+// context in a register instead costs 39 instructions per group, only 7 of
+// them memory, in a loop that already carries 16 lanes of coder state; the
+// spills cost more than the 10 references did.
+//
+// And 2 is the interesting half. It is 1's loop with the two loops swapped and
+// nothing else, and it recovers 4 points of 1's 8.6 -- so the wavefront's
+// chain shortening is real and worth about +4%, on top of a prerequisite that
+// costs twice that. Which is the RC_EAGER_CTY result again in a different
+// shape: this decoder has no register budget left to buy latency with.
+#ifndef RC_DEC_WAVE
+#define RC_DEC_WAVE 0
+#endif
+
+// 1 = emit the group's output bytes as one 16-bit store instead of two. Under
+// RC_DEC_WAVE=2 they finish together; under 0 the first is held in a register
+// across its eight bits, which is one more live value and no more work.
+//
+// MEASURED, AND IT LOSES STANDALONE: -2.43% decode against a +0.11% control,
+// even though it takes 11 instructions and 16 loads out of the group loop.
+// Under RC_DEC_WAVE=0 the first byte has to be held across its eight bits, and
+// one more value live through half a group costs more than the store saves.
+// Under RC_DEC_WAVE=2, where the bytes finish together and nothing is held, it
+// is worth +1.6% -- but that build is 4.7% down for its own reasons.
+#ifndef RC_DEC_PUTW
+#define RC_DEC_PUTW 0
+#endif
+#if RC_DEC_PUTW && ( RC_DEC_WAVE==1 || (RC_RCNUM/8)%2 )
+#error "RC_DEC_PUTW needs RC_DEC_WAVE 0 or 2 and an even byte count per group"
+#endif
+
+// 1 = the decoder's byte refill reads one 32-bit window instead of one or two
+// separate bytes. The substream runs backwards, so the dword at tmpptr-3 holds
+// both cases in its top half -- b[q] is bits 24..31 and b[q-1]+b[q]<<8 is bits
+// 16..31 -- and one load hoisted above the branch replaces two loads and the
+// shift-or that assembled them. The fully unrolled decode loop stamps out
+// RCNUM copies of this, so the body shrinks by more than the hot path does.
+//
+// 2 = the same window, but read only inside the 2-byte branch instead of
+// hoisted above the test.
+//
+// LITTLE-ENDIAN ONLY, and deliberately not guarded on __BYTE_ORDER__: this
+// reaches the generator, and rc_vecD.inc must not depend on the target (see
+// RC_KERNEL_CONF below). Same arrangement as RC_SHIFT_SAT.
+//
+// MEASURED -- -march=skylake, decode, control +0.10%:
+//
+//   0  two byte loads      405 insns/group   46.88 MB/s
+//   1  hoisted window      456               42.09   -10.23%
+//   2  2-byte branch only  405               47.02    +0.31%
+//
+// 1 loses because hoisting makes the COMMON case pay: the 1-byte path went
+// from `movzbl (base,q)` folded into the add to a load plus a `shr $24`, and
+// it is the more frequent of the two. 2 keeps that path untouched and improves
+// the other, and comes out inside the noise -- the 2-byte case is too rare to
+// pay for a knob that assumes little-endian. Default 0.
+#ifndef RC_LOAD32
+#define RC_LOAD32 0
+#endif
+
+// 1 = tell the block placer the decoder's byte refill is really cold, so the
+// 16 unrolled copies sink out of the group loop body instead of sitting in it.
+// speed_plan_next.md 2.3: shrinking the body while KEEPING the full unroll is
+// the variant RC_DEC_UNROLL did not test.
+#ifndef RC_DEC_COLD
+#define RC_DEC_COLD 0
+#endif
+
+// 1 = the decoder's copy of the generated kernel keeps ALIGN(VECSIZE) on the
+// lane arrays. 0 drops it -- speed_plan_next.md 3. The decoder never touches
+// that state as a vector, and the alignment costs it `and rsp,-32`, a frame
+// pointer and rbp for the whole function.
+//
+// MEASURED, AND DROPPING IT LOSES: -1.42% decode against a -0.04% control.
+// The prologue really does lose the realignment and rbp really does come back
+// to the allocator, and the group loop still ends up 48 bytes longer. Which is
+// the sixth result in a row on this loop where the change did what it was
+// meant to and the clock disagreed.
+#ifndef RC_DEC_ALIGN
+#define RC_DEC_ALIGN 1
+#endif
 
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero

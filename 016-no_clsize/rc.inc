@@ -330,8 +330,54 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     if( f_DEC==1 ) {
       code -= rpre;
       rpre = 0;
+      // RC_DEC_COLD strengthens the hint: if_e0 is expect(x,0), which clang
+      // reads as ~10% and is not enough to sink 16 unrolled copies of the
+      // refill out of the loop body. ~91% of bits take neither branch.
+#if RC_DEC_COLD
+      if( __builtin_expect_with_probability( range<sTOP, 0, 0.99 ) ) {
+#else
       if_e0( range<sTOP ) {
+#endif
         uint _q = tmpptr;
+#if RC_LOAD32
+        // The substream runs backwards, so the two bytes the 2-byte case wants
+        // are the top two of the little-endian dword at _q-3, and the one byte
+        // the 1-byte case wants is its top byte. One load covers both, hoisted
+        // above the branch, with no masking and no shift-or to assemble it.
+        // See the pad assert in rc_io.inc for the three bytes below _q.
+        //
+        // NOT `(const uint&)`: a C-style cast to a CONST reference from a byte
+        // lvalue is a static_cast to a temporary -- the byte widened to uint,
+        // silently -- because binding a const lvalue reference to a converted
+        // temporary is a valid conversion and is tried before reinterpret_cast.
+        // A non-const uint& cannot bind to a temporary, so it reinterprets,
+        // which is why the encoder's `(uint&)tmpbase[...] = cl` works.
+#if RC_LOAD32==2
+        // ... but only in the 2-byte branch. Hoisting the window above the
+        // test makes the COMMON 1-byte case pay a shift it did not need, and
+        // that case is the more frequent of the two.
+        if_e0( range<gTOP ) {
+          range <<= 16;
+          code = (code<<16) + ((uint&)tmpbase[_q-3] >> 16);
+          tmpptr = _q-2;
+        } else {
+          range <<= 8;
+          code = (code<<8) + tmpbase[_q];
+          tmpptr = _q-1;
+        }
+#else
+        uint _w = (uint&)tmpbase[_q-3];
+        if_e0( range<gTOP ) {
+          range <<= 16;
+          code = (code<<16) + (_w>>16);
+          tmpptr = _q-2;
+        } else {
+          range <<= 8;
+          code = (code<<8) + (_w>>24);
+          tmpptr = _q-1;
+        }
+#endif
+#else
         if_e0( range<gTOP ) {
           range <<= 16;
           code = (code<<16) + (uint(tmpbase[_q])<<8) + tmpbase[_q-1];
@@ -341,6 +387,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
           code = (code<<8) + tmpbase[_q];
           tmpptr = _q-1;
         }
+#endif
       }
     }
   }
@@ -437,8 +484,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // Seed the staging at where the first ShiftLow's store would land anyway:
     // the row's zero prefix, which rc_Write drops. Keeps a commit before the
     // first ShiftLow -- there is none today -- from writing somewhere it
-    // should not. A no-op when the build is not staging.
-    RC_STAGE_INIT( rcidx, tmpptr-2 );
+    // should not. A no-op when the build is not staging, and encoder-only in
+    // any case: in the decoder tmpptr indexes the INPUT row, so tmpptr-2 is
+    // not an address anything should be seeded with. Dead either way, but
+    // visibly so.
+    if( f_DEC==0 ) RC_STAGE_INIT( rcidx, tmpptr-2 );
 #endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
   }

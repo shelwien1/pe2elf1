@@ -25,7 +25,23 @@ struct Model<1> : Coroutine, PredictorD {
     // The generated coder: lane state as local arrays, methods as macros --
     // sh_v1xN's arrangement, from the same rc.inc as the scalar reference.
     // Locals, not members, so nothing the loop stores through can alias them.
+// RC_DEC_ALIGN=0 drops the vector alignment here. The decoder touches the lane
+// state one scalar at a time and never as a vector, and ALIGN(VECSIZE) on a
+// local array forces `and rsp,-32` in the prologue -- which forces a frame
+// pointer and takes rbp out of the allocator for the whole function, the
+// documented reason model_pass is NOINLINE on the encoder side. Dropping it
+// does remove both, and measures 1.4% slower anyway; see rc_config.inc.
+#if RC_DEC_ALIGN
+#define RC_KALIGN ALIGN(VECSIZE)
+#else
+#define RC_KALIGN
+#endif
 #include "rc_vecD.inc"
+#undef  RC_KALIGN
+    static_assert( KERNEL_CONF == RC_KERNEL_CONF,
+      "rc_vecD.inc was generated against a different RC_* configuration than "
+      "this build. Re-run mk_kernel.sh with the same -D set -- build.sh takes "
+      "it as arguments and gc.bat has %defs% for it." );
 #endif
 
     P_Init(stats,DIM(stats));
@@ -82,7 +98,68 @@ struct Model<1> : Coroutine, PredictorD {
 #else
 #error "RC_DEC_UNROLL must be 0, 1, 2, 4 or 8"
 #endif
-#if RC_EAGER_CTY
+#if RC_DEC_WAVE==2
+        // The wavefront (speed_plan_next.md 1.1). A group is RCNUM/8 output
+        // bytes -- lanes 0..7 are one, 8..15 the next -- and the bit-context
+        // chain restarts at every byte and carries nothing across: P_byte is
+        // `c = ctx&0xFF; ctx = 1`. The only cross-byte edge is a RAW through
+        // cty[], and at bit k the context is in [2^k, 2^(k+1)), so depth-k
+        // nodes are touched at bit k and nowhere else.
+        //
+        // So byte n's step k only has to stay before byte n+1's step k, and
+        // stepping the bytes together turns one 8*RCNUM/8-step chain into
+        // RCNUM/8 chains of 8 that overlap. Same loads, same updates, same
+        // rc_Process calls with j still a compile-time constant: the
+        // instruction count does not move, only the dependency graph.
+        {
+          enum { NB = RCNUM/8 };
+          uint lctx[NB], st[NB], bt[NB];
+          for( i=0; i<nb1; i+=RCNUM ) {
+            RC_UNROLL for( uint m=0; m<NB; m++ ) lctx[m] = 1;
+            RC_UNROLL
+            for( j=0; j<8; j++ ) {
+              RC_UNROLL
+              for( uint m=0; m<NB; m++ ) {
+                P_S_L( lctx[m], st[m] ); p = P_P(st[m]);
+                rc_Process( m*8+j, p, bt[m] );
+                P_update_L( lctx[m], st[m], bt[m] );
+              }
+            }
+#if RC_DEC_PUTW
+            RC_UNROLL
+            for( uint m=0; m<NB; m+=2 ) put0w( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
+#else
+            RC_UNROLL for( uint m=0; m<NB; m++ ) put0( lctx[m]&0xFF );
+#endif
+          }
+          ctx = 1;                      // the tail loops below use the member
+        }
+#elif RC_DEC_WAVE==1
+        // Caller-held context (speed_plan_next.md 1.2), same order as the
+        // default: the group's bytes one after another. The member ctx costs
+        // 10 memory references per group -- two loads of cty, two of ctx, four
+        // stores of ctx and two of the reset constant -- because the store to
+        // cty[ctx] may-alias this->ctx and nothing bounds a loaded index. The
+        // only difference from RC_DEC_WAVE=2 below is which of the two loops
+        // is inner.
+        {
+          enum { NB = RCNUM/8 };
+          for( i=0; i<nb1; i+=RCNUM ) {
+            RC_UNROLL
+            for( uint m=0; m<NB; m++ ) {
+              uint lctx = 1;
+              RC_UNROLL
+              for( j=0; j<8; j++ ) {
+                P_S_L( lctx, state ); p = P_P(state);
+                rc_Process( m*8+j, p, bit );
+                P_update_L( lctx, state, bit );
+              }
+              put0( lctx&0xFF );
+            }
+          }
+          ctx = 1;                      // the tail loops below use the member
+        }
+#elif RC_EAGER_CTY
         // Same loop, with the counter fetched a bit ahead: `state` for bit j+1
         // is one half of the pair loaded at bit j, so the load is off the
         // critical chain and only a select remains on it. j is a compile-time
@@ -102,6 +179,10 @@ struct Model<1> : Coroutine, PredictorD {
           }
         }
 #else
+        {
+#if RC_DEC_PUTW
+        uint cpair = 0;
+#endif
         for( i=0; i<nb1; i+=RCNUM ) {
           RC_UNROLL_DEC
           for( j=0; j<RCNUM; j++ ) {
@@ -112,8 +193,17 @@ struct Model<1> : Coroutine, PredictorD {
             rc.rc_Process( j, p, bit );
 #endif
             P_update( state, bit );
+#if RC_DEC_PUTW
+            // The group's two output bytes go to consecutive addresses, so
+            // hold the first across its eight bits and store the pair once.
+            // j is constant here, so the (j&8) test folds away.
+            if( (j&7)==7 ) { P_byte(stats,c);
+              if( (j&8)==0 ) cpair = c; else put0w( cpair + (c<<8) ); }
+#else
             if( (j&7)==7 ) { P_byte(stats,c); put0(c); }
+#endif
           }
+        }
         }
 #endif
         for( i=nb1; i<blksize*8; i++ ) {
