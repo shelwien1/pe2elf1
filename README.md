@@ -92,6 +92,13 @@ does, what the hot loop costs instruction by instruction, and what is left to
 try. `misc/clk.c` measures the core clock the figures are against, which is
 not the one `/proc/cpuinfo` reports.
 
+`RC_FOLD_RPRE` came out of reading that listing: `rc_Process` leaves `rpre`
+pending for the next `ShiftLow` to add to `low`, and applying it where it is
+produced instead would take `rpre` out of the sweep's loop-carried set -- two
+ymm out of a working set that does not fit. It is stream-neutral, it shortens
+the loop by six instructions and two stores, and it is 2.55% slower. Default
+0, kept for the measurement; `rc_config.inc` has it.
+
 `RC_SCATTER_SKIP` sits on top of it: a lane whose renorm emitted nothing owes
 no store, and only about 1.3 of 16 lanes owe one, so the scatter can be masked
 down to them or branched past entirely. Both are correct and both lose on

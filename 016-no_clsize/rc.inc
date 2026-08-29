@@ -228,6 +228,10 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // OpenCL and ispc ports; the branch was the cost, never the store.
   void ShiftLow( uint n ) {
     uint sh = n*8;
+#if RC_FOLD_RPRE
+    // rc_Process already added rpre to low and folded the carry into FFNum,
+    // so this whole block moved there -- see rc_config.inc
+#else
 #if RC_LOWSPLIT
     uint _cf = (lowl+rpre < lowl);
     lowl += rpre;
@@ -258,6 +262,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // that mask, and the accumulate becomes one vpand of a compare result
     // clang already has in hand, with no +1 fixup at the fold.
     FFNum &= _cy - 1;
+#endif
     // cl's top byte lands at tmpptr+1, the next at tmpptr, the rest
     // below as staging that later stores overwrite
 #if RC_LOWSPLIT
@@ -361,6 +366,21 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
     range = _b ? range : rpre;
     rpre &= -_b;
+
+#if RC_VECOUT && RC_FOLD_RPRE
+    // Apply rpre here instead of at the next ShiftLow -- see rc_config.inc.
+    // f_DEC is a template parameter, so the decoder (which needs rpre for
+    // ShiftCode's `code -= rpre`) never compiles this.
+    if( f_DEC==0 ) {
+      uint _pf = (lowl+rpre < lowl);
+      lowl += rpre;
+      uint _pc = (lowh+_pf < lowh);
+      lowh += _pf;
+      rpre = 0;
+      RC_CARRY_COUNT(_pc);
+      FFNum &= _pc - 1;
+    }
+#endif
 
     _bit = _b;
   }

@@ -205,7 +205,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 8192*RC_CODBYTES + 131072*RC_RANGE64             \
                        + 262144*RC_SHIFT_SAT + 524288*RC_STATS            \
                        + 1048576*RC_VECSIZE + RC_BLKSIZE/16               \
-                       + 4096*(RC_FF_TRIM&63) )
+                       + 4096*(RC_FF_TRIM&63)                     \
+                       + 33554432*RC_FOLD_RPRE )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -386,6 +387,44 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // eight. All three produce the same stream.
 #ifndef RC_SHIFT_SAT
 #define RC_SHIFT_SAT 0
+#endif
+
+// 1 = apply rc_Process's rpre to low where it is PRODUCED, instead of leaving
+// it pending for the next ShiftLow to add. Encoder only -- f_DEC is a template
+// parameter, and the decoder still needs rpre for ShiftCode's `code -= rpre`.
+//
+// Stream-neutral, and not by luck: nothing reads low between the two points,
+// so it is the same addition in the same order. The carry detection and the
+// FFNum mask move along with it, so the instruction count barely changes --
+// what changes is that rpre stops being loop-carried, which is worth two ymm
+// in a sweep whose live state is 19 ymm in a 16-register file. That is the
+// single biggest item in misc/model0_process_skl.asm's accounting: 27 of the
+// loop's ~158 uops are spill traffic.
+//
+// It does exactly what it was supposed to do to the instruction stream, and it
+// is still SLOWER. AVX2, -march=skylake, RCNUM=16, 20 MB of enwik8, medians of
+// best-of-6 over 8 round-robin runs, with a copy of the baseline binary in the
+// rotation as the noise control:
+//
+//   0  rpre applied at the next ShiftLow   145 insns, 26 st   73.61 MB/s
+//   1  rpre applied in rc_Process          139 insns, 24 st   71.73   -2.55%
+//   -  control (baseline binary again)     identical          73.59   -0.03%
+//
+// Six fewer instructions, two fewer stores, three fewer vextracti128 -- and
+// 2.6% off, against a control that says the noise floor is 0.03%. The likely
+// reason is that the staged store's value now depends on the SAME iteration's
+// vpmulld rather than the previous one's: the fold buys uops and spends the
+// slack the scheduler was hiding the 10-cycle multiply in. Not isolated, so
+// read it as a hypothesis -- what is measured is the loss.
+//
+// Kept because it is the one structural way to shrink that live set, and a
+// wider machine (or a target where the multiply is cheaper) could flip it.
+#if !RC_LOWSPLIT || RC_LOWBYTES!=8
+#undef  RC_FOLD_RPRE
+#define RC_FOLD_RPRE 0
+#endif
+#ifndef RC_FOLD_RPRE
+#define RC_FOLD_RPRE 0
 #endif
 
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder

@@ -69,23 +69,36 @@
 ;-----------------------------------------------------------------------------
 ;  WHAT COULD BE IMPROVED  (best first; sizes in uops per 16 coded bits)
 ;
-;  1. REGISTER PRESSURE IS THE WHOLE STORY.  13 spill stores + 14 spill
-;     reloads = 27 of ~158 uops, ~17% of the loop, and they exist only
-;     because the live vector state does not fit: 6 lane arrays (range, lowl,
-;     lowh, rpre, FFNum, tmpptr) x 2 ymm = 12, plus the stcl/stad staging
-;     x 2 = 4, plus 3 broadcast constants = 19 ymm in a 16-register file.
-;     The one lever that actually removes an array: apply rc_Process's
-;     `rpre` to low IMMEDIATELY instead of deferring it to the next
-;     ShiftLow.  Nothing reads low in between, so it is the same arithmetic
-;     in the same order -- the carry detection and the FFNum mask just move
-;     from ShiftLow into rc_Process -- but rpre stops being loop-carried and
-;     two ymm come free.  UNMEASURED: rc.inc's rc_Process is shared with the
-;     decoder, which needs rpre for `code -= rpre`, so it wants a
-;     RC_VECOUT-only variant.  Note the accumulator knobs do NOT help --
-;     RC_LOWSPLIT=0 costs the same two ymm per eight lanes as lowl+lowh, and
-;     RC_LOWBYTES below 7 makes the carry fallback fire constantly
-;     (rc_config.inc: 143379 lost carries on book1 at 4).
-;     Everything below is small change next to this.
+;  1. REGISTER PRESSURE IS THE WHOLE STORY -- AND THE FIX FOR IT LOSES.
+;     13 spill stores + 14 spill reloads = 27 of ~158 uops, ~17% of the loop,
+;     and they exist only because the live vector state does not fit: 6 lane
+;     arrays (range, lowl, lowh, rpre, FFNum, tmpptr) x 2 ymm = 12, plus the
+;     stcl/stad staging x 2 = 4, plus 3 broadcast constants = 19 ymm in a
+;     16-register file.
+;
+;     The one structural way to shrink that: apply rc_Process's `rpre` to low
+;     where it is PRODUCED, instead of leaving it pending for the next
+;     ShiftLow to add.  Nothing reads low in between, so it is the same
+;     arithmetic in the same order -- the carry detection and the FFNum mask
+;     move with it -- and rpre stops being loop-carried.  Encoder-only, and
+;     free of the decoder: f_DEC is a TEMPLATE parameter, so `if( f_DEC==0 )`
+;     compiles the decoder's `code -= rpre` path unchanged.
+;
+;     That is RC_FOLD_RPRE in rc_config.inc now, and it does exactly what it
+;     was meant to do to the instruction stream -- in the Linux build of this
+;     same source, 145 -> 139 instructions, 26 -> 24 stores, 3 -> 0
+;     vextracti128 -- and it is 2.55% SLOWER: 73.61 -> 71.73 MB/s, medians of
+;     best-of-6 over 8 round-robin runs, with a COPY OF THE BASELINE BINARY in
+;     the rotation reading -0.03%.  Neutral on AVX-512, where there is no
+;     spill to relieve.  Default 0; rc_config.inc has the numbers and the
+;     likely mechanism (the staged store's value now depends on the same
+;     iteration's vpmulld rather than the previous one's).
+;
+;     So the spills are not simply free to remove, and "fewer uops always
+;     wins" is not quite the whole model.  The accumulator knobs are no help
+;     either -- RC_LOWSPLIT=0 costs the same two ymm per eight lanes that
+;     lowl+lowh do, and RC_LOWBYTES below 7 makes the carry fallback fire
+;     constantly.  Everything below is small change next to this.
 ;
 ;  2. `vmovdqa [rsp+..+var_150], ymm5` spills `range>>15` for lanes 0-7 and
 ;     `vpmulld ymm6, ymm6, [rsp+..+var_150]` reloads it as the multiply's

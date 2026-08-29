@@ -415,7 +415,7 @@ measuring them alongside. Round-robin medians put both at exactly baseline
 this document under ~1% should be read as a no-op unless a control was
 measured with it.
 
-## 9c. Annotating the AVX2 listing, and the one thing it suggested
+## 9c. Annotating the AVX2 listing, and the two things it suggested
 
 `misc/model0_process_skl.asm` is the disassembly of `Model<0>::do_process`
 from the Windows clang-18 `-march=skylake` build, annotated block by block.
@@ -433,7 +433,7 @@ sections 2 and 7, now from the instruction stream rather than from probes.
 ymm (six lane arrays x 2, the stcl/stad staging x 2, three constants) in a
 16-register file.
 
-One candidate came out of reading it and was measured:
+Two candidates came out of reading it. Both were measured, and both lose:
 
 **Not taken: reading `pbit` as signed.** The bit test spends 4 p5 uops per
 group -- two `vpmovzxwd` to widen `p` and two `vpmovsxwd` to widen the bit
@@ -445,16 +445,46 @@ and **2.1% slower** -- 71.80 against 73.34 MB/s, medians of best-of-6 over 6
 round-robin runs on 20 MB. (Those absolute numbers are from a later container
 than section 8's; only the ratio carries.)
 
-The item worth having is the one that is not reachable by rewording the
-sweep: apply `rc_Process`'s `rpre` to `low` immediately instead of deferring
-it to the next `ShiftLow`. Nothing reads `low` in between, so it is the same
-arithmetic in the same order -- the carry detection and the FFNum mask move
-from `ShiftLow` into `rc_Process` -- but `rpre` stops being loop-carried and
-two ymm come free. Unmeasured: `rc_Process` is shared with the decoder, which
-needs `rpre` for `code -= rpre`, so it wants an `RC_VECOUT`-only variant.
-The accumulator knobs are not an alternative -- `RC_LOWSPLIT=0` costs the
-same two ymm per eight lanes that `lowl`+`lowh` do, and `RC_LOWBYTES` below 7
-makes the carry fallback fire constantly.
+**Not taken, and the interesting one: `RC_FOLD_RPRE`.** The structural way to
+shrink the live set is to apply `rc_Process`'s `rpre` to `low` where it is
+produced, instead of leaving it pending for the next `ShiftLow` to add.
+Nothing reads `low` in between, so it is the same addition in the same order
+-- the carry detection and the FFNum mask move with it -- and `rpre` stops
+being loop-carried. It costs nothing to keep the decoder correct: `f_DEC` is a
+*template parameter*, so `if( f_DEC==0 )` leaves `ShiftCode`'s `code -= rpre`
+compiled exactly as before.
+
+It does what it was supposed to do to the instruction stream, and it is still
+slower. Same 20 MB, medians of best-of-6 over 8 round-robin runs, with a copy
+of the baseline binary in the rotation as the noise control:
+
+| `-march=skylake` (AVX2) | sweep loop | MB/s | vs base |
+|---|---|---|---|
+| `RC_FOLD_RPRE=0` | 145 insns, 26 stores | 73.61 | +0.00% |
+| `RC_FOLD_RPRE=1` | 139 insns, 24 stores | 71.73 | **-2.55%** |
+| *control* -- the baseline binary again | identical | 73.59 | -0.03% |
+
+Six fewer instructions, two fewer stores, three fewer `vextracti128`, and 2.6%
+off, against a control that puts the noise floor at 0.03%. On `-march=native`
+(AVX-512, 32 registers, nothing to spill) it is neutral: -0.99% against a
+control of -0.42%.
+
+The likely reason is that the staged store's value now depends on the *same*
+iteration's `vpmulld` rather than the previous one's. Deferring `rpre` gave
+`low`'s update a full iteration of slack around a 10-cycle multiply; folding
+it buys six uops and spends that slack. Not isolated -- read it as a
+hypothesis. What is measured is the loss.
+
+So the spills are not free to remove, and section 9's "both loops are at the
+rename ceiling, so the only lever is a shorter instruction stream" is a
+one-way rule: a longer stream reliably costs, but a shorter one does not
+reliably pay. The knob stays in `rc_config.inc`, default 0, because it is the
+only structural lever on that 19-ymm working set and a wider machine could
+flip it.
+
+The accumulator knobs are not an alternative -- `RC_LOWSPLIT=0` costs the same
+two ymm per eight lanes that `lowl`+`lowh` do, and `RC_LOWBYTES` below 7 makes
+the carry fallback fire constantly.
 
 ## 10. What is left
 
@@ -471,10 +501,11 @@ In rough order of what is actually available:
    executable.)
 2. The commit's 7-9 cyc/grp. Section 7 says what is and is not known about it;
    the two obvious ways in both lose.
-3. Freeing `rpre` from the sweep's live set -- section 9c. Two ymm out of a
-   19-ymm working set in a 16-register file, which is where the sweep's 27
-   uops of spill traffic come from. Unmeasured, and it needs an
-   `RC_VECOUT`-only `rc_Process`.
+3. ~~Freeing `rpre` from the sweep's live set.~~ Done, measured, and it
+   loses by 2.55% -- section 9c. It is `RC_FOLD_RPRE`, default 0. The 27 uops
+   of spill traffic in the sweep are real and they are the largest single
+   item in the loop, but the one change that removes them costs more than
+   they do.
 4. The model pass is the majority of encode and pinned at the rename ceiling.
    Only a shorter instruction stream moves it; every layout experiment here
    (fusing the tables, prefetching, chunking) lost, and every win so far has
