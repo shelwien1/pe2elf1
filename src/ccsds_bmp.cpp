@@ -20,6 +20,9 @@
 #include "bmf_glue.inc"
 #include "bmp.inc"
 
+// The CCSDS 123 predictor and entropy coder.  Their headers declare what this
+// file uses; their implementations are included at the bottom, so the whole
+// coder is one translation unit and `make` compiles one file.
 #include "ccsds123/utils.h"
 #include "ccsds123/predictor.h"
 #include "ccsds123/entropy_encoder.h"
@@ -1016,3 +1019,18 @@ int main(int argc, char** argv) {
   }
   return encoding ? compress(paths[0], paths[1], &o) : decompress(paths[0], paths[1], &o);
 }
+
+// ---------------------------------------------------------------------------
+// The CCSDS 123.0-R-1 implementation
+//
+// Included rather than linked, so that this file is the whole build.  It sits
+// at the end because it is the library underneath the coder above, not part of
+// it; the headers at the top are what the coder above was written against.
+// Each of these is a standalone translation unit in its own right and includes
+// the headers it needs, so nothing here depends on the order.
+
+#include "ccsds123/utils.c"
+#include "ccsds123/predictor.c"
+#include "ccsds123/entropy_encoder.c"
+#include "ccsds123/decoder.c"
+#include "ccsds123/unpredict.c"

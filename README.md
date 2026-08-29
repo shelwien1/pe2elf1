@@ -28,8 +28,10 @@ make fuzz       # feeds the decoder damaged streams
 make sancheck   # both suites over an address/UB sanitizer build
 ```
 
-No dependencies beyond a C++ compiler and libm. Python 3 is needed for the
-tests only.
+The whole coder is one translation unit: `src/ccsds_bmp.cpp` includes the two
+`.inc` fragments and the five CCSDS 123 implementation files, so `make` runs a
+single compiler invocation. No dependencies beyond a C++ compiler and libm.
+Python 3 is needed for the tests only.
 
 ## What it does
 
@@ -148,8 +150,8 @@ BMP was turned into a cube.
 
 ## Losslessness
 
-`make check` round trips the corpus in `test/bmp` through eleven coder settings
-and asserts two things per run.
+`make check` round trips the corpus in `test/bmp` through fourteen coder
+settings and asserts two things per run.
 
 The decoded BMP depicts the same image as the source: same geometry, same
 palette, same pixels. It is not compared byte for byte with the source, because
@@ -173,6 +175,13 @@ sanitizers do the checking.
     src/bmf_glue.inc     the handful of symbols bmp.inc expects from its host
     src/ccsds123/        the CCSDS 123.0-R-1 predictor and entropy coder
     test/                the corpus generator, the round trip suite, the fuzzer
+
+`ccsds_bmp.cpp` includes the `.inc` fragments at the top, then the CCSDS 123
+headers it was written against, and the five `.c` files at the bottom — the
+library underneath the coder rather than part of it. Each of those is a
+standalone translation unit that includes what it needs, so the order does not
+matter and they still compile separately if you would rather link them. The
+Makefile passes `-MMD`, so editing any included file rebuilds.
 
 `src/ccsds123` is Luca Fossati's reference implementation for the European Space
 Agency, under the European Space Agency Public License v2.0; the licence text is

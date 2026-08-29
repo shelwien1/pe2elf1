@@ -1,4 +1,7 @@
 # ccsds -- lossless BMP coder on CCSDS 123.0-R-1
+#
+# One translation unit: ccsds_bmp.cpp includes the .inc fragments and the
+# CCSDS 123 implementation, so this compiles a single file.
 
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g
@@ -9,27 +12,18 @@ WARN     := -Wall -Wextra -Wno-unused-function -Wno-unused-parameter \
             -Wno-sign-compare -Wno-write-strings -Wno-format
 LDLIBS   := -lm
 
-BIN  := ccsds
-SRCS := src/ccsds_bmp.cpp \
-        src/ccsds123/utils.c \
-        src/ccsds123/predictor.c \
-        src/ccsds123/entropy_encoder.c \
-        src/ccsds123/decoder.c \
-        src/ccsds123/unpredict.c
-OBJS := $(addsuffix .o,$(basename $(SRCS)))
+BIN := ccsds
+SRC := src/ccsds_bmp.cpp
+DEP := $(BIN).d
 
 all: $(BIN)
 
-$(BIN): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS)
+# -MMD writes the list of everything the file pulled in, the included .c and
+# .inc files among them, so editing any of them rebuilds.
+$(BIN): $(SRC)
+	$(CXX) $(CXXFLAGS) $(DEFS) $(WARN) -MMD -MP -MF $(DEP) -Isrc -o $@ $< $(LDLIBS)
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) $(DEFS) $(WARN) -Isrc -c -o $@ $<
-
-# The reference implementation is C, but it was published to be built with g++
-# and the coder links it into one C++ binary, so it is compiled the same way.
-%.o: %.c
-	$(CXX) $(CXXFLAGS) $(DEFS) $(WARN) -Isrc -x c++ -c -o $@ $<
+-include $(DEP)
 
 # Round trips the whole corpus under every coder setting.
 check: $(BIN)
@@ -49,6 +43,6 @@ sancheck:
 	$(MAKE) clean
 
 clean:
-	rm -f $(OBJS) $(BIN)
+	rm -f $(BIN) $(DEP)
 
 .PHONY: all check fuzz sancheck clean

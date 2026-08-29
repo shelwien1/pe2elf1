@@ -7,3 +7,4 @@
 *.ccsds
 __pycache__/
 *.pyc
+*.d
