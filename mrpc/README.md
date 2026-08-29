@@ -163,6 +163,10 @@ The two depths behave very differently, and neither the way I expected:
 | `DLRAW.bmp` | 816x1200 4bpp | **274,491** | 286,496 | mrpc 4% better |
 | `f05_200.bmp` | 1728x2339 1bpp | **24,992** | 35,388 | mrpc 29% better |
 
+`-t` is worth a little on the scan (24,929) and nothing on the graphic; `-x`
+is a no-op at both depths by construction, since a plane packed into 1 or 4
+bits already uses a contiguous run of values and there is nothing to close up.
+
 A bilevel scan is the case where a predictive coder ought to be at its worst —
 two values, so the residual is in {-1,0,1} and there is no magnitude to model —
 and it is instead where the margin is largest, at 0.099 bits per pixel. What
