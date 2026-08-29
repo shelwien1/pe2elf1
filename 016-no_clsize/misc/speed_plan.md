@@ -10,6 +10,68 @@ Numbers are from this box at **3.290 GHz** (`misc/clk.c` -- not the 2.8 GHz
 a different container instance). clang 18.1.3, `-O3 -flto -march=skylake`,
 20 MB of enwik8. Absolute MB/s does not carry across instances; ratios do.
 
+## Results -- all seven items, tested
+
+Everything below the line was written before any of it was tried. This section
+is what happened. Same box, 3.290 GHz, 20 MB of enwik8, medians of best-of-5
+over 6 round-robin runs with a copy of the baseline binary in the rotation.
+Every variant produces a **byte-identical stream**; the compressed size never
+moved, on any target, in any configuration.
+
+| | encode | decode |
+|---|---|---|
+| **`-march=skylake` (AVX2)** | | |
+| baseline (before this round) | 72.72 | 39.83 |
+| defaults now | **78.90 (+8.5%)** | **47.31 (+18.8%)** |
+| defaults + `RC_THREADS=1` | **128.49 (+76.7%)** | 47.33 (+18.8%) |
+| *control* | +1.15% | -1.21% |
+| **`-march=native` (AVX-512)** | | |
+| baseline | 80.82 | 39.88 |
+| defaults now | 81.79 (+1.2%) | **46.95 (+17.8%)** |
+| defaults + `RC_THREADS=1` | **121.57 (+50.4%)** | 46.95 (+17.7%) |
+| *control* | +0.22% | +1.24% |
+
+Item by item:
+
+| # | what | result |
+|---|---|---|
+| 1 | fuse `pp` into the counter step | **TAKEN** -- `RC_FUSE_PP_ENC/DEC`, decode +18% on both targets, encode +2.7% on AVX2 |
+| 2 | decode: eager child load | lost, -3.4% decode -- `RC_EAGER_CTY`, default 0 |
+| 3 | decode: shrink the loop body | lost at every unroll factor, -7.6% to -30% |
+| 4 | AVX-512 at 512-bit | lost, -3.2% encode, and it halves the sweep loop |
+| 5 | interleave model pass and sweep | **TAKEN** -- `RC_CHUNK=2048`, encode +3% on both targets |
+| 6 | model pass on a second thread | **TAKEN** -- `RC_THREADS=1`, encode +64%, decode untouched |
+| 7 | `-fno-pie` | marginal: encode +0.4%, decode +2.5% on AVX2; a packaging call |
+
+What the plan got right and wrong:
+
+- **Right about where to look.** Decode had never been profiled and was the
+  bigger half; it is now 18% faster and the *encoder* is the slow side again.
+- **Right about the mechanism for item 1**, and right that the old
+  "pp fused into FSM" result was explained by the address shape rather than
+  the table size. Wrong about the size of the encode half of it: the plan said
+  ~+9% from "two fewer instructions per bit", and the real answer is that clang
+  micro-fuses `add pp(,%state,2),%p`, so the load costs no instruction slot and
+  the encode gain is 2.7% from the load port, not the front end.
+- **Wrong about item 5 being a re-test of a known loss.** It is a different
+  change: both passes now work the low end of `pbit`, so the chunk is rewritten
+  in place. The old experiment's stated mechanism (FSM+pp evicted from L2) was
+  never real -- 256 states, 2 KB of tables.
+- **Wrong about item 2 and item 4, in the same way.** Both shorten the
+  instruction stream and both lose. Item 2's own failure is what identified the
+  reason: once item 1 took the dependent load off the chain, decode stopped
+  being chain-bound, so the lever it was aiming at had already moved.
+- **Right about item 6 being the largest, and about the ceiling.** 1/0.57 =
+  1.75x predicted, 1.77x measured on AVX2.
+
+One bug came out of it: `RC_CHUNK` as first written broke the carry fallback,
+which re-codes a whole block out of `pbit[]` that the chunked pass no longer
+holds. A lost carry is a ~2^-33 event, so no test would have found it; forcing
+the fallback segfaults. The model is now snapshotted per block and the fallback
+rewinds. See the commit.
+
+---
+
 ## 0. Where the time actually is
 
 |  | MB/s | cyc/byte | cyc per group of 16 bits |

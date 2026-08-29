@@ -82,11 +82,30 @@ with one `vpscatterdd`. It turns on by itself for clang + AVX-512 at
 `RCNUM%16==0`, and is off everywhere else, where staging would only cost.
 The stream does not change either way -- `t.sh` checks that.
 
-`misc/speed_plan.md` is what to try next, ranked: it starts from the fact that
-decode costs 1.86x what encode does and has never been profiled, and from the
-fact that `FSM0.txt` has 256 live states -- so the model's whole working set is
-2 KB, which retires the cache-footprint explanation two of the older negative
-results were written against.
+`misc/speed_plan.md` is that plan and what came of it -- all seven items
+tested, three taken, four measured and rejected, every variant byte-identical
+to the reference. Three knobs came out of it, all stream-neutral:
+
+    RC_FUSE_PP_ENC / RC_FUSE_PP_DEC   the counter carries {p,state} and the
+                                      FSM entry carries the next state's
+                                      probability, so the model reads one
+                                      table per bit instead of two, and the
+                                      probability stops being a load that
+                                      depends on a load.  Decode +18%.
+    RC_CHUNK=2048                     the model pass and the coding sweep
+                                      interleaved a chunk at a time, both
+                                      working the low end of pbit[], so the
+                                      buffer between them is 32 KB rather
+                                      than 1 MB.  Encode +3%.
+    RC_THREADS=1                      the model pass on a second thread,
+                                      overlapped with the sweep.  Off by
+                                      default; needs RC_CHUNK.  Encode +64%.
+
+On `-march=skylake`, against the same source one round earlier: encode
+72.72 -> 78.90 MB/s by default and 128.49 with `RC_THREADS=1`, decode
+39.83 -> 47.31. On `-march=native`: 80.82 -> 81.79 / 121.57 and
+39.88 -> 46.95. Compressed size unchanged everywhere -- 62,513,092 bytes for
+enwik8, as before.
 
 `build.sh` takes `CXX`, so a different toolchain is one variable away. Newer is
 not faster here: clang 23.1.0 builds a byte-identical stream 7.4% slower than
