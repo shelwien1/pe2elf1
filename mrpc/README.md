@@ -125,7 +125,13 @@ A grey index is a luminance: neighbouring pixels have neighbouring values, the
 predictor works, and the codec is ahead. A palette index is a label, and
 neighbouring pixels have neighbouring *labels* only by accident — there is
 nothing for a predictor to find, while the repetition in a label map is exactly
-what an LZ eats. `t24` is graphic art with flat regions, which is the worst
+what an LZ eats.
+
+Nothing about this path expands anything to RGB: an 8bpp file goes in as one
+component and is coded with the 20 same-component taps and no cross-component
+ones, which is what MRP itself did. `-x` is the one thing that touches the
+index field, and it only re-indexes it to the values that occur — order
+preserved, and the palette in the head blob never looked at. `t24` is graphic art with flat regions, which is the worst
 case for this and the best case for `xz`; the satellite photo is textured, and
 the gap is small.
 
@@ -358,6 +364,7 @@ mrpc -l
   -n <n>    use <n> predictor classes (2..63) instead of the number the
             image size suggests
   -t        encode the image both ways round and keep the smaller file
+  -x        also try re-indexing each plane to the values it uses
   -V        report what the device compiler had to say, and the device
             time per kernel at the end
 ```
@@ -385,6 +392,62 @@ What the plot file carries is the input's header and a raster the same shape;
 anything that trailed the pixel data in the input does not come along.  `-t`
 applies: the plot is of whichever orientation won, mapped back the right way
 up.
+
+### Planes that skip levels
+
+MRP's probability model is a generalized Gaussian over the integers and its
+resolution is one level.  That is fine while a plane uses its levels.  It is
+not fine when the plane is four bits widened to eight — every sixteenth
+residual is then the only one that can occur, and the model has no way to say
+so, so it spreads its mass over all of them and pays log2 of the spacing on
+every symbol.  Measured, on a 128x128 RGB tile quantised to four bits a
+component:
+
+| | as it stands | levels closed up |
+| --- | --- | --- |
+| `v = k*16`, low nibble always zero | 34,992 | **10,660** |
+| `v = k*17`, four bits replicated | 35,334 | **10,660** |
+
+Both forms occur in the wild and they are equally bad, which is the first
+thing to say about the obvious fix.  A mask of the always-zero and always-one
+bits catches `k*16` — the low nibble is constant — and does nothing at all for
+`k*17`, which has no constant bit anywhere.  The other half of the mask, the
+constant *high* bits, is catchable and measured harmful: see below.  What closes
+both is the **gcd of the gaps** between the values a plane uses.  Every
+component now goes through `v -> (v - lo%g) / g` on the way in and its inverse
+on the way out, with `lo%g` and `g` in the stream.  It is a change of units,
+so the predictor is unchanged in shape and the gain is exactly `log2 g`.  On
+the reference corpus every plane has `g == 1`, the map is the identity, and
+the whole thing costs the one symbol in `params` that says so — a byte on the
+file, and not one image of the twenty-four moves otherwise.
+
+Only the scale, never the offset — which is where the always-one bits of a
+mask would have gone.  Subtracting `lo` outright is not free: 128 is written
+into the borders and into the working buffer before the first pixel is read,
+and a prediction is clamped to [0,255], so moving a plane's values away from
+the middle costs something.  On planes with nothing to gain from it, it
+measured **+2.8 %** on `piag_0` (which starts at 22) and **+12.9 %** on
+`t24p_1`.  So `lo` contributes only the remainder that makes the division
+exact, and a plane whose top bit is always set is left where it is.
+
+`-x` goes further: re-index each plane to the **values it actually uses**,
+rank order, 256 bits in the stream.  That closes up a plane whose levels are
+near a lattice without being on one, which is most quantised imagery, and it
+is worth a great deal there — but it is not a change of units, it warps what
+a linear predictor sees, and nothing measurable separates the images it helps
+from the ones it hurts.  Forced on, it wins on 15 of the 24 corpus tiles by
+up to 31.5 % and loses on 7 by up to 13.7 %.  So it is a trial: two more
+encodes, keep the smaller, **-7.33 % on the mean and -7.03 % on the total**,
+and it cannot lose on any image.
+
+| | `-x` | |
+| --- | --- | --- |
+| `pia_*` quantised space imagery | −26.6 % to −31.5 % | 100 of 256 levels used |
+| `big*` 32bpp | −1.6 % to −9.1 % | |
+| `t24_1`, `t24_2`, `t24_3` graphic art | −6.1 % to −12.5 % | 64 levels in one plane |
+| `t24_0`, `t24p_1` | +13.7 %, +9.0 % forced | the trial declines them |
+
+The two trials compose: `-t -x` is four encodes.
 
 `-t` runs the whole search twice, once on the image and once on its
 transpose, and keeps whichever came out smaller.  Nothing about the taps, the

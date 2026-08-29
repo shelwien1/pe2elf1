@@ -227,6 +227,38 @@ The trial fits one predictor with no classes on a subset of rows --
 one contiguous stripe, because one stripe of a 4096-wide image can be nothing
 like the rest of it.
 
+### Value maps
+
+Before any of the searches, `BuildValueMaps` walks the raster once and, per
+component, finds the values that occur. If they lie on a lattice — `lo`,
+`lo+g`, `lo+2g`, ... — the component goes through `v -> (v - lo%g)/g` on the
+way in and its inverse on the way out, and `lo%g` and `g` go in `params`.
+
+This matters because the probability model is a generalized Gaussian over the
+integers and its resolution is one level. A plane that is four bits widened to
+eight can only produce every sixteenth residual, and the model cannot say so:
+it spreads its mass over all of them and pays `log2 g` on every symbol.
+Measured, 34,992 bytes against 10,660 on the same picture. Both of the forms
+this takes in the wild, `k*16` and `k*17`, are caught, which a mask of the
+constant bits would not be — `k*17` has no constant bit.
+
+Dividing by `g` is a change of units: the predictor is unchanged in shape,
+the residual is the same residual in smaller units, and the gain is exactly
+`log2 g`. Subtracting `lo` outright would not be, because 128 is written into
+the borders and into `org` before the first pixel is read and `Clip` bounds a
+prediction at 0 and 255, so only the remainder that makes the division exact
+is subtracted.
+
+`mrpc_opts.trial_vmap` (`-x`) adds a second map: `v` to its rank among the
+values that occur, with the 256-bit used set in `params`. It closes up a
+plane whose levels are near a lattice without being on one, which is worth
+-27 % to -32 % on the quantised-imagery tiles of the corpus, and it warps
+what a linear predictor sees, which costs up to 13.7 % on two others.
+Nothing measurable separates them -- neither a gradient predictor's residual
+entropy nor a fitted linear one's ranks the two groups apart -- so it is
+reached by a trial rather than a rule: **-7.33 % mean, -7.03 % total**, and
+it cannot lose on any image. The trials compose; `-t -x` is four encodes.
+
 ### The coefficient clamp
 
 `ChooseCoefRange` sets how wide a predictor coefficient may be, out of
@@ -392,9 +424,11 @@ and the encoder tries all sixteen, keeps the cheapest, and sends `m` first.
 There is nothing adaptive anywhere in the side information; the encoder knows
 the whole histogram before it writes a bit, so it just names the model.
 
-**The residual model, the coefficient clamp, the class count and the
-component order** (`CodeParams`) -- the model as a varint, the clamp flat
-over three, then flat over `MRP_MAXCLASS+1` and `nc`. Note this makes
+**The residual model, the coefficient clamp, the class count, the component
+order and the value maps** (`CodeParams`) -- the model as a varint, the clamp flat
+over three, then flat over `MRP_MAXCLASS+1` and `nc`, then per component a
+value-map kind and what it needs -- two bytes for a scale, 256 context-coded
+bits for a used set. Note this makes
 `MRP_MAXCLASS` part of the format. `CodeParams` is written *after* the search
 rather than before it, because the class count is not settled until the
 search stops.

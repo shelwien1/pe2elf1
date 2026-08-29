@@ -61,7 +61,7 @@
 extern "C" {
 #endif
 
-#define MRPC_VERSION   2
+#define MRPC_VERSION   3
 #define MRPC_MAX_COMP  4  /* RGB and RGBA, in the order the raster has them */
 
 /* An image as the codec sees it: one interleaved raster, `stride` bytes
@@ -104,6 +104,12 @@ typedef struct {
                         smaller.  Worth -0.41% on the reference corpus and
                         never worse on any image; it costs two encodes and
                         nothing at all to decode. */
+  int trial_vmap;    /* 1 = also try re-indexing each plane to the values it
+                        actually uses.  Worth -6.4% on the reference corpus
+                        and up to -32% on quantised imagery, but it warps
+                        what a linear predictor sees and costs up to 14% on
+                        two tiles, so it is a trial rather than a rule.
+                        Another two encodes; four with trial_flip. */
 } mrpc_opts;
 
 enum { MRPC_DEV_ANY = 0, MRPC_DEV_CPU, MRPC_DEV_GPU, MRPC_DEV_ACC };

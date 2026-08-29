@@ -214,7 +214,16 @@ static void Usage(const char* argv0) {
          "  -t        encode the image both ways round and keep the smaller.\n"
          "            Two encodes, nothing at the decoder; worth 0.41%% on the\n"
          "            reference corpus and never worse on any image of it\n"
+         "  -x        also try re-indexing each plane to the values it uses.\n"
+         "            Another two encodes; worth 6.4%% on the corpus and up to\n"
+         "            32%% on quantised imagery.  -t -x is four encodes\n"
          "  -V        report what the device compiler had to say\n"
+         "\n"
+         "A plane that only uses every g'th value -- four bits widened to\n"
+         "eight, most often -- is coded in units of g, which the stream\n"
+         "carries.  -x also tries re-indexing each plane to the values it\n"
+         "actually uses, which is worth a great deal on quantised imagery\n"
+         "and costs on some other pictures, so it is a trial and not a rule.\n"
          "\n"
          "'p' encodes the image exactly as 'c' does, throws the stream away, and\n"
          "writes a BMP of the same geometry instead: every component byte is\n"
@@ -284,6 +293,9 @@ int main(int argc, char** argv) {
         break;
       case 't':
         opt.trial_flip = 1;
+        break;
+      case 'x':
+        opt.trial_vmap = 1;
         break;
       case 'd':
         opt.device = ArgNum(argc, argv, i, "-d");

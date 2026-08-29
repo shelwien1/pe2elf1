@@ -879,6 +879,16 @@ struct MRPC {
                  // case W and H are the other way round and only LoadOrg,
                  // StoreOrg and CodePad still speak the raster's geometry.
   int tflip;
+  // Per raster component, the bijection the values go through on the way
+  // in.  See BuildValueMaps: it is what stops a plane that only uses one
+  // value in sixteen from paying for the fifteen it does not.
+  byte vmap[MAXC][256];  // raster value -> what the codec codes
+  byte vinv[MAXC][256];  // and back
+  int vkind[MAXC];       // 0 identity, 1 affine, 2 the used set
+  int vlo[MAXC], vgs[MAXC];
+  int vmode;             // what the encoder may use: 0 none, 1 the scale
+                         // only, 2 also the used set
+  byte vused[MAXC][256];
   byte* plotbuf;     // where CI_PLOT writes, in the caller's raster
   double plot_bits;  // and what it came to before the rounding
   int num_class;
@@ -3302,6 +3312,8 @@ struct Codec : MRPCIO {
   int class_req;  // and how many classes: 0 for whatever the image suggests
   int trial_flip; // and whether to encode both orientations and keep the
                   // smaller: two encodes, no decode cost
+  int trial_vmap; // and whether to try the used-set value maps the same
+                  // way.  Both together is four encodes.
 
   // How many predictor classes this image gets.  The caller's number wins;
   // -DMRP_CLASS pins it at build time; otherwise MRP's own rule, which is
@@ -3334,7 +3346,7 @@ struct Codec : MRPCIO {
   void Init() {
     memset(this, 0, sizeof(*this));
     o1 = (BC(*)[256]) new BC[256*256];
-    hdr = (BC(*)[256]) new BC[4*256];
+    hdr = (BC(*)[256]) new BC[8*256];
     sse.Init(SSE_NCTX);
   }
 
@@ -3362,7 +3374,7 @@ struct Codec : MRPCIO {
   void ResetModels() {
     for( int i = 0; i<256*256; i++ )
       ((BC*)o1)[i].Init();
-    for( int i = 0; i<4*256; i++ )
+    for( int i = 0; i<8*256; i++ )
       ((BC*)hdr)[i].Init();
   }
 
@@ -3468,6 +3480,165 @@ struct Codec : MRPCIO {
   }
 
   // the stored raster -> the bordered buffer, in coding order
+  // -----------------------------------------------------------------
+  // Value maps
+  // -----------------------------------------------------------------
+  // MRP's probability model is a generalized Gaussian over the integers,
+  // and its resolution is one level.  That is fine while a plane uses its
+  // levels; it is very much not fine when the plane is four bits widened
+  // to eight.  Every second, or sixteenth, or seventeenth residual is then
+  // the only one that can occur, and the model has no way to say so: it
+  // spreads its mass over all of them and pays log2 of the spacing on
+  // every symbol.  Measured, a 24bpp image quantised to four bits a
+  // component costs 34,991 bytes coded as it stands and 10,666 with the
+  // levels closed up -- and the two forms this takes in the wild, v*16 and
+  // v*17, are equally bad, so a mask of the constant bits catches only
+  // half of them.
+  //
+  // So every raster component goes through a bijection on the way in and
+  // its inverse on the way out, chosen by the encoder and transmitted:
+  //
+  //   0  identity
+  //   1  the scale: (v - lo%g) / g, where g is the gcd of the gaps.  A
+  //      change of units, so the predictor is unchanged in shape and the
+  //      gain is exactly log2(g).  This is the free one, and it is on by
+  //      default.
+  //   2  the used set: v -> its rank among the values that occur.  Not
+  //      linear, so it can warp what a linear predictor sees, but it
+  //      closes up a plane whose levels are near a lattice without being
+  //      on one -- quantised imagery, mostly -- which 1 cannot.  Worth a
+  //      great deal where it works and expensive where it does not, with
+  //      nothing measurable to tell the two apart, so it is reached by a
+  //      trial rather than a rule: see CompressTrial.
+  void SetValueMap(uint c) {
+    for( int i = 0; i<256; i++ )
+      vinv[c][i] = 0;
+    if( vkind[c]==2 ) {
+      int j = 0;
+      for( int i = 0; i<256; i++ ) {
+        vmap[c][i] = byte(j); // an unused value maps somewhere defined
+        if( vused[c][i] ) {
+          vinv[c][j] = byte(i);
+          j++;
+        }
+      }
+      return;
+    }
+    const int lo = (vkind[c]==1) ? vlo[c] : 0;
+    const int g = (vkind[c]==1) ? vgs[c] : 1;
+    for( int i = 0; i<256; i++ ) {
+      int v = (i-lo)/g;
+      vmap[c][i] = byte(v<0 ? 0 : (v>255 ? 255 : v));
+    }
+    for( int v = 0; v<256; v++ ) {
+      int i = lo+v*g;
+      vinv[c][v] = byte(i>255 ? 255 : i);
+    }
+  }
+
+  void SetValueMaps() {
+    for( uint c = 0; c<nc; c++ )
+      SetValueMap(c);
+  }
+
+  void BuildValueMaps() {
+    if( const char* e = getenv("MRPC_VMAP") ) // pins it for a measurement
+      vmode = atoi(e);
+    for( int c = 0; c<MAXC; c++ ) {
+      vkind[c] = 0;
+      vlo[c] = 0;
+      vgs[c] = 1;
+    }
+    for( uint c = 0; c<nc; c++ ) {
+      for( int i = 0; i<256; i++ )
+        vused[c][i] = 0;
+      for( uint y = 0; y<ih; y++ ) {
+        const byte* r = img+size_t(y)*stride+c;
+        for( uint x = 0; x<iw; x++, r += nc )
+          vused[c][r[0]] = 1;
+      }
+      int lo = -1, hi = -1, n = 0;
+      for( int i = 0; i<256; i++ )
+        if( vused[c][i] ) {
+          if( lo<0 )
+            lo = i;
+          hi = i;
+          n++;
+        }
+      if( n<=1||vmode<1 ) { // a constant plane has nothing to close up
+        SetValueMap(c);
+        continue;
+      }
+      int g = 0;
+      for( int i = lo; i<=hi; i++ )
+        if( vused[c][i] ) {
+          int a = g, b = i-lo;
+          while( b ) {
+            int t = a%b;
+            a = b;
+            b = t;
+          }
+          g = a;
+        }
+      if( g<1 )
+        g = 1;
+      // Only the scale, never the offset.  Dividing by g is a change of
+      // units and the predictor does not notice; subtracting lo is not,
+      // because 128 is written into the borders and into org before the
+      // first pixel is read, and the clamp on a prediction is [0,255].
+      // Measured, shifting a plane that had nothing to gain from it cost
+      // 2.8% on piag_0 and 12.9% on t24p_1, so the offset is now only the
+      // remainder that makes the division exact.
+      vlo[c] = lo%g;
+      vgs[c] = g;
+      vkind[c] = (g>1) ? 1 : 0;
+      // And the one that is not a change of units: rank among the values
+      // that occur.  It closes up a plane whose levels are near a lattice
+      // without being on one -- quantised imagery, mostly -- and it is
+      // worth a great deal there, -27% to -32% on the pia tiles.  It is
+      // also not free: it warps what a linear predictor sees, and on two
+      // tiles of the corpus it costs 9% and 14%.  Nothing measurable
+      // separates those from the fifteen it wins on, so it is not a rule
+      // the encoder can apply on its own -- vmode 2 is reached by the
+      // trial in CompressTrial, which encodes both ways and keeps the
+      // smaller.  The test below only asks whether the plane's values have
+      // holes in them at all: a contiguous run has nothing for this to
+      // close up, and re-indexing it would only be the offset that rule 1
+      // just declined to take.
+      if( vmode>=2&&n<hi-lo+1 )
+        vkind[c] = 2;
+      SetValueMap(c);
+    }
+  }
+
+  // The maps travel with the stream: kind, then what it needs.
+  void CodeValueMaps(int dec) {
+    SPMod u;
+    u.Set(3, -1);
+    for( uint c = 0; c<nc; c++ ) {
+      if( dec )
+        vkind[c] = DecSP(u);
+      else
+        EncSP(u, vkind[c]);
+      if( vkind[c]==1 ) {
+        vlo[c] = int(CodeBits(hdr[4], uint(vlo[c]), 8));
+        vgs[c] = int(CodeBits(hdr[5], uint(vgs[c]), 8));
+        if( vgs[c]<1 )
+          vgs[c] = 1;
+      } else if( vkind[c]==2 ) {
+        // 256 bits, under a context of what the last one was: a lattice
+        // is a run pattern and costs almost nothing to say
+        int prev = 0;
+        for( int i = 0; i<256; i++ ) {
+          uint b = CodeBits(hdr[6]+prev*2, uint(vused[c][i]), 1);
+          vused[c][i] = byte(b);
+          prev = int(b);
+        }
+      }
+    }
+    SetValueMaps();
+  }
+
   void LoadOrg() {
     for( uint y = 0; y<H; y++ ) {
       byte* d = org+OI(y, 0);
@@ -3477,12 +3648,12 @@ struct Codec : MRPCIO {
         const byte* s = img+size_t(y)*nc;
         for( uint x = 0; x<W; x++, s += stride, d += nc )
           for( uint k = 0; k<nc; k++ )
-            d[k] = s[ord[k]];
+            d[k] = vmap[ord[k]][s[ord[k]]];
       } else {
         const byte* s = img+size_t(y)*stride;
         for( uint x = 0; x<W; x++, s += nc, d += nc )
           for( uint k = 0; k<nc; k++ )
-            d[k] = s[ord[k]];
+            d[k] = vmap[ord[k]][s[ord[k]]];
       }
     }
     FillBorders();
@@ -3497,12 +3668,12 @@ struct Codec : MRPCIO {
         byte* d = img+size_t(y)*nc;
         for( uint x = 0; x<W; x++, s += nc, d += stride )
           for( uint k = 0; k<nc; k++ )
-            d[ord[k]] = s[k];
+            d[ord[k]] = vinv[ord[k]][s[k]];
       } else {
         byte* d = img+size_t(y)*stride;
         for( uint x = 0; x<W; x++, s += nc, d += nc )
           for( uint k = 0; k<nc; k++ )
-            d[ord[k]] = s[k];
+            d[ord[k]] = vinv[ord[k]][s[k]];
       }
     }
   }
@@ -3700,6 +3871,7 @@ struct Codec : MRPCIO {
       else
         EncSP(u, ord[k]);
     }
+    CodeValueMaps(dec);
   }
 
   void Encode() {
@@ -3708,6 +3880,8 @@ struct Codec : MRPCIO {
     // give it nothing to choose between
     crange = NCRANGE-1;
     mxc = MAX_COEF;
+    // before anything reads the raster: LoadOrg goes through these
+    BuildValueMaps();
     num_pm = NUM_PMODEL;
     pmset.Init(num_pm, 0);
     pmset.Costs();
@@ -4070,26 +4244,39 @@ struct Codec : MRPCIO {
   int CompressTrial(const mrpc_image* im, const void* head, size_t headlen,
                     const void* tail, size_t taillen, mrpc_blob* out) {
     tflip = 0;
-    if( !trial_flip||!im||im->width<2||im->height<2 )
+    vmode = 1;
+    const int nt = (trial_flip&&im&&im->width>1&&im->height>1) ? 2 : 1;
+    const int nv = (trial_vmap&&im) ? 2 : 1;
+    if( nt*nv<2 )
       return Compress(im, head, headlen, tail, taillen, out);
-    mrpc_blob a;
-    a.data = 0;
-    a.size = 0;
-    int ra = Compress(im, head, headlen, tail, taillen, &a);
-    if( ra!=MRPC_OK ) {
-      free(a.data);
-      tflip = 0;
-      return Compress(im, head, headlen, tail, taillen, out);
+    mrpc_blob best;
+    best.data = 0;
+    best.size = 0;
+    int rc = MRPC_ERR_DATA;
+    for( int i = 0; i<nt*nv; i++ ) {
+      tflip = i&1 ? (nt>1 ? 1 : 0) : 0;
+      vmode = ((nv>1)&&(i>=nt)) ? 2 : 1;
+      mrpc_blob b;
+      b.data = 0;
+      b.size = 0;
+      int r = Compress(im, head, headlen, tail, taillen, &b);
+      if( r==MRPC_OK&&(!best.data||b.size<best.size) ) {
+        free(best.data);
+        best = b;
+        rc = MRPC_OK;
+      } else {
+        free(b.data);
+        if( r!=MRPC_OK&&rc!=MRPC_OK )
+          rc = r;
+      }
     }
-    tflip = 1;
-    int rb = Compress(im, head, headlen, tail, taillen, out);
-    if( rb!=MRPC_OK||out->size>=a.size ) {
-      free(out->data);
-      out->data = a.data;
-      out->size = a.size;
-      return MRPC_OK;
+    tflip = 0;
+    vmode = 1;
+    if( rc!=MRPC_OK ) {
+      free(best.data);
+      return rc;
     }
-    free(a.data);
+    *out = best;
     return MRPC_OK;
   }
 
@@ -4121,18 +4308,21 @@ struct Codec : MRPCIO {
     size_t bestsz = 0;
     double bestbits = 0.0;
     int rc = MRPC_ERR_MEM;
-    // ... and if the orientation trial is on, the plot of whichever way
-    // round won, so that `p` describes the file `c` would have written
-    for( int t = 0; t<=(trial_flip ? 1 : 0); t++ ) {
+    // ... and if the trials are on, the plot of whichever encode won, so
+    // that `p` describes the file `c` would have written
+    const int nt = (trial_flip&&im->width>1&&im->height>1) ? 2 : 1;
+    const int nv = trial_vmap ? 2 : 1;
+    for( int i = 0; i<nt*nv; i++ ) {
       byte* pb = (byte*)calloc(n ? n : 1, 1);
       if( !pb )
         break;
       mrpc_blob blob;
       blob.data = 0;
       blob.size = 0;
-      tflip = t;
       plotbuf = pb;
       plot_bits = 0.0;
+      tflip = (i&1) ? (nt>1 ? 1 : 0) : 0;
+      vmode = ((nv>1)&&(i>=nt)) ? 2 : 1;
       int r = Compress(im, 0, 0, 0, 0, &blob);
       plotbuf = 0;
       if( r==MRPC_OK&&(!best||blob.size<bestsz) ) {
@@ -4149,6 +4339,7 @@ struct Codec : MRPCIO {
       free(blob.data);
     }
     tflip = 0;
+    vmode = 1;
     if( rc!=MRPC_OK ) {
       free(best);
       return rc;
@@ -4291,6 +4482,8 @@ MRPC_API mrpc_ctx* MRPC_CALL mrpc_init(const mrpc_opts* opts) {
   c->cd.prog_req = opts ? opts->progress : 0;
   c->cd.class_req = opts ? opts->num_class : 0;
   c->cd.trial_flip = opts ? opts->trial_flip : 0;
+  c->cd.trial_vmap = opts ? opts->trial_vmap : 0;
+  c->cd.vmode = 1;
   g_clopt.use = opts ? opts->use_opencl : 1;
   g_clopt.plat = opts ? opts->platform : -1;
   g_clopt.dev = opts ? opts->device : -1;

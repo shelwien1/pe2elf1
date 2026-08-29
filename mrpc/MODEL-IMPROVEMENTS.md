@@ -645,7 +645,7 @@ the trial turned off. With `-t` it is **-2.654 % mean, -1.305 % total**.
 | §8 merging starved classes | measured, **not shipped** (`MRPC_MINSAMP`) | +0.24 % mean, -0.13 % total |
 | §5 an NLMS correction on the predictor | measured, **refuted** | there is nothing left to correct |
 | §9's run mode | not built, and the reason is a result | the correction's zero band already is one |
-| §9's palette ordering as a trial | not attempted, and why | every candidate is a full search |
+| §9's palette ordering as a trial | **shipped behind `-x`**, in the one form that is affordable | -7.33 % mean, -7.03 % total |
 | §9's vertical period | measured, **refuted** | best correlation over 64 lags is 0.08 |
 
 ### §4, and the shape it actually took
@@ -835,6 +835,29 @@ budget attached, and it is the one item on this list that is still worth
 someone's afternoon -- `t24p_0` and `piap_0` are the tiles that responded
 most to everything else here, which is a hint about where the remaining
 redundancy is.
+
+### §9's palette ordering, revisited: one candidate is affordable
+
+The section above says a palette-ordering trial was not attempted because
+every candidate is a full search and there are 256! of them. That is still
+true of *arbitrary* orderings. It is not true of the one ordering that is
+worth trying: **rank among the values that actually occur**, which is order
+preserving, needs no search to find, and describes itself in 256 bits.
+
+That map is now in the codec behind `-x`, and it is not really about palettes
+-- it is about any plane whose levels have holes in them. It is worth
+**-7.33 % on the mean and -7.03 % on the total** of the corpus as a trial,
+and up to -31.5 % on the quantised-imagery tiles. See `ALGORITHM.md`'s "Value
+maps"; the free half of it, dividing out the gcd of the gaps, is on by
+default and fixes an image quantised to four bits a component costing three
+times what it should.
+
+The lesson the rest of §14 keeps drawing holds here too, with a twist: a
+trial beat a rule again, and this time *no* rule was available. A gradient
+predictor's residual entropy and a fitted linear one's both say the map helps
+on `t24_0`; the codec says it costs 13.7 %. Two proxies, both wrong in the
+same direction, on the one tile this document has been calling bimodal since
+§8.
 
 ### §9's vertical period, tested on the residual and not worth a tap
 

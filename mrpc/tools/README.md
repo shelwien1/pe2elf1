@@ -175,3 +175,23 @@ and is the best of sixty-four candidates measured on twelve thousand samples:
     for k in range(NC):
         r = a[:,:,k] - a[:,:,k].mean(); v = (r*r).mean()
         print(k, max((abs((r[p:]*r[:-p]).mean()/v), p) for p in range(1, 65)))
+
+## q4.py
+
+The two ways a four-bit-per-component image reaches an eight-bit file, which
+is what `../README.md`'s "Planes that skip levels" is about.
+
+    python3 tools/q4.py in.bmp step16 out.bmp   # v = (v>>4)<<4
+    python3 tools/q4.py in.bmp rep17  out.bmp   # v = (v>>4)*17
+    python3 tools/q4.py in.bmp idx16  out.bmp   # v =  v>>4
+
+`step16` has a constant low nibble and `rep17` has no constant bit at all, so
+a mask of the always-zero and always-one bits catches one and not the other.
+Both are the same picture and both cost the same to code once the levels are
+closed up, which is what `idx16` is for: it is the third file, coded honestly,
+and the number to beat.
+
+    step16   34,992      rep17   35,334      idx16   10,653
+
+The codec now reaches 10,660 on either of the first two, by dividing out the
+gcd of the gaps between the values each plane uses.
