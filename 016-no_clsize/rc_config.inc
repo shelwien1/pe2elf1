@@ -209,7 +209,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 33554432*RC_FOLD_RPRE            \
                        + 67108864*RC_LOAD32               \
                        + 134217728*RC_DEC_COLD            \
-                       + 3*RC_FF_LANES )
+                       + 3*RC_FF_LANES                    \
+                       + 11*RC_DEC_RENORM )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -360,6 +361,80 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // See misc/avx2_vs_avx512.md for what the pair of probes is for.
 #ifndef RC_SCATTER_SKIP
 #define RC_SCATTER_SKIP 0
+#endif
+
+// The decoder's renormalisation shape. The encoder has always used the
+// counted shift -- `n = (range<sTOP) + (range<gTOP)`, then one shift by n*8 --
+// and the generated decoder used two nested branches instead. (The scalar
+// reference coder in the !RC_VECOUT half of rc.inc has always used the counted
+// shift on BOTH sides, so the two were already disagreeing.) The asymmetry was
+// never measured; this knob has seven shapes and the measurements are below.
+//
+//   0  two nested branches: skip everything unless range<sTOP, then test
+//      range<gTOP to pick the 1-byte or the 2-byte refill
+//   1  the outer branch, the inner one replaced by a counted shift   <- default
+//   2  no branch at all; n from the same two compares the encoder uses
+//   3  no branch at all; n from __builtin_clz -- sTOP and gTOP are 1<<24 and
+//      1<<16, so the two compares ARE a count of leading zero bytes
+//   4  no branch at all, and the refill window is addressed by n and masked
+//      rather than loaded at a fixed offset and shifted
+//   5  a branchless ONE-byte refill on the single compare that decides it,
+//      plus a guard for the second byte
+//   6  1, with the window addressed by n and masked instead of shifted
+//
+// The distribution is the whole story. Counted in the scalar reference coder
+// over the 800M bits of enwik8:
+//
+//   n==0   737,581,939   92.195%
+//   n==1    62,444,004    7.805%
+//   n==2            15    0.000002%
+//
+// So ~92% of bits renormalise NOTHING, and the 2-byte case -- which needs
+// range to fall by more than 2^8 in one step, so p below 128/32768 -- happens
+// FIFTEEN TIMES in a hundred megabytes.
+//
+// That makes the two branches two completely different propositions. The OUTER
+// one buys 92% of bits an empty renorm for a test that mispredicts ~8% of the
+// time, and it is worth far more than the mispredict: taking it away costs
+// 8-18%, because the unconditional shifts land on the loop-carried range and
+// code chains and the 16x unrolled body grows by 150-220 instructions. The
+// INNER one never mispredicts at all -- but it is still worth removing,
+// because it costs instructions and stack slots in a body that is short of
+// both.
+//
+// This box, clang 18, -march=native, 100 MB of enwik8, RC_DEC_WAVE=2 and the
+// rest of the tuned set, medians of best-of-3 over 7 round-robin rounds with a
+// byte-identical twin of shape 0 in the rotation (it came back at 2.745 s, the
+// same three digits). Loop figures are the 16-lane decode body:
+//
+//                                      insns  branch  rsp    decode
+//   0  two nested branches              460     17    119    2.745 s
+//   1  counted inner, window shifted    449     17    114    2.687   +2.2%
+//   6  counted inner, window addressed  442     17    108    2.667   +2.9%
+//   5  branchless 1 byte + guard        678     18    134    2.990   -8.2%
+//   4  branchless, window addressed     605      1    144    3.248  -15.5%
+//   3  branchless, clz                  654      1    157    3.287  -16.5%
+//   2  branchless, two compares         672      1    158    3.365  -18.4%
+//
+// At RC_DEC_WAVE=0 the same three: 2.902 / 2.739 (+5.9%) / 2.761 (+5.1%). The
+// win is larger there, which is the wavefront doing what it is for -- with 16
+// lanes in flight there is more to hide a branch behind.
+//
+// 1 and 6 are a tie (+2.2 vs +2.9 at WAVE=2, +5.9 vs +5.1 at WAVE=0, against a
+// 0.8% twin spread), and 1 is the default because 6 needs four bytes of row
+// above the cursor and so cannot be built at RC_LOWBYTES==RC_CODBYTES. The
+// encode column does not move for any of them -- f_DEC is a template
+// parameter, so none of this reaches Model<0>.
+//
+// 1..6 all read the 32-bit refill window, so they carry RC_LOAD32's padding
+// requirement whatever RC_LOAD32 itself is set to (see rc_io.inc), and 4 and 6
+// need bytes ABOVE the cursor as well. They ignore RC_LOAD32: it selects
+// between shapes of the branchy refill, and 1 and 6 have subsumed it while
+// 2..5 have no branchy refill left.
+//
+// All seven produce the same stream -- t_matrix.sh checks each.
+#ifndef RC_DEC_RENORM
+#define RC_DEC_RENORM 1
 #endif
 
 // 1 = ShiftLow extracts the high word as a single variable shift,

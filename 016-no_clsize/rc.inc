@@ -323,9 +323,10 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
   }
 
-  // Encode: the counted shift. Decode: the branchy nested refill with the
-  // cursor touched only inside it -- ~91% of bits pass two predicted tests
-  // and do nothing else, the shape rc_split_ispc_v1.md section 9.5 measured.
+  // Encode: the counted shift. Decode: whichever of RC_DEC_RENORM's seven
+  // shapes is built -- by default the branchy nested refill with the cursor
+  // touched only inside it, ~91% of bits passing two predicted tests and
+  // doing nothing else, the shape rc_split_ispc_v1.md section 9.5 measured.
   void rc_Renorm( void ) {
     if( f_DEC==0 ) {
       uint n = (range<sTOP) + (range<gTOP);
@@ -335,6 +336,66 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     if( f_DEC==1 ) {
       code -= rpre;
       rpre = 0;
+#if RC_DEC_RENORM>=2 && RC_DEC_RENORM<=4
+      // No branch: the decoder's counted shift, the encoder's `n` expression
+      // read the other way round. gTOP < sTOP, so range<gTOP implies
+      // range<sTOP and n is 0, 1 or 2 -- n bytes leave the substream and n
+      // enter code, and n==0 leaves all three of range, code and the cursor
+      // exactly as they were.
+      uint _q = tmpptr;
+#if RC_DEC_RENORM==3
+      // sTOP and gTOP are 1<<24 and 1<<16, so the pair of compares is a count
+      // of leading zero BYTES. range is never below 1<<9 -- the model clamps p
+      // to [1,SCALE-1], so one step divides range by at most SCALE=1<<15 and
+      // range was at least 1<<24 -- so clz is never asked about zero and n
+      // never comes out 3.
+      uint sh = uint(__builtin_clz(range)) & ~7u;
+      uint n  = sh>>3;
+#else
+      uint n  = (range<sTOP) + (range<gTOP);
+      uint sh = n*8;
+#endif
+#if RC_DEC_RENORM==4
+      // The window addressed by n instead of shifted: the n bytes the refill
+      // wants are [_q-n+1 .. _q], and a little-endian dword loaded AT _q-n+1
+      // already has them in its low n bytes, most significant at the top --
+      // which is the order code wants them in. What is above them is stream
+      // the cursor has already passed, so the mask is the whole cost.
+      // (1<<sh)-1 is 0, 0xFF, 0xFFFF for n = 0, 1, 2; sh is at most 16, so the
+      // shift is defined. Reads up to _q+4: see the pad assert in rc_io.inc.
+      uint _c = (uint&)tmpbase[_q+1-n] & ((1u<<sh)-1);
+#else
+      // The window at a fixed offset and shifted: the dword at _q-3 has byte
+      // _q at the top, so the top n bytes of it are the refill. sh is 0 here
+      // too, and x>>32 is undefined, so it is the split shift ShiftLow uses.
+      uint _c = ((uint&)tmpbase[_q-3] >> 16) >> (16-sh);
+#endif
+      range <<= sh;
+      code    = (code<<sh) + _c;
+      tmpptr  = _q - n;
+#elif RC_DEC_RENORM==5
+      // What the measured distribution actually asks for. Over 800M bits of
+      // enwik8: n==0 92.195%, n==1 7.805%, n==2 FIFTEEN TIMES. So the refill
+      // is a one-byte refill, branchless on the single compare that decides
+      // it, and the second byte is a guard that is perfectly predicted because
+      // it is taken once in 53 million. sh is 0 or 8, so the split shift is
+      // still what keeps the n==0 case defined.
+      {
+        uint _q = tmpptr;
+        uint sh = (range<sTOP)*8;
+        range <<= sh;
+        code    = (code<<sh) + (((uint&)tmpbase[_q-3] >> 16) >> (16-sh));
+        tmpptr  = _q - (sh>>3);
+      }
+      // One byte took range to at least 1<<17, so at most one more is ever
+      // owed, and after it range is at least 1<<25.
+      if_e0( range<sTOP ) {
+        uint _r = tmpptr;
+        range <<= 8;
+        code    = (code<<8) + tmpbase[_r];
+        tmpptr  = _r - 1;
+      }
+#else
       // RC_DEC_COLD strengthens the hint: if_e0 is expect(x,0), which clang
       // reads as ~10% and is not enough to sink 16 unrolled copies of the
       // refill out of the loop body. ~91% of bits take neither branch.
@@ -344,6 +405,26 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       if_e0( range<sTOP ) {
 #endif
         uint _q = tmpptr;
+#if RC_DEC_RENORM==1 || RC_DEC_RENORM==6
+        // Inside the 8% that renormalise, the counted shift instead of the
+        // second test. n is 1 or 2 here, never 0, so sh is 8 or 16 and 32-sh
+        // is 24 or 16: one defined shift, no split and no branch.
+        uint n  = 1 + (range<gTOP);
+        uint sh = n*8;
+        range <<= sh;
+#if RC_DEC_RENORM==6
+        // The window addressed by n rather than shifted: the n bytes wanted
+        // are [_q-n+1 .. _q] and a dword loaded AT _q-n+1 already has them in
+        // its low n bytes, most significant at the top. Same two extra
+        // operations either way -- a shift and a subtract there, a shift and a
+        // decrement here -- so this is a straight A/B of address arithmetic
+        // against shift arithmetic. Reads up to _q+3: see rc_io.inc.
+        code    = (code<<sh) + ((uint&)tmpbase[_q+1-n] & ((1u<<sh)-1));
+#else
+        code    = (code<<sh) + ((uint&)tmpbase[_q-3] >> (32-sh));
+#endif
+        tmpptr  = _q - n;
+#else
 #if RC_LOAD32
         // The substream runs backwards, so the two bytes the 2-byte case wants
         // are the top two of the little-endian dword at _q-3, and the one byte
@@ -393,7 +474,9 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
           tmpptr = _q-1;
         }
 #endif
+#endif  // RC_DEC_RENORM 1 or 6
       }
+#endif  // RC_DEC_RENORM branchless shapes
     }
   }
 
