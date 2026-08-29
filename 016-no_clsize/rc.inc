@@ -52,6 +52,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   uint  Carry;   // carry out of low, pending until the next byte is emitted
   uint  code;
   rangetype range;
+  // Its only consumer is model0.inc's `ncarry &= FFNum[j]` over every lane at
+  // block end, so the per-lane values are never read apart and the generated
+  // kernel can give it fewer slots than lanes -- see RC_FF_LANES. The enum is
+  // how that reaches rc_soa.pl: comments do not survive the preprocessor.
+  enum { FFNum_SOA_FOLD = RC_FF_LANES };
   uint  FFNum;
   uint  Cache;
 #if RC_STATS

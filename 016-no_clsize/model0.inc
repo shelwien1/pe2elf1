@@ -227,6 +227,24 @@ struct Model<0> : Coroutine, PredictorE {
           // One rc_Process per lane per group, so the RCNUM staged stores
           // are RCNUM distinct addresses in RCNUM distinct rows and the
           // group can commit them together.
+#if RC_SWEEP_NEGIDX
+          // speed_plan_next.md 5.2: `add/cmp/jb` is two fused uops per group;
+          // biasing the base and counting a negative index up to zero makes
+          // the add set ZF itself, so it is `add/jne` -- one.
+          {
+            const word* __restrict _pb = pbit + blksize1;
+            for( int _i = -int(blksize1); _i<0; _i += RCNUM ) {
+              RC_UNROLL
+              for( j=0; j<RCNUM; j++ ) {
+                uint b = _pb[_i+int(j)];
+                uint f = b&0x7FFF; b >>= 15;
+                rc_Process( j, f, b );
+              }
+              RC_FLUSHALL();
+            }
+            i = blksize1;
+          }
+#else
           for( i=0; i<blksize1; i+=RCNUM ) {
             RC_UNROLL
             for( j=0; j<RCNUM; j++ ) {
@@ -236,6 +254,7 @@ struct Model<0> : Coroutine, PredictorE {
             }
             RC_FLUSHALL();
           }
+#endif
 
           // fewer than RCNUM bits left: consecutive i, so still one lane each
           for( ; i<blksize0; i++ ) {
@@ -253,7 +272,7 @@ struct Model<0> : Coroutine, PredictorE {
           uint len = ((j+1)*t_RCio::rowsize-1) - tmpptr[j];
           len = len>RC_SKIP ? len-RC_SKIP : 0;
           res.lens[j] = len;
-          ncarry &= FFNum[j];
+          if( j<RC_FF_LANES ) ncarry &= FFNum[j];   // folded: see RC_FF_LANES
           novf   += (len>t_RCio::tmpbufsize);
         }
         if_e0( novf!=0 ) rc_overflow();

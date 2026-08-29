@@ -9,6 +9,102 @@ The regime changed in the last round, and that is the whole story of this one.
 
 ---
 
+## Results — all of §1–§5, tested
+
+Written after. Every variant byte-identical to the `-C` reference on
+`-march=skylake` and `-march=native`; the compressed size never moved.
+Medians of best-of-5 over 6–7 round-robin runs with a copy of the baseline
+binary in the rotation. **Nothing was taken. The default build is byte-identical
+to the one this plan was written against.**
+
+| § | knob | insns/group | result |
+|---|---|---|---|
+| 1.2 | `RC_DEC_WAVE=1` caller-held context | 444 (405) | **−8.62%** dec |
+| 1.1 | `RC_DEC_WAVE=2` two-byte wavefront | 447 | **−4.69%** dec |
+| 2.1 | `RC_LOAD32=1` 32-bit window, hoisted | 456 | **−10.23%** dec |
+| 2.1 | `RC_LOAD32=2` window in the 2-byte branch only | 405 | +0.31% (noise) |
+| 2.2 | `RC_DEC_PUTW=1` paired output store | 394 | **−2.43%** dec |
+| 2.3 | `RC_DEC_COLD=1` stronger cold hint | 405 | byte-identical binary |
+| 3 | `RC_DEC_ALIGN=0` unaligned decode kernel | 403 | **−1.42%** dec |
+| 5.1 | `RC_FF_LANES=8` FFNum folded to one ymm | 150 (142) | **−1.06%** enc |
+| 5.1 | `RC_FF_LANES=4` | 177 | **−10.87%** enc |
+| 5.2 | `RC_SWEEP_NEGIDX=1` add/jne latch | 142 | −0.93% (did not fire) |
+| 5.4 | — re-measure the split | — | **55.2 / 44.8**, was 57/43 |
+| 5.3 | `-fno-pie` | — | +0.4% enc, +2.5% dec (packaging) |
+
+### What the plan got right
+
+- **§1.2's premise.** The member `ctx` really is 10 memory references per group
+  — two loads of `cty`, two of `ctx`, four stores of `ctx`, two of the reset
+  constant — exactly for the aliasing reason `predict.inc` documents.
+- **§1.1's mechanism.** `RC_DEC_WAVE=2` is `=1`'s loop with the two loops
+  swapped and nothing else, and it recovers 4 of `=1`'s 8.6 points. The
+  wavefront's chain shortening is real and worth about **+4%** — on top of a
+  prerequisite that costs twice that.
+- **§2.2's mechanism**, in the same conditional way: worth **+1.6%** inside the
+  `RC_DEC_WAVE=2` build, where the two bytes finish together and neither is
+  held; **−2.43%** standalone, where the first has to live across eight bits.
+- **§5.4.** The split barely moved, so §5's aim was right.
+
+### What it got wrong, and the one thing that explains all of it
+
+The blend in §0 — `T ≈ 0.28·chain + 0.24·insn` — fitted two points and
+generalised to none. Every item it priced was mispriced in the same direction,
+and the reason is a variable the blend has no term for: **register pressure.**
+
+- §1.2 removes 10 memory references and adds 39 instructions, only 7 of them
+  memory. The rest are spills: holding the context in a register costs more
+  than keeping it in memory did.
+- §2.2 removes 11 instructions and 16 loads and still loses, because one byte
+  held across eight bits is one more live value.
+- §3 does exactly what it promised — the decoder's prologue loses `and rsp,-32`
+  and its frame pointer, and `rbp` returns to the allocator — and the group loop
+  comes out 48 bytes longer and 1.4% slower.
+- §5.1 removes an array from the sweep's working set and creates a cross-half
+  RAW where there was none, turning two independent accumulator chains into one.
+
+Instruction count has now failed to predict the sign of the result **eleven
+times** across the two rounds. On these two loops it is not the currency; the
+register file is, and both loops are already at a local optimum that clang
+found. A change that frees a register loses, a change that spends one loses,
+and a change that does neither is inside the noise.
+
+### Items that were not reachable
+
+- **§2.3.** `__builtin_expect_with_probability(…, 0, 0.99)` on the refill test
+  produces a byte-identical binary. Cold-block placement of the 16 refill copies
+  is not addressable from the source; it would need the generator to emit them
+  as separate functions, which §2.3 itself rules out.
+- **§5.2**, three of four. `range>>15`'s spill, lane 15's duplicated address and
+  the rematerialised broadcasts are register-allocator and constant-placement
+  decisions with no source spelling. The fourth, the `add/jne` latch, is
+  spellable and clang declines it: it emits `add $16,%rcx; cmp $-16,%rcx; jl`,
+  keeping the compare rather than using the add's own flags.
+- **§2.1's second half** (`rc_Init`'s four `get()`s as one `load32`) was left
+  alone once the main item measured neutral; the plan called it code-size only.
+
+### Kept anyway
+
+All of it, as knobs at their measured-best defaults, with the numbers in
+`rc_config.inc`. Three things landed that are independent of any timing:
+
+- The decoder asserts `KERNEL_CONF`, which only the encoder did (§3).
+- `rc_Init`'s staging seed is visibly encoder-only instead of computing an
+  address into the input row (§3).
+- `rc_soa.pl` gained `RC_KALIGN` and `SOA_FOLD`, so the two models can differ on
+  the kernel's alignment and a field the includer only reduces over can have
+  fewer slots than lanes. Both are inert at the defaults.
+
+And one bug found on the way in, worth its own note because it is silent:
+`(const uint&)p[i]` on a `byte` lvalue is a **static_cast to a temporary** — the
+byte widened to `uint` — not a reinterpret, because binding a const lvalue
+reference to a converted temporary is a valid conversion and is tried first. A
+non-const `uint&` cannot bind to a temporary, so it reinterprets. That is why
+the encoder's `(uint&)tmpbase[…] = cl` works and the first cut of §2.1 decoded
+garbage at `-O1` and `-O3` alike.
+
+---
+
 ## 0. Where the time is now
 
 3.290 GHz (`misc/clk.c`), clang 18.1.3, 20 MB of enwik8, default knobs:

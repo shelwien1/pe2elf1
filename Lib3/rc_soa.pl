@@ -21,7 +21,7 @@ $out =~ s/0(\.\w+)$/1$1/ or $out = "$inp.soa";
 open my $F, '<', $inp or die "$inp: $!";
 my @L = <$F>; close $F;
 
-my (@fields, @decl, @body, %fname, %seen);
+my (@fields, @decl, @body, %fname, %seen, %fold, %fold_pending);
 
 # pass 1: collect + strip
 my $depth = 0;      # brace depth inside a function
@@ -43,11 +43,23 @@ while( $i < @L ) {
   }
 
   if( !$depth && !$skip ) {
+    # `enum { X_SOA_FOLD = N };` says field X gets N slots instead of RCNUM and
+    # every mention is indexed rcidx%N. A field the includer only reduces over
+    # all lanes does not need one slot per lane. Comments do not survive the
+    # preprocessor, which is why this is an enum.
+    if( $l =~ /^\s*enum\s*\{\s*(\w+)_SOA_FOLD\s*=\s*([^}]+?)\s*\}\s*;/ ) {
+      $fold_pending{$1} = $2; $i++; next;
+    }
+
     # a field declaration: plain integral members, before/between functions
-    if( $l =~ /^\s*(uint|qword|word|byte|rangetype)\s+(\w+(?:\s*,\s*\w+)*)\s*;/ ) {
-      my ($t,$names) = ($1,$2);
-      for my $n (split /\s*,\s*/, $names) { push @fields, $n; }
-      push @decl, "RC_KALIGN $t ".join("[RCNUM], ", split /\s*,\s*/, $names)."[RCNUM];\n";
+    if( $l =~ /^\s*(uint|qword|word|byte|rangetype)\s+(\w+(?:\s*,\s*\w+)*)\s*;(.*)$/ ) {
+      my ($t,$names,$rest) = ($1,$2,$3);
+      # A field the includer only ever reduces over all lanes does not need one
+      # slot per lane. `//SOA_FOLD N` gives it N, and every mention is indexed
+      # rcidx%N -- see RC_FF_LANES in rc_config.inc.
+      my @ns = split /\s*,\s*/, $names;
+      for my $n (@ns) { push @fields, $n; $fold{$n} = $fold_pending{$n} // 'RCNUM'; }
+      push @decl, join('', map { "RC_KALIGN $t $_\[$fold{$_}];\n" } @ns);
       $i++; next;
     }
     # statics pass through as declarations
@@ -102,7 +114,7 @@ for my $l (@body) {
   $l =~ s/\bget\(\s*\)/get1(rcidx)/g;
   $l =~ s/\bput\(\s*/put1( rcidx, /g;
   # field mentions
-  $l =~ s/\b($fieldpat)\b(?!\s*[\[\w])/$1\[rcidx\]/g if @fields;
+  $l =~ s/\b($fieldpat)\b(?!\s*[\[\w])/$1 . '[' . ($fold{$1} eq 'RCNUM' ? 'rcidx' : "rcidx%$fold{$1}") . ']'/ge if @fields;
   # tmpptr is the prelude's per-lane cursor
   $l =~ s/\btmpptr\b(?!\s*\[)/tmpptr[rcidx]/g;
 }

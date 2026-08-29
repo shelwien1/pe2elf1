@@ -208,7 +208,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 4096*(RC_FF_TRIM&63)                     \
                        + 33554432*RC_FOLD_RPRE            \
                        + 67108864*RC_LOAD32               \
-                       + 134217728*RC_DEC_COLD )
+                       + 134217728*RC_DEC_COLD            \
+                       + 3*RC_FF_LANES )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -649,6 +650,33 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // meant to and the clock disagreed.
 #ifndef RC_DEC_ALIGN
 #define RC_DEC_ALIGN 1
+#endif
+
+// How many slots the generated kernel gives FFNum. Its only consumer is
+// model0.inc's `ncarry &= FFNum[j]` over every lane at block end, followed by a
+// whole-block re-code -- so the per-lane values are never read apart and the
+// array can be narrower than RCNUM, with lane j folding into slot j%N. At
+// RCNUM=16 and N=8 that is one ymm instead of two, and one fewer spilled array
+// in the sweep's working set. speed_plan_next.md 5.1.
+#ifndef RC_FF_LANES
+#define RC_FF_LANES RC_RCNUM
+#endif
+#if RC_RCNUM % RC_FF_LANES
+#error "RC_FF_LANES must divide RC_RCNUM"
+#endif
+
+// 1 = the coding sweep walks pbit[] with a negative index counting up to zero,
+// off a biased base, so the group loop's latch is `add/jne` (one fused uop)
+// instead of `add/cmp/jb` (two). speed_plan_next.md 5.2.
+//
+// MEASURED, AND IT DOES NOT FIRE: clang emits `add $16,%rcx; cmp $-16,%rcx;
+// jl` -- it keeps the compare rather than using the add's own flags -- so the
+// instruction count is unchanged at 142 per group and the timing follows
+// (-0.93% encode against a -0.46% control). The other three items in 5.2 are
+// register-allocator and constant-placement decisions with no source spelling
+// at all.
+#ifndef RC_SWEEP_NEGIDX
+#define RC_SWEEP_NEGIDX 0
 #endif
 
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
