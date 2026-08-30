@@ -214,7 +214,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 13*RC_ENC_NSEL                   \
                        + 17*RC_ENC_RENORM                  \
                        + 19*RC_DEC_PREFETCH               \
-                       + 23*RC_DEC_PFDIST )
+                       + 23*RC_DEC_PFDIST                  \
+                       + 29*RC_DEC_SPLIT )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -651,6 +652,35 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // How far below the cursor to prefetch, in bytes. One cache line by default.
 #ifndef RC_DEC_PFDIST
 #define RC_DEC_PFDIST 64
+#endif
+
+// 1 = split rc_Process at the model, so the decode group runs as four passes
+// instead of one interleaved walk. misc/dec_vectorize.md is the analysis; the
+// short version is that rc_Process decides the bit AND updates the coder, and
+// because the decision needs the model's p in the middle, the whole thing runs
+// at the model's pace -- p arrives one lane at a time, so clang vectorises the
+// renorm and then extracts every lane to reach (range>>SCALElog)*freq.
+//
+//   rc_DecPre    renormalise, every lane           -- vector
+//   RC_DIVALL    val = code/(range>>SCALElog)      -- vector, model-free
+//   the model    bit = (val >= p), ctx = ctx*2+b   -- scalar, serial
+//   rc_DecUpd    the coder update, every lane      -- vector
+//
+// `code >= (range>>SCALElog)*freq` and `code/(range>>SCALElog) >= freq` are the
+// same predicate for integer freq, and the quotient does not mention the model,
+// so it can be computed for the whole group before the walk starts. The serial
+// chain keeps only a load, a compare and a shift-add.
+//
+// The lane-to-byte mapping is RC_DEC_WAVE==2's and the stream is identical;
+// this changes the order the work is issued in, not the arithmetic.
+#ifndef RC_DEC_SPLIT
+#define RC_DEC_SPLIT 0
+#endif
+#if RC_DEC_SPLIT && !RC_VEC
+#error "RC_DEC_SPLIT needs the vector coder (RC_VEC=1)"
+#endif
+#if RC_DEC_SPLIT && ( (RC_RCNUM%8) || (RC_DEC_PUTW && (RC_RCNUM/8)%2) )
+#error "RC_DEC_SPLIT needs RCNUM a multiple of 8, and an even byte count per group under RC_DEC_PUTW"
 #endif
 
 #if   RC_DEC_PREFETCH==1

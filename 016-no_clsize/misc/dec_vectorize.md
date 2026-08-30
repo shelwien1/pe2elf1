@@ -127,8 +127,91 @@ if the eight-deep chain of dependent counter loads really is ~56 cycles per
 byte, 62 cycles of divide can hide underneath it rather than adding to it. That
 is the question a prototype answers and arithmetic does not.
 
-## 4. What to build
+## 4. Built: RC_DEC_SPLIT, and why it loses anyway
 
-Restructuring the group loop into the three passes above, with `q[]`, `freq[]`
-and `bit[]` staged between them -- the same shape the encoder already has, and
-the same place `RC_FLUSHALL` lives. Not yet built.
+The four-pass loop is implemented and decodes byte-identically. `rc_DecPre`
+renormalises, `RC_DIVALL` produces the quotients, the model walks, `rc_DecUpd`
+updates the coder; the lane-to-byte mapping and the stream are `RC_DEC_WAVE=2`'s
+exactly, so this changes the order the work is issued in and nothing else.
+
+**It does what it was supposed to do.** In `Model<1>::do_process`:
+
+| | insns | vector ops | zmm | ymm | vdivpd | transfers |
+|---|---|---|---|---|---|---|
+| baseline, shape 0 | 1502 | 303 | 0 | 144 | 0 | 58 |
+| split, shape 9 | **979** | **398** | 40 | 203 | 2 | 48 |
+
+A third smaller, a third more vector work, two `vdivpd` covering all sixteen
+lanes, and fewer transfers. The vectorisation goal is met.
+
+**And it is 33-77% slower.**
+
+| RCNUM | baseline | split | gap |
+|---|---|---|---|
+| 16 | 2.085 s | 3.683 | +77% |
+| **32** | **1.897** | 2.930 | +54% |
+| 64 | 2.241 | 2.986 | +33% |
+| 128 | 2.817 | 3.986 | +41% |
+
+The reason is structural and I had it wrong in section 3. I argued the divides
+were independent throughput work that could hide under the model's latency
+chain. They cannot: **the model consumes the quotients.** The four passes are a
+hard dependency chain — renorm, then divide, then the eight-deep context walk,
+then the update — and a barrier between each.
+
+The interleaved loop has the same per-lane serial chains, but nothing stops the
+scheduler overlapping lane 5's renorm with lane 3's counter load, and it has
+sixteen lane chains plus NB model chains to draw from. Splitting into passes
+throws that away to gain vector width. On this box the overlap was worth more
+than the width.
+
+The one thing that does amortise is the barrier itself — the gap narrows from
++77% to +33% as RCNUM goes 16 to 64, then reverses at 128 when both variants
+start losing to cache pressure. It never crosses.
+
+### What the split does confirm
+
+Inside it, **branchless renorm beats branchy**, which is the opposite of every
+measurement in `dec_renorm.md`:
+
+| split, RCNUM=16 | decode |
+|---|---|
+| shape 9, cached window, branchless | **3.683 s** |
+| shape 13, clz | 3.873 |
+| shape 0, two branches | 4.174 |
+| shape 8, one branch | 4.311 |
+
++12% for shape 9 over shape 0. So the sub-hypothesis holds — once the renorm
+is a clean whole-group pass with no model interleaved, the branch stops paying
+and branchless wins. It just does not rescue the structure around it.
+
+### Hints from sserangecoding
+
+Two things in richgel999/sserangecoding are worth recording, and one of them
+does not transfer:
+
+- It divides in **float32** (`_mm_div_ps` on `_mm_cvtepi32_ps`) with no
+  correction step. That is exact for it because its value is seeded by
+  `read_be24` and stays inside float32's 24-bit mantissa. Ours is
+  `RC_CODBYTES=4`, a full 32 bits, so float32 needs a two-sided correction and
+  the upward one overflows 32 bits — measured, 13 mismatches near 2^32. Doubles
+  are not optional here.
+- Its refill is a **shuffle**, not a gather: `_mm_loadl_epi64` of eight bytes
+  then `_mm_shuffle_epi8` with tables indexed by the lanes' renorm mask. That
+  works because its four lanes share ONE stream and consume from it in order.
+  Ours are RCNUM independent substreams in separate rows, so the addresses are
+  unrelated and no shuffle can assemble them. Sharing a stream across lanes
+  would be a format change, not a decoder change — but it is the thing that
+  makes their refill free, and it is the direction to look if the format is
+  ever on the table.
+
+## 5. Where this leaves it
+
+Nothing here beats the interleaved loop, and the reason is now specific rather
+than vague: the decoder's cross-lane overlap is worth more than its vector
+width, so any restructuring that adds a barrier to gain width starts behind.
+
+The one result worth acting on is unrelated to all of it: **RCNUM=32 decodes at
+1.897 s against 16's 2.085**, about 9%, on the ordinary interleaved loop. That
+wants a twin-controlled re-measure and a look at what it costs the encoder,
+but it is free if it holds.

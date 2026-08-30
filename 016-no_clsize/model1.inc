@@ -108,7 +108,46 @@ struct Model<1> : Coroutine, PredictorD {
 #else
 #error "RC_DEC_UNROLL must be 0, 1, 2, 4 or 8"
 #endif
-#if RC_DEC_WAVE==2
+#if RC_DEC_SPLIT
+        // rc_Process split at the model -- see rc.inc and misc/dec_vectorize.md.
+        // Same wavefront as RC_DEC_WAVE==2 below, same lane-to-byte mapping,
+        // but the group is four passes instead of one interleaved walk, so
+        // that the three which do not need the model can be whole-group work.
+        {
+          enum { NB = RCNUM/8 };
+          uint lctx[NB], st[NB];
+          uint pa[RCNUM], ba[RCNUM];
+          for( i=0; i<nb1; i+=RCNUM ) {
+            // 1. renormalise every lane. Nothing here reads the model.
+            RC_UNROLL for( j=0; j<RCNUM; j++ ) rc_DecPre( j );
+            // 2. the quotients, whole group at once.
+            RC_DIVALL();
+            // 3. the serial walk. No coder state and no multiply: the bit is
+            //    one compare against the quotient pass 2 already produced.
+            RC_UNROLL for( uint m=0; m<NB; m++ ) lctx[m] = 1;
+            RC_UNROLL
+            for( j=0; j<8; j++ ) {
+              RC_UNROLL
+              for( uint m=0; m<NB; m++ ) {
+                P_S_L( lctx[m], st[m] );
+                const uint _p = P_P(st[m]);
+                const uint _b = (val[m*8+j] >= _p);
+                pa[m*8+j] = _p; ba[m*8+j] = _b;
+                P_update_L( lctx[m], st[m], _b );
+              }
+            }
+            // 4. the coder update, every lane.
+            RC_UNROLL for( j=0; j<RCNUM; j++ ) rc_DecUpd( j, pa[j], ba[j] );
+#if RC_DEC_PUTW
+            RC_UNROLL
+            for( uint m=0; m<NB; m+=2 ) put0pair( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
+#else
+            RC_UNROLL for( uint m=0; m<NB; m++ ) put0( lctx[m]&0xFF );
+#endif
+          }
+          ctx = 1;                      // the tail loops below use the member
+        }
+#elif RC_DEC_WAVE==2
         // The wavefront (speed_plan_next.md 1.1). A group is RCNUM/8 output
         // bytes -- lanes 0..7 are one, 8..15 the next -- and the bit-context
         // chain restarts at every byte and carries nothing across: P_byte is

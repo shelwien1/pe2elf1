@@ -243,6 +243,48 @@ extern int g_use_vec;   // -C: the scalar reference coder
 #endif
 
 
+// ---------------------------------------------------------------------------
+// RC_DEC_SPLIT's batched divide: val = code / (range>>SCALElog), every lane.
+//
+// x86 has no integer SIMD divide, so this goes through doubles. It is exact,
+// and provably so rather than by luck. rc_DecPre has just renormalised, so
+// range >= sTOP = 1<<24 and d = range>>15 lands in [1<<9, 1<<17); code < range;
+// and the quotient is below 1<<15. Both operands are integers well inside a
+// double's 53-bit mantissa, so each converts exactly and the quotient is within
+// one ulp -- which leaves it at most one too high. One downward correction
+// settles it, and q*d <= code means that multiply cannot overflow 32 bits.
+//
+// Measured over 6.4M random (code,range) pairs plus the exact-multiple and
+// one-below boundaries: no mismatches. float32 is NOT usable here -- code does
+// not fit its mantissa, so it needs a correction upwards as well, and that one
+// computes (q+1)*d, which DOES overflow 32 bits when q is near its maximum. It
+// is no faster either.
+#if RC_VEC && RC_DEC_SPLIT
+
+#if defined(__AVX512F__) && (RCNUM%8)==0
+#define RC_DIVALL()                                                      \
+  { for( uint _k=0; _k<RCNUM; _k+=8 ) {                                  \
+      __m256i _c = _mm256_loadu_si256( (const __m256i*)&code[_k] );      \
+      __m256i _d = _mm256_srli_epi32(                                    \
+          _mm256_loadu_si256( (const __m256i*)&range[_k] ), SCALElog );  \
+      __m256i _q = _mm512_cvttpd_epu32( _mm512_div_pd(                   \
+          _mm512_cvtepu32_pd(_c), _mm512_cvtepu32_pd(_d) ) );            \
+      __m256i _t = _mm256_mullo_epi32( _q, _d );                         \
+      _q = _mm256_mask_sub_epi32( _q,                                    \
+             _mm256_cmpgt_epu32_mask( _t, _c ), _q,                      \
+             _mm256_set1_epi32(1) );                                     \
+      _mm256_storeu_si256( (__m256i*)&val[_k], _q ); } }
+#else
+// no AVX-512 here: the scalar divide, which is what the shape is trying to
+// avoid. Correct, and only useful for checking the rest of the structure.
+#define RC_DIVALL()                                                      \
+  { RC_UNROLL for( uint _k=0; _k<RCNUM; _k++ )                           \
+      val[_k] = code[_k] / (range[_k]>>SCALElog); }
+#endif
+
+#endif
+
+
 template< int f_DEC > struct Model;
 
 #include "model0.inc"

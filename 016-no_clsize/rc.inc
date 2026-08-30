@@ -85,6 +85,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // it, which is the whole point -- see rc_config.inc.
   uint  win;
 
+  // RC_DEC_SPLIT's quotient, code/(range>>SCALElog), one per lane. Produced
+  // for the whole group at once by RC_DIVALL and consumed by the serial model
+  // walk, which is the only reason it has to live in lane state at all.
+  uint  val;
+
   // what this kernel was generated against; model0.inc checks it
   enum { KERNEL_CONF = RC_KERNEL_CONF };
 #endif
@@ -693,6 +698,39 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
 
     _bit = _b;
+  }
+
+  // RC_DEC_SPLIT cuts the above in two at the model.
+  //
+  // rc_Process does both halves of a bit -- it decides the bit, which needs
+  // the model's p, and it updates the coder, which does not. Because it needs
+  // p in the middle, the whole thing runs at the model's pace: p arrives one
+  // lane at a time (a byte's eight bits are one walk of the context tree,
+  // ctx = ctx*2 + bit), so clang vectorises the renorm and then extracts every
+  // lane to reach `rpre = (range>>SCALElog)*freq`. That extract is the
+  // decoder's scalar/vector boundary -- see misc/dec_vectorize.md.
+  //
+  // Split, a group runs as four passes:
+  //
+  //   rc_DecPre    renormalise, every lane           -- vector
+  //   RC_DIVALL    val = code/(range>>SCALElog)      -- vector, model-free
+  //   the model    bit = (val >= p), ctx = ctx*2+b   -- scalar, serial
+  //   rc_DecUpd    the coder update, every lane      -- vector
+  //
+  // The division is what makes it possible: `code >= (range>>SCALElog)*freq`
+  // and `code/(range>>SCALElog) >= freq` are the same predicate for integer
+  // freq, but the quotient does not mention the model, so it can be computed
+  // for every lane before the walk starts. What is left on the serial chain is
+  // a load, a compare and a shift-add; the multiply is gone from it.
+  void rc_DecPre( void ) {
+    rc_Renorm();
+  }
+  void rc_DecUpd( uint freq, uint _b ) {
+    rpre = range>>SCALElog;
+    rpre *= freq;
+    range -= rpre;
+    range = _b ? range : rpre;
+    rpre &= -_b;
   }
 
   // Decode needs the unit before it can pick the symbol, so this is where the
