@@ -37,6 +37,12 @@ NITERD=${NITERD:-$NITER}
 FSM=${FSM:-../FSM0.txt}
 CODER=./coder
 
+# A build whose encoder is wrong decodes to a stream that never ends -- the
+# block length is coded INSIDE the rangecoder data, so a bad stream can ask the
+# decoder for bytes forever. Cap the write: 4x the input is far more than any
+# correct run needs, and the cap turns "filled the disk" into "test failed".
+ulimit -f $(( ($(wc -c < "$IN") / 512 + 1) * 4 )) 2>/dev/null || true
+
 enc=t.enc; dec=t.dec; ref=t.ref
 [ "${KEEP:-0}" = 1 ] || trap 'rm -f "$enc" "$dec" "$ref"' EXIT
 

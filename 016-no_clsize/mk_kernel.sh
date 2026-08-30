@@ -56,4 +56,16 @@ for feat in RC_KALIGN RC_FOLD; do
   }
 done
 
+# Same for rc_macro.pl: a stale one emits macro bodies that do not parenthesise
+# their parameters, so the body's precedence applies to the caller's
+# expression. ShiftLow's `n*8` turns `ShiftLow( sh>>3 )` into `sh>>3*8`. That
+# compiles, encodes, and produces a stream that does not decode.
+grep -q '\[(rcidx)\]' rc_vecD.inc || {
+  echo "mk_kernel.sh: ../Lib3/rc_macro.pl is out of date -- the generated" >&2
+  echo "  kernel does not parenthesise macro parameters. Sync Lib3 with this" >&2
+  echo "  directory; an old generator builds fine and miscodes any call that" >&2
+  echo "  passes an expression (RC_ENC_NSEL=1, say)." >&2
+  exit 1
+}
+
 echo "generated rc_vecD.inc from rc.inc"

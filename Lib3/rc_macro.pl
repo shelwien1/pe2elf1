@@ -66,10 +66,18 @@ while( <I> ) {
     }
 
     $list = join(",",@list);
+    $parmpat = @list ? join('|', map { quotemeta } @list) : undef;
     print D "#define $func\($list\)\n";
 
     next;
   }
+
+  # Inside a macro body, every use of a parameter gets parenthesised. Without
+  # it the body's operator precedence silently applies to whatever the caller
+  # passed: ShiftLow's `n*8` turns `ShiftLow( sh>>3 )` into `sh>>3*8`, which
+  # is `sh>>24`, which encodes a stream that does not decode. A parenthesised
+  # lvalue is still an lvalue, so a parameter the body assigns to is fine.
+  $a =~ s/\b($parmpat)\b(?![\w(])/($1)/g if $f_func==1 && defined $parmpat;
 
   print D "$a\n";
 }

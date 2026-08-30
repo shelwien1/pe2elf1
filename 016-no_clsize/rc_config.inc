@@ -210,7 +210,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 67108864*RC_LOAD32               \
                        + 134217728*RC_DEC_COLD            \
                        + 3*RC_FF_LANES                    \
-                       + 11*RC_DEC_RENORM )
+                       + 11*RC_DEC_RENORM                 \
+                       + 13*RC_ENC_NSEL )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -368,11 +369,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // and the generated decoder used two nested branches instead. (The scalar
 // reference coder in the !RC_VECOUT half of rc.inc has always used the counted
 // shift on BOTH sides, so the two were already disagreeing.) The asymmetry was
-// never measured; this knob has seven shapes and the measurements are below.
+// never measured; this knob has ten shapes and misc/dec_renorm.md is the
+// analysis.
 //
 //   0  two nested branches: skip everything unless range<sTOP, then test
-//      range<gTOP to pick the 1-byte or the 2-byte refill
-//   1  the outer branch, the inner one replaced by a counted shift   <- default
+//      range<gTOP to pick the 1-byte or the 2-byte refill        <- default
+//   1  the outer branch, the inner one replaced by a counted shift
 //   2  no branch at all; n from the same two compares the encoder uses
 //   3  no branch at all; n from __builtin_clz -- sTOP and gTOP are 1<<24 and
 //      1<<16, so the two compares ARE a count of leading zero bytes
@@ -381,6 +383,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //   5  a branchless ONE-byte refill on the single compare that decides it,
 //      plus a guard for the second byte
 //   6  1, with the window addressed by n and masked instead of shifted
+//   7  Shelwien's branchless shape: no locals at all, the SHIFT COUNT in lane
+//      state, selected by a nested ternary
+//   8  7 with the outer branch back, and the rpre fold duplicated into both
+//      arms rather than hoisted above it
+//   9  7 with the refill window CACHED in lane state and re-filled one
+//      iteration ahead of the bit that reads it
 //
 // The distribution is the whole story. Counted in the scalar reference coder
 // over the 800M bits of enwik8:
@@ -396,45 +404,82 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // That makes the two branches two completely different propositions. The OUTER
 // one buys 92% of bits an empty renorm for a test that mispredicts ~8% of the
 // time, and it is worth far more than the mispredict: taking it away costs
-// 8-18%, because the unconditional shifts land on the loop-carried range and
-// code chains and the 16x unrolled body grows by 150-220 instructions. The
-// INNER one never mispredicts at all -- but it is still worth removing,
-// because it costs instructions and stack slots in a body that is short of
-// both.
+// 17-36%, on both machines below, because the unconditional shifts land on the
+// loop-carried range and code chains. The INNER one never mispredicts at all,
+// and removing it is worth a couple of percent -- in one direction on one
+// machine and the other on the other.
 //
-// This box, clang 18, -march=native, 100 MB of enwik8, RC_DEC_WAVE=2 and the
-// rest of the tuned set, medians of best-of-3 over 7 round-robin rounds with a
-// byte-identical twin of shape 0 in the rotation (it came back at 2.745 s, the
-// same three digits). Loop figures are the 16-lane decode body:
+// Two boxes, both 100 MB of enwik8, RC_DEC_WAVE=2 and the rest of the tuned
+// set. Mine: clang 18, -march=native (AVX-512), medians of best-of-2 over 5
+// round-robin rounds, twins of 0 and 9 in the rotation (2.2% and 1.9% apart,
+// which is the noise floor). Shelwien's: clang 23, AVX2, from his log.txt.
+// Loop figures are my 16-lane decode body.
 //
-//                                      insns  branch  rsp    decode
-//   0  two nested branches              460     17    119    2.745 s
-//   1  counted inner, window shifted    449     17    114    2.687   +2.2%
-//   6  counted inner, window addressed  442     17    108    2.667   +2.9%
-//   5  branchless 1 byte + guard        678     18    134    2.990   -8.2%
-//   4  branchless, window addressed     605      1    144    3.248  -15.5%
-//   3  branchless, clz                  654      1    157    3.287  -16.5%
-//   2  branchless, two compares         672      1    158    3.365  -18.4%
+//                                    insns  br   rsp    mine      his
+//   8  one branch, no locals          431   17   103   +2.5%    -1.9%
+//   0  two nested branches            460   17   113      --       --
+//   6  counted inner, addressed       450   17   114   -0.6%    -3.5%
+//   1  counted inner, shifted         452   17   111   -2.9%    -4.9%
+//   5  branchless 1 byte + guard      678   18   134   -5.4%   -10.7%
+//   9  branchless, window cached      478    1    80  -20.5%        ?
+//   4  branchless, addressed          629    1   163  -31.0%   -21.7%
+//   3  branchless, clz                655    1   157  -33.4%   -23.5%
+//   2  branchless, two compares       668    1   156  -34.4%   -22.8%
+//   7  branchless, no locals          735    1   204  -36.2%   -16.8%
 //
-// At RC_DEC_WAVE=0 the same three: 2.902 / 2.739 (+5.9%) / 2.761 (+5.1%). The
-// win is larger there, which is the wavefront doing what it is for -- with 16
-// lanes in flight there is more to hide a branch behind.
+// Read that table twice. The big number -- the outer branch is worth a fifth
+// to a third of decode -- reproduces on both machines. Every small number
+// disagrees: 1 and 6 are the two best shapes on neither box and 8 wins on one
+// and loses on the other, and inside the branchless family the ranking is
+// exactly REVERSED (7 is his best and my worst). The default is 0 because it
+// is the only shape that is never worse than second, and because an earlier
+// round of this measurement -- taken on a box that turned out to be sharing
+// its cores with a runaway process -- read 1 as +2.2% here and briefly made it
+// the default. It is not.
 //
-// 1 and 6 are a tie (+2.2 vs +2.9 at WAVE=2, +5.9 vs +5.1 at WAVE=0, against a
-// 0.8% twin spread), and 1 is the default because 6 needs four bytes of row
-// above the cursor and so cannot be built at RC_LOWBYTES==RC_CODBYTES. The
-// encode column does not move for any of them -- f_DEC is a template
-// parameter, so none of this reaches Model<0>.
+// 9 is the answer to "the branchless shape is slower because of the memory
+// read": it is, and caching the window is worth +24.7% over 7 here (3.097 ->
+// 2.485 s) while cutting stack traffic from 204 references to 80, the lowest
+// of any shape. It still does not beat the branch here. But his branchless
+// family starts far closer to his branchy one -- 7 is at 83% of 0 on his box
+// against 64% on mine -- so the same +25% there would land at about 50 MB/s
+// against 0's 48.21, and 9 would win outright. That is the measurement to
+// make.
 //
-// 1..6 all read the 32-bit refill window, so they carry RC_LOAD32's padding
-// requirement whatever RC_LOAD32 itself is set to (see rc_io.inc), and 4 and 6
-// need bytes ABOVE the cursor as well. They ignore RC_LOAD32: it selects
-// between shapes of the branchy refill, and 1 and 6 have subsumed it while
-// 2..5 have no branchy refill left.
+// 1..9 all read the 32-bit refill window, so they carry RC_LOAD32's padding
+// requirement whatever RC_LOAD32 itself is set to (see rc_io.inc), and 4, 6,
+// 7 and 8 need bytes ABOVE the cursor as well. They ignore RC_LOAD32: it
+// selects between shapes of the branchy refill, which 1 and 6 through 8 have
+// subsumed and 2 through 5 and 9 do not have.
 //
-// All seven produce the same stream -- t_matrix.sh checks each.
+// All ten produce the same stream -- t_matrix.sh checks each.
 #ifndef RC_DEC_RENORM
-#define RC_DEC_RENORM 1
+#define RC_DEC_RENORM 0
+#endif
+
+// The encoder half of the same two lessons. rc_Renorm's f_DEC==0 arm has
+// always been `n = (range<sTOP) + (range<gTOP)`, a byte count in a local.
+//
+//   0  that
+//   1  the SHIFT COUNT from a nested ternary, in a const local
+//   2  the same, in lane state (dsh) instead of a local
+//
+// The encoder is not the decoder: its sweep is vector code over lane arrays
+// that clang auto-vectorises, so a scalar local there is a vector register,
+// not sixteen scalar ones, and the pressure argument that makes the decoder
+// care does not apply. Measured: 93.7 / 94.3 / 94.0 MB/s for 0 / 1 / 2 here,
+// against a 0-twin at 92.4 -- the whole spread is inside the noise. His log
+// says the same from the other end: the encode column sits between 80.0 and
+// 81.8 MB/s across all forty rows of it, with no structure. Kept because the
+// knob costs nothing and his box is not this one.
+//
+// 1 was also the bug that found rc_macro.pl's missing parentheses. ShiftLow's
+// body is `n*8`, so `ShiftLow( sh>>3 )` expanded to `sh>>3*8` -- `sh>>24`,
+// always 0 -- and encoded a stream whose decode never terminated. The
+// generator parenthesises its macro parameters now, and mk_kernel.sh fails if
+// it is stale.
+#ifndef RC_ENC_NSEL
+#define RC_ENC_NSEL 0
 #endif
 
 // 1 = ShiftLow extracts the high word as a single variable shift,

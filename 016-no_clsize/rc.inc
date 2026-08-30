@@ -72,6 +72,19 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // them and they cost nothing.
   uint  stcl, stad, stn;
 
+  // RC_DEC_RENORM 7 and 8 keep the renorm's shift count in lane state rather
+  // than in a local, which is the whole point of those shapes -- see
+  // rc_config.inc. Declared unconditionally for the same reason the staging
+  // trio is: the generated kernel must not depend on anything but the -D set.
+  // Nothing writes it in the other shapes and it costs nothing there.
+  uint  dsh;
+
+  // RC_DEC_RENORM 9's cached refill window: the four stream bytes ending at
+  // the cursor, so the invariant is `win == (uint&)tmpbase[tmpptr-3]` at every
+  // entry to rc_Renorm. rc_Init seeds it and rc_Renorm re-fills it AFTER using
+  // it, which is the whole point -- see rc_config.inc.
+  uint  win;
+
   // what this kernel was generated against; model0.inc checks it
   enum { KERNEL_CONF = RC_KERNEL_CONF };
 #endif
@@ -323,20 +336,97 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
   }
 
-  // Encode: the counted shift. Decode: whichever of RC_DEC_RENORM's seven
+  // Encode: the counted shift. Decode: whichever of RC_DEC_RENORM's nine
   // shapes is built -- by default the branchy nested refill with the cursor
   // touched only inside it, ~91% of bits passing two predicted tests and
   // doing nothing else, the shape rc_split_ispc_v1.md section 9.5 measured.
   void rc_Renorm( void ) {
     if( f_DEC==0 ) {
-      uint n = (range<sTOP) + (range<gTOP);
+      // RC_ENC_NSEL carries the decoder's two lessons across to this side:
+      // pick the SHIFT COUNT with a nested ternary rather than summing two
+      // compares into a byte count, and hold it in lane state rather than in a
+      // local. See rc_config.inc for what each is worth.
+#if RC_ENC_NSEL==2
+      dsh = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+      ShiftLow( dsh>>3 );
+      range <<= dsh;
+#elif RC_ENC_NSEL==1
+      // _sh, not sh: ShiftLow's body declares its own `sh`, and after the
+      // generator turns the function into a macro an argument named sh would
+      // expand into that declaration's own initialiser.
+      const uint _sh = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+      ShiftLow( _sh>>3 );
+      range <<= _sh;
+#else
+      const uint n = (range<sTOP) + (range<gTOP);
       ShiftLow( n );
       range <<= n*8;
+#endif
     }
     if( f_DEC==1 ) {
+#if RC_DEC_RENORM<7
       code -= rpre;
       rpre = 0;
-#if RC_DEC_RENORM>=2 && RC_DEC_RENORM<=4
+#endif
+#if RC_DEC_RENORM>=7
+      // Shelwien's shapes, and they are not written the way the others are.
+      // Every operation is its own statement on lane state -- no locals at all
+      // -- because in the 16x unrolled decode loop a local is a scalar with a
+      // live range clang has to allocate a register for sixteen times over,
+      // while a lane-array slot is something it can re-read or rematerialise
+      // as it likes. See rc_config.inc for what that measured.
+      //
+      // dsh holds the SHIFT COUNT, 0/8/16, not the byte count: it is what
+      // both shifts want, and the cursor's decrement is dsh>>3 for free. The
+      // nested ternary produces it directly. Selecting the byte count that way
+      // instead and deriving the shift from it measures 29% slower.
+#if RC_DEC_RENORM==9
+      // Branchless, and the refill read one iteration ahead of where it is
+      // needed. 7 reloads the window every bit and consumes it in the same
+      // bit, so the chain is range -> dsh -> tmpptr -> load -> code and the
+      // load's latency is on it. Here `code` takes its bytes out of win, which
+      // the PREVIOUS bit already loaded, and this bit's load only has to land
+      // before the next one reads it. Same load count, a whole iteration of
+      // slack -- the trick RC_FOLD_RPRE plays on the encoder.
+      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+      code   -= rpre;
+      rpre    = 0;
+      code  <<= dsh;
+      range <<= dsh;
+      code   |= (win>>16) >> (16-dsh);   // the top dsh bits of the cached word
+      tmpptr -= dsh>>3;
+      win     = (uint&)tmpbase[tmpptr-3];
+#elif RC_DEC_RENORM==8
+      // The outer test kept -- the same one shape 0 has, and worth ~18% here.
+      // The rpre fold is DUPLICATED into both arms rather than hoisted above
+      // the branch: hoisting it measures 1.7% slower, because it makes code
+      // and rpre live across the test in a body that is short of registers.
+#if RC_DEC_COLD
+      if( __builtin_expect_with_probability( range<sTOP, 0, 0.99 ) ) {
+#else
+      if_e0( range<sTOP ) {
+#endif
+        dsh     = (range<gTOP) ? 16 : 8;
+        tmpptr -= dsh>>3;
+        code   -= rpre;
+        rpre    = 0;
+        code  <<= dsh;
+        range <<= dsh;
+        code   |= (uint&)tmpbase[tmpptr+1] & ((dsh==8) ? 0xFF : 0xFFFF);
+      } else {
+        code   -= rpre;
+        rpre    = 0;
+      }
+#else
+      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+      tmpptr -= dsh>>3;
+      code   -= rpre;
+      rpre    = 0;
+      code  <<= dsh;
+      range <<= dsh;
+      code   |= (uint&)tmpbase[tmpptr+1] & ((dsh==0) ? 0 : (dsh==8) ? 0xFF : 0xFFFF);
+#endif
+#elif RC_DEC_RENORM>=2 && RC_DEC_RENORM<=4
       // No branch: the decoder's counted shift, the encoder's `n` expression
       // read the other way round. gTOP < sTOP, so range<gTOP implies
       // range<sTOP and n is 0, 1 or 2 -- n bytes leave the substream and n
@@ -476,7 +566,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
 #endif  // RC_DEC_RENORM 1 or 6
       }
-#endif  // RC_DEC_RENORM branchless shapes
+#endif  // RC_DEC_RENORM shape dispatch
     }
   }
 
@@ -579,6 +669,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     if( f_DEC==0 ) RC_STAGE_INIT( rcidx, tmpptr-2 );
 #endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
+#if RC_VECOUT && RC_DEC_RENORM==9
+    // seed the cached window; get() above is the only other thing that moves
+    // the decoder's cursor
+    if( f_DEC==1 ) win = (uint&)tmpbase[tmpptr-3];
+#endif
   }
 
 #if RC_VECOUT

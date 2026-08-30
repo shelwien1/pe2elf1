@@ -99,14 +99,15 @@ struct RCio {
   static_assert( FF_PADSIZE >= RC_FF_TRIM + RC_LOWBYTES + 3,
     "the 32-bit refill reads tmpbase[tmpptr-3]; RC_FF_PADSIZE must cover it" );
 #endif
-#if RC_DEC_RENORM==4 || RC_DEC_RENORM==6
-  // ...and 4 and 6 address that window by n, so the load can start at the
-  // cursor itself (4 goes one above it, at n==0) and read up to tmpptr+4 --
+#if RC_DEC_RENORM==4 || RC_DEC_RENORM==6 || RC_DEC_RENORM>=7
+  // ...and 4, 6, 7 and 8 address that window by n, so the load can start at
+  // the cursor itself (or one above it, at n==0) and read up to tmpptr+4 --
   // stream the cursor has already passed, but it still has to be inside the
   // row. The cursor never rises above the payload's top byte, which sits
   // RC_SKIP below the row top, so RC_SKIP alone decides it.
   static_assert( RC_SKIP >= 4,
-    "RC_DEC_RENORM 4 and 6 read above tmpptr; RC_SKIP (= RC_LOWBYTES minus "
+    "RC_DEC_RENORM 4, 6, 7 and 8 read above tmpptr; RC_SKIP (= RC_LOWBYTES "
+    "minus "
     "RC_CODBYTES) must leave four bytes above the payload" );
 #endif
 
