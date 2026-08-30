@@ -46,11 +46,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   static constexpr qword LOW_MASK = qword(-1) >> (64-LOWBITS);
   static constexpr qword LOW_MAX  = LOW_MASK+1;
 
-#if RC_LOWSPLIT
   uint  lowl, lowh;   // low accumulator, LOWBITS wide, as (lowh<<32)|lowl
-#else
-  qword lowc;    // low accumulator, LOWBITS wide
-#endif
   uint  rpre;    // the unit out of rc_Renorm; scaled to the low delta in
                  // rc_Process, which is what the next ShiftLow applies
   uint  Carry;   // carry out of low, pending until the next byte is emitted
@@ -101,57 +97,34 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // hold the overflow, so the test has to be on the addition itself.
   uint low_Add( void ) {
     uint c = 0;
-#if RC_LOWSPLIT
     const uint cf = (lowl+rpre < lowl);
     lowl += rpre;
     if( LOWBYTES==8 ) c = (lowh+cf < lowh);
     lowh += cf;
     if( LOWBYTES< 8 ) c = (lowh >= uint(LOW_MAX>>32));
     lowh &= uint(LOW_MASK>>32);          // clears that bit (and is 0 at LB4)
-#else
-    if( LOWBYTES==8 ) c = (lowc+rpre < lowc);
-    lowc += rpre;
-    if( LOWBYTES< 8 ) c = (lowc>=LOW_MAX);
-    lowc &= LOW_MASK;                    // clears that bit
-#endif
     return c;
   }
 
   uint low_Top( void ) {                 // the byte about to leave
-#if RC_LOWSPLIT
     // LOWBITS-40 is where the top byte sits inside lowh; at LOWBYTES==4 lowh
     // holds nothing and the top byte is still in lowl.
     enum { TOPSH = LOWBITS>32 ? LOWBITS-40 : 0 };
     return LOWBITS>32 ? ((lowh>>TOPSH)&0xFF) : ((lowl>>24)&0xFF);
-#else
-    return uint(lowc>>(LOWBITS-8)) & 0xFF;
-#endif
   }
 
   void low_Shift8( void ) {
-#if RC_LOWSPLIT
     lowh = (lowh<<8) | (lowl>>24);       // constant count: no 32-sh trap here
     lowl <<= 8;
     lowh &= uint(LOW_MASK>>32);
-#else
-    lowc = (lowc<<8) & LOW_MASK;
-#endif
   }
 
   qword low_Get( void ) {
-#if RC_LOWSPLIT
     return (qword(lowh)<<32) + lowl;
-#else
-    return lowc;
-#endif
   }
 
   void low_Init( void ) {
-#if RC_LOWSPLIT
     lowl = 0; lowh = 0;
-#else
-    lowc = 0;
-#endif
   }
 
 #if !RC_VECOUT
@@ -242,7 +215,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // rc_Process already added rpre to low and folded the carry into FFNum,
     // so this whole block moved there -- see rc_config.inc
 #else
-#if RC_LOWSPLIT
     const uint _cf = (lowl+rpre < lowl);
     lowl += rpre;
 #if RC_LOWBYTES==8
@@ -252,17 +224,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     lowh += _cf;
     const uint _cy = (lowh > uint(LOW_MASK>>32));
     lowh &= uint(LOW_MASK>>32);
-#endif
-#else
-#if RC_LOWBYTES==8
-    const qword _t = lowc + rpre;
-    const uint _cy = (_t < lowc);
-    lowc = _t;
-#else
-    const qword _t = lowc + rpre;
-    const uint _cy = (_t > LOW_MASK);
-    lowc = _t & LOW_MASK;
-#endif
 #endif
     rpre = 0;
     RC_CARRY_COUNT(_cy);
@@ -275,7 +236,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
     // cl's top byte lands at tmpptr+1, the next at tmpptr, the rest
     // below as staging that later stores overwrite
-#if RC_LOWSPLIT
 #if RC_ENC_RENORM<2
 #if RC_LOWBYTES==8
     const uint cl = lowh;
@@ -295,17 +255,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // the coder emits about 0.08 bytes per coded bit -- and RC_SCATTER_SKIP
     // is what acts on it.
     RC_STAGE_CL( rcidx, tmpptr-2, RC_ENC_CL, RC_ENC_NB );
-#else
-#if RC_LOWBYTES==8
-    const qword cl = lowc;
-    (qword&)tmpbase[tmpptr-6] = cl;
-#else
-    const uint cl = uint(lowc >> (LOWBITS-32));
-    (uint&)tmpbase[tmpptr-2] = cl;
-#endif
-#endif
     tmpptr -= RC_ENC_NB;
-#if RC_LOWSPLIT
     // sh is 0, 8 or 16, so splitting the shift keeps both counts <= 16 and
     // the sh==0 case falls out as 0 on its own -- (x>>16)>>16 is a defined
     // pair of 32-bit shifts where x>>32 is not. That drops the vpcmpeqd and
@@ -324,9 +274,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     const uint _hi = (lowl >> 16) >> (16-RC_ENC_SH);
     lowh = ((lowh<<RC_ENC_SH) | _hi) & uint(LOW_MASK>>32);
     lowl <<= RC_ENC_SH;
-#endif
-#else
-    lowc = (lowc<<RC_ENC_SH) & LOW_MASK;
 #endif
   }
 
@@ -495,11 +442,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       RC_FLUSH_ONE( rcidx );
 
       uint i, n = LOWBYTES;
-#if RC_LOWSPLIT
       qword llow = (qword(lowh)<<32) + lowl;
-#else
-      qword llow = lowc;
-#endif
       const qword high = llow + range;
       const uint  hic  = (high<llow);
 

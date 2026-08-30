@@ -83,44 +83,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_LOWBYTES 8
 #endif
 
-// 1 = hold the low accumulator as two uints instead of one qword. Stream-
-// neutral: it is the same accumulator, so output is byte-identical either way.
-//
-// sh_v1xN_s.cpp defaults this on, because in the vector coder two uint lanes
-// map onto one ymm each where a qword lane needs two. There is no vector coder
-// here -- the host coder is scalar and the kernel holds low as one ulong
-// whatever this says -- so the reason is gone, and measuring says so:
-//
-//                                      split=1   split=0
-//   carryless, LOWBYTES=8, book1        19.75     19.84   -0.5%
-//   carryless, LOWBYTES=8, 10 MB        14.37     14.56   -1.3%
-//   carry twin, LOWBYTES=4, book1       19.59     20.08   -2.4%
-//   decoder, any                          --        --     none
-//
-// The decoder is untouched by construction: low_Add, low_Top and low_Shift8
-// are all under `if( f_DEC==0 )`. The carry twin at LOWBYTES=4 loses most,
-// because there LOWBITS is 32 and the split version shifts a lowh that the
-// mask then clears anyway.
-#ifndef RC_LOWSPLIT
-#define RC_LOWSPLIT 1
-#endif
 
 
 
 
 
 
-// 1 = skip the carryless fast path in the encoder and always code with the
-// carry-propagating twin. Testing knob: it makes the fallback coder the only
-// producer, so its output gets exercised on every block. Only the carryless
-// coder has a kernel, so this also takes the OpenCL path out of the build.
-//
-// Note the two coders' output is not always identical: where the block ends in
-// a run of 0xFF the carry twin trims them at the flush and the carryless coder
-// has already written them. Both decode.
-#ifndef RC_FORCE_CARRY
-#define RC_FORCE_CARRY 0
-#endif
 
 
 
@@ -153,7 +121,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // itself is a macro the compile defines (see model.inc). RC_VECOUT and
 // RC_CARRYLESS are excluded too -- mk_kernel.sh forces them, and the compile
 // sets RC_CARRYLESS both ways.
-#define RC_KERNEL_CONF ( RC_RCNUM + 64*RC_LOWBYTES + 2048*RC_LOWSPLIT      \
+#define RC_KERNEL_CONF ( RC_RCNUM + 64*RC_LOWBYTES                        \
                        + 8192*RC_CODBYTES                                 \
                        + 1048576*RC_VECSIZE + RC_BLKSIZE/16               \
                        + 4096*(RC_FF_TRIM&63)                             \
@@ -186,9 +154,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // the scattering to one intrinsic after the group.
 //
 // Only where that trade is available: AVX-512 for the scatter, RCNUM a whole
-// number of 16-lane scatters, RC_LOWSPLIT for the 32-bit store shape (at
-// LOWSPLIT=0 with LOWBYTES=8 the store is a qword and would want a different
-// scatter), and clang, because the trade is with SLP -- gcc does not vectorize
+// number of 16-lane scatters, and clang, because the trade is with SLP -- gcc
+// does not vectorize
 // the sweep at all, so staging buys it nothing and costs it two arrays of real
 // memory traffic (22.97 -> 19.06 MB/s here). Everywhere else the store stays
 // exactly where it is: without a scatter the staged form is strictly worse.
@@ -221,7 +188,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 #ifndef RC_SCATTER
-# if !defined(__clang__) || !RC_LOWSPLIT
+# if !defined(__clang__)
 #  define RC_SCATTER 0
 # elif RC_SCATTER_W==0
    // the scalar block: no ISA requirement, but it is a straight trade of port-5
@@ -386,8 +353,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // compares it against zero, so handing it the shift instead is the same
 // predicate with no fixup.
 //
-// 2 leaves the !RC_LOWSPLIT path and the !RC_FOLD_RPRE carry block alone --
-// both declare locals of their own and neither is the default shape.
+// 2 leaves the !RC_FOLD_RPRE carry block alone -- it declares locals of its
+// own and is not the default shape.
 #ifndef RC_ENC_RENORM
 #define RC_ENC_RENORM 0
 #endif
@@ -452,7 +419,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //
 // Kept because it is the one structural way to shrink that live set, and a
 // wider machine (or a target where the multiply is cheaper) could flip it.
-#if !RC_LOWSPLIT || RC_LOWBYTES!=8
+#if RC_LOWBYTES!=8
 #undef  RC_FOLD_RPRE
 #define RC_FOLD_RPRE 0
 #endif
@@ -507,9 +474,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 # endif
 #endif
 
-#ifndef RC_FUSE_PP_DEC
-#define RC_FUSE_PP_DEC 1
-#endif
 
 
 

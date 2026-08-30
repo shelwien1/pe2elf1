@@ -2,8 +2,8 @@
 // The counter shape is a per-MODEL choice, not a per-build one: the encoder
 // and the decoder are separate types with separate `stats` arrays and no
 // shared state, so each can carry whatever counter its own loop likes. They
-// disagree on this box -- see RC_FUSE_PP_ENC / RC_FUSE_PP_DEC in
-// rc_config.inc -- which is the whole reason this is a template parameter.
+// disagree on this box -- the decoder is always fused, the encoder follows
+// RC_FUSE_PP_ENC in rc_config.inc -- which is why this is a template parameter.
 template< int FUSE >
 struct PredictorT {
 
@@ -78,4 +78,4 @@ struct PredictorT {
 };
 
 typedef PredictorT< RC_FUSE_PP_ENC > PredictorE;   // Model<0>
-typedef PredictorT< RC_FUSE_PP_DEC > PredictorD;   // Model<1>
+typedef PredictorT< 1 > PredictorD;                // Model<1>: always fused

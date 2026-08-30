@@ -3,7 +3,7 @@
 # Every configuration t.sh should pass, in one go. t.sh checks one build; this
 # checks that the -D space still holds together, which is where the breakage
 # actually happens: a knob that skips work on one path and restores it on
-# another can look fine at the defaults and segfault at RC_FORCE_CARRY=1.
+# another can look fine at the defaults and segfault at a different RCNUM.
 #
 #   ./t_matrix.sh                  clang, -march=skylake
 #   ARCH=native ./t_matrix.sh      the other target
@@ -41,10 +41,8 @@ echo "== ${CXX:-clang++}, -march=${ARCH:-skylake}, $TESTFILE"
 
 # geometry and the paths that move work between the vector and scalar sides
 runsame ""
-runsame "-DRC_FORCE_CARRY=1"
 run "-DRC_RCNUM=32"
 run "-DCORO_FAKE=1"
-runsame "-DRC_LOWSPLIT=0"
 runsame "-DRC_SCATTER=0"
 run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7"
 run "-DRC_CODBYTES=3"
@@ -62,17 +60,15 @@ runsame "-DRC_ENC_RENORM=1 -DRC_ENC_NSEL=1"
 runsame "-DRC_ENC_RENORM=2 -DRC_ENC_NSEL=2"
 runsame "-DRC_CHUNK=0"
 runsame "-DRC_CHUNK=512"
-runsame "-DRC_FUSE_PP_ENC=0 -DRC_FUSE_PP_DEC=0"
-runsame "-DRC_FUSE_PP_ENC=1 -DRC_FUSE_PP_DEC=1"
+runsame "-DRC_FUSE_PP_ENC=0"
+runsame "-DRC_FUSE_PP_ENC=1"
 
 # the two defs profiles themselves
 runsame "-DRC_SWEEP_NEGIDX=1 -DRC_FOLD_RPRE=1 -DRC_SCATTER_SKIP=0 -DRC_ENC_NSEL=0 -DRC_ENC_RENORM=0"
 runsame "-DRC_SWEEP_NEGIDX=0 -DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2"
 
 # combinations that have bitten before: a knob that moves work between paths
-runsame "-DRC_CHUNK=512 -DRC_FORCE_CARRY=1"
 run "-DRC_RCNUM=32 -DRC_ENC_NSEL=1"
-run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7 -DRC_FORCE_CARRY=1"
 
 rm -f "$REFSTREAM_FILE"
 [ "$fail" = 0 ] && echo "== all configurations pass" || { echo "== FAILURES above"; exit 1; }

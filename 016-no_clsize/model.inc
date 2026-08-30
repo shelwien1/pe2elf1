@@ -7,19 +7,12 @@
 #include "rc_config.inc"
 #include "rc_io.inc"
 
-// rc.inc is the scalar rangecoder of sh_v1xN_s.cpp, and it is included twice:
-// once carryless (the encoder's fast path, which drops carry propagation and
-// only flags a lost carry) and once with carry propagation (the twin the
-// encoder falls back to for that block, and the decoder's coder -- the decode
-// path is identical in both, RC_CARRYLESS only touches ShiftLow and rc_Quit).
-// The class name comes in through a macro, so rc.inc itself stays the file it
-// was moved from.
-
-#define RC_CARRYLESS 1
-#define Rangecoder Rangecoder_CL
-#include "rc.inc"
-#undef Rangecoder
-#undef RC_CARRYLESS
+// rc.inc is the scalar rangecoder of sh_v1xN_s.cpp, instantiated once here
+// with carry propagation: the twin the vector encoder falls back to for a
+// block where a lane lost a carry. Its carryless form is still built -- that
+// is what mk_kernel.sh generates the vector kernel from -- but only as the
+// generator's input, never as a class the compile instantiates. The class name
+// comes in through a macro, so rc.inc itself stays the file it was moved from.
 
 #define RC_CARRYLESS 0
 #define Rangecoder Rangecoder_CY

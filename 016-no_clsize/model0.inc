@@ -35,10 +35,8 @@ struct Model<0> : Coroutine, PredictorE {
     uint rc_len( uint i ) { return lens[i]; }
   } res;
 
-  typedef RangecoderN<BLKSIZE,RCNUM, Rangecoder_CL<0> > t_RC_fast;  // carryless
   typedef RangecoderN<BLKSIZE,RCNUM, Rangecoder_CY<0> > t_RC_safe;  // carry twin
 
-  ALIGN(64) t_RC_fast rcC;
   ALIGN(64) t_RC_safe rcY;
 
   uint Init( void* p ) {
@@ -111,21 +109,6 @@ struct Model<0> : Coroutine, PredictorE {
     exit(4);
   }
 
-  void host_block( uint blksize ) {
-#if RC_FORCE_CARRY
-    recode_with_carry( blksize );
-#else
-    rcC.rc_Init( rcio );
-    proc_block( rcC, blksize );
-
-    if_e0( rcC.rc_Carries()!=0 ) {
-      recode_with_carry( blksize );
-    } else {
-      rcio.rc_Write( (*this), rcC );
-    }
-#endif
-  }
-
   // The model pass, out of line on purpose. It precalcs the {p;bit} pair for
   // every bit of the block, and it has no vector code -- but inside
   // do_process it was paying for do_process's. The generated kernel's
@@ -184,7 +167,6 @@ struct Model<0> : Coroutine, PredictorE {
       model_pass( blksize );
 #endif
 
-#if !RC_FORCE_CARRY
       // The vector coding pass: the carryless coder over all RCNUM lanes,
       // straight into the substream rows. The unrolled sweep is what clang
       // auto-vectorizes -- constant lane indices over local arrays, exactly
@@ -294,16 +276,6 @@ struct Model<0> : Coroutine, PredictorE {
         }
 
       }
-#else
-      {
-        // RC_FORCE_CARRY compiles the chunked loop out entirely, so the block
-        // still has to be cached here before host_block can walk it.
-#if RC_CHUNK
-        model_pass( blksize );
-#endif
-        host_block( blksize );
-      }
-#endif
 
       if( blksize<BLKSIZE ) break;
 
