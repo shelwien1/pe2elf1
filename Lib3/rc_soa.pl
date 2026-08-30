@@ -125,8 +125,9 @@ print $O <<"HDR";
 // Include inside do_process: the declarations become locals there, which is
 // what lets the compiler prove nothing aliases them. The includer provides
 // f_DEC, sets tmpbase and tmpptr[], then drives the rc_* macros.
-// The substreams run BACKWARDS (sh_v1xN's arrangement): both cursors
-// decrement, see rc_io.inc.
+// Which way the cursors run is the coder's business, not this file's -- the
+// range coder writes and reads its substreams backwards (sh_v1xN's
+// arrangement) while rANS writes forwards and reads backwards. See rc_io.inc.
 RC_KALIGN uint tmpptr[RCNUM];
 byte* __restrict tmpbase;
 // A SOA_FOLD field has N slots for RCNUM lanes; at N>=RCNUM the fold is the\n// identity and disappears at compile time rather than relying on the compiler\n// to fold a modulo by a power of two.\n#define RC_FOLD( i, n ) ( (n)>=RCNUM ? (i) : (i)%(n) )\n#define get1( k ) (tmpbase[tmpptr[k]--])

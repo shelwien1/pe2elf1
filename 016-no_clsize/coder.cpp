@@ -119,7 +119,8 @@ int main( int argc, char** argv ) {
       #define Q(x) Q1(x)
       #define __DIRNAM__1 Q(__DIRNAM__)
       #endif
-      fprintf(g, "%s%s %-10s // %s RCNUM=%i LB=%i\n", c_res,d_res, p, __DIRNAM__1, int(RCNUM), int(RC_LOWBYTES) );
+      fprintf(g, "%s%s %-10s // %s %s RCNUM=%i LB=%i\n", c_res,d_res, p, __DIRNAM__1,
+               RC_RANS?"rans":"rc", int(RCNUM), int(RC_LOWBYTES) );
       fclose( G );
       fclose( g );
     }

@@ -7,12 +7,26 @@
 #include "rc_config.inc"
 #include "rc_io.inc"
 
-// rc.inc is the scalar rangecoder of sh_v1xN_s.cpp, instantiated once here
-// with carry propagation: the twin the vector encoder falls back to for a
-// block where a lane lost a carry. Its carryless form is still built -- that
-// is what mk_kernel.sh generates the vector kernel from -- but only as the
-// generator's input, never as a class the compile instantiates. The class name
-// comes in through a macro, so rc.inc itself stays the file it was moved from.
+// The scalar coders. Whichever file RC_RANS selects is the same one
+// mk_kernel.sh generates the vector kernel from, so the scalar class and the
+// generated one are two shapes of one source -- which is what makes RC_VEC=0
+// a reference rather than a second implementation. The class name comes in
+// through a macro, so neither file needs to know it is being included twice.
+//
+// Rangecoder_S  the coder the model uses at RC_VEC=0. For rANS it is the only
+//               scalar class; for the range coder it is the CARRYLESS one, so
+//               that its stream is the generated kernel's byte for byte.
+// Rangecoder_CY the range coder's carry-propagating twin, which the encoder
+//               falls back to for a block where a lane lost a carry. rANS has
+//               no carries and no twin.
+
+#if RC_RANS
+
+#define Rangecoder Rangecoder_S
+#include "rans.inc"
+#undef Rangecoder
+
+#else
 
 #define RC_CARRYLESS 0
 #define Rangecoder Rangecoder_CY
@@ -20,9 +34,66 @@
 #undef Rangecoder
 #undef RC_CARRYLESS
 
+#define RC_CARRYLESS 1
+#define Rangecoder Rangecoder_S
+#include "rc.inc"
+#undef Rangecoder
+#undef RC_CARRYLESS
+
+#endif
+
 #include "rc_vec.inc"
 
 #include "counter.inc"
+
+
+
+//  The rANS encoder's division.
+//
+//  Left to the COMPILE, like the staging macros below and for the same reason:
+//  mk_kernel.sh resolves rans.inc against the -D set alone, with no idea what
+//  target the result will be compiled for, and any correct division produces
+//  the same stream -- so this is exactly the kind of decision that does not
+//  belong in the generated kernel.
+//
+//  The default is a float32 RECIPROCAL and a multiply, not a divide, and that
+//  is the whole point of the shape. The encoder's sweep is not short of
+//  instructions -- it is shorter than the range coder's -- it is bound by the
+//  loop-carried chain through x, and a vdivps on that chain is eleven cycles
+//  of it. The reciprocal depends only on f, which comes out of pbit[], so
+//  writing it this way leaves the divider off the chain entirely and puts one
+//  vmulps on it instead. Measured on cascadelake: 56.97 -> 66.6 MB/s, with the
+//  same instruction count.
+//
+//  RANS_BIAS is the one-sidedness, folded into the reciprocal so that it costs
+//  nothing on the chain either. The quotient is below 1<<XSH and float32
+//  carries 2^-24 of relative error over the three roundings between f and the
+//  quotient, so scaling the reciprocal down by 2^-19 is bigger than that error
+//  -- the truncation is never high -- and 2^-19 of a quotient below 2^16 is an
+//  eighth, so it is never more than one low either. rans.inc's masked add
+//  corrects that one case.
+//
+//  Both conversions around it are the SIGNED ones, which every target has; x
+//  is below 2^31 and the quotient below 2^16, so nothing is misread as
+//  negative.
+#ifndef RANS_BIAS
+#define RANS_BIAS 0.99999809265f     /* 1 - 2^-19 */
+#endif
+#ifndef RANS_DIV
+#define RANS_DIV( a, b ) ( (a) * (RANS_BIAS/(b)) )
+#endif
+
+//  Where it is NOT worth putting it: ahead of the renormalisation. The
+//  quotient rans.inc wants is floor((x>>sh)/f), and floor(floor(x/2^sh)/f) is
+//  floor(x/(f*2^sh)) -- so the divide can run on x BEFORE the shift, with the
+//  shift applied to the result afterwards by subtracting it from the float's
+//  exponent field (exact: sh is 0/8/16 and the quotient stays normal). That
+//  takes the two compares which pick sh off the front of the chain, six cycles
+//  of it, and the generated sweep is one instruction shorter. It measures
+//  SLOWER -- 63.0 against 63.8 MB/s, best of 6 over 6 round-robin rounds on
+//  20 MB of enwik8 -- which is the same answer RCNUM=32 gives: this sweep is
+//  not bound by its dependency chain, so shortening it buys nothing and the
+//  extra exponent arithmetic costs. Not kept; the measurement is why.
 
 
 

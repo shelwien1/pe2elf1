@@ -34,6 +34,12 @@ struct Model<1> : Coroutine {
 
   ALIGN(4096) RCio<BLKSIZE,RCNUM> rcio;
 
+#if RC_VEC==0
+  // The reference decode: RCNUM scalar coders from the same file the generated
+  // kernel comes out of, driven through the same loop below. See RC_VEC.
+  ALIGN(64) RangecoderN<BLKSIZE,RCNUM, Rangecoder_S<1> > rcS;
+#endif
+
 
   // outbuf has to hold a whole block: the decode loop writes blksize bytes with
   // the unchecked put0 and only calls chkout() once, at the block boundary.
@@ -60,6 +66,7 @@ struct Model<1> : Coroutine {
 // pointer and takes rbp out of the allocator for the whole function, the
 // documented reason model_pass is NOINLINE on the encoder side. Dropping it
 // does remove both, and measures 1.4% slower anyway; see rc_config.inc.
+#if RC_VEC
 #define RC_KALIGN
 #include "rc_vecD.inc"
 #undef  RC_KALIGN
@@ -67,6 +74,12 @@ struct Model<1> : Coroutine {
       "rc_vecD.inc was generated against a different RC_* configuration than "
       "this build. Re-run mk_kernel.sh with the same -D set -- build.sh takes "
       "it as arguments and gc.bat has %defs% for it." );
+#else
+    // The scalar coders answer to the same three-argument call, so the decode
+    // loop below is the one loop either way -- only the per-block binding
+    // differs.
+    #define rc_Process( j, f, b ) rcS.rc_Process( (j), (f), (b) )
+#endif
 
     for( i=0; i<DIM(stats); i++ ) stats[i].Reset();
     ctx = 1; cty = stats;
@@ -75,10 +88,17 @@ struct Model<1> : Coroutine {
 
       rcio.rc_Read( (*this) );
 
+#if RC_VEC
       tmpbase = rcio.rows();
-      // each cursor starts at the top of its lane's chunk and reads DOWN,
-      // running into the 0xFF pad below it past the end of the substream
+      // Each cursor starts at the TOP of its lane's chunk and reads DOWN.
+      // For the range coder that is the substream's first emitted byte, and
+      // it runs into the 0xFF pad below past the end; for rANS it is the LAST
+      // byte emitted, which is what a LIFO decoder wants first, and rc_Init
+      // spends the top four of them on the state the encoder flushed there.
       for( j=0; j<RCNUM; j++ ) { tmpptr[j] = j*rcio.rowsize + rcio.FF_PADSIZE-1 + rcio.rclen[j]; rc_Init(j); }
+#else
+      rcS.rc_Init( rcio );
+#endif
 
       rc_Process( 0, hSCALE, bit );
 
@@ -154,6 +174,10 @@ struct Model<1> : Coroutine {
 
       chkout();
     }
+
+#if RC_VEC==0
+    #undef rc_Process
+#endif
 
     yield(this,0);
   }

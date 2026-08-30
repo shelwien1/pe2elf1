@@ -62,6 +62,58 @@ enum{ inpbufsize=1<<30, outbufsize=1<<30 };
 // the command line with -DRC_BLKSIZE / -DRC_RCNUM / -DRC_VECSIZE.
 enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
+//--- which coder ------------------------------------------------------------
+
+// 1 = the binary rANS coder of rans.inc; 0 = the binary range coder of rc.inc.
+//
+// The two are interchangeable from the model's point of view -- same lane
+// count, same substream layout, same rc_Process(lane,p,bit) -- and both go
+// through mk_kernel.sh, so the comparison is one -D apart and both stay
+// covered by t_matrix.sh. They are NOT stream-compatible with each other:
+// this is a different entropy coder, not a different shape of the same one.
+//
+// The differences the rest of the coder has to know about are all in rans.inc's
+// header comment; the one that reaches the model is that rANS is LIFO, so
+// model0.inc's coding pass walks the block backwards.
+#ifndef RC_RANS
+#define RC_RANS 1
+#endif
+
+// log2(L/M) for the rANS state: the state lives in [SCALE<<KLOG, SCALE<<(KLOG+8))
+// and the coder's rounding costs the stream about 2^-KLOG/4 of a bit per coded
+// bit, worst case.
+//
+// 8 is the ceiling, and it is the SIGNED float conversion that sets it, not the
+// word size. x < (SCALE<<KLOG)<<8 has to fit a uint, which would admit 9 -- but
+// rans.inc converts the state with (float)(int)rx, because vcvtdq2ps is on
+// every target and its unsigned twin is AVX-512 only. At KLOG=9 the state runs
+// up to 2^32 and (int)rx goes negative: an exhaustive sweep over every f with
+// 40 states each gives 0 mismatches at KLOG 4 and 8 and 209531 at KLOG 9, every
+// one of them with x >= 2^31 and q too high. misc/rans_div.cpp is that sweep.
+//
+// Below 8 the coder only loses ratio, and less than the exponent suggests --
+// on 20 MB of enwik8 the whole difference between KLOG=2 and KLOG=8 is 6712
+// bytes of 12.55 MB (0.053%), because the substream's own 4-byte state flush,
+// which does not move with KLOG, is the larger term.
+#ifndef RC_RANS_KLOG
+#define RC_RANS_KLOG 8
+#endif
+#if RC_RANS_KLOG<1 || RC_RANS_KLOG>8
+#error "RC_RANS_KLOG must be 1..8: above 8 the state passes 2^31 and rans.inc's signed float conversion misreads it"
+#endif
+
+// 1 = the coding pass is the generated lane-array kernel (rc_vecD.inc), which
+// is what clang auto-vectorizes. 0 = RCNUM independent scalar coders through
+// rc_vec.inc's RangecoderN, from the same rc.inc/rans.inc.
+//
+// 0 is the reference, not a fallback: the scalar rANS divides with the integer
+// `/` and the generated one divides in float32 with a fixup, so a run where the
+// two produce the same stream byte for byte is a run where the float path is
+// right. t_matrix.sh has the row.
+#ifndef RC_VEC
+#define RC_VEC 1
+#endif
+
 //--- sh_v1xN_s.cpp rangecoder knobs -----------------------------------------
 
 // Width of the low accumulator, in bytes. 4..8.
@@ -120,6 +172,16 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // itself is a macro the compile defines (see model.inc). RC_VECOUT and
 // RC_CARRYLESS are excluded too -- mk_kernel.sh forces them, and the compile
 // sets RC_CARRYLESS both ways.
+//
+// One expression per coder, because the two have different knobs -- but with a
+// tag that separates the families as well. Only ONE direction of a cross-coder
+// mismatch fails to compile on its own (an rANS kernel against the range
+// coder's model, which names FFNum[]); the other direction has every name it
+// needs and would miscode quietly, so the tag is what catches it.
+#if RC_RANS
+#define RC_KERNEL_CONF ( 1000000000 + RC_RCNUM + 64*RC_RANS_KLOG          \
+                       + 1048576*RC_VECSIZE + RC_BLKSIZE/16 )
+#else
 #define RC_KERNEL_CONF ( RC_RCNUM + 64*RC_LOWBYTES                        \
                        + 8192*RC_CODBYTES                                 \
                        + 1048576*RC_VECSIZE + RC_BLKSIZE/16               \
@@ -127,6 +189,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 33554432*RC_FOLD_RPRE                            \
                        + 13*RC_ENC_NSEL                                   \
                        + 17*RC_ENC_RENORM )
+#endif
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -136,7 +199,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 
-#if RC_VECOUT && !RC_CARRYLESS
+#if RC_VECOUT && !RC_RANS && !RC_CARRYLESS
 #error the vector kernel is the carryless coder -- generate with RC_CARRYLESS=1
 #endif
 
@@ -453,6 +516,29 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // dropped by rc_Write, which starts each lane's payload past it -- rather than
 // tested for in put(), which is the coder's one hot store.
 #define RC_SKIP (RC_LOWBYTES - RC_CODBYTES)
+
+// Bytes of each substream row reserved ABOVE the payload -- the zero prefix
+// for the range coder, nothing at all for rANS, whose ShiftLow equivalent
+// emits only stream bytes. rc_io.inc uses it for the payload's start and for
+// the encoder's length, so the one name covers both coders.
+#if RC_RANS
+#define RC_PAYTOP 0
+#else
+#define RC_PAYTOP RC_SKIP
+#endif
+
+// Bytes of each row left free above the payload region. For the range coder
+// that is the zero prefix again; for rANS it is headroom for the DECODER,
+// whose refill is a 32-bit load at a cursor that ascends to the top of its
+// chunk, so the load can reach three bytes past the last stream byte.
+// Keeping it at 4 for both leaves rowsize -- and so the way the RCNUM lane
+// cursors spread over the L1d and dTLB sets -- identical between the two
+// coders, which is what makes their timings comparable.
+#if RC_RANS
+#define RC_ROWTOP 4
+#else
+#define RC_ROWTOP RC_SKIP
+#endif
 
 // The decoder reads 0xFF past the end of a substream, because rc_Read pads it
 // with them, and that is what lets rc_Quit leave the tail of its flush out.

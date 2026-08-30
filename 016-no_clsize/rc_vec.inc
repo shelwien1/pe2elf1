@@ -22,13 +22,19 @@ struct RangecoderN {
   ALIGN(VECSIZE) t_RC rc[RCNUM];
 
   // Bind every lane to its own substream row in the RCio and reset it.
-  // Both directions run BACKWARDS (sh_v1xN's arrangement): the encoder's
-  // first byte goes to the top of the row, the decoder's first byte is the
-  // top of the chunk rc_Read placed at FF_PADSIZE.
+  // The range coder's encoder runs BACKWARDS (sh_v1xN's arrangement), its
+  // first byte at the top of the row; rANS runs forwards from the base -- see
+  // rans.inc. Either way the decoder starts at the top of the chunk rc_Read
+  // placed at FF_PADSIZE and descends: for the range coder that is the first
+  // byte emitted, for rANS the last, and a LIFO decoder wants the last.
   template< class IO >
   void rc_Init( IO& io ) {
     for( uint i=0; i<RCNUM; i++ ) {
+#if RC_RANS
+      if( f_DEC==0 ) rc[i].StartEncode( io.buf(i), IO::tmpbufsize );
+#else
       if( f_DEC==0 ) rc[i].StartEncode( io.buf(i)+IO::rowsize-1, IO::tmpbufsize );
+#endif
       else           rc[i].StartDecode( io.buf(i)+IO::FF_PADSIZE-1+io.rclen[i] );
     }
   }

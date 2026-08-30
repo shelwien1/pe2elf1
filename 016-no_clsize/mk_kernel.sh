@@ -1,8 +1,9 @@
 #!/bin/sh
-# rc.inc -> rc_kernel0.c -> rc_kernel1.c -> rc_vecD.inc
+# rc.inc / rans.inc -> rc_kernel0.c -> rc_kernel1.c -> rc_vecD.inc
 #
 #   $CPP -E      resolves the #if forest against the build's configuration
-#                (RC_VECOUT=1 picks the vector-shape coder bodies)
+#                (RC_RANS picks the coder, RC_VECOUT=1 picks its vector-shape
+#                bodies)
 #   rc_soa.pl    lane state to [RCNUM] arrays, rcidx threaded through
 #   rc_macro.pl  functions into #define/#enddef blocks
 #   defines.pl   ... into real multi-line macros
@@ -34,7 +35,7 @@ esac
 # $CPP is deliberately unquoted below, so it can carry flags -- which means its
 # words are split on whitespace and cannot be shell-quoted. A path with spaces
 # in it has to reach us already escaped, or as a short name.
-$CPP -P -x c++ -DRC_VECOUT=1 -DRC_CARRYLESS=1 "$@"   -imacros rc_config.inc rc.inc > rc_kernel0.c
+$CPP -P -x c++ -DRC_VECOUT=1 -DRC_CARRYLESS=1 "$@"   -imacros rc_config.inc rc_kernel_src.inc > rc_kernel0.c
 
 perl ../Lib3/rc_soa.pl rc_kernel0.c
 perl ../Lib3/rc_macro.pl rc_kernel1.c
@@ -67,4 +68,4 @@ grep -q '\[(rcidx)\]' rc_vecD.inc || {
   exit 1
 }
 
-echo "generated rc_vecD.inc from rc.inc"
+echo "generated rc_vecD.inc from rc_kernel_src.inc"

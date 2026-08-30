@@ -5,16 +5,21 @@ coder_*
 *.exe
 *.o
 
-# generated from rc.inc by mk_kernel.sh, once per configuration -- see the
-# comment at the top of that script
+# generated from rc.inc / rans.inc by mk_kernel.sh, once per configuration --
+# see the comment at the top of that script
 rc_kernel0.c
 rc_kernel1.c
 rc_vecD.inc
 
-# t.sh scratch
+# t_matrix.sh's exhaustive check of the rANS encoder's division
+rans_div
+
+# t.sh / t_matrix.sh scratch
 t.enc
 t.dec
 t.ref
+t_ref_rans.enc
+t_ref_rc.enc
 
 # test corpus, fetched by get_enwik8.sh
 /enwik8

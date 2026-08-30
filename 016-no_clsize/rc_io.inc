@@ -36,22 +36,42 @@ struct RC_IO {
   // payload copy stops below it. put() is the coder's one hot store; the
   // top-of-row start is the buffer equivalent of rc_Write's
   // tmpbufsize-1-ofs in sh_v1xN_io.inc.
+  //
+  // rANS writes the other way, from the base of the row upwards, because its
+  // renormalisation emits the LOW byte of the state first -- see the byte
+  // order note in rans.inc. Its decoder still reads downwards, from the top
+  // of the chunk: rc_Write reverses the substream on the way out, and a LIFO
+  // decoder wants it reversed.
+#if RC_RANS
+  void put( byte c ) {
+    *ptr++ = c;
+  }
+#else
   void put( byte c ) {
     *ptr-- = c;
   }
+#endif
 
-  // top is the highest byte of the lane's row (where the first emitted byte
-  // goes); bufsize is the payload capacity, and the prefix sits above it --
-  // RCio::rowsize covers both plus the pad below.
+  // top is where the first emitted byte goes -- the highest byte of the lane's
+  // row for the range coder, whose prefix then sits above the payload and
+  // whose cursor descends, and the row's BASE for rANS, whose cursor ascends.
+  // bufsize is the payload capacity; RCio::rowsize covers it plus the pad.
   void StartEncode( byte* top, uint bufsize ) {
-    ptr = top; beg = top-RC_SKIP; end = beg-bufsize;
+#if RC_RANS
+    beg = ptr = top; end = top+bufsize;
+#else
+    ptr = top; beg = top-RC_PAYTOP; end = beg-bufsize;
+#endif
     ((Rangecoder*)this)->rc_Init();
   }
 
   void FinishEncode( void ) { ((Rangecoder*)this)->rc_Quit(); }
 
-  // top is the payload's first byte: its highest address, since rc_Read put
-  // the chunk back in file order and the file holds it last-emitted-first.
+  // top is the byte the decoder wants first, at its highest address, and the
+  // cursor descends from there. For the range coder that is the substream's
+  // first emitted byte, which rc_Write put first in the file; for rANS it is
+  // its LAST emitted byte, which rc_Write put last -- the same address either
+  // way, because the two encoders write their rows in opposite directions.
   void StartDecode( byte* top ) {
     beg = ptr = top; end = 0;
     ((Rangecoder*)this)->rc_Init();
@@ -60,7 +80,14 @@ struct RC_IO {
   // encoder: payload bytes written, i.e. this lane's substream length. A lane
   // that coded nothing can stop inside the prefix -- 16 header bits over 64
   // lanes leaves most of them with no work -- and owes the stream nothing.
+  // rANS has no prefix and grows the other way, so its length is just the
+  // distance the cursor travelled; every lane owes at least its four-byte
+  // state flush.
+#if RC_RANS
+  uint rc_len( void ) const { return uint(ptr-beg); }
+#else
   uint rc_len( void ) const { return ptr<beg ? uint(beg-ptr) : 0; }
+#endif
 };
 
 
@@ -84,6 +111,30 @@ struct RCio {
   // carry-propagating coder drops, which is capped at RC_FF_TRIM precisely so
   // that this constant can exist -- see rc_config.inc.
   static const uint FF_PADSIZE = RC_FF_PADSIZE;
+#if RC_RANS
+  // rANS never reads past the end of its own substream, so the pad is not
+  // there to be read -- only to be READABLE: the refill is a 32-bit load three
+  // bytes below the descending cursor, and the cursor's last step is the
+  // bottom of the chunk.
+  //
+  // It does not read the whole substream either. The decoder renormalises at
+  // the HEAD of a step, so the refill before step i undoes the encoder's
+  // renormalisation before ITS step i-1 -- and the encoder's very first
+  // renormalisation, on the block's last bit, has no step after it to undo it.
+  // Those 0..2 bytes sit at the bottom of the row and are never consumed.
+  // Harmless, and only reachable when that bit's frequency is under
+  // SCALE>>RC_RANS_KLOG; the alternative is renormalising after the step
+  // instead, which costs more than the bytes are worth (see rans.inc).
+  static_assert( FF_PADSIZE >= 3,
+    "the rANS refill loads 32 bits at tmpptr-3 and the cursor descends to the "
+    "bottom of the chunk; RC_FF_PADSIZE must cover the three bytes below it" );
+  // Its encoder runs the other way, from the row's base upwards, and its store
+  // is a dword of which only the low bytes are committed -- so the row also
+  // has to hold three bytes past the longest possible substream.
+  static_assert( RC_ROWTOP + RC_FF_PADSIZE >= 3,
+    "the rANS encoder's dword store overshoots the substream by three bytes; "
+    "the row must have room for them" );
+#else
   static_assert( FF_PADSIZE >= RC_FF_TRIM + RC_LOWBYTES,
     "RC_FF_PADSIZE must cover RC_FF_TRIM plus the minimal flush's own tail" );
   // The 32-bit refill window reaches three bytes below the cursor, so the pad
@@ -98,11 +149,18 @@ struct RCio {
   static_assert( RC_SKIP >= 4,
     "the refill reads above tmpptr; RC_SKIP (= RC_LOWBYTES minus RC_CODBYTES) "
     "must leave four bytes above the payload" );
+#endif
 
   // Worst case output for one lane: bits_per_lane (plus the 17 block-length
   // header bits, which all land in the low lanes) at SCALElog bits each, since
   // the model's p is clamped to [1,SCALE-1] and so one bit can cost at most
   // SCALElog bits. Plus the flush.
+  //
+  // The same bound holds for rANS and for the same reason: a symbol of
+  // frequency f multiplies the state by at most M/f <= M, i.e. it can push at
+  // most SCALElog bits out, and the flush is four bytes against the range
+  // coder's RC_LOWBYTES (>=4). So this over-estimates rANS rather than
+  // under-estimating it, which is the direction that is safe.
   //
   // Capped at 0xFFFF because the length header is two bytes: with the default
   // geometry the true worst case (61543 at BLKSIZE=64K, RCNUM=16) is below the
@@ -128,7 +186,7 @@ struct RCio {
   // Rounded up to 4 so a row start is dword-aligned: the kernel writes each
   // lane's substream a dword at a time, because AVX-512 has no byte scatter --
 
-  static const uint rowsize = ((RC_SKIP+tmpbufsize+FF_PADSIZE)+3) & ~3u;
+  static const uint rowsize = ((RC_ROWTOP+tmpbufsize+FF_PADSIZE)+3) & ~3u;
 
   // rowsize is also the stride between the RCNUM lane cursors, and all of them
   // are hot and written every group (model0.inc: tmpptr[j] = (j+1)*rowsize-2).
@@ -185,7 +243,11 @@ struct RCio {
         memcpy( &tmpbuf[rcidx][FF_PADSIZE+i], (prbyte)C.inpptr, n );
         C.inpptr += n;
       }
-      // the decoder reads downward, so the over-read pad sits BELOW the chunk
+      // the decoder reads downward, so the over-read pad sits BELOW the chunk.
+      // The range coder READS this run -- rc_Quit leaves the trailing 0xFFs
+      // out and the decoder reconstructs them from here. rANS never reads past
+      // its own last byte and only needs the three bytes its refill load
+      // reaches below the cursor to be mapped and defined.
       for( i=0; i<FF_PADSIZE; i++ ) tmpbuf[rcidx][i] = 0xFF;
     } // rcidx
   }
@@ -207,10 +269,17 @@ struct RCio {
       l = rclen[rcidx];
       for( i=0; i<l; i+=n ) {
         C.chkout(); n = Min<uint>( l-i, C.getoutlen() );
-        // the payload spans [rowsize-RC_SKIP-l, rowsize-1-RC_SKIP]: its top
-        // byte sits RC_SKIP below the row top (above it, the zero prefix),
-        // and the ascending copy emits it last-emitted-first
-        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][rowsize-RC_SKIP-l+i], n );
+        // The range coder's payload spans [rowsize-RC_PAYTOP-l, rowsize-1-
+        // RC_PAYTOP]: its top byte sits RC_PAYTOP below the row top (above it,
+        // the zero prefix), and the ascending copy emits it
+        // last-emitted-first. rANS wrote its row upwards from the base, so the
+        // same ascending copy emits it first-emitted-first -- which, since a
+        // LIFO decoder consumes in reverse, is the same thing.
+#if RC_RANS
+        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][i], n );
+#else
+        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][rowsize-RC_PAYTOP-l+i], n );
+#endif
         C.outptr += n;
       }
     } // rcidx

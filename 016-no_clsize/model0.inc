@@ -40,9 +40,21 @@ struct Model<0> : Coroutine {
     uint rc_len( uint i ) { return lens[i]; }
   } res;
 
+#if !RC_RANS
   typedef RangecoderN<BLKSIZE,RCNUM, Rangecoder_CY<0> > t_RC_safe;  // carry twin
 
   ALIGN(64) t_RC_safe rcY;
+#endif
+
+#if RC_VEC==0
+  // The reference coding pass: RCNUM scalar coders from the same file the
+  // generated kernel comes out of. Not a fallback -- the streams have to
+  // match byte for byte, and for rANS that is what checks the vector path's
+  // float32 division against this one's integer `/`. See RC_VEC.
+  typedef RangecoderN<BLKSIZE,RCNUM, Rangecoder_S<0> > t_RC_ref;
+
+  ALIGN(64) t_RC_ref rcS;
+#endif
 
   // The model_api.inc entry points. Init loads the counter state machine
   // named on the command line; both ends need the same one.
@@ -67,6 +79,50 @@ struct Model<0> : Coroutine {
   void proc_block( RC& rc, uint blksize ) {
     uint i,j,c,bit;
 
+    uint blksize0 = blksize*8;
+    uint blksize1 = blksize0 - (blksize0%RCNUM);
+
+#if RC_RANS
+
+    // rANS is LIFO -- the decoder's first symbol has to be the encoder's last
+    // -- so the block is coded BACKWARDS: the tail bits (which are the block's
+    // last), then the groups from the top down, then the 16 block-length bits,
+    // then the flag that says whether they are there. Reverse that and it is
+    // exactly the order model1.inc decodes in.
+    //
+    // Within a group the order is free: lane j codes only the bits with
+    // i%RCNUM==j, and the lanes share nothing, so descending j would be the
+    // same stream as ascending j.
+
+    for( i=blksize0; i>blksize1; ) {
+      --i;
+      uint b = pbit[i];
+      uint p = b&0x7FFF; b >>= 15;
+      rc.rc_Process( i%RCNUM, p, b );
+    }
+
+    for( i=blksize1; i>0; ) {
+      i -= RCNUM;
+      for( j=0; j<RCNUM; j++ ) {
+        uint b = pbit[i+j];
+        uint p = b&0x7FFF; b >>= 15;
+        rc.rc_Process( j, p, b );
+      }
+    }
+
+    if( blksize!=BLKSIZE ) {
+      for( j=16; j>0; ) {
+        --j;
+        bit = (blksize>>(15-j))&1;
+        rc.rc_Process( j%RCNUM, hSCALE, bit );
+      }
+    }
+
+    bit = (blksize!=BLKSIZE);
+    rc.rc_Process( 0, hSCALE, bit );
+
+#else
+
     // Block length: one flag bit, then 16 bits when the block is short.
     // BLKSIZE itself does not fit in 16 bits, hence the flag.
     bit = (blksize!=BLKSIZE);
@@ -79,9 +135,6 @@ struct Model<0> : Coroutine {
         c = c*2 + (bit>0);
       }
     }
-
-    uint blksize0 = blksize*8;
-    uint blksize1 = blksize0 - (blksize0%RCNUM);
 
     for( i=0; i<blksize1; i+=RCNUM ) {
       for( j=0; j<RCNUM; j++ ) {
@@ -97,16 +150,20 @@ struct Model<0> : Coroutine {
       rc.rc_Process( i%RCNUM, p, b );
     }
 
+#endif
+
     rc.rc_Quit();
   }
 
   // The carry-propagating twin. Reached from either coding path when a carry
-  // escaped the carryless one.
+  // escaped the carryless one. rANS has no carries, so it has no twin.
+#if !RC_RANS
   void recode_with_carry( uint blksize ) {
     rcY.rc_Init( rcio );
     proc_block( rcY, blksize );
     rcio.rc_Write( (*this), rcY );
   }
+#endif
 
   // Re-code the block with the carry-propagating twin, for a block where the
   // vector pass let a carry escape. At RC_LOWBYTES=8 that is a ~2^-33 event
@@ -165,6 +222,7 @@ struct Model<0> : Coroutine {
     // sh_v1xN's arrangement, from the same rc.inc as the carry twin. Locals, so the sweep's stores alias nothing.
 // The sweep reads and writes the lane arrays as vectors, so they carry vector
 // alignment. The decoder's copy does not -- see model1.inc.
+#if RC_VEC
 #define RC_KALIGN ALIGN(VECSIZE)
 #include "rc_vecD.inc"
 #undef  RC_KALIGN
@@ -172,6 +230,7 @@ struct Model<0> : Coroutine {
       "rc_vecD.inc was generated against a different RC_* configuration than "
       "this build. Re-run mk_kernel.sh with the same -D set -- build.sh takes "
       "it as arguments and gc.bat has %defs% for it." );
+#endif
 
     for( i=0; i<DIM(stats); i++ ) stats[i].Reset();
     ctx = 1; cty = stats;
@@ -182,35 +241,94 @@ struct Model<0> : Coroutine {
 
       model_pass( blksize );
 
-      // The vector coding pass: the carryless coder over all RCNUM lanes,
-      // straight into the substream rows. The unrolled sweep is what clang
-      // auto-vectorizes -- constant lane indices over local arrays, exactly
-      // the original sh_v1xN encode side. A lane that lost a carry (FFNum)
-      // sends the whole block to the scalar twin.
+      // The vector coding pass: the coder over all RCNUM lanes, straight into
+      // the substream rows. The unrolled sweep is what clang auto-vectorizes
+      // -- constant lane indices over local arrays, exactly the original
+      // sh_v1xN encode side. For the range coder, a lane that lost a carry
+      // (FFNum) sends the whole block to the scalar twin; rANS has no carries.
+#if RC_VEC
       {
 
         tmpbase = rcio.rows();
-        // the substreams grow DOWN from the top of each row; the cursor
-        // starts one below the first byte's slot because ShiftLow's store
-        // stages its word at [tmpptr..tmpptr+1] (see rc.inc)
+        // The range coder's substreams grow DOWN from the top of each row, and
+        // its cursor starts one below the first byte's slot because the store
+        // stages its word at [tmpptr..tmpptr+1] (see rc.inc). rANS grows UP
+        // from the base and its cursor IS the next byte's slot (rans.inc).
+#if RC_RANS
+        for( j=0; j<RCNUM; j++ ) { tmpptr[j] = j*t_RCio::rowsize; rc_Init(j); }
+#else
         for( j=0; j<RCNUM; j++ ) { tmpptr[j] = (j+1)*t_RCio::rowsize-2; rc_Init(j); }
-
-        // The block-length header codes one lane at a time, and comes back
-        // to lane 0 -- the flag bit stages it, then j=0 stages it again --
-        // so these commit per bit rather than per group.
-        bit = (blksize!=BLKSIZE);
-        rc_Process( 0, hSCALE, bit ); RC_FLUSH_ONE( 0 );
-
-        if( bit ) {
-          for( j=0; j<16; j++ ) {
-            bit = (blksize>>(15-j))&1;
-            rc_Process( j%RCNUM, hSCALE, bit ); RC_FLUSH_ONE( j%RCNUM );
-          }
-        }
+#endif
 
         {
           uint blksize0 = blksize*8;
           uint blksize1 = blksize0 - (blksize0%RCNUM);
+
+#if RC_RANS
+
+          // Backwards, because rANS is LIFO -- proc_block above has the
+          // argument, and the two orders have to agree. The tail bits are the
+          // block's last, so they go first; then the groups from the top down;
+          // then the header, at the bottom of this block.
+          //
+          // Fewer than RCNUM tail bits at consecutive i, so each lands on a
+          // different lane and commits on its own.
+          for( i=blksize0; i>blksize1; ) {
+            --i;
+            uint b = pbit[i];
+            uint f = b&0x7FFF; b >>= 15;
+            rc_Process( i%RCNUM, f, b ); RC_FLUSH_ONE( i%RCNUM );
+          }
+
+          // One rc_Process per lane per group, so the RCNUM staged stores
+          // are RCNUM distinct addresses in RCNUM distinct rows and the
+          // group can commit them together.
+          // Through a restrict pointer, not pbit[i+j]. Descending, i is an
+          // unsigned counter clang rewrites into a negative-going one, and
+          // i+j is then a 32-bit sum it cannot prove monotone -- so the
+          // sixteen loads stop being one contiguous vector load and become
+          // eight leas and eight vpinsrw per half group, 20 instructions per
+          // group of the 117 this loop had. Hoisting the base does the
+          // addition once, in 64 bits, and pb[j] is a constant offset again.
+          for( i=blksize1; i>0; ) {
+            i -= RCNUM;
+            const word* __restrict pb = &pbit[i];
+            RC_UNROLL
+            for( j=0; j<RCNUM; j++ ) {
+              uint b = pb[j];
+              uint f = b&0x7FFF; b >>= 15;
+              rc_Process( j, f, b );
+            }
+            RC_FLUSHALL();
+          }
+
+          // The block-length header comes LAST here and the flag after it, so
+          // that the decoder sees the flag first. Lane 0 takes the flag and
+          // also header bit 0, so these commit per bit rather than per group.
+          if( blksize!=BLKSIZE ) {
+            for( j=16; j>0; ) {
+              --j;
+              bit = (blksize>>(15-j))&1;
+              rc_Process( j%RCNUM, hSCALE, bit ); RC_FLUSH_ONE( j%RCNUM );
+            }
+          }
+          bit = (blksize!=BLKSIZE);
+          rc_Process( 0, hSCALE, bit ); RC_FLUSH_ONE( 0 );
+
+#else
+
+          // The block-length header codes one lane at a time, and comes back
+          // to lane 0 -- the flag bit stages it, then j=0 stages it again --
+          // so these commit per bit rather than per group.
+          bit = (blksize!=BLKSIZE);
+          rc_Process( 0, hSCALE, bit ); RC_FLUSH_ONE( 0 );
+
+          if( bit ) {
+            for( j=0; j<16; j++ ) {
+              bit = (blksize>>(15-j))&1;
+              rc_Process( j%RCNUM, hSCALE, bit ); RC_FLUSH_ONE( j%RCNUM );
+            }
+          }
 
           // One rc_Process per lane per group, so the RCNUM staged stores
           // are RCNUM distinct addresses in RCNUM distinct rows and the
@@ -231,25 +349,55 @@ struct Model<0> : Coroutine {
             uint f = b&0x7FFF; b >>= 15;
             rc_Process( i%RCNUM, f, b ); RC_FLUSH_ONE( i%RCNUM );
           }
+
+#endif
         }
 
         for( j=0; j<RCNUM; j++ ) rc_Quit(j);
 
-        uint ncarry = uint(-1), novf = 0;
+        uint novf = 0;
         for( j=0; j<RCNUM; j++ ) {
+          // rANS's cursor IS the next byte's slot and started at the row base,
+          // so the distance it travelled is the length. The range coder's
+          // sits one below, and its own rc_Quit steps it up before the final
+          // put1 run, which leaves the payload RC_SKIP further down: the zero
+          // prefix, which rc_Write drops.
+#if RC_RANS
+          uint len = tmpptr[j] - j*t_RCio::rowsize;
+#else
           uint len = ((j+1)*t_RCio::rowsize-1) - tmpptr[j];
           len = len>RC_SKIP ? len-RC_SKIP : 0;
+#endif
           res.lens[j] = len;
-          if( j<RC_FF_LANES ) ncarry &= FFNum[j];   // folded: see RC_FF_LANES
           novf   += (len>t_RCio::tmpbufsize);
         }
         if_e0( novf!=0 ) rc_overflow();
+
+#if RC_RANS
+        rcio.rc_Write( (*this), res );
+#else
+        uint ncarry = uint(-1);
+        RC_UNROLL
+        for( j=0; j<RC_FF_LANES; j++ ) ncarry &= FFNum[j];   // folded: see RC_FF_LANES
         if( ncarry!=0 ) rcio.rc_Write( (*this), res );   // no lane lost a carry
         else {
           recode_with_carry( blksize );
         }
+#endif
 
       }
+#else // RC_VEC==0 -- the scalar reference pass
+      {
+        rcS.rc_Init( rcio );
+        proc_block( rcS, blksize );
+#if RC_RANS
+        rcio.rc_Write( (*this), rcS );
+#else
+        if( rcS.rc_Carries()==0 ) rcio.rc_Write( (*this), rcS );
+        else recode_with_carry( blksize );
+#endif
+      }
+#endif
 
       if( blksize<BLKSIZE ) break;
 
