@@ -212,7 +212,9 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 3*RC_FF_LANES                    \
                        + 11*RC_DEC_RENORM                 \
                        + 13*RC_ENC_NSEL                   \
-                       + 17*RC_ENC_RENORM )
+                       + 17*RC_ENC_RENORM                  \
+                       + 19*RC_DEC_PREFETCH               \
+                       + 23*RC_DEC_PFDIST )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -596,6 +598,57 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // both declare locals of their own and neither is the default shape.
 #ifndef RC_ENC_RENORM
 #define RC_ENC_RENORM 0
+#endif
+
+// A prefetch on the branchless decoder's window read (RC_DEC_RENORM 7 and 9).
+//
+// 7's whole problem is that the read sits ON the chain: range -> dsh -> tmpptr
+// -> address -> load -> code, every bit. A prefetch of THIS bit's address
+// cannot help -- the address is the thing that is late, and by the time it
+// exists the load can issue. So the prefetch here is for a FUTURE bit: the
+// substream runs backwards, so the next reads are below the cursor, and
+// RC_DEC_PFDIST says how far.
+//
+//   0  off                                                       <- default
+//   1  prefetcht0    (locality 3, all levels)
+//   2  prefetcht1    (locality 2)
+//   3  prefetcht2    (locality 1)
+//   4  prefetchnta   (locality 0, non-temporal)
+//
+// __builtin_prefetch, not _mm_prefetch: this reaches the generator, and
+// rc_vecD.inc must not depend on the target (see RC_KERNEL_CONF). Prefetch
+// never faults, so the address needs no bounds check.
+//
+// MEASURED, AND IT DOES NOTHING -- see misc/dec_renorm.md section 6. There is
+// no miss to hide. Each lane's cursor moves about 0.08 bytes per coded bit, so
+// one 64-byte line serves a lane for ~800 bits and the sixteen live lines sit
+// in L1 permanently. What the chain pays is L1 load-use latency, and a
+// prefetch does not shorten that: the real load still issues and still takes
+// its four or five cycles from address to data. The knob is kept because the
+// result is worth having written down, not because it is faster.
+#ifndef RC_DEC_PREFETCH
+#define RC_DEC_PREFETCH 0
+#endif
+
+// How far below the cursor to prefetch, in bytes. One cache line by default.
+#ifndef RC_DEC_PFDIST
+#define RC_DEC_PFDIST 64
+#endif
+
+#if   RC_DEC_PREFETCH==1
+#define RC_DEC_PFLOC 3
+#elif RC_DEC_PREFETCH==2
+#define RC_DEC_PFLOC 2
+#elif RC_DEC_PREFETCH==3
+#define RC_DEC_PFLOC 1
+#elif RC_DEC_PREFETCH==4
+#define RC_DEC_PFLOC 0
+#endif
+
+#if RC_DEC_PREFETCH
+#define RC_DEC_PF( q )  __builtin_prefetch( &tmpbase[(q)-RC_DEC_PFDIST], 0, RC_DEC_PFLOC )
+#else
+#define RC_DEC_PF( q )  ((void)0)
 #endif
 
 #if RC_ENC_RENORM>=1

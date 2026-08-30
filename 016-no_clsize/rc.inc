@@ -111,7 +111,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   uint low_Add( void ) {
     uint c = 0;
 #if RC_LOWSPLIT
-    uint cf = (lowl+rpre < lowl);
+    const uint cf = (lowl+rpre < lowl);
     lowl += rpre;
     if( LOWBYTES==8 ) c = (lowh+cf < lowh);
     lowh += cf;
@@ -167,7 +167,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
   void ShiftLow( uint n ) {
 
-    uint c = low_Add();
+    const uint c = low_Add();
     rpre = 0;
     RC_CARRY_COUNT(c);
 
@@ -188,7 +188,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // added between two emitted bytes sums to less than one range, i.e. < 2^32.
 
     for( ; n!=0; n-- ) {
-      uint cl = low_Top();
+      const uint cl = low_Top();
       low_Shift8();
 
       if_e1( (cl!=0xFF) || Carry ) {
@@ -213,7 +213,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // loop only matters for the multi-symbol entry points below, where the unit
   // is range/totFreq and can be much smaller.
   void rc_Renorm( void ) {
-    uint n = (range<sTOP) + (range<gTOP);
+    const uint n = (range<sTOP) + (range<gTOP);
     if( f_DEC==0 ) ShiftLow(n); else ShiftCode(n);
     range <<= n*8;
 #if RC_RENORM_TAIL
@@ -253,31 +253,31 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #if RC_ENC_RENORM>=1
     RC_ENC_SHDECL
 #else
-    uint sh = n*8;
+    const uint sh = n*8;
 #endif
 #if RC_FOLD_RPRE
     // rc_Process already added rpre to low and folded the carry into FFNum,
     // so this whole block moved there -- see rc_config.inc
 #else
 #if RC_LOWSPLIT
-    uint _cf = (lowl+rpre < lowl);
+    const uint _cf = (lowl+rpre < lowl);
     lowl += rpre;
 #if RC_LOWBYTES==8
-    uint _cy = (lowh+_cf < lowh);
+    const uint _cy = (lowh+_cf < lowh);
     lowh += _cf;
 #else
     lowh += _cf;
-    uint _cy = (lowh > uint(LOW_MASK>>32));
+    const uint _cy = (lowh > uint(LOW_MASK>>32));
     lowh &= uint(LOW_MASK>>32);
 #endif
 #else
 #if RC_LOWBYTES==8
-    qword _t = lowc + rpre;
-    uint _cy = (_t < lowc);
+    const qword _t = lowc + rpre;
+    const uint _cy = (_t < lowc);
     lowc = _t;
 #else
-    qword _t = lowc + rpre;
-    uint _cy = (_t > LOW_MASK);
+    const qword _t = lowc + rpre;
+    const uint _cy = (_t > LOW_MASK);
     lowc = _t & LOW_MASK;
 #endif
 #endif
@@ -295,13 +295,13 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #if RC_LOWSPLIT
 #if RC_ENC_RENORM<2
 #if RC_LOWBYTES==8
-    uint cl = lowh;
+    const uint cl = lowh;
 #elif RC_LOWBYTES>=6
-    uint cl = lowh << (64-LOWBITS);
+    const uint cl = lowh << (64-LOWBITS);
 #elif RC_LOWBYTES==5
-    uint cl = (lowh<<24) | (lowl>>8);
+    const uint cl = (lowh<<24) | (lowl>>8);
 #else
-    uint cl = lowl;
+    const uint cl = lowl;
 #endif
 #endif
     // The store -- performed here, or staged for the group to commit, which
@@ -314,10 +314,10 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     RC_STAGE_CL( rcidx, tmpptr-2, RC_ENC_CL, RC_ENC_NB );
 #else
 #if RC_LOWBYTES==8
-    qword cl = lowc;
+    const qword cl = lowc;
     (qword&)tmpbase[tmpptr-6] = cl;
 #else
-    uint cl = uint(lowc >> (LOWBITS-32));
+    const uint cl = uint(lowc >> (LOWBITS-32));
     (uint&)tmpbase[tmpptr-2] = cl;
 #endif
 #endif
@@ -342,9 +342,9 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     lowl <<= RC_ENC_SH;
 #else
 #if RC_SHIFT_SAT
-    uint _hi = lowl >> (32-RC_ENC_SH);
+    const uint _hi = lowl >> (32-RC_ENC_SH);
 #else
-    uint _hi = (lowl >> 16) >> (16-RC_ENC_SH);
+    const uint _hi = (lowl >> 16) >> (16-RC_ENC_SH);
 #endif
     lowh = ((lowh<<RC_ENC_SH) | _hi) & uint(LOW_MASK>>32);
     lowl <<= RC_ENC_SH;
@@ -453,6 +453,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       code   |= (win>>16) >> (16-dsh);   // the top dsh bits of the cached word
       tmpptr -= dsh>>3;
       win     = (uint&)tmpbase[tmpptr-3];
+      RC_DEC_PF( tmpptr );
 #elif RC_DEC_RENORM==8
       // The outer test kept -- the same one shape 0 has, and worth ~18% here.
       // The rpre fold is DUPLICATED into both arms rather than hoisted above
@@ -482,6 +483,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       code  <<= dsh;
       range <<= dsh;
       code   |= (uint&)tmpbase[tmpptr+1] & ((dsh==0) ? 0 : (dsh==8) ? 0xFF : 0xFFFF);
+      RC_DEC_PF( tmpptr );
 #endif
 #elif RC_DEC_RENORM>=2 && RC_DEC_RENORM<=4
       // No branch: the decoder's counted shift, the encoder's `n` expression
@@ -489,18 +491,18 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // range<sTOP and n is 0, 1 or 2 -- n bytes leave the substream and n
       // enter code, and n==0 leaves all three of range, code and the cursor
       // exactly as they were.
-      uint _q = tmpptr;
+      const uint _q = tmpptr;
 #if RC_DEC_RENORM==3
       // sTOP and gTOP are 1<<24 and 1<<16, so the pair of compares is a count
       // of leading zero BYTES. range is never below 1<<9 -- the model clamps p
       // to [1,SCALE-1], so one step divides range by at most SCALE=1<<15 and
       // range was at least 1<<24 -- so clz is never asked about zero and n
       // never comes out 3.
-      uint sh = uint(__builtin_clz(range)) & ~7u;
-      uint n  = sh>>3;
+      const uint sh = uint(__builtin_clz(range)) & ~7u;
+      const uint n  = sh>>3;
 #else
-      uint n  = (range<sTOP) + (range<gTOP);
-      uint sh = n*8;
+      const uint n  = (range<sTOP) + (range<gTOP);
+      const uint sh = n*8;
 #endif
 #if RC_DEC_RENORM==4
       // The window addressed by n instead of shifted: the n bytes the refill
@@ -510,12 +512,12 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // the cursor has already passed, so the mask is the whole cost.
       // (1<<sh)-1 is 0, 0xFF, 0xFFFF for n = 0, 1, 2; sh is at most 16, so the
       // shift is defined. Reads up to _q+4: see the pad assert in rc_io.inc.
-      uint _c = (uint&)tmpbase[_q+1-n] & ((1u<<sh)-1);
+      const uint _c = (uint&)tmpbase[_q+1-n] & ((1u<<sh)-1);
 #else
       // The window at a fixed offset and shifted: the dword at _q-3 has byte
       // _q at the top, so the top n bytes of it are the refill. sh is 0 here
       // too, and x>>32 is undefined, so it is the split shift ShiftLow uses.
-      uint _c = ((uint&)tmpbase[_q-3] >> 16) >> (16-sh);
+      const uint _c = ((uint&)tmpbase[_q-3] >> 16) >> (16-sh);
 #endif
       range <<= sh;
       code    = (code<<sh) + _c;
@@ -528,8 +530,8 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // it is taken once in 53 million. sh is 0 or 8, so the split shift is
       // still what keeps the n==0 case defined.
       {
-        uint _q = tmpptr;
-        uint sh = (range<sTOP)*8;
+        const uint _q = tmpptr;
+        const uint sh = (range<sTOP)*8;
         range <<= sh;
         code    = (code<<sh) + (((uint&)tmpbase[_q-3] >> 16) >> (16-sh));
         tmpptr  = _q - (sh>>3);
@@ -537,7 +539,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // One byte took range to at least 1<<17, so at most one more is ever
       // owed, and after it range is at least 1<<25.
       if_e0( range<sTOP ) {
-        uint _r = tmpptr;
+        const uint _r = tmpptr;
         range <<= 8;
         code    = (code<<8) + tmpbase[_r];
         tmpptr  = _r - 1;
@@ -551,13 +553,13 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #else
       if_e0( range<sTOP ) {
 #endif
-        uint _q = tmpptr;
+        const uint _q = tmpptr;
 #if RC_DEC_RENORM==1 || RC_DEC_RENORM==6
         // Inside the 8% that renormalise, the counted shift instead of the
         // second test. n is 1 or 2 here, never 0, so sh is 8 or 16 and 32-sh
         // is 24 or 16: one defined shift, no split and no branch.
-        uint n  = 1 + (range<gTOP);
-        uint sh = n*8;
+        const uint n  = 1 + (range<gTOP);
+        const uint sh = n*8;
         range <<= sh;
 #if RC_DEC_RENORM==6
         // The window addressed by n rather than shifted: the n bytes wanted
@@ -599,7 +601,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
           tmpptr = _q-1;
         }
 #else
-        uint _w = (uint&)tmpbase[_q-3];
+        const uint _w = (uint&)tmpbase[_q-3];
         if_e0( range<gTOP ) {
           range <<= 16;
           code = (code<<16) + (_w>>16);
@@ -654,9 +656,9 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // f_DEC is a template parameter, so the decoder (which needs rpre for
     // ShiftCode's `code -= rpre`) never compiles this.
     if( f_DEC==0 ) {
-      uint _pf = (lowl+rpre < lowl);
+      const uint _pf = (lowl+rpre < lowl);
       lowl += rpre;
-      uint _pc = (lowh+_pf < lowh);
+      const uint _pc = (lowh+_pf < lowh);
       lowh += _pf;
       rpre = 0;
       RC_CARRY_COUNT(_pc);
@@ -694,7 +696,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
     if( f_DEC==0 ) { rc_Renorm(); rpre = range/totFreq; }
 
-    uint tmp = rpre*cumFreq;
+    const uint tmp = rpre*cumFreq;
 
     range = rpre*freq;
 
@@ -749,11 +751,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #else
       qword llow = lowc;
 #endif
-      qword high = llow + range;
-      uint  hic  = (high<llow);
+      const qword high = llow + range;
+      const uint  hic  = (high<llow);
 
       for( i=0; i<LOWBYTES; i++ ) {
-        qword mask = ((1ULL<<((i+1)*4))<<((i+1)*4))-1;
+        const qword mask = ((1ULL<<((i+1)*4))<<((i+1)*4))-1;
         if( hic || ((llow|mask)<high) ) llow|=mask, --n;
       }
 
@@ -773,11 +775,11 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // Carry=0: cache   .. FF x FFNum .. low
       // Carry=1: cache+1 .. 00 x FFNum .. low
       qword llow = low_Get();
-      qword high = llow + range;
-      uint  hic  = (high<llow);   // llow+range can leave the qword at LOWBYTES==8
+      const qword high = llow + range;
+      const uint  hic  = (high<llow);   // llow+range can leave the qword at LOWBYTES==8
 
       for( i=0; i<LOWBYTES; i++ ) {
-        qword mask = ((1ULL<<((i+1)*4))<<((i+1)*4))-1;
+        const qword mask = ((1ULL<<((i+1)*4))<<((i+1)*4))-1;
         if( hic || ((llow|mask)<high) ) llow|=mask, --n;
       }
 
@@ -804,8 +806,8 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
         // data makes it, so only RC_FF_TRIM of it may go. sh_v1xN_c.inc and
         // sh_v1xN_s.cpp drop the whole run; on a block whose flush leaves more
         // than the padding behind, that decodes to the wrong bytes.
-        uint run  = FFNum + ((Cache!=uint(-1)) && (Cache==0xFF));
-        uint keep = (run>RC_FF_TRIM) ? run-RC_FF_TRIM : 0;
+        const uint run  = FFNum + ((Cache!=uint(-1)) && (Cache==0xFF));
+        const uint keep = (run>RC_FF_TRIM) ? run-RC_FF_TRIM : 0;
         if( (Cache!=uint(-1)) && (Cache!=0xFF) ) put( byte(Cache) );
         for( i=0; i<keep; i++ ) put( byte(0xFF) );
       } else {
