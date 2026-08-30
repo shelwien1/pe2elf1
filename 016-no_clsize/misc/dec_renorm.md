@@ -225,26 +225,94 @@ smallest body of the ten (431 instructions, 103 stack references) and the only
 one that beats the two-branch shape here. Shape 9, which adds one more lane
 field, has the fewest stack references of anything measured.
 
-**The rule does not carry to the encoder.** `RC_ENC_NSEL` puts the same two
-changes on `rc_Renorm`'s `f_DEC==0` arm -- shift count from a nested ternary,
-in a `const` local (1) or in lane state (2):
+**Half the rule carries to the encoder, and it is not the half you would
+guess.** `RC_ENC_NSEL` puts the selection change on `rc_Renorm`'s `f_DEC==0`
+arm -- shift count from a nested ternary, in a `const` local (1) or in lane
+state (2) -- and `RC_ENC_RENORM` carries it the rest of the way down into
+`ShiftLow`, which still had three locals of its own.
+
+The first measurement of this said "all noise". It was under-powered: 7 rounds,
+one twin, a 6% spread. With twins on both arms and 15 rounds:
 
 | | encode, mine |
 |---|---|
-| 0 sum of compares, byte count in a local | 93.7 MB/s |
-| 1 nested ternary, shift count in a const local | 94.3 |
-| 2 the same, in lane state | 94.0 |
-| *twin of 0* | *92.4* |
+| `NSEL=0` sum of compares, byte count | 91.82 / 92.37 -- mean **92.10** |
+| `NSEL=1` nested ternary, shift count | 93.97 / 94.51 -- mean **94.24** |
 
-The whole spread is inside the twin's. That is what should happen: the
-encoder's sweep is vector code over the lane arrays, so a scalar local there
-becomes one vector register, not sixteen scalar ones, and there is no pressure
-for the rule to relieve. His own log says the same from the other end -- the
-encode column sits between 80.0 and 81.8 MB/s across all forty rows, with no
-structure in it. The knob is kept because it costs nothing and his box is not
-this one.
+**+2.3%**, about four times the twin spread, with no overlap between the arms.
+The ternary is real on the encoder too.
 
-## 5. One bug the exercise found
+But only the ternary. `RC_ENC_RENORM` exists to find out what the rest is worth
+and the answer is nothing:
+
+| | `RENORM=0` | `RENORM=1` | `RENORM=2` |
+|---|---|---|---|
+| with `NSEL=1` | 92.29 | 91.58 | 91.88 |
+
+`RENORM=1` stops the round trip -- `NSEL` selects `{0,8,16}`, and `ShiftLow`'s
+first statement was `uint sh = n*8`, so the shift count was being divided by
+eight, passed, and multiplied by eight again on the chain every bit. `RENORM=2`
+additionally writes out `cl` and `_hi`, each read exactly once, so the body
+declares nothing at all. Neither moves: clang folds `(x>>3)*8` back to a mask,
+and the locals are vector registers in the sweep. Every shape that uses the
+ternary lands at +2 to +2.7% and they are all within a noise floor of each
+other.
+
+So the split is clean. **The selection transfers; the register-pressure rule
+does not**, exactly as the vector/scalar argument predicts.
+
+## 5. Why the big idea cannot cross
+
+The decoder's real win is the outer branch, worth 17-36%. The encoder cannot
+have it, and this repo had already measured the reason before the question was
+asked.
+
+In the sweep, `range` is sixteen lanes in a vector register. A test on
+`range<sTOP` cannot be taken per lane -- only per group, on a reduction over
+all sixteen. That changes the proposition completely:
+
+| | per-bit (decoder) | per-group (encoder) |
+|---|---|---|
+| taken | ~8% of the time | ~26% of groups (`1-0.92^16`) |
+| predictable | yes | no |
+| worth | **+18 to +36%** | **-10 to -29%** |
+
+The encoder numbers are `RC_SCATTER_SKIP` 2 and 3, which are precisely this
+branch placed around the commit: 75.9 → 53.8 MB/s on AVX-512, 66.9 → 60.0 on
+AVX2. Its own note reaches the same conclusion from the cost side -- *"one
+branch per group, taken about a quarter of the time and unpredictable, costs
+11.2 cycles where it could save at most 2.8. There is no frequency at which
+this pays; it is the misprediction, not the work."*
+
+And the branch could never save much even if it were free. The probes put the
+whole sweep at 30.8 cycles per group against 85.3 for encode, so the renorm
+arithmetic is a fraction of a third of the encoder; the decoder's branch, by
+contrast, skips work on the two loop-carried chains of the hot loop itself.
+
+The third idea has the same answer from the other direction: **the encoder
+already has it.** Shape 9's trick -- move the memory operation a whole
+iteration away from the shift that feeds it -- is what `RC_FOLD_RPRE` does to
+the `low += rpre` carry, and it is where shape 9 came from. Better than that,
+`ShiftLow`'s store is already in that form and always was: the address is
+`tmpptr-2` *before* `tmpptr -= n`, and `cl` is extracted from `low` *before*
+the shift, so neither the address nor the data depends on this bit's count.
+There is nothing left to move.
+
+Which is the whole answer to "what about the encoding side". Of the four
+things the decoder exercise turned up, the encoder already had two, cannot
+have the third, and gains 2.3% from the fourth:
+
+| idea | encoder |
+|---|---|
+| outer branch | unavailable -- vector granularity makes it 26% and unpredictable; measured at −10 to −29% |
+| memory op one iteration ahead | already there (`RC_FOLD_RPRE`, and the store always was) |
+| no locals / lane state | free -- they are vector registers, not 16 scalar live ranges |
+| ternary for the shift count | **+2.3%**, and the one thing worth taking |
+
+The encoder runs at about twice the decoder's throughput, and this is why:
+almost everything the decoder exercise discovered, it was already doing.
+
+## 6. One bug the exercise found
 
 `RC_ENC_NSEL=1` was the first call in this codebase to pass an *expression* to
 a generated macro, and it encoded a stream that never finished decoding.

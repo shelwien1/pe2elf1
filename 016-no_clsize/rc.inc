@@ -245,7 +245,16 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // next store. The per-byte loop is what scalarised the sweep in the
   // OpenCL and ispc ports; the branch was the cost, never the store.
   void ShiftLow( uint n ) {
+    // RC_ENC_RENORM decides what `n` IS and whether this body keeps any locals.
+    // At 0 it is the byte count 0/1/2 and the shift is derived here; at >=1 it
+    // is the SHIFT COUNT 0/8/16 and the byte count is derived instead. That
+    // direction matters: everything downstream of the selection wants the
+    // shift, and only tmpptr wants the count. See rc_config.inc.
+#if RC_ENC_RENORM>=1
+    RC_ENC_SHDECL
+#else
     uint sh = n*8;
+#endif
 #if RC_FOLD_RPRE
     // rc_Process already added rpre to low and folded the carry into FFNum,
     // so this whole block moved there -- see rc_config.inc
@@ -284,6 +293,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // cl's top byte lands at tmpptr+1, the next at tmpptr, the rest
     // below as staging that later stores overwrite
 #if RC_LOWSPLIT
+#if RC_ENC_RENORM<2
 #if RC_LOWBYTES==8
     uint cl = lowh;
 #elif RC_LOWBYTES>=6
@@ -293,6 +303,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #else
     uint cl = lowl;
 #endif
+#endif
     // The store -- performed here, or staged for the group to commit, which
     // is RC_STAGE_CL's business and the compile's, not the generator's.
     // Staged, n==0 means the store is dead: the cursor does not move, so this
@@ -300,7 +311,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // overwritten before anything reads the row. That is the common case --
     // the coder emits about 0.08 bytes per coded bit -- and RC_SCATTER_SKIP
     // is what acts on it.
-    RC_STAGE_CL( rcidx, tmpptr-2, cl, n );
+    RC_STAGE_CL( rcidx, tmpptr-2, RC_ENC_CL, RC_ENC_NB );
 #else
 #if RC_LOWBYTES==8
     qword cl = lowc;
@@ -310,7 +321,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     (uint&)tmpbase[tmpptr-2] = cl;
 #endif
 #endif
-    tmpptr -= n;
+    tmpptr -= RC_ENC_NB;
 #if RC_LOWSPLIT
     // sh is 0, 8 or 16, so splitting the shift keeps both counts <= 16 and
     // the sh==0 case falls out as 0 on its own -- (x>>16)>>16 is a defined
@@ -324,15 +335,22 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // in C. RC_SHIFT_SAT in rc_config.inc has it, with the measurements: it
     // is slower here, because clang will not fold the poison into the one
     // instruction the hardware would allow.
+#if RC_ENC_RENORM>=2
+    // _hi and cl were each read exactly once; at 2 they are written out where
+    // they were used and the body declares nothing at all.
+    lowh = ((lowh<<RC_ENC_SH) | RC_ENC_HI) & uint(LOW_MASK>>32);
+    lowl <<= RC_ENC_SH;
+#else
 #if RC_SHIFT_SAT
-    uint _hi = lowl >> (32-sh);
+    uint _hi = lowl >> (32-RC_ENC_SH);
 #else
-    uint _hi = (lowl >> 16) >> (16-sh);
+    uint _hi = (lowl >> 16) >> (16-RC_ENC_SH);
 #endif
-    lowh = ((lowh<<sh) | _hi) & uint(LOW_MASK>>32);
-    lowl <<= sh;
+    lowh = ((lowh<<RC_ENC_SH) | _hi) & uint(LOW_MASK>>32);
+    lowl <<= RC_ENC_SH;
+#endif
 #else
-    lowc = (lowc<<sh) & LOW_MASK;
+    lowc = (lowc<<RC_ENC_SH) & LOW_MASK;
 #endif
   }
 
@@ -348,18 +366,18 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // local. See rc_config.inc for what each is worth.
 #if RC_ENC_NSEL==2
       dsh = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
-      ShiftLow( dsh>>3 );
+      ShiftLow( RC_ENC_ARG(dsh) );
       range <<= dsh;
 #elif RC_ENC_NSEL==1
-      // _sh, not sh: ShiftLow's body declares its own `sh`, and after the
-      // generator turns the function into a macro an argument named sh would
-      // expand into that declaration's own initialiser.
+      // _sh, not sh: at RC_ENC_RENORM==0 ShiftLow's body declares its own `sh`,
+      // and after the generator turns the function into a macro an argument
+      // named sh would expand into that declaration's own initialiser.
       const uint _sh = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
-      ShiftLow( _sh>>3 );
+      ShiftLow( RC_ENC_ARG(_sh) );
       range <<= _sh;
 #else
       const uint n = (range<sTOP) + (range<gTOP);
-      ShiftLow( n );
+      ShiftLow( RC_ENC_ARG(n*8) );
       range <<= n*8;
 #endif
     }

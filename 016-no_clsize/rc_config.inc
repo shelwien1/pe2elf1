@@ -211,7 +211,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 134217728*RC_DEC_COLD            \
                        + 3*RC_FF_LANES                    \
                        + 11*RC_DEC_RENORM                 \
-                       + 13*RC_ENC_NSEL )
+                       + 13*RC_ENC_NSEL                   \
+                       + 17*RC_ENC_RENORM )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -467,11 +468,31 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // The encoder is not the decoder: its sweep is vector code over lane arrays
 // that clang auto-vectorises, so a scalar local there is a vector register,
 // not sixteen scalar ones, and the pressure argument that makes the decoder
-// care does not apply. Measured: 93.7 / 94.3 / 94.0 MB/s for 0 / 1 / 2 here,
-// against a 0-twin at 92.4 -- the whole spread is inside the noise. His log
-// says the same from the other end: the encode column sits between 80.0 and
-// 81.8 MB/s across all forty rows of it, with no structure. Kept because the
-// knob costs nothing and his box is not this one.
+// care does not apply -- to the LOCALS. It turns out the SELECTION is worth
+// something anyway.
+//
+// Measured here with twins on both arms, 15 round-robin rounds of best-of-3,
+// 100 MB of enwik8:
+//
+//   NSEL=0   91.82  92.37   mean 92.10
+//   NSEL=1   93.97  94.51   mean 94.24    +2.3%
+//
+// The twins are 0.6% apart and the two arms do not overlap, so +2.3% is about
+// four times the noise floor. A first pass at 7 rounds without twins on both
+// sides read this as flat and this comment said so; it was under-powered.
+//
+// The win is entirely in the ternary, and RC_ENC_RENORM below is the evidence:
+// carrying the shift count all the way into ShiftLow instead of round-tripping
+// it through >>3 and *8 adds nothing, and removing every local from ShiftLow's
+// body adds nothing. Only the 0 -> 1 selection change moves. The mechanism is
+// thin -- {0,8,16} from two blends against {0,1,2} from two compares and a
+// vpslld -- which is why the default has not moved: his box is not this one and
+// the last small one-box win in this file inverted on it. One build says
+// whether it transfers.
+//
+// His own log cannot answer it: the encode column there sits between 80.0 and
+// 81.8 MB/s across all forty rows, but those forty rows vary the DECODER's
+// shape, so they say nothing about this knob.
 //
 // 1 was also the bug that found rc_macro.pl's missing parentheses. ShiftLow's
 // body is `n*8`, so `ShiftLow( sh>>3 )` expanded to `sh>>3*8` -- `sh>>24`,
@@ -480,6 +501,85 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // it is stale.
 #ifndef RC_ENC_NSEL
 #define RC_ENC_NSEL 0
+#endif
+
+// The rest of the encoder's renorm, and the thing RC_ENC_NSEL alone could not
+// reach. That knob picks the SHIFT COUNT with a ternary -- and then handed
+// ShiftLow `dsh>>3`, whose first statement was `uint sh = n*8`. The shift
+// count was selected, divided by eight, passed, and multiplied by eight again,
+// on the chain, every bit. Whatever the ternary was worth, the round trip was
+// spending it: that is why 0/1/2 all measured inside the noise.
+//
+// This knob fixes the direction and then keeps going, because ShiftLow still
+// declares three more locals -- sh, cl and _hi -- and cl and _hi are each read
+// exactly once.
+//
+//   0  ShiftLow takes the BYTE count and derives the shift: `uint sh = n*8`,
+//      plus `uint cl` and `uint _hi`                              <- default
+//   1  ShiftLow takes the SHIFT COUNT and derives the byte count for tmpptr,
+//      which is the only thing that wants it. No sh local, no round trip
+//   2  1, and cl and _hi written out where they were read, so the body
+//      declares nothing at all
+//
+// Measured, 15 rounds, twins, against the 92.10 baseline of RC_ENC_NSEL=0:
+//
+//   RC_ENC_RENORM  0      1      2
+//   RC_ENC_NSEL=1  92.29  91.58  91.88     (and 92.05/91.71 for the 2/2 twins)
+//
+// So the answer is no. Every shape that uses the ternary lands at +2 to +2.7%
+// and they are within a noise floor of each other; the round trip and the
+// locals are both free. clang folds (x>>3)*8 back to a mask, and the locals
+// are vector registers in the sweep, exactly as the argument above says. The
+// knob stays because it makes the encoder's renorm say what it means and
+// because it is the control that proves the ternary is the whole effect --
+// not because it is faster.
+//
+// The direction is the point. Downstream of the selection, three of the four
+// uses want the shift -- lowh<<sh, lowl<<sh, the _hi extraction -- and only
+// tmpptr wants the count, so selecting the shift and deriving the count costs
+// one shift where the reverse costs a multiply on the chain. It is the same
+// argument the decoder's dsh made, and RC_ENC_NSEL=1/2 was making it in the
+// right place and then undoing it one call deeper.
+//
+// stn[] takes the count as a store-is-dead flag and model.inc only ever
+// compares it against zero, so handing it the shift instead is the same
+// predicate with no fixup.
+//
+// 2 leaves the !RC_LOWSPLIT path and the !RC_FOLD_RPRE carry block alone --
+// both declare locals of their own and neither is the default shape.
+#ifndef RC_ENC_RENORM
+#define RC_ENC_RENORM 0
+#endif
+
+#if RC_ENC_RENORM>=1
+#define RC_ENC_SHDECL                     // n IS the shift: nothing to declare
+#define RC_ENC_SH      (n)
+#define RC_ENC_NB      ((n)>>3)
+#define RC_ENC_ARG(x)  (x)
+#else
+#define RC_ENC_SHDECL
+#define RC_ENC_SH      sh
+#define RC_ENC_NB      (n)
+#define RC_ENC_ARG(x)  ((x)>>3)
+#endif
+
+#if RC_ENC_RENORM>=2
+#if RC_SHIFT_SAT
+#define RC_ENC_HI   (lowl >> (32-RC_ENC_SH))
+#else
+#define RC_ENC_HI   ((lowl >> 16) >> (16-RC_ENC_SH))
+#endif
+#if RC_LOWBYTES==8
+#define RC_ENC_CL   lowh
+#elif RC_LOWBYTES>=6
+#define RC_ENC_CL   (lowh << (64-LOWBITS))
+#elif RC_LOWBYTES==5
+#define RC_ENC_CL   ((lowh<<24) | (lowl>>8))
+#else
+#define RC_ENC_CL   lowl
+#endif
+#else
+#define RC_ENC_CL   cl
 #endif
 
 // 1 = ShiftLow extracts the high word as a single variable shift,
