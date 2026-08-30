@@ -306,7 +306,73 @@ passes cannot overlap.
 The knob stays because a CODBYTES-wide range is a real generalisation and the
 constants were hardcoded for no reason. It should not be turned on.
 
-## 7. Where this leaves it
+## 7. Speculating the context tree
+
+The other direction: we do not know which `freq` the comparison needs, so
+evaluate *all* of them. Fill a table with every node's `rpre*freq`, the matching
+`code` for each node, compare, get 255 bits, and let the actual decode be a
+walk through precomputed bits.
+
+The dependency this attacks is real, and it is the right one. Today the per-bit
+chain is
+
+```
+load cty[ctx] (5) -> p -> mul (3) -> cmp (1) -> bit -> ctx*2+bit (1) -> next ADDRESS
+```
+
+about 10 cycles, and the counter load is inside it because the next address
+depends on this bit. Speculated, every address is known at the root — level *k*
+of a byte's tree is the contiguous run `cty[2^k .. 2^(k+1)-1]` — so no load is
+on the chain and what remains is `mul -> cmp -> select`, about 5.
+
+It also works: the path to node *c* is exactly *c*'s binary representation, so
+each node's `(code, range)` is a deterministic function of *c*. Nothing is
+ambiguous, and reading the whole tree before updating any of it is safe,
+because an update writes the node just left, never a descendant.
+
+**It loses at every depth.** `misc/tree_spec.cpp` speculates D bits at a time —
+D=1 is what the decoder does now, D=4 the nibble, D=8 the whole symbol:
+
+| D | nodes/byte | loads on the chain | cycles/byte | /bit |
+|---|---|---|---|---|
+| **1** | 8 | 8 | **117.8** | 14.7 |
+| 2 | 12 | 4 | 130.3 | 16.3 |
+| 4 | 30 | 2 | 445.7 | 55.7 |
+| 8 | 255 | 1 | 3137.4 | 392.2 |
+
+A hand-vectorised D=8 (AVX-512, level by level, contiguous counter loads) gets
+that last row from 3137 to 684 cycles — vectorising is worth 4.6× — and it is
+still **6.6× slower** than the serial walk's 104. And that comparison is an
+upper bound in speculation's favour: neither side pays the stream refill, which
+the serial walk owes once per bit and speculation would owe 255 ways, each from
+a different substream position.
+
+The curve never turns. Even D=2, at only 1.5× the work, is already 10% down.
+
+The reason is simple once measured: **the loads being speculated away are L1
+hits.** The whole tree is 2 KB and permanently resident, so a counter load is
+about 5 cycles — and one extra speculated node costs a multiply, a compare and
+two child renorms, comfortably more than 5. Removing an L1 hit from the chain
+is not worth the arithmetic it takes to remove it. Speculation pays when the
+load you avoid is a miss; here there are none.
+
+### The version that does pay is already in the tree
+
+`RC_EAGER_CTY` is depth-1 speculation of exactly this kind, and it is cheap for
+a specific reason: it speculates **only the load**, never the state. The two
+children of *c* are `cty[2c]` and `cty[2c+1]` — adjacent — so both come in one
+8-byte load whose address is known a bit early, and the next bit picks its half
+with a select. Two counters for one load and no extra coder arithmetic at all.
+
+That is the whole distinction. Speculating the load is nearly free and already
+done; speculating the *state update* costs a multiply and two renorms per node,
+and no depth makes that back.
+
+It also lands on the same wall every other attempt in this file hit, stated
+best in `RC_DEC_WAVE`'s own note: *"this decoder has no register budget left to
+buy latency with."*
+
+## 8. Where this leaves it
 
 Nothing here beats the interleaved loop, and the reason is now specific rather
 than vague: the decoder's cross-lane overlap is worth more than its vector
