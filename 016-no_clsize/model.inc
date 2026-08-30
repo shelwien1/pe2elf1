@@ -307,6 +307,18 @@ extern int g_use_vec;   // -C: the scalar reference coder
 #endif
 
 
+// RC_GUESS_STATS: how often `bit = (p<hSCALE)` would have been right. See
+// rc_config.inc for the numbers and why they matter.
+#if RC_GUESS_STATS
+extern unsigned long long g_guess_hit[8], g_guess_tot[8];
+#define RC_GUESS_COUNT( idx, p, bit )                                    \
+  { unsigned _k = (idx)&7; g_guess_tot[_k]++;                            \
+    g_guess_hit[_k] += ( ((p)<hSCALE) == (bit) ); }
+void rc_guess_report( void );
+#else
+#define RC_GUESS_COUNT( idx, p, bit )  ((void)0)
+#endif
+
 template< int f_DEC > struct Model;
 
 #include "model0.inc"

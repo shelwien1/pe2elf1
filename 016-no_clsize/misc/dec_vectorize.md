@@ -419,7 +419,54 @@ in the loop body", which is what `RC_DEC_UNROLL`'s note says is worth
 re-asking, and what `RC_DEC_RENORM=8` — the smallest body of the ten shapes,
 431 instructions — is quietly the best answer to.
 
-## 8. Where this leaves it
+## 8. Guessing the bit from p
+
+`RC_GUESS_STATS=1` counts how often the MAP guess `bit = (p<hSCALE)` would have
+been right. enwik8, 800M bits:
+
+| | | | |
+|---|---|---|---|
+| bit 0 of byte | **99.606%** | bit 4 | 67.658% |
+| bit 1 | 76.975% | bit 5 | 61.917% |
+| bit 2 | 90.106% | bit 6 | 80.134% |
+| bit 3 | 68.706% | bit 7 | 73.455% |
+| | | **OVERALL** | **77.319%** |
+
+Bit 0 is the byte's top bit and this is ASCII, so it is nearly free; the other
+seven average about 74%. Only **32.5%** of bits have p outside [2768, 30000] --
+two thirds are not confidently predictable in either direction.
+
+**Speculating on it cannot pay, for three reasons that compound.**
+
+**Verification costs exactly what the work costs.** To find out whether the
+guess was right you must compute `rpre = (range>>SCALElog)*p` and
+`code >= rpre` -- which is the entire per-bit job. Speculation cannot skip it.
+All it can do is let the *next* step start earlier, so this is purely a latency
+play.
+
+**There is no latency here to buy.** Section 7: the loop runs 2.9 IPC out of a
+1756-byte body and is front-end bound. And `RC_EAGER_CTY` is the *100% correct*
+version of this same speculation -- it covers both branches with one 8-byte
+load and needs no fixup path at all -- and it loses. A 77%-accurate guess that
+also needs a verify and a rollback is strictly worse than a both-ways load that
+is never wrong: more instructions, in a loop limited by instruction bandwidth.
+
+**And 22.7% is a dreadful branch.** Written as a real branch that is ~15-20
+cycles per miss, or 3.4-4.5 cycles per bit against a current 8.77 -- a 40-50%
+penalty on its own. This is exactly why the coder is branchless
+(`range = _b ? range : rpre`) to begin with; a guess reintroduces the branch
+the shape was built to avoid, at a worse rate than the renorm branch it already
+declines to take.
+
+The 32.5% confidence figure closes the selective version too: restricting
+speculation to extreme p covers a third of bits at best, and those are the
+cheap, well-predicted ones anyway.
+
+Bit 0's 99.6% is a genuinely different regime, but it is one bit in eight and
+verification still costs full price, so using it would take a byte-level fast
+path -- "is this ASCII" -- not RC speculation.
+
+## 9. Where this leaves it
 
 Nothing here beats the interleaved loop, and the reason is now specific rather
 than vague: the decoder's cross-lane overlap is worth more than its vector

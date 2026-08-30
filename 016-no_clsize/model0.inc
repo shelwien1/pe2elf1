@@ -243,6 +243,7 @@ struct Model<0> : Coroutine, PredictorE {
               for( j=0; j<RCNUM; j++ ) {
                 uint b = _pb[_i+int(j)];
                 uint f = b&0x7FFF; b >>= 15;
+                RC_GUESS_COUNT( _i+int(j)+int(blksize1), f, b );
                 rc_Process( j, f, b );
               }
               RC_FLUSHALL();
@@ -255,6 +256,7 @@ struct Model<0> : Coroutine, PredictorE {
             for( j=0; j<RCNUM; j++ ) {
               uint b = pbit[i+j];
               uint f = b&0x7FFF; b >>= 15;
+              RC_GUESS_COUNT( i+j, f, b );
               rc_Process( j, f, b );
             }
             RC_FLUSHALL();

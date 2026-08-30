@@ -1,8 +1,23 @@
+#include <stdlib.h>
 
 #define INC_FLEN
 #include "common.inc"
 #include "rc_config.inc"
 #include "file_api.inc"
+
+#if RC_GUESS_STATS
+#include <stdio.h>
+unsigned long long g_guess_hit[8]={0}, g_guess_tot[8]={0};
+void rc_guess_report( void ) {
+  unsigned long long H=0,T=0;
+  fprintf( stderr, "\n== guess bit=(p<hSCALE) ==\n" );
+  for( int k=0;k<8;k++ ) { H+=g_guess_hit[k]; T+=g_guess_tot[k];
+    if( g_guess_tot[k] )
+      fprintf( stderr, "  bit %d of byte: %6.3f%%  (%llu bits)\n",
+               k, 100.0*g_guess_hit[k]/g_guess_tot[k], g_guess_tot[k] ); }
+  if( T ) fprintf( stderr, "  OVERALL      : %6.3f%% over %llu bits\n", 100.0*H/T, T );
+}
+#endif
 
 
 #include "misc/timer.h"
@@ -97,6 +112,10 @@ static int parse_opts( int argc, char** argv ) {
 }
 
 int main( int argc, char** argv ) {
+#if RC_GUESS_STATS
+  atexit( rc_guess_report );
+#endif
+
   uint i,r,c;
 
   argc = parse_opts( argc, argv );

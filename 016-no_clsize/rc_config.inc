@@ -676,6 +676,30 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #ifndef RC_DEC_SPLIT
 #define RC_DEC_SPLIT 0
 #endif
+
+// 1 = count how often the MAP guess `bit = (p<hSCALE)` would have been right,
+// per bit position within the byte, and report at exit. Encoder only, and the
+// whole thing compiles away at 0 -- it is a model diagnostic, not a coder
+// knob, and it exists because "how predictable is the bit?" is the first
+// question any speculative decode shape has to answer.
+//
+// MEASURED on enwik8, 800M bits:
+//
+//   bit 0 of byte  99.606%      bit 4  67.658%
+//   bit 1          76.975%      bit 5  61.917%
+//   bit 2          90.106%      bit 6  80.134%
+//   bit 3          68.706%      bit 7  73.455%
+//   OVERALL        77.319%
+//
+// Bit 0 is the byte's top bit and this is ASCII, so it is nearly free; the
+// rest average around 74%. Only 32.5% of bits have p outside [2768,30000],
+// i.e. two thirds of them are not confidently predictable either way.
+//
+// 22.7% wrong is why speculating on it does not help -- see
+// misc/dec_vectorize.md section 8.
+#ifndef RC_GUESS_STATS
+#define RC_GUESS_STATS 0
+#endif
 #if RC_DEC_SPLIT && !RC_VEC
 #error "RC_DEC_SPLIT needs the vector coder (RC_VEC=1)"
 #endif
