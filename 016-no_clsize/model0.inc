@@ -1,7 +1,22 @@
 
 template<>
-struct Model<0> : Coroutine, PredictorE {
+struct Model<0> : Coroutine {
   static const uint f_DEC=0;
+
+  // The counter shape is a per-MODEL choice, not a per-build one: the encoder
+  // and the decoder are separate types with separate stats[] and no shared
+  // state, so each carries whatever counter its own loop likes. On this box
+  // they disagree -- the decoder is always fused, this side follows
+  // RC_FUSE_PP_ENC. Counter2 carries {p,state} in one dword and Counter keeps
+  // the state alone with p in a side table.
+  typedef SelCounter< RC_FUSE_PP_ENC >::t t_Counter;
+
+  // o0 aligned bit context, and the counter table it indexes. cty is NOT
+  // biased by -1: the bias would cost nothing on its own, but it makes
+  // cty[2*c] land at an odd index. Index 0 goes unused instead; contexts run
+  // 1..255, which is why stats[] is 0x200 entries.
+  uint ctx;
+  t_Counter* __restrict cty;
 
   typedef RCio<BLKSIZE,RCNUM> t_RCio;
 
@@ -39,9 +54,20 @@ struct Model<0> : Coroutine, PredictorE {
 
   ALIGN(64) t_RC_safe rcY;
 
+  // The model_api.inc entry points. Init loads the counter state machine
+  // named on the command line; both ends need the same one.
   uint Init( void* p ) {
-    return PredictorE::Init(p);
+    uint r = 0;
+    if( p!=0 ) {
+      FILE* h = fopen( (char*)p, "rb" ); if( h==0 ) r=4; else {
+        if( FSM[0].Load(h) ) r=5;
+        fclose(h);
+      }
+    }
+    return r;
   }
+  void* Save( void* r0 = 0 ) { return 0; }
+  uint  Quit( void ) { return 0; }
 
   // One full scalar coding pass over the cached block. Both scalar coders
   // take it: the -C reference (carryless, checked against the vector pass
@@ -131,12 +157,13 @@ struct Model<0> : Coroutine, PredictorE {
     for( i=0; i<blksize; i++ ) {
       c = *ip++;                          // get0(), against the local cursor
       for( j=0; j<8; j++ ) {
-        P_S_L(lctx,state); p=P_P(state);
+        state = cty[lctx].Get(); p = t_Counter::P(state);
         bit = (c>>(7-j))&1;
         pbit[i*8+j] = (bit<<15)+p;
-        P_update_L( lctx, state, bit );
+        cty[lctx].Update( state, bit );
+        (lctx*=2) += bit;
       }
-      lctx = 1;                           // P_byte: resets the bit context
+      lctx = 1;                           // end of byte: reset the bit context
     }
     inpptr = ip; ctx = lctx;
   }
@@ -157,7 +184,8 @@ struct Model<0> : Coroutine, PredictorE {
       "this build. Re-run mk_kernel.sh with the same -D set -- build.sh takes "
       "it as arguments and gc.bat has %defs% for it." );
 
-    P_Init(stats,DIM(stats));
+    for( i=0; i<DIM(stats); i++ ) stats[i].Reset();
+    ctx = 1; cty = stats;
 
     while(1) {
 

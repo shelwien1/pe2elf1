@@ -24,7 +24,6 @@
 
 #include "counter.inc"
 
-#include "predict.inc"
 
 
 //  Staging the coder's one hot store, and committing it.

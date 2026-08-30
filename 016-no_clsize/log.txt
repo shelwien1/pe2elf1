@@ -2,3 +2,26 @@
  70.86MB/s 1.346s 41.89MB/s  2.276s 62,513,092 // 016-no_clsize RCNUM=16 LB=8  avx512
  78.50MB/s 1.215s 44.39MB/s  2.148s 62,513,092 // 016-no_clsize RCNUM=16 LB=8 LOWSPLIT=1  avx512
  73.70MB/s 1.294s 44.41MB/s  2.147s 62,513,092 // 016-no_clsize RCNUM=16 LB=8  avx2
+ 84.28MB/s 0.034s 51.55MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 93.78MB/s 0.031s 49.56MB/s  0.058s 1,873,439  // 016-no_clsize RCNUM=32 LB=8 clang-18 avx512
+ 74.86MB/s 0.038s 42.23MB/s  0.068s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 80.35MB/s 0.036s 51.40MB/s  0.056s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 95.31MB/s 0.030s 51.59MB/s  0.055s 1,899,557  // 016-no_clsize RCNUM=16 LB=7 clang-18 avx512
+ 89.40MB/s 0.032s 48.77MB/s  0.059s 1,899,557  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 96.08MB/s 0.030s 52.32MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 88.76MB/s 0.032s 52.49MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 88.49MB/s 0.032s 51.20MB/s  0.056s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 84.68MB/s 0.034s 50.90MB/s  0.056s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 96.76MB/s 0.030s 51.71MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 96.82MB/s 0.030s 52.83MB/s  0.054s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 82.29MB/s 0.035s 49.96MB/s  0.057s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 93.95MB/s 0.030s 51.98MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 97.12MB/s 0.029s 51.86MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 97.16MB/s 0.029s 50.09MB/s  0.057s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 90.81MB/s 0.032s 51.93MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 93.23MB/s 0.031s 51.12MB/s  0.056s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 91.95MB/s 0.031s 52.59MB/s  0.054s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 83.34MB/s 0.034s 49.98MB/s  0.057s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 93.31MB/s 0.031s 49.83MB/s  0.057s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 92.96MB/s 0.031s 51.68MB/s  0.055s 1,871,721  // 016-no_clsize RCNUM=16 LB=8 clang-18 avx512
+ 96.37MB/s 0.030s 51.89MB/s  0.055s 1,873,439  // 016-no_clsize RCNUM=32 LB=8 clang-18 avx512

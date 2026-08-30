@@ -1,7 +1,34 @@
 
 template<>
-struct Model<1> : Coroutine, PredictorD {
+struct Model<1> : Coroutine {
   static const uint f_DEC=1;
+
+  // The counter shape is this model's own choice -- see model0.inc, which
+  // picks a different one. The decoder is always fused: Counter2 carries
+  // {p,state} in one dword, so Get() is the whole load and P() is a mask.
+  typedef SelCounter< 1 >::t t_Counter;
+
+  // o0 aligned bit context, and the counter table it indexes. cty is NOT
+  // biased by -1: the bias would cost nothing on its own, but it makes
+  // cty[2*c] land at an odd index. Index 0 goes unused instead; contexts run
+  // 1..255, which is why stats[] is 0x200 entries.
+  uint ctx;
+  t_Counter* __restrict cty;
+
+  // The model_api.inc entry points. Init loads the counter state machine
+  // named on the command line; both ends need the same one.
+  uint Init( void* p ) {
+    uint r = 0;
+    if( p!=0 ) {
+      FILE* h = fopen( (char*)p, "rb" ); if( h==0 ) r=4; else {
+        if( FSM[0].Load(h) ) r=5;
+        fclose(h);
+      }
+    }
+    return r;
+  }
+  void* Save( void* r0 = 0 ) { return 0; }
+  uint  Quit( void ) { return 0; }
 
   ALIGN(64) t_Counter stats[0x200];   // order0
 
@@ -41,7 +68,8 @@ struct Model<1> : Coroutine, PredictorD {
       "this build. Re-run mk_kernel.sh with the same -D set -- build.sh takes "
       "it as arguments and gc.bat has %defs% for it." );
 
-    P_Init(stats,DIM(stats));
+    for( i=0; i<DIM(stats); i++ ) stats[i].Reset();
+    ctx = 1; cty = stats;
 
     while(1) {
 
@@ -72,8 +100,8 @@ struct Model<1> : Coroutine, PredictorD {
         uint nb1 = blksize*8 - (blksize*8)%RCNUM;
         // The wavefront (speed_plan_next.md 1.1). A group is RCNUM/8 output
         // bytes -- lanes 0..7 are one, 8..15 the next -- and the bit-context
-        // chain restarts at every byte and carries nothing across: P_byte is
-        // `c = ctx&0xFF; ctx = 1`. The only cross-byte edge is a RAW through
+        // chain restarts at every byte and carries nothing across -- the byte
+        // is `c = ctx&0xFF` and the context resets to 1. The only cross-byte edge is a RAW through
         // cty[], and at bit k the context is in [2^k, 2^(k+1)), so depth-k
         // nodes are touched at bit k and nowhere else.
         //
@@ -91,9 +119,10 @@ struct Model<1> : Coroutine, PredictorD {
             for( j=0; j<8; j++ ) {
               RC_UNROLL
               for( uint m=0; m<NB; m++ ) {
-                P_S_L( lctx[m], st[m] ); p = P_P(st[m]);
+                st[m] = cty[lctx[m]].Get(); p = t_Counter::P(st[m]);
                 rc_Process( m*8+j, p, bt[m] );
-                P_update_L( lctx[m], st[m], bt[m] );
+                cty[lctx[m]].Update( st[m], bt[m] );
+                (lctx[m]*=2) += bt[m];
               }
             }
             RC_UNROLL
@@ -103,19 +132,21 @@ struct Model<1> : Coroutine, PredictorD {
         }
         for( i=nb1; i<blksize*8; i++ ) {
           j = i % RCNUM;
-          P_S(state); p=P_P(state);
+          state = cty[ctx].Get(); p = t_Counter::P(state);
           rc_Process( j, p, bit );
-          P_update( state, bit );
-          if_e0( i%8==7 ) { P_byte(stats,c); put0(c); }
+          cty[ctx].Update( state, bit );
+          (ctx*=2) += bit;
+          if_e0( i%8==7 ) { c = ctx&0xFF; ctx = 1; put0(c); }
         }
       }
 #else
       for( i=0; i<blksize*8; i++ ) {
         j = i % RCNUM;
-        P_S(state); p=P_P(state);
+        state = cty[ctx].Get(); p = t_Counter::P(state);
         rc_Process( j, p, bit );
-        P_update( state, bit );
-        if_e0( i%8==7 ) { P_byte(stats,c); put0(c); }
+        cty[ctx].Update( state, bit );
+        (ctx*=2) += bit;
+        if_e0( i%8==7 ) { c = ctx&0xFF; ctx = 1; put0(c); }
       }
 #endif
 
