@@ -22,7 +22,6 @@ struct RC_IO {
   byte* __restrict beg;   // top of this lane's payload (its first byte)
   byte* __restrict ptr;   // cursor -- encoding, it starts RC_SKIP above beg
   byte* __restrict end;   // one below the last writable byte (encoder only)
-  uint  f_OVF;            // encoder: set if the substream did not fit
 
   // Reads past the end of the substream return 0xFF. That is not an accident:
   // RCio::rc_Read pads the RC_FF_PADSIZE bytes below each substream with
@@ -38,9 +37,6 @@ struct RC_IO {
   // top-of-row start is the buffer equivalent of rc_Write's
   // tmpbufsize-1-ofs in sh_v1xN_io.inc.
   void put( byte c ) {
-#if RC_IO_CHECK
-    if_e0( ptr<=end ) { f_OVF=1; return; }
-#endif
     *ptr-- = c;
   }
 
@@ -49,7 +45,6 @@ struct RC_IO {
   // RCio::rowsize covers both plus the pad below.
   void StartEncode( byte* top, uint bufsize ) {
     ptr = top; beg = top-RC_SKIP; end = beg-bufsize;
-    f_OVF = 0;
     ((Rangecoder*)this)->rc_Init();
   }
 
@@ -59,7 +54,6 @@ struct RC_IO {
   // the chunk back in file order and the file holds it last-emitted-first.
   void StartDecode( byte* top ) {
     beg = ptr = top; end = 0;
-    f_OVF = 0;
     ((Rangecoder*)this)->rc_Init();
   }
 
@@ -113,7 +107,7 @@ struct RCio {
   // Capped at 0xFFFF because the length header is two bytes: with the default
   // geometry the true worst case (61543 at BLKSIZE=64K, RCNUM=16) is below the
   // cap anyway, but a low RCNUM would push it over, and there the cap plus the
-  // RC_IO_CHECK overflow flag turns a silent overrun into a loud error.
+  // vector path's length check turns a silent overrun into a loud error.
   static const uint rc_worst = ((BLKSIZE*8+RCNUM-1)/RCNUM + 17)*SCALElog/8
                              + RC_LOWBYTES + 64;
   static const uint tmpbufsize = macro_Min( rc_worst, 0xFFFFu );
@@ -122,12 +116,12 @@ struct RCio {
   // header and a substream can never overflow whatever the data does.
   static const uint blkmax = (0xFFFFu - RC_LOWBYTES - 96)*RCNUM/SCALElog;
 
-#if RC_STRICT_BLKSIZE
+  // Unconditional: it costs nothing at run time and it is what makes the
+  // runtime overflow guard unnecessary -- below blkmax a substream cannot
+  // overflow whatever the data does, so there is nothing left to check for.
   static_assert( uint(BLKSIZE) <= blkmax,
     "BLKSIZE is too large for RCNUM: one lane's worst-case output would not fit "
-    "the 2-byte substream length header. Lower RC_BLKSIZE, raise RC_RCNUM, or "
-    "drop RC_STRICT_BLKSIZE and rely on the runtime guard." );
-#endif
+    "the 2-byte substream length header. Lower RC_BLKSIZE or raise RC_RCNUM." );
 
   // Row stride of tmpbuf. The OpenCL path writes its lanes into rows of
   // exactly this pitch, so the payload readback lands where rc_Write expects.

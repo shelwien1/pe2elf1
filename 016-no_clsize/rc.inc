@@ -539,11 +539,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // FFs that the carry-mode flush below trims are already committed.
       for( i=0; i<n; i++ ) put( byte(llow>>(LOWBITS-8-i*8)) );
 
-#if RC_CARRYLESS_WARN
-      if( FFNum ) fprintf( stderr,
-        "rc.inc: RC_CARRYLESS lost %u carr%s -- substream is NOT decodable.\n",
-        FFNum, FFNum==1?"y":"ies" );
-#endif
 
 #else
 

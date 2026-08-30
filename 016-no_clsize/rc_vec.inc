@@ -54,12 +54,5 @@ struct RangecoderN {
     return c;
   }
 
-  // A lane whose output did not fit its buffer. Only reachable by configuring
-  // BLKSIZE/RCNUM past what a 2-byte length header can describe.
-  uint rc_Overflow( void ) {
-    uint c = 0;
-    for( uint i=0; i<RCNUM; i++ ) c += rc[i].f_OVF;
-    return c;
-  }
 
 };

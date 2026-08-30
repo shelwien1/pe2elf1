@@ -90,18 +90,27 @@ struct Model<0> : Coroutine, PredictorE {
   // The carry-propagating twin. Reached from either coding path when a carry
   // escaped the carryless one.
   void recode_with_carry( uint blksize ) {
-#if RC_TRACE_FALLBACK
-    fprintf( stderr, "coder: block re-coded on the host, carry lost\n" );
-#endif
     rcY.rc_Init( rcio );
     proc_block( rcY, blksize );
-    rc_check( rcY );
     rcio.rc_Write( (*this), rcY );
   }
 
   // The scalar reference path (-C): carryless first, re-code with the twin
   // if any lane let a carry escape. At RC_LOWBYTES=8 that is a ~2^-33 event
   // per step, so the second pass practically never runs.
+  // A substream that did not fit its buffer cannot be described by the 2-byte
+  // length header either, so there is nothing to fall back on -- say so instead
+  // of writing a stream that will not decode. rc_io.inc's blkmax assert makes
+  // this unreachable for any BLKSIZE/RCNUM that compiles; it stays as the
+  // backstop for the geometry knobs.
+  void rc_overflow( void ) {
+    fprintf( stderr, "coder: substream overflow -- BLKSIZE=%i is too large for "
+                     "RCNUM=%i, the 2-byte length header tops out at %i bytes "
+                     "per lane. Rebuild with RC_BLKSIZE<=%i or a higher RC_RCNUM.\n",
+             int(BLKSIZE), int(RCNUM), 0xFFFF, int(t_RCio::blkmax) );
+    exit(4);
+  }
+
   void host_block( uint blksize ) {
 #if RC_FORCE_CARRY
     recode_with_carry( blksize );
@@ -112,7 +121,6 @@ struct Model<0> : Coroutine, PredictorE {
     if_e0( rcC.rc_Carries()!=0 ) {
       recode_with_carry( blksize );
     } else {
-      rc_check( rcC );
       rcio.rc_Write( (*this), rcC );
     }
 #endif
@@ -302,24 +310,6 @@ struct Model<0> : Coroutine, PredictorE {
     }
 
     yield(this,0);
-  }
-
-  // A substream that did not fit its buffer cannot be described by the 2-byte
-  // length header either, so there is nothing to fall back on -- say so instead
-  // of writing a stream that will not decode. Unreachable with any BLKSIZE and
-  // RCNUM whose worst case fits 0xFFFF (see RCio::rc_worst).
-  NOINLINE
-  void rc_overflow( void ) {
-    fprintf( stderr, "coder: substream overflow -- BLKSIZE=%i is too large for "
-                     "RCNUM=%i, the 2-byte length header tops out at %i bytes "
-                     "per lane. Rebuild with RC_BLKSIZE<=%i or a higher RC_RCNUM.\n",
-             int(BLKSIZE), int(RCNUM), 0xFFFF, int(t_RCio::blkmax) );
-    exit(4);
-  }
-
-  template< class RC >
-  void rc_check( RC& rc ) {
-    if_e0( rc.rc_Overflow()!=0 ) rc_overflow();
   }
 
 };

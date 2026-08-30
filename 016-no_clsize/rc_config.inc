@@ -108,20 +108,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
 
 
-// 1 = have the carryless rc_Quit complain to stderr about lost carries. In
-// sh_v1xN_s.cpp a lost carry is fatal, because a single-pass stream demo has
-// nothing to fall back on. Here it is a normal, recoverable event: model0.inc
-// keeps the block's {p;bit} cache and re-encodes with the carry-propagating
-// twin, so the warning is off.
-#ifndef RC_CARRYLESS_WARN
-#define RC_CARRYLESS_WARN 0
-#endif
 
-// 1 = report every block the carryless fast path had to hand to the carry twin.
-// Off by default; the fallback is a normal event, not a problem.
-#ifndef RC_TRACE_FALLBACK
-#define RC_TRACE_FALLBACK 0
-#endif
 
 // 1 = skip the carryless fast path in the encoder and always code with the
 // carry-propagating twin. Testing knob: it makes the fallback coder the only
@@ -135,23 +122,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_FORCE_CARRY 0
 #endif
 
-// 1 = refuse at compile time any BLKSIZE/RCNUM pair whose worst case does not
-// fit the 2-byte substream length header.
-//
-// Off by default, because that worst case is 15 bits per coded bit -- a model
-// that is maximally wrong about every single bit -- and the geometries in use
-// (RCNUM 8/16/32 at BLKSIZE 64K) are nowhere near it on real data: a lane runs
-// about BLKSIZE/RCNUM bytes even on incompressible input. The one config that
-// does trip on ordinary random data is RCNUM=1 at BLKSIZE=64K, where a whole
-// block lands in one lane and clears 65535 by a byte.
-//
-// Either way a lane cannot overrun its buffer: it is sized to the smaller of
-// the worst case and the header cap, and model0.inc reports the overflow and
-// stops rather than emitting a stream that will not decode. RCio::blkmax is the
-// largest safe BLKSIZE for the configured RCNUM.
-#ifndef RC_STRICT_BLKSIZE
-#define RC_STRICT_BLKSIZE 0
-#endif
 
 
 
@@ -643,10 +613,3 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 
-// Bounds-check every byte the encoder writes into its substream buffer. The
-// buffer is sized for the worst case the model can produce (see rc_io.inc), so
-// this can only fire on a misconfiguration -- but a silent overflow would be a
-// buffer overrun, so it is on by default.
-#ifndef RC_IO_CHECK
-#define RC_IO_CHECK 0
-#endif
