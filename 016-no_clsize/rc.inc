@@ -21,7 +21,9 @@
  #define RC_RANGE_INIT (1ULL<<32)
 #else
  typedef uint  rangetype;
- #define RC_RANGE_INIT 0xFFFFFFFF
+ // A CODBYTES-wide range. At the default 4 this is the whole word; narrower,
+ // it is what lets `code` fit a float32 mantissa -- see RC_CODBYTES.
+ #define RC_RANGE_INIT ( RC_CODBYTES>=4 ? 0xFFFFFFFFu : (1u<<(8*RC_CODBYTES))-1u )
 #endif
 
 template< int f_DEC >
@@ -36,8 +38,13 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   static const uint CODBYTES = RC_CODBYTES;
   static const uint LOWBYTES = RC_LOWBYTES;
   static const uint LOWBITS  = LOWBYTES*8;
-  static const uint sTOP     = 0x01000000U;
-  static const uint gTOP     = 0x00010000U;
+  // The renorm thresholds are the top two byte boundaries of a CODBYTES-wide
+  // range: at CODBYTES=4 these are the 1<<24 and 1<<16 the shapes in
+  // rc_config.inc are written against, and they track CODBYTES below that.
+  static const uint sTOP     = 1u << (8*(CODBYTES-1));
+  static const uint gTOP     = 1u << (8*(CODBYTES-2));
+  // what clz(range) reads as zero bytes to shift: 0 at CODBYTES=4.
+  static const uint CLZBIAS  = 8*(4-CODBYTES);
   // ~0>>(64-LOWBITS) rather than (1<<LOWBITS)-1: nothing to get wrong at 64.
   static constexpr qword LOW_MASK = qword(-1) >> (64-LOWBITS);
   static constexpr qword LOW_MAX  = LOW_MASK+1;
@@ -420,7 +427,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // sTOP and gTOP are 1<<24 and 1<<16, so `clz(range) & ~7` IS the shift
       // count: 0 while range >= 1<<24, 8 below it, 16 below 1<<16. Shape 3
       // established that range is never 0 here and the count never reaches 24.
-      dsh     = uint(__builtin_clz(range)) & ~7u;
+      dsh     = (uint(__builtin_clz(range)) - CLZBIAS) & ~7u;
       code   -= rpre;
       rpre    = 0;
       code  <<= dsh;
@@ -529,7 +536,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // to [1,SCALE-1], so one step divides range by at most SCALE=1<<15 and
       // range was at least 1<<24 -- so clz is never asked about zero and n
       // never comes out 3.
-      const uint sh = uint(__builtin_clz(range)) & ~7u;
+      const uint sh = (uint(__builtin_clz(range)) - CLZBIAS) & ~7u;
       const uint n  = sh>>3;
 #else
       const uint n  = (range<sTOP) + (range<gTOP);

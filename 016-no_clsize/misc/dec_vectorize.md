@@ -251,7 +251,62 @@ lifting the reload out of the renorm turns sixteen register-resident window
 values into an array round-trip, and that costs more than any placement gains.
 The reload wants to stay where it is.
 
-## 6. Where this leaves it
+## 6. A 24-bit range, so the divide can be float32
+
+Shelwien's: `CODBYTES` already exists, `range` can be initialised to
+`(1<<(8*CODBYTES))-1`, and at `CODBYTES=3` code fits float32's 24-bit mantissa
+-- so the division needs no correction at all.
+
+Every part of that is right. `sTOP`/`gTOP` were hardcoded `1<<24`/`1<<16`; they
+now derive as the top two byte boundaries of a CODBYTES-wide range, the clz
+shapes (3 and 13) take a `CLZBIAS` so they still count from the top of the
+range rather than the top of the word, and `RC_RANGE64` is refused with
+`CODBYTES!=4`. `CODBYTES=3` decodes byte-identically across the shapes.
+
+And the divide gets what it promised:
+
+| | cycles / 16 lanes | exactness |
+|---|---|---|
+| double + one correction (32-bit code) | 59.1 | 0 miss in 6.4M |
+| **bare float32 (24-bit code)** | **43.8** | **0 miss in 6.4M** |
+| bare float32 on a 32-bit code | -- | 2021 miss in 3.2M |
+
+One `vdivps` for sixteen lanes instead of two `vdivpd` for eight each, and the
+`mullo`/compare/masked-sub correction gone. Confirmed in the binary: the split
+build at `CODBYTES=3` contains exactly one divide instruction in the loop.
+
+**It still does not pay, twice over.**
+
+The range is narrower, so the coder is coarser -- the unit `range>>SCALElog`
+falls from `[2^9, 2^17)` to `[2, 2^9)`:
+
+| enwik8 | size | bpc |
+|---|---|---|
+| CODBYTES=4 | 62,513,092 | 5.00105 |
+| CODBYTES=3 | 63,437,360 | 5.07499 |
+
+**+1.479%**, 924 KB. That is more than any decode result in this file.
+
+And the speed does not come:
+
+| | CODBYTES=4 | CODBYTES=3 |
+|---|---|---|
+| plain loop | 2.247 s | 2.272 |
+| split, shape 9 | 3.830 | 4.005 |
+
+The plain decoder is unmoved -- it never divides. The split gets *slower*,
+about 4.6%, of which ~1.5% is just the larger stream it has to read.
+
+That last row is the useful one. Cutting the division's cost by a quarter
+changed the split's time by nothing good, which is independent confirmation of
+section 4: **the split is bound by its pass barriers, not by the divide.**
+Making the expensive pass cheaper does not help when the problem is that the
+passes cannot overlap.
+
+The knob stays because a CODBYTES-wide range is a real generalisation and the
+constants were hardcoded for no reason. It should not be turned on.
+
+## 7. Where this leaves it
 
 Nothing here beats the interleaved loop, and the reason is now specific rather
 than vague: the decoder's cross-lane overlap is worth more than its vector

@@ -1062,6 +1062,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #ifndef RC_CODBYTES
 #define RC_CODBYTES 4
 #endif
+#if RC_RANGE64 && RC_CODBYTES!=4
+#error "RC_RANGE64 carries a full-width range; it cannot be narrowed by RC_CODBYTES"
+#endif
+#if RC_CODBYTES<3 || RC_CODBYTES>4
+#error "RC_CODBYTES must be 3 or 4"
+#endif
 
 // The encoder's leading zero prefix. Additions land in the bottom 32 bits of
 // low while ShiftLow emits the top byte, so the top has not been reached yet;
