@@ -351,7 +351,81 @@ price measured above.
 So the branch stays ahead, and the best decoder here remains Shelwien's
 one-branch shape 8 at 1.890 s.
 
-## 6. Why the big idea cannot cross
+## 6. Where 9's gap actually goes, and the prefetch
+
+§5 blamed the extract/insert traffic. That was half right. Disassembling
+shape 9's group loop against shape 0's, by mnemonic:
+
+```
+  mov        -68     vpextrd    +30
+  cmovb      -32     kmovd      +21
+  sub        -32     kshiftlb   +18
+  jbe        -16     vpinsrd    +18
+  cmp        -16     vmovd      +16
+                     korb       +14
+                     kshiftrb   +14
+```
+
+79 mask-domain operations per group, on top of 80 extracts and inserts. Clang
+lowers `(range<sTOP) ? (range<gTOP) ? 16 : 8 : 0` **through the AVX-512 mask
+registers** — each compare produces a k-mask, the two are shifted and or'ed in
+the mask domain, and the result is moved back to a GPR with `kmovd`, which is
+port 5 and about three cycles. Sixteen lanes of that per group.
+
+It is not the vectoriser. `-fno-vectorize` and `-fno-slp-vectorize`, together
+or separately, leave the count at exactly 127 vector operations. This is how
+clang lowers the select.
+
+### Shape 13: clz instead of the ternary
+
+`clz` has no compare in it, so nothing enters the mask domain. `sTOP` and
+`gTOP` are `1<<24` and `1<<16`, so `clz(range) & ~7` **is** the shift count —
+0 while range is at least `1<<24`, 8 below that, 16 below `1<<16`. Shape 3
+already established that range is never 0 here and the count never reaches 24.
+One line of shape 9 changes.
+
+| | decode | vs 9 | vs 0 |
+|---|---|---|---|
+| 0 two branches | 1.962 s | | -- |
+| **13 cached window, clz** | **2.273** | **+7.2%** | −13.7% |
+| 9 cached window, ternary | 2.449 | -- | −19.9% |
+| 7 branchless | 3.122 | −27% | −37% |
+
+The best branchless shape so far, and the gap to the branch is down from 20%
+to 14%. Clang still declines to emit `lzcnt` in the unrolled body — only two
+in the whole binary — so it is folding the builtin back into compares and
+cmovs, but crucially *not* into k-masks.
+
+### The prefetch
+
+`RC_DEC_PREFETCH` puts `__builtin_prefetch` on the window read at
+`RC_DEC_PFDIST` bytes below the cursor, since the substream runs backwards.
+A prefetch of *this* bit's address cannot help — the address is the late
+operand, so by the time it exists the load can already issue — so it is aimed
+at a future bit.
+
+| shape 7 | decode |
+|---|---|
+| no prefetch | **3.122 s** |
+| t1 | 3.159 |
+| t2 | 3.188 |
+| t0 | 3.215 |
+| nta | 3.226 |
+| t0, dist 8 | 3.211 |
+| t0, dist 256 | 3.226 |
+
+and on shape 9, 2.449 → 2.642. It loses at every hint and every distance, and
+the twins are 0.4% apart so all of it is real.
+
+There is no miss to hide. Each lane's cursor moves about 0.08 bytes per coded
+bit, so one 64-byte line serves a lane for roughly 800 bits and the sixteen
+live lines are permanently L1-resident. What the chain pays is L1 load-use
+latency, and a prefetch does not shorten that — the real load still issues and
+still takes its four or five cycles from address to data. What the prefetch
+adds is one more uop per bit, sixteen per group, which is exactly the size of
+the loss.
+
+## 7. Why the big idea cannot cross
 
 The decoder's real win is the outer branch, worth 17-36%. The encoder cannot
 have it, and this repo had already measured the reason before the question was
@@ -402,7 +476,7 @@ have the third, and gains 2.3% from the fourth:
 The encoder runs at about twice the decoder's throughput, and this is why:
 almost everything the decoder exercise discovered, it was already doing.
 
-## 7. One bug the exercise found
+## 8. One bug the exercise found
 
 `RC_ENC_NSEL=1` was the first call in this codebase to pass an *expression* to
 a generated macro, and it encoded a stream that never finished decoding.

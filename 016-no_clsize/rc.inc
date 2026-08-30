@@ -398,7 +398,33 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // both shifts want, and the cursor's decrement is dsh>>3 for free. The
       // nested ternary produces it directly. Selecting the byte count that way
       // instead and deriving the shift from it measures 29% slower.
-#if RC_DEC_RENORM>=11
+#if RC_DEC_RENORM==13
+      // 9, with the shift count from clz instead of the nested ternary.
+      //
+      // 9's remaining gap to the branchy shape is not the loads and not the
+      // shift chain: it is that clang lowers `(range<sTOP) ? (range<gTOP) ? 16
+      // : 8 : 0` through the AVX-512 MASK REGISTERS. Against shape 0 the group
+      // loop gains 21 kmovd, 18 kshiftlb, 14 korb and 14 kshiftrb on top of 30
+      // vpextrd and 18 vpinsrd -- two compares that each produce a k-mask, then
+      // shifted and or'ed together in the mask domain and moved back to a GPR,
+      // and kmovd between the two domains is port 5 and about three cycles.
+      // Neither -fno-vectorize nor -fno-slp-vectorize touches it; it is the
+      // select lowering, not the vectoriser.
+      //
+      // clz has no compare in it at all, so nothing enters the mask domain.
+      // sTOP and gTOP are 1<<24 and 1<<16, so `clz(range) & ~7` IS the shift
+      // count: 0 while range >= 1<<24, 8 below it, 16 below 1<<16. Shape 3
+      // established that range is never 0 here and the count never reaches 24.
+      dsh     = uint(__builtin_clz(range)) & ~7u;
+      code   -= rpre;
+      rpre    = 0;
+      code  <<= dsh;
+      range <<= dsh;
+      code   |= (win>>16) >> (16-dsh);
+      tmpptr -= dsh>>3;
+      win     = (uint&)tmpbase[tmpptr-3];
+      RC_DEC_PF( tmpptr );
+#elif RC_DEC_RENORM>=11
       // 9, with the reload lifted OUT of the lane body entirely. 9 keeps the
       // window's load off the critical chain but still does it here, per lane,
       // and clang pays vpextrd to get tmpptr out of the vector it is keeping

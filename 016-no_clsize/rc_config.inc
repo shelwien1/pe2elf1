@@ -397,6 +397,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //  11  9 with the reload lifted out of the lane body: one MASKED GATHER per
 //      group, in model1.inc where the encoder's RC_FLUSHALL goes
 //  12  11 unmasked, the control for it
+//  13  9 with the shift count from clz instead of the nested ternary -- the
+//      fastest branchless shape here
 //
 // The distribution is the whole story. Counted in the scalar reference coder
 // over the 800M bits of enwik8:
@@ -434,9 +436,20 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //   3  branchless, clz                655    1   157  -33.4%   -23.5%
 //   2  branchless, two compares       668    1   156  -34.4%   -22.8%
 //   7  branchless, no locals          735    1   204  -36.2%   -16.8%
+//  13  9 + clz select                 515    1     ?  -13.7%        ?
 //  10  9 + branch on the reload       772   18   185  -28.7%        ?
 //  12  9 + unmasked gather            529    1    94  -36.1%        ?
 //  11  9 + masked gather              534    1    97  -36.8%        ?
+//
+// 13 is the best branchless shape here, +7.2% over 9 (2.273 s against 2.449),
+// and it came out of asking WHERE 9's remaining gap goes. Not the loads and
+// not the shift chain: against shape 0 the group loop gains 21 kmovd, 18
+// kshiftlb, 14 korb and 14 kshiftrb. Clang lowers the nested ternary through
+// the AVX-512 MASK REGISTERS -- each compare makes a k-mask, they are shifted
+// and or'ed in the mask domain, and the result is moved back to a GPR with
+// kmovd, which is port 5 and about three cycles. Neither -fno-vectorize nor
+// -fno-slp-vectorize changes any of it; this is select lowering, not the
+// vectoriser. clz has no compare in it, so nothing enters the mask domain.
 //
 // Read that table twice. The big number -- the outer branch is worth a fifth
 // to a third of decode -- reproduces on both machines. Every small number
@@ -619,8 +632,13 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // rc_vecD.inc must not depend on the target (see RC_KERNEL_CONF). Prefetch
 // never faults, so the address needs no bounds check.
 //
-// MEASURED, AND IT DOES NOTHING -- see misc/dec_renorm.md section 6. There is
-// no miss to hide. Each lane's cursor moves about 0.08 bytes per coded bit, so
+// MEASURED, AND IT LOSES AT EVERY HINT AND EVERY DISTANCE. Shape 7 sits at
+// 3.122 s; with a prefetch it is 3.159 (t1), 3.188 (t2), 3.215 (t0) and 3.226
+// (nta), and moving PFDIST to 8 or 256 bytes changes nothing (3.211, 3.226).
+// On shape 9 it costs more, 2.449 -> 2.642. The twins are 0.4% apart, so all
+// of that is real, and it is just the extra uop per bit -- sixteen per group.
+//
+// There is no miss to hide. Each lane's cursor moves about 0.08 bytes per coded bit, so
 // one 64-byte line serves a lane for ~800 bits and the sixteen live lines sit
 // in L1 permanently. What the chain pays is L1 load-use latency, and a
 // prefetch does not shorten that: the real load still issues and still takes

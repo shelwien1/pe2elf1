@@ -174,7 +174,7 @@ extern int g_use_vec;   // -C: the scalar reference coder
 // The group's refill has to run after every lane has renormalised, so it goes
 // where the encoder's RC_FLUSHALL does. RC_REFILL_ONE covers the paths that
 // code a single lane at a time (the block header, and the tail below RCNUM).
-#if RC_VEC && RC_DEC_RENORM>=11
+#if RC_VEC && (RC_DEC_RENORM==11 || RC_DEC_RENORM==12)
 
 #define RC_REFILL_ONE( k )  ( win[k] = (uint&)tmpbase[ tmpptr[k]-3 ] )
 
