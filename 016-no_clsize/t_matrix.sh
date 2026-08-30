@@ -48,7 +48,6 @@ run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7"
 run "-DRC_CODBYTES=3"
 
 # the knobs, at their non-default settings
-runsame "-DRC_SWEEP_NEGIDX=1"
 runsame "-DRC_FOLD_RPRE=1"
 runsame "-DRC_SCATTER_SKIP=1"
 runsame "-DRC_SCATTER_W=0"
@@ -58,17 +57,18 @@ runsame "-DRC_ENC_RENORM=1"
 runsame "-DRC_ENC_RENORM=2"
 runsame "-DRC_ENC_RENORM=1 -DRC_ENC_NSEL=1"
 runsame "-DRC_ENC_RENORM=2 -DRC_ENC_NSEL=2"
-runsame "-DRC_CHUNK=0"
-runsame "-DRC_CHUNK=512"
 runsame "-DRC_FUSE_PP_ENC=0"
 runsame "-DRC_FUSE_PP_ENC=1"
 
 # the two defs profiles themselves
-runsame "-DRC_SWEEP_NEGIDX=1 -DRC_FOLD_RPRE=1 -DRC_SCATTER_SKIP=0 -DRC_ENC_NSEL=0 -DRC_ENC_RENORM=0"
-runsame "-DRC_SWEEP_NEGIDX=0 -DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2"
+runsame "-DRC_FOLD_RPRE=1 -DRC_SCATTER_SKIP=0 -DRC_ENC_NSEL=0 -DRC_ENC_RENORM=0"
+runsame "-DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2"
+
+# the two defs profiles themselves
 
 # combinations that have bitten before: a knob that moves work between paths
 run "-DRC_RCNUM=32 -DRC_ENC_NSEL=1"
+run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7 -DRC_FOLD_RPRE=1"
 
 rm -f "$REFSTREAM_FILE"
 [ "$fail" = 0 ] && echo "== all configurations pass" || { echo "== FAILURES above"; exit 1; }

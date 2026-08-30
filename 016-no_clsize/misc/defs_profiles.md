@@ -1,31 +1,33 @@
 # The defs profiles
 
-After the cleanup, everything both profiles agreed on is the code's only state
-and is gone from the -D space. What is left is the five knobs the two targets
-actually disagree about:
+Everything both profiles agreed on is the code's only state and is gone from
+the -D space. What is left is the four knobs the two targets disagree about:
 
 ```
-set defs_avx2=  -DRC_SWEEP_NEGIDX=1 -DRC_FOLD_RPRE=1 -DRC_SCATTER_SKIP=0 ^
-                -DRC_ENC_NSEL=0 -DRC_ENC_RENORM=0
-set defs_avx512=-DRC_SWEEP_NEGIDX=0 -DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 ^
-                -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2
+set defs_avx2=  -DRC_FOLD_RPRE=1 -DRC_SCATTER_SKIP=0 -DRC_ENC_NSEL=0 -DRC_ENC_RENORM=0
+set defs_avx512=-DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2
 ```
 
 Baked in, no longer settable: `RC_DEC_WAVE=2`, `RC_LOAD32=1`, `RC_DEC_ALIGN=0`,
 `RC_FF_LANES=8`, `RC_DEC_PUTW=1`, `RC_DEC_COLD=1`, `RC_SHIFT_SAT=0`,
-`RC_DEC_RENORM=8`, `RC_DEC_PREFETCH=0`. The stream is byte-identical to what
-the old profiles produced, and so is the speed.
+`RC_DEC_RENORM=8`, `RC_DEC_PREFETCH=0`, `RC_LOWSPLIT=1`, `RC_FUSE_PP_DEC=1`,
+`RC_SWEEP_NEGIDX=0`, and `RC_CHUNK` off. The stream is byte-identical to what
+the original profiles produced.
 
-Two constraints the baking made hard, both now `#error`ed rather than silent:
+Two constraints the baking made hard, both `#error`ed rather than silent:
 
-- **`RC_RCNUM` must be a multiple of 16.** The paired 16-bit output store (the
-  old `RC_DEC_PUTW`) needs an even number of output bytes per group. `RCNUM=8`
-  used to be rejected by that knob's own guard; without the guard it built and
-  roundtripped to garbage, which is how the matrix caught it.
+- **`RC_RCNUM` must be a multiple of 16.** The paired 16-bit output store needs
+  an even number of output bytes per group. `RCNUM=8` used to be rejected by
+  `RC_DEC_PUTW`'s own guard; without it the build roundtripped to garbage.
 - **`RC_LOWBYTES - RC_CODBYTES >= 4`.** The one-branch refill reads a 32-bit
-  window from the cursor, so the payload needs four bytes above it. At the
-  default `RC_CODBYTES=4` that pins `RC_LOWBYTES` to 8; `RC_CODBYTES=3` also
-  admits 7. `RC_LOWBYTES` 4..6 are no longer buildable.
+  window from the cursor. At `RC_CODBYTES=4` that pins `RC_LOWBYTES` to 8;
+  `RC_CODBYTES=3` also admits 7.
+
+**`RC_CHUNK` was removed for clutter, not because it did nothing.** It
+interleaved the model pass with the coding sweep over 2048 input bytes at a
+time, keeping the buffer between them at 32 KB instead of 1 MB, and the repo
+measured +2.6 to +4.2% encode for it across 256..8192. That is the cost of
+dropping it; decode is untouched, since it has no model pass to split.
 
 ## A. Add these — measured wins on the profile
 
@@ -55,9 +57,6 @@ the three.
 
 ## B. Worth a build — box- or compiler-dependent, cannot be settled from here
 
-- **`-DRC_CHUNK=`** (default 2048). The repo measured +2.6 to +4.2% encode flat
-  across 256…8192 on skylake; never re-swept on clang 23. Decode is untouched —
-  it has no model pass to split.
 - **`-DRC_FUSE_PP_ENC=0`** as a control. The default auto-selects on
   `__clang_major__ < 19`, so at clang 23 you get 1, and the note says clang 23
   measured +3.98% for it. But the cut sits between the only two versions ever

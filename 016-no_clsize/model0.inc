@@ -33,16 +33,6 @@ struct Model<0> : Coroutine {
   // carryless pass loses a carry.
   ALIGN(4096) word pbit[BLKSIZE*8];
 
-#if RC_CHUNK
-  // The carry fallback re-codes the whole block out of pbit[], and the chunked
-  // pass only ever holds one chunk of it. So the model is snapshotted before
-  // the pass and the fallback rewinds and re-caches the block in full. The
-  // snapshot is ~2 KB once per block; the restore runs about once in 2^33
-  // coding steps, which is to say never.
-  ALIGN(64) t_Counter ctysave[0x200];
-  byte* inpsave;
-  uint  ctxsave;
-#endif
 
   // what the vector pass reports, shaped so rc_Write can take it directly
   struct t_res {
@@ -190,9 +180,7 @@ struct Model<0> : Coroutine {
 
       chkinp(); blksize=getinplen(); if( blksize>BLKSIZE ) blksize=BLKSIZE;
 
-#if !RC_CHUNK
       model_pass( blksize );
-#endif
 
       // The vector coding pass: the carryless coder over all RCNUM lanes,
       // straight into the substream rows. The unrolled sweep is what clang
@@ -220,45 +208,13 @@ struct Model<0> : Coroutine {
           }
         }
 
-#if RC_CHUNK
-        inpsave = inpptr; ctxsave = ctx;
-        memcpy( ctysave, stats, sizeof(stats) );
-#endif
-        // RC_CHUNK: model pass and sweep interleaved over CHUNK input bytes
-        // at a time, both working the low end of pbit[] so the buffer that
-        // travels between them is CHUNK*16 bytes instead of 1 MB. RC_CHUNK is
-        // even, so every chunk is a whole number of RCNUM-bit groups and bit i
-        // still lands in lane i%RCNUM exactly as the unchunked pass puts it.
-        for( uint _c0=0; _c0<blksize; _c0+=RC_CHUNK_N ) {
-          uint _cn = blksize-_c0; if( _cn>RC_CHUNK_N ) _cn = RC_CHUNK_N;
-#if RC_CHUNK
-          model_pass( _cn );
-#endif
         {
-          uint blksize0 = _cn*8;
+          uint blksize0 = blksize*8;
           uint blksize1 = blksize0 - (blksize0%RCNUM);
 
           // One rc_Process per lane per group, so the RCNUM staged stores
           // are RCNUM distinct addresses in RCNUM distinct rows and the
           // group can commit them together.
-#if RC_SWEEP_NEGIDX
-          // speed_plan_next.md 5.2: `add/cmp/jb` is two fused uops per group;
-          // biasing the base and counting a negative index up to zero makes
-          // the add set ZF itself, so it is `add/jne` -- one.
-          {
-            const word* __restrict _pb = pbit + blksize1;
-            for( int _i = -int(blksize1); _i<0; _i += RCNUM ) {
-              RC_UNROLL
-              for( j=0; j<RCNUM; j++ ) {
-                uint b = _pb[_i+int(j)];
-                uint f = b&0x7FFF; b >>= 15;
-                rc_Process( j, f, b );
-              }
-              RC_FLUSHALL();
-            }
-            i = blksize1;
-          }
-#else
           for( i=0; i<blksize1; i+=RCNUM ) {
             RC_UNROLL
             for( j=0; j<RCNUM; j++ ) {
@@ -268,7 +224,6 @@ struct Model<0> : Coroutine {
             }
             RC_FLUSHALL();
           }
-#endif
 
           // fewer than RCNUM bits left: consecutive i, so still one lane each
           for( ; i<blksize0; i++ ) {
@@ -276,7 +231,6 @@ struct Model<0> : Coroutine {
             uint f = b&0x7FFF; b >>= 15;
             rc_Process( i%RCNUM, f, b ); RC_FLUSH_ONE( i%RCNUM );
           }
-        }
         }
 
         for( j=0; j<RCNUM; j++ ) rc_Quit(j);
@@ -292,13 +246,6 @@ struct Model<0> : Coroutine {
         if_e0( novf!=0 ) rc_overflow();
         if( ncarry!=0 ) rcio.rc_Write( (*this), res );   // no lane lost a carry
         else {
-#if RC_CHUNK
-          // rewind the model and cache the whole block, which is what
-          // proc_block reads
-          inpptr = inpsave; ctx = ctxsave;
-          memcpy( stats, ctysave, sizeof(stats) );
-          model_pass( blksize );
-#endif
           recode_with_carry( blksize );
         }
 

@@ -417,36 +417,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
 
 
-// Chunk size, in input bytes, for interleaving the model pass with the coding
-// sweep. 0 = off, the model pass runs once over the whole block.
-//
-// pbit[] is BLKSIZE*8 words -- 1 MB written and 1 MB read per 64 KB block, 32
-// bytes of traffic per input byte, for a value produced and consumed in the
-// same order. Chunking makes that buffer CHUNK*16 bytes and keeps it in L1.
-// Must be even so each chunk is a whole number of RCNUM-bit groups.
-//
-// misc/avx2_profile.md section 8 has "chunked model/sweep, 2048" at +10.27
-// cyc/grp, i.e. a loss, and blames tmpbuf evicting FSM+pp from L2. That
-// mechanism was never real -- FSM0.txt has 256 states, so the model's whole
-// working set is 2 KB -- and this version wins. The difference is where pbit
-// is indexed: both passes work its low end and the chunk is rewritten in
-// place, so the buffer between them is 32 KB at CHUNK=2048 rather than a 1 MB
-// window that walks. Measured, encode, byte-identical stream:
-//
-//     CHUNK      256    512   1024   2048   4096   8192
-//     skylake  +3.84  +3.53  +4.16  +3.69  +3.17  +3.77   (control -0.95)
-//     rerun       --  +2.64  +2.58  +3.18     --     --    (control +0.02)
-//     native      --     --     -- +2.56     --     --    (control -0.18)
-//
-// Flat across two decades of chunk size, which says it is the traffic and not
-// a cache-capacity knee. Decode is untouched -- it has no model pass to split.
-#ifndef RC_CHUNK
-#define RC_CHUNK 2048
-#endif
-#if RC_CHUNK && (RC_CHUNK&1)
-#error "RC_CHUNK must be even"
-#endif
-#define RC_CHUNK_N ( RC_CHUNK ? RC_CHUNK : RC_BLKSIZE )
 
 
 
@@ -465,19 +435,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #error "RC_FF_LANES must divide RC_RCNUM"
 #endif
 
-// 1 = the coding sweep walks pbit[] with a negative index counting up to zero,
-// off a biased base, so the group loop's latch is `add/jne` (one fused uop)
-// instead of `add/cmp/jb` (two). speed_plan_next.md 5.2.
-//
-// MEASURED, AND IT DOES NOT FIRE: clang emits `add $16,%rcx; cmp $-16,%rcx;
-// jl` -- it keeps the compare rather than using the add's own flags -- so the
-// instruction count is unchanged at 142 per group and the timing follows
-// (-0.93% encode against a -0.46% control). The other three items in 5.2 are
-// register-allocator and constant-placement decisions with no source spelling
-// at all.
-#ifndef RC_SWEEP_NEGIDX
-#define RC_SWEEP_NEGIDX 0
-#endif
 
 // Width of the code register, in bytes. 4 everywhere -- it is what the decoder
 // holds and what sTOP/gTOP are written against -- but named, because the zero
