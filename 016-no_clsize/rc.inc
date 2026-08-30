@@ -16,15 +16,12 @@
 //
 //  Needs: SCALElog (FSM.cpp), the knobs in rc_config.inc, RC_IO (rc_io.inc).
 
-#if RC_RANGE64
- typedef qword rangetype;
- #define RC_RANGE_INIT (1ULL<<32)
-#else
  typedef uint  rangetype;
  // A CODBYTES-wide range. At the default 4 this is the whole word; narrower,
  // it is what lets `code` fit a float32 mantissa -- see RC_CODBYTES.
- #define RC_RANGE_INIT ( RC_CODBYTES>=4 ? 0xFFFFFFFFu : (1u<<(8*RC_CODBYTES))-1u )
-#endif
+ // as a right shift, not (1<<8*CODBYTES)-1: at CODBYTES==4 that shift is 32,
+ // and clang rejects it in a constant expression even on the dead branch.
+ #define RC_RANGE_INIT ( 0xFFFFFFFFu >> (8*(4-RC_CODBYTES)) )
 
 template< int f_DEC >
 struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
@@ -66,9 +63,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   enum { FFNum_SOA_FOLD = RC_FF_LANES };
   uint  FFNum;
   uint  Cache;
-#if RC_STATS
-  uint  n_carry; // isn't expected to be used on enough data to overflow
-#endif
 #if RC_VECOUT
   // Where ShiftLow's store goes when the build stages it instead of performing
   // it: the dword, the tmpbase offset it belongs at, and the renorm count that
@@ -79,33 +73,18 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // them and they cost nothing.
   uint  stcl, stad, stn;
 
-  // RC_DEC_RENORM 7 and 8 keep the renorm's shift count in lane state rather
+  // The renorm's shift count, kept in lane state rather
   // than in a local, which is the whole point of those shapes -- see
   // rc_config.inc. Declared unconditionally for the same reason the staging
   // trio is: the generated kernel must not depend on anything but the -D set.
   // Nothing writes it in the other shapes and it costs nothing there.
   uint  dsh;
 
-  // RC_DEC_RENORM 9 and 10's cached refill window: the four stream bytes ending at
-  // the cursor, so the invariant is `win == (uint&)tmpbase[tmpptr-3]` at every
-  // entry to rc_Renorm. rc_Init seeds it and rc_Renorm re-fills it AFTER using
-  // it, which is the whole point -- see rc_config.inc.
-  uint  win;
-
-  // RC_DEC_SPLIT's quotient, code/(range>>SCALElog), one per lane. Produced
-  // for the whole group at once by RC_DIVALL and consumed by the serial model
-  // walk, which is the only reason it has to live in lane state at all.
-  uint  val;
-
   // what this kernel was generated against; model0.inc checks it
   enum { KERNEL_CONF = RC_KERNEL_CONF };
 #endif
 
-#if RC_STATS
-  #define RC_CARRY_COUNT(c) (n_carry+=(c))
-#else
   #define RC_CARRY_COUNT(c) ((void)0)
-#endif
 
   // Carries that escaped the low accumulator over this substream. Non-zero
   // means the output is not decodable and the block has to be re-coded with
@@ -228,12 +207,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     const uint n = (range<sTOP) + (range<gTOP);
     if( f_DEC==0 ) ShiftLow(n); else ShiftCode(n);
     range <<= n*8;
-#if RC_RENORM_TAIL
-    while( range<sTOP ) {
-      if( f_DEC==0 ) ShiftLow(1); else ShiftCode(1);
-      range <<= 8;
-    }
-#endif
   }
 
 #else // RC_VECOUT ---------------------------------------------------------
@@ -344,20 +317,13 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // `lowl >> (32-sh)`, because their variable shift saturates to zero past
     // the lane width -- but scalar x86 masks the count and OpenCL defines the
     // shift as `x >> (n & 31)`, so that form is target-specific and undefined
-    // in C. RC_SHIFT_SAT in rc_config.inc has it, with the measurements: it
-    // is slower here, because clang will not fold the poison into the one
-    // instruction the hardware would allow.
 #if RC_ENC_RENORM>=2
     // _hi and cl were each read exactly once; at 2 they are written out where
     // they were used and the body declares nothing at all.
     lowh = ((lowh<<RC_ENC_SH) | RC_ENC_HI) & uint(LOW_MASK>>32);
     lowl <<= RC_ENC_SH;
 #else
-#if RC_SHIFT_SAT
-    const uint _hi = lowl >> (32-RC_ENC_SH);
-#else
     const uint _hi = (lowl >> 16) >> (16-RC_ENC_SH);
-#endif
     lowh = ((lowh<<RC_ENC_SH) | _hi) & uint(LOW_MASK>>32);
     lowl <<= RC_ENC_SH;
 #endif
@@ -366,10 +332,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
   }
 
-  // Encode: the counted shift. Decode: whichever of RC_DEC_RENORM's nine
-  // shapes is built -- by default the branchy nested refill with the cursor
-  // touched only inside it, ~91% of bits passing two predicted tests and
-  // doing nothing else, the shape rc_split_ispc_v1.md section 9.5 measured.
+  // Encode: the counted shift. Decode: the one-branch refill below.
   void rc_Renorm( void ) {
     if( f_DEC==0 ) {
       // RC_ENC_NSEL carries the decoder's two lessons across to this side:
@@ -394,114 +357,23 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
     }
     if( f_DEC==1 ) {
-#if RC_DEC_RENORM<7
-      code -= rpre;
-      rpre = 0;
-#endif
-#if RC_DEC_RENORM>=7
-      // Shelwien's shapes, and they are not written the way the others are.
-      // Every operation is its own statement on lane state -- no locals at all
-      // -- because in the 16x unrolled decode loop a local is a scalar with a
-      // live range clang has to allocate a register for sixteen times over,
-      // while a lane-array slot is something it can re-read or rematerialise
-      // as it likes. See rc_config.inc for what that measured.
+      // Shelwien's one-branch refill (rc_renorm_1br.txt). Every operation is
+      // its own statement on lane state -- no locals -- because in the 16x
+      // unrolled decode loop a local is a scalar clang has to allocate a
+      // register for sixteen times over, while a lane slot it can re-read or
+      // rematerialise. dsh holds the SHIFT COUNT, 0/8/16, not the byte count:
+      // it is what both shifts want and the cursor's decrement is dsh>>3 for
+      // free.
       //
-      // dsh holds the SHIFT COUNT, 0/8/16, not the byte count: it is what
-      // both shifts want, and the cursor's decrement is dsh>>3 for free. The
-      // nested ternary produces it directly. Selecting the byte count that way
-      // instead and deriving the shift from it measures 29% slower.
-#if RC_DEC_RENORM==13
-      // 9, with the shift count from clz instead of the nested ternary.
+      // The outer test is worth ~18% -- ~92% of bits renormalise nothing, and
+      // the two unconditional shifts it skips land on the loop-carried range
+      // and code chains. The rpre fold is DUPLICATED into both arms rather
+      // than hoisted above it: hoisting measures 1.7% slower, because it makes
+      // code and rpre live across the test in a body short of registers.
       //
-      // 9's remaining gap to the branchy shape is not the loads and not the
-      // shift chain: it is that clang lowers `(range<sTOP) ? (range<gTOP) ? 16
-      // : 8 : 0` through the AVX-512 MASK REGISTERS. Against shape 0 the group
-      // loop gains 21 kmovd, 18 kshiftlb, 14 korb and 14 kshiftrb on top of 30
-      // vpextrd and 18 vpinsrd -- two compares that each produce a k-mask, then
-      // shifted and or'ed together in the mask domain and moved back to a GPR,
-      // and kmovd between the two domains is port 5 and about three cycles.
-      // Neither -fno-vectorize nor -fno-slp-vectorize touches it; it is the
-      // select lowering, not the vectoriser.
-      //
-      // clz has no compare in it at all, so nothing enters the mask domain.
-      // sTOP and gTOP are 1<<24 and 1<<16, so `clz(range) & ~7` IS the shift
-      // count: 0 while range >= 1<<24, 8 below it, 16 below 1<<16. Shape 3
-      // established that range is never 0 here and the count never reaches 24.
-      dsh     = (uint(__builtin_clz(range)) - CLZBIAS) & ~7u;
-      code   -= rpre;
-      rpre    = 0;
-      code  <<= dsh;
-      range <<= dsh;
-      code   |= (win>>16) >> (16-dsh);
-      tmpptr -= dsh>>3;
-      win     = (uint&)tmpbase[tmpptr-3];
-      RC_DEC_PF( tmpptr );
-#elif RC_DEC_RENORM>=11
-      // 9, with the reload lifted OUT of the lane body entirely. 9 keeps the
-      // window's load off the critical chain but still does it here, per lane,
-      // and clang pays vpextrd to get tmpptr out of the vector it is keeping
-      // the lane state in and vpinsrd to put the loaded word back. That is ~60
-      // cross-domain moves per group, all on port 5, and it is the whole of
-      // 9's gap to the branchy shape.
-      //
-      // Here the lane body does no memory at all. Each lane's window is
-      // refilled once per group by RC_REFILLALL() in model1.inc -- one gather,
-      // masked at 11 by dsh!=0 so only the lanes that moved are read. Timing
-      // is unchanged: a lane renormalises at most once per group, so a refill
-      // at the end of the group still lands before the next bit reads it,
-      // which is the same one-iteration slack 9 relies on.
-      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
-      code   -= rpre;
-      rpre    = 0;
-      code  <<= dsh;
-      range <<= dsh;
-      code   |= (win>>16) >> (16-dsh);
-      tmpptr -= dsh>>3;
-#elif RC_DEC_RENORM==10
-      // 9, with the reload -- and ONLY the reload -- put behind a branch. The
-      // arithmetic stays branchless; what comes back is the memory traffic the
-      // branchy shapes skip. It is a diagnostic, not a candidate: it asks what
-      // the refill reads are worth once their latency is already off the chain,
-      // and it answers the question for every scheme that aims to read less
-      // often, because skipping per lane skips ~92% of the reads and no
-      // group-wide test can do better than that. See rc_config.inc.
-      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
-      code   -= rpre;
-      rpre    = 0;
-      code  <<= dsh;
-      range <<= dsh;
-      code   |= (win>>16) >> (16-dsh);
-      tmpptr -= dsh>>3;
-      // correct because dsh==0 leaves tmpptr where it was, so the window the
-      // previous iteration cached is still the window this lane needs
-      if_e0( dsh ) win = (uint&)tmpbase[tmpptr-3];
-#elif RC_DEC_RENORM==9
-      // Branchless, and the refill read one iteration ahead of where it is
-      // needed. 7 reloads the window every bit and consumes it in the same
-      // bit, so the chain is range -> dsh -> tmpptr -> load -> code and the
-      // load's latency is on it. Here `code` takes its bytes out of win, which
-      // the PREVIOUS bit already loaded, and this bit's load only has to land
-      // before the next one reads it. Same load count, a whole iteration of
-      // slack -- the trick RC_FOLD_RPRE plays on the encoder.
-      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
-      code   -= rpre;
-      rpre    = 0;
-      code  <<= dsh;
-      range <<= dsh;
-      code   |= (win>>16) >> (16-dsh);   // the top dsh bits of the cached word
-      tmpptr -= dsh>>3;
-      win     = (uint&)tmpbase[tmpptr-3];
-      RC_DEC_PF( tmpptr );
-#elif RC_DEC_RENORM==8
-      // The outer test kept -- the same one shape 0 has, and worth ~18% here.
-      // The rpre fold is DUPLICATED into both arms rather than hoisted above
-      // the branch: hoisting it measures 1.7% slower, because it makes code
-      // and rpre live across the test in a body that is short of registers.
-#if RC_DEC_COLD
+      // misc/dec_renorm.md is the analysis, and the nine other shapes it
+      // measured; this is the one that won.
       if( __builtin_expect_with_probability( range<sTOP, 0, 0.99 ) ) {
-#else
-      if_e0( range<sTOP ) {
-#endif
         dsh     = (range<gTOP) ? 16 : 8;
         tmpptr -= dsh>>3;
         code   -= rpre;
@@ -513,157 +385,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
         code   -= rpre;
         rpre    = 0;
       }
-#else
-      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
-      tmpptr -= dsh>>3;
-      code   -= rpre;
-      rpre    = 0;
-      code  <<= dsh;
-      range <<= dsh;
-      code   |= (uint&)tmpbase[tmpptr+1] & ((dsh==0) ? 0 : (dsh==8) ? 0xFF : 0xFFFF);
-      RC_DEC_PF( tmpptr );
-#endif
-#elif RC_DEC_RENORM>=2 && RC_DEC_RENORM<=4
-      // No branch: the decoder's counted shift, the encoder's `n` expression
-      // read the other way round. gTOP < sTOP, so range<gTOP implies
-      // range<sTOP and n is 0, 1 or 2 -- n bytes leave the substream and n
-      // enter code, and n==0 leaves all three of range, code and the cursor
-      // exactly as they were.
-      const uint _q = tmpptr;
-#if RC_DEC_RENORM==3
-      // sTOP and gTOP are 1<<24 and 1<<16, so the pair of compares is a count
-      // of leading zero BYTES. range is never below 1<<9 -- the model clamps p
-      // to [1,SCALE-1], so one step divides range by at most SCALE=1<<15 and
-      // range was at least 1<<24 -- so clz is never asked about zero and n
-      // never comes out 3.
-      const uint sh = (uint(__builtin_clz(range)) - CLZBIAS) & ~7u;
-      const uint n  = sh>>3;
-#else
-      const uint n  = (range<sTOP) + (range<gTOP);
-      const uint sh = n*8;
-#endif
-#if RC_DEC_RENORM==4
-      // The window addressed by n instead of shifted: the n bytes the refill
-      // wants are [_q-n+1 .. _q], and a little-endian dword loaded AT _q-n+1
-      // already has them in its low n bytes, most significant at the top --
-      // which is the order code wants them in. What is above them is stream
-      // the cursor has already passed, so the mask is the whole cost.
-      // (1<<sh)-1 is 0, 0xFF, 0xFFFF for n = 0, 1, 2; sh is at most 16, so the
-      // shift is defined. Reads up to _q+4: see the pad assert in rc_io.inc.
-      const uint _c = (uint&)tmpbase[_q+1-n] & ((1u<<sh)-1);
-#else
-      // The window at a fixed offset and shifted: the dword at _q-3 has byte
-      // _q at the top, so the top n bytes of it are the refill. sh is 0 here
-      // too, and x>>32 is undefined, so it is the split shift ShiftLow uses.
-      const uint _c = ((uint&)tmpbase[_q-3] >> 16) >> (16-sh);
-#endif
-      range <<= sh;
-      code    = (code<<sh) + _c;
-      tmpptr  = _q - n;
-#elif RC_DEC_RENORM==5
-      // What the measured distribution actually asks for. Over 800M bits of
-      // enwik8: n==0 92.195%, n==1 7.805%, n==2 FIFTEEN TIMES. So the refill
-      // is a one-byte refill, branchless on the single compare that decides
-      // it, and the second byte is a guard that is perfectly predicted because
-      // it is taken once in 53 million. sh is 0 or 8, so the split shift is
-      // still what keeps the n==0 case defined.
-      {
-        const uint _q = tmpptr;
-        const uint sh = (range<sTOP)*8;
-        range <<= sh;
-        code    = (code<<sh) + (((uint&)tmpbase[_q-3] >> 16) >> (16-sh));
-        tmpptr  = _q - (sh>>3);
-      }
-      // One byte took range to at least 1<<17, so at most one more is ever
-      // owed, and after it range is at least 1<<25.
-      if_e0( range<sTOP ) {
-        const uint _r = tmpptr;
-        range <<= 8;
-        code    = (code<<8) + tmpbase[_r];
-        tmpptr  = _r - 1;
-      }
-#else
-      // RC_DEC_COLD strengthens the hint: if_e0 is expect(x,0), which clang
-      // reads as ~10% and is not enough to sink 16 unrolled copies of the
-      // refill out of the loop body. ~91% of bits take neither branch.
-#if RC_DEC_COLD
-      if( __builtin_expect_with_probability( range<sTOP, 0, 0.99 ) ) {
-#else
-      if_e0( range<sTOP ) {
-#endif
-        const uint _q = tmpptr;
-#if RC_DEC_RENORM==1 || RC_DEC_RENORM==6
-        // Inside the 8% that renormalise, the counted shift instead of the
-        // second test. n is 1 or 2 here, never 0, so sh is 8 or 16 and 32-sh
-        // is 24 or 16: one defined shift, no split and no branch.
-        const uint n  = 1 + (range<gTOP);
-        const uint sh = n*8;
-        range <<= sh;
-#if RC_DEC_RENORM==6
-        // The window addressed by n rather than shifted: the n bytes wanted
-        // are [_q-n+1 .. _q] and a dword loaded AT _q-n+1 already has them in
-        // its low n bytes, most significant at the top. Same two extra
-        // operations either way -- a shift and a subtract there, a shift and a
-        // decrement here -- so this is a straight A/B of address arithmetic
-        // against shift arithmetic. Reads up to _q+3: see rc_io.inc.
-        code    = (code<<sh) + ((uint&)tmpbase[_q+1-n] & ((1u<<sh)-1));
-#else
-        code    = (code<<sh) + ((uint&)tmpbase[_q-3] >> (32-sh));
-#endif
-        tmpptr  = _q - n;
-#else
-#if RC_LOAD32
-        // The substream runs backwards, so the two bytes the 2-byte case wants
-        // are the top two of the little-endian dword at _q-3, and the one byte
-        // the 1-byte case wants is its top byte. One load covers both, hoisted
-        // above the branch, with no masking and no shift-or to assemble it.
-        // See the pad assert in rc_io.inc for the three bytes below _q.
-        //
-        // NOT `(const uint&)`: a C-style cast to a CONST reference from a byte
-        // lvalue is a static_cast to a temporary -- the byte widened to uint,
-        // silently -- because binding a const lvalue reference to a converted
-        // temporary is a valid conversion and is tried before reinterpret_cast.
-        // A non-const uint& cannot bind to a temporary, so it reinterprets,
-        // which is why the encoder's `(uint&)tmpbase[...] = cl` works.
-#if RC_LOAD32==2
-        // ... but only in the 2-byte branch. Hoisting the window above the
-        // test makes the COMMON 1-byte case pay a shift it did not need, and
-        // that case is the more frequent of the two.
-        if_e0( range<gTOP ) {
-          range <<= 16;
-          code = (code<<16) + ((uint&)tmpbase[_q-3] >> 16);
-          tmpptr = _q-2;
-        } else {
-          range <<= 8;
-          code = (code<<8) + tmpbase[_q];
-          tmpptr = _q-1;
-        }
-#else
-        const uint _w = (uint&)tmpbase[_q-3];
-        if_e0( range<gTOP ) {
-          range <<= 16;
-          code = (code<<16) + (_w>>16);
-          tmpptr = _q-2;
-        } else {
-          range <<= 8;
-          code = (code<<8) + (_w>>24);
-          tmpptr = _q-1;
-        }
-#endif
-#else
-        if_e0( range<gTOP ) {
-          range <<= 16;
-          code = (code<<16) + (uint(tmpbase[_q])<<8) + tmpbase[_q-1];
-          tmpptr = _q-2;
-        } else {
-          range <<= 8;
-          code = (code<<8) + tmpbase[_q];
-          tmpptr = _q-1;
-        }
-#endif
-#endif  // RC_DEC_RENORM 1 or 6
-      }
-#endif  // RC_DEC_RENORM shape dispatch
     }
   }
 
@@ -705,39 +426,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 #endif
 
     _bit = _b;
-  }
-
-  // RC_DEC_SPLIT cuts the above in two at the model.
-  //
-  // rc_Process does both halves of a bit -- it decides the bit, which needs
-  // the model's p, and it updates the coder, which does not. Because it needs
-  // p in the middle, the whole thing runs at the model's pace: p arrives one
-  // lane at a time (a byte's eight bits are one walk of the context tree,
-  // ctx = ctx*2 + bit), so clang vectorises the renorm and then extracts every
-  // lane to reach `rpre = (range>>SCALElog)*freq`. That extract is the
-  // decoder's scalar/vector boundary -- see misc/dec_vectorize.md.
-  //
-  // Split, a group runs as four passes:
-  //
-  //   rc_DecPre    renormalise, every lane           -- vector
-  //   RC_DIVALL    val = code/(range>>SCALElog)      -- vector, model-free
-  //   the model    bit = (val >= p), ctx = ctx*2+b   -- scalar, serial
-  //   rc_DecUpd    the coder update, every lane      -- vector
-  //
-  // The division is what makes it possible: `code >= (range>>SCALElog)*freq`
-  // and `code/(range>>SCALElog) >= freq` are the same predicate for integer
-  // freq, but the quotient does not mention the model, so it can be computed
-  // for every lane before the walk starts. What is left on the serial chain is
-  // a load, a compare and a shift-add; the multiply is gone from it.
-  void rc_DecPre( void ) {
-    rc_Renorm();
-  }
-  void rc_DecUpd( uint freq, uint _b ) {
-    rpre = range>>SCALElog;
-    rpre *= freq;
-    range -= rpre;
-    range = _b ? range : rpre;
-    rpre &= -_b;
   }
 
   // Decode needs the unit before it can pick the symbol, so this is where the
@@ -784,9 +472,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     FFNum = 0;
 #endif
     Cache = -1;
-#if RC_STATS
-    n_carry = 0;
-#endif
     range = RC_RANGE_INIT;
 #if RC_VECOUT
     // Seed the staging at where the first ShiftLow's store would land anyway:
@@ -799,11 +484,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     if( f_DEC==0 ) RC_STAGE_INIT( rcidx, tmpptr-2 );
 #endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
-#if RC_VECOUT && RC_DEC_RENORM>=9
-    // seed the cached window; get() above is the only other thing that moves
-    // the decoder's cursor
-    if( f_DEC==1 ) win = (uint&)tmpbase[tmpptr-3];
-#endif
   }
 
 #if RC_VECOUT
@@ -889,9 +569,6 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
 #endif
 
-#if RC_STATS
-      fprintf( stderr, "LOWBYTES=%u  carries=%u\n", LOWBYTES, n_carry );
-#endif
     }
   }
 #endif // RC_VECOUT

@@ -5,19 +5,6 @@
 #include "rc_config.inc"
 #include "file_api.inc"
 
-#if RC_GUESS_STATS
-#include <stdio.h>
-unsigned long long g_guess_hit[8]={0}, g_guess_tot[8]={0};
-void rc_guess_report( void ) {
-  unsigned long long H=0,T=0;
-  fprintf( stderr, "\n== guess bit=(p<hSCALE) ==\n" );
-  for( int k=0;k<8;k++ ) { H+=g_guess_hit[k]; T+=g_guess_tot[k];
-    if( g_guess_tot[k] )
-      fprintf( stderr, "  bit %d of byte: %6.3f%%  (%llu bits)\n",
-               k, 100.0*g_guess_hit[k]/g_guess_tot[k], g_guess_tot[k] ); }
-  if( T ) fprintf( stderr, "  OVERALL      : %6.3f%% over %llu bits\n", 100.0*H/T, T );
-}
-#endif
 
 
 #include "misc/timer.h"
@@ -85,26 +72,20 @@ char t_res[256];
 // The FSM file is the counter state machine loaded by Predictor::Init; both
 // ends need the same one.
 //
-// One option: -C runs the scalar reference coder instead of the generated
-// vector one -- same rc.inc, and t.sh compares their streams byte for byte.
-int g_use_vec = 1;
 
 static void usage( void ) {
-  printf( "coder [-C] c|d in out FSM_file [n_iter] [test_output] [n_iter_dec]\n"
-          "\n"
-          "  -C        the scalar reference coder, not the vector one\n" );
+  printf( "coder c|d in out FSM_file [n_iter] [test_output] [n_iter_dec]\n" );
 }
 
 // Pull the options out of argv, leaving the positional arguments compacted at
 // the front. Called again on the recursive test-mode invocation, where there
-// are none left and g_use_vec already says what was asked for.
+// are none left.
 static int parse_opts( int argc, char** argv ) {
   int n = 1;
   for( int i=1; i<argc; i++ ) {
     char* a = argv[i];
     if( a[0]!='-' || a[1]==0 ) { argv[n++] = a; continue; }
     switch( a[1] ) {
-      case 'C': g_use_vec = 0; break;
       default:  fprintf( stderr, "coder: unknown option -%c\n", a[1] ); usage(); exit(1);
     }
   }
@@ -112,9 +93,6 @@ static int parse_opts( int argc, char** argv ) {
 }
 
 int main( int argc, char** argv ) {
-#if RC_GUESS_STATS
-  atexit( rc_guess_report );
-#endif
 
   uint i,r,c;
 

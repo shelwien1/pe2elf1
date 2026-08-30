@@ -43,6 +43,14 @@ enum{ inpbufsize=1<<30, outbufsize=1<<30 };
 #ifndef RC_RCNUM
 #define RC_RCNUM 16
 #endif
+// The decoder emits a group's output bytes as one 16-bit store (what used to
+// be RC_DEC_PUTW, now unconditional), so a group has to be an even number of
+// output bytes: RCNUM/8 must be even, i.e. RCNUM a multiple of 16. Without
+// this the build is silently wrong rather than broken -- RCNUM=8 roundtripped
+// to garbage before the guard came back.
+#if (RC_RCNUM/8)%2 || RC_RCNUM%8
+#error "RC_RCNUM must be a multiple of 16: a group's output bytes are stored in pairs"
+#endif
 
 // Alignment for the lane array. Meaningless for the scalar coders, kept so the
 // object still lays out the way the vector version needed it to.
@@ -67,6 +75,10 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // model0.inc practically never has to fall back. Lower values make the
 // fallback fire often, which is the cheap way to exercise it: book1 loses
 // carries below 7 (3 at LOWBYTES=6, 565 at 5, 143379 at 4).
+// The refill reads a 32-bit window that starts at the cursor, so the payload
+// needs four bytes of room above it: RC_SKIP = RC_LOWBYTES - RC_CODBYTES must
+// be at least 4, which rc_io.inc asserts. At the default RC_CODBYTES=4 that
+// pins RC_LOWBYTES to 8; RC_CODBYTES=3 also admits 7.
 #ifndef RC_LOWBYTES
 #define RC_LOWBYTES 8
 #endif
@@ -93,26 +105,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_LOWSPLIT 1
 #endif
 
-// 0 = sh_v1xN's `uint range = 0xFFFFFFFF`.
-// 1 = the original demo's `qword range = 1<<32`, one ulp wider.
-#ifndef RC_RANGE64
-#define RC_RANGE64 0
-#endif
 
-// The counted 0/1/2-byte renorm is exact only when one step cannot take range
-// below 2^8, i.e. when the unit is >= 2^8. This coder is binary throughout:
-// unit = range>>SCALElog is >= 2^9, always. So the tail loop is dead.
-#ifndef RC_RENORM_TAIL
-#define RC_RENORM_TAIL 0
-#endif
 
-// Count carries out of the low accumulator. The carryless coder needs the
-// count regardless (model0.inc re-encodes the block when it is non-zero); this
-// only controls the diagnostic fprintf in rc_Quit, which would fire once per
-// lane per block here and is off by default.
-#ifndef RC_STATS
-#define RC_STATS 0
-#endif
 
 // 1 = have the carryless rc_Quit complain to stderr about lost carries. In
 // sh_v1xN_s.cpp a lost carry is fatal, because a single-pass stream demo has
@@ -202,20 +196,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // RC_CARRYLESS are excluded too -- mk_kernel.sh forces them, and the compile
 // sets RC_CARRYLESS both ways.
 #define RC_KERNEL_CONF ( RC_RCNUM + 64*RC_LOWBYTES + 2048*RC_LOWSPLIT      \
-                       + 8192*RC_CODBYTES + 131072*RC_RANGE64             \
-                       + 262144*RC_SHIFT_SAT + 524288*RC_STATS            \
+                       + 8192*RC_CODBYTES                                 \
                        + 1048576*RC_VECSIZE + RC_BLKSIZE/16               \
-                       + 4096*(RC_FF_TRIM&63)                     \
-                       + 33554432*RC_FOLD_RPRE            \
-                       + 67108864*RC_LOAD32               \
-                       + 134217728*RC_DEC_COLD            \
-                       + 3*RC_FF_LANES                    \
-                       + 11*RC_DEC_RENORM                 \
-                       + 13*RC_ENC_NSEL                   \
-                       + 17*RC_ENC_RENORM                  \
-                       + 19*RC_DEC_PREFETCH               \
-                       + 23*RC_DEC_PFDIST                  \
-                       + 29*RC_DEC_SPLIT )
+                       + 4096*(RC_FF_TRIM&63)                             \
+                       + 33554432*RC_FOLD_RPRE                            \
+                       + 13*RC_ENC_NSEL                                   \
+                       + 17*RC_ENC_RENORM )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -224,26 +210,9 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_VECOUT 0
 #endif
 
-// 1 = the models drive the generated lane-array coder (rc_vecD.inc, built
-// from this same rc.inc by mk_kernel.sh) -- sh_v1xN's arrangement: the
-// encoder's pbit sweep auto-vectorizes across the lanes, the decoder gets
-// the unrolled group loop over local arrays. The scalar coder stays compiled
-// beside it: it is the -C reference and the carry-propagating fallback,
-// built from the same source. 0 = scalar only.
-#ifndef RC_VEC
-#define RC_VEC 1
-#endif
-
-#if RC_RANGE64   // the vector kernel carries a 32-bit range
-#undef RC_VEC
-#define RC_VEC 0
-#endif
 
 #if RC_VECOUT && !RC_CARRYLESS
 #error the vector kernel is the carryless coder -- generate with RC_CARRYLESS=1
-#endif
-#if RC_VECOUT && RC_RANGE64
-#error the vector kernel carries a 32-bit range -- RC_RANGE64 stays scalar
 #endif
 
 // 1 = ShiftLow stages its store in the lane arrays instead of performing it,
@@ -294,7 +263,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 #ifndef RC_SCATTER
-# if !defined(__clang__) || !RC_VEC || !RC_LOWSPLIT
+# if !defined(__clang__) || !RC_LOWSPLIT
 #  define RC_SCATTER 0
 # elif RC_SCATTER_W==0
    // the scalar block: no ISA requirement, but it is a straight trade of port-5
@@ -368,158 +337,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_SCATTER_SKIP 0
 #endif
 
-// The decoder's renormalisation shape. The encoder has always used the
-// counted shift -- `n = (range<sTOP) + (range<gTOP)`, then one shift by n*8 --
-// and the generated decoder used two nested branches instead. (The scalar
-// reference coder in the !RC_VECOUT half of rc.inc has always used the counted
-// shift on BOTH sides, so the two were already disagreeing.) The asymmetry was
-// never measured; this knob has ten shapes and misc/dec_renorm.md is the
-// analysis.
-//
-//   0  two nested branches: skip everything unless range<sTOP, then test
-//      range<gTOP to pick the 1-byte or the 2-byte refill        <- default
-//   1  the outer branch, the inner one replaced by a counted shift
-//   2  no branch at all; n from the same two compares the encoder uses
-//   3  no branch at all; n from __builtin_clz -- sTOP and gTOP are 1<<24 and
-//      1<<16, so the two compares ARE a count of leading zero bytes
-//   4  no branch at all, and the refill window is addressed by n and masked
-//      rather than loaded at a fixed offset and shifted
-//   5  a branchless ONE-byte refill on the single compare that decides it,
-//      plus a guard for the second byte
-//   6  1, with the window addressed by n and masked instead of shifted
-//   7  Shelwien's branchless shape: no locals at all, the SHIFT COUNT in lane
-//      state, selected by a nested ternary
-//   8  7 with the outer branch back, and the rpre fold duplicated into both
-//      arms rather than hoisted above it
-//   9  7 with the refill window CACHED in lane state and re-filled one
-//      iteration ahead of the bit that reads it
-//  10  9 with the reload, and only the reload, behind a branch -- a diagnostic
-//      for what the refill reads are worth once their latency is off the chain
-//  11  9 with the reload lifted out of the lane body: one MASKED GATHER per
-//      group, in model1.inc where the encoder's RC_FLUSHALL goes
-//  12  11 unmasked, the control for it
-//  13  9 with the shift count from clz instead of the nested ternary -- the
-//      fastest branchless shape here
-//
-// The distribution is the whole story. Counted in the scalar reference coder
-// over the 800M bits of enwik8:
-//
-//   n==0   737,581,939   92.195%
-//   n==1    62,444,004    7.805%
-//   n==2            15    0.000002%
-//
-// So ~92% of bits renormalise NOTHING, and the 2-byte case -- which needs
-// range to fall by more than 2^8 in one step, so p below 128/32768 -- happens
-// FIFTEEN TIMES in a hundred megabytes.
-//
-// That makes the two branches two completely different propositions. The OUTER
-// one buys 92% of bits an empty renorm for a test that mispredicts ~8% of the
-// time, and it is worth far more than the mispredict: taking it away costs
-// 17-36%, on both machines below, because the unconditional shifts land on the
-// loop-carried range and code chains. The INNER one never mispredicts at all,
-// and removing it is worth a couple of percent -- in one direction on one
-// machine and the other on the other.
-//
-// Two boxes, both 100 MB of enwik8, RC_DEC_WAVE=2 and the rest of the tuned
-// set. Mine: clang 18, -march=native (AVX-512), medians of best-of-2 over 5
-// round-robin rounds, twins of 0 and 9 in the rotation (2.2% and 1.9% apart,
-// which is the noise floor). Shelwien's: clang 23, AVX2, from his log.txt.
-// Loop figures are my 16-lane decode body.
-//
-//                                    insns  br   rsp    mine      his
-//   8  one branch, no locals          431   17   103   +4.3%    -1.9%
-//   0  two nested branches            460   17   113      --       --
-//   6  counted inner, addressed       450   17   114   -0.6%    -3.5%
-//   1  counted inner, shifted         452   17   111   -2.9%    -4.9%
-//   5  branchless 1 byte + guard      678   18   134   -5.4%   -10.7%
-//   9  branchless, window cached      478    1    80  -20.5%        ?
-//   4  branchless, addressed          629    1   163  -31.0%   -21.7%
-//   3  branchless, clz                655    1   157  -33.4%   -23.5%
-//   2  branchless, two compares       668    1   156  -34.4%   -22.8%
-//   7  branchless, no locals          735    1   204  -36.2%   -16.8%
-//  13  9 + clz select                 515    1     ?  -13.7%        ?
-//  10  9 + branch on the reload       772   18   185  -28.7%        ?
-//  12  9 + unmasked gather            529    1    94  -36.1%        ?
-//  11  9 + masked gather              534    1    97  -36.8%        ?
-//
-// 13 is the best branchless shape here, +7.2% over 9 (2.273 s against 2.449),
-// and it came out of asking WHERE 9's remaining gap goes. Not the loads and
-// not the shift chain: against shape 0 the group loop gains 21 kmovd, 18
-// kshiftlb, 14 korb and 14 kshiftrb. Clang lowers the nested ternary through
-// the AVX-512 MASK REGISTERS -- each compare makes a k-mask, they are shifted
-// and or'ed in the mask domain, and the result is moved back to a GPR with
-// kmovd, which is port 5 and about three cycles. Neither -fno-vectorize nor
-// -fno-slp-vectorize changes any of it; this is select lowering, not the
-// vectoriser. clz has no compare in it, so nothing enters the mask domain.
-//
-// Read that table twice. The big number -- the outer branch is worth a fifth
-// to a third of decode -- reproduces on both machines. Every small number
-// disagrees: 1 and 6 are the two best shapes on neither box and 8 wins on one
-// and loses on the other, and inside the branchless family the ranking is
-// exactly REVERSED (7 is his best and my worst). The default is 0 because it
-// is the only shape that is never worse than second, and because an earlier
-// round of this measurement -- taken on a box that turned out to be sharing
-// its cores with a runaway process -- read 1 as +2.2% here and briefly made it
-// the default. It is not.
-//
-// 9 is the answer to "the branchless shape is slower because of the memory
-// read": it is, and caching the window is worth +24.7% over 7 here (3.097 ->
-// 2.485 s) while cutting stack traffic from 204 references to 80, the lowest
-// of any shape. It still does not beat the branch here. But his branchless
-// family starts far closer to his branchy one -- 7 is at 83% of 0 on his box
-// against 64% on mine -- so the same +25% there would land at about 50 MB/s
-// against 0's 48.21, and 9 would win outright. That is the measurement to
-// make.
-//
-// 10, 11 and 12 are the answer to "the branchless shape reads memory every
-// bit -- read less often, or read better". Neither works, and the reason is
-// the same both times.
-//
-// First, what the gap actually is. clang AUTO-VECTORISES the branchless
-// shapes and does not vectorise the branchy ones: the group loop holds 127
-// vector operations at 9 and 16 at 0. But it vectorises the arithmetic and
-// then moves each lane in and out by hand to do the load -- 36 vpextrd, 24
-// vpinsrd and 20 vmovd per group, essentially all port 5. At one per cycle
-// that is ~46 cycles, and 9 is 222 cycles per 16-lane group against 0's 176.
-// The gap IS the cross-domain traffic, not the shift chain and not the loads.
-//
-// 10 tests reading less often, and it is the strongest possible version of
-// that test: a per-lane branch skips ~92% of the reads, where a group-wide
-// test could only skip the ~27% of groups in which no lane renormalises
-// (0.92195^16). It loses -- 2.758 s against 9's 2.475, 11% slower -- because
-// the branch de-vectorises the body: 127 vector operations collapse to 8, the
-// loop grows from 478 instructions to 772 and stack traffic from 80 to 185.
-// Since the strongest form loses, every weaker one does too.
-//
-// 11 and 12 test reading better: leave tmpptr in the vector it is already in
-// and let one gather do all sixteen. It loses harder -- 3.109 s masked, 3.077
-// unmasked, 25% behind 9 and level with 7. The gather removes 15 of the loads
-// and gives them straight back, because it has to land in the win[] array and
-// every lane then reads its slot out of memory: 95 memory-source instructions
-// at 9, 93 at 11. What is left is a vpgatherdd where sixteen scalar loads
-// were, and it costs about 57 cycles per group more than they did.
-//
-// The mask buys nothing -- 11 and 12 are within noise of each other -- which
-// is the same thing RC_SCATTER_SKIP found on the encoder's scatter, from the
-// other direction: on this target a gather with one active lane costs what a
-// gather with sixteen costs.
-//
-// So the traffic can only go by keeping the lane state in vector registers
-// across the whole loop and never extracting at all -- the encoder's shape.
-// The decoder cannot follow it there while the model side is a per-lane table
-// walk, because that would need a gather of its own, at the price measured
-// here. That is the wall, and it is where this line of attack stops.
-//
-// 1..12 all read the 32-bit refill window, so they carry RC_LOAD32's padding
-// requirement whatever RC_LOAD32 itself is set to (see rc_io.inc), and 4, 6,
-// 7 and 8 need bytes ABOVE the cursor as well. They ignore RC_LOAD32: it
-// selects between shapes of the branchy refill, which 1 and 6 through 8 have
-// subsumed and 2 through 5 and 9 do not have.
-//
-// All ten produce the same stream -- t_matrix.sh checks each.
-#ifndef RC_DEC_RENORM
-#define RC_DEC_RENORM 0
-#endif
 
 // The encoder half of the same two lessons. rc_Renorm's f_DEC==0 arm has
 // always been `n = (range<sTOP) + (range<gTOP)`, a byte count in a local.
@@ -614,117 +431,9 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_ENC_RENORM 0
 #endif
 
-// A prefetch on the branchless decoder's window read (RC_DEC_RENORM 7 and 9).
-//
-// 7's whole problem is that the read sits ON the chain: range -> dsh -> tmpptr
-// -> address -> load -> code, every bit. A prefetch of THIS bit's address
-// cannot help -- the address is the thing that is late, and by the time it
-// exists the load can issue. So the prefetch here is for a FUTURE bit: the
-// substream runs backwards, so the next reads are below the cursor, and
-// RC_DEC_PFDIST says how far.
-//
-//   0  off                                                       <- default
-//   1  prefetcht0    (locality 3, all levels)
-//   2  prefetcht1    (locality 2)
-//   3  prefetcht2    (locality 1)
-//   4  prefetchnta   (locality 0, non-temporal)
-//
-// __builtin_prefetch, not _mm_prefetch: this reaches the generator, and
-// rc_vecD.inc must not depend on the target (see RC_KERNEL_CONF). Prefetch
-// never faults, so the address needs no bounds check.
-//
-// MEASURED, AND IT LOSES AT EVERY HINT AND EVERY DISTANCE. Shape 7 sits at
-// 3.122 s; with a prefetch it is 3.159 (t1), 3.188 (t2), 3.215 (t0) and 3.226
-// (nta), and moving PFDIST to 8 or 256 bytes changes nothing (3.211, 3.226).
-// On shape 9 it costs more, 2.449 -> 2.642. The twins are 0.4% apart, so all
-// of that is real, and it is just the extra uop per bit -- sixteen per group.
-//
-// There is no miss to hide. Each lane's cursor moves about 0.08 bytes per coded bit, so
-// one 64-byte line serves a lane for ~800 bits and the sixteen live lines sit
-// in L1 permanently. What the chain pays is L1 load-use latency, and a
-// prefetch does not shorten that: the real load still issues and still takes
-// its four or five cycles from address to data. The knob is kept because the
-// result is worth having written down, not because it is faster.
-#ifndef RC_DEC_PREFETCH
-#define RC_DEC_PREFETCH 0
-#endif
 
-// How far below the cursor to prefetch, in bytes. One cache line by default.
-#ifndef RC_DEC_PFDIST
-#define RC_DEC_PFDIST 64
-#endif
 
-// 1 = split rc_Process at the model, so the decode group runs as four passes
-// instead of one interleaved walk. misc/dec_vectorize.md is the analysis; the
-// short version is that rc_Process decides the bit AND updates the coder, and
-// because the decision needs the model's p in the middle, the whole thing runs
-// at the model's pace -- p arrives one lane at a time, so clang vectorises the
-// renorm and then extracts every lane to reach (range>>SCALElog)*freq.
-//
-//   rc_DecPre    renormalise, every lane           -- vector
-//   RC_DIVALL    val = code/(range>>SCALElog)      -- vector, model-free
-//   the model    bit = (val >= p), ctx = ctx*2+b   -- scalar, serial
-//   rc_DecUpd    the coder update, every lane      -- vector
-//
-// `code >= (range>>SCALElog)*freq` and `code/(range>>SCALElog) >= freq` are the
-// same predicate for integer freq, and the quotient does not mention the model,
-// so it can be computed for the whole group before the walk starts. The serial
-// chain keeps only a load, a compare and a shift-add.
-//
-// The lane-to-byte mapping is RC_DEC_WAVE==2's and the stream is identical;
-// this changes the order the work is issued in, not the arithmetic.
-#ifndef RC_DEC_SPLIT
-#define RC_DEC_SPLIT 0
-#endif
 
-// 1 = count how often the MAP guess `bit = (p<hSCALE)` would have been right,
-// per bit position within the byte, and report at exit. Encoder only, and the
-// whole thing compiles away at 0 -- it is a model diagnostic, not a coder
-// knob, and it exists because "how predictable is the bit?" is the first
-// question any speculative decode shape has to answer.
-//
-// MEASURED on enwik8, 800M bits:
-//
-//   bit 0 of byte  99.606%      bit 4  67.658%
-//   bit 1          76.975%      bit 5  61.917%
-//   bit 2          90.106%      bit 6  80.134%
-//   bit 3          68.706%      bit 7  73.455%
-//   OVERALL        77.319%
-//
-// Bit 0 is the byte's top bit and this is ASCII, so it is nearly free; the
-// rest average around 74%. Only 32.5% of bits have p outside [2768,30000],
-// i.e. two thirds of them are not confidently predictable either way.
-//
-// 22.7% wrong is why speculating on it does not help -- see
-// misc/dec_vectorize.md section 8.
-#ifndef RC_GUESS_STATS
-#define RC_GUESS_STATS 0
-#endif
-#if RC_DEC_SPLIT && !RC_VEC
-#error "RC_DEC_SPLIT needs the vector coder (RC_VEC=1)"
-#endif
-#if RC_DEC_SPLIT==2 && (RC_RCNUM<16 || (RC_RCNUM/8)%2)
-#error "RC_DEC_SPLIT=2 halves the group, so it needs an even number of byte chains"
-#endif
-#if RC_DEC_SPLIT && ( (RC_RCNUM%8) || (RC_DEC_PUTW && (RC_RCNUM/8)%2) )
-#error "RC_DEC_SPLIT needs RCNUM a multiple of 8, and an even byte count per group under RC_DEC_PUTW"
-#endif
-
-#if   RC_DEC_PREFETCH==1
-#define RC_DEC_PFLOC 3
-#elif RC_DEC_PREFETCH==2
-#define RC_DEC_PFLOC 2
-#elif RC_DEC_PREFETCH==3
-#define RC_DEC_PFLOC 1
-#elif RC_DEC_PREFETCH==4
-#define RC_DEC_PFLOC 0
-#endif
-
-#if RC_DEC_PREFETCH
-#define RC_DEC_PF( q )  __builtin_prefetch( &tmpbase[(q)-RC_DEC_PFDIST], 0, RC_DEC_PFLOC )
-#else
-#define RC_DEC_PF( q )  ((void)0)
-#endif
 
 #if RC_ENC_RENORM>=1
 #define RC_ENC_SHDECL                     // n IS the shift: nothing to declare
@@ -739,11 +448,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 #if RC_ENC_RENORM>=2
-#if RC_SHIFT_SAT
-#define RC_ENC_HI   (lowl >> (32-RC_ENC_SH))
-#else
 #define RC_ENC_HI   ((lowl >> 16) >> (16-RC_ENC_SH))
-#endif
 #if RC_LOWBYTES==8
 #define RC_ENC_CL   lowh
 #elif RC_LOWBYTES>=6
@@ -757,41 +462,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_ENC_CL   cl
 #endif
 
-// 1 = ShiftLow extracts the high word as a single variable shift,
-// `lowl >> (32-sh)`, and relies on the shift SATURATING to zero when sh==0
-// makes the count 32. 0 = the portable double shift, `(lowl>>16)>>(16-sh)`,
-// which is the same value with both counts <= 16.
-//
-// Saturation is a property of the target, and the targets disagree:
-//
-//   x86 SIMD   vpsrlvd / vpsrld     count >= 32 -> 0      saturates
-//   ARM NEON   ushl (negative)      shift >= 32 -> 0      saturates
-//   x86 scalar shr                  count & 31  -> lowl   WRONG
-//   OpenCL     `x >> n`             n & 31      -> lowl   WRONG (spec 6.3.j)
-//   CUDA C     `x >> n`             undefined             (PTX shr.u32 clamps)
-//   C / C++    `x >> n`             undefined for n >= 32
-//
-// so 1 is only ever correct for a hand-written kernel on a target in the top
-// two rows. In the C build it is undefined behaviour at sh==0, and a compiler
-// is free to make the whole ShiftLow disappear.
-//
-// It is also SLOWER here, which is the reason the default is 0 rather than a
-// portability compromise. clang will not fold the C-level poison into the one
-// vpsrlvd the hardware would allow; it canonicalises around it and emits more,
-// not less. AVX2, -march=skylake, RCNUM=16, 20 MB of enwik8, sweep loop
-// instruction counts and best of 6x6:
-//
-//   0  (lowl>>16)>>(16-sh)         144 insns   58.20 MB/s   <- default
-//   1  lowl>>(32-sh)               153         56.20
-//   -  uint(qword(lowl)>>(32-sh))  170         53.13
-//
-// The third is the well-defined way to ask for the same thing -- a 64-bit
-// shift by 32 is perfectly legal -- and it is the worst of the three: clang
-// widens the lane to 64 bits and emits vpsrlvq, four lanes per ymm instead of
-// eight. All three produce the same stream.
-#ifndef RC_SHIFT_SAT
-#define RC_SHIFT_SAT 0
-#endif
 
 // 1 = apply rc_Process's rpre to low where it is PRODUCED, instead of leaving
 // it pending for the next ShiftLow to add. Encoder only -- f_DEC is a template
@@ -882,48 +552,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_FUSE_PP_DEC 1
 #endif
 
-// 1 = the decoder fetches the next counter a bit early. See P_kids in
-// predict.inc: the two children of a context are adjacent, so both come in one
-// 8-byte load whose address is known a bit ahead, and the next bit picks its
-// half with a select rather than waiting on a load. Needs the fused counter --
-// with a bare state the load it removes is still followed by pp[state], and
-// the chain is no shorter.
-//
-// Decoder only. The encoder's model pass is rename-bound; there an extra load
-// per bit to save latency it is not paying is strictly worse.
-//
-// MEASURED, AND IT LOSES: -3.37% decode on -march=skylake against a +0.09%
-// control, byte-identical stream. It does shorten the chain -- the select is a
-// cmov, not a branch -- but it costs ~6 instructions per bit (the pair load,
-// the shift, the cmov and the register moves around a 64-bit value) and the
-// loop goes from 405 to 506 instructions per group of 16 bits.
-//
-// Which says what the decoder became once RC_FUSE_PP removed the second load:
-// at 8.77 cyc/bit over ~25 instructions it is running ~2.9 IPC out of a
-// 1756-byte loop body, i.e. it is now FRONT-END bound, not chain-bound. The
-// lever moved. Kept at 0 for the record and because a machine with more fetch
-// bandwidth could flip it.
-#ifndef RC_EAGER_CTY
-#define RC_EAGER_CTY 0
-#endif
-#if RC_EAGER_CTY && !RC_FUSE_PP_DEC
-#error "RC_EAGER_CTY needs RC_FUSE_PP_DEC=1"
-#endif
 
-// How far to unroll the DECODER's group loop. 0 = fully (RCNUM bodies, the
-// shape sh_v1xN's decoder had and the reason RC_UNROLL exists); 1 = not at
-// all; 2/4/8 = that many bodies.
-//
-// The full unroll makes j a compile-time constant, so the lane arrays become
-// fixed addresses and (j&7)==7 a compile-time test. It also stamps out RCNUM
-// copies of rc_Renorm's byte refill -- the branchy part ~91% of bits skip --
-// which is what makes the decode loop 1756 bytes against the encode sweep's
-// 902 for the same 16 bits. Once RC_FUSE_PP took the dependent load off the
-// per-bit chain the decoder stopped being chain-bound (see RC_EAGER_CTY), so
-// which side of that trade wins is worth re-asking.
-#ifndef RC_DEC_UNROLL
-#define RC_DEC_UNROLL 0
-#endif
 
 // Chunk size, in input bytes, for interleaving the model pass with the coding
 // sweep. 0 = off, the model pass runs once over the whole block.
@@ -956,102 +585,10 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 #define RC_CHUNK_N ( RC_CHUNK ? RC_CHUNK : RC_BLKSIZE )
 
-// How the decoder's model loop is shaped. 0 = the member context, one byte at
-// a time (the original). 1 = the same order with a caller-held context. 2 = the
-// wavefront: the group's RCNUM/8 bytes stepped together, so their 8-step
-// context chains overlap instead of running end to end. See model1.inc and
-// misc/speed_plan_next.md 1.1/1.2. All three code the same stream.
-//
-// MEASURED, AND BOTH LOSE -- -march=skylake, decode, control +0.08%:
-//
-//   0  member ctx, byte at a time    405 insns/group    47.43 MB/s
-//   1  caller-held ctx               444                43.34   -8.62%
-//   2  wavefront                     447                45.20   -4.69%
-//
-// The premise of 1 holds: the member ctx really is 10 memory references per
-// group -- two loads of cty, two of ctx, four stores of ctx, two of the reset
-// constant -- because the store to cty[ctx] may-alias this->ctx and nothing
-// bounds a loaded index. It is just not what the loop is short of. Holding the
-// context in a register instead costs 39 instructions per group, only 7 of
-// them memory, in a loop that already carries 16 lanes of coder state; the
-// spills cost more than the 10 references did.
-//
-// And 2 is the interesting half. It is 1's loop with the two loops swapped and
-// nothing else, and it recovers 4 points of 1's 8.6 -- so the wavefront's
-// chain shortening is real and worth about +4%, on top of a prerequisite that
-// costs twice that. Which is the RC_EAGER_CTY result again in a different
-// shape: this decoder has no register budget left to buy latency with.
-#ifndef RC_DEC_WAVE
-#define RC_DEC_WAVE 0
-#endif
 
-// 1 = emit the group's output bytes as one 16-bit store instead of two. Under
-// RC_DEC_WAVE=2 they finish together; under 0 the first is held in a register
-// across its eight bits, which is one more live value and no more work.
-//
-// MEASURED, AND IT LOSES STANDALONE: -2.43% decode against a +0.11% control,
-// even though it takes 11 instructions and 16 loads out of the group loop.
-// Under RC_DEC_WAVE=0 the first byte has to be held across its eight bits, and
-// one more value live through half a group costs more than the store saves.
-// Under RC_DEC_WAVE=2, where the bytes finish together and nothing is held, it
-// is worth +1.6% -- but that build is 4.7% down for its own reasons.
-#ifndef RC_DEC_PUTW
-#define RC_DEC_PUTW 0
-#endif
-#if RC_DEC_PUTW && ( RC_DEC_WAVE==1 || (RC_RCNUM/8)%2 )
-#error "RC_DEC_PUTW needs RC_DEC_WAVE 0 or 2 and an even byte count per group"
-#endif
 
-// 1 = the decoder's byte refill reads one 32-bit window instead of one or two
-// separate bytes. The substream runs backwards, so the dword at tmpptr-3 holds
-// both cases in its top half -- b[q] is bits 24..31 and b[q-1]+b[q]<<8 is bits
-// 16..31 -- and one load hoisted above the branch replaces two loads and the
-// shift-or that assembled them. The fully unrolled decode loop stamps out
-// RCNUM copies of this, so the body shrinks by more than the hot path does.
-//
-// 2 = the same window, but read only inside the 2-byte branch instead of
-// hoisted above the test.
-//
-// LITTLE-ENDIAN ONLY, and deliberately not guarded on __BYTE_ORDER__: this
-// reaches the generator, and rc_vecD.inc must not depend on the target (see
-// RC_KERNEL_CONF below). Same arrangement as RC_SHIFT_SAT.
-//
-// MEASURED -- -march=skylake, decode, control +0.10%:
-//
-//   0  two byte loads      405 insns/group   46.88 MB/s
-//   1  hoisted window      456               42.09   -10.23%
-//   2  2-byte branch only  405               47.02    +0.31%
-//
-// 1 loses because hoisting makes the COMMON case pay: the 1-byte path went
-// from `movzbl (base,q)` folded into the add to a load plus a `shr $24`, and
-// it is the more frequent of the two. 2 keeps that path untouched and improves
-// the other, and comes out inside the noise -- the 2-byte case is too rare to
-// pay for a knob that assumes little-endian. Default 0.
-#ifndef RC_LOAD32
-#define RC_LOAD32 0
-#endif
 
-// 1 = tell the block placer the decoder's byte refill is really cold, so the
-// 16 unrolled copies sink out of the group loop body instead of sitting in it.
-// speed_plan_next.md 2.3: shrinking the body while KEEPING the full unroll is
-// the variant RC_DEC_UNROLL did not test.
-#ifndef RC_DEC_COLD
-#define RC_DEC_COLD 0
-#endif
 
-// 1 = the decoder's copy of the generated kernel keeps ALIGN(VECSIZE) on the
-// lane arrays. 0 drops it -- speed_plan_next.md 3. The decoder never touches
-// that state as a vector, and the alignment costs it `and rsp,-32`, a frame
-// pointer and rbp for the whole function.
-//
-// MEASURED, AND DROPPING IT LOSES: -1.42% decode against a -0.04% control.
-// The prologue really does lose the realignment and rbp really does come back
-// to the allocator, and the group loop still ends up 48 bytes longer. Which is
-// the sixth result in a row on this loop where the change did what it was
-// meant to and the clock disagreed.
-#ifndef RC_DEC_ALIGN
-#define RC_DEC_ALIGN 1
-#endif
 
 // How many slots the generated kernel gives FFNum. Its only consumer is
 // model0.inc's `ncarry &= FFNum[j]` over every lane at block end, followed by a
@@ -1059,9 +596,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // array can be narrower than RCNUM, with lane j folding into slot j%N. At
 // RCNUM=16 and N=8 that is one ymm instead of two, and one fewer spilled array
 // in the sweep's working set. speed_plan_next.md 5.1.
-#ifndef RC_FF_LANES
-#define RC_FF_LANES RC_RCNUM
-#endif
+// Fixed at 8: both defs profiles set it, and it reaches the generator.
+#define RC_FF_LANES 8
 #if RC_RCNUM % RC_FF_LANES
 #error "RC_FF_LANES must divide RC_RCNUM"
 #endif
@@ -1085,9 +621,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // prefix below is the difference between it and the low accumulator.
 #ifndef RC_CODBYTES
 #define RC_CODBYTES 4
-#endif
-#if RC_RANGE64 && RC_CODBYTES!=4
-#error "RC_RANGE64 carries a full-width range; it cannot be narrowed by RC_CODBYTES"
 #endif
 #if RC_CODBYTES<3 || RC_CODBYTES>4
 #error "RC_CODBYTES must be 3 or 4"
@@ -1120,29 +653,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #define RC_FF_PADSIZE (RC_FF_TRIM + 2*RC_LOWBYTES + 16)
 #endif
 
-// Probe: run the encoder's model pass and skip the coding sweep entirely.
-// Does NOT encode correctly -- it writes empty substreams -- so it is timed
-// with a plain encode to /dev/null (or nul), never through t.sh:
-//
-//   OUT=probe ./build.sh -DRC_PROBE_MODELONLY=1
-//   ./probe c ../enwik8 /dev/null ../FSM0.txt 5
-//
-// The encoder is two passes over the block that share nothing but pbit[]: a
-// scalar model pass, which is the same code on every target, and the vector
-// sweep. This says how the time splits between them, and it is the first
-// number to have before reading anything into a sweep-side knob -- on the box
-// misc/avx2_vs_avx512.md was written on the model pass is 48% of encode, so
-// halving the sweep's instruction count moves encode by 13%, not by 50%.
-//
-// Pair it with RC_SCATTER_SKIP=9 to split the sweep again, into arithmetic
-// and commit. The three builds decompose encode completely:
-//
-//   RC_PROBE_MODELONLY=1        model
-//   RC_SCATTER_SKIP=9           model + sweep arithmetic
-//   (neither)                   model + sweep arithmetic + commit
-#ifndef RC_PROBE_MODELONLY
-#define RC_PROBE_MODELONLY 0
-#endif
 
 // Bounds-check every byte the encoder writes into its substream buffer. The
 // buffer is sized for the worst case the model can produce (see rc_io.inc), so

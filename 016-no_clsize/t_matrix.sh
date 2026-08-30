@@ -3,99 +3,76 @@
 # Every configuration t.sh should pass, in one go. t.sh checks one build; this
 # checks that the -D space still holds together, which is where the breakage
 # actually happens: a knob that skips work on one path and restores it on
-# another can look fine at the defaults and segfault at RC_VEC=0.
+# another can look fine at the defaults and segfault at RC_FORCE_CARRY=1.
 #
 #   ./t_matrix.sh                  clang, -march=skylake
 #   ARCH=native ./t_matrix.sh      the other target
 #   CXX=g++ ./t_matrix.sh          the other compiler
 #   TESTFILE=../book1 ./t_matrix.sh
 #
-# Each row is roundtrip + byte-identical against the -C scalar reference.
+# Each row is a roundtrip plus a byte-identical re-encode.
 set -e
 cd "$(dirname "$0")"
 : "${NITER:=1}"; export NITER
 : "${TESTFILE:=../enwik8}"; export TESTFILE
 
 fail=0
-run() {
-  printf '  %-42s ' "${1:-<defaults>}"
+
+# runsame: the row must reproduce the reference stream as well as roundtrip.
+# run:     the row legitimately changes the format (geometry), so roundtrip only.
+REFSTREAM_FILE=$(pwd)/t_ref.enc; rm -f "$REFSTREAM_FILE"
+
+_run() {
+  want=$1; ref=$2; args=$3
+  printf '  %-42s ' "${args:-<defaults>}"
   # shellcheck disable=SC2086
-  if out=$(./t.sh $1 2>&1); then
+  if out=$(REFSTREAM="$ref" ./t.sh $args 2>&1); then
     ok=$(printf '%s' "$out" | grep -c 'ok: ')
-    if [ "$ok" -ge 2 ]; then echo "ok"; else echo "FAIL (checks missing)"; fail=1; fi
+    if [ "$ok" -ge "$want" ]; then echo "ok"; else echo "FAIL (checks missing)"; fail=1; fi
   else
     echo "FAIL"; fail=1
     printf '%s\n' "$out" | tail -4 | sed 's/^/      /'
   fi
 }
+runsame() { _run 2 "$REFSTREAM_FILE" "$1"; }
+run()     { _run 1 "" "$1"; }
 
 echo "== ${CXX:-clang++}, -march=${ARCH:-skylake}, $TESTFILE"
 
-# geometry and the paths that compile the vector coder out entirely
-run ""
-run "-DRC_VEC=0"
-run "-DRC_FORCE_CARRY=1"
-run "-DRC_RCNUM=8"
+# geometry and the paths that move work between the vector and scalar sides
+runsame ""
+runsame "-DRC_FORCE_CARRY=1"
 run "-DRC_RCNUM=32"
 run "-DCORO_FAKE=1"
-run "-DRC_LOWSPLIT=0"
-run "-DRC_SCATTER=0"
-run "-DRC_LOWBYTES=4"
+runsame "-DRC_LOWSPLIT=0"
+runsame "-DRC_SCATTER=0"
+run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7"
+run "-DRC_CODBYTES=3"
 
 # the knobs, at their non-default settings
-run "-DRC_CHUNK=0"
-run "-DRC_CHUNK=512"
-run "-DRC_FUSE_PP_ENC=0 -DRC_FUSE_PP_DEC=0"
-run "-DRC_FUSE_PP_ENC=1 -DRC_FUSE_PP_DEC=1"
-run "-DRC_DEC_WAVE=1"
-run "-DRC_DEC_WAVE=2"
-run "-DRC_DEC_PUTW=1"
-run "-DRC_DEC_ALIGN=0"
-run "-DRC_DEC_COLD=1"
-run "-DRC_LOAD32=1"
-run "-DRC_LOAD32=2"
-run "-DRC_FF_LANES=8"
-run "-DRC_SWEEP_NEGIDX=1"
-run "-DRC_FOLD_RPRE=1"
-run "-DRC_SHIFT_SAT=1"
-run "-DRC_DEC_RENORM=0"
-run "-DRC_DEC_RENORM=1"
-run "-DRC_DEC_RENORM=2"
-run "-DRC_DEC_RENORM=3"
-run "-DRC_DEC_RENORM=4"
-run "-DRC_DEC_RENORM=5"
-run "-DRC_DEC_RENORM=6"
-run "-DRC_DEC_RENORM=7"
-run "-DRC_DEC_RENORM=8"
-run "-DRC_DEC_RENORM=9"
-run "-DRC_DEC_RENORM=10"
-run "-DRC_DEC_RENORM=11"
-run "-DRC_DEC_RENORM=12"
-run "-DRC_DEC_RENORM=13"
-run "-DRC_DEC_SPLIT=1"
-run "-DRC_DEC_SPLIT=1 -DRC_DEC_RENORM=9"
-run "-DRC_DEC_SPLIT=1 -DRC_RCNUM=32"
-run "-DRC_DEC_SPLIT=2"
-run "-DRC_DEC_SPLIT=2 -DRC_DEC_RENORM=14"
-run "-DRC_DEC_RENORM=14"
-run "-DRC_CODBYTES=3"
-run "-DRC_GUESS_STATS=1"
-run "-DRC_CODBYTES=3 -DRC_DEC_RENORM=13"
-run "-DRC_CODBYTES=3 -DRC_DEC_SPLIT=1 -DRC_DEC_RENORM=9"
-run "-DRC_DEC_RENORM=7 -DRC_DEC_PREFETCH=1"
-run "-DRC_DEC_RENORM=9 -DRC_DEC_PREFETCH=4 -DRC_DEC_PFDIST=8"
-run "-DRC_ENC_NSEL=1"
-run "-DRC_ENC_NSEL=2"
-run "-DRC_ENC_RENORM=1"
-run "-DRC_ENC_RENORM=2"
-run "-DRC_ENC_RENORM=1 -DRC_ENC_NSEL=1"
-run "-DRC_ENC_RENORM=2 -DRC_ENC_NSEL=2"
-run "-DRC_SCATTER_SKIP=1"
-run "-DRC_SCATTER_W=0"
+runsame "-DRC_SWEEP_NEGIDX=1"
+runsame "-DRC_FOLD_RPRE=1"
+runsame "-DRC_SCATTER_SKIP=1"
+runsame "-DRC_SCATTER_W=0"
+runsame "-DRC_ENC_NSEL=1"
+runsame "-DRC_ENC_NSEL=2"
+runsame "-DRC_ENC_RENORM=1"
+runsame "-DRC_ENC_RENORM=2"
+runsame "-DRC_ENC_RENORM=1 -DRC_ENC_NSEL=1"
+runsame "-DRC_ENC_RENORM=2 -DRC_ENC_NSEL=2"
+runsame "-DRC_CHUNK=0"
+runsame "-DRC_CHUNK=512"
+runsame "-DRC_FUSE_PP_ENC=0 -DRC_FUSE_PP_DEC=0"
+runsame "-DRC_FUSE_PP_ENC=1 -DRC_FUSE_PP_DEC=1"
+
+# the two defs profiles themselves
+runsame "-DRC_SWEEP_NEGIDX=1 -DRC_FOLD_RPRE=1 -DRC_SCATTER_SKIP=0 -DRC_ENC_NSEL=0 -DRC_ENC_RENORM=0"
+runsame "-DRC_SWEEP_NEGIDX=0 -DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2"
 
 # combinations that have bitten before: a knob that moves work between paths
-run "-DRC_CHUNK=0 -DRC_VEC=0"
-run "-DRC_CHUNK=512 -DRC_FORCE_CARRY=1"
-run "-DRC_FF_LANES=8 -DRC_RCNUM=32"
+runsame "-DRC_CHUNK=512 -DRC_FORCE_CARRY=1"
+run "-DRC_RCNUM=32 -DRC_ENC_NSEL=1"
+run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7 -DRC_FORCE_CARRY=1"
 
+rm -f "$REFSTREAM_FILE"
 [ "$fail" = 0 ] && echo "== all configurations pass" || { echo "== FAILURES above"; exit 1; }

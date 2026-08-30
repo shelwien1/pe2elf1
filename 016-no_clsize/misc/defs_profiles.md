@@ -1,23 +1,39 @@
-# What to add to the defs profiles
+# The defs profiles
 
-Measured on this box (clang 18, `-march=native`, AVX-512, 100 MB of enwik8)
-with `defs_avx512` **verbatim** as the baseline, not against library defaults —
-several of these interact with the profile and read differently on top of it.
-Every row is a median with a byte-identical twin build in the rotation.
+After the cleanup, everything both profiles agreed on is the code's only state
+and is gone from the -D space. What is left is the five knobs the two targets
+actually disagree about:
 
 ```
-defs_avx512 = -DRC_DEC_WAVE=2 -DRC_LOAD32=1 -DRC_DEC_ALIGN=0 -DRC_FF_LANES=8
-              -DRC_SWEEP_NEGIDX=0 -DRC_FOLD_RPRE=0 -DRC_DEC_PUTW=1
-              -DRC_DEC_COLD=1 -DRC_SHIFT_SAT=0 -DRC_SCATTER_SKIP=1
+set defs_avx2=  -DRC_SWEEP_NEGIDX=1 -DRC_FOLD_RPRE=1 -DRC_SCATTER_SKIP=0 ^
+                -DRC_ENC_NSEL=0 -DRC_ENC_RENORM=0
+set defs_avx512=-DRC_SWEEP_NEGIDX=0 -DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 ^
+                -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2
 ```
+
+Baked in, no longer settable: `RC_DEC_WAVE=2`, `RC_LOAD32=1`, `RC_DEC_ALIGN=0`,
+`RC_FF_LANES=8`, `RC_DEC_PUTW=1`, `RC_DEC_COLD=1`, `RC_SHIFT_SAT=0`,
+`RC_DEC_RENORM=8`, `RC_DEC_PREFETCH=0`. The stream is byte-identical to what
+the old profiles produced, and so is the speed.
+
+Two constraints the baking made hard, both now `#error`ed rather than silent:
+
+- **`RC_RCNUM` must be a multiple of 16.** The paired 16-bit output store (the
+  old `RC_DEC_PUTW`) needs an even number of output bytes per group. `RCNUM=8`
+  used to be rejected by that knob's own guard; without the guard it built and
+  roundtripped to garbage, which is how the matrix caught it.
+- **`RC_LOWBYTES - RC_CODBYTES >= 4`.** The one-branch refill reads a 32-bit
+  window from the cursor, so the payload needs four bytes above it. At the
+  default `RC_CODBYTES=4` that pins `RC_LOWBYTES` to 8; `RC_CODBYTES=3` also
+  admits 7. `RC_LOWBYTES` 4..6 are no longer buildable.
 
 ## A. Add these — measured wins on the profile
 
 | add | effect | |
 |---|---|---|
-| `-DRC_DEC_RENORM=8` | **+4.4% decode** | 1.864 → 1.786 s |
-| `-DRC_ENC_NSEL=1` | **+7.1% encode** | 92.05 → 98.61 MB/s |
-| `-DRC_RCNUM=32 -DRC_FF_LANES=16` | **+9.0% decode** | 1.864 → 1.710 s |
+| `-DRC_DEC_RENORM=8` | **+4.4% decode** | 1.864 → 1.786 s — **now baked in** |
+| `-DRC_ENC_NSEL=1` | **+7.1% encode** | 92.05 → 98.61 MB/s — in `defs_avx512` |
+| `-DRC_RCNUM=32` | **+9.0% decode** | 1.864 → 1.710 s |
 
 **`RC_DEC_RENORM=8` is your own one-branch shape** (`rc_renorm_1br.txt`), with
 the rpre fold duplicated into both arms as you wrote it. It is the smallest
@@ -32,10 +48,10 @@ something in the set. Encode only; decode is untouched.
 
 **`RC_RCNUM=32` changes the stream format** — streams are not interchangeable
 with RCNUM=16 builds, and a mismatched decoder segfaults rather than failing
-cleanly. Note also that your profiles pin `RC_FF_LANES=8` while the default is
-`RC_RCNUM`; at RCNUM=32 raising it to 16 is worth another 1.5% (1.735 → 1.710).
-This row was measured against its own stream rather than round-robin against
-the baseline, so it is the weakest of the three.
+cleanly. `RC_FF_LANES` is now fixed at 8 rather than following RCNUM, which is
+the setting the +9.0% was measured with. This row was measured against its own
+stream rather than round-robin against the baseline, so it is the weakest of
+the three.
 
 ## B. Worth a build — box- or compiler-dependent, cannot be settled from here
 
@@ -60,15 +76,18 @@ is still the first thing to try.
 
 ## C. Do not spend a build — measured losses here
 
+These were measured and lost, and the cleanup removed every one of them from
+the -D space except `RC_CODBYTES`. Recorded so they are not rebuilt:
+
 | | |
 |---|---|
-| `-DRC_DEC_UNROLL=2 / 4 / 8` | −1.1 to −1.7% (1.893, 1.893, 1.903 s) |
-| `-DRC_EAGER_CTY=1` | −1.1% (1.892 s) |
-| `-DRC_DEC_RENORM=13` | −18% (2.215 s) — best *branchless* shape, still loses |
-| `-DRC_DEC_SPLIT=1/2` | −33 to −77%, see dec_vectorize.md |
-| `-DRC_DEC_PREFETCH=1..4` | −1.2 to −3.3%, every hint and distance |
-| `-DRC_CODBYTES=3` | no speed, and costs 1.479% of ratio |
-| `-DRC_ENC_RENORM=1/2` | inside noise |
+| `RC_DEC_UNROLL` 2 / 4 / 8 | −1.1 to −1.7% (1.893, 1.893, 1.903 s) |
+| `RC_EAGER_CTY=1` | −1.1% (1.892 s) |
+| `RC_DEC_RENORM=13` | −18% (2.215 s) — best *branchless* shape, still loses |
+| `RC_DEC_SPLIT` 1 / 2 | −33 to −77%, see dec_vectorize.md |
+| `RC_DEC_PREFETCH` 1..4 | −1.2 to −3.3%, every hint and distance |
+| `-DRC_CODBYTES=3` | no speed, and costs 1.479% of ratio (**still a knob**) |
+| `-DRC_ENC_RENORM=1/2` | inside noise (**still a knob** — the profiles differ) |
 
 `RC_DEC_UNROLL` is the interesting negative. Section 7 of `dec_vectorize.md`
 establishes this decoder is front-end bound, and the full unroll is what makes

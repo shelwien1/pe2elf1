@@ -22,11 +22,12 @@
 #      tags that line with the compiler and ISA build.sh recorded, which is
 #      the "avx512" / "avx2" column the existing lines carry.
 #   2. the decoded file is compared against the input.
-#   3. the file is encoded again with -C, the scalar reference coder, and the
-#      two streams are compared byte for byte. The vector coder is a
-#      transformation of the same rc.inc and is meant to be bit-exact with it;
-#      if it were not, step 2 could still pass -- the stream would just be a
-#      different valid one -- so this is the check that pins it down.
+#   3. if REFSTREAM names a file, the encoded stream is compared against it --
+#      or recorded into it when it does not exist yet. Roundtripping only says
+#      the stream decodes to the input; it does not say it is the SAME stream,
+#      so a knob that silently changed the format would still pass step 2.
+#      t_matrix.sh points every format-neutral row at one reference to pin
+#      that down across the whole -D space.
 
 set -e
 cd "$(dirname "$0")"
@@ -79,15 +80,6 @@ else
   exit 1
 fi
 
-echo "== vector stream vs the -C scalar reference"
-"$CODER" -C c "$IN" "$ref" "$FSM" 1
-if cmp -s "$enc" "$ref"; then
-  echo "   ok: byte-identical"
-else
-  echo "   FAILED: the vector coder and the scalar reference disagree" >&2
-  cmp "$enc" "$ref" >&2 || true
-  exit 1
-fi
 
 # Tag the line coder just appended with what this binary was built as.
 lines1=$(wc -l < log.txt 2>/dev/null || echo 0)
@@ -95,6 +87,20 @@ if [ -f "$CODER.tag" ] && [ "$lines1" -gt "$lines0" ]; then
   awk -v n="$lines1" -v t=" $(cat "$CODER.tag")" \
       'NR==n { printf "%s%s\n", $0, t; next } { print }' log.txt > log.txt.new
   mv log.txt.new log.txt
+fi
+
+if [ -n "${REFSTREAM:-}" ]; then
+  if [ -f "$REFSTREAM" ]; then
+    if cmp -s "$enc" "$REFSTREAM"; then
+      echo "   ok: stream matches the reference"
+    else
+      echo "   FAILED: this build's stream differs from the reference" >&2
+      exit 1
+    fi
+  else
+    cp "$enc" "$REFSTREAM"
+    echo "   ok: stream recorded as the reference"
+  fi
 fi
 
 echo "== $encsize bytes, $(awk -v a="$encsize" -v b="$insize" 'BEGIN{printf "%.4f", a*8/b}') bpc"

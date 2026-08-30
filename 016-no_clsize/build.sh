@@ -74,20 +74,7 @@ DIRNAM=$(basename "$PWD")
 # is target-independent by construction, so whatever preprocessor runs it is
 # free to disagree with the compile about the ISA (see model.inc). Not
 # committed: it is derived, and derived differently for every -D set.
-#
-# Only when the configuration actually has one. RC_VEC=0 leaves the models on
-# the scalar coder and never includes rc_vecD.inc, and RC_RANGE64=1 turns
-# RC_VEC off itself (the generated coder carries a 32-bit range) -- generating
-# it anyway would stop the build on rc_config.inc's #error. Ask the
-# preprocessor what the -D set resolved to rather than re-deriving the rules.
-rc_vec=$(echo 'RC_VEC_IS RC_VEC' | $CXX -E -P -x c++ -imacros rc_config.inc "$@" - 2>/dev/null \
-         | sed -n 's/^RC_VEC_IS *//p')
-if [ "$rc_vec" = 0 ]; then
-  echo "build.sh: RC_VEC=0, scalar coder only -- skipping mk_kernel.sh"
-  rm -f rc_vecD.inc
-else
-  CPP="$CXX -E" ./mk_kernel.sh "$@"
-fi
+CPP="$CXX -E" ./mk_kernel.sh "$@"
 
 #--- compile -----------------------------------------------------------------
 src="coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp"

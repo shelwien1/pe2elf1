@@ -92,24 +92,18 @@ struct RCio {
   static const uint FF_PADSIZE = RC_FF_PADSIZE;
   static_assert( FF_PADSIZE >= RC_FF_TRIM + RC_LOWBYTES,
     "RC_FF_PADSIZE must cover RC_FF_TRIM plus the minimal flush's own tail" );
-#if RC_LOAD32 || RC_DEC_RENORM
   // The 32-bit refill window reaches three bytes below the cursor, so the pad
-  // has to cover three more than the cursor itself can descend to. RC_LOAD32
-  // and every RC_DEC_RENORM but 0 read it.
+  // has to cover three more than the cursor itself can descend to.
   static_assert( FF_PADSIZE >= RC_FF_TRIM + RC_LOWBYTES + 3,
     "the 32-bit refill reads tmpbase[tmpptr-3]; RC_FF_PADSIZE must cover it" );
-#endif
-#if RC_DEC_RENORM==4 || RC_DEC_RENORM==6 || RC_DEC_RENORM>=7
-  // ...and 4, 6, 7 and 8 address that window by n, so the load can start at
-  // the cursor itself (or one above it, at n==0) and read up to tmpptr+4 --
-  // stream the cursor has already passed, but it still has to be inside the
-  // row. The cursor never rises above the payload's top byte, which sits
-  // RC_SKIP below the row top, so RC_SKIP alone decides it.
+  // ...and the refill addresses that window from the cursor, so the load can
+  // start at the cursor itself (or one above it, when nothing is shifted in)
+  // and read up to tmpptr+4 -- stream the cursor has already passed, but it
+  // still has to be inside the row. The cursor never rises above the payload's
+  // top byte, which sits RC_SKIP below the row top, so RC_SKIP alone decides it.
   static_assert( RC_SKIP >= 4,
-    "RC_DEC_RENORM 4, 6, 7 and 8 read above tmpptr; RC_SKIP (= RC_LOWBYTES "
-    "minus "
-    "RC_CODBYTES) must leave four bytes above the payload" );
-#endif
+    "the refill reads above tmpptr; RC_SKIP (= RC_LOWBYTES minus RC_CODBYTES) "
+    "must leave four bytes above the payload" );
 
   // Worst case output for one lane: bits_per_lane (plus the 17 block-length
   // header bits, which all land in the low lanes) at SCALElog bits each, since

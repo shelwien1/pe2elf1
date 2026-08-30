@@ -154,10 +154,8 @@ struct Model<0> : Coroutine, PredictorE {
   void do_process() {
     uint c,i,j,bit,p,blksize,state;
 
-#if RC_VEC
     // The generated coder: lane state as local arrays, methods as macros --
-    // sh_v1xN's arrangement, from the same rc.inc as the scalar reference
-    // and the carry twin. Locals, so the sweep's stores alias nothing.
+    // sh_v1xN's arrangement, from the same rc.inc as the carry twin. Locals, so the sweep's stores alias nothing.
 // The sweep reads and writes the lane arrays as vectors, so they carry vector
 // alignment. The decoder's copy does not -- see model1.inc.
 #define RC_KALIGN ALIGN(VECSIZE)
@@ -167,7 +165,6 @@ struct Model<0> : Coroutine, PredictorE {
       "rc_vecD.inc was generated against a different RC_* configuration than "
       "this build. Re-run mk_kernel.sh with the same -D set -- build.sh takes "
       "it as arguments and gc.bat has %defs% for it." );
-#endif
 
     P_Init(stats,DIM(stats));
 
@@ -179,13 +176,13 @@ struct Model<0> : Coroutine, PredictorE {
       model_pass( blksize );
 #endif
 
-#if RC_VEC && !RC_FORCE_CARRY
+#if !RC_FORCE_CARRY
       // The vector coding pass: the carryless coder over all RCNUM lanes,
       // straight into the substream rows. The unrolled sweep is what clang
       // auto-vectorizes -- constant lane indices over local arrays, exactly
       // the original sh_v1xN encode side. A lane that lost a carry (FFNum)
       // sends the whole block to the scalar twin.
-      if_e1( g_use_vec ) {
+      {
 
         tmpbase = rcio.rows();
         // the substreams grow DOWN from the top of each row; the cursor
@@ -221,11 +218,6 @@ struct Model<0> : Coroutine, PredictorE {
           model_pass( _cn );
 #endif
         {
-#if RC_PROBE_MODELONLY
-          // the probe: time the model pass with the sweep taken out from
-          // under it, and leave the substreams empty -- see rc_config.inc
-          continue;                    // continues the CHUNK loop only
-#endif
           uint blksize0 = _cn*8;
           uint blksize1 = blksize0 - (blksize0%RCNUM);
 
@@ -243,7 +235,6 @@ struct Model<0> : Coroutine, PredictorE {
               for( j=0; j<RCNUM; j++ ) {
                 uint b = _pb[_i+int(j)];
                 uint f = b&0x7FFF; b >>= 15;
-                RC_GUESS_COUNT( _i+int(j)+int(blksize1), f, b );
                 rc_Process( j, f, b );
               }
               RC_FLUSHALL();
@@ -256,7 +247,6 @@ struct Model<0> : Coroutine, PredictorE {
             for( j=0; j<RCNUM; j++ ) {
               uint b = pbit[i+j];
               uint f = b&0x7FFF; b >>= 15;
-              RC_GUESS_COUNT( i+j, f, b );
               rc_Process( j, f, b );
             }
             RC_FLUSHALL();
@@ -272,10 +262,6 @@ struct Model<0> : Coroutine, PredictorE {
         }
         }
 
-#if RC_PROBE_MODELONLY
-        { for( j=0; j<RCNUM; j++ ) res.lens[j]=0;
-          rcio.rc_Write( (*this), res ); }
-#else
         for( j=0; j<RCNUM; j++ ) rc_Quit(j);
 
         uint ncarry = uint(-1), novf = 0;
@@ -298,21 +284,18 @@ struct Model<0> : Coroutine, PredictorE {
 #endif
           recode_with_carry( blksize );
         }
-#endif  // RC_PROBE_MODELONLY
 
-      } else
-#endif
+      }
+#else
       {
+        // RC_FORCE_CARRY compiles the chunked loop out entirely, so the block
+        // still has to be cached here before host_block can walk it.
 #if RC_CHUNK
-        // RC_CHUNK skips the model pass above, because the chunked vector path
-        // does it a chunk at a time. Every path that reaches host_block needs
-        // the whole block cached, and that is not only the -C path: RC_VEC=0
-        // and RC_FORCE_CARRY=1 both compile the chunked loop out entirely, so
-        // this cannot be conditioned on either of them.
         model_pass( blksize );
 #endif
         host_block( blksize );
       }
+#endif
 
       if( blksize<BLKSIZE ) break;
 

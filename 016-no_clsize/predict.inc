@@ -20,10 +20,8 @@ struct PredictorT {
   static uint P_P( uint _s ) { return t_Counter::P(_s); }
 
   // cty is NOT biased by -1. The bias would cost nothing on its own, but it
-  // makes cty[2*c] land at an odd index, and RC_EAGER_CTY loads cty[2*c] and
-  // cty[2*c+1] as one 8-byte unit. Index 0 goes unused instead; contexts run
-  // 1..255, and RC_EAGER_CTY reads children up to 511, which is why the
-  // models' stats[] is 0x200 entries rather than 0x100.
+  // makes cty[2*c] land at an odd index. Index 0 goes unused instead;
+  // contexts run 1..255 and the models' stats[] is 0x200 entries.
   void P_Init( t_Counter* p0_, uint p_size ) { 
     t_Counter* __restrict P_p = p0_;
     for( uint i=0; i<p_size; i++ ) P_p[i].Reset();
@@ -54,24 +52,6 @@ struct PredictorT {
   // entirely. Identical arithmetic, identical traffic through cty[].
   void P_S_L( uint _c, uint& _s ) {
     _s = cty[_c].Get();
-  }
-
-  // RC_EAGER_CTY. The eight contexts a byte visits are one root-to-leaf path
-  // in a 256-node tree, and the two children of _c are cty[2*_c] and
-  // cty[2*_c+1] -- ADJACENT. So both can be fetched as one 8-byte load whose
-  // address is known a whole bit early, and the next bit picks its half with a
-  // select instead of waiting on a load. That is the decoder's per-bit chain:
-  // it was cty-load -> pp-load -> multiply -> compare, RC_FUSE_PP took the
-  // second load out and this takes the first.
-  //
-  // Safe by the shape of the walk: the update writes the node just LEFT, never
-  // a descendant, so the speculative read cannot miss a write. cty is unbiased
-  // (see P_Init) precisely so the pair is 8-byte aligned.
-  qword P_kids( uint _c ) {
-    return (const qword&)cty[ 2*_c ];
-  }
-  static uint P_sel( qword _k, uint bit ) {
-    return bit ? uint(_k>>32) : uint(_k);
   }
 
   void P_update_L( uint& _c, uint state, uint bit ) {
