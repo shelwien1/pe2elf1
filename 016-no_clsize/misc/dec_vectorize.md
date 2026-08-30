@@ -466,7 +466,76 @@ Bit 0's 99.6% is a genuinely different regime, but it is one bit in eight and
 verification still costs full price, so using it would take a byte-level fast
 path -- "is this ASCII" -- not RC speculation.
 
-## 9. Where this leaves it
+## 9. The generated if-tree — the one that works
+
+Shelwien's: generate a binary tree of real `if` branches, 255 nodes and 256
+leaves, and let the CPU's own predictor track each node's bias. On compressible
+data those branches are not 50/50, so the hardware speculates past them and
+runs the next node before this one's `code >= rpre` resolves.
+
+This is not the software guess of section 8, and the differences are the whole
+point:
+
+- **Hardware speculation is free when correct.** No verify, no rollback, no
+  extra instructions on the taken path — the thing that sank section 8.
+- **Every node gets its own predictor entry.** A single shared branch site
+  would see the average bias; 255 sites each learn their own.
+- **`cty[c]` becomes a compile-time constant address.** The dependent load
+  address — the thing that put the load on the chain in section 7 — is gone by
+  construction.
+
+`misc/iftree_gen.py` emits the tree; `misc/iftree_bench.cpp` is a complete
+adaptive binary rangecoder (encode, then decode both ways, output checked
+against the source) so the branch outcomes and their per-site biases are the
+genuine ones from real data. Medians of 9 alternating rounds:
+
+| data | lanes | A indexed walk | B if-tree | |
+|---|---|---|---|---|
+| enwik8 | 1 | 117.6 cyc/byte | **64.7** | **1.82× faster** |
+| enwik8 | 16 | 121.9 | **74.8** | **1.63× faster** |
+| random | 1 | 150.1 | 130.0 | 1.15× |
+| random | 16 | 156.5 | 135.1 | 1.16× |
+
+**The incompressible row is the control.** With branches at 50/50 the predictor
+is useless and the win collapses from 1.63× to 1.16×. That gap is the
+prediction; the 1.16 residual is the constant addresses. The mechanism is
+exactly the one proposed.
+
+**It survives lane interleaving**, which was the obvious way for it to die: 16
+lanes share the 255 branch sites, so each site sees 16 interleaved outcome
+streams. It costs only 1.82× → 1.63×, because the lanes *share the model* — every
+lane at node *c* has the same P(bit|c), so the interleaving does not blur the
+bias the predictor is learning.
+
+And it is the first idea in this file that **reduces** the instruction count on
+the executed path instead of adding to it: 8 of the 255 nodes run per byte, each
+a load / multiply / compare / predicted branch, against the branchless walk's
+select-and-index sequence. Section 7 established this decoder is front-end
+bound, and this is the only proposal so far that pushes on that constraint in
+the right direction — which is presumably why it is also the only one that wins.
+
+### What this does not yet establish
+
+- The model here is a plain adaptive counter, not `counter.inc`/FSM0 with
+  `RC_FUSE_PP`. The absolute cycle counts will not transfer.
+- **The lane arrangement is different, and this is the real obstacle.** Here
+  lane *L* codes whole bytes, so `code` and `range` stay in registers across all
+  eight levels of the walk. In the codebase, lane `m*8+j` codes bit *j* of byte
+  *m*, so a byte's eight bits live in eight different coder lanes and each level
+  of the tree would load a different lane's state. Adopting this needs the
+  lane-to-byte assignment changed, which is a stream-format change.
+- That reassignment may be worth having anyway: it would give RCNUM independent
+  model chains instead of section 1's `NB = RCNUM/8` — the exact limit that
+  capped everything else in this file.
+- 53 KB of generated code per tree, against a decode loop that is currently
+  1756 bytes. It wins here despite that, but the real decoder's front end is
+  already the binding constraint and a second tree (encoder side) would double
+  it.
+
+The next step is not another probe: it is the lane reassignment, measured on
+the real model.
+
+## 10. Where this leaves it
 
 Nothing here beats the interleaved loop, and the reason is now specific rather
 than vague: the decoder's cross-lane overlap is worth more than its vector
