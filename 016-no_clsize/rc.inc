@@ -79,7 +79,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // Nothing writes it in the other shapes and it costs nothing there.
   uint  dsh;
 
-  // RC_DEC_RENORM 9's cached refill window: the four stream bytes ending at
+  // RC_DEC_RENORM 9 and 10's cached refill window: the four stream bytes ending at
   // the cursor, so the invariant is `win == (uint&)tmpbase[tmpptr-3]` at every
   // entry to rc_Renorm. rc_Init seeds it and rc_Renorm re-fills it AFTER using
   // it, which is the whole point -- see rc_config.inc.
@@ -398,7 +398,46 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // both shifts want, and the cursor's decrement is dsh>>3 for free. The
       // nested ternary produces it directly. Selecting the byte count that way
       // instead and deriving the shift from it measures 29% slower.
-#if RC_DEC_RENORM==9
+#if RC_DEC_RENORM>=11
+      // 9, with the reload lifted OUT of the lane body entirely. 9 keeps the
+      // window's load off the critical chain but still does it here, per lane,
+      // and clang pays vpextrd to get tmpptr out of the vector it is keeping
+      // the lane state in and vpinsrd to put the loaded word back. That is ~60
+      // cross-domain moves per group, all on port 5, and it is the whole of
+      // 9's gap to the branchy shape.
+      //
+      // Here the lane body does no memory at all. Each lane's window is
+      // refilled once per group by RC_REFILLALL() in model1.inc -- one gather,
+      // masked at 11 by dsh!=0 so only the lanes that moved are read. Timing
+      // is unchanged: a lane renormalises at most once per group, so a refill
+      // at the end of the group still lands before the next bit reads it,
+      // which is the same one-iteration slack 9 relies on.
+      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+      code   -= rpre;
+      rpre    = 0;
+      code  <<= dsh;
+      range <<= dsh;
+      code   |= (win>>16) >> (16-dsh);
+      tmpptr -= dsh>>3;
+#elif RC_DEC_RENORM==10
+      // 9, with the reload -- and ONLY the reload -- put behind a branch. The
+      // arithmetic stays branchless; what comes back is the memory traffic the
+      // branchy shapes skip. It is a diagnostic, not a candidate: it asks what
+      // the refill reads are worth once their latency is already off the chain,
+      // and it answers the question for every scheme that aims to read less
+      // often, because skipping per lane skips ~92% of the reads and no
+      // group-wide test can do better than that. See rc_config.inc.
+      dsh     = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+      code   -= rpre;
+      rpre    = 0;
+      code  <<= dsh;
+      range <<= dsh;
+      code   |= (win>>16) >> (16-dsh);
+      tmpptr -= dsh>>3;
+      // correct because dsh==0 leaves tmpptr where it was, so the window the
+      // previous iteration cached is still the window this lane needs
+      if_e0( dsh ) win = (uint&)tmpbase[tmpptr-3];
+#elif RC_DEC_RENORM==9
       // Branchless, and the refill read one iteration ahead of where it is
       // needed. 7 reloads the window every bit and consumes it in the same
       // bit, so the chain is range -> dsh -> tmpptr -> load -> code and the
@@ -687,7 +726,7 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     if( f_DEC==0 ) RC_STAGE_INIT( rcidx, tmpptr-2 );
 #endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
-#if RC_VECOUT && RC_DEC_RENORM==9
+#if RC_VECOUT && RC_DEC_RENORM>=9
     // seed the cached window; get() above is the only other thing that moves
     // the decoder's cursor
     if( f_DEC==1 ) win = (uint&)tmpbase[tmpptr-3];

@@ -390,6 +390,11 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //      arms rather than hoisted above it
 //   9  7 with the refill window CACHED in lane state and re-filled one
 //      iteration ahead of the bit that reads it
+//  10  9 with the reload, and only the reload, behind a branch -- a diagnostic
+//      for what the refill reads are worth once their latency is off the chain
+//  11  9 with the reload lifted out of the lane body: one MASKED GATHER per
+//      group, in model1.inc where the encoder's RC_FLUSHALL goes
+//  12  11 unmasked, the control for it
 //
 // The distribution is the whole story. Counted in the scalar reference coder
 // over the 800M bits of enwik8:
@@ -417,7 +422,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // Loop figures are my 16-lane decode body.
 //
 //                                    insns  br   rsp    mine      his
-//   8  one branch, no locals          431   17   103   +2.5%    -1.9%
+//   8  one branch, no locals          431   17   103   +4.3%    -1.9%
 //   0  two nested branches            460   17   113      --       --
 //   6  counted inner, addressed       450   17   114   -0.6%    -3.5%
 //   1  counted inner, shifted         452   17   111   -2.9%    -4.9%
@@ -427,6 +432,9 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //   3  branchless, clz                655    1   157  -33.4%   -23.5%
 //   2  branchless, two compares       668    1   156  -34.4%   -22.8%
 //   7  branchless, no locals          735    1   204  -36.2%   -16.8%
+//  10  9 + branch on the reload       772   18   185  -28.7%        ?
+//  12  9 + unmasked gather            529    1    94  -36.1%        ?
+//  11  9 + masked gather              534    1    97  -36.8%        ?
 //
 // Read that table twice. The big number -- the outer branch is worth a fifth
 // to a third of decode -- reproduces on both machines. Every small number
@@ -447,7 +455,46 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // against 0's 48.21, and 9 would win outright. That is the measurement to
 // make.
 //
-// 1..9 all read the 32-bit refill window, so they carry RC_LOAD32's padding
+// 10, 11 and 12 are the answer to "the branchless shape reads memory every
+// bit -- read less often, or read better". Neither works, and the reason is
+// the same both times.
+//
+// First, what the gap actually is. clang AUTO-VECTORISES the branchless
+// shapes and does not vectorise the branchy ones: the group loop holds 127
+// vector operations at 9 and 16 at 0. But it vectorises the arithmetic and
+// then moves each lane in and out by hand to do the load -- 36 vpextrd, 24
+// vpinsrd and 20 vmovd per group, essentially all port 5. At one per cycle
+// that is ~46 cycles, and 9 is 222 cycles per 16-lane group against 0's 176.
+// The gap IS the cross-domain traffic, not the shift chain and not the loads.
+//
+// 10 tests reading less often, and it is the strongest possible version of
+// that test: a per-lane branch skips ~92% of the reads, where a group-wide
+// test could only skip the ~27% of groups in which no lane renormalises
+// (0.92195^16). It loses -- 2.758 s against 9's 2.475, 11% slower -- because
+// the branch de-vectorises the body: 127 vector operations collapse to 8, the
+// loop grows from 478 instructions to 772 and stack traffic from 80 to 185.
+// Since the strongest form loses, every weaker one does too.
+//
+// 11 and 12 test reading better: leave tmpptr in the vector it is already in
+// and let one gather do all sixteen. It loses harder -- 3.109 s masked, 3.077
+// unmasked, 25% behind 9 and level with 7. The gather removes 15 of the loads
+// and gives them straight back, because it has to land in the win[] array and
+// every lane then reads its slot out of memory: 95 memory-source instructions
+// at 9, 93 at 11. What is left is a vpgatherdd where sixteen scalar loads
+// were, and it costs about 57 cycles per group more than they did.
+//
+// The mask buys nothing -- 11 and 12 are within noise of each other -- which
+// is the same thing RC_SCATTER_SKIP found on the encoder's scatter, from the
+// other direction: on this target a gather with one active lane costs what a
+// gather with sixteen costs.
+//
+// So the traffic can only go by keeping the lane state in vector registers
+// across the whole loop and never extracting at all -- the encoder's shape.
+// The decoder cannot follow it there while the model side is a per-lane table
+// walk, because that would need a gather of its own, at the price measured
+// here. That is the wall, and it is where this line of attack stops.
+//
+// 1..12 all read the 32-bit refill window, so they carry RC_LOAD32's padding
 // requirement whatever RC_LOAD32 itself is set to (see rc_io.inc), and 4, 6,
 // 7 and 8 need bytes ABOVE the cursor as well. They ignore RC_LOAD32: it
 // selects between shapes of the branchy refill, which 1 and 6 through 8 have

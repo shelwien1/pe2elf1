@@ -154,6 +154,95 @@ extern int g_use_vec;   // -C: the scalar reference coder
 #endif
 
 
+// ---------------------------------------------------------------------------
+// RC_DEC_RENORM 11 and 12: the decoder's cached refill window, filled for the
+// whole group at once.
+//
+// 9 caches the window in lane state and reloads it per lane, which takes the
+// load's LATENCY off the chain but leaves its data movement in the lane body.
+// clang auto-vectorises the branchless renorm -- 127 vector ops in the group
+// loop against the branchy shape's 16 -- and then has to extract each lane's
+// tmpptr out of a vector to form the address and insert the loaded word back:
+// 36 vpextrd, 24 vpinsrd and 20 vmovd per group, essentially all port 5.
+//
+// A gather does the same sixteen loads with the indices left where they
+// already are. 11 masks it on dsh!=0, which is the same "the store is dead"
+// reading RC_SCATTER_SKIP takes on the encoder -- a lane that did not
+// renormalise did not move its cursor, so its cached window is still correct
+// and the lane can be left out. 12 is the unmasked control.
+//
+// The group's refill has to run after every lane has renormalised, so it goes
+// where the encoder's RC_FLUSHALL does. RC_REFILL_ONE covers the paths that
+// code a single lane at a time (the block header, and the tail below RCNUM).
+#if RC_VEC && RC_DEC_RENORM>=11
+
+#define RC_REFILL_ONE( k )  ( win[k] = (uint&)tmpbase[ tmpptr[k]-3 ] )
+
+#if defined(__AVX512F__) && (RCNUM%16)==0
+#define RC_REFILL_W 16
+#elif defined(__AVX2__) && (RCNUM%8)==0
+#define RC_REFILL_W 8
+#else
+#define RC_REFILL_W 0
+#endif
+
+#if RC_REFILL_W==16
+#define RC_REFILL_GROUP( k )                                             \
+  { __m512i _p = _mm512_sub_epi32(                                       \
+        _mm512_loadu_si512( (const void*)&tmpptr[k] ),                   \
+        _mm512_set1_epi32(3) );                                          \
+    __m512i _w = _mm512_loadu_si512( (const void*)&win[k] );             \
+    RC_REFILL_GATHER( k );                                               \
+    _mm512_storeu_si512( (void*)&win[k], _w ); }
+#if RC_DEC_RENORM==11
+#define RC_REFILL_GATHER( k )                                            \
+    _w = _mm512_mask_i32gather_epi32( _w,                                \
+           _mm512_cmpneq_epi32_mask(                                     \
+             _mm512_loadu_si512( (const void*)&dsh[k] ),                 \
+             _mm512_setzero_si512() ),                                   \
+           _p, (const void*)tmpbase, 1 )
+#else
+#define RC_REFILL_GATHER( k )                                            \
+    _w = _mm512_i32gather_epi32( _p, (const void*)tmpbase, 1 )
+#endif
+
+#elif RC_REFILL_W==8
+#define RC_REFILL_GROUP( k )                                             \
+  { __m256i _p = _mm256_sub_epi32(                                       \
+        _mm256_loadu_si256( (const __m256i*)&tmpptr[k] ),                \
+        _mm256_set1_epi32(3) );                                          \
+    __m256i _w = _mm256_loadu_si256( (const __m256i*)&win[k] );          \
+    RC_REFILL_GATHER( k );                                               \
+    _mm256_storeu_si256( (__m256i*)&win[k], _w ); }
+#if RC_DEC_RENORM==11
+// AVX2 gathers take a vector mask, not a k-mask, and consume it destructively
+#define RC_REFILL_GATHER( k )                                            \
+    _w = _mm256_mask_i32gather_epi32( _w, (const int*)tmpbase, _p,       \
+           _mm256_cmpeq_epi32( _mm256_setzero_si256(),                   \
+             _mm256_cmpeq_epi32(                                         \
+               _mm256_loadu_si256( (const __m256i*)&dsh[k] ),            \
+               _mm256_setzero_si256() ) ), 1 )
+#else
+#define RC_REFILL_GATHER( k )                                            \
+    _w = _mm256_i32gather_epi32( (const int*)tmpbase, _p, 1 )
+#endif
+#endif
+
+#if RC_REFILL_W
+#define RC_REFILLALL()  { for( uint _k=0; _k<RCNUM; _k+=RC_REFILL_W )    \
+    RC_REFILL_GROUP( _k ) }
+#else
+// no gather on this target: the same refill, lane by lane
+#define RC_REFILLALL()  { RC_UNROLL for( uint _k=0; _k<RCNUM; _k++ )     \
+    RC_REFILL_ONE( _k ); }
+#endif
+
+#else
+#define RC_REFILL_ONE( k )  ((void)0)
+#define RC_REFILLALL()      ((void)0)
+#endif
+
+
 template< int f_DEC > struct Model;
 
 #include "model0.inc"

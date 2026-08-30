@@ -72,6 +72,7 @@ struct Model<1> : Coroutine, PredictorD {
 #else
       rc.rc_Process( 0, hSCALE, bit );
 #endif
+      RC_REFILL_ONE( 0 );
 
       if( bit ) {
         for( j=0,c=0; j<16; j++ ) {
@@ -80,6 +81,7 @@ struct Model<1> : Coroutine, PredictorD {
 #else
           rc.rc_Process( j%RCNUM, hSCALE, bit );
 #endif
+          RC_REFILL_ONE( j%RCNUM );
           c = c*2 + (bit>0);
         } blksize=c;
       } else blksize=BLKSIZE;
@@ -139,6 +141,7 @@ struct Model<1> : Coroutine, PredictorD {
 #else
             RC_UNROLL for( uint m=0; m<NB; m++ ) put0( lctx[m]&0xFF );
 #endif
+            RC_REFILLALL();
           }
           ctx = 1;                      // the tail loops below use the member
         }
@@ -164,6 +167,7 @@ struct Model<1> : Coroutine, PredictorD {
               }
               put0( lctx&0xFF );
             }
+            RC_REFILLALL();
           }
           ctx = 1;                      // the tail loops below use the member
         }
@@ -185,6 +189,7 @@ struct Model<1> : Coroutine, PredictorD {
             if( (j&7)!=7 ) { state1 = P_sel(kids,bit); kids = P_kids(ctx); }
             else { P_byte(stats,c); put0(c); }
           }
+          RC_REFILLALL();
         }
 #else
         {
@@ -211,6 +216,7 @@ struct Model<1> : Coroutine, PredictorD {
             if( (j&7)==7 ) { P_byte(stats,c); put0(c); }
 #endif
           }
+          RC_REFILLALL();
         }
         }
 #endif
@@ -222,6 +228,7 @@ struct Model<1> : Coroutine, PredictorD {
 #else
           rc.rc_Process( j, p, bit );
 #endif
+          RC_REFILL_ONE( j );
           P_update( state, bit );
           if_e0( i%8==7 ) { P_byte(stats,c); put0(c); }
         }
@@ -235,6 +242,7 @@ struct Model<1> : Coroutine, PredictorD {
 #else
         rc.rc_Process( j, p, bit );
 #endif
+        RC_REFILL_ONE( j );
         P_update( state, bit );
         if_e0( i%8==7 ) { P_byte(stats,c); put0(c); }
       }

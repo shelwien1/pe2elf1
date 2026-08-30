@@ -20,7 +20,7 @@ back 2.2% and 1.9% apart, which is the noise floor here.
 
 | | shape | his (MB/s) | vs 0 | mine (s) | vs 0 |
 |---|---|---|---|---|---|
-| 8 | one branch, no locals | -- | -- | **1.925** | **+2.5%** |
+| 8 | one branch, no locals | -- | -- | **1.890** | **+4.3%** |
 | 0 | two nested branches | **48.21** | -- | 1.975 | -- |
 | 6 | counted inner, addressed | 46.54 | −3.5% | 1.987 | −0.6% |
 | 1 | counted inner, shifted | 45.86 | −4.9% | 2.033 | −2.9% |
@@ -261,7 +261,97 @@ other.
 So the split is clean. **The selection transfers; the register-pressure rule
 does not**, exactly as the vector/scalar argument predicts.
 
-## 5. Why the big idea cannot cross
+## 5. Reading less, and reading better
+
+Two follow-ups to §3, both aimed at the same thing: the branchless shape reads
+memory on every bit and the branchy one does not, so make it read less often
+(a branch, per lane or per group) or read better (one gather instead of
+sixteen scalar loads). Neither works, and finding out why corrects the
+diagnosis in §3.
+
+### The branchless shapes are already vectorised
+
+They are, and the branchy ones are not:
+
+| | insns | vector ops | ymm | gather |
+|---|---|---|---|---|
+| 0 branchy | 460 | 16 | 0 | 0 |
+| 7 branchless | 735 | 94 | 30 | 0 |
+| 9 cached | 478 | **127** | 47 | 0 |
+| 10 branch on the reload | 772 | **8** | 0 | 0 |
+
+Lane state is `[rcidx]`-indexed arrays, and clang auto-vectorises across them
+once the branches are gone. But look at *what* it emits at 9: `vpextrd`×36,
+`vpinsrd`×24, `vmovd`×20, `vextracti128`×6. It vectorises the arithmetic and
+then lifts every lane out by hand to do the load and puts the result back —
+about 60 cross-domain moves per group, essentially all on port 5, so about 46
+cycles. Shape 9 runs at 222 cycles per 16-lane group against shape 0's 176.
+
+**The gap is the extract/insert traffic** -- not the load latency, which 9 had
+already moved off the critical path, and not the shift chain, which is what I
+assumed when §3 could not explain why a shape with fewer spills and no
+mispredicts was still 20% behind.
+
+### Reading less often: shape 10
+
+Shape 10 puts a branch around the reload and nothing else. It is the strongest
+possible form of the "skip the reads" idea, because a per-lane test skips ~92%
+of them where a group-wide test could only skip the ~27% of groups in which no
+lane renormalises at all (`0.92195^16`).
+
+It loses: **2.758 s against 9's 2.475**, 11% slower. The branch de-vectorises
+the body — 127 vector operations collapse to 8, the loop grows from 478
+instructions to 772, stack traffic from 80 references to 185. The reads were
+not costing anything worth a branch, and the branch costs the vectorisation.
+
+Since the strongest form of the idea loses, the group-wide form cannot win:
+it skips a third as many reads for the same damage.
+
+### Reading better: shapes 11 and 12
+
+If the traffic is the problem, leave `tmpptr` in the vector it is already in
+and let one gather do all sixteen lanes. Shape 11 lifts the reload out of the
+lane body into a per-group `RC_REFILLALL()` — in `model1.inc`, exactly where
+the encoder's `RC_FLUSHALL()` goes — as a `vpgatherdd` masked on `dsh!=0`, so
+only lanes that actually moved their cursor are read. Shape 12 is the unmasked
+control. Timing is safe: a lane renormalises at most once per group, so a
+refill at the end of the group still lands before the next bit reads it, which
+is the same one-iteration slack shape 9 runs on.
+
+| | decode | vs 9 |
+|---|---|---|
+| 9 scalar reloads | 2.475 s | -- |
+| 12 unmasked gather | 3.077 | **−24%** |
+| 11 masked gather | 3.109 | **−26%** |
+
+It loses harder than the branch, and level with shape 7. Two things went wrong.
+
+**The gather gives the loads straight back.** It has to land somewhere, and
+where it lands is the `win[]` array — so every lane then reads its slot out of
+memory. Memory-source instructions in the loop: 95 at shape 9, **93** at shape
+11. Fifteen scalar loads removed, fifteen readbacks added, and a `vpgatherdd`
+where the loads used to be. That instruction costs about 57 cycles per group
+more than the sixteen scalar loads did.
+
+**The mask buys nothing.** 11 and 12 are within noise of each other. That is
+the same result `RC_SCATTER_SKIP` records for the encoder's scatter from the
+other side: on this target a gather with one active lane costs what a gather
+with sixteen costs. Where gather cost scales with active lanes -- Ice Lake and
+later, Zen 4 -- 11 is the one worth rebuilding, but it starts 24% behind.
+
+### Where that leaves it
+
+The traffic is real and it is the whole gap, but neither instrument removes
+it. It can only go by keeping the lane state in vector registers across the
+entire loop and never extracting at all -- which is the encoder's
+architecture, and the decoder cannot follow it there while the model side is a
+per-lane table walk, because that walk would need a gather of its own at the
+price measured above.
+
+So the branch stays ahead, and the best decoder here remains Shelwien's
+one-branch shape 8 at 1.890 s.
+
+## 6. Why the big idea cannot cross
 
 The decoder's real win is the outer branch, worth 17-36%. The encoder cannot
 have it, and this repo had already measured the reason before the question was
@@ -312,7 +402,7 @@ have the third, and gains 2.3% from the fourth:
 The encoder runs at about twice the decoder's throughput, and this is why:
 almost everything the decoder exercise discovered, it was already doing.
 
-## 6. One bug the exercise found
+## 7. One bug the exercise found
 
 `RC_ENC_NSEL=1` was the first call in this codebase to pass an *expression* to
 a generated macro, and it encoded a stream that never finished decoding.
