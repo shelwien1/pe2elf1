@@ -70,7 +70,6 @@ struct Model<1> : Coroutine, PredictorD {
 #if (RC_RCNUM%8)==0
       {
         uint nb1 = blksize*8 - (blksize*8)%RCNUM;
-#define RC_UNROLL_DEC RC_UNROLL
         // The wavefront (speed_plan_next.md 1.1). A group is RCNUM/8 output
         // bytes -- lanes 0..7 are one, 8..15 the next -- and the bit-context
         // chain restarts at every byte and carries nothing across: P_byte is

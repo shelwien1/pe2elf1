@@ -154,19 +154,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 
-// 1 = the kernel buffers each lane's output and writes it a dword at a time
-// instead of a byte at a time.
-//
-// A byte store to a per-lane address cannot be vectorised at all: there is no
-// byte scatter in AVX-512, or in any other SIMD ISA worth naming, so every
-// such store scalarises into extract-the-address, store, mask test, branch --
-// once per lane, per byte. vpscatterdd does exist, so a per-lane dword store
-// is one masked instruction and no branches. The cost is carrying a 32-bit
-// accumulator and a byte count per lane, and flushing at rc_quit.
-// build.sh maps -1 to 1: under ispc the word path is the one that vectorises.
-#ifndef RC_DEV_WORDOUT
-#define RC_DEV_WORDOUT (-1)
-#endif
+
 
 
 // Full unroll of a group loop whose trip count is RCNUM: with j constant in
@@ -336,6 +324,9 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #ifndef RC_SCATTER_SKIP
 #define RC_SCATTER_SKIP 0
 #endif
+#if RC_SCATTER_SKIP<0 || RC_SCATTER_SKIP>1
+#error "RC_SCATTER_SKIP is 0 or 1: the branch variants and the no-commit probe are gone"
+#endif
 
 
 // The encoder half of the same two lessons. rc_Renorm's f_DEC==0 arm has
@@ -436,12 +427,10 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
 
 #if RC_ENC_RENORM>=1
-#define RC_ENC_SHDECL                     // n IS the shift: nothing to declare
 #define RC_ENC_SH      (n)
 #define RC_ENC_NB      ((n)>>3)
 #define RC_ENC_ARG(x)  (x)
 #else
-#define RC_ENC_SHDECL
 #define RC_ENC_SH      sh
 #define RC_ENC_NB      (n)
 #define RC_ENC_ARG(x)  ((x)>>3)

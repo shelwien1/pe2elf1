@@ -78,9 +78,6 @@
 
 #if RC_SCATTER_SKIP==0
 #define RC_FLUSHALL() RC_COMMIT_ALL()
-#elif RC_SCATTER_SKIP==9
-#warning "RC_SCATTER_SKIP=9 drops the commit: this build does not encode correctly"
-#define RC_FLUSHALL() ((void)0)
 #else
 #define RC_FLUSHALL()                                                    \
   { uint _z = 0;                                                         \
@@ -105,8 +102,6 @@
 #define RC_SCAT_M   _mm512_mask_i32scatter_epi32( (void*)tmpbase, _m, _a, _v, 1 )
 #define RC_SCAT_U   _mm512_i32scatter_epi32( (void*)tmpbase, _a, _v, 1 )
 #define RC_NE0      _mm512_cmpneq_epi32_mask
-#define RC_EQ0      _mm512_cmpeq_epi32_mask
-#define RC_FULL     0xFFFFu
 #else
 #define RC_SCATTER_GROUP( k, MK, SCAT )                                  \
   { __m256i _a = _mm256_loadu_si256( (const __m256i*)&stad[k] );         \
@@ -117,8 +112,6 @@
 #define RC_SCAT_M   _mm256_mask_i32scatter_epi32( (void*)tmpbase, _m, _a, _v, 1 )
 #define RC_SCAT_U   _mm256_i32scatter_epi32( (void*)tmpbase, _a, _v, 1 )
 #define RC_NE0      _mm256_cmpneq_epi32_mask
-#define RC_EQ0      _mm256_cmpeq_epi32_mask
-#define RC_FULL     0xFFu
 #endif
 
 #if   RC_SCATTER_SKIP==0
@@ -127,16 +120,6 @@
 #elif RC_SCATTER_SKIP==1
 #define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
     RC_SCATTER_GROUP( _k, RC_NE0, RC_SCAT_M ) }
-#elif RC_SCATTER_SKIP==2
-#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
-    RC_SCATTER_GROUP( _k, RC_NE0, if_e0( _m ) RC_SCAT_M ) }
-#elif RC_SCATTER_SKIP==3
-#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
-    RC_SCATTER_GROUP( _k, RC_EQ0, if_e1( _m!=RC_FULL ) RC_SCAT_U ) }
-#else
-#warning "RC_SCATTER_SKIP=9 drops the scatter: this build does not encode correctly"
-#define RC_FLUSHALL() { for( uint _k=0; _k<RCNUM; _k+=RC_SCATTER_W )     \
-    RC_SCATTER_GROUP( _k, RC_NE0, (void)_m ) }
 #endif
 
 #endif  /* RC_SCATTER_W==0 */

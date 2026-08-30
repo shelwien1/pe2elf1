@@ -235,10 +235,8 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
     // is the SHIFT COUNT 0/8/16 and the byte count is derived instead. That
     // direction matters: everything downstream of the selection wants the
     // shift, and only tmpptr wants the count. See rc_config.inc.
-#if RC_ENC_RENORM>=1
-    RC_ENC_SHDECL
-#else
-    const uint sh = n*8;
+#if RC_ENC_RENORM==0
+    const uint sh = n*8;   // at >=1 the parameter IS the shift, so nothing to declare
 #endif
 #if RC_FOLD_RPRE
     // rc_Process already added rpre to low and folded the carry into FFNum,
