@@ -205,7 +205,53 @@ does not transfer:
   makes their refill free, and it is the direction to look if the format is
   ever on the table.
 
-## 5. Where this leaves it
+## 5. Pipelining the passes by halves
+
+The barriers are the problem, so cover them. The two halves of a group are
+completely independent -- lanes 0..RCNUM/2-1 are bytes 0..NB/2-1 and carry
+their own context chains -- so one half's barrier can be filled with the other
+half's work. `RC_DEC_SPLIT=2` issues the passes staggered:
+
+```
+renorm A | div A | renorm B | model A | div B | model B | upd A | upd B
+```
+
+renorm B sits over div A's latency, and div B sits over model A's serial walk,
+which is the longest stall in the group.
+
+It works, and only where the group is small:
+
+| | RCNUM=16 | RCNUM=32 |
+|---|---|---|
+| baseline, shape 0 | **2.055 s** | **1.934** |
+| split, shape 9 | 3.674 | 2.979 |
+| split by halves, shape 9 | 3.414 (**+7.1%**) | 3.313 (−11%) |
+
+At RCNUM=16 staggering buys 7.1%. At 32 it *costs* 11%, because a 32-lane group
+already has enough independent work per pass to cover its own joins, and
+halving it just doubles the number of joins. Same effect from two directions:
+what the barrier needs is neighbouring independent work, and either more lanes
+or a stagger will supply it, but not both.
+
+The best split remains 2.979 s at RCNUM=32 against a 1.934 baseline.
+
+### Deferring the window refill does not help either
+
+Shape 14 is shape 9 with the reload lifted out of the lane body into its own
+pass placed after the divide, where it has the model walk to hide under -- the
+loads are for the *next* group, so they have a whole group of slack.
+
+| | split | split by halves |
+|---|---|---|
+| shape 9, reload inline | **3.674 s** | **3.414** |
+| shape 14, reload deferred | 3.992 (−8.7%) | 3.537 (−3.5%) |
+
+It loses both ways, and for the reason shapes 11 and 12 already established:
+lifting the reload out of the renorm turns sixteen register-resident window
+values into an array round-trip, and that costs more than any placement gains.
+The reload wants to stay where it is.
+
+## 6. Where this leaves it
 
 Nothing here beats the interleaved loop, and the reason is now specific rather
 than vague: the decoder's cross-lane overlap is worth more than its vector

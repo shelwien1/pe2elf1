@@ -108,7 +108,67 @@ struct Model<1> : Coroutine, PredictorD {
 #else
 #error "RC_DEC_UNROLL must be 0, 1, 2, 4 or 8"
 #endif
-#if RC_DEC_SPLIT
+#if RC_DEC_SPLIT==2
+        // The split, software-pipelined by halves.
+        //
+        // SPLIT=1 loses because its four passes are one dependency chain with a
+        // barrier at each join, and the barriers throw away the cross-lane
+        // overlap the interleaved loop gets for free. But the halves of a group
+        // are completely independent -- lanes 0..RCNUM/2-1 are bytes 0..NB/2-1
+        // and carry their own context chains -- so one half's barrier can be
+        // covered by the other half's work. The passes are issued staggered:
+        //
+        //   renorm A | div A | renorm B | model A | div B | model B | upd A/B
+        //
+        // so renorm B sits over div A's latency and div B sits over model A's
+        // serial walk, which is the longest stall in the group.
+        {
+          enum { NB = RCNUM/8, HN = RCNUM/2, HB = NB/2 };
+          uint lctx[NB], st[NB];
+          uint pa[RCNUM], ba[RCNUM];
+          for( i=0; i<nb1; i+=RCNUM ) {
+            RC_UNROLL for( uint m=0; m<NB; m++ ) lctx[m] = 1;
+            RC_UNROLL for( j=0; j<HN; j++ ) rc_DecPre( j );
+            RC_DIV( 0, HN );
+            RC_UNROLL for( j=HN; j<RCNUM; j++ ) rc_DecPre( j );
+            RC_REFILLALL();
+            // model, first half
+            RC_UNROLL
+            for( j=0; j<8; j++ ) {
+              RC_UNROLL
+              for( uint m=0; m<HB; m++ ) {
+                P_S_L( lctx[m], st[m] );
+                const uint _p = P_P(st[m]);
+                const uint _b = (val[m*8+j] >= _p);
+                pa[m*8+j] = _p; ba[m*8+j] = _b;
+                P_update_L( lctx[m], st[m], _b );
+              }
+            }
+            RC_DIV( HN, HN );
+            RC_UNROLL for( j=0; j<HN; j++ ) rc_DecUpd( j, pa[j], ba[j] );
+            // model, second half
+            RC_UNROLL
+            for( j=0; j<8; j++ ) {
+              RC_UNROLL
+              for( uint m=HB; m<NB; m++ ) {
+                P_S_L( lctx[m], st[m] );
+                const uint _p = P_P(st[m]);
+                const uint _b = (val[m*8+j] >= _p);
+                pa[m*8+j] = _p; ba[m*8+j] = _b;
+                P_update_L( lctx[m], st[m], _b );
+              }
+            }
+            RC_UNROLL for( j=HN; j<RCNUM; j++ ) rc_DecUpd( j, pa[j], ba[j] );
+#if RC_DEC_PUTW
+            RC_UNROLL
+            for( uint m=0; m<NB; m+=2 ) put0pair( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
+#else
+            RC_UNROLL for( uint m=0; m<NB; m++ ) put0( lctx[m]&0xFF );
+#endif
+          }
+          ctx = 1;
+        }
+#elif RC_DEC_SPLIT
         // rc_Process split at the model -- see rc.inc and misc/dec_vectorize.md.
         // Same wavefront as RC_DEC_WAVE==2 below, same lane-to-byte mapping,
         // but the group is four passes instead of one interleaved walk, so
@@ -120,8 +180,15 @@ struct Model<1> : Coroutine, PredictorD {
           for( i=0; i<nb1; i+=RCNUM ) {
             // 1. renormalise every lane. Nothing here reads the model.
             RC_UNROLL for( j=0; j<RCNUM; j++ ) rc_DecPre( j );
-            // 2. the quotients, whole group at once.
+            // 2. the quotients, whole group at once. Nothing between the
+            //    renorm arithmetic and this.
             RC_DIVALL();
+            // 2b. the window refills, which are for the NEXT group and so have
+            //     a whole group of slack. Under RC_DEC_RENORM=14 they are not
+            //     in rc_DecPre at all, and land here instead, where they have
+            //     the model's serial walk below to hide under. A no-op for
+            //     every shape that keeps its reload inline.
+            RC_REFILLALL();
             // 3. the serial walk. No coder state and no multiply: the bit is
             //    one compare against the quotient pass 2 already produced.
             RC_UNROLL for( uint m=0; m<NB; m++ ) lctx[m] = 1;

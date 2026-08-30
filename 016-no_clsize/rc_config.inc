@@ -679,6 +679,9 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #if RC_DEC_SPLIT && !RC_VEC
 #error "RC_DEC_SPLIT needs the vector coder (RC_VEC=1)"
 #endif
+#if RC_DEC_SPLIT==2 && (RC_RCNUM<16 || (RC_RCNUM/8)%2)
+#error "RC_DEC_SPLIT=2 halves the group, so it needs an even number of byte chains"
+#endif
 #if RC_DEC_SPLIT && ( (RC_RCNUM%8) || (RC_DEC_PUTW && (RC_RCNUM/8)%2) )
 #error "RC_DEC_SPLIT needs RCNUM a multiple of 8, and an even byte count per group under RC_DEC_PUTW"
 #endif

@@ -174,11 +174,18 @@ extern int g_use_vec;   // -C: the scalar reference coder
 // The group's refill has to run after every lane has renormalised, so it goes
 // where the encoder's RC_FLUSHALL does. RC_REFILL_ONE covers the paths that
 // code a single lane at a time (the block header, and the tail below RCNUM).
-#if RC_VEC && (RC_DEC_RENORM==11 || RC_DEC_RENORM==12)
+#if RC_VEC && (RC_DEC_RENORM==11 || RC_DEC_RENORM==12 || RC_DEC_RENORM==14)
 
 #define RC_REFILL_ONE( k )  ( win[k] = (uint&)tmpbase[ tmpptr[k]-3 ] )
 
-#if defined(__AVX512F__) && (RCNUM%16)==0
+// 14 is the shape the split wants: the reload lifted out of the lane body like
+// 11, but refilled with plain scalar loads rather than a gather. 11 and 12
+// measured the gather and it lost badly; what 14 is for is PLACEMENT -- the
+// loads are for the NEXT group, so once they are out of rc_DecPre they can be
+// issued after the divide and left to overlap the model's serial walk.
+#if RC_DEC_RENORM==14
+#define RC_REFILL_W 0
+#elif defined(__AVX512F__) && (RCNUM%16)==0
 #define RC_REFILL_W 16
 #elif defined(__AVX2__) && (RCNUM%8)==0
 #define RC_REFILL_W 8
@@ -262,8 +269,8 @@ extern int g_use_vec;   // -C: the scalar reference coder
 #if RC_VEC && RC_DEC_SPLIT
 
 #if defined(__AVX512F__) && (RCNUM%8)==0
-#define RC_DIVALL()                                                      \
-  { for( uint _k=0; _k<RCNUM; _k+=8 ) {                                  \
+#define RC_DIV( k0, kn )                                                 \
+  { for( uint _k=(k0); _k<(k0)+(kn); _k+=8 ) {                           \
       __m256i _c = _mm256_loadu_si256( (const __m256i*)&code[_k] );      \
       __m256i _d = _mm256_srli_epi32(                                    \
           _mm256_loadu_si256( (const __m256i*)&range[_k] ), SCALElog );  \
@@ -274,12 +281,14 @@ extern int g_use_vec;   // -C: the scalar reference coder
              _mm256_cmpgt_epu32_mask( _t, _c ), _q,                      \
              _mm256_set1_epi32(1) );                                     \
       _mm256_storeu_si256( (__m256i*)&val[_k], _q ); } }
+#define RC_DIVALL() RC_DIV( 0, RCNUM )
 #else
 // no AVX-512 here: the scalar divide, which is what the shape is trying to
 // avoid. Correct, and only useful for checking the rest of the structure.
-#define RC_DIVALL()                                                      \
-  { RC_UNROLL for( uint _k=0; _k<RCNUM; _k++ )                           \
+#define RC_DIV( k0, kn )                                                 \
+  { RC_UNROLL for( uint _k=(k0); _k<(k0)+(kn); _k++ )                    \
       val[_k] = code[_k] / (range[_k]>>SCALElog); }
+#define RC_DIVALL() RC_DIV( 0, RCNUM )
 #endif
 
 #endif
