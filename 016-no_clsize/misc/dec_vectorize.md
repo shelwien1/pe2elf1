@@ -330,6 +330,30 @@ each node's `(code, range)` is a deterministic function of *c*. Nothing is
 ambiguous, and reading the whole tree before updating any of it is safe,
 because an update writes the node just left, never a descendant.
 
+### The state is nearly redundant, but only nearly
+
+Before costing it: is the per-node state even needed? If the leaf intervals
+could come from products of the `p`'s down each root-to-leaf path, prefix-summed
+to 256 thresholds, there would be no per-node state and no per-node renorm at
+all — one cumulative-frequency lookup for the whole byte. `misc/tree_cumul.cpp`
+compares that against the real walk over 20,000 random bytes:
+
+| | |
+|---|---|
+| symbol mismatches | **0.40%** |
+| bit mismatches | 0.09% |
+| first divergence at bit 0-4 | **0.0%** |
+| at bit 5 / 6 / 7 | 0.1% / 0.1% / 0.2% |
+
+So the state is 99.6% redundant, and the residue is the per-level
+`(range>>SCALElog)` truncation, whose error only accumulates enough to flip a
+bit at the deep levels. Exact for a nibble in this sample, never exact for a
+byte. A decoder needs all of it, so the shortcut is unusable — but it does mean
+the per-node cost is smaller than a first reading suggests: child 0's range
+**is** `rpre`, already computed for the comparison, and child 1 is two
+subtracts. The only real cost per node is the two child renorms, which cannot
+be deferred because `range` underflows within a nibble when `p` is extreme.
+
 **It loses at every depth.** `misc/tree_spec.cpp` speculates D bits at a time —
 D=1 is what the decoder does now, D=4 the nibble, D=8 the whole symbol:
 
@@ -356,21 +380,44 @@ two child renorms, comfortably more than 5. Removing an L1 hit from the chain
 is not worth the arithmetic it takes to remove it. Speculation pays when the
 load you avoid is a miss; here there are none.
 
-### The version that does pay is already in the tree
+### Correcting the premise: this decoder is not chain-bound
 
-`RC_EAGER_CTY` is depth-1 speculation of exactly this kind, and it is cheap for
-a specific reason: it speculates **only the load**, never the state. The two
-children of *c* are `cty[2c]` and `cty[2c+1]` — adjacent — so both come in one
-8-byte load whose address is known a bit early, and the next bit picks its half
-with a select. Two counters for one load and no extra coder arithmetic at all.
+Everything above is argued from "the counter load sits in a ~10 cycle per-bit
+chain, so getting it out is worth having". **That premise is false here, and
+`rc_config.inc` had already measured it.** From `RC_EAGER_CTY`'s own note:
 
-That is the whole distinction. Speculating the load is nearly free and already
-done; speculating the *state update* costs a multiply and two renorms per node,
-and no depth makes that back.
+> at 8.77 cyc/bit over ~25 instructions it is running ~2.9 IPC out of a
+> 1756-byte loop body, i.e. it is now FRONT-END bound, not chain-bound. The
+> lever moved.
 
-It also lands on the same wall every other attempt in this file hit, stated
-best in `RC_DEC_WAVE`'s own note: *"this decoder has no register budget left to
-buy latency with."*
+`RC_EAGER_CTY` *is* depth-1 speculation of exactly this kind, and the cheapest
+possible form of it — it speculates only the **load**, never the state, since
+`cty[2c]` and `cty[2c+1]` are adjacent and arrive in one 8-byte load whose
+address is known a bit early. Two counters for one load, no extra arithmetic.
+And it is **off by default, because it loses.**
+
+`misc/tree_spec.cpp`'s companion reproduces that ordering — speculating only
+the loads, state kept serial:
+
+| | cycles/byte | /bit |
+|---|---|---|
+| **load per bit, on the chain** | **60.6** | **7.57** |
+| both children, one load (EAGER_CTY) | 82.8 | 10.35 |
+| four grandchildren, two levels early | 93.0 | 11.62 |
+
+Deeper is monotonically worse, and even depth 1 loses.
+
+That is the unifying result for this whole file. A front-end-bound loop has no
+latency to buy, and every scheme in these seven sections pays instructions to
+buy latency: the gather, the group branch, the four-pass split, the staggered
+halves, the cheaper divide, and now speculation — which is the most extreme
+version, spending 32× the instruction count on a loop whose binding constraint
+is instruction bandwidth. It is not a coincidence that it loses hardest.
+
+The right question for this decoder is not "what is on the chain" but "what is
+in the loop body", which is what `RC_DEC_UNROLL`'s note says is worth
+re-asking, and what `RC_DEC_RENORM=8` — the smallest body of the ten shapes,
+431 instructions — is quietly the best answer to.
 
 ## 8. Where this leaves it
 
