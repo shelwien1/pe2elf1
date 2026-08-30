@@ -69,11 +69,10 @@ struct Model<0> : Coroutine {
   void* Save( void* r0 = 0 ) { return 0; }
   uint  Quit( void ) { return 0; }
 
-  // One full scalar coding pass over the cached block. Both scalar coders
-  // take it: the -C reference (carryless, checked against the vector pass
-  // byte for byte by t.sh) and the carry-propagating twin a lost carry
-  // falls back to. Bit i of the block goes to lane i%RCNUM -- the vector
-  // pass in do_process walks the same order, it has to.
+  // One full scalar coding pass over the cached block, for the
+  // carry-propagating twin a lost carry falls back to. Bit i of the block goes
+  // to lane i%RCNUM -- the vector pass in do_process walks the same order, it
+  // has to.
   template< class RC >
   void proc_block( RC& rc, uint blksize ) {
     uint i,j,c,bit;
@@ -119,9 +118,9 @@ struct Model<0> : Coroutine {
     rcio.rc_Write( (*this), rcY );
   }
 
-  // The scalar reference path (-C): carryless first, re-code with the twin
-  // if any lane let a carry escape. At RC_LOWBYTES=8 that is a ~2^-33 event
-  // per step, so the second pass practically never runs.
+  // Re-code the block with the carry-propagating twin, for a block where the
+  // vector pass let a carry escape. At RC_LOWBYTES=8 that is a ~2^-33 event
+  // per step, so this practically never runs.
   // A substream that did not fit its buffer cannot be described by the 2-byte
   // length header either, so there is nothing to fall back on -- say so instead
   // of writing a stream that will not decode. rc_io.inc's blkmax assert makes
@@ -229,7 +228,7 @@ struct Model<0> : Coroutine {
         // at a time, both working the low end of pbit[] so the buffer that
         // travels between them is CHUNK*16 bytes instead of 1 MB. RC_CHUNK is
         // even, so every chunk is a whole number of RCNUM-bit groups and bit i
-        // still lands in lane i%RCNUM exactly as the scalar reference puts it.
+        // still lands in lane i%RCNUM exactly as the unchunked pass puts it.
         for( uint _c0=0; _c0<blksize; _c0+=RC_CHUNK_N ) {
           uint _cn = blksize-_c0; if( _cn>RC_CHUNK_N ) _cn = RC_CHUNK_N;
 #if RC_CHUNK

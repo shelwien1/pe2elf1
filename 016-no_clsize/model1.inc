@@ -39,9 +39,9 @@ struct Model<1> : Coroutine {
   // the unchecked put0 and only calls chkout() once, at the block boundary.
   static_assert( int(outbufsize)>=int(BLKSIZE), "outbufsize must be at least BLKSIZE" );
 
-  // RC_DEC_PUTW's paired output store. Defined here rather than in Lib3
-  // because Lib3 is shared with other projects and syncs separately -- a knob
-  // in this directory must not need a matching Lib3. Both coroutine headers
+  // The group's two output bytes as one 16-bit store. Defined here rather than
+  // in Lib3 because Lib3 is shared with other projects and syncs separately --
+  // this directory must not need a matching Lib3. Both coroutine headers
   // expose outptr (coro3b.inc has it in the union pin[] aliases, so this is
   // the same cursor put0 advances), and put0 is *outptr++ = c with the one
   // chkout per block done by the caller, so the pair is unchecked the same way.
@@ -52,9 +52,9 @@ struct Model<1> : Coroutine {
     uint c,i,j,bit=0,p,blksize,state;
 
     // The generated coder: lane state as local arrays, methods as macros --
-    // sh_v1xN's arrangement, from the same rc.inc as the scalar reference.
+    // sh_v1xN's arrangement, generated from rc.inc by mk_kernel.sh.
     // Locals, not members, so nothing the loop stores through can alias them.
-// RC_DEC_ALIGN=0 drops the vector alignment here. The decoder touches the lane
+// No vector alignment on the decoder's lane arrays. The decoder touches the lane
 // state one scalar at a time and never as a vector, and ALIGN(VECSIZE) on a
 // local array forces `and rsp,-32` in the prologue -- which forces a frame
 // pointer and takes rbp out of the allocator for the whole function, the

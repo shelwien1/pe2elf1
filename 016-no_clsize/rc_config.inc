@@ -43,11 +43,10 @@ enum{ inpbufsize=1<<30, outbufsize=1<<30 };
 #ifndef RC_RCNUM
 #define RC_RCNUM 16
 #endif
-// The decoder emits a group's output bytes as one 16-bit store (what used to
-// be RC_DEC_PUTW, now unconditional), so a group has to be an even number of
-// output bytes: RCNUM/8 must be even, i.e. RCNUM a multiple of 16. Without
-// this the build is silently wrong rather than broken -- RCNUM=8 roundtripped
-// to garbage before the guard came back.
+// The decoder emits a group's output bytes as one 16-bit store, so a group has
+// to be an even number of output bytes: RCNUM/8 must be even, i.e. RCNUM a
+// multiple of 16. Without this guard the build is silently wrong rather than
+// broken -- RCNUM=8 roundtripped to garbage.
 #if (RC_RCNUM/8)%2 || RC_RCNUM%8
 #error "RC_RCNUM must be a multiple of 16: a group's output bytes are stored in pairs"
 #endif
@@ -204,60 +203,34 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // What to do about the lanes that staged nothing. A ShiftLow with n==0 leaves
 // the cursor where it was, so the window it staged is written again by that
 // lane's next store before anything reads the row: its store is dead and can
-// simply not happen. And that is the common case -- the coder emits about
-// 0.08 bytes per coded bit, so a lane renormalises on about one bit in
-// thirteen, only ~1.3 of 16 lanes owe a store, and a whole group stages
-// nothing about a quarter of the time.
+// simply not happen. That is the common case -- the coder emits about 0.08
+// bytes per coded bit, so only ~1.3 of 16 lanes owe a store, and a whole group
+// stages nothing about a quarter of the time.
 //
-//   0  scatter every lane every group
-//   1  scatter under a k-mask of the lanes with n!=0
-//   2  the same, and branch past the scatter when that mask is empty
-//   3  scatter every lane, but branch past the whole thing when every n is 0
-//   9  probe: no scatter at all. Does NOT encode correctly -- it is here to
-//      measure what the scatter costs on a given machine, which is what says
-//      whether any of this is worth doing there. Time it with a plain encode,
-//      `./coder c <file> /dev/null ../FSM0.txt 6`; do not put it through t.sh,
-//      whose decode step would be handed a stream that does not decode.
+//   0  commit every lane every group
+//   1  with a scatter (RC_SCATTER_W!=0), scatter under a k-mask of the lanes
+//      with n!=0; without one, branch past a group where no lane owes a store
 //
-// At RC_SCATTER_W==0 there is no mask, so only 0 (always commit) and non-zero
-// (branch past a group where no lane emitted a byte) differ there.
+// Both produce the same stream. 20 MB of enwik8, clang 18, best of 6x5 -- the
+// box turbos to 3.235 GHz measured, not its 2.8 GHz base, and every cycle
+// figure in this file is at the measured clock:
 //
-// 0..3 all produce the same stream -- t.sh checks each. On cascadelake only 0
-// and 1 are worth having, on either target. 20 MB of enwik8, clang 18, best of
-// 6x5 (the box turbos to 3.235 GHz measured, not its 2.8 GHz base -- every
-// cycle figure in this file is at the measured clock):
+//   AVX-512, -march=native     0 unmasked 75.9 MB/s     1 masked 74.7
+//   AVX2,    -march=skylake    0 scalar   66.9          1 branch 60.0
 //
-//   AVX-512, -march=native            AVX2, -march=skylake
-//   0  unmasked          75.9 MB/s    0  block of scalar stores  66.9 MB/s
-//   1  masked            74.7         3  + branch, 1 per group   60.0
-//   2  masked + branch   54.2         3  + branch, 1 per 8 lanes 50.0
-//   3  unmasked + branch 53.8         9  probe: no commit        75.1
-//   9  probe: no scatter 77.6
-//   -  probe: mask forced 0  74.8
+// So neither profile is leaving anything on the table: defs_avx512 takes 1 and
+// defs_avx2 takes 0. On AVX-512 a vpscatterdd with an empty mask costs what a
+// full one costs, so masking cannot buy anything and 1 only pays for the stn
+// array -- a probe with the scatter removed entirely ran 77.6, putting its
+// whole cost at 1.85 cycles per 16-bit group against 30.8 for the sweep, so
+// 2.2% of encode is the ceiling on any scheme that scatters less often.
+// Without a scatter the only lever is a branch, and one unpredictable branch
+// per group costs 11.2 cycles where it could save at most 2.8; it is the
+// misprediction, not the work. misc/avx2_vs_avx512.md has the probe pair.
 //
-// The probes are the whole story. On AVX-512 a vpscatterdd whose mask is empty
-// costs what one with a full mask costs, so masking cannot buy anything and 1
-// only pays for the stn array; and 0 against 9 puts the scatter's ENTIRE cost
-// at 1.85 cycles per 16-bit group against 30.8 for the sweep and 85.3 for the
-// encode, so 2.2% of encode is the ceiling on every scheme that aims to
-// scatter less often.
-//
-// On AVX2 the commit is worth far more -- 10.6 cycles per group -- and the
-// branch STILL loses: one branch per group, taken about a quarter of the time
-// and unpredictable, costs 11.2 cycles where it could save at most 2.8. Two
-// branches cost 32.6. There is no frequency at which this pays; it is the
-// misprediction, not the work.
-//
-// Where scatter cost scales with the number of active lanes -- Ice Lake and
-// later, Zen 4 -- 1 is the one to try on AVX-512: same instruction count, no
-// branch, ~1.3 lanes of work instead of 16. Build 9 first: if 0 and 9 are
-// close on your machine too, nothing in this direction can pay there either.
-//
-// 9 drops the commit on BOTH paths, so the same probe answers the same
-// question on AVX2 -- what the block of RCNUM scalar stores costs there. It
-// used to fall into the "non-zero means branch" reading at RC_SCATTER_W==0,
-// which measured the branch instead and made the two targets incomparable.
-// See misc/avx2_vs_avx512.md for what the pair of probes is for.
+// Where scatter cost DOES scale with the number of active lanes -- Ice Lake
+// and later, Zen 4 -- 1 is the one that could pay properly: same instruction
+// count, no branch, ~1.3 lanes of work instead of 16.
 #ifndef RC_SCATTER_SKIP
 #define RC_SCATTER_SKIP 0
 #endif
@@ -266,90 +239,57 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 
 
-// The encoder half of the same two lessons. rc_Renorm's f_DEC==0 arm has
-// always been `n = (range<sTOP) + (range<gTOP)`, a byte count in a local.
+// How rc_Renorm's f_DEC==0 arm picks the renorm shift. It has always been
+// `n = (range<sTOP) + (range<gTOP)`, a byte count in a local.
 //
-//   0  that
-//   1  the SHIFT COUNT from a nested ternary, in a const local
+//   0  that                                     <- defs_avx2
+//   1  the SHIFT COUNT from a nested ternary, in a const local  <- defs_avx512
 //   2  the same, in lane state (dsh) instead of a local
 //
-// The encoder is not the decoder: its sweep is vector code over lane arrays
-// that clang auto-vectorises, so a scalar local there is a vector register,
-// not sixteen scalar ones, and the pressure argument that makes the decoder
-// care does not apply -- to the LOCALS. It turns out the SELECTION is worth
-// something anyway.
-//
-// Measured here with twins on both arms, 15 round-robin rounds of best-of-3,
-// 100 MB of enwik8:
+// The encoder is not the decoder: its sweep is vector code that clang
+// auto-vectorises, so a scalar local there is one vector register, not sixteen
+// scalar ones, and the register-pressure argument behind the decoder's shape
+// does not apply. But the SELECTION is worth something anyway. Twins on both
+// arms, 15 round-robin rounds of best-of-3, 100 MB of enwik8:
 //
 //   NSEL=0   91.82  92.37   mean 92.10
 //   NSEL=1   93.97  94.51   mean 94.24    +2.3%
 //
-// The twins are 0.6% apart and the two arms do not overlap, so +2.3% is about
-// four times the noise floor. A first pass at 7 rounds without twins on both
-// sides read this as flat and this comment said so; it was under-powered.
+// Twins 0.6% apart and the arms do not overlap, so that is about four times
+// the noise floor. It reads bigger stacked on the rest of defs_avx512 (+7.1%
+// there), which is why the two profiles disagree and this stayed a knob. The
+// mechanism is thin -- {0,8,16} from two blends against {0,1,2} from two
+// compares and a vpslld -- so it is not obvious it survives a different box.
 //
-// The win is entirely in the ternary, and RC_ENC_RENORM below is the evidence:
-// carrying the shift count all the way into ShiftLow instead of round-tripping
-// it through >>3 and *8 adds nothing, and removing every local from ShiftLow's
-// body adds nothing. Only the 0 -> 1 selection change moves. The mechanism is
-// thin -- {0,8,16} from two blends against {0,1,2} from two compares and a
-// vpslld -- which is why the default has not moved: his box is not this one and
-// the last small one-box win in this file inverted on it. One build says
-// whether it transfers.
-//
-// His own log cannot answer it: the encode column there sits between 80.0 and
-// 81.8 MB/s across all forty rows, but those forty rows vary the DECODER's
-// shape, so they say nothing about this knob.
-//
-// 1 was also the bug that found rc_macro.pl's missing parentheses. ShiftLow's
-// body is `n*8`, so `ShiftLow( sh>>3 )` expanded to `sh>>3*8` -- `sh>>24`,
-// always 0 -- and encoded a stream whose decode never terminated. The
-// generator parenthesises its macro parameters now, and mk_kernel.sh fails if
-// it is stale.
+// misc/dec_renorm.md is where the decoder half of this was measured.
 #ifndef RC_ENC_NSEL
 #define RC_ENC_NSEL 0
 #endif
 
-// The rest of the encoder's renorm, and the thing RC_ENC_NSEL alone could not
-// reach. That knob picks the SHIFT COUNT with a ternary -- and then handed
-// ShiftLow `dsh>>3`, whose first statement was `uint sh = n*8`. The shift
-// count was selected, divided by eight, passed, and multiplied by eight again,
-// on the chain, every bit. Whatever the ternary was worth, the round trip was
-// spending it: that is why 0/1/2 all measured inside the noise.
+// The rest of the encoder's renorm: what ShiftLow is handed and what it
+// declares. At RC_ENC_NSEL>=1 the shift count is selected and then handed to
+// ShiftLow as `dsh>>3`, whose first statement was `uint sh = n*8` -- selected,
+// divided by eight, passed, multiplied by eight again, on the chain.
 //
-// This knob fixes the direction and then keeps going, because ShiftLow still
-// declares three more locals -- sh, cl and _hi -- and cl and _hi are each read
-// exactly once.
-//
-//   0  ShiftLow takes the BYTE count and derives the shift: `uint sh = n*8`,
-//      plus `uint cl` and `uint _hi`                              <- default
+//   0  ShiftLow takes the BYTE count and derives the shift, plus locals for
+//      cl and _hi                                            <- defs_avx2
 //   1  ShiftLow takes the SHIFT COUNT and derives the byte count for tmpptr,
-//      which is the only thing that wants it. No sh local, no round trip
+//      the only thing that wants it. No round trip
 //   2  1, and cl and _hi written out where they were read, so the body
-//      declares nothing at all
+//      declares nothing at all                               <- defs_avx512
 //
-// Measured, 15 rounds, twins, against the 92.10 baseline of RC_ENC_NSEL=0:
+// Measured, 15 rounds, twins, against RC_ENC_NSEL=0's 92.10 baseline:
 //
 //   RC_ENC_RENORM  0      1      2
-//   RC_ENC_NSEL=1  92.29  91.58  91.88     (and 92.05/91.71 for the 2/2 twins)
+//   RC_ENC_NSEL=1  92.29  91.58  91.88   (2/2 twins 92.05/91.71)
 //
-// So the answer is no. Every shape that uses the ternary lands at +2 to +2.7%
-// and they are within a noise floor of each other; the round trip and the
-// locals are both free. clang folds (x>>3)*8 back to a mask, and the locals
-// are vector registers in the sweep, exactly as the argument above says. The
-// knob stays because it makes the encoder's renorm say what it means and
-// because it is the control that proves the ternary is the whole effect --
-// not because it is faster.
+// All within a noise floor of each other: the round trip and the locals are
+// both free, because clang folds (x>>3)*8 back to a mask and the locals are
+// vector registers in the sweep. The knob stays because it makes the encoder's
+// renorm say what it means, and because it is the control proving the ternary
+// in RC_ENC_NSEL is the whole effect -- not because it is faster.
 //
-// The direction is the point. Downstream of the selection, three of the four
-// uses want the shift -- lowh<<sh, lowl<<sh, the _hi extraction -- and only
-// tmpptr wants the count, so selecting the shift and deriving the count costs
-// one shift where the reverse costs a multiply on the chain. It is the same
-// argument the decoder's dsh made, and RC_ENC_NSEL=1/2 was making it in the
-// right place and then undoing it one call deeper.
-//
-// stn[] takes the count as a store-is-dead flag and model.inc only ever
+// stn[] takes the byte count only as a store-is-dead flag and model.inc only
 // compares it against zero, so handing it the shift instead is the same
 // predicate with no fixup.
 //
