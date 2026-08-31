@@ -62,14 +62,16 @@ give, not a prediction.
 
 ## Integrated, it loses -- and the tree is not why
 
-`RC_DEC_IFTREE` (rc_config.inc, default 0) is the probe's shape in the real
-decoder: `mk_iftree.py` generates `rc_iftree.inc` at build time, the walk does
+It was built into `model1.inc` behind a depth knob, measured, and taken back
+out; the numbers are what is left of it.  The shape was: a generator emitting
+the tree at build time like `mk_kernel.sh` does the coder, a walk that does
 nothing but the compares -- each node's multiply has to sit inside the branch
-structure, because the frequency is what the context selects -- and it leaves
-`rpre` in a small array.  The range/rpre update is batched over the lane arrays
-afterwards, and the renorm is one pass at the end over all RCNUM lanes.  The
-knob is the tree's depth; below it the remaining bits run as a loop.  Every
-depth codes the same stream and round-trips the default encoder.
+structure, because the frequency is what the context selects -- leaving `rpre`
+in a small array; the range/rpre update batched over the lane arrays
+afterwards; and the renorm one pass at the end over all RCNUM lanes.  The knob
+was the tree's depth, with the remaining bits below it running as a loop.
+Every depth coded the same stream and round-tripped the default encoder, so
+the arrangement is sound -- it is just slower.
 
 ```
   depth   binary    dec MB/s      (base: 51224 bytes, 46.2 MB/s)
@@ -85,13 +87,19 @@ the plain loop with the batched update and nothing else, and it is already
 0.64x.  So the restructuring costs 36% and the tree then wins 15% of it back
 (29.40 -> 33.71) without ever reaching the loop it replaced.
 
-The tree is doing what the probe said it does.  What the probe did not model is
+The tree does what the probe said it does.  What the probe did not model is
 the cost of taking the update out of `rc_Process`.  There, a lane's `code`,
 `range` and `rpre` live in registers across a tight window and the counter
 update is two loads and a store; here `pre[]` is written by the walk and read
 back by the batch, `range[]` and `rpre[]` are written by the batch and read
 again by the renorm, and all of it goes through stack arrays that the loop
 version never materialises.  That is the 36%.
+
+One implementation note worth keeping: renormalising at the END of a group
+needs normalised state on ENTRY, and the block-length header above the group
+loop runs through `rc_Process`, which renormalises at the start and leaves
+`range` wherever the last bit put it.  One renorm before the loop squares that
+up; without it the first group decodes garbage.
 
 The batch does not vectorize, with or without `RC_UNROLL` on it -- clang
 reports the same four vectorized loops in the model1 translation unit either

@@ -11,9 +11,6 @@ rc_kernel0.c
 rc_kernel1.c
 rc_vecD.inc
 
-# generated from nothing but the tree shape by mk_iftree.py, per build
-rc_iftree.inc
-
 # t.sh scratch
 t.enc
 t.dec

@@ -112,11 +112,6 @@ DIRNAM=$(basename "$PWD")
 # committed: it is derived, and derived differently for every -D set.
 CPP="$CXX -E" ./mk_kernel.sh "$@"
 
-# rc_iftree.inc -- the decoder's optional branch-tree byte (RC_DEC_IFTREE).
-# Generated unconditionally: it depends on nothing but the tree shape, and
-# generating it always keeps the -D set from deciding whether a file exists.
-python3 ./mk_iftree.py rc_iftree.inc "${IFTDEPTH:-8}" >/dev/null
-
 #--- compile -----------------------------------------------------------------
 src="coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp"
 

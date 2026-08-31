@@ -483,17 +483,6 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //     11   62,487,243         2048      64 KB
 //     12   62,487,412         4096     128 KB
 //     13   62,487,677         8192     256 KB
-// The decoder's byte as a generated 255-node tree of static branch sites
-// instead of an 8-step loop -- one node per context, so cty[c] is a
-// compile-time address and every node gets its own predictor entry. The eight
-// lanes a byte reads are independent, so the renorms hoist out and the tree
-// holds only the context chain, which is what the predictor runs ahead of.
-// Codes the same stream either way. Standalone probe: 1.27x on enwik8, 0.94x
-// on incompressible data -- see misc/iftree_lanes.md. RCNUM=16 only.
-#ifndef RC_DEC_IFTREE
-#define RC_DEC_IFTREE 0
-#endif
-
 #ifndef RC_HDR_CTXBITS
 #define RC_HDR_CTXBITS 10
 #endif
