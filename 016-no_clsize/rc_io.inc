@@ -62,10 +62,11 @@ struct RC_IO {
   // lanes leaves most of them with no work -- and owes the stream nothing.
   uint rc_len( void ) const { return ptr<beg ? uint(beg-ptr) : 0; }
 
-  // 0: rc_Quit drops as many flush bytes as the fill allows, and the length in
-  // the block header tells the reader where the substream ended. See
-  // RC_HDR_IO for the stream that has no such length.
-  static const uint QUIT_FLUSH = 0;
+  // rc_Quit drops as many flush bytes as the fill allows, and rc_Read's 0xFF
+  // padding stands in for them; the length in the block header is what tells
+  // the reader where the substream ended. See RC_HDR_IO for the stream that
+  // has neither.
+  static const uint QUIT_ALIGN = 0;
 };
 
 
@@ -83,45 +84,51 @@ struct RC_IO {
 //  that position IS the length. Here the reader starts at the first byte and
 //  walks up.
 //
-//  And with a full-length flush, which is what makes the stream exactly as
-//  long as its reader. A reader consumes CODBYTES at rc_Init plus one byte per
-//  renorm; a writer emits one byte per renorm plus the flush, less the RC_SKIP
-//  zero prefix. The renorm counts are the same sequence on both sides, so
+//  And with rc_Quit's ALIGNED flush rather than its 0xFF one, which is where
+//  the byte count comes from. A reader consumes CODBYTES at rc_Init plus one
+//  byte per renorm; a writer emits one byte per renorm plus the flush, less
+//  the RC_SKIP zero prefix. The renorm counts are the same sequence on both
+//  sides, so
 //
 //      bytes read = bytes written + LOWBYTES - (flush bytes)
 //
-//  and a flush of all LOWBYTES makes those equal. The reader stops on the last
-//  byte the writer wrote, and the payload starts at the next one -- no length,
-//  no marker, nothing to over-read.
+//  and the flush length settles the over-read. The reader cannot be told what
+//  it was -- that is the length again -- so it has to derive it, and rc_Quit's
+//  j = (bsr(range)-1)/8 is derived from the one value both sides hold at the
+//  flush. The reader mirrors the flush's renorm (FinishDecode) and asks its
+//  own `range` the same question; the j bytes it over-read are the payload's
+//  first, kept in tail[] for rc_Read to put back.
 //
-//  It is worth being clear about why the flush cannot be trimmed here, since
-//  trimming it is free everywhere else. rc_Quit drops trailing bytes that the
-//  fill made 0xFF, and a payload substream can afford that because rc_Read
-//  pads below it with 0xFF: the reader that runs off the end reads back
-//  exactly what was dropped. This stream has no pad under it. What follows it
-//  is the payload, and a reader that ran off the end would fold those bytes
-//  into `code` in place of the 0xFF the writer assumed -- which lowers the
-//  reconstructed value below `low` whenever they are smaller, and flips the
-//  last bits decoded. Measured, before this was a full flush: at RCNUM=32 the
-//  head byte of the last lane of block 9 of enwik8 came back 0x00 for 0x01,
-//  one bit, from a three-byte over-read landing on payload.
-//
-//  That costs LOWBYTES-(what the fill would have dropped) bytes a block, about
-//  three: the price of a stream that delimits itself. It could be won back by
-//  flushing against the payload bytes that actually follow instead of against
-//  0xFF -- range >= sTOP means the interval always contains a value ending in
-//  any given CODBYTES-1 bytes -- but that couples the flush to the payload and
-//  has a carry case; see misc/flush_bits.md.
+//  Why the flush has to be the aligned one, and not the cheaper 0xFF one that
+//  every payload substream uses: rc_Quit drops trailing bytes that the fill
+//  made 0xFF, and a payload row can afford that because rc_Read pads below it
+//  with 0xFF -- the reader running off the end reads back exactly what was
+//  dropped. This stream has no pad under it. What follows is the payload, so a
+//  reader running off the end folds THOSE bytes into `code` in place of the
+//  0xFF the writer assumed, which drops the reconstructed value below `low`
+//  whenever they are smaller and flips the last bits decoded. Measured, when
+//  this stream still used the 0xFF flush: at RCNUM=32 the head byte of the
+//  last lane of block 9 of enwik8 came back 0x00 for 0x01 -- one bit, from a
+//  three-byte over-read landing on payload. The aligned flush is the fix: it
+//  drops only bytes that any value may occupy.
 //----------------------------------------------------------------------------
 template< class Rangecoder >
 struct RC_HDR_IO {
 
-  static const uint QUIT_FLUSH = RC_LOWBYTES;
+  static const uint QUIT_ALIGN = 1;
 
   Coroutine* C;
-  uint  nio;                // bytes read (decode) or emitted (encode) so far
+  uint  nio;                 // bytes read (decode) or emitted (encode) so far
+  uint  jdrop;               // decode: how many of tail[] are the payload's
+  byte  tail[RC_CODBYTES];   // decode: the last bytes read, newest last
 
-  byte get( void ) { nio++; return byte(C->get()); }
+  byte get( void ) {
+    const byte c = byte(C->get());
+    for( uint i=0; i+1<RC_CODBYTES; i++ ) tail[i] = tail[i+1];
+    tail[RC_CODBYTES-1] = c;
+    nio++;
+    return c;
+  }
 
   // The RC_SKIP leading bytes are low's zero prefix, the same one rc_Write
   // drops from a lane's row -- the accumulator is LOWBYTES wide and only its
@@ -138,7 +145,8 @@ struct RC_HDR_IO {
   }
 
   void StartDecode( Coroutine& c ) {
-    C = &c; nio = 0;
+    C = &c; nio = 0; jdrop = 0;
+    for( uint i=0; i<RC_CODBYTES; i++ ) tail[i] = 0xFF;
     ((Rangecoder*)this)->rc_Init();   // reads CODBYTES bytes
   }
 
@@ -147,7 +155,15 @@ struct RC_HDR_IO {
   // rc_Quit opens with a renorm, to apply the last pending rpre; rc_Quit's
   // body is encoder-only, so the reader has to make that renorm itself or it
   // stops one shift short of the writer and the byte count does not line up.
-  void FinishDecode( void ) { ((Rangecoder*)this)->rc_Renorm(); }
+  // Then `range` is what it was when the writer chose its flush length, and
+  // asking it the same question gives back the same j.
+  void FinishDecode( void ) {
+    ((Rangecoder*)this)->rc_Renorm();
+    jdrop = ((Rangecoder*)this)->quit_drop();
+  }
+
+  // decode: the over-read bytes, oldest first -- the payload's first jdrop
+  const byte* spill( void ) const { return tail + (RC_CODBYTES-jdrop); }
 
   uint rc_len ( void ) const { return (nio>RC_SKIP) ? nio-RC_SKIP : 0; }  // encode
   uint rc_read( void ) const { return nio; }                              // decode
@@ -307,11 +323,22 @@ struct RCio {
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) head[rcidx] = rclen[rcidx] ? byte(hdr.GetBits(8)) : 0xFF;
     hdr.FinishDecode();
 
+    // ...and the bytes the header stream's reader over-read: they are the
+    // payload's, and they go back in front of it. They can span lanes, so this
+    // is a prefix over the whole run rather than a fix-up on lane 0. At the end
+    // of the file there may be nothing for them to go back into, and they will
+    // be the 0xFF that C.get() gives past EOF -- which is what the writer's
+    // aligned flush allowed for anyway.
+    const byte* sp = hdr.spill();
+    uint spn = hdr.jdrop;
+
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
       if( l ) {
         tmpbuf[rcidx][FF_PADSIZE] = head[rcidx];
-        for( i=0; i<l-1; i+=n ) {
+        i = 0;
+        for( ; spn && (i<l-1); spn--,i++ ) tmpbuf[rcidx][FF_PADSIZE+1+i] = *sp++;
+        for( ; i<l-1; i+=n ) {
           C.chkinp(); n = Min<uint>( l-1-i, C.getinplen() );
           // truncated stream: chkinp has nothing left to hand us. Stop rather
           // than spin -- the FF padding below fills the hole and the block

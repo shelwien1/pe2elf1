@@ -153,74 +153,108 @@ reader knows where its last byte is before it starts.  The header stream's
 length is what it is on its way to describing, so its reader has to start at
 the first byte and walk up.
 
-**A full flush, not a trimmed one.**  A reader consumes CODBYTES at `rc_Init`
-plus one byte per renorm; a writer emits one byte per renorm plus the flush,
-less the RC_SKIP zero prefix.  The renorm counts are the same sequence on both
-sides, so
+**An aligned flush, not the 0xFF one.**  A reader consumes CODBYTES at
+`rc_Init` plus one byte per renorm; a writer emits one byte per renorm plus the
+flush, less the RC_SKIP zero prefix.  The renorm counts are the same sequence
+on both sides, so
 
 ```
   bytes read = bytes written + LOWBYTES - (flush bytes)
 ```
 
-A flush of all LOWBYTES makes those equal, and the reader stops on the last
-byte the writer wrote.  No length field, no marker, nothing over-read -- the
-stream delimits itself.
+The flush length settles the over-read, and the reader has to derive it -- it
+cannot be told, because that is the length again.  Both of those come out of
+`rc_Quit`, and neither works with the flush every payload substream uses.
 
-### Why the trim cannot come along
+### Why the 0xFF trim cannot come along
 
-The obvious economy is to keep the trimmed flush and let the reader work out
-its own over-read: pin the flush at LOWBYTES-j and the reader consumes exactly
-j bytes past the end, so it can hand them back.  `range >= sTOP` at every flush
-puts the fill's run of 1 bits at CODBYTES-1 bytes or more, so j = CODBYTES-1
-always fits.
-
-It decodes wrong, and the reason is the whole mechanism this document is about.
-`rc_Quit` may drop a trailing 0xFF byte **because the reader reads 0xFF past
-the end of a substream** -- `rc_Read` pads below every payload row with them.
-The header stream has no pad under it.  What follows it is the payload, so a
-reader running off the end folds *payload bytes* into `code` where the writer
-assumed 0xFF, and whenever they are smaller the reconstructed value drops below
-`low` and the last bits decoded flip.
+`rc_Quit` may drop a trailing byte **because the reader reads 0xFF past the end
+of a substream** -- `rc_Read` pads below every payload row with them, so a
+reader running off the end reads back exactly what was dropped.  The header
+stream has no pad under it.  What follows is the payload, so a reader running
+off the end folds *payload bytes* into `code` where the writer assumed 0xFF,
+and whenever they are smaller the reconstructed value drops below `low` and the
+last bits decoded flip.
 
 It is a low-probability event, which is the dangerous kind.  enwik8 at RCNUM=16
-round-tripped clean; at RCNUM=32 the matrix caught it, and it was one bit: the
+round-tripped clean; the matrix caught it at RCNUM=32, and it was one bit: the
 head byte of the last lane of block 9, 0x00 for 0x01, from a three-byte
 over-read landing on payload.  The header decoder's own accounting was exact --
 97 bytes written, 100 read, every block -- so the byte positions were right and
 only the value was wrong.
 
-### What it costs, and how to get it back
+### The aligned flush
+
+The bytes this stream drops have to be bytes that *any* value may occupy.  So
+instead of the largest value in the interval ending in 1 bits, flush an
+**aligned block**: round `low` up to a multiple of 2^(8j), write the top
+LOWBYTES-j bytes of that, and whatever the reader picks up for the bottom 8j
+bits it lands in [A, A+2^(8j)) -- which is wholly inside the interval.
+
+A 2^k-aligned block fits in [low, low+range) exactly when
+
+```
+  (low + kmask) | kmask  <  high        kmask = 2^k - 1
+```
+
+which is the fill test with `low` rounded **up** instead of down -- the whole
+difference between the two flushes.  Equivalently `ceil(low/2^k) <
+floor(high/2^k)`, against the fill's `floor(low/2^k) < floor(high/2^k)`.  The
+similar-looking `low <= ((high-1) & ~kmask) && high > (low|kmask)` is not the
+same test and over-accepts: it takes the top block's *base* being above `low`
+and the bottom block's *top* being below `high`, which two different blocks can
+satisfy while neither fits.  2625 false accepts in 900,000 random intervals.
+
+### j comes from `range`, not from the interval
+
+The maximal k for a given interval is not usable, because the reader cannot
+compute it.  At the flush the writer holds `low` and the reader holds `code`;
+the only value they share is `range`.  So j has to be a function of `range`
+alone.
+
+Any interval of length >= 2^(k+1) contains a 2^k-aligned block whatever `low`
+is, and that bound is tight -- over random intervals the smallest achievable
+kmax is exactly bsr(range)-1 for every bsr.  So the best such function is
+
+```c
+  j = (bsr(range) - 1) / 8;
+```
+
+one bit scan, and the reader mirrors `rc_Quit`'s opening renorm (`FinishDecode`)
+and asks its own `range` the same question.  At CODBYTES=4, `range` after the
+renorm is in [2^24, 2^32), so j is 3 whenever range >= 2^25 and 2 below it.
+Measured over enwik8:
+
+```
+  j=3   1480 blocks   96.99%
+  j=2     46 blocks    3.01%
+  mean header stream   49.00 bytes   (48 raw)
+```
+
+The one thing to watch is that rounding `low` up can carry out of the
+accumulator.  That is a carry out of low like any other and folds into
+`Carry`, and it cannot collide with one already pending: a pending carry means
+low has just wrapped, so it is under 2^32 and nowhere near the top.  It does
+mean the aligned flush needs the carry-propagating `ShiftLow`, which a
+`static_assert` on RC_CARRYLESS enforces.  The vector coder is untouched
+either way -- the switch is in the scalar body, and `n -= k/8` is what the
+generated kernel still carries.
+
+### What it costs
 
 ```
   head row, raw (the previous format)         62,513,092
-  header coded, trimmed flush (wrong)         62,514,572    +1,480
-  header coded, full flush                    62,519,150    +6,058
+  header coded, 0xFF flush (wrong)            62,514,572   +1,480
+  header coded, full LOWBYTES flush           62,519,150   +6,058
+  header coded, aligned flush                 62,514,618   +1,526
 ```
 
-+1 byte a block for the coder itself, and +3 more for the untrimmed flush:
-0.0097% of the file, against the ~20 KB an order-0 header model is worth (see
-below).  Encode and decode speed are unchanged -- round-robin twin builds, best
-of 6 passes, 3 rounds: enc 81.58 -> 81.56 MB/s, dec 47.20 -> 46.57.
-
-The three bytes a block are recoverable, and the way to do it is to stop
-flushing against 0xFF and flush against the bytes that are actually there.  The
-writer knows them -- at `rc_Write` the payload is already in `tmpbuf`.  Let P be
-the next j bytes and M = 2^(8j)-1; take
-
-```
-  x = (low & ~M) | P;      if( x < low ) x += M+1;
-```
-
-`x` ends in P by construction, and it is always inside the interval: `x` lies
-in [low-M, low+M], so the branch puts it in (low, low+M], and `range >= sTOP >
-M` keeps that under `high`.  Write the top LOWBYTES-j bytes of `x` and the
-reader's over-read reconstructs it exactly.
-
-Two things to be careful of if it gets built.  `x += M+1` can carry out of the
-LOWBYTES-wide accumulator, which is the `Carry`/`FFNum` path and not just an
-add.  And the last block's payload can be shorter than j bytes -- an empty
-input leaves every lane with nothing but its head byte -- in which case the
-file really does end there and P is 0xFF after all.
++1 byte a block, which is the coder itself: 49 bytes of stream for 48 bytes of
+fields.  The aligned flush gives back 4,532 of the full flush's 6,058, and the
+46 bytes it still trails the (incorrect) 0xFF flush by are exactly the 46
+blocks that landed on j=2.  Encode and decode speed are unchanged -- round-robin
+twin builds, best of 6 passes, 3 rounds, medians: enc 78.5 -> 80.6 MB/s, dec
+46.6 -> 46.9, inside a 13% within-build spread.
 
 ## What the header is worth
 

@@ -38,10 +38,13 @@
  // range>0 keeps them apart. (common.inc's log2i is 32-bit.)
 #if defined(__GNUC__) || defined(__clang__)
  #define RC_BSR64( x ) uint( 63-__builtin_clzll(x) )
+ #define RC_BSR32( x ) uint( 31-__builtin_clz(x) )
 #elif defined(_MSC_VER)
  #define RC_BSR64( x ) [&]{ unsigned long i_; _BitScanReverse64(&i_,(x)); return uint(i_); }()
+ #define RC_BSR32( x ) [&]{ unsigned long i_; _BitScanReverse  (&i_,(x)); return uint(i_); }()
 #else
  #define RC_BSR64( x ) [&]{ qword v_=(x); uint i_=0; while( v_>>=1 ) i_++; return i_; }()
+ #define RC_BSR32( x ) [&]{ uint  v_=(x); uint i_=0; while( v_>>=1 ) i_++; return i_; }()
 #endif
 
 template< int f_DEC >
@@ -52,6 +55,16 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
   using t_IO::put;
 
   static const int  RC_f_DEC  = f_DEC;    // so RangecoderN can read it back
+
+  // rc_Quit's aligned flush rounds low up, which can carry out of the
+  // accumulator, and only the carry-propagating ShiftLow can carry it.
+  // Not for the kernel: rc_soa.pl lifts this region into do_process, where
+  // there is no t_IO -- and no vector build sets QUIT_ALIGN in any case.
+#if !RC_VECOUT
+  static_assert( !(RC_CARRYLESS) || !t_IO::QUIT_ALIGN,
+    "RC_CARRYLESS with QUIT_ALIGN: the aligned flush's round-up has nowhere "
+    "to put a carry out of low" );
+#endif
 
   static const uint CODBYTES = RC_CODBYTES;
   static const uint LOWBYTES = RC_LOWBYTES;
@@ -428,6 +441,11 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
     rpre = tmp;   // low += tmp / code -= tmp, deferred to the next renorm
   }
 
+  // The aligned flush's byte count, from `range` alone -- which is why the
+  // reader can ask for it after mirroring rc_Quit's renorm and know how many
+  // of the bytes it just read belong to whatever follows. See rc_Quit.
+  uint quit_drop( void ) const { return (RC_BSR32(range)-1)/8; }
+
   void rc_Init( void ) {
     low_Init();
     rpre  = 0;
@@ -506,6 +524,46 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
       // Carry=0: cache   .. FF x FFNum .. low
       // Carry=1: cache+1 .. 00 x FFNum .. low
       qword llow = low_Get();
+
+      if( t_IO::QUIT_ALIGN ) {
+
+        // The aligned flush, for a stream that has no 0xFF pad under it: the
+        // bytes it drops come back as whatever follows in the file, so they
+        // have to be bytes ANY value can occupy. That means flushing an
+        // ALIGNED BLOCK -- pick j, round low up to a multiple of 2^(8j) and
+        // write the top LOWBYTES-j bytes of that. Whatever the reader picks up
+        // for the bottom 8j bits, it lands in [A, A+2^(8j)), and that whole
+        // block is inside the interval.
+        //
+        // A 2^m-aligned block fits in [low, low+range) exactly when
+        //
+        //     (low+2^m-1) | (2^m-1)  <  low+range
+        //
+        // -- the fill test with low rounded UP instead of down, which is the
+        // whole difference between the two flushes. But j cannot be chosen
+        // from that: `range` is the only thing the writer and the reader both
+        // hold here (the writer has low, the reader has code), so j has to be
+        // a function of range alone. Any interval of length >= 2^(m+1)
+        // contains a 2^m-aligned block whatever low is, and that bound is
+        // tight, so the best such function is
+        //
+        //     j = (bsr(range)-1)/8
+        //
+        // At CODBYTES=4 that is 3 whenever range >= 2^25 and 2 below it, so
+        // the flush costs about one byte more per block than the FF one.
+        const uint  j  = (RC_BSR32(range)-1)/8;
+        const qword km = (qword(1)<<(8*j))-1;
+        const qword A  = (llow + km) & ~km;
+        // The round-up can leave the accumulator, which is a carry out of low
+        // like any other. It cannot collide with one already pending: a
+        // pending Carry means low just wrapped, so llow is under 2^32 and
+        // nowhere near the top.
+        Carry |= (A<llow);
+        llow = A;
+        n -= j;
+
+      } else {
+
       const qword high = llow + range;
       const uint  hic  = (high<llow);   // llow+range can leave the qword at LOWBYTES==8
 
@@ -530,13 +588,9 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
       // at least 3 of the LOWBYTES it would otherwise emit.
       const uint k = hic ? LOWBITS : RC_BSR64( llow ^ high );
       llow |= (k>=64) ? ~qword(0) : ((qword(1)<<k)-1);
-      // t_IO::QUIT_FLUSH is 0 for a substream the block header gives a length:
-      // drop every byte the fill allows, and let rc_Read's 0xFF padding stand
-      // in for them. A stream with no length written down anywhere cannot --
-      // its reader would run off the end into whatever follows, which is not
-      // 0xFF -- so it names its flush length instead and drops nothing. Both
-      // are compile-time constants; only one arm survives.
-      if( t_IO::QUIT_FLUSH ) n = t_IO::QUIT_FLUSH; else n -= k/8;
+      n -= k/8;
+
+      }
 
 #if RC_CARRYLESS
 
@@ -577,4 +631,5 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
 #undef RC_CARRY_COUNT
 #undef RC_RANGE_INIT
 #undef RC_BSR64
+#undef RC_BSR32
 #undef RC_IO_BASE
