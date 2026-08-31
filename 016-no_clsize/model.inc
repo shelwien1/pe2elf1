@@ -93,9 +93,58 @@
 #ifndef RANS_BIAS
 #define RANS_BIAS 0.99999809265f     /* 1 - 2^-19 */
 #endif
+//  RANS_DIV takes the two INTEGERS and returns the integer quotient, so that
+//  the conversion is part of what is being chosen here rather than fixed by
+//  rans.inc. The casts go through int, not uint: x is below 2^31 and the
+//  quotient below 2^16 by construction, and the signed conversions are
+//  vcvtdq2ps/vcvttps2dq, which every target has -- the unsigned ones are
+//  AVX-512 only. C-style casts, because the functional form float(int(b)) is
+//  the vexing parse: `int(b)` reads as a declaration of b, which makes the
+//  whole thing a cast to the function type float(int).
 #ifndef RANS_DIV
-#define RANS_DIV( a, b ) ( (a) * (RANS_BIAS/(b)) )
+#define RANS_DIV( a, b ) \
+  ( (uint)(int)( (float)(int)(a) * (RANS_BIAS/(float)(int)(b)) ) )
 #endif
+
+//  Six ways to compute that quotient, all of them correct -- any correct
+//  division gives the same stream, so they are directly comparable. Encode
+//  MB/s, best of 4-5 round-robin rounds on 20 MB of enwik8, cascadelake:
+//
+//    64.4  as shipped: reciprocal beside the chain, one vmulps on it
+//    57.9  ((a)*RANS_BIAS)/(b) -- the same value, the divide ON the chain
+//    57.4  vrcp14ps + a Newton step (-ffast-math; -mrecip does not reach it)
+//    ~58   an ALU-only reciprocal seeded from the exponent field
+//    50.5  (double)a/(double)b -- exact, so the fixup below is never taken
+//    42.6  the reciprocal from a 32768-entry table, gathered
+//
+//  The ordering is the whole answer, and it is not the one you would guess
+//  from "a divide is expensive". Getting the divider off the loop-carried
+//  chain is worth 11% because vdivps is ~23 cycles of latency. After that the
+//  sweep is bound by instruction throughput, so every scheme that trades the
+//  divider for other work loses: the divider port is otherwise idle and the
+//  ALU and load ports are not. Doubles halve the lanes per register. The
+//  gather is microcoded, ~12 uops for 8 lanes, and loses a third of encode
+//  all by itself even though the model is a 256-state FSM and only ~512 of
+//  the table's entries are ever touched.
+//
+//  Nor is there room in the instruction count for a cheaper table: the
+//  gathered build's sweep is 83 instructions against 82: reading the
+//  reciprocal from memory does not remove the work, it moves it. So the
+//  variant this suggests -- the model pass precomputing RANS_BIAS/f into a
+//  parallel array, which it could do from a 512-entry table with no gather,
+//  since f has at most 512 distinct values -- would buy at most one
+//  instruction of 82 and pay four bytes per coded bit of extra traffic
+//  through pbit[]. Not tried, and that is why.
+//
+//  Anything built on a fast exp/log -- Schraudolph's bit-trick pair, and the
+//  polynomial variants -- is out on precision rather than on speed. The
+//  correction below can absorb a quotient one low and nothing else, which
+//  puts f*rcp inside a window of width 2^-XSH: 1.5e-5 at the default KLOG,
+//  so the reciprocal needs ~17 bits of relative accuracy and has to sit
+//  inside that window. The raw Schraudolph log2/exp2 pair carries ~3% error,
+//  about 5 bits. Even at RC_RANS_KLOG=1, where the window widens to 2^-9,
+//  it is four bits short -- and that setting costs 105,765 bytes of enwik8.
+//  Closing the gap takes more instructions than the divide it replaces.
 
 //  Where it is NOT worth putting it: ahead of the renormalisation. The
 //  quotient rans.inc wants is floor((x>>sh)/f), and floor(floor(x/2^sh)/f) is

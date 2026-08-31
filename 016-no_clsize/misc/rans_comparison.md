@@ -365,28 +365,57 @@ The interesting part is *why* the encoder resists, because four independent
 measurements say the same thing and none of them is the one you would guess.
 Round-robin on 20 MB of enwik8, cascadelake:
 
-| change to the encode sweep | MB/s |
+| how the encoder computes `x/f` -- all of these are correct | MB/s |
 |---|---|
-| the divide on the loop-carried chain, `((a)*BIAS)/(b)` | 57.85 |
-| **as shipped, reciprocal beside the chain, `(a)*(BIAS/(b))`** | **64.39** |
-| `vdivps` replaced by `vrcp14ps` + a Newton step (`-ffast-math`) | 57.37 |
+| **as shipped: `(a)*(BIAS/(b))`, the reciprocal beside the chain** | **64.4** |
+| `((a)*BIAS)/(b)` -- the same value, the divide ON the chain | 57.9 |
+| `vrcp14ps` + a Newton step (`-ffast-math`) | 57.4 |
+| an ALU-only reciprocal seeded from the exponent field | ~58 |
+| `(double)a/(double)b` -- exact, so the fixup is never taken | 50.5 |
+| the reciprocal from a 32768-entry table, gathered | 42.6 |
+
+and, from the same sweep for other candidates:
+
+| | |
+|---|---|
 | the divide moved ahead of the renormalisation (one instruction shorter) | 63.0 |
 | `RCNUM=32`, twice the independent chains | flat |
 | the staged store committed directly instead of scattered | 56.75 |
 
 Getting the divider *off* the chain is worth 11%, because a `vdivps` is ~23
-cycles of latency and the chain cannot absorb it. Everything after that fails,
-and fails in the direction that says the sweep is **bound by instruction
-throughput**: shortening the chain further buys nothing, more independent
-chains buy nothing, and trading the divider for ALU work -- which is what
-every reciprocal approximation is -- actively loses, because the divider port
-is otherwise idle and the ALU ports are not. The sweep's own shape agrees: 82
-instructions per 16-lane group, of which 21 are register moves and spills. It
-is short of registers, not of cycles, and no idea in these three files
-addresses that.
+cycles of latency and the chain cannot absorb it. **Everything after that
+fails, and they all fail the same way**: once the divider is beside the chain
+the sweep is bound by instruction throughput, the divider port is otherwise
+idle, and every scheme that replaces the division spends ALU or load slots
+that are not. Doubles halve the lanes per register. The gather is microcoded
+-- ~12 uops for 8 lanes -- and loses a third of encode by itself.
 
-`-mrecip`, incidentally, does not reach it: nothing short of `-ffast-math`
-makes clang emit `vrcp14ps` for this divide, and when it does, it is slower.
+The table lookup deserves a note, because on paper it is the one idea that
+should work: our model is a **256-state FSM**, so `f` has at most 512 distinct
+values however long the file is, and the classic static-rANS trick of
+precomputing every reciprocal applies to an adaptive model. It still loses,
+and the instruction count says it would lose even without the gather: the
+gathered build's sweep is **83 instructions against 82**. Reading the
+reciprocal from memory does not remove the work, it moves it. So the
+gather-free version of the same idea -- the model pass precomputing
+`BIAS/f` into a parallel array, which it could do with a scalar load from a
+512-entry table -- would buy at most one instruction of 82 and pay four bytes
+per coded bit of extra traffic through `pbit[]`.
+
+Anything built on a fast `exp`/`log` is out on precision, not speed. The one
+masked correction can absorb a quotient one low and nothing else, which pins
+`f*rcp` inside a window of width `2^-XSH` -- 1.5e-5 at the default `KLOG`, so
+~17 bits of relative accuracy, correctly positioned. Schraudolph's bit-trick
+`log2`/`exp2` pair carries ~3% error, about 5 bits. Even at `RC_RANS_KLOG=1`,
+where the window widens to `2^-9`, it is four bits short -- and that setting
+costs 105,765 bytes. Closing the gap costs more instructions than the divide.
+
+The sweep's own shape is the summary: 82 instructions per 16-lane group, of
+which 21 are register moves and spills. It is short of registers, not of
+cycles, and nothing in these three files addresses that.
+
+`-mrecip`, incidentally, does not reach this divide at all: nothing short of
+`-ffast-math` makes clang emit `vrcp14ps` here, and when it does, it is slower.
 
 ### What is still worth taking
 

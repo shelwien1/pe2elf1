@@ -224,9 +224,12 @@ division gives the same stream. Writing it as a reciprocal rather than a
 divide is worth 11% -- the divide only depends on `f`, which comes out of
 `pbit[]`, so this way the divider stays off the loop-carried chain and a
 23-cycle latency stops mattering. Once it is off the chain, though, the sweep
-is bound by instruction throughput, and everything that trades the divider for
-ALU work loses: the hardware reciprocal approximation plus a Newton step is
-11% *slower* again, and so is an ALU-only reciprocal.
+is bound by instruction throughput, and every other way of computing the same
+quotient loses: the hardware reciprocal approximation plus a Newton step and
+an ALU-only reciprocal are both ~11% slower, `double` division 22%, and a
+gathered table of inverses 34%. `model.inc` has all six measured against each
+other, and why a fast `exp`/`log` cannot reach the precision the single
+correction assumes.
 
 ### What it costs and what it buys
 

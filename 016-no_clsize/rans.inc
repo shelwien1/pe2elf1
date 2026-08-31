@@ -258,14 +258,13 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // adding one to q and taking f off r adds exactly M-f to the result,
       // so it folds into the reconstruction as a masked add.
       //
-      // The casts go through int, not uint: x is below 2^31 and the quotient
-      // below 2^16 by construction, and the signed conversions are
-      // vcvtdq2ps/vcvttps2dq, which every target has -- the unsigned ones are
-      // AVX-512 only. C-style, because the functional form float(int(_f)) is
-      // the vexing parse: `int(_f)` reads as a declaration of _f, which makes
-      // the whole thing a cast to the function type float(int).
+      // RANS_DIV takes the two integers and returns the integer quotient:
+      // whether it converts to float at all, and to what, is the compile's
+      // business and not this file's. Any correct division gives the same
+      // stream, which is what makes the alternatives measurable against each
+      // other -- model.inc has the six that were.
       rc_Renorm( _f );
-      const uint _q = (uint)(int)RANS_DIV( (float)(int)rx, (float)(int)_f );
+      const uint _q = RANS_DIV( rx, _f );
       const uint _r = rx - _q*_f;
       const uint _u = uint(-int(_r>=_f));
       rx = (_q<<SCALElog) + _r + _c + ((SCALE-_f)&_u);

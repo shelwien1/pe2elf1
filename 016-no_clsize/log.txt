@@ -65,3 +65,39 @@
  68.93MB/s 0.042s 35.01MB/s  0.082s 1,871,721  // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
  65.12MB/s 0.044s 34.54MB/s  0.083s 1,873,439  // 016-no_clsize rc RCNUM=32 LB=8 clang-18 avx512
  64.98MB/s 0.044s 35.84MB/s  0.080s 1,899,557  // 016-no_clsize rc RCNUM=16 LB=7 clang-18 avx512
+ 59.22MB/s 0.322s 34.31MB/s  0.556s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 18.31MB/s 1.042s 32.78MB/s  0.582s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 48.67MB/s 0.392s 39.26MB/s  0.486s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 56.26MB/s 0.339s 37.00MB/s  0.515s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 61.69MB/s 0.309s 34.45MB/s  0.554s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 60.73MB/s 0.314s 34.35MB/s  0.555s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 53.71MB/s 0.355s 39.46MB/s  0.483s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 61.97MB/s 0.308s 38.98MB/s  0.489s 12,576,355 // 016-no_clsize rans RCNUM=32 LB=8 clang-18 avx512
+ 18.24MB/s 1.046s 36.26MB/s  0.526s 12,576,355 // 016-no_clsize rans RCNUM=32 LB=8 clang-18 avx512
+ 48.84MB/s 0.390s 32.28MB/s  0.591s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 60.99MB/s 0.313s 40.82MB/s  0.467s 12,570,513 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 61.71MB/s 0.309s 40.81MB/s  0.467s 12,550,403 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 18.40MB/s 1.036s 37.96MB/s  0.502s 12,549,472 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 61.86MB/s 0.308s 41.78MB/s  0.456s 12,952,530 // 016-no_clsize rans RCNUM=16 LB=8 clang-18 avx512
+ 63.17MB/s 0.302s 37.19MB/s  0.513s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 23.10MB/s 0.826s 32.36MB/s  0.589s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 64.79MB/s 0.294s 33.51MB/s  0.569s 12,545,664 // 016-no_clsize rc RCNUM=32 LB=8 clang-18 avx512
+ 49.94MB/s 0.382s 29.51MB/s  0.646s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 60.70MB/s 0.314s 34.73MB/s  0.549s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 65.81MB/s 0.290s 36.06MB/s  0.529s 12,719,402 // 016-no_clsize rc RCNUM=16 LB=7 clang-18 avx512
+ 65.95MB/s 0.289s 36.37MB/s  0.524s 12,719,402 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 65.79MB/s 0.290s 38.54MB/s  0.495s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 68.45MB/s 0.279s 35.52MB/s  0.537s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 64.15MB/s 0.297s 34.86MB/s  0.547s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 67.60MB/s 0.282s 37.91MB/s  0.503s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 66.31MB/s 0.288s 38.46MB/s  0.496s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 65.44MB/s 0.291s 37.76MB/s  0.505s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 66.10MB/s 0.289s 35.68MB/s  0.534s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 60.63MB/s 0.315s 34.27MB/s  0.557s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 54.83MB/s 0.348s 37.78MB/s  0.505s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 65.88MB/s 0.289s 38.06MB/s  0.501s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 57.14MB/s 0.334s 37.57MB/s  0.508s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 59.07MB/s 0.323s 33.69MB/s  0.566s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 68.61MB/s 0.278s 35.66MB/s  0.535s 12,534,315 // 016-no_clsize rc RCNUM=16 LB=8 clang-18 avx512
+ 64.16MB/s 0.297s 33.88MB/s  0.563s 12,545,664 // 016-no_clsize rc RCNUM=32 LB=8 clang-18 avx512
+ 64.42MB/s 0.296s 36.52MB/s  0.522s 12,719,402 // 016-no_clsize rc RCNUM=16 LB=7 clang-18 avx512
