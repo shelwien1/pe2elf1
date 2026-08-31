@@ -407,22 +407,48 @@ it out of line.  It is a different perturbation, not a fix.
 same three binaries come out 74.0 / 72.4 / 72.7 -- the out-of-line build ahead
 of the inlined one, and the no-model build's lead inside the overlap.
 
-**The table size does not matter, so it is not the cache.**  Same source, only
-`RC_HDR_CTXBITS` differing, so the work scales but the code does not:
+**`RC_HDR_CTXBITS` does move encode speed, by about 6%, and it is neither the
+table nor the data around it.**  Each depth is a different binary, so this is
+the same mechanism again -- but it is worth showing what it is not, because
+each candidate has an obvious story and each one is wrong.
 
 ```
-  depth  state      enc            dec            enwik8
-      1     0 KB   79.99  76.07   46.51  45.34   62,507,154
-      8     8 KB   76.59  76.48   47.12  46.24   62,488,351
-     10    32 KB   78.75  76.93   45.48  45.66   62,487,196
-     12   128 KB   74.37  76.73   45.94  46.78   62,487,412
-     16  2048 KB   79.70  81.00   44.52  46.23   62,489,308
+  depth   compile-time   padded   runtime (one binary)     state
+      1       76.93      77.89       79.19                  0 KB
+      8       76.50      75.22       80.84                  8 KB
+     10       75.81      77.05       80.41                 32 KB
+     12       74.39      75.19       80.41                128 KB
+     14       75.58      73.79       80.16                512 KB
+     16       78.69      80.21       79.09               2048 KB
+   spread      5.8%       8.7%        2.2%
 ```
 
-The 2 MB table is among the fastest and the 4-entry one among the slowest, and
-the spread within a single depth across rounds is as wide as the spread across
-depths.  RCNUM x depth accesses once per 65536-byte block is too little traffic
-to reach the cache at all.
+*Not the cache.*  The 2 MB table is the fastest of the six and the 4-entry one
+is mid-table.  RCNUM x depth accesses once per 65536-byte block is too little
+traffic to reach a cache at all.
+
+*Not the work.*  Work is monotone in depth -- depth 16 does sixteen counter
+updates per length, depth 1 does one -- and speed is not: the two extremes are
+the fast ones.
+
+*Not the alignment of what follows the table.*  `hdrlen` sits inside `RCio`
+immediately before `pbit[BLKSIZE*8]`, the encoder's hottest array, so changing
+its size shifts `pbit` by up to 2 MB.  The "padded" column holds `sizeof(RCio)`
+constant across depths so nothing downstream moves.  The spread does not
+shrink; it grows.
+
+*It is the code.*  The last column is ONE binary with the tree depth read from
+the environment -- `nctx` a runtime argument, the table always 2 MB -- so code
+and data layout are byte-identical across the six runs and only the depth
+differs.  The spread collapses from 5.8% to 2.2% and the ordering scrambles
+(depth 8 fastest, 16 slowest, against 16 fastest and 12 slowest at compile
+time).  That binary is also faster than every compile-time build despite doing
+strictly more work, which is the same artifact once more.
+
+`PutCtx`'s two loops are what changes: at depth 16 the p=1/2 loop is gone, at
+depth 1 the tree loop is one iteration, and in between both are there and
+unrolled.  Binary size follows -- 50824 at depth 1, 52328 at 8, 50544 at 16 --
+and so does the measurement.
 
 `-falign-loops=32` does not fix it either (it costs a little more).  The number
 will move again with any unrelated edit, in either direction, which is worth
