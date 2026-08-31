@@ -70,5 +70,11 @@ runsame "-DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2"
 run "-DRC_RCNUM=32 -DRC_ENC_NSEL=1"
 run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7 -DRC_FOLD_RPRE=1"
 
+# The header model's context depth. Changes the stream, so `run`, not
+# `runsame` -- and the shallow end is what exercises the p=1/2 tail.
+run "-DRC_HDR_CTXBITS=1"
+run "-DRC_HDR_CTXBITS=16"
+run "-DRC_HDR_CTXBITS=8 -DRC_RCNUM=32"
+
 rm -f "$REFSTREAM_FILE"
 [ "$fail" = 0 ] && echo "== all configurations pass" || { echo "== FAILURES above"; exit 1; }

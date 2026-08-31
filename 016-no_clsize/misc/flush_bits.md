@@ -328,6 +328,8 @@ which is the `k%8` histogram at the top of this document, byte for byte.
   vs the raw head row it started from            -23,594        4.9992 bpc
 ```
 
+(and -2,302 more from the length context below, for 62,487,196)
+
 Of that, 23,769 is the per-lane position model and 1,351 the k%8 split (against
 a 1,064-byte estimate -- the counters do slightly better than the static bound
 because r is not quite uniform within a lane).  49654 against a static optimum
@@ -340,6 +342,61 @@ rounds, best of 6 passes, medians: enc 80.48 -> 80.79 MB/s, dec 46.95 ->
 inlined into `do_process` -- 384 counters once per file, costing registers in
 the loop that runs 800 million times, the same effect that makes `model_pass`
 NOINLINE.  It is NOINLINE now.
+
+### A context for the length, and nothing for its low bits
+
+The length gets a binary-tree context instead of a position: the counter is
+picked by the bits already sent, `RC_HDR_CTXBITS` deep, per lane.  It is the
+field with a shape worth conditioning on -- a lane's lengths sit in a narrow
+band, so the high byte takes 5 to 10 distinct values with two dominating, and a
+position-only model pays for the top bits over and over.
+
+Below the tree the bits go out at **p=1/2 with no counter at all**, and that is
+not a simplification -- it is smaller.  A length's low bits carry no structure
+a counter can find, and an adaptive counter on a random bit costs more than it
+saves: at 8 bits of context, dropping the low byte's eight position counters
+for p=1/2 is worth 393 bytes on its own.
+
+```
+  context bits   enwik8        counters/lane   state
+      (none)     62,489,498         -            -      16 position counters
+         8       62,488,351        256          8 KB
+         9       62,487,641        512         16 KB
+        10       62,487,196       1024         32 KB    <- default
+        11       62,487,243       2048         64 KB
+        12       62,487,412       4096        128 KB
+        13       62,487,677       8192        256 KB
+```
+
+Past 10 the deeper contexts see too few of a lane's 1526 lengths to train.  A
+static entropy estimate does not show that -- it says depth 16 is best by 2913
+bytes -- because with 1526 samples over 65536 contexts it is measuring its own
+overfitting.  A KT-estimated adaptive cost does show it, and puts the optimum
+at 11; the real FSM counters put it at 10.  The same trap caught the low byte:
+static entropy said a 256-context tree there was worth 796 bytes, and it
+measured 990 bytes **worse**.
+
+### The encode measurement, and why it is not a cost
+
+The tree build measures 3-4% slower to encode, consistently, and that is code
+layout rather than work.  The header does the same number of coded bits either
+way -- RCNUM lanes x 16 bits -- and the p=1/2 tail does strictly fewer counter
+updates than the position model it replaced.
+
+Proved rather than argued: build both versions with the header coding present
+in the binary but gated on a `volatile int` that is zero, so neither executes
+any of it.  The gap stays.
+
+```
+  header code present, never executed      enc
+    without the tree                  82.61  82.94  79.22
+    with the tree                     77.63  78.41  76.66
+```
+
+So `do_process`'s hot loops moved, and this build is sensitive to where they
+land.  `-falign-loops=32` does not fix it (it costs a little more).  The number
+will move again with any unrelated edit, in either direction, which is worth
+remembering before reading a few percent off this encoder as a result.
 
 ### What is left in it
 

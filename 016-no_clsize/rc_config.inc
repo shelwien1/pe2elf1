@@ -466,6 +466,30 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // run, and that run is as long as the data makes it -- 6384 bytes on a
 // repeating {0xFF,0x00} -- so the trim has to be capped rather than assumed
 // small. Leaving it uncapped decodes to the wrong bytes, silently.
+// How many of the substream length's 16 bits go through the header model's
+// binary-tree context, top first; the rest are coded at p=1/2 with no counter
+// at all. A length's low bits carry no structure a counter can find, and an
+// adaptive counter on a random bit costs MORE than it saves -- at 8 bits of
+// context, dropping the low byte's eight position counters for p=1/2 is worth
+// 393 bytes on enwik8 by itself.
+//
+// The tree is per lane, so this is RCNUM<<this counters, and past 10 the
+// deeper contexts see too few of a lane's 1526 lengths to train:
+//
+//   bits   enwik8       counters/lane   state
+//      8   62,488,351          256       8 KB
+//      9   62,487,641          512      16 KB
+//     10   62,487,196         1024      32 KB     <- default
+//     11   62,487,243         2048      64 KB
+//     12   62,487,412         4096     128 KB
+//     13   62,487,677         8192     256 KB
+#ifndef RC_HDR_CTXBITS
+#define RC_HDR_CTXBITS 10
+#endif
+#if RC_HDR_CTXBITS<1 || RC_HDR_CTXBITS>16
+#error "RC_HDR_CTXBITS must be 1..16"
+#endif
+
 #ifndef RC_FF_TRIM
 #define RC_FF_TRIM 32
 #endif

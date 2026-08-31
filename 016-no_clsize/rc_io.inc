@@ -179,6 +179,40 @@ struct RC_HDR_IO {
     }
   }
 
+  // nb bits, top first: the top `nctx` through a binary-tree context -- the
+  // counter picked by the bits already sent, not by position -- and the rest
+  // at p=1/2 with no counter. The tree index runs 1..(1<<nctx)-1, so the table
+  // is 1<<nctx entries with index 0 unused.
+  void PutCtx( uint v, uint nb, uint nctx, Counter* __restrict t ) {
+    uint j, c = 1;
+    for( j=0; j<nctx; j++ ) {
+      uint b = (v>>(nb-1-j))&1;
+      const uint s = t[c].Get();
+      ((Rangecoder*)this)->rc_Process( Counter::P(s), b );
+      t[c].Update( s, b );
+      c = c*2 + b;
+    }
+    for( ; j<nb; j++ ) {
+      uint b = (v>>(nb-1-j))&1;
+      ((Rangecoder*)this)->rc_Process( hSCALE, b );
+    }
+  }
+
+  uint GetCtx( uint nb, uint nctx, Counter* __restrict t ) {
+    uint j, b, c = 1, v = 0;
+    for( j=0; j<nctx; j++ ) {
+      const uint s = t[c].Get();
+      ((Rangecoder*)this)->rc_Process( Counter::P(s), b );
+      t[c].Update( s, b );
+      c = c*2 + b; v = v*2 + b;
+    }
+    for( ; j<nb; j++ ) {
+      ((Rangecoder*)this)->rc_Process( hSCALE, b );
+      v = v*2 + b;
+    }
+    return v;
+  }
+
   uint GetBits( uint n, Counter* __restrict c ) {
     uint v = 0;
     for( ; n!=0; n--,c++ ) {
@@ -208,8 +242,9 @@ struct RC_HDR_IO {
 //  is why it is up here with the lengths and not down in the payload.
 //
 //  The header goes through its own scalar carry-propagating rangecoder --
-//  RC_HDR_IO above is its cursor -- against a counter per bit position per
-//  lane (hdrctr below), carried across blocks.
+//  RC_HDR_IO above is its cursor -- against per-lane counters carried across
+//  blocks: a binary-tree context for the length's high byte, a counter per bit
+//  position for everything else. See hdrctr/hdrhi below.
 //
 //  The header stream's own length is written nowhere, and needs no marker: the
 //  field layout is fixed, so the reader knows when to stop, and RC_HDR_IO's
@@ -332,13 +367,23 @@ struct RCio {
   // all-ones head byte cannot come out of a payload lane's flush (that byte
   // would have been dropped), but the carry twin's degenerate n==0 flush can
   // end on one, and at r==7 the top bit is coded like any other.
-  static const uint HDR_LENBITS  = 16;                       // the 2-byte length
+  // The length gets a context instead of a position: a binary tree over the
+  // bits already sent, RC_HDR_CTXBITS deep, per lane. It is the field with a
+  // shape worth conditioning on -- a lane's lengths sit in a narrow band, so
+  // its high byte takes 5 to 10 distinct values with two dominating, and a
+  // position-only model pays for the top bits over and over. Below the tree
+  // the bits are random and go out at p=1/2 with no counter at all, which
+  // measures BETTER than a position counter there: an adaptive counter on a
+  // random bit costs more than it saves. See RC_HDR_CTXBITS.
+  static const uint HDR_LENBITS  = 16;
+  static const uint HDR_CTXBITS  = RC_HDR_CTXBITS;
   static const uint HDR_RUNBITS  = 3;                        // k%8, capped at 7
   static const uint HDR_HEADBITS = 8;                        // the head byte
-  static const uint HDR_RUNPOS   = HDR_LENBITS;
+  static const uint HDR_RUNPOS   = 0;
   static const uint HDR_HEADPOS  = HDR_RUNPOS + HDR_RUNBITS;
   static const uint HDR_BITS     = HDR_HEADPOS + HDR_HEADBITS;
   Counter hdrctr[RCNUM][HDR_BITS];
+  Counter hdrlen[RCNUM][1u<<HDR_CTXBITS];                    // the length tree
 
   // Where the head byte's coded part starts, given the run. Below 7 the run's
   // own terminating zero is bit r, so bits 7..r+1 are free; at 7 there is no
@@ -351,7 +396,10 @@ struct RCio {
   // that runs 800 million times. Inline it and the decoder loses 2%.
   NOINLINE
   void hdr_Init( void ) {
-    for( uint i=0; i<RCNUM; i++ ) for( uint j=0; j<HDR_BITS; j++ ) hdrctr[i][j].Reset();
+    for( uint i=0; i<RCNUM; i++ ) {
+      for( uint j=0; j<HDR_BITS; j++ ) hdrctr[i][j].Reset();
+      for( uint j=0; j<(1u<<HDR_CTXBITS); j++ ) hdrlen[i][j].Reset();
+    }
   }
 
   byte* buf( uint rcidx ) { return &tmpbuf[rcidx][0]; }
@@ -365,7 +413,7 @@ struct RCio {
     t_Hdr hdr;
     hdr.StartDecode( C );
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
-      l = hdr.GetBits( HDR_LENBITS, hdrctr[rcidx] );
+      l = hdr.GetCtx( HDR_LENBITS, HDR_CTXBITS, hdrlen[rcidx] );
       // A valid stream never exceeds tmpbufsize; a corrupt header could, and
       // the payload copy and the FF padding below both index by it.
       rclen[rcidx] = Min<uint>( l, tmpbufsize );
@@ -425,7 +473,7 @@ struct RCio {
     hdr.StartEncode( C );
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rc.rc_len(rcidx);
-      hdr.PutBits( l, HDR_LENBITS, hdrctr[rcidx] );
+      hdr.PutCtx( l, HDR_LENBITS, HDR_CTXBITS, hdrlen[rcidx] );
       rclen[rcidx] = l;
     }
 
