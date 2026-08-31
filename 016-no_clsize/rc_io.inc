@@ -65,10 +65,24 @@ struct RC_IO {
 
 
 //----------------------------------------------------------------------------
-//  Block I/O. Compressed format, unchanged from sh_v1xN_io.inc:
+//  Block I/O. Compressed format:
 //
 //    per block:  RCNUM x 2-byte little-endian substream length
-//                RCNUM x substream payload, in lane order
+//                one head byte per NON-EMPTY substream, in lane order
+//                RCNUM x substream payload minus its head byte, in lane order
+//
+//  The head row is sh_v1xN_io.inc's format with one byte lifted out of each
+//  payload. That byte is the substream's first byte in the file, which -- the
+//  substreams run backwards, see RC_IO above -- is the LAST byte rc_Quit
+//  writes, the one whose low bits the flush fills with 1s. It is the most
+//  skewed byte in the block by a wide margin (order-0 entropy 6.45 bits
+//  against ~8 for the payload; misc/flush_bits.md has the distribution), so
+//  gathering the RCNUM of them into one row is what would let a future header
+//  coder reach them without touching the payload. Nothing codes them yet: this
+//  is a pure reordering and the block is the same size either way.
+//
+//  A lane that coded nothing has no head byte and contributes none -- the
+//  lengths come first, so both sides agree on which lanes are in the row.
 //
 //  The block length itself is not in the header -- it is coded inside the
 //  rangecoder data (a flag bit plus 16 bits when the block is short), see
@@ -174,16 +188,24 @@ struct RCio {
       rclen[rcidx] = Min<uint>( l, tmpbufsize );
     }
 
+    // the head row: one byte per non-empty lane, put back at the bottom of the
+    // lane's chunk -- where rc_Write lifted it from
+    byte head[RCNUM];
+    for( rcidx=0; rcidx<RCNUM; rcidx++ ) head[rcidx] = rclen[rcidx] ? byte(C.get()) : 0xFF;
+
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
-      for( i=0; i<l; i+=n ) {
-        C.chkinp(); n = Min<uint>( l-i, C.getinplen() );
-        // truncated stream: chkinp has nothing left to hand us. Stop rather
-        // than spin -- the FF padding below fills the hole and the block
-        // decodes to garbage, which is the best a truncated file can do.
-        if_e0( n==0 ) break;
-        memcpy( &tmpbuf[rcidx][FF_PADSIZE+i], (prbyte)C.inpptr, n );
-        C.inpptr += n;
+      if( l ) {
+        tmpbuf[rcidx][FF_PADSIZE] = head[rcidx];
+        for( i=0; i<l-1; i+=n ) {
+          C.chkinp(); n = Min<uint>( l-1-i, C.getinplen() );
+          // truncated stream: chkinp has nothing left to hand us. Stop rather
+          // than spin -- the FF padding below fills the hole and the block
+          // decodes to garbage, which is the best a truncated file can do.
+          if_e0( n==0 ) break;
+          memcpy( &tmpbuf[rcidx][FF_PADSIZE+1+i], (prbyte)C.inpptr, n );
+          C.inpptr += n;
+        }
       }
       // the decoder reads downward, so the over-read pad sits BELOW the chunk
       for( i=0; i<FF_PADSIZE; i++ ) tmpbuf[rcidx][i] = 0xFF;
@@ -203,14 +225,22 @@ struct RCio {
       rclen[rcidx] = l;
     }
 
+    // the head row. The payload spans [rowsize-RC_SKIP-l, rowsize-1-RC_SKIP]:
+    // its top byte sits RC_SKIP below the row top (above it, the zero prefix),
+    // and the ascending copy below emits it last-emitted-first -- so the byte
+    // at the BOTTOM of that span is the one the file would lead with, and it
+    // is the one that comes up here instead.
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
-      for( i=0; i<l; i+=n ) {
-        C.chkout(); n = Min<uint>( l-i, C.getoutlen() );
-        // the payload spans [rowsize-RC_SKIP-l, rowsize-1-RC_SKIP]: its top
-        // byte sits RC_SKIP below the row top (above it, the zero prefix),
-        // and the ascending copy emits it last-emitted-first
-        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][rowsize-RC_SKIP-l+i], n );
+      if( l ) C.put( tmpbuf[rcidx][rowsize-RC_SKIP-l] );
+    }
+
+    for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
+      l = rclen[rcidx];
+      if( l==0 ) continue;
+      for( i=0; i<l-1; i+=n ) {
+        C.chkout(); n = Min<uint>( l-1-i, C.getoutlen() );
+        memcpy( (prbyte)C.outptr, &tmpbuf[rcidx][rowsize-RC_SKIP-l+1+i], n );
         C.outptr += n;
       }
     } // rcidx

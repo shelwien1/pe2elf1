@@ -110,7 +110,53 @@ cost 117,890 bytes of payload (0.19%) and the substream length table another
 
 So the change is worth having for its own sake -- the search became one bit
 scan instead of a loop, and the flush now writes the largest value the
-interval permits rather than an arbitrary one -- but the skew it creates is
-not a size win waiting to be collected.  A coder that wanted to collect it
-would have to move the trim below byte granularity, i.e. give up byte-aligned
-substreams.
+interval permits rather than an arbitrary one -- but the skew is not a size
+win the payload can collect.  Moving the *trim* below byte granularity would
+mean giving up byte-aligned substreams.  What can collect it is the header.
+
+## The head row
+
+The block header now carries those bytes.  `rc_Write` lifts each substream's
+first byte out of the payload and writes them all together, right after the
+length row:
+
+```
+  per block:  RCNUM x 2-byte little-endian substream length
+              one head byte per non-empty substream, in lane order
+              RCNUM x substream payload minus its head byte, in lane order
+```
+
+Nothing codes them yet -- this is a pure reordering, and enwik8 is still
+62,513,092 bytes -- but it puts the block's most predictable bytes in one
+contiguous run where a header coder can reach them without walking payload.
+A lane that coded nothing has no head byte and contributes none; the lengths
+come first, so both sides agree on which lanes are in the row.
+
+Round-robin twin builds over 6 rounds, best of 6 passes each: enc 67.4 -> 67.0
+MB/s, dec 38.4 -> 38.4 MB/s, inside a within-build spread of 4%.  It is one
+extra 16-byte pass per 41 KB block.
+
+## What the header is worth
+
+enwik8, 1526 blocks x 16 lanes = 24416 substreams.  Order-0 entropy of each
+header field, as it stands:
+
+```
+                              bits    x24416 = bytes
+  length low byte             7.929            24198
+  length high byte            2.959             9032
+  head byte                   6.450            19687
+                                       ------------
+  header today (48832 + 24416)                 73248   0.117% of the file
+  order-0 coded                                52917
+                                             = 20331 saved,  0.033%
+```
+
+Two things to note before building a header coder.  The head byte is *not*
+where most of that is -- it gives 4.7 KB, and the length high byte gives 15.6
+KB, because substream lengths cluster tightly (min 57, max 4163, mean 2558,
+so the high byte is nearly always 0x09 or 0x0A).  And coding the length as one
+16-bit symbol is *worse* than as two bytes (10.535 vs 10.888 bits), as is
+delta-coding against the previous lane (10.914) -- the lanes' lengths are close
+to each other but their low bytes are not correlated, so the delta only
+destroys the high byte's structure.
