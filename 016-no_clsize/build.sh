@@ -5,6 +5,7 @@
 #   ./build.sh                       clang++, -march=native
 #   ./build.sh -DRC_RCNUM=32         extra -D flags (see below)
 #   ARCH=skylake-avx512 ./build.sh   pick the -march/-mtune target
+#   TUNE=znver5 ./build.sh           schedule for a different core than -march
 #   CXX=g++ ./build.sh               build with gcc instead (see below)
 #   LTO=0 ./build.sh                 skip -flto
 #   STATIC=1 ./build.sh              link -static
@@ -27,6 +28,14 @@ cd "$(dirname "$0")"
 
 CXX=${CXX:-clang++}
 ARCH=${ARCH:-native}
+# -mtune follows -march unless asked otherwise. Worth asking on AMD: tuning for
+# the actual core is reported to buy about 10% encode on Zen, and clang only
+# learned znver5 in 19 and znver6 in 21, so the value here outruns what any one
+# clang accepts. It is scheduling only -- no ISA -- so a rejected value is a
+# warning and the build goes on. On the Intel box this tree is measured on,
+# znver tuning COSTS about 4% both ways (see the table below); it is a per-host
+# choice, not a default.
+TUNE=${TUNE:-$ARCH}
 STD=${STD:-c++17}
 OUT=${OUT:-coder}
 OPT=${OPT:--O3}
@@ -53,9 +62,36 @@ case "$($CXX --version 2>/dev/null | head -1)" in
      echo "build.sh: $CXX is not clang -- the lane sweep will not be vectorized" >&2 ;;
 esac
 
+# Measured here, best of 4 passes over enwik8, median of 4-5 rounds, on an
+# Intel Cascade Lake Xeon (which is what -march=native resolves to):
+#
+#   clang 18, -march=native      native   znver2   znver3   znver4  generic
+#                       enc       75.57    75.14    71.32    72.77    76.35
+#                       dec       46.45    43.95    44.52    44.59    43.71
+#
+#   clang 20, -march=native      native   znver4   znver5
+#                       enc       75.27    69.64    69.24
+#                       dec       45.87    44.48    43.08
+#
+#   clang 20, -march=skylake-avx512      skylake-avx512   znver5
+#                                 enc       75.46          70.09
+#                                 dec       45.68          44.90
+#
+# So on THIS core znver tuning costs 6-8% encode, every round, and the two
+# tunings that matter are indistinguishable anyway: clang 20 emits a
+# byte-identical binary for znver4 and znver5. Reported to buy about 10% on a
+# Skylake-X, which is a different core and possibly a different clang, so it
+# is a per-host measurement and not a default. clang learned znver5 in 19 and
+# znver6 in 21; below that the value is rejected and the build says so.
 archflags=
 if try_flag "-march=$ARCH"; then
-  archflags="-march=$ARCH -mtune=$ARCH"
+  archflags="-march=$ARCH"
+  if try_flag "-mtune=$TUNE"; then
+    archflags="$archflags -mtune=$TUNE"
+  else
+    echo "build.sh: -mtune=$TUNE rejected by $CXX, tuning for $ARCH instead" >&2
+    archflags="$archflags -mtune=$ARCH"
+  fi
 else
   echo "build.sh: -march=$ARCH rejected by $CXX, building without it" >&2
 fi
