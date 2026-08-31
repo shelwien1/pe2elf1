@@ -394,7 +394,37 @@ any of it.  The gap stays.
 ```
 
 So `do_process`'s hot loops moved, and this build is sensitive to where they
-land.  `-falign-loops=32` does not fix it (it costs a little more).  The number
+land.  Three things confirm it and none of them fix it:
+
+**Moving the header out of line does not help.**  `rc_Write`/`rc_Read` were
+already NOINLINE, but `PutCtx`/`GetCtx` inlined *into* them, so they grew.
+Splitting the header into its own NOINLINE `hdr_Write`/`hdr_Read` -- which is
+where it belongs anyway, and gives byte-identical output -- moves the number
+again rather than back: 80.6 without the model, 78.4 with it inlined, 77.4 with
+it out of line.  It is a different perturbation, not a fix.
+
+**The ordering does not survive a target change.**  At `-march=skylake` the
+same three binaries come out 74.0 / 72.4 / 72.7 -- the out-of-line build ahead
+of the inlined one, and the no-model build's lead inside the overlap.
+
+**The table size does not matter, so it is not the cache.**  Same source, only
+`RC_HDR_CTXBITS` differing, so the work scales but the code does not:
+
+```
+  depth  state      enc            dec            enwik8
+      1     0 KB   79.99  76.07   46.51  45.34   62,507,154
+      8     8 KB   76.59  76.48   47.12  46.24   62,488,351
+     10    32 KB   78.75  76.93   45.48  45.66   62,487,196
+     12   128 KB   74.37  76.73   45.94  46.78   62,487,412
+     16  2048 KB   79.70  81.00   44.52  46.23   62,489,308
+```
+
+The 2 MB table is among the fastest and the 4-entry one among the slowest, and
+the spread within a single depth across rounds is as wide as the spread across
+depths.  RCNUM x depth accesses once per 65536-byte block is too little traffic
+to reach the cache at all.
+
+`-falign-loops=32` does not fix it either (it costs a little more).  The number
 will move again with any unrelated edit, in either direction, which is worth
 remembering before reading a few percent off this encoder as a result.
 

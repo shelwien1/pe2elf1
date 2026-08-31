@@ -405,10 +405,20 @@ struct RCio {
   byte* buf( uint rcidx ) { return &tmpbuf[rcidx][0]; }
   byte* rows( void ) { return &tmpbuf[0][0]; }
 
+  // The header, out of line, on both sides. It is RCNUM x ~27 coded bits once
+  // a block against a 32 KB counter table, next to nothing beside the payload
+  // it describes -- but inlined into rc_Read/rc_Write its counter walks make
+  // those functions several times bigger, and that moves do_process's hot
+  // loops. Which is worth a few percent either way on this build; see
+  // misc/flush_bits.md. Out of line they cannot.
+  //
+  // Fills rclen[] and head[], and hands back the bytes the header stream's
+  // reader over-read: they are the payload's first, and rc_Read puts them back
+  // in front of it.
   template< class t_Hdr >
   NOINLINE
-  void rc_Read( Coroutine& C ) {
-    uint rcidx,i,l,n;
+  void hdr_Read( Coroutine& C, byte* __restrict head, byte* __restrict spill, uint& spn ) {
+    uint rcidx, l;
 
     t_Hdr hdr;
     hdr.StartDecode( C );
@@ -424,7 +434,6 @@ struct RCio {
     for( rcidx=0; rcidx<RCNUM; rcidx++ )
       hrun[rcidx] = rclen[rcidx] ? hdr.GetBits( HDR_RUNBITS, hdrctr[rcidx]+HDR_RUNPOS ) : 0;
 
-    byte head[RCNUM];
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       if( rclen[rcidx]==0 ) { head[rcidx] = 0xFF; continue; }
       const uint r  = hrun[rcidx];
@@ -433,14 +442,24 @@ struct RCio {
     }
     hdr.FinishDecode();
 
-    // ...and the bytes the header stream's reader over-read: they are the
-    // payload's, and they go back in front of it. They can span lanes, so this
-    // is a prefix over the whole run rather than a fix-up on lane 0. At the end
-    // of the file there may be nothing for them to go back into, and they will
-    // be the 0xFF that C.get() gives past EOF -- which is what the writer's
-    // aligned flush allowed for anyway.
-    const byte* sp = hdr.spill();
-    uint spn = hdr.jdrop;
+    spn = hdr.jdrop;
+    for( uint i=0; i<spn; i++ ) spill[i] = hdr.spill()[i];
+  }
+
+  template< class t_Hdr >
+  NOINLINE
+  void rc_Read( Coroutine& C ) {
+    uint rcidx,i,l,n;
+
+    // ...and the bytes the header stream's reader over-read go back in front
+    // of the payload. They can span lanes, so this is a prefix over the whole
+    // run rather than a fix-up on lane 0. At the end of the file there may be
+    // nothing for them to go back into, and they will be the 0xFF that C.get()
+    // gives past EOF -- which is what the writer's aligned flush allowed for.
+    byte head[RCNUM], spill[RC_CODBYTES];
+    uint spn;
+    hdr_Read<t_Hdr>( C, head, spill, spn );
+    const byte* sp = spill;
 
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
@@ -463,12 +482,12 @@ struct RCio {
     } // rcidx
   }
 
+  // The header, out of line -- see hdr_Read above for why. Fills rclen[].
   template< class t_Hdr, class RCV >
   NOINLINE
-  void rc_Write( Coroutine& C, RCV& rc ) {
-    uint rcidx,i,l,n;
+  void hdr_Write( Coroutine& C, RCV& rc, uint* __restrict rclen ) {
+    uint rcidx, l;
 
-    uint rclen[RCNUM];
     t_Hdr hdr;
     hdr.StartEncode( C );
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
@@ -501,6 +520,15 @@ struct RCio {
       hdr.PutBits( hbyte[rcidx]>>sh, HDR_HEADBITS-sh, hdrctr[rcidx]+HDR_HEADPOS );
     }
     hdr.FinishEncode();
+  }
+
+  template< class t_Hdr, class RCV >
+  NOINLINE
+  void rc_Write( Coroutine& C, RCV& rc ) {
+    uint rcidx,i,l,n;
+
+    uint rclen[RCNUM];
+    hdr_Write<t_Hdr>( C, rc, rclen );
 
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
