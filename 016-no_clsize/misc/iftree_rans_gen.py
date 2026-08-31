@@ -12,7 +12,7 @@
 #      arrangement actually wants -- byte m's bit j lives in lane m*8+j, so
 #      the eight states of one byte are eight different lanes and nothing
 #      chains through them within the byte.
-def emit(c, depth, out, shape):
+def emit(c, depth, out, shape, DEP=0):
     ind = '  '*(depth+1)
     b1, b0 = 2*c+1, 2*c
     out.append(f'{ind}{{ const uint _st = cty[{c}].v; const uint _p = _st & 0xFFFF;')
@@ -25,6 +25,9 @@ def emit(c, depth, out, shape):
         t_hi = f'rx[_k] = rx[_k]-_p-_a; cty[{c}].v = FSM2[(_st>>16)*2+1];'
         t_lo = f'rx[_k] = _a+_s;        cty[{c}].v = FSM2[(_st>>16)*2+0];'
         cond = '_s >= _p'
+        if DEP:
+            out.append(f'{ind}  uint _sd=_s; __asm__("" : "+r"(_sd) : "r"(_a));')
+            cond = '_sd >= _p'
     else:
         out.append(f'{ind}  const uint _k = _base+{depth}; pv[_k] = _p;')
         t_hi = f'cty[{c}].v = FSM2[(_st>>16)*2+1];'
@@ -34,9 +37,9 @@ def emit(c, depth, out, shape):
         out.append(f'{ind}  if( {cond} ) {{ {t_hi} _sym = {b1}; }} else {{ {t_lo} _sym = {b0}; }} }}')
         return
     out.append(f'{ind}  if( {cond} ) {{ {t_hi}')
-    emit(b1, depth+1, out, shape)
+    emit(b1, depth+1, out, shape, DEP)
     out.append(f'{ind}  }} else {{ {t_lo}')
-    emit(b0, depth+1, out, shape)
+    emit(b0, depth+1, out, shape, DEP)
     out.append(f'{ind}  }} }}')
 
 # P<D>: the tree only for the first D levels, where the bias is strongest and
@@ -55,6 +58,10 @@ def emitP(c, depth, out, D):
     emitP(2*c, depth+1, out, D)
     out.append(f'{ind}  }} }}')
 
+out=[]
+emit(1,0,out,'T',1)
+open('rans_tree_TD.h','w').write('\n'.join(out)+'\n')
+print('rans_tree_TD.h:', len(out), 'lines')
 for shape in ('T','U'):
     out=[]
     emit(1,0,out,shape)

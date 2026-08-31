@@ -21,6 +21,10 @@ synthesised 256-state FSM counter `rans_shapes.cpp` uses. enwik8, 100 MB,
 | P2 if-tree for 2 levels, then the indexed walk | 47.73 | |
 | P3 if-tree for 3 levels | 45.20 | |
 | P4 if-tree for 4 levels | 40.06 | |
+| SD S with the bit made to wait for the multiply | 50.18¹ | |
+| TD T with the bit made to wait for the multiply | 29.34¹ | |
+
+¹ measured in a later run whose A/S were 49.92/50.02; compare within a run.
 
 **It loses, and not marginally.** Every variant is below the plain walk, and
 the partial trees are monotone in depth: two levels already cost 15%, and each
@@ -39,36 +43,78 @@ one lane holds a whole byte would be worth having for the extra model chains.
 Here two chains against one are worth 3.3%, which is not much to reorganise a
 stream format for.
 
-## The mechanism works. It just cannot pay for itself
+## What the controls rule out — including my first explanation
 
-The urandom column is the same control §9 used, and it says the same thing.
-With branches at 50/50 the predictor is useless: T is **3.26×** slower than A
-there, against **1.80×** on enwik8. So prediction is buying the tree a lot --
-it just starts from far enough back that a lot is not enough.
+Four controls, all within this one probe so nothing but the named variable
+moves:
 
-The reason it starts so far back is a structural difference between the two
-coders, and it is the whole result:
+| control | question | answer |
+|---|---|---|
+| **S** byte-sequential indexed walk | is it the lost wavefront ILP? | **no** — 3.3% |
+| **SD/TD** the bit made to wait for the multiply | is it where the multiply sits? | **no** — see below |
+| spill counts from the listing | is it register pressure? | **no** — U spills 1.4% |
+| **P2/P3/P4** partial trees | is there a depth that pays? | **no** — monotone |
 
-- The range coder's bit is `code >= (range>>SCALElog)*cty[ctx]`. A **multiply**
-  sits between the model's `p` and the decoded bit, so `p` arrives, then five
-  more cycles pass before the branch can resolve. Speculating past that is
-  worth a great deal, and that is what §9 measured.
-- rANS's bit is `(x & (M-1)) >= p`. The left side does not mention `p` and is
-  ready before the counter load returns, so the bit resolves the cycle `p`
-  arrives. **There is nothing between the model and the branch for speculation
-  to hide.**
+**The multiply.** My first reading of this result was that the range coder puts
+a multiply between the model's `p` and the decoded bit -- `code >=
+(range>>SCALElog)*p` -- so speculating past that branch buys five cycles,
+while rANS's `(x & (M-1)) >= p` resolves the cycle `p` arrives and has nothing
+to hide. The multiply is certainly *there* in rANS's step, and it is certainly
+off the branch's path; the listing shows the compare using `p` and the masked
+state while the `imull`'s result goes only to the update:
 
-So the if-tree pays a mispredict to buy latency that rANS has already removed
-by construction -- the same property that makes `RC_DEC_SPLIT` pointless here
-(`rans_decode.md` §3) and makes the default decode-step form beat the textbook
-one (§4). rANS's decode step is short on the model side, and every shape that
-spends something to shorten it further has now lost.
+```
+    movl  _ZL4cty_+4(%rip), %ecx     ; the counter, at a constant address
+    movzwl %cx, %eax                 ; p
+    andl  $32767, %edx               ; s = x & (M-1)
+    shrl  $15, %r15d
+    imull %eax, %r15d                ; a = p*(x>>15)   -- beside the branch
+    cmpl  %eax, %edx                 ; s vs p          -- does not use %r15d
+    jae   .LBB3_26
+```
 
-It is also worth noting what the tree costs in the other direction: T inlines
-the refill at all 255 nodes and comes to 2039 lines of generated body, against
-U's 1019 with the coder step lifted out. U is faster than T by 9%, which is the
-front-end paying for that footprint -- and both are far below a walk that fits
-in a loop.
+**But that is not why the tree loses, and the experiment says so.** SD and TD
+are S and T with an empty `__asm__` that forces the branch to wait for the
+multiply, exactly as the range coder's does -- one dependency added, nothing
+else. If the multiply's position were the mechanism, putting it on the path
+should cost the flat walk (which cannot speculate past the branch) more than
+the tree (which can), and the ratio should move. It does not move:
+
+| | walk | tree | tree/walk |
+|---|---|---|---|
+| as written | S 50.02 | T 30.13 | 0.602 |
+| bit waits for the multiply | SD 50.18 | TD 29.34 | 0.585 |
+
+The walk does not care at all, and the tree gets marginally worse. The
+explanation was wrong.
+
+**Nor is it code size**, which was the next guess. U's body is 7,675
+instructions against the walk's 756 -- but the range coder's *winning* tree is
+**12,516**, larger still. A big body is not what decides it.
+
+## What is actually left, and what this probe cannot settle
+
+What the controls leave is the plainest reading: the tree carries a large cost
+-- 285 conditional branches in U, 1,022 in T, against 18 in the walk -- and it
+can only win where the walk it replaces is more expensive than that cost. In
+this probe the rANS walk is about 20 ns/byte and the trees land at 30-31.
+`iftree_bench`'s range coder walk is about 52 ns/byte on the same box and its
+tree lands at 38, so there the same trade clears.
+
+**That is where the honest account stops.** The two benches do not differ only
+in their coder: `iftree_bench`'s model is a shift-and-clamp counter with no
+table where this probe uses the FSM lookup `counter.inc` actually has, and its
+`decA` is a non-inlined call per byte per lane that reloads `code`, `range` and
+the cursor from globals every time, where this probe keeps a block's state in
+one function. Its baseline is inflated by its harness. So the cross-bench
+comparison shows that the tree wins there and loses here, and does **not**
+establish that the coder is the reason.
+
+Settling that would take one more experiment: the same probe with the range
+coder dropped in beside rANS, same model, same lane arrangement, same harness.
+Until then the useful conclusion is the narrow one -- **for this decoder, as it
+is built, the if-tree loses in every shape and at every depth tried, and the
+three obvious explanations for why are all ruled out.**
 
 ## Reproducing
 

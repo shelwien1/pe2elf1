@@ -204,6 +204,52 @@ NOINLINE static void decode_P( const byte* __restrict base, const uint* off, con
   }
 }
 
+// SD / TD: S and T with the branch made to WAIT for the multiply, the way the
+// range coder's `code >= (range>>SCALElog)*p` does. The asm is empty, so the
+// only thing it adds is the dependency. If the multiply's POSITION is what
+// decides whether the tree pays, then putting it on the branch path should
+// hurt the flat walk more than the tree -- the tree can speculate past the
+// branch and the walk cannot -- and TD/SD should be better than T/S.
+NOINLINE static void decode_SD( const byte* __restrict base, const uint* off, const uint* lens, uint blksize, byte* __restrict out ){
+  Counter* __restrict cty = cty_;
+  uint rx[RCNUM], tp[RCNUM];
+  LANE_INIT();
+  uint nb1=blksize*8;
+  for( uint i=0;i<nb1;i+=RCNUM ){
+    uint c[NB];
+    UNROLL for( uint m=0;m<NB;m++ ){
+      uint lctx=1;
+      UNROLL for( uint j=0;j<8;j++ ){
+        const uint k=m*8+j;
+        uint st=cty[lctx].Get(), p=Counter::P(st);
+        if( __builtin_expect_with_probability( rx[k]<RANSL, 0, 0.99 ) ){
+          uint dsh=(rx[k]<(RANSL>>8))?16:8;
+          rx[k]<<=dsh; rx[k]|=load32(base+tp[k]-3)>>(32-dsh); tp[k]-=dsh>>3; }
+        uint s=rx[k]&mSCALE, a=p*(rx[k]>>SCALElog);
+        uint sd=s; __asm__("" : "+r"(sd) : "r"(a));
+        uint b=(sd>=p); rx[k]=b?(rx[k]-p-a):(a+s);
+        cty[lctx].Update(st,b); lctx=2*lctx+b; }
+      c[m]=lctx&0xFF; }
+    store16( out+i/8, c[0]|(c[1]<<8) );
+  }
+}
+NOINLINE static void decode_TD( const byte* __restrict base, const uint* off, const uint* lens, uint blksize, byte* __restrict out ){
+  Counter* __restrict cty = cty_;
+  uint rx[RCNUM], tp[RCNUM];
+  LANE_INIT();
+  uint nb1=blksize*8;
+  for( uint i=0;i<nb1;i+=RCNUM ){
+    uint _sym, c0, c1;
+    { const uint _base=0;
+#include "rans_tree_TD.h"
+      c0=_sym&0xFF; }
+    { const uint _base=8;
+#include "rans_tree_TD.h"
+      c1=_sym&0xFF; }
+    store16( out+i/8, c0|(c1<<8) );
+  }
+}
+
 typedef void (*t_dec)( const byte*, const uint*, const uint*, uint, byte* );
 static double now(){ return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 int main( int argc, char** argv ){
@@ -234,6 +280,8 @@ int main( int argc, char** argv ){
     { "S  indexed walk but byte-sequential (the ILP control)  ", decode_S },
     { "T  255-node if-tree, coder step inline at each node ", decode_T },
     { "U  255-node if-tree, bits only, updates after the byte", decode_U },
+    { "SD S, but the bit made to wait for the multiply       ", decode_SD },
+    { "TD T, but the bit made to wait for the multiply       ", decode_TD },
     { "P2 if-tree for 2 levels, then the indexed walk        ", decode_P<2,2> },
     { "P3 if-tree for 3 levels, then the indexed walk        ", decode_P<3,3> },
     { "P4 if-tree for 4 levels, then the indexed walk        ", decode_P<4,4> },

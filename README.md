@@ -317,15 +317,19 @@ tree, so it would cost a test inside the 22-instruction decode body on every
 file. Not built; the file says why.
 
 `misc/iftree_rans.md` is Shelwien's generated if-tree -- 255 real branch sites,
-one per context node -- tested against rANS, where `dec_vectorize.md` §9 had
-measured **1.63×** for the range coder. It loses, 40-45%, and the controls say
-why. A byte-sequential walk that gives up the wavefront exactly as a tree must
-costs only 3.3%, so the lane arrangement §9 flagged as the obstacle is not it;
-and on incompressible data the tree is 3.26× behind against 1.80× on enwik8,
-so the predictor IS buying it a lot. The range coder puts a multiply between
-the model's `p` and the decoded bit and speculation hides those cycles. rANS's
-bit is `(x & (M-1)) >= p`, ready the cycle `p` arrives, so there is nothing
-there to hide and the mispredict is pure cost.
+one per context node -- tested against rANS, where `dec_vectorize.md` §9
+measured 1.63x for the range coder (1.38x reproduced on this box). It loses,
+40-45%, in every shape and at every depth tried. Four controls rule out the
+obvious explanations, one of which was mine: it is not the lost wavefront ILP
+(a byte-sequential walk costs 3.3%), not register pressure (the cheap tree
+spills 1.4%), not where the multiply sits (forcing the bit to wait for it, as
+the range coder's does, moves the tree/walk ratio from 0.602 to 0.585 -- the
+wrong way), and not code size (the range coder's *winning* tree is 12,516
+instructions against this one's losing 7,675). What is left is that the tree
+costs what it costs -- 285 branches against the walk's 18 -- and only wins
+where the walk is more expensive than that. The file is explicit that the
+cross-bench comparison does not establish the coder as the reason, since the
+two harnesses differ in model and structure too.
 
 `misc/rans_decode.md` is the decoder read off its own disassembly: 130 vector
 instructions in 1099 against the encoder's 385 in 843, 22 instructions per bit
