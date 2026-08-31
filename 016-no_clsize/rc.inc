@@ -23,6 +23,18 @@
  // and clang rejects it in a constant expression even on the dead branch.
  #define RC_RANGE_INIT ( 0xFFFFFFFFu >> (8*(4-RC_CODBYTES)) )
 
+ // Index of the top set bit. A macro, not a function: rc_vecD.inc is this file
+ // preprocessed, and its contents land inside do_process, where a definition
+ // would be illegal. Never called with 0 -- rc_Quit's operand is low^high and
+ // range>0 keeps them apart. (common.inc's log2i is 32-bit.)
+#if defined(__GNUC__) || defined(__clang__)
+ #define RC_BSR64( x ) uint( 63-__builtin_clzll(x) )
+#elif defined(_MSC_VER)
+ #define RC_BSR64( x ) [&]{ unsigned long i_; _BitScanReverse64(&i_,(x)); return uint(i_); }()
+#else
+ #define RC_BSR64( x ) [&]{ qword v_=(x); uint i_=0; while( v_>>=1 ) i_++; return i_; }()
+#endif
+
 template< int f_DEC >
 struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
@@ -446,10 +458,28 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       const qword high = llow + range;
       const uint  hic  = (high<llow);
 
-      for( i=0; i<LOWBYTES; i++ ) {
-        const qword mask = ((1ULL<<((i+1)*4))<<((i+1)*4))-1;
-        if( hic || ((llow|mask)<high) ) llow|=mask, --n;
-      }
+      // Flush the largest value in [low, high) whose bottom bits are all 1.
+      //
+      //   low|(2^k-1) < high  <=>  (low>>k) < (high>>k)
+      //
+      // -- both sides say the top 64-k bits of low and high differ -- so the
+      // longest fillable run is the position of the top set bit of low^high.
+      // No search: one bit scan. And since a fill that fails at k fails at
+      // every wider k, that same k is what the byte-wise loop this replaced
+      // was finding, one byte at a time.
+      //
+      // Only the byte-aligned part of the run shortens the flush: the decoder
+      // reads 0xFF past the end of a substream (rc_Read pads it -- see
+      // rc_config.inc), so a trailing all-ones BYTE need not be written, and
+      // that count is floor(k/8) either way. Filling the leftover k%8 bits is
+      // free and cannot drop another byte; what it buys is the value of the
+      // last byte we do write. See misc/flush_bits.md.
+      //
+      // range >= sTOP holds at every flush, so k >= 24: a flush always drops
+      // at least 3 of the LOWBYTES it would otherwise emit.
+      const uint k = hic ? LOWBITS : RC_BSR64( llow ^ high );
+      llow |= (k>=64) ? ~qword(0) : ((qword(1)<<k)-1);
+      n -= k/8;
 
       // the cursor sits below ShiftLow's staging pair; the next stream
       // byte belongs one up (sh_v1xN_macro.inc's ++tmpptr before put1)
@@ -470,10 +500,28 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       const qword high = llow + range;
       const uint  hic  = (high<llow);   // llow+range can leave the qword at LOWBYTES==8
 
-      for( i=0; i<LOWBYTES; i++ ) {
-        const qword mask = ((1ULL<<((i+1)*4))<<((i+1)*4))-1;
-        if( hic || ((llow|mask)<high) ) llow|=mask, --n;
-      }
+      // Flush the largest value in [low, high) whose bottom bits are all 1.
+      //
+      //   low|(2^k-1) < high  <=>  (low>>k) < (high>>k)
+      //
+      // -- both sides say the top 64-k bits of low and high differ -- so the
+      // longest fillable run is the position of the top set bit of low^high.
+      // No search: one bit scan. And since a fill that fails at k fails at
+      // every wider k, that same k is what the byte-wise loop this replaced
+      // was finding, one byte at a time.
+      //
+      // Only the byte-aligned part of the run shortens the flush: the decoder
+      // reads 0xFF past the end of a substream (rc_Read pads it -- see
+      // rc_config.inc), so a trailing all-ones BYTE need not be written, and
+      // that count is floor(k/8) either way. Filling the leftover k%8 bits is
+      // free and cannot drop another byte; what it buys is the value of the
+      // last byte we do write. See misc/flush_bits.md.
+      //
+      // range >= sTOP holds at every flush, so k >= 24: a flush always drops
+      // at least 3 of the LOWBYTES it would otherwise emit.
+      const uint k = hic ? LOWBITS : RC_BSR64( llow ^ high );
+      llow |= (k>=64) ? ~qword(0) : ((qword(1)<<k)-1);
+      n -= k/8;
 
 #if RC_CARRYLESS
 
