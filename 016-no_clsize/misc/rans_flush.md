@@ -121,3 +121,67 @@ The honest summary: the range coder trims the flush because its decoder
 tolerates a range of final values. rANS does not have that tolerance at the
 flush at all, and the tolerance it does have -- at the initial state -- is
 destroyed by its own renormalisation within about a dozen symbols.
+
+## 4. Two proposals, checked against the geometry
+
+### 4.1 Big-endian flush plus zero padding
+
+The flush is **already** big-endian in the order that matters. The encoder
+writes the state's bytes ascending, LSB first, and the decoder reads the chunk
+DOWNWARD from its top -- so the byte at the top of a substream is the state's
+most significant one, which is the byte that is zero 12.185% of the time. The
+leading zeros are already where a trim would want them.
+
+What the zero padding would be for is telling the decoder how many were
+trimmed, and **it is not needed**, because the state's own invariant already
+says: the decoder reads three bytes, and reads a fourth only when three did
+not reach `RANSL`. That is exact rather than heuristic (§2), so no padding and
+no length bits are spent.
+
+An explicit byte count in the header is **equivalent in yield, not better**,
+and the reason is the invariant again. `x >= L = 2^(15+KLOG)`, so the state
+never fits in fewer than `ceil((16+KLOG)/8)` bytes: three at every
+`RC_RANS_KLOG` from 1 to 8. The only choice a count could express is three
+against four -- exactly what the test already extracts, for free. A count
+would earn something only at `KLOG=0`, where the state can fit in two bytes,
+and `KLOG>=1` is enforced for other reasons.
+
+### 4.2 The high bits of the length field, and a raw escape
+
+The length header is two bytes per lane and the arithmetic behind the proposal
+holds. One lane codes `BLKSIZE*8/RCNUM = 32768` bits, which is **4096 bytes
+stored raw**, so any lane whose coded output exceeds that would be better
+stored verbatim -- and a length capped there needs 13 bits, leaving the top
+three free. Measured lane lengths:
+
+| | n | min | median | mean | p99 | max |
+|---|---|---|---|---|---|---|
+| enwik8 | 24,416 | 59 | 2,900 | 2,561 | 3,619 | **4,166** |
+| 20 MB of /dev/urandom | 4,896 | 739 | 4,218 | 4,206 | 4,231 | **4,247** |
+
+Nothing anywhere near 0x1FFF, so the three high bits are genuinely free.
+
+**On enwik8 the escape is worth almost nothing**: 4 lanes of 24,416 exceed
+4096, by 70 bytes each -- under 300 bytes in 62 MB. That is not where its
+value is.
+
+**On incompressible input it is worth a great deal.** 20 MB of urandom codes
+to 20,604,250 bytes today -- **3.021% of expansion**, because an order-0 bit
+model on random data pays a little over one bit per bit and cannot do
+otherwise. With the escape, 4,880 of the 4,896 lanes would store their 4096
+raw bytes instead of their ~4,206 coded ones, and expansion falls to roughly
+0.3%. That is the argument for the feature: not ratio on text, but a bound on
+what the coder can do to data it cannot model.
+
+**But per-lane is the wrong granularity.** A raw lane's bits still have to walk
+the shared context tree -- the model is one `cty[]` across all lanes -- so the
+decoder would take the bit from a raw buffer instead of the coder and still
+run `Get`/`Update`. That is a per-lane test inside a loop whose whole body is
+22 instructions, paid on every bit of every file to help the files that cannot
+be modelled. A **per-block** escape has none of that cost: one flag, the block
+stored verbatim, the model skipped on both ends, and the decode loop untouched.
+It caps expansion at the flag plus the block header rather than at ~0.3%, and
+it is the shape worth building.
+
+Not implemented here. It is a format change that touches `rc_Read`, `rc_Write`
+and both models, and it is orthogonal to everything else in this file.

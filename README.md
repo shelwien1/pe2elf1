@@ -303,6 +303,19 @@ values decode identically, and rANS's decoder is injective. The freedom rANS
 does have is at the encoder's *initial* state, and renormalisation destroys it
 within about a dozen symbols; the file has that measured.
 
+Its §4 checks two further proposals against the geometry. A big-endian flush
+with zero padding is already what the format does -- the decoder reads the
+chunk downward, so the state's top byte is at the top of the substream -- and
+an explicit byte count in the length header would be equivalent in yield, not
+better, because `x >= L` puts the floor at three bytes for every
+`RC_RANS_KLOG` from 1 to 8. The length field does have three free high bits:
+lane lengths top out at 4,166 on enwik8 against a 4,096-byte raw equivalent.
+A raw-storage escape is worth under 300 bytes on enwik8 -- but 20 MB of
+urandom expands **3.021%** today, and a per-block escape would cap that near
+zero. Per-lane would not: a raw lane's bits still walk the shared context
+tree, so it would cost a test inside the 22-instruction decode body on every
+file. Not built; the file says why.
+
 `misc/rans_decode.md` is the decoder read off its own disassembly: 130 vector
 instructions in 1099 against the encoder's 385 in 843, 22 instructions per bit
 at ~9.4 cycles, so IPC ~2.5 -- about 38% of a 4-wide machine's issue width
