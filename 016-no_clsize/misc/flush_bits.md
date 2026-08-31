@@ -292,16 +292,47 @@ The per-lane bit model beats byte-level order-0, which is the point: the lane
 is the context that matters, and a byte-level coder without it does not have
 it.
 
-Measured, with the FSM counters actually doing the work:
+### The head byte is not coded whole
+
+Everything above about the flush says what the head byte's bottom bits are:
+its trailing run of 1s is exactly `k%8`, and the bit above the run is the zero
+that stopped it.  So the run goes first, in a 3-bit field of its own with three
+more counters per lane, and only bits 7..r+1 of the byte are left to code.
+
+Splitting a value into a prefix and a remainder is its own entropy either way
+-- `H(byte) = H(r) + H(rest | r)`, and r is a function of the byte.  What it
+buys is that a **position-only model cannot see structure inside a byte**: bit
+3 of the head byte is 1 whenever r>3, and no counter indexed by position alone
+learns that.  Told r first, it does not have to.
 
 ```
-  header stream   51005 bytes over 1526 blocks   33.42 a block   (48 raw)
-  enwik8          62,514,618 -> 62,490,849       -23,769
-  vs the raw head row it started from            -22,243        4.9993 bpc
+  head byte, per-lane counters              bits/value
+    8 position counters                       6.8648
+    3 for k%8, then bits 7..r+1               6.5162
+    pooled order-0 byte entropy (the floor)   6.4504
 ```
 
-51005 against the 48135 static optimum plus about 1660 bytes of flush: the FSM
-gives up roughly 2.4% to adaptation, which is what an FSM counter costs.
+r is capped at 7, not 8.  A payload lane's flush cannot leave an all-ones head
+byte -- that byte would have been dropped -- but the carry twin's degenerate
+n==0 flush can end on one, so at r==7 bit 7 is coded like any other and 0xFF is
+representable.
+
+Decoded r over enwik8 comes back as 3092/3023/2993/3038/3035/3091/3124/3020,
+which is the `k%8` histogram at the top of this document, byte for byte.
+
+### Measured
+
+```
+  header stream   49654 bytes over 1526 blocks   32.54 a block   (48 raw)
+  enwik8          62,514,618 -> 62,489,498       -25,120
+  vs the raw head row it started from            -23,594        4.9992 bpc
+```
+
+Of that, 23,769 is the per-lane position model and 1,351 the k%8 split (against
+a 1,064-byte estimate -- the counters do slightly better than the static bound
+because r is not quite uniform within a lane).  49654 against a static optimum
+near 47,000 plus about 1,660 bytes of flush: the FSM gives up a couple of
+percent to adaptation, which is what an FSM counter costs.
 
 Encode speed is unchanged; decode is about 1% slower (round-robin twins, 7
 rounds, best of 6 passes, medians: enc 80.48 -> 80.79 MB/s, dec 46.95 ->
@@ -317,11 +348,10 @@ its own value, so the model cannot learn that a length starting `0x09` is
 likely to continue one way.  A binary-tree context within the value -- the
 `ctx`/`cty` shape the payload model already uses -- is the obvious next step,
 and the gap between the position-only bound (8.907 bits a length) and the
-per-lane byte entropies says there is something in it.  Two other things the
+per-lane byte entropies says there is something in it.  The other thing the
 data suggests and this model does not use: a length is close to the same
 lane's length in the *previous* block (sd 72-250 against means in the
-thousands), and the head byte's trailing-1 run is exactly `k%8` of the flush
-that produced it, which the coder knows.
+thousands).
 
 ## What the header is worth
 

@@ -320,10 +320,31 @@ struct RCio {
   // No context beyond the position: a bit does not see the bits above it in
   // its own value. That is the next thing to try, not a claim that it does not
   // matter -- see misc/flush_bits.md.
+  //
+  // The head byte is not coded whole. Its trailing run of 1 bits is k%8 of the
+  // flush that wrote it -- exactly, because rc_Quit's fill stops at a k whose
+  // bit in low is 0 -- so the run is sent first, in its own 3-bit field, and
+  // the byte's bottom r+1 bits then follow from it: r ones and the zero that
+  // ended the run. Only bits 7..r+1 are left to code. Coding the run and the
+  // remainder separately is the byte's own entropy either way, but a
+  // position-only model cannot see that structure inside a byte, so splitting
+  // it out is worth 0.35 bits a head. r is capped at 7 rather than 8: an
+  // all-ones head byte cannot come out of a payload lane's flush (that byte
+  // would have been dropped), but the carry twin's degenerate n==0 flush can
+  // end on one, and at r==7 the top bit is coded like any other.
   static const uint HDR_LENBITS  = 16;                       // the 2-byte length
+  static const uint HDR_RUNBITS  = 3;                        // k%8, capped at 7
   static const uint HDR_HEADBITS = 8;                        // the head byte
-  static const uint HDR_BITS     = HDR_LENBITS + HDR_HEADBITS;
+  static const uint HDR_RUNPOS   = HDR_LENBITS;
+  static const uint HDR_HEADPOS  = HDR_RUNPOS + HDR_RUNBITS;
+  static const uint HDR_BITS     = HDR_HEADPOS + HDR_HEADBITS;
   Counter hdrctr[RCNUM][HDR_BITS];
+
+  // Where the head byte's coded part starts, given the run. Below 7 the run's
+  // own terminating zero is bit r, so bits 7..r+1 are free; at 7 there is no
+  // terminating zero inside the byte and bit 7 is free. The counters are
+  // indexed from bit 7 down, so a bit always meets the same counter.
+  static uint hdr_headsh( uint r ) { return (r<7) ? r+1 : 7; }
 
   // NOINLINE for model_pass's reason (model0.inc): this runs once per file,
   // but its address arithmetic inside do_process costs registers in the loop
@@ -349,10 +370,19 @@ struct RCio {
       // the payload copy and the FF padding below both index by it.
       rclen[rcidx] = Min<uint>( l, tmpbufsize );
     }
-    // the head row: one byte per non-empty lane, put back at the bottom of the
-    // lane's chunk -- where rc_Write lifted it from
+    // the run row, then the head row: one byte per non-empty lane, put back at
+    // the bottom of the lane's chunk -- where rc_Write lifted it from
+    uint hrun[RCNUM];
+    for( rcidx=0; rcidx<RCNUM; rcidx++ )
+      hrun[rcidx] = rclen[rcidx] ? hdr.GetBits( HDR_RUNBITS, hdrctr[rcidx]+HDR_RUNPOS ) : 0;
+
     byte head[RCNUM];
-    for( rcidx=0; rcidx<RCNUM; rcidx++ ) head[rcidx] = rclen[rcidx] ? byte(hdr.GetBits( HDR_HEADBITS, hdrctr[rcidx]+HDR_LENBITS )) : 0xFF;
+    for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
+      if( rclen[rcidx]==0 ) { head[rcidx] = 0xFF; continue; }
+      const uint r  = hrun[rcidx];
+      const uint sh = hdr_headsh(r);
+      head[rcidx] = byte( (hdr.GetBits( HDR_HEADBITS-sh, hdrctr[rcidx]+HDR_HEADPOS )<<sh) | ((1u<<r)-1) );
+    }
     hdr.FinishDecode();
 
     // ...and the bytes the header stream's reader over-read: they are the
@@ -399,14 +429,28 @@ struct RCio {
       rclen[rcidx] = l;
     }
 
-    // the head row. The payload spans [rowsize-RC_SKIP-l, rowsize-1-RC_SKIP]:
+    // The head bytes. The payload spans [rowsize-RC_SKIP-l, rowsize-1-RC_SKIP]:
     // its top byte sits RC_SKIP below the row top (above it, the zero prefix),
     // and the ascending copy below emits it last-emitted-first -- so the byte
     // at the BOTTOM of that span is the one the file would lead with, and it
     // is the one that comes up here instead.
+    //
+    // The run row first: r is the byte's trailing 1s, which is k%8 of the
+    // flush that wrote it, and it fixes the byte's bottom r+1 bits.
+    byte hbyte[RCNUM]; uint hrun[RCNUM];
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
-      if( l ) hdr.PutBits( tmpbuf[rcidx][rowsize-RC_SKIP-l], HDR_HEADBITS, hdrctr[rcidx]+HDR_LENBITS );
+      if( l==0 ) continue;
+      const uint b = tmpbuf[rcidx][rowsize-RC_SKIP-l];
+      uint r = 0; while( (r<7) && ((b>>r)&1) ) r++;
+      hbyte[rcidx] = byte(b); hrun[rcidx] = r;
+      hdr.PutBits( r, HDR_RUNBITS, hdrctr[rcidx]+HDR_RUNPOS );
+    }
+
+    for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
+      if( rclen[rcidx]==0 ) continue;
+      const uint sh = hdr_headsh( hrun[rcidx] );
+      hdr.PutBits( hbyte[rcidx]>>sh, HDR_HEADBITS-sh, hdrctr[rcidx]+HDR_HEADPOS );
     }
     hdr.FinishEncode();
 
