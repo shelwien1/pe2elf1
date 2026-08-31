@@ -200,6 +200,45 @@ struct Model<0> : Coroutine {
     uint c,i,j,bit,p,state;
     byte* __restrict ip = inpptr;
     uint lctx = ctx;
+#if RC_DEFER_UPD>1 || defined(RC_DEFER_CHECK)
+    // PRICING ONLY, and encoder-only: what a deferred counter update costs in
+    // ratio. Every wide-SIMD decode proposal needs one, because at depth 0
+    // every in-flight byte reads and writes cty[1] -- so a decoder that reads
+    // the counters for G bytes before writing any of them does not reproduce
+    // model_pass's order, whatever else it gets right. The fix has to be in
+    // the FORMAT: a defined G-byte adaptation lag on both ends.
+    //
+    // Here the bytes of a group of G all read the state as of the start of the
+    // group and their writes land in order at the end, last writer winning --
+    // exactly "read all, then write all". G=1 is the current stream and is the
+    // check that this path is otherwise faithful. The decoder is NOT changed:
+    // the output of this build does not decode, and the only number wanted
+    // from it is the block size.
+    {
+      const uint G = RC_DEFER_UPD;
+      uint ua[8*RC_DEFER_UPD], uv[8*RC_DEFER_UPD];
+      for( uint i0=0; i0<blksize; i0+=G ) {
+        uint n = 0;
+        const uint ge = (i0+G<blksize) ? i0+G : blksize;
+        for( i=i0; i<ge; i++ ) {
+          c = *ip++;
+          for( j=0; j<8; j++ ) {
+            state = cty[lctx].Get(); p = t_Counter::P(state);
+            bit = (c>>(7-j))&1;
+            pbit[i*8+j] = (bit<<15)+p;
+            // record the write instead of performing it: Update against a
+            // scratch copy leaves the live counter alone
+            t_Counter tmp = cty[lctx];
+            tmp.Update( state, bit );
+            ua[n] = lctx; uv[n] = tmp.Get(); n++;
+            (lctx*=2) += bit;
+          }
+          lctx = 1;
+        }
+        for( uint t=0; t<n; t++ ) cty[ua[t]].Set( uv[t] );
+      }
+    }
+#else
     for( i=0; i<blksize; i++ ) {
       c = *ip++;                          // get0(), against the local cursor
       for( j=0; j<8; j++ ) {
@@ -211,6 +250,7 @@ struct Model<0> : Coroutine {
       }
       lctx = 1;                           // end of byte: reset the bit context
     }
+#endif
     inpptr = ip; ctx = lctx;
   }
 

@@ -365,12 +365,29 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // one little-endian word at the cursor, masked, no swap and no second
       // load. rc.inc's decode renorm, mirrored; misc/dec_renorm.md is where
       // that shape was measured.
+#if RC_RANS_REFILL==1
+      // One byte, with the second out of line. Exact: RANSL is a multiple of
+      // 256, so after x = (x<<8)|b the test x<RANSL is true exactly when the
+      // original x was below RANSL>>8 -- the nested branch reproduces the
+      // 0/8/16 ternary rather than approximating it. The byte order is the
+      // same one the dword form assembles: tmpbase[tmpptr] is the high byte.
+      // The second branch fired 19 times in 12520077 refills, so it is free,
+      // and the ternary, both variable shifts, the 32-dsh, the dsh>>3 and the
+      // dsh[] lane array all go with it.
+      if( __builtin_expect_with_probability( rx<RANSL, 0, 0.99 ) ) {
+        rx = (rx<<8) | tmpbase[tmpptr]; tmpptr -= 1;
+        if( __builtin_expect_with_probability( rx<RANSL, 0, 0.999 ) ) {
+          rx = (rx<<8) | tmpbase[tmpptr]; tmpptr -= 1;
+        }
+      }
+#else
       if( __builtin_expect_with_probability( rx<RANSL, 0, 0.99 ) ) {
         dsh = (rx<(RANSL>>8)) ? 16 : 8;
         rx <<= dsh;
         rx |= (uint&)tmpbase[tmpptr-3] >> (32-dsh);
         tmpptr -= dsh>>3;
       }
+#endif
       // One multiply, and it does not wait for the bit. The textbook step is
       //   f = bit ? M-p : p;  c = bit ? p : 0;  x = f*(x>>15) + s - c
       // which puts the multiply AFTER the comparison that picks f, and needs

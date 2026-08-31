@@ -81,6 +81,10 @@ runsame "-DRC_RANS_SPLIT=1"
 runsame "-DRC_RANS_SPLIT=2"
 runsame "-DRC_RANS_DECS=1"
 runsame "-DRC_RANS_DECS=2"
+runsame "-DRC_RANS_REFILL=1"
+# the deferred-update pricing path, forced on at G=1 where it must reproduce
+# the default stream exactly -- that is what says the pricing is faithful
+runsame "-DRC_DEFER_UPD=1 -DRC_DEFER_CHECK=1"
 
 #--- the range coder ---------------------------------------------------------
 echo "-- range coder (rc.inc)"

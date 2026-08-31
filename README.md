@@ -290,12 +290,21 @@ range actually costs is about 300 bytes of the 75,436 -- that is the whole
 `RC_RANS_KLOG` barely moves the total.
 
 `misc/rans_decode.md` is the decoder read off its own disassembly: 130 vector
-instructions in 1099 against the encoder's 385 in 843, 22 instructions per
-bit, and an IPC near 2 -- so it is bound by instruction count, not by either
-dependency chain. It has `rc.inc`'s `RC_DEC_SPLIT` ported and measured (-33%),
-the decode step's three algebraic forms (the default wins by a quarter,
-because its multiply does not wait for the bit), and why most of the
-`RC_DEC_RENORM` shapes have nothing to do here.
+instructions in 1099 against the encoder's 385 in 843, 22 instructions per bit
+at ~9.4 cycles, so IPC ~2.5 -- about 38% of a 4-wide machine's issue width
+idle. It has `rc.inc`'s `RC_DEC_SPLIT` ported and measured (-33%), the decode
+step's three algebraic forms (the default wins by a quarter, because its
+multiply does not wait for the bit), a one-byte refill that is +1.3% on one
+machine and -9.2% here, and Shelwien's `rans_shapes` shapes reproduced -- the
+ordering transfers, the magnitude does not.
+
+Its §5a is the one number the whole wide-SIMD question turns on. Every
+proposal to gather the counters for 8 lanes, step them as a vector and scatter
+back needs a defined adaptation lag in the FORMAT, because at depth 0 every
+in-flight byte reads and writes `cty[1]`. `RC_DEFER_UPD=G` prices that in
+`model_pass` alone: **+0.309% of enwik8 at G=2 and +1.90% at G=8**, against a
+total rANS-vs-rangecoder ratio gap of 0.121%. No measured speed result is
+worth 16x the coder's whole ratio cost, so the space is closed.
 
 `misc/rans_comparison.md` reads this coder against three other vectorised rANS
 implementations -- `rz`, `lolz` and Oodle's LZNA -- from their source. The

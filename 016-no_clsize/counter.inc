@@ -18,6 +18,7 @@ struct Counter {
   void Update( uint _state, uint bit ) { 
     state = ((const word*)FSM)[ _state*2 + bit ];
   }
+  void Set( uint v ) { state = word(v); }    // RC_DEFER_UPD's deferred write
 };
 
 // RC_FUSE_PP=1: the same counter with pp[] folded in. What the model carries
@@ -34,6 +35,7 @@ struct Counter2 {
   void Update( uint _sp, uint bit ) {
     sp = FSM2[ (_sp>>16)*2 + bit ];
   }
+  void Set( uint v ) { sp = v; }             // RC_DEFER_UPD's deferred write
 };
 
 template< int FUSE > struct SelCounter { typedef Counter2 t; };

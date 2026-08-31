@@ -138,6 +138,30 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #ifndef RC_RANS_DECS
 #define RC_RANS_DECS 0
 #endif
+
+// The decoder's refill shape.
+//
+//   0  the dword window and a 0/8/16 ternary shift
+//   1  one byte, with the second byte behind a nested branch
+//
+// 1 is exact rather than approximate: RANSL is a multiple of 256, so after
+// x = (x<<8)|b the test x<RANSL is true exactly when the original x was below
+// RANSL>>8. The second branch fires ~1.5e-6 of the time (19 in 12520077
+// refills on enwik8), so it costs nothing, and it deletes the ternary, both
+// variable shifts, the 32-dsh, the dsh>>3 and the dsh[] lane array.
+#ifndef RC_RANS_REFILL
+#define RC_RANS_REFILL 0
+#endif
+
+// PRICING ONLY: the group size of a deferred counter update in model_pass.
+// 1 (the default) is the current stream. Above 1, the bytes of each group of
+// RC_DEFER_UPD read the counters as of the start of the group and their
+// writes land at the end -- the adaptation lag every wide-SIMD decoder shape
+// needs in the FORMAT before it can be legal. The decoder is not changed, so
+// such a build does not roundtrip; the only number it produces is the size.
+#ifndef RC_DEFER_UPD
+#define RC_DEFER_UPD 1
+#endif
 #if RC_RANS_KLOG<1 || RC_RANS_KLOG>8
 #error "RC_RANS_KLOG must be 1..8: above 8 the state passes 2^31 and rans.inc's signed float conversion misreads it"
 #endif
