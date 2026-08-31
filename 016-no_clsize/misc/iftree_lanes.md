@@ -59,3 +59,49 @@ than the substream rows the real decoder indexes through `tmpbase`/`tmpptr`.
 All of that is work the real decoder does on both sides of the comparison, so
 it dilutes the ratio: 1.27x here is an upper bound on what integration can
 give, not a prediction.
+
+## Integrated, it loses -- and the tree is not why
+
+`RC_DEC_IFTREE` (rc_config.inc, default 0) is the probe's shape in the real
+decoder: `mk_iftree.py` generates `rc_iftree.inc` at build time, the walk does
+nothing but the compares -- each node's multiply has to sit inside the branch
+structure, because the frequency is what the context selects -- and it leaves
+`rpre` in a small array.  The range/rpre update is batched over the lane arrays
+afterwards, and the renorm is one pass at the end over all RCNUM lanes.  The
+knob is the tree's depth; below it the remaining bits run as a loop.  Every
+depth codes the same stream and round-trips the default encoder.
+
+```
+  depth   binary    dec MB/s      (base: 51224 bytes, 46.2 MB/s)
+      1    51704       29.40
+      2    51848       30.25
+      4    51864       33.71   <- best
+      6    53080       27.36
+      8    59928       23.13
+```
+
+0.73x at best.  The interesting row is **depth 1**: one branch site, which is
+the plain loop with the batched update and nothing else, and it is already
+0.64x.  So the restructuring costs 36% and the tree then wins 15% of it back
+(29.40 -> 33.71) without ever reaching the loop it replaced.
+
+The tree is doing what the probe said it does.  What the probe did not model is
+the cost of taking the update out of `rc_Process`.  There, a lane's `code`,
+`range` and `rpre` live in registers across a tight window and the counter
+update is two loads and a store; here `pre[]` is written by the walk and read
+back by the batch, `range[]` and `rpre[]` are written by the batch and read
+again by the renorm, and all of it goes through stack arrays that the loop
+version never materialises.  That is the 36%.
+
+The batch does not vectorize, with or without `RC_UNROLL` on it -- clang
+reports the same four vectorized loops in the model1 translation unit either
+way, and the measurement does not move (33.30 against 33.71).  A read-modify-
+write over a runtime-based slice with a select per element is not what the loop
+vectorizer wants, and forcing the unroll only removes the loop it would have
+taken.
+
+What would have to change for this to pay is the renorm: it is a 99%
+not-taken branch per lane with a masked 16-bit load (see `rc_Renorm` in the
+generated kernel), so a common vectorized renorm has to do unconditionally,
+for sixteen lanes, work that today happens about 1.2 times a group.  That is
+the wrong direction, and it is why the batch form starts 36% down.
