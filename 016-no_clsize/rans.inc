@@ -243,15 +243,16 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       const uint _c = _b ? freq : 0;
       // The division, in float32 and through RANS_DIV, which model.inc
       // defines because it is the compile's business and not the generator's.
-      // It runs on x BEFORE the renormalisation and RANS_SCALB applies the
-      // renormalisation's shift to the result afterwards -- same quotient,
-      // but the two compares that pick the shift no longer sit in front of
-      // the conversion and the multiply. See RANS_SCALB.
+      // It runs AFTER the renormalisation, on a state below f<<XSH, so the
+      // quotient is below 1<<XSH and the relative error float32 carries over
+      // it is what RANS_DIV's bias is sized against: the truncated quotient is
+      // the true one or exactly one below it, never above, and one correction
+      // is always enough. misc/rans_div.cpp checks that for every f.
       //
-      // After the shift the quotient is below 1<<XSH, and the relative error
-      // float32 carries over it is what RANS_DIV's bias is sized against: the
-      // truncated quotient is the true one or exactly one below it, never
-      // above, and one correction is always enough.
+      // The divide can also be moved AHEAD of the renormalisation -- the
+      // quotient is the same one, and the shift comes off the float's exponent
+      // afterwards -- which takes the two compares that pick the shift off the
+      // front of the chain. It measures slower; model.inc has the numbers.
       //
       // The correction does not need a branch or even a second quotient:
       // adding one to q and taking f off r adds exactly M-f to the result,
@@ -277,9 +278,15 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // call's multiply has just produced, so it resolves a whole step
       // earlier. That is where rc.inc puts its refill too.
       //
-      // The outer test is what the shape is for: about 96% of coded bits
-      // renormalise nothing, and the two shifts it skips land on the
-      // loop-carried x. The 0.99 in the hint is not that measured rate: it is
+      // The outer test is what the shape is for, and its rate is not a
+      // guess: a byte-renormalised rANS refills exactly once per byte of
+      // output, so the branch fires bpc/8 of the time. Measured over 20 MB
+      // of enwik8 at 5.01 bpc: 12520077 firings in 160000322 coded bits,
+      // 7.83%, and 1.000 bytes per firing -- the 16-bit case, x below L>>8,
+      // happened 19 times in 12.5 million. The inner select is there for
+      // correctness, not for the common path.
+      //
+      // The 0.99 in the hint is deliberately NOT that measured rate: it is
       // what makes clang put the body out of line rather than in the fall-
       // through path, and the difference between 0.92 and 0.99 is 5.3% of
       // decode -- the loop is big enough that its footprint matters. Inside, dsh is the SHIFT count, 0/8/16, not a byte

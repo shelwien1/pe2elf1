@@ -276,6 +276,16 @@ range actually costs is about 300 bytes of the 75,436 -- that is the whole
 `KLOG=7 -> 8` step, and the loss halves with every one -- which is why
 `RC_RANS_KLOG` barely moves the total.
 
+`misc/rans_comparison.md` reads this coder against three other vectorised rANS
+implementations -- `rz`, `lolz` and Oodle's LZNA -- from their source. The
+short version is that they vectorise the *alphabet* of one stream (a SIMD
+search over 16 or 32 cumulative frequencies, two interleaved states) and leave
+the coder scalar, where we vectorise the *coder* across sixteen streams and
+leave the alphabet at two. Two of them also code single bits, and all three
+binary steps turn out to be the same algebra; the differences are that they
+branch on the bit where we select, and that their encoders divide with the
+integer `/` where sixteen lanes left us no such option.
+
 ### Knobs
 
 | | |
