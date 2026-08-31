@@ -5,6 +5,10 @@
 #include "FSM.cpp"
 
 #include "rc_config.inc"
+
+// Ahead of rc_io.inc, which needs Counter for the header model -- see RCio.
+#include "counter.inc"
+
 #include "rc_io.inc"
 
 // rc.inc is the scalar rangecoder of sh_v1xN_s.cpp, instantiated once here
@@ -32,8 +36,6 @@
 #undef RC_CARRYLESS
 
 #include "rc_vec.inc"
-
-#include "counter.inc"
 
 
 

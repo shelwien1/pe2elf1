@@ -256,10 +256,77 @@ blocks that landed on j=2.  Encode and decode speed are unchanged -- round-robin
 twin builds, best of 6 passes, 3 rounds, medians: enc 78.5 -> 80.6 MB/s, dec
 46.6 -> 46.9, inside a 13% within-build spread.
 
+## The header model
+
+The header stream codes each bit against an FSM counter, one per bit position
+per lane: `RCio::hdrctr[RCNUM][24]`, 16 positions for the length and 8 for the
+head byte, carried across blocks and reset once per file.
+
+Per **lane** is what makes it work, and it is not a small effect.  The lanes
+are not interchangeable -- they are fixed slices of the bit stream with fixed
+jobs, and their lengths sit in tight bands a long way apart:
+
+```
+  lane   mean length   sd     bits/length, position-only model
+     0        127      72          7.997
+     1       3276     107          9.020
+     2       1648     252         10.491
+     5       3523      76          8.989
+    ...
+```
+
+One shared set of 24 counters sees the union of those bands, so its top
+position bits look near-random and it learns almost nothing: 11.530 bits a
+length.  Per lane it is 8.907.  On the head byte the two are nearly the same
+(6.908 vs 6.865) -- that byte's skew is `k%8`, which has no lane in it.
+
+```
+  static, from the enwik8 header data      header bytes    saved
+    raw                                          73248         -
+    24 counters, shared                          56273     16975
+    24 x RCNUM, per lane                         48135     25113
+    (byte-level order-0, for reference)          52917     20331
+```
+
+The per-lane bit model beats byte-level order-0, which is the point: the lane
+is the context that matters, and a byte-level coder without it does not have
+it.
+
+Measured, with the FSM counters actually doing the work:
+
+```
+  header stream   51005 bytes over 1526 blocks   33.42 a block   (48 raw)
+  enwik8          62,514,618 -> 62,490,849       -23,769
+  vs the raw head row it started from            -22,243        4.9993 bpc
+```
+
+51005 against the 48135 static optimum plus about 1660 bytes of flush: the FSM
+gives up roughly 2.4% to adaptation, which is what an FSM counter costs.
+
+Encode speed is unchanged; decode is about 1% slower (round-robin twins, 7
+rounds, best of 6 passes, medians: enc 80.48 -> 80.79 MB/s, dec 46.95 ->
+46.43).  Most of a first, larger regression was `hdr_Init`'s reset loop being
+inlined into `do_process` -- 384 counters once per file, costing registers in
+the loop that runs 800 million times, the same effect that makes `model_pass`
+NOINLINE.  It is NOINLINE now.
+
+### What is left in it
+
+No context beyond the bit position: a bit does not see the bits above it in
+its own value, so the model cannot learn that a length starting `0x09` is
+likely to continue one way.  A binary-tree context within the value -- the
+`ctx`/`cty` shape the payload model already uses -- is the obvious next step,
+and the gap between the position-only bound (8.907 bits a length) and the
+per-lane byte entropies says there is something in it.  Two other things the
+data suggests and this model does not use: a length is close to the same
+lane's length in the *previous* block (sd 72-250 against means in the
+thousands), and the head byte's trailing-1 run is exactly `k%8` of the flush
+that produced it, which the coder knows.
+
 ## What the header is worth
 
-enwik8, 1526 blocks x 16 lanes = 24416 substreams.  Order-0 entropy of each
-header field, as it stands:
+The numbers this model was built against.  enwik8, 1526 blocks x 16 lanes =
+24416 substreams; order-0 entropy of each header field in the raw format:
 
 ```
                               bits    x24416 = bytes
@@ -267,16 +334,16 @@ header field, as it stands:
   length high byte            2.959             9032
   head byte                   6.450            19687
                                        ------------
-  header today (48832 + 24416)                 73248   0.117% of the file
+  header raw (48832 + 24416)                   73248   0.117% of the file
   order-0 coded                                52917
                                              = 20331 saved,  0.033%
 ```
 
-Two things to note before building a header coder.  The head byte is *not*
-where most of that is -- it gives 4.7 KB, and the length high byte gives 15.6
-KB, because substream lengths cluster tightly (min 57, max 4163, mean 2558,
-so the high byte is nearly always 0x09 or 0x0A).  And coding the length as one
-16-bit symbol is *worse* than as two bytes (10.535 vs 10.888 bits), as is
-delta-coding against the previous lane (10.914) -- the lanes' lengths are close
-to each other but their low bytes are not correlated, so the delta only
-destroys the high byte's structure.
+The head byte is *not* where most of that is -- it gives 4.7 KB, and the length
+high byte gives 15.6 KB, because substream lengths cluster tightly (min 57, max
+4163, mean 2558, so the high byte is nearly always 0x09 or 0x0A).  And coding
+the length as one 16-bit symbol is *worse* than as two bytes (10.535 vs 10.888
+bits), as is delta-coding against the previous lane (10.914) -- the lanes'
+lengths are close to each other but their low bytes are not correlated, so the
+delta only destroys the high byte's structure.  Delta against the same lane in
+the previous block is a different question, and untried.

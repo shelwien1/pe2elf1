@@ -174,6 +174,7 @@ struct Model<0> : Coroutine {
       "it as arguments and gc.bat has %defs% for it." );
 
     for( i=0; i<DIM(stats); i++ ) stats[i].Reset();
+    rcio.hdr_Init();
     ctx = 1; cty = stats;
 
     while(1) {

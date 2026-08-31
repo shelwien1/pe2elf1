@@ -168,15 +168,25 @@ struct RC_HDR_IO {
   uint rc_len ( void ) const { return (nio>RC_SKIP) ? nio-RC_SKIP : 0; }  // encode
   uint rc_read( void ) const { return nio; }                              // decode
 
-  // Bypass bits, p = 1/2. A placeholder for a header model: it costs what the
-  // raw bytes cost and the point of it is the plumbing, not the size.
-  void PutBits( uint v, uint n ) {
-    for( ; n!=0; n-- ) { uint b = (v>>(n-1))&1; ((Rangecoder*)this)->rc_Process( hSCALE, b ); }
+  // n bits, top first, against a run of n counters -- one per bit position.
+  // The counters are the caller's and live across blocks; see RCio::hdrctr.
+  void PutBits( uint v, uint n, Counter* __restrict c ) {
+    for( ; n!=0; n--,c++ ) {
+      uint b = (v>>(n-1))&1;         // rc_Process takes the bit by reference
+      const uint s = c->Get();
+      ((Rangecoder*)this)->rc_Process( Counter::P(s), b );
+      c->Update( s, b );
+    }
   }
 
-  uint GetBits( uint n ) {
+  uint GetBits( uint n, Counter* __restrict c ) {
     uint v = 0;
-    for( ; n!=0; n-- ) { uint b; ((Rangecoder*)this)->rc_Process( hSCALE, b ); v = v*2 + b; }
+    for( ; n!=0; n--,c++ ) {
+      uint b; const uint s = c->Get();
+      ((Rangecoder*)this)->rc_Process( Counter::P(s), b );
+      c->Update( s, b );
+      v = v*2 + b;
+    }
     return v;
   }
 };
@@ -198,11 +208,8 @@ struct RC_HDR_IO {
 //  is why it is up here with the lengths and not down in the payload.
 //
 //  The header goes through its own scalar carry-propagating rangecoder --
-//  RC_HDR_IO above is its cursor -- coding every bit at p=1/2 for now. That is
-//  the same size as writing the bytes raw, plus the flush; the point of it is
-//  that a header model now has somewhere to go. The lengths cluster tightly
-//  and the head bytes are skewed, so there is about 20 KB per 62 MB in it --
-//  see misc/flush_bits.md.
+//  RC_HDR_IO above is its cursor -- against a counter per bit position per
+//  lane (hdrctr below), carried across blocks.
 //
 //  The header stream's own length is written nowhere, and needs no marker: the
 //  field layout is fixed, so the reader knows when to stop, and RC_HDR_IO's
@@ -301,6 +308,31 @@ struct RCio {
   // headers -- the decode cursors start at FF_PADSIZE-1+rclen[rcidx].
   uint rclen[RCNUM];
 
+  // The header model: a counter per bit position per lane, carried across
+  // blocks. A lane's own history is what makes this worth having -- the lanes
+  // are not interchangeable, they are fixed slices of the bit stream with
+  // fixed jobs, and their lengths sit in tight bands a long way apart (over
+  // enwik8 at RCNUM=16, lane 0 averages 127 bytes and lane 5 averages 3523).
+  // One shared set of 24 sees the union of those bands and learns almost
+  // nothing about the top bits; per lane it is 8.9 bits a length instead of
+  // 11.5, and the whole header 48 KB instead of 56 KB against 73 KB raw.
+  //
+  // No context beyond the position: a bit does not see the bits above it in
+  // its own value. That is the next thing to try, not a claim that it does not
+  // matter -- see misc/flush_bits.md.
+  static const uint HDR_LENBITS  = 16;                       // the 2-byte length
+  static const uint HDR_HEADBITS = 8;                        // the head byte
+  static const uint HDR_BITS     = HDR_LENBITS + HDR_HEADBITS;
+  Counter hdrctr[RCNUM][HDR_BITS];
+
+  // NOINLINE for model_pass's reason (model0.inc): this runs once per file,
+  // but its address arithmetic inside do_process costs registers in the loop
+  // that runs 800 million times. Inline it and the decoder loses 2%.
+  NOINLINE
+  void hdr_Init( void ) {
+    for( uint i=0; i<RCNUM; i++ ) for( uint j=0; j<HDR_BITS; j++ ) hdrctr[i][j].Reset();
+  }
+
   byte* buf( uint rcidx ) { return &tmpbuf[rcidx][0]; }
   byte* rows( void ) { return &tmpbuf[0][0]; }
 
@@ -312,7 +344,7 @@ struct RCio {
     t_Hdr hdr;
     hdr.StartDecode( C );
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
-      l = hdr.GetBits(16);
+      l = hdr.GetBits( HDR_LENBITS, hdrctr[rcidx] );
       // A valid stream never exceeds tmpbufsize; a corrupt header could, and
       // the payload copy and the FF padding below both index by it.
       rclen[rcidx] = Min<uint>( l, tmpbufsize );
@@ -320,7 +352,7 @@ struct RCio {
     // the head row: one byte per non-empty lane, put back at the bottom of the
     // lane's chunk -- where rc_Write lifted it from
     byte head[RCNUM];
-    for( rcidx=0; rcidx<RCNUM; rcidx++ ) head[rcidx] = rclen[rcidx] ? byte(hdr.GetBits(8)) : 0xFF;
+    for( rcidx=0; rcidx<RCNUM; rcidx++ ) head[rcidx] = rclen[rcidx] ? byte(hdr.GetBits( HDR_HEADBITS, hdrctr[rcidx]+HDR_LENBITS )) : 0xFF;
     hdr.FinishDecode();
 
     // ...and the bytes the header stream's reader over-read: they are the
@@ -363,7 +395,7 @@ struct RCio {
     hdr.StartEncode( C );
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rc.rc_len(rcidx);
-      hdr.PutBits( l, 16 );
+      hdr.PutBits( l, HDR_LENBITS, hdrctr[rcidx] );
       rclen[rcidx] = l;
     }
 
@@ -374,7 +406,7 @@ struct RCio {
     // is the one that comes up here instead.
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
-      if( l ) hdr.PutBits( tmpbuf[rcidx][rowsize-RC_SKIP-l], 8 );
+      if( l ) hdr.PutBits( tmpbuf[rcidx][rowsize-RC_SKIP-l], HDR_HEADBITS, hdrctr[rcidx]+HDR_LENBITS );
     }
     hdr.FinishEncode();
 
