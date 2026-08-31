@@ -61,25 +61,137 @@ struct RC_IO {
   // that coded nothing can stop inside the prefix -- 16 header bits over 64
   // lanes leaves most of them with no work -- and owes the stream nothing.
   uint rc_len( void ) const { return ptr<beg ? uint(beg-ptr) : 0; }
+
+  // 0: rc_Quit drops as many flush bytes as the fill allows, and the length in
+  // the block header tells the reader where the substream ended. See
+  // RC_HDR_IO for the stream that has no such length.
+  static const uint QUIT_FLUSH = 0;
+};
+
+
+//----------------------------------------------------------------------------
+//  The header coder's cursor: bytes straight to and from the coroutine's
+//  stream, in emission order.
+//
+//  RC_IO above runs its substream backwards and lets rc_Quit drop as many
+//  flush bytes as the interval allows, because the block header carries the
+//  length: the reader knows where the payload ends before it starts. The
+//  header stream is the one that cannot -- its length is what it is on its way
+//  to describing -- so it is the other way round on both counts.
+//
+//  Forwards, because a backwards reader has to start at the last byte, and
+//  that position IS the length. Here the reader starts at the first byte and
+//  walks up.
+//
+//  And with a full-length flush, which is what makes the stream exactly as
+//  long as its reader. A reader consumes CODBYTES at rc_Init plus one byte per
+//  renorm; a writer emits one byte per renorm plus the flush, less the RC_SKIP
+//  zero prefix. The renorm counts are the same sequence on both sides, so
+//
+//      bytes read = bytes written + LOWBYTES - (flush bytes)
+//
+//  and a flush of all LOWBYTES makes those equal. The reader stops on the last
+//  byte the writer wrote, and the payload starts at the next one -- no length,
+//  no marker, nothing to over-read.
+//
+//  It is worth being clear about why the flush cannot be trimmed here, since
+//  trimming it is free everywhere else. rc_Quit drops trailing bytes that the
+//  fill made 0xFF, and a payload substream can afford that because rc_Read
+//  pads below it with 0xFF: the reader that runs off the end reads back
+//  exactly what was dropped. This stream has no pad under it. What follows it
+//  is the payload, and a reader that ran off the end would fold those bytes
+//  into `code` in place of the 0xFF the writer assumed -- which lowers the
+//  reconstructed value below `low` whenever they are smaller, and flips the
+//  last bits decoded. Measured, before this was a full flush: at RCNUM=32 the
+//  head byte of the last lane of block 9 of enwik8 came back 0x00 for 0x01,
+//  one bit, from a three-byte over-read landing on payload.
+//
+//  That costs LOWBYTES-(what the fill would have dropped) bytes a block, about
+//  three: the price of a stream that delimits itself. It could be won back by
+//  flushing against the payload bytes that actually follow instead of against
+//  0xFF -- range >= sTOP means the interval always contains a value ending in
+//  any given CODBYTES-1 bytes -- but that couples the flush to the payload and
+//  has a carry case; see misc/flush_bits.md.
+//----------------------------------------------------------------------------
+template< class Rangecoder >
+struct RC_HDR_IO {
+
+  static const uint QUIT_FLUSH = RC_LOWBYTES;
+
+  Coroutine* C;
+  uint  nio;                // bytes read (decode) or emitted (encode) so far
+
+  byte get( void ) { nio++; return byte(C->get()); }
+
+  // The RC_SKIP leading bytes are low's zero prefix, the same one rc_Write
+  // drops from a lane's row -- the accumulator is LOWBYTES wide and only its
+  // bottom CODBYTES are live, so its top RC_SKIP bytes leave before anything
+  // has been added to them. They are not part of the stream.
+  void put( byte c ) {
+    if( nio>=RC_SKIP ) C->put( c );
+    nio++;
+  }
+
+  void StartEncode( Coroutine& c ) {
+    C = &c; nio = 0;
+    ((Rangecoder*)this)->rc_Init();
+  }
+
+  void StartDecode( Coroutine& c ) {
+    C = &c; nio = 0;
+    ((Rangecoder*)this)->rc_Init();   // reads CODBYTES bytes
+  }
+
+  void FinishEncode( void ) { ((Rangecoder*)this)->rc_Quit(); }
+
+  // rc_Quit opens with a renorm, to apply the last pending rpre; rc_Quit's
+  // body is encoder-only, so the reader has to make that renorm itself or it
+  // stops one shift short of the writer and the byte count does not line up.
+  void FinishDecode( void ) { ((Rangecoder*)this)->rc_Renorm(); }
+
+  uint rc_len ( void ) const { return (nio>RC_SKIP) ? nio-RC_SKIP : 0; }  // encode
+  uint rc_read( void ) const { return nio; }                              // decode
+
+  // Bypass bits, p = 1/2. A placeholder for a header model: it costs what the
+  // raw bytes cost and the point of it is the plumbing, not the size.
+  void PutBits( uint v, uint n ) {
+    for( ; n!=0; n-- ) { uint b = (v>>(n-1))&1; ((Rangecoder*)this)->rc_Process( hSCALE, b ); }
+  }
+
+  uint GetBits( uint n ) {
+    uint v = 0;
+    for( ; n!=0; n-- ) { uint b; ((Rangecoder*)this)->rc_Process( hSCALE, b ); v = v*2 + b; }
+    return v;
+  }
 };
 
 
 //----------------------------------------------------------------------------
 //  Block I/O. Compressed format:
 //
-//    per block:  RCNUM x 2-byte little-endian substream length
-//                one head byte per NON-EMPTY substream, in lane order
+//    per block:  header stream -- RCNUM x 16-bit substream length, then one
+//                8-bit head byte per NON-EMPTY substream, in lane order,
+//                through a rangecoder of their own (see below)
 //                RCNUM x substream payload minus its head byte, in lane order
 //
-//  The head row is sh_v1xN_io.inc's format with one byte lifted out of each
-//  payload. That byte is the substream's first byte in the file, which -- the
+//  The head byte is a substream's first byte in the file, which -- the
 //  substreams run backwards, see RC_IO above -- is the LAST byte rc_Quit
 //  writes, the one whose low bits the flush fills with 1s. It is the most
 //  skewed byte in the block by a wide margin (order-0 entropy 6.45 bits
-//  against ~8 for the payload; misc/flush_bits.md has the distribution), so
-//  gathering the RCNUM of them into one row is what would let a future header
-//  coder reach them without touching the payload. Nothing codes them yet: this
-//  is a pure reordering and the block is the same size either way.
+//  against ~8 for the payload; misc/flush_bits.md has the distribution), which
+//  is why it is up here with the lengths and not down in the payload.
+//
+//  The header goes through its own scalar carry-propagating rangecoder --
+//  RC_HDR_IO above is its cursor -- coding every bit at p=1/2 for now. That is
+//  the same size as writing the bytes raw, plus the flush; the point of it is
+//  that a header model now has somewhere to go. The lengths cluster tightly
+//  and the head bytes are skewed, so there is about 20 KB per 62 MB in it --
+//  see misc/flush_bits.md.
+//
+//  The header stream's own length is written nowhere, and needs no marker: the
+//  field layout is fixed, so the reader knows when to stop, and RC_HDR_IO's
+//  full flush makes it stop on the writer's last byte exactly. The payload
+//  starts at the next one.
 //
 //  A lane that coded nothing has no head byte and contributes none -- the
 //  lengths come first, so both sides agree on which lanes are in the row.
@@ -176,22 +288,24 @@ struct RCio {
   byte* buf( uint rcidx ) { return &tmpbuf[rcidx][0]; }
   byte* rows( void ) { return &tmpbuf[0][0]; }
 
+  template< class t_Hdr >
   NOINLINE
   void rc_Read( Coroutine& C ) {
     uint rcidx,i,l,n;
 
+    t_Hdr hdr;
+    hdr.StartDecode( C );
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
-      l  = byte(C.get());
-      l += byte(C.get())*256;
+      l = hdr.GetBits(16);
       // A valid stream never exceeds tmpbufsize; a corrupt header could, and
       // the payload copy and the FF padding below both index by it.
       rclen[rcidx] = Min<uint>( l, tmpbufsize );
     }
-
     // the head row: one byte per non-empty lane, put back at the bottom of the
     // lane's chunk -- where rc_Write lifted it from
     byte head[RCNUM];
-    for( rcidx=0; rcidx<RCNUM; rcidx++ ) head[rcidx] = rclen[rcidx] ? byte(C.get()) : 0xFF;
+    for( rcidx=0; rcidx<RCNUM; rcidx++ ) head[rcidx] = rclen[rcidx] ? byte(hdr.GetBits(8)) : 0xFF;
+    hdr.FinishDecode();
 
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
@@ -212,16 +326,17 @@ struct RCio {
     } // rcidx
   }
 
-  template< class RCV >
+  template< class t_Hdr, class RCV >
   NOINLINE
   void rc_Write( Coroutine& C, RCV& rc ) {
     uint rcidx,i,l,n;
 
     uint rclen[RCNUM];
+    t_Hdr hdr;
+    hdr.StartEncode( C );
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rc.rc_len(rcidx);
-      C.put( byte(l) );
-      C.put( byte(l>>8) );
+      hdr.PutBits( l, 16 );
       rclen[rcidx] = l;
     }
 
@@ -232,8 +347,9 @@ struct RCio {
     // is the one that comes up here instead.
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];
-      if( l ) C.put( tmpbuf[rcidx][rowsize-RC_SKIP-l] );
+      if( l ) hdr.PutBits( tmpbuf[rcidx][rowsize-RC_SKIP-l], 8 );
     }
+    hdr.FinishEncode();
 
     for( rcidx=0; rcidx<RCNUM; rcidx++ ) {
       l = rclen[rcidx];

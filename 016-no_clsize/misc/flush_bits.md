@@ -136,6 +136,92 @@ Round-robin twin builds over 6 rounds, best of 6 passes each: enc 67.4 -> 67.0
 MB/s, dec 38.4 -> 38.4 MB/s, inside a within-build spread of 4%.  It is one
 extra 16-byte pass per 41 KB block.
 
+## The header stream
+
+The header is now coded, not written raw: a scalar carry-propagating
+rangecoder of its own (`Rangecoder_HDR`, rc.inc instantiated a second time
+over `RC_HDR_IO`) takes the RCNUM 16-bit lengths and the 8-bit head bytes,
+every bit at p=1/2 for now.  Bypass coding is the same size as the raw bytes;
+the point is that a header model now has somewhere to go.
+
+That coder's cursor differs from the payload's on two counts, and both come
+back to this document's subject.
+
+**Forwards, not backwards.**  A payload substream is written and read
+backwards, which is only possible because its length is in the header: the
+reader knows where its last byte is before it starts.  The header stream's
+length is what it is on its way to describing, so its reader has to start at
+the first byte and walk up.
+
+**A full flush, not a trimmed one.**  A reader consumes CODBYTES at `rc_Init`
+plus one byte per renorm; a writer emits one byte per renorm plus the flush,
+less the RC_SKIP zero prefix.  The renorm counts are the same sequence on both
+sides, so
+
+```
+  bytes read = bytes written + LOWBYTES - (flush bytes)
+```
+
+A flush of all LOWBYTES makes those equal, and the reader stops on the last
+byte the writer wrote.  No length field, no marker, nothing over-read -- the
+stream delimits itself.
+
+### Why the trim cannot come along
+
+The obvious economy is to keep the trimmed flush and let the reader work out
+its own over-read: pin the flush at LOWBYTES-j and the reader consumes exactly
+j bytes past the end, so it can hand them back.  `range >= sTOP` at every flush
+puts the fill's run of 1 bits at CODBYTES-1 bytes or more, so j = CODBYTES-1
+always fits.
+
+It decodes wrong, and the reason is the whole mechanism this document is about.
+`rc_Quit` may drop a trailing 0xFF byte **because the reader reads 0xFF past
+the end of a substream** -- `rc_Read` pads below every payload row with them.
+The header stream has no pad under it.  What follows it is the payload, so a
+reader running off the end folds *payload bytes* into `code` where the writer
+assumed 0xFF, and whenever they are smaller the reconstructed value drops below
+`low` and the last bits decoded flip.
+
+It is a low-probability event, which is the dangerous kind.  enwik8 at RCNUM=16
+round-tripped clean; at RCNUM=32 the matrix caught it, and it was one bit: the
+head byte of the last lane of block 9, 0x00 for 0x01, from a three-byte
+over-read landing on payload.  The header decoder's own accounting was exact --
+97 bytes written, 100 read, every block -- so the byte positions were right and
+only the value was wrong.
+
+### What it costs, and how to get it back
+
+```
+  head row, raw (the previous format)         62,513,092
+  header coded, trimmed flush (wrong)         62,514,572    +1,480
+  header coded, full flush                    62,519,150    +6,058
+```
+
++1 byte a block for the coder itself, and +3 more for the untrimmed flush:
+0.0097% of the file, against the ~20 KB an order-0 header model is worth (see
+below).  Encode and decode speed are unchanged -- round-robin twin builds, best
+of 6 passes, 3 rounds: enc 81.58 -> 81.56 MB/s, dec 47.20 -> 46.57.
+
+The three bytes a block are recoverable, and the way to do it is to stop
+flushing against 0xFF and flush against the bytes that are actually there.  The
+writer knows them -- at `rc_Write` the payload is already in `tmpbuf`.  Let P be
+the next j bytes and M = 2^(8j)-1; take
+
+```
+  x = (low & ~M) | P;      if( x < low ) x += M+1;
+```
+
+`x` ends in P by construction, and it is always inside the interval: `x` lies
+in [low-M, low+M], so the branch puts it in (low, low+M], and `range >= sTOP >
+M` keeps that under `high`.  Write the top LOWBYTES-j bytes of `x` and the
+reader's over-read reconstructs it exactly.
+
+Two things to be careful of if it gets built.  `x += M+1` can carry out of the
+LOWBYTES-wide accumulator, which is the `Carry`/`FFNum` path and not just an
+add.  And the last block's payload can be shorter than j bytes -- an empty
+input leaves every lane with nothing but its head byte -- in which case the
+file really does end there and P is 0xFF after all.
+
 ## What the header is worth
 
 enwik8, 1526 blocks x 16 lanes = 24416 substreams.  Order-0 entropy of each

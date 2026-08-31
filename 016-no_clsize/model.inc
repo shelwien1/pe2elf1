@@ -20,6 +20,17 @@
 #undef Rangecoder
 #undef RC_CARRYLESS
 
+// ...and a second time for the block header's own coder, which is the same
+// scalar carry-propagating coder over a different cursor: forwards, straight
+// to and from the coroutine, with a fixed-length flush. See RC_HDR_IO.
+#define RC_CARRYLESS 0
+#define RC_IO_BASE   RC_HDR_IO
+#define Rangecoder   Rangecoder_HDR
+#include "rc.inc"
+#undef Rangecoder
+#undef RC_IO_BASE
+#undef RC_CARRYLESS
+
 #include "rc_vec.inc"
 
 #include "counter.inc"

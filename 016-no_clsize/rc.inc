@@ -16,6 +16,15 @@
 //
 //  Needs: SCALElog (FSM.cpp), the knobs in rc_config.inc, RC_IO (rc_io.inc).
 
+ // The CRTP base: RC_IO (rc_io.inc) unless the includer names another. The
+ // header coder needs a cursor that runs FORWARDS, straight to and from the
+ // coroutine, because its stream is the one whose length is not written down
+ // anywhere -- see RC_HDR_IO. Everything below is written against the base's
+ // get/put and does not care which it is.
+#ifndef RC_IO_BASE
+#define RC_IO_BASE RC_IO
+#endif
+
  typedef uint  rangetype;
  // A CODBYTES-wide range. At the default 4 this is the whole word; narrower,
  // it is what lets `code` fit a float32 mantissa -- see RC_CODBYTES.
@@ -36,9 +45,9 @@
 #endif
 
 template< int f_DEC >
-struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
+struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
 
-  typedef RC_IO< Rangecoder<f_DEC> > t_IO;
+  typedef RC_IO_BASE< Rangecoder<f_DEC> > t_IO;
   using t_IO::get;
   using t_IO::put;
 
@@ -521,7 +530,13 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // at least 3 of the LOWBYTES it would otherwise emit.
       const uint k = hic ? LOWBITS : RC_BSR64( llow ^ high );
       llow |= (k>=64) ? ~qword(0) : ((qword(1)<<k)-1);
-      n -= k/8;
+      // t_IO::QUIT_FLUSH is 0 for a substream the block header gives a length:
+      // drop every byte the fill allows, and let rc_Read's 0xFF padding stand
+      // in for them. A stream with no length written down anywhere cannot --
+      // its reader would run off the end into whatever follows, which is not
+      // 0xFF -- so it names its flush length instead and drops nothing. Both
+      // are compile-time constants; only one arm survives.
+      if( t_IO::QUIT_FLUSH ) n = t_IO::QUIT_FLUSH; else n -= k/8;
 
 #if RC_CARRYLESS
 
@@ -561,3 +576,5 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
 #undef RC_CARRY_COUNT
 #undef RC_RANGE_INIT
+#undef RC_BSR64
+#undef RC_IO_BASE

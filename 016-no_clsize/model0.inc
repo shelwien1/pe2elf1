@@ -105,7 +105,7 @@ struct Model<0> : Coroutine {
   void recode_with_carry( uint blksize ) {
     rcY.rc_Init( rcio );
     proc_block( rcY, blksize );
-    rcio.rc_Write( (*this), rcY );
+    rcio.rc_Write< Rangecoder_HDR<0> >( (*this), rcY );
   }
 
   // Re-code the block with the carry-propagating twin, for a block where the
@@ -244,7 +244,7 @@ struct Model<0> : Coroutine {
           novf   += (len>t_RCio::tmpbufsize);
         }
         if_e0( novf!=0 ) rc_overflow();
-        if( ncarry!=0 ) rcio.rc_Write( (*this), res );   // no lane lost a carry
+        if( ncarry!=0 ) rcio.rc_Write< Rangecoder_HDR<0> >( (*this), res );   // no lane lost a carry
         else {
           recode_with_carry( blksize );
         }

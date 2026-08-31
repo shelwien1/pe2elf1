@@ -73,7 +73,7 @@ struct Model<1> : Coroutine {
 
     while(1) {
 
-      rcio.rc_Read( (*this) );
+      rcio.rc_Read< Rangecoder_HDR<1> >( (*this) );
 
       tmpbase = rcio.rows();
       // each cursor starts at the top of its lane's chunk and reads DOWN,
