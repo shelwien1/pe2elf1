@@ -289,6 +289,14 @@ range actually costs is about 300 bytes of the 75,436 -- that is the whole
 `KLOG=7 -> 8` step, and the loss halves with every one -- which is why
 `RC_RANS_KLOG` barely moves the total.
 
+`misc/rans_decode.md` is the decoder read off its own disassembly: 130 vector
+instructions in 1099 against the encoder's 385 in 843, 22 instructions per
+bit, and an IPC near 2 -- so it is bound by instruction count, not by either
+dependency chain. It has `rc.inc`'s `RC_DEC_SPLIT` ported and measured (-33%),
+the decode step's three algebraic forms (the default wins by a quarter,
+because its multiply does not wait for the bit), and why most of the
+`RC_DEC_RENORM` shapes have nothing to do here.
+
 `misc/rans_comparison.md` reads this coder against three other vectorised rANS
 implementations -- `rz`, `lolz` and Oodle's LZNA -- from their source. The
 short version is that they vectorise the *alphabet* of one stream (a SIMD

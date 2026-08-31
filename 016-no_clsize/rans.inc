@@ -102,6 +102,13 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
   // The state. One uint per lane, and the only thing carried between bits.
   uint rx;
+
+  // RC_RANS_SPLIT's model-free half of the decode step: s = x & (M-1), one per
+  // lane, produced for a whole group before the serial walk starts and read by
+  // it. Outside the RC_VECOUT block because both coders carry it -- the scalar
+  // reference has the same split pair, so the shapes stay comparable. Nothing
+  // writes it in the unsplit shape and it costs nothing there.
+  uint sv;
 #if RC_VECOUT
   // Where ShiftLow's store goes when the build stages it instead of performing
   // it -- see RC_SCATTER in rc_config.inc and RC_STAGE_CL in model.inc. The
@@ -174,11 +181,75 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
         rx = (rx<<sh) | w;
       }
       const uint _s = rx & mSCALE;
+#if RC_RANS_DECS==1
+      // The textbook form: pick f and the cumulative start from the bit, then
+      // one multiply-add. Two selects instead of two arms.
+      _b = (_s>=freq);
+      const uint _f = _b ? SCALE-freq : freq;
+      const uint _c = _b ? freq : 0;
+      rx = _f*(rx>>SCALElog) + _s - _c;
+#elif RC_RANS_DECS==2
+      // The same, with the selects as mask arithmetic: m = -bit, and
+      // f = freq + (m & (SCALE-2*freq)) is freq or SCALE-freq without a cmov.
+      _b = (_s>=freq);
+      const uint _m = uint(-int(_b));
+      const uint _f = freq + (_m & (SCALE-2*freq));
+      rx = _f*(rx>>SCALElog) + _s - (freq & _m);
+#else
       const uint _a = freq * (rx>>SCALElog);
       _b = (_s>=freq);
       rx = _b ? (rx - freq - _a) : (_a + _s);
+#endif
     }
 
+    _bit = _b;
+  }
+
+  // RC_RANS_SPLIT cuts the above in two at the model, the way rc.inc's
+  // RC_DEC_SPLIT cuts the range coder's.
+  //
+  // rc_Process does both halves of a bit: it decides the bit, which needs the
+  // model's p, and it updates the state, which also needs p. Because p arrives
+  // one lane at a time -- a byte's eight bits are one walk of the context tree
+  // -- the whole thing runs at the model's pace, scalar, and the disassembly
+  // says so: 130 vector instructions in 1099, nearly all of them vmovdqa and
+  // vpextrd moving lane state across a boundary rather than computing on it.
+  //
+  // The cut is possible because the bit does NOT need the multiply:
+  //
+  //     bit = (x & (M-1)) >= p
+  //
+  // has no p in the left side. So `s` can be produced for every lane up front,
+  // the walk becomes a load, a compare and the context step, and the multiply
+  // and the select go to a vector pass afterwards. What makes it LEGAL is
+  // model1.inc's wavefront: a group is RCNUM bit-slots and lane j takes
+  // exactly one of them, so no lane's x moves between the top of the group and
+  // its own step -- renormalising every lane at the top is the same
+  // renormalisation, at the same point in that lane's sequence.
+  //
+  //   rc_DecPre   renormalise, s = x & (M-1)   -- every lane, vectorisable
+  //   the model   bit = (s >= p), ctx = ctx*2+bit  -- scalar, serial
+  //   rc_DecUpd   the state update              -- every lane, vectorisable
+  void rc_DecPre( void ) {
+    if( rx<RANSL ) {
+      const uint sh = (rx<(RANSL>>8)) ? 16 : 8;
+      uint w = get(); if( sh==16 ) w = (w<<8) | get();
+      rx = (rx<<sh) | w;
+    }
+    sv = rx & mSCALE;
+  }
+  void rc_DecUpd( uint freq, uint _b ) {
+    const uint _a = freq * (rx>>SCALElog);
+    rx = _b ? (rx - freq - _a) : (_a + sv);
+  }
+  // RC_RANS_SPLIT=2: the whole step minus the renormalisation, which
+  // rc_DecPre already did for every lane. Keeps the bit and the update
+  // together -- so no per-lane p or bit has to be carried between passes --
+  // and only takes the refill branch out of the unrolled walk.
+  void rc_DecStep( uint freq, uint& _bit ) {
+    const uint _a = freq * (rx>>SCALElog);
+    const uint _b = (sv>=freq);
+    rx = _b ? (rx - freq - _a) : (_a + sv);
     _bit = _b;
   }
 
@@ -309,11 +380,76 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       // the old state and can issue while the compare is still in flight.
       // Two selects, a constant and a subtract go with it.
       const uint _s = rx & mSCALE;
+#if RC_RANS_DECS==1
+      // The textbook form: pick f and the cumulative start from the bit, then
+      // one multiply-add. Two selects instead of two arms.
+      _b = (_s>=freq);
+      const uint _f = _b ? SCALE-freq : freq;
+      const uint _c = _b ? freq : 0;
+      rx = _f*(rx>>SCALElog) + _s - _c;
+#elif RC_RANS_DECS==2
+      // The same, with the selects as mask arithmetic: m = -bit, and
+      // f = freq + (m & (SCALE-2*freq)) is freq or SCALE-freq without a cmov.
+      _b = (_s>=freq);
+      const uint _m = uint(-int(_b));
+      const uint _f = freq + (_m & (SCALE-2*freq));
+      rx = _f*(rx>>SCALElog) + _s - (freq & _m);
+#else
       const uint _a = freq * (rx>>SCALElog);
       _b = (_s>=freq);
       rx = _b ? (rx - freq - _a) : (_a + _s);
+#endif
     }
 
+    _bit = _b;
+  }
+
+  // RC_RANS_SPLIT cuts the above in two at the model, the way rc.inc's
+  // RC_DEC_SPLIT cuts the range coder's.
+  //
+  // rc_Process does both halves of a bit: it decides the bit, which needs the
+  // model's p, and it updates the state, which also needs p. Because p arrives
+  // one lane at a time -- a byte's eight bits are one walk of the context tree
+  // -- the whole thing runs at the model's pace, scalar, and the disassembly
+  // says so: 130 vector instructions in 1099, nearly all of them vmovdqa and
+  // vpextrd moving lane state across a boundary rather than computing on it.
+  //
+  // The cut is possible because the bit does NOT need the multiply:
+  //
+  //     bit = (x & (M-1)) >= p
+  //
+  // has no p in the left side. So `s` can be produced for every lane up front,
+  // the walk becomes a load, a compare and the context step, and the multiply
+  // and the select go to a vector pass afterwards. What makes it LEGAL is
+  // model1.inc's wavefront: a group is RCNUM bit-slots and lane j takes
+  // exactly one of them, so no lane's x moves between the top of the group and
+  // its own step -- renormalising every lane at the top is the same
+  // renormalisation, at the same point in that lane's sequence.
+  //
+  //   rc_DecPre   renormalise, s = x & (M-1)   -- every lane, vectorisable
+  //   the model   bit = (s >= p), ctx = ctx*2+bit  -- scalar, serial
+  //   rc_DecUpd   the state update              -- every lane, vectorisable
+  void rc_DecPre( void ) {
+    if( __builtin_expect_with_probability( rx<RANSL, 0, 0.99 ) ) {
+      dsh = (rx<(RANSL>>8)) ? 16 : 8;
+      rx <<= dsh;
+      rx |= (uint&)tmpbase[tmpptr-3] >> (32-dsh);
+      tmpptr -= dsh>>3;
+    }
+    sv = rx & mSCALE;
+  }
+  void rc_DecUpd( uint freq, uint _b ) {
+    const uint _a = freq * (rx>>SCALElog);
+    rx = _b ? (rx - freq - _a) : (_a + sv);
+  }
+  // RC_RANS_SPLIT=2: the whole step minus the renormalisation, which
+  // rc_DecPre already did for every lane. Keeps the bit and the update
+  // together -- so no per-lane p or bit has to be carried between passes --
+  // and only takes the refill branch out of the unrolled walk.
+  void rc_DecStep( uint freq, uint& _bit ) {
+    const uint _a = freq * (rx>>SCALElog);
+    const uint _b = (sv>=freq);
+    rx = _b ? (rx - freq - _a) : (_a + sv);
     _bit = _b;
   }
 

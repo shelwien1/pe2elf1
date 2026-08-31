@@ -98,6 +98,46 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #ifndef RC_RANS_KLOG
 #define RC_RANS_KLOG 8
 #endif
+
+// rc.inc's RC_DEC_SPLIT, ported to rANS -- and it does not transfer. Kept
+// because the port is the answer to "why not", and the answer is specific.
+//
+//   1  the full split: every lane renormalises and produces s = x & (M-1),
+//      the walk decides the bits from s alone and records p and the bit per
+//      lane, and the state update runs for the whole group afterwards
+//   2  half of it: the renormalisation hoisted, the bit and the update left
+//      together in the walk, so nothing is carried between passes
+//
+// Both are correct -- the wavefront gives each lane exactly one of a group's
+// RCNUM bit-slots, so no lane's x moves between the top of the group and its
+// own step, and hoisting the renormalisation is the same renormalisation.
+// Decode MB/s on 20 MB of enwik8, best of 4 round-robin rounds: 42.4 unsplit,
+// 28.3 at 1, 25.9 at 2.
+//
+// The reason is what the split is FOR. In the range coder it moves a DIVISION
+// -- code/(range>>SCALElog), which RC_DIVALL then does for a whole group --
+// off the serial walk. rANS's decode step has no division in it; what the
+// split can move is one multiply, and the group's s, p and bit have to travel
+// between the passes through memory to do it. The traffic costs more than the
+// multiply, and shape 2 is worse than shape 1 because it pays the same
+// hoisting for less of the saving.
+#ifndef RC_RANS_SPLIT
+#define RC_RANS_SPLIT 0
+#endif
+
+// The decode step's algebraic form. All three compute the same thing.
+//
+//   0  x = bit ? (x - p - a) : (a + s),  a = p*(x>>15)   -- the default
+//   1  f = bit ? M-p : p;  c = bit ? p : 0;  x = f*(x>>15) + s - c
+//   2  the same as 1, with the two selects as mask arithmetic
+//
+// 0 wins and the disassembly says why: its multiply is the FIRST thing in the
+// step and does not wait for the bit, where 1 and 2 both put it after the
+// select that needs the bit and so put its latency on the chain. 42.3 against
+// 32.0 and 31.3 -- a quarter of decode, for an expression that looks cheaper.
+#ifndef RC_RANS_DECS
+#define RC_RANS_DECS 0
+#endif
 #if RC_RANS_KLOG<1 || RC_RANS_KLOG>8
 #error "RC_RANS_KLOG must be 1..8: above 8 the state passes 2^31 and rans.inc's signed float conversion misreads it"
 #endif

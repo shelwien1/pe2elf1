@@ -133,6 +133,55 @@ struct Model<1> : Coroutine {
         {
           enum { NB = RCNUM/8 };
           uint lctx[NB], st[NB], bt[NB];
+#if RC_RANS && RC_RANS_SPLIT==2 && RC_VEC
+          // Half the split: the renormalisation is hoisted for the whole
+          // group, the bit and the update stay together in the walk. Nothing
+          // has to be carried between passes, and what leaves the sixteen
+          // unrolled bodies is the refill branch -- which is most of their
+          // footprint, and this loop is measurably sensitive to that.
+          for( i=0; i<nb1; i+=RCNUM ) {
+            RC_UNROLL for( j=0; j<RCNUM; j++ ) rc_DecPre( j );
+            RC_UNROLL for( uint m=0; m<NB; m++ ) lctx[m] = 1;
+            RC_UNROLL
+            for( j=0; j<8; j++ ) {
+              RC_UNROLL
+              for( uint m=0; m<NB; m++ ) {
+                st[m] = cty[lctx[m]].Get(); p = t_Counter::P(st[m]);
+                rc_DecStep( m*8+j, p, bt[m] );
+                cty[lctx[m]].Update( st[m], bt[m] );
+                (lctx[m]*=2) += bt[m];
+              }
+            }
+            RC_UNROLL
+            for( uint m=0; m<NB; m+=2 ) put0pair( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
+          }
+#elif RC_RANS && RC_RANS_SPLIT==1 && RC_VEC
+          // The split walk (rans.inc's rc_DecPre / rc_DecUpd). Same three
+          // things per bit, regrouped: every lane renormalises and produces
+          // its s = x & (M-1) before the walk, the walk decides the bits from
+          // s alone, and the state update runs for the whole group after it.
+          // Legal because each lane owns exactly one of the group's RCNUM
+          // bit-slots, so no lane's x moves in between -- see rans.inc.
+          uint pv[RCNUM], bv[RCNUM];
+          for( i=0; i<nb1; i+=RCNUM ) {
+            RC_UNROLL for( j=0; j<RCNUM; j++ ) rc_DecPre( j );
+            RC_UNROLL for( uint m=0; m<NB; m++ ) lctx[m] = 1;
+            RC_UNROLL
+            for( j=0; j<8; j++ ) {
+              RC_UNROLL
+              for( uint m=0; m<NB; m++ ) {
+                st[m] = cty[lctx[m]].Get(); p = t_Counter::P(st[m]);
+                bt[m] = ( sv[m*8+j] >= p );
+                pv[m*8+j] = p; bv[m*8+j] = bt[m];
+                cty[lctx[m]].Update( st[m], bt[m] );
+                (lctx[m]*=2) += bt[m];
+              }
+            }
+            RC_UNROLL for( j=0; j<RCNUM; j++ ) rc_DecUpd( j, pv[j], bv[j] );
+            RC_UNROLL
+            for( uint m=0; m<NB; m+=2 ) put0pair( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
+          }
+#else
           for( i=0; i<nb1; i+=RCNUM ) {
             RC_UNROLL for( uint m=0; m<NB; m++ ) lctx[m] = 1;
             RC_UNROLL
@@ -148,6 +197,7 @@ struct Model<1> : Coroutine {
             RC_UNROLL
             for( uint m=0; m<NB; m+=2 ) put0pair( (lctx[m]&0xFF) + ((lctx[m+1]&0xFF)<<8) );
           }
+#endif
           ctx = 1;                      // the tail loops below use the member
         }
         for( i=nb1; i<blksize*8; i++ ) {

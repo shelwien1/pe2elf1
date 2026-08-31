@@ -75,6 +75,12 @@ run     "-DRC_RANS_KLOG=1"
 run     "-DRC_RANS_KLOG=4"
 run     "-DRC_RANS_KLOG=8 -DRC_VEC=0"
 run     "-DRC_BLKSIZE=4096"
+# the decoder shapes: same stream, so runsame, and the roundtrip is what
+# actually checks them -- the encoder is not involved
+runsame "-DRC_RANS_SPLIT=1"
+runsame "-DRC_RANS_SPLIT=2"
+runsame "-DRC_RANS_DECS=1"
+runsame "-DRC_RANS_DECS=2"
 
 #--- the range coder ---------------------------------------------------------
 echo "-- range coder (rc.inc)"
