@@ -891,6 +891,7 @@ struct MRPC {
   byte vused[MAXC][256];
   byte* plotbuf;     // where CI_PLOT writes, in the caller's raster
   double plot_bits;  // and what it came to before the rounding
+  byte* qmapbuf;     // and where the class map goes, one byte a pixel
   int num_class;
   int ord[MAXC]; // coding position -> component of the raster
 
@@ -3678,6 +3679,22 @@ struct Codec : MRPCIO {
     }
   }
 
+  // The class map in the raster's geometry: one byte a pixel, the index
+  // of the class whose predictor and quantiser coded it.  The same
+  // address mapping StoreOrg uses, so a transposed encode comes back the
+  // right way up, and the row is `iw` wide because that is the raster's
+  // width whichever way round the codec ran.
+  void StoreClassMap() {
+    for( uint y = 0; y<H; y++ ) {
+      const byte* s = cls+size_t(y)*W;
+      if( tflip )
+        for( uint x = 0; x<W; x++ )
+          qmapbuf[size_t(x)*iw+y] = s[x];
+      else
+        memcpy(qmapbuf+size_t(y)*iw, s, W);
+    }
+  }
+
   void SetPmodels() {
     for( uint k = 0; k<nc; k++ )
       for( int g = 0; g<MRP_GROUP; g++ ) {
@@ -4065,6 +4082,11 @@ struct Codec : MRPCIO {
     CodePredictor(0);
     CodeThreshold(0);
     CodeImage(plotbuf ? CI_PLOT : CI_ENC);
+    // one branch an image rather than one a symbol: unlike a code length,
+    // a class is known before the coding loop starts and does not have to
+    // be picked out of it
+    if( qmapbuf )
+      StoreClassMap();
     PROG(" ... done  [%.0fs]\n", tnow()-t_start);
 #ifdef MRP_OPENCL
     g_cl.Report(stderr);
@@ -4280,22 +4302,34 @@ struct Codec : MRPCIO {
     return MRPC_OK;
   }
 
-  // Where the bits went.
+  // The two pictures an encode can hand back instead of a stream.
   //
-  // The same encode, to the byte, with the code length of every component
-  // written into a raster of the caller's geometry as it is coded: no
-  // second model, no second pass, and no branch in the encoder that does
-  // not want one -- CI_PLOT is a separate instantiation of the coding
-  // loop, so `c` and `p` share the search and share nothing else.
+  //   PIC_PLOT  the code length of every component, written into a raster
+  //             of the caller's geometry as it is coded: no second model,
+  //             no second pass, and no branch in the encoder that does not
+  //             want one -- CI_PLOT is a separate instantiation of the
+  //             coding loop, so `c` and `p` share the search and nothing
+  //             else.  It sums to the size of the file `c` would have
+  //             written, give or take what saturated.
+  //   PIC_QMAP  the class map: one byte a pixel, the class whose predictor
+  //             and quantiser coded it.  A class is settled before the
+  //             coding loop runs, so this one is a copy at the end of the
+  //             encode rather than anything inside it.
   //
-  // The stream it produces is thrown away.  That is the point: what comes
-  // back is the picture of the cost, and it sums to the size of the file
-  // `c` would have written, give or take what saturated.
-  int Plot(const mrpc_image* im, mrpc_image* out, double* bits) {
+  // Both come out of a real encode, and if the trials are on, out of
+  // whichever encode won -- so the loop that runs them is one loop, and
+  // only the buffer it fills and the shape of that buffer differ.  The
+  // stream is thrown away either way; that is the point.
+  enum { PIC_PLOT = 0, PIC_QMAP = 1 };
+
+  int Picture(int kind, const mrpc_image* im, mrpc_image* out,
+              double* bits, int* nclass) {
     // cleared before anything can go wrong, so that a caller who ignores
     // the return code is looking at an empty image rather than a stack
     if( bits )
       *bits = 0.0;
+    if( nclass )
+      *nclass = 0;
     if( out )
       memset(out, 0, sizeof(*out));
     if( !out||!im )
@@ -4303,13 +4337,15 @@ struct Codec : MRPCIO {
     if( !im->data||im->width==0||im->height==0||im->ncomp<1||
         im->ncomp>MAXC||im->stride<im->width*im->ncomp )
       return MRPC_ERR_ARG;
-    const size_t n = size_t(im->stride)*im->height;
+    // a class belongs to a pixel and not to a component, so the class map
+    // is one plane, packed, whatever the image it describes was
+    const uint pstride = (kind==PIC_QMAP) ? im->width : im->stride;
+    const size_t n = size_t(pstride)*im->height;
     byte* best = 0;
     size_t bestsz = 0;
     double bestbits = 0.0;
+    int bestclass = 0;
     int rc = MRPC_ERR_MEM;
-    // ... and if the trials are on, the plot of whichever encode won, so
-    // that `p` describes the file `c` would have written
     const int nt = (trial_flip&&im->width>1&&im->height>1) ? 2 : 1;
     const int nv = trial_vmap ? 2 : 1;
     for( int i = 0; i<nt*nv; i++ ) {
@@ -4319,17 +4355,20 @@ struct Codec : MRPCIO {
       mrpc_blob blob;
       blob.data = 0;
       blob.size = 0;
-      plotbuf = pb;
+      plotbuf = (kind==PIC_QMAP) ? 0 : pb;
+      qmapbuf = (kind==PIC_QMAP) ? pb : 0;
       plot_bits = 0.0;
       tflip = (i&1) ? (nt>1 ? 1 : 0) : 0;
       vmode = ((nv>1)&&(i>=nt)) ? 2 : 1;
       int r = Compress(im, 0, 0, 0, 0, &blob);
       plotbuf = 0;
+      qmapbuf = 0;
       if( r==MRPC_OK&&(!best||blob.size<bestsz) ) {
         free(best);
         best = pb;
         bestsz = blob.size;
         bestbits = plot_bits;
+        bestclass = num_class;
         rc = MRPC_OK;
       } else {
         free(pb);
@@ -4346,12 +4385,22 @@ struct Codec : MRPCIO {
     }
     out->width = im->width;
     out->height = im->height;
-    out->ncomp = im->ncomp;
-    out->stride = im->stride;
+    out->ncomp = (kind==PIC_QMAP) ? 1 : im->ncomp;
+    out->stride = pstride;
     out->data = best;
     if( bits )
       *bits = bestbits;
+    if( nclass )
+      *nclass = bestclass;
     return MRPC_OK;
+  }
+
+  int Plot(const mrpc_image* im, mrpc_image* out, double* bits) {
+    return Picture(PIC_PLOT, im, out, bits, 0);
+  }
+
+  int ClassMap(const mrpc_image* im, mrpc_image* out, int* nclass) {
+    return Picture(PIC_QMAP, im, out, 0, nclass);
   }
 
   int Decompress(const void* data, size_t size, mrpc_image* im,
@@ -4553,6 +4602,16 @@ MRPC_API int MRPC_CALL mrpc_plot(mrpc_ctx* c, const mrpc_image* img,
     return MRPC_ERR_ARG;
   }
   return c->cd.Plot(img, out, bits);
+}
+
+MRPC_API int MRPC_CALL mrpc_classmap(mrpc_ctx* c, const mrpc_image* img,
+                                     mrpc_image* out, int* nclass) {
+  if( !c ) {
+    if( nclass )
+      *nclass = 0;
+    return MRPC_ERR_ARG;
+  }
+  return c->cd.ClassMap(img, out, nclass);
 }
 
 MRPC_API void MRPC_CALL mrpc_free(void* p) {

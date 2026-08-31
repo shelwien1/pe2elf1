@@ -57,8 +57,9 @@ static const uint HDR0 = 54; // BITMAPFILEHEADER + BITMAPINFOHEADER
 
 struct BmpInfo {
   uint ok, off, W, H, nc, stride, pixbytes;
-  uint bits; // bits per pixel as the file has them: 1, 4, 8, 24 or 32
-  uint uW;   // pixels per row once widened -- W for 8bpp and up
+  uint bits;   // bits per pixel as the file has them: 1, 4, 8, 24 or 32
+  uint uW;     // pixels per row once widened -- W for 8bpp and up
+  int topdown; // biHeight was negative: row 0 of the raster is the top one
 
   int Packed() const {
     return bits<8;
@@ -150,6 +151,7 @@ struct BmpInfo {
     off = o;
     W = W_;
     H = H_;
+    topdown = (h<0);
     bits = bpp;
     uW = uw;
     nc = (bpp<8) ? 1 : bpp/8;
@@ -214,6 +216,83 @@ struct File {
 };
 
 // -------------------------------------------------------------
+// An 8bpp BMP of exactly this geometry: the 54-byte header, a 256-entry
+// palette, and rows padded out to four bytes.  Both of the picture modes
+// need one -- `p` when the input was packed and cannot hold a code length
+// in its own depth, and `q` always, because a class belongs to a pixel
+// and not to a component.
+// -------------------------------------------------------------
+static int WriteBmp8(const char* path, const byte* src, uint W, uint H,
+                     uint srcstride, const byte* pal, int topdown) {
+  const uint st = (W+3)&~3u;
+  const size_t n = size_t(st)*H;
+  byte* ras = (byte*)calloc(n ? n : 1, 1);
+  if( !ras )
+    return 0;
+  for( uint y = 0; y<H; y++ )
+    memcpy(ras+size_t(y)*st, src+size_t(y)*srcstride, W);
+  byte hdr[HDR0+1024];
+  memset(hdr, 0, sizeof(hdr));
+  hdr[0] = 'B';
+  hdr[1] = 'M';
+  put32(hdr+2, uint(sizeof(hdr)+n));
+  put32(hdr+10, uint(sizeof(hdr)));
+  put32(hdr+14, 40);
+  put32(hdr+18, W);
+  put32(hdr+22, topdown ? uint(-int(H)) : H);
+  put32(hdr+26, 1|(8<<16)); // planes 1, 8bpp
+  put32(hdr+34, uint(n));
+  put32(hdr+46, 256);
+  put32(hdr+50, 256);
+  memcpy(hdr+HDR0, pal, 1024);
+  int ok = File::Write(path, hdr, sizeof(hdr), ras, n, 0, 0);
+  free(ras);
+  return ok;
+}
+
+// The grey ramp `p` wants: the pixel is the datum, and the palette is
+// only there so that the file can be looked at.
+static void GreyPalette(byte* pal) {
+  for( uint i = 0; i<256; i++ ) {
+    pal[i*4+0] = pal[i*4+1] = pal[i*4+2] = byte(i);
+    pal[i*4+3] = 0;
+  }
+}
+
+// And the one `q` wants, which is a different problem.  A class index is
+// a label and not a level -- the search hands them out in whatever order
+// it settles on, and class 7 is not between class 6 and class 8 in any
+// sense at all -- so a ramp would invent an ordering that is not there.
+// Hues stepped by the golden angle put neighbouring indices as far apart
+// on the wheel as a sequence can, and alternating the value and the
+// saturation separates the two that eventually do land close.  Classes
+// the encode did not use stay black.
+static void ClassPalette(byte* pal, int n) {
+  memset(pal, 0, 1024);
+  for( int i = 0; i<n&&i<256; i++ ) {
+    double h = (double(i)*0.61803398874989485-int(double(i)*0.61803398874989485))*6.0;
+    double v = (i&1) ? 0.70 : 1.00;
+    double sa = (i%3==2) ? 0.55 : 0.90;
+    int hi = int(h);
+    double f = h-hi;
+    double p1 = v*(1.0-sa), q1 = v*(1.0-f*sa), t1 = v*(1.0-(1.0-f)*sa);
+    double r, g, b;
+    switch( hi ) {
+      case 0:  r = v;  g = t1; b = p1; break;
+      case 1:  r = q1; g = v;  b = p1; break;
+      case 2:  r = p1; g = v;  b = t1; break;
+      case 3:  r = p1; g = q1; b = v;  break;
+      case 4:  r = t1; g = p1; b = v;  break;
+      default: r = v;  g = p1; b = q1; break;
+    }
+    pal[i*4+0] = byte(b*255.0+0.5);
+    pal[i*4+1] = byte(g*255.0+0.5);
+    pal[i*4+2] = byte(r*255.0+0.5);
+    pal[i*4+3] = 0;
+  }
+}
+
+// -------------------------------------------------------------
 static void ListDevices(FILE* f) {
   int n = mrpc_device_count();
   if( n<=0 ) {
@@ -267,7 +346,7 @@ static void Usage(const char* argv0) {
          "Usage: %s [options] <mode> <input> <output>\n"
          "       %s -l\n"
          "\n"
-         "  <mode>    'c' compress, 'd' decompress, 'p' plot\n"
+         "  <mode>    'c' compress, 'd' decompress, 'p' plot, 'q' class map\n"
          "\n"
          "Options (the encoder's optimisation loop runs on an OpenCL device;\n"
          "the decoder is serial and always runs on the host):\n"
@@ -302,6 +381,16 @@ static void Usage(const char* argv0) {
          "gets a grey ramp for a palette so that it can be looked at, and a\n"
          "1 or 4bpp input gets an 8bpp plot of the widened width, since a\n"
          "code length does not fit in its depth.\n"
+         "\n"
+         "'q' runs the same encode again and writes the segmentation instead:\n"
+         "an 8bpp BMP whose every pixel is the index of the class that coded\n"
+         "it.  A class belongs to a pixel and not to a component, so the map\n"
+         "is one plane whatever went in.  The palette is categorical -- hues\n"
+         "stepped by the golden angle, unused classes black -- because a\n"
+         "class index is a label and a ramp would invent an order the search\n"
+         "never gave it.  How the pixels fell between the classes goes to\n"
+         "stderr, which is where a class the search kept but barely used\n"
+         "shows up.\n"
          "\n"
          "With no -d or -T, the first GPU is used, or the first CPU device\n"
          "if there is no GPU.  Anything that goes wrong with the device is\n"
@@ -401,8 +490,8 @@ int main(int argc, char** argv) {
   }
 
   const char mode = pos[0][0];
-  if( (mode!='c'&&mode!='d'&&mode!='p')||pos[0][1] ) {
-    fprintf(stderr, "mrpc: mode is 'c', 'd' or 'p', not \"%s\"\n", pos[0]);
+  if( (mode!='c'&&mode!='d'&&mode!='p'&&mode!='q')||pos[0][1] ) {
+    fprintf(stderr, "mrpc: mode is 'c', 'd', 'p' or 'q', not \"%s\"\n", pos[0]);
     return 1;
   }
   const int dec = (mode=='d');
@@ -464,39 +553,30 @@ int main(int argc, char** argv) {
       // indices to colours and a code length is not an index, so a
       // one-component plot gets a grey ramp instead and can be looked at;
       // and a packed file cannot hold a code length in its own depth at
-      // all, so it gets a fresh 8bpp header of the widened geometry.
-      const uint hlen = b.Packed() ? HDR0+1024 : b.off;
-      byte* hdr = (byte*)malloc(hlen ? hlen : 1);
-      if( hdr ) {
-        if( b.Packed() ) {
-          memset(hdr, 0, hlen);
-          hdr[0] = 'B';
-          hdr[1] = 'M';
-          put32(hdr+2, uint(hlen+size_t(pl.stride)*pl.height));
-          put32(hdr+10, hlen);
-          put32(hdr+14, 40);
-          put32(hdr+18, pl.width);
-          put32(hdr+22, pl.height);
-          put32(hdr+26, 1|(8<<16)); // planes 1, 8bpp
-          put32(hdr+34, uint(size_t(pl.stride)*pl.height));
-          put32(hdr+46, 256);
-          put32(hdr+50, 256);
-        } else {
-          memcpy(hdr, in.data, b.off);
-        }
-        if( b.nc==1&&hlen>=HDR0+1024 )
-          for( uint i = 0; i<256; i++ ) {
-            byte* e = hdr+hlen-1024+i*4;
-            e[0] = e[1] = e[2] = byte(i);
-            e[3] = 0;
-          }
-        if( !File::Write(pos[2], hdr, hlen, pl.data, size_t(pl.stride)*pl.height, 0, 0) ) {
+      // all, so it gets a fresh 8bpp file of the widened geometry.
+      if( b.Packed() ) {
+        byte pal[1024];
+        GreyPalette(pal);
+        if( !WriteBmp8(pos[2], pl.data, pl.width, pl.height, pl.stride, pal,
+                       b.topdown) ) {
           fprintf(stderr, "mrpc: cannot write %s\n", pos[2]);
           ret = 4;
         }
-        free(hdr);
       } else {
-        rc = MRPC_ERR_MEM;
+        byte* hdr = (byte*)malloc(b.off);
+        if( hdr ) {
+          memcpy(hdr, in.data, b.off);
+          if( b.nc==1&&b.off>=HDR0+1024 )
+            GreyPalette(hdr+b.off-1024);
+          if( !File::Write(pos[2], hdr, b.off, pl.data,
+                           size_t(pl.stride)*pl.height, 0, 0) ) {
+            fprintf(stderr, "mrpc: cannot write %s\n", pos[2]);
+            ret = 4;
+          }
+          free(hdr);
+        } else {
+          rc = MRPC_ERR_MEM;
+        }
       }
       // what the raster adds up to, against what the encode actually
       // cost -- they differ by the symbols too cheap to round to a
@@ -520,6 +600,76 @@ int main(int argc, char** argv) {
         fprintf(stderr, ", %llu saturated", (unsigned long long)sat);
       fprintf(stderr, "\n");
       mrpc_free(pl.data);
+    }
+    free(wide);
+    b.Quit();
+  } else if( mode=='q' ) {
+    // --- class map: the same encode, and a picture of the segmentation
+    BmpInfo b;
+    b.Parse(in.data, in.size);
+    if( !b.ok ) {
+      fprintf(stderr, "mrpc: %s is not a raster this can segment\n", pos[1]);
+      mrpc_quit(ctx);
+      in.Quit();
+      return 3;
+    }
+    mrpc_image im, qm;
+    int nclass = 0;
+    memset(&im, 0, sizeof(im));
+    im.width = b.W;
+    im.height = b.H;
+    im.ncomp = b.nc;
+    im.stride = b.stride;
+    im.data = in.data+b.off;
+    byte* wide = 0;
+    if( b.Packed() ) {
+      wide = (byte*)malloc(size_t(b.uW)*b.H);
+      if( !wide )
+        rc = MRPC_ERR_MEM;
+      else {
+        b.Widen(in.data+b.off, wide);
+        im.width = b.uW;
+        im.stride = b.uW;
+        im.data = wide;
+      }
+    }
+    if( rc==MRPC_OK )
+      rc = mrpc_classmap(ctx, &im, &qm, &nclass);
+    if( rc==MRPC_OK ) {
+      byte pal[1024];
+      ClassPalette(pal, nclass);
+      if( !WriteBmp8(pos[2], qm.data, qm.width, qm.height, qm.stride, pal,
+                     b.topdown) ) {
+        fprintf(stderr, "mrpc: cannot write %s\n", pos[2]);
+        ret = 4;
+      }
+      // how the pixels came out between the classes -- the search is free
+      // to leave a class with almost nothing in it, and that is worth
+      // seeing without having to count the colours by eye
+      size_t hist[256];
+      memset(hist, 0, sizeof(hist));
+      for( uint y = 0; y<qm.height; y++ ) {
+        const byte* r = qm.data+size_t(y)*qm.stride;
+        for( uint x = 0; x<qm.width; x++ )
+          hist[r[x]]++;
+      }
+      const double n = double(qm.width)*qm.height;
+      size_t lo = size_t(n), hi = 0;
+      int empty = 0;
+      for( int i = 0; i<nclass; i++ ) {
+        if( hist[i]<lo )
+          lo = hist[i];
+        if( hist[i]>hi )
+          hi = hist[i];
+        if( !hist[i] )
+          empty++;
+      }
+      fprintf(stderr, "mrpc: %.0f pixels over %d classes, largest %.2f%%,"
+                      " smallest %.2f%%", n, nclass, 100.0*hi/n, 100.0*lo/n);
+      if( empty )
+        fprintf(stderr, ", %d empty", empty);
+      fprintf(stderr, "\n");
+      mrpc_free(qm.data);
     }
     free(wide);
     b.Quit();

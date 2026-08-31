@@ -406,6 +406,15 @@ without coding them would describe a file nobody wrote. The check is that
 the exact total `p` reports agrees to the byte with what `ChooseSse` measured
 for the model it picked -- 14,647 B on `t24_0`, both.
 
+`mrpc q` is the other picture the encode can hand back, and it is
+deliberately *not* a fifth mode. A code length only exists while the coder is
+charging for a symbol, which is why `CI_PLOT` has to live inside the loop; a
+class is settled before the loop starts and is still sitting in `cls` when it
+stops. So the class map is one copy at the end of `Encode`, through the same
+address mapping, and costs the encoder one branch an image rather than one a
+symbol. Both pictures run through the same trial loop, so `-t` and `-x` pick
+the same winner for `q` as they do for `c`.
+
 ### The orientation trial
 
 `-t` encodes the image both ways round and keeps the smaller file. It is two

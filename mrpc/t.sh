@@ -5,9 +5,10 @@
 # what is checked is that each decodes back to the original, and what is
 # reported is what each cost.
 #
-# The plot is checked too, since it runs the same encoder: `p` has to
-# produce a file of the input's own geometry and say what it cost -- of
-# the widened geometry, at 8bpp, if the input was 1 or 4bpp packed.
+# The two picture modes are checked too, since they run the same encoder:
+# `p` has to produce a file of the input's own geometry and say what it
+# cost -- of the widened geometry, at 8bpp, if the input was 1 or 4bpp
+# packed -- and `q` an 8bpp class map of one plane, whatever went in.
 #
 #   ./t.sh img.bmp [img.bmp ...]
 
@@ -37,6 +38,22 @@ for f in "$@"; do
   if [ ! -s "$T/p.bmp" ] || [ "$(wc -c <"$T/p.bmp")" -gt "$lim" ]; then
     echo "$(basename "$f"): the plot is not the shape of the image"; fail=1
   fi
+  # the class map: 8bpp of one plane, so 54 + 1024 + a padded row per row,
+  # and every class it names has to be one the encode could have used
+  $M -C q "$f" "$T/q.bmp" 2>"$T/qerr" >/dev/null || { echo "$f: class map failed"; fail=1; continue; }
+  qw=$(od -An -tu4 -j18 -N4 "$T/q.bmp" | tr -d ' ')
+  qh=$(od -An -tu4 -j22 -N4 "$T/q.bmp" | tr -d ' ')
+  qb=$(od -An -tu2 -j28 -N2 "$T/q.bmp" | tr -d ' ')
+  # biHeight is signed and the map keeps the input's row order, so a
+  # top-down image gives it back as a negative
+  [ "$qh" -gt 2147483647 ] && qh=$((4294967296 - qh))
+  want=$(( 1078 + ((qw + 3) / 4 * 4) * qh ))
+  if [ "$qb" != 8 ] || [ "$(wc -c <"$T/q.bmp")" -ne "$want" ]; then
+    echo "$(basename "$f"): the class map is not an 8bpp plane of its geometry"; fail=1
+  fi
+  if ! grep -q "pixels over" "$T/qerr"; then
+    echo "$(basename "$f"): the class map said nothing about the classes"; fail=1
+  fi
   a=$(wc -c <"$T/a.mrp"); b=$(wc -c <"$T/b.mrp")
   d=$(awk "BEGIN{printf \"%+.3f%%\", 100*($a-$b)/$b}")
   printf '%-28s %10s %10s %8s' "$(basename "$f")" "$a" "$b" "$d"
@@ -47,5 +64,5 @@ for f in "$@"; do
     fail=1
   fi
 done
-rm -f "$T/err" "$T/a.mrp" "$T/b.mrp" "$T/a.bmp" "$T/b.bmp" "$T/p.bmp"
+rm -f "$T/err" "$T/qerr" "$T/a.mrp" "$T/b.mrp" "$T/a.bmp" "$T/b.bmp" "$T/p.bmp" "$T/q.bmp"
 exit $fail

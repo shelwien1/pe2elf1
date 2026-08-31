@@ -47,6 +47,11 @@ mrpc_image plot; double bits;
 mrpc_plot(c, &img, &plot, &bits);
 /* same geometry; every component byte is that component's code length
    in 4.4 fixed point.  `bits` is the exact total before the rounding. */
+
+mrpc_image qmap; int nclass;
+mrpc_classmap(c, &img, &qmap, &nclass);
+/* one plane, packed, `width` bytes a row: the index of the class that
+   coded each pixel.  Every byte is < nclass. */
 ```
 
 * **One class does both directions.** `Codec` in `mrpc_lib.cpp` is the whole
@@ -65,7 +70,9 @@ mrpc_plot(c, &img, &plot, &bits);
   it is the only place that is a run-time value, so the three modes that are
   not the encoder do not put a branch a symbol in the encoder. `mrpc_plot`
   runs the same search and the same coder as `mrpc_compress`; only the
-  instantiation differs.
+  instantiation differs. `mrpc_classmap` needs no mode at all: a class is
+  settled before the coding loop starts, so it is one copy at the end of the
+  encode — one branch an image rather than one a symbol.
 * **head and tail** are arbitrary bytes carried through the stream with an
   order-1 model — a file format's header and trailer riding along with the
   raster. `img` may be null, which compresses those alone: what a frontend does
@@ -398,7 +405,7 @@ keep consistent, which is a design change and not a tuning one.
 mrpc [options] <mode> <input> <output>
 mrpc -l
 
-  <mode>    'c' compress, 'd' decompress, 'p' plot
+  <mode>    'c' compress, 'd' decompress, 'p' plot, 'q' class map
 
   -l        list the OpenCL platforms and devices, and exit
   -d <n>    use device <n>, numbered as -l prints it
@@ -437,6 +444,44 @@ What the plot file carries is the input's header and a raster the same shape;
 anything that trailed the pixel data in the input does not come along.  `-t`
 applies: the plot is of whichever orientation won, mapped back the right way
 up.
+
+### The class map
+
+`q` runs the same encode again and writes the *segmentation* instead: an 8bpp
+BMP whose every pixel is the index of the class that coded it. A class belongs
+to a pixel and not to a component, so the map is one plane whatever went in —
+a 32bpp RGBA image and a bilevel scan both give back one byte a pixel. The
+palette is categorical, not a ramp: hues stepped by the golden angle so that
+neighbouring indices land far apart on the wheel, with the value and the
+saturation alternated to separate the two that eventually do land close, and
+classes the encode did not use left black. A class index is a label — the
+search hands them out in whatever order it settles on, and class 7 is not
+between class 6 and class 8 in any sense — so a grey ramp would draw an
+ordering that is not there.
+
+Where the pixels fell goes to stderr, which is the part that is hard to see by
+eye:
+
+```
+$ mrpc -C q DLRAW.bmp classes.bmp
+mrpc: 979200 pixels over 63 classes, largest 5.55%, smallest 0.39%
+
+$ mrpc -C q t24_0.bmp classes.bmp
+mrpc: 20480 pixels over 15 classes, largest 99.00%, smallest 0.00%, 10 empty
+```
+
+Those two lines are the tool earning its keep. The 816x1200 image gets a real
+segmentation — 63 classes, none empty, none dominant. The 160x128 tile of flat
+graphic art collapses onto one: the class count the size rule asked for is 15,
+the search keeps five of them and gives one 99% of the pixels, because on
+twenty thousand pixels a second class has to save more than its predictor and
+its share of the quadtree cost. A photographic tile of the same size does not
+do that (`pia_0`: 15 classes, largest 20%, smallest 0.98%, none empty), so it
+is the picture and not the size.
+
+Like `p`, `q` is a real encode and not an estimate, `-t` and `-x` apply — the
+map is of whichever encode won, mapped back the right way up — and the stream
+it produces is thrown away.
 
 ### Planes that skip levels
 

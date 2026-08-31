@@ -175,6 +175,20 @@ MRPC_API int MRPC_CALL mrpc_decompress(mrpc_ctx* c, const void* data, size_t siz
 MRPC_API int MRPC_CALL mrpc_plot(mrpc_ctx* c, const mrpc_image* img,
                                  mrpc_image* out, double* bits);
 
+/* The class map.  The same encode again -- and, with the trials on, the
+   same winning encode -- handing back one byte per pixel instead of a
+   stream: the index of the class whose predictor and quantiser coded
+   that pixel.  A class belongs to a pixel rather than to a component, so
+   whatever went in, what comes back is one plane, packed, `width` bytes
+   a row.
+
+   nclass, if given, receives how many classes the encode settled on,
+   which is the range of the values in it: every byte is < nclass.
+
+   out->data is allocated here; free it with mrpc_free. */
+MRPC_API int MRPC_CALL mrpc_classmap(mrpc_ctx* c, const mrpc_image* img,
+                                     mrpc_image* out, int* nclass);
+
 /* Everything the library allocated goes back through here, and only
    here: across a DLL boundary the caller's free() may not be the one
    that allocated it. */

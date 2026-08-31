@@ -196,6 +196,31 @@ int main(void) {
     mrpc_free(blob.data);
   }
 
+  /* --- the class map, which is the other picture the encode can make - */
+  {
+    mrpc_image qm, qm2;
+    int nclass = -1, bad = 0;
+    unsigned yy, xx;
+    rc = mrpc_classmap(c, &in, &qm, &nclass);
+    check(rc==MRPC_OK&&qm.data!=0, "mrpc_classmap");
+    /* one plane, packed, whatever went in -- a class belongs to a pixel
+       and not to a component */
+    check(qm.width==W&&qm.height==H&&qm.ncomp==1&&qm.stride==W,
+          "the class map is one plane of the image's geometry");
+    check(nclass>0&&nclass<=63, "and says how many classes it used");
+    for( yy = 0; yy<qm.height; yy++ ) {
+      const unsigned char* r = qm.data+(size_t)yy*qm.stride;
+      for( xx = 0; xx<qm.width; xx++ )
+        if( r[xx]>=nclass )
+          bad++;
+    }
+    check(bad==0, "every pixel names a class inside that range");
+    rc = mrpc_classmap(c, 0, &qm2, &nclass);
+    check(rc==MRPC_ERR_ARG&&qm2.data==0&&nclass==0,
+          "a class map of nothing is refused");
+    mrpc_free(qm.data);
+  }
+
   /* --- no image at all: a file the frontend could not parse -------- */
   {
     unsigned char junk[1000];
