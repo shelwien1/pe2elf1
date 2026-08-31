@@ -316,6 +316,17 @@ zero. Per-lane would not: a raw lane's bits still walk the shared context
 tree, so it would cost a test inside the 22-instruction decode body on every
 file. Not built; the file says why.
 
+`misc/iftree_rans.md` is Shelwien's generated if-tree -- 255 real branch sites,
+one per context node -- tested against rANS, where `dec_vectorize.md` §9 had
+measured **1.63×** for the range coder. It loses, 40-45%, and the controls say
+why. A byte-sequential walk that gives up the wavefront exactly as a tree must
+costs only 3.3%, so the lane arrangement §9 flagged as the obstacle is not it;
+and on incompressible data the tree is 3.26× behind against 1.80× on enwik8,
+so the predictor IS buying it a lot. The range coder puts a multiply between
+the model's `p` and the decoded bit and speculation hides those cycles. rANS's
+bit is `(x & (M-1)) >= p`, ready the cycle `p` arrives, so there is nothing
+there to hide and the mispredict is pure cost.
+
 `misc/rans_decode.md` is the decoder read off its own disassembly: 130 vector
 instructions in 1099 against the encoder's 385 in 843, 22 instructions per bit
 at ~9.4 cycles, so IPC ~2.5 -- about 38% of a 4-wide machine's issue width

@@ -518,6 +518,14 @@ the right direction — which is presumably why it is also the only one that win
 
 - The model here is a plain adaptive counter, not `counter.inc`/FSM0 with
   `RC_FUSE_PP`. The absolute cycle counts will not transfer.
+- **Settled since, for rANS: the lane arrangement is NOT the obstacle, and the
+  tree loses anyway.** `misc/iftree_rans.md` is the same probe against
+  `rans.inc`: a byte-sequential control that gives up the wavefront exactly as
+  a tree must costs 3.3%, while the trees cost 40-45% -- and the partial trees
+  are monotone in depth, so no depth pays. The reason is that the range coder
+  puts a MULTIPLY between `p` and the bit, which speculation hides, and rANS's
+  `(x & (M-1)) >= p` does not. What follows is the original note.
+
 - **The lane arrangement is different, and this is the real obstacle.** Here
   lane *L* codes whole bytes, so `code` and `range` stay in registers across all
   eight levels of the walk. In the codebase, lane `m*8+j` codes bit *j* of byte
