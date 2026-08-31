@@ -162,6 +162,29 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #ifndef RC_DEFER_UPD
 #define RC_DEFER_UPD 1
 #endif
+
+// The flush length. rANS ends a substream by writing its whole state, and
+// that state is in [L, 256L) -- so at RC_RANS_KLOG=8 it is 24 to 31 bits, and
+// a fixed four-byte flush spends a byte on nothing whenever it is 24.
+//
+//   0  four bytes always
+//   1  three when the state fits, four otherwise, told apart by x >= RANSL
+//      (the default: it is free, and the decoder needs no flag)
+//
+// This is the range coder's minimal flush, as far as it goes here, and it
+// does not go far: misc/rans_flush.md has the distribution of 24416 flushed
+// states over enwik8. It is log-uniform to within a fifth of a percent per
+// octave, exactly as rANS theory says it must be, so the leading zero byte is
+// the ONLY redundancy in it -- 12.185% of flushes, 2975 bytes, 0.0048%.
+#ifndef RC_RANS_FLUSH
+#define RC_RANS_FLUSH 1
+#endif
+
+#if RC_RANS_FLUSH
+#define RC_FLUSH_N( x ) ( 3u + ((x)>>24 != 0) )
+#else
+#define RC_FLUSH_N( x ) 4u
+#endif
 #if RC_RANS_KLOG<1 || RC_RANS_KLOG>8
 #error "RC_RANS_KLOG must be 1..8: above 8 the state passes 2^31 and rans.inc's signed float conversion misreads it"
 #endif

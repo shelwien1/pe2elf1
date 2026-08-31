@@ -283,11 +283,25 @@ is already the best of the three. What the sweep is short of is registers --
 
 The 0.121% of ratio is almost all one thing: rANS ends every substream by
 flushing its whole 31-bit state, four bytes per lane per block, where the
-rangecoder's minimal flush writes one or two. It scales with `RCNUM` and with
+rangecoder's minimal flush writes one or two. `RC_RANS_FLUSH` takes back the
+part of that which is not information -- see `misc/rans_flush.md`, which is
+the distribution of 24,416 flushed states and what can be cut from it. It scales with `RCNUM` and with
 `1/BLKSIZE`, not with the arithmetic -- the rounding loss the `L/M = 2^8` state
 range actually costs is about 300 bytes of the 75,436 -- that is the whole
 `KLOG=7 -> 8` step, and the loss halves with every one -- which is why
 `RC_RANS_KLOG` barely moves the total.
+
+`misc/rans_flush.md` answers whether the rangecoder's minimal flush has an
+rANS analogue. The flushed state is log-uniform to within a fifth of a percent
+per octave -- exactly what rANS theory requires -- so the only redundancy in
+it is its **4.50 leading zero bits** on average, and conditioned on the octave
+the rest measures 7.93-7.95 bits of 8. `RC_RANS_FLUSH=1` (the default) writes
+three bytes instead of four when the state fits, told apart by the state's own
+`x >= RANSL` invariant with no flag: 2,975 bytes, and free. The rangecoder's
+trick itself does not carry over -- it works because a range of final `low`
+values decode identically, and rANS's decoder is injective. The freedom rANS
+does have is at the encoder's *initial* state, and renormalisation destroys it
+within about a dozen symbols; the file has that measured.
 
 `misc/rans_decode.md` is the decoder read off its own disassembly: 130 vector
 instructions in 1099 against the encoder's 385 in 843, 22 instructions per bit

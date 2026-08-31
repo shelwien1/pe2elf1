@@ -82,6 +82,10 @@ runsame "-DRC_RANS_SPLIT=2"
 runsame "-DRC_RANS_DECS=1"
 runsame "-DRC_RANS_DECS=2"
 runsame "-DRC_RANS_REFILL=1"
+# the flush length: 0 is the old fixed four bytes, so a different stream
+run     "-DRC_RANS_FLUSH=0"
+run     "-DRC_RANS_FLUSH=0 -DRC_VEC=0"
+run     "-DRC_RANS_FLUSH=1 -DRC_VEC=0"
 # the deferred-update pricing path, forced on at G=1 where it must reproduce
 # the default stream exactly -- that is what says the pricing is faithful
 runsame "-DRC_DEFER_UPD=1 -DRC_DEFER_CHECK=1"

@@ -255,13 +255,20 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
 
   void rc_Init( void ) {
     if( f_DEC==0 ) rx = RANSL;
-    if( f_DEC==1 ) { rx = 0; for( uint i=0; i<4; i++ ) rx = (rx<<8) | get(); }
+    if( f_DEC==1 ) {
+      // Read three, and a fourth only if three did not reach RANSL. Exact:
+      // a 3-byte flush is an x in [2^23,2^24), which IS >= RANSL, while the
+      // top three bytes of a 4-byte flush are x>>8 in [2^16,2^23), which is
+      // not -- so the test tells the two apart with no flag in the format.
+      rx = 0; for( uint i=0; i<3; i++ ) rx = (rx<<8) | get();
+      if( rx<RANSL ) rx = (rx<<8) | get();
+    }
   }
 
   // The flush is the whole state, low byte first like the renorm above, so
   // the decoder's four-byte init is one little-endian load.
   void rc_Quit( void ) {
-    if( f_DEC==0 ) for( uint i=0; i<4; i++ ) put( byte(rx>>(8*i)) );
+    if( f_DEC==0 ) { const uint n = RC_FLUSH_N(rx); for( uint i=0; i<n; i++ ) put( byte(rx>>(8*i)) ); }
   }
 
 #else // RC_VECOUT ---------------------------------------------------------
@@ -480,8 +487,20 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
       RC_STAGE_INIT( rcidx, tmpptr );
     }
     if( f_DEC==1 ) {
-      rx = (uint&)tmpbase[tmpptr-3];
+      // One dword covers both flush lengths: the substream runs backwards, so
+      // the top three bytes of the dword at tmpptr-3 are the three-byte flush
+      // read descending, and the whole dword is the four-byte one.
+      const uint _w = (uint&)tmpbase[tmpptr-3];
+#if RC_RANS_FLUSH
+      rx = _w>>8; tmpptr -= 3;
+      // three bytes reached RANSL means that WAS the state; otherwise what was
+      // read is x>>8, in [2^16,2^23), and the fourth byte is the dword's low
+      // one -- which is exactly _w again. See RC_RANS_FLUSH.
+      if( rx<RANSL ) { rx = _w; tmpptr -= 1; }
+#else
+      rx = _w;
       tmpptr -= 4;
+#endif
     }
   }
 
@@ -489,8 +508,12 @@ struct Rangecoder : RC_IO< Rangecoder<f_DEC> > {
   // all four bytes committed instead of none.
   void rc_Quit( void ) {
     if( f_DEC==0 ) {
+      // The dword is staged whole either way; only the cursor decides how much
+      // of it is payload. The byte above a 3-byte flush is written and never
+      // counted -- rc_Write copies `len` bytes and the row's top slack is
+      // asserted at >= 3, so it goes nowhere anything reads.
       RC_STAGE_CL( rcidx, tmpptr, rx, 4 );
-      tmpptr += 4;
+      tmpptr += RC_FLUSH_N(rx);
       RC_FLUSH_ONE( rcidx );
     }
   }
