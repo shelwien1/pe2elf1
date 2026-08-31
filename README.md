@@ -221,8 +221,12 @@ inside one edge, 7.7x inside the other at the default `KLOG`.
 
 `RANS_DIV` is left to the compile, like `RC_STAGE_CL`, because any correct
 division gives the same stream. Writing it as a reciprocal rather than a
-divide is worth 4%: the divide only depends on `f`, which comes out of
-`pbit[]`, so this way the divider stays off the loop-carried chain.
+divide is worth 11% -- the divide only depends on `f`, which comes out of
+`pbit[]`, so this way the divider stays off the loop-carried chain and a
+23-cycle latency stops mattering. Once it is off the chain, though, the sweep
+is bound by instruction throughput, and everything that trades the divider for
+ALU work loses: the hardware reciprocal approximation plus a Newton step is
+11% *slower* again, and so is an ALU-only reciprocal.
 
 ### What it costs and what it buys
 
@@ -262,11 +266,17 @@ compares; rANS's is a divide, two float conversions, the same multiply and the
 same two compares. The generated sweep is *shorter* than the rangecoder's --
 82 instructions per 16-lane group against 92 -- and still slower, because the
 extra work lands on ports the rangecoder was not using and the store the two
-share is already most of the group. Nothing recovered it: `RCNUM=32` (more
-independent chains) is flat, and so is moving the divide ahead of the
-renormalisation to shorten the chain, which says the sweep is not chain-bound;
-an ALU-only reciprocal in place of `vdivps` is 10% *slower*, which says the
-divider is not the limit either.
+share is already most of the group. Nothing recovered it, and the failures
+agree on why. `RCNUM=32` (twice the independent chains) is flat, and so is
+moving the divide ahead of the renormalisation to shorten the chain: the sweep
+is not chain-bound. Swapping `vdivps` for the hardware reciprocal
+approximation plus a Newton step is 11% slower, and an ALU-only reciprocal
+10% slower: the divider is not the limit either -- its port is otherwise idle,
+and anything that moves that work onto the ALUs loses. Nor is it the store:
+staging plus one `vpscatterdd` per sub-group beats a direct store (63.83
+against 56.75) and beats scalar commit stores (58.57), so the shape in place
+is already the best of the three. What the sweep is short of is registers --
+21 of its 82 instructions are moves and spills.
 
 The 0.121% of ratio is almost all one thing: rANS ends every substream by
 flushing its whole 31-bit state, four bytes per lane per block, where the

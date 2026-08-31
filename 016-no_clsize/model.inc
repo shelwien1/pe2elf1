@@ -57,13 +57,27 @@
 //  belong in the generated kernel.
 //
 //  The default is a float32 RECIPROCAL and a multiply, not a divide, and that
-//  is the whole point of the shape. The encoder's sweep is not short of
-//  instructions -- it is shorter than the range coder's -- it is bound by the
-//  loop-carried chain through x, and a vdivps on that chain is eleven cycles
-//  of it. The reciprocal depends only on f, which comes out of pbit[], so
-//  writing it this way leaves the divider off the chain entirely and puts one
-//  vmulps on it instead. Measured on cascadelake: 56.97 -> 66.6 MB/s, with the
-//  same instruction count.
+//  is the whole point of the shape. A vdivps is ~23 cycles of latency and the
+//  loop-carried x cannot afford it; the reciprocal depends only on f, which
+//  comes out of pbit[], so writing it this way leaves the divider off the
+//  chain entirely and puts one vmulps on it instead. Measured on cascadelake,
+//  against ((a)*RANS_BIAS)/(b) -- the same value, the same instruction count,
+//  the divide on the chain instead of beside it -- 57.85 -> 64.39 MB/s, best
+//  of 5 round-robin rounds on 20 MB of enwik8. Worth 11%.
+//
+//  That is the whole of what the divide costs, and the two obvious next steps
+//  both make it worse, because once the divider is off the chain this sweep is
+//  bound by instruction throughput rather than by latency:
+//
+//    - replacing vdivps with the hardware reciprocal approximation and a
+//      Newton step (-ffast-math; -mrecip alone does not reach it, and nothing
+//      short of -ffast-math makes clang emit vrcp14ps here) is 57.37 against
+//      64.34. The divider port is otherwise idle, so vdivps is nearly free
+//      where the ALU instructions that replace it are not.
+//    - an ALU-only reciprocal, same reason, 10% slower.
+//
+//  The sweep's own shape says why: 82 instructions per 16-lane group, of which
+//  21 are register moves and spills. It is short of registers, not of cycles.
 //
 //  RANS_BIAS is the one-sidedness, folded into the reciprocal so that it costs
 //  nothing on the chain either. The quotient is below 1<<XSH and float32

@@ -345,21 +345,64 @@ shape.
 
 ## 11. What each could take from the others
 
-**For us, from LZNA:** not the wider renorm -- §7 measured that and it costs
-more than it saves. The synthesised-mixin *idea* has no binary analogue
-either. What does transfer is the raw-bit path in §9, if we ever need it.
+### Nothing here makes our coder faster, and the reasons are worth keeping
 
-**For us, from lolz:** `RansCM_mix` is the one thing in these files with no
-counterpart on our side and a real use for us. It mixes two models' CDFs with
-a learned weight; the binary case is one `mulhi` and a shift-update, and it
-would drop into our model without touching the coder at all. It is also the
-only idea here that would change our *ratio* rather than our speed.
+That is the short answer, and it is not for lack of looking. Item by item:
+
+- **LZNA's 32-bit renorm** -- §7. A 64-bit state halves the lane count, and
+  keeping 32 bits while widening the unit forces `L/M ≤ 2`, measured at
+  105,765 bytes of enwik8. More ratio than the entire rANS-vs-rangecoder gap.
+- **The SIMD cumulative-frequency search** -- §3. Two symbols, one compare.
+  There is nothing to parallelise.
+- **LZNA's synthesised mixin** -- §5. A binary model has no CDF to mix into.
+- **Raw bits stuffed in the state** -- §9. Real, cheap, and we have no
+  unmodelled bits to put there. Worth remembering if that changes.
+- **Two swapped states** -- §8. We have sixteen lanes, and `RCNUM=32` is
+  already past the point of return (39.88 against 42.86 MB/s decoding).
+- **lolz's integer `x / freq`** -- §6. We are faster than that already, by 11%.
+
+The interesting part is *why* the encoder resists, because four independent
+measurements say the same thing and none of them is the one you would guess.
+Round-robin on 20 MB of enwik8, cascadelake:
+
+| change to the encode sweep | MB/s |
+|---|---|
+| the divide on the loop-carried chain, `((a)*BIAS)/(b)` | 57.85 |
+| **as shipped, reciprocal beside the chain, `(a)*(BIAS/(b))`** | **64.39** |
+| `vdivps` replaced by `vrcp14ps` + a Newton step (`-ffast-math`) | 57.37 |
+| the divide moved ahead of the renormalisation (one instruction shorter) | 63.0 |
+| `RCNUM=32`, twice the independent chains | flat |
+| the staged store committed directly instead of scattered | 56.75 |
+
+Getting the divider *off* the chain is worth 11%, because a `vdivps` is ~23
+cycles of latency and the chain cannot absorb it. Everything after that fails,
+and fails in the direction that says the sweep is **bound by instruction
+throughput**: shortening the chain further buys nothing, more independent
+chains buy nothing, and trading the divider for ALU work -- which is what
+every reciprocal approximation is -- actively loses, because the divider port
+is otherwise idle and the ALU ports are not. The sweep's own shape agrees: 82
+instructions per 16-lane group, of which 21 are register moves and spills. It
+is short of registers, not of cycles, and no idea in these three files
+addresses that.
+
+`-mrecip`, incidentally, does not reach it: nothing short of `-ffast-math`
+makes clang emit `vrcp14ps` for this divide, and when it does, it is slower.
+
+### What is still worth taking
+
+**From lolz, `RansCM_mix`** -- the one thing in these files with no counterpart
+on our side and a real use for us. It mixes two models' CDFs with a learned
+weight; the binary case is one `mulhi` and a shift-update, and it would drop
+into our model without touching the coder. It is also the only idea here that
+would change our *ratio* rather than our speed, which -- given the table above
+-- is the more promising axis.
 
 **For them, from us:** lane interleaving past two states, and the branchless
 binary step in §4 if they ever want to vectorise one. Also the biased
 reciprocal in §6 -- lolz's encoder does an integer `x / freq` per symbol on
-the critical path, and the reciprocal form is 4% faster scalar for the same
-reason it is necessary vectorised.
+the critical path, and the reciprocal form is 11% faster for the same reason
+it was necessary vectorised: it takes the divider off the dependency chain.
+That one transfers to any scalar rANS encoder.
 
 **For lolz, from LZNA:** the synthesised mixin (§5) removes a table load per
 symbol from an inner loop that already has plenty to do.
