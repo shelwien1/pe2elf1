@@ -14,6 +14,9 @@ rc_vecD.inc
 # t_matrix.sh's exhaustive check of the rANS encoder's division
 rans_div
 
+# scratch binaries from A/B runs (OUT=... ./build.sh)
+c_*
+
 # t.sh / t_matrix.sh scratch
 t.enc
 t.dec
