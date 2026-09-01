@@ -1,0 +1,29 @@
+Linux x86-64, clang++-18, ./build.sh (-march=haswell), single thread.
+"ppmd" = ./coder0 c <f> <o> none (transformer disabled), "lstm" = the original
+coder0 this tree started from, "tf" = ppmd + the pretrained transformer.
+
+file                 orig     ppmd     lstm       tf   tf vs ppmd   tf vs lstm
+book1000             4096     1858     1821     1734       -6.7%        -4.8%
+book1[:16384]       16384     6312     6104     6003       -4.9%        -1.7%
+book1[:65536]       65536    21803    20796    21085       -3.3%        +1.4%
+book1              768771   209801   194387   204669       -2.4%        +5.3%
+
+All four round-trip byte-identically (./t.sh).
+
+book1: enc 220s, dec 220s (~3500 bytes/s; ~110 quantized matmuls and a 2.9 MB
+sequential weight stream per byte).  Peak RSS 435 MB, of which ~400 MB is the
+ppmd arena (ppmd_memory = 6284) and ~37 MB the transformer.
+
+The frozen model is strongest on short inputs and loses to the on-line LSTM
+past ~30 KB: it was trained on WRT-dictionary-encoded Wikipedia, so plain
+ASCII prose is out of its training distribution, while the LSTM adapts to the
+file at hand.  It still beats ppmd alone everywhere.
+
+Token mapping (book1000, same build):
+  enwik9-derived byte map (what this tree does)   1734
+  coder0 packed alphabet indices                  2140   worse than no model
+  no transformer                                  1858
+Cross-entropy of the transformer alone on book1[:20000] with a flat prior:
+  enwik9-derived byte map    3.73 bits/byte
+  packed alphabet indices    7.19 bits/byte
+  scrambled map (control)    8.33 bits/byte
