@@ -79,18 +79,23 @@
 #ifndef TF_ADAPTER_D
 #define TF_ADAPTER_D 192
 #endif
-// AdamW rate for TF_TRAIN=3, x1000000 (5 = 5e-6).  Measured on book1000 /
+// AdamW rate for TF_TRAIN=3, x1000000 (3 = 3e-6).  Measured on book1000 /
 // book1[:16384], frozen being 1735 / 6002:
 //   1e-6 1693/5751   3e-6 1671/5700   5e-6 1667/5706   1e-5 1669/5752
 //   3e-5 1707/5878   1e-4 1778/6034   3e-4 1810/6105
-// The optimum is flat between 3e-6 and 1e-5 and falls off fast above it - the
-// model is pretrained, so a rate sized for training from noise wrecks it.
+// and on book1[:65536] (frozen 21086): 3e-6 20038, 5e-6 20100.  The optimum is
+// flat between 3e-6 and 1e-5 and falls off fast above it - the model is
+// pretrained, so a rate sized for training from noise wrecks it.  The longer
+// the input, the more the lower end of that range wins.
 #ifndef TF_FULL_LR_X1000000
-#define TF_FULL_LR_X1000000 5
+#define TF_FULL_LR_X1000000 3
 #endif
 // Bytes of gradient accumulated per optimizer step.  The AdamW step touches
 // four arrays of 22.5 MB, so at TF_BATCH 1 it moves 4x as much memory as the
 // forward pass does and dominates the run time; accumulating amortizes it.
+// Measured on book1000 / book1[:16384]: batch 1 gives 1671 / 5700 at 36s per
+// 4 KB, batch 4 gives 1671 / 5744 at 22s, batch 16 gives 1697 / 5828 at 18s.
+// Per-byte updates compress best, so that is the default.
 #ifndef TF_BATCH
 #define TF_BATCH 1
 #endif

@@ -364,8 +364,8 @@ struct ModelImpl {
   size_t state_size() const;
   void state_save(void* dst) const;
   void state_load(const void* src);
-  const float* van_xn_ = nullptr;  // the attention input of the layer being
-                                   // backpropagated (set by backward())
+  const float* attn_xn_ = nullptr;  // rms_norm(x) of the layer currently being
+                                    // backpropagated; set by backward()
 };
 
 // dequantize one weight matrix: w[o][i] = q[o][i] * row_scale[o].  The
@@ -783,9 +783,6 @@ void ModelImpl::van_backward(int vi, const float* dy, float* dxn) {
   VanLayer& L = van[vi];
   VanTape& T = tape->van[vi];
   VanState& st = vst[vi];
-  const float* xin = nullptr;  // set by the caller through dxn's owner
-  (void)xin;
-
   float dpre[D] = {};
   lin_back(L.op.w, T.pre, dy, D, D, g(L.op.w), dpre);
 
@@ -826,7 +823,7 @@ void ModelImpl::van_backward(int vi, const float* dy, float* dxn) {
                   dk_raw + h * DH);
   }
 
-  const float* xn1 = van_xn_;
+  const float* xn1 = attn_xn_;
   lin_back(L.qp.w, xn1, dq_raw, D, D, g(L.qp.w), dxn);
   lin_back(L.kp.w, xn1, dk_raw, D, D, g(L.kp.w), dxn);
   lin_back(L.vp.w, xn1, dv_cur, D, D, g(L.vp.w), dxn);
@@ -835,7 +832,7 @@ void ModelImpl::van_backward(int vi, const float* dy, float* dxn) {
 void ModelImpl::kimi_backward(int ki, const float* dy, float* dxn) {
   KimiLayer& L = kimi[ki];
   KimiTape& T = tape->kimi[ki];
-  const float* xn1 = van_xn_;
+  const float* xn1 = attn_xn_;
 
   float dgn[D] = {};
   lin_back(L.op.w, T.gn, dy, D, D, g(L.op.w), dgn);
@@ -972,8 +969,9 @@ void ModelImpl::backward(const float* dcap) {
   float dx[D];
   rms_norm_back(dxn_fin, T.xn_fin, T.d_fin, D, dx);
 
-  float dtok[D] = {}, dskip[6] = {};
-  float dskip_vec[6][D] = {};
+  float dtok[D] = {};
+  float dskip_vec[6][D] = {};  // gradient waiting for the block that produced
+                               // the skip source (layers 0..5)
 
   for (int l = NL - 1; l >= 0; l--) {
     LayerTape& LT = T.lay[l];
@@ -996,7 +994,7 @@ void ModelImpl::backward(const float* dcap) {
 
     // attention
     float dxn1[D] = {};
-    van_xn_ = LT.xn1;
+    attn_xn_ = LT.xn1;
     if (KIMI[l])
       kimi_backward(layer2kimi[l], dmid, dxn1);
     else
@@ -1024,7 +1022,6 @@ void ModelImpl::backward(const float* dcap) {
         dskip_vec[src][i] += skip_w[wi] * dx[i];
       }
       g(&skip_w[wi])[0] += gs;
-      dskip[wi] = gs;
     }
   }
 

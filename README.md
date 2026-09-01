@@ -134,7 +134,7 @@ Every combination round-trips:
 | fp32, frozen (default) | 1735 | 6002 | 21086 | |
 | fp32 + `TF_TRAIN=1` | 1761 | 5976 | 20756 | |
 | fp32 + `TF_TRAIN=2` | 1765 | 5957 | 20666 | |
-| **fp32 + `TF_TRAIN=3`** | **1667** | **5706** | | |
+| **fp32 + `TF_TRAIN=3`** | **1671** | **5700** | **20038** | |
 | fp32 + fresh init | 2046 | 6680 | 22364 | |
 | quantized, frozen | **1734** | 6003 | 21085 | 204669 |
 | quantized + `TF_TRAIN=1` | 1761 | 5977 | 20770 | 200299 |
@@ -144,8 +144,11 @@ Every combination round-trips:
 The fp32 and quantized engines land within a byte or two of each other
 everywhere; fp32 costs about 4x the time (6.9s vs 1.7s per 4 KB here).
 
-Training closes part of the gap the frozen model leaves on long inputs, and at
-64 KB the trained stack passes the LSTM.
+`TF_TRAIN=3` — training the whole model — wins everywhere: against the LSTM it
+replaced, −8.2% on book1000, −6.6% at 16 KB and −3.6% at 64 KB, which is the
+size where the frozen model had been losing. It costs about 9 ms/byte here
+(36s per 4 KB, against 6.9s frozen); `TF_BATCH=4` brings that to 22s for about
+0.7% more output.
 
 ### What is not trained, and why
 

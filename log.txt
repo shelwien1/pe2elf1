@@ -79,3 +79,32 @@ The fp32 model is 5,897,145 parameters = 22.50 MB, contiguous.  engine_cmp
 also checks the backup contract: copy the block, scale every weight by 1.03
 (output moves by 0.12 L1), copy the block back, and the output is bit-identical
 again.
+
+TF_TRAIN=3, the whole model trained online (fp32, AdamW per byte, lr 3e-6):
+
+  config                    book1000    16K      64K
+  ppmd alone                    1858   6312    21803
+  ppmd + LSTM (original)        1821   6104    20796
+  transformer frozen            1735   6002    21086
+  TF_TRAIN=2 (top block)        1765   5957    20666
+  TF_TRAIN=3 (whole model)      1671   5700    20038
+                                       -6.6%   -3.6%  vs the LSTM
+
+Learning rate (book1000 / 16K, frozen 1735 / 6002):
+  1e-6 1693/5751   3e-6 1671/5700   5e-6 1667/5706   1e-5 1669/5752
+  3e-5 1707/5878   1e-4 1778/6034   3e-4 1810/6105
+64K: 3e-6 -> 20038, 5e-6 -> 20100.  Longer inputs prefer the lower end.
+
+Gradient accumulation (book1000 / 16K, time per 4 KB):
+  TF_BATCH=1  1671 / 5700  36s
+  TF_BATCH=4  1671 / 5744  22s
+  TF_BATCH=16 1697 / 5828  18s
+
+tools/gradcheck_full.cpp, numeric directional derivative vs the analytic
+gradient, with the recurrent state restored between evaluations so the finite
+difference matches the one-step truncation:
+  whole model              -26.057428 vs -26.055626   rel 3.5e-05
+  embedding+prior+unembed   -1.712434 vs  -1.712887   rel 1.3e-04
+  first kimi block          -4.134215 vs  -4.134117   rel 1.2e-05
+  a vanilla block           -0.346231 vs  -0.346258   rel 3.9e-05
+  last mlp                  +1.185796 vs  +1.185661   rel 5.7e-05
