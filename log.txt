@@ -48,7 +48,7 @@ Online training (TF_TRAIN), pretrained weights, lr 2000:
   config              book1000    16K      64K     book1
   frozen                  1734   6003    21085    204669
   TF_TRAIN=1              1761   5977    20770    200299
-  TF_TRAIN=2              1766   5966    20684
+  TF_TRAIN=2              1766   5966    20684    200026
   (ppmd alone             1858   6312    21803    209801)
   (ppmd + LSTM            1821   6104    20796    194387)
 

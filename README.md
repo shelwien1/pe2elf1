@@ -122,7 +122,7 @@ Every combination round-trips:
 | PPMD + LSTM (the original) | 1821 | 6104 | 20796 | 194387 |
 | pretrained, frozen (default) | **1734** | 6003 | 21085 | 204669 |
 | pretrained + `TF_TRAIN=1` | 1761 | 5977 | 20770 | 200299 |
-| pretrained + `TF_TRAIN=2` | 1766 | **5966** | **20684** | see `log.txt` |
+| pretrained + `TF_TRAIN=2` | 1766 | **5966** | **20684** | **200026** |
 | fresh init, frozen | 2042 | 6672 | 22356 | |
 | fresh init + `TF_TRAIN=1` | 1880 | 6284 | 21565 | |
 
