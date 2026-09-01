@@ -51,13 +51,13 @@ rem allocates a 64-byte-aligned object, which needs C++17 aligned new from the
 rem runtime.  VC2019's vcruntime has it; older header sets need
 rem   -include "C:\VC2019\include\vcruntime_new.h"
 rem added to %%gcc%% (some of the clang configurations above already do that).
-set tfopts=-std=c++17 -O3 -fno-math-errno
+set tfopts=-std=c++17 -O3 -fno-math-errno -ffp-contract=off
 
 for %%f in (weights_io qmat_dense qmat_sparse attn kda glue arena_build model_opt) do (
   %gcc% -c %tfopts% %arch% %incs% %opts% tf\%%f.cpp -o %%f.o
 )
 rem load-time only: -Os keeps the weights range decoder at ~5KB of code
-%gcc% -c -std=c++17 -Os -fno-math-errno %arch% %incs% %opts% tf\weights_io_compressed.cpp -o weights_io_compressed.o
+%gcc% -c -std=c++17 -Os -fno-math-errno -ffp-contract=off %arch% %incs% %opts% tf\weights_io_compressed.cpp -o weights_io_compressed.o
 
 rem c++17, not c++23: the original single-line build put -std=c++17 in %%incs%%
 rem after -std=c++23, and clang takes the last one, so this is what coder0 has

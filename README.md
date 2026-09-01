@@ -71,9 +71,13 @@ PPMD's arena.
 
 Compress and decompress with the *same binary*: the coding distribution is
 floating point, so a gcc-built and a clang-built coder0 do not produce
-interchangeable archives. That was already true of coder0 before this change
-(its mixer is float and is built `-Ofast`) and is not specific to the
-transformer.
+interchangeable archives. The transformer is not the reason — with
+`-ffp-contract=off` (which `build.sh` and `gc.bat` pass, and which costs clang
+nothing because its default contracts nothing here) the two toolchains produce a
+*bit-identical model*, verified. What still diverges is `coder0.cpp`'s own float
+mixer under `-Ofast`, exactly as it did before this change: build it `-O2
+-ffp-contract=off` instead and a gcc and a clang coder0 emit byte-identical
+archives (and `book1000` costs one byte more, 1735).
 
 ## Why the token mapping matters
 

@@ -60,5 +60,23 @@ or with LTO against fast-math code:
 `build.sh` and `gc.bat` compile them separately from `coder0.cpp` for exactly
 this reason, mirroring what the cmix makefile does with the same sources.
 
+`-ffp-contract=off` is also passed. Clang's default already contracts nothing
+in these sources (they use explicit FMA intrinsics), so it changes neither the
+output nor the speed there; g++ defaults to `-ffp-contract=fast` and without it
+produces a different model. With it, a clang and a g++ build of the engine are
+bit-identical.
+
 The kernels require AVX2, FMA, F16C and BMI2 — all present in `-march=haswell`,
-which is what coder0 targets.
+which is what coder0 targets. (F16C is needed by `glue.cpp` alone, for the
+float16 prior conversion.)
+
+Two things that look like Windows risks and are not: `attn.cpp`'s hot-path GNU
+extended asm (`pv_dense_i8`, hard-coded `%ymm0..%ymm13`) compiles for
+`x86_64-pc-windows-msvc`, at the cost of the expected xmm6-xmm15 spills the
+Win64 ABI requires; and mixing these strict objects with an LTO'd, `-ffast-math`
+`coder0.o` is safe, because clang carries per-function FP attributes through
+LTO. `attn.cpp`'s `pv_row()` remains an intrinsic-only fallback if the asm ever
+misbehaves.
+
+coder0 asks for `AttnKind::KVI8`, the variant cmix uses. It is bitwise
+identical to `KVF32` and both faster and 1.7 MB smaller in cache footprint.

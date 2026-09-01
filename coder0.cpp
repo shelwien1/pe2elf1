@@ -7,7 +7,8 @@
 #include <cstring>
 
 #include <algorithm>
-#include <vector>
+#include <memory>    // pulled in before the `restrict` macro below, because
+#include <vector>    // tf/model_opt.h needs it (see transformer.inc)
 
 // Intel SSE/AVX intrinsics to fix the denormal microcode penalty
 #if defined(__SSE3__)||defined(__x86_64__)||defined(_M_X64)

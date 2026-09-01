@@ -6,12 +6,14 @@
 # unpacks the weights recomputes the RoPE tables with a bit-exact port of CUDA's
 # sinf/cosf, and the model's quantization steps depend on exact round-to-nearest
 # division), while coder0.cpp itself keeps the -Ofast build it has always had.
+# -ffp-contract=off costs clang nothing (its default already contracts nothing
+# here) and makes a g++ build produce a bit-identical model.
 set -e
 CXX=${CXX:-clang++}
 ARCH=${ARCH:--march=haswell -mtune=haswell}
 OUT=${OUT:-coder0}
 
-TFFLAGS="-O3 -std=c++17 -fno-math-errno $ARCH -Wall -Wextra -Wno-unused-parameter"
+TFFLAGS="-O3 -std=c++17 -fno-math-errno -ffp-contract=off $ARCH -Wall -Wextra -Wno-unused-parameter"
 C0FLAGS="-Ofast -std=c++17 -fomit-frame-pointer -fno-stack-protector $ARCH -Wno-format"
 
 mkdir -p obj
