@@ -86,6 +86,17 @@ archives (and `book1000` costs one byte more, 1735).
 `transformer.inc` has two compile-time switches, both settable with `-D`
 (`TFDEFS=` in `build.sh`, `set tfdefs=` in `gc.bat`):
 
+* **`TF_FP32`** (default 1) — the weights file stores int4 weights with per-row
+  scales and a static scale per activation quantizer. With `TF_FP32=1` every
+  weight is dequantized **once, at load** (`w = q * row_scale`) and nothing is
+  quantized again: the forward pass is ordinary floating point with no
+  activation quantization steps, and every parameter of the model is a plain
+  float in one contiguous block (`weights()` / `weight_count()`, 5,897,145
+  floats = 22.5 MB) that can be backed up and restored with a `memcpy` —
+  which is what training the body needs. `TF_FP32=0` runs the packed int4/int8
+  AVX2 engine instead: ~4x faster, but the weights only exist inside its
+  arenas. Compression is the same either way (see the table), because the model
+  was trained with fake quantization and is at least as good without it.
 * **`TF_LOAD_WEIGHTS`** (default 1) — 0 initializes the weights in memory
   instead of reading `6m-q4-fp32.tfwc2`, from `TF_INIT_SEED`. The scheme is the
   reference one, transcribed from the submission's training code
@@ -120,11 +131,17 @@ Every combination round-trips:
 |---|---|---|---|---|
 | PPMD alone | 1858 | 6312 | 21803 | 209801 |
 | PPMD + LSTM (the original) | 1821 | 6104 | 20796 | 194387 |
-| pretrained, frozen (default) | **1734** | 6003 | 21085 | 204669 |
-| pretrained + `TF_TRAIN=1` | 1761 | 5977 | 20770 | 200299 |
-| pretrained + `TF_TRAIN=2` | 1766 | **5966** | **20684** | **200026** |
-| fresh init, frozen | 2042 | 6672 | 22356 | |
-| fresh init + `TF_TRAIN=1` | 1880 | 6284 | 21565 | |
+| fp32, frozen (default) | 1735 | 6002 | 21086 | |
+| fp32 + `TF_TRAIN=1` | 1761 | 5976 | 20756 | |
+| fp32 + `TF_TRAIN=2` | 1765 | **5957** | **20666** | |
+| fp32 + fresh init | 2046 | 6680 | 22364 | |
+| quantized, frozen | **1734** | 6003 | 21085 | 204669 |
+| quantized + `TF_TRAIN=1` | 1761 | 5977 | 20770 | 200299 |
+| quantized + `TF_TRAIN=2` | 1766 | 5966 | 20684 | 200026 |
+| quantized + fresh init | 2042 | 6672 | 22356 | |
+
+The fp32 and quantized engines land within a byte or two of each other
+everywhere; fp32 costs about 4x the time (6.9s vs 1.7s per 4 KB here).
 
 Training closes part of the gap the frozen model leaves on long inputs, and at
 64 KB the trained stack passes the LSTM.

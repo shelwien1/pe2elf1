@@ -58,3 +58,24 @@ tools/gradcheck.cpp, directional derivative vs the analytic gradient:
   head      numeric -12.951033  analytic -12.951110  rel 3.0e-06
   mlp.down  numeric  +2.725932  analytic  +2.725839  rel 1.7e-05
   mlp.up    numeric  -1.893722  analytic  -1.893601  rel 3.2e-05
+
+fp32 engine (TF_FP32=1, the default: weights dequantized at load, no activation
+quantization anywhere) against the packed int4/int8 engine (TF_FP32=0):
+
+  config                       book1000    16K      64K    time/4KB
+  quantized engine                 1734   6003    21085       1.7s
+  fp32 engine                      1735   6002    21086       6.9s
+  quantized + TF_TRAIN=2           1766   5966    20684       2.0s
+  fp32 + TF_TRAIN=1                1761   5976    20756       6.7s
+  fp32 + TF_TRAIN=2                1765   5957    20666       6.6s
+  fp32 + fresh init                2046   6680    22364       6.2s
+
+Compression is the same within a byte or two - the model was trained with fake
+quantization, so running it in full precision is at worst neutral.  tools/
+engine_cmp.cpp on a synthetic stream: mean |dp| 1.0e-03 per element, and the
+fp32 engine's mean -log p is LOWER by 0.0175 nats.
+
+The fp32 model is 5,897,145 parameters = 22.50 MB, contiguous.  engine_cmp
+also checks the backup contract: copy the block, scale every weight by 1.03
+(output moves by 0.12 L1), copy the block back, and the output is bit-identical
+again.

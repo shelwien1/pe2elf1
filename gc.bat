@@ -58,7 +58,7 @@ set tfdefs=
 
 set tfopts=-std=c++17 -O3 -fno-math-errno -ffp-contract=off
 
-for %%f in (weights_io weights_init qmat_dense qmat_sparse attn kda glue arena_build model_opt) do (
+for %%f in (weights_io weights_init fp32_model qmat_dense qmat_sparse attn kda glue arena_build model_opt) do (
   %gcc% -c %tfopts% %arch% %incs% %opts% tf\%%f.cpp -o %%f.o
 )
 rem load-time only: -Os keeps the weights range decoder at ~5KB of code
@@ -69,7 +69,7 @@ rem after -std=c++23, and clang takes the last one, so this is what coder0 has
 rem always actually been compiled as.
 %gcc% -c -std=c++17 -Ofast -fpermissive -Wno-format %tfdefs% %arch% %incs% %opts% coder0.cpp -o coder0.o
 
-%gcc% -s %arch% -static -fuse-ld=lld coder0.o weights_io.o weights_io_compressed.o weights_init.o ^
+%gcc% -s %arch% -static -fuse-ld=lld coder0.o weights_io.o weights_io_compressed.o weights_init.o fp32_model.o ^
   qmat_dense.o qmat_sparse.o attn.o kda.o glue.o arena_build.o model_opt.o -o coder0.exe
 
 del link.exe

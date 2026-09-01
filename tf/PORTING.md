@@ -45,6 +45,32 @@ Only four changes were made, all mechanical:
 No numerical change: with the cap left at 0 the engine is bit-identical to the
 original.
 
+## fp32_model.cpp
+
+`fp32_model.{h,cpp}` is not from the submission - it is a plain fp32
+implementation of the same model, written against `cpp_infer/src/model.cpp`
+(the naive reference forward), `SPEC.md` and `KIMI_SEMANTICS.md`. It
+dequantizes every weight once at load (`w = q * row_scale`) and drops the
+activation quantizers entirely, so the forward pass is ordinary floating point
+and every parameter is a plain float in one contiguous arena. `weights()` /
+`weight_count()` expose that arena: 5,897,145 floats, copy it to back the model
+up and copy it back to restore.
+
+Differences from the quantized path, all of them consequences of removing the
+fake quantization:
+
+* a matmul `y[o] = s_act*s_w[o]*<q(x), q(w[o])>` becomes `y[o] = <x, w[o]>` on
+  the dequantized row (the folded `s_act` disappears with the quantizer);
+* vanilla attention keeps its KV ring in fp32 and scores with
+  `0.125*<q_h, k_h>` - the `sq*sk` factor existed only to undo int8 scaling;
+* `log_baseline_decay_rate` is kept as the raw parameter and `-exp()` applied
+  at use, rather than folded at load, so that every trainable number lives in
+  the arena.
+
+Everything else - `rms_norm`, the causal conv + SiLU, the KDA recurrence, the
+gated norm, RoPE, the logit softcap and the softmax - was already fp32 in the
+reference and is transcribed unchanged.
+
 ## Build flags
 
 These translation units must **not** be compiled with `-ffast-math` / `-Ofast`

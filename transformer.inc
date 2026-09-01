@@ -14,10 +14,17 @@
 // the two probability vectors that cross the boundary.
 // ===========================================================================
 
-#include "tf/model_opt.h"
-
 // ---------------------------------------------------------------------------
 // Configuration switches (override with -D on the command line).
+//
+//   TF_FP32          1  dequantize the weights to fp32 once at load and run
+//                       the model in plain floating point, with no activation
+//                       quantization anywhere (default).  Every parameter is
+//                       then an ordinary float in one contiguous block that
+//                       can be copied out and back with a memcpy.
+//                    0  run the quantized AVX2 engine instead (int4 weights,
+//                       int8 activations): several times faster, but the
+//                       weights only exist pre-packed into its arenas.
 //
 //   TF_LOAD_WEIGHTS  1  load the pretrained weights file (default)
 //                    0  initialize the weights in memory instead, from
@@ -57,6 +64,9 @@
 // there is no recurrence to backpropagate through, unlike the LSTM, which
 // could only afford full BPTT every `horizon_` bytes.
 // ---------------------------------------------------------------------------
+#ifndef TF_FP32
+#define TF_FP32 1
+#endif
 #ifndef TF_LOAD_WEIGHTS
 #define TF_LOAD_WEIGHTS 1
 #endif
@@ -69,6 +79,25 @@
 #ifndef TF_ADAPTER_D
 #define TF_ADAPTER_D 192
 #endif
+
+#if TF_FP32
+#include "tf/fp32_model.h"
+typedef fx2::f32::Transformer32 TFNet;
+#else
+#include "tf/model_opt.h"
+typedef fx2::opt::TransformerOpt TFNet;
+#endif
+
+// The two engines expose the same step/begin_article/last_final_norm/
+// unembed_rows surface; only construction differs.
+static TFNet* TF_MakeNet(const char* path, uint rope_rows) {
+#if TF_FP32
+  return new fx2::f32::Transformer32(path, rope_rows, TF_INIT_SEED);
+#else
+  return new fx2::opt::TransformerOpt(path, fx2::opt::AttnKind::KVI8,
+                                      rope_rows, TF_INIT_SEED);
+#endif
+}
 
 // Learning rate (x100000) and the step count the schedule decays over.  The
 // schedule is the one the LSTM used for its own output layer (lstm_layer.inc);
@@ -234,7 +263,7 @@ struct Transformer {
     TF_MAX_PIECE = 131072 // rope table length = longest independent context
   };
 
-  fx2::opt::TransformerOpt* net_;
+  TFNet* net_;
   int   byte2tok_[256];   // -1 for bytes outside the file's alphabet
   int   tok_list_[TF_V];  // the n_tokens_ token ids actually in use
   uint  piece_len_;       // tokens per independent transformer context
@@ -349,8 +378,7 @@ struct Transformer {
     // Only piece_len_ rope positions are ever addressed, so only that many
     // rows of the sin/cos tables are built at load time (the full tables are
     // 32 MB and take ~0.2s).
-    net_ = new fx2::opt::TransformerOpt(weights_path, fx2::opt::AttnKind::KVI8,
-                                        piece_len_, TF_INIT_SEED);
+    net_ = TF_MakeNet(weights_path, piece_len_);
     for( uint i = 0; i<TF_V; i++ )
       prior_[i] = out_[i] = 0.0f;
 #if TF_TRAIN
