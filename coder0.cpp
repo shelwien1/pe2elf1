@@ -63,12 +63,15 @@ int ppmd_order = 9;
 int ppmd_memory = 6284; //1000;
 
 // Searched in order when no weights file is given on the command line.
+#if TF_LOAD_WEIGHTS
 static const char* tf_weights_paths[] = {
   "6m-q4-fp32.tfwc2",
   "models/6m-q4-fp32.tfwc2",
   0
 };
+#endif
 
+#if TF_LOAD_WEIGHTS
 static const char* find_weights(const char* given) {
   const char* const one[] = { given, 0 };
   const char* const* list = given ? one : tf_weights_paths;
@@ -81,6 +84,7 @@ static const char* find_weights(const char* given) {
   }
   return 0;   // also the "ppmd only" switch: name a file that does not exist
 }
+#endif
 
 ALIGN(64) Transformer tf;
 ALIGN(64) Rangecoder rc;
@@ -127,15 +131,26 @@ int main(int argc, char** argv) {
   for( n_chars = 0, i = 0; i<CNUM; i++ )
     n_chars += (cmap[i] = rc.rc_BProcess(SCALE/2, cmap[i]));
 
-  // The transformer replaces the LSTM: frozen weights, no training, so the
-  // alphabet only decides the byte <-> token mapping.  If the weights are
-  // missing or the alphabet does not fit the model's 205 tokens the model
-  // stays disabled and its input to the mixer is PPMD's own distribution,
-  // which still round-trips (just without the transformer's contribution).
+  // The transformer replaces the LSTM.  If the weights are missing or the
+  // alphabet does not fit the model's 205 tokens the model stays disabled and
+  // its input to the mixer is PPMD's own distribution, which still round-trips
+  // (just without the transformer's contribution).
+#if TF_LOAD_WEIGHTS
   const char* wpath = find_weights(argc>4 ? argv[4] : 0);
   if( !wpath || !tf.Init(wpath, cmap, f_len) )
     fprintf(stderr, "coder0: transformer disabled (%s)\n",
             wpath ? "alphabet does not fit the model" : "no weights file");
+#else
+  // TF_LOAD_WEIGHTS 0: no weights file, the model is initialized in memory.
+  fprintf(stderr, "coder0: transformer weights initialized from seed %llu\n",
+          (unsigned long long)TF_INIT_SEED);
+  if( !tf.Init(0, cmap, f_len) )
+    fprintf(stderr, "coder0: transformer disabled "
+                    "(alphabet does not fit the model)\n");
+#endif
+#if TF_TRAIN
+  fprintf(stderr, "coder0: transformer output layer trained online\n");
+#endif
 
   M.Init(ppmd_order, ppmd_memory, cmap, &tf, f_len);
 

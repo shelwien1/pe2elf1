@@ -93,6 +93,9 @@ struct OptModel {
   int layer2van[NL] = {};
   float rsc[NL] = {}, tec[NL] = {}, skip_w[6] = {};
   const float* tok_table = nullptr;  // 205x192 normed embedding rows
+  // dequantized unembedding rows (q * per-row scale, WITHOUT the activation
+  // scale), kept for a caller that wants to run or train its own output layer
+  std::vector<float> unembed_f32;  // V x D
   std::vector<float> rope_sin, rope_cos;  // rope_len x 32 each
   size_t rope_len = 0;  // rows actually materialized; past it model_opt.cpp
                         // computes sin/cos with libm
@@ -100,7 +103,10 @@ struct OptModel {
 
   // rope_rows caps the sin/cos tables (0 = the full ROPE_LEN); positions
   // beyond the cap still work, they just take the libm fallback path.
-  void load(const char* weights_path, size_t rope_rows = 0);
+  // weights_path == nullptr initializes the weights in memory instead of
+  // reading a file (WeightsFile::random with init_seed).
+  void load(const char* weights_path, size_t rope_rows = 0,
+            uint64_t init_seed = 0);
 };
 
 }  // namespace opt

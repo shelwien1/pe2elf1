@@ -26,13 +26,16 @@ enum class AttnKind : int { KVF32 = 0, KVI8 = 1 };
 struct TransformerOptImpl;
 
 struct TransformerOpt {
+  // weights_path == nullptr initializes the weights in memory from init_seed
+  // instead of reading a file (weights_init.cpp) - deterministic, so an
+  // encoder and a decoder passing the same seed get identical weights.
   // rope_rows caps the recomputed rope sin/cos tables (0 = the full 131072
   // positions, 32 MB).  Positions beyond the cap fall back to libm sin/cos,
   // which is deterministic and therefore still symmetric between an encoder
   // and a decoder running the same binary.
   explicit TransformerOpt(const char* weights_path,
                           AttnKind attn = AttnKind::KVF32,
-                          size_t rope_rows = 0);
+                          size_t rope_rows = 0, uint64_t init_seed = 0);
   ~TransformerOpt();
   TransformerOpt(const TransformerOpt&) = delete;
   TransformerOpt& operator=(const TransformerOpt&) = delete;
@@ -49,6 +52,14 @@ struct TransformerOpt {
 
   // the 205 post-softcap logits of the last step (valid until the next step)
   const float* last_logits() const;
+  // the final rms_norm output of the last step (192 fp32) - the activation the
+  // unembedding consumes, i.e. what a caller needs to run or train its own
+  // output layer.  Valid until the next step.
+  const float* last_final_norm() const;
+  // the dequantized unembedding rows (205 x 192, row-major): weight q times
+  // its per-row scale, without the activation scale.  Stable for the model's
+  // lifetime; a caller training its own head starts from these.
+  const float* unembed_rows() const;
 
   AttnKind attn_kind() const;
 

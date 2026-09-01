@@ -14,7 +14,9 @@ The inference engine is in `tf/` (see `tf/PORTING.md`), the glue is
 ## Build
 
 ```sh
-./build.sh                 # clang++ (or CXX=g++), -march=haswell
+./build.sh                                   # clang++ (or CXX=g++), -march=haswell
+TFDEFS="-DTF_TRAIN=1" ./build.sh             # + online training of the output layer
+TFDEFS="-DTF_LOAD_WEIGHTS=0" ./build.sh      # no weights file: initialize in memory
 ```
 
 Windows: `gc.bat` (clang, the same layout Shelwien's other builds use).
@@ -78,6 +80,42 @@ nothing because its default contracts nothing here) the two toolchains produce a
 mixer under `-Ofast`, exactly as it did before this change: build it `-O2
 -ffp-contract=off` instead and a gcc and a clang coder0 emit byte-identical
 archives (and `book1000` costs one byte more, 1735).
+
+## Switches
+
+`transformer.inc` has two compile-time switches, both settable with `-D`
+(`TFDEFS=` in `build.sh`, `set tfdefs=` in `gc.bat`):
+
+* **`TF_LOAD_WEIGHTS`** (default 1) — 0 initializes the weights in memory
+  instead of reading `6m-q4-fp32.tfwc2`, from `TF_INIT_SEED`. The scheme is the
+  reference one, transcribed from the submission's training code
+  (`pysrc/model.py`, `pysrc/quantization.py`, `training_recipes/quantize.py`):
+  kaiming-uniform weights, `normal_` for the two embeddings, per-row
+  `max|w|/7` weight scales, `(2/sqrt(127))*mean|x|` activation scales, and the
+  reference's KDA decay-rate and `dt_bias` draws. See `tf/weights_init.cpp`.
+  Deterministic, so encoder and decoder build the same model.
+* **`TF_TRAIN`** (default 0) — 1 trains the output layer online, once per byte,
+  the way the LSTM this replaced trained its own output layer. coder0 keeps an
+  fp32 copy of the unembedding (started from the model's), runs it on the
+  transformer's final activation, and updates it with AdamW from the byte just
+  coded. `TF_LR_X100000` (default 2000) sets the rate.
+
+All four combinations round-trip:
+
+| config | book1000 | book1[:16K] | book1[:64K] |
+|---|---|---|---|
+| pretrained, frozen (default) | **1734** | 6003 | 21085 |
+| pretrained + `TF_TRAIN=1` | 1761 | **5977** | **20770** |
+| fresh init, frozen | 2042 | 6672 | 22356 |
+| fresh init + `TF_TRAIN=1` | 1880 | 6284 | 21565 |
+
+Training is the output layer only — the 12 transformer blocks stay frozen.
+The engine consumes weights pre-packed as int4 nibbles behind fused
+quantization epilogues, so a backward pass through the body would need fp32
+master weights plus a re-pack of the 2.9 MB weight stream per byte; the
+submission has no C++ backward pass either (`cpp_infer/src` is inference only,
+training is PyTorch with Muon+AdamW). The output layer is also where the LSTM
+did its per-byte work — it ran full BPTT only every `horizon_` bytes.
 
 ## Why the token mapping matters
 

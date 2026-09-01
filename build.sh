@@ -14,11 +14,15 @@ ARCH=${ARCH:--march=haswell -mtune=haswell}
 OUT=${OUT:-coder0}
 
 TFFLAGS="-O3 -std=c++17 -fno-math-errno -ffp-contract=off $ARCH -Wall -Wextra -Wno-unused-parameter"
-C0FLAGS="-Ofast -std=c++17 -fomit-frame-pointer -fno-stack-protector $ARCH -Wno-format"
+# Model switches (see the header of transformer.inc):
+#   TFDEFS="-DTF_LOAD_WEIGHTS=0"   initialize the weights instead of loading
+#   TFDEFS="-DTF_TRAIN=1"          train the output layer online
+TFDEFS=${TFDEFS:-}
+C0FLAGS="-Ofast -std=c++17 -fomit-frame-pointer -fno-stack-protector $ARCH -Wno-format $TFDEFS"
 
 mkdir -p obj
-for f in weights_io weights_io_compressed qmat_dense qmat_sparse attn kda glue \
-         arena_build model_opt; do
+for f in weights_io weights_io_compressed weights_init qmat_dense qmat_sparse \
+         attn kda glue arena_build model_opt; do
   case $f in
     # load-time only: -Os keeps the weights range decoder small
     weights_io_compressed) O="$(echo $TFFLAGS | sed 's/-O3/-Os/')" ;;
@@ -32,6 +36,6 @@ echo "  CC coder0.cpp"
 $CXX $C0FLAGS -c coder0.cpp -o obj/coder0.o
 echo "  LD $OUT"
 $CXX -o $OUT obj/coder0.o obj/weights_io.o obj/weights_io_compressed.o \
-    obj/qmat_dense.o obj/qmat_sparse.o obj/attn.o obj/kda.o obj/glue.o \
+    obj/weights_init.o obj/qmat_dense.o obj/qmat_sparse.o obj/attn.o obj/kda.o obj/glue.o \
     obj/arena_build.o obj/model_opt.o -lm
 echo "done: $OUT"

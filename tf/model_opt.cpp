@@ -268,9 +268,10 @@ struct TransformerOptImpl {
   alignas(64) float probs208[208] = {};
   alignas(32) float sfall[32] = {}, cfall[32] = {};  // rope fallback row
 
-  TransformerOptImpl(const char* path, AttnKind k, size_t rope_rows)
+  TransformerOptImpl(const char* path, AttnKind k, size_t rope_rows,
+                     uint64_t init_seed)
       : kind(k) {
-    M.load(path, rope_rows);
+    M.load(path, rope_rows, init_seed);
     const size_t kda_sz = sizeof(KdaState) * 9;
     const size_t kv_sz =
         (kind == AttnKind::KVF32 ? sizeof(AttnKVF32) : sizeof(AttnKV)) * 3;
@@ -549,8 +550,8 @@ struct TransformerOptImpl {
 };
 
 TransformerOpt::TransformerOpt(const char* weights_path, AttnKind attn,
-                               size_t rope_rows)
-    : impl(new TransformerOptImpl(weights_path, attn, rope_rows)) {}
+                               size_t rope_rows, uint64_t init_seed)
+    : impl(new TransformerOptImpl(weights_path, attn, rope_rows, init_seed)) {}
 
 TransformerOpt::~TransformerOpt() = default;
 
@@ -572,6 +573,12 @@ void TransformerOpt::step(uint8_t token, const float* prior205,
 }
 
 const float* TransformerOpt::last_logits() const { return impl->logits; }
+
+const float* TransformerOpt::last_final_norm() const { return impl->xn; }
+
+const float* TransformerOpt::unembed_rows() const {
+  return impl->M.unembed_f32.data();
+}
 
 AttnKind TransformerOpt::attn_kind() const { return impl->kind; }
 

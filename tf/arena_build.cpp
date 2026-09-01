@@ -56,16 +56,21 @@ HugeBuf::~HugeBuf() {
   raw = nullptr;
 }
 
-void OptModel::load(const char* weights_path, size_t rope_rows) {
+void OptModel::load(const char* weights_path, size_t rope_rows,
+                    uint64_t init_seed) {
   g_rope_rows_limit = rope_rows;
+  // no path: initialize the weights in memory (weights_init.cpp).  Otherwise
   // accept both the raw FX2TFW01 file and the losslessly compressed
-  // FX2TFWC1/FX2TFWC2 files (bit-identical tensors either way)
+  // FX2TFWC1/FX2TFWC2 files (bit-identical tensors either way).
   char magic[8] = {0};
-  if (FILE* f = std::fopen(weights_path, "rb")) {
-    if (std::fread(magic, 1, 8, f) != 8) magic[0] = 0;
-    std::fclose(f);
+  if (weights_path) {
+    if (FILE* f = std::fopen(weights_path, "rb")) {
+      if (std::fread(magic, 1, 8, f) != 8) magic[0] = 0;
+      std::fclose(f);
+    }
   }
-  WeightsFile wf = std::memcmp(magic, "FX2TFWC", 7) == 0
+  WeightsFile wf = !weights_path ? WeightsFile::random(init_seed)
+                   : std::memcmp(magic, "FX2TFWC", 7) == 0
                        ? WeightsFile::load_compressed(weights_path)
                        : WeightsFile::load(weights_path);
 
@@ -220,6 +225,16 @@ void OptModel::load(const char* weights_path, size_t rope_rows) {
   if (ki != 9 || vi != 3) die("layer pattern mismatch");
 
   unembed = qsite("unembedding", V, D, true);
+  {  // fp32 copy of the same rows, for a caller running its own output layer
+    const WTensor& uq = wf.get("unembedding.weight.q", DT_I8, {V, D});
+    const WTensor& us = wf.get("unembedding.weight.scale", DT_BF16, {V});
+    unembed_f32.resize(size_t(V) * D);
+    for (int o = 0; o < V; o++) {
+      const float sc = bf16_to_f32(us.bf16_bits()[o]);
+      for (int i = 0; i < D; i++)
+        unembed_f32[size_t(o) * D + i] = sc * float(uq.i8()[size_t(o) * D + i]);
+    }
+  }
   stream_bytes = round64(off);
 
   // ---- non-stream data: tail slack gap, then the normed embedding table ----

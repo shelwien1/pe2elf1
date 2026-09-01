@@ -27,3 +27,18 @@ Cross-entropy of the transformer alone on book1[:20000] with a flat prior:
   enwik9-derived byte map    3.73 bits/byte
   packed alphabet indices    7.19 bits/byte
   scrambled map (control)    8.33 bits/byte
+
+Switch matrix (clang++-18, -march=haswell), all round-tripping:
+
+config                              book1000    16K      64K
+pretrained, frozen (default)            1734   6003    21085
+pretrained + TF_TRAIN=1                 1761   5977    20770
+fresh init (TF_LOAD_WEIGHTS=0)          2042   6672    22356
+fresh init + TF_TRAIN=1                 1880   6284    21565
+  (for reference: ppmd alone            1858   6312    21803
+                  ppmd + LSTM           1821   6104    20796)
+
+Online learning rate on book1[:65536], pretrained weights:
+  frozen 21085, lr 7200 -> 20956, 600 -> 20796, 1000 -> 20772, 2000 -> 20770.
+The LSTM's 7200 is tuned for a model starting from noise; 2000 is the default
+here, and is also the best of the values tried from a fresh init.

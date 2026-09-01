@@ -57,6 +57,12 @@ struct WeightsFile {
   // matching uncompressed file (weights_io_compressed.cpp)
   static WeightsFile load_compressed(const char* path);
 
+  // builds the same tensor set in memory with freshly initialized values
+  // instead of reading a file (weights_init.cpp).  Deterministic in `seed`:
+  // an encoder and a decoder that pass the same seed get identical weights.
+  // Honours g_rope_rows_limit like the file loaders do.
+  static WeightsFile random(uint64_t seed);
+
   bool has(const std::string& name) const { return tensors.count(name) != 0; }
   const WTensor& get(const std::string& name) const;
   // get + validate dtype and exact shape

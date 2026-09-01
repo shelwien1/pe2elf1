@@ -17,6 +17,89 @@
 #include "tf/model_opt.h"
 
 // ---------------------------------------------------------------------------
+// Configuration switches (override with -D on the command line).
+//
+//   TF_LOAD_WEIGHTS  1  load the pretrained weights file (default)
+//                    0  initialize the weights in memory instead, from
+//                       TF_INIT_SEED - no weights file needed.  The
+//                       initialization is described in tf/weights_init.cpp;
+//                       it is deterministic, so the encoder and the decoder
+//                       build the same model.
+//
+//   TF_TRAIN         0  frozen model: the engine's own output layer (default)
+//                    1  train the output layer online, once per byte, the way
+//                       the LSTM this replaced trained its output layer.
+//                       coder0 then runs its own fp32 copy of the unembedding
+//                       (started from the model's) on the transformer's final
+//                       activation, and updates it with AdamW from the byte
+//                       that was just coded.
+//
+// The four combinations are all valid and all round-trip: the pretrained model
+// frozen (1/0), fine-tuned online (1/1), a fresh model trained from scratch
+// (0/1) and a fresh frozen model as a control (0/0).
+//
+// SCOPE OF TF_TRAIN: the output layer only, not the 12 transformer blocks.
+// The body cannot be trained through this engine as it stands - it consumes
+// weights pre-packed as int4 nibbles with folded per-row scales, behind fused
+// quantization epilogues and hand-written kernels, so a backward pass would
+// need fp32 master weights plus a full re-pack of the 2.9 MB weight stream
+// after every byte.  The output layer is where the LSTM did its per-byte work
+// too (it ran full BPTT only every `horizon_` bytes), and it is the part that
+// adapts to the file at hand.
+// ---------------------------------------------------------------------------
+#ifndef TF_LOAD_WEIGHTS
+#define TF_LOAD_WEIGHTS 1
+#endif
+#ifndef TF_TRAIN
+#define TF_TRAIN 0
+#endif
+#ifndef TF_INIT_SEED
+#define TF_INIT_SEED 0xC0DE0ULL
+#endif
+
+// Learning rate (x100000) and the step count the schedule decays over.  The
+// schedule is the one the LSTM used for its own output layer (lstm_layer.inc);
+// its learning rate (7200) is tuned for a model that starts from noise and is
+// too aggressive here, so the default is lower.  Measured on book1[:65536]
+// with the pretrained weights: 21085 bytes frozen, 20956 at 7200, 20796 at
+// 600, 20772 at 1000, 20770 at 2000.  2000 is also the best of the values
+// tried with TF_LOAD_WEIGHTS 0 (book1000 1880 at 2000, 1914 at 7200).
+#ifndef TF_LR_X100000
+#define TF_LR_X100000 2000
+#endif
+#ifndef TF_UPDATE_LIMIT
+#define TF_UPDATE_LIMIT 3000
+#endif
+
+#if TF_TRAIN
+
+// AdamW over one weight row, with the step-dependent scalars precomputed by
+// the caller so they are not recomputed 205 times per byte.
+struct TF_AdamW {
+  float alpha, b1_t, b2_t;
+  static const float beta1() { return 0.024f; }
+  static const float beta2() { return 0.9999f; }
+
+  void Prepare(float lr, qword t, uint lim) {
+    qword t_eff = t<lim ? t : lim;
+    alpha = lr*0.1f/sqrtf(5e-5f*t_eff+1.0f)*(1.0f-(float)t_eff/(lim*1.33f));
+    float t_pow = t>0 ? (float)t : 1.0f;
+    b1_t = 1.0f-powf(beta1(), t_pow);
+    b2_t = 1.0f-powf(beta2(), t_pow);
+  }
+
+  void Row(cprfloat g, prfloat m, prfloat v, prfloat w, uint n) const {
+    const float eps = 1e-6f, decay = 1e-5f;
+    for( uint i = 0; i<n; ++i ) {
+      m[i] = beta1()*m[i]+(1.0f-beta1())*g[i];
+      v[i] = beta2()*v[i]+(1.0f-beta2())*g[i]*g[i];
+      w[i] -= alpha*((m[i]/b1_t)/(sqrtf(v[i]/b2_t)+eps)+decay*w[i]);
+    }
+  }
+};
+#endif
+
+// ---------------------------------------------------------------------------
 // The model's vocabulary.
 //
 // The transformer was trained on exactly the byte stream cmix feeds to its
@@ -90,16 +173,29 @@ static int TF_TokenOfStreamByte(int b) {
 struct Transformer {
   enum {
     TF_V = 205,           // the model's vocabulary size
+    TF_D = 192,           // the model's residual width
     TF_MAX_PIECE = 131072 // rope table length = longest independent context
   };
 
   fx2::opt::TransformerOpt* net_;
   int   byte2tok_[256];   // -1 for bytes outside the file's alphabet
+  int   tok_list_[TF_V];  // the n_tokens_ token ids actually in use
   uint  piece_len_;       // tokens per independent transformer context
   uint  piece_pos_;       // tokens already fed into the current context
   uint  n_tokens_;        // alphabet size (== n_chars)
   ALIGN(64) float prior_[TF_V];
   ALIGN(64) float out_[TF_V];
+#if TF_TRAIN
+  // coder0's own output layer: an fp32 copy of the model's unembedding rows,
+  // trained online.  Only the rows of tokens the file uses are ever touched.
+  ALIGN(64) float head_w_[TF_V*TF_D];
+  ALIGN(64) float head_m_[TF_V*TF_D];
+  ALIGN(64) float head_v_[TF_V*TF_D];
+  ALIGN(64) float head_l_[TF_V];    // post-softcap logits of the last forward
+  ALIGN(64) float prev_xn_[TF_D];   // final activation of the last forward
+  uint  pending_;                   // a prediction is waiting for its target
+  qword head_steps_;
+#endif
 
   Transformer() : net_(0), piece_len_(0), piece_pos_(0), n_tokens_(0) {}
 
@@ -123,6 +219,8 @@ struct Transformer {
     for( i = 0; i<TF_V; i++ )
       taken[i] = false;
     n_tokens_ = 0;
+    for( i = 0; i<TF_V; i++ )
+      tok_list_[i] = 0;
     for( i = 0; i<256; i++ ) {
       byte2tok_[i] = -1;
       if( !cmap[i] )
@@ -160,12 +258,16 @@ struct Transformer {
       byte2tok_[i] = spare;
       taken[spare] = true;
     }
+    for( i = 0, n_tokens_ = 0; i<256; i++ )
+      if( byte2tok_[i]>=0 )
+        tok_list_[n_tokens_++] = byte2tok_[i];
     return true;
   }
 
-  // Loads the weights and prepares the mapping.  Returns false (with the model
-  // left disabled) if the file cannot be used, so the caller can fall back to
-  // PPMD alone rather than fail.
+  // Prepares the mapping and brings up the model: weights_path names the
+  // weights file, or is NULL to initialize them in memory (TF_LOAD_WEIGHTS 0).
+  // Returns false (with the model left disabled) if the alphabet does not fit,
+  // so the caller can fall back to PPMD alone rather than fail.
   bool Init(const char* weights_path, const char* cmap, uint f_len) {
     if( !SelfCheck() )
       return false;
@@ -174,14 +276,71 @@ struct Transformer {
     piece_len_ = f_len<TF_MAX_PIECE ? (f_len ? f_len : 1) : TF_MAX_PIECE;
     piece_pos_ = 0;
     // Only piece_len_ rope positions are ever addressed, so only that many
-    // rows of the sin/cos tables are recomputed at load time (the full tables
-    // are 32 MB and take ~0.2s to rebuild).
+    // rows of the sin/cos tables are built at load time (the full tables are
+    // 32 MB and take ~0.2s).
     net_ = new fx2::opt::TransformerOpt(weights_path, fx2::opt::AttnKind::KVI8,
-                                        piece_len_);
+                                        piece_len_, TF_INIT_SEED);
     for( uint i = 0; i<TF_V; i++ )
       prior_[i] = out_[i] = 0.0f;
+#if TF_TRAIN
+    // Start the trainable head from the model's own unembedding, so training
+    // begins where the frozen model would have been rather than from noise.
+    memcpy(head_w_, net_->unembed_rows(), sizeof(head_w_));
+    memset(head_m_, 0, sizeof(head_m_));
+    memset(head_v_, 0, sizeof(head_v_));
+    memset(head_l_, 0, sizeof(head_l_));
+    memset(prev_xn_, 0, sizeof(prev_xn_));
+    pending_ = 0;
+    head_steps_ = 0;
+#endif
     return true;
   }
+
+#if TF_TRAIN
+  // Runs coder0's own output layer on the transformer's final activation:
+  // logits, the model's logit softcap, then a softmax over the tokens the
+  // file actually uses.  Leaves the post-softcap logits in head_l_ and the
+  // distribution in out_ (both over used tokens only).
+  void HeadForward(cprfloat xn) {
+    uint k;
+    float m = -1e30f;
+    for( k = 0; k<n_tokens_; k++ ) {
+      const int o = tok_list_[k];
+      float z = DotProduct(head_w_+(uint)o*TF_D, xn, TF_D);
+      float l = 15.0f*tanhf(z*(1.0f/15.0f));
+      head_l_[o] = l;
+      if( l>m )
+        m = l;
+    }
+    float sum = 0.0f;
+    for( k = 0; k<n_tokens_; k++ ) {
+      const int o = tok_list_[k];
+      sum += (out_[o] = expf(head_l_[o]-m));
+    }
+    float inv = 1.0f/(sum+1e-30f);
+    for( k = 0; k<n_tokens_; k++ )
+      out_[tok_list_[k]] *= inv;
+  }
+
+  // One online AdamW step on the head, from the target that has just arrived.
+  // d(-log p[target])/dz = (p - onehot) * dsoftcap/dz, and
+  // dsoftcap/dz = 1 - tanh(z/15)^2 = 1 - (l/15)^2 with l the capped logit.
+  void HeadUpdate(int target) {
+    TF_AdamW opt;
+    opt.Prepare(TF_LR_X100000/100000.0f, head_steps_/10+1, TF_UPDATE_LIMIT*2);
+    ALIGN(64) float grad[TF_D];
+    for( uint k = 0; k<n_tokens_; k++ ) {
+      const int o = tok_list_[k];
+      const float t = head_l_[o]*(1.0f/15.0f);
+      float g = (out_[o]-(o==target ? 1.0f : 0.0f))*(1.0f-t*t);
+      for( uint j = 0; j<TF_D; j++ )
+        grad[j] = g*prev_xn_[j];
+      opt.Row(grad, head_m_+(uint)o*TF_D, head_v_+(uint)o*TF_D,
+              head_w_+(uint)o*TF_D, TF_D);
+    }
+    ++head_steps_;
+  }
+#endif
 
   bool Ready() const { return net_!=0; }
 
@@ -195,6 +354,13 @@ struct Transformer {
     uint i;
     if( sym>255 || byte2tok_[sym]<0 )
       return false;               // not an alphabet byte (corrupt archive)
+#if TF_TRAIN
+    // The byte just coded is the target of the prediction made last call.
+    if( pending_ ) {
+      HeadUpdate(byte2tok_[sym]);
+      pending_ = 0;
+    }
+#endif
     if( piece_pos_+1>=piece_len_ ) {
       // Last token of this context: the next byte starts a fresh one, so
       // this token's prediction would be thrown away.  Skip the step, as
@@ -219,6 +385,13 @@ struct Transformer {
       net_->begin_article(0);
     net_->step((uint8_t)byte2tok_[sym], prior_, out_);
     ++piece_pos_;
+#if TF_TRAIN
+    // Replace the engine's frozen output layer with the trained one; out_ and
+    // head_l_ are what HeadUpdate will need once the target arrives.
+    memcpy(prev_xn_, net_->last_final_norm(), sizeof(prev_xn_));
+    HeadForward(prev_xn_);
+    pending_ = 1;
+#endif
 
     float sum = 0.0f;
     for( i = 0; i<256; i++ ) {
