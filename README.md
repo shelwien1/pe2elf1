@@ -133,7 +133,8 @@ Every combination round-trips:
 | PPMD + LSTM (the original) | 1821 | 6104 | 20796 | 194387 |
 | fp32, frozen (default) | 1735 | 6002 | 21086 | |
 | fp32 + `TF_TRAIN=1` | 1761 | 5976 | 20756 | |
-| fp32 + `TF_TRAIN=2` | 1765 | **5957** | **20666** | |
+| fp32 + `TF_TRAIN=2` | 1765 | 5957 | 20666 | |
+| **fp32 + `TF_TRAIN=3`** | **1667** | **5706** | | |
 | fp32 + fresh init | 2046 | 6680 | 22364 | |
 | quantized, frozen | **1734** | 6003 | 21085 | 204669 |
 | quantized + `TF_TRAIN=1` | 1761 | 5977 | 20770 | 200299 |

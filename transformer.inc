@@ -79,6 +79,28 @@
 #ifndef TF_ADAPTER_D
 #define TF_ADAPTER_D 192
 #endif
+// AdamW rate for TF_TRAIN=3, x1000000 (5 = 5e-6).  Measured on book1000 /
+// book1[:16384], frozen being 1735 / 6002:
+//   1e-6 1693/5751   3e-6 1671/5700   5e-6 1667/5706   1e-5 1669/5752
+//   3e-5 1707/5878   1e-4 1778/6034   3e-4 1810/6105
+// The optimum is flat between 3e-6 and 1e-5 and falls off fast above it - the
+// model is pretrained, so a rate sized for training from noise wrecks it.
+#ifndef TF_FULL_LR_X1000000
+#define TF_FULL_LR_X1000000 5
+#endif
+// Bytes of gradient accumulated per optimizer step.  The AdamW step touches
+// four arrays of 22.5 MB, so at TF_BATCH 1 it moves 4x as much memory as the
+// forward pass does and dominates the run time; accumulating amortizes it.
+#ifndef TF_BATCH
+#define TF_BATCH 1
+#endif
+#ifndef TF_FULL_WD_X1000000
+#define TF_FULL_WD_X1000000 0
+#endif
+
+#if TF_TRAIN>=3 && !TF_FP32
+#error "TF_TRAIN=3 trains the model's own weights, which only exist as plain floats under TF_FP32=1"
+#endif
 
 #if TF_FP32
 #include "tf/fp32_model.h"
@@ -113,7 +135,7 @@ static TFNet* TF_MakeNet(const char* path, uint rope_rows) {
 #define TF_UPDATE_LIMIT 3000
 #endif
 
-#if TF_TRAIN
+#if TF_TRAIN>=1 && TF_TRAIN<=2
 
 #ifdef TF_GRADCHECK
 // Set by the gradient check: while non-null, TF_AdamW::Row records the
@@ -271,7 +293,7 @@ struct Transformer {
   uint  n_tokens_;        // alphabet size (== n_chars)
   ALIGN(64) float prior_[TF_V];
   ALIGN(64) float out_[TF_V];
-#if TF_TRAIN
+#if TF_TRAIN>=1 && TF_TRAIN<=2
   // coder0's own output layer: an fp32 copy of the model's unembedding rows,
   // trained online.  Only the rows of tokens the file uses are ever touched.
   ALIGN(64) float head_w_[TF_V*TF_D];
@@ -282,7 +304,10 @@ struct Transformer {
   uint  pending_;                   // a prediction is waiting for its target
   qword head_steps_;
 #endif
-#if TF_TRAIN>=2
+#if TF_TRAIN>=3
+  uint pending_;                    // a prediction is waiting for its target
+#endif
+#if TF_TRAIN==2
   // one more transformer block, in the model's own MLP shape and trained in
   // fp32:  h2 = h + down(relu(up(rms_norm(h)))^2),  head input = rms_norm(h2).
   // down starts at zero, so the block is the identity at step 0 and level 2
@@ -379,9 +404,15 @@ struct Transformer {
     // rows of the sin/cos tables are built at load time (the full tables are
     // 32 MB and take ~0.2s).
     net_ = TF_MakeNet(weights_path, piece_len_);
+#if TF_TRAIN>=3
+    net_->enable_training();
+    full_steps_ = 0;
+    accum_ = 0;
+    pending_ = 0;
+#endif
     for( uint i = 0; i<TF_V; i++ )
       prior_[i] = out_[i] = 0.0f;
-#if TF_TRAIN
+#if TF_TRAIN>=1 && TF_TRAIN<=2
     // Start the trainable head from the model's own unembedding, so training
     // begins where the frozen model would have been rather than from noise.
     memcpy(head_w_, net_->unembed_rows(), sizeof(head_w_));
@@ -392,7 +423,7 @@ struct Transformer {
     pending_ = 0;
     head_steps_ = 0;
 #endif
-#if TF_TRAIN>=2
+#if TF_TRAIN==2
     // up: kaiming_uniform over fan_in = TF_D, the reference's init for an mlp
     // up projection.  down: zero, so the block starts as the identity.
     {
@@ -421,11 +452,11 @@ struct Transformer {
     return true;
   }
 
-#if TF_TRAIN
+#if TF_TRAIN>=1 && TF_TRAIN<=2
   // What the output layer reads: the model's final activation at level 1, the
-  // extra block's output at level 2.
+  // extra block's output at level 2.  (Level 3 uses the model's own head.)
   cprfloat HeadInput() const {
-#if TF_TRAIN>=2
+#if TF_TRAIN==2
     return a_n2_;
 #else
     return prev_xn_;
@@ -439,7 +470,7 @@ struct Transformer {
   // plus every intermediate the backward pass needs.
   void StackForward() {
     uint j, k;
-#if TF_TRAIN>=2
+#if TF_TRAIN==2
     TF_RmsNorm(prev_xn_, a_n1_, TF_D);
     for( k = 0; k<TF_ADAPTER_D; k++ ) {
       const float u = DotProduct(up_w_+k*TF_D, a_n1_, TF_D);
@@ -490,7 +521,7 @@ struct Transformer {
       const float t = head_l_[o]*(1.0f/15.0f);
       dz[o] = (out_[o]-(o==target ? 1.0f : 0.0f))*(1.0f-t*t);
     }
-#if TF_TRAIN>=2
+#if TF_TRAIN==2
     // dL/d(head input), with the head weights as they were in the forward pass
     ALIGN(64) float dn2[TF_D];
     for( j = 0; j<TF_D; j++ )
@@ -512,7 +543,7 @@ struct Transformer {
       opt.Row(grad, head_m_+(uint)o*TF_D, head_v_+(uint)o*TF_D,
               head_w_+(uint)o*TF_D, TF_D);
     }
-#if TF_TRAIN>=2
+#if TF_TRAIN==2
     // back through the final rms_norm, then the residual: dh2 reaches both the
     // down projection and (unused) the block input, since the body is frozen
     ALIGN(64) float dh2[TF_D];
@@ -546,6 +577,37 @@ struct Transformer {
   }
 #endif
 
+#if TF_TRAIN>=3
+  qword full_steps_;
+  uint  accum_;
+
+  // Backpropagate this byte's loss through the whole model and take one AdamW
+  // step.  coder0 codes with the model's distribution RESTRICTED to the
+  // alphabet, so the loss is -log( p[target] / sum_{used} p ) and its
+  // derivative with respect to the capped logits is the restricted softmax
+  // minus the one-hot target - zero on tokens the file never uses.
+  void FullUpdate(int target) {
+    ALIGN(64) float dcap[TF_V];
+    uint k;
+    for( k = 0; k<TF_V; k++ )
+      dcap[k] = 0.0f;
+    float sum = 0.0f;
+    for( k = 0; k<n_tokens_; k++ )
+      sum += out_[tok_list_[k]];
+    const float inv = 1.0f/(sum+1e-30f);
+    for( k = 0; k<n_tokens_; k++ ) {
+      const int o = tok_list_[k];
+      dcap[o] = out_[o]*inv-(o==target ? 1.0f : 0.0f);
+    }
+    net_->backward(dcap);
+    if( ++accum_>=TF_BATCH ) {
+      accum_ = 0;
+      net_->adam_step(TF_FULL_LR_X1000000/1000000.0f*TF_BATCH,
+                      TF_FULL_WD_X1000000/1000000.0f, (long)(++full_steps_));
+    }
+  }
+#endif
+
   bool Ready() const { return net_!=0; }
 
   // Feeds the byte that was just coded together with PPMD's distribution over
@@ -561,7 +623,11 @@ struct Transformer {
 #if TF_TRAIN
     // The byte just coded is the target of the prediction made last call.
     if( pending_ ) {
+#if TF_TRAIN>=3
+      FullUpdate(byte2tok_[sym]);
+#else
       StackUpdate(byte2tok_[sym]);
+#endif
       pending_ = 0;
     }
 #endif
@@ -589,11 +655,16 @@ struct Transformer {
       net_->begin_article(0);
     net_->step((uint8_t)byte2tok_[sym], prior_, out_);
     ++piece_pos_;
-#if TF_TRAIN
+#if TF_TRAIN>=1 && TF_TRAIN<=2
     // Replace the engine's frozen output layer with the trained one; out_ and
-    // head_l_ are what HeadUpdate will need once the target arrives.
+    // head_l_ are what StackUpdate will need once the target arrives.
     memcpy(prev_xn_, net_->last_final_norm(), sizeof(prev_xn_));
     StackForward();
+    pending_ = 1;
+#elif TF_TRAIN>=3
+    // out_ already holds the model's own distribution; the tape inside the
+    // engine holds this step's forward pass until the next step() overwrites
+    // it, which is after FullUpdate has run.
     pending_ = 1;
 #endif
 

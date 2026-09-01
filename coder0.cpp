@@ -148,7 +148,11 @@ int main(int argc, char** argv) {
     fprintf(stderr, "coder0: transformer disabled "
                     "(alphabet does not fit the model)\n");
 #endif
-#if TF_TRAIN
+#if TF_TRAIN>=3
+  fprintf(stderr, "coder0: whole transformer trained online (%d params, "
+                  "lr %g, batch %d)\n", 5897145,
+          TF_FULL_LR_X1000000/1000000.0, (int)TF_BATCH);
+#elif TF_TRAIN
   fprintf(stderr, "coder0: transformer output layer trained online\n");
 #endif
 

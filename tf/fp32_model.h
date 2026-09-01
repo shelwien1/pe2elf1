@@ -57,6 +57,42 @@ struct Transformer32 {
   const float* weights() const;
   size_t weight_count() const;
 
+  // ---- training ----------------------------------------------------------
+  // Allocates the gradient buffer, the optimizer moments and the forward tape,
+  // and makes step() record what backward() needs.  Roughly 4x the weight
+  // block in memory (gradients + two AdamW moments).
+  void enable_training();
+  bool training() const;
+
+  // Backpropagates dL/d(capped logits) - 205 values, the derivative of the
+  // caller's loss with respect to the post-softcap logits of the LAST step -
+  // through the whole model, accumulating into the gradient buffer.  Every
+  // parameter gets a gradient: the twelve blocks, both attention kinds, the
+  // convolutions, the gates, the embeddings.
+  //
+  // The recurrent state is truncated at one step: the KDA state and the
+  // attention KV ring as they stood BEFORE this token are treated as
+  // constants, so what is computed is the exact gradient of this token's loss
+  // with respect to this token's computation.  Contributions that would flow
+  // back into earlier tokens' forward passes are dropped, which is the same
+  // trade the LSTM made with its finite BPTT horizon, at horizon 1.
+  void backward(const float* dcap205);
+
+  // AdamW over every parameter, then zeroes the gradients.
+  void adam_step(float lr, float weight_decay, long t);
+
+  // The recurrent state - KDA states, conv histories, the attention KV rings,
+  // the skip store and the position counter.  Save it, run a step, restore it
+  // and the same step runs again identically; that is what makes the truncated
+  // gradient checkable against a finite difference, and it is also what a
+  // checkpoint of a running context would need.
+  size_t state_bytes() const;
+  void save_state(void* dst) const;
+  void load_state(const void* src);
+  void zero_grads();
+  const float* grads() const;
+  float* grads();
+
  private:
   std::unique_ptr<ModelImpl> impl;
 };
