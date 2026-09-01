@@ -59,7 +59,10 @@ for %%f in (weights_io qmat_dense qmat_sparse attn kda glue arena_build model_op
 rem load-time only: -Os keeps the weights range decoder at ~5KB of code
 %gcc% -c -std=c++17 -Os -fno-math-errno %arch% %incs% %opts% tf\weights_io_compressed.cpp -o weights_io_compressed.o
 
-%gcc% -c -std=c++23 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% coder0.cpp -o coder0.o
+rem c++17, not c++23: the original single-line build put -std=c++17 in %%incs%%
+rem after -std=c++23, and clang takes the last one, so this is what coder0 has
+rem always actually been compiled as.
+%gcc% -c -std=c++17 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% coder0.cpp -o coder0.o
 
 %gcc% -s %arch% -static -fuse-ld=lld coder0.o weights_io.o weights_io_compressed.o ^
   qmat_dense.o qmat_sparse.o attn.o kda.o glue.o arena_build.o model_opt.o -o coder0.exe

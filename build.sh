@@ -12,7 +12,7 @@ ARCH=${ARCH:--march=haswell -mtune=haswell}
 OUT=${OUT:-coder0}
 
 TFFLAGS="-O3 -std=c++17 -fno-math-errno $ARCH -Wall -Wextra -Wno-unused-parameter"
-C0FLAGS="-Ofast -std=c++23 -fomit-frame-pointer -fno-stack-protector $ARCH -Wno-format"
+C0FLAGS="-Ofast -std=c++17 -fomit-frame-pointer -fno-stack-protector $ARCH -Wno-format"
 
 mkdir -p obj
 for f in weights_io weights_io_compressed qmat_dense qmat_sparse attn kda glue \

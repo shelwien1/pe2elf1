@@ -205,6 +205,10 @@ struct Transformer {
     // The prior is PPMD's distribution over the byte that comes NEXT, paired
     // with the byte just coded - the same pairing the model was trained on
     // (cmix writes it with --save-ppmd-probs right after its byte update).
+    // cmix additionally rounds it to float16 there, to reproduce the training
+    // file pipeline bit-for-bit; that was measured here and is not worth it
+    // (book1000 1735 vs 1734, book1[:16384] 6004 vs 6003) - the model's own
+    // int8 prior quantizer is far coarser than float16 anyway.
     for( i = 0; i<TF_V; i++ )
       prior_[i] = 0.0f;
     for( i = 0; i<256; i++ )

@@ -34,7 +34,9 @@ Without the fourth argument the weights are looked up as `6m-q4-fp32.tfwc2`
 then `models/6m-q4-fp32.tfwc2`. If no weights file is found, or the input's
 alphabet does not fit the model's 205 tokens, the transformer is disabled and
 coder0 runs on PPMD alone — still lossless, just without the second model.
-Naming a file that does not exist is the supported way to ask for that:
+(A weights file that exists but is corrupt is fatal: the fx2 loader exits the
+process rather than reporting an error.) Naming a file that does not exist is
+the supported way to ask for that:
 
 ```sh
 ./coder0 c book1000 out.ppmd none
@@ -58,6 +60,10 @@ The frozen transformer wins on short inputs and loses to the on-line LSTM past
 ~30 KB. That is what one should expect: it was trained on WRT-dictionary-encoded
 Wikipedia, so a plain-ASCII novel is out of its training distribution, while the
 LSTM adapts to the file at hand. It beats PPMD alone on every input.
+
+coder0 sets FTZ and DAZ at startup, which the fx2 kernels were not validated
+under; it makes no difference to any of the sizes above, and it is the same on
+both sides of the coder either way.
 
 It also costs about 3500 bytes/s (~110 quantized matmuls and a 2.9 MB sequential
 weight stream per byte) against the LSTM's ~10^5, and 37 MB of RAM on top of
