@@ -42,3 +42,19 @@ Online learning rate on book1[:65536], pretrained weights:
   frozen 21085, lr 7200 -> 20956, 600 -> 20796, 1000 -> 20772, 2000 -> 20770.
 The LSTM's 7200 is tuned for a model starting from noise; 2000 is the default
 here, and is also the best of the values tried from a fresh init.
+
+Online training (TF_TRAIN), pretrained weights, lr 2000:
+
+  config              book1000    16K      64K     book1
+  frozen                  1734   6003    21085    204669
+  TF_TRAIN=1              1761   5977    20770    200299
+  TF_TRAIN=2              1766   5966    20684
+  (ppmd alone             1858   6312    21803    209801)
+  (ppmd + LSTM            1821   6104    20796    194387)
+
+TF_ADAPTER_D=384 is not better than the default 192 (1777 / 6004 / 20687).
+
+tools/gradcheck.cpp, directional derivative vs the analytic gradient:
+  head      numeric -12.951033  analytic -12.951110  rel 3.0e-06
+  mlp.down  numeric  +2.725932  analytic  +2.725839  rel 1.7e-05
+  mlp.up    numeric  -1.893722  analytic  -1.893601  rel 3.2e-05

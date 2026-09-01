@@ -33,19 +33,29 @@
 //                       (started from the model's) on the transformer's final
 //                       activation, and updates it with AdamW from the byte
 //                       that was just coded.
+//                    2  additionally run and train one more transformer block
+//                       on top of the frozen ones - the model's own MLP shape,
+//                       rms_norm -> up -> relu^2 -> down -> residual - with
+//                       backprop through it in fp32.  TF_ADAPTER_D sets its
+//                       hidden width.
 //
 // The four combinations are all valid and all round-trip: the pretrained model
 // frozen (1/0), fine-tuned online (1/1), a fresh model trained from scratch
 // (0/1) and a fresh frozen model as a control (0/0).
 //
-// SCOPE OF TF_TRAIN: the output layer only, not the 12 transformer blocks.
-// The body cannot be trained through this engine as it stands - it consumes
-// weights pre-packed as int4 nibbles with folded per-row scales, behind fused
-// quantization epilogues and hand-written kernels, so a backward pass would
-// need fp32 master weights plus a full re-pack of the 2.9 MB weight stream
-// after every byte.  The output layer is where the LSTM did its per-byte work
-// too (it ran full BPTT only every `horizon_` bytes), and it is the part that
-// adapts to the file at hand.
+// SCOPE: what is trained sits ON TOP of the 12 frozen blocks, not inside them.
+// The engine cannot be trained through as it stands - it consumes weights
+// pre-packed as int4 nibbles with folded per-row scales, behind fused
+// quantization epilogues and hand-written kernels, so a backward pass through
+// the body would need fp32 master weights plus a full re-pack of the 2.9 MB
+// weight stream after every byte.  The submission has no C++ backward pass to
+// reuse either: cpp_infer/src is inference only and its training is PyTorch
+// (Muon for the matrices, AdamW for the rest).  So the backward pass here is
+// written from scratch, in fp32, over the model's own operations - rms_norm,
+// relu-squared, the logit softcap, the residual add - and everything it runs
+// on is position-local, which is what makes a per-byte online update exact:
+// there is no recurrence to backpropagate through, unlike the LSTM, which
+// could only afford full BPTT every `horizon_` bytes.
 // ---------------------------------------------------------------------------
 #ifndef TF_LOAD_WEIGHTS
 #define TF_LOAD_WEIGHTS 1
@@ -55,6 +65,9 @@
 #endif
 #ifndef TF_INIT_SEED
 #define TF_INIT_SEED 0xC0DE0ULL
+#endif
+#ifndef TF_ADAPTER_D
+#define TF_ADAPTER_D 192
 #endif
 
 // Learning rate (x100000) and the step count the schedule decays over.  The
@@ -73,6 +86,40 @@
 
 #if TF_TRAIN
 
+#ifdef TF_GRADCHECK
+// Set by the gradient check: while non-null, TF_AdamW::Row records the
+// gradients it is given instead of applying them, so the weights stay put and
+// finite differences are taken around the same point.
+static float* tf_gc_capture = 0;
+static uint   tf_gc_n = 0;
+#endif
+
+// rms_norm, the model's own (SPEC 3.1): y = x / sqrt(mean(x^2) + FLT_EPSILON).
+// Returns the denominator, which the backward pass needs.
+static float TF_RmsNorm(cprfloat x, prfloat y, uint n) {
+  const float eps = 1.1920928955078125e-07f;   // FLT_EPSILON, as in the model
+  float ss = 0.0f;
+  for( uint i = 0; i<n; i++ )
+    ss += x[i]*x[i];
+  const float s = sqrtf(ss/n+eps);
+  const float inv = 1.0f/s;
+  for( uint i = 0; i<n; i++ )
+    y[i] = x[i]*inv;
+  return s;
+}
+
+// dL/dx of the above, from dy, the forward output y and its denominator s:
+//   dx = (dy - y * dot(dy,y)/n) / s
+static void TF_RmsNormBack(cprfloat dy, cprfloat y, float s, uint n, prfloat dx) {
+  float d = 0.0f;
+  for( uint i = 0; i<n; i++ )
+    d += dy[i]*y[i];
+  d /= (float)n;
+  const float inv = 1.0f/s;
+  for( uint i = 0; i<n; i++ )
+    dx[i] = (dy[i]-y[i]*d)*inv;
+}
+
 // AdamW over one weight row, with the step-dependent scalars precomputed by
 // the caller so they are not recomputed 205 times per byte.
 struct TF_AdamW {
@@ -90,6 +137,16 @@ struct TF_AdamW {
 
   void Row(cprfloat g, prfloat m, prfloat v, prfloat w, uint n) const {
     const float eps = 1e-6f, decay = 1e-5f;
+#ifdef TF_GRADCHECK
+    // Every gradient the backward pass produces passes through here, so this
+    // is the one place a test has to tap to compare against finite
+    // differences.  See tools/gradcheck.cpp.
+    if( tf_gc_capture ) {
+      for( uint i = 0; i<n; ++i )
+        tf_gc_capture[tf_gc_n++] = g[i];
+      return;
+    }
+#endif
     for( uint i = 0; i<n; ++i ) {
       m[i] = beta1()*m[i]+(1.0f-beta1())*g[i];
       v[i] = beta2()*v[i]+(1.0f-beta2())*g[i]*g[i];
@@ -192,9 +249,23 @@ struct Transformer {
   ALIGN(64) float head_m_[TF_V*TF_D];
   ALIGN(64) float head_v_[TF_V*TF_D];
   ALIGN(64) float head_l_[TF_V];    // post-softcap logits of the last forward
-  ALIGN(64) float prev_xn_[TF_D];   // final activation of the last forward
+  ALIGN(64) float prev_xn_[TF_D];   // the block's input: the model's final norm
   uint  pending_;                   // a prediction is waiting for its target
   qword head_steps_;
+#endif
+#if TF_TRAIN>=2
+  // one more transformer block, in the model's own MLP shape and trained in
+  // fp32:  h2 = h + down(relu(up(rms_norm(h)))^2),  head input = rms_norm(h2).
+  // down starts at zero, so the block is the identity at step 0 and level 2
+  // begins exactly where level 1 does.
+  ALIGN(64) float up_w_[TF_ADAPTER_D*TF_D], up_m_[TF_ADAPTER_D*TF_D],
+                  up_v_[TF_ADAPTER_D*TF_D];
+  ALIGN(64) float dn_w_[TF_D*TF_ADAPTER_D], dn_m_[TF_D*TF_ADAPTER_D],
+                  dn_v_[TF_D*TF_ADAPTER_D];
+  // forward values the backward pass needs, from the last step
+  ALIGN(64) float a_n1_[TF_D], a_u_[TF_ADAPTER_D], a_r_[TF_ADAPTER_D];
+  ALIGN(64) float a_h2_[TF_D], a_n2_[TF_D];
+  float a_s2_;
 #endif
 
   Transformer() : net_(0), piece_len_(0), piece_pos_(0), n_tokens_(0) {}
@@ -293,21 +364,72 @@ struct Transformer {
     pending_ = 0;
     head_steps_ = 0;
 #endif
+#if TF_TRAIN>=2
+    // up: kaiming_uniform over fan_in = TF_D, the reference's init for an mlp
+    // up projection.  down: zero, so the block starts as the identity.
+    {
+      uint64_t st = TF_INIT_SEED ^ 0x5DEECE66Dull;
+      const float bound = sqrtf(6.0f/(float)TF_D);
+      for( uint i = 0; i<TF_ADAPTER_D*TF_D; i++ ) {
+        uint64_t z = (st += 0x9E3779B97F4A7C15ull);
+        z = (z^(z>>30))*0xBF58476D1CE4E5B9ull;
+        z = (z^(z>>27))*0x94D049BB133111EBull;
+        z ^= z>>31;
+        up_w_[i] = bound*(2.0f*(float(z>>40)*(1.0f/16777216.0f))-1.0f);
+      }
+    }
+    memset(up_m_, 0, sizeof(up_m_));
+    memset(up_v_, 0, sizeof(up_v_));
+    memset(dn_w_, 0, sizeof(dn_w_));
+    memset(dn_m_, 0, sizeof(dn_m_));
+    memset(dn_v_, 0, sizeof(dn_v_));
+    memset(a_n1_, 0, sizeof(a_n1_));
+    memset(a_u_, 0, sizeof(a_u_));
+    memset(a_r_, 0, sizeof(a_r_));
+    memset(a_h2_, 0, sizeof(a_h2_));
+    memset(a_n2_, 0, sizeof(a_n2_));
+    a_s2_ = 1.0f;
+#endif
     return true;
   }
 
 #if TF_TRAIN
-  // Runs coder0's own output layer on the transformer's final activation:
-  // logits, the model's logit softcap, then a softmax over the tokens the
-  // file actually uses.  Leaves the post-softcap logits in head_l_ and the
-  // distribution in out_ (both over used tokens only).
-  void HeadForward(cprfloat xn) {
-    uint k;
+  // What the output layer reads: the model's final activation at level 1, the
+  // extra block's output at level 2.
+  cprfloat HeadInput() const {
+#if TF_TRAIN>=2
+    return a_n2_;
+#else
+    return prev_xn_;
+#endif
+  }
+
+  // Forward pass of everything coder0 owns, on the transformer's final
+  // activation: at level 2 the extra block, then the output layer - logits,
+  // the model's logit softcap, and a softmax over the tokens the file uses.
+  // Leaves the post-softcap logits in head_l_ and the distribution in out_,
+  // plus every intermediate the backward pass needs.
+  void StackForward() {
+    uint j, k;
+#if TF_TRAIN>=2
+    TF_RmsNorm(prev_xn_, a_n1_, TF_D);
+    for( k = 0; k<TF_ADAPTER_D; k++ ) {
+      const float u = DotProduct(up_w_+k*TF_D, a_n1_, TF_D);
+      a_u_[k] = u;
+      const float t = u>0.0f ? u : 0.0f;   // relu squared, the model's mlp
+      a_r_[k] = t*t;
+    }
+    for( j = 0; j<TF_D; j++ )
+      a_h2_[j] = prev_xn_[j] +
+                 DotProduct(dn_w_+j*TF_ADAPTER_D, a_r_, TF_ADAPTER_D);
+    a_s2_ = TF_RmsNorm(a_h2_, a_n2_, TF_D);
+#endif
+    cprfloat hin = HeadInput();
     float m = -1e30f;
     for( k = 0; k<n_tokens_; k++ ) {
       const int o = tok_list_[k];
-      float z = DotProduct(head_w_+(uint)o*TF_D, xn, TF_D);
-      float l = 15.0f*tanhf(z*(1.0f/15.0f));
+      const float z = DotProduct(head_w_+(uint)o*TF_D, hin, TF_D);
+      const float l = 15.0f*tanhf(z*(1.0f/15.0f));
       head_l_[o] = l;
       if( l>m )
         m = l;
@@ -317,27 +439,81 @@ struct Transformer {
       const int o = tok_list_[k];
       sum += (out_[o] = expf(head_l_[o]-m));
     }
-    float inv = 1.0f/(sum+1e-30f);
+    const float inv = 1.0f/(sum+1e-30f);
     for( k = 0; k<n_tokens_; k++ )
       out_[tok_list_[k]] *= inv;
   }
 
-  // One online AdamW step on the head, from the target that has just arrived.
-  // d(-log p[target])/dz = (p - onehot) * dsoftcap/dz, and
-  // dsoftcap/dz = 1 - tanh(z/15)^2 = 1 - (l/15)^2 with l the capped logit.
-  void HeadUpdate(int target) {
+  // One online step, from the target that has just arrived.  The loss is
+  // -log p[target] over the used tokens, so
+  //   dL/dz = (p - onehot) * dsoftcap/dz,
+  //   dsoftcap/dz = 1 - tanh(z/15)^2 = 1 - (l/15)^2   with l the capped logit.
+  // Every gradient below is read off the pre-update weights before that weight
+  // is touched, and every operation is position-local, so the update is the
+  // exact gradient of this byte's loss - no truncation, unlike BPTT.
+  void StackUpdate(int target) {
+    uint j, k;
     TF_AdamW opt;
     opt.Prepare(TF_LR_X100000/100000.0f, head_steps_/10+1, TF_UPDATE_LIMIT*2);
-    ALIGN(64) float grad[TF_D];
-    for( uint k = 0; k<n_tokens_; k++ ) {
+    cprfloat hin = HeadInput();
+    ALIGN(64) float dz[TF_V];
+    for( k = 0; k<n_tokens_; k++ ) {
       const int o = tok_list_[k];
       const float t = head_l_[o]*(1.0f/15.0f);
-      float g = (out_[o]-(o==target ? 1.0f : 0.0f))*(1.0f-t*t);
-      for( uint j = 0; j<TF_D; j++ )
-        grad[j] = g*prev_xn_[j];
+      dz[o] = (out_[o]-(o==target ? 1.0f : 0.0f))*(1.0f-t*t);
+    }
+#if TF_TRAIN>=2
+    // dL/d(head input), with the head weights as they were in the forward pass
+    ALIGN(64) float dn2[TF_D];
+    for( j = 0; j<TF_D; j++ )
+      dn2[j] = 0.0f;
+    for( k = 0; k<n_tokens_; k++ ) {
+      const int o = tok_list_[k];
+      cprfloat w = head_w_+(uint)o*TF_D;
+      const float g = dz[o];
+      for( j = 0; j<TF_D; j++ )
+        dn2[j] += w[j]*g;
+    }
+#endif
+    ALIGN(64) float grad[TF_D>TF_ADAPTER_D ? TF_D : TF_ADAPTER_D];
+    for( k = 0; k<n_tokens_; k++ ) {
+      const int o = tok_list_[k];
+      const float g = dz[o];
+      for( j = 0; j<TF_D; j++ )
+        grad[j] = g*hin[j];
       opt.Row(grad, head_m_+(uint)o*TF_D, head_v_+(uint)o*TF_D,
               head_w_+(uint)o*TF_D, TF_D);
     }
+#if TF_TRAIN>=2
+    // back through the final rms_norm, then the residual: dh2 reaches both the
+    // down projection and (unused) the block input, since the body is frozen
+    ALIGN(64) float dh2[TF_D];
+    TF_RmsNormBack(dn2, a_n2_, a_s2_, TF_D, dh2);
+    // dr needs the down weights as they were, so read it before updating them
+    ALIGN(64) float dr[TF_ADAPTER_D];
+    for( k = 0; k<TF_ADAPTER_D; k++ )
+      dr[k] = 0.0f;
+    for( j = 0; j<TF_D; j++ ) {
+      cprfloat w = dn_w_+j*TF_ADAPTER_D;
+      const float g = dh2[j];
+      for( k = 0; k<TF_ADAPTER_D; k++ )
+        dr[k] += w[k]*g;
+    }
+    for( j = 0; j<TF_D; j++ ) {
+      const float g = dh2[j];
+      for( k = 0; k<TF_ADAPTER_D; k++ )
+        grad[k] = g*a_r_[k];
+      opt.Row(grad, dn_m_+j*TF_ADAPTER_D, dn_v_+j*TF_ADAPTER_D,
+              dn_w_+j*TF_ADAPTER_D, TF_ADAPTER_D);
+    }
+    // d(relu(u)^2)/du = 2*relu(u)
+    for( k = 0; k<TF_ADAPTER_D; k++ ) {
+      const float du = dr[k]*2.0f*(a_u_[k]>0.0f ? a_u_[k] : 0.0f);
+      for( j = 0; j<TF_D; j++ )
+        grad[j] = du*a_n1_[j];
+      opt.Row(grad, up_m_+k*TF_D, up_v_+k*TF_D, up_w_+k*TF_D, TF_D);
+    }
+#endif
     ++head_steps_;
   }
 #endif
@@ -357,7 +533,7 @@ struct Transformer {
 #if TF_TRAIN
     // The byte just coded is the target of the prediction made last call.
     if( pending_ ) {
-      HeadUpdate(byte2tok_[sym]);
+      StackUpdate(byte2tok_[sym]);
       pending_ = 0;
     }
 #endif
@@ -389,7 +565,7 @@ struct Transformer {
     // Replace the engine's frozen output layer with the trained one; out_ and
     // head_l_ are what HeadUpdate will need once the target arrives.
     memcpy(prev_xn_, net_->last_final_norm(), sizeof(prev_xn_));
-    HeadForward(prev_xn_);
+    StackForward();
     pending_ = 1;
 #endif
 

@@ -94,28 +94,52 @@ archives (and `book1000` costs one byte more, 1735).
   `max|w|/7` weight scales, `(2/sqrt(127))*mean|x|` activation scales, and the
   reference's KDA decay-rate and `dt_bias` draws. See `tf/weights_init.cpp`.
   Deterministic, so encoder and decoder build the same model.
-* **`TF_TRAIN`** (default 0) — 1 trains the output layer online, once per byte,
-  the way the LSTM this replaced trained its own output layer. coder0 keeps an
-  fp32 copy of the unembedding (started from the model's), runs it on the
-  transformer's final activation, and updates it with AdamW from the byte just
-  coded. `TF_LR_X100000` (default 2000) sets the rate.
+* **`TF_TRAIN`** (default 0) — online training, in C++, of what sits on top of
+  the frozen blocks. `1` trains the output layer: coder0 keeps an fp32 copy of
+  the unembedding (started from the model's), runs it on the transformer's
+  final activation and updates it with AdamW from the byte just coded, with the
+  gradient taken through the model's logit softcap. `2` additionally runs and
+  trains one more block in the model's own MLP shape —
+  `h + down(relu(up(rms_norm(h)))²)`, then `rms_norm` — with the backward pass
+  for all of it written out in fp32. `TF_LR_X100000` (default 2000) sets the
+  rate, `TF_ADAPTER_D` (default 192) the block's hidden width.
 
-All four combinations round-trip:
+Everything trained is position-local, which is what makes a per-byte update
+*exact*: there is no recurrence to backpropagate through, so unlike the LSTM
+(which could only afford full BPTT every `horizon_` bytes) nothing is
+truncated. `tools/gradcheck.cpp` checks the analytic gradients against the
+numeric directional derivative of the loss; it agrees to ~1e-5 relative:
 
-| config | book1000 | book1[:16K] | book1[:64K] |
-|---|---|---|---|
-| pretrained, frozen (default) | **1734** | 6003 | 21085 |
-| pretrained + `TF_TRAIN=1` | 1761 | **5977** | **20770** |
-| fresh init, frozen | 2042 | 6672 | 22356 |
-| fresh init + `TF_TRAIN=1` | 1880 | 6284 | 21565 |
+```sh
+clang++ -O2 -std=c++17 -I. tools/gradcheck.cpp $(ls obj/*.o | grep -v coder0) -o gradcheck && ./gradcheck
+```
 
-Training is the output layer only — the 12 transformer blocks stay frozen.
-The engine consumes weights pre-packed as int4 nibbles behind fused
-quantization epilogues, so a backward pass through the body would need fp32
-master weights plus a re-pack of the 2.9 MB weight stream per byte; the
-submission has no C++ backward pass either (`cpp_infer/src` is inference only,
-training is PyTorch with Muon+AdamW). The output layer is also where the LSTM
-did its per-byte work — it ran full BPTT only every `horizon_` bytes.
+Every combination round-trips:
+
+| config | book1000 | book1[:16K] | book1[:64K] | book1 |
+|---|---|---|---|---|
+| PPMD alone | 1858 | 6312 | 21803 | 209801 |
+| PPMD + LSTM (the original) | 1821 | 6104 | 20796 | 194387 |
+| pretrained, frozen (default) | **1734** | 6003 | 21085 | 204669 |
+| pretrained + `TF_TRAIN=1` | 1761 | 5977 | 20770 | 200299 |
+| pretrained + `TF_TRAIN=2` | 1766 | **5966** | **20684** | see `log.txt` |
+| fresh init, frozen | 2042 | 6672 | 22356 | |
+| fresh init + `TF_TRAIN=1` | 1880 | 6284 | 21565 | |
+
+Training closes part of the gap the frozen model leaves on long inputs, and at
+64 KB the trained stack passes the LSTM.
+
+### What is not trained, and why
+
+The 12 transformer blocks stay frozen. The engine consumes weights pre-packed
+as int4 nibbles with folded per-row scales, behind fused quantization epilogues
+and hand-written kernels, so a backward pass through the body needs fp32 master
+weights plus a re-pack of the 2.9 MB weight stream after every byte. There is
+no C++ backward pass in the submission to reuse either: `cpp_infer/src` is
+inference only, and training is PyTorch (Muon for the matrices, AdamW for the
+rest). What is here is written from scratch over the model's own operations —
+`rms_norm` and its backward, relu-squared, the logit softcap, the residual add
+— which are the primitives a deeper port would build on.
 
 ## Why the token mapping matters
 
