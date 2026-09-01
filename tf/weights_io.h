@@ -1,13 +1,6 @@
 // weights_io: loader for cpp_infer/data/weights.bin (SPEC.md section 4)
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-#include <initializer_list>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 namespace fx2 {
 
 enum WDtype : uint8_t { DT_I8 = 0, DT_BF16 = 1, DT_F32 = 2, DT_I32 = 3 };

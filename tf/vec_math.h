@@ -29,8 +29,6 @@
 // (libm scalar baselines on this box: expf 9.1 c/elem, tanhf 44-56 c/elem.)
 #pragma once
 
-#include <immintrin.h>
-
 namespace fx2 {
 
 // ---------------------------------------------------------------------------

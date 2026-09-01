@@ -1,18 +1,12 @@
 #include "qmat_dense.h"
 
-#include <immintrin.h>
-
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
 namespace fx2 {
 namespace opt {
 
 namespace {
 
 [[noreturn]] void die(const char* msg) {
-  std::fprintf(stderr, "qmat: %s\n", msg);
+  fprintf(stderr, "qmat: %s\n", msg);
   std::exit(1);
 }
 

@@ -28,8 +28,6 @@
 //   (article start: conv history and state are zero per cu_seqlens semantics).
 #pragma once
 
-#include <cstdint>
-
 namespace fx2 {
 namespace opt {
 

@@ -34,10 +34,6 @@
 //   * dt_bias           inverse-softplus of exp(uniform(log 1e-3, log 0.1)),
 //                       clamped at 1e-4 (model.py:786-795)
 //   * gated norm gain   1.0 (fla's FusedRMSNormGated, model.py:805)
-#include <cmath>
-#include <cstring>
-#include <string>
-#include <vector>
 
 #include "weights_io.h"
 

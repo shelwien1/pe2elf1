@@ -12,10 +12,6 @@
 // SPEC-safe threshold 21 it never fires anyway).
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-
 namespace fx2 {
 namespace opt {
 

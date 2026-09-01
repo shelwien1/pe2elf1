@@ -72,8 +72,6 @@
 // also drives the group-skip fast path.
 #pragma once
 
-#include <cstdint>
-
 namespace fx2 {
 namespace opt {
 

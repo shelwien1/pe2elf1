@@ -18,8 +18,6 @@
 //                gated-norm statistics match the naive path bit-for-bit.
 #pragma once
 
-#include <immintrin.h>
-
 #include "vec_math.h"
 
 namespace fx2 {

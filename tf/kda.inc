@@ -28,9 +28,6 @@
 
 #include "kda.h"
 
-#include <cmath>
-#include <cstring>
-
 #include "kda_math.h"  // includes vec_math.h (canonical exp/silu/sigmoid/softplus)
 
 namespace fx2 {

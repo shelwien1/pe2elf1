@@ -20,10 +20,6 @@
 // stream). RoPE tables (32 MB, 256 B/token) live in separate heap vectors.
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-#include <vector>
-
 #include "kda.h"
 #include "qmat.h"
 

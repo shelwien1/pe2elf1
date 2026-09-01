@@ -1,15 +1,6 @@
 #include "fp32_model.h"
 
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <string>
-#include <algorithm>
-#include <vector>
-
 #if defined(__AVX2__)
-#include <immintrin.h>
 #endif
 
 #include "weights_io.h"
@@ -26,7 +17,7 @@ constexpr bool KIMI[NL] = {true, true, true,  false, true, true,
 constexpr float RMS_EPS = 1.1920928955078125e-07f;  // FLT_EPSILON, as in torch
 
 [[noreturn]] void die(const char* msg) {
-  std::fprintf(stderr, "fp32_model: %s\n", msg);
+  fprintf(stderr, "fp32_model: %s\n", msg);
   std::exit(1);
 }
 
@@ -400,9 +391,9 @@ void ModelImpl::load(const char* path, size_t rope_rows, uint64_t seed) {
   g_rope_rows_limit = rope_rows;
   char magic[8] = {0};
   if (path) {
-    if (FILE* f = std::fopen(path, "rb")) {
-      if (std::fread(magic, 1, 8, f) != 8) magic[0] = 0;
-      std::fclose(f);
+    if (FILE* f = fopen(path, "rb")) {
+      if (fread(magic, 1, 8, f) != 8) magic[0] = 0;
+      fclose(f);
     }
   }
   WeightsFile wf = !path ? WeightsFile::random(seed)
@@ -773,7 +764,6 @@ void ModelImpl::step(uint8_t token, const float* prior, float* probs_out) {
   for (int i = 0; i < V; i++) probs_out[i] /= den;
   t++;
 }
-
 
 // ---------------------------------------------------------------------------
 // backward

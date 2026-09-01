@@ -1,10 +1,5 @@
 #include "glue.h"
 
-#include <immintrin.h>
-
-#include <cassert>
-#include <cmath>
-
 #include "vec_math.h"
 
 namespace fx2 {
@@ -343,14 +338,14 @@ inline float hmax256(__m256 v) {  // max is exact in any order
 }  // namespace
 
 void head_softcap_softmax(float* l, float* probs) {
-  l[205] = l[206] = l[207] = -INFINITY;  // pads cap to exactly -15
+  l[205] = l[206] = l[207] = kNegHuge;  // pads cap to exactly -15
   const __m256 v15 = _mm256_set1_ps(15.0f);
   // pass 0: a = l/15 (IEEE div like naive) — hoisted so the divider work
   // pipelines independently instead of heading each tanh dependency chain
   alignas(32) float a[208];
   for (int i = 0; i < 208; i += 8)
     _mm256_store_ps(a + i, _mm256_div_ps(_mm256_loadu_ps(l + i), v15));
-  __m256 vmax0 = _mm256_set1_ps(-INFINITY);
+  __m256 vmax0 = _mm256_set1_ps(kNegHuge);
   __m256 vmax1 = vmax0;
   // 2x unrolled so two tanh dependency chains overlap (3x spills)
   for (int i = 0; i < 208; i += 16) {

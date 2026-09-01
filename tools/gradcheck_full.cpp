@@ -10,14 +10,10 @@
 // Per-element differences are useless in fp32 (one weight's effect on the loss
 // sits at the precision floor), so each group is checked along a random
 // direction: (L(w+hv) - L(w-hv)) / 2h against <grad, v>.
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <string>
-#include <vector>
+#include "tool_prelude.inc"
 
-#include "fp32_model.h"
+#define TF_FP32 1
+#include "tf_all.inc"
 
 namespace {
 constexpr int V = 205;

@@ -1,10 +1,5 @@
 #include "weights_io.h"
 
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
 namespace fx2 {
 
 size_t g_rope_rows_limit = 0;
@@ -14,9 +9,9 @@ namespace {
 [[noreturn]] void die(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  std::fprintf(stderr, "weights_io: ");
+  fprintf(stderr, "weights_io: ");
   std::vfprintf(stderr, fmt, ap);
-  std::fprintf(stderr, "\n");
+  fprintf(stderr, "\n");
   va_end(ap);
   std::exit(1);
 }
@@ -65,16 +60,16 @@ struct Reader {
 }  // namespace
 
 WeightsFile WeightsFile::load(const char* path) {
-  FILE* f = std::fopen(path, "rb");
+  FILE* f = fopen(path, "rb");
   if (!f) die("cannot open %s", path);
-  std::fseek(f, 0, SEEK_END);
-  long size = std::ftell(f);
-  std::fseek(f, 0, SEEK_SET);
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+  fseek(f, 0, SEEK_SET);
   if (size < 12) die("%s: too small", path);
   std::vector<uint8_t> buf(static_cast<size_t>(size));
-  if (std::fread(buf.data(), 1, buf.size(), f) != buf.size())
+  if (fread(buf.data(), 1, buf.size(), f) != buf.size())
     die("%s: short read", path);
-  std::fclose(f);
+  fclose(f);
 
   Reader r{buf.data(), buf.size(), path};
   char magic[8];

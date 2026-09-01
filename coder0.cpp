@@ -1,19 +1,33 @@
 #define _FILE_OFFSET_BITS 64
-// C library headers
+
+// Every system header the whole program needs, in one place: coder0 and the
+// transformer are one translation unit, and the transformer's own sources
+// (tf/*.inc) carry no #include <...> of their own.
+#include <cassert>
 #include <cmath>
+#include <cstdarg>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 #include <algorithm>
-#include <memory>    // pulled in before the `restrict` macro below, because
-#include <vector>    // tf/model_opt.h needs it (see transformer.inc)
+#include <initializer_list>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
-// Intel SSE/AVX intrinsics to fix the denormal microcode penalty
+// Intel SSE/AVX intrinsics: the denormal microcode fix below, and the
+// transformer kernels (AVX2/FMA/F16C, all present in -march=haswell).
 #if defined(__SSE3__)||defined(__x86_64__)||defined(_M_X64)
 #include <xmmintrin.h>
 #include <pmmintrin.h>   // _MM_SET_DENORMALS_ZERO_MODE (gcc puts it here)
+#include <immintrin.h>
+#endif
+#if defined(__linux__)
+#include <sys/mman.h>    // arena_build's hugepage allocation
 #endif
 
 typedef uint16_t word;

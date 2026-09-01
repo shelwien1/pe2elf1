@@ -107,11 +107,11 @@
 #error "TF_TRAIN=3 trains the model's own weights, which only exist as plain floats under TF_FP32=1"
 #endif
 
+#include "tf/tf_all.inc"
+
 #if TF_FP32
-#include "tf/fp32_model.h"
 typedef fx2::f32::Transformer32 TFNet;
 #else
-#include "tf/model_opt.h"
 typedef fx2::opt::TransformerOpt TFNet;
 #endif
 

@@ -2,18 +2,14 @@
 // transformer.inc (the extra block and the output layer) against central
 // finite differences of the loss it is supposed to be the gradient of.
 //
-//   build:  clang++ -O2 -std=c++17 -I.. tools/gradcheck.cpp -o /tmp/gradcheck
-//   run:    /tmp/gradcheck
+//   build:  clang++ -O2 -std=c++17 -march=haswell -I. -I tf \
+//             tools/gradcheck.cpp -o gradcheck -lm
+//   run:    ./gradcheck
 //
 // It drives the real code: TF_GRADCHECK makes TF_AdamW::Row record the
 // gradients the backward pass produces instead of applying them, so the
 // weights stay fixed and both sides are evaluated at the same point.
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <initializer_list>
+#include "tool_prelude.inc"
 
 typedef uint32_t uint;
 typedef uint64_t qword;

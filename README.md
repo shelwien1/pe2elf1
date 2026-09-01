@@ -13,17 +13,23 @@ The inference engine is in `tf/` (see `tf/PORTING.md`), the glue is
 
 ## Build
 
+One translation unit: `coder0.cpp` includes the transformer's sources
+(`tf/*.inc`) directly, and every `#include <...>` in the program is at the top
+of `coder0.cpp`.
+
 ```sh
 ./build.sh                                   # clang++ (or CXX=g++), -march=haswell
-TFDEFS="-DTF_TRAIN=1" ./build.sh             # + online training of the output layer
+TFDEFS="-DTF_TRAIN=3" ./build.sh             # + online training of the whole model
 TFDEFS="-DTF_LOAD_WEIGHTS=0" ./build.sh      # no weights file: initialize in memory
+TFDEFS="-DTF_FP32=0" ./build.sh              # the packed int4/int8 engine
 ```
 
 Windows: `gc.bat` (clang, the same layout Shelwien's other builds use).
 
-Both build the transformer sources as separate translation units with IEEE
-floating point; `coder0.cpp` keeps its `-Ofast` build. `tf/PORTING.md` explains
-why that separation is required.
+Both compile with `-O3 -ffp-contract=off` rather than the `-Ofast` coder0 was
+historically built with: one translation unit means one flag set, and the
+transformer's numerics need IEEE semantics — `tf/PORTING.md` explains what
+breaks otherwise.
 
 ## Use
 

@@ -113,3 +113,20 @@ difference matches the one-step truncation:
   first kimi block          -4.134215 vs  -4.134117   rel 1.2e-05
   a vanilla block           -0.346231 vs  -0.346258   rel 3.9e-05
   last mlp                  +1.185796 vs  +1.185661   rel 5.7e-05
+
+Single translation unit (coder0.cpp includes tf/*.inc; -O3 -ffp-contract=off
+instead of -Ofast, because one TU means one flag set and it has to be the one
+the transformer is correct under).  book1000, all round-tripping:
+
+  (defaults)                 1735
+  -DTF_FP32=0                1735
+  -DTF_TRAIN=1               1762
+  -DTF_TRAIN=2               1765
+  -DTF_TRAIN=3               1672
+  -DTF_LOAD_WEIGHTS=0        2047
+  -DTF_FP32=0 -DTF_TRAIN=2   1767
+  g++ instead of clang++     1735
+
+Everything is within 2 bytes of the same configuration under the old
+multi-TU -Ofast build, so the tables above still stand.  Edge cases (empty,
+1 byte, 20 KB of random, all 256 byte values) all round-trip.

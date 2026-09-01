@@ -22,10 +22,6 @@
 //     fp32 and is unchanged.
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-
 namespace fx2 {
 namespace f32 {
 

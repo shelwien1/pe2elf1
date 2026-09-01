@@ -15,27 +15,21 @@
 
 #include "weights_io.h"
 
-#include <cmath>
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
 namespace fx2 {
 
 namespace {
 
-[[noreturn]] void die(const char* fmt, ...) {
+[[noreturn]] void die_wc(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  std::fprintf(stderr, "weights_io_compressed: ");
+  fprintf(stderr, "weights_io_compressed: ");
   std::vfprintf(stderr, fmt, ap);
-  std::fprintf(stderr, "\n");
+  fprintf(stderr, "\n");
   va_end(ap);
   std::exit(1);
 }
 
-size_t dtype_size(uint8_t dtype) {
+size_t dtype_size_wc(uint8_t dtype) {
   switch (dtype) {
     case DT_I8:
       return 1;
@@ -46,17 +40,17 @@ size_t dtype_size(uint8_t dtype) {
     case DT_I32:
       return 4;
     default:
-      die("unknown dtype code %u", unsigned(dtype));
+      die_wc("unknown dtype code %u", unsigned(dtype));
   }
 }
 
-struct Reader {
+struct ReaderWC {
   const uint8_t* p;
   size_t left;
   const char* path;
 
   void need(size_t n) {
-    if (left < n) die("%s: truncated file (need %zu more bytes)", path, n);
+    if (left < n) die_wc("%s: truncated file (need %zu more bytes)", path, n);
   }
   void read(void* dst, size_t n) {
     need(n);
@@ -197,7 +191,11 @@ float sincosf_cuda(float a, int cos_bias) {
   t = fmaf(j, fbits(0xB3A22168u), t);
   t = fmaf(j, fbits(0xA7C234C5u), t);
   if (fabsf(a) >= 105615.0f) {
-    if (std::isinf(a)) {
+    // bit test rather than std::isinf: -ffinite-math-only would fold that
+    // away, and this file only runs once, at load
+    uint32_t abits;
+    memcpy(&abits, &a, 4);
+    if ((abits & 0x7FFFFFFFu) >= 0x7F800000u) {
       t = a * 0.0f;
       i = 0;
     } else {
@@ -278,7 +276,7 @@ struct ModelsV2 {
         plane(4 * 256, 1024) {}
 };
 
-WeightsFile load_v2(Reader& r, const char* path) {
+WeightsFile load_v2(ReaderWC& r, const char* path) {
   uint32_t n_tensors = r.u32();
   BinDecoder dec(r.p, r.left);
   ModelsV2 m;
@@ -304,9 +302,9 @@ WeightsFile load_v2(Reader& r, const char* path) {
 
     WTensor t;
     t.dtype = get_meta();
-    dtype_size(t.dtype);  // validates the code
+    dtype_size_wc(t.dtype);  // validates the code
     uint32_t ndim = get_meta();
-    if (ndim > 8) die("%s: %s: absurd ndim %u", path, name.c_str(), ndim);
+    if (ndim > 8) die_wc("%s: %s: absurd ndim %u", path, name.c_str(), ndim);
     t.shape.resize(ndim);
     size_t numel = 1;
     for (uint32_t d = 0; d < ndim; d++) {
@@ -316,13 +314,13 @@ WeightsFile load_v2(Reader& r, const char* path) {
       numel *= v;
     }
     t.numel = numel;
-    size_t bytes = numel * dtype_size(t.dtype);
+    size_t bytes = numel * dtype_size_wc(t.dtype);
     t.data.resize(bytes);
     uint8_t encoding = get_meta();
 
     switch (encoding) {
       case ENC_INT4: {
-        if (t.dtype != DT_I8) die("%s: %s: ENC_INT4 on dtype %u", path,
+        if (t.dtype != DT_I8) die_wc("%s: %s: ENC_INT4 on dtype %u", path,
                                   name.c_str(), unsigned(t.dtype));
         int8_t* out = reinterpret_cast<int8_t*>(t.data.data());
         for (size_t k = 0; k < numel; k++)
@@ -330,7 +328,7 @@ WeightsFile load_v2(Reader& r, const char* path) {
         break;
       }
       case ENC_BF16: {
-        if (t.dtype != DT_BF16) die("%s: %s: ENC_BF16 on dtype %u", path,
+        if (t.dtype != DT_BF16) die_wc("%s: %s: ENC_BF16 on dtype %u", path,
                                     name.c_str(), unsigned(t.dtype));
         uint16_t* out = reinterpret_cast<uint16_t*>(t.data.data());
         for (size_t k = 0; k < numel; k++) {
@@ -341,8 +339,8 @@ WeightsFile load_v2(Reader& r, const char* path) {
         break;
       }
       case ENC_PLANE4: {
-        if (dtype_size(t.dtype) != 4)
-          die("%s: %s: ENC_PLANE4 on dtype %u", path, name.c_str(),
+        if (dtype_size_wc(t.dtype) != 4)
+          die_wc("%s: %s: ENC_PLANE4 on dtype %u", path, name.c_str(),
               unsigned(t.dtype));
         for (size_t k = 0; k < bytes; k++)
           t.data[k] = uint8_t(dec.decode_tree(&m.plane[(k & 3) * 256], 8));
@@ -351,12 +349,12 @@ WeightsFile load_v2(Reader& r, const char* path) {
       case ENC_ROPE_SIN:
       case ENC_ROPE_COS: {
         if (t.dtype != DT_F32 || ndim != 2)
-          die("%s: %s: bad rope tensor", path, name.c_str());
+          die_wc("%s: %s: bad rope tensor", path, name.c_str());
         if (!wf.has("rope.inv_freq"))
-          die("%s: %s: rope.inv_freq not decoded yet", path, name.c_str());
+          die_wc("%s: %s: rope.inv_freq not decoded yet", path, name.c_str());
         const WTensor& inv = wf.get("rope.inv_freq");
         if (inv.dtype != DT_F32 || inv.numel != t.shape[1])
-          die("%s: %s: rope.inv_freq mismatch", path, name.c_str());
+          die_wc("%s: %s: rope.inv_freq mismatch", path, name.c_str());
         const float* invf = inv.f32();
         // Generate only the positions the caller can reach (g_rope_rows_limit,
         // 0 = all); the rows are independent, so a prefix is exact.
@@ -380,12 +378,12 @@ WeightsFile load_v2(Reader& r, const char* path) {
         break;
       }
       default:
-        die("%s: %s: unknown encoding %u", path, name.c_str(),
+        die_wc("%s: %s: unknown encoding %u", path, name.c_str(),
             unsigned(encoding));
     }
 
     if (!wf.tensors.emplace(name, std::move(t)).second)
-      die("%s: duplicate tensor %s", path, name.c_str());
+      die_wc("%s: duplicate tensor %s", path, name.c_str());
   }
   return wf;
 }
@@ -393,37 +391,37 @@ WeightsFile load_v2(Reader& r, const char* path) {
 }  // namespace
 
 WeightsFile WeightsFile::load_compressed(const char* path) {
-  FILE* f = std::fopen(path, "rb");
-  if (!f) die("cannot open %s", path);
-  std::fseek(f, 0, SEEK_END);
-  long size = std::ftell(f);
-  std::fseek(f, 0, SEEK_SET);
-  if (size < 12) die("%s: too small", path);
+  FILE* f = fopen(path, "rb");
+  if (!f) die_wc("cannot open %s", path);
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  if (size < 12) die_wc("%s: too small", path);
   std::vector<uint8_t> buf(static_cast<size_t>(size));
-  if (std::fread(buf.data(), 1, buf.size(), f) != buf.size())
-    die("%s: short read", path);
-  std::fclose(f);
+  if (fread(buf.data(), 1, buf.size(), f) != buf.size())
+    die_wc("%s: short read", path);
+  fclose(f);
 
-  Reader r{buf.data(), buf.size(), path};
+  ReaderWC r{buf.data(), buf.size(), path};
   char magic[8];
   r.read(magic, 8);
   if (std::memcmp(magic, "FX2TFWC2", 8) == 0) return load_v2(r, path);
-  if (std::memcmp(magic, "FX2TFWC1", 8) != 0) die("%s: bad magic", path);
+  if (std::memcmp(magic, "FX2TFWC1", 8) != 0) die_wc("%s: bad magic", path);
 
   uint32_t n_tensors = r.u32();
   WeightsFile wf;
   wf.tensors.reserve(n_tensors);
   for (uint32_t i = 0; i < n_tensors; i++) {
     uint32_t name_len = r.u32();
-    if (name_len > 4096) die("%s: absurd name length %u", path, name_len);
+    if (name_len > 4096) die_wc("%s: absurd name length %u", path, name_len);
     std::string name(name_len, '\0');
     r.read(&name[0], name_len);
 
     WTensor t;
     t.dtype = r.u8();
-    dtype_size(t.dtype);  // validates the code
+    dtype_size_wc(t.dtype);  // validates the code
     uint32_t ndim = r.u32();
-    if (ndim > 8) die("%s: %s: absurd ndim %u", path, name.c_str(), ndim);
+    if (ndim > 8) die_wc("%s: %s: absurd ndim %u", path, name.c_str(), ndim);
     t.shape.resize(ndim);
     size_t numel = 1;
     for (uint32_t d = 0; d < ndim; d++) {
@@ -431,7 +429,7 @@ WeightsFile WeightsFile::load_compressed(const char* path) {
       numel *= t.shape[d];
     }
     t.numel = numel;
-    size_t bytes = numel * dtype_size(t.dtype);
+    size_t bytes = numel * dtype_size_wc(t.dtype);
     t.data.resize(bytes);
     if (t.dtype == DT_I8) {
       uint32_t stream_len = r.u32();
@@ -445,10 +443,10 @@ WeightsFile WeightsFile::load_compressed(const char* path) {
     }
 
     if (!wf.tensors.emplace(name, std::move(t)).second)
-      die("%s: duplicate tensor %s", path, name.c_str());
+      die_wc("%s: duplicate tensor %s", path, name.c_str());
   }
   if (r.left != 0)
-    die("%s: %zu trailing bytes after last tensor", path, r.left);
+    die_wc("%s: %zu trailing bytes after last tensor", path, r.left);
   return wf;
 }
 

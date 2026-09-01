@@ -1,15 +1,5 @@
 #include "arena_build.h"
 
-#if defined(__linux__)
-#include <sys/mman.h>
-#endif
-
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <string>
-
 #include "weights_io.h"
 #include "glue.h"
 
@@ -18,8 +8,8 @@ namespace opt {
 
 namespace {
 
-[[noreturn]] void die(const char* msg) {
-  std::fprintf(stderr, "arena_build: %s\n", msg);
+[[noreturn]] void die_arena(const char* msg) {
+  fprintf(stderr, "arena_build: %s\n", msg);
   std::exit(1);
 }
 
@@ -33,13 +23,13 @@ void HugeBuf::alloc(size_t n) {
 #if defined(__linux__)
   void* m = ::mmap(nullptr, bytes, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (m == MAP_FAILED) die("mmap failed");
+  if (m == MAP_FAILED) die_arena("mmap failed");
   ::madvise(m, bytes, MADV_HUGEPAGE);
   raw = nullptr;
   p = static_cast<uint8_t*>(m);
 #else
   raw = static_cast<uint8_t*>(std::malloc(bytes + kAlign));
-  if (!raw) die("out of memory");
+  if (!raw) die_arena("out of memory");
   p = reinterpret_cast<uint8_t*>(
       (reinterpret_cast<uintptr_t>(raw) + (kAlign - 1)) & ~(uintptr_t(kAlign - 1)));
 #endif
@@ -64,9 +54,9 @@ void OptModel::load(const char* weights_path, size_t rope_rows,
   // FX2TFWC1/FX2TFWC2 files (bit-identical tensors either way).
   char magic[8] = {0};
   if (weights_path) {
-    if (FILE* f = std::fopen(weights_path, "rb")) {
-      if (std::fread(magic, 1, 8, f) != 8) magic[0] = 0;
-      std::fclose(f);
+    if (FILE* f = fopen(weights_path, "rb")) {
+      if (fread(magic, 1, 8, f) != 8) magic[0] = 0;
+      fclose(f);
     }
   }
   WeightsFile wf = !weights_path ? WeightsFile::random(init_seed)
@@ -78,10 +68,10 @@ void OptModel::load(const char* weights_path, size_t rope_rows,
     const WTensor& ci = wf.get("config.ints", DT_I32, {11});
     const int32_t want[11] = {V, D, NL, DH, NH, DMLP, 1024, DH, NH, 4, 10000};
     for (int i = 0; i < 11; i++)
-      if (ci.i32()[i] != want[i]) die("config.ints mismatch");
+      if (ci.i32()[i] != want[i]) die_arena("config.ints mismatch");
     const WTensor& ck = wf.get("config.kimi", DT_I32, {NL});
     for (int i = 0; i < NL; i++)
-      if ((ck.i32()[i] != 0) != KIMI_L[i]) die("config.kimi mismatch");
+      if ((ck.i32()[i] != 0) != KIMI_L[i]) die_arena("config.kimi mismatch");
   }
 
   pool.alloc(size_t(16) << 20);
@@ -90,7 +80,7 @@ void OptModel::load(const char* weights_path, size_t rope_rows,
     off = round64(off);
     uint8_t* q = pool.p + off;
     off += n;
-    if (off + QMAT_TAIL_SLACK > pool.bytes) die("weight pool overflow");
+    if (off + QMAT_TAIL_SLACK > pool.bytes) die_arena("weight pool overflow");
     return q;
   };
 
@@ -106,7 +96,7 @@ void OptModel::load(const char* weights_path, size_t rope_rows,
         wf.get(prefix + ".quantize_activation.scale", DT_BF16, {1});
     QSite s;
     s.s_act = bf16_to_f32(sa.bf16_bits()[0]);
-    if (!(s.s_act > 0.0f)) die("activation scale not positive");
+    if (!(s.s_act > 0.0f)) die_arena("activation scale not positive");
     std::vector<float> fold(d_out);
     for (int o = 0; o < d_out; o++)
       fold[o] = s.s_act * bf16_to_f32(ws.bf16_bits()[o]);
@@ -126,7 +116,7 @@ void OptModel::load(const char* weights_path, size_t rope_rows,
     const WTensor& sa =
         wf.get(prefix + ".quantize_activation.scale", DT_BF16, {1});
     float s_act = bf16_to_f32(sa.bf16_bits()[0]);
-    if (!(s_act > 0.0f)) die("activation scale not positive");
+    if (!(s_act > 0.0f)) die_arena("activation scale not positive");
     *s_act_out = s_act;
     std::vector<float> fold(D);
     for (int o = 0; o < D; o++)
@@ -222,7 +212,7 @@ void OptModel::load(const char* weights_path, size_t rope_rows,
     mlp[l].up = qsite(b + "mlp.up", DMLP, D, true);
     mlp[l].down = qsp4(b + "mlp.down", DMLP, &mlp[l].down_s_act);
   }
-  if (ki != 9 || vi != 3) die("layer pattern mismatch");
+  if (ki != 9 || vi != 3) die_arena("layer pattern mismatch");
 
   unembed = qsite("unembedding", V, D, true);
   {  // fp32 copy of the same rows, for a caller running its own output layer
@@ -257,7 +247,7 @@ void OptModel::load(const char* weights_path, size_t rope_rows,
     if (si.dtype != DT_F32 || si.shape.size() != 2 || si.shape[1] != 32 ||
         co.dtype != DT_F32 || co.shape.size() != 2 || co.shape[1] != 32 ||
         si.shape[0] != co.shape[0] || si.shape[0] > uint32_t(ROPE_LEN))
-      die("bad rope.sin/rope.cos");
+      die_arena("bad rope.sin/rope.cos");
     rope_len = si.shape[0];
     rope_sin.assign(si.f32(), si.f32() + rope_len * 32);
     rope_cos.assign(co.f32(), co.f32() + rope_len * 32);

@@ -84,11 +84,14 @@
 // weights in [-7,7] and the folded per-row fp32 scales.
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-
 namespace fx2 {
 namespace opt {
+
+// Sentinel for "no score here": -INFINITY would be undefined under
+// -ffinite-math-only, and anything this negative gives the same
+// softmax (exp of it underflows to zero).
+static const float kNegHuge = -3.0e38f;
+
 
 // mapped slack required after every arena (prefetch overrun)
 constexpr size_t QMAT_TAIL_SLACK = 4096;

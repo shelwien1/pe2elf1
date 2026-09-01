@@ -9,14 +9,6 @@
 
 #include "model_opt.h"
 
-#include <immintrin.h>
-
-#include <algorithm>
-#include <cmath>
-#include <cstdio>
-#include <cstring>
-#include <vector>
-
 #include "arena_build.h"
 #include "attn.h"
 #include "glue.h"
@@ -171,7 +163,7 @@ void prof_print(double tsc_to_core, long tokens) {
 #ifndef FX2_PROF
   (void)tsc_to_core;
   (void)tokens;
-  std::printf("prof: not compiled in (build with -DFX2_PROF)\n");
+  printf("prof: not compiled in (build with -DFX2_PROF)\n");
 #else
   // empty-section overhead: median back-to-back raw-rdtsc delta
   const int NS = 4001;
@@ -181,7 +173,7 @@ void prof_print(double tsc_to_core, long tokens) {
   for (int i = 0; i + 1 < NS; i++) dd[i] = double(st[i + 1] - st[i]);
   std::nth_element(dd.begin(), dd.begin() + (NS - 1) / 2, dd.end());
   const double stamp_ticks = dd[(NS - 1) / 2];
-  std::printf("\n== per-part profile (raw rdtsc, overhead-corrected by %.1f "
+  printf("\n== per-part profile (raw rdtsc, overhead-corrected by %.1f "
               "ticks/section = %.1f core cyc) ==\n",
               stamp_ticks, stamp_ticks * tsc_to_core);
   double gcyc[4] = {}, gcalls[4] = {};
@@ -195,20 +187,20 @@ void prof_print(double tsc_to_core, long tokens) {
     gcalls[kPSites[s].group] += double(g_pcalls[s]);
     total += site_cyc[s];
   }
-  std::printf("%-34s %12s %6s %9s\n", "group", "cyc/token", "%", "calls/tok");
+  printf("%-34s %12s %6s %9s\n", "group", "cyc/token", "%", "calls/tok");
   for (int g = 0; g < 4; g++)
-    std::printf("%-34s %12.0f %5.1f%% %9.1f\n", kGroups[g], gcyc[g],
+    printf("%-34s %12.0f %5.1f%% %9.1f\n", kGroups[g], gcyc[g],
                 100.0 * gcyc[g] / total,
                 gcalls[g] / double(tokens > 0 ? tokens : 1));
-  std::printf("%-34s %12.0f %5.1f%%\n", "TOTAL (instrumented sections)", total,
+  printf("%-34s %12.0f %5.1f%%\n", "TOTAL (instrumented sections)", total,
               100.0);
-  std::printf("\n%-34s %12s %6s %9s\n", "  site", "cyc/token", "%",
+  printf("\n%-34s %12s %6s %9s\n", "  site", "cyc/token", "%",
               "calls/tok");
   for (int g = 0; g < 4; g++) {
-    std::printf("  -- %s --\n", kGroups[g]);
+    printf("  -- %s --\n", kGroups[g]);
     for (int s = 0; s < PS_N; s++) {
       if (kPSites[s].group != g) continue;
-      std::printf("  %-32s %12.0f %5.1f%% %9.1f\n", kPSites[s].name,
+      printf("  %-32s %12.0f %5.1f%% %9.1f\n", kPSites[s].name,
                   site_cyc[s], 100.0 * site_cyc[s] / total,
                   double(g_pcalls[s]) / double(tokens > 0 ? tokens : 1));
     }

@@ -14,11 +14,6 @@
 //      into 8 fp32 accumulators; (sv/den) folded into one final multiply.
 #include "attn.h"
 
-#include <immintrin.h>
-
-#include <cmath>
-#include <cstring>
-
 #include "vec_math.h"
 
 namespace fx2 {
@@ -92,7 +87,7 @@ template <bool FIXED, typename T>
 inline float qk_scan(const T* kh, const int32_t* qp32, float coef, int n,
                      float* sc) {
   const __m256 vcoef = _mm256_set1_ps(coef);
-  __m256 vmax = _mm256_set1_ps(-INFINITY);
+  __m256 vmax = _mm256_set1_ps(kNegHuge);
   const int nDB = FIXED ? (ATTN_WIN / 32) : (n >> 5);
   const T* kb = kh;
   float* scp = sc;
@@ -150,7 +145,7 @@ inline float qk_scan(const T* kh, const int32_t* qp32, float coef, int n,
       }
       // pad [n, next 32 boundary) with -inf, then fold the tail into the max
       const int pad_end = (n + 31) & ~31;
-      for (int j = n; j < pad_end; j++) sc[j] = -INFINITY;
+      for (int j = n; j < pad_end; j++) sc[j] = kNegHuge;
       for (int j = nDB << 5; j < pad_end; j += 8)
         vmax = _mm256_max_ps(vmax, _mm256_load_ps(sc + j));
     }

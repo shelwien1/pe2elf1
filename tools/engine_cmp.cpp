@@ -4,14 +4,21 @@
 //   build: clang++ -O3 -std=c++17 -march=haswell -I tf tools/engine_cmp.cpp \
 //            <tf objects> -o engine_cmp
 //   run:   ./engine_cmp models/6m-q4-fp32.tfwc2
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <vector>
+#include "tool_prelude.inc"
 
-#include "fp32_model.h"
+// engine_cmp needs both engines, so it includes both halves of tf_all.inc
+#define TF_FP32 1
+#include "tf_all.inc"
+#undef TF_FP32
+#define TF_FP32 0
 #include "model_opt.h"
+#include "qmat_dense.inc"
+#include "qmat_sparse.inc"
+#include "attn.inc"
+#include "kda.inc"
+#include "glue.inc"
+#include "arena_build.inc"
+#include "model_opt.inc"
 
 int main(int argc, char** argv) {
   const char* path = argc > 1 ? argv[1] : "models/6m-q4-fp32.tfwc2";

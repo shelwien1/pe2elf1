@@ -1,10 +1,5 @@
 #include "qmat_sparse.h"
 
-#include <immintrin.h>
-
-#include <algorithm>
-#include <cstring>
-
 namespace fx2 {
 namespace opt {
 

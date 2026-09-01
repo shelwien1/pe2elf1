@@ -13,7 +13,12 @@ al., transformer work on top of fx2-cmix), namely
 document the model (205 tokens, d_model 192, 12 layers — 9 Kimi linear-attention
 layers and 3 sliding-window attention layers — int4 weights, int8 activations).
 
-Only four changes were made, all mechanical:
+These are `.inc` files rather than `.cpp`: coder0 is built as a single
+translation unit, so `coder0.cpp` includes `tf/tf_all.inc`, which includes
+them. None of them carries a `#include <...>` of its own — every system header
+the program needs is at the top of `coder0.cpp`.
+
+Only seven changes were made, all mechanical:
 
 1. **Include paths.** `arena_build.cpp` and `model_opt.cpp` referred to
    `../weights_io.h` / `../kernels.h`; the tree is flat here. (`kernels.h` is
@@ -41,6 +46,25 @@ Only four changes were made, all mechanical:
 4. **`TransformerOpt`'s constructor takes the cap** (`model_opt.h`) as a third,
    defaulted argument. The rest of the public interface — `begin_article`,
    the two `step` overloads, `last_logits` — is unchanged.
+
+5. **No `std::` on the stdio calls.** `gc.bat` defines
+   `_CRT_DISABLE_PERFCRIT_LOCKS`, which makes the UCRT define `fseek`, `ftell`,
+   `fread` and `fclose` as macros expanding to `_fseek_nolock` and friends —
+   so `std::fseek` becomes `std::_fseek_nolock`, which does not exist. All 33
+   of these calls are now unqualified.
+
+6. **Two anonymous-namespace name clashes resolved.** In separate translation
+   units these were fine; in one they collide. `weights_io_compressed.inc`'s
+   `die`, `dtype_size` and `Reader` became `die_wc`, `dtype_size_wc` and
+   `ReaderWC` (`weights_io.inc` keeps the originals), and `arena_build.inc`'s
+   `die` became `die_arena` (`qmat_dense.inc` keeps it).
+
+7. **No dependence on infinity semantics.** `weights_io_compressed.inc` used
+   `std::isinf` in its CUDA `sinf` port, and `attn.inc`/`glue.inc` used
+   `-INFINITY` as a "no score here" sentinel. Under `-ffinite-math-only`
+   (implied by `-ffast-math`) both are undefined — clang folds `isinf` to
+   false. They are now a bit test and a large finite constant (`kNegHuge` in
+   `qmat.h`), which behave identically under every flag set.
 
 No numerical change: with the cap left at 0 the engine is bit-identical to the
 original.
@@ -83,8 +107,12 @@ or with LTO against fast-math code:
   IEEE division, and the attention softmax, the KDA exp/softplus chain and the
   logit softcap are all written against exact IEEE semantics.
 
-`build.sh` and `gc.bat` compile them separately from `coder0.cpp` for exactly
-this reason, mirroring what the cmix makefile does with the same sources.
+This is why the single-TU build uses `-O3 -ffp-contract=off` rather than the
+`-Ofast` coder0 was historically built with: one translation unit means one
+flag set, and it has to be the one the transformer is correct under. Change 7
+above removes the hard failure mode, but `-ffast-math` would still substitute
+reciprocals for the divisions in the norm and quantization paths — measured at
+13.6% relative on the output probabilities — so it stays off.
 
 `-ffp-contract=off` is also passed. Clang's default already contracts nothing
 in these sources (they use explicit FMA intrinsics), so it changes neither the

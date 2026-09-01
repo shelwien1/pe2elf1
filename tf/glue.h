@@ -20,8 +20,6 @@
 //   is a performance, not correctness, requirement).
 #pragma once
 
-#include <cstdint>
-
 #include "sparse_acts.h"
 
 namespace fx2 {

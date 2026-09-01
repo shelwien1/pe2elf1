@@ -12,8 +12,6 @@
 // link qmat_sparse; both describe the same ascending nonzero index set.
 #pragma once
 
-#include <cstdint>
-
 namespace fx2 {
 
 // Sparse view of a quantized activation vector (prior probabilities row).
