@@ -72,6 +72,14 @@ while( <I> ) {
     next;
   }
 
+  # A pragma inside a function body. The preprocessor prints a _Pragma as a
+  # #pragma line, and a #pragma line cannot sit inside a #define -- so it
+  # goes back to being a _Pragma, which can. Its arguments are macro-expanded
+  # when the compiler parses it, so a width spelled as a knob name survives.
+  if( $f_func==1 && $a =~ m!^(\s*)#\s*pragma\s+(.*?)\s*$! ) {
+    $a = "$1_Pragma(\"$2\")";
+  }
+
   # Inside a macro body, every use of a parameter gets parenthesised. Without
   # it the body's operator precedence silently applies to whatever the caller
   # passed: ShiftLow's `n*8` turns `ShiftLow( sh>>3 )` into `sh>>3*8`, which

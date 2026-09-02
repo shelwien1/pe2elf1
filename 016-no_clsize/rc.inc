@@ -47,33 +47,20 @@
  #define RC_BSR32( x ) [&]{ uint  v_=(x); uint i_=0; while( v_>>=1 ) i_++; return i_; }()
 #endif
 
- // Two macros the GENERATED kernel expands at compile time, defined here so
- // they exist wherever rc_vecD.inc is included, and hidden from the generator
- // (RC_VECOUT is 1 only while mk_kernel.sh preprocesses this file):
- //
- //   RC_LOOP_PRAGMA  a loop pragma inside a macro body. Left undefined while
- //                   the kernel is generated, so `RC_LOOP_PRAGMA( clang loop
- //                   ... )` survives into rc_vecD.inc as written and becomes
- //                   a _Pragma there -- a #pragma line cannot sit inside a
- //                   #define, and the preprocessor would have turned a
- //                   _Pragma into one.
- //   RC_SLOT         which array slot holds lane L. The lane number is the
- //                   format's -- bit i of a block goes to lane i%RCNUM, so
- //                   lane m*8+j is bit j of byte m of a decode group -- but
- //                   where its state sits in the arrays is the includer's
- //                   business. The vector renorm pass (rc_RenormRun below)
- //                   wants the lanes it covers after step j to be a
- //                   contiguous run, so under it the slots are BIT-MAJOR:
- //                   slot = j*NB + m, and the lanes finished by step j are
- //                   slots 0..(j+1)*NB-1. Without the pass, the identity.
-#if !RC_VECOUT
-#ifndef RC_LOOP_PRAGMA
-#define RC_LOOP_PRAGMA( x )  _Pragma( #x )
+ // Which array slot holds lane L. The lane number is the format's -- bit i of
+ // a block goes to lane i%RCNUM, so lane m*8+j is bit j of byte m of a decode
+ // group -- but where its state sits in the arrays is the includer's
+ // business. The vector renorm pass (rc_RenormRun below) wants the lanes it
+ // covers after step j to be a contiguous run, so under it the slots are
+ // BIT-MAJOR: slot = j*NB + m, and the lanes finished by step j are slots
+ // 0..(j+1)*NB-1. Without the pass, the identity. Defined here, where every
+ // includer of the generated kernel sees it, and once: this file is included
+ // twice.
+#ifndef RC_SLOT
 #if RC_DEC_VRENORM
 #define RC_SLOT( L )  ( ((L)%8)*(RC_RCNUM/8) + (L)/8 )
 #else
 #define RC_SLOT( L )  (L)
-#endif
 #endif
 #endif
 
@@ -595,12 +582,12 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
     // (skylake, RCNUM=16, 20 MB of enwik8): 103.1 -> 96.7 cycles per group.
 #if RC_SCATTER_SKIP
     uint z = 0;
-    RC_LOOP_PRAGMA( unroll )
+    RC_UNROLL
     for( uint i=0; i<RC_FLUSH_LANES; i++ ) z |= stn[rcidx+i];
     if_e0( z )
 #endif
     {
-      RC_LOOP_PRAGMA( unroll )
+      RC_UNROLL
       for( uint i=0; i<RC_FLUSH_LANES; i++ ) (uint&)tmpbase[stad[rcidx+i]] = stcl[rcidx+i];
     }
 #endif
@@ -776,18 +763,19 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
   // The pass over the run of RC_DEC_VRENORM lanes starting at this one, then
   // its refill. A loop for the compiler to vectorise -- RC_DEC_VRENORM_VF
   // lanes wide, and kept away from the unroller, which would otherwise
-  // scalarise it before the vectoriser ever saw it.
+  // scalarise it before the vectoriser ever saw it. The knob names inside
+  // the pragma are expanded when the compiler parses it, not here.
   void rc_RenormRun( uint zofs ) {
 #if RC_DEC_VRENORM_VF>1
-    RC_LOOP_PRAGMA( clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable) )
+    _Pragma("clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable)")
 #else
-    RC_LOOP_PRAGMA( clang loop vectorize(disable) unroll(full) )   // the probe: scalar, unrolled
+    _Pragma("clang loop vectorize(disable) unroll(full)")   // the probe: scalar, unrolled
 #endif
     for( uint k=0; k<RC_DEC_VRENORM; k++ ) rc_RenormV( rcidx+k, zofs );
 #if RC_DEC_VRENORM_PROBE==2
     // the probe: the pass twice over -- the second finds nothing to shift, so
     // what it adds is the cost of a pass with nothing to wait for
-    RC_LOOP_PRAGMA( clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable) )
+    _Pragma("clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable)")
     for( uint k=0; k<RC_DEC_VRENORM; k++ ) rc_RenormV( rcidx+k, zofs );
 #endif
 #if !RC_DEC_VRENORM_GATHER

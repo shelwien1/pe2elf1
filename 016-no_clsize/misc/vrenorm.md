@@ -265,10 +265,12 @@ so it vectorises or not as it pleases.
   other slots explicitly and the generator passes that through.  What it
   cost to get there: the generator's call-threading regex put its `rcidx`
   lookahead after a `\s*`, which backtracked around it (fixed in
-  `Lib3/rc_soa.pl`, and mk_kernel.sh now checks for the symptom), and a
-  `_Pragma` cannot go through the preprocessor into a macro body -- it comes
-  out as a `#pragma` line -- so the loop pragma is `RC_LOOP_PRAGMA(...)`,
-  undefined while the kernel is generated and a `_Pragma` at compile time.
+  `Lib3/rc_soa.pl`, and mk_kernel.sh now checks for the symptom), and the
+  preprocessor prints a `_Pragma` as a `#pragma` line, which cannot sit in
+  a macro body -- so `rc_macro.pl` turns a `#pragma` line inside a function
+  back into a `_Pragma`, and rc.inc writes the loop pragma as one, knob
+  names and all: the compiler macro-expands the pragma's arguments when it
+  parses them.
 - The generator now sees the target: build.sh and gc.bat hand mk_kernel.sh
   the compile's `-march`, so the scatter and the lane-mask intrinsics resolve
   in rc.inc like everything else, and `RC_KERNEL_CONF` carries

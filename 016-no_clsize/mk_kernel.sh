@@ -68,6 +68,17 @@ grep -q '\[(rcidx)\]' rc_vecD.inc || {
   exit 1
 }
 
+# A #pragma line inside a macro body is a compile error, and it is what a
+# stale rc_macro.pl leaves of the loop pragmas rc.inc writes as _Pragma: the
+# preprocessor prints those as #pragma lines, and the generator has to turn
+# them back.
+grep -q '^[[:space:]]*#[[:space:]]*pragma' rc_vecD.inc && {
+  echo "mk_kernel.sh: ../Lib3/rc_macro.pl is out of date -- the generated" >&2
+  echo "  kernel has a #pragma line inside a macro body. Sync Lib3 with this" >&2
+  echo "  directory; a current generator emits it as a _Pragma." >&2
+  exit 1
+}
+
 # And the third way a stale rc_soa.pl produces a kernel that compiles wrongly
 # or not at all: threading rcidx into a call that already names its lane
 # (`rc_Refill( rcidx+i )` in rc.inc's vector pass), which a lookahead that
