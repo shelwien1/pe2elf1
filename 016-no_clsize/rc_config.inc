@@ -584,7 +584,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // row at the new cursor or the lane's own zero slot -- the address is
 // selected, the load always happens, and the mask (0xFF/0xFFFF/0) is
 // applied on top. Not the pass: the scalar shape, per bit. Only without
-// RC_DEC_VRENORM.
+// RC_DEC_VRENORM. Measured here at 24.04 MB/s against 45.52, -47%, paired
+// rounds -- misc/vrenorm.md 6 has why.
 #ifndef RC_DEC_RENORM_ZS
 #define RC_DEC_RENORM_ZS 0
 #endif

@@ -316,7 +316,19 @@ What clang does with it is worth a look: it SLP-vectorises the eight
 detour that costs port 5 and helps nothing.  Measured, paired rounds, best
 of 3, 100 MB of enwik8:
 
-ZSTABLE
+| build | median MB/s | vs base | rounds |
+|---|---|---|---|
+| base | **45.52** | -- | 45.52 42.11 46.40 45.20 45.95 |
+| base again | 45.82 | +0.7% | 45.68 45.82 45.49 46.25 46.93 |
+| `RC_DEC_RENORM_ZS=1` | 24.04 | **−47.2%** | 22.57 24.04 23.78 24.10 24.33 |
+
+Half the baseline, every round, which is where `dec_renorm.md`'s branchless
+per-step shapes landed too (−20% to −36%), with the slot store and the
+address select on top.  The stream is byte-identical.  So: no, nothing in
+it that the pass does not already do eight lanes at a time -- and the one
+thing that is different, the selected address, is what the mask on the
+next line and the compiler's own masked gather had already made
+unnecessary.
 
 ## 7. Things learned about the tools
 
