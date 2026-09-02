@@ -145,8 +145,26 @@ Alternating rounds, best of 3 decode passes each, 100 MB of enwik8, clang
 18, `-march=native` (Cascade Lake, AVX-512), with a byte-identical copy of
 the baseline in the rotation as the noise control.
 
-(The paired table goes here; the rounds are running as this is committed,
-and the single runs below are what the design was steered by.)
+| build | median MB/s | vs base | rounds |
+|---|---|---|---|
+| base, `RC_DEC_VRENORM=0` | **45.58** | -- | 45.56 46.24 45.60 45.37 46.38 44.72 |
+| base again (the noise control) | 45.22 | −0.8% | 44.93 42.89 45.44 44.99 46.20 46.34 |
+| `PROBE=1`, gather shape: the pass, no load | 48.48 | **+6.4%** | 49.10 48.74 48.92 40.79 47.83 48.22 |
+| `PROBE=3`: the window pass, no refill | 48.24 | **+5.8%** | 46.84 48.22 48.30 48.26 48.74 46.43 |
+| `PROBE=4`: ... and the lane mask | 46.22 | +1.4% | 47.26 48.14 45.18 44.17 44.96 47.47 |
+| `PROBE=6`: ... and two slots, no loop | 46.34 | +1.7% | 46.38 46.30 45.61 46.14 46.54 46.49 |
+| `RC_DEC_VRENORM=16`, two slots and the loop | 43.14 | −5.4% | 42.98 42.97 43.23 43.05 43.52 44.46 |
+| `RC_DEC_VRENORM=8`, two passes a group | 40.33 | −11.5% | 40.73 40.98 41.11 39.55 39.38 39.92 |
+| `GATHER=1`, the shape asked for | 33.26 | −27.0% | 33.10 33.44 33.39 33.40 33.03 33.13 |
+
+So: the pass is worth +6%, the mask and two unconditional slots give back
+4% of it, and the loop for the third lane -- 13% taken, six instructions a
+trip -- gives back 7% more, which is far more than a 13% mispredict rate
+accounts for and is probably the layout sensitivity `speed_ideas.md` §0
+warns about as much as the branch.  The second table is the slot count,
+`RC_DEC_VRENORM_SLOTS`, which is the only lever left in the refill:
+
+SLOTTABLE
 
 Single runs of the probe ladder, the same box, for the shape of the cost:
 

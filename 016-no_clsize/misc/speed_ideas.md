@@ -180,6 +180,26 @@ memory, and there is no evidence yet that anything does.  §2.1 of
 `speed_plan_next.md` (batching the bookkeeping at the group edges *to remove
 instructions*) is still the only framing under which it could pay.
 
+## 4a. Settled after this: the renorm as a vector pass
+
+`vrenorm.md` has it.  The decoder's renorm CAN be a branchless pass over all
+sixteen lanes, auto-vectorised from a plain loop, and the pass on its own is
+worth **+6% decode** -- measured with paired rounds, the first item on this
+list to move the decoder in the right direction since the wavefront.  What
+it cannot be is a gather: a `vpgatherdd` costs 25 ticks on this box
+(`gather_bench.cpp`, the GDS microcode mitigation), and a refill of the
+~1.2 lanes a group that shifted has to be scalar, off a lane mask, into a
+window array nothing on the scalar path reads.  That refill is what the
+knob is fighting: mask plus two slots costs 4% of the 6%, and the loop for
+the rare third lane more than the rest.  `RC_DEC_VRENORM=16` with
+`RC_DEC_VRENORM_SLOTS` is the state of it.
+
+Two mechanisms from it belong on the "know before building" list: a scalar
+store whose address is known late (a `tzcnt` off a mask) stalls every later
+load of the same array in the disambiguation logic, whatever the slack; and
+clang folds `store(select)` into masked stores and gathers on its own, so
+the "zero slot to gather from" idea is something the compiler already does.
+
 ## 5. Outside the loop
 
 Things that do not touch the hot path and are not the coder's problem in the

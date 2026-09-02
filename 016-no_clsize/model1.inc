@@ -198,10 +198,21 @@ struct Model<1> : Coroutine {
 #define RC_VREFILL( k0, W ) { uint _m = RC_LANEMASK( k0, W ); RC_VREFILL1( k0, W, _m ); }
 #elif RC_DEC_VRENORM_PROBE==6
 #define RC_VREFILL( k0, W ) { uint _m = RC_LANEMASK( k0, W ); RC_VREFILL1( k0, W, _m ); RC_VREFILL1( k0, W, _m ); }
-#else
+#elif RC_DEC_VRENORM_PROBE==7
+    // the probe: two slots, and a rare path with no loop in it -- every
+    // window reloaded, straight-line
 #define RC_VREFILL( k0, W ) {                                                \
       uint _m = RC_LANEMASK( k0, W );                                        \
       RC_VREFILL1( k0, W, _m ); RC_VREFILL1( k0, W, _m );                    \
+      if( _m ) { RC_UNROLL for( uint _k=(k0); _k<(k0)+(W); _k++ ) vwin[_k] = RC_VR_WIN( tmpptr[_k] ); } }
+#else
+    // RC_DEC_VRENORM_SLOTS lanes unconditionally, then the loop for the rest
+#define RC_VREFILL( k0, W ) {                                                \
+      uint _m = RC_LANEMASK( k0, W );                                        \
+      RC_VREFILL1( k0, W, _m );                                              \
+      if( RC_DEC_VRENORM_SLOTS>=2 ) RC_VREFILL1( k0, W, _m );                \
+      if( RC_DEC_VRENORM_SLOTS>=3 ) RC_VREFILL1( k0, W, _m );                \
+      if( RC_DEC_VRENORM_SLOTS>=4 ) RC_VREFILL1( k0, W, _m );                \
       if( _m ) do { RC_VREFILL1( k0, W, _m ); } while( _m ); }
 #endif
     // one lane's window reload: the lowest set bit of m, or the run's first

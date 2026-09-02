@@ -423,20 +423,38 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //       ~92% not taken, and the refill's masked load only on the taken arm
 //   W   no renorm inside rc_Process at all. A lane is renormalised AFTER its
 //       bit, W lanes at a time, in a loop the compiler auto-vectorises: two
-//       compares for the shift count, the cursor decrement, ONE dword gather
-//       at the new cursor for every lane whether it shifted or not, the mask
-//       (1<<sh)-1 to keep only the bytes shifted in, and the two shifts. No
-//       branch, no per-lane mask, no lane left out.
+//       compares for the shift count, the cursor decrement, the two shifts,
+//       and the bytes shifted in taken from a per-lane cached window dword
+//       (misc/dec_renorm.md's shape 9, lifted into lane state) -- no
+//       branch, no memory but the lane arrays. Then the lanes that shifted,
+//       ~1.2 of 16 a group, reload their window in scalar code off a bit
+//       mask: RC_DEC_VRENORM_SLOTS of them unconditionally, a loop for the
+//       rest. See model1.inc, and misc/vrenorm.md for how it got there.
 //
 // Why a pass and not the branchless shapes misc/dec_renorm.md buried: those
 // put the always-executed shifts and the refill load on each lane's own chain
 // at the head of its step, sixteen times a group, in scalar code. The pass
 // takes them off the step entirely -- a lane's next use is a whole group
-// away, so it has ~139 cycles of slack -- and does them eight lanes to an
-// instruction. dec_vectorize.md saw the same thing from the other side: inside
-// a clean whole-group renorm pass, branchless beat every branchy shape by 12%.
-// It just could not carry the barriers of the four-pass split around it. Here
-// the model stays interleaved; only the renorm moves.
+// away -- and does them eight lanes to an instruction. dec_vectorize.md saw
+// the same thing from the other side: inside a clean whole-group renorm
+// pass, branchless beat every branchy shape by 12%. It just could not carry
+// the barriers of the four-pass split around it. Here the model stays
+// interleaved; only the renorm moves.
+//
+// Measured, paired rounds, 100 MB of enwik8, clang 18, -march=native on
+// the Cascade Lake VM, medians of six best-of-3 decode passes, twins of the
+// baseline 0.8% apart:
+//
+//   0                                   45.58 MB/s
+//   16, the pass alone (probe 3)        48.24     +5.8%    the ceiling
+//   16, pass + mask + 2 slots, no loop  46.34     +1.7%    (probe 6)
+//   16, the whole thing, 2 slots        43.14     -5.4%
+//   8,  two passes a group              40.33    -11.5%
+//   16, gather shape (GATHER=1)         33.26    -27.0%
+//
+// So the pass is real and the refill eats it. The default stays 0 until a
+// refill that costs less than the pass buys exists; RC_DEC_VRENORM_SLOTS
+// below is the lever, and the slot-count rows are in misc/vrenorm.md.
 //
 // W is the number of lanes a pass covers, and it fixes WHERE the passes go.
 // The group form of the decode loop (model1.inc) steps the NB=RCNUM/8 bytes
@@ -445,8 +463,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // out bit-major (slot = j*NB + m, see RC_SLOT), those lanes are a contiguous
 // run, and a pass of W lanes fires every W/NB steps over the run just
 // finished. W=RCNUM is one pass at the group's end; W=RCNUM/2 is two passes,
-// after steps 3 and 7, which keeps a bit-0 lane's renorm four steps clear of
-// its next use instead of zero.
+// after steps 3 and 7 -- which measures worse: the fixed cost is per pass,
+// and the slack it buys was never the problem.
 //
 // The kernel changes with it: rc_Process's decoder arm stops calling
 // rc_Renorm and applies rpre to code where it is produced (`code -= rpre`
@@ -497,6 +515,19 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 #if RC_DEC_ZSLOT && !RC_DEC_VRENORM_GATHER
 #error "RC_DEC_ZSLOT selects the gather's address: it needs RC_DEC_VRENORM_GATHER"
+#endif
+
+// How many lanes the pass's refill reloads UNCONDITIONALLY before it falls
+// into a loop for the rest. A lane shifts on ~8% of its bits, so of 16 lanes
+// ~1.3 shift a group: P(more than 2) is 13%, more than 3 is 3.3%, more than
+// 4 is 0.6%. Each slot is six instructions with nothing to predict; the
+// loop's exit is a data-dependent branch that costs a mispredict whenever
+// the count crosses it. See misc/vrenorm.md for what each setting measures.
+#ifndef RC_DEC_VRENORM_SLOTS
+#define RC_DEC_VRENORM_SLOTS 3
+#endif
+#if RC_DEC_VRENORM_SLOTS<1 || RC_DEC_VRENORM_SLOTS>4
+#error "RC_DEC_VRENORM_SLOTS is 1..4"
 #endif
 
 // Probes on the pass, for taking it apart. 0 is the pass. 1 leaves the
