@@ -47,6 +47,36 @@
  #define RC_BSR32( x ) [&]{ uint  v_=(x); uint i_=0; while( v_>>=1 ) i_++; return i_; }()
 #endif
 
+ // Two macros the GENERATED kernel expands at compile time, defined here so
+ // they exist wherever rc_vecD.inc is included, and hidden from the generator
+ // (RC_VECOUT is 1 only while mk_kernel.sh preprocesses this file):
+ //
+ //   RC_LOOP_PRAGMA  a loop pragma inside a macro body. Left undefined while
+ //                   the kernel is generated, so `RC_LOOP_PRAGMA( clang loop
+ //                   ... )` survives into rc_vecD.inc as written and becomes
+ //                   a _Pragma there -- a #pragma line cannot sit inside a
+ //                   #define, and the preprocessor would have turned a
+ //                   _Pragma into one.
+ //   RC_SLOT         which array slot holds lane L. The lane number is the
+ //                   format's -- bit i of a block goes to lane i%RCNUM, so
+ //                   lane m*8+j is bit j of byte m of a decode group -- but
+ //                   where its state sits in the arrays is the includer's
+ //                   business. The vector renorm pass (rc_RenormRun below)
+ //                   wants the lanes it covers after step j to be a
+ //                   contiguous run, so under it the slots are BIT-MAJOR:
+ //                   slot = j*NB + m, and the lanes finished by step j are
+ //                   slots 0..(j+1)*NB-1. Without the pass, the identity.
+#if !RC_VECOUT
+#ifndef RC_LOOP_PRAGMA
+#define RC_LOOP_PRAGMA( x )  _Pragma( #x )
+#if RC_DEC_VRENORM
+#define RC_SLOT( L )  ( ((L)%8)*(RC_RCNUM/8) + (L)/8 )
+#else
+#define RC_SLOT( L )  (L)
+#endif
+#endif
+#endif
+
 template< int f_DEC >
 struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
 
@@ -96,12 +126,16 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
 #if RC_VECOUT
   // Where ShiftLow's store goes when the build stages it instead of performing
   // it: the dword, the tmpbase offset it belongs at, and the renorm count that
-  // says whether it is a store at all. Declared unconditionally, because the
-  // generated kernel must not depend on anything but the -D set -- whether
-  // they are used is RC_SCATTER's business, decided at COMPILE time by
-  // RC_STAGE_CL / RC_FLUSH_ONE (model.inc). When it is off, nothing writes
-  // them and they cost nothing.
+  // says whether it is a store at all. Declared unconditionally -- whether
+  // they are used is RC_SCATTER's business (ShiftLow, rc_FlushAll below), and
+  // when it is off nothing writes them and they cost nothing.
   uint  stcl, stad, stn;
+
+  // The decoder's vector renorm pass (RC_DEC_VRENORM, rc_RenormRun below): a
+  // lane's cached refill window -- the dword ending at its cursor -- and the
+  // shift it took in the last pass, which is what the refill selects lanes
+  // by. Declared unconditionally, like the rest of this block.
+  uint  vwin, vsh;
 
   // The renorm's shift count, kept in lane state rather
   // than in a local, which is the whole point of those shapes -- see
@@ -281,14 +315,18 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
     const uint cl = lowl;
 #endif
 #endif
-    // The store -- performed here, or staged for the group to commit, which
-    // is RC_STAGE_CL's business and the compile's, not the generator's.
-    // Staged, n==0 means the store is dead: the cursor does not move, so this
-    // lane's next store writes this exact window again and every byte here is
-    // overwritten before anything reads the row. That is the common case --
-    // the coder emits about 0.08 bytes per coded bit -- and RC_SCATTER_SKIP
-    // is what acts on it.
-    RC_STAGE_CL( rcidx, tmpptr-2, RC_ENC_CL, RC_ENC_NB );
+    // The store -- performed here, or staged for rc_FlushAll to commit a
+    // group at a time (RC_SCATTER, rc_config.inc). Staged, n==0 means the
+    // store is dead: the cursor does not move, so this lane's next store
+    // writes this exact window again and every byte here is overwritten
+    // before anything reads the row. That is the common case -- the coder
+    // emits about 0.08 bytes per coded bit -- and RC_SCATTER_SKIP is what
+    // acts on it.
+#if RC_SCATTER
+    stcl = RC_ENC_CL; stad = tmpptr-2; stn = RC_ENC_NB;
+#else
+    (uint&)tmpbase[tmpptr-2] = RC_ENC_CL;
+#endif
     tmpptr -= RC_ENC_NB;
     // sh is 0, 8 or 16, so splitting the shift keeps both counts <= 16 and
     // the sh==0 case falls out as 0 on its own -- (x>>16)>>16 is a defined
@@ -491,24 +529,90 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
     // Seed the staging at where the first ShiftLow's store would land anyway:
     // the row's zero prefix, which rc_Write drops. Keeps a commit before the
     // first ShiftLow -- there is none today -- from writing somewhere it
-    // should not. A no-op when the build is not staging, and encoder-only in
+    // should not. Nothing when the build is not staging, and encoder-only in
     // any case: in the decoder tmpptr indexes the INPUT row, so tmpptr-2 is
     // not an address anything should be seeded with. Dead either way, but
     // visibly so.
-    if( f_DEC==0 ) RC_STAGE_INIT( rcidx, tmpptr-2 );
+#if RC_SCATTER
+    if( f_DEC==0 ) { stcl = 0; stad = tmpptr-2; stn = 0; }
+#endif
 #endif
     if( f_DEC==1 ) { code = 0; for( uint i=0; i<CODBYTES; i++ ) code = (code<<8) + get(); }
   }
 
 #if RC_VECOUT
+  // ---- committing the staged store (RC_SCATTER) ---------------------------
+  //
+  // ShiftLow stages its dword in stcl/stad/stn instead of storing it, and the
+  // model commits a whole group of them at once: the staged arrays are RCNUM
+  // lanes of dword and dword-offset, which is exactly a vpscatterdd -- the
+  // one instruction SLP will not produce on its own -- or, where there is no
+  // scatter, a block of scalar stores that at least needs no address
+  // extraction. Both are nothing at all when the build is not staging.
+
+  // this lane's staged store, now: the block-length bits and the tail run
+  // one lane at a time and come back to lane 0, so they commit per bit
+  void rc_FlushOne( void ) {
+#if RC_SCATTER
+    (uint&)tmpbase[stad] = stcl;
+#endif
+  }
+
+  // the RC_FLUSH_LANES lanes from this one, as one commit. RC_SCATTER_W lanes
+  // to a scatter, and the width has to match what the sweep's arithmetic came
+  // out at (rc_config.inc); unaligned loads, because the lane arrays carry
+  // VECSIZE alignment, which is not the scatter's width. RC_SCATTER_SKIP=1
+  // scatters under a mask of the lanes that owe a store -- the compare gives
+  // the k-mask directly, so testing them and masking them is the same one
+  // instruction -- or, in the scalar block, branches past a group where no
+  // lane owes one.
+  void rc_FlushAll( void ) {
+#if !RC_SCATTER
+#elif RC_SCATTER_W==16
+    const __m512i a = _mm512_loadu_si512( (const void*)&stad[rcidx] );
+    const __m512i v = _mm512_loadu_si512( (const void*)&stcl[rcidx] );
+#if RC_SCATTER_SKIP
+    const __mmask16 m = _mm512_cmpneq_epi32_mask( _mm512_loadu_si512( (const void*)&stn[rcidx] ), _mm512_setzero_si512() );
+    _mm512_mask_i32scatter_epi32( (void*)tmpbase, m, a, v, 1 );
+#else
+    _mm512_i32scatter_epi32( (void*)tmpbase, a, v, 1 );
+#endif
+#elif RC_SCATTER_W==8
+    const __m256i a = _mm256_loadu_si256( (const __m256i*)&stad[rcidx] );
+    const __m256i v = _mm256_loadu_si256( (const __m256i*)&stcl[rcidx] );
+#if RC_SCATTER_SKIP
+    const __mmask8 m = _mm256_cmpneq_epi32_mask( _mm256_loadu_si256( (const __m256i*)&stn[rcidx] ), _mm256_setzero_si256() );
+    _mm256_mask_i32scatter_epi32( (void*)tmpbase, m, a, v, 1 );
+#else
+    _mm256_i32scatter_epi32( (void*)tmpbase, a, v, 1 );
+#endif
+#else
+    // no scatter on this target: the whole group as a block of scalar stores
+    // read back out of the staged arrays. Still the point -- the arrays got
+    // there as contiguous vector stores, so the address extraction the inline
+    // store needed (24 vpextrd plus 4 vextracti128 per group, all port 5) is
+    // gone and what is left lands on the store port. Measured on AVX2
+    // (skylake, RCNUM=16, 20 MB of enwik8): 103.1 -> 96.7 cycles per group.
+#if RC_SCATTER_SKIP
+    uint z = 0;
+    RC_LOOP_PRAGMA( unroll )
+    for( uint i=0; i<RC_FLUSH_LANES; i++ ) z |= stn[rcidx+i];
+    if_e0( z )
+#endif
+    {
+      RC_LOOP_PRAGMA( unroll )
+      for( uint i=0; i<RC_FLUSH_LANES; i++ ) (uint&)tmpbase[stad[rcidx+i]] = stcl[rcidx+i];
+    }
+#endif
+  }
+
   // the carryless minimal flush, low_Get inlined
   void rc_Quit( void ) {
     if( f_DEC==0 ) {
       rc_Renorm();
       // commit the staged store before the put1 run below, which overwrites
       // the top of that dword -- exactly what it does to the direct store.
-      // A no-op when the build is not staging.
-      RC_FLUSH_ONE( rcidx );
+      rc_FlushOne();
 
       uint i, n = LOWBYTES;
       qword llow = (qword(lowh)<<32) + lowl;
@@ -544,6 +648,154 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
       for( i=0; i<n; i++ ) put( byte(llow>>(LOWBITS-8-i*8)) );
     }
   }
+
+  // ---- the decoder's renorm as a vector pass (RC_DEC_VRENORM) -------------
+  //
+  // model1.inc's group loop steps the NB=RCNUM/8 bytes of a group together,
+  // one bit position at a time, so after step j the lanes of bit positions
+  // <=j are done for the group -- and with the lane arrays bit-major
+  // (RC_SLOT) they are a contiguous run. Under RC_DEC_VRENORM rc_Process does
+  // not renormalise on the decode side: rc_RenormRun renormalises a run of
+  // RC_DEC_VRENORM lanes AFTER their bits, in a loop the compiler vectorises,
+  // and the block-length bits and the tail, which do not run through it, go
+  // through rc_ProcessR. misc/vrenorm.md has the measurements and the two
+  // mechanisms that shaped this; rc_config.inc has the knobs.
+
+  // rc_Process with the renorm BEFORE the bit, for the paths that need it
+  // that way. Without the pass, rc_Process already renormalises.
+  void rc_ProcessR( uint freq, uint& _bit ) {
+    if( RC_DEC_VRENORM ) rc_Renorm();
+    rc_Process( freq, _bit );
+  }
+
+#if RC_DEC_VRENORM
+
+  // One lane of the pass. Two compares give the shift count 0/8/16, the
+  // cursor moves by the byte count, the two shifts, and the bytes shifted in
+  // come from...
+#if RC_DEC_VRENORM_GATHER
+  // ...the row: every lane loads the dword at its new cursor, (1<<sh)-1 keeps
+  // the bytes that came in -- none, for an idle lane -- and the compiler
+  // makes the sixteen loads a gather. Under RC_DEC_ZSLOT an idle lane's
+  // index is the zero slot at zofs (RCio::zslot) instead. The load is legal
+  // for every lane: the window is inside the row by RC_SKIP>=4 above and the
+  // 0xFF pad below (rc_io.inc). See RC_DEC_VRENORM_GATHER for why this is
+  // not the default.
+  void rc_RenormV( uint zofs ) {
+    const uint r  = range;
+    const uint sh = ( uint(r<sTOP) + uint(r<gTOP) )*8;
+    const uint p  = tmpptr - (sh>>3);
+    const int  ix = (RC_DEC_ZSLOT && sh==0) ? int(zofs) : int(p+1);
+#if RC_DEC_VRENORM_PROBE==1
+    const uint w  = p;   // the probe: no load at all
+#else
+    const uint w  = (uint&)tmpbase[ix];
+#endif
+    tmpptr = p;
+    code   = (code<<sh) | (w & ((1u<<sh)-1));
+    range  = r<<sh;
+  }
+#else
+  // ...vwin, the lane's cached refill window: the dword ending at its cursor,
+  // `vwin == (uint&)tmpbase[tmpptr-3]` on entry to every pass -- the
+  // invariant misc/dec_renorm.md's shape 9 kept in scalar lane state. The
+  // cursor's own byte is the window's top byte, so the top sh bits are what
+  // an sh-bit shift wants, and (win>>16)>>(16-sh) is 0 for a lane that
+  // shifted nothing. No memory but the lane arrays: the refill below reloads
+  // the window afterwards, and only for the lanes that moved it.
+  void rc_RenormV( uint zofs ) {
+    const uint r  = range;
+    const uint sh = ( uint(r<sTOP) + uint(r<gTOP) )*8;
+    tmpptr -= sh>>3;
+    code  = (code<<sh) | ((vwin>>16)>>(16-sh));
+    range = r<<sh;
+    vsh   = sh;
+  }
+#endif
+
+  // One lane's window reload -- also how the invariant is seeded at block
+  // start. tmpptr-3 is inside the row: rc_io.inc asserts the pad covers it.
+  void rc_Refill( void ) {
+#if RC_DEC_VRENORM_PROBE==1
+    vwin = tmpptr;       // the probe: no load from the row at all
+#else
+    vwin = *(const uint*)(tmpbase + tmpptr - 3);
+#endif
+  }
+
+  // One lane off the run's mask: the lowest set bit, or the run's first slot
+  // when there is none -- whose window did not move, so the reload is the
+  // same dword again. tzcnt of 0 is 32 on BMI and the & folds it to slot 0.
+  void rc_RefillOne( uint& msk ) {
+    const uint i = ( msk ? uint(__builtin_ctz(msk)) : 32u ) & (RC_DEC_VRENORM-1);
+    msk &= msk-1;
+    rc_Refill( rcidx+i );
+  }
+
+  // The refill of the run starting at this lane: the lanes with vsh != 0 as
+  // a bit per lane, RC_DEC_VRENORM_SLOTS of them reloaded unconditionally --
+  // ~1.2 of 16 shift in a group -- and the rest by RC_DEC_VRENORM_TAIL's
+  // shape. This is the part that does NOT vectorise: on this box, or on any
+  // core that serialises gathers, sixteen loads for 1.2 lanes cost more than
+  // the pass buys. And it must write nothing the scalar steps read: a store
+  // whose address is known only after the mask -- forty cycles after the
+  // group's last decision -- stalls every later load of that array in the
+  // memory disambiguation logic, whatever the slack; a refill into code[]
+  // measured 50 cycles a group (misc/vrenorm.md 3). vwin[] is read by the
+  // next pass, a group later, and by then the address is old.
+  void rc_RefillRun( void ) {
+    uint msk = 0;
+#if RC_DEC_VRENORM_PROBE==3
+    // the probe: no refill at all
+#else
+#if defined(__AVX512VL__) && RC_DEC_VRENORM>=8
+    for( uint c=0; c<RC_DEC_VRENORM; c+=8 )
+      msk |= uint(_mm256_cmpneq_epi32_mask( _mm256_loadu_si256( (const __m256i*)&vsh[rcidx+c] ), _mm256_setzero_si256() )) << c;
+#elif defined(__AVX2__) && RC_DEC_VRENORM>=8
+    for( uint c=0; c<RC_DEC_VRENORM; c+=8 )
+      msk |= uint(_mm256_movemask_ps( _mm256_castsi256_ps( _mm256_cmpeq_epi32( _mm256_loadu_si256( (const __m256i*)&vsh[rcidx+c] ), _mm256_setzero_si256() ) ) ) ^ 0xFF) << c;
+#else
+    for( uint k=0; k<RC_DEC_VRENORM; k++ ) msk |= uint(vsh[rcidx+k]!=0) << k;
+#endif
+#if RC_DEC_VRENORM_PROBE==4
+    vwin = msk;          // the probe: the mask alone, kept live
+#else
+    rc_RefillOne( msk );
+    if( RC_DEC_VRENORM_SLOTS>=2 ) rc_RefillOne( msk );
+    if( RC_DEC_VRENORM_SLOTS>=3 ) rc_RefillOne( msk );
+    if( RC_DEC_VRENORM_SLOTS>=4 ) rc_RefillOne( msk );
+#if RC_DEC_VRENORM_TAIL==0
+    if( msk ) do { rc_RefillOne( msk ); } while( msk );
+#elif RC_DEC_VRENORM_TAIL==1
+    if( msk ) for( uint k=0; k<RC_DEC_VRENORM; k++ ) rc_Refill( rcidx+k );
+#endif
+#endif
+#endif
+  }
+
+  // The pass over the run of RC_DEC_VRENORM lanes starting at this one, then
+  // its refill. A loop for the compiler to vectorise -- RC_DEC_VRENORM_VF
+  // lanes wide, and kept away from the unroller, which would otherwise
+  // scalarise it before the vectoriser ever saw it.
+  void rc_RenormRun( uint zofs ) {
+#if RC_DEC_VRENORM_VF>1
+    RC_LOOP_PRAGMA( clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable) )
+#else
+    RC_LOOP_PRAGMA( clang loop vectorize(disable) unroll(full) )   // the probe: scalar, unrolled
+#endif
+    for( uint k=0; k<RC_DEC_VRENORM; k++ ) rc_RenormV( rcidx+k, zofs );
+#if RC_DEC_VRENORM_PROBE==2
+    // the probe: the pass twice over -- the second finds nothing to shift, so
+    // what it adds is the cost of a pass with nothing to wait for
+    RC_LOOP_PRAGMA( clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable) )
+    for( uint k=0; k<RC_DEC_VRENORM; k++ ) rc_RenormV( rcidx+k, zofs );
+#endif
+#if !RC_DEC_VRENORM_GATHER
+    rc_RefillRun();
+#endif
+  }
+
+#endif // RC_DEC_VRENORM
 #else
   void rc_Quit( void ) {
     if( f_DEC==0 ) {

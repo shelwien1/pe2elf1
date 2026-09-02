@@ -16,12 +16,11 @@ set gcc=C:\clangM10x\bin\clang++.exe
 set gcc=C:\clangN10x\bin\clang++.exe 
 
 rem ---- rc.inc -> rc_vecD.inc ----------------------------------------------
-rem  Uses the build's own compiler as the preprocessor: no second toolchain to
-rem  install, and no way for the generator and the compile to disagree about
-rem  %defs%. Nothing about the target is passed, and nothing needs to be --
-rem  the kernel depends on %defs% and nothing else, by construction; whatever
-rem  the compile has to decide for itself is left as a macro for it to define
-rem  (see model.inc).
+rem  Uses the build's own compiler as the preprocessor, with the build's own
+rem  -march: no second toolchain to install, and no way for the generator and
+rem  the compile to disagree about %defs% or the target -- the kernel carries
+rem  the scatter and the decoder's vector pass, chosen on __AVX512F__ and
+rem  friends, and RC_KERNEL_CONF (rc_config.inc) fingerprints both.
 rem
 rem  This runs BEFORE the PATH below is replaced, while sh is still findable.
 rem  Only the executable, not the rest of %gcc%: mk_kernel.sh preprocesses
@@ -29,8 +28,11 @@ rem  rc.inc, which includes nothing, and it word-splits $CPP -- so a quoted
 rem  -include argument would not survive the trip. mk_kernel.sh turns the
 rem  backslashes into slashes itself, because to sh a word without one is a
 rem  command name and not a path.
+set targ=haswell
+set targ=native
+set targ=skylake
 for /f "tokens=1" %%x in ("%gcc%") do set CPPEXE=%%x
-set CPP=%CPPEXE% -E
+set CPP=%CPPEXE% -E -march=%targ%
 sh mk_kernel.sh %defs%
 if errorlevel 1 (
   echo gc.bat: mk_kernel.sh failed -- refusing to build against a stale rc_vecD.inc
@@ -73,9 +75,6 @@ rem -mllvm -inline-threshold=0 -fno-inline-functions
 
 rem -fwhole-program -fno-unsafe-math-optimizations 
 
-set targ=haswell
-set targ=native
-set targ=skylake
 set arch=-march=%targ% -mtune=%targ% -fms-compatibility -fms-compatibility-version=19 -fms-extensions -Wno-ignored-attributes -m64 
 rem -mno-avx2 -mavx512f
 

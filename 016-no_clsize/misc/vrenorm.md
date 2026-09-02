@@ -37,6 +37,13 @@ their bits are in.
   never read on the decode side.  `rc_Renorm`'s decode arm keeps the
   one-branch shape minus the fold, for the block-length bits and the tail,
   which `model1.inc` drives through `rc_ProcessR` (renorm, then process).
+  Everything below is a member function of the scalar coder in `rc.inc` --
+  `rc_RenormV`, `rc_Refill`, `rc_RefillOne`, `rc_RefillRun`, `rc_RenormRun`
+  -- written against one lane's fields, and mk_kernel.sh's chain turns them
+  into the lane-array macros `model1.inc` calls, exactly as it does for
+  `rc_Process`.  A function over a *run* of lanes reaches the other lanes'
+  slots by indexing them (`vsh[rcidx+c]`) and calls a per-lane function
+  with `rc_Refill( rcidx+i )`, which the generator leaves alone.
 - **Slots.** The lane arrays are laid out bit-major under the knob --
   `RC_SLOT(m*8+j) = j*NB + m` -- so the lanes finished by step `j` are a
   contiguous run.  A pass of `W` lanes fires every `W/NB` steps over the run
@@ -47,12 +54,14 @@ their bits are in.
   unroller scalarises it before the vectoriser ever sees it):
 
   ```c
-  r   = range[k];
-  sh  = ((r<sTOP) + (r<gTOP)) * 8;               // 0, 8, 16
-  tmpptr[k] -= sh>>3;
-  code[k]    = (code[k]<<sh) | ((vwin[k]>>16)>>(16-sh));
-  range[k]   = r<<sh;
-  vsh[k]     = sh;
+  void rc_RenormV( uint zofs ) {          // one lane; rc_RenormRun loops it
+    const uint r  = range;
+    const uint sh = ( uint(r<sTOP) + uint(r<gTOP) )*8;   // 0, 8, 16
+    tmpptr -= sh>>3;
+    code  = (code<<sh) | ((vwin>>16)>>(16-sh));
+    range = r<<sh;
+    vsh   = sh;
+  }
   ```
 
   `vwin[k]` is the dword ending at the lane's cursor,
@@ -152,7 +161,7 @@ the baseline in the rotation as the noise control.
 | `PROBE=1`, gather shape: the pass, no load | 48.48 | **+6.4%** | 49.10 48.74 48.92 40.79 47.83 48.22 |
 | `PROBE=3`: the window pass, no refill | 48.24 | **+5.8%** | 46.84 48.22 48.30 48.26 48.74 46.43 |
 | `PROBE=4`: ... and the lane mask | 46.22 | +1.4% | 47.26 48.14 45.18 44.17 44.96 47.47 |
-| `PROBE=6`: ... and two slots, no loop | 46.34 | +1.7% | 46.38 46.30 45.61 46.14 46.54 46.49 |
+| `SLOTS=2, TAIL=2`: ... and two slots, no loop | 46.34 | +1.7% | 46.38 46.30 45.61 46.14 46.54 46.49 |
 | `RC_DEC_VRENORM=16`, two slots and the loop | 43.14 | −5.4% | 42.98 42.97 43.23 43.05 43.52 44.46 |
 | `RC_DEC_VRENORM=8`, two passes a group | 40.33 | −11.5% | 40.73 40.98 41.11 39.55 39.38 39.92 |
 | `GATHER=1`, the shape asked for | 33.26 | −27.0% | 33.10 33.44 33.39 33.40 33.03 33.13 |
@@ -168,7 +177,7 @@ warns about as much as the branch.  The second table is the slot count,
 |---|---|---|---|
 | base | **45.75** | -- | 45.70 44.79 45.80 45.25 45.88 46.29 |
 | base again | 45.41 | −0.8% | 45.35 45.46 43.80 45.46 43.06 45.81 |
-| `PROBE=6`: mask + two slots, no loop | 46.00 | +0.6% | 44.52 45.03 46.35 46.37 46.56 45.66 |
+| `SLOTS=2, TAIL=2`: mask + two slots, no loop | 46.00 | +0.6% | 44.52 45.03 46.35 46.37 46.56 45.66 |
 | `SLOTS=2`, loop for the rest (13% taken) | 42.95 | −6.1% | 43.03 43.17 43.28 42.53 42.86 42.68 |
 | `SLOTS=3`, loop (3.3% taken) | 44.23 | −3.3% | 44.00 43.89 44.47 45.16 43.15 44.74 |
 | `SLOTS=4`, loop (0.6% taken) | 43.61 | −4.7% | 44.52 42.10 44.90 42.07 42.70 44.79 |
@@ -189,7 +198,7 @@ reloads every window is worse at 13% taken (48 instructions a trip), and
 |---|---|---|---|
 | base | **44.70** | -- | 45.17 42.38 45.43 45.54 43.55 44.23 |
 | base again | 45.17 | +1.1% | 44.23 44.10 45.53 44.81 46.38 46.24 |
-| `PROBE=6`: mask + two slots, no tail at all | 46.03 | +3.0% | 45.77 46.35 46.29 46.84 45.19 45.38 |
+| `SLOTS=2, TAIL=2`: mask + two slots, no tail at all | 46.03 | +3.0% | 45.77 46.35 46.29 46.84 45.19 45.38 |
 | `SLOTS=4`, loop tail | 44.47 | −0.5% | 43.28 43.61 44.38 44.64 44.83 44.55 |
 | `SLOTS=4`, straight-line tail (`TAIL=1`) | 44.15 | −1.2% | 44.17 42.13 44.28 44.13 43.02 44.76 |
 | `SLOTS=3`, straight-line tail | 43.29 | −3.2% | 44.53 41.56 43.30 43.28 43.14 43.64 |
@@ -231,8 +240,8 @@ Single runs of the probe ladder, the same box, for the shape of the cost:
 | `PROBE=1`, gather shape | 48.4 | the pass with no load at all |
 | `PROBE=3` | 46.8 | the window pass, no refill |
 | `PROBE=4` | 47.3 | ... and the lane mask |
-| `PROBE=5` | 43.3 | ... and one slot |
-| `PROBE=6` | 45.5 | ... and two slots |
+| `SLOTS=1, TAIL=2` | 43.3 | ... and one slot |
+| `SLOTS=2, TAIL=2` | 45.5 | ... and two slots |
 | `RC_DEC_VRENORM=16` | 42.5 | the whole thing |
 | `RC_DEC_VRENORM=8` | 37.9 | two passes a group |
 | `GATHER=1`, index `uint` | 33.1 | the shape asked for |
@@ -250,6 +259,20 @@ gcc builds and roundtrips `RC_DEC_VRENORM=16` too; its pragma is clang's,
 so it vectorises or not as it pleases.
 
 ## 6. Things learned about the tools
+
+- The kernel's functions are written once, per lane, in `rc.inc`, and
+  mk_kernel.sh makes the macros; a function over a run of lanes indexes the
+  other slots explicitly and the generator passes that through.  What it
+  cost to get there: the generator's call-threading regex put its `rcidx`
+  lookahead after a `\s*`, which backtracked around it (fixed in
+  `Lib3/rc_soa.pl`, and mk_kernel.sh now checks for the symptom), and a
+  `_Pragma` cannot go through the preprocessor into a macro body -- it comes
+  out as a `#pragma` line -- so the loop pragma is `RC_LOOP_PRAGMA(...)`,
+  undefined while the kernel is generated and a `_Pragma` at compile time.
+- The generator now sees the target: build.sh and gc.bat hand mk_kernel.sh
+  the compile's `-march`, so the scatter and the lane-mask intrinsics resolve
+  in rc.inc like everything else, and `RC_KERNEL_CONF` carries
+  `RC_SCATTER_W` and friends so a mismatch is a build error.
 
 - `#pragma clang loop vectorize_width(N)` needs `unroll(disable)` beside it
   or the loop is fully unrolled first and never vectorised; SLP does not form

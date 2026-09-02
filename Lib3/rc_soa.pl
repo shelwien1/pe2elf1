@@ -105,10 +105,14 @@ my $fieldpat = join '|', map { quotemeta } @fields;
 for my $l (@body) {
   next if $l =~ m{^/\* dropped};
   next if $l =~ /^void \w+\( uint rcidx/;      # signatures stay as emitted
-  # calls of our own void functions get rcidx threaded through
+  # calls of our own void functions get rcidx threaded through -- unless the
+  # call names its lane itself (`rc_Refill( rcidx+i )`, a function over a run
+  # of lanes reaching another lane's slot), which is what the lookahead is
+  # for. It has to come BEFORE the \s*: after it, a failed lookahead just
+  # makes \s* give the space back and match again in front of it.
   for my $fn (keys %fname) {
     $l =~ s/\b\Q$fn\E\(\s*\)/$fn(rcidx)/g;
-    $l =~ s/\b\Q$fn\E\(\s*(?!rcidx\b)/$fn( rcidx, /g;
+    $l =~ s/\b\Q$fn\E\((?!\s*rcidx\b)\s*/$fn( rcidx, /g;
   }
   # the RC_IO byte cursor becomes the prelude's flat one
   $l =~ s/\bget\(\s*\)/get1(rcidx)/g;

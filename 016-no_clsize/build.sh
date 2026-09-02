@@ -106,11 +106,14 @@ done
 DIRNAM=$(basename "$PWD")
 
 #--- the generated vector coder ----------------------------------------------
-# rc.inc -> rc_vecD.inc, against this build's -D set. Nothing else: the kernel
-# is target-independent by construction, so whatever preprocessor runs it is
-# free to disagree with the compile about the ISA (see model.inc). Not
-# committed: it is derived, and derived differently for every -D set.
-CPP="$CXX -E" ./mk_kernel.sh "$@"
+# rc.inc -> rc_vecD.inc, against this build's -D set AND its target: the
+# kernel carries the scatter that commits the staged store and the decoder's
+# vector pass, whose shapes are chosen on __AVX512F__ and friends, so the
+# generator's preprocessor is the compile's own with the compile's own -march.
+# RC_KERNEL_CONF fingerprints both. Not committed: it is derived, and derived
+# differently for every -D set and every target.
+# shellcheck disable=SC2086
+CPP="$CXX -E $archflags" ./mk_kernel.sh "$@"
 
 #--- compile -----------------------------------------------------------------
 src="coder.cpp FSM.cpp misc/model0.cpp misc/model1.cpp misc/timer.cpp"

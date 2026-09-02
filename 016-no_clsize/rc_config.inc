@@ -115,11 +115,14 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // whole reason build.sh takes its -D set as arguments and gc.bat has one
 // %defs%.
 //
-// Only knobs that reach the GENERATOR belong here. Nothing target-derived:
-// the kernel does not depend on the ISA, and anything the compile decides for
-// itself is a macro the compile defines (see model.inc). RC_VECOUT and
-// RC_CARRYLESS are excluded too -- mk_kernel.sh forces them, and the compile
-// sets RC_CARRYLESS both ways.
+// Every knob that reaches the GENERATOR belongs here, and since build.sh and
+// gc.bat hand mk_kernel.sh the compile's own -march that includes the ones
+// derived from the target: RC_SCATTER and RC_SCATTER_W resolve against
+// __AVX512F__ and friends while rc.inc is preprocessed, exactly as they do
+// in the compile, and a kernel generated for one target and compiled for
+// another fails this assert instead of miscommitting. RC_VECOUT and
+// RC_CARRYLESS are excluded -- mk_kernel.sh forces them, and the compile sets
+// RC_CARRYLESS both ways.
 #define RC_KERNEL_CONF ( RC_RCNUM + 64*RC_LOWBYTES                        \
                        + 8192*RC_CODBYTES                                 \
                        + 1048576*RC_VECSIZE + RC_BLKSIZE/16               \
@@ -127,7 +130,12 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 33554432*RC_FOLD_RPRE                            \
                        + 13*RC_ENC_NSEL                                   \
                        + 17*RC_ENC_RENORM                                 \
-                       + 23*RC_DEC_VRENORM )
+                       + 23*RC_DEC_VRENORM                                \
+                       + 29*RC_DEC_VRENORM_VF + 31*RC_DEC_VRENORM_SLOTS   \
+                       + 37*RC_DEC_VRENORM_TAIL + 41*RC_DEC_VRENORM_GATHER \
+                       + 43*RC_DEC_ZSLOT + 47*RC_DEC_VRENORM_PROBE         \
+                       + 53*RC_SCATTER + 59*RC_SCATTER_W                  \
+                       + 61*RC_SCATTER_SKIP )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -143,7 +151,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
 // 1 = ShiftLow stages its store in the lane arrays instead of performing it,
 // and the model commits a whole group of them with one vpscatterdd -- see
-// stcl/stad in rc.inc and RC_FLUSHALL in model0.inc.
+// stcl/stad and rc_FlushAll in rc.inc, and the group loop in model0.inc.
 //
 // The store is the coder's one hot store, and it goes to a per-lane address.
 // SLP -- which is what handles the unrolled RCNUM-lane sweep, since the sweep
@@ -200,6 +208,11 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #  define RC_SCATTER ((RC_RCNUM%16)==0)
 # endif
 #endif
+
+// Lanes per rc_FlushAll call: a scatter's width, or the whole group where
+// the commit is the scalar block (and rc_FlushAll is nothing at all when the
+// build is not staging).
+#define RC_FLUSH_LANES ( RC_SCATTER_W ? RC_SCATTER_W : RC_RCNUM )
 
 // What to do about the lanes that staged nothing. A ShiftLow with n==0 leaves
 // the cursor where it was, so the window it staged is written again by that
@@ -429,7 +442,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //       branch, no memory but the lane arrays. Then the lanes that shifted,
 //       ~1.2 of 16 a group, reload their window in scalar code off a bit
 //       mask: RC_DEC_VRENORM_SLOTS of them unconditionally, a loop for the
-//       rest. See model1.inc, and misc/vrenorm.md for how it got there.
+//       rest. See rc_RenormRun in rc.inc, and misc/vrenorm.md for how it
+//       got there.
 //
 // Why a pass and not the branchless shapes misc/dec_renorm.md buried: those
 // put the always-executed shifts and the refill load on each lane's own chain
@@ -492,6 +506,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        || 8%(RC_DEC_VRENORM/(RC_RCNUM/8)) )
 #error "RC_DEC_VRENORM must divide RC_RCNUM, be a multiple of RC_RCNUM/8, and cover 1, 2, 4 or 8 steps"
 #endif
+// ...and the steps between passes: a pass covers W lanes = W/NB bit positions
+#define RC_DEC_VRENORM_STEPS ( RC_DEC_VRENORM/(RC_RCNUM/8) )
 
 // Vector width for the pass's loop: the width the compiler is TOLD to use,
 // through `#pragma clang loop vectorize_width`. 8 is a ymm of dwords, and
@@ -542,6 +558,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //   0  a loop over what is left of the mask
 //   1  reload every window of the run, straight-line -- 3 instructions a
 //      lane, W lanes, behind the one branch. No loop in the group body.
+//   2  nothing: the probe that measures the slots alone. Garbage out.
 // The rare path's cost is its probability times its length either way;
 // what differs is what a loop does to the code around it. Measured in
 // misc/vrenorm.md: at SLOTS=4 the two are within a percent of each other
@@ -549,16 +566,25 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #ifndef RC_DEC_VRENORM_TAIL
 #define RC_DEC_VRENORM_TAIL 0
 #endif
+#if RC_DEC_VRENORM_TAIL<0 || RC_DEC_VRENORM_TAIL>2
+#error "RC_DEC_VRENORM_TAIL is 0, 1 or 2"
+#endif
 
-// Probes on the pass, for taking it apart. 0 is the pass. 1 leaves the
-// gather out -- the refill takes the cursor for data, so the decode is
-// garbage but the block structure survives and the work is the same. 2 runs
-// the pass twice, back to back; the second finds nothing to shift, so what
-// it adds is the cost of a pass with nothing to wait for. 3..6 cut the
-// refill down: none, the mask alone, one slot, two slots -- garbage out.
-// RC_DEC_VRENORM_VF=1 is one more: the same pass, scalar, fully unrolled.
+// Probes on the pass, for taking it apart -- all garbage out, the block
+// structure survives and the work is the same. 0 is the pass.
+//   1  no load from the row: the refill (or the gather shape's load) takes
+//      the cursor for data
+//   2  the pass twice, back to back; the second finds nothing to shift, so
+//      what it adds is the cost of a pass with nothing to wait for
+//   3  no refill at all
+//   4  the lane mask alone, kept live
+// With RC_DEC_VRENORM_TAIL=2 and RC_DEC_VRENORM_SLOTS the slots come next,
+// and RC_DEC_VRENORM_VF=1 is one more: the same pass, scalar, unrolled.
 #ifndef RC_DEC_VRENORM_PROBE
 #define RC_DEC_VRENORM_PROBE 0
+#endif
+#if RC_DEC_VRENORM_PROBE<0 || RC_DEC_VRENORM_PROBE>4
+#error "RC_DEC_VRENORM_PROBE is 0..4"
 #endif
 
 // 1 = the pass's gather does not read a lane that shifted nothing: its index

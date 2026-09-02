@@ -140,7 +140,7 @@ the loop.
   `cty[ctx]` and keeps the context out of a register.  It runs for the last
   <16 bits of a block, so it is not measurable -- but it is the same fix and
   it is free.
-- **`rc_Init` runs `RC_STAGE_INIT` before the `f_DEC` test** and the kernel
+- **`rc_Init` seeds the staging before the `f_DEC` test** and the kernel
   prelude declares the encoder's eleven lane arrays for the decoder to carry.
   `speed_plan_next.md` §3 wanted an `f_DEC` guard in the generator's emission.
   Since then `RC_KALIGN` is empty on the decoder side and the alignment was

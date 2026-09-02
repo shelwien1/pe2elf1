@@ -7,13 +7,14 @@
 #   rc_macro.pl  functions into #define/#enddef blocks
 #   defines.pl   ... into real multi-line macros
 #
-# The output depends on the RC_* configuration and on NOTHING ELSE -- not on
-# the target, not on which compiler preprocesses it. Anything the compile has
-# to decide for itself (whether the store is staged, and what commits it) is
-# left as a macro for the compile to define; see model.inc. So build.sh and
-# gc.bat can run this with whatever preprocessor is at hand, as long as the -D
-# set matches. Nothing here is committed.
-#   mk_kernel.sh [-Dname=value ...]
+# The output depends on the RC_* configuration and on the TARGET: rc.inc
+# chooses the scatter that commits the staged store and the decoder's vector
+# pass on __AVX512F__ and friends, so $CPP has to be the compile's compiler
+# with the compile's -march -- build.sh and gc.bat pass it -- and
+# RC_KERNEL_CONF (rc_config.inc) fingerprints the result, so a kernel
+# generated for one target and compiled for another is a build error.
+# Nothing here is committed.
+#   CPP="clang++ -E -march=native" mk_kernel.sh [-Dname=value ...]
 set -e
 cd "$(dirname "$0")"
 CPP="${CPP:-cc -E}"
@@ -64,6 +65,17 @@ grep -q '\[(rcidx)\]' rc_vecD.inc || {
   echo "  kernel does not parenthesise macro parameters. Sync Lib3 with this" >&2
   echo "  directory; an old generator builds fine and miscodes any call that" >&2
   echo "  passes an expression (RC_ENC_NSEL=1, say)." >&2
+  exit 1
+}
+
+# And the third way a stale rc_soa.pl produces a kernel that compiles wrongly
+# or not at all: threading rcidx into a call that already names its lane
+# (`rc_Refill( rcidx+i )` in rc.inc's vector pass), which a lookahead that
+# came after the \s* let through. Only present when the pass is generated.
+grep -q '( *(rcidx), *(rcidx)' rc_vecD.inc && {
+  echo "mk_kernel.sh: ../Lib3/rc_soa.pl is out of date -- the generated" >&2
+  echo "  kernel threads rcidx into a call that already passes it. Sync Lib3" >&2
+  echo "  with this directory." >&2
   exit 1
 }
 

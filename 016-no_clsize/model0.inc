@@ -200,12 +200,12 @@ struct Model<0> : Coroutine {
         // to lane 0 -- the flag bit stages it, then j=0 stages it again --
         // so these commit per bit rather than per group.
         bit = (blksize!=BLKSIZE);
-        rc_Process( 0, hSCALE, bit ); RC_FLUSH_ONE( 0 );
+        rc_Process( 0, hSCALE, bit ); rc_FlushOne( 0 );
 
         if( bit ) {
           for( j=0; j<16; j++ ) {
             bit = (blksize>>(15-j))&1;
-            rc_Process( j%RCNUM, hSCALE, bit ); RC_FLUSH_ONE( j%RCNUM );
+            rc_Process( j%RCNUM, hSCALE, bit ); rc_FlushOne( j%RCNUM );
           }
         }
 
@@ -215,7 +215,9 @@ struct Model<0> : Coroutine {
 
           // One rc_Process per lane per group, so the RCNUM staged stores
           // are RCNUM distinct addresses in RCNUM distinct rows and the
-          // group can commit them together.
+          // group can commit them together -- RC_FLUSH_LANES at a time,
+          // which is a scatter's width, or the whole group as scalar stores,
+          // or nothing at all when the build is not staging.
           for( i=0; i<blksize1; i+=RCNUM ) {
             RC_UNROLL
             for( j=0; j<RCNUM; j++ ) {
@@ -223,14 +225,15 @@ struct Model<0> : Coroutine {
               uint f = b&0x7FFF; b >>= 15;
               rc_Process( j, f, b );
             }
-            RC_FLUSHALL();
+            RC_UNROLL
+            for( j=0; j<RCNUM; j+=RC_FLUSH_LANES ) rc_FlushAll( j );
           }
 
           // fewer than RCNUM bits left: consecutive i, so still one lane each
           for( ; i<blksize0; i++ ) {
             uint b = pbit[i];
             uint f = b&0x7FFF; b >>= 15;
-            rc_Process( i%RCNUM, f, b ); RC_FLUSH_ONE( i%RCNUM );
+            rc_Process( i%RCNUM, f, b ); rc_FlushOne( i%RCNUM );
           }
         }
 
