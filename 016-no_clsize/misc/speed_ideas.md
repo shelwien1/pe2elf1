@@ -111,10 +111,10 @@ instead of two, which is the mechanism if it holds.  Measured this round, four
 paired rounds, best of 4 encode / 5 decode passes:
 
 ```
-              enc MB/s            dec MB/s            enwik8
-  RCNUM=16    66.25 67.50 68.02   37.69 36.58 36.41   62,487,196
-  RCNUM=32    65.60 57.54 66.08   34.03 32.41 33.72   62,512,348
-  median      67.50 -> 65.60      36.58 -> 33.72      +25,152
+              enc MB/s                  dec MB/s                  enwik8
+  RCNUM=16    66.25 67.50 68.02 65.87   37.69 36.58 36.41 36.70   62,487,196
+  RCNUM=32    65.60 57.54 66.08 65.13   34.03 32.41 33.72 33.64   62,512,348
+  median      66.9 -> 65.4              36.6 -> 33.7              +25,152
 ```
 
 It does not hold.  Decode is **9-10% slower** at RCNUM=32 in every paired
