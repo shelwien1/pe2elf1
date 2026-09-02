@@ -85,6 +85,15 @@ struct Transformer32 {
   size_t state_bytes() const;
   void save_state(void* dst) const;
   void load_state(const void* src);
+
+  // Re-quantizes the current weights back into the shipped file format
+  // (FX2TFWC2) and writes them, so a later run can be started from them with
+  // the weights argument.  The round trip is lossy in exactly one way: the
+  // file stores int4 weights with a per-row scale, so each row is re-fitted to
+  // max|w|/7 and the 15 levels, the same quantizer the checkpoint was trained
+  // under.  Activation scales, config and rope.inv_freq are carried through
+  // from whatever the model was loaded from.
+  bool save_weights(const char* path) const;
   void zero_grads();
   const float* grads() const;
   float* grads();

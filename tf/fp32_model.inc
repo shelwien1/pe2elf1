@@ -313,6 +313,11 @@ struct ModelImpl {
   std::vector<float> rope_sin, rope_cos;
   size_t rope_len = 0;
   float inv_freq[32] = {};
+  // Tensors the fp32 forward pass has no use for but the file format requires:
+  // the activation scales of every quantized site, the config asserts and
+  // rope.inv_freq.  Carried through from load so save_weights can write a file
+  // the loaders accept.
+  std::unordered_map<std::string, WTensor> aux_;
 
   KimiState kst[9];
   VanState vst[3];
@@ -340,6 +345,7 @@ struct ModelImpl {
   }
 
   void load(const char* path, size_t rope_rows, uint64_t seed);
+  bool save(const char* path) const;
   void dequant(const WeightsFile& wf, const std::string& prefix, int d_out,
                int d_in, Lin* out);
   float* copy_f32(const WeightsFile& wf, const std::string& name,
@@ -400,6 +406,25 @@ void ModelImpl::load(const char* path, size_t rope_rows, uint64_t seed) {
                    : std::memcmp(magic, "FX2TFWC", 7) == 0
                        ? WeightsFile::load_compressed(path)
                        : WeightsFile::load(path);
+
+  // Keep the tensors the fp32 forward pass has no use for but the file format
+  // requires, so save() can write a file the loaders accept.
+  for (const auto& kv : wf.tensors) {
+    const std::string& n = kv.first;
+    const bool is_act =
+        n.size() > 26 &&
+        n.compare(n.size() - 26, 26, ".quantize_activation.scale") == 0;
+    const bool is_qkv = n.find(".quantize_queries.scale") != std::string::npos ||
+                        n.find(".quantize_keys.scale") != std::string::npos ||
+                        n.find(".quantize_values.scale") != std::string::npos;
+    // the per-row weight scales are kept as a starting point for save()
+    const bool is_row = n.size() > 13 &&
+                        n.compare(n.size() - 13, 13, ".weight.scale") == 0;
+    if (is_act || is_qkv || is_row || n == "config.ints" ||
+        n == "config.kimi" || n == "rope.inv_freq" ||
+        n == "embedding.weight.q")
+      aux_[n] = kv.second;
+  }
 
   {
     const WTensor& ci = wf.get("config.ints", DT_I32, {11});
@@ -1086,6 +1111,176 @@ void ModelImpl::adam_step(float lr, float wd, long tstep) {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// save: rebuild a weights file from the live fp32 parameters
+// ---------------------------------------------------------------------------
+
+namespace {
+
+WTensor mk_tensor(uint8_t dtype, std::vector<uint32_t> shape, bool alloc) {
+  WTensor t;
+  t.dtype = dtype;
+  t.shape = std::move(shape);
+  t.numel = 1;
+  for (uint32_t d : t.shape) t.numel *= d;
+  if (alloc) {
+    const size_t esz = dtype == DT_I8 ? 1 : (dtype == DT_BF16 ? 2 : 4);
+    t.data.assign(t.numel * esz, 0);
+  }
+  return t;
+}
+
+}  // namespace
+
+bool ModelImpl::save(const char* path) const {
+  WeightsFile wf;
+  std::vector<std::string> order;
+
+  auto add = [&](const std::string& name, WTensor&& t) {
+    wf.tensors[name] = std::move(t);
+    order.push_back(name);
+  };
+  // an activation scale / config tensor carried through from load
+  auto add_aux = [&](const std::string& name) -> bool {
+    auto it = aux_.find(name);
+    if (it == aux_.end()) {
+      fprintf(stderr, "fp32_model: %s was not kept at load\n", name.c_str());
+      return false;
+    }
+    wf.tensors[name] = it->second;
+    order.push_back(name);
+    return true;
+  };
+  auto add_f32 = [&](const std::string& name, std::vector<uint32_t> shape,
+                     const float* src) {
+    WTensor t = mk_tensor(DT_F32, std::move(shape), true);
+    memcpy(t.data.data(), src, sizeof(float) * t.numel);
+    add(name, std::move(t));
+  };
+  // one quantized site: re-fit each row to max|w|/7 and the 15 int4 levels
+  auto add_q = [&](const std::string& prefix, const Lin& L, bool with_act,
+                   bool reuse_scales = true) {
+    WTensor q = mk_tensor(DT_I8, {uint32_t(L.d_out), uint32_t(L.d_in)}, true);
+    WTensor sc = mk_tensor(DT_BF16, {uint32_t(L.d_out)}, true);
+    int8_t* qp = reinterpret_cast<int8_t*>(q.data.data());
+    uint16_t* sp = reinterpret_cast<uint16_t*>(sc.data.data());
+    // the scales this site was loaded with, where they still fit
+    auto pv = reuse_scales ? aux_.find(prefix + ".weight.scale") : aux_.end();
+    const uint16_t* prev =
+        (pv != aux_.end() && pv->second.numel == size_t(L.d_out))
+            ? pv->second.bf16_bits()
+            : nullptr;
+    for (int o = 0; o < L.d_out; o++)
+      quantize_row_int4(L.w + size_t(o) * L.d_in, L.d_in,
+                        qp + size_t(o) * L.d_in, &sp[o], prev ? prev[o] : 0);
+    add(prefix + ".weight.q", std::move(q));
+    add(prefix + ".weight.scale", std::move(sc));
+    return with_act ? add_aux(prefix + ".quantize_activation.scale") : true;
+  };
+
+  if (!add_aux("config.ints") || !add_aux("config.kimi")) return false;
+
+  {
+    // The embedding is the one site whose stored form differs from the file's:
+    // what is held here is the rms-normed row, the file holds the raw one.
+    // Re-quantizing the normed row is a genuine re-fit (no raw row quantizes
+    // to exactly a given normed one), so when the table has not been trained
+    // the originals are written back verbatim instead - which makes a save
+    // with training off a no-op rather than a small perturbation.
+    auto eq = aux_.find("embedding.weight.q");
+    auto es = aux_.find("embedding.weight.scale");
+    bool unchanged = eq != aux_.end() && es != aux_.end() &&
+                     eq->second.numel == size_t(V) * D &&
+                     es->second.numel == size_t(V);
+    if (unchanged) {
+      std::vector<float> row(D);
+      for (int c = 0; c < V && unchanged; c++) {
+        const float sc = bf16_to_f32(es->second.bf16_bits()[c]);
+        for (int i = 0; i < D; i++)
+          row[i] = float(eq->second.i8()[size_t(c) * D + i]) * sc;
+        rms_norm_vec(row.data(), row.data(), D);
+        if (memcmp(row.data(), tok_table + size_t(c) * D, sizeof(float) * D))
+          unchanged = false;
+      }
+    }
+    if (unchanged) {
+      wf.tensors["embedding.weight.q"] = eq->second;
+      order.push_back("embedding.weight.q");
+      wf.tensors["embedding.weight.scale"] = es->second;
+      order.push_back("embedding.weight.scale");
+    } else {
+      Lin emb;
+      emb.w = tok_table;
+      emb.d_out = V;
+      emb.d_in = D;
+      // not the loaded scales: those belong to the raw rows, whose magnitudes
+      // are unrelated to the normed ones held here
+      if (!add_q("embedding", emb, false, false)) return false;
+    }
+  }
+  if (!add_q("prior_embedding", prior_lin, true)) return false;
+  if (!add_q("unembedding", unembed, true)) return false;
+  add_f32("skip_connection_weights.value", {6}, skip_w);
+
+  for (int l = 0; l < NL; l++) {
+    const std::string b = "blocks." + std::to_string(l) + ".";
+    const std::string a = b + "attention.";
+    add_f32(b + "residual_stream_coefficient.value", {1}, &rsc[l]);
+    add_f32(b + "token_embedding_coefficient.value", {1}, &tec[l]);
+
+    if (KIMI[l]) {
+      const KimiLayer& L = kimi[layer2kimi[l]];
+      if (!add_q(a + "query_projection", L.qp, true) ||
+          !add_q(a + "key_projection", L.kp, true) ||
+          !add_q(a + "value_projection", L.vp, true) ||
+          !add_q(a + "output_projection", L.op, true) ||
+          !add_q(a + "forget_gate_projection.up", L.fg_up, true) ||
+          !add_q(a + "forget_gate_projection.down", L.fg_down, true) ||
+          !add_q(a + "output_gate_projection.up", L.og_up, true) ||
+          !add_q(a + "output_gate_projection.down", L.og_down, true))
+        return false;
+      add_f32(a + "beta_projection.weight", {NH, D}, L.beta_w);
+      const char* convs[3] = {"query_convolution.weight",
+                              "key_convolution.weight",
+                              "value_convolution.weight"};
+      const float* wts[3] = {L.wt_q, L.wt_k, L.wt_v};
+      for (int c = 0; c < 3; c++) {  // stored tap-major, the file wants [D][4]
+        WTensor t = mk_tensor(DT_F32, {D, 4}, true);
+        float* p = reinterpret_cast<float*>(t.data.data());
+        for (int ch = 0; ch < D; ch++)
+          for (int j = 0; j < 4; j++) p[ch * 4 + j] = wts[c][j * D + ch];
+        add(a + convs[c], std::move(t));
+      }
+      add_f32(a + "dt_bias", {D}, L.dt_bias);
+      add_f32(a + "output_fused_norm_gate.weight", {DH}, L.gn_w);
+      add_f32(a + "log_baseline_decay_rate", {NH}, L.log_decay);
+    } else {
+      const VanLayer& L = van[layer2van[l]];
+      if (!add_q(a + "query_projection", L.qp, true) ||
+          !add_q(a + "key_projection", L.kp, true) ||
+          !add_q(a + "value_projection", L.vp, true) ||
+          !add_q(a + "output_projection", L.op, true) ||
+          !add_aux(a + "quantize_queries.scale") ||
+          !add_aux(a + "quantize_keys.scale") ||
+          !add_aux(a + "quantize_values.scale"))
+        return false;
+    }
+    if (!add_q(b + "mlp.up", mlp_up[l], true) ||
+        !add_q(b + "mlp.down", mlp_down[l], true))
+      return false;
+  }
+
+  // inv_freq must precede the tables, which carry no payload: the decoder
+  // recomputes them from it.  Always the full length, so the saved file is
+  // interchangeable with the shipped one however short this run's cap was.
+  if (!add_aux("rope.inv_freq")) return false;
+  add("rope.sin", mk_tensor(DT_F32, {uint32_t(ROPE_LEN), 32}, false));
+  add("rope.cos", mk_tensor(DT_F32, {uint32_t(ROPE_LEN), 32}, false));
+
+  return write_weights_v2(path, wf, order);
+}
+
 Transformer32::Transformer32(const char* weights_path, size_t rope_rows,
                              uint64_t init_seed)
     : impl(new ModelImpl()) {
@@ -1119,6 +1314,10 @@ void Transformer32::zero_grads() {
 }
 const float* Transformer32::grads() const { return impl->grad.data(); }
 float* Transformer32::grads() { return impl->grad.data(); }
+
+bool Transformer32::save_weights(const char* path) const {
+  return impl->save(path);
+}
 
 size_t Transformer32::state_bytes() const { return impl->state_size(); }
 void Transformer32::save_state(void* dst) const { impl->state_save(dst); }

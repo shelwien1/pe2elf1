@@ -107,7 +107,14 @@ ALIGN(64) BinaryMixer mixer[32];
 
 int main(int argc, char** argv) {
   if( argc<4 ) {
-    fprintf(stderr, "usage: coder0 c|d <input> <output> [weights.tfwc2]\n");
+    fprintf(stderr,
+      "usage: coder0 c|d <input> <output> [weights_in] [weights_out]\n"
+      "  weights_in   the model to start from; without it, 6m-q4-fp32.tfwc2\n"
+      "               then models/6m-q4-fp32.tfwc2.  Naming a file that does\n"
+      "               not exist runs PPMD alone.\n"
+      "  weights_out  write the model back out when the file is done, so a\n"
+      "               later run can start from it (needs TF_FP32=1; with\n"
+      "               TF_TRAIN it is the trained model that gets written).\n");
     return 1;
   }
 #if defined(__SSE3__)||defined(__x86_64__)||defined(_M_X64)
@@ -232,5 +239,15 @@ int main(int argc, char** argv) {
     rc.FinishEncode();
   fclose(g);
   fclose(f);
+
+  // The model both sides end with is the same, so either can write it out;
+  // saving from both and comparing the files is a check that they agree.
+  if( argc>5 && tf.Ready() ) {
+    if( tf.SaveWeights(argv[5]) )
+      fprintf(stderr, "coder0: wrote the final model to %s\n", argv[5]);
+    else
+      return 4;
+  }
+
   return 0;
 }

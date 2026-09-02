@@ -10,6 +10,7 @@
 #include "weights_io.h"
 #include "weights_io.inc"
 #include "weights_io_compressed.inc"
+#include "weights_write.inc"
 #include "weights_init.inc"
 
 #if TF_FP32

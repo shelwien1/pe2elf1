@@ -615,6 +615,20 @@ struct Transformer {
 
   bool Ready() const { return net_!=0; }
 
+  // Writes the model as it stands to a weights file, so a later run can start
+  // from it.  Only the fp32 engine can: the packed one keeps its weights inside
+  // its arenas, in a layout the file format cannot express.
+  bool SaveWeights(const char* path) const {
+#if TF_FP32
+    return net_ && net_->save_weights(path);
+#else
+    (void)path;
+    fprintf(stderr, "coder0: saving weights needs TF_FP32=1 (the packed engine "
+                    "has no plain-float copy to write)\n");
+    return false;
+#endif
+  }
+
   // Feeds the byte that was just coded together with PPMD's distribution over
   // the next byte, and writes the transformer's distribution over the next
   // byte into probs[256] (zero outside the alphabet).  Returns false at the

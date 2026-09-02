@@ -130,3 +130,15 @@ the transformer is correct under).  book1000, all round-tripping:
 Everything is within 2 bytes of the same configuration under the old
 multi-TU -Ofast build, so the tables above still stand.  Edge cases (empty,
 1 byte, 20 KB of random, all 256 byte values) all round-trip.
+
+Saving the final weights (5th argument), FX2TFWC2, the format they are read
+from.  Rows keep the scale they were loaded with where it still covers them,
+and an untrained embedding is written back verbatim, so a save with training
+off is a byte-exact no-op; save(load(save(X))) == save(X) byte for byte, which
+is what verifies the encoder against the decoder it mirrors.
+
+Train on a 32 KB slice of book1 disjoint from book1000, save, reuse:
+  book1000     shipped weights frozen 1735   trained weights frozen 1727
+  32 KB slice  shipped weights frozen 11026  trained weights frozen 10973
+                                             (online, one pass: 10418)
+File sizes: shipped 2930652, re-saved untrained 2930603, trained 2930960.

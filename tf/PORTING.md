@@ -69,6 +69,19 @@ Only seven changes were made, all mechanical:
 No numerical change: with the cap left at 0 the engine is bit-identical to the
 original.
 
+## weights_write.inc
+
+Also not from the submission: the encoder for the FX2TFWC2 format, the mirror
+of the decoder in `weights_io_compressed.inc`. Same range coder, same model
+set and sizes, same shift-5 probability update, same MSB-first bit trees, and
+the metadata, names and four payload encodings written in the order
+`load_v2()` reads them. `rope.sin` / `rope.cos` carry no payload — the decoder
+recomputes them from `rope.inv_freq`, which therefore has to be written first.
+
+`save(load(save(X)))` being byte-identical to `save(X)` is what verifies it
+against the decoder: any disagreement in the coder or the models would not
+survive the round trip.
+
 ## fp32_model.cpp
 
 `fp32_model.{h,cpp}` is not from the submission - it is a plain fp32
@@ -78,7 +91,10 @@ dequantizes every weight once at load (`w = q * row_scale`) and drops the
 activation quantizers entirely, so the forward pass is ordinary floating point
 and every parameter is a plain float in one contiguous arena. `weights()` /
 `weight_count()` expose that arena: 5,897,145 floats, copy it to back the model
-up and copy it back to restore.
+up and copy it back to restore. `save_weights()` writes it out as a weights
+file instead, re-quantizing to int4 per row; it keeps the scale a row was
+loaded with wherever that still covers the row, so a save with nothing trained
+reproduces the file it read.
 
 Differences from the quantized path, all of them consequences of removing the
 fake quantization:

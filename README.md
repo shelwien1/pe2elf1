@@ -34,21 +34,52 @@ breaks otherwise.
 ## Use
 
 ```sh
-./coder0 c <input> <output> [weights.tfwc2]
-./coder0 d <input> <output> [weights.tfwc2]
+./coder0 c <input> <output> [weights_in] [weights_out]
+./coder0 d <input> <output> [weights_in] [weights_out]
 ```
 
-Without the fourth argument the weights are looked up as `6m-q4-fp32.tfwc2`
-then `models/6m-q4-fp32.tfwc2`. If no weights file is found, or the input's
-alphabet does not fit the model's 205 tokens, the transformer is disabled and
-coder0 runs on PPMD alone — still lossless, just without the second model.
-(A weights file that exists but is corrupt is fatal: the fx2 loader exits the
-process rather than reporting an error.) Naming a file that does not exist is
-the supported way to ask for that:
+`weights_in` is the model to start from; without it the weights are looked up
+as `6m-q4-fp32.tfwc2` then `models/6m-q4-fp32.tfwc2`. If no weights file is
+found, or the input's alphabet does not fit the model's 205 tokens, the
+transformer is disabled and coder0 runs on PPMD alone — still lossless, just
+without the second model. (A weights file that exists but is corrupt is fatal:
+the fx2 loader exits the process rather than reporting an error.) Naming a file
+that does not exist is the supported way to ask for that:
 
 ```sh
 ./coder0 c book1000 out.ppmd none
 ```
+
+`weights_out` writes the model back out when the file is done, in the same
+compressed format it was read from, so a later run can start from it:
+
+```sh
+./coder0 c corpus corpus.z models/6m-q4-fp32.tfwc2 tuned.tfwc2   # built with TF_TRAIN=3
+./coder0 c other  other.z  tuned.tfwc2                           # reuse it
+```
+
+Both sides of the coder end with the same model, so either can write it; saving
+from the encoder and the decoder and comparing the two files is a check that
+they agree. It needs `TF_FP32=1` — the packed engine keeps its weights inside
+its arenas, in a layout the file format cannot express.
+
+Saving re-quantizes: the format stores int4 weights with a per-row scale, so
+each row is re-fitted to the 15 levels — the same quantizer the checkpoint was
+trained under. Two properties make that safe to chain. A row keeps the scale it
+was loaded with whenever that still covers it, and the embedding (the one site
+whose stored form differs from the file's — coder0 holds the rms-normed row,
+the file the raw one) is written back verbatim when it has not been trained, so
+**a save with training off is a byte-exact no-op**. And `save(load(save(X)))`
+equals `save(X)` byte for byte, which is also what verifies the encoder in
+`tf/weights_write.inc` against the decoder it mirrors.
+
+Measured, training on a 32 KB slice of book1 that does not contain book1000:
+
+| | book1000 | the 32 KB slice |
+|---|---|---|
+| shipped weights, frozen | 1735 | 11026 |
+| trained weights, frozen | **1727** | **10973** |
+| (online training, one pass) | | 10418 |
 
 ## Results
 
