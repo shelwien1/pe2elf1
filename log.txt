@@ -148,3 +148,18 @@ freshly initialized model rather than a file - the same thing a
 TF_LOAD_WEIGHTS=0 build does, and byte-identical to it (book1000: 2047 both
 ways).  The name is matched rather than opened: on Windows fopen("nul")
 succeeds, so the loader would read an empty file and die.
+
+Progress reporting.  The coding loop tests one mask per byte; the clock is read
+on a stride that retunes itself to a fixed wall-clock spacing, so the cost does
+not depend on the configuration:
+
+  ppmd only, book1 (5.5 us/byte)   stride settles at 16384   53 clock reads total
+  transformer frozen (7 ms/byte)   stride settles at 32      ~10 reads/second
+
+Both give a half-second update cadence.  clock_gettime costs 27.5 ns here
+(tsc clocksource), so the ppmd case spends about 1.5 us on timing across a
+4.3 second run.  Best-of-9 interleaved runs, ppmd only on book1:
+  PROGRESS=0  4.270s     PROGRESS=1  4.269s
+The medians differ by 0.8% in both directions across repeats - that is machine
+noise, the minima are identical.  Compressed output is byte-identical with and
+without progress.

@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>     // clock_gettime, for progress.inc's monotonic clock
 
 #include <algorithm>
 #include <initializer_list>
@@ -64,6 +65,8 @@ uint flen(FILE* f) {
 #include "ppmd2.hpp"
 
 #include "utils.inc"
+
+#include "progress.inc"
 
 #include "transformer.inc"
 
@@ -205,7 +208,13 @@ int main(int argc, char** argv) {
 
   uint history = 0;
 
+  Progress prog;
+  prog.Init(f_len);
+
   for( f_pos = 0; f_pos<f_len; f_pos++ ) {
+    if( (f_pos&prog.mask)==0 )
+      prog.Tick(f_pos);
+
     uint ctx = history&31;
     mixer[ctx].Mix(M.tf_probs_, M.ppmd_probs_, cmap);
 
@@ -258,6 +267,7 @@ int main(int argc, char** argv) {
 
   if( f_DEC==0 )
     rc.FinishEncode();
+  prog.Done(f_len);
   fclose(g);
   fclose(f);
 

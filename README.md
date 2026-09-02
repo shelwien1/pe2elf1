@@ -92,6 +92,34 @@ Measured, training on a 32 KB slice of book1 that does not contain book1000:
 | trained weights, frozen | **1727** | **10973** |
 | (online training, one pass) | | 10418 |
 
+## Progress
+
+Runs that last more than a second print one self-overwriting line on stderr,
+and a summary when they finish:
+
+```
+   45.3%  7424/16384  581 B/s  elapsed 0:12  remaining 0:15
+  16384 bytes in 0:34 (478 B/s)
+```
+
+The coding loop pays one AND and one compare per byte for this. The clock is
+read on a stride that retunes itself to stay a fixed wall-clock distance apart,
+because the per-byte cost of this program spans four orders of magnitude — a
+microsecond with PPMD alone, ten milliseconds with the whole transformer being
+trained — and a fixed stride that suits one end is useless at the other.
+Measured: PPMD alone on book1 settles at a 16384-byte stride and reads the
+clock **53 times in the whole 768 KB run**; the transformer settles at 32 bytes
+and reads it about ten times a second. Both give the same half-second update
+cadence, and the run time is unchanged (best-of-9 on the fastest path: 4.269s
+with progress, 4.270s without).
+
+The clock is `QueryPerformanceCounter` on Windows and
+`clock_gettime(CLOCK_MONOTONIC)` elsewhere, called directly — no `<windows.h>`,
+no `<chrono>`, since coder0 builds with `-nostdinc++` against the MSVC headers.
+`PROGRESS=0` compiles the whole thing out; `PROGRESS_INTERVAL` and
+`PROGRESS_DELAY` set the update cadence and how long a run must last before the
+first line.
+
 ## Results
 
 Compressed size in bytes (clang++-18, `-march=haswell`; `log.txt` has the
