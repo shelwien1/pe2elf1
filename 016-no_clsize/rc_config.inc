@@ -448,13 +448,18 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //   0                                   45.58 MB/s
 //   16, the pass alone (probe 3)        48.24     +5.8%    the ceiling
 //   16, pass + mask + 2 slots, no loop  46.34     +1.7%    (probe 6)
-//   16, the whole thing, 2 slots        43.14     -5.4%
+//   16, the whole thing, SLOTS=2        43.14     -5.4%
+//   16, SLOTS=3                         44.23     -3.3%    (second run, base 45.75)
+//   16, SLOTS=4                         43.61     -4.7%
 //   8,  two passes a group              40.33    -11.5%
 //   16, gather shape (GATHER=1)         33.26    -27.0%
 //
-// So the pass is real and the refill eats it. The default stays 0 until a
-// refill that costs less than the pass buys exists; RC_DEC_VRENORM_SLOTS
-// below is the lever, and the slot-count rows are in misc/vrenorm.md.
+// So the pass is real and the refill eats it: the mask and two slots cost
+// the +6% by themselves, and the loop behind them costs 3-6% more whether
+// it runs or not -- at SLOTS=4 it is taken in 0.6% of groups. The default
+// stays 0 until a refill that costs less than the pass buys exists;
+// RC_DEC_VRENORM_SLOTS and RC_DEC_VRENORM_TAIL below are the levers, and
+// misc/vrenorm.md has every row.
 //
 // W is the number of lanes a pass covers, and it fixes WHERE the passes go.
 // The group form of the decode loop (model1.inc) steps the NB=RCNUM/8 bytes
@@ -530,12 +535,24 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #error "RC_DEC_VRENORM_SLOTS is 1..4"
 #endif
 
+// What the refill does about the lanes past RC_DEC_VRENORM_SLOTS:
+//   0  a loop over what is left of the mask
+//   1  reload every window of the run, straight-line -- 3 instructions a
+//      lane, W lanes, behind the one branch. No loop in the group body.
+// The rare path's cost is its probability times its length either way;
+// what differs is what a loop does to the code around it. Measured in
+// misc/vrenorm.md.
+#ifndef RC_DEC_VRENORM_TAIL
+#define RC_DEC_VRENORM_TAIL 0
+#endif
+
 // Probes on the pass, for taking it apart. 0 is the pass. 1 leaves the
 // gather out -- the refill takes the cursor for data, so the decode is
 // garbage but the block structure survives and the work is the same. 2 runs
 // the pass twice, back to back; the second finds nothing to shift, so what
-// it adds is the cost of a pass with nothing to wait for. RC_DEC_VRENORM_VF=1
-// is the third probe: the same pass, scalar, fully unrolled.
+// it adds is the cost of a pass with nothing to wait for. 3..6 cut the
+// refill down: none, the mask alone, one slot, two slots -- garbage out.
+// RC_DEC_VRENORM_VF=1 is one more: the same pass, scalar, fully unrolled.
 #ifndef RC_DEC_VRENORM_PROBE
 #define RC_DEC_VRENORM_PROBE 0
 #endif

@@ -164,7 +164,29 @@ accounts for and is probably the layout sensitivity `speed_ideas.md` §0
 warns about as much as the branch.  The second table is the slot count,
 `RC_DEC_VRENORM_SLOTS`, which is the only lever left in the refill:
 
-SLOTTABLE
+| build, all `RC_DEC_VRENORM=16` | median MB/s | vs base | rounds |
+|---|---|---|---|
+| base | **45.75** | -- | 45.70 44.79 45.80 45.25 45.88 46.29 |
+| base again | 45.41 | −0.8% | 45.35 45.46 43.80 45.46 43.06 45.81 |
+| `PROBE=6`: mask + two slots, no loop | 46.00 | +0.6% | 44.52 45.03 46.35 46.37 46.56 45.66 |
+| `SLOTS=2`, loop for the rest (13% taken) | 42.95 | −6.1% | 43.03 43.17 43.28 42.53 42.86 42.68 |
+| `SLOTS=3`, loop (3.3% taken) | 44.23 | −3.3% | 44.00 43.89 44.47 45.16 43.15 44.74 |
+| `SLOTS=4`, loop (0.6% taken) | 43.61 | −4.7% | 44.52 42.10 44.90 42.07 42.70 44.79 |
+| `SLOTS=2`, rare path reloads all 16, straight-line (13% taken) | 40.52 | −11.4% | 39.55 40.74 40.80 36.56 40.30 41.39 |
+
+Two things fall out.  The mask and two slots -- 17 instructions, none of
+them predicted -- cost the whole +6% of the pass by themselves: +0.6% is
+the noise floor.  And the loop for the rare lanes costs 3-6% *whether or
+not it runs*: at four slots it is taken in 0.6% of groups, which is a tenth
+of a cycle of mispredicts, and the build is still 4.7% behind base and 5.3%
+behind the same code with the loop deleted.  That is what a loop inside
+the group body does to the code around it -- register allocation, layout,
+the uop cache, something the assembly listing can be asked about -- and not
+what the branch does.  A straight-line rare path that reloads every window
+is worse again at 13% taken (48 instructions a trip), and is what
+`RC_DEC_VRENORM_TAIL=1` measures at the higher slot counts below.
+
+TAILTABLE
 
 Single runs of the probe ladder, the same box, for the shape of the cost:
 
@@ -183,7 +205,16 @@ Single runs of the probe ladder, the same box, for the shape of the cost:
 | `VF=1` | 27.5 | the same pass, scalar, unrolled |
 | `RC_DEC_VRENORM=4` | 18.0 | four passes a group, gather shape |
 
-## 5. Things learned about the tools
+## 5. The matrix
+
+Every row in `t_matrix.sh` for the knob reproduces the reference stream on
+both targets (`-march=skylake`, AVX2, and `-march=native`, AVX-512): pass
+widths 2, 4, 8 and 16, the scalar and 16-wide loop shapes, the gather
+variant with and without the zero slot, and widths 16 and 4 at RCNUM=32.
+gcc builds and roundtrips `RC_DEC_VRENORM=16` too; its pragma is clang's,
+so it vectorises or not as it pleases.
+
+## 6. Things learned about the tools
 
 - `#pragma clang loop vectorize_width(N)` needs `unroll(disable)` beside it
   or the loop is fully unrolled first and never vectorised; SLP does not form
