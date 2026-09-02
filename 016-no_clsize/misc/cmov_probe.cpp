@@ -15,6 +15,8 @@
 //   cmov_mem   hand-assembled  test cond; mov eax,q; cmovne eax,[p]; ret
 //   cmov_reg   hand-assembled  mov ecx,[p]; test cond; mov eax,q; cmovne eax,ecx; ret
 //   branch     hand-assembled  test cond; jne L; mov eax,q; ret; L: mov eax,[p]; ret
+//   sel_addr   the C++ below: select the ADDRESS, then one load
+//   cmov_addr  hand-assembled  local=q; lea rax,&local; test; cmovne rax,p; mov eax,[rax]
 // The branch form is the control: with cond false it never touches p.
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +41,14 @@ typedef int (*t_sel)( const int* p, int q, int cond );
 NOINLINE int sel( const int* __restrict p, int q, int cond ) {
   int t = *p;                                   // load must be unconditional
   return __builtin_unpredictable(cond) ? t : q;
+}
+// Select the ADDRESS, then load once: with cond false the load hits a local
+// on the stack and never touches p.  Branchless if the compiler keeps the
+// select on the pointer -- it may not fold it into a load of each side,
+// because *p is not known to be safe to speculate.
+NOINLINE int sel_addr( const int* __restrict p, int q, int cond ) {
+  int local_var = q;
+  return *( __builtin_unpredictable(cond) ? p : &local_var );
 }
 
 static byte* alloc_exec( size_t n ) {
@@ -65,10 +75,16 @@ static volatile qword sink;
 static const byte S_cmov_mem[] = { 0x45,0x85,0xC0, 0x89,0xD0, 0x0F,0x45,0x01, 0xC3 };
 static const byte S_cmov_reg[] = { 0x44,0x8B,0x09, 0x45,0x85,0xC0, 0x89,0xD0, 0x41,0x0F,0x45,0xC1, 0xC3 };
 static const byte S_branch[]   = { 0x45,0x85,0xC0, 0x75,0x03, 0x89,0xD0, 0xC3, 0x8B,0x01, 0xC3 };
+// mov [rsp+8],edx; lea rax,[rsp+8]; test r8d,r8d; cmovne rax,rcx; mov eax,[rax]; ret
+static const byte S_cmov_addr[]= { 0x89,0x54,0x24,0x08, 0x48,0x8D,0x44,0x24,0x08, 0x45,0x85,0xC0,
+                                   0x48,0x0F,0x45,0xC1, 0x8B,0x00, 0xC3 };
 #else
 static const byte S_cmov_mem[] = { 0x85,0xD2, 0x89,0xF0, 0x0F,0x45,0x07, 0xC3 };
 static const byte S_cmov_reg[] = { 0x8B,0x0F, 0x85,0xD2, 0x89,0xF0, 0x0F,0x45,0xC1, 0xC3 };
 static const byte S_branch[]   = { 0x85,0xD2, 0x75,0x03, 0x89,0xF0, 0xC3, 0x8B,0x07, 0xC3 };
+// mov [rsp-8],esi; lea rax,[rsp-8]; test edx,edx; cmovne rax,rdi; mov eax,[rax]; ret
+static const byte S_cmov_addr[]= { 0x89,0x74,0x24,0xF8, 0x48,0x8D,0x44,0x24,0xF8, 0x85,0xD2,
+                                   0x48,0x0F,0x45,0xC7, 0x8B,0x00, 0xC3 };
 #endif
 
 enum { NL=1024, STRIDE=4096 };      // lines 4 KB apart: no streamer/spatial prefetch across them
@@ -144,20 +160,23 @@ int main( int argc, char** argv ) {
   memcpy( code+0,    S_cmov_mem, sizeof S_cmov_mem );
   memcpy( code+256,  S_cmov_reg, sizeof S_cmov_reg );
   memcpy( code+512,  S_branch,   sizeof S_branch );
+  memcpy( code+768,  S_cmov_addr,sizeof S_cmov_addr );
   set_rx( code, 4096 );
-  t_sel F[4] = { sel, (t_sel)(uintptr_t)(code+0), (t_sel)(uintptr_t)(code+256), (t_sel)(uintptr_t)(code+512) };
-  const char* nm[4] = { "sel (compiled)", "cmov_mem", "cmov_reg", "branch" };
+  enum { NF=6 };
+  t_sel F[NF] = { sel, (t_sel)(uintptr_t)(code+0), (t_sel)(uintptr_t)(code+256), (t_sel)(uintptr_t)(code+512),
+                  sel_addr, (t_sel)(uintptr_t)(code+768) };
+  const char* nm[NF] = { "sel (compiled)", "cmov_mem", "cmov_reg", "branch", "sel_addr (compiled)", "cmov_addr" };
   // sanity: every form selects correctly
-  { int v = 42; for( int k=0; k<4; k++ ) if( F[k](&v,7,0)!=7 || F[k](&v,7,1)!=42 ) { printf("form %s is wrong\n",nm[k]); return 1; } }
+  { int v = 42; for( int k=0; k<NF; k++ ) if( F[k](&v,7,0)!=7 || F[k](&v,7,1)!=42 ) { printf("form %s is wrong\n",nm[k]); return 1; } }
   { auto w0=std::chrono::steady_clock::now(); qword t0=__rdtsc();
     while( std::chrono::duration<double>(std::chrono::steady_clock::now()-w0).count()<0.2 ){}
     qword t1=__rdtsc(); double s=std::chrono::duration<double>(std::chrono::steady_clock::now()-w0).count();
     printf("TSC %.2f GHz; %d lines 4 KB apart, random order; min of %d; ticks\n\n",(t1-t0)/s/1e9,NL,reps); }
 
   printf("Q1  read latency of a flushed line AFTER calling f(line, 7, cond) on it\n");
-  printf("      %-18s %8.1f   (no call: the cold read)\n", "none", q1( 0, 0, reps ));
-  for( int k=0; k<4; k++ )
-    printf("      %-18s %8.1f   cond=false      %8.1f   cond=true\n", nm[k], q1(F[k],0,reps), q1(F[k],1,reps));
+  printf("      %-20s %8.1f   (no call: the cold read)\n", "none", q1( 0, 0, reps ));
+  for( int k=0; k<NF; k++ )
+    printf("      %-20s %8.1f   cond=false      %8.1f   cond=true\n", nm[k], q1(F[k],0,reps), q1(F[k],1,reps));
 
   // a random single cycle over the lines, stored both in next[] and IN the lines
   { static uint perm[NL]; for( uint i=0;i<NL;i++ ) perm[i]=i;
@@ -166,14 +185,14 @@ int main( int argc, char** argv ) {
 
   printf("\nQ2a ticks per step of  idx = f(line(idx), next[idx], cond)  -- the next ADDRESS comes\n");
   printf("    out of f's result, so the chain waits on exactly what the result depends on\n");
-  printf("      %-18s   cold,cond=false   warm,cond=false   cold,cond=true   warm,cond=true\n", "");
-  for( int k=0; k<4; k++ )
-    printf("      %-18s %10.1f %16.1f %16.1f %16.1f\n", nm[k],
+  printf("      %-20s   cold,cond=false   warm,cond=false   cold,cond=true   warm,cond=true\n", "");
+  for( int k=0; k<NF; k++ )
+    printf("      %-20s %10.1f %16.1f %16.1f %16.1f\n", nm[k],
            q2_chain(F[k],0,1,reps), q2_chain(F[k],0,0,reps), q2_chain(F[k],1,1,reps), q2_chain(F[k],1,0,reps));
   printf("\nQ2b ticks per  x = x / (f(line(i), 0, cond) + 1)  -- addresses independent of x\n");
-  printf("      %-18s   cold,cond=false   warm,cond=false   cold,cond=true   warm,cond=true\n", "");
-  for( int k=0; k<4; k++ )
-    printf("      %-18s %10.1f %16.1f %16.1f %16.1f\n", nm[k],
+  printf("      %-20s   cold,cond=false   warm,cond=false   cold,cond=true   warm,cond=true\n", "");
+  for( int k=0; k<NF; k++ )
+    printf("      %-20s %10.1f %16.1f %16.1f %16.1f\n", nm[k],
            q2_stream(F[k],0,1,reps), q2_stream(F[k],0,0,reps), q2_stream(F[k],1,1,reps), q2_stream(F[k],1,0,reps));
   printf("\n  Q1:  a warm number under cond=false means the instruction read the line.\n"
          "  Q2a: cold,false up at cold,true means the result waited for the line it did not select.\n"

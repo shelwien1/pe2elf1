@@ -153,3 +153,82 @@ So the vector form has neither of the scalar `cmov`'s properties: a lane with
 on nothing it did not select.  It honours the SPMD rule that inactive
 instances perform no memory operations.  What it costs is the gather, which
 is the question `dec_vectorize.md` already answered for the per-bit path.
+
+## Selecting the address instead: `*(cond ? p : &local)`
+
+The scalar analogue of a masked load is to select the *pointer* and load
+once: with `cond` false the load hits a local on the stack and never touches
+`p`.
+
+```c
+int sel_addr(const int* __restrict p, int q, int cond) {
+    int local_var = q;
+    return *( __builtin_unpredictable(cond) ? p : &local_var );
+}
+```
+
+Two forms were added to the probe: that C++, and a hand-assembled stub that
+pins the shape -- `local = q; lea rax,&local; test cond; cmovne rax,p; mov
+eax,[rax]; ret` (the local in the red zone on SysV, in the caller's shadow
+space on Win64).  Measured against the earlier forms, same harness:
+
+```
+  Q1  read latency after f(line, 7, cond)       cond=false   cond=true
+      none (cold read)                             192.9
+      cmov_mem                                      37.0        37.9
+      branch                                       196.4        37.0
+      sel_addr (compiled)                          195.2        37.4
+      cmov_addr (stub)                             197.4        37.0
+
+  Q2a chained through the result       cold,false  warm,false  cold,true  warm,true
+      cmov_mem                            374.0       76.2       387.4      76.7
+      branch                                5.0        5.1       369.9      75.6
+      sel_addr (compiled)                   5.1        5.0       377.1      74.7
+      cmov_addr (stub)                     11.6       11.6       386.2      76.0
+
+  Q2b independent stream               cold,false  warm,false  cold,true  warm,true
+      cmov_mem                             44.4       10.1        44.7      10.1
+      branch                                9.4        9.4        40.3       9.7
+      cmov_addr (stub)                      9.4        9.4        45.4       9.7
+```
+
+**The stub does everything asked of it.**  With `cond` false the line stays
+cold (Q1: 197, the cold number), the chain does not wait for it (Q2a: 11.6
+against 374 for the value-`cmov`), and the independent stream pays nothing
+(Q2b: 9.4, the branch's number).  With `cond` true it is an ordinary load.
+No branch, no fault possible on the untaken side, no cache fill, no
+dependency on memory that was not selected.
+
+Its price is visible in Q2a: 11.6 against the branch's 5.0.  The branch form
+returns `q` from a register; the address form always performs a *load* --
+of `local_var`, L1-hot, ~5 ticks -- so the select puts one L1 latency on the
+chain that the branch does not.  That is the whole cost, and it is the same
+shape a masked gather has for its masked-off lanes: a lane that is off still
+goes through the load unit, it just goes somewhere harmless.
+
+**But the compiler will not emit it.**  Both clang and gcc compile
+`sel_addr` to a branch:
+
+```
+    movl    %esi, %eax
+    testl   %edx, %edx
+    je      .LBB1_2
+    movl    (%rdi), %eax
+```
+
+-- identical to gcc's code for the plain `sel`, and the `sel_addr (compiled)`
+rows match the `branch` rows exactly.  `__builtin_unpredictable` is a hint;
+LLVM took the select of two pointers followed by a load and, unable to
+speculate `*p`, chose a branch over a `cmov` on the address.  If the
+branchless form matters -- and it does exactly when the condition is
+unpredictable, which is when the compiled version costs a misprediction --
+it has to be the stub or inline assembly, as with the value form.
+
+**On AVX2.**  `vpgatherdd` already takes a mask operand, so for a gather the
+trick is not needed: the hardware does for masked-off lanes precisely what
+the stub does -- routes them somewhere harmless and issues no memory
+operation.  Where the trick applies is scalar per-lane code, and any gather
+width AVX2 does not have (there is no byte or word gather); there the vector
+form is "blend the index vector to a dummy L1-resident slot where the mask
+is off, then gather unmasked", and it costs what the stub costs: one
+harmless load per off lane.
