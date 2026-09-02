@@ -77,15 +77,12 @@ int ppmd_order = 9;
 int ppmd_memory = 6284; //1000;
 
 // Searched in order when no weights file is given on the command line.
-#if TF_LOAD_WEIGHTS
 static const char* tf_weights_paths[] = {
   "6m-q4-fp32.tfwc2",
   "models/6m-q4-fp32.tfwc2",
   0
 };
-#endif
 
-#if TF_LOAD_WEIGHTS
 static const char* find_weights(const char* given) {
   const char* const one[] = { given, 0 };
   const char* const* list = given ? one : tf_weights_paths;
@@ -98,7 +95,25 @@ static const char* find_weights(const char* given) {
   }
   return 0;   // also the "ppmd only" switch: name a file that does not exist
 }
-#endif
+
+// The null device asks for a freshly initialized model rather than a file.
+// It has to be recognized by name: on Windows fopen("nul") SUCCEEDS, so the
+// loader would otherwise read an empty file and die, and on Linux
+// "/dev/null" does the same.
+static int is_null_device(const char* s) {
+  static const char* names[] = { "nul", "nul:", "/dev/null", 0 };
+  for( int i = 0; names[i]; i++ ) {
+    int j = 0;
+    for( ; s[j] && names[i][j]; j++ ) {
+      int a = s[j], b = names[i][j];
+      if( a>='A' && a<='Z' ) a += 'a'-'A';
+      if( a!=b ) break;
+    }
+    if( !s[j] && !names[i][j] )
+      return 1;
+  }
+  return 0;
+}
 
 ALIGN(64) Transformer tf;
 ALIGN(64) Rangecoder rc;
@@ -110,8 +125,10 @@ int main(int argc, char** argv) {
     fprintf(stderr,
       "usage: coder0 c|d <input> <output> [weights_in] [weights_out]\n"
       "  weights_in   the model to start from; without it, 6m-q4-fp32.tfwc2\n"
-      "               then models/6m-q4-fp32.tfwc2.  Naming a file that does\n"
-      "               not exist runs PPMD alone.\n"
+      "               then models/6m-q4-fp32.tfwc2.  \"nul\" (or /dev/null)\n"
+      "               starts from a freshly initialized model instead of a\n"
+      "               file.  Naming a file that does not exist runs PPMD\n"
+      "               alone.\n"
       "  weights_out  write the model back out when the file is done, so a\n"
       "               later run can start from it (needs TF_FP32=1; with\n"
       "               TF_TRAIN it is the trained model that gets written).\n");
@@ -156,19 +173,23 @@ int main(int argc, char** argv) {
   // alphabet does not fit the model's 205 tokens the model stays disabled and
   // its input to the mixer is PPMD's own distribution, which still round-trips
   // (just without the transformer's contribution).
-#if TF_LOAD_WEIGHTS
-  const char* wpath = find_weights(argc>4 ? argv[4] : 0);
-  if( !wpath || !tf.Init(wpath, cmap, f_len) )
-    fprintf(stderr, "coder0: transformer disabled (%s)\n",
-            wpath ? "alphabet does not fit the model" : "no weights file");
-#else
-  // TF_LOAD_WEIGHTS 0: no weights file, the model is initialized in memory.
-  fprintf(stderr, "coder0: transformer weights initialized from seed %llu\n",
-          (unsigned long long)TF_INIT_SEED);
-  if( !tf.Init(0, cmap, f_len) )
-    fprintf(stderr, "coder0: transformer disabled "
-                    "(alphabet does not fit the model)\n");
+  const char* warg = argc>4 ? argv[4] : 0;
+#if !TF_LOAD_WEIGHTS
+  warg = "nul";  // the build-time switch makes the same request as the name
 #endif
+  if( warg && is_null_device(warg) ) {
+    // no file: the model is initialized in memory instead (weights_init.inc)
+    fprintf(stderr, "coder0: transformer weights initialized from seed %llu\n",
+            (unsigned long long)TF_INIT_SEED);
+    if( !tf.Init(0, cmap, f_len) )
+      fprintf(stderr, "coder0: transformer disabled "
+                      "(alphabet does not fit the model)\n");
+  } else {
+    const char* wpath = find_weights(warg);
+    if( !wpath || !tf.Init(wpath, cmap, f_len) )
+      fprintf(stderr, "coder0: transformer disabled (%s)\n",
+              wpath ? "alphabet does not fit the model" : "no weights file");
+  }
 #if TF_TRAIN>=3
   fprintf(stderr, "coder0: whole transformer trained online (%d params, "
                   "lr %g, batch %d)\n", 5897145,

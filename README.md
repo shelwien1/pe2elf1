@@ -39,12 +39,23 @@ breaks otherwise.
 ```
 
 `weights_in` is the model to start from; without it the weights are looked up
-as `6m-q4-fp32.tfwc2` then `models/6m-q4-fp32.tfwc2`. If no weights file is
-found, or the input's alphabet does not fit the model's 205 tokens, the
-transformer is disabled and coder0 runs on PPMD alone — still lossless, just
-without the second model. (A weights file that exists but is corrupt is fatal:
-the fx2 loader exits the process rather than reporting an error.) Naming a file
-that does not exist is the supported way to ask for that:
+as `6m-q4-fp32.tfwc2` then `models/6m-q4-fp32.tfwc2`.
+
+**`nul`** (or `NUL`, `nul:`, `/dev/null`) starts from a freshly initialized
+model instead of a file — the same thing the `TF_LOAD_WEIGHTS=0` build does,
+but chosen at run time. The name is recognized rather than opened, because on
+Windows `fopen("nul")` succeeds and the loader would read an empty file:
+
+```sh
+./coder0 c input out.z nul                 # train from scratch (with TF_TRAIN)
+./coder0 c input out.z nul fresh.tfwc2     # ... and keep the result
+```
+
+If no weights file is found, or the input's alphabet does not fit the model's
+205 tokens, the transformer is disabled and coder0 runs on PPMD alone — still
+lossless, just without the second model. (A weights file that exists but is
+corrupt is fatal: the fx2 loader exits the process rather than reporting an
+error.) Naming a file that does not exist is the supported way to ask for that:
 
 ```sh
 ./coder0 c book1000 out.ppmd none
@@ -135,7 +146,9 @@ archives (and `book1000` costs one byte more, 1735).
   arenas. Compression is the same either way (see the table), because the model
   was trained with fake quantization and is at least as good without it.
 * **`TF_LOAD_WEIGHTS`** (default 1) — 0 initializes the weights in memory
-  instead of reading `6m-q4-fp32.tfwc2`, from `TF_INIT_SEED`. The scheme is the
+  instead of reading `6m-q4-fp32.tfwc2`, from `TF_INIT_SEED`. Passing `nul` as
+  `weights_in` asks for the same thing at run time, and is usually what you
+  want; the build switch just makes it the default. The scheme is the
   reference one, transcribed from the submission's training code
   (`pysrc/model.py`, `pysrc/quantization.py`, `training_recipes/quantize.py`):
   kaiming-uniform weights, `normal_` for the two embeddings, per-row

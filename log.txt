@@ -142,3 +142,9 @@ Train on a 32 KB slice of book1 disjoint from book1000, save, reuse:
   32 KB slice  shipped weights frozen 11026  trained weights frozen 10973
                                              (online, one pass: 10418)
 File sizes: shipped 2930652, re-saved untrained 2930603, trained 2930960.
+
+"nul" (also NUL, nul:, /dev/null) as the weights_in argument starts from a
+freshly initialized model rather than a file - the same thing a
+TF_LOAD_WEIGHTS=0 build does, and byte-identical to it (book1000: 2047 both
+ways).  The name is matched rather than opened: on Windows fopen("nul")
+succeeds, so the loader would read an empty file and die.
