@@ -12,6 +12,7 @@ OUT=${OUT:-coder0}
 # Model switches (documented at the top of coder0.cpp):
 #   LSTMDEFS="-DLSTM_TRAIN=0"           freeze the weights, no online training
 #   LSTMDEFS="-DLSTM_SAVE_OPTIMIZER=0"  save the weights without the AdamW state
+#   LSTMDEFS="-DLSTM_SAVE_Q4=1"         quantize the saved weights to int4
 LSTMDEFS=${LSTMDEFS:-}
 
 $CXX -O3 -std=c++17 -fno-math-errno -ffp-contract=off -fomit-frame-pointer \

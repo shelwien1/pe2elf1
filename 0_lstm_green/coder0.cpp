@@ -66,6 +66,14 @@ typedef const float*__restrict cprfloat;
 //                        AdamW's FIRST moments are never written - beta1 is
 //                        0.024, so a restored m is gone after two steps.
 //
+//   LSTM_SAVE_Q4         0 (the default): weights_out stores every tensor at
+//                        full precision, so a save/load round trip is exact.
+//                        1 stores the weight MATRICES the way the transformer
+//                        stores its own - 15 int4 levels against a per-row
+//                        bf16 scale - which is about a quarter of the size
+//                        and lossy.  A checkpoint of either kind loads into
+//                        either build; the form is per tensor, not per file.
+//
 // progress.inc has its own switches (PROGRESS, PROGRESS_INTERVAL and the
 // rest), documented at the top of that file.
 // ---------------------------------------------------------------------------
@@ -74,6 +82,9 @@ typedef const float*__restrict cprfloat;
 #endif
 #ifndef LSTM_SAVE_OPTIMIZER
 #define LSTM_SAVE_OPTIMIZER 1
+#endif
+#ifndef LSTM_SAVE_Q4
+#define LSTM_SAVE_Q4 0
 #endif
 
 static const int MAX_CELLS = 256;
@@ -339,7 +350,7 @@ int main(int argc, char** argv) {
   // saving from both and comparing the files is a check that they agree.
   if( argc>5 && lstm_on ) {
     if( lstm_io::Save(argv[5], lstm, cmap, LSTM_SAVE_OPTIMIZER, LSTM_TRAIN,
-                      have_weights ? &wf : 0) )
+                      LSTM_SAVE_Q4, have_weights ? &wf : 0) )
       fprintf(stderr, "coder0: wrote the final model to %s\n", argv[5]);
     else
       return 4;

@@ -65,10 +65,18 @@ Only the tensor set is different, and every name in it is prefixed `lstm.`, so
 the two kinds of checkpoint can never be confused — feeding a transformer file
 to this coder gets a message, not a crash.
 
-All tensors are `f32` or `i32`, which the writer stores with its lossless
-per-byte-plane model. No quantization is involved anywhere, so a save/load
-round trip is bit-exact — see *Frozen* below for how that is checked. The
-repository's `tfwc` tool unpacks these files into BMP images like any other.
+There are two storage forms, and the loader takes either, tensor by tensor, so
+checkpoints of both kinds are interchangeable between builds:
+
+- **f32** (the default) — every tensor `f32` or `i32`, which the writer stores
+  with its lossless per-byte-plane model. A save/load round trip is bit-exact.
+- **q4** (`LSTM_SAVE_Q4=1`) — the weight *matrices* go out the way the
+  transformer's do: 15 int4 levels against a per-row bf16 scale, `i8` +
+  `bf16`, which the container range-codes with its own int4 and bf16 models,
+  under `<name>.q` and `<name>.scale` in place of `<name>`. The quantizer is
+  the transformer's own, so the two coders round identically.
+
+The repository's `tfwc` tool unpacks either into BMP images like any other.
 
 What is in one:
 
@@ -80,6 +88,11 @@ What is in one:
 | `…​.sym_w`, `…​.ppmd_w`, `…​.rec_w` | each gate's three input matrices: the previous symbol, PPMD's distribution, and the recurrent state |
 | `lstm.output_layer` | the softmax layer |
 | `…​.v`, `lstm.steps` | AdamW's second moments and step counters, when they are being saved |
+
+Under `q4` the four weight matrices per gate become `.q` + `.scale`; `A`, `B`,
+`C`, the variances and the config stay `f32`. `A`/`B`/`C` are 90 floats apiece
+and not worth the trouble, and a variance is non-negative with a wide dynamic
+range, so levels laid out symmetrically about zero would fit it badly.
 
 Not in one, because they are state of one pass over one file rather than of
 the model: the cell state and hidden vector, the per-epoch histories the
@@ -135,6 +148,7 @@ LSTMDEFS=-DLSTM_TRAIN=0 ./build.sh
 |---|---|
 | `LSTM_TRAIN=0` | freeze the weights. The recurrent state still evolves and the mixer still adapts, but no gradient step runs. |
 | `LSTM_SAVE_OPTIMIZER=0` | write the weights without AdamW's state — half the size, and better on new data (see below). |
+| `LSTM_SAVE_Q4=1` | quantize the saved weight matrices to int4, as the transformer stores its own. |
 
 **Frozen** is also how the save/load path is checked. With training off, the
 model at the end of a run is the model at the start, so
@@ -147,6 +161,12 @@ OUT=coder0_frozen LSTMDEFS=-DLSTM_TRAIN=0 ./build.sh
 must produce two byte-identical files, and does — for any input, including one
 whose alphabet is narrower than the checkpoint's. That covers the whole path:
 decode, remap to the packed alphabet, remap back, re-encode.
+
+It holds under `LSTM_SAVE_Q4=1` too, which is less obvious: a row keeps the
+scale it was loaded with whenever that still covers it, so every weight lands
+back on the level it came from. Re-fitting to `max|w|/7` instead would stretch
+any row that does not reach ±7 and re-round all of it. `t.sh` checks this on
+every run, in both storage forms.
 
 ## Progress
 
@@ -188,7 +208,20 @@ saved with the optimizer state, *warm-0* from one built with
 | 200000 B of this repository's sources (121 values), from its own model | 44606 | 40948 | **38191** | 38756 | 41380 |
 | a disjoint 80000 B of them (98 values), from the 200000 B model | 20055 | 18676 | 18144 | **17932** | 19353 |
 
-Checkpoint sizes: 807338 bytes with the optimizer state, 404812 without.
+Checkpoint sizes for that 200000-byte model, and what each form costs on the
+80000-byte unseen file (18676 fresh, so the warm start is worth ~530 bytes):
+
+| | bytes | | unseen file |
+|---|---|---|---|
+| f32, with the optimizer state | 807338 | | 18144 |
+| q4, with the optimizer state | 456337 | | 18169 |
+| f32, weights only | 404812 | | 17932 |
+| **q4, weights only** | **53819** | | **17952** |
+
+Quantizing costs about 0.13% of the result — 20 bytes in 18000 — and takes the
+checkpoint from 405 KB to 53 KB, or 15× down from the default form. It is off
+by default because f32 is exact and is what the checkpoints already committed
+here are; on these numbers it looks like the better trade, and it is one flag.
 
 Three things worth reading off that table.
 

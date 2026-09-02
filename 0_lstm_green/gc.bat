@@ -78,6 +78,7 @@ rem
 rem Model switches (documented at the top of coder0.cpp):
 rem   set lstmdefs=-DLSTM_TRAIN=0            freeze the weights, no training
 rem   set lstmdefs=-DLSTM_SAVE_OPTIMIZER=0   save the weights without AdamW state
+rem   set lstmdefs=-DLSTM_SAVE_Q4=1          quantize the saved weights to int4
 set lstmdefs=
 
 %gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %lstmdefs% %arch% %incs% %opts% -static coder0.cpp -o coder0.exe

@@ -4,9 +4,24 @@
 //
 // The container, the range coder and the per-tensor encodings are the
 // transformer's, included from ../tf; this file only decides which tensors an
-// LSTM has.  They are all DT_F32 or DT_I32, which the writer stores with the
-// lossless per-byte-plane model, so a save/load round trip is bit-exact - no
-// quantization is involved anywhere.
+// LSTM has.
+//
+// STORAGE.  Two forms, chosen by the `q4` argument to Save():
+//
+//   f32   every tensor DT_F32 or DT_I32, which the writer stores with its
+//         lossless per-byte-plane model.  A save/load round trip is bit-exact.
+//
+//   q4    the weight matrices instead go out the way the transformer's do -
+//         15 int4 levels against a per-row bf16 scale, DT_I8 + DT_BF16, which
+//         the container range-codes with its own int4 and bf16 models - as
+//         "<name>.q" and "<name>.scale" in place of "<name>".  Lossy, and
+//         about a quarter of the size.  Everything else stays f32: A/B/C are
+//         90 floats apiece, and an AdamW variance is non-negative with a wide
+//         dynamic range, so levels laid out symmetrically about zero would be
+//         a poor fit for it.
+//
+// The loader takes either, tensor by tensor, whatever the build writes, so
+// checkpoints in the two forms are interchangeable.
 //
 // Every name is prefixed "lstm.", so an LSTM checkpoint and a transformer
 // checkpoint can never be mistaken for one another even though they share a
@@ -84,25 +99,15 @@ static qword get_u64(const int32_t* p) {
   return qword(uint32_t(p[0]))|(qword(uint32_t(p[1]))<<32);
 }
 
-// The tensor by that name if the file has one of exactly that shape, else 0.
-// Used both to read a checkpoint and, when saving, to carry through the parts
-// of the one this run started from that it cannot speak for itself.
-static const float* plane(const WeightsFile* wf, const std::string& name,
-                          uint rows, uint cols) {
-  if( !wf||!wf->has(name) )
-    return 0;
-  const WTensor& t = wf->tensors.find(name)->second;
-  if( t.dtype!=DT_F32||t.shape.size()!=2||t.shape[0]!=rows||t.shape[1]!=cols )
-    return 0;
-  return t.f32();
-}
-
 // ---------------------------------------------------------------- writing --
+
+static size_t dtype_bytes(uint8_t dtype) {
+  return dtype==fx2::DT_I8 ? 1 : dtype==fx2::DT_BF16 ? 2 : 4;
+}
 
 struct Builder {
   WeightsFile wf;
 
-  // every dtype used here is 4 bytes wide
   void add(const std::string& name, uint8_t dtype,
            std::initializer_list<uint32_t> shape, const void* src) {
     WTensor t;
@@ -112,12 +117,76 @@ struct Builder {
     for( uint32_t d : t.shape )
       n *= d;
     t.numel = n;
-    t.data.resize(n*4);
-    memcpy(t.data.data(), src, n*4);
+    t.data.resize(n*dtype_bytes(dtype));
+    memcpy(t.data.data(), src, t.data.size());
     wf.order.push_back(name);
     wf.tensors.emplace(name, std::move(t));
   }
 };
+
+// A [rows][cols] matrix, in whichever of the two forms the caller asks for.
+// The int4 quantizer is the transformer's own (../tf/weights_write.inc), so
+// the two coders round exactly alike.
+static void add_matrix(Builder& b, const std::string& name, const float* w,
+                       uint rows, uint cols, bool q4, const WeightsFile* base) {
+  if( !q4 ) {
+    b.add(name, fx2::DT_F32, {rows, cols}, w);
+    return;
+  }
+
+  // The scale each row was loaded with, which the quantizer keeps when it
+  // still covers the row.  That is what makes a frozen save reproduce the file
+  // it read: without it a row whose largest level is 5 would be re-fitted to
+  // 7 and every weight in it re-rounded.
+  //
+  // An all-zero row - lstm.output_layer has one per byte outside the alphabet
+  // - needs no special case even though its scale is arbitrary: the quantizer
+  // gives every such row 1.0, on the first save and on each one after, so the
+  // two agree without being made to.
+  const std::string sname = name+".scale";
+  const uint16_t* prev = 0;
+  if( base&&base->has(sname) ) {
+    const WTensor& t = base->tensors.find(sname)->second;
+    if( t.dtype==fx2::DT_BF16&&t.numel==rows )
+      prev = t.bf16_bits();
+  }
+
+  std::vector<int8_t> q(size_t(rows)*cols);
+  std::vector<uint16_t> sc(rows);
+  for( uint i = 0; i<rows; i++ ) {
+    const float* row = w+size_t(i)*cols;
+    fx2::quantize_row_int4(row, int(cols), &q[size_t(i)*cols], &sc[i],
+                           prev ? prev[i] : uint16_t(0));
+  }
+  b.add(name+".q", fx2::DT_I8, {rows, cols}, q.data());
+  b.add(sname, fx2::DT_BF16, {rows}, sc.data());
+}
+
+// The reverse, and the one place that knows a matrix can arrive either way.
+// False if the file holds neither form, which the callers turn into a
+// missing-tensor error.
+static bool read_matrix(const WeightsFile& wf, const std::string& name,
+                        uint rows, uint cols, std::vector<float>& out) {
+  out.assign(size_t(rows)*cols, 0.0f);
+  if( wf.has(name) ) {
+    const WTensor& t = wf.get(name, DT_F32, {rows, cols});
+    memcpy(out.data(), t.f32(), out.size()*sizeof(float));
+    return true;
+  }
+  if( wf.has(name+".q")&&wf.has(name+".scale") ) {
+    const WTensor& q = wf.get(name+".q", fx2::DT_I8, {rows, cols});
+    const WTensor& s = wf.get(name+".scale", fx2::DT_BF16, {rows});
+    const int8_t* qp = q.i8();
+    const uint16_t* sb = s.bf16_bits();
+    for( uint i = 0; i<rows; i++ ) {
+      const float f = fx2::bf16_to_f32(sb[i]);
+      for( uint c = 0; c<cols; c++ )
+        out[size_t(i)*cols+c] = float(qp[size_t(i)*cols+c])*f;
+    }
+    return true;
+  }
+  return false;
+}
 
 // What a run may write for each byte: its own model where the byte is both in
 // its alphabet and counts as trained, the checkpoint it loaded everywhere that
@@ -142,66 +211,70 @@ struct SaveMap {
 template <class Arr>
 static void save_sym_cols(Builder& b, const std::string& name,
                           const std::vector<Arr>& src, uint rows,
-                          const SaveMap& map, const WeightsFile* base) {
-  std::vector<float> buf(size_t(rows)*SYMS, 0.0f);
-  const float* bp = plane(base, name, rows, SYMS);
+                          const SaveMap& map, const WeightsFile* base,
+                          bool q4) {
+  std::vector<float> buf(size_t(rows)*SYMS, 0.0f), bp;
+  const bool has_base = base&&read_matrix(*base, name, rows, SYMS, bp);
   for( uint c = 0; c<SYMS; c++ ) {
     if( map.from_model(c) ) {
       const uint j = uint(map.a->pack[c]);
       for( uint i = 0; i<rows; i++ )
         buf[size_t(i)*SYMS+c] = src[i].d[j];
-    } else if( bp&&map.from_base(c) ) {
+    } else if( has_base&&map.from_base(c) ) {
       for( uint i = 0; i<rows; i++ )
         buf[size_t(i)*SYMS+c] = bp[size_t(i)*SYMS+c];
     }
   }
-  b.add(name, DT_F32, {rows, SYMS}, buf.data());
+  add_matrix(b, name, buf.data(), rows, SYMS, q4, base);
 }
 
 // [rows][cols], no symbol axis: this run's model is the whole story
 template <class Arr>
 static void save_rows(Builder& b, const std::string& name,
-                      const std::vector<Arr>& src, uint rows, uint cols) {
+                      const std::vector<Arr>& src, uint rows, uint cols,
+                      const WeightsFile* base, bool q4) {
   std::vector<float> buf(size_t(rows)*cols);
   for( uint i = 0; i<rows; i++ )
     memcpy(&buf[size_t(i)*cols], src[i].d, cols*sizeof(float));
-  b.add(name, DT_F32, {rows, cols}, buf.data());
+  add_matrix(b, name, buf.data(), rows, cols, q4, base);
 }
 
 // [n_sym][cols], packed rows -> [256][cols], byte rows
 static void save_sym_rows(Builder& b, const std::string& name,
                           const std::vector<ArrHidden>& src, uint cols,
-                          const SaveMap& map, const WeightsFile* base) {
-  std::vector<float> buf(size_t(SYMS)*cols, 0.0f);
-  const float* bp = plane(base, name, SYMS, cols);
+                          const SaveMap& map, const WeightsFile* base,
+                          bool q4) {
+  std::vector<float> buf(size_t(SYMS)*cols, 0.0f), bp;
+  const bool has_base = base&&read_matrix(*base, name, SYMS, cols, bp);
   for( uint s = 0; s<SYMS; s++ ) {
     if( map.from_model(s) )
       memcpy(&buf[size_t(s)*cols], src[uint(map.a->pack[s])].d,
              cols*sizeof(float));
-    else if( bp&&map.from_base(s) )
+    else if( has_base&&map.from_base(s) )
       memcpy(&buf[size_t(s)*cols], &bp[size_t(s)*cols], cols*sizeof(float));
   }
-  b.add(name, DT_F32, {SYMS, cols}, buf.data());
+  add_matrix(b, name, buf.data(), SYMS, cols, q4, base);
 }
 
 static void save_gate(Builder& b, const char* prefix, const Mixer& g, uint cells,
                       uint hidden, const SaveMap& map, const WeightsFile* base,
-                      bool with_optimizer) {
+                      bool with_optimizer, bool q4) {
   const std::string p(prefix);
   b.add(p+".A", DT_F32, {cells}, g.A_);
   b.add(p+".B", DT_F32, {cells}, g.B_);
   b.add(p+".C", DT_F32, {cells}, g.C_);
-  save_sym_cols(b, p+".sym_w", g.sym_w_, cells, map, base);
-  save_sym_cols(b, p+".ppmd_w", g.ppmd_w_, cells, map, base);
-  save_rows(b, p+".rec_w", g.rec_w_, cells, hidden);
+  save_sym_cols(b, p+".sym_w", g.sym_w_, cells, map, base, q4);
+  save_sym_cols(b, p+".ppmd_w", g.ppmd_w_, cells, map, base, q4);
+  save_rows(b, p+".rec_w", g.rec_w_, cells, hidden, base, q4);
   if( !with_optimizer )
     return;
+  // the variances stay f32 whatever the weights do - see the note at the top
   b.add(p+".A.v", DT_F32, {cells}, g.A_v_);
   b.add(p+".B.v", DT_F32, {cells}, g.B_v_);
   b.add(p+".C.v", DT_F32, {cells}, g.C_v_);
-  save_sym_cols(b, p+".sym_w.v", g.sym_v_, cells, map, base);
-  save_sym_cols(b, p+".ppmd_w.v", g.ppmd_v_, cells, map, base);
-  save_rows(b, p+".rec_w.v", g.rec_v_, cells, hidden);
+  save_sym_cols(b, p+".sym_w.v", g.sym_v_, cells, map, base, false);
+  save_sym_cols(b, p+".ppmd_w.v", g.ppmd_v_, cells, map, base, false);
+  save_rows(b, p+".rec_w.v", g.rec_v_, cells, hidden, base, false);
 }
 
 // Writes everything a later run needs to continue from this model.  Not
@@ -219,7 +292,8 @@ static void save_gate(Builder& b, const char* prefix, const Mixer& g, uint cells
 // at the top.  `trained` says whether this build ran any gradient step, and so
 // whether the columns for this file's own bytes are worth anything.
 static bool Save(const char* path, const Lstm& lstm, const char* cmap,
-                 bool with_optimizer, bool trained, const WeightsFile* base) {
+                 bool with_optimizer, bool trained, bool q4,
+                 const WeightsFile* base) {
   Alphabet a;
   a.Init(cmap);
 
@@ -269,20 +343,21 @@ static bool Save(const char* path, const Lstm& lstm, const char* cmap,
   b.add("lstm.vocab", DT_I32, {SYMS}, map.out_vocab);
 
   save_gate(b, "lstm.forget_gate", lstm.forget_gate_, cells, hidden, map, base,
-            with_optimizer);
+            with_optimizer, q4);
   save_gate(b, "lstm.input_node", lstm.input_node_, cells, hidden, map, base,
-            with_optimizer);
+            with_optimizer, q4);
   save_gate(b, "lstm.output_gate", lstm.output_gate_, cells, hidden, map, base,
-            with_optimizer);
+            with_optimizer, q4);
 
   // output_layer_ is a rolling per-epoch history: Update() writes
   // output_layer_[epoch_] from output_layer_[last_ep] and Mix() reads it back
   // before advancing epoch_, so the newest copy is the one behind epoch_.
   const uint ep = lstm.epoch_==0 ? lstm.horizon_-1 : lstm.epoch_-1;
   save_sym_rows(b, "lstm.output_layer", lstm.output_layer_[ep], hidden, map,
-                base);
+                base, q4);
   if( with_optimizer )
-    save_sym_rows(b, "lstm.output_layer.v", lstm.output_v_, hidden, map, base);
+    save_sym_rows(b, "lstm.output_layer.v", lstm.output_v_, hidden, map, base,
+                  false);
 
   return fx2::write_weights_v2(path, b.wf, b.wf.order);
 }
@@ -296,13 +371,12 @@ static bool load_sym_cols_(const WeightsFile& wf, const std::string& name,
                            float** rowptr, uint rows, const Alphabet& a,
                            const int32_t* fvocab, bool required,
                            std::string* missing) {
-  if( !wf.has(name) ) {
+  std::vector<float> src;
+  if( !read_matrix(wf, name, rows, SYMS, src) ) {
     if( required )
       *missing = name;
     return !required;
   }
-  const WTensor& t = wf.get(name, DT_F32, {rows, SYMS});
-  const float* src = t.f32();
   for( uint i = 0; i<rows; i++ )
     for( uint c = 0; c<SYMS; c++ )
       if( a.pack[c]>=0&&fvocab[c] )
@@ -326,13 +400,12 @@ template <class Arr>
 static bool load_rows(const WeightsFile& wf, const std::string& name,
                       std::vector<Arr>& dst, uint rows, uint cols,
                       bool required, std::string* missing) {
-  if( !wf.has(name) ) {
+  std::vector<float> src;
+  if( !read_matrix(wf, name, rows, cols, src) ) {
     if( required )
       *missing = name;
     return !required;
   }
-  const WTensor& t = wf.get(name, DT_F32, {rows, cols});
-  const float* src = t.f32();
   for( uint i = 0; i<rows; i++ )
     memcpy(dst[i].d, &src[size_t(i)*cols], cols*sizeof(float));
   return true;
@@ -354,13 +427,12 @@ static bool load_sym_rows(const WeightsFile& wf, const std::string& name,
                           std::vector<ArrHidden>& dst, uint cols,
                           const Alphabet& a, const int32_t* fvocab,
                           bool required, std::string* missing) {
-  if( !wf.has(name) ) {
+  std::vector<float> src;
+  if( !read_matrix(wf, name, SYMS, cols, src) ) {
     if( required )
       *missing = name;
     return !required;
   }
-  const WTensor& t = wf.get(name, DT_F32, {SYMS, cols});
-  const float* src = t.f32();
   for( uint s = 0; s<SYMS; s++ )
     if( a.pack[s]>=0&&fvocab[s] )
       memcpy(dst[a.pack[s]].d, &src[size_t(s)*cols], cols*sizeof(float));
@@ -520,9 +592,10 @@ static bool Apply(Lstm& lstm, const WeightsFile& wf, const char* cmap,
   for( uint i = 0; i<SYMS; i++ )
     shared += (a.pack[i]>=0&&fvocab[i]);
   fprintf(stderr,
-          "coder0: loaded %s (%d cells, trained on %d byte values, %u of this "
-          "file's %u%s)\n",
-          path, cfg[CFG_NUM_CELLS], cfg[CFG_N_SYM], shared, a.n_sym,
+          "coder0: loaded %s (%s, %d cells, trained on %d byte values, %u of "
+          "this file's %u%s)\n",
+          path, wf.has("lstm.forget_gate.sym_w.q") ? "q4" : "f32",
+          cfg[CFG_NUM_CELLS], cfg[CFG_N_SYM], shared, a.n_sym,
           want_opt ? ", with the optimizer state" : "");
   return true;
 }

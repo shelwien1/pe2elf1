@@ -185,3 +185,29 @@ with progress and 3.813s without - 6% the "wrong" way, which is this machine's
 noise rather than a saving, and matches what the transformer measurements above
 found in the other direction.  Compressed output is byte-identical with and
 without, checkpoint included.
+
+0_lstm_green: LSTM_SAVE_Q4 stores the saved weight matrices the way the
+transformer stores its own - 15 int4 levels against a per-row bf16 scale,
+through tf/weights_write.inc's own quantizer, as <name>.q + <name>.scale.  The
+loader takes either form tensor by tensor, so f32 and q4 checkpoints are
+interchangeable between builds.  A/B/C, the AdamW variances and the config stay
+f32: 90 floats each is not worth the trouble, and a variance is non-negative
+with a wide dynamic range.
+
+Checkpoint from 200000 bytes of sources, and the cost on a disjoint 80000
+(fresh 18676):
+  f32 + optimizer   807338   18144
+  q4  + optimizer   456337   18169
+  f32 weights only  404812   17932
+  q4  weights only   53819   17952
+So q4 costs ~0.13% and is 7.5x smaller weights-only, 15x down from the default.
+Off by default: f32 is exact.
+
+The frozen save/load identity survives quantization because quantize_row_int4
+keeps a row's loaded scale when it still covers the row.  I first added a
+special case for all-zero rows (lstm.output_layer has one per byte outside the
+alphabet), whose scale is arbitrary and which the quantizer hands 1.0 rather
+than the loaded value - then tested it by removing the special case, and the
+round trip stayed byte-identical.  It cannot fire: the quantizer gives such a
+row 1.0 on the first save too, so both sides already agree, and a frozen run
+cannot turn a nonzero row into a zero one.  Removed again.
