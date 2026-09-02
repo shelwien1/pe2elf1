@@ -56,13 +56,67 @@ cache that serves it.
 
 What it costs is the branch.  The target is `base + i*stride` with `i` the
 lookup index, and an indirect branch whose target the predictor cannot guess
-costs 15-20 cycles.  For an FSM lookup the index is the adaptive state, which
+costs 15-20 cycles -- measured below at 25-29 ticks a lookup, stubs in L1i.  For an FSM lookup the index is the adaptive state, which
 is unpredictable *by construction* -- if the predictor could guess it the
 model would have nothing to model.  This round measured exactly that
 mechanism from the other side: the generated if-tree in `iftree_lanes.md`
 wins 1.27x on text, where the branches predict, and on incompressible data
 it goes 0.94x, slower than the loop.  An unpredictable branch per lookup
 against a 5-cycle L1d hit is not a trade.
+
+## Measured: `misc/icache_call_probe.cpp` -- the table as code
+
+That variant was built and timed too: entry *i* is `B8 imm32 C3`, a lookup is
+an indirect call to it, and every lookup is chained (the value fetched is the
+next index) so the number is latency.  Three orders -- a fixed random cycle,
+which a predictor can learn; sequential; and *scrambled*, where the fetched
+value is mixed with an LCG before it becomes the next index so the sequence
+never repeats, which is the FSM's situation -- at two strides, 8 bytes
+(N=2048 is 16 KB, inside L1i) and 64 (one entry a line, 128 KB, outside it).
+The data columns are the same chains through a plain array, so they are the
+L1d number at 8 B and the L2 number at 64 B / N=2048.  Everything warm;
+ticks per lookup, TSC 2.80 GHz, min of five:
+
+```
+                  --- table as CODE: call mov eax,imm; ret ---   ---- table as DATA: load ----
+     N  size    cycle/8B seq/8B cycle/64B seq/64B scr/8B scr/64B   cycle/8B cycle/64B scr/8B scr/64B
+    16   ..       5.3     5.2      4.9     4.9    25.3    22.1       6.6      6.6      8.2    8.2
+    64   ..       5.4     5.2      5.0     5.0    25.6    23.0       6.6      6.6      8.2    8.6
+   256  2/16K     5.6    23.9     13.0    21.6    26.1    23.4       6.6      6.6      8.3    8.2
+  1024  8/64K    24.9    27.0     31.9    33.6    27.4    30.4       6.6     14.0      8.2   10.4
+  2048 16/128K   26.2    27.5     35.0    36.2    29.2    35.2       6.6     14.0      8.4   13.2
+```
+
+Read it in three parts.
+
+**Yes, it can be faster than a load -- when the target is predictable.**  A
+small fixed cycle (top-left) runs at 5.0-5.6 ticks a lookup against the data
+chain's 6.6: a predicted `call`+`ret` delivering an immediate beats a load
+whose address arithmetic sits on the chain, by about 20%.  That is the whole
+of what "reading from the instruction cache" can do, and it is real.
+
+**No, when it is not.**  The scrambled columns are the FSM's case, and at
+every N the code lookup costs **25-29 ticks with the stubs in L1i** against
+**8.2 for L1d and 13.2 for L2**: three times a data load, twice an L2 miss.
+That is the indirect-branch misprediction, and it does not get cheaper with a
+smaller table -- N=16 mispredicts as hard as N=2048.  The fixed cycle looks
+good at N<=256 only because the predictor memorises it; the FSM's next state
+is decided by the data, and nothing memorises that.
+
+**Being in L1i helps the miss, not the hit.**  At N=2048 scrambled, 8 B (16
+KB, resident) is 29.2 and 64 B (128 KB, not) is 35.2: about 6-9 ticks, which
+is the refetch after the misprediction coming from L1i instead of L2.  It
+moves the wrong number.
+
+(One artefact worth a line so nobody chases it: at N=256 the *sequential*
+order mispredicts -- 23.9 -- while the *random* cycle over the same 256
+targets predicts, 5.6.  Targets 8 bytes apart in address order alias in the
+indirect predictor's indexing; a permutation of the same addresses spreads
+them.  Sequential is not the easy case here.)
+
+For the FSM lookup that started this: 234 states, index decided by the data,
+today an L1d hit on a fused load.  As code it would be a 26-tick
+misprediction per bit, on a decoder that spends 8.7 ticks a bit in total.
 
 ## Checking the premise: how big is the FSM, really?
 
