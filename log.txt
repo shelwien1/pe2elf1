@@ -163,3 +163,15 @@ Both give a half-second update cadence.  clock_gettime costs 27.5 ns here
 The medians differ by 0.8% in both directions across repeats - that is machine
 noise, the minima are identical.  Compressed output is byte-identical with and
 without progress.
+
+tfwc: weights file <-> BMP images.  "tfwc c file prefix" writes prefix.txt and
+186 BMP v3 images (6.4 MB for the 2.9 MB file); "tfwc d prefix file" packs them
+back.  Byte-identical round trip on the shipped file, on a fresh-init save and
+on a re-saved file: the text file keeps the tensor order (WeightsFile::order,
+recorded by both loaders) and the packer reuses weights_write.inc, which picks
+the same per-tensor encoding the Python encoder did.  Shapes as in MODEL.md's
+budget: the q/k/v/o projections of a block are one 192x192 RGBA image
+(R=q, G=k, B=v, A=o), KDA gate pairs stack into one 8-bit image per direction,
+int4 pixels are q+7 under a 15-level palette, bf16 vectors are two rows (hi/lo),
+f32/i32 verbatim in 32-bit pixels, anything of 32 elements or less is hex in
+the text file.  PIL decodes every image.

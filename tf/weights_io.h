@@ -41,6 +41,9 @@ extern size_t g_rope_rows_limit;
 
 struct WeightsFile {
   std::unordered_map<std::string, WTensor> tensors;
+  // the tensors in the order the file held them (the loaders fill this in);
+  // write_weights_v2 in this order reproduces a v2 file byte for byte
+  std::vector<std::string> order;
 
   // parses the whole file; aborts with a message on any format error
   static WeightsFile load(const char* path);

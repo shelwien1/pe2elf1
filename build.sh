@@ -22,3 +22,9 @@ TFDEFS=${TFDEFS:-}
 $CXX -O3 -std=c++17 -fno-math-errno -ffp-contract=off -fomit-frame-pointer \
      -fno-stack-protector $ARCH -Wno-format $TFDEFS coder0.cpp -o "$OUT" -lm
 echo "done: $OUT"
+
+# tfwc: weights <-> BMP images (see tfwc.cpp); only built when asked for
+if [ "${TOOLS:-}" = 1 ]; then
+  $CXX -O2 -std=c++17 -ffp-contract=off $ARCH -Wno-format tfwc.cpp -o tfwc -lm
+  echo "done: tfwc"
+fi

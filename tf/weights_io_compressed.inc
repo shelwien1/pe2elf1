@@ -382,6 +382,7 @@ WeightsFile load_v2(ReaderWC& r, const char* path) {
             unsigned(encoding));
     }
 
+    wf.order.push_back(name);
     if (!wf.tensors.emplace(name, std::move(t)).second)
       die_wc("%s: duplicate tensor %s", path, name.c_str());
   }
@@ -442,6 +443,7 @@ WeightsFile WeightsFile::load_compressed(const char* path) {
       r.read(t.data.data(), bytes);
     }
 
+    wf.order.push_back(name);
     if (!wf.tensors.emplace(name, std::move(t)).second)
       die_wc("%s: duplicate tensor %s", path, name.c_str());
   }

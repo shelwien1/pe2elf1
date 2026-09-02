@@ -63,6 +63,10 @@ set tfdefs=
 %gcc% -s -std=c++17 -O3 -fno-math-errno -ffp-contract=off -fpermissive -Wno-format ^
   %tfdefs% %arch% %incs% %opts% -static coder0.cpp -o coder0.exe
 
+rem tfwc: weights file <-> BMP images and a text file (see tfwc.cpp)
+%gcc% -s -std=c++17 -O2 -ffp-contract=off -fpermissive -Wno-format ^
+  %arch% %incs% %opts% -static tfwc.cpp -o tfwc.exe
+
 del link.exe
 
 del *.o

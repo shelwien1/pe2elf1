@@ -101,6 +101,7 @@ WeightsFile WeightsFile::load(const char* path) {
     t.data.resize(bytes);
     r.read(t.data.data(), bytes);
 
+    wf.order.push_back(name);
     if (!wf.tensors.emplace(name, std::move(t)).second)
       die("%s: duplicate tensor %s", path, name.c_str());
   }

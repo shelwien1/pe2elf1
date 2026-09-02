@@ -92,6 +92,47 @@ Measured, training on a 32 KB slice of book1 that does not contain book1000:
 | trained weights, frozen | **1727** | **10973** |
 | (online training, one pass) | | 10418 |
 
+## The weights as images: tfwc
+
+`tfwc` turns a `.tfwc2` file into uncompressed BMP images plus one text file,
+and back, losslessly:
+
+```sh
+./tfwc c models/6m-q4-fp32.tfwc2 w/x     # -> w/x.txt and w/x_*.bmp (186 images, 6.4 MB)
+./tfwc d w/x rebuilt.tfwc2               # <- byte-identical to the input
+```
+
+`d` rebuilds the file byte for byte, not just tensor for tensor: the text file
+records the tensor order and the writer is the same encoder `weights_out`
+uses, so the shipped file, a fresh-init save and a trained save all come back
+identical (`cmp` verified). The images are plain BMP v3 (40-byte
+`BITMAPINFOHEADER`, `BI_RGB`, bottom-up, rows padded to 4 bytes), 8 bits per
+pixel with a 256-entry palette or 32 bits per pixel, so any viewer opens them.
+
+The shapes follow the parameter budget in `MODEL.md`:
+
+| tensor | image |
+|---|---|
+| int4 matrix `R×C` (embeddings, MLP up/down) | 8-bit `C×R`, pixel = q+7 (0..14), palette spreads the 15 levels over 0..252 |
+| the four attention projections of a block (q, k, v, o) | one 32-bit `192×192` image, R=q, G=k, B=v, A=o; their four row scales one `192×2` RGBA image |
+| a KDA block's forget/output gate pair (up, down) | one 8-bit image per direction, the two rank-64 matrices stacked |
+| bf16 vector (per-row scales, norms) | 8-bit `N×2`, high byte over low |
+| f32 / i32 tensors (convolutions, dt_bias, RoPE inv_freq) | 32-bit, one element per pixel, the four bytes verbatim |
+| ≤ 32 elements (config, coefficients, decay rates, activation scales) | hex words in the text file |
+| `rope.sin` / `rope.cos` | not stored — the file format recomputes them from `inv_freq` |
+
+`x.txt` starts with `tfwc 1`, `tensors N`, then one line per tensor in file
+order: `name dtype ndim dims... storage`, where storage is one of
+`bmp8 FILE`, `bmp8rows FILE ROW0`, `bmp32 FILE`, `bmp32ch FILE CH`,
+`hex WORDS`, `rope`. `FILE` is relative to the prefix (`prefix_FILE`), `CH` is
+the byte within a 32-bit pixel (B=0, G=1, R=2, A=3). It reads the header
+fields back rather than trusting the file names, so a BMP re-saved by an
+editor (top-down, a larger header) still packs, as long as the pixels survive.
+
+Build: `TOOLS=1 ./build.sh`, or `gc.bat` on Windows, or directly
+`clang++ -O2 -std=c++17 -ffp-contract=off tfwc.cpp -o tfwc -lm`. It includes
+the same `tf/weights_*.inc` sources coder0 does, nothing else.
+
 ## Progress
 
 Runs that last more than a second print one self-overwriting line on stderr,
@@ -277,6 +318,7 @@ from the authors' ablations and from what the trained weights settled on.
 MODEL.md          what the transformer is, layer by layer
 coder0.cpp        the compressor (main loop, range coder driver)
 transformer.inc   weights loading, byte<->token mapping, context splitting
+tfwc.cpp          weights file <-> BMP images + text, lossless (tfwc c/d)
 ppmd2.hpp         mod_ppmd
 newton.inc        the logistic mixer
 sh_v2f.inc        range coder
