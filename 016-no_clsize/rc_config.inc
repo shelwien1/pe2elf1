@@ -135,7 +135,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 37*RC_DEC_VRENORM_TAIL + 41*RC_DEC_VRENORM_GATHER \
                        + 43*RC_DEC_ZSLOT + 47*RC_DEC_VRENORM_PROBE         \
                        + 53*RC_SCATTER + 59*RC_SCATTER_W                  \
-                       + 61*RC_SCATTER_SKIP )
+                       + 61*RC_SCATTER_SKIP + 67*RC_DEC_RENORM_ZS )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -576,6 +576,20 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 #endif
 #if RC_DEC_VRENORM_TAIL<0 || RC_DEC_VRENORM_TAIL>2
 #error "RC_DEC_VRENORM_TAIL is 0, 1 or 2"
+#endif
+
+// 1 = Shelwien's branchless per-lane refill with the address-selected load
+// (misc/vrenorm.md 6): rc_Renorm's decode arm, at the head of every step,
+// selects the shift with a nested ternary and loads a dword from EITHER the
+// row at the new cursor or the lane's own zero slot -- the address is
+// selected, the load always happens, and the mask (0xFF/0xFFFF/0) is
+// applied on top. Not the pass: the scalar shape, per bit. Only without
+// RC_DEC_VRENORM.
+#ifndef RC_DEC_RENORM_ZS
+#define RC_DEC_RENORM_ZS 0
+#endif
+#if RC_DEC_RENORM_ZS && RC_DEC_VRENORM
+#error "RC_DEC_RENORM_ZS is the per-step refill; RC_DEC_VRENORM replaces it"
 #endif
 
 // Probes on the pass, for taking it apart -- all garbage out, the block

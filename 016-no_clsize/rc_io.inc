@@ -347,7 +347,7 @@ struct RCio {
   // block, which is what keeps it hot; the pass then reads it up to RCNUM
   // times a group. ZOFS is the index the pass uses -- a compile-time
   // constant, and model1.inc asserts it against the real layout.
-  ALIGN(64) uint zslot[16];
+  ALIGN(64) uint zslot[RCNUM<16 ? 16 : RCNUM];
   static const uint ZOFS = ((RCNUM*rowsize)+63) & ~63u;
 
   // decoder: the substream lengths of the current block, from rc_Read's

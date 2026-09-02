@@ -390,6 +390,21 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
         range <<= dsh;
         code   |= (uint&)tmpbase[tmpptr+1] & ((dsh==8) ? 0xFF : 0xFFFF);
       }
+#elif RC_VECOUT && RC_DEC_RENORM_ZS
+      // Shelwien's shape, as sent (rc_config.inc): branchless, the load's
+      // ADDRESS selected between the row and this lane's zero slot in the
+      // RCio, the slot rewritten every step. The offset is signed: the rows
+      // sit below the slot in the RCio, so it is negative.
+      code -= rpre;
+      rpre  = 0;
+      rcio.zslot[rcidx] = 0;
+      dsh = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+      tmpptr -= dsh>>3;
+      vwin = (range<sTOP) ? uint( ((char*)&tmpbase[tmpptr+1]) - ((char*)&rcio.zslot[rcidx]) ) : 0;
+      vwin = *(const uint*)( ((char*)&rcio.zslot[rcidx]) + int(vwin) );
+      code  <<= dsh;
+      range <<= dsh;
+      code  |= vwin & ((dsh>0) ? (dsh==8) ? 0xFF : 0xFFFF : 0);
 #else
       if( __builtin_expect_with_probability( range<sTOP, 0, 0.99 ) ) {
         dsh     = (range<gTOP) ? 16 : 8;

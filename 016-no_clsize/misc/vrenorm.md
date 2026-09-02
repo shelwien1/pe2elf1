@@ -268,7 +268,57 @@ variant with and without the zero slot, and widths 16 and 4 at RCNUM=32.
 gcc builds and roundtrips `RC_DEC_VRENORM=16` too; its pragma is clang's,
 so it vectorises or not as it pleases.
 
-## 6. Things learned about the tools
+## 6. The address-selected refill, per step
+
+Shelwien's version of `rc_Renorm`'s decode arm, at the kernel level:
+
+```c
+code -= rpre;  rpre = 0;
+rcio.zslot[rcidx] = 0;
+dsh    = (range<sTOP) ? (range<gTOP) ? 16 : 8 : 0;
+tmpptr -= dsh>>3;
+vwin   = (range<sTOP) ? (char*)&tmpbase[tmpptr+1] - (char*)&rcio.zslot[rcidx] : 0;
+vwin   = *(int*)((char*)&rcio.zslot[rcidx] + vwin);
+code <<= dsh;  range <<= dsh;
+code  |= vwin & ((dsh>0) ? (dsh==8) ? 0xFF : 0xFFFF : 0);
+```
+
+Branchless, per lane, at the head of every step -- `dec_renorm.md`'s family
+-- with the refill load's *address* selected between the row and the lane's
+own zero slot, which is `cmov_probe.md`'s address-select in scalar form.
+`RC_DEC_RENORM_ZS=1` is it, as sent (with the offset signed: the rows sit
+below the slot in the RCio, so it is negative).  What is and is not new in
+it:
+
+- **The selected address changes nothing the mask does not already do.**
+  The load at `tmpptr+1` is legal for every lane (`RC_SKIP>=4`) and, for an
+  idle lane, the line it read last group, so it is hot; and the value is
+  masked to 0 for `dsh==0` on the next line regardless.  The select costs
+  a `sub` and a `cmov` on the address, and buys back nothing -- the same
+  finding as `RC_DEC_ZSLOT` in §2, where clang had already made the gather
+  masked by itself.
+- **The slot store puts a store-to-load forward on the `code` chain every
+  step.**  `zslot[rcidx] = 0` then the load from it (the 92% case) is a
+  forwarded load, five cycles, feeding `code` through the mask -- the load
+  latency `dec_renorm.md`'s shape 9 took *off* the chain by caching the
+  window is back on it, plus a store a bit.
+- **Per step, not per group.**  The instruction count is the cost: the
+  branchy shape spends three instructions on the 92% of steps that shift
+  nothing, this spends all of them every step.  On this box the decoder is
+  front-end bound at 2.9 IPC, and every branchless per-step shape measured
+  17-36% behind.  The pass (§1) is the same arithmetic done eight lanes to
+  an instruction, once a group, which is the only form in which
+  "branchless" has paid here.
+
+What clang does with it is worth a look: it SLP-vectorises the eight
+`dsh` selections of a byte's lanes into one `vpcmp`/`vpblendmd`, then
+`vpextrd`s each lane's value back out for the scalar shifts -- a vector
+detour that costs port 5 and helps nothing.  Measured, paired rounds, best
+of 3, 100 MB of enwik8:
+
+ZSTABLE
+
+## 7. Things learned about the tools
 
 - The kernel's functions are written once, per lane, in `rc.inc`, and
   mk_kernel.sh makes the macros; a function over a run of lanes indexes the
