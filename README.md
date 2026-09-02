@@ -265,9 +265,16 @@ ascending byte order. Feeding them as the WRT capitalization marker plus the
 lower-case letter instead was measured to be worth 0.2% and needs two forward
 passes per byte, so it is not done.
 
+## The model itself
+
+`MODEL.md` describes the transformer: every layer with its dimensions, what
+context each one draws on, the parameter budget, and why each part is there —
+from the authors' ablations and from what the trained weights settled on.
+
 ## Layout
 
 ```
+MODEL.md          what the transformer is, layer by layer
 coder0.cpp        the compressor (main loop, range coder driver)
 transformer.inc   weights loading, byte<->token mapping, context splitting
 ppmd2.hpp         mod_ppmd
