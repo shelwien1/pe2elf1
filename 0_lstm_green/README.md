@@ -2,10 +2,11 @@
 
 The compressor this repository's transformer port started from: PPMD and a
 small LSTM, mixed. It is here as a self-contained snapshot — the support files
-(`ppmd2.hpp`, `newton.inc`, `sh_v2f.inc`, `utils.inc`, `logf1.inc`, `MOD/`) are
-byte-identical to the ones in the repository root — plus one addition: the
-model can now be saved and reloaded, in the same file format and from the same
-command line as the transformer version.
+(`ppmd2.hpp`, `newton.inc`, `sh_v2f.inc`, `utils.inc`, `logf1.inc`,
+`progress.inc`, `MOD/`) are byte-identical to the ones in the repository root —
+plus two additions: the model can now be saved and reloaded, in the same file
+format and from the same command line as the transformer version, and long runs
+report progress.
 
 ```sh
 ./build.sh                       # or gc.bat on Windows
@@ -146,6 +147,34 @@ OUT=coder0_frozen LSTMDEFS=-DLSTM_TRAIN=0 ./build.sh
 must produce two byte-identical files, and does — for any input, including one
 whose alphabet is narrower than the checkpoint's. That covers the whole path:
 decode, remap to the packed alphabet, remap back, re-encode.
+
+## Progress
+
+Runs that last more than a second print one self-overwriting line on stderr,
+and a summary when they finish:
+
+```
+   81.9%  65536/80000  10.5 KB/s  elapsed 0:06  remaining 0:01
+  80000 bytes in 0:07 (10.5 KB/s)
+```
+
+`progress.inc` is the transformer version's, unchanged. The coding loop pays
+one AND and one compare per byte; the clock is read on a stride that retunes
+itself to stay a fixed wall-clock distance apart, because the per-byte cost
+here spans two orders of magnitude — about a microsecond with PPMD alone,
+about a hundred with the LSTM training. Measured: the LSTM settles at a
+1024-byte stride, PPMD alone at 32768, which is 28 clock reads across a
+948424-byte run. Both give the same half-second cadence, and the run time is
+unchanged — best-of-9 interleaved on the fastest path came out 6% *faster*
+with progress than without, which is this machine's noise, not a saving.
+
+The compressed output is byte-identical with and without it, checkpoint
+included.
+
+`PROGRESS=0` compiles the whole thing out; `PROGRESS_INTERVAL` and
+`PROGRESS_DELAY` set the cadence and how long a run must last before the first
+line. The clock is `QueryPerformanceCounter` on Windows and
+`clock_gettime(CLOCK_MONOTONIC)` elsewhere, called directly.
 
 ## Measured
 

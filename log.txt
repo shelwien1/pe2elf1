@@ -175,3 +175,13 @@ budget: the q/k/v/o projections of a block are one 192x192 RGBA image
 int4 pixels are q+7 under a 15-level palette, bf16 vectors are two rows (hi/lo),
 f32/i32 verbatim in 32-bit pixels, anything of 32 elements or less is hex in
 the text file.  PIL decodes every image.
+
+0_lstm_green: the ppmd+LSTM coder gets progress.inc verbatim (it has no
+transformer dependency), alongside the weights load/save.  Its adaptive stride
+settles at 1024 bytes with the LSTM training (~100 us/byte) and at 32768 with
+PPMD alone (~1 us/byte: 28 clock reads over a 948424-byte run).  Both keep the
+half-second cadence.  Best-of-9 interleaved on the fast path came out 3.582s
+with progress and 3.813s without - 6% the "wrong" way, which is this machine's
+noise rather than a saving, and matches what the transformer measurements above
+found in the other direction.  Compressed output is byte-identical with and
+without, checkpoint included.

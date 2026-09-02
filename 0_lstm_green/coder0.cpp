@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>     // clock_gettime, for progress.inc's monotonic clock
 
 #include <algorithm>
 #include <initializer_list>
@@ -64,6 +65,9 @@ typedef const float*__restrict cprfloat;
 //                        new data does better without it (see README.md).
 //                        AdamW's FIRST moments are never written - beta1 is
 //                        0.024, so a restored m is gone after two steps.
+//
+// progress.inc has its own switches (PROGRESS, PROGRESS_INTERVAL and the
+// rest), documented at the top of that file.
 // ---------------------------------------------------------------------------
 #ifndef LSTM_TRAIN
 #define LSTM_TRAIN 1
@@ -103,6 +107,8 @@ uint flen(FILE* f) {
 #include "ppmd2.hpp"
 
 #include "utils.inc"
+
+#include "progress.inc"
 
 #include "lstm_layer.inc"
 
@@ -263,7 +269,13 @@ int main(int argc, char** argv) {
 
   uint history = 0;
 
+  Progress prog;
+  prog.Init(f_len);
+
   for( f_pos = 0; f_pos<f_len; f_pos++ ) {
+    if( (f_pos&prog.mask)==0 )
+      prog.Tick(f_pos);
+
     uint ctx = history&31;
     mixer[ctx].Mix(M.lstm_probs_, M.ppmd_probs_, cmap);
 
@@ -319,6 +331,7 @@ int main(int argc, char** argv) {
 
   if( f_DEC==0 )
     rc.FinishEncode();
+  prog.Done(f_len);
   fclose(g);
   fclose(f);
 
