@@ -140,14 +140,16 @@ the loop.
   `cty[ctx]` and keeps the context out of a register.  It runs for the last
   <16 bits of a block, so it is not measurable -- but it is the same fix and
   it is free.
-- **`rc_Init` seeds the staging before the `f_DEC` test** and the kernel
-  prelude declares the encoder's eleven lane arrays for the decoder to carry.
-  `speed_plan_next.md` §3 wanted an `f_DEC` guard in the generator's emission.
-  Since then `RC_KALIGN` is empty on the decoder side and the alignment was
-  measured (dropping it: 1.4% slower, `model1.inc`), so the frame-pointer
-  argument is moot -- but the dead declarations still cost stack and the
-  prologue still zeroes nothing it needs to.  Probably nil; cheap to make the
-  generator honest.
+- **The kernel prelude declares the encoder's lane arrays for the decoder to
+  carry.**  `speed_plan_next.md` §3 wanted an `f_DEC` guard in the generator's
+  emission.  Half of it is done, in `rc.inc` rather than in the generator: the
+  fields a build cannot use are no longer declared, so the default kernel is
+  eleven lane arrays instead of fifteen (`Carry` and `Cache` do not exist in a
+  carryless coder, the staging trio needs `RC_SCATTER`, the pass's window pair
+  needs its knob).  It changed no instruction anywhere -- the arrays were dead
+  and the compiler had already eliminated them -- which is the answer to
+  "probably nil".  What is left is the genuinely `f_DEC`-split state, and that
+  the generator would have to do.
 - **`Counter2::Update` is a load and a store per bit**, 16 stores a group into
   `stats[]`.  The one experiment that took the updates off the per-bit path
   (the if-tree's replay, §4) lost for other reasons, so it is not known what

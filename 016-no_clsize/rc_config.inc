@@ -329,15 +329,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 
 #if RC_ENC_RENORM>=2
 #define RC_ENC_HI   ((lowl >> 16) >> (16-RC_ENC_SH))
-#if RC_LOWBYTES==8
-#define RC_ENC_CL   lowh
-#elif RC_LOWBYTES>=6
-#define RC_ENC_CL   (lowh << (64-LOWBITS))
-#elif RC_LOWBYTES==5
-#define RC_ENC_CL   ((lowh<<24) | (lowl>>8))
-#else
-#define RC_ENC_CL   lowl
-#endif
+#define RC_ENC_CL   RC_LOW_CL   // the width cascade, in rc.inc
 #else
 #define RC_ENC_CL   cl
 #endif
