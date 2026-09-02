@@ -124,6 +124,16 @@ was right for a reason it did not know.  On a core where a gather is one
 instruction, `RC_DEC_VRENORM_GATHER=1` is the shape to measure -- run the
 microbenchmark first.
 
+One more thing about that shape, found on the AVX2 side: the loop
+vectoriser only forms a gather on a core LLVM marks fast-gather, Skylake and
+up.  Built for Haswell (`-march=haswell`, or `native` on one) it keeps the
+vector arithmetic and scalarises the sixteen loads into `vpextrd` / load /
+`vpinsrd` chunks -- clang 18 and 23 alike, and it looks exactly like "some
+128-bit chunks, mostly scalar".  So on AVX2 the gather shape's pass is
+spelled out with the intrinsic (`rc_RenormV8`): eight lanes a call, the
+lanes that shift as the gather's mask, and `RC_DEC_ZSLOT` choosing between
+the gather's own zero fill for an idle lane and the zero-slot index.
+
 ## 3. Why the refill cannot write `code[]`
 
 The second build kept the pass gather-free (`code <<= sh`, the mask to an

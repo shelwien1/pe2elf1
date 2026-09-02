@@ -760,24 +760,69 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
 #endif
   }
 
-  // The pass over the run of RC_DEC_VRENORM lanes starting at this one, then
-  // its refill. A loop for the compiler to vectorise -- RC_DEC_VRENORM_VF
-  // lanes wide, and kept away from the unroller, which would otherwise
-  // scalarise it before the vectoriser ever saw it. The knob names inside
-  // the pragma are expanded when the compiler parses it, not here.
-  void rc_RenormRun( uint zofs ) {
+#if RC_DEC_VRENORM_GATHER && defined(__AVX2__) && (RC_DEC_VRENORM%8)==0
+  // Eight lanes of the gather shape, from this one, with the gather spelled
+  // out. The loop vectoriser only forms a gather on a core LLVM marks
+  // fast-gather -- Skylake and up -- and on a Haswell-tuned build
+  // (-march=haswell, or native on one) it scalarises the sixteen loads into
+  // vpextrd / load / vpinsrd chunks around the vector arithmetic, which is
+  // what "the AVX2 build looks mostly scalar" turned out to be. The
+  // intrinsic gathers wherever AVX2 is, and rc_RenormRun uses this body
+  // there in place of the loop.
+  //
+  // The mask is the lanes that shift, and RC_DEC_ZSLOT is which of the two
+  // ways an idle lane loads nothing: the gather's own mask, which fills the
+  // lane from the zero source and never touches memory (0), or its index
+  // pointed at the zero slot under an unmasked gather (1).
+  void rc_RenormV8( uint zofs ) {
+    const __m256i r   = _mm256_loadu_si256( (const __m256i*)&range[rcidx] );
+    const __m256i m1  = _mm256_cmpeq_epi32( _mm256_min_epu32( r, _mm256_set1_epi32( int(sTOP-1) ) ), r );   // r < sTOP
+    const __m256i m2  = _mm256_cmpeq_epi32( _mm256_min_epu32( r, _mm256_set1_epi32( int(gTOP-1) ) ), r );   // r < gTOP
+    const __m256i c8  = _mm256_set1_epi32( 8 );
+    const __m256i sh  = _mm256_add_epi32( _mm256_and_si256( m1, c8 ), _mm256_and_si256( m2, c8 ) );
+    const __m256i p   = _mm256_sub_epi32( _mm256_loadu_si256( (const __m256i*)&tmpptr[rcidx] ), _mm256_srli_epi32( sh, 3 ) );
+    const __m256i ix  = _mm256_add_epi32( p, _mm256_set1_epi32( 1 ) );
+#if RC_DEC_VRENORM_PROBE==1
+    const __m256i w   = p;   // the probe: no load at all
+#elif RC_DEC_ZSLOT
+    const __m256i w   = _mm256_i32gather_epi32( (const int*)tmpbase, _mm256_blendv_epi8( _mm256_set1_epi32( int(zofs) ), ix, m1 ), 1 );
+#else
+    const __m256i w   = _mm256_mask_i32gather_epi32( _mm256_setzero_si256(), (const int*)tmpbase, ix, m1, 1 );
+#endif
+    const __m256i one = _mm256_set1_epi32( 1 );
+    const __m256i msk = _mm256_sub_epi32( _mm256_sllv_epi32( one, sh ), one );
+    const __m256i cd  = _mm256_loadu_si256( (const __m256i*)&code[rcidx] );
+    _mm256_storeu_si256( (__m256i*)&tmpptr[rcidx], p );
+    _mm256_storeu_si256( (__m256i*)&code[rcidx], _mm256_or_si256( _mm256_sllv_epi32( cd, sh ), _mm256_and_si256( w, msk ) ) );
+    _mm256_storeu_si256( (__m256i*)&range[rcidx], _mm256_sllv_epi32( r, sh ) );
+  }
+#endif
+
+  // One pass over the run of RC_DEC_VRENORM lanes starting at this one: the
+  // spelled-out gather body where it applies, else a loop for the compiler
+  // to vectorise -- RC_DEC_VRENORM_VF lanes wide, and kept away from the
+  // unroller, which would otherwise scalarise it before the vectoriser ever
+  // saw it. The knob names inside the pragma are expanded when the compiler
+  // parses it, not here.
+  void rc_RenormPass( uint zofs ) {
+#if RC_DEC_VRENORM_GATHER && defined(__AVX2__) && (RC_DEC_VRENORM%8)==0
+    for( uint k=0; k<RC_DEC_VRENORM; k+=8 ) rc_RenormV8( rcidx+k, zofs );
+#else
 #if RC_DEC_VRENORM_VF>1
     _Pragma("clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable)")
 #else
     _Pragma("clang loop vectorize(disable) unroll(full)")   // the probe: scalar, unrolled
 #endif
     for( uint k=0; k<RC_DEC_VRENORM; k++ ) rc_RenormV( rcidx+k, zofs );
-#if RC_DEC_VRENORM_PROBE==2
+#endif
+  }
+
+  // The pass, then its refill.
+  void rc_RenormRun( uint zofs ) {
+    rc_RenormPass( zofs );
     // the probe: the pass twice over -- the second finds nothing to shift, so
     // what it adds is the cost of a pass with nothing to wait for
-    _Pragma("clang loop vectorize(enable) vectorize_width(RC_DEC_VRENORM_VF) interleave_count(RC_DEC_VRENORM/RC_DEC_VRENORM_VF) unroll(disable)")
-    for( uint k=0; k<RC_DEC_VRENORM; k++ ) rc_RenormV( rcidx+k, zofs );
-#endif
+    if( RC_DEC_VRENORM_PROBE==2 ) rc_RenormPass( zofs );
 #if !RC_DEC_VRENORM_GATHER
     rc_RefillRun();
 #endif

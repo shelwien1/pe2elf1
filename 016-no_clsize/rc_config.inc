@@ -532,8 +532,16 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //
 // 0 = the pass does everything but the load, and the lanes that took bytes
 // (~1.2 of 16 a group) are refilled by scalar code off a bit mask. See
-// model1.inc. The default; 1 is for a core whose gathers are not
-// serialised, where it is one instruction against a dozen.
+// rc_RefillRun in rc.inc. The default; 1 is for a core whose gathers are
+// not serialised, where it is one instruction against a dozen.
+//
+// On AVX2 the gather is spelled out (rc_RenormV8): the loop vectoriser only
+// forms one on a core LLVM marks fast-gather, Skylake and up, and a
+// Haswell-tuned build -- -march=haswell, or native on one -- gets the
+// sixteen loads scalarised into vpextrd/vpinsrd chunks instead, on clang 18
+// and 23 alike. The intrinsic gathers wherever AVX2 is. The auto-vectorised
+// loop is what remains for a pass narrower than eight lanes, and for
+// targets without AVX2.
 #ifndef RC_DEC_VRENORM_GATHER
 #define RC_DEC_VRENORM_GATHER 0
 #endif
@@ -592,14 +600,16 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // rewritten -- and so brought into L1 -- by rc_Read at every block), so what
 // comes back for an idle lane is 0 whatever the mask does. The scalar version
 // of the trick is misc/cmov_probe.md's address-select. Only meaningful with
-// RC_DEC_VRENORM.
+// RC_DEC_VRENORM_GATHER.
 //
-// 0 = every lane loads the dword at its cursor. That is always a legal read
-// -- the refill's window is inside the row by RC_SKIP>=4 (rc_io.inc) -- and
-// for an idle lane it is the line the lane read last group, so it is hot;
-// the mask (1<<0)-1 == 0 then throws the whole dword away. The select buys
-// nothing in the value domain, and costs a compare and a blend per vector.
-// It is the shape asked for; 0 is the control.
+// 0 = the gather's own mask. In the spelled-out AVX2 body (rc_RenormV8) an
+// idle lane is masked off and takes the zero source without touching memory
+// -- the same effect in hardware, one blend cheaper. In the auto-vectorised
+// loop every lane loads the dword at its cursor, which is always a legal
+// read (the window is inside the row by RC_SKIP>=4, rc_io.inc) and for an
+// idle lane a hot line, and the mask (1<<0)-1 == 0 throws it away; clang
+// tends to fold that into a masked gather by itself. 1 is the shape asked
+// for; 0 is the control, and measures the same.
 #ifndef RC_DEC_ZSLOT
 #define RC_DEC_ZSLOT 0
 #endif
