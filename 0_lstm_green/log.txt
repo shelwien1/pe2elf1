@@ -1,0 +1,29 @@
+
+196582 57.159s 56.060s  PeakWorkingSetSize: 27,000,832 // green.hpp
+                                                   
+195598 31.400s 30.748s  PeakWorkingSetSize: 25,763,840 // ppmd.hpp
+                                                   
+194498 26.418s 24.807s  PeakWorkingSetSize: 25,870,336 // ppmd.hpp 
+                                                                  
+195546 48.921s 49.165s  PeakWorkingSetSize: 27,099,136 // green.hpp
+                                                   
+194708 23.977s 23.969s  PeakWorkingSetSize: 25,866,240 // sq/st sch1 ppmd.hpp 
+                                                                             
+195948 50.101s 48.759s  PeakWorkingSetSize: 27,103,232 // sq/st sch1 green.hpp
+
+2182515  719.409s  735.675s  PeakWorkingSetSize: 128,512,000 // ppmd enwik7
+
+2212963 2970.065s 2955.081s  PeakWorkingSetSize: 139,735,040 // green enwik7
+
+2190856  713.489s  713.645s  PeakWorkingSetSize: 161,017,856 // tree enwik7
+
+194397 24.344s 24.079s  PeakWorkingSetSize: 89,559,040 // ppmd2.hpp (tree)
+
+[enc] 768771 > 196608  100.0%  done in 0.16s  14.80M RAM // ppmd_sh9
+
+[enc] 768771 > 209793  100.0%  done in 0.71s   8.50M RAM // ppmd-tree
+WinSize=0.73 MB; alloc_size=8.50 MB; waste_size=0.01 MB; total=9.25 MB; MemSize=256 MB
+
+
+30.173s: ..\memchk coder0.exe c ../book1 1
+30.401s: ..\memchk coder0.exe d 1 2
