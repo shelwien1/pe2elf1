@@ -126,3 +126,30 @@ divide, an address, anything -- waits for the slower one.  `sel(p, 0, false)
   (5.0 in Q2a).  `__builtin_unpredictable` is clang's; gcc has no equivalent
   that forces `cmov`, and MSVC has neither.  If the `cmov` matters, the
   portable way to get it is the stub or inline assembly, not the ternary.
+
+## ISPC: the vector analogue does mask
+
+Would ISPC compile `cond ? *p : q` -- varying pointer, varying condition --
+to a masked gather?  `misc/sel_gather.ispc`, ispc 1.22 / LLVM 17: yes, and it
+lowers the ternary exactly like an `if`.  The IR's blocks are named
+`select_eval_expr` / `select_done`, an any-lane test branches around the
+gather when no lane needs it, and the gather's mask *is* the condition.
+AVX-512:
+
+```
+    vptestmd   %zmm2, %zmm2, %k1          ; k1 = cond != 0
+    kortestw   %k1, %k1 ; je ...          ; no lane true: skip the gather
+    kmovq      %k1, %k2
+    vpgatherdd (%rsi,%zmm3), %zmm1 {%k2}  ; masked by cond
+    vpblendmd  %zmm1, %zmm0, %zmm2 {%k1}
+```
+
+AVX2 is the same shape with `vptest`/`je`, `vpgatherdd` under a
+cond-derived mask, and `vblendvps`.  An explicit `if (cond) x = *p; else x =
+q;` compiles to the identical code.
+
+So the vector form has neither of the scalar `cmov`'s properties: a lane with
+`cond` false issues no load -- no fault, no cache fill -- and the blend waits
+on nothing it did not select.  It honours the SPMD rule that inactive
+instances perform no memory operations.  What it costs is the gather, which
+is the question `dec_vectorize.md` already answered for the per-bit path.
