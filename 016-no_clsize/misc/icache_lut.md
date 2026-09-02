@@ -140,11 +140,49 @@ Two places, neither of them a cache:
   table; the decoder's per-block data is the model (4 KB, resident) and the
   input rows (streamed once, prefetched by the stride detector).
 
+## Measured: `misc/icache_probe.cpp`
+
+The claim above is testable, so it was tested.  A 4K-aligned 128 KB block is
+filled with a data pattern and threaded with an instruction sequence that
+touches every line -- a 2-byte short jump straddling each line boundary
+(`EB 3E` at bytes 63..64 of every line, jumping to the next boundary), ending
+in `ret`.  Reads are timed as a dependent-load pointer chase over a random
+single cycle of lines, so the tick count is the latency of wherever the line
+lives and not a prefetcher's bandwidth; and they are timed over the first and
+last 16 KB separately, because 128 KB is four L1i's and only the *last* lines
+executed can still be in L1i.  Cold means a 256 MB read plus `clflush`.
+Intel Cascade Lake, TSC 2.80 GHz, minimum of five:
+
+```
+  ticks per dependent load          whole 128KB   first 16KB   last 16KB
+  cold (256MB read + clflush)         106.0        127.0        102.7
+  after EXECUTING the block            12.4         12.5         12.5
+  after reading it as data             12.4          5.0          5.0
+  read twice (L1d reference)           12.4          5.0          5.0
+  cold again (control)                136.2         93.2         98.9
+```
+
+Three numbers calibrate it: 5.0 is an L1d hit, 12.4 is an L2 hit (the whole
+128 KB does not fit L1d, so even the data-warm chase of the full block runs at
+L2 speed while the 16 KB regions run at L1d), and 100-136 is DRAM.
+
+The row that answers the question is **after executing the block, last
+16 KB: 12.5**.  Those are the lines the front end fetched most recently; they
+are in L1i.  A load reads them at exactly the L2 latency -- the same 12.5 as
+the first 16 KB, which left L1i long ago -- and not at the 5.0 that a line in
+L1d gets.  Executing the code did one thing for the data path: it filled L2.
+A 1 GB flush gives the same table.
+
+Windows builds with `cl /O2 icache_probe.cpp`; that branch is written to the
+documented API and not yet run.
+
 ## Verdict
 
 The mechanism the idea rests on -- a data load served from L1i -- does not
-exist: L1i and L1d meet at L2, so the best case is an L2 hit where an L1d hit
-was already happening, and a store to such a line is a machine clear.  The
+exist, and the probe shows it: a line that is in L1i and not in L1d reads at
+L2 latency, 12.5 ticks against L1d's 5.0.  L1i and L1d meet at L2, so the
+best case is an L2 hit where an L1d hit was already happening, and a store to
+such a line is a machine clear.  The
 variant that does read L1i, executing the data, replaces a 5-cycle load with an
 unpredictable branch.  And the table it was aimed at is 2 KB, already packed,
 already resident, and already had its one latency win taken by `RC_FUSE_PP`.
