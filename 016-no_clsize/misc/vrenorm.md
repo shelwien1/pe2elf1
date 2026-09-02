@@ -1,0 +1,185 @@
+# The decoder's renorm as a vector pass
+
+The ask: make the decoder's `tmpptr` reads branchless and let the compiler
+vectorise them -- a dummy zero dword next to the lane rows, kept hot, and
+each lane's refill gathering from either its cursor or that dword, so no lane
+is left out and nothing branches.
+
+The short answer: **the pass vectorises, the refill must not.** A branchless
+renorm pass over all sixteen lanes, auto-vectorised from a plain loop, is
+worth about +7% decode on this box *when it has no load in it* -- and every
+way of putting the load in the pass loses, because on this box a
+`vpgatherdd` costs 25 cycles and the sixteen lanes' cursors are sixteen
+lines.  What works is shape 9's cached window from `dec_renorm.md`, lifted
+into the pass: the bytes a lane shifts in come from a per-lane dword the pass
+holds in lane state, and only the ~1.2 lanes a group that shifted reload
+theirs, in scalar code, into an array nothing on the scalar path reads.  The
+zero slot turned out to be unnecessary at every stage: clang produced the
+masked gather on its own, and the mask is what the pass computes anyway.
+
+Where it landed is in §4; the mechanisms, all of which were surprises, are
+§2 and §3.  `RC_DEC_VRENORM` in `rc_config.inc` is the knob, with
+`RC_DEC_VRENORM_GATHER` and `RC_DEC_ZSLOT` for the shape originally asked
+for, and `RC_DEC_VRENORM_PROBE` for taking it apart again.
+
+## 1. The shape
+
+The group form of the decode loop (`model1.inc`) steps the two bytes of a
+group together, one bit position at a time.  Lane `m*8+j` is bit `j` of
+byte `m`, and each lane is touched exactly once a group -- which is what makes
+a pass possible: a lane's renorm can move from the head of its `rc_Process`
+to *after* its bit, and a run of lanes can be renormalised together once
+their bits are in.
+
+- **The kernel** (`rc.inc`, under `RC_VECOUT && RC_DEC_VRENORM`):
+  `rc_Process`'s decode arm stops calling `rc_Renorm` and applies `rpre` to
+  `code` where it is produced; `rpre` is dead after that and the array is
+  never read on the decode side.  `rc_Renorm`'s decode arm keeps the
+  one-branch shape minus the fold, for the block-length bits and the tail,
+  which `model1.inc` drives through `rc_ProcessR` (renorm, then process).
+- **Slots.** The lane arrays are laid out bit-major under the knob --
+  `RC_SLOT(m*8+j) = j*NB + m` -- so the lanes finished by step `j` are a
+  contiguous run.  A pass of `W` lanes fires every `W/NB` steps over the run
+  just finished: `W=16` is one pass at the group's end, `W=8` two passes,
+  after steps 3 and 7.
+- **The pass** is a loop the compiler vectorises (`#pragma clang loop
+  vectorize_width(8) unroll(disable)` -- without the second half the full
+  unroller scalarises it before the vectoriser ever sees it):
+
+  ```c
+  r   = range[k];
+  sh  = ((r<sTOP) + (r<gTOP)) * 8;               // 0, 8, 16
+  tmpptr[k] -= sh>>3;
+  code[k]    = (code[k]<<sh) | ((vwin[k]>>16)>>(16-sh));
+  range[k]   = r<<sh;
+  vsh[k]     = sh;
+  ```
+
+  `vwin[k]` is the dword ending at the lane's cursor,
+  `vwin == (uint&)tmpbase[tmpptr-3]` on entry to every pass.  The cursor's
+  own byte is its top byte, so the top `sh` bits are what an `sh`-bit shift
+  wants, and `(win>>16)>>(16-sh)` is 0 for a lane that shifted nothing.
+  Twelve vector instructions a group for sixteen lanes, no memory but the
+  lane arrays, and clang emits exactly that: two compares to `k`-masks,
+  `vpmovm2d`, the subtracts, `vpsllvd`, `vpsrlvd`, `vpor`, six 32-byte
+  stores.
+- **The refill** is the lanes with `vsh != 0`, as a bit mask (one
+  `vpcmpneqd` + `kmov` per eight lanes on AVX-512, `vpcmpeqd` + `vmovmskps`
+  on AVX2), refilled two at a time unconditionally -- the lowest set bit,
+  `tzcnt`, or the run's first slot when there is none, which then reloads a
+  window that did not move -- and a loop for the third and beyond:
+
+  ```c
+  m = lanemask( vsh[k0..k0+W) != 0 );
+  i = k0 + (tzcnt(m) & (W-1)); m &= m-1;  vwin[i] = *(uint*)(tmpbase + tmpptr[i] - 3);
+  i = k0 + (tzcnt(m) & (W-1)); m &= m-1;  vwin[i] = ...;
+  if( m ) do { ... } while( m );
+  ```
+
+  Six instructions a slot.  P(three or more lanes shift in a group) is about
+  13%, so that loop's branch is the one branch left in the renorm, against
+  sixteen 8%-taken ones before.
+
+## 2. Why the load cannot be in the pass here
+
+The first build did the obvious thing -- every lane loads the dword at its
+new cursor, `(1<<sh)-1` keeps the bytes that came in -- and clang made it a
+`vpgatherdd`.  Two things about that build:
+
+- With the index as `uint`, clang produced 4-lane `vpgatherqd` (the offset
+  is zero-extended to 64 bits and `vpgatherdd` sign-extends) *and* it
+  produced the masked gather on its own: `vpxor` the destination, gather
+  under the `range<sTOP` mask.  The backend folds `store(select(k, new,
+  old))` into a masked store and the gather's dead lanes into its mask.
+  **The zero slot was never needed**: the compiler had already arranged that
+  an idle lane loads nothing.  `RC_DEC_ZSLOT=1` measures identical to 0
+  (33.6 against 33.1 MB/s, single runs).  With the index as `int` the gather
+  is the 8-lane `vpgatherdd` and, oddly, unmasked again.
+- Either way it costs 59 cycles a group, on a 139-cycle group.  The probe
+  that replaces the load with the cursor (`RC_DEC_VRENORM_PROBE=1`, garbage
+  out, same work) runs at **+7% over the baseline**; the same pass with its
+  gather runs at −27%.  A gather is the whole loss.
+
+`misc/gather_bench.cpp` is the microbenchmark: one 8-lane `vpgatherdd` from
+L1-hot data costs **25 ticks of throughput** here, 37 dependent, against 19
+for eight dependent scalar loads.  That is the Downfall (GDS) microcode
+mitigation, which serialises gathers on every Skylake-generation core; an
+unmitigated Skylake-X does one every ~5 cycles.  The guest kernel reports
+`gather_data_sampling: Not affected` and times exactly like a core that is.
+`-mno-gather`, clang's flag for this situation, scalarises the sixteen loads
+into `vpextrd`/load/`vpinsrd` -- 23 cycles of port 5 a group, and −12%.
+
+So on this box the refill has to be scalar and it has to be for the lanes
+that need it, and `speed_plan_next.md`'s "gathers stay out on both sides"
+was right for a reason it did not know.  On a core where a gather is one
+instruction, `RC_DEC_VRENORM_GATHER=1` is the shape to measure -- run the
+microbenchmark first.
+
+## 3. Why the refill cannot write `code[]`
+
+The second build kept the pass gather-free (`code <<= sh`, the mask to an
+array) and refilled the shifted lanes scalar, `code[i] |= load & mask[i]`.
+It measured **exactly like the gather build** -- 2.92 s against 2.87 -- and
+so did its 8-lane twin, whose first pass has four steps of slack before any
+of its lanes is used again.  Latency exposure was not the story, and a probe
+that dropped the load but kept the store was just as slow.
+
+The store is the story.  `code[i]`'s address is known only after the mask,
+which is after the whole pass, some forty cycles after the group's last
+decision -- and the next steps' loads of `code[k]` are issued long before
+that.  A load issued behind an older store whose address is unknown goes
+through the memory disambiguation predictor; the ones that have aliased
+(the run's first slot aliases in ~34% of groups: 26% no lane shifted, 8% it
+was that lane) get predicted to alias and wait for *every* older store
+address to resolve, which puts the refill's whole chain on the critical
+path -- including the second pass's, in the 8-lane build, for loads that
+never aliased it.  Fifty cycles a group either way.
+
+Hence the window: the refill's store goes to `vwin[i]`, which nothing on the
+scalar path reads.  The next pass reads it a group later, when the address
+is old.  That build is the one in §4.
+
+## 4. What it measures
+
+Alternating rounds, best of 3 decode passes each, 100 MB of enwik8, clang
+18, `-march=native` (Cascade Lake, AVX-512), with a byte-identical copy of
+the baseline in the rotation as the noise control.
+
+(The paired table goes here; the rounds are running as this is committed,
+and the single runs below are what the design was steered by.)
+
+Single runs of the probe ladder, the same box, for the shape of the cost:
+
+| build | MB/s | what it is |
+|---|---|---|
+| base | 45.5 | the one-branch refill, `RC_DEC_VRENORM=0` |
+| `PROBE=1`, gather shape | 48.4 | the pass with no load at all |
+| `PROBE=3` | 46.8 | the window pass, no refill |
+| `PROBE=4` | 47.3 | ... and the lane mask |
+| `PROBE=5` | 43.3 | ... and one slot |
+| `PROBE=6` | 45.5 | ... and two slots |
+| `RC_DEC_VRENORM=16` | 42.5 | the whole thing |
+| `RC_DEC_VRENORM=8` | 37.9 | two passes a group |
+| `GATHER=1`, index `uint` | 33.1 | the shape asked for |
+| `GATHER=1`, `-mno-gather` | 40.9 | loads and `vpinsrd` |
+| `VF=1` | 27.5 | the same pass, scalar, unrolled |
+| `RC_DEC_VRENORM=4` | 18.0 | four passes a group, gather shape |
+
+## 5. Things learned about the tools
+
+- `#pragma clang loop vectorize_width(N)` needs `unroll(disable)` beside it
+  or the loop is fully unrolled first and never vectorised; SLP does not form
+  gathers from the result.
+- A gather's index must be a signed 32-bit value to become `vpgatherdd`; a
+  `uint` offset into a `byte*` gives two 4-lane `vpgatherqd`.
+- clang folds `store(select(k, new, old))` into an AVX-512 masked store and
+  masks the gather feeding it.  Whether it does so depends on details
+  (the index type changed it); the shape of the pass is worth reading in
+  the assembly every time.
+- The store-to-load forwarding pairs in a mixed scalar/vector loop are
+  asymmetric: a scalar load from a 32-byte store forwards, a 32-byte load
+  from eight scalar stores waits for them to commit.  Neither showed up as a
+  cost here; the disambiguation stall in §3 is the one that did.
+- There is no `perf` in this VM, and the CPU reports itself unaffected by a
+  mitigation it plainly has.  A microbenchmark of the instruction in
+  question is cheaper than a theory.

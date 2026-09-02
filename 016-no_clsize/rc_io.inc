@@ -339,6 +339,17 @@ struct RCio {
   // decoder places it back ascending and walks it from its top.
   ALIGN(4096) byte tmpbuf[RCNUM][rowsize];
 
+  // A dword of zeros directly above the lane rows, at a fixed offset from
+  // rows(): the decoder's vector renorm pass points an idle lane's gather at
+  // it (RC_DEC_ZSLOT, rc_config.inc), so the pass reads nothing a lane did
+  // not shift in. Sixteen dwords, not one, so a whole vector of idle lanes
+  // hits one line and nothing else shares it. rc_Read rewrites it every
+  // block, which is what keeps it hot; the pass then reads it up to RCNUM
+  // times a group. ZOFS is the index the pass uses -- a compile-time
+  // constant, and model1.inc asserts it against the real layout.
+  ALIGN(64) uint zslot[16];
+  static const uint ZOFS = ((RCNUM*rowsize)+63) & ~63u;
+
   // decoder: the substream lengths of the current block, from rc_Read's
   // headers -- the decode cursors start at FF_PADSIZE-1+rclen[rcidx].
   uint rclen[RCNUM];
@@ -480,6 +491,11 @@ struct RCio {
       // the decoder reads downward, so the over-read pad sits BELOW the chunk
       for( i=0; i<FF_PADSIZE; i++ ) tmpbuf[rcidx][i] = 0xFF;
     } // rcidx
+
+    // the zero slot the vector renorm pass gathers from for idle lanes --
+    // written every block so the line is in L1 before the first pass reads
+    // it (it is never anything but zero; the write IS the prefetch)
+    for( i=0; i<DIM(zslot); i++ ) zslot[i] = 0;
   }
 
   // The header, out of line -- see hdr_Read above for why. Fills rclen[].

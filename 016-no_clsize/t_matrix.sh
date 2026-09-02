@@ -70,6 +70,21 @@ runsame "-DRC_FOLD_RPRE=0 -DRC_SCATTER_SKIP=1 -DRC_ENC_NSEL=1 -DRC_ENC_RENORM=2"
 run "-DRC_RCNUM=32 -DRC_ENC_NSEL=1"
 run "-DRC_CODBYTES=3 -DRC_LOWBYTES=7 -DRC_FOLD_RPRE=1"
 
+# The decoder's vector renorm pass: decode side only, so the stream is the
+# reference's. Every pass width, the scalar and 16-wide loop shapes, the
+# gather variant with and without the zero-slot select, and the width that
+# is one step at RCNUM=32.
+runsame "-DRC_DEC_VRENORM=16"
+runsame "-DRC_DEC_VRENORM=8"
+runsame "-DRC_DEC_VRENORM=4"
+runsame "-DRC_DEC_VRENORM=2"
+runsame "-DRC_DEC_VRENORM=16 -DRC_DEC_VRENORM_VF=1"
+runsame "-DRC_DEC_VRENORM=16 -DRC_DEC_VRENORM_VF=16"
+runsame "-DRC_DEC_VRENORM=16 -DRC_DEC_VRENORM_GATHER=1"
+runsame "-DRC_DEC_VRENORM=8 -DRC_DEC_VRENORM_GATHER=1 -DRC_DEC_ZSLOT=1"
+run "-DRC_DEC_VRENORM=16 -DRC_RCNUM=32"
+run "-DRC_DEC_VRENORM=4 -DRC_RCNUM=32"
+
 # The header model's context depth. Changes the stream, so `run`, not
 # `runsame` -- and the shallow end is what exercises the p=1/2 tail.
 run "-DRC_HDR_CTXBITS=1"

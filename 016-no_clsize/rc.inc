@@ -352,6 +352,20 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
       //
       // misc/dec_renorm.md is the analysis, and the nine other shapes it
       // measured; this is the one that won.
+#if RC_VECOUT && RC_DEC_VRENORM
+      // The vector-pass build (RC_DEC_VRENORM, rc_config.inc): the group loop
+      // never calls this -- model1.inc renormalises a run of lanes at once,
+      // after their bits -- and rc_Process applies rpre to code itself. What
+      // is left here serves the block-length bits and the tail, and is the
+      // shape below minus the rpre fold, which has nothing left to fold.
+      if( __builtin_expect_with_probability( range<sTOP, 0, 0.99 ) ) {
+        dsh     = (range<gTOP) ? 16 : 8;
+        tmpptr -= dsh>>3;
+        code  <<= dsh;
+        range <<= dsh;
+        code   |= (uint&)tmpbase[tmpptr+1] & ((dsh==8) ? 0xFF : 0xFFFF);
+      }
+#else
       if( __builtin_expect_with_probability( range<sTOP, 0, 0.99 ) ) {
         dsh     = (range<gTOP) ? 16 : 8;
         tmpptr -= dsh>>3;
@@ -364,6 +378,7 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
         code   -= rpre;
         rpre    = 0;
       }
+#endif
     }
   }
 
@@ -377,7 +392,15 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
     uint _b = _bit;   // not `bit`: as a macro, callers pass a variable named
                       // bit, and `uint bit = bit;` would self-initialize
 
+#if RC_VECOUT && RC_DEC_VRENORM
+    // Decode renormalises AFTER the bit, a run of lanes at a time, in
+    // model1.inc's vector pass -- see RC_DEC_VRENORM. The scalar paths that
+    // still need it before the bit (the block-length bits, the tail) call
+    // rc_Renorm themselves, through model1.inc's rc_ProcessR.
+    if( f_DEC==0 ) rc_Renorm();
+#else
     rc_Renorm();
+#endif
     rpre = range>>SCALElog;
 
     rpre *= freq;
@@ -388,6 +411,13 @@ struct Rangecoder : RC_IO_BASE< Rangecoder<f_DEC> > {
 
     range = _b ? range : rpre;
     rpre &= -_b;
+
+#if RC_VECOUT && RC_DEC_VRENORM
+    // ...and the decoder applies it here rather than leaving it pending for
+    // the next renorm, which no longer runs at the head of the step. rpre is
+    // dead after this on the decode side; the slot is never read again.
+    if( f_DEC==1 ) code -= rpre;
+#endif
 
 #if RC_VECOUT && RC_FOLD_RPRE
     // Apply rpre here instead of at the next ShiftLow -- see rc_config.inc.

@@ -126,7 +126,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
                        + 4096*(RC_FF_TRIM&63)                             \
                        + 33554432*RC_FOLD_RPRE                            \
                        + 13*RC_ENC_NSEL                                   \
-                       + 17*RC_ENC_RENORM )
+                       + 17*RC_ENC_RENORM                                 \
+                       + 23*RC_DEC_VRENORM )
 
 // 1 only inside mk_kernel.sh's preprocessing of rc.inc: selects the
 // vector-shape ShiftLow/rc_Renorm/rc_Quit bodies the generated lane-array
@@ -412,6 +413,120 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 # else
 #  define RC_FUSE_PP_ENC 1
 # endif
+#endif
+
+
+// The decoder's renorm as a BRANCHLESS VECTOR PASS over a run of lanes,
+// instead of a branch at the head of every rc_Process.
+//
+//   0   the one-branch refill in rc.inc: `if( range<sTOP )` per lane per bit,
+//       ~92% not taken, and the refill's masked load only on the taken arm
+//   W   no renorm inside rc_Process at all. A lane is renormalised AFTER its
+//       bit, W lanes at a time, in a loop the compiler auto-vectorises: two
+//       compares for the shift count, the cursor decrement, ONE dword gather
+//       at the new cursor for every lane whether it shifted or not, the mask
+//       (1<<sh)-1 to keep only the bytes shifted in, and the two shifts. No
+//       branch, no per-lane mask, no lane left out.
+//
+// Why a pass and not the branchless shapes misc/dec_renorm.md buried: those
+// put the always-executed shifts and the refill load on each lane's own chain
+// at the head of its step, sixteen times a group, in scalar code. The pass
+// takes them off the step entirely -- a lane's next use is a whole group
+// away, so it has ~139 cycles of slack -- and does them eight lanes to an
+// instruction. dec_vectorize.md saw the same thing from the other side: inside
+// a clean whole-group renorm pass, branchless beat every branchy shape by 12%.
+// It just could not carry the barriers of the four-pass split around it. Here
+// the model stays interleaved; only the renorm moves.
+//
+// W is the number of lanes a pass covers, and it fixes WHERE the passes go.
+// The group form of the decode loop (model1.inc) steps the NB=RCNUM/8 bytes
+// of a group together, one bit position at a time, so after step j the lanes
+// of bit positions <=j are done for this group. With the lane arrays laid
+// out bit-major (slot = j*NB + m, see RC_SLOT), those lanes are a contiguous
+// run, and a pass of W lanes fires every W/NB steps over the run just
+// finished. W=RCNUM is one pass at the group's end; W=RCNUM/2 is two passes,
+// after steps 3 and 7, which keeps a bit-0 lane's renorm four steps clear of
+// its next use instead of zero.
+//
+// The kernel changes with it: rc_Process's decoder arm stops calling
+// rc_Renorm and applies rpre to code where it is produced (`code -= rpre`
+// with rpre already masked), and rc_Renorm's decoder arm -- still used, for
+// the block-length bits and the tail -- drops its rpre fold. The stream does
+// not change; t_matrix.sh checks it against the reference.
+//
+// Constraints: W must divide RCNUM, be a multiple of NB=RCNUM/8, and W/NB
+// must divide 8. At RCNUM=16 that is 2, 4, 8 or 16.
+#ifndef RC_DEC_VRENORM
+#define RC_DEC_VRENORM 0
+#endif
+#if RC_DEC_VRENORM<0 || RC_DEC_VRENORM>RC_RCNUM
+#error "RC_DEC_VRENORM is 0 or a lane count up to RC_RCNUM"
+#endif
+#if RC_DEC_VRENORM && ( RC_RCNUM%RC_DEC_VRENORM || RC_DEC_VRENORM%(RC_RCNUM/8) \
+                       || 8%(RC_DEC_VRENORM/(RC_RCNUM/8)) )
+#error "RC_DEC_VRENORM must divide RC_RCNUM, be a multiple of RC_RCNUM/8, and cover 1, 2, 4 or 8 steps"
+#endif
+
+// Vector width for the pass's loop: the width the compiler is TOLD to use,
+// through `#pragma clang loop vectorize_width`. 8 is a ymm of dwords, and
+// clang's default on AVX-512 anyway (-mprefer-vector-width=256). 16 asks for
+// a zmm gather where W allows it. Only meaningful with RC_DEC_VRENORM.
+#ifndef RC_DEC_VRENORM_VF
+# if RC_DEC_VRENORM>=8
+#  define RC_DEC_VRENORM_VF 8
+# else
+#  define RC_DEC_VRENORM_VF RC_DEC_VRENORM
+# endif
+#endif
+
+// 1 = the pass loads for EVERY lane, and the compiler turns the sixteen
+// loads into vpgatherdd. It is the obvious shape, and on this box it is the
+// worst thing in the whole experiment: a vpgatherdd ymm here costs 25 ticks
+// of throughput in isolation (misc/gather_bench.cpp) -- the Downfall
+// microcode mitigation serialises gathers on Skylake-generation cores, and
+// this VM reports "Not affected" while timing exactly like one that is. Two
+// of them a group is 59 cycles on a 139-cycle group. `-mno-gather`, which
+// scalarises them into loads and vpinsrd, is port 5 for 23 cycles instead.
+//
+// 0 = the pass does everything but the load, and the lanes that took bytes
+// (~1.2 of 16 a group) are refilled by scalar code off a bit mask. See
+// model1.inc. The default; 1 is for a core whose gathers are not
+// serialised, where it is one instruction against a dozen.
+#ifndef RC_DEC_VRENORM_GATHER
+#define RC_DEC_VRENORM_GATHER 0
+#endif
+#if RC_DEC_ZSLOT && !RC_DEC_VRENORM_GATHER
+#error "RC_DEC_ZSLOT selects the gather's address: it needs RC_DEC_VRENORM_GATHER"
+#endif
+
+// Probes on the pass, for taking it apart. 0 is the pass. 1 leaves the
+// gather out -- the refill takes the cursor for data, so the decode is
+// garbage but the block structure survives and the work is the same. 2 runs
+// the pass twice, back to back; the second finds nothing to shift, so what
+// it adds is the cost of a pass with nothing to wait for. RC_DEC_VRENORM_VF=1
+// is the third probe: the same pass, scalar, fully unrolled.
+#ifndef RC_DEC_VRENORM_PROBE
+#define RC_DEC_VRENORM_PROBE 0
+#endif
+
+// 1 = the pass's gather does not read a lane that shifted nothing: its index
+// is SELECTED to a dword of zeros kept next to the lane rows (RCio::zslot,
+// rewritten -- and so brought into L1 -- by rc_Read at every block), so what
+// comes back for an idle lane is 0 whatever the mask does. The scalar version
+// of the trick is misc/cmov_probe.md's address-select. Only meaningful with
+// RC_DEC_VRENORM.
+//
+// 0 = every lane loads the dword at its cursor. That is always a legal read
+// -- the refill's window is inside the row by RC_SKIP>=4 (rc_io.inc) -- and
+// for an idle lane it is the line the lane read last group, so it is hot;
+// the mask (1<<0)-1 == 0 then throws the whole dword away. The select buys
+// nothing in the value domain, and costs a compare and a blend per vector.
+// It is the shape asked for; 0 is the control.
+#ifndef RC_DEC_ZSLOT
+#define RC_DEC_ZSLOT 0
+#endif
+#if RC_DEC_ZSLOT && !RC_DEC_VRENORM
+#error "RC_DEC_ZSLOT needs RC_DEC_VRENORM"
 #endif
 
 
