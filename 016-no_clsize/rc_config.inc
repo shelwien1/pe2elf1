@@ -451,15 +451,18 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //   16, the whole thing, SLOTS=2        43.14     -5.4%
 //   16, SLOTS=3                         44.23     -3.3%    (second run, base 45.75)
 //   16, SLOTS=4                         43.61     -4.7%
+//   16, SLOTS=4 again                   44.47     -0.5%    (third run, base 44.70)
+//   16, SLOTS=4, TAIL=1                 44.15     -1.2%
 //   8,  two passes a group              40.33    -11.5%
 //   16, gather shape (GATHER=1)         33.26    -27.0%
 //
-// So the pass is real and the refill eats it: the mask and two slots cost
-// the +6% by themselves, and the loop behind them costs 3-6% more whether
-// it runs or not -- at SLOTS=4 it is taken in 0.6% of groups. The default
-// stays 0 until a refill that costs less than the pass buys exists;
-// RC_DEC_VRENORM_SLOTS and RC_DEC_VRENORM_TAIL below are the levers, and
-// misc/vrenorm.md has every row.
+// So the pass is real and the refill eats it: the mask and the slots that
+// keep the stream honest cost what the pass bought, and at SLOTS=4 the
+// build sits within about a percent of 0 -- the noise floor -- with the
+// tail's shape not mattering. The default stays 0; RC_DEC_VRENORM_SLOTS
+// and RC_DEC_VRENORM_TAIL below are the levers, misc/vrenorm.md has every
+// row and what would change the answer (a core with cheap gathers, a
+// wider window, the AVX2 box).
 //
 // W is the number of lanes a pass covers, and it fixes WHERE the passes go.
 // The group form of the decode loop (model1.inc) steps the NB=RCNUM/8 bytes
@@ -529,7 +532,7 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 // loop's exit is a data-dependent branch that costs a mispredict whenever
 // the count crosses it. See misc/vrenorm.md for what each setting measures.
 #ifndef RC_DEC_VRENORM_SLOTS
-#define RC_DEC_VRENORM_SLOTS 3
+#define RC_DEC_VRENORM_SLOTS 4
 #endif
 #if RC_DEC_VRENORM_SLOTS<1 || RC_DEC_VRENORM_SLOTS>4
 #error "RC_DEC_VRENORM_SLOTS is 1..4"
@@ -541,7 +544,8 @@ enum { BLKSIZE=RC_BLKSIZE, RCNUM=RC_RCNUM, VECSIZE=RC_VECSIZE };
 //      lane, W lanes, behind the one branch. No loop in the group body.
 // The rare path's cost is its probability times its length either way;
 // what differs is what a loop does to the code around it. Measured in
-// misc/vrenorm.md.
+// misc/vrenorm.md: at SLOTS=4 the two are within a percent of each other
+// and of the baseline, and 1 never beats 0.
 #ifndef RC_DEC_VRENORM_TAIL
 #define RC_DEC_VRENORM_TAIL 0
 #endif

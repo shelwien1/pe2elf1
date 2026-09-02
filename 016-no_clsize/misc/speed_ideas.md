@@ -190,9 +190,12 @@ it cannot be is a gather: a `vpgatherdd` costs 25 ticks on this box
 (`gather_bench.cpp`, the GDS microcode mitigation), and a refill of the
 ~1.2 lanes a group that shifted has to be scalar, off a lane mask, into a
 window array nothing on the scalar path reads.  That refill is what the
-knob is fighting: mask plus two slots costs 4% of the 6%, and the loop for
-the rare third lane more than the rest.  `RC_DEC_VRENORM=16` with
-`RC_DEC_VRENORM_SLOTS` is the state of it.
+knob is fighting: the mask and the unconditional slots cost back the 6%,
+and `RC_DEC_VRENORM=16` with four slots lands within a percent of the
+baseline -- a wash here, and the knob's default stays 0.  `vrenorm.md` §4a
+has the three things that would change that: a core whose gathers are one
+instruction, an 8-byte window that reloads a lane every ~7 bytes instead of
+every shift, and the AVX2 box.
 
 Two mechanisms from it belong on the "know before building" list: a scalar
 store whose address is known late (a `tzcnt` off a mask) stalls every later

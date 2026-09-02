@@ -179,14 +179,49 @@ them predicted -- cost the whole +6% of the pass by themselves: +0.6% is
 the noise floor.  And the loop for the rare lanes costs 3-6% *whether or
 not it runs*: at four slots it is taken in 0.6% of groups, which is a tenth
 of a cycle of mispredicts, and the build is still 4.7% behind base and 5.3%
-behind the same code with the loop deleted.  That is what a loop inside
-the group body does to the code around it -- register allocation, layout,
-the uop cache, something the assembly listing can be asked about -- and not
-what the branch does.  A straight-line rare path that reloads every window
-is worse again at 13% taken (48 instructions a trip), and is what
-`RC_DEC_VRENORM_TAIL=1` measures at the higher slot counts below.
+behind the same code with the loop deleted -- in that run.  The next run
+put the same binary at −0.5%, which is the box's layout sensitivity doing
+what `speed_ideas.md` §0 says it does.  A straight-line rare path that
+reloads every window is worse at 13% taken (48 instructions a trip), and
+`RC_DEC_VRENORM_TAIL=1` measures it at the higher slot counts below.
 
-TAILTABLE
+| build, all `RC_DEC_VRENORM=16` | median MB/s | vs base | rounds |
+|---|---|---|---|
+| base | **44.70** | -- | 45.17 42.38 45.43 45.54 43.55 44.23 |
+| base again | 45.17 | +1.1% | 44.23 44.10 45.53 44.81 46.38 46.24 |
+| `PROBE=6`: mask + two slots, no tail at all | 46.03 | +3.0% | 45.77 46.35 46.29 46.84 45.19 45.38 |
+| `SLOTS=4`, loop tail | 44.47 | −0.5% | 43.28 43.61 44.38 44.64 44.83 44.55 |
+| `SLOTS=4`, straight-line tail (`TAIL=1`) | 44.15 | −1.2% | 44.17 42.13 44.28 44.13 43.02 44.76 |
+| `SLOTS=3`, straight-line tail | 43.29 | −3.2% | 44.53 41.56 43.30 43.28 43.14 43.64 |
+| `SLOTS=2`, straight-line tail | 39.98 | −10.5% | 40.47 35.74 40.46 39.51 31.42 40.55 |
+
+A noisier run (the baseline's own rounds span 7%), and it moves the
+four-slot loop build from −4.7% to −0.5%: at four slots the tail's shape
+does not matter and the build sits **within about a percent of the
+baseline**, which is the noise floor.  Three slots is 3% behind either
+way, two slots is 6-10% behind, and the straight-line tail never beats the
+loop.  `RC_DEC_VRENORM_SLOTS=4` is the default under the knob; the knob's
+own default stays 0, because on this box the whole thing is a wash: the
+pass buys 6%, the mask and slots that keep the stream honest cost 6%.
+
+## 4a. What would make it win
+
+- **A core whose gathers are one instruction.**  Then the refill is back
+  inside the pass (`RC_DEC_VRENORM_GATHER=1`), the mask, slots and tail
+  vanish, and the +6% of the bare pass is what is left to lose a gather's
+  throughput from.  `misc/gather_bench.cpp` says in a minute whether a box
+  is that box; this one is not, and a patched Skylake-X is not either.
+- **Fewer reloads.**  The refill is ~1.3 lanes a group because a 4-byte
+  window is spent after one 2-byte shift.  An 8-byte window in lane state
+  -- two dword arrays, or qword lanes -- with a consumed-bytes count would
+  reload a lane every ~7 bytes instead of every shift: 0.18 reloads a
+  group, P(more than one) 1.4%, one unconditional slot and a rare tail
+  that is rare.  The pass grows by the 64-bit shifts; the refill shrinks
+  by a slot and the mask stays.  Unmeasured.
+- **The other box.**  Every branch/branchless call in `dec_renorm.md`
+  inverted between this machine and the AVX2 one; the pass's shape on AVX2
+  is `vpcmpgtd`/`vpblendvb` for the mask work here done in `k` registers.
+  Try `-DRC_DEC_VRENORM=16` there before believing any of the above.
 
 Single runs of the probe ladder, the same box, for the shape of the cost:
 
