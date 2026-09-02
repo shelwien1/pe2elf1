@@ -319,6 +319,8 @@ MODEL.md          what the transformer is, layer by layer
 coder0.cpp        the compressor (main loop, range coder driver)
 transformer.inc   weights loading, byte<->token mapping, context splitting
 tfwc.cpp          weights file <-> BMP images + text, lossless (tfwc c/d)
+0_lstm_green/     the ppmd+LSTM coder this started from, with the same
+                  weights format and command line (see its README)
 ppmd2.hpp         mod_ppmd
 newton.inc        the logistic mixer
 sh_v2f.inc        range coder

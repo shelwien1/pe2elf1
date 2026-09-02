@@ -70,7 +70,17 @@ for /D %%a in (.) do set DIRNAM=%%~na
 
 rem %gcc% -std=c++11 -O9 -s %incs% %opts% zdelta.cpp ../zstd145/zstd.o -o zdelta.exe
 rem %gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% -static -DWRAPPER_SIMD shar.cpp zstd1/zstd.cpp -o shar.exe
-%gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% -static coder0.cpp -o coder0.exe
+rem One translation unit: coder0.cpp includes the LSTM (lstm*.inc) and the
+rem weights codec it shares with the transformer version (..\tf\weights_*.inc),
+rem and every system header lives at the top of coder0.cpp.  Building this
+rem directory outside the repository needs ..\tf\ next to it.
+rem
+rem Model switches (documented at the top of coder0.cpp):
+rem   set lstmdefs=-DLSTM_TRAIN=0            freeze the weights, no training
+rem   set lstmdefs=-DLSTM_SAVE_OPTIMIZER=0   save the weights without AdamW state
+set lstmdefs=
+
+%gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %lstmdefs% %arch% %incs% %opts% -static coder0.cpp -o coder0.exe
 
 rem %gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% -static green.cpp -o green.exe
 

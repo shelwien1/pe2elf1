@@ -88,6 +88,7 @@ struct Lstm {
     uint old_input = input_history_[last_ep];
     input_history_[last_ep] = sym;
 
+#if LSTM_TRAIN
     if( epoch_==0 ) {
       float state_err[MAX_CELLS] = {0}, stored_err[MAX_CELLS] = {0};
 
@@ -147,18 +148,27 @@ struct Lstm {
     }
 
     ++o_update_steps_;
+#else
+    (void)old_input;   // only the backward pass reads it
+#endif
 
     for( uint i = 0; i<output_size_; ++i ) {
-      float err = output_[last_ep].d[i]-(i==sym ? 1.0f : 0.0f);
       prfloat o_layer_ep = output_layer_[epoch_][i].d;
       cprfloat o_layer_last = output_layer_[last_ep][i].d;
 
+#if LSTM_TRAIN
+      float err = output_[last_ep].d[i]-(i==sym ? 1.0f : 0.0f);
       float g_out[MAX_CELLS+1];
       for( uint j = 0; j<hidden_size_; ++j ) {
         g_out[j] = err*hidden_[j];
         o_layer_ep[j] = o_layer_last[j];
       }
       AdamW(g_out, output_m_[i].d, output_v_[i].d, o_layer_ep, hidden_size_, learning_rate_*1.0f, float(o_update_steps_)/10.0f, float(UPDATE_LIMIT)*2.0f);
+#else
+      // frozen: keep the rolling copy Mix() reads, drop the gradient step
+      for( uint j = 0; j<hidden_size_; ++j )
+        o_layer_ep[j] = o_layer_last[j];
+#endif
     }
     last_input_ = sym;
   }

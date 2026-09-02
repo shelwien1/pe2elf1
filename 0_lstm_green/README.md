@@ -1,0 +1,179 @@
+# coder0, the ppmd+LSTM version
+
+The compressor this repository's transformer port started from: PPMD and a
+small LSTM, mixed. It is here as a self-contained snapshot — the support files
+(`ppmd2.hpp`, `newton.inc`, `sh_v2f.inc`, `utils.inc`, `logf1.inc`, `MOD/`) are
+byte-identical to the ones in the repository root — plus one addition: the
+model can now be saved and reloaded, in the same file format and from the same
+command line as the transformer version.
+
+```sh
+./build.sh                       # or gc.bat on Windows
+./t.sh                           # round trips, both ways, five configurations
+```
+
+The weights codec is shared with the transformer version rather than copied, so
+building needs `../tf/` next to this directory.
+
+## Use
+
+```
+coder0 c|d <input> <output> [weights_in] [weights_out]
+```
+
+Exactly the transformer version's command line.
+
+`weights_in` is the model to start from. Without it — or with `nul`, `NUL`,
+`nul:` or `/dev/null` — the LSTM starts from its usual fresh initialization,
+and the coder behaves as it always has. Naming a file that **does not exist**
+runs PPMD alone, which is what the transformer version does with a missing
+checkpoint; it still round-trips, just without the LSTM's contribution.
+
+One deliberate difference from the transformer version: there is no default
+search list. A 6M-parameter transformer with random weights is useless, so that
+build hunts for its checkpoint and disables itself when it cannot find one;
+this model's normal state *is* freshly initialized, so it only looks where it
+is told to.
+
+`weights_out` writes the model back out when the file is done:
+
+```sh
+./coder0 c corpus corpus.z nul trained.tfwc2   # train, keep the model
+./coder0 c other  other.z  trained.tfwc2       # start from it
+```
+
+The encoder and the decoder see the same bytes in the same order and so end
+with the same model — either can write it, and saving from both and comparing
+the two files is a check that they agree. `t.sh` does that on every run.
+
+**Decoding needs the same `weights_in` the encoding used.** Like `ppmd_order`
+and `ppmd_memory`, the model is not recorded in the archive, and a mismatch is
+not detected — it just decodes to the wrong bytes.
+
+A checkpoint is only worth carrying if it is agreed in advance, the way
+`models/6m-q4-fp32.tfwc2` is for the transformer. It is hundreds of kilobytes
+and buys a few hundred bytes; it pays as a shipped side model, never as
+something sent alongside one archive.
+
+## The file format
+
+The same container as the transformer's checkpoints: `FX2TFWC2`, written by
+`../tf/weights_write.inc` and read by `../tf/weights_io_compressed.inc`, which
+this build includes rather than copies so the two coders cannot drift apart.
+Only the tensor set is different, and every name in it is prefixed `lstm.`, so
+the two kinds of checkpoint can never be confused — feeding a transformer file
+to this coder gets a message, not a crash.
+
+All tensors are `f32` or `i32`, which the writer stores with its lossless
+per-byte-plane model. No quantization is involved anywhere, so a save/load
+round trip is bit-exact — see *Frozen* below for how that is checked. The
+repository's `tfwc` tool unpacks these files into BMP images like any other.
+
+What is in one:
+
+| | |
+|---|---|
+| `lstm.config`, `lstm.hyper` | shape, and the learning rate and gradient clip the run that wrote it used |
+| `lstm.vocab` | which byte values the model has actually been trained on |
+| `lstm.{forget_gate,input_node,output_gate}.{A,B,C}` | the per-cell input scales |
+| `…​.sym_w`, `…​.ppmd_w`, `…​.rec_w` | each gate's three input matrices: the previous symbol, PPMD's distribution, and the recurrent state |
+| `lstm.output_layer` | the softmax layer |
+| `…​.v`, `lstm.steps` | AdamW's second moments and step counters, when they are being saved |
+
+Not in one, because they are state of one pass over one file rather than of
+the model: the cell state and hidden vector, the per-epoch histories the
+truncated backpropagation walks, the gradient accumulators, and PPMD and the
+mixer, which both adapt from scratch anyway.
+
+Nor AdamW's **first** moments. `beta1` is 0.024, so a restored `m` is 2.4% of
+itself after one step and gone after two. Measured: storing them costs a third
+of the file and moves the result by one byte in 18000.
+
+`lstm.steps` travels with the second moments and only with them. Restoring a
+saturated step count next to a variance that has not been accumulated makes
+AdamW's bias correction divide by almost nothing, and the opening steps come
+out some 40× too large — undoing the very weights the file was loaded for.
+
+### Alphabets
+
+The LSTM's input and output width is the number of *distinct byte values* in
+the file, and a symbol is indexed by its rank among them — so the same weight
+column means different things for two files with different alphabets. The
+checkpoint therefore stores those dimensions byte-indexed, 256 wide, next to
+the set of bytes it was trained on. Two rules follow.
+
+**Loading** fills in only the columns the checkpoint was trained on. Every
+other column keeps the value a fresh initialization gave it, which is the only
+correct answer available: a column's initial value `0.1531·cos(π·j/(i+1))` is a
+function of the rank `j`, and so of the whole alphabet, and cannot be recovered
+from a file.
+
+**Saving** carries the checkpoint it started from through. A run only has
+columns for the bytes in *its* file; writing just those would drop everything
+the checkpoint knew about the rest of the alphabet, and one pass over a narrow
+file would permanently shrink a model trained on a wide one. So the columns
+this run cannot speak for are copied over from the file it loaded — both are
+byte-indexed, so no remapping is involved — and the two alphabets are unioned.
+A column counts as trained only if the checkpoint had it or this build actually
+trains, because an untrained column holds an initial value belonging to one
+particular alphabet and passing that off as a weight would corrupt the next run
+with a different one.
+
+So a model trained on one file loads into a run over a completely different
+one, and a detour through a narrow file costs nothing. `t.sh` checks both.
+
+## Switches
+
+Both are compile-time, and `build.sh` passes them through `LSTMDEFS`:
+
+```sh
+LSTMDEFS=-DLSTM_TRAIN=0 ./build.sh
+```
+
+| | |
+|---|---|
+| `LSTM_TRAIN=0` | freeze the weights. The recurrent state still evolves and the mixer still adapts, but no gradient step runs. |
+| `LSTM_SAVE_OPTIMIZER=0` | write the weights without AdamW's state — half the size, and better on new data (see below). |
+
+**Frozen** is also how the save/load path is checked. With training off, the
+model at the end of a run is the model at the start, so
+
+```sh
+OUT=coder0_frozen LSTMDEFS=-DLSTM_TRAIN=0 ./build.sh
+./coder0_frozen c ../book1000 /tmp/z w.tfwc2 w2.tfwc2 && cmp w.tfwc2 w2.tfwc2
+```
+
+must produce two byte-identical files, and does — for any input, including one
+whose alphabet is narrower than the checkpoint's. That covers the whole path:
+decode, remap to the packed alphabet, remap back, re-encode.
+
+## Measured
+
+Compressed size, best of each row in bold. *warm* starts from a checkpoint
+saved with the optimizer state, *warm-0* from one built with
+`LSTM_SAVE_OPTIMIZER=0`, *frozen* from the first with training off.
+
+| | PPMD | fresh | warm | warm-0 | frozen |
+|---|---|---|---|---|---|
+| `book1000` (4096 B, 67 byte values), from its own model | 1858 | 1822 | 1700 | 1696 | **1661** |
+| 200000 B of this repository's sources (121 values), from its own model | 44606 | 40948 | **38191** | 38756 | 41380 |
+| a disjoint 80000 B of them (98 values), from the 200000 B model | 20055 | 18676 | 18144 | **17932** | 19353 |
+
+Checkpoint sizes: 807338 bytes with the optimizer state, 404812 without.
+
+Three things worth reading off that table.
+
+A warm start is worth 2.8–6.7%, and on the third row it collects that across a
+change of alphabet — 121 byte values down to 98.
+
+The optimizer state is not free. On a **second pass over the same stream** it
+helps, because the run really is a continuation. On **new data** it hurts: the
+restored variances and the saturated step count pin the learning rate down at a
+point where the model can no longer re-fit, and the smaller `warm-0` checkpoint
+wins. Which is the right default depends on what the checkpoint is for; it is on
+here because that is the complete model state, and one flag turns it off.
+
+Frozen is worse than training from scratch on anything the model has not seen.
+That is the honest result for 90 cells: far too small to be a fixed language
+model, and its value is in how fast it adapts. It wins only on a file it has
+already been trained on, where further training just disturbs it.
