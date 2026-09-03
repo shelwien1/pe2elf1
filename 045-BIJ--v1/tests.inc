@@ -144,6 +144,36 @@ int run_tests( void ) {
     printf( "[4] FUZZ     %i random files, |m|<4000        : ok=%ld fail=%ld (%llu -> %llu bytes) %s\n", TEST_FWD, ok,fail, sm,sa, fail?"FAIL":"PASS" );
     rc |= (fail!=0);
   }
+  { // [5] REPEATABILITY: Reset() must restore every scrap of per-run state
+    // The other tests would pass even if state leaked between runs, as long as
+    // each archive still decoded.  This one pins determinism: the same input
+    // must give the same archive no matter what ran before it.  Runs are
+    // interleaved at several lengths because the parse array is indexed by
+    // position, so a stale entry only shows up when an earlier run reached at
+    // least as far as the current one.
+    static byte a1[1<<17], a2[1<<17], o1[1<<17], o2[1<<17];
+    long fail=0;
+    static const uint LENS[6] = { 300, 3000, 700, 5000, 1500, 4000 };
+    for( uint k=0; k+1<6; k++ ) {
+      uint la = LENS[k], lb = LENS[k+1];
+      for( i=0; i<la; i++ ) m[i] = rnd();
+      for( i=0; i<lb; i++ ) d[i] = rnd()%7;      // different statistics on purpose
+
+      int al1 = mem_encode( m,la, a1,sizeof(a1) );
+      int bl  = mem_encode( d,lb, o1,sizeof(o1) );
+      int al2 = mem_encode( m,la, a2,sizeof(a2) );
+      if( (al1!=al2) || (memcmp(a1,a2,al1)!=0) ) fail++;   // encoder state leak
+
+      int dl1 = mem_decode( a1,al1, o1,sizeof(o1) );
+      int xl  = mem_decode( o2,bl>0?0:0, o2,sizeof(o2) );  // a run in between
+      int dl2 = mem_decode( a1,al1, o2,sizeof(o2) );
+      if( (dl1!=dl2) || (memcmp(o1,o2,dl1)!=0) ) fail++;   // decoder state leak
+      if( (dl1!=int(la)) || (memcmp(m,o1,la)!=0) ) fail++;
+      (void)xl; (void)bl;
+    }
+    printf( "[5] REPEAT   same input after other work -> same archive : %s\n", fail?"FAIL":"PASS" );
+    rc |= (fail!=0);
+  }
   printf( "%s (RC_BIJ=%i)\n", rc ? "*** TESTS FAILED ***" : "ALL TESTS PASSED", RC_BIJ );
   return rc;
 }

@@ -1,6 +1,5 @@
 
 
-static const int M_EOF = (32752+0) * (1);
 static const int M_maxblk = (2+0) * (1);
 static const int M_mb_wr = (eSCALE/(144+16));
 static const int M_mb_mw = (704+1) * (1);

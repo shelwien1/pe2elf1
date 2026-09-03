@@ -50,7 +50,7 @@ enum {
 
 uint p_maxblk = Max<int>(1,Min<int>(mSCALE,M_maxblk));
 //uint p_compflag = Max<int>(1,Min<int>(mSCALE,M_compflag));
-uint p_EOF =       Max<int>(1,Min<int>(mSCALE,M_EOF));
+// p_EOF is gone with process_EOF: bijective termination needs no EOF symbol.
 uint p_freq_half = Max<int>(1,Min<int>(mSCALE,M_freq_half));
 uint p_freq_sign = Max<int>(1,Min<int>(mSCALE,M_freq_sign));
 //uint p_freq_mid = Max<int>(1,Min<int>(mSCALE,M_freq_mid));

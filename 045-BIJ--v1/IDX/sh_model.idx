@@ -4,7 +4,8 @@ Debug 1
 
 Const 1
 
-Number  EOF,       1,0!111111111110000
+# EOF: dropped in r045 -- bijective termination codes no EOF symbol, so the
+# parameter no longer affects the output and tuning it would be wasted work.
 
 Number  maxblk,    1,0!000000000000010
 

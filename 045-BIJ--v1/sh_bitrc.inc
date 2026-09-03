@@ -40,6 +40,26 @@ struct Rangecoder_SHB : RC_IO< Rangecoder_SHB<f_DEC_> > {
 
   enum { NUM = 32, sTOP = 0x80000000U };
 
+  // -DCDM_CHECK builds every coder invariant in as a runtime assertion.  It is
+  // off by default (it costs a branch per operation); `make check` runs the
+  // whole self-test under it.
+#ifdef CDM_CHECK
+  void chk( int ok, const char* what ) {
+    if( !ok ) {
+      fprintf( stderr, "CDM_CHECK failed: %s  (f_DEC=%i range=%08X low=%08X code=%08X nr=%u)\n",
+               what, int(f_DEC), range, low(), code, nr );
+      abort();
+    }
+  }
+  // the decoder is only in sync while its codestream value lies in the window
+  void chk_window( const char* what ) { if( f_DEC ) chk( uint(code-low())<range, what ); }
+  void chk_norm( const char* what ) { chk( range>=sTOP, what ); }
+#else
+  void chk( int, const char* ) {}
+  void chk_window( const char* ) {}
+  void chk_norm( const char* ) {}
+#endif
+
   qword lowc;    // interval low = uint(lowc), carry = lowc>>32
   uint  code;    // decoder: raw codestream value
   uint  range;
@@ -122,7 +142,16 @@ struct Rangecoder_SHB : RC_IO< Rangecoder_SHB<f_DEC_> > {
     for( uint i=0; i<nr; i++ ) resv[i] = (resv[i]<<1) | 1;   // endings keep their 1-tail
   }
 
-  void rc_Renorm ( void ) { while( range<sTOP ) ShiftStuff(); }
+  void rc_Renorm ( void ) {
+#ifdef CDM_CHECK
+    chk( range>0, "rc_Renorm: range==0 would spin forever" );
+    uint n=0; while( range<sTOP ) { ShiftStuff(); chk( ++n<=NUM, "rc_Renorm: too many shifts" ); }
+    chk_norm( "rc_Renorm: not normalised on exit" );
+    chk_window( "rc_Renorm: code left the window" );
+#else
+    while( range<sTOP ) ShiftStuff();
+#endif
+  }
   void rc_Renorm0( void ) {}
   void rc_Renorm1( void ) { rc_Renorm(); }  // SH1m's byte-granular shortcuts do not
   void rc_Renorm2( void ) { rc_Renorm(); }  // survive bit renormalisation
@@ -132,15 +161,24 @@ struct Rangecoder_SHB : RC_IO< Rangecoder_SHB<f_DEC_> > {
   uint muldivR( uint a, uint b ) { return (qword(a)*b)/range; }
 
   // ---- n-ary: process_freqtable / process_range -------------------------------
-  uint rc_GetFreq( uint totFreq ) { return muldivR( code-low(), totFreq ); }
+  uint rc_GetFreq( uint totFreq ) {
+    chk_window( "rc_GetFreq: entered out of window" );
+    uint v = muldivR( code-low(), totFreq );
+    chk( v<totFreq, "rc_GetFreq: value >= totFreq" );
+    return v;
+  }
 
   void rc_Arrange( uint totFreq ) {}
 
   void rc_Process( uint cumFreq, uint freq, uint totFreq ) {
+    chk_norm( "rc_Process: entered unnormalised" );
+    chk_window( "rc_Process: entered out of window" );
+    chk( (freq>=1) && (cumFreq+freq<=totFreq) && (totFreq>=1), "rc_Process: bad freqs" );
     uint tmp  = range - mulRdiv( totFreq-cumFreq,        totFreq );
     uint rnew = range - mulRdiv( totFreq-(cumFreq+freq), totFreq );
     lowc += tmp;                      // both directions: low is explicit here
     range = rnew - tmp;
+    chk( range>0, "rc_Process: range collapsed to 0" );
     drop_endings();
     rc_Renorm();
   }
@@ -151,7 +189,11 @@ struct Rangecoder_SHB : RC_IO< Rangecoder_SHB<f_DEC_> > {
   // degenerate (rnew >= 2^16).
   INLINE
   void rc_BProcess( uint freq, uint& bit ) {
+    chk_norm( "rc_BProcess: entered unnormalised" );
+    chk_window( "rc_BProcess: entered out of window" );
+    chk( (freq>=1) && (freq<SCALE), "rc_BProcess: probability out of [1,SCALE)" );
     uint rnew = (qword(range)*(freq<<(32-SCALElog)))>>32;
+    chk( (rnew>0) && (rnew<range), "rc_BProcess: degenerate split" );
 
     if( f_DEC ) bit = ((code-low()) >= rnew);
 
@@ -168,17 +210,37 @@ struct Rangecoder_SHB : RC_IO< Rangecoder_SHB<f_DEC_> > {
   // rc_Renorm1/rc_Renorm2 does, and here those are the full loop.
   INLINE
   void rb_Process( uint& bit, uint& freq0, uint& freq1 ) {
+    chk_norm( "rb_Process: entered unnormalised" );
+    chk_window( "rb_Process: entered out of window" );
+    // codec.inc guards (freq0==0)+(freq1==0) once per BYTE, so a count may be 0
+    // here; the split is then degenerate (rnew==0 or rnew==range) and free.
+    chk( freq0+freq1 >= 1, "rb_Process: n==0, rb_itotal[0] is not a probability" );
+    chk( freq0+freq1 < DIM(rb_itotal), "rb_Process: n past rb_itotal" );
     uint itotal = rb_itotal[freq0+freq1];
     itotal *= freq0;
     uint rnew = ((qword(range)*itotal + 0xFFFFFFFFU)>>32);
+    chk( rnew<=range, "rb_Process: rnew past range" );
 
     if( f_DEC ) bit = ((code-low()) >= rnew);
+
+    // A count at 0 admits exactly one bit value, and codec.inc only re-checks
+    // that once per BYTE, so the remaining bits of the byte are coded with the
+    // count already at 0.  The split is then degenerate -- but only ALMOST:
+    // rnew is range-(0xFFFFFFFF mod n)*range/2^32 rather than range, leaving a
+    // sliver of codestream values the encoder can never produce.  Its measured
+    // mass is ~1.6e-4 per self-test run, so an arbitrary archive does land
+    // there, and the raw comparison would then return the forbidden bit,
+    // wrapping the counter to 0xFFFFFFFF and indexing rb_itotal out of bounds
+    // on the next call.  Clamping is a no-op on any encoder-produced stream.
+    // (r044 has the same hazard; it just never decodes a foreign archive.)
+    if( f_DEC ) bit = (bit | (freq0==0)) & (freq1!=0);
 
     freq0 -= bit^1;
     freq1 -= bit;
 
     lowc += rnew & (-bit);
     range = ((range-rnew-rnew) & (-bit)) + rnew;
+    chk( range>0, "rb_Process: range collapsed to 0" );
 
     drop_endings();
   }
@@ -187,9 +249,18 @@ struct Rangecoder_SHB : RC_IO< Rangecoder_SHB<f_DEC_> > {
   // SH1m divides range by 256, multiplies by freq=1 and shifts exactly one byte
   // back in.  Here the same division costs exactly 8 bit-shifts, which is what
   // rc_Renorm does: range >= 2^31 -> range/256 >= 2^23 -> 8 shifts -> >= 2^31.
-  void rs_Arrange( uint totFreq ) { range /= totFreq; }
+  void rs_Arrange( uint totFreq ) {
+    chk_norm( "rs_Arrange: entered unnormalised" );
+    chk_window( "rs_Arrange: entered out of window" );
+    range /= totFreq;
+    chk( range>0, "rs_Arrange: range collapsed to 0" );
+  }
 
-  uint rs_GetFreq( void ) { return (code-low())/range; }
+  uint rs_GetFreq( void ) {
+    uint v = (code-low())/range;
+    chk( v<256, "rs_GetFreq: symbol out of range" );
+    return v;
+  }
 
   void rs_Process( uint cumFreq, uint freq, uint totFreq ) {
     lowc += cumFreq*range;

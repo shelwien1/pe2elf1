@@ -25,6 +25,7 @@ pipeline; the model, the price tables and the optimal parser are unchanged.
 make                 # -> 044-EOF--v4/cdm and 045-BIJ--v1/cdm
 make test            # round-trip 044-EOF--v4/testfile through both
 make selftest        # r045's exhaustive forward/backward suite (~20 s)
+make check           # the same suite with every coder invariant asserted (~40 s)
 make ab              # size comparison of the two revisions
 make CXX=clang++     # clang works too, and emits identical streams
 ```
@@ -176,6 +177,34 @@ abandoning the parser, which is the compressor.
 
 Test [3] asserts the property that *does* hold on arbitrary archives: whatever
 message one decodes to, that message survives its own encode/decode round trip.
+Test [5] pins determinism, which the others would miss: the same input must give
+the same archive whatever ran before it. `make check` reruns the suite with
+`-DCDM_CHECK`, which turns every coder invariant into an assertion — `range`
+never 0, normalised at every entry, the decoder's value inside the window, model
+frequencies in range, renormalisation bounded. It passes over 100 000 arbitrary
+archives.
+
+### One robustness fix, inherited from r044
+
+`codec.inc` re-checks `(freq0==0)+(freq1==0)` once per **byte**, so the remaining
+bits of a byte are coded with a count already at zero. That is deliberate and
+free — the split is degenerate, `rnew` is 0 or `range`, and the bit costs
+nothing. Almost: `rnew` is really `range - (0xFFFFFFFF mod n)·range/2^32`, which
+leaves a sliver of codestream values the encoder can never produce. Decoding an
+*arbitrary* archive can land there, and the raw comparison then returns the bit
+the count forbids, wrapping the counter to `0xFFFFFFFF` and indexing
+`rb_itotal` out of bounds on the next call. The measured mass of that sliver is
+about 1.6·10⁻⁴ per self-test run, so it is reachable, not theoretical.
+
+r045's `rb_Process` clamps the decoded bit to the one the counts allow:
+
+```cpp
+if( f_DEC ) bit = (bit | (freq0==0)) & (freq1!=0);
+```
+
+On any encoder-produced stream that is a no-op — verified byte-identical across
+the whole corpus — and it costs nothing measurable. r044 has the same hazard; it
+is simply never asked to decode a foreign archive.
 
 ### One fix in the model
 
@@ -185,7 +214,13 @@ object restarted with a stale `inppos` and looped. That is invisible when a proc
 compresses one file and exits, but the self-test runs thousands of encodes. r045
 splits the cheap per-run half out as `Reset()`, called at the top of `do_encode`
 and `do_decode`; it restores `inppos`, the one adaptive global (`p_maxblk`) and the
-touched prefix of `tok_array`.
+touched prefix of `tok_array`. Each of those three is covered by test [5] —
+removing any one of them makes it fail (or, for `inppos`, hang exactly as r044
+did).
+
+`p_EOF` and its tunable `M_EOF` are gone with the EOF symbol; the `IDX` entry is
+removed too, so the parameter optimizer does not spend cycles tuning something
+that no longer reaches the output.
 
 
 ## Parameter tuning

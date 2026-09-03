@@ -4,6 +4,7 @@
 #   make r044 / r045     build one
 #   make test            round-trip both on the bundled testfile
 #   make selftest        r045's exhaustive forward/backward suite (~20 s)
+#   make check           the same suite with every coder invariant asserted
 #   make ab              size comparison of the two revisions
 #   make clean
 #
@@ -32,7 +33,7 @@ LIBDEPS  := $(wildcard Lib3/*.inc) $(wildcard Lib3/*.h)
 DEPS_044 := $(wildcard $(R044)/*.inc) $(wildcard $(R044)/MOD/*.inc) $(LIBDEPS)
 DEPS_045 := $(wildcard $(R045)/*.inc) $(wildcard $(R045)/MOD/*.inc) $(LIBDEPS)
 
-.PHONY: all r044 r045 test selftest ab clean
+.PHONY: all r044 r045 test selftest check ab clean
 
 all: r044 r045
 r044: $(R044)/cdm
@@ -58,6 +59,14 @@ test: all
 selftest: r045
 	./$(R045)/cdm t
 
+# -DCDM_CHECK turns every coder invariant into a runtime assertion: range never
+# 0, normalised at every entry, the decoder's value inside the window, model
+# frequencies in range, renormalisation bounded.  Slower, so it is its own build.
+check:
+	$(CXX) $(CXXFLAGS_045) -DCDM_CHECK -DTEST_BWD=20000 $(LDFLAGS) $(R045)/cdm.cpp -o $(R045)/cdm_check
+	./$(R045)/cdm_check t
+	@rm -f $(R045)/cdm_check
+
 ab: all
 	@set -e; \
 	tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
@@ -74,4 +83,4 @@ ab: all
 	done
 
 clean:
-	rm -f $(R044)/cdm $(R045)/cdm $(R044)/*.o $(R045)/*.o
+	rm -f $(R044)/cdm $(R045)/cdm $(R045)/cdm_check $(R044)/*.o $(R045)/*.o

@@ -1,6 +1,7 @@
 # build products
 044-EOF--v4/cdm
 045-BIJ--v1/cdm
+045-BIJ--v1/cdm_check
 *.o
 *.exe
 
