@@ -72,6 +72,8 @@ trace to stdout. Redirect it if you only want the timing:
 | `Lib3/bitwrap.inc` | `BitstringWrap` — the bijective bit/byte wrap |
 | `044-EOF--v4/MOD/` | model constants generated from `IDX/sh_model.idx` |
 | `044-EOF--v4/IDX/` | parameter description and the perl tuning pipeline |
+| `BWTS/` | bijective BWT: `bwts` bytewise, `bwth`/`bwtl` bitwise MSB-/LSB-first |
+| `tools/` | CDM2 measurement tools: `ctxscan` (screen), `lanesplit` (direct test) |
 | `Lib3/` | coroutine, file and common helpers shared with other Shelwien projects |
 
 ## r045: the bijective coder
@@ -222,6 +224,31 @@ did).
 removed too, so the parameter optimizer does not spend cycles tuning something
 that no longer reaches the output.
 
+
+## The transform matters more than the coder
+
+CDM is a post-coder for a bitwise BWT, and nearly all of the compression comes
+from the transform. Measured on 262 kB of text:
+
+| pipeline | output | gain |
+| --- | --- | --- |
+| `cdm` alone | 257 267 | 1.86 % |
+| `BWTS/bwts` (bytewise) + `cdm` | 239 083 | 8.80 % |
+| `BWTS/bwth` (bitwise, MSB-first) + `cdm` | **75 630** | **71.15 %** |
+
+Bit order is a real, data-dependent parameter: on `gzip -9` output `bwtl`
+(LSB-first) gives 3.01 % where `bwth` gives 0.42 %, a 7× difference, because
+deflate packs its Huffman codes LSB-first. Try both.
+
+```sh
+make bwts
+./BWTS/bwth c256 input input.bwth      # chunk size in KB for bwth/bwtl
+./045-BIJ--v1/cdm c input.bwth archive
+```
+
+`CDM2-design.md` proposes replacing the BWT's fixed context grouping with a
+searched context tree, and measures 19.8 % beyond `bwth`+`cdm` on that text case.
+`make tools` builds the two measurement tools it depends on.
 
 ## Parameter tuning
 

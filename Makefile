@@ -6,6 +6,8 @@
 #   make selftest        r045's exhaustive forward/backward suite (~20 s)
 #   make check           the same suite with every coder invariant asserted
 #   make ab              size comparison of the two revisions
+#   make tools           the CDM2 measurement tools (tools/ctxscan, tools/lanesplit)
+#   make bwts            the BWTS transforms (bytewise + bitwise LE/BE)
 #   make clean
 #
 # Override the compiler or flags from the environment:
@@ -33,7 +35,7 @@ LIBDEPS  := $(wildcard Lib3/*.inc) $(wildcard Lib3/*.h)
 DEPS_044 := $(wildcard $(R044)/*.inc) $(wildcard $(R044)/MOD/*.inc) $(LIBDEPS)
 DEPS_045 := $(wildcard $(R045)/*.inc) $(wildcard $(R045)/MOD/*.inc) $(LIBDEPS)
 
-.PHONY: all r044 r045 test selftest check ab clean
+.PHONY: all r044 r045 test selftest check ab tools bwts clean
 
 all: r044 r045
 r044: $(R044)/cdm
@@ -82,5 +84,15 @@ ab: all
 	  printf '%-14s %10s %10s %10s %7s\n' "$$(basename $$f)" "$$(wc -c < $$f)" "$$s4" "$$s5" "$$((s5-s4))"; \
 	done
 
+# CDM2 (see CDM2-design.md): the screening statistic and the direct lane test.
+tools: tools/ctxscan tools/lanesplit
+tools/%: tools/%.cpp
+	$(CXX) -std=gnu++1z $(OPT) $(CXXARCH) -o $@ $<
+
+# bwts (bytewise), bwth/bwtl (bitwise, MSB-/LSB-first).  Bit order is worth 7x
+# on gzip output -- see CDM2-design.md section 2.2.
+bwts:
+	cd BWTS && ./g.sh
+
 clean:
-	rm -f $(R044)/cdm $(R045)/cdm $(R045)/cdm_check $(R044)/*.o $(R045)/*.o
+	rm -f tools/ctxscan tools/lanesplit BWTS/bwts BWTS/bwth BWTS/bwtl $(R044)/cdm $(R045)/cdm $(R045)/cdm_check $(R044)/*.o $(R045)/*.o

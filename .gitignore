@@ -3,6 +3,11 @@
 045-BIJ--v1/cdm
 045-BIJ--v1/cdm_check
 *.o
+tools/ctxscan
+tools/lanesplit
+BWTS/bwts
+BWTS/bwth
+BWTS/bwtl
 *.exe
 
 # optimizer scratch
