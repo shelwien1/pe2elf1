@@ -1,0 +1,184 @@
+
+// idx Const=0
+ 10.639s:  cdm.exe c ..\book1bwt_ogg 1
+  0.390s:  cdm.exe d 1 2
+
+// Const=1
+ 10.140s:  cdm.exe c ..\book1bwt_ogg 1
+  0.390s:  cdm.exe d 1 2
+
+// no optimizers running
+  7.535s:  cdm.exe c ..\book1bwt_ogg 1
+  0.343s:  cdm.exe d 1 2
+
+// gcc7 build
+  6.490s:  cdm.exe c ..\book1bwt_ogg 1
+  0.343s:  cdm.exe d 1 2
+
+// gcc63
+  6.645s:  cdm.exe c ..\book1bwt_ogg 1
+  0.328s:  cdm.exe d 1 2
+
+// gcc7x1
+  7.161s:  cdm.exe c ..\book1bwt_ogg 1
+  0.327s:  cdm.exe d 1 2
+
+// gcc7x
+  6.443s:  cdm.exe c ..\book1bwt_ogg 1
+  0.328s:  cdm.exe d 1 2
+
+// gcc63x1
+  6.583s:  cdm.exe c ..\book1bwt_ogg 1
+  0.312s:  cdm.exe d 1 2
+
+// IC18
+  7.519s:  cdm.exe c ..\book1bwt_ogg 1
+  0.328s:  cdm.exe d 1 2
+
+// itotal1
+  7.473s:  cdm.exe c ..\book1bwt_ogg 1
+  0.312s:  cdm.exe d 1 2
+
+  7.503s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.441s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.457s:  cdm.exe c ..\book1bwt_ogg 1
+  0.296s:  cdm.exe d 1 2
+  7.582s:  cdm.exe c ..\book1bwt_ogg 1
+  0.328s:  cdm.exe d 1 2
+
+  7.629s:  cdm.exe c ..\book1bwt_ogg 1
+  0.202s:  cdm.exe d 1 2
+
+  6.411s:  cdm.exe c ..\book1bwt_ogg 1
+  0.188s:  cdm.exe d 1 2
+  7.457s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+  7.566s:  cdm.exe c ..\book1bwt_ogg 1
+  0.172s:  cdm.exe d 1 2
+  7.442s:  cdm.exe c ..\book1bwt_ogg 1
+  0.171s:  cdm.exe d 1 2
+  7.394s:  cdm.exe c ..\book1bwt_ogg 1
+  0.188s:  cdm.exe d 1 2
+  7.426s:  cdm.exe c ..\book1bwt_ogg 1
+  0.172s:  cdm.exe d 1 2
+  7.379s:  cdm.exe c ..\book1bwt_ogg 1
+  0.219s:  cdm.exe d 1 2
+
+  7.379s:  cdm.exe c ..\book1bwt_ogg 1
+  0.156s:  cdm.exe d 1 2
+  7.410s:  cdm.exe c ..\book1bwt_ogg 1
+  0.141s:  cdm.exe d 1 2
+  7.347s:  cdm.exe c ..\book1bwt_ogg 1
+  7.675s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+  7.628s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.644s:  cdm.exe c ..\book1bwt_ogg 1
+  0.202s:  cdm.exe d 1 2
+  7.551s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+  7.582s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+
+  6.349s:  cdm.exe c ..\book1bwt_ogg 1
+  0.218s:  cdm.exe d 1 2
+
+  7.706s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.582s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.176s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+  7.426s:  cdm.exe c ..\book1bwt_ogg 1
+  0.188s:  cdm.exe d 1 2
+  7.613s:  cdm.exe c ..\book1bwt_ogg 1
+  0.202s:  cdm.exe d 1 2
+  7.628s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.394s:  cdm.exe c ..\book1bwt_ogg 1
+  0.188s:  cdm.exe d 1 2
+  7.847s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+
+  6.334s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+  7.551s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.550s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.613s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.566s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+
+// freq=0 skip
+  7.567s:  cdm.exe c ..\book1bwt_ogg 1
+  0.202s:  cdm.exe d 1 2
+  6.318s:  cdm.exe c ..\book1bwt_ogg 1
+  0.188s:  cdm.exe d 1 2
+
+// no skip
+  7.582s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  6.318s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  7.582s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+
+  7.629s:  cdm.exe c ..\book1bwt_ogg 1
+  0.202s:  cdm.exe d 1 2
+
+// IC18+PGO
+  6.708s:  cdm.exe c ..\book1bwt_ogg 1
+  0.202s:  cdm.exe d 1 2
+
+// gcc7+PGO
+  6.380s:  cdm.exe c ..\book1bwt_ogg 1
+  0.219s:  cdm.exe d 1 2
+
+// IC18/PGO/SSE2
+  6.614s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+
+// GL-
+  6.537s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+
+// Qipo-
+  6.521s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+
+// no /Gr
+  6.505s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+
+  6.458s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+
+  6.303s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+
+2652463/6.303 = 420,825
+2652463/0.187 = 14,184,294
+
+  6.677s:  cdm.exe c ..\book1bwt_ogg 1
+  0.188s:  cdm.exe d 1 2
+
+  6.677s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+  6.615s:  cdm.exe c ..\book1bwt_ogg 1
+  0.202s:  cdm.exe d 1 2
+  6.599s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  6.645s:  cdm.exe c ..\book1bwt_ogg 1
+  0.203s:  cdm.exe d 1 2
+  6.708s:  cdm.exe c ..\book1bwt_ogg 1
+  0.188s:  cdm.exe d 1 2
+
+  6.661s:  cdm.exe c ..\book1bwt_ogg 1
+  0.187s:  cdm.exe d 1 2
+
+ 19.219s:  cdm.exe c ..\book1bwt_ogg 1
+  0.312s:  cdm.exe d 1 2
