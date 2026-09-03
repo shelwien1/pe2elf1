@@ -1,5 +1,6 @@
 # build products
 044-EOF--v4/cdm
+045-BIJ--v1/cdm
 *.o
 *.exe
 
@@ -9,3 +10,5 @@ opttimes.!!!
 *.opt_tmp
 044-EOF--v4/IDX/idx_*.tar.gz
 044-EOF--v4/IDX/*.tmp
+045-BIJ--v1/IDX/idx_*.tar.gz
+045-BIJ--v1/IDX/*.tmp

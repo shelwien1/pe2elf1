@@ -8,20 +8,32 @@ The mechanism is enumerative coding — a block of `n` bits with population coun
 that picks block boundaries and per-block coding mode. See `CDM-analysis.md` for
 the full write-up.
 
-This is release r044 (`044-EOF--v4`), with the build ported to Linux.
+Two revisions live here:
+
+| revision | coder | termination |
+| --- | --- | --- |
+| `044-EOF--v4` | `Rangecoder_SH1m` — byte-granular, delayed-carry cache | explicit EOF flag per block, plus a rangecoder flush |
+| `045-BIJ--v1` | `sh_bit` — bit-granular, reserved inverse-FO endings | bijective: no EOF symbol, no flush |
+
+r044 is the upstream release with the build ported to Linux. r045 replaces its
+rangecoder with the bijective coder from `sh_bits`, wired as a `CoroutinePair`
+pipeline; the model, the price tables and the optimal parser are unchanged.
 
 ## Build
 
 ```sh
-make                 # -> 044-EOF--v4/cdm
-make test            # build, then round-trip 044-EOF--v4/testfile
+make                 # -> 044-EOF--v4/cdm and 045-BIJ--v1/cdm
+make test            # round-trip 044-EOF--v4/testfile through both
+make selftest        # r045's exhaustive forward/backward suite (~20 s)
+make ab              # size comparison of the two revisions
 make CXX=clang++     # clang works too, and emits identical streams
 ```
 
-or, equivalently, the shell twin of the original `g.bat`:
+or, equivalently, the shell twin of the original `g.bat`, in either directory:
 
 ```sh
 cd 044-EOF--v4 && ./g.sh
+cd 045-BIJ--v1 && ./g.sh
 ```
 
 Both accept `CXX`, `CXXARCH` (e.g. `-march=native`) and `LDFLAGS` from the
@@ -33,6 +45,7 @@ level; the Windows `g.bat` still builds the same sources with MinGW.
 ```sh
 cdm c <input> <output>     # compress
 cdm d <input> <output>     # decompress
+cdm t                      # r045 only: the self-test suite
 ```
 
 The encoder is built with `TRACE_ON` (set in `cdm.inc`), so it writes a per-block
@@ -51,10 +64,129 @@ trace to stdout. Redirect it if you only want the timing:
 | `044-EOF--v4/codec.inc` | block header and block body coding |
 | `044-EOF--v4/opt_tok.inc` | parser token, per-position price computation |
 | `044-EOF--v4/opt_calc.inc` | closed-form price estimates used to fill the tables |
-| `044-EOF--v4/sh_v1m.inc` | rangecoder (binary, byte and enumerative paths) |
+| `044-EOF--v4/sh_v1m.inc` | r044's rangecoder (binary, byte and enumerative paths) |
+| `045-BIJ--v1/sh_bitrc.inc` | r045's coder: sh_bit's bijective rangecoder behind that same API |
+| `045-BIJ--v1/rcio.inc` | sh_bit's psi/psi-inverse codestream I/O over coroutine pins |
+| `045-BIJ--v1/tests.inc` | the `cdm t` self-test suite |
+| `Lib3/bitwrap.inc` | `BitstringWrap` — the bijective bit/byte wrap |
 | `044-EOF--v4/MOD/` | model constants generated from `IDX/sh_model.idx` |
 | `044-EOF--v4/IDX/` | parameter description and the perl tuning pipeline |
 | `Lib3/` | coroutine, file and common helpers shared with other Shelwien projects |
+
+## r045: the bijective coder
+
+`045-BIJ--v1` swaps CDM's rangecoder for the one from `sh_bits` — a 32-bit
+carryless coder made bijective on bitstrings by reserving *inverse finitely-odd*
+endings — and runs it as the first stage of a two-stage `CoroutinePair`, exactly
+the shape `sh_bitc.cpp` uses:
+
+```
+encode:  file ---bytes--> CDM<0> ---bits--> midbuf --> BitWrap<0>::bit2byte ---bytes--> archive
+decode:  archive ---bytes--> BitWrap<1>::byte2bit ---bits--> midbuf --> CDM<1> ---bytes--> file
+
+typedef CoroFileProc< CoroutinePair< CDM<0>, BitWrap<0> > > t_encproc;
+typedef CoroFileProc< CoroutinePair< BitWrap<1>, CDM<1> > > t_decproc;
+```
+
+### The adapter
+
+`sh_bitrc.inc` is the whole port: sh_bit's coder wearing `Rangecoder_SH1m`'s
+method surface, so `codec.inc`, `opt_calc.inc` and `opt_tok.inc` keep calling
+`rc_Process` / `rc_BProcess` / `rb_Process` / `rs_process_byte` unchanged. Two
+structural gaps had to be bridged:
+
+* **`code` is absolute, not interval-relative.** `Rangecoder_SH1m` normalises
+  `low` to zero and subtracts from `code`; sh_bit tracks `low` explicitly because
+  its ending machinery works in absolute codestream coordinates
+  (`in_window(v)` is `uint(v-low()) < range`). Every `code >= rnew` becomes
+  `code-low() >= rnew`, and every `code -= x` disappears — the unconditional
+  `lowc += x` carries both directions.
+* **Renormalisation is by the bit, not the byte.** `rc_Renorm1` and `rc_Renorm2`
+  are byte-granular shortcuts that are exact only while `range >= 2^24`. With
+  `range >= 2^31` and one bit per shift, `rb_Process` with `freq0 = 1, n = 2049`
+  drops eleven bits at a stroke, so both collapse to the full
+  `while( range<sTOP )` loop.
+
+`rcio.inc` is sh_bit's ψ/ψ⁻¹ one-bit-delay layer, unchanged except that its
+codestream accessors are spelled `bij_get`/`bij_put`: CDM's `decode_block` calls a
+bare `put(c)` to emit a decoded *plaintext* byte, which must reach
+`Coroutine::put` and not the bit layer.
+
+### Where the ending is reserved
+
+sh_bit checks and reserves an ending at every symbol, because every symbol
+boundary can end the message. CDM can only stop at a **block** boundary, so
+`rc_ending()` is called exactly where `process_EOF()` used to be — once per block,
+on both sides. The injectivity argument survives the thinning: what it needs is
+that an ending live at one stop point is never the final ending at a later stop
+point, and reserving at exactly the stop points gives that.
+
+Reserving per block rather than per symbol also makes the two limits the sh_bit
+paper documents in its §7 disappear. The 4090-ending cap — which `sh_bitc`
+reaches after roughly 760 000 identical bytes, forfeiting injectivity — and the
+linear reservation scan that made 1 MiB of zeros a projected hour are both driven
+by the number of simultaneously live endings. Measured here, that number is **1**
+on every input tried, including 200 000 identical bytes:
+
+| input | max live endings | discarded |
+| --- | --- | --- |
+| 200 000 × `00` | 1 | 0 |
+| 200 000 × `FF` | 1 | 0 |
+| gzip -9 output | 1 | 0 |
+| 1 MB urandom | 1 | 0 |
+
+### What it buys, and what it does not
+
+Bijective termination removes the per-block EOF flag, the final EOF symbol and the
+rangecoder's flush. Archives come out 1–2 bytes smaller than r044 on every input,
+and the empty file encodes to the empty archive:
+
+| input | r044 | r045 |
+| --- | --- | --- |
+| empty | 2 | **0** |
+| 1 byte | 4 | 3 |
+| 200 000 × `00` | 1620 | 1619 |
+| popcount-skewed 200 000 | 187 751 | 187 749 |
+| gzip -9 output 485 091 | 484 763 | 484 761 |
+| urandom 1 000 000 | 1 000 026 | 1 000 024 |
+
+Speed is unchanged (0.68 s vs 0.80 s to encode 485 kB; decode 0.06 s vs 0.05 s).
+
+**It does not make CDM a bijection on archives**, and cannot. `sh_bitc` can be one
+because its order-0 model codes one symbol per byte with no choices, so an archive
+determines the encoder's every move. CDM's encoder runs an optimal parser: it picks
+block lengths and one of three coding methods per block by price. An arbitrary
+archive therefore decodes to a message whose implied parse is generally not the
+parse the encoder would choose, and re-encoding gives a different archive. A second,
+independent cause: the decoder reads an implied tail of `1`s past the end of the
+archive, and with blocks of up to 256 bytes it can consume much more codestream
+than the archive pays for, so a re-encoding can also come out *longer*. Both are
+properties of a parsing compressor, not of the coder — abandoning them would mean
+abandoning the parser, which is the compressor.
+
+`./045-BIJ--v1/cdm t` therefore asserts what holds and reports what does not:
+
+```
+[0] TERMINATION empty file <-> empty archive        : enc=0 dec=0 PASS
+[1] FORWARD  decode(encode(m))==m, |m|<=2 bytes     : ok=65793 fail=0 maxarc=4 PASS
+[2] BACKWARD encode(decode(a))==a, |a|<=2 bytes     : ok=65277 differ=516 (99.2%) runaway=0 reported
+[3] STABILITY 2000 random archives, 3<=|a|<=64      : ok=2000 unstable=0 runaway=0 PASS
+[4] FUZZ     300 random files, |m|<4000             : ok=300 fail=0 PASS
+```
+
+Test [3] asserts the property that *does* hold on arbitrary archives: whatever
+message one decodes to, that message survives its own encode/decode round trip.
+
+### One fix in the model
+
+r044's `CDM::Init()` resets `inppos` and the parse array along with the ~1 MB price
+tables, so a CDM object was single-shot — a second `processfile()` on the same
+object restarted with a stale `inppos` and looped. That is invisible when a process
+compresses one file and exits, but the self-test runs thousands of encodes. r045
+splits the cheap per-run half out as `Reset()`, called at the top of `do_encode`
+and `do_decode`; it restores `inppos`, the one adaptive global (`p_maxblk`) and the
+touched prefix of `tok_array`.
+
 
 ## Parameter tuning
 

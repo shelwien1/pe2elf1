@@ -1,0 +1,33 @@
+
+// r045: r044's model over sh_bit's bijective bitwise rangecoder.
+// gcc 13.3 -O3 (g.sh), 4-core x86-64.  Sizes in bytes.
+
+                     input      r044      r045   delta
+empty                    0         2         0      -2
+1 byte                   1         4         3      -1
+255 urandom            255       260       258      -2
+257 urandom            257       262       260      -2
+200000 x 00         200000      1620      1619      -1
+200000 x FF         200000      1725      1723      -2
+popcount-skewed     200000    187751    187749      -2
+gzip -9 output      485091    484763    484761      -2
+xz -9 output        239464    239472    239470      -2
+urandom            1000000   1000026   1000024      -2
+
+// timing, gzip -9 output (485091 B)
+//   r044   enc 0.80s  dec 0.05s
+//   r045   enc 0.68s  dec 0.06s
+
+// self-test (./cdm t), 21s
+//   [0] TERMINATION empty file <-> empty archive        : PASS
+//   [1] FORWARD  decode(encode(m))==m, |m|<=2 bytes     : ok=65793 fail=0 maxarc=4 PASS
+//   [2] BACKWARD encode(decode(a))==a, |a|<=2 bytes     : 99.2% exact, 0 runaway (reported)
+//   [3] STABILITY 2000 random archives, 3<=|a|<=64      : 2000 stable, 0 runaway PASS
+//   [4] FUZZ     300 random files, |m|<4000            : ok=300 fail=0 PASS
+
+// reserved live endings (sh_bit paper sec 7.1: cap 4090, sh_bitc reaches it at
+// ~760000 identical bytes).  CDM reserves once per BLOCK, not once per symbol:
+//   200000 x 00   max live endings = 1   discarded = 0
+//   200000 x FF   max live endings = 1   discarded = 0
+//   gzip output   max live endings = 1   discarded = 0
+//   1MB urandom   max live endings = 1   discarded = 0

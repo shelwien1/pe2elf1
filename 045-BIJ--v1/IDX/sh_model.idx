@@ -1,0 +1,47 @@
+
+Prefix M
+Debug 1
+
+Const 1
+
+Number  EOF,       1,0!111111111110000
+
+Number  maxblk,    1,0!000000000000010
+
+Rate1   mb_wr,   16!00000010010000
+Number  mb_mw,  1,1!00001011000000
+
+Const 1
+
+#Number  compflag,  1,0!000000000001010
+Number  cfl0,  1,1!000000000000
+Number  cfl1,  1,1!111100110000
+Number  cfl2,  1,1!000000011111
+
+Const 1
+
+Number  freq_half, 1,0!111110000000000
+Number  freq_sign, 1,0!010101111100000
+
+Const 1
+
+Number  lsb0,      1,1!01011011
+Number  lsb1,      1,1!11101100
+Number  lsb2,      1,1!10001000
+Number  lsb3,      1,1!11111010
+Number  lsb4,      1,1!01101110
+Number  lsb5,      1,1!110101010001
+Number  lsb6,      1,1!000000000000
+Number  lsb7,      1,1!000000000000
+#Number  lsb8,      1,1!011000000000
+#Number  lsb9,      1,1!000000000010
+
+Const 1
+
+Number  mid_div1,  1,2!001100
+Number  mid_div2,  1,2!000011
+
+Number  mid0,      1,1!000000000000
+Number  mid1,      1,1!010001111000
+Number  mid2,      1,1!000110000000
+

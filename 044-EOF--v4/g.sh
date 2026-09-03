@@ -23,7 +23,13 @@ LDFLAGS=${LDFLAGS:-}
 
 incs="-DNDEBUG -I../Lib3"
 
-opts="-fwhole-program -fstrict-aliasing -fomit-frame-pointer -ffast-math
+# clang has no -fwhole-program and warns about it; -flto is its equivalent here.
+case "$($CXX --version 2>&1 | head -1)" in
+  *clang*) WHOLE="-flto" ;;
+  *)       WHOLE="-fwhole-program" ;;
+esac
+
+opts="$WHOLE -fstrict-aliasing -fomit-frame-pointer -ffast-math
 -fno-rtti -fno-exceptions
 -fno-stack-protector -fno-stack-check -fno-check-new"
 
