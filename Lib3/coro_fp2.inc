@@ -5,6 +5,10 @@ struct CoroFileProc : Model {
   using Model::f_quit;
   using Model::outptr;
   using Model::outbeg;
+  using Model::coro_init;
+  using Model::coro_call;
+  using Model::addinp;
+  using Model::addout;
 
   ALIGN(4096) byte inpbuf[inpbufsize];
   ALIGN(4096) byte outbuf[outbufsize];

@@ -84,6 +84,20 @@ template<byte a,byte b,byte c,byte d> struct wc {
  #endif
 #endif
 
+// MSVC/ICC intrinsics; on MinGW they arrive via <windows.h> -> <intrin.h>,
+// but a plain gcc/clang target has to spell them out.
+#if defined(__GNUC__) && !defined(_WIN32) && !defined(__INTEL_COMPILER) && !defined(COMMON_SKIP_BSF)
+ static INLINE int _bit_scan_forward( uint x ) { return __builtin_ctz(x); }
+ static INLINE int _bit_scan_reverse( uint x ) { return 31-__builtin_clz(x); }
+#endif
+
+// printf length modifier for qword: msvcrt wants "I64", everybody else "ll".
+#if defined(_WIN32) && !defined(__USE_MINGW_ANSI_STDIO)
+ #define I64 "I64"
+#else
+ #define I64 "ll"
+#endif
+
 #ifdef INC_FLEN
 static uint flen( FILE* f ) {
   fseek( f, 0, SEEK_END );

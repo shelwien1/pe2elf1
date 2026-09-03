@@ -8,8 +8,7 @@
 
 #include "cdm.inc"
 
-ALIGN(4096)
-static union {
+static union ALIGN(4096) {
   CoroFileProc< CDM<0> > C;
   CoroFileProc< CDM<1> > D;
 };

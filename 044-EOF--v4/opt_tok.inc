@@ -7,7 +7,8 @@ struct token {
   qword pos:62; // 4TB is 42 bits, hard to expect more there?
   qword f_compflag:2;
 
-  static const qword pos_empty = (-1ULL)>>2;
+  static const qword pos_empty  = (-1ULL)>>2;  // all ones in pos:62
+  static const qword price_max  = (-1ULL)>>24; // all ones in price:40
 
   void Init( uint n=1 ) {
     uint i;
@@ -37,7 +38,7 @@ INLINE
     uint maxlen = Min<uint>(curpos+1-C.inppos,maxblk+1);
 
     // init current token if its not initialized yet
-    if( pos!=curpos ) { pos=curpos; price=-1ULL; blklen=maxblk; f_compflag=0; p_maxlen = p_maxblk; }
+    if( pos!=curpos ) { pos=curpos; price=price_max; blklen=maxblk; f_compflag=0; p_maxlen = p_maxblk; }
 
     p += curpos - C.inppos;
     c0=0; c1=0; g_c0=0; g_c1=0;

@@ -1,0 +1,11 @@
+# build products
+044-EOF--v4/cdm
+*.o
+*.exe
+
+# optimizer scratch
+export.!!!
+opttimes.!!!
+*.opt_tmp
+044-EOF--v4/IDX/idx_*.tar.gz
+044-EOF--v4/IDX/*.tmp

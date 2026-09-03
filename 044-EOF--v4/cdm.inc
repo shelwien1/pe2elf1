@@ -1,5 +1,7 @@
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 
 #define TRACE_ON
@@ -80,8 +82,24 @@ int p_cfl_0[4] = { M_cfl0,M_cfl1,M_cfl2, 0 };
 template< int f_DEC >
 struct CDM: Rangecoder_SH1m<f_DEC> {
 
+  // Two-phase lookup: members of a dependent base are invisible to unqualified
+  // names inside the template, so every one of them has to be pulled in here.
   using Rangecoder_SH1m<f_DEC>::FFNum;
   using Rangecoder_SH1m<f_DEC>::inpptr;
+  using Rangecoder_SH1m<f_DEC>::coro_init;
+  using Rangecoder_SH1m<f_DEC>::chkinp;
+  using Rangecoder_SH1m<f_DEC>::getinplen;
+  using Rangecoder_SH1m<f_DEC>::put;
+  using Rangecoder_SH1m<f_DEC>::rc_Init;
+  using Rangecoder_SH1m<f_DEC>::rc_Quit;
+  using Rangecoder_SH1m<f_DEC>::rc_Process;
+  using Rangecoder_SH1m<f_DEC>::rc_GetFreq;
+  using Rangecoder_SH1m<f_DEC>::rc_BProcess;
+  using Rangecoder_SH1m<f_DEC>::rc_Renorm;
+  using Rangecoder_SH1m<f_DEC>::rc_Renorm1;
+  using Rangecoder_SH1m<f_DEC>::rc_Renorm2;
+  using Rangecoder_SH1m<f_DEC>::rb_Process;
+  using Rangecoder_SH1m<f_DEC>::rs_process_byte;
 #ifdef TRACE_ON
   using Rangecoder_SH1m<f_DEC>::rc_outbytes;
   using Rangecoder_SH1m<f_DEC>::range;
@@ -297,7 +315,7 @@ Reparse:
           for( curpos=inppos+1; curpos<goalpos; curpos++ ) {
             token& T1 = tok_array[curpos%tokblk];
             token& T0 = tok_array[(curpos-T1.blklen)%tokblk];
-            if( (T1.pos!=curpos) || (T0.pos<inppos) || (T0.pos!=curpos-T1.blklen) ) T1.pos=-1ULL, n_kills++;
+            if( (T1.pos!=curpos) || (T0.pos<inppos) || (T0.pos!=curpos-T1.blklen) ) T1.pos=token::pos_empty, n_kills++;
           }
           // recompute the killed tokens
           for( curpos=inppos+1; curpos<goalpos; curpos++ ) {

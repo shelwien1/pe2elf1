@@ -119,7 +119,7 @@ double rc_codelen = double(rc_outbytes)*8 + double((0x100000-LOG2(range>>16)))/6
 #ifdef TRACE_ON
 if( f_DEC==0 ) {
   double rc_codelen1 = double(rc_outbytes)*8 + double((0x100000-LOG2(range>>16)))/65536 - rc_codelen;
-  printf( "!inppos=%-8I64i blklen=%4i freq0=%4i method=%i headerbits=%6.3lf ", inppos, blklen*8, freq0, f_compflag, rc_codelen1 );
+  printf( "!inppos=%-8" I64 "i blklen=%4i freq0=%4i method=%i headerbits=%6.3lf ", inppos, blklen*8, freq0, f_compflag, rc_codelen1 );
 }
   return rc_codelen;
 #endif
