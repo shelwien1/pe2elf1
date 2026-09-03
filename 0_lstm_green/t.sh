@@ -13,7 +13,8 @@
 #   5  the same two, with the weights quantized to int4 (LSTM_SAVE_Q4): a
 #      frozen save has to reproduce those bytes as well, which is what the
 #      per-row scale being kept rather than re-fitted buys
-#   6  no model at all (a weights_in that does not exist): PPMD alone
+#   6  gN: exactly N bytes out, the same ones every time, nothing left over
+#   7  no model at all (a weights_in that does not exist): PPMD alone
 set -e
 [ -x ./coder0 ] || ./build.sh >/dev/null
 [ -x ./coder0_frozen ] || OUT=coder0_frozen LSTMDEFS=-DLSTM_TRAIN=0 ./build.sh >/dev/null
@@ -65,6 +66,12 @@ for f in "${@:-../book1000}"; do
   ./coder0_q4 c "$f" "$W.ac" "$W.1we" 2>/dev/null
   ./coder0_q4 d "$W.ac" "$W.ad" "$W.1we" 2>/dev/null
   cmp -s "$f" "$W.ad"       || fail "q4 build reading an f32 checkpoint"
+
+  ./coder0 g256 "$f" "$W.g1" 2>/dev/null
+  ./coder0 g256 "$f" "$W.g2" 2>/dev/null
+  [ "$(wc -c < "$W.g1")" -eq 256 ] || fail "g256 did not write 256 bytes"
+  cmp -s "$W.g1" "$W.g2" || fail "g256 is not deterministic"
+  [ ! -e "$W.g1.rnd" ] || fail "g256 left its bit source behind"
 
   ./coder0 c "$f" "$W.5c" "$W.no_such_file" 2>/dev/null
   ./coder0 d "$W.5c" "$W.5d" "$W.no_such_file" 2>/dev/null
