@@ -6,6 +6,7 @@
 #   ./run-tests.sh corpus  ./pjpg ../testfiles   run every jpeg, incl. imagetestsuite
 #   ./run-tests.sh carve   ./pjpg ../testfiles   jpegdet round trip + decodability
 #   ./run-tests.sh nesting ./pjpg ../testfiles   thumbnails nested as deep as they go
+#   ./run-tests.sh coder   ./pjpg ../testfiles   jpgcoder: coefficients out and back
 #   ./run-tests.sh matrix  ''    ../testfiles    build+run the compiler/flag matrix
 #
 # Note on line endings: log1 and tests/golden.log are stored with CRLF (they came
@@ -123,6 +124,17 @@ check)
     fi
   else
     echo "SKIP  carve     jpegdet not built"
+  fi
+
+  # 6) the coefficient transcoder
+  if [ -x "$HERE/jpgcoder" ]; then
+    if out=$("$0" coder "$BIN" "$TESTDIR" 2>&1) && [ -n "$out" ]; then
+      echo "PASS  coder     ${out##*coder: }"
+    else
+      echo "FAIL  coder"; echo "$out" | sed 's/^/  /'; fail=1
+    fi
+  else
+    echo "SKIP  coder     jpgcoder not built"
   fi
 
   [ $fail -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
@@ -405,6 +417,48 @@ nesting)
       || { echo "  $f: -n did not leave one image that round-trips"; bad=$((bad+1)); }
   done < "$dir/manifest"
   echo "nesting: $n files, nested up to $deepest deep, $carved thumbnails carved, $bad problems"
+  [ $bad -eq 0 ]
+  ;;
+
+coder)
+  # jpgcoder: a JPEG taken apart into its DCT coefficients and put back.
+  #
+  # The invariant is the same one the carver has, for the same reason -- what
+  # comes back has to be the input, byte for byte -- but it is harder to hold,
+  # because the bytes are not copied through.  They are decoded to coefficients
+  # and encoded again, and an encoder that means the same thing need not choose
+  # the same bytes.  So jpgcoder checks its own work at compress time and leaves
+  # a scan in the header verbatim when re-encoding does not reproduce it.  That
+  # makes the round trip exact for every input and turns the interesting number
+  # into a different one: how much of the file reached the coefficient form.
+  # Both are checked here, because a coder that never transcodes anything would
+  # pass the first on its own.
+  cd "$HERE" || exit 1
+  COD="$HERE/jpgcoder"
+  if [ ! -x "$COD" ]; then echo "coder: $COD missing (run make)"; exit 1; fi
+  ext="$WORK/its"; mkdir -p "$ext"
+  for t in "$TESTDIR"/*.tar.gz; do [ -e "$t" ] && tar -xzf "$t" -C "$ext"; done
+
+  bad=0; n=0; ns=0; nc=0; na=0
+  while IFS= read -r -d '' f; do
+    n=$((n+1))
+    if ! timeout 300 "$COD" -v c "$f" "$WORK/c.hdr" "$WORK/c.coef" > "$WORK/c.log" 2>&1; then
+      echo "  c failed on $(basename "$f")"; bad=$((bad+1)); continue
+    fi
+    # "N scan(s), M as coefficients (K arithmetic, ...)"
+    set -- $(sed -n 's/^\([0-9][0-9]*\) scan(s), \([0-9][0-9]*\) as coefficients.*/\1 \2/p' "$WORK/c.log")
+    ns=$((ns+${1:-0})); nc=$((nc+${2:-0}))
+    na=$((na+$(grep -ac 'arith' "$WORK/c.log" || true)))
+    if ! timeout 300 "$COD" d "$WORK/c.hdr" "$WORK/c.out" "$WORK/c.coef" >/dev/null 2>&1; then
+      echo "  d failed on $(basename "$f")"; bad=$((bad+1)); continue
+    fi
+    cmp -s "$f" "$WORK/c.out" || { echo "  $(basename "$f"): round trip is not byte-exact"; bad=$((bad+1)); }
+  done < <(find "$TESTDIR" "$ext" -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | LC_ALL=C sort -z)
+
+  # Arithmetic coding has a decoder here but no encoder, so those scans can
+  # never transcode; everything else should, and on this corpus most does.
+  [ "$nc" -gt 0 ] || { echo "  nothing at all reached the coefficient form"; bad=$((bad+1)); }
+  echo "coder: $n files, $nc of $ns scans as coefficients, $bad problems"
   [ $bad -eq 0 ]
   ;;
 

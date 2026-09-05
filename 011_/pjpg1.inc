@@ -20,6 +20,16 @@ struct pjpg : Coroutine, pjpg0 {
   }
   qword at( void ) { return stream_base + qword( pin[0].ptr - pin[0].beg ); }
 
+  // A scan sink.  pjpg walks the markers and decodes the entropy data; a
+  // transcoder has to do something at each scan -- note where it is in the
+  // file, or write a re-encoded one out -- and the moment to do it is with this
+  // parser's state still in hand: the scan's components, its spectral range,
+  // its tables, its restart interval.  Called with phase 0 once the scan header
+  // is parsed and before its data is touched, and phase 1 once the data is
+  // done.  Null unless a frontend sets it, so pjpg itself is unaffected.
+  void* sc_ctx;
+  void (*sc_hook)( void* ctx, struct pjpg* P, uint phase );
+
   uint n_restart;
   uint n_scan;
   uint n_frame;        // frame headers in this image, DHP not counted
@@ -175,6 +185,7 @@ struct pjpg : Coroutine, pjpg0 {
     bzero( ac_huff_tbl_ptrs );
     bzero( dtbl_ok[0] ); bzero( dtbl_ok[1] );
     nz_free();
+    co_free();
   }
 
   void do_process( void ) {
@@ -347,9 +358,16 @@ struct pjpg : Coroutine, pjpg0 {
       // between carving a file that opens and one that does not.
       if( was_sos && f_SOS ) check_scan_quant();
 
+
       if( was_sos && f_SOS && f_entropy ) {
         if( scan_decodable() ) {
+          // After scan_decodable(), because that is what runs per_scan_setup():
+          // a sink that means to encode this scan needs its MCU geometry, and
+          // one that means to note where it is needs the input pointer still
+          // sitting on its first entropy byte.  Both hold here.
+          if( sc_hook ) sc_hook( sc_ctx, this, 0 );
           pending = decode_scan();
+          if( sc_hook ) sc_hook( sc_ctx, this, 1 );
           if( pending==0 ) goto at_eof;
         } else if( arith_code && sof_lossless ) {
           pjpg_warn( "lossless arithmetic scan, entropy data not decoded" );

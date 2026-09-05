@@ -9,6 +9,7 @@
 #   make corpus          run every bundled jpeg (incl. imagetestsuite) for crashes/hangs
 #   make coders          Huffman vs arithmetic must agree on the same image
 #   make carve           jpegdet: round-trip and decodability of what it extracts
+#   make coder           jpgcoder: coefficients out and the same bytes back
 #   make nesting         thumbnails nested as deep as a JPEG can nest
 #   make crosscheck      confirm gcc and clang builds agree byte-for-byte
 #   make matrix          build+run the full compiler/flag matrix
@@ -31,6 +32,7 @@ LIB3     ?= ../Lib3
 TESTDIR  ?= ../testfiles
 BIN      ?= pjpg
 DET      ?= jpegdet
+COD      ?= jpgcoder
 
 # ---------------------------------------------------------------- flags -----
 # Kept from gc.bat because they are meaningful on Linux too:
@@ -129,11 +131,16 @@ $(BIN): pjpg.cpp $(DEPS)
 $(DET): jpegdet.cpp $(DEPS)
 	$(CXX) $(ALL_CXXFLAGS) $< -o $@ $(ALL_LDFLAGS)
 
-all: $(BIN) $(DET)
+# The coefficient transcoder, built from the same parser and its entropy
+# decoders: it takes a JPEG apart into DCT coefficients and puts it back.
+$(COD): jpgcoder.cpp $(DEPS)
+	$(CXX) $(ALL_CXXFLAGS) $< -o $@ $(ALL_LDFLAGS)
+
+all: $(BIN) $(DET) $(COD)
 .DEFAULT_GOAL := all
 
 # ---------------------------------------------------------------- tests -----
-test: $(BIN) $(DET)
+test: $(BIN) $(DET) $(COD)
 	@./run-tests.sh check "./$(BIN)" "$(TESTDIR)"
 
 golden: $(BIN)
@@ -153,6 +160,10 @@ coders: $(BIN)
 carve: $(DET)
 	@./run-tests.sh carve "./$(BIN)" "$(TESTDIR)"
 
+# Take every test image apart into coefficients and put it back.
+coder: $(COD)
+	@./run-tests.sh coder "./$(BIN)" "$(TESTDIR)"
+
 # Thumbnail recursion, to the depth the format allows and past the depth pjpg
 # parses.  Part of `make test` too.
 nesting: $(BIN)
@@ -165,9 +176,9 @@ matrix: pjpg0j.inc
 	@./run-tests.sh matrix "" "$(TESTDIR)"
 
 clean:
-	rm -f $(BIN) $(DET) pjpg0i.inc pjpg0j.inc *.o
+	rm -f $(BIN) $(DET) $(COD) pjpg0i.inc pjpg0j.inc *.o
 
-.PHONY: all test golden corpus coders carve nesting crosscheck matrix clean
+.PHONY: all test golden corpus coders carve coder nesting crosscheck matrix clean
 
 # The codegen writes fixed filenames into the source directory, and `clean`
 # races `all` under -j: `make -j8 clean all` used to print "Nothing to be done"

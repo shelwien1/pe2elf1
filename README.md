@@ -50,6 +50,22 @@ Using the real parser as the detector is what makes it work: a signature scan ca
 find `FF D8 FF`, but only decoding the entropy data tells you where an image
 *ends*. See `docs/jpegdet.md`.
 
+## jpgcoder
+
+The same parser, plus an encoder, gives `jpgcoder`: it takes a JPEG apart into
+its DCT coefficients and puts it back byte for byte.
+
+```sh
+./jpgcoder c photo.jpg photo.hdr photo.coef   # coefficients out
+./jpgcoder d photo.hdr rebuilt.jpg photo.coef # -> photo.jpg, exactly
+```
+
+Re-encoding a scan gives a stream that means the same thing but need not be the
+same bytes, so it does not assume: every scan is re-encoded at compress time and
+compared, and one that does not reproduce is left in the header verbatim. The
+round trip is exact for every input; what varies is how much reached the
+coefficient form. See `docs/jpgcoder.md`.
+
 ## Building
 
 ### Linux
@@ -93,6 +109,7 @@ Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
 | `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
 | `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
 | `make nesting` | Runs the JPEGs in `testfiles/nested/`, whose thumbnails nest as deep as the format allows — 337 levels, which is what a 16-bit segment length works out to — and checks that pjpg walks the four it has parsers for, that the depth guard fires exactly once per chain below that, and that nothing past it is mistaken for anything. Every level of every file is itself a decodable JPEG (381 of them), so a failure is a failure of the recursion, not of error handling. The images are checked in alongside the script that builds them, and the target regenerates and compares so the two cannot drift. Also checks that `jpegdet` lifts every one of those thumbnails into a file that opens, and puts them all back byte for byte — with and without `-n`. Included in `make test`. |
+| `make coder` | Takes every bundled image apart into coefficients with `jpgcoder` and puts it back, requiring the result to equal the input byte for byte — and that *something* reached the coefficient form, since leaving every scan in the header is trivially lossless. 139 files, 141 of 277 scans transcoded; the rest are arithmetic-coded (no encoder), not DCT-coded, or damaged. Included in `make test`. |
 | `make carve` | Runs `jpegdet` over ten synthetic streams and asserts three things for each: `c` then `d` reproduces the input byte for byte, every carved file decodes, and the number of images carved is exactly what that stream contains. The last is the one that matters — nothing stops a carver from being trivially lossless by never carving anything. Three of the streams are hazard regressions for defects testing found: a padded-MCU blow-up, a cross-scan state leak, and an over-size MCU. Included in `make test`. |
 | `make golden` | Regenerates `tests/golden.log` after an intentional output change. |
 

@@ -210,6 +210,7 @@ struct cinfo {
 
   int blocks_in_MCU;
   int MCU_membership[10];
+  int MCU_first[4];          // first MCU block belonging to each scan component
 
   int Ss, Se, Ah, Al;
 

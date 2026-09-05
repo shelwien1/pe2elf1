@@ -50,8 +50,10 @@ uint e_short;              // ran out of data inside the segment
 uint e_pad;                // consecutive MCUs decoded from padding, not data
 enum { E_PAD_LIMIT = 1<<20 };
 uint e_bytes;              // entropy bytes consumed, for reporting
+qword e_end;               // offset of the FF that ended the segment, for a
+                           // caller that has to cut the scan out of the file
 
-void bits_init( void ) { e_buf=0; e_bits=0; e_marker=0; e_eof=0; e_short=0; }
+void bits_init( void ) { e_buf=0; e_bits=0; e_marker=0; e_eof=0; e_short=0; e_end=0; }
 
 // libjpeg's jpeg_fill_bit_buffer, reading through the coroutine rather than a
 // memory buffer.  FF 00 is a stuffed FF, a run of FF is fill, and FF followed
@@ -64,6 +66,7 @@ uint fill_bit_buffer( int nbits ) {
       if( c==uint(-1) ) { e_eof=1; break; }
       e_bytes++;
       if( c==0xFF ) {
+        qword ff_at = at()-1;             // where this run of FFs began
         do {
           c = get();
           if( c==uint(-1) ) { e_eof=1; break; }
@@ -71,7 +74,7 @@ uint fill_bit_buffer( int nbits ) {
         } while( c==0xFF );
         if( e_eof ) break;
         if( c==0 ) c = 0xFF;
-        else { e_marker = c; break; }     // a real marker: no more bytes
+        else { e_marker = c; e_end = ff_at; break; }   // a real marker: no more bytes
       }
       e_buf = (e_buf<<8) | c;
       e_bits += 8;
@@ -233,6 +236,88 @@ uint nz_alloc( void ) {
 
 uint  nz_ci;        // component index (into comp_info) of the current block
 uint  nz_pos;       // block index within that component
+
+// ---- coefficient capture ----------------------------------------------------
+//
+// pjpg reads the entropy data to describe it, and throws the values away.  A
+// transcoder wants them, so when co_buf is set the decoders write each block's
+// 64 coefficients into it, in zigzag order -- the order they are coded in, and
+// so the order that makes re-encoding a straight walk.
+//
+// The grid is padded to whole MCUs, because that is what the bitstream codes:
+// an image 17 pixels wide with 2x1 sampling still has a block column past the
+// edge in every MCU row, and it carries coded data that has to come back.  So a
+// component's row is co_bw blocks wide whatever its width_in_blocks says.
+short* co_buf;
+qword  co_nblk;                  // blocks co_buf holds, for bounds checking
+qword  co_base[4];               // where each frame component's blocks start
+uint   co_bw[4], co_bh[4];       // its padded block grid
+uint   mcu_row, mcu_col;         // where decode_scan's loops are
+
+uint co_want;                    // allocate co_buf at the first decodable scan
+uint co_failed;                  // ... and could not
+
+// The grid is only knowable once a frame header has been read, and the first
+// scan is the first moment it is needed, so that is where it is built.  Padded
+// to whole MCUs because that is what the bitstream codes.
+uint co_alloc( void ) {
+  uint c,mw,mh;
+  qword n;
+  co_free();
+  if( (num_components<1) || (num_components>4) ) { co_failed=1; return 0; }
+  if( (max_h_samp_factor<1) || (max_v_samp_factor<1) ) { co_failed=1; return 0; }
+  mw = uint(jdiv_round_up( int(image_width),  max_h_samp_factor*8 ));
+  mh = uint(jdiv_round_up( int(image_height), max_v_samp_factor*8 ));
+  n = 0;
+  for( c=0; c<uint(num_components); c++ ) {
+    co_bw[c] = mw * uint(comp_info[c].h_samp_factor);
+    co_bh[c] = mh * uint(comp_info[c].v_samp_factor);
+    co_base[c] = n;
+    n += qword(co_bw[c]) * co_bh[c];
+  }
+  // 64 shorts a block, so this is the memory the whole image costs.  A cap,
+  // because the dimensions come from the file and 65535x65535 asks for 550 GB.
+  if( (n==0) || (n > (qword(1)<<28)) ) { co_failed=1; return 0; }
+  co_buf = (short*)calloc( size_t(n)*64, sizeof(short) );
+  if( co_buf==0 ) { co_failed=1; return 0; }
+  co_nblk = n;
+  return 1;
+}
+
+void co_free( void ) {
+  if( co_buf ) free( co_buf );
+  co_buf = 0; co_nblk = 0;
+}
+
+// Storage for block blkn of the MCU being decoded, or 0 if there is none.
+short* co_block( uint blkn ) {
+  uint ci,cc,o,r,c,wib;
+  qword idx;
+  if( co_buf==0 ) return 0;
+  if( blkn >= uint(DIM(MCU_membership)) ) return 0;
+  ci = uint(MCU_membership[blkn]);
+  if( ci >= uint(comps_in_scan) ) return 0;
+  cc = cs_cmp[ci];
+  if( (cc>=4) || (cc>=uint(num_components)) ) return 0;
+
+  if( comps_in_scan==1 ) {
+    // A single-component scan walks that component's own blocks, left to right
+    // and top to bottom over its real size -- not the padded one, so the row
+    // has to be recovered before it can be indexed into the padded grid.
+    wib = comp_info[cc].width_in_blocks;
+    if( wib==0 ) return 0;
+    r = mcu_row; c = mcu_col;                    // == nz_pos / wib, nz_pos % wib
+    if( c>=wib ) return 0;
+  } else {
+    o = blkn - uint(MCU_first[ci]);
+    r = mcu_row * uint(cur_comp_info[ci]->MCU_height) + o / uint(cur_comp_info[ci]->MCU_width);
+    c = mcu_col * uint(cur_comp_info[ci]->MCU_width)  + o % uint(cur_comp_info[ci]->MCU_width);
+  }
+  if( (r>=co_bh[cc]) || (c>=co_bw[cc]) ) return 0;
+  idx = co_base[cc] + qword(r)*co_bw[cc] + c;
+  if( idx >= co_nblk ) return 0;
+  return co_buf + idx*64;
+}
 qword nz_cur;       // its bits, loaded before a refinement block
 
 void nz_load( void ) {
@@ -262,17 +347,24 @@ d_tbl* ac_cur[10];
 // libjpeg's decode_mcu (baseline / extended sequential)
 uint dec_mcu_seq( void ) {
   uint blkn;
-  int  s,k,r;
+  int  s,k,r,v;
+  short* b;
   for( blkn=0; blkn<uint(blocks_in_MCU); blkn++ ) {
     uint ci = uint(MCU_membership[blkn]);
+    b = co_block( blkn );
     s = huff_decode( *dc_cur[blkn] );
     if( s ) { r = int(get_bits(s)); s = HUFF_EXTEND(r,s); }
     s += last_dc_val[ci];
     last_dc_val[ci] = s;
+    if( b ) b[0] = short(s);
     for( k=1; k<64; k++ ) {
       s = huff_decode( *ac_cur[blkn] );
       r = s>>4; s &= 15;
-      if( s ) { k += r; (void)get_bits(s); }
+      if( s ) {
+        k += r;
+        v = int(get_bits(s));
+        if( b && (k<64) ) b[k] = short(HUFF_EXTEND(v,s));
+      }
       else { if( r!=15 ) break; k += 15; }
     }
     e_blocks++;
@@ -284,12 +376,18 @@ uint dec_mcu_seq( void ) {
 uint dec_mcu_dc_first( void ) {
   uint blkn;
   int  s,r;
+  short* b;
   for( blkn=0; blkn<uint(blocks_in_MCU); blkn++ ) {
     uint ci = uint(MCU_membership[blkn]);
     s = huff_decode( *dc_cur[blkn] );
     if( s ) { r = int(get_bits(s)); s = HUFF_EXTEND(r,s); }
     s += last_dc_val[ci];
     last_dc_val[ci] = s;
+    b = co_block( blkn );
+    // Scaled, not shifted: the value is signed and a left shift of a negative
+    // is undefined before C++20.  Multiplying by the same power of two is the
+    // same arithmetic and the same instruction.
+    if( b ) b[0] = short(s * (1<<Al));  // stored already scaled, as it is coded
     e_blocks++;
   }
   return 1;
@@ -298,22 +396,32 @@ uint dec_mcu_dc_first( void ) {
 // libjpeg's decode_mcu_DC_refine: one bit per block, unconditionally
 uint dec_mcu_dc_refine( void ) {
   uint blkn;
-  for( blkn=0; blkn<uint(blocks_in_MCU); blkn++ ) { (void)get_bits(1); e_blocks++; }
+  short* b;
+  for( blkn=0; blkn<uint(blocks_in_MCU); blkn++ ) {
+    b = co_block( blkn );
+    if( get_bits(1) ) { if( b ) b[0] = short(b[0] | (1<<Al)); }
+    e_blocks++;
+  }
   return 1;
 }
 
 // libjpeg's decode_mcu_AC_first.  Always one block per MCU.
 uint dec_mcu_ac_first( void ) {
-  int s,k,r;
+  int s,k,r,v;
+  short* b;
   if( EOBRUN>0 ) { EOBRUN--; e_blocks++; return 1; }
+  b = co_block( 0 );
   nz_load();
   for( k=int(Ss); k<=int(Se); k++ ) {
     s = huff_decode( *ac_cur[0] );
     r = s>>4; s &= 15;
     if( s ) {
       k += r;
-      (void)get_bits(s);
-      if( (k>=0) && (k<64) ) nz_cur |= qword(1)<<k;   // now nonzero
+      v = int(get_bits(s));
+      if( (k>=0) && (k<64) ) {
+        nz_cur |= qword(1)<<k;                        // now nonzero
+        if( b ) b[k] = short(HUFF_EXTEND(v,s) * (1<<Al)); // stored as coded
+      }
     } else {
       if( r==15 ) { k += 15; }
       else {
@@ -332,16 +440,23 @@ uint dec_mcu_ac_first( void ) {
 // libjpeg's decode_mcu_AC_refine.  The bitstream shape depends only on which
 // coefficients are already nonzero, which is exactly what nz_cur holds.
 uint dec_mcu_ac_refine( void ) {
-  int s,k,r;
+  int s,k,r,p1,m1,kk;
+  short* b;
+  b  = co_block( 0 );
+  p1 = 1 << Al;                         // the bit this scan adds, positive
+  m1 = -(1 << Al);                      // and negative
   nz_load();
+  // With the coefficients in hand, "is this one already nonzero" is a fact
+  // rather than a bitmap lookup, so the map is only consulted when there is
+  // nowhere to store values.
+  #define AC_NONZERO(i)  ( b ? (b[i]!=0) : (((nz_cur>>(i)) & 1)!=0) )
   k = int(Ss);
   if( EOBRUN==0 ) {
     for( ; k<=int(Se); k++ ) {
       s = huff_decode( *ac_cur[0] );
       r = s>>4; s &= 15;
       if( s ) {
-        (void)get_bits(1);              // sign of the newly nonzero coefficient
-        s = 1;
+        s = get_bits(1) ? p1 : m1;      // sign of the newly nonzero coefficient
       } else {
         if( r!=15 ) {
           EOBRUN = 1u<<r;
@@ -352,8 +467,10 @@ uint dec_mcu_ac_refine( void ) {
       // advance over already-nonzero coefficients (each takes a correction
       // bit) and r still-zero ones
       while( k<=int(Se) ) {
-        if( (nz_cur>>k) & 1 ) {
-          (void)get_bits(1);            // correction bit
+        if( AC_NONZERO(k) ) {
+          if( get_bits(1) ) {           // correction bit
+            if( b && ((b[k] & p1)==0) ) b[k] = short( (b[k]>=0) ? (b[k]+p1) : (b[k]+m1) );
+          }
         } else {
           if( r==0 ) break;
           r--;
@@ -362,13 +479,21 @@ uint dec_mcu_ac_refine( void ) {
       }
       // libjpeg lands an overrun on jpeg_natural_order[64..79], all of which
       // are 63; under this relabelling that is coefficient 63.
-      if( s ) nz_cur |= qword(1) << ((k>=0 && k<64) ? k : 63);
+      kk = (k>=0 && k<64) ? k : 63;
+      if( s ) { nz_cur |= qword(1) << kk; if( b ) b[kk] = short(s); }
     }
   }
   if( EOBRUN>0 ) {
-    for( ; k<=int(Se); k++ ) if( (nz_cur>>k)&1 ) (void)get_bits(1);
+    for( ; k<=int(Se); k++ ) {
+      if( AC_NONZERO(k) ) {
+        if( get_bits(1) ) {
+          if( b && ((b[k] & p1)==0) ) b[k] = short( (b[k]>=0) ? (b[k]+p1) : (b[k]+m1) );
+        }
+      }
+    }
     EOBRUN--;
   }
+  #undef AC_NONZERO
   nz_store();
   e_blocks++;
   return 1;
@@ -718,6 +843,7 @@ uint per_scan_setup( void ) {
     c.MCU_width = 1; c.MCU_height = 1; c.MCU_blocks = 1;
     blocks_in_MCU = 1;
     MCU_membership[0] = 0;
+    MCU_first[0] = 0;
   } else {
     if( (comps_in_scan<=0) || (comps_in_scan>4) ) return 0;
     MCUs_per_row     = jdiv_round_up( int(image_width),  max_h_samp_factor*8 );
@@ -730,6 +856,7 @@ uint per_scan_setup( void ) {
       c.MCU_blocks = c.MCU_width * c.MCU_height;
       mcublks = uint(c.MCU_blocks);
       if( uint(blocks_in_MCU)+mcublks > 10 ) return 0;   // sampling factors too large
+      MCU_first[ci] = blocks_in_MCU;
       while( mcublks-- > 0 ) MCU_membership[blocks_in_MCU++] = int(ci);
     }
   }
@@ -767,14 +894,17 @@ uint next_marker_now( void ) {
     if( c==uint(-1) ) { e_eof=1; return 0; }
     e_bytes++;
     if( c!=0xFF ) { e_resync++; continue; }
-    do {
-      c = get();
-      if( c==uint(-1) ) { e_eof=1; return 0; }
-      e_bytes++;
-    } while( c==0xFF );
-    if( c==0 ) { e_resync += 2; continue; }   // stuffed byte, still entropy data
-    e_marker = c;
-    return c;
+    { qword ff_at = at()-1;               // where this run of FFs began
+      do {
+        c = get();
+        if( c==uint(-1) ) { e_eof=1; return 0; }
+        e_bytes++;
+      } while( c==0xFF );
+      if( c==0 ) { e_resync += 2; continue; }   // stuffed byte, still entropy data
+      e_marker = c;
+      e_end = ff_at;
+      return c;
+    }
   }
 }
 
@@ -885,6 +1015,7 @@ uint decode_scan( void ) {
   uint row,col,i,mcu_ok;
 
   bits_init();
+  if( co_want && (co_buf==0) ) co_alloc();
   e_bytes = 0; e_blocks = 0; e_mcus = 0; n_rst_seen = 0; e_resync = 0;
   // ar_dead is a verdict on ONE scan, and it was only ever cleared by
   // arith_reset_coder() -- which decode_scan calls on the arithmetic branch
@@ -938,6 +1069,7 @@ uint decode_scan( void ) {
       }
 
       nz_pos = row*MCUs_per_row + col;    // only meaningful when non-interleaved
+      mcu_row = row; mcu_col = col;       // where co_block() puts what it stores
 
       if( arith_code ) {
         if( progressive_mode==0 )   mcu_ok = ar_mcu_seq();
