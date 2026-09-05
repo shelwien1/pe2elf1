@@ -109,6 +109,11 @@ stateDiagram-v2
     S4 --> S0 : l_tag reached 0
 ```
 
+One asymmetry the diagram cannot show: RSTn returns from `case 1` *before* the
+`printf`, so restart markers are recognised and skipped silently, while every
+other marker prints a `!tag=XX!` line. `tag_id` is still assigned first, so it
+briefly holds `D0`–`D7`; that is harmless because `f_ptag[]` is 0 for those.
+
 Two tables built by `init_lentag()` drive it:
 
 * `f_lentag[256]` — markers that carry a 2-byte length field (`len2[]` in `cinfo.inc`).
@@ -239,9 +244,19 @@ that compiles and is wrong.
 
 ## 6. Bugs
 
-Ranked by severity. Reproducers were built with
-`python3` and run against `011_/pjpg` built by plain `make` (g++ 13.3, `-O2`, no
-sanitizer) on x86-64 Linux.
+Ranked by severity. Reproducers were built with `python3` and run against
+`011_/pjpg` built by plain `make` (g++ 13.3, `-O2`, no sanitizer) on x86-64
+Linux. `docs/make-repros.py` regenerates all of them:
+
+```sh
+python3 docs/make-repros.py repro
+for f in repro/*.jpg; do 011_/pjpg "$f" >/dev/null 2>&1; echo "$? $f"; done
+```
+
+Severity is judged on the assumption that pjpg is pointed at files it did not
+produce — it is a diagnostic tool for inspecting arbitrary JPEGs, so every byte
+it reads is attacker-controlled. None of these are reachable from a well-formed
+image, which is why the 118-file corpus is clean.
 
 ### 6.1 SOS component loop writes past `cur_comp_info[4]` — remote SIGSEGV (critical)
 
