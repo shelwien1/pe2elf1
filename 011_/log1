@@ -1,0 +1,106 @@
+!tag=D8!
+!tag=E0!
+APP0: JFIF
+JFIF APP0 marker: version 1.01, density 1x1  unit=0
+    with 0 x 0 thumbnail image
+!tag=E1!
+APP1: Exif
+align: II
+tagMark=2A ofs1st=8 pos=8 len=CF2
+n_entries=4
+0016/0CF2: 010F 0002 0008 003E
+0022/0CF2: 0110 0002 000E 0046
+002E/0CF2: 0131 0002 0007 0054
+003A/0CF2: 8769 0004 0001 005C
+nextofs=11E; pos=003E/0CF2
+n_entries=6
+012C/0CF2: 0103 0003 0001 0006
+0138/0CF2: 011A 0005 0001 016C
+0144/0CF2: 011B 0005 0001 0174
+0150/0CF2: 0128 0003 0001 0002
+015C/0CF2: 0201 0004 0001 017C
+0168/0CF2: 0202 0004 0001 0B75
+nextofs=0; pos=016C/0CF2
+thumbOfs=17C thumbLen=B75 thumbTyp=6; pos=016C/0CF2
+exif_done; pos=0CF1/0CF2
+!tag=E1!
+APP1: ht  
+!tag=ED!
+!tag=DB!
+Define Quantization Table 0  precision 0
+Define Quantization Table 1  precision 0
+!tag=C0!
+Start Of Frame 0xc0: width=6291, height=2520, components=3
+    Component 1: 2hx2v q=0
+    Component 2: 1hx1v q=1
+    Component 3: 1hx1v q=1
+!tag=C4!
+Define Huffman Table 0x00
+!tag=C4!
+Define Huffman Table 0x10
+!tag=C4!
+Define Huffman Table 0x01
+!tag=C4!
+Define Huffman Table 0x11
+!tag=DA!
+Start Of Scan: 3 components; l_tag=9
+  Component 1: dc=00 ac=00
+  Component 2: dc=01 ac=01
+  Component 3: dc=01 ac=01
+  Ss=0, Se=63, Ah=0, Al=0
+!tag=D9!
+!tag=D8!
+!tag=E0!
+APP0: JFIF
+JFIF APP0 marker: version 1.02, density 72x72  unit=1
+    with 0 x 0 thumbnail image
+!tag=E1!
+APP1: Exif
+align: MM
+tagMark=2A ofs1st=8 pos=8 len=1D0F
+n_entries=7
+0016/1D0F: 0112 0003 0001 10000
+0022/1D0F: 011A 0005 0001 0062
+002E/1D0F: 011B 0005 0001 006A
+003A/1D0F: 0128 0003 0001 20000
+0046/1D0F: 0131 0002 001B 0072
+0052/1D0F: 0132 0002 0014 008D
+005E/1D0F: 8769 0004 0001 00A4
+nextofs=D0; pos=0062/1D0F
+n_entries=6
+00DE/1D0F: 0103 0003 0001 60000
+00EA/1D0F: 011A 0005 0001 011E
+00F6/1D0F: 011B 0005 0001 0126
+0102/1D0F: 0128 0003 0001 20000
+010E/1D0F: 0201 0004 0001 012E
+011A/1D0F: 0202 0004 0001 1BE1
+nextofs=0; pos=011E/1D0F
+thumbOfs=12E thumbLen=1BE1 thumbTyp=6; pos=011E/1D0F
+exif_done; pos=1D0F/1D0F
+!tag=ED!
+!tag=E1!
+APP1: ht  
+!tag=E2!
+!tag=EE!
+!tag=DB!
+Define Quantization Table 0  precision 0
+Define Quantization Table 1  precision 0
+!tag=C0!
+Start Of Frame 0xc0: width=200, height=132, components=3
+    Component 1: 1hx1v q=0
+    Component 2: 1hx1v q=1
+    Component 3: 1hx1v q=1
+!tag=DD!
+Define Restart Interval 25
+!tag=C4!
+Define Huffman Table 0x00
+Define Huffman Table 0x01
+Define Huffman Table 0x10
+Define Huffman Table 0x11
+!tag=DA!
+Start Of Scan: 3 components; l_tag=9
+  Component 1: dc=00 ac=00
+  Component 2: dc=01 ac=01
+  Component 3: dc=01 ac=01
+  Ss=0, Se=63, Ah=0, Al=0
+!tag=D9!

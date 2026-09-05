@@ -1,0 +1,7 @@
+# Several sources, the reference log and the perl-generated file are stored with
+# CRLF because they came from the Windows tree and the byte-for-byte comparison
+# against log1 depends on them staying exactly as they are.  Never translate.
+* -text
+*.jpg binary
+*.JPG binary
+*.tar.gz binary
