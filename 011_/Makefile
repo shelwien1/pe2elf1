@@ -7,6 +7,7 @@
 #   make CXX=clang++     build with clang instead of gcc
 #   make test            regression-test against tests/golden.log
 #   make corpus          run every bundled jpeg (incl. imagetestsuite) for crashes/hangs
+#   make coders          Huffman vs arithmetic must agree on the same image
 #   make crosscheck      confirm gcc and clang builds agree byte-for-byte
 #   make matrix          build+run the full compiler/flag matrix
 #   make clean           remove binaries and generated sources
@@ -116,6 +117,10 @@ corpus: $(BIN)
 # Both of these compile pjpg.cpp themselves, so they need the generated source
 # to exist -- without the prerequisite they fail on a fresh clone or after
 # `make clean`, and crosscheck fails silently.
+# Huffman vs arithmetic on losslessly-transcoded pairs of the same image
+coders: $(BIN)
+	@./run-tests.sh coders "./$(BIN)" "$(TESTDIR)"
+
 crosscheck: pjpg0j.inc
 	@./run-tests.sh crosscheck "" "$(TESTDIR)"
 
@@ -125,7 +130,7 @@ matrix: pjpg0j.inc
 clean:
 	rm -f $(BIN) pjpg0i.inc pjpg0j.inc *.o
 
-.PHONY: all test golden corpus crosscheck matrix clean
+.PHONY: all test golden corpus coders crosscheck matrix clean
 
 # The codegen writes fixed filenames into the source directory, and `clean`
 # races `all` under -j: `make -j8 clean all` used to print "Nothing to be done"

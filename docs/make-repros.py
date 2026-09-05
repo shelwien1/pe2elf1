@@ -33,6 +33,29 @@ def w(name, data):
     open(os.path.join(out, name), 'wb').write(data)
     print('%-22s %7d bytes' % (name, len(data)))
 
+# --- entropy-coded scan parsing --------------------------------------------
+
+# A valid scan followed by one whose second component id resolves to nothing.
+# f_SOS used to survive from the first scan, so the entropy decoder ran on a
+# cur_comp_info[] the second scan never filled in and dereferenced a null.
+_dht_dc = bytes([0x00]) + bytes([1] + [0]*15) + bytes([0])
+_dht_ac = bytes([0x10]) + bytes([1] + [0]*15) + bytes([0])
+_dqt    = bytes([0x00]) + bytes([16]*64)
+_sof1   = bytes([8]) + struct.pack('>HH', 16, 16) + bytes([1]) + bytes([1, 0x11, 0])
+w('scan_stale_sos.jpg', SOI
+  + seg(0xDB, _dqt) + seg(0xC0, _sof1) + seg(0xC4, _dht_dc) + seg(0xC4, _dht_ac)
+  + seg(0xDA, bytes([1]) + bytes([1, 0x00]) + bytes([0, 63, 0])) + b'\x00' * 8
+  + seg(0xDA, bytes([2]) + bytes([1, 0x00]) + bytes([9, 0x00]) + bytes([0, 63, 0]))
+  + b'\x00' * 8 + EOI)
+
+# A DC Huffman table whose symbols exceed 15.  The symbol IS the magnitude
+# category, so without libjpeg's check the decoder asks for get_bits(200).
+w('scan_bad_dc_table.jpg', SOI
+  + seg(0xDB, _dqt) + seg(0xC0, _sof1)
+  + seg(0xC4, bytes([0x00]) + bytes([1] + [0]*15) + bytes([200]))
+  + seg(0xC4, _dht_ac)
+  + seg(0xDA, bytes([1]) + bytes([1, 0x00]) + bytes([0, 63, 0])) + b'\xAB' * 32 + EOI)
+
 # --- recursive thumbnail parsing -------------------------------------------
 # An Exif APP1 whose thumbnail is itself a JPEG is parsed by the next level, so
 # these exercise the recursion, its depth limit, and its error handling.

@@ -94,6 +94,15 @@ check)
     fi
   fi
 
+  # 4) Huffman and arithmetic must agree on losslessly-transcoded pairs
+  if [ -d "$TESTDIR/coders" ]; then
+    if out=$("$0" coders "$BIN" "$TESTDIR" 2>&1) && [ -n "$out" ]; then
+      echo "PASS  coders    ${out#coders: }"
+    else
+      echo "FAIL  coders"; echo "$out" | sed 's/^/  /'; fail=1
+    fi
+  fi
+
   [ $fail -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
   exit $fail
   ;;
@@ -117,6 +126,37 @@ corpus)
     fi
   done < <(find "$TESTDIR" "$ext" -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | LC_ALL=C sort -z)
   echo "corpus: $n files, $((n-errs-bad)) clean, $errs reported parse errors, $bad crashes/hangs"
+  [ $bad -eq 0 ]
+  ;;
+
+coders)
+  # Cross-coder invariant: jpegtran transcodes losslessly in the DCT domain, so
+  # the Huffman and arithmetic variants of an image hold identical coefficients
+  # and must produce identical MCU and block counts.  Any disagreement is an
+  # entropy decoder bug.  No scan may need a resync (which would mean the
+  # decoder did not land on the terminating marker) or end up INCOMPLETE.
+  cd "$HERE" || exit 1
+  dir="$TESTDIR/coders"
+  if [ ! -d "$dir" ]; then echo "coders: $dir missing"; exit 0; fi
+  blocks() { timeout 120 "$BIN" "$1" 2>&1 | grep -a '^  scan ' \
+             | sed 's/.*MCUs, \([0-9]*\) blocks.*/\1/' | paste -sd+ | bc; }
+  n=0; bad=0
+  for base in "$dir"/*.base.jpg; do
+    [ -e "$base" ] || continue
+    b=${base%.base.jpg}
+    n=$((n+1))
+    for v in base prog arith arithprog; do
+      [ -f "$b.$v.jpg" ] || { echo "  MISSING $(basename "$b").$v.jpg"; bad=$((bad+1)); continue; }
+      o=$(timeout 120 "$BIN" "$b.$v.jpg" 2>&1)
+      echo "$o" | grep -qa resync     && { echo "  RESYNC in $(basename "$b").$v"; bad=$((bad+1)); }
+      echo "$o" | grep -qa INCOMPLETE && { echo "  INCOMPLETE in $(basename "$b").$v"; bad=$((bad+1)); }
+    done
+    hs=$(blocks "$b.base.jpg");  as=$(blocks "$b.arith.jpg")
+    hp=$(blocks "$b.prog.jpg");  ap=$(blocks "$b.arithprog.jpg")
+    [ "$hs" = "$as" ] || { echo "  $(basename "$b") sequential: Huffman $hs blocks vs arithmetic $as"; bad=$((bad+1)); }
+    [ "$hp" = "$ap" ] || { echo "  $(basename "$b") progressive: Huffman $hp blocks vs arithmetic $ap"; bad=$((bad+1)); }
+  done
+  echo "coders: $n images x 4 variants, $bad problems"
   [ $bad -eq 0 ]
   ;;
 
@@ -209,5 +249,5 @@ matrix)
   ;;
 
 *)
-  echo "usage: $0 {check|golden|corpus|crosscheck|matrix} [binary] [testdir]" >&2; exit 2 ;;
+  echo "usage: $0 {check|golden|corpus|coders|crosscheck|matrix} [binary] [testdir]" >&2; exit 2 ;;
 esac

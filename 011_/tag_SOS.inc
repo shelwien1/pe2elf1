@@ -7,6 +7,11 @@ uint f_found;
 
 void pa_SOS( void ) { CORO_START;
 
+  // Only this scan's header may set it.  Left over from a previous scan it
+  // would tell the entropy decoder to run on a cur_comp_info[] this scan never
+  // filled in, because a malformed header exits before resolving components.
+  f_SOS = 0;
+
   // Ns(1) + 2 bytes per component + Ss(1) + Se(1) + AhAl(1) = 4 minimum.
   if( l_tag<4 ) { pjpg_err( E_BADLEN, "SOS segment shorter than 4 bytes" ); CORO_EXIT; }
 

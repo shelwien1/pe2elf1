@@ -809,6 +809,7 @@ uint scan_decodable( void ) {
   if( data_precision!=8 ) return 0;              // libjpeg's decoders are 8-bit
   if( Se>63 ) return 0;
   for( i=0; i<uint(comps_in_scan); i++ ) {
+    if( cur_comp_info[i]==0 ) return 0;          // header never resolved it
     c = cs_cmp[i];
     if( c>=uint(num_components) ) return 0;
     if( (comp_info[c].h_samp_factor<1) || (comp_info[c].v_samp_factor<1) ) return 0;

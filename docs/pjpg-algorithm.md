@@ -690,10 +690,14 @@ nothing in the `log1` reference.
 
 ## 8. Not implemented
 
-* **Entropy-coded scan data is skipped, not decoded** — no Huffman or arithmetic
-  decoding, no MCU reconstruction, no IDCT. This is deliberate: pjpg reports
-  structure. RSTn markers are counted; `f_MCU` and the `proc_MCU()` hook the
-  original carried have been removed rather than left dangling.
+* **No image is reconstructed** — entropy-coded scans are now decoded (§10), but
+  coefficients are discarded rather than dequantised, and there is no IDCT,
+  upsampling or colour conversion. pjpg reports structure.
+* **Lossless and hierarchical frames** (SOF3/5/6/7/11/13/14/15, DHP) are
+  recognised and their scans skipped: they are not DCT-coded, and neither source
+  this was ported from decodes them.
+* **12- and 16-bit precision scans are not decoded** — the ported decoders are
+  libjpeg's 8-bit ones. The frame header is still parsed and reported.
 * Segment *contents* are not validated beyond structure: a Huffman table is
   checked for size and index but not for being a valid prefix code, and
   quantisation values are stored without range checks.
@@ -894,39 +898,85 @@ own Huffman decoder runs in the same range. Both modes are kept:
 
 ### How this was validated
 
-* **Marker sequences are identical to the skip-only parser on all 118 corpus
-  files.** The decoder cannot overrun a marker.
-* **Zero resync on 50 of 52 scans across the 19 real test images**, including
-  7-scan and 11-scan progressive files: the decoder consumes exactly the right
-  number of bits and lands precisely on the terminating marker. The two
-  exceptions are on a file whose Huffman table pjpg rejects as corrupt.
+The strongest evidence comes from **transcoding**. `jpegtran -arithmetic` and
+`-progressive` re-encode losslessly in the DCT domain: every variant of an image
+holds exactly the same coefficients, so all four must report identical MCU and
+block counts. Sixteen test images were transcoded into all four combinations of
+{sequential, progressive} x {Huffman, arithmetic}:
+
+```
+  IMAGE          VARIANT     SCANS  RESYNC  INCOMPLETE  BLOCKS
+  IMG_1341       base        1      0       0           185856
+  IMG_1341       prog        10     0       0           929280
+  IMG_1341       arith       1      0       0           185856
+  IMG_1341       arithprog   10     0       0           929280
+```
+
+Across 16 images x 4 variants: **zero block-count disagreements between the
+Huffman and arithmetic decoders**, zero scans needing a resync, zero incomplete.
+A subset lives in `testfiles/coders/` and `make coders` enforces the invariant.
+
+Alongside that:
+
+* **Marker sequences are identical to the skip-only parser on all 130 corpus
+  files.** The decoder never overruns a marker.
+* **Zero resync** means the decoder consumed exactly the right number of bits
+  and landed precisely on the terminating marker -- on every scan of every
+  transcoded file, and on 50 of 52 scans across the original test images (the
+  two exceptions are a file whose Huffman table pjpg rejects as corrupt).
 * **Per-scan entropy byte counts agree with djpeg's** input-position
   instrumentation, allowing for the SOS header djpeg counts and pjpg does not.
+* On a damaged arithmetic file, pjpg and djpeg produce **identical decoder
+  state** -- decision bit, `A`, `C` and `CT` -- until they diverge in how they
+  recover from data exhaustion (libjpeg keeps decoding against a zero-filled
+  stream; pjpg stops at the marker, which is the right call for a parser).
 * **Every file pjpg marks `[INCOMPLETE]` is one djpeg independently complains
-  about**, on all but one of the 118.
-* UBSan (`-fno-sanitize-recover=all`) clean over 148 inputs; 4000 mutated inputs
-  produce no crash or hang; gcc and clang agree byte-for-byte on all 118.
+  about**, on all but one of the corpus.
+* UBSan (`-fno-sanitize-recover=all`) clean; gcc and clang agree byte-for-byte
+  on all 130 corpus files; 24 build configurations pass.
 
-Two real bugs were found by that validation and fixed: Lib3's two-dimensional
-`bzero` template indexes `p[0][i]` past the first row (avoided rather than
-changed, since Lib3 is shared), and libjpeg's check that a DC table's symbols
-are all 0..15 had been dropped in the port — without it a corrupt table hands
-the decoder a magnitude category of up to 255 and `get_bits(200)` drives the bit
-counter out of range.
+### Bugs this validation found
 
-### What is not validated
+Three, all fixed and all with a reproducer in `docs/make-repros.py`:
 
-**The arithmetic decoder has not been tested on a clean file.** The corpus
-contains four arithmetic-coded frames; three have plainly corrupt headers
-(`components=138`, `width=52582`) and the fourth is damaged enough that djpeg
-reports 564 errors on it. No arithmetic JPEG encoder is available here to make
-one.
+* **A stale `f_SOS` across scans.** It was set by the first scan and never
+  cleared, so a later malformed scan header -- one that exits before resolving
+  its components -- left the entropy decoder running against a `cur_comp_info[]`
+  that scan never filled in, dereferencing a null. Found by fuzzing mutated
+  arithmetic files, not by the corpus: `scan_stale_sos.jpg` is a 168-byte
+  reproducer that segfaults the pre-fix build.
+* **libjpeg's DC symbol check had been dropped in the port.** A DC table's
+  symbol *is* the magnitude category, so it must be 0..15; without the check a
+  corrupt table hands the decoder a category of up to 255 and `get_bits(200)`
+  drives the bit counter out of range. Found by UBSan
+  (`shift exponent -228 is negative`). Reproducer: `scan_bad_dc_table.jpg`.
+* **Lib3's two-dimensional `bzero` template** indexes `p[0][i]` past the first
+  row, which UBSan reports on every file once a `byte[2][4]` is passed to it.
+  Avoided by zeroing rows separately rather than changing Lib3, which is shared.
 
-What *is* established: on that fourth file pjpg and djpeg produce **identical
-arithmetic decoder state** — decision bit, `A`, `C` and `CT` — for every
-decision until the point where the two differ in how they recover from data
-exhaustion (libjpeg keeps decoding against a zero-filled stream; pjpg stops at
-the marker, which is the right call for a parser). The QM probability table is
-copied verbatim and the decoder is a line-by-line port. That is good evidence,
-but it is not the same as decoding a real arithmetic JPEG correctly. **A clean
-arithmetic-coded test file would settle it.**
+Two bugs were also found *in the source material* and deliberately not carried
+over -- see §11.
+
+---
+
+## 11. Bugs in the ported-from sources
+
+Both are in the packJPG-derived `jpgcoder.cpp` that was the first candidate for
+this port, and both are fixed in what pjpg actually runs.
+
+* **`decode_ac_prg_fs` cannot terminate.** Its EOB-run branch reads
+  `for( bpos = from; bpos <= to; ) block[ bpos ] = 0;` -- no increment. packJPG
+  has `bpos++`. As written the loop is infinite (or, having no side effect and
+  no exit, whatever the optimiser makes of it).
+* **`decode_block_seq` is passed the wrong AC table.** Both call sites read
+  `htrees[1][cmpnfo[cmp].huffdc]` where the table number should be `huffac`.
+  The encoder half of the same file uses `hcodes[1][...huffac]` at the matching
+  places, which is what makes this a decoder bug rather than a convention: it
+  only bites when a component's DC and AC table numbers differ, which is legal
+  but unusual.
+
+`jpgcoder.cpp` also has **no arithmetic decoder at all** -- it rejects SOF9,
+SOF10, SOF11, SOF13, SOF14 and SOF15 outright with
+`errorlevel = 2; return false`. That is why the port was redone from the
+libjpeg-derived `002_djpeg` tree, which has both coders and whose structures
+pjpg's `cinfo.inc` already matched.
