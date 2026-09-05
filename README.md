@@ -52,6 +52,7 @@ Knobs:
 | `make CXX=clang++` | build with clang instead of gcc |
 | `make OPT=-Ofast` | optimisation level (default `-O2`) |
 | `make CORO=libc` | use the portable `<setjmp.h>` coroutine backend |
+| `make FP=1` | build with a frame pointer (`-fno-omit-frame-pointer`), selecting the alternative coroutine asm |
 | `make NATIVE=1` | add `-march=native` |
 | `make LTO=1` / `STATIC=1` | link-time optimisation / static link |
 | `make SAN=undefined` | build under UndefinedBehaviorSanitizer |
@@ -152,6 +153,34 @@ is set (Ubuntu's gcc defaults it on at `-O1`+), and that check aborts with
 precisely because this coroutine *does* jump into a restored stack. `make
 CORO=libc` therefore adds `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0`, after which
 it produces identical output.
+
+### Frame pointers and the clang coroutine backend
+
+`Lib3/coro3_setjmp_x64d.h` — the hand-written asm `setjmp` clang uses — saves
+only `rip` and `rsp`. That is correct only while the compiler keeps nothing live
+in `%rbp` across the setjmp edge, which is what `-fomit-frame-pointer` gives you,
+and what `gc.bat`, `gc.sh` and the Makefile all build with.
+
+Build with `-fno-omit-frame-pointer` and `%rbp` becomes the frame base that the
+setjmp landing pad reloads its spills through — and on the longjmp edge it holds
+the *other* coroutine's value. The result is a segfault at `-O1` and above.
+Ubuntu's own `dpkg-buildflags` include `-fno-omit-frame-pointer`, so a
+distro-style clang build hits this.
+
+`%rbp` cannot simply be added to the clobber list instead: gcc rejects that
+outright (`error: bp cannot be used in 'asm' here`) and clang accepts it and
+miscompiles. The other callee-saved registers need no such treatment — they are
+already in the clobber list, so nothing stays live in them across the edge.
+
+The header therefore carries two variants, selected by `CORO_FRAME_POINTER`,
+which `make FP=1` sets along with the flag. Nothing distinguishes the two at
+compile time — no predefined macro differs between `-fomit-frame-pointer` and
+`-fno-omit-frame-pointer` on gcc or clang at any `-O` level (verified across
+twelve compiler/optimisation combinations) — so the define has to be passed by
+whoever sets the flag. Both halves are covered by `make matrix`.
+
+The gcc path is unaffected: it uses `coro3_setjmp_x64.h`, which is built on
+`__builtin_setjmp`/`__builtin_longjmp` and works in either mode.
 
 ### AddressSanitizer does not work here
 

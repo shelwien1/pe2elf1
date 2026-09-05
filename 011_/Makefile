@@ -16,6 +16,7 @@
 #   CXX=g++|clang++      compiler                      (default g++)
 #   OPT=-O2              optimisation level            (default -O2)
 #   CORO=asm|libc        coroutine backend             (default asm)
+#   FP=1                 build with a frame pointer (-fno-omit-frame-pointer)
 #   NATIVE=1             add -march=native
 #   LTO=1                add -flto
 #   STATIC=1             add -static
@@ -61,6 +62,16 @@ EXTRA_LD :=
 CORO ?= asm
 ifeq ($(CORO),libc)
 EXTRA += -DCORO_NOASM=1 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
+endif
+
+# The clang coroutine backend's setjmp saves only rip/rsp, which is correct
+# only while nothing is live in %rbp across the setjmp edge -- i.e. under
+# -fomit-frame-pointer, which is what CODEGEN sets.  Building with a frame
+# pointer needs the alternative asm in Lib3/coro3_setjmp_x64d.h, and nothing
+# distinguishes the two at compile time, so it is selected by this define.
+ifdef FP
+CODEGEN := $(filter-out -fomit-frame-pointer,$(CODEGEN)) -fno-omit-frame-pointer
+EXTRA   += -DCORO_FRAME_POINTER
 endif
 
 ifdef NATIVE

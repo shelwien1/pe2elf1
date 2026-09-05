@@ -237,6 +237,9 @@ matrix)
     cell "$tag-native"     $cc -Ofast $cg -march=native
     cell "$tag-no-pie"     $cc -O2 $cg -no-pie
     cell "$tag-pie"        $cc -O2 $cg -fPIE -pie
+    # a frame-pointer build needs the alternative setjmp asm; both halves of
+    # that switch are covered, including that the default still works without it
+    cell "$tag-framepointer" $cc -O2 $cg -fno-omit-frame-pointer -DCORO_FRAME_POINTER
     cell "$tag-ubsan"      $cc -O1 -g -fsanitize=undefined
     # AddressSanitizer instruments and poisons stack frames, which is exactly what
     # the coroutine hand-copies in and out of Coroutine::stk[].  Known incompatible;
