@@ -7,6 +7,7 @@
 #   make CXX=clang++     build with clang instead of gcc
 #   make test            regression-test against tests/golden.log
 #   make corpus          run every bundled jpeg (incl. imagetestsuite) for crashes/hangs
+#   make crosscheck      confirm gcc and clang builds agree byte-for-byte
 #   make matrix          build+run the full compiler/flag matrix
 #   make clean           remove binaries and generated sources
 #
@@ -103,10 +104,13 @@ golden: $(BIN)
 corpus: $(BIN)
 	@./run-tests.sh corpus "./$(BIN)" "$(TESTDIR)"
 
+crosscheck:
+	@./run-tests.sh crosscheck "" "$(TESTDIR)"
+
 matrix:
 	@./run-tests.sh matrix "" "$(TESTDIR)"
 
 clean:
 	rm -f $(BIN) pjpg0i.inc pjpg0j.inc *.o
 
-.PHONY: all test golden corpus matrix clean
+.PHONY: all test golden corpus crosscheck matrix clean

@@ -1,0 +1,136 @@
+# pjpg — JPEG structure parser
+
+`pjpg` walks a JPEG file byte by byte and prints the marker structure: APP0/APP1
+(JFIF, JFXX, Exif including the embedded thumbnail IFDs), DQT, DHT, SOF0/1/2/9/10,
+DRI and SOS. It is a *parser*, not a decoder — it reads and reports, it does not
+produce an image.
+
+The interesting part is *how* it parses. `pjpg0.inc` is written as if the input
+were a stream it can pull bytes from at will, and two layers of machinery make
+that work over a fixed-size input buffer:
+
+* `coro_fsm.pl` rewrites every `coro2_get()` call site into a computed-goto
+  resume point (`state=&&m17; return; m17: ...`), turning the per-marker parsers
+  into resumable state machines.
+* `Lib3/coro3b.inc` is a stackful coroutine built from `setjmp`/`longjmp` plus a
+  hand-rolled `memcpy` of the live stack frame into a member array, so the byte
+  loop in `pjpg1.inc` can suspend when the input buffer runs dry and resume when
+  the frontend refills it.
+
+Both are unusual enough that most of the porting effort went into confirming they
+still behave on Linux/ELF. They do.
+
+## Building
+
+### Linux
+
+```sh
+cd 011_
+make                    # -> ./pjpg
+make test               # regression against the Windows-captured reference output
+./pjpg ../testfiles/drazen1.jpg
+```
+
+`make` needs a C++17 compiler (gcc or clang) and `perl` for the codegen step.
+
+Knobs:
+
+| | |
+|---|---|
+| `make CXX=clang++` | build with clang instead of gcc |
+| `make OPT=-Ofast` | optimisation level (default `-O2`) |
+| `make CORO=libc` | use the portable `<setjmp.h>` coroutine backend |
+| `make NATIVE=1` | add `-march=native` |
+| `make LTO=1` / `STATIC=1` | link-time optimisation / static link |
+| `make SAN=undefined` | build under UndefinedBehaviorSanitizer |
+
+`011_/gc.sh` and `011_/t.sh` are one-shot script equivalents of `make` and
+`make test`, mirroring the original `gc.bat` / `t.bat`.
+
+### Windows
+
+Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
+`011_/t.bat` still runs the two reference files. Neither was modified.
+
+## Testing
+
+| target | what it does |
+|---|---|
+| `make test` | Runs the two `t.bat` files and diffs against `011_/log1`, the output captured on Windows; then runs all 20 checked-in jpegs against `011_/tests/golden.log`. |
+| `make corpus` | Runs all 118 bundled jpegs (`testfiles/` plus the 98 in `imagetestsuite-jpg-1.00.tar.gz`) looking for crashes and hangs. |
+| `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
+| `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
+| `make golden` | Regenerates `tests/golden.log` after an intentional output change. |
+
+Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
+
+* Output is **byte-identical to the Windows reference** for both files in `log1`.
+* All 118 corpus files parse to exit 0, no crashes, no hangs (~0.4 s total).
+* gcc and clang agree byte-for-byte on all 118.
+* All matrix cells pass, with the two exceptions noted below.
+
+## Porting notes
+
+### Flags dropped from `gc.bat`
+
+`gc.bat` is a Windows clang command line targeting the MSVC runtime. The Linux
+build keeps only what is meaningful here:
+
+* **Kept**: `-DNDEBUG`, `-Drestrict=__restrict` (`restrict` is not a C++ keyword),
+  `-fomit-frame-pointer`, `-fno-stack-protector`, `-fno-stack-check`,
+  `-fstrict-aliasing`, and optionally `-march=…`, `-flto`, `-static`.
+* **Dropped as Windows-only**: `-DSTRICT`, `-DWIN32`, `-D_WIN32`,
+  `-DWIN32_LEAN_AND_MEAN`, every `_CRT_*` / `_SECURE_SCL*` /
+  `_HAS_ITERATOR_DEBUGGING` / `_ITERATOR_DEBUG_LEVEL` define, `-nostdlibinc`,
+  `-nostdinc++`, `-fms-compatibility`, `-fms-extensions`, `-Wmsvc-not-found`,
+  the `-isystem` paths into `C:\VC2019` and friends, and `-DCOMMON_SKIP_BSF`
+  (it guards an MSVC-only `_BitScanForward` declaration in `common.inc`).
+  Defining `_WIN32` on Linux would be actively wrong.
+* **Dropped as unused**: `-D__DIRNAM__=%DIRNAM%` — no source file references it.
+
+### The coroutine on Linux
+
+`Lib3/coro3b.inc` picks a `setjmp` implementation at compile time:
+
+| build | backend | header |
+|---|---|---|
+| gcc | `__builtin_setjmp` / `__builtin_longjmp` | `coro3_setjmp_x64.h` |
+| clang | hand-written x86-64 inline asm | `coro3_setjmp_x64d.h` |
+| `-DCORO_NOASM=1` | glibc `<setjmp.h>` | — |
+
+The `CORO_NOASM` fallback is the only backend that is not x86-specific, so it
+matters for any future non-x86 Linux port — but on glibc it needs fortification
+turned off. glibc redirects `longjmp` to `__longjmp_chk` when `_FORTIFY_SOURCE`
+is set (Ubuntu's gcc defaults it on at `-O1`+), and that check aborts with
+
+```
+*** longjmp causes uninitialized stack frame ***
+```
+
+precisely because this coroutine *does* jump into a restored stack. `make
+CORO=libc` therefore adds `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0`, after which
+it produces identical output.
+
+### AddressSanitizer does not work here
+
+ASan instruments and poisons stack frames; `Coroutine::yield` `memcpy`s a live
+stack frame out to `Coroutine::stk[]` and `coro_call0` copies it back. ASan
+cannot follow that and aborts. This is inherent to the design, not a bug to fix,
+so `make matrix` records it as an expected failure rather than hiding it. UBSan
+works and passes.
+
+### Line endings
+
+Much of the tree, the reference `log1`, and the perl-generated `pjpg0j.inc` are
+stored with CRLF. `.gitattributes` sets `* -text` so git never translates them,
+because the byte-for-byte comparison against `log1` depends on those bytes. Test
+comparisons strip CR before diffing, so the same golden file works on both
+platforms.
+
+### Generated files
+
+`pjpg0i.inc` (preprocessed) and `pjpg0j.inc` (perl-rewritten) are build
+artifacts — `gc.bat` deletes and regenerates them on every build — so they are
+gitignored here too and `make` regenerates them. The codegen is deterministic:
+Linux clang reproduces the Windows-generated `pjpg0j.inc` byte for byte, and
+gcc's differs only by four blank lines from a preprocessor formatting difference.
