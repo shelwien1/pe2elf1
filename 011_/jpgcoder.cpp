@@ -38,6 +38,7 @@
 #include "pjpg0j.inc"
 #include "pjpg1.inc"
 #include "jpgenc.inc"
+#include "jpgarith.inc"
 
 //=============================================================================
 
@@ -72,7 +73,7 @@ struct Scan {
   uint  coef;            // stored as coefficients rather than left in the header
   uint  padbit;          // the bit that padded its last byte
   uint  prog, Ss, Se, Ah, Al;   // what it was, for -v
-  uint  arith;                  // arithmetic-coded: there is no encoder for it
+  uint  arith;                  // arithmetic-coded rather than Huffman
   const char* why;              // why it did not re-encode to the same bytes
 };
 
@@ -133,6 +134,52 @@ static Run R;
 // Encoding one scan from the coefficients, with pjpg's state describing it.
 //=============================================================================
 
+// The arithmetic coder's state is a few kilobytes of statistics areas, which
+// is more than belongs on the stack next to the Huffman tables.
+static AriOut ario;
+
+// An arithmetic scan has no padding bit to guess: T.81 D.1.8 says how the
+// coder terminates, and libjpeg's flush picks the one stream that says it in
+// the fewest bytes.  So there is a single candidate, not two.
+static uint encode_scan_ari( pjpg& P, qword* out_len ) {
+  uint row,col,rst_to_go,rst_num,ok;
+
+  ario.init( encbuf, enccap );
+  ari_reset_stats( ario, P );
+
+  rst_to_go = P.restart_interval;
+  rst_num   = 0;
+
+  for( row=0; row<P.MCU_rows_in_scan; row++ ) {
+    for( col=0; col<P.MCUs_per_row; col++ ) {
+
+      if( P.restart_interval ) {
+        if( rst_to_go==0 ) {
+          ari_restart( ario, P, rst_num );
+          rst_num++;
+          rst_to_go = P.restart_interval;
+        }
+        rst_to_go--;
+      }
+
+      P.mcu_row = row; P.mcu_col = col;
+
+      if( !P.progressive_mode ) ok = ari_mcu_seq( ario, P );
+      else if( P.Ss==0 )        ok = (P.Ah==0) ? ari_mcu_dc_first( ario, P )
+                                               : ari_mcu_dc_refine( ario, P );
+      else                      ok = (P.Ah==0) ? ari_mcu_ac_first( ario, P )
+                                               : ari_mcu_ac_refine( ario, P );
+      if( !ok ) return 0;
+      if( ario.bad ) return 0;
+    }
+  }
+
+  ario.finish();
+  if( ario.bad ) return 0;
+  *out_len = ario.len;
+  return 1;
+}
+
 static uint encode_scan( pjpg& P, uint padbit, qword* out_len ) {
   e_tbl   dc[4], ac[4];
   AcState st;
@@ -146,6 +193,8 @@ static uint encode_scan( pjpg& P, uint padbit, qword* out_len ) {
   // decode_scan -- which on this path has not happened and never will.  It only
   // computes, so running it here is free and idempotent.
   if( !P.per_scan_setup() ) return 0;
+
+  if( P.arith_code ) return encode_scan_ari( P, out_len );
 
   o.init( encbuf, enccap );
   st.reset();
@@ -343,8 +392,10 @@ static int cmd_c( const char* inp, const char* hdrname, const char* coefname ) {
         P->co_buf = e.buf; P->co_nblk = e.nblk;
         for( uint c=0; c<4; c++ ) { P->co_base[c]=e.base[c]; P->co_bw[c]=e.bw[c]; P->co_bh[c]=e.bh[c]; }
         Scan& S = scan[e.i];
-        S.why = S.arith ? "arithmetic" : "the encoder gave up";
-        for( pb=0; (pb<2) && !S.arith; pb++ ) {
+        S.why = "the encoder gave up";
+        // The arithmetic coder terminates deterministically, so only the
+        // Huffman path has a padding bit to try both ways.
+        for( pb=0; pb < (S.arith ? 1u : 2u); pb++ ) {
           if( !encode_scan( *P, pb, &len ) ) continue;
           if( len != S.end-S.beg ) { S.why = "re-encoded to a different length"; continue; }
           if( memcmp( encbuf, filebuf+S.beg, size_t(len) )!=0 ) { S.why = "re-encoded to different bytes"; continue; }
@@ -428,9 +479,7 @@ static int cmd_c( const char* inp, const char* hdrname, const char* coefname ) {
     uint n_ar = 0;
     for( s=0; s<n_scan; s++ ) if( scan[s].arith ) n_ar++;
     printf( "%u scan(s), %u as coefficients", n_scan, n_coef_scan );
-    // Arithmetic coding has a decoder here but no encoder, so those scans can
-    // never be re-encoded and are not a shortfall to go looking for.
-    if( n_ar ) printf( " (%u arithmetic, which this cannot re-encode)", n_ar );
+    if( n_ar ) printf( " (%u arithmetic)", n_ar );
     printf( "; %llu coefficients, header %llu of %llu bytes\n",
             (unsigned long long)total_coef,
             (unsigned long long)hdrlen, (unsigned long long)filelen );
@@ -518,7 +567,7 @@ static int cmd_d( const char* hdrname, const char* outname, const char* coefname
   FILE *f,*g;
   char  magic[8];
   qword orig_size, orig_hash, cut;
-  uint  s,c,version;
+  uint  s,c,version,rc;
   DCtx  D;
   Fnv   H;
   qword out_len[JC_MAX_SCANS];
@@ -554,17 +603,21 @@ static int cmd_d( const char* hdrname, const char* outname, const char* coefname
   if( f_bad || hdrlen > (qword(1)<<32) ) { fprintf( stderr, "jpgcoder: bad header length\n" ); fclose(f); return 2; }
   hdrbuf = (byte*)malloc( size_t(hdrlen)?size_t(hdrlen):1 );
   if( hdrbuf==0 || fread( hdrbuf, 1, size_t(hdrlen), f )!=hdrlen ) {
-    fprintf( stderr, "jpgcoder: %s is truncated\n", hdrname ); fclose(f); return 2;
+    fprintf( stderr, "jpgcoder: %s is truncated\n", hdrname );
+    fclose(f); free(hdrbuf); return 2;
   }
   orig_size = get_u64( f );
   orig_hash = get_u64( f );
   if( f_bad || fread( magic, 1, 4, f )!=4 || memcmp( magic, UJP_END, 4 )!=0 ) {
-    fprintf( stderr, "jpgcoder: %s is truncated or corrupt\n", hdrname ); fclose(f); return 2;
+    fprintf( stderr, "jpgcoder: %s is truncated or corrupt\n", hdrname );
+    fclose(f); free(hdrbuf); return 2;
   }
   fclose( f );
 
   D.fcoef = fopen( coefname, "rb" );
-  if( D.fcoef==0 ) { fprintf( stderr, "jpgcoder: cannot read %s\n", coefname ); return 2; }
+  if( D.fcoef==0 ) {
+    fprintf( stderr, "jpgcoder: cannot read %s\n", coefname ); free(hdrbuf); return 2;
+  }
   D.out_len = out_len; D.out_buf = out_buf;
 
   // Walking the header alone gives the parser everything the encoder needs --
@@ -572,14 +625,21 @@ static int cmd_d( const char* hdrname, const char* outname, const char* coefname
   // all of it lives in the segments, and only the entropy data was taken out.
   enccap = orig_size + (orig_size>>2) + (1<<16);
   encbuf = (byte*)malloc( size_t(enccap) );
-  if( encbuf==0 ) { fprintf( stderr, "jpgcoder: out of memory\n" ); return 2; }
+  if( encbuf==0 ) {
+    fprintf( stderr, "jpgcoder: out of memory\n" );
+    fclose(D.fcoef); free(hdrbuf); return 2;
+  }
   R.P.co_want = 0;
   R.go( hdrbuf, hdrlen, &D, d_hook );
   fclose( D.fcoef );
-  if( D.failed ) { fprintf( stderr, "jpgcoder: could not re-encode the image data\n" ); return 2; }
+
+  // Everything from here on has the coefficient buffer and the re-encoded scans
+  // in hand, so it leaves through the same door.
+  rc = 2;
+  if( D.failed ) { fprintf( stderr, "jpgcoder: could not re-encode the image data\n" ); goto done; }
 
   g = fopen( outname, "wb" );
-  if( g==0 ) { fprintf( stderr, "jpgcoder: cannot write %s\n", outname ); return 2; }
+  if( g==0 ) { fprintf( stderr, "jpgcoder: cannot write %s\n", outname ); goto done; }
   H.init();
   cut = 0;
   for( s=0; s<n_scan; s++ ) {
@@ -587,7 +647,7 @@ static int cmd_d( const char* hdrname, const char* outname, const char* coefname
     if( scan[s].splice < cut || scan[s].splice > hdrlen ) {
       fprintf( stderr, "jpgcoder: the header says scan %u goes back at %llu, which is out of order\n",
                s, (unsigned long long)scan[s].splice );
-      fclose(g); remove(outname); return 2;
+      fclose(g); remove(outname); goto done;
     }
     fwrite( hdrbuf+cut, 1, size_t(scan[s].splice-cut), g );
     H.add( hdrbuf+cut, scan[s].splice-cut );
@@ -599,7 +659,7 @@ static int cmd_d( const char* hdrname, const char* outname, const char* coefname
   H.add( hdrbuf+cut, hdrlen-cut );
 
   if( fflush(g)!=0 || ferror(g) || fclose(g)!=0 ) {
-    fprintf( stderr, "jpgcoder: write error on %s\n", outname ); remove(outname); return 2;
+    fprintf( stderr, "jpgcoder: write error on %s\n", outname ); remove(outname); goto done;
   }
 
   {
@@ -608,15 +668,22 @@ static int cmd_d( const char* hdrname, const char* outname, const char* coefname
     if( n!=orig_size ) {
       fprintf( stderr, "jpgcoder: rebuilt %llu bytes, the original was %llu\n",
                (unsigned long long)n, (unsigned long long)orig_size );
-      return 1;
+      rc = 1; goto done;
     }
   }
   if( H.h!=orig_hash ) {
     fprintf( stderr, "jpgcoder: the rebuilt file does not match the original's hash\n" );
-    return 1;
+    rc = 1; goto done;
   }
   printf( "%u scan(s) rebuilt, %llu bytes verified\n", n_scan, (unsigned long long)orig_size );
-  return 0;
+  rc = 0;
+
+done:
+  free( D.buf ); D.buf = 0;
+  for( s=0; s<JC_MAX_SCANS; s++ ) { free( out_buf[s] ); out_buf[s] = 0; }
+  free( hdrbuf ); hdrbuf = 0;
+  free( encbuf ); encbuf = 0;
+  return int(rc);
 }
 
 //=============================================================================

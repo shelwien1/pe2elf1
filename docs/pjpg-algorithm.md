@@ -1014,7 +1014,7 @@ three real gaps, all found by that comparison:
 
 ### Bugs this validation found
 
-Three, all fixed and all with a reproducer in `docs/make-repros.py`:
+All fixed; the first two have a reproducer in `docs/make-repros.py`:
 
 * **A stale `f_SOS` across scans.** It was set by the first scan and never
   cleared, so a later malformed scan header -- one that exits before resolving

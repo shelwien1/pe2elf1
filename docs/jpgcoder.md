@@ -42,7 +42,9 @@ sixteen zeroes is split, which bit pads the last byte — all of these are choic
 and the file being reproduced made them once already.
 
 So this does not assume. **Every scan is re-encoded at compress time and compared
-against the original bytes.** A scan that comes back identical is stored as
+against the original bytes.** The arithmetic coder has a termination procedure
+rather than a padding bit, but the same applies: T.81 D.1.8 accepts any value in
+the final interval, and only one of them is the one in the file. A scan that comes back identical is stored as
 coefficients; one that does not is left in the header verbatim. The round trip is
 therefore exact for *every* input, and what varies is only how much of the file
 reached the coefficient form — which the summary line says:
@@ -77,10 +79,28 @@ so refinement scans parse. Three things were added, all inert unless asked for:
   interval. That is exactly what an encoder needs, and it is what both halves of
   the job hang off.
 
-The encoder (`jpgenc.inc`) mirrors libjpeg's `jchuff.c` and `jcphuff.c` rather
-than being written afresh, for the same reason the decoders mirror `jdhuff.c`:
-the files this has to reproduce were overwhelmingly made by libjpeg, and its
-choices are what "the same bytes" means in practice.
+The encoders mirror libjpeg rather than being written afresh, for the same reason
+the decoders mirror `jdhuff.c` and `jdarith.c`: the files this has to reproduce
+were overwhelmingly made by libjpeg, and its choices are what "the same bytes"
+means in practice. `jpgenc.inc` is `jchuff.c` and `jcphuff.c`; `jpgarith.inc` is
+`jcarith.c` — the QM coder of T.81 Annex D with libjpeg's "Pacman" flush, which
+of the conforming ways to terminate a scan picks the shortest.
+
+Two things changed on the decoding side to feed them. The arithmetic decoders
+computed each coefficient and threw it away, keeping only the nonzero bitmap
+refinement scans need, so they now store what they compute — the same buffer, on
+the same terms, as the Huffman ones.
+
+The other is fidelity rather than a fix. T.851 10.3 has the sign bits and the DC
+refinement bits coded against a bin that never adapts, and libjpeg gives it its
+own storage: `fixed_bin`, parked in state 113, whose transitions point back at
+itself. The port instead borrowed `ar_ac_stats[tbl][245]` and zeroed it before
+each use, which codes exactly the same decisions — state 0 has the same Qe of
+0x5A1D — and 245 really is free, since the highest index any real context reaches
+is 244. But that is a bound nobody writes down, holding by 1, in a shared array;
+and the encoder mirrors `jcarith.c`, which has no such arrangement. So the bin
+now has its own four bytes on both sides and `jaritab` carries T.851's 114th
+entry, and neither side depends on the coincidence.
 
 Both directions run pjpg. Compressing runs it over the file; decompressing runs
 it over the **header alone**, which still contains every segment — so the parser
@@ -89,23 +109,30 @@ parsed twice by two different pieces of code.
 
 ## 4. What transcodes and what does not
 
-Measured over 187 files — the bundled corpus, the 98 deliberately-damaged images
-of `imagetestsuite`, the nested-thumbnail set, and 48 exotic frame types from the
-JPEG XT reference encoder:
+Measured over what `make coder` runs on: the bundled corpus including the
+nested-thumbnail set and the transcoded coder variants, plus the 98
+deliberately-damaged images of `imagetestsuite`. 145 files.
 
-**187 of 187 round-trip byte-exact.** 170 of 346 scans reached the coefficient
-form. The rest divide into three, and only one of them is a gap:
+**145 of 145 round-trip byte-exact.** 223 of 318 scans reached the coefficient
+form. Split by whether pjpg could decode the file at all:
 
-| | why |
-|---|---|
-| **arithmetic scans** (52) | pjpg decodes them, but there is no arithmetic *encoder* here. packJPG's jpgcoder has none either — it refuses these files outright. |
-| **not DCT-coded at all** | lossless-predictive (SOF3/SOF11) and hierarchical frames have no DCT coefficients to store. |
-| **damaged scans** | a truncated scan re-encodes to a complete one, which is not the same bytes, so it stays raw. Correct, not a shortfall. |
+| | scans | as coefficients |
+|---|---|---|
+| **files that decode completely** (82) | 208 | **207** |
+| **files with a scan that stops part-way** (63) | 110 | 16 |
 
-On well-formed Huffman JPEGs — baseline, extended sequential, and progressive in
-all four scan shapes — coverage is effectively total: of the 92 non-arithmetic
-scans in the clean corpus, 83 transcode, and all nine that do not are in one file
-whose entropy data is truncated.
+So on well-formed input coverage is all but total, and it does not depend on
+which entropy coder the file used: all 82 arithmetic scans in the corpus
+transcode, sequential and progressive alike, with and without restart intervals.
+The single miss in the first row is a file whose sampling factors T.81 forbids
+(14h × 5v), which pjpg refuses to decode, so there are no coefficients to store.
+
+The second row is not a shortfall. A truncated scan re-encodes to a *complete*
+one — the encoder has the whole coefficient grid and writes all of it — which is
+not the same bytes, so it stays raw. That is the fallback working.
+
+Two shapes have no coefficients to store at all and never will:
+lossless-predictive (SOF3/SOF11) and JPEG-LS frames are not DCT-coded.
 
 **Known gap:** the differential frames of a *hierarchical* stream. Their first
 frame transcodes; the differential frames that follow are left in the header. The
@@ -124,8 +151,16 @@ and the result must equal the input byte for byte. The target also asserts that
 anything would pass the round-trip check on its own, since leaving every scan in
 the header is trivially lossless.
 
-Beyond that: UBSan clean over the whole corpus in both directions, no leaks, and
-five compiler and flag configurations producing identical output.
+`make coders` covers the arithmetic encoder's own corner: `testfiles/coders/`
+carries `-restart 1B` versions of the arithmetic pair, which put an RSTn at every
+MCU row. A restart makes the coder terminate its interval and start a fresh one
+mid-scan, and no file without restart markers goes near that path.
+
+Beyond that: UBSan clean over the whole corpus in both directions, LeakSanitizer
+clean including the error paths, and the full compiler and flag matrix producing
+identical output. (`d` used to hold on to the coefficient buffer and the
+re-encoded scans until exit; both are freed now, so a leak report means a real
+one.)
 
 AddressSanitizer reports a stack-buffer-underflow inside `yield()` here exactly
 as it does for `pjpg`: the coroutine copies a live stack region by hand. See

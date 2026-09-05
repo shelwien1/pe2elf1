@@ -179,18 +179,21 @@ coders)
     [ -e "$base" ] || continue
     b=${base%.base.jpg}
     n=$((n+1))
-    for v in base prog arith arithprog; do
+    for v in base prog arith arithprog arithrst arithprogrst; do
       [ -f "$b.$v.jpg" ] || { echo "  MISSING $(basename "$b").$v.jpg"; bad=$((bad+1)); continue; }
       o=$(timeout 120 "$BIN" "$b.$v.jpg" 2>&1)
       echo "$o" | grep -qa resync     && { echo "  RESYNC in $(basename "$b").$v"; bad=$((bad+1)); }
       echo "$o" | grep -qa INCOMPLETE && { echo "  INCOMPLETE in $(basename "$b").$v"; bad=$((bad+1)); }
     done
-    hs=$(blocks "$b.base.jpg");  as=$(blocks "$b.arith.jpg")
-    hp=$(blocks "$b.prog.jpg");  ap=$(blocks "$b.arithprog.jpg")
+    hs=$(blocks "$b.base.jpg");  as=$(blocks "$b.arith.jpg");     rs=$(blocks "$b.arithrst.jpg")
+    hp=$(blocks "$b.prog.jpg");  ap=$(blocks "$b.arithprog.jpg"); rp=$(blocks "$b.arithprogrst.jpg")
     [ "$hs" = "$as" ] || { echo "  $(basename "$b") sequential: Huffman $hs blocks vs arithmetic $as"; bad=$((bad+1)); }
     [ "$hp" = "$ap" ] || { echo "  $(basename "$b") progressive: Huffman $hp blocks vs arithmetic $ap"; bad=$((bad+1)); }
+    # Restart markers change where the coder resets, not what it codes.
+    [ "$hs" = "$rs" ] || { echo "  $(basename "$b") sequential restarts: $rs blocks vs $hs"; bad=$((bad+1)); }
+    [ "$hp" = "$rp" ] || { echo "  $(basename "$b") progressive restarts: $rp blocks vs $hp"; bad=$((bad+1)); }
   done
-  echo "coders: $n images x 4 variants, $bad problems"
+  echo "coders: $n images x 6 variants, $bad problems"
   [ $bad -eq 0 ]
   ;;
 

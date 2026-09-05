@@ -4,7 +4,11 @@
 # jpegtran transcodes losslessly in the DCT domain, so every variant of an image
 # holds exactly the same coefficients.  That is what makes them a test: pjpg's
 # Huffman and arithmetic decoders must report identical MCU and block counts for
-# all four, and `make coders` checks exactly that.
+# all six, and `make coders` checks exactly that.
+#
+# The two restart-interval variants are there for the encoders rather than the
+# decoders: an entropy coder resets at every RSTn, and the arithmetic one has to
+# terminate and restart its interval as well, which nothing else here exercises.
 #
 # Needs libjpeg-turbo's jpegtran (Debian/Ubuntu: libjpeg-turbo-progs).
 set -u
@@ -20,5 +24,9 @@ for b in 10-2-t laplata4_1 jcaron; do
   jpegtran -copy none -progressive              -outfile "$b.prog.jpg"      "$src"
   jpegtran -copy none -arithmetic               -outfile "$b.arith.jpg"     "$src"
   jpegtran -copy none -arithmetic -progressive  -outfile "$b.arithprog.jpg" "$src"
-  echo "  $b -> base prog arith arithprog"
+  # -restart 1B is one restart interval per MCU row: as many RSTn as the image
+  # can hold, which is what makes it worth checking in.
+  jpegtran -copy none -arithmetic -restart 1B                -outfile "$b.arithrst.jpg"     "$src"
+  jpegtran -copy none -arithmetic -restart 1B -progressive   -outfile "$b.arithprogrst.jpg" "$src"
+  echo "  $b -> base prog arith arithprog arithrst arithprogrst"
 done

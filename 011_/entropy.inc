@@ -501,7 +501,7 @@ uint dec_mcu_ac_refine( void ) {
 
 // The QM-coder probability estimation table, verbatim from djpeg's
 // arith_tab.inc (JPEG T.81 Table D.3): Qe, next-MPS, switch, next-LPS packed.
-static constexpr int jaritab[113] = {
+static constexpr int jaritab[114] = {
    (((int)0x5a1d << 16) | ((int)1 << 8) | ((int)1 << 7) | 1),
    (((int)0x2586 << 16) | ((int)2 << 8) | ((int)0 << 7) | 14),
    (((int)0x1114 << 16) | ((int)3 << 8) | ((int)0 << 7) | 16),
@@ -614,7 +614,13 @@ static constexpr int jaritab[113] = {
    (((int)0x504f << 16) | ((int)107 << 8) | ((int)0 << 7) | 111),
    (((int)0x5a10 << 16) | ((int)111 << 8) | ((int)1 << 7) | 110),
    (((int)0x5522 << 16) | ((int)109 << 8) | ((int)0 << 7) | 112),
-   (((int)0x59eb << 16) | ((int)111 << 8) | ((int)1 << 7) | 112)
+   (((int)0x59eb << 16) | ((int)111 << 8) | ((int)1 << 7) | 112),
+// Index 113 is not part of Table D.3: it is the fixed 0.5 estimate ITU-T
+// T.851 10.3 Table 5 recommends, and libjpeg appends it for the same reason.
+// Both transitions point back at itself with no MPS switch, so a bin left in
+// this state stays at Qe=0x5A1D with the MPS at 0 no matter what is coded --
+// which is what "does not adapt" means.
+   (((int)0x5a1d << 16) | ((int)113 << 8) | ((int)0 << 7) | 113)
 };
 
 // ---- arithmetic decoder (T.81 Annex D) --------------------------------------
@@ -625,6 +631,14 @@ int  ar_last_dc[4];
 int  ar_dc_context[4];
 byte ar_dc_stats[16][64];
 byte ar_ac_stats[16][256];
+// libjpeg's fixed_bin: the non-adapting bin the sign and the DC refinement bits
+// are coded against (T.851 10.3).  This used to borrow ar_ac_stats[tbl][245],
+// zeroed before each use -- which codes the identical decision, state 0 having
+// the same Qe, and 245 is genuinely free: the highest index a real context
+// reaches is 244.  But that is an unwritten bound holding by one, in an array
+// something else owns, and the encoder in jpgarith.inc mirrors jcarith.c, which
+// keeps the bin apart.  So it is apart here too.
+byte ar_fixed[4];
 uint ar_dead;                 // set once the coder hits a bad code
 
 // The arithmetic coder's own byte fetch.  Same FF00 / marker rules as the
@@ -636,13 +650,19 @@ uint ar_byte( void ) {
   if( c==uint(-1) ) { e_eof=1; return 0; }
   e_bytes++;
   if( c!=0xFF ) return c;
-  do {
-    c = get();
-    if( c==uint(-1) ) { e_eof=1; return 0; }
-    e_bytes++;
-  } while( c==0xFF );
-  if( c==0 ) return 0xFF;
-  e_marker = c;
+  { qword ff_at = at()-1;               // where this run of FFs began
+    do {
+      c = get();
+      if( c==uint(-1) ) { e_eof=1; return 0; }
+      e_bytes++;
+    } while( c==0xFF );
+    if( c==0 ) return 0xFF;
+    // next_marker_now() returns immediately once e_marker is set, so if this
+    // does not record where the segment ended nothing will -- and the caller
+    // that wants to know which bytes were the scan's gets an empty range.
+    e_marker = c;
+    e_end = ff_at;
+  }
   return 0;
 }
 
@@ -675,7 +695,10 @@ int arith_decode( byte* st ) {
   return sv >> 7;
 }
 
-void arith_reset_coder( void ) { ar_c=0; ar_a=0; ar_ct=-16; ar_dead=0; }
+void arith_reset_coder( void ) {
+  ar_c=0; ar_a=0; ar_ct=-16; ar_dead=0;
+  ar_fixed[0]=113; ar_fixed[1]=0; ar_fixed[2]=0; ar_fixed[3]=0;
+}
 
 void arith_reset_stats( void ) {
   uint i;
@@ -689,12 +712,19 @@ void arith_reset_stats( void ) {
   }
 }
 
-// libjpeg's decode_mcu1 (sequential) and decode_mcu1_DC_first share this
-uint ar_decode_dc( uint ci, uint tbl ) {
+// libjpeg's decode_mcu1 (sequential) and decode_mcu1_DC_first share this.
+// b, when the transcoder asked for coefficients, is the block to store into;
+// scale is 1<<Al for a progressive first scan and 1 for a sequential one --
+// the DC value is stored as it was coded, exactly as the Huffman path does.
+uint ar_decode_dc( uint ci, uint tbl, short* b, int scale ) {
   byte* st;
   int sign,v,m;
   st = ar_dc_stats[tbl] + ar_dc_context[ci];
-  if( arith_decode(st)==0 ) { ar_dc_context[ci] = 0; return 1; }
+  if( arith_decode(st)==0 ) {
+    ar_dc_context[ci] = 0;
+    if( b ) b[0] = short(ar_last_dc[ci] * scale);
+    return 1;
+  }
   sign = arith_decode( st+1 );
   st += 2; st += sign;
   if( (m = arith_decode(st)) != 0 ) {
@@ -712,14 +742,15 @@ uint ar_decode_dc( uint ci, uint tbl ) {
   while( m >>= 1 ) if( arith_decode(st) ) v |= m;
   v += 1; if( sign ) v = -v;
   ar_last_dc[ci] += v;
+  if( b ) b[0] = short(ar_last_dc[ci] * scale);
   return 1;
 }
 
-// one AC coefficient magnitude, shared by the sequential and AC-first paths
-uint ar_decode_ac_val( uint tbl, byte* st, int k ) {
+// one AC coefficient magnitude, shared by the sequential and AC-first paths.
+// As above, b is where to store it and scale is 1<<Al (1 when sequential).
+uint ar_decode_ac_val( uint tbl, byte* st, int k, short* b, int scale ) {
   int sign,v,m;
-  ar_ac_stats[tbl][245] = 0;
-  sign = arith_decode( ar_ac_stats[tbl] + 245 );
+  sign = arith_decode( ar_fixed );
   st += 2;
   if( (m = arith_decode(st)) != 0 ) {
     if( arith_decode(st) ) {
@@ -734,17 +765,19 @@ uint ar_decode_ac_val( uint tbl, byte* st, int k ) {
   v = m;
   st += 14;
   while( m >>= 1 ) if( arith_decode(st) ) v |= m;
-  (void)v; (void)sign;
+  v += 1; if( sign ) v = -v;
+  if( b && (k>=0) && (k<64) ) b[k] = short(v * scale);
   return 1;
 }
 
 uint ar_mcu_seq( void ) {
-  uint blkn,ci,tbl; int k; byte* st;
+  uint blkn,ci,tbl; int k; byte* st; short* b;
   if( ar_dead ) return 1;
   for( blkn=0; blkn<uint(blocks_in_MCU); blkn++ ) {
     ci = uint(MCU_membership[blkn]);
+    b = co_block( blkn );
     tbl = uint(comp_info[cs_cmp[ci]].dc_tbl_no) & 15;
-    if( !ar_decode_dc(ci,tbl) ) return 1;
+    if( !ar_decode_dc(ci,tbl,b,1) ) return 1;
     tbl = uint(comp_info[cs_cmp[ci]].ac_tbl_no) & 15;
     for( k=1; k<64; k++ ) {
       st = ar_ac_stats[tbl] + 3*(k-1);
@@ -753,7 +786,7 @@ uint ar_mcu_seq( void ) {
         st += 3; k++;
         if( k>=64 ) { ar_dead=1; return 1; }
       }
-      if( !ar_decode_ac_val(tbl,st,k) ) return 1;
+      if( !ar_decode_ac_val(tbl,st,k,b,1) ) return 1;
     }
     e_blocks++;
   }
@@ -761,31 +794,33 @@ uint ar_mcu_seq( void ) {
 }
 
 uint ar_mcu_dc_first( void ) {
-  uint blkn,ci,tbl;
+  uint blkn,ci,tbl; short* b;
   if( ar_dead ) return 1;
   for( blkn=0; blkn<uint(blocks_in_MCU); blkn++ ) {
     ci = uint(MCU_membership[blkn]);
+    b = co_block( blkn );
     tbl = uint(comp_info[cs_cmp[ci]].dc_tbl_no) & 15;
-    if( !ar_decode_dc(ci,tbl) ) return 1;
+    if( !ar_decode_dc(ci,tbl,b,1<<Al) ) return 1;
     e_blocks++;
   }
   return 1;
 }
 
 uint ar_mcu_dc_refine( void ) {
-  uint blkn; byte st[4];
+  uint blkn; short* b;
   for( blkn=0; blkn<uint(blocks_in_MCU); blkn++ ) {
-    st[0] = 0;
-    (void)arith_decode( st );
+    b = co_block( blkn );
+    if( arith_decode( ar_fixed ) ) { if( b ) b[0] = short(b[0] | (1<<Al)); }
     e_blocks++;
   }
   return 1;
 }
 
 uint ar_mcu_ac_first( void ) {
-  uint tbl; int k; byte* st;
+  uint tbl; int k; byte* st; short* b;
   if( ar_dead ) { e_blocks++; return 1; }
   tbl = uint(comp_info[cs_cmp[0]].ac_tbl_no) & 15;
+  b = co_block( 0 );
   nz_load();
   for( k=int(Ss); k<=int(Se); k++ ) {
     st = ar_ac_stats[tbl] + 3*(k-1);
@@ -794,7 +829,7 @@ uint ar_mcu_ac_first( void ) {
       st += 3; k++;
       if( k > int(Se) ) { ar_dead=1; nz_store(); e_blocks++; return 1; }
     }
-    if( !ar_decode_ac_val(tbl,st,k) ) { nz_store(); e_blocks++; return 1; }
+    if( !ar_decode_ac_val(tbl,st,k,b,1<<Al) ) { nz_store(); e_blocks++; return 1; }
     if( (k>=0) && (k<64) ) nz_cur |= qword(1)<<k;
   }
   nz_store(); e_blocks++;
@@ -802,23 +837,32 @@ uint ar_mcu_ac_first( void ) {
 }
 
 uint ar_mcu_ac_refine( void ) {
-  uint tbl; int k,kex; byte* st;
+  uint tbl; int k,kex,p1,m1; byte* st; short* b;
   if( ar_dead ) { e_blocks++; return 1; }
   tbl = uint(comp_info[cs_cmp[0]].ac_tbl_no) & 15;
+  b  = co_block( 0 );
+  p1 = 1 << Al;                         // the bit this scan adds, positive
+  m1 = -(1 << Al);                      // and negative
   nz_load();
-  // libjpeg scans down for the highest nonzero coefficient; the bitmap has it
-  for( kex=int(Se)+1; kex>1; kex-- ) if( (nz_cur>>(kex-1)) & 1 ) break;
+  // As on the Huffman side: with the coefficients in hand "is this one already
+  // nonzero" is a fact, and the bitmap is only consulted when there is nowhere
+  // to keep them.  libjpeg reads the coefficient, so this reads it too whenever
+  // it exists -- the two cannot then disagree.
+  #define AR_NONZERO(i)  ( b ? (b[i]!=0) : (((nz_cur>>(i)) & 1)!=0) )
+  // libjpeg scans down for the highest nonzero coefficient
+  for( kex=int(Se); kex>0; kex-- ) if( AR_NONZERO(kex) ) break;
   for( k=int(Ss); k<=int(Se); k++ ) {
     st = ar_ac_stats[tbl] + 3*(k-1);
-    if( k>=kex ) if( arith_decode(st) ) break;
+    if( k>kex ) if( arith_decode(st) ) break;
     while(1) {
-      if( (nz_cur>>k) & 1 ) {
-        (void)arith_decode( st+2 );          // correction bit
+      if( AR_NONZERO(k) ) {
+        if( arith_decode( st+2 ) )           // correction bit
+          if( b ) b[k] = short( b[k] + ((b[k]<0) ? m1 : p1) );
         break;
       }
       if( arith_decode(st+1) ) {
-        ar_ac_stats[tbl][245] = 0;
-        (void)arith_decode( ar_ac_stats[tbl] + 245 );   // sign
+        if( arith_decode( ar_fixed ) ) { if( b ) b[k] = short(m1); }
+        else                           { if( b ) b[k] = short(p1); }
         nz_cur |= qword(1)<<k;                          // newly nonzero
         break;
       }
@@ -826,6 +870,7 @@ uint ar_mcu_ac_refine( void ) {
       if( k > int(Se) ) { ar_dead=1; nz_store(); e_blocks++; return 1; }
     }
   }
+  #undef AR_NONZERO
   nz_store(); e_blocks++;
   return 1;
 }
