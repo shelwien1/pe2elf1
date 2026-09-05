@@ -458,9 +458,56 @@ coder)
     cmp -s "$f" "$WORK/c.out" || { echo "  $(basename "$f"): round trip is not byte-exact"; bad=$((bad+1)); }
   done < <(find "$TESTDIR" "$ext" -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | LC_ALL=C sort -z)
 
-  # Arithmetic coding has a decoder here but no encoder, so those scans can
-  # never transcode; everything else should, and on this corpus most does.
   [ "$nc" -gt 0 ] || { echo "  nothing at all reached the coefficient form"; bad=$((bad+1)); }
+
+  # Hostile input.  Both halves take files from outside -- "c" a JPEG, "d" a
+  # header that need not have come from "c" -- and each of these two crashed a
+  # build with every corpus test passing, because a length computed from the
+  # file was used before it was bounded.  Any exit is fine; a signal is not.
+  if command -v python3 >/dev/null 2>&1; then
+    hz="$WORK/hostile"; mkdir -p "$hz"
+    python3 - "$hz" "$TESTDIR" <<'PYSRC' >/dev/null 2>&1
+import sys, struct, glob
+hz, td = sys.argv[1], sys.argv[2]
+src = sorted(glob.glob(td + '/coders/*.base.jpg')) or sorted(glob.glob(td + '/*.jpg'))
+d = open(src[0], 'rb').read()
+# A second frame header declaring more components than the first.  The
+# coefficient grid was built for the first one and has room for four.
+n = 5
+seg = bytes([8]) + struct.pack('>HH', 16, 16) + bytes([n])
+for i in range(n):
+    seg += bytes([i + 1, 0x11, 0])
+open(hz + '/twosof.jpg', 'wb').write(
+    d[:-2] + b'\xff\xc0' + struct.pack('>H', len(seg) + 2) + seg + b'\xff\xd9')
+PYSRC
+    if [ -f "$hz/twosof.jpg" ]; then
+      timeout 120 "$COD" c "$hz/twosof.jpg" "$hz/h.hdr" "$hz/h.coef" >/dev/null 2>&1
+      rc=$?
+      [ $rc -le 2 ] || { echo "  a second frame header with 5 components killed c (exit $rc)"; bad=$((bad+1)); }
+    fi
+    # And a header whose per-component block counts sum past 2^64: the total
+    # wraps to something small, so the buffer is small and the load is not.
+    if timeout 120 "$COD" c "$TESTDIR/coders/10-2-t.base.jpg" "$hz/g.hdr" "$hz/g.coef" >/dev/null 2>&1; then
+      python3 - "$hz" <<'PYSRC' >/dev/null 2>&1
+import sys, struct
+hz = sys.argv[1]
+d = bytearray(open(hz + '/g.hdr', 'rb').read())
+if d[:4] == b'UJP2' and struct.unpack_from('<I', d, 8)[0] == 3:
+    for i, (bw, bh) in enumerate([(1 << 31, (1 << 32) - 2),
+                                  (1 << 31, (1 << 32) - 2),
+                                  (4, (1 << 31) + 25)]):
+        struct.pack_into('<II', d, 12 + 8 * i, bw, bh)
+    open(hz + '/wrap.hdr', 'wb').write(bytes(d))
+    open(hz + '/wrap.coef', 'wb').write(b'\x7f' * (4 << 20))
+PYSRC
+      if [ -f "$hz/wrap.hdr" ]; then
+        timeout 120 "$COD" d "$hz/wrap.hdr" "$hz/wrap.out" "$hz/wrap.coef" >/dev/null 2>&1
+        rc=$?
+        [ $rc -le 2 ] || { echo "  a header with a wrapped block count killed d (exit $rc)"; bad=$((bad+1)); }
+      fi
+    fi
+  fi
+
   echo "coder: $n files, $nc of $ns scans as coefficients, $bad problems"
   [ $bad -eq 0 ]
   ;;

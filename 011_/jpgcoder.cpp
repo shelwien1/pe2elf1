@@ -301,27 +301,9 @@ static void c_hook( void* ctx, pjpg* P, uint phase ) {
   }
 }
 
-// Everything the encoder cannot know: which bit padded the last byte.  It is
-// whatever the bits after the last coded one are, and they are all the same in
-// a conforming file.
-static uint padbit_of( const byte* p, qword beg, qword end, qword coded_bits ) {
-  qword nb;
-  uint  last,used,mask;
-  (void)beg;
-  if( end<=beg ) return 1;
-  nb = coded_bits & 7;
-  if( nb==0 ) return 1;                       // nothing was padded
-  last = p[end-1];
-  used = uint(nb);
-  mask = (1u<<(8-used)) - 1;
-  if( (last & mask)==mask ) return 1;
-  if( (last & mask)==0    ) return 0;
-  return 2;                                   // mixed: not reproducible
-}
-
 static int cmd_c( const char* inp, const char* hdrname, const char* coefname ) {
   FILE *f,*g;
-  qword i,cut,elen,total_coef;
+  qword i,cut,total_coef;
   uint  s,c,ok,ncomp;
   Fnv   H;
 
@@ -361,18 +343,14 @@ static int cmd_c( const char* inp, const char* hdrname, const char* coefname ) {
 
   n_coef_scan = 0;
   if( n_scan ) {
-    struct Try { uint idx; } t;
-    t.idx = 0;
     // Walk the file again, this time to re-encode: the parse gives back the
     // same scan state in the same order, and the coefficients are already in
     // hand from the first pass.
-    struct Ctx { uint i; } cx; cx.i = 0;
     R.P.co_want = 0;                       // keep the coefficients from pass one
-    short* keep = R.P.co_buf; qword keepn = R.P.co_nblk;
+    short* keep = R.P.co_buf; qword keepn = R.P.co_nblk; uint keepc = R.P.co_ncomp;
     qword kb[4]; uint kw[4],kh[4];
     for( c=0; c<4; c++ ) { kb[c]=R.P.co_base[c]; kw[c]=R.P.co_bw[c]; kh[c]=R.P.co_bh[c]; }
     R.P.co_buf = 0;                        // the reset in the next parse must not free it
-    (void)t;
 
     struct Enc {
       short* buf; qword nblk; qword base[4]; uint bw[4],bh[4];
@@ -411,8 +389,9 @@ static int cmd_c( const char* inp, const char* hdrname, const char* coefname ) {
     R.P.co_want = 0;
     ok = R.go( filebuf, filelen, &E, H2::hook );
     (void)ok;
-    // The second parse allocated nothing; put pass one's coefficients back.
-    R.P.co_buf = keep; R.P.co_nblk = keepn;
+    // The second parse allocated nothing, but an SOI in it still ran
+    // image_reset(); put pass one's coefficients and their shape back.
+    R.P.co_buf = keep; R.P.co_nblk = keepn; R.P.co_ncomp = keepc;
     for( c=0; c<4; c++ ) { R.P.co_base[c]=kb[c]; R.P.co_bw[c]=kw[c]; R.P.co_bh[c]=kh[c]; }
   }
 
@@ -423,6 +402,15 @@ static int cmd_c( const char* inp, const char* hdrname, const char* coefname ) {
   cut = 0;
   for( s=0; s<n_scan; s++ ) {
     if( !scan[s].coef ) continue;
+    // A forward parse hands these back in order, but the arithmetic below is
+    // unsigned: one scan starting before the last one ended would turn into a
+    // memcpy of most of the address space.  The decompressor checks the same
+    // invariant on the way back, so check it here too.
+    if( (scan[s].beg < cut) || (scan[s].end < scan[s].beg) || (scan[s].end > filelen) ) {
+      fprintf( stderr, "jpgcoder: scan %u spans %llu..%llu, which is out of order\n",
+               s, (unsigned long long)scan[s].beg, (unsigned long long)scan[s].end );
+      return 2;
+    }
     memcpy( hdrbuf+hdrlen, filebuf+cut, size_t(scan[s].beg-cut) );
     hdrlen += scan[s].beg-cut;
     scan[s].splice = hdrlen;                 // where it goes back
@@ -438,7 +426,12 @@ static int cmd_c( const char* inp, const char* hdrname, const char* coefname ) {
   if( g==0 ) { fprintf( stderr, "jpgcoder: cannot write %s\n", hdrname ); return 2; }
   fwrite( UJP_MAGIC, 1, 4, g );
   put_u32( g, UJP_VERSION );
-  ncomp = (R.P.co_buf && (n_scan>0)) ? uint(R.P.num_components) : 0;
+  // co_ncomp, not num_components: the grid was built for the frame that was
+  // current at the first decodable scan, and a second frame later in the same
+  // image can declare a different -- larger, and up to 255 -- component count.
+  // co_bw/co_bh/co_base have room for four.
+  ncomp = (R.P.co_buf && (n_scan>0)) ? R.P.co_ncomp : 0;
+  if( ncomp>4 ) ncomp = 4;
   put_u32( g, ncomp );
   for( c=0; c<ncomp; c++ ) { put_u32( g, R.P.co_bw[c] ); put_u32( g, R.P.co_bh[c] ); }
   put_u32( g, n_scan );
@@ -516,9 +509,20 @@ static uint load_coef( DCtx& D ) {
   uint c,k;
   qword i,nb;
   int lo,hi;
+  // bw and bh come from the header file, so they are whatever it says.  Both
+  // are 32-bit, so a product is up to 2^64 and a sum of four of them wraps --
+  // and a wrapped total passes the cap below, buys a small buffer, and then the
+  // read loop below walks off the end of it.  So the cap goes on every step:
+  // 1<<28 blocks is what co_alloc() would have allowed in the first place.
   D.nblk = 0;
-  for( c=0; c<D.ncomp; c++ ) { D.base[c] = D.nblk; D.nblk += qword(D.bw[c])*D.bh[c]; }
-  if( (D.nblk==0) || (D.nblk > (qword(1)<<28)) ) return 0;
+  for( c=0; c<D.ncomp; c++ ) {
+    if( (D.bw[c]==0) || (D.bh[c]==0) ) return 0;
+    if( qword(D.bw[c]) > (qword(1)<<28) / D.bh[c] ) return 0;
+    D.base[c] = D.nblk;
+    D.nblk += qword(D.bw[c]) * D.bh[c];
+    if( D.nblk > (qword(1)<<28) ) return 0;
+  }
+  if( D.nblk==0 ) return 0;
   D.buf = (short*)calloc( size_t(D.nblk)*64, sizeof(short) );
   if( D.buf==0 ) return 0;
   for( c=0; c<D.ncomp; c++ ) {
@@ -647,6 +651,12 @@ static int cmd_d( const char* hdrname, const char* outname, const char* coefname
     if( scan[s].splice < cut || scan[s].splice > hdrlen ) {
       fprintf( stderr, "jpgcoder: the header says scan %u goes back at %llu, which is out of order\n",
                s, (unsigned long long)scan[s].splice );
+      fclose(g); remove(outname); goto done;
+    }
+    // The walk above re-encodes every scan the header marks; one it never
+    // reached leaves nothing to splice, and fwrite would be handed a null.
+    if( out_buf[s]==0 ) {
+      fprintf( stderr, "jpgcoder: the header marks scan %u as coefficients, but nothing re-encoded it\n", s );
       fclose(g); remove(outname); goto done;
     }
     fwrite( hdrbuf+cut, 1, size_t(scan[s].splice-cut), g );

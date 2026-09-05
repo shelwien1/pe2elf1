@@ -252,6 +252,9 @@ short* co_buf;
 qword  co_nblk;                  // blocks co_buf holds, for bounds checking
 qword  co_base[4];               // where each frame component's blocks start
 uint   co_bw[4], co_bh[4];       // its padded block grid
+uint   co_ncomp;                 // components the grid covers -- the frame that
+                                 // built it, which a later frame in the same
+                                 // image can disagree with
 uint   mcu_row, mcu_col;         // where decode_scan's loops are
 
 uint co_want;                    // allocate co_buf at the first decodable scan
@@ -281,12 +284,13 @@ uint co_alloc( void ) {
   co_buf = (short*)calloc( size_t(n)*64, sizeof(short) );
   if( co_buf==0 ) { co_failed=1; return 0; }
   co_nblk = n;
+  co_ncomp = uint(num_components);
   return 1;
 }
 
 void co_free( void ) {
   if( co_buf ) free( co_buf );
-  co_buf = 0; co_nblk = 0;
+  co_buf = 0; co_nblk = 0; co_ncomp = 0;
 }
 
 // Storage for block blkn of the MCU being decoded, or 0 if there is none.

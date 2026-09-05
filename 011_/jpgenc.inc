@@ -239,6 +239,10 @@ static uint enc_ac_first( BitOut& o, e_tbl& ac, const short* b, AcState& st,
     if( !enc_eobrun(o,ac,st) ) return 0;
     while( r>15 ) { if( !e_emit(o,ac,0xF0) ) return 0; r -= 16; }
     n = e_cat( v );
+    // As in enc_block_seq: not T.81's 1..10, but the nibble a run/size symbol
+    // has room for.  A category of 16 would not overflow anything -- it would
+    // quietly fold into a different symbol, which is worse than giving up.
+    if( n>15 ) return 0;
     if( !e_emit(o,ac,uint(r<<4)|n) ) return 0;
     o.put_bits( e_bits_of(v,n), n );
     r = 0;

@@ -156,6 +156,25 @@ carries `-restart 1B` versions of the arithmetic pair, which put an RSTn at ever
 MCU row. A restart makes the coder terminate its interval and start a fresh one
 mid-scan, and no file without restart markers goes near that path.
 
+Both halves take files from outside — `c` a JPEG, `d` a header that need not have
+come from `c` — so `make coder` also builds two crafted inputs and requires an
+exit rather than a signal. Each of them used to crash a build with every corpus
+test passing, and for the same reason: a length computed from the file was used
+before it was bounded.
+
+* A JPEG whose second frame header declares five components. The coefficient
+  grid is built for the frame that was current at the first decodable scan, and
+  it has room for four; the writer used the component count in force at the end
+  of the parse, which a later frame can raise to 255.
+* A header whose per-component block counts sum past 2⁶⁴. `bw` and `bh` are
+  32-bit and come straight from the file, so four products can wrap — and a
+  wrapped total passes the size cap, buys a small buffer, and is then loaded
+  against the unwrapped per-component counts. Every step is capped now.
+
+Fuzzing backs those up: a thousand rounds of mutated JPEGs through `c` and `d`
+with the round trip checked, and eight hundred rounds of a mutated header
+through `d`, with no crash and no inexact rebuild.
+
 Beyond that: UBSan clean over the whole corpus in both directions, LeakSanitizer
 clean including the error paths, and the full compiler and flag matrix producing
 identical output. (`d` used to hold on to the coefficient buffer and the
