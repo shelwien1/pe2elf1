@@ -34,7 +34,7 @@ void pa_SOS( void ) { CORO_START;
     // outside the declared frame.
     f_found = 0;
     for( ci=0; ci<uint(num_components); ci++ ) {
-      if( uint(comp_info[ci].component_id)==cc ) { cur_comp_info[i]=&comp_info[ci]; f_found=1; break; }
+      if( uint(comp_info[ci].component_id)==cc ) { cur_comp_info[i]=&comp_info[ci]; cs_cmp[i]=ci; f_found=1; break; }
     }
     if( f_found==0 ) {
       pjpg_err( E_BADSOS, "scan references a component the frame does not define" ); CORO_EXIT;

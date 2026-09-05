@@ -75,6 +75,15 @@ struct JHUFF_TBL {
   int sent_table;
 };
 
+// Decoding tree for one Huffman table, in the packJPG shape: node 0 is the
+// root, l[]/r[] hold the child node index, and a value >= 256 is a leaf
+// carrying symbol (value-256).
+struct JHUFF_TREE {
+  word l[256];
+  word r[256];
+  word max_eobrun;
+};
+
 enum J_COLOR_SPACE {
   JCS_UNKNOWN,
   JCS_GRAYSCALE,
@@ -96,8 +105,9 @@ struct jpeg_component_info {
   int dc_tbl_no;
   int ac_tbl_no;
 
-  uint width_in_blocks;
-  uint height_in_blocks;
+  uint width_in_blocks;      // blocks per row covering the image
+  uint height_in_blocks;     // block rows covering the image
+  uint blocks_total;         // width_in_blocks * height_in_blocks
 
   int DCT_h_scaled_size;
   int DCT_v_scaled_size;
@@ -193,6 +203,7 @@ struct cinfo {
 
   int comps_in_scan;
   jpeg_component_info* cur_comp_info[4];
+  uint cs_cmp[4];            // the same components, as indices into comp_info
 
   uint MCUs_per_row;
   uint MCU_rows_in_scan;

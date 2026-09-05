@@ -27,12 +27,15 @@ struct pjpg1 {
   byte*&         outptr = pjpg_[0].outptr;
   byte*&         outbeg = pjpg_[0].outbeg;
 
+  uint f_entropy = 1;      // decode entropy-coded scans
+
   void coro_init( void ) {
     uint i;
     for( i=0; i<PjpgLevels; i++ ) {
       pjpg_[i].coro_init();
       pjpg_[i].level = i;
       pjpg_[i].sub   = (i+1<PjpgLevels) ? &pjpg_[i+1] : 0;
+      pjpg_[i].f_entropy = f_entropy;
     }
   }
 
@@ -54,10 +57,16 @@ CoroFileProc< pjpg1 > C;
 
 int main( int argc, char **argv ) {
 
-  if( argc<2 ) { fprintf( stderr, "usage: %s <file.jpg>\n", argv[0] ); return 2; }
+  // -s: structure only, skip the entropy-coded scans.  Decoding every Huffman
+  // or arithmetic symbol costs about 50x the time of skipping the data, so the
+  // fast structural pass stays available.
+  int argi = 1;
+  if( (argc>2) && (argv[1][0]=='-') && (argv[1][1]=='s') ) { C.f_entropy = 0; argi = 2; }
 
-  FILE* f = fopen( argv[1], "rb" );
-  if( f==0 ) { fprintf( stderr, "%s: cannot open\n", argv[1] ); return 2; }
+  if( argc<argi+1 ) { fprintf( stderr, "usage: %s [-s] <file.jpg>\n", argv[0] ); return 2; }
+
+  FILE* f = fopen( argv[argi], "rb" );
+  if( f==0 ) { fprintf( stderr, "%s: cannot open\n", argv[argi] ); return 2; }
 
   uint r = C.processfile( f, 0 );
 

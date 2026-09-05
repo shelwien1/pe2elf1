@@ -59,6 +59,7 @@ thumbOfs=12E thumbLen=1BE1 thumbTyp=6; pos=011E/1D0F
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+      scan 1: Huffman sequential, 70 MCUs, 420 blocks, 6593 entropy bytes    , 6 restarts    
     !tag=D9!
 <<< end of thumbnail (level 1)
 exif_done; pos=1D0F/1D0F
@@ -94,6 +95,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 425 MCUs, 1275 blocks, 15218 entropy bytes, 16 restarts
 !tag=D9!
 ===== exit=0 =====
 ===== 02newyr2.jpg =====
@@ -128,6 +130,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 2400 MCUs, 9600 blocks, 66140 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== 10-2-t.jpg =====
@@ -152,6 +155,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 40 MCUs, 160 blocks, 1303 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== 10-2.jpg =====
@@ -185,6 +189,7 @@ JFXX APP0 marker: JPEG-compressed thumbnail image
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+      scan 1: Huffman sequential, 40 MCUs, 160 blocks, 1303 entropy bytes    
     !tag=D9!
 <<< end of thumbnail (level 1)
 !tag=EC!
@@ -209,6 +214,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 10240 MCUs, 40960 blocks, 279123 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== 110323_JFIF_thumbnail.jpg =====
@@ -244,6 +250,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 3: dc=01 ac=01
   Ss=0, Se=0, Ah=0, Al=0
 Warning [tag DA]: sequential scan is not a full 0..63 spectral selection
+  scan 1: Huffman sequential, 345 MCUs, 2070 blocks, 19233 entropy bytes
 !tag=D9!
 
 parse completed with 1 warning(s)
@@ -279,6 +286,7 @@ JFXX APP0 marker: JPEG-compressed thumbnail image
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+      scan 1: Huffman sequential, 40 MCUs, 160 blocks, 1455 entropy bytes    
     !tag=D9!
 <<< end of thumbnail (level 1)
 !tag=EC!
@@ -303,6 +311,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 10240 MCUs, 40960 blocks, 307621 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== 21ad703b38e2c350215bb92a849486f3.jpg =====
@@ -332,9 +341,10 @@ JFXX APP0 marker: JPEG-compressed thumbnail image
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+    Warning [tag 00]: a Huffman table this scan uses was never defined
     !tag=D9!
     
-parse finished with 2 error(s) and 0 warning(s); first error: quantisation table index >= 4 (bad quantisation table)
+parse finished with 2 error(s) and 1 warning(s); first error: quantisation table index >= 4 (bad quantisation table)
 Warning [tag E0]: embedded thumbnail did not parse cleanly
 <<< end of thumbnail (level 1)
 !tag=EC!
@@ -359,65 +369,79 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=00
   Component 3: dc=01 ac=00
   Ss=0, Se=0, Ah=0, Al=1
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 1: Huffman progressive DC, 216 MCUs, 1296 blocks, 839 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=5, Ah=0, Al=2
+  scan 2: Huffman progressive AC, 805 MCUs, 805 blocks, 1516 entropy bytes
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=01
   Ss=1, Se=55, Ah=0, Al=1
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 3: Huffman progressive AC, 216 MCUs, 216 blocks, 187 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=00 ac=01
   Ss=1, Se=63, Ah=0, Al=1
+  scan 4: Huffman progressive AC, 216 MCUs, 216 blocks, 344 entropy bytes
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=6, Se=63, Ah=0, Al=2
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 5: Huffman progressive AC, 805 MCUs, 805 blocks, 1704 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=63, Ah=2, Al=1
+  scan 6: Huffman progressive AC refine, 805 MCUs, 805 blocks, 1923 entropy bytes
 !tag=DA!
 Start Of Scan: 3 components; l_tag=9
   Component 1: dc=00 ac=00
   Component 2: dc=00 ac=00
   Component 3: dc=00 ac=00
   Ss=0, Se=0, Ah=1, Al=0
+  scan 7: Huffman progressive DC refine, 216 MCUs, 1296 blocks, 164 entropy bytes
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=01
   Ss=1, Se=63, Ah=1, Al=0
+  scan 8: Huffman progressive AC refine, 216 MCUs, 216 blocks, 246 entropy bytes
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=00 ac=01
   Ss=1, Se=63, Ah=1, Al=0
+  scan 9: Huffman progressive AC refine, 216 MCUs, 216 blocks, 384 entropy bytes
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=63, Ah=1, Al=0
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 10: Huffman progressive AC refine, 805 MCUs, 805 blocks, 3070 entropy bytes  [INCOMPLETE]
 !tag=DC!
 Define Number of Lines: 29039
 ERROR [tag 00]: input ended inside a segment
 
-parse finished with 1 error(s) and 1 warning(s); first error: input ended inside a segment (truncated)
+parse finished with 1 error(s) and 5 warning(s); first error: input ended inside a segment (truncated)
 ===== exit=1 =====
 ===== 283782.jpg =====
 !tag=D8!
@@ -451,30 +475,37 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=0, Ah=0, Al=0
+  scan 1: Huffman progressive DC, 273 MCUs, 819 blocks, 628 entropy bytes
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=00 ac=00
   Ss=1, Se=5, Ah=0, Al=0
+  scan 2: Huffman progressive AC, 273 MCUs, 273 blocks, 502 entropy bytes
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=00
   Ss=1, Se=5, Ah=0, Al=0
+  scan 3: Huffman progressive AC, 273 MCUs, 273 blocks, 527 entropy bytes
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=5, Ah=0, Al=0
+  scan 4: Huffman progressive AC, 273 MCUs, 273 blocks, 855 entropy bytes
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=00 ac=02
   Ss=6, Se=63, Ah=0, Al=0
+  scan 5: Huffman progressive AC, 273 MCUs, 273 blocks, 364 entropy bytes
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=02
   Ss=6, Se=63, Ah=0, Al=0
+  scan 6: Huffman progressive AC, 273 MCUs, 273 blocks, 338 entropy bytes
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=01
   Ss=6, Se=63, Ah=0, Al=0
+  scan 7: Huffman progressive AC, 273 MCUs, 273 blocks, 2940 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== 4838ece0d3900220d33528ee027289bc.jpg =====
@@ -510,6 +541,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 36 MCUs, 216 blocks, 1569 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== 940536_CIFF.jpg =====
@@ -544,6 +576,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 1536 MCUs, 6144 blocks, 38626 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== A10.jpg =====
@@ -574,6 +607,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 15552 MCUs, 46656 blocks, 841855 entropy bytes, 107 restarts
 !tag=D9!
 ===== exit=0 =====
 ===== DSCN5081.jpg =====
@@ -641,6 +675,7 @@ thumbOfs=32E thumbLen=10C8 thumbTyp=6; pos=031E/13F6
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+      scan 1: Huffman sequential, 48 MCUs, 288 blocks, 3752 entropy bytes    , 5 restarts    
     !tag=D9!
 <<< end of thumbnail (level 1)
 exif_done; pos=13F6/13F6
@@ -676,6 +711,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 49152 MCUs, 147456 blocks, 496402 entropy bytes, 191 restarts
 !tag=D9!
 ===== exit=0 =====
 ===== IMG_1341.JPG =====
@@ -726,6 +762,7 @@ thumbOfs=13F4 thumbLen=1052 thumbTyp=6; pos=0B70/25F6
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+      scan 1: Huffman sequential, 150 MCUs, 600 blocks, 3589 entropy bytes    
     !tag=D9!
 <<< end of thumbnail (level 1)
 exif_done; pos=2446/25F6
@@ -749,6 +786,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 46464 MCUs, 185856 blocks, 2596623 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== bear1_JPXX_13.jpg =====
@@ -785,6 +823,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 468 MCUs, 2808 blocks, 11602 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== digital-art-science-fiction-landscape-wallpaper-5706c362e9ba477419c616522524f50a.jpg =====
@@ -808,66 +847,77 @@ Define Huffman Table 0x00
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=0, Se=0, Ah=0, Al=0
+  scan 1: Huffman progressive DC, 25200 MCUs, 25200 blocks, 23098 entropy bytes
 !tag=C4!
 Define Huffman Table 0x01
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=01 ac=00
   Ss=0, Se=0, Ah=0, Al=0
+  scan 2: Huffman progressive DC, 12600 MCUs, 12600 blocks, 8631 entropy bytes
 !tag=C4!
 Define Huffman Table 0x01
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=01 ac=00
   Ss=0, Se=0, Ah=0, Al=0
+  scan 3: Huffman progressive DC, 12600 MCUs, 12600 blocks, 7938 entropy bytes
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=8, Ah=0, Al=2
+  scan 4: Huffman progressive AC, 25200 MCUs, 25200 blocks, 69586 entropy bytes
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=9, Se=63, Ah=0, Al=2
+  scan 5: Huffman progressive AC, 25200 MCUs, 25200 blocks, 42305 entropy bytes
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=63, Ah=2, Al=1
+  scan 6: Huffman progressive AC refine, 25200 MCUs, 25200 blocks, 93793 entropy bytes
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=63, Ah=1, Al=0
+  scan 7: Huffman progressive AC refine, 25200 MCUs, 25200 blocks, 131609 entropy bytes
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=00 ac=01
   Ss=1, Se=5, Ah=0, Al=0
+  scan 8: Huffman progressive AC, 12600 MCUs, 12600 blocks, 26855 entropy bytes
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=00 ac=01
   Ss=6, Se=63, Ah=0, Al=0
+  scan 9: Huffman progressive AC, 12600 MCUs, 12600 blocks, 38207 entropy bytes
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=01
   Ss=1, Se=5, Ah=0, Al=0
+  scan 10: Huffman progressive AC, 12600 MCUs, 12600 blocks, 22299 entropy bytes
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=01
   Ss=6, Se=63, Ah=0, Al=0
+  scan 11: Huffman progressive AC, 12600 MCUs, 12600 blocks, 19144 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== drazen1.jpg =====
@@ -925,6 +975,7 @@ thumbOfs=17C thumbLen=B75 thumbTyp=6; pos=016C/0CF2
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+      scan 1: Huffman sequential, 40 MCUs, 240 blocks, 2578 entropy bytes    
     !tag=D9!
 <<< end of thumbnail (level 1)
 exif_done; pos=0CF1/0CF2
@@ -955,6 +1006,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 62252 MCUs, 373512 blocks, 2303223 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== fd44dc63fa7bdd12ee34fc602231ef02.jpg =====
@@ -996,22 +1048,32 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=00
   Component 3: dc=01 ac=00
   Ss=0, Se=0, Ah=0, Al=1
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 1: Huffman progressive DC, 2 MCUs, 12 blocks, 5 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=5, Ah=0, Al=2
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+  scan 2: Huffman progressive AC, 2 MCUs, 2 blocks, 4 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=01
   Ss=41, Se=63, Ah=0, Al=1
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+  scan 3: Huffman progressive AC, 2 MCUs, 2 blocks, 32 entropy bytes, resync +23  [INCOMPLETE]
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 2: dc=00 ac=01
   Ss=1, Se=63, Ah=0, Al=1
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 4: Huffman progressive AC, 2 MCUs, 2 blocks, 2 entropy bytes  [INCOMPLETE]
 !tag=2D!
 !tag=C4!
 Define Huffman Table 0x10
@@ -1019,24 +1081,36 @@ Define Huffman Table 0x10
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=6, Se=63, Ah=0, Al=2
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 5: Huffman progressive AC, 2 MCUs, 2 blocks, 4 entropy bytes  [INCOMPLETE]
 !tag=EE!
 APP14: .....
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=1, Se=63, Ah=2, Al=1
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 6: Huffman progressive AC refine, 2 MCUs, 2 blocks, 4 entropy bytes  [INCOMPLETE]
 !tag=DA!
 Start Of Scan: 3 components; l_tag=9
   Component 1: dc=00 ac=00
   Component 2: dc=00 ac=00
   Component 3: dc=00 ac=00
   Ss=0, Se=0, Ah=1, Al=0
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 7: Huffman progressive DC refine, 2 MCUs, 12 blocks, 3 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x11
 !tag=DA!
 Start Of Scan: 1 components; l_tag=5
   Component 3: dc=00 ac=01
   Ss=1, Se=63, Ah=1, Al=0
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+Warning [tag 00]: entropy data ran out before the scan was complete
+  scan 8: Huffman progressive AC refine, 2 MCUs, 2 blocks, 5 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x11
 !tag=C4!
@@ -1045,9 +1119,11 @@ Define Huffman Table 0x10
 Start Of Scan: 1 components; l_tag=5
   Component 1: dc=00 ac=00
   Ss=39, Se=63, Ah=1, Al=0
+Warning [tag 00]: entropy data ended before all MCUs were decoded
+  scan 9: Huffman progressive AC refine, 2 MCUs, 2 blocks, 6 entropy bytes, resync +2  [INCOMPLETE]
 Warning [tag 00]: input ended before EOI
 
-parse completed with 1 warning(s)
+parse completed with 16 warning(s)
 ===== exit=0 =====
 ===== jcaron.jpg =====
 !tag=D8!
@@ -1106,6 +1182,7 @@ thumbOfs=126 thumbLen=2A4 thumbTyp=6; pos=0116/03CA
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+      scan 1: Huffman sequential, 2 MCUs, 12 blocks, 132 entropy bytes    , 1 restarts    
     !tag=D9!
 <<< end of thumbnail (level 1)
 exif_done; pos=03CA/03CA
@@ -1194,6 +1271,7 @@ Start Of Scan: 4 components; l_tag=11
   Component 3: dc=01 ac=01
   Component 4: dc=00 ac=00
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 6 MCUs, 24 blocks, 578 entropy bytes, 2 restarts
 !tag=D9!
 ===== exit=0 =====
 ===== laplata4_1.jpg =====
@@ -1230,6 +1308,7 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 352 MCUs, 2112 blocks, 6107 entropy bytes
 !tag=D9!
 ===== exit=0 =====
 ===== urbancruiser high 29082008.jpg =====
@@ -1285,5 +1364,6 @@ Start Of Scan: 3 components; l_tag=9
   Component 2: dc=01 ac=01
   Component 3: dc=01 ac=01
   Ss=0, Se=63, Ah=0, Al=0
+  scan 1: Huffman sequential, 2752 MCUs, 16512 blocks, 203755 entropy bytes
 !tag=D9!
 ===== exit=0 =====

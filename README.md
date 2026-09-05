@@ -86,7 +86,10 @@ Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
 * gcc and clang agree byte-for-byte on all 118.
 * All matrix cells pass, with the two exceptions noted below.
 * Thumbnails are parsed recursively, up to 5 levels deep.
-* Throughput on a 130 MB stream: **3.2 GB/s** (was 378 MB/s before the byte loop
+* Entropy-coded scans are decoded — Huffman and arithmetic, sequential and
+  progressive — or skipped with `-s`. See [§10 of the algorithm doc](docs/pjpg-algorithm.md).
+* Throughput: **61 MB/s** decoding entropy data, **2.9 GB/s** with `-s`
+  (structure only) (was 378 MB/s before the byte loop
   was rewritten around `memchr` and bulk skipping).
 
 ## Exit status

@@ -820,3 +820,113 @@ corrupt thumbnail inside a healthy file is still visible in the exit status.
 Running this over the bundled corpus immediately turned up real corruption that
 was previously skipped — `21ad703b…jpg` has a JFXX thumbnail with a bogus DQT
 index and a bogus DHT index.
+
+---
+
+## 10. Entropy-coded scan parsing
+
+Until now the entropy-coded data between SOS and the next marker was skipped
+(§3): `scan_FF()` ran `memchr` to the next `0xFF` and the bytes in between were
+never looked at. `011_/entropy.inc` now decodes them, for both entropy coders
+JPEG defines.
+
+It is a port of the libjpeg-derived `002_djpeg` tree — `huff_bit_buffer.inc`,
+`huff_macro.inc`, `huff_decode.inc`, `huff_make_d_derived_tbl.inc`,
+`huff_decode_mcu{,_DC,_DCr,_AC,_ACr}.inc`, `arith.inc`, `arith_tab.inc`,
+`decodeMCU_ari.inc` and `per_scan_setup.inc`. pjpg's `cinfo.inc` was already
+libjpeg-shaped (`jpeg_component_info`, `JHUFF_TBL`, `MCU_membership`,
+`blocks_in_MCU`, `Ss/Se/Ah/Al`, `arith_dc_L/U`, `arith_ac_K`), so most of it
+mapped across unchanged.
+
+| coder | modes |
+|---|---|
+| Huffman | baseline and extended sequential; progressive DC first / DC refine / AC first / AC refine |
+| Arithmetic | sequential; progressive DC first / DC refine / AC first / AC refine |
+
+Restart intervals are handled for both. Lossless and hierarchical frames are
+recognised and skipped — they are not DCT-coded, and neither source decodes them.
+
+### Two deliberate differences
+
+**Streaming input.** djpeg reads the whole file into memory and its bit reader
+walks `next_input_byte`. pjpg is a single forward pass, so `fill_bit_buffer()`
+and the arithmetic coder's `ar_byte()` pull from the coroutine's `get()`,
+doing the FF00 unstuffing and marker detection inline. Everything above that
+layer is unchanged.
+
+**One bit per coefficient instead of sixteen.** djpeg keeps every coefficient
+because it reconstructs an image. pjpg does not, so values are discarded — with
+one exception: a *progressive refinement* scan's bitstream shape depends on
+which coefficients earlier scans already made nonzero. `decode_mcu_AC_refine`
+branches on `*thiscoef != 0` to decide whether to read a correction bit, and the
+arithmetic `AC_refine` scans down for the highest nonzero coefficient.
+
+That single bit is all pjpg keeps: a `qword` per block, indexed by zigzag
+position. It is exact for parsing — a coefficient that is nonzero only ever
+grows in magnitude across refinement scans, so the bit is set and never cleared
+— and it costs 8 bytes per block where a `JBLOCK` costs 128. A 6000×4000
+progressive image needs about 4.5 MB rather than 72 MB. It is allocated lazily
+on the first progressive scan, capped at 256 MB, and freed at each SOI.
+
+### Output
+
+```
+  scan 1: Huffman progressive DC, 273 MCUs, 819 blocks, 628 entropy bytes
+  scan 2: Huffman progressive AC, 273 MCUs, 273 blocks, 502 entropy bytes
+  ...
+  scan 7: Huffman progressive AC, 273 MCUs, 273 blocks, 2940 entropy bytes
+```
+
+`[INCOMPLETE]` marks a scan whose data ran out before every MCU was decoded, and
+`resync +N` the bytes that had to be skipped to find the terminating marker —
+which for a correct decode is zero.
+
+### Speed, and the `-s` flag
+
+Decoding every Huffman or arithmetic symbol costs roughly fifty times what
+skipping the data costs, which is inherent rather than a regression: libjpeg's
+own Huffman decoder runs in the same range. Both modes are kept:
+
+| | 52 MB of concatenated JPEG |
+|---|---|
+| `pjpg file.jpg` (decode) | 61 MB/s |
+| `pjpg -s file.jpg` (structure only) | 2882 MB/s |
+
+### How this was validated
+
+* **Marker sequences are identical to the skip-only parser on all 118 corpus
+  files.** The decoder cannot overrun a marker.
+* **Zero resync on 50 of 52 scans across the 19 real test images**, including
+  7-scan and 11-scan progressive files: the decoder consumes exactly the right
+  number of bits and lands precisely on the terminating marker. The two
+  exceptions are on a file whose Huffman table pjpg rejects as corrupt.
+* **Per-scan entropy byte counts agree with djpeg's** input-position
+  instrumentation, allowing for the SOS header djpeg counts and pjpg does not.
+* **Every file pjpg marks `[INCOMPLETE]` is one djpeg independently complains
+  about**, on all but one of the 118.
+* UBSan (`-fno-sanitize-recover=all`) clean over 148 inputs; 4000 mutated inputs
+  produce no crash or hang; gcc and clang agree byte-for-byte on all 118.
+
+Two real bugs were found by that validation and fixed: Lib3's two-dimensional
+`bzero` template indexes `p[0][i]` past the first row (avoided rather than
+changed, since Lib3 is shared), and libjpeg's check that a DC table's symbols
+are all 0..15 had been dropped in the port — without it a corrupt table hands
+the decoder a magnitude category of up to 255 and `get_bits(200)` drives the bit
+counter out of range.
+
+### What is not validated
+
+**The arithmetic decoder has not been tested on a clean file.** The corpus
+contains four arithmetic-coded frames; three have plainly corrupt headers
+(`components=138`, `width=52582`) and the fourth is damaged enough that djpeg
+reports 564 errors on it. No arithmetic JPEG encoder is available here to make
+one.
+
+What *is* established: on that fourth file pjpg and djpeg produce **identical
+arithmetic decoder state** — decision bit, `A`, `C` and `CT` — for every
+decision until the point where the two differ in how they recover from data
+exhaustion (libjpeg keeps decoding against a zero-filled stream; pjpg stops at
+the marker, which is the right call for a parser). The QM probability table is
+copied verbatim and the decoder is a line-by-line port. That is good evidence,
+but it is not the same as decoding a real arithmetic JPEG correctly. **A clean
+arithmetic-coded test file would settle it.**

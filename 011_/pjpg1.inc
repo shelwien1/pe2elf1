@@ -10,6 +10,9 @@ struct pjpg : Coroutine, pjpg0 {
 
   uint n_restart;
   uint n_scan;
+  uint f_entropy;      // decode entropy-coded scans (1) or skip them (0)
+
+  #include "entropy.inc"
 
   void init_lentag( void ) {
     uint i;
@@ -100,20 +103,27 @@ struct pjpg : Coroutine, pjpg0 {
     for( k=0; k<uint(DIM(quant_tbl)); k++ ) quant_tbl[k].f_undef = 1;
     bzero( dc_huff_tbl_ptrs );
     bzero( ac_huff_tbl_ptrs );
+    bzero( dtbl_ok[0] ); bzero( dtbl_ok[1] );
+    nz_free();
   }
 
   void do_process( void ) {
-    uint c,r,lo,hi;
+    uint c,r,lo,hi,pending,was_sos;
 
     init_lentag();
     pjpg0_init();
     image_reset();
 
-    tag_id=0; l_tag=0;
-    n_restart=0; n_scan=0;
+    tag_id=0; l_tag=0; pending=0;
+    n_restart=0; n_scan=0; n_scan_dec=0;
+    nz_free();
     coro2_init();
 
     while(1) {
+
+      // The entropy decoder consumes the marker that ends a scan, so take that
+      // one rather than scanning for the next FF.
+      if( pending ) { c = pending; pending = 0; goto have_marker; }
 
       // --- find the next marker prefix -------------------------------------
       // In state "scanning" the only byte that matters is 0xFF, so look for it
@@ -126,6 +136,7 @@ struct pjpg : Coroutine, pjpg0 {
         c = get(); if( c==uint(-1) ) goto at_eof;
       } while( c==0xFF );
 
+    have_marker:
       if( c==0x00 ) continue;             // FF 00 -- a stuffed data byte
 
       if( (c&0xF8)==M_RST0 ) {            // RST0..RST7: no payload, not printed
@@ -155,6 +166,7 @@ struct pjpg : Coroutine, pjpg0 {
       l_tag -= 2;                          // payload size
 
       // --- payload ---------------------------------------------------------
+      was_sos = (tag_id==M_SOS);
       if( f_ptag[tag_id] ) {
 
         if( tag_id==M_SOS ) n_scan++;
@@ -190,6 +202,19 @@ struct pjpg : Coroutine, pjpg0 {
       if( l_tag>0 ) {
         if( skip(l_tag)!=l_tag ) { l_tag=0; goto truncated; }
         l_tag = 0;
+      }
+
+      // Entropy-coded data follows a scan header.  Decode it when we can;
+      // otherwise fall through and let scan_FF skip it as before.
+      if( was_sos && f_SOS && f_entropy ) {
+        if( scan_decodable() ) {
+          pending = decode_scan();
+          if( pending==0 ) goto at_eof;
+        } else if( arith_code && sof_lossless ) {
+          pjpg_warn( "lossless arithmetic scan, entropy data not decoded" );
+        } else if( sof_lossless ) {
+          pjpg_warn( "lossless scan, entropy data not decoded" );
+        }
       }
     }
 
