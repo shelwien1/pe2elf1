@@ -56,7 +56,17 @@ void pa_SOS( void ) { CORO_START;
   Ah = coro2_getH();
   Al = coro2_getL();
 
-  pf( "  Ss=%d, Se=%d, Ah=%d, Al=%d\n", Ss, Se, Ah, Al );
+  // T.81 B.2.3: in a lossless frame these four bytes are not a spectral
+  // selection.  Ss is the predictor selector, Se is 0, Ah is 0 and Al is the
+  // point transform, so naming them Ss/Se/Ah/Al there would be misleading.
+  if( sof_lossless ) {
+    pf( "  predictor=%d, point transform=%d\n", Ss, Al );
+    if( (Ss<1) || (Ss>7) ) pjpg_warn( "lossless predictor selector outside 1..7" );
+    if( Se!=0 )            pjpg_warn( "lossless scan has a non-zero Se" );
+    if( Ah!=0 )            pjpg_warn( "lossless scan has a non-zero Ah" );
+  } else {
+    pf( "  Ss=%d, Se=%d, Ah=%d, Al=%d\n", Ss, Se, Ah, Al );
+  }
 
   if( progressive_mode ) {
     if( (Ss>Se) || (Se>63) ) pjpg_warn( "progressive scan spectral range outside 0..63" );
