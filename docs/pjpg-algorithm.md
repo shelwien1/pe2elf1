@@ -796,6 +796,48 @@ separate the coroutine's saved stack from its caller's. Measured minimum stack:
 Linux's 8 MB default is ample, but a small-stack thread is not, and raising
 `PjpgLevels` costs 256 KB a level.
 
+### Test images, nested as deep as a JPEG can nest
+
+`docs/make-nested.py` builds them, and `make test` runs them:
+
+```sh
+python3 docs/make-nested.py nested        # then 011_/pjpg nested/nest_limit.jpg
+```
+
+| file | thumbnails deep | what it is for |
+|---|---|---|
+| `nest1.jpg` | 1 | one Exif thumbnail — the ordinary case |
+| `nest2.jpg` | 2 | Exif then JFXX |
+| `nest4.jpg` | 4 | the deepest pjpg parses; the guard must stay quiet |
+| `nest_max.jpg` | 5 | one more, so the guard has to fire |
+| `nest_deep.jpg` | 8 | three levels past the guard, all skipped as opaque payload |
+| `nest_exif5.jpg` | 5 | every level an Exif APP1 |
+| `nest_jfxx5.jpg` | 5 | every level a JFXX APP0 |
+| `nest_two.jpg` | 5 × 2 | two chains side by side on one image |
+| `nest_limit.jpg` | **337** | as deep as a 16-bit segment length allows |
+
+Two things make these worth having rather than just deep. First, **every level of
+every file is a valid, decodable baseline JPEG in its own right** — 381 images
+across the nine files, all of which `djpeg` opens. Nothing here is malformed, so
+a failure is a failure of the recursion and not of error handling. Second, they
+enter the recursion by **both** routes and alternate between them, so neither
+`pa_APP0`'s call site nor `pa_APP1`'s is only ever reached from itself.
+
+`nest_two.jpg` is the one that is not a chain. Two thumbnails hang off the same
+image, so the second chain reuses the parser objects the first one finished with
+— which is the only place in the recursion that depends on a parser being
+reusable at all, and where `pjpg0_init()` clearing `sub_active` earns its keep.
+
+The 337 in `nest_limit.jpg` is the real ceiling, and it is not pjpg's. Neither
+T.81 nor Exif bounds thumbnail depth; what bounds it is that every level except
+the outermost has to fit inside its parent's APP segment, whose length field is
+16 bits. Wrapping the smallest conforming baseline datastream (~130 bytes)
+until the next wrap would not fit gives 337 levels in 65512 bytes when the two
+routes alternate — 387 through JFXX alone, which is the cheaper wrapper, and 299
+through Exif alone. pjpg walks the first four of them in 6 ms and skips the rest,
+which is the whole point: the guard has to hold against a file built to defeat
+it, not just against a plausible one.
+
 ### Why nesting the coroutines is safe
 
 Each level is a full `Coroutine`, which saves its live stack frame into a member

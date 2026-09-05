@@ -9,6 +9,7 @@
 #   make corpus          run every bundled jpeg (incl. imagetestsuite) for crashes/hangs
 #   make coders          Huffman vs arithmetic must agree on the same image
 #   make carve           jpegdet: round-trip and decodability of what it extracts
+#   make nesting         thumbnails nested as deep as a JPEG can nest
 #   make crosscheck      confirm gcc and clang builds agree byte-for-byte
 #   make matrix          build+run the full compiler/flag matrix
 #   make clean           remove binaries and generated sources
@@ -152,6 +153,11 @@ coders: $(BIN)
 carve: $(DET)
 	@./run-tests.sh carve "./$(BIN)" "$(TESTDIR)"
 
+# Thumbnail recursion, to the depth the format allows and past the depth pjpg
+# parses.  Part of `make test` too.
+nesting: $(BIN)
+	@./run-tests.sh nesting "./$(BIN)" "$(TESTDIR)"
+
 crosscheck: pjpg0j.inc
 	@./run-tests.sh crosscheck "" "$(TESTDIR)"
 
@@ -161,7 +167,7 @@ matrix: pjpg0j.inc
 clean:
 	rm -f $(BIN) $(DET) pjpg0i.inc pjpg0j.inc *.o
 
-.PHONY: all test golden corpus coders carve crosscheck matrix clean
+.PHONY: all test golden corpus coders carve nesting crosscheck matrix clean
 
 # The codegen writes fixed filenames into the source directory, and `clean`
 # races `all` under -j: `make -j8 clean all` used to print "Nothing to be done"

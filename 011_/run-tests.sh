@@ -5,6 +5,7 @@
 #   ./run-tests.sh golden  ./pjpg ../testfiles   regenerate tests/golden.log
 #   ./run-tests.sh corpus  ./pjpg ../testfiles   run every jpeg, incl. imagetestsuite
 #   ./run-tests.sh carve   ./pjpg ../testfiles   jpegdet round trip + decodability
+#   ./run-tests.sh nesting ./pjpg ../testfiles   thumbnails nested as deep as they go
 #   ./run-tests.sh matrix  ''    ../testfiles    build+run the compiler/flag matrix
 #
 # Note on line endings: log1 and tests/golden.log are stored with CRLF (they came
@@ -92,6 +93,15 @@ check)
       echo "PASS  repros    $(ls "$WORK"/repro/*.jpg | wc -l) crafted malformed files reported, none crashed"
     else
       echo "FAIL  repros    a crafted input crashed the parser"; fail=1
+    fi
+  fi
+
+  # 3b) thumbnail recursion, as deep as a JPEG can nest
+  if [ -f "$HERE/../docs/make-nested.py" ]; then
+    if out=$("$0" nesting "$BIN" "$TESTDIR" 2>&1) && [ -n "$out" ]; then
+      echo "PASS  nesting   ${out##*nesting: }"
+    else
+      echo "FAIL  nesting"; echo "$out" | sed 's/^/  /'; fail=1
     fi
   fi
 
@@ -312,6 +322,36 @@ PYEOF
 
   [ $have_djpeg = 1 ] || echo "  (djpeg not installed: decodability not checked)"
   echo "carve: $n streams, $imgs images, $bad problems"
+  [ $bad -eq 0 ]
+  ;;
+
+nesting)
+  # Thumbnail recursion, to the depth the format allows and past the depth pjpg
+  # parses.  Nothing here is malformed: every level of every file is a decodable
+  # JPEG in its own right, so a failure is a failure of the recursion and not of
+  # error handling.  What it tests is that the handover between levels and the
+  # depth guard both hold when the nesting is as deep as a JPEG can nest -- 337
+  # levels, which is what a 16-bit segment length works out to.
+  #
+  # The generator writes down what each file should make a parser do, so the
+  # expectations live with the thing that knows them rather than being restated
+  # here and going stale the first time a file is added.
+  cd "$HERE" || exit 1
+  gen="$HERE/../docs/make-nested.py"
+  if [ ! -f "$gen" ]; then echo "nesting: $gen missing"; exit 0; fi
+  rm -rf "$WORK/nested"; python3 "$gen" "$WORK/nested" >/dev/null || { echo "nesting: generator failed"; exit 1; }
+  bad=0; n=0; deepest=0
+  while read -r f depth walked guard; do
+    [ -n "$f" ] || continue
+    n=$((n+1)); [ "$depth" -gt "$deepest" ] && deepest=$depth
+    timeout 60 "$BIN" "$WORK/nested/$f" > "$WORK/n.log" 2>&1; e=$?
+    [ $e -eq 0 ] || { echo "  exit=$e on $f"; bad=$((bad+1)); }
+    gw=$(grep -ac 'parsing as JPEG at level' "$WORK/n.log") || gw=0
+    gg=$(grep -ac 'nesting limit reached'    "$WORK/n.log") || gg=0
+    [ "$gw" = "$walked" ] || { echo "  $f: walked $gw levels, expected $walked"; bad=$((bad+1)); }
+    [ "$gg" = "$guard"  ] || { echo "  $f: depth guard fired $gg times, expected $guard"; bad=$((bad+1)); }
+  done < "$WORK/nested/manifest"
+  echo "nesting: $n files, nested up to $deepest deep, $bad problems"
   [ $bad -eq 0 ]
   ;;
 

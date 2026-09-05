@@ -90,6 +90,7 @@ Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
 | `make coders` | Decodes `testfiles/coders/`, three images transcoded by `jpegtran` into sequential/progressive × Huffman/arithmetic. Because the transcode is lossless, all four must report identical MCU and block counts — a disagreement is an entropy decoder bug. |
 | `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
 | `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
+| `make nesting` | Builds JPEGs whose thumbnails nest as deep as the format allows — 337 levels, which is what a 16-bit segment length works out to — and checks that pjpg walks the four it has parsers for, that the depth guard fires exactly once per chain below that, and that nothing past it is mistaken for anything. Every level of every file is itself a decodable JPEG (381 of them), so a failure is a failure of the recursion, not of error handling. Included in `make test`. |
 | `make carve` | Runs `jpegdet` over ten synthetic streams and asserts three things for each: `c` then `d` reproduces the input byte for byte, every carved file decodes, and the number of images carved is exactly what that stream contains. The last is the one that matters — nothing stops a carver from being trivially lossless by never carving anything. Three of the streams are hazard regressions for defects testing found: a padded-MCU blow-up, a cross-scan state leak, and an over-size MCU. Included in `make test`. |
 | `make golden` | Regenerates `tests/golden.log` after an intentional output change. |
 
@@ -105,7 +106,9 @@ Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
   reports.
 * gcc and clang agree byte-for-byte on all 118.
 * All matrix cells pass, with the two exceptions noted below.
-* Thumbnails are parsed recursively, up to 5 levels deep.
+* Thumbnails are parsed recursively, up to 5 levels deep — checked against files
+  nested 337 levels deep, both through Exif APP1 and through JFXX APP0, and with
+  two chains hanging off one image.
 * Entropy-coded scans are decoded — Huffman and arithmetic, sequential and
   progressive — or skipped with `-s`. Validated by transcoding 16 images into
   all four coder combinations with `jpegtran` and requiring the Huffman and
