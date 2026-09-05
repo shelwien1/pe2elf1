@@ -66,13 +66,19 @@ struct pjpg : Coroutine, pjpg0 {
   }
 
   // Advance to the next 0xFF and consume it.  Returns 0 at end of input.
+  // n_skipped counts the bytes passed over: after a segment those are garbage
+  // between it and the next marker, which is worth reporting.
+  uint n_skipped;
+
   uint scan_FF( void ) {
     byte* p;
     uint av;
+    n_skipped = 0;
     while(1) {
       av = inp_fill(); if( av==0 ) return 0;
       p = (byte*)memchr( pin[0].ptr, 0xFF, av );
-      if( p ) { pin[0].ptr = p+1; return 1; }
+      if( p ) { n_skipped += uint(p - pin[0].ptr); pin[0].ptr = p+1; return 1; }
+      n_skipped += av;
       pin[0].ptr = pin[0].end;
     }
   }
@@ -109,12 +115,13 @@ struct pjpg : Coroutine, pjpg0 {
 
   void do_process( void ) {
     uint c,r,lo,hi,pending,was_sos;
+    uint f_expect_marker;
 
     init_lentag();
     pjpg0_init();
     image_reset();
 
-    tag_id=0; l_tag=0; pending=0;
+    tag_id=0; l_tag=0; pending=0; f_expect_marker=0;
     n_restart=0; n_scan=0; n_scan_dec=0;
     nz_free();
     coro2_init();
@@ -126,10 +133,17 @@ struct pjpg : Coroutine, pjpg0 {
       if( pending ) { c = pending; pending = 0; goto have_marker; }
 
       // --- find the next marker prefix -------------------------------------
+      // f_expect_marker is set once a segment has been fully consumed: the very
+      // next byte should be FF, so anything skipped before it is stray data.
       // In state "scanning" the only byte that matters is 0xFF, so look for it
       // with memchr over whole buffers rather than one loop iteration per byte.
       // This is the hot path: it covers all entropy-coded scan data.
       if( scan_FF()==0 ) break;
+      if( f_expect_marker && n_skipped ) {
+        pf( "Warning: %u extraneous byte(s) before the next marker\n", n_skipped );
+        n_warn++;
+      }
+      f_expect_marker = 0;
 
       // A run of 0xFF bytes is legal padding before a marker.
       do {
@@ -148,7 +162,10 @@ struct pjpg : Coroutine, pjpg0 {
       pf( "!tag=%02X!\n", tag_id );
 
       if( c==M_TEM ) continue;            // TEM has no payload
-      if( c==M_SOI ) { image_reset(); saw_SOI = 1; continue; }
+      if( c==M_SOI ) {
+        if( saw_SOI && !eoi_reached ) pjpg_warn( "second SOI before the previous image ended" );
+        image_reset(); saw_SOI = 1; continue;
+      }
       if( c==M_EOI ) { eoi_reached = 1; continue; }
 
       if( f_lentag[c]==0 ) continue;      // standalone or reserved marker
@@ -204,8 +221,11 @@ struct pjpg : Coroutine, pjpg0 {
         l_tag = 0;
       }
 
+      f_expect_marker = 1;
+
       // Entropy-coded data follows a scan header.  Decode it when we can;
       // otherwise fall through and let scan_FF skip it as before.
+      if( was_sos ) f_expect_marker = 0;
       if( was_sos && f_SOS && f_entropy ) {
         if( scan_decodable() ) {
           pending = decode_scan();
@@ -219,6 +239,10 @@ struct pjpg : Coroutine, pjpg0 {
     }
 
   at_eof:
+    // libjpeg refuses a file that does not begin with SOI ("Not a JPEG file").
+    // pjpg parses whatever it finds, but a stream with no SOI at all is worth
+    // saying out loud.
+    if( !saw_SOI ) pjpg_warn( "no SOI marker anywhere in the input" );
     if( saw_SOF && !eoi_reached ) pjpg_warn( "input ended before EOI" );
     goto fin;
 

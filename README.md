@@ -69,7 +69,7 @@ Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
 | target | what it does |
 |---|---|
 | `make test` | Three assertions: no line that the Windows `011_/log1` printed has gone missing (pjpg now parses markers the original skipped, so its output is a superset); all 20 checked-in jpegs match `011_/tests/golden.log`; and all 15 crafted malformed inputs are *reported* rather than crashing. |
-| `make corpus` | Runs all 118 bundled jpegs (`testfiles/` plus the 98 in `imagetestsuite-jpg-1.00.tar.gz`). Exit 1 (a reported parse error) is expected — imagetestsuite is a deliberately-damaged corpus — but a crash or hang fails the target. |
+| `make corpus` | Runs all bundled jpegs (`testfiles/` plus the 98 in `imagetestsuite-jpg-1.00.tar.gz`). Exit 1 (a reported parse error) is expected — imagetestsuite is a deliberately-damaged corpus — but a crash or hang fails the target. |
 | `make coders` | Decodes `testfiles/coders/`, three images transcoded by `jpegtran` into sequential/progressive × Huffman/arithmetic. Because the transcode is lossless, all four must report identical MCU and block counts — a disagreement is an entropy decoder bug. |
 | `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
 | `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
@@ -79,9 +79,10 @@ Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
 
 * Output is a **strict superset of the Windows reference**: 8 lines added by the
   marker handlers the original did not have, none lost.
-* 118 corpus files: 0 crashes, 0 hangs. 57 parse clean; the 61 that report errors
-  are the damaged imagetestsuite images, and the truncation verdict was
-  cross-checked against an independent marker walker on all 118.
+* 130 corpus files: 0 crashes, 0 hangs.
+* On the 98 deliberately-broken images in `imagetestsuite-jpg-1.00.tar.gz`,
+  pjpg's verdict agrees with libjpeg-turbo's `jpegtran` **on every file**:
+  94 both report a problem, 4 both call clean, 0 disagreements.
 * 4000 mutated inputs and all 15 crafted malformed files: 0 crashes, 0 UBSan
   reports.
 * gcc and clang agree byte-for-byte on all 118.

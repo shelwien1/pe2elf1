@@ -798,6 +798,32 @@ uint process_restart( void ) {
 uint e_scan_ok;        // 1 if the last scan decoded without complaint
 uint n_scan_dec;       // scans actually decoded
 
+// libjpeg's scan-parameter validation (jdphuff.c start_pass_phuff_decoder and
+// jdhuff.c start_pass_huff_decoder).  These are exact rules, not heuristics: a
+// scan that breaks them cannot be decoded by any conforming decoder.
+uint scan_params_valid( void ) {
+  uint bad = 0;
+  if( progressive_mode ) {
+    if( Ss==0 ) {
+      if( Se!=0 ) bad = 1;                      // a DC scan covers only coef 0
+    } else {
+      if( (Ss>Se) || (Se>=64) ) bad = 1;
+      if( comps_in_scan!=1 ) bad = 1;           // an AC scan is single-component
+    }
+    if( Ah!=0 ) { if( Al != Ah-1 ) bad = 1; }   // refinement must be Al = Ah-1
+    if( Al>13 ) bad = 1;
+  } else {
+    if( (Ss!=0) || (Se!=63) ) bad = 1;
+    if( (Ah!=0) || (Al!=0) ) bad = 1;
+  }
+  if( bad ) {
+    pjpg_err( E_BADSOS, progressive_mode ? "invalid progressive scan parameters"
+                                         : "invalid sequential scan parameters" );
+    return 0;
+  }
+  return 1;
+}
+
 // Can this scan be entropy-decoded at all?
 uint scan_decodable( void ) {
   uint i,c;
@@ -806,6 +832,7 @@ uint scan_decodable( void ) {
   if( sof_lossless || sof_hier ) return 0;       // not DCT-coded
   if( f_SOS==0 ) return 0;
   if( (comps_in_scan<1) || (comps_in_scan>4) ) return 0;
+  if( !scan_params_valid() ) return 0;
   if( data_precision!=8 ) return 0;              // libjpeg's decoders are 8-bit
   if( Se>63 ) return 0;
   for( i=0; i<uint(comps_in_scan); i++ ) {
@@ -858,7 +885,7 @@ uint decode_scan( void ) {
   e_scan_ok = 1;
 
   if( !per_scan_setup() ) { pjpg_warn( "scan geometry is unusable, skipping its data" ); e_scan_ok=0; return next_marker_now(); }
-  if( !scan_tables_ready() ) { pjpg_warn( "a Huffman table this scan uses was never defined" ); e_scan_ok=0; return next_marker_now(); }
+  if( !scan_tables_ready() ) { pjpg_err( E_BADDHT, "a Huffman table this scan uses is missing or bogus" ); e_scan_ok=0; return next_marker_now(); }
   if( !arith_code ) scan_bind_tables();
   else { arith_reset_stats(); arith_reset_coder(); }
 

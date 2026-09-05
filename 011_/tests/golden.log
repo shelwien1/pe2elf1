@@ -250,11 +250,11 @@ Start Of Scan: 3 components; l_tag=9
   Component 3: dc=01 ac=01
   Ss=0, Se=0, Ah=0, Al=0
 Warning [tag DA]: sequential scan is not a full 0..63 spectral selection
-  scan 1: Huffman sequential, 345 MCUs, 2070 blocks, 19233 entropy bytes
+ERROR [tag 00]: invalid sequential scan parameters
 !tag=D9!
 
-parse completed with 1 warning(s)
-===== exit=0 =====
+parse finished with 1 error(s) and 1 warning(s); first error: invalid sequential scan parameters (bad scan header)
+===== exit=1 =====
 ===== 13-0.jpg =====
 !tag=D8!
 !tag=E0!
@@ -341,10 +341,10 @@ JFXX APP0 marker: JPEG-compressed thumbnail image
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
-    Warning [tag 00]: a Huffman table this scan uses was never defined
+    ERROR [tag 00]: a Huffman table this scan uses is missing or bogus
     !tag=D9!
     
-parse finished with 2 error(s) and 1 warning(s); first error: quantisation table index >= 4 (bad quantisation table)
+parse finished with 3 error(s) and 0 warning(s); first error: quantisation table index >= 4 (bad quantisation table)
 Warning [tag E0]: embedded thumbnail did not parse cleanly
 <<< end of thumbnail (level 1)
 !tag=EC!
@@ -517,6 +517,7 @@ JFIF APP0 marker: version 1.02, density 1x1  unit=0
 !tag=E0!
 APP0: JFXX
 JFXX APP0 marker: palette thumbnail image
+Warning: 2 extraneous byte(s) before the next marker
 !tag=DB!
 Define Quantization Table 0  precision 0
 !tag=DB!
@@ -543,6 +544,8 @@ Start Of Scan: 3 components; l_tag=9
   Ss=0, Se=63, Ah=0, Al=0
   scan 1: Huffman sequential, 36 MCUs, 216 blocks, 1569 entropy bytes
 !tag=D9!
+
+parse completed with 1 warning(s)
 ===== exit=0 =====
 ===== 940536_CIFF.jpg =====
 !tag=D8!
@@ -1113,6 +1116,7 @@ Warning [tag 00]: entropy data ran out before the scan was complete
   scan 8: Huffman progressive AC refine, 2 MCUs, 2 blocks, 5 entropy bytes  [INCOMPLETE]
 !tag=C4!
 Define Huffman Table 0x11
+Warning: 14 extraneous byte(s) before the next marker
 !tag=C4!
 Define Huffman Table 0x10
 !tag=DA!
@@ -1123,7 +1127,7 @@ Warning [tag 00]: entropy data ended before all MCUs were decoded
   scan 9: Huffman progressive AC refine, 2 MCUs, 2 blocks, 6 entropy bytes, resync +2  [INCOMPLETE]
 Warning [tag 00]: input ended before EOI
 
-parse completed with 16 warning(s)
+parse completed with 17 warning(s)
 ===== exit=0 =====
 ===== jcaron.jpg =====
 !tag=D8!

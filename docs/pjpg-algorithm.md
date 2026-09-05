@@ -937,6 +937,33 @@ Alongside that:
 * UBSan (`-fno-sanitize-recover=all`) clean over the corpus; gcc and clang agree
   byte-for-byte on all 130 corpus files; 24 build configurations pass.
 
+### Cross-checking the verdicts against jpegtran
+
+`testfiles/imagetestsuite-jpg-1.00.tar.gz` is 98 deliberately-broken JPEGs, and
+`make corpus` and `make crosscheck` have used it throughout. But "no crash" is a
+weak thing to check a corpus of broken files for -- the interesting question is
+whether pjpg *notices* what is broken. With libjpeg-turbo's `jpegtran` installed
+as a reference, every one of the 98 can be compared verdict for verdict:
+
+| | jpegtran reports | jpegtran silent |
+|---|---|---|
+| **pjpg reports** | 94 | 0 |
+| **pjpg silent** | 0 | 4 |
+
+Exact agreement, and the four both call clean do decode. Getting there closed
+three real gaps, all found by that comparison:
+
+* **Extraneous bytes between segments** (16 of the 98). After a segment ends the
+  next byte must be `0xFF`; `scan_FF` silently skipped anything else. pjpg now
+  reports the count, matching jpegtran and djpeg byte for byte
+  (`2 extraneous bytes before marker 0xdb`).
+* **Scan parameters were barely checked.** libjpeg's rules are exact, not
+  heuristic: a DC scan has `Se == 0`; an AC scan has `Ss <= Se < 64` and exactly
+  one component; a refinement scan has `Al == Ah-1`; `Al <= 13`. Ported from
+  `jdphuff.c` into `scan_params_valid()`.
+* **A second SOI inside an image, and a stream with no SOI at all**, both now
+  warn.
+
 ### Bugs this validation found
 
 Three, all fixed and all with a reproducer in `docs/make-repros.py`:
@@ -955,6 +982,12 @@ Three, all fixed and all with a reproducer in `docs/make-repros.py`:
 * **Lib3's two-dimensional `bzero` template** indexes `p[0][i]` past the first
   row, which UBSan reports on every file once a `byte[2][4]` is passed to it.
   Avoided by zeroing rows separately rather than changing Lib3, which is shared.
+* **`entropy.inc` was missing from the Makefile's `DEPS`**, so editing it did not
+  trigger a rebuild and the binary went stale -- which is how a scan-parameter
+  check that never fired looked like a passing test. The same class of bug as the
+  hand-kept `$(TAGS)` list, and fixed the same way: `DEPS` is now globbed, with
+  the generated `pjpg0j.inc` named explicitly because `$(wildcard)` is evaluated
+  before it exists. Caught because `make clean && make` then failed outright.
 
 Two bugs were also found *in the source material* and deliberately not carried
 over -- see §11.

@@ -95,7 +95,16 @@ pjpg0j.inc: pjpg0i.inc coro_fsm.pl
 	$(PERL) coro_fsm.pl $< $@
 
 # ---------------------------------------------------------------- build -----
-DEPS := pjpg0j.inc pjpg1.inc cinfo.inc jpeg_marker.inc coro_fp2.inc \
+# Globbed for the same reason as $(TAGS): a hand-kept list goes stale the moment
+# a file is added, and a missed dependency means silently building against a
+# stale binary.  pjpg0i.inc is excluded only because it is the intermediate that
+# pjpg0j.inc is generated from.
+# pjpg0j.inc is named explicitly because it is generated: $(wildcard) is
+# evaluated before it exists, so after `make clean` it would not be a
+# prerequisite and pjpg would be built before the codegen ran.  pjpg0i.inc is
+# excluded as the intermediate pjpg0j.inc comes from.
+DEPS := pjpg0j.inc \
+        $(filter-out pjpg0i.inc pjpg0j.inc,$(wildcard *.inc)) \
         $(wildcard $(LIB3)/*.inc) $(wildcard $(LIB3)/*.h)
 
 $(BIN): pjpg.cpp $(DEPS)
