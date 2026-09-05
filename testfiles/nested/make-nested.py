@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Build JPEGs whose thumbnails nest as deeply as a JPEG can nest.
+"""Regenerate the nested-thumbnail images in this directory.
 
-    python3 docs/make-nested.py [outdir]      # default: ./nested
-    011_/pjpg nested/nest_max.jpg
+    python3 testfiles/nested/make-nested.py [outdir]   # default: beside this script
+    011_/pjpg testfiles/nested/nest_limit.jpg
+
+The images are checked in, because they are what the tests run against and what
+anyone poking at the parser wants to hand it.  This script is checked in beside
+them so they can be rebuilt, and `make nesting` regenerates them into a scratch
+directory and compares -- which is what keeps the two from drifting apart.
 
 A JPEG can carry a JPEG thumbnail, and that thumbnail is an ordinary JPEG, so it
 can carry one of its own.  Nothing in T.81 or in Exif bounds the depth -- the
@@ -133,7 +138,7 @@ def build(depth, sizes=None):
         assert len(img) < MAX_SEG, 'level %d is too big to embed' % lvl
     return img
 
-out = sys.argv[1] if len(sys.argv) > 1 else 'nested'
+out = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.abspath(__file__))
 os.makedirs(out, exist_ok=True)
 
 # PjpgLevels in 011_/pjpg.cpp: level 0 is the file itself, so this is how many

@@ -97,7 +97,7 @@ check)
   fi
 
   # 3b) thumbnail recursion, as deep as a JPEG can nest
-  if [ -f "$HERE/../docs/make-nested.py" ]; then
+  if [ -d "$TESTDIR/nested" ]; then
     if out=$("$0" nesting "$BIN" "$TESTDIR" 2>&1) && [ -n "$out" ]; then
       echo "PASS  nesting   ${out##*nesting: }"
     else
@@ -336,20 +336,41 @@ nesting)
   # depth guard both hold when the nesting is as deep as a JPEG can nest -- 337
   # levels, which is what a 16-bit segment length works out to.
   #
-  # The generator writes down what each file should make a parser do, so the
-  # expectations live with the thing that knows them rather than being restated
-  # here and going stale the first time a file is added.
+  # The manifest beside the images says what each one should make a tool do, so
+  # the expectations live with the thing that knows them rather than being
+  # restated here and going stale the first time a file is added.
   cd "$HERE" || exit 1
-  gen="$HERE/../docs/make-nested.py"
-  if [ ! -f "$gen" ]; then echo "nesting: $gen missing"; exit 0; fi
-  rm -rf "$WORK/nested"; python3 "$gen" "$WORK/nested" >/dev/null || { echo "nesting: generator failed"; exit 1; }
+  dir="$TESTDIR/nested"
+  gen="$dir/make-nested.py"
+  if [ ! -d "$dir" ]; then echo "nesting: $dir missing"; exit 0; fi
   DET="$HERE/jpegdet"
   have_djpeg=1; command -v djpeg >/dev/null 2>&1 || have_djpeg=0
   bad=0; n=0; deepest=0; carved=0
+
+  # The images are checked in, so those are what get tested -- but they are also
+  # generated, and a generated file that has drifted from its generator is worse
+  # than either.  Rebuild them into a scratch directory and compare.
+  if [ -f "$gen" ]; then
+    rm -rf "$WORK/nested"
+    if python3 "$gen" "$WORK/nested" >/dev/null; then
+      for f in "$dir"/*.jpg "$dir"/manifest; do
+        [ -e "$f" ] || continue
+        cmp -s "$f" "$WORK/nested/$(basename "$f")" \
+          || { echo "  $(basename "$f") is not what make-nested.py produces"; bad=$((bad+1)); }
+      done
+      for f in "$WORK"/nested/*.jpg; do
+        [ -e "$dir/$(basename "$f")" ] \
+          || { echo "  make-nested.py produces $(basename "$f"), which is not checked in"; bad=$((bad+1)); }
+      done
+    else
+      echo "  make-nested.py failed"; bad=$((bad+1))
+    fi
+  fi
+
   while read -r f depth walked guard want_carved; do
     [ -n "$f" ] || continue
     n=$((n+1)); [ "$depth" -gt "$deepest" ] && deepest=$depth
-    timeout 60 "$BIN" "$WORK/nested/$f" > "$WORK/n.log" 2>&1; e=$?
+    timeout 60 "$BIN" "$dir/$f" > "$WORK/n.log" 2>&1; e=$?
     [ $e -eq 0 ] || { echo "  exit=$e on $f"; bad=$((bad+1)); }
     gw=$(grep -ac 'parsing as JPEG at level' "$WORK/n.log") || gw=0
     gg=$(grep -ac 'nesting limit reached'    "$WORK/n.log") || gg=0
@@ -362,7 +383,7 @@ nesting)
     # thumbnail alone and still round-trip.
     [ -x "$DET" ] || continue
     rm -rf "$WORK/o"; mkdir -p "$WORK/o"
-    timeout 120 "$DET" c "$WORK/nested/$f" "$WORK/o/i" > "$WORK/t.log" 2>&1 || { echo "  $f: c failed"; bad=$((bad+1)); continue; }
+    timeout 120 "$DET" c "$dir/$f" "$WORK/o/i" > "$WORK/t.log" 2>&1 || { echo "  $f: c failed"; bad=$((bad+1)); continue; }
     gt=$(sed -n 's/.*and \([0-9][0-9]*\) thumbnail(s).*/\1/p' "$WORK/t.log" | tail -1)
     [ -n "$gt" ] || gt=0
     [ "$gt" = "$want_carved" ] || { echo "  $f: carved $gt thumbnails, expected $want_carved"; bad=$((bad+1)); }
@@ -373,16 +394,16 @@ nesting)
       rm -f "$WORK/d.ppm"; djpeg -outfile "$WORK/d.ppm" "$j" >/dev/null 2>&1
       [ -s "$WORK/d.ppm" ] || { echo "  $f: $(basename "$j") does not decode"; bad=$((bad+1)); }
     done
-    timeout 120 "$DET" d "$WORK/o/i" "$WORK/r.bin" >/dev/null 2>&1 && cmp -s "$WORK/nested/$f" "$WORK/r.bin" \
+    timeout 120 "$DET" d "$WORK/o/i" "$WORK/r.bin" >/dev/null 2>&1 && cmp -s "$dir/$f" "$WORK/r.bin" \
       || { echo "  $f: round trip is not byte-exact"; bad=$((bad+1)); }
     # and the same file with extraction switched off
     rm -rf "$WORK/o2"; mkdir -p "$WORK/o2"
-    timeout 120 "$DET" -n c "$WORK/nested/$f" "$WORK/o2/i" >/dev/null 2>&1 \
+    timeout 120 "$DET" -n c "$dir/$f" "$WORK/o2/i" >/dev/null 2>&1 \
       && [ "$(ls "$WORK"/o2/i????????.jpg 2>/dev/null | wc -l)" = 1 ] \
       && timeout 120 "$DET" d "$WORK/o2/i" "$WORK/r2.bin" >/dev/null 2>&1 \
-      && cmp -s "$WORK/nested/$f" "$WORK/r2.bin" \
+      && cmp -s "$dir/$f" "$WORK/r2.bin" \
       || { echo "  $f: -n did not leave one image that round-trips"; bad=$((bad+1)); }
-  done < "$WORK/nested/manifest"
+  done < "$dir/manifest"
   echo "nesting: $n files, nested up to $deepest deep, $carved thumbnails carved, $bad problems"
   [ $bad -eq 0 ]
   ;;

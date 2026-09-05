@@ -798,13 +798,17 @@ Linux's 8 MB default is ample, but a small-stack thread is not, and raising
 
 ### Test images, nested as deep as a JPEG can nest
 
-`docs/make-nested.py` builds them, and `make test` runs them:
+They are checked in under `testfiles/nested/`, with the script that builds them
+and a `manifest` saying what each one should make a tool do.  `make nesting`
+runs them -- and regenerates them into a scratch directory and compares, so the
+images and the script cannot drift apart.
 
 ```sh
-python3 docs/make-nested.py nested        # then 011_/pjpg nested/nest_limit.jpg
+011_/pjpg testfiles/nested/nest_limit.jpg
+python3 testfiles/nested/make-nested.py    # rebuild them in place
 ```
 
-| file | thumbnails deep | what it is for |
+| `testfiles/nested/` | thumbnails deep | what it is for |
 |---|---|---|
 | `nest1.jpg` | 1 | one Exif thumbnail — the ordinary case |
 | `nest2.jpg` | 2 | Exif then JFXX |
