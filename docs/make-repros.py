@@ -4,10 +4,15 @@
     python3 docs/make-repros.py [outdir]      # default: ./repro
     for f in repro/*.jpg; do 011_/pjpg "$f" >/dev/null 2>&1; echo "$? $f"; done
 
-Expected against a plain `make` build (g++ 13.3 -O2, x86-64):
-    139 (SIGSEGV) for sos_overflow.jpg and sos_n22.jpg
-    0 for everything else -- the remaining bugs are silent corruption,
-      output amplification or misparses, not crashes.
+These are the reproducers for the bugs catalogued in docs/pjpg-algorithm.md.
+Against the parser as it stands they must all be REPORTED, never fatal:
+
+    exit 0  parsed to the end (warnings allowed)
+    exit 1  parsed, and at least one error was reported
+    exit >1 a crash -- a regression; `make test` fails on it
+
+Before the fixes, sos_overflow.jpg segfaulted (139), dht_overflow.jpg silently
+corrupted 3824 bytes of adjacent state, and dqt_amplify.jpg emitted 65004 lines.
 """
 import os, struct, sys
 

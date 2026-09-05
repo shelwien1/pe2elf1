@@ -120,6 +120,37 @@ corpus)
   [ $bad -eq 0 ]
   ;;
 
+crosscheck)
+  # Build with every available compiler at -O2 and confirm all of them produce
+  # byte-identical output over the whole corpus.  A disagreement between two
+  # correct compilers is the signature of undefined behaviour, which matters here
+  # because the coroutine hand-rolls stack switching and the parsers type-pun.
+  cd "$HERE" || exit 1
+  ext="$WORK/its"; mkdir -p "$ext"
+  for t in "$TESTDIR"/*.tar.gz; do [ -e "$t" ] && tar -xzf "$t" -C "$ext"; done
+  base="-std=c++17 -O2 -I../Lib3 -DNDEBUG -Drestrict=__restrict"
+  cg="-fomit-frame-pointer -fno-stack-protector -fno-stack-check -fstrict-aliasing"
+  built=()
+  for cc in g++ clang++; do
+    command -v "$cc" >/dev/null 2>&1 || continue
+    if $cc $base $cg pjpg.cpp -o "$WORK/x_${cc%%+*}" >/dev/null 2>&1; then built+=("${cc%%+*}"); fi
+  done
+  if [ ${#built[@]} -lt 2 ]; then echo "crosscheck: need two compilers, have ${#built[@]}"; exit 0; fi
+  ref=${built[0]}; n=0; bad=0
+  while IFS= read -r -d '' f; do
+    n=$((n+1))
+    timeout 60 "$WORK/x_$ref" "$f" > "$WORK/a" 2>&1 || true
+    for o in "${built[@]:1}"; do
+      timeout 60 "$WORK/x_$o" "$f" > "$WORK/b" 2>&1 || true
+      if ! diff -a -q "$WORK/a" "$WORK/b" >/dev/null; then
+        echo "DISAGREE ($ref vs $o)  $f"; bad=$((bad+1))
+      fi
+    done
+  done < <(find "$TESTDIR" "$ext" -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | LC_ALL=C sort -z)
+  echo "crosscheck: ${built[*]} agree on $((n-bad))/$n files"
+  [ $bad -eq 0 ]
+  ;;
+
 matrix)
   # Every configuration we claim to support.  Each cell builds, runs the two t.bat
   # files and compares against log1.

@@ -4,9 +4,10 @@
 *structure* parser, not a decoder: it reports what segments exist and what is in
 their headers, and never produces an image.
 
-This document describes how it works, then catalogues the bugs found in it. Every
-bug below has a crafted reproducer that was actually run against a plain
-`g++ -O2` build; where a claim could not be reproduced it says so.
+This document describes how it works, then catalogues the bugs that were found
+in it — all of which are now fixed. Each bug has a crafted reproducer that was
+actually run; the reproducers are kept in the test suite so the fixes stay
+fixed.
 
 The stackful-coroutine transport in `Lib3/coro3b.inc` is deliberately out of
 scope. For our purposes `get()` returns the next input byte or `uint(-1)` at
@@ -73,93 +74,104 @@ is inert — `main()` passes `0` as the output `FILE*`.
 
 ## 3. Layer 2 — the marker scanner
 
-`pjpg::do_process` (`pjpg1.inc:16`) is the heart of the parser. It consumes
-**exactly one input byte per iteration**, which is what makes the whole program
-provably terminating (see §7).
+`pjpg::do_process` (`pjpg1.inc`) is the heart of the parser. It is a single
+forward pass: it only ever advances the input pointer, never seeks, and never
+holds more than one 64 KB buffer, so it works on a pipe as well as a file.
 
-State is held in `pst`:
-
-| `pst` | meaning |
-|---|---|
-| 0 | scanning — ordinary data, looking for `0xFF` |
-| 1 | saw `0xFF`, expecting a marker code |
-| 2 | expecting the high byte of the segment length |
-| 3 | expecting the low byte of the segment length |
-| 4 | inside a segment payload, `l_tag` bytes still to go |
-
-```mermaid
-stateDiagram-v2
-    [*] --> S0
-    S0: pst=0 scanning
-    S1: pst=1 marker expected
-    S2: pst=2 length hi byte
-    S3: pst=3 length lo byte
-    S4: pst=4 inside payload
-
-    S0 --> S1 : byte is FF
-    S0 --> S0 : any other byte
-    S1 --> S1 : another FF
-    S1 --> S0 : byte 00, stuffed FF
-    S1 --> S0 : RSTn D0-D7, or marker with no length
-    S1 --> S2 : marker has a length field
-    S2 --> S3
-    S3 --> S0 : declared length <= 2
-    S3 --> S4 : l_tag = length-2, then coro2_init and run to first read
-    S4 --> S4 : feed one byte to the parser, l_tag--
-    S4 --> S0 : l_tag reached 0
 ```
+while(1) {
+  if( scan_FF()==0 ) break;                 // memchr to the next FF
+  do { c = get(); } while( c==0xFF );       // skip a run of fill bytes
+  if( c==0x00 ) continue;                   // FF 00 -- a stuffed data byte
+  if( RSTn ) { n_restart++; continue; }
 
-One asymmetry the diagram cannot show: RSTn returns from `case 1` *before* the
-`printf`, so restart markers are recognised and skipped silently, while every
-other marker prints a `!tag=XX!` line. `tag_id` is still assigned first, so it
-briefly holds `D0`–`D7`; that is harmless because `f_ptag[]` is 0 for those.
+  tag_id = c;  printf("!tag=%02X!\n", tag_id);
+  if( SOI ) { image_reset(); continue; }
+  if( EOI || TEM || !f_lentag[c] ) continue;
 
-Two tables built by `init_lentag()` drive it:
-
-* `f_lentag[256]` — markers that carry a 2-byte length field (`len2[]` in `cinfo.inc`).
-* `f_ptag[256]` — markers pjpg actually parses (`parsedtags[]`): SOF0/1/2/9/10,
-  APP0, APP1, DHT, DQT, SOS, DRI.
-
-### The feeding contract
-
-This is the single most important thing to understand about the design:
-
-```cpp
-l_tag -= (l_tag>0);                             // pjpg1.inc:36
-
-if( (pst==4) && f_ptag[tag_id] ) {              // pjpg1.inc:38
-  coro2_c = c;
-  r = coro2_process(); if( r==0 ) tag_id=0;
+  l_tag = read_length() - 2;                // payload size
+  if( f_ptag[tag_id] ) feed_parser();       // one byte at a time
+  if( l_tag>0 ) skip(l_tag);                // bulk-skip the remainder
 }
 ```
 
-A marker parser never reads the file. It is *fed*, one byte per outer-loop
-iteration, and only while `pst==4`. Three consequences follow, and most of the
-parser's behaviour — including several of the bugs — is explained by them:
+The original was a five-state machine (`pst` 0..4) that ran one loop iteration
+per input byte and rebuilt the segment length in a shift register. It was
+rewritten into the form above for three reasons: the whole segment is now
+handled in one place, which is what made the length and bounds checks tractable;
+`get()` and `skip()` suspend and resume transparently, so the sequential shape
+costs nothing; and the two bulk primitives make it roughly nine times faster.
+
+### Speed
+
+Two operations dominate a JPEG: entropy-coded scan data, and segments the parser
+does not care about. Neither needs byte-at-a-time handling.
+
+* `scan_FF()` finds the next `0xFF` with `memchr` over whole input buffers.
+* `skip(n)` advances the input pointer by whole buffers at a time.
+
+Both yield for a refill exactly the way `get()` does, so they stay within the
+coroutine contract and remain strictly sequential. Measured on a 130 MB stream
+of concatenated images, parsing every marker:
+
+| | |
+|---|---|
+| byte-at-a-time (original) | 378 MB/s |
+| bulk scan + skip (current) | 3351 MB/s |
+
+### The feeding contract
+
+This is still the single most important thing to understand about the design.
+A marker parser never reads the file; it is *fed*, one byte per iteration, and
+only while the scanner is inside a payload it has a parser for:
+
+```cpp
+while( r && (l_tag>0) ) {
+  c = get(); l_tag--;
+  coro2_c = c;
+  r = coro2_process();
+  if( r==0 ) break;              // parser finished, or gave up on a bad field
+}
+```
+
+Three consequences follow, and most of the parser's behaviour is explained by
+them:
 
 1. **A parser that finishes early stops being fed.** `coro2_process()` returns
-   `state!=0`; when the parser reaches `CORO_END` (which the codegen turns into
-   `state=0`), the caller sets `tag_id=0`, and `f_ptag[0]` is 0, so the rest of
-   the segment is skipped.
+   `state!=0`; reaching `CORO_END` (which the codegen turns into `state=0`) ends
+   the feed, and the rest of the segment is skipped in bulk.
 
-2. **A parser that does not finish is silently abandoned.** When `l_tag` reaches
-   0 the scanner drops to `pst=0` and simply stops feeding. The parser is never
-   told, never resumed, and never cleaned up. This is the *only* termination
-   mechanism for the unbounded `while(1)` loops in `tag_DHT.inc` and
-   `tag_DQT.inc`, and the reason none of them can hang.
+2. **`l_tag` is the parser's own view of what is left.** It is decremented
+   before the byte is handed over, so inside a parser `l_tag` means "bytes
+   remaining after this one". Every parser bounds itself against it — that is
+   how the segment-length checks in §6 are written.
 
-3. **Payload bytes are never re-examined as markers.** `case 4` does not test for
-   `0xFF`, so an `0xFF` inside an APP payload cannot start a false marker. This
-   is correct, and it is why the Exif thumbnail's own embedded `SOI`/`EOI` do not
+3. **Payload bytes are never re-examined as markers.** The scanner is purely
+   length-driven inside a segment, so an `0xFF` in an APP payload cannot start a
+   false marker. This is why an Exif thumbnail's own embedded `SOI`/`EOI` do not
    appear in the output.
 
-The `l_tag` accounting is exact. For a segment declaring length *L*, `case 3`
-sets `l_tag = L-2`, and the decrement at line 36 happens once per payload byte,
-so the byte on which `l_tag` hits 0 is the *L-2*'th — precisely the last payload
-byte. A declared length of 0, 1 or 2 takes the degenerate branch and no parser
-runs.
+If a parser still wants data when the segment ends, that is now reported
+(`segment ended while its parser was still reading`) rather than passing
+silently — with correct bounds it should not happen.
 
----
+### Errors
+
+A malformed field is recorded by `pjpg_err()` and the segment is abandoned, but
+parsing **continues from the next marker**: the segment's declared length still
+says where that is, so one run reports everything wrong with a file rather than
+only the first problem. Losing the stream position — input ending inside a
+segment — is fatal and stops the pass.
+
+Either way `do_process` ends with `yield(this, PJPG_ERR)` instead of
+`yield(this, PJPG_QUIT)`, `processfile()` returns that code, and `main` exits 1.
+Warnings are printed and counted but do not affect the exit status.
+
+```
+exit 0   parsed to the end (possibly with warnings)
+exit 1   parsed, but at least one error was reported
+exit 2   could not open the file / no argument
+```
 
 ## 4. Layer 3 — the marker parsers and the `coro_fsm.pl` transform
 
@@ -209,54 +221,81 @@ constants on every resume.
 * the `coro2_get()` statement must be a complete statement on its own line;
 * it must not sit in an unbraced `if`/`for`/`while` body — the injected
   `state=…; return;` would become the body and the rest would run unconditionally;
-* it must not appear inside a `for(…)` header or a loop condition;
-* at most one `coro2_get2()`/`coro2_get4()` per line, since `A`/`B`/`C`/`D` are
-  single shared registers and both occurrences would be replaced with the same
-  expression.
+* it must not appear inside a `for(…)` header or a loop condition — the resume
+  label would land outside the construct it belongs to;
+* at most one `coro2_get2()`/`coro2_get4()` per line, and never mixed with a
+  plain `coro2_get()`, since `A`/`B`/`C`/`D` are single shared registers and both
+  occurrences would be replaced by the same expression.
 
-The current sources honour all of this — note how `tag_APP1.inc` carefully puts
-the skip loops' `coro2_get();` on its own line inside braces:
+Violating any of these produced code that compiled and misbehaved. The sources
+happened to honour all of it, but only by discipline.
 
-```cpp
-for(; pos<ofs1st; pos++ ) {
-  coro2_get();
-}
+`coro_fsm.pl` now **checks** and refuses, naming the file and line:
+
+```
+$ perl coro_fsm.pl in.inc out.inc
+coro_fsm.pl: in.inc line 1: coro2_get() inside a for/while/if/switch header
+  for( i=0; coro2_get()<10; i++ ) { x=1; }
 ```
 
-but nothing enforces it, and a future edit that violates it will produce code
-that compiles and is wrong.
-
----
+It rejects a get in a control header, a get as an unbraced body, two gets on one
+line, two multi-byte gets on one line, and a multi-byte get mixed with a plain
+one — while still accepting every shape the real sources use, including the get
+nested inside the `coro2_getH()` macro expansion and a get used as a call
+argument. A silent miscompile is now a build failure.
 
 ## 5. What each parser reads
 
+Marker coverage is complete in the sense that every marker T.81 defines is
+either parsed or correctly recognised and skipped. Entropy-coded scan data is
+skipped, not decoded.
+
 | marker | parser | reads |
 |---|---|---|
-| APP0 | `tag_APP0.inc` | `JFIF\0` → version, density unit, X/Y density, thumbnail w×h; `JFXX\0` → extension type; warns if `l_tag != xs*ys*3` |
-| APP1 | `tag_APP1.inc` | `Exif\0\0` → TIFF header, then walks the IFD chain, recording tags 0x0103 (compression), 0x0111/0x0201 (thumbnail offset), 0x0117/0x0202 (thumbnail length), then skips the thumbnail |
-| DQT | `tag_DQT.inc` | repeatedly: precision/index nibbles, then 64 coefficients in zig-zag order |
+| SOF0/1/2/3, SOF5/6/7, SOF9/10/11, SOF13/14/15, DHP | `tag_SOF.inc` | precision, height, width, component count, then per component: id, sampling factors, quant table. The process flags (sequential / progressive / lossless, differential, Huffman / arithmetic, hierarchical) are derived from the marker code rather than enumerated. |
+| DNL | `tag_misc.inc` | number of lines; fills in a frame height of 0 |
+| EXP | `tag_misc.inc` | Eh/Ev expansion flags |
+| DAC | `tag_DAC.inc` | arithmetic conditioning pairs, into `arith_dc_L/U` and `arith_ac_K` |
 | DHT | `tag_DHT.inc` | repeatedly: table index, `bits[1..16]`, then `count = sum(bits)` symbol values |
-| SOF0/1/2/9/10 | `tag_SOF.inc` | precision, height, width, component count, then per component: id, sampling factors, quant table |
-| SOS | `tag_SOS.inc` | component count, then per component: id and DC/AC table nibbles; then Ss, Se, Ah, Al |
+| DQT | `tag_DQT.inc` | repeatedly: precision/index nibbles, then 64 coefficients in zig-zag order |
 | DRI | `tag_DRI.inc` | restart interval |
+| SOS | `tag_SOS.inc` | component count, then per component: id and DC/AC table nibbles; then Ss, Se, Ah, Al |
+| COM | `tag_misc.inc` | the comment text, sanitised and truncated for display |
+| APP0 | `tag_APP0.inc` | `JFIF\0` → version, density unit, X/Y density, thumbnail w×h; `JFXX\0` → extension type |
+| APP1 | `tag_APP1.inc` | `Exif\0\0` → TIFF header, then walks the IFD chain recording the thumbnail tags, then skips the thumbnail |
+| APP2 | `tag_APPn.inc` | `ICC_PROFILE\0` → chunk sequence number and count |
+| APP14 | `tag_APPn.inc` | `Adobe` → version, flags, colour transform |
+| APP3–APP13, APP15 | `tag_APPn.inc` | identified by their leading signature string |
+| SOI, EOI, TEM, RST0–7 | — | recognised structurally; RSTn are counted, not printed |
+| JPG, JPG0–JPG13, and everything else in `C0..FE` | — | recognised as length-bearing and skipped |
+| the reserved range `02..BF` | — | recognised as standalone, per T.81 |
 
----
+## 6. Bugs (all fixed)
 
-## 6. Bugs
+Every defect below was found in the original parser and is **fixed** in the
+current tree. Each entry states what was wrong, how it was reproduced, and what
+the fix was, because the reproducers are still in the test suite (`make test`
+runs all 15 and fails if any of them crashes rather than reporting).
 
-Ranked by severity. Reproducers were built with `python3` and run against
-`011_/pjpg` built by plain `make` (g++ 13.3, `-O2`, no sanitizer) on x86-64
-Linux. `docs/make-repros.py` regenerates all of them:
+Ranked by the severity they had, judged on the assumption that pjpg is pointed
+at files it did not produce — it is a diagnostic tool for inspecting arbitrary
+JPEGs, so every byte it reads is attacker-controlled. None of these were
+reachable from a well-formed image, which is why the 118-file corpus never
+showed them. Each was found by reading the code and then crafting the input.
+Notably, **4000 random byte-flip mutations of real JPEGs found none of them** —
+§6.1 and §6.2 need structured malformation, not noise.
+
+Reproducers were built with `python3` and run against `011_/pjpg` from a plain
+`make` (g++ 13.3, `-O2`, no sanitizer) on x86-64 Linux. `docs/make-repros.py`
+regenerates all 15:
 
 ```sh
 python3 docs/make-repros.py repro
 for f in repro/*.jpg; do 011_/pjpg "$f" >/dev/null 2>&1; echo "$? $f"; done
 ```
 
-Severity is judged on the assumption that pjpg is pointed at files it did not
-produce — it is a diagnostic tool for inspecting arbitrary JPEGs, so every byte
-it reads is attacker-controlled. None of these are reachable from a well-formed
-image, which is why the 118-file corpus is clean.
+Exit 0 means parsed clean, 1 means a parse error was reported, and anything
+higher is a crash — which is what `make test` asserts never happens.
 
 ### 6.1 SOS component loop writes past `cur_comp_info[4]` — remote SIGSEGV (critical)
 
@@ -335,6 +374,13 @@ the declared frame. That one stays in bounds (`num_components` is a byte,
 `comp_info` is `[256]`) but silently corrupts a component that a later scan may
 reference.
 
+**Fixed** in `tag_SOS.inc`: reject `Ns` outside 1..4 (which is also T.81's limit)
+before the loop can run, require the header to be long enough for the components
+it claims, require a frame to have been seen, and require every component id to
+resolve — the old code fell out of the search loop with `ci == num_components`
+and wrote an undeclared slot. `c_tag[]` is now indexed with `byte(tag_id)` as
+well, so even a corrupted `tag_id` cannot index out of it.
+
 ### 6.2 DHT symbol loop overflows `huffval[256]` by up to 3824 bytes (high)
 
 `tag_DHT.inc`:
@@ -386,6 +432,10 @@ remaining in the segment:
 if( count>256 || count>l_tag ) { printf("Bogus Huffman table definition\n"); CORO_END; return; }
 ```
 
+**Fixed** in `tag_DHT.inc`: the commented-out `count>256` check is restored and
+paired with `count > l_tag`, so a table can neither exceed its array nor its
+segment. The table class is checked too.
+
 ### 6.3 Bare `return` in `pa_DQT` leaves the parser resumable (medium)
 
 ```cpp
@@ -412,6 +462,11 @@ can produce hundreds of megabytes of output.
 it is unreachable — see §6.8.
 
 **Fix**: `break` out of the `while(1)` so control reaches `CORO_END`.
+
+**Fixed** in `tag_DQT.inc`: the early exits now go through `CORO_EXIT`
+(`goto coro_done`), which reaches `CORO_END` and clears `state`. `pjpg0.inc`
+defines that macro precisely so no parser has to use a bare `return` again.
+The 65 KB input now produces 6 lines and one error instead of 65004 lines.
 
 ### 6.4 `len2[]` omits 11 length-bearing markers, so their payloads are scanned as data (medium)
 
@@ -449,6 +504,10 @@ legitimately declared.
 length field are exactly `D0`–`D7` (RSTn), `D8` (SOI), `D9` (EOI), `01` (TEM) and
 the `FF` fill bytes; everything else in `C0`–`FE` has one.
 
+**Fixed** in `pjpg1.inc`: `init_lentag()` derives the flag from the T.81 rule —
+every marker in `C0..FE` carries a length except `D0..D9` — rather than from a
+list that has to be kept complete by hand. The `len2[]` table is gone.
+
 ### 6.5 No parser state is reset between concatenated images (medium)
 
 Nothing resets `num_components`, `comp_info`, `quant_tbl`, `saw_SOF` or
@@ -469,6 +528,11 @@ Start Of Scan: 1 components; l_tag=5
 described in §6.1. `cur_comp_info[0]` keeps a pointer from the previous image.
 
 **Fix**: reset the frame state when `M_SOI` is seen.
+
+**Fixed** in `pjpg1.inc`: `image_reset()` clears the frame, the scan, the
+quantisation and Huffman tables and the marker-seen flags, and runs on every
+`SOI`. The two-image reproducer now correctly reports that image 2's scan has no
+frame to resolve against.
 
 ### 6.6 `(word&)d[6]` type-punning swaps the Exif align field (low)
 
@@ -499,6 +563,12 @@ violation, which matters because `gc.bat` builds with `-Ofast -fstrict-aliasing`
 **Fix**: `d[6] = A; d[7] = B;` — or read the two bytes individually and drop the
 cast.
 
+**Fixed** in `tag_APP1.inc`: the two bytes are read individually into `d[6]` and
+`d[7]`, so the printed field is in file order, `f_LE` comes from the first byte,
+there is no aliasing violation, and the behaviour no longer depends on host
+endianness. A byte-order mark that is neither `II` nor `MM` is now a warning,
+and a TIFF magic other than 42 is an error.
+
 ### 6.7 Integer overflow in the Exif thumbnail bounds check (low)
 
 ```cpp
@@ -521,6 +591,12 @@ is why the `exif_done` line never prints. The bug is real; the containment is
 accidental but robust.
 
 **Fix**: `(thumbOfs <= len) && (thumbLen <= len - thumbOfs)`.
+
+**Fixed** in `tag_APP1.inc`: the bound is now `thumbOfs<=len && thumbLen<=len-thumbOfs`,
+which cannot wrap. The IFD walk is bounded by `len` at every step as well — the
+entry count is clamped to what the block can hold, the chain pointer is rejected
+if it points backwards, and the walk stops rather than running off the segment
+and being abandoned.
 
 ### 6.8 Dead code and unreachable checks (info)
 
@@ -549,51 +625,78 @@ Several things do not do what they appear to:
 * **`j` in `pjpg::do_process` is declared and never used**, and `i` is declared,
   never assigned, and shadows the `i` member used by every marker parser. Only
   the commented-out trace reads it.
-* **`c = 0xFF; goto parse_code;`** at `pjpg1.inc:57` is a no-op. `parse_code:`
-  sits inside `case 0` and its body is just `break`, and the shift register
-  `pc` was already updated with the original `c` at line 46. Nothing downstream
-  reads `c` again. The FF-unstuffing therefore reduces to `pst = 0`, which
-  happens to be the correct behaviour, so the dead assignment is harmless.
+* **`c = 0xFF; goto parse_code;`** at `pjpg1.inc:57` was a no-op. `parse_code:`
+  sat inside `case 0` and its body was just `break`, and the shift register
+  `pc` had already been updated with the original `c`. The FF-unstuffing
+  therefore reduced to `pst = 0`, which happened to be the correct behaviour.
+
+**Fixed**: `f_MCU`, `pc`, `pst`, the `parse_code` label and `len2[]` no longer
+exist — the loop rewrite in §3 removed all of them. `pjpg0_init()` is now
+called, and it initialises the error state as well as `c_tag`. The unreachable
+`n==-1` test is gone; `pa_SOS` checks the component count instead. `c_tag[]` is
+still write-only, but it is now indexed safely and kept as the marker histogram
+it was meant to be.
+
+### 6.9 `pa_APP1` never cleared its thumbnail state (low)
+
+`thumbOfs`, `thumbLen` and `thumbTyp` were in-class initialisers, so they were
+set once when the global parser object was constructed and never cleared again.
+They are only assigned when an IFD actually contains tags 0x0103/0x0111/0x0201/
+0x0117/0x0202, so a second Exif APP1 with no thumbnail tags reported — and acted
+on — the *first* marker's thumbnail offset and length.
+
+**Fixed**: they are reset at the top of `pa_APP1`, along with `bzero(d)`, so each
+marker is parsed from a clean state.
+
+### 6.10 Marker signatures were printed as raw bytes (low)
+
+`APP0:` and `APP1:` printed four bytes straight from the file with `%c`, so a
+malformed marker could emit control characters to the terminal.
+
+**Fixed**: all signature output goes through `pr()`, which maps anything outside
+0x20..0x7E to `.`. This changes two lines across the 20-file golden set and
+nothing in the `log1` reference.
 
 ---
 
-## 7. Properties that do hold
+## 7. Properties that hold
 
-Worth stating explicitly, because the code looks more dangerous than it is in
-these respects:
-
-* **pjpg cannot hang.** The outer loop consumes exactly one input byte per
-  iteration and terminates on `get()` returning `uint(-1)`. Every unbounded
-  `while(1)` in a marker parser is bounded by the feeding contract. This was
-  checked against the whole 118-file corpus and against crafted self-referencing
-  Exif IFD chains and 4-billion-byte skip loops — all terminate.
-* **Degenerate inputs are handled.** Empty file, 1-byte file, a file that is not
-  a JPEG at all, and a file truncated mid-segment all exit 0 without crashing.
-* **`0xFF` inside a segment payload cannot start a false marker**, so embedded
-  Exif thumbnails are correctly skipped.
-* **The `l_tag` accounting is exact** — a segment of declared length *L* feeds
+* **pjpg cannot hang.** Every path through the loop consumes at least one input
+  byte, and every parser is bounded by `l_tag`. Verified against the corpus,
+  crafted self-referencing Exif IFD chains, 4-billion-byte skip loops, and 4000
+  mutated inputs.
+* **Malformed input is reported, never fatal to the process.** All 15 crafted
+  reproducers and all 4000 mutated inputs exit 0 or 1; none crashes. `make test`
+  enforces this.
+* **Degenerate inputs are handled**: empty file, 1-byte file, a file that is not
+  a JPEG, and a file truncated mid-segment.
+* **Output is a strict superset of the original.** Across the two files in
+  `log1`, 8 lines are added by the new handlers and none is lost; `make test`
+  fails if any line the Windows build printed goes missing.
+* **`0xFF` inside a segment payload cannot start a false marker.**
+* **The `l_tag` accounting is exact** — a segment of declared length *L* offers
   exactly *L-2* bytes to its parser.
-* **`num_components` cannot overflow `comp_info[256]`**: it is read as a single
-  byte, so it is at most 255.
-* **DHT's table index is bounded** — `if( (index&15)>=4 ) break;` keeps
-  `h[index&15]` in range. It is only the *symbol count* that is unchecked.
-* **DQT's `quant_tbl` index is bounded** by `if( n>=4 ) return;`, and
-  `jpeg_natural_order[i]` for `i<64` yields values ≤ 63, in range for
-  `quantval[64]`.
-* Over the 118-file corpus, gcc and clang builds produce byte-identical output,
-  and UBSan (`-fno-sanitize-recover=all`) reports nothing.
-
----
+* **Truncation detection agrees with an independent walker** on all 118 corpus
+  files.
+* Over the corpus, gcc and clang builds produce byte-identical output, UBSan
+  (`-fno-sanitize-recover=all`) reports nothing, and 24 build configurations
+  agree on the 20-file golden log.
+* Under `-Wall -Wextra` the parser compiles warning-free on both compilers; the
+  two warnings that remain are in `Lib3`, which was not modified.
 
 ## 8. Not implemented
 
-* Entropy-coded scan data is skipped, not parsed (`proc_MCU()` is commented out).
-  RSTn markers are recognised and ignored; `f_MCU` would have gated the MCU
-  decoder that does not exist yet.
-* DAC, COM and APP2–APP15 are recognised as length-bearing markers and skipped
-  correctly, but their contents are not parsed.
-* SOF3/5/6/7/11/13/14/15 (lossless, differential and arithmetic variants), DNL,
-  DHP and EXP are not handled at all — see §6.4, their payloads are scanned as
-  raw data rather than skipped.
-* No validation that SOI precedes anything, that SOF precedes SOS, or that a
-  referenced quantisation or Huffman table was actually defined.
+* **Entropy-coded scan data is skipped, not decoded** — no Huffman or arithmetic
+  decoding, no MCU reconstruction, no IDCT. This is deliberate: pjpg reports
+  structure. RSTn markers are counted; `f_MCU` and the `proc_MCU()` hook the
+  original carried have been removed rather than left dangling.
+* Segment *contents* are not validated beyond structure: a Huffman table is
+  checked for size and index but not for being a valid prefix code, and
+  quantisation values are stored without range checks.
+* Cross-segment consistency is only partly checked. A scan must reference a
+  component the frame declares, but a component referencing an undefined
+  quantisation or Huffman table slot is not diagnosed.
+* APP13 (Photoshop IRB), APP12 and the other APPn segments are identified by
+  signature only; their internal block structure is not walked.
+* There is no check that SOI precedes everything or that the file ends at EOI
+  beyond a warning.

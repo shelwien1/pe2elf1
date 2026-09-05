@@ -21,9 +21,11 @@ Both are unusual enough that most of the porting effort went into confirming the
 still behave on Linux/ELF. They do.
 
 [**docs/pjpg-algorithm.md**](docs/pjpg-algorithm.md) describes the parsing
-algorithm in detail and catalogues the bugs found in it — including a
-remotely-triggerable SIGSEGV from a crafted SOS marker. `docs/make-repros.py`
-regenerates the crafted JPEGs used as reproducers.
+algorithm in detail and catalogues the ten bugs that were found in it — all now
+fixed, including a remotely-triggerable SIGSEGV from a 69-byte crafted SOS
+marker and a 3824-byte buffer overflow from a crafted DHT.
+`docs/make-repros.py` regenerates the crafted JPEGs used as reproducers, and
+`make test` runs them.
 
 ## Building
 
@@ -61,18 +63,39 @@ Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
 
 | target | what it does |
 |---|---|
-| `make test` | Runs the two `t.bat` files and diffs against `011_/log1`, the output captured on Windows; then runs all 20 checked-in jpegs against `011_/tests/golden.log`. |
-| `make corpus` | Runs all 118 bundled jpegs (`testfiles/` plus the 98 in `imagetestsuite-jpg-1.00.tar.gz`) looking for crashes and hangs. |
+| `make test` | Three assertions: no line that the Windows `011_/log1` printed has gone missing (pjpg now parses markers the original skipped, so its output is a superset); all 20 checked-in jpegs match `011_/tests/golden.log`; and all 15 crafted malformed inputs are *reported* rather than crashing. |
+| `make corpus` | Runs all 118 bundled jpegs (`testfiles/` plus the 98 in `imagetestsuite-jpg-1.00.tar.gz`). Exit 1 (a reported parse error) is expected — imagetestsuite is a deliberately-damaged corpus — but a crash or hang fails the target. |
 | `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
 | `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
 | `make golden` | Regenerates `tests/golden.log` after an intentional output change. |
 
 Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
 
-* Output is **byte-identical to the Windows reference** for both files in `log1`.
-* All 118 corpus files parse to exit 0, no crashes, no hangs (~0.4 s total).
+* Output is a **strict superset of the Windows reference**: 8 lines added by the
+  marker handlers the original did not have, none lost.
+* 118 corpus files: 0 crashes, 0 hangs. 57 parse clean; the 61 that report errors
+  are the damaged imagetestsuite images, and the truncation verdict was
+  cross-checked against an independent marker walker on all 118.
+* 4000 mutated inputs and all 15 crafted malformed files: 0 crashes, 0 UBSan
+  reports.
 * gcc and clang agree byte-for-byte on all 118.
 * All matrix cells pass, with the two exceptions noted below.
+* Throughput on a 130 MB stream: **3.3 GB/s** (was 378 MB/s before the byte loop
+  was rewritten around `memchr` and bulk skipping).
+
+## Exit status
+
+```
+0   parsed to the end of the file (warnings are allowed)
+1   parsed, but at least one structural error was reported
+2   could not open the file, or no argument was given
+```
+
+A malformed field is reported and its segment abandoned, but parsing continues
+from the next marker — the declared length still says where that is — so one run
+reports everything wrong with a file. Losing the stream position (input ending
+inside a segment) is fatal. Either way the coroutine finishes with an error
+yield rather than a quit.
 
 ## Porting notes
 
