@@ -932,8 +932,10 @@ Alongside that:
   stream; pjpg stops at the marker, which is the right call for a parser).
 * **Every file pjpg marks `[INCOMPLETE]` is one djpeg independently complains
   about**, on all but one of the corpus.
-* UBSan (`-fno-sanitize-recover=all`) clean; gcc and clang agree byte-for-byte
-  on all 130 corpus files; 24 build configurations pass.
+* **8000 mutated inputs derived from all four coder variants** produce no crash
+  and no hang; the first 1500 under UBSan produce no report.
+* UBSan (`-fno-sanitize-recover=all`) clean over the corpus; gcc and clang agree
+  byte-for-byte on all 130 corpus files; 24 build configurations pass.
 
 ### Bugs this validation found
 
