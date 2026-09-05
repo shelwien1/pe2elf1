@@ -1,4 +1,6 @@
 
+#include <stdarg.h>   // for pjpg0::pf(), the indenting printf
+
 #include "common.inc"
 
 #include "coro3b.inc"
@@ -9,7 +11,46 @@
 #include "pjpg0j.inc"
 #include "pjpg1.inc"
 
-CoroFileProc< pjpg > C;
+// One parser instance per nesting level.  A JPEG may carry a JPEG thumbnail in
+// its Exif APP1 or JFXX APP0 segment, and that thumbnail may carry one of its
+// own, so the levels are used recursively: level 0 parses the file, and when it
+// meets a JPEG thumbnail it feeds those bytes to level 1 instead of skipping
+// them.  PjpgLevels bounds the recursion; the deepest level skips.
+const int PjpgLevels = 5;
+
+struct pjpg1 {
+  pjpg pjpg_[PjpgLevels];
+
+  // CoroFileProc drives level 0 only; every deeper level is driven by the level
+  // above it, so the frontend's view of this object is just level 0's.
+  volatile uint& f_quit = pjpg_[0].f_quit;
+  byte*&         outptr = pjpg_[0].outptr;
+  byte*&         outbeg = pjpg_[0].outbeg;
+
+  void coro_init( void ) {
+    uint i;
+    for( i=0; i<PjpgLevels; i++ ) {
+      pjpg_[i].coro_init();
+      pjpg_[i].level = i;
+      pjpg_[i].sub   = (i+1<PjpgLevels) ? &pjpg_[i+1] : 0;
+    }
+  }
+
+  template <typename T> uint coro_call( T* ) { return pjpg_[0].coro_call( &pjpg_[0] ); }
+
+  void addinp( byte* p, uint n ) { pjpg_[0].addinp(p,n); }
+  void addout( byte* p, uint n ) { pjpg_[0].addout(p,n); }
+
+  // Worst outcome across every level, so a thumbnail that fails to parse is
+  // visible in the exit status of the run that found it.
+  uint worst_err( void ) {
+    uint i,e; e=0;
+    for( i=0; i<PjpgLevels; i++ ) if( pjpg_[i].err_code ) { e=pjpg_[i].err_code; break; }
+    return e;
+  }
+};
+
+CoroFileProc< pjpg1 > C;
 
 int main( int argc, char **argv ) {
 
@@ -23,5 +64,5 @@ int main( int argc, char **argv ) {
   fclose( f );
 
   // 0 = parsed cleanly (warnings still allow 0), 1 = fatal parse error.
-  return (r==PJPG_ERR) ? 1 : 0;
+  return ((r==PJPG_ERR) || C.worst_err()) ? 1 : 0;
 }

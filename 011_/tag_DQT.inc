@@ -14,7 +14,7 @@ void pa_DQT( void ) { CORO_START;
     prec = coro2_getH();
     n    = coro2_getL();
 
-    printf( "Define Quantization Table %d  precision %d\n", n, prec );
+    pf( "Define Quantization Table %d  precision %d\n", n, prec );
 
     // The original used a bare 'return' here.  That skipped CORO_END, so state
     // stayed non-zero, the outer loop kept feeding, and every remaining payload

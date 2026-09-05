@@ -12,7 +12,7 @@ void pa_DNL( void ) { CORO_START;
 
   dnl_lines = coro2_get2();
 
-  printf( "Define Number of Lines: %u\n", dnl_lines );
+  pf( "Define Number of Lines: %u\n", dnl_lines );
 
   if( dnl_lines==0 ) pjpg_warn( "DNL declares 0 lines" );
   if( image_height==0 ) image_height = dnl_lines;
@@ -27,7 +27,7 @@ void pa_EXP( void ) { CORO_START;
   exp_h = coro2_getH();
   exp_v = coro2_getL();
 
-  printf( "Expand Reference Component: Eh=%u Ev=%u\n", exp_h, exp_v );
+  pf( "Expand Reference Component: Eh=%u Ev=%u\n", exp_h, exp_v );
 
   if( (exp_h>1) || (exp_v>1) ) pjpg_warn( "EXP expansion flag is not 0 or 1" );
 
@@ -50,7 +50,7 @@ void pa_COM( void ) { CORO_START;
     if( (combuf[i]<0x20) || (combuf[i]>0x7E) ) combuf[i]='.';
   }
 
-  printf( "Comment (%u bytes): %s%s\n", comlen + l_tag, combuf, l_tag ? " ..." : "" );
+  pf( "Comment (%u bytes): %s%s\n", comlen + l_tag, combuf, l_tag ? " ..." : "" );
 
   CORO_END;
 }

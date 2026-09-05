@@ -1,4 +1,10 @@
 
+// The next nesting level is a full pjpg (declared in pjpg1.inc): a thumbnail is
+// an ordinary JPEG, so it is parsed by an ordinary parser.  These members are
+// declared here because the marker parsers below are pjpg0 members, but their
+// bodies have to wait until pjpg is a complete type.
+struct pjpg;
+
 struct pjpg0 : cinfo {
 
   void* state;
@@ -11,6 +17,39 @@ struct pjpg0 : cinfo {
   uint f_SOS;  
 
   uint c_tag[256];
+
+  // Recursion into an embedded JPEG thumbnail.  sub is the next level's parser,
+  // or 0 at the deepest level, wired up by pjpg1 in pjpg.cpp.
+  pjpg* sub;
+  uint  sub_active;
+  uint  n_thumb;
+
+  // Thumbnail bytes arrive one at a time, because that is how a marker parser
+  // is fed, but handing them over one at a time would cost a coroutine switch
+  // -- two stack memcpys -- per byte.  They are batched through this buffer
+  // instead, which keeps the handover streaming and bounded: a thumbnail is
+  // never held whole.
+  byte  sub_buf[4096];
+  uint  sub_n;
+
+  // Open a nested parse of nbytes of JPEG data; returns 0 if the depth limit
+  // stops us, in which case the caller just discards the bytes as before.
+  uint sub_begin( const char* what, uint nbytes );
+  void sub_flush( void );
+  void sub_end( void );
+
+  void sub_feed( uint c ) {
+    sub_buf[sub_n++] = byte(c);
+    if( sub_n >= uint(DIM(sub_buf)) ) sub_flush();
+  }
+
+  // One thumbnail byte: to the nested parser if one is open, else discarded.
+  void thumb_byte( uint c ) { if( sub_active ) sub_feed(c); }
+
+  // Nesting depth: 0 for the file itself, 1 for a thumbnail inside it, and so
+  // on.  Every line this parser prints is indented by it, so nested output is
+  // visually contained in the segment that carried it.
+  uint level;
 
   // Error state.  A parser that detects a malformed field records it here and
   // exits via CORO_EXIT; the outer loop in pjpg1.inc then yields PJPG_ERR.
@@ -46,15 +85,26 @@ struct pjpg0 : cinfo {
   void pjpg_err( uint code, const char* msg ) {
     n_err++;
     if( err_code==0 ) { err_code=code; err_msg=msg; }
-    printf( "ERROR [tag %02X]: %s\n", tag_id, msg );
+    pf( "ERROR [tag %02X]: %s\n", tag_id, msg );
   }
 
   // Marker signatures are arbitrary file bytes; never send them to a terminal raw.
   byte pr( uint c ) { return ((c>=0x20) && (c<=0x7E)) ? byte(c) : byte('.'); }
 
+  // Every parser writes through this rather than printf, so a nested level's
+  // output is indented under the marker that contained it.
+  #ifdef __GNUC__
+  __attribute__((format(printf,2,3)))
+  #endif
+  void pf( const char* fmt, ... ) {
+    uint k;
+    for( k=0; k<level; k++ ) printf( "    " );
+    va_list ap; va_start( ap, fmt ); vprintf( fmt, ap ); va_end( ap );
+  }
+
   void pjpg_warn( const char* msg ) {
     n_warn++;
-    printf( "Warning [tag %02X]: %s\n", tag_id, msg );
+    pf( "Warning [tag %02X]: %s\n", tag_id, msg );
   }
 
   #define coro2_get2E(f_LE,pos) ( (void)coro2_get2(), pos+=2, (f_LE?(B<<8)|A:(A<<8)|B) )

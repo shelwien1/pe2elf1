@@ -12,7 +12,7 @@ void pa_SOS( void ) { CORO_START;
 
   n = coro2_get();
 
-  printf( "Start Of Scan: %d components; l_tag=%i\n", n, l_tag );
+  pf( "Start Of Scan: %d components; l_tag=%i\n", n, l_tag );
 
   // THE fix for the cur_comp_info[4] overflow.  Ns is a whole byte from the
   // file but the scan component table holds exactly 4 entries, which is also
@@ -43,7 +43,7 @@ void pa_SOS( void ) { CORO_START;
     comp_info[ci].dc_tbl_no = coro2_getH();
     comp_info[ci].ac_tbl_no = coro2_getL();
 
-    printf( "  Component %d: dc=%02X ac=%02X\n", cc, comp_info[ci].dc_tbl_no, comp_info[ci].ac_tbl_no );
+    pf( "  Component %d: dc=%02X ac=%02X\n", cc, comp_info[ci].dc_tbl_no, comp_info[ci].ac_tbl_no );
   }
 
   Ss = coro2_get();
@@ -51,7 +51,7 @@ void pa_SOS( void ) { CORO_START;
   Ah = coro2_getH();
   Al = coro2_getL();
 
-  printf( "  Ss=%d, Se=%d, Ah=%d, Al=%d\n", Ss, Se, Ah, Al );
+  pf( "  Ss=%d, Se=%d, Ah=%d, Al=%d\n", Ss, Se, Ah, Al );
 
   if( progressive_mode ) {
     if( (Ss>Se) || (Se>63) ) pjpg_warn( "progressive scan spectral range outside 0..63" );

@@ -16,8 +16,8 @@ void pa_SOF( void ) { CORO_START;
   image_width = coro2_get2();
   num_components = coro2_get();
 
-  printf( "Start Of Frame 0x%02x: width=%u, height=%u, components=%d\n", tag_id, image_width, image_height, num_components );
-  printf( "  %s, %d-bit%s\n", sof_name(), data_precision, sof_arith ? ", arithmetic" : ", Huffman" );
+  pf( "Start Of Frame 0x%02x: width=%u, height=%u, components=%d\n", tag_id, image_width, image_height, num_components );
+  pf( "  %s, %d-bit%s\n", sof_name(), data_precision, sof_arith ? ", arithmetic" : ", Huffman" );
 
   // Nf==0 is illegal and would leave every later scan resolving component ids
   // against an empty frame.
@@ -44,7 +44,7 @@ void pa_SOF( void ) { CORO_START;
     ci.v_samp_factor = coro2_getL();
     ci.quant_tbl_no = coro2_get();
 
-    printf( "    Component %d: %dhx%dv q=%d\n", ci.component_id, ci.h_samp_factor, ci.v_samp_factor, ci.quant_tbl_no );
+    pf( "    Component %d: %dhx%dv q=%d\n", ci.component_id, ci.h_samp_factor, ci.v_samp_factor, ci.quant_tbl_no );
 
     if( (ci.h_samp_factor<1) || (ci.h_samp_factor>4) || (ci.v_samp_factor<1) || (ci.v_samp_factor>4) ) {
       pjpg_warn( "component sampling factor outside 1..4" );

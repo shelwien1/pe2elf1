@@ -11,7 +11,7 @@ void pa_DAC( void ) { CORO_START;
     dac_tb = coro2_getL();
     dac_cs = coro2_get();
 
-    printf( "Define Arithmetic Conditioning: class=%u table=%u Cs=%u\n", dac_tc, dac_tb, dac_cs );
+    pf( "Define Arithmetic Conditioning: class=%u table=%u Cs=%u\n", dac_tc, dac_tb, dac_cs );
 
     if( dac_tc>1 )  { pjpg_err( E_BADDAC, "conditioning table class > 1" ); CORO_EXIT; }
     if( dac_tb>=4 ) { pjpg_err( E_BADDAC, "conditioning table index >= 4" ); CORO_EXIT; }

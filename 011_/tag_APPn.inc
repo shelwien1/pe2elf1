@@ -21,7 +21,7 @@ void pa_APPn( void ) { CORO_START;
     }
     for( siglen=0; siglen<5; siglen++ ) sig[siglen] = pr(sig[siglen]);
     sig[5] = 0;
-    printf( "APP14: %s\n", (char*)sig );
+    pf( "APP14: %s\n", (char*)sig );
 
     if( (sig[0]=='A') && (sig[1]=='d') && (sig[2]=='o') && (sig[3]=='b') && (sig[4]=='e') ) {
       if( l_tag<7 ) { pjpg_warn( "truncated Adobe APP14 header" ); CORO_EXIT; }
@@ -30,7 +30,7 @@ void pa_APPn( void ) { CORO_START;
       adobe_f1  = coro2_get2();
       Adobe_transform = coro2_get();
       saw_Adobe_marker = 1;
-      printf( "  Adobe marker: version %u, flags 0x%04X/0x%04X, transform %u\n",
+      pf( "  Adobe marker: version %u, flags 0x%04X/0x%04X, transform %u\n",
               adobe_ver, adobe_f0, adobe_f1, Adobe_transform );
       if( Adobe_transform>2 ) pjpg_warn( "unknown Adobe colour transform" );
     }
@@ -48,14 +48,14 @@ void pa_APPn( void ) { CORO_START;
   }
   sig[siglen] = 0;
 
-  printf( "APP%u: %s\n", tag_id-M_APP0, siglen ? (char*)sig : (char*)"(no signature)" );
+  pf( "APP%u: %s\n", tag_id-M_APP0, siglen ? (char*)sig : (char*)"(no signature)" );
 
   // ICC_PROFILE\0 <seq> <count> <profile chunk>
   if( (tag_id==M_APP2) && (siglen==11) && (sig[0]=='I') && (sig[1]=='C') && (sig[2]=='C') ) {
     if( l_tag<2 ) { pjpg_warn( "truncated ICC_PROFILE header" ); CORO_EXIT; }
     icc_seq = coro2_get();
     icc_num = coro2_get();
-    printf( "  ICC profile chunk %u of %u, %u bytes\n", icc_seq, icc_num, l_tag );
+    pf( "  ICC profile chunk %u of %u, %u bytes\n", icc_seq, icc_num, l_tag );
     if( (icc_seq<1) || (icc_num<1) || (icc_seq>icc_num) ) pjpg_warn( "ICC chunk numbering out of range" );
   }
 

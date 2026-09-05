@@ -5,7 +5,7 @@ void pa_DRI( void ) { CORO_START;
 
   restart_interval = coro2_get2();
 
-  printf( "Define Restart Interval %u\n", restart_interval );
+  pf( "Define Restart Interval %u\n", restart_interval );
 
   if( l_tag>0 ) pjpg_warn( "trailing bytes after the restart interval" );
 

@@ -33,6 +33,48 @@ def w(name, data):
     open(os.path.join(out, name), 'wb').write(data)
     print('%-22s %7d bytes' % (name, len(data)))
 
+# --- recursive thumbnail parsing -------------------------------------------
+# An Exif APP1 whose thumbnail is itself a JPEG is parsed by the next level, so
+# these exercise the recursion, its depth limit, and its error handling.
+
+def entry(tag, fmt, cnt, val): return struct.pack('<HHII', tag, fmt, cnt, val)
+
+def exif_thumb(payload, typ=6, declared=None):
+    """An Exif APP1 carrying `payload` as a thumbnail of the given type."""
+    OFS = 56                                              # size of the TIFF block below
+    t  = b'II' + b'\x2a\x00' + struct.pack('<I', 8)       # header, IFD0 at 8
+    t += struct.pack('<H', 0) + struct.pack('<I', 14)     # IFD0: no entries -> IFD1 at 14
+    t += struct.pack('<H', 3)                             # IFD1: 3 entries
+    t += entry(0x0103, 3, 1, typ)                         #   compression (6 = JPEG)
+    t += entry(0x0201, 4, 1, OFS)                         #   thumbnail offset
+    t += entry(0x0202, 4, 1, len(payload) if declared is None else declared)
+    t += struct.pack('<I', 0)                             #   no next IFD
+    assert len(t) == OFS, len(t)
+    return b'Exif\0\0' + t + payload
+
+def image(w, h, extra=b''):
+    sof = bytes([8]) + struct.pack('>HH', h, w) + bytes([1]) + bytes([1, 0x11, 0])
+    sos = bytes([1]) + bytes([1, 0x00]) + bytes([0, 63, 0])
+    return SOI + extra + seg(0xC0, sof) + seg(0xDA, sos) + EOI
+
+def nest(depth):
+    d = image(8, 8)
+    for k in range(depth):
+        d = image(16*(k+2), 12*(k+2), seg(0xE1, exif_thumb(d)))
+    return d
+
+w('thumb_nested.jpg', nest(2))        # levels 0,1,2
+w('thumb_deep.jpg',   nest(8))        # deeper than PjpgLevels: the limit must hold
+w('thumb_notjpeg.jpg', image(32, 32,  # compression says JPEG, contents are not
+    seg(0xE1, exif_thumb(b'\x00' * 64))))
+w('thumb_truncated.jpg', image(32, 32,  # thumbnail cut off mid-segment
+    seg(0xE1, exif_thumb(image(16, 16)[:20]))))
+w('thumb_raw.jpg', image(32, 32,      # compression = 1: raw pixels, not recursed into
+    seg(0xE1, exif_thumb(b'\xAA' * 48, typ=1))))
+w('thumb_jfxx.jpg', SOI +             # the other JPEG-thumbnail carrier
+    seg(0xE0, b'JFXX\0\x10' + image(8, 8)) + seg(0xC0,
+    bytes([8]) + struct.pack('>HH', 32, 32) + bytes([1]) + bytes([1, 0x11, 0])) + EOI)
+
 # 6.1  SOS declares 22 components -> cur_comp_info[21] overwrites pjpg0::tag_id -> SIGSEGV
 w('sos_overflow.jpg', SOI + seg(0xC0, SOF1)
   + seg(0xDA, bytes([22]) + bytes([0x00, 0x00]) * 22 + bytes([0, 63, 0])) + EOI)

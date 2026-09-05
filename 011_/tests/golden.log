@@ -26,6 +26,41 @@ n_entries=6
 011A/1D0F: 0202 0004 0001 1BE1
 nextofs=0; pos=011E/1D0F
 thumbOfs=12E thumbLen=1BE1 thumbTyp=6; pos=011E/1D0F
+>>> Exif thumbnail: 7137 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=E0!
+    APP0: JFIF
+    JFIF APP0 marker: version 1.02, density 72x72  unit=1
+        with 0 x 0 thumbnail image
+    !tag=ED!
+    APP13: Adobe_CM
+    !tag=EE!
+    APP14: Adobe
+      Adobe marker: version 100, flags 0x8000/0x0000, transform 1
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    Define Quantization Table 1  precision 0
+    !tag=C0!
+    Start Of Frame 0xc0: width=160, height=106, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx2v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=DD!
+    Define Restart Interval 10
+    !tag=C4!
+    Define Huffman Table 0x00
+    Define Huffman Table 0x01
+    Define Huffman Table 0x10
+    Define Huffman Table 0x11
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+<<< end of thumbnail (level 1)
 exif_done; pos=1D0F/1D0F
 !tag=ED!
 APP13: Photoshop 3.0
@@ -128,6 +163,30 @@ JFIF APP0 marker: version 1.02, density 144x144  unit=1
 !tag=E0!
 APP0: JFXX
 JFXX APP0 marker: JPEG-compressed thumbnail image
+>>> JFXX thumbnail: 1893 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    Define Quantization Table 1  precision 0
+    !tag=C4!
+    Define Huffman Table 0x00
+    Define Huffman Table 0x10
+    Define Huffman Table 0x01
+    Define Huffman Table 0x11
+    !tag=C0!
+    Start Of Frame 0xc0: width=80, height=60, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx1v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+<<< end of thumbnail (level 1)
 !tag=EC!
 APP12: OLYMPUS OPTICAL CO.,LTD
 !tag=DB!
@@ -198,6 +257,30 @@ JFIF APP0 marker: version 1.02, density 144x144  unit=1
 !tag=E0!
 APP0: JFXX
 JFXX APP0 marker: JPEG-compressed thumbnail image
+>>> JFXX thumbnail: 2045 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    Define Quantization Table 1  precision 0
+    !tag=C4!
+    Define Huffman Table 0x00
+    Define Huffman Table 0x10
+    Define Huffman Table 0x01
+    Define Huffman Table 0x11
+    !tag=C0!
+    Start Of Frame 0xc0: width=80, height=60, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx1v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+<<< end of thumbnail (level 1)
 !tag=EC!
 APP12: OLYMPUS OPTICAL CO.,LTD
 !tag=DB!
@@ -227,6 +310,33 @@ Start Of Scan: 3 components; l_tag=9
 !tag=E0!
 APP0: JFXX
 JFXX APP0 marker: JPEG-compressed thumbnail image
+>>> JFXX thumbnail: 1506 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    Define Quantization Table 4  precision 2
+    ERROR [tag DB]: quantisation table index >= 4
+    !tag=C4!
+    Define Huffman Table 0x00
+    Define Huffman Table 0x28
+    ERROR [tag C4]: Huffman table index >= 4
+    !tag=C0!
+    Start Of Frame 0xc0: width=80, height=60, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx1v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+    
+parse finished with 2 error(s) and 0 warning(s); first error: quantisation table index >= 4 (bad quantisation table)
+Warning [tag E0]: embedded thumbnail did not parse cleanly
+<<< end of thumbnail (level 1)
 !tag=EC!
 APP12: OL?MPUS OPTICAL CO.,LTD
 !tag=DB!
@@ -307,7 +417,7 @@ Start Of Scan: 1 components; l_tag=5
 Define Number of Lines: 29039
 ERROR [tag 00]: input ended inside a segment
 
-parse finished with 1 error(s) and 0 warning(s); first error: input ended inside a segment (truncated)
+parse finished with 1 error(s) and 1 warning(s); first error: input ended inside a segment (truncated)
 ===== exit=1 =====
 ===== 283782.jpg =====
 !tag=D8!
@@ -498,6 +608,41 @@ n_entries=6
 031A/13F6: 0202 0004 0001 10C8
 nextofs=0; pos=031E/13F6
 thumbOfs=32E thumbLen=10C8 thumbTyp=6; pos=031E/13F6
+>>> Exif thumbnail: 4296 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=E0!
+    APP0: JFIF
+    JFIF APP0 marker: version 1.02, density 72x72  unit=1
+        with 0 x 0 thumbnail image
+    !tag=ED!
+    APP13: Adobe_CM
+    !tag=EE!
+    APP14: Adobe
+      Adobe marker: version 100, flags 0x8000/0x0000, transform 1
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    Define Quantization Table 1  precision 0
+    !tag=C0!
+    Start Of Frame 0xc0: width=128, height=96, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx2v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=DD!
+    Define Restart Interval 8
+    !tag=C4!
+    Define Huffman Table 0x00
+    Define Huffman Table 0x01
+    Define Huffman Table 0x10
+    Define Huffman Table 0x11
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+<<< end of thumbnail (level 1)
 exif_done; pos=13F6/13F6
 !tag=ED!
 APP13: Photoshop 3.0
@@ -559,6 +704,30 @@ n_entries=6
 0B6C/25F6: 0202 0004 0001 1052
 nextofs=0; pos=0B70/25F6
 thumbOfs=13F4 thumbLen=1052 thumbTyp=6; pos=0B70/25F6
+>>> Exif thumbnail: 4178 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    Define Quantization Table 1  precision 0
+    !tag=C0!
+    Start Of Frame 0xc0: width=160, height=120, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx1v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=C4!
+    Define Huffman Table 0x00
+    Define Huffman Table 0x01
+    Define Huffman Table 0x10
+    Define Huffman Table 0x11
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+<<< end of thumbnail (level 1)
 exif_done; pos=2446/25F6
 !tag=DB!
 Define Quantization Table 0  precision 0
@@ -726,6 +895,38 @@ n_entries=6
 0168/0CF2: 0202 0004 0001 0B75
 nextofs=0; pos=016C/0CF2
 thumbOfs=17C thumbLen=B75 thumbTyp=6; pos=016C/0CF2
+>>> Exif thumbnail: 2933 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=E0!
+    APP0: JFIF
+    JFIF APP0 marker: version 1.01, density 1x1  unit=0
+        with 0 x 0 thumbnail image
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    !tag=DB!
+    Define Quantization Table 1  precision 0
+    !tag=C0!
+    Start Of Frame 0xc0: width=160, height=64, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx2v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=C4!
+    Define Huffman Table 0x00
+    !tag=C4!
+    Define Huffman Table 0x10
+    !tag=C4!
+    Define Huffman Table 0x01
+    !tag=C4!
+    Define Huffman Table 0x11
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+<<< end of thumbnail (level 1)
 exif_done; pos=0CF1/0CF2
 !tag=E1!
 APP1: ht  
@@ -872,6 +1073,41 @@ n_entries=6
 0112/03CA: 0202 0004 0001 02A4
 nextofs=0; pos=0116/03CA
 thumbOfs=126 thumbLen=2A4 thumbTyp=6; pos=0116/03CA
+>>> Exif thumbnail: 676 bytes, parsing as JPEG at level 1
+    !tag=D8!
+    !tag=E0!
+    APP0: JFIF
+    JFIF APP0 marker: version 1.02, density 72x72  unit=1
+        with 0 x 0 thumbnail image
+    !tag=ED!
+    APP13: Adobe_CM
+    !tag=EE!
+    APP14: Adobe
+      Adobe marker: version 100, flags 0x8000/0x0000, transform 1
+    !tag=DB!
+    Define Quantization Table 0  precision 0
+    Define Quantization Table 1  precision 0
+    !tag=C0!
+    Start Of Frame 0xc0: width=10, height=20, components=3
+      Sequential frame, 8-bit, Huffman
+        Component 1: 2hx2v q=0
+        Component 2: 1hx1v q=1
+        Component 3: 1hx1v q=1
+    !tag=DD!
+    Define Restart Interval 1
+    !tag=C4!
+    Define Huffman Table 0x00
+    Define Huffman Table 0x01
+    Define Huffman Table 0x10
+    Define Huffman Table 0x11
+    !tag=DA!
+    Start Of Scan: 3 components; l_tag=9
+      Component 1: dc=00 ac=00
+      Component 2: dc=01 ac=01
+      Component 3: dc=01 ac=01
+      Ss=0, Se=63, Ah=0, Al=0
+    !tag=D9!
+<<< end of thumbnail (level 1)
 exif_done; pos=03CA/03CA
 !tag=ED!
 APP13: Photoshop 3.0

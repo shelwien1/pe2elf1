@@ -84,6 +84,7 @@ struct pjpg : Coroutine, pjpg0 {
     num_components = 0;
     comps_in_scan  = 0;
     saw_SOF = 0;
+    saw_SOI = 0;
     saw_JFIF_marker = 0;
     saw_Adobe_marker = 0;
     progressive_mode = 0;
@@ -133,10 +134,10 @@ struct pjpg : Coroutine, pjpg0 {
       }
 
       tag_id = c;
-      printf( "!tag=%02X!\n", tag_id );
+      pf( "!tag=%02X!\n", tag_id );
 
       if( c==M_TEM ) continue;            // TEM has no payload
-      if( c==M_SOI ) { image_reset(); continue; }
+      if( c==M_SOI ) { image_reset(); saw_SOI = 1; continue; }
       if( c==M_EOI ) { eoi_reached = 1; continue; }
 
       if( f_lentag[c]==0 ) continue;      // standalone or reserved marker
@@ -202,10 +203,10 @@ struct pjpg : Coroutine, pjpg0 {
 
   fin:
     if( err_code ) {
-      printf( "\nparse finished with %u error(s) and %u warning(s); first error: %s (%s)\n",
+      pf( "\nparse finished with %u error(s) and %u warning(s); first error: %s (%s)\n",
               n_err, n_warn, err_msg, jpeg_err_name(err_code) );
     } else if( n_warn ) {
-      printf( "\nparse completed with %u warning(s)\n", n_warn );
+      pf( "\nparse completed with %u warning(s)\n", n_warn );
     }
 
     // do_process must never return -- the frontend's stack frame is gone.
@@ -213,3 +214,62 @@ struct pjpg : Coroutine, pjpg0 {
   }
 
 };
+
+//-----------------------------------------------------------------------------
+// Recursive thumbnail parsing.
+//
+// A JPEG can carry a JPEG thumbnail in its Exif APP1 or JFXX APP0 segment, and
+// that thumbnail can carry one of its own.  Rather than special-casing it, the
+// thumbnail is handed to the next level's parser, which is a plain pjpg: it
+// does its own marker scanning, its own bounds checking and its own error
+// reporting, and can recurse again in turn.
+//
+// The bytes arrive one at a time because that is how a marker parser is fed, so
+// each one is pushed through the sub-parser's own input pin.  The level above
+// plays exactly the role CoroFileProc plays for level 0: hand over input, run
+// the coroutine until it asks for more, repeat, then signal end of input.
+//-----------------------------------------------------------------------------
+
+uint pjpg0::sub_begin( const char* what, uint nbytes ) {
+  if( sub==0 ) { pjpg_warn( "thumbnail nesting limit reached, not parsing it" ); return 0; }
+  n_thumb++;
+  pf( ">>> %s: %u bytes, parsing as JPEG at level %u\n", what, nbytes, level+1 );
+  sub->coro_init();
+  sub->level = level+1;
+  sub_active = 1;
+  sub_n = 0;
+  return 1;
+}
+
+// Hand the buffered bytes over and let that level run until it has consumed
+// them and asks for more.  Anything other than "give me input" means the level
+// is done with the stream -- it reached EOI, or it failed -- so stop driving it.
+// The caller keeps consuming the remaining thumbnail bytes either way, so the
+// outer segment stays correctly aligned.
+void pjpg0::sub_flush( void ) {
+  if( sub_n==0 ) return;
+  if( sub_active ) {
+    sub->addinp( sub_buf, sub_n );
+    if( sub->coro_call( sub )!=1 ) sub_active = 0;
+  }
+  sub_n = 0;
+}
+
+void pjpg0::sub_end( void ) {
+  uint guard;
+  if( sub==0 ) return;
+  sub_flush();
+  if( sub_active ) {
+    sub->f_quit = 1;                       // no more thumbnail bytes are coming
+    for( guard=0; guard<4; guard++ ) {
+      sub->addinp( sub_buf, 0 );
+      if( sub->coro_call( sub )!=1 ) break;
+    }
+    sub_active = 0;
+  }
+  // A thumbnail whose compression tag says JPEG but which contains no JPEG at
+  // all is a malformed Exif block, not just an empty parse.
+  if( sub->saw_SOI==0 )  pjpg_warn( "thumbnail is declared as JPEG but has no SOI marker" );
+  else if( sub->err_code ) pjpg_warn( "embedded thumbnail did not parse cleanly" );
+  pf( "<<< end of thumbnail (level %u)\n", level+1 );
+}

@@ -5,6 +5,7 @@ uint f_LE,pos,len;
 uint tagMark,ofs1st, n_entries,tagnum,format,d_elem,d_ofs,nextofs;
 uint thumbOfs,thumbLen,thumbTyp;
 uint max_entries;
+uint f_thumbjpg;
 
 void pa_APP1( void ) { CORO_START;
 
@@ -30,7 +31,7 @@ void pa_APP1( void ) { CORO_START;
     d[5] = coro2_get();
   }
 
-  printf( "APP1: %c%c%c%c\n", pr(d[0]),pr(d[1]),pr(d[2]),pr(d[3]) );
+  pf( "APP1: %c%c%c%c\n", pr(d[0]),pr(d[1]),pr(d[2]),pr(d[3]) );
 
   if( (d[2]=='i') && (d[3]=='f') && (d[4]==0) && (d[5]==0) ) {
 
@@ -47,7 +48,7 @@ void pa_APP1( void ) { CORO_START;
     d[7] = coro2_get();
     pos += 2;
 
-    printf( "align: %c%c\n", pr(d[6]),pr(d[7]) );
+    pf( "align: %c%c\n", pr(d[6]),pr(d[7]) );
     f_LE = (d[6]=='I'); // 'I'=little endian, 'M'=big endian
 
     if( !((d[6]=='I') && (d[7]=='I')) && !((d[6]=='M') && (d[7]=='M')) ) {
@@ -57,7 +58,7 @@ void pa_APP1( void ) { CORO_START;
     tagMark = coro2_get2E(f_LE,pos);
     ofs1st  = coro2_get4E(f_LE,pos);
 
-    printf( "tagMark=%X ofs1st=%X pos=%X len=%X\n", tagMark,ofs1st,pos,len );
+    pf( "tagMark=%X ofs1st=%X pos=%X len=%X\n", tagMark,ofs1st,pos,len );
 
     if( tagMark!=0x2A ) { pjpg_err( E_BADEXIF, "TIFF magic is not 42" ); CORO_EXIT; }
 
@@ -71,7 +72,7 @@ void pa_APP1( void ) { CORO_START;
 
       if( len-pos < 2 ) { pjpg_warn( "IFD entry count runs past the Exif block" ); break; }
       n_entries = coro2_get2E(f_LE,pos);
-      printf( "n_entries=%i\n", n_entries );
+      pf( "n_entries=%i\n", n_entries );
 
       // Each directory entry is 12 bytes and the chain pointer another 4.
       max_entries = (len-pos)/12;
@@ -85,7 +86,7 @@ void pa_APP1( void ) { CORO_START;
         format = coro2_get2E(f_LE,pos);
         d_elem = coro2_get4E(f_LE,pos);
         d_ofs  = coro2_get4E(f_LE,pos);
-        printf( "%04X/%04X: %04X %04X %04X %04X\n", pos,len, tagnum,format,d_elem,d_ofs );
+        pf( "%04X/%04X: %04X %04X %04X %04X\n", pos,len, tagnum,format,d_elem,d_ofs );
         switch( tagnum ) {
         case 0x0103: thumbTyp = f_LE ? word(d_ofs) : d_ofs>>16; break;
         case 0x0111: case 0x0201: thumbOfs = d_ofs; break;
@@ -95,28 +96,37 @@ void pa_APP1( void ) { CORO_START;
 
       if( len-pos < 4 ) { pjpg_warn( "IFD chain pointer runs past the Exif block" ); break; }
       nextofs  = coro2_get4E(f_LE,pos);
-      printf( "nextofs=%X; pos=%04X/%04X\n",  nextofs, pos,len );
+      pf( "nextofs=%X; pos=%04X/%04X\n",  nextofs, pos,len );
 
       if( (nextofs!=0) && (nextofs<pos) ) { pjpg_warn( "IFD chain points backwards" ); break; }
 
       ofs1st=nextofs;
     }
 
-    printf( "thumbOfs=%X thumbLen=%X thumbTyp=%i; pos=%04X/%04X\n",  thumbOfs,thumbLen,thumbTyp, pos,len );
+    pf( "thumbOfs=%X thumbLen=%X thumbTyp=%i; pos=%04X/%04X\n",  thumbOfs,thumbLen,thumbTyp, pos,len );
 
     // typ=6: jpeg; typ=1: uncompressed; others unknown?
     // thumbOfs+thumbLen would wrap 32 bits, so a huge offset with a small
     // length used to pass the bound it should have failed.
     if( (thumbLen>0) && (thumbOfs>=pos) && (thumbOfs<=len) && (thumbLen<=len-thumbOfs) ) {
+
       for(; pos<thumbOfs; pos++ ) {
         (void)coro2_get();
       }
+
+      // Compression tag 0x0103 == 6 means the thumbnail is a JPEG, so hand it
+      // to the next level instead of discarding it.  Type 1 is uncompressed
+      // pixels and anything else is unknown; both are skipped as before.
+      f_thumbjpg = (thumbTyp==6) ? sub_begin( "Exif thumbnail", thumbLen ) : 0;
+
       for( i=0; i<thumbLen; i++,pos++ ) {
-        (void)coro2_get();
+        thumb_byte( coro2_get() );
       }
+
+      if( f_thumbjpg ) sub_end();
     }
 
-    printf( "exif_done; pos=%04X/%04X\n",  pos,len );
+    pf( "exif_done; pos=%04X/%04X\n",  pos,len );
   }
 
   coro_done: CORO_END;

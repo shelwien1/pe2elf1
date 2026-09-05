@@ -13,7 +13,7 @@ void pa_DHT( void ) { CORO_START;
     }
 
     index = coro2_get(); 
-    printf( "Define Huffman Table 0x%02x\n", index );
+    pf( "Define Huffman Table 0x%02x\n", index );
 
     // Tc (high nibble) selects DC/AC, Th (low nibble) the table slot.
     if( (index&15)>=4 ) { pjpg_err( E_BADDHT, "Huffman table index >= 4" ); CORO_EXIT; }

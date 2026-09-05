@@ -20,6 +20,11 @@ that work over a fixed-size input buffer:
 Both are unusual enough that most of the porting effort went into confirming they
 still behave on Linux/ELF. They do.
 
+A third wrinkle: a JPEG can carry a JPEG thumbnail, so `pjpg.cpp` holds
+`PjpgLevels` complete parser instances and hands an embedded thumbnail to the
+next one. A thumbnail is not a special case — it is parsed by a plain `pjpg`,
+which can recurse again in turn.
+
 [**docs/pjpg-algorithm.md**](docs/pjpg-algorithm.md) describes the parsing
 algorithm in detail and catalogues the ten bugs that were found in it — all now
 fixed, including a remotely-triggerable SIGSEGV from a 69-byte crafted SOS
@@ -80,7 +85,8 @@ Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
   reports.
 * gcc and clang agree byte-for-byte on all 118.
 * All matrix cells pass, with the two exceptions noted below.
-* Throughput on a 130 MB stream: **3.3 GB/s** (was 378 MB/s before the byte loop
+* Thumbnails are parsed recursively, up to 5 levels deep.
+* Throughput on a 130 MB stream: **3.2 GB/s** (was 378 MB/s before the byte loop
   was rewritten around `memchr` and bulk skipping).
 
 ## Exit status
