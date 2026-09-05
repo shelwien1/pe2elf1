@@ -4,6 +4,7 @@
 #   ./run-tests.sh check   ./pjpg ../testfiles   regression vs tests/golden.log
 #   ./run-tests.sh golden  ./pjpg ../testfiles   regenerate tests/golden.log
 #   ./run-tests.sh corpus  ./pjpg ../testfiles   run every jpeg, incl. imagetestsuite
+#   ./run-tests.sh carve   ./pjpg ../testfiles   jpegdet round trip + decodability
 #   ./run-tests.sh matrix  ''    ../testfiles    build+run the compiler/flag matrix
 #
 # Note on line endings: log1 and tests/golden.log are stored with CRLF (they came
@@ -103,6 +104,17 @@ check)
     fi
   fi
 
+  # 5) the carver: extract, rebuild, compare, and open what was extracted
+  if [ -x "$HERE/jpegdet" ]; then
+    if out=$("$0" carve "$BIN" "$TESTDIR" 2>&1) && [ -n "$out" ]; then
+      echo "PASS  carve     ${out##*carve: }"
+    else
+      echo "FAIL  carve"; echo "$out" | sed 's/^/  /'; fail=1
+    fi
+  else
+    echo "SKIP  carve     jpegdet not built"
+  fi
+
   [ $fail -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
   exit $fail
   ;;
@@ -157,6 +169,83 @@ coders)
     [ "$hp" = "$ap" ] || { echo "  $(basename "$b") progressive: Huffman $hp blocks vs arithmetic $ap"; bad=$((bad+1)); }
   done
   echo "coders: $n images x 4 variants, $bad problems"
+  [ $bad -eq 0 ]
+  ;;
+
+carve)
+  # jpegdet, the carver built on the same parser.  Two invariants, and they pull
+  # in opposite directions, which is the point of testing them together:
+  #
+  #   1. LOSSLESS.  "c" then "d" must reproduce the input byte for byte.  This
+  #      has to hold for every input, including ones with no JPEG in them at
+  #      all, because it is a property of the partition (every byte goes to
+  #      exactly one of the metainfo file and one .jpg), not of the detection.
+  #   2. DECODABLE.  Every file "c" writes must actually open.  Nothing stops a
+  #      carver from being trivially lossless by never carving anything, so the
+  #      streams below are built from real images and the count is checked too.
+  #
+  # Decodability is judged by whether djpeg produces an image, not by its exit
+  # status: libjpeg exits 2 for a warning on a file it decoded perfectly well.
+  cd "$HERE" || exit 1
+  DET="$HERE/jpegdet"
+  if [ ! -x "$DET" ]; then echo "carve: $DET missing (run make)"; exit 1; fi
+  have_djpeg=1; command -v djpeg >/dev/null 2>&1 || have_djpeg=0
+
+  # Three real images, small enough to keep the streams quick.
+  mapfile -d '' -t src < <(list_golden_files)
+  pick=(); for f in "${src[@]}"; do
+    [ "$(stat -c %s "$f")" -lt 60000 ] && pick+=("$f")
+    [ "${#pick[@]}" -ge 3 ] && break
+  done
+  if [ "${#pick[@]}" -lt 2 ]; then echo "carve: not enough small test images"; exit 0; fi
+
+  mk() { # mk <name> -- builds $WORK/<name>.bin on stdin
+    cat > "$WORK/$1.bin"
+  }
+  head -c 3000 /dev/urandom > "$WORK/noise"
+  cat "${pick[0]}"                                       | mk single
+  { printf 'HEAD'; cat "${pick[0]}"; printf 'TAIL'; }     | mk sandwiched
+  { cat "${pick[0]}"; cat "${pick[1]}"; }                 | mk adjacent
+  { cat "$WORK/noise"; cat "${pick[0]}"; cat "$WORK/noise"; cat "${pick[1]}"; cat "$WORK/noise"; } | mk noise_between
+  cat "$WORK/noise"                                       | mk nojpeg
+  : | mk empty
+  # a JPEG whose EOI was cut off, immediately followed by another: the carver
+  # has to cut the first one at the second one's SOI to get two openable files
+  { head -c $(( $(stat -c %s "${pick[0]}") - 2 )) "${pick[0]}"; cat "${pick[1]}"; } | mk no_eoi_then_jpg
+
+  # How many images each stream must yield.  Checking the count per stream, and
+  # not just a total, is what stops the carver from passing by carving nothing:
+  # losslessness alone is trivially satisfied by treating the whole input as
+  # literal data.
+  want_single=1 want_sandwiched=1 want_adjacent=2 want_noise_between=2
+  want_nojpeg=0 want_empty=0 want_no_eoi_then_jpg=2
+
+  bad=0; n=0; imgs=0
+  for c in "$WORK"/*.bin; do
+    name=$(basename "$c" .bin); n=$((n+1))
+    rm -rf "$WORK/o"; mkdir -p "$WORK/o"
+    if ! timeout 300 "$DET" c "$c" "$WORK/o/i" >"$WORK/c.log" 2>&1; then
+      echo "  $name: c failed -- $(tail -1 "$WORK/c.log")"; bad=$((bad+1)); continue
+    fi
+    if ! timeout 300 "$DET" d "$WORK/o/i" "$WORK/r.bin" >"$WORK/d.log" 2>&1; then
+      echo "  $name: d failed -- $(tail -1 "$WORK/d.log")"; bad=$((bad+1)); continue
+    fi
+    cmp -s "$c" "$WORK/r.bin" || { echo "  $name: round trip is not byte-exact"; bad=$((bad+1)); continue; }
+    got=0
+    for j in "$WORK"/o/i????????.jpg; do
+      [ -e "$j" ] || continue
+      got=$((got+1)); imgs=$((imgs+1))
+      [ $have_djpeg = 1 ] || continue
+      rm -f "$WORK/d.ppm"
+      djpeg -outfile "$WORK/d.ppm" "$j" >/dev/null 2>&1
+      [ -s "$WORK/d.ppm" ] || { echo "  $name: $(basename "$j") does not decode"; bad=$((bad+1)); }
+    done
+    eval "want=\${want_$name:-}"
+    [ -z "$want" ] || [ "$got" = "$want" ] || { echo "  $name: carved $got images, expected $want"; bad=$((bad+1)); }
+  done
+
+  [ $have_djpeg = 1 ] || echo "  (djpeg not installed: decodability not checked)"
+  echo "carve: $n streams, $imgs images, $bad problems"
   [ $bad -eq 0 ]
   ;;
 

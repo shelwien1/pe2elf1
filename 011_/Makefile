@@ -3,11 +3,12 @@
 # The Windows build (gc.bat + t.bat) is unchanged and still authoritative there;
 # this Makefile is the Linux equivalent.  See ../README.md for the porting notes.
 #
-#   make                 build ./pjpg with the default compiler
+#   make                 build ./pjpg and ./jpegdet with the default compiler
 #   make CXX=clang++     build with clang instead of gcc
 #   make test            regression-test against tests/golden.log
 #   make corpus          run every bundled jpeg (incl. imagetestsuite) for crashes/hangs
 #   make coders          Huffman vs arithmetic must agree on the same image
+#   make carve           jpegdet: round-trip and decodability of what it extracts
 #   make crosscheck      confirm gcc and clang builds agree byte-for-byte
 #   make matrix          build+run the full compiler/flag matrix
 #   make clean           remove binaries and generated sources
@@ -28,6 +29,7 @@ OPT      ?= -O2
 LIB3     ?= ../Lib3
 TESTDIR  ?= ../testfiles
 BIN      ?= pjpg
+DET      ?= jpegdet
 
 # ---------------------------------------------------------------- flags -----
 # Kept from gc.bat because they are meaningful on Linux too:
@@ -121,11 +123,16 @@ DEPS := pjpg0j.inc \
 $(BIN): pjpg.cpp $(DEPS)
 	$(CXX) $(ALL_CXXFLAGS) $< -o $@ $(ALL_LDFLAGS)
 
-all: $(BIN)
+# The JPEG carver, built from the same parser: it drives pjpg over every
+# candidate offset in a stream rather than over one file.
+$(DET): jpegdet.cpp $(DEPS)
+	$(CXX) $(ALL_CXXFLAGS) $< -o $@ $(ALL_LDFLAGS)
+
+all: $(BIN) $(DET)
 .DEFAULT_GOAL := all
 
 # ---------------------------------------------------------------- tests -----
-test: $(BIN)
+test: $(BIN) $(DET)
 	@./run-tests.sh check "./$(BIN)" "$(TESTDIR)"
 
 golden: $(BIN)
@@ -141,6 +148,10 @@ corpus: $(BIN)
 coders: $(BIN)
 	@./run-tests.sh coders "./$(BIN)" "$(TESTDIR)"
 
+# Extract, rebuild, compare.  Every carved file must also decode.
+carve: $(DET)
+	@./run-tests.sh carve "./$(BIN)" "$(TESTDIR)"
+
 crosscheck: pjpg0j.inc
 	@./run-tests.sh crosscheck "" "$(TESTDIR)"
 
@@ -148,9 +159,9 @@ matrix: pjpg0j.inc
 	@./run-tests.sh matrix "" "$(TESTDIR)"
 
 clean:
-	rm -f $(BIN) pjpg0i.inc pjpg0j.inc *.o
+	rm -f $(BIN) $(DET) pjpg0i.inc pjpg0j.inc *.o
 
-.PHONY: all test golden corpus coders crosscheck matrix clean
+.PHONY: all test golden corpus coders carve crosscheck matrix clean
 
 # The codegen writes fixed filenames into the source directory, and `clean`
 # races `all` under -j: `make -j8 clean all` used to print "Nothing to be done"

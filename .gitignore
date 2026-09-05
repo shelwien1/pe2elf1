@@ -1,6 +1,8 @@
 # build artifacts
 011_/pjpg
 011_/pjpg.exe
+011_/jpegdet
+011_/jpegdet.exe
 011_/log1.new
 011_/log1.diff
 011_/repro/

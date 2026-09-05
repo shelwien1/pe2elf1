@@ -46,8 +46,13 @@ void pa_SOF( void ) { CORO_START;
 
     pf( "    Component %d: %dhx%dv q=%d\n", ci.component_id, ci.h_samp_factor, ci.v_samp_factor, ci.quant_tbl_no );
 
+    // T.81 B.2.2 puts Hi and Vi in 1..4.  Outside that the frame geometry is
+    // not merely unusual, it is undefined, and libjpeg stops on it ("Bogus
+    // sampling factors") -- so it counts against conformance rather than
+    // being just a remark.
     if( (ci.h_samp_factor<1) || (ci.h_samp_factor>4) || (ci.v_samp_factor<1) || (ci.v_samp_factor>4) ) {
       pjpg_warn( "component sampling factor outside 1..4" );
+      n_nonconf++;
     }
     if( ci.quant_tbl_no>=4 ) {
       pjpg_err( E_BADSOF, "component references quantisation table >= 4" ); CORO_EXIT;

@@ -51,12 +51,39 @@ struct pjpg0 : cinfo {
   // visually contained in the segment that carried it.
   uint level;
 
+  // Hooks for a caller that parses to locate rather than to report -- jpegdet
+  // runs this parser speculatively at every candidate offset in a byte stream.
+  // All three default to 0, which is exactly pjpg's own behaviour, and none of
+  // them is touched by pjpg0_init(): the frontend sets them once, before the
+  // parse, the way it sets level and sub.
+  uint f_quiet;        // swallow every pf() line
+  uint f_stop_at_eoi;  // end the parse the moment EOI has been consumed, so the
+                       // input pointer marks the exact end of one image
+  uint f_bail_on_err;  // end the parse at the first fatal error, rather than
+                       // carrying on to report every problem in the file
+  uint f_check_scans;  // validate scan headers and their Huffman tables even
+                       // when the entropy data is not being decoded.  Neither
+                       // check needs the data, and skipping the data is no
+                       // reason to accept a scan a decoder would reject.
+  uint f_stop_at_soi2; // end the parse where a second image begins.  An image
+                       // whose EOI is missing does not end anywhere a parser
+                       // can see -- it just runs on into whatever follows --
+                       // so the next SOI is the only honest boundary, and
+                       // stopping there is what lets both images be recovered
+                       // instead of one file holding the two of them
+
   // Error state.  A parser that detects a malformed field records it here and
   // exits via CORO_EXIT; the outer loop in pjpg1.inc then yields PJPG_ERR.
   uint  err_code;
   const char* err_msg;
   uint  n_err;
   uint  n_warn;
+
+  // Things a conforming decoder refuses outright but that pjpg only notes and
+  // walks past.  pjpg's job is to describe what is in a file; a detector's job
+  // is to decide whether the file is one, and for that the difference between
+  // "unusual" and "libjpeg stops here" is the whole question.
+  uint  n_nonconf;
 
   // Frame flags derived from the SOF marker code, set by do_process() before
   // pa_SOF() runs.  They are members rather than parameters so that a resumed
@@ -65,8 +92,13 @@ struct pjpg0 : cinfo {
 
   void pjpg0_init( void ) {
     bzero(c_tag);
-    err_code = 0; err_msg = 0; n_err = 0; n_warn = 0;
+    err_code = 0; err_msg = 0; n_err = 0; n_warn = 0; n_nonconf = 0;
     sof_prog = sof_arith = sof_lossless = sof_diff = sof_hier = 0;
+    // A parser object is reused across parses by jpegdet, so nothing may
+    // survive into the next one.  sub_active in particular: a parse abandoned
+    // inside a thumbnail would otherwise leave it set, and the next parse's
+    // thumb_byte() would feed a sub-parser that was never sub_begin()'d.
+    sub_active = 0; sub_n = 0; n_thumb = 0;
   }
 
   void coro2_init( void ) {
@@ -88,6 +120,13 @@ struct pjpg0 : cinfo {
     pf( "ERROR [tag %02X]: %s\n", tag_id, msg );
   }
 
+  // Is what went wrong something that stops a decoder?  A malformed Exif block
+  // is not: it sits inside an APP1 payload that every decoder skips whole, so
+  // the image decodes regardless of what the TIFF structure inside it says.
+  // pjpg reports it because describing the file is its job; a detector deciding
+  // whether these bytes are a usable image must not hold it against them.
+  uint fatal_for_decoding( void ) { return err_code && (err_code!=E_BADEXIF); }
+
   // Marker signatures are arbitrary file bytes; never send them to a terminal raw.
   byte pr( uint c ) { return ((c>=0x20) && (c<=0x7E)) ? byte(c) : byte('.'); }
 
@@ -98,6 +137,7 @@ struct pjpg0 : cinfo {
   #endif
   void pf( const char* fmt, ... ) {
     uint k;
+    if( f_quiet ) return;
     for( k=0; k<level; k++ ) printf( "    " );
     va_list ap; va_start( ap, fmt ); vprintf( fmt, ap ); va_end( ap );
   }

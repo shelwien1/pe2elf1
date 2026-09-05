@@ -10,6 +10,12 @@ struct pjpg : Coroutine, pjpg0 {
 
   uint n_restart;
   uint n_scan;
+  uint n_frame;        // frame headers in this image, DHP not counted
+  uint f_hier_seen;    // a DHP introduced them, so more than one is legal
+  uint n_soi;          // SOI markers seen.  More than one means a stream that
+                       // ran two images together without an EOI between them,
+                       // which a detector needs to know about: it will have
+                       // parsed straight through the first into the second.
   uint f_entropy;      // decode entropy-coded scans (1) or skip them (0)
 
   #include "entropy.inc"
@@ -85,6 +91,19 @@ struct pjpg : Coroutine, pjpg0 {
 
   //--------------------------------------------------------------------------
 
+  // T.81 fixes the length of these segments exactly -- SOF is 8+3*Nf, SOS is
+  // 6+2*Ns, DRI is 4, EXP is 3, DNL is 4 -- or, for DQT/DHT/DAC, makes it a
+  // whole number of table definitions.  A byte left over when the parser is
+  // done means the segment is malformed, and libjpeg stops on it ("Bogus
+  // marker length").  APPn and COM payloads are the exception: they are opaque,
+  // pjpg reads the signature it recognises and leaves the rest, so a leftover
+  // there says nothing at all.
+  uint exact_len_marker( uint m ) {
+    if( (m>=M_APP0) && (m<=M_APP15) ) return 0;
+    if( m==M_COM ) return 0;
+    return f_ptag[m];
+  }
+
   // C0..CF are frame headers apart from DHT (C4), JPG (C8) and DAC (CC); DHP
   // shares the SOF syntax and starts a hierarchical frame too.
   uint is_frame_marker( uint m ) {
@@ -110,6 +129,7 @@ struct pjpg : Coroutine, pjpg0 {
     restart_interval = 0;
     eoi_reached = 0;
     input_scan_number = 0;
+    n_frame = 0; f_hier_seen = 0;
     image_width = 0; image_height = 0;
     data_precision = 0;
     f_SOS = 0;
@@ -123,7 +143,7 @@ struct pjpg : Coroutine, pjpg0 {
   }
 
   void do_process( void ) {
-    uint c,r,lo,hi,pending,was_sos,was_sof;
+    uint c,r,lo,hi,pending,was_sos,was_sof,this_tag;
     uint f_expect_marker;
 
     init_lentag();
@@ -131,11 +151,16 @@ struct pjpg : Coroutine, pjpg0 {
     image_reset();
 
     tag_id=0; l_tag=0; pending=0; f_expect_marker=0;
-    n_restart=0; n_scan=0; n_scan_dec=0;
+    n_restart=0; n_scan=0; n_scan_dec=0; n_scan_bad=0; n_soi=0;
     nz_free();
     coro2_init();
 
     while(1) {
+
+      // A detector parses speculatively at every candidate offset in a stream,
+      // so a wrong guess must cost as little as possible: give up at the first
+      // fatal error instead of reporting every problem in what is not a JPEG.
+      if( f_bail_on_err && fatal_for_decoding() ) goto at_eof;
 
       // The entropy decoder consumes the marker that ends a scan, so take that
       // one rather than scanning for the next FF.
@@ -170,12 +195,31 @@ struct pjpg : Coroutine, pjpg0 {
       tag_id = c;
       pf( "!tag=%02X!\n", tag_id );
 
+      // T.81 B.1.1.3 reserves 02..BF.  Between segments a conforming stream
+      // never carries one, and libjpeg gives up on it ("Unsupported marker
+      // type 0x..").  TEM (01) is legal and handled just below.
+      if( (c>=0x02) && (c<=0xBF) ) n_nonconf++;
+
       if( c==M_TEM ) continue;            // TEM has no payload
       if( c==M_SOI ) {
-        if( saw_SOI && !eoi_reached ) pjpg_warn( "second SOI before the previous image ended" );
-        image_reset(); saw_SOI = 1; continue;
+        if( saw_SOI && !eoi_reached ) {
+          pjpg_warn( "second SOI before the previous image ended" );
+          // Leave before image_reset(), so what the first image established --
+          // its frame, its scans, its errors -- is still there to be read.  The
+          // input pointer is two bytes past the start of this SOI (the marker
+          // byte, and the FF that introduced it), which is where the first
+          // image has to be cut.
+          if( f_stop_at_soi2 ) { n_soi++; goto fin; }
+        }
+        image_reset(); saw_SOI = 1; n_soi++; continue;
       }
-      if( c==M_EOI ) { eoi_reached = 1; continue; }
+      // Stopping straight at fin leaves the input pointer just past the D9, which
+      // is what makes the end of an image an exact byte offset for a detector.
+      // The FF and the D9 have both been consumed on every path that gets here:
+      // by the get() under scan_FF(), or by the entropy decoder's read-ahead,
+      // which parks the marker it ran into in e_marker rather than pushing it
+      // back (see fill_bit_buffer/next_marker_now in entropy.inc).
+      if( c==M_EOI ) { eoi_reached = 1; if( f_stop_at_eoi ) goto fin; continue; }
 
       if( f_lentag[c]==0 ) continue;      // standalone or reserved marker
 
@@ -186,14 +230,16 @@ struct pjpg : Coroutine, pjpg0 {
 
       if( l_tag<2 ) {
         pjpg_warn( "segment length below the 2 bytes of the length field itself" );
+        n_nonconf++;                       // libjpeg: "Bogus marker length"
         l_tag = 0; tag_id = 0;
         continue;
       }
       l_tag -= 2;                          // payload size
 
       // --- payload ---------------------------------------------------------
-      was_sos = (tag_id==M_SOS);
-      was_sof = is_frame_marker(tag_id);
+      was_sos  = (tag_id==M_SOS);
+      was_sof  = is_frame_marker(tag_id);
+      this_tag = tag_id;                   // the parser below clears tag_id
       if( f_ptag[tag_id] ) {
 
         if( tag_id==M_SOS ) n_scan++;
@@ -227,6 +273,7 @@ struct pjpg : Coroutine, pjpg0 {
       // Whatever the parser did not consume -- trailing bytes, or the whole
       // payload of a marker we do not parse -- is skipped in bulk.
       if( l_tag>0 ) {
+        if( exact_len_marker(this_tag) ) n_nonconf++;
         if( skip(l_tag)!=l_tag ) { l_tag=0; goto truncated; }
         l_tag = 0;
       }
@@ -240,7 +287,17 @@ struct pjpg : Coroutine, pjpg0 {
       // between one SOI and EOI, and image_reset() only runs at SOI, so without
       // this the second frame's refinement scans decode against a map sized for
       // the first -- silently, because nz_get/nz_set bounds-check and return 0.
-      if( was_sof ) nz_free();
+      if( was_sof ) {
+        nz_free();
+        if( this_tag==M_DHP ) f_hier_seen = 1;
+        else {
+          n_frame++;
+          // T.81 B.2: a non-hierarchical stream carries exactly one frame.  A
+          // second frame header with no DHP to introduce it is what libjpeg
+          // calls "Invalid JPEG file structure: two SOF markers", and it stops.
+          if( (n_frame>1) && !f_hier_seen ) n_nonconf++;
+        }
+      }
 
       if( was_sos ) f_expect_marker = 0;
       if( was_sos && f_SOS && f_entropy ) {
@@ -252,6 +309,14 @@ struct pjpg : Coroutine, pjpg0 {
         } else if( sof_lossless ) {
           pjpg_warn( "lossless scan, entropy data not decoded" );
         }
+      } else if( was_sos && f_SOS && f_check_scans ) {
+        // Same header checks, none of the cost: scan_decodable() validates the
+        // scan parameters against the frame and scan_tables_ready() builds the
+        // decoding tables, which is where a Huffman table that does not form a
+        // prefix code is caught ("Bogus Huffman table definition").  Neither
+        // reads a byte of entropy data.
+        if( scan_decodable() )
+          if( !scan_tables_ready() ) pjpg_err( E_BADDHT, "a Huffman table this scan uses is missing or bogus" );
       }
     }
 

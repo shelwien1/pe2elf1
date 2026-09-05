@@ -797,6 +797,10 @@ uint process_restart( void ) {
 
 uint e_scan_ok;        // 1 if the last scan decoded without complaint
 uint n_scan_dec;       // scans actually decoded
+uint n_scan_bad;       // of those, how many did not decode cleanly.  e_scan_ok
+                       // only describes the last scan, and a detector deciding
+                       // whether a candidate really is a JPEG needs the whole
+                       // image's verdict, not the final scan's.
 
 // libjpeg's scan-parameter validation (jdphuff.c start_pass_phuff_decoder and
 // jdhuff.c start_pass_huff_decoder).  These are exact rules, not heuristics: a
@@ -932,6 +936,7 @@ done:
   if( ar_dead )  { pjpg_warn( "bad arithmetic code in the scan" ); e_scan_ok = 0; }
 
   n_scan_dec++;
+  if( e_scan_ok==0 ) n_scan_bad++;
   pf( "  scan %u: %s%s, %u MCUs, %u blocks, %u entropy bytes",
       n_scan_dec,
       arith_code ? "arithmetic" : "Huffman",

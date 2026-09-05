@@ -32,6 +32,22 @@ marker and a 3824-byte buffer overflow from a crafted DHT.
 `docs/make-repros.py` regenerates the crafted JPEGs used as reproducers, and
 `make test` runs them.
 
+## jpegdet
+
+The same parser also drives `jpegdet`, a JPEG carver: it finds the images inside
+an arbitrary byte stream, writes each one out as a file a decoder will open, and
+keeps a metainfo file beside them so the original stream can be rebuilt byte for
+byte.
+
+```sh
+./jpegdet c stream.bin out/img     # -> out/img00000000.jpg ... + out/img.jdm
+./jpegdet d out/img rebuilt.bin    # -> stream.bin, exactly
+```
+
+Using the real parser as the detector is what makes it work: a signature scan can
+find `FF D8 FF`, but only decoding the entropy data tells you where an image
+*ends*. See `docs/jpegdet.md`.
+
 ## Building
 
 ### Linux
@@ -74,6 +90,7 @@ Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
 | `make coders` | Decodes `testfiles/coders/`, three images transcoded by `jpegtran` into sequential/progressive × Huffman/arithmetic. Because the transcode is lossless, all four must report identical MCU and block counts — a disagreement is an entropy decoder bug. |
 | `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
 | `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
+| `make carve` | Runs `jpegdet` over seven synthetic streams and asserts three things for each: `c` then `d` reproduces the input byte for byte, every carved file decodes, and the number of images carved is exactly what that stream contains. The last is the one that matters — nothing stops a carver from being trivially lossless by never carving anything. Included in `make test`. |
 | `make golden` | Regenerates `tests/golden.log` after an intentional output change. |
 
 Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
@@ -97,6 +114,11 @@ Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
 * Throughput: **61 MB/s** decoding entropy data, **2.9 GB/s** with `-s`
   (structure only) (was 378 MB/s before the byte loop
   was rewritten around `memchr` and bulk skipping).
+* `jpegdet` carves 43 of the 48 conforming images the JPEG XT reference encoder
+  can produce — every DCT, lossless-predictive and hierarchical variant — and
+  round-trips all of them byte for byte. The five misses are JPEG-LS, which pjpg
+  cannot parse at all. 27 synthetic stream shapes and 1000 fuzz iterations: 0
+  round-trip failures, 0 undecodable outputs, 0 UBSan reports.
 
 ## Exit status
 
@@ -105,6 +127,9 @@ Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
 1   parsed, but at least one structural error was reported
 2   could not open the file, or no argument was given
 ```
+
+`jpegdet` uses `0` for success, `1` for a restoration that did not match the
+recorded size or hash, and `2` for anything it could not read or write.
 
 A malformed field is reported and its segment abandoned, but parsing continues
 from the next marker — the declared length still says where that is — so one run
