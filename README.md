@@ -20,6 +20,11 @@ that work over a fixed-size input buffer:
 Both are unusual enough that most of the porting effort went into confirming they
 still behave on Linux/ELF. They do.
 
+[**docs/pjpg-algorithm.md**](docs/pjpg-algorithm.md) describes the parsing
+algorithm in detail and catalogues the bugs found in it — including a
+remotely-triggerable SIGSEGV from a crafted SOS marker. `docs/make-repros.py`
+regenerates the crafted JPEGs used as reproducers.
+
 ## Building
 
 ### Linux
