@@ -83,8 +83,9 @@ ALL_LDFLAGS  := $(LDFLAGS) $(EXTRA_LD)
 # ------------------------------------------------------------ generation -----
 # pjpg0.inc is preprocessed to pjpg0i.inc, then coro_fsm.pl rewrites every
 # coro2_get() into a computed-goto resume point, producing pjpg0j.inc.
-TAGS := tag_APP0.inc tag_APP1.inc tag_DHT.inc tag_DQT.inc tag_DRI.inc \
-        tag_SOF.inc tag_SOS.inc
+# Globbed, not listed: pjpg0.inc includes every tag_*.inc, and a hand-kept list
+# silently goes stale the moment a parser is added (it had missed three).
+TAGS := $(wildcard tag_*.inc)
 
 pjpg0i.inc: pjpg0.inc $(TAGS)
 	$(CXX) -x c++ $< -E -P -o $@
@@ -112,13 +113,21 @@ golden: $(BIN)
 corpus: $(BIN)
 	@./run-tests.sh corpus "./$(BIN)" "$(TESTDIR)"
 
-crosscheck:
+# Both of these compile pjpg.cpp themselves, so they need the generated source
+# to exist -- without the prerequisite they fail on a fresh clone or after
+# `make clean`, and crosscheck fails silently.
+crosscheck: pjpg0j.inc
 	@./run-tests.sh crosscheck "" "$(TESTDIR)"
 
-matrix:
+matrix: pjpg0j.inc
 	@./run-tests.sh matrix "" "$(TESTDIR)"
 
 clean:
 	rm -f $(BIN) pjpg0i.inc pjpg0j.inc *.o
 
 .PHONY: all test golden corpus crosscheck matrix clean
+
+# The codegen writes fixed filenames into the source directory, and `clean`
+# races `all` under -j: `make -j8 clean all` used to print "Nothing to be done"
+# and leave no binary.
+.NOTPARALLEL:
