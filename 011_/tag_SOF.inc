@@ -1,10 +1,15 @@
 
-// uint i;
+// Frame header: SOF0-3, SOF5-7, SOF9-11, SOF13-15 and DHP, which all share the
+// same syntax.  The process flags (progressive / arithmetic / lossless /
+// differential / hierarchical) are set from the marker code by do_process().
 
-void pa_SOF( int is_prog, int is_arith ) { CORO_START;
+void pa_SOF( void ) { CORO_START;
 
-  progressive_mode = is_prog;
-  arith_code = is_arith;
+  // P(1) + Y(2) + X(2) + Nf(1) = 6, then 3 bytes per component.
+  if( l_tag<6 ) { pjpg_err( E_BADLEN, "SOF segment shorter than 6 bytes" ); CORO_EXIT; }
+
+  progressive_mode = sof_prog;
+  arith_code       = sof_arith;
 
   data_precision = coro2_get();
   image_height = coro2_get2();
@@ -12,9 +17,25 @@ void pa_SOF( int is_prog, int is_arith ) { CORO_START;
   num_components = coro2_get();
 
   printf( "Start Of Frame 0x%02x: width=%u, height=%u, components=%d\n", tag_id, image_width, image_height, num_components );
+  printf( "  %s, %d-bit%s\n", sof_name(), data_precision, sof_arith ? ", arithmetic" : ", Huffman" );
 
-  for( i=0; i<num_components; i++ ) {
-    //jpeg_component_info& ci = comp_info[i];
+  // Nf==0 is illegal and would leave every later scan resolving component ids
+  // against an empty frame.
+  if( num_components<1 ) { pjpg_err( E_BADSOF, "frame declares 0 components" ); CORO_EXIT; }
+
+  // Nf is one byte so it cannot exceed comp_info[256], but the segment must
+  // actually carry the 3 bytes per component it claims.
+  if( l_tag < 3*uint(num_components) ) { pjpg_err( E_BADSOF, "frame header shorter than its component count" ); CORO_EXIT; }
+
+  if( image_width==0 ) { pjpg_err( E_BADSOF, "frame width is 0" ); CORO_EXIT; }
+  // Y==0 is legal: the true height then arrives in a DNL segment.
+  if( image_height==0 ) { pjpg_warn( "frame height is 0, expecting DNL" ); }
+
+  if( (data_precision<2) || (data_precision>16) ) { pjpg_err( E_BADSOF, "frame precision out of range" ); CORO_EXIT; }
+
+  max_h_samp_factor = 1; max_v_samp_factor = 1;
+
+  for( i=0; i<uint(num_components); i++ ) {
     #define ci comp_info[i]
 
     ci.component_index = i;
@@ -24,12 +45,19 @@ void pa_SOF( int is_prog, int is_arith ) { CORO_START;
     ci.quant_tbl_no = coro2_get();
 
     printf( "    Component %d: %dhx%dv q=%d\n", ci.component_id, ci.h_samp_factor, ci.v_samp_factor, ci.quant_tbl_no );
+
+    if( (ci.h_samp_factor<1) || (ci.h_samp_factor>4) || (ci.v_samp_factor<1) || (ci.v_samp_factor>4) ) {
+      pjpg_warn( "component sampling factor outside 1..4" );
+    }
+    if( ci.quant_tbl_no>=4 ) {
+      pjpg_err( E_BADSOF, "component references quantisation table >= 4" ); CORO_EXIT;
+    }
+    if( ci.h_samp_factor>max_h_samp_factor ) max_h_samp_factor = ci.h_samp_factor;
+    if( ci.v_samp_factor>max_v_samp_factor ) max_v_samp_factor = ci.v_samp_factor;
     #undef ci
   }
 
   saw_SOF = 1;
 
-  CORO_END;
+  coro_done: CORO_END;
 }
-
-

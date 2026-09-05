@@ -1,19 +1,50 @@
 
 #include "jpeg_marker.inc"
 
-byte len2[] = {
-  M_SOF0, M_SOF1, M_SOF2, M_SOF9, M_SOF10,
-  M_SOS,  M_DAC,  M_DHT,  M_DQT,  M_DRI,  
+// Markers pjpg has a parser for.  Everything else that carries a length is
+// still recognised and skipped correctly -- see init_lentag() in pjpg1.inc,
+// which derives "has a length field" from the T.81 rule rather than a list
+// (the old len2[] table omitted 11 length-bearing markers, so their payloads
+// were scanned as data and any FF xx inside became a fabricated marker).
+byte parsedtags[] = {
+  M_SOF0, M_SOF1, M_SOF2, M_SOF3, M_SOF5, M_SOF6, M_SOF7,
+  M_SOF9, M_SOF10,M_SOF11,M_SOF13,M_SOF14,M_SOF15,
+  M_DHP,  M_EXP,  M_DNL,  M_DAC,
+  M_DHT,  M_DQT,  M_SOS,  M_DRI,  M_COM,
   M_APP0, M_APP1, M_APP2, M_APP3, M_APP4,
   M_APP5, M_APP6, M_APP7, M_APP8, M_APP9,
   M_APP10,M_APP11,M_APP12,M_APP13,M_APP14,
-  M_APP15,M_COM,
+  M_APP15,
 0 };
 
-byte parsedtags[] = {
-  M_SOF0, M_SOF1, M_SOF2, M_SOF9, M_SOF10,
-  M_APP0, M_APP1, M_DHT,  M_DQT,  M_SOS,  M_DRI,
-0 };
+// Fatal parse errors.  A parser records one and exits; pjpg1.inc then ends the
+// coroutine with a PJPG_ERR yield instead of QUIT, and main() exits non-zero.
+enum JPEG_ERR {
+  E_OK = 0,
+  E_TRUNCATED,   // input ended inside a segment
+  E_BADLEN,      // segment length too small for the marker it claims to be
+  E_BADSOF,      // bogus frame header
+  E_BADSOS,      // bogus scan header
+  E_BADDHT,      // bogus Huffman table definition
+  E_BADDQT,      // bogus quantisation table definition
+  E_BADDAC,      // bogus arithmetic conditioning
+  E_BADEXIF,     // malformed Exif/TIFF structure
+};
+
+static const char* jpeg_err_name( uint e ) {
+  switch( e ) {
+  case E_OK:        return "ok";
+  case E_TRUNCATED: return "truncated";
+  case E_BADLEN:    return "bad segment length";
+  case E_BADSOF:    return "bad frame header";
+  case E_BADSOS:    return "bad scan header";
+  case E_BADDHT:    return "bad Huffman table";
+  case E_BADDQT:    return "bad quantisation table";
+  case E_BADDAC:    return "bad arithmetic conditioning";
+  case E_BADEXIF:   return "bad Exif structure";
+  }
+  return "unknown";
+}
 
 //---------------------------------------------------------
 

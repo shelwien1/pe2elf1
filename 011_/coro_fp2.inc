@@ -12,7 +12,9 @@ struct CoroFileProc : Model {
   ALIGN(4096) byte inpbuf[inpbufsize];
   ALIGN(4096) byte outbuf[outbufsize];
 
-  void processfile( FILE* f, FILE* g ) {
+  // Returns the code the coroutine finished on: 0 = clean quit,
+  // 3 = the model reported a fatal error.
+  uint processfile( FILE* f, FILE* g ) {
     uint l,r;
     coro_init();
     addout( outbuf, outbufsize );
@@ -30,6 +32,7 @@ struct CoroFileProc : Model {
         addout( outbuf, outbufsize );
       } // if
     } // while
+    return r;
   } // func
 
 };

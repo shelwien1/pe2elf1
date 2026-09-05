@@ -13,17 +13,15 @@ CoroFileProc< pjpg > C;
 
 int main( int argc, char **argv ) {
 
-  if( argc<2 ) return 1;
+  if( argc<2 ) { fprintf( stderr, "usage: %s <file.jpg>\n", argv[0] ); return 2; }
 
-//  uint f_DEC = (argv[1][0]=='d'); // decoding?
-  FILE* f = fopen( argv[1], "rb" ); if( f==0 ) return 1;
-//  FILE* g = fopen( argv[3], "wb" ); if( g==0 ) return 1;
+  FILE* f = fopen( argv[1], "rb" );
+  if( f==0 ) { fprintf( stderr, "%s: cannot open\n", argv[1] ); return 2; }
 
-//  init_lentag();
+  uint r = C.processfile( f, 0 );
 
-  C.processfile( f, 0 );
+  fclose( f );
 
-  return 0;
+  // 0 = parsed cleanly (warnings still allow 0), 1 = fatal parse error.
+  return (r==PJPG_ERR) ? 1 : 0;
 }
-
-

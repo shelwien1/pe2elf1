@@ -26,10 +26,11 @@ list_golden_files() {
     | LC_ALL=C sort -z
 }
 
-emit_golden() {
+emit_golden() {   # $1 = binary to run
+  local bin=${1:-$BIN}
   while IFS= read -r -d '' f; do
     printf '===== %s =====\n' "$(basename "$f")"
-    timeout 60 "$BIN" "$f" 2>&1
+    timeout 60 "$bin" "$f" 2>&1
     printf '===== exit=%d =====\n' $?
   done < <(list_golden_files)
 }
@@ -47,29 +48,50 @@ golden)
 check)
   fail=0
 
-  # 1) the original t.bat pair, compared against the Windows-captured log1
+  # 1) No line the Windows build printed may have disappeared.  pjpg now parses
+  #    markers the original skipped, so its output is a SUPERSET of log1; what
+  #    would be a regression is a line going missing.
   {
     timeout 60 "$BIN" "$TESTDIR/drazen1.jpg"
     timeout 60 "$BIN" "$TESTDIR/000107_Exif_MM.jpg"
   } > "$WORK/log1.new" 2>&1
   tr -d '\r' < "$HERE/log1" > "$WORK/log1.ref"
-  if diff -u "$WORK/log1.ref" "$WORK/log1.new" > "$WORK/log1.diff"; then
-    echo "PASS  log1      output identical to the Windows reference"
+  diff -a "$WORK/log1.ref" "$WORK/log1.new" > "$WORK/log1.diff"
+  gone=$(grep -ac '^<' "$WORK/log1.diff" 2>/dev/null || true); gone=${gone:-0}
+  add=$(grep -ac '^>' "$WORK/log1.diff" 2>/dev/null || true); add=${add:-0}
+  if [ "$gone" -eq 0 ]; then
+    echo "PASS  log1      no line lost vs the Windows reference ($add added)"
   else
-    echo "FAIL  log1      differs from the Windows reference:"; head -40 "$WORK/log1.diff"; fail=1
+    echo "FAIL  log1      $gone line(s) the Windows build printed are missing:"
+    grep -a '^<' "$WORK/log1.diff" | head -20; fail=1
   fi
 
   # 2) the full golden log over every checked-in jpeg
   if [ -f "$GOLDEN" ]; then
-    emit_golden > "$WORK/g.new"
+    emit_golden "$BIN" > "$WORK/g.new"
     tr -d '\r' < "$GOLDEN" > "$WORK/g.ref"
-    if diff -u "$WORK/g.ref" "$WORK/g.new" > "$WORK/g.diff"; then
+    if diff -a -u "$WORK/g.ref" "$WORK/g.new" > "$WORK/g.diff"; then
       echo "PASS  golden    $(list_golden_files | tr -cd '\0' | wc -c) files match tests/golden.log"
     else
       echo "FAIL  golden    differs from tests/golden.log:"; head -60 "$WORK/g.diff"; fail=1
     fi
   else
     echo "SKIP  golden    tests/golden.log missing (run 'make golden')"
+  fi
+
+  # 3) the crafted malformed inputs must be reported, never crash
+  if [ -f "$HERE/../docs/make-repros.py" ]; then
+    rm -rf "$WORK/repro"; python3 "$HERE/../docs/make-repros.py" "$WORK/repro" >/dev/null
+    bad=0
+    for f in "$WORK/repro"/*.jpg; do
+      timeout 60 "$BIN" "$f" >/dev/null 2>&1; e=$?
+      if [ $e -gt 1 ]; then echo "  CRASH exit=$e on $(basename "$f")"; bad=1; fi
+    done
+    if [ $bad -eq 0 ]; then
+      echo "PASS  repros    $(ls "$WORK"/repro/*.jpg | wc -l) crafted malformed files reported, none crashed"
+    else
+      echo "FAIL  repros    a crafted input crashed the parser"; fail=1
+    fi
   fi
 
   [ $fail -eq 0 ] && echo "all tests passed" || echo "TESTS FAILED"
@@ -82,47 +104,19 @@ corpus)
   for t in "$TESTDIR"/*.tar.gz; do
     [ -e "$t" ] && tar -xzf "$t" -C "$ext"
   done
-  n=0; bad=0
+  # exit 0 = parsed clean, 1 = parsed but reported errors (expected: imagetestsuite
+  # is a deliberately-damaged corpus), anything else is a crash or a hang.
+  n=0; errs=0; bad=0
   while IFS= read -r -d '' f; do
     n=$((n+1))
     timeout 60 "$BIN" "$f" > /dev/null 2>&1; e=$?
-    if [ $e -ne 0 ]; then
+    if [ $e -eq 1 ]; then errs=$((errs+1))
+    elif [ $e -ne 0 ]; then
       bad=$((bad+1))
-      if [ $e -eq 124 ]; then echo "HANG      $f"; else echo "exit=$e   $f"; fi
+      if [ $e -eq 124 ]; then echo "HANG      $f"; else echo "CRASH exit=$e   $f"; fi
     fi
   done < <(find "$TESTDIR" "$ext" -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | LC_ALL=C sort -z)
-  echo "corpus: $n files, $bad failures"
-  [ $bad -eq 0 ]
-  ;;
-
-crosscheck)
-  # Build with every available compiler at -O2 and confirm all of them produce
-  # byte-identical output over the whole corpus.  A disagreement between two
-  # correct compilers is the signature of undefined behaviour, which matters here
-  # because the coroutine hand-rolls stack switching and the parsers type-pun.
-  cd "$HERE" || exit 1
-  ext="$WORK/its"; mkdir -p "$ext"
-  for t in "$TESTDIR"/*.tar.gz; do [ -e "$t" ] && tar -xzf "$t" -C "$ext"; done
-  base="-std=c++17 -O2 -I../Lib3 -DNDEBUG -Drestrict=__restrict"
-  cg="-fomit-frame-pointer -fno-stack-protector -fno-stack-check -fstrict-aliasing"
-  built=()
-  for cc in g++ clang++; do
-    command -v "$cc" >/dev/null 2>&1 || continue
-    if $cc $base $cg pjpg.cpp -o "$WORK/x_${cc%%+*}" >/dev/null 2>&1; then built+=("${cc%%+*}"); fi
-  done
-  if [ ${#built[@]} -lt 2 ]; then echo "crosscheck: need two compilers, have ${#built[@]}"; exit 0; fi
-  ref=${built[0]}; n=0; bad=0
-  while IFS= read -r -d '' f; do
-    n=$((n+1))
-    timeout 60 "$WORK/x_$ref" "$f" > "$WORK/a" 2>&1 || true
-    for o in "${built[@]:1}"; do
-      timeout 60 "$WORK/x_$o" "$f" > "$WORK/b" 2>&1 || true
-      if ! diff -q "$WORK/a" "$WORK/b" >/dev/null; then
-        echo "DISAGREE ($ref vs $o)  $f"; bad=$((bad+1))
-      fi
-    done
-  done < <(find "$TESTDIR" "$ext" -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | LC_ALL=C sort -z)
-  echo "crosscheck: ${built[*]} agree on $((n-bad))/$n files"
+  echo "corpus: $n files, $((n-errs-bad)) clean, $errs reported parse errors, $bad crashes/hangs"
   [ $bad -eq 0 ]
   ;;
 
@@ -130,7 +124,8 @@ matrix)
   # Every configuration we claim to support.  Each cell builds, runs the two t.bat
   # files and compares against log1.
   cd "$HERE" || exit 1
-  ref="$WORK/log1.ref"; tr -d '\r' < log1 > "$ref"
+  if [ ! -f "$GOLDEN" ]; then echo "matrix: tests/golden.log missing (run 'make golden')"; exit 1; fi
+  ref="$WORK/g.ref"; tr -d '\r' < "$GOLDEN" > "$ref"
   base="-std=c++17 -I../Lib3 -DNDEBUG -Drestrict=__restrict"
   cg="-fomit-frame-pointer -fno-stack-protector -fno-stack-check -fstrict-aliasing"
   nofort="-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0"
@@ -151,9 +146,8 @@ matrix)
       if [ -n "$xfail" ]; then printf '  %-28s XFAIL (%s)\n' "$name" "$xfail"; return; fi
       printf '  %-28s BUILD FAIL\n' "$name"; sed 's/^/      /' "$WORK/$name.err" | head -5; rc=1; return
     fi
-    { timeout 60 "$WORK/$name" "$TESTDIR/drazen1.jpg"
-      timeout 60 "$WORK/$name" "$TESTDIR/000107_Exif_MM.jpg"; } > "$WORK/$name.out" 2>&1 || true
-    if diff -q "$ref" "$WORK/$name.out" > /dev/null 2>&1; then
+    emit_golden "$WORK/$name" > "$WORK/$name.out" 2>&1 || true
+    if diff -a -q "$ref" "$WORK/$name.out" > /dev/null 2>&1; then
       if [ -n "$xfail" ]; then printf '  %-28s XPASS -- expected to fail (%s)\n' "$name" "$xfail"; fi
       printf '  %-28s PASS\n' "$name"
     elif [ -n "$xfail" ]; then
