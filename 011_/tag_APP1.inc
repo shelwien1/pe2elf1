@@ -4,6 +4,7 @@
 uint f_LE,pos,len;
 uint tagMark,ofs1st, n_entries,tagnum,format,d_elem,d_ofs,nextofs;
 uint thumbOfs,thumbLen,thumbTyp;
+qword ofsTagAt,lenTagAt;
 uint max_entries;
 uint f_thumbjpg;
 
@@ -13,6 +14,7 @@ void pa_APP1( void ) { CORO_START;
   // start and never cleared.  A second Exif APP1 with no thumbnail tags then
   // reported -- and acted on -- the first marker's thumbnail offset and length.
   thumbOfs = 0; thumbLen = 0; thumbTyp = 10;
+  ofsTagAt = 0; lenTagAt = 0;
 
   bzero( d );
 
@@ -89,8 +91,12 @@ void pa_APP1( void ) { CORO_START;
         pf( "%04X/%04X: %04X %04X %04X %04X\n", pos,len, tagnum,format,d_elem,d_ofs );
         switch( tagnum ) {
         case 0x0103: thumbTyp = f_LE ? word(d_ofs) : d_ofs>>16; break;
-        case 0x0111: case 0x0201: thumbOfs = d_ofs; break;
-        case 0x0117: case 0x0202: thumbLen = d_ofs; break;
+        case 0x0111: case 0x0201: thumbOfs = d_ofs; ofsTagAt = tag_at()-4; break;
+        // Where this tag's 4-byte value field is, so a caller lifting the
+        // thumbnail out can set the length to zero rather than leave an IFD
+        // pointing at bytes that are no longer there.  coro2_get4E has just
+        // read it, so it ends where the parser now stands.
+        case 0x0117: case 0x0202: thumbLen = d_ofs; lenTagAt = tag_at()-4; break;
         }
       }
 
@@ -118,6 +124,10 @@ void pa_APP1( void ) { CORO_START;
       // to the next level instead of discarding it.  Type 1 is uncompressed
       // pixels and anything else is unknown; both are skipped as before.
       f_thumbjpg = (thumbTyp==6) ? sub_begin( "Exif thumbnail", thumbLen ) : 0;
+      // sub_begin has already filed the span, so the tag whose value has to be
+      // zeroed for the Exif to still make sense without a thumbnail goes on it.
+      if( (thumbTyp==6) && f_thumb_spans && n_thumbs && (n_thumbs <= uint(MAX_THUMBS)) )
+        thumbs[n_thumbs-1].fixup = lenTagAt;
 
       for( i=0; i<thumbLen; i++,pos++ ) {
         thumb_byte( coro2_get() );

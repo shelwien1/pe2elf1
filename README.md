@@ -35,12 +35,14 @@ marker and a 3824-byte buffer overflow from a crafted DHT.
 ## jpegdet
 
 The same parser also drives `jpegdet`, a JPEG carver: it finds the images inside
-an arbitrary byte stream, writes each one out as a file a decoder will open, and
-keeps a metainfo file beside them so the original stream can be rebuilt byte for
-byte.
+an arbitrary byte stream, writes each one out as a file a decoder will open —
+lifting embedded thumbnails into files of their own and patching the segment that
+carried them, so what is left is still a JPEG — and keeps a metainfo file beside
+them so the original stream can be rebuilt byte for byte.
 
 ```sh
 ./jpegdet c stream.bin out/img     # -> out/img00000000.jpg ... + out/img.jdm
+./jpegdet -n c stream.bin out/img  # ... leaving thumbnails inside their images
 ./jpegdet d out/img rebuilt.bin    # -> stream.bin, exactly
 ```
 
@@ -90,7 +92,7 @@ Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
 | `make coders` | Decodes `testfiles/coders/`, three images transcoded by `jpegtran` into sequential/progressive × Huffman/arithmetic. Because the transcode is lossless, all four must report identical MCU and block counts — a disagreement is an entropy decoder bug. |
 | `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
 | `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
-| `make nesting` | Builds JPEGs whose thumbnails nest as deep as the format allows — 337 levels, which is what a 16-bit segment length works out to — and checks that pjpg walks the four it has parsers for, that the depth guard fires exactly once per chain below that, and that nothing past it is mistaken for anything. Every level of every file is itself a decodable JPEG (381 of them), so a failure is a failure of the recursion, not of error handling. Included in `make test`. |
+| `make nesting` | Builds JPEGs whose thumbnails nest as deep as the format allows — 337 levels, which is what a 16-bit segment length works out to — and checks that pjpg walks the four it has parsers for, that the depth guard fires exactly once per chain below that, and that nothing past it is mistaken for anything. Every level of every file is itself a decodable JPEG (381 of them), so a failure is a failure of the recursion, not of error handling. Also checks that `jpegdet` lifts every one of those thumbnails into a file that opens, and puts them all back byte for byte — with and without `-n`. Included in `make test`. |
 | `make carve` | Runs `jpegdet` over ten synthetic streams and asserts three things for each: `c` then `d` reproduces the input byte for byte, every carved file decodes, and the number of images carved is exactly what that stream contains. The last is the one that matters — nothing stops a carver from being trivially lossless by never carving anything. Three of the streams are hazard regressions for defects testing found: a padded-MCU blow-up, a cross-scan state leak, and an over-size MCU. Included in `make test`. |
 | `make golden` | Regenerates `tests/golden.log` after an intentional output change. |
 

@@ -307,10 +307,13 @@ PYEOF
       echo "  $name: d failed -- $(tail -1 "$WORK/d.log")"; bad=$((bad+1)); continue
     fi
     cmp -s "$c" "$WORK/r.bin" || { echo "  $name: round trip is not byte-exact"; bad=$((bad+1)); continue; }
-    got=0
+    # Count the images the stream contained, not the files written: a thumbnail
+    # is carved into a file of its own too, so the file count depends on what
+    # the test images happen to carry.  Every file still has to decode.
+    got=$(sed -n 's/^\([0-9][0-9]*\) image(s).*/\1/p' "$WORK/c.log" | tail -1)
     for j in "$WORK"/o/i????????.jpg; do
       [ -e "$j" ] || continue
-      got=$((got+1)); imgs=$((imgs+1))
+      imgs=$((imgs+1))
       [ $have_djpeg = 1 ] || continue
       rm -f "$WORK/d.ppm"
       djpeg -outfile "$WORK/d.ppm" "$j" >/dev/null 2>&1
@@ -321,7 +324,7 @@ PYEOF
   done
 
   [ $have_djpeg = 1 ] || echo "  (djpeg not installed: decodability not checked)"
-  echo "carve: $n streams, $imgs images, $bad problems"
+  echo "carve: $n streams, $imgs files, $bad problems"
   [ $bad -eq 0 ]
   ;;
 
@@ -340,8 +343,10 @@ nesting)
   gen="$HERE/../docs/make-nested.py"
   if [ ! -f "$gen" ]; then echo "nesting: $gen missing"; exit 0; fi
   rm -rf "$WORK/nested"; python3 "$gen" "$WORK/nested" >/dev/null || { echo "nesting: generator failed"; exit 1; }
-  bad=0; n=0; deepest=0
-  while read -r f depth walked guard; do
+  DET="$HERE/jpegdet"
+  have_djpeg=1; command -v djpeg >/dev/null 2>&1 || have_djpeg=0
+  bad=0; n=0; deepest=0; carved=0
+  while read -r f depth walked guard want_carved; do
     [ -n "$f" ] || continue
     n=$((n+1)); [ "$depth" -gt "$deepest" ] && deepest=$depth
     timeout 60 "$BIN" "$WORK/nested/$f" > "$WORK/n.log" 2>&1; e=$?
@@ -350,8 +355,35 @@ nesting)
     gg=$(grep -ac 'nesting limit reached'    "$WORK/n.log") || gg=0
     [ "$gw" = "$walked" ] || { echo "  $f: walked $gw levels, expected $walked"; bad=$((bad+1)); }
     [ "$gg" = "$guard"  ] || { echo "  $f: depth guard fired $gg times, expected $guard"; bad=$((bad+1)); }
+
+    # And the other half of it: jpegdet lifts each thumbnail into a file of its
+    # own, patches the segment that carried it so what is left is still a JPEG,
+    # and can put the whole thing back byte for byte.  -n has to leave every
+    # thumbnail alone and still round-trip.
+    [ -x "$DET" ] || continue
+    rm -rf "$WORK/o"; mkdir -p "$WORK/o"
+    timeout 120 "$DET" c "$WORK/nested/$f" "$WORK/o/i" > "$WORK/t.log" 2>&1 || { echo "  $f: c failed"; bad=$((bad+1)); continue; }
+    gt=$(sed -n 's/.*and \([0-9][0-9]*\) thumbnail(s).*/\1/p' "$WORK/t.log" | tail -1)
+    [ -n "$gt" ] || gt=0
+    [ "$gt" = "$want_carved" ] || { echo "  $f: carved $gt thumbnails, expected $want_carved"; bad=$((bad+1)); }
+    carved=$((carved+gt))
+    for j in "$WORK"/o/i????????.jpg; do
+      [ -e "$j" ] || continue
+      [ $have_djpeg = 1 ] || continue
+      rm -f "$WORK/d.ppm"; djpeg -outfile "$WORK/d.ppm" "$j" >/dev/null 2>&1
+      [ -s "$WORK/d.ppm" ] || { echo "  $f: $(basename "$j") does not decode"; bad=$((bad+1)); }
+    done
+    timeout 120 "$DET" d "$WORK/o/i" "$WORK/r.bin" >/dev/null 2>&1 && cmp -s "$WORK/nested/$f" "$WORK/r.bin" \
+      || { echo "  $f: round trip is not byte-exact"; bad=$((bad+1)); }
+    # and the same file with extraction switched off
+    rm -rf "$WORK/o2"; mkdir -p "$WORK/o2"
+    timeout 120 "$DET" -n c "$WORK/nested/$f" "$WORK/o2/i" >/dev/null 2>&1 \
+      && [ "$(ls "$WORK"/o2/i????????.jpg 2>/dev/null | wc -l)" = 1 ] \
+      && timeout 120 "$DET" d "$WORK/o2/i" "$WORK/r2.bin" >/dev/null 2>&1 \
+      && cmp -s "$WORK/nested/$f" "$WORK/r2.bin" \
+      || { echo "  $f: -n did not leave one image that round-trips"; bad=$((bad+1)); }
   done < "$WORK/nested/manifest"
-  echo "nesting: $n files, nested up to $deepest deep, $bad problems"
+  echo "nesting: $n files, nested up to $deepest deep, $carved thumbnails carved, $bad problems"
   [ $bad -eq 0 ]
   ;;
 

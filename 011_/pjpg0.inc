@@ -16,6 +16,16 @@ struct pjpg0 : cinfo {
   uint l_tag;
   uint f_SOS;  
 
+  // Where the segment being parsed starts, and how big its payload is.  The
+  // outer loop sets both once per segment, so a parser can say where in the
+  // stream any byte it has read came from without anything being counted on
+  // the byte-at-a-time path:  l_tag is what is left of the payload, so
+  // seg_payload - l_tag is what has been eaten, and the payload itself begins
+  // four bytes past the FF (marker, then the two-byte length).
+  qword seg_pos;
+  uint  seg_payload;
+  qword tag_at( void ) { return seg_pos + 4 + qword(seg_payload - l_tag); }
+
   uint c_tag[256];
 
   // Recursion into an embedded JPEG thumbnail.  sub is the next level's parser,
@@ -23,6 +33,28 @@ struct pjpg0 : cinfo {
   pjpg* sub;
   uint  sub_active;
   uint  n_thumb;
+
+  // Where each thumbnail sits, for a caller that wants to lift it out.  All
+  // offsets are in this parser's own input, so level 0 reports them in the
+  // stream and a nested level reports them inside the thumbnail it is parsing
+  // -- which composes, because that thumbnail's own position is in the record
+  // one level up.
+  //
+  // Only recorded when f_thumb_spans is set, and only for a thumbnail that
+  // parsed as a JPEG: one that hit the depth limit was never checked, so
+  // nothing here vouches for it.
+  struct thumb_span {
+    qword pos, len;      // the thumbnail's bytes
+    qword seg, seg_end;  // the segment carrying it: its FF, and one past its end
+    qword fixup;         // the Exif thumbnail-length tag's value field, else 0
+    uint  carrier;       // M_APP0 (JFXX) or M_APP1 (Exif)
+    uint  ok;            // it parsed cleanly, so it can stand on its own
+  };
+  enum { MAX_THUMBS = 8 };
+  thumb_span thumbs[MAX_THUMBS];
+  uint n_thumbs;
+  uint f_thumb_spans;
+  uint f_thumbs_lost;    // more than MAX_THUMBS: the list is no longer complete
 
   // Thumbnail bytes arrive one at a time, because that is how a marker parser
   // is fed, but handing them over one at a time would cost a coroutine switch
@@ -99,6 +131,8 @@ struct pjpg0 : cinfo {
     // inside a thumbnail would otherwise leave it set, and the next parse's
     // thumb_byte() would feed a sub-parser that was never sub_begin()'d.
     sub_active = 0; sub_n = 0; n_thumb = 0;
+    n_thumbs = 0; f_thumbs_lost = 0;
+    seg_pos = 0; seg_payload = 0;
   }
 
   void coro2_init( void ) {

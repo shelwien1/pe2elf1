@@ -108,31 +108,51 @@ struct Fnv {
 //=============================================================================
 // The metainfo file.
 //
-//   "JPEGDET1"  u32 version
+//   "JPEGDET2"  u32 version
 //   then a sequence of records, each introduced by one tag byte:
-//     'I'  u64 gap_len, gap_len bytes, u64 img_len, u32 add_len, u32 flags, u32 index
+//     'C'  an image definition, for a thumbnail
+//     'I'  u64 gap_len, gap_len bytes, then an image definition
 //     'E'  u64 tail_len, tail_len bytes, u64 orig_size, u64 orig_hash, "JDMEND"
+//
+//   an image definition:
+//     u32 index      which <prefix>NNNNNNNN.jpg holds it
+//     u64 file_len   bytes of that file that are image data
+//     u32 add_len    bytes of it that are not (a synthesised EOI)
+//     u32 flags
+//     u64 orig_len   what putting the thumbnails back has to produce
+//     u32 n_thumbs, then for each:
+//       u64 cut_at     offset in the reassembled image where the span goes back
+//       u32 pre_len, pre_len bytes      what sat before the thumbnail in it
+//       u32 child      the index of the file holding the thumbnail
+//       u64 child_len  its own reassembled length
+//       u32 post_len, post_len bytes    what sat after it
+//       u32 n_fix, then for each:
+//         u64 offset, u32 len, len bytes    what the patch overwrote
 //
 // Record-tagged rather than counted so that "c" can write it in one forward
 // pass: the number of images is not known until the input is exhausted, and a
 // header field patched by seeking back is a field that is wrong whenever the
 // program is killed.  The size and hash live in the terminator for the same
-// reason.
+// reason.  A thumbnail's definition is written before the definition of the
+// image that carried it, so a single forward pass through the file is also all
+// "d" needs -- everything a definition refers to has already been read.
 //
 // The image bytes themselves are not here -- they are the .jpg files, which is
-// the whole point.  gap_len is the run of stream data before the image, img_len
-// is how much of the .jpg file belongs to the stream (see JDF_ADDED_EOI), and
-// index names the file rather than leaving it implicit in record order, so a
-// deleted or renamed .jpg is an error message instead of a silently
-// misassembled output.
+// the whole point.  What is here is everything needed to undo the two things
+// "c" does to an image: the gap of stream data before it, and the thumbnails
+// lifted out of it.  index names the file rather than leaving it implicit in
+// record order, so a deleted or renamed .jpg is an error message instead of a
+// silently misassembled output.
 //=============================================================================
 
-#define JDM_MAGIC   "JPEGDET1"
+#define JDM_MAGIC   "JPEGDET2"
 #define JDM_END     "JDMEND"
-#define JDM_VERSION 1
+#define JDM_VERSION 2
 
 enum {
-  JDR_IMAGE = 'I',
+  JDR_IMAGE = 'I',      // the gap before a top-level image
+  JDR_IMAGE_DEF = 'D',  // that image's own definition, straight after the gap
+  JDR_CHILD = 'C',      // a thumbnail lifted out of another image
   JDR_END   = 'E',
 };
 
@@ -140,6 +160,7 @@ enum {
   JDF_ADDED_EOI = 1,   // the .jpg carries an EOI that the stream did not
   JDF_BAD_SCAN  = 2,   // accepted under -r with entropy data that did not decode
   JDF_MULTI_SOI = 4,   // cut short by the next image's SOI, not by an EOI
+  JDF_THUMB     = 8,   // this image is a thumbnail lifted out of another
 };
 
 //=============================================================================
@@ -164,6 +185,7 @@ struct JpegProbe {
   uint  f_entropy;              // decode the scans (slow, certain) or skip them
   uint  f_relaxed;              // accept an image whose entropy data is damaged
   uint  f_tail;                 // accept a final image the stream cut short
+  uint  f_thumbs;               // record where the thumbnails are
   qword sof_limit;              // give up on a candidate that has read this far
                                 // without producing a frame header
 
@@ -175,7 +197,7 @@ struct JpegProbe {
   const char* why;              // why the candidate was turned down, for -v
 
   void init( void ) {
-    f_entropy = 1; f_relaxed = 0; f_tail = 0;
+    f_entropy = 1; f_relaxed = 0; f_tail = 0; f_thumbs = 0;
     sof_limit = 16u<<20;
     why = "";
   }
@@ -207,9 +229,12 @@ struct JpegProbe {
 
     P.coro_init();
     P.level         = 0;
-    P.sub           = 0;         // no thumbnail recursion: a thumbnail travels
-                                 // inside its parent's bytes, so parsing it
-                                 // separately would only cost time
+    // No recursion is needed to find the thumbnails -- sub_begin() files a span
+    // whether or not there is a level to descend into -- and none is wanted
+    // either: each one is re-probed on its own, which both vouches for it and
+    // finds what it carries in turn, so parsing it twice here would be waste.
+    P.sub            = 0;
+    P.f_thumb_spans  = f_thumbs;
     P.f_entropy      = f_entropy;
     P.f_quiet        = 1;        // a detector is not a reporter
     P.f_stop_at_eoi  = 1;        // stop with the pointer exactly past the D9
@@ -439,6 +464,154 @@ static qword copy_range( FILE* f, qword from, qword to, FILE* g, Fnv* h ) {
 static JpegProbe PR;
 static SigScan   SC;
 
+//=============================================================================
+// Lifting a thumbnail out of the image that carried it.
+//
+// A thumbnail is a whole JPEG living inside an APP segment of another one, so
+// it can be written out as a file of its own -- but only if what is left behind
+// is still a JPEG.  The two carriers need different surgery for that:
+//
+//   JFXX APP0   the segment is nothing but the thumbnail, so the whole segment
+//               goes.  What remains is an ordinary JFIF file.
+//   Exif APP1   the segment is metadata that should survive, so only the
+//               thumbnail is cut, the segment length is corrected, and the
+//               IFD's thumbnail-length tag is zeroed -- which is exactly what
+//               an Exif block with no thumbnail looks like.
+//
+// Restoration puts the span back and undoes the byte edits, so the original is
+// reproduced exactly either way.  Everything here is in the image's own
+// coordinates; a thumbnail's own thumbnails are described the same way, in its
+// coordinates, and the recursion composes.
+//=============================================================================
+
+enum { JD_MAX_TDEPTH = 32 };   // how deep the extraction will follow thumbnails
+
+struct Fix {                   // bytes the patch overwrote, to be put back
+  qword at;
+  uint  len;
+  byte  old[8];
+  byte  neu[8];
+};
+
+struct Cut {                   // one thumbnail lifted out of one image
+  qword at, end;               // the span removed from the image
+  qword child_beg, child_end;  // the thumbnail inside that span
+  uint  child;                 // the file it was written as
+  qword child_len;             // its own reassembled length
+  Fix   fix[2];
+  uint  n_fix;
+};
+
+// Read len bytes at `at`; 0 if they are not there.
+static uint read_at( FILE* f, qword at, byte* p, uint len ) {
+  if( jd_seek( f, at )!=0 ) return 0;
+  return uint( fread( p, 1, len, f ) )==len;
+}
+
+// Work out what has to change in the image at [beg,end) for the thumbnail
+// `t` to be taken out of it.  Offsets in `t` are relative to beg.
+static uint plan_cut( FILE* f, qword beg, const pjpg0::thumb_span& t,
+                      qword child_end, Cut& c ) {
+  qword seg, seg_end, tpos;
+  uint  newlen;
+
+  seg     = beg + t.seg;
+  seg_end = beg + t.seg_end;
+  tpos    = beg + t.pos;
+
+  c.child_beg = tpos;
+  c.child_end = child_end;
+  c.n_fix     = 0;
+
+  if( t.carrier == M_APP0 ) {
+    // The whole segment exists to carry the thumbnail; nothing of it is worth
+    // keeping, and nothing that remains needs correcting.
+    c.at  = seg;
+    c.end = seg_end;
+    return 1;
+  }
+
+  // Exif: keep the segment, drop the thumbnail and whatever followed it inside
+  // the segment, then make the header agree with what is left.
+  if( tpos < seg+4 ) return 0;                  // not inside its own segment
+  c.at  = tpos;
+  c.end = seg_end;
+
+  newlen = uint( tpos - seg ) - 2;              // the length field counts itself
+  if( (newlen < 2) || (newlen > 0xFFFF) ) return 0;
+
+  Fix& L = c.fix[c.n_fix];
+  L.at = seg+2; L.len = 2;
+  if( !read_at( f, L.at, L.old, 2 ) ) return 0;
+  L.neu[0] = byte(newlen>>8); L.neu[1] = byte(newlen);
+  c.n_fix++;
+
+  // An IFD that still claims a thumbnail of N bytes, with the bytes gone, is
+  // not an Exif block any reader should have to make sense of.  Zeroing the
+  // length is how a file with no thumbnail says so.  A SHORT value lives in the
+  // first two bytes of the same four, so zeroing all four covers both formats.
+  if( t.fixup ) {
+    Fix& T = c.fix[c.n_fix];
+    T.at = beg + t.fixup; T.len = 4;
+    if( !read_at( f, T.at, T.old, 4 ) ) return 0;
+    T.neu[0] = T.neu[1] = T.neu[2] = T.neu[3] = 0;
+    c.n_fix++;
+  }
+  return 1;
+}
+
+// Copy [from,to) of the input to g, hashing what was read rather than what was
+// written -- the hash is of the original stream, and what goes out may be
+// patched.  Returns 0 on a short read or a write error.
+static uint pass_through( FILE* f, qword from, qword to, FILE* g, Fnv* h ) {
+  if( to<=from ) return 1;
+  return copy_range( f, from, to, g, h ) == to-from;
+}
+
+// Write the image at [beg,end) to g with `n` thumbnails taken out of it, in
+// increasing order of where they were.
+static uint write_patched( FILE* f, qword beg, qword end, Cut* cut, uint n, FILE* g, Fnv* h ) {
+  qword p;
+  uint  i,k;
+  byte  scratch[8];
+
+  p = beg;
+  for( i=0; i<n; i++ ) {
+    // The fixups of one cut always sit before the span it removes, so walking
+    // the cuts in order walks every edit in order.
+    for( k=0; k<cut[i].n_fix; k++ ) {
+      Fix& F = cut[i].fix[k];
+      if( !pass_through( f, p, F.at, g, h ) ) return 0;
+      if( !read_at( f, F.at, scratch, F.len ) ) return 0;
+      if( h ) h->add( scratch, F.len );          // the hash follows the original
+      if( fwrite( F.neu, 1, F.len, g )!=F.len ) { f_wrerr=1; return 0; }
+      p = F.at + F.len;
+    }
+    if( !pass_through( f, p, cut[i].at, g, h ) ) return 0;
+    if( h ) {                                    // the span still counts, unwritten
+      if( copy_range( f, cut[i].at, cut[i].end, 0, h ) != cut[i].end-cut[i].at ) return 0;
+    }
+    p = cut[i].end;
+  }
+  return pass_through( f, p, end, g, h );
+}
+
+
+// Write one image out as <prefix>NNNNNNNN.jpg with its thumbnails lifted into
+// files of their own, and its definition into the metainfo.  A thumbnail's
+// definition is written before the definition of the image that carried it, so
+// reading the metainfo forwards resolves every reference as it is met.
+//
+// `sp` is this image's thumbnail list, snapshotted from the probe that found
+// it -- the probe object is reused to look inside each thumbnail in turn, so
+// its own list does not survive the first step down.
+struct Opts;
+static uint emit_image( FILE* f, const char* prefix, FILE* g,
+                        qword beg, qword end, uint flags, uint add_len,
+                        const pjpg0::thumb_span* sp, uint n_sp, uint spans_lost,
+                        uint depth, uint* next_idx, Fnv* h,
+                        const Opts& O, uint tag, uint* out_index, qword* out_file_len );
+
 struct Opts {
   uint  f_entropy;   // -s clears: skip the entropy-coded scans
   uint  f_relaxed;   // -r sets:   accept damaged entropy data
@@ -446,13 +619,114 @@ struct Opts {
   qword min_size;    // -m N
   qword sof_limit;   // -L N
   uint  siglen;      // 3 = anchor on FF D8 FF, 2 = FF D8
+  uint  f_nothumb;   // -n: leave thumbnails inside the images that carry them
 };
+
+static uint emit_image( FILE* f, const char* prefix, FILE* g,
+                        qword beg, qword end, uint flags, uint add_len,
+                        const pjpg0::thumb_span* sp, uint n_sp, uint spans_lost,
+                        uint depth, uint* next_idx, Fnv* h,
+                        const Opts& O, uint tag, uint* out_index, qword* out_file_len ) {
+  char  name[1024];
+  FILE* gj;
+  Cut   cut[pjpg0::MAX_THUMBS];
+  pjpg0::thumb_span kid[pjpg0::MAX_THUMBS];
+  uint  n_cut,i,k,n_kid,kid_lost,cidx;
+  qword file_len,taken,cbeg,cend,clen;
+
+  cidx = (*next_idx)++;
+  n_cut = 0;
+
+  // Follow each thumbnail down.  The probe both vouches for it -- only a
+  // thumbnail that parses as a JPEG on its own can be written out as one -- and
+  // tells us what it carries in turn.
+  if( !O.f_nothumb && (depth < JD_MAX_TDEPTH) ) {
+    for( i=0; i<n_sp; i++ ) {
+      if( n_cut >= uint(pjpg0::MAX_THUMBS) ) break;
+      cbeg = beg + sp[i].pos;
+      if( (cbeg < beg) || (cbeg >= end) ) continue;
+
+      if( !PR.probe( f, cbeg, beg + sp[i].pos + sp[i].len ) ) continue;
+      cend = PR.end_pos;
+      if( (cend <= cbeg) || (cend > end) ) continue;
+
+      n_kid = PR.P.n_thumbs; kid_lost = PR.P.f_thumbs_lost;
+      if( n_kid > uint(pjpg0::MAX_THUMBS) ) n_kid = uint(pjpg0::MAX_THUMBS);
+      for( k=0; k<n_kid; k++ ) kid[k] = PR.P.thumbs[k];
+
+      if( !plan_cut( f, beg, sp[i], cend, cut[n_cut] ) ) continue;
+
+      if( !emit_image( f, prefix, g, cbeg, cend, JDF_THUMB, 0,
+                       kid, n_kid, kid_lost, depth+1, next_idx, 0, O,
+                       JDR_CHILD, &cut[n_cut].child, &clen ) ) return 0;
+      cut[n_cut].child_len = cend - cbeg;
+      (void)clen;
+      n_cut++;
+    }
+  }
+  if( spans_lost && f_verbose )
+    printf( "          %12llu    more thumbnails than the parser tracks, some left in place\n",
+            (unsigned long long)beg );
+
+  // --- the image file ------------------------------------------------------
+  if( snprintf( name, sizeof(name), "%s%08X.jpg", prefix, cidx )>=int(sizeof(name)) ) {
+    fprintf( stderr, "jpegdet: prefix too long\n" ); return 0;
+  }
+  gj = fopen( name, "wb" );
+  if( gj==0 ) { fprintf( stderr, "jpegdet: cannot write %s\n", name ); return 0; }
+
+  if( !write_patched( f, beg, end, cut, n_cut, gj, h ) ) {
+    fprintf( stderr, f_wrerr ? "jpegdet: write error on %s\n"
+                             : "jpegdet: short read while writing %s\n", name );
+    fclose(gj); return 0;
+  }
+  if( flags & JDF_ADDED_EOI ) { putc( 0xFF, gj ); putc( 0xD9, gj ); }
+  if( !close_ok( gj ) ) { fprintf( stderr, "jpegdet: write error on %s\n", name ); return 0; }
+
+  taken = 0;
+  for( i=0; i<n_cut; i++ ) taken += cut[i].end - cut[i].at;
+  file_len = (end-beg) - taken;
+
+  // --- its definition ------------------------------------------------------
+  putc( tag, g );
+  put_u32( g, cidx );
+  put_u64( g, file_len );
+  put_u32( g, add_len );
+  put_u32( g, flags );
+  put_u64( g, end-beg );
+  put_u32( g, n_cut );
+  for( i=0; i<n_cut; i++ ) {
+    Cut& c = cut[i];
+    put_u64( g, c.at - beg );
+    put_u32( g, uint( c.child_beg - c.at ) );
+    if( copy_range( f, c.at, c.child_beg, g, 0 ) != c.child_beg-c.at ) return 0;
+    put_u32( g, c.child );
+    put_u64( g, c.child_len );
+    put_u32( g, uint( c.end - c.child_end ) );
+    if( copy_range( f, c.child_end, c.end, g, 0 ) != c.end-c.child_end ) return 0;
+    put_u32( g, c.n_fix );
+    for( k=0; k<c.n_fix; k++ ) {
+      put_u64( g, c.fix[k].at - beg );
+      put_u32( g, c.fix[k].len );
+      if( fwrite( c.fix[k].old, 1, c.fix[k].len, g )!=c.fix[k].len ) { f_wrerr=1; return 0; }
+    }
+  }
+
+  if( f_verbose && (tag==JDR_CHILD) )
+    printf( "          %08X  thumbnail %10llu bytes%s\n", cidx,
+            (unsigned long long)(end-beg), n_cut ? "  (and its own)" : "" );
+
+  *out_index    = cidx;
+  *out_file_len = file_len;
+  return 1;
+}
 
 static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
   char name[1024];
   FILE *f,*g,*gj;
-  qword file_size, pos, committed, s, e, gap, n_gap, n_img;
-  uint idx, flags, add_len, ok;
+  qword file_size, pos, committed, s, e, gap, n_gap, n_img, this_len;
+  uint idx, n_top, flags, add_len, ok, k, n_sp, sp_lost, this_idx;
+  pjpg0::thumb_span sp[pjpg0::MAX_THUMBS];
   Fnv H;
 
   f = fopen( inpname, "rb" );
@@ -473,6 +747,7 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
   put_u32( g, JDM_VERSION );
 
   PR.init();
+  PR.f_thumbs  = !O.f_nothumb;
   PR.f_entropy = O.f_entropy;
   PR.f_relaxed = O.f_relaxed;
   PR.f_tail    = O.f_tail;
@@ -480,7 +755,7 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
   SC.init( f, O.siglen );
   H.init();
 
-  pos = 0; committed = 0; idx = 0; n_gap = 0; n_img = 0;
+  pos = 0; committed = 0; idx = 0; n_top = 0; n_gap = 0; n_img = 0;
 
   while(1) {
     s = SC.find( pos, file_size );
@@ -508,44 +783,33 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
     if( PR.f_scan_bad )  flags |= JDF_BAD_SCAN;
     if( PR.f_multi_soi ) flags |= JDF_MULTI_SOI;
 
-    if( snprintf( name, sizeof(name), "%s%08X.jpg", prefix, idx )>=int(sizeof(name)) ) {
-      fprintf( stderr, "jpegdet: prefix too long\n" ); fclose(g); fclose(f); return 2;
-    }
-    gj = fopen( name, "wb" );
-    if( gj==0 ) { fprintf( stderr, "jpegdet: cannot write %s\n", name ); fclose(g); fclose(f); return 2; }
+    // The probe object is about to be reused on this image's thumbnails, so
+    // take what it found before stepping down into them.
+    n_sp = PR.P.n_thumbs; sp_lost = PR.P.f_thumbs_lost;
+    if( n_sp > uint(pjpg0::MAX_THUMBS) ) n_sp = uint(pjpg0::MAX_THUMBS);
+    for( k=0; k<n_sp; k++ ) sp[k] = PR.P.thumbs[k];
 
-    // The gap before the image, hashed and stored inline in the metainfo.
+    // The gap before the image, hashed and stored inline in the metainfo.  It
+    // goes out before the image's own record, and so before the records of the
+    // thumbnails that come out of it -- but those carry no gap of their own, so
+    // the literal data still reaches "d" in stream order.
     gap = s-committed;
     putc( JDR_IMAGE, g );
     put_u64( g, gap );
     if( copy_range( f, committed, s, g, &H )!=gap ) {
       fprintf( stderr, f_wrerr ? "jpegdet: write error on the metainfo file\n"
                                : "jpegdet: short read on the gap before image %u\n", idx );
-      fclose(gj); fclose(g); fclose(f); return 2;
+      fclose(g); fclose(f); return 2;
     }
     n_gap += gap;
 
-    // The image itself, byte for byte out of the stream.
-    if( copy_range( f, s, e, gj, &H )!=e-s ) {
-      fprintf( stderr, f_wrerr ? "jpegdet: write error on %s%08X.jpg\n"
-                               : "jpegdet: short read on image %s%08X\n", prefix, idx );
-      fclose(gj); fclose(g); fclose(f); return 2;
-    }
-    // A stream that ends mid-image leaves a file no decoder will open.  Two
-    // bytes fix that, and add_len tells "d" to leave them behind.
-    if( flags & JDF_ADDED_EOI ) { putc( 0xFF, gj ); putc( 0xD9, gj ); }
-    if( !close_ok( gj ) ) {
-      fprintf( stderr, "jpegdet: write error on %s%08X.jpg\n", prefix, idx );
+    if( !emit_image( f, prefix, g, s, e, flags, add_len, sp, n_sp, sp_lost,
+                     0, &idx, &H, O, JDR_IMAGE_DEF, &this_idx, &this_len ) ) {
       fclose(g); fclose(f); return 2;
     }
 
-    put_u64( g, e-s );
-    put_u32( g, add_len );
-    put_u32( g, flags );
-    put_u32( g, idx );
-
     if( f_verbose ) {
-      printf( "%08X  %12llu .. %-12llu  %10llu bytes%s%s%s\n", idx,
+      printf( "%08X  %12llu .. %-12llu  %10llu bytes%s%s%s\n", this_idx,
               (unsigned long long)s, (unsigned long long)e,
               (unsigned long long)(e-s),
               (flags & JDF_ADDED_EOI) ? "  [EOI added]"   : "",
@@ -553,8 +817,8 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
               (flags & JDF_MULTI_SOI) ? "  [cut at the next image]" : "" );
     }
 
-    n_img += e-s;
-    idx++;
+    n_img += e-s;      // emit_image allocated the indices, this one and its thumbnails
+    n_top++;
     committed = e;
     pos = e;
   }
@@ -576,9 +840,14 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
   if( !close_ok( g ) ) { fprintf( stderr, "jpegdet: write error on the metainfo file\n" ); fclose(f); return 2; }
   fclose( f );
 
-  printf( "%u image(s), %llu image byte(s), %llu literal byte(s), %llu total\n",
-          idx, (unsigned long long)n_img, (unsigned long long)n_gap,
-          (unsigned long long)file_size );
+  if( idx > n_top )
+    printf( "%u image(s) and %u thumbnail(s), %llu image byte(s), %llu literal byte(s), %llu total\n",
+            n_top, idx-n_top, (unsigned long long)n_img, (unsigned long long)n_gap,
+            (unsigned long long)file_size );
+  else
+    printf( "%u image(s), %llu image byte(s), %llu literal byte(s), %llu total\n",
+            n_top, (unsigned long long)n_img, (unsigned long long)n_gap,
+            (unsigned long long)file_size );
 
   return 0;
 }
@@ -587,22 +856,251 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
 // d: restore
 //=============================================================================
 
+//=============================================================================
+// d: restore
+//
+// Reassembly is the mirror of emit_image: an image's file holds it with its
+// thumbnails taken out, and its definition says where they went and what the
+// patch overwrote.  Putting one back means walking its file, stopping at each
+// recorded offset to undo a byte edit or to drop a thumbnail in -- and a
+// thumbnail is an image, so dropping one in is the same walk again, one level
+// down, written straight through to the output rather than assembled anywhere.
+//=============================================================================
+
+struct RFix { qword at; uint len; byte old[8]; };
+
+struct RThumb {
+  qword at;              // where the span goes back, in the reassembled image
+  uint  pre_len;  byte* pre;
+  uint  child;
+  qword child_len;
+  uint  post_len; byte* post;
+  uint  n_fix;    RFix  fix[2];
+};
+
+struct RDef {
+  uint   used;
+  qword  file_len;
+  uint   add_len, flags;
+  qword  orig_len;
+  uint   n_thumbs;
+  RThumb* th;
+};
+
+static RDef*  rdef;
+static uint   n_rdef;
+
+static uint rdef_room( uint idx ) {
+  uint want;
+  RDef* p;
+  if( idx < n_rdef ) return 1;
+  if( idx > 0x00FFFFFF ) return 0;                 // an index that size is corruption
+  want = idx + 64;
+  p = (RDef*)realloc( rdef, want*sizeof(RDef) );
+  if( p==0 ) return 0;
+  rdef = p;
+  memset( rdef+n_rdef, 0, (want-n_rdef)*sizeof(RDef) );
+  n_rdef = want;
+  return 1;
+}
+
+static void rdef_free( void ) {
+  uint i,k;
+  for( i=0; i<n_rdef; i++ ) {
+    if( rdef[i].th ) {
+      for( k=0; k<rdef[i].n_thumbs; k++ ) { free(rdef[i].th[k].pre); free(rdef[i].th[k].post); }
+      free( rdef[i].th );
+    }
+  }
+  free( rdef ); rdef = 0; n_rdef = 0;
+}
+
+// Read len bytes of the metainfo into a fresh block.  Zero length is a null
+// pointer, not a zero-byte allocation, so the free path stays uniform.
+static byte* get_blob( FILE* f, uint len ) {
+  byte* p;
+  if( len==0 ) return 0;
+  p = (byte*)malloc( len );
+  if( p==0 ) { f_bad=1; return 0; }
+  if( fread( p, 1, len, f )!=len ) { f_bad=1; free(p); return 0; }
+  return p;
+}
+
+// One image definition, as written by emit_image.
+static uint read_def( FILE* f, uint* out_index ) {
+  uint idx,i,k;
+  RDef* D;
+
+  idx = get_u32( f );
+  if( f_bad || !rdef_room( idx ) ) return 0;
+  D = &rdef[idx];
+  if( D->used ) return 0;                          // the same index defined twice
+
+  D->file_len = get_u64( f );
+  D->add_len  = get_u32( f );
+  D->flags    = get_u32( f );
+  D->orig_len = get_u64( f );
+  D->n_thumbs = get_u32( f );
+  if( f_bad ) return 0;
+  if( D->n_thumbs > uint(pjpg0::MAX_THUMBS) ) return 0;
+
+  if( D->n_thumbs ) {
+    D->th = (RThumb*)calloc( D->n_thumbs, sizeof(RThumb) );
+    if( D->th==0 ) return 0;
+  }
+  for( i=0; i<D->n_thumbs; i++ ) {
+    RThumb& T = D->th[i];
+    T.at       = get_u64( f );
+    T.pre_len  = get_u32( f );  if( f_bad ) return 0;
+    T.pre      = get_blob( f, T.pre_len );  if( f_bad ) return 0;
+    T.child    = get_u32( f );
+    T.child_len= get_u64( f );
+    T.post_len = get_u32( f );  if( f_bad ) return 0;
+    T.post     = get_blob( f, T.post_len ); if( f_bad ) return 0;
+    T.n_fix    = get_u32( f );  if( f_bad ) return 0;
+    if( T.n_fix > uint(DIM(T.fix)) ) return 0;
+    for( k=0; k<T.n_fix; k++ ) {
+      T.fix[k].at  = get_u64( f );
+      T.fix[k].len = get_u32( f );
+      if( f_bad || (T.fix[k].len > uint(DIM(T.fix[k].old))) ) return 0;
+      if( fread( T.fix[k].old, 1, T.fix[k].len, f )!=T.fix[k].len ) { f_bad=1; return 0; }
+    }
+    if( T.child >= n_rdef || !rdef[T.child].used ) return 0;   // must be defined already
+  }
+
+  D->used = 1;
+  *out_index = idx;
+  return 1;
+}
+
+// Copy n bytes of fj to g, hashing them.  Returns 0 short.
+static uint copy_file( FILE* fj, qword n, FILE* g, Fnv* h ) {
+  uint want,got;
+  while( n>0 ) {
+    want = uint( (n < qword(sizeof(copybuf))) ? n : qword(sizeof(copybuf)) );
+    got  = uint( fread( copybuf, 1, want, fj ) );
+    if( got==0 ) return 0;
+    h->add( copybuf, got );
+    if( fwrite( copybuf, 1, got, g )!=got ) { f_wrerr=1; return 0; }
+    n -= got;
+  }
+  return 1;
+}
+
+static uint emit_blob( const byte* p, uint n, FILE* g, Fnv* h ) {
+  if( n==0 ) return 1;
+  h->add( p, n );
+  if( fwrite( p, 1, n, g )!=n ) { f_wrerr=1; return 0; }
+  return 1;
+}
+
+// Write image `idx`'s original bytes to g.
+static uint assemble( const char* prefix, uint idx, FILE* g, Fnv* h, uint depth ) {
+  char  name[1024];
+  FILE* fj;
+  RDef* D;
+  uint  i,k,ok,below;
+  qword have,orig_p,file_p,upto;
+
+  if( depth > JD_MAX_TDEPTH+1 ) { fprintf( stderr, "jpegdet: thumbnails nested past the limit\n" ); return 0; }
+  if( idx >= n_rdef || !rdef[idx].used ) {
+    fprintf( stderr, "jpegdet: the metainfo refers to image %08X, which it never defines\n", idx );
+    return 0;
+  }
+  D = &rdef[idx];
+
+  if( snprintf( name, sizeof(name), "%s%08X.jpg", prefix, idx )>=int(sizeof(name)) ) {
+    fprintf( stderr, "jpegdet: prefix too long\n" ); return 0;
+  }
+  fj = fopen( name, "rb" );
+  if( fj==0 ) {
+    fprintf( stderr, "jpegdet: %s is missing -- cannot rebuild the stream without it\n", name );
+    return 0;
+  }
+  // The file has to be exactly what "c" wrote: the image with its thumbnails
+  // taken out, plus whatever was appended to make it open.  Anything else means
+  // it was edited or replaced, and splicing it in regardless would corrupt the
+  // output without saying so.
+  have = file_size_of( fj );
+  if( have != D->file_len + D->add_len ) {
+    fprintf( stderr, "jpegdet: %s is %llu bytes, the metainfo says %llu\n",
+             name, (unsigned long long)have, (unsigned long long)(D->file_len + D->add_len) );
+    fclose(fj); return 0;
+  }
+  rewind( fj );
+
+  ok = 1; below = 0;
+  orig_p = 0;                       // how much of the original has been written
+  file_p = 0;                       // how much of the file has been read
+  for( i=0; ok && (i<D->n_thumbs); i++ ) {
+    RThumb& T = D->th[i];
+
+    // Undo the byte edits the patch made.  They sit inside the part of the
+    // image the file still holds, ahead of the span this thumbnail came out of.
+    for( k=0; ok && (k<T.n_fix); k++ ) {
+      RFix& F = T.fix[k];
+      if( (F.at < orig_p) || (F.at + F.len > T.at) ) { ok = 0; break; }
+      upto = F.at - orig_p;
+      if( !copy_file( fj, upto, g, h ) ) { ok=0; break; }
+      orig_p += upto; file_p += upto;
+      if( jd_seek( fj, file_p + F.len )!=0 ) { ok=0; break; }   // drop the patched bytes
+      if( !emit_blob( F.old, F.len, g, h ) ) { ok=0; break; }
+      orig_p += F.len; file_p += F.len;
+    }
+    if( !ok ) break;
+
+    if( T.at < orig_p ) { ok = 0; break; }
+    upto = T.at - orig_p;
+    if( !copy_file( fj, upto, g, h ) ) { ok=0; break; }
+    orig_p += upto; file_p += upto;
+
+    // The span itself: what framed the thumbnail, the thumbnail, and whatever
+    // followed it inside the same segment.
+    if( !emit_blob( T.pre, T.pre_len, g, h ) ) { ok=0; break; }
+    if( !assemble( prefix, T.child, g, h, depth+1 ) ) { ok=0; below=1; break; }
+    if( !emit_blob( T.post, T.post_len, g, h ) ) { ok=0; break; }
+    orig_p += T.pre_len + T.child_len + T.post_len;
+  }
+
+  if( ok && (file_p <= D->file_len) ) {
+    if( !copy_file( fj, D->file_len - file_p, g, h ) ) ok = 0;
+    else orig_p += D->file_len - file_p;
+  } else if( ok ) ok = 0;
+
+  fclose( fj );
+  if( !ok ) {
+    // A thumbnail that could not be rebuilt has already said why; saying that
+    // its parent therefore does not fit adds nothing but noise.
+    if( f_wrerr || below ) return 0;
+    fprintf( stderr, "jpegdet: %s does not fit the metainfo's description of it\n", name );
+    return 0;
+  }
+  if( orig_p != D->orig_len ) {
+    fprintf( stderr, "jpegdet: rebuilding image %08X gave %llu bytes, the metainfo says %llu\n",
+             idx, (unsigned long long)orig_p, (unsigned long long)D->orig_len );
+    return 0;
+  }
+  return 1;
+}
+
 static int cmd_d( const char* prefix, const char* outname ) {
-  char name[1024], magic[9];
-  FILE *f,*g,*fj;
-  qword gap, img_len, orig_size, orig_hash, written, have;
-  uint tag, version, add_len, flags, idx, n;
+  char magic[9];
+  FILE *f,*g;
+  qword gap, orig_size, orig_hash, written;
+  uint tag, version, idx, n;
   Fnv H;
 
-  if( snprintf( name, sizeof(name), "%s.jdm", prefix )>=int(sizeof(name)) ) {
-    fprintf( stderr, "jpegdet: prefix too long\n" ); return 2;
-  }
-  f = fopen( name, "rb" );
-  if( f==0 ) { fprintf( stderr, "jpegdet: cannot read %s\n", name ); return 2; }
-
-  if( fread( magic, 1, 8, f )!=8 || memcmp( magic, JDM_MAGIC, 8 )!=0 ) {
-    fprintf( stderr, "jpegdet: %s is not a jpegdet metainfo file\n", name );
-    fclose(f); return 2;
+  {
+    char name[1024];
+    if( snprintf( name, sizeof(name), "%s.jdm", prefix )>=int(sizeof(name)) ) {
+      fprintf( stderr, "jpegdet: prefix too long\n" ); return 2;
+    }
+    f = fopen( name, "rb" );
+    if( f==0 ) { fprintf( stderr, "jpegdet: cannot read %s\n", name ); return 2; }
+    if( fread( magic, 1, 8, f )!=8 || memcmp( magic, JDM_MAGIC, 8 )!=0 ) {
+      fprintf( stderr, "jpegdet: %s is not a jpegdet metainfo file\n", name );
+      fclose(f); return 2;
+    }
   }
   f_bad = 0;
   version = get_u32( f );
@@ -614,9 +1112,8 @@ static int cmd_d( const char* prefix, const char* outname ) {
   g = fopen( outname, "wb" );
   if( g==0 ) { fprintf( stderr, "jpegdet: cannot write %s\n", outname ); fclose(f); return 2; }
 
-  H.init();
-  written = 0;
-  n = 0;
+  H.init(); written = 0; n = 0; f_wrerr = 0;
+  orig_size = 0; orig_hash = 0;
 
   while(1) {
     tag = uint( getc(f) );
@@ -625,7 +1122,6 @@ static int cmd_d( const char* prefix, const char* outname ) {
     if( tag==JDR_END ) {
       gap = get_u64( f );
       if( f_bad ) goto truncated;
-      // The trailing literal data, straight out of the metainfo.
       while( gap>0 ) {
         uint want = uint( (gap < qword(sizeof(copybuf))) ? gap : qword(sizeof(copybuf)) );
         uint got  = uint( fread( copybuf, 1, want, f ) );
@@ -643,65 +1139,41 @@ static int cmd_d( const char* prefix, const char* outname ) {
       break;
     }
 
-    if( tag!=JDR_IMAGE ) {
-      fprintf( stderr, "jpegdet: unknown record type '%c' in the metainfo\n", (tag>=0x20 && tag<0x7F) ? int(tag) : '?' );
-      goto fail;
+    if( tag==JDR_CHILD ) {                      // a thumbnail, defined for later
+      if( !read_def( f, &idx ) ) goto badrec;
+      continue;
     }
 
-    // The literal run before this image.
-    gap = get_u64( f );
-    if( f_bad ) goto truncated;
-    while( gap>0 ) {
-      uint want = uint( (gap < qword(sizeof(copybuf))) ? gap : qword(sizeof(copybuf)) );
-      uint got  = uint( fread( copybuf, 1, want, f ) );
-      if( got==0 ) goto truncated;
-      H.add( copybuf, got );
-      if( fwrite( copybuf, 1, got, g )!=got ) goto wrfail;
-      written += got; gap -= got;
-    }
-
-    img_len = get_u64( f );
-    add_len = get_u32( f );
-    flags   = get_u32( f );
-    idx     = get_u32( f );
-    if( f_bad ) goto truncated;
-    (void)flags;
-
-    if( snprintf( name, sizeof(name), "%s%08X.jpg", prefix, idx )>=int(sizeof(name)) ) {
-      fprintf( stderr, "jpegdet: prefix too long\n" ); goto fail;
-    }
-    fj = fopen( name, "rb" );
-    if( fj==0 ) {
-      fprintf( stderr, "jpegdet: %s is missing -- cannot rebuild the stream without it\n", name );
-      goto fail;
-    }
-    // The file must be exactly what "c" wrote: the stream's bytes, plus
-    // whatever was appended to make it decodable.  Anything else means it was
-    // edited or replaced, and quietly splicing it in would corrupt the output.
-    have = file_size_of( fj );
-    if( have != img_len+add_len ) {
-      fprintf( stderr, "jpegdet: %s is %llu bytes, the metainfo says %llu\n",
-               name, (unsigned long long)have, (unsigned long long)(img_len+add_len) );
-      fclose(fj); goto fail;
-    }
-    rewind( fj );
-    {
-      qword left = img_len;
-      while( left>0 ) {
-        uint want = uint( (left < qword(sizeof(copybuf))) ? left : qword(sizeof(copybuf)) );
-        uint got  = uint( fread( copybuf, 1, want, fj ) );
-        if( got==0 ) { fprintf( stderr, "jpegdet: short read on %s\n", name ); fclose(fj); goto fail; }
+    if( tag==JDR_IMAGE ) {                      // the gap before a top-level image
+      gap = get_u64( f );
+      if( f_bad ) goto truncated;
+      while( gap>0 ) {
+        uint want = uint( (gap < qword(sizeof(copybuf))) ? gap : qword(sizeof(copybuf)) );
+        uint got  = uint( fread( copybuf, 1, want, f ) );
+        if( got==0 ) goto truncated;
         H.add( copybuf, got );
-        if( fwrite( copybuf, 1, got, g )!=got ) { fclose(fj); goto wrfail; }
-        written += got; left -= got;
+        if( fwrite( copybuf, 1, got, g )!=got ) goto wrfail;
+        written += got; gap -= got;
       }
+      continue;
     }
-    fclose( fj );
-    n++;
+
+    if( tag==JDR_IMAGE_DEF ) {                  // ... and the image itself
+      if( !read_def( f, &idx ) ) goto badrec;
+      if( !assemble( prefix, idx, g, &H, 0 ) ) { if( f_wrerr ) goto wrfail; goto fail; }
+      written += rdef[idx].orig_len;
+      n++;
+      continue;
+    }
+
+    fprintf( stderr, "jpegdet: unknown record type '%c' in the metainfo\n",
+             (tag>=0x20 && tag<0x7F) ? int(tag) : '?' );
+    goto fail;
   }
 
   if( !close_ok( g ) ) goto wrfail_closed;
   fclose( f );
+  rdef_free();
 
   if( written!=orig_size ) {
     fprintf( stderr, "jpegdet: rebuilt %llu bytes, the original was %llu\n",
@@ -716,6 +1188,10 @@ static int cmd_d( const char* prefix, const char* outname ) {
   printf( "%u image(s), %llu bytes restored and verified\n", n, (unsigned long long)written );
   return 0;
 
+badrec:
+  fprintf( stderr, f_bad ? "jpegdet: the metainfo file is truncated\n"
+                         : "jpegdet: a malformed image definition in the metainfo\n" );
+  goto fail;
 truncated:
   fprintf( stderr, "jpegdet: the metainfo file is truncated\n" );
   goto fail;
@@ -723,14 +1199,16 @@ wrfail:
   fclose(g);
 wrfail_closed:
   fprintf( stderr, "jpegdet: write error on %s\n", outname );
-  fclose(f);
+  fclose(f); rdef_free();
+  remove( outname );
   return 2;
 fail:
-  fclose(g); fclose(f);
+  fclose(g); fclose(f); rdef_free();
+  // Whatever was written is a prefix of the original at best.  Leaving it named
+  // as the restoration invites it being taken for one.
+  remove( outname );
   return 2;
 }
-
-//=============================================================================
 
 static void usage( const char* me ) {
   fprintf( stderr,
@@ -747,6 +1225,9 @@ static void usage( const char* me ) {
     "  -r    relaxed: accept an image whose entropy data does not decode cleanly.\n"
     "  -t    also carve a final image that the stream cut short, appending the EOI\n"
     "        it needs to open (\"d\" removes it again).\n"
+    "  -n    leave thumbnails where they are.  By default a JPEG thumbnail is\n"
+    "        written out as an image of its own and the segment that carried it\n"
+    "        is patched, so what is left is still a JPEG -- without one.\n"
     "  -A    anchor only on FF D8 FF.  Faster on a big stream, but misses an\n"
     "        image whose SOI is followed by something other than a marker.\n"
     "  -m N  ignore anything shorter than N bytes (default 128).\n"
@@ -766,6 +1247,7 @@ int main( int argc, char** argv ) {
   O.min_size  = 128;
   O.sof_limit = 0;             // 0 = leave JpegProbe's default in place
   O.siglen    = 2;
+  O.f_nothumb = 0;
 
   while( (argi<argc) && (argv[argi][0]=='-') && argv[argi][1] ) {
     const char* o = argv[argi]+1;
@@ -774,6 +1256,7 @@ int main( int argc, char** argv ) {
     case 's': O.f_entropy = 0; argi++; continue;
     case 'r': O.f_relaxed = 1; argi++; continue;
     case 't': O.f_tail    = 1; argi++; continue;
+    case 'n': O.f_nothumb = 1; argi++; continue;
     case 'v': f_verbose   = 1; argi++; continue;
     case 'A': O.siglen    = 3; argi++; continue;
     case 'm': if( argi+1<argc ) { O.min_size  = qword(strtoull(argv[argi+1],0,0)); argi+=2; continue; } break;

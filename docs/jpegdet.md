@@ -47,33 +47,40 @@ positions start with `FF D8`; none of them survives.
 For a stream that goes *junk, image, junk, image, junk*:
 
 ```
-<prefix>00000000.jpg     the first image, byte for byte out of the stream
-<prefix>00000001.jpg     the second
-<prefix>.jdm             the three runs of junk, and how to interleave them
+<prefix>00000000.jpg     the first image, with its thumbnails taken out
+<prefix>00000001.jpg     a thumbnail that came out of it
+<prefix>00000002.jpg     the second image
+<prefix>.jdm             the three runs of junk, and how to put it all back
 ```
+
+(`-n` leaves thumbnails inside the images carrying them, and then a file is
+exactly a byte range of the stream — see §3.)
 
 The `.jdm` is a flat, record-tagged, little-endian file:
 
 | | field | meaning |
 |---|---|---|
-| header | `"JPEGDET1"` | magic, 8 bytes |
-| | `u32 version` | 1 |
-| `'I'` record, once per image | `u64 gap_len` | literal stream bytes before this image |
-| | *gap_len bytes* | those bytes |
-| | `u64 img_len` | how much of the .jpg belongs to the stream |
-| | `u32 add_len` | bytes appended to the .jpg that do not |
-| | `u32 flags` | see below |
-| | `u32 index` | which `<prefix>NNNNNNNN.jpg` this is |
-| `'E'` record, once | `u64 tail_len` | literal bytes after the last image |
-| | *tail_len bytes* | those bytes |
-| | `u64 orig_size` | the input's length |
-| | `u64 orig_hash` | FNV-1a 64 of the input |
+| header | `"JPEGDET2"` | magic, 8 bytes |
+| | `u32 version` | 2 |
+| `'I'` record | `u64 gap_len` + *bytes* | the literal stream data before a top-level image |
+| `'D'` record | *an image definition* | that image, straight after its gap |
+| `'C'` record | *an image definition* | a thumbnail, written before the image that carried it |
+| `'E'` record, once | `u64 tail_len` + *bytes* | literal data after the last image |
+| | `u64 orig_size`, `u64 orig_hash` | the input's length, and FNV-1a 64 of it |
 | | `"JDMEND"` | terminator |
 
-Flags: `1` an EOI was synthesised, `2` accepted under `-r` with entropy data that
-did not decode, `4` cut short by the next image's SOI rather than by an EOI.
+An image definition:
 
-Three deliberate choices:
+| field | meaning |
+|---|---|
+| `u32 index` | which `<prefix>NNNNNNNN.jpg` holds it |
+| `u64 file_len` | bytes of that file that are image data |
+| `u32 add_len` | bytes of it that are not (a synthesised EOI) |
+| `u32 flags` | `1` EOI synthesised, `2` damaged entropy data accepted under `-r`, `4` cut at the next image's SOI, `8` this image is a thumbnail |
+| `u64 orig_len` | what putting the thumbnails back has to produce |
+| `u32 n_thumbs` | then per thumbnail: `u64 cut_at`, `u32 pre_len` + bytes, `u32 child`, `u64 child_len`, `u32 post_len` + bytes, `u32 n_fix` + `{u64 offset, u32 len, bytes}` |
+
+Four deliberate choices:
 
 * **Record-tagged, not counted.** The number of images is not known until the
   input is exhausted, and a header field patched by seeking back afterwards is a
@@ -85,22 +92,76 @@ Three deliberate choices:
   `fwrite` would agree with none of them.
 * **`index` is stored, not implied by record order.** A deleted or renamed `.jpg`
   then produces an error message rather than a silently misassembled output.
+* **A thumbnail is defined before the image that carried it.** Everything a
+  definition refers to has therefore already been read, so `d` still needs only
+  one forward pass — no seeking, and no buffering the gap data to get at a
+  reference that has not arrived yet.
 
-`d` also checks each `.jpg` is exactly `img_len + add_len` bytes before splicing
-it in, and verifies the rebuilt length and hash at the end. Editing an extracted
-image and re-running `d` is reported, not baked into the output.
+`d` checks each `.jpg` is exactly `file_len + add_len` bytes before splicing it
+in, that every reassembled image comes to its recorded `orig_len`, and that the
+whole stream matches the recorded size and hash. A deleted, truncated or edited
+file is reported and the output removed rather than left looking like a
+restoration.
 
-## 3. The invariant that makes it lossless
+## 3. Thumbnails
 
-Every byte of the input is written **exactly once**, in order, unmodified: to a
-gap, to an image, or to the tail. Restoration is a concatenation.
+A JPEG thumbnail is a whole JPEG living inside an APP segment of another one, so
+by default `jpegdet` writes it out as an image of its own and patches the segment
+that carried it. `-n` turns that off and leaves every thumbnail where it is.
+
+The patch differs by carrier, because what is worth keeping does:
+
+| carrier | what happens |
+|---|---|
+| **JFXX APP0** (extension code `0x10`) | the segment is nothing but the thumbnail, so the whole segment goes. What is left is an ordinary JFIF file. |
+| **Exif APP1** (IFD compression tag `0x0103` = 6) | the segment is metadata that should survive, so only the thumbnail is cut. The segment length is corrected and the IFD's thumbnail-length tag (`0x0202` or `0x0117`) is zeroed — which is exactly what an Exif block with no thumbnail looks like. |
+
+```
+$ jpegdet -v c photo.jpg out/i
+          00000001  thumbnail       8342 bytes
+00000000             0 .. 516726            516726 bytes
+1 image(s) and 1 thumbnail(s), 516726 image byte(s), 0 literal byte(s), 516726 total
+
+$ pjpg out/i00000000.jpg | grep thumb
+thumbOfs=44 thumbLen=0 thumbTyp=6; pos=0044/0044      <- the Exif survives, the thumbnail is gone
+```
+
+A thumbnail is only lifted out if it parses as a JPEG on its own — the same
+acceptance predicate every other carved image goes through. One that does not is
+left in place, because writing out a file that will not open is the one thing
+this must not do. The same applies to a JFXX thumbnail that is not a JPEG at all:
+extension codes `0x11` (palette) and `0x13` (RGB) are raw pixels and stay put.
+
+Thumbnails nest, and so does this. Each extracted thumbnail is itself probed, so
+its own thumbnails come out as files in turn, up to `JD_MAX_TDEPTH` levels. What
+stops it is that limit rather than pjpg's `PjpgLevels`: pjpg nests one parser per
+level, but `jpegdet` re-probes each thumbnail on its own, so it goes deeper than
+pjpg's own recursion does. On `nest_deep.jpg`, which nests eight levels, pjpg
+walks four and `jpegdet` carves all eight.
+
+Restoration puts everything back exactly. The metainfo records, for each
+thumbnail, where the removed span was, what framed it, which file holds it, and
+the bytes the patch overwrote — so `d` re-inserts the span, undoes the edits, and
+reproduces the original byte for byte. A thumbnail's own thumbnails are described
+the same way in its own coordinates, and the recursion composes.
+
+## 4. The invariant that makes it lossless
+
+Every byte of the input is accounted for **exactly once**: it goes to a gap, to
+an image, to a thumbnail lifted out of an image, or to the tail — and where a
+patch changed a byte, the original is recorded beside it. Restoration walks that
+back.
 
 This is a property of the *partition*, not of the detection — so it holds no
 matter how badly the detector guesses. A stream with no JPEG in it round-trips
 through a `.jdm` that is one `'E'` record. The same invariant is what makes
 `rawdet.cpp` exact, and `jpegdet` keeps it for the same reason.
 
-## 4. Making the extracted files openable
+With `-n` the partition is a straight concatenation, as it was before thumbnails
+were extracted at all; the format is the same either way, with no thumbnail
+records in it.
+
+## 5. Making the extracted files openable
 
 An image is carved as the exact slice of the stream between its SOI and its EOI,
 so normally there is nothing to repair. Two cases need two bytes:
@@ -117,7 +178,7 @@ so normally there is nothing to repair. Two cases need two bytes:
 In both cases `FF D9` is appended to the `.jpg` and `add_len` records it, so `d`
 takes only `img_len` bytes back and the restoration stays exact.
 
-## 5. Conformance, not just parseability
+## 6. Conformance, not just parseability
 
 `pjpg` describes what is in a file; a carver has to decide whether the file is
 one. The two jobs disagree about several things `pjpg` notes and walks past but a
@@ -165,7 +226,7 @@ opens it" genuinely differ, and `jpegdet` follows T.81 rather than libjpeg:
 DNL supplies one and rejected when none ever comes (*"Empty JPEG image"*), even
 though libjpeg refuses both.
 
-## 6. Options
+## 7. Options
 
 ```
 -s    structure only: do not decode the entropy-coded scans.  Much faster.
@@ -174,6 +235,9 @@ though libjpeg refuses both.
 -r    relaxed: accept an image whose entropy data does not decode cleanly.
 -t    also carve a final image that the stream cut short, appending the EOI
       it needs to open ("d" removes it again).
+-n    leave thumbnails where they are.  By default a JPEG thumbnail is
+      written out as an image of its own and the segment that carried it
+      is patched, so what is left is still a JPEG -- without one.
 -A    anchor only on FF D8 FF.  Faster on a big stream, but misses an
       image whose SOI is followed by something other than a marker.
 -m N  ignore anything shorter than N bytes (default 128).
@@ -218,7 +282,7 @@ carrying a chunked ICC profile and an MPF index gets there well inside the
 default. Without the cap, a stream with many false signatures would cost a full
 read of the tail for each one.
 
-## 7. What it does and does not find
+## 8. What it does and does not find
 
 Measured on 48 conforming images produced by the JPEG XT reference encoder (see
 `exotic-samples.md`) — baseline, extended sequential, progressive, arithmetic,
@@ -247,13 +311,13 @@ Deliberately **not** carved:
 Throughput, on a stream of 16 concatenated real images: **52 MB/s** with full
 entropy decoding, **385 MB/s** with `-s`.
 
-## 8. Testing
+## 9. Testing
 
 ```sh
 make carve      # or 'make test', which includes it
 ```
 
-The `carve` case builds seven streams — a lone image, one sandwiched in text, two
+The `carve` case builds ten streams — a lone image, one sandwiched in text, two
 adjacent, two separated by noise, a stream with no JPEG, an empty stream, and an
 image whose EOI was stripped followed by another image — and asserts three things
 for each:
@@ -261,12 +325,14 @@ for each:
 1. `c` then `d` reproduces the input byte for byte.
 2. Every carved file decodes (judged by whether `djpeg` produces an image, not by
    its exit status: `libjpeg` exits 2 for a warning on a file it decoded fine).
-3. The number of images carved is exactly what that stream contains.
+3. The number of images carved is exactly what that stream contains — counted
+   from the summary line rather than from the files written, since a thumbnail
+   gets a file of its own too.
 
 The third assertion is the one that matters most: nothing stops a carver from
 being trivially lossless by never carving anything.
 
-Three of the ten streams are hazard regressions, each a defect that testing
+Three of them are hazard regressions, each a defect that testing
 actually found: `spin` (the padded-MCU blow-up above, run under a 20-second
 timeout rather than the 300 the others get, since the point is that it used to
 take 34), `poison` (a truncated *arithmetic* image in front of ordinary Huffman

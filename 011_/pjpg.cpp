@@ -34,6 +34,7 @@ struct pjpg1 {
     for( i=0; i<PjpgLevels; i++ ) {
       pjpg_[i].coro_init();
       pjpg_[i].level = i;
+      pjpg_[i].stream_base = 0;
       pjpg_[i].sub   = (i+1<PjpgLevels) ? &pjpg_[i+1] : 0;
       pjpg_[i].f_entropy = f_entropy;
     }
@@ -41,7 +42,9 @@ struct pjpg1 {
 
   template <typename T> uint coro_call( T* ) { return pjpg_[0].coro_call( &pjpg_[0] ); }
 
-  void addinp( byte* p, uint n ) { pjpg_[0].addinp(p,n); }
+  // feed(), not addinp(): it keeps level 0's byte counter in step with the file,
+  // so every segment pjpg reports knows where in the file it came from.
+  void addinp( byte* p, uint n ) { pjpg_[0].feed(p,n); }
   void addout( byte* p, uint n ) { pjpg_[0].addout(p,n); }
 
   // Worst outcome across every level, so a thumbnail that fails to parse is

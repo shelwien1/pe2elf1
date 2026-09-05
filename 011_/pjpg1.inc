@@ -8,6 +8,18 @@ struct pjpg : Coroutine, pjpg0 {
   byte f_lentag[256];
   byte f_ptag[256];
 
+  // Absolute offset of the first byte of the block pin[0] is holding.  Whoever
+  // hands this parser input advances it, so stream_base + (ptr-beg) is where
+  // the next byte to be read lives -- the file frontend counts in the file, and
+  // sub_flush() counts in the thumbnail it is feeding down.
+  qword stream_base;
+
+  void feed( byte* p, uint n ) {
+    stream_base += qword( pin[0].ptr - pin[0].beg );
+    addinp( p, n );
+  }
+  qword at( void ) { return stream_base + qword( pin[0].ptr - pin[0].beg ); }
+
   uint n_restart;
   uint n_scan;
   uint n_frame;        // frame headers in this image, DHP not counted
@@ -216,6 +228,10 @@ struct pjpg : Coroutine, pjpg0 {
       }
 
       tag_id = c;
+      // The FF and the marker byte have both been read, so the segment starts
+      // two back.  A run of fill FFs before it leaves the extra ones outside,
+      // which is what a caller cutting the segment out wants anyway.
+      seg_pos = at() - 2;
       pf( "!tag=%02X!\n", tag_id );
 
       // T.81 B.1.1.3 reserves 02..BF (RES), C8 (JPG) and F0..FD (JPG0..JPG13)
@@ -260,6 +276,7 @@ struct pjpg : Coroutine, pjpg0 {
         continue;
       }
       l_tag -= 2;                          // payload size
+      seg_payload = l_tag;
 
       // --- payload ---------------------------------------------------------
       was_sos  = (tag_id==M_SOS);
@@ -392,11 +409,33 @@ struct pjpg : Coroutine, pjpg0 {
 //-----------------------------------------------------------------------------
 
 uint pjpg0::sub_begin( const char* what, uint nbytes ) {
+
+  // Record the span before the depth check, not after: a caller that means to
+  // lift the thumbnail out wants to know it is there whether or not this parser
+  // has a level left to look inside it with.  ok stays 0 until something has
+  // actually read it as a JPEG -- either sub_end below, or the caller itself.
+  if( f_thumb_spans ) {
+    if( n_thumbs >= uint(MAX_THUMBS) ) f_thumbs_lost = 1;
+    else {
+      thumb_span& t = thumbs[n_thumbs];
+      t.pos     = tag_at();              // the next byte the caller will read
+      t.len     = nbytes;
+      t.seg     = seg_pos;
+      t.seg_end = seg_pos + 4 + seg_payload;
+      t.fixup   = 0;
+      t.carrier = tag_id;
+      t.ok      = 0;
+      n_thumbs++;
+    }
+  }
+
   if( sub==0 ) { pjpg_warn( "thumbnail nesting limit reached, not parsing it" ); return 0; }
   n_thumb++;
   pf( ">>> %s: %u bytes, parsing as JPEG at level %u\n", what, nbytes, level+1 );
   sub->coro_init();
   sub->level = level+1;
+  sub->stream_base = 0;                  // this level counts inside the thumbnail
+  sub->f_thumb_spans = f_thumb_spans;    // and records its own, if we record ours
   sub_active = 1;
   sub_n = 0;
   return 1;
@@ -410,7 +449,7 @@ uint pjpg0::sub_begin( const char* what, uint nbytes ) {
 void pjpg0::sub_flush( void ) {
   if( sub_n==0 ) return;
   if( sub_active ) {
-    sub->addinp( sub_buf, sub_n );
+    sub->feed( sub_buf, sub_n );
     if( sub->coro_call( sub )!=1 ) sub_active = 0;
   }
   sub_n = 0;
@@ -423,7 +462,7 @@ void pjpg0::sub_end( void ) {
   if( sub_active ) {
     sub->f_quit = 1;                       // no more thumbnail bytes are coming
     for( guard=0; guard<4; guard++ ) {
-      sub->addinp( sub_buf, 0 );
+      sub->feed( sub_buf, 0 );
       if( sub->coro_call( sub )!=1 ) break;
     }
     sub_active = 0;
@@ -432,5 +471,12 @@ void pjpg0::sub_end( void ) {
   // all is a malformed Exif block, not just an empty parse.
   if( sub->saw_SOI==0 )  pjpg_warn( "thumbnail is declared as JPEG but has no SOI marker" );
   else if( sub->err_code ) pjpg_warn( "embedded thumbnail did not parse cleanly" );
+
+  // This level has now read the thumbnail as a JPEG, so it can say whether it
+  // stands up on its own -- which is what decides whether it can be lifted out
+  // and still open.
+  if( f_thumb_spans && n_thumbs && (n_thumbs <= uint(MAX_THUMBS)) )
+    thumbs[n_thumbs-1].ok = sub->saw_SOI && sub->eoi_reached && (sub->err_code==0);
+
   pf( "<<< end of thumbnail (level %u)\n", level+1 );
 }

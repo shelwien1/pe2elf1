@@ -140,19 +140,26 @@ os.makedirs(out, exist_ok=True)
 # thumbnails below it get a parser of their own.
 PARSED_LEVELS = 4
 
+# JD_MAX_TDEPTH in 011_/jpegdet.cpp.  jpegdet goes deeper than pjpg's own
+# recursion because it re-probes each thumbnail on its own rather than nesting
+# parsers, so what stops it is this and not PjpgLevels.
+EXTRACT_LEVELS = 32
+
 manifest = []
 
 def w(name, data, depth, note, chains=1):
     """depth = thumbnails nested in this file; chains = how many such chains.
 
-    The manifest records what a parser should be seen to do with each file, so
-    the test does not have to restate it: how many levels it walks (as many as
-    it has, up to the guard, per chain) and whether the guard fires.
+    The manifest records what each file should be seen to make a tool do, so the
+    test does not have to restate it: how many levels pjpg walks (as many as the
+    file has, up to its guard, per chain), whether that guard fires, and how many
+    thumbnails jpegdet lifts out.
     """
     open(os.path.join(out, name), 'wb').write(data)
-    walked = min(depth, PARSED_LEVELS) * chains
+    walked = min(depth, PARSED_LEVELS)  * chains
     guard  = chains if depth > PARSED_LEVELS else 0
-    manifest.append('%s %d %d %d' % (name, depth, walked, guard))
+    carved = min(depth, EXTRACT_LEVELS) * chains
+    manifest.append('%s %d %d %d %d' % (name, depth, walked, guard, carved))
     print('%-18s %6d bytes  %3d deep   %s' % (name, len(data), depth, note))
 
 # PjpgLevels is 5: level 0 is the file and levels 1..4 are parsed, so the fifth
