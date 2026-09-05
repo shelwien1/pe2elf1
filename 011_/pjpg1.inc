@@ -85,6 +85,15 @@ struct pjpg : Coroutine, pjpg0 {
 
   //--------------------------------------------------------------------------
 
+  // C0..CF are frame headers apart from DHT (C4), JPG (C8) and DAC (CC); DHP
+  // shares the SOF syntax and starts a hierarchical frame too.
+  uint is_frame_marker( uint m ) {
+    if( m==M_DHP ) return 1;
+    if( (m<M_SOF0) || (m>M_SOF15) ) return 0;
+    if( (m==M_DHT) || (m==M_JPG) || (m==M_DAC) ) return 0;
+    return 1;
+  }
+
   // Frame state that must not survive into the next image in a multi-image
   // file.  Nothing used to reset any of this at SOI, so a second image parsed
   // its scans against the first image's frame.
@@ -114,7 +123,7 @@ struct pjpg : Coroutine, pjpg0 {
   }
 
   void do_process( void ) {
-    uint c,r,lo,hi,pending,was_sos;
+    uint c,r,lo,hi,pending,was_sos,was_sof;
     uint f_expect_marker;
 
     init_lentag();
@@ -184,6 +193,7 @@ struct pjpg : Coroutine, pjpg0 {
 
       // --- payload ---------------------------------------------------------
       was_sos = (tag_id==M_SOS);
+      was_sof = is_frame_marker(tag_id);
       if( f_ptag[tag_id] ) {
 
         if( tag_id==M_SOS ) n_scan++;
@@ -225,6 +235,13 @@ struct pjpg : Coroutine, pjpg0 {
 
       // Entropy-coded data follows a scan header.  Decode it when we can;
       // otherwise fall through and let scan_FF skip it as before.
+      // A new frame header means new geometry, so the coefficient map sized for
+      // the previous frame is wrong.  A hierarchical stream has several frames
+      // between one SOI and EOI, and image_reset() only runs at SOI, so without
+      // this the second frame's refinement scans decode against a map sized for
+      // the first -- silently, because nz_get/nz_set bounds-check and return 0.
+      if( was_sof ) nz_free();
+
       if( was_sos ) f_expect_marker = 0;
       if( was_sos && f_SOS && f_entropy ) {
         if( scan_decodable() ) {
