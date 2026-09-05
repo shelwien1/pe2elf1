@@ -42,8 +42,13 @@ DEFS     := -DNDEBUG -Drestrict=__restrict
 INCS     := -I$(LIB3)
 CODEGEN  := -fomit-frame-pointer -fno-stack-protector -fno-stack-check -fstrict-aliasing
 
-CXXFLAGS ?= $(STD) $(OPT) $(INCS) $(DEFS) $(CODEGEN)
+# CXXFLAGS is yours to override (make CXXFLAGS=-O0 -g). INCS and DEFS are not
+# folded into it, so overriding CXXFLAGS cannot accidentally drop the include
+# path or the defines the sources need to compile at all.
+CXXFLAGS ?= $(STD) $(OPT) $(CODEGEN)
 LDFLAGS  ?=
+EXTRA    :=
+EXTRA_LD :=
 
 # The coroutine saves and restores a live stack frame by hand.  The default
 # backend ("asm") uses __builtin_setjmp/__builtin_longjmp on gcc and hand-written
@@ -54,23 +59,26 @@ LDFLAGS  ?=
 # so fortification has to be switched off for that backend.
 CORO ?= asm
 ifeq ($(CORO),libc)
-CXXFLAGS += -DCORO_NOASM=1 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
+EXTRA += -DCORO_NOASM=1 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
 endif
 
 ifdef NATIVE
-CXXFLAGS += -march=native
+EXTRA += -march=native
 endif
 ifdef LTO
-CXXFLAGS += -flto
-LDFLAGS  += -flto
+EXTRA    += -flto
+EXTRA_LD += -flto
 endif
 ifdef STATIC
-LDFLAGS  += -static
+EXTRA_LD += -static
 endif
 ifdef SAN
-CXXFLAGS += -fsanitize=$(SAN) -g
-LDFLAGS  += -fsanitize=$(SAN)
+EXTRA    += -fsanitize=$(SAN) -g
+EXTRA_LD += -fsanitize=$(SAN)
 endif
+
+ALL_CXXFLAGS := $(CXXFLAGS) $(INCS) $(DEFS) $(EXTRA)
+ALL_LDFLAGS  := $(LDFLAGS) $(EXTRA_LD)
 
 # ------------------------------------------------------------ generation -----
 # pjpg0.inc is preprocessed to pjpg0i.inc, then coro_fsm.pl rewrites every
@@ -89,7 +97,7 @@ DEPS := pjpg0j.inc pjpg1.inc cinfo.inc jpeg_marker.inc coro_fp2.inc \
         $(wildcard $(LIB3)/*.inc) $(wildcard $(LIB3)/*.h)
 
 $(BIN): pjpg.cpp $(DEPS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
+	$(CXX) $(ALL_CXXFLAGS) $< -o $@ $(ALL_LDFLAGS)
 
 all: $(BIN)
 .DEFAULT_GOAL := all
