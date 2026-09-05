@@ -47,6 +47,8 @@ int  e_bits;
 uint e_marker;             // marker that ended the entropy segment (0 = none)
 uint e_eof;
 uint e_short;              // ran out of data inside the segment
+uint e_pad;                // consecutive MCUs decoded from padding, not data
+enum { E_PAD_LIMIT = 1<<20 };
 uint e_bytes;              // entropy bytes consumed, for reporting
 
 void bits_init( void ) { e_buf=0; e_bits=0; e_marker=0; e_eof=0; e_short=0; }
@@ -797,10 +799,11 @@ uint process_restart( void ) {
 
 uint e_scan_ok;        // 1 if the last scan decoded without complaint
 uint n_scan_dec;       // scans actually decoded
-uint n_scan_bad;       // of those, how many did not decode cleanly.  e_scan_ok
-                       // only describes the last scan, and a detector deciding
-                       // whether a candidate really is a JPEG needs the whole
-                       // image's verdict, not the final scan's.
+uint n_scan_bad;       // scans that should have decoded and did not, whether
+                       // they failed in the data or never got as far as it.
+                       // e_scan_ok only describes the last scan, and a detector
+                       // deciding whether a candidate really is a JPEG needs
+                       // the whole image's verdict, not the final scan's.
 
 // libjpeg's scan-parameter validation (jdphuff.c start_pass_phuff_decoder and
 // jdhuff.c start_pass_huff_decoder).  These are exact rules, not heuristics: a
@@ -883,13 +886,33 @@ uint decode_scan( void ) {
 
   bits_init();
   e_bytes = 0; e_blocks = 0; e_mcus = 0; n_rst_seen = 0; e_resync = 0;
+  // ar_dead is a verdict on ONE scan, and it was only ever cleared by
+  // arith_reset_coder() -- which decode_scan calls on the arithmetic branch
+  // alone, while the report below reads it for every scan.  So one arithmetic
+  // scan that died condemned every later scan in the same parser, Huffman
+  // included.  Invisible to pjpg, which parses one file per process; fatal to
+  // anything that reuses a parser, which is what a stream detector does.
+  ar_dead = 0; e_pad = 0;
   EOBRUN = 0;
   for( i=0; i<4; i++ ) last_dc_val[i] = 0;
   restarts_to_go = restart_interval;
   e_scan_ok = 1;
 
-  if( !per_scan_setup() ) { pjpg_warn( "scan geometry is unusable, skipping its data" ); e_scan_ok=0; return next_marker_now(); }
-  if( !scan_tables_ready() ) { pjpg_err( E_BADDHT, "a Huffman table this scan uses is missing or bogus" ); e_scan_ok=0; return next_marker_now(); }
+  // Every way per_scan_setup() can fail is a hard error in libjpeg -- a zero
+  // dimension, or an MCU carrying more than the 10 data units T.81 A.2.3
+  // allows ("Sampling factors too large for interleaved scan").  The early
+  // return jumps over the counters at the bottom of this function, so without
+  // recording the verdict here the scan is detected and then forgotten.
+  if( !per_scan_setup() ) {
+    pjpg_warn( "scan geometry is unusable, skipping its data" );
+    n_nonconf++; n_scan_bad++;
+    e_scan_ok=0; return next_marker_now();
+  }
+  if( !scan_tables_ready() ) {
+    pjpg_err( E_BADDHT, "a Huffman table this scan uses is missing or bogus" );
+    n_scan_bad++;
+    e_scan_ok=0; return next_marker_now();
+  }
   if( !arith_code ) scan_bind_tables();
   else { arith_reset_stats(); arith_reset_coder(); }
 
@@ -928,6 +951,26 @@ uint decode_scan( void ) {
       e_mcus++;
       if( mcu_ok==0 ) { e_scan_ok=0; goto done; }
       if( e_eof ) { e_scan_ok=0; goto done; }
+
+      // Once the entropy data has run out, every further MCU is decoded
+      // against the zero padding fill_bit_buffer() substitutes -- so it
+      // consumes no input, and the number of them is whatever the frame header
+      // claimed.  A 155-byte file declaring 65535x65535 buys 67 million, and
+      // since nothing is read, nothing yields: neither f_quit nor any limit the
+      // frontend keeps can interrupt it.  Chaining scan headers multiplies it,
+      // so 395 bytes cost 34 seconds and 13 KB would cost hours.
+      //
+      // libjpeg pads to the end of the frame too, and matching it is worth
+      // more than the microseconds saved by stopping the moment the data ends
+      // -- a progressive refinement scan reads the nonzero map the padded MCUs
+      // of the scan before it left behind.  So this is a ceiling, not a cut:
+      // high enough that no file whose declared size bears any relation to its
+      // data can reach it, low enough that one that does not costs a few
+      // milliseconds.  restarts_to_go is left alone; process_restart() clears
+      // e_short, so real data resuming at an RSTn resets the count with it.
+      if( e_short ) {
+        if( ++e_pad > E_PAD_LIMIT ) { e_scan_ok=0; goto done; }
+      } else e_pad = 0;
     }
   }
 

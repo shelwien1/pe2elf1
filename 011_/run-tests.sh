@@ -220,11 +220,77 @@ carve)
   want_single=1 want_sandwiched=1 want_adjacent=2 want_noise_between=2
   want_nojpeg=0 want_empty=0 want_no_eoi_then_jpg=2
 
+  # Hazard regressions.  Each of these was a real defect found by testing, and
+  # each is cheap enough to keep checking forever.
+  #
+  # spin: a frame header declaring 65535x65535 with no data behind it.  Every
+  # MCU after the data runs out is decoded from padding, so it consumes no
+  # input -- which means nothing yields and no limit the frontend keeps can
+  # interrupt it.  395 bytes used to cost 34 seconds, and chaining scan headers
+  # scaled it linearly.
+  python3 - "$WORK/spin.bin" <<'PYEOF'
+import struct, sys
+def seg(m,p): return bytes([0xFF,m])+struct.pack('>H',len(p)+2)+p
+d  = b'\xff\xd8'
+d += seg(0xDB, bytes([0])+bytes([16]*64))
+d += seg(0xC4, bytes([0x00])+bytes([1]+[0]*15)+bytes([0]))
+d += seg(0xC4, bytes([0x10])+bytes([1]+[0]*15)+bytes([0]))
+comps  = b''.join(bytes([i+1,0x11,0]) for i in range(4))
+scomps = b''.join(bytes([i+1,0x00])   for i in range(4))
+d += seg(0xC0, bytes([8])+struct.pack('>HH',65535,65535)+bytes([4])+comps)
+d += seg(0xDA, bytes([4])+scomps+bytes([0,63,0]))*16
+d += b'\xff\xd9'
+open(sys.argv[1],'wb').write(d)
+PYEOF
+
+  # poison: a truncated ARITHMETIC image in front of ordinary Huffman ones.
+  # ar_dead was cleared only on the arithmetic path but read on every path, so
+  # one dead arithmetic scan used to condemn every later image in the run -- the
+  # two Huffman images behind it were lost, and only the arithmetic fragment
+  # itself came out.  All three are expected.
+  if [ -f "$TESTDIR/coders/jcaron.arith.jpg" ] && [ "${#pick[@]}" -ge 2 ]; then
+    { head -c 287 "$TESTDIR/coders/jcaron.arith.jpg"; cat "${pick[0]}"; cat "${pick[1]}"; } > "$WORK/poison.bin"
+    want_poison=3
+  fi
+
+  # bigsamp: sampling factors whose MCU exceeds the 10 data units of T.81
+  # A.2.3.  per_scan_setup() rejects it and used to return before recording
+  # that it had, so the image was carved and djpeg would not open it.
+  python3 - "${pick[0]}" "$WORK/bigsamp.bin" <<'PYEOF'
+import sys
+# Walk the marker structure, and drop every APPn on the way: an Exif thumbnail
+# is a whole JPEG inside the APP1 payload, so leaving it in would make the
+# expected image count depend on which test file happened to be picked -- the
+# thumbnail is carved on its own once the image around it is rejected, which is
+# right, but it is not what this stream is testing.
+src = open(sys.argv[1],'rb').read()
+out = bytearray(src[:2])
+i = 2
+while i+3 < len(src):
+    if src[i] != 0xFF: break
+    m = src[i+1]
+    if m in (0xFF,0x00) or 0xD0 <= m <= 0xD9: out += src[i:i+2]; i += 2; continue
+    ln  = (src[i+2]<<8) | src[i+3]
+    seg = bytearray(src[i:i+2+ln])
+    i  += 2 + ln
+    if 0xE0 <= m <= 0xEF: continue                  # APPn: not part of the test
+    if m in (0xC0,0xC1,0xC2):
+        n = seg[9]                                  # marker(2) len(2) P(1) Y(2) X(2) then Nf
+        for c in range(n): seg[11+3*c] = 0x44       # Hi/Vi = 4x4: 48 data units per MCU
+    out += seg
+    if m == 0xDA: out += src[i:]; break             # entropy data and everything after
+open(sys.argv[2],'wb').write(bytes(out))
+PYEOF
+  want_spin=0 want_bigsamp=0
+
   bad=0; n=0; imgs=0
   for c in "$WORK"/*.bin; do
     name=$(basename "$c" .bin); n=$((n+1))
     rm -rf "$WORK/o"; mkdir -p "$WORK/o"
-    if ! timeout 300 "$DET" c "$c" "$WORK/o/i" >"$WORK/c.log" 2>&1; then
+    # 20s, not the 300s the rest get: the point of the spin stream is that it
+    # used to take 34 seconds, so a generous timeout would hide the regression.
+    lim=300; [ "$name" = spin ] && lim=20
+    if ! timeout $lim "$DET" c "$c" "$WORK/o/i" >"$WORK/c.log" 2>&1; then
       echo "  $name: c failed -- $(tail -1 "$WORK/c.log")"; bad=$((bad+1)); continue
     fi
     if ! timeout 300 "$DET" d "$WORK/o/i" "$WORK/r.bin" >"$WORK/d.log" 2>&1; then

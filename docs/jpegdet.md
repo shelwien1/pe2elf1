@@ -126,21 +126,44 @@ and disqualify a candidate:
 
 | | libjpeg's verdict |
 |---|---|
-| a reserved marker, `FF 02`..`FF BF`, between segments | *Unsupported marker type 0x..* |
+| a reserved marker between segments: `FF 02`..`FF BF` (RES), `FF C8` (JPG), `FF F0`..`FF FD` (JPG0..JPG13) | *Unsupported marker type 0x..* |
 | a segment length below the 2 bytes of the length field | *Bogus marker length* |
 | a parsed segment with bytes left over — SOF, SOS, DRI, DQT, DHT, DAC, DNL, EXP all have exact lengths in T.81; APPn and COM do not | *Bogus marker length* |
 | a component sampling factor outside T.81's 1..4 | *Bogus sampling factors* |
+| an interleaved MCU carrying more than the 10 data units of T.81 A.2.3 | *Sampling factors too large for interleaved scan* |
+| a DCT frame whose precision is neither 8 nor 12 (T.81 B.2.2 table B.2; only the lossless processes take the full 2..16) | *Unsupported JPEG data precision N* |
 | two frame headers with no DHP to introduce them | *Invalid JPEG file structure: two SOF markers* |
-| a component naming a quantisation table no DQT defined | *Quantization table 0x00 was not defined* |
+| a scan naming a quantisation table no DQT has defined **yet** | *Quantization table 0x00 was not defined* |
 
-The last one is checked by `jpegdet` rather than `pjpg`: `pjpg` never
-dequantises, so nothing in the parse trips over a missing table.
+Two of these are worth dwelling on, because both were live holes that a stream
+detector reaches and a file parser does not.
+
+**Ordering, not just presence.** T.81 4.5 requires a quantisation table to be
+defined *before* the scan that references it, and libjpeg latches the tables at
+each scan. Checking only at the end of the file accepts a stream whose DQT
+arrives *after* the scan that uses it — which parses perfectly, decodes
+perfectly, and does not open. `pjpg` already got the Huffman half of this rule
+right (`scan_tables_ready()` runs per scan); the quantisation half now runs in
+the same place. `jpegdet` keeps a whole-image check as well, so a component no
+scan ever references still has to have a table.
+
+**A rule detected and then forgotten.** `per_scan_setup()` rejects an MCU with
+more than 10 data units, but its early `return` jumped over the counters at the
+bottom of `decode_scan()` — so the verdict was computed and thrown away, and a
+file `djpeg` refuses was carved silently. Two bytes in any 3-component baseline
+JPEG reach it.
 
 Going the other way, a malformed **Exif** block does *not* disqualify anything.
 It sits inside an APP1 payload that every decoder skips whole, so the image
 decodes regardless of what the TIFF structure inside it says — `pjpg` reports it
 because describing the file is its job, and `fatal_for_decoding()` is where the
 two jobs part company.
+
+A frame header with `Y == 0` is the one case where "conforming" and "libjpeg
+opens it" genuinely differ, and `jpegdet` follows T.81 rather than libjpeg:
+`Y == 0` means the height arrives in a later DNL segment, so it is carved when a
+DNL supplies one and rejected when none ever comes (*"Empty JPEG image"*), even
+though libjpeg refuses both.
 
 ## 6. Options
 
@@ -168,9 +191,25 @@ image you expected is not there:
 00000001         41066 .. 56256              15190 bytes
 ```
 
-Two bounds keep a hostile stream from costing more than it should. `-m` is the
-minimum size, the same guard `rawdet` applies with `blk_minsize`. `-L` is the
-more important one: a candidate that is not a JPEG can still parse a long way
+### Bounding what a hostile stream can cost
+
+Three things bound the work, and the first is not an option because nothing the
+frontend can do would reach it.
+
+Once a scan's entropy data runs out, every remaining MCU is decoded against the
+zero padding `fill_bit_buffer()` substitutes. Those MCUs **consume no input**, so
+their number is whatever the frame header claimed, and since nothing is read,
+nothing yields: neither `f_quit` nor any limit kept outside the parser can
+interrupt it. A 155-byte file declaring 65535×65535 buys 67 million of them, and
+chaining scan headers multiplies it — 395 bytes cost 34 seconds, and 13 KB would
+have cost hours. `pjpg` was affected exactly as much as `jpegdet`. Padded MCUs
+are now capped per scan (`E_PAD_LIMIT`), high enough that no file whose declared
+size bears any relation to its data can reach it — the whole golden corpus is
+byte-identical across the change — and low enough that one that does not costs
+half a second instead of 34.
+
+`-m` is the minimum size, the same guard `rawdet` applies with `blk_minsize`.
+`-L` is the more interesting one: a candidate that is not a JPEG can still parse a long way
 without a fatal error, because every byte in `C0`..`FE` is a marker with a
 length, so random data reads a random length and skips it, over and over. The one
 thing it will not do is produce a frame header, and a real image has one within
@@ -227,11 +266,29 @@ for each:
 The third assertion is the one that matters most: nothing stops a carver from
 being trivially lossless by never carving anything.
 
+Three of the ten streams are hazard regressions, each a defect that testing
+actually found: `spin` (the padded-MCU blow-up above, run under a 20-second
+timeout rather than the 300 the others get, since the point is that it used to
+take 34), `poison` (a truncated *arithmetic* image in front of ordinary Huffman
+ones — `ar_dead` was cleared only on the arithmetic path but read on every path,
+so one dead arithmetic scan condemned every later image in the run), and
+`bigsamp` (an MCU over the 10-data-unit limit, the rule that was detected and
+then forgotten).
+
 Beyond the checked-in case, the implementation was validated against 27 synthetic
-stream shapes and 1000 fuzz iterations over mutated and truncated real images —
-byte-exact round trip and a decodable output every time — plus a clean UBSan run
-over the whole corpus and byte-identical results from six compiler and flag
-configurations (gcc/clang, `-O0`..`-O3`, `CORO_FRAME_POINTER`, `CORO_NOASM`).
+stream shapes across six flag combinations and 900 fuzz iterations over mutated
+and truncated real images — byte-exact round trip and a decodable output every
+time — plus a clean UBSan run over the whole corpus and byte-identical results
+from six compiler and flag configurations (gcc/clang, `-O0`..`-O3`,
+`CORO_FRAME_POINTER`, `CORO_NOASM`).
+
+Failure paths are checked too, because a carver that reports success after
+writing a truncated file is worse than one that fails: every output file is
+closed through `close_ok()`, which flushes and takes `fclose`'s return, since on
+a full disk that is usually the only place the error surfaces. An input that
+cannot be seeked (a pipe, a character device) is refused up front rather than
+carved as an empty stream — every candidate is revisited by seeking, so there is
+nothing to carve.
 
 AddressSanitizer reports a stack-buffer-underflow inside `yield()` for `jpegdet`
 exactly as it does for `pjpg`: the coroutine copies a live stack region by hand.

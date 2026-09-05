@@ -341,10 +341,12 @@ JFXX APP0 marker: JPEG-compressed thumbnail image
       Component 2: dc=01 ac=01
       Component 3: dc=01 ac=01
       Ss=0, Se=63, Ah=0, Al=0
+    Warning [tag 00]: scan uses a quantisation table no DQT has defined yet
+    Warning [tag 00]: scan uses a quantisation table no DQT has defined yet
     ERROR [tag 00]: a Huffman table this scan uses is missing or bogus
     !tag=D9!
     
-parse finished with 3 error(s) and 0 warning(s); first error: quantisation table index >= 4 (bad quantisation table)
+parse finished with 3 error(s) and 2 warning(s); first error: quantisation table index >= 4 (bad quantisation table)
 Warning [tag E0]: embedded thumbnail did not parse cleanly
 <<< end of thumbnail (level 1)
 !tag=EC!

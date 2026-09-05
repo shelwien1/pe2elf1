@@ -33,6 +33,15 @@ void pa_SOF( void ) { CORO_START;
 
   if( (data_precision<2) || (data_precision>16) ) { pjpg_err( E_BADSOF, "frame precision out of range" ); CORO_EXIT; }
 
+  // T.81 B.2.2 table B.2: a DCT-based frame is 8-bit (baseline) or 8- or
+  // 12-bit (extended and progressive).  Only the lossless processes take the
+  // full 2..16.  Anything else is not a precision a decoder can be asked for,
+  // and libjpeg stops on it ("Unsupported JPEG data precision N").
+  if( !sof_lossless && (data_precision!=8) && (data_precision!=12) ) {
+    pjpg_warn( "DCT frame precision is neither 8 nor 12" );
+    n_nonconf++;
+  }
+
   max_h_samp_factor = 1; max_v_samp_factor = 1;
 
   for( i=0; i<uint(num_components); i++ ) {

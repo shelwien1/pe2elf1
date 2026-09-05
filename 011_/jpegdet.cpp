@@ -218,7 +218,9 @@ struct JpegProbe {
     P.f_check_scans  = !f_entropy;  // -s still checks what costs nothing
     P.addout( outbuf, uint(sizeof(outbuf)) );
 
-    if( jd_seek( f, start )!=0 ) return 0;
+    end_pos = start; f_eoi = 0; f_scan_bad = 0; f_multi_soi = 0; why = "";
+
+    if( jd_seek( f, start )!=0 ) return no( "cannot seek to the candidate" );
     pos_base = start;
     P.addinp( inpbuf, 0 );
 
@@ -275,6 +277,12 @@ struct JpegProbe {
     // carved with one in it would not open, so it is not carved.
     if( P.n_nonconf )    return no( "a segment a conforming decoder refuses" );
     if( !quant_tables_present() ) return no( "a component's quantisation table was never defined" );
+
+    // Y==0 in a frame header means the height arrives later, in a DNL segment
+    // (T.81 B.2.2), and pa_DNL writes it into image_height when it does.  Still
+    // zero at the end of the image means no DNL ever came, so the frame never
+    // had a height at all -- libjpeg calls that "Empty JPEG image".
+    if( P.image_height==0 ) return no( "frame height is 0 and no DNL supplied one" );
 
     // Then the entropy data, when we decoded it.  n_scan_bad counts scans that
     // were decodable in principle and did not decode; scans pjpg cannot decode
@@ -372,23 +380,44 @@ struct SigScan {
 
 static uint f_verbose = 0;
 
+// fclose is the last chance a buffered write has to fail, and on a full disk it
+// is usually the only one that does.  Everything written here is either a file
+// the caller will rely on being complete or a metainfo file that claims the
+// rest are -- so no output file is closed anywhere except through this.
+static uint close_ok( FILE* f ) {
+  uint bad;
+  bad = (fflush(f)!=0) || ferror(f);
+  if( fclose(f)!=0 ) bad = 1;
+  return !bad;
+}
+
+// All-ones if the length cannot be learned.  Distinguishing that from a length
+// of zero matters: an empty file is a perfectly good input that carves to an
+// empty metainfo, while a pipe or a character device is one this cannot carve
+// at all -- every candidate is revisited by seeking -- and reporting success
+// after writing nothing would be a silent loss.
 static qword file_size_of( FILE* f ) {
   jd_off n;
-  if( jd_seekend(f)!=0 ) return 0;
+  if( jd_seekend(f)!=0 ) return ~qword(0);
   n = jd_tell( f );
-  if( n<0 ) return 0;
+  if( n<0 ) return ~qword(0);
   return qword(n);
 }
 
 // Copy [from,to) out of the input.  Every byte of the stream goes through here
 // exactly once, on its way either to the metainfo file or to a .jpg, so this is
 // also where the hash of the original is taken.
+//
+// A short return says only that the copy did not finish.  f_wrerr says which
+// end gave out, because the two mean opposite things: a short read is an input
+// that changed under us, a short write is an output that will be wrong.
 static byte copybuf[1<<16];
+static uint f_wrerr;
 
 static qword copy_range( FILE* f, qword from, qword to, FILE* g, Fnv* h ) {
   qword done,n;
   uint want,got;
-  done = 0;
+  done = 0; f_wrerr = 0;
   if( to<=from ) return 0;
   if( jd_seek( f, from )!=0 ) return 0;
   n = to-from;
@@ -397,7 +426,7 @@ static qword copy_range( FILE* f, qword from, qword to, FILE* g, Fnv* h ) {
     got  = uint( fread( copybuf, 1, want, f ) );
     if( got==0 ) break;
     if( h ) h->add( copybuf, got );
-    if( g ) if( fwrite( copybuf, 1, got, g )!=got ) return done;
+    if( g ) if( fwrite( copybuf, 1, got, g )!=got ) { f_wrerr = 1; return done; }
     done += got;
   }
   return done;
@@ -429,6 +458,10 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
   f = fopen( inpname, "rb" );
   if( f==0 ) { fprintf( stderr, "jpegdet: cannot read %s\n", inpname ); return 2; }
   file_size = file_size_of( f );
+  if( file_size==~qword(0) ) {
+    fprintf( stderr, "jpegdet: %s is not seekable, so its images cannot be located\n", inpname );
+    fclose(f); return 2;
+  }
 
   if( snprintf( name, sizeof(name), "%s.jdm", prefix )>=int(sizeof(name)) ) {
     fprintf( stderr, "jpegdet: prefix too long\n" ); fclose(f); return 2;
@@ -486,20 +519,25 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
     putc( JDR_IMAGE, g );
     put_u64( g, gap );
     if( copy_range( f, committed, s, g, &H )!=gap ) {
-      fprintf( stderr, "jpegdet: short read on the gap before image %u\n", idx );
+      fprintf( stderr, f_wrerr ? "jpegdet: write error on the metainfo file\n"
+                               : "jpegdet: short read on the gap before image %u\n", idx );
       fclose(gj); fclose(g); fclose(f); return 2;
     }
     n_gap += gap;
 
     // The image itself, byte for byte out of the stream.
     if( copy_range( f, s, e, gj, &H )!=e-s ) {
-      fprintf( stderr, "jpegdet: short read on image %u\n", idx );
+      fprintf( stderr, f_wrerr ? "jpegdet: write error on %s%08X.jpg\n"
+                               : "jpegdet: short read on image %s%08X\n", prefix, idx );
       fclose(gj); fclose(g); fclose(f); return 2;
     }
     // A stream that ends mid-image leaves a file no decoder will open.  Two
     // bytes fix that, and add_len tells "d" to leave them behind.
     if( flags & JDF_ADDED_EOI ) { putc( 0xFF, gj ); putc( 0xD9, gj ); }
-    fclose( gj );
+    if( !close_ok( gj ) ) {
+      fprintf( stderr, "jpegdet: write error on %s%08X.jpg\n", prefix, idx );
+      fclose(g); fclose(f); return 2;
+    }
 
     put_u64( g, e-s );
     put_u32( g, add_len );
@@ -526,7 +564,8 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
   putc( JDR_END, g );
   put_u64( g, gap );
   if( copy_range( f, committed, file_size, g, &H )!=gap ) {
-    fprintf( stderr, "jpegdet: short read on the trailing data\n" );
+    fprintf( stderr, f_wrerr ? "jpegdet: write error on the metainfo file\n"
+                             : "jpegdet: short read on the trailing data\n" );
     fclose(g); fclose(f); return 2;
   }
   n_gap += gap;
@@ -534,8 +573,7 @@ static int cmd_c( const char* inpname, const char* prefix, const Opts& O ) {
   put_u64( g, H.h );
   fwrite( JDM_END, 1, 6, g );
 
-  if( ferror(g) ) { fprintf( stderr, "jpegdet: write error on the metainfo file\n" ); fclose(g); fclose(f); return 2; }
-  fclose( g );
+  if( !close_ok( g ) ) { fprintf( stderr, "jpegdet: write error on the metainfo file\n" ); fclose(f); return 2; }
   fclose( f );
 
   printf( "%u image(s), %llu image byte(s), %llu literal byte(s), %llu total\n",
@@ -662,8 +700,7 @@ static int cmd_d( const char* prefix, const char* outname ) {
     n++;
   }
 
-  if( fflush(g)!=0 || ferror(g) ) goto wrfail;
-  fclose( g );
+  if( !close_ok( g ) ) goto wrfail_closed;
   fclose( f );
 
   if( written!=orig_size ) {
@@ -683,7 +720,11 @@ truncated:
   fprintf( stderr, "jpegdet: the metainfo file is truncated\n" );
   goto fail;
 wrfail:
+  fclose(g);
+wrfail_closed:
   fprintf( stderr, "jpegdet: write error on %s\n", outname );
+  fclose(f);
+  return 2;
 fail:
   fclose(g); fclose(f);
   return 2;

@@ -90,7 +90,7 @@ Unchanged. `011_/gc.bat` still drives the clang + MSVC-runtime build and
 | `make coders` | Decodes `testfiles/coders/`, three images transcoded by `jpegtran` into sequential/progressive × Huffman/arithmetic. Because the transcode is lossless, all four must report identical MCU and block counts — a disagreement is an entropy decoder bug. |
 | `make crosscheck` | Builds with gcc *and* clang and confirms they produce byte-identical output on every corpus file. Disagreement between two correct compilers is the signature of undefined behaviour, which is worth watching for in code that hand-switches stacks and type-puns. |
 | `make matrix` | Builds and runs 26 configurations: gcc and clang × `-O0`…`-Ofast`, both coroutine backends, LTO, static, `-march=native`, PIE and no-PIE, and the sanitizers. |
-| `make carve` | Runs `jpegdet` over seven synthetic streams and asserts three things for each: `c` then `d` reproduces the input byte for byte, every carved file decodes, and the number of images carved is exactly what that stream contains. The last is the one that matters — nothing stops a carver from being trivially lossless by never carving anything. Included in `make test`. |
+| `make carve` | Runs `jpegdet` over ten synthetic streams and asserts three things for each: `c` then `d` reproduces the input byte for byte, every carved file decodes, and the number of images carved is exactly what that stream contains. The last is the one that matters — nothing stops a carver from being trivially lossless by never carving anything. Three of the streams are hazard regressions for defects testing found: a padded-MCU blow-up, a cross-scan state leak, and an over-size MCU. Included in `make test`. |
 | `make golden` | Regenerates `tests/golden.log` after an intentional output change. |
 
 Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
@@ -117,8 +117,14 @@ Current status on Ubuntu 24.04 (gcc 13.3, clang 18.1.3, x86-64):
 * `jpegdet` carves 43 of the 48 conforming images the JPEG XT reference encoder
   can produce — every DCT, lossless-predictive and hierarchical variant — and
   round-trips all of them byte for byte. The five misses are JPEG-LS, which pjpg
-  cannot parse at all. 27 synthetic stream shapes and 1000 fuzz iterations: 0
-  round-trip failures, 0 undecodable outputs, 0 UBSan reports.
+  cannot parse at all. 27 synthetic stream shapes across six flag combinations
+  and 900 fuzz iterations: 0 round-trip failures, 0 undecodable outputs, 0 UBSan
+  reports.
+* A scan whose entropy data has run out used to keep decoding padded MCUs to the
+  end of the frame — consuming no input, so nothing could interrupt it. 395
+  bytes cost 34 seconds and 13 KB would have cost hours, in `pjpg` as much as in
+  `jpegdet`. Padded MCUs are now capped per scan, with the golden corpus
+  byte-identical across the change.
 
 ## Exit status
 

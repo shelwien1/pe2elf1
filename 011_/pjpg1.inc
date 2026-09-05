@@ -91,6 +91,29 @@ struct pjpg : Coroutine, pjpg0 {
 
   //--------------------------------------------------------------------------
 
+  // T.81 4.5: a quantisation table has to be defined BEFORE the scan that
+  // references it, and libjpeg latches the tables at each scan (jdinput.c
+  // latch_quant_tables, JERR_NO_QUANT_TABLE).  Asking at the end of the file
+  // instead accepts a stream whose DQT arrives after the scan that uses it --
+  // which parses perfectly, decodes perfectly, and does not open.  The
+  // Huffman side of the same rule is already enforced per scan, by
+  // scan_tables_ready().  Lossless and hierarchical frames carry no
+  // quantisation at all.
+  void check_scan_quant( void ) {
+    uint i,c,q;
+    if( sof_lossless || sof_hier ) return;
+    for( i=0; i<uint(comps_in_scan); i++ ) {
+      c = cs_cmp[i];
+      if( c>=uint(num_components) ) continue;
+      q = uint(comp_info[c].quant_tbl_no);
+      if( q>=uint(DIM(quant_tbl)) ) continue;      // pa_SOF rejects this already
+      if( quant_tbl[q].f_undef ) {
+        pjpg_warn( "scan uses a quantisation table no DQT has defined yet" );
+        n_nonconf++;
+      }
+    }
+  }
+
   // T.81 fixes the length of these segments exactly -- SOF is 8+3*Nf, SOS is
   // 6+2*Ns, DRI is 4, EXP is 3, DNL is 4 -- or, for DQT/DHT/DAC, makes it a
   // whole number of table definitions.  A byte left over when the parser is
@@ -195,10 +218,12 @@ struct pjpg : Coroutine, pjpg0 {
       tag_id = c;
       pf( "!tag=%02X!\n", tag_id );
 
-      // T.81 B.1.1.3 reserves 02..BF.  Between segments a conforming stream
-      // never carries one, and libjpeg gives up on it ("Unsupported marker
-      // type 0x..").  TEM (01) is legal and handled just below.
-      if( (c>=0x02) && (c<=0xBF) ) n_nonconf++;
+      // T.81 B.1.1.3 reserves 02..BF (RES), C8 (JPG) and F0..FD (JPG0..JPG13)
+      // for extensions that were never defined.  Between segments a conforming
+      // stream carries none of them, and libjpeg gives up on whichever it meets
+      // ("Unsupported marker type 0x..", or for C8 "Unsupported JPEG process:
+      // SOF type 0xc8").  TEM (01) is legal and handled just below.
+      if( ((c>=0x02) && (c<=0xBF)) || (c==M_JPG) || ((c>=M_JPG0) && (c<=M_JPG13)) ) n_nonconf++;
 
       if( c==M_TEM ) continue;            // TEM has no payload
       if( c==M_SOI ) {
@@ -300,6 +325,11 @@ struct pjpg : Coroutine, pjpg0 {
       }
 
       if( was_sos ) f_expect_marker = 0;
+      // Before anything that depends on the tables, and in every mode: this
+      // costs one pass over at most four components and it is the difference
+      // between carving a file that opens and one that does not.
+      if( was_sos && f_SOS ) check_scan_quant();
+
       if( was_sos && f_SOS && f_entropy ) {
         if( scan_decodable() ) {
           pending = decode_scan();
