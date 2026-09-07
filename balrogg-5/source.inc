@@ -81,8 +81,14 @@ struct source {
       FATAL_UNLESS(!(prev->type & 4), "the packet at %lu exceeds its link",
                    (unsigned long) offset());
       n = q.parse(in_win + k, have - k);
-      FATAL_UNLESS(n != 0, "the packet at %lu has no continuation page",
-                   (unsigned long) offset());
+      /*  FATAL rather than FATAL_UNLESS: the latter returns when its
+          condition holds, so it cannot be NORETURN, and gcc therefore cannot
+          see that q is assigned on every path reaching the memcpy below.  It
+          says so as a -Wmaybe-uninitialized on q.nseg at -O1 and -O3 -- but
+          not at -O2, the one level the Makefile ships, which is how it went
+          unnoticed.  */
+      if (!n) FATAL("the packet at %lu has no continuation page",
+                    (unsigned long) offset());
       FATAL_UNLESS(q.np > 0 && (q.type & 1),
                    "the continuation of the packet at %lu is missing",
                    (unsigned long) offset());
@@ -103,8 +109,14 @@ struct source {
     memcpy(dst, head, pl);
     while (done < total) {
       n = q.parse(in_win + k, have - k);
-      FATAL_UNLESS(n != 0, "the packet at %lu has no continuation page",
-                   (unsigned long) offset());
+      /*  FATAL rather than FATAL_UNLESS: the latter returns when its
+          condition holds, so it cannot be NORETURN, and gcc therefore cannot
+          see that q is assigned on every path reaching the memcpy below.  It
+          says so as a -Wmaybe-uninitialized on q.nseg at -O1 and -O3 -- but
+          not at -O2, the one level the Makefile ships, which is how it went
+          unnoticed.  */
+      if (!n) FATAL("the packet at %lu has no continuation page",
+                    (unsigned long) offset());
       take = q.plen[0];
       if (take > total - done) take = total - done;
       memcpy(dst + done, in_win + k + OGG_HDRMIN + q.nseg, take);

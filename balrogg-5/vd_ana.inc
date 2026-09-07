@@ -53,6 +53,19 @@ struct pcmwin {
   }
   static u32 rd16(const u8 * p) { return (u32) p[0] | ((u32) p[1] << 8); }
 
+  /*  fseek's offset is a long: 64-bit on LP64 Linux, 32-bit on LLP64 Windows,
+      where a WAV past 2 GiB -- which wav.inc's own WAV_MAXBYTES allows -- would
+      seek to a wrapped, negative offset and read the wrong samples.  Offsets
+      are computed as i64 and checked to survive the narrowing, so such a file
+      is refused rather than silently misread.  */
+  void seek_to(i64 off) {
+    FATAL_UNLESS(off == (i64) (long) off,
+                 "%s: offset %lld needs 64-bit file offsets", path,
+                 (long long) off);
+    if (fseek(f, (long) off, SEEK_SET))
+      FATAL_CODE(BLR_EXIT_IO, "seek failed on %s", path);
+  }
+
   /*  Walk the RIFF chunks rather than assuming a bare 44-byte header.  Any
       writer may put LIST, fact or padding chunks before the samples, and
       guessing the offset would silently shift every block.  The fmt chunk
@@ -60,7 +73,7 @@ struct pcmwin {
       as a wrong digit ten thousand records later.  */
   void open(const char * pth, u32 nch, u32 rate) {
     u8 h[8], fmt[16];
-    long at;
+    i64 at;
     f = fopen(pth, "rb");
     if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot open %s", pth);
     path = pth;  ch = nch;  lo = hi = 0;  data0 = -1;  frames = 0;
@@ -72,7 +85,8 @@ struct pcmwin {
     at = 12;
     for (;;) {
       u32 sz4;
-      if (fseek(f, at, SEEK_SET) || fread(h, 1, 8, f) != 8) break;
+      if (at != (i64) (long) at) break;          /*  past what fseek can reach  */
+      if (fseek(f, (long) at, SEEK_SET) || fread(h, 1, 8, f) != 8) break;
       sz4 = rd32(h + 4);
       if (!memcmp(h, "fmt ", 4)) {
         FATAL_UNLESS(sz4 >= 16 && fread(fmt, 1, 16, f) == 16,
@@ -88,7 +102,7 @@ struct pcmwin {
         data0 = at + 8;  frames = (i64) sz4 / (nch * 2);
         break;
       }
-      at += 8 + (long) sz4 + (long) (sz4 & 1);   /*  chunks pad to even  */
+      at += 8 + (i64) sz4 + (i64) (sz4 & 1);     /*  chunks pad to even  */
     }
     FATAL_UNLESS(data0 >= 0, "%s: no data chunk", pth);
   }
@@ -99,8 +113,7 @@ struct pcmwin {
     if (first < 0) first = 0;
     if (first + want > frames) want = frames - first;
     if (want < 0) want = 0;
-    if (fseek(f, (long) (data0 + first * ch * 2), SEEK_SET))
-      FATAL_CODE(BLR_EXIT_IO, "seek failed on %s", path);
+    seek_to(data0 + first * (i64) ch * 2);
     if (want && fread(aw_buf, 2 * ch, (size_t) want, f) != (size_t) want)
       FATAL_CODE(BLR_EXIT_IO, "short read on %s", path);
     lo = first;  hi = first + want;
