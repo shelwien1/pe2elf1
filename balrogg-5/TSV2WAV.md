@@ -274,6 +274,34 @@ against the truth at every step and `REST` against the corrections at the
 same steps, the two are in lock-step by construction. This is what makes the
 whole thing exact rather than approximately right.
 
+**How the corrections are written.** The list is `(index, value)` pairs, and
+there are three ways to put it on the page. The packet's `kn` count says
+which, in its sign and its low bit, and mode `c` prices all three and takes
+the cheapest:
+
+| form | `kn` | what goes out |
+|---|---|---|
+| sparse | `n` | the gap to each correction on `kd.i`, then the values on `kd.v` |
+| raw | `−2t` | every one of the packet's `t` digits on `kd.v`, zeros run-coded |
+| marked | `−(2t+1)` | the same `t` positions on `kd.v`: a digit the walk got right is a zero and joins a run, a digit it got wrong carries `zig(v)+1` |
+
+The marked form is the sparse list with the indices left out — what separates
+two corrections is a run marker rather than a gap, and **two corrections side
+by side need nothing between them at all.** Corrections cluster, so that is
+where it wins: on `00000007` it takes the correction stream down 8.2%. It is
+decoded straight back into the `(index, value)` list, so nothing downstream
+of `read_keeps` knows the difference.
+
+Riding the form in the count's low bit rather than in a record of its own is
+worth 1.7 of those 8.2 points: doubling a number costs a digit only when it
+crosses a power of ten, where a record of its own costs two bytes every time.
+
+Two things that sound right and are not. Storing `want − got` instead of
+`want` is **worse** (+4.1%): a correction's true digit is usually zero, and
+the difference from a wrong guess is not. And using the marked form alone,
+dropping `kd.i` entirely, is only 0.04% behind keeping all three — but it
+regresses badly on packets where the walk is useless, so all three stay.
+
 ### 4.6 Class prediction
 
 The class is the encoder's choice of cascade ladder, and libvorbis chooses it

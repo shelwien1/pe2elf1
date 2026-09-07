@@ -20,7 +20,7 @@ hides what each one shows:
 | source Ogg | 12,734,656 | 515,872 |
 | balrogg TSV | 108,163,951 | 4,386,774 |
 | meta, self-contained build | 15,682,793 (14.50%) | 1,748,355 (39.85%) |
-| **meta, with libvorbis** | **15,191,473 (14.05%)** | **1,149,911 (26.21%)** |
+| **meta, with libvorbis** | **14,368,735 (13.28%)** | **1,088,889 (24.82%)** |
 
 The percentage is of the TSV, which is what the meta stands in for; the WAV
 carries the rest. Reconstruction from WAV plus meta is exact for all 39
@@ -37,14 +37,14 @@ files are long enough that the setup header is rounding error.
 
 | part | tags | bytes | share |
 |---|---|---:|---:|
-| Digit corrections | `kd.i`, `kd.v` | 10,385,900 | 68.37% |
-| Floor posts | `flr.y`, `flr.d` | 2,439,498 | 16.06% |
-| Class corrections | `kc.i`, `kc.v` | 1,475,114 | 9.71% |
-| Page framing | `page.*` | 356,995 | 2.35% |
-| Per-packet scalars | `pk` | 328,179 | 2.16% |
-| Correction counts | `kn` | 168,901 | 1.11% |
-| Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 22,601 | 0.15% |
-| Stream header | `id.*`, `link.*`, `cmt.*` | 8,086 | 0.05% |
+| Digit corrections | `kd.v`, `kd.i` | 9,646,221 | 67.13% |
+| Floor posts | `flr.y`, `flr.d` | 2,439,670 | 16.98% |
+| Class corrections | `kc.v`, `kc.i` | 1,340,964 | 9.33% |
+| Page framing | `page.*` | 356,995 | 2.48% |
+| Per-packet scalars | `pk` | 328,179 | 2.28% |
+| Correction counts | `kn` | 219,820 | 1.53% |
+| Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 22,601 | 0.16% |
+| Stream header | `id.*`, `link.*`, `cmt.*` | 8,086 | 0.06% |
 | Learned models | `cm.*`, `vf.*` | 5,870 | 0.04% |
 | **Codebooks** | `cb.*` | **329** | **0.00%** |
 
@@ -52,15 +52,15 @@ files are long enough that the setup header is rounding error.
 
 | part | bytes | share |
 |---|---:|---:|
-| Digit corrections | 513,363 | 44.64% |
-| Floor posts | 458,776 | 39.90% |
-| Learned models | 44,961 | 3.91% |
-| Per-packet scalars | 31,284 | 2.72% |
-| Correction counts | 27,657 | 2.41% |
-| Class corrections | 25,016 | 2.18% |
-| Page framing | 23,000 | 2.00% |
-| Floor/residue/mapping setup | 17,336 | 1.51% |
-| Stream header | 8,056 | 0.70% |
+| Digit corrections | 459,299 | 42.18% |
+| Floor posts | 458,948 | 42.15% |
+| Learned models | 36,214 | 3.33% |
+| Correction counts | 35,021 | 3.22% |
+| Per-packet scalars | 31,284 | 2.87% |
+| Page framing | 23,000 | 2.11% |
+| Class corrections | 19,269 | 1.77% |
+| Floor/residue/mapping setup | 17,336 | 1.59% |
+| Stream header | 8,056 | 0.74% |
 | Codebooks | 462 | 0.04% |
 
 ## What each part is, and why it is still there
@@ -85,6 +85,30 @@ by construction. **That is the ceiling for anything done to the WAV:** at
 most about 15% of the corrections are near enough to the boundary that a
 better sample could flip them. It is why the encoder-side knobs below are
 worth one to nine percent and not more.
+
+**How they are written matters as much as how many there are.** The list is
+`(index, value)` pairs and there are three ways to put it down; the packet's
+`kn` count says which, in its sign and its low bit, and mode `c` prices all
+three:
+
+| form | `kn` | what goes out |
+|---|---|---|
+| sparse | `n` | the gap to each correction on `kd.i`, then the values on `kd.v` |
+| raw | `-2t` | all `t` digits of the packet on `kd.v`, zeros run-coded |
+| marked | `-(2t+1)` | the same `t` positions on `kd.v`: right is a zero and joins a run, wrong carries `zig(v)+1` |
+
+The marked form is the sparse list with the indices left out. What separates
+two corrections is a run marker rather than a gap, and two corrections side by
+side need nothing between them at all -- and corrections cluster, which is why
+it wins. It took the corpus down 5.15% on its own and `00000009` by 7.24%;
+`kd.i` fell from 4,681,080 bytes to 303,695.
+
+Two things that sound right and are not. Storing `want - got` instead of
+`want` is **worse** (+4.1%): a correction's true digit is usually zero, and
+the difference from a wrong guess is not. And dropping `kd.i` altogether,
+keeping only the two block forms, is a mere 0.04% behind keeping all three --
+but it regresses badly on packets where the walk is useless, so all three
+stay.
 
 Rejected here: zeroing unobservable channels, a deadzone in the digit walk
 (monotonically worse from 0.50 to 0.75), and carrying the encoder's lowpass
@@ -118,9 +142,13 @@ byte sizes and are not derivable without rebuilding the packets. `page.type`,
 **Per-packet scalars -- 2%.** Mode, next-window flag and the floor-use bits,
 packed into one `pk` row per packet.
 
-**Correction counts -- 1% / 2%.** Two numbers per packet: how many
-corrections follow and whether they are sparse or a raw run. Merged onto one
-row, since a row apiece spent more on tag text than on the values.
+**Correction counts -- 1.5% / 3.2%.** Two numbers per packet: how many
+corrections follow, and which of the three forms above carries them. Merged
+onto one row, since a row apiece spent more on tag text than on the values.
+This grew when the marked form arrived -- a block form's count is the
+packet's whole digit count where the sparse form's is only how many were
+wrong -- and it is charged to the forms that cause it, so the choice pays for
+its own row.
 
 **Codebooks -- 0.00%.** This was 18.6% when the work started and 2.3% a
 little later. libvorbis does not build codebooks when it encodes: `lib/books/`
@@ -193,16 +221,16 @@ What a single value occupies, tag text and separator included, over the
 
 | tag | bytes | values | bytes/value |
 |---|---:|---:|---:|
-| `kd.v` | 5,704,820 | 2,781,620 | 2.05 |
-| `kd.i` | 4,681,080 | 1,970,811 | 2.38 |
+| `kd.v` | 9,342,526 | 3,998,333 | 2.34 |
 | `flr.y` | 1,427,732 | 529,509 | 2.70 |
-| `kc.v` | 1,132,826 | 370,640 | 3.06 |
-| `flr.d` | 1,011,766 | 395,866 | 2.56 |
-| `kc.i` | 342,288 | 106,842 | 3.20 |
+| `kc.v` | 1,290,472 | 435,082 | 2.97 |
+| `flr.d` | 1,011,938 | 395,934 | 2.56 |
 | `pk` | 328,179 | 109,422 | 3.00 |
+| `kd.i` | 303,695 | 113,272 | 2.68 |
+| `kn` | 219,820 | 38,674 | 5.68 |
 | `page.plen` | 176,779 | 38,096 | 4.64 |
-| `kn` | 168,901 | 40,746 | 4.15 |
 | `page.granlo` | 58,404 | 3,008 | 19.42 |
+| `kc.i` | 50,492 | 11,308 | 4.47 |
 
 `kn` was 7.93 before its two counts were merged onto one row, and the keep
 values fell from 2.67 to 2.15 once they were zigzagged so a minus sign stopped
@@ -222,3 +250,8 @@ The corpora are not the ones earlier versions of this document used, so the
 shares are not comparable with them file for file. What is comparable is the
 direction: codebooks went 18.6% to 2.3% to 0.00%, and digit corrections are
 now what is left.
+
+Two files, `00000001` and `0000000B`, come out two bytes larger under the
+marked form than without it. The choice is made per packet against a cost
+model that cannot see how rows merge across packet boundaries; two bytes in
+136,621 is what that blind spot is worth, and it is not worth removing.

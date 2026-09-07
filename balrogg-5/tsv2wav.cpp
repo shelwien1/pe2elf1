@@ -262,40 +262,95 @@ static int recover(u32 n, int W, int wp, int wn, u32 ch, vd_map * mp) {
     and so almost always lost; with runs, raw wins whenever the digits needing
     no correction fall into fewer than n stretches, which on coupled stereo is
     most of the time.  */
+/*  What a value costs on a row: its digits, and the separator before it.  The
+    forms below are close enough in count that the digits decide between them
+    -- a gap and a run length and a digit are all one value and rarely the
+    same width -- so they are compared in bytes rather than in values.  */
+static u32 dcost(long long v) {
+  u32 d = 1;
+  unsigned long long a = v < 0 ? 0ULL - (unsigned long long) v : (unsigned long long) v;
+  if (v < 0) d++;
+  while (a >= 10) { a /= 10;  d++; }
+  return d + 1;
+}
+
+/*  The raw form: every digit of the packet, zeros run-coded.  */
 static u32 keep_run_cost(const i32 * v, u32 total) {
   u32 i, c = 0;
   for (i = 0; i < total; ) {
-    if (v[i]) { c++;  i++;  continue; }
+    if (v[i]) { c += dcost(vf_zig(v[i]));  i++;  continue; }
     { u32 e = i;
       while (e < total && !v[e]) e++;
-      c++;
-      if (e - i < VF_RUNMIN) i++;  else i = e; }
+      if (e - i < VF_RUNMIN) { c += dcost(0);  i++; }
+      else { c += dcost(-(long long) (e - i));  i = e; } }
   }
   return c;
 }
 
-static u32 keep_gap_cost(const u32 * ix, u32 n) {
+/*  The sparse form: the gap to each correction, then the corrections.  */
+static u32 keep_gap_cost(const u32 * ix, u32 n, const i32 * all) {
   u32 i, c = 0;
   long long prev = -1;
   for (i = 0; i < n; ) {
     long long g = (long long) ix[i] - prev - 1;
-    if (g) { c++;  prev = ix[i];  i++;  continue; }
+    if (g) { c += dcost(g);  prev = ix[i];  i++;  continue; }
     { u32 e = i;  long long p2 = prev;
       while (e < n && (long long) ix[e] - p2 - 1 == 0) { p2 = ix[e];  e++; }
-      c++;
-      if (e - i < VF_RUNMIN) { prev = ix[i];  i++; }
-      else { prev = p2;  i = e; } }
+      if (e - i < VF_RUNMIN) { c += dcost(0);  prev = ix[i];  i++; }
+      else { c += dcost(-(long long) (e - i));  prev = p2;  i = e; } }
+  }
+  for (i = 0; i < n; i++) c += dcost(vf_zig(all[ix[i]]));
+  return c;
+}
+
+/*  The marked form: the whole packet as one run, a digit the walk got right
+    contributing a zero and a digit it got wrong its own value.  It carries
+    the same corrections as the sparse form and none of the indices -- what
+    separates two corrections is a run marker rather than a gap, and two
+    corrections side by side need nothing between them at all, which is where
+    it wins: corrections cluster.  Values go out as zig(v) + 1 so that they
+    are never zero and never collide with the runs.  */
+static u32 keep_mark_cost(const u32 * ix, u32 n, const i32 * all, u32 total) {
+  u32 i = 0, k = 0, c = 0;
+  while (i < total) {
+    if (k < n && ix[k] == i) { c += dcost(vf_zig(all[i]) + 1);  k++;  i++;  continue; }
+    { u32 e = i, k2 = k;
+      while (e < total && !(k2 < n && ix[k2] == e)) e++;
+      if (e - i < VF_RUNMIN) { c += dcost(0);  i++; }
+      else { c += dcost(-(long long) (e - i));  i = e; } }
   }
   return c;
 }
 
-/*  How the count goes out: zero for none, a negative total for the raw form,
-    otherwise the number of sparse corrections.  The sign is what tells the
-    reader which form follows, so both sides agree without recomputing it.  */
+/*  How the count goes out, and with it which form follows:
+
+        0            no corrections
+        n > 0        sparse: n corrections, gaps then values
+        -(2t)        raw: the packet's t digits, zeros run-coded
+        -(2t + 1)    marked: the same t positions, corrections in place
+
+    The two block forms both need the digit count, and the count is a number
+    that is going out anyway, so the form rides in its low bit rather than in
+    a record of its own.  Doubling it costs a digit only when it crosses a
+    power of ten; a record of its own would cost two bytes every time, which
+    measured over four files is 1.7 points of the 7.5 this form is worth.
+
+    Each form is charged for its own count, since the three do not write the
+    same number: a block form's is the packet's whole digit count where the
+    sparse form's is only how many were wrong, which is often two digits
+    fewer.  And the sparse form is charged KEEP_TAGC for the row of indices
+    the other two do not write at all -- "kd.i", a tab and a newline.  Rows
+    merge across packets when the tags run on, so that row sometimes costs
+    less; charging it in full measured best.  */
+#define KEEP_TAGC 6               /*  the tag, its tab and its newline  */
 static long long keep_count(u32 n, u32 total, const u32 * ix, const i32 * all) {
+  u32 sparse, raw, mark;
   if (!n) return 0;
-  return keep_run_cost(all, total) < keep_gap_cost(ix, n) + n
-       ? -(long long) total : (long long) n;
+  sparse = keep_gap_cost(ix, n, all) + KEEP_TAGC + dcost((long long) n);
+  raw = keep_run_cost(all, total) + dcost(-2 * (long long) total);
+  mark = keep_mark_cost(ix, n, all, total) + dcost(-(2 * (long long) total + 1));
+  if (sparse <= raw && sparse <= mark) return (long long) n;
+  return raw <= mark ? -2 * (long long) total : -(2 * (long long) total + 1);
 }
 
 static void write_keeps(tsv & dst, const char * ti, const char * tv,
@@ -303,7 +358,7 @@ static void write_keeps(tsv & dst, const char * ti, const char * tv,
                         const i32 * all, u32 total) {
   u32 i;
   if (!c) return;
-  if (c < 0) {                            /*  the indices would cost more  */
+  if (c < 0 && !((-c) & 1)) {             /*  raw: every digit of the packet  */
     /*  Zigzagged, so a value is never negative and the run marker keeps the
         sign to itself, the same arrangement the floor differences use.  */
     for (i = 0; i < total; ) {
@@ -311,6 +366,17 @@ static void write_keeps(tsv & dst, const char * ti, const char * tv,
       if (z) { dst.put(tv, z);  i++;  continue; }
       { u32 e = i;
         while (e < total && !all[e]) e++;
+        if (e - i < VF_RUNMIN) { dst.put(tv, 0);  i++; }
+        else { dst.put(tv, -(long long) (e - i));  i = e; } }
+    }
+    return;
+  }
+  if (c < 0) {                            /*  marked: corrections in place  */
+    u32 k = 0;
+    for (i = 0; i < total; ) {
+      if (k < n && ix[k] == i) { dst.put(tv, vf_zig(vl[k]) + 1);  k++;  i++;  continue; }
+      { u32 e = i, k2 = k;
+        while (e < total && !(k2 < n && ix[k2] == e)) e++;
         if (e - i < VF_RUNMIN) { dst.put(tv, 0);  i++; }
         else { dst.put(tv, -(long long) (e - i));  i = e; } }
     }
@@ -338,8 +404,8 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
   u32 i;
   n = 0;  raw = 0;
   if (!c) return;
-  if (c < 0) {
-    raw = 1;  n = (u32) -c;
+  if (c < 0 && !((-c) & 1)) {
+    raw = 1;  n = (u32) ((-c) >> 1);
     FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", tv);
     for (i = 0; i < n; ) {
       long long z = src.get(tv);
@@ -347,6 +413,24 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
       if (!z)    { vl[i++] = 0;  continue; }
       FATAL_UNLESS((u32) -z <= n - i, "%s: correction run overruns the block", tv);
       { long long r = -z;  while (r--) vl[i++] = 0; }
+    }
+    return;
+  }
+  if (c < 0) {
+    /*  The marked form carries the same list the sparse form does, so it is
+        unpacked into that and the walk downstream never learns the
+        difference.  */
+    u32 total = (u32) ((-c) >> 1), at = 0;
+    FATAL_UNLESS(total <= KEEP_MAX, "%s: correction block is too large", tv);
+    while (at < total) {
+      long long z = src.get(tv);
+      if (z > 0) {
+        FATAL_UNLESS(n < KEEP_MAX, "%s: correction block is too large", tv);
+        ix[n] = at;  vl[n] = vf_unzig(z - 1);  n++;  at++;  continue;
+      }
+      if (!z) { at++;  continue; }
+      FATAL_UNLESS((u32) -z <= total - at, "%s: correction run overruns the block", tv);
+      at += (u32) -z;
     }
     return;
   }

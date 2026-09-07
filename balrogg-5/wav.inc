@@ -134,7 +134,8 @@ struct wav {
       if (v < -32768) v = -32768;
       /*  Clipping would otherwise let the feedback wind up without bound.  */
       { double e = (double) v - x;
-        if (e > 4.0) e = 4.0;  if (e < -4.0) e = -4.0;
+        if (e > 4.0) e = 4.0;
+        if (e < -4.0) e = -4.0;
         wav_err[i] = e; }
       w16(ob + on, (u32) (v & 0xFFFF));  on += 2;
     }
