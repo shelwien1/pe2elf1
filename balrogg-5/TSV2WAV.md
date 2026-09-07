@@ -366,6 +366,31 @@ flag's row costs. The byte saving is smaller than the correction saving
 because a correction that goes away leaves a zero, and a lone zero does not
 merge into a run.
 
+### 4.5.2 The class a partition had last time
+
+The class model is the digit model's sibling, and its context comes from
+iczelia's balrogg — `src/vorbis.h`, `AR_PCLS`: *"the previous packet's class
+at a partition"*. The fitted metric looks at one partition's residue and
+nothing else, so it cannot see that a spectral envelope holds still from one
+packet to the next and that partition *p* tends to want the ladder it wanted
+before.
+
+The context is the fit's own guess, the class this partition had in the
+previous packet, and the class the previous partition turned out to be, with
+the guess carrying half its own count again so a rival must be clearly ahead.
+The three files measured:
+
+| context | 00000007 | 00000003 | ff_48000_q10 |
+|---|---:|---:|---:|
+| previous partition in the walk | -8.1% | -15.7% | -4.4% |
+| previous packet, same partition | -13.5% | -25.7% | -5.8% |
+| **both** | **-27.4%** | **-30.1%** | **-20.2%** |
+
+Nothing is carried but a flag. **That flag must be scored in a meta pass**,
+not the fit pass: `guess` is only computed for the non-fit roles, so in the
+fit pass it is a constant zero and the scoring compares a prediction against
+nothing. A first version scored it there and came out half as good.
+
 ### 4.6 Class prediction
 
 The class is the encoder's choice of cascade ladder, and libvorbis chooses it

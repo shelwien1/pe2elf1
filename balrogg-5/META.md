@@ -20,7 +20,7 @@ hides what each one shows:
 | source Ogg | 12,734,656 | 515,872 |
 | balrogg TSV | 108,163,951 | 4,386,774 |
 | meta, self-contained build | 15,682,793 (14.50%) | 1,748,355 (39.85%) |
-| **meta, with libvorbis** | **13,589,096 (12.56%)** | **1,009,013 (23.00%)** |
+| **meta, with libvorbis** | **13,252,370 (12.25%)** | **1,007,397 (22.96%)** |
 
 The percentage is of the TSV, which is what the meta stands in for; the WAV
 carries the rest. Reconstruction from WAV plus meta is exact for all 39
@@ -37,12 +37,12 @@ files are long enough that the setup header is rounding error.
 
 | part | tags | bytes | share |
 |---|---|---:|---:|
-| Digit corrections | `kd.v`, `kd.i` | 9,583,647 | 70.52% |
-| Floor posts | `flr.y`, `flr.d` | 2,293,894 | 16.88% |
-| Class corrections | `kc.v`, `kc.i` | 993,347 | 7.31% |
-| Per-packet scalars | `pk` | 291,734 | 2.15% |
-| Page framing | `page.*` | 202,682 | 1.49% |
-| Correction counts | `kn` | 200,483 | 1.48% |
+| Digit corrections | `kd.v`, `kd.i` | 9,583,647 | 72.32% |
+| Floor posts | `flr.y`, `flr.d` | 2,293,894 | 17.31% |
+| Class corrections | `kc.v`, `kc.i` | 666,361 | 5.03% |
+| Per-packet scalars | `pk` | 291,734 | 2.20% |
+| Page framing | `page.*` | 202,682 | 1.53% |
+| Correction counts | `kn` | 190,658 | 1.44% |
 | Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 11,254 | 0.08% |
 | Stream header | `id.*`, `link.*`, `cmt.*` | 6,386 | 0.05% |
 | Learned models | `cm.*`, `vf.*` | 5,510 | 0.04% |
@@ -52,13 +52,13 @@ files are long enough that the setup header is rounding error.
 
 | part | bytes | share |
 |---|---:|---:|
-| Floor posts | 445,044 | 44.11% |
-| Digit corrections | 424,290 | 42.05% |
-| Learned models | 35,789 | 3.55% |
-| Correction counts | 30,480 | 3.02% |
+| Floor posts | 445,044 | 44.18% |
+| Digit corrections | 424,290 | 42.12% |
+| Learned models | 35,899 | 3.56% |
+| Correction counts | 30,405 | 3.02% |
 | Per-packet scalars | 27,808 | 2.76% |
 | Page framing | 15,619 | 1.55% |
-| Class corrections | 15,415 | 1.53% |
+| Class corrections | 13,764 | 1.37% |
 | Floor/residue/mapping setup | 8,470 | 0.84% |
 | Stream header | 5,856 | 0.58% |
 | Codebooks | 242 | 0.02% |
@@ -154,6 +154,25 @@ the bitstream, so they are fitted per residue and carried -- a few dozen
 integers standing in for tens of thousands of class records. What remains is
 largely classes whose ladders are interchangeable, which no predictor can
 separate.
+
+**What predicts a class is the class that partition had last time.** The
+metric fit looks at one partition's residue and nothing else, so it cannot
+see that a spectral envelope holds still from packet to packet and that
+partition *p* tends to want the ladder it wanted before. iczelia's balrogg
+conditions its class coder on exactly that (`src/vorbis.h`, `AR_PCLS`), and
+the same context works here: an adaptive table over the fit's own guess, the
+class this partition had in the previous packet, and the class the previous
+partition turned out to be.
+
+Over three files the walk-order predecessor alone takes 4-16% of the class
+corrections, the previous packet alone 6-26%, and the two together **20-30%**.
+Nothing is carried but a flag. It took class corrections from 7.31% of the
+corpus meta to 5.03%, and the meta itself down 2.48%.
+
+The flag has to be scored in a meta pass, not the fit pass: the fit's guess
+is only real once the fit has settled, and in the fit pass it is not computed
+at all. Scoring it there measured a prediction against a constant zero, which
+is how the first attempt at this came out half as good as it should have.
 
 These go out through the same three forms as the digits, with one difference.
 A digit is signed and is zigzagged so that its sign never costs a byte of its

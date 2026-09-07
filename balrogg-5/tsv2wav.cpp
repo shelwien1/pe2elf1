@@ -940,7 +940,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
   u32 link = 0;
 
   src.open(srcpath);
-  if (role == ROLE_META || role == ROLE_REST) dgm.clear();
+  if (role == ROLE_META || role == ROLE_REST) { dgm.clear();  cgm.clear(); }
   if (role == ROLE_META || role == ROLE_REST) dst.create(dstpath);
   else if (role == ROLE_FIT) dst.create(DEV_NULL);
   /*  The meta is the one stream with the short tags: written here in META,
@@ -1025,11 +1025,13 @@ static void walk(int role, const char * srcpath, const char * dstpath,
             if (role == ROLE_META) {
               models_put(dst, dec.s);
               dst.put("dg.on", dg_on);
+              dst.put("cg.on", cg_on);
               VF_QREC(dst);
             }
             if (role == ROLE_REST) {
               models_get(src, dec.s);
               dg_on = (int) src.get("dg.on");
+              cg_on = (int) src.get("cg.on");
               VF_QGET(src);
             }
             src.tee = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;
@@ -1212,6 +1214,11 @@ int main(int argc, char ** argv) {
         wav_shape = WAV_SHAPES[bestk];  synth_and_fit(argv[2], argv[3]);
       }
     }
+    /*  One pass to score the class model, which needs the settled fit and the
+        truth side by side, and so cannot be scored in the fit pass.  */
+    { cg_on = 0;  cg_score = 1;  cg_hit0 = cg_hit1 = 0;
+      walk(ROLE_META, argv[2], DEV_NULL, argv[3]);
+      cg_score = 0;  cg_on = cg_hit1 > cg_hit0; }
     walk(ROLE_META, argv[2], argv[4], argv[3]);
   } else
     walk(ROLE_REST, argv[4], argv[3], argv[2]);

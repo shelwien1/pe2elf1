@@ -181,6 +181,81 @@ static dgmodel dgm;
 static int dg_on;                        /*  does it earn its place?  */
 static long long dg_hit0, dg_hit1;       /*  the shadow run, in the fit pass  */
 
+/*  The same idea over the classes, with the context iczelia's balrogg uses
+    for them (src/vorbis.h, AR_PCLS): not the class of the partition before
+    this one, but the class this same partition had in the *previous packet*.
+    A spectral envelope holds still from one packet to the next, so partition
+    p tends to want the ladder it wanted last time -- which is exactly what
+    the metric fit cannot see, since it looks at one partition's residue and
+    nothing else.
+
+    Both of those and the fit's own guess together are worth far more than
+    either alone: over three files the walk-order predecessor alone takes 4
+    to 16 percent of the class corrections, the previous packet alone 6 to 26,
+    and the two together 20 to 30.
+
+    Adaptive, and nothing travels but a flag.  */
+constexpr int CG_P = VD_MAXCLASS + 1;    /*  a class, or "nothing yet"  */
+constexpr int CG_CTX = VD_MAXCLASS * CG_P * CG_P;
+constexpr u32 CG_NCH = 4;                /*  channels past this share a slot  */
+constexpr u32 CG_NPART = 1024;           /*  ... as do partitions past this  */
+
+struct cgmodel {
+  u16 (* cnt)[VD_MAXCLASS];
+  u8 * last;                             /*  per residue, channel, partition  */
+  u8 pw;                                 /*  the walk-order predecessor  */
+
+  void alloc() {
+    if (!cnt) cnt = (u16 (*)[VD_MAXCLASS]) calloc(CG_CTX, sizeof *cnt);
+    if (!last) last = (u8 *) malloc(VD_MAXRES * CG_NCH * CG_NPART);
+  }
+  void clear() {
+    alloc();
+    if (cnt) memset(cnt, 0, CG_CTX * sizeof *cnt);
+    if (last) memset(last, (int) VD_MAXCLASS, VD_MAXRES * CG_NCH * CG_NPART);
+    restart();
+  }
+  void restart() { pw = (u8) VD_MAXCLASS; }
+  u32 slot(u32 rno, u32 ch, u32 part) const {
+    if (rno >= VD_MAXRES) rno = VD_MAXRES - 1;
+    if (ch >= CG_NCH) ch = CG_NCH - 1;
+    if (part >= CG_NPART) part = CG_NPART - 1;
+    return (rno * CG_NCH + ch) * CG_NPART + part;
+  }
+  u32 ctx(u32 got, u32 was) const { return (got * CG_P + was) * CG_P + pw; }
+
+  /*  The commonest class seen in this context, or the fit's guess.  The
+      guess carries half its own count again, so a rival must be clearly
+      ahead before a right answer is thrown away.  */
+  u32 predict(u32 got, u32 rno, u32 ch, u32 part) const {
+    const u16 * r;  u32 v, best = got;  long bc;
+    if (!cnt || !last || got >= VD_MAXCLASS) return got;
+    r = cnt[ctx(got, last[slot(rno, ch, part)])];
+    bc = (long) r[got] + (r[got] >> 1);
+    for (v = 0; v < VD_MAXCLASS; v++)
+      if (v != got && (long) r[v] > bc) { bc = r[v];  best = v; }
+    return best;
+  }
+  void observe(u32 got, u32 want, u32 rno, u32 ch, u32 part) {
+    if (cnt && last && got < VD_MAXCLASS) {
+      u32 sl = slot(rno, ch, part);
+      u16 * r = cnt[ctx(got, last[sl])];
+      if (want < VD_MAXCLASS) {
+        if (++r[want] >= 1024) {
+          u32 v;
+          for (v = 0; v < VD_MAXCLASS; v++) r[v] = (u16) (r[v] >> 1);
+        }
+        last[sl] = (u8) want;
+      }
+    }
+    pw = (u8) (want < VD_MAXCLASS ? want : VD_MAXCLASS);
+  }
+};
+
+static cgmodel cgm;
+static int cg_on, cg_score;
+static long long cg_hit0, cg_hit1;
+
 constexpr u32 KEEP_MAX = 1u << 20;        /*  keeps in one packet  */
 
 static u32 kc_i[KEEP_MAX];  static i32 kc_v[KEEP_MAX];
@@ -204,7 +279,8 @@ struct vd_rec {
   u32 nclamp;                             /*  digits that hit a book's edge  */
 
   void packet_begin() { kc_n = kd_n = kc_p = kd_p = 0;  ci = di = 0;
-                        nclamp = 0;  kc_raw = kd_raw = 0;  dgm.restart(); }
+                        nclamp = 0;  kc_raw = kd_raw = 0;
+                        dgm.restart();  cgm.restart(); }
 
   /*  One digit: what is left rounds to it, and what it stands for comes off.
 
@@ -448,7 +524,7 @@ struct vd_rec {
   }
 
   /*  Reconcile a predicted class against the truth or the corrections.  */
-  u32 klass(u32 got) {
+  u32 klass(u32 got, u32 rno, u32 ch, u32 part) {
     u32 fin;
     if (role == ROLE_FIT) {               /*  collect, emit nothing  */
       u32 want = src->get_u("res.class", 16);
@@ -456,21 +532,28 @@ struct vd_rec {
       ci++;
       return want;
     }
+    /*  The fit's guess is only real once the fit has settled, which is after
+        the fit pass, so the model is scored in a meta pass instead.  */
+    { u32 pred = cg_on ? cgm.predict(got, rno, ch, part) : got;
     if (role == ROLE_META) {
       u32 want = src->get_u("res.class", 16);
       FATAL_UNLESS(ci < KEEP_MAX && kc_n < KEEP_MAX,
                    "too many classes in a packet");
+      /*  scored here, where the fit's guess is real and the truth is at hand  */
+      if (cg_score) { cg_hit0 += (want == got);
+                      cg_hit1 += (want == cgm.predict(got, rno, ch, part)); }
       kc_all[ci] = (i32) want;
-      if (want != got) { kc_i[kc_n] = ci;  kc_v[kc_n] = (i32) want;  kc_n++; }
+      if (want != pred) { kc_i[kc_n] = ci;  kc_v[kc_n] = (i32) want;  kc_n++; }
       fin = want;
     } else {
       if (kc_raw) fin = (u32) kc_v[kc_p++];     /*  raw run  */
       else {
-        fin = got;
+        fin = pred;
         if (kc_p < kc_n && kc_i[kc_p] == ci) fin = (u32) kc_v[kc_p++];
       }
       dst->put("res.class", fin);
     }
+    cgm.observe(got, fin, rno, ch, part); }
     ci++;
     return fin;
   }
@@ -510,7 +593,7 @@ struct vd_rec {
                   fit_rno = rno;  fit_ok = 1;
                 } else guess = predict(r, rno, bp, nch, bpos);
               }
-              vd_cl[j * w + at] = klass(guess);
+              vd_cl[j * w + at] = klass(guess, rno, j, at);
             }
         for (k = 0; k < pv; k++) {
           if (pc >= np) break;
