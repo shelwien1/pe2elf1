@@ -274,11 +274,19 @@ static u32 dcost(long long v) {
   return d + 1;
 }
 
+/*  Digits are signed and go out zigzagged so that the sign never costs a
+    byte of its own and never collides with a run marker.  Classes are an
+    index into a ladder and cannot be negative, so zigzagging one would
+    double it for nothing -- a class of five would cost the two digits of
+    ten.  The flag says which is being written.  */
+static long long keep_enc(i32 v, int sgn) { return sgn ? vf_zig(v) : (long long) v; }
+static i32 keep_dec(long long z, int sgn) { return sgn ? vf_unzig(z) : (i32) z; }
+
 /*  The raw form: every digit of the packet, zeros run-coded.  */
-static u32 keep_run_cost(const i32 * v, u32 total) {
+static u32 keep_run_cost(const i32 * v, u32 total, int sgn) {
   u32 i, c = 0;
   for (i = 0; i < total; ) {
-    if (v[i]) { c += dcost(vf_zig(v[i]));  i++;  continue; }
+    if (v[i]) { c += dcost(keep_enc(v[i], sgn));  i++;  continue; }
     { u32 e = i;
       while (e < total && !v[e]) e++;
       if (e - i < VF_RUNMIN) { c += dcost(0);  i++; }
@@ -288,7 +296,7 @@ static u32 keep_run_cost(const i32 * v, u32 total) {
 }
 
 /*  The sparse form: the gap to each correction, then the corrections.  */
-static u32 keep_gap_cost(const u32 * ix, u32 n, const i32 * all) {
+static u32 keep_gap_cost(const u32 * ix, u32 n, const i32 * all, int sgn) {
   u32 i, c = 0;
   long long prev = -1;
   for (i = 0; i < n; ) {
@@ -299,7 +307,7 @@ static u32 keep_gap_cost(const u32 * ix, u32 n, const i32 * all) {
       if (e - i < VF_RUNMIN) { c += dcost(0);  prev = ix[i];  i++; }
       else { c += dcost(-(long long) (e - i));  prev = p2;  i = e; } }
   }
-  for (i = 0; i < n; i++) c += dcost(vf_zig(all[ix[i]]));
+  for (i = 0; i < n; i++) c += dcost(keep_enc(all[ix[i]], sgn));
   return c;
 }
 
@@ -310,10 +318,11 @@ static u32 keep_gap_cost(const u32 * ix, u32 n, const i32 * all) {
     corrections side by side need nothing between them at all, which is where
     it wins: corrections cluster.  Values go out as zig(v) + 1 so that they
     are never zero and never collide with the runs.  */
-static u32 keep_mark_cost(const u32 * ix, u32 n, const i32 * all, u32 total) {
+static u32 keep_mark_cost(const u32 * ix, u32 n, const i32 * all, u32 total,
+                          int sgn) {
   u32 i = 0, k = 0, c = 0;
   while (i < total) {
-    if (k < n && ix[k] == i) { c += dcost(vf_zig(all[i]) + 1);  k++;  i++;  continue; }
+    if (k < n && ix[k] == i) { c += dcost(keep_enc(all[i], sgn) + 1);  k++;  i++;  continue; }
     { u32 e = i, k2 = k;
       while (e < total && !(k2 < n && ix[k2] == e)) e++;
       if (e - i < VF_RUNMIN) { c += dcost(0);  i++; }
@@ -343,26 +352,27 @@ static u32 keep_mark_cost(const u32 * ix, u32 n, const i32 * all, u32 total) {
     merge across packets when the tags run on, so that row sometimes costs
     less; charging it in full measured best.  */
 #define KEEP_TAGC 6               /*  the tag, its tab and its newline  */
-static long long keep_count(u32 n, u32 total, const u32 * ix, const i32 * all) {
+static long long keep_count(u32 n, u32 total, const u32 * ix, const i32 * all,
+                            int sgn) {
   u32 sparse, raw, mark;
   if (!n) return 0;
-  sparse = keep_gap_cost(ix, n, all) + KEEP_TAGC + dcost((long long) n);
-  raw = keep_run_cost(all, total) + dcost(-2 * (long long) total);
-  mark = keep_mark_cost(ix, n, all, total) + dcost(-(2 * (long long) total + 1));
+  sparse = keep_gap_cost(ix, n, all, sgn) + KEEP_TAGC + dcost((long long) n);
+  raw = keep_run_cost(all, total, sgn) + dcost(-2 * (long long) total);
+  mark = keep_mark_cost(ix, n, all, total, sgn) + dcost(-(2 * (long long) total + 1));
   if (sparse <= raw && sparse <= mark) return (long long) n;
   return raw <= mark ? -2 * (long long) total : -(2 * (long long) total + 1);
 }
 
 static void write_keeps(tsv & dst, const char * ti, const char * tv,
                         long long c, u32 n, const u32 * ix, const i32 * vl,
-                        const i32 * all, u32 total) {
+                        const i32 * all, u32 total, int sgn) {
   u32 i;
   if (!c) return;
   if (c < 0 && !((-c) & 1)) {             /*  raw: every digit of the packet  */
     /*  Zigzagged, so a value is never negative and the run marker keeps the
         sign to itself, the same arrangement the floor differences use.  */
     for (i = 0; i < total; ) {
-      long long z = vf_zig(all[i]);
+      long long z = keep_enc(all[i], sgn);
       if (z) { dst.put(tv, z);  i++;  continue; }
       { u32 e = i;
         while (e < total && !all[e]) e++;
@@ -374,7 +384,7 @@ static void write_keeps(tsv & dst, const char * ti, const char * tv,
   if (c < 0) {                            /*  marked: corrections in place  */
     u32 k = 0;
     for (i = 0; i < total; ) {
-      if (k < n && ix[k] == i) { dst.put(tv, vf_zig(vl[k]) + 1);  k++;  i++;  continue; }
+      if (k < n && ix[k] == i) { dst.put(tv, keep_enc(vl[k], sgn) + 1);  k++;  i++;  continue; }
       { u32 e = i, k2 = k;
         while (e < total && !(k2 < n && ix[k2] == e)) e++;
         if (e - i < VF_RUNMIN) { dst.put(tv, 0);  i++; }
@@ -396,11 +406,12 @@ static void write_keeps(tsv & dst, const char * ti, const char * tv,
         if (e - i < VF_RUNMIN) { dst.put(ti, 0);  prev = ix[i];  i++; }
         else { dst.put(ti, -(long long) (e - i));  prev = p2;  i = e; } }
     } }
-  for (i = 0; i < n; i++) dst.put(tv, vf_zig(vl[i]));
+  for (i = 0; i < n; i++) dst.put(tv, keep_enc(vl[i], sgn));
 }
 
 static void read_keeps(tsv & src, const char * ti, const char * tv,
-                       long long c, u32 & n, u32 * ix, i32 * vl, int & raw) {
+                       long long c, u32 & n, u32 * ix, i32 * vl, int & raw,
+                       int sgn) {
   u32 i;
   n = 0;  raw = 0;
   if (!c) return;
@@ -409,7 +420,7 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
     FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", tv);
     for (i = 0; i < n; ) {
       long long z = src.get(tv);
-      if (z > 0) { vl[i++] = vf_unzig(z);  continue; }
+      if (z > 0) { vl[i++] = keep_dec(z, sgn);  continue; }
       if (!z)    { vl[i++] = 0;  continue; }
       FATAL_UNLESS((u32) -z <= n - i, "%s: correction run overruns the block", tv);
       { long long r = -z;  while (r--) vl[i++] = 0; }
@@ -426,7 +437,7 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
       long long z = src.get(tv);
       if (z > 0) {
         FATAL_UNLESS(n < KEEP_MAX, "%s: correction block is too large", tv);
-        ix[n] = at;  vl[n] = vf_unzig(z - 1);  n++;  at++;  continue;
+        ix[n] = at;  vl[n] = keep_dec(z - 1, sgn);  n++;  at++;  continue;
       }
       if (!z) { at++;  continue; }
       FATAL_UNLESS((u32) -z <= total - at, "%s: correction run overruns the block", tv);
@@ -448,7 +459,7 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
     }
   }
   FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", tv);
-  for (i = 0; i < n; i++) vl[i] = vf_unzig(src.get(tv));
+  for (i = 0; i < n; i++) vl[i] = keep_dec(src.get(tv), sgn);
 }
 
 #ifdef BLR_VORBIS
@@ -877,8 +888,8 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
   if (role == ROLE_REST) {                /*  corrections arrive before use  */
     { long long a = 0, b = 0;
       if (!strcmp(src.peek(), "kn")) { a = src.get("kn");  b = src.get("kn"); }
-      read_keeps(src, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, rec.kc_raw);
-      read_keeps(src, "kd.i", "kd.v", b, rec.kd_n, kd_i, kd_v, rec.kd_raw); }
+      read_keeps(src, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, rec.kc_raw, 0);
+      read_keeps(src, "kd.i", "kd.v", b, rec.kd_n, kd_i, kd_v, rec.kd_raw, 1); }
   }
 
   rec.role = role;  rec.src = &src;  rec.dst = &dst;
@@ -895,11 +906,12 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
     /*  The two correction counts are known together and are one small number
         each; a row apiece spends more on tag text than on the values, so they
         share a row.  */
-    { long long a = keep_count(rec.kc_n, rec.ci, kc_i, kc_all),
-                b = keep_count(rec.kd_n, rec.di, kd_i, kd_all);
+    /*  classes are an index and never negative; digits are signed  */
+    { long long a = keep_count(rec.kc_n, rec.ci, kc_i, kc_all, 0),
+                b = keep_count(rec.kd_n, rec.di, kd_i, kd_all, 1);
       if (a || b) { dst.put("kn", a);  dst.put("kn", b); }
-      write_keeps(dst, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, kc_all, rec.ci);
-      write_keeps(dst, "kd.i", "kd.v", b, rec.kd_n, kd_i, kd_v, kd_all, rec.di); }
+      write_keeps(dst, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, kc_all, rec.ci, 0);
+      write_keeps(dst, "kd.i", "kd.v", b, rec.kd_n, kd_i, kd_v, kd_all, rec.di, 1); }
   }
   src.tee = &dst;                         /*  structural records flow again  */
 }

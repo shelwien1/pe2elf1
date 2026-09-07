@@ -285,6 +285,13 @@ the cheapest:
 | raw | `−2t` | every one of the packet's `t` digits on `kd.v`, zeros run-coded |
 | marked | `−(2t+1)` | the same `t` positions on `kd.v`: a digit the walk got right is a zero and joins a run, a digit it got wrong carries `zig(v)+1` |
 
+The same three forms carry the class corrections on `kc.i` and `kc.v`, with
+one difference: a digit is signed and goes out zigzagged so that its sign
+never costs a byte of its own and never looks like a run marker, but a class
+is an index into a ladder and cannot be negative, so zigzagging one would
+double it for nothing — class five would cost the two digits of ten. The
+classes skip it, which is worth 6.2% of `kc` on `00000003`.
+
 The marked form is the sparse list with the indices left out — what separates
 two corrections is a run marker rather than a gap, and **two corrections side
 by side need nothing between them at all.** Corrections cluster, so that is

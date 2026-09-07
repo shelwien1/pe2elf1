@@ -20,7 +20,7 @@ hides what each one shows:
 | source Ogg | 12,734,656 | 515,872 |
 | balrogg TSV | 108,163,951 | 4,386,774 |
 | meta, self-contained build | 15,682,793 (14.50%) | 1,748,355 (39.85%) |
-| **meta, with libvorbis** | **14,368,735 (13.28%)** | **1,088,889 (24.82%)** |
+| **meta, with libvorbis** | **14,092,491 (13.03%)** | **1,087,653 (24.79%)** |
 
 The percentage is of the TSV, which is what the meta stands in for; the WAV
 carries the rest. Reconstruction from WAV plus meta is exact for all 39
@@ -37,12 +37,12 @@ files are long enough that the setup header is rounding error.
 
 | part | tags | bytes | share |
 |---|---|---:|---:|
-| Digit corrections | `kd.v`, `kd.i` | 9,646,221 | 67.13% |
-| Floor posts | `flr.y`, `flr.d` | 2,439,670 | 16.98% |
-| Class corrections | `kc.v`, `kc.i` | 1,340,964 | 9.33% |
-| Page framing | `page.*` | 356,995 | 2.48% |
-| Per-packet scalars | `pk` | 328,179 | 2.28% |
-| Correction counts | `kn` | 219,820 | 1.53% |
+| Digit corrections | `kd.v`, `kd.i` | 9,646,221 | 68.45% |
+| Floor posts | `flr.y`, `flr.d` | 2,439,670 | 17.31% |
+| Class corrections | `kc.v`, `kc.i` | 1,064,720 | 7.56% |
+| Page framing | `page.*` | 356,995 | 2.53% |
+| Per-packet scalars | `pk` | 328,179 | 2.33% |
+| Correction counts | `kn` | 219,820 | 1.56% |
 | Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 22,601 | 0.16% |
 | Stream header | `id.*`, `link.*`, `cmt.*` | 8,086 | 0.06% |
 | Learned models | `cm.*`, `vf.*` | 5,870 | 0.04% |
@@ -52,13 +52,13 @@ files are long enough that the setup header is rounding error.
 
 | part | bytes | share |
 |---|---:|---:|
-| Digit corrections | 459,299 | 42.18% |
-| Floor posts | 458,948 | 42.15% |
+| Digit corrections | 459,299 | 42.23% |
+| Floor posts | 458,948 | 42.20% |
 | Learned models | 36,214 | 3.33% |
-| Correction counts | 35,021 | 3.22% |
-| Per-packet scalars | 31,284 | 2.87% |
+| Correction counts | 35,023 | 3.22% |
+| Per-packet scalars | 31,284 | 2.88% |
 | Page framing | 23,000 | 2.11% |
-| Class corrections | 19,269 | 1.77% |
+| Class corrections | 18,031 | 1.66% |
 | Floor/residue/mapping setup | 17,336 | 1.59% |
 | Stream header | 8,056 | 0.74% |
 | Codebooks | 462 | 0.04% |
@@ -101,7 +101,9 @@ The marked form is the sparse list with the indices left out. What separates
 two corrections is a run marker rather than a gap, and two corrections side by
 side need nothing between them at all -- and corrections cluster, which is why
 it wins. It took the corpus down 5.15% on its own and `00000009` by 7.24%;
-`kd.i` fell from 4,681,080 bytes to 303,695.
+`kd.i` fell from 4,681,080 bytes to 303,695, and `kc.i` from 342,288 to
+50,492. Together with the class values below, the two changes are 6.97% of
+the corpus.
 
 Two things that sound right and are not. Storing `want - got` instead of
 `want` is **worse** (+4.1%): a correction's true digit is usually zero, and
@@ -127,13 +129,21 @@ The ceiling was measured by feeding the ported `floor1_fit` the *true* floor
 as its own mask: even a perfect mask gives 2.30 bits against 3.44, so about a
 third of this stream is the most any predictor can remove.
 
-**Class corrections -- 10% / 2%.** Where the fitted classifier chose a
+**Class corrections -- 7.6% / 1.7%.** Where the fitted classifier chose a
 different ladder. libvorbis picks the class from two measures of the
 quantized residue against `classmetric1/2`, which are encoder-side and not in
 the bitstream, so they are fitted per residue and carried -- a few dozen
 integers standing in for tens of thousands of class records. What remains is
 largely classes whose ladders are interchangeable, which no predictor can
 separate.
+
+These go out through the same three forms as the digits, with one difference.
+A digit is signed and is zigzagged so that its sign never costs a byte of its
+own and never looks like a run marker; a class is an index into a ladder and
+cannot be negative, so zigzagging one would double it for nothing -- class
+five would cost the two digits of ten. Skipping it took `kc.v` from 2.97
+bytes a value to 2.33, and 99.3% of the values are now a single digit, which
+is as far as this can go: a frequency remap has nothing left to save.
 
 **Page framing -- 2%.** `page.plen` dominates: segment lengths are packet
 byte sizes and are not derivable without rebuilding the packets. `page.type`,
@@ -223,7 +233,7 @@ What a single value occupies, tag text and separator included, over the
 |---|---:|---:|---:|
 | `kd.v` | 9,342,526 | 3,998,333 | 2.34 |
 | `flr.y` | 1,427,732 | 529,509 | 2.70 |
-| `kc.v` | 1,290,472 | 435,082 | 2.97 |
+| `kc.v` | 1,014,228 | 435,082 | 2.33 |
 | `flr.d` | 1,011,938 | 395,934 | 2.56 |
 | `pk` | 328,179 | 109,422 | 3.00 |
 | `kd.i` | 303,695 | 113,272 | 2.68 |
