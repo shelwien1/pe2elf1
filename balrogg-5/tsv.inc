@@ -24,6 +24,89 @@
     where it happens rather than as corrupt output.  */
 
 constexpr char TSV_MAGIC[] = "tag\tvalues";
+
+/*  The meta is read by tsv2wav and by nothing else, so its tags do not have
+    to be the ones balrogg chose -- and a tag is written once per row, which
+    over a meta that changes tag every few values is most of what the tag
+    costs.  Every tag that can reach a meta has a short name here, given out
+    shortest-first by how many rows the tag takes, and the stream translates
+    on the way out and back.  Nothing at the call sites changes, and the tee
+    keeps handing over balrogg's names.
+
+    Measured over 39 files this is 538,143 bytes, 3.55% of the meta.  */
+struct tsv_short { const char * lng, * sht; };
+static const tsv_short TSV_SHORT[] = {
+  { "pk", "a" },
+  { "kn", "b" },
+  { "flr.d", "c" },
+  { "kd.v", "d" },
+  { "kc.v", "e" },
+  { "flr.y", "f" },
+  { "kc.i", "g" },
+  { "kd.i", "h" },
+  { "page.gran", "i" },
+  { "page.npkt", "k" },
+  { "page.plen", "l" },
+  { "page.tail", "m" },
+  { "page.spill", "n" },
+  { "flr.cdim", "o" },
+  { "flr.csub", "p" },
+  { "flr.sbook", "q" },
+  { "flr.cbook", "r" },
+  { "link.more", "s" },
+  { "mode.blockflag", "t" },
+  { "mode.mapping", "u" },
+  { "flr.type", "v" },
+  { "flr.parts", "w" },
+  { "flr.pclass", "x" },
+  { "flr.mult", "y" },
+  { "flr.rangebits", "z" },
+  { "flr.x", "A" },
+  { "res.type", "B" },
+  { "res.begin", "C" },
+  { "res.end", "D" },
+  { "res.partsize", "E" },
+  { "res.nclass", "F" },
+  { "res.classbook", "G" },
+  { "res.cascade", "H" },
+  { "res.book", "I" },
+  { "map.submaps", "J" },
+  { "map.steps", "K" },
+  { "map.smtime", "L" },
+  { "map.smfloor", "M" },
+  { "map.smres", "N" },
+  { "cm.mode", "O" },
+  { "link.frames", "P" },
+  { "link.serial", "Q" },
+  { "id.channels", "R" },
+  { "id.rate", "S" },
+  { "id.brmax", "T" },
+  { "id.brnom", "U" },
+  { "id.brmin", "V" },
+  { "id.blocksize", "W" },
+  { "id.framing", "X" },
+  { "cmt.byte", "Y" },
+  { "cb.count", "Z" },
+  { "cb.i", "0" },
+  { "flr.ntime", "1" },
+  { "flr.count", "2" },
+  { "res.count", "3" },
+  { "map.count", "4" },
+  { "mode.count", "5" },
+  { "dg.on", "6" },
+  { "vf.q", "7" },
+  { "page.eos", "8" },
+  { "cm.a", "9" },
+  { "cm.b", "aa" },
+  { "map.mag", "ab" },
+  { "map.ang", "ac" },
+  { "aud.wpfix", "ad" },
+  { "cm.n", "ae" },
+  { "cm.f", "af" },
+  { "cm.g", "ag" },
+  { "cm.c", "ah" },
+};
+constexpr int TSV_NSHORT = (int) (sizeof TSV_SHORT / sizeof *TSV_SHORT);
 constexpr sz   TSV_OBUF    = 1 << 20;
 constexpr sz   TSV_IBUF    = 1 << 16;
 constexpr sz   TSV_TAGMAX  = 31;
@@ -49,6 +132,26 @@ struct tsv {
   const char * wtag;          /*  its tag, or null between rows  */
 
   tsv * tee;                  /*  every record read is echoed here  */
+  int terse;                  /*  the stream uses the short tags above  */
+  /*  Records arrive in runs of one tag, so remembering the last one turns
+      the lookup into a pointer compare nearly every time.  */
+  const char * clng, * csht;
+
+  const char * shorten(const char * tag) {
+    int i;
+    if (!terse) return tag;
+    if (tag == clng) return csht;
+    for (i = 0; i < TSV_NSHORT; i++)
+      if (!strcmp(TSV_SHORT[i].lng, tag))
+        { clng = tag;  csht = TSV_SHORT[i].sht;  return csht; }
+    return tag;               /*  not a meta tag; it goes out as it came  */
+  }
+  static const char * lengthen(const char * sht) {
+    int i;
+    for (i = 0; i < TSV_NSHORT; i++)
+      if (!strcmp(TSV_SHORT[i].sht, sht)) return TSV_SHORT[i].lng;
+    return sht;
+  }
   char * mem;                 /*  when set, output goes here, not to a file  */
   sz memcap, memlen;
   sz bytes;                   /*  what has been written, for trial runs  */
@@ -61,6 +164,7 @@ struct tsv {
     if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", pth);
     path = pth;  enc = 1;  row = 0;  on = 0;  rl = 0;  wtag = nullptr;  bytes = 0;
     mem = nullptr;  memcap = memlen = 0;
+    terse = 0;  clng = csht = nullptr;
     emit(TSV_MAGIC, sizeof TSV_MAGIC - 1);  emit("\n", 1);
   }
 
@@ -69,6 +173,7 @@ struct tsv {
   void create_mem(char * buf, sz cap) {
     f = nullptr;  path = "(memory)";  enc = 1;  row = 0;  on = 0;  rl = 0;
     wtag = nullptr;  bytes = 0;  mem = buf;  memcap = cap;  memlen = 0;
+    terse = 0;  clng = csht = nullptr;
   }
 
   void emit(const char * s, sz n) {
@@ -97,7 +202,7 @@ struct tsv {
     f = fopen(pth, "rb");
     if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot open %s", pth);
     path = pth;  enc = 0;  row = 0;  ip = in = 0;  left = 0;  rtag[0] = 0;
-    tee = nullptr;
+    tee = nullptr;  terse = 0;  clng = csht = nullptr;
     while (*m) {
       FATAL_UNLESS(rd() == (u8) *m, "%s: not a balrogg TSV stream", path);
       m++;
@@ -133,6 +238,7 @@ struct tsv {
     int k = (int) sizeof n;
     unsigned long long a = v < 0 ? 0ULL - (unsigned long long) v
                                  : (unsigned long long) v;
+    tag = shorten(tag);
     if (wtag && rl < TSV_ROWMAX && (tag == wtag || !strcmp(tag, wtag)))
       emit(" ", 1);
     else {
@@ -154,8 +260,10 @@ struct tsv {
     int c, neg = 0, nd = 0;
     row++;
     if (!left) head(tag);
-    FATAL_UNLESS(!strcmp(rtag, tag), "%s: record %lu is '%s', expected '%s'",
-                 path, row, rtag, tag);
+    { const char * want = shorten(tag);
+      FATAL_UNLESS(!strcmp(rtag, want),
+                   "%s: record %lu is '%s', expected '%s'", path, row,
+                   terse ? lengthen(rtag) : rtag, tag); }
     c = rd();
     if (c == '-') { neg = 1;  c = rd(); }
     while (c >= '0' && c <= '9') {
@@ -185,7 +293,7 @@ struct tsv {
       stream.  Lets an optional record cost nothing when it is absent.  */
   const char * peek() {
     if (!left && !head_soft()) return "";
-    return rtag;
+    return terse ? lengthen(rtag) : rtag;
   }
 
   u32 get_u(const char * tag, unsigned long long hi) {

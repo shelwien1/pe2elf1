@@ -20,7 +20,7 @@ hides what each one shows:
 | source Ogg | 12,734,656 | 515,872 |
 | balrogg TSV | 108,163,951 | 4,386,774 |
 | meta, self-contained build | 15,682,793 (14.50%) | 1,748,355 (39.85%) |
-| **meta, with libvorbis** | **14,092,627 (13.03%)** | **1,063,591 (24.24%)** |
+| **meta, with libvorbis** | **13,589,096 (12.56%)** | **1,009,013 (23.00%)** |
 
 The percentage is of the TSV, which is what the meta stands in for; the WAV
 carries the rest. Reconstruction from WAV plus meta is exact for all 39
@@ -37,31 +37,31 @@ files are long enough that the setup header is rounding error.
 
 | part | tags | bytes | share |
 |---|---|---:|---:|
-| Digit corrections | `kd.v`, `kd.i` | 9,646,221 | 68.45% |
-| Floor posts | `flr.y`, `flr.d` | 2,439,670 | 17.31% |
-| Class corrections | `kc.v`, `kc.i` | 1,064,720 | 7.56% |
-| Page framing | `page.*` | 356,995 | 2.53% |
-| Per-packet scalars | `pk` | 328,179 | 2.33% |
-| Correction counts | `kn` | 219,820 | 1.56% |
-| Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 22,601 | 0.16% |
-| Stream header | `id.*`, `link.*`, `cmt.*` | 8,086 | 0.06% |
-| Learned models | `cm.*`, `vf.*` | 5,870 | 0.04% |
-| **Codebooks** | `cb.*` | **329** | **0.00%** |
+| Digit corrections | `kd.v`, `kd.i` | 9,583,647 | 70.52% |
+| Floor posts | `flr.y`, `flr.d` | 2,293,894 | 16.88% |
+| Class corrections | `kc.v`, `kc.i` | 993,347 | 7.31% |
+| Per-packet scalars | `pk` | 291,734 | 2.15% |
+| Page framing | `page.*` | 202,682 | 1.49% |
+| Correction counts | `kn` | 200,483 | 1.48% |
+| Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 11,254 | 0.08% |
+| Stream header | `id.*`, `link.*`, `cmt.*` | 6,386 | 0.05% |
+| Learned models | `cm.*`, `vf.*` | 5,510 | 0.04% |
+| **Codebooks** | `cb.*` | **159** | **0.00%** |
 
 22 ffmpeg files:
 
 | part | bytes | share |
 |---|---:|---:|
-| Digit corrections | 459,299 | 42.23% |
-| Floor posts | 458,948 | 42.20% |
-| Learned models | 36,214 | 3.33% |
-| Correction counts | 35,023 | 3.22% |
-| Per-packet scalars | 31,284 | 2.88% |
-| Page framing | 23,000 | 2.11% |
-| Class corrections | 18,031 | 1.66% |
-| Floor/residue/mapping setup | 17,336 | 1.59% |
-| Stream header | 8,056 | 0.74% |
-| Codebooks | 462 | 0.04% |
+| Floor posts | 445,044 | 44.11% |
+| Digit corrections | 424,290 | 42.05% |
+| Learned models | 35,789 | 3.55% |
+| Correction counts | 30,480 | 3.02% |
+| Per-packet scalars | 27,808 | 2.76% |
+| Page framing | 15,619 | 1.55% |
+| Class corrections | 15,415 | 1.53% |
+| Floor/residue/mapping setup | 8,470 | 0.84% |
+| Stream header | 5,856 | 0.58% |
+| Codebooks | 242 | 0.02% |
 
 ## What each part is, and why it is still there
 
@@ -241,6 +241,48 @@ The sweep costs about 25% more runtime, which is less than it sounds:
 scoring a candidate is done with the floor refit switched off, and that refit
 is 97% of what mode `c` otherwise spends. Scoring that way was checked over
 37 files to pick the same coefficient as scoring the whole meta.
+
+## What the format spends on saying which record is which
+
+An audit of the 70 tags a meta can hold found no value that is wrong and none
+that is never read back. What it did find was that the *names* were most of
+the cost of the small records, and that one of them was saying nothing.
+
+**The tags.** A tag goes out once per row, and the meta changes tag every few
+values, so `page.granlo` was costing 19.3 bytes a value and `page.granhi`
+14.0 -- against `pk`'s 3.0, which merges. Tag text and row breaks came to
+853,594 bytes, **5.63% of the meta**. The meta is read by `tsv2wav` and by
+nothing else, so its tags do not have to be the ones balrogg chose: they are
+now one or two characters, handed out shortest-first by row count, with the
+stream translating on the way out and back. No call site changed, and the tee
+still hands over balrogg's names.
+
+**The granule.** It went out as two 32-bit halves, and the high half was zero
+on all 3,187 pages -- it stays zero until a stream passes 2^32 samples, which
+is twenty-seven hours at 44.1 kHz. It is now one number, and a difference
+from the page before: a small number from a small set, 120 distinct values
+over 3,187 pages and a third of them exactly 4096, because a page's granule
+climbs by the samples its packets put out.
+
+| | before | after | |
+|---|---:|---:|---:|
+| 17-file corpus | 14,092,627 | 13,589,096 | **-3.57%** |
+| 22 ffmpeg files | 1,063,591 | 1,009,013 | **-5.13%** |
+
+Files whose meta is mostly setup gain most -- `00000005` by 15.9%,
+`00000003` by 15.3% -- and files that are almost all correction values gain
+least, `00000009` by 1.0%, because there the tag was never the problem.
+
+What is left of the row overhead is 2.99%, spread evenly over the four
+per-packet records. Taking more of it means merging rows across packets,
+which needs a whole link buffered before anything is written.
+
+Three findings from the audit were left alone. `page.eos` and `aud.wpfix`
+carry a value that is redundant with the record's presence, but a TSV record
+must have a value, so the saving is two bytes an occurrence -- 693 in all.
+And `id.rate`, `id.channels` and `link.frames` are recoverable from the WAV
+-- `pcmwin::open` already *checks* the first two against its fmt chunk -- but
+they come to 1,824 bytes and removing them would remove that check.
 
 ## Cost per value
 

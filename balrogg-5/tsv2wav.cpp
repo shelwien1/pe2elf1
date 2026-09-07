@@ -128,6 +128,10 @@ constexpr u32 LK_MAX = 4096;              /*  links in one file  */
     a link.  The serial is one number per link, not per page.  The meta carries
     the serial once and derives the other two, and mode c checks the derivation
     rather than trusting it.  */
+/*  The granule the page before this one ended on, which the difference above
+    is taken against.  A link starts it again from zero.  */
+static i64 pg_gran;
+
 struct pg {
   u32 type, glo, ghi, serial, seq, np;
   u32 plen[OGG_MAXSEG];
@@ -152,8 +156,10 @@ struct pg {
   void get_meta(tsv & t, u32 ser, u32 sq, int bos, int cont) {
     int i;
     type = (u32) ((bos ? 2 : 0) | (cont ? 1 : 0));
-    glo = t.get_u("page.granlo", 0x100000000ULL);
-    ghi = t.get_u("page.granhi", 0x100000000ULL);
+    { i64 g = pg_gran + (i64) t.get("page.gran");
+      pg_gran = g;
+      glo = (u32) ((unsigned long long) g & 0xFFFFFFFFu);
+      ghi = (u32) ((unsigned long long) g >> 32); }
     serial = ser;  seq = sq;
     np = t.get_u("page.npkt", OGG_MAXSEG + 1);
     Fi((int) np, plen[i] = t.get_u("page.plen",
@@ -174,10 +180,19 @@ struct pg {
     if (np && !(plen[np - 1] % OGG_MAXSEG)) t.put("page.tail", tail);
   }
 
-  /*  Write to the meta, omitting type, serial and seq.  */
+  /*  Write to the meta, omitting type, serial and seq.
+
+      The granule goes out whole and as a difference.  It is one number, not
+      two halves: the high half is zero until a stream passes 2^32 samples,
+      which is twenty-seven hours at 44.1 kHz, and it was costing fourteen
+      bytes a page to say so.  And it climbs by the samples the page's packets
+      put out, so the difference is a small number from a small set -- 120
+      distinct ones over 3187 pages, a third of them 4096.  */
   void put_meta(tsv & t) const {
     int i;
-    t.put("page.granlo", glo);   t.put("page.granhi", ghi);
+    { i64 g = (i64) (((unsigned long long) ghi << 32) | glo);
+      t.put("page.gran", (long long) (g - pg_gran));
+      pg_gran = g; }
     t.put("page.npkt", np);
     Fi((int) np, t.put("page.plen", plen[i]));
     if (np && !(plen[np - 1] % OGG_MAXSEG)) t.put("page.tail", tail);
@@ -928,6 +943,10 @@ static void walk(int role, const char * srcpath, const char * dstpath,
   if (role == ROLE_META || role == ROLE_REST) dgm.clear();
   if (role == ROLE_META || role == ROLE_REST) dst.create(dstpath);
   else if (role == ROLE_FIT) dst.create(DEV_NULL);
+  /*  The meta is the one stream with the short tags: written here in META,
+      read here in REST.  The restored TSV keeps balrogg's names.  */
+  if (role == ROLE_META) dst.terse = 1;
+  if (role == ROLE_REST) src.terse = 1;
   dec.s.have = 0;  lk_n = 0;  tot_before = 0;
 
   if (role == ROLE_META || role == ROLE_REST) src.tee = &dst;
@@ -937,6 +956,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
     u32 serial = 0, seq = 0;
     int prevtail = 0;
     sz spill = 0;
+    pg_gran = 0;
     if (open) { dec.link();  an_first = 1;  an_prevW = 0; }
     if (role == ROLE_META) { src.tee = nullptr;
                              dst.put("link.frames", (long long) lk_frames[link]);

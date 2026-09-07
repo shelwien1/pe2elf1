@@ -83,6 +83,17 @@ the end. `REST` emits the floor records as it reads them, reads the keep
 blocks, then computes and emits the residue records. Neither role buffers a
 packet.
 
+**Its tags are its own.** The meta is read by `tsv2wav` and by nothing else,
+so it does not have to use the names balrogg chose. A tag goes out once per
+row and the meta changes tag every few values, which made the names most of
+what the small records cost — `page.granlo` was 19.3 bytes a value. `tsv.inc`
+carries a table of one- and two-character names, handed out shortest-first by
+how many rows a tag takes, and `tsv::put`/`get`/`peek` translate on the way
+out and back with a one-entry cache (records arrive in runs of one tag, so it
+is a pointer compare nearly every time). Call sites are unchanged, and the tee
+still hands over balrogg's names. Worth 3.6% of the corpus meta and 5.1% of
+the ffmpeg one.
+
 ---
 
 ## 2. Synthesis (`ROLE_SYNTH`)
