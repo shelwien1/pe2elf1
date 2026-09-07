@@ -147,6 +147,36 @@ if NOTE + PLAIN not in s:
         if a in s:
             wr(f, s.replace(a, NOTE + PLAIN)); break
 
+#  (9) psy.c clamps halfoc to P_BANDS-1 and then interpolates between
+#      noiseoff[inthalfoc] and noiseoff[inthalfoc+1] -- so at the top of the
+#      range it reads noiseoff[P_BANDS], one past the end of a float[17].
+#      del is 0 there, so the value is multiplied away and the result was
+#      never wrong; but the read is out of bounds (UBSan flags it), and if the
+#      adjacent bytes ever decoded to inf or NaN the 0 would not save it.
+#      Clamping to the last interval instead of the last point keeps
+#      inthalfoc+1 in range and yields exactly noiseoff[P_BANDS-1] either way.
+f = 'psy.c'; s = rd(f)
+a = """    inthalfoc=(int)halfoc;
+    del=halfoc-inthalfoc;"""
+b = """    inthalfoc=(int)halfoc;
+    if(inthalfoc>P_BANDS-2)inthalfoc=P_BANDS-2;   /* keep inthalfoc+1 in range */
+    del=halfoc-inthalfoc;"""
+if b not in s:
+    assert s.count(a) == 1
+    wr(f, s.replace(a, b))
+
+#  (10) psy.c packs a pair of indices into one long as ((lo-1)<<16)+(hi-1),
+#       and lo starts at 0, so the first band shifts -1 left.  Shifting a
+#       negative value is undefined before C++20 (UBSan flags it).  lo and hi
+#       are bounded by n <= 4096, so (lo-1)*65536 cannot overflow an int and
+#       gives the identical value at every standard.
+f = 'psy.c'; s = rd(f)
+a = '    p->bark[i]=((lo-1)<<16)+(hi-1);'
+b = '    p->bark[i]=((lo-1)*65536)+(hi-1);   /* not <<: lo-1 is -1 on the first band */'
+if b not in s:
+    assert s.count(a) == 1
+    wr(f, s.replace(a, b))
+
 #  (7) int fields, double literals
 f = 'modes/psych_44.h'; s = rd(f)
 a = '   {99.},{{99.},{99.}},{0},{0},{{0.},{0.}}'

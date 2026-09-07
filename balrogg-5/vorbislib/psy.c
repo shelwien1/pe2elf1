@@ -317,7 +317,7 @@ void _vp_psy_init(vorbis_look_psy *p,vorbis_info_psy *vi,
     for(;hi<=n && (hi<i+vi->noisewindowhimin ||
           toBARK(rate/(2*n)*hi)<(bark+vi->noisewindowhi));hi++);
 
-    p->bark[i]=((lo-1)<<16)+(hi-1);
+    p->bark[i]=((lo-1)*65536)+(hi-1);   /* not <<: lo-1 is -1 on the first band */
 
   }
 
@@ -340,6 +340,7 @@ void _vp_psy_init(vorbis_look_psy *p,vorbis_info_psy *vi,
     if(halfoc<0)halfoc=0;
     if(halfoc>=P_BANDS-1)halfoc=P_BANDS-1;
     inthalfoc=(int)halfoc;
+    if(inthalfoc>P_BANDS-2)inthalfoc=P_BANDS-2;   /* keep inthalfoc+1 in range */
     del=halfoc-inthalfoc;
 
     for(j=0;j<P_NOISECURVES;j++)
