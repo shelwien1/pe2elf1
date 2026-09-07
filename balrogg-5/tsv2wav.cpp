@@ -251,20 +251,69 @@ static int recover(u32 n, int W, int wp, int wn, u32 ch, vd_map * mp) {
     A block the PCM does not span carries every value as a raw run with no
     indices; both roles know which form to use because both compute the same
     `covered`.  */
-/*  How the count goes out: zero for none, a negative total for a raw run,
-    otherwise the number of sparse corrections.  */
-static long long keep_count(u32 n, u32 total) {
+/*  What each form costs, counted in values rather than guessed at.
+
+    The raw form carries every digit of the block, but its zeros go out as runs
+    -- exactly what the floor differences already do -- so a block whose
+    corrections cluster spends one value on each stretch that needed none.  The
+    sparse form spends a gap-coded index on every correction and then the
+    correction itself, so it never costs less than 2n.  The old rule, `2n >
+    total`, compared the sparse cost against a raw form that had no runs at all
+    and so almost always lost; with runs, raw wins whenever the digits needing
+    no correction fall into fewer than n stretches, which on coupled stereo is
+    most of the time.  */
+static u32 keep_run_cost(const i32 * v, u32 total) {
+  u32 i, c = 0;
+  for (i = 0; i < total; ) {
+    if (v[i]) { c++;  i++;  continue; }
+    { u32 e = i;
+      while (e < total && !v[e]) e++;
+      c++;
+      if (e - i < VF_RUNMIN) i++;  else i = e; }
+  }
+  return c;
+}
+
+static u32 keep_gap_cost(const u32 * ix, u32 n) {
+  u32 i, c = 0;
+  long long prev = -1;
+  for (i = 0; i < n; ) {
+    long long g = (long long) ix[i] - prev - 1;
+    if (g) { c++;  prev = ix[i];  i++;  continue; }
+    { u32 e = i;  long long p2 = prev;
+      while (e < n && (long long) ix[e] - p2 - 1 == 0) { p2 = ix[e];  e++; }
+      c++;
+      if (e - i < VF_RUNMIN) { prev = ix[i];  i++; }
+      else { prev = p2;  i = e; } }
+  }
+  return c;
+}
+
+/*  How the count goes out: zero for none, a negative total for the raw form,
+    otherwise the number of sparse corrections.  The sign is what tells the
+    reader which form follows, so both sides agree without recomputing it.  */
+static long long keep_count(u32 n, u32 total, const u32 * ix, const i32 * all) {
   if (!n) return 0;
-  return 2 * n > total ? -(long long) total : (long long) n;
+  return keep_run_cost(all, total) < keep_gap_cost(ix, n) + n
+       ? -(long long) total : (long long) n;
 }
 
 static void write_keeps(tsv & dst, const char * ti, const char * tv,
-                        u32 n, const u32 * ix, const i32 * vl,
+                        long long c, u32 n, const u32 * ix, const i32 * vl,
                         const i32 * all, u32 total) {
   u32 i;
-  if (!n) return;
-  if (2 * n > total) {                    /*  the indices would cost more  */
-    for (i = 0; i < total; i++) dst.put(tv, vf_zig(all[i]));
+  if (!c) return;
+  if (c < 0) {                            /*  the indices would cost more  */
+    /*  Zigzagged, so a value is never negative and the run marker keeps the
+        sign to itself, the same arrangement the floor differences use.  */
+    for (i = 0; i < total; ) {
+      long long z = vf_zig(all[i]);
+      if (z) { dst.put(tv, z);  i++;  continue; }
+      { u32 e = i;
+        while (e < total && !all[e]) e++;
+        if (e - i < VF_RUNMIN) { dst.put(tv, 0);  i++; }
+        else { dst.put(tv, -(long long) (e - i));  i = e; } }
+    }
     return;
   }
   /*  Indices rise, so what goes out is the gap since the last one, less the
@@ -289,8 +338,19 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
   u32 i;
   n = 0;  raw = 0;
   if (!c) return;
-  if (c < 0) { raw = 1;  n = (u32) -c; }
-  else {
+  if (c < 0) {
+    raw = 1;  n = (u32) -c;
+    FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", tv);
+    for (i = 0; i < n; ) {
+      long long z = src.get(tv);
+      if (z > 0) { vl[i++] = vf_unzig(z);  continue; }
+      if (!z)    { vl[i++] = 0;  continue; }
+      FATAL_UNLESS((u32) -z <= n - i, "%s: correction run overruns the block", tv);
+      { long long r = -z;  while (r--) vl[i++] = 0; }
+    }
+    return;
+  }
+  {
     n = (u32) c;
     FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", ti);
     long long prev = -1;
@@ -728,10 +788,11 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
     /*  The two correction counts are known together and are one small number
         each; a row apiece spends more on tag text than on the values, so they
         share a row.  */
-    { long long a = keep_count(rec.kc_n, rec.ci), b = keep_count(rec.kd_n, rec.di);
-      if (a || b) { dst.put("kn", a);  dst.put("kn", b); } }
-    write_keeps(dst, "kc.i", "kc.v", rec.kc_n, kc_i, kc_v, kc_all, rec.ci);
-    write_keeps(dst, "kd.i", "kd.v", rec.kd_n, kd_i, kd_v, kd_all, rec.di);
+    { long long a = keep_count(rec.kc_n, rec.ci, kc_i, kc_all),
+                b = keep_count(rec.kd_n, rec.di, kd_i, kd_all);
+      if (a || b) { dst.put("kn", a);  dst.put("kn", b); }
+      write_keeps(dst, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, kc_all, rec.ci);
+      write_keeps(dst, "kd.i", "kd.v", b, rec.kd_n, kd_i, kd_v, kd_all, rec.di); }
   }
   src.tee = &dst;                         /*  structural records flow again  */
 }
