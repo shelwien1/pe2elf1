@@ -145,10 +145,10 @@ struct vd_dec {
   void partition(tsv & t, vd_res * r, vd_book * b, float ** ch, u32 nch,
                  u32 pos) {
     u32 i, j, dim = b->dim, psz = r->psz;
-    FATAL_UNLESS(dim > 0 && b->lookup == 1, "tsv2wav: residue book has no grid");
+    FATAL_UNLESS(dim > 0 && b->lookup == 1, "residue book has no grid");
     if (r->type == 0) {
       u32 step = psz / dim, o;
-      FATAL_UNLESS(step * dim == psz, "tsv2wav: residue 0 partition size");
+      FATAL_UNLESS(step * dim == psz, "residue 0 partition size");
       for (i = 0; i < step; i++) symbol(t, b, vd_part + i * dim);
       for (i = 0, o = 0; i < dim; i++, o += step)
         for (j = 0; j < step; j++) ch[0][pos + o + j] += vd_part[j * dim + i];
@@ -185,7 +185,7 @@ struct vd_dec {
     pv = cb->dim;
     w = np + pv;
     FATAL_UNLESS((sz) vch * w <= sizeof vd_cl / sizeof *vd_cl,
-                 "tsv2wav: residue needs %lu classification slots",
+                 "residue needs %lu classification slots",
                  (unsigned long) ((sz) vch * w));
     for (pass = 0; pass < 8; pass++) {
       pc = 0;
@@ -199,7 +199,7 @@ struct vd_dec {
           for (j = 0; j < vch; j++) {
             u32 c = vd_cl[j * w + pc];
             i32 bn;
-            FATAL_UNLESS(c < r->ncl, "tsv2wav: residue class %lu, limit %lu",
+            FATAL_UNLESS(c < r->ncl, "residue class %lu, limit %lu",
                          (unsigned long) c, (unsigned long) r->ncl);
             bn = r->book[c][pass];
             if (bn < 0) continue;
@@ -218,7 +218,7 @@ struct vd_dec {
     u32 mo, n, i, j, k, ch = s.ch;
     vd_map * mp;
     int Wn;
-    FATAL_UNLESS(s.have, "tsv2wav: audio before setup");
+    FATAL_UNLESS(s.have, "audio before setup");
     mo = t.get_u("aud.mode", s.nmd);
     Wn = s.blockflag[mo];
     wp = wn = 0;

@@ -119,9 +119,16 @@ struct wav {
   }
 
   void close() {
+    /*  The header carries the frame count, so it can only be written once the
+        count is known.  If the rewind fails the file keeps the placeholder
+        header written at create() -- a WAV whose data chunk claims 0 bytes --
+        so that is an error, not something to pass over.  */
+    int bad;
     flush();
-    if (fseek(f, 0, SEEK_SET) == 0) header();
-    if (fclose(f)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
+    bad = fseek(f, 0, SEEK_SET) != 0;
+    if (!bad) { header();  bad = ferror(f) != 0; }
+    if (fclose(f)) bad = 1;
+    if (bad) FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
     f = nullptr;
   }
 };

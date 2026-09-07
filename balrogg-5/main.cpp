@@ -49,6 +49,8 @@ int main(int argc, char ** argv) {
                     "  d  rebuild the Ogg Vorbis file from that stream\n");
     return BLR_EXIT_USAGE;
   }
+  blr_set_prog(argv[0]);
+  blr_paths_distinct(argv + 2, 2);
   if (argv[1][0] == 'c') vb_pack(argv[2], argv[3]);
   else vb_unpack(argv[2], argv[3]);
   return BLR_EXIT_OK;

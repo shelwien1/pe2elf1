@@ -81,6 +81,9 @@ struct vd_book {
   void read(tsv & t) {
     u32 i, ent2, lk, vb, mx = 0, mult;
     dim = t.get_u("cb.dim", 0x10000);
+    /*  vd_lk1 never terminates on dim == 0, and the recovery divides by the
+        book's step.  balrogg rejects the same book at io.inc:208.  */
+    FATAL_UNLESS(dim > 0, "codebook has dimension 0");
     ent = t.get_u("cb.entries", 0x1000000);
     /*  lengths: consumed for position, discarded  */
     if (t.get_u("cb.ordered", 2)) {
@@ -88,7 +91,7 @@ struct vd_book {
       t.get("cb.ordlen");
       while (got < ent) {
         u32 n = t.get_u("cb.ordrun", 0x100000000ULL);
-        FATAL_UNLESS(n <= ent - got, "tsv2wav: ordered run overruns its book");
+        FATAL_UNLESS(n <= ent - got, "ordered run overruns its book");
         got += n;
       }
     } else if (!t.get_u("cb.sparse", 2)) {
@@ -102,7 +105,7 @@ struct vd_book {
     } else {
       /*  Turn the alternation into two runs, or back again.  */
       u32 nu = 0;
-      FATAL_UNLESS(ent <= sizeof cb_use, "tsv2wav: codebook is too large");
+      FATAL_UNLESS(ent <= sizeof cb_use, "codebook is too large");
       t.tee = nullptr;
       if (su_role == 1) {                 /*  interleaved in, two runs out  */
         int used = (int) t.get_u("cb.used", 2);
@@ -131,7 +134,7 @@ struct vd_book {
     lookup = (int) lk;  nv = 0;  off = 0;  seq = 0;
     minval = delta = 0;  min_fx = delta_fx = 0;
     if (!lk) return;
-    FATAL_UNLESS(lk == 1, "tsv2wav: unsupported codebook lookup type %lu",
+    FATAL_UNLESS(lk == 1, "unsupported codebook lookup type %lu",
                  (unsigned long) lk);
     {
       u32 s0 = t.get_u("cb.min.sign", 2), e0 = t.get_u("cb.min.exp", 0x400),
@@ -150,7 +153,7 @@ struct vd_book {
     }
     off = (mx + 1) >> 1;
     min_fx = fx((double) minval);  delta_fx = fx((double) delta);
-    FATAL_UNLESS(delta_fx != 0, "tsv2wav: codebook has a zero delta");
+    FATAL_UNLESS(delta_fx != 0, "codebook has a zero delta");
   }
 };
 
@@ -165,9 +168,9 @@ struct vd_floor {
   void read(tsv & t) {
     u32 i, j, k, nc = 0, sub;
     static const u32 Q[4] = { 256, 128, 86, 64 };
-    FATAL_UNLESS(t.get_u("flr.type", 2) == 1, "tsv2wav: floor type 0");
+    FATAL_UNLESS(t.get_u("flr.type", 2) == 1, "floor type 0");
     parts = t.get_u("flr.parts", 32);
-    FATAL_UNLESS(parts <= VD_MAXPART, "tsv2wav: floor partitions");
+    FATAL_UNLESS(parts <= VD_MAXPART, "floor partitions");
     for (i = 0; i < parts; i++) {
       pcls[i] = (u8) t.get_u("flr.pclass", VD_MAXCLASS);
       if ((u32) pcls[i] + 1 > nc) nc = pcls[i] + 1;
@@ -185,7 +188,7 @@ struct vd_floor {
     x[0] = 0;  x[1] = 1UL << rng;  posts = 2;
     for (i = 0; i < parts; i++)
       for (j = 0; j < cdim[pcls[i]]; j++) {
-        FATAL_UNLESS(posts < VD_MAXPOST, "tsv2wav: too many floor posts");
+        FATAL_UNLESS(posts < VD_MAXPOST, "too many floor posts");
         x[posts++] = t.get_u("flr.x", 1ULL << rng);
       }
     /*  sort posts by X, then find each post's bracketing neighbours among
@@ -196,6 +199,11 @@ struct vd_floor {
         u8 tmp = srt[j];  srt[j] = srt[j - 1];  srt[j - 1] = tmp;
       }
     }
+    /*  Two posts at the same X make x1 - x0 zero in render(), which divides
+        by it.  balrogg rejects the same list at vb_floor.inc:37.  */
+    for (i = 1; i < posts; i++)
+      FATAL_UNLESS(x[srt[i]] != x[srt[i - 1]],
+                   "floor X list repeats a value");
     for (i = 0; i + 2 < posts; i++) {
       u32 l = 0, h = 1, lx = 0, hx = x[1], cx = x[i + 2];
       for (k = 0; k < i + 2; k++) {
@@ -215,12 +223,12 @@ struct vd_res {
   void read(tsv & t) {
     u32 i, j;
     type = t.get_u("res.type", 4);
-    FATAL_UNLESS(type <= 2, "tsv2wav: residue type above 2");
+    FATAL_UNLESS(type <= 2, "residue type above 2");
     beg = t.get_u("res.begin", 0x1000000);
     end = t.get_u("res.end", 0x1000000);
     psz = t.get_u("res.partsize", 0x1000000) + 1;
     ncl = t.get_u("res.nclass", 64) + 1;
-    FATAL_UNLESS(ncl <= VD_MAXRCL, "tsv2wav: residue classifications");
+    FATAL_UNLESS(ncl <= VD_MAXRCL, "residue classifications");
     cbook = t.get_u("res.classbook", 256);
     for (i = 0; i < ncl; i++) casc[i] = (u8) t.get_u("res.cascade", 256);
     for (i = 0; i < ncl; i++)
@@ -239,9 +247,9 @@ struct vd_map {
     u32 i;
     memset(mux, 0, sizeof mux);
     sub = t.get_u("map.submaps", 16) + 1;
-    FATAL_UNLESS(sub <= VD_MAXSUB, "tsv2wav: mapping submaps");
+    FATAL_UNLESS(sub <= VD_MAXSUB, "mapping submaps");
     nstep = t.get_u("map.steps", 257);
-    FATAL_UNLESS(nstep <= VD_MAXCH, "tsv2wav: coupling steps");
+    FATAL_UNLESS(nstep <= VD_MAXCH, "coupling steps");
     for (i = 0; i < nstep; i++) {
       mag[i] = (u8) t.get_u("map.mag", 256);
       ang[i] = (u8) t.get_u("map.ang", 256);
@@ -273,10 +281,10 @@ struct vd_setup {
     b = t.get_u("id.blocksize", 256);
     bs0 = 1UL << (b & 15);  bs1 = 1UL << (b >> 4);
     t.get("id.framing");
-    FATAL_UNLESS(ch >= 1 && ch < VD_MAXCH, "tsv2wav: %lu channels",
+    FATAL_UNLESS(ch >= 1 && ch < VD_MAXCH, "%lu channels",
                  (unsigned long) ch);
     FATAL_UNLESS(bs0 >= 64 && bs1 >= bs0 && bs1 <= MD_MAXBLK,
-                 "tsv2wav: block sizes %lu and %lu",
+                 "block sizes %lu and %lu",
                  (unsigned long) bs0, (unsigned long) bs1);
   }
 
@@ -289,24 +297,47 @@ struct vd_setup {
   void setup(tsv & t) {
     u32 i, nt;
     nbk = t.get_u("cb.count", 256) + 1;
-    FATAL_UNLESS(nbk <= VD_MAXBOOK, "tsv2wav: codebooks");
+    FATAL_UNLESS(nbk <= VD_MAXBOOK, "codebooks");
     su_books(t, nbk, bk);
     nt = t.get_u("flr.ntime", 64) + 1;  (void) nt;
     nfl = t.get_u("flr.count", 64) + 1;
-    FATAL_UNLESS(nfl <= VD_MAXFLOOR, "tsv2wav: floors");
+    FATAL_UNLESS(nfl <= VD_MAXFLOOR, "floors");
     for (i = 0; i < nfl; i++) fl[i].read(t);
     nrs = t.get_u("res.count", 64) + 1;
-    FATAL_UNLESS(nrs <= VD_MAXRES, "tsv2wav: residues");
+    FATAL_UNLESS(nrs <= VD_MAXRES, "residues");
     for (i = 0; i < nrs; i++) rs[i].read(t);
+    /*  Every book a residue can reach must exist and carry a lookup grid: the
+        decode path asks for that at vd_dec.inc:148, but the recovery divides
+        by the book's step without asking (vd_rec::split, class_cost), so a
+        stream naming a gridless or never-read book reached mode d as a
+        division by zero.  The books and the residues are both known here, and
+        this runs whichever role is walking the stream.  */
+    for (i = 0; i < nrs; i++) {
+      u32 c, p;
+      FATAL_UNLESS(rs[i].cbook < nbk, "residue %lu names codebook %lu",
+                   (unsigned long) i, (unsigned long) rs[i].cbook);
+      FATAL_UNLESS(bk[rs[i].cbook].dim > 0,
+                   "residue %lu class book has no grid",
+                   (unsigned long) i);
+      for (c = 0; c < rs[i].ncl; c++)
+        for (p = 0; p < 8; p++) {
+          i32 bn = rs[i].book[c][p];
+          if (bn < 0) continue;
+          FATAL_UNLESS((u32) bn < nbk, "residue %lu names codebook %ld",
+                       (unsigned long) i, (long) bn);
+          FATAL_UNLESS(bk[bn].dim > 0 && bk[bn].lookup == 1,
+                       "residue book %ld has no grid", (long) bn);
+        }
+    }
     nmp = t.get_u("map.count", 64) + 1;
-    FATAL_UNLESS(nmp <= VD_MAXMAP, "tsv2wav: mappings");
+    FATAL_UNLESS(nmp <= VD_MAXMAP, "mappings");
     for (i = 0; i < nmp; i++) mp[i].read(t, ch);
     nmd = t.get_u("mode.count", 64) + 1;
-    FATAL_UNLESS(nmd <= VD_MAXMODE, "tsv2wav: modes");
+    FATAL_UNLESS(nmd <= VD_MAXMODE, "modes");
     for (i = 0; i < nmd; i++) {
       blockflag[i] = (u8) t.get_u("mode.blockflag", 2);
       mdmap[i] = (u8) t.get_u("mode.mapping", 256);
-      FATAL_UNLESS(mdmap[i] < nmp, "tsv2wav: mode names mapping %d", mdmap[i]);
+      FATAL_UNLESS(mdmap[i] < nmp, "mode names mapping %d", mdmap[i]);
     }
     have = 1;
   }

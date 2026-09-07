@@ -19,7 +19,11 @@ constexpr u32 VB_MAXBOOK = 256;   /*  the codebook count is 8 bits + 1  */
     from a bump arena that is reclaimed whole when the link ends.  */
 constexpr sz VB_ARENA = 96UL << 20;
 
-static u8 vb_arena[VB_ARENA];
+/*  vb_alloc hands out u32* and i32* into this, and rounds every request up to
+    8, so the base is the only thing that has to be aligned.  Without alignas
+    the array's alignment is 1 by the standard -- gcc happens to place it well,
+    which is what kept -Wcast-align=strict's two warnings here theoretical.  */
+alignas(8) static u8 vb_arena[VB_ARENA];
 static sz vb_used;
 
 template <class T> static T * vb_alloc(sz n) {

@@ -85,8 +85,19 @@ template <class T> constexpr const T & blr_max(const T & a, const T & b) {
 
 static void message(const char * fmt, va_list ap) BLR_PRINTF(1, 0);
 
+/*  Set from argv[0] at entry.  Both programs share this file, so a fixed
+    "balrogg: " labelled tsv2wav's diagnostics with the wrong program.  */
+static const char * blr_prog = "balrogg";
+
+static void blr_set_prog(const char * argv0) {
+  const char * s;
+  if (!argv0 || !*argv0) return;
+  for (s = argv0; *s; s++) if (*s == '/' || *s == '\\') argv0 = s + 1;
+  if (*argv0) blr_prog = argv0;
+}
+
 static void message(const char * fmt, va_list ap) {
-  fputs("balrogg: ", stderr);
+  fputs(blr_prog, stderr);  fputs(": ", stderr);
   vfprintf(stderr, fmt, ap);
   fputc('\n', stderr);
 }
@@ -110,4 +121,19 @@ void blr_fatal_unless(int cond, const char * fmt, ...) {
   if (cond) return;
   va_start(ap, fmt);  message(fmt, ap);  va_end(ap);
   die(BLR_EXIT_REFUSED);
+}
+
+/*  Both tools create their outputs with "wb", which truncates before the input
+    has been read, so naming one file twice destroyed it and still exited 0.
+    Every path either tool is given names a distinct file in every legitimate
+    invocation, so requiring exactly that is the whole check.  It compares the
+    paths as written, which catches the repeated argument that actually
+    happens; it does not see one file reached by two different spellings.  */
+static void blr_paths_distinct(char ** v, int n) {
+  int i, j;
+  for (i = 0; i < n; i++)
+    for (j = i + 1; j < n; j++)
+      if (!strcmp(v[i], v[j]))
+        FATAL_CODE(BLR_EXIT_USAGE, "%s is named twice: an output would be "
+                   "written over an input", v[i]);
 }

@@ -198,11 +198,10 @@ static i64 an_base, an_T, tot_before;
 static int an_covered;
 static long meta_bytes;
 static u32 dec_ch, dec_rate;              /*  from the identification header  */
-/*  Where to split between two output integers.  Nearest is zero; the rest
-    tilt the split, at the cost of moving a few samples one step further from
-    what libvorbis would have produced.  */
-static const float BIAS[] = { 0.f, -0.25f, 0.25f, -0.125f, 0.125f };
-constexpr int NBIAS = (int) (sizeof BIAS / sizeof *BIAS);
+/*  Where to split between two output integers was a knob once: nearest, then
+    +-0.25 and +-0.125 tilting the split.  Every tilt moves a few samples one
+    step further from what libvorbis would have produced and none of them paid,
+    so nearest is what the code does and the table it swept is gone.  */
 static u32 an_Mprev;
 static int an_first, an_prevW;
 
@@ -778,8 +777,11 @@ static void walk(int role, const char * srcpath, const char * dstpath,
         if (role == ROLE_META) {
           u32 want = (u32) ((seq == 0 ? 2 : 0) | (prevtail ? 1 : 0)) |
                      (u32) (p.type & 4);
+          /*  Only the pages after the first are checked against the link
+              serial; the first page is where `serial` is read from, just
+              below, so there is nothing to compare it with yet.  */
           FATAL_UNLESS(p.type == want && p.seq == seq &&
-                       (seq || 1) && (!seq || p.serial == serial),
+                       (!seq || p.serial == serial),
                        "%s: page header is not in canonical form; this stream "
                        "needs page.type, page.seq or page.serial carried",
                        srcpath);
@@ -872,6 +874,8 @@ int main(int argc, char ** argv) {
       "       tsv2wav d output.wav restored.tsv output.meta\n");
     return BLR_EXIT_USAGE;
   }
+  blr_set_prog(argv[0]);
+  blr_paths_distinct(argv + 2, 3);
 #ifdef BLR_VORBIS
 #ifdef BLR_VORBIS
   vf_dbg = getenv("TSV2WAV_SWEEP") != nullptr;

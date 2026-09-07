@@ -157,7 +157,11 @@ struct vd_rec {
       monotonically, 218,700 to 262,085 bytes.  Nearest is optimal.  */
   i32 take(i64 & v, vd_book * b, u32 * clamped, i64 & last) {
     i64 base = b->min_fx + last, con;
-    i64 t = (i64) (((__int128) (v - base) << F) / b->delta_fx);
+    /*  Multiply, not shift: v - base is routinely negative here, and shifting
+        a negative value left is undefined before C++20.  The two are the same
+        value on any two's-complement target, and this is the only left shift
+        in the tree whose operand can be negative.  */
+    i64 t = (i64) (((__int128) (v - base) * ((__int128) 1 << F)) / b->delta_fx);
     i64 q = _rnd(t);
     i32 d = (i32) (q - (i64) b->off);
     i32 lo = -(i32) b->off, hi = (i32) b->nv - 1 - (i32) b->off;
@@ -189,7 +193,7 @@ struct vd_rec {
     if (role == ROLE_META) {
       i32 want = (i32) src->get("res.digit");
       FATAL_UNLESS(di < KEEP_MAX && kd_n < KEEP_MAX,
-                   "tsv2wav: too many digits in a packet");
+                   "too many digits in a packet");
       kd_all[di] = want;
       if (want != got) { kd_i[kd_n] = di;  kd_v[kd_n] = want;  kd_n++; }
       fin = want;
@@ -216,7 +220,7 @@ struct vd_rec {
     u32 i, j, dim = b->dim, psz = r->psz;
     if (r->type == 0) {
       u32 step = psz / dim;
-      FATAL_UNLESS(step * dim == psz, "tsv2wav: residue 0 partition size");
+      FATAL_UNLESS(step * dim == psz, "residue 0 partition size");
       for (j = 0; j < step; j++) {
         i64 last = 0;
         for (i = 0; i < dim; i++) digit(bundle[0][pos + i * step + j], b, last);
@@ -377,7 +381,7 @@ struct vd_rec {
     if (role == ROLE_META) {
       u32 want = src->get_u("res.class", 16);
       FATAL_UNLESS(ci < KEEP_MAX && kc_n < KEEP_MAX,
-                   "tsv2wav: too many classes in a packet");
+                   "too many classes in a packet");
       kc_all[ci] = (i32) want;
       if (want != got) { kc_i[kc_n] = ci;  kc_v[kc_n] = (i32) want;  kc_n++; }
       fin = want;
@@ -409,7 +413,7 @@ struct vd_rec {
     if (!np) return;
     pv = cb->dim;  w = np + pv;
     FATAL_UNLESS((sz) vch * w <= sizeof vd_cl / sizeof *vd_cl,
-                 "tsv2wav: residue classification table");
+                 "residue classification table");
     for (pass = 0; pass < 8; pass++) {
       pc = 0;
       while (pc < np) {
@@ -435,7 +439,7 @@ struct vd_rec {
           for (j = 0; j < vch; j++) {
             u32 c = vd_cl[j * w + pc];
             i32 bn;
-            FATAL_UNLESS(c < r->ncl, "tsv2wav: residue class %lu out of range",
+            FATAL_UNLESS(c < r->ncl, "residue class %lu out of range",
                          (unsigned long) c);
             bn = r->book[c][pass];
             if (bn < 0) continue;

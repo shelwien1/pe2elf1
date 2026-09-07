@@ -79,6 +79,15 @@ struct tsv {
       return;
     }
     if (on + n > TSV_OBUF) flush();
+    /*  One write can be larger than the whole buffer: su_books hands over a
+        captured codebook section, which is bounded by CB_CAP and not by this.
+        The flush above emptied the buffer but did not make room for that, so
+        anything oversized goes straight out.  */
+    if (n > TSV_OBUF) {
+      if (fwrite(s, 1, n, f) != n)
+        FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
+      return;
+    }
     memcpy(tsv_ob + on, s, n);  on += n;
   }
 
