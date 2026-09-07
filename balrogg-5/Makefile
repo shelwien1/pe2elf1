@@ -1,6 +1,9 @@
 #  make                 balrogg and tsv2wav
 #  make tsv2wav-vorbis  the libvorbis-assisted tsv2wav (smaller meta, see META.md)
+#  make tsvsteg         tsv2wav with a payload in the quantization gaps (STEG.md)
+#  make tsvsteg-vorbis  the same, libvorbis-assisted
 #  make test            round-trip 00.ogg through both tools and compare
+#  make test-steg       the same, with a payload in the WAV (see STEG.md)
 #  make test TESTFILES=path/to/dir     round-trip every .ogg in a directory
 #
 #  CXXFLAGS is yours to set.  The flags the build needs rather than prefers are
@@ -34,6 +37,7 @@ BLR_INC = common.inc tsv.inc ogg_page.inc vb_info.inc vb_book.inc \
           io.inc source.inc link_walk.inc codec.inc
 W2V_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
           wav.inc vd_dec.inc vd_ana.inc vd_rec.inc
+STG_INC = sh_v2f.inc steg.inc
 
 #  The vorbis build adds these two and drops floor_db.inc, whose table it takes
 #  from libvorbis instead (tsv2wav.cpp:99).
@@ -68,6 +72,12 @@ tsv2wav: tsv2wav.cpp $(W2V_INC) .flags
 tsv2wav-vorbis: tsv2wav.cpp $(VRB_INC) $(VRB_SRC) .flags
 	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) $(VRB_FLAGS) -o $@ tsv2wav.cpp $(LIBS)
 
+tsvsteg: tsvsteg.cpp tsv2wav.cpp $(W2V_INC) $(STG_INC) .flags
+	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ tsvsteg.cpp $(LIBS)
+
+tsvsteg-vorbis: tsvsteg.cpp tsv2wav.cpp $(VRB_INC) $(STG_INC) $(VRB_SRC) .flags
+	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) $(VRB_FLAGS) -o $@ tsvsteg.cpp $(LIBS)
+
 #  `sh t.sh`, not `./t.sh`: the exec bit does not survive every way this tree
 #  gets copied around, and losing it should not break the test target.
 test: balrogg tsv2wav
@@ -76,8 +86,14 @@ test: balrogg tsv2wav
 test-vorbis: balrogg tsv2wav-vorbis
 	TSV2WAV=./tsv2wav-vorbis sh t.sh $(TESTFILES)
 
+test-steg: balrogg tsvsteg
+	sh t-steg.sh $(TESTFILES)
+
+test-steg-vorbis: balrogg tsvsteg-vorbis
+	TSVSTEG=./tsvsteg-vorbis sh t-steg.sh $(TESTFILES)
+
 clean:
-	rm -f balrogg tsv2wav tsv2wav-vorbis .flags .flags.tmp
+	rm -f balrogg tsv2wav tsv2wav-vorbis tsvsteg tsvsteg-vorbis .flags .flags.tmp
 	rm -f *.tsv *.tsr *.wav *.meta *.ogr
 
-.PHONY: all test test-vorbis clean FORCE
+.PHONY: all test test-vorbis test-steg test-steg-vorbis clean FORCE

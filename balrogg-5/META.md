@@ -261,6 +261,9 @@ scoring a candidate is done with the floor refit switched off, and that refit
 is 97% of what mode `c` otherwise spends. Scoring that way was checked over
 37 files to pick the same coefficient as scoring the whole meta.
 
+The same slack is what `tsvsteg` spends on a payload instead of on a rounding
+rule -- 0.72 bits a sample, for 9.7% to 13.8% more meta. See STEG.md.
+
 ## What the format spends on saying which record is which
 
 An audit of the 70 tags a meta can hold found no value that is wrong and none

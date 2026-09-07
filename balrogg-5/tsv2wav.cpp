@@ -102,9 +102,24 @@
 #include "imdct.inc"       /*  the window and the inverse transform  */
 
 #include "vd_setup.inc"    /*  codebooks, floors, residues, mappings, modes  */
+#ifdef BLR_STEG
+/*  The gap filler needs the PCM reader, which is three includes further down,
+    so the sink is given only these.  See steg.inc.  */
+enum { STEG_OFF, STEG_EMBED, STEG_EXTRACT };
+static int steg_mode = STEG_OFF;
+static const char * steg_refpath;
+static int steg_choose(double x, int obs);
+static const i16 * steg_ref_frame(u32 ch);
+static void steg_ref_open(const char * path, u32 ch, u32 rate);
+static void steg_pass_reset(void);
+#endif
 #include "wav.inc"         /*  the PCM sink  */
 #include "vd_dec.inc"      /*  one packet, and the lap between packets  */
 #include "vd_ana.inc"      /*  PCM back to the spectrum  */
+#ifdef BLR_STEG
+#include "sh_v2f.inc"      /*  the range coder the gaps are filled from  */
+#include "steg.inc"        /*  the payload, and where it lives  */
+#endif
 #include "vd_rec.inc"      /*  the residue walk, run backwards  */
 
 /*  Signed values go out zigzagged -- 0, -1, 1, -2 becomes 0, 1, 2, 3 -- so a
@@ -1159,39 +1174,13 @@ static void synth_and_fit(const char * src, const char * wav) {
   for (q = 0; q < VD_MAXRES; q++) if (cfit[q].ncl) cfit[q].settle();
 }
 
-int main(int argc, char ** argv) {
-  if (argc != 5 || (argv[1][0] != 'c' && argv[1][0] != 'd') || argv[1][1]) {
-    fprintf(stderr,
-      "usage: tsv2wav c input.tsv output.wav output.meta\n"
-      "       tsv2wav d output.wav restored.tsv output.meta\n");
-    return BLR_EXIT_USAGE;
-  }
-  blr_set_prog(argv[0]);
-  blr_paths_distinct(argv + 2, 3);
-#ifdef BLR_VORBIS
-#ifdef BLR_VORBIS
-  vf_dbg = getenv("TSV2WAV_SWEEP") != nullptr;
-#endif
-#endif
-  if (argv[1][0] == 'c') {
-    /*  How the synthesis lands its samples is swept below; these are the
-        coefficients tried.  Over 37 files, choosing per file from the whole
-        grid is worth 2.12% of the meta and choosing from these four is worth
-        2.10%, so the rest of the grid is not worth the passes.  Zero has to
-        be among them: on some files every amount of feedback costs.
 
-        Two neighbouring knobs were measured and are not swept, because they
-        do not pay.  The lifting's rounding rule -- nearest, floor, ceiling or
-        truncate -- moves the meta by under 0.03%, its shears rounding at
-        2^-32 against a sample step of 2^-16.  (An earlier note here said the
-        four produce byte-identical WAVs.  They do not; the effect is real,
-        just far too small to chase.)  And the split point is best at nearest:
-        floor or ceiling cost about a percent, quarter steps either side 0.4
-        to 0.7.  */
-    static const double WAV_SHAPES[] = { 0.0, 0.3, 0.5, 0.8 };
-    constexpr int NSHAPE = (int) (sizeof WAV_SHAPES / sizeof *WAV_SHAPES);
-    wav_shape = WAV_SHAPES[0];
-    synth_and_fit(argv[2], argv[3]);
+/*  The encoder settings the floor refit runs at, swept against the WAV that
+    has just been written.  It lived inside mode c; tsvsteg wants it too, and
+    wants it without the placement sweep that used to sit beside it, so it is
+    a function rather than a paragraph of main.  */
+static void vf_settings(char ** argv) {
+  (void) argv;
 #ifdef BLR_VORBIS
     /*  Sweep the encoder settings and keep whichever reproduces the most
         posts.  On a stream whose encoder is reproducible this has a sharp
@@ -1248,6 +1237,42 @@ int main(int argc, char ** argv) {
     }
 #endif
 #endif
+}
+#ifndef BLR_STEG
+int main(int argc, char ** argv) {
+  if (argc != 5 || (argv[1][0] != 'c' && argv[1][0] != 'd') || argv[1][1]) {
+    fprintf(stderr,
+      "usage: tsv2wav c input.tsv output.wav output.meta\n"
+      "       tsv2wav d output.wav restored.tsv output.meta\n");
+    return BLR_EXIT_USAGE;
+  }
+  blr_set_prog(argv[0]);
+  blr_paths_distinct(argv + 2, 3);
+#ifdef BLR_VORBIS
+#ifdef BLR_VORBIS
+  vf_dbg = getenv("TSV2WAV_SWEEP") != nullptr;
+#endif
+#endif
+  if (argv[1][0] == 'c') {
+    /*  How the synthesis lands its samples is swept below; these are the
+        coefficients tried.  Over 37 files, choosing per file from the whole
+        grid is worth 2.12% of the meta and choosing from these four is worth
+        2.10%, so the rest of the grid is not worth the passes.  Zero has to
+        be among them: on some files every amount of feedback costs.
+
+        Two neighbouring knobs were measured and are not swept, because they
+        do not pay.  The lifting's rounding rule -- nearest, floor, ceiling or
+        truncate -- moves the meta by under 0.03%, its shears rounding at
+        2^-32 against a sample step of 2^-16.  (An earlier note here said the
+        four produce byte-identical WAVs.  They do not; the effect is real,
+        just far too small to chase.)  And the split point is best at nearest:
+        floor or ceiling cost about a percent, quarter steps either side 0.4
+        to 0.7.  */
+    static const double WAV_SHAPES[] = { 0.0, 0.3, 0.5, 0.8 };
+    constexpr int NSHAPE = (int) (sizeof WAV_SHAPES / sizeof *WAV_SHAPES);
+    wav_shape = WAV_SHAPES[0];
+    synth_and_fit(argv[2], argv[3]);
+    vf_settings(argv);
     /*  Now the synthesis itself.  Feeding each sample's quantization error
         into the next shapes the error spectrum by 1 - h/z, draining it away
         from the low frequencies where most of the digits are; it is worth up
@@ -1296,3 +1321,4 @@ int main(int argc, char ** argv) {
     walk(ROLE_REST, argv[4], argv[3], argv[2]);
   return BLR_EXIT_OK;
 }
+#endif

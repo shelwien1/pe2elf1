@@ -28,6 +28,9 @@ constexpr sz WAV_OBUF = 1 << 16;
     side 0.4 to 0.7.  It stays a variable because that is worth being able to
     measure again.
 
+    That freedom is also room for something else to live in: tsvsteg fills the
+    same gap by decoding a payload rather than by either knob.  See STEG.md.
+
     wav_shape feeds each sample's quantization error into the next, which
     shapes the error spectrum by 1 - h/z and drains it away from the low
     frequencies where most of the digits are.  This one pays, and unevenly:
@@ -109,6 +112,13 @@ struct wav {
     path = pth;  rate = r;  ch = c;  frames = 0;  on = 0;
     memset(wav_err, 0, sizeof wav_err);
     wav_order(ch, ord);
+#ifdef BLR_STEG
+    /*  A synthesis pass may be run more than once and the last one is the one
+        on disk, so the payload coders start again with it.  Extraction reads
+        the real WAV here and writes its own samples nowhere.  */
+    if (steg_mode == STEG_EXTRACT) steg_ref_open(steg_refpath, c, r);
+    steg_pass_reset();
+#endif
     maxframes = WAV_MAXBYTES / (ch * 2);
     header();
   }
@@ -117,6 +127,9 @@ struct wav {
       example decoder does it.  */
   void frame(const float * s) {
     u32 i;
+#ifdef BLR_STEG
+    const i16 * obs = (steg_mode == STEG_EXTRACT) ? steg_ref_frame(ch) : nullptr;
+#endif
     FATAL_UNLESS(frames < maxframes,
                  "%s: a WAVE file cannot hold more than %llu frames at %lu "
                  "channels", path, maxframes, (unsigned long) ch);
@@ -129,9 +142,15 @@ struct wav {
           from the other side: both only move where samples land, and the
           sweep already finds somewhere good.  It stays because it is right.  */
       double x = (double) s[ord[i]] * 32767.0 - wav_shape * wav_err[i];
-      int v = (int) floor(x + wav_bias);
-      if (v > 32767) v = 32767;
-      if (v < -32768) v = -32768;
+      int v;
+#ifdef BLR_STEG
+      /*  The gap is the payload's, not a rounding rule's.  */
+      if (steg_mode) v = steg_choose(x, obs ? (int) obs[i] : 0);
+      else
+#endif
+      { v = (int) floor(x + wav_bias);
+        if (v > 32767) v = 32767;
+        if (v < -32768) v = -32768; }
       /*  Clipping would otherwise let the feedback wind up without bound.  */
       { double e = (double) v - x;
         if (e > 4.0) e = 4.0;
