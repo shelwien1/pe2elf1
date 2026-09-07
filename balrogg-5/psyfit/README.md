@@ -177,13 +177,44 @@ an address space -- and `bookmerge.py` interns the books by content and unions
 the rate ranges of every release that agrees on a set.
 
 Over 19 libvorbis releases (1.0beta4 through 1.3.7) and 15 aoTuV betas: **1318
-distinct codebooks in 349 sets**. The aoTuV betas add *nothing* -- not one book,
+distinct codebooks in 349 sets** -- 1346 in 350 once ffmpeg's own encoder is
+added below. The aoTuV betas add *nothing* -- not one book,
 not one set. aoTuV replaced the setup templates, and its own template choices
 are already reachable from the same tables by some (channels, rate, setting)
 libvorbis itself can be asked for.
 
 Against the 17-file corpus this names the codebooks of every file, `00000007`
-included, and costs 0.40% of the meta's values and 0.47% of its bytes. What it
-does not reach is an encoder that is not libvorbis: ffmpeg's own vorbis encoder
-has a set of its own in `libavcodec/vorbis_enc_data.h` and would want a dumper
-of its own.
+included, and costs 0.40% of the meta's values and 0.47% of its bytes.
+
+## The one encoder that is not libvorbis
+
+`ffmpeg -c:a vorbis` is ffmpeg's own encoder, not `libvorbis`, and it does not
+choose its codebooks from anything -- it has one set of 29 in
+`libavcodec/vorbis_enc_data.h` and writes it into every file, whatever the
+sample rate or the quality. It refuses to encode anything but stereo. So the
+whole encoder is a single row, and `ffbookgen.c` builds against an ffmpeg
+checkout to produce it, reproducing `create_vorbis_context` and the two derived
+fields `put_codebook_header` writes: `q_min`/`q_delta` are its `put_float` of
+the `cvectors` floats, `q_quant` its `bits`.
+
+The one thing that had to be checked rather than assumed: **ffmpeg decides a
+book is "ordered" on a weaker test than libvorbis.** libvorbis also disqualifies
+a zero length; ffmpeg only requires the lengths not to descend. `vbooks.inc`
+emits libvorbis's decision, so a book the two rules disagree about would be
+found and then fail to match. On these 29 they agree everywhere, so nothing has
+to be carried to say which packer wrote the stream.
+
+`fftest.sh` synthesises stereo sources and encodes 22 files across seven sample
+rates and four qualities. Before, every one of them fell through to raw
+codebooks; after, all 22 name the set and all 22 still round-trip bit-exactly:
+
+| | values | bytes |
+|---|---:|---:|
+| before | 701,613 | 1,748,707 |
+| after | 450,153 | 1,149,911 |
+| | **-35.8%** | **-34.2%** |
+
+Every file saves the same 11,430 values -- the fixed set, removed once. The
+percentages are large because these are six-second files, where 29 codebooks
+are most of the meta; on a long file the same 11,430 would disappear into the
+noise. It is a fixed cost, and it is now zero.

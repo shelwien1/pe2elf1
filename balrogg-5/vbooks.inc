@@ -31,8 +31,9 @@
     psyfit/bookdump.sh; between them they are what an Ogg Vorbis file is
     likely to hold.
 
-    What is left over -- an encoder that builds its books rather than choosing
-    them, as ffmpeg's native one does -- carries them as before.
+    ffmpeg's own encoder -- the one behind `-c:a vorbis`, not `-c:a libvorbis`
+    -- is in there too, as a single row: it chooses from nothing, and writes
+    the same 29 books into every file it makes.
 
     Nothing about the encoding has to be carried alongside: whether the length
     list went out ordered, sparse or plain is decided by vorbis_staticbook_pack

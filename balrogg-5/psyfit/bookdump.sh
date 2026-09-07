@@ -10,6 +10,7 @@
 #      git clone https://github.com/AO-Yumi/vorbis_aotuv.git aotuv
 #      #  and the aoTuV betas from https://ao-yumi.github.io/aotuv_web/,
 #      #  unpacked as aotuv-b1a, aotuv-b2, ... aotuv-b6.03_2015
+#      git clone --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg
 #      curl -sSLO https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz
 #      tar xzf libogg-1.3.5.tar.gz
 #      (cd libogg-1.3.5 && ./configure -q --disable-shared --prefix=$PWD/../prefix \
@@ -23,11 +24,10 @@
 #  them.  1.0beta4 and 1.0rc1 are in the same position but build anyway, and
 #  cost nothing to keep.
 #
-#  What this does not reach is an encoder that is not libvorbis.  The aoTuV
-#  betas are here and turn out to add nothing -- they replaced the templates,
-#  not the tables -- but ffmpeg's own vorbis encoder has a set of its own, in
-#  libavcodec/vorbis_enc_data.h, which no sweep of libvorbis will produce.  It
-#  would want a dumper of its own.
+#  Encoders that are not libvorbis need a dumper of their own, and get one:
+#  ffbookgen.c does ffmpeg's, and is run here too when an ffmpeg checkout is
+#  beside the releases.  The aoTuV betas do not need one -- they replaced the
+#  setup templates, not the tables, and add not one book.
 here=`cd \`dirname "$0"\` && pwd`
 work=${WORK:-./bookdump}
 prefix=${PREFIX:-$PWD/prefix}
@@ -73,6 +73,23 @@ for d in libvorbis-* aotuv aotuv-* vorbis-1.*; do
   echo "  `cat "$work/run-$name.log"`"
   built=`expr $built + 1`
 done
+
+#  ffmpeg's own encoder, if its source is here.  It chooses from nothing --
+#  one fixed set of 29 books for every file it writes -- so there is no sweep,
+#  just the one dump.
+if [ -f ffmpeg/libavcodec/vorbis_enc_data.h ]; then
+  if cc -O1 -w -I ffmpeg -o "$work/ffbookgen" "$here/ffbookgen.c" -lm \
+       2> "$work/build-ffmpeg.log" &&
+     "$work/ffbookgen" > "$work/ffmpeg.dump" 2> "$work/run-ffmpeg.log"; then
+    echo "  `cat "$work/run-ffmpeg.log"`"
+    built=`expr $built + 1`
+  else
+    echo "skip ffmpeg: see $work/build-ffmpeg.log and $work/run-ffmpeg.log"
+    rm -f "$work/ffmpeg.dump"
+  fi
+else
+  echo "skip ffmpeg: no checkout beside the releases"
+fi
 
 [ "$built" -gt 0 ] || { echo "nothing built"; exit 1; }
 python3 "$here/bookmerge.py" "$work"/*.dump > "$here/../vbooks_gen.inc"
