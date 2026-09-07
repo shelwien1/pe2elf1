@@ -161,9 +161,9 @@ struct dgmodel {
   int predict() const {
     const u16 * r = cnt[ctx()];
     int v, best = 0;
-    long bc = (long) r[DG_K] + (r[DG_K] >> 1);
+    i32 bc = (i32) r[DG_K] + (r[DG_K] >> 1);
     for (v = 0; v < DG_V; v++)
-      if (v != DG_K && (long) r[v] > bc) { bc = r[v];  best = v - DG_K; }
+      if (v != DG_K && (i32) r[v] > bc) { bc = (i32) r[v];  best = v - DG_K; }
     return best;
   }
   void observe(i32 e) {
@@ -179,7 +179,7 @@ struct dgmodel {
 
 static dgmodel dgm;
 static int dg_on;                        /*  does it earn its place?  */
-static long long dg_hit0, dg_hit1;       /*  the shadow run, in the fit pass  */
+static i64 dg_hit0, dg_hit1;             /*  the shadow run, in the fit pass  */
 
 /*  The same idea over the classes, with the context iczelia's balrogg uses
     for them (src/vorbis.h, AR_PCLS): not the class of the partition before
@@ -228,12 +228,12 @@ struct cgmodel {
       guess carries half its own count again, so a rival must be clearly
       ahead before a right answer is thrown away.  */
   u32 predict(u32 got, u32 rno, u32 ch, u32 part) const {
-    const u16 * r;  u32 v, best = got;  long bc;
+    const u16 * r;  u32 v, best = got;  i32 bc;
     if (!cnt || !last || got >= VD_MAXCLASS) return got;
     r = cnt[ctx(got, last[slot(rno, ch, part)])];
-    bc = (long) r[got] + (r[got] >> 1);
+    bc = (i32) r[got] + (r[got] >> 1);
     for (v = 0; v < VD_MAXCLASS; v++)
-      if (v != got && (long) r[v] > bc) { bc = r[v];  best = v; }
+      if (v != got && (i32) r[v] > bc) { bc = (i32) r[v];  best = v; }
     return best;
   }
   void observe(u32 got, u32 want, u32 rno, u32 ch, u32 part) {
@@ -254,7 +254,7 @@ struct cgmodel {
 
 static cgmodel cgm;
 static int cg_on, cg_score;
-static long long cg_hit0, cg_hit1;
+static i64 cg_hit0, cg_hit1;
 
 constexpr u32 KEEP_MAX = 1u << 20;        /*  keeps in one packet  */
 
@@ -600,8 +600,8 @@ struct vd_rec {
           for (j = 0; j < vch; j++) {
             u32 c = vd_cl[j * w + pc];
             i32 bn;
-            FATAL_UNLESS(c < r->ncl, "residue class %lu out of range",
-                         (unsigned long) c);
+            FATAL_UNLESS(c < r->ncl, "residue class %" PRIu64 " out of range",
+                         (u64) c);
             bn = r->book[c][pass];
             if (bn < 0) continue;
             if (r->type == 2)

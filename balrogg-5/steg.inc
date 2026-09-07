@@ -51,8 +51,8 @@ static Rangecoder steg_dec;               /*  embed: payload -> choices  */
 static Rangecoder steg_enc;               /*  choices -> payload  */
 
 static double steg_cap;                   /*  what the gaps held, in bits  */
-static unsigned long long steg_nsym;      /*  gaps that could carry a choice  */
-static unsigned long long steg_nsamp;     /*  samples seen  */
+static u64 steg_nsym;                     /*  gaps that could carry a choice  */
+static u64 steg_nsamp;                    /*  samples seen  */
 
 /*  The WAV being read back, for extraction.  pcmwin walks the RIFF chunks and
     checks fmt against the stream, which is exactly the check wanted here, so
@@ -70,8 +70,8 @@ static void steg_ref_open(const char * path, u32 ch, u32 rate) {
 static const i16 * steg_ref_frame(u32 ch) {
   u8 t[2 * VD_MAXCH];  u32 c;
   FATAL_UNLESS(steg_rat < steg_pw.frames,
-               "%s: the stream is longer than the WAV -- %lld frames",
-               steg_pw.path, (long long) steg_pw.frames);
+               "%s: the stream is longer than the WAV -- %" PRId64 " frames",
+               steg_pw.path, (i64) steg_pw.frames);
   if (fread(t, 2, ch, steg_pw.f) != ch)
     FATAL_CODE(BLR_EXIT_IO, "short read on %s", steg_pw.path);
   for (c = 0; c < ch; c++)
@@ -82,7 +82,7 @@ static const i16 * steg_ref_frame(u32 ch) {
 
 /*  P(the upper integer) as a count out of SCALE.  */
 static uint steg_freq(double f) {
-  long q = (long) (f * (double) SCALE + 0.5);
+  i32 q = (i32) (f * (double) SCALE + 0.5);
   if (q < 0) q = 0;
   if (q > SCALE) q = SCALE;
   return (uint) q;
@@ -114,9 +114,9 @@ static int steg_choose(double x, int obs) {
     if (v > 32767) v = 32767;
     if (v < -32768) v = -32768;
     if (steg_mode == STEG_EXTRACT)
-      FATAL_UNLESS(obs == v, "%s: sample %llu is %d where the stream forces "
+      FATAL_UNLESS(obs == v, "%s: sample %" PRIu64 " is %d where the stream forces "
                    "%d -- the WAV does not go with this meta",
-                   steg_pw.path, (unsigned long long) steg_nsamp, obs, v);
+                   steg_pw.path, (u64) steg_nsamp, obs, v);
     return v;
   }
   steg_nsym++;
@@ -127,9 +127,9 @@ static int steg_choose(double x, int obs) {
     steg_enc.rc_BProcess(freq, bit);      /*  and straight back, to check  */
   } else {
     FATAL_UNLESS(obs == lo || obs == hi,
-                 "%s: sample %llu is %d, not %d or %d -- the WAV does not go "
+                 "%s: sample %" PRIu64 " is %d, not %d or %d -- the WAV does not go "
                  "with this meta", steg_pw.path,
-                 (unsigned long long) steg_nsamp, obs, lo, hi);
+                 (u64) steg_nsamp, obs, lo, hi);
     bit = (obs == hi);
     steg_enc.rc_BProcess(freq, bit);
   }
@@ -162,12 +162,12 @@ static void steg_read_file(const char * path, rc_buf * b) {
 
 /*  [length][payload], ready to be decoded from.  */
 static void steg_embed_begin(const char * path) {
-  unsigned long long len;
+  u64 len;
   int i;
   steg_src.init();  steg_dst.init();
   for (i = 0; i < (int) STEG_HDR; i++) steg_src.put(0);
   steg_read_file(path, &steg_src);
-  len = (unsigned long long) (steg_src.n - STEG_HDR);
+  len = (u64) (steg_src.n - STEG_HDR);
   for (i = 0; i < (int) STEG_HDR; i++) steg_src.p[i] = (u8) (len >> (8 * i));
   steg_mode = STEG_EMBED;
 }
@@ -191,8 +191,8 @@ static void steg_embed_end(const char * path) {
     double cap = steg_bytes_held();
     FATAL_CODE(BLR_EXIT_REFUSED,
                "%s: this stream holds about %.0f payload bytes, and the "
-               "payload is %llu", path, cap < 0.0 ? 0.0 : cap,
-               (unsigned long long) (steg_src.n - STEG_HDR));
+               "payload is %" PRIu64, path, cap < 0.0 ? 0.0 : cap,
+               (u64) (steg_src.n - STEG_HDR));
   }
 }
 
@@ -202,18 +202,18 @@ static void steg_extract_begin(void) {
 }
 
 static void steg_extract_end(const char * path) {
-  unsigned long long len = 0;
+  u64 len = 0;
   int i;
   FILE * f;
   steg_enc.FinishEncode();
   FATAL_UNLESS(steg_dst.n >= STEG_HDR,
                "%s: nothing came back out of the WAV", steg_pw.path);
   for (i = (int) STEG_HDR - 1; i >= 0; i--) len = (len << 8) | steg_dst.p[i];
-  FATAL_UNLESS(len <= (unsigned long long) (steg_dst.n - STEG_HDR),
-               "%s: the recovered length is %llu bytes but only %llu came "
+  FATAL_UNLESS(len <= (u64) (steg_dst.n - STEG_HDR),
+               "%s: the recovered length is %" PRIu64 " bytes but only %" PRIu64 " came "
                "back -- the WAV, the meta or the payload has been altered",
                steg_pw.path, len,
-               (unsigned long long) (steg_dst.n - STEG_HDR));
+               (u64) (steg_dst.n - STEG_HDR));
   f = fopen(path, "wb");
   if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", path);
   if (len && fwrite(steg_dst.p + STEG_HDR, 1, (sz) len, f) != (sz) len) {
@@ -227,7 +227,7 @@ static void steg_extract_end(const char * path) {
     having when sizing one, so an environment variable asks for them.  */
 static void steg_report(const char * what) {
   if (!getenv("TSVSTEG_VERBOSE")) return;
-  fprintf(stderr, "%s: %llu of %llu samples had a gap to fill, holding "
+  fprintf(stderr, "%s: %" PRIu64 " of %" PRIu64 " samples had a gap to fill, holding "
           "%.0f bits = %.0f bytes; %.2f bits a sample\n", what,
           steg_nsym, steg_nsamp, steg_cap, steg_cap / 8.0,
           steg_nsamp ? steg_cap / (double) steg_nsamp : 0.0);

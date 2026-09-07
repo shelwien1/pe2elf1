@@ -18,8 +18,8 @@
     carries at least OGG_MAXSEG of them in at most OGG_HDRMIN + 1 + OGG_MAXSEG
     bytes, so no page's join can reach further than IN_LOW from its own start.
     The window is larger so that refilling it moves the tail rarely.  */
-constexpr sz IN_LOW = 20UL << 20;
-constexpr sz IN_WIN = 32UL << 20;
+constexpr sz IN_LOW = (sz) 20 << 20;
+constexpr sz IN_WIN = (sz) 32 << 20;
 
 /*  A forward-only window over the input file.  */
 
@@ -78,8 +78,8 @@ struct source {
     sz total = pl, k = at + got, n;
     ogg_page q;
     for (;;) {
-      FATAL_UNLESS(!(prev->type & 4), "the packet at %lu exceeds its link",
-                   (unsigned long) offset());
+      FATAL_UNLESS(!(prev->type & 4), "the packet at %" PRIu64 " exceeds its link",
+                   (u64) offset());
       n = q.parse(in_win + k, have - k);
       /*  FATAL rather than FATAL_UNLESS: the latter returns when its
           condition holds, so it cannot be NORETURN, and gcc therefore cannot
@@ -87,15 +87,15 @@ struct source {
           says so as a -Wmaybe-uninitialized on q.nseg at -O1 and -O3 -- but
           not at -O2, the one level the Makefile ships, which is how it went
           unnoticed.  */
-      if (!n) FATAL("the packet at %lu has no continuation page",
-                    (unsigned long) offset());
+      if (!n) FATAL("the packet at %" PRIu64 " has no continuation page",
+                    (u64) offset());
       FATAL_UNLESS(q.np > 0 && (q.type & 1),
-                   "the continuation of the packet at %lu is missing",
-                   (unsigned long) offset());
+                   "the continuation of the packet at %" PRIu64 " is missing",
+                   (u64) offset());
       total += q.plen[0];
       FATAL_UNLESS(total - pl <= MAXPAY * (sz) OGG_MAXSEG,
-                   "the packet at %lu continues too far",
-                   (unsigned long) offset());
+                   "the packet at %" PRIu64 " continues too far",
+                   (u64) offset());
       if (!(q.np == 1 && q.tail)) return total;
       k += n;  prev = &q;
     }
@@ -115,8 +115,8 @@ struct source {
           says so as a -Wmaybe-uninitialized on q.nseg at -O1 and -O3 -- but
           not at -O2, the one level the Makefile ships, which is how it went
           unnoticed.  */
-      if (!n) FATAL("the packet at %lu has no continuation page",
-                    (unsigned long) offset());
+      if (!n) FATAL("the packet at %" PRIu64 " has no continuation page",
+                    (u64) offset());
       take = q.plen[0];
       if (take > total - done) take = total - done;
       memcpy(dst + done, in_win + k + OGG_HDRMIN + q.nseg, take);

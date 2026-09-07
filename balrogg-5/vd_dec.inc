@@ -47,7 +47,7 @@ struct vd_dec {
   int started;                /*  a block has been lapped  */
   int wp, wn;                 /*  this packet's window flags  */
   u32 pndn;                   /*  frames held back  */
-  unsigned long long done;    /*  frames written for the current link  */
+  u64 done;                   /*  frames written for the current link  */
 
   /*  Per-link reset; the setup that follows fills s again.  A chained file
       restarts the lap and the granule count at every link.  */
@@ -133,8 +133,8 @@ struct vd_dec {
     u32 k;
     double last = 0;
     for (k = 0; k < b->dim; k++) {
-      long long d = t.get("res.digit");
-      double q = (double) (d + (long long) b->off) * (double) b->delta
+      i64 d = t.get("res.digit");
+      double q = (double) (d + (i64) b->off) * (double) b->delta
                + (double) b->minval + last;
       if (b->seq) last = q;
       v[k] = (float) q;
@@ -185,8 +185,8 @@ struct vd_dec {
     pv = cb->dim;
     w = np + pv;
     FATAL_UNLESS((sz) vch * w <= sizeof vd_cl / sizeof *vd_cl,
-                 "residue needs %lu classification slots",
-                 (unsigned long) ((sz) vch * w));
+                 "residue needs %" PRIu64 " classification slots",
+                 (u64) ((sz) vch * w));
     for (pass = 0; pass < 8; pass++) {
       pc = 0;
       while (pc < np) {
@@ -199,8 +199,8 @@ struct vd_dec {
           for (j = 0; j < vch; j++) {
             u32 c = vd_cl[j * w + pc];
             i32 bn;
-            FATAL_UNLESS(c < r->ncl, "residue class %lu, limit %lu",
-                         (unsigned long) c, (unsigned long) r->ncl);
+            FATAL_UNLESS(c < r->ncl, "residue class %" PRIu64 ", limit %" PRIu64,
+                         (u64) c, (u64) r->ncl);
             bn = r->book[c][pass];
             if (bn < 0) continue;
             if (r->type == 2)
@@ -329,9 +329,9 @@ struct vd_dec {
     pndn = count;
   }
 
-  void finish(unsigned long long granule) {
+  void finish(u64 granule) {
     u32 keep = pndn;
-    if (granule >= done && granule - done < (unsigned long long) pndn)
+    if (granule >= done && granule - done < (u64) pndn)
       keep = (u32) (granule - done);
     flush(keep);
   }

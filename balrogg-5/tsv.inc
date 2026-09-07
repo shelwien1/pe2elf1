@@ -127,7 +127,7 @@ struct tsv {
   FILE * f;
   const char * path;
   int enc;
-  unsigned long row;          /*  records written or read so far  */
+  u64 row;                    /*  records written or read so far  */
 
   sz on;                      /*  bytes held in the write buffer  */
   sz rl;                      /*  value bytes on the row being written  */
@@ -235,11 +235,10 @@ struct tsv {
   /*  Decimal without the printf machinery: this runs once per coded symbol.
       A record joins the row above it when the tags match; the literals at the
       call sites usually make that a pointer compare.  */
-  void put(const char * tag, long long v) {
+  void put(const char * tag, i64 v) {
     char n[24];
     int k = (int) sizeof n;
-    unsigned long long a = v < 0 ? 0ULL - (unsigned long long) v
-                                 : (unsigned long long) v;
+    u64 a = v < 0 ? (u64) 0 - (u64) v : (u64) v;
     tag = shorten(tag);
     if (wtag && rl < TSV_ROWMAX && (tag == wtag || !strcmp(tag, wtag)))
       emit(" ", 1);
@@ -257,33 +256,33 @@ struct tsv {
     row++;
   }
 
-  long long get(const char * tag) {
-    unsigned long long a = 0;
+  i64 get(const char * tag) {
+    u64 a = 0;
     int c, neg = 0, nd = 0;
     row++;
     if (!left) head(tag);
     { const char * want = shorten(tag);
       FATAL_UNLESS(!strcmp(rtag, want),
-                   "%s: record %lu is '%s', expected '%s'", path, row,
+                   "%s: record %" PRIu64 " is '%s', expected '%s'", path, row,
                    terse ? lengthen(rtag) : rtag, tag); }
     c = rd();
     if (c == '-') { neg = 1;  c = rd(); }
     while (c >= '0' && c <= '9') {
-      FATAL_UNLESS(nd < 19, "%s: record %lu has a malformed value", path, row);
-      a = a * 10 + (unsigned) (c - '0');
+      FATAL_UNLESS(nd < 19, "%s: record %" PRIu64 " has a malformed value", path, row);
+      a = a * 10 + (u32) (c - '0');
       nd++;  c = rd();
     }
-    FATAL_UNLESS(nd && a <= 9223372036854775807ULL,
-                 "%s: record %lu has a malformed value", path, row);
+    FATAL_UNLESS(nd && a <= (u64) INT64_MAX,
+                 "%s: record %" PRIu64 " has a malformed value", path, row);
     if (c == ' ') left = 1;
     else {
       if (c == '\r') c = rd();
-      FATAL_UNLESS(c == '\n' || c < 0, "%s: record %lu has a malformed value",
+      FATAL_UNLESS(c == '\n' || c < 0, "%s: record %" PRIu64 " has a malformed value",
                    path, row);
       left = 0;
     }
     {
-      long long r = neg ? -(long long) a : (long long) a;
+      i64 r = neg ? -(i64) a : (i64) a;
       if (tee) tee->put(tag, r);
       return r;
     }
@@ -298,10 +297,10 @@ struct tsv {
     return terse ? lengthen(rtag) : rtag;
   }
 
-  u32 get_u(const char * tag, unsigned long long hi) {
-    long long v = get(tag);
-    FATAL_UNLESS(v >= 0 && (unsigned long long) v < hi,
-                 "%s: record %lu: %s = %lld is out of range", path, row,
+  u32 get_u(const char * tag, u64 hi) {
+    i64 v = get(tag);
+    FATAL_UNLESS(v >= 0 && (u64) v < hi,
+                 "%s: record %" PRIu64 ": %s = %" PRId64 " is out of range", path, row,
                  tag, v);
     return (u32) v;
   }
@@ -335,18 +334,18 @@ private:
     sz n = 0;
     if (c < 0) return 0;
     while (c >= 0 && c != '\t' && c != '\n') {
-      FATAL_UNLESS(n < TSV_TAGMAX, "%s: record %lu has an overlong tag", path, row);
+      FATAL_UNLESS(n < TSV_TAGMAX, "%s: record %" PRIu64 " has an overlong tag", path, row);
       rtag[n++] = (char) c;
       c = rd();
     }
-    FATAL_UNLESS(c == '\t', "%s: record %lu has no value column", path, row);
+    FATAL_UNLESS(c == '\t', "%s: record %" PRIu64 " has no value column", path, row);
     rtag[n] = 0;
     left = 1;
     return 1;
   }
 
   void head(const char * tag) {
-    FATAL_UNLESS(head_soft(), "%s: stream ends before record %lu (%s)",
+    FATAL_UNLESS(head_soft(), "%s: stream ends before record %" PRIu64 " (%s)",
                  path, row, tag);
   }
 

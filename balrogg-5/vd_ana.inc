@@ -60,8 +60,8 @@ struct pcmwin {
       is refused rather than silently misread.  */
   void seek_to(i64 off) {
     FATAL_UNLESS(off == (i64) (long) off,
-                 "%s: offset %lld needs 64-bit file offsets", path,
-                 (long long) off);
+                 "%s: offset %" PRId64 " needs 64-bit file offsets", path,
+                 (i64) off);
     if (fseek(f, (long) off, SEEK_SET))
       FATAL_CODE(BLR_EXIT_IO, "seek failed on %s", path);
   }
@@ -92,11 +92,11 @@ struct pcmwin {
         FATAL_UNLESS(sz4 >= 16 && fread(fmt, 1, 16, f) == 16,
                      "%s: short fmt chunk", pth);
         FATAL_UNLESS(rd16(fmt) == 1, "%s: not uncompressed PCM", pth);
-        FATAL_UNLESS(rd16(fmt + 2) == nch, "%s: %lu channels, the stream has "
-                     "%lu", pth, (unsigned long) rd16(fmt + 2),
-                     (unsigned long) nch);
-        FATAL_UNLESS(rd32(fmt + 4) == rate, "%s: %lu Hz, the stream is %lu Hz",
-                     pth, (unsigned long) rd32(fmt + 4), (unsigned long) rate);
+        FATAL_UNLESS(rd16(fmt + 2) == nch, "%s: %" PRIu64 " channels, the stream has %"
+                     PRIu64, pth, (u64) rd16(fmt + 2),
+                     (u64) nch);
+        FATAL_UNLESS(rd32(fmt + 4) == rate, "%s: %" PRIu64 " Hz, the stream is %" PRIu64 " Hz",
+                     pth, (u64) rd32(fmt + 4), (u64) rate);
         FATAL_UNLESS(rd16(fmt + 14) == 16, "%s: not 16-bit samples", pth);
       } else if (!memcmp(h, "data", 4)) {
         data0 = at + 8;  frames = (i64) sz4 / (nch * 2);

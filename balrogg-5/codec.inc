@@ -38,21 +38,21 @@ void vb_pack(const char * in, const char * out) {
     src.want();
     if (!src.avail()) break;
     got = p.parse(src.cur(), src.avail());
-    FATAL_UNLESS(got != 0, "%s: no Ogg page at %lu", in,
-                 (unsigned long) src.offset());
+    FATAL_UNLESS(got != 0, "%s: no Ogg page at %" PRIu64, in,
+                 (u64) src.offset());
     /*  CRCs must be valid because decoding recomputes them.  */
-    FATAL_UNLESS(ogg_page::crc_ok(src.cur(), got), "%s: the page at %lu has a bad CRC",
-                 in, (unsigned long) src.offset());
+    FATAL_UNLESS(ogg_page::crc_ok(src.cur(), got), "%s: the page at %" PRIu64 " has a bad CRC",
+                 in, (u64) src.offset());
     /*  BOS starts a link only after EOS.  */
     if ((p.type & 2) && eos) {
       t.put("link.more", 1);  v.link();  lw.start();  eos = 0;
     }
-    FATAL_UNLESS(!eos, "%s: page %lu %s", in, (unsigned long) npage,
+    FATAL_UNLESS(!eos, "%s: page %" PRIu64 " %s", in, (u64) npage,
                  npage ? "follows end of stream" : "precedes any bitstream");
     lw.page(v, t, src, p, got);
     if (p.type & 4) {
-      FATAL_UNLESS(!lw.cont, "%s: a continued packet is %lu bytes short", in,
-                   (unsigned long) lw.spill);
+      FATAL_UNLESS(!lw.cont, "%s: a continued packet is %" PRIu64 " bytes short", in,
+                   (u64) lw.spill);
       eos = 1;
     }
     src.skip(got);  npage++;
@@ -84,19 +84,19 @@ void vb_unpack(const char * in, const char * out) {
       sz at = 0, pgl;
       int j;
       q.get(t);
-      FATAL_UNLESS(q.blen <= MAXPAY, "%s: a page claims %lu payload bytes", in,
-                   (unsigned long) q.blen);
+      FATAL_UNLESS(q.blen <= MAXPAY, "%s: a page claims %" PRIu64 " payload bytes", in,
+                   (u64) q.blen);
       Fj(q.np,
         sz pl = q.plen[j];
         /*  Copy a fragment from the packet decoded on an earlier page.  */
         if (j == 0 && (q.type & 1) && cont) {
-          FATAL_UNLESS(pl <= spill, "%s: page takes %lu of %lu remaining bytes",
-                       in, (unsigned long) pl, (unsigned long) spill);
+          FATAL_UNLESS(pl <= spill, "%s: page takes %" PRIu64 " of %" PRIu64 " remaining bytes",
+                       in, (u64) pl, (u64) spill);
           if (pl) memcpy(body + at, jb + jn - spill, pl);
           spill -= pl;
           if (!(q.np == 1 && q.tail)) {
-            FATAL_UNLESS(!spill, "%s: a page closes a packet %lu bytes early",
-                         in, (unsigned long) spill);
+            FATAL_UNLESS(!spill, "%s: a page closes a packet %" PRIu64 " bytes early",
+                         in, (u64) spill);
             cont = 0;
           }
           at += pl;  continue;
@@ -104,7 +104,7 @@ void vb_unpack(const char * in, const char * out) {
         FATAL_UNLESS(pl > 0, "%s: a page claims an empty packet", in);
         if (j == q.np - 1 && q.tail) {
           sz ex = (sz) t.get_u("page.spill",
-                               (unsigned long long) MAXPAY * OGG_MAXSEG + 1);
+                               (u64) MAXPAY * OGG_MAXSEG + 1);
           sz tot = pl + ex;
           io z(v, t, 0, jb, tot);
           jn = tot;
@@ -120,8 +120,8 @@ void vb_unpack(const char * in, const char * out) {
         FATAL_CODE(BLR_EXIT_IO, "write error on %s", out);
       if (q.type & 4) done = 1;
     }
-    FATAL_UNLESS(!cont, "%s: a continued packet is %lu bytes short", in,
-                 (unsigned long) spill);
+    FATAL_UNLESS(!cont, "%s: a continued packet is %" PRIu64 " bytes short", in,
+                 (u64) spill);
   }
 
   t.close();

@@ -37,7 +37,7 @@ static void crcinit(void) {
   if (CRC[1]) return;
   Fi(256,
     c = i << 24;
-    Fj(8, c = (c & 0x80000000UL) ? (c << 1) ^ 0x04C11DB7UL : c << 1);
+    Fj(8, c = (c & (u32) 0x80000000) ? (c << 1) ^ (u32) 0x04C11DB7 : c << 1);
     CRC[i] = c);
 }
 
@@ -147,13 +147,13 @@ struct ogg_page {
   void get(tsv & t) {
     int i;
     type = (u8) t.get_u("page.type", 0x100);
-    glo = t.get_u("page.granlo", 0x100000000ULL);
-    ghi = t.get_u("page.granhi", 0x100000000ULL);
-    serial = t.get_u("page.serial", 0x100000000ULL);
-    seq = t.get_u("page.seq", 0x100000000ULL);
+    glo = t.get_u("page.granlo", (u64) 0x100000000);
+    ghi = t.get_u("page.granhi", (u64) 0x100000000);
+    serial = t.get_u("page.serial", (u64) 0x100000000);
+    seq = t.get_u("page.seq", (u64) 0x100000000);
     np = (int) t.get_u("page.npkt", OGG_MAXSEG + 1);
     Fi(np, plen[i] = t.get_u("page.plen",
-                             (unsigned long long) OGG_MAXSEG * OGG_MAXSEG + 1));
+                             (u64) OGG_MAXSEG * OGG_MAXSEG + 1));
     tail = 0;
     if (np && !(plen[np - 1] % OGG_MAXSEG)) tail = (int) t.get_u("page.tail", 2);
     pack();

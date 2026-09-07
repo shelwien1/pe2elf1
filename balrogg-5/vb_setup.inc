@@ -27,27 +27,27 @@ struct vb_setup {
     u32 i, j;
     Fi(nfl, Fj(VB_MAXCLASS,
       u32 k;
-      FATAL_UNLESS(fl[i].cbook[j] < (i32) nbk, "vorbis: floor master book %ld",
-                   (long) fl[i].cbook[j]);
+      FATAL_UNLESS(fl[i].cbook[j] < (i32) nbk, "vorbis: floor master book %" PRId64,
+                   (i64) fl[i].cbook[j]);
       Fk(8,
         FATAL_UNLESS(fl[i].csb[j][k] < (i32) nbk, "vorbis: floor subclass "
-                     "book %ld", (long) fl[i].csb[j][k]))));
+                     "book %" PRId64, (i64) fl[i].csb[j][k]))));
     Fi(nrs,
       u32 c, p;
-      FATAL_UNLESS(rs[i].cbook < nbk, "vorbis: residue class book %lu",
-                   (unsigned long) rs[i].cbook);
+      FATAL_UNLESS(rs[i].cbook < nbk, "vorbis: residue class book %" PRIu64,
+                   (u64) rs[i].cbook);
       FATAL_UNLESS(rs[i].ncl <= 16,
-                   "vorbis: %lu residue classifications, limit 16",
-                   (unsigned long) rs[i].ncl);
+                   "vorbis: %" PRIu64 " residue classifications, limit 16",
+                   (u64) rs[i].ncl);
       for (c = 0; c < rs[i].ncl; c++)
         for (p = 0; p < 8; p++) {
           i32 b = rs[i].book[c][p];
-          FATAL_UNLESS(b < (i32) nbk, "vorbis: residue book %ld", (long) b);
-          FATAL_UNLESS(b < 0 || bk[b].look == 1, "vorbis: residue book %ld has "
-                       "no lookup table", (long) b);
+          FATAL_UNLESS(b < (i32) nbk, "vorbis: residue book %" PRId64, (i64) b);
+          FATAL_UNLESS(b < 0 || bk[b].look == 1, "vorbis: residue book %" PRId64 " has "
+                       "no lookup table", (i64) b);
         });
-    Fi(nmd, FATAL_UNLESS(mdmap[i] < nmp, "vorbis: mode %lu names mapping "
-                            "%d", (unsigned long) i, mdmap[i]));
+    Fi(nmd, FATAL_UNLESS(mdmap[i] < nmp, "vorbis: mode %" PRIu64 " names mapping "
+                            "%d", (u64) i, mdmap[i]));
     Fi(nmp, Fj(mp[i].sub,
       FATAL_UNLESS(mp[i].fl[j] < nfl, "vorbis: submap floor %d", mp[i].fl[j]);
       FATAL_UNLESS(mp[i].rs[j] < nrs, "vorbis: submap residue %d", mp[i].rs[j])));

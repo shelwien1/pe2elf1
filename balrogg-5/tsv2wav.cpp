@@ -125,8 +125,8 @@ static void steg_pass_reset(void);
 /*  Signed values go out zigzagged -- 0, -1, 1, -2 becomes 0, 1, 2, 3 -- so a
     minus sign never costs a byte of its own and a run marker is free to use
     the sign instead.  */
-static long long vf_zig(i32 d) { return d < 0 ? -2LL * d - 1 : 2LL * d; }
-static i32 vf_unzig(long long z) { return (z & 1) ? (i32) (-(z + 1) / 2) : (i32) (z / 2); }
+static i64 vf_zig(i32 d) { return d < 0 ? (i64) -2 * d - 1 : (i64) 2 * d; }
+static i32 vf_unzig(i64 z) { return (z & 1) ? (i32) (-(z + 1) / 2) : (i32) (z / 2); }
 #ifdef BLR_VORBIS
 #include "vfloor.inc"      /*  the floor, refitted by libvorbis  */
 #include "vbooks.inc"      /*  codebooks, reproduced from an index  */
@@ -176,7 +176,7 @@ static u32 pg_cd, pg_cp, pg_nlink;
     digit and the row break  */
 constexpr u32 PG_FLAG = 5;
 
-static u32 dcost(long long v);            /*  the width of a value on a row  */
+static u32 dcost(i64 v);                  /*  the width of a value on a row  */
 
 /*  What the granule of a page with this shape should come to.  `frag` says
     the page opens with the tail of a packet from the page before.  */
@@ -203,13 +203,13 @@ struct pg {
   void get(tsv & t) {
     int i;
     type = t.get_u("page.type", 0x100);
-    glo = t.get_u("page.granlo", 0x100000000ULL);
-    ghi = t.get_u("page.granhi", 0x100000000ULL);
-    serial = t.get_u("page.serial", 0x100000000ULL);
-    seq = t.get_u("page.seq", 0x100000000ULL);
+    glo = t.get_u("page.granlo", (u64) 0x100000000);
+    ghi = t.get_u("page.granhi", (u64) 0x100000000);
+    serial = t.get_u("page.serial", (u64) 0x100000000);
+    seq = t.get_u("page.seq", (u64) 0x100000000);
     np = t.get_u("page.npkt", OGG_MAXSEG + 1);
     Fi((int) np, plen[i] = t.get_u("page.plen",
-                                   (unsigned long long) OGG_MAXSEG * OGG_MAXSEG + 1));
+                                   (u64) OGG_MAXSEG * OGG_MAXSEG + 1));
     tail = 0;
     if (np && !(plen[np - 1] % OGG_MAXSEG)) tail = (int) t.get_u("page.tail", 2);
   }
@@ -221,7 +221,7 @@ struct pg {
     serial = ser;  seq = sq;
     np = t.get_u("page.npkt", OGG_MAXSEG + 1);
     Fi((int) np, plen[i] = t.get_u("page.plen",
-                                   (unsigned long long) OGG_MAXSEG * OGG_MAXSEG + 1));
+                                   (u64) OGG_MAXSEG * OGG_MAXSEG + 1));
     tail = 0;
     if (np && !(plen[np - 1] % OGG_MAXSEG)) tail = (int) t.get_u("page.tail", 2);
     if (!strcmp(t.peek(), "page.eos")) { t.get("page.eos");  type |= 4; }
@@ -230,8 +230,8 @@ struct pg {
     { i64 pr = pg_predict(np, tail, cont);
       i64 g = (pg_pred ? pr : pg_prev) + (i64) t.get("page.gran");
       pg_prev = g;
-      glo = (u32) ((unsigned long long) g & 0xFFFFFFFFu);
-      ghi = (u32) ((unsigned long long) g >> 32); }
+      glo = (u32) ((u64) g & 0xFFFFFFFFu);
+      ghi = (u32) ((u64) g >> 32); }
   }
 
   /*  Write in balrogg's order and form.  */
@@ -261,10 +261,10 @@ struct pg {
     Fi((int) np, t.put("page.plen", plen[i]));
     if (np && !(plen[np - 1] % OGG_MAXSEG)) t.put("page.tail", tail);
     if (type & 4) t.put("page.eos", 1);
-    { i64 g = (i64) (((unsigned long long) ghi << 32) | glo);
+    { i64 g = (i64) (((u64) ghi << 32) | glo);
       i64 rp = g - pg_predict(np, tail, cont), rd = g - pg_prev;
       if (pg_score) { pg_cp += dcost(rp);  pg_cd += dcost(rd); }
-      t.put("page.gran", (long long) (pg_pred ? rp : rd));
+      t.put("page.gran", (i64) (pg_pred ? rp : rd));
       pg_prev = g; }
   }
 };
@@ -280,7 +280,7 @@ static u32 lk_n;
 /*  Analysis state across a link.  */
 static i64 an_base, an_T, tot_before;
 static int an_covered;
-static long meta_bytes;
+static i64 meta_bytes;
 static u32 dec_ch, dec_rate;              /*  from the identification header  */
 /*  Where to split between two output integers was a knob once: nearest, then
     +-0.25 and +-0.125 tilting the split.  Every tilt moves a few samples one
@@ -353,9 +353,9 @@ static int recover(u32 n, int W, int wp, int wn, u32 ch, vd_map * mp) {
     forms below are close enough in count that the digits decide between them
     -- a gap and a run length and a digit are all one value and rarely the
     same width -- so they are compared in bytes rather than in values.  */
-static u32 dcost(long long v) {
+static u32 dcost(i64 v) {
   u32 d = 1;
-  unsigned long long a = v < 0 ? 0ULL - (unsigned long long) v : (unsigned long long) v;
+  u64 a = v < 0 ? (u64) 0 - (u64) v : (u64) v;
   if (v < 0) d++;
   while (a >= 10) { a /= 10;  d++; }
   return d + 1;
@@ -366,8 +366,8 @@ static u32 dcost(long long v) {
     index into a ladder and cannot be negative, so zigzagging one would
     double it for nothing -- a class of five would cost the two digits of
     ten.  The flag says which is being written.  */
-static long long keep_enc(i32 v, int sgn) { return sgn ? vf_zig(v) : (long long) v; }
-static i32 keep_dec(long long z, int sgn) { return sgn ? vf_unzig(z) : (i32) z; }
+static i64 keep_enc(i32 v, int sgn) { return sgn ? vf_zig(v) : (i64) v; }
+static i32 keep_dec(i64 z, int sgn) { return sgn ? vf_unzig(z) : (i32) z; }
 
 /*  The raw form: every digit of the packet, zeros run-coded.  */
 static u32 keep_run_cost(const i32 * v, u32 total, int sgn) {
@@ -377,7 +377,7 @@ static u32 keep_run_cost(const i32 * v, u32 total, int sgn) {
     { u32 e = i;
       while (e < total && !v[e]) e++;
       if (e - i < VF_RUNMIN) { c += dcost(0);  i++; }
-      else { c += dcost(-(long long) (e - i));  i = e; } }
+      else { c += dcost(-(i64) (e - i));  i = e; } }
   }
   return c;
 }
@@ -385,14 +385,14 @@ static u32 keep_run_cost(const i32 * v, u32 total, int sgn) {
 /*  The sparse form: the gap to each correction, then the corrections.  */
 static u32 keep_gap_cost(const u32 * ix, u32 n, const i32 * all, int sgn) {
   u32 i, c = 0;
-  long long prev = -1;
+  i64 prev = -1;
   for (i = 0; i < n; ) {
-    long long g = (long long) ix[i] - prev - 1;
+    i64 g = (i64) ix[i] - prev - 1;
     if (g) { c += dcost(g);  prev = ix[i];  i++;  continue; }
-    { u32 e = i;  long long p2 = prev;
-      while (e < n && (long long) ix[e] - p2 - 1 == 0) { p2 = ix[e];  e++; }
+    { u32 e = i;  i64 p2 = prev;
+      while (e < n && (i64) ix[e] - p2 - 1 == 0) { p2 = ix[e];  e++; }
       if (e - i < VF_RUNMIN) { c += dcost(0);  prev = ix[i];  i++; }
-      else { c += dcost(-(long long) (e - i));  prev = p2;  i = e; } }
+      else { c += dcost(-(i64) (e - i));  prev = p2;  i = e; } }
   }
   for (i = 0; i < n; i++) c += dcost(keep_enc(all[ix[i]], sgn));
   return c;
@@ -413,7 +413,7 @@ static u32 keep_mark_cost(const u32 * ix, u32 n, const i32 * all, u32 total,
     { u32 e = i, k2 = k;
       while (e < total && !(k2 < n && ix[k2] == e)) e++;
       if (e - i < VF_RUNMIN) { c += dcost(0);  i++; }
-      else { c += dcost(-(long long) (e - i));  i = e; } }
+      else { c += dcost(-(i64) (e - i));  i = e; } }
   }
   return c;
 }
@@ -439,19 +439,19 @@ static u32 keep_mark_cost(const u32 * ix, u32 n, const i32 * all, u32 total,
     merge across packets when the tags run on, so that row sometimes costs
     less; charging it in full measured best.  */
 #define KEEP_TAGC 6               /*  the tag, its tab and its newline  */
-static long long keep_count(u32 n, u32 total, const u32 * ix, const i32 * all,
+static i64 keep_count(u32 n, u32 total, const u32 * ix, const i32 * all,
                             int sgn) {
   u32 sparse, raw, mark;
   if (!n) return 0;
-  sparse = keep_gap_cost(ix, n, all, sgn) + KEEP_TAGC + dcost((long long) n);
-  raw = keep_run_cost(all, total, sgn) + dcost(-2 * (long long) total);
-  mark = keep_mark_cost(ix, n, all, total, sgn) + dcost(-(2 * (long long) total + 1));
-  if (sparse <= raw && sparse <= mark) return (long long) n;
-  return raw <= mark ? -2 * (long long) total : -(2 * (long long) total + 1);
+  sparse = keep_gap_cost(ix, n, all, sgn) + KEEP_TAGC + dcost((i64) n);
+  raw = keep_run_cost(all, total, sgn) + dcost(-2 * (i64) total);
+  mark = keep_mark_cost(ix, n, all, total, sgn) + dcost(-(2 * (i64) total + 1));
+  if (sparse <= raw && sparse <= mark) return (i64) n;
+  return raw <= mark ? -2 * (i64) total : -(2 * (i64) total + 1);
 }
 
 static void write_keeps(tsv & dst, const char * ti, const char * tv,
-                        long long c, u32 n, const u32 * ix, const i32 * vl,
+                        i64 c, u32 n, const u32 * ix, const i32 * vl,
                         const i32 * all, u32 total, int sgn) {
   u32 i;
   if (!c) return;
@@ -459,12 +459,12 @@ static void write_keeps(tsv & dst, const char * ti, const char * tv,
     /*  Zigzagged, so a value is never negative and the run marker keeps the
         sign to itself, the same arrangement the floor differences use.  */
     for (i = 0; i < total; ) {
-      long long z = keep_enc(all[i], sgn);
+      i64 z = keep_enc(all[i], sgn);
       if (z) { dst.put(tv, z);  i++;  continue; }
       { u32 e = i;
         while (e < total && !all[e]) e++;
         if (e - i < VF_RUNMIN) { dst.put(tv, 0);  i++; }
-        else { dst.put(tv, -(long long) (e - i));  i = e; } }
+        else { dst.put(tv, -(i64) (e - i));  i = e; } }
     }
     return;
   }
@@ -475,7 +475,7 @@ static void write_keeps(tsv & dst, const char * ti, const char * tv,
       { u32 e = i, k2 = k;
         while (e < total && !(k2 < n && ix[k2] == e)) e++;
         if (e - i < VF_RUNMIN) { dst.put(tv, 0);  i++; }
-        else { dst.put(tv, -(long long) (e - i));  i = e; } }
+        else { dst.put(tv, -(i64) (e - i));  i = e; } }
     }
     return;
   }
@@ -484,20 +484,20 @@ static void write_keeps(tsv & dst, const char * ti, const char * tv,
       the median gap is one -- so a stretch of touching corrections becomes a
       stretch of zero gaps, and the same run marker that serves the floor
       posts serves here.  */
-  { long long prev = -1;                  /*  so a first index of zero gaps by zero  */
+  { i64 prev = -1;                /*  so a first index of zero gaps by zero  */
     for (i = 0; i < n; ) {
-      long long g = (long long) ix[i] - prev - 1;
+      i64 g = (i64) ix[i] - prev - 1;
       if (g) { dst.put(ti, g);  prev = ix[i];  i++;  continue; }
-      { u32 e = i;  long long p2 = prev;
-        while (e < n && (long long) ix[e] - p2 - 1 == 0) { p2 = ix[e];  e++; }
+      { u32 e = i;  i64 p2 = prev;
+        while (e < n && (i64) ix[e] - p2 - 1 == 0) { p2 = ix[e];  e++; }
         if (e - i < VF_RUNMIN) { dst.put(ti, 0);  prev = ix[i];  i++; }
-        else { dst.put(ti, -(long long) (e - i));  prev = p2;  i = e; } }
+        else { dst.put(ti, -(i64) (e - i));  prev = p2;  i = e; } }
     } }
   for (i = 0; i < n; i++) dst.put(tv, keep_enc(vl[i], sgn));
 }
 
 static void read_keeps(tsv & src, const char * ti, const char * tv,
-                       long long c, u32 & n, u32 * ix, i32 * vl, int & raw,
+                       i64 c, u32 & n, u32 * ix, i32 * vl, int & raw,
                        int sgn) {
   u32 i;
   n = 0;  raw = 0;
@@ -506,11 +506,11 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
     raw = 1;  n = (u32) ((-c) >> 1);
     FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", tv);
     for (i = 0; i < n; ) {
-      long long z = src.get(tv);
+      i64 z = src.get(tv);
       if (z > 0) { vl[i++] = keep_dec(z, sgn);  continue; }
       if (!z)    { vl[i++] = 0;  continue; }
       FATAL_UNLESS((u32) -z <= n - i, "%s: correction run overruns the block", tv);
-      { long long r = -z;  while (r--) vl[i++] = 0; }
+      { i64 r = -z;  while (r--) vl[i++] = 0; }
     }
     return;
   }
@@ -521,7 +521,7 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
     u32 total = (u32) ((-c) >> 1), at = 0;
     FATAL_UNLESS(total <= KEEP_MAX, "%s: correction block is too large", tv);
     while (at < total) {
-      long long z = src.get(tv);
+      i64 z = src.get(tv);
       if (z > 0) {
         FATAL_UNLESS(n < KEEP_MAX, "%s: correction block is too large", tv);
         ix[n] = at;  vl[n] = keep_dec(z - 1, sgn);  n++;  at++;  continue;
@@ -535,13 +535,13 @@ static void read_keeps(tsv & src, const char * ti, const char * tv,
   {
     n = (u32) c;
     FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", ti);
-    long long prev = -1;
+    i64 prev = -1;
     for (i = 0; i < n; ) {
-      long long g = src.get(ti);
+      i64 g = src.get(ti);
       if (g > 0) { prev += g + 1;  ix[i++] = (u32) prev;  continue; }
       if (!g)    { prev += 1;      ix[i++] = (u32) prev;  continue; }
       FATAL_UNLESS((u32) -g <= n - i, "%s: correction run overruns the block", ti);
-      { long long r = -g;
+      { i64 r = -g;
         while (r--) { prev += 1;  ix[i++] = (u32) prev; } }
     }
   }
@@ -572,7 +572,7 @@ static vfloor vf;
                           if (vf_on) { (d).put("vf.q", vf_pm); \
                                        (d).put("vf.q", vf_g);  vf.reset_amp(); } \
                         } while (0)
-#define VF_QGET(st_)  do { long long q2_ = (st_).get("vf.q"); \
+#define VF_QGET(st_)  do { i64 q2_ = (st_).get("vf.q"); \
                           vf_on = q2_ >= 0 && vf.open(dec.s.ch, dec.s.rate, (int) q2_); \
                           if (vf_on) { vf_pm = (int) (st_).get("vf.q"); \
                                        vf_g = (int) (st_).get("vf.q"); \
@@ -581,7 +581,7 @@ static vfloor vf;
 static int vf_on;                         /*  a usable encoder was found  */
 static i32 vf_pred[VD_MAXPOST];
 static int vf_sweep;                      /*  scoring qualities, not predicting  */
-static long vf_hit[21], vf_seen[21];      /*  posts reproduced, per quality  */
+static i64 vf_hit[21], vf_seen[21];       /*  posts reproduced, per quality  */
 static int vf_pm;                         /*  which predictor is in use  */
 static int vf_g;                          /*  the fitted offset, in tenth-dB  */
 static double vf_cd[21][2], vf_cy;        /*  cost of each variant, and of the posts  */
@@ -889,12 +889,12 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
               res[i] = g_unw[k][i] - vf_pred[i];
             }
             for (i = 0; i < f->posts; ) {
-              long long z = vf_zig(g_unw[k][i] - adj[i]);
+              i64 z = vf_zig(g_unw[k][i] - adj[i]);
               if (z) { dst.put("flr.d", z);  i++;  continue; }
               { u32 e = i;
                 while (e < f->posts && g_unw[k][e] == adj[e]) e++;
                 if (e - i < VF_RUNMIN) { dst.put("flr.d", 0);  i++; }
-                else { dst.put("flr.d", -(long long) (e - i));  i = e; } }
+                else { dst.put("flr.d", -(i64) (e - i));  i = e; } }
             }
           }
           continue;
@@ -908,11 +908,11 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
         { u32 e = i;
           while (e < f->posts && !vd_y[k][f->srt[e]]) e++;
           if (e - i < VF_RUNMIN) { dst.put("flr.y", 0);  i++; }
-          else { dst.put("flr.y", -(long long) (e - i));  i = e; } }
+          else { dst.put("flr.y", -(i64) (e - i));  i = e; } }
       }
     }
   } else {
-    for (k = 0; k < (ch + 31) / 32; k++) um[k] = src.get_u("pk", 0x100000000ULL);
+    for (k = 0; k < (ch + 31) / 32; k++) um[k] = src.get_u("pk", (u64) 0x100000000);
     for (k = 0; k < ch; k++) {           /*  ... and back interleaved  */
       vd_floor * f = dec.s.fl + mp->fl[mp->mux[k]];
       vd_used[k] = vd_nz[k] = (u8) ((um[k >> 5] >> (k & 31)) & 1);
@@ -925,7 +925,7 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
                  f->x, f->posts, f->mult, vf_pred)) {
         i32 unw[VD_MAXPOST], cod[VD_MAXPOST], res[VD_MAXPOST], adj;
         for (i = 0; i < f->posts; ) {
-          long long z = src.get("flr.d");
+          i64 z = src.get("flr.d");
           if (z > 0) {
             vf_refine(f, vf_pred, res, i, &adj);
             unw[i] = adj + vf_unzig(z);
@@ -934,7 +934,7 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
           FATAL_UNLESS(z < 0 ? (u32) -z <= f->posts - i : 1,
                        "%s: floor difference run overruns the post list",
                        src.path);
-          { long long r = z ? -z : 1;
+          { i64 r = z ? -z : 1;
             while (r--) {
               vf_refine(f, vf_pred, res, i, &adj);
               unw[i] = adj;  res[i] = unw[i] - vf_pred[i];  i++;
@@ -949,13 +949,13 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
       }
 #endif
       for (i = 0; i < f->posts; ) {
-        long long y = src.get("flr.y");
+        i64 y = src.get("flr.y");
         if (y > 0) { vd_y[k][f->srt[i++]] = (i32) y;  continue; }
         if (!y) { vd_y[k][f->srt[i++]] = 0;  continue; }
         FATAL_UNLESS(y < 0 && (u32) -y <= f->posts - i,
-                     "%s: floor run of %lld overruns the post list",
+                     "%s: floor run of %" PRId64 " overruns the post list",
                      src.path, y);
-        { long long r = -y;
+        { i64 r = -y;
           while (r--) vd_y[k][f->srt[i++]] = 0; }
       }
       for (i = 0; i < f->posts; i++) dst.put("flr.y", vd_y[k][f->srt[i]]);
@@ -973,7 +973,7 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
   rec.covered = recover(n, W, wp, wn, ch, mp);
 
   if (role == ROLE_REST) {                /*  corrections arrive before use  */
-    { long long a = 0, b = 0;
+    { i64 a = 0, b = 0;
       if (!strcmp(src.peek(), "kn")) { a = src.get("kn");  b = src.get("kn"); }
       read_keeps(src, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, rec.kc_raw, 0);
       read_keeps(src, "kd.i", "kd.v", b, rec.kd_n, kd_i, kd_v, rec.kd_raw, 1); }
@@ -994,7 +994,7 @@ static void audio_rec(tsv & src, tsv & dst, int role) {
         each; a row apiece spends more on tag text than on the values, so they
         share a row.  */
     /*  classes are an index and never negative; digits are signed  */
-    { long long a = keep_count(rec.kc_n, rec.ci, kc_i, kc_all, 0),
+    { i64 a = keep_count(rec.kc_n, rec.ci, kc_i, kc_all, 0),
                 b = keep_count(rec.kd_n, rec.di, kd_i, kd_all, 1);
       if (a || b) { dst.put("kn", a);  dst.put("kn", b); }
       write_keeps(dst, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, kc_all, rec.ci, 0);
@@ -1023,7 +1023,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
 
   if (role == ROLE_META || role == ROLE_REST) src.tee = &dst;
   while (src.get_u("link.more", 2)) {
-    unsigned long long last = 0;
+    u64 last = 0;
     int w = 0, done = 0, cont = 0;
     u32 serial = 0, seq = 0;
     int prevtail = 0;
@@ -1032,7 +1032,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
     if (open) { dec.link();  an_first = 1;  an_prevW = 0; }
     if (role == ROLE_META) { src.tee = nullptr;
                              if (pg_score) pg_nlink++;
-                             dst.put("link.frames", (long long) lk_frames[link]);
+                             dst.put("link.frames", (i64) lk_frames[link]);
                              if (pg_pred) dst.put("pg.pred", 1);
                              src.tee = &dst; }
     if (role == ROLE_REST) { src.tee = nullptr;
@@ -1046,7 +1046,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
       int j;
       src.tee = nullptr;
       if (role == ROLE_REST) {
-        if (!seq) serial = src.get_u("link.serial", 0x100000000ULL);
+        if (!seq) serial = src.get_u("link.serial", (u64) 0x100000000);
         p.get_meta(src, serial, seq, seq == 0, prevtail);
         p.put(dst);
       } else {
@@ -1069,7 +1069,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
       src.tee = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;
       prevtail = p.tail;
       seq++;
-      if (p.np) last = ((unsigned long long) p.ghi << 32) | p.glo;
+      if (p.np) last = ((u64) p.ghi << 32) | p.glo;
       Fj((int) p.np,
         sz pl = p.plen[j];
         sz len = pl;
@@ -1082,8 +1082,8 @@ static void walk(int role, const char * srcpath, const char * dstpath,
         if (j == (int) p.np - 1 && p.tail) {
           sz ex;
           src.tee = nullptr;
-          ex = (sz) src.get_u("page.spill", 0x100000000ULL);
-          if (role != ROLE_SYNTH) dst.put("page.spill", (long long) ex);
+          ex = (sz) src.get_u("page.spill", (u64) 0x100000000);
+          if (role != ROLE_SYNTH) dst.put("page.spill", (i64) ex);
           src.tee = (role == ROLE_SYNTH) ? nullptr : &dst;
           len = pl + ex;  spill = ex;  cont = 1;
         }
@@ -1148,7 +1148,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
   FATAL_UNLESS(open, "%s: no Vorbis stream", srcpath);
   src.tee = nullptr;
   /*  the terminating link.more was echoed by the tee already  */
-  if (role == ROLE_META) meta_bytes = (long) dst.bytes;
+  if (role == ROLE_META) meta_bytes = (i64) dst.bytes;
   if (role != ROLE_SYNTH) dst.close();
   src.close();
   if (role == ROLE_SYNTH) sink.close();
@@ -1194,8 +1194,8 @@ static void vf_settings(char ** argv) {
         vf_cd[qq][0] = vf_cd[qq][1] = vf_cy = 0;
         walk(ROLE_META, argv[2], DEV_NULL, argv[3]);
         vf_sweep = 0;
-        if (vf_dbg) fprintf(stderr, "posts %ld exact %.1f%%  cost %.0f vs %.0f\n",
-                            (long) vf_seen[qq],
+        if (vf_dbg) fprintf(stderr, "posts %" PRId64 " exact %.1f%%  cost %.0f vs %.0f\n",
+                            (i64) vf_seen[qq],
                             vf_seen[qq] ? 100.0 * (double) vf_hit[qq] / (double) vf_seen[qq] : 0.0,
                             vf_cd[qq][0], vf_cy);
         /*  keep the setting whose differences are cheapest, and only if
@@ -1287,7 +1287,7 @@ int main(int argc, char ** argv) {
         which is the difference between this costing a tenth of the run and
         half of it.  Measured over 37 files, scoring this way picks the same
         coefficient as scoring the whole meta.  */
-    { int k, bestk = 0;  long bestb = -1;
+    { int k, bestk = 0;  i64 bestb = -1;
 #ifdef BLR_VORBIS
       int vf_save = vf_on;
 #endif

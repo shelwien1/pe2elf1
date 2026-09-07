@@ -649,9 +649,54 @@ wrong audio.
 - A WAV with a `LIST` chunk ahead of `data`: exact. A WAV whose channel count
   disagrees with the meta: rejected at open.
 
-The `-Wpedantic` builds report `__int128` as a GNU extension in `pmul`. That
-is deliberate: the shear needs a 128-bit intermediate, and the alternative is
-splitting every multiply.
+The `-Wpedantic` builds report two GNU extensions, both deliberate:
+`__int128` in `pmul`, because the shear needs a 128-bit intermediate and the
+alternative is splitting every multiply; and the anonymous struct in
+`sh_v2f.inc`, which is how the supplied range coder aliases its low word and
+carry as one counter.
+
+### 7.1 Widths are fixed, and why
+
+No width in this tree is spelled `long`. `long` is 64 bits on LP64 and 32 on
+Windows, and the difference is not academic: the generated codebook table
+carries `q_min` and `q_delta`, which are packed float32 bit patterns rather
+than numbers, and a pattern with the sign bit set is a value above 2^31. The
+table held those as `long`, so a Windows clang refused thirteen rows outright
+-- *"constant expression evaluates to 3760717824 which cannot be narrowed to
+type 'long'"* -- and the rest of the file was one `-Wconstant-conversion`
+away from silently wrapping. The same table had the same patterns written
+both ways, positive from a library that built one at run time and negative
+from one that had it as a literal, which is what a `long` lets you not
+notice.
+
+So the types are `u8`/`u16`/`u32`/`u64` and `i8`/`i16`/`i32`/`i64` from
+`<inttypes.h>`, and the diagnostics use `PRIu64` and `PRId64` rather than
+`%lu` and `%lld`. That second half was not cosmetic either: a file offset
+cast to `unsigned long` and printed with `%lu` truncates above 4 GiB on
+Windows, and `source.inc` and `codec.inc` did that in every diagnostic they
+had.
+
+`long` survives in exactly two places, both of them casts at a boundary
+somebody else owns, and each says so where it stands:
+
+* `fseek` takes a `long`, so `pcmwin::seek_to` casts to one -- and checks the
+  value survives the narrowing first, which is the check that makes a WAV past
+  2 GiB fail loudly on Windows instead of seeking somewhere else.
+* libvorbis declares `static_codebook`, `vorbis_block::pcmend`,
+  `codec_setup_info::blocksizes` and `vorbis_encode_init_vbr` in terms of
+  `long`, so `vbooks.inc` and `vfloor.inc` cast at the call.
+
+One of those boundaries needed more than a cast. `static_codebook::quantlist`
+is an array of libvorbis's `long` and the generated table's is `i32`; a cast
+between the two would read every other entry on LP64. The materialised book
+leaves that field null and the three fields whose width differs -- `q_min`,
+`q_delta`, `quantlist` -- are read through `qmin()`, `qdelta()` and `qmult()`,
+which know which library they are looking at.
+
+Verified: `g++` and `clang++` both build all five binaries with no warning
+from this tree's own sources, and every meta is byte-identical to the ones the
+build produced before the change -- 27 checked directly, then the 17-file
+corpus and the 22 ffmpeg files end to end.
 
 ---
 

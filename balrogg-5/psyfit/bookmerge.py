@@ -123,17 +123,24 @@ for i, b in enumerate(books):
     if ll:
         w('static const char vg_l%d[] = {%s};\n' % (i, ','.join(map(str, ll))))
     if maptype:
-        w('static const long vg_q%d[] = {%s};\n' % (i, ','.join(map(str, ql))))
+        w('static const i32 vg_q%d[] = {%s};\n' % (i, ','.join(map(str, ql))))
 
 w('static const vg_book vg_books[%d] = {\n' % len(books))
 for i, b in enumerate(books):
     dim, ent, maptype, qmin, qdelta, qquant, qseq, ll, ql = b
-    w('  {%d,%d,%s,%d,%d,%d,%d,%d,%s},\n'
-      % (dim, ent, ('vg_l%d' % i) if ll else '0', maptype, qmin, qdelta,
+    #  q_min and q_delta are packed float32 bit patterns, not numbers.  A
+    #  library that built one at run time hands back a value up to 2^32-1; one
+    #  that had it as a literal in books/*.h hands back the same bits written
+    #  as a negative long.  Emitting them as they came made a table where the
+    #  same pattern appeared both ways and neither fitted a 32-bit long, so
+    #  they go out as the unsigned pattern they are.
+    w('  {%d,%d,%s,%d,%u,%u,%d,%d,%s},\n'
+      % (dim, ent, ('vg_l%d' % i) if ll else '0', maptype,
+         qmin & 0xFFFFFFFF, qdelta & 0xFFFFFFFF,
          qquant, qseq, ('vg_q%d' % i) if maptype else '0'))
 w('};\n')
 
-w('static const unsigned short vg_idx[%d] = {%s};\n'
+w('static const u16 vg_idx[%d] = {%s};\n'
   % (len(idx), ','.join(map(str, idx))))
 
 w('static const vg_set vg_sets[%d] = {\n' % len(rows))

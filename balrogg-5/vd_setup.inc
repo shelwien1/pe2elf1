@@ -90,7 +90,7 @@ struct vd_book {
       u32 got = 0;
       t.get("cb.ordlen");
       while (got < ent) {
-        u32 n = t.get_u("cb.ordrun", 0x100000000ULL);
+        u32 n = t.get_u("cb.ordrun", (u64) 0x100000000);
         FATAL_UNLESS(n <= ent - got, "ordered run overruns its book");
         got += n;
       }
@@ -134,8 +134,8 @@ struct vd_book {
     lookup = (int) lk;  nv = 0;  off = 0;  seq = 0;
     minval = delta = 0;  min_fx = delta_fx = 0;
     if (!lk) return;
-    FATAL_UNLESS(lk == 1, "unsupported codebook lookup type %lu",
-                 (unsigned long) lk);
+    FATAL_UNLESS(lk == 1, "unsupported codebook lookup type %" PRIu64,
+                 (u64) lk);
     {
       u32 s0 = t.get_u("cb.min.sign", 2), e0 = t.get_u("cb.min.exp", 0x400),
           m0 = t.get_u("cb.min.mant", 0x200000);
@@ -148,7 +148,7 @@ struct vd_book {
     nv = vd_lk1(ent, dim);
     ent2 = nv ? nv : 1;
     for (i = 0; i < ent2; i++) {
-      mult = t.get_u("cb.mult", 1ULL << vb);
+      mult = t.get_u("cb.mult", (u64) 1 << vb);
       if (mult > mx) mx = mult;
     }
     off = (mx + 1) >> 1;
@@ -180,16 +180,16 @@ struct vd_floor {
       sub = t.get_u("flr.csub", 4);
       csub[i] = (u8) sub;
       if (sub) t.get("flr.cbook");
-      for (j = 0; j < (1UL << sub); j++) t.get("flr.sbook");
+      for (j = 0; j < ((u32) 1 << sub); j++) t.get("flr.sbook");
     }
     mult = t.get_u("flr.mult", 4) + 1;
     quant = Q[mult - 1];
     rng = t.get_u("flr.rangebits", 16);
-    x[0] = 0;  x[1] = 1UL << rng;  posts = 2;
+    x[0] = 0;  x[1] = (u32) 1 << rng;  posts = 2;
     for (i = 0; i < parts; i++)
       for (j = 0; j < cdim[pcls[i]]; j++) {
         FATAL_UNLESS(posts < VD_MAXPOST, "too many floor posts");
-        x[posts++] = t.get_u("flr.x", 1ULL << rng);
+        x[posts++] = t.get_u("flr.x", (u64) 1 << rng);
       }
     /*  sort posts by X, then find each post's bracketing neighbours among
         the posts that precede it in list order  */
@@ -233,7 +233,7 @@ struct vd_res {
     for (i = 0; i < ncl; i++) casc[i] = (u8) t.get_u("res.cascade", 256);
     for (i = 0; i < ncl; i++)
       for (j = 0; j < 8; j++)
-        book[i][j] = (casc[i] & (1UL << j))
+        book[i][j] = (casc[i] & ((u32) 1 << j))
                    ? (i32) t.get_u("res.book", 256) : -1;
   }
 };
@@ -276,16 +276,16 @@ struct vd_setup {
   void ident(tsv & t) {
     u32 b;
     ch = t.get_u("id.channels", 256);
-    rate = t.get_u("id.rate", 0x100000000ULL);
+    rate = t.get_u("id.rate", (u64) 0x100000000);
     t.get("id.brmax");  t.get("id.brnom");  t.get("id.brmin");
     b = t.get_u("id.blocksize", 256);
-    bs0 = 1UL << (b & 15);  bs1 = 1UL << (b >> 4);
+    bs0 = (u32) 1 << (b & 15);  bs1 = (u32) 1 << (b >> 4);
     t.get("id.framing");
-    FATAL_UNLESS(ch >= 1 && ch < VD_MAXCH, "%lu channels",
-                 (unsigned long) ch);
+    FATAL_UNLESS(ch >= 1 && ch < VD_MAXCH, "%" PRIu64 " channels",
+                 (u64) ch);
     FATAL_UNLESS(bs0 >= 64 && bs1 >= bs0 && bs1 <= MD_MAXBLK,
-                 "block sizes %lu and %lu",
-                 (unsigned long) bs0, (unsigned long) bs1);
+                 "block sizes %" PRIu64 " and %" PRIu64,
+                 (u64) bs0, (u64) bs1);
   }
 
   /*  The comment header is opaque; its length comes from the page.  */
@@ -314,19 +314,19 @@ struct vd_setup {
         this runs whichever role is walking the stream.  */
     for (i = 0; i < nrs; i++) {
       u32 c, p;
-      FATAL_UNLESS(rs[i].cbook < nbk, "residue %lu names codebook %lu",
-                   (unsigned long) i, (unsigned long) rs[i].cbook);
+      FATAL_UNLESS(rs[i].cbook < nbk, "residue %" PRIu64 " names codebook %" PRIu64,
+                   (u64) i, (u64) rs[i].cbook);
       FATAL_UNLESS(bk[rs[i].cbook].dim > 0,
-                   "residue %lu class book has no grid",
-                   (unsigned long) i);
+                   "residue %" PRIu64 " class book has no grid",
+                   (u64) i);
       for (c = 0; c < rs[i].ncl; c++)
         for (p = 0; p < 8; p++) {
           i32 bn = rs[i].book[c][p];
           if (bn < 0) continue;
-          FATAL_UNLESS((u32) bn < nbk, "residue %lu names codebook %ld",
-                       (unsigned long) i, (long) bn);
+          FATAL_UNLESS((u32) bn < nbk, "residue %" PRIu64 " names codebook %" PRId64,
+                       (u64) i, (i64) bn);
           FATAL_UNLESS(bk[bn].dim > 0 && bk[bn].lookup == 1,
-                       "residue book %ld has no grid", (long) bn);
+                       "residue book %" PRId64 " has no grid", (i64) bn);
         }
     }
     nmp = t.get_u("map.count", 64) + 1;

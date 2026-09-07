@@ -190,7 +190,9 @@ same model, which is the same one-record change the shaping needs.
 
 **Little-endian only.** `sh_v2f.inc` aliases the coder's low word and carry as
 one 64-bit counter; the build stops on a big-endian target rather than
-miscoding quietly.
+miscoding quietly. Its types are this tree's fixed-width ones -- see TSV2WAV.md
+7.1 -- so `uint`, `qword` and `byte` are `u32`, `u64` and `u8`, and nothing in
+it changes width between Linux and Windows.
 
 ## Verification
 

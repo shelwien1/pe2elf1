@@ -42,17 +42,25 @@
 /*  A codebook set, as it appears in the generated table.  The two pointer
     fields stand in for what static_codebook wants, and open_gen() copies the
     row into one of those.  */
+/*  The widths are fixed rather than libvorbis's `long`, which is 64 bits on
+    LP64 and 32 on Windows.  q_min and q_delta are packed float32 bit patterns
+    rather than numbers, and a library that builds one at run time hands back a
+    value up to 2^32-1 where one that had it as a literal in the books/
+    headers hands
+    back the same bits as a negative long -- so the table used to carry the
+    same pattern written both ways, and neither form fitted a 32-bit long.
+    They are the unsigned pattern now, which is what they always were.  */
 struct vg_book {
-  long dim, entries;
+  i32 dim, entries;
   const char * lengthlist;
-  int maptype;
-  long q_min, q_delta;
-  int q_quant, q_sequencep;
-  const long * quantlist;
+  i32 maptype;
+  u32 q_min, q_delta;
+  i32 q_quant, q_sequencep;
+  const i32 * quantlist;
 };
 /*  One set, over the sample rates it is chosen for.  Both bounds are the
     exact rates libvorbis switches at, and `first` indexes vg_idx.  */
-struct vg_set { int ch, rate_lo, rate_hi, n, first; };
+struct vg_set { i32 ch, rate_lo, rate_hi, n, first; };
 
 #include "vbooks_gen.inc"
 
@@ -75,6 +83,7 @@ struct vbooks {
   int ready;                              /*  1 library 0 open, 2 library 1  */
   const vg_set * gset;
   static_codebook gbk[VB_MAXSET];         /*  materialised from the table  */
+  const vg_book * gsrc[VB_MAXSET];        /*  the row each of those came from  */
 
   vbooks() : ready(0), gset(nullptr) {}
   void close() { if (ready == 1) vorbis_info_clear(&vi);  ready = 0;  gset = nullptr; }
@@ -114,9 +123,17 @@ struct vbooks {
         memset(&d, 0, sizeof d);
         d.dim = b->dim;  d.entries = b->entries;
         d.lengthlist = (char *) b->lengthlist;
-        d.maptype = b->maptype;  d.q_min = b->q_min;  d.q_delta = b->q_delta;
-        d.q_quant = b->q_quant;  d.q_sequencep = b->q_sequencep;
-        d.quantlist = (long *) b->quantlist;
+        d.maptype = (long) b->maptype;
+        d.q_min = (long) b->q_min;  d.q_delta = (long) b->q_delta;
+        d.q_quant = (long) b->q_quant;  d.q_sequencep = (long) b->q_sequencep;
+        /*  Deliberately not b->quantlist: static_codebook wants an array of
+            libvorbis's `long` and ours is i32, so the two disagree in
+            width wherever long is 64 bits and the cast would misread every
+            other entry.  Nothing in libvorbis reads this field for these
+            books -- _book_maptype1_quantvals() looks only at dim and entries
+            -- and our own reads go through qmult() below.  */
+        d.quantlist = nullptr;
+        gsrc[k] = b;
       }
       gset = g;  ready = 2;  return 1; }
   }
@@ -140,19 +157,34 @@ struct vbooks {
     return ((codec_setup_info *) vi.codec_setup)->book_param[i];
   }
 
+  /*  The three fields whose width differs between the two libraries: read
+      them through here rather than off static_codebook, so neither the
+      generated table's i32 nor libvorbis's long is read as the other.
+      Casting a long q_min to u32 keeps the pattern either way, since it
+      is 32 bits of float in a wider box.  */
+  u32 qmin(int i) const {
+    return ready == 2 ? gsrc[i]->q_min : (u32) book(i)->q_min;
+  }
+  u32 qdelta(int i) const {
+    return ready == 2 ? gsrc[i]->q_delta : (u32) book(i)->q_delta;
+  }
+  i32 qmult(int i, i32 j) const {
+    return ready == 2 ? gsrc[i]->quantlist[j] : (i32) book(i)->quantlist[j];
+  }
+
   /*  Does this setting's book i match what the stream described?  */
   int same(int i, const vd_book & s, const u8 * len, const u32 * mult) const {
     static_codebook * b = book(i);
-    long j;
+    i32 j;
     if ((u32) b->dim != s.dim || (u32) b->entries != s.ent) return 0;
     if ((b->maptype != 0) != (s.lookup != 0)) return 0;
-    for (j = 0; j < b->entries; j++)
+    for (j = 0; j < (i32) b->entries; j++)
       if ((u8) b->lengthlist[j] != len[j]) return 0;
     if (b->maptype) {
-      long n = _book_maptype1_quantvals(b);
-      if (b->q_sequencep != s.seq) return 0;
+      i32 n = (i32) _book_maptype1_quantvals(b);
+      if (b->q_sequencep != (long) s.seq) return 0;
       for (j = 0; j < n; j++)
-        if ((u32) b->quantlist[j] != mult[j]) return 0;
+        if ((u32) qmult(i, j) != mult[j]) return 0;
     }
     return 1;
   }
@@ -161,18 +193,17 @@ struct vbooks {
       have to parse records it is about to write.  */
   void fill(int i, vd_book & s) const {
     static_codebook * b = book(i);
+    u32 qm = qmin(i), qd = qdelta(i);
     s.dim = (u32) b->dim;  s.ent = (u32) b->entries;
-    s.lookup = b->maptype;  s.nv = 0;  s.off = 0;  s.seq = 0;
+    s.lookup = (u32) b->maptype;  s.nv = 0;  s.off = 0;  s.seq = 0;
     s.minval = s.delta = 0;  s.min_fx = s.delta_fx = 0;
     if (!b->maptype) return;
-    s.minval = vd_f32((u32) ((b->q_min >> 31) & 1), (u32) ((b->q_min >> 21) & 0x3ff),
-                      (u32) (b->q_min & 0x1fffff));
-    s.delta  = vd_f32((u32) ((b->q_delta >> 31) & 1), (u32) ((b->q_delta >> 21) & 0x3ff),
-                      (u32) (b->q_delta & 0x1fffff));
-    s.seq = b->q_sequencep;
+    s.minval = vd_f32((qm >> 31) & 1, (qm >> 21) & 0x3ff, qm & 0x1fffff);
+    s.delta  = vd_f32((qd >> 31) & 1, (qd >> 21) & 0x3ff, qd & 0x1fffff);
+    s.seq = (u32) b->q_sequencep;
     s.nv = vd_lk1(s.ent, s.dim);
-    { long j, n = _book_maptype1_quantvals(b), mx = 0;
-      for (j = 0; j < n; j++) if (b->quantlist[j] > mx) mx = b->quantlist[j];
+    { i32 j, n = (i32) _book_maptype1_quantvals(b), mx = 0;
+      for (j = 0; j < n; j++) if (qmult(i, j) > mx) mx = qmult(i, j);
       s.off = (u32) ((mx + 1) >> 1); }
     s.min_fx = fx((double) s.minval);  s.delta_fx = fx((double) s.delta);
   }
@@ -183,7 +214,7 @@ struct vbooks {
       them.  */
   void emit(int i, tsv & dst, int grouped) const {
     static_codebook * b = book(i);
-    long j, k, ent = b->entries;
+    i32 j, k, ent = (i32) b->entries;
     int ordered = 0, sparse = 0;
     dst.put("cb.dim", b->dim);
     dst.put("cb.entries", ent);
@@ -193,7 +224,7 @@ struct vbooks {
     if (j == ent) ordered = 1;
     dst.put("cb.ordered", ordered);
     if (ordered) {
-      long count = 0;
+      i32 count = 0;
       dst.put("cb.ordlen", b->lengthlist[0] - 1);
       for (j = 1; j < ent; j++) {
         int now = b->lengthlist[j], last = b->lengthlist[j - 1];
@@ -219,16 +250,17 @@ struct vbooks {
     }
     dst.put("cb.lookup", b->maptype);
     if (b->maptype) {
-      long n = _book_maptype1_quantvals(b);
-      dst.put("cb.min.sign", (b->q_min >> 31) & 1);
-      dst.put("cb.min.exp",  (b->q_min >> 21) & 0x3ff);
-      dst.put("cb.min.mant",  b->q_min        & 0x1fffff);
-      dst.put("cb.dlt.sign", (b->q_delta >> 31) & 1);
-      dst.put("cb.dlt.exp",  (b->q_delta >> 21) & 0x3ff);
-      dst.put("cb.dlt.mant",  b->q_delta        & 0x1fffff);
+      i32 n = (i32) _book_maptype1_quantvals(b);
+      u32 qm = qmin(i), qd = qdelta(i);
+      dst.put("cb.min.sign", (qm >> 31) & 1);
+      dst.put("cb.min.exp",  (qm >> 21) & 0x3ff);
+      dst.put("cb.min.mant",  qm        & 0x1fffff);
+      dst.put("cb.dlt.sign", (qd >> 31) & 1);
+      dst.put("cb.dlt.exp",  (qd >> 21) & 0x3ff);
+      dst.put("cb.dlt.mant",  qd        & 0x1fffff);
       dst.put("cb.valbits", b->q_quant - 1);
       dst.put("cb.sequence", b->q_sequencep);
-      for (j = 0; j < n; j++) dst.put("cb.mult", b->quantlist[j]);
+      for (j = 0; j < n; j++) dst.put("cb.mult", qmult(i, j));
     }
   }
 };

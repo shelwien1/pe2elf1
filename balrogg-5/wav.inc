@@ -45,7 +45,7 @@ static double wav_err[VD_MAXCH];
     reader would see a truncated file, so the writer stops instead.  RF64 or
     WAVE64 would lift the limit; neither is worth the complexity until a
     stream needs it.  */
-constexpr unsigned long long WAV_MAXBYTES = 0xFFFFFFFFULL - 36;
+constexpr u64 WAV_MAXBYTES = (u64) 0xFFFFFFFF - 36;
 
 /*  Vorbis orders channels its own way; RIFF expects the Microsoft order, and
     both libvorbis's oggdec and ffmpeg map between the two on the way out.
@@ -74,10 +74,10 @@ struct wav {
   FILE * f;
   const char * path;
   u32 rate, ch;
-  unsigned long long frames;
+  u64 frames;
   u8 ob[WAV_OBUF];  sz on;
   u8 ord[VD_MAXCH];
-  unsigned long long maxframes;
+  u64 maxframes;
 
   static void w32(u8 * p, u32 v) {
     p[0] = (u8) v;  p[1] = (u8) (v >> 8);
@@ -131,8 +131,8 @@ struct wav {
     const i16 * obs = (steg_mode == STEG_EXTRACT) ? steg_ref_frame(ch) : nullptr;
 #endif
     FATAL_UNLESS(frames < maxframes,
-                 "%s: a WAVE file cannot hold more than %llu frames at %lu "
-                 "channels", path, maxframes, (unsigned long) ch);
+                 "%s: a WAVE file cannot hold more than %" PRIu64 " frames at %" PRIu64 " "
+                 "channels", path, maxframes, (u64) ch);
     if (on + 2 * ch > WAV_OBUF) flush();
     for (i = 0; i < ch; i++) {
       /*  In double, not float: the product is around 32767, so a float one

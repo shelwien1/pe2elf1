@@ -95,16 +95,16 @@ struct io {
   /*  A value that is not a plain packet field: derived, composite, or from
       the audio payload.  Both directions enforce the same bound, so a stream
       is rejected on the same inputs whichever way it is walked.  */
-  INLINE u32 val(const char * tag, u32 x, unsigned long long hi) {
+  INLINE u32 val(const char * tag, u32 x, u64 hi) {
     if (!enc) return t.get_u(tag, hi);
-    FATAL_IF_HOT((unsigned long long) x >= hi)("vorbis: %s is out of range", tag);
+    FATAL_IF_HOT((u64) x >= hi)("vorbis: %s is out of range", tag);
     t.put(tag, x);
     return x;
   }
 
   /*  ... and a signed one.  */
   INLINE i32 sval(const char * tag, i32 x, i32 lim) {
-    long long r;
+    i64 r;
     if (enc) {
       FATAL_IF_HOT(x < -lim || x > lim)("vorbis: %s is out of range", tag);
       t.put(tag, x);
@@ -120,12 +120,12 @@ struct io {
     u32 x;
     if (enc) {
       x = bget(n);
-      FATAL_UNLESS(w >= 32 || !(x >> w), "vorbis: %s value %lu exceeds %d bits",
-                   tag, (unsigned long) x, w);
+      FATAL_UNLESS(w >= 32 || !(x >> w), "vorbis: %s value %" PRIu64 " exceeds %d bits",
+                   tag, (u64) x, w);
       t.put(tag, x);
       return x;
     }
-    x = t.get_u(tag, w >= 32 ? 0x100000000ULL : 1ULL << w);
+    x = t.get_u(tag, w >= 32 ? (u64) 0x100000000 : (u64) 1 << w);
     bput(n, x);
     return x;
   }
@@ -134,8 +134,8 @@ struct io {
   void cst(int n, u32 k) {
     if (enc) {
       u32 x = bget(n);
-      FATAL_UNLESS(x == k, "vorbis: fixed field %lu, expected %lu",
-                   (unsigned long) x, (unsigned long) k);
+      FATAL_UNLESS(x == k, "vorbis: fixed field %" PRIu64 ", expected %" PRIu64,
+                   (u64) x, (u64) k);
     } else bput(n, k);
   }
 
@@ -163,8 +163,8 @@ struct io {
 
   void bk_put(vb_book * bk, u32 e) {
     u32 k;
-    FATAL_UNLESS(e < bk->ent && bk->len[e], "vorbis: codebook has no entry %lu",
-                 (unsigned long) e);
+    FATAL_UNLESS(e < bk->ent && bk->len[e], "vorbis: codebook has no entry %" PRIu64,
+                 (u64) e);
     for (k = bk->len[e]; k > 0; k--) bput1((bk->code[e] >> (k - 1)) & 1);
   }
 
@@ -197,7 +197,7 @@ struct io {
     u32 nb, j, lk, vb, i;
     vb_book * k;
     nb = fld("cb.count", 8, 8) + 1;
-    FATAL_UNLESS(nb <= VB_MAXBOOK, "vorbis: %lu codebooks", (unsigned long) nb);
+    FATAL_UNLESS(nb <= VB_MAXBOOK, "vorbis: %" PRIu64 " codebooks", (u64) nb);
     s->nbk = nb;
     Fj(nb,
       k = s->bk + j;
@@ -205,15 +205,15 @@ struct io {
       k->dim = fld("cb.dim", 16, 16);
       k->ent = fld("cb.entries", 24, 24);
       /*  ent == 0 is accepted by libvorbis; dim == 0 divides by zero.  */
-      FATAL_UNLESS(k->dim > 0, "vorbis: codebook %lu has dimension 0",
-                   (unsigned long) j);
-      FATAL_UNLESS(k->ent <= (1UL << 20), "vorbis: codebook %lu has %lu entries",
-                   (unsigned long) j, (unsigned long) k->ent);
+      FATAL_UNLESS(k->dim > 0, "vorbis: codebook %" PRIu64 " has dimension 0",
+                   (u64) j);
+      FATAL_UNLESS(k->ent <= ((u32) 1 << 20), "vorbis: codebook %" PRIu64 " has %" PRIu64 " entries",
+                   (u64) j, (u64) k->ent);
       /*  Enforce libvorbis's joint dimension and entry bound.  */
       FATAL_UNLESS(blr_ilog(k->dim) + blr_ilog(k->ent) <= 24,
-                   "vorbis: codebook %lu size %lu x %lu is unsupported",
-                   (unsigned long) j, (unsigned long) k->dim,
-                   (unsigned long) k->ent);
+                   "vorbis: codebook %" PRIu64 " size %" PRIu64 " x %" PRIu64 " is unsupported",
+                   (u64) j, (u64) k->dim,
+                   (u64) k->ent);
       k->len = vb_alloc<u8>(k->ent);  memset(k->len, 0, k->ent);
       k->code = vb_alloc<u32>(k->ent);
       lengths(k);
@@ -221,8 +221,8 @@ struct io {
       lk = fld("cb.lookup", 4, 2);
       k->look = (u8) lk;
       if (!lk) continue;
-      FATAL_UNLESS(lk == 1, "vorbis: unsupported codebook lookup type %lu",
-                   (unsigned long) lk);
+      FATAL_UNLESS(lk == 1, "vorbis: unsupported codebook lookup type %" PRIu64,
+                   (u64) lk);
       flt("cb.min.sign", "cb.min.exp", "cb.min.mant");
       flt("cb.dlt.sign", "cb.dlt.exp", "cb.dlt.mant");
       vb = fld("cb.valbits", 4, 4) + 1;
@@ -230,8 +230,8 @@ struct io {
       k->nv = lk1(k->ent, k->dim);
       k->mult = vb_alloc<u32>(k->nv ? k->nv : 1);
       Fi(k->nv, k->mult[i] = fld("cb.mult", (int) vb, (int) vb));
-      FATAL_UNLESS(k->nv > 0, "vorbis: codebook %lu has an empty lookup table",
-                   (unsigned long) j);
+      FATAL_UNLESS(k->nv > 0, "vorbis: codebook %" PRIu64 " has an empty lookup table",
+                   (u64) j);
       k->grid());
   }
 
@@ -242,36 +242,36 @@ struct io {
     nt = fld("flr.ntime", 6, 6) + 1;
     Fi(nt, cst(16, 0));                      /*  the time domain list  */
     nf = fld("flr.count", 6, 6) + 1;
-    FATAL_UNLESS(nf <= VB_MAXFLOOR, "vorbis: %lu floors", (unsigned long) nf);
+    FATAL_UNLESS(nf <= VB_MAXFLOOR, "vorbis: %" PRIu64 " floors", (u64) nf);
     s->nfl = nf;
     Fk(nf,
       q = s->fl + k;
       FATAL_UNLESS(fld("flr.type", 16, 1) == 1,
                    "vorbis: floor type 0 is unsupported");
       q->parts = fld("flr.parts", 5, 5);
-      FATAL_UNLESS(q->parts <= VB_MAXPART, "vorbis: floor has %lu partitions",
-                   (unsigned long) q->parts);
+      FATAL_UNLESS(q->parts <= VB_MAXPART, "vorbis: floor has %" PRIu64 " partitions",
+                   (u64) q->parts);
       nc = 0;
       Fi(q->parts,
         q->pcls[i] = (u8) fld("flr.pclass", 4, 4);
-        FATAL_UNLESS(q->pcls[i] < VB_MAXCLASS, "vorbis: floor class %lu",
-                     (unsigned long) q->pcls[i]);
+        FATAL_UNLESS(q->pcls[i] < VB_MAXCLASS, "vorbis: floor class %" PRIu64,
+                     (u64) q->pcls[i]);
         if ((u32) q->pcls[i] + 1 > nc) nc = q->pcls[i] + 1);
       Fi(nc,
         q->cdim[i] = (u8) (fld("flr.cdim", 3, 3) + 1);
         sub = fld("flr.csub", 2, 2);
         q->csub[i] = (u8) sub;  q->cbook[i] = -1;
         if (sub) q->cbook[i] = (i32) fld("flr.cbook", 8, 8);
-        Fj(1UL << sub,
+        Fj((u32) 1 << sub,
           sb = fld("flr.sbook", 8, 8);
           q->csb[i][j] = (i32) sb - 1));
       q->mult = fld("flr.mult", 2, 2) + 1;
       q->quant = QUANT[q->mult - 1];
       q->rng = fld("flr.rangebits", 4, 4);
-      q->x[0] = 0;  q->x[1] = 1UL << q->rng;  q->posts = 2;
+      q->x[0] = 0;  q->x[1] = (u32) 1 << q->rng;  q->posts = 2;
       Fi(q->parts, Fj(q->cdim[q->pcls[i]],
-        FATAL_UNLESS(q->posts < VB_MAXPOST, "vorbis: floor has over %lu posts",
-                     (unsigned long) VB_MAXPOST);
+        FATAL_UNLESS(q->posts < VB_MAXPOST, "vorbis: floor has over %" PRIu64 " posts",
+                     (u64) VB_MAXPOST);
         q->x[q->posts++] = fld("flr.x", (int) q->rng, (int) q->rng)));
       q->sort());
   }
@@ -281,7 +281,7 @@ struct io {
     u32 nr, k, i, j, bno, c;
     vb_res * q;
     nr = fld("res.count", 6, 6) + 1;
-    FATAL_UNLESS(nr <= VB_MAXRES, "vorbis: %lu residues", (unsigned long) nr);
+    FATAL_UNLESS(nr <= VB_MAXRES, "vorbis: %" PRIu64 " residues", (u64) nr);
     s->nrs = nr;
     Fk(nr,
       q = s->rs + k;
@@ -290,8 +290,8 @@ struct io {
       q->beg = fld("res.begin", 24, 24);  q->end = fld("res.end", 24, 24);
       q->psz = fld("res.partsize", 24, 24) + 1;
       q->ncl = fld("res.nclass", 6, 6) + 1;
-      FATAL_UNLESS(q->ncl <= VB_MAXRCL, "vorbis: residue has %lu classifications",
-                   (unsigned long) q->ncl);
+      FATAL_UNLESS(q->ncl <= VB_MAXRCL, "vorbis: residue has %" PRIu64 " classifications",
+                   (u64) q->ncl);
       q->cbook = fld("res.classbook", 8, 8);
       Fi(q->ncl,
         /*  One byte, split in the packet across a 3-bit low half and an
@@ -306,7 +306,7 @@ struct io {
         });
       Fi(q->ncl, Fj(8,
         q->book[i][j] = -1;
-        if (!(q->casc[i] & (1UL << j))) continue;
+        if (!(q->casc[i] & ((u32) 1 << j))) continue;
         bno = fld("res.book", 8, 8);
         q->book[i][j] = (i32) bno)));
   }
@@ -316,7 +316,7 @@ struct io {
     u32 nm, j, i, sub = 1, steps = 0, nmode, fl;
     vb_map * q;
     nm = fld("map.count", 6, 6) + 1;
-    FATAL_UNLESS(nm <= VB_MAXMAP, "vorbis: %lu mappings", (unsigned long) nm);
+    FATAL_UNLESS(nm <= VB_MAXMAP, "vorbis: %" PRIu64 " mappings", (u64) nm);
     s->nmp = nm;
     Fj(nm,
       q = s->mp + j;
@@ -327,33 +327,33 @@ struct io {
         FATAL_UNLESS(!fl || sub > 1, "vorbis: invalid submap flag");
       }
       sub = val("map.submaps", enc ? sub - 1 : 0, 16) + 1;
-      FATAL_UNLESS(sub >= 1 && sub <= VB_MAXSUB, "vorbis: mapping has %lu submaps",
-                   (unsigned long) sub);
+      FATAL_UNLESS(sub >= 1 && sub <= VB_MAXSUB, "vorbis: mapping has %" PRIu64 " submaps",
+                   (u64) sub);
       if (!enc) { bput(1, sub > 1);  if (sub > 1) bput(4, sub - 1); }
       if (enc) steps = bget(1) ? bget(8) + 1 : 0;
       steps = val("map.steps", steps, 257);
       if (!enc) { bput(1, steps != 0);  if (steps) bput(8, steps - 1); }
       q->sub = sub;  q->nstep = steps;
-      FATAL_UNLESS(steps <= VB_MAXCH, "vorbis: %lu coupling steps",
-                   (unsigned long) steps);
+      FATAL_UNLESS(steps <= VB_MAXCH, "vorbis: %" PRIu64 " coupling steps",
+                   (u64) steps);
       Fi(steps,
         q->mag[i] = (u8) fld("map.mag", (int) blr_ilog(ch - 1), (int) blr_ilog(ch - 1));
         q->ang[i] = (u8) fld("map.ang", (int) blr_ilog(ch - 1), (int) blr_ilog(ch - 1));
         FATAL_UNLESS(q->mag[i] < ch && q->ang[i] < ch && q->mag[i] != q->ang[i],
-                     "vorbis: invalid coupling channels %d/%d of %lu",
-                     q->mag[i], q->ang[i], (unsigned long) ch));
+                     "vorbis: invalid coupling channels %d/%d of %" PRIu64,
+                     q->mag[i], q->ang[i], (u64) ch));
       cst(2, 0);                             /*  reserved  */
       if (sub > 1) Fi(ch,
         q->mux[i] = (u8) fld("map.mux", 4, 4);
-        FATAL_UNLESS(q->mux[i] < sub, "vorbis: channel %lu maps to submap %d of %lu",
-                     (unsigned long) i, q->mux[i],
-                     (unsigned long) sub));
+        FATAL_UNLESS(q->mux[i] < sub, "vorbis: channel %" PRIu64 " maps to submap %d of %" PRIu64,
+                     (u64) i, q->mux[i],
+                     (u64) sub));
       Fi(sub,
         fld("map.smtime", 8, 8);
         q->fl[i] = (u8) fld("map.smfloor", 8, 8);
         q->rs[i] = (u8) fld("map.smres", 8, 8)));
     nmode = fld("mode.count", 6, 6) + 1;
-    FATAL_UNLESS(nmode <= VB_MAXMODE, "vorbis: %lu modes", (unsigned long) nmode);
+    FATAL_UNLESS(nmode <= VB_MAXMODE, "vorbis: %" PRIu64 " modes", (u64) nmode);
     s->nmd = nmode;
     Fi(nmode,
       s->blockflag[i] = (u8) fld("mode.blockflag", 1, 1);
@@ -375,14 +375,14 @@ struct io {
     fld("id.brnom", 32, 32);
     fld("id.brmin", 32, 32);
     bs = fld("id.blocksize", 8, 8);
-    n->bs0 = 1UL << (bs & 15);  n->bs1 = 1UL << (bs >> 4);
+    n->bs0 = (u32) 1 << (bs & 15);  n->bs1 = (u32) 1 << (bs >> 4);
     fld("id.framing", 8, 8);
     /*  Enforce the four bounds from libvorbis `_vorbis_unpack_info`.  */
-    FATAL_UNLESS(n->ch >= 1, "vorbis: %lu channels", (unsigned long) n->ch);
+    FATAL_UNLESS(n->ch >= 1, "vorbis: %" PRIu64 " channels", (u64) n->ch);
     FATAL_UNLESS(n->rate >= 1, "vorbis: sample rate 0");
     FATAL_UNLESS(n->bs0 >= 64 && n->bs1 >= n->bs0 && n->bs1 <= 8192,
-                 "vorbis: block sizes %lu and %lu",
-                 (unsigned long) n->bs0, (unsigned long) n->bs1);
+                 "vorbis: block sizes %" PRIu64 " and %" PRIu64,
+                 (u64) n->bs0, (u64) n->bs1);
   }
 
   /*  The comment header is opaque; carry it a byte at a time.  */
@@ -414,8 +414,8 @@ struct io {
       default: setup();  break;
     }
     /*  Only zero padding may remain after the parsed header.  */
-    FATAL_UNLESS(len * 8 - pos < 8, "vorbis: %lu unparsed packet bits",
-                 (unsigned long) (len * 8 - pos));
+    FATAL_UNLESS(len * 8 - pos < 8, "vorbis: %" PRIu64 " unparsed packet bits",
+                 (u64) (len * 8 - pos));
     if (enc)
       FATAL_UNLESS(bget((int) (len * 8 - pos)) == 0,
                    "vorbis: nonzero packet padding");
@@ -433,14 +433,14 @@ struct io {
       if (cs) cv = bk_get(s->bk + f->cbook[c]);
       cv0 = cv;
       Fk(cd,
-        i32 sb = f->csb[c][cv & ((1UL << cs) - 1)];
+        i32 sb = f->csb[c][cv & (((u32) 1 << cs) - 1)];
         cv >>= cs;
         y[j + k] = sb >= 0 ? bk_get(s->bk + sb) : 0);
       /*  Recreate libvorbis's first matching subclass choice exactly.  */
       FATAL_UNLESS(!(cv0 >> (cs * cd)),
                    "vorbis: floor class codeword exceeds its dimension");
       Fk(cd,
-        u32 l, d = (cv0 >> (k * cs)) & ((1UL << cs) - 1);
+        u32 l, d = (cv0 >> (k * cs)) & (((u32) 1 << cs) - 1);
         for (l = 0; l < d; l++) {
           u32 mx = f->csb[c][l] < 0 ? 1 : s->bk[f->csb[c][l]].ent;
           FATAL_UNLESS(y[j + k] >= mx,
@@ -459,25 +459,25 @@ struct io {
     bput(1, (u32) used);
     if (!used) return;
     p = blr_ilog(f->quant - 1);
-    FATAL_UNLESS(y[0] < (1UL << p) && y[1] < (1UL << p),
-                 "vorbis: floor post does not fit %lu bits", (unsigned long) p);
+    FATAL_UNLESS(y[0] < ((u32) 1 << p) && y[1] < ((u32) 1 << p),
+                 "vorbis: floor post does not fit %" PRIu64 " bits", (u64) p);
     bput(p, y[0]);  bput(p, y[1]);
     Fi(f->parts,
       u32 c = f->pcls[i];
       cd = f->cdim[c];  cs = f->csub[c];  cv = 0;
       if (cs) {
         Fk(cd,
-          for (l = 0; l < (1UL << cs); l++) {
+          for (l = 0; l < ((u32) 1 << cs); l++) {
             mx = f->csb[c][l] < 0 ? 1 : s->bk[f->csb[c][l]].ent;
             if (y[j + k] < mx) break;
           }
-          FATAL_UNLESS(l < (1UL << cs), "vorbis: no class %lu book fits value %lu",
-                       (unsigned long) c, (unsigned long) y[j + k]);
+          FATAL_UNLESS(l < ((u32) 1 << cs), "vorbis: no class %" PRIu64 " book fits value %" PRIu64,
+                       (u64) c, (u64) y[j + k]);
           cv |= l << (k * cs));
         bk_put(s->bk + f->cbook[c], cv);
       }
       Fk(cd,
-        i32 sb = f->csb[c][cv & ((1UL << cs) - 1)];
+        i32 sb = f->csb[c][cv & (((u32) 1 << cs) - 1)];
         cv >>= cs;
         if (sb >= 0) bk_put(s->bk + sb, y[j + k]));
       j += cd);
@@ -495,10 +495,10 @@ struct io {
         u32 p;
         d = sval("res.digit", 0, RS_DIGIT_MAX);
         FATAL_IF_HOT(!(d + (i32) bk->off >= 0 && d + (i32) bk->off < (i32) bk->base))
-          ("vorbis: residue digit %ld outside codebook grid", (long) d);
+          ("vorbis: residue digit %" PRId64 " outside codebook grid", (i64) d);
         p = bk->inv[(u32) (d + (i32) bk->off)];
         FATAL_IF_HOT(p == (u32) -1)
-          ("vorbis: residue digit %ld is not a codebook multiplicand", (long) d);
+          ("vorbis: residue digit %" PRId64 " is not a codebook multiplicand", (i64) d);
         /*  Digit k weighs nv^k, the same decomposition the encoder took the
             entry apart with.  */
         e += p * np;  np *= bk->nv;
@@ -514,8 +514,8 @@ struct io {
     if (r->type == 0) {
       st = r->psz / bk->dim;
       FATAL_IF_HOT(st * bk->dim != r->psz)
-        ("vorbis: residue 0 partition %lu not divisible by %lu",
-         (unsigned long) r->psz, (unsigned long) bk->dim);
+        ("vorbis: residue 0 partition %" PRIu64 " not divisible by %" PRIu64,
+         (u64) r->psz, (u64) bk->dim);
       Fi(st, rs_sym(bk));
     } else
       for (i = 0; i < r->psz; i += bk->dim)
@@ -540,8 +540,8 @@ struct io {
     pv = cb->dim;
     w = np + pv;
     FATAL_UNLESS((sz) vch * w <= VB_CSMAX,
-                 "vorbis: residue needs %lu classification slots, limit %lu",
-                 (unsigned long) ((sz) vch * w), (unsigned long) VB_CSMAX);
+                 "vorbis: residue needs %" PRIu64 " classification slots, limit %" PRIu64,
+                 (u64) ((sz) vch * w), (u64) VB_CSMAX);
     cl = vb_cs;
     for (pass = 0; pass < 8; pass++) {
       pc = 0;
@@ -567,8 +567,8 @@ struct io {
           Fj(vch,
             i32 bn;
             FATAL_IF_HOT(cl[j * w + pc] >= r->ncl)
-              ("vorbis: residue class %lu, limit %lu",
-               (unsigned long) cl[j * w + pc], (unsigned long) r->ncl);
+              ("vorbis: residue class %" PRIu64 ", limit %" PRIu64,
+               (u64) cl[j * w + pc], (u64) r->ncl);
             bn = r->book[cl[j * w + pc]][pass];
             if (bn >= 0) rs_part(r, s->bk + bn));
           pc++);
@@ -599,7 +599,7 @@ struct io {
       nz[k] = (u8) u;
       if (u)
         Fi(f->posts, u32 p = f->srt[i];
-                     yc[p] = val("flr.y", enc ? yc[p] : 0, 0x100000000ULL));
+                     yc[p] = val("flr.y", enc ? yc[p] : 0, (u64) 0x100000000));
       if (!enc) fl_put(f, yc, u));
     Fi(mp->nstep, if (nz[mp->mag[i]] || nz[mp->ang[i]])
                     nz[mp->mag[i]] = nz[mp->ang[i]] = 1);
@@ -630,8 +630,8 @@ struct io {
         if (!enc) bput(1, (u32) w));
     payload(md);
     /*  Only byte-alignment padding may remain.  */
-    FATAL_UNLESS(len * 8 - pos < 8, "vorbis: %lu unparsed audio bits",
-                 (unsigned long) (len * 8 - pos));
+    FATAL_UNLESS(len * 8 - pos < 8, "vorbis: %" PRIu64 " unparsed audio bits",
+                 (u64) (len * 8 - pos));
     /*  Require the remaining byte-padding bits to be zero.  */
     if (enc)
       FATAL_UNLESS(bget((int) (len * 8 - pos)) == 0,

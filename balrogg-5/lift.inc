@@ -23,7 +23,6 @@
 
     F only controls fidelity, never reversibility.  */
 
-typedef int64_t i64;
 typedef int8_t  i8;
 constexpr int F = 32;
 

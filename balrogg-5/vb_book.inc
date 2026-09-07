@@ -17,7 +17,7 @@ constexpr u32 VB_MAXBOOK = 256;   /*  the codebook count is 8 bits + 1  */
 /*  Codebook bodies -- lengths, codewords, decode tree, multiplicands and the
     inverse multiplicand table -- vary in size with the setup, so they come
     from a bump arena that is reclaimed whole when the link ends.  */
-constexpr sz VB_ARENA = 96UL << 20;
+constexpr sz VB_ARENA = (sz) 96 << 20;
 
 /*  vb_alloc hands out u32* and i32* into this, and rounds every request up to
     8, so the base is the only thing that has to be aligned.  Without alignas
@@ -30,8 +30,8 @@ template <class T> static T * vb_alloc(sz n) {
   sz want = (n * sizeof(T) + 7) & ~(sz) 7;
   u8 * p = vb_arena + vb_used;
   FATAL_UNLESS(want <= VB_ARENA - vb_used,
-               "vorbis: the setup needs more than the %lu MiB codebook arena",
-               (unsigned long) (VB_ARENA >> 20));
+               "vorbis: the setup needs more than the %" PRIu64 " MiB codebook arena",
+               (u64) (VB_ARENA >> 20));
   vb_used += want;
   return (T *) p;
 }
@@ -106,15 +106,15 @@ struct vb_book {
     /*  Require unique multiplicands and enough digit tuples for every entry.  */
     Fi(nv,
       FATAL_UNLESS(inv[mult[i]] == (u32) -1,
-                   "vorbis: duplicate codebook multiplicand %lu",
-                   (unsigned long) mult[i]);
+                   "vorbis: duplicate codebook multiplicand %" PRIu64,
+                   (u64) mult[i]);
       inv[mult[i]] = i);
     /*  Count tuples, guarding the nv == 1 case.  */
     np = 1;
     if (nv > 1) Fi(dim, np *= nv);
     Fi(ent, if (len[i] && i >= np)
-                 FATAL("vorbis: codebook entry %lu exceeds lookup grid %lu",
-                       (unsigned long) i,
-                       (unsigned long) np));
+                 FATAL("vorbis: codebook entry %" PRIu64 " exceeds lookup grid %" PRIu64,
+                       (u64) i,
+                       (u64) np));
   }
 };

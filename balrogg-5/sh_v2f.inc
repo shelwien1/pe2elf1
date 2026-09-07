@@ -14,9 +14,11 @@
     the decoder consumed.  So the tool never stores the payload; it stores the
     choices, and the choices are the payload read through the model.  */
 
+/*  The coder's own spellings, over this tree's fixed-width types, so nothing
+    in it changes width between LP64 and Windows.  */
 typedef u8  byte;
 typedef u32 uint;
-typedef uint64_t qword;
+typedef u64 qword;
 
 /*  `lowc` aliases (low, Carry) as one 64-bit counter so that adding to it
     propagates into the carry flag.  That is a layout assumption, and the rest
@@ -47,8 +49,8 @@ struct rc_buf {
     if (n == cap) {
       sz want = cap ? cap * 2 : 1 << 12;
       u8 * q = (u8 *) realloc(p, want);
-      if (!q) FATAL_CODE(BLR_EXIT_IO, "out of memory for %llu payload bytes",
-                         (unsigned long long) want);
+      if (!q) FATAL_CODE(BLR_EXIT_IO, "out of memory for %" PRIu64 " payload bytes",
+                         (u64) want);
       p = q;  cap = want;
     }
     p[n++] = c;
@@ -57,12 +59,12 @@ struct rc_buf {
 
 struct Rangecoder {
   uint f_DEC; // 0=encode, 1=decode;
-  rc_buf * b;
-  byte get() { return b->get(); }
-  void put( byte c ) { b->put(c); }
-  void StartEncode( rc_buf *B ) { b=B; f_DEC=0; rc_Init(); }
+  rc_buf * buf;
+  byte get() { return buf->get(); }
+  void put( byte c ) { buf->put(c); }
+  void StartEncode( rc_buf *B ) { buf=B; f_DEC=0; rc_Init(); }
   void FinishEncode( void ) { rc_Quit(); }
-  void StartDecode( rc_buf *B ) { b=B; f_DEC=1; rc_Init(); }
+  void StartDecode( rc_buf *B ) { buf=B; f_DEC=1; rc_Init(); }
 
   static const uint NUM   = 32;
   static const uint sTOP  = 0x80000000U;
@@ -86,7 +88,7 @@ struct Rangecoder {
 
   void inpbit( void ) {
     if( (bits<<=1)>=0 ) bits = 0xFF000000 + get();
-    code = code*2 + (((signed char)bits)<0);
+    code = code*2 + (((i8)bits)<0);
   }
 
   void outbit( uint c ) {
