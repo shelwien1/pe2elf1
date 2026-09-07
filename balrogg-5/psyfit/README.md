@@ -135,12 +135,55 @@ The five misses are worth chasing: `cbr45` is constant-bitrate, so it comes
 from `vorbis_encode_init` rather than the VBR entry point, and the others may
 be managed-bitrate or a different libvorbis release.
 
+Both guesses turned out to be right; see *One library is not enough* below.
+
 This corrects a claim made earlier in this work -- that no encoder setting
 reproduces the corpus files' codebooks. That was wrong. It was concluded from
 a full-stream re-encode, where a mismatch anywhere looks like a mismatch
 everywhere; comparing the codebooks alone shows they match exactly.
 
 Codebooks are 18.6% of the meta. Replacing them with a quality index needs the
-records rebuilt in balrogg's exact form -- the ordered/sparse choice for the
-length list is how the *bitstream* encoded it and is not recoverable from
-`static_codebook`, so two bits per book would have to be carried alongside.
+records rebuilt in balrogg's exact form. The ordered/sparse choice for the
+length list looked at first like something only the bitstream knew, needing two
+bits per book alongside the index; it is not. `vorbis_staticbook_pack` decides
+it from the length list itself, and `vbooks.inc` makes the same decision, so
+the index carries everything.
+
+## One library is not enough
+
+The misses above were not noise. Vendor strings name their encoders exactly:
+`00000007` is `Xiphophorus libVorbis I 20010813`, which is 1.0rc2, and the two
+`Sony Ogg Vorbis 1.0 Final` files are `Xiph.Org libVorbis I 20020717`, which is
+1.0's literal `ENCODE_VENDOR_STRING`. Those releases' tables are not the ones
+compiled in: 1.0 differs from 1.3.7 in 319 of 790 shared arrays, with 32 gone
+and 446 added.
+
+So the sets of every released libvorbis are carried as data instead. Two axes
+have to be swept, not one:
+
+* **quality**, through `vorbis_encode_init_vbr`, which is what a VBR file used;
+* **nominal bitrate**, through `vorbis_encode_init`, which selects the setup
+  template through `rate_mapping` rather than `quality_mapping` *and* turns
+  bitrate management on -- and a managed encode takes its residues from
+  `books_base_managed`, a family no quality setting ever reaches.
+
+That second axis is what `cbr45` needed, and it is also the only axis 1.0rc2
+has: rc2 declares `vorbis_encode_init_vbr` but its body is `return OV_EIMPL`.
+
+`bookgen.c` sweeps both over channels 1..8 and the whole rate range, bisecting
+each template boundary so the table carries the exact rate libvorbis switches
+at. `bookdump.sh` runs it once per release -- two libvorbis copies cannot share
+an address space -- and `bookmerge.py` interns the books by content and unions
+the rate ranges of every release that agrees on a set.
+
+Over 19 libvorbis releases (1.0beta4 through 1.3.7) and 15 aoTuV betas: **1318
+distinct codebooks in 349 sets**. The aoTuV betas add *nothing* -- not one book,
+not one set. aoTuV replaced the setup templates, and its own template choices
+are already reachable from the same tables by some (channels, rate, setting)
+libvorbis itself can be asked for.
+
+Against the 17-file corpus this names the codebooks of every file, `00000007`
+included, and costs 0.40% of the meta's values and 0.47% of its bytes. What it
+does not reach is an encoder that is not libvorbis: ffmpeg's own vorbis encoder
+has a set of its own in `libavcodec/vorbis_enc_data.h` and would want a dumper
+of its own.

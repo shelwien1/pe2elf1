@@ -37,7 +37,7 @@ W2V_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
 
 #  The vorbis build adds these two and drops floor_db.inc, whose table it takes
 #  from libvorbis instead (tsv2wav.cpp:99).
-VRB_INC = $(filter-out floor_db.inc,$(W2V_INC)) vfloor.inc vbooks.inc
+VRB_INC = $(filter-out floor_db.inc,$(W2V_INC)) vfloor.inc vbooks.inc vbooks_gen.inc
 VRB_SRC = $(wildcard vorbislib/*.c vorbislib/*.h vorbislib/vorbis/*.h \
                      vorbislib/ogg/*.h vorbislib/modes/*.h vorbislib/books/*/*.h)
 

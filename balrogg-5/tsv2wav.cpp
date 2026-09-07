@@ -502,12 +502,35 @@ static void su_books(tsv & t, u32 nbk, vd_book * bk) {
     for (i = 0; i < nbk; i++) bk[i].read(t);
     cap.flush_row();  alen = cap.memlen;
     su_dst = dst;  t.tee = save;
+    /*  Both libraries are asked, the compiled-in one first so a stream it
+        wrote keeps the quality it has always been named by.  Library 1 is the
+        generated table, which holds the sets of every released libvorbis --
+        among them the ones a 2002-era stream needs, which are in no build of
+        ours at all.  */
+    /*  -1 is the meta's "no set fits", so library 0 is named by 0..10 only
+        and its quality -0.1 is left to library 1, which has that row like any
+        other.  */
     cb_q = -1;
-    for (qq = -1; qq <= 10; qq++) {
+    for (qq = 0; qq <= 10 && cb_q < 0; qq++) {
       if (!vb_gen.open(dec_ch, dec_rate, qq)) continue;
       if ((u32) vb_gen.count() != nbk) continue;
       { sz blen = cb_render(vb_gen, cb_b);
-        if (blen == alen && !memcmp(cb_a, cb_b, alen)) { cb_q = qq;  break; } }
+        if (blen == alen && !memcmp(cb_a, cb_b, alen)) cb_q = qq; }
+    }
+    for (int row = vbooks::gen_next(dec_ch, dec_rate, -1);
+         row >= 0 && cb_q < 0; row = vbooks::gen_next(dec_ch, dec_rate, row)) {
+      /*  Rendering a set is far from free and nearly every row is the wrong
+          one, so the shape of the books is checked first: it comes straight
+          out of the table and settles almost all of them.  */
+      if ((u32) vbooks::gen_count(row) != nbk) continue;
+      for (i = 0; i < nbk; i++) {
+        const vg_book * g = vbooks::gen_book(row, (int) i);
+        if ((u32) g->dim != bk[i].dim || (u32) g->entries != bk[i].ent) break;
+      }
+      if (i != nbk) continue;
+      if (!vb_gen.open(dec_ch, dec_rate, VB_LIB1 + row)) continue;
+      { sz blen = cb_render(vb_gen, cb_b);
+        if (blen == alen && !memcmp(cb_a, cb_b, alen)) cb_q = VB_LIB1 + row; }
     }
     dst->put("cb.i", cb_q);
     if (cb_q < 0) { dst->flush_row();  dst->emit(cb_a, alen); }
