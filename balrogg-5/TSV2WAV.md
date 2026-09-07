@@ -309,6 +309,52 @@ the difference from a wrong guess is not. And using the marked form alone,
 dropping `kd.i` entirely, is only 0.04% behind keeping all three — but it
 regresses badly on packets where the walk is useless, so all three stay.
 
+### 4.5.1 A model over the walk's own mistakes
+
+The digits cannot be predicted from each other. The floor has already taken
+the spectral envelope out, and what remains has an autocorrelation of **+0.009
+at lag one** — a linear predictor over past digits finds nothing, and that is
+the floor doing its job rather than a shortcoming.
+
+The walk's *error* is another matter:
+
+| | lag 1 | lag 2 | lag 3 | lag 8 |
+|---|---:|---:|---:|---:|
+| `want` | +0.009 | +0.011 | −0.022 | +0.058 |
+| `want − got` | **−0.418** | +0.320 | −0.243 | +0.196 |
+
+and where the walk has just been wrong it is wrong again **74%** of the time
+against 11% overall. Errors arrive in bursts, with an alternating sign.
+
+**LPC on that does not work, and it was tried.** The error is zero at nine
+digits in ten, so a predictor that rounds a continuous estimate breaks far
+more right answers than it mends: order 1 cost +14.5% more corrections, order
+8 cost +40.1%. The autocorrelation is real but it is carried entirely by the
+one digit in ten that is wrong.
+
+What does work is a **conditional mode**: the commonest error seen before in
+the same context, the context being the two previous errors clipped to ±3,
+with zero given half its own count again as a margin so a rival has to be
+clearly ahead. Nothing is carried — both roles see the same errors in the
+same order, so both update the same counters — except one flag per stream,
+which the fit pass sets by running the model in shadow over every digit.
+
+It wins by a lot or not at all:
+
+| | walk right | with the model | corrections |
+|---|---:|---:|---:|
+| `ff_8000_q5` | 68.7% | 77.8% | **−29.2%** |
+| `ff_48000_q10` | 89.2% | 90.9% | **−15.8%** |
+| `00000007` | 98.4% | 98.4% | +0.7% |
+| `00000003` | 99.9% | 99.9% | +1.4% |
+
+so the flag is what makes it safe. On the 22 ffmpeg files every one turns it
+on, for −2.21% of the meta and −18.0% of the corrections on `ff_48000_q10`;
+on all 17 corpus files every one turns it off, and pays the eight bytes the
+flag's row costs. The byte saving is smaller than the correction saving
+because a correction that goes away leaves a zero, and a lone zero does not
+merge into a run.
+
 ### 4.6 Class prediction
 
 The class is the encoder's choice of cascade ladder, and libvorbis chooses it

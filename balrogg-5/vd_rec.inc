@@ -119,6 +119,68 @@ struct clsfit {
 
 static clsfit cfit[VD_MAXRES];
 
+/*  A model over the walk's own mistakes.
+
+    The digits themselves are not predictable from each other -- the floor has
+    already taken the spectral envelope out, and what is left has an
+    autocorrelation of 0.009 at lag one, so a linear predictor over them finds
+    nothing.  The walk's *error* is a different matter: it runs -0.42 at lag
+    one and +0.32 at lag two, and where the walk has just been wrong it is
+    wrong again 74% of the time against 11% overall.  Errors arrive in bursts.
+
+    What will not work on that is LPC, and it was tried: the error is zero at
+    nine digits in ten, so a predictor that rounds a continuous estimate
+    breaks far more right answers than it mends -- corrections rose 40%.  What
+    does work is the commonest error seen before in the same context, with the
+    context being the two previous errors clipped to +-3, and with zero given
+    a margin so that it wins anything close.
+
+    Nothing about it is carried.  Both roles see the same errors in the same
+    order -- META has the truth and REST has the corrections, and either way
+    the digit that comes out is the same one -- so both update the same
+    counters and reach the same prediction.  All that travels is one flag per
+    stream saying whether the model earns its place, which the fit pass
+    decides by running it in shadow.  */
+constexpr int DG_K = 3;                  /*  errors are clipped to this  */
+constexpr int DG_V = 2 * DG_K + 1;       /*  ... so this many of them  */
+constexpr int DG_SYM = DG_V + 1;         /*  ... plus "nothing yet"  */
+constexpr int DG_CTX = DG_SYM * DG_SYM;  /*  the two previous errors  */
+
+struct dgmodel {
+  u16 cnt[DG_CTX][DG_V];
+  u8 h0, h1;                             /*  the two previous, as symbols  */
+
+  void clear() { memset(cnt, 0, sizeof cnt);  restart(); }
+  void restart() { h0 = h1 = (u8) DG_V; }   /*  a packet starts blind  */
+  int ctx() const { return (int) h0 * DG_SYM + (int) h1; }
+
+  /*  The commonest error in this context, or none.  Zero carries half its
+      own count again, so a rival has to be clearly ahead to displace it --
+      predicting a correction that is not there costs a digit that was
+      already right.  */
+  int predict() const {
+    const u16 * r = cnt[ctx()];
+    int v, best = 0;
+    long bc = (long) r[DG_K] + (r[DG_K] >> 1);
+    for (v = 0; v < DG_V; v++)
+      if (v != DG_K && (long) r[v] > bc) { bc = r[v];  best = v - DG_K; }
+    return best;
+  }
+  void observe(i32 e) {
+    int s = e < -DG_K ? -DG_K : (e > DG_K ? DG_K : (int) e);
+    u16 * r = cnt[ctx()];
+    if (++r[s + DG_K] >= 1024) {         /*  halve, so the model can move  */
+      int v;
+      for (v = 0; v < DG_V; v++) r[v] = (u16) (r[v] >> 1);
+    }
+    h1 = h0;  h0 = (u8) (s + DG_K);
+  }
+};
+
+static dgmodel dgm;
+static int dg_on;                        /*  does it earn its place?  */
+static long long dg_hit0, dg_hit1;       /*  the shadow run, in the fit pass  */
+
 constexpr u32 KEEP_MAX = 1u << 20;        /*  keeps in one packet  */
 
 static u32 kc_i[KEEP_MAX];  static i32 kc_v[KEEP_MAX];
@@ -142,7 +204,7 @@ struct vd_rec {
   u32 nclamp;                             /*  digits that hit a book's edge  */
 
   void packet_begin() { kc_n = kd_n = kc_p = kd_p = 0;  ci = di = 0;
-                        nclamp = 0;  kc_raw = kd_raw = 0; }
+                        nclamp = 0;  kc_raw = kd_raw = 0;  dgm.restart(); }
 
   /*  One digit: what is left rounds to it, and what it stands for comes off.
 
@@ -181,30 +243,46 @@ struct vd_rec {
       records where one would do, so such a packet switches to a raw run: the
       values in order, no indices.  Both roles derive `covered` from the same
       block geometry, so neither needs to be told which form is in use.  */
+  /*  What the walk guessed, moved by what the model makes of the mistakes
+      before it, and held inside the book either way.  */
+  i32 guess(i32 got, vd_book * b) const {
+    i32 lo = -(i32) b->off, hi = (i32) b->nv - 1 - (i32) b->off, p;
+    if (!dg_on) return got;
+    p = got + (i32) dgm.predict();
+    return p < lo ? lo : (p > hi ? hi : p);
+  }
+
   i32 digit(i64 & v, vd_book * b, i64 & last) {
     i64 before = last;
-    i32 got = take(v, b, &nclamp, last), fin;
+    i32 got = take(v, b, &nclamp, last), fin, pred;
     if (role == ROLE_FIT) {
+      /*  the model runs here only to be scored: the walk's guess against the
+          same guess corrected, over every digit in the stream  */
       i32 want = (i32) src->get("res.digit");
+      dg_hit0 += (want == got);
+      dg_hit1 += (want == got + (i32) dgm.predict());
+      dgm.observe(want - got);
       if (want != got) v -= (i64) (want - got) * b->delta_fx;
       di++;
       return want;
     }
+    pred = guess(got, b);
     if (role == ROLE_META) {
       i32 want = (i32) src->get("res.digit");
       FATAL_UNLESS(di < KEEP_MAX && kd_n < KEEP_MAX,
                    "too many digits in a packet");
       kd_all[di] = want;
-      if (want != got) { kd_i[kd_n] = di;  kd_v[kd_n] = want;  kd_n++; }
+      if (want != pred) { kd_i[kd_n] = di;  kd_v[kd_n] = want;  kd_n++; }
       fin = want;
     } else {
       if (kd_raw) fin = kd_v[kd_p++];           /*  raw run  */
       else {
-        fin = got;
+        fin = pred;
         if (kd_p < kd_n && kd_i[kd_p] == di) fin = kd_v[kd_p++];
       }
       dst->put("res.digit", fin);
     }
+    dgm.observe(fin - got);
     /*  put back what the walk took and remove what the stream really had  */
     if (fin != got) {
       v -= (i64) (fin - got) * b->delta_fx;

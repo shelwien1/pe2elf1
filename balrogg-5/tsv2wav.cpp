@@ -925,6 +925,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
   u32 link = 0;
 
   src.open(srcpath);
+  if (role == ROLE_META || role == ROLE_REST) dgm.clear();
   if (role == ROLE_META || role == ROLE_REST) dst.create(dstpath);
   else if (role == ROLE_FIT) dst.create(DEV_NULL);
   dec.s.have = 0;  lk_n = 0;  tot_before = 0;
@@ -1003,10 +1004,12 @@ static void walk(int role, const char * srcpath, const char * dstpath,
                 if (!cfit[q].ncl) cfit[q].reset(dec.s.rs[q].ncl);
             if (role == ROLE_META) {
               models_put(dst, dec.s);
+              dst.put("dg.on", dg_on);
               VF_QREC(dst);
             }
             if (role == ROLE_REST) {
               models_get(src, dec.s);
+              dg_on = (int) src.get("dg.on");
               VF_QGET(src);
             }
             src.tee = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;
@@ -1054,7 +1057,15 @@ static void synth_and_fit(const char * src, const char * wav) {
   u32 q;
   for (q = 0; q < VD_MAXRES; q++) cfit[q].ncl = 0;
   walk(ROLE_SYNTH, src, nullptr, wav);
+  /*  The fit pass also scores the digit model against the bare walk over
+      every digit in the stream, and it is kept only where it wins.  It wins
+      by a lot or not at all: where the walk is already right 98% of the time
+      there is nothing for it to find and it costs a little, and where the
+      walk is right 69% of the time it takes a quarter of the corrections
+      away.  */
+  dgm.clear();  dg_on = 0;  dg_hit0 = dg_hit1 = 0;
   walk(ROLE_FIT, src, nullptr, wav);
+  dg_on = dg_hit1 > dg_hit0;
   for (q = 0; q < VD_MAXRES; q++) if (cfit[q].ncl) cfit[q].settle();
 }
 

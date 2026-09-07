@@ -20,7 +20,7 @@ hides what each one shows:
 | source Ogg | 12,734,656 | 515,872 |
 | balrogg TSV | 108,163,951 | 4,386,774 |
 | meta, self-contained build | 15,682,793 (14.50%) | 1,748,355 (39.85%) |
-| **meta, with libvorbis** | **14,092,491 (13.03%)** | **1,087,653 (24.79%)** |
+| **meta, with libvorbis** | **14,092,627 (13.03%)** | **1,063,591 (24.24%)** |
 
 The percentage is of the TSV, which is what the meta stands in for; the WAV
 carries the rest. Reconstruction from WAV plus meta is exact for all 39
@@ -111,6 +111,24 @@ the difference from a wrong guess is not. And dropping `kd.i` altogether,
 keeping only the two block forms, is a mere 0.04% behind keeping all three --
 but it regresses badly on packets where the walk is useless, so all three
 stay.
+
+**The walk's mistakes are predictable from each other, where there are
+enough of them.** The digits are not -- the floor has taken the envelope out
+and their autocorrelation is +0.009 at lag one -- but the error runs -0.42 at
+lag one and +0.32 at lag two, and a digit following a wrong one is wrong 74%
+of the time against 11% overall. LPC on that fails, because the error is zero
+nine times in ten and a rounded continuous estimate breaks more right answers
+than it mends (+40% corrections at order 8). A conditional mode over the two
+previous errors, clipped, with a margin favouring zero, works: it needs no
+side information at all, since both roles see the same errors in the same
+order.
+
+It pays only where the walk is weak. On the ffmpeg files, right 69% to 89% of
+the time, it takes 15-29% of the corrections away and 2.21% of the meta; on
+the corpus, right 98% or better, it finds nothing and costs a little. One
+flag per stream, set by running the model in shadow during the fit pass,
+decides -- and on these two corpora it comes out 22 on and 17 off, which is
+the whole story.
 
 Rejected here: zeroing unobservable channels, a deadzone in the digit walk
 (monotonically worse from 0.50 to 0.75), and carrying the encoder's lowpass
