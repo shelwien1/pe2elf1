@@ -1,133 +1,224 @@
 # What remains in the tsv2wav meta
 
-Measured over the 26-file corpus with the libvorbis-assisted build
-(`-DBLR_VORBIS -I vorbislib`). Every figure is a byte count of the
-meta files actually produced, not an estimate.
+Measured over 39 files with the libvorbis-assisted build
+(`-DBLR_VORBIS -I vorbislib`). Every figure is a byte count of the meta
+files actually produced, not an estimate.
+
+Two corpora, because they are shaped very differently and averaging them
+hides what each one shows:
+
+* **the 17-file corpus** -- real Ogg Vorbis from six libvorbis releases,
+  dominated by two long files that between them are 88% of the bytes;
+* **the 22 ffmpeg files** -- six seconds each, written by ffmpeg's own
+  encoder (`-c:a vorbis`), made by `psyfit/fftest.sh`. Short files where
+  the per-stream fixed costs are still visible.
 
 ## Totals
 
-| | bytes | of TSV |
+| | 17-file corpus | 22 ffmpeg files |
 |---|---:|---:|
-| source Ogg | 4623253 | -- |
-| balrogg TSV | 41240780 | 100% |
-| meta, self-contained build | 3199177 | 7.76% |
-| **meta, with libvorbis** | **2553633** | **6.19%** |
+| source Ogg | 12,734,656 | 515,872 |
+| balrogg TSV | 108,163,951 | 4,386,774 |
+| meta, self-contained build | 15,682,793 (14.50%) | 1,748,355 (39.85%) |
+| **meta, with libvorbis** | **15,191,473 (14.05%)** | **1,149,911 (26.21%)** |
 
-The WAV carries the rest. Reconstruction from WAV plus meta is exact for
-all 26 files, and each restored TSV rebuilds its original Ogg byte for byte.
+The percentage is of the TSV, which is what the meta stands in for; the WAV
+carries the rest. Reconstruction from WAV plus meta is exact for all 39
+files, and each restored TSV rebuilds its original Ogg byte for byte.
+
+The two builds differ only in whether libvorbis is compiled into the same
+translation unit. On the ffmpeg files the difference is 34% of the meta,
+nearly all of it codebooks; on the 17-file corpus it is 3%, because those
+files are long enough that the setup header is rounding error.
 
 ## Where the meta goes
 
+17-file corpus:
+
 | part | tags | bytes | share |
 |---|---|---:|---:|
-| Floor posts | `flr.y`, `flr.d` | 1165767 | 45.7% |
-| Digit corrections | `kd.i`, `kd.v` | 642721 | 25.2% |
-| Per-packet scalars | `pk` | 217104 | 8.5% |
-| Class corrections | `kc.i`, `kc.v` | 205155 | 8.0% |
-| Page framing | `page.*` | 149384 | 5.9% |
-| Codebooks | `cb.*` | 59368 | 2.3% |
-| Correction counts | `kn` | 54372 | 2.1% |
-| Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 33128 | 1.3% |
-| Stream header | `id.*`, `link.*`, `cmt.*` | 19202 | 0.8% |
-| Learned models | `cm.*`, `vf.*` | 7146 | 0.3% |
-| **total** | | **2553347** | |
+| Digit corrections | `kd.i`, `kd.v` | 10,385,900 | 68.37% |
+| Floor posts | `flr.y`, `flr.d` | 2,439,498 | 16.06% |
+| Class corrections | `kc.i`, `kc.v` | 1,475,114 | 9.71% |
+| Page framing | `page.*` | 356,995 | 2.35% |
+| Per-packet scalars | `pk` | 328,179 | 2.16% |
+| Correction counts | `kn` | 168,901 | 1.11% |
+| Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 22,601 | 0.15% |
+| Stream header | `id.*`, `link.*`, `cmt.*` | 8,086 | 0.05% |
+| Learned models | `cm.*`, `vf.*` | 5,870 | 0.04% |
+| **Codebooks** | `cb.*` | **329** | **0.00%** |
+
+22 ffmpeg files:
+
+| part | bytes | share |
+|---|---:|---:|
+| Digit corrections | 513,363 | 44.64% |
+| Floor posts | 458,776 | 39.90% |
+| Learned models | 44,961 | 3.91% |
+| Per-packet scalars | 31,284 | 2.72% |
+| Correction counts | 27,657 | 2.41% |
+| Class corrections | 25,016 | 2.18% |
+| Page framing | 23,000 | 2.00% |
+| Floor/residue/mapping setup | 17,336 | 1.51% |
+| Stream header | 8,056 | 0.70% |
+| Codebooks | 462 | 0.04% |
 
 ## What each part is, and why it is still there
 
-**Floor posts — 45.7%.** The largest item, and the most worked. `flr.d` carries
-the difference from a floor refitted by libvorbis's own psychoacoustic model
-run over the decoded PCM with the stream's block sizes forced; `flr.y` carries
-the posts directly where no encoder setting fits. The refit reproduces about
-48% of posts exactly at the matched quality and cuts the stream 30–37% where it
-applies, on 12 of 26 files.
+**Digit corrections -- 68% / 45%.** Where the residue walk read a different
+digit from the one the stream had. The recovery MDCTs the WAV it wrote,
+divides by the stream's own floor and rounds; a correction is one place where
+that rounding landed in the wrong bin.
 
-What was tried and rejected: predicting the floor from windowed spectrum
-statistics (worse than storing it), delta-coding against the previous packet
-(5.4% worse), a per-band offset fit over a ported noise mask (5.46 bits against
-a 3.37 cost basis), and a neighbour-residual predictor (helps some files, hurts
-others, so it is chosen per file). The ceiling was measured by feeding the
-ported `floor1_fit` the *true* floor as its own mask: even a perfect mask gives
-2.30 bits against 3.44, so about a third of this stream is the most that any
-predictor can remove.
+How often it lands right is now measured directly rather than inferred. On
+`ff_48000_q10`, of every digit the walk reads:
 
-**Digit corrections — 25.2%.** Where the residue walk read a different digit
-from the one the stream had. The sources are enumerated and mostly inherent:
-blocks at a link edge that the PCM does not span, coupled pairs where one
-channel has no floor, and type-1 digits placed past the end of a partition.
+| | share of digits |
+|---|---:|
+| recovered exactly | 89.0% |
+| wrong, but within one step of right | 1.7% |
+| wrong by a whole step or more | 9.3% |
 
-Rejected here: zeroing unobservable channels (218k → 376k on a six-channel
-stream), a deadzone in the digit walk (monotonically worse from 0.50 to 0.75),
-and the encoder's own lowpass cutoff (2 bytes, because the residue walk already
-stops at `res.end`). Re-encoding the WAV predicts these *worse* than the current
-recovery — 95.36% against 97.11% — because the recovery holds the stream's true
-floor and a re-encoder has to guess it.
+and of the wrong ones, 37% are in blocks the PCM does not span at all -- a
+link edge, where there is nothing to analyse and every digit is a correction
+by construction. **That is the ceiling for anything done to the WAV:** at
+most about 15% of the corrections are near enough to the boundary that a
+better sample could flip them. It is why the encoder-side knobs below are
+worth one to nine percent and not more.
 
-**Per-packet scalars — 8.5%.** Mode, next-window flag and the floor-use bits,
-packed into one `pk` row per packet. `aud.wprev` is derived from the previous
-block's flag and costs nothing unless the derivation fails.
+Rejected here: zeroing unobservable channels, a deadzone in the digit walk
+(monotonically worse from 0.50 to 0.75), and carrying the encoder's lowpass
+cutoff. Re-encoding the WAV predicts these *worse* than the current recovery,
+because the recovery holds the stream's true floor and a re-encoder has to
+guess it.
 
-**Class corrections — 8.0%.** Where the fitted classifier chose a different
-ladder. libvorbis picks the class from two measures of the quantized residue
-against `classmetric1/2`, which are encoder-side and not in the bitstream, so
-they are fitted per residue and carried — a few dozen integers standing in for
-tens of thousands of class records. That took corrections from 53% to 14.7% on
-the worst file. What remains is largely classes whose ladders are
-interchangeable, which no predictor can separate.
+**Floor posts -- 16% / 40%.** `flr.d` carries the difference from a floor
+refitted by libvorbis's own psychoacoustic model, run over the decoded PCM
+with the stream's block sizes forced; `flr.y` carries the posts directly
+where no encoder setting fits. On the ffmpeg files no setting fits at all --
+they were not written by libvorbis -- so all of it is `flr.y`, which is why
+this part is 40% there and 16% here.
 
-**Page framing — 5.9%.** `page.plen` dominates: segment lengths are packet byte
-sizes and are not derivable without rebuilding the packets. `page.type`,
-`page.seq` and `page.serial` are already derived from position and link. The
-granule positions are one row per page for one number each and still carry the
-per-record slack that merging fixed elsewhere.
+The ceiling was measured by feeding the ported `floor1_fit` the *true* floor
+as its own mask: even a perfect mask gives 2.30 bits against 3.44, so about a
+third of this stream is the most any predictor can remove.
 
-**Codebooks — 2.3%.** Only the two streams whose books libvorbis cannot
-reproduce. libvorbis does not build codebooks when it encodes; `lib/books/`
-holds static tables and a setup template points at them, so 24 of 26 files
-carry a quality index instead of their books. This part was 18.6% before that
-change.
+**Class corrections -- 10% / 2%.** Where the fitted classifier chose a
+different ladder. libvorbis picks the class from two measures of the
+quantized residue against `classmetric1/2`, which are encoder-side and not in
+the bitstream, so they are fitted per residue and carried -- a few dozen
+integers standing in for tens of thousands of class records. What remains is
+largely classes whose ladders are interchangeable, which no predictor can
+separate.
 
-**Correction counts — 2.1%.** Two numbers per packet: how many corrections
-follow and whether they are sparse or a raw run. Merged onto one row, since a
-row apiece spent more on tag text than on the values.
+**Page framing -- 2%.** `page.plen` dominates: segment lengths are packet
+byte sizes and are not derivable without rebuilding the packets. `page.type`,
+`page.seq` and `page.serial` are already derived from position and link.
 
-**Floor/residue/mapping setup — 1.3%.** Partition sizes, post lists, coupling
-steps. Small and not obviously compressible.
+**Per-packet scalars -- 2%.** Mode, next-window flag and the floor-use bits,
+packed into one `pk` row per packet.
 
-**Stream header — 0.8%.** Identification, comments, link boundaries.
+**Correction counts -- 1% / 2%.** Two numbers per packet: how many
+corrections follow and whether they are sparse or a raw run. Merged onto one
+row, since a row apiece spent more on tag text than on the values.
 
-**Learned models — 0.3%.** The fitted class metrics, the floor predictor's
-quality, offset and predictor choice, and the codebook index. Together they are
-a third of a percent and they replace far more than that.
+**Codebooks -- 0.00%.** This was 18.6% when the work started and 2.3% a
+little later. libvorbis does not build codebooks when it encodes: `lib/books/`
+holds static tables and a setup template points at them, so a stream can name
+its set instead of carrying it. What kept it from being zero was that the
+*compiled-in* libvorbis is only one encoder among many, and the tables moved
+-- revised for 1.1 and again for 1.3, with the managed-bitrate path drawing
+on a different residue family in every release. `vbooks_gen.inc` now carries
+the sets of 19 libvorbis releases, 15 aoTuV betas and ffmpeg's own encoder --
+1346 codebooks in 350 sets, generated by `psyfit/bookdump.sh`. Every file in
+both corpora names its set; 329 bytes over 17 files is the index itself.
+
+**Floor/residue/mapping setup, stream header, learned models -- under 2%
+together.** Partition sizes, post lists, coupling steps, comments, and the
+fitted class metrics and floor quality. The learned models are 3.9% on the
+ffmpeg files only because those files are six seconds long; they are a fixed
+cost per stream and they replace far more than they cost.
+
+## The WAV is the tool's own output
+
+Everything above is a correction to something read back from the WAV, and the
+WAV is not given -- `tsv2wav c` writes it. How a sample is placed between two
+integers is therefore an encoder-side choice with no format consequence at
+all: mode `d` reads whatever was written and needs to be told nothing.
+
+Three knobs were measured over 26 to 37 files:
+
+| knob | result |
+|---|---|
+| the lifting's rounding rule (nearest, floor, ceiling, truncate) | within 0.03% of each other; a non-lever |
+| the sample split point (floor, nearest, ceiling, and quarter steps) | nearest is best; 0.375 or 0.625 cost 0.4-0.7%, floor or ceiling about 1% |
+| first-order error feedback on the quantization | **the one that pays** |
+
+Feeding a fraction `h` of each sample's quantization error into the next
+shapes the error spectrum by `1 - h/z`, draining it away from the low
+frequencies where most of the digits are. It pays very unevenly, and not with
+one sign: a fixed coefficient is wrong, because `h = 0.6` everywhere is 6.3%
+worse on the 17-file corpus even though it is 11.5% better on two of its
+files. So mode `c` tries four coefficients and keeps the best, which carries
+nothing -- mode `d` reads back whatever was written.
+
+| | before | after | |
+|---|---:|---:|---:|
+| 17-file corpus | 15,191,473 | 15,148,489 | **-0.28%** |
+| 22 ffmpeg files | 1,149,911 | 1,117,924 | **-2.78%** |
+
+The corpus figure is small because 88% of its bytes are two long files that
+both choose no feedback at all; the files that do move, move a lot --
+`00000003` and `0000000F` by 11.5% each, `ff_16000_q10` by 12.9%. Nothing
+regresses, since zero feedback is always among the candidates.
+
+Two things that sound like they should matter and do not. Second-order
+shaping adds nothing measurable over first-order. And forming the sample
+product in double rather than float -- which is the right thing to do, since
+a float product of about 32767 carries only nine bits below the point, and
+the bits below the point are the whole of the rounding decision -- is worth
+0.00% once the sweep is running. It was worth 3.3% on one file *before* the
+sweep existed, which is the same thing said differently: both are ways of
+nudging where samples land, and the sweep already finds a good nudge.
+
+The sweep costs about 25% more runtime, which is less than it sounds:
+scoring a candidate is done with the floor refit switched off, and that refit
+is 97% of what mode `c` otherwise spends. Scoring that way was checked over
+37 files to pick the same coefficient as scoring the whole meta.
 
 ## Cost per value
 
-What a single value occupies, tag text and separator included. This is where
-the recent wins came from: `kn` was 7.93 before its two counts were merged onto
-one row, and the keep values fell from 2.67 to 2.15 once they were zigzagged so
-a minus sign stopped costing a byte.
+What a single value occupies, tag text and separator included, over the
+17-file corpus.
 
 | tag | bytes | values | bytes/value |
 |---|---:|---:|---:|
-| `flr.d` | 688980 | 255188 | 2.70 |
-| `flr.y` | 476787 | 177270 | 2.69 |
-| `kd.v` | 334586 | 155680 | 2.15 |
-| `kd.i` | 308135 | 121125 | 2.54 |
-| `pk` | 217104 | 72381 | 3.00 |
-| `kc.v` | 110479 | 33886 | 3.26 |
-| `page.plen` | 99370 | 24293 | 4.09 |
-| `kc.i` | 94676 | 26633 | 3.55 |
-| `kn` | 54372 | 14176 | 3.84 |
-| `cb.used` | 26402 | 13041 | 2.02 |
-| `cb.len` | 24629 | 9116 | 2.70 |
-| `page.granlo` | 19451 | 1043 | 18.65 |
+| `kd.v` | 5,704,820 | 2,781,620 | 2.05 |
+| `kd.i` | 4,681,080 | 1,970,811 | 2.38 |
+| `flr.y` | 1,427,732 | 529,509 | 2.70 |
+| `kc.v` | 1,132,826 | 370,640 | 3.06 |
+| `flr.d` | 1,011,766 | 395,866 | 2.56 |
+| `kc.i` | 342,288 | 106,842 | 3.20 |
+| `pk` | 328,179 | 109,422 | 3.00 |
+| `page.plen` | 176,779 | 38,096 | 4.64 |
+| `kn` | 168,901 | 40,746 | 4.15 |
+| `page.granlo` | 58,404 | 3,008 | 19.42 |
+
+`kn` was 7.93 before its two counts were merged onto one row, and the keep
+values fell from 2.67 to 2.15 once they were zigzagged so a minus sign stopped
+costing a byte. `page.granlo` is one row per page for one number and still
+carries the per-record slack that merging fixed elsewhere.
 
 ## Notes on method
 
-Every number here is a byte count of files on disk. Several earlier figures in
-this work were wrong because they compared the wrong things — coded residuals
-against absolute posts, or a new build against a stale baseline — so each claim
-above was re-measured against the build that produced this document.
+Every number here is a byte count of files on disk, produced by the build in
+this tree. Several earlier figures in this work were wrong because they
+compared the wrong things -- coded residuals against absolute posts, a new
+build against a stale baseline, or struct-literal text where the numbers were
+what mattered -- so each claim above was re-measured against the build that
+produced this document.
 
-The two builds differ only in whether libvorbis is compiled into the same
-translation unit. Both reconstruct all 26 files exactly; the self-contained
-build is 7.76% and needs no external source.
+The corpora are not the ones earlier versions of this document used, so the
+shares are not comparable with them file for file. What is comparable is the
+direction: codebooks went 18.6% to 2.3% to 0.00%, and digit corrections are
+now what is left.

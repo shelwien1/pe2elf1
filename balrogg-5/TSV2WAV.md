@@ -108,6 +108,49 @@ carries the whole spectral chain in fixed point. It does not affect
 reversibility — the keep-list closes any gap — and the float path is what
 lets the output match libvorbis to 1 LSB. See §6.1.
 
+### 2.1 Where the sample lands, which the tool chooses
+
+The last step, `round(y × 32767)`, is the one genuinely lossy step in the
+chain, and it is the tool's own: the WAV is an output, not an input, and mode
+`d` reads back whatever was written. So nothing about how a sample is placed
+between two integers has to be carried, and the placement is free to be
+chosen to suit the recovery rather than the ear.
+
+Three ways of choosing were measured over 26 to 37 files.
+
+| | effect on the meta |
+|---|---|
+| the lifting's rounding rule (nearest, floor, ceiling, truncate) | under 0.03%; a non-lever |
+| the split point (floor, nearest, ceiling, quarter steps) | nearest is best; floor or ceiling ≈ 1%, quarter steps 0.4–0.7% |
+| first-order error feedback | **−2.1% chosen per file, up to −11.5% on one** |
+
+The third is the one that pays. Quantizing sample *n* with a fraction *h* of
+sample *n−1*'s error subtracted shapes the error spectrum by `1 − h/z`,
+draining it away from the low frequencies where most of the digits are. Its
+value is strongly file-dependent and not one-signed: `h = 0.6` everywhere is
+6.3% *worse* on the 17-file corpus even though it is 11.5% better on one of
+its files, so `wav::frame`'s coefficient is swept per file in mode `c` and
+the winner kept. Second-order shaping adds nothing measurable.
+
+The candidates are scored with the floor refit switched off, which makes a
+scoring pass twenty-five times cheaper — the refit is 97% of mode `c`'s
+runtime — and was checked over 37 files to pick the same coefficient as
+scoring the whole meta. Four candidates cost about 25% more runtime.
+
+The product is formed in double, not float: it is around 32767, so a float
+product would carry only nine bits below the point, and the bits below the
+point are the whole of the decision being made. This is correctness rather
+than a gain — measured against the float product it is worth 0.00% once the
+sweep is running, though it was worth 3.3% on one file before the sweep
+existed.
+
+The ceiling on all of this is known. Instrumenting the digit walk on
+`ff_48000_q10`: 89.0% of digits are recovered exactly, 1.7% are wrong but
+within one step of right, and 9.3% are wrong by a whole step or more — and
+37% of the wrong ones are in blocks the PCM does not span at all. Only that
+1.7% is close enough to the boundary for a better sample to flip, which is
+why the numbers above are single-digit percentages and not more.
+
 ---
 
 ## 3. What is recoverable, measured

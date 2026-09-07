@@ -951,6 +951,17 @@ static void walk(int role, const char * srcpath, const char * dstpath,
   else apw.close();
 }
 
+/*  Write the WAV with the shaper currently set, then learn the encoder's
+    classifier from it.  Both depend on the samples, so a new placement needs
+    both again; the fit accumulates, so it is cleared rather than added to.  */
+static void synth_and_fit(const char * src, const char * wav) {
+  u32 q;
+  for (q = 0; q < VD_MAXRES; q++) cfit[q].ncl = 0;
+  walk(ROLE_SYNTH, src, nullptr, wav);
+  walk(ROLE_FIT, src, nullptr, wav);
+  for (q = 0; q < VD_MAXRES; q++) if (cfit[q].ncl) cfit[q].settle();
+}
+
 int main(int argc, char ** argv) {
   if (argc != 5 || (argv[1][0] != 'c' && argv[1][0] != 'd') || argv[1][1]) {
     fprintf(stderr,
@@ -966,26 +977,24 @@ int main(int argc, char ** argv) {
 #endif
 #endif
   if (argv[1][0] == 'c') {
-    u32 q;
-    /*  Two rounding knobs were measured here and neither pays.
+    /*  How the synthesis lands its samples is swept below; these are the
+        coefficients tried.  Over 37 files, choosing per file from the whole
+        grid is worth 2.12% of the meta and choosing from these four is worth
+        2.10%, so the rest of the grid is not worth the passes.  Zero has to
+        be among them: on some files every amount of feedback costs.
 
-        The lifting's shears round at 2^-32 of full scale, five orders of
-        magnitude below the 16-bit sample step, so no combination of floor,
-        ceiling, nearest or truncate changes a single output sample -- all four
-        produce byte-identical WAVs and byte-identical metas.  The rule is
-        free to choose and worth nothing.
-
-        The sample quantization is the one genuinely lossy step and the tool
-        owns it, but nearest is already the best split: it minimises the error
-        the recovery has to work back through, and tilting it by a quarter of a
-        step cost 0.3% on 00000000 and nothing anywhere else.  Per-sample
-        choice -- picking each sample's direction to suit the digits it lands
-        in -- is a different and much larger problem, since one sample reaches
-        every bin of two blocks.  */
-    walk(ROLE_SYNTH, argv[2], nullptr, argv[3]);
-    /*  a pass to learn the encoder's classifier, then one to write the meta  */
-    walk(ROLE_FIT, argv[2], nullptr, argv[3]);
-    for (q = 0; q < VD_MAXRES; q++) if (cfit[q].ncl) cfit[q].settle();
+        Two neighbouring knobs were measured and are not swept, because they
+        do not pay.  The lifting's rounding rule -- nearest, floor, ceiling or
+        truncate -- moves the meta by under 0.03%, its shears rounding at
+        2^-32 against a sample step of 2^-16.  (An earlier note here said the
+        four produce byte-identical WAVs.  They do not; the effect is real,
+        just far too small to chase.)  And the split point is best at nearest:
+        floor or ceiling cost about a percent, quarter steps either side 0.4
+        to 0.7.  */
+    static const double WAV_SHAPES[] = { 0.0, 0.3, 0.5, 0.8 };
+    constexpr int NSHAPE = (int) (sizeof WAV_SHAPES / sizeof *WAV_SHAPES);
+    wav_shape = WAV_SHAPES[0];
+    synth_and_fit(argv[2], argv[3]);
 #ifdef BLR_VORBIS
     /*  Sweep the encoder settings and keep whichever reproduces the most
         posts.  On a stream whose encoder is reproducible this has a sharp
@@ -1042,6 +1051,40 @@ int main(int argc, char ** argv) {
     }
 #endif
 #endif
+    /*  Now the synthesis itself.  Feeding each sample's quantization error
+        into the next shapes the error spectrum by 1 - h/z, draining it away
+        from the low frequencies where most of the digits are; it is worth up
+        to 12.9% of a file's meta and costs as much as that on another, so it
+        is chosen per file rather than fixed.  Nothing has to be carried: mode d
+        reads back whatever was written.
+
+        The candidates are scored with the floor refit switched off.  What
+        the refit writes does not depend on the samples' placement in any way
+        the argument here turns on -- the corrections do -- and leaving it out
+        makes a scoring pass twenty-five times cheaper than the sweep above,
+        which is the difference between this costing a tenth of the run and
+        half of it.  Measured over 37 files, scoring this way picks the same
+        coefficient as scoring the whole meta.  */
+    { int k, bestk = 0;  long bestb = -1;
+#ifdef BLR_VORBIS
+      int vf_save = vf_on;
+#endif
+      for (k = 0; k < NSHAPE; k++) {
+        if (k) { wav_shape = WAV_SHAPES[k];  synth_and_fit(argv[2], argv[3]); }
+#ifdef BLR_VORBIS
+        vf_on = 0;
+#endif
+        walk(ROLE_META, argv[2], DEV_NULL, argv[3]);
+#ifdef BLR_VORBIS
+        vf_on = vf_save;
+#endif
+        if (bestb < 0 || meta_bytes < bestb) { bestb = meta_bytes;  bestk = k; }
+      }
+      /*  the WAV on disk is the last candidate's; put the winner's back  */
+      if (bestk != NSHAPE - 1) {
+        wav_shape = WAV_SHAPES[bestk];  synth_and_fit(argv[2], argv[3]);
+      }
+    }
     walk(ROLE_META, argv[2], argv[4], argv[3]);
   } else
     walk(ROLE_REST, argv[4], argv[3], argv[2]);

@@ -18,7 +18,24 @@
 
 constexpr sz WAV_OBUF = 1 << 16;
 
+/*  Where a sample lands between two integers is the one genuinely lossy step
+    in the whole chain, and the tool owns it: the WAV is its own output, and
+    mode d reads back whatever was written.  So neither knob below is carried
+    in the meta, and both are free to be chosen to suit the recovery.
+
+    wav_bias is the split point.  Nearest is best, and was measured to be:
+    floor or ceiling cost about a percent of the meta, quarter steps either
+    side 0.4 to 0.7.  It stays a variable because that is worth being able to
+    measure again.
+
+    wav_shape feeds each sample's quantization error into the next, which
+    shapes the error spectrum by 1 - h/z and drains it away from the low
+    frequencies where most of the digits are.  This one pays, and unevenly:
+    up to 12.9% of a file's meta, while the same coefficient costs as much on
+    another file.  So mode c sweeps it per file and keeps the best.  */
 static float wav_bias = 0.5f;             /*  0.5 is round to nearest  */
+static double wav_shape = 0.0;
+static double wav_err[VD_MAXCH];
 
 /*  RIFF states both sizes in 32-bit fields, so a WAVE file cannot describe
     more than 4 GiB.  Past that the header would silently wrap and every
@@ -90,6 +107,7 @@ struct wav {
     f = fopen(pth, "wb");
     if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", pth);
     path = pth;  rate = r;  ch = c;  frames = 0;  on = 0;
+    memset(wav_err, 0, sizeof wav_err);
     wav_order(ch, ord);
     maxframes = WAV_MAXBYTES / (ch * 2);
     header();
@@ -104,15 +122,20 @@ struct wav {
                  "channels", path, maxframes, (unsigned long) ch);
     if (on + 2 * ch > WAV_OBUF) flush();
     for (i = 0; i < ch; i++) {
-      /*  Where the sample lands between two integers is the one genuinely
-          lossy step in the whole chain, and the tool owns it: the WAV is its
-          own output.  Nudging the split point moves which samples round up,
-          which moves the recovered residue, which moves how many digits have
-          to be corrected.  Mode c tries a few and keeps the cheapest; mode d
-          only reads the result, so nothing has to be carried.  */
-      int v = (int) floor(s[ord[i]] * 32767.0f + wav_bias);
+      /*  In double, not float: the product is around 32767, so a float one
+          would carry only nine bits below the point -- and the bits below the
+          point are the whole of the decision being made here.  Measured, it
+          is worth nothing once wav_shape is swept, which is the same fact
+          from the other side: both only move where samples land, and the
+          sweep already finds somewhere good.  It stays because it is right.  */
+      double x = (double) s[ord[i]] * 32767.0 - wav_shape * wav_err[i];
+      int v = (int) floor(x + wav_bias);
       if (v > 32767) v = 32767;
       if (v < -32768) v = -32768;
+      /*  Clipping would otherwise let the feedback wind up without bound.  */
+      { double e = (double) v - x;
+        if (e > 4.0) e = 4.0;  if (e < -4.0) e = -4.0;
+        wav_err[i] = e; }
       w16(ob + on, (u32) (v & 0xFFFF));  on += 2;
     }
     frames++;
