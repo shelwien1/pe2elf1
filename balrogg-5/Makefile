@@ -7,7 +7,10 @@
 #  separate so that `make CXXFLAGS=-O0 -g` does not silently drop -Wall or the
 #  -D's the vorbis build cannot compile without.
 
-CXX      ?= c++
+#  `CXX ?= c++` would not fire: make defines CXX=g++ as a built-in, so ?= sees
+#  it as already set and a clang-only host cannot build.  A plain = still loses
+#  to `make CXX=clang++` on the command line, which is what we want.
+CXX       = c++
 CXXFLAGS ?= -O2
 WARN     ?= -Wall -Wextra
 LIBS      = -lm
@@ -20,13 +23,16 @@ BLR_INC = common.inc tsv.inc ogg_page.inc vb_info.inc vb_book.inc \
 W2V_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
           wav.inc vd_dec.inc vd_ana.inc vd_rec.inc
 
-#  Only the -DBLR_VORBIS build compiles these two.
-VRB_INC = $(W2V_INC) vfloor.inc vbooks.inc
+#  The vorbis build adds these two and drops floor_db.inc, whose table it takes
+#  from libvorbis instead (tsv2wav.cpp:99).
+VRB_INC = $(filter-out floor_db.inc,$(W2V_INC)) vfloor.inc vbooks.inc
 VRB_SRC = $(wildcard vorbislib/*.c vorbislib/*.h vorbislib/vorbis/*.h \
                      vorbislib/ogg/*.h vorbislib/modes/*.h vorbislib/books/*/*.h)
 
-#  libvorbis needs C99's `restrict` spelled the way C++ spells it, and M_PI.
-#  It does *not* need -fpermissive: see vorbislib/patch.py.
+#  -Drestrict and -D_USE_MATH_DEFINES are inert against glibc but are what
+#  libvorbis needs on the toolchains that do not define them; they cost nothing
+#  here and keep this flag set the same as gc.bat's.  What matters is what is
+#  *absent*: no -fpermissive.  See vorbislib/patch.py.
 VRB_FLAGS = -std=c++17 -DBLR_VORBIS -D_USE_MATH_DEFINES -Drestrict=__restrict \
             -I vorbislib
 

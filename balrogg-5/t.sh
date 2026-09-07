@@ -34,25 +34,29 @@ for prog in "$BALROGG" "$TSV2WAV"; do
   exit 2
 done
 
-#  Collect the inputs: a directory contributes every .ogg in it.
-set -- ${@:+"$@"}
-[ $# -eq 0 ] && set -- "$here/00.ogg"
-inputs=$(for a in "$@"; do
-           if [ -d "$a" ]; then find "$a" -maxdepth 1 -name '*.ogg' | sort
-           else echo "$a"
-           fi
-         done)
-[ -n "$inputs" ] || { echo "t.sh: no .ogg inputs" >&2; exit 2; }
-
 out=${OUT:-$(mktemp -d "${TMPDIR:-/tmp}/t.sh.XXXXXX")} || exit 2
 mkdir -p "$out" || exit 2
 cleanup() { [ -n "${KEEP:-}" ] || [ -n "${OUT:-}" ] || rm -rf "$out"; }
 trap cleanup EXIT INT TERM
 
+#  Collect the inputs, one path per line: a directory contributes every .ogg in
+#  it.  The list goes through a file read with `read -r`, so a path with spaces
+#  stays one path -- iterating an unquoted $list would split it on every space.
+[ $# -eq 0 ] && set -- "$here/00.ogg"
+list=$out/.inputs
+: > "$list"
+for a in "$@"; do
+  if [ -d "$a" ]; then find "$a" -maxdepth 1 -name '*.ogg' | sort >> "$list"
+  else printf '%s\n' "$a" >> "$list"
+  fi
+done
+[ -s "$list" ] || { echo "t.sh: no .ogg inputs" >&2; exit 2; }
+
 printf '%-22s %-10s %10s %10s %10s %8s\n' file result ogg tsv meta wav
 pass=0 fail=0
 
-for src in $inputs; do
+while IFS= read -r src; do
+  [ -n "$src" ] || continue
   b=$(basename "$src" .ogg)
   w=$out/$b
   why=""
@@ -76,7 +80,7 @@ for src in $inputs; do
   fi
 
   [ -n "${KEEP:-}" ] || rm -f "$w.ogg" "$w.tsv" "$w.wav" "$w.meta" "$w.tsr" "$w.ogr"
-done
+done < "$list"
 
 echo
 echo "$pass passed, $fail failed"
