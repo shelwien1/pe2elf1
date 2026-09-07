@@ -1,0 +1,15 @@
+# build outputs
+balrogg-5/balrogg
+balrogg-5/tsv2wav
+balrogg-5/tsv2wav-vorbis
+*.o
+
+# round-trip test byproducts (t.sh / t.bat)
+*.tsv
+*.tsr
+*.wav
+*.meta
+*.ogr
+
+# prebuilt Windows binaries from the original drop
+*.exe

@@ -1,0 +1,234 @@
+/*  Copyright (C) 2026 Kamila Szewczyk
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, version 3.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <http://www.gnu.org/licenses/>.  */
+
+/*  An ordered stream of (tag, value) records held as a two-column TSV file.
+    A run of records that share a tag becomes one row, the tag written once
+    and the values separated by spaces:
+
+        flr.y<TAB>26 13 11
+
+    The writer appends; the reader replays in the same order.  Encoding and
+    decoding walk one shared traversal, so the reader also checks that every
+    tag is the one the caller expects and any desync is reported at the record
+    where it happens rather than as corrupt output.  */
+
+constexpr char TSV_MAGIC[] = "tag\tvalues";
+constexpr sz   TSV_OBUF    = 1 << 20;
+constexpr sz   TSV_IBUF    = 1 << 16;
+constexpr sz   TSV_TAGMAX  = 31;
+
+/*  Close a row once its values reach this many bytes and open another under
+    the same tag.  No real stream comes near it; it only keeps a pathological
+    run from becoming one enormous line.  */
+constexpr sz TSV_ROWMAX = 8192;
+
+/*  Reading is a byte tokenizer rather than a line reader, so a row may hold
+    as many values as the writer cared to put on it.  */
+static char tsv_ib[TSV_IBUF];
+static char tsv_ob[TSV_OBUF];
+
+struct tsv {
+  FILE * f;
+  const char * path;
+  int enc;
+  unsigned long row;          /*  records written or read so far  */
+
+  sz on;                      /*  bytes held in the write buffer  */
+  sz rl;                      /*  value bytes on the row being written  */
+  const char * wtag;          /*  its tag, or null between rows  */
+
+  tsv * tee;                  /*  every record read is echoed here  */
+  char * mem;                 /*  when set, output goes here, not to a file  */
+  sz memcap, memlen;
+  sz bytes;                   /*  what has been written, for trial runs  */
+  sz ip, in;                  /*  cursor and fill of the read buffer  */
+  char rtag[TSV_TAGMAX + 1];  /*  tag of the row being read  */
+  int left;                   /*  that row still has a value to hand out  */
+
+  void create(const char * pth) {
+    f = fopen(pth, "wb");
+    if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", pth);
+    path = pth;  enc = 1;  row = 0;  on = 0;  rl = 0;  wtag = nullptr;  bytes = 0;
+    mem = nullptr;  memcap = memlen = 0;
+    emit(TSV_MAGIC, sizeof TSV_MAGIC - 1);  emit("\n", 1);
+  }
+
+  /*  Write into memory instead of a file, so a section can be captured and
+      compared against one generated from elsewhere.  */
+  void create_mem(char * buf, sz cap) {
+    f = nullptr;  path = "(memory)";  enc = 1;  row = 0;  on = 0;  rl = 0;
+    wtag = nullptr;  bytes = 0;  mem = buf;  memcap = cap;  memlen = 0;
+  }
+
+  void emit(const char * s, sz n) {
+    bytes += n;                 /*  so a trial run can be sized without a file  */
+    if (mem) {
+      FATAL_UNLESS(memlen + n <= memcap, "captured section is too large");
+      memcpy(mem + memlen, s, n);  memlen += n;
+      return;
+    }
+    if (on + n > TSV_OBUF) flush();
+    memcpy(tsv_ob + on, s, n);  on += n;
+  }
+
+  void open(const char * pth) {
+    const char * m = TSV_MAGIC;
+    int c;
+    f = fopen(pth, "rb");
+    if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot open %s", pth);
+    path = pth;  enc = 0;  row = 0;  ip = in = 0;  left = 0;  rtag[0] = 0;
+    tee = nullptr;
+    while (*m) {
+      FATAL_UNLESS(rd() == (u8) *m, "%s: not a balrogg TSV stream", path);
+      m++;
+    }
+    c = rd();
+    if (c == '\r') c = rd();
+    FATAL_UNLESS(c == '\n', "%s: not a balrogg TSV stream", path);
+  }
+
+  /*  End the row in progress without closing, so a captured section is
+      complete and comparable.  */
+  void flush_row() { if (enc && wtag) { emit("\n", 1);  wtag = nullptr;  rl = 0; } }
+
+  void close() {
+    if (enc) {
+      if (wtag) emit("\n", 1);
+      flush();
+    }
+    if (f) {
+      int bad = ferror(f);
+      if (fclose(f)) bad = 1;
+      if (bad) FATAL_CODE(BLR_EXIT_IO, "%s on %s",
+                          enc ? "write error" : "read error", path);
+    }
+    f = nullptr;
+  }
+
+  /*  Decimal without the printf machinery: this runs once per coded symbol.
+      A record joins the row above it when the tags match; the literals at the
+      call sites usually make that a pointer compare.  */
+  void put(const char * tag, long long v) {
+    char n[24];
+    int k = (int) sizeof n;
+    unsigned long long a = v < 0 ? 0ULL - (unsigned long long) v
+                                 : (unsigned long long) v;
+    if (wtag && rl < TSV_ROWMAX && (tag == wtag || !strcmp(tag, wtag)))
+      emit(" ", 1);
+    else {
+      sz tn = strlen(tag);
+      FATAL_UNLESS(tn <= TSV_TAGMAX, "tag '%s' is too long", tag);
+      if (wtag) emit("\n", 1);
+      emit(tag, tn);  emit("\t", 1);
+      wtag = tag;  rl = 0;
+    }
+    do { n[--k] = (char) ('0' + (a % 10));  a /= 10; } while (a);
+    if (v < 0) n[--k] = '-';
+    emit(n + k, sizeof n - (sz) k);
+    rl += sizeof n - (sz) k + 1;
+    row++;
+  }
+
+  long long get(const char * tag) {
+    unsigned long long a = 0;
+    int c, neg = 0, nd = 0;
+    row++;
+    if (!left) head(tag);
+    FATAL_UNLESS(!strcmp(rtag, tag), "%s: record %lu is '%s', expected '%s'",
+                 path, row, rtag, tag);
+    c = rd();
+    if (c == '-') { neg = 1;  c = rd(); }
+    while (c >= '0' && c <= '9') {
+      FATAL_UNLESS(nd < 19, "%s: record %lu has a malformed value", path, row);
+      a = a * 10 + (unsigned) (c - '0');
+      nd++;  c = rd();
+    }
+    FATAL_UNLESS(nd && a <= 9223372036854775807ULL,
+                 "%s: record %lu has a malformed value", path, row);
+    if (c == ' ') left = 1;
+    else {
+      if (c == '\r') c = rd();
+      FATAL_UNLESS(c == '\n' || c < 0, "%s: record %lu has a malformed value",
+                   path, row);
+      left = 0;
+    }
+    {
+      long long r = neg ? -(long long) a : (long long) a;
+      if (tee) tee->put(tag, r);
+      return r;
+    }
+  }
+
+  /*  Fetch and range-check in one step; `hi` is exclusive.  */
+
+  /*  The tag of the next record without consuming it, or "" at end of
+      stream.  Lets an optional record cost nothing when it is absent.  */
+  const char * peek() {
+    if (!left && !head_soft()) return "";
+    return rtag;
+  }
+
+  u32 get_u(const char * tag, unsigned long long hi) {
+    long long v = get(tag);
+    FATAL_UNLESS(v >= 0 && (unsigned long long) v < hi,
+                 "%s: record %lu: %s = %lld is out of range", path, row,
+                 tag, v);
+    return (u32) v;
+  }
+
+private:
+
+  void flush() {
+    if (!on) return;
+    if (fwrite(tsv_ob, 1, on, f) != on)
+      FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
+    on = 0;
+  }
+
+  /*  Next input byte, or -1 at end of file.  */
+  INLINE int rd() {
+    if (ip == in) {
+      in = fread(tsv_ib, 1, TSV_IBUF, f);
+      ip = 0;
+      if (!in) {
+        if (ferror(f)) FATAL_CODE(BLR_EXIT_IO, "read error on %s", path);
+        return -1;
+      }
+    }
+    return (u8) tsv_ib[ip++];
+  }
+
+  /*  Read a row's tag and leave the cursor on its first value.  Returns 0
+      at end of stream so peek() can report it without failing.  */
+  int head_soft() {
+    int c = rd();
+    sz n = 0;
+    if (c < 0) return 0;
+    while (c >= 0 && c != '\t' && c != '\n') {
+      FATAL_UNLESS(n < TSV_TAGMAX, "%s: record %lu has an overlong tag", path, row);
+      rtag[n++] = (char) c;
+      c = rd();
+    }
+    FATAL_UNLESS(c == '\t', "%s: record %lu has no value column", path, row);
+    rtag[n] = 0;
+    left = 1;
+    return 1;
+  }
+
+  void head(const char * tag) {
+    FATAL_UNLESS(head_soft(), "%s: stream ends before record %lu (%s)",
+                 path, row, tag);
+  }
+
+};

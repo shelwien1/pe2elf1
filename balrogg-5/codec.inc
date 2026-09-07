@@ -1,0 +1,129 @@
+/*  Copyright (C) 2026 Kamila Szewczyk
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, version 3.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <http://www.gnu.org/licenses/>.  */
+
+/*  Link and page walk.  A file is a sequence of links, a link a sequence of
+    pages, and a page a sequence of packets; a packet that runs off the end of
+    its page is gathered whole before it is taken apart.  Neither direction
+    ever looks back, so both stream and neither holds the file.  */
+
+static u8 pgbuf[PAGE_MAX];    /*  one rebuilt page, on the way out  */
+static u8 body[MAXPAY];       /*  its payload, while the packets fill it  */
+
+void vb_pack(const char * in, const char * out) {
+  source src;
+  vb_ctx v;
+  tsv t;
+  link_walk lw;
+  ogg_page p;
+  sz got, npage = 0;
+  int eos = 1;
+
+  src.open(in);
+  t.create(out);
+  v.init();
+  lw.start();
+
+  for (;;) {
+    src.want();
+    if (!src.avail()) break;
+    got = p.parse(src.cur(), src.avail());
+    FATAL_UNLESS(got != 0, "%s: no Ogg page at %lu", in,
+                 (unsigned long) src.offset());
+    /*  CRCs must be valid because decoding recomputes them.  */
+    FATAL_UNLESS(ogg_page::crc_ok(src.cur(), got), "%s: the page at %lu has a bad CRC",
+                 in, (unsigned long) src.offset());
+    /*  BOS starts a link only after EOS.  */
+    if ((p.type & 2) && eos) {
+      t.put("link.more", 1);  v.link();  lw.start();  eos = 0;
+    }
+    FATAL_UNLESS(!eos, "%s: page %lu %s", in, (unsigned long) npage,
+                 npage ? "follows end of stream" : "precedes any bitstream");
+    lw.page(v, t, src, p, got);
+    if (p.type & 4) {
+      FATAL_UNLESS(!lw.cont, "%s: a continued packet is %lu bytes short", in,
+                   (unsigned long) lw.spill);
+      eos = 1;
+    }
+    src.skip(got);  npage++;
+  }
+  FATAL_UNLESS(npage > 0, "%s: not an Ogg bitstream", in);
+  FATAL_UNLESS(eos, "%s: final bitstream has no end-of-stream page", in);
+  t.put("link.more", 0);
+
+  t.close();  src.close();
+}
+
+void vb_unpack(const char * in, const char * out) {
+  vb_ctx v;
+  tsv t;
+  FILE * o;
+
+  t.open(in);
+  v.init();
+  o = fopen(out, "wb");
+  if (!o) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", out);
+
+  while (t.get_u("link.more", 2)) {
+    ogg_page q;
+    sz jn = 0, spill = 0;
+    int w = 0, done = 0, cont = 0;
+
+    v.link();
+    while (!done) {
+      sz at = 0, pgl;
+      int j;
+      q.get(t);
+      FATAL_UNLESS(q.blen <= MAXPAY, "%s: a page claims %lu payload bytes", in,
+                   (unsigned long) q.blen);
+      Fj(q.np,
+        sz pl = q.plen[j];
+        /*  Copy a fragment from the packet decoded on an earlier page.  */
+        if (j == 0 && (q.type & 1) && cont) {
+          FATAL_UNLESS(pl <= spill, "%s: page takes %lu of %lu remaining bytes",
+                       in, (unsigned long) pl, (unsigned long) spill);
+          if (pl) memcpy(body + at, jb + jn - spill, pl);
+          spill -= pl;
+          if (!(q.np == 1 && q.tail)) {
+            FATAL_UNLESS(!spill, "%s: a page closes a packet %lu bytes early",
+                         in, (unsigned long) spill);
+            cont = 0;
+          }
+          at += pl;  continue;
+        }
+        FATAL_UNLESS(pl > 0, "%s: a page claims an empty packet", in);
+        if (j == q.np - 1 && q.tail) {
+          sz ex = (sz) t.get_u("page.spill",
+                               (unsigned long long) MAXPAY * OGG_MAXSEG + 1);
+          sz tot = pl + ex;
+          io z(v, t, 0, jb, tot);
+          jn = tot;
+          if (w < 3) { z.hdr(w);  w++; } else z.audio();
+          memcpy(body + at, jb, pl);
+          spill = ex;  cont = 1;  at += pl;  continue;
+        }
+        io z(v, t, 0, body + at, pl);
+        if (w < 3) { z.hdr(w);  w++; } else z.audio();
+        at += pl);
+      pgl = q.emit(pgbuf, body);
+      if (fwrite(pgbuf, 1, pgl, o) != pgl)
+        FATAL_CODE(BLR_EXIT_IO, "write error on %s", out);
+      if (q.type & 4) done = 1;
+    }
+    FATAL_UNLESS(!cont, "%s: a continued packet is %lu bytes short", in,
+                 (unsigned long) spill);
+  }
+
+  t.close();
+  if (fclose(o)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", out);
+}

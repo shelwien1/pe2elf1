@@ -1,0 +1,961 @@
+/*  Copyright (C) 2026 Kamila Szewczyk
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, version 3.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <http://www.gnu.org/licenses/>.  */
+
+/*  tsv2wav -- PCM synthesis from a balrogg record stream, and back.
+
+      tsv2wav c input.tsv output.wav output.meta
+      tsv2wav d output.wav restored.tsv output.meta
+
+    Mode c decodes the record stream to 16-bit PCM, matching libvorbis to
+    within one LSB, and writes a meta stream holding everything the PCM cannot
+    give back.  Mode d rebuilds the exact record stream from the two.
+
+    The bulk of a stream is res.digit, 92% of its records; those come back out
+    of the PCM by running the synthesis backwards -- windowed MDCT, divide by
+    the floor, undo the coupling, then walk the cascade ladder subtracting each
+    digit's worth as it is read.  res.class is predicted from the recovered
+    values, since the class is the choice of ladder.  aud.wprev is the previous
+    block's flag.  What is left -- page framing, headers, the floor posts, and
+    the corrections where the above got it wrong -- is the meta, which is
+    itself a TSV.
+
+    The floor has to stay: the recovery divides by it before it can read any
+    digit.  */
+
+#include <math.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef _WIN32
+  #define DEV_NULL "nul"
+#else
+  #define DEV_NULL "/dev/null"
+#endif
+
+#ifdef BLR_VORBIS               /*  see vorbislib/patch.py  */
+#include "psy.c"
+#include "floor1.c"
+#include "floor0.c"
+#include "mdct.c"
+#include "smallft.c"
+#include "lookup.c"
+#include "lpc.c"
+#include "lsp.c"
+#include "sharedbook.c"
+#include "codebook.c"
+#include "registry.c"
+#include "info.c"
+#include "block.c"
+#include "envelope.c"
+#include "bitrate.c"
+#include "analysis.c"
+#include "synthesis.c"
+#include "window.c"
+#include "res0.c"
+#include "mapping0.c"
+#include "vorbisenc.c"
+#include "bitwise.c"
+#include "framing.c"
+
+
+
+
+/*  libvorbis's table and ours are identical entry for entry  */
+#define FLOOR_DB FLOOR1_fromdB_LOOKUP
+#endif
+
+#ifndef BLR_VORBIS
+#define VF_QREC(d)   ((void) 0)
+#define VF_QGET(st_)  ((void) 0)
+#endif
+
+/*  A run of L zeros goes out as -L, which costs three bytes; a single zero
+    written plainly costs two.  So runs start at length two.  Getting this
+    wrong taxes every isolated zero a byte, and it taxes a predictor that
+    scatters its zeros more than one that clusters them -- which is enough to
+    decide the wrong predictor.  */
+#define VF_RUNMIN 2
+
+#include "common.inc"      /*  types, diagnostics, loop macros  */
+#include "tsv.inc"         /*  the record stream  */
+
+
+#include "lift.inc"        /*  fixed point, lifting rotations, DCT-IV  */
+#ifndef BLR_VORBIS
+#include "floor_db.inc"    /*  floor1_inverse_dB_table  */
+#endif
+#include "imdct.inc"       /*  the window and the inverse transform  */
+
+#include "vd_setup.inc"    /*  codebooks, floors, residues, mappings, modes  */
+#include "wav.inc"         /*  the PCM sink  */
+#include "vd_dec.inc"      /*  one packet, and the lap between packets  */
+#include "vd_ana.inc"      /*  PCM back to the spectrum  */
+#include "vd_rec.inc"      /*  the residue walk, run backwards  */
+
+/*  Signed values go out zigzagged -- 0, -1, 1, -2 becomes 0, 1, 2, 3 -- so a
+    minus sign never costs a byte of its own and a run marker is free to use
+    the sign instead.  */
+static long long vf_zig(i32 d) { return d < 0 ? -2LL * d - 1 : 2LL * d; }
+static i32 vf_unzig(long long z) { return (z & 1) ? (i32) (-(z + 1) / 2) : (i32) (z / 2); }
+#ifdef BLR_VORBIS
+#include "vfloor.inc"      /*  the floor, refitted by libvorbis  */
+#include "vbooks.inc"      /*  codebooks, reproduced from an index  */
+#endif
+
+constexpr int OGG_MAXSEG = 255;
+constexpr u32 LK_MAX = 4096;              /*  links in one file  */
+
+/*  Just enough of a page to find the packet boundaries.
+
+    Three of the header fields are not information.  The type flags follow from
+    position -- BOS on a link's first page, EOS on its last, continued when the
+    page before ended mid-packet.  The sequence number counts from zero within
+    a link.  The serial is one number per link, not per page.  The meta carries
+    the serial once and derives the other two, and mode c checks the derivation
+    rather than trusting it.  */
+struct pg {
+  u32 type, glo, ghi, serial, seq, np;
+  u32 plen[OGG_MAXSEG];
+  int tail;
+
+  /*  Read from the record stream, as balrogg wrote it.  */
+  void get(tsv & t) {
+    int i;
+    type = t.get_u("page.type", 0x100);
+    glo = t.get_u("page.granlo", 0x100000000ULL);
+    ghi = t.get_u("page.granhi", 0x100000000ULL);
+    serial = t.get_u("page.serial", 0x100000000ULL);
+    seq = t.get_u("page.seq", 0x100000000ULL);
+    np = t.get_u("page.npkt", OGG_MAXSEG + 1);
+    Fi((int) np, plen[i] = t.get_u("page.plen",
+                                   (unsigned long long) OGG_MAXSEG * OGG_MAXSEG + 1));
+    tail = 0;
+    if (np && !(plen[np - 1] % OGG_MAXSEG)) tail = (int) t.get_u("page.tail", 2);
+  }
+
+  /*  Read from the meta, which omits what the walk can work out.  */
+  void get_meta(tsv & t, u32 ser, u32 sq, int bos, int cont) {
+    int i;
+    type = (u32) ((bos ? 2 : 0) | (cont ? 1 : 0));
+    glo = t.get_u("page.granlo", 0x100000000ULL);
+    ghi = t.get_u("page.granhi", 0x100000000ULL);
+    serial = ser;  seq = sq;
+    np = t.get_u("page.npkt", OGG_MAXSEG + 1);
+    Fi((int) np, plen[i] = t.get_u("page.plen",
+                                   (unsigned long long) OGG_MAXSEG * OGG_MAXSEG + 1));
+    tail = 0;
+    if (np && !(plen[np - 1] % OGG_MAXSEG)) tail = (int) t.get_u("page.tail", 2);
+    if (!strcmp(t.peek(), "page.eos")) { t.get("page.eos");  type |= 4; }
+  }
+
+  /*  Write in balrogg's order and form.  */
+  void put(tsv & t) const {
+    int i;
+    t.put("page.type", type);
+    t.put("page.granlo", glo);   t.put("page.granhi", ghi);
+    t.put("page.serial", serial);  t.put("page.seq", seq);
+    t.put("page.npkt", np);
+    Fi((int) np, t.put("page.plen", plen[i]));
+    if (np && !(plen[np - 1] % OGG_MAXSEG)) t.put("page.tail", tail);
+  }
+
+  /*  Write to the meta, omitting type, serial and seq.  */
+  void put_meta(tsv & t) const {
+    int i;
+    t.put("page.granlo", glo);   t.put("page.granhi", ghi);
+    t.put("page.npkt", np);
+    Fi((int) np, t.put("page.plen", plen[i]));
+    if (np && !(plen[np - 1] % OGG_MAXSEG)) t.put("page.tail", tail);
+    if (type & 4) t.put("page.eos", 1);
+  }
+};
+
+static vd_dec dec;
+static wav sink;
+static vd_ana ana;
+static vd_rec rec;
+static pcmwin apw;
+static i64 lk_frames[LK_MAX];             /*  output frames per link  */
+static u32 lk_n;
+
+/*  Analysis state across a link.  */
+static i64 an_base, an_T, tot_before;
+static int an_covered;
+static long meta_bytes;
+static u32 dec_ch, dec_rate;              /*  from the identification header  */
+/*  Where to split between two output integers.  Nearest is zero; the rest
+    tilt the split, at the cost of moving a few samples one step further from
+    what libvorbis would have produced.  */
+static const float BIAS[] = { 0.f, -0.25f, 0.25f, -0.125f, 0.125f };
+constexpr int NBIAS = (int) (sizeof BIAS / sizeof *BIAS);
+static u32 an_Mprev;
+static int an_first, an_prevW;
+
+/*  Recover the spectrum for the block that is about to be walked, and turn it
+    into the residue the decoder started from.  */
+/*  Advance to this block and report where it sits.  Split out of recover()
+    because the floor prediction needs the same span, and runs before the
+    floor records have been read.  */
+static i64 an_span;
+static int block_span(u32 n) {
+  if (an_first) { an_T = 0;  an_first = 0; } else an_T += (i64) (an_Mprev + n) / 2;
+  an_Mprev = n;
+  an_span = an_base + an_T - (i64) n;
+  return !(an_span < an_base ||
+           an_span + 2 * (i64) n > an_base + lk_frames[lk_n - 1]);
+}
+
+static int recover(u32 n, int W, int wp, int wn, u32 ch, vd_map * mp) {
+  u32 c, k;
+  i64 first = an_span;
+  if (!an_covered) {
+    for (c = 0; c < ch; c++) memset(aw_r[c], 0, n * sizeof *aw_r[c]);
+    return 0;
+  }
+  ana.window(n, wp, W, wn);
+  {
+    const i16 * seg = apw.seg(first, 2 * n);
+    for (c = 0; c < ch; c++) ana.spectrum(seg, c, n, aw_X[c]);
+  }
+  for (c = 0; c < ch; c++)
+    for (k = 0; k < n; k++) aw_fl[c][k] = (double) vd_flc[c][k];
+  ana.divide(ch, n);
+  ana.uncouple_all(mp, n);
+
+  return 1;
+}
+
+/*  Correction blocks.
+
+    Three things keep these small.  The indices and the values go out as two
+    runs rather than interleaved pairs, so the TSV row grouping pays for each
+    tag once per packet instead of once per correction.  The indices rise
+    within a packet, so only the first is absolute.  And a packet with nothing
+    to correct writes nothing at all -- the reader peeks for the count tag
+    instead of reading a zero.
+
+    A block the PCM does not span carries every value as a raw run with no
+    indices; both roles know which form to use because both compute the same
+    `covered`.  */
+/*  How the count goes out: zero for none, a negative total for a raw run,
+    otherwise the number of sparse corrections.  */
+static long long keep_count(u32 n, u32 total) {
+  if (!n) return 0;
+  return 2 * n > total ? -(long long) total : (long long) n;
+}
+
+static void write_keeps(tsv & dst, const char * ti, const char * tv,
+                        u32 n, const u32 * ix, const i32 * vl,
+                        const i32 * all, u32 total) {
+  u32 i;
+  if (!n) return;
+  if (2 * n > total) {                    /*  the indices would cost more  */
+    for (i = 0; i < total; i++) dst.put(tv, vf_zig(all[i]));
+    return;
+  }
+  /*  Indices rise, so what goes out is the gap since the last one, less the
+      one that is always there.  Corrections often sit next to each other --
+      the median gap is one -- so a stretch of touching corrections becomes a
+      stretch of zero gaps, and the same run marker that serves the floor
+      posts serves here.  */
+  { long long prev = -1;                  /*  so a first index of zero gaps by zero  */
+    for (i = 0; i < n; ) {
+      long long g = (long long) ix[i] - prev - 1;
+      if (g) { dst.put(ti, g);  prev = ix[i];  i++;  continue; }
+      { u32 e = i;  long long p2 = prev;
+        while (e < n && (long long) ix[e] - p2 - 1 == 0) { p2 = ix[e];  e++; }
+        if (e - i < VF_RUNMIN) { dst.put(ti, 0);  prev = ix[i];  i++; }
+        else { dst.put(ti, -(long long) (e - i));  prev = p2;  i = e; } }
+    } }
+  for (i = 0; i < n; i++) dst.put(tv, vf_zig(vl[i]));
+}
+
+static void read_keeps(tsv & src, const char * ti, const char * tv,
+                       long long c, u32 & n, u32 * ix, i32 * vl, int & raw) {
+  u32 i;
+  n = 0;  raw = 0;
+  if (!c) return;
+  if (c < 0) { raw = 1;  n = (u32) -c; }
+  else {
+    n = (u32) c;
+    FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", ti);
+    long long prev = -1;
+    for (i = 0; i < n; ) {
+      long long g = src.get(ti);
+      if (g > 0) { prev += g + 1;  ix[i++] = (u32) prev;  continue; }
+      if (!g)    { prev += 1;      ix[i++] = (u32) prev;  continue; }
+      FATAL_UNLESS((u32) -g <= n - i, "%s: correction run overruns the block", ti);
+      { long long r = -g;
+        while (r--) { prev += 1;  ix[i++] = (u32) prev; } }
+    }
+  }
+  FATAL_UNLESS(n <= KEEP_MAX, "%s: correction block is too large", tv);
+  for (i = 0; i < n; i++) vl[i] = vf_unzig(src.get(tv));
+}
+
+#ifdef BLR_VORBIS
+/*  Buffers for the codebook comparison: the stream's section, and one
+    generated from libvorbis at a candidate quality.  */
+constexpr sz CB_CAP = 1u << 23;
+static char cb_a[CB_CAP], cb_b[CB_CAP];
+static vbooks vb_gen;
+
+static int cb_q = -1;                     /*  the setting that reproduces them  */
+
+/*  Emit every codebook of a setting into a buffer, in balrogg's own form.  */
+static sz cb_render(vbooks & g, char * buf) {
+  tsv d;  int i;
+  d.create_mem(buf, CB_CAP);
+  for (i = 0; i < g.count(); i++) g.emit(i, d, 1);
+  d.flush_row();
+  return d.memlen;
+}
+
+static vfloor vf;
+#define VF_QREC(d)   do { (d).put("vf.q", vf_on ? vf_q : -1); \
+                          if (vf_on) { (d).put("vf.q", vf_pm); \
+                                       (d).put("vf.q", vf_g);  vf.reset_amp(); } \
+                        } while (0)
+#define VF_QGET(st_)  do { long long q2_ = (st_).get("vf.q"); \
+                          vf_on = q2_ >= 0 && vf.open(dec.s.ch, dec.s.rate, (int) q2_); \
+                          if (vf_on) { vf_pm = (int) (st_).get("vf.q"); \
+                                       vf_g = (int) (st_).get("vf.q"); \
+                                       vf.gain = vf_g * 0.1f; \
+                                       vf.reset_amp(); } } while (0)
+static int vf_on;                         /*  a usable encoder was found  */
+static i32 vf_pred[VD_MAXPOST];
+static int vf_sweep;                      /*  scoring qualities, not predicting  */
+static long vf_hit[21], vf_seen[21];      /*  posts reproduced, per quality  */
+static int vf_pm;                         /*  which predictor is in use  */
+static int vf_g;                          /*  the fitted offset, in tenth-dB  */
+static double vf_cd[21][2], vf_cy;        /*  cost of each variant, and of the posts  */
+
+/*  Refine libvorbis's refitted posts before differencing.
+
+    The refit's error drifts slowly across a block -- a level offset from the
+    encoder not being quite the one that made the stream -- so the residual at
+    a post correlates with the residual at its two neighbours (+0.75 measured).
+    Those neighbours are always decoded before the post itself, so subtracting
+    their mean costs nothing in the meta.  It helps where the encoder is
+    mismatched and hurts where it is exact, so the sweep scores both and the
+    choice travels as one number.  */
+static void vf_refine(vd_floor * f, const i32 * pred, const i32 * res, u32 i,
+                      i32 * out) {
+  *out = pred[i];
+  if (vf_pm == 1 && i >= 2) {
+    u32 l = f->lo[i - 2], h = f->hi[i - 2];
+    i32 s = res[l] + res[h];
+    *out += (s >= 0 ? s + 1 : s - 1) / 2;
+  }
+}
+
+/*  Differences are signed, and the run marker wants the sign to itself, so
+    they travel zigzagged: 0, -1, 1, -2 ... becomes 0, 1, 2, 3 ...  A negative
+    value is then free to mean a run of zeros, exactly as it does for the
+    posts themselves.  Around half the differences are zero at the setting the
+    sweep picks, and they cluster.  */
+/*  What a value costs as a TSV field: its digits, a sign, a separator.  */
+static double vf_width(i32 v) {
+  double w = 2;
+  u32 a = (u32) (v < 0 ? -v : v);
+  if (v < 0) w += 1;
+  while (a >= 10) { a /= 10;  w += 1; }
+  return w;
+}
+static int vf_q;                          /*  the winner, in tenths  */
+static int vf_dbg;
+static i32 g_unw[VD_MAXCH][VD_MAXPOST];   /*  posts as the encoder fitted them  */
+
+/*  The inverse of vd_dec's unwrap: absolute posts back to the residuals the
+    record stream carries.  Zero means "the neighbour interpolation was
+    right", which is how the encoder drops a post.  */
+static void floor_wrap(vd_floor * f, const i32 * y, i32 * coded) {
+  u32 i;
+  coded[0] = y[0];  coded[1] = y[1];
+  for (i = 2; i < f->posts; i++) {
+    u32 l = f->lo[i - 2], h = f->hi[i - 2];
+    i32 dy = y[h] - y[l], adx = (i32) f->x[h] - (i32) f->x[l];
+    i32 ady = dy < 0 ? -dy : dy;
+    i32 pred = ady * ((i32) f->x[i] - (i32) f->x[l]) / adx;
+    i32 hiroom, loroom, room, v;
+    pred = dy < 0 ? y[l] - pred : y[l] + pred;
+    hiroom = (i32) f->quant - pred;  loroom = pred;
+    room = (hiroom < loroom ? hiroom : loroom) << 1;
+    v = y[i] - pred;
+    if (!v) { coded[i] = 0;  continue; }
+    /*  the exact inverse of vd_dec::draw's mapping back  */
+    if (v < 0) {
+      if (-v > loroom && hiroom <= loroom) coded[i] = -1 - v * 2;
+      else if (-v >= (hiroom < loroom ? hiroom : loroom) && hiroom <= loroom)
+        coded[i] = hiroom - v - 1;
+      else coded[i] = -1 - v * 2;
+    } else {
+      if (v >= (hiroom < loroom ? hiroom : loroom) && hiroom > loroom)
+        coded[i] = v + loroom;
+      else coded[i] = v * 2;
+    }
+    if (coded[i] < room) {                /*  keep the two branches consistent  */
+      i32 chk = coded[i];
+      chk = (chk & 1) ? -((chk + 1) >> 1) : (chk >> 1);
+      if (chk != v) coded[i] = (v < 0) ? -1 - v * 2 : v * 2;
+    }
+  }
+}
+
+#endif
+
+
+/*  The codebook section, per role.
+
+    Reading it is the ordinary case.  In META it is captured and matched
+    against libvorbis's static tables; when a setting reproduces it, the meta
+    carries the setting instead of the books.  In REST the setting is read back
+    and the books regenerated, so the restored stream gets them without their
+    ever having been stored.  */
+static void su_books(tsv & t, u32 nbk, vd_book * bk) {
+  u32 i;
+#ifdef BLR_VORBIS
+  if (su_role == 1) {                     /*  META: capture, match, decide  */
+    static tsv cap;
+    tsv * dst = su_dst;
+    tsv * save = t.tee;
+    sz alen;
+    int qq;
+    cap.create_mem(cb_a, CB_CAP);
+    /*  both paths have to land in the capture: the plain records arrive via
+        the tee, the regrouped sparse ones via su_dst  */
+    t.tee = &cap;  su_dst = &cap;
+    for (i = 0; i < nbk; i++) bk[i].read(t);
+    cap.flush_row();  alen = cap.memlen;
+    su_dst = dst;  t.tee = save;
+    cb_q = -1;
+    for (qq = -1; qq <= 10; qq++) {
+      if (!vb_gen.open(dec_ch, dec_rate, qq)) continue;
+      if ((u32) vb_gen.count() != nbk) continue;
+      { sz blen = cb_render(vb_gen, cb_b);
+        if (blen == alen && !memcmp(cb_a, cb_b, alen)) { cb_q = qq;  break; } }
+    }
+    dst->put("cb.i", cb_q);
+    if (cb_q < 0) { dst->flush_row();  dst->emit(cb_a, alen); }
+    return;
+  }
+  if (su_role == 2) {                     /*  REST: regenerate or read  */
+    tsv * dst = su_dst;
+    tsv * save = t.tee;
+    t.tee = nullptr;
+    cb_q = (int) t.get("cb.i");
+    t.tee = save;
+    if (cb_q >= 0 && vb_gen.open(dec_ch, dec_rate, cb_q) &&
+        (u32) vb_gen.count() == nbk) {
+      for (i = 0; i < nbk; i++) { vb_gen.fill((int) i, bk[i]);
+                                  vb_gen.emit((int) i, *dst, 0); }
+      return;
+    }
+    FATAL_UNLESS(cb_q < 0, "meta names codebook set %d, which does not fit "
+                 "this stream", cb_q);
+  }
+#endif
+  for (i = 0; i < nbk; i++) bk[i].read(t);
+}
+
+/*  One audio packet in the META or REST role.  */
+/*  The fitted classifier, written once per setup.  A few dozen integers per
+    residue stand in for tens of thousands of class records.  */
+static void models_put(tsv & dst, vd_setup & s) {
+  u32 i, k;
+  for (i = 0; i < s.nrs; i++) {
+    clsfit & c = cfit[i];
+    dst.put("cm.mode", c.mode);
+    if (!c.mode) {
+      for (k = 0; k < s.rs[i].ncl; k++) dst.put("cm.a", c.cm1[k]);
+      for (k = 0; k < s.rs[i].ncl; k++) dst.put("cm.b", c.cm2[k]);
+    } else {
+      dst.put("cm.n", c.tn);
+      for (k = 0; k < c.tn; k++) dst.put("cm.f", c.tf1[k]);
+      for (k = 0; k < c.tn; k++) dst.put("cm.g", c.tf2[k]);
+      for (k = 0; k < c.tn; k++) dst.put("cm.c", c.tcl[k]);
+    }
+  }
+}
+
+static void models_get(tsv & src, vd_setup & s) {
+  u32 i, k;
+  for (i = 0; i < s.nrs; i++) {
+    clsfit & c = cfit[i];
+    c.reset(s.rs[i].ncl);
+    c.mode = (int) src.get_u("cm.mode", 2);
+    if (!c.mode) {
+      for (k = 0; k < s.rs[i].ncl; k++) c.cm1[k] = (i32) src.get("cm.a");
+      for (k = 0; k < s.rs[i].ncl; k++) c.cm2[k] = (i32) src.get("cm.b");
+    } else {
+      c.tn = src.get_u("cm.n", CF_TAB + 1);
+      for (k = 0; k < c.tn; k++) c.tf1[k] = (i32) src.get("cm.f");
+      for (k = 0; k < c.tn; k++) c.tf2[k] = (i32) src.get("cm.g");
+      for (k = 0; k < c.tn; k++) c.tcl[k] = (u8) src.get_u("cm.c", VD_MAXCLASS);
+    }
+  }
+}
+
+static void audio_rec(tsv & src, tsv & dst, int role) {
+  u32 mo, n, i, j, k, ch = dec.s.ch;
+  u32 um[(VD_MAXCH + 31) / 32];
+  vd_map * mp;
+  int W, wp, wn;
+
+  /*  The mode, the next-window flag and the floor-use bits are one scalar
+      each per packet, and a record apiece spends more on tag text than on
+      the values.  They travel as a single `pk` row: mode, wnext, then the
+      floor-use bits packed 32 to a word.  */
+  src.tee = nullptr;
+  wp = an_prevW;                          /*  derived: the previous block  */
+  if (role != ROLE_REST) {                /*  META and FIT read the source  */
+    mo = src.get_u("aud.mode", dec.s.nmd);
+    W = dec.s.blockflag[mo];
+    wn = 0;
+    if (W) {
+      int truep = (int) src.get_u("aud.wprev", 2);
+      wn = (int) src.get_u("aud.wnext", 2);
+      if (truep != wp) { dst.put("aud.wpfix", truep);  wp = truep; }
+    }
+  } else {
+    if (!strcmp(src.peek(), "aud.wpfix")) wp = (int) src.get_u("aud.wpfix", 2);
+    mo = src.get_u("pk", dec.s.nmd);
+    W = dec.s.blockflag[mo];
+    wn = (int) src.get_u("pk", 2);
+    dst.put("aud.mode", mo);
+    if (W) { dst.put("aud.wprev", wp);  dst.put("aud.wnext", wn); }
+  }
+  an_prevW = W;
+  mp = dec.s.mp + dec.s.mdmap[mo];
+  n = (W ? dec.s.bs1 : dec.s.bs0) / 2;
+  an_covered = block_span(n);
+#ifdef BLR_VORBIS
+  /*  the floor prediction needs the same windowed span the recovery uses,
+      and it runs before the floor records have been read  */
+  if ((vf_on || vf_sweep) && an_covered) ana.window(n, wp, W, wn);
+#endif
+
+  /*  Floor-use bits, then the posts.  The record stream interleaves them per
+      channel; the meta separates them so the posts of the whole packet form
+      one run and pay for their tag once.  */
+  memset(um, 0, sizeof um);
+  if (role != ROLE_REST) {
+    for (k = 0; k < ch; k++) {           /*  read in the source's order  */
+      vd_floor * f = dec.s.fl + mp->fl[mp->mux[k]];
+      vd_used[k] = vd_nz[k] = (u8) src.get_u("flr.used", 2);
+      if (!vd_used[k]) continue;
+      um[k >> 5] |= 1u << (k & 31);
+      for (i = 0; i < f->posts; i++)
+        vd_y[k][f->srt[i]] = (i32) src.get_u("flr.y", 0x8000);
+    }
+    dst.put("pk", mo);  dst.put("pk", wn);
+    for (k = 0; k < (ch + 31) / 32; k++) dst.put("pk", um[k]);
+    /*  Half the posts code as zero -- the value the neighbour prediction
+        already got right -- and they cluster, so a run of n zeros goes out
+        as -n.  Real posts are never negative, so the sign is free.  */
+    for (k = 0; k < ch; k++) {
+      vd_floor * f = dec.s.fl + mp->fl[mp->mux[k]];
+      if (!vd_used[k]) continue;
+#ifdef BLR_VORBIS
+      /*  Where libvorbis can refit this block's floor, the meta carries the
+          difference from its fit rather than the posts themselves.  During a
+          sweep the same fit is only scored, so the pass can compare encoder
+          settings without writing anything.  */
+      if ((vf_on || vf_sweep) && an_covered) {
+        dec.floor_only(k, vd_flc[k], f, n, g_unw[k]);
+        if (vf.fit(apw.seg(an_span, 2 * n), ch, k, n, W, aw_win,
+                   f->x, f->posts, f->mult, vf_pred)) {
+          if (vf_sweep) {
+            for (i = 0; i < f->posts; i++) {
+              vf_seen[vf.quality]++;
+              if (g_unw[k][i] == vf_pred[i]) vf_hit[vf.quality]++;
+            }
+            { int pm;
+              i32 res[VD_MAXPOST], adj[VD_MAXPOST];
+              int save = vf_pm;
+              for (pm = 0; pm < 2; pm++) {
+                vf_pm = pm;
+                for (i = 0; i < f->posts; i++) {
+                  vf_refine(f, vf_pred, res, i, adj + i);
+                  res[i] = g_unw[k][i] - vf_pred[i];
+                }
+                for (i = 0; i < f->posts; ) {
+                  i32 d = g_unw[k][i] - adj[i];
+                  if (d) { vf_cd[vf.quality][pm] += vf_width((i32) vf_zig(d));
+                           i++;  continue; }
+                  { u32 e = i;
+                    while (e < f->posts && g_unw[k][e] == adj[e]) e++;
+                    if (e - i < VF_RUNMIN) { vf_cd[vf.quality][pm] += 2;  i++; }
+                    else { vf_cd[vf.quality][pm] += vf_width(-(i32) (e - i));
+                           i = e; } }
+                }
+              }
+              vf_pm = save;
+            }
+            /*  and what the posts themselves would have cost, zero runs
+                and all, so the sweep compares like with like  */
+            for (i = 0; i < f->posts; ) {
+              i32 y = vd_y[k][f->srt[i]];
+              if (y) { vf_cy += vf_width(y);  i++;  continue; }
+              { u32 e = i;
+                while (e < f->posts && !vd_y[k][f->srt[e]]) e++;
+                if (e - i < VF_RUNMIN) { vf_cy += 2;  i++; }
+                else { vf_cy += vf_width(-(i32) (e - i));  i = e; } }
+            }
+            continue;
+          }
+          { i32 res[VD_MAXPOST], adj[VD_MAXPOST];
+            for (i = 0; i < f->posts; i++) {
+              vf_refine(f, vf_pred, res, i, adj + i);
+              res[i] = g_unw[k][i] - vf_pred[i];
+            }
+            for (i = 0; i < f->posts; ) {
+              long long z = vf_zig(g_unw[k][i] - adj[i]);
+              if (z) { dst.put("flr.d", z);  i++;  continue; }
+              { u32 e = i;
+                while (e < f->posts && g_unw[k][e] == adj[e]) e++;
+                if (e - i < VF_RUNMIN) { dst.put("flr.d", 0);  i++; }
+                else { dst.put("flr.d", -(long long) (e - i));  i = e; } }
+            }
+          }
+          continue;
+        }
+        if (vf_sweep) continue;
+      }
+#endif
+      for (i = 0; i < f->posts; ) {
+        i32 y = vd_y[k][f->srt[i]];
+        if (y) { dst.put("flr.y", y);  i++;  continue; }
+        { u32 e = i;
+          while (e < f->posts && !vd_y[k][f->srt[e]]) e++;
+          if (e - i < VF_RUNMIN) { dst.put("flr.y", 0);  i++; }
+          else { dst.put("flr.y", -(long long) (e - i));  i = e; } }
+      }
+    }
+  } else {
+    for (k = 0; k < (ch + 31) / 32; k++) um[k] = src.get_u("pk", 0x100000000ULL);
+    for (k = 0; k < ch; k++) {           /*  ... and back interleaved  */
+      vd_floor * f = dec.s.fl + mp->fl[mp->mux[k]];
+      vd_used[k] = vd_nz[k] = (u8) ((um[k >> 5] >> (k & 31)) & 1);
+      dst.put("flr.used", vd_used[k]);
+      if (!vd_used[k]) continue;
+#ifdef BLR_VORBIS
+      /*  the same refit mode c made, plus the stored difference  */
+      if (vf_on && an_covered &&
+          vf.fit(apw.seg(an_span, 2 * n), ch, k, n, W, aw_win,
+                 f->x, f->posts, f->mult, vf_pred)) {
+        i32 unw[VD_MAXPOST], cod[VD_MAXPOST], res[VD_MAXPOST], adj;
+        for (i = 0; i < f->posts; ) {
+          long long z = src.get("flr.d");
+          if (z > 0) {
+            vf_refine(f, vf_pred, res, i, &adj);
+            unw[i] = adj + vf_unzig(z);
+            res[i] = unw[i] - vf_pred[i];  i++;  continue;
+          }
+          FATAL_UNLESS(z < 0 ? (u32) -z <= f->posts - i : 1,
+                       "%s: floor difference run overruns the post list",
+                       src.path);
+          { long long r = z ? -z : 1;
+            while (r--) {
+              vf_refine(f, vf_pred, res, i, &adj);
+              unw[i] = adj;  res[i] = unw[i] - vf_pred[i];  i++;
+            } }
+        }
+        floor_wrap(f, unw, cod);
+        for (i = 0; i < f->posts; i++) {
+          dst.put("flr.y", cod[f->srt[i]]);
+          vd_y[k][f->srt[i]] = cod[f->srt[i]];
+        }
+        continue;
+      }
+#endif
+      for (i = 0; i < f->posts; ) {
+        long long y = src.get("flr.y");
+        if (y > 0) { vd_y[k][f->srt[i++]] = (i32) y;  continue; }
+        if (!y) { vd_y[k][f->srt[i++]] = 0;  continue; }
+        FATAL_UNLESS(y < 0 && (u32) -y <= f->posts - i,
+                     "%s: floor run of %lld overruns the post list",
+                     src.path, y);
+        { long long r = -y;
+          while (r--) vd_y[k][f->srt[i++]] = 0; }
+      }
+      for (i = 0; i < f->posts; i++) dst.put("flr.y", vd_y[k][f->srt[i]]);
+    }
+  }
+  for (k = 0; k < ch; k++) {
+    if (!vd_used[k]) { memset(vd_flc[k], 0, n * sizeof *vd_flc[k]);  continue; }
+    dec.floor_only(k, vd_flc[k], dec.s.fl + mp->fl[mp->mux[k]], n);
+  }
+  for (i = 0; i < mp->nstep; i++)
+    if (vd_nz[mp->mag[i]] || vd_nz[mp->ang[i]])
+      vd_nz[mp->mag[i]] = vd_nz[mp->ang[i]] = 1;
+
+  rec.packet_begin();
+  rec.covered = recover(n, W, wp, wn, ch, mp);
+
+  if (role == ROLE_REST) {                /*  corrections arrive before use  */
+    { long long a = 0, b = 0;
+      if (!strcmp(src.peek(), "kn")) { a = src.get("kn");  b = src.get("kn"); }
+      read_keeps(src, "kc.i", "kc.v", a, rec.kc_n, kc_i, kc_v, rec.kc_raw);
+      read_keeps(src, "kd.i", "kd.v", b, rec.kd_n, kd_i, kd_v, rec.kd_raw); }
+  }
+
+  rec.role = role;  rec.src = &src;  rec.dst = &dst;
+  for (i = 0; i < mp->sub; i++) {
+    i64 * bundle[VD_MAXCH];
+    u8 nzb[VD_MAXCH];
+    u32 m = 0;
+    for (j = 0; j < ch; j++)
+      if (mp->mux[j] == i) { nzb[m] = vd_nz[j];  bundle[m++] = aw_r[j]; }
+    if (m) rec.residue(mp->rs[i], bundle, nzb, m, n);
+  }
+
+  if (role == ROLE_META) {
+    /*  The two correction counts are known together and are one small number
+        each; a row apiece spends more on tag text than on the values, so they
+        share a row.  */
+    { long long a = keep_count(rec.kc_n, rec.ci), b = keep_count(rec.kd_n, rec.di);
+      if (a || b) { dst.put("kn", a);  dst.put("kn", b); } }
+    write_keeps(dst, "kc.i", "kc.v", rec.kc_n, kc_i, kc_v, kc_all, rec.ci);
+    write_keeps(dst, "kd.i", "kd.v", rec.kd_n, kd_i, kd_v, kd_all, rec.di);
+  }
+  src.tee = &dst;                         /*  structural records flow again  */
+}
+
+/*  One pass over a record stream.  */
+static void walk(int role, const char * srcpath, const char * dstpath,
+                 const char * wavpath) {
+  tsv src, dst;
+  pg p;
+  int open = 0;
+  u32 link = 0;
+
+  src.open(srcpath);
+  if (role == ROLE_META || role == ROLE_REST) dst.create(dstpath);
+  else if (role == ROLE_FIT) dst.create(DEV_NULL);
+  dec.s.have = 0;  lk_n = 0;  tot_before = 0;
+
+  if (role == ROLE_META || role == ROLE_REST) src.tee = &dst;
+  while (src.get_u("link.more", 2)) {
+    unsigned long long last = 0;
+    int w = 0, done = 0, cont = 0;
+    u32 serial = 0, seq = 0;
+    int prevtail = 0;
+    sz spill = 0;
+    if (open) { dec.link();  an_first = 1;  an_prevW = 0; }
+    if (role == ROLE_META) { src.tee = nullptr;
+                             dst.put("link.frames", (long long) lk_frames[link]);
+                             src.tee = &dst; }
+    if (role == ROLE_REST) { src.tee = nullptr;
+                             lk_frames[link] = src.get("link.frames");
+                             src.tee = &dst; }
+    lk_n = link + 1;
+    if (link) an_base += lk_frames[link - 1];
+    while (!done) {
+      int j;
+      src.tee = nullptr;
+      if (role == ROLE_REST) {
+        if (!seq) serial = src.get_u("link.serial", 0x100000000ULL);
+        p.get_meta(src, serial, seq, seq == 0, prevtail);
+        p.put(dst);
+      } else {
+        p.get(src);
+        if (role == ROLE_META) {
+          u32 want = (u32) ((seq == 0 ? 2 : 0) | (prevtail ? 1 : 0)) |
+                     (u32) (p.type & 4);
+          FATAL_UNLESS(p.type == want && p.seq == seq &&
+                       (seq || 1) && (!seq || p.serial == serial),
+                       "%s: page header is not in canonical form; this stream "
+                       "needs page.type, page.seq or page.serial carried",
+                       srcpath);
+          if (!seq) { serial = p.serial;  dst.put("link.serial", serial); }
+          p.put_meta(dst);
+        }
+      }
+      src.tee = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;
+      prevtail = p.tail;
+      seq++;
+      if (p.np) last = ((unsigned long long) p.ghi << 32) | p.glo;
+      Fj((int) p.np,
+        sz pl = p.plen[j];
+        sz len = pl;
+        if (j == 0 && (p.type & 1) && cont) {
+          FATAL_UNLESS(pl <= spill, "%s: page overruns a continued packet", srcpath);
+          spill -= pl;
+          if (!(p.np == 1 && p.tail)) cont = 0;
+          continue;
+        }
+        if (j == (int) p.np - 1 && p.tail) {
+          sz ex;
+          src.tee = nullptr;
+          ex = (sz) src.get_u("page.spill", 0x100000000ULL);
+          if (role != ROLE_SYNTH) dst.put("page.spill", (long long) ex);
+          src.tee = (role == ROLE_SYNTH) ? nullptr : &dst;
+          len = pl + ex;  spill = ex;  cont = 1;
+        }
+        if (w < 3) {
+          if (w == 0) { dec.s.ident(src);  dec_ch = dec.s.ch;  dec_rate = dec.s.rate; }
+          else if (w == 1) dec.s.comment(src, len);
+          else {
+            su_dst = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;
+            su_role = (role == ROLE_META) ? 1 : (role == ROLE_REST ? 2 : 0);
+            dec.s.setup(src);
+            src.tee = nullptr;
+            if (role == ROLE_FIT)
+              for (u32 q = 0; q < dec.s.nrs; q++)
+                if (!cfit[q].ncl) cfit[q].reset(dec.s.rs[q].ncl);
+            if (role == ROLE_META) {
+              models_put(dst, dec.s);
+              VF_QREC(dst);
+            }
+            if (role == ROLE_REST) {
+              models_get(src, dec.s);
+              VF_QGET(src);
+            }
+            src.tee = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;
+            dec.md.setup(dec.s.bs0, dec.s.bs1);
+            dec.lift.setup(dec.s.bs0 / 2, dec.s.bs1 / 2);
+            ana.s = &dec.s;  ana.lift = &dec.lift;  ana.md = &dec.md;
+            ana.pw = &apw;   rec.s = &dec.s;
+            ana.reset_windows();  rec.build_reach();
+            if (!open) {
+              if (role == ROLE_SYNTH) { sink.create(wavpath, dec.s.rate, dec.s.ch);
+                                        dec.start(&sink); }
+              else apw.open(wavpath, dec.s.ch, dec.s.rate);
+              an_base = 0;  an_first = 1;  an_prevW = 0;  open = 1;
+            }
+          }
+          w++;
+        } else if (role == ROLE_SYNTH) dec.audio(src);
+        else audio_rec(src, dst, role));
+      if (p.type & 4) {
+        done = 1;
+        if (role == ROLE_SYNTH) {
+          dec.finish(last);
+          lk_frames[link] = (i64) sink.frames - tot_before;
+          tot_before = (i64) sink.frames;
+        }
+      }
+    }
+    link++;
+    FATAL_UNLESS(link < LK_MAX, "%s: too many links", srcpath);
+  }
+  FATAL_UNLESS(open, "%s: no Vorbis stream", srcpath);
+  src.tee = nullptr;
+  /*  the terminating link.more was echoed by the tee already  */
+  if (role == ROLE_META) meta_bytes = (long) dst.bytes;
+  if (role != ROLE_SYNTH) dst.close();
+  src.close();
+  if (role == ROLE_SYNTH) sink.close();
+  else apw.close();
+}
+
+int main(int argc, char ** argv) {
+  if (argc != 5 || (argv[1][0] != 'c' && argv[1][0] != 'd') || argv[1][1]) {
+    fprintf(stderr,
+      "usage: tsv2wav c input.tsv output.wav output.meta\n"
+      "       tsv2wav d output.wav restored.tsv output.meta\n");
+    return BLR_EXIT_USAGE;
+  }
+#ifdef BLR_VORBIS
+#ifdef BLR_VORBIS
+  vf_dbg = getenv("TSV2WAV_SWEEP") != nullptr;
+#endif
+#endif
+  if (argv[1][0] == 'c') {
+    u32 q;
+    /*  Two rounding knobs were measured here and neither pays.
+
+        The lifting's shears round at 2^-32 of full scale, five orders of
+        magnitude below the 16-bit sample step, so no combination of floor,
+        ceiling, nearest or truncate changes a single output sample -- all four
+        produce byte-identical WAVs and byte-identical metas.  The rule is
+        free to choose and worth nothing.
+
+        The sample quantization is the one genuinely lossy step and the tool
+        owns it, but nearest is already the best split: it minimises the error
+        the recovery has to work back through, and tilting it by a quarter of a
+        step cost 0.3% on 00000000 and nothing anywhere else.  Per-sample
+        choice -- picking each sample's direction to suit the digits it lands
+        in -- is a different and much larger problem, since one sample reaches
+        every bin of two blocks.  */
+    walk(ROLE_SYNTH, argv[2], nullptr, argv[3]);
+    /*  a pass to learn the encoder's classifier, then one to write the meta  */
+    walk(ROLE_FIT, argv[2], nullptr, argv[3]);
+    for (q = 0; q < VD_MAXRES; q++) if (cfit[q].ncl) cfit[q].settle();
+#ifdef BLR_VORBIS
+    /*  Sweep the encoder settings and keep whichever reproduces the most
+        posts.  On a stream whose encoder is reproducible this has a sharp
+        maximum at the setting actually used.  */
+#ifndef BLR_NOSWEEP
+    { int qq, best = -1, bestpm = 0;  double bs = 0;
+      for (qq = 0; qq <= 10; qq++) {
+        if (!vf.open(dec.s.ch, dec.s.rate, qq)) continue;
+        if (vf_dbg) fprintf(stderr, "  sweep q=%.1f ", qq * 0.1);
+        vf_sweep = 1;  vf_hit[qq] = vf_seen[qq] = 0;
+        vf_cd[qq][0] = vf_cd[qq][1] = vf_cy = 0;
+        walk(ROLE_META, argv[2], DEV_NULL, argv[3]);
+        vf_sweep = 0;
+        if (vf_dbg) fprintf(stderr, "posts %ld exact %.1f%%  cost %.0f vs %.0f\n",
+                            (long) vf_seen[qq],
+                            vf_seen[qq] ? 100.0 * (double) vf_hit[qq] / (double) vf_seen[qq] : 0.0,
+                            vf_cd[qq][0], vf_cy);
+        /*  keep the setting whose differences are cheapest, and only if
+            they beat carrying the posts unchanged  */
+        /*  Keep the best ratio even when it is below one: the level offset
+            swept next can move it, and only the final figure decides whether
+            the differences are carried at all.  */
+        { int pm;
+          for (pm = 0; pm < 2; pm++)
+            if (vf_seen[qq] > 0 && vf_cd[qq][pm] > 0) {
+              double s = vf_cy / vf_cd[qq][pm];
+              if (s > bs) { bs = s;  best = qq;  bestpm = pm; }
+            } }
+      }
+      if (best >= 0) {
+        int gg, bestg = 0;
+        /*  now the level offset, at the setting just chosen  */
+        for (gg = -30; gg <= 30; gg += 3) {
+          vf.open(dec.s.ch, dec.s.rate, best);
+          vf.gain = gg * 0.1f;
+          vf_sweep = 1;  vf_hit[best] = vf_seen[best] = 0;
+          vf_cd[best][0] = vf_cd[best][1] = vf_cy = 0;
+          walk(ROLE_META, argv[2], DEV_NULL, argv[3]);
+          vf_sweep = 0;
+          if (vf_seen[best] > 0 && vf_cd[best][bestpm] > 0) {
+            double s = vf_cy / vf_cd[best][bestpm];
+            if (s > bs) { bs = s;  bestg = gg; }
+          }
+        }
+        if (vf_dbg) fprintf(stderr, "  best q=%.1f pm=%d gain=%+.1f dB, "
+                            "ratio %.3f%s\n", best * 0.1, bestpm, bestg * 0.1,
+                            bs, bs > 1.0 ? "" : " (posts are cheaper; not used)");
+        if (bs > 1.0) {
+          vf.open(dec.s.ch, dec.s.rate, best);
+          vf.gain = bestg * 0.1f;
+          vf_q = best;  vf_pm = bestpm;  vf_g = bestg;  vf_on = 1;
+        }
+      }
+    }
+#endif
+#endif
+    walk(ROLE_META, argv[2], argv[4], argv[3]);
+  } else
+    walk(ROLE_REST, argv[4], argv[3], argv[2]);
+  return BLR_EXIT_OK;
+}

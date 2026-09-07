@@ -1,0 +1,7 @@
+tsv2wav.cpp:772:29: warning: use of logical '||' with constant operand [-Wconstant-logical-operand]
+  772 |                        (seq || 1) && (!seq || p.serial == serial),
+      |                             ^  ~
+tsv2wav.cpp:772:29: note: use '|' for a bitwise operation
+  772 |                        (seq || 1) && (!seq || p.serial == serial),
+      |                             ^~
+      |                             |
