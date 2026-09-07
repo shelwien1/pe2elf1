@@ -13,3 +13,6 @@ balrogg-5/tsv2wav-vorbis
 
 # prebuilt Windows binaries from the original drop
 *.exe
+
+# make flag sentinel
+balrogg-5/.flags
