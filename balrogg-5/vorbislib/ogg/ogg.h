@@ -16,6 +16,11 @@
 #ifndef _OGG_H
 #define _OGG_H
 
+/*  Outside the extern "C" block below: vb_voidp is a class template-
+    bearing type, which cannot be given C language linkage.  It gives
+    libogg's "void *ret;" realloc idiom back its C conversion.  */
+#include "../vb_voidp.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

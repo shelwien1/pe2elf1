@@ -618,16 +618,16 @@ int vorbis_analysis_blockout(vorbis_dsp_state *v,vorbis_block *vb){
   g->ampmax=_vp_ampmax_decay(g->ampmax,v);
   vbi->ampmax=g->ampmax;
 
-  vb->pcm=_vorbis_block_alloc(vb,sizeof(*vb->pcm)*vi->channels);
-  vbi->pcmdelay=_vorbis_block_alloc(vb,sizeof(*vbi->pcmdelay)*vi->channels);
+  vb->pcm=VB_ALLOC(vb,sizeof(*vb->pcm)*vi->channels);
+  vbi->pcmdelay=VB_ALLOC(vb,sizeof(*vbi->pcmdelay)*vi->channels);
   for(i=0;i<vi->channels;i++){
     vbi->pcmdelay[i]=
-      _vorbis_block_alloc(vb,(vb->pcmend+beginW)*sizeof(*vbi->pcmdelay[i]));
+      VB_ALLOC(vb,(vb->pcmend+beginW)*sizeof(*vbi->pcmdelay[i]));
     memcpy(vbi->pcmdelay[i],v->pcm[i],(vb->pcmend+beginW)*sizeof(*vbi->pcmdelay[i]));
     vb->pcm[i]=vbi->pcmdelay[i]+beginW;
 
     /* before we added the delay
-       vb->pcm[i]=_vorbis_block_alloc(vb,vb->pcmend*sizeof(*vb->pcm[i]));
+       vb->pcm[i]=VB_ALLOC(vb,vb->pcmend*sizeof(*vb->pcm[i]));
        memcpy(vb->pcm[i],v->pcm[i]+beginW,ci->blocksizes[v->W]*sizeof(*vb->pcm[i]));
     */
 

@@ -17,6 +17,10 @@
 #ifndef _vorbis_codec_h_
 #define _vorbis_codec_h_
 
+/*  Outside the extern "C" block below: vb_voidp is a class template-
+    bearing type, which cannot be given C language linkage.  */
+#include "../vb_voidp.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -49,7 +53,7 @@ typedef struct vorbis_info{
   long bitrate_lower;
   long bitrate_window;
 
-  void *codec_setup;
+  VB_VOIDP codec_setup;
 } vorbis_info;
 
 /* vorbis_dsp_state buffers the current vorbis audio
@@ -81,7 +85,7 @@ typedef struct vorbis_dsp_state{
   ogg_int64_t floor_bits;
   ogg_int64_t res_bits;
 
-  void       *backend_state;
+  VB_VOIDP    backend_state;
 } vorbis_dsp_state;
 
 typedef struct vorbis_block{
@@ -114,7 +118,7 @@ typedef struct vorbis_block{
   long floor_bits;
   long res_bits;
 
-  void *internal;
+  VB_VOIDP internal;
 
 } vorbis_block;
 

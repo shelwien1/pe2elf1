@@ -23,7 +23,7 @@ typedef struct highlevel_byblocktype {
 
 typedef struct highlevel_encode_setup {
   int   set_in_stone;
-  const void *setup;
+  VB_CVOIDP   setup;
   double base_setting;
 
   double impulse_noisetune;

@@ -27,6 +27,7 @@
 #include <limits.h>
 #include <string.h>
 #include <ogg/ogg.h>
+#include "vshim.h"
 
 /* A complete description of Ogg framing exists in docs/framing.html */
 
@@ -184,7 +185,7 @@ int ogg_stream_destroy(ogg_stream_state *os){
 static int _os_body_expand(ogg_stream_state *os,long needed){
   if(os->body_storage-needed<=os->body_fill){
     long body_storage;
-    void *ret;
+    VB_VOIDP ret;
     if(os->body_storage>LONG_MAX-needed){
       ogg_stream_clear(os);
       return -1;
@@ -205,7 +206,7 @@ static int _os_body_expand(ogg_stream_state *os,long needed){
 static int _os_lacing_expand(ogg_stream_state *os,long needed){
   if(os->lacing_storage-needed<=os->lacing_fill){
     long lacing_storage;
-    void *ret;
+    VB_VOIDP ret;
     if(os->lacing_storage>LONG_MAX-needed){
       ogg_stream_clear(os);
       return -1;
@@ -598,7 +599,7 @@ char *ogg_sync_buffer(ogg_sync_state *oy, long size){
   if(size>oy->storage-oy->fill){
     /* We need to extend the internal buffer */
     long newsize;
-    void *ret;
+    VB_VOIDP ret;
 
     if(size>INT_MAX-4096-oy->fill){
       ogg_sync_clear(oy);
@@ -716,7 +717,7 @@ long ogg_sync_pageseek(ogg_sync_state *oy,ogg_page *og){
   oy->bodybytes=0;
 
   /* search for possible capture */
-  next=memchr(page+1,'O',bytes-1);
+  next=(unsigned char *)memchr(page+1,'O',bytes-1);
   if(!next)
     next=oy->data+oy->fill;
 

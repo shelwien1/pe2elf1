@@ -9,15 +9,16 @@
 #ifndef VSHIM_H
 #define VSHIM_H
 #include <stdlib.h>
+#include "vb_voidp.h"
 #include "vorbis/codec.h"
 #include "codec_internal.h"
-struct vb_voidp {
-  void * p;
-  template <typename T> operator T * () const { return (T *) p; }
-};
+#undef _ogg_malloc
 #define _ogg_malloc(n)      (vb_voidp{ malloc(n) })
+#undef _ogg_calloc
 #define _ogg_calloc(n, s)   (vb_voidp{ calloc(n, s) })
+#undef _ogg_realloc
 #define _ogg_realloc(p, n)  (vb_voidp{ realloc(p, n) })
+#undef _ogg_free
 #define _ogg_free(p)        free(p)
 #undef alloca
 #define alloca(n)           (vb_voidp{ __builtin_alloca(n) })

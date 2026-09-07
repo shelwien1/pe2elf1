@@ -61,12 +61,12 @@ typedef struct private_state {
   /* local lookup storage */
   envelope_lookup        *ve; /* envelope lookup */
   int                     window[2];
-  vorbis_look_transform **transform[2];    /* block, type */
+  VB_VOIDP               *transform[2];    /* block, type; vorbis_look_transform * */
   drft_lookup             fft_look[2];
 
   int                     modebits;
-  vorbis_look_floor     **flr;
-  vorbis_look_residue   **residue;
+  VB_VOIDP               *flr;             /* vorbis_look_floor *   */
+  VB_VOIDP               *residue;         /* vorbis_look_residue * */
   vorbis_look_psy        *psy;
   vorbis_look_psy_global *psy_g_look;
 
@@ -111,11 +111,11 @@ typedef struct codec_setup_info {
 
   vorbis_info_mode       *mode_param[64];
   int                     map_type[64];
-  vorbis_info_mapping    *map_param[64];
+  VB_VOIDP                map_param[64];   /* vorbis_info_mapping * */
   int                     floor_type[64];
-  vorbis_info_floor      *floor_param[64];
+  VB_VOIDP                floor_param[64]; /* vorbis_info_floor *   */
   int                     residue_type[64];
-  vorbis_info_residue    *residue_param[64];
+  VB_VOIDP                residue_param[64]; /* vorbis_info_residue * */
   static_codebook        *book_param[256];
   codebook               *fullbooks;
 
