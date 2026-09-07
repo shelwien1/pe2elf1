@@ -413,6 +413,71 @@ analysed. `recover()` zeroes the residue for such blocks so both roles
 compute identical (useless) digits, and every digit is keep-listed. Two
 blocks per link.
 
+### 4.8 The granule, predicted from the packets
+
+The granule went out as a plain difference from the page before. iczelia's
+balrogg predicts it from the packets instead — `src/ogg.c`, *"predict granules
+from prior packet sample counts"*, over the counts `samples()` derives in
+`src/codec.c`. Two things have to be right:
+
+* a Vorbis packet with window `n` and predecessor `M` puts out `(M + n) / 2`
+  samples, and the first packet of a link puts out none — it is held back to
+  give the second one a left half;
+* a page's granule is the decodable position at the end of the last packet
+  that **completes** on it, so a packet split across two pages counts on the
+  page it finishes, not the page it starts. `samples()` skips a leading
+  fragment, holds a trailing one in a carry, and releases the carry on the
+  page the packet finishes; `pg_predict` does the same three things.
+
+Their encoder can subtract the page's own contribution outright, because
+`ogg_hdr_step` runs after the page's packets and `ogg_hdr_enc` before them —
+so by the time it writes page *i* it has walked pages 0..*i*−1 and the
+residual `glo - cum` is exactly what this page adds. This tool writes the page
+header first, so that number is not available: what the page adds has to be
+*predicted*, as the number of packets completing here times what a packet was
+worth on the page before.
+
+Averaging over the previous page matters. The obvious estimator — the last
+completed packet — is a poor witness where the two block sizes alternate, and
+measured on this corpus it lost to the plain difference outright.
+
+**It is not free, so it is optional.** Where a page's packets are all one
+block size the prediction lands exactly; where the sizes alternate within a
+page its residual is wider than the plain difference, which is what the long
+libvorbis files are full of. So the form is chosen per stream by a scoring
+pass — the DEV_NULL pass that already scores the class model — and written
+down only when it wins. A stream it does not suit says nothing and pays
+nothing, and an absent record means the difference, which is what the format
+did before. The scorer charges the prediction for its own flag row: without
+that, a stream the prediction suits by four bytes comes out one byte larger,
+and two corpus files did.
+
+| | before | after | |
+|---|---:|---:|---:|
+| 22 ffmpeg files | 1,007,397 | 1,007,208 | **−0.019%** |
+| 17-file corpus | 13,252,370 | 13,252,200 | **−0.001%** |
+
+All 22 ffmpeg files take the prediction. Five of the seventeen corpus files
+do; the other twelve are byte-for-byte unchanged. The best are `00000006` and
+`0000000D` at −0.24%.
+
+Both directions call `pg_predict` on every page whether the stream uses it or
+not, because settling the page rate is a side effect of the call. And the page
+shape — `page.npkt`, `page.plen`, `page.tail` — now goes out *before* the
+granule, because the prediction has to know how many packets complete on the
+page before it can say where the page ends.
+
+**What does not port.** iczelia's residual is not smaller than ours — it is
+the same quantity. Their `cum` is the previous page's granule, page for page,
+because a page's granule *is* the running sample total; the two differ only on
+a final page trimmed short. The comment's "zero residual" is the *model's*
+doing: a first-order adaptive model over a value that repeats costs almost
+nothing, while a TSV row costs its digits whatever they are. That part of the
+win is unavailable to a text format, and what is left — a point prediction
+against a page whose block sizes may or may not hold still — is worth a
+quarter of a percent on the best file here and a fiftieth of a percent over
+the corpus.
+
 ---
 
 ## 5. Where the keeps come from

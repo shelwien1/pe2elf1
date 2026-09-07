@@ -20,7 +20,7 @@ hides what each one shows:
 | source Ogg | 12,734,656 | 515,872 |
 | balrogg TSV | 108,163,951 | 4,386,774 |
 | meta, self-contained build | 15,682,793 (14.50%) | 1,748,355 (39.85%) |
-| **meta, with libvorbis** | **13,252,370 (12.25%)** | **1,007,397 (22.96%)** |
+| **meta, with libvorbis** | **13,252,200 (12.25%)** | **1,007,208 (22.96%)** |
 
 The percentage is of the TSV, which is what the meta stands in for; the WAV
 carries the rest. Reconstruction from WAV plus meta is exact for all 39
@@ -41,10 +41,10 @@ files are long enough that the setup header is rounding error.
 | Floor posts | `flr.y`, `flr.d` | 2,293,894 | 17.31% |
 | Class corrections | `kc.v`, `kc.i` | 666,361 | 5.03% |
 | Per-packet scalars | `pk` | 291,734 | 2.20% |
-| Page framing | `page.*` | 202,682 | 1.53% |
+| Page framing | `page.*` | 202,487 | 1.53% |
 | Correction counts | `kn` | 190,658 | 1.44% |
 | Floor/residue/mapping setup | `flr.*`, `res.*`, `map.*`, `mode.*` | 11,254 | 0.08% |
-| Stream header | `id.*`, `link.*`, `cmt.*` | 6,386 | 0.05% |
+| Stream header | `id.*`, `link.*`, `cmt.*`, `pg.pred` | 6,411 | 0.05% |
 | Learned models | `cm.*`, `vf.*` | 5,510 | 0.04% |
 | **Codebooks** | `cb.*` | **159** | **0.00%** |
 
@@ -52,15 +52,15 @@ files are long enough that the setup header is rounding error.
 
 | part | bytes | share |
 |---|---:|---:|
-| Floor posts | 445,044 | 44.18% |
-| Digit corrections | 424,290 | 42.12% |
+| Floor posts | 445,044 | 44.19% |
+| Digit corrections | 424,290 | 42.13% |
 | Learned models | 35,899 | 3.56% |
 | Correction counts | 30,405 | 3.02% |
 | Per-packet scalars | 27,808 | 2.76% |
-| Page framing | 15,619 | 1.55% |
+| Page framing | 15,320 | 1.52% |
 | Class corrections | 13,764 | 1.37% |
 | Floor/residue/mapping setup | 8,470 | 0.84% |
-| Stream header | 5,856 | 0.58% |
+| Stream header | 5,966 | 0.59% |
 | Codebooks | 242 | 0.02% |
 
 ## What each part is, and why it is still there
@@ -292,6 +292,14 @@ Files whose meta is mostly setup gain most -- `00000005` by 15.9%,
 `00000003` by 15.3% -- and files that are almost all correction values gain
 least, `00000009` by 1.0%, because there the tag was never the problem.
 
+Since a page's granule *is* the samples its packets put out, that difference
+can be predicted rather than stored, which is what iczelia's balrogg does --
+see TSV2WAV.md 4.8 for the accounting and what it is worth here. It is not
+worth much: the residual is narrower than the difference only where a page's
+packets are all one block size, so the form is chosen per stream and written
+down only when it wins. It takes 189 bytes off the ffmpeg files (-0.019%) and
+170 off the corpus (-0.001%), and no file comes out larger.
+
 What is left of the row overhead is 2.99%, spread evenly over the four
 per-packet records. Taking more of it means merging rows across packets,
 which needs a whole link buffered before anything is written.
@@ -310,21 +318,31 @@ What a single value occupies, tag text and separator included, over the
 
 | tag | bytes | values | bytes/value |
 |---|---:|---:|---:|
-| `kd.v` | 9,342,526 | 3,998,333 | 2.34 |
-| `flr.y` | 1,427,732 | 529,509 | 2.70 |
-| `kc.v` | 1,014,228 | 435,082 | 2.33 |
-| `flr.d` | 1,011,938 | 395,934 | 2.56 |
-| `pk` | 328,179 | 109,422 | 3.00 |
-| `kd.i` | 303,695 | 113,272 | 2.68 |
-| `kn` | 219,820 | 38,674 | 5.68 |
-| `page.plen` | 176,779 | 38,096 | 4.64 |
-| `page.granlo` | 58,404 | 3,008 | 19.42 |
-| `kc.i` | 50,492 | 11,308 | 4.47 |
+| `kd.v` | 9,292,192 | 3,998,333 | 2.32 |
+| `flr.y` | 1,365,492 | 529,509 | 2.58 |
+| `flr.d` | 928,402 | 395,934 | 2.34 |
+| `kc.v` | 545,912 | 228,204 | 2.39 |
+| `pk` | 291,734 | 109,422 | 2.67 |
+| `kd.i` | 291,455 | 113,272 | 2.57 |
+| `kn` | 190,658 | 38,546 | 4.95 |
+| `page.plen` | 152,715 | 38,096 | 4.01 |
+| `kc.i` | 120,449 | 46,976 | 2.56 |
+| `page.gran` | 20,978 | 3,008 | 6.97 |
 
 `kn` was 7.93 before its two counts were merged onto one row, and the keep
 values fell from 2.67 to 2.15 once they were zigzagged so a minus sign stopped
-costing a byte. `page.granlo` is one row per page for one number and still
-carries the per-record slack that merging fixed elsewhere.
+costing a byte. `page.gran` is still the dearest of these: one row per page
+for one number, so it pays a whole record's slack for a value that is usually
+two or three digits. The gap-and-run form the keeps use would close it, but a
+page's granule is one value, and there is nothing to merge it with.
+
+An earlier version of this table was measured before the tags were shortened
+and before the keeps were recoded, and had gone stale against the rest of the
+document: it put the class corrections at 1,064,720 bytes where the breakdown
+above says 666,361, and it still named `page.granlo`, a tag the format no
+longer has. These numbers are from the files the breakdown was measured on,
+and add up to it: `kd.v` + `kd.i` to 9,583,647, `flr.y` + `flr.d` to
+2,293,894, `kc.v` + `kc.i` to 666,361.
 
 ## Notes on method
 

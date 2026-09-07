@@ -128,9 +128,56 @@ constexpr u32 LK_MAX = 4096;              /*  links in one file  */
     a link.  The serial is one number per link, not per page.  The meta carries
     the serial once and derives the other two, and mode c checks the derivation
     rather than trusting it.  */
-/*  The granule the page before this one ended on, which the difference above
-    is taken against.  A link starts it again from zero.  */
-static i64 pg_gran;
+/*  Where the granule is predicted from, after iczelia's balrogg (src/ogg.c,
+    "predict granules from prior packet sample counts", and src/codec.c's
+    samples()).  A page's granule is the decodable position at the end of the
+    last packet that *completes* on it, so a packet split across pages counts
+    on the page it finishes, not the one it starts.
+
+    Their encoder can subtract the page's own sample count because it walks
+    the page's packets before writing its header.  This one writes the header
+    first, so the page's own contribution is predicted rather than known: the
+    packets that complete here, each worth what a packet on the page before
+    was worth.  That is exact where a page's packets are all one block size
+    and wide of the mark where the two sizes alternate within a page, which is
+    why the form is a per-stream choice below.  */
+static i64 pg_cum;                        /*  through packets that completed  */
+static i64 pg_carry;                      /*  a packet still spanning pages  */
+static i64 pg_pkt;                        /*  what the packet just walked is worth  */
+static i64 pg_ps, pg_pn;                  /*  the page in progress: samples, packets  */
+static i64 pg_rate;                       /*  ... averaged over the page before  */
+static i64 pg_prev;                       /*  the granule of the page before  */
+
+/*  Which of the two the stream uses.  The prediction above is right where a
+    page's packets are all one block size and poor where the two alternate,
+    and the plain difference from the page before is the other way round, so
+    the choice is made per stream, by a scoring pass that adds up what each
+    would spend.  Only the prediction is written down -- a link that says
+    nothing takes the difference -- so a stream the prediction does not suit
+    pays nothing for having been asked.  */
+static int pg_pred, pg_score;
+static u32 pg_cd, pg_cp, pg_nlink;
+/*  what that record costs where it is written: the short tag, a tab, the one
+    digit and the row break  */
+constexpr u32 PG_FLAG = 5;
+
+static u32 dcost(long long v);            /*  the width of a value on a row  */
+
+/*  What the granule of a page with this shape should come to.  `frag` says
+    the page opens with the tail of a packet from the page before.  */
+static i64 pg_predict(u32 np, int tail, int frag) {
+  i64 g = pg_cum;
+  int nnew = (int) np - (frag ? 1 : 0) - (tail ? 1 : 0);
+  /*  Called once per page by both directions, so the page that has just
+      finished can settle the rate here.  An average over the page beats the
+      last packet on its own: where the two block sizes alternate, one packet
+      is a poor witness for the next.  */
+  if (pg_pn > 0) pg_rate = pg_ps / pg_pn;
+  pg_ps = pg_pn = 0;
+  if (frag && !(np == 1 && tail)) g += pg_carry;
+  if (nnew > 0) g += (i64) nnew * pg_rate;
+  return g;
+}
 
 struct pg {
   u32 type, glo, ghi, serial, seq, np;
@@ -156,10 +203,6 @@ struct pg {
   void get_meta(tsv & t, u32 ser, u32 sq, int bos, int cont) {
     int i;
     type = (u32) ((bos ? 2 : 0) | (cont ? 1 : 0));
-    { i64 g = pg_gran + (i64) t.get("page.gran");
-      pg_gran = g;
-      glo = (u32) ((unsigned long long) g & 0xFFFFFFFFu);
-      ghi = (u32) ((unsigned long long) g >> 32); }
     serial = ser;  seq = sq;
     np = t.get_u("page.npkt", OGG_MAXSEG + 1);
     Fi((int) np, plen[i] = t.get_u("page.plen",
@@ -167,6 +210,13 @@ struct pg {
     tail = 0;
     if (np && !(plen[np - 1] % OGG_MAXSEG)) tail = (int) t.get_u("page.tail", 2);
     if (!strcmp(t.peek(), "page.eos")) { t.get("page.eos");  type |= 4; }
+    /*  the shape is read first, because the prediction needs it -- and it is
+        made either way, since it settles the page rate as a side effect  */
+    { i64 pr = pg_predict(np, tail, cont);
+      i64 g = (pg_pred ? pr : pg_prev) + (i64) t.get("page.gran");
+      pg_prev = g;
+      glo = (u32) ((unsigned long long) g & 0xFFFFFFFFu);
+      ghi = (u32) ((unsigned long long) g >> 32); }
   }
 
   /*  Write in balrogg's order and form.  */
@@ -187,16 +237,20 @@ struct pg {
       which is twenty-seven hours at 44.1 kHz, and it was costing fourteen
       bytes a page to say so.  And it climbs by the samples the page's packets
       put out, so the difference is a small number from a small set -- 120
-      distinct ones over 3187 pages, a third of them 4096.  */
-  void put_meta(tsv & t) const {
+      distinct ones over 3187 pages, a third of them 4096.  A stream that says
+      so writes the residual against pg_predict instead; either way the page
+      shape has gone out first, because the prediction is made from it.  */
+  void put_meta(tsv & t, int cont) const {
     int i;
-    { i64 g = (i64) (((unsigned long long) ghi << 32) | glo);
-      t.put("page.gran", (long long) (g - pg_gran));
-      pg_gran = g; }
     t.put("page.npkt", np);
     Fi((int) np, t.put("page.plen", plen[i]));
     if (np && !(plen[np - 1] % OGG_MAXSEG)) t.put("page.tail", tail);
     if (type & 4) t.put("page.eos", 1);
+    { i64 g = (i64) (((unsigned long long) ghi << 32) | glo);
+      i64 rp = g - pg_predict(np, tail, cont), rd = g - pg_prev;
+      if (pg_score) { pg_cp += dcost(rp);  pg_cd += dcost(rd); }
+      t.put("page.gran", (long long) (pg_pred ? rp : rd));
+      pg_prev = g; }
   }
 };
 
@@ -227,6 +281,9 @@ static int an_first, an_prevW;
     floor records have been read.  */
 static i64 an_span;
 static int block_span(u32 n) {
+  /*  the samples this packet adds to the decodable position; the first block
+      of a link is held back and adds none  */
+  pg_pkt = an_first ? 0 : (i64) (an_Mprev + n) / 2;
   if (an_first) { an_T = 0;  an_first = 0; } else an_T += (i64) (an_Mprev + n) / 2;
   an_Mprev = n;
   an_span = an_base + an_T - (i64) n;
@@ -956,13 +1013,17 @@ static void walk(int role, const char * srcpath, const char * dstpath,
     u32 serial = 0, seq = 0;
     int prevtail = 0;
     sz spill = 0;
-    pg_gran = 0;
+    pg_cum = pg_carry = pg_ps = pg_pn = pg_rate = pg_prev = 0;
     if (open) { dec.link();  an_first = 1;  an_prevW = 0; }
     if (role == ROLE_META) { src.tee = nullptr;
+                             if (pg_score) pg_nlink++;
                              dst.put("link.frames", (long long) lk_frames[link]);
+                             if (pg_pred) dst.put("pg.pred", 1);
                              src.tee = &dst; }
     if (role == ROLE_REST) { src.tee = nullptr;
                              lk_frames[link] = src.get("link.frames");
+                             pg_pred = !strcmp(src.peek(), "pg.pred");
+                             if (pg_pred) src.get("pg.pred");
                              src.tee = &dst; }
     lk_n = link + 1;
     if (link) an_base += lk_frames[link - 1];
@@ -987,7 +1048,7 @@ static void walk(int role, const char * srcpath, const char * dstpath,
                        "needs page.type, page.seq or page.serial carried",
                        srcpath);
           if (!seq) { serial = p.serial;  dst.put("link.serial", serial); }
-          p.put_meta(dst);
+          p.put_meta(dst, prevtail);
         }
       }
       src.tee = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;
@@ -1048,8 +1109,15 @@ static void walk(int role, const char * srcpath, const char * dstpath,
             }
           }
           w++;
-        } else if (role == ROLE_SYNTH) dec.audio(src);
-        else audio_rec(src, dst, role));
+        } else {
+          pg_pkt = 0;
+          if (role == ROLE_SYNTH) dec.audio(src);
+          else audio_rec(src, dst, role);
+          /*  A packet that runs onto the next page belongs to that page's
+              granule, so it waits in the carry; anything else lands here.  */
+          if (j == (int) p.np - 1 && p.tail) pg_carry = pg_pkt;
+          else { pg_cum += pg_pkt;  pg_ps += pg_pkt;  pg_pn++; }
+        });
       if (p.type & 4) {
         done = 1;
         if (role == ROLE_SYNTH) {
@@ -1217,8 +1285,12 @@ int main(int argc, char ** argv) {
     /*  One pass to score the class model, which needs the settled fit and the
         truth side by side, and so cannot be scored in the fit pass.  */
     { cg_on = 0;  cg_score = 1;  cg_hit0 = cg_hit1 = 0;
+      pg_pred = 0;  pg_score = 1;  pg_cd = pg_cp = pg_nlink = 0;
       walk(ROLE_META, argv[2], DEV_NULL, argv[3]);
-      cg_score = 0;  cg_on = cg_hit1 > cg_hit0; }
+      cg_score = 0;  cg_on = cg_hit1 > cg_hit0;
+      /*  the prediction has to pay for its own flag before it is worth
+          having, or a stream it barely suits comes out larger  */
+      pg_score = 0;  pg_pred = pg_cp + PG_FLAG * pg_nlink < pg_cd; }
     walk(ROLE_META, argv[2], argv[4], argv[3]);
   } else
     walk(ROLE_REST, argv[4], argv[3], argv[2]);
