@@ -131,6 +131,22 @@ for f, (guard, inc) in GUARDS.items():
     assert s.count(guard) == 1, f
     wr(f, s.replace(guard, guard + '\n\n' + note, 1))
 
+#  (8) res0_free_info memsets vorbis_info_residue0 and vorbis_encode_residue_setup
+#      memcpys a template over it; a const member makes copy-assignment deleted
+#      and both writes UB in C++ (-Wclass-memaccess).  The note deliberately
+#      avoids the three identifiers rule 1 rewrites -- backends.h goes through it.
+f = 'backends.h'; s = rd(f)
+NOTE = ('  /*  Not const: res0_free_info memsets the struct and\n'
+        '      vorbis_encode_residue_setup memcpys a template over it.  A const\n'
+        '      member makes copy-assignment deleted and both writes UB in C++\n'
+        '      (-Wclass-memaccess); nothing actually relies on the qualifier.  */\n')
+PLAIN = '  int classmetric1[64];\n  int classmetric2[64];'
+CONST = '  const int classmetric1[64];\n  const int classmetric2[64];'
+if NOTE + PLAIN not in s:
+    for a in (CONST, PLAIN):
+        if a in s:
+            wr(f, s.replace(a, NOTE + PLAIN)); break
+
 #  (7) int fields, double literals
 f = 'modes/psych_44.h'; s = rd(f)
 a = '   {99.},{{99.},{99.}},{0},{0},{{0.},{0.}}'

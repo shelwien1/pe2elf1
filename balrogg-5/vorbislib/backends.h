@@ -113,8 +113,12 @@ typedef struct vorbis_info_residue0{
   int    secondstages[64]; /* expanded out to pointers in lookup */
   int    booklist[512];    /* list of second stage books */
 
-  const int classmetric1[64];
-  const int classmetric2[64];
+  /*  Not const: res0_free_info memsets the struct and
+      vorbis_encode_residue_setup memcpys a template over it.  A const
+      member makes copy-assignment deleted and both writes UB in C++
+      (-Wclass-memaccess); nothing actually relies on the qualifier.  */
+  int classmetric1[64];
+  int classmetric2[64];
 } vorbis_info_residue0;
 
 /* Mapping backend generic *****************************************/

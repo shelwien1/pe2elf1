@@ -79,6 +79,21 @@ struct vb_cvoidp {
   friend bool operator != (vb_cvoidp a, decltype(nullptr)) { return a.p != 0; }
 };
 
+/*  The whole point is that these are void* in all but conversion: libvorbis
+    callocs and memsets the structs holding them, and casts them across
+    translation-unit boundaries that no longer exist but whose layout
+    assumptions remain.  */
+#if defined(__cplusplus) && __cplusplus >= 201103L
+#include <type_traits>
+static_assert(sizeof(vb_voidp) == sizeof(void *), "vb_voidp must be void*-sized");
+static_assert(alignof(vb_voidp) == alignof(void *), "vb_voidp must be void*-aligned");
+static_assert(std::is_trivially_copyable<vb_voidp>::value, "vb_voidp must survive memcpy");
+static_assert(std::is_trivially_destructible<vb_voidp>::value, "vb_voidp must not need destruction");
+static_assert(std::is_standard_layout<vb_voidp>::value, "vb_voidp must be standard layout");
+static_assert(sizeof(vb_cvoidp) == sizeof(const void *), "vb_cvoidp must be void*-sized");
+static_assert(std::is_trivially_copyable<vb_cvoidp>::value, "vb_cvoidp must survive memcpy");
+#endif
+
 #define VB_VOIDP   vb_voidp
 #define VB_CVOIDP  vb_cvoidp
 
