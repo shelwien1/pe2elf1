@@ -28,7 +28,7 @@ static u16 cm_mrec[CM_AMAX + 2];          /*  65536 / (n + 1), for the mixer  */
 
 static i16 cm_st[CM_PONE];                /*  stretch: p -> log-odds  */
 static u16 cm_sq[2 * CM_STMAX + 1];       /*  squash: log-odds -> p  */
-static u16 cm_ident[33];                  /*  an APM's curve before it learns  */
+constexpr int CM_QMAX = 66;               /*  points an APM's curve may have  */
 
 static void cm_tables(void) {
   int i;
@@ -41,11 +41,6 @@ static void cm_tables(void) {
     if (p < 1) p = 1;
     if (p > CM_PONE - 1) p = CM_PONE - 1;
     cm_sq[i + CM_STMAX] = (u16) p;
-  }
-  for (i = 0; i < 33; i++) {                /*  cm_squash is declared below  */
-    int x = (i - 16) * 128;
-    cm_ident[i] = cm_sq[(x <= -CM_STMAX ? -CM_STMAX
-                       : x >= CM_STMAX ? CM_STMAX : x) + CM_STMAX];
   }
   /*  the inverse, by walking the squash curve once  */
   { int j = 0;
@@ -116,30 +111,50 @@ struct cm_cnt {
     from there on at exactly the rate the .idx asked for.  That is what the
     counters have always done; the APM was the one part still on a constant.  */
 struct cm_apm {
-  /*  What is stored is the bucket's distance from the curve it starts on,
-      not the curve itself, so that an untouched table is an unlearned APM
-      and needs no filling.  cm_ident is 33 entries and stays in cache.  */
+  /*  What is stored is each point's distance from the curve the APM starts
+      on, not the curve itself, so that an untouched table is an unlearned
+      APM and needs no filling.
+
+      How many points that curve has is `q`, and it is a parameter.  33 is
+      what this had, and it is far more than the shape of a correction curve
+      needs: the points are what the visits are divided between, and an APM
+      under a context rich enough to be worth having does not get 33 visits
+      per row to spend.  mp3c tunes the same number per SSE and every one of
+      its twelve lands between 5 and 8.  At q = 33 the arithmetic below is
+      bit for bit what it was.  */
   i16 * t;
   u8  * c;
   u32 n;
-  int idx, bkt;
-  void init(i16 * tab, u8 * cnt, u32 nctx) {
+  int idx, bkt, q;
+  u16 ident[CM_QMAX];
+  void init(i16 * tab, u8 * cnt, u32 nctx, int qq) {
+    int j;
     t = tab;  c = cnt;  n = nctx;  idx = 0;  bkt = 0;
+    q = qq < 3 ? 3 : qq > CM_QMAX ? CM_QMAX : qq;
+    /*  point j sits at stretched position j * 4096 / (q - 1)  */
+    for (j = 0; j < q; j++) {
+      int x = j * 4096 / (q - 1) - CM_STMAX - 1;
+      ident[j] = (u16) cm_squash(x);
+    }
   }
+  /*  s is the stretched probability in [0, 4094]; scaling by q - 1 and
+      taking the top bits of a 4096 grid puts point 0 at one end and point
+      q - 1 at the other, and never asks for a point past the last.  */
   INLINE int pp(int pr, u32 ctx) {
-    int s = cm_stretch(pr) + CM_STMAX;    /*  [0, 4094]  */
-    int w = s & 127;
-    bkt = s >> 7;
-    idx = (int) (ctx * 33) + bkt;
-    return (((int) cm_ident[bkt] + t[idx]) * (128 - w)
-          + ((int) cm_ident[bkt + 1] + t[idx + 1]) * w) >> 7;
+    int s = cm_stretch(pr) + CM_STMAX;
+    int pos = s * (q - 1);
+    int w = (pos & 4095) >> 5;
+    bkt = pos >> 12;
+    idx = (int) (ctx * (u32) q) + bkt;
+    return (((int) ident[bkt] + t[idx]) * (128 - w)
+          + ((int) ident[bkt + 1] + t[idx + 1]) * w) >> 7;
   }
   INLINE void upd1(int i, int b, int g, int lim) {
     int k = c[i];
-    int v = (int) cm_ident[b] + t[i];
+    int v = (int) ident[b] + t[i];
     if (k < lim) c[i] = (u8) (k + 1);
     v += ((g - v) * cm_arec[k]) >> 16;
-    t[i] = (i16) (v - (int) cm_ident[b]);
+    t[i] = (i16) (v - (int) ident[b]);
   }
   INLINE void upd(int bit, int rate) {
     int g = bit ? 0 : CM_PONE;
