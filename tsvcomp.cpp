@@ -1168,9 +1168,13 @@ static void tc_page(tc_pg & p, u32 seq, int bos, int cont, tsv & out) {
   p.np = (u32) tc_aux(F_NPKT, tc_enc ? p.np : 0);
   FATAL_UNLESS(p.np <= OGG_MAXSEG, "coded stream: page holds %" PRIu64 " packets",
                (u64) p.np);
+  /*  A packet's length against the one before it.  The two axes F_PLEN had
+      were both the previous length, one of them log-quantised twice; what it
+      wanted was the difference, which within a page is small.  */
   { i64 prev = 0;
     for (i = 0; i < p.np; i++) {
-      i64 v = tc_auxc(F_PLEN, tc_qlog(prev), tc_enc ? p.plen[i] : 0, 0);
+      i64 v = tc_auxc(F_PLEN, tc_qlog(prev),
+                      tc_enc ? (i64) p.plen[i] - prev : 0, 1) + prev;
       FATAL_UNLESS(v >= 0 && v <= (i64) OGG_MAXSEG * OGG_MAXSEG,
                    "coded stream: packet length %" PRId64, v);
       p.plen[i] = (u32) v;
