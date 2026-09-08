@@ -15,7 +15,7 @@ can address:
   -- one floor curve to a row, one residue partition to a row -- under a tag
   that names which floor, and which residue and pass, they belong to.
 
-Options, which mode d must be given too:
+Options:
 
 | | |
 |---|---|
@@ -23,6 +23,21 @@ Options, which mode d must be given too:
 | `-W` | keep `aud.wprev` rather than deriving it |
 | `-R` | keep the floor and digit rows as they came, ragged |
 | `-n` | all of the above: copy the stream through unchanged |
+
+**Mode d needs none of them.** A transformed stream opens with a record saying
+so and saying which of the switches made it -- `tt.v  1 7` -- and mode d takes
+its settings from there; options given on the line anyway are reported and
+ignored. That record is also what tells the two directions apart, so `c` on an
+already-transformed file and `d` on a raw one both stop at once and say which
+mode you wanted:
+
+    $ tsvtrans c 00.tsw 00.tsr
+    tsvtrans: 00.tsw: this is already a transformed stream -- `tsvtrans d` turns it back
+
+Before that record existed the two directions were told apart only by which
+file you handed to which mode, and getting it wrong reported the first record
+that did not fit -- `record 2 is 'link.serial', expected 'page.type'` -- which
+names a symptom three steps from the mistake.
 
 ## Why the rows are ragged to begin with
 
@@ -170,6 +185,9 @@ what `wav.inc` does with a frame count for the same reason.
   `-W` and `-R` on `00000000`, with and without the images.
 * The transformed stream is byte-identical whether or not the images are
   asked for, so drawing cannot perturb what is being drawn.
+* Every option combination round trips through a **bare** `d`, the settings
+  coming from the stream; `c` on a transformed file and `d` on a raw one are
+  both refused by name rather than by symptom.
 * Every image written over the 39 files is a well-formed BMP: signature,
   declared file size, and 54 + stride x height all agree with the file on
   disk.

@@ -75,11 +75,23 @@ static void su_books(tsv & t, u32 nbk, vd_book * bk) {
 constexpr int OGG_MAXSEG = 255;
 constexpr u32 LK_MAX = 4096;
 
+/*  A transformed stream says so, in its first record, and says which of the
+    switches below made it.
+
+    Without that the two directions are told apart only by which file you hand
+    to which mode, and getting it wrong reports the first record that does not
+    fit -- "record 2 is 'link.serial', expected 'page.type'" -- which names a
+    symptom three steps from the mistake.  It also meant mode d had to be
+    given the same options mode c was, by hand, with nothing to catch a
+    mismatch.  Both go away if the stream carries its own settings.  */
+constexpr i64 TT_VER = 1;
+
 /*  What the transform does, and what it leaves alone.  Each can be switched
     off on its own, which is how each was measured.  */
 static int tr_page = 1;                   /*  drop the implied page header  */
 static int tr_win  = 1;                   /*  drop the derivable window flag  */
 static int tr_rows = 1;                   /*  fixed-width floor and digits  */
+static int tr_opts;                       /*  any of the three named on the line  */
 
 static int tr_enc;                        /*  1 = c, 0 = d  */
 static int tr_trace;
@@ -418,8 +430,36 @@ static void tr_walk(const char * inpath, const char * outpath) {
   u32 link = 0;
 
   in.open(inpath);
+  tr_in = &in;
+  /*  Which direction this file is already in, before anything is written.  */
+  { int marked = !strcmp(in.peek(), "tt.v");
+    if (tr_enc)
+      FATAL_UNLESS(!marked,
+                   "%s: this is already a transformed stream -- `tsvtrans d` "
+                   "turns it back", inpath);
+    else
+      FATAL_UNLESS(marked,
+                   "%s: this is not a transformed stream -- `tsvtrans c` makes "
+                   "one", inpath); }
   out.create(outpath);
-  tr_in = &in;  tr_out = &out;
+  tr_out = &out;
+  if (tr_enc)
+    out.put("tt.v", TT_VER),
+    out.put("tt.v", (i64) ((tr_page ? 1 : 0) | (tr_win ? 2 : 0) | (tr_rows ? 4 : 0)));
+  else {
+    i64 v = in.get("tt.v"), fl;
+    FATAL_UNLESS(v == TT_VER,
+                 "%s: made by tsvtrans version %" PRId64 ", this is version %"
+                 PRId64, inpath, v, TT_VER);
+    fl = in.get("tt.v");
+    FATAL_UNLESS(fl >= 0 && fl < 8, "%s: unknown transform flags %" PRId64,
+                 inpath, fl);
+    { int p_ = (fl & 1) != 0, w_ = (fl & 2) != 0, r_ = (fl & 4) != 0;
+      if (tr_opts && (p_ != tr_page || w_ != tr_win || r_ != tr_rows))
+        fprintf(stderr, "%s: %s was made with different options; using its own\n",
+                blr_prog, inpath);
+      tr_page = p_;  tr_win = w_;  tr_rows = r_; }
+  }
   in.tee = &out;                          /*  everything not named below  */
 
   while (in.get_u("link.more", 2)) {
@@ -503,10 +543,10 @@ int main(int argc, char ** argv) {
     const char * o = argv[a] + 1;
     for (; *o; o++)
       switch (*o) {
-        case 'P': tr_page = 0;  break;
-        case 'W': tr_win = 0;   break;
-        case 'R': tr_rows = 0;  break;
-        case 'n': tr_page = tr_win = tr_rows = 0;  break;
+        case 'P': tr_page = 0;  tr_opts = 1;  break;
+        case 'W': tr_win = 0;   tr_opts = 1;  break;
+        case 'R': tr_rows = 0;  tr_opts = 1;  break;
+        case 'n': tr_page = tr_win = tr_rows = 0;  tr_opts = 1;  break;
         default: goto usage;
       }
   }
@@ -557,6 +597,7 @@ usage:
     "  -R  keep the floor and digit rows as they came, ragged\n"
     "  -n  all of the above: copy the stream through unchanged\n"
     "\n"
-    "Mode d must be given the same options mode c was.\n");
+    "A transformed stream records which of these made it, so mode d needs\n"
+    "none of them and will say so if it is given ones that disagree.\n");
   return BLR_EXIT_USAGE;
 }
