@@ -35,6 +35,12 @@ constexpr int TCP_SYMMAX = 256;           /*  the widest alphabet a prior covers
 constexpr u32 TCP_NODEMAX = 1u << 16;     /*  prefix nodes one book may take  */
 constexpr u32 TCP_SCALE  = 1u << 20;      /*  what a node's weights sum to  */
 constexpr u32 TCP_MEMMAX = 64u << 20;     /*  all priors together  */
+/*  The mantissa prior is the one that cannot be tabulated, so it walks the
+    alphabet at coding time.  That is cheap for a residue book, whose grid
+    holds at most a few dozen values, and not for a floor post, whose
+    alphabet is its whole range -- where it also returns nothing, since what
+    is left of a floor residual after its bit length is close to uniform.  */
+constexpr u32 TCP_MANMAX = 64;
 
 static sz tcp_mem;
 
@@ -350,7 +356,7 @@ static INLINE int tcp_sign(const tc_pcur & c, i64 mag) {
 static INLINE int tcp_man(const tc_pcur & c, int nb, int p, u64 pref) {
   const u32 * w;
   u32 nd, w0 = 0, w1 = 0, j;
-  if (!c.usable() || nb < 2 || p > nb - 2) return -1;
+  if (!c.usable() || nb < 2 || p > nb - 2 || c.t->nsym > TCP_MANMAX) return -1;
   nd = c.node();
   w = c.t->pw + (sz) nd * c.t->nsym;
   for (j = 0; j < c.t->nsym; j++) {
