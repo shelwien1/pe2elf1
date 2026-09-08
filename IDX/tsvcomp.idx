@@ -33,6 +33,13 @@ Const 0
 #    cls   the class of this partition -- the choice of codebook
 #    bkq   that codebook's `off`, log-ish: the half-width of its value range
 #    zrun  zeros so far in this partition        blk  short or long block
+#    pq    what the codebook makes of it: the log-odds, in 32 steps, that
+#          this digit is zero, from the entry weights of the prefix the
+#          vector's earlier places have already spelled (tc_prior.inc)
+#    ps    what the passes before this one put at the slot, signed
+#    chn   the slot's channel in a type-2 residue -- which vpos names only
+#          when the book's dimension happens to be even
+#    crun cm  how long the class has held, and whether it held from last packet
 #
 #  `cls` is the biggest single factor and the most surprising one: the class is
 #  the choice of ladder and the ladder decides what a digit can be, so knowing
@@ -44,6 +51,13 @@ Const 0
 #  and worse in combination, and `band` is at three buckets because the fourth
 #  onwards are worth 0.05% between them once `cls` is in -- the partition had
 #  been standing in for the class.
+#
+#  `zrun` is the cautionary tale.  It sat at pattern zero because it measures
+#  at nothing on a 350 kbit/s mono residue, which is what this was tuned on;
+#  on a 96 kbit/s stereo one, where two digits in three are zero, widening it
+#  is worth 3% of the file.  These patterns are a joint answer over a corpus
+#  that has both, and a pattern of zeroes means "not on this corpus", not
+#  "never".
 
 Index dig_a
  dig_a_rno:  rno,   1!0

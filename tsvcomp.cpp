@@ -13,11 +13,49 @@
     The model is mp3c's, described in MP3C-ALGORITHM.md.  Every value is a
     cascade of binary decisions and every decision goes through the same
     parts: four counters on different contexts, an APM correcting the first,
-    a logistic mixer weighing them (plus a bias) under a context of its own,
-    a second APM correcting the mix, and a carryless binary range coder.  The
-    encoder and the decoder are the same code -- `tc_fam::code` either codes
-    the value it is given or decodes one and both then run the identical
-    update -- so a model change cannot desynchronise the two halves.
+    a logistic mixer weighing them and one thing mp3c had no equivalent of
+    (below) under a context of its own, a second APM correcting the mix, and
+    a carryless binary range coder.  The encoder and the decoder are the same
+    code -- `tc_fam::code` either codes the value it is given or decodes one
+    and both then run the identical update -- so a model change cannot
+    desynchronise the two halves.
+
+    Rev G's subject is what the *file* knows about itself.  A residue digit
+    is one base-nv place of a Vorbis codebook entry, and that entry reached
+    the file as a Huffman codeword: a complete Huffman code is a probability
+    model, an entry of length L standing for 2^-L.  balrogg has to read those
+    lengths to find where the next field starts, and tsvcomp read them and
+    threw them away -- which left the one thing about a residue digit that no
+    amount of coded history can supply on the floor, and at low bitrates,
+    where a context has few visits to learn from, that is most of what there
+    is.  tc_prior.inc builds the conditional form of it, per book: the digits
+    of a vector are the places of one entry, so once a place is known the
+    entry is confined to a subtree, and the cascade asks each prefix node not
+    for P(place) but for the weight either side of "is it zero", "is it one",
+    "is its bit length k".  It enters as a mixer input, not as a decision, so
+    the mixer learns how far to trust it; `pq` (how sure it is that the digit
+    is zero) is an axis, and the mixer context is where that axis pays most.
+    The classword gets the same from the classbook, and a floor post gets it
+    in a second shape: which subclass book coded a post is implied by the
+    post's own value, so P(post) is P(subclass) from the classword times
+    P(value) in that book.  On the residue this is worth 9%; on the floor
+    almost nothing, because an envelope moves slowly and the model was
+    already coding 03's floor at 2.79 bits against the 3.19 the codebooks
+    alone give.
+
+    Two things were coded that are not information.  The header packets' tag
+    sequence is a function of values already coded -- both halves run
+    vd_setup's readers, which ask for cb.dim, then cb.entries, then whatever
+    cb.ordered turned out to be -- and the reader now drives the coding
+    directly through a pair of tsv hooks, so a tag is never written down.
+    That was 37% of the header stage.  And a floor post at index >= 2 is
+    floor1's folded residual against the line between its two bracketing
+    neighbours, both of which precede it in list order and neither of which
+    was reachable in the ascending-X order balrogg writes; the posts are
+    turned around and coded in list order, which puts the prediction, the
+    room either side of it and last packet's reconstructed curve in reach.
+    `ep` -- what floor1 would have coded for last packet's curve against this
+    packet's prediction -- is the largest floor context since the column.
 
     Rev E1 (the 08.tsv work, -4.4% on that file) took three things from
     mp3c's ModelMDCT() that the first version had left out, and one Vorbis
@@ -96,7 +134,18 @@
     are coded as records rather than as text or as bytes.  Their tag sequence
     is not information: both sides run the same reader, which asks for the
     tags it needs in the order it needs them, so only the values are coded.
-    See tc_header.  */
+    See tc_header.
+
+    A note on what the .idx is for, since it decides more than it looks like
+    it does.  The shipped parameters had been hill-climbed on the mono half
+    of the corpus, and the same model with the same code was 10% worse than
+    balrogg on a 96 kbit/s stereo file and 3% better on a 350 kbit/s mono
+    one -- because a variable that carries nothing on dense residue (zrun,
+    say) carries 3% on sparse residue, and a pattern of all zeroes is how a
+    variable that was tried and did not pay stays out of the way.  Tuning on
+    one regime is tuning against the other.  IDX/opt.pl's header says
+    "optimize on a corpus, not a file"; a corpus has to span the regimes as
+    well as the files.  */
 
 #include <math.h>
 #include <stdarg.h>
