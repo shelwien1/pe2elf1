@@ -63,11 +63,11 @@ Index dig_a
  dig_a_rno:  rno,   1!0
  dig_a_pass: pass,  1!1111111
  dig_a_band: band, 1!111111111111111
- dig_a_col: col, 1!0100011
+ dig_a_col: col, 1!0100111
  dig_a_q1:   q1,    1!00000
  dig_a_q2:   q2,    1!0000
  dig_a_t1:   t1,    1!000
- dig_a_bkq: bkq, 1!0101
+ dig_a_bkq: bkq, 1!0010
  dig_a_cls:  cls,   1!010100111000000
  dig_a_zrun: zrun,  1!0000
  dig_a_blk:  blk,   1!1
@@ -79,53 +79,53 @@ Index dig_a
  dig_a_n1:   n1,   1!000
  dig_a_w1:   w1,   1!000
  dig_a_p0:   p0,   1!000
- dig_a_p0s:  p0s,  -6!0000000000000
+ dig_a_p0s: p0s, -6!0100000000000
  dig_a_pn:   pn,   1!000
  dig_a_ax: ax, 1!000000100000
- dig_a_pq:   pq,    1!00000000000000000000000000000000
+ dig_a_pq: pq, 1!00000000100000000000000010000000
  dig_a_ps:   ps,   -6!0000000000000
- dig_a_chn:  chn,   1!0000000
+ dig_a_chn: chn, 1!1010101
  dig_a_crun: crun,  1!000000000
  dig_a_cm:   cm,    1!0
 
 Index dig_b
  dig_b_rno:  rno,   1!0
- dig_b_pass: pass,  1!0010001
- dig_b_band: band,  1!110000001000000
- dig_b_col:  col,   1!0100101
- dig_b_q1:   q1,    1!00000
- dig_b_q2:   q2,    1!0010
+ dig_b_pass: pass, 1!0100010
+ dig_b_band: band, 1!110111101111011
+ dig_b_col: col, 1!0100010
+ dig_b_q1: q1, 1!10101
+ dig_b_q2: q2, 1!0000
  dig_b_t1:   t1,    1!000
  dig_b_bkq:  bkq,   1!0110
- dig_b_cls:  cls,   1!000
- dig_b_zrun: zrun,  1!001
+ dig_b_cls: cls, 1!010
+ dig_b_zrun: zrun, 1!101
  dig_b_blk:  blk,   1!1
- dig_b_vpos: vpos,  1!0
+ dig_b_vpos: vpos, 1!1
  dig_b_q1s:  q1s,  -6!0000000000000
  dig_b_q2s:  q2s,  -6!0000000000000
  dig_b_t1s:  t1s,  -6!0000000000000
  dig_b_t2:   t2,   1!000
  dig_b_n1:   n1,   1!000
  dig_b_w1:   w1,   1!000
- dig_b_p0:   p0,   1!100
+ dig_b_p0: p0, 1!111
  dig_b_p0s:  p0s,  -6!0000000000000
  dig_b_pn:   pn,   1!100
  dig_b_ax:   ax,   1!000000000000
  dig_b_pq:   pq,    1!00010001000100010001000100010001
  dig_b_ps:   ps,   -6!0000000000000
- dig_b_chn:  chn,   1!0000000
+ dig_b_chn: chn, 1!1000000
  dig_b_crun: crun,  1!000000000
  dig_b_cm:   cm,    1!0
 
 Index dig_c
- dig_c_pass: pass,  1!11
+ dig_c_pass: pass, 1!10
  dig_c_vpos: vpos,  1!0
- dig_c_band: band,  1!01100
+ dig_c_band: band, 1!01010
  dig_c_t1s:  t1s,  -6!0000000000000
  dig_c_t2:   t2,   1!000
  dig_c_n1:   n1,   1!000
  dig_c_w1:   w1,   1!000
- dig_c_ax:   ax,   1!100000000100
+ dig_c_ax: ax, 1!101000000100
  dig_c_q1s:  q1s,  -6!0000000000000
  dig_c_q2s:  q2s,  -6!1000000000000
  dig_c_cls:  cls,   1!000
@@ -137,7 +137,7 @@ Index dig_c
  dig_c_cm:   cm,    1!0
 
 Index dig_d
- dig_d_pass: pass, 1!11
+ dig_d_pass: pass, 1!00
  dig_d_vpos: vpos, 1!1
  dig_d_band: band,  1!00000
  dig_d_t1s:  t1s,  -6!0000000000000
@@ -145,13 +145,13 @@ Index dig_d
  dig_d_n1:   n1,   1!000
  dig_d_w1:   w1,   1!000
  dig_d_ax: ax, 1!010101010101
- dig_d_q1s: q1s, -6!0101010101010
- dig_d_q2s:  q2s,  -6!0101000000010
- dig_d_cls:  cls,   1!011
- dig_d_p0s:  p0s,  -6!0000111110000
- dig_d_pq:   pq,    1!00010001000100010001000100010001
- dig_d_ps:   ps,   -6!0000000000000
- dig_d_chn:  chn,   1!0000000
+ dig_d_q1s: q1s, -6!1010110110101
+ dig_d_q2s: q2s, -6!0000000000000
+ dig_d_cls: cls, 1!000
+ dig_d_p0s: p0s, -6!0010111110000
+ dig_d_pq: pq, 1!00000000100000000000000010000000
+ dig_d_ps: ps, -6!0010001000100
+ dig_d_chn: chn, 1!1010101
  dig_d_crun: crun,  1!000000000
  dig_d_cm:   cm,    1!0
 
@@ -159,38 +159,38 @@ Index dig_s
  dig_s_pass: pass, 1!10
  dig_s_band: band, 1!100
  dig_s_q1: q1, 1!000
- dig_s_t1:   t1,    1!010
- dig_s_bkq:  bkq,   1!011
+ dig_s_t1: t1, 1!011
+ dig_s_bkq: bkq, 1!101
  dig_s_cls:  cls,   1!000
  dig_s_vpos: vpos,  1!0
  dig_s_q1s: q1s, -6!0000000000000
  dig_s_q2s: q2s, -6!0000000000000
- dig_s_t1s: t1s, -6!0000000000000
+ dig_s_t1s: t1s, -6!1000000000000
  dig_s_t2:   t2,   1!000
  dig_s_n1:   n1,   1!000
  dig_s_w1: w1, 1!000
- dig_s_p0: p0, 1!100
- dig_s_p0s: p0s, -6!0000000000000
- dig_s_pn: pn, 1!010
+ dig_s_p0: p0, 1!101
+ dig_s_p0s: p0s, -6!0100000000000
+ dig_s_pn: pn, 1!000
  dig_s_ax: ax, 1!100010101111
  dig_s_pq: pq, 1!00000000000000000000000000000000
- dig_s_ps:   ps,   -6!0000000000000
- dig_s_chn:  chn,   1!0000000
+ dig_s_ps: ps, -6!0010000000000
+ dig_s_chn: chn, 1!1010101
  dig_s_crun: crun,  1!000000000
- dig_s_cm:   cm,    1!0
+ dig_s_cm: cm, 1!1
 
 Index dig_f
  dig_f_pass: pass, 1!11
  dig_f_vpos: vpos, 1!0
- dig_f_cls: cls, 1!111111111
- dig_f_q1s: q1s, -6!0100100010010
- dig_f_p0s: p0s, -6!0100000000000
+ dig_f_cls: cls, 1!101111111
+ dig_f_q1s: q1s, -6!0000100010010
+ dig_f_p0s: p0s, -6!0000000000000
  dig_f_t1s: t1s, -6!0000000000000
  dig_f_ax: ax, 1!000101010101
  dig_f_band: band, 1!10101
  dig_f_pq: pq, 1!00000000000000000000000000000000
  dig_f_ps:   ps,   -6!0000000000000
- dig_f_chn:  chn,   1!0000000
+ dig_f_chn: chn, 1!1010101
  dig_f_crun: crun,  1!000000000
  dig_f_cm:   cm,    1!0
 
@@ -214,7 +214,7 @@ Index dig_m
  dig_m_ax:   ax,   1!000000000000
  dig_m_pq: pq, 1!00100000100001000010000010000100
  dig_m_ps:   ps,   -6!0000000000000
- dig_m_chn:  chn,   1!0000000
+ dig_m_chn: chn, 1!1010101
  dig_m_crun: crun,  1!000000000
  dig_m_cm:   cm,    1!0
 
@@ -274,18 +274,18 @@ Number dig_mb, 1, 0!01000000
 #  channel and of the digit before, and the magnitude just coded.
 
 Index sgn_a
- sgn_a_pass: pass,  1!00
+ sgn_a_pass: pass, 1!11
  sgn_a_vpos: vpos,  1!1111111
- sgn_a_cls:  cls,   1!000001111
- sgn_a_p0s:  p0s,  -3!1011110
- sgn_a_q1s:  q1s,  -3!1111111
- sgn_a_mg:   mg,    1!111111111
+ sgn_a_cls: cls, 1!101101101
+ sgn_a_p0s: p0s, -3!1111111
+ sgn_a_q1s: q1s, -3!0000000
+ sgn_a_mg: mg, 1!010101010
  sgn_a_t1s:  t1s,  -3!0000000
  sgn_a_q2s:  q2s,  -3!0000000
- sgn_a_band: band,  1!00101
- sgn_a_pq:   pq,    1!00000000000000000000000000000000
+ sgn_a_band: band, 1!00001
+ sgn_a_pq: pq, 1!00001000000010000000100000001000
  sgn_a_sq:   sq,    1!00010001000100010001000100010001
- sgn_a_ps:   ps,   -6!0000000000000
+ sgn_a_ps: ps, -6!0010001000100
  sgn_a_chn:  chn,   1!0000000
  sgn_a_crun: crun,  1!000000000
  sgn_a_cm:   cm,    1!0
@@ -338,38 +338,38 @@ Index sgn_d
  sgn_d_cm:   cm,    1!0
 
 Index sgn_s
- sgn_s_pass: pass,  1!00
+ sgn_s_pass: pass, 1!01
  sgn_s_vpos: vpos,  1!0
- sgn_s_p0s:  p0s,  -3!0010010
+ sgn_s_p0s: p0s, -3!0101010
  sgn_s_mg:   mg,    1!000
- sgn_s_pq:   pq,    1!00000000000000000000000000000000
- sgn_s_sq:   sq,    1!00000000000000000000000000000000
- sgn_s_ps:   ps,   -6!0000000000000
- sgn_s_chn:  chn,   1!0000000
- sgn_s_crun: crun,  1!000000000
+ sgn_s_pq: pq, 1!00001000000010000000100000001000
+ sgn_s_sq: sq, 1!00000000100000000000000010000000
+ sgn_s_ps: ps, -6!0010001000100
+ sgn_s_chn: chn, 1!1010101
+ sgn_s_crun: crun, 1!000001000
  sgn_s_cm:   cm,    1!0
 
 Index sgn_f
  sgn_f_pass: pass,  1!11
  sgn_f_vpos: vpos,  1!1
- sgn_f_p0s:  p0s,  -3!1011101
- sgn_f_mg:   mg,    1!011
- sgn_f_pq:   pq,    1!00000000000000000000000000000000
- sgn_f_sq:   sq,    1!00010001000100010001000100010001
- sgn_f_ps:   ps,   -6!0000000000000
+ sgn_f_p0s: p0s, -3!1110111
+ sgn_f_mg: mg, 1!101
+ sgn_f_pq: pq, 1!00000000000000001000000000000000
+ sgn_f_sq: sq, 1!00100010001000100010001000100010
+ sgn_f_ps: ps, -6!0000001000000
  sgn_f_chn:  chn,   1!0000000
- sgn_f_crun: crun,  1!000000000
- sgn_f_cm:   cm,    1!0
+ sgn_f_crun: crun, 1!000010000
+ sgn_f_cm: cm, 1!1
 
 Index sgn_m
  sgn_m_pass: pass,  1!11
- sgn_m_vpos: vpos,  1!1111111
- sgn_m_p0s:  p0s,  -3!0000000
- sgn_m_mg:   mg,    1!010
- sgn_m_pq:   pq,    1!00000000000000000000000000000000
- sgn_m_sq:   sq,    1!00010001000100010001000100010001
- sgn_m_ps:   ps,   -6!0000000000000
- sgn_m_chn:  chn,   1!0000000
+ sgn_m_vpos: vpos, 1!0000000
+ sgn_m_p0s: p0s, -3!0001000
+ sgn_m_mg: mg, 1!111
+ sgn_m_pq: pq, 1!00000000100000000000000010000000
+ sgn_m_sq: sq, 1!00000000000000000000000000000000
+ sgn_m_ps: ps, -6!0001000001000
+ sgn_m_chn: chn, 1!1010101
  sgn_m_crun: crun,  1!000000000
  sgn_m_cm:   cm,    1!0
 

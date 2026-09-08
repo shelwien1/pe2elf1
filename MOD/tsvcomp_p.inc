@@ -31,56 +31,65 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_a = 0;
   dig_a = dig_a*8 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1))+(pass>3+(1-1))+(pass>4+(1-1))+(pass>5+(1-1))+(pass>6+(1-1)));
   dig_a = dig_a*16 + TC_dig_a_band[__min(15,__max(0,band-(1-1)))];
-  dig_a = dig_a*4 + ((col>1+(1-1))+(col>5+(1-1))+(col>6+(1-1)));
-  dig_a = dig_a*3 + ((bkq>1+(1-1))+(bkq>3+(1-1)));
+  dig_a = dig_a*5 + ((col>1+(1-1))+(col>4+(1-1))+(col>5+(1-1))+(col>6+(1-1)));
+  dig_a = dig_a*2 + ((bkq>2+(1-1)));
   dig_a = dig_a*6 + ((cls>1+(1-1))+(cls>3+(1-1))+(cls>6+(1-1))+(cls>7+(1-1))+(cls>8+(1-1)));
   dig_a = dig_a*2 + ((blk>0+(1-1)));
+  dig_a = dig_a*2 + ((p0s>1+(-6-1)));
   dig_a = dig_a*2 + ((ax>6+(1-1)));
+  dig_a = dig_a*3 + ((pq>8+(1-1))+(pq>24+(1-1)));
+  dig_a = dig_a*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
 
   dig_b = 0;
-  dig_b = dig_b*3 + ((pass>2+(1-1))+(pass>6+(1-1)));
-  dig_b = dig_b*4 + ((band>0+(1-1))+(band>1+(1-1))+(band>8+(1-1)));
-  dig_b = dig_b*4 + ((col>1+(1-1))+(col>4+(1-1))+(col>6+(1-1)));
-  dig_b = dig_b*2 + ((q2>2+(1-1)));
+  dig_b = dig_b*3 + ((pass>1+(1-1))+(pass>5+(1-1)));
+  dig_b = dig_b*13 + TC_dig_b_band[__min(15,__max(0,band-(1-1)))];
+  dig_b = dig_b*3 + ((col>1+(1-1))+(col>5+(1-1)));
+  dig_b = dig_b*4 + ((q1>0+(1-1))+(q1>2+(1-1))+(q1>4+(1-1)));
   dig_b = dig_b*3 + ((bkq>1+(1-1))+(bkq>2+(1-1)));
-  dig_b = dig_b*2 + ((zrun>2+(1-1)));
+  dig_b = dig_b*2 + ((cls>1+(1-1)));
+  dig_b = dig_b*3 + ((zrun>0+(1-1))+(zrun>2+(1-1)));
   dig_b = dig_b*2 + ((blk>0+(1-1)));
-  dig_b = dig_b*2 + ((p0>0+(1-1)));
+  dig_b = dig_b*2 + ((vpos>0+(1-1)));
+  dig_b = dig_b*4 + ((p0>0+(1-1))+(p0>1+(1-1))+(p0>2+(1-1)));
   dig_b = dig_b*2 + ((pn>0+(1-1)));
   dig_b = dig_b*9 + TC_dig_b_pq[__min(32,__max(0,pq-(1-1)))];
+  dig_b = dig_b*2 + ((chn>0+(1-1)));
 
   dig_c = 0;
-  dig_c = dig_c*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
-  dig_c = dig_c*3 + ((band>1+(1-1))+(band>2+(1-1)));
-  dig_c = dig_c*3 + ((ax>0+(1-1))+(ax>9+(1-1)));
+  dig_c = dig_c*2 + ((pass>0+(1-1)));
+  dig_c = dig_c*3 + ((band>1+(1-1))+(band>3+(1-1)));
+  dig_c = dig_c*4 + ((ax>0+(1-1))+(ax>2+(1-1))+(ax>9+(1-1)));
   dig_c = dig_c*2 + ((q2s>0+(-6-1)));
 
   dig_d = 0;
-  dig_d = dig_d*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
   dig_d = dig_d*2 + ((vpos>0+(1-1)));
   dig_d = dig_d*7 + ((ax>1+(1-1))+(ax>3+(1-1))+(ax>5+(1-1))+(ax>7+(1-1))+(ax>9+(1-1))+(ax>11+(1-1)));
-  dig_d = dig_d*7 + ((q1s>1+(-6-1))+(q1s>3+(-6-1))+(q1s>5+(-6-1))+(q1s>7+(-6-1))+(q1s>9+(-6-1))+(q1s>11+(-6-1)));
-  dig_d = dig_d*4 + ((q2s>1+(-6-1))+(q2s>3+(-6-1))+(q2s>11+(-6-1)));
-  dig_d = dig_d*3 + ((cls>1+(1-1))+(cls>2+(1-1)));
-  dig_d = dig_d*6 + ((p0s>4+(-6-1))+(p0s>5+(-6-1))+(p0s>6+(-6-1))+(p0s>7+(-6-1))+(p0s>8+(-6-1)));
-  dig_d = dig_d*9 + TC_dig_d_pq[__min(32,__max(0,pq-(1-1)))];
+  dig_d = dig_d*9 + TC_dig_d_q1s[__min(13,__max(0,q1s-(-6-1)))];
+  dig_d = dig_d*7 + ((p0s>2+(-6-1))+(p0s>4+(-6-1))+(p0s>5+(-6-1))+(p0s>6+(-6-1))+(p0s>7+(-6-1))+(p0s>8+(-6-1)));
+  dig_d = dig_d*3 + ((pq>8+(1-1))+(pq>24+(1-1)));
+  dig_d = dig_d*4 + ((ps>2+(-6-1))+(ps>6+(-6-1))+(ps>10+(-6-1)));
+  dig_d = dig_d*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
 
   dig_s = 0;
   dig_s = dig_s*2 + ((pass>0+(1-1)));
   dig_s = dig_s*2 + ((band>0+(1-1)));
-  dig_s = dig_s*2 + ((t1>1+(1-1)));
-  dig_s = dig_s*3 + ((bkq>1+(1-1))+(bkq>2+(1-1)));
-  dig_s = dig_s*2 + ((p0>0+(1-1)));
-  dig_s = dig_s*2 + ((pn>1+(1-1)));
+  dig_s = dig_s*3 + ((t1>1+(1-1))+(t1>2+(1-1)));
+  dig_s = dig_s*3 + ((bkq>0+(1-1))+(bkq>2+(1-1)));
+  dig_s = dig_s*2 + ((t1s>0+(-6-1)));
+  dig_s = dig_s*3 + ((p0>0+(1-1))+(p0>2+(1-1)));
+  dig_s = dig_s*2 + ((p0s>1+(-6-1)));
   dig_s = dig_s*8 + ((ax>0+(1-1))+(ax>4+(1-1))+(ax>6+(1-1))+(ax>8+(1-1))+(ax>9+(1-1))+(ax>10+(1-1))+(ax>11+(1-1)));
+  dig_s = dig_s*2 + ((ps>2+(-6-1)));
+  dig_s = dig_s*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
+  dig_s = dig_s*2 + ((cm>0+(1-1)));
 
   dig_f = 0;
   dig_f = dig_f*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
-  dig_f = dig_f*10 + TC_dig_f_cls[__min(9,__max(0,cls-(1-1)))];
-  dig_f = dig_f*5 + ((q1s>1+(-6-1))+(q1s>4+(-6-1))+(q1s>8+(-6-1))+(q1s>11+(-6-1)));
-  dig_f = dig_f*2 + ((p0s>1+(-6-1)));
+  dig_f = dig_f*9 + TC_dig_f_cls[__min(9,__max(0,cls-(1-1)))];
+  dig_f = dig_f*4 + ((q1s>4+(-6-1))+(q1s>8+(-6-1))+(q1s>11+(-6-1)));
   dig_f = dig_f*6 + ((ax>3+(1-1))+(ax>5+(1-1))+(ax>7+(1-1))+(ax>9+(1-1))+(ax>11+(1-1)));
   dig_f = dig_f*4 + ((band>0+(1-1))+(band>2+(1-1))+(band>4+(1-1)));
+  dig_f = dig_f*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
 
   dig_m = 0;
   dig_m = dig_m*2 + ((pass>1+(1-1)));
@@ -90,6 +99,7 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_m = dig_m*2 + ((p0>0+(1-1)));
   dig_m = dig_m*3 + ((pn>0+(1-1))+(pn>2+(1-1)));
   dig_m = dig_m*7 + ((pq>2+(1-1))+(pq>8+(1-1))+(pq>13+(1-1))+(pq>18+(1-1))+(pq>24+(1-1))+(pq>29+(1-1)));
+  dig_m = dig_m*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
 
   dig_t = 0;
   dig_t = dig_t*4 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1)));
@@ -113,13 +123,15 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   (void) ps;   (void) chn;   (void) crun;  (void) cm;
 
   sgn_a = 0;
+  sgn_a = sgn_a*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
   sgn_a = sgn_a*8 + ((vpos>0+(1-1))+(vpos>1+(1-1))+(vpos>2+(1-1))+(vpos>3+(1-1))+(vpos>4+(1-1))+(vpos>5+(1-1))+(vpos>6+(1-1)));
-  sgn_a = sgn_a*5 + ((cls>5+(1-1))+(cls>6+(1-1))+(cls>7+(1-1))+(cls>8+(1-1)));
-  sgn_a = sgn_a*6 + ((p0s>0+(-3-1))+(p0s>2+(-3-1))+(p0s>3+(-3-1))+(p0s>4+(-3-1))+(p0s>5+(-3-1)));
-  sgn_a = sgn_a*8 + ((q1s>0+(-3-1))+(q1s>1+(-3-1))+(q1s>2+(-3-1))+(q1s>3+(-3-1))+(q1s>4+(-3-1))+(q1s>5+(-3-1))+(q1s>6+(-3-1)));
-  sgn_a = sgn_a*10 + TC_sgn_a_mg[__min(9,__max(0,mg-(1-1)))];
-  sgn_a = sgn_a*3 + ((band>2+(1-1))+(band>4+(1-1)));
+  sgn_a = sgn_a*7 + ((cls>0+(1-1))+(cls>2+(1-1))+(cls>3+(1-1))+(cls>5+(1-1))+(cls>6+(1-1))+(cls>8+(1-1)));
+  sgn_a = sgn_a*8 + ((p0s>0+(-3-1))+(p0s>1+(-3-1))+(p0s>2+(-3-1))+(p0s>3+(-3-1))+(p0s>4+(-3-1))+(p0s>5+(-3-1))+(p0s>6+(-3-1)));
+  sgn_a = sgn_a*5 + ((mg>1+(1-1))+(mg>3+(1-1))+(mg>5+(1-1))+(mg>7+(1-1)));
+  sgn_a = sgn_a*2 + ((band>4+(1-1)));
+  sgn_a = sgn_a*5 + ((pq>4+(1-1))+(pq>12+(1-1))+(pq>20+(1-1))+(pq>28+(1-1)));
   sgn_a = sgn_a*9 + TC_sgn_a_sq[__min(32,__max(0,sq-(1-1)))];
+  sgn_a = sgn_a*4 + ((ps>2+(-6-1))+(ps>6+(-6-1))+(ps>10+(-6-1)));
 
   sgn_b = 0;
   sgn_b = sgn_b*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
@@ -143,20 +155,32 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   sgn_d = sgn_d*2 + ((q2s>3+(-3-1)));
 
   sgn_s = 0;
-  sgn_s = sgn_s*3 + ((p0s>2+(-3-1))+(p0s>5+(-3-1)));
+  sgn_s = sgn_s*2 + ((pass>1+(1-1)));
+  sgn_s = sgn_s*4 + ((p0s>1+(-3-1))+(p0s>3+(-3-1))+(p0s>5+(-3-1)));
+  sgn_s = sgn_s*5 + ((pq>4+(1-1))+(pq>12+(1-1))+(pq>20+(1-1))+(pq>28+(1-1)));
+  sgn_s = sgn_s*3 + ((sq>8+(1-1))+(sq>24+(1-1)));
+  sgn_s = sgn_s*4 + ((ps>2+(-6-1))+(ps>6+(-6-1))+(ps>10+(-6-1)));
+  sgn_s = sgn_s*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
+  sgn_s = sgn_s*2 + ((crun>5+(1-1)));
 
   sgn_f = 0;
   sgn_f = sgn_f*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
   sgn_f = sgn_f*2 + ((vpos>0+(1-1)));
-  sgn_f = sgn_f*6 + ((p0s>0+(-3-1))+(p0s>2+(-3-1))+(p0s>3+(-3-1))+(p0s>4+(-3-1))+(p0s>6+(-3-1)));
-  sgn_f = sgn_f*3 + ((mg>1+(1-1))+(mg>2+(1-1)));
+  sgn_f = sgn_f*7 + ((p0s>0+(-3-1))+(p0s>1+(-3-1))+(p0s>2+(-3-1))+(p0s>4+(-3-1))+(p0s>5+(-3-1))+(p0s>6+(-3-1)));
+  sgn_f = sgn_f*3 + ((mg>0+(1-1))+(mg>2+(1-1)));
+  sgn_f = sgn_f*2 + ((pq>16+(1-1)));
   sgn_f = sgn_f*9 + TC_sgn_f_sq[__min(32,__max(0,sq-(1-1)))];
+  sgn_f = sgn_f*2 + ((ps>6+(-6-1)));
+  sgn_f = sgn_f*2 + ((crun>4+(1-1)));
+  sgn_f = sgn_f*2 + ((cm>0+(1-1)));
 
   sgn_m = 0;
   sgn_m = sgn_m*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
-  sgn_m = sgn_m*8 + ((vpos>0+(1-1))+(vpos>1+(1-1))+(vpos>2+(1-1))+(vpos>3+(1-1))+(vpos>4+(1-1))+(vpos>5+(1-1))+(vpos>6+(1-1)));
-  sgn_m = sgn_m*2 + ((mg>1+(1-1)));
-  sgn_m = sgn_m*9 + TC_sgn_m_sq[__min(32,__max(0,sq-(1-1)))];
+  sgn_m = sgn_m*2 + ((p0s>3+(-3-1)));
+  sgn_m = sgn_m*4 + ((mg>0+(1-1))+(mg>1+(1-1))+(mg>2+(1-1)));
+  sgn_m = sgn_m*3 + ((pq>8+(1-1))+(pq>24+(1-1)));
+  sgn_m = sgn_m*3 + ((ps>3+(-6-1))+(ps>9+(-6-1)));
+  sgn_m = sgn_m*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
 
   sgn_t = 0;
   X.a = sgn_a;  X.b = sgn_b;  X.c = sgn_c;  X.d = sgn_d;  X.s = sgn_s;  X.f = sgn_f;  X.m = sgn_m;  X.t = sgn_t;

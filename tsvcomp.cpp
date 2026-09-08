@@ -240,7 +240,15 @@ static void * tc_alloc(sz n) {
   tc_mem += n;
   return p;
 }
-static void cm_fill(cm_cnt * p, sz n) { sz i;  for (i = 0; i < n; i++) p[i].init(); }
+/*  Every model table's unlearned state is now all-bits-zero, so the shipping
+    build -- whose tables are one static object -- needs no filling at all and
+    faults in only the pages a stream reaches.  The tuning build allocates
+    with new[], which does not zero, so there it has to be said out loud.  */
+#if USE_NEW
+  #define TC_WIPE(p, n) memset((p), 0, (n))
+#else
+  #define TC_WIPE(p, n) ((void) 0)
+#endif
 
 #include "tc_prior.inc"    /*  the codebook's own model of its entries  */
 
@@ -402,7 +410,7 @@ static INLINE int tc_bit(int p, int bit) {
     what is here is the wiring and the coding.  */
 struct tc_fam {
   cm_cnt * A, * B, * C, * D, * G, * T;
-  u16 * S, * S2;
+  i16 * S, * S2;
   i32 * W;
   cm_apm ap, ap2;
   cm_mix<7> mx;
@@ -418,18 +426,30 @@ struct tc_fam {
 
   void wire(cm_cnt * a, int va, cm_cnt * b, int vb, cm_cnt * c, int vc,
             cm_cnt * d, int vd, cm_cnt * t, int vt,
-            u16 * s, u8 * sc, int vs, u16 * s2, u8 * sc2, int vf,
+            i16 * s, u8 * sc, int vs, i16 * s2, u8 * sc2, int vf,
             i32 * w, int vm, cm_cnt * g, int vg, i32 * wm,
             u8 * wc, u8 * wmc,
             int ra, int rb, int rc_, int rd, int rs, int lrate,
             int mwt, int bwt, int mbt) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
-    cm_fill(A, (sz) va * TC_NODE);
-    cm_fill(B, (sz) vb * TC_NODE);
-    cm_fill(C, (sz) vc * TC_NODE);
-    cm_fill(D, (sz) vd * TC_NODE);
-    cm_fill(T, (sz) vt * TC_MNODE);
-    if (G) cm_fill(G, (sz) vg);
+    /*  The shipping build's tables come zeroed from the loader, so TC_WIPE
+        expands to nothing there and the sizes go unread.  */
+    (void) va;  (void) vb;  (void) vc;  (void) vd;  (void) vt;  (void) vg;
+    (void) sc;  (void) sc2;  (void) wc;  (void) wmc;
+    TC_WIPE(A, (sz) va * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(B, (sz) vb * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(C, (sz) vc * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(D, (sz) vd * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(T, (sz) vt * TC_MNODE * sizeof(cm_cnt));
+    if (G) TC_WIPE(G, (sz) vg * sizeof(cm_cnt));
+    TC_WIPE(s, (sz) vs * TC_NODE * 33 * sizeof(i16));
+    TC_WIPE(sc, (sz) vs * TC_NODE * 33);
+    TC_WIPE(s2, (sz) vf * TC_NODE * 33 * sizeof(i16));
+    TC_WIPE(sc2, (sz) vf * TC_NODE * 33);
+    TC_WIPE(w, (sz) vm * TC_NODE * 7 * sizeof(i32));
+    TC_WIPE(wc, (sz) vm * TC_NODE);
+    TC_WIPE(wm, (sz) vt * TC_MNODE * 3 * sizeof(i32));
+    TC_WIPE(wmc, (sz) vt * TC_MNODE);
     ap.init(S, sc, (u32) vs * TC_NODE);
     ap2.init(S2, sc2, (u32) vf * TC_NODE);
     mx.init(W, wc, (u32) vm * TC_NODE);

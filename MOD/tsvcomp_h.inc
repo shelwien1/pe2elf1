@@ -17,12 +17,13 @@
 
 static const byte TC_dig_a_band[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
+static const byte TC_dig_b_band[15+1]={ 0,1,2,2,3,4,5,6,6,7,8,9,10,10,11,12 };
 static const byte TC_dig_b_pq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
 
 
-static const byte TC_dig_d_pq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
+static const byte TC_dig_d_q1s[13+1]={ 0,1,1,2,2,3,4,4,5,6,6,7,7,8 };
 
-static const byte TC_dig_f_cls[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
+static const byte TC_dig_f_cls[9+1]={ 0,1,1,2,3,4,5,6,7,8 };
 
 static const byte TC_dig_m_cls[15+1]={ 0,1,1,2,2,3,4,5,5,6,6,7,7,8,8,9 };
 
@@ -52,16 +53,14 @@ static const byte TC_flr_t_col[48+1]={ 0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,1
 
 
 
-static const byte TC_sgn_a_mg[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 static const byte TC_sgn_a_sq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
 
 static const byte TC_sgn_b_cls[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
 
 
-static const byte TC_sgn_f_sq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
+static const byte TC_sgn_f_sq[32+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8 };
 
-static const byte TC_sgn_m_sq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
 
 
 
@@ -147,13 +146,13 @@ static const int TC_cls_f_Volume = 1* 1* 1* 1* 1* 1* 1; // 1
 static const int TC_cls_m_Volume = 1* 2* 3* 2* 1* 1* 1; // 12
 static const int TC_cls_s_Volume = 1* 1* 1* 1* 1* 1* 1; // 1
 static const int TC_cls_t_Volume = 1* 3* 2* 3* 1* 1* 1; // 18
-static const int TC_dig_a_Volume = 1* 1* 8* 16* 4* 1* 1* 1* 3* 6* 1* 2* 1* 1* 1* 1* 1* 1* 1* 1* 1* 1* 2* 1* 1* 1* 1* 1; // 36864
-static const int TC_dig_b_Volume = 1* 1* 3* 4* 4* 1* 2* 1* 3* 1* 2* 2* 1* 1* 1* 1* 1* 1* 1* 2* 1* 2* 1* 9* 1* 1* 1* 1; // 41472
-static const int TC_dig_c_Volume = 1* 3* 1* 3* 1* 1* 1* 1* 3* 1* 2* 1* 1* 1* 1* 1* 1* 1; // 54
-static const int TC_dig_d_Volume = 1* 3* 2* 1* 1* 1* 1* 1* 7* 7* 4* 3* 6* 9* 1* 1* 1* 1; // 190512
-static const int TC_dig_f_Volume = 1* 3* 1* 10* 5* 2* 1* 6* 4* 1* 1* 1* 1* 1; // 7200
-static const int TC_dig_m_Volume = 1* 2* 1* 1* 1* 2* 10* 8* 1* 1* 1* 1* 1* 1* 2* 1* 3* 1* 7* 1* 1* 1* 1; // 13440
-static const int TC_dig_s_Volume = 1* 2* 2* 1* 2* 3* 1* 1* 1* 1* 1* 1* 1* 1* 2* 1* 2* 8* 1* 1* 1* 1* 1; // 768
+static const int TC_dig_a_Volume = 1* 1* 8* 16* 5* 1* 1* 1* 2* 6* 1* 2* 1* 1* 1* 1* 1* 1* 1* 1* 2* 1* 2* 3* 1* 5* 1* 1; // 921600
+static const int TC_dig_b_Volume = 1* 1* 3* 13* 3* 4* 1* 1* 3* 2* 3* 2* 2* 1* 1* 1* 1* 1* 1* 4* 1* 2* 1* 9* 1* 2* 1* 1; // 4852224
+static const int TC_dig_c_Volume = 1* 2* 1* 3* 1* 1* 1* 1* 4* 1* 2* 1* 1* 1* 1* 1* 1* 1; // 48
+static const int TC_dig_d_Volume = 1* 1* 2* 1* 1* 1* 1* 1* 7* 9* 1* 1* 7* 3* 4* 5* 1* 1; // 52920
+static const int TC_dig_f_Volume = 1* 3* 1* 9* 4* 1* 1* 6* 4* 1* 1* 5* 1* 1; // 12960
+static const int TC_dig_m_Volume = 1* 2* 1* 1* 1* 2* 10* 8* 1* 1* 1* 1* 1* 1* 2* 1* 3* 1* 7* 1* 5* 1* 1; // 67200
+static const int TC_dig_s_Volume = 1* 2* 2* 1* 3* 3* 1* 1* 1* 1* 2* 1* 1* 1* 3* 2* 1* 8* 1* 2* 5* 1* 2; // 69120
 static const int TC_dig_t_Volume = 1* 4* 1* 1* 1* 1* 6* 1* 1* 1* 1* 1* 1* 1* 2* 1* 1* 1* 1* 1* 1* 1* 1; // 48
 static const int TC_flr_a_Volume = 1* 2* 34* 1* 2* 1* 1* 1* 1* 1* 1* 1* 3* 1* 1* 1* 1; // 408
 static const int TC_flr_b_Volume = 1* 1* 2* 13* 2* 1* 2* 1* 1* 1* 1* 1* 1* 9* 1* 1* 12; // 11232
@@ -171,13 +170,13 @@ static const int TC_hdr_f_Volume = 1* 64; // 64
 static const int TC_hdr_m_Volume = 1* 64; // 64
 static const int TC_hdr_s_Volume = 1* 64; // 64
 static const int TC_hdr_t_Volume = 1* 64* (1<<6); // 4096
-static const int TC_sgn_a_Volume = 1* 1* 8* 5* 6* 8* 10* 1* 1* 3* 1* 9* 1* 1* 1* 1; // 518400
+static const int TC_sgn_a_Volume = 1* 3* 8* 7* 8* 1* 5* 1* 1* 2* 5* 9* 4* 1* 1* 1; // 2419200
 static const int TC_sgn_b_Volume = 1* 3* 2* 16* 6* 3* 1* 8* 3* 3* 1* 1* 1* 1* 1* 1; // 124416
 static const int TC_sgn_c_Volume = 1* 2* 1* 3* 2* 1* 2* 1* 1* 1* 1* 1* 1* 1; // 24
 static const int TC_sgn_d_Volume = 1* 1* 1* 4* 2* 1* 2* 1* 1* 1* 1* 1* 1* 1; // 16
-static const int TC_sgn_f_Volume = 1* 3* 2* 6* 3* 1* 9* 1* 1* 1* 1; // 972
-static const int TC_sgn_m_Volume = 1* 3* 8* 1* 2* 1* 9* 1* 1* 1* 1; // 432
-static const int TC_sgn_s_Volume = 1* 1* 1* 3* 1* 1* 1* 1* 1* 1* 1; // 3
+static const int TC_sgn_f_Volume = 1* 3* 2* 7* 3* 2* 9* 2* 1* 2* 2; // 18144
+static const int TC_sgn_m_Volume = 1* 3* 1* 2* 4* 3* 1* 3* 5* 1* 1; // 1080
+static const int TC_sgn_s_Volume = 1* 2* 1* 4* 1* 5* 3* 4* 5* 2* 1; // 4800
 static const int TC_sgn_t_Volume = 1* 1* 1* 1* 1* 1* 1* 1; // 1
 
 struct TC_T { 
@@ -190,9 +189,9 @@ struct TC_T {
   cm_cnt TC_dig_C[TC_dig_c_Volume * TC_NODE];
   cm_cnt TC_dig_D[TC_dig_d_Volume * TC_NODE];
   cm_cnt TC_dig_T[TC_dig_t_Volume * TC_MNODE];
-  u16 TC_dig_S[TC_dig_s_Volume * TC_NODE * 33];
+  i16 TC_dig_S[TC_dig_s_Volume * TC_NODE * 33];
   u8 TC_dig_SC[TC_dig_s_Volume * TC_NODE * 33];
-  u16 TC_dig_F[TC_dig_f_Volume * TC_NODE * 33];
+  i16 TC_dig_F[TC_dig_f_Volume * TC_NODE * 33];
   u8 TC_dig_FC[TC_dig_f_Volume * TC_NODE * 33];
   i32 TC_dig_W[TC_dig_m_Volume * TC_NODE * 7];
   u8 TC_dig_WC[TC_dig_m_Volume * TC_NODE];
@@ -203,9 +202,9 @@ struct TC_T {
   cm_cnt TC_sgn_C[TC_sgn_c_Volume * TC_NODE];
   cm_cnt TC_sgn_D[TC_sgn_d_Volume * TC_NODE];
   cm_cnt TC_sgn_T[TC_sgn_t_Volume * TC_MNODE];
-  u16 TC_sgn_S[TC_sgn_s_Volume * TC_NODE * 33];
+  i16 TC_sgn_S[TC_sgn_s_Volume * TC_NODE * 33];
   u8 TC_sgn_SC[TC_sgn_s_Volume * TC_NODE * 33];
-  u16 TC_sgn_F[TC_sgn_f_Volume * TC_NODE * 33];
+  i16 TC_sgn_F[TC_sgn_f_Volume * TC_NODE * 33];
   u8 TC_sgn_FC[TC_sgn_f_Volume * TC_NODE * 33];
   i32 TC_sgn_W[TC_sgn_m_Volume * TC_NODE * 7];
   u8 TC_sgn_WC[TC_sgn_m_Volume * TC_NODE];
@@ -216,9 +215,9 @@ struct TC_T {
   cm_cnt TC_flr_C[TC_flr_c_Volume * TC_NODE];
   cm_cnt TC_flr_D[TC_flr_d_Volume * TC_NODE];
   cm_cnt TC_flr_T[TC_flr_t_Volume * TC_MNODE];
-  u16 TC_flr_S[TC_flr_s_Volume * TC_NODE * 33];
+  i16 TC_flr_S[TC_flr_s_Volume * TC_NODE * 33];
   u8 TC_flr_SC[TC_flr_s_Volume * TC_NODE * 33];
-  u16 TC_flr_F[TC_flr_f_Volume * TC_NODE * 33];
+  i16 TC_flr_F[TC_flr_f_Volume * TC_NODE * 33];
   u8 TC_flr_FC[TC_flr_f_Volume * TC_NODE * 33];
   i32 TC_flr_W[TC_flr_m_Volume * TC_NODE * 7];
   u8 TC_flr_WC[TC_flr_m_Volume * TC_NODE];
@@ -230,9 +229,9 @@ struct TC_T {
   cm_cnt TC_cls_C[TC_cls_c_Volume * TC_NODE];
   cm_cnt TC_cls_D[TC_cls_d_Volume * TC_NODE];
   cm_cnt TC_cls_T[TC_cls_t_Volume * TC_MNODE];
-  u16 TC_cls_S[TC_cls_s_Volume * TC_NODE * 33];
+  i16 TC_cls_S[TC_cls_s_Volume * TC_NODE * 33];
   u8 TC_cls_SC[TC_cls_s_Volume * TC_NODE * 33];
-  u16 TC_cls_F[TC_cls_f_Volume * TC_NODE * 33];
+  i16 TC_cls_F[TC_cls_f_Volume * TC_NODE * 33];
   u8 TC_cls_FC[TC_cls_f_Volume * TC_NODE * 33];
   i32 TC_cls_W[TC_cls_m_Volume * TC_NODE * 7];
   u8 TC_cls_WC[TC_cls_m_Volume * TC_NODE];
@@ -244,9 +243,9 @@ struct TC_T {
   cm_cnt TC_aux_C[TC_aux_c_Volume * TC_NODE];
   cm_cnt TC_aux_D[TC_aux_d_Volume * TC_NODE];
   cm_cnt TC_aux_T[TC_aux_t_Volume * TC_MNODE];
-  u16 TC_aux_S[TC_aux_s_Volume * TC_NODE * 33];
+  i16 TC_aux_S[TC_aux_s_Volume * TC_NODE * 33];
   u8 TC_aux_SC[TC_aux_s_Volume * TC_NODE * 33];
-  u16 TC_aux_F[TC_aux_f_Volume * TC_NODE * 33];
+  i16 TC_aux_F[TC_aux_f_Volume * TC_NODE * 33];
   u8 TC_aux_FC[TC_aux_f_Volume * TC_NODE * 33];
   i32 TC_aux_W[TC_aux_m_Volume * TC_NODE * 7];
   u8 TC_aux_WC[TC_aux_m_Volume * TC_NODE];
@@ -258,9 +257,9 @@ struct TC_T {
   cm_cnt TC_hdr_C[TC_hdr_c_Volume * TC_NODE];
   cm_cnt TC_hdr_D[TC_hdr_d_Volume * TC_NODE];
   cm_cnt TC_hdr_T[TC_hdr_t_Volume * TC_MNODE];
-  u16 TC_hdr_S[TC_hdr_s_Volume * TC_NODE * 33];
+  i16 TC_hdr_S[TC_hdr_s_Volume * TC_NODE * 33];
   u8 TC_hdr_SC[TC_hdr_s_Volume * TC_NODE * 33];
-  u16 TC_hdr_F[TC_hdr_f_Volume * TC_NODE * 33];
+  i16 TC_hdr_F[TC_hdr_f_Volume * TC_NODE * 33];
   u8 TC_hdr_FC[TC_hdr_f_Volume * TC_NODE * 33];
   i32 TC_hdr_W[TC_hdr_m_Volume * TC_NODE * 7];
   u8 TC_hdr_WC[TC_hdr_m_Volume * TC_NODE];
@@ -276,9 +275,9 @@ struct TC_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_c_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_d_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_dig_s_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_dig_s_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_s_Volume * TC_NODE * 33)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_dig_f_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_dig_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_m_Volume * TC_NODE * 7)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_m_Volume * TC_NODE)
@@ -289,9 +288,9 @@ struct TC_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_sgn_c_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_sgn_d_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_sgn_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_sgn_s_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_sgn_s_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_sgn_s_Volume * TC_NODE * 33)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_sgn_f_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_sgn_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_sgn_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_sgn_m_Volume * TC_NODE * 7)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_sgn_m_Volume * TC_NODE)
@@ -302,9 +301,9 @@ struct TC_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_c_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_d_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_flr_s_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_flr_s_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_s_Volume * TC_NODE * 33)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_flr_f_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_flr_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_m_Volume * TC_NODE * 7)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_m_Volume * TC_NODE)
@@ -316,9 +315,9 @@ struct TC_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_cls_c_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_cls_d_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_cls_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_cls_s_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_cls_s_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_s_Volume * TC_NODE * 33)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_cls_f_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_cls_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_cls_m_Volume * TC_NODE * 7)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_m_Volume * TC_NODE)
@@ -330,9 +329,9 @@ struct TC_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_c_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_d_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_aux_s_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_aux_s_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_s_Volume * TC_NODE * 33)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_aux_f_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_aux_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_aux_m_Volume * TC_NODE * 7)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_m_Volume * TC_NODE)
@@ -344,9 +343,9 @@ struct TC_T {
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_c_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_d_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_hdr_s_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_hdr_s_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_s_Volume * TC_NODE * 33)
-                              + (unsigned long long)sizeof(u16) * (unsigned long long)(TC_hdr_f_Volume * TC_NODE * 33)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_hdr_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_f_Volume * TC_NODE * 33)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_m_Volume * TC_NODE * 7)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_m_Volume * TC_NODE)

@@ -28,6 +28,7 @@ static u16 cm_mrec[CM_AMAX + 2];          /*  65536 / (n + 1), for the mixer  */
 
 static i16 cm_st[CM_PONE];                /*  stretch: p -> log-odds  */
 static u16 cm_sq[2 * CM_STMAX + 1];       /*  squash: log-odds -> p  */
+static u16 cm_ident[33];                  /*  an APM's curve before it learns  */
 
 static void cm_tables(void) {
   int i;
@@ -40,6 +41,11 @@ static void cm_tables(void) {
     if (p < 1) p = 1;
     if (p > CM_PONE - 1) p = CM_PONE - 1;
     cm_sq[i + CM_STMAX] = (u16) p;
+  }
+  for (i = 0; i < 33; i++) {                /*  cm_squash is declared below  */
+    int x = (i - 16) * 128;
+    cm_ident[i] = cm_sq[(x <= -CM_STMAX ? -CM_STMAX
+                       : x >= CM_STMAX ? CM_STMAX : x) + CM_STMAX];
   }
   /*  the inverse, by walking the squash curve once  */
   { int j = 0;
@@ -70,9 +76,16 @@ static INLINE int cm_stretch(int p) { return cm_st[p]; }
     it.  Four extra bits move the freeze out past any limit worth setting.  */
 struct cm_cnt {
   u16 p, t;
-  void init() { p = (u16) (CM_CONE / 2);  t = 0; }
+  /*  All-bits-zero is "never asked", and stands for an even chance -- which
+      is what lets the tables go uninitialised.  In the shipping build they
+      are one static object, so their pages arrive zeroed from the operating
+      system and only the ones a stream reaches are ever faulted in; filling
+      a hundred million counters was five times the work of coding a 100 kB
+      file.  `t` is the flag rather than `p`, because a counter may legitimately
+      settle at p = 0 and must not then be read as fresh: t is zero only
+      before the first update, since `lim` is clamped at 1 or more.  */
   INLINE int P() const {
-    int v = p >> (CM_CBITS - CM_PBITS);
+    int v = t ? p >> (CM_CBITS - CM_PBITS) : CM_PHALF;
     return v < 1 ? 1 : v > CM_PONE - 1 ? CM_PONE - 1 : v;
   }
   /*  `mw` bounds the update: the counter runs towards mw and CONE-1-mw
@@ -83,8 +96,9 @@ struct cm_cnt {
       family's contexts are diluted, so it is a parameter and not a constant.  */
   INLINE void upd(int bit, int lim, int mw) {
     int target = bit ? mw : CM_CONE - 1 - mw;
+    int cur = t ? (int) p : CM_CONE / 2;
     if (t < lim) t++;
-    p = (u16) ((int) p + (((target - (int) p) * cm_rec[t]) >> CM_CBITS));
+    p = (u16) (cur + (((target - cur) * cm_rec[t]) >> CM_CBITS));
   }
 };
 
@@ -102,36 +116,37 @@ struct cm_cnt {
     from there on at exactly the rate the .idx asked for.  That is what the
     counters have always done; the APM was the one part still on a constant.  */
 struct cm_apm {
-  u16 * t;
+  /*  What is stored is the bucket's distance from the curve it starts on,
+      not the curve itself, so that an untouched table is an unlearned APM
+      and needs no filling.  cm_ident is 33 entries and stays in cache.  */
+  i16 * t;
   u8  * c;
   u32 n;
-  int idx;
-  void init(u16 * tab, u8 * cnt, u32 nctx) {
-    u32 i, j;
-    t = tab;  c = cnt;  n = nctx;  idx = 0;
-    for (i = 0; i < nctx; i++)
-      for (j = 0; j < 33; j++) {
-        t[i * 33 + j] = (u16) cm_squash(((int) j - 16) * 128);
-        c[i * 33 + j] = 0;
-      }
+  int idx, bkt;
+  void init(i16 * tab, u8 * cnt, u32 nctx) {
+    t = tab;  c = cnt;  n = nctx;  idx = 0;  bkt = 0;
   }
   INLINE int pp(int pr, u32 ctx) {
     int s = cm_stretch(pr) + CM_STMAX;    /*  [0, 4094]  */
     int w = s & 127;
-    idx = (int) (ctx * 33) + (s >> 7);
-    return (t[idx] * (128 - w) + t[idx + 1] * w) >> 7;
+    bkt = s >> 7;
+    idx = (int) (ctx * 33) + bkt;
+    return (((int) cm_ident[bkt] + t[idx]) * (128 - w)
+          + ((int) cm_ident[bkt + 1] + t[idx + 1]) * w) >> 7;
   }
-  INLINE void upd1(int i, int g, int lim) {
+  INLINE void upd1(int i, int b, int g, int lim) {
     int k = c[i];
+    int v = (int) cm_ident[b] + t[i];
     if (k < lim) c[i] = (u8) (k + 1);
-    t[i] = (u16) ((int) t[i] + (((g - (int) t[i]) * cm_arec[k]) >> 16));
+    v += ((g - v) * cm_arec[k]) >> 16;
+    t[i] = (i16) (v - (int) cm_ident[b]);
   }
   INLINE void upd(int bit, int rate) {
     int g = bit ? 0 : CM_PONE;
     int lim = rate >= 8 ? CM_AMAX : (1 << rate) - 2;
     if (lim < 1) lim = 1;
-    upd1(idx, g, lim);
-    upd1(idx + 1, g, lim);
+    upd1(idx, bkt, g, lim);
+    upd1(idx + 1, bkt + 1, g, lim);
   }
 };
 
@@ -144,11 +159,12 @@ struct cm_mix {
   u8 * c;                                 /*  how often a row has been asked  */
   int x[N], pr, row, ctxn;
   int nx;
+  /*  Stored as the distance from the mean the weights start at, for the same
+      reason the APM stores a distance from its curve.  */
+  enum { W0 = (1 << 16) / N };
   void init(i32 * wt, u8 * cnt, u32 nctx) {
-    u32 i;
+    (void) nctx;
     w = wt;  c = cnt;
-    for (i = 0; i < nctx * N; i++) w[i] = (1 << 16) / N;  /*  their mean  */
-    for (i = 0; i < nctx; i++) c[i] = 0;
     nx = 0;  row = 0;  ctxn = 0;  pr = CM_PHALF;
   }
   INLINE void add(int st) { x[nx++] = st; }
@@ -156,7 +172,7 @@ struct cm_mix {
     i64 s = 0;
     int i;
     ctxn = (int) ctx;  row = (int) ctx * N;
-    for (i = 0; i < nx; i++) s += (i64) w[row + i] * x[i];
+    for (i = 0; i < nx; i++) s += (i64) (w[row + i] + W0) * x[i];
     { int d = (int) (s >> 16);
       if (d < -CM_STMAX) d = -CM_STMAX;
       if (d > CM_STMAX) d = CM_STMAX;
