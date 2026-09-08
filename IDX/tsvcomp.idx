@@ -48,12 +48,12 @@ Const 0
 Index dig_a
  dig_a_rno:  rno,   1!0
  dig_a_pass: pass,  1!1111111
- dig_a_band: band,  1!100110010000000
- dig_a_col:  col,   1!1000010
+ dig_a_band: band, 1!111111111111111
+ dig_a_col: col, 1!0100010
  dig_a_q1:   q1,    1!00000
  dig_a_q2:   q2,    1!0000
  dig_a_t1:   t1,    1!000
- dig_a_bkq:  bkq,   1!0011
+ dig_a_bkq: bkq, 1!0101
  dig_a_cls:  cls,   1!010100111000000
  dig_a_zrun: zrun,  1!0000
  dig_a_blk:  blk,   1!1
@@ -67,7 +67,7 @@ Index dig_a
  dig_a_p0:   p0,   1!000
  dig_a_p0s:  p0s,  -6!0000000000000
  dig_a_pn:   pn,   1!000
- dig_a_ax:   ax,   1!000100000000
+ dig_a_ax: ax, 1!000000100000
  dig_a_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_b
@@ -111,58 +111,58 @@ Index dig_c
  dig_c_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_d
- dig_d_pass: pass,  1!00
- dig_d_vpos: vpos,  1!0
+ dig_d_pass: pass, 1!11
+ dig_d_vpos: vpos, 1!1
  dig_d_band: band,  1!00000
  dig_d_t1s:  t1s,  -6!0000000000000
  dig_d_t2:   t2,   1!000
  dig_d_n1:   n1,   1!000
  dig_d_w1:   w1,   1!000
- dig_d_ax:   ax,   1!010001010000
- dig_d_q1s:  q1s,  -6!0101010010010
+ dig_d_ax: ax, 1!010101010101
+ dig_d_q1s: q1s, -6!0101010101010
  dig_d_q2s:  q2s,  -6!0101000000010
  dig_d_cls:  cls,   1!011
  dig_d_p0s:  p0s,  -6!0000111110000
  dig_d_pq:   pq,    1!00010001000100010001000100010001
 
 Index dig_s
- dig_s_pass: pass,  1!00
- dig_s_band: band,  1!111
- dig_s_q1:   q1,    1!001
+ dig_s_pass: pass, 1!10
+ dig_s_band: band, 1!000
+ dig_s_q1: q1, 1!000
  dig_s_t1:   t1,    1!010
  dig_s_bkq:  bkq,   1!011
  dig_s_cls:  cls,   1!000
  dig_s_vpos: vpos,  1!0
- dig_s_q1s:  q1s,  -6!0100000000000
- dig_s_q2s:  q2s,  -6!0100000000001
- dig_s_t1s:  t1s,  -6!0000010000000
+ dig_s_q1s: q1s, -6!0000000000000
+ dig_s_q2s: q2s, -6!0000000000000
+ dig_s_t1s: t1s, -6!0000000000000
  dig_s_t2:   t2,   1!000
  dig_s_n1:   n1,   1!000
- dig_s_w1:   w1,   1!000
- dig_s_p0:   p0,   1!111
- dig_s_p0s:  p0s,  -6!0010000000100
- dig_s_pn:   pn,   1!000
- dig_s_ax:   ax,   1!010010101111
- dig_s_pq:   pq,    1!00000000000000000000000000000000
+ dig_s_w1: w1, 1!010
+ dig_s_p0: p0, 1!101
+ dig_s_p0s: p0s, -6!0110000000100
+ dig_s_pn: pn, 1!010
+ dig_s_ax: ax, 1!110010101111
+ dig_s_pq: pq, 1!00000100000000001000000000100000
 
 Index dig_f
- dig_f_pass: pass,  1!10
- dig_f_vpos: vpos,  1!0
- dig_f_cls:  cls,   1!100101110
- dig_f_q1s:  q1s,  -6!1000000000000
- dig_f_p0s:  p0s,  -6!0000001100010
- dig_f_t1s:  t1s,  -6!0000000000000
- dig_f_ax:   ax,   1!000001100100
- dig_f_band: band,  1!00010
- dig_f_pq:   pq,    1!00000000000000000000000000000000
+ dig_f_pass: pass, 1!11
+ dig_f_vpos: vpos, 1!1
+ dig_f_cls: cls, 1!111111111
+ dig_f_q1s: q1s, -6!0001000001000
+ dig_f_p0s: p0s, -6!0000000000000
+ dig_f_t1s: t1s, -6!1000000000000
+ dig_f_ax: ax, 1!010101010101
+ dig_f_band: band, 1!01010
+ dig_f_pq: pq, 1!00000100000000001000000000100000
 
 Index dig_m
  dig_m_pass: pass,  1!111
  dig_m_band: band,  1!000
- dig_m_q1:   q1,    1!000
+ dig_m_q1: q1, 1!010
  dig_m_t1:   t1,    1!0
  dig_m_bkq:  bkq,   1!001
- dig_m_cls:  cls,   1!111111111111111
+ dig_m_cls: cls, 1!101010101010101
  dig_m_vpos: vpos,  1!1111111
  dig_m_q1s:  q1s,  -6!0000000000000
  dig_m_q2s:  q2s,  -6!0000000000000
@@ -170,11 +170,11 @@ Index dig_m
  dig_m_t2:   t2,   1!000
  dig_m_n1:   n1,   1!000
  dig_m_w1:   w1,   1!000
- dig_m_p0:   p0,   1!000
+ dig_m_p0: p0, 1!101
  dig_m_p0s:  p0s,  -6!0000000000000
  dig_m_pn:   pn,   1!000
  dig_m_ax:   ax,   1!000000000000
- dig_m_pq:   pq,    1!00010001000100010001000100010001
+ dig_m_pq: pq, 1!00000000000000000000000000000000
 
 #  The mantissa of a digit that escaped the ladder: its own plane, on its own
 #  index and its own tables, as mp3c's Smant is a submodel of its own.

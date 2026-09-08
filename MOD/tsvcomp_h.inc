@@ -15,16 +15,18 @@
 
 
 
+static const byte TC_dig_a_band[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
 static const byte TC_dig_b_pq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
 
 
 static const byte TC_dig_d_pq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
 
+static const byte TC_dig_f_cls[9+1]={ 0,1,2,3,4,5,6,7,8,9 };
 
-static const byte TC_dig_m_cls[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
-static const byte TC_dig_m_pq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
+static const byte TC_dig_m_cls[15+1]={ 0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8 };
 
+static const byte TC_dig_s_ax[12+1]={ 0,1,2,2,2,3,3,4,4,5,6,7,8 };
 
 
 static const byte TC_flr_a_col[48+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,28,28,28,28,28,29,29,29,30,31,32,32,32,32,32,32,32,32,32,33 };
@@ -126,13 +128,13 @@ static const int TC_cls_f_Volume = 1* 1* 1* 1* 1* 1* 1; // 1
 static const int TC_cls_m_Volume = 1* 2* 3* 2* 1* 1* 1; // 12
 static const int TC_cls_s_Volume = 1* 1* 1* 1* 1* 1* 1; // 1
 static const int TC_cls_t_Volume = 1* 3* 2* 3* 1* 1* 1; // 18
-static const int TC_dig_a_Volume = 1* 1* 8* 5* 3* 1* 1* 1* 3* 6* 1* 2* 1* 1* 1* 1* 1* 1* 1* 1* 1* 1* 2* 1; // 8640
+static const int TC_dig_a_Volume = 1* 1* 8* 16* 3* 1* 1* 1* 3* 6* 1* 2* 1* 1* 1* 1* 1* 1* 1* 1* 1* 1* 2* 1; // 27648
 static const int TC_dig_b_Volume = 1* 1* 3* 4* 4* 1* 2* 1* 3* 1* 2* 2* 1* 1* 1* 1* 1* 1* 1* 2* 1* 2* 1* 9; // 41472
 static const int TC_dig_c_Volume = 1* 3* 1* 3* 1* 1* 1* 1* 3* 1* 2* 1* 1* 1; // 54
-static const int TC_dig_d_Volume = 1* 1* 1* 1* 1* 1* 1* 1* 4* 6* 4* 3* 6* 9; // 15552
-static const int TC_dig_f_Volume = 1* 2* 1* 6* 2* 4* 1* 4* 2* 1; // 768
-static const int TC_dig_m_Volume = 1* 4* 1* 1* 1* 2* 16* 8* 1* 1* 1* 1* 1* 1* 1* 1* 1* 1* 9; // 9216
-static const int TC_dig_s_Volume = 1* 1* 4* 2* 2* 3* 1* 1* 2* 3* 2* 1* 1* 1* 4* 3* 1* 8* 1; // 55296
+static const int TC_dig_d_Volume = 1* 3* 2* 1* 1* 1* 1* 1* 7* 7* 4* 3* 6* 9; // 190512
+static const int TC_dig_f_Volume = 1* 3* 2* 10* 3* 1* 2* 7* 3* 4; // 30240
+static const int TC_dig_m_Volume = 1* 4* 1* 2* 1* 2* 9* 8* 1* 1* 1* 1* 1* 1* 3* 1* 1* 1* 1; // 3456
+static const int TC_dig_s_Volume = 1* 2* 1* 1* 2* 3* 1* 1* 1* 1* 1* 1* 1* 2* 3* 4* 2* 9* 4; // 20736
 static const int TC_dig_t_Volume = 1* 4* 1* 1* 1* 1* 6* 1* 1* 1* 1* 1* 1* 1* 2* 1* 1* 1* 1; // 48
 static const int TC_flr_a_Volume = 1* 2* 34* 1* 2* 1* 1* 1* 1* 1* 1* 1* 3* 1* 1* 1* 1; // 408
 static const int TC_flr_b_Volume = 1* 1* 2* 13* 2* 1* 2* 1* 1* 1* 1* 1* 1* 9* 1* 1* 12; // 11232
