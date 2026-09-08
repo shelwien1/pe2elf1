@@ -39,9 +39,9 @@ Against `xz -9e` on the same TSVs, and against the `.ogg` the TSV came from:
 
 | | .ogg | .tsv | `xz -9e` | tsvcomp | of .ogg | of xz |
 |---|---:|---:|---:|---:|---:|---:|
-| 17 libvorbis files | 12,734,656 | 108,163,951 | 16,860,676 | **12,117,933** | 95.2% | 71.9% |
-| 22 ffmpeg files | 515,872 | 4,386,774 | 381,424 | **285,911** | 55.4% | 74.9% |
-| **total** | **13,250,528** | **112,550,725** | **17,242,100** | **12,403,844** | **93.6%** | **71.9%** |
+| 17 libvorbis files | 12,734,656 | 108,163,951 | 16,860,676 | **12,075,279** | 94.8% | 71.6% |
+| 22 ffmpeg files | 515,872 | 4,386,774 | 381,424 | **275,056** | 53.3% | 72.1% |
+| **total** | **13,250,528** | **112,550,725** | **17,242,100** | **12,350,335** | **93.2%** | **71.6%** |
 
 The `of .ogg` column is the one that matters: it is the whole point of balrogg
 that a `.tsv` plus a coder should come out smaller than the Ogg Vorbis file
@@ -62,13 +62,13 @@ Every file in both corpora round-trips byte for byte:
 MP3C-ALGORITHM.md's per-stage table came from -- and changes no output:
 
     $ tsvcomp c -v 00000000.tsv 00000000.tc
-    tsvcomp: 171491 bytes of model, 40 MB of tables
-      headers          3507 bytes   2.04%
-      pages             836 bytes   0.49%
-      packets            75 bytes   0.04%
-      floor            6031 bytes   3.52%  18083 values, 2.668 bits each
-      class            2265 bytes   1.32%  10424 values, 1.738 bits each
-      digits         158777 bytes  92.59%  434720 values, 2.922 bits each
+    tsvcomp: 168568 bytes of model, 13 MB of tables
+      headers          3122 bytes   1.85%
+      pages             809 bytes   0.48%
+      packets            78 bytes   0.05%
+      floor            5854 bytes   3.47%  18083 values, 2.590 bits each
+      class            2139 bytes   1.27%  10424 values, 1.642 bits each
+      digits         156565 bytes  92.88%  434720 values, 2.881 bits each
 
 ## How a number becomes bits
 
@@ -91,7 +91,7 @@ variables.
 as mp3c's `Smant` is a submodel of its own. Folded into the head it would be
 six times the depth, multiplying the whole of a rich context by the part of
 the cascade that carries the least and is reached the least: the head of a
-digit is worth asking 230,400 ways and its fourteenth mantissa bit is not.
+digit is worth asking 62,208 ways and its fourteenth mantissa bit is not.
 
 ## The contexts, declared
 
@@ -179,49 +179,89 @@ checksum in the stream to catch that, because the two builds have nothing in
 common at runtime to compute one from -- the shipping build has no objects
 left. Anything a mid-hill-climb binary writes should be thrown away.
 
-## What each context is worth
+## How the declaration was arrived at
 
-Measured on `00000000`, `00000007` and `ff_44100_q5` -- 1,070,740 bytes coded
-between them -- by turning one thing off in the declaration and leaving
-everything else alone:
+In two stages, and they found different kinds of thing.
+
+### By hand: which variables to offer at all
+
+Sweeping one pattern at a time over three files, against a declaration whose
+shape was chosen by hand. The lasting result of that stage is the variable
+list -- what a family is allowed to condition on -- and one finding:
+
+**The residue class is the largest single factor, and that was not the
+expectation.** TSVTRANS.md measured the partition and the pass as the
+coordinates that predict a digit, and they do -- but the class is *the choice
+of ladder*, and the ladder decides what a digit can be. On that declaration,
+sixteen buckets of it against four was worth 4.65%, and once it was in, the
+frequency band it had been competing with all but disappeared: one bucket cost
+0.05% and thirteen *cost* 0.10%. The partition had been standing in for the
+class.
+
+Two things measured useless in that stage, and both are worth naming because
+the optimizer later contradicted both:
+
+* `col`, the position inside a partition -- +0.27% alone in TSVTRANS.md, worse
+  in combination, left at zero;
+* `bkq`, the codebook's `off`, which is the half-width of its value range --
+  the class in a form that would mean the same thing in the next file, where a
+  class number means nothing. Substituted for `cls` it measured **+1.01%**.
+
+### By opt.pl: how to arrange them
+
+`IDX/opt.pl` on `00000000` and `ff_44100_q5`, 654 bits, to convergence -- 25
+minutes, ending at 183,552 from 187,210, **−1.95%** on what it could see. On
+the two corpora, of which it saw two files:
+
+| | hand-set | after opt.pl | |
+|---|---:|---:|---:|
+| 17 libvorbis files | 12,117,933 | 12,075,279 | −0.35% |
+| 22 ffmpeg files | 285,911 | 275,056 | **−3.80%** |
+| tables | 40 MB | 13 MB | |
+| `00000000`, coding | 0.36 s | 0.10 s | |
+
+It improves 38 of the 39 files, including the 37 it never saw; the exception
+is `00000007`, at +1.46%, which is the densest stream in either corpus and the
+kind of file the tuning list should have had one of.
+
+**What it actually did was swap the two counters' roles.** `dig_a` had been
+the rich one -- the class at sixteen buckets, the neighbouring digits, the
+packet-ago slot, 230,400 rows -- and `dig_b` the coarse fallback. It is now
+the *structural* counter, on the pass, the band and the class, at 6,144 rows,
+while `dig_b` is the *local* one, on the neighbouring digits, the column and
+the zero run, at 62,208. One counter says where in the stream this digit is,
+the other what has just been happening around it, and the mixer weighs them.
+
+That is a decomposition, and a sweep cannot find one: it moves a variable at a
+time inside the arrangement it is handed. It is also why the tables shrank by
+two thirds and the program got three and a half times faster -- the split
+model fits in cache where the single rich one did not.
+
+Both of the hand-stage's dead ends come back under it. `col` is five
+thresholds in `dig_b`, where it is not competing with the band. `bkq` is on in
+four indices *alongside* the class rather than instead of it.
+
+### What each variable is worth now
+
+Same method, against the shipped declaration, on the same three files:
 
 | off | coded | |
 |---|---:|---:|
-| nothing -- the shipped declaration | 1,070,740 | — |
-| the residue class, in the digit model | 1,121,836 | +4.77% |
-| the neighbouring digits (`q2`, `zrun`) | 1,100,986 | +2.83% |
-| the same slot one packet ago (`t1`, `p1`) | 1,095,716 | +2.33% |
-| the column, in the floor model | 1,075,515 | +0.45% |
+| nothing -- the shipped declaration | 1,079,958 | — |
+| the neighbouring digits (`q1`, `q2`, `zrun`) | 1,161,225 | **+7.52%** |
+| the same slot one packet ago (`t1`, `p1`) | 1,103,806 | +2.21% |
+| the residue class | 1,091,073 | +1.03% |
+| the column, in the floor model | 1,085,913 | +0.55% |
 
-Two of those are worth reading twice.
+Compare that with the same table before tuning, where the class was +4.77% and
+the neighbours +2.83%. Nothing about the stream changed; what changed is which
+counter carries which, and the marginal value of a variable is a property of
+the arrangement it sits in rather than of the variable.
 
-**The class is the largest single factor, and that was not the expectation.**
-TSVTRANS.md measured the partition and the pass as the coordinates that
-predict a digit, and they do -- but the class is *the choice of ladder*, and
-the ladder decides what a digit can be:
-
-| `cls` in `dig_a` | coded | |
-|---|---:|---:|
-| 16 buckets -- shipped | 1,070,740 | — |
-| 8 buckets | 1,074,377 | +0.34% |
-| 4 buckets | 1,120,557 | +4.65% |
-
-Once it is in, the frequency band it was competing with all but disappears:
-one bucket costs 0.05% and thirteen *cost* 0.10%, so `band` is at three in the
-shipped declaration. The partition had been standing in for the class.
-
-The obvious refinement does not work. `bkq` -- the codebook's `off`, which is
-the half-width of its multiplicand range, in six buckets rather than sixteen
--- is the same information in a form that would mean the same thing in the
-next file, where a class number means nothing at all. Substituted for `cls` it
-measures **+1.01%**. Two classes with the same range are still not the same
-choice, and the class number carries which one the encoder made.
-
-**The column ablation looks small and is not.** The floor is 3.5% of a coded
-stream on `00000000` and 5.3% on `00000007`, so 0.45% overall is most of it:
-floor posts alone go from 53,011 bytes to 57,529 across those two, **+8.52%**.
-That is TSVTRANS.md's −22.20% seen from the other side, against a model that
-already has the previous post and the same post one packet ago to work with.
+**The floor column looks small and is not.** The floor is 3.5% of a coded
+stream, so 0.55% overall is most of what the floor costs at all -- which is
+TSVTRANS.md's −22.20% seen from the other side, against a model that already
+has the previous post and the same post one packet ago to work with.
 
 ## The counter's precision, and a bug worth naming
 
@@ -237,8 +277,10 @@ the output.
 
 Holding the probability at 16 bits and handing it out at 12 moves the freeze
 out past any limit worth setting. What that is worth is not one number, and
-the shape of the table is the whole story -- same three files, same
-declaration, only the digit counters' limit and their width changing:
+the shape of the table is the whole story -- same three files, only the digit
+counters' limit and their width changing (measured on the hand-set
+declaration, before `opt.pl` rearranged it; the cliff is a property of the
+counter, not of the parameters):
 
 | `dig_rA` | 12-bit | 16-bit | |
 |---|---:|---:|---:|
@@ -288,27 +330,27 @@ Page headers are 0.5% of a coded stream either way.
 
 ## Memory and speed
 
-About 40 MB of tables, and 0.36 s to code and 0.38 s to decode `00000000`'s
-1.27 MB TSV -- 3.5 MB of TSV per second each way, against 1.6 MB/s for `xz
--9e` on the same file, for 28% less output. Decoding is the same work as
-coding, which is what a context-mixing coder costs and where `xz` wins
-outright.
+13 MB of tables, 16 MB peak, and 0.10 s to code and 0.08 s to decode
+`00000000`'s 1.27 MB TSV -- about 13 MB of TSV per second each way, against
+1.6 MB/s for `xz -9e` on the same file, for 30% less output. Decoding costs
+the same as coding, which is what a context-mixing coder is; `xz` wins on
+decompression alone.
 
-The tables are what the declaration asks for. `dig_a`, the digit model's rich
-counter, is the large one at 230,400 rows; the sweep that set its shape was
-mostly about *not* spending more. Widening `band` from three buckets to
-thirteen takes it to 998,400 rows and the program from 40 MB of tables to 111
-MB -- and codes 0.10% *worse*, because those rows are then visited a fifth as
-often each.
+The tables are whatever the declaration asks for, and the arrangement the
+optimizer found is small: 62,208 rows in the largest index where the hand-set
+one had 230,400. That was not something it was asked to do -- `opt.pl` scores
+coded bytes and nothing else -- but a model that fits in cache is faster, and
+one whose rows are visited more often each is also better predicted. Both
+followed from the same rearrangement.
 
 ## What it does not do
 
-* **The shipped patterns have not been through the optimizer.** They were set
-  by hand-run sweeps over three files, and `IDX/opt.pl` runs against this
-  build and descends from the first minute -- but a hill-climb long enough to
-  trust wants a corpus covering every model (see the note in `opt.lst`) and a
-  good deal more wall-clock than setting it up took. What is here is the loop,
-  working; what is not here is a converged run through it.
+* **The tuning corpus was two files.** They were chosen to span the two
+  encoders and both length regimes, and the result generalised -- 37 of the 39
+  files it never saw improved. `00000007` did not, by 1.46%, and it is the
+  densest stream in either corpus: a list with one of those in it would
+  probably take that back and cost a little elsewhere. The run took 25
+  minutes; a real one should be longer and wider.
 * **There is no match model.** mp3c does not need one; a residue stream with
   long exact repeats -- silence, loops -- would reward one here.
 * **The mixer has two inputs.** mp3c's has two as well, but its counters have

@@ -34,57 +34,65 @@ Const 0
 #    bkq   that codebook's `off`, log-ish: the half-width of its value range
 #    zrun  zeros so far in this partition        blk  short or long block
 #
-#  `cls` is the biggest single factor and the most surprising one: the class is
-#  the choice of ladder and the ladder decides what a digit can be, so knowing
-#  it beats knowing where in the spectrum the digit sits.  Four buckets of it
-#  cost 4.65%.  `bkq` is the same thought in a form that would generalise to
-#  the next file, and it measures 1.01% worse than the class number it was
-#  meant to replace: two classes with the same range are still not the same
-#  choice.  `col` is at zero because TSVTRANS.md measured it at +0.27% alone
-#  and worse in combination, and `band` is at three buckets because the fourth
-#  onwards are worth 0.05% between them once `cls` is in -- the partition had
-#  been standing in for the class.
+#  These patterns are opt.pl's, and what it did to the hand-set ones is worth
+#  reading.  They started with dig_a rich -- the class at sixteen buckets, the
+#  neighbouring digits, the packet-ago slot -- and dig_b coarse.  The optimizer
+#  swapped the two roles: dig_a is now the *structural* counter, on the pass,
+#  the band and the class, at 6,144 rows; dig_b is the *local* one, on the
+#  neighbouring digits, the column and the zero run, at 62,208.  One counter
+#  says where in the stream this digit is, the other what has just been
+#  happening around it, and the mixer weighs them.  Hand sweeps do not find a
+#  decomposition; they only move one variable at a time inside the one they
+#  are given.
+#
+#  Two things that measured useless by hand are on here.  `col`, the position
+#  inside the partition, is +0.27% alone (TSVTRANS.md) and was at zero -- it is
+#  now five thresholds in dig_b, where it is not competing with the band.
+#  `bkq`, the codebook's value range, was 1.01% worse than the class number it
+#  was meant to replace -- it is now on in four indices *alongside* the class,
+#  not instead of it.  Neither is a sweep result; both are what a search over
+#  654 bits at once finds and a search over one at a time cannot.
 
 Index dig_a
  dig_a_rno:  rno,   1!0
  dig_a_pass: pass,  1!1111111
- dig_a_band: band,  1!110000000000000
- dig_a_col:  col,   1!0000000
- dig_a_q1:   q1,    1!11111
- dig_a_q2:   q2,    1!1111
- dig_a_t1:   t1,    1!111
- dig_a_bkq:  bkq,   1!0000
- dig_a_cls:  cls,   1!111111111111111
- dig_a_zrun: zrun,  1!1111
- dig_a_blk:  blk,   1!0
+ dig_a_band: band,  1!100110011000000
+ dig_a_col:  col,   1!0000010
+ dig_a_q1:   q1,    1!00000
+ dig_a_q2:   q2,    1!0000
+ dig_a_t1:   t1,    1!000
+ dig_a_bkq:  bkq,   1!0001
+ dig_a_cls:  cls,   1!010111111000000
+ dig_a_zrun: zrun,  1!0001
+ dig_a_blk:  blk,   1!1
 
 Index dig_b
  dig_b_rno:  rno,   1!0
  dig_b_pass: pass,  1!1111111
- dig_b_band: band,  1!000000000000000
- dig_b_col:  col,   1!0000000
+ dig_b_band: band,  1!110000001000000
+ dig_b_col:  col,   1!0111101
  dig_b_q1:   q1,    1!11111
- dig_b_q2:   q2,    1!0000
- dig_b_t1:   t1,    1!111
- dig_b_bkq:  bkq,   1!0000
+ dig_b_q2:   q2,    1!1001
+ dig_b_t1:   t1,    1!100
+ dig_b_bkq:  bkq,   1!0101
  dig_b_cls:  cls,   1!000
- dig_b_zrun: zrun,  1!111
- dig_b_blk:  blk,   1!1
+ dig_b_zrun: zrun,  1!011
+ dig_b_blk:  blk,   1!0
 
 Index dig_s
- dig_s_pass: pass,  1!11
- dig_s_band: band,  1!111
+ dig_s_pass: pass,  1!01
+ dig_s_band: band,  1!011
  dig_s_q1:   q1,    1!111
- dig_s_t1:   t1,    1!000
- dig_s_bkq:  bkq,   1!000
- dig_s_cls:  cls,   1!111
+ dig_s_t1:   t1,    1!111
+ dig_s_bkq:  bkq,   1!001
+ dig_s_cls:  cls,   1!001
 
 Index dig_m
  dig_m_pass: pass,  1!111
- dig_m_band: band,  1!111
+ dig_m_band: band,  1!000
  dig_m_q1:   q1,    1!000
- dig_m_t1:   t1,    1!1
- dig_m_bkq:  bkq,   1!000
+ dig_m_t1:   t1,    1!0
+ dig_m_bkq:  bkq,   1!001
  dig_m_cls:  cls,   1!000
 
 #  The mantissa of a digit that escaped the ladder: its own plane, on its own
@@ -92,60 +100,60 @@ Index dig_m
 
 Index dig_t
  dig_t_pass: pass,  1!111
- dig_t_band: band,  1!111
- dig_t_q1:   q1,    1!11111
+ dig_t_band: band,  1!000
+ dig_t_q1:   q1,    1!00000
  dig_t_t1:   t1,    1!000
  dig_t_bkq:  bkq,   1!000
- dig_t_cls:  cls,   1!111111111111111
+ dig_t_cls:  cls,   1!111101011101100
 
 Number dig_rA, 1, 0!11111111
-Number dig_rB, 1, 0!11111111
-Number dig_rS, 1, 0!00111
-Number dig_lr, 1, 0!01000
+Number dig_rB, 1, 0!11111011
+Number dig_rS, 1, 0!01000
+Number dig_lr, 1, 0!11011
 
 #  ---------------------------------------------------------------------------
 #  Floor posts.  The column is the whole story here -- post 0 and post 1 are
 #  coded raw and land at the ends of the row, everything between them is a
-#  folded residual at a frequency the column names -- so it gets 48 buckets
-#  where the digit model gives its own position none.  `p1` is what this post
-#  was one packet ago, and it is the second factor: a floor curve is the
-#  spectral envelope, and an envelope moves slowly.
+#  folded residual at a frequency the column names.  Turning it off costs
+#  0.55% of a whole stream, which is most of what the floor costs at all.
+#  `p1` is what this post was one packet ago: a floor curve is the spectral
+#  envelope, and an envelope moves slowly.
 
 Index flr_a
  flr_a_fno:  fno,   1!1
  flr_a_col:  col,   1!111111111111111111111111111111111111111111111111
- flr_a_p1:   p1,    1!1111111
- flr_a_n1:   n1,    1!111
+ flr_a_p1:   p1,    1!0000111
+ flr_a_n1:   n1,    1!011
  flr_a_raw:  raw,   1!0
  flr_a_blk:  blk,   1!0
 
 Index flr_b
  flr_b_fno:  fno,   1!0
  flr_b_col:  col,   1!0000000
- flr_b_p1:   p1,    1!11111111111111
- flr_b_n1:   n1,    1!1111111
- flr_b_raw:  raw,   1!1
- flr_b_blk:  blk,   1!1
+ flr_b_p1:   p1,    1!11111001111101
+ flr_b_n1:   n1,    1!0000000
+ flr_b_raw:  raw,   1!0
+ flr_b_blk:  blk,   1!0
 
 Index flr_s
  flr_s_col:  col,   1!1111111
  flr_s_p1:   p1,    1!111
- flr_s_n1:   n1,    1!000
+ flr_s_n1:   n1,    1!111
 
 Index flr_m
- flr_m_col:  col,   1!111
- flr_m_p1:   p1,    1!111
+ flr_m_col:  col,   1!000
+ flr_m_p1:   p1,    1!000
  flr_m_n1:   n1,    1!000
 
 Index flr_t
- flr_t_col:  col,   1!111111111111111111111111111111111111111111111111
- flr_t_p1:   p1,    1!111
- flr_t_n1:   n1,    1!000
+ flr_t_col:  col,   1!011111111010111111111001111100010000000010000000
+ flr_t_p1:   p1,    1!000
+ flr_t_n1:   n1,    1!001
 
-Number flr_rA, 1, 0!11111111
-Number flr_rB, 1, 0!11111111
+Number flr_rA, 1, 0!00100000
+Number flr_rB, 1, 0!10010000
 Number flr_rS, 1, 0!00110
-Number flr_lr, 1, 0!00110
+Number flr_lr, 1, 0!11111
 
 #  ---------------------------------------------------------------------------
 #  Residue classes: the class before it (-15.13% on its own, measured in
@@ -153,17 +161,17 @@ Number flr_lr, 1, 0!00110
 
 Index cls_a
  cls_a_rno:  rno,   1!1
- cls_a_band: band,  1!111111111111111
- cls_a_prev: prev,  1!1111111
- cls_a_t1:   t1,    1!1111111
+ cls_a_band: band,  1!000110011000000
+ cls_a_prev: prev,  1!0000000
+ cls_a_t1:   t1,    1!0101010
  cls_a_blk:  blk,   1!1
 
 Index cls_b
  cls_b_rno:  rno,   1!0
- cls_b_band: band,  1!000000000000000
- cls_b_prev: prev,  1!111111111111111
- cls_b_t1:   t1,    1!111
- cls_b_blk:  blk,   1!0
+ cls_b_band: band,  1!100000000010000
+ cls_b_prev: prev,  1!111111100000001
+ cls_b_t1:   t1,    1!101
+ cls_b_blk:  blk,   1!1
 
 Index cls_s
  cls_s_band: band,  1!111
@@ -172,18 +180,18 @@ Index cls_s
 
 Index cls_m
  cls_m_band: band,  1!000
- cls_m_prev: prev,  1!111
- cls_m_t1:   t1,    1!1
+ cls_m_prev: prev,  1!000
+ cls_m_t1:   t1,    1!0
 
 Index cls_t
  cls_t_band: band,  1!111
- cls_t_prev: prev,  1!111
- cls_t_t1:   t1,    1!000
+ cls_t_prev: prev,  1!000
+ cls_t_t1:   t1,    1!011
 
-Number cls_rA, 1, 0!11111111
-Number cls_rB, 1, 0!11111111
-Number cls_rS, 1, 0!00110
-Number cls_lr, 1, 0!00110
+Number cls_rA, 1, 0!00011100
+Number cls_rB, 1, 0!10000000
+Number cls_rS, 1, 0!00111
+Number cls_lr, 1, 0!11111
 
 #  ---------------------------------------------------------------------------
 #  Everything the page and packet headers hold, one field id apart.  Each field
@@ -193,12 +201,12 @@ Number cls_lr, 1, 0!00110
 
 Index aux_a
 ADD 32: fld
- aux_a_p1:   p1,    1!111111111111111
- aux_a_p2:   p2,    1!1111111
+ aux_a_p1:   p1,    1!100100001000111
+ aux_a_p2:   p2,    1!1000000
 
 Index aux_b
 ADD 32: fld
- aux_b_p1:   p1,    1!111
+ aux_b_p1:   p1,    1!000
  aux_b_p2:   p2,    1!000
 
 Index aux_s
@@ -210,10 +218,10 @@ ADD 32: fld
 Index aux_t
 ADD 32: fld
 
-Number aux_rA, 1, 0!11111111
-Number aux_rB, 1, 0!11111111
-Number aux_rS, 1, 0!00110
-Number aux_lr, 1, 0!00110
+Number aux_rA, 1, 0!00100000
+Number aux_rB, 1, 0!00000000
+Number aux_rS, 1, 0!00101
+Number aux_lr, 1, 0!11111
 
 #  ---------------------------------------------------------------------------
 #  The three header packets, coded record by record.  The tag is a dense factor
@@ -223,15 +231,15 @@ Number aux_lr, 1, 0!00110
 
 Index hdr_a
 ADD 64: tag
- hdr_a_p1:   p1,    1!111111111111111
- hdr_a_p2:   p2,    1!0000000
+ hdr_a_p1:   p1,    1!010000000001010
+ hdr_a_p2:   p2,    1!1111111
  hdr_a_pos:  pos,   1!111
  hdr_a_p1r:  p1r,   &00000000
 
 Index hdr_b
- hdr_b_p1:   p1,    1!000
+ hdr_b_p1:   p1,    1!011
  hdr_b_pos:  pos,   1!1
- hdr_b_p1r:  p1r,   &11111111
+ hdr_b_p1r:  p1r,   &11011111
 
 Index hdr_s
 ADD 64: tag
@@ -241,9 +249,9 @@ ADD 64: tag
 
 Index hdr_t
 ADD 64: tag
- hdr_t_p1r:  p1r,   &11111111
+ hdr_t_p1r:  p1r,   &10011111
 
-Number hdr_rA, 1, 0!11111111
-Number hdr_rB, 1, 0!11111111
-Number hdr_rS, 1, 0!00110
-Number hdr_lr, 1, 0!00110
+Number hdr_rA, 1, 0!00001010
+Number hdr_rB, 1, 0!00100000
+Number hdr_rS, 1, 0!00001
+Number hdr_lr, 1, 0!11111

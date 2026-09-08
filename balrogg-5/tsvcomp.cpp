@@ -48,16 +48,21 @@
     much between two granules; the same is true of a Vorbis residue digit, of
     a floor post, and of the class of a partition, so all three carry one
     packet of history here, kept separately for short and long blocks.  It is
-    worth 2.33%.
+    worth 2.21%.
 
-    And it adds one that neither of them suggested and that turned out to be
-    the largest single factor in the program: **the class of the partition the
-    digit is in**, worth 4.65% against the four buckets of it this started
-    with.  The class is the choice of ladder and the ladder decides what a
-    digit can be -- which, once the model has it, leaves the frequency band
-    that TSVTRANS.md measured contributing 0.05%.  The band had been standing
-    in for the class.  TSVCOMP.md has that measurement and the ones that
-    settled every other pattern.
+    And it adds one that neither of them suggested: **the class of the
+    partition the digit is in**, which is the choice of ladder, and the ladder
+    decides what a digit can be.  On the declaration this started with it was
+    the largest single factor in the program.
+
+    It is not any more, and that is the more interesting fact.  IDX/opt.pl
+    rearranged the digit model rather than retuning it: the counter that had
+    been rich is now the structural one -- pass, band, class -- and the
+    coarse one carries what is local, the neighbouring digits and the column
+    that hand sweeps had measured useless.  The neighbours are now worth 7.52%
+    and the class 1.03%, with nothing about the stream having changed.  What a
+    variable is worth is a property of the arrangement it sits in.  TSVCOMP.md
+    has both tables.
 
     The contexts themselves are declared, not written.  IDX/tsvcomp.idx names
     every variable, its thresholds and every tunable rate; IDX/idx2inc.pl
