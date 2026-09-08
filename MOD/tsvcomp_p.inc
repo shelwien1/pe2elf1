@@ -85,6 +85,8 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_m = 0;
   dig_m = dig_m*4 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1)));
   dig_m = dig_m*2 + ((bkq>2+(1-1)));
+  dig_m = dig_m*16 + TC_dig_m_cls[__min(15,__max(0,cls-(1-1)))];
+  dig_m = dig_m*8 + ((vpos>0+(1-1))+(vpos>1+(1-1))+(vpos>2+(1-1))+(vpos>3+(1-1))+(vpos>4+(1-1))+(vpos>5+(1-1))+(vpos>6+(1-1)));
   dig_m = dig_m*9 + TC_dig_m_pq[__min(32,__max(0,pq-(1-1)))];
 
   dig_t = 0;
@@ -146,6 +148,7 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
 
   sgn_m = 0;
   sgn_m = sgn_m*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
+  sgn_m = sgn_m*8 + ((vpos>0+(1-1))+(vpos>1+(1-1))+(vpos>2+(1-1))+(vpos>3+(1-1))+(vpos>4+(1-1))+(vpos>5+(1-1))+(vpos>6+(1-1)));
   sgn_m = sgn_m*2 + ((mg>1+(1-1)));
   sgn_m = sgn_m*9 + TC_sgn_m_sq[__min(32,__max(0,sq-(1-1)))];
 

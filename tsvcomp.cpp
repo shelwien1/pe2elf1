@@ -339,8 +339,8 @@ struct tc_fam {
 
   void wire(cm_cnt * a, int va, cm_cnt * b, int vb, cm_cnt * c, int vc,
             cm_cnt * d, int vd, cm_cnt * t, int vt,
-            u16 * s, int vs, u16 * s2, int vf, i32 * w, int vm, cm_cnt * g, int vg,
-            i32 * wm,
+            u16 * s, u8 * sc, int vs, u16 * s2, u8 * sc2, int vf,
+            i32 * w, int vm, cm_cnt * g, int vg, i32 * wm,
             int ra, int rb, int rc_, int rd, int rs, int lrate) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
     cm_fill(A, (sz) va * TC_NODE);
@@ -349,8 +349,8 @@ struct tc_fam {
     cm_fill(D, (sz) vd * TC_NODE);
     cm_fill(T, (sz) vt * TC_MNODE);
     if (G) cm_fill(G, (sz) vg);
-    ap.init(S, (u32) vs * TC_NODE);
-    ap2.init(S2, (u32) vf * TC_NODE);
+    ap.init(S, sc, (u32) vs * TC_NODE);
+    ap2.init(S2, sc2, (u32) vf * TC_NODE);
     mx.init(W, (u32) vm * TC_NODE);
     mxm.init(wm, (u32) vt * TC_MNODE);
     /*  A pattern is a search space and the optimizer visits its ends, so
@@ -1194,8 +1194,8 @@ static void tc_walk(const char * inpath, const char * outpath) {
            tcm.TC_##F##_C, TC_##F##_c_Volume,                                 \
            tcm.TC_##F##_D, TC_##F##_d_Volume,                                 \
            tcm.TC_##F##_T, TC_##F##_t_Volume,                                 \
-           tcm.TC_##F##_S, TC_##F##_s_Volume,                                 \
-           tcm.TC_##F##_F, TC_##F##_f_Volume,                                 \
+           tcm.TC_##F##_S, tcm.TC_##F##_SC, TC_##F##_s_Volume,                \
+           tcm.TC_##F##_F, tcm.TC_##F##_FC, TC_##F##_f_Volume,                \
            tcm.TC_##F##_W, TC_##F##_m_Volume, (g), (ng),                      \
            tcm.TC_##F##_WM,                                                   \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \

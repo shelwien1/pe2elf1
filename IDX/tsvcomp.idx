@@ -162,8 +162,8 @@ Index dig_m
  dig_m_q1:   q1,    1!000
  dig_m_t1:   t1,    1!0
  dig_m_bkq:  bkq,   1!001
- dig_m_cls:  cls,   1!000
- dig_m_vpos: vpos,  1!0
+ dig_m_cls:  cls,   1!111111111111111
+ dig_m_vpos: vpos,  1!1111111
  dig_m_q1s:  q1s,  -6!0000000000000
  dig_m_q2s:  q2s,  -6!0000000000000
  dig_m_t1s:  t1s,  -6!0000000000000
@@ -290,7 +290,7 @@ Index sgn_f
 
 Index sgn_m
  sgn_m_pass: pass,  1!11
- sgn_m_vpos: vpos,  1!0
+ sgn_m_vpos: vpos,  1!1111111
  sgn_m_p0s:  p0s,  -3!0000000
  sgn_m_mg:   mg,    1!010
  sgn_m_pq:   pq,    1!00000000000000000000000000000000

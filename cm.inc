@@ -22,6 +22,8 @@ constexpr int CM_CONE  = 1 << CM_CBITS;
 constexpr int CM_TMAX  = 4096;            /*  the highest limit upd honours  */
 
 static u16 cm_rec[CM_TMAX + 2];           /*  CM_CONE / (t + 2)  */
+constexpr int CM_AMAX = 255;              /*  where an APM bucket's count stops  */
+static u16 cm_arec[CM_AMAX + 2];          /*  65536 / (n + 2), for the APM  */
 
 static i16 cm_st[CM_PONE];                /*  stretch: p -> log-odds  */
 static u16 cm_sq[2 * CM_STMAX + 1];       /*  squash: log-odds -> p  */
@@ -29,6 +31,7 @@ static u16 cm_sq[2 * CM_STMAX + 1];       /*  squash: log-odds -> p  */
 static void cm_tables(void) {
   int i;
   for (i = 0; i <= CM_TMAX + 1; i++) cm_rec[i] = (u16) (CM_CONE / (i + 2));
+  for (i = 0; i <= CM_AMAX + 1; i++) cm_arec[i] = (u16) (65536 / (i + 2));
   for (i = -CM_STMAX; i <= CM_STMAX; i++) {
     double v = CM_PONE / (1.0 + exp(-i / 256.0));
     int p = (int) (v + 0.5);
@@ -80,17 +83,29 @@ struct cm_cnt {
 /*  Secondary estimation.  The counter's probability is stretched, the two
     nearest of 33 buckets are interpolated, and the answer is what the bucket
     has actually seen at that confidence in this context -- which is how a
-    model that is directionally right stops being overconfident.  */
+    model that is directionally right stops being overconfident.
+
+    The update is the counter's, not a fixed shift.  A shift is the right rate
+    for a bucket that has been visited a thousand times and much too slow for
+    one that has been visited twice, and an APM under a rich context is mostly
+    the second kind: it starts on the identity curve and a fixed 1/128 step
+    needs a hundred visits to leave it.  Each bucket carries its own count, so
+    it moves at 1/(n+2) until n reaches where the rate would have been, and
+    from there on at exactly the rate the .idx asked for.  That is what the
+    counters have always done; the APM was the one part still on a constant.  */
 struct cm_apm {
   u16 * t;
+  u8  * c;
   u32 n;
   int idx;
-  void init(u16 * tab, u32 nctx) {
+  void init(u16 * tab, u8 * cnt, u32 nctx) {
     u32 i, j;
-    t = tab;  n = nctx;  idx = 0;
+    t = tab;  c = cnt;  n = nctx;  idx = 0;
     for (i = 0; i < nctx; i++)
-      for (j = 0; j < 33; j++)
+      for (j = 0; j < 33; j++) {
         t[i * 33 + j] = (u16) cm_squash(((int) j - 16) * 128);
+        c[i * 33 + j] = 0;
+      }
   }
   INLINE int pp(int pr, u32 ctx) {
     int s = cm_stretch(pr) + CM_STMAX;    /*  [0, 4094]  */
@@ -98,10 +113,17 @@ struct cm_apm {
     idx = (int) (ctx * 33) + (s >> 7);
     return (t[idx] * (128 - w) + t[idx + 1] * w) >> 7;
   }
+  INLINE void upd1(int i, int g, int lim) {
+    int k = c[i];
+    if (k < lim) c[i] = (u8) (k + 1);
+    t[i] = (u16) ((int) t[i] + (((g - (int) t[i]) * cm_arec[k]) >> 16));
+  }
   INLINE void upd(int bit, int rate) {
     int g = bit ? 0 : CM_PONE;
-    t[idx]     = (u16) (t[idx]     + ((g - t[idx])     >> rate));
-    t[idx + 1] = (u16) (t[idx + 1] + ((g - t[idx + 1]) >> rate));
+    int lim = rate >= 8 ? CM_AMAX : (1 << rate) - 2;
+    if (lim < 1) lim = 1;
+    upd1(idx, g, lim);
+    upd1(idx + 1, g, lim);
   }
 };
 
