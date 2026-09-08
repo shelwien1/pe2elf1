@@ -69,6 +69,10 @@ Index dig_a
  dig_a_pn:   pn,   1!000
  dig_a_ax: ax, 1!000000100000
  dig_a_pq:   pq,    1!00000000000000000000000000000000
+ dig_a_ps:   ps,   -6!0000000000000
+ dig_a_chn:  chn,   1!0000000
+ dig_a_crun: crun,  1!000000000
+ dig_a_cm:   cm,    1!0
 
 Index dig_b
  dig_b_rno:  rno,   1!0
@@ -94,6 +98,10 @@ Index dig_b
  dig_b_pn:   pn,   1!100
  dig_b_ax:   ax,   1!000000000000
  dig_b_pq:   pq,    1!00010001000100010001000100010001
+ dig_b_ps:   ps,   -6!0000000000000
+ dig_b_chn:  chn,   1!0000000
+ dig_b_crun: crun,  1!000000000
+ dig_b_cm:   cm,    1!0
 
 Index dig_c
  dig_c_pass: pass,  1!11
@@ -109,6 +117,10 @@ Index dig_c
  dig_c_cls:  cls,   1!000
  dig_c_p0s:  p0s,  -6!0000000000000
  dig_c_pq:   pq,    1!00000000000000000000000000000000
+ dig_c_ps:   ps,   -6!0000000000000
+ dig_c_chn:  chn,   1!0000000
+ dig_c_crun: crun,  1!000000000
+ dig_c_cm:   cm,    1!0
 
 Index dig_d
  dig_d_pass: pass, 1!11
@@ -124,6 +136,10 @@ Index dig_d
  dig_d_cls:  cls,   1!011
  dig_d_p0s:  p0s,  -6!0000111110000
  dig_d_pq:   pq,    1!00010001000100010001000100010001
+ dig_d_ps:   ps,   -6!0000000000000
+ dig_d_chn:  chn,   1!0000000
+ dig_d_crun: crun,  1!000000000
+ dig_d_cm:   cm,    1!0
 
 Index dig_s
  dig_s_pass: pass, 1!10
@@ -144,6 +160,10 @@ Index dig_s
  dig_s_pn: pn, 1!010
  dig_s_ax: ax, 1!110010101111
  dig_s_pq: pq, 1!00000100000000001000000000100000
+ dig_s_ps:   ps,   -6!0000000000000
+ dig_s_chn:  chn,   1!0000000
+ dig_s_crun: crun,  1!000000000
+ dig_s_cm:   cm,    1!0
 
 Index dig_f
  dig_f_pass: pass, 1!11
@@ -155,6 +175,10 @@ Index dig_f
  dig_f_ax: ax, 1!010101010101
  dig_f_band: band, 1!01010
  dig_f_pq: pq, 1!00000100000000001000000000100000
+ dig_f_ps:   ps,   -6!0000000000000
+ dig_f_chn:  chn,   1!0000000
+ dig_f_crun: crun,  1!000000000
+ dig_f_cm:   cm,    1!0
 
 Index dig_m
  dig_m_pass: pass,  1!111
@@ -175,6 +199,10 @@ Index dig_m
  dig_m_pn:   pn,   1!000
  dig_m_ax:   ax,   1!000000000000
  dig_m_pq: pq, 1!00000000000000000000000000000000
+ dig_m_ps:   ps,   -6!0000000000000
+ dig_m_chn:  chn,   1!0000000
+ dig_m_crun: crun,  1!000000000
+ dig_m_cm:   cm,    1!0
 
 #  The mantissa of a digit that escaped the ladder: its own plane, on its own
 #  index and its own tables, as mp3c's Smant is a submodel of its own.
@@ -198,6 +226,10 @@ Index dig_t
  dig_t_pn:   pn,   1!000
  dig_t_ax:   ax,   1!000000000000
  dig_t_pq:   pq,    1!00000000000000000000000000000000
+ dig_t_ps:   ps,   -6!0000000000000
+ dig_t_chn:  chn,   1!0000000
+ dig_t_crun: crun,  1!000000000
+ dig_t_cm:   cm,    1!0
 
 #  mp3c's exA: av (running mean) and the six neighbours, weighted, scaled by
 #  avC/4096 and log-quantised into `ax`.  avD/256 is the running mean's decay.
@@ -217,6 +249,9 @@ Number dig_rC, 1, 0!00001111
 Number dig_rD, 1, 0!11100101
 Number dig_rS, 1, 0!00111
 Number dig_lr, 1, 0!01011
+Number dig_mw, 1, 0!00000000
+Number dig_bw, 1, 0!01010
+Number dig_mb, 1, 0!01000000
 
 #  ---------------------------------------------------------------------------
 #  The sign of a residue digit: 28% of the digit bits, and nearly random.  What
@@ -236,6 +271,10 @@ Index sgn_a
  sgn_a_band: band,  1!00101
  sgn_a_pq:   pq,    1!00000000000000000000000000000000
  sgn_a_sq:   sq,    1!00010001000100010001000100010001
+ sgn_a_ps:   ps,   -6!0000000000000
+ sgn_a_chn:  chn,   1!0000000
+ sgn_a_crun: crun,  1!000000000
+ sgn_a_cm:   cm,    1!0
 
 Index sgn_b
  sgn_b_pass: pass,  1!11
@@ -249,6 +288,10 @@ Index sgn_b
  sgn_b_band: band,  1!10010
  sgn_b_pq:   pq,    1!00000000000000000000000000000000
  sgn_b_sq:   sq,    1!00000000000000000000000000000000
+ sgn_b_ps:   ps,   -6!0000000000000
+ sgn_b_chn:  chn,   1!0000000
+ sgn_b_crun: crun,  1!000000000
+ sgn_b_cm:   cm,    1!0
 
 Index sgn_c
  sgn_c_pass: pass,  1!01
@@ -260,6 +303,10 @@ Index sgn_c
  sgn_c_mg:   mg,    1!000
  sgn_c_pq:   pq,    1!00000000000000000000000000000000
  sgn_c_sq:   sq,    1!00000000000000000000000000000000
+ sgn_c_ps:   ps,   -6!0000000000000
+ sgn_c_chn:  chn,   1!0000000
+ sgn_c_crun: crun,  1!000000000
+ sgn_c_cm:   cm,    1!0
 
 Index sgn_d
  sgn_d_pass: pass,  1!00
@@ -271,6 +318,10 @@ Index sgn_d
  sgn_d_mg:   mg,    1!000
  sgn_d_pq:   pq,    1!00000000000000000000000000000000
  sgn_d_sq:   sq,    1!00000000000000000000000000000000
+ sgn_d_ps:   ps,   -6!0000000000000
+ sgn_d_chn:  chn,   1!0000000
+ sgn_d_crun: crun,  1!000000000
+ sgn_d_cm:   cm,    1!0
 
 Index sgn_s
  sgn_s_pass: pass,  1!00
@@ -279,6 +330,10 @@ Index sgn_s
  sgn_s_mg:   mg,    1!000
  sgn_s_pq:   pq,    1!00000000000000000000000000000000
  sgn_s_sq:   sq,    1!00000000000000000000000000000000
+ sgn_s_ps:   ps,   -6!0000000000000
+ sgn_s_chn:  chn,   1!0000000
+ sgn_s_crun: crun,  1!000000000
+ sgn_s_cm:   cm,    1!0
 
 Index sgn_f
  sgn_f_pass: pass,  1!11
@@ -287,6 +342,10 @@ Index sgn_f
  sgn_f_mg:   mg,    1!011
  sgn_f_pq:   pq,    1!00000000000000000000000000000000
  sgn_f_sq:   sq,    1!00010001000100010001000100010001
+ sgn_f_ps:   ps,   -6!0000000000000
+ sgn_f_chn:  chn,   1!0000000
+ sgn_f_crun: crun,  1!000000000
+ sgn_f_cm:   cm,    1!0
 
 Index sgn_m
  sgn_m_pass: pass,  1!11
@@ -295,11 +354,19 @@ Index sgn_m
  sgn_m_mg:   mg,    1!010
  sgn_m_pq:   pq,    1!00000000000000000000000000000000
  sgn_m_sq:   sq,    1!00010001000100010001000100010001
+ sgn_m_ps:   ps,   -6!0000000000000
+ sgn_m_chn:  chn,   1!0000000
+ sgn_m_crun: crun,  1!000000000
+ sgn_m_cm:   cm,    1!0
 
 Index sgn_t
  sgn_t_pass: pass,  1!00
  sgn_t_pq:   pq,    1!00000000000000000000000000000000
  sgn_t_sq:   sq,    1!00000000000000000000000000000000
+ sgn_t_ps:   ps,   -6!0000000000000
+ sgn_t_chn:  chn,   1!0000000
+ sgn_t_crun: crun,  1!000000000
+ sgn_t_cm:   cm,    1!0
 
 Number sgn_rA, 1, 0!11111110
 Number sgn_rB, 1, 0!11111111
@@ -307,6 +374,9 @@ Number sgn_rC, 1, 0!00001010
 Number sgn_rD, 1, 0!00001011
 Number sgn_rS, 1, 0!00111
 Number sgn_lr, 1, 0!10010
+Number sgn_mw, 1, 0!00000000
+Number sgn_bw, 1, 0!01100
+Number sgn_mb, 1, 0!00010000
 
 #  ---------------------------------------------------------------------------
 #  Floor posts.  The column is the whole story here -- post 0 and post 1 are
@@ -448,6 +518,9 @@ Index flr_t
 !Number flr_rD, 1, 0!00111111
 !Number flr_rS, 1, 0!00110
 !Number flr_lr, 1, 0!10110
+!Number flr_mw, 1, 0!00000000
+!Number flr_bw, 1, 0!01100
+!Number flr_mb, 1, 0!00000000
 
 #  ---------------------------------------------------------------------------
 #  Residue classes: the class before it (-15.13% on its own, measured in
@@ -527,6 +600,9 @@ Index cls_t
 !Number cls_rD, 1, 0!00111111
 !Number cls_rS, 1, 0!00101
 !Number cls_lr, 1, 0!11000
+!Number cls_mw, 1, 0!00000000
+!Number cls_bw, 1, 0!01100
+!Number cls_mb, 1, 0!00000000
 
 #  ---------------------------------------------------------------------------
 #  Everything the page and packet headers hold, one field id apart.  Each field
@@ -568,6 +644,9 @@ ADD 32: fld
 !Number aux_rD, 1, 0!00111111
 !Number aux_rS, 1, 0!00110
 !Number aux_lr, 1, 0!11111
+!Number aux_mw, 1, 0!00000000
+!Number aux_bw, 1, 0!01100
+!Number aux_mb, 1, 0!00000000
 
 #  ---------------------------------------------------------------------------
 #  The three header packets, coded record by record.  The tag is a dense factor
@@ -612,3 +691,6 @@ ADD 64: tag
 !Number hdr_rD, 1, 0!00111111
 !Number hdr_rS, 1, 0!00001
 !Number hdr_lr, 1, 0!11111
+!Number hdr_mw, 1, 0!00000000
+!Number hdr_bw, 1, 0!01100
+!Number hdr_mb, 1, 0!00000000

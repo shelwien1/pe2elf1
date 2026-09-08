@@ -24,6 +24,7 @@ constexpr int CM_TMAX  = 4096;            /*  the highest limit upd honours  */
 static u16 cm_rec[CM_TMAX + 2];           /*  CM_CONE / (t + 2)  */
 constexpr int CM_AMAX = 255;              /*  where an APM bucket's count stops  */
 static u16 cm_arec[CM_AMAX + 2];          /*  65536 / (n + 2), for the APM  */
+static u16 cm_mrec[CM_AMAX + 2];          /*  65536 / (n + 1), for the mixer  */
 
 static i16 cm_st[CM_PONE];                /*  stretch: p -> log-odds  */
 static u16 cm_sq[2 * CM_STMAX + 1];       /*  squash: log-odds -> p  */
@@ -32,6 +33,7 @@ static void cm_tables(void) {
   int i;
   for (i = 0; i <= CM_TMAX + 1; i++) cm_rec[i] = (u16) (CM_CONE / (i + 2));
   for (i = 0; i <= CM_AMAX + 1; i++) cm_arec[i] = (u16) (65536 / (i + 2));
+  for (i = 0; i <= CM_AMAX + 1; i++) cm_mrec[i] = (u16) (65535 / (i + 1));
   for (i = -CM_STMAX; i <= CM_STMAX; i++) {
     double v = CM_PONE / (1.0 + exp(-i / 256.0));
     int p = (int) (v + 0.5);
@@ -73,8 +75,14 @@ struct cm_cnt {
     int v = p >> (CM_CBITS - CM_PBITS);
     return v < 1 ? 1 : v > CM_PONE - 1 ? CM_PONE - 1 : v;
   }
-  INLINE void upd(int bit, int lim) {
-    int target = bit ? 0 : CM_CONE - 1;
+  /*  `mw` bounds the update: the counter runs towards mw and CONE-1-mw
+      rather than towards the ends, so a context that has only ever seen one
+      value stops short of claiming certainty about the next.  At mw = 0 this
+      is the plain running mean it has always been, which is what the .idx
+      starts every family at; what the right bound is depends on how much a
+      family's contexts are diluted, so it is a parameter and not a constant.  */
+  INLINE void upd(int bit, int lim, int mw) {
+    int target = bit ? mw : CM_CONE - 1 - mw;
     if (t < lim) t++;
     p = (u16) ((int) p + (((target - (int) p) * cm_rec[t]) >> CM_CBITS));
   }
@@ -133,19 +141,21 @@ struct cm_apm {
 template <int N>
 struct cm_mix {
   i32 * w;                                /*  16.16, one row of N per context  */
-  int x[N], pr, row;
+  u8 * c;                                 /*  how often a row has been asked  */
+  int x[N], pr, row, ctxn;
   int nx;
-  void init(i32 * wt, u32 nctx) {
+  void init(i32 * wt, u8 * cnt, u32 nctx) {
     u32 i;
-    w = wt;
+    w = wt;  c = cnt;
     for (i = 0; i < nctx * N; i++) w[i] = (1 << 16) / N;  /*  their mean  */
-    nx = 0;  row = 0;  pr = CM_PHALF;
+    for (i = 0; i < nctx; i++) c[i] = 0;
+    nx = 0;  row = 0;  ctxn = 0;  pr = CM_PHALF;
   }
   INLINE void add(int st) { x[nx++] = st; }
   INLINE int mix(u32 ctx) {
     i64 s = 0;
     int i;
-    row = (int) ctx * N;
+    ctxn = (int) ctx;  row = (int) ctx * N;
     for (i = 0; i < nx; i++) s += (i64) w[row + i] * x[i];
     { int d = (int) (s >> 16);
       if (d < -CM_STMAX) d = -CM_STMAX;
@@ -155,9 +165,20 @@ struct cm_mix {
     if (pr > CM_PONE - 1) pr = CM_PONE - 1;
     return pr;
   }
-  INLINE void upd(int bit, int lr) {
-    int err = ((bit ? 0 : CM_PONE) - pr) * lr;
-    int i;
+  /*  A weight set starts at the mean of its inputs and has to be taught which
+      of them to believe; at the rate that suits a well-visited row that takes
+      hundreds of decisions, and a mixer context rich enough to be worth
+      having is mostly rows that never get hundreds.  `mb` buys the first
+      visits a faster rate, decaying as 1/(n+1) to the .idx's own.  At mb = 0
+      it is the fixed rate it has always been.  */
+  INLINE void upd(int bit, int lr, int mb) {
+    int err, i, n;
+    if (mb) {
+      n = c[ctxn];
+      if (n < CM_AMAX) c[ctxn] = (u8) (n + 1);
+      lr += (int) (((i64) mb * lr * cm_mrec[n]) >> 16);
+    }
+    err = ((bit ? 0 : CM_PONE) - pr) * lr;
     for (i = 0; i < nx; i++) w[row + i] += (x[i] * err) >> 16;
     nx = 0;
   }

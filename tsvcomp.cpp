@@ -318,7 +318,7 @@ static TC_T tcm;
 /*  Everything a residue digit's contexts are built from.  */
 struct tc_dv {
   int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1,
-      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq;
+      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm;
 };
 
 /*  One family's five index rows for one value: the two counters, the APM, the
@@ -363,13 +363,15 @@ struct tc_fam {
   tc_pcur pc;                             /*  the prior for the value in hand  */
   int prp;                                /*  P(this bit is zero) from it, or -1  */
   u32 ba, bb, bc, bd, bs, bf, bm, bt;
-  int rA, rB, rC, rD, rS, lr;
+  int rA, rB, rC, rD, rS, lr, mw, bw, mb;
 
   void wire(cm_cnt * a, int va, cm_cnt * b, int vb, cm_cnt * c, int vc,
             cm_cnt * d, int vd, cm_cnt * t, int vt,
             u16 * s, u8 * sc, int vs, u16 * s2, u8 * sc2, int vf,
             i32 * w, int vm, cm_cnt * g, int vg, i32 * wm,
-            int ra, int rb, int rc_, int rd, int rs, int lrate) {
+            u8 * wc, u8 * wmc,
+            int ra, int rb, int rc_, int rd, int rs, int lrate,
+            int mwt, int bwt, int mbt) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
     cm_fill(A, (sz) va * TC_NODE);
     cm_fill(B, (sz) vb * TC_NODE);
@@ -379,8 +381,8 @@ struct tc_fam {
     if (G) cm_fill(G, (sz) vg);
     ap.init(S, sc, (u32) vs * TC_NODE);
     ap2.init(S2, sc2, (u32) vf * TC_NODE);
-    mx.init(W, (u32) vm * TC_NODE);
-    mxm.init(wm, (u32) vt * TC_MNODE);
+    mx.init(W, wc, (u32) vm * TC_NODE);
+    mxm.init(wm, wmc, (u32) vt * TC_MNODE);
     /*  A pattern is a search space and the optimizer visits its ends, so
         anything used as a size, a shift or a limit is clamped at the point of
         use -- IDX/IDX-FORMAT.md §5 says the same, and means it.  */
@@ -390,6 +392,9 @@ struct tc_fam {
     rD = tc_clamp(rd, 1, CM_TMAX);
     rS = tc_clamp(rs, 1, 15);
     lr = tc_clamp(lrate, 1, 64);
+    mw = tc_clamp(mwt * 64, 0, CM_CONE / 4);
+    bw = tc_clamp(bwt, 0, 16);
+    mb = tc_clamp(mbt, 0, 255);
     pc.off();  prp = -1;
   }
 
@@ -428,15 +433,17 @@ struct tc_fam {
     mx.add(256);
     { int pm = mx.mix(bm + (u32) node);
       int pf = ap2.pp(pm, bf + (u32) node);
-      pf = (3 * pm + pf + 2) >> 2;
+      /*  How much of the answer the second APM is allowed to be.  It was a
+          fixed three parts mixer to one, which is 12 here.  */
+      pf = (bw * pm + (16 - bw) * pf + 8) >> 4;
       b = tc_bit(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b); }
-    mx.upd(b, lr);
+    mx.upd(b, lr, mb);
     ap.upd(b, rS);
     ap2.upd(b, rS);
-    a.upd(b, rA);
-    c.upd(b, rB);
-    e.upd(b, rC);
-    f.upd(b, rD);
+    a.upd(b, rA, mw);
+    c.upd(b, rB, mw);
+    e.upd(b, rC, mw);
+    f.upd(b, rD, mw);
     return b;
   }
 
@@ -447,7 +454,7 @@ struct tc_fam {
     cm_cnt & t = T[bt + node];
     if (prp < 0) {                          /*  nothing to weigh it against  */
       b = tc_bit(t.P(), b);
-      t.upd(b, rA);
+      t.upd(b, rA, mw);
       return b;
     }
     mxm.add(cm_stretch(t.P()));
@@ -455,8 +462,8 @@ struct tc_fam {
     mxm.add(256);
     { int pm = mxm.mix(bt + (u32) node);
       b = tc_bit(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b); }
-    mxm.upd(b, lr);
-    t.upd(b, rA);
+    mxm.upd(b, lr, mb);
+    t.upd(b, rA, mw);
     return b;
   }
 
@@ -512,7 +519,7 @@ struct tc_fam {
     if (G) {
       cm_cnt & g = G[sc];
       s = tc_bit(g.P(), tc_enc && x < 0);
-      g.upd(s, rA);
+      g.upd(s, rA, mw);
     } else { prp = tcp_sign(pc, m);  s = bit(TC_SIGN, tc_enc && x < 0);  prp = -1; }
     return s ? -m : m;
   }
@@ -548,6 +555,7 @@ static i16 * dg_hist[VD_MAXRES];
 static i16 * dg_hist2[VD_MAXRES];         /*  the same, one packet further back  */
 static u16 * dg_avg[VD_MAXRES];           /*  running mean magnitude, 4.12 fixed  */
 static i16 * dg_pp[VD_MAXRES];            /*  [channel][slot]: the earlier pass's digit this packet  */
+static i16 * dg_ps[VD_MAXRES];            /*  and everything the passes so far put there  */
 static u8  * dg_pn[VD_MAXRES];            /*  [channel][slot]: passes that coded this slot so far  */
 static u8  * cl_hist[VD_MAXRES];
 static sz    dg_span[VD_MAXRES], cl_np[VD_MAXRES];
@@ -565,6 +573,7 @@ static void tc_hist_free(void) {
     free(dg_hist2[i]); dg_hist2[i] = nullptr;
     free(dg_avg[i]);   dg_avg[i] = nullptr;
     free(dg_pp[i]);    dg_pp[i] = nullptr;
+    free(dg_ps[i]);    dg_ps[i] = nullptr;
     free(dg_pn[i]);    dg_pn[i] = nullptr;
     free(cl_hist[i]);  cl_hist[i] = nullptr;
     dg_span[i] = cl_np[i] = 0;
@@ -595,6 +604,7 @@ static void tc_setup_done(void) {
       dg_hist2[i] = (i16 *) tc_alloc((sz) 2 * 8 * tc_nchan * span * sizeof(i16));
       dg_avg[i]   = (u16 *) tc_alloc((sz) 2 * 8 * tc_nchan * span * sizeof(u16));
       dg_pp[i]    = (i16 *) tc_alloc((sz) tc_nchan * span * sizeof(i16));
+      dg_ps[i]    = (i16 *) tc_alloc((sz) tc_nchan * span * sizeof(i16));
       dg_pn[i]    = (u8 *)  tc_alloc((sz) tc_nchan * span);
     }
     cl_np[i] = span ? span / r->psz + 2 : 0;
@@ -761,13 +771,14 @@ static INLINE i32 tc_sq(i32 v) {          /*  signed log-ish quantisation  */
   return v < 0 ? -q : q;
 }
 static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
-                    i32 bkq, u32 dim, u32 bn) {
+                    i32 bkq, u32 dim, u32 bn, i32 clrun, int clmatch) {
   sz span = dg_span[rno];
   sz hb = ((sz) (tc_blk * 8 + pss) * tc_nchan + j) * span;
   i16 * hist  = span ? dg_hist[rno]  + hb : nullptr;
   i16 * hist2 = span ? dg_hist2[rno] + hb : nullptr;
   u16 * avg   = span ? dg_avg[rno]   + hb : nullptr;
   i16 * pp    = span ? dg_pp[rno] + (sz) j * span : nullptr;
+  i16 * ps    = span ? dg_ps[rno] + (sz) j * span : nullptr;
   u8  * pn    = span ? dg_pn[rno] + (sz) j * span : nullptr;
   sz base = (sz) ((rno * 8 + pss) * tc_nchan + j);
   i32 * q1 = dg_q1 + base, * q2 = dg_q2 + base, * zr = dg_zr + base;
@@ -787,6 +798,7 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
     i32 w1 = ok && slot >= dim ? hist[slot - dim] : 0;
     i32 av = ok ? avg[slot] : 0;
     i32 p0 = ok ? pp[slot] : 0;
+    i32 psum = ok ? ps[slot] : 0;
     i32 pnn = ok ? pn[slot] : 0;
     i64 dg;
     u32 sc;
@@ -797,6 +809,16 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
     d.t1 = tc_qlog(t1);  d.t1s = tc_sq(t1);
     d.t2 = tc_qlog(t2);  d.n1 = tc_qlog(n1);  d.w1 = tc_qlog(w1);
     d.p0 = tc_qlog(p0);  d.p0s = tc_sq(p0);  d.pn = pnn;
+    /*  What the passes before this one have already put at this slot,
+        signed.  Once three passes have hit a slot the last one alone is a
+        poor summary of where the value stands; the refinement leans against
+        the running total, not against the last correction.  */
+    d.ps = tc_sq(psum);
+    /*  For a type-2 residue the vector interleaves the channels, so a slot's
+        channel is its position modulo their number -- which is what vpos
+        names only when the book's dimension happens to be even.  */
+    d.chn = (int) (tc_nchan ? (((sz) pc * psz + i) % tc_nchan) : 0);
+    d.crun = tc_qlog(clrun);  d.cm = clmatch;
     d.cls = (int) cls;  d.zrun = tc_qlog(*zr);  d.blk = (int) tc_blk;
     d.bkq = bkq;
     /*  A vector's digits are the places of one codebook entry, so the prior
@@ -864,12 +886,17 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
       hist[slot] = c;
       avg[slot] = (u16) ((((u32) avg[slot] * (u32) TC_dig_avD) >> 8) + (u32) (a > 4095 ? 4095 : a) * 16);
       pp[slot] = c;  pn[slot] = (u8) (pnn < 7 ? pnn + 1 : 7);
+      { i32 t = psum + c;
+        ps[slot] = (i16) (t < -32768 ? -32768 : t > 32767 ? 32767 : t); }
     }
     *q2 = *q1;  *q1 = (i32) dg;
     *zr = dg ? 0 : *zr + 1;
     if (tc_verbose) tc_syms[STG_DIGIT]++;
   }
 }
+
+static i32 cl_run[VD_MAXRES];             /*  how long the class has held  */
+static u8 cl_same[1u << 20];              /*  and whether it held from last packet  */
 
 static u32 tc_classify(u32 rno, u32 j, u32 slot) {
   tcx v;
@@ -885,6 +912,7 @@ static u32 tc_classify(u32 rno, u32 j, u32 slot) {
   c = fam_cls.code(v, c);
   if (!tc_enc) tc_out->put("res.class", c);
   FATAL_UNLESS(c >= 0 && c < 16, "coded stream: residue class %" PRId64, c);
+  cl_run[rno] = (c == cl_last[rno]) ? cl_run[rno] + 1 : 0;
   if (hist && slot < cl_np[rno]) hist[slot] = (u8) c;
   cl_last2[rno] = cl_last[rno];  cl_last[rno] = (i32) c;
   if (tc_verbose) tc_syms[STG_CLASS]++;
@@ -893,6 +921,7 @@ static u32 tc_classify(u32 rno, u32 j, u32 slot) {
 
 /*  The residue walk of io.inc, over records rather than bits.  */
 static u8 tc_cl[1u << 20];
+static u8 cl_run_buf[1u << 20];           /*  the run and the match, per slot  */
 static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
   vd_res * r = su.rs + rno;
   vd_book * cb = su.bk + r->cbook;
@@ -911,6 +940,7 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
                (u64) ((sz) vch * w), (u64) sizeof tc_cl);
   if (dg_span[rno]) {
     memset(dg_pp[rno], 0, (sz) tc_nchan * dg_span[rno] * sizeof(i16));
+    memset(dg_ps[rno], 0, (sz) tc_nchan * dg_span[rno] * sizeof(i16));
     memset(dg_pn[rno], 0, (sz) tc_nchan * dg_span[rno]);
   }
   for (pss = 0; pss < 8; pss++) {
@@ -923,8 +953,16 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
               vector's digits get the residue book's.  */
           fam_cls.pc.start(tcp_cls[rno].ok ? &tcp_cls[rno] : nullptr);
           for (k = 0; k < pv; k++) {
+            u8 * ch = cl_np[rno] ? cl_hist[rno] + ((sz) tc_blk * tc_nchan + j) * cl_np[rno]
+                                 : nullptr;
+            i32 was = (ch && pc + k < cl_np[rno]) ? ch[pc + k] : -1;
+            i32 run = cl_run[rno];
             u32 c = tc_classify(rno, j, pc + k);
             tc_cl[j * w + pc + k] = (u8) c;
+            if (j * w + pc + k < sizeof cl_run_buf) {
+              cl_run_buf[j * w + pc + k] = (u8) (run > 255 ? 255 : run);
+              cl_same[j * w + pc + k] = (u8) (was == (i32) c);
+            }
             fam_cls.pc.step((int) c);
           }
         }
@@ -943,7 +981,9 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
               means the same thing in the next file.  */
           if (bn >= 0)
             tc_part(rno, pss, j, pc, r->psz, c, tc_qlog(su.bk[bn].off),
-                    su.bk[bn].dim, (u32) bn);
+                    su.bk[bn].dim, (u32) bn,
+                    j * w + pc < sizeof cl_run_buf ? cl_run_buf[j * w + pc] : 0,
+                    j * w + pc < sizeof cl_same ? cl_same[j * w + pc] : 0);
         }
         pc++;
       }
@@ -1281,9 +1321,10 @@ static void tc_walk(const char * inpath, const char * outpath) {
            tcm.TC_##F##_S, tcm.TC_##F##_SC, TC_##F##_s_Volume,                \
            tcm.TC_##F##_F, tcm.TC_##F##_FC, TC_##F##_f_Volume,                \
            tcm.TC_##F##_W, TC_##F##_m_Volume, (g), (ng),                      \
-           tcm.TC_##F##_WM,                                                   \
+           tcm.TC_##F##_WM, tcm.TC_##F##_WC, tcm.TC_##F##_WMC,               \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \
-           TC_##F##_rS, TC_##F##_lr)
+           TC_##F##_rS, TC_##F##_lr, TC_##F##_mw, TC_##F##_bw,                \
+           TC_##F##_mb)
 
 static void tc_models(void) {
   cm_tables();
