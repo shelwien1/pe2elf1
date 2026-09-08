@@ -49,7 +49,7 @@ Index dig_a
  dig_a_rno:  rno,   1!0
  dig_a_pass: pass,  1!1111111
  dig_a_band: band, 1!111111111111111
- dig_a_col: col, 1!0100010
+ dig_a_col: col, 1!0100011
  dig_a_q1:   q1,    1!00000
  dig_a_q2:   q2,    1!0000
  dig_a_t1:   t1,    1!000
@@ -143,7 +143,7 @@ Index dig_d
 
 Index dig_s
  dig_s_pass: pass, 1!10
- dig_s_band: band, 1!000
+ dig_s_band: band, 1!100
  dig_s_q1: q1, 1!000
  dig_s_t1:   t1,    1!010
  dig_s_bkq:  bkq,   1!011
@@ -154,12 +154,12 @@ Index dig_s
  dig_s_t1s: t1s, -6!0000000000000
  dig_s_t2:   t2,   1!000
  dig_s_n1:   n1,   1!000
- dig_s_w1: w1, 1!010
- dig_s_p0: p0, 1!101
- dig_s_p0s: p0s, -6!0110000000100
+ dig_s_w1: w1, 1!000
+ dig_s_p0: p0, 1!100
+ dig_s_p0s: p0s, -6!0000000000000
  dig_s_pn: pn, 1!010
- dig_s_ax: ax, 1!110010101111
- dig_s_pq: pq, 1!00000100000000001000000000100000
+ dig_s_ax: ax, 1!100010101111
+ dig_s_pq: pq, 1!00000000000000000000000000000000
  dig_s_ps:   ps,   -6!0000000000000
  dig_s_chn:  chn,   1!0000000
  dig_s_crun: crun,  1!000000000
@@ -167,26 +167,26 @@ Index dig_s
 
 Index dig_f
  dig_f_pass: pass, 1!11
- dig_f_vpos: vpos, 1!1
+ dig_f_vpos: vpos, 1!0
  dig_f_cls: cls, 1!111111111
- dig_f_q1s: q1s, -6!0001000001000
- dig_f_p0s: p0s, -6!0000000000000
- dig_f_t1s: t1s, -6!1000000000000
- dig_f_ax: ax, 1!010101010101
- dig_f_band: band, 1!01010
- dig_f_pq: pq, 1!00000100000000001000000000100000
+ dig_f_q1s: q1s, -6!0100100010010
+ dig_f_p0s: p0s, -6!0100000000000
+ dig_f_t1s: t1s, -6!0000000000000
+ dig_f_ax: ax, 1!000101010101
+ dig_f_band: band, 1!10101
+ dig_f_pq: pq, 1!00000000000000000000000000000000
  dig_f_ps:   ps,   -6!0000000000000
  dig_f_chn:  chn,   1!0000000
  dig_f_crun: crun,  1!000000000
  dig_f_cm:   cm,    1!0
 
 Index dig_m
- dig_m_pass: pass,  1!111
+ dig_m_pass: pass, 1!010
  dig_m_band: band,  1!000
- dig_m_q1: q1, 1!010
+ dig_m_q1: q1, 1!000
  dig_m_t1:   t1,    1!0
  dig_m_bkq:  bkq,   1!001
- dig_m_cls: cls, 1!101010101010101
+ dig_m_cls: cls, 1!101011101010101
  dig_m_vpos: vpos,  1!1111111
  dig_m_q1s:  q1s,  -6!0000000000000
  dig_m_q2s:  q2s,  -6!0000000000000
@@ -194,11 +194,11 @@ Index dig_m
  dig_m_t2:   t2,   1!000
  dig_m_n1:   n1,   1!000
  dig_m_w1:   w1,   1!000
- dig_m_p0: p0, 1!101
+ dig_m_p0: p0, 1!100
  dig_m_p0s:  p0s,  -6!0000000000000
- dig_m_pn:   pn,   1!000
+ dig_m_pn: pn, 1!101
  dig_m_ax:   ax,   1!000000000000
- dig_m_pq: pq, 1!00000000000000000000000000000000
+ dig_m_pq: pq, 1!00100000100001000010000010000100
  dig_m_ps:   ps,   -6!0000000000000
  dig_m_chn:  chn,   1!0000000
  dig_m_crun: crun,  1!000000000

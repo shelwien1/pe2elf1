@@ -31,7 +31,7 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_a = 0;
   dig_a = dig_a*8 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1))+(pass>3+(1-1))+(pass>4+(1-1))+(pass>5+(1-1))+(pass>6+(1-1)));
   dig_a = dig_a*16 + TC_dig_a_band[__min(15,__max(0,band-(1-1)))];
-  dig_a = dig_a*3 + ((col>1+(1-1))+(col>5+(1-1)));
+  dig_a = dig_a*4 + ((col>1+(1-1))+(col>5+(1-1))+(col>6+(1-1)));
   dig_a = dig_a*3 + ((bkq>1+(1-1))+(bkq>3+(1-1)));
   dig_a = dig_a*6 + ((cls>1+(1-1))+(cls>3+(1-1))+(cls>6+(1-1))+(cls>7+(1-1))+(cls>8+(1-1)));
   dig_a = dig_a*2 + ((blk>0+(1-1)));
@@ -67,32 +67,29 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
 
   dig_s = 0;
   dig_s = dig_s*2 + ((pass>0+(1-1)));
+  dig_s = dig_s*2 + ((band>0+(1-1)));
   dig_s = dig_s*2 + ((t1>1+(1-1)));
   dig_s = dig_s*3 + ((bkq>1+(1-1))+(bkq>2+(1-1)));
-  dig_s = dig_s*2 + ((w1>1+(1-1)));
-  dig_s = dig_s*3 + ((p0>0+(1-1))+(p0>2+(1-1)));
-  dig_s = dig_s*4 + ((p0s>1+(-6-1))+(p0s>2+(-6-1))+(p0s>10+(-6-1)));
+  dig_s = dig_s*2 + ((p0>0+(1-1)));
   dig_s = dig_s*2 + ((pn>1+(1-1)));
-  dig_s = dig_s*9 + TC_dig_s_ax[__min(12,__max(0,ax-(1-1)))];
-  dig_s = dig_s*4 + ((pq>5+(1-1))+(pq>16+(1-1))+(pq>26+(1-1)));
+  dig_s = dig_s*8 + ((ax>0+(1-1))+(ax>4+(1-1))+(ax>6+(1-1))+(ax>8+(1-1))+(ax>9+(1-1))+(ax>10+(1-1))+(ax>11+(1-1)));
 
   dig_f = 0;
   dig_f = dig_f*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
-  dig_f = dig_f*2 + ((vpos>0+(1-1)));
   dig_f = dig_f*10 + TC_dig_f_cls[__min(9,__max(0,cls-(1-1)))];
-  dig_f = dig_f*3 + ((q1s>3+(-6-1))+(q1s>9+(-6-1)));
-  dig_f = dig_f*2 + ((t1s>0+(-6-1)));
-  dig_f = dig_f*7 + ((ax>1+(1-1))+(ax>3+(1-1))+(ax>5+(1-1))+(ax>7+(1-1))+(ax>9+(1-1))+(ax>11+(1-1)));
-  dig_f = dig_f*3 + ((band>1+(1-1))+(band>3+(1-1)));
-  dig_f = dig_f*4 + ((pq>5+(1-1))+(pq>16+(1-1))+(pq>26+(1-1)));
+  dig_f = dig_f*5 + ((q1s>1+(-6-1))+(q1s>4+(-6-1))+(q1s>8+(-6-1))+(q1s>11+(-6-1)));
+  dig_f = dig_f*2 + ((p0s>1+(-6-1)));
+  dig_f = dig_f*6 + ((ax>3+(1-1))+(ax>5+(1-1))+(ax>7+(1-1))+(ax>9+(1-1))+(ax>11+(1-1)));
+  dig_f = dig_f*4 + ((band>0+(1-1))+(band>2+(1-1))+(band>4+(1-1)));
 
   dig_m = 0;
-  dig_m = dig_m*4 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1)));
-  dig_m = dig_m*2 + ((q1>1+(1-1)));
+  dig_m = dig_m*2 + ((pass>1+(1-1)));
   dig_m = dig_m*2 + ((bkq>2+(1-1)));
-  dig_m = dig_m*9 + TC_dig_m_cls[__min(15,__max(0,cls-(1-1)))];
+  dig_m = dig_m*10 + TC_dig_m_cls[__min(15,__max(0,cls-(1-1)))];
   dig_m = dig_m*8 + ((vpos>0+(1-1))+(vpos>1+(1-1))+(vpos>2+(1-1))+(vpos>3+(1-1))+(vpos>4+(1-1))+(vpos>5+(1-1))+(vpos>6+(1-1)));
-  dig_m = dig_m*3 + ((p0>0+(1-1))+(p0>2+(1-1)));
+  dig_m = dig_m*2 + ((p0>0+(1-1)));
+  dig_m = dig_m*3 + ((pn>0+(1-1))+(pn>2+(1-1)));
+  dig_m = dig_m*7 + ((pq>2+(1-1))+(pq>8+(1-1))+(pq>13+(1-1))+(pq>18+(1-1))+(pq>24+(1-1))+(pq>29+(1-1)));
 
   dig_t = 0;
   dig_t = dig_t*4 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1)));
