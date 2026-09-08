@@ -48,12 +48,12 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   X.a = sgn_a;  X.b = sgn_b;  X.c = sgn_c;  X.d = sgn_d;  X.s = sgn_s;  X.f = sgn_f;  X.m = sgn_m;  X.t = sgn_t;
 }
 
-void tc_make_flr( int fno, int col, int p1, int n1, int raw, int blk,
-                  int o1, int pn, int od, int chn,
+void tc_make_flr( int fno, int col, int p1, int fy, int raw, int blk,
+                  int o1, int prd, int od, int chn,
                   int room, int hl, int lov, int hiv, int pri, int ep, tcx & X ) {
   int flr_a, flr_b, flr_c, flr_d, flr_s, flr_f, flr_m, flr_t;
-  (void) fno;  (void) col;  (void) p1;  (void) n1;  (void) raw;  (void) blk;
-  (void) o1;   (void) pn;   (void) od;  (void) chn;
+  (void) fno;  (void) col;  (void) p1;  (void) fy;  (void) raw;  (void) blk;
+  (void) o1;   (void) prd;  (void) od;  (void) chn;
   (void) room; (void) hl;   (void) lov; (void) hiv; (void) pri;  (void) ep;
   MakeIndex flr_a,flr_b,flr_c,flr_d,flr_s,flr_f,flr_m,flr_t
   X.a = flr_a;  X.b = flr_b;  X.c = flr_c;  X.d = flr_d;  X.s = flr_s;  X.f = flr_f;  X.m = flr_m;  X.t = flr_t;

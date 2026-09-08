@@ -186,24 +186,24 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   X.a = sgn_a;  X.b = sgn_b;  X.c = sgn_c;  X.d = sgn_d;  X.s = sgn_s;  X.f = sgn_f;  X.m = sgn_m;  X.t = sgn_t;
 }
 
-void tc_make_flr( int fno, int col, int p1, int n1, int raw, int blk,
-                  int o1, int pn, int od, int chn,
+void tc_make_flr( int fno, int col, int p1, int fy, int raw, int blk,
+                  int o1, int prd, int od, int chn,
                   int room, int hl, int lov, int hiv, int pri, int ep, tcx & X ) {
   int flr_a, flr_b, flr_c, flr_d, flr_s, flr_f, flr_m, flr_t;
-  (void) fno;  (void) col;  (void) p1;  (void) n1;  (void) raw;  (void) blk;
-  (void) o1;   (void) pn;   (void) od;  (void) chn;
+  (void) fno;  (void) col;  (void) p1;  (void) fy;  (void) raw;  (void) blk;
+  (void) o1;   (void) prd;  (void) od;  (void) chn;
   (void) room; (void) hl;   (void) lov; (void) hiv; (void) pri;  (void) ep;
 
   flr_a = 0;
   flr_a = flr_a*2 + ((fno>0+(1-1)));
   flr_a = flr_a*34 + TC_flr_a_col[__min(48,__max(0,col-(1-1)))];
-  flr_a = flr_a*2 + ((n1>0+(1-1)));
+  flr_a = flr_a*2 + ((fy>0+(1-1)));
   flr_a = flr_a*3 + ((hl>0+(1-1))+(hl>1+(1-1)));
 
   flr_b = 0;
   flr_b = flr_b*2 + ((col>6+(1-1)));
   flr_b = flr_b*13 + TC_flr_b_p1[__min(14,__max(0,p1-(1-1)))];
-  flr_b = flr_b*2 + ((n1>6+(1-1)));
+  flr_b = flr_b*2 + ((fy>6+(1-1)));
   flr_b = flr_b*2 + ((blk>0+(1-1)));
   flr_b = flr_b*9 + TC_flr_b_lov[__min(8,__max(0,lov-(1-1)))];
   flr_b = flr_b*12 + TC_flr_b_ep[__min(11,__max(0,ep-(1-1)))];
@@ -217,7 +217,7 @@ void tc_make_flr( int fno, int col, int p1, int n1, int raw, int blk,
 
   flr_s = 0;
   flr_s = flr_s*6 + ((col>0+(1-1))+(col>2+(1-1))+(col>3+(1-1))+(col>4+(1-1))+(col>6+(1-1)));
-  flr_s = flr_s*3 + ((n1>0+(1-1))+(n1>2+(1-1)));
+  flr_s = flr_s*3 + ((fy>0+(1-1))+(fy>2+(1-1)));
 
   flr_f = 0;
 

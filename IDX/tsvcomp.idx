@@ -395,20 +395,32 @@ Number sgn_mb, 1, 0!00010000
 #  ---------------------------------------------------------------------------
 #  Floor posts.  The column is the whole story here -- post 0 and post 1 are
 #  coded raw and land at the ends of the row, everything between them is a
-#  folded residual at a frequency the column names -- so it gets 48 buckets
-#  where the digit model gives its own position none.  `p1` is what this post
-#  was one packet ago, and it is the second factor: a floor curve is the
-#  spectral envelope, and an envelope moves slowly.
+#  folded residual against the line between the post's two bracketing
+#  neighbours, at a frequency the column names -- so it gets 48 buckets where
+#  the digit model gives its own position none.
+#
+#  The posts are coded in list order, not the ascending-X order the records
+#  are in, because that is the order the prediction is available in:
+#
+#    prd   render_point between the bracketing neighbours   room  hl  the
+#          room either side of it, and which side is wider
+#    lov hiv  what those two neighbours' own residuals were
+#    fy    the curve this post carried one packet ago
+#    ep    what floor1 would have coded for that curve against this packet's
+#          prediction -- the residual if the envelope had not moved, which is
+#          the second factor after the column
+#    p1    this post's residual one packet ago, which ep largely replaces
+#    pri   what the subclass books and the classword make of the value
 
 Index flr_a
 ! flr_a_fno:  fno,   1!1
 ! flr_a_col:  col,   1!111111111111111111111111111100000100111000000001
 ! flr_a_p1:   p1,    1!0000000
-! flr_a_n1:   n1,    1!100
+! flr_a_fy:   fy,    1!100
 ! flr_a_raw:  raw,   1!0
 ! flr_a_blk:  blk,   1!0
 ! flr_a_o1:   o1,    1!0000000
-! flr_a_pn:   pn,    1!0000000
+! flr_a_prd:   prd,    1!0000000
 ! flr_a_od:   od,   -4!000000000
 ! flr_a_chn:  chn,   1!0
 ! flr_a_room: room,  1!00000000
@@ -422,11 +434,11 @@ Index flr_b
 ! flr_b_fno:  fno,   1!0
 ! flr_b_col:  col,   1!0000001
 ! flr_b_p1:   p1,    1!11111111111100
-! flr_b_n1:   n1,    1!0000001
+! flr_b_fy:   fy,    1!0000001
 ! flr_b_raw:  raw,   1!0
 ! flr_b_blk:  blk,   1!1
 ! flr_b_o1:   o1,    1!0000000
-! flr_b_pn:   pn,    1!0000000
+! flr_b_prd:   prd,    1!0000000
 ! flr_b_od:   od,   -4!000000000
 ! flr_b_chn:  chn,   1!0
 ! flr_b_room: room,  1!00000000
@@ -439,9 +451,9 @@ Index flr_b
 Index flr_c
 ! flr_c_col:  col,   1!1111111
 ! flr_c_p1:   p1,    1!000
-! flr_c_n1:   n1,    1!000
+! flr_c_fy:   fy,    1!000
 ! flr_c_o1:   o1,    1!1111111
-! flr_c_pn:   pn,    1!0000000
+! flr_c_prd:   prd,    1!0000000
 ! flr_c_od:   od,   -4!000000000
 ! flr_c_chn:  chn,   1!0
 ! flr_c_room: room,  1!00000000
@@ -454,9 +466,9 @@ Index flr_c
 Index flr_d
 ! flr_d_col:  col,   1!0000000
 ! flr_d_p1:   p1,    1!000
-! flr_d_n1:   n1,    1!000
+! flr_d_fy:   fy,    1!000
 ! flr_d_o1:   o1,    1!0000000
-! flr_d_pn:   pn,    1!0000000
+! flr_d_prd:   prd,    1!0000000
 ! flr_d_od:   od,   -4!000000000
 ! flr_d_chn:  chn,   1!0
 ! flr_d_room: room,  1!00000000
@@ -469,9 +481,9 @@ Index flr_d
 Index flr_s
 ! flr_s_col:  col,   1!1011101
 ! flr_s_p1:   p1,    1!000
-! flr_s_n1:   n1,    1!101
+! flr_s_fy:   fy,    1!101
 ! flr_s_o1:   o1,    1!0000000
-! flr_s_pn:   pn,    1!0000000
+! flr_s_prd:   prd,    1!0000000
 ! flr_s_od:   od,   -4!000000000
 ! flr_s_chn:  chn,   1!0
 ! flr_s_room: room,  1!00000000
@@ -484,9 +496,9 @@ Index flr_s
 Index flr_f
 ! flr_f_col:  col,   1!0000000
 ! flr_f_p1:   p1,    1!000
-! flr_f_n1:   n1,    1!000
+! flr_f_fy:   fy,    1!000
 ! flr_f_o1:   o1,    1!0000000
-! flr_f_pn:   pn,    1!0000000
+! flr_f_prd:   prd,    1!0000000
 ! flr_f_od:   od,   -4!000000000
 ! flr_f_chn:  chn,   1!0
 ! flr_f_room: room,  1!00000000
@@ -499,9 +511,9 @@ Index flr_f
 Index flr_m
 ! flr_m_col:  col,   1!111111111111111
 ! flr_m_p1:   p1,    1!001
-! flr_m_n1:   n1,    1!000
+! flr_m_fy:   fy,    1!000
 ! flr_m_o1:   o1,    1!0000000
-! flr_m_pn:   pn,    1!0000000
+! flr_m_prd:   prd,    1!0000000
 ! flr_m_od:   od,   -4!000000000
 ! flr_m_chn:  chn,   1!0
 ! flr_m_room: room,  1!00000000
@@ -514,9 +526,9 @@ Index flr_m
 Index flr_t
 ! flr_t_col:  col,   1!011111111111111111110111111000100000000000000000
 ! flr_t_p1:   p1,    1!000
-! flr_t_n1:   n1,    1!000
+! flr_t_fy:   fy,    1!000
 ! flr_t_o1:   o1,    1!0000000
-! flr_t_pn:   pn,    1!0000000
+! flr_t_prd:   prd,    1!0000000
 ! flr_t_od:   od,   -4!000000000
 ! flr_t_chn:  chn,   1!0
 ! flr_t_room: room,  1!00000000
