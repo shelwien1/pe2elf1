@@ -5,6 +5,7 @@ balrogg-5/tsv2wav-vorbis
 balrogg-5/tsvsteg
 balrogg-5/tsvsteg-vorbis
 balrogg-5/tsvtrans
+balrogg-5/tsvcomp
 *.o
 
 # round-trip test byproducts (t.sh / t.bat)
@@ -14,6 +15,7 @@ balrogg-5/tsvtrans
 *.meta
 *.ogr
 *.bmp
+*.tc
 
 # prebuilt Windows binaries from the original drop
 *.exe

@@ -39,19 +39,41 @@ static const int SCALE    = 1<<SCALElog;
 struct rc_buf {
   u8 * p;
   sz n, cap, at;
+  /*  A stream too large to hold can name a file instead: put() then empties
+      the buffer into it rather than growing, and get() refills from it.  The
+      buffer-only behaviour is unchanged when this is null, which is what
+      tsvsteg uses.  */
+  FILE * f;
 
-  void init() { p = nullptr;  n = cap = at = 0; }
+  void init() { p = nullptr;  n = cap = at = 0;  f = nullptr; }
   void free_() { ::free(p);  init(); }
 
-  byte get() { return at < n ? p[at++] : (byte) (at++, 0xFF); }
+  void attach(FILE * file, sz bufsz) {
+    p = (u8 *) malloc(bufsz);
+    if (!p) FATAL_CODE(BLR_EXIT_IO, "out of memory for the coder buffer");
+    cap = bufsz;  n = at = 0;  f = file;
+  }
+  void flush() {
+    if (f && n) { if (fwrite(p, 1, n, f) != n)
+                    FATAL_CODE(BLR_EXIT_IO, "write error on the coded stream");
+                  n = 0; }
+  }
+
+  byte get() {
+    if (at >= n && f) { at = 0;  n = fread(p, 1, cap, f); }
+    return at < n ? p[at++] : (byte) (at++, 0xFF);
+  }
 
   void put(byte c) {
     if (n == cap) {
-      sz want = cap ? cap * 2 : 1 << 12;
-      u8 * q = (u8 *) realloc(p, want);
-      if (!q) FATAL_CODE(BLR_EXIT_IO, "out of memory for %" PRIu64 " payload bytes",
-                         (u64) want);
-      p = q;  cap = want;
+      if (f) { flush(); }
+      else {
+        sz want = cap ? cap * 2 : 1 << 12;
+        u8 * q = (u8 *) realloc(p, want);
+        if (!q) FATAL_CODE(BLR_EXIT_IO, "out of memory for %" PRIu64 " payload bytes",
+                           (u64) want);
+        p = q;  cap = want;
+      }
     }
     p[n++] = c;
   }

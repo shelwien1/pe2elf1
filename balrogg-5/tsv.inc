@@ -157,6 +157,9 @@ struct tsv {
   }
   char * mem;                 /*  when set, output goes here, not to a file  */
   sz memcap, memlen;
+  int memgrow;                /*  and emit may resize it  */
+  const char * msrc;          /*  when set, input comes from here  */
+  sz mlen, mat;
   sz bytes;                   /*  what has been written, for trial runs  */
   sz ip, in;                  /*  cursor and fill of the read buffer  */
   char rtag[TSV_TAGMAX + 1];  /*  tag of the row being read  */
@@ -166,23 +169,39 @@ struct tsv {
     f = fopen(pth, "wb");
     if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", pth);
     path = pth;  enc = 1;  row = 0;  on = 0;  rl = 0;  wtag = nullptr;  bytes = 0;
-    mem = nullptr;  memcap = memlen = 0;
+    mem = nullptr;  memcap = memlen = 0;  memgrow = 0;
+    msrc = nullptr;  mlen = mat = 0;
     terse = 0;  clng = csht = nullptr;
     emit(TSV_MAGIC, sizeof TSV_MAGIC - 1);  emit("\n", 1);
   }
 
   /*  Write into memory instead of a file, so a section can be captured and
-      compared against one generated from elsewhere.  */
-  void create_mem(char * buf, sz cap) {
+      compared against one generated from elsewhere.
+
+      `grow` says the buffer is this stream's to resize -- it must then have
+      come from malloc, and the caller takes `mem` and `memcap` back
+      afterwards, since a realloc will have moved it.  A capture whose size
+      the caller cannot bound in advance needs that: tsvcomp captures a
+      link's header packets, and how many records those hold is a property of
+      the stream rather than of the packet length.  */
+  void create_mem(char * buf, sz cap, int grow) {
     f = nullptr;  path = "(memory)";  enc = 1;  row = 0;  on = 0;  rl = 0;
     wtag = nullptr;  bytes = 0;  mem = buf;  memcap = cap;  memlen = 0;
-    terse = 0;  clng = csht = nullptr;
+    memgrow = grow;  terse = 0;  clng = csht = nullptr;
   }
 
   void emit(const char * s, sz n) {
     bytes += n;                 /*  so a trial run can be sized without a file  */
-    if (mem) {
-      FATAL_UNLESS(memlen + n <= memcap, "captured section is too large");
+    if (mem || memgrow) {           /*  a growable capture starts empty  */
+      if (memlen + n > memcap) {
+        char * t;
+        FATAL_UNLESS(memgrow, "captured section is too large");
+        while (memcap < memlen + n) memcap = memcap ? memcap * 2 : (sz) 1 << 16;
+        t = (char *) realloc(mem, memcap);
+        if (!t) FATAL_CODE(BLR_EXIT_IO, "out of memory for %" PRIu64
+                           " captured bytes", (u64) memcap);
+        mem = t;
+      }
       memcpy(mem + memlen, s, n);  memlen += n;
       return;
     }
@@ -199,6 +218,21 @@ struct tsv {
     memcpy(tsv_ob + on, s, n);  on += n;
   }
 
+  /*  Read from memory rather than a file.  A section captured on the way out
+      can then be parsed again on the way back without a detour through the
+      filesystem; tsvcomp does that with the header packets.
+
+      There is no magic line to check, because the writer at the other end of
+      this is create_mem, which does not write one: a captured section is a
+      run of records, not a file, and the two are only ever paired with each
+      other.  A memory reader also does not touch the shared input buffer, so
+      unlike open() it may be used while a file reader is open.  */
+  void open_mem(const char * buf, sz len) {
+    f = nullptr;  msrc = buf;  mlen = len;  mat = 0;
+    path = "<memory>";  enc = 0;  row = 0;  ip = in = 0;  left = 0;  rtag[0] = 0;
+    tee = nullptr;  terse = 0;  clng = csht = nullptr;
+  }
+
   void open(const char * pth) {
     const char * m = TSV_MAGIC;
     int c;
@@ -206,6 +240,7 @@ struct tsv {
     if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot open %s", pth);
     path = pth;  enc = 0;  row = 0;  ip = in = 0;  left = 0;  rtag[0] = 0;
     tee = nullptr;  terse = 0;  clng = csht = nullptr;
+    msrc = nullptr;  mlen = mat = 0;
     while (*m) {
       FATAL_UNLESS(rd() == (u8) *m, "%s: not a balrogg TSV stream", path);
       m++;
@@ -317,6 +352,7 @@ private:
 
   /*  Next input byte, or -1 at end of file.  */
   INLINE int rd() {
+    if (msrc) return mat < mlen ? (u8) msrc[mat++] : -1;
     if (ip == in) {
       in = fread(tsv_ib, 1, TSV_IBUF, f);
       ip = 0;

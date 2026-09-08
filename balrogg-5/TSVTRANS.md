@@ -6,7 +6,8 @@
 Nothing is compressed here. `tsvtrans` reads a balrogg record stream and
 writes another one, and mode d turns it back byte for byte. What it does is
 hand whatever coder comes next a stream with less in it and a shape that coder
-can address:
+can address -- and `tsvcomp` (TSVCOMP.md) is now that coder, built on this
+tool's walk and on the measurements below:
 
 * **values the stream already implies are dropped**, and mode d works them out
   again -- the page header's type, sequence and serial, the granule, and the

@@ -5,6 +5,7 @@
 #  make tsvsteg-vorbis  the same, libvorbis-assisted
 #  make test            round-trip 00.ogg through both tools and compare
 #  make test-steg       the same, with a payload in the WAV (see STEG.md)
+#  make test-comp       round-trip a stream through tsvcomp and compare
 #  make test TESTFILES=path/to/dir     round-trip every .ogg in a directory
 #
 #  CXXFLAGS is yours to set.  The flags the build needs rather than prefers are
@@ -41,6 +42,8 @@ W2V_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
 STG_INC = sh_v2f.inc steg.inc
 TRN_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
           bmp.inc
+CMP_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
+          sh_v2f.inc cm.inc idx.inc
 
 #  The vorbis build adds these two and drops floor_db.inc, whose table it takes
 #  from libvorbis instead (tsv2wav.cpp:99).
@@ -78,6 +81,9 @@ tsv2wav-vorbis: tsv2wav.cpp $(VRB_INC) $(VRB_SRC) .flags
 tsvtrans: tsvtrans.cpp $(TRN_INC) .flags
 	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ tsvtrans.cpp $(LIBS)
 
+tsvcomp: tsvcomp.cpp $(CMP_INC) .flags
+	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ tsvcomp.cpp $(LIBS)
+
 tsvsteg: tsvsteg.cpp tsv2wav.cpp $(W2V_INC) $(STG_INC) .flags
 	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ tsvsteg.cpp $(LIBS)
 
@@ -95,6 +101,9 @@ test-vorbis: balrogg tsv2wav-vorbis
 test-trans: balrogg tsvtrans
 	sh t-trans.sh $(TESTFILES)
 
+test-comp: balrogg tsvcomp
+	sh t-comp.sh $(TESTFILES)
+
 test-steg: balrogg tsvsteg
 	sh t-steg.sh $(TESTFILES)
 
@@ -103,7 +112,9 @@ test-steg-vorbis: balrogg tsvsteg-vorbis
 
 clean:
 	rm -f balrogg tsv2wav tsv2wav-vorbis tsvsteg tsvsteg-vorbis tsvtrans \
+	      tsvcomp \
 	      .flags .flags.tmp
 	rm -f *.tsv *.tsr *.wav *.meta *.ogr
 
-.PHONY: all test test-vorbis test-steg test-steg-vorbis test-trans clean FORCE
+.PHONY: all test test-vorbis test-steg test-steg-vorbis test-trans test-comp \
+        clean FORCE

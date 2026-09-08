@@ -562,7 +562,7 @@ static int cb_q = -1;                     /*  the setting that reproduces them  
 /*  Emit every codebook of a setting into a buffer, in balrogg's own form.  */
 static sz cb_render(vbooks & g, char * buf) {
   tsv d;  int i;
-  d.create_mem(buf, CB_CAP);
+  d.create_mem(buf, CB_CAP, 0);
   for (i = 0; i < g.count(); i++) g.emit(i, d, 1);
   d.flush_row();
   return d.memlen;
@@ -678,7 +678,7 @@ static void su_books(tsv & t, u32 nbk, vd_book * bk) {
     tsv * save = t.tee;
     sz alen;
     int qq;
-    cap.create_mem(cb_a, CB_CAP);
+    cap.create_mem(cb_a, CB_CAP, 0);
     /*  both paths have to land in the capture: the plain records arrive via
         the tee, the regrouped sparse ones via su_dst  */
     t.tee = &cap;  su_dst = &cap;
