@@ -94,6 +94,7 @@ static const tsv_short TSV_SHORT[] = {
   { "map.count", "4" },
   { "mode.count", "5" },
   { "pg.pred", "aj" },
+  { "steg.n", "ak" },
   { "cg.on", "ai" },
   { "dg.on", "6" },
   { "vf.q", "7" },

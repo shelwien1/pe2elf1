@@ -26,6 +26,11 @@
     The pair is still lossless: nothing about the payload changes what the
     meta has to carry, only how much of it there is.
 
+    A payload too large for the stream is not refused.  The stream holds what
+    it holds -- about 0.72 bits a sample -- and the prefix that fits goes in;
+    mode c says how much did.  A payload smaller than the stream runs into
+    0xFF padding, which is what the coder reads past the end of the file.
+
     Three differences from tsv2wav's mode c, all of them consequences of mode d
     having to recompute the samples rather than merely read them:
 
@@ -55,13 +60,15 @@ int main(int argc, char ** argv) {
 #endif
   wav_shape = STEG_SHAPE;
   if (argv[1][0] == 'c') {
-    /*  The payload goes in during the synthesis, and the check that it came
-        back out runs alongside it, so a payload too big for the stream fails
-        here rather than after the whole meta has been built.  */
+    /*  The payload goes in during the synthesis, and an encoder runs beside
+        the decoder over the same choices, so how much of it came back is
+        known as soon as the WAV is written -- and before the meta, which has
+        to carry that count.  A payload larger than the stream is not an
+        error: the prefix that fits goes in and steg_say() reports it.  */
     steg_embed_begin(argv[5]);
     synth_and_fit(argv[2], argv[3]);
-    steg_embed_end(argv[5]);
-    steg_report(argv[3]);
+    steg_embed_end();
+    steg_say(1);
     /*  The analysis passes below read the WAV; none of them synthesises, so
         none of them can disturb what was just written.  */
     steg_mode = STEG_OFF;
@@ -82,7 +89,7 @@ int main(int argc, char ** argv) {
     steg_refpath = argv[2];
     walk(ROLE_SYNTH, argv[3], nullptr, DEV_NULL);
     steg_extract_end(argv[5]);
-    steg_report(argv[2]);
+    steg_say(0);
   }
   return BLR_EXIT_OK;
 }

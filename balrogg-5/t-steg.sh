@@ -17,9 +17,10 @@
 #      TSVSTEG=./tsvsteg-vorbis ./t-steg.sh testfiles/   pick the build
 #      PAYLOAD=8192 ./t-steg.sh testfiles/               payload bytes
 #
-#  The default payload is small enough for any stream of a second or two; a
-#  stream too short for it fails with the size that would fit, which is not a
-#  bug in the tool.  See STEG.md.
+#  The comparison is exact, so the payload has to be one the stream can hold:
+#  tsvsteg stores the prefix that fits and says so, which is not a failure but
+#  would fail this test.  The default is small enough for any stream of a
+#  second or two.  See STEG.md.
 
 set -u
 

@@ -108,6 +108,7 @@
 enum { STEG_OFF, STEG_EMBED, STEG_EXTRACT };
 static int steg_mode = STEG_OFF;
 static const char * steg_refpath;
+static u64 steg_stored, steg_want;
 static int steg_choose(double x, int obs);
 static const i16 * steg_ref_frame(u32 ch);
 static void steg_ref_open(const char * path, u32 ch, u32 rate);
@@ -1102,12 +1103,20 @@ static void walk(int role, const char * srcpath, const char * dstpath,
               models_put(dst, dec.s);
               dst.put("dg.on", dg_on);
               dst.put("cg.on", cg_on);
+#ifdef BLR_STEG
+              /*  what mode c got in, so mode d knows where the payload stops
+                  and the coder's flush begins  */
+              dst.put("steg.n", (i64) steg_stored);
+#endif
               VF_QREC(dst);
             }
             if (role == ROLE_REST) {
               models_get(src, dec.s);
               dg_on = (int) src.get("dg.on");
               cg_on = (int) src.get("cg.on");
+#ifdef BLR_STEG
+              steg_want = (u64) src.get("steg.n");
+#endif
               VF_QGET(src);
             }
             src.tee = (role == ROLE_META || role == ROLE_REST) ? &dst : nullptr;

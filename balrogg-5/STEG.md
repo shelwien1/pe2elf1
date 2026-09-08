@@ -79,13 +79,52 @@ each choice back into payload.
 meta too.** That is a property of the construction, not a security claim; see
 the limits at the end.
 
-## Container
+## Container, and what happens when the payload does not fit
 
-The payload goes in behind its own 8-byte little-endian length, so extraction
-knows where the real bytes stop and the coder's flush begins. Mode c runs an
-encoder alongside the decoder over the same choices and checks that what comes
-back is what went in, so a payload too large for the stream fails during the
-synthesis rather than silently truncating.
+The payload is read as an endless stream: the file, then `0xFF` for ever. So
+the two awkward cases stop being cases at all.
+
+**A payload smaller than the stream** runs into the padding. Nothing marks the
+end of the file, because nothing needs to.
+
+**A payload larger than the stream is not an error.** The gaps hold what they
+hold; the prefix that fits goes in and the rest does not. Mode c says which
+happened, and that line is the one thing it always prints:
+
+    $ tsvsteg c 00.tsv 00steg.wav 00steg.meta 00.ogg
+    tsvsteg: stored 21528 of 183832 payload bytes; the remaining 162304 did not fit
+
+    $ tsvsteg c 00.tsv 00steg.wav 00steg.meta small.bin
+    tsvsteg: stored 4000 payload bytes
+
+The count is measured, not predicted. An encoder runs beside the decoder over
+the same choices, and because mode d encodes the same symbols through the same
+models, what that encoder gives back is exactly what mode d will give back --
+so the payload bytes that survive are the leading run on which the two agree.
+Past that the stream ran out of gaps and the coder's flush took over.
+
+Mode d writes exactly those bytes and says so:
+
+    $ tsvsteg d 00steg.wav 00.tsr 00steg.meta out.bin
+    tsvsteg: recovered 21528 payload bytes
+
+For that it needs the count, and the count is not knowable until the gaps have
+been walked -- so it cannot ride at the front of the stream it would itself
+displace. It goes in the meta, as `steg.n`. **That is the one place a tsvsteg
+meta differs from a tsv2wav one**, and it costs both ways: a tsv2wav build can
+no longer restore the record stream from a tsvsteg pair, and the meta says a
+payload is there. The alternative was handing back the payload with the
+coder's flush stuck on the end for the caller to trim, which is worse.
+
+`TSVSTEG_VERBOSE=1` adds the gaps behind the count:
+
+    tsvsteg: 239348 of 239360 samples had a gap to fill, 172586 bits =
+    21573 bytes at the ceiling; 0.72 bits a sample
+
+That ceiling is the entropy, and it is a ceiling rather than a promise: a range
+coder spends a little over it and the flush costs a few bytes, so on `00.ogg`
+21,573 bytes of ceiling took 21,528 bytes of payload. Size a payload by the
+ceiling; believe the stored count.
 
 ## What it costs
 
@@ -96,8 +135,8 @@ same files, with a 4 KiB payload:
 
 | | tsv2wav | tsvsteg | |
 |---|---:|---:|---:|
-| 17-file corpus | 13,252,200 | 15,078,038 | **+13.78%** |
-| 22 ffmpeg files | 1,007,208 | 1,104,599 | **+9.67%** |
+| 17-file corpus | 13,252,200 | 15,073,118 | **+13.74%** |
+| 22 ffmpeg files | 1,007,208 | 1,103,549 | **+9.57%** |
 
 Both round trip exactly: 17 of 17 and 22 of 22 give back the record stream
 byte for byte *and* the payload byte for byte.
@@ -107,36 +146,40 @@ On the ffmpeg files, which differ only in rate and quality:
 
 | | q1 | q5 | q10 |
 |---|---:|---:|---:|
-| 11025 Hz | +0.05% | +0.31% | +26.26% |
-| 16000 Hz | +0.04% | +4.51% | +57.06% |
-| 22050 Hz | +0.07% | +0.55% | +19.39% |
-| 32000 Hz | −0.03% | +4.82% | +20.64% |
-| 44100 Hz | +0.01% | +4.67% | +7.87% |
-| 48000 Hz | +0.02% | +4.45% | +12.39% |
+| 8000 Hz | +0.40% | +9.73% | +8.36% |
+| 11025 Hz | +0.04% | +0.41% | +25.76% |
+| 16000 Hz | +0.03% | +3.80% | +56.57% |
+| 22050 Hz | +0.03% | +0.82% | +18.76% |
+| 32000 Hz | +0.08% | +4.77% | +20.75% |
+| 44100 Hz | +0.03% | +4.73% | +7.65% |
+| 48000 Hz | +0.03% | +4.48% | +11.86% |
 
 A coarsely coded stream has residue digits far wider than an LSB, so moving a
 sample by one almost never changes one and the payload is close to free. A
 finely coded stream has digits at the same scale as the noise, and the payload
 costs half again as much meta. `00000008` and `00000009`, which are 86% of the
-corpus by bytes, pay +14.45% and +16.61% and are what the corpus total is.
+corpus by bytes, pay +14.52% and +16.38% and are what the corpus total is.
 
-Five of the seventeen corpus files come out **smaller** (`00000001` and
-`0000000B` by 0.34%). Moving a sample is as likely to fix a digit as to break
-one where the walk was already marginal, so at the low end this is noise
-around zero, not a cost.
+Four of the seventeen corpus files come out **smaller** (`00000001` and
+`0000000B` by 0.34%, `00000002` and `00000010` by 0.30%). Moving a sample is as
+likely to fix a digit as to break one where the walk was already marginal, so
+at the low end this is noise around zero, not a cost.
 
 **The cost does not depend on how much payload there is.** Every gap is filled
 by a draw whether or not there are payload bytes left to draw from -- past the
-end the coder reads padding -- so a one-byte payload buys the same noise as a
-full one. On `00000000`, against a 48,084-byte baseline:
+end the coder reads `0xFF` padding -- so a one-byte payload buys the same noise
+as a full one, and an oversized one buys no more. On `00000000`, against a
+48,084-byte baseline:
 
-| payload | meta |
-|---|---:|
-| 1 byte | 48,069 |
-| 4,096 bytes | 48,013 |
-| 20,000 bytes | 48,163 |
+| payload offered | stored | meta |
+|---|---:|---:|
+| 1 byte | 1 | 48,131 |
+| 4,096 bytes | 4,096 | 48,137 |
+| 20,000 bytes | 20,000 | 48,125 |
+| 30,000 bytes | 21,572 | 48,126 |
 
-That is the same ±0.15% either way. If a stream is worth using at all, fill it.
+Twelve bytes of spread across a range of 30,000, and the row that overran costs
+no more than the row that did not. If a stream is worth using at all, fill it.
 
 ## Capacity
 
@@ -152,11 +195,11 @@ Measured per file the rate is 0.72 bits a sample on every stream that is not
 partly silent; `ff_8000_q1` comes to 0.69 because 4.3% of its samples have no
 gap to fill at all.
 
-`TSVSTEG_VERBOSE=1` reports the figure. What mode c *quotes* when a payload
-does not fit is deliberately a little under the entropy -- 32 bytes and a
-further tenth of a percent -- because the entropy is a ceiling a range coder
-does not quite reach: on `00.ogg` the ceiling is 21,565 bytes and the largest
-payload that actually goes in is 21,544. The quoted figure is one that fits.
+These are entropy ceilings, which is what `TSVSTEG_VERBOSE=1` reports. Nothing
+now has to be sized against them: a payload that overruns is stored as far as
+it goes and mode c prints how far, so the ceiling is for planning and the
+stored count is for trusting. On `00.ogg` the ceiling is 21,573 bytes and
+21,528 go in.
 
 ## Limits
 
@@ -202,10 +245,11 @@ it changes width between Linux and Windows.
   `balrogg d` -- rebuild the original Ogg byte for byte with the payload
   intact: `00.ogg`, two ffmpeg files and two corpus files. `make test-steg`
   runs this over whatever `TESTFILES` names.
-* An empty payload; and 21,531 bytes into `00.ogg` against a quoted 21,512,
-  confirming the quote is under the true limit rather than over it.
-* A payload above capacity: refused during the synthesis, naming the size that
-  would fit.
+* An empty payload: stored 0, recovered 0.
+* A payload nine times the stream's capacity -- `00.ogg` carrying its own
+  183,832-byte Ogg -- stores 21,528 and exits 0, and what mode d gives back is
+  the first 21,528 bytes of that Ogg, byte for byte.
+* A payload of exactly the stored count, 21,528 bytes: all of it, exact.
 * A WAV sample moved by 1000: refused, naming the sample.
 * A meta from a different stream: refused.
 * The stego WAV against the plain one on `00.ogg`: 25.0% of samples differ,
