@@ -602,7 +602,13 @@ constexpr sz TC_HISTMAX = 1u << 23;       /*  and slots its history may take  */
 
 static i16 * dg_hist[VD_MAXRES];
 static i16 * dg_hist2[VD_MAXRES];         /*  the same, one packet further back  */
-static u16 * dg_avg[VD_MAXRES];           /*  running mean magnitude, 4.12 fixed  */
+/*  Running mean magnitude, 4.12 fixed.  u32 and not u16: the mean settles at
+    about 241 times the digit, so a u16 wraps for a sustained magnitude over
+    271 and `ax` -- the one axis counter D is built on -- becomes noise for
+    that slot.  No book in the corpus here has a range that wide, which is why
+    it had never shown; the clamp below bounds the digit at 4095, so u32 is
+    what that clamp implies.  */
+static u32 * dg_avg[VD_MAXRES];
 static i16 * dg_pp[VD_MAXRES];            /*  [channel][slot]: the earlier pass's digit this packet  */
 static i16 * dg_ps[VD_MAXRES];            /*  and everything the passes so far put there  */
 static u8  * dg_pn[VD_MAXRES];            /*  [channel][slot]: passes that coded this slot so far  */
@@ -651,7 +657,7 @@ static void tc_setup_done(void) {
     if (span) {
       dg_hist[i]  = (i16 *) tc_alloc((sz) 2 * 8 * tc_nchan * span * sizeof(i16));
       dg_hist2[i] = (i16 *) tc_alloc((sz) 2 * 8 * tc_nchan * span * sizeof(i16));
-      dg_avg[i]   = (u16 *) tc_alloc((sz) 2 * 8 * tc_nchan * span * sizeof(u16));
+      dg_avg[i]   = (u32 *) tc_alloc((sz) 2 * 8 * tc_nchan * span * sizeof(u32));
       dg_pp[i]    = (i16 *) tc_alloc((sz) tc_nchan * span * sizeof(i16));
       dg_ps[i]    = (i16 *) tc_alloc((sz) tc_nchan * span * sizeof(i16));
       dg_pn[i]    = (u8 *)  tc_alloc((sz) tc_nchan * span);
@@ -825,7 +831,7 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
   sz hb = ((sz) (tc_blk * 8 + pss) * tc_nchan + j) * span;
   i16 * hist  = span ? dg_hist[rno]  + hb : nullptr;
   i16 * hist2 = span ? dg_hist2[rno] + hb : nullptr;
-  u16 * avg   = span ? dg_avg[rno]   + hb : nullptr;
+  u32 * avg   = span ? dg_avg[rno]   + hb : nullptr;
   i16 * pp    = span ? dg_pp[rno] + (sz) j * span : nullptr;
   i16 * ps    = span ? dg_ps[rno] + (sz) j * span : nullptr;
   u8  * pn    = span ? dg_pn[rno] + (sz) j * span : nullptr;
@@ -933,7 +939,8 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
       i32 a = tc_abs(c);
       hist2[slot] = hist[slot];
       hist[slot] = c;
-      avg[slot] = (u16) ((((u32) avg[slot] * (u32) TC_dig_avD) >> 8) + (u32) (a > 4095 ? 4095 : a) * 16);
+      avg[slot] = (((u32) avg[slot] * (u32) TC_dig_avD) >> 8)
+                + (u32) (a > 4095 ? 4095 : a) * 16;
       pp[slot] = c;  pn[slot] = (u8) (pnn < 7 ? pnn + 1 : 7);
       { i32 t = psum + c;
         ps[slot] = (i16) (t < -32768 ? -32768 : t > 32767 ? 32767 : t); }
