@@ -230,10 +230,37 @@ static INLINE int tcp_sign(const tc_pcur & c, i64 mag) {
   }
   return tcp_p(wp, wn);
 }
-/*  A summary of the prior for the digit as a whole, for use as a context
-    axis: the log-odds that it is zero, in 32 steps.  */
-static INLINE int tcp_axis(const tc_pcur & c) {
-  int p = tcp_head(c, 0);
+/*  A mantissa bit.  The length cascade has settled how many bits the value
+    has and `pref` is what has been coded of it, leading one included, so the
+    alphabet is down to the few symbols that spell the rest.  This is the one
+    prior that has to be walked at coding time -- the prefix is not a prefix
+    of the codebook entry, so it cannot be tabulated per node.  */
+static INLINE int tcp_man(const tc_pcur & c, int nb, int p, u64 pref) {
+  const u32 * w;
+  u32 nd, w0 = 0, w1 = 0, j;
+  if (!c.usable() || nb < 2 || p > nb - 2) return -1;
+  nd = c.node();
+  w = c.t->pw + (sz) nd * c.t->nsym;
+  for (j = 0; j < c.t->nsym; j++) {
+    i32 v = c.t->val[j];
+    i32 a = v < 0 ? -v : v;
+    u32 u;
+    if (a < 3) continue;
+    if (tc_ptab::nbits(a) != nb) continue;
+    u = (u32) a - 2;
+    if ((u >> (nb - 1 - p)) != pref) continue;
+    if ((u >> (nb - 2 - p)) & 1) w1 += w[j];  else w0 += w[j];
+  }
+  return tcp_p(w0, w1);
+}
+
+/*  A probability as a context axis: its log-odds in 32 steps, with 0 kept
+    for "there was no prior", which is not the same as an even one.  */
+static INLINE int tcp_bucket(int p) {
   if (p < 0) return 0;
   return tc_clamp((cm_stretch(p) + CM_STMAX) >> 7, 0, 31) + 1;
+}
+/*  The prior for the digit as a whole: the log-odds that it is zero.  */
+static INLINE int tcp_axis(const tc_pcur & c) {
+  return tcp_bucket(tcp_head(c, 0));
 }

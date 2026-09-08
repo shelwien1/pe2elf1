@@ -290,7 +290,7 @@ static TC_T tcm;
 /*  Everything a residue digit's contexts are built from.  */
 struct tc_dv {
   int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1,
-      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq;
+      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq;
 };
 
 /*  One family's five index rows for one value: the two counters, the APM, the
@@ -327,6 +327,11 @@ struct tc_fam {
   i32 * W;
   cm_apm ap, ap2;
   cm_mix<7> mx;
+  /*  The mantissa's own two-input mix.  It stays out of the main mixer
+      because what it weighs is different -- one counter against the
+      codebook -- and because a bare counter is what a decision this cheap
+      deserves when there is no codebook to weigh it against.  */
+  cm_mix<3> mxm;
   tc_pcur pc;                             /*  the prior for the value in hand  */
   int prp;                                /*  P(this bit is zero) from it, or -1  */
   u32 ba, bb, bc, bd, bs, bf, bm, bt;
@@ -335,6 +340,7 @@ struct tc_fam {
   void wire(cm_cnt * a, int va, cm_cnt * b, int vb, cm_cnt * c, int vc,
             cm_cnt * d, int vd, cm_cnt * t, int vt,
             u16 * s, int vs, u16 * s2, int vf, i32 * w, int vm, cm_cnt * g, int vg,
+            i32 * wm,
             int ra, int rb, int rc_, int rd, int rs, int lrate) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
     cm_fill(A, (sz) va * TC_NODE);
@@ -346,6 +352,7 @@ struct tc_fam {
     ap.init(S, (u32) vs * TC_NODE);
     ap2.init(S2, (u32) vf * TC_NODE);
     mx.init(W, (u32) vm * TC_NODE);
+    mxm.init(wm, (u32) vt * TC_MNODE);
     /*  A pattern is a search space and the optimizer visits its ends, so
         anything used as a size, a shift or a limit is clamped at the point of
         use -- IDX/IDX-FORMAT.md §5 says the same, and means it.  */
@@ -410,7 +417,17 @@ struct tc_fam {
       itself should not be run four million times.  */
   INLINE int bitm(int node, int b) {
     cm_cnt & t = T[bt + node];
-    b = tc_bit(t.P(), b);
+    if (prp < 0) {                          /*  nothing to weigh it against  */
+      b = tc_bit(t.P(), b);
+      t.upd(b, rA);
+      return b;
+    }
+    mxm.add(cm_stretch(t.P()));
+    mxm.add(cm_stretch(prp));
+    mxm.add(256);
+    { int pm = mxm.mix(bt + (u32) node);
+      b = tc_bit(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b); }
+    mxm.upd(b, lr);
     t.upd(b, rA);
     return b;
   }
@@ -443,13 +460,16 @@ struct tc_fam {
       FATAL_UNLESS(k + 2 <= TC_NBMAX, "%s: a value of 2^%d or more",
                    tc_enc ? "this stream holds" : "coded stream", TC_NBMAX);
     }
-    prp = -1;
-    if (!tc_enc) u = 1;
-    for (p = 0; p < nb - 1; p++) {
-      int mb = bitm(tc_node_man(nb, p),
-                    tc_enc && ((u >> (nb - 2 - p)) & 1) != 0);
-      if (!tc_enc) u = u * 2 + (u64) mb;
-    }
+    { u64 pref = 1;                         /*  what both sides have of `u`  */
+      for (p = 0; p < nb - 1; p++) {
+        int mb;
+        prp = tcp_man(pc, nb, p, pref);
+        mb = bitm(tc_node_man(nb, p),
+                  tc_enc && ((u >> (nb - 2 - p)) & 1) != 0);
+        pref = pref * 2 + (u64) mb;
+      }
+      prp = -1;
+      if (!tc_enc) u = pref; }
     return (i64) (u - 1) + 3;
   }
 
@@ -737,6 +757,7 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
         restarts with the vector and walks down one level per digit.  */
     if (dim && d.vpos == 0) fam_dig.pc.start(pt);
     d.pq = tcp_axis(fam_dig.pc);
+    d.sq = 0;
     { /*  mp3c's exA: a weighted mean of the neighbourhood, log-quantised  */
       i32 ex = (av >> 4) * TC_dig_avA + tc_abs(t1) * TC_dig_avT1
              + tc_abs(t2) * TC_dig_avT2 + tc_abs(n1) * TC_dig_avN1
@@ -762,12 +783,19 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
       if (mg) {
         tcx w;
         int sn;
+        int spr = tcp_sign(fam_dig.pc, mg);
         d.mg = tc_qlog(mg);
+        /*  The codebook says which of +m and -m its entries hold at this
+            place, which for a coupled angle channel is most of what there is
+            to know about a sign.  It goes to the sign model twice: as the
+            mixer input it is, and as an axis, so the weight it is given can
+            depend on how sure it is.  */
+        d.sq = tcp_bucket(spr);
         tc_make_sgn(d, w);
         fam_sgn.select(w);
         /*  The sign is a different family but the same place in the same
             vector, so it reads the digit model's cursor.  */
-        fam_sgn.prp = tcp_sign(fam_dig.pc, mg);
+        fam_sgn.prp = spr;
         sn = fam_sgn.bit(0, tc_enc && dg < 0);
         fam_sgn.prp = -1;
         dg = sn ? -mg : mg;
@@ -1169,6 +1197,7 @@ static void tc_walk(const char * inpath, const char * outpath) {
            tcm.TC_##F##_S, TC_##F##_s_Volume,                                 \
            tcm.TC_##F##_F, TC_##F##_f_Volume,                                 \
            tcm.TC_##F##_W, TC_##F##_m_Volume, (g), (ng),                      \
+           tcm.TC_##F##_WM,                                                   \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \
            TC_##F##_rS, TC_##F##_lr)
 

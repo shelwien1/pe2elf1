@@ -46,6 +46,7 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_b = dig_b*2 + ((blk>0+(1-1)));
   dig_b = dig_b*2 + ((p0>0+(1-1)));
   dig_b = dig_b*2 + ((pn>0+(1-1)));
+  dig_b = dig_b*9 + TC_dig_b_pq[__min(32,__max(0,pq-(1-1)))];
 
   dig_c = 0;
   dig_c = dig_c*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
@@ -59,6 +60,7 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_d = dig_d*4 + ((q2s>1+(-6-1))+(q2s>3+(-6-1))+(q2s>11+(-6-1)));
   dig_d = dig_d*3 + ((cls>1+(1-1))+(cls>2+(1-1)));
   dig_d = dig_d*6 + ((p0s>4+(-6-1))+(p0s>5+(-6-1))+(p0s>6+(-6-1))+(p0s>7+(-6-1))+(p0s>8+(-6-1)));
+  dig_d = dig_d*9 + TC_dig_d_pq[__min(32,__max(0,pq-(1-1)))];
 
   dig_s = 0;
   dig_s = dig_s*4 + ((band>0+(1-1))+(band>1+(1-1))+(band>2+(1-1)));
@@ -83,6 +85,7 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_m = 0;
   dig_m = dig_m*4 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1)));
   dig_m = dig_m*2 + ((bkq>2+(1-1)));
+  dig_m = dig_m*9 + TC_dig_m_pq[__min(32,__max(0,pq-(1-1)))];
 
   dig_t = 0;
   dig_t = dig_t*4 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1)));
@@ -97,18 +100,19 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
       cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax, mg = D.mg,
-      pq = D.pq;
+      pq = D.pq, sq = D.sq;
   (void) rno;  (void) pass;  (void) band;  (void) col;  (void) vpos;
   (void) q1;   (void) q2;    (void) q1s;   (void) q2s;  (void) t1;
   (void) t1s;  (void) t2;    (void) n1;    (void) w1;   (void) p0;
   (void) p0s;  (void) pn;    (void) cls;   (void) zrun; (void) blk;
-  (void) bkq;  (void) ax;    (void) mg;    (void) pq;
+  (void) bkq;  (void) ax;    (void) mg;    (void) pq;   (void) sq;
 
   sgn_a = 0;
   sgn_a = sgn_a*5 + ((cls>5+(1-1))+(cls>6+(1-1))+(cls>7+(1-1))+(cls>8+(1-1)));
   sgn_a = sgn_a*6 + ((p0s>0+(-3-1))+(p0s>2+(-3-1))+(p0s>3+(-3-1))+(p0s>4+(-3-1))+(p0s>5+(-3-1)));
   sgn_a = sgn_a*2 + ((mg>2+(1-1)));
   sgn_a = sgn_a*3 + ((band>2+(1-1))+(band>4+(1-1)));
+  sgn_a = sgn_a*9 + TC_sgn_a_sq[__min(32,__max(0,sq-(1-1)))];
 
   sgn_b = 0;
   sgn_b = sgn_b*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
@@ -138,10 +142,12 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   sgn_f = sgn_f*2 + ((vpos>0+(1-1)));
   sgn_f = sgn_f*6 + ((p0s>0+(-3-1))+(p0s>2+(-3-1))+(p0s>3+(-3-1))+(p0s>4+(-3-1))+(p0s>6+(-3-1)));
   sgn_f = sgn_f*3 + ((mg>1+(1-1))+(mg>2+(1-1)));
+  sgn_f = sgn_f*9 + TC_sgn_f_sq[__min(32,__max(0,sq-(1-1)))];
 
   sgn_m = 0;
   sgn_m = sgn_m*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
   sgn_m = sgn_m*2 + ((mg>1+(1-1)));
+  sgn_m = sgn_m*9 + TC_sgn_m_sq[__min(32,__max(0,sq-(1-1)))];
 
   sgn_t = 0;
   X.a = sgn_a;  X.b = sgn_b;  X.c = sgn_c;  X.d = sgn_d;  X.s = sgn_s;  X.f = sgn_f;  X.m = sgn_m;  X.t = sgn_t;
