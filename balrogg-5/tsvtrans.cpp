@@ -101,11 +101,52 @@ static int tr_trace;
     because the rows are a fixed width: a ragged stream would shear.  */
 static const char * tr_ybmp;
 static const char * tr_gbmp;
-static bmp yimg, gimg;
-static int tr_img;                        /*  the images are open  */
+static bmp yimg, gimg;                    /*  everything in one pair  */
+static int tr_img;                        /*  the images are wanted  */
 constexpr u32 TR_BMPW = 4096;             /*  widest row a picture will hold  */
 static u8 tr_px[TR_BMPW * 3];
 static u32 tr_bmprows = 1u << 16;
+
+/*  Or one image a stream.  A file's digits are not one thing: this stream has
+    two residues, whose partitions are 16 and 32 values, and three cascade
+    passes each, which is six streams that the single picture interleaves in
+    emission order and pads to a common width.  Split, each gets its own
+    picture at its own width, with nothing padded and nothing interleaved --
+    which is what to look at when the question is what one stream does rather
+    than what the walk emits.  */
+static int tr_split;
+constexpr u32 TR_MAXIMG = 64;
+static bmp yimgs[VD_MAXFLOOR], gimgs[VD_MAXRES][8];
+static u8 yopen[VD_MAXFLOOR], gopen[VD_MAXRES][8];
+static u32 tr_nimg;
+
+/*  digits.bmp and residue 1 pass 0 give digits.g1_0.bmp.  */
+static char tr_nbuf[1024];
+static const char * tr_stem(const char * stem, const char * what) {
+  const char * dot = strrchr(stem, '.');
+  const char * cut = strrchr(stem, '/');
+  const char * bs = strrchr(stem, '\\');
+  if (bs && (!cut || bs > cut)) cut = bs;
+  if (dot && (!cut || dot > cut))
+    snprintf(tr_nbuf, sizeof tr_nbuf, "%.*s.%s%s", (int) (dot - stem), stem,
+             what, dot);
+  else
+    snprintf(tr_nbuf, sizeof tr_nbuf, "%s.%s.bmp", stem, what);
+  return tr_nbuf;
+}
+
+static bmp * tr_open1(bmp * im, u8 * flag, const char * stem, const char * what,
+                      u32 w) {
+  if (!*flag) {
+    FATAL_UNLESS(tr_nimg < TR_MAXIMG,
+                 "more than %" PRIu32 " streams to draw; run without the "
+                 "third and fourth file, or without -s", TR_MAXIMG);
+    im->create(tr_stem(stem, what), w > TR_BMPW ? TR_BMPW : w, tr_bmprows);
+    *flag = 1;  tr_nimg++;
+  }
+  return im->full() ? nullptr : im;
+}
+
 
 static tsv * tr_in;
 static tsv * tr_out;
@@ -123,8 +164,11 @@ static void tr_img_open(void) {
   for (i = 0; i < su.nrs; i++) if (su.rs[i].psz > gw) gw = su.rs[i].psz;
   if (yw > TR_BMPW) yw = TR_BMPW;
   if (gw > TR_BMPW) gw = TR_BMPW;
-  yimg.create(tr_ybmp, yw ? yw : 1, tr_bmprows);
-  gimg.create(tr_gbmp, gw ? gw : 1, tr_bmprows);
+  if (!tr_split) {
+    yimg.create(tr_ybmp, yw ? yw : 1, tr_bmprows);
+    gimg.create(tr_gbmp, gw ? gw : 1, tr_bmprows);
+    tr_nimg = 2;
+  }
   tr_img = 1;
 }
 
@@ -149,6 +193,19 @@ static void tr_tags(void) {
         worth +0.27%, so the pass is the coordinate that has to be visible.  */
     for (k = 0; k < 8; k++) snprintf(tag_d[i][k], sizeof **tag_d, "g%u_%u", i, k);
   }
+}
+
+/*  Which picture this row belongs in, opened if it is the first of its kind.  */
+static bmp * tr_yimg(u32 fno, u32 w) {
+  if (!tr_img) return nullptr;
+  if (!tr_split) return yimg.full() ? nullptr : &yimg;
+  return tr_open1(yimgs + fno, yopen + fno, tr_ybmp, tag_y[fno], w);
+}
+static bmp * tr_gimg(u32 rno, u32 pss, u32 w) {
+  if (!tr_img) return nullptr;
+  if (!tr_split) return gimg.full() ? nullptr : &gimg;
+  return tr_open1(&gimgs[rno][pss], &gopen[rno][pss], tr_gbmp,
+                  tag_d[rno][pss], w);
 }
 
 /*  A record that crosses unchanged, but whose value the traversal also needs.
@@ -205,38 +262,24 @@ static u8 tr_cl[TR_CSMAX];
 static FILE * tr_dump;
 static u32 tr_dpart, tr_dpass, tr_dch;
 
+/*  One partition: psz digits, read once and put once, with the pixels and the
+    dump taken in passing.  The tee is off here -- tr_audio detaches it -- so
+    the records are moved by hand rather than through pass().  */
 static void tr_part(u32 rno, u32 pss, u32 psz) {
-  u32 i;
-  if (tr_dump && tr_enc) {
-    tsv * in = tr_in;
-    for (i = 0; i < psz; i++) {
-      i64 d = in->get("res.digit");
+  u32 i, k = psz > TR_BMPW ? TR_BMPW : psz;
+  bmp * im = tr_gimg(rno, pss, psz);
+  const char * rt = (tr_enc || !tr_rows) ? "res.digit" : tag_d[rno][pss];
+  const char * wt = (tr_enc && tr_rows) ? tag_d[rno][pss] : "res.digit";
+  for (i = 0; i < psz; i++) {
+    i64 d = tr_in->get(rt);
+    if (im && i < k) bmp_div(d, tr_px + i * 3);
+    if (tr_dump && tr_enc)
       fprintf(tr_dump, "%u %u %u %u %u %" PRId64 "\n", rno, tr_dpass, tr_dch,
               tr_dpart, i, d);
-      tr_out->put(tag_d[rno][pss], d);
-    }
-    tr_out->flush_row();
-    return;
+    tr_out->put(wt, d);
   }
-  if (tr_img && !gimg.full()) {
-    /*  the row is wanted as pixels as well as records, and the records are
-        consumed once, so it is built here rather than read back  */
-    u32 k = psz > TR_BMPW ? TR_BMPW : psz;
-    for (i = 0; i < psz; i++) {
-      i64 d = tr_in->get(tr_enc || !tr_rows ? "res.digit" : tag_d[rno][pss]);
-      if (i < k) bmp_div(d, tr_px + i * 3);
-      tr_out->put(tr_enc && tr_rows ? tag_d[rno][pss] : "res.digit", d);
-    }
-    if (tr_enc && tr_rows) tr_out->flush_row();
-    gimg.row(tr_px, psz);
-    return;
-  }
-  if (!tr_rows) { for (i = 0; i < psz; i++) pass("res.digit");  return; }
-  if (tr_enc) {
-    for (i = 0; i < psz; i++) tr_out->put(tag_d[rno][pss], tr_in->get("res.digit"));
-    tr_out->flush_row();
-  } else
-    for (i = 0; i < psz; i++) tr_out->put("res.digit", tr_in->get(tag_d[rno][pss]));
+  if (tr_enc && tr_rows) tr_out->flush_row();
+  if (im) im->row(tr_px, psz);
 }
 
 /*  The residue walk of io.inc, over records rather than bits.  */
@@ -295,25 +338,17 @@ static void tr_payload(u32 mode) {
     u32 u = pass_u("flr.used", 2);
     nz[k] = (u8) u;
     if (!u) continue;
-    if (tr_img && !yimg.full()) {
+    { bmp * im = tr_yimg(fno, f->posts);
       u32 kk = f->posts > TR_BMPW ? TR_BMPW : f->posts;
+      const char * rt = (tr_enc || !tr_rows) ? "flr.y" : tag_y[fno];
+      const char * wt = (tr_enc && tr_rows) ? tag_y[fno] : "flr.y";
       for (i = 0; i < f->posts; i++) {
-        i64 y = tr_in->get(tr_enc || !tr_rows ? "flr.y" : tag_y[fno]);
-        if (i < kk) bmp_seq(y, tr_px + i * 3);
-        tr_out->put(tr_enc && tr_rows ? tag_y[fno] : "flr.y", y);
+        i64 y = tr_in->get(rt);
+        if (im && i < kk) bmp_seq(y, tr_px + i * 3);
+        tr_out->put(wt, y);
       }
       if (tr_enc && tr_rows) tr_out->flush_row();
-      yimg.row(tr_px, f->posts);
-      continue;
-    }
-    if (!tr_rows) { for (i = 0; i < f->posts; i++) pass("flr.y"); }
-    else if (tr_enc) {
-      for (i = 0; i < f->posts; i++)
-        tr_out->put(tag_y[fno], tr_in->get("flr.y"));
-      tr_out->flush_row();
-    } else
-      for (i = 0; i < f->posts; i++)
-        tr_out->put("flr.y", tr_in->get(tag_y[fno]));
+      if (im) im->row(tr_px, f->posts); }
   }
   for (i = 0; i < mp->nstep; i++)
     if (nz[mp->mag[i]] || nz[mp->ang[i]])
@@ -547,6 +582,7 @@ int main(int argc, char ** argv) {
         case 'W': tr_win = 0;   tr_opts = 1;  break;
         case 'R': tr_rows = 0;  tr_opts = 1;  break;
         case 'n': tr_page = tr_win = tr_rows = 0;  tr_opts = 1;  break;
+        case 's': tr_split = 1;  break;
         default: goto usage;
       }
   }
@@ -567,17 +603,43 @@ int main(int argc, char ** argv) {
   tr_walk(argv[a], argv[a + 1]);
   if (tr_dump && fclose(tr_dump)) FATAL_CODE(BLR_EXIT_IO, "write error on the dump");
   if (tr_img) {
-    u32 yr = yimg.rows, gr = gimg.rows, yw = yimg.w, gw = gimg.w;
-    u32 yc = yimg.clipped, gc = gimg.clipped;
-    yimg.close();  gimg.close();
-    fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 ", %s %" PRIu32 "x%" PRIu32 "\n",
-            blr_prog, tr_ybmp, yw, yr, tr_gbmp, gw, gr);
-    if (yr >= tr_bmprows || gr >= tr_bmprows)
+    u32 capped = 0, cut = 0, i, j;
+    /*  say what each picture came to, since in split mode which streams exist
+        at all is part of the answer  */
+    if (!tr_split) {
+      bmp * im[2];  const char * nm[2];
+      im[0] = &yimg;  nm[0] = tr_ybmp;  im[1] = &gimg;  nm[1] = tr_gbmp;
+      for (i = 0; i < 2; i++) {
+        if (im[i]->rows >= tr_bmprows) capped = 1;
+        cut += im[i]->clipped;
+        fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 "\n", blr_prog, nm[i],
+                im[i]->w, im[i]->rows);
+        im[i]->close();
+      }
+    } else {
+      for (i = 0; i < VD_MAXFLOOR; i++) if (yopen[i]) {
+        if (yimgs[i].rows >= tr_bmprows) capped = 1;
+        cut += yimgs[i].clipped;
+        fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 "\n", blr_prog,
+                tr_stem(tr_ybmp, tag_y[i]), yimgs[i].w, yimgs[i].rows);
+        yimgs[i].close();
+      }
+      for (i = 0; i < VD_MAXRES; i++)
+        for (j = 0; j < 8; j++) if (gopen[i][j]) {
+          if (gimgs[i][j].rows >= tr_bmprows) capped = 1;
+          cut += gimgs[i][j].clipped;
+          fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 "\n", blr_prog,
+                  tr_stem(tr_gbmp, tag_d[i][j]), gimgs[i][j].w,
+                  gimgs[i][j].rows);
+          gimgs[i][j].close();
+        }
+    }
+    if (capped)
       fprintf(stderr, "%s: stopped at %" PRIu32 " rows; TSVTRANS_BMPROWS raises it\n",
               blr_prog, tr_bmprows);
-    if (yc || gc)
-      fprintf(stderr, "%s: %" PRIu32 " floor and %" PRIu32 " digit rows were wider "
-              "than the image and were cut\n", blr_prog, yc, gc);
+    if (cut)
+      fprintf(stderr, "%s: %" PRIu32 " rows were wider than their image and were "
+              "cut\n", blr_prog, cut);
   }
   return BLR_EXIT_OK;
 usage:
@@ -590,6 +652,10 @@ usage:
     "are taken from the walk rather than from the text, so the pictures come\n"
     "out square whatever the options above say.  A row narrower than the image\n"
     "-- a 19-post floor beside a 29-post one -- is padded in black.\n"
+    "\n"
+    "  -s  one picture a stream instead, named from those two: digits.bmp\n"
+    "      becomes digits.g0_0.bmp, digits.g1_0.bmp and so on, each at its\n"
+    "      own width, nothing padded and nothing interleaved.\n"
     "TSVTRANS_BMPROWS caps the height, by default 65536.\n"
     "\n"
     "  -P  keep the page header as it stands (type, sequence, serial, granule)\n"

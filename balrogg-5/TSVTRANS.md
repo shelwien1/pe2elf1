@@ -23,6 +23,7 @@ Options:
 | `-W` | keep `aud.wprev` rather than deriving it |
 | `-R` | keep the floor and digit rows as they came, ragged |
 | `-n` | all of the above: copy the stream through unchanged |
+| `-s` | one picture per stream rather than two in total (see below) |
 
 **Mode d needs none of them.** A transformed stream opens with a record saying
 so and saying which of the switches made it -- `tt.v  1 7` -- and mode d takes
@@ -165,6 +166,28 @@ A row narrower than the image is padded in **black**, which is in neither
 ramp: `00000000` has floors of 19 and 29 posts and residues with partitions of
 16 and 32, so the picture shows which one each row came from.
 
+**`-s` gives each stream its own picture instead.** A file's digits are not
+one thing. `00000000` has two residues and three cascade passes each, so
+`digits.bmp` is six streams interleaved in emission order and padded to a
+common width -- everything is in there, and the heights prove it:
+
+| | rows in the TSV | | rows in the TSV |
+|---|---:|---|---:|
+| `g0_0` | 4,747 | `g1_0` | 3,775 |
+| `g0_1` | 4,747 | `g1_1` | 3,775 |
+| `g0_2` | 1,132 | `g1_2` | 722 |
+| | | **total** | **18,898** |
+
+and `digits.bmp` is 32 x 18,898. Under `-s` the same rows come out as
+`digits.g0_0.bmp` at 16 x 4,747, `digits.g1_0.bmp` at 32 x 3,775 and so on,
+each at its own width with nothing padded and nothing interleaved -- which is
+what to look at when the question is what one stream does. Seen apart, pass 2
+is visibly paler than pass 0: a later cascade pass is a finer correction, and
+mixed in with pass 0 that does not show.
+
+The stream `-s` writes is byte-identical to the one it writes without, so the
+choice is only about the pictures.
+
 The pictures corroborate the table above rather than adding to it. The floor
 image is banded vertically -- column 0 and the last column are consistently
 dark, being the two posts floor1 codes raw, and the columns between them are
@@ -188,6 +211,8 @@ what `wav.inc` does with a frame count for the same reason.
 * Every option combination round trips through a **bare** `d`, the settings
   coming from the stream; `c` on a transformed file and `d` on a raw one are
   both refused by name rather than by symptom.
+* `-s` over the 39 files writes 220 images, every one well-formed, and leaves
+  the transformed stream byte-identical to the one written without it.
 * Every image written over the 39 files is a well-formed BMP: signature,
   declared file size, and 54 + stride x height all agree with the file on
   disk.
