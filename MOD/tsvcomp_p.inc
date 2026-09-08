@@ -113,18 +113,21 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   (void) ps;   (void) chn;   (void) crun;  (void) cm;
 
   sgn_a = 0;
+  sgn_a = sgn_a*8 + ((vpos>0+(1-1))+(vpos>1+(1-1))+(vpos>2+(1-1))+(vpos>3+(1-1))+(vpos>4+(1-1))+(vpos>5+(1-1))+(vpos>6+(1-1)));
   sgn_a = sgn_a*5 + ((cls>5+(1-1))+(cls>6+(1-1))+(cls>7+(1-1))+(cls>8+(1-1)));
   sgn_a = sgn_a*6 + ((p0s>0+(-3-1))+(p0s>2+(-3-1))+(p0s>3+(-3-1))+(p0s>4+(-3-1))+(p0s>5+(-3-1)));
-  sgn_a = sgn_a*2 + ((mg>2+(1-1)));
+  sgn_a = sgn_a*8 + ((q1s>0+(-3-1))+(q1s>1+(-3-1))+(q1s>2+(-3-1))+(q1s>3+(-3-1))+(q1s>4+(-3-1))+(q1s>5+(-3-1))+(q1s>6+(-3-1)));
+  sgn_a = sgn_a*10 + TC_sgn_a_mg[__min(9,__max(0,mg-(1-1)))];
   sgn_a = sgn_a*3 + ((band>2+(1-1))+(band>4+(1-1)));
   sgn_a = sgn_a*9 + TC_sgn_a_sq[__min(32,__max(0,sq-(1-1)))];
 
   sgn_b = 0;
   sgn_b = sgn_b*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
   sgn_b = sgn_b*2 + ((vpos>0+(1-1)));
+  sgn_b = sgn_b*16 + TC_sgn_b_cls[__min(15,__max(0,cls-(1-1)))];
   sgn_b = sgn_b*6 + ((p0s>1+(-3-1))+(p0s>2+(-3-1))+(p0s>3+(-3-1))+(p0s>4+(-3-1))+(p0s>5+(-3-1)));
   sgn_b = sgn_b*3 + ((q1s>2+(-3-1))+(q1s>4+(-3-1)));
-  sgn_b = sgn_b*3 + ((t1s>4+(-3-1))+(t1s>6+(-3-1)));
+  sgn_b = sgn_b*8 + ((t1s>0+(-3-1))+(t1s>1+(-3-1))+(t1s>2+(-3-1))+(t1s>3+(-3-1))+(t1s>4+(-3-1))+(t1s>5+(-3-1))+(t1s>6+(-3-1)));
   sgn_b = sgn_b*3 + ((q2s>2+(-3-1))+(q2s>4+(-3-1)));
   sgn_b = sgn_b*3 + ((band>0+(1-1))+(band>3+(1-1)));
 

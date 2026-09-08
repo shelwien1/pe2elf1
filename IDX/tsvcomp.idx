@@ -275,11 +275,11 @@ Number dig_mb, 1, 0!01000000
 
 Index sgn_a
  sgn_a_pass: pass,  1!00
- sgn_a_vpos: vpos,  1!0
+ sgn_a_vpos: vpos,  1!1111111
  sgn_a_cls:  cls,   1!000001111
  sgn_a_p0s:  p0s,  -3!1011110
- sgn_a_q1s:  q1s,  -3!0000000
- sgn_a_mg:   mg,    1!001
+ sgn_a_q1s:  q1s,  -3!1111111
+ sgn_a_mg:   mg,    1!111111111
  sgn_a_t1s:  t1s,  -3!0000000
  sgn_a_q2s:  q2s,  -3!0000000
  sgn_a_band: band,  1!00101
@@ -293,11 +293,11 @@ Index sgn_a
 Index sgn_b
  sgn_b_pass: pass,  1!11
  sgn_b_vpos: vpos,  1!1
- sgn_b_cls:  cls,   1!000
+ sgn_b_cls:  cls,   1!111111111111111
  sgn_b_p0s:  p0s,  -3!0111110
  sgn_b_q1s:  q1s,  -3!0010100
  sgn_b_mg:   mg,    1!000
- sgn_b_t1s:  t1s,  -3!0000101
+ sgn_b_t1s:  t1s,  -3!1111111
  sgn_b_q2s:  q2s,  -3!0010100
  sgn_b_band: band,  1!10010
  sgn_b_pq:   pq,    1!00000000000000000000000000000000
