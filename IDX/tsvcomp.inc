@@ -102,7 +102,6 @@ Table( i32,    %M%dig_W, %M%dig_m_Volume * TC_NODE * 7 );
 Table( u8,     %M%dig_WC, %M%dig_m_Volume * TC_NODE );
 Table( i32,    %M%dig_WM, %M%dig_t_Volume * TC_MNODE * 3 );
 Table( u8,     %M%dig_WMC, %M%dig_t_Volume * TC_MNODE );
-Table( cm_cnt, %M%dig_G, TC_SGN_DIG );
 
 Table( cm_cnt, %M%sgn_A, %M%sgn_a_Volume * TC_NODE );
 Table( cm_cnt, %M%sgn_B, %M%sgn_b_Volume * TC_NODE );

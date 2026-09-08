@@ -198,7 +198,6 @@ struct TC_T {
   u8 TC_dig_WC[TC_dig_m_Volume * TC_NODE];
   i32 TC_dig_WM[TC_dig_t_Volume * TC_MNODE * 3];
   u8 TC_dig_WMC[TC_dig_t_Volume * TC_MNODE];
-  cm_cnt TC_dig_G[TC_SGN_DIG];
   cm_cnt TC_sgn_A[TC_sgn_a_Volume * TC_NODE];
   cm_cnt TC_sgn_B[TC_sgn_b_Volume * TC_NODE];
   cm_cnt TC_sgn_C[TC_sgn_c_Volume * TC_NODE];
@@ -285,7 +284,6 @@ struct TC_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_m_Volume * TC_NODE)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_t_Volume * TC_MNODE * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_SGN_DIG)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_sgn_a_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_sgn_b_Volume * TC_NODE)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_sgn_c_Volume * TC_NODE)

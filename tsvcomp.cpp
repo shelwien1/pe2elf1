@@ -343,12 +343,14 @@ enum {
 };
 constexpr int TC_MAXTAG = 128;            /*  header tags one stream may use  */
 
-/*  Sign counters.  A family that codes signs gets a context of its own for
-    them: the sign of a residue digit correlates with the sign the same slot
-    had a packet ago and with the digit before it, and with nothing the
-    magnitude cascade is looking at.  These are sizes rather than Volumes,
-    which is what Table() takes when the shape does not come from an Index.  */
-constexpr int TC_SGN_DIG = 4 * 8 * 3 * 3;
+/*  Sign counters.  A family that codes signs through `codes` gets a context
+    of its own for them.  These are sizes rather than Volumes, which is what
+    Table() takes when the shape does not come from an Index.
+
+    fam_dig has none: a residue digit's sign has been fam_sgn's since it
+    became a model rather than a counter, and the magnitude goes through
+    `code`, which never looks at G.  The table and the context that addressed
+    it were still being built.  */
 constexpr int TC_SGN_AUX = F_N;
 constexpr int TC_SGN_HDR = TC_MAXTAG;
 /*  A floor post and a residue class are never negative, so their sign is one
@@ -856,7 +858,6 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
     i32 psum = ok ? ps[slot] : 0;
     i32 pnn = ok ? pn[slot] : 0;
     i64 dg;
-    u32 sc;
     d.rno = (int) rno;  d.pass = (int) pss;  d.band = tc_qlog(pc);
     d.col = tc_qlog(i);  d.vpos = (int) (dim ? i % dim : 0);
     d.q1 = tc_qlog(*q1);  d.q2 = tc_qlog(*q2);
@@ -898,10 +899,7 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
       rec[9] = (i16) t2;   rec[10] = (i16) pc;
       tc_dumprec = rec;  tc_dumpf = df; }
 #endif
-    sc = (u32) ((((rno & 3) * 8 + pss) * 3 + (*q1 < 0 ? 0 : *q1 > 0 ? 2 : 1)) * 3
-                + (t1 < 0 ? 0 : t1 > 0 ? 2 : 1));
     dg = tc_enc ? tc_in->get("res.digit") : 0;
-    (void) sc;
     { i64 mg = fam_dig.code(v, tc_enc ? (dg < 0 ? -dg : dg) : 0);
       if (mg) {
         tcx w;
@@ -1389,7 +1387,7 @@ static void tc_walk(const char * inpath, const char * outpath) {
 static void tc_models(void) {
   cm_tables();
   tcm.TC_Init();
-  TC_WIRE(fam_dig, dig, tcm.TC_dig_G, TC_SGN_DIG);
+  TC_WIRE(fam_dig, dig, (cm_cnt *) nullptr, 0);
   TC_WIRE(fam_sgn, sgn, (cm_cnt *) nullptr, 0);
   TC_WIRE(fam_flr, flr, tcm.TC_flr_G, TC_SGN_FLR);
   TC_WIRE(fam_cls, cls, tcm.TC_cls_G, TC_SGN_CLS);

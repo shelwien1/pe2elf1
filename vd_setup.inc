@@ -214,6 +214,14 @@ struct vd_floor {
   void read(tsv & t) {
     u32 i, j, k, nc = 0, sub;
     static const u32 Q[4] = { 256, 128, 86, 64 };
+    /*  A class number the floor does not use keeps whatever the previous
+        link's floor left there, and tcp_build walks every class.  */
+    memset(cdim, 0, sizeof cdim);  memset(csub, 0, sizeof csub);
+    memset(pcl, 0, sizeof pcl);    memset(ppos, 0, sizeof ppos);
+    for (i = 0; i < VD_MAXCLASS; i++) {
+      cbk[i] = -1;
+      for (j = 0; j < 8; j++) csb[i][j] = -1;
+    }
     FATAL_UNLESS(t.get_u("flr.type", 2) == 1, "floor type 0");
     parts = t.get_u("flr.parts", 32);
     FATAL_UNLESS(parts <= VD_MAXPART, "floor partitions");
