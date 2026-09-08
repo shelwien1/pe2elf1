@@ -122,6 +122,17 @@ struct tsv {
   const char * wtag;          /*  its tag, or null between rows  */
 
   tsv * tee;                  /*  every record read is echoed here  */
+
+  /*  A caller that already knows what the reader is going to ask for --
+      because it runs the same reader on the other side -- can supply the
+      values itself and take them back, and then a tag never has to be
+      written down at all.  tsvcomp codes the three header packets that way:
+      both halves walk vd_setup, so the tag sequence is a function of values
+      already coded and is not information.  Null everywhere else, which is
+      every other use of this file.  */
+  i64 (*ghook)(void * ctx, const char * tag);
+  void (*phook)(void * ctx, const char * tag, i64 v);
+  void * hctx;
   int terse;                  /*  the stream uses the short tags above  */
   /*  Records arrive in runs of one tag, so remembering the last one turns
       the lookup into a pointer compare nearly every time.  */
@@ -159,6 +170,7 @@ struct tsv {
     mem = nullptr;  memcap = memlen = 0;  memgrow = 0;
     msrc = nullptr;  mlen = mat = 0;
     terse = 0;  clng = csht = nullptr;
+    ghook = nullptr;  phook = nullptr;  hctx = nullptr;
     emit(TSV_MAGIC, sizeof TSV_MAGIC - 1);  emit("\n", 1);
   }
 
@@ -175,6 +187,7 @@ struct tsv {
     f = nullptr;  path = "(memory)";  enc = 1;  row = 0;  on = 0;  rl = 0;
     wtag = nullptr;  bytes = 0;  mem = buf;  memcap = cap;  memlen = 0;
     memgrow = grow;  terse = 0;  clng = csht = nullptr;
+    ghook = nullptr;  phook = nullptr;  hctx = nullptr;
   }
 
   void emit(const char * s, sz n) {
@@ -218,6 +231,26 @@ struct tsv {
     f = nullptr;  msrc = buf;  mlen = len;  mat = 0;
     path = "<memory>";  enc = 0;  row = 0;  ip = in = 0;  left = 0;  rtag[0] = 0;
     tee = nullptr;  terse = 0;  clng = csht = nullptr;
+    ghook = nullptr;  phook = nullptr;  hctx = nullptr;
+  }
+
+  /*  A reader that parses nothing: every get() is answered by `g`.  There is
+      no stream behind it, so peek() has nothing to report and the caller must
+      be one that never asks -- vd_setup's readers do not.  */
+  void open_hook(void * ctx, i64 (*g)(void *, const char *)) {
+    f = nullptr;  msrc = nullptr;  mlen = mat = 0;
+    path = "<reader>";  enc = 0;  row = 0;  ip = in = 0;  left = 0;  rtag[0] = 0;
+    tee = nullptr;  terse = 0;  clng = csht = nullptr;
+    ghook = g;  phook = nullptr;  hctx = ctx;
+  }
+
+  /*  A writer that writes nothing: every put() is handed to `p`.  */
+  void create_hook(void * ctx, void (*p)(void *, const char *, i64)) {
+    f = nullptr;  path = "<writer>";  enc = 1;  row = 0;  on = 0;  rl = 0;
+    wtag = nullptr;  bytes = 0;  mem = nullptr;  memcap = memlen = 0;
+    memgrow = 0;  msrc = nullptr;  mlen = mat = 0;
+    terse = 0;  clng = csht = nullptr;
+    ghook = nullptr;  phook = p;  hctx = ctx;
   }
 
   void open(const char * pth) {
@@ -228,6 +261,7 @@ struct tsv {
     path = pth;  enc = 0;  row = 0;  ip = in = 0;  left = 0;  rtag[0] = 0;
     tee = nullptr;  terse = 0;  clng = csht = nullptr;
     msrc = nullptr;  mlen = mat = 0;
+    ghook = nullptr;  phook = nullptr;  hctx = nullptr;
     while (*m) {
       FATAL_UNLESS(rd() == (u8) *m, "%s: not a balrogg TSV stream", path);
       m++;
@@ -260,6 +294,7 @@ struct tsv {
       call sites usually make that a pointer compare.  */
   void put(const char * tag, i64 v) {
     char n[24];
+    if (phook) { phook(hctx, tag, v);  row++;  return; }
     int k = (int) sizeof n;
     u64 a = v < 0 ? (u64) 0 - (u64) v : (u64) v;
     tag = shorten(tag);
@@ -283,6 +318,7 @@ struct tsv {
     u64 a = 0;
     int c, neg = 0, nd = 0;
     row++;
+    if (ghook) { i64 r = ghook(hctx, tag);  if (tee) tee->put(tag, r);  return r; }
     if (!left) head(tag);
     { const char * want = shorten(tag);
       FATAL_UNLESS(!strcmp(rtag, want),

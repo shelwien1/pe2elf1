@@ -261,8 +261,7 @@ static INLINE u64 tbl_n(u64 n) {
     table's size is F_N and the generated header needs it.  */
 enum {
   F_MORE, F_PGTYPE, F_GRAN, F_SERIAL, F_SEQ, F_NPKT, F_PLEN, F_TAIL,
-  F_SPILL, F_MODE, F_WPREV, F_WNEXT, F_USED, F_NHDR, F_TAGSAME, F_TAGIDX,
-  F_TAGLEN, F_TAGCHR, F_N
+  F_SPILL, F_MODE, F_WPREV, F_WNEXT, F_USED, F_N
 };
 constexpr int TC_MAXTAG = 128;            /*  header tags one stream may use  */
 
@@ -591,8 +590,17 @@ static void tc_setup_done(void) {
     declares its entry count in three bytes and every entry is a record, so
     the records a setup packet yields are a property of the stream and not of
     its length.  */
-static char * tc_hbuf;
-static sz tc_hcap;
+/*  The tag a record carries is not information.  Both halves run vd_setup's
+    readers over the same values, so both ask for the same tags in the same
+    order; what has to cross is the values.  A tag still names a context --
+    every field is a different kind of number -- so it gets an id, assigned in
+    order of first sighting, which both sides arrive at identically because
+    they see the same first sightings.  Nothing about it is coded.
+
+    That is what this file's preamble has always claimed and what the program
+    did not do: the previous form captured the records, coded a count, and
+    then coded each tag as a same-flag, an index and, on a first sighting, its
+    letters.  On a short stream that was 37% of the header stage.  */
 static char tc_tagbuf[TC_MAXTAG * (TSV_TAGMAX + 1)];
 static const char * tc_tag[TC_MAXTAG];
 static u32 tc_ntag;
@@ -600,34 +608,21 @@ static int tc_lasttag = -1;
 static i64 tc_tlast[TC_MAXTAG], tc_tlast2[TC_MAXTAG];
 static i64 tc_runpos;
 
-static int tc_tagcode(const char * tag) {
-  int id = -1, same;
-  if (tc_enc) {
-    u32 i;
-    for (i = 0; i < tc_ntag; i++)
-      if (!strcmp(tc_tag[i], tag)) { id = (int) i;  break; }
-  }
-  same = (int) tc_auxc(F_TAGSAME, tc_lasttag < 0 ? 0 : tc_lasttag,
-                       tc_enc && id >= 0 && id == tc_lasttag, 0);
-  if (same) {
-    FATAL_UNLESS(tc_lasttag >= 0, "coded stream: a tag repeats nothing");
-    id = tc_lasttag;
-  } else {
-    id = (int) tc_auxc(F_TAGIDX, tc_lasttag < 0 ? 0 : tc_lasttag,
-                       tc_enc ? (id < 0 ? (i64) tc_ntag : id) : 0, 0);
-    FATAL_UNLESS(id >= 0 && (u32) id <= tc_ntag && id < TC_MAXTAG,
-                 "coded stream: tag %d is out of range", id);
-    if ((u32) id == tc_ntag) {
-      char * dst = tc_tagbuf + (sz) tc_ntag * (TSV_TAGMAX + 1);
-      u32 L = (u32) tc_auxc(F_TAGLEN, 0, tc_enc ? (i64) strlen(tag) : 0, 0);
-      u32 k;
-      FATAL_UNLESS(L && L <= TSV_TAGMAX, "coded stream: tag length %u", L);
-      for (k = 0; k < L; k++)
-        dst[k] = (char) tc_auxc(F_TAGCHR, k ? (u8) dst[k - 1] : 0,
-                                tc_enc ? (u8) tag[k] : 0, 0);
-      dst[L] = 0;
-      tc_tag[tc_ntag++] = dst;
-    }
+static int tc_tagid(const char * tag) {
+  u32 i;
+  int id = -1;
+  for (i = 0; i < tc_ntag; i++)
+    if (!strcmp(tc_tag[i], tag)) { id = (int) i;  break; }
+  if (id < 0) {
+    char * dst = tc_tagbuf + (sz) tc_ntag * (TSV_TAGMAX + 1);
+    /*  hdr_a's tag axis is 64 wide and TC_MAXTAG is what the table holds; a
+        reader that grew past either would index off the end of both, so it is
+        refused here rather than found later.  */
+    FATAL_UNLESS(tc_ntag < TC_MAXTAG, "the reader asks for more than %d tags",
+                 TC_MAXTAG);
+    snprintf(dst, TSV_TAGMAX + 1, "%s", tag);
+    tc_tag[tc_ntag] = dst;
+    id = (int) tc_ntag++;
   }
   tc_runpos = (id == tc_lasttag) ? tc_runpos + 1 : 0;
   tc_lasttag = id;
@@ -643,64 +638,39 @@ static i64 tc_hdrval(int id, i64 x) {
   return x;
 }
 
-/*  Mode c: the packet is read from the input while a memory stream captures
-    it, and the capture is then re-read record by record and coded.  Mode d:
-    the records are decoded into a memory stream, which the same reader then
-    parses -- with a tee to the output, so they reach the restored file in
-    the order and under the tags they were read with.  */
+/*  Both modes run the reader once.  In mode c it reads the real input and a
+    tee hands every value to the model; in mode d it reads nothing -- each
+    get() is answered by the model, and the value goes on to the restored
+    stream in the order and under the tag it was asked for.  The two are the
+    same walk over the same values, so they ask for the same tags.  */
+static void tc_hdr_enc(void * ctx, const char * tag, i64 v) {
+  (void) ctx;
+  tc_hdrval(tc_tagid(tag), v);
+}
+static i64 tc_hdr_dec(void * ctx, const char * tag) {
+  i64 v = tc_hdrval(tc_tagid(tag), 0);
+  ((tsv *) ctx)->put(tag, v);
+  return v;
+}
+
 static void tc_header(int which, sz plen, tsv & out) {
-  tsv mem;
-  memset(&mem, 0, sizeof mem);
+  tsv h;
+  memset(&h, 0, sizeof h);
   tc_stage = STG_HDR;
   if (tc_enc) {
-    tsv r;
-    u32 n = 0;
-    char tg[TSV_TAGMAX + 1];
-    mem.create_mem(tc_hbuf, tc_hcap, 1);
-    tc_in->tee = &mem;
+    h.create_hook(nullptr, tc_hdr_enc);
+    tc_in->tee = &h;
     if (which == 0) su.ident(*tc_in);
     else if (which == 1) su.comment(*tc_in, plen);
     else { su_role = 0;  su_dst = nullptr;  su.setup(*tc_in);  su.have = 1; }
     tc_in->tee = nullptr;
-    mem.close();
-    tc_hbuf = mem.mem;  tc_hcap = mem.memcap;
-    memset(&r, 0, sizeof r);
-    r.open_mem(tc_hbuf, mem.memlen);
-    while (*r.peek()) {
-      snprintf(tg, sizeof tg, "%s", r.peek());
-      r.get(tg);  n++;
-    }
-    tc_aux(F_NHDR, n);
-    memset(&r, 0, sizeof r);
-    r.open_mem(tc_hbuf, mem.memlen);
-    while (*r.peek()) {
-      i64 val;
-      snprintf(tg, sizeof tg, "%s", r.peek());
-      val = r.get(tg);
-      tc_hdrval(tc_tagcode(tg), val);
-    }
-    if (which == 2) tc_setup_done();
   } else {
-    tsv w;
-    u32 n = (u32) tc_aux(F_NHDR, 0), i;
-    memset(&w, 0, sizeof w);
-    w.create_mem(tc_hbuf, tc_hcap, 1);
-    for (i = 0; i < n; i++) {
-      int id = tc_tagcode(nullptr);
-      w.put(tc_tag[id], tc_hdrval(id, 0));
-    }
-    w.close();
-    tc_hbuf = w.mem;  tc_hcap = w.memcap;
-    mem.open_mem(tc_hbuf, w.memlen);
-    mem.tee = &out;
-    if (which == 0) su.ident(mem);
-    else if (which == 1) su.comment(mem, plen);
-    else { su_role = 0;  su_dst = nullptr;  su.setup(mem);  su.have = 1; }
-    mem.tee = nullptr;
-    FATAL_UNLESS(!*mem.peek(), "coded stream: the header packet has records "
-                 "the reader did not want");
-    if (which == 2) tc_setup_done();
+    h.open_hook(&out, tc_hdr_dec);
+    if (which == 0) su.ident(h);
+    else if (which == 1) su.comment(h, plen);
+    else { su_role = 0;  su_dst = nullptr;  su.setup(h);  su.have = 1; }
   }
+  if (which == 2) tc_setup_done();
 }
 
 /*  ------------------------------------------------------------------
