@@ -47,10 +47,12 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
 }
 
 void tc_make_flr( int fno, int col, int p1, int n1, int raw, int blk,
-                  int o1, int pn, int od, int chn, tcx & X ) {
+                  int o1, int pn, int od, int chn,
+                  int room, int hl, int lov, int hiv, int pri, int ep, tcx & X ) {
   int flr_a, flr_b, flr_c, flr_d, flr_s, flr_f, flr_m, flr_t;
   (void) fno;  (void) col;  (void) p1;  (void) n1;  (void) raw;  (void) blk;
   (void) o1;   (void) pn;   (void) od;  (void) chn;
+  (void) room; (void) hl;   (void) lov; (void) hiv; (void) pri;  (void) ep;
   MakeIndex flr_a,flr_b,flr_c,flr_d,flr_s,flr_f,flr_m,flr_t
   X.a = flr_a;  X.b = flr_b;  X.c = flr_c;  X.d = flr_d;  X.s = flr_s;  X.f = flr_f;  X.m = flr_m;  X.t = flr_t;
 }

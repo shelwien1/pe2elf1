@@ -200,8 +200,15 @@ struct vd_floor {
   u32 parts, mult, quant, posts, rng;
   u8 pcls[VD_MAXPART];
   u8 cdim[VD_MAXCLASS], csub[VD_MAXCLASS];
+  /*  Which books a class codes with: `cbk` picks the subclass codeword and
+      `csb` the book each of its digits names, -1 for "this post is zero".
+      balrogg reads both to find the bits; the model wants them because the
+      lengths in those books are what a floor post was coded against.  */
+  i32 cbk[VD_MAXCLASS], csb[VD_MAXCLASS][8];
+  u8 pcl[VD_MAXPOST], ppos[VD_MAXPOST];  /*  post >= 2: its class and place  */
   u32 x[VD_MAXPOST];
   u8 srt[VD_MAXPOST];           /*  post numbers in ascending X order  */
+  u8 rnk[VD_MAXPOST];           /*  and the inverse: a post's place in X  */
   u8 lo[VD_MAXPOST], hi[VD_MAXPOST];  /*  decode neighbours, for post >= 2  */
 
   void read(tsv & t) {
@@ -218,8 +225,10 @@ struct vd_floor {
       cdim[i] = (u8) (t.get_u("flr.cdim", 8) + 1);
       sub = t.get_u("flr.csub", 4);
       csub[i] = (u8) sub;
-      if (sub) t.get("flr.cbook");
-      for (j = 0; j < ((u32) 1 << sub); j++) t.get("flr.sbook");
+      cbk[i] = -1;
+      if (sub) cbk[i] = (i32) t.get_u("flr.cbook", 256);
+      for (j = 0; j < ((u32) 1 << sub); j++)
+        csb[i][j] = (i32) t.get_u("flr.sbook", 257) - 1;
     }
     mult = t.get_u("flr.mult", 4) + 1;
     quant = Q[mult - 1];
@@ -228,6 +237,7 @@ struct vd_floor {
     for (i = 0; i < parts; i++)
       for (j = 0; j < cdim[pcls[i]]; j++) {
         FATAL_UNLESS(posts < VD_MAXPOST, "too many floor posts");
+        pcl[posts] = pcls[i];  ppos[posts] = (u8) j;
         x[posts++] = t.get_u("flr.x", (u64) 1 << rng);
       }
     /*  sort posts by X, then find each post's bracketing neighbours among
@@ -243,6 +253,7 @@ struct vd_floor {
     for (i = 1; i < posts; i++)
       FATAL_UNLESS(x[srt[i]] != x[srt[i - 1]],
                    "floor X list repeats a value");
+    for (i = 0; i < posts; i++) rnk[srt[i]] = (u8) i;
     for (i = 0; i + 2 < posts; i++) {
       u32 l = 0, h = 1, lx = 0, hx = x[1], cx = x[i + 2];
       for (k = 0; k < i + 2; k++) {

@@ -327,6 +327,12 @@ Index flr_a
 ! flr_a_pn:   pn,    1!0000000
 ! flr_a_od:   od,   -4!000000000
 ! flr_a_chn:  chn,   1!0
+! flr_a_room: room,  1!00000000
+! flr_a_hl:   hl,    1!11
+! flr_a_lov:  lov,   1!00000000
+! flr_a_hiv:  hiv,   1!00000000
+! flr_a_pri:  pri,   1!00000000000000000000000000000000
+! flr_a_ep:   ep,    1!00000000000
 
 Index flr_b
 ! flr_b_fno:  fno,   1!0
@@ -339,6 +345,12 @@ Index flr_b
 ! flr_b_pn:   pn,    1!0000000
 ! flr_b_od:   od,   -4!000000000
 ! flr_b_chn:  chn,   1!0
+! flr_b_room: room,  1!00000000
+! flr_b_hl:   hl,    1!00
+! flr_b_lov:  lov,   1!11111111
+! flr_b_hiv:  hiv,   1!00000000
+! flr_b_pri:  pri,   1!00000000000000000000000000000000
+! flr_b_ep:   ep,    1!11111111111
 
 Index flr_c
 ! flr_c_col:  col,   1!1111111
@@ -348,6 +360,12 @@ Index flr_c
 ! flr_c_pn:   pn,    1!0000000
 ! flr_c_od:   od,   -4!000000000
 ! flr_c_chn:  chn,   1!0
+! flr_c_room: room,  1!00000000
+! flr_c_hl:   hl,    1!00
+! flr_c_lov:  lov,   1!00000000
+! flr_c_hiv:  hiv,   1!00000000
+! flr_c_pri:  pri,   1!00000000000000000000000000000000
+! flr_c_ep:   ep,    1!11111111111
 
 Index flr_d
 ! flr_d_col:  col,   1!0000000
@@ -357,6 +375,12 @@ Index flr_d
 ! flr_d_pn:   pn,    1!0000000
 ! flr_d_od:   od,   -4!000000000
 ! flr_d_chn:  chn,   1!0
+! flr_d_room: room,  1!00000000
+! flr_d_hl:   hl,    1!00
+! flr_d_lov:  lov,   1!00000000
+! flr_d_hiv:  hiv,   1!00000000
+! flr_d_pri:  pri,   1!00000000000000000000000000000000
+! flr_d_ep:   ep,    1!00000000000
 
 Index flr_s
 ! flr_s_col:  col,   1!1011101
@@ -366,6 +390,12 @@ Index flr_s
 ! flr_s_pn:   pn,    1!0000000
 ! flr_s_od:   od,   -4!000000000
 ! flr_s_chn:  chn,   1!0
+! flr_s_room: room,  1!00000000
+! flr_s_hl:   hl,    1!00
+! flr_s_lov:  lov,   1!00000000
+! flr_s_hiv:  hiv,   1!00000000
+! flr_s_pri:  pri,   1!00000000000000000000000000000000
+! flr_s_ep:   ep,    1!00000000000
 
 Index flr_f
 ! flr_f_col:  col,   1!0000000
@@ -375,15 +405,27 @@ Index flr_f
 ! flr_f_pn:   pn,    1!0000000
 ! flr_f_od:   od,   -4!000000000
 ! flr_f_chn:  chn,   1!0
+! flr_f_room: room,  1!00000000
+! flr_f_hl:   hl,    1!00
+! flr_f_lov:  lov,   1!00000000
+! flr_f_hiv:  hiv,   1!00000000
+! flr_f_pri:  pri,   1!00000000000000000000000000000000
+! flr_f_ep:   ep,    1!00000000000
 
 Index flr_m
-! flr_m_col:  col,   1!111
+! flr_m_col:  col,   1!111111111111111
 ! flr_m_p1:   p1,    1!001
 ! flr_m_n1:   n1,    1!000
 ! flr_m_o1:   o1,    1!0000000
 ! flr_m_pn:   pn,    1!0000000
 ! flr_m_od:   od,   -4!000000000
 ! flr_m_chn:  chn,   1!0
+! flr_m_room: room,  1!00000000
+! flr_m_hl:   hl,    1!00
+! flr_m_lov:  lov,   1!00000000
+! flr_m_hiv:  hiv,   1!00000000
+! flr_m_pri:  pri,   1!00010001000100010001000100010001
+! flr_m_ep:   ep,    1!00000000000
 
 Index flr_t
 ! flr_t_col:  col,   1!011111111111111111110111111000100000000000000000
@@ -393,6 +435,12 @@ Index flr_t
 ! flr_t_pn:   pn,    1!0000000
 ! flr_t_od:   od,   -4!000000000
 ! flr_t_chn:  chn,   1!0
+! flr_t_room: room,  1!00000000
+! flr_t_hl:   hl,    1!00
+! flr_t_lov:  lov,   1!00000000
+! flr_t_hiv:  hiv,   1!00000000
+! flr_t_pri:  pri,   1!00000000000000000000000000000000
+! flr_t_ep:   ep,    1!00000000000
 
 !Number flr_rA, 1, 0!00001111
 !Number flr_rB, 1, 0!01001011

@@ -199,11 +199,14 @@ static void cm_fill(cm_cnt * p, sz n) { sz i;  for (i = 0; i < n; i++) p[i].init
     residue (the classes of a classword).  A link's setup replaces both.  */
 static tc_ptab tcp_book[VD_MAXBOOK];
 static tc_ptab tcp_cls[VD_MAXRES];
+static tc_ptab tcp_flr[VD_MAXFLOOR][VD_MAXCLASS];
 
 static void tcp_free(void) {
-  u32 i;
+  u32 i, j;
   for (i = 0; i < VD_MAXBOOK; i++) tcp_book[i].drop();
   for (i = 0; i < VD_MAXRES; i++) tcp_cls[i].drop();
+  for (i = 0; i < VD_MAXFLOOR; i++)
+    for (j = 0; j < VD_MAXCLASS; j++) tcp_flr[i][j].drop();
   tcp_mem = 0;
 }
 
@@ -224,6 +227,32 @@ static void tcp_build(void) {
     if (!cb->clen || r->ncl > TCP_SYMMAX) continue;
     for (j = 0; j < r->ncl; j++) v[j] = (i32) j;
     tcp_cls[i].build(cb->clen, cb->ent, r->ncl, cb->dim, 1, v);
+  }
+  /*  A floor partition: which subclass book coded a post is implied by the
+      post's own value, so the classword and the subclass books together give
+      one distribution over that value.  */
+  for (i = 0; i < su.nfl; i++) {
+    vd_floor * f = su.fl + i;
+    u32 c;
+    for (c = 0; c < VD_MAXCLASS; c++) {
+      const u8 * bl[8];
+      u32 be[8], nb = 1u << f->csub[c], maxy = 1, k;
+      const u8 * cl = nullptr;
+      u32 cent = 0;
+      if (!f->cdim[c] || f->csub[c] > 3) continue;
+      for (k = 0; k < nb; k++) {
+        i32 sb = f->csb[c][k];
+        if (sb >= 0 && (u32) sb < su.nbk && su.bk[sb].clen) {
+          bl[k] = su.bk[sb].clen;  be[k] = su.bk[sb].ent;
+          if (be[k] > maxy) maxy = be[k];
+        } else if (sb >= 0) { bl[k] = nullptr;  be[k] = 0;  maxy = 0;  break; }
+        else { bl[k] = nullptr;  be[k] = 1; }
+      }
+      if (!maxy || maxy > TCP_SYMMAX) continue;
+      if (f->csub[c] && f->cbk[c] >= 0 && (u32) f->cbk[c] < su.nbk)
+        { cl = su.bk[f->cbk[c]].clen;  cent = su.bk[f->cbk[c]].ent; }
+      tcp_flr[i][c].build_floor(cl, cent, f->csub[c], f->cdim[c], bl, be, maxy);
+    }
   }
 }
 
@@ -525,6 +554,7 @@ static sz    dg_span[VD_MAXRES], cl_np[VD_MAXRES];
 static i32 * dg_q1, * dg_q2, * dg_zr;     /*  [rno][pass][channel]  */
 static i32   cl_last[VD_MAXRES], cl_last2[VD_MAXRES];
 static i16 * fl_hist;                     /*  [blk][channel][post]  */
+static i16 * fl_yhist;                    /*  the same, rebuilt into a curve  */
 static u32   tc_blk;                      /*  the block this packet is  */
 static u32   tc_nchan;
 
@@ -539,8 +569,8 @@ static void tc_hist_free(void) {
     free(cl_hist[i]);  cl_hist[i] = nullptr;
     dg_span[i] = cl_np[i] = 0;
   }
-  free(dg_q1);  free(dg_q2);  free(dg_zr);  free(fl_hist);
-  dg_q1 = dg_q2 = dg_zr = nullptr;  fl_hist = nullptr;
+  free(dg_q1);  free(dg_q2);  free(dg_zr);  free(fl_hist);  free(fl_yhist);
+  dg_q1 = dg_q2 = dg_zr = nullptr;  fl_hist = nullptr;  fl_yhist = nullptr;
 }
 
 /*  A link's setup has just been read; size the histories it implies.  A
@@ -575,6 +605,52 @@ static void tc_setup_done(void) {
   dg_q2 = (i32 *) tc_alloc((sz) su.nrs * 8 * tc_nchan * sizeof(i32));
   dg_zr = (i32 *) tc_alloc((sz) su.nrs * 8 * tc_nchan * sizeof(i32));
   fl_hist = (i16 *) tc_alloc((sz) 2 * tc_nchan * VD_MAXPOST * sizeof(i16));
+  fl_yhist = (i16 *) tc_alloc((sz) 2 * tc_nchan * VD_MAXPOST * sizeof(i16));
+}
+
+/*  libvorbis's render_point and the inverse of floor1's folding.  A post at
+    index >= 2 is coded against the line between its two bracketing
+    neighbours, and what balrogg writes down is that folded residual -- which
+    is why the column is worth -22% and the previous post nothing.  Both
+    neighbours precede the post in list order, so coding in list order (which
+    is not the order the records are in) puts the prediction, the room either
+    side of it and the reconstructed curve within reach.  */
+static i32 vd_render(i32 x0, i32 x1, i32 y0, i32 y1, i32 X) {
+  i32 dy = y1 - y0, adx = x1 - x0;
+  i32 ady = dy < 0 ? -dy : dy;
+  i32 off;
+  if (adx <= 0) return y0;
+  off = (i32) (((i64) ady * (X - x0)) / adx);
+  return dy < 0 ? y0 - off : y0 + off;
+}
+/*  The other direction: what floor1 would have coded for a curve point.  Run
+    on last packet's curve against this packet's prediction it says what the
+    residual would be if the envelope had not moved -- which is the context
+    the previous packet's *residual* was standing in for, and a much better
+    one, since the prediction it was measured against has moved since.  */
+static i32 vd_fold(i32 y, i32 pred, i32 quant) {
+  i32 hiroom = quant - pred, lowroom = pred;
+  i32 room = (hiroom < lowroom ? hiroom : lowroom) << 1;
+  i32 d = y - pred;
+  i32 a = d >= 0 ? 2 * d : -2 * d - 1;
+  if (!d) return 0;
+  if (a < room) return a;
+  return hiroom > lowroom ? d + lowroom : hiroom - 1 - d;
+}
+
+/*  The coded value back into a curve point, exactly as floor1_inverse2 does
+    it.  A stream may name anything; the result is clamped to the range the
+    quantiser admits so a later render cannot run away.  */
+static i32 vd_unfold(i32 val, i32 pred, i32 quant) {
+  i32 hiroom = quant - pred, lowroom = pred;
+  i32 room = (hiroom < lowroom ? hiroom : lowroom) << 1;
+  i32 y;
+  if (!val) y = pred;
+  else if (val >= room)
+    y = hiroom > lowroom ? val - lowroom + pred : pred - val + hiroom - 1;
+  else if (val & 1) y = pred - ((val + 1) >> 1);
+  else y = pred + (val >> 1);
+  return y < 0 ? 0 : y > quant - 1 ? quant - 1 : y;
 }
 
 /*  ------------------------------------------------------------------
@@ -877,6 +953,9 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
 
 /*  Floor curves, then the residues, for one audio packet.  */
 static u8 tc_used[VD_MAXCH];
+static i16 fl_cur[VD_MAXPOST];            /*  this channel's coded residuals  */
+static i16 fl_fy[VD_MAXPOST];             /*  and the curve they rebuild  */
+
 static void tc_payload(u32 mode) {
   vd_map * mp = su.mp + su.mdmap[mode];
   u32 n = (su.blockflag[mode] ? su.bs1 : su.bs0) / 2;
@@ -887,8 +966,9 @@ static void tc_payload(u32 mode) {
     u32 fno = mp->fl[mp->mux[k]];
     vd_floor * f = su.fl + fno;
     i16 * hp = fl_hist + ((sz) tc_blk * tc_nchan + k) * VD_MAXPOST;
-    i32 prev = 0;
-    u32 u;
+    i16 * hy = fl_yhist + ((sz) tc_blk * tc_nchan + k) * VD_MAXPOST;
+    u32 u, p;
+    i32 quant = (i32) f->quant;
     tc_stage = STG_AUD;
     u = (u32) tc_auxc(F_USED, tc_used[k], tc_enc ? tc_in->get_u("flr.used", 2) : 0, 0);
     FATAL_UNLESS(u < 2, "coded stream: flr.used is %u", u);
@@ -896,22 +976,56 @@ static void tc_payload(u32 mode) {
     tc_used[k] = nz[k] = (u8) u;
     if (!u) continue;
     tc_stage = STG_FLOOR;
-    for (i = 0; i < f->posts; i++) {
+    fam_flr.pc.off();
+    /*  The records are in ascending X, which is the order the column context
+        is about; the coding is in list order, which is the order the
+        prediction is available in.  Both sides do the same swap, so what
+        crosses is the same values in a different order.  */
+    if (tc_enc)
+      for (i = 0; i < f->posts; i++)
+        fl_cur[f->srt[i]] = (i16) tc_in->get("flr.y");
+    for (p = 0; p < f->posts; p++) {
       tcx v;
       i64 y;
-      i32 o1 = k ? hp[i - (sz) VD_MAXPOST] : 0;      /*  the channel before, this packet  */
-      i32 pn = i + 1 < VD_MAXPOST ? hp[i + 1] : 0;   /*  the next post, one packet ago  */
-      i32 od = k ? hp[i - (sz) VD_MAXPOST] - hp[i] : 0; /*  how the other channel moved  */
-      tc_make_flr((int) fno, (int) (i < VD_MAXPOST ? i : VD_MAXPOST - 1),
-                  tc_qlog(hp[i]), tc_qlog(prev), i < 2, (int) tc_blk,
-                  tc_qlog(o1), tc_qlog(pn), tc_sq(od), (int) k, v);
-      y = tc_enc ? tc_in->get("flr.y") : 0;
+      i32 pred = 0, room = 0, hl = 0, lov = 0, hiv = 0, ep = 0;
+      i32 o1 = k ? hp[p - (sz) VD_MAXPOST] : 0;    /*  the channel before  */
+      i32 od = k ? hy[p - (sz) VD_MAXPOST] - hy[p] : 0;
+      if (p >= 2) {
+        u32 l = f->lo[p - 2], h = f->hi[p - 2];
+        i32 hiroom, lowroom;
+        u32 c = f->pcl[p];
+        if (!f->ppos[p])
+          fam_flr.pc.start(tcp_flr[fno][c].ok ? &tcp_flr[fno][c] : nullptr);
+        pred = vd_render((i32) f->x[l], (i32) f->x[h], fl_fy[l], fl_fy[h],
+                         (i32) f->x[p]);
+        if (pred < 0) pred = 0;
+        if (pred > quant - 1) pred = quant - 1;
+        hiroom = quant - pred;  lowroom = pred;
+        room = (hiroom < lowroom ? hiroom : lowroom) << 1;
+        hl = hiroom > lowroom ? 1 : hiroom < lowroom ? 2 : 0;
+        lov = fl_cur[l];  hiv = fl_cur[h];
+        ep = vd_fold(hy[p], pred, quant);
+        if (ep < 0) ep = 0;
+      }
+      tc_make_flr((int) fno, (int) (f->rnk[p] < VD_MAXPOST ? f->rnk[p] : VD_MAXPOST - 1),
+                  tc_qlog(hp[p]), tc_qlog(hy[p]), p < 2, (int) tc_blk,
+                  tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int) k,
+                  tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv),
+                  tcp_axis(fam_flr.pc), tc_qlog(ep), v);
+      y = tc_enc ? fl_cur[p] : 0;
       y = fam_flr.codes(v, y, 0);
-      if (!tc_enc) tc_out->put("flr.y", y);
-      hp[i] = (i16) (y < -32768 ? -32768 : y > 32767 ? 32767 : y);
-      prev = (i32) y;
+      FATAL_UNLESS(y >= 0 && y < 32768, "coded stream: floor post %" PRId64, y);
+      fl_cur[p] = (i16) y;
+      fl_fy[p] = (i16) (p < 2 ? (y > quant - 1 ? quant - 1 : (i32) y)
+                              : vd_unfold((i32) y, pred, quant));
+      if (fam_flr.pc.on)
+        fam_flr.pc.step(y >= 0 && y < (i64) fam_flr.pc.t->nsym ? (int) y : -1);
       if (tc_verbose) tc_syms[STG_FLOOR]++;
     }
+    if (!tc_enc)
+      for (i = 0; i < f->posts; i++)
+        tc_out->put("flr.y", fl_cur[f->srt[i]]);
+    for (p = 0; p < f->posts; p++) { hp[p] = fl_cur[p];  hy[p] = fl_fy[p]; }
   }
   for (i = 0; i < mp->nstep; i++)
     if (nz[mp->mag[i]] || nz[mp->ang[i]])
