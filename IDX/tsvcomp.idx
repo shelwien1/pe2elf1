@@ -1,0 +1,534 @@
+#  tsvcomp's context indices and tunable parameters.
+#
+#  IDX-FORMAT.md in this directory is the specification.  idx2inc.pl turns this
+#  file plus the template tsvcomp.inc into MOD/tsvcomp_h.inc (the mapping
+#  objects or their folded literals, the Volumes and the table struct) and
+#  MOD/tsvcomp_p.inc (the index builders).  ../mk.sh drives both builds:
+#
+#      ./mk.sh              tuning:   Debug 1, Const 0 -- every threshold is a
+#                                     live mapping object carrying a "!MAP!"
+#                                     descriptor, which is what IDX/opt.pl
+#                                     scans the executable for and hill-climbs
+#      ./mk.sh release      shipping: every threshold folded to a literal
+#
+#  Both builds must code byte-identically; ./mk.sh check is that test.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.  Every variable a
+#  family supplies is listed in every one of its indices for that reason.
+
+Prefix TC
+Debug 1
+Const 0
+
+#  ---------------------------------------------------------------------------
+#  Residue digits: 92% of the records in a stream, so this is the program.
+#
+#  Variables, from tsvcomp.cpp:
+#    rno   which residue          pass  which cascade pass
+#    band  partition, log-ish     col   position inside the partition
+#    q1 q2 the two digits before it, magnitude, log-ish
+#    t1    the same slot one packet ago, log-ish
+#    cls   the class of this partition -- the choice of codebook
+#    bkq   that codebook's `off`, log-ish: the half-width of its value range
+#    zrun  zeros so far in this partition        blk  short or long block
+#
+#  `cls` is the biggest single factor and the most surprising one: the class is
+#  the choice of ladder and the ladder decides what a digit can be, so knowing
+#  it beats knowing where in the spectrum the digit sits.  Four buckets of it
+#  cost 4.65%.  `bkq` is the same thought in a form that would generalise to
+#  the next file, and it measures 1.01% worse than the class number it was
+#  meant to replace: two classes with the same range are still not the same
+#  choice.  `col` is at zero because TSVTRANS.md measured it at +0.27% alone
+#  and worse in combination, and `band` is at three buckets because the fourth
+#  onwards are worth 0.05% between them once `cls` is in -- the partition had
+#  been standing in for the class.
+
+Index dig_a
+ dig_a_rno:  rno,   1!0
+ dig_a_pass: pass,  1!1111111
+ dig_a_band: band,  1!100110010000000
+ dig_a_col:  col,   1!1000010
+ dig_a_q1:   q1,    1!00000
+ dig_a_q2:   q2,    1!0000
+ dig_a_t1:   t1,    1!000
+ dig_a_bkq:  bkq,   1!0011
+ dig_a_cls:  cls,   1!010100111000000
+ dig_a_zrun: zrun,  1!0000
+ dig_a_blk:  blk,   1!1
+ dig_a_vpos: vpos,  1!0
+ dig_a_q1s:  q1s,  -6!0000000000000
+ dig_a_q2s:  q2s,  -6!0000000000000
+ dig_a_t1s:  t1s,  -6!0000000000000
+ dig_a_t2:   t2,   1!000
+ dig_a_n1:   n1,   1!000
+ dig_a_w1:   w1,   1!000
+ dig_a_p0:   p0,   1!000
+ dig_a_p0s:  p0s,  -6!0000000000000
+ dig_a_pn:   pn,   1!000
+ dig_a_ax:   ax,   1!000100000000
+
+Index dig_b
+ dig_b_rno:  rno,   1!0
+ dig_b_pass: pass,  1!0010001
+ dig_b_band: band,  1!110000001000000
+ dig_b_col:  col,   1!0100101
+ dig_b_q1:   q1,    1!00000
+ dig_b_q2:   q2,    1!0010
+ dig_b_t1:   t1,    1!000
+ dig_b_bkq:  bkq,   1!0110
+ dig_b_cls:  cls,   1!000
+ dig_b_zrun: zrun,  1!001
+ dig_b_blk:  blk,   1!1
+ dig_b_vpos: vpos,  1!0
+ dig_b_q1s:  q1s,  -6!0000000000000
+ dig_b_q2s:  q2s,  -6!0000000000000
+ dig_b_t1s:  t1s,  -6!0000000000000
+ dig_b_t2:   t2,   1!000
+ dig_b_n1:   n1,   1!000
+ dig_b_w1:   w1,   1!000
+ dig_b_p0:   p0,   1!100
+ dig_b_p0s:  p0s,  -6!0000000000000
+ dig_b_pn:   pn,   1!100
+ dig_b_ax:   ax,   1!000000000000
+
+Index dig_c
+ dig_c_pass: pass,  1!11
+ dig_c_vpos: vpos,  1!0
+ dig_c_band: band,  1!01100
+ dig_c_t1s:  t1s,  -6!0000000000000
+ dig_c_t2:   t2,   1!000
+ dig_c_n1:   n1,   1!000
+ dig_c_w1:   w1,   1!000
+ dig_c_ax:   ax,   1!100000000100
+ dig_c_q1s:  q1s,  -6!0000000000000
+ dig_c_q2s:  q2s,  -6!1000000000000
+ dig_c_cls:  cls,   1!000
+ dig_c_p0s:  p0s,  -6!0000000000000
+
+Index dig_d
+ dig_d_pass: pass,  1!00
+ dig_d_vpos: vpos,  1!0
+ dig_d_band: band,  1!00000
+ dig_d_t1s:  t1s,  -6!0000000000000
+ dig_d_t2:   t2,   1!000
+ dig_d_n1:   n1,   1!000
+ dig_d_w1:   w1,   1!000
+ dig_d_ax:   ax,   1!010001010000
+ dig_d_q1s:  q1s,  -6!0101010010010
+ dig_d_q2s:  q2s,  -6!0101000000010
+ dig_d_cls:  cls,   1!011
+ dig_d_p0s:  p0s,  -6!0000111110000
+
+Index dig_s
+ dig_s_pass: pass,  1!00
+ dig_s_band: band,  1!111
+ dig_s_q1:   q1,    1!001
+ dig_s_t1:   t1,    1!010
+ dig_s_bkq:  bkq,   1!011
+ dig_s_cls:  cls,   1!000
+ dig_s_vpos: vpos,  1!0
+ dig_s_q1s:  q1s,  -6!0100000000000
+ dig_s_q2s:  q2s,  -6!0100000000001
+ dig_s_t1s:  t1s,  -6!0000010000000
+ dig_s_t2:   t2,   1!000
+ dig_s_n1:   n1,   1!000
+ dig_s_w1:   w1,   1!000
+ dig_s_p0:   p0,   1!111
+ dig_s_p0s:  p0s,  -6!0010000000100
+ dig_s_pn:   pn,   1!000
+ dig_s_ax:   ax,   1!010010101111
+
+Index dig_f
+ dig_f_pass: pass,  1!10
+ dig_f_vpos: vpos,  1!0
+ dig_f_cls:  cls,   1!100101110
+ dig_f_q1s:  q1s,  -6!1000000000000
+ dig_f_p0s:  p0s,  -6!0000001100010
+ dig_f_t1s:  t1s,  -6!0000000000000
+ dig_f_ax:   ax,   1!000001100100
+ dig_f_band: band,  1!00010
+
+Index dig_m
+ dig_m_pass: pass,  1!111
+ dig_m_band: band,  1!000
+ dig_m_q1:   q1,    1!000
+ dig_m_t1:   t1,    1!0
+ dig_m_bkq:  bkq,   1!001
+ dig_m_cls:  cls,   1!000
+ dig_m_vpos: vpos,  1!0
+ dig_m_q1s:  q1s,  -6!0000000000000
+ dig_m_q2s:  q2s,  -6!0000000000000
+ dig_m_t1s:  t1s,  -6!0000000000000
+ dig_m_t2:   t2,   1!000
+ dig_m_n1:   n1,   1!000
+ dig_m_w1:   w1,   1!000
+ dig_m_p0:   p0,   1!000
+ dig_m_p0s:  p0s,  -6!0000000000000
+ dig_m_pn:   pn,   1!000
+ dig_m_ax:   ax,   1!000000000000
+
+#  The mantissa of a digit that escaped the ladder: its own plane, on its own
+#  index and its own tables, as mp3c's Smant is a submodel of its own.
+
+Index dig_t
+ dig_t_pass: pass,  1!111
+ dig_t_band: band,  1!000
+ dig_t_q1:   q1,    1!00000
+ dig_t_t1:   t1,    1!000
+ dig_t_bkq:  bkq,   1!000
+ dig_t_cls:  cls,   1!000101011001000
+ dig_t_vpos: vpos,  1!0
+ dig_t_q1s:  q1s,  -6!0000000000000
+ dig_t_q2s:  q2s,  -6!0000000000000
+ dig_t_t1s:  t1s,  -6!0000000000000
+ dig_t_t2:   t2,   1!000
+ dig_t_n1:   n1,   1!000
+ dig_t_w1:   w1,   1!000
+ dig_t_p0:   p0,   1!100
+ dig_t_p0s:  p0s,  -6!0000000000000
+ dig_t_pn:   pn,   1!000
+ dig_t_ax:   ax,   1!000000000000
+
+#  mp3c's exA: av (running mean) and the six neighbours, weighted, scaled by
+#  avC/4096 and log-quantised into `ax`.  avD/256 is the running mean's decay.
+Number dig_avD,  1, 0!11101111
+Number dig_avA,  1, 0!111
+Number dig_avT1, 1, 0!000
+Number dig_avT2, 1, 0!000
+Number dig_avN1, 1, 0!101
+Number dig_avW1, 1, 0!100
+Number dig_avQ1, 1, 0!111
+Number dig_avQ2, 1, 0!101
+Number dig_avC,  1, 0!0110101110
+
+Number dig_rA, 1, 0!11111111
+Number dig_rB, 1, 0!11111110
+Number dig_rC, 1, 0!00001111
+Number dig_rD, 1, 0!11100101
+Number dig_rS, 1, 0!00111
+Number dig_lr, 1, 0!01011
+
+#  ---------------------------------------------------------------------------
+#  The sign of a residue digit: 28% of the digit bits, and nearly random.  What
+#  little predicts it is the sign of the earlier pass's digit at the same slot
+#  (the refinement leans against the coarse rounding), the sign of the coupled
+#  channel and of the digit before, and the magnitude just coded.
+
+Index sgn_a
+ sgn_a_pass: pass,  1!00
+ sgn_a_vpos: vpos,  1!0
+ sgn_a_cls:  cls,   1!000001111
+ sgn_a_p0s:  p0s,  -3!1011110
+ sgn_a_q1s:  q1s,  -3!0000000
+ sgn_a_mg:   mg,    1!001
+ sgn_a_t1s:  t1s,  -3!0000000
+ sgn_a_q2s:  q2s,  -3!0000000
+ sgn_a_band: band,  1!00101
+
+Index sgn_b
+ sgn_b_pass: pass,  1!11
+ sgn_b_vpos: vpos,  1!1
+ sgn_b_cls:  cls,   1!000
+ sgn_b_p0s:  p0s,  -3!0111110
+ sgn_b_q1s:  q1s,  -3!0010100
+ sgn_b_mg:   mg,    1!000
+ sgn_b_t1s:  t1s,  -3!0000101
+ sgn_b_q2s:  q2s,  -3!0010100
+ sgn_b_band: band,  1!10010
+
+Index sgn_c
+ sgn_c_pass: pass,  1!01
+ sgn_c_vpos: vpos,  1!0
+ sgn_c_p0s:  p0s,  -3!1000001
+ sgn_c_q1s:  q1s,  -3!0000100
+ sgn_c_t1s:  t1s,  -3!0000000
+ sgn_c_q2s:  q2s,  -3!0000100
+ sgn_c_mg:   mg,    1!000
+
+Index sgn_d
+ sgn_d_pass: pass,  1!00
+ sgn_d_vpos: vpos,  1!0
+ sgn_d_p0s:  p0s,  -3!0001101
+ sgn_d_q1s:  q1s,  -3!0001000
+ sgn_d_t1s:  t1s,  -3!0000000
+ sgn_d_q2s:  q2s,  -3!0001000
+ sgn_d_mg:   mg,    1!000
+
+Index sgn_s
+ sgn_s_pass: pass,  1!00
+ sgn_s_vpos: vpos,  1!0
+ sgn_s_p0s:  p0s,  -3!0010010
+ sgn_s_mg:   mg,    1!000
+
+Index sgn_f
+ sgn_f_pass: pass,  1!11
+ sgn_f_vpos: vpos,  1!1
+ sgn_f_p0s:  p0s,  -3!1011101
+ sgn_f_mg:   mg,    1!011
+
+Index sgn_m
+ sgn_m_pass: pass,  1!11
+ sgn_m_vpos: vpos,  1!0
+ sgn_m_p0s:  p0s,  -3!0000000
+ sgn_m_mg:   mg,    1!010
+
+Index sgn_t
+ sgn_t_pass: pass,  1!00
+
+Number sgn_rA, 1, 0!11111110
+Number sgn_rB, 1, 0!11111111
+Number sgn_rC, 1, 0!00001010
+Number sgn_rD, 1, 0!00001011
+Number sgn_rS, 1, 0!00111
+Number sgn_lr, 1, 0!10010
+
+#  ---------------------------------------------------------------------------
+#  Floor posts.  The column is the whole story here -- post 0 and post 1 are
+#  coded raw and land at the ends of the row, everything between them is a
+#  folded residual at a frequency the column names -- so it gets 48 buckets
+#  where the digit model gives its own position none.  `p1` is what this post
+#  was one packet ago, and it is the second factor: a floor curve is the
+#  spectral envelope, and an envelope moves slowly.
+
+Index flr_a
+! flr_a_fno:  fno,   1!1
+! flr_a_col:  col,   1!111111111111111111111111111100000100111000000001
+! flr_a_p1:   p1,    1!0000000
+! flr_a_n1:   n1,    1!100
+! flr_a_raw:  raw,   1!0
+! flr_a_blk:  blk,   1!0
+! flr_a_o1:   o1,    1!0000000
+! flr_a_pn:   pn,    1!0000000
+! flr_a_od:   od,   -4!000000000
+! flr_a_chn:  chn,   1!0
+
+Index flr_b
+! flr_b_fno:  fno,   1!0
+! flr_b_col:  col,   1!0000001
+! flr_b_p1:   p1,    1!11111111111100
+! flr_b_n1:   n1,    1!0000001
+! flr_b_raw:  raw,   1!0
+! flr_b_blk:  blk,   1!1
+! flr_b_o1:   o1,    1!0000000
+! flr_b_pn:   pn,    1!0000000
+! flr_b_od:   od,   -4!000000000
+! flr_b_chn:  chn,   1!0
+
+Index flr_c
+! flr_c_col:  col,   1!1111111
+! flr_c_p1:   p1,    1!000
+! flr_c_n1:   n1,    1!000
+! flr_c_o1:   o1,    1!1111111
+! flr_c_pn:   pn,    1!0000000
+! flr_c_od:   od,   -4!000000000
+! flr_c_chn:  chn,   1!0
+
+Index flr_d
+! flr_d_col:  col,   1!0000000
+! flr_d_p1:   p1,    1!000
+! flr_d_n1:   n1,    1!000
+! flr_d_o1:   o1,    1!0000000
+! flr_d_pn:   pn,    1!0000000
+! flr_d_od:   od,   -4!000000000
+! flr_d_chn:  chn,   1!0
+
+Index flr_s
+! flr_s_col:  col,   1!1011101
+! flr_s_p1:   p1,    1!000
+! flr_s_n1:   n1,    1!101
+! flr_s_o1:   o1,    1!0000000
+! flr_s_pn:   pn,    1!0000000
+! flr_s_od:   od,   -4!000000000
+! flr_s_chn:  chn,   1!0
+
+Index flr_f
+! flr_f_col:  col,   1!0000000
+! flr_f_p1:   p1,    1!000
+! flr_f_n1:   n1,    1!000
+! flr_f_o1:   o1,    1!0000000
+! flr_f_pn:   pn,    1!0000000
+! flr_f_od:   od,   -4!000000000
+! flr_f_chn:  chn,   1!0
+
+Index flr_m
+! flr_m_col:  col,   1!111
+! flr_m_p1:   p1,    1!001
+! flr_m_n1:   n1,    1!000
+! flr_m_o1:   o1,    1!0000000
+! flr_m_pn:   pn,    1!0000000
+! flr_m_od:   od,   -4!000000000
+! flr_m_chn:  chn,   1!0
+
+Index flr_t
+! flr_t_col:  col,   1!011111111111111111110111111000100000000000000000
+! flr_t_p1:   p1,    1!000
+! flr_t_n1:   n1,    1!000
+! flr_t_o1:   o1,    1!0000000
+! flr_t_pn:   pn,    1!0000000
+! flr_t_od:   od,   -4!000000000
+! flr_t_chn:  chn,   1!0
+
+!Number flr_rA, 1, 0!00001111
+!Number flr_rB, 1, 0!01001011
+!Number flr_rC, 1, 0!00111111
+!Number flr_rD, 1, 0!00111111
+!Number flr_rS, 1, 0!00110
+!Number flr_lr, 1, 0!10110
+
+#  ---------------------------------------------------------------------------
+#  Residue classes: the class before it (-15.13% on its own, measured in
+#  TSVTRANS.md) and the class the same partition had one packet ago.
+
+Index cls_a
+! cls_a_rno:  rno,   1!1
+! cls_a_band: band,  1!011010101110000
+! cls_a_prev: prev,  1!0101011
+! cls_a_t1:   t1,    1!0001111
+! cls_a_blk:  blk,   1!1
+! cls_a_tn:   tn,    1!000
+! cls_a_prev2: prev2, 1!000
+
+Index cls_b
+! cls_b_rno:  rno,   1!0
+! cls_b_band: band,  1!100001111110000
+! cls_b_prev: prev,  1!111010100000000
+! cls_b_t1:   t1,    1!111
+! cls_b_blk:  blk,   1!1
+! cls_b_tn:   tn,    1!000
+! cls_b_prev2: prev2, 1!000
+
+Index cls_c
+! cls_c_band: band,  1!000
+! cls_c_prev: prev,  1!111
+! cls_c_t1:   t1,    1!111
+! cls_c_tn:   tn,    1!111
+! cls_c_prev2: prev2, 1!000
+
+Index cls_d
+! cls_d_band: band,  1!111
+! cls_d_prev: prev,  1!111
+! cls_d_t1:   t1,    1!000
+! cls_d_tn:   tn,    1!000
+! cls_d_prev2: prev2, 1!111
+
+Index cls_s
+! cls_s_band: band,  1!000
+! cls_s_prev: prev,  1!000
+! cls_s_t1:   t1,    1!000
+! cls_s_tn:   tn,    1!000
+! cls_s_prev2: prev2, 1!000
+
+Index cls_f
+! cls_f_band: band,  1!000
+! cls_f_prev: prev,  1!000
+! cls_f_t1:   t1,    1!000
+! cls_f_tn:   tn,    1!000
+! cls_f_prev2: prev2, 1!000
+
+Index cls_m
+! cls_m_band: band,  1!001
+! cls_m_prev: prev,  1!101
+! cls_m_t1:   t1,    1!1
+! cls_m_tn:   tn,    1!000
+! cls_m_prev2: prev2, 1!000
+
+Index cls_t
+! cls_t_band: band,  1!101
+! cls_t_prev: prev,  1!001
+! cls_t_t1:   t1,    1!101
+! cls_t_tn:   tn,    1!000
+! cls_t_prev2: prev2, 1!000
+
+!Number cls_rA, 1, 0!01010000
+!Number cls_rB, 1, 0!00101011
+!Number cls_rC, 1, 0!00111111
+!Number cls_rD, 1, 0!00111111
+!Number cls_rS, 1, 0!00101
+!Number cls_lr, 1, 0!11000
+
+#  ---------------------------------------------------------------------------
+#  Everything the page and packet headers hold, one field id apart.  Each field
+#  is a few thousand records at most, so what these want is separation, not
+#  resolution: `fld` is a dense factor and the rest is the field's own recent
+#  history.
+
+Index aux_a
+ADD 32: fld
+! aux_a_p1:   p1,    1!100000001000111
+! aux_a_p2:   p2,    1!1000001
+
+Index aux_b
+ADD 32: fld
+! aux_b_p1:   p1,    1!000
+! aux_b_p2:   p2,    1!000
+
+Index aux_c
+ADD 32: fld
+
+Index aux_d
+ADD 32: fld
+
+Index aux_s
+ADD 32: fld
+
+Index aux_f
+ADD 32: fld
+
+Index aux_m
+ADD 32: fld
+
+Index aux_t
+ADD 32: fld
+
+!Number aux_rA, 1, 0!00010110
+!Number aux_rB, 1, 0!00000000
+!Number aux_rC, 1, 0!00111111
+!Number aux_rD, 1, 0!00111111
+!Number aux_rS, 1, 0!00110
+!Number aux_lr, 1, 0!11111
+
+#  ---------------------------------------------------------------------------
+#  The three header packets, coded record by record.  The tag is a dense factor
+#  because the alphabet is small and every entry in it is a different kind of
+#  number; p1r is the previous value under the same tag, whole, which is what
+#  makes cb.len and cmt.byte an order-1 byte model.
+
+Index hdr_a
+ADD 64: tag
+! hdr_a_p1:   p1,    1!100000000010110
+! hdr_a_p2:   p2,    1!1111111
+! hdr_a_pos:  pos,   1!011
+! hdr_a_p1r:  p1r,   &00000000
+
+Index hdr_b
+! hdr_b_p1:   p1,    1!101
+! hdr_b_pos:  pos,   1!0
+! hdr_b_p1r:  p1r,   &01011110
+
+Index hdr_c
+ADD 64: tag
+
+Index hdr_d
+ADD 64: tag
+
+Index hdr_s
+ADD 64: tag
+
+Index hdr_f
+ADD 64: tag
+
+Index hdr_m
+ADD 64: tag
+
+Index hdr_t
+ADD 64: tag
+! hdr_t_p1r:  p1r,   &01101111
+
+!Number hdr_rA, 1, 0!00010000
+!Number hdr_rB, 1, 0!00100000
+!Number hdr_rC, 1, 0!00111111
+!Number hdr_rD, 1, 0!00111111
+!Number hdr_rS, 1, 0!00001
+!Number hdr_lr, 1, 0!11111
