@@ -19,12 +19,13 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   int rno = D.rno, pass = D.pass, band = D.band, col = D.col, vpos = D.vpos,
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
-      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax;
+      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax,
+      pq = D.pq;
   (void) rno;  (void) pass;  (void) band;  (void) col;  (void) vpos;
   (void) q1;   (void) q2;    (void) q1s;   (void) q2s;  (void) t1;
   (void) t1s;  (void) t2;    (void) n1;    (void) w1;   (void) p0;
   (void) p0s;  (void) pn;    (void) cls;   (void) zrun; (void) blk;
-  (void) bkq;  (void) ax;
+  (void) bkq;  (void) ax;    (void) pq;
 
   dig_a = 0;
   dig_a = dig_a*8 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1))+(pass>3+(1-1))+(pass>4+(1-1))+(pass>5+(1-1))+(pass>6+(1-1)));
@@ -95,12 +96,13 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   int rno = D.rno, pass = D.pass, band = D.band, col = D.col, vpos = D.vpos,
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
-      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax, mg = D.mg;
+      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax, mg = D.mg,
+      pq = D.pq;
   (void) rno;  (void) pass;  (void) band;  (void) col;  (void) vpos;
   (void) q1;   (void) q2;    (void) q1s;   (void) q2s;  (void) t1;
   (void) t1s;  (void) t2;    (void) n1;    (void) w1;   (void) p0;
   (void) p0s;  (void) pn;    (void) cls;   (void) zrun; (void) blk;
-  (void) bkq;  (void) ax;    (void) mg;
+  (void) bkq;  (void) ax;    (void) mg;    (void) pq;
 
   sgn_a = 0;
   sgn_a = sgn_a*5 + ((cls>5+(1-1))+(cls>6+(1-1))+(cls>7+(1-1))+(cls>8+(1-1)));
@@ -183,9 +185,11 @@ void tc_make_flr( int fno, int col, int p1, int n1, int raw, int blk,
   X.a = flr_a;  X.b = flr_b;  X.c = flr_c;  X.d = flr_d;  X.s = flr_s;  X.f = flr_f;  X.m = flr_m;  X.t = flr_t;
 }
 
-void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev2, tcx & X ) {
+void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev2,
+                  int pq, tcx & X ) {
   int cls_a, cls_b, cls_c, cls_d, cls_s, cls_f, cls_m, cls_t;
   (void) rno;  (void) band;  (void) prev;  (void) t1;  (void) blk;  (void) tn;  (void) prev2;
+  (void) pq;
 
   cls_a = 0;
   cls_a = cls_a*2 + ((rno>0+(1-1)));

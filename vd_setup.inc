@@ -59,35 +59,71 @@ static int su_role = 0;                   /*  0 synth, 1 meta, 2 restore  */
     read, captured for comparison, or generated from an index.  */
 static void su_books(tsv & t, u32 nbk, struct vd_book * bk);
 
+/*  A book whose entry count is past this keeps no length list, so the
+    codeword prior below simply does not apply to it.  balrogg refuses a
+    larger book outright (io.inc), so in a stream that round-trips this is
+    never reached; it bounds what an arbitrary .tsv can ask us to allocate.  */
+constexpr u32 VD_LENMAX = 1u << 20;
+
 struct vd_book {
   u32 dim, ent, nv, off;
   int seq, lookup;
   float minval, delta;
   i64 min_fx, delta_fx;       /*  the same two, ready for the recovery  */
 
+  /*  What Vorbis already knows about this book's entries and tsvcomp used to
+      drop on the floor.  `clen` is the codeword length per entry (0 = the
+      entry is unused), which is the encoder's own probability model: a
+      complete Huffman code assigns 2^-len to an entry, and that is the one
+      thing about a residue digit that no amount of history can supply.
+      `mval` is the multiplicand list and `minv` its inverse, so a coded digit
+      can be turned back into the grid index it came from.  */
+  u8  * clen;
+  u32 * mval;
+  i32 * minv;
+  u32   base;
+
+  /*  A link's setup replaces the one before it, so what the previous link's
+      books held goes back first.  Every vd_setup is a static object, so on
+      the first pass these are the null pointers of static initialisation.  */
+  void drop() {
+    free(clen);  clen = nullptr;
+    free(mval);  mval = nullptr;
+    free(minv);  minv = nullptr;
+    base = 0;
+  }
+
   void read(tsv & t) {
     u32 i, ent2, lk, vb, mx = 0, mult;
+    drop();
     dim = t.get_u("cb.dim", 0x10000);
     /*  vd_lk1 never terminates on dim == 0, and the recovery divides by the
         book's step.  balrogg rejects the same book at io.inc:208.  */
     FATAL_UNLESS(dim > 0, "codebook has dimension 0");
     ent = t.get_u("cb.entries", 0x1000000);
-    /*  lengths: consumed for position, discarded  */
+    /*  Lengths: kept now, not dropped -- see `clen`.  A record still has to
+        be consumed whether or not there is room to store it, so the guard is
+        on the write and not on the read.  */
+    if (ent && ent <= VD_LENMAX) clen = (u8 *) calloc(ent, 1);
     if (t.get_u("cb.ordered", 2)) {
-      u32 got = 0;
-      t.get("cb.ordlen");
+      u32 got = 0, cur = (u32) t.get_u("cb.ordlen", 32) + 1;
       while (got < ent) {
         u32 n = t.get_u("cb.ordrun", (u64) 0x100000000);
         FATAL_UNLESS(n <= ent - got, "ordered run overruns its book");
-        got += n;
+        if (clen && cur <= 32) for (i = got; i < got + n; i++) clen[i] = (u8) cur;
+        got += n;  cur++;
       }
     } else if (!t.get_u("cb.sparse", 2)) {
-      for (i = 0; i < ent; i++) t.get("cb.len");
+      for (i = 0; i < ent; i++) {
+        u32 L = (u32) t.get_u("cb.len", 32) + 1;
+        if (clen) clen[i] = (u8) L;
+      }
     } else if (su_role == 0) {
       int used = (int) t.get_u("cb.used", 2);
       for (i = 0; i < ent; i++) {
         if (i) used = (int) t.get_u("cb.used", 2);
-        if (used) t.get("cb.len");
+        if (used) { u32 L = (u32) t.get_u("cb.len", 32) + 1;
+                    if (clen) clen[i] = (u8) L; }
       }
     } else {
       /*  Turn the alternation into two runs, or back again.  */
@@ -134,11 +170,27 @@ struct vd_book {
     seq = (int) t.get_u("cb.sequence", 2);
     nv = vd_lk1(ent, dim);
     ent2 = nv ? nv : 1;
+    mval = (u32 *) calloc(ent2, sizeof(u32));
     for (i = 0; i < ent2; i++) {
       mult = t.get_u("cb.mult", (u64) 1 << vb);
+      mval[i] = mult;
       if (mult > mx) mx = mult;
     }
     off = (mx + 1) >> 1;
+    /*  balrogg's vb_book::grid, for the same reason: a digit is coded as
+        `mval[index] - off` and the index is what the entry decomposes into,
+        so the model needs the way back.  A duplicate multiplicand would make
+        that ambiguous; balrogg refuses such a book, and here the map simply
+        keeps the first, which only costs the prior its accuracy.  */
+    base = mx + 1;
+    if (base && base <= (1u << 24)) {
+      minv = (i32 *) malloc((sz) base * sizeof(i32));
+      if (minv) {
+        for (i = 0; i < base; i++) minv[i] = -1;
+        for (i = 0; i < ent2; i++)
+          if (mval[i] < base && minv[mval[i]] < 0) minv[mval[i]] = (i32) i;
+      }
+    }
     min_fx = fx((double) minval);  delta_fx = fx((double) delta);
     FATAL_UNLESS(delta_fx != 0, "codebook has a zero delta");
   }

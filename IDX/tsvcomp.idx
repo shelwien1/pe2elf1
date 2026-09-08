@@ -68,6 +68,7 @@ Index dig_a
  dig_a_p0s:  p0s,  -6!0000000000000
  dig_a_pn:   pn,   1!000
  dig_a_ax:   ax,   1!000100000000
+ dig_a_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_b
  dig_b_rno:  rno,   1!0
@@ -92,6 +93,7 @@ Index dig_b
  dig_b_p0s:  p0s,  -6!0000000000000
  dig_b_pn:   pn,   1!100
  dig_b_ax:   ax,   1!000000000000
+ dig_b_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_c
  dig_c_pass: pass,  1!11
@@ -106,6 +108,7 @@ Index dig_c
  dig_c_q2s:  q2s,  -6!1000000000000
  dig_c_cls:  cls,   1!000
  dig_c_p0s:  p0s,  -6!0000000000000
+ dig_c_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_d
  dig_d_pass: pass,  1!00
@@ -120,6 +123,7 @@ Index dig_d
  dig_d_q2s:  q2s,  -6!0101000000010
  dig_d_cls:  cls,   1!011
  dig_d_p0s:  p0s,  -6!0000111110000
+ dig_d_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_s
  dig_s_pass: pass,  1!00
@@ -139,6 +143,7 @@ Index dig_s
  dig_s_p0s:  p0s,  -6!0010000000100
  dig_s_pn:   pn,   1!000
  dig_s_ax:   ax,   1!010010101111
+ dig_s_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_f
  dig_f_pass: pass,  1!10
@@ -149,6 +154,7 @@ Index dig_f
  dig_f_t1s:  t1s,  -6!0000000000000
  dig_f_ax:   ax,   1!000001100100
  dig_f_band: band,  1!00010
+ dig_f_pq:   pq,    1!00000000000000000000000000000000
 
 Index dig_m
  dig_m_pass: pass,  1!111
@@ -168,6 +174,7 @@ Index dig_m
  dig_m_p0s:  p0s,  -6!0000000000000
  dig_m_pn:   pn,   1!000
  dig_m_ax:   ax,   1!000000000000
+ dig_m_pq:   pq,    1!00000000000000000000000000000000
 
 #  The mantissa of a digit that escaped the ladder: its own plane, on its own
 #  index and its own tables, as mp3c's Smant is a submodel of its own.
@@ -190,6 +197,7 @@ Index dig_t
  dig_t_p0s:  p0s,  -6!0000000000000
  dig_t_pn:   pn,   1!000
  dig_t_ax:   ax,   1!000000000000
+ dig_t_pq:   pq,    1!00000000000000000000000000000000
 
 #  mp3c's exA: av (running mean) and the six neighbours, weighted, scaled by
 #  avC/4096 and log-quantised into `ax`.  avD/256 is the running mean's decay.
@@ -226,6 +234,7 @@ Index sgn_a
  sgn_a_t1s:  t1s,  -3!0000000
  sgn_a_q2s:  q2s,  -3!0000000
  sgn_a_band: band,  1!00101
+ sgn_a_pq:   pq,    1!00000000000000000000000000000000
 
 Index sgn_b
  sgn_b_pass: pass,  1!11
@@ -237,6 +246,7 @@ Index sgn_b
  sgn_b_t1s:  t1s,  -3!0000101
  sgn_b_q2s:  q2s,  -3!0010100
  sgn_b_band: band,  1!10010
+ sgn_b_pq:   pq,    1!00000000000000000000000000000000
 
 Index sgn_c
  sgn_c_pass: pass,  1!01
@@ -246,6 +256,7 @@ Index sgn_c
  sgn_c_t1s:  t1s,  -3!0000000
  sgn_c_q2s:  q2s,  -3!0000100
  sgn_c_mg:   mg,    1!000
+ sgn_c_pq:   pq,    1!00000000000000000000000000000000
 
 Index sgn_d
  sgn_d_pass: pass,  1!00
@@ -255,27 +266,32 @@ Index sgn_d
  sgn_d_t1s:  t1s,  -3!0000000
  sgn_d_q2s:  q2s,  -3!0001000
  sgn_d_mg:   mg,    1!000
+ sgn_d_pq:   pq,    1!00000000000000000000000000000000
 
 Index sgn_s
  sgn_s_pass: pass,  1!00
  sgn_s_vpos: vpos,  1!0
  sgn_s_p0s:  p0s,  -3!0010010
  sgn_s_mg:   mg,    1!000
+ sgn_s_pq:   pq,    1!00000000000000000000000000000000
 
 Index sgn_f
  sgn_f_pass: pass,  1!11
  sgn_f_vpos: vpos,  1!1
  sgn_f_p0s:  p0s,  -3!1011101
  sgn_f_mg:   mg,    1!011
+ sgn_f_pq:   pq,    1!00000000000000000000000000000000
 
 Index sgn_m
  sgn_m_pass: pass,  1!11
  sgn_m_vpos: vpos,  1!0
  sgn_m_p0s:  p0s,  -3!0000000
  sgn_m_mg:   mg,    1!010
+ sgn_m_pq:   pq,    1!00000000000000000000000000000000
 
 Index sgn_t
  sgn_t_pass: pass,  1!00
+ sgn_t_pq:   pq,    1!00000000000000000000000000000000
 
 Number sgn_rA, 1, 0!11111110
 Number sgn_rB, 1, 0!11111111
@@ -389,6 +405,7 @@ Index cls_a
 ! cls_a_blk:  blk,   1!1
 ! cls_a_tn:   tn,    1!000
 ! cls_a_prev2: prev2, 1!000
+! cls_a_pq:   pq,    1!00000000000000000000000000000000
 
 Index cls_b
 ! cls_b_rno:  rno,   1!0
@@ -398,6 +415,7 @@ Index cls_b
 ! cls_b_blk:  blk,   1!1
 ! cls_b_tn:   tn,    1!000
 ! cls_b_prev2: prev2, 1!000
+! cls_b_pq:   pq,    1!00000000000000000000000000000000
 
 Index cls_c
 ! cls_c_band: band,  1!000
@@ -405,6 +423,7 @@ Index cls_c
 ! cls_c_t1:   t1,    1!111
 ! cls_c_tn:   tn,    1!111
 ! cls_c_prev2: prev2, 1!000
+! cls_c_pq:   pq,    1!00000000000000000000000000000000
 
 Index cls_d
 ! cls_d_band: band,  1!111
@@ -412,6 +431,7 @@ Index cls_d
 ! cls_d_t1:   t1,    1!000
 ! cls_d_tn:   tn,    1!000
 ! cls_d_prev2: prev2, 1!111
+! cls_d_pq:   pq,    1!00000000000000000000000000000000
 
 Index cls_s
 ! cls_s_band: band,  1!000
@@ -419,6 +439,7 @@ Index cls_s
 ! cls_s_t1:   t1,    1!000
 ! cls_s_tn:   tn,    1!000
 ! cls_s_prev2: prev2, 1!000
+! cls_s_pq:   pq,    1!00000000000000000000000000000000
 
 Index cls_f
 ! cls_f_band: band,  1!000
@@ -426,6 +447,7 @@ Index cls_f
 ! cls_f_t1:   t1,    1!000
 ! cls_f_tn:   tn,    1!000
 ! cls_f_prev2: prev2, 1!000
+! cls_f_pq:   pq,    1!00000000000000000000000000000000
 
 Index cls_m
 ! cls_m_band: band,  1!001
@@ -433,6 +455,7 @@ Index cls_m
 ! cls_m_t1:   t1,    1!1
 ! cls_m_tn:   tn,    1!000
 ! cls_m_prev2: prev2, 1!000
+! cls_m_pq:   pq,    1!00000000000000000000000000000000
 
 Index cls_t
 ! cls_t_band: band,  1!101
@@ -440,6 +463,7 @@ Index cls_t
 ! cls_t_t1:   t1,    1!101
 ! cls_t_tn:   tn,    1!000
 ! cls_t_prev2: prev2, 1!000
+! cls_t_pq:   pq,    1!00000000000000000000000000000000
 
 !Number cls_rA, 1, 0!01010000
 !Number cls_rB, 1, 0!00101011

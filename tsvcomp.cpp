@@ -193,6 +193,40 @@ static void * tc_alloc(sz n) {
 }
 static void cm_fill(cm_cnt * p, sz n) { sz i;  for (i = 0; i < n; i++) p[i].init(); }
 
+#include "tc_prior.inc"    /*  the codebook's own model of its entries  */
+
+/*  One prior table per codebook (the digits of a residue vector) and one per
+    residue (the classes of a classword).  A link's setup replaces both.  */
+static tc_ptab tcp_book[VD_MAXBOOK];
+static tc_ptab tcp_cls[VD_MAXRES];
+
+static void tcp_free(void) {
+  u32 i;
+  for (i = 0; i < VD_MAXBOOK; i++) tcp_book[i].drop();
+  for (i = 0; i < VD_MAXRES; i++) tcp_cls[i].drop();
+  tcp_mem = 0;
+}
+
+static void tcp_build(void) {
+  i32 v[TCP_SYMMAX];
+  u32 i, j;
+  tcp_free();
+  for (i = 0; i < su.nbk; i++) {
+    vd_book * b = su.bk + i;
+    if (b->lookup != 1 || !b->clen || !b->mval || !b->nv) continue;
+    if (b->nv > TCP_SYMMAX) continue;
+    for (j = 0; j < b->nv; j++) v[j] = (i32) b->mval[j] - (i32) b->off;
+    tcp_book[i].build(b->clen, b->ent, b->nv, b->dim, 0, v);
+  }
+  for (i = 0; i < su.nrs; i++) {
+    vd_res * r = su.rs + i;
+    vd_book * cb = su.bk + r->cbook;
+    if (!cb->clen || r->ncl > TCP_SYMMAX) continue;
+    for (j = 0; j < r->ncl; j++) v[j] = (i32) j;
+    tcp_cls[i].build(cb->clen, cb->ent, r->ncl, cb->dim, 1, v);
+  }
+}
+
 /*  ------------------------------------------------------------------
     The generated model.
 
@@ -256,7 +290,7 @@ static TC_T tcm;
 /*  Everything a residue digit's contexts are built from.  */
 struct tc_dv {
   int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1,
-      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg;
+      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq;
 };
 
 /*  One family's five index rows for one value: the two counters, the APM, the
@@ -292,7 +326,9 @@ struct tc_fam {
   u16 * S, * S2;
   i32 * W;
   cm_apm ap, ap2;
-  cm_mix<6> mx;
+  cm_mix<7> mx;
+  tc_pcur pc;                             /*  the prior for the value in hand  */
+  int prp;                                /*  P(this bit is zero) from it, or -1  */
   u32 ba, bb, bc, bd, bs, bf, bm, bt;
   int rA, rB, rC, rD, rS, lr;
 
@@ -319,6 +355,7 @@ struct tc_fam {
     rD = tc_clamp(rd, 1, CM_TMAX);
     rS = tc_clamp(rs, 1, 15);
     lr = tc_clamp(lrate, 1, 64);
+    pc.off();  prp = -1;
   }
 
   INLINE void select(const tcx & x) {
@@ -347,6 +384,12 @@ struct tc_fam {
     mx.add(cm_stretch(e.P()));
     mx.add(cm_stretch(f.P()));
     mx.add(cm_stretch(a.P()));
+    /*  What the codebook says about this decision.  A family with no prior,
+        or a decision the prior cannot speak to, contributes a zero, which is
+        what a stretched even chance is: the input is there and says nothing,
+        and the mixer's weight for it stays where the rest of the corpus put
+        it rather than being trained on a different set of inputs.  */
+    mx.add(prp >= 0 ? cm_stretch(prp) : 0);
     mx.add(256);
     { int pm = mx.mix(bm + (u32) node);
       int pf = ap2.pp(pm, bf + (u32) node);
@@ -376,21 +419,31 @@ struct tc_fam {
       is left in unary, then its mantissa.  Small values -- which is nearly
       all of them -- cost one, two or three decisions, and nothing has to
       know a field's range in advance.  */
+  /*  The three head steps and the unary length each have a shape the prior
+      can answer for; the mantissa does not, and is the part that carries
+      least, so it goes uninformed.  `prp` is set immediately before the bit
+      it describes and cleared after, so a path that does not set it cannot
+      hand the mixer a stale one.  */
   i64 code(const tcx & v, i64 x) {
     int k, p, nb = 0;
     u64 u;
     select(v);
     if (tc_enc) FATAL_UNLESS(x >= 0, "negative magnitude");
-    if (bit(0, tc_enc && x == 0)) return 0;
-    if (bit(1, tc_enc && x == 1)) return 1;
-    if (bit(2, tc_enc && x == 2)) return 2;
+    prp = tcp_head(pc, 0);
+    if (bit(0, tc_enc && x == 0)) { prp = -1;  return 0; }
+    prp = tcp_head(pc, 1);
+    if (bit(1, tc_enc && x == 1)) { prp = -1;  return 1; }
+    prp = tcp_head(pc, 2);
+    if (bit(2, tc_enc && x == 2)) { prp = -1;  return 2; }
     u = tc_enc ? (u64) (x - 3) + 1 : 1;
     if (tc_enc) { u64 t = u;  while (t) { nb++;  t >>= 1; } }
     for (k = 0; ; k++) {
+      prp = tcp_len(pc, k);
       if (bit(tc_node_len(k), tc_enc && nb == k + 1)) { nb = k + 1;  break; }
       FATAL_UNLESS(k + 2 <= TC_NBMAX, "%s: a value of 2^%d or more",
                    tc_enc ? "this stream holds" : "coded stream", TC_NBMAX);
     }
+    prp = -1;
     if (!tc_enc) u = 1;
     for (p = 0; p < nb - 1; p++) {
       int mb = bitm(tc_node_man(nb, p),
@@ -412,7 +465,7 @@ struct tc_fam {
       cm_cnt & g = G[sc];
       s = tc_bit(g.P(), tc_enc && x < 0);
       g.upd(s, rA);
-    } else s = bit(TC_SIGN, tc_enc && x < 0);
+    } else { prp = tcp_sign(pc, m);  s = bit(TC_SIGN, tc_enc && x < 0);  prp = -1; }
     return s ? -m : m;
   }
 };
@@ -478,6 +531,7 @@ static void tc_hist_free(void) {
 static void tc_setup_done(void) {
   u32 i;
   tc_hist_free();
+  tcp_build();
   tc_nchan = su.ch;
   for (i = 0; i < su.nrs; i++) {
     vd_res * r = su.rs + i;
@@ -641,7 +695,7 @@ static INLINE i32 tc_sq(i32 v) {          /*  signed log-ish quantisation  */
   return v < 0 ? -q : q;
 }
 static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
-                    i32 bkq, u32 dim) {
+                    i32 bkq, u32 dim, u32 bn) {
   sz span = dg_span[rno];
   sz hb = ((sz) (tc_blk * 8 + pss) * tc_nchan + j) * span;
   i16 * hist  = span ? dg_hist[rno]  + hb : nullptr;
@@ -651,8 +705,11 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
   u8  * pn    = span ? dg_pn[rno] + (sz) j * span : nullptr;
   sz base = (sz) ((rno * 8 + pss) * tc_nchan + j);
   i32 * q1 = dg_q1 + base, * q2 = dg_q2 + base, * zr = dg_zr + base;
+  vd_book * bk = su.bk + bn;
+  const tc_ptab * pt = tcp_book[bn].ok ? &tcp_book[bn] : nullptr;
   u32 i;
   tc_stage = STG_DIGIT;
+  fam_dig.pc.off();
   for (i = 0; i < psz; i++) {
     sz slot = (sz) pc * psz + i;
     int ok = hist && slot < span;
@@ -676,6 +733,10 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
     d.p0 = tc_qlog(p0);  d.p0s = tc_sq(p0);  d.pn = pnn;
     d.cls = (int) cls;  d.zrun = tc_qlog(*zr);  d.blk = (int) tc_blk;
     d.bkq = bkq;
+    /*  A vector's digits are the places of one codebook entry, so the prior
+        restarts with the vector and walks down one level per digit.  */
+    if (dim && d.vpos == 0) fam_dig.pc.start(pt);
+    d.pq = tcp_axis(fam_dig.pc);
     { /*  mp3c's exA: a weighted mean of the neighbourhood, log-quantised  */
       i32 ex = (av >> 4) * TC_dig_avA + tc_abs(t1) * TC_dig_avT1
              + tc_abs(t2) * TC_dig_avT2 + tc_abs(n1) * TC_dig_avN1
@@ -704,9 +765,20 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
         d.mg = tc_qlog(mg);
         tc_make_sgn(d, w);
         fam_sgn.select(w);
+        /*  The sign is a different family but the same place in the same
+            vector, so it reads the digit model's cursor.  */
+        fam_sgn.prp = tcp_sign(fam_dig.pc, mg);
         sn = fam_sgn.bit(0, tc_enc && dg < 0);
+        fam_sgn.prp = -1;
         dg = sn ? -mg : mg;
       } else dg = 0; }
+    /*  Step past this place.  A digit the grid does not name puts the cursor
+        out for the rest of the vector rather than mispositioning it.  */
+    if (fam_dig.pc.on) {
+      i64 gv = dg + (i64) bk->off;
+      fam_dig.pc.step(bk->minv && gv >= 0 && gv < (i64) bk->base
+                      ? bk->minv[gv] : -1);
+    }
 #ifdef TC_DUMP
     tc_dumprec[11] = (i16) dg;  fwrite(tc_dumprec, 2, 12, tc_dumpf);
 #endif
@@ -734,7 +806,7 @@ static u32 tc_classify(u32 rno, u32 j, u32 slot) {
   i64 c;
   tc_stage = STG_CLASS;
   tc_make_cls((int) rno, tc_qlog(slot), cl_last[rno], t1, (int) tc_blk, tn,
-              cl_last2[rno], v);
+              cl_last2[rno], tcp_axis(fam_cls.pc), v);
   c = tc_enc ? (i64) tc_in->get_u("res.class", 16) : 0;
   c = fam_cls.code(v, c);
   if (!tc_enc) tc_out->put("res.class", c);
@@ -771,9 +843,17 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
     pc = 0;
     while (pc < np) {
       if (!pss)
-        for (j = 0; j < vch; j++)
-          for (k = 0; k < pv; k++)
-            tc_cl[j * w + pc + k] = (u8) tc_classify(rno, j, pc + k);
+        for (j = 0; j < vch; j++) {
+          /*  The classes of `pv` consecutive partitions are the places of one
+              classword, so they get the classbook's prior the same way a
+              vector's digits get the residue book's.  */
+          fam_cls.pc.start(tcp_cls[rno].ok ? &tcp_cls[rno] : nullptr);
+          for (k = 0; k < pv; k++) {
+            u32 c = tc_classify(rno, j, pc + k);
+            tc_cl[j * w + pc + k] = (u8) c;
+            fam_cls.pc.step((int) c);
+          }
+        }
       for (k = 0; k < pv; k++) {
         if (pc >= np) break;
         for (j = 0; j < vch; j++) {
@@ -789,7 +869,7 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
               means the same thing in the next file.  */
           if (bn >= 0)
             tc_part(rno, pss, j, pc, r->psz, c, tc_qlog(su.bk[bn].off),
-                    su.bk[bn].dim);
+                    su.bk[bn].dim, (u32) bn);
         }
         pc++;
       }
@@ -1140,6 +1220,7 @@ int main(int argc, char ** argv) {
       }
   }
   tc_hist_free();
+  tcp_free();
   return BLR_EXIT_OK;
 usage:
   fprintf(stderr,

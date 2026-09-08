@@ -19,12 +19,13 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   int rno = D.rno, pass = D.pass, band = D.band, col = D.col, vpos = D.vpos,
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
-      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax;
+      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax,
+      pq = D.pq;
   (void) rno;  (void) pass;  (void) band;  (void) col;  (void) vpos;
   (void) q1;   (void) q2;    (void) q1s;   (void) q2s;  (void) t1;
   (void) t1s;  (void) t2;    (void) n1;    (void) w1;   (void) p0;
   (void) p0s;  (void) pn;    (void) cls;   (void) zrun; (void) blk;
-  (void) bkq;  (void) ax;
+  (void) bkq;  (void) ax;    (void) pq;
   MakeIndex dig_a,dig_b,dig_c,dig_d,dig_s,dig_f,dig_m,dig_t
   X.a = dig_a;  X.b = dig_b;  X.c = dig_c;  X.d = dig_d;  X.s = dig_s;  X.f = dig_f;  X.m = dig_m;  X.t = dig_t;
 }
@@ -34,12 +35,13 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   int rno = D.rno, pass = D.pass, band = D.band, col = D.col, vpos = D.vpos,
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
-      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax, mg = D.mg;
+      cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax, mg = D.mg,
+      pq = D.pq;
   (void) rno;  (void) pass;  (void) band;  (void) col;  (void) vpos;
   (void) q1;   (void) q2;    (void) q1s;   (void) q2s;  (void) t1;
   (void) t1s;  (void) t2;    (void) n1;    (void) w1;   (void) p0;
   (void) p0s;  (void) pn;    (void) cls;   (void) zrun; (void) blk;
-  (void) bkq;  (void) ax;    (void) mg;
+  (void) bkq;  (void) ax;    (void) mg;    (void) pq;
   MakeIndex sgn_a,sgn_b,sgn_c,sgn_d,sgn_s,sgn_f,sgn_m,sgn_t
   X.a = sgn_a;  X.b = sgn_b;  X.c = sgn_c;  X.d = sgn_d;  X.s = sgn_s;  X.f = sgn_f;  X.m = sgn_m;  X.t = sgn_t;
 }
@@ -53,9 +55,11 @@ void tc_make_flr( int fno, int col, int p1, int n1, int raw, int blk,
   X.a = flr_a;  X.b = flr_b;  X.c = flr_c;  X.d = flr_d;  X.s = flr_s;  X.f = flr_f;  X.m = flr_m;  X.t = flr_t;
 }
 
-void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev2, tcx & X ) {
+void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev2,
+                  int pq, tcx & X ) {
   int cls_a, cls_b, cls_c, cls_d, cls_s, cls_f, cls_m, cls_t;
   (void) rno;  (void) band;  (void) prev;  (void) t1;  (void) blk;  (void) tn;  (void) prev2;
+  (void) pq;
   MakeIndex cls_a,cls_b,cls_c,cls_d,cls_s,cls_f,cls_m,cls_t
   X.a = cls_a;  X.b = cls_b;  X.c = cls_c;  X.d = cls_d;  X.s = cls_s;  X.f = cls_f;  X.m = cls_m;  X.t = cls_t;
 }
@@ -88,7 +92,7 @@ Table( cm_cnt, %M%dig_D, %M%dig_d_Volume * TC_NODE );
 Table( cm_cnt, %M%dig_T, %M%dig_t_Volume * TC_MNODE );
 Table( u16,    %M%dig_S, %M%dig_s_Volume * TC_NODE * 33 );
 Table( u16,    %M%dig_F, %M%dig_f_Volume * TC_NODE * 33 );
-Table( i32,    %M%dig_W, %M%dig_m_Volume * TC_NODE * 6 );
+Table( i32,    %M%dig_W, %M%dig_m_Volume * TC_NODE * 7 );
 Table( cm_cnt, %M%dig_G, TC_SGN_DIG );
 
 Table( cm_cnt, %M%sgn_A, %M%sgn_a_Volume * TC_NODE );
@@ -98,7 +102,7 @@ Table( cm_cnt, %M%sgn_D, %M%sgn_d_Volume * TC_NODE );
 Table( cm_cnt, %M%sgn_T, %M%sgn_t_Volume * TC_MNODE );
 Table( u16,    %M%sgn_S, %M%sgn_s_Volume * TC_NODE * 33 );
 Table( u16,    %M%sgn_F, %M%sgn_f_Volume * TC_NODE * 33 );
-Table( i32,    %M%sgn_W, %M%sgn_m_Volume * TC_NODE * 6 );
+Table( i32,    %M%sgn_W, %M%sgn_m_Volume * TC_NODE * 7 );
 
 Table( cm_cnt, %M%flr_A, %M%flr_a_Volume * TC_NODE );
 Table( cm_cnt, %M%flr_B, %M%flr_b_Volume * TC_NODE );
@@ -107,7 +111,7 @@ Table( cm_cnt, %M%flr_D, %M%flr_d_Volume * TC_NODE );
 Table( cm_cnt, %M%flr_T, %M%flr_t_Volume * TC_MNODE );
 Table( u16,    %M%flr_S, %M%flr_s_Volume * TC_NODE * 33 );
 Table( u16,    %M%flr_F, %M%flr_f_Volume * TC_NODE * 33 );
-Table( i32,    %M%flr_W, %M%flr_m_Volume * TC_NODE * 6 );
+Table( i32,    %M%flr_W, %M%flr_m_Volume * TC_NODE * 7 );
 Table( cm_cnt, %M%flr_G, TC_SGN_FLR );
 
 Table( cm_cnt, %M%cls_A, %M%cls_a_Volume * TC_NODE );
@@ -117,7 +121,7 @@ Table( cm_cnt, %M%cls_D, %M%cls_d_Volume * TC_NODE );
 Table( cm_cnt, %M%cls_T, %M%cls_t_Volume * TC_MNODE );
 Table( u16,    %M%cls_S, %M%cls_s_Volume * TC_NODE * 33 );
 Table( u16,    %M%cls_F, %M%cls_f_Volume * TC_NODE * 33 );
-Table( i32,    %M%cls_W, %M%cls_m_Volume * TC_NODE * 6 );
+Table( i32,    %M%cls_W, %M%cls_m_Volume * TC_NODE * 7 );
 Table( cm_cnt, %M%cls_G, TC_SGN_CLS );
 
 Table( cm_cnt, %M%aux_A, %M%aux_a_Volume * TC_NODE );
@@ -127,7 +131,7 @@ Table( cm_cnt, %M%aux_D, %M%aux_d_Volume * TC_NODE );
 Table( cm_cnt, %M%aux_T, %M%aux_t_Volume * TC_MNODE );
 Table( u16,    %M%aux_S, %M%aux_s_Volume * TC_NODE * 33 );
 Table( u16,    %M%aux_F, %M%aux_f_Volume * TC_NODE * 33 );
-Table( i32,    %M%aux_W, %M%aux_m_Volume * TC_NODE * 6 );
+Table( i32,    %M%aux_W, %M%aux_m_Volume * TC_NODE * 7 );
 Table( cm_cnt, %M%aux_G, TC_SGN_AUX );
 
 Table( cm_cnt, %M%hdr_A, %M%hdr_a_Volume * TC_NODE );
@@ -137,5 +141,5 @@ Table( cm_cnt, %M%hdr_D, %M%hdr_d_Volume * TC_NODE );
 Table( cm_cnt, %M%hdr_T, %M%hdr_t_Volume * TC_MNODE );
 Table( u16,    %M%hdr_S, %M%hdr_s_Volume * TC_NODE * 33 );
 Table( u16,    %M%hdr_F, %M%hdr_f_Volume * TC_NODE * 33 );
-Table( i32,    %M%hdr_W, %M%hdr_m_Volume * TC_NODE * 6 );
+Table( i32,    %M%hdr_W, %M%hdr_m_Volume * TC_NODE * 7 );
 Table( cm_cnt, %M%hdr_G, TC_SGN_HDR );
