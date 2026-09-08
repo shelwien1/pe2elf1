@@ -23,7 +23,7 @@ Options:
 | `-W` | keep `aud.wprev` rather than deriving it |
 | `-R` | keep the floor and digit rows as they came, ragged |
 | `-n` | all of the above: copy the stream through unchanged |
-| `-s` | one picture per stream rather than two in total (see below) |
+| `-s` | each stream to its own image file, instead of side by side |
 
 **Mode d needs none of them.** A transformed stream opens with a record saying
 so and saying which of the switches made it -- `tt.v  1 7` -- and mode d takes
@@ -162,30 +162,33 @@ Eight steps to an arm, on a log ladder -- 0, 1, 2-3, 4-7, 8-15, 16-31, 32-63,
 and leave the small ones, which are nearly all of them, indistinguishable from
 zero.
 
-A row narrower than the image is padded in **black**, which is in neither
-ramp: `00000000` has floors of 19 and 29 posts and residues with partitions of
-16 and 32, so the picture shows which one each row came from.
+**A file's digits are not one thing**, so the image does not treat them as
+one. `00000000` has two residues -- partitions of 16 and 32 values -- and
+three cascade passes each: six streams, each with its own width and its own
+statistics. They go into one image **side by side**, a band of columns each,
+and the tool says which columns are which:
 
-**`-s` gives each stream its own picture instead.** A file's digits are not
-one thing. `00000000` has two residues and three cascade passes each, so
-`digits.bmp` is six streams interleaved in emission order and padded to a
-common width -- everything is in there, and the heights prove it:
+    tsvtrans: digits.bmp 144x4747: g0_0 0-15x4747, g0_1 16-31x4747,
+              g0_2 32-47x1132, g1_0 48-79x3775, g1_1 80-111x3775,
+              g1_2 112-143x722
+    tsvtrans: floor.bmp 48x735: y0 0-18x735, y1 19-47x142
 
-| | rows in the TSV | | rows in the TSV |
-|---|---:|---|---:|
-| `g0_0` | 4,747 | `g1_0` | 3,775 |
-| `g0_1` | 4,747 | `g1_1` | 3,775 |
-| `g0_2` | 1,132 | `g1_2` | 722 |
-| | | **total** | **18,898** |
+A band that runs out is black below it. Stacking them instead would pad every
+16-wide row out to 32 and put six unlike things in one column, which is what
+the first version did.
 
-and `digits.bmp` is 32 x 18,898. Under `-s` the same rows come out as
-`digits.g0_0.bmp` at 16 x 4,747, `digits.g1_0.bmp` at 32 x 3,775 and so on,
-each at its own width with nothing padded and nothing interleaved -- which is
-what to look at when the question is what one stream does. Seen apart, pass 2
-is visibly paler than pass 0: a later cascade pass is a finer correction, and
-mixed in with pass 0 that does not show.
+**Side by side they also line up.** Pass 0 and pass 1 of a residue emit a row
+for the same partitions -- whichever ones their class puts a book on -- so
+where those counts agree, and here they do at 4,747 and 3,775, row *k* of one
+band is the same partition as row *k* of the next: the bands can be read
+across. A later pass with fewer rows does not line up and simply stops part
+way down. Seen this way pass 2 is visibly paler than pass 0, which is what a
+finer correction should look like and is not visible at all when the passes
+are interleaved.
 
-The stream `-s` writes is byte-identical to the one it writes without, so the
+`-s` writes each band to its own file instead -- `digits.g0_0.bmp` at
+16 x 4,747, `digits.g1_0.bmp` at 32 x 3,775 -- for when one stream is the
+whole question. Either way the transformed stream is byte-identical, so the
 choice is only about the pictures.
 
 The pictures corroborate the table above rather than adding to it. The floor
@@ -196,10 +199,12 @@ vertical structure at all; it is red and blue noise across the row. That is
 the +0.27% and the -22.20% of the previous section, seen rather than counted.
 
 `TSVTRANS_BMPROWS` caps the height, 65536 by default, and the tool says when
-it stopped early. The images are 24-bit BMP written top-down (a negative
-height in the header) so that rows can be streamed as they arrive; the size
-is not known until the stream ends, so the header is written twice, which is
-what `wav.inc` does with a frame count for the same reason.
+it stopped early. The bands do not arrive interleaved -- the walk finishes one
+partition before starting the next -- so a band's rows are held until the end
+and the image assembled then; memory is the data itself with no padding
+stored, and the row cap is what bounds it. The images are 24-bit BMP written
+top-down (a negative height in the header) so that the first row read is the
+first row shown.
 
 ## Verification
 
@@ -211,8 +216,9 @@ what `wav.inc` does with a frame count for the same reason.
 * Every option combination round trips through a **bare** `d`, the settings
   coming from the stream; `c` on a transformed file and `d` on a raw one are
   both refused by name rather than by symptom.
-* `-s` over the 39 files writes 220 images, every one well-formed, and leaves
-  the transformed stream byte-identical to the one written without it.
+* Both layouts over the 39 files -- 78 runs, 298 images -- byte-exact round
+  trips, every image well-formed, and the transformed stream byte-identical
+  between them. Holding the bands costs 27 MB on the largest stream.
 * Every image written over the 39 files is a well-formed BMP: signature,
   declared file size, and 54 + stride x height all agree with the file on
   disk.

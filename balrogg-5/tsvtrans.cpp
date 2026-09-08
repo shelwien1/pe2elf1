@@ -101,26 +101,30 @@ static int tr_trace;
     because the rows are a fixed width: a ragged stream would shear.  */
 static const char * tr_ybmp;
 static const char * tr_gbmp;
-static bmp yimg, gimg;                    /*  everything in one pair  */
 static int tr_img;                        /*  the images are wanted  */
 constexpr u32 TR_BMPW = 4096;             /*  widest row a picture will hold  */
 static u8 tr_px[TR_BMPW * 3];
 static u32 tr_bmprows = 1u << 16;
 
-/*  Or one image a stream.  A file's digits are not one thing: this stream has
-    two residues, whose partitions are 16 and 32 values, and three cascade
-    passes each, which is six streams that the single picture interleaves in
-    emission order and pads to a common width.  Split, each gets its own
-    picture at its own width, with nothing padded and nothing interleaved --
-    which is what to look at when the question is what one stream does rather
-    than what the walk emits.  */
-static int tr_split;
-constexpr u32 TR_MAXIMG = 64;
-static bmp yimgs[VD_MAXFLOOR], gimgs[VD_MAXRES][8];
-static u8 yopen[VD_MAXFLOOR], gopen[VD_MAXRES][8];
-static u32 tr_nimg;
+/*  A file's digits are not one thing.  This stream has two residues, whose
+    partitions are 16 and 32 values, and three cascade passes each: six
+    streams, each with its own width and its own statistics.  They go into one
+    image side by side, a band of columns each, rather than stacked in
+    emission order where a 16-wide row would have to be padded out to 32 and
+    six unlike things would share a column.
 
-/*  digits.bmp and residue 1 pass 0 give digits.g1_0.bmp.  */
+    Side by side they also line up.  Pass 0 and pass 1 of a residue emit a row
+    for the same partitions -- whichever ones their class puts a book on --
+    so where those counts agree, and here they do at 4747 and 3775, row k of
+    one band is the same partition as row k of the next.  A later pass with
+    fewer rows does not line up, and simply stops part way down.
+
+    -s writes each band to its own file instead.  */
+static int tr_split;
+static bmp_band ybnd[VD_MAXFLOOR], gbnd[VD_MAXRES][8];
+static u8 yopen[VD_MAXFLOOR], gopen[VD_MAXRES][8];
+
+/*  digits.bmp and residue 1 pass 0 give digits.g1_0.bmp, for -s.  */
 static char tr_nbuf[1024];
 static const char * tr_stem(const char * stem, const char * what) {
   const char * dot = strrchr(stem, '.');
@@ -135,16 +139,9 @@ static const char * tr_stem(const char * stem, const char * what) {
   return tr_nbuf;
 }
 
-static bmp * tr_open1(bmp * im, u8 * flag, const char * stem, const char * what,
-                      u32 w) {
-  if (!*flag) {
-    FATAL_UNLESS(tr_nimg < TR_MAXIMG,
-                 "more than %" PRIu32 " streams to draw; run without the "
-                 "third and fourth file, or without -s", TR_MAXIMG);
-    im->create(tr_stem(stem, what), w > TR_BMPW ? TR_BMPW : w, tr_bmprows);
-    *flag = 1;  tr_nimg++;
-  }
-  return im->full() ? nullptr : im;
+static bmp_band * tr_band(bmp_band * b, u8 * flag, const char * what, u32 w) {
+  if (!*flag) { b->init(what, w > TR_BMPW ? TR_BMPW : w);  *flag = 1; }
+  return b->rows >= tr_bmprows ? nullptr : b;
 }
 
 
@@ -157,20 +154,7 @@ static vd_setup su;
     are streamed after it, so the width cannot be discovered later.  A second
     link with a wider setup would have its rows clipped, and the count of
     those is reported rather than passed over.  */
-static void tr_img_open(void) {
-  u32 i, yw = 0, gw = 0;
-  if (!tr_ybmp || tr_img) return;
-  for (i = 0; i < su.nfl; i++) if (su.fl[i].posts > yw) yw = su.fl[i].posts;
-  for (i = 0; i < su.nrs; i++) if (su.rs[i].psz > gw) gw = su.rs[i].psz;
-  if (yw > TR_BMPW) yw = TR_BMPW;
-  if (gw > TR_BMPW) gw = TR_BMPW;
-  if (!tr_split) {
-    yimg.create(tr_ybmp, yw ? yw : 1, tr_bmprows);
-    gimg.create(tr_gbmp, gw ? gw : 1, tr_bmprows);
-    tr_nimg = 2;
-  }
-  tr_img = 1;
-}
+static void tr_img_open(void) { if (tr_ybmp) tr_img = 1; }
 
 /*  Tags for the fixed-width rows, one per floor and per residue, built once
     so that the pointers handed to tsv::put outlive the row they open: put()
@@ -195,17 +179,14 @@ static void tr_tags(void) {
   }
 }
 
-/*  Which picture this row belongs in, opened if it is the first of its kind.  */
-static bmp * tr_yimg(u32 fno, u32 w) {
+/*  Which band this row belongs in, started if it is the first of its kind.  */
+static bmp_band * tr_yimg(u32 fno, u32 w) {
   if (!tr_img) return nullptr;
-  if (!tr_split) return yimg.full() ? nullptr : &yimg;
-  return tr_open1(yimgs + fno, yopen + fno, tr_ybmp, tag_y[fno], w);
+  return tr_band(ybnd + fno, yopen + fno, tag_y[fno], w);
 }
-static bmp * tr_gimg(u32 rno, u32 pss, u32 w) {
+static bmp_band * tr_gimg(u32 rno, u32 pss, u32 w) {
   if (!tr_img) return nullptr;
-  if (!tr_split) return gimg.full() ? nullptr : &gimg;
-  return tr_open1(&gimgs[rno][pss], &gopen[rno][pss], tr_gbmp,
-                  tag_d[rno][pss], w);
+  return tr_band(&gbnd[rno][pss], &gopen[rno][pss], tag_d[rno][pss], w);
 }
 
 /*  A record that crosses unchanged, but whose value the traversal also needs.
@@ -267,7 +248,7 @@ static u32 tr_dpart, tr_dpass, tr_dch;
     the records are moved by hand rather than through pass().  */
 static void tr_part(u32 rno, u32 pss, u32 psz) {
   u32 i, k = psz > TR_BMPW ? TR_BMPW : psz;
-  bmp * im = tr_gimg(rno, pss, psz);
+  bmp_band * im = tr_gimg(rno, pss, psz);
   const char * rt = (tr_enc || !tr_rows) ? "res.digit" : tag_d[rno][pss];
   const char * wt = (tr_enc && tr_rows) ? tag_d[rno][pss] : "res.digit";
   for (i = 0; i < psz; i++) {
@@ -338,7 +319,7 @@ static void tr_payload(u32 mode) {
     u32 u = pass_u("flr.used", 2);
     nz[k] = (u8) u;
     if (!u) continue;
-    { bmp * im = tr_yimg(fno, f->posts);
+    { bmp_band * im = tr_yimg(fno, f->posts);
       u32 kk = f->posts > TR_BMPW ? TR_BMPW : f->posts;
       const char * rt = (tr_enc || !tr_rows) ? "flr.y" : tag_y[fno];
       const char * wt = (tr_enc && tr_rows) ? tag_y[fno] : "flr.y";
@@ -603,43 +584,47 @@ int main(int argc, char ** argv) {
   tr_walk(argv[a], argv[a + 1]);
   if (tr_dump && fclose(tr_dump)) FATAL_CODE(BLR_EXIT_IO, "write error on the dump");
   if (tr_img) {
-    u32 capped = 0, cut = 0, i, j;
-    /*  say what each picture came to, since in split mode which streams exist
-        at all is part of the answer  */
-    if (!tr_split) {
-      bmp * im[2];  const char * nm[2];
-      im[0] = &yimg;  nm[0] = tr_ybmp;  im[1] = &gimg;  nm[1] = tr_gbmp;
-      for (i = 0; i < 2; i++) {
-        if (im[i]->rows >= tr_bmprows) capped = 1;
-        cut += im[i]->clipped;
-        fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 "\n", blr_prog, nm[i],
-                im[i]->w, im[i]->rows);
-        im[i]->close();
-      }
-    } else {
-      for (i = 0; i < VD_MAXFLOOR; i++) if (yopen[i]) {
-        if (yimgs[i].rows >= tr_bmprows) capped = 1;
-        cut += yimgs[i].clipped;
-        fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 "\n", blr_prog,
-                tr_stem(tr_ybmp, tag_y[i]), yimgs[i].w, yimgs[i].rows);
-        yimgs[i].close();
-      }
-      for (i = 0; i < VD_MAXRES; i++)
-        for (j = 0; j < 8; j++) if (gopen[i][j]) {
-          if (gimgs[i][j].rows >= tr_bmprows) capped = 1;
-          cut += gimgs[i][j].clipped;
+    /*  Bands in the order the walk can produce them, which is also the order
+        their columns run left to right.  */
+    static bmp_band bs[VD_MAXFLOOR + VD_MAXRES * 8];
+    u32 i, j, n, capped = 0;
+    const char * nm[2];
+    nm[0] = tr_ybmp;  nm[1] = tr_gbmp;
+    for (j = 0; j < 2; j++) {
+      u32 x = 0;
+      n = 0;
+      if (!j) { for (i = 0; i < VD_MAXFLOOR; i++) if (yopen[i]) bs[n++] = ybnd[i]; }
+      else for (i = 0; i < VD_MAXRES; i++)
+             for (u32 k = 0; k < 8; k++) if (gopen[i][k]) bs[n++] = gbnd[i][k];
+      for (i = 0; i < n; i++) if (bs[i].rows >= tr_bmprows) capped = 1;
+      if (tr_split)
+        for (i = 0; i < n; i++) {
+          bmp_save(tr_stem(nm[j], bs[i].name), bs + i, 1);
           fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 "\n", blr_prog,
-                  tr_stem(tr_gbmp, tag_d[i][j]), gimgs[i][j].w,
-                  gimgs[i][j].rows);
-          gimgs[i][j].close();
+                  tr_stem(nm[j], bs[i].name), bs[i].w, bs[i].rows);
         }
+      else {
+        u32 W = 0, H = 0;
+        for (i = 0; i < n; i++) { W += bs[i].w;  if (bs[i].rows > H) H = bs[i].rows; }
+        bmp_save(nm[j], bs, n);
+        fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32, blr_prog, nm[j],
+                W ? W : 1, H ? H : 1);
+        /*  where each band sits, since a column number is the way back from
+            the picture to the stream  */
+        for (i = 0; i < n; i++) {
+          fprintf(stderr, "%s %s %" PRIu32 "-%" PRIu32 "x%" PRIu32,
+                  i ? "," : ":", bs[i].name, x, x + bs[i].w - 1, bs[i].rows);
+          x += bs[i].w;
+        }
+        fputc('\n', stderr);
+      }
     }
+    for (i = 0; i < VD_MAXFLOOR; i++) if (yopen[i]) ybnd[i].free_();
+    for (i = 0; i < VD_MAXRES; i++)
+      for (j = 0; j < 8; j++) if (gopen[i][j]) gbnd[i][j].free_();
     if (capped)
       fprintf(stderr, "%s: stopped at %" PRIu32 " rows; TSVTRANS_BMPROWS raises it\n",
               blr_prog, tr_bmprows);
-    if (cut)
-      fprintf(stderr, "%s: %" PRIu32 " rows were wider than their image and were "
-              "cut\n", blr_prog, cut);
   }
   return BLR_EXIT_OK;
 usage:
@@ -650,12 +635,12 @@ usage:
     "Name a third and fourth file and the floor curves and the residue digits\n"
     "are also drawn, one curve or one partition to a row of pixels.  The rows\n"
     "are taken from the walk rather than from the text, so the pictures come\n"
-    "out square whatever the options above say.  A row narrower than the image\n"
-    "-- a 19-post floor beside a 29-post one -- is padded in black.\n"
+    "out square whatever the options above say.  The streams they hold\n"
+    "-- run side by side, a band of columns each at its own width, and the\n"
+    "tool says which columns are which.  A band that runs out is black below.\n"
     "\n"
-    "  -s  one picture a stream instead, named from those two: digits.bmp\n"
-    "      becomes digits.g0_0.bmp, digits.g1_0.bmp and so on, each at its\n"
-    "      own width, nothing padded and nothing interleaved.\n"
+    "  -s  each band to its own file instead, named from those two: digits.bmp\n"
+    "      becomes digits.g0_0.bmp, digits.g1_0.bmp and so on.\n"
     "TSVTRANS_BMPROWS caps the height, by default 65536.\n"
     "\n"
     "  -P  keep the page header as it stands (type, sequence, serial, granule)\n"

@@ -23,73 +23,88 @@
 
 constexpr sz BMP_HDR = 54;
 
-struct bmp {
-  FILE * f;
-  const char * path;
-  u32 w, rows, cap;
-  u8 * line;                              /*  one padded row of pixels  */
-  sz stride;
-  u32 clipped;                            /*  rows wider than the image  */
+/*  A band is one stream's rows, kept at that stream's own width.  The streams
+    do not arrive interleaved -- the walk finishes a partition before it starts
+    the next -- but they have to leave side by side, so the rows are held and
+    the image assembled at the end.  Memory is then the data itself, with no
+    padding stored; what bounds it is the row cap.  */
+struct bmp_band {
+  const char * name;
+  u8 * px;
+  u32 w, rows, cap;                       /*  cap: rows allocated  */
 
-  static void w32(u8 * p, u32 v) {
-    p[0] = (u8) v;  p[1] = (u8) (v >> 8);
-    p[2] = (u8) (v >> 16);  p[3] = (u8) (v >> 24);
+  void init(const char * nm, u32 width) {
+    name = nm;  px = nullptr;  w = width;  rows = cap = 0;
   }
-  static void w16(u8 * p, u32 v) { p[0] = (u8) v;  p[1] = (u8) (v >> 8); }
-
-  void header(void) {
-    u8 h[BMP_HDR];
-    u32 img = (u32) (stride * rows);
-    memset(h, 0, sizeof h);
-    h[0] = 'B';  h[1] = 'M';
-    w32(h + 2, (u32) BMP_HDR + img);      w32(h + 10, (u32) BMP_HDR);
-    w32(h + 14, 40);
-    w32(h + 18, w);
-    w32(h + 22, (u32) (0u - rows));       /*  negative: rows run downward  */
-    w16(h + 26, 1);  w16(h + 28, 24);
-    w32(h + 34, img);
-    w32(h + 38, 2835);  w32(h + 42, 2835);   /*  72 dpi  */
-    if (fwrite(h, 1, sizeof h, f) != sizeof h)
-      FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
-  }
-
-  void create(const char * pth, u32 width, u32 maxrows) {
-    FATAL_UNLESS(width > 0, "%s: a zero-width image", pth);
-    f = fopen(pth, "wb");
-    if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", pth);
-    path = pth;  w = width;  rows = 0;  cap = maxrows;  clipped = 0;
-    stride = ((sz) w * 3 + 3) & ~(sz) 3;
-    line = (u8 *) malloc(stride);
-    if (!line) FATAL_CODE(BLR_EXIT_IO, "out of memory for %s", pth);
-    header();
-  }
-
-  int full(void) const { return rows >= cap; }
-
-  /*  `n` colours, already in BGR order, and the rest of the row padded.  */
   void row(const u8 * bgr, u32 n) {
-    if (rows >= cap) return;
-    if (n > w) { n = w;  clipped++; }
-    memset(line, 0, stride);              /*  black is the pad  */
-    memcpy(line, bgr, (sz) n * 3);
-    if (fwrite(line, 1, stride, f) != stride)
-      FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
+    if (rows == cap) {
+      u32 want = cap ? cap * 2 : 256;
+      u8 * q = (u8 *) realloc(px, (sz) want * w * 3);
+      if (!q) FATAL_CODE(BLR_EXIT_IO,
+                         "out of memory for %s at %" PRIu32 " rows; "
+                         "TSVTRANS_BMPROWS lowers it", name, want);
+      px = q;  cap = want;
+    }
+    { u8 * d = px + (sz) rows * w * 3;
+      u32 k = n > w ? w : n;
+      memset(d, 0, (sz) w * 3);
+      memcpy(d, bgr, (sz) k * 3); }
     rows++;
   }
-
-  void close(void) {
-    int bad;
-    if (!f) return;
-    /*  An image with no rows would claim a zero height, which some readers
-        reject outright; one blank row is a truer answer than a broken file.  */
-    if (!rows) { memset(line, 0, stride);  fwrite(line, 1, stride, f);  rows = 1; }
-    bad = fseek(f, 0, SEEK_SET) != 0;
-    if (!bad) { header();  bad = ferror(f) != 0; }
-    if (fclose(f)) bad = 1;
-    free(line);  line = nullptr;  f = nullptr;
-    if (bad) FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
-  }
+  void free_() { ::free(px);  px = nullptr;  rows = cap = 0; }
 };
+
+/*  Write `n` bands side by side: the image is as wide as they are together
+    and as tall as the tallest, and a band that runs out is black below.
+
+    The height is known here, so unlike wav.inc's sink this writes its header
+    once.  It goes out negative -- a top-down BMP -- so the first row read is
+    the first row shown.  */
+static void bmp_save(const char * path, const bmp_band * b, u32 n) {
+  FILE * f;
+  u8 h[BMP_HDR], * line;
+  u32 i, r, W = 0, H = 0;
+  sz stride, img;
+  for (i = 0; i < n; i++) { W += b[i].w;  if (b[i].rows > H) H = b[i].rows; }
+  if (!W) W = 1;
+  if (!H) H = 1;                          /*  a zero height is not a BMP  */
+  stride = ((sz) W * 3 + 3) & ~(sz) 3;
+  img = stride * H;
+  f = fopen(path, "wb");
+  if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", path);
+  memset(h, 0, sizeof h);
+  h[0] = 'B';  h[1] = 'M';
+  { u8 * p = h;
+    #define BMP_W32(o, v) do { u32 v_ = (u32) (v);  p[o] = (u8) v_; \
+                               p[(o) + 1] = (u8) (v_ >> 8); \
+                               p[(o) + 2] = (u8) (v_ >> 16); \
+                               p[(o) + 3] = (u8) (v_ >> 24); } while (0)
+    #define BMP_W16(o, v) do { u32 v_ = (u32) (v);  p[o] = (u8) v_; \
+                               p[(o) + 1] = (u8) (v_ >> 8); } while (0)
+    BMP_W32(2, (u32) BMP_HDR + img);  BMP_W32(10, (u32) BMP_HDR);
+    BMP_W32(14, 40);  BMP_W32(18, W);  BMP_W32(22, 0u - H);
+    BMP_W16(26, 1);   BMP_W16(28, 24);
+    BMP_W32(34, img); BMP_W32(38, 2835);  BMP_W32(42, 2835);
+    #undef BMP_W32
+    #undef BMP_W16
+  }
+  line = (u8 *) malloc(stride);
+  if (!line) { fclose(f);  FATAL_CODE(BLR_EXIT_IO, "out of memory for %s", path); }
+  if (fwrite(h, 1, sizeof h, f) != sizeof h)
+    { fclose(f);  free(line);  FATAL_CODE(BLR_EXIT_IO, "write error on %s", path); }
+  for (r = 0; r < H; r++) {
+    u8 * d = line;
+    memset(line, 0, stride);
+    for (i = 0; i < n; i++) {
+      if (r < b[i].rows) memcpy(d, b[i].px + (sz) r * b[i].w * 3, (sz) b[i].w * 3);
+      d += (sz) b[i].w * 3;
+    }
+    if (fwrite(line, 1, stride, f) != stride)
+      { fclose(f);  free(line);  FATAL_CODE(BLR_EXIT_IO, "write error on %s", path); }
+  }
+  free(line);
+  if (fclose(f)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", path);
+}
 
 /*  The two ramps, as BGR triples.
 
