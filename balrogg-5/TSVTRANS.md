@@ -1,7 +1,7 @@
 # tsvtrans: a record stream rearranged for an entropy coder
 
-    tsvtrans c [options] input.tsv output.tsv
-    tsvtrans d [options] output.tsv restored.tsv
+    tsvtrans c [options] input.tsv output.tsv [floor.bmp digits.bmp]
+    tsvtrans d [options] output.tsv restored.tsv [floor.bmp digits.bmp]
 
 Nothing is compressed here. `tsvtrans` reads a balrogg record stream and
 writes another one, and mode d turns it back byte for byte. What it does is
@@ -125,11 +125,54 @@ residual against a prediction, at a frequency the column names. The two floors
 of this stream are 19 and 29 posts wide, and separating them into `y0` and
 `y1` is most of what makes that column meaningful.
 
+## Looking at it
+
+Name a third and fourth file and the walk also draws what it is reading: one
+floor curve to a row of pixels, one residue partition to a row of pixels. The
+rows come from the walk rather than from the text, so the pictures are square
+whatever the options say -- `-R` changes the stream but not the image.
+
+The two have different jobs and take different ramps.
+
+**The floor is a magnitude**, so it takes one hue, light to dark: pale where a
+post is zero, deep blue where it is large. **A residue digit is signed**, so it
+takes two hues either side of a neutral grey -- blue below zero, red above,
+grey at it. No hue sits at the midpoint and neither ramp is a rainbow, because
+a rainbow reads as unordered and the reader would have to consult a key to
+tell a large value from a small one.
+
+Eight steps to an arm, on a log ladder -- 0, 1, 2-3, 4-7, 8-15, 16-31, 32-63,
+64 and over. A linear ramp would spend its whole range on the few large values
+and leave the small ones, which are nearly all of them, indistinguishable from
+zero.
+
+A row narrower than the image is padded in **black**, which is in neither
+ramp: `00000000` has floors of 19 and 29 posts and residues with partitions of
+16 and 32, so the picture shows which one each row came from.
+
+The pictures corroborate the table above rather than adding to it. The floor
+image is banded vertically -- column 0 and the last column are consistently
+dark, being the two posts floor1 codes raw, and the columns between them are
+mostly pale, being residuals against a prediction. The digit image has no
+vertical structure at all; it is red and blue noise across the row. That is
+the +0.27% and the -22.20% of the previous section, seen rather than counted.
+
+`TSVTRANS_BMPROWS` caps the height, 65536 by default, and the tool says when
+it stopped early. The images are 24-bit BMP written top-down (a negative
+height in the header) so that rows can be streamed as they arrive; the size
+is not known until the stream ends, so the header is written twice, which is
+what `wav.inc` does with a frame count for the same reason.
+
 ## Verification
 
 * 39 files -- the 17-file corpus and the 22 ffmpeg files -- through `c` then
-  `d`: byte-exact on all 39, and byte-exact under `-n`, `-P`, `-W` and `-R`
-  singly on `00000000`.
+  `d`: byte-exact on all 39, and byte-exact under every combination of `-P`,
+  `-W` and `-R` on `00000000`, with and without the images.
+* The transformed stream is byte-identical whether or not the images are
+  asked for, so drawing cannot perturb what is being drawn.
+* Every image written over the 39 files is a well-formed BMP: signature,
+  declared file size, and 54 + stride x height all agree with the file on
+  disk.
 * `make test-trans` runs `balrogg c`, `tsvtrans c`, `tsvtrans d` and compares.
 * The first version was exact on seven of ten corpus files and failed on the
   three that have packets spanning pages. `page.spill` is read while the tee

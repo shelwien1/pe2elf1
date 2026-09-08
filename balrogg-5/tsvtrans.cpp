@@ -62,6 +62,7 @@
 #include "floor_db.inc"    /*  the dB table, for imdct.inc's sake  */
 #include "imdct.inc"       /*  not used here; MD_MAXBLK bounds the setup  */
 #include "vd_setup.inc"    /*  codebooks, floors, residues, mappings, modes  */
+#include "bmp.inc"        /*  the optional picture of what came out  */
 
 /*  vd_setup calls this to read the codebook section.  tsv2wav substitutes a
     whole set from an index here; there is nothing to substitute in a stream
@@ -82,9 +83,38 @@ static int tr_rows = 1;                   /*  fixed-width floor and digits  */
 
 static int tr_enc;                        /*  1 = c, 0 = d  */
 static int tr_trace;
+
+/*  The pictures, when the command line names them.  One row of records
+    becomes one row of pixels, which is only a picture worth looking at
+    because the rows are a fixed width: a ragged stream would shear.  */
+static const char * tr_ybmp;
+static const char * tr_gbmp;
+static bmp yimg, gimg;
+static int tr_img;                        /*  the images are open  */
+constexpr u32 TR_BMPW = 4096;             /*  widest row a picture will hold  */
+static u8 tr_px[TR_BMPW * 3];
+static u32 tr_bmprows = 1u << 16;
+
 static tsv * tr_in;
 static tsv * tr_out;
 static vd_setup su;
+
+/*  Both images are opened at the first setup, where the widest floor and the
+    widest partition are known: a BMP states its width in the header and rows
+    are streamed after it, so the width cannot be discovered later.  A second
+    link with a wider setup would have its rows clipped, and the count of
+    those is reported rather than passed over.  */
+static void tr_img_open(void) {
+  u32 i, yw = 0, gw = 0;
+  if (!tr_ybmp || tr_img) return;
+  for (i = 0; i < su.nfl; i++) if (su.fl[i].posts > yw) yw = su.fl[i].posts;
+  for (i = 0; i < su.nrs; i++) if (su.rs[i].psz > gw) gw = su.rs[i].psz;
+  if (yw > TR_BMPW) yw = TR_BMPW;
+  if (gw > TR_BMPW) gw = TR_BMPW;
+  yimg.create(tr_ybmp, yw ? yw : 1, tr_bmprows);
+  gimg.create(tr_gbmp, gw ? gw : 1, tr_bmprows);
+  tr_img = 1;
+}
 
 /*  Tags for the fixed-width rows, one per floor and per residue, built once
     so that the pointers handed to tsv::put outlive the row they open: put()
@@ -176,6 +206,19 @@ static void tr_part(u32 rno, u32 pss, u32 psz) {
     tr_out->flush_row();
     return;
   }
+  if (tr_img && !gimg.full()) {
+    /*  the row is wanted as pixels as well as records, and the records are
+        consumed once, so it is built here rather than read back  */
+    u32 k = psz > TR_BMPW ? TR_BMPW : psz;
+    for (i = 0; i < psz; i++) {
+      i64 d = tr_in->get(tr_enc || !tr_rows ? "res.digit" : tag_d[rno][pss]);
+      if (i < k) bmp_div(d, tr_px + i * 3);
+      tr_out->put(tr_enc && tr_rows ? tag_d[rno][pss] : "res.digit", d);
+    }
+    if (tr_enc && tr_rows) tr_out->flush_row();
+    gimg.row(tr_px, psz);
+    return;
+  }
   if (!tr_rows) { for (i = 0; i < psz; i++) pass("res.digit");  return; }
   if (tr_enc) {
     for (i = 0; i < psz; i++) tr_out->put(tag_d[rno][pss], tr_in->get("res.digit"));
@@ -240,6 +283,17 @@ static void tr_payload(u32 mode) {
     u32 u = pass_u("flr.used", 2);
     nz[k] = (u8) u;
     if (!u) continue;
+    if (tr_img && !yimg.full()) {
+      u32 kk = f->posts > TR_BMPW ? TR_BMPW : f->posts;
+      for (i = 0; i < f->posts; i++) {
+        i64 y = tr_in->get(tr_enc || !tr_rows ? "flr.y" : tag_y[fno]);
+        if (i < kk) bmp_seq(y, tr_px + i * 3);
+        tr_out->put(tr_enc && tr_rows ? tag_y[fno] : "flr.y", y);
+      }
+      if (tr_enc && tr_rows) tr_out->flush_row();
+      yimg.row(tr_px, f->posts);
+      continue;
+    }
     if (!tr_rows) { for (i = 0; i < f->posts; i++) pass("flr.y"); }
     else if (tr_enc) {
       for (i = 0; i < f->posts; i++)
@@ -420,7 +474,8 @@ static void tr_walk(const char * inpath, const char * outpath) {
         if (w < 3) {
           if (w == 0) su.ident(in);
           else if (w == 1) su.comment(in, len);
-          else { su_role = 0;  su_dst = nullptr;  su.setup(in);  su.have = 1; }
+          else { su_role = 0;  su_dst = nullptr;  su.setup(in);  su.have = 1;
+                 tr_img_open(); }
           w++;
         } else {
           in.tee = nullptr;
@@ -455,9 +510,14 @@ int main(int argc, char ** argv) {
         default: goto usage;
       }
   }
-  if (argc - a != 2) goto usage;
-  blr_set_prog(argv[0]);
-  blr_paths_distinct(argv + a, 2);
+  { int nf = argc - a;
+    if (nf != 2 && nf != 4) goto usage;
+    blr_set_prog(argv[0]);
+    blr_paths_distinct(argv + a, nf);
+    if (nf == 4) { tr_ybmp = argv[a + 2];  tr_gbmp = argv[a + 3]; } }
+  { const char * r = getenv("TSVTRANS_BMPROWS");
+    if (r) { long v = strtol(r, nullptr, 10);
+             tr_bmprows = v > 0 ? (u32) v : 1; } }
   tr_enc = mode[0] == 'c';
   tr_trace = getenv("TSVTRANS_TRACE") != nullptr;
   { const char * dp = getenv("TSVTRANS_DUMP");
@@ -466,11 +526,31 @@ int main(int argc, char ** argv) {
   tr_tags();
   tr_walk(argv[a], argv[a + 1]);
   if (tr_dump && fclose(tr_dump)) FATAL_CODE(BLR_EXIT_IO, "write error on the dump");
+  if (tr_img) {
+    u32 yr = yimg.rows, gr = gimg.rows, yw = yimg.w, gw = gimg.w;
+    u32 yc = yimg.clipped, gc = gimg.clipped;
+    yimg.close();  gimg.close();
+    fprintf(stderr, "%s: %s %" PRIu32 "x%" PRIu32 ", %s %" PRIu32 "x%" PRIu32 "\n",
+            blr_prog, tr_ybmp, yw, yr, tr_gbmp, gw, gr);
+    if (yr >= tr_bmprows || gr >= tr_bmprows)
+      fprintf(stderr, "%s: stopped at %" PRIu32 " rows; TSVTRANS_BMPROWS raises it\n",
+              blr_prog, tr_bmprows);
+    if (yc || gc)
+      fprintf(stderr, "%s: %" PRIu32 " floor and %" PRIu32 " digit rows were wider "
+              "than the image and were cut\n", blr_prog, yc, gc);
+  }
   return BLR_EXIT_OK;
 usage:
   fprintf(stderr,
-    "usage: tsvtrans c [options] input.tsv output.tsv\n"
-    "       tsvtrans d [options] output.tsv restored.tsv\n"
+    "usage: tsvtrans c [options] input.tsv output.tsv [floor.bmp digits.bmp]\n"
+    "       tsvtrans d [options] output.tsv restored.tsv [floor.bmp digits.bmp]\n"
+    "\n"
+    "Name a third and fourth file and the floor curves and the residue digits\n"
+    "are also drawn, one curve or one partition to a row of pixels.  The rows\n"
+    "are taken from the walk rather than from the text, so the pictures come\n"
+    "out square whatever the options above say.  A row narrower than the image\n"
+    "-- a 19-post floor beside a 29-post one -- is padded in black.\n"
+    "TSVTRANS_BMPROWS caps the height, by default 65536.\n"
     "\n"
     "  -P  keep the page header as it stands (type, sequence, serial, granule)\n"
     "  -W  keep aud.wprev rather than deriving it\n"

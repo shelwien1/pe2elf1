@@ -39,7 +39,8 @@ BLR_INC = common.inc tsv.inc ogg_page.inc vb_info.inc vb_book.inc \
 W2V_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
           wav.inc vd_dec.inc vd_ana.inc vd_rec.inc
 STG_INC = sh_v2f.inc steg.inc
-TRN_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc
+TRN_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
+          bmp.inc
 
 #  The vorbis build adds these two and drops floor_db.inc, whose table it takes
 #  from libvorbis instead (tsv2wav.cpp:99).

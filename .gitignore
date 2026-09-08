@@ -13,6 +13,7 @@ balrogg-5/tsvtrans
 *.wav
 *.meta
 *.ogr
+*.bmp
 
 # prebuilt Windows binaries from the original drop
 *.exe
