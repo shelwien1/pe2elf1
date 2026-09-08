@@ -20,5 +20,14 @@ balrogg-5/tsvcomp
 # prebuilt Windows binaries from the original drop
 *.exe
 
+# IDX/opt.pl's running results, and idx2inc.pl's outputs before mk.sh moves
+# them into MOD/ (MOD/ itself is a build input and is tracked)
+balrogg-5/export.!!!
+balrogg-5/opttimes.!!!
+balrogg-5/IDX/*_h.inc
+balrogg-5/IDX/*_p.inc
+balrogg-5/IDX/tsvcomp-const.idx
+balrogg-5/IDX/tsvcomp-const.inc
+
 # make flag sentinel
 balrogg-5/.flags

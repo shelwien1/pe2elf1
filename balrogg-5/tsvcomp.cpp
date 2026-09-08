@@ -59,10 +59,19 @@
     in for the class.  TSVCOMP.md has that measurement and the ones that
     settled every other pattern.
 
-    The contexts themselves are declared, not written -- see idx.inc.  The
-    block of IDX text below is the whole of what this program knows about how
-    a variable becomes a table row, and editing a threshold pattern in it is
-    the entire edit.
+    The contexts themselves are declared, not written.  IDX/tsvcomp.idx names
+    every variable, its thresholds and every tunable rate; IDX/idx2inc.pl
+    turns that plus the template IDX/tsvcomp.inc into MOD/tsvcomp_h.inc and
+    MOD/tsvcomp_p.inc, and ./mk.sh drives it.  Nothing in this file decides a
+    context, and MOD/ is generated -- edit the .idx.
+
+    The point of that arrangement is IDX/opt.pl, which does not parse or
+    rebuild anything: the tuning build embeds each threshold pattern in the
+    executable as a "!MAP!name!base\0pattern" string, and the optimizer flips
+    those bits *in the binary*, re-runs the corpus and keeps what shrinks it.
+    One build serves a whole hill-climb.  ./mk.sh release folds the same
+    patterns to literals for shipping, and both builds must code identically
+    -- ./mk.sh check is that test.
 
     Values the stream implies are not coded as they stand: the granule, the
     page sequence and the page serial go out as residuals against what the
@@ -98,7 +107,7 @@
 #include "vd_setup.inc"    /*  codebooks, floors, residues, mappings, modes  */
 #include "sh_v2f.inc"      /*  the range coder  */
 #include "cm.inc"          /*  counter, APM, mixer  */
-#include "idx.inc"         /*  contexts as declarations  */
+#include "sh_mapping.inc"  /*  IDX runtime: mapping, masking, pdesc  */
 
 /*  vd_setup calls this to read the codebook section.  tsv2wav substitutes a
     whole set from an index here; there is nothing to substitute in a stream
@@ -120,265 +129,6 @@ static tsv * tc_out;                      /*  mode d: the stream being written  
 static vd_setup su;
 static Rangecoder rc;
 static rc_buf rcb;
-static idx_decl tc_idx;
-static u16 tc_idxsum;                     /*  which declaration coded a stream  */
-
-/*  ------------------------------------------------------------------
-    The declaration.
-
-    One `Index` per (family, role): `_a` is the rich counter, `_b` the coarse
-    one, `_s` the APM's own grouping and `_m` the mixer's.  mp3c computes four
-    different context indices over the same variables with different
-    thresholds for exactly this reason -- each of the four stages wants a
-    different grouping, and sharing one is a compromise none of them asked
-    for.
-
-    A factor whose pattern is all zeroes contributes one bucket and is
-    dropped, which is how a variable that was tried and found not to pay
-    stays visible in the source.  `col` in the digit model is the measured
-    example: it is declared, at zero, because the natural thing to assume
-    about it is wrong.  */
-static const char TC_IDXTEXT[] =
-"Prefix TC\n"
-"Debug 1\n"
-"Const 0\n"
-"\n"
-"#  Residue digits: 92% of the records in a stream, so this is the program.\n"
-"#\n"
-"#  `cls` is the biggest single factor here and the most surprising one: the\n"
-"#  class is the choice of ladder, and the ladder decides what a digit can be,\n"
-"#  so knowing it is worth more than knowing where in the spectrum the digit\n"
-"#  sits.  Sixteen buckets of it beat four by 0.9%.\n"
-"#\n"
-"#  `bkq` is the same thought in a form that would generalise -- the book's\n"
-"#  `off`, which is the half-width of its multiplicand range, in four buckets\n"
-"#  instead of sixteen.  It is left at zero because it measured 0.9% *worse*\n"
-"#  than the class number it was meant to replace: two classes with the same\n"
-"#  range are still not the same choice.\n"
-"#\n"
-"#  `col`, the position inside the partition, is at zero because TSVTRANS.md\n"
-"#  measured it at +0.27% on its own and worse in combination.  `band` is at\n"
-"#  three buckets because the fourth onwards are worth 0.03% between them once\n"
-"#  `cls` is in: a partition's identity was standing in for its class.\n"
-"\n"
-"Index dig_a\n"
-" a_rno:  rno,   1!0\n"
-" a_pass: pass,  1!1111111\n"
-" a_band: band,  1!110000000000000\n"
-" a_col:  col,   1!0000000\n"
-" a_q1:   q1,    1!11111\n"
-" a_q2:   q2,    1!1111\n"
-" a_t1:   t1,    1!111\n"
-" a_bkq:  bkq,   1!0000\n"
-" a_cls:  cls,   1!111111111111111\n"
-" a_zrun: zrun,  1!1111\n"
-" a_blk:  blk,   1!0\n"
-"\n"
-"Index dig_b\n"
-" b_rno:  rno,   1!0\n"
-" b_pass: pass,  1!1111111\n"
-" b_band: band,  1!000000000000000\n"
-" b_col:  col,   1!0000000\n"
-" b_q1:   q1,    1!11111\n"
-" b_q2:   q2,    1!0000\n"
-" b_t1:   t1,    1!111\n"
-" b_bkq:  bkq,   1!0000\n"
-" b_cls:  cls,   1!000\n"
-" b_zrun: zrun,  1!111\n"
-" b_blk:  blk,   1!1\n"
-"\n"
-"Index dig_s\n"
-" s_pass: pass,  1!11\n"
-" s_band: band,  1!111\n"
-" s_q1:   q1,    1!111\n"
-" s_t1:   t1,    1!000\n"
-" s_bkq:  bkq,   1!000\n"
-" s_cls:  cls,   1!111\n"
-"\n"
-"Index dig_m\n"
-" m_pass: pass,  1!111\n"
-" m_band: band,  1!111\n"
-" m_q1:   q1,    1!000\n"
-" m_t1:   t1,    1!1\n"
-" m_bkq:  bkq,   1!000\n"
-" m_cls:  cls,   1!000\n"
-"\n"
-"#  The mantissa of a digit that escaped the ladder: its own plane, on its own\n"
-"#  and much coarser context.\n"
-"\n"
-"Index dig_t\n"
-" t_pass: pass,  1!111\n"
-" t_band: band,  1!111\n"
-" t_q1:   q1,    1!11111\n"
-" t_t1:   t1,    1!000\n"
-" t_bkq:  bkq,   1!000\n"
-" t_cls:  cls,   1!111111111111111\n"
-"\n"
-"Number dig_rA, 1, 0!11111111\n"
-"Number dig_rB, 1, 0!11111111\n"
-"Number dig_rS, 1, 0!00111\n"
-"Number dig_lr, 1, 0!01000\n"
-"\n"
-"#  Floor posts.  The column is the whole story here -- post 0 and post 1 are\n"
-"#  coded raw and land at the ends of the row, everything between them is a\n"
-"#  folded residual at a frequency the column names -- so it gets 48 buckets\n"
-"#  where the digit model gives its own position none.  `p1` is what this post\n"
-"#  was one packet ago, and it is the second factor: a floor curve is the\n"
-"#  spectral envelope, and an envelope moves slowly.\n"
-"\n"
-"Index flr_a\n"
-" a_fno:  fno,   1!1\n"
-" a_col:  col,   1!111111111111111111111111111111111111111111111111\n"
-" a_p1:   p1,    1!1111111\n"
-" a_n1:   n1,    1!111\n"
-" a_raw:  raw,   1!0\n"
-" a_blk:  blk,   1!0\n"
-"\n"
-"Index flr_b\n"
-" b_fno:  fno,   1!0\n"
-" b_col:  col,   1!0000000\n"
-" b_p1:   p1,    1!11111111111111\n"
-" b_n1:   n1,    1!1111111\n"
-" b_raw:  raw,   1!1\n"
-" b_blk:  blk,   1!1\n"
-"\n"
-"Index flr_s\n"
-" s_col:  col,   1!1111111\n"
-" s_p1:   p1,    1!111\n"
-" s_n1:   n1,    1!000\n"
-"\n"
-"Index flr_m\n"
-" m_col:  col,   1!111\n"
-" m_p1:   p1,    1!111\n"
-" m_n1:   n1,    1!000\n"
-"\n"
-"Index flr_t\n"
-" t_col:  col,   1!111111111111111111111111111111111111111111111111\n"
-" t_p1:   p1,    1!111\n"
-" t_n1:   n1,    1!000\n"
-"\n"
-"Number flr_rA, 1, 0!11111111\n"
-"Number flr_rB, 1, 0!11111111\n"
-"Number flr_rS, 1, 0!00110\n"
-"Number flr_lr, 1, 0!00110\n"
-"\n"
-"#  Residue classes: the class before it (-15.13% on its own, measured in\n"
-"#  TSVTRANS.md) and the class the same partition had one packet ago.\n"
-"\n"
-"Index cls_a\n"
-" a_rno:  rno,   1!1\n"
-" a_band: band,  1!111111111111111\n"
-" a_prev: prev,  1!1111111\n"
-" a_t1:   t1,    1!1111111\n"
-" a_blk:  blk,   1!1\n"
-"\n"
-"Index cls_b\n"
-" b_rno:  rno,   1!0\n"
-" b_band: band,  1!000000000000000\n"
-" b_prev: prev,  1!111111111111111\n"
-" b_t1:   t1,    1!111\n"
-" b_blk:  blk,   1!0\n"
-"\n"
-"Index cls_s\n"
-" s_band: band,  1!111\n"
-" s_prev: prev,  1!111\n"
-" s_t1:   t1,    1!000\n"
-"\n"
-"Index cls_m\n"
-" m_band: band,  1!000\n"
-" m_prev: prev,  1!111\n"
-" m_t1:   t1,    1!1\n"
-"\n"
-"Index cls_t\n"
-" t_prev: prev,  1!111\n"
-" t_band: band,  1!111\n"
-"\n"
-"Number cls_rA, 1, 0!11111111\n"
-"Number cls_rB, 1, 0!11111111\n"
-"Number cls_rS, 1, 0!00110\n"
-"Number cls_lr, 1, 0!00110\n"
-"\n"
-"#  Everything the page and packet headers hold, one field id apart.  Each\n"
-"#  field is a few thousand records at most, so what these want is separation,\n"
-"#  not resolution: `fld` is a dense factor and the rest is the field's own\n"
-"#  recent history.\n"
-"\n"
-"Index aux_a\n"
-"ADD 32: fld\n"
-" a_p1:   p1,    1!111111111111111\n"
-" a_p2:   p2,    1!1111111\n"
-"\n"
-"Index aux_b\n"
-"ADD 32: fld\n"
-" b_p1:   p1,    1!111\n"
-" b_p2:   p2,    1!000\n"
-"\n"
-"Index aux_s\n"
-"ADD 32: fld\n"
-"\n"
-"Index aux_m\n"
-"ADD 32: fld\n"
-"\n"
-"Index aux_t\n"
-"ADD 32: fld\n"
-"\n"
-"Number aux_rA, 1, 0!11111111\n"
-"Number aux_rB, 1, 0!11111111\n"
-"Number aux_rS, 1, 0!00110\n"
-"Number aux_lr, 1, 0!00110\n"
-"\n"
-"#  The three header packets, coded record by record.  The tag is a dense\n"
-"#  factor because the alphabet is small and every entry in it is a different\n"
-"#  kind of number; p1r is the previous value under the same tag, whole, which\n"
-"#  is what makes cb.len and cmt.byte an order-1 byte model.\n"
-"\n"
-"Index hdr_a\n"
-"ADD 64: tag\n"
-" a_p1:   p1,    1!111111111111111\n"
-" a_pos:  pos,   1!111\n"
-" a_p2:   p2,    1!0000000\n"
-"\n"
-"Index hdr_b\n"
-" b_p1r:  p1r,   &11111111\n"
-" b_pos:  pos,   1!1\n"
-"\n"
-"Index hdr_s\n"
-"ADD 64: tag\n"
-"\n"
-"Index hdr_m\n"
-"ADD 64: tag\n"
-"\n"
-"Index hdr_t\n"
-"ADD 64: tag\n"
-" t_p1r:  p1r,   &11111111\n"
-"\n"
-"Number hdr_rA, 1, 0!11111111\n"
-"Number hdr_rB, 1, 0!11111111\n"
-"Number hdr_rS, 1, 0!00110\n"
-"Number hdr_lr, 1, 0!00110\n";
-
-/*  The variable vectors.  A factor line above names one of these; a name that
-    is not here is a startup error rather than a silently wrong context.  */
-enum { DV_RNO, DV_PASS, DV_BAND, DV_COL, DV_Q1, DV_Q2, DV_T1, DV_CLS,
-       DV_ZRUN, DV_BLK, DV_BKQ, DV_N };
-static const char * const TC_VDIG[] =
-  { "rno", "pass", "band", "col", "q1", "q2", "t1", "cls", "zrun", "blk",
-    "bkq", nullptr };
-
-enum { FV_FNO, FV_COL, FV_P1, FV_N1, FV_RAW, FV_BLK, FV_N };
-static const char * const TC_VFLR[] =
-  { "fno", "col", "p1", "n1", "raw", "blk", nullptr };
-
-enum { CV_RNO, CV_BAND, CV_PREV, CV_T1, CV_BLK, CV_N };
-static const char * const TC_VCLS[] =
-  { "rno", "band", "prev", "t1", "blk", nullptr };
-
-enum { AV_FLD, AV_P1, AV_P2, AV_N };
-static const char * const TC_VAUX[] = { "fld", "p1", "p2", nullptr };
-
-enum { HV_TAG, HV_P1, HV_P2, HV_POS, HV_P1R, HV_N };
-static const char * const TC_VHDR[] =
-  { "tag", "p1", "p2", "pos", "p1r", nullptr };
 
 /*  ------------------------------------------------------------------
     One binary decision, and the tree of them that makes a number.  */
@@ -420,20 +170,80 @@ static INLINE int tc_clamp(int v, int lo, int hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-static sz tc_mem;                         /*  what has been allocated  */
-static sz tc_tab;                         /*  of which the model tables  */
+static sz tc_mem;                         /*  the per-link histories  */
 static void * tc_alloc(sz n) {
   void * p = calloc(n ? n : 1, 1);
   if (!p) FATAL_CODE(BLR_EXIT_IO, "out of memory for %" PRIu64 " bytes", (u64) n);
   tc_mem += n;
   return p;
 }
-static cm_cnt * tc_cnt(sz n) {
-  cm_cnt * p = (cm_cnt *) tc_alloc(n * sizeof *p);
-  sz i;
-  for (i = 0; i < n; i++) p[i].init();
-  return p;
+static void cm_fill(cm_cnt * p, sz n) { sz i;  for (i = 0; i < n; i++) p[i].init(); }
+
+/*  ------------------------------------------------------------------
+    The generated model.
+
+    IDX-FORMAT.md \u00a712 warns about an include-order cycle and it is real: the
+    generated header needs this file's types and helpers *before* it, and the
+    model below needs the tables and Volumes it declares *after* it.  So
+    everything MOD/tsvcomp_h.inc reads is above this line and everything that
+    reads MOD/tsvcomp_h.inc is below it.  Merging the two halves is the
+    obvious-looking simplification that cannot work.  */
+
+typedef u16 word;                         /*  idx2inc.pl's wider bucket table  */
+#ifndef __min
+  #define __min(a, b) ((a) < (b) ? (a) : (b))
+  #define __max(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+/*  Every generated `new[]` goes through this.  It bounds the count so the
+    compiler can prove the byte product cannot overflow -- without it GCC 13+
+    raises -Walloc-size-larger-than on its own overflow guard, once per table
+    -- and it is where a pattern widened past what the machine has is caught,
+    by name, instead of as a failed allocation.  The shipping build sizes its
+    tables as fixed arrays and never calls it, hence `INLINE`: a plain static
+    would draw -Wunused-function from exactly one of the two builds.  */
+static INLINE u64 tbl_n(u64 n) {
+  FATAL_UNLESS(n > 0 && n <= ((u64) 1 << 31),
+               "IDX/tsvcomp.idx asks for a table of %" PRIu64 " entries", n);
+  return n;
 }
+
+/*  The fields the page and packet headers hold, one model context apart.
+    Declared here rather than with the rest of the walk because the sign
+    table's size is F_N and the generated header needs it.  */
+enum {
+  F_MORE, F_PGTYPE, F_GRAN, F_SERIAL, F_SEQ, F_NPKT, F_PLEN, F_TAIL,
+  F_SPILL, F_MODE, F_WPREV, F_WNEXT, F_USED, F_NHDR, F_TAGSAME, F_TAGIDX,
+  F_TAGLEN, F_TAGCHR, F_N
+};
+constexpr int TC_MAXTAG = 128;            /*  header tags one stream may use  */
+
+/*  Sign counters.  A family that codes signs gets a context of its own for
+    them: the sign of a residue digit correlates with the sign the same slot
+    had a packet ago and with the digit before it, and with nothing the
+    magnitude cascade is looking at.  These are sizes rather than Volumes,
+    which is what Table() takes when the shape does not come from an Index.  */
+constexpr int TC_SGN_DIG = 4 * 8 * 3 * 3;
+constexpr int TC_SGN_AUX = F_N;
+constexpr int TC_SGN_HDR = TC_MAXTAG;
+/*  A floor post and a residue class are never negative, so their sign is one
+    counter saturating towards "positive" rather than a context: spread over
+    the family index and put through the mixer it takes longer to get there,
+    which measured +40 bytes on the floor of 00000000 and nothing anywhere
+    else.  A field that is genuinely signed pays for a context; one that is
+    not pays for a counter.  */
+constexpr int TC_SGN_FLR = 1;
+constexpr int TC_SGN_CLS = 1;
+
+#include "MOD/tsvcomp_h.inc"
+
+static TC_T tcm;
+
+/*  One family's five index rows for one value: the two counters, the APM, the
+    mixer and the mantissa plane each get their own.  */
+struct tcx { int a, b, s, m, t; };
+
+#include "MOD/tsvcomp_p.inc"
 
 /*  Where the bits went, for -v.  Accounting only; it changes no output, and
     is the same trick MP3C-ALGORITHM.md's per-stage table came from.  */
@@ -454,10 +264,10 @@ static INLINE int tc_bit(int p, int bit) {
   return (int) b;
 }
 
-/*  A family: four context indices, the tables they address, and the cascade
-    that turns a number into bits.  */
+/*  A family: the tables its five indices address, and the cascade that turns
+    a number into bits.  The tables and the index builders are both generated;
+    what is here is the wiring and the coding.  */
 struct tc_fam {
-  const idx_index * ia, * ib, * is, * im, * it;
   cm_cnt * A, * B, * G, * T;
   u16 * S;
   i32 * W;
@@ -466,36 +276,31 @@ struct tc_fam {
   u32 ba, bb, bs, bm, bt;
   int rA, rB, rS, lr;
 
-  void init(const char * fam, u32 nsign) {
-    char nm[IDX_NAME];
-    snprintf(nm, sizeof nm, "%s_a", fam);  ia = tc_idx.index(nm);
-    snprintf(nm, sizeof nm, "%s_b", fam);  ib = tc_idx.index(nm);
-    snprintf(nm, sizeof nm, "%s_s", fam);  is = tc_idx.index(nm);
-    snprintf(nm, sizeof nm, "%s_m", fam);  im = tc_idx.index(nm);
-    snprintf(nm, sizeof nm, "%s_t", fam);  it = tc_idx.index(nm);
-    A = tc_cnt((sz) ia->vol * TC_NODE);
-    B = tc_cnt((sz) ib->vol * TC_NODE);
-    T = tc_cnt((sz) it->vol * TC_MNODE);
-    G = nsign ? tc_cnt(nsign) : nullptr;
-    S = (u16 *) tc_alloc((sz) is->vol * TC_NODE * 33 * sizeof *S);
-    W = (i32 *) tc_alloc((sz) im->vol * TC_NODE * 2 * sizeof *W);
-    ap.init(S, is->vol * TC_NODE);
-    mx.init(W, im->vol * TC_NODE);
-    /*  A pattern is a search space and its ends get visited, so anything
-        used as a size, a shift or a limit is clamped at the point of use --
-        IDX/IDX-FORMAT.md §5 says the same, and means it.  */
-    snprintf(nm, sizeof nm, "%s_rA", fam);  rA = tc_clamp(tc_idx.number(nm), 1, CM_TMAX);
-    snprintf(nm, sizeof nm, "%s_rB", fam);  rB = tc_clamp(tc_idx.number(nm), 1, CM_TMAX);
-    snprintf(nm, sizeof nm, "%s_rS", fam);  rS = tc_clamp(tc_idx.number(nm), 1, 15);
-    snprintf(nm, sizeof nm, "%s_lr", fam);  lr = tc_clamp(tc_idx.number(nm), 1, 64);
+  void wire(cm_cnt * a, int va, cm_cnt * b, int vb, cm_cnt * t, int vt,
+            u16 * s, int vs, i32 * w, int vm, cm_cnt * g, int vg,
+            int ra, int rb, int rs, int lrate) {
+    A = a;  B = b;  T = t;  S = s;  W = w;  G = g;
+    cm_fill(A, (sz) va * TC_NODE);
+    cm_fill(B, (sz) vb * TC_NODE);
+    cm_fill(T, (sz) vt * TC_MNODE);
+    if (G) cm_fill(G, (sz) vg);
+    ap.init(S, (u32) vs * TC_NODE);
+    mx.init(W, (u32) vm * TC_NODE);
+    /*  A pattern is a search space and the optimizer visits its ends, so
+        anything used as a size, a shift or a limit is clamped at the point of
+        use -- IDX/IDX-FORMAT.md §5 says the same, and means it.  */
+    rA = tc_clamp(ra, 1, CM_TMAX);
+    rB = tc_clamp(rb, 1, CM_TMAX);
+    rS = tc_clamp(rs, 1, 15);
+    lr = tc_clamp(lrate, 1, 64);
   }
 
-  INLINE void select(const i32 * v) {
-    ba = ia->build(v) * TC_NODE;
-    bb = ib->build(v) * TC_NODE;
-    bs = is->build(v) * TC_NODE;
-    bm = im->build(v) * TC_NODE;
-    bt = it->build(v) * TC_MNODE;
+  INLINE void select(const tcx & x) {
+    ba = (u32) x.a * TC_NODE;
+    bb = (u32) x.b * TC_NODE;
+    bs = (u32) x.s * TC_NODE;
+    bm = (u32) x.m * TC_NODE;
+    bt = (u32) x.t * TC_MNODE;
   }
 
   /*  mp3c's six lines, in order: refine counter A through the APM, stretch
@@ -528,7 +333,7 @@ struct tc_fam {
       is left in unary, then its mantissa.  Small values -- which is nearly
       all of them -- cost one, two or three decisions, and nothing has to
       know a field's range in advance.  */
-  i64 code(const i32 * v, i64 x) {
+  i64 code(const tcx & v, i64 x) {
     int k, p, nb = 0;
     u64 u;
     select(v);
@@ -556,7 +361,7 @@ struct tc_fam {
       residue digit correlates with the sign the same slot had a packet ago
       and with the digit before it, and with nothing the magnitude cascade is
       looking at.  */
-  i64 codes(const i32 * v, i64 x, u32 sc) {
+  i64 codes(const tcx & v, i64 x, u32 sc) {
     i64 m = code(v, tc_enc ? (x < 0 ? -x : x) : 0);
     int s;
     if (!m) return 0;
@@ -574,20 +379,13 @@ static tc_fam fam_dig, fam_flr, fam_cls, fam_aux, fam_hdr;
 /*  ------------------------------------------------------------------
     The fields that are not floor, class or digit.  */
 
-enum {
-  F_MORE, F_PGTYPE, F_GRAN, F_SERIAL, F_SEQ, F_NPKT, F_PLEN, F_TAIL,
-  F_SPILL, F_MODE, F_WPREV, F_WNEXT, F_USED, F_NHDR, F_TAGSAME, F_TAGIDX,
-  F_TAGLEN, F_TAGCHR, F_N
-};
 static i64 tc_last[F_N], tc_last2[F_N];
 
 /*  `c` is whatever the caller knows that the field's own history does not.  */
 static i64 tc_auxc(int fld, i32 c, i64 x, int sgn) {
-  i32 v[AV_N];
+  tcx v;
   i64 r;
-  v[AV_FLD] = fld;
-  v[AV_P1] = c;
-  v[AV_P2] = tc_qlog(tc_last[fld]);
+  tc_make_aux(fld, c, tc_qlog(tc_last[fld]), v);
   r = sgn ? fam_aux.codes(v, x, (u32) fld) : fam_aux.code(v, x);
   tc_last2[fld] = tc_last[fld];  tc_last[fld] = r;
   return r;
@@ -657,8 +455,6 @@ static void tc_setup_done(void) {
     record is nearly always the tag of the record before it -- balrogg emits
     runs -- so that is one bit, and a first sighting costs its letters.  */
 
-constexpr int TC_MAXTAG = 128;
-
 /*  The capture buffer, which grows to whatever a link's header packets turn
     out to need.  It cannot be sized from the packet length: a codebook
     declares its entry count in three bytes and every entry is a record, so
@@ -708,12 +504,9 @@ static int tc_tagcode(const char * tag) {
 }
 
 static i64 tc_hdrval(int id, i64 x) {
-  i32 v[HV_N];
-  v[HV_TAG] = id;
-  v[HV_P1] = tc_qlog(tc_tlast[id]);
-  v[HV_P2] = tc_qlog(tc_tlast2[id]);
-  v[HV_POS] = tc_qlog(tc_runpos);
-  v[HV_P1R] = (i32) (tc_tlast[id] & 255);
+  tcx v;
+  tc_make_hdr(id, tc_qlog(tc_tlast[id]), tc_qlog(tc_tlast2[id]),
+              tc_qlog(tc_runpos), (int) (tc_tlast[id] & 255), v);
   x = fam_hdr.codes(v, x, (u32) id);
   tc_tlast2[id] = tc_tlast[id];  tc_tlast[id] = x;
   return x;
@@ -795,21 +588,13 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
   tc_stage = STG_DIGIT;
   for (i = 0; i < psz; i++) {
     sz slot = (sz) pc * psz + i;
-    i32 v[DV_N];
+    tcx v;
     i32 t1 = (hist && slot < span) ? hist[slot] : 0;
     i64 d;
     u32 sc;
-    v[DV_RNO] = (i32) rno;
-    v[DV_PASS] = (i32) pss;
-    v[DV_BAND] = tc_qlog(pc);
-    v[DV_COL] = tc_qlog(i);
-    v[DV_Q1] = tc_qlog(*q1);
-    v[DV_Q2] = tc_qlog(*q2);
-    v[DV_T1] = tc_qlog(t1);
-    v[DV_CLS] = (i32) cls;
-    v[DV_ZRUN] = tc_qlog(*zr);
-    v[DV_BLK] = (i32) tc_blk;
-    v[DV_BKQ] = bkq;
+    tc_make_dig((int) rno, (int) pss, tc_qlog(pc), tc_qlog(i), tc_qlog(*q1),
+                tc_qlog(*q2), tc_qlog(t1), (int) cls, tc_qlog(*zr),
+                (int) tc_blk, bkq, v);
     sc = (u32) ((((rno & 3) * 8 + pss) * 3 + (*q1 < 0 ? 0 : *q1 > 0 ? 2 : 1)) * 3
                 + (t1 < 0 ? 0 : t1 > 0 ? 2 : 1));
     d = tc_enc ? tc_in->get("res.digit") : 0;
@@ -824,17 +609,13 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
 }
 
 static u32 tc_classify(u32 rno, u32 j, u32 slot) {
-  i32 v[CV_N];
+  tcx v;
   u8 * hist = cl_np[rno] ? cl_hist[rno] + ((sz) tc_blk * tc_nchan + j) * cl_np[rno]
                          : nullptr;
   i32 t1 = (hist && slot < cl_np[rno]) ? hist[slot] : 0;
   i64 c;
   tc_stage = STG_CLASS;
-  v[CV_RNO] = (i32) rno;
-  v[CV_BAND] = tc_qlog(slot);
-  v[CV_PREV] = cl_last[rno];
-  v[CV_T1] = t1;
-  v[CV_BLK] = (i32) tc_blk;
+  tc_make_cls((int) rno, tc_qlog(slot), cl_last[rno], t1, (int) tc_blk, v);
   c = tc_enc ? (i64) tc_in->get_u("res.class", 16) : 0;
   c = fam_cls.code(v, c);
   if (!tc_enc) tc_out->put("res.class", c);
@@ -914,14 +695,10 @@ static void tc_payload(u32 mode) {
     if (!u) continue;
     tc_stage = STG_FLOOR;
     for (i = 0; i < f->posts; i++) {
-      i32 v[FV_N];
+      tcx v;
       i64 y;
-      v[FV_FNO] = (i32) fno;
-      v[FV_COL] = (i32) (i < VD_MAXPOST ? i : VD_MAXPOST - 1);
-      v[FV_P1] = tc_qlog(hp[i]);
-      v[FV_N1] = tc_qlog(prev);
-      v[FV_RAW] = i < 2;
-      v[FV_BLK] = (i32) tc_blk;
+      tc_make_flr((int) fno, (int) (i < VD_MAXPOST ? i : VD_MAXPOST - 1),
+                  tc_qlog(hp[i]), tc_qlog(prev), i < 2, (int) tc_blk, v);
       y = tc_enc ? tc_in->get("flr.y") : 0;
       y = fam_flr.codes(v, y, 0);
       if (!tc_enc) tc_out->put("flr.y", y);
@@ -1071,36 +848,30 @@ static void tc_walk(const char * inpath, const char * outpath) {
   memset(&p, 0, sizeof p);
 
   if (tc_enc) {
-    u8 h[4];
+    u8 h[2];
     in.open(inpath);
     tc_in = &in;
     bf = fopen(outpath, "wb");
     if (!bf) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", outpath);
     h[0] = (u8) TC_VER;  h[1] = 0;
-    h[2] = (u8) (tc_idxsum & 0xFF);  h[3] = (u8) (tc_idxsum >> 8);
     if (fwrite(TC_MAGIC, 1, sizeof TC_MAGIC - 1, bf) != sizeof TC_MAGIC - 1 ||
-        fwrite(h, 1, 4, bf) != 4)
+        fwrite(h, 1, 2, bf) != 2)
       FATAL_CODE(BLR_EXIT_IO, "write error on %s", outpath);
     rcb.attach(bf, 1 << 16);
     rc.StartEncode(&rcb);
   } else {
     char m[sizeof TC_MAGIC - 1];
-    u8 h[4];
+    u8 h[2];
     bf = fopen(inpath, "rb");
     if (!bf) FATAL_CODE(BLR_EXIT_IO, "cannot open %s", inpath);
     FATAL_UNLESS(fread(m, 1, sizeof m, bf) == sizeof m &&
                  !memcmp(m, TC_MAGIC, sizeof m),
                  "%s: not a tsvcomp stream -- `tsvcomp c` makes one", inpath);
-    FATAL_UNLESS(fread(h, 1, 4, bf) == 4,
+    FATAL_UNLESS(fread(h, 1, 2, bf) == 2,
                  "%s: the stream ends in its header", inpath);
     FATAL_UNLESS(h[0] == TC_VER,
                  "%s: made by tsvcomp version %u, this is version %u",
                  inpath, h[0], TC_VER);
-    FATAL_UNLESS(((u32) h[2] | ((u32) h[3] << 8)) == tc_idxsum,
-                 "%s: coded against a different context declaration (%04x, "
-                 "this one is %04x) -- set TSVCOMP_IDX to the file it was "
-                 "made with", inpath, (u32) h[2] | ((u32) h[3] << 8),
-                 (u32) tc_idxsum);
     rcb.attach(bf, 1 << 16);
     rc.StartDecode(&rcb);
     out.create(outpath);
@@ -1177,62 +948,26 @@ static void tc_walk(const char * inpath, const char * outpath) {
 
 /*  ------------------------------------------------------------------  */
 
-/*  The declaration is compiled in, and TSVCOMP_IDX replaces it with the
-    contents of a file: that is how the measurements in TSVCOMP.md were made,
-    and it is what an optimizer would drive if one were pointed at this.
-
-    A stream carries a checksum of the declaration that coded it, because the
-    declaration *is* the format -- move one threshold and the same bytes mean
-    something else.  Two builds that disagree meet a message naming both
-    checksums rather than a decode that runs to the end and produces
-    nonsense.  */
-static char * tc_idxfile;
-
-static const char * tc_declaration(void) {
-  const char * env = getenv("TSVCOMP_IDX");
-  const char * text = TC_IDXTEXT;
-  const char * q;
-  u32 h = 2166136261u;
-  if (env) {
-    FILE * f = fopen(env, "rb");
-    sz n = 0, cap = 1 << 16;
-    if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot open %s", env);
-    tc_idxfile = (char *) malloc(cap);
-    if (!tc_idxfile) FATAL_CODE(BLR_EXIT_IO, "out of memory");
-    for (;;) {
-      sz got = fread(tc_idxfile + n, 1, cap - n - 1, f);
-      n += got;
-      if (n + 1 < cap) break;
-      cap *= 2;
-      { char * t = (char *) realloc(tc_idxfile, cap);
-        if (!t) FATAL_CODE(BLR_EXIT_IO, "out of memory");
-        tc_idxfile = t; }
-    }
-    fclose(f);
-    tc_idxfile[n] = 0;
-    text = tc_idxfile;
-  }
-  for (q = text; *q; q++) { h ^= (u8) *q;  h *= 16777619u; }
-  tc_idxsum = (u16) (h ^ (h >> 16));
-  return text;
-}
+/*  Hand a family the tables the generator sized for it and the rates the
+    .idx set.  Every name here is generated: `TC_dig_A` is the Table() line in
+    IDX/tsvcomp.inc, `TC_dig_a_Volume` the product of the factor sizes in
+    IDX/tsvcomp.idx, `TC_dig_rA` its Number.  */
+#define TC_WIRE(f, F, g, ng)                                                  \
+  (f).wire(tcm.TC_##F##_A, TC_##F##_a_Volume,                                 \
+           tcm.TC_##F##_B, TC_##F##_b_Volume,                                 \
+           tcm.TC_##F##_T, TC_##F##_t_Volume,                                 \
+           tcm.TC_##F##_S, TC_##F##_s_Volume,                                 \
+           tcm.TC_##F##_W, TC_##F##_m_Volume, (g), (ng),                      \
+           TC_##F##_rA, TC_##F##_rB, TC_##F##_rS, TC_##F##_lr)
 
 static void tc_models(void) {
-  const char * text = tc_declaration();
   cm_tables();
-  tc_idx.init();
-  tc_idx.family("dig", TC_VDIG);
-  tc_idx.family("flr", TC_VFLR);
-  tc_idx.family("cls", TC_VCLS);
-  tc_idx.family("aux", TC_VAUX);
-  tc_idx.family("hdr", TC_VHDR);
-  tc_idx.parse(text);
-  fam_dig.init("dig", 4 * 8 * 3 * 3);
-  fam_flr.init("flr", 1);
-  fam_cls.init("cls", 1);
-  fam_aux.init("aux", F_N);
-  fam_hdr.init("hdr", TC_MAXTAG);
-  tc_tab = tc_mem;                        /*  the histories come later, per link  */
+  tcm.TC_Init();
+  TC_WIRE(fam_dig, dig, tcm.TC_dig_G, TC_SGN_DIG);
+  TC_WIRE(fam_flr, flr, tcm.TC_flr_G, TC_SGN_FLR);
+  TC_WIRE(fam_cls, cls, tcm.TC_cls_G, TC_SGN_CLS);
+  TC_WIRE(fam_aux, aux, tcm.TC_aux_G, TC_SGN_AUX);
+  TC_WIRE(fam_hdr, hdr, tcm.TC_hdr_G, TC_SGN_HDR);
 }
 
 int main(int argc, char ** argv) {
@@ -1260,7 +995,7 @@ int main(int argc, char ** argv) {
     double tot = 0;
     for (i = 0; i < STG_N; i++) tot += tc_bits[i];
     fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n",
-            blr_prog, tot / 8, (u64) (tc_tab >> 20));
+            blr_prog, tot / 8, (u64) (tcm.TC_Size >> 20));
     if (tc_enc)
       for (i = 0; i < STG_N; i++) {
         fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", TC_STAGE[i],
@@ -1284,8 +1019,9 @@ usage:
     "\n"
     "  -v  say where the bits went, by stage\n"
     "\n"
-    "TSVCOMP_IDX names a file to take the context declaration from, in place\n"
-    "of the one compiled in.  A stream records which declaration coded it and\n"
-    "mode d refuses one it does not have.\n");
+    "The contexts and the rates are declared in IDX/tsvcomp.idx and compiled\n"
+    "in through MOD/; ./mk.sh regenerates them and IDX/opt.pl tunes them.\n"
+    "They are part of the format -- a stream is decodable by a build with the\n"
+    "same MOD/, and by no other.\n");
   return BLR_EXIT_USAGE;
 }

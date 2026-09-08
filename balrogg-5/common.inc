@@ -29,6 +29,10 @@ typedef size_t   sz;
 /*  Hot-path hints.  */
 #if defined(__GNUC__) && !defined(BLR_NO_ATTRS)
 #define INLINE      inline __attribute__((__always_inline__))
+/*  IDX's mapping objects are built once, at static-init time, from a pattern
+    string the optimizer patches in the binary; inlining those constructors
+    would only bloat the startup path.  sh_mapping.inc asks for this.  */
+#define NOINLINE    __attribute__((__noinline__))
 #define HOT         __attribute__((__hot__))
 #define FLATTEN     __attribute__((__flatten__))
 #define NORETURN    __attribute__((__noreturn__))
@@ -37,6 +41,7 @@ typedef size_t   sz;
 #define BLR_PRINTF(f, a) __attribute__((__format__(__printf__, f, a)))
 #else
 #define INLINE      inline
+#define NOINLINE
 #define HOT
 #define FLATTEN
 #define NORETURN

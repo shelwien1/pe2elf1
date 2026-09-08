@@ -1,0 +1,249 @@
+#  tsvcomp's context indices and tunable parameters.
+#
+#  IDX-FORMAT.md in this directory is the specification.  idx2inc.pl turns this
+#  file plus the template tsvcomp.inc into MOD/tsvcomp_h.inc (the mapping
+#  objects or their folded literals, the Volumes and the table struct) and
+#  MOD/tsvcomp_p.inc (the index builders).  ../mk.sh drives both builds:
+#
+#      ./mk.sh              tuning:   Debug 1, Const 0 -- every threshold is a
+#                                     live mapping object carrying a "!MAP!"
+#                                     descriptor, which is what IDX/opt.pl
+#                                     scans the executable for and hill-climbs
+#      ./mk.sh release      shipping: every threshold folded to a literal
+#
+#  Both builds must code byte-identically; ./mk.sh check is that test.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.  Every variable a
+#  family supplies is listed in every one of its indices for that reason.
+
+Prefix TC
+Debug 1
+Const 0
+
+#  ---------------------------------------------------------------------------
+#  Residue digits: 92% of the records in a stream, so this is the program.
+#
+#  Variables, from tsvcomp.cpp:
+#    rno   which residue          pass  which cascade pass
+#    band  partition, log-ish     col   position inside the partition
+#    q1 q2 the two digits before it, magnitude, log-ish
+#    t1    the same slot one packet ago, log-ish
+#    cls   the class of this partition -- the choice of codebook
+#    bkq   that codebook's `off`, log-ish: the half-width of its value range
+#    zrun  zeros so far in this partition        blk  short or long block
+#
+#  `cls` is the biggest single factor and the most surprising one: the class is
+#  the choice of ladder and the ladder decides what a digit can be, so knowing
+#  it beats knowing where in the spectrum the digit sits.  Four buckets of it
+#  cost 4.65%.  `bkq` is the same thought in a form that would generalise to
+#  the next file, and it measures 1.01% worse than the class number it was
+#  meant to replace: two classes with the same range are still not the same
+#  choice.  `col` is at zero because TSVTRANS.md measured it at +0.27% alone
+#  and worse in combination, and `band` is at three buckets because the fourth
+#  onwards are worth 0.05% between them once `cls` is in -- the partition had
+#  been standing in for the class.
+
+Index dig_a
+ dig_a_rno:  rno,   1!0
+ dig_a_pass: pass,  1!1111111
+ dig_a_band: band,  1!110000000000000
+ dig_a_col:  col,   1!0000000
+ dig_a_q1:   q1,    1!11111
+ dig_a_q2:   q2,    1!1111
+ dig_a_t1:   t1,    1!111
+ dig_a_bkq:  bkq,   1!0000
+ dig_a_cls:  cls,   1!111111111111111
+ dig_a_zrun: zrun,  1!1111
+ dig_a_blk:  blk,   1!0
+
+Index dig_b
+ dig_b_rno:  rno,   1!0
+ dig_b_pass: pass,  1!1111111
+ dig_b_band: band,  1!000000000000000
+ dig_b_col:  col,   1!0000000
+ dig_b_q1:   q1,    1!11111
+ dig_b_q2:   q2,    1!0000
+ dig_b_t1:   t1,    1!111
+ dig_b_bkq:  bkq,   1!0000
+ dig_b_cls:  cls,   1!000
+ dig_b_zrun: zrun,  1!111
+ dig_b_blk:  blk,   1!1
+
+Index dig_s
+ dig_s_pass: pass,  1!11
+ dig_s_band: band,  1!111
+ dig_s_q1:   q1,    1!111
+ dig_s_t1:   t1,    1!000
+ dig_s_bkq:  bkq,   1!000
+ dig_s_cls:  cls,   1!111
+
+Index dig_m
+ dig_m_pass: pass,  1!111
+ dig_m_band: band,  1!111
+ dig_m_q1:   q1,    1!000
+ dig_m_t1:   t1,    1!1
+ dig_m_bkq:  bkq,   1!000
+ dig_m_cls:  cls,   1!000
+
+#  The mantissa of a digit that escaped the ladder: its own plane, on its own
+#  index and its own tables, as mp3c's Smant is a submodel of its own.
+
+Index dig_t
+ dig_t_pass: pass,  1!111
+ dig_t_band: band,  1!111
+ dig_t_q1:   q1,    1!11111
+ dig_t_t1:   t1,    1!000
+ dig_t_bkq:  bkq,   1!000
+ dig_t_cls:  cls,   1!111111111111111
+
+Number dig_rA, 1, 0!11111111
+Number dig_rB, 1, 0!11111111
+Number dig_rS, 1, 0!00111
+Number dig_lr, 1, 0!01000
+
+#  ---------------------------------------------------------------------------
+#  Floor posts.  The column is the whole story here -- post 0 and post 1 are
+#  coded raw and land at the ends of the row, everything between them is a
+#  folded residual at a frequency the column names -- so it gets 48 buckets
+#  where the digit model gives its own position none.  `p1` is what this post
+#  was one packet ago, and it is the second factor: a floor curve is the
+#  spectral envelope, and an envelope moves slowly.
+
+Index flr_a
+ flr_a_fno:  fno,   1!1
+ flr_a_col:  col,   1!111111111111111111111111111111111111111111111111
+ flr_a_p1:   p1,    1!1111111
+ flr_a_n1:   n1,    1!111
+ flr_a_raw:  raw,   1!0
+ flr_a_blk:  blk,   1!0
+
+Index flr_b
+ flr_b_fno:  fno,   1!0
+ flr_b_col:  col,   1!0000000
+ flr_b_p1:   p1,    1!11111111111111
+ flr_b_n1:   n1,    1!1111111
+ flr_b_raw:  raw,   1!1
+ flr_b_blk:  blk,   1!1
+
+Index flr_s
+ flr_s_col:  col,   1!1111111
+ flr_s_p1:   p1,    1!111
+ flr_s_n1:   n1,    1!000
+
+Index flr_m
+ flr_m_col:  col,   1!111
+ flr_m_p1:   p1,    1!111
+ flr_m_n1:   n1,    1!000
+
+Index flr_t
+ flr_t_col:  col,   1!111111111111111111111111111111111111111111111111
+ flr_t_p1:   p1,    1!111
+ flr_t_n1:   n1,    1!000
+
+Number flr_rA, 1, 0!11111111
+Number flr_rB, 1, 0!11111111
+Number flr_rS, 1, 0!00110
+Number flr_lr, 1, 0!00110
+
+#  ---------------------------------------------------------------------------
+#  Residue classes: the class before it (-15.13% on its own, measured in
+#  TSVTRANS.md) and the class the same partition had one packet ago.
+
+Index cls_a
+ cls_a_rno:  rno,   1!1
+ cls_a_band: band,  1!111111111111111
+ cls_a_prev: prev,  1!1111111
+ cls_a_t1:   t1,    1!1111111
+ cls_a_blk:  blk,   1!1
+
+Index cls_b
+ cls_b_rno:  rno,   1!0
+ cls_b_band: band,  1!000000000000000
+ cls_b_prev: prev,  1!111111111111111
+ cls_b_t1:   t1,    1!111
+ cls_b_blk:  blk,   1!0
+
+Index cls_s
+ cls_s_band: band,  1!111
+ cls_s_prev: prev,  1!111
+ cls_s_t1:   t1,    1!000
+
+Index cls_m
+ cls_m_band: band,  1!000
+ cls_m_prev: prev,  1!111
+ cls_m_t1:   t1,    1!1
+
+Index cls_t
+ cls_t_band: band,  1!111
+ cls_t_prev: prev,  1!111
+ cls_t_t1:   t1,    1!000
+
+Number cls_rA, 1, 0!11111111
+Number cls_rB, 1, 0!11111111
+Number cls_rS, 1, 0!00110
+Number cls_lr, 1, 0!00110
+
+#  ---------------------------------------------------------------------------
+#  Everything the page and packet headers hold, one field id apart.  Each field
+#  is a few thousand records at most, so what these want is separation, not
+#  resolution: `fld` is a dense factor and the rest is the field's own recent
+#  history.
+
+Index aux_a
+ADD 32: fld
+ aux_a_p1:   p1,    1!111111111111111
+ aux_a_p2:   p2,    1!1111111
+
+Index aux_b
+ADD 32: fld
+ aux_b_p1:   p1,    1!111
+ aux_b_p2:   p2,    1!000
+
+Index aux_s
+ADD 32: fld
+
+Index aux_m
+ADD 32: fld
+
+Index aux_t
+ADD 32: fld
+
+Number aux_rA, 1, 0!11111111
+Number aux_rB, 1, 0!11111111
+Number aux_rS, 1, 0!00110
+Number aux_lr, 1, 0!00110
+
+#  ---------------------------------------------------------------------------
+#  The three header packets, coded record by record.  The tag is a dense factor
+#  because the alphabet is small and every entry in it is a different kind of
+#  number; p1r is the previous value under the same tag, whole, which is what
+#  makes cb.len and cmt.byte an order-1 byte model.
+
+Index hdr_a
+ADD 64: tag
+ hdr_a_p1:   p1,    1!111111111111111
+ hdr_a_p2:   p2,    1!0000000
+ hdr_a_pos:  pos,   1!111
+ hdr_a_p1r:  p1r,   &00000000
+
+Index hdr_b
+ hdr_b_p1:   p1,    1!000
+ hdr_b_pos:  pos,   1!1
+ hdr_b_p1r:  p1r,   &11111111
+
+Index hdr_s
+ADD 64: tag
+
+Index hdr_m
+ADD 64: tag
+
+Index hdr_t
+ADD 64: tag
+ hdr_t_p1r:  p1r,   &11111111
+
+Number hdr_rA, 1, 0!11111111
+Number hdr_rB, 1, 0!11111111
+Number hdr_rS, 1, 0!00110
+Number hdr_lr, 1, 0!00110

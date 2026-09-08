@@ -18,9 +18,14 @@ the value it is given or decodes one, and both then run the identical update
 -- so a model change cannot desynchronise the two halves.
 
 What is different from mp3c is which variables the contexts are built from.
-Those are declared rather than written, in mp3c's own IDX notation; §"The
-contexts, declared" is the whole of what this program knows about how a
-variable becomes a table row.
+Those are declared rather than written, in mp3c's own IDX notation and through
+its own toolchain: `IDX/tsvcomp.idx` is the declaration, `IDX/idx2inc.pl`
+generates `MOD/`, and `IDX/opt.pl` tunes the result by patching the binary.
+Nothing in `tsvcomp.cpp` decides a context.
+
+    ./mk.sh              regenerate MOD/ and build for tuning
+    ./mk.sh release      the same, with every parameter folded to a literal
+    ./mk.sh check        prove the two builds code identically
 
 Options:
 
@@ -28,18 +33,15 @@ Options:
 |---|---|
 | `-v` | say where the bits went, by stage |
 
-`TSVCOMP_IDX` names a file to take the context declaration from in place of
-the one compiled in. Every measurement below was made that way.
-
 ## What it costs
 
 Against `xz -9e` on the same TSVs, and against the `.ogg` the TSV came from:
 
 | | .ogg | .tsv | `xz -9e` | tsvcomp | of .ogg | of xz |
 |---|---:|---:|---:|---:|---:|---:|
-| 17 libvorbis files | 12,734,656 | 108,163,951 | 16,860,676 | **12,117,967** | 95.2% | 71.9% |
-| 22 ffmpeg files | 515,872 | 4,386,774 | 381,424 | **285,955** | 55.4% | 75.0% |
-| **total** | **13,250,528** | **112,550,725** | **17,242,100** | **12,403,922** | **93.6%** | **71.9%** |
+| 17 libvorbis files | 12,734,656 | 108,163,951 | 16,860,676 | **12,117,933** | 95.2% | 71.9% |
+| 22 ffmpeg files | 515,872 | 4,386,774 | 381,424 | **285,911** | 55.4% | 74.9% |
+| **total** | **13,250,528** | **112,550,725** | **17,242,100** | **12,403,844** | **93.6%** | **71.9%** |
 
 The `of .ogg` column is the one that matters: it is the whole point of balrogg
 that a `.tsv` plus a coder should come out smaller than the Ogg Vorbis file
@@ -93,43 +95,89 @@ digit is worth asking 230,400 ways and its fourteenth mantissa bit is not.
 
 ## The contexts, declared
 
-`idx.inc` reads the part of mp3c's IDX notation that a single-file program
-needs. A factor line is a variable, a base and a pattern, and each `1` in the
-pattern places a threshold:
+`IDX/tsvcomp.idx` is the declaration. A factor line is a variable, a base and
+a pattern, and each `1` in the pattern places a threshold:
 
-     a_q1:   q1,    1!11111
+     dig_a_q1:   q1,    1!11111
 
 is `(q1>0) + (q1>1) + ... + (q1>4)`, six buckets, one factor of a mixed-radix
 index. `ADD 32: fld` is a dense factor for a variable that is already a small
-integer, and `&11111111` keeps the named bits of one. Each family declares
-five indices: `_a` for the rich counter, `_b` for the coarse one, `_s` for the
-APM's own grouping, `_m` for the mixer's, `_t` for the mantissa plane. mp3c
-computes four separate indices over the same variables for exactly this
-reason -- each stage wants the grouping that suits it, and sharing one is a
-compromise none of them asked for.
+integer, and `&11111111` keeps the named bits of one. `Number dig_rA, 1,
+0!11111111` is a tunable integer -- the pattern read as binary, plus the base,
+times the multiplier. Each family declares five indices: `_a` for the rich
+counter, `_b` for the coarse one, `_s` for the APM's own grouping, `_m` for
+the mixer's, `_t` for the mantissa plane. mp3c computes four separate indices
+over the same variables for exactly this reason -- each stage wants the
+grouping that suits it, and sharing one is a compromise none of them asked
+for.
 
-**What IDX is for is that a variable which did not pay stays visible.** A
-pattern of zeroes contributes one bucket and is dropped, so the declaration
-records what was tried:
+**A variable that did not pay stays visible.** A pattern of zeroes contributes
+one bucket and costs nothing, so the declaration records what was tried, and
+gives the optimizer somewhere to go:
 
-     a_col:  col,   1!0000000       # +0.27%, and worse in combination
-     a_bkq:  bkq,   1!0000          # 0.9% worse than the class it replaces
+     dig_a_col:  col,   1!0000000       # +0.27%, and worse in combination
+     dig_a_bkq:  bkq,   1!0000          # 1.01% worse than the class it replaces
 
-The difference from mp3c is that nothing is generated: this is IDX's *tuning*
-shape -- thresholds live, patterns editable -- kept, with the declaration
-parsed at startup rather than compiled in by `idx2inc.pl`. A stream costs
-milliseconds to walk and the parse is a few hundred microseconds once, so the
-shipping shape would buy nothing that matters and would cost a perl dependency
-and a generated file that can go stale against its source.
+`IDX/idx2inc.pl`, `IDX/opt.pl`, `IDX/import.pl`, `IDX/IDX-FORMAT.md` and
+`sh_mapping.inc` are Shelwien's, taken unchanged from the `psrc` tree apart
+from `opt.pl`'s defaults and header, which name this program's corpus and
+files instead of `bmf`'s.
 
-The declaration *is* the format: move one threshold and the same bytes mean
-something else. So a stream carries a checksum of the declaration that coded
-it, and mode d refuses one it does not have --
+`IDX/tsvcomp.inc` is the template. `MakeIndex dig_a,dig_b,dig_s,dig_m,dig_t`
+in it becomes the statements that build all five, and `Table( cm_cnt,
+%M%dig_A, %M%dig_a_Volume * TC_NODE )` becomes a member of the generated
+`TC_T` struct sized by the product of that index's factors. `IDX/idx2inc.pl`
+turns the two into `MOD/tsvcomp_h.inc` and `MOD/tsvcomp_p.inc`.
 
-    tsvcomp: 00.tc: coded against a different context declaration (e542, this
-    one is 74aa) -- set TSVCOMP_IDX to the file it was made with
+**MOD/ is a build input, not a build artefact.** It ships generated, in the
+shipping form, so `make tsvcomp` needs no perl -- and a stale MOD/ compiles
+fine and codes differently, so run `./mk.sh` after editing anything in `IDX/`.
 
--- rather than decoding to the end and producing nonsense.
+### Why it is generated rather than parsed
+
+The declaration could be read at startup instead, and that would be simpler.
+It would also be useless, because of how the optimizer works.
+
+`Debug` and `Const` are orthogonal flags, not two modes. With `Const 0` each
+threshold is a live `mapping` object built from a pattern string; with `Debug
+1` that string starts with `!MAP!`, and it is embedded in the executable:
+
+    ./mk.sh
+    mk.sh: tuning build -- 654 tunable bits in 112 patterns, visible to IDX/opt.pl
+
+`IDX/opt.pl` does not parse or rebuild anything. It scans the binary for those
+markers, flips their bits **in the binary**, re-runs the corpus and keeps what
+shrinks it -- so one build serves an entire hill-climb, and a run is bounded
+by how fast the corpus codes rather than by how fast it compiles. That is what
+the format is *for*, and it is only available if the patterns are objects in a
+compiled binary. The whole loop:
+
+    ./mk.sh                                     # tuning build
+    perl IDX/opt.pl opt.lst ./tsvcomp           # hill-climb; writes export.!!!
+    cd IDX && perl import.pl tsvcomp.idx ../export.!!! > t && mv t tsvcomp.idx
+    ./mk.sh check                               # then ship what it found
+
+`import.pl` folds the winners back into the `.idx` by name, keeping the
+comments -- so the annotations above stay attached to the patterns they
+describe.
+
+`./mk.sh release` derives the shipping build from the same source with one
+substitution, `Const 0` becoming `Const 1` in a copy, so the two cannot drift.
+There every threshold is folded:
+
+    flr_a = flr_a*49 + TC_flr_a_col[__min(48,__max(0,col-(1-1)))];
+
+**Both builds must produce identical streams**, and `./mk.sh check` is that
+test -- the only one that catches a parameter which folds to something
+different from what it evaluated to. It codes the same files under both and
+compares byte for byte.
+
+One consequence to be clear about: **the parameters are part of the format.**
+Move a threshold and the same bytes mean something else, so a stream is
+decodable by a build with the same `MOD/` and by no other. There is no
+checksum in the stream to catch that, because the two builds have nothing in
+common at runtime to compute one from -- the shipping build has no objects
+left. Anything a mid-hill-climb binary writes should be thrown away.
 
 ## What each context is worth
 
@@ -255,12 +303,12 @@ often each.
 
 ## What it does not do
 
-* **There is no optimizer.** The patterns were set by hand-run sweeps over
-  three files; IDX exists so that `opt.pl` can hill-climb them over a corpus,
-  and pointing one at this is the obvious next thing. The `Debug`/`Const`
-  machinery and the `!MAP!` markers it scans for are not implemented, so that
-  means either adding them or writing a sweeper that edits the `.idx` and
-  re-runs -- which is all `TSVCOMP_IDX` was added for.
+* **The shipped patterns have not been through the optimizer.** They were set
+  by hand-run sweeps over three files, and `IDX/opt.pl` runs against this
+  build and descends from the first minute -- but a hill-climb long enough to
+  trust wants a corpus covering every model (see the note in `opt.lst`) and a
+  good deal more wall-clock than setting it up took. What is here is the loop,
+  working; what is not here is a converged run through it.
 * **There is no match model.** mp3c does not need one; a residue stream with
   long exact repeats -- silence, loops -- would reward one here.
 * **The mixer has two inputs.** mp3c's has two as well, but its counters have

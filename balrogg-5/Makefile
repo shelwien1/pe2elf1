@@ -43,7 +43,8 @@ STG_INC = sh_v2f.inc steg.inc
 TRN_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
           bmp.inc
 CMP_INC = common.inc tsv.inc lift.inc floor_db.inc imdct.inc vd_setup.inc \
-          sh_v2f.inc cm.inc idx.inc
+          sh_v2f.inc cm.inc sh_mapping.inc \
+          MOD/tsvcomp_h.inc MOD/tsvcomp_p.inc
 
 #  The vorbis build adds these two and drops floor_db.inc, whose table it takes
 #  from libvorbis instead (tsv2wav.cpp:99).
@@ -81,6 +82,10 @@ tsv2wav-vorbis: tsv2wav.cpp $(VRB_INC) $(VRB_SRC) .flags
 tsvtrans: tsvtrans.cpp $(TRN_INC) .flags
 	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ tsvtrans.cpp $(LIBS)
 
+#  MOD/ is a build input, not a build artefact: it ships generated, in the
+#  shipping (Const) form, so this target needs no perl.  ./mk.sh regenerates it
+#  from IDX/ -- run that after editing IDX/tsvcomp.idx, since a stale MOD/
+#  compiles fine and codes differently.
 tsvcomp: tsvcomp.cpp $(CMP_INC) .flags
 	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ tsvcomp.cpp $(LIBS)
 

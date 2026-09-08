@@ -1,0 +1,11 @@
+#  The corpus IDX/opt.pl hill-climbs against: one balrogg .tsv per line.
+#
+#  Generate them first -- `make` then `./balrogg c X.ogg X.tsv`, or run
+#  `KEEP=1 OUT=/some/dir ./t-comp.sh testfiles/` and point this at what it
+#  leaves behind.  .tsv files are not in the repository; they are made from
+#  .ogg files, and which ones you tune against is your choice.
+#
+#  Cover every model.  A list of one file overfits it, and a list of long
+#  libvorbis streams alone leaves the header model -- most of a short ffmpeg
+#  file and almost none of a long one -- drifting while nothing measures it.
+00.tsv
