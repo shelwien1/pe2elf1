@@ -100,7 +100,7 @@ Index dig_b
  dig_b_cls: cls, 1!010
  dig_b_zrun: zrun, 1!101
  dig_b_blk:  blk,   1!1
- dig_b_vpos: vpos, 1!1
+ dig_b_vpos: vpos, 1!0
  dig_b_q1s:  q1s,  -6!0000000000000
  dig_b_q2s:  q2s,  -6!0000000000000
  dig_b_t1s:  t1s,  -6!0000000000000
@@ -125,14 +125,14 @@ Index dig_c
  dig_c_t2:   t2,   1!000
  dig_c_n1:   n1,   1!000
  dig_c_w1:   w1,   1!000
- dig_c_ax: ax, 1!101000000100
- dig_c_q1s:  q1s,  -6!0000000000000
- dig_c_q2s:  q2s,  -6!1000000000000
+ dig_c_ax: ax, 1!111000000100
+ dig_c_q1s: q1s, -6!0100000000000
+ dig_c_q2s: q2s, -6!0000000000000
  dig_c_cls:  cls,   1!000
- dig_c_p0s:  p0s,  -6!0000000000000
- dig_c_pq:   pq,    1!00000000000000000000000000000000
- dig_c_ps:   ps,   -6!0000000000000
- dig_c_chn:  chn,   1!0000000
+ dig_c_p0s: p0s, -6!0000001000000
+ dig_c_pq: pq, 1!00000000100000000000000010000000
+ dig_c_ps: ps, -6!0001000001000
+ dig_c_chn: chn, 1!1010101
  dig_c_crun: crun,  1!000000000
  dig_c_cm:   cm,    1!0
 
@@ -227,7 +227,7 @@ Index dig_t
  dig_t_q1:   q1,    1!00000
  dig_t_t1:   t1,    1!000
  dig_t_bkq:  bkq,   1!000
- dig_t_cls:  cls,   1!000101011001000
+ dig_t_cls: cls, 1!010100101001010
  dig_t_vpos: vpos,  1!0
  dig_t_q1s:  q1s,  -6!0000000000000
  dig_t_q2s:  q2s,  -6!0000000000000
@@ -241,7 +241,7 @@ Index dig_t
  dig_t_ax:   ax,   1!000000000000
  dig_t_pq:   pq,    1!00000000000000000000000000000000
  dig_t_ps:   ps,   -6!0000000000000
- dig_t_chn:  chn,   1!0000000
+ dig_t_chn: chn, 1!1010101
  dig_t_crun: crun,  1!000000000
  dig_t_cm:   cm,    1!0
 
@@ -249,23 +249,23 @@ Index dig_t
 #  avC/4096 and log-quantised into `ax`.  avD/256 is the running mean's decay.
 Number dig_avD,  1, 0!11101111
 Number dig_avA,  1, 0!111
-Number dig_avT1, 1, 0!000
-Number dig_avT2, 1, 0!000
+Number dig_avT1, 1, 0!010
+Number dig_avT2, 1, 0!001
 Number dig_avN1, 1, 0!101
-Number dig_avW1, 1, 0!100
-Number dig_avQ1, 1, 0!111
-Number dig_avQ2, 1, 0!101
-Number dig_avC,  1, 0!0110101110
+Number dig_avW1, 1, 0!011
+Number dig_avQ1, 1, 0!101
+Number dig_avQ2, 1, 0!011
+Number dig_avC, 1, 0!0110101111
 
 Number dig_rA, 1, 0!11111111
 Number dig_rB, 1, 0!11111110
-Number dig_rC, 1, 0!00001111
-Number dig_rD, 1, 0!11100101
+Number dig_rC, 1, 0!00010000
+Number dig_rD, 1, 0!11100011
 Number dig_rS, 1, 0!00111
 Number dig_lr, 1, 0!01011
-Number dig_mw, 1, 0!00000000
-Number dig_bw, 1, 0!01010
-Number dig_mb, 1, 0!01000000
+Number dig_mw, 1, 0!00000010
+Number dig_bw, 1, 0!01011
+Number dig_mb, 1, 0!01000100
 
 #  ---------------------------------------------------------------------------
 #  The sign of a residue digit: 28% of the digit bits, and nearly random.  What
@@ -275,9 +275,9 @@ Number dig_mb, 1, 0!01000000
 
 Index sgn_a
  sgn_a_pass: pass, 1!11
- sgn_a_vpos: vpos,  1!1111111
- sgn_a_cls: cls, 1!101101101
- sgn_a_p0s: p0s, -3!1111111
+ sgn_a_vpos: vpos, 1!0000000
+ sgn_a_cls: cls, 1!100101101
+ sgn_a_p0s: p0s, -3!0111111
  sgn_a_q1s: q1s, -3!0000000
  sgn_a_mg: mg, 1!010101010
  sgn_a_t1s:  t1s,  -3!0000000
@@ -285,7 +285,7 @@ Index sgn_a
  sgn_a_band: band, 1!00001
  sgn_a_pq: pq, 1!00001000000010000000100000001000
  sgn_a_sq:   sq,    1!00010001000100010001000100010001
- sgn_a_ps: ps, -6!0010001000100
+ sgn_a_ps: ps, -6!1010110110101
  sgn_a_chn:  chn,   1!0000000
  sgn_a_crun: crun,  1!000000000
  sgn_a_cm:   cm,    1!0
@@ -293,15 +293,15 @@ Index sgn_a
 Index sgn_b
  sgn_b_pass: pass,  1!11
  sgn_b_vpos: vpos,  1!1
- sgn_b_cls:  cls,   1!111111111111111
- sgn_b_p0s:  p0s,  -3!0111110
- sgn_b_q1s:  q1s,  -3!0010100
+ sgn_b_cls: cls, 1!000000000000000
+ sgn_b_p0s: p0s, -3!1111111
+ sgn_b_q1s: q1s, -3!1010101
  sgn_b_mg:   mg,    1!000
- sgn_b_t1s:  t1s,  -3!1111111
- sgn_b_q2s:  q2s,  -3!0010100
- sgn_b_band: band,  1!10010
- sgn_b_pq:   pq,    1!00000000000000000000000000000000
- sgn_b_sq:   sq,    1!00000000000000000000000000000000
+ sgn_b_t1s: t1s, -3!0000000
+ sgn_b_q2s: q2s, -3!0101010
+ sgn_b_band: band, 1!10011
+ sgn_b_pq: pq, 1!00001000000010000000100000001000
+ sgn_b_sq: sq, 1!00100010001000100010001000100010
  sgn_b_ps:   ps,   -6!0000000000000
  sgn_b_chn:  chn,   1!0000000
  sgn_b_crun: crun,  1!000000000
@@ -325,15 +325,15 @@ Index sgn_c
 Index sgn_d
  sgn_d_pass: pass,  1!00
  sgn_d_vpos: vpos,  1!0
- sgn_d_p0s:  p0s,  -3!0001101
+ sgn_d_p0s: p0s, -3!0001100
  sgn_d_q1s:  q1s,  -3!0001000
  sgn_d_t1s:  t1s,  -3!0000000
  sgn_d_q2s:  q2s,  -3!0001000
  sgn_d_mg:   mg,    1!000
  sgn_d_pq:   pq,    1!00000000000000000000000000000000
- sgn_d_sq:   sq,    1!00000000000000000000000000000000
- sgn_d_ps:   ps,   -6!0000000000000
- sgn_d_chn:  chn,   1!0000000
+ sgn_d_sq: sq, 1!00000000100000000000000010000000
+ sgn_d_ps: ps, -6!0010001000100
+ sgn_d_chn: chn, 1!1010101
  sgn_d_crun: crun,  1!000000000
  sgn_d_cm:   cm,    1!0
 
@@ -364,11 +364,11 @@ Index sgn_f
 Index sgn_m
  sgn_m_pass: pass,  1!11
  sgn_m_vpos: vpos, 1!0000000
- sgn_m_p0s: p0s, -3!0001000
- sgn_m_mg: mg, 1!111
+ sgn_m_p0s: p0s, -3!0000000
+ sgn_m_mg: mg, 1!010
  sgn_m_pq: pq, 1!00000000100000000000000010000000
- sgn_m_sq: sq, 1!00000000000000000000000000000000
- sgn_m_ps: ps, -6!0001000001000
+ sgn_m_sq: sq, 1!00000000100000000000000010000000
+ sgn_m_ps: ps, -6!0000000000000
  sgn_m_chn: chn, 1!1010101
  sgn_m_crun: crun,  1!000000000
  sgn_m_cm:   cm,    1!0
