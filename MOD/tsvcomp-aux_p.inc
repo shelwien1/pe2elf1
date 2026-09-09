@@ -56,6 +56,7 @@ void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
 
   g = 0;
   g = g*4 + ((p1>5+(1-1))+(p1>12+(1-1))+(p1>13+(1-1)));
+  g = g*14 + TC_aux_g_p2[__min(13,__max(0,p2-(1-1)))];
   X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }

@@ -22,13 +22,27 @@ Const 0
 #  because the alphabet is small and every entry in it is a different kind of
 #  number; p1r is the previous value under the same tag, whole, which is what
 #  makes cb.len and cmt.byte an order-1 byte model.
+#
+#  p1r is a mask and not a threshold list because what it carries is a byte's
+#  identity, not its size: the low bits of the last value are what say which
+#  value this one is likely to be, and quantising by magnitude throws exactly
+#  those away.  Measured, the widest threshold list is worse than the mask it
+#  replaces in every index here.  A threshold list is the better form for a
+#  small dense number, which is what most of the other axes are; this is the
+#  one variable in the model that is a byte rather than a quantity.
+#
+#  The sign counter's context, `Index g`, was empty -- one row per tag.  The
+#  values are coded as differences from the previous value under the tag, and
+#  the sign of a difference is most of what the previous value predicts: p1r
+#  whole, its magnitude, and whether the tag is repeating cut the header stage
+#  by 5.3%.
 
 Index a
  a_tag: tag, 1!1111011111111110110111111111111111111111111111111111111111111111
 ! a_p1:   p1,    1!100000000010110
 ! a_p2:   p2,    1!1111111
 ! a_pos:  pos,   1!011
-! a_p1r:  p1r,   &00000000
+  a_p1r: p1r, &00001111
 
 Index b
 ! b_p1:   p1,    1!101
@@ -82,7 +96,7 @@ Index n
 ! n_p1r:  p1r,   &01101111
 
 Index g
-! g_p1:   p1,    1!000000000000000
-! g_p2:   p2,    1!0000000
-! g_pos:  pos,   1!000
-! g_p1r:  p1r,   &00000000
+  g_p1:   p1,    1!000000000000000
+  g_p2: p2, 1!1111111
+  g_pos: pos, 1!100
+  g_p1r: p1r, &11111111
