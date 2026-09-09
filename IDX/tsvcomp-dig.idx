@@ -33,7 +33,12 @@ Const 0
 #          vector's earlier places have already spelled (tc_prior.inc)
 #    ps    what the passes before this one put at the slot, signed
 #    chn   the slot's channel: its place in the interleave for a type-2
-#          residue, and the channel the vector is for one coded per channel
+#          residue, and the channel the vector is for one coded per channel.
+#          Two buckets where it has any at all: it carried five, of which a
+#          mono or stereo stream reaches two, and the three that no file here
+#          can reach still multiplied every table they were in by 2.5.  A
+#          multichannel corpus would want them back, and this is the file
+#          that decides that
 #    x1    the coupled channel at this very place, one packet ago -- an
 #          interleaved residue only; `t1` already carries this channel's own
 #          past, so what a neighbour is worth is what it does not repeat
@@ -82,7 +87,7 @@ Index a
  a_ax: ax, 1!000000100000
  a_pq: pq, 1!00000000100000000000000010000000
  a_ps:   ps,   -6!0000000000000
- a_chn: chn, 1!1010101
+ a_chn: chn, 1!0000000
  a_crun: crun,  1!000000000
  a_cm:   cm,    1!0
  a_x1: x1, 1!000
@@ -113,7 +118,7 @@ Index b
  b_ax:   ax,   1!000000000000
  b_pq:   pq,    1!00010001000100010001000100010001
  b_ps:   ps,   -6!0000000000000
- b_chn: chn, 1!1000000
+ b_chn: chn, 1!0000000
  b_crun: crun,  1!000000000
  b_cm:   cm,    1!0
  b_x1: x1, 1!000
@@ -134,7 +139,7 @@ Index c
  c_p0s: p0s, -6!0000001000000
  c_pq: pq, 1!00000000100000000000000010000000
  c_ps: ps, -6!0001000001000
- c_chn: chn, 1!1010101
+ c_chn: chn, 1!0000000
  c_crun: crun,  1!000000000
  c_cm:   cm,    1!0
  c_x1: x1, 1!000
@@ -155,11 +160,11 @@ Index d
  d_p0s: p0s, -6!0010111110000
  d_pq: pq, 1!00000000100000000000000010000000
  d_ps: ps, -6!0010001000100
- d_chn: chn, 1!1010101
+ d_chn: chn, 1!1000000
  d_crun: crun,  1!000000000
  d_cm:   cm,    1!0
  d_x1: x1, 1!000
- d_x1s: x1s, -6!0000000000000
+ d_x1s: x1s, -6!0001111111000
 
 Index s
  s_pass: pass, 1!10
@@ -181,7 +186,7 @@ Index s
  s_ax: ax, 1!100010101111
  s_pq: pq, 1!00000000000000000000000000000000
  s_ps: ps, -6!0010000000000
- s_chn: chn, 1!1010101
+ s_chn: chn, 1!1000000
  s_crun: crun,  1!000000000
  s_cm: cm, 1!1
  s_x1: x1, 1!000
@@ -198,7 +203,7 @@ Index f
  f_band: band, 1!10101
  f_pq: pq, 1!00000000000000000000000000000000
  f_ps:   ps,   -6!0000000000000
- f_chn: chn, 1!1010101
+ f_chn: chn, 1!1000000
  f_crun: crun,  1!000000000
  f_cm:   cm,    1!0
  f_x1: x1, 1!000
@@ -224,7 +229,7 @@ Index m
  m_ax:   ax,   1!000000000000
  m_pq: pq, 1!00100000100001000010000010000100
  m_ps:   ps,   -6!0000000000000
- m_chn: chn, 1!1010101
+ m_chn: chn, 1!1000000
  m_crun: crun,  1!000000000
  m_cm:   cm,    1!0
  m_x1: x1, 1!000
