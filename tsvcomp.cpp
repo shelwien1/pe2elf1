@@ -817,7 +817,7 @@ static u8  * dg_pn[VD_MAXRES];            /*  [channel][slot]: passes that coded
 static u8  * cl_hist[VD_MAXRES];
 static sz    dg_span[VD_MAXRES], cl_np[VD_MAXRES];
 static i32 * dg_q1, * dg_q2, * dg_zr;     /*  [rno][pass][channel]  */
-static i32   cl_last[VD_MAXRES], cl_last2[VD_MAXRES];
+static i32   cl_last[VD_MAXRES][VD_MAXCH], cl_last2[VD_MAXRES][VD_MAXCH];
 static i16 * fl_hist;                     /*  [blk][channel][post]  */
 static i16 * fl_yhist;                    /*  the same, rebuilt into a curve  */
 static u32   tc_blk;                      /*  the block this packet is  */
@@ -866,7 +866,8 @@ static void tc_setup_done(void) {
     }
     cl_np[i] = span ? span / r->psz + 2 : 0;
     if (cl_np[i]) cl_hist[i] = (u8 *) tc_alloc((sz) 2 * tc_nchan * cl_np[i]);
-    cl_last[i] = cl_last2[i] = 0;
+    memset(cl_last[i], 0, sizeof cl_last[i]);
+    memset(cl_last2[i], 0, sizeof cl_last2[i]);
   }
   dg_q1 = (i32 *) tc_alloc((sz) su.nrs * 8 * tc_nchan * sizeof(i32));
   dg_q2 = (i32 *) tc_alloc((sz) su.nrs * 8 * tc_nchan * sizeof(i32));
@@ -1214,15 +1215,15 @@ static u32 tc_classify(u32 rno, u32 j, u32 slot) {
   i32 tn = (hist && slot + 1 < cl_np[rno]) ? hist[slot + 1] : 0;
   i64 c;
   tc_stage = STG_CLASS;
-  tc_make_cls((int) rno, tc_qlog(slot), cl_last[rno], t1, (int) tc_blk, tn,
-              cl_last2[rno], tcp_axis(fam_cls.pc), v);
+  tc_make_cls((int) rno, tc_qlog(slot), cl_last[rno][j], t1, (int) tc_blk, tn,
+              cl_last2[rno][j], tcp_axis(fam_cls.pc), v);
   c = tc_enc ? (i64) tc_in->get_u("res.class", 16) : 0;
   c = fam_cls.code(v, c);
   if (!tc_enc) tc_out->put("res.class", c);
   FATAL_UNLESS(c >= 0 && c < 16, "coded stream: residue class %" PRId64, c);
-  cl_run[rno] = (c == cl_last[rno]) ? cl_run[rno] + 1 : 0;
+  cl_run[rno] = (c == cl_last[rno][j]) ? cl_run[rno] + 1 : 0;
   if (hist && slot < cl_np[rno]) hist[slot] = (u8) c;
-  cl_last2[rno] = cl_last[rno];  cl_last[rno] = (i32) c;
+  cl_last2[rno][j] = cl_last[rno][j];  cl_last[rno][j] = (i32) c;
   if (tc_verbose) tc_syms[STG_CLASS]++;
   return (u32) c;
 }
@@ -1255,6 +1256,9 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
   FATAL_UNLESS((sz) vch * w <= sizeof tc_cl,
                "residue needs %" PRIu64 " classification slots, limit %" PRIu64,
                (u64) ((sz) vch * w), (u64) sizeof tc_cl);
+  memset(dg_q1 + (sz) rno * 8 * tc_nchan, 0, (sz) 8 * tc_nchan * sizeof(i32));
+  memset(dg_q2 + (sz) rno * 8 * tc_nchan, 0, (sz) 8 * tc_nchan * sizeof(i32));
+  memset(dg_zr + (sz) rno * 8 * tc_nchan, 0, (sz) 8 * tc_nchan * sizeof(i32));
   if (dg_span[rno]) {
     memset(dg_pp[rno], 0, (sz) tc_nchan * dg_span[rno] * sizeof(i16));
     memset(dg_ps[rno], 0, (sz) tc_nchan * dg_span[rno] * sizeof(i16));
