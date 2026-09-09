@@ -89,9 +89,11 @@ else
 fi
 rm -f IDX/tc-guard.idx IDX/tc-guard.inc IDX/tc-guard IDX/tc-guard_h.inc IDX/tc-guard_p.inc
 
-#  Leave MOD/ as it is checked in -- the shipping form, which is ./mk.sh
-#  release's, not the tuning form the two builds above were made in.
-./mk.sh release >/dev/null
+#  Leave MOD/ as it is checked in -- the shipping form, not the tuning form the
+#  builds above were made in.  Not `./mk.sh release`, which would also replace
+#  ./tsvcomp with a binary carrying no !MAP! markers, and so silently end
+#  whatever tuning run was using it.
+./mk.sh mod >/dev/null
 
 [ "$fail" = 0 ] && echo "t-guard.sh: the guards hold" \
                 || { echo "t-guard.sh: A GUARD DOES NOT HOLD" >&2; exit 1; }

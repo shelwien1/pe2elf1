@@ -4,6 +4,11 @@
 #      ./mk.sh              tuning build   -- Debug 1, Const 0
 #      ./mk.sh release      shipping build -- every parameter folded
 #      ./mk.sh check        build both and prove they code identically
+#      ./mk.sh mod          regenerate MOD/ in the shipping form, build nothing
+#
+#  Only the first two write ./tsvcomp.  A shipping binary has no !MAP! markers
+#  in it, so an optimizer driving one finds no knobs and reports that nothing
+#  it tries changes anything -- which is why `check` leaves ./tsvcomp alone.
 #
 #  IDX-FORMAT.md sec.1: Debug and Const are orthogonal flags, not two modes.
 #  `Const 0` leaves each threshold a live `mapping` object; `Debug 1` makes its
@@ -44,6 +49,19 @@ generate_and_build() {
   mv -f "IDX/$1_h.inc" MOD/tsvcomp_h.inc
   mv -f "IDX/$1_p.inc" MOD/tsvcomp_p.inc
   $CXX $CXXFLAGS $WARN $REQ -o "$3" tsvcomp.cpp -lm
+}
+
+#  Regenerate MOD/ in the shipping form and build nothing.  What a script wants
+#  when it has finished borrowing MOD/ and has to put it back the way it ships:
+#  building would also replace ./tsvcomp, and ./tsvcomp may be the tuning build
+#  someone is in the middle of optimizing.
+regenerate_mod() {
+  release_source
+  ( cd IDX && IDX_NOCONST=0 perl idx2inc.pl tsvcomp-const.idx 0 >/dev/null )
+  mkdir -p MOD
+  mv -f IDX/tsvcomp-const_h.inc MOD/tsvcomp_h.inc
+  mv -f IDX/tsvcomp-const_p.inc MOD/tsvcomp_p.inc
+  rm -f IDX/tsvcomp-const.idx IDX/tsvcomp-const.inc
 }
 
 release_source() {
@@ -104,14 +122,23 @@ case "${1:-tuning}" in
         bad=1
       fi
     done < "$lst"
-    #  Leave the tree in the shipping shape, which is what MOD/ is checked in as.
-    cp -f "$tmp/rel" tsvcomp
+    #  Leave MOD/ in the shipping shape, which is what it is checked in as.
+    #  Both binaries stay in $tmp: ./tsvcomp is not this command's to replace,
+    #  and replacing it with the shipping build is the quiet way to end a
+    #  tuning session -- that build carries no !MAP! markers, so IDX/opt.pl
+    #  finds nothing to patch and every measurement comes back the same.
+    regenerate_mod
     [ "$bad" = 0 ] && echo "mk.sh: tuning and shipping builds agree" \
                    || { echo "mk.sh: THE TWO BUILDS DISAGREE" >&2; exit 1; }
     ;;
 
+  mod)
+    regenerate_mod
+    echo "mk.sh: MOD/ regenerated in the shipping form; no binary built"
+    ;;
+
   *)
-    echo "usage: ./mk.sh [tuning|release|check [file-list]]" >&2
+    echo "usage: ./mk.sh [tuning|release|check [file-list]|mod]" >&2
     exit 2
     ;;
 esac
