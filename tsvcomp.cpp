@@ -1512,7 +1512,13 @@ static void tc_walk(const char * inpath, const char * outpath) {
     .idx set.  Every name here is generated: `TC_dig_A` is the Table() line in
     IDX/tsvcomp.inc, `TC_dig_a_Volume` the product of the factor sizes in
     IDX/tsvcomp.idx, `TC_dig_rA` its Number.  */
-#define TC_WIRE(f, F, g, ng)                                                  \
+/*  Two of the six families do not have every component, so the wiring says
+    which parameters they are missing rather than IDX/tsvcomp.idx carrying a
+    knob that cannot move:  fam_dig has no sign counter -- a digit's sign is
+    fam_sgn's whole job -- and fam_sgn has neither that nor a mantissa, since
+    it only ever calls bit() and a sign is one bit.  The four that code a
+    signed value with a mantissa name all of it, through TC_WIRE_ALL.  */
+#define TC_WIRE(f, F, g, ng, rt, mwt, rg, mwg, lrmt, mbmt)                    \
   (f).wire(tcm->TC_##F##_A, TC_##F##_a_Volume,                                 \
            tcm->TC_##F##_B, TC_##F##_b_Volume,                                 \
            tcm->TC_##F##_C, TC_##F##_c_Volume,                                 \
@@ -1524,12 +1530,16 @@ static void tc_walk(const char * inpath, const char * outpath) {
            tcm->TC_##F##_WM, TC_##F##_n_Volume,                                \
            tcm->TC_##F##_WC, tcm->TC_##F##_WMC,                                 \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \
-           TC_##F##_rT, TC_##F##_rG,                                          \
+           (rt), (rg),                                                        \
            TC_##F##_mwA, TC_##F##_mwB, TC_##F##_mwC, TC_##F##_mwD,            \
-           TC_##F##_mwT, TC_##F##_mwG,                                        \
+           (mwt), (mwg),                                                      \
            TC_##F##_rS1, TC_##F##_rS2,                                        \
-           TC_##F##_lr, TC_##F##_mb, TC_##F##_lrm, TC_##F##_mbm,              \
+           TC_##F##_lr, TC_##F##_mb, (lrmt), (mbmt),                          \
            TC_##F##_bw, TC_##F##_qs, TC_##F##_qf)
+
+#define TC_WIRE_ALL(f, F, g, ng)                                              \
+  TC_WIRE(f, F, g, ng, TC_##F##_rT, TC_##F##_mwT, TC_##F##_rG, TC_##F##_mwG,  \
+          TC_##F##_lrm, TC_##F##_mbm)
 
 /*  What the model may ask for in tables -- address space, not memory, since
     tc_map hands back a reservation and the pages arrive as the coder reaches
@@ -1567,12 +1577,14 @@ static void tc_models(void) {
                "the %" PRIu64 " MB this build allows -- narrow a context, or "
                "rebuild with a larger TC_MEMCAP",
                (u64) (tcm->TC_Size >> 20), (u64) (TC_MEMCAP >> 20));
-  TC_WIRE(fam_dig, dig, (cm_cnt *) nullptr, 0);
-  TC_WIRE(fam_sgn, sgn, (cm_cnt *) nullptr, 0);
-  TC_WIRE(fam_flr, flr, tcm->TC_flr_G, TC_SGN_FLR);
-  TC_WIRE(fam_cls, cls, tcm->TC_cls_G, TC_SGN_CLS);
-  TC_WIRE(fam_aux, aux, tcm->TC_aux_G, TC_SGN_AUX);
-  TC_WIRE(fam_hdr, hdr, tcm->TC_hdr_G, TC_SGN_HDR);
+  TC_WIRE(fam_dig, dig, (cm_cnt *) nullptr, 0,      /*  no sign counter  */
+          TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
+  TC_WIRE(fam_sgn, sgn, (cm_cnt *) nullptr, 0,      /*  nor a mantissa  */
+          0, 0, 0, 0, 0, 0);
+  TC_WIRE_ALL(fam_flr, flr, tcm->TC_flr_G, TC_SGN_FLR);
+  TC_WIRE_ALL(fam_cls, cls, tcm->TC_cls_G, TC_SGN_CLS);
+  TC_WIRE_ALL(fam_aux, aux, tcm->TC_aux_G, TC_SGN_AUX);
+  TC_WIRE_ALL(fam_hdr, hdr, tcm->TC_hdr_G, TC_SGN_HDR);
 }
 
 /*  The model tables are mapped and report their own failures; what is left on
