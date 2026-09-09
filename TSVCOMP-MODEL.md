@@ -1,7 +1,7 @@
 # The tsvcomp model: design, bugs and room to improve
 
-This describes the model as it stands: 11,363,861 bytes over the 17-file
-corpus in 337 MB of declared tables.  Where it started, and what section 7
+This describes the model as it stands: 11,355,711 bytes over the 17-file
+corpus in 505 MB of declared tables.  Where it started, and what section 7
 is a list of, was 11,372,019 bytes in 928 MB.  It is the
 companion to two other documents: `BALROGG-MODEL.md` says what balrogg's
 model does that this one does not, and what each of those was measured to be
@@ -34,14 +34,14 @@ already coded, the two directions cannot drift.
 
 Where the bits go, on a 350 kbit/s mono file and a 96 kbit/s stereo one:
 
-| stage | 05 (105,952 B) | 07 (780,525 B) | what it is |
+| stage | 05 (105,854 B) | 07 (779,467 B) | what it is |
 |---|---|---|---|
-| headers | 1.80% | 0.29% | the three Vorbis header packets, record by record |
+| headers | 1.72% | 0.27% | the three Vorbis header packets, record by record |
 | pages | 0.31% | 0.37% | Ogg page fields as residuals against their expected values |
 | packets | 0.03% | 0.00% | mode, window flags, floor-used flags |
-| floor | 1.78% (2.01 b/post) | 5.30% (1.37 b/post) | floor1 posts, coded as folded residuals |
-| class | 0.91% (1.19 b/class) | 3.18% (1.21 b/class) | residue partition classes |
-| digits | 95.17% (2.63 b/digit) | 90.86% (1.15 b/digit) | residue vector digits, magnitude and sign |
+| floor | 1.78% (2.00 b/post) | 5.25% (1.35 b/post) | floor1 posts, coded as folded residuals |
+| class | 0.90% (1.18 b/class) | 3.15% (1.19 b/class) | residue partition classes |
+| digits | 95.26% (2.63 b/digit) | 90.96% (1.15 b/digit) | residue vector digits, magnitude and sign |
 
 The digit model is the program.  Everything else together is under 10%, and
 on the high-bitrate file under 5%.
@@ -62,7 +62,7 @@ the contexts are built from and which parts of the cascade they use.
 | aux | page and packet fields | `code` / `codes` | 16 x 13 counters | none | 29 | 0.1 |
 | hdr | header records | `codes` | 128 counters, by tag | none | 29 | 12.4 |
 
-Total 337.5 MiB of address space, of which the corpus touches a small
+Total 505 MiB of address space, of which the corpus touches a small
 fraction: the tables are mapped, not allocated, and only the rows a stream
 reaches are ever faulted in.
 
@@ -373,7 +373,7 @@ Each family's `.idx` declares its factors; `IDX/idx2inc.pl` turns them into
 product of the factor sizes via saturating `tc_vmul`) and `_p.inc` (the
 index builder).  The tables of a family are one struct mapped with
 `MAP_NORESERVE` (`tc_map`), so what is declared is address space and what
-is paid is the pages a stream touches: 337 MiB declared and a small part of
+is paid is the pages a stream touches: 505 MiB declared and a small part of
 that resident on any corpus file -- a 38.9 GB tuned set once ran in 304 MB.
 `TC_MEMCAP` (64 GB) bounds the declaration; `tc_vfits`/`tc_ifits` check
 each component's index against the width it can actually address, so an
@@ -558,7 +558,26 @@ search.
 
 **I8. Fix B1 and B2, then give the sign model the coupled channel.**  Done,
 and it is the largest single win here: 3161 bytes over four files, 0.03% of
-the corpus, for 17 MB.
+the corpus, for 17 MB.  The channel itself came back afterwards, measured one
+index at a time: the sign model's rich counter wants it (976 bytes for 16 MB)
+and the digit model's coarse counter does (482 for 134 MB), while the digit
+model's fine counter is worse with it (+117) -- it already carries the band,
+the column and the class, which on this corpus say much of what the channel
+would.  For coupled stereo the channel is which half of the pair a value is,
+a magnitude or an angle, and those differ most in their signs.
+
+**I13. Look in the indices nobody had looked in.**  Not on the original list,
+and the largest thing left.  Every factor line of tsvcomp-flr.idx and
+tsvcomp-cls.idx carried the freeze marker, so IDX/opt.pl had never moved one
+of them; the floor model's fourth counter and second APM and both of the
+class model's APMs were empty, meaning one row -- a single correction curve
+for every decision in a stream, which is the one thing an APM is not for.
+The header model's sign-counter index was empty in the same way.  Filling
+four of them with variables the .idx comments already named is 738 bytes of
+floor, 429 of class and 5.3% of the header stage.  All three files are
+unfrozen now.  The lesson is not about those indices: a frozen line is
+invisible to the search and to the reader, and nothing recorded why these
+were frozen.
 
 **I9. Reset the histories that run past what they describe.**  Done -- B11
 and B12.
@@ -581,6 +600,9 @@ size one.
 
 ### What is left
 
+- The rest of tsvcomp-flr.idx and tsvcomp-cls.idx, now that they are
+  unfrozen.  Four indices were empty and four things were tried in them; the
+  space is not exhausted.
 - A residue's floor envelope as a context.  The floor is coded before the
   residue and says what magnitude to expect at each frequency, which is
   physically the right predictor for a digit; `cls` may already carry most of
@@ -617,3 +639,12 @@ From BALROGG-MODEL.md's measurements, this branch's, and the commit history:
 - Sharing one rate between two components: the optimizer settles it where
   the louder component wants it; every component now has its own.
 - Optimizing size with memory free: 4345 MB for 3867 bytes.
+- Replacing a bitmask with a threshold list on `p1r`, the header model's
+  order-1 byte context: worse in every index tried -- 7968 header bytes
+  against the mask's 7963 in the rich counter, 8015 against 8005 in the
+  mantissa plane, 7672 against 7643 in the sign counter.  A threshold list
+  quantises by magnitude, which is right for a digit or a run length and
+  throws away exactly what a byte context is made of.  `p1r` is the only
+  variable in the model that is a byte rather than a quantity, and the five
+  masks are the five places it appears.  Carrying both forms of it as two
+  factors is worse than the mask alone.
