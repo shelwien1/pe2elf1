@@ -498,7 +498,8 @@ static TC_hdr_T * tcm_hdr;
 /*  Everything a residue digit's contexts are built from.  */
 struct tc_dv {
   int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1,
-      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm;
+      p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm,
+      x1, x1s;
 };
 
 /*  One family's five index rows for one value: the two counters, the APM, the
@@ -1042,8 +1043,15 @@ static INLINE i32 tc_sq(i32 v) {          /*  signed log-ish quantisation  */
   i32 q = tc_qlog(v);
   return v < 0 ? -q : q;
 }
+/*  The least common multiple, for the neighbour stride below.  */
+static INLINE u32 tc_gcd(u32 a, u32 b) { while (b) { u32 t = a % b;  a = b;  b = t; } return a; }
+
+/*  `j` is the channel this vector belongs to, not the position of the vector
+    among those that were coded -- see tc_residue, where the two part company.
+    `ilv` is how many channels the residue interleaves into one vector, and is
+    0 when it does not interleave.  */
 static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
-                    i32 bkq, u32 dim, u32 bn, i32 clrun, int clmatch) {
+                    i32 bkq, u32 dim, u32 bn, i32 clrun, int clmatch, u32 ilv) {
   sz span = dg_span[rno];
   sz hb = ((sz) (tc_blk * 8 + pss) * tc_nchan + j) * span;
   i16 * hist  = span ? dg_hist[rno]  + hb : nullptr;
@@ -1054,6 +1062,15 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
   u8  * pn    = span ? dg_pn[rno] + (sz) j * span : nullptr;
   sz base = (sz) ((rno * 8 + pss) * tc_nchan + j);
   i32 * q1 = dg_q1 + base, * q2 = dg_q2 + base, * zr = dg_zr + base;
+  /*  How far away "the same place, one vector along" is.  In an interleaved
+      residue a vector holds one place of every channel, so stepping by the
+      book's dimension lands on the same channel only when the dimension is a
+      multiple of the channel count -- 00000007 codes a 3-dimensional book
+      over 2 channels, where every step by 3 crosses to the other channel and
+      the neighbourhood `ax` is built from is half someone else's.  The least
+      common multiple is the nearest step that stays put, and is the dimension
+      itself in the ordinary case.  */
+  u32 str = ilv && dim ? dim / tc_gcd(dim, ilv) * ilv : dim;
   vd_book * bk = su.bk + bn;
   const tc_ptab * pt = tcp_book[bn].ok ? &tcp_book[bn] : nullptr;
   u32 i;
@@ -1066,8 +1083,17 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
     tc_dv d;
     i32 t1 = ok ? hist[slot] : 0;
     i32 t2 = ok ? hist2[slot] : 0;
-    i32 n1 = ok && slot + dim < span ? hist[slot + dim] : 0;
-    i32 w1 = ok && slot >= dim ? hist[slot - dim] : 0;
+    i32 n1 = ok && slot + str < span ? hist[slot + str] : 0;
+    i32 w1 = ok && slot >= str ? hist[slot - str] : 0;
+    /*  The channel beside this one, at this very place, a packet ago.  It is
+        what the neighbour stride used to return by accident whenever a book
+        was one-dimensional, and losing it cost more than the wrong stride
+        did: `t1` already says what this channel held here, so a same-channel
+        neighbour repeats it, where the coupled channel does not.  In a
+        residue coded per channel there is nothing beside the slot and this
+        is zero.  */
+    i32 x1 = ok && ilv > 1
+           ? hist[slot - slot % ilv + (slot + ilv - 1) % ilv] : 0;
     i32 av = ok ? avg[slot] : 0;
     i32 p0 = ok ? pp[slot] : 0;
     i32 psum = ok ? ps[slot] : 0;
@@ -1080,15 +1106,19 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
     d.t1 = tc_qlog(t1);  d.t1s = tc_sq(t1);
     d.t2 = tc_qlog(t2);  d.n1 = tc_qlog(n1);  d.w1 = tc_qlog(w1);
     d.p0 = tc_qlog(p0);  d.p0s = tc_sq(p0);  d.pn = pnn;
+    d.x1 = tc_qlog(x1);  d.x1s = tc_sq(x1);
     /*  What the passes before this one have already put at this slot,
         signed.  Once three passes have hit a slot the last one alone is a
         poor summary of where the value stands; the refinement leans against
         the running total, not against the last correction.  */
     d.ps = tc_sq(psum);
-    /*  For a type-2 residue the vector interleaves the channels, so a slot's
-        channel is its position modulo their number -- which is what vpos
-        names only when the book's dimension happens to be even.  */
-    d.chn = (int) (tc_nchan ? (((sz) pc * psz + i) % tc_nchan) : 0);
+    /*  Which channel this digit belongs to.  An interleaved residue holds
+        them all in one vector, so it is the slot's position modulo the number
+        interleaved -- the number this submap interleaves, which is not always
+        the number the stream has; anything else is the channel the vector is,
+        which for a residue coded per channel is the whole answer and was
+        being read as slot parity.  */
+    d.chn = (int) (ilv ? ((sz) pc * psz + i) % ilv : j);
     d.crun = tc_qlog(clrun);  d.cm = clmatch;
     d.cls = (int) cls;  d.zrun = tc_qlog(*zr);  d.blk = (int) tc_blk;
     d.bkq = bkq;
@@ -1098,10 +1128,15 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
     d.pq = tcp_axis(fam_dig.pc);
     d.sq = 0;
     { /*  mp3c's exA: a weighted mean of the neighbourhood, log-quantised  */
-      i32 ex = (av >> 4) * TC_dig_avA + tc_abs(t1) * TC_dig_avT1
-             + tc_abs(t2) * TC_dig_avT2 + tc_abs(n1) * TC_dig_avN1
-             + tc_abs(w1) * TC_dig_avW1 + tc_abs(*q1) * TC_dig_avQ1
-             + tc_abs(*q2) * TC_dig_avQ2;
+      i64 ex = (i64) (av >> 4) * TC_dig_avA + (i64) tc_abs(t1) * TC_dig_avT1
+             + (i64) tc_abs(t2) * TC_dig_avT2 + (i64) tc_abs(n1) * TC_dig_avN1
+             + (i64) tc_abs(w1) * TC_dig_avW1 + (i64) tc_abs(*q1) * TC_dig_avQ1
+             + (i64) tc_abs(*q2) * TC_dig_avQ2 + (i64) tc_abs(x1) * TC_dig_avX1;
+      /*  In 64 bits, because the weights are a search space: `avg` reaches a
+          million, the digits are whatever the stream holds, and nine terms
+          times a scale of 1023 leaves an int only as much room as the tuned
+          values happen to use.  A context that wraps is noise for that slot,
+          and it would wrap where the optimizer looks.  */
       d.ax = tc_qlog((ex * TC_dig_avC) >> 12);
     }
     tc_make_dig(d, v);
@@ -1194,11 +1229,20 @@ static u8 cl_run_buf[1u << 20];           /*  the run and the match, per slot  *
 static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
   vd_res * r = su.rs + rno;
   vd_book * cb = su.bk + r->cbook;
-  u32 vch, end, np, pv, pss, pc, i, j, k, w, nc = 0;
+  u32 vch, end, np, pv, pss, pc, i, j, k, w, nc = 0, ilv;
+  /*  Which channel each coded vector belongs to.  A residue coded per channel
+      skips the channels whose floor was not used, so the v-th vector is the
+      v-th *non-zero* channel and not the v-th channel -- and every history
+      here is per channel, so keying them by the vector's position slides one
+      channel's past into another's the first time a channel falls silent.  An
+      interleaved residue is one vector over all of them, and is its own key.  */
+  u8 cidx[VD_MAXCH];
   for (i = 0; i < nch; i++) if (nz[i]) nc++;
   if (!nc) return;
-  if (r->type == 2) { vch = 1;  end = blr_min(r->end, n * nch); }
-  else { vch = nc;  end = blr_min(r->end, n); }
+  if (r->type == 2) { vch = 1;  ilv = nch;  cidx[0] = 0;
+                      end = blr_min(r->end, n * nch); }
+  else { vch = nc;  ilv = 0;  end = blr_min(r->end, n);
+         for (i = 0, k = 0; i < nch; i++) if (nz[i]) cidx[k++] = (u8) i; }
   if (end <= r->beg) return;
   np = (end - r->beg) / r->psz;
   if (!np) return;
@@ -1222,11 +1266,12 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
               vector's digits get the residue book's.  */
           fam_cls.pc.start(tcp_cls[rno].ok ? &tcp_cls[rno] : nullptr);
           for (k = 0; k < pv; k++) {
-            u8 * ch = cl_np[rno] ? cl_hist[rno] + ((sz) tc_blk * tc_nchan + j) * cl_np[rno]
+            u8 * ch = cl_np[rno] ? cl_hist[rno]
+                                   + ((sz) tc_blk * tc_nchan + cidx[j]) * cl_np[rno]
                                  : nullptr;
             i32 was = (ch && pc + k < cl_np[rno]) ? ch[pc + k] : -1;
             i32 run = cl_run[rno];
-            u32 c = tc_classify(rno, j, pc + k);
+            u32 c = tc_classify(rno, cidx[j], pc + k);
             tc_cl[j * w + pc + k] = (u8) c;
             if (j * w + pc + k < sizeof cl_run_buf) {
               cl_run_buf[j * w + pc + k] = (u8) (run > 255 ? 255 : run);
@@ -1249,10 +1294,10 @@ static void tc_residue(u32 rno, const u8 * nz, u32 nch, u32 n) {
               the same information in four buckets instead of sixteen, and it
               means the same thing in the next file.  */
           if (bn >= 0)
-            tc_part(rno, pss, j, pc, r->psz, c, tc_qlog(su.bk[bn].off),
+            tc_part(rno, pss, cidx[j], pc, r->psz, c, tc_qlog(su.bk[bn].off),
                     su.bk[bn].dim, (u32) bn,
                     j * w + pc < sizeof cl_run_buf ? cl_run_buf[j * w + pc] : 0,
-                    j * w + pc < sizeof cl_same ? cl_same[j * w + pc] : 0);
+                    j * w + pc < sizeof cl_same ? cl_same[j * w + pc] : 0, ilv);
         }
         pc++;
       }

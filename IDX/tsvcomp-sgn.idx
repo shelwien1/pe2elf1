@@ -39,6 +39,8 @@ Index a
  a_chn:  chn,   1!0000000
  a_crun: crun,  1!000000000
  a_cm:   cm,    1!0
+ a_x1: x1, 1!000
+ a_x1s: x1s, -6!0000000000000
 
 Index b
  b_pass: pass,  1!11
@@ -56,6 +58,8 @@ Index b
  b_chn:  chn,   1!0000000
  b_crun: crun,  1!000000000
  b_cm:   cm,    1!0
+ b_x1: x1, 1!000
+ b_x1s: x1s, -6!0000000000000
 
 Index c
  c_pass: pass,  1!01
@@ -71,6 +75,8 @@ Index c
  c_chn:  chn,   1!0000000
  c_crun: crun,  1!000000000
  c_cm:   cm,    1!0
+ c_x1: x1, 1!000
+ c_x1s: x1s, -6!0000000000000
 
 Index d
  d_pass: pass,  1!00
@@ -86,6 +92,8 @@ Index d
  d_chn: chn, 1!1010101
  d_crun: crun,  1!000000000
  d_cm:   cm,    1!0
+ d_x1: x1, 1!000
+ d_x1s: x1s, -6!0000000000000
 
 Index s
  s_pass: pass, 1!01
@@ -98,6 +106,8 @@ Index s
  s_chn: chn, 1!1010101
  s_crun: crun, 1!000001000
  s_cm:   cm,    1!0
+ s_x1: x1, 1!000
+ s_x1s: x1s, -6!0000000000000
 
 Index f
  f_pass: pass,  1!11
@@ -110,6 +120,8 @@ Index f
  f_chn:  chn,   1!0000000
  f_crun: crun, 1!000010000
  f_cm: cm, 1!1
+ f_x1: x1, 1!000
+ f_x1s: x1s, -6!0000000000000
 
 Index m
  m_pass: pass,  1!11
@@ -122,6 +134,8 @@ Index m
  m_chn: chn, 1!1010101
  m_crun: crun,  1!000000000
  m_cm:   cm,    1!0
+ m_x1: x1, 1!000
+ m_x1s: x1s, -6!0000000000000
 
 Index t
 #  No factors: fam_sgn only ever calls bit(), never code(), so it never reaches

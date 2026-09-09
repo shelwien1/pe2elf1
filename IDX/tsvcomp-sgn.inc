@@ -27,13 +27,15 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
       cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax, mg = D.mg,
-      pq = D.pq, sq = D.sq, ps = D.ps, chn = D.chn, crun = D.crun, cm = D.cm;
+      pq = D.pq, sq = D.sq, ps = D.ps, chn = D.chn, crun = D.crun, cm = D.cm,
+      x1 = D.x1, x1s = D.x1s;
   (void) rno;  (void) pass;  (void) band;  (void) col;  (void) vpos;
   (void) q1;   (void) q2;    (void) q1s;   (void) q2s;  (void) t1;
   (void) t1s;  (void) t2;    (void) n1;    (void) w1;   (void) p0;
   (void) p0s;  (void) pn;    (void) cls;   (void) zrun; (void) blk;
   (void) bkq;  (void) ax;    (void) mg;    (void) pq;   (void) sq;
   (void) ps;   (void) chn;   (void) crun;  (void) cm;
+  (void) x1;   (void) x1s;
   MakeIndex a,b,c,d,s,f,m,t,n,g
   X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;

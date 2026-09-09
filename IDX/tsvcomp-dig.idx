@@ -32,8 +32,11 @@ Const 0
 #          this digit is zero, from the entry weights of the prefix the
 #          vector's earlier places have already spelled (tc_prior.inc)
 #    ps    what the passes before this one put at the slot, signed
-#    chn   the slot's channel in a type-2 residue -- which vpos names only
-#          when the book's dimension happens to be even
+#    chn   the slot's channel: its place in the interleave for a type-2
+#          residue, and the channel the vector is for one coded per channel
+#    x1    the coupled channel at this very place, one packet ago -- an
+#          interleaved residue only; `t1` already carries this channel's own
+#          past, so what a neighbour is worth is what it does not repeat
 #    crun cm  how long the class has held, and whether it held from last packet
 #
 #  `cls` is the biggest single factor and the most surprising one: the class is
@@ -82,6 +85,8 @@ Index a
  a_chn: chn, 1!1010101
  a_crun: crun,  1!000000000
  a_cm:   cm,    1!0
+ a_x1: x1, 1!000
+ a_x1s: x1s, -6!0000000000000
 
 Index b
  b_rno:  rno,   1!0
@@ -111,6 +116,8 @@ Index b
  b_chn: chn, 1!1000000
  b_crun: crun,  1!000000000
  b_cm:   cm,    1!0
+ b_x1: x1, 1!000
+ b_x1s: x1s, -6!0000000000000
 
 Index c
  c_pass: pass, 1!10
@@ -130,6 +137,8 @@ Index c
  c_chn: chn, 1!1010101
  c_crun: crun,  1!000000000
  c_cm:   cm,    1!0
+ c_x1: x1, 1!000
+ c_x1s: x1s, -6!0000000000000
 
 Index d
  d_pass: pass, 1!00
@@ -149,6 +158,8 @@ Index d
  d_chn: chn, 1!1010101
  d_crun: crun,  1!000000000
  d_cm:   cm,    1!0
+ d_x1: x1, 1!000
+ d_x1s: x1s, -6!0000000000000
 
 Index s
  s_pass: pass, 1!10
@@ -173,6 +184,8 @@ Index s
  s_chn: chn, 1!1010101
  s_crun: crun,  1!000000000
  s_cm: cm, 1!1
+ s_x1: x1, 1!000
+ s_x1s: x1s, -6!0000000000000
 
 Index f
  f_pass: pass, 1!11
@@ -188,6 +201,8 @@ Index f
  f_chn: chn, 1!1010101
  f_crun: crun,  1!000000000
  f_cm:   cm,    1!0
+ f_x1: x1, 1!000
+ f_x1s: x1s, -6!0000000000000
 
 Index m
  m_pass: pass, 1!010
@@ -212,6 +227,8 @@ Index m
  m_chn: chn, 1!1010101
  m_crun: crun,  1!000000000
  m_cm:   cm,    1!0
+ m_x1: x1, 1!000
+ m_x1s: x1s, -6!0000000000000
 
 #  The mantissa of a digit that escaped the ladder: its own plane, on its own
 #  index and its own tables, as mp3c's Smant is a submodel of its own.
@@ -239,17 +256,25 @@ Index t
  t_chn: chn, 1!1010101
  t_crun: crun,  1!000000000
  t_cm:   cm,    1!0
+ t_x1: x1, 1!000
+ t_x1s: x1s, -6!0000000000000
 
-#  mp3c's exA: av (running mean) and the six neighbours, weighted, scaled by
+#  mp3c's exA: av (running mean) and the seven neighbours, weighted, scaled by
 #  avC/4096 and log-quantised into `ax`.  avD/256 is the running mean's decay.
+#  avN1 is wider than three bits because the sweep wanted 9: what it names is
+#  a same-channel neighbour now, and that is worth more than the half-crossed
+#  one it named before.
 Number avD,  1, 0!11101111
 Number avA,  1, 0!111
 Number avT1, 1, 0!010
 Number avT2, 1, 0!001
-Number avN1, 1, 0!101
+Number avN1, 1, 0!01001
 Number avW1, 1, 0!011
 Number avQ1, 1, 0!101
 Number avQ2, 1, 0!011
+#  The coupled channel at this place, a packet ago -- only an interleaved
+#  residue has one.  See tc_part.
+Number avX1, 1, 0!101
 Number avC, 1, 0!0110101111
 
 Number rA, 1, 0!11111111
@@ -296,6 +321,8 @@ Index n
  n_chn: chn, 1!1010101
  n_crun: crun,  1!000000000
  n_cm:   cm,    1!0
+ n_x1: x1, 1!000
+ n_x1s: x1s, -6!0000000000000
 
 Index g
 #  No factors: fam_dig is wired with G = nullptr and tsvcomp-dig.inc declares no
