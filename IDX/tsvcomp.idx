@@ -261,9 +261,19 @@ Number dig_rA, 1, 0!11111111
 Number dig_rB, 1, 0!11111110
 Number dig_rC, 1, 0!00010000
 Number dig_rD, 1, 0!11100011
-Number dig_rS, 1, 0!00111
+Number dig_rT, 1, 0!11111111
+Number dig_rG, 1, 0!11111111
+Number dig_rS1, 1, 0!00111
+Number dig_rS2, 1, 0!00111
 Number dig_lr, 1, 0!01011
-Number dig_mw, 1, 0!00000010
+Number dig_lrm, 1, 0!01011
+Number dig_mbm, 1, 0!01000100
+Number dig_mwA, 1, 0!00000010
+Number dig_mwB, 1, 0!00000010
+Number dig_mwC, 1, 0!00000010
+Number dig_mwD, 1, 0!00000010
+Number dig_mwT, 1, 0!00000010
+Number dig_mwG, 1, 0!00000010
 Number dig_bw, 1, 0!01011
 Number dig_qs, 1, 3!0011110
 Number dig_qf, 1, 3!0111110
@@ -388,9 +398,19 @@ Number sgn_rA, 1, 0!11111110
 Number sgn_rB, 1, 0!11111111
 Number sgn_rC, 1, 0!00001010
 Number sgn_rD, 1, 0!00001011
-Number sgn_rS, 1, 0!00111
+Number sgn_rT, 1, 0!11111110
+Number sgn_rG, 1, 0!11111110
+Number sgn_rS1, 1, 0!00111
+Number sgn_rS2, 1, 0!00111
 Number sgn_lr, 1, 0!10010
-Number sgn_mw, 1, 0!00000000
+Number sgn_lrm, 1, 0!10010
+Number sgn_mbm, 1, 0!00010000
+Number sgn_mwA, 1, 0!00000000
+Number sgn_mwB, 1, 0!00000000
+Number sgn_mwC, 1, 0!00000000
+Number sgn_mwD, 1, 0!00000000
+Number sgn_mwT, 1, 0!00000000
+Number sgn_mwG, 1, 0!00000000
 Number sgn_bw, 1, 0!01100
 Number sgn_qs, 1, 3!0101110
 Number sgn_qf, 1, 3!0111110
@@ -546,9 +566,19 @@ Index flr_t
 !Number flr_rB, 1, 0!01001011
 !Number flr_rC, 1, 0!00111111
 !Number flr_rD, 1, 0!00111111
-!Number flr_rS, 1, 0!00110
+!Number flr_rT, 1, 0!00001111
+!Number flr_rG, 1, 0!00001111
+!Number flr_rS1, 1, 0!00110
+!Number flr_rS2, 1, 0!00110
 !Number flr_lr, 1, 0!10110
-!Number flr_mw, 1, 0!00000000
+!Number flr_lrm, 1, 0!10110
+!Number flr_mbm, 1, 0!00000000
+!Number flr_mwA, 1, 0!00000000
+!Number flr_mwB, 1, 0!00000000
+!Number flr_mwC, 1, 0!00000000
+!Number flr_mwD, 1, 0!00000000
+!Number flr_mwT, 1, 0!00000000
+!Number flr_mwG, 1, 0!00000000
 !Number flr_bw, 1, 0!01100
 !Number flr_qs, 1, 3!0011110
 !Number flr_qf, 1, 3!0111110
@@ -630,9 +660,19 @@ Index cls_t
 !Number cls_rB, 1, 0!00101011
 !Number cls_rC, 1, 0!00111111
 !Number cls_rD, 1, 0!00111111
-!Number cls_rS, 1, 0!00101
+!Number cls_rT, 1, 0!01010000
+!Number cls_rG, 1, 0!01010000
+!Number cls_rS1, 1, 0!00101
+!Number cls_rS2, 1, 0!00101
 !Number cls_lr, 1, 0!11000
-!Number cls_mw, 1, 0!00000000
+!Number cls_lrm, 1, 0!11000
+!Number cls_mbm, 1, 0!00000000
+!Number cls_mwA, 1, 0!00000000
+!Number cls_mwB, 1, 0!00000000
+!Number cls_mwC, 1, 0!00000000
+!Number cls_mwD, 1, 0!00000000
+!Number cls_mwT, 1, 0!00000000
+!Number cls_mwG, 1, 0!00000000
 !Number cls_bw, 1, 0!01100
 !Number cls_qs, 1, 3!0011110
 !Number cls_qf, 1, 3!0111110
@@ -676,9 +716,19 @@ ADD 32: fld
 !Number aux_rB, 1, 0!00000000
 !Number aux_rC, 1, 0!00111111
 !Number aux_rD, 1, 0!00111111
-!Number aux_rS, 1, 0!00110
+!Number aux_rT, 1, 0!00010110
+!Number aux_rG, 1, 0!00010110
+!Number aux_rS1, 1, 0!00110
+!Number aux_rS2, 1, 0!00110
 !Number aux_lr, 1, 0!11111
-!Number aux_mw, 1, 0!00000000
+!Number aux_lrm, 1, 0!11111
+!Number aux_mbm, 1, 0!00000000
+!Number aux_mwA, 1, 0!00000000
+!Number aux_mwB, 1, 0!00000000
+!Number aux_mwC, 1, 0!00000000
+!Number aux_mwD, 1, 0!00000000
+!Number aux_mwT, 1, 0!00000000
+!Number aux_mwG, 1, 0!00000000
 !Number aux_bw, 1, 0!01100
 !Number aux_qs, 1, 3!0011110
 !Number aux_qf, 1, 3!0011110
@@ -725,10 +775,160 @@ ADD 64: tag
 !Number hdr_rB, 1, 0!00100000
 !Number hdr_rC, 1, 0!00111111
 !Number hdr_rD, 1, 0!00111111
-!Number hdr_rS, 1, 0!00001
+!Number hdr_rT, 1, 0!00010000
+!Number hdr_rG, 1, 0!00010000
+!Number hdr_rS1, 1, 0!00001
+!Number hdr_rS2, 1, 0!00001
 !Number hdr_lr, 1, 0!11111
-!Number hdr_mw, 1, 0!00000000
+!Number hdr_lrm, 1, 0!11111
+!Number hdr_mbm, 1, 0!00000000
+!Number hdr_mwA, 1, 0!00000000
+!Number hdr_mwB, 1, 0!00000000
+!Number hdr_mwC, 1, 0!00000000
+!Number hdr_mwD, 1, 0!00000000
+!Number hdr_mwT, 1, 0!00000000
+!Number hdr_mwG, 1, 0!00000000
 !Number hdr_bw, 1, 0!01100
 !Number hdr_qs, 1, 3!0011110
 !Number hdr_qf, 1, 3!0011110
 !Number hdr_mb, 1, 0!00000000
+
+#  ---------------------------------------------------------------------------
+#  The two components that had no context of their own.
+#
+#  `_n` is the mantissa mixer's.  It had been addressing counter T's index --
+#  the counter it weighs -- which is a reasonable guess and not an answer: what
+#  a weight set needs to know is how far to trust that counter against the
+#  codebook, and that is not the same question as what the counter's own rows
+#  should be.  It starts as a copy of `_t`, so nothing moves until it is moved.
+#
+#  `_g` is the sign counter's, for the families that code a sign through
+#  `codes` rather than through a model of their own.  That counter was
+#  addressed by the field or the tag alone, with nothing declared; it now has
+#  an index in front of that, at pattern zero, which is exactly the one context
+#  it had.  A residue digit's sign does not appear here -- it has been fam_sgn's
+#  since Rev E1 -- so dig and sgn carry the declaration and no counter.
+
+Index dig_n
+ dig_n_pass: pass,  1!111
+ dig_n_band: band,  1!000
+ dig_n_q1:   q1,    1!00000
+ dig_n_t1:   t1,    1!000
+ dig_n_bkq:  bkq,   1!000
+ dig_n_cls: cls, 1!010100101001010
+ dig_n_vpos: vpos,  1!0
+ dig_n_q1s:  q1s,  -6!0000000000000
+ dig_n_q2s:  q2s,  -6!0000000000000
+ dig_n_t1s:  t1s,  -6!0000000000000
+ dig_n_t2:   t2,   1!000
+ dig_n_n1:   n1,   1!000
+ dig_n_w1:   w1,   1!000
+ dig_n_p0:   p0,   1!100
+ dig_n_p0s:  p0s,  -6!0000000000000
+ dig_n_pn:   pn,   1!000
+ dig_n_ax:   ax,   1!000000000000
+ dig_n_pq:   pq,    1!00000000000000000000000000000000
+ dig_n_ps:   ps,   -6!0000000000000
+ dig_n_chn: chn, 1!1010101
+ dig_n_crun: crun,  1!000000000
+ dig_n_cm:   cm,    1!0
+
+Index dig_g
+ dig_g_pass: pass,  1!000
+ dig_g_band: band,  1!000
+ dig_g_q1:   q1,    1!00000
+ dig_g_t1:   t1,    1!000
+ dig_g_bkq:  bkq,   1!000
+ dig_g_cls: cls, 1!000000000000000
+ dig_g_vpos: vpos,  1!0
+ dig_g_q1s:  q1s,  -6!0000000000000
+ dig_g_q2s:  q2s,  -6!0000000000000
+ dig_g_t1s:  t1s,  -6!0000000000000
+ dig_g_t2:   t2,   1!000
+ dig_g_n1:   n1,   1!000
+ dig_g_w1:   w1,   1!000
+ dig_g_p0:   p0,   1!000
+ dig_g_p0s:  p0s,  -6!0000000000000
+ dig_g_pn:   pn,   1!000
+ dig_g_ax:   ax,   1!000000000000
+ dig_g_pq:   pq,    1!00000000000000000000000000000000
+ dig_g_ps:   ps,   -6!0000000000000
+ dig_g_chn: chn, 1!0000000
+ dig_g_crun: crun,  1!000000000
+ dig_g_cm:   cm,    1!0
+
+Index sgn_n
+ sgn_n_pass: pass,  1!00
+ sgn_n_pq:   pq,    1!00000000000000000000000000000000
+ sgn_n_sq:   sq,    1!00000000000000000000000000000000
+ sgn_n_ps:   ps,   -6!0000000000000
+ sgn_n_chn:  chn,   1!0000000
+ sgn_n_crun: crun,  1!000000000
+ sgn_n_cm:   cm,    1!0
+
+Index sgn_g
+ sgn_g_pass: pass,  1!00
+ sgn_g_pq:   pq,    1!00000000000000000000000000000000
+ sgn_g_sq:   sq,    1!00000000000000000000000000000000
+ sgn_g_ps:   ps,   -6!0000000000000
+ sgn_g_chn:  chn,   1!0000000
+ sgn_g_crun: crun,  1!000000000
+ sgn_g_cm:   cm,    1!0
+
+Index flr_n
+! flr_n_col:  col,   1!011111111111111111110111111000100000000000000000
+! flr_n_p1:   p1,    1!000
+! flr_n_fy:   fy,    1!000
+! flr_n_o1:   o1,    1!0000000
+! flr_n_prd:   prd,    1!0000000
+! flr_n_od:   od,   -4!000000000
+! flr_n_chn:  chn,   1!0
+! flr_n_room: room,  1!00000000
+! flr_n_hl:   hl,    1!00
+! flr_n_lov:  lov,   1!00000000
+! flr_n_hiv:  hiv,   1!00000000
+! flr_n_pri:  pri,   1!00000000000000000000000000000000
+! flr_n_ep:   ep,    1!00000000000
+
+Index flr_g
+! flr_g_col:  col,   1!000000000000000000000000000000000000000000000000
+! flr_g_p1:   p1,    1!000
+! flr_g_fy:   fy,    1!000
+! flr_g_o1:   o1,    1!0000000
+! flr_g_prd:   prd,    1!0000000
+! flr_g_od:   od,   -4!000000000
+! flr_g_chn:  chn,   1!0
+! flr_g_room: room,  1!00000000
+! flr_g_hl:   hl,    1!00
+! flr_g_lov:  lov,   1!00000000
+! flr_g_hiv:  hiv,   1!00000000
+! flr_g_pri:  pri,   1!00000000000000000000000000000000
+! flr_g_ep:   ep,    1!00000000000
+
+Index cls_n
+! cls_n_band: band,  1!101
+! cls_n_prev: prev,  1!001
+! cls_n_t1:   t1,    1!101
+! cls_n_tn:   tn,    1!000
+! cls_n_prev2: prev2, 1!000
+! cls_n_pq:   pq,    1!00000000000000000000000000000000
+
+Index cls_g
+! cls_g_band: band,  1!000
+! cls_g_prev: prev,  1!000
+! cls_g_t1:   t1,    1!000
+! cls_g_tn:   tn,    1!000
+! cls_g_prev2: prev2, 1!000
+! cls_g_pq:   pq,    1!00000000000000000000000000000000
+
+Index aux_n
+ADD 32: fld
+
+Index aux_g
+
+Index hdr_n
+ADD 64: tag
+! hdr_n_p1r:  p1r,   &01101111
+
+Index hdr_g
+! hdr_g_p1r:  p1r,   &00000000

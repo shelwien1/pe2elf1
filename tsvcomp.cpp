@@ -382,7 +382,7 @@ struct tc_dv {
 
 /*  One family's five index rows for one value: the two counters, the APM, the
     mixer and the mantissa plane each get their own.  */
-struct tcx { int a, b, c, d, s, f, m, t; };
+struct tcx { int a, b, c, d, s, f, m, t, n, g; };
 
 #include "MOD/tsvcomp_p.inc"
 
@@ -421,35 +421,50 @@ struct tc_fam {
   cm_mix<3> mxm;
   tc_pcur pc;                             /*  the prior for the value in hand  */
   int prp;                                /*  P(this bit is zero) from it, or -1  */
-  u32 ba, bb, bc, bd, bs, bf, bm, bt;
-  int rA, rB, rC, rD, rS, lr, mw, bw, mb;
+  u32 ba, bb, bc, bd, bs, bf, bm, bt, bn, bg;
+  /*  Ten predictors, ten sets of parameters.  What had been shared: the
+      mantissa counter and the sign counter both updated at counter A's rate,
+      the two APMs at one rate between them, the mantissa mixer at the main
+      mixer's rate and boost, and all six counters at one bound.  A parameter
+      two components share is a parameter neither of them owns -- the
+      optimizer moves it and two things move, so it settles where the louder
+      one wants it and the quieter one never gets an answer.  */
+  int rA, rB, rC, rD, rT, rG;             /*  one rate per counter  */
+  int mwA, mwB, mwC, mwD, mwT, mwG;       /*  one bound per counter  */
+  int rS1, rS2;                           /*  one rate per APM  */
+  int lr, mb, lrm, mbm;                   /*  one rate and boost per mixer  */
+  int bw;
+  int ng;                                 /*  the sign counter's field span  */
 
   void wire(cm_cnt * a, int va, cm_cnt * b, int vb, cm_cnt * c, int vc,
             cm_cnt * d, int vd, cm_cnt * t, int vt,
             i16 * s, u8 * sc, int vs, i16 * s2, u8 * sc2, int vf,
-            i32 * w, int vm, cm_cnt * g, int vg, i32 * wm,
+            i32 * w, int vm, cm_cnt * g, int vg, int vgi, i32 * wm, int vn,
             u8 * wc, u8 * wmc,
-            int ra, int rb, int rc_, int rd, int rs, int lrate,
-            int mwt, int bwt, int mbt, int qqs, int qqf) {
+            int ra, int rb, int rc_, int rd, int rt, int rg,
+            int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg,
+            int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2,
+            int bwt, int qqs, int qqf) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
     /*  The shipping build's tables come zeroed from the loader, so TC_WIPE
         expands to nothing there and the sizes go unread.  */
     (void) va;  (void) vb;  (void) vc;  (void) vd;  (void) vt;  (void) vg;
-    (void) sc;  (void) sc2;  (void) wc;  (void) wmc;
+    (void) sc;  (void) sc2;  (void) wc;  (void) wmc;  (void) vgi;
+    ng = vg;
     TC_WIPE(A, (sz) va * TC_NODE * sizeof(cm_cnt));
     TC_WIPE(B, (sz) vb * TC_NODE * sizeof(cm_cnt));
     TC_WIPE(C, (sz) vc * TC_NODE * sizeof(cm_cnt));
     TC_WIPE(D, (sz) vd * TC_NODE * sizeof(cm_cnt));
     TC_WIPE(T, (sz) vt * TC_MNODE * sizeof(cm_cnt));
-    if (G) TC_WIPE(G, (sz) vg * sizeof(cm_cnt));
+    if (G) TC_WIPE(G, (sz) vgi * vg * sizeof(cm_cnt));
     TC_WIPE(s, (sz) vs * TC_NODE * qqs * sizeof(i16));
     TC_WIPE(sc, (sz) vs * TC_NODE * qqs);
     TC_WIPE(s2, (sz) vf * TC_NODE * qqf * sizeof(i16));
     TC_WIPE(sc2, (sz) vf * TC_NODE * qqf);
     TC_WIPE(w, (sz) vm * TC_NODE * 7 * sizeof(i32));
     TC_WIPE(wc, (sz) vm * TC_NODE);
-    TC_WIPE(wm, (sz) vt * TC_MNODE * 3 * sizeof(i32));
-    TC_WIPE(wmc, (sz) vt * TC_MNODE);
+    TC_WIPE(wm, (sz) vn * TC_MNODE * 3 * sizeof(i32));
+    TC_WIPE(wmc, (sz) vn * TC_MNODE);
     /*  Each APM sizes its own curve.  The two do different jobs on different
         contexts -- one corrects a single counter and goes to the mixer, the
         other corrects what the mixer made of all of them -- so how many
@@ -457,7 +472,7 @@ struct tc_fam {
     ap.init(S, sc, (u32) vs * TC_NODE, qqs);
     ap2.init(S2, sc2, (u32) vf * TC_NODE, qqf);
     mx.init(W, wc, (u32) vm * TC_NODE);
-    mxm.init(wm, wmc, (u32) vt * TC_MNODE);
+    mxm.init(wm, wmc, (u32) vn * TC_MNODE);
     /*  A pattern is a search space and the optimizer visits its ends, so
         anything used as a size, a shift or a limit is clamped at the point of
         use -- IDX/IDX-FORMAT.md §5 says the same, and means it.  */
@@ -465,11 +480,21 @@ struct tc_fam {
     rB = tc_clamp(rb, 1, CM_TMAX);
     rC = tc_clamp(rc_, 1, CM_TMAX);
     rD = tc_clamp(rd, 1, CM_TMAX);
-    rS = tc_clamp(rs, 1, 15);
+    rT = tc_clamp(rt, 1, CM_TMAX);
+    rG = tc_clamp(rg, 1, CM_TMAX);
+    mwA = tc_clamp(mwa * 64, 0, CM_CONE / 4);
+    mwB = tc_clamp(mwb * 64, 0, CM_CONE / 4);
+    mwC = tc_clamp(mwc * 64, 0, CM_CONE / 4);
+    mwD = tc_clamp(mwd * 64, 0, CM_CONE / 4);
+    mwT = tc_clamp(mwtt * 64, 0, CM_CONE / 4);
+    mwG = tc_clamp(mwg * 64, 0, CM_CONE / 4);
+    rS1 = tc_clamp(rs1, 1, 15);
+    rS2 = tc_clamp(rs2, 1, 15);
     lr = tc_clamp(lrate, 1, 64);
-    mw = tc_clamp(mwt * 64, 0, CM_CONE / 4);
-    bw = tc_clamp(bwt, 0, 16);
     mb = tc_clamp(mbt, 0, 255);
+    lrm = tc_clamp(lrm2, 1, 64);
+    mbm = tc_clamp(mbm2, 0, 255);
+    bw = tc_clamp(bwt, 0, 16);
     pc.off();  prp = -1;
   }
 
@@ -482,6 +507,8 @@ struct tc_fam {
     bf = (u32) x.f * TC_NODE;
     bm = (u32) x.m * TC_NODE;
     bt = (u32) x.t * TC_MNODE;
+    bn = (u32) x.n * TC_MNODE;
+    bg = (u32) x.g;
   }
 
   /*  mp3c's six lines, widened: refine counter A through the APM, stretch
@@ -513,12 +540,12 @@ struct tc_fam {
       pf = (bw * pm + (16 - bw) * pf + 8) >> 4;
       b = tc_bit(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b); }
     mx.upd(b, lr, mb);
-    ap.upd(b, rS);
-    ap2.upd(b, rS);
-    a.upd(b, rA, mw);
-    c.upd(b, rB, mw);
-    e.upd(b, rC, mw);
-    f.upd(b, rD, mw);
+    ap.upd(b, rS1);
+    ap2.upd(b, rS2);
+    a.upd(b, rA, mwA);
+    c.upd(b, rB, mwB);
+    e.upd(b, rC, mwC);
+    f.upd(b, rD, mwD);
     return b;
   }
 
@@ -529,16 +556,16 @@ struct tc_fam {
     cm_cnt & t = T[bt + node];
     if (prp < 0) {                          /*  nothing to weigh it against  */
       b = tc_bit(t.P(), b);
-      t.upd(b, rA, mw);
+      t.upd(b, rT, mwT);
       return b;
     }
     mxm.add(cm_stretch(t.P()));
     mxm.add(cm_stretch(prp));
     mxm.add(256);
-    { int pm = mxm.mix(bt + (u32) node);
+    { int pm = mxm.mix(bn + (u32) node);
       b = tc_bit(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b); }
-    mxm.upd(b, lr, mb);
-    t.upd(b, rA, mw);
+    mxm.upd(b, lrm, mbm);
+    t.upd(b, rT, mwT);
     return b;
   }
 
@@ -592,9 +619,9 @@ struct tc_fam {
     int s;
     if (!m) return 0;
     if (G) {
-      cm_cnt & g = G[sc];
+      cm_cnt & g = G[bg * (u32) ng + sc];
       s = tc_bit(g.P(), tc_enc && x < 0);
-      g.upd(s, rA, mw);
+      g.upd(s, rG, mwG);
     } else { prp = tcp_sign(pc, m);  s = bit(TC_SIGN, tc_enc && x < 0);  prp = -1; }
     return s ? -m : m;
   }
@@ -1402,11 +1429,16 @@ static void tc_walk(const char * inpath, const char * outpath) {
            tcm.TC_##F##_T, TC_##F##_t_Volume,                                 \
            tcm.TC_##F##_S, tcm.TC_##F##_SC, TC_##F##_s_Volume,                \
            tcm.TC_##F##_F, tcm.TC_##F##_FC, TC_##F##_f_Volume,                \
-           tcm.TC_##F##_W, TC_##F##_m_Volume, (g), (ng),                      \
-           tcm.TC_##F##_WM, tcm.TC_##F##_WC, tcm.TC_##F##_WMC,               \
+           tcm.TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume,  \
+           tcm.TC_##F##_WM, TC_##F##_n_Volume,                                \
+           tcm.TC_##F##_WC, tcm.TC_##F##_WMC,                                 \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \
-           TC_##F##_rS, TC_##F##_lr, TC_##F##_mw, TC_##F##_bw,                \
-           TC_##F##_mb, TC_##F##_qs, TC_##F##_qf)
+           TC_##F##_rT, TC_##F##_rG,                                          \
+           TC_##F##_mwA, TC_##F##_mwB, TC_##F##_mwC, TC_##F##_mwD,            \
+           TC_##F##_mwT, TC_##F##_mwG,                                        \
+           TC_##F##_rS1, TC_##F##_rS2,                                        \
+           TC_##F##_lr, TC_##F##_mb, TC_##F##_lrm, TC_##F##_mbm,              \
+           TC_##F##_bw, TC_##F##_qs, TC_##F##_qf)
 
 static void tc_models(void) {
   cm_tables();

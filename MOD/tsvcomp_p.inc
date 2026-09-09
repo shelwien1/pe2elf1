@@ -15,7 +15,7 @@
     somewhere to go.  */
 
 void tc_make_dig( const tc_dv & D, tcx & X ) {
-  int dig_a, dig_b, dig_c, dig_d, dig_s, dig_f, dig_m, dig_t;
+  int dig_a, dig_b, dig_c, dig_d, dig_s, dig_f, dig_m, dig_t, dig_n, dig_g;
   int rno = D.rno, pass = D.pass, band = D.band, col = D.col, vpos = D.vpos,
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
@@ -109,11 +109,20 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   dig_t = dig_t*7 + ((cls>1+(1-1))+(cls>3+(1-1))+(cls>6+(1-1))+(cls>8+(1-1))+(cls>11+(1-1))+(cls>13+(1-1)));
   dig_t = dig_t*2 + ((p0>0+(1-1)));
   dig_t = dig_t*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
+
+  dig_n = 0;
+  dig_n = dig_n*4 + ((pass>0+(1-1))+(pass>1+(1-1))+(pass>2+(1-1)));
+  dig_n = dig_n*7 + ((cls>1+(1-1))+(cls>3+(1-1))+(cls>6+(1-1))+(cls>8+(1-1))+(cls>11+(1-1))+(cls>13+(1-1)));
+  dig_n = dig_n*2 + ((p0>0+(1-1)));
+  dig_n = dig_n*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
+
+  dig_g = 0;
   X.a = dig_a;  X.b = dig_b;  X.c = dig_c;  X.d = dig_d;  X.s = dig_s;  X.f = dig_f;  X.m = dig_m;  X.t = dig_t;
+  X.n = dig_n;  X.g = dig_g;
 }
 
 void tc_make_sgn( const tc_dv & D, tcx & X ) {
-  int sgn_a, sgn_b, sgn_c, sgn_d, sgn_s, sgn_f, sgn_m, sgn_t;
+  int sgn_a, sgn_b, sgn_c, sgn_d, sgn_s, sgn_f, sgn_m, sgn_t, sgn_n, sgn_g;
   int rno = D.rno, pass = D.pass, band = D.band, col = D.col, vpos = D.vpos,
       q1 = D.q1, q2 = D.q2, q1s = D.q1s, q2s = D.q2s, t1 = D.t1, t1s = D.t1s,
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
@@ -188,13 +197,18 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   sgn_m = sgn_m*5 + ((chn>0+(1-1))+(chn>2+(1-1))+(chn>4+(1-1))+(chn>6+(1-1)));
 
   sgn_t = 0;
+
+  sgn_n = 0;
+
+  sgn_g = 0;
   X.a = sgn_a;  X.b = sgn_b;  X.c = sgn_c;  X.d = sgn_d;  X.s = sgn_s;  X.f = sgn_f;  X.m = sgn_m;  X.t = sgn_t;
+  X.n = sgn_n;  X.g = sgn_g;
 }
 
 void tc_make_flr( int fno, int col, int p1, int fy, int raw, int blk,
                   int o1, int prd, int od, int chn,
                   int room, int hl, int lov, int hiv, int pri, int ep, tcx & X ) {
-  int flr_a, flr_b, flr_c, flr_d, flr_s, flr_f, flr_m, flr_t;
+  int flr_a, flr_b, flr_c, flr_d, flr_s, flr_f, flr_m, flr_t, flr_n, flr_g;
   (void) fno;  (void) col;  (void) p1;  (void) fy;  (void) raw;  (void) blk;
   (void) o1;   (void) prd;  (void) od;  (void) chn;
   (void) room; (void) hl;   (void) lov; (void) hiv; (void) pri;  (void) ep;
@@ -233,12 +247,18 @@ void tc_make_flr( int fno, int col, int p1, int fy, int raw, int blk,
 
   flr_t = 0;
   flr_t = flr_t*27 + TC_flr_t_col[__min(48,__max(0,col-(1-1)))];
+
+  flr_n = 0;
+  flr_n = flr_n*27 + TC_flr_n_col[__min(48,__max(0,col-(1-1)))];
+
+  flr_g = 0;
   X.a = flr_a;  X.b = flr_b;  X.c = flr_c;  X.d = flr_d;  X.s = flr_s;  X.f = flr_f;  X.m = flr_m;  X.t = flr_t;
+  X.n = flr_n;  X.g = flr_g;
 }
 
 void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev2,
                   int pq, tcx & X ) {
-  int cls_a, cls_b, cls_c, cls_d, cls_s, cls_f, cls_m, cls_t;
+  int cls_a, cls_b, cls_c, cls_d, cls_s, cls_f, cls_m, cls_t, cls_n, cls_g;
   (void) rno;  (void) band;  (void) prev;  (void) t1;  (void) blk;  (void) tn;  (void) prev2;
   (void) pq;
 
@@ -278,11 +298,19 @@ void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev
   cls_t = cls_t*3 + ((band>0+(1-1))+(band>2+(1-1)));
   cls_t = cls_t*2 + ((prev>2+(1-1)));
   cls_t = cls_t*3 + ((t1>0+(1-1))+(t1>2+(1-1)));
+
+  cls_n = 0;
+  cls_n = cls_n*3 + ((band>0+(1-1))+(band>2+(1-1)));
+  cls_n = cls_n*2 + ((prev>2+(1-1)));
+  cls_n = cls_n*3 + ((t1>0+(1-1))+(t1>2+(1-1)));
+
+  cls_g = 0;
   X.a = cls_a;  X.b = cls_b;  X.c = cls_c;  X.d = cls_d;  X.s = cls_s;  X.f = cls_f;  X.m = cls_m;  X.t = cls_t;
+  X.n = cls_n;  X.g = cls_g;
 }
 
 void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
-  int aux_a, aux_b, aux_c, aux_d, aux_s, aux_f, aux_m, aux_t;
+  int aux_a, aux_b, aux_c, aux_d, aux_s, aux_f, aux_m, aux_t, aux_n, aux_g;
   (void) fld;  (void) p1;  (void) p2;
 
   aux_a = 0;
@@ -310,11 +338,17 @@ void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
 
   aux_t = 0;
   aux_t = aux_t*(32) + (fld);
+
+  aux_n = 0;
+  aux_n = aux_n*(32) + (fld);
+
+  aux_g = 0;
   X.a = aux_a;  X.b = aux_b;  X.c = aux_c;  X.d = aux_d;  X.s = aux_s;  X.f = aux_f;  X.m = aux_m;  X.t = aux_t;
+  X.n = aux_n;  X.g = aux_g;
 }
 
 void tc_make_hdr( int tag, int p1, int p2, int pos, int p1r, tcx & X ) {
-  int hdr_a, hdr_b, hdr_c, hdr_d, hdr_s, hdr_f, hdr_m, hdr_t;
+  int hdr_a, hdr_b, hdr_c, hdr_d, hdr_s, hdr_f, hdr_m, hdr_t, hdr_n, hdr_g;
   (void) tag;  (void) p1;  (void) p2;  (void) pos;  (void) p1r;
 
   hdr_a = 0;
@@ -345,7 +379,14 @@ void tc_make_hdr( int tag, int p1, int p2, int pos, int p1r, tcx & X ) {
   hdr_t = 0;
   hdr_t = hdr_t*(64) + (tag);
   hdr_t = (hdr_t<<6) + (((((p1r)>>5)&3)<<4) + ((p1r)&15)); // 01101111
+
+  hdr_n = 0;
+  hdr_n = hdr_n*(64) + (tag);
+  hdr_n = (hdr_n<<6) + (((((p1r)>>5)&3)<<4) + ((p1r)&15)); // 01101111
+
+  hdr_g = 0;
   X.a = hdr_a;  X.b = hdr_b;  X.c = hdr_c;  X.d = hdr_d;  X.s = hdr_s;  X.f = hdr_f;  X.m = hdr_m;  X.t = hdr_t;
+  X.n = hdr_n;  X.g = hdr_g;
 }
 
 /*  The tables the indices address.  `_A` is the rich counter, `_B` the coarse
