@@ -40,7 +40,7 @@ Index a
  a_crun: crun,  1!000000000
  a_cm:   cm,    1!0
  a_x1: x1, 1!000
- a_x1s: x1s, -6!0000000000000
+ a_x1s: x1s, -6!0001111111000
 
 Index b
  b_pass: pass,  1!11
@@ -59,7 +59,7 @@ Index b
  b_crun: crun,  1!000000000
  b_cm:   cm,    1!0
  b_x1: x1, 1!000
- b_x1s: x1s, -6!0000000000000
+ b_x1s: x1s, -6!0000111110000
 
 Index c
  c_pass: pass,  1!01
@@ -135,7 +135,7 @@ Index m
  m_crun: crun,  1!000000000
  m_cm:   cm,    1!0
  m_x1: x1, 1!000
- m_x1s: x1s, -6!0000000000000
+ m_x1s: x1s, -6!1111111111111
 
 Index t
 #  No factors: fam_sgn only ever calls bit(), never code(), so it never reaches

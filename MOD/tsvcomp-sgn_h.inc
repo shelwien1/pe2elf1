@@ -9,6 +9,7 @@ static const byte TC_sgn_b_sq[32+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,
 static const byte TC_sgn_f_sq[32+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8 };
 
 
+static const byte TC_sgn_m_x1s[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
 
@@ -31,13 +32,13 @@ static const int TC_sgn_qf = (62+3) * (1);
 static const int TC_sgn_mb = (16+0) * (1);
 
 
-static const long long TC_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 6), 7), 1), 5), 1), 1), 2), 5), 9), 9), 1), 1), 1), 1), 1); // 510300
-static const long long TC_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 1), 8), 5), 1), 1), 4), 4), 5), 9), 1), 1), 1), 1), 1), 1); // 172800
+static const long long TC_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 6), 7), 1), 5), 1), 1), 2), 5), 9), 9), 1), 1), 1), 1), 8); // 4082400
+static const long long TC_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 1), 8), 5), 1), 1), 4), 4), 5), 9), 1), 1), 1), 1), 1), 6); // 1036800
 static const long long TC_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 3), 2), 1), 2), 1), 1), 1), 1), 1), 1), 1), 1), 1); // 24
 static const long long TC_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3), 2), 1), 2), 1), 1), 3), 4), 5), 1), 1), 1), 1); // 720
 static const long long TC_sgn_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 7), 3), 2), 9), 2), 1), 2), 2), 1), 1); // 18144
 static const long long TC_sgn_g_Volume = 1; // 1
-static const long long TC_sgn_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 1), 2), 3), 3), 1), 5), 1), 1), 1), 1); // 270
+static const long long TC_sgn_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 1), 2), 3), 3), 1), 5), 1), 1), 1), 14); // 3780
 static const long long TC_sgn_n_Volume = 1; // 1
 static const long long TC_sgn_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 4), 1), 5), 3), 4), 5), 2), 1), 1), 1); // 4800
 static const long long TC_sgn_t_Volume = 1; // 1

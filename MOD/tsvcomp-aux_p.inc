@@ -26,7 +26,7 @@ void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
   (void) fld;  (void) p1;  (void) p2;
 
   a = 0;
-  a = a*5 + ((fld>0+(1-1))+(fld>2+(1-1))+(fld>5+(1-1))+(fld>6+(1-1)));
+  a = a*6 + ((fld>0+(1-1))+(fld>1+(1-1))+(fld>4+(1-1))+(fld>5+(1-1))+(fld>6+(1-1)));
   a = a*6 + ((p1>0+(1-1))+(p1>8+(1-1))+(p1>12+(1-1))+(p1>13+(1-1))+(p1>14+(1-1)));
   a = a*3 + ((p2>0+(1-1))+(p2>6+(1-1)));
 
@@ -34,10 +34,10 @@ void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
   b = b*6 + ((fld>1+(1-1))+(fld>2+(1-1))+(fld>4+(1-1))+(fld>5+(1-1))+(fld>8+(1-1)));
 
   c = 0;
-  c = c*14 + TC_aux_c_fld[__min(13,__max(0,fld-(1-1)))];
+  c = c*12 + TC_aux_c_fld[__min(13,__max(0,fld-(1-1)))];
 
   d = 0;
-  d = d*14 + TC_aux_d_fld[__min(13,__max(0,fld-(1-1)))];
+  d = d*4 + ((fld>5+(1-1))+(fld>8+(1-1))+(fld>11+(1-1)));
 
   s = 0;
   s = s*14 + TC_aux_s_fld[__min(13,__max(0,fld-(1-1)))];
@@ -55,7 +55,7 @@ void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
   n = n*14 + TC_aux_n_fld[__min(13,__max(0,fld-(1-1)))];
 
   g = 0;
-  g = g*16 + TC_aux_g_p1[__min(15,__max(0,p1-(1-1)))];
+  g = g*4 + ((p1>5+(1-1))+(p1>12+(1-1))+(p1>13+(1-1)));
   X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }
