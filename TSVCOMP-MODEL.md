@@ -532,10 +532,10 @@ describes and the code does not quite build.
 may be worth a few hundred bytes on the stereo files.
 
 **I10. Decode speed on the digit path.**  Six dependent cache misses per
-digit (A, B, C, D, APM1 row, mixer row) with nothing to overlap them
-against, since the next digit's contexts depend on this one.  What can be
-done: keep a row's node 0..2 counters in one cache line (they are, at 4
-bytes each), prefetch the next partition's `B` row when the class is known (the class is
+digit (A, B, C, D, APM1 row, mixer row) with nothing to overlap them against,
+since the next digit's contexts depend on this one.  What can be done: keep a
+row's node 0..2 counters in one cache line (they are, at 4 bytes each),
+prefetch the next partition's `B` row when the class is known (the class is
 coded before the digits), and SIMD the 7-input dot product.  balrogg's
 SSE2/AVX2 kernels (sec.10) are the reference.
 
