@@ -1108,8 +1108,8 @@ static void tc_part(u32 rno, u32 pss, u32 j, u32 pc, u32 psz, u32 cls,
         neighbour repeats it, where the coupled channel does not.  In a
         residue coded per channel there is nothing beside the slot and this
         is zero.  */
-    i32 x1 = ok && ilv > 1
-           ? hist[slot - slot % ilv + (slot + ilv - 1) % ilv] : 0;
+    sz xs = ilv > 1 ? slot - slot % ilv + (slot + ilv - 1) % ilv : 0;
+    i32 x1 = ok && ilv > 1 && xs < span ? hist[xs] : 0;
     i32 av = ok ? avg[slot] : 0;
     i32 p0 = ok ? pp[slot] : 0;
     i32 psum = ok ? ps[slot] : 0;
