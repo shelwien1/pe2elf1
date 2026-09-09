@@ -62,36 +62,36 @@ struct TC_dig_T {
 #define USE_NEW 0
 
 
-  cm_cnt TC_dig_A[TC_dig_a_Volume * TC_NODE];
-  cm_cnt TC_dig_B[TC_dig_b_Volume * TC_NODE];
-  cm_cnt TC_dig_C[TC_dig_c_Volume * TC_NODE];
-  cm_cnt TC_dig_D[TC_dig_d_Volume * TC_NODE];
-  cm_cnt TC_dig_MT[TC_dig_t_Volume * TC_MNODE];
-  i16 TC_dig_S[TC_dig_s_Volume * TC_NODE * TC_dig_qs];
-  u8 TC_dig_SC[TC_dig_s_Volume * TC_NODE * TC_dig_qs];
-  i16 TC_dig_F[TC_dig_f_Volume * TC_NODE * TC_dig_qf];
-  u8 TC_dig_FC[TC_dig_f_Volume * TC_NODE * TC_dig_qf];
-  i32 TC_dig_W[TC_dig_m_Volume * TC_NODE * 7];
-  u8 TC_dig_WC[TC_dig_m_Volume * TC_NODE];
-  i32 TC_dig_WM[TC_dig_n_Volume * TC_MNODE * 3];
-  u8 TC_dig_WMC[TC_dig_n_Volume * TC_MNODE];
+  cm_cnt TC_dig_A[TC_dig_a_Volume * TC_dig_ND];
+  cm_cnt TC_dig_B[TC_dig_b_Volume * TC_dig_ND];
+  cm_cnt TC_dig_C[TC_dig_c_Volume * TC_dig_ND];
+  cm_cnt TC_dig_D[TC_dig_d_Volume * TC_dig_ND];
+  cm_cnt TC_dig_MT[TC_dig_t_Volume * TC_dig_MND];
+  i16 TC_dig_S[TC_dig_s_Volume * TC_dig_ND * TC_dig_qs];
+  u8 TC_dig_SC[TC_dig_s_Volume * TC_dig_ND * TC_dig_qs];
+  i16 TC_dig_F[TC_dig_f_Volume * TC_dig_ND * TC_dig_qf];
+  u8 TC_dig_FC[TC_dig_f_Volume * TC_dig_ND * TC_dig_qf];
+  i32 TC_dig_W[TC_dig_m_Volume * TC_dig_ND * 7];
+  u8 TC_dig_WC[TC_dig_m_Volume * TC_dig_ND];
+  i32 TC_dig_WM[TC_dig_n_Volume * TC_dig_MND * 3];
+  u8 TC_dig_WMC[TC_dig_n_Volume * TC_dig_MND];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
   static constexpr unsigned long long TC_dig_Size = 0
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_a_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_b_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_c_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_d_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_dig_s_Volume * TC_NODE * TC_dig_qs)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_s_Volume * TC_NODE * TC_dig_qs)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_dig_f_Volume * TC_NODE * TC_dig_qf)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_f_Volume * TC_NODE * TC_dig_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_m_Volume * TC_NODE * 7)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_m_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_n_Volume * TC_MNODE * 3)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_n_Volume * TC_MNODE);
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_a_Volume * TC_dig_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_b_Volume * TC_dig_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_c_Volume * TC_dig_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_d_Volume * TC_dig_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_dig_t_Volume * TC_dig_MND)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_dig_s_Volume * TC_dig_ND * TC_dig_qs)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_s_Volume * TC_dig_ND * TC_dig_qs)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_dig_f_Volume * TC_dig_ND * TC_dig_qf)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_f_Volume * TC_dig_ND * TC_dig_qf)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_m_Volume * TC_dig_ND * 7)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_m_Volume * TC_dig_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_n_Volume * TC_dig_MND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_n_Volume * TC_dig_MND);
   void TC_dig_Init( void ) {
   
   }

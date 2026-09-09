@@ -57,37 +57,37 @@ struct TC_aux_T {
 #define USE_NEW 0
 
 
-  cm_cnt TC_aux_A[TC_aux_a_Volume * TC_NODE];
-  cm_cnt TC_aux_B[TC_aux_b_Volume * TC_NODE];
-  cm_cnt TC_aux_C[TC_aux_c_Volume * TC_NODE];
-  cm_cnt TC_aux_D[TC_aux_d_Volume * TC_NODE];
-  cm_cnt TC_aux_MT[TC_aux_t_Volume * TC_MNODE];
-  i16 TC_aux_S[TC_aux_s_Volume * TC_NODE * TC_aux_qs];
-  u8 TC_aux_SC[TC_aux_s_Volume * TC_NODE * TC_aux_qs];
-  i16 TC_aux_F[TC_aux_f_Volume * TC_NODE * TC_aux_qf];
-  u8 TC_aux_FC[TC_aux_f_Volume * TC_NODE * TC_aux_qf];
-  i32 TC_aux_W[TC_aux_m_Volume * TC_NODE * 7];
-  u8 TC_aux_WC[TC_aux_m_Volume * TC_NODE];
-  i32 TC_aux_WM[TC_aux_n_Volume * TC_MNODE * 3];
-  u8 TC_aux_WMC[TC_aux_n_Volume * TC_MNODE];
+  cm_cnt TC_aux_A[TC_aux_a_Volume * TC_aux_ND];
+  cm_cnt TC_aux_B[TC_aux_b_Volume * TC_aux_ND];
+  cm_cnt TC_aux_C[TC_aux_c_Volume * TC_aux_ND];
+  cm_cnt TC_aux_D[TC_aux_d_Volume * TC_aux_ND];
+  cm_cnt TC_aux_MT[TC_aux_t_Volume * TC_aux_MND];
+  i16 TC_aux_S[TC_aux_s_Volume * TC_aux_ND * TC_aux_qs];
+  u8 TC_aux_SC[TC_aux_s_Volume * TC_aux_ND * TC_aux_qs];
+  i16 TC_aux_F[TC_aux_f_Volume * TC_aux_ND * TC_aux_qf];
+  u8 TC_aux_FC[TC_aux_f_Volume * TC_aux_ND * TC_aux_qf];
+  i32 TC_aux_W[TC_aux_m_Volume * TC_aux_ND * 7];
+  u8 TC_aux_WC[TC_aux_m_Volume * TC_aux_ND];
+  i32 TC_aux_WM[TC_aux_n_Volume * TC_aux_MND * 3];
+  u8 TC_aux_WMC[TC_aux_n_Volume * TC_aux_MND];
   cm_cnt TC_aux_G[TC_aux_g_Volume * TC_SGN_AUX];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
   static constexpr unsigned long long TC_aux_Size = 0
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_a_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_b_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_c_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_d_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_aux_s_Volume * TC_NODE * TC_aux_qs)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_s_Volume * TC_NODE * TC_aux_qs)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_aux_f_Volume * TC_NODE * TC_aux_qf)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_f_Volume * TC_NODE * TC_aux_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_aux_m_Volume * TC_NODE * 7)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_m_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_aux_n_Volume * TC_MNODE * 3)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_n_Volume * TC_MNODE)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_a_Volume * TC_aux_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_b_Volume * TC_aux_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_c_Volume * TC_aux_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_d_Volume * TC_aux_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_t_Volume * TC_aux_MND)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_aux_s_Volume * TC_aux_ND * TC_aux_qs)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_s_Volume * TC_aux_ND * TC_aux_qs)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_aux_f_Volume * TC_aux_ND * TC_aux_qf)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_f_Volume * TC_aux_ND * TC_aux_qf)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_aux_m_Volume * TC_aux_ND * 7)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_m_Volume * TC_aux_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_aux_n_Volume * TC_aux_MND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_aux_n_Volume * TC_aux_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_aux_g_Volume * TC_SGN_AUX);
   void TC_aux_Init( void ) {
   

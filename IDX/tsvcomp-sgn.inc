@@ -39,16 +39,16 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   X.n = n;  X.g = g;
 }
 
-Table( cm_cnt, %M%A, %M%a_Volume * TC_NODE );
-Table( cm_cnt, %M%B, %M%b_Volume * TC_NODE );
-Table( cm_cnt, %M%C, %M%c_Volume * TC_NODE );
-Table( cm_cnt, %M%D, %M%d_Volume * TC_NODE );
-Table( cm_cnt, %M%MT, %M%t_Volume * TC_MNODE );
-Table( i16,    %M%S, %M%s_Volume * TC_NODE * %M%qs );
-Table( u8,     %M%SC, %M%s_Volume * TC_NODE * %M%qs );
-Table( i16,    %M%F, %M%f_Volume * TC_NODE * %M%qf );
-Table( u8,     %M%FC, %M%f_Volume * TC_NODE * %M%qf );
-Table( i32,    %M%W, %M%m_Volume * TC_NODE * 7 );
-Table( u8,     %M%WC, %M%m_Volume * TC_NODE );
-Table( i32,    %M%WM, %M%n_Volume * TC_MNODE * 3 );
-Table( u8,     %M%WMC, %M%n_Volume * TC_MNODE );
+Table( cm_cnt, %M%A, %M%a_Volume * %M%ND );
+Table( cm_cnt, %M%B, %M%b_Volume * %M%ND );
+Table( cm_cnt, %M%C, %M%c_Volume * %M%ND );
+Table( cm_cnt, %M%D, %M%d_Volume * %M%ND );
+Table( cm_cnt, %M%MT, %M%t_Volume * %M%MND );
+Table( i16,    %M%S, %M%s_Volume * %M%ND * %M%qs );
+Table( u8,     %M%SC, %M%s_Volume * %M%ND * %M%qs );
+Table( i16,    %M%F, %M%f_Volume * %M%ND * %M%qf );
+Table( u8,     %M%FC, %M%f_Volume * %M%ND * %M%qf );
+Table( i32,    %M%W, %M%m_Volume * %M%ND * 7 );
+Table( u8,     %M%WC, %M%m_Volume * %M%ND );
+Table( i32,    %M%WM, %M%n_Volume * %M%MND * 3 );
+Table( u8,     %M%WMC, %M%n_Volume * %M%MND );

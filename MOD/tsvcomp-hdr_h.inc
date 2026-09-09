@@ -57,37 +57,37 @@ struct TC_hdr_T {
 #define USE_NEW 0
 
 
-  cm_cnt TC_hdr_A[TC_hdr_a_Volume * TC_NODE];
-  cm_cnt TC_hdr_B[TC_hdr_b_Volume * TC_NODE];
-  cm_cnt TC_hdr_C[TC_hdr_c_Volume * TC_NODE];
-  cm_cnt TC_hdr_D[TC_hdr_d_Volume * TC_NODE];
-  cm_cnt TC_hdr_MT[TC_hdr_t_Volume * TC_MNODE];
-  i16 TC_hdr_S[TC_hdr_s_Volume * TC_NODE * TC_hdr_qs];
-  u8 TC_hdr_SC[TC_hdr_s_Volume * TC_NODE * TC_hdr_qs];
-  i16 TC_hdr_F[TC_hdr_f_Volume * TC_NODE * TC_hdr_qf];
-  u8 TC_hdr_FC[TC_hdr_f_Volume * TC_NODE * TC_hdr_qf];
-  i32 TC_hdr_W[TC_hdr_m_Volume * TC_NODE * 7];
-  u8 TC_hdr_WC[TC_hdr_m_Volume * TC_NODE];
-  i32 TC_hdr_WM[TC_hdr_n_Volume * TC_MNODE * 3];
-  u8 TC_hdr_WMC[TC_hdr_n_Volume * TC_MNODE];
+  cm_cnt TC_hdr_A[TC_hdr_a_Volume * TC_hdr_ND];
+  cm_cnt TC_hdr_B[TC_hdr_b_Volume * TC_hdr_ND];
+  cm_cnt TC_hdr_C[TC_hdr_c_Volume * TC_hdr_ND];
+  cm_cnt TC_hdr_D[TC_hdr_d_Volume * TC_hdr_ND];
+  cm_cnt TC_hdr_MT[TC_hdr_t_Volume * TC_hdr_MND];
+  i16 TC_hdr_S[TC_hdr_s_Volume * TC_hdr_ND * TC_hdr_qs];
+  u8 TC_hdr_SC[TC_hdr_s_Volume * TC_hdr_ND * TC_hdr_qs];
+  i16 TC_hdr_F[TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf];
+  u8 TC_hdr_FC[TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf];
+  i32 TC_hdr_W[TC_hdr_m_Volume * TC_hdr_ND * 7];
+  u8 TC_hdr_WC[TC_hdr_m_Volume * TC_hdr_ND];
+  i32 TC_hdr_WM[TC_hdr_n_Volume * TC_hdr_MND * 3];
+  u8 TC_hdr_WMC[TC_hdr_n_Volume * TC_hdr_MND];
   cm_cnt TC_hdr_G[TC_hdr_g_Volume * TC_SGN_HDR];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
   static constexpr unsigned long long TC_hdr_Size = 0
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_a_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_b_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_c_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_d_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_hdr_s_Volume * TC_NODE * TC_hdr_qs)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_s_Volume * TC_NODE * TC_hdr_qs)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_hdr_f_Volume * TC_NODE * TC_hdr_qf)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_f_Volume * TC_NODE * TC_hdr_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_m_Volume * TC_NODE * 7)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_m_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_n_Volume * TC_MNODE * 3)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_n_Volume * TC_MNODE)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_a_Volume * TC_hdr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_b_Volume * TC_hdr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_c_Volume * TC_hdr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_d_Volume * TC_hdr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_t_Volume * TC_hdr_MND)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_hdr_s_Volume * TC_hdr_ND * TC_hdr_qs)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_s_Volume * TC_hdr_ND * TC_hdr_qs)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_m_Volume * TC_hdr_ND * 7)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_m_Volume * TC_hdr_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_n_Volume * TC_hdr_MND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_n_Volume * TC_hdr_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_hdr_g_Volume * TC_SGN_HDR);
   void TC_hdr_Init( void ) {
   

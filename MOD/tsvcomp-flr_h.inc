@@ -58,37 +58,37 @@ struct TC_flr_T {
 #define USE_NEW 0
 
 
-  cm_cnt TC_flr_A[TC_flr_a_Volume * TC_NODE];
-  cm_cnt TC_flr_B[TC_flr_b_Volume * TC_NODE];
-  cm_cnt TC_flr_C[TC_flr_c_Volume * TC_NODE];
-  cm_cnt TC_flr_D[TC_flr_d_Volume * TC_NODE];
-  cm_cnt TC_flr_MT[TC_flr_t_Volume * TC_MNODE];
-  i16 TC_flr_S[TC_flr_s_Volume * TC_NODE * TC_flr_qs];
-  u8 TC_flr_SC[TC_flr_s_Volume * TC_NODE * TC_flr_qs];
-  i16 TC_flr_F[TC_flr_f_Volume * TC_NODE * TC_flr_qf];
-  u8 TC_flr_FC[TC_flr_f_Volume * TC_NODE * TC_flr_qf];
-  i32 TC_flr_W[TC_flr_m_Volume * TC_NODE * 7];
-  u8 TC_flr_WC[TC_flr_m_Volume * TC_NODE];
-  i32 TC_flr_WM[TC_flr_n_Volume * TC_MNODE * 3];
-  u8 TC_flr_WMC[TC_flr_n_Volume * TC_MNODE];
+  cm_cnt TC_flr_A[TC_flr_a_Volume * TC_flr_ND];
+  cm_cnt TC_flr_B[TC_flr_b_Volume * TC_flr_ND];
+  cm_cnt TC_flr_C[TC_flr_c_Volume * TC_flr_ND];
+  cm_cnt TC_flr_D[TC_flr_d_Volume * TC_flr_ND];
+  cm_cnt TC_flr_MT[TC_flr_t_Volume * TC_flr_MND];
+  i16 TC_flr_S[TC_flr_s_Volume * TC_flr_ND * TC_flr_qs];
+  u8 TC_flr_SC[TC_flr_s_Volume * TC_flr_ND * TC_flr_qs];
+  i16 TC_flr_F[TC_flr_f_Volume * TC_flr_ND * TC_flr_qf];
+  u8 TC_flr_FC[TC_flr_f_Volume * TC_flr_ND * TC_flr_qf];
+  i32 TC_flr_W[TC_flr_m_Volume * TC_flr_ND * 7];
+  u8 TC_flr_WC[TC_flr_m_Volume * TC_flr_ND];
+  i32 TC_flr_WM[TC_flr_n_Volume * TC_flr_MND * 3];
+  u8 TC_flr_WMC[TC_flr_n_Volume * TC_flr_MND];
   cm_cnt TC_flr_G[TC_flr_g_Volume * TC_SGN_FLR];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
   static constexpr unsigned long long TC_flr_Size = 0
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_a_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_b_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_c_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_d_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_t_Volume * TC_MNODE)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_flr_s_Volume * TC_NODE * TC_flr_qs)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_s_Volume * TC_NODE * TC_flr_qs)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_flr_f_Volume * TC_NODE * TC_flr_qf)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_f_Volume * TC_NODE * TC_flr_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_m_Volume * TC_NODE * 7)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_m_Volume * TC_NODE)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_n_Volume * TC_MNODE * 3)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_n_Volume * TC_MNODE)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_a_Volume * TC_flr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_b_Volume * TC_flr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_c_Volume * TC_flr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_d_Volume * TC_flr_ND)
+                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_t_Volume * TC_flr_MND)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_flr_s_Volume * TC_flr_ND * TC_flr_qs)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_s_Volume * TC_flr_ND * TC_flr_qs)
+                              + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_flr_f_Volume * TC_flr_ND * TC_flr_qf)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_f_Volume * TC_flr_ND * TC_flr_qf)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_m_Volume * TC_flr_ND * 7)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_m_Volume * TC_flr_ND)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_n_Volume * TC_flr_MND * 3)
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_n_Volume * TC_flr_MND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_flr_g_Volume * TC_SGN_FLR);
   void TC_flr_Init( void ) {
   

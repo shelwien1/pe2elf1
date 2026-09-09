@@ -208,9 +208,17 @@ static rc_buf rcb;
     a rich context by a part of the cascade that carries the least and is
     reached the least: the head of a digit is asked 921,600 ways and its
     fourteenth mantissa bit does not need to be.  */
-constexpr int TC_NODE  = 30;              /*  0-2 ladder, 3-28 length, 29 sign  */
+/*  How many of these a family's tables actually hold is the family's own
+    number -- see TC_dig_ND and its five siblings below.  These two are the
+    most any family needs: the ladder and the unary length between them reach
+    node 28, and the mantissa plane 168.
+
+    There is no sign node.  Every family that codes a sign has a counter for
+    it -- `G`, on a context of its own -- so the 30th row these tables used to
+    carry was addressed by nothing, in every family, at 1/30th of the whole
+    model's address space.  `codes` refuses rather than reaching for it.  */
+constexpr int TC_NODE  = 29;              /*  0-2 ladder, 3-28 length  */
 constexpr int TC_MNODE = 169;             /*  13 lengths x 13 positions  */
-constexpr int TC_SIGN  = 29;
 constexpr int TC_NBMAX = 62;              /*  bit lengths the cascade admits  */
 
 static INLINE int tc_node_len(int k) { return 3 + (k < 25 ? k : 25); }
@@ -446,6 +454,28 @@ constexpr int TC_SGN_HDR = TC_MAXTAG;
 constexpr int TC_SGN_FLR = 1;
 constexpr int TC_SGN_CLS = 1;
 
+/*  How deep each family's tables are, per context.  A family pays for the
+    nodes it can reach and no more, and what it can reach is a property of
+    which entry point it uses:
+
+      dig, flr, cls, aux, hdr   code() or codes(): the ladder and the unary
+                                length, so nodes 0..28, and a mantissa plane
+      sgn                       bit(0) and nothing else -- a sign is one bit
+
+    fam_sgn was the expensive one.  Laid out like the rest it took 199.9 MB
+    for the 1/29th of it node 0 addresses, and, worse, put consecutive
+    contexts' counters 116 bytes apart, so the one counter a sign reads
+    arrived alone in its cache line.  It is asked once per non-zero digit.
+
+    The mantissa depth is the same story one step further: sgn never calls
+    bitm(), so its mantissa plane and mantissa mixer are one row each.  */
+constexpr int TC_dig_ND = TC_NODE,  TC_dig_MND = TC_MNODE;
+constexpr int TC_sgn_ND = 1,        TC_sgn_MND = 1;
+constexpr int TC_flr_ND = TC_NODE,  TC_flr_MND = TC_MNODE;
+constexpr int TC_cls_ND = TC_NODE,  TC_cls_MND = TC_MNODE;
+constexpr int TC_aux_ND = TC_NODE,  TC_aux_MND = TC_MNODE;
+constexpr int TC_hdr_ND = TC_NODE,  TC_hdr_MND = TC_MNODE;
+
 /*  One IDX module per family -- IDX-FORMAT.md sec.13.  Each declares its own
     mapping objects, its own Volumes and its own table struct, all under the
     prefix TC_<family>, so every generated name is the one it always was and an
@@ -536,6 +566,7 @@ struct tc_fam {
   int lr, mb, lrm, mbm;                   /*  one rate and boost per mixer  */
   int bw;
   int ng;                                 /*  the sign counter's field span  */
+  int nd, nm;                             /*  and how deep its tables are  */
 
   void wire(cm_cnt * a, sz va, cm_cnt * b, sz vb, cm_cnt * c, sz vc,
             cm_cnt * d, sz vd, cm_cnt * t, sz vt,
@@ -545,7 +576,7 @@ struct tc_fam {
             int ra, int rb, int rc_, int rd, int rt, int rg,
             int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg,
             int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2,
-            int bwt, int qqs, int qqf) {
+            int bwt, int qqs, int qqf, int ndp, int nmp) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
     /*  A mapped table is already zero, which is every counter's, APM's and
         mixer's unlearned state, so there is nothing to fill in either build.
@@ -561,25 +592,26 @@ struct tc_fam {
         and fails one of these would wrap into its own table and code against
         the wrong row, quietly, so each is checked where its width is known.  */
     ng = (int) vg;
-    tc_vfits("counter A", va, TC_NODE);
-    tc_vfits("counter B", vb, TC_NODE);
-    tc_vfits("counter C", vc, TC_NODE);
-    tc_vfits("counter D", vd, TC_NODE);
-    tc_vfits("counter T", vt, TC_MNODE);
+    nd = ndp;  nm = nmp;
+    tc_vfits("counter A", va, nd);
+    tc_vfits("counter B", vb, nd);
+    tc_vfits("counter C", vc, nd);
+    tc_vfits("counter D", vd, nd);
+    tc_vfits("counter T", vt, nm);
     if (G) tc_vfits("counter G", vg, vgi);
-    tc_ifits("APM 1", vs, (sz) TC_NODE * qqs);
-    tc_ifits("APM 2", vf, (sz) TC_NODE * qqf);
-    tc_ifits("mixer", vm, (sz) TC_NODE * 7);
-    tc_ifits("mantissa mixer", vn, (sz) TC_MNODE * 3);
+    tc_ifits("APM 1", vs, (sz) nd * qqs);
+    tc_ifits("APM 2", vf, (sz) nd * qqf);
+    tc_ifits("mixer", vm, (sz) nd * 7);
+    tc_ifits("mantissa mixer", vn, (sz) nm * 3);
     (void) sc;  (void) sc2;  (void) wc;  (void) wmc;
     /*  Each APM sizes its own curve.  The two do different jobs on different
         contexts -- one corrects a single counter and goes to the mixer, the
         other corrects what the mixer made of all of them -- so how many
         points that correction is worth is two questions, not one.  */
-    ap.init(S, sc, vs * TC_NODE, qqs);
-    ap2.init(S2, sc2, vf * TC_NODE, qqf);
-    mx.init(W, wc, vm * TC_NODE);
-    mxm.init(wm, wmc, vn * TC_MNODE);
+    ap.init(S, sc, vs * nd, qqs);
+    ap2.init(S2, sc2, vf * nd, qqf);
+    mx.init(W, wc, vm * nd);
+    mxm.init(wm, wmc, vn * nm);
     /*  A pattern is a search space and the optimizer visits its ends, so
         anything used as a size, a shift or a limit is clamped at the point of
         use -- IDX/IDX-FORMAT.md §5 says the same, and means it.  */
@@ -606,15 +638,15 @@ struct tc_fam {
   }
 
   INLINE void select(const tcx & x) {
-    ba = (sz) x.a * TC_NODE;
-    bb = (sz) x.b * TC_NODE;
-    bc = (sz) x.c * TC_NODE;
-    bd = (sz) x.d * TC_NODE;
-    bs = (u32) x.s * TC_NODE;
-    bf = (u32) x.f * TC_NODE;
-    bm = (u32) x.m * TC_NODE;
-    bt = (u32) x.t * TC_MNODE;
-    bn = (u32) x.n * TC_MNODE;
+    ba = (sz) x.a * nd;
+    bb = (sz) x.b * nd;
+    bc = (sz) x.c * nd;
+    bd = (sz) x.d * nd;
+    bs = (u32) x.s * nd;
+    bf = (u32) x.f * nd;
+    bm = (u32) x.m * nd;
+    bt = (u32) x.t * nm;
+    bn = (u32) x.n * nm;
     bg = (u32) x.g;
   }
 
@@ -729,7 +761,12 @@ struct tc_fam {
       cm_cnt & g = G[bg * (u32) ng + sc];
       s = tc_bit(g.P(), tc_enc && x < 0);
       g.upd(s, rG, mwG);
-    } else { prp = tcp_sign(pc, m);  s = bit(TC_SIGN, tc_enc && x < 0);  prp = -1; }
+    } else {
+      /*  Unreachable: every family that codes a sign is wired with one, and
+          the two that are not (dig, sgn) never call this.  The tables have no
+          row for a sign, so this refuses rather than addressing a magnitude's.  */
+      FATAL_CODE(BLR_EXIT_IO, "a family with no sign counter coded a sign");
+    }
     return s ? -m : m;
   }
 };
@@ -1623,7 +1660,8 @@ static void tc_walk(const char * inpath, const char * outpath) {
            (mwt), (mwg),                                                      \
            TC_##F##_rS1, TC_##F##_rS2,                                        \
            TC_##F##_lr, TC_##F##_mb, (lrmt), (mbmt),                          \
-           TC_##F##_bw, TC_##F##_qs, TC_##F##_qf)
+           TC_##F##_bw, TC_##F##_qs, TC_##F##_qf,                             \
+           TC_##F##_ND, TC_##F##_MND)
 
 #define TC_WIRE_ALL(f, F, g, ng)                                              \
   TC_WIRE(f, F, g, ng, TC_##F##_rT, TC_##F##_mwT, TC_##F##_rG, TC_##F##_mwG,  \
