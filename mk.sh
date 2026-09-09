@@ -21,6 +21,17 @@
 #        perl import.pl $f ../export.\!\!\! > t && mv t $f; done
 #      ./mk.sh check                            # then ship what it found
 #
+#  Widening a context is free to a search whose objective is the size of one
+#  file, which is how one arrives at a 38 GB model to save 3 kB.  Build the
+#  tuning binary with a price on memory instead of a threshold on it:
+#
+#      CXXFLAGS='-O2 -DTC_MEMCOST' ./mk.sh     # 10000 bytes per GB of tables
+#      CXXFLAGS='-O2 -DTC_MEMCOST=25000' ./mk.sh
+#
+#  The encoder then pads its output by that much, so opt.pl sees the memory in
+#  the number it is minimizing and takes a widening only when it pays for
+#  itself.  Off by default, including under `check`, so the two builds agree.
+#
 #  The shipping build is derived from the same source with one substitution --
 #  "Const 0" becomes "Const 1" in a copy -- so the two cannot drift apart, and
 #  `./mk.sh check` is the test that they have not: whatever the parameters are,

@@ -21,6 +21,16 @@
 # exe: which binary to patch (default ./tsvcomp).  Point it at a copy while
 # tuning; opt.pl rewrites the file it is given.
 #
+# Memory is invisible to this script -- it minimizes the size of a file and a
+# wider context only ever makes that smaller, so left alone it will widen
+# every threshold it can reach and arrive at a model no machine can hold.
+# Build the binary it patches with a price on memory and the two become one
+# number:
+#   CXXFLAGS='-O2 -DTC_MEMCOST' ./mk.sh      # 10000 bytes per GB of tables
+# The encoder pads its output by that much, so a widening that costs more
+# memory than it saves bytes now measures worse and this script rejects it on
+# its own.  Nothing is refused outright and there is no threshold to pick.
+#
 # Results are written continuously to export.!!! (mdesc lines) and progress to
 # opttimes.!!!.  Fold them back into the .idx source with:
 #   cd IDX && for f in tsvcomp-*.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done

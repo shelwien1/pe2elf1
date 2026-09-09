@@ -1433,6 +1433,45 @@ static void tc_page(tc_pg & p, u32 seq, int bos, int cont, tsv & out) {
     -- it has to be, since the shape of what follows is decided by records
     already read -- so the two modes differ only in where a value comes from
     and where it goes.  */
+/*  Optimization mode: what the model's memory costs, in bytes of output.
+
+    IDX/opt.pl's objective is the size of the file it produced and nothing
+    else, so every context it can widen is free to it and the widest set
+    always wins -- which is how a search arrives at a 38 GB model that codes
+    one file 3 kB smaller.  The alternative to a threshold is a price: build
+    with -DTC_MEMCOST and the encoder appends one byte of padding per
+    TC_MEMCOST-th of a gigabyte the tables occupy, so widening a context has
+    to pay for itself against the memory it takes and the search finds the
+    trade rather than the corner.  There is no threshold to tune and no set is
+    refused outright -- a set that is worth its memory still wins.
+
+    TC_MEMCOST is bytes charged per gigabyte; the default 10000 makes the
+    929 MB this ships with cost about 9 kB against a 11.4 MB corpus, which is
+    roughly the size of the win a doubling of the model has been worth.  Halve
+    it to make memory cheap, raise it to make it dear.
+
+    What is charged is TC_Size, the address space the tables occupy, because
+    that is what the .idx decides and what is known before a byte is coded.
+    Resident memory is a property of the file as much as of the model -- the
+    38 GB set above touches 304 MB -- so it is not something a parameter
+    search can be given as an objective.
+
+    This is a tuning build only: the padding is written, never read back, so a
+    stream still decodes, but it is not a stream anyone should ship.  ./mk.sh
+    and ./mk.sh check leave it off, so the two builds still agree.  */
+#ifdef TC_MEMCOST
+  /*  `-DTC_MEMCOST` is `-DTC_MEMCOST=1` to the compiler, and one byte per
+      gigabyte rounds to nothing for any model worth charging for -- so the
+      bare form means the default rather than silently costing zero.  */
+  #if TC_MEMCOST + 0 <= 1
+    #undef TC_MEMCOST
+    #define TC_MEMCOST 10000
+  #endif
+#endif
+
+/*  Defined below, with the cap it belongs beside; the encoder needs it here.  */
+static INLINE u64 tc_tables(void);
+
 static void tc_walk(const char * inpath, const char * outpath) {
   tsv in, out;
   FILE * bf;
@@ -1533,6 +1572,16 @@ static void tc_walk(const char * inpath, const char * outpath) {
   if (tc_enc) {
     rc.FinishEncode();
     rcb.flush();
+#ifdef TC_MEMCOST
+    /*  The model's rent, paid where the optimizer is looking.  */
+    { u64 n = tc_tables() / ((u64) 1 << 30) * TC_MEMCOST
+            + tc_tables() % ((u64) 1 << 30) * TC_MEMCOST / ((u64) 1 << 30);
+      u64 i;
+      for (i = 0; i < n; i++) fputc(0xFF, bf);
+      if (tc_verbose)
+        fprintf(stderr, "%s: %" PRIu64 " MB of tables, %" PRIu64 " bytes of rent\n",
+                blr_prog, tc_tables() >> 20, n); }
+#endif
     { int bad = ferror(bf);
       if (fclose(bf)) bad = 1;
       if (bad) FATAL_CODE(BLR_EXIT_IO, "write error on %s", outpath); }
