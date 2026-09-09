@@ -28,7 +28,7 @@ static u16 cm_mrec[CM_AMAX + 2];          /*  65536 / (n + 1), for the mixer  */
 
 static i16 cm_st[CM_PONE];                /*  stretch: p -> log-odds  */
 static u16 cm_sq[2 * CM_STMAX + 1];       /*  squash: log-odds -> p  */
-constexpr int CM_QMAX = 66;               /*  points an APM's curve may have  */
+constexpr int CM_QMAX = 130;              /*  points an APM's curve may have  */
 
 static void cm_tables(void) {
   int i;

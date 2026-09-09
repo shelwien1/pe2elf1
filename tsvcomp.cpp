@@ -430,7 +430,7 @@ struct tc_fam {
             i32 * w, int vm, cm_cnt * g, int vg, i32 * wm,
             u8 * wc, u8 * wmc,
             int ra, int rb, int rc_, int rd, int rs, int lrate,
-            int mwt, int bwt, int mbt, int qq) {
+            int mwt, int bwt, int mbt, int qqs, int qqf) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
     /*  The shipping build's tables come zeroed from the loader, so TC_WIPE
         expands to nothing there and the sizes go unread.  */
@@ -442,16 +442,20 @@ struct tc_fam {
     TC_WIPE(D, (sz) vd * TC_NODE * sizeof(cm_cnt));
     TC_WIPE(T, (sz) vt * TC_MNODE * sizeof(cm_cnt));
     if (G) TC_WIPE(G, (sz) vg * sizeof(cm_cnt));
-    TC_WIPE(s, (sz) vs * TC_NODE * qq * sizeof(i16));
-    TC_WIPE(sc, (sz) vs * TC_NODE * qq);
-    TC_WIPE(s2, (sz) vf * TC_NODE * qq * sizeof(i16));
-    TC_WIPE(sc2, (sz) vf * TC_NODE * qq);
+    TC_WIPE(s, (sz) vs * TC_NODE * qqs * sizeof(i16));
+    TC_WIPE(sc, (sz) vs * TC_NODE * qqs);
+    TC_WIPE(s2, (sz) vf * TC_NODE * qqf * sizeof(i16));
+    TC_WIPE(sc2, (sz) vf * TC_NODE * qqf);
     TC_WIPE(w, (sz) vm * TC_NODE * 7 * sizeof(i32));
     TC_WIPE(wc, (sz) vm * TC_NODE);
     TC_WIPE(wm, (sz) vt * TC_MNODE * 3 * sizeof(i32));
     TC_WIPE(wmc, (sz) vt * TC_MNODE);
-    ap.init(S, sc, (u32) vs * TC_NODE, qq);
-    ap2.init(S2, sc2, (u32) vf * TC_NODE, qq);
+    /*  Each APM sizes its own curve.  The two do different jobs on different
+        contexts -- one corrects a single counter and goes to the mixer, the
+        other corrects what the mixer made of all of them -- so how many
+        points that correction is worth is two questions, not one.  */
+    ap.init(S, sc, (u32) vs * TC_NODE, qqs);
+    ap2.init(S2, sc2, (u32) vf * TC_NODE, qqf);
     mx.init(W, wc, (u32) vm * TC_NODE);
     mxm.init(wm, wmc, (u32) vt * TC_MNODE);
     /*  A pattern is a search space and the optimizer visits its ends, so
@@ -1402,7 +1406,7 @@ static void tc_walk(const char * inpath, const char * outpath) {
            tcm.TC_##F##_WM, tcm.TC_##F##_WC, tcm.TC_##F##_WMC,               \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \
            TC_##F##_rS, TC_##F##_lr, TC_##F##_mw, TC_##F##_bw,                \
-           TC_##F##_mb, TC_##F##_q)
+           TC_##F##_mb, TC_##F##_qs, TC_##F##_qf)
 
 static void tc_models(void) {
   cm_tables();
