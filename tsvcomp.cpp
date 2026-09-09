@@ -918,10 +918,12 @@ static int tc_tagid(const char * tag) {
     char * dst = tc_tagbuf + (sz) tc_ntag * (TSV_TAGMAX + 1);
     /*  TC_MAXTAG is what tc_tag, tc_tlast and the sign table hold, so a
         reader that wants more than that is refused here rather than found
-        later.  The model's tag axis is narrower -- six bits -- but it is a
-        mask now rather than a bare multiply, so a tag past it aliases onto
-        another tag's context, deterministically on both sides, instead of
-        indexing off the end of the table the way `ADD 64: tag` did.  */
+        later.  The model's tag axis is 64 wide, and it is a threshold list
+        now rather than a bare multiply, so a tag past it saturates into the
+        last bucket -- with every other overflow tag, and away from tag 0's
+        statistics -- instead of indexing off the end of the table the way
+        `ADD 64: tag` did.  The corpus reaches 57 tags, so that was seven
+        short of happening.  */
     FATAL_UNLESS(tc_ntag < TC_MAXTAG, "the reader asks for more than %d tags",
                  TC_MAXTAG);
     snprintf(dst, TSV_TAGMAX + 1, "%s", tag);

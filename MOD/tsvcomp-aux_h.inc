@@ -1,14 +1,23 @@
 
+static const byte TC_aux_a_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_b_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_c_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_d_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_f_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 static const byte TC_aux_g_p1[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
+static const byte TC_aux_m_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_n_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_s_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_t_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
 static const int TC_aux_rA = (22+0) * (1);
@@ -34,16 +43,16 @@ static const int TC_aux_qf = (30+3) * (1);
 static const int TC_aux_mb = (0+0) * (1);
 
 
-static const long long TC_aux_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<5)), 6), 3); // 576
-static const long long TC_aux_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<5)), 1), 1); // 32
-static const long long TC_aux_c_Volume = tc_vmul(1, (1<<5)); // 32
-static const long long TC_aux_d_Volume = tc_vmul(1, (1<<5)); // 32
-static const long long TC_aux_f_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long TC_aux_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 3); // 252
+static const long long TC_aux_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 1), 1); // 14
+static const long long TC_aux_c_Volume = tc_vmul(1, 14); // 14
+static const long long TC_aux_d_Volume = tc_vmul(1, 14); // 14
+static const long long TC_aux_f_Volume = tc_vmul(1, 14); // 14
 static const long long TC_aux_g_Volume = tc_vmul(tc_vmul(1, 16), 1); // 16
-static const long long TC_aux_m_Volume = tc_vmul(1, (1<<5)); // 32
-static const long long TC_aux_n_Volume = tc_vmul(1, (1<<5)); // 32
-static const long long TC_aux_s_Volume = tc_vmul(1, (1<<5)); // 32
-static const long long TC_aux_t_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long TC_aux_m_Volume = tc_vmul(1, 14); // 14
+static const long long TC_aux_n_Volume = tc_vmul(1, 14); // 14
+static const long long TC_aux_s_Volume = tc_vmul(1, 14); // 14
+static const long long TC_aux_t_Volume = tc_vmul(1, 14); // 14
 
 struct TC_aux_T { 
 #undef USE_NEW

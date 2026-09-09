@@ -141,9 +141,22 @@ to be surprised by:
   allowed 128 tags.
 
 A dense axis of width 2^k is exactly a mask of k ones — `ADD 32: fld` and
-`fld: fld, &11111` build the identical index — so unless the multiplier is not
-a power of two, prefer the mask. It costs nothing, it clamps, and it hands the
-optimizer the choice of how many of those bits are worth paying for.
+`fld: fld, &11111` build the identical index — so an `ADD` is never the only
+way to write one. But for a small dense integer the threshold form is the
+better replacement, and by some distance:
+
+| | groupings reachable | out of range | buckets for 13 ids |
+|---|---|---|---|
+| `&11111` | 32, and only strided — dropping bit *k* merges values differing in bit *k* | wraps: id 32 aliases onto id 0 | 32 |
+| `1!` ×13 | 2^12 — a boundary between any two adjacent ids, so any run can be merged and any id isolated | saturates into the last bucket | 14 |
+
+The mask's one advantage is those strided merges, which a threshold list cannot
+express — and over an alphabet whose numbering is arbitrary, as an id's is,
+there is no reason to want them. Everything else favours thresholds: finer,
+smaller, and it cannot index off the end. `tsvcomp` measured it — a single
+greedy pass over the threshold form found merges worth 6 bytes on the smallest
+file in its corpus, and every one of them merged *specific adjacent* field ids,
+which is exactly what a mask has no way to say.
 
 ---
 
