@@ -1,8 +1,8 @@
 # The tsvcomp model: design, bugs and room to improve
 
-This describes the model as it stands at the tree that produced the
-`tsvcompG` column of `log.txt`: 11,372,019 bytes over the 17-file corpus,
-1.57% under balrogg 1.3, decoding at 1.1x to 1.9x the Rev F time.  It is the
+This describes the model as it stands: 11,363,861 bytes over the 17-file
+corpus in 337 MB of declared tables.  Where it started, and what section 7
+is a list of, was 11,372,019 bytes in 928 MB.  It is the
 companion to two other documents: `BALROGG-MODEL.md` says what balrogg's
 model does that this one does not, and what each of those was measured to be
 worth here; `IDX/IDX-FORMAT.md` is the specification of the `.idx` files the
@@ -12,6 +12,11 @@ read the code.
 Functions are named rather than line-numbered; everything is in
 `tsvcomp.cpp` unless a file is given.  Sizes are what the shipping build
 maps; "resident" means what the kernel actually faults in for a file.
+
+Sections 7 and 8 are the working list.  Each entry says what was done and
+what it measured, including the ones that measured worse and were reverted --
+those are the more useful half, since the next person to have the same idea
+should know it has been had.
 
 ---
 
@@ -48,16 +53,23 @@ family has its own context declarations (`IDX/tsvcomp-<fam>.idx`), its own
 tables and its own rates.  What differs between them is only which variables
 the contexts are built from and which parts of the cascade they use.
 
-| family | codes | entry | sign | prior | tables (MiB) |
-|---|---|---|---|---|---|
-| dig | residue digit magnitude | `code` | none here | residue book | 714.4 |
-| sgn | residue digit sign | `bit(0)` only | is the sign | residue book, via `sq` | 199.9 |
-| flr | floor posts | `codes` | one saturating counter | subclass book | 1.8 |
-| cls | residue classes | `code` | not used | classbook | 0.2 |
-| aux | page and packet fields | `code` / `codes` | 16 x 13 counters | none | 0.1 |
-| hdr | header records | `codes` | 128 counters, by tag | none | 12.4 |
+| family | codes | entry | sign | prior | depth | tables (MiB) |
+|---|---|---|---|---|---|---|
+| dig | residue digit magnitude | `code` | none here | residue book | 29 | 299.4 |
+| sgn | residue digit sign | `bit(0)` only | is the sign | residue book, via `sq` | 1 | 23.7 |
+| flr | floor posts | `codes` | one saturating counter | subclass book | 29 | 1.7 |
+| cls | residue classes | `code` | not used | classbook | 29 | 0.2 |
+| aux | page and packet fields | `code` / `codes` | 16 x 13 counters | none | 29 | 0.1 |
+| hdr | header records | `codes` | 128 counters, by tag | none | 29 | 12.4 |
 
-Total 928.8 MiB of address space, of which the corpus touches about 57 MB.
+Total 337.5 MiB of address space, of which the corpus touches a small
+fraction: the tables are mapped, not allocated, and only the rows a stream
+reaches are ever faulted in.
+
+The depth column is how many rows deep a family's tables are per context, and
+it is where the cascade's position is carried (section 3).  fam_sgn's 1 is
+why it is the cheapest rich model here and can afford context the digit model
+cannot.
 
 ---
 
@@ -92,11 +104,11 @@ target away from 0 and 1 (`mw x 64` out of 65536) so a context that has seen
 one outcome does not claim certainty.  The first update at 1/3 rather than
 1/2 amounts to a fixed prior of one pseudo-count per side.
 
-Four counters per decision, on four indices: `A` (dig: 921,600 rows) and
-`B` (2.4 M rows) are two different groupings of the same variables, `C`
-and `D` are small (5,400 and 52,920).  In `aux` and `hdr` counter B's rate
-is 0, clamped to 1, so B there is a "what happened last time" flag updating
-at a fixed 1/3.
+Four counters per decision, on four indices: `A` (dig: 184,320 rows) and
+`B` (1,213,056) are two different groupings of the same variables, `C` and
+`D` are small (1,080 and 169,344).  In `aux` and `hdr` counter B's rate is 0,
+clamped to 1, so B there is a "what happened last time" flag updating at a
+fixed 1/3.
 
 ### APMs (`cm_apm`)
 
@@ -112,8 +124,8 @@ whatever the interpolation weight was.
 
 APM1 corrects counter A before the mixer; APM2 corrects the mixer's output.
 Their widths are parameters: `qs`/`qf` are 33/65 for dig, 49/65 for sgn,
-33/33 for aux and 5/5 for hdr, and they are why APM1 is 195.8 MiB in dig,
-second only to counter B.
+33/33 for aux and 5/5 for hdr.  Per-file widths were measured and are not
+worth a mechanism (section 8, I4).
 
 ### The mixer (`cm_mix<7>`)
 
@@ -124,15 +136,21 @@ the mean 1/7, one row of seven per mixer context.  Update is `w += x * err *
 lr >> 16` with `err` the 12-bit error against the mixer's own output (not
 the final `pf`).  `mb` is a boost for young rows: the rate is multiplied by
 `1 + mb / (n + 1)` with `n` the row's u8 visit count, so a fresh row learns
-fast and decays to `lr`.  dig has `lr 11, mb 68`; the others `lr 18..31`
-with `mb 16` (sgn) or 0.  The mantissa has its own three-input mixer
-(`mxm`: counter T, prior, bias) with its own `lrm`/`mbm`.
+fast and decays to `lr`.  The product is taken in 64 bits, because at the
+rates the boost can reach it does not fit in 32 (section 7, B7).  dig has
+`lr 11, mb 68`; the others `lr 18..31` with `mb 16` (sgn) or 0.  The
+mantissa has its own three-input mixer (`mxm`: counter T, prior, bias) with
+its own `lrm`/`mbm`.
 
 ### The blend
 
 `bw` is how much of the final answer is the mixer against APM2, out of 16:
-11 for dig, 12 elsewhere.  It is a linear blend in probability space with
-one constant per family, not learned and not per context.
+11 for dig, 5 for aux, 12 elsewhere.  It is a linear blend in probability
+space with one constant per family, not learned and not per context, and two
+ways of learning it were tried and are worse (section 8, I1).  What makes it
+hard to beat is that an unlearned APM row returns very nearly its own input,
+so the blend already degrades to "all mixer" exactly where the APM has
+nothing to say.
 
 ### Current parameters
 
@@ -144,7 +162,7 @@ one constant per family, not learned and not per context.
 | rS1 rS2 | 7 7 | 7 7 | 6 6 | 5 5 | 6 6 | 1 1 |
 | lr mb | 11 68 | 18 16 | 22 0 | 24 0 | 31 0 | 31 0 |
 | lrm mbm | 32 68 | - | 22 0 | 24 0 | 31 0 | 31 0 |
-| bw | 11 | 12 | 12 | 12 | 12 | 12 |
+| bw | 11 | 12 | 12 | 12 | 5 | 12 |
 | qs qf | 33 65 | 49 65 | 33 65 | 33 65 | 33 33 | 5 5 |
 
 An APM rate of `r` means a point's count stops at `2^r - 2`; 8 and above
@@ -167,10 +185,12 @@ then the nb - 1 bits of u below its leading one, most significant first,
 each under mantissa node 13 * min(nb, 12) + min(p, 12)   (169 nodes)
 ```
 
-Every table is `TC_NODE = 30` rows deep per context (or `TC_MNODE = 169` for
-the mantissa plane), so where a decision sits in the cascade is context
-without being a declared variable.  Node 29 is `TC_SIGN`, the sign coded
-through the full pipeline; no family reaches it any more (section 7, B6).
+A family's tables are `TC_<fam>_ND` rows deep per context (and `TC_<fam>_MND`
+for the mantissa plane), so where a decision sits in the cascade is context
+without being a declared variable.  The most any family needs is 29 and 169;
+fam_sgn needs one of each and declares that.  There is no sign node: every
+family that codes a sign has a counter for it, and `codes` refuses rather
+than reaching for a row that does not exist.
 
 Small values, which is nearly all of them, cost one to three decisions.  A
 value of 3 costs four (three ladder steps and `nb == 1`) and no mantissa.
@@ -243,14 +263,15 @@ same, signed):
 | band, col, vpos | partition index (log), position in the partition (log), position in the vector |
 | q1, q2 (q1s, q2s) | the two digits before this one in the same (rno, pass, channel) stream, persisting across packets |
 | t1, t2 (t1s) | the same slot the last two times this (block size, pass, channel) was coded |
-| n1, w1 | the slot one vector later and one vector earlier, last time |
+| n1, w1 | the slot one vector later and one vector earlier, last time, stepping by a whole number of channels so it stays on this one |
 | p0 (p0s), pn, ps | the earlier pass's digit at this slot this packet, how many passes hit it, their signed sum |
 | cls, bkq | the partition's class, and the class's codebook half-range (log) |
 | zrun | zeros in a row in this stream |
 | blk | short or long block |
-| ax | `tc_qlog` of a weighted mean of `avg` (a 4.12 running mean of the slot's magnitude, decay `avD/256`) and the six neighbours, weights `avA..avQ2`, scale `avC/4096` |
+| ax | `tc_qlog` of a weighted mean of `avg` (a 4.12 running mean of the slot's magnitude, decay `avD/256`) and the seven neighbours, weights `avA..avX1`, scale `avC/4096`, summed in 64 bits |
 | pq | the prior's P(zero), 32 buckets |
-| chn | `slot mod su.ch` (meant to be the channel of an interleaved type-2 slot) |
+| chn | the slot's channel: its place in the interleave where the residue has one, else the channel the vector is |
+| x1 (x1s) | the coupled channel at this very place, one packet ago -- an interleaved residue only |
 | crun, cm | how long the class has held, and whether it is what this partition had last packet |
 | mg, sq | (sgn only) the magnitude just coded, the prior's sign probability |
 
@@ -259,13 +280,13 @@ What the seven dig indices actually use (buckets per factor, from
 
 | index | rows | factors |
 |---|---|---|
-| A | 921,600 | pass 8, band 16, col 5, bkq 2, cls 6, blk 2, p0s 2, ax 2, pq 3, chn 5 |
-| B | 2,426,112 | pass 3, band 13, col 3, q1 4, bkq 3, cls 2, zrun 3, blk 2, p0 4, pn 2, pq 9, chn 2 |
-| C | 5,400 | pass 2, band 3, ax 5, q1s 2, p0s 2, pq 3, ps 3, chn 5 |
-| D | 52,920 | vpos 2, ax 7, q1s 9, p0s 7, pq 3, ps 4, chn 5 |
-| APM1 | 69,120 | pass 2, band 2, t1 3, bkq 3, t1s 2, p0 3, p0s 2, ax 8, ps 2, chn 5, cm 2 |
-| APM2 | 12,960 | pass 3, cls 9, q1s 4, ax 6, band 4, chn 5 |
-| mixer | 67,200 | pass 2, bkq 2, cls 10, vpos 8, p0 2, pn 3, pq 7, chn 5 |
+| A | 184,320 | pass 8, band 16, col 5, bkq 2, cls 6, blk 2, p0s 2, ax 2, pq 3 |
+| B | 1,213,056 | pass 3, band 13, col 3, q1 4, bkq 3, cls 2, zrun 3, blk 2, p0 4, pn 2, pq 9 |
+| C | 1,080 | pass 2, band 3, ax 5, q1s 2, p0s 2, pq 3, ps 3 |
+| D | 169,344 | vpos 2, ax 7, q1s 9, p0s 7, pq 3, ps 4, chn 2, x1s 8 |
+| APM1 | 27,648 | pass 2, band 2, t1 3, bkq 3, t1s 2, p0 3, p0s 2, ax 8, ps 2, chn 2, cm 2 |
+| APM2 | 5,184 | pass 3, cls 9, q1s 4, ax 6, band 4, chn 2 |
+| mixer | 26,880 | pass 2, bkq 2, cls 10, vpos 8, p0 2, pn 3, pq 7, chn 2 |
 | mantissa | 280 | pass 4, cls 7, p0 2, chn 5 |
 
 Note what is absent from A and B: `t1`, the same slot a packet ago, is only
@@ -273,6 +294,12 @@ in APM1, and the neighbourhood is only present as `ax`.  The optimizer moved
 the temporal context out of the direct counters and into the APM and the
 `ax` summary; the comment block in the .idx records why `cls` beats `band`
 and why `zrun` looked worthless on the file it was first tuned on.
+
+`chn` is at two buckets or none because it was priced: five buckets in every
+index, of which a stereo stream reaches two, cost 456 MB and were buying 1459
+bytes over four files, where `x1s` buys 3161 for 17 MB.  Sized for a
+multichannel stream it would want six, and this is the file that decides
+that.
 
 Histories are per residue: `dg_hist`/`dg_hist2` (last two values of a slot,
 keyed by block size, pass and coded-vector index), `dg_avg` (the running
@@ -283,12 +310,20 @@ codable.
 
 ### sgn
 
-Same `tc_dv`, plus `mg` and `sq`.  A (510,300 rows): pass 3, cls 6, p0s 7,
-mg 5, band 2, pq 5, sq 9, ps 9.  B (172,800): pass 3, vpos 2, p0s 8, q1s 5,
-q2s 4, band 4, pq 5, sq 9.  What predicts a sign is the earlier pass's sign
-at the slot (`p0s`), the signed sum of passes (`ps`), the prior (`sq`) and,
-for interleaved stereo, the digit before (`q1s`), which is the other
-channel's digit at the same position.
+Same `tc_dv`, plus `mg` and `sq`.  A (4,082,400 rows): pass 3, cls 6, p0s 7,
+mg 5, band 2, pq 5, sq 9, ps 9, x1s 8.  B (1,036,800): pass 3, vpos 2, p0s 8,
+q1s 5, q2s 4, band 4, pq 5, sq 9, x1s 6.  The mixer (3,780) carries x1s at
+its full 14.  What predicts a sign is the earlier pass's sign at the slot
+(`p0s`), the signed sum of passes (`ps`), the prior (`sq`), the digit before
+(`q1s`) -- which for interleaved stereo is the other channel at the same
+position, this packet -- and `x1s`, which is that same channel a packet ago.
+A coupled pair is a magnitude and an angle, and what the angle did here last
+time is most of what there is to know about what it does now: `x1s` is worth
+3161 bytes over four files, nearly all of it on 00000009.
+
+Four million rows sounds ruinous and is 15.6 MB, because fam_sgn's tables are
+one row deep.  That is the whole argument for per-family depth: the same
+context in the digit model would be 29 times the size and does not pay.
 
 ### flr
 
@@ -338,8 +373,8 @@ Each family's `.idx` declares its factors; `IDX/idx2inc.pl` turns them into
 product of the factor sizes via saturating `tc_vmul`) and `_p.inc` (the
 index builder).  The tables of a family are one struct mapped with
 `MAP_NORESERVE` (`tc_map`), so what is declared is address space and what
-is paid is the pages a stream touches: 929 MiB declared, about 57 MB
-resident on any corpus file, and a 38.9 GB tuned set once ran in 304 MB.
+is paid is the pages a stream touches: 337 MiB declared and a small part of
+that resident on any corpus file -- a 38.9 GB tuned set once ran in 304 MB.
 `TC_MEMCAP` (64 GB) bounds the declaration; `tc_vfits`/`tc_ifits` check
 each component's index against the width it can actually address, so an
 oversized .idx is refused rather than wrapped.
@@ -353,7 +388,10 @@ residency and that an oversized one is refused.
 Widening a context is free to an optimizer whose objective is file size, so
 `-DTC_MEMCOST` (tuning builds only) appends `TC_MEMCOST` bytes of 0xFF per
 GiB of declared tables: memory has a price, 10 kB per GB by default, and a
-widening has to pay for itself.
+widening has to pay for itself.  It is not decoration.  The same greedy
+search over the same axes reached 3,592,483 bytes on four files in 4345 MB
+with the price off, and 3,592,689 in 337 MB with it on: 206 bytes for four
+gigabytes.
 
 Thresholds (`1!pattern`) map a variable's range onto buckets and saturate;
 masks (`&pattern`) select bits; a pattern of all zeros is one bucket and
@@ -364,204 +402,211 @@ why a large file has to be in the objective.
 
 ---
 
-## 7. Bugs
+## 7. Bugs, and what fixing them was worth
 
-None of these breaks decoding: encoder and decoder compute the same wrong
-thing.  They are modelling defects, wasted memory, or arithmetic that is
-only safe by margin.  Ordered by how much they are likely to matter.
+None of these broke decoding: encoder and decoder computed the same wrong
+thing.  They were modelling defects, wasted memory, or arithmetic that was
+only safe by margin.  All are fixed; each says what it measured, because
+"correct" and "smaller" turned out to be different questions more than once.
 
-**B1. `chn` is not the channel for type-0/1 residues, nor for more than one
-submap.**  `tc_part` sets `d.chn = (pc * psz + i) % su.ch` for every
-residue.  For a type-2 residue with a single submap that is the slot's
-channel.  For type 0 and 1 the channel is `j` and `chn` is slot parity,
-which A, C, D, APM1, APM2, the mixer and the mantissa all split on.  For a
-type-2 residue in a stream with several submaps the modulus should be the
-submap's channel count, not the stream's.  Fix: pass the residue type and
-`nch` into `tc_part`; `chn = type == 2 ? slot % nch : j`.
+**B1. `chn` was not the channel** for a residue coded per channel, nor for a
+stream whose submap interleaves fewer channels than it has.  `tc_part` took
+the slot's position modulo the number of channels the stream has, which is
+the channel only for an interleave over all of them; for a type-0 or type-1
+residue the channel is the vector's own and what the model saw was slot
+parity, in seven of its eight indices.  Fixed: the place in the interleave
+where there is one, the vector's channel where there is not.  The corpus
+cannot show it -- its mono files have one channel and its stereo files
+interleave both -- so this is correctness for content not to hand.
 
-**B2. Digit and class histories are keyed by coded-vector index, not by
-channel.**  For type 0/1 residues `tc_residue` iterates `j` over the
-non-zero channels only, so `j` is "the j-th channel that was coded", and
-`dg_hist`, `dg_pp/ps/pn`, `dg_q1/q2/zr` and `cl_hist` are all indexed by it.
-When a channel falls silent for a packet the other channel's history slides
-into its slot.  Rare in coupled stereo (the coupling step forces both
-channels non-zero together) but wrong in general.  Fix: map `j` to the true
-channel through the `nz` array before keying.
+**B2. Per-channel histories were keyed by the vector's position** among those
+coded, not by the channel.  A residue coded per channel skips the channels
+whose floor was not used, so the first time a channel falls silent the next
+one's past slides into its slot.  Fixed by keying on the channel.  Again
+invisible here, for the same reason.
 
-**B3. `n1` and `w1` stride by `dim`, which crosses channels on interleaved
-residues.**  `hist[slot +- dim]` is "the same place one vector along" only
-when the vector belongs to one channel; on a type-2 residue whose `dim` is
-not a multiple of the channel count it is a different channel's slot.  The
-comment on `vpos` admits the same.  Every `n1`/`w1` pattern is at zero, so
-today it is only what `ax` folds in (`avN1 5, avW1 3`).  Fix: stride by
-`dim * nch` for type 2, or by the channel-aligned distance.
+**B3. `n1` and `w1` stepped one book dimension** along, which stays in the
+same channel only when the dimension is a multiple of the interleave.
+00000009 codes one-dimensional books over two channels, where every step
+crossed.  Fixed to step by the least common multiple -- and that cost 21
+bytes, because what the bug had been returning was the coupled channel, and
+`t1` already says what this channel held.  A neighbour is worth what it does
+not repeat.  So the coupled channel became a variable of its own, `x1`, and
+between the two the corpus fell 1115 bytes.  This one is the argument for
+measuring a fix rather than trusting it.
 
-**B4. sgn's tables are 30 rows deep for one row used.**  sgn only ever
-calls `bit(0)`, but its A..D, APM and mixer tables are laid out `TC_NODE`
-deep per context like every family's.  Of its 199.9 MiB, 29/30 is never
-addressed; worse, the row a context does use is 120 bytes from the next, so
-sgn's counters sit one per cache line instead of sixteen, and sgn is asked
-once per non-zero digit.  The same applies to its two APM tables (each
-context's `qs`/`qf` points are 30x apart).  Fix: a per-family depth (1 for
-sgn) in the Table lines and in `select`.  Decode speed is the expected win,
-compression unchanged.
+**B4. fam_sgn's tables were 29 rows deep for the one row it uses.**  It calls
+`bit(0)` and nothing else, so 28 rows in 29 were addressed by nothing, and
+the row a context did use sat 116 bytes from the next -- one counter per
+cache line, on the model asked once per non-zero digit.  Each family now
+declares its own depth.  Byte-identical output, 928 MB down to 711.  The
+memory it freed is what let the sign model afford `x1s` later, which is where
+the real 3161 bytes came from: the fix that pays is rarely the one that pays
+directly.
 
-**B5. `chn` allocates five buckets where two are reachable.**  Every dig
-index and most sgn ones carry `chn` at `1!1010101` (5 buckets) although
-`chn` is 0 or 1 on every stereo file and 0 on mono.  The unreachable
-buckets cost no resident memory, but they multiply every `_Size` by 2.5 and
-so the rent `TC_MEMCOST` charges, and they inflate `tc_ifits` headroom for
-nothing.  dig A would be 368,640 rows rather than 921,600 with identical
-output.  Fix: a pattern of `1!1` (or a clamp in `tc_part`).
+**B5. `chn` allocated five buckets where two are reachable.**  Priced against
+what they buy, even the two lose in five of eight indices.  See section 5.
+337 MB, and 588 bytes smaller than not doing it.
 
-**B6. Dead code and dead knobs.**  `TC_SIGN` (node 29) is unreachable:
-every family that codes signs has a `G` counter, so the `else` branch in
-`codes` never runs and the 30th row of every table in every family is
-address space for nothing.  `cls` never calls `codes`, so its `G` table,
-`rG`, `mwG` and `Index g` are dead; its `Number rG` and `mwG` are tunable
-knobs that move nothing.  APM rates 8..15 are one setting.  sgn's `MT`/`WM`
-tables (mantissa) exist and are never read.
+**B6. A sign node no family reached.**  `TC_SIGN` was the row a family without
+a sign counter would have coded a sign at, and there is no such family.  Gone
+with B4; `codes` refuses rather than reaching for it.  fam_cls declared a
+sign counter of its own and codes a class through `code`, which never reaches
+a sign, so that counter was never read and the rate and bound the .idx
+offered for it were two knobs the optimizer could spend moves on and never
+move anything.  Both gone, byte for byte.
 
-**B7. The mixer's gradient step can overflow 32 bits.**  `cm_mix::upd`
-computes `err = (target - pr) * lr'` and then `x[i] * err` in `int`.  With
-dig's `lr 11, mb 68`, a fresh row has `lr' = 11 * 69 = 759`, `|err|` up to
-3.1 million, and any input past `|x| = 690` (a counter at about 94%)
-multiplies past 2^31 when the row is wrong by the full range.  At pattern
-extremes (`lr 64, mb 255`) any `|x| > 32` overflows.  `-fwrapv` makes the
-wrap deterministic, so streams still decode, but the step lands with a
-wrong sign and magnitude.  Measured: computing the product in `i64` changes
-the corpus by +5 bytes (07, 08 and 0A one byte smaller, 09 eight bytes
-larger), so at the shipped rates the case is essentially never reached; it
-is a hazard for the search, which does visit the extremes, and for any
-retune that raises `mb`.  Fix: `(i32) (((i64) x[i] * err) >> 16)`, and
-clamp the weights while there.
+**B7. The mixer's gradient step could overflow 32 bits.**  `err` is already
+scaled by the learning rate and the young-row boost, so at the top of their
+ranges any input past a counter at 94% takes the product past 2^31 -- the
+fresh, confident, wrong row the boost exists for.  `-fwrapv` kept it
+deterministic, so streams decoded and the step merely landed with the wrong
+sign.  Taken in 64 bits now, which moves the corpus by 5 bytes: the case is
+essentially unreachable at the shipped rates, and reachable exactly where the
+search goes.
 
-**B8. `ax` is computed in `int` from unbounded inputs.**  `ex` sums `avg >>
-4` and six neighbours times weights, then `ex * avC` is shifted.  `avg`
-tops out near 10^6 and the history values are i16, so at current weights
-the product stays under 4.5 x 10^8; but `q1`/`q2` are the raw `i32` digits,
-unclamped, and at pattern extremes (`avC 1023`, all weights 7) the product
-passes 2^31 on legal Vorbis values.  `-fwrapv` again keeps it deterministic;
-the context is then noise for that slot.  Fix: compute in `i64`, clamp the
-inputs to what `avg` already clamps to (4095).
+**B8. `ax` was summed in `int`** from inputs with no bound -- nine terms of
+raw digits times a scale the optimizer may take to 1023.  In 64 bits now.
 
-**B9. The granule field's two context axes are the same axis.**  `tc_page`
-codes `F_GRAN` through `tc_auxc(F_GRAN, tc_qlog(tc_last[F_GRAN]), ..)`, and
-`tc_auxc` itself supplies `tc_qlog(tc_last[fld])` as the other axis, so
-`p1 == p2` for that field.  The intended context was presumably the
-difference two back, as `tc_aux` supplies for the fields that go through
-it.
+**B9. The granule field had one context axis twice.**  `tc_auxc` already
+supplies the field's last value as the second axis, and `tc_page` passed the
+same value as the first.  It gets the one before it now, as every other field
+does.
 
-**B10. Floor's "channel before" context can be stale.**  `o1`/`od` read the
-previous channel's `fl_hist` row for this block size, which that channel
-updated this packet only if its floor was used; when it was not, the row is
-from some earlier packet.  `fl_hist` is also shared between floor
-configurations that different modes may map onto the same channel and
-block size, so `hp[p]` can be a post from another floor's layout.  Both are
-small on the corpus.
+**B10. The floor's backward contexts read rows that were not theirs.**  Every
+floor context reaching back a packet is keyed by block size and channel, and
+neither key says which floor wrote it: a channel whose floor was not used
+still holds what it held when it last was, and two modes of one block size
+may map a channel onto different floors, whose posts are at different
+frequencies.  Each row now records the floor that wrote it and a foreign
+history reads as absent.  Two bytes either way on this corpus, where every
+packet uses every channel and keeps its floor.
 
-**B11. `cl_last` carries across channels and packets.**  The class model's
-strongest axis, `prev`, at the first partition of channel 1 is the last
-class of channel 0, and at the first partition of a packet it is the last
-class of the previous packet's last channel.  Whether resetting or keying
-by channel is better was not measured.
+**B11. The class model's "previous class" ran across channels and packets.**
+Kept per channel now.  Unobservable here: the mono files have one channel and
+the stereo ones interleave into a single classification stream.
 
-**B12. "One packet ago" is "last time this (block size, pass, channel) was
-coded".**  `dg_hist` is keyed by `tc_blk`, so for a stream alternating
-short and long blocks `t1` may be several packets old, and `dg_hist2` older
-still.  This is by construction (a short block's slot does not correspond
-to a long block's), but the variable documentation says "one packet ago".
+**B12. `q1`, `q2` and the zero run ran across packets** -- at the first digit
+of a packet they were the last digits of the one before, the top of the
+spectrum standing in for the bottom.  Cleared per residue, worth 12 bytes.
+`dg_hist` keeping "one packet ago" per block size is by construction and
+stays: a short block's slot does not correspond to a long block's.
 
-**B13. The stream header has a spare byte nobody reads.**  `tc_walk` writes
-`h[1] = 0` and the decoder ignores it.  It is the natural place for a
-per-file profile (section 8, I4) and costs nothing until then.
+**B13. The stream header's spare byte** is still spare.  It was to be the
+per-file profile of I4, and I4 does not pay.
+
+One bug was introduced and caught here rather than found: the coupled-channel
+lookup of B3 is the slot next door, and its guard only checked the slot
+itself, so a history row of odd length read one element past its end.  Every
+span in the corpus is even.  The whole corpus round-trips, and encode and
+decode of a mono and a stereo file are clean under AddressSanitizer and
+UndefinedBehaviorSanitizer.
 
 ---
 
-## 8. Points for improvement
+## 8. Improvements, and what they measured
 
-Ranked by expected value per unit of decode time, with what has been
-measured where it has been.
+Ranked as they were before any of them was tried.  Most of the ones at the
+top lost, which is worth more than the ranking was.
 
-**I1. Learn the final blend.**  `bw` is one constant per family, a linear
-blend in probability space.  Replacing it with a second small mixer (inputs:
-`st(pm)`, `st(pf2)`, bias, under a cheap context such as the node) is one
-more 3-input mix per bit, and it is how every paq-family coder ends its
-pipeline.  Cheap; untested here.
+**I1. Learn the final blend.**  Tried twice, worse both times.  A two-input
+logistic mixer over the mixer and the second APM, at its best rate, costs
+1762 bytes over four files; what it learns is a geometric mean of the odds,
+which is more confident than either input wherever they agree, and this blend
+wants to be less.  Learning `bw` itself per node by gradient is worse still
+-- 18,000 bytes -- because the least-squares gradient in probability space is
+not the log-loss one, and the weight saturates at whichever end it drifts
+towards.  The fixed blend survives because an unlearned APM row returns
+almost exactly its own input, so a constant already behaves like "all mixer"
+where the APM has nothing to say.
 
-**I2. Weight the APM update by proximity.**  Both bracketing points get the
-full step regardless of the 7-bit interpolation weight `w`.  Updating with
-`(128 - w)` and `w` scaled rates, or only the nearer point, is the standard
-form and costs nothing.  Untested.
+**I2. Weight the APM update by proximity.**  Tried twice, worse both times.
+Scaling each point's step by its share of the interpolation costs 2325 bytes:
+the step halves while the count ages at full speed, so the rate decays without
+the learning.  Updating only the nearer point at full rate is 12 bytes better
+on size and 2-9% *slower* to decode, because the branch is unpredictable and
+the two points share a cache line anyway.
 
-**I3. Density for sgn (B4) and the reachable-bucket fix (B5).**  Both are
-free in compression and are the cheapest decode-time win available; sgn's
-tables become 6.7 MiB and its counters cache-resident.  The decode budget
-this buys back is what I6 needs.
+**I3. Density for sgn and the reachable-bucket fix.**  Done -- B4 and B5.
+928 MB to 337 MB: B4 byte for byte, B5 588 bytes to the good.  The decode
+speed it was ranked for did not materialise (I10); what it bought instead was
+room for I8, which is where the bytes came from.
 
-**I4. A per-file profile in the spare header byte.**  BALROGG-MODEL.md sec.4
-measured per-file APM widths at 0.05% and scalar rates at 0.01%.  A byte
-selecting one of a few width/rate sets (chosen by trial encodes, as balrogg
-does with three bytes) is the way to take it without a per-file search
-inside the format.
+**I4. A per-file profile in the spare header byte.**  Measured first, and it
+does not pay.  Choosing the first APM's width per file, which is the largest
+of the per-file gains the earlier measurements claimed, is worth 57 bytes
+over four files -- 0.0016%, against a mechanism that needs K trial encodes,
+a complete reset of the model between them, and a format byte.  The model
+sits at a broad optimum and per-file selection has almost nothing to select.
 
-**I5. Two-rate counters, or a confidence input.**  A counter gives the
-mixer one number.  Giving it two, a fast and a slow probability for the
-same context, or the stretch and a count-scaled confidence, is the cheapest
-way to let the mixer tell a settled context from a young one.  The
-indirect (bit-history) model was measured at 0.013% for 5-18% decode
-(BALROGG-MODEL.md sec.1) and is not the way to get this.
+**I5. Two-rate counters, or a confidence input.**  Tried, worse.  An eighth
+mixer input carrying counter A scaled by how much it has seen costs 645
+bytes; replacing the raw-A input with it costs 363.
 
-**I6. A fifth, hashed counter.**  Measured at -0.02% for +8-32% decode
-(sec.2).  Worth taking only once I3 has bought the time back.
+**I6. A fifth, hashed counter.**  Not retried.  It was -0.02% for +8-32%
+decode, and nothing since has changed that arithmetic.
 
-**I7. Tune with a large file in the objective, and with `TC_MEMCOST` on.**
-`opt.lst` has one large file (07); flr's rates show what tuning on the
-small ones alone does (+560 bytes), and the 38.9 GB set shows what tuning
-without a price on memory does.  Both are one-line changes to how the
-search is run, not to the model.
+**I7. Tune with a large file in the objective and a price on memory.**  Done,
+and the price is what made the difference.  A greedy search on the new axes
+with memory free arrived at 4345 MB for 3867 bytes -- the corner this tree
+built TC_MEMCOST to avoid -- and the same search with the model's address
+space charged at 10000 bytes per gigabyte took the axis only where it earns.
+Two runs of IDX/opt.pl over all 4190 tunable bits found 25 bytes between
+them, which says the scalar parameters are done; the targeted searches on the
+new axes found 3161 in a tenth of the time.  New information beats more
+search.
 
-**I8. Fix B1 and B2, then give the sign model the coupled channel's sign
-explicitly.**  Today `q1s` stands in for it on interleaved stereo.  A
-proper channel axis plus the other channel's digit at the same slot (from
-`dg_pp` of the other channel, this pass) is the context the sgn comment
-describes and the code does not quite build.
+**I8. Fix B1 and B2, then give the sign model the coupled channel.**  Done,
+and it is the largest single win here: 3161 bytes over four files, 0.03% of
+the corpus, for 17 MB.
 
-**I9. Reset or key `dg_q1/q2/zr` and `cl_last` per packet or channel
-(B11, B12).**  Cheap experiments; the current carry-over may be neutral or
-may be worth a few hundred bytes on the stereo files.
+**I9. Reset the histories that run past what they describe.**  Done -- B11
+and B12.
 
-**I10. Decode speed on the digit path.**  Six dependent cache misses per
-digit (A, B, C, D, APM1 row, mixer row) with nothing to overlap them against,
-since the next digit's contexts depend on this one.  What can be done: keep a
-row's node 0..2 counters in one cache line (they are, at 4 bytes each),
-prefetch the next partition's `B` row when the class is known (the class is
-coded before the digits), and SIMD the 7-input dot product.  balrogg's
-SSE2/AVX2 kernels (sec.10) are the reference.
+**I10. Decode speed.**  Prefetching every row a value will read, issued at
+select time, is inside the measurement noise.  Decode is unchanged overall,
+against where this branch started: 0.95x on 00000005 and 00000003, 1.04x on
+00000007, 1.01x on 00000009, 0.97x on 00000008.  The dependent chain through
+the cascade is the cost, and neither smaller tables nor prefetch shortens
+it.
 
-**I11. Sparse prior tries.**  `nbr^k` nodes per level hits `TCP_NODEMAX`
-at `nbr = 16, k = 4`, after which a book simply has no prior.  No corpus
-book comes near it (156 nodes), but a stream with a large residue book
-loses the prior exactly where it is worth most.  A hash of the prefix, or
-a trie of only the reachable prefixes (which is what a Huffman code's
-prefix set is), removes the cliff.
+**I11. Sparse prior tries.**  Done, by truncation rather than by hashing: a
+book too deep for a dense trie now keeps the levels that fit instead of
+losing the prior entirely.  Byte-identical here, since no book comes near the
+cap; forced to a cap of 17 nodes it is 1588 bytes better than refusing.
 
-**I12. The mantissa.**  A single counter plus the prior, on a 280-row
-index.  The prior's `tcp_man` walks the alphabet per bit; a per-node table
-of the first mantissa bit (the one most often asked) would make it a read.
-Compression value unknown and small: mantissa bits are a few percent of
-the digit bits.
+**I12. The mantissa.**  Not attempted.  It is a few percent of the digit bits
+and the work is a table for `tcp_man`, which is a decode-time question, not a
+size one.
+
+### What is left
+
+- A residue's floor envelope as a context.  The floor is coded before the
+  residue and says what magnitude to expect at each frequency, which is
+  physically the right predictor for a digit; `cls` may already carry most of
+  it, since the encoder picks the class from the magnitudes.  Untried.
+- Anything that shortens the dependent chain per digit, which is what decode
+  time is.
 
 ---
 
 ## 9. Tried, measured, and not worth repeating
 
-From BALROGG-MODEL.md's "what these are worth here" and the commit history:
+From BALROGG-MODEL.md's measurements, this branch's, and the commit history:
 
 - Indirect model (bit-history states + state map): 0.013% for 5-18% decode.
 - Match model over the digit stream: worse than the model it was mixed
   into; 77% right, but accuracy alternates with length parity on stereo.
 - Hashed fifth counter: -0.02% for +8-32% decode.
+- A learned final blend, as a mixer (+1762 bytes) or as a learned `bw`
+  (+18,000).
+- A proximity-weighted APM update (+2325), or a nearest-point-only one
+  (-12 bytes and slower).
+- A confidence-scaled counter as an extra mixer input (+645) or in place of
+  the raw one (+363).
+- Per-file APM widths: 57 bytes over four files, against a format byte and
+  K trial encodes.
+- Prefetching the rows a value will read: inside the noise.
 - Coding page/packet fields as differences: +4,653 bytes; deciding per
   field by a running score: worse than either fixed choice.
 - Per-field delta for the header records: -154 bytes, kept.
@@ -571,3 +616,4 @@ From BALROGG-MODEL.md's "what these are worth here" and the commit history:
   decode time; only cache-resident side tables are affordable.
 - Sharing one rate between two components: the optimizer settles it where
   the louder component wants it; every component now has its own.
+- Optimizing size with memory free: 4345 MB for 3867 bytes.

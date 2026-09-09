@@ -44,4 +44,3 @@ Table( i32,    %M%W, %M%m_Volume * %M%ND * TC_MIXN );
 Table( u8,     %M%WC, %M%m_Volume * %M%ND );
 Table( i32,    %M%WM, %M%n_Volume * %M%MND * 3 );
 Table( u8,     %M%WMC, %M%n_Volume * %M%MND );
-Table( cm_cnt, %M%G, %M%g_Volume * TC_SGN_CLS );

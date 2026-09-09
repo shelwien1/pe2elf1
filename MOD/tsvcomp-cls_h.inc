@@ -15,7 +15,6 @@ static const int TC_cls_rB = (43+0) * (1);
 static const int TC_cls_rC = (63+0) * (1);
 static const int TC_cls_rD = (63+0) * (1);
 static const int TC_cls_rT = (80+0) * (1);
-static const int TC_cls_rG = (80+0) * (1);
 static const int TC_cls_rS1 = (5+0) * (1);
 static const int TC_cls_rS2 = (5+0) * (1);
 static const int TC_cls_lr = (24+0) * (1);
@@ -26,7 +25,6 @@ static const int TC_cls_mwB = (0+0) * (1);
 static const int TC_cls_mwC = (0+0) * (1);
 static const int TC_cls_mwD = (0+0) * (1);
 static const int TC_cls_mwT = (0+0) * (1);
-static const int TC_cls_mwG = (0+0) * (1);
 static const int TC_cls_bw = (12+0) * (1);
 static const int TC_cls_qs = (30+3) * (1);
 static const int TC_cls_qf = (62+3) * (1);
@@ -38,7 +36,7 @@ static const long long TC_cls_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul
 static const long long TC_cls_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 4), 4), 1), 1); // 64
 static const long long TC_cls_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 1), 1), 4), 1); // 64
 static const long long TC_cls_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 1), 1), 1); // 1
-static const long long TC_cls_g_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 1), 1), 1); // 1
+static const long long TC_cls_g_Volume = 1; // 1
 static const long long TC_cls_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 2), 1), 1), 1); // 12
 static const long long TC_cls_n_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3), 1), 1), 1); // 18
 static const long long TC_cls_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 1), 1), 1); // 1
@@ -62,7 +60,6 @@ struct TC_cls_T {
   u8 TC_cls_WC[TC_cls_m_Volume * TC_cls_ND];
   i32 TC_cls_WM[TC_cls_n_Volume * TC_cls_MND * 3];
   u8 TC_cls_WMC[TC_cls_n_Volume * TC_cls_MND];
-  cm_cnt TC_cls_G[TC_cls_g_Volume * TC_SGN_CLS];
   
   /* Total bytes this module's Table() members occupy -- a constant here, since
    * Const mode has already folded every count. */
@@ -79,8 +76,7 @@ struct TC_cls_T {
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_cls_m_Volume * TC_cls_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_m_Volume * TC_cls_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_cls_n_Volume * TC_cls_MND * 3)
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_n_Volume * TC_cls_MND)
-                              + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(TC_cls_g_Volume * TC_SGN_CLS);
+                              + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_n_Volume * TC_cls_MND);
   void TC_cls_Init( void ) {
   
   }

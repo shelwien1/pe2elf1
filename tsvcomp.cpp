@@ -449,14 +449,18 @@ constexpr int TC_MAXTAG = 128;            /*  header tags one stream may use  */
     it were still being built.  */
 constexpr int TC_SGN_AUX = F_N;
 constexpr int TC_SGN_HDR = TC_MAXTAG;
-/*  A floor post and a residue class are never negative, so their sign is one
-    counter saturating towards "positive" rather than a context: spread over
-    the family index and put through the mixer it takes longer to get there,
-    which measured +40 bytes on the floor of 00000000 and nothing anywhere
-    else.  A field that is genuinely signed pays for a context; one that is
-    not pays for a counter.  */
+/*  A floor post is never negative, so its sign is one counter saturating
+    towards "positive" rather than a context: spread over the family index and
+    put through the mixer it takes longer to get there, which measured +40
+    bytes on the floor of 00000000 and nothing anywhere else.  A field that is
+    genuinely signed pays for a context; one that is not pays for a counter.
+
+    fam_cls has no sign at all.  A residue class is a small non-negative
+    number and the family codes it through `code`, which never reaches a sign
+    -- so the counter it used to declare was never read, and the rate and
+    bound the .idx offered for it were two knobs the optimizer could spend
+    moves on and never move anything.  */
 constexpr int TC_SGN_FLR = 1;
-constexpr int TC_SGN_CLS = 1;
 
 /*  How deep each family's tables are, per context.  A family pays for the
     nodes it can reach and no more, and what it can reach is a property of
@@ -1799,7 +1803,8 @@ static void tc_models(void) {
   TC_WIRE(fam_sgn, sgn, (cm_cnt *) nullptr, 0,      /*  nor a mantissa  */
           0, 0, 0, 0, 0, 0);
   TC_WIRE_ALL(fam_flr, flr, tcm_flr->TC_flr_G, TC_SGN_FLR);
-  TC_WIRE_ALL(fam_cls, cls, tcm_cls->TC_cls_G, TC_SGN_CLS);
+  TC_WIRE(fam_cls, cls, (cm_cnt *) nullptr, 0,       /*  nor a sign  */
+          TC_cls_rT, TC_cls_mwT, 0, 0, TC_cls_lrm, TC_cls_mbm);
   TC_WIRE_ALL(fam_aux, aux, tcm_aux->TC_aux_G, TC_SGN_AUX);
   TC_WIRE_ALL(fam_hdr, hdr, tcm_hdr->TC_hdr_G, TC_SGN_HDR);
 }
