@@ -23,7 +23,7 @@
 #
 # Results are written continuously to export.!!! (mdesc lines) and progress to
 # opttimes.!!!.  Fold them back into the .idx source with:
-#   cd IDX && perl import.pl tsvcomp.idx ../export.!!! > t && mv t tsvcomp.idx
+#   cd IDX && for f in tsvcomp-*.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
 # then ./mk.sh to continue tuning, or ./mk.sh check to prove the shipping build
 # still agrees and ship it.
 #

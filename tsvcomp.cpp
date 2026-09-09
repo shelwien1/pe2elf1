@@ -110,9 +110,9 @@
     in for the class.  TSVCOMP.md has that measurement and the ones that
     settled every other pattern.
 
-    The contexts themselves are declared, not written.  IDX/tsvcomp.idx names
+    The contexts themselves are declared, not written.  IDX/tsvcomp-<family>.idx names
     every variable, its thresholds and every tunable rate; IDX/idx2inc.pl
-    turns that plus the template IDX/tsvcomp.inc into MOD/tsvcomp_h.inc and
+    turns that plus the templates IDX/tsvcomp-*.inc into MOD/tsvcomp-*_h.inc and
     MOD/tsvcomp_p.inc, and ./mk.sh drives it.  Nothing in this file decides a
     context, and MOD/ is generated -- edit the .idx.
 
@@ -273,7 +273,7 @@ static void * tc_map(sz n) {
 #endif
   if (!p) FATAL_CODE(BLR_EXIT_IO,
                      "cannot map %" PRIu64 " MB for a model table -- "
-                     "IDX/tsvcomp.idx asks for more than this machine will map",
+                     "IDX/tsvcomp-*.idx asks for more than this machine will map",
                      (u64) (n >> 20));
   return p;
 }
@@ -394,7 +394,7 @@ constexpr long long tc_vmul(long long a, long long b) {
     TC_MEMCAP, below, which is about the whole of it rather than one table.  */
 static INLINE u64 tbl_n(u64 n) {
   FATAL_UNLESS(n > 0 && n <= ((u64) 1 << 40),
-               "IDX/tsvcomp.idx asks for a table of %" PRIu64 " entries", n);
+               "IDX/tsvcomp-*.idx asks for a table of %" PRIu64 " entries", n);
   return n;
 }
 
@@ -402,7 +402,7 @@ static INLINE u64 tbl_n(u64 n) {
     every index in an int, so this is the one limit no component escapes.  */
 static void tc_vfits(const char * what, sz vol, sz nodes) {
   FATAL_UNLESS(vol > 0 && vol < ((sz) 1 << 31) && nodes > 0,
-               "IDX/tsvcomp.idx gives the %s an index of %" PRIu64 " rows -- "
+               "IDX/tsvcomp-*.idx gives the %s an index of %" PRIu64 " rows -- "
                "idx2inc.pl builds indices in int, so a Volume must stay under "
                "2147483648", what, (u64) vol);
 }
@@ -413,7 +413,7 @@ static void tc_vfits(const char * what, sz vol, sz nodes) {
 static void tc_ifits(const char * what, sz vol, sz mult) {
   tc_vfits(what, vol, mult);
   FATAL_UNLESS(vol * mult < ((sz) 1 << 31),
-               "IDX/tsvcomp.idx gives the %s %" PRIu64 " rows of %" PRIu64
+               "IDX/tsvcomp-*.idx gives the %s %" PRIu64 " rows of %" PRIu64
                " -- it addresses them with an int, so the product must stay "
                "under 2147483648", what, (u64) vol, (u64) mult);
 }
@@ -446,10 +446,24 @@ constexpr int TC_SGN_HDR = TC_MAXTAG;
 constexpr int TC_SGN_FLR = 1;
 constexpr int TC_SGN_CLS = 1;
 
-#include "MOD/tsvcomp_h.inc"
+/*  One IDX module per family -- IDX-FORMAT.md sec.13.  Each declares its own
+    mapping objects, its own Volumes and its own table struct, all under the
+    prefix TC_<family>, so every generated name is the one it always was and an
+    export.!!! keyed by those names still imports.  */
+#include "MOD/tsvcomp-dig_h.inc"
+#include "MOD/tsvcomp-sgn_h.inc"
+#include "MOD/tsvcomp-flr_h.inc"
+#include "MOD/tsvcomp-cls_h.inc"
+#include "MOD/tsvcomp-aux_h.inc"
+#include "MOD/tsvcomp-hdr_h.inc"
 
 /*  Mapped in tc_models(), not declared static -- see there.  */
-static TC_T * tcm;
+static TC_dig_T * tcm_dig;
+static TC_sgn_T * tcm_sgn;
+static TC_flr_T * tcm_flr;
+static TC_cls_T * tcm_cls;
+static TC_aux_T * tcm_aux;
+static TC_hdr_T * tcm_hdr;
 
 /*  Everything a residue digit's contexts are built from.  */
 struct tc_dv {
@@ -461,7 +475,12 @@ struct tc_dv {
     mixer and the mantissa plane each get their own.  */
 struct tcx { int a, b, c, d, s, f, m, t, n, g; };
 
-#include "MOD/tsvcomp_p.inc"
+#include "MOD/tsvcomp-dig_p.inc"
+#include "MOD/tsvcomp-sgn_p.inc"
+#include "MOD/tsvcomp-flr_p.inc"
+#include "MOD/tsvcomp-cls_p.inc"
+#include "MOD/tsvcomp-aux_p.inc"
+#include "MOD/tsvcomp-hdr_p.inc"
 
 /*  Where the bits went, for -v.  Accounting only; it changes no output, and
     is the same trick MP3C-ALGORITHM.md's per-stage table came from.  */
@@ -1510,25 +1529,25 @@ static void tc_walk(const char * inpath, const char * outpath) {
 
 /*  Hand a family the tables the generator sized for it and the rates the
     .idx set.  Every name here is generated: `TC_dig_A` is the Table() line in
-    IDX/tsvcomp.inc, `TC_dig_a_Volume` the product of the factor sizes in
-    IDX/tsvcomp.idx, `TC_dig_rA` its Number.  */
+    IDX/tsvcomp-dig.inc, `TC_dig_a_Volume` the product of the factor sizes in
+    IDX/tsvcomp-*.idx, `TC_dig_rA` its Number.  */
 /*  Two of the six families do not have every component, so the wiring says
-    which parameters they are missing rather than IDX/tsvcomp.idx carrying a
+    which parameters they are missing rather than IDX/tsvcomp-*.idx carrying a
     knob that cannot move:  fam_dig has no sign counter -- a digit's sign is
     fam_sgn's whole job -- and fam_sgn has neither that nor a mantissa, since
     it only ever calls bit() and a sign is one bit.  The four that code a
     signed value with a mantissa name all of it, through TC_WIRE_ALL.  */
 #define TC_WIRE(f, F, g, ng, rt, mwt, rg, mwg, lrmt, mbmt)                    \
-  (f).wire(tcm->TC_##F##_A, TC_##F##_a_Volume,                                 \
-           tcm->TC_##F##_B, TC_##F##_b_Volume,                                 \
-           tcm->TC_##F##_C, TC_##F##_c_Volume,                                 \
-           tcm->TC_##F##_D, TC_##F##_d_Volume,                                 \
-           tcm->TC_##F##_T, TC_##F##_t_Volume,                                 \
-           tcm->TC_##F##_S, tcm->TC_##F##_SC, TC_##F##_s_Volume,                \
-           tcm->TC_##F##_F, tcm->TC_##F##_FC, TC_##F##_f_Volume,                \
-           tcm->TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume,  \
-           tcm->TC_##F##_WM, TC_##F##_n_Volume,                                \
-           tcm->TC_##F##_WC, tcm->TC_##F##_WMC,                                 \
+  (f).wire(tcm_##F->TC_##F##_A, TC_##F##_a_Volume,                                 \
+           tcm_##F->TC_##F##_B, TC_##F##_b_Volume,                                 \
+           tcm_##F->TC_##F##_C, TC_##F##_c_Volume,                                 \
+           tcm_##F->TC_##F##_D, TC_##F##_d_Volume,                                 \
+           tcm_##F->TC_##F##_MT, TC_##F##_t_Volume,                                 \
+           tcm_##F->TC_##F##_S, tcm_##F->TC_##F##_SC, TC_##F##_s_Volume,                \
+           tcm_##F->TC_##F##_F, tcm_##F->TC_##F##_FC, TC_##F##_f_Volume,                \
+           tcm_##F->TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume,  \
+           tcm_##F->TC_##F##_WM, TC_##F##_n_Volume,                                \
+           tcm_##F->TC_##F##_WC, tcm_##F->TC_##F##_WMC,                                 \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \
            (rt), (rg),                                                        \
            TC_##F##_mwA, TC_##F##_mwB, TC_##F##_mwC, TC_##F##_mwD,            \
@@ -1555,11 +1574,21 @@ static void tc_walk(const char * inpath, const char * outpath) {
 #ifndef TC_MEMCAP
   #define TC_MEMCAP ((u64) 64 << 30)
 #endif
+/*  What the six modules ask for between them.  A constant expression in the
+    shipping build, where every Volume is folded, and a sum of load-time values
+    in the tuning build, where they are read from the mapping objects.  */
+static INLINE u64 tc_tables(void) {
+  return (u64) tcm_dig->TC_dig_Size + (u64) tcm_sgn->TC_sgn_Size
+       + (u64) tcm_flr->TC_flr_Size + (u64) tcm_cls->TC_cls_Size
+       + (u64) tcm_aux->TC_aux_Size + (u64) tcm_hdr->TC_hdr_Size;
+}
 #if !USE_NEW
 /*  The shipping build folds every size, so an .idx too large for the cap is a
     build error rather than something to find out at run time.  */
-static_assert(TC_T::TC_Size <= TC_MEMCAP,
-              "IDX/tsvcomp.idx asks for more model tables than TC_MEMCAP allows");
+static_assert(TC_dig_T::TC_dig_Size + TC_sgn_T::TC_sgn_Size
+            + TC_flr_T::TC_flr_Size + TC_cls_T::TC_cls_Size
+            + TC_aux_T::TC_aux_Size + TC_hdr_T::TC_hdr_Size <= TC_MEMCAP,
+              "IDX/tsvcomp-*.idx ask for more model tables than TC_MEMCAP allows");
 #endif
 
 static void tc_models(void) {
@@ -1570,21 +1599,24 @@ static void tc_models(void) {
       refused outright by the default overcommit heuristic, which kills the
       program before main() with no message at all.  A mapping is zero, which
       is what the loader would have given it.  */
-  tcm = (TC_T *) tc_map(sizeof(TC_T));
-  tcm->TC_Init();
-  FATAL_UNLESS(tcm->TC_Size <= TC_MEMCAP,
-               "IDX/tsvcomp.idx asks for %" PRIu64 " MB of model tables, past "
+  #define TC_MAP(F) (tcm_##F = (TC_##F##_T *) tc_map(sizeof(TC_##F##_T)),      \
+                     tcm_##F->TC_##F##_Init())
+  TC_MAP(dig);  TC_MAP(sgn);  TC_MAP(flr);
+  TC_MAP(cls);  TC_MAP(aux);  TC_MAP(hdr);
+  #undef TC_MAP
+  FATAL_UNLESS(tc_tables() <= TC_MEMCAP,
+               "IDX/tsvcomp-*.idx asks for %" PRIu64 " MB of model tables, past "
                "the %" PRIu64 " MB this build allows -- narrow a context, or "
                "rebuild with a larger TC_MEMCAP",
-               (u64) (tcm->TC_Size >> 20), (u64) (TC_MEMCAP >> 20));
+               (u64) (tc_tables() >> 20), (u64) (TC_MEMCAP >> 20));
   TC_WIRE(fam_dig, dig, (cm_cnt *) nullptr, 0,      /*  no sign counter  */
           TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
   TC_WIRE(fam_sgn, sgn, (cm_cnt *) nullptr, 0,      /*  nor a mantissa  */
           0, 0, 0, 0, 0, 0);
-  TC_WIRE_ALL(fam_flr, flr, tcm->TC_flr_G, TC_SGN_FLR);
-  TC_WIRE_ALL(fam_cls, cls, tcm->TC_cls_G, TC_SGN_CLS);
-  TC_WIRE_ALL(fam_aux, aux, tcm->TC_aux_G, TC_SGN_AUX);
-  TC_WIRE_ALL(fam_hdr, hdr, tcm->TC_hdr_G, TC_SGN_HDR);
+  TC_WIRE_ALL(fam_flr, flr, tcm_flr->TC_flr_G, TC_SGN_FLR);
+  TC_WIRE_ALL(fam_cls, cls, tcm_cls->TC_cls_G, TC_SGN_CLS);
+  TC_WIRE_ALL(fam_aux, aux, tcm_aux->TC_aux_G, TC_SGN_AUX);
+  TC_WIRE_ALL(fam_hdr, hdr, tcm_hdr->TC_hdr_G, TC_SGN_HDR);
 }
 
 /*  The model tables are mapped and report their own failures; what is left on
@@ -1594,7 +1626,7 @@ static void tc_models(void) {
     misleads a size-driven search.  There is nothing to fall back to, so the
     failure is reported and the file goes.  */
 static void tc_nomem(void) {
-  FATAL_CODE(BLR_EXIT_IO, "out of memory -- IDX/tsvcomp.idx asks for more "
+  FATAL_CODE(BLR_EXIT_IO, "out of memory -- IDX/tsvcomp-*.idx asks for more "
              "than this machine has");
 }
 
@@ -1624,7 +1656,7 @@ int main(int argc, char ** argv) {
     double tot = 0;
     for (i = 0; i < STG_N; i++) tot += tc_bits[i];
     fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n",
-            blr_prog, tot / 8, (u64) (tcm->TC_Size >> 20));
+            blr_prog, tot / 8, (u64) (tc_tables() >> 20));
     if (tc_enc)
       for (i = 0; i < STG_N; i++) {
         fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", TC_STAGE[i],
@@ -1649,7 +1681,7 @@ usage:
     "\n"
     "  -v  say where the bits went, by stage\n"
     "\n"
-    "The contexts and the rates are declared in IDX/tsvcomp.idx and compiled\n"
+    "The contexts and the rates are declared in IDX/tsvcomp-*.idx and compiled\n"
     "in through MOD/; ./mk.sh regenerates them and IDX/opt.pl tunes them.\n"
     "They are part of the format -- a stream is decodable by a build with the\n"
     "same MOD/, and by no other.\n");

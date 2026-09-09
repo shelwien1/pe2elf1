@@ -1,0 +1,129 @@
+#  tsvcomp's cls model: its context indices and its tunable parameters.
+#
+#  One module per family -- IDX/IDX-FORMAT.md is the specification, and sec.7
+#  is why there are six of these rather than one file.  Every name here is
+#  relative to the family: the prefix below puts `cls_` back, so the index `a`
+#  is TC_cls_a and the threshold `a_band` is TC_cls_a_band, which is what
+#  IDX/opt.pl finds in the executable and what an export.!!! is keyed by.
+#
+#  ../mk.sh regenerates MOD/tsvcomp-cls_h.inc and MOD/tsvcomp-cls_p.inc from
+#  this file and tsvcomp-cls.inc; ./mk.sh check proves the tuning and shipping
+#  builds of all six code identically.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.
+
+Prefix TC_cls
+Debug 1
+Const 0
+#  ---------------------------------------------------------------------------
+#  Residue classes: the class before it (-15.13% on its own, measured in
+#  TSVTRANS.md) and the class the same partition had one packet ago.
+
+Index a
+! a_rno:  rno,   1!1
+! a_band: band,  1!011010101110000
+! a_prev: prev,  1!0101011
+! a_t1:   t1,    1!0001111
+! a_blk:  blk,   1!1
+! a_tn:   tn,    1!000
+! a_prev2: prev2, 1!000
+! a_pq:   pq,    1!00000000000000000000000000000000
+
+Index b
+! b_rno:  rno,   1!0
+! b_band: band,  1!100001111110000
+! b_prev: prev,  1!111010100000000
+! b_t1:   t1,    1!111
+! b_blk:  blk,   1!1
+! b_tn:   tn,    1!000
+! b_prev2: prev2, 1!000
+! b_pq:   pq,    1!00000000000000000000000000000000
+
+Index c
+! c_band: band,  1!000
+! c_prev: prev,  1!111
+! c_t1:   t1,    1!111
+! c_tn:   tn,    1!111
+! c_prev2: prev2, 1!000
+! c_pq:   pq,    1!00000000000000000000000000000000
+
+Index d
+! d_band: band,  1!111
+! d_prev: prev,  1!111
+! d_t1:   t1,    1!000
+! d_tn:   tn,    1!000
+! d_prev2: prev2, 1!111
+! d_pq:   pq,    1!00000000000000000000000000000000
+
+Index s
+! s_band: band,  1!000
+! s_prev: prev,  1!000
+! s_t1:   t1,    1!000
+! s_tn:   tn,    1!000
+! s_prev2: prev2, 1!000
+! s_pq:   pq,    1!00000000000000000000000000000000
+
+Index f
+! f_band: band,  1!000
+! f_prev: prev,  1!000
+! f_t1:   t1,    1!000
+! f_tn:   tn,    1!000
+! f_prev2: prev2, 1!000
+! f_pq:   pq,    1!00000000000000000000000000000000
+
+Index m
+! m_band: band,  1!001
+! m_prev: prev,  1!101
+! m_t1:   t1,    1!1
+! m_tn:   tn,    1!000
+! m_prev2: prev2, 1!000
+! m_pq:   pq,    1!00000000000000000000000000000000
+
+Index t
+! t_band: band,  1!101
+! t_prev: prev,  1!001
+! t_t1:   t1,    1!101
+! t_tn:   tn,    1!000
+! t_prev2: prev2, 1!000
+! t_pq:   pq,    1!00000000000000000000000000000000
+
+!Number rA, 1, 0!01010000
+!Number rB, 1, 0!00101011
+!Number rC, 1, 0!00111111
+!Number rD, 1, 0!00111111
+!Number rT, 1, 0!01010000
+!Number rG, 1, 0!01010000
+!Number rS1, 1, 0!00101
+!Number rS2, 1, 0!00101
+!Number lr, 1, 0!11000
+!Number lrm, 1, 0!11000
+!Number mbm, 1, 0!00000000
+!Number mwA, 1, 0!00000000
+!Number mwB, 1, 0!00000000
+!Number mwC, 1, 0!00000000
+!Number mwD, 1, 0!00000000
+!Number mwT, 1, 0!00000000
+!Number mwG, 1, 0!00000000
+!Number bw, 1, 0!01100
+!Number qs, 1, 3!0011110
+!Number qf, 1, 3!0111110
+!Number mb, 1, 0!00000000
+
+
+Index n
+! n_band: band,  1!101
+! n_prev: prev,  1!001
+! n_t1:   t1,    1!101
+! n_tn:   tn,    1!000
+! n_prev2: prev2, 1!000
+! n_pq:   pq,    1!00000000000000000000000000000000
+
+Index g
+! g_band: band,  1!000
+! g_prev: prev,  1!000
+! g_t1:   t1,    1!000
+! g_tn:   tn,    1!000
+! g_prev2: prev2, 1!000
+! g_pq:   pq,    1!00000000000000000000000000000000

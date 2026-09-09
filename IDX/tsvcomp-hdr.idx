@@ -1,0 +1,88 @@
+#  tsvcomp's hdr model: its context indices and its tunable parameters.
+#
+#  One module per family -- IDX/IDX-FORMAT.md is the specification, and sec.7
+#  is why there are six of these rather than one file.  Every name here is
+#  relative to the family: the prefix below puts `hdr_` back, so the index `a`
+#  is TC_hdr_a and the threshold `a_band` is TC_hdr_a_band, which is what
+#  IDX/opt.pl finds in the executable and what an export.!!! is keyed by.
+#
+#  ../mk.sh regenerates MOD/tsvcomp-hdr_h.inc and MOD/tsvcomp-hdr_p.inc from
+#  this file and tsvcomp-hdr.inc; ./mk.sh check proves the tuning and shipping
+#  builds of all six code identically.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.
+
+Prefix TC_hdr
+Debug 1
+Const 0
+#  ---------------------------------------------------------------------------
+#  The three header packets, coded record by record.  The tag is a dense factor
+#  because the alphabet is small and every entry in it is a different kind of
+#  number; p1r is the previous value under the same tag, whole, which is what
+#  makes cb.len and cmt.byte an order-1 byte model.
+
+Index a
+ADD 64: tag
+! a_p1:   p1,    1!100000000010110
+! a_p2:   p2,    1!1111111
+! a_pos:  pos,   1!011
+! a_p1r:  p1r,   &00000000
+
+Index b
+! b_p1:   p1,    1!101
+! b_pos:  pos,   1!0
+! b_p1r:  p1r,   &01011110
+
+Index c
+ADD 64: tag
+
+Index d
+ADD 64: tag
+
+Index s
+ADD 64: tag
+
+Index f
+ADD 64: tag
+
+Index m
+ADD 64: tag
+
+Index t
+ADD 64: tag
+! t_p1r:  p1r,   &01101111
+
+!Number rA, 1, 0!00010000
+!Number rB, 1, 0!00100000
+!Number rC, 1, 0!00111111
+!Number rD, 1, 0!00111111
+!Number rT, 1, 0!00010000
+!Number rG, 1, 0!00010000
+!Number rS1, 1, 0!00001
+!Number rS2, 1, 0!00001
+!Number lr, 1, 0!11111
+!Number lrm, 1, 0!11111
+!Number mbm, 1, 0!00000000
+!Number mwA, 1, 0!00000000
+!Number mwB, 1, 0!00000000
+!Number mwC, 1, 0!00000000
+!Number mwD, 1, 0!00000000
+!Number mwT, 1, 0!00000000
+!Number mwG, 1, 0!00000000
+!Number bw, 1, 0!01100
+!Number qs, 1, 3!0011110
+!Number qf, 1, 3!0011110
+!Number mb, 1, 0!00000000
+
+
+Index n
+ADD 64: tag
+! n_p1r:  p1r,   &01101111
+
+Index g
+! g_p1:   p1,    1!000000000000000
+! g_p2:   p2,    1!0000000
+! g_pos:  pos,   1!000
+! g_p1r:  p1r,   &00000000

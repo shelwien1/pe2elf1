@@ -17,14 +17,20 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 fail=0
 say() { printf '  %-46s %s\n' "$1" "$2"; }
 
-#  $1 = a .idx under IDX/, $2 = the binary to build from it.  The tuning form,
-#  because that is the one IDX/opt.pl patches and runs.
+#  $1 = a sed program applied to the dig module, $2 = the binary to build.
+#  The tuning form, because that is the one IDX/opt.pl patches and runs.  The
+#  six modules are generated from a copy of IDX/, so a widened index never
+#  lands in the tree and an interrupted run leaves nothing behind but MOD/,
+#  which the tail of this script puts back.
 build() {
-  b=$(basename "$1" .idx)
-  cp -f IDX/tsvcomp.inc "IDX/$b.inc"
-  ( cd IDX && IDX_NOCONST=0 perl idx2inc.pl "$b.idx" 1 >/dev/null 2>&1 ) || return 1
-  mv -f "IDX/${b}_h.inc" MOD/tsvcomp_h.inc || return 1
-  mv -f "IDX/${b}_p.inc" MOD/tsvcomp_p.inc || return 1
+  rm -rf "$tmp/IDX";  cp -R IDX "$tmp/IDX"
+  sed -e "$1" IDX/tsvcomp-dig.idx > "$tmp/IDX/tsvcomp-dig.idx"
+  for f in dig sgn flr cls aux hdr; do
+    ( cd "$tmp/IDX" && IDX_NOCONST=0 perl idx2inc.pl "tsvcomp-$f.idx" 1 \
+        >/dev/null 2>&1 ) || return 1
+    mv -f "$tmp/IDX/tsvcomp-${f}_h.inc" "MOD/tsvcomp-${f}_h.inc" || return 1
+    mv -f "$tmp/IDX/tsvcomp-${f}_p.inc" "MOD/tsvcomp-${f}_p.inc" || return 1
+  done
   c++ ${CXXFLAGS:--O2} -fwrapv -o "$2" tsvcomp.cpp -lm
 }
 
@@ -32,8 +38,7 @@ build() {
 in=$1
 
 #  A control: the shipped parameters code the file and leave it behind.
-cp IDX/tsvcomp.idx "IDX/tc-guard.idx"
-build IDX/tc-guard.idx "$tmp/ok"
+build '' "$tmp/ok"
 if "$tmp/ok" c "$in" "$tmp/a.tc" >/dev/null 2>&1 && [ -s "$tmp/a.tc" ]
   then say "shipped parameters code the file" "ok"
   else say "shipped parameters code the file" "FAILED"; fail=1; fi
@@ -44,10 +49,8 @@ if "$tmp/ok" c "$in" "$tmp/a.tc" >/dev/null 2>&1 && [ -s "$tmp/a.tc" ]
 #  anyway.  The pages a link actually reaches are a rounding error against what
 #  it reserves, so a wide index costs address space and almost no memory, and
 #  that is the whole reason an index is allowed to be this wide.
-sed -e 's/^\( *dig_a_q1s: *[a-z0-9]*, *-6!\)[01]*$/\11111111111111/' \
-    -e 's/^\( *dig_a_ps: *[a-z0-9]*, *-6!\)[01]*$/\11111111111111/' \
-    IDX/tsvcomp.idx > "IDX/tc-guard.idx"
-build IDX/tc-guard.idx "$tmp/wide"
+build 's/^\( *a_\(q1s\|ps\): *[a-z0-9]*, *-6!\)[01]*$/\11111111111111/' \
+      "$tmp/wide"
 "$tmp/wide" c "$in" "$tmp/c.tc" >/dev/null 2>&1 &
 wp=$!
 rss=0
@@ -73,9 +76,8 @@ fi
 
 #  An index widened past what the machine has: refused by name, before a byte
 #  of output exists, with a status the caller can see.
-sed 's/^\( *dig_a_[a-z0-9]*: *[a-z0-9]*, *1!\)[01]*$/\1111111111111111/' \
-    IDX/tsvcomp.idx > "IDX/tc-guard.idx"
-build IDX/tc-guard.idx "$tmp/big" 2>/dev/null || true
+build 's/^\( *a_[a-z0-9]*: *[a-z0-9]*, *1!\)[01]*$/\1111111111111111/' \
+      "$tmp/big" 2>/dev/null || true
 rm -f "$tmp/b.tc"
 if [ -x "$tmp/big" ]; then
   if "$tmp/big" c "$in" "$tmp/b.tc" >"$tmp/msg" 2>&1
@@ -87,8 +89,6 @@ if [ -x "$tmp/big" ]; then
 else
   say "an oversized index is refused" "ok (the build itself refused it)"
 fi
-rm -f IDX/tc-guard.idx IDX/tc-guard.inc IDX/tc-guard IDX/tc-guard_h.inc IDX/tc-guard_p.inc
-
 #  Leave MOD/ as it is checked in -- the shipping form, not the tuning form the
 #  builds above were made in.  Not `./mk.sh release`, which would also replace
 #  ./tsvcomp with a binary carrying no !MAP! markers, and so silently end

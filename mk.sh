@@ -17,7 +17,8 @@
 #
 #      ./mk.sh
 #      perl IDX/opt.pl opt.lst ./tsvcomp        # hill-climbs the binary itself
-#      cd IDX && perl import.pl tsvcomp.idx ../export.\!\!\! > t && mv t tsvcomp.idx
+#      cd IDX && for f in tsvcomp-*.idx; do \
+#        perl import.pl $f ../export.\!\!\! > t && mv t $f; done
 #      ./mk.sh check                            # then ship what it found
 #
 #  The shipping build is derived from the same source with one substitution --
@@ -30,7 +31,7 @@
 #  MOD/ is a build input, not a build artefact.  It ships generated -- in the
 #  shipping form, so `make` works without perl -- and this script rewrites it.
 #  A stale MOD/ compiles fine and codes differently, so run ./mk.sh after
-#  editing IDX/tsvcomp.idx or IDX/tsvcomp.inc.
+#  editing any IDX/tsvcomp-<family>.idx or its .inc.
 
 set -e
 
@@ -42,12 +43,31 @@ CXXFLAGS=${CXXFLAGS:--O2}
 WARN=${WARN:--Wall -Wextra}
 REQ=-fwrapv
 
-#  $1 = idx stem, $2 = UseNew (1 pointers, 0 fixed arrays), $3 = output binary
-generate_and_build() {
-  ( cd IDX && IDX_NOCONST=0 perl idx2inc.pl "$1.idx" "$2" >/dev/null )
+#  One IDX module per family -- IDX-FORMAT.md sec.13.
+FAMS="dig sgn flr cls aux hdr"
+
+#  Regenerate MOD/ from all six.  $1 = UseNew (1 pointers, 0 fixed arrays),
+#  $2 = 1 to fold every parameter to a literal, which is IDX-FORMAT.md sec.1's
+#  one substitution applied to each module in turn so they cannot drift.
+generate() {
   mkdir -p MOD
-  mv -f "IDX/$1_h.inc" MOD/tsvcomp_h.inc
-  mv -f "IDX/$1_p.inc" MOD/tsvcomp_p.inc
+  for f in $FAMS; do
+    s="tsvcomp-$f"
+    if [ "$2" = 1 ]; then
+      sed 's/^Const 0/Const 1/' "IDX/tsvcomp-$f.idx" > "IDX/tsvcomp-$f-const.idx"
+      cp -f "IDX/tsvcomp-$f.inc" "IDX/tsvcomp-$f-const.inc"
+      s="tsvcomp-$f-const"
+    fi
+    ( cd IDX && IDX_NOCONST=0 perl idx2inc.pl "$s.idx" "$1" >/dev/null )
+    mv -f "IDX/${s}_h.inc" "MOD/tsvcomp-${f}_h.inc"
+    mv -f "IDX/${s}_p.inc" "MOD/tsvcomp-${f}_p.inc"
+    if [ "$2" = 1 ]; then rm -f "IDX/$s.idx" "IDX/$s.inc"; fi
+  done
+}
+
+#  $1 = UseNew, $2 = fold, $3 = output binary
+generate_and_build() {
+  generate "$1" "$2"
   $CXX $CXXFLAGS $WARN $REQ -o "$3" tsvcomp.cpp -lm
 }
 
@@ -55,24 +75,11 @@ generate_and_build() {
 #  when it has finished borrowing MOD/ and has to put it back the way it ships:
 #  building would also replace ./tsvcomp, and ./tsvcomp may be the tuning build
 #  someone is in the middle of optimizing.
-regenerate_mod() {
-  release_source
-  ( cd IDX && IDX_NOCONST=0 perl idx2inc.pl tsvcomp-const.idx 0 >/dev/null )
-  mkdir -p MOD
-  mv -f IDX/tsvcomp-const_h.inc MOD/tsvcomp_h.inc
-  mv -f IDX/tsvcomp-const_p.inc MOD/tsvcomp_p.inc
-  rm -f IDX/tsvcomp-const.idx IDX/tsvcomp-const.inc
-}
-
-release_source() {
-  #  IDX-FORMAT.md sec.1's one substitution, and the template alongside it.
-  sed 's/^Const 0/Const 1/' IDX/tsvcomp.idx > IDX/tsvcomp-const.idx
-  cp -f IDX/tsvcomp.inc IDX/tsvcomp-const.inc
-}
+regenerate_mod() { generate 0 1; }
 
 case "${1:-tuning}" in
   tuning)
-    generate_and_build tsvcomp 1 tsvcomp
+    generate_and_build 1 0 tsvcomp
     #  The marker is put there by the pdesc macro, so it is the binary that
     #  has to be looked at -- which is also what opt.pl looks at.
     n=$(grep -ac '!MAP!' tsvcomp || true)
@@ -81,10 +88,8 @@ case "${1:-tuning}" in
     ;;
 
   release)
-    release_source
-    generate_and_build tsvcomp-const 0 tsvcomp
-    rm -f IDX/tsvcomp-const.idx IDX/tsvcomp-const.inc
-    if grep -q '!MAP!' MOD/tsvcomp_h.inc; then
+    generate_and_build 0 1 tsvcomp
+    if grep -q '!MAP!' MOD/tsvcomp-*_h.inc; then
       echo "mk.sh: release build still carries !MAP! markers" >&2
       exit 1
     fi
@@ -106,10 +111,8 @@ case "${1:-tuning}" in
       echo "$tmp/00.tsv" > "$lst"
     fi
     [ -f "$lst" ] || { echo "mk.sh check: no $lst -- one .tsv per line" >&2; exit 2; }
-    generate_and_build tsvcomp 1 "$tmp/tune"
-    release_source
-    generate_and_build tsvcomp-const 0 "$tmp/rel"
-    rm -f IDX/tsvcomp-const.idx IDX/tsvcomp-const.inc
+    generate_and_build 1 0 "$tmp/tune"
+    generate_and_build 0 1 "$tmp/rel"
     bad=0
     while IFS= read -r f; do
       case "$f" in ''|\#*) continue;; esac

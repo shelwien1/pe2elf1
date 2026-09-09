@@ -229,6 +229,32 @@ because `Table()`'s fixed-array form needs constant-expression sizes and only th
 shipping build has them. That coupling is a convention, so §8 backs it with a
 `static_assert`.
 
+### Several modules in one program
+
+Because the struct, its `_Init`, its Volumes and its mapping objects are all
+named from `Prefix`, one program can hold as many modules as it has models —
+`xadpcm` builds its index from four, and `tsvcomp` has one per family
+(`IDX/tsvcomp-dig.idx`, `-sgn`, `-flr`, `-cls`, `-aux`, `-hdr`). Each is a
+whole, independent generator input: its own `.idx`, its own `.inc` template,
+its own `_h.inc`/`_p.inc` pair in `MOD/`, its own `%M%_T` object to map and
+`_Init`. What was one 900-line file becomes six that can be read, and a
+`Number` or a threshold is now named relative to its family.
+
+Two things to get right when splitting one module into several:
+
+* **Put the family in the `Prefix`, not in the names.** `Prefix TC_dig` with an
+  index called `a` generates `TC_dig_a_Volume` — exactly what `Prefix TC` with
+  an index called `dig_a` generated. Every emitted identifier stays as it was,
+  which matters because those identifiers are what `opt.pl` finds in the
+  executable and what an `export.!!!` is keyed by: get this right and a tuning
+  export from before the split still imports afterwards.
+* **No table may be called `T`.** The struct is `%M%_T`, so a `Table()` named
+  `%M%T` is a member with its own class's name, which is ill-formed. `tsvcomp`
+  renamed its mantissa plane to `%M%MT` for this and nothing else.
+
+`import.pl` takes one `.idx` at a time, so importing an export across a split
+model is a loop — `IDX/import-all.bat` is that loop.
+
 ---
 
 ## 8. IDX values as template parameters — `IDXP` / `IDXC`
