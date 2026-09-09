@@ -72,7 +72,7 @@ struct TC_dig_T {
   u8 TC_dig_SC[TC_dig_s_Volume * TC_dig_ND * TC_dig_qs];
   i16 TC_dig_F[TC_dig_f_Volume * TC_dig_ND * TC_dig_qf];
   u8 TC_dig_FC[TC_dig_f_Volume * TC_dig_ND * TC_dig_qf];
-  i32 TC_dig_W[TC_dig_m_Volume * TC_dig_ND * 7];
+  i32 TC_dig_W[TC_dig_m_Volume * TC_dig_ND * TC_MIXN];
   u8 TC_dig_WC[TC_dig_m_Volume * TC_dig_ND];
   i32 TC_dig_WM[TC_dig_n_Volume * TC_dig_MND * 3];
   u8 TC_dig_WMC[TC_dig_n_Volume * TC_dig_MND];
@@ -89,7 +89,7 @@ struct TC_dig_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_s_Volume * TC_dig_ND * TC_dig_qs)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_dig_f_Volume * TC_dig_ND * TC_dig_qf)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_f_Volume * TC_dig_ND * TC_dig_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_m_Volume * TC_dig_ND * 7)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_m_Volume * TC_dig_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_m_Volume * TC_dig_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_dig_n_Volume * TC_dig_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_dig_n_Volume * TC_dig_MND);

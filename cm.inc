@@ -210,7 +210,16 @@ struct cm_mix {
       lr += (int) (((i64) mb * lr * cm_mrec[n]) >> 16);
     }
     err = ((bit ? 0 : CM_PONE) - pr) * lr;
-    for (i = 0; i < nx; i++) w[row + i] += (x[i] * err) >> 16;
+    /*  In 64 bits.  `lr` reaches 64 and the boost multiplies it by up to
+        256 more, so a fresh row's `err` runs to millions and any input past a
+        counter at 94% takes the product past what an int holds -- which is
+        the fresh confident-and-wrong row the boost exists for.  -fwrapv makes
+        that deterministic rather than undefined, so a stream still decodes;
+        the step just lands with the wrong sign.  At the rates this ships with
+        the case is reached so rarely that the corpus moves by 5 bytes, but
+        the rates are a search space and the search visits the corners.  */
+    for (i = 0; i < nx; i++)
+      w[row + i] += (i32) (((i64) x[i] * err) >> 16);
     nx = 0;
   }
 };

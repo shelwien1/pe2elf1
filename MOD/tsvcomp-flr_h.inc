@@ -67,7 +67,7 @@ struct TC_flr_T {
   u8 TC_flr_SC[TC_flr_s_Volume * TC_flr_ND * TC_flr_qs];
   i16 TC_flr_F[TC_flr_f_Volume * TC_flr_ND * TC_flr_qf];
   u8 TC_flr_FC[TC_flr_f_Volume * TC_flr_ND * TC_flr_qf];
-  i32 TC_flr_W[TC_flr_m_Volume * TC_flr_ND * 7];
+  i32 TC_flr_W[TC_flr_m_Volume * TC_flr_ND * TC_MIXN];
   u8 TC_flr_WC[TC_flr_m_Volume * TC_flr_ND];
   i32 TC_flr_WM[TC_flr_n_Volume * TC_flr_MND * 3];
   u8 TC_flr_WMC[TC_flr_n_Volume * TC_flr_MND];
@@ -85,7 +85,7 @@ struct TC_flr_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_s_Volume * TC_flr_ND * TC_flr_qs)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_flr_f_Volume * TC_flr_ND * TC_flr_qf)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_f_Volume * TC_flr_ND * TC_flr_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_m_Volume * TC_flr_ND * 7)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_m_Volume * TC_flr_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_m_Volume * TC_flr_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_flr_n_Volume * TC_flr_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_flr_n_Volume * TC_flr_MND)

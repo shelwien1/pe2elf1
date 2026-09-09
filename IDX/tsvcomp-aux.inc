@@ -38,7 +38,7 @@ Table( i16,    %M%S, %M%s_Volume * %M%ND * %M%qs );
 Table( u8,     %M%SC, %M%s_Volume * %M%ND * %M%qs );
 Table( i16,    %M%F, %M%f_Volume * %M%ND * %M%qf );
 Table( u8,     %M%FC, %M%f_Volume * %M%ND * %M%qf );
-Table( i32,    %M%W, %M%m_Volume * %M%ND * 7 );
+Table( i32,    %M%W, %M%m_Volume * %M%ND * TC_MIXN );
 Table( u8,     %M%WC, %M%m_Volume * %M%ND );
 Table( i32,    %M%WM, %M%n_Volume * %M%MND * 3 );
 Table( u8,     %M%WMC, %M%n_Volume * %M%MND );

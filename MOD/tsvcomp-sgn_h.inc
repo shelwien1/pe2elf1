@@ -56,7 +56,7 @@ struct TC_sgn_T {
   u8 TC_sgn_SC[TC_sgn_s_Volume * TC_sgn_ND * TC_sgn_qs];
   i16 TC_sgn_F[TC_sgn_f_Volume * TC_sgn_ND * TC_sgn_qf];
   u8 TC_sgn_FC[TC_sgn_f_Volume * TC_sgn_ND * TC_sgn_qf];
-  i32 TC_sgn_W[TC_sgn_m_Volume * TC_sgn_ND * 7];
+  i32 TC_sgn_W[TC_sgn_m_Volume * TC_sgn_ND * TC_MIXN];
   u8 TC_sgn_WC[TC_sgn_m_Volume * TC_sgn_ND];
   i32 TC_sgn_WM[TC_sgn_n_Volume * TC_sgn_MND * 3];
   u8 TC_sgn_WMC[TC_sgn_n_Volume * TC_sgn_MND];
@@ -73,7 +73,7 @@ struct TC_sgn_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_sgn_s_Volume * TC_sgn_ND * TC_sgn_qs)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_sgn_f_Volume * TC_sgn_ND * TC_sgn_qf)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_sgn_f_Volume * TC_sgn_ND * TC_sgn_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_sgn_m_Volume * TC_sgn_ND * 7)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_sgn_m_Volume * TC_sgn_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_sgn_m_Volume * TC_sgn_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_sgn_n_Volume * TC_sgn_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_sgn_n_Volume * TC_sgn_MND);

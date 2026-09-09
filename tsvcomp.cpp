@@ -217,6 +217,10 @@ static rc_buf rcb;
     it -- `G`, on a context of its own -- so the 30th row these tables used to
     carry was addressed by nothing, in every family, at 1/30th of the whole
     model's address space.  `codes` refuses rather than reaching for it.  */
+/*  How many inputs the main mixer weighs -- see tc_fam::bit for what they
+    are.  It is a constant and not a parameter because the tables are sized by
+    it and the .idx may not resize them.  */
+constexpr int TC_MIXN  = 7;
 constexpr int TC_NODE  = 29;              /*  0-2 ladder, 3-28 length  */
 constexpr int TC_MNODE = 169;             /*  13 lengths x 13 positions  */
 constexpr int TC_NBMAX = 62;              /*  bit lengths the cascade admits  */
@@ -540,7 +544,7 @@ struct tc_fam {
   i16 * S, * S2;
   i32 * W;
   cm_apm ap, ap2;
-  cm_mix<7> mx;
+  cm_mix<TC_MIXN> mx;
   /*  The mantissa's own two-input mix.  It stays out of the main mixer
       because what it weighs is different -- one counter against the
       codebook -- and because a bare counter is what a decision this cheap
@@ -602,7 +606,7 @@ struct tc_fam {
     if (G) tc_vfits("counter G", vg, vgi);
     tc_ifits("APM 1", vs, (sz) nd * qqs);
     tc_ifits("APM 2", vf, (sz) nd * qqf);
-    tc_ifits("mixer", vm, (sz) nd * 7);
+    tc_ifits("mixer", vm, (sz) nd * TC_MIXN);
     tc_ifits("mantissa mixer", vn, (sz) nm * 3);
     (void) sc;  (void) sc2;  (void) wc;  (void) wmc;
     /*  Each APM sizes its own curve.  The two do different jobs on different
@@ -1468,7 +1472,11 @@ static void tc_page(tc_pg & p, u32 seq, int bos, int cont, tsv & out) {
     pg_prevtype = p.type; }
 
   g = tc_enc ? (i64) (((u64) p.ghi << 32) | p.glo) : 0;
-  g = tc_auxc(F_GRAN, tc_qlog(tc_last[F_GRAN]), tc_enc ? g - pg_prev : 0, 1) + pg_prev;
+  /*  tc_auxc supplies the field's own last value as the second axis, so
+      passing it again as the first gave F_GRAN one axis twice over.  What the
+      other fields get there is the value before that, which is what tc_aux
+      passes; a granule difference is worth predicting from the one before it.  */
+  g = tc_auxc(F_GRAN, tc_qlog(tc_last2[F_GRAN]), tc_enc ? g - pg_prev : 0, 1) + pg_prev;
   pg_prev = g;
   if (!tc_enc) { p.glo = (u32) ((u64) g & 0xFFFFFFFFu);  p.ghi = (u32) ((u64) g >> 32); }
 

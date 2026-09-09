@@ -58,7 +58,7 @@ struct TC_cls_T {
   u8 TC_cls_SC[TC_cls_s_Volume * TC_cls_ND * TC_cls_qs];
   i16 TC_cls_F[TC_cls_f_Volume * TC_cls_ND * TC_cls_qf];
   u8 TC_cls_FC[TC_cls_f_Volume * TC_cls_ND * TC_cls_qf];
-  i32 TC_cls_W[TC_cls_m_Volume * TC_cls_ND * 7];
+  i32 TC_cls_W[TC_cls_m_Volume * TC_cls_ND * TC_MIXN];
   u8 TC_cls_WC[TC_cls_m_Volume * TC_cls_ND];
   i32 TC_cls_WM[TC_cls_n_Volume * TC_cls_MND * 3];
   u8 TC_cls_WMC[TC_cls_n_Volume * TC_cls_MND];
@@ -76,7 +76,7 @@ struct TC_cls_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_s_Volume * TC_cls_ND * TC_cls_qs)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_cls_f_Volume * TC_cls_ND * TC_cls_qf)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_f_Volume * TC_cls_ND * TC_cls_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_cls_m_Volume * TC_cls_ND * 7)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_cls_m_Volume * TC_cls_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_m_Volume * TC_cls_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_cls_n_Volume * TC_cls_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_cls_n_Volume * TC_cls_MND)

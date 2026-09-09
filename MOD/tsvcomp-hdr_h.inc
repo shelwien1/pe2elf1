@@ -66,7 +66,7 @@ struct TC_hdr_T {
   u8 TC_hdr_SC[TC_hdr_s_Volume * TC_hdr_ND * TC_hdr_qs];
   i16 TC_hdr_F[TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf];
   u8 TC_hdr_FC[TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf];
-  i32 TC_hdr_W[TC_hdr_m_Volume * TC_hdr_ND * 7];
+  i32 TC_hdr_W[TC_hdr_m_Volume * TC_hdr_ND * TC_MIXN];
   u8 TC_hdr_WC[TC_hdr_m_Volume * TC_hdr_ND];
   i32 TC_hdr_WM[TC_hdr_n_Volume * TC_hdr_MND * 3];
   u8 TC_hdr_WMC[TC_hdr_n_Volume * TC_hdr_MND];
@@ -84,7 +84,7 @@ struct TC_hdr_T {
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_s_Volume * TC_hdr_ND * TC_hdr_qs)
                               + (unsigned long long)sizeof(i16) * (unsigned long long)(TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_f_Volume * TC_hdr_ND * TC_hdr_qf)
-                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_m_Volume * TC_hdr_ND * 7)
+                              + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_m_Volume * TC_hdr_ND * TC_MIXN)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_m_Volume * TC_hdr_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(TC_hdr_n_Volume * TC_hdr_MND * 3)
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(TC_hdr_n_Volume * TC_hdr_MND)
