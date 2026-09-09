@@ -10,5 +10,5 @@ balrogg
 #  folds.
 export.!!!
 opttimes.!!!
-IDX/tsvcomp-const.idx
-IDX/tsvcomp-const.inc
+IDX/tsvcomp-*-const.idx
+IDX/tsvcomp-*-const.inc
