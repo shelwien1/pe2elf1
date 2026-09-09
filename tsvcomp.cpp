@@ -820,6 +820,13 @@ static i32 * dg_q1, * dg_q2, * dg_zr;     /*  [rno][pass][channel]  */
 static i32   cl_last[VD_MAXRES][VD_MAXCH], cl_last2[VD_MAXRES][VD_MAXCH];
 static i16 * fl_hist;                     /*  [blk][channel][post]  */
 static i16 * fl_yhist;                    /*  the same, rebuilt into a curve  */
+/*  Which floor configuration last wrote each of those rows, or -1 for none.
+    A row is keyed by block size and channel, and which floor a channel uses
+    is a property of the mode: two modes of the same block size may map the
+    same channel onto different floors, whose posts are at different
+    frequencies and whose count differs.  Read across that boundary the
+    "previous packet" context is a post from someone else's layout.  */
+static i32 * fl_who;
 static u32   tc_blk;                      /*  the block this packet is  */
 static u32   tc_nchan;
 
@@ -836,7 +843,9 @@ static void tc_hist_free(void) {
     dg_span[i] = cl_np[i] = 0;
   }
   free(dg_q1);  free(dg_q2);  free(dg_zr);  free(fl_hist);  free(fl_yhist);
+  free(fl_who);
   dg_q1 = dg_q2 = dg_zr = nullptr;  fl_hist = nullptr;  fl_yhist = nullptr;
+  fl_who = nullptr;
 }
 
 /*  A link's setup has just been read; size the histories it implies.  A
@@ -874,6 +883,8 @@ static void tc_setup_done(void) {
   dg_zr = (i32 *) tc_alloc((sz) su.nrs * 8 * tc_nchan * sizeof(i32));
   fl_hist = (i16 *) tc_alloc((sz) 2 * tc_nchan * VD_MAXPOST * sizeof(i16));
   fl_yhist = (i16 *) tc_alloc((sz) 2 * tc_nchan * VD_MAXPOST * sizeof(i16));
+  fl_who = (i32 *) tc_alloc((sz) 2 * tc_nchan * sizeof(i32));
+  for (i = 0; i < 2 * tc_nchan; i++) fl_who[i] = -1;
 }
 
 /*  libvorbis's render_point and the inverse of floor1's folding.  A post at
@@ -1327,8 +1338,16 @@ static void tc_payload(u32 mode) {
   for (k = 0; k < ch; k++) {
     u32 fno = mp->fl[mp->mux[k]];
     vd_floor * f = su.fl + fno;
-    i16 * hp = fl_hist + ((sz) tc_blk * tc_nchan + k) * VD_MAXPOST;
-    i16 * hy = fl_yhist + ((sz) tc_blk * tc_nchan + k) * VD_MAXPOST;
+    sz row = (sz) tc_blk * tc_nchan + k;
+    i16 * hp = fl_hist + row * VD_MAXPOST;
+    i16 * hy = fl_yhist + row * VD_MAXPOST;
+    /*  This channel's own past, and the channel before's, count only if they
+        are this floor's and, for the neighbour, from this packet: a channel
+        whose floor was not used this packet still holds whatever it held
+        when it last was, which is not "the channel beside this one, now".  */
+    int mine = fl_who[row] == (i32) fno;
+    int hasn = k && nz[k - 1]
+             && fl_who[row - 1] == (i32) mp->fl[mp->mux[k - 1]];
     u32 u, p;
     i32 quant = (i32) f->quant;
     tc_stage = STG_AUD;
@@ -1350,8 +1369,8 @@ static void tc_payload(u32 mode) {
       tcx v;
       i64 y;
       i32 pred = 0, room = 0, hl = 0, lov = 0, hiv = 0, ep = 0;
-      i32 o1 = k ? hp[p - (sz) VD_MAXPOST] : 0;    /*  the channel before  */
-      i32 od = k ? hy[p - (sz) VD_MAXPOST] - hy[p] : 0;
+      i32 o1 = hasn ? hp[p - (sz) VD_MAXPOST] : 0;  /*  the channel before  */
+      i32 od = hasn && mine ? hy[p - (sz) VD_MAXPOST] - hy[p] : 0;
       if (p >= 2) {
         u32 l = f->lo[p - 2], h = f->hi[p - 2];
         i32 hiroom, lowroom;
@@ -1366,11 +1385,12 @@ static void tc_payload(u32 mode) {
         room = (hiroom < lowroom ? hiroom : lowroom) << 1;
         hl = hiroom > lowroom ? 1 : hiroom < lowroom ? 2 : 0;
         lov = fl_cur[l];  hiv = fl_cur[h];
-        ep = vd_fold(hy[p], pred, quant);
+        ep = mine ? vd_fold(hy[p], pred, quant) : 0;
         if (ep < 0) ep = 0;
       }
       tc_make_flr((int) fno, (int) (f->rnk[p] < VD_MAXPOST ? f->rnk[p] : VD_MAXPOST - 1),
-                  tc_qlog(hp[p]), tc_qlog(hy[p]), p < 2, (int) tc_blk,
+                  tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0),
+                  p < 2, (int) tc_blk,
                   tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int) k,
                   tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv),
                   tcp_axis(fam_flr.pc), tc_qlog(ep), v);
@@ -1388,6 +1408,7 @@ static void tc_payload(u32 mode) {
       for (i = 0; i < f->posts; i++)
         tc_out->put("flr.y", fl_cur[f->srt[i]]);
     for (p = 0; p < f->posts; p++) { hp[p] = fl_cur[p];  hy[p] = fl_fy[p]; }
+    fl_who[row] = (i32) fno;
   }
   for (i = 0; i < mp->nstep; i++)
     if (nz[mp->mag[i]] || nz[mp->ang[i]])
