@@ -293,12 +293,15 @@ while( <I2> ) {
     # tbl_n() bounds-checks the count so the compiler can prove the byte size
     # cannot overflow -- without it every one of these lines draws a
     # -Walloc-size-larger-than from GCC 13+ about its own overflow guard.
-    # No () on the new[]: every table is filled by Codec::init() before it is
-    # read, and value-initializing here would just be a second pass over a few
-    # hundred MiB.  It also keeps the Debug build's semantics identical to the
-    # Const build, where these are array members of a default-initialized
-    # object and are equally indeterminate until init() fills them.
-    $t_con .= "  $v = new ${t}[ tbl_n(${sz}) ];\n";
+    # Mapped, not new[]: the host's tc_map hands back zeroed pages on demand,
+    # so a table costs address space at once and memory only where the codec
+    # reaches it.  That is what lets an index be wide -- new[] plus a fill
+    # touches every page of a table the codec will visit a thousandth of, and
+    # a table too large to touch is a table too large to have.  It also makes
+    # this build's memory behaviour the Const build's, whose tables are
+    # members of one mapped object, so `./mk.sh check` can compare the two on
+    # a set neither could allocate outright.
+    $t_con .= "  $v = (${t} *) tc_map( (unsigned long long)sizeof(${t}) * tbl_n(${sz}) );\n";
     # Running total of this module's table bytes.  Const mode can fold the sum
     # at compile time; Debug cannot, because the counts come from the mapping
     # objects opt.pl patches at load, so there it accumulates in _Init().
@@ -321,7 +324,7 @@ TEXT
       #$t_con .= "printf( \"sizeof($t ${v}[%i]) = %i\\n\", ${sz}, sizeof( ${t}[${sz}] ) );\n";
     }
 
-    $t_des .= "  delete[] $v;\n";
+    $t_des .= "  tc_unmap( $v, (unsigned long long)sizeof(${t}) * tbl_n(${sz}) );\n";
     next;
   }
   if( /^(\s*)MakeIndex\s+([^\s]+)/ ) {

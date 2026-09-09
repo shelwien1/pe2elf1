@@ -1,12 +1,14 @@
 #!/bin/sh
-#  The guards on model size, and on what a failed run leaves behind.
+#  What an index may ask for, and what a failed run leaves behind.
 #
 #  IDX/opt.pl flips pattern bits and keeps whatever makes the corpus smaller.
-#  The factor sizes in an index multiply, so a set that asks for a plausible
-#  table is a few flips from one that asks for forty-seven gigabytes -- and a
-#  run that dies partway through leaves a prefix of its output, which is small,
-#  which is exactly what the search is looking for.  That is a search that
-#  converges on a crash.  These are the checks that stop it.
+#  The factor sizes in an index multiply, so the sets it reaches are wide --
+#  tens of gigabytes of tables, of which a link touches a few hundred
+#  megabytes -- and that has to work, because that is where the wins are.
+#  What must not work is the set past even that, and what must never look
+#  like a win is a run that died partway through: its output is a prefix,
+#  a prefix is small, and small is exactly what the search is looking for.
+#  These are the checks on both edges.
 set -e
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$here"
@@ -35,6 +37,39 @@ build IDX/tc-guard.idx "$tmp/ok"
 if "$tmp/ok" c "$in" "$tmp/a.tc" >/dev/null 2>&1 && [ -s "$tmp/a.tc" ]
   then say "shipped parameters code the file" "ok"
   else say "shipped parameters code the file" "FAILED"; fail=1; fi
+
+#  Wide, and legitimately so: two thresholds opened up put dig_a's counter at
+#  5.4 billion entries -- 21.7 GB of tables, past what a 32-bit row base could
+#  address and well past what this machine holds.  It has to code the file
+#  anyway.  The pages a link actually reaches are a rounding error against what
+#  it reserves, so a wide index costs address space and almost no memory, and
+#  that is the whole reason an index is allowed to be this wide.
+sed -e 's/^\( *dig_a_q1s: *[a-z0-9]*, *-6!\)[01]*$/\11111111111111/' \
+    -e 's/^\( *dig_a_ps: *[a-z0-9]*, *-6!\)[01]*$/\11111111111111/' \
+    IDX/tsvcomp.idx > "IDX/tc-guard.idx"
+build IDX/tc-guard.idx "$tmp/wide"
+"$tmp/wide" c "$in" "$tmp/c.tc" >/dev/null 2>&1 &
+wp=$!
+rss=0
+while kill -0 "$wp" 2>/dev/null; do
+  if [ -r "/proc/$wp/status" ]; then
+    r=$(awk '/VmHWM/{print $2}' "/proc/$wp/status" 2>/dev/null || true)
+    [ -n "$r" ] && rss=$r
+  fi
+  sleep 1
+done
+wrc=0;  wait "$wp" || wrc=$?
+if [ "$wrc" != 0 ]; then
+  say "a wide index codes the file" "FAILED (exit $wrc)"; fail=1
+elif ! "$tmp/wide" d "$tmp/c.tc" "$tmp/c.tsv" >/dev/null 2>&1 || ! cmp -s "$in" "$tmp/c.tsv"; then
+  say "a wide index codes the file" "FAILED (the stream does not decode)"; fail=1
+elif [ "$rss" -gt 1048576 ]; then
+  say "a wide index costs no memory" "FAILED ($((rss/1024)) MB resident)"; fail=1
+elif [ "$rss" = 0 ]; then
+  say "a wide index codes the file" "ok (no /proc, so no memory reading)"
+else
+  say "a wide index codes the file" "ok -- $((rss/1024)) MB resident of 21.7 GB"
+fi
 
 #  An index widened past what the machine has: refused by name, before a byte
 #  of output exists, with a status the caller can see.

@@ -309,22 +309,30 @@ Table( Ctr, %M%tTail, %M%TL_Volume * 256 );
 
 | `USE_NEW` | member | allocation |
 |---|---|---|
-| `0` | `Ctr G0_tTail[G0_TL_Volume*256];` | none — it is the object |
-| `1` | `Ctr* G0_tTail;` | `anew<Ctr>(tbl_n(size), "G0_tTail")` in `%M%_Init()` |
+| `0` | `Ctr G0_tTail[G0_TL_Volume*256];` | none — it is a member of the module object |
+| `1` | `Ctr* G0_tTail;` | `tc_map(sizeof(Ctr) * tbl_n(size))` in `%M%_Init()`, released by `tc_unmap` in `%M%_Quit()` |
 
 Three details the generator handles that are easy to get wrong by hand:
 
 * **`tbl_n(size)` bounds-checks the count** so the compiler can prove the byte
   product cannot overflow. Without it GCC 13+ raises
   `-Walloc-size-larger-than` on *its own* overflow guard, for every such line.
-* **No `()` on the `new[]`.** Every table is filled by the codec's `init()`
-  before it is read, and value-initialising here would be a second pass over
-  hundreds of megabytes. It also keeps the two builds' semantics identical: in
-  the fixed-array form these are members of a default-initialised object and are
-  equally indeterminate until `init()` runs.
+* **The host supplies the allocator, and it should map rather than allocate.**
+  `tsvcomp`'s `tc_map` is `mmap(MAP_NORESERVE)` (`VirtualAlloc` on Windows), so
+  a table costs address space when it is made and memory only where the codec
+  reaches it. This is not a detail: an index whose factors multiply out to tens
+  of gigabytes is *ordinary* once an optimizer has been at it, and such an index
+  codes a real file in a few hundred megabytes resident, because a link visits
+  a rounding error's worth of the rows it can address. Anything that touches
+  the whole table — `new[]` and a `memset`, or a `.bss` the loader must commit —
+  makes a table too large to fill a table too large to have, and puts most of
+  the search space out of reach. It also keeps the two builds' memory behaviour
+  identical, which is what lets `./mk.sh check` compare them on a set neither
+  could allocate outright.
 * **`%M%_Size` accumulates the module's table bytes.** A `constexpr` sum in the
   shipping build; accumulated in `_Init()` in the tuning build, where the counts
-  are runtime values.
+  are runtime values. It is address space, not memory: a cap on it is a sanity
+  bound on how far a search has wandered, not a statement about the machine.
 
 ### When `Table()` is the wrong tool
 

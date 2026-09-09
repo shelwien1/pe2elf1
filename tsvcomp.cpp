@@ -158,8 +158,10 @@
 
 #ifdef _WIN32
   #define DEV_NULL "nul"
+  #include <windows.h>
 #else
   #define DEV_NULL "/dev/null"
+  #include <sys/mman.h>
 #endif
 
 #include "common.inc"      /*  types, diagnostics, loop macros  */
@@ -241,15 +243,52 @@ static void * tc_alloc(sz n) {
   tc_mem += n;
   return p;
 }
-/*  Every model table's unlearned state is now all-bits-zero, so the shipping
-    build -- whose tables are one static object -- needs no filling at all and
-    faults in only the pages a stream reaches.  The tuning build allocates
-    with new[], which does not zero, so there it has to be said out loud.  */
-#if USE_NEW
-  #define TC_WIPE(p, n) memset((p), 0, (n))
+/*  Model tables are mapped, not allocated, and this is the whole reason the
+    contexts can be as wide as IDX/opt.pl wants them.
+
+    Every table's unlearned state is all-bits-zero, and a fresh mapping is
+    zero, so a table costs address space at once and memory only where a
+    stream actually reaches it.  The tuned indices are enormously sparse:
+    a set asking for 38.9 GB of tables codes 00000008.tsv in 304 MB resident
+    and 00000007.tsv in 79 MB, because a few hundred thousand distinct
+    contexts is what a link really visits.  What has to be avoided is anything
+    that touches a page the coder never will -- a memset over the whole table,
+    which is what `new[]` plus a wipe amounted to, or a commit charge against
+    the whole reservation, which is what a multi-gigabyte .bss amounted to on
+    Linux: the kernel's default overcommit heuristic refuses the mapping and
+    the program dies before main().  MAP_NORESERVE says exactly what is meant.
+
+    Windows has no equivalent -- a commit is charged against RAM plus the
+    pagefile whatever one does -- so there a wide model is bounded by the
+    pagefile, and VirtualAlloc failing is reported like any other refusal
+    rather than left to become a fault.  */
+static void * tc_map(sz n) {
+  void * p;
+#ifdef _WIN32
+  p = VirtualAlloc(nullptr, n, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 #else
-  #define TC_WIPE(p, n) ((void) 0)
+  p = mmap(nullptr, n, PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  if (p == MAP_FAILED) p = nullptr;
 #endif
+  if (!p) FATAL_CODE(BLR_EXIT_IO,
+                     "cannot map %" PRIu64 " MB for a model table -- "
+                     "IDX/tsvcomp.idx asks for more than this machine will map",
+                     (u64) (n >> 20));
+  return p;
+}
+
+/*  INLINE for the same reason tbl_n has it: the shipping build's tables are
+    members of one object, so nothing there unmaps a table and exactly one of
+    the two builds would draw -Wunused-function.  */
+static INLINE void tc_unmap(void * p, sz n) {
+  if (!p) return;
+#ifdef _WIN32
+  (void) n;  VirtualFree(p, 0, MEM_RELEASE);
+#else
+  munmap(p, n);
+#endif
+}
 
 #include "tc_prior.inc"    /*  the codebook's own model of its entries  */
 
@@ -349,10 +388,34 @@ constexpr long long tc_vmul(long long a, long long b) {
   return (a <= 0 || b <= 0 || a > TC_VOLMAX / b) ? TC_VOLMAX : a * b;
 }
 
+/*  IDX-FORMAT.md sec.9: this exists so the compiler can prove the byte product
+    behind a table cannot overflow.  The bound is on entries and is deliberately
+    far above anything a sane index reaches -- what actually bounds a model is
+    TC_MEMCAP, below, which is about the whole of it rather than one table.  */
 static INLINE u64 tbl_n(u64 n) {
-  FATAL_UNLESS(n > 0 && n <= ((u64) 1 << 31),
+  FATAL_UNLESS(n > 0 && n <= ((u64) 1 << 40),
                "IDX/tsvcomp.idx asks for a table of %" PRIu64 " entries", n);
   return n;
+}
+
+/*  A Volume as the index builder can address it.  idx2inc.pl accumulates
+    every index in an int, so this is the one limit no component escapes.  */
+static void tc_vfits(const char * what, sz vol, sz nodes) {
+  FATAL_UNLESS(vol > 0 && vol < ((sz) 1 << 31) && nodes > 0,
+               "IDX/tsvcomp.idx gives the %s an index of %" PRIu64 " rows -- "
+               "idx2inc.pl builds indices in int, so a Volume must stay under "
+               "2147483648", what, (u64) vol);
+}
+
+/*  And a Volume as the component itself can address it, for the components
+    that reach a row by multiplying the index by a width and keeping the
+    product in an int.  */
+static void tc_ifits(const char * what, sz vol, sz mult) {
+  tc_vfits(what, vol, mult);
+  FATAL_UNLESS(vol * mult < ((sz) 1 << 31),
+               "IDX/tsvcomp.idx gives the %s %" PRIu64 " rows of %" PRIu64
+               " -- it addresses them with an int, so the product must stay "
+               "under 2147483648", what, (u64) vol, (u64) mult);
 }
 
 /*  The fields the page and packet headers hold, one model context apart.
@@ -385,7 +448,8 @@ constexpr int TC_SGN_CLS = 1;
 
 #include "MOD/tsvcomp_h.inc"
 
-static TC_T tcm;
+/*  Mapped in tc_models(), not declared static -- see there.  */
+static TC_T * tcm;
 
 /*  Everything a residue digit's contexts are built from.  */
 struct tc_dv {
@@ -434,7 +498,12 @@ struct tc_fam {
   cm_mix<3> mxm;
   tc_pcur pc;                             /*  the prior for the value in hand  */
   int prp;                                /*  P(this bit is zero) from it, or -1  */
-  u32 ba, bb, bc, bd, bs, bf, bm, bt, bn, bg;
+  /*  The four counters' bases are 64-bit: a Volume just under the index
+      builder's 2^31 limit times TC_NODE is past what 32 bits hold, and a
+      base that wraps addresses another counter's row.  The APM, mixer and
+      mantissa rows are bounded to an int by tc_ifits, so theirs need not be.  */
+  sz  ba, bb, bc, bd;
+  u32 bs, bf, bm, bt, bn, bg;
   /*  Ten predictors, ten sets of parameters.  What had been shared: the
       mantissa counter and the sign counter both updated at counter A's rate,
       the two APMs at one rate between them, the mantissa mixer at the main
@@ -459,25 +528,31 @@ struct tc_fam {
             int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2,
             int bwt, int qqs, int qqf) {
     A = a;  B = b;  C = c;  D = d;  T = t;  S = s;  S2 = s2;  W = w;  G = g;
-    /*  The shipping build's tables come zeroed from the loader, so TC_WIPE
-        expands to nothing there and the sizes go unread.  */
-    (void) va;  (void) vb;  (void) vc;  (void) vd;  (void) vt;  (void) vg;
-    (void) sc;  (void) sc2;  (void) wc;  (void) wmc;  (void) vgi;
+    /*  A mapped table is already zero, which is every counter's, APM's and
+        mixer's unlearned state, so there is nothing to fill in either build.
+
+        What does have to be said is how wide an index each component can
+        actually address, because that is not one number.  idx2inc.pl builds
+        every index in `int`, so no Volume may reach 2^31 whatever the table
+        behind it costs.  Past that the four counters are the generous ones --
+        their row is reached through a 64-bit base, so a Volume near the limit
+        is merely expensive.  The APM multiplies its row count by the curve
+        width and keeps the product in an int; the mixers multiply theirs by
+        the input count and do the same.  An index that passes the first check
+        and fails one of these would wrap into its own table and code against
+        the wrong row, quietly, so each is checked where its width is known.  */
     ng = (int) vg;
-    TC_WIPE(A, va * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(B, vb * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(C, vc * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(D, vd * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(T, vt * TC_MNODE * sizeof(cm_cnt));
-    if (G) TC_WIPE(G, vgi * vg * sizeof(cm_cnt));
-    TC_WIPE(s, vs * TC_NODE * qqs * sizeof(i16));
-    TC_WIPE(sc, vs * TC_NODE * qqs);
-    TC_WIPE(s2, vf * TC_NODE * qqf * sizeof(i16));
-    TC_WIPE(sc2, vf * TC_NODE * qqf);
-    TC_WIPE(w, vm * TC_NODE * 7 * sizeof(i32));
-    TC_WIPE(wc, vm * TC_NODE);
-    TC_WIPE(wm, vn * TC_MNODE * 3 * sizeof(i32));
-    TC_WIPE(wmc, vn * TC_MNODE);
+    tc_vfits("counter A", va, TC_NODE);
+    tc_vfits("counter B", vb, TC_NODE);
+    tc_vfits("counter C", vc, TC_NODE);
+    tc_vfits("counter D", vd, TC_NODE);
+    tc_vfits("counter T", vt, TC_MNODE);
+    if (G) tc_vfits("counter G", vg, vgi);
+    tc_ifits("APM 1", vs, (sz) TC_NODE * qqs);
+    tc_ifits("APM 2", vf, (sz) TC_NODE * qqf);
+    tc_ifits("mixer", vm, (sz) TC_NODE * 7);
+    tc_ifits("mantissa mixer", vn, (sz) TC_MNODE * 3);
+    (void) sc;  (void) sc2;  (void) wc;  (void) wmc;
     /*  Each APM sizes its own curve.  The two do different jobs on different
         contexts -- one corrects a single counter and goes to the mixer, the
         other corrects what the mixer made of all of them -- so how many
@@ -512,10 +587,10 @@ struct tc_fam {
   }
 
   INLINE void select(const tcx & x) {
-    ba = (u32) x.a * TC_NODE;
-    bb = (u32) x.b * TC_NODE;
-    bc = (u32) x.c * TC_NODE;
-    bd = (u32) x.d * TC_NODE;
+    ba = (sz) x.a * TC_NODE;
+    bb = (sz) x.b * TC_NODE;
+    bc = (sz) x.c * TC_NODE;
+    bd = (sz) x.d * TC_NODE;
     bs = (u32) x.s * TC_NODE;
     bf = (u32) x.f * TC_NODE;
     bm = (u32) x.m * TC_NODE;
@@ -1438,16 +1513,16 @@ static void tc_walk(const char * inpath, const char * outpath) {
     IDX/tsvcomp.inc, `TC_dig_a_Volume` the product of the factor sizes in
     IDX/tsvcomp.idx, `TC_dig_rA` its Number.  */
 #define TC_WIRE(f, F, g, ng)                                                  \
-  (f).wire(tcm.TC_##F##_A, TC_##F##_a_Volume,                                 \
-           tcm.TC_##F##_B, TC_##F##_b_Volume,                                 \
-           tcm.TC_##F##_C, TC_##F##_c_Volume,                                 \
-           tcm.TC_##F##_D, TC_##F##_d_Volume,                                 \
-           tcm.TC_##F##_T, TC_##F##_t_Volume,                                 \
-           tcm.TC_##F##_S, tcm.TC_##F##_SC, TC_##F##_s_Volume,                \
-           tcm.TC_##F##_F, tcm.TC_##F##_FC, TC_##F##_f_Volume,                \
-           tcm.TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume,  \
-           tcm.TC_##F##_WM, TC_##F##_n_Volume,                                \
-           tcm.TC_##F##_WC, tcm.TC_##F##_WMC,                                 \
+  (f).wire(tcm->TC_##F##_A, TC_##F##_a_Volume,                                 \
+           tcm->TC_##F##_B, TC_##F##_b_Volume,                                 \
+           tcm->TC_##F##_C, TC_##F##_c_Volume,                                 \
+           tcm->TC_##F##_D, TC_##F##_d_Volume,                                 \
+           tcm->TC_##F##_T, TC_##F##_t_Volume,                                 \
+           tcm->TC_##F##_S, tcm->TC_##F##_SC, TC_##F##_s_Volume,                \
+           tcm->TC_##F##_F, tcm->TC_##F##_FC, TC_##F##_f_Volume,                \
+           tcm->TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume,  \
+           tcm->TC_##F##_WM, TC_##F##_n_Volume,                                \
+           tcm->TC_##F##_WC, tcm->TC_##F##_WMC,                                 \
            TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD,                \
            TC_##F##_rT, TC_##F##_rG,                                          \
            TC_##F##_mwA, TC_##F##_mwB, TC_##F##_mwC, TC_##F##_mwD,            \
@@ -1456,20 +1531,19 @@ static void tc_walk(const char * inpath, const char * outpath) {
            TC_##F##_lr, TC_##F##_mb, TC_##F##_lrm, TC_##F##_mbm,              \
            TC_##F##_bw, TC_##F##_qs, TC_##F##_qf)
 
-/*  What the model may ask for in tables.  A pattern is a search space and
-    IDX/opt.pl visits its ends: the factor sizes multiply, so a set that asks
-    for forty-seven gigabytes is a few bit-flips from one that asks for one,
-    and the optimizer has no way to know it went there.  Met with an
-    allocation the machine cannot serve, the shipping build -- whose tables
-    are lazily faulted BSS -- starts coding and is killed partway through by
-    the OOM killer, which is a signal nothing can catch and so leaves the
-    half-written output behind whatever the fatal path does about it.  So the
-    size is refused here, by name, before a byte of output exists.
+/*  What the model may ask for in tables -- address space, not memory, since
+    tc_map hands back a reservation and the pages arrive as the coder reaches
+    them.  A tuned set really does ask for tens of gigabytes and really does
+    code in a few hundred megabytes; the cap is a sanity bound on a search
+    that has no way of knowing how far it has wandered, not a statement about
+    what the machine has.  Which is also why it is not the thing keeping
+    IDX/opt.pl honest: a set whose *touched* pages exceed the machine still
+    ends under the OOM killer, a signal nothing can catch, and what survives
+    that is opt.pl reading the exit status rather than the size.
 
-    Override at build time if a machine really has the room:
-    -DTC_MEMCAP='((u64) 16 << 30)'.  */
+    Override at build time: -DTC_MEMCAP='((u64) 256 << 30)'.  */
 #ifndef TC_MEMCAP
-  #define TC_MEMCAP ((u64) 4 << 30)
+  #define TC_MEMCAP ((u64) 64 << 30)
 #endif
 #if !USE_NEW
 /*  The shipping build folds every size, so an .idx too large for the cap is a
@@ -1480,28 +1554,36 @@ static_assert(TC_T::TC_Size <= TC_MEMCAP,
 
 static void tc_models(void) {
   cm_tables();
-  tcm.TC_Init();
-  FATAL_UNLESS(tcm.TC_Size <= TC_MEMCAP,
+  /*  In the shipping build this object is the tables -- tens of gigabytes of
+      them, at fixed offsets -- so it is mapped rather than declared static:
+      a .bss that size needs -mcmodel=large to address and, on Linux, is
+      refused outright by the default overcommit heuristic, which kills the
+      program before main() with no message at all.  A mapping is zero, which
+      is what the loader would have given it.  */
+  tcm = (TC_T *) tc_map(sizeof(TC_T));
+  tcm->TC_Init();
+  FATAL_UNLESS(tcm->TC_Size <= TC_MEMCAP,
                "IDX/tsvcomp.idx asks for %" PRIu64 " MB of model tables, past "
                "the %" PRIu64 " MB this build allows -- narrow a context, or "
                "rebuild with a larger TC_MEMCAP",
-               (u64) (tcm.TC_Size >> 20), (u64) (TC_MEMCAP >> 20));
+               (u64) (tcm->TC_Size >> 20), (u64) (TC_MEMCAP >> 20));
   TC_WIRE(fam_dig, dig, (cm_cnt *) nullptr, 0);
   TC_WIRE(fam_sgn, sgn, (cm_cnt *) nullptr, 0);
-  TC_WIRE(fam_flr, flr, tcm.TC_flr_G, TC_SGN_FLR);
-  TC_WIRE(fam_cls, cls, tcm.TC_cls_G, TC_SGN_CLS);
-  TC_WIRE(fam_aux, aux, tcm.TC_aux_G, TC_SGN_AUX);
-  TC_WIRE(fam_hdr, hdr, tcm.TC_hdr_G, TC_SGN_HDR);
+  TC_WIRE(fam_flr, flr, tcm->TC_flr_G, TC_SGN_FLR);
+  TC_WIRE(fam_cls, cls, tcm->TC_cls_G, TC_SGN_CLS);
+  TC_WIRE(fam_aux, aux, tcm->TC_aux_G, TC_SGN_AUX);
+  TC_WIRE(fam_hdr, hdr, tcm->TC_hdr_G, TC_SGN_HDR);
 }
 
-/*  new[] throwing bad_alloc would abort, which skips the unlink and leaves the
-    partial output behind -- the very thing that misleads a size-driven search.
-    The generated tables are the only things this program allocates with new,
-    and there is nothing to fall back to, so failure is reported and the file
-    goes.  */
+/*  The model tables are mapped and report their own failures; what is left on
+    new[] is sh_mapping.inc's threshold tables, which are tiny.  Still worth a
+    handler: bad_alloc unwinds to terminate, terminate aborts, and an abort
+    skips the unlink and leaves a partial output behind -- the very thing that
+    misleads a size-driven search.  There is nothing to fall back to, so the
+    failure is reported and the file goes.  */
 static void tc_nomem(void) {
-  FATAL_CODE(BLR_EXIT_IO, "out of memory for the model tables -- "
-             "IDX/tsvcomp.idx asks for more than this machine has");
+  FATAL_CODE(BLR_EXIT_IO, "out of memory -- IDX/tsvcomp.idx asks for more "
+             "than this machine has");
 }
 
 int main(int argc, char ** argv) {
@@ -1530,7 +1612,7 @@ int main(int argc, char ** argv) {
     double tot = 0;
     for (i = 0; i < STG_N; i++) tot += tc_bits[i];
     fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n",
-            blr_prog, tot / 8, (u64) (tcm.TC_Size >> 20));
+            blr_prog, tot / 8, (u64) (tcm->TC_Size >> 20));
     if (tc_enc)
       for (i = 0; i < STG_N; i++) {
         fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", TC_STAGE[i],
