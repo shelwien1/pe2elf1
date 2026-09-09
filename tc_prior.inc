@@ -44,13 +44,33 @@ constexpr u32 TCP_MANMAX = 64;
 
 static sz tcp_mem;
 
+/*  b^e, stopped well short of where it would wrap.  Used only to bound how
+    many entries a given number of places can spell, so a saturated answer
+    means "more than any book has" and bounds nothing.  */
+static INLINE u64 tcp_pow(u32 b, u32 e) {
+  u64 v = 1;
+  u32 i;
+  for (i = 0; i < e; i++) {
+    if (v > ((u64) 1 << 40) / (b ? b : 1)) return (u64) 1 << 40;
+    v *= b;
+  }
+  return v;
+}
+
 /*  `nlev` places of an `nsym`-ary alphabet.  A residue book spells its entry
     least significant place first (io.inc's rs_sym divides by nv as it goes);
     a classbook spells it most significant first (the classword loop
     multiplies by ncl), which is `be`.  */
 struct tc_ptab {
   int ok, be;
-  u32 nsym, nlev, nnode;
+  /*  `nlev` is how many places are tabulated and `ndim` how many the vector
+      has.  They part company when the trie would not fit: a dense trie is
+      nbr^k nodes at level k, so a book of any width runs out of room after a
+      few places, and refusing the whole prior there loses the first places
+      too -- which are the ones every entry passes through and the ones a
+      vector always reaches.  Tabulating what fits and stopping the cursor
+      where the table stops costs nothing and keeps the rest.  */
+  u32 nsym, nlev, ndim, nnode;
   /*  A floor post's alphabet is not its trie's branching: the value says
       which subclass book coded it, and it is the subclass that the classword
       spells.  So the symbol alphabet (`nsym` values) and the branching
@@ -90,18 +110,21 @@ struct tc_ptab {
     u32 k;
     drop();
     if (!nsym_ || !nbr_ || !nlev_ || nsym_ > TCP_SYMMAX || nlev_ > 16) return nullptr;
-    nsym = nsym_;  nbr = nbr_;  nlev = nlev_;  be = be_;
+    nsym = nsym_;  nbr = nbr_;  ndim = nlev_;  be = be_;
     nnode = 0;
-    for (k = 0; k < nlev; k++) {
+    /*  As many levels as fit, rather than all of them or none.  */
+    for (k = 0; k < ndim; k++) {
+      if (lim > TCP_NODEMAX || nnode + lim > TCP_NODEMAX) break;
+      if (tcp_mem + (sz) (nnode + lim) * (nsym * 2 + 4 + TCP_NBMAX) * 4 > TCP_MEMMAX) break;
       sz_[k] = (u32) lim;
       of[k] = nnode;
-      if (lim > TCP_NODEMAX || nnode + lim > TCP_NODEMAX) return nullptr;
       nnode += (u32) lim;
       lim *= nbr;
-      if (lim > (u64) 1 << 32) return nullptr;
+      if (lim > (u64) 1 << 32) { k++;  break; }
     }
+    nlev = k;
+    if (!nlev) return nullptr;
     of[nlev] = nnode;
-    if (tcp_mem + (sz) nnode * (nsym * 2 + 4 + TCP_NBMAX) * 4 > TCP_MEMMAX) return nullptr;
     acc  = (u64 *) calloc((sz) nnode * nsym, sizeof(u64));
     pw   = (u32 *) calloc((sz) nnode * nsym, sizeof(u32));
     tot  = (u32 *) calloc(nnode, sizeof(u32));
@@ -158,8 +181,11 @@ struct tc_ptab {
     acc = layout(nsym_, nsym_, nlev_, be_);
     if (!acc) return 0;
     for (i = 0; i < nsym; i++) { val[i] = value[i];  brm[i] = i; }
-    lim = (u64) sz_[nlev - 1] * nsym;
-    cap = (u32) (lim < ent ? lim : ent);   /*  entries the places can spell  */
+    /*  What the vector's places can spell -- all of them, not just the ones
+        that fit in the table, since an entry past the tabulated depth still
+        passes through the prefixes that are tabulated.  */
+    lim = tcp_pow(nsym, ndim);
+    cap = (u32) (lim < ent ? lim : ent);
     /*  Every used entry drops its weight into the node of each of its
         prefixes.  2^-len is scaled by 2^32 so it stays an integer; the
         lengths Vorbis admits are 1..32.  */
@@ -169,7 +195,12 @@ struct tc_ptab {
       if (!L || L > 32) continue;
       w = (u64) 1 << (32 - L);
       for (k = 0; k < nlev; k++) {
-        if (be) { nd = e / sz_[nlev - 1 - k] / nsym;  s = (e / sz_[nlev - 1 - k]) % nsym; }
+        /*  Big-endian spells the most significant place first, so the prefix
+            of length k is what is left after dividing out the places below
+            it -- of which there are ndim - k, whether or not they are all
+            tabulated.  */
+        if (be) { u64 d = tcp_pow(nbr, ndim - 1 - k);
+                  nd = (u32) (e / d / nsym);  s = (u32) ((e / d) % nsym); }
         else    { nd = e % sz_[k];  s = (e / sz_[k]) % nsym; }
         acc[(sz) (of[k] + nd) * nsym + s] += w;
       }
@@ -228,14 +259,14 @@ struct tc_ptab {
       if (!clen || !cs) {
         for (i = 0; i < nnode; i++) cwt[(sz) i * nbr_] = TCP_SCALE;
       } else {
-        lim = (u64) sz_[cd - 1] * nbr_;
+        lim = tcp_pow(nbr_, cd);
         cap = (u32) (lim < cent ? lim : cent);
         for (e = 0; e < cap; e++) {
           u32 L = clen[e], nd, sb;
           u64 w;
           if (!L || L > 32) continue;
           w = (u64) 1 << (32 - L);
-          for (k = 0; k < cd; k++) {
+          for (k = 0; k < nlev; k++) {
             nd = e % sz_[k];  sb = (e / sz_[k]) % nbr_;
             cwt[(sz) (of[k] + nd) * nbr_ + sb] += w;
           }
