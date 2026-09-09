@@ -1,7 +1,5 @@
 
-static const byte TC_aux_a_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
-static const byte TC_aux_b_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 static const byte TC_aux_c_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
@@ -43,8 +41,8 @@ static const int TC_aux_qf = (30+3) * (1);
 static const int TC_aux_mb = (0+0) * (1);
 
 
-static const long long TC_aux_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 6), 3); // 252
-static const long long TC_aux_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 14), 1), 1); // 14
+static const long long TC_aux_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 5), 6), 3); // 90
+static const long long TC_aux_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 6), 1), 1); // 6
 static const long long TC_aux_c_Volume = tc_vmul(1, 14); // 14
 static const long long TC_aux_d_Volume = tc_vmul(1, 14); // 14
 static const long long TC_aux_f_Volume = tc_vmul(1, 14); // 14

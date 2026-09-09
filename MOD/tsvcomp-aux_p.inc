@@ -26,12 +26,12 @@ void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
   (void) fld;  (void) p1;  (void) p2;
 
   a = 0;
-  a = a*14 + TC_aux_a_fld[__min(13,__max(0,fld-(1-1)))];
+  a = a*5 + ((fld>0+(1-1))+(fld>2+(1-1))+(fld>5+(1-1))+(fld>6+(1-1)));
   a = a*6 + ((p1>0+(1-1))+(p1>8+(1-1))+(p1>12+(1-1))+(p1>13+(1-1))+(p1>14+(1-1)));
   a = a*3 + ((p2>0+(1-1))+(p2>6+(1-1)));
 
   b = 0;
-  b = b*14 + TC_aux_b_fld[__min(13,__max(0,fld-(1-1)))];
+  b = b*6 + ((fld>1+(1-1))+(fld>2+(1-1))+(fld>4+(1-1))+(fld>5+(1-1))+(fld>8+(1-1)));
 
   c = 0;
   c = c*14 + TC_aux_c_fld[__min(13,__max(0,fld-(1-1)))];
