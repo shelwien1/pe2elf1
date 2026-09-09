@@ -34,16 +34,16 @@ static const int TC_aux_qf = (30+3) * (1);
 static const int TC_aux_mb = (0+0) * (1);
 
 
-static const long long TC_aux_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, 32), 6), 3); // 576
-static const long long TC_aux_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 32), 1), 1); // 32
-static const long long TC_aux_c_Volume = tc_vmul(1, 32); // 32
-static const long long TC_aux_d_Volume = tc_vmul(1, 32); // 32
-static const long long TC_aux_f_Volume = tc_vmul(1, 32); // 32
+static const long long TC_aux_a_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<5)), 6), 3); // 576
+static const long long TC_aux_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<5)), 1), 1); // 32
+static const long long TC_aux_c_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long TC_aux_d_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long TC_aux_f_Volume = tc_vmul(1, (1<<5)); // 32
 static const long long TC_aux_g_Volume = tc_vmul(tc_vmul(1, 16), 1); // 16
-static const long long TC_aux_m_Volume = tc_vmul(1, 32); // 32
-static const long long TC_aux_n_Volume = tc_vmul(1, 32); // 32
-static const long long TC_aux_s_Volume = tc_vmul(1, 32); // 32
-static const long long TC_aux_t_Volume = tc_vmul(1, 32); // 32
+static const long long TC_aux_m_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long TC_aux_n_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long TC_aux_s_Volume = tc_vmul(1, (1<<5)); // 32
+static const long long TC_aux_t_Volume = tc_vmul(1, (1<<5)); // 32
 
 struct TC_aux_T { 
 #undef USE_NEW

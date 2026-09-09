@@ -33,16 +33,16 @@ static const int TC_hdr_qf = (30+3) * (1);
 static const int TC_hdr_mb = (0+0) * (1);
 
 
-static const long long TC_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 64), 5), 8), 3); // 7680
+static const long long TC_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, (1<<6)), 5), 8), 3); // 7680
 static const long long TC_hdr_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), (1<<5)); // 96
-static const long long TC_hdr_c_Volume = tc_vmul(1, 64); // 64
-static const long long TC_hdr_d_Volume = tc_vmul(1, 64); // 64
-static const long long TC_hdr_f_Volume = tc_vmul(1, 64); // 64
+static const long long TC_hdr_c_Volume = tc_vmul(1, (1<<6)); // 64
+static const long long TC_hdr_d_Volume = tc_vmul(1, (1<<6)); // 64
+static const long long TC_hdr_f_Volume = tc_vmul(1, (1<<6)); // 64
 static const long long TC_hdr_g_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1); // 1
-static const long long TC_hdr_m_Volume = tc_vmul(1, 64); // 64
-static const long long TC_hdr_n_Volume = tc_vmul(tc_vmul(1, 64), (1<<6)); // 4096
-static const long long TC_hdr_s_Volume = tc_vmul(1, 64); // 64
-static const long long TC_hdr_t_Volume = tc_vmul(tc_vmul(1, 64), (1<<6)); // 4096
+static const long long TC_hdr_m_Volume = tc_vmul(1, (1<<6)); // 64
+static const long long TC_hdr_n_Volume = tc_vmul(tc_vmul(1, (1<<6)), (1<<6)); // 4096
+static const long long TC_hdr_s_Volume = tc_vmul(1, (1<<6)); // 64
+static const long long TC_hdr_t_Volume = tc_vmul(tc_vmul(1, (1<<6)), (1<<6)); // 4096
 
 struct TC_hdr_T { 
 #undef USE_NEW

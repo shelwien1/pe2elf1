@@ -916,9 +916,12 @@ static int tc_tagid(const char * tag) {
     if (!strcmp(tc_tag[i], tag)) { id = (int) i;  break; }
   if (id < 0) {
     char * dst = tc_tagbuf + (sz) tc_ntag * (TSV_TAGMAX + 1);
-    /*  hdr_a's tag axis is 64 wide and TC_MAXTAG is what the table holds; a
-        reader that grew past either would index off the end of both, so it is
-        refused here rather than found later.  */
+    /*  TC_MAXTAG is what tc_tag, tc_tlast and the sign table hold, so a
+        reader that wants more than that is refused here rather than found
+        later.  The model's tag axis is narrower -- six bits -- but it is a
+        mask now rather than a bare multiply, so a tag past it aliases onto
+        another tag's context, deterministically on both sides, instead of
+        indexing off the end of the table the way `ADD 64: tag` did.  */
     FATAL_UNLESS(tc_ntag < TC_MAXTAG, "the reader asks for more than %d tags",
                  TC_MAXTAG);
     snprintf(dst, TSV_TAGMAX + 1, "%s", tag);

@@ -127,6 +127,24 @@ ADD 2: OldLR      ->    Cont = Cont*(2) + (OldLR);
 
 For a factor that is already a small dense integer and needs no quantizer.
 
+**`ADD` has no mapping object behind it**, and two things follow that are easy
+to be surprised by:
+
+* **It is not tunable.** No object means no descriptor, no `!MAP!`, nothing for
+  `opt.pl` to find. An `ADD` axis is a decision the author made and the search
+  can never revisit — and since it is usually written once per index, one `ADD`
+  line can quietly fix the same choice across a whole family.
+* **It does not clamp.** Every other form bounds what it emits (`&` masks, a
+  threshold list saturates); `ADD n: v` emits `Cont*n + v` and trusts that
+  `v < n`. A `v` that grows past `n` runs off the end of the table rather than
+  aliasing inside it. `tsvcomp` had this: `ADD 64: tag` against a reader
+  allowed 128 tags.
+
+A dense axis of width 2^k is exactly a mask of k ones — `ADD 32: fld` and
+`fld: fld, &11111` build the identical index — so unless the multiplier is not
+a power of two, prefer the mask. It costs nothing, it clamps, and it hands the
+optimizer the choice of how many of those bits are worth paying for.
+
 ---
 
 ## 5. Parameters

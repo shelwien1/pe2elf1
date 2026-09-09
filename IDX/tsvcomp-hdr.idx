@@ -24,7 +24,7 @@ Const 0
 #  makes cb.len and cmt.byte an order-1 byte model.
 
 Index a
-ADD 64: tag
+ a_tag: tag, &111111
 ! a_p1:   p1,    1!100000000010110
 ! a_p2:   p2,    1!1111111
 ! a_pos:  pos,   1!011
@@ -36,22 +36,22 @@ Index b
 ! b_p1r:  p1r,   &01011110
 
 Index c
-ADD 64: tag
+ c_tag: tag, &111111
 
 Index d
-ADD 64: tag
+ d_tag: tag, &111111
 
 Index s
-ADD 64: tag
+ s_tag: tag, &111111
 
 Index f
-ADD 64: tag
+ f_tag: tag, &111111
 
 Index m
-ADD 64: tag
+ m_tag: tag, &111111
 
 Index t
-ADD 64: tag
+ t_tag: tag, &111111
 ! t_p1r:  p1r,   &01101111
 
 !Number rA, 1, 0!00010000
@@ -78,7 +78,7 @@ ADD 64: tag
 
 
 Index n
-ADD 64: tag
+ n_tag: tag, &111111
 ! n_p1r:  p1r,   &01101111
 
 Index g
