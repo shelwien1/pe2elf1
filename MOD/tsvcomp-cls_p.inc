@@ -51,8 +51,14 @@ void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev
   d = d*4 + ((prev2>0+(1-1))+(prev2>1+(1-1))+(prev2>2+(1-1)));
 
   s = 0;
+  s = s*13 + TC_cls_s_band[__min(12,__max(0,band-(1-1)))];
+  s = s*4 + ((t1>0+(1-1))+(t1>1+(1-1))+(t1>2+(1-1)));
+  s = s*4 + ((tn>0+(1-1))+(tn>1+(1-1))+(tn>2+(1-1)));
 
   f = 0;
+  f = f*13 + TC_cls_f_band[__min(12,__max(0,band-(1-1)))];
+  f = f*4 + ((t1>0+(1-1))+(t1>1+(1-1))+(t1>2+(1-1)));
+  f = f*4 + ((tn>0+(1-1))+(tn>1+(1-1))+(tn>2+(1-1)));
 
   m = 0;
   m = m*2 + ((band>2+(1-1)));

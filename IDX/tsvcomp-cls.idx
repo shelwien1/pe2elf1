@@ -20,74 +20,78 @@ Const 0
 #  ---------------------------------------------------------------------------
 #  Residue classes: the class before it (-15.13% on its own, measured in
 #  TSVTRANS.md) and the class the same partition had one packet ago.
+#
+#  As in tsvcomp-flr.idx, every line here was frozen and both APMs were empty.
+#  The partition, the same partition last packet and the next one are worth
+#  429 bytes of class over four files.  Unfrozen now.
 
 Index a
-! a_rno:  rno,   1!1
-! a_band: band,  1!011010101110000
-! a_prev: prev,  1!0101011
-! a_t1:   t1,    1!0001111
-! a_blk:  blk,   1!1
-! a_tn:   tn,    1!000
-! a_prev2: prev2, 1!000
-! a_pq:   pq,    1!00000000000000000000000000000000
+  a_rno:  rno,   1!1
+  a_band: band,  1!011010101110000
+  a_prev: prev,  1!0101011
+  a_t1:   t1,    1!0001111
+  a_blk:  blk,   1!1
+  a_tn:   tn,    1!000
+  a_prev2: prev2, 1!000
+  a_pq:   pq,    1!00000000000000000000000000000000
 
 Index b
-! b_rno:  rno,   1!0
-! b_band: band,  1!100001111110000
-! b_prev: prev,  1!111010100000000
-! b_t1:   t1,    1!111
-! b_blk:  blk,   1!1
-! b_tn:   tn,    1!000
-! b_prev2: prev2, 1!000
-! b_pq:   pq,    1!00000000000000000000000000000000
+  b_rno:  rno,   1!0
+  b_band: band,  1!100001111110000
+  b_prev: prev,  1!111010100000000
+  b_t1:   t1,    1!111
+  b_blk:  blk,   1!1
+  b_tn:   tn,    1!000
+  b_prev2: prev2, 1!000
+  b_pq:   pq,    1!00000000000000000000000000000000
 
 Index c
-! c_band: band,  1!000
-! c_prev: prev,  1!111
-! c_t1:   t1,    1!111
-! c_tn:   tn,    1!111
-! c_prev2: prev2, 1!000
-! c_pq:   pq,    1!00000000000000000000000000000000
+  c_band: band,  1!000
+  c_prev: prev,  1!111
+  c_t1:   t1,    1!111
+  c_tn:   tn,    1!111
+  c_prev2: prev2, 1!000
+  c_pq:   pq,    1!00000000000000000000000000000000
 
 Index d
-! d_band: band,  1!111
-! d_prev: prev,  1!111
-! d_t1:   t1,    1!000
-! d_tn:   tn,    1!000
-! d_prev2: prev2, 1!111
-! d_pq:   pq,    1!00000000000000000000000000000000
+  d_band: band,  1!111
+  d_prev: prev,  1!111
+  d_t1:   t1,    1!000
+  d_tn:   tn,    1!000
+  d_prev2: prev2, 1!111
+  d_pq:   pq,    1!00000000000000000000000000000000
 
 Index s
-! s_band: band,  1!000
-! s_prev: prev,  1!000
-! s_t1:   t1,    1!000
-! s_tn:   tn,    1!000
-! s_prev2: prev2, 1!000
-! s_pq:   pq,    1!00000000000000000000000000000000
+  s_band: band, 1!111111111111
+  s_prev: prev,  1!000
+  s_t1: t1, 1!111
+  s_tn: tn, 1!111
+  s_prev2: prev2, 1!000
+  s_pq:   pq,    1!00000000000000000000000000000000
 
 Index f
-! f_band: band,  1!000
-! f_prev: prev,  1!000
-! f_t1:   t1,    1!000
-! f_tn:   tn,    1!000
-! f_prev2: prev2, 1!000
-! f_pq:   pq,    1!00000000000000000000000000000000
+  f_band: band, 1!111111111111
+  f_prev: prev,  1!000
+  f_t1: t1, 1!111
+  f_tn: tn, 1!111
+  f_prev2: prev2, 1!000
+  f_pq:   pq,    1!00000000000000000000000000000000
 
 Index m
-! m_band: band,  1!001
-! m_prev: prev,  1!101
-! m_t1:   t1,    1!1
-! m_tn:   tn,    1!000
-! m_prev2: prev2, 1!000
-! m_pq:   pq,    1!00000000000000000000000000000000
+  m_band: band,  1!001
+  m_prev: prev,  1!101
+  m_t1:   t1,    1!1
+  m_tn:   tn,    1!000
+  m_prev2: prev2, 1!000
+  m_pq:   pq,    1!00000000000000000000000000000000
 
 Index t
-! t_band: band,  1!101
-! t_prev: prev,  1!001
-! t_t1:   t1,    1!101
-! t_tn:   tn,    1!000
-! t_prev2: prev2, 1!000
-! t_pq:   pq,    1!00000000000000000000000000000000
+  t_band: band,  1!101
+  t_prev: prev,  1!001
+  t_t1:   t1,    1!101
+  t_tn:   tn,    1!000
+  t_prev2: prev2, 1!000
+  t_pq:   pq,    1!00000000000000000000000000000000
 
 Number rA, 1, 0!01010000
 Number rB, 1, 0!00101011
@@ -111,12 +115,12 @@ Number mb, 1, 0!00000000
 
 
 Index n
-! n_band: band,  1!101
-! n_prev: prev,  1!001
-! n_t1:   t1,    1!101
-! n_tn:   tn,    1!000
-! n_prev2: prev2, 1!000
-! n_pq:   pq,    1!00000000000000000000000000000000
+  n_band: band,  1!101
+  n_prev: prev,  1!001
+  n_t1:   t1,    1!101
+  n_tn:   tn,    1!000
+  n_prev2: prev2, 1!000
+  n_pq:   pq,    1!00000000000000000000000000000000
 
 Index g
 #  No factors: fam_cls codes a class through `code`, which never reaches a

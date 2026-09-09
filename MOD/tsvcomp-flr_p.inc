@@ -49,12 +49,16 @@ void tc_make_flr( int fno, int col, int p1, int fy, int raw, int blk,
   c = c*12 + TC_flr_c_ep[__min(11,__max(0,ep-(1-1)))];
 
   d = 0;
+  d = d*8 + ((prd>0+(1-1))+(prd>1+(1-1))+(prd>2+(1-1))+(prd>3+(1-1))+(prd>4+(1-1))+(prd>5+(1-1))+(prd>6+(1-1)));
+  d = d*12 + TC_flr_d_ep[__min(11,__max(0,ep-(1-1)))];
 
   s = 0;
   s = s*6 + ((col>0+(1-1))+(col>2+(1-1))+(col>3+(1-1))+(col>4+(1-1))+(col>6+(1-1)));
   s = s*3 + ((fy>0+(1-1))+(fy>2+(1-1)));
 
   f = 0;
+  f = f*3 + ((hl>0+(1-1))+(hl>1+(1-1)));
+  f = f*12 + TC_flr_f_ep[__min(11,__max(0,ep-(1-1)))];
 
   m = 0;
   m = m*16 + TC_flr_m_col[__min(15,__max(0,col-(1-1)))];
