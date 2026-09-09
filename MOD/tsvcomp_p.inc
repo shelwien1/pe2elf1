@@ -343,6 +343,7 @@ void tc_make_aux( int fld, int p1, int p2, tcx & X ) {
   aux_n = aux_n*(32) + (fld);
 
   aux_g = 0;
+  aux_g = aux_g*16 + TC_aux_g_p1[__min(15,__max(0,p1-(1-1)))];
   X.a = aux_a;  X.b = aux_b;  X.c = aux_c;  X.d = aux_d;  X.s = aux_s;  X.f = aux_f;  X.m = aux_m;  X.t = aux_t;
   X.n = aux_n;  X.g = aux_g;
 }

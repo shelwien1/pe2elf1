@@ -266,7 +266,7 @@ Number dig_rG, 1, 0!11111111
 Number dig_rS1, 1, 0!00111
 Number dig_rS2, 1, 0!00111
 Number dig_lr, 1, 0!01011
-Number dig_lrm, 1, 0!01011
+Number dig_lrm, 1, 0!100000
 Number dig_mbm, 1, 0!01000100
 Number dig_mwA, 1, 0!00000010
 Number dig_mwB, 1, 0!00000010
@@ -925,10 +925,15 @@ Index aux_n
 ADD 32: fld
 
 Index aux_g
+ aux_g_p1:   p1,    1!111111111111111
+ aux_g_p2:   p2,    1!0000000
 
 Index hdr_n
 ADD 64: tag
 ! hdr_n_p1r:  p1r,   &01101111
 
 Index hdr_g
+! hdr_g_p1:   p1,    1!000000000000000
+! hdr_g_p2:   p2,    1!0000000
+! hdr_g_pos:  pos,   1!000
 ! hdr_g_p1r:  p1r,   &00000000

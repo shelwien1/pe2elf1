@@ -4,6 +4,7 @@
 
 
 
+static const byte TC_aux_g_p1[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 
 
 
@@ -97,7 +98,7 @@ static const int TC_dig_rG = (255+0) * (1);
 static const int TC_dig_rS1 = (7+0) * (1);
 static const int TC_dig_rS2 = (7+0) * (1);
 static const int TC_dig_lr = (11+0) * (1);
-static const int TC_dig_lrm = (11+0) * (1);
+static const int TC_dig_lrm = (32+0) * (1);
 static const int TC_dig_mbm = (68+0) * (1);
 static const int TC_dig_mwA = (2+0) * (1);
 static const int TC_dig_mwB = (2+0) * (1);
@@ -221,7 +222,7 @@ static const int TC_aux_b_Volume = 1* 32* 1* 1; // 32
 static const int TC_aux_c_Volume = 1* 32; // 32
 static const int TC_aux_d_Volume = 1* 32; // 32
 static const int TC_aux_f_Volume = 1* 32; // 32
-static const int TC_aux_g_Volume = 1; // 1
+static const int TC_aux_g_Volume = 1* 16* 1; // 16
 static const int TC_aux_m_Volume = 1* 32; // 32
 static const int TC_aux_n_Volume = 1* 32; // 32
 static const int TC_aux_s_Volume = 1* 32; // 32
@@ -261,7 +262,7 @@ static const int TC_hdr_b_Volume = 1* 3* 1* (1<<5); // 96
 static const int TC_hdr_c_Volume = 1* 64; // 64
 static const int TC_hdr_d_Volume = 1* 64; // 64
 static const int TC_hdr_f_Volume = 1* 64; // 64
-static const int TC_hdr_g_Volume = 1; // 1
+static const int TC_hdr_g_Volume = 1* 1* 1* 1; // 1
 static const int TC_hdr_m_Volume = 1* 64; // 64
 static const int TC_hdr_n_Volume = 1* 64* (1<<6); // 4096
 static const int TC_hdr_s_Volume = 1* 64; // 64
