@@ -57,7 +57,7 @@ while( <I1> ) {
     $coef=~s/\%M\%/${prefix}_/g;
     $var=~s/\%M\%/${prefix}_/g;
     print "ADD $coef:$var\n";
-    $volume{$index} .= "* $coef";
+    push @{$vfactors{$index}}, "$coef";
     $count{$index} *= $coef;
     $porder{$index} .= "*(1+$coef";
     $code{$index} .= "\n$index = $index*($coef) + ($var);";
@@ -65,7 +65,17 @@ while( <I1> ) {
     $index = $1;
     print "Index=<$index>\n";
     $code{$index} = "\n$index = 0;";
-    $volume{$index} = "static const int ${prefix}_${index}_Volume = 1";
+    # A Volume is a product of factor sizes, and the table sizes multiply it
+    # again by the node count and, for an APM, by the curve width.  In int
+    # that product wraps, and the wrap that lands positive is the dangerous
+    # one: the bound in tbl_n is then satisfied by the wrong number, a table
+    # far too small is allocated, and the coder indexes off the end of it with
+    # nothing said.  So: long long, and folded through a saturating multiply,
+    # because with two dozen factors opt.pl can widen its way past 64 bits
+    # too.  Saturating means whatever checks the size downstream sees a number
+    # at least as large as what was asked for, and refuses it.
+    $volume{$index} = "1";
+    $vfactors{$index} = [];
     $porder{$index} = "static const int ${prefix}_${index}_POrder = 1";
     $count{$index} = 1;
     $maps{$index} = "";
@@ -104,7 +114,7 @@ while( <I1> ) {
     ($tag,$var,$map) = ($1,$2,$3);
     $ccount = ($map=~s/1/1/g);
     if( $const==0 ) {
-      $volume{$index} .= "* ${prefix}_${tag}.Size";
+      push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
       $code{$index} .= "\n${prefix}_${tag}.inc( $index, $var );";
       $maps{$index} .= ($debug>0?'p':'m')."mask2( ${prefix}_${tag}, \"$map\" );\n"
     } else {
@@ -121,7 +131,7 @@ while( <I1> ) {
             $pmap[$i] = ( $j<$i ) ? $pmap[$j] : $k++;
           }
         }
-        $volume{$index} .= "* $k";
+        push @{$vfactors{$index}}, "$k";
         $count{$index} *= $k;
         $sz1 = $sz-1;
         $code{$index} .= "\n$index = ($index*$k) + ${prefix}_${tag}[($var)<1?1:(($var)>$sz1?$sz1:($var))]; // $map"; # clamped == masking_b::map
@@ -135,7 +145,7 @@ while( <I1> ) {
         $c .= " };\n";
         $maps{$index} .= $c;
       } else {
-        $volume{$index} .= "* $sz";
+        push @{$vfactors{$index}}, "$sz";
         $count{$index} *= $k;
         $sz1 = $sz-1;
         $code{$index} .= "\n$index = ($index*$sz) + (($var)<1?1:(($var)>$sz1?$sz1:($var))); // $map"; # clamped == masking_b::map
@@ -146,12 +156,12 @@ while( <I1> ) {
     ($tag,$var,$map) = ($1,$2,$3);
     $ccount = ($map=~s/1/1/g);
     if( $const==0 ) {
-      $volume{$index} .= "* ${prefix}_${tag}.Size";
+      push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
       $code{$index} .= "\n${prefix}_${tag}.inc( $index, $var );";
       $maps{$index} .= ($debug>0?'p':'m')."mask( ${prefix}_${tag}, \"$map\" );\n"
     } else {
       if( $ccount>0 ) {
-        $volume{$index} .= "* (1<<$ccount)";
+        push @{$vfactors{$index}}, "(1<<$ccount)";
         $count{$index} = $count{$index} << $ccount;
         $lmap = length($map);
         # Decompose the mask into runs of ones and emit shift/mask/or code.
@@ -187,12 +197,12 @@ while( <I1> ) {
     $ccount = ($map=~s/1/1/g) + 1;
     $count{$index} *= $ccount;
     if( $const==0 ) {
-      $volume{$index} .= "* ${prefix}_${tag}.Size";
+      push @{$vfactors{$index}}, "${prefix}_${tag}.Size";
       $porder{$index} .= "*(1+${prefix}_${tag}.Size";
       $code{$index} .= "\n${prefix}_${tag}.inc( $index, $var );";
       $maps{$index} .= ($debug>0?'p':'m')."desc( ${prefix}_${tag}, $base, \"$map\" );\n"
     } else {
-      $volume{$index} .= "* $ccount";
+        push @{$vfactors{$index}}, "$ccount";
       $porder{$index} .= "*(1+$ccount";
       $lmap = length($map);
       if( $ccount > 8 ) {
@@ -339,7 +349,9 @@ close O1;
 open O1, ">$fileH";
 print O1 "$hdr\n";
 for (sort keys %volume) {
-  print O1 "$volume{$_}; // $count{$_}\n";
+  { my $v = $volume{$_};
+    $v = "tc_vmul($v, $_)" for @{$vfactors{$_}};
+    print O1 "static const long long ${prefix}_${_}_Volume = $v; // $count{$_}\n"; }
   $porder{$_} .= '*0' . (')' x ($porder{$_}=~s/\(/\(/g));
   $porder{$_} .= '; // ' . eval( substr( $porder{$_}, index( $porder{$_}, "=" )+1 ) );
 #  print O1 "$porder{$_}\n";

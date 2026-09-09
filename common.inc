@@ -102,7 +102,23 @@ static void message(const char * fmt, va_list ap) {
   fputc('\n', stderr);
 }
 
-static NORETURN void die(int code) { exit(code); }
+/*  A tool that dies partway through has already written part of its output,
+    and a truncated output is worse than none: it is a well-formed prefix that
+    the next thing along will happily measure.  IDX/opt.pl reads the size of
+    the file and nothing else, so a run that died after one 64 kB buffer flush
+    reads as a spectacular improvement on 800 kB, and the search walks towards
+    whatever killed it.  So whatever a fatal path is about, the half-written
+    output goes with it, and the caller is left with no file rather than a
+    plausible one.  */
+static const char * blr_partial;
+static void blr_output(const char * path) { blr_partial = path; }
+static void blr_output_kept(void) { blr_partial = nullptr; }
+
+static NORETURN void die(int code) {
+  if (blr_partial) { const char * p = blr_partial;  blr_partial = nullptr;
+                     remove(p); }
+  exit(code);
+}
 
 NORETURN void blr_fatal(const char * fmt, ...) {
   va_list ap;

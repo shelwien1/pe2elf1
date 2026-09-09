@@ -148,6 +148,7 @@
     well as the files.  */
 
 #include <math.h>
+#include <new>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -336,6 +337,18 @@ typedef u16 word;                         /*  idx2inc.pl's wider bucket table  *
     by name, instead of as a failed allocation.  The shipping build sizes its
     tables as fixed arrays and never calls it, hence `INLINE`: a plain static
     would draw -Wunused-function from exactly one of the two builds.  */
+/*  A Volume is folded through this rather than with a bare multiply.  There
+    are up to two dozen factors in one, and IDX/opt.pl widening several at
+    once carries the product past what 64 bits hold; a product that wraps can
+    land on a number that looks perfectly reasonable, and then the table is
+    sized from it and the coder walks off the end of it in silence.
+    Saturating means tbl_n and the memory cap see a number at least as large
+    as what was asked for, so they refuse it.  */
+constexpr long long TC_VOLMAX = (long long) 1 << 60;
+constexpr long long tc_vmul(long long a, long long b) {
+  return (a <= 0 || b <= 0 || a > TC_VOLMAX / b) ? TC_VOLMAX : a * b;
+}
+
 static INLINE u64 tbl_n(u64 n) {
   FATAL_UNLESS(n > 0 && n <= ((u64) 1 << 31),
                "IDX/tsvcomp.idx asks for a table of %" PRIu64 " entries", n);
@@ -436,10 +449,10 @@ struct tc_fam {
   int bw;
   int ng;                                 /*  the sign counter's field span  */
 
-  void wire(cm_cnt * a, int va, cm_cnt * b, int vb, cm_cnt * c, int vc,
-            cm_cnt * d, int vd, cm_cnt * t, int vt,
-            i16 * s, u8 * sc, int vs, i16 * s2, u8 * sc2, int vf,
-            i32 * w, int vm, cm_cnt * g, int vg, int vgi, i32 * wm, int vn,
+  void wire(cm_cnt * a, sz va, cm_cnt * b, sz vb, cm_cnt * c, sz vc,
+            cm_cnt * d, sz vd, cm_cnt * t, sz vt,
+            i16 * s, u8 * sc, sz vs, i16 * s2, u8 * sc2, sz vf,
+            i32 * w, sz vm, cm_cnt * g, sz vg, sz vgi, i32 * wm, sz vn,
             u8 * wc, u8 * wmc,
             int ra, int rb, int rc_, int rd, int rt, int rg,
             int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg,
@@ -450,29 +463,29 @@ struct tc_fam {
         expands to nothing there and the sizes go unread.  */
     (void) va;  (void) vb;  (void) vc;  (void) vd;  (void) vt;  (void) vg;
     (void) sc;  (void) sc2;  (void) wc;  (void) wmc;  (void) vgi;
-    ng = vg;
-    TC_WIPE(A, (sz) va * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(B, (sz) vb * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(C, (sz) vc * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(D, (sz) vd * TC_NODE * sizeof(cm_cnt));
-    TC_WIPE(T, (sz) vt * TC_MNODE * sizeof(cm_cnt));
-    if (G) TC_WIPE(G, (sz) vgi * vg * sizeof(cm_cnt));
-    TC_WIPE(s, (sz) vs * TC_NODE * qqs * sizeof(i16));
-    TC_WIPE(sc, (sz) vs * TC_NODE * qqs);
-    TC_WIPE(s2, (sz) vf * TC_NODE * qqf * sizeof(i16));
-    TC_WIPE(sc2, (sz) vf * TC_NODE * qqf);
-    TC_WIPE(w, (sz) vm * TC_NODE * 7 * sizeof(i32));
-    TC_WIPE(wc, (sz) vm * TC_NODE);
-    TC_WIPE(wm, (sz) vn * TC_MNODE * 3 * sizeof(i32));
-    TC_WIPE(wmc, (sz) vn * TC_MNODE);
+    ng = (int) vg;
+    TC_WIPE(A, va * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(B, vb * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(C, vc * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(D, vd * TC_NODE * sizeof(cm_cnt));
+    TC_WIPE(T, vt * TC_MNODE * sizeof(cm_cnt));
+    if (G) TC_WIPE(G, vgi * vg * sizeof(cm_cnt));
+    TC_WIPE(s, vs * TC_NODE * qqs * sizeof(i16));
+    TC_WIPE(sc, vs * TC_NODE * qqs);
+    TC_WIPE(s2, vf * TC_NODE * qqf * sizeof(i16));
+    TC_WIPE(sc2, vf * TC_NODE * qqf);
+    TC_WIPE(w, vm * TC_NODE * 7 * sizeof(i32));
+    TC_WIPE(wc, vm * TC_NODE);
+    TC_WIPE(wm, vn * TC_MNODE * 3 * sizeof(i32));
+    TC_WIPE(wmc, vn * TC_MNODE);
     /*  Each APM sizes its own curve.  The two do different jobs on different
         contexts -- one corrects a single counter and goes to the mixer, the
         other corrects what the mixer made of all of them -- so how many
         points that correction is worth is two questions, not one.  */
-    ap.init(S, sc, (u32) vs * TC_NODE, qqs);
-    ap2.init(S2, sc2, (u32) vf * TC_NODE, qqf);
-    mx.init(W, wc, (u32) vm * TC_NODE);
-    mxm.init(wm, wmc, (u32) vn * TC_MNODE);
+    ap.init(S, sc, vs * TC_NODE, qqs);
+    ap2.init(S2, sc2, vf * TC_NODE, qqf);
+    mx.init(W, wc, vm * TC_NODE);
+    mxm.init(wm, wmc, vn * TC_MNODE);
     /*  A pattern is a search space and the optimizer visits its ends, so
         anything used as a size, a shift or a limit is clamped at the point of
         use -- IDX/IDX-FORMAT.md §5 says the same, and means it.  */
@@ -1322,6 +1335,7 @@ static void tc_walk(const char * inpath, const char * outpath) {
     tc_in = &in;
     bf = fopen(outpath, "wb");
     if (!bf) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", outpath);
+    blr_output(outpath);
     h[0] = (u8) TC_VER;  h[1] = 0;
     if (fwrite(TC_MAGIC, 1, sizeof TC_MAGIC - 1, bf) != sizeof TC_MAGIC - 1 ||
         fwrite(h, 1, 2, bf) != 2)
@@ -1344,6 +1358,7 @@ static void tc_walk(const char * inpath, const char * outpath) {
     rcb.attach(bf, 1 << 16);
     rc.StartDecode(&rcb);
     out.create(outpath);
+    blr_output(outpath);
     tc_out = &out;
   }
 
@@ -1412,6 +1427,7 @@ static void tc_walk(const char * inpath, const char * outpath) {
     out.close();
     fclose(bf);
   }
+  blr_output_kept();
   rcb.free_();
 }
 
@@ -1440,15 +1456,52 @@ static void tc_walk(const char * inpath, const char * outpath) {
            TC_##F##_lr, TC_##F##_mb, TC_##F##_lrm, TC_##F##_mbm,              \
            TC_##F##_bw, TC_##F##_qs, TC_##F##_qf)
 
+/*  What the model may ask for in tables.  A pattern is a search space and
+    IDX/opt.pl visits its ends: the factor sizes multiply, so a set that asks
+    for forty-seven gigabytes is a few bit-flips from one that asks for one,
+    and the optimizer has no way to know it went there.  Met with an
+    allocation the machine cannot serve, the shipping build -- whose tables
+    are lazily faulted BSS -- starts coding and is killed partway through by
+    the OOM killer, which is a signal nothing can catch and so leaves the
+    half-written output behind whatever the fatal path does about it.  So the
+    size is refused here, by name, before a byte of output exists.
+
+    Override at build time if a machine really has the room:
+    -DTC_MEMCAP='((u64) 16 << 30)'.  */
+#ifndef TC_MEMCAP
+  #define TC_MEMCAP ((u64) 4 << 30)
+#endif
+#if !USE_NEW
+/*  The shipping build folds every size, so an .idx too large for the cap is a
+    build error rather than something to find out at run time.  */
+static_assert(TC_T::TC_Size <= TC_MEMCAP,
+              "IDX/tsvcomp.idx asks for more model tables than TC_MEMCAP allows");
+#endif
+
 static void tc_models(void) {
   cm_tables();
   tcm.TC_Init();
+  FATAL_UNLESS(tcm.TC_Size <= TC_MEMCAP,
+               "IDX/tsvcomp.idx asks for %" PRIu64 " MB of model tables, past "
+               "the %" PRIu64 " MB this build allows -- narrow a context, or "
+               "rebuild with a larger TC_MEMCAP",
+               (u64) (tcm.TC_Size >> 20), (u64) (TC_MEMCAP >> 20));
   TC_WIRE(fam_dig, dig, (cm_cnt *) nullptr, 0);
   TC_WIRE(fam_sgn, sgn, (cm_cnt *) nullptr, 0);
   TC_WIRE(fam_flr, flr, tcm.TC_flr_G, TC_SGN_FLR);
   TC_WIRE(fam_cls, cls, tcm.TC_cls_G, TC_SGN_CLS);
   TC_WIRE(fam_aux, aux, tcm.TC_aux_G, TC_SGN_AUX);
   TC_WIRE(fam_hdr, hdr, tcm.TC_hdr_G, TC_SGN_HDR);
+}
+
+/*  new[] throwing bad_alloc would abort, which skips the unlink and leaves the
+    partial output behind -- the very thing that misleads a size-driven search.
+    The generated tables are the only things this program allocates with new,
+    and there is nothing to fall back to, so failure is reported and the file
+    goes.  */
+static void tc_nomem(void) {
+  FATAL_CODE(BLR_EXIT_IO, "out of memory for the model tables -- "
+             "IDX/tsvcomp.idx asks for more than this machine has");
 }
 
 int main(int argc, char ** argv) {
@@ -1469,6 +1522,7 @@ int main(int argc, char ** argv) {
   blr_set_prog(argv[0]);
   blr_paths_distinct(argv + a, 2);
   tc_enc = mode[0] == 'c';
+  std::set_new_handler(tc_nomem);
   tc_models();
   tc_walk(argv[a], argv[a + 1]);
   if (tc_verbose) {

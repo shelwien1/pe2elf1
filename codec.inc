@@ -17,6 +17,7 @@ void vb_pack(const char * in, const char * out) {
 
   src.open(in);
   t.create(out);
+  blr_output(out);
   v.init();
   lw.start();
 
@@ -48,6 +49,7 @@ void vb_pack(const char * in, const char * out) {
   t.put("link.more", 0);
 
   t.close();  src.close();
+  blr_output_kept();
 }
 
 void vb_unpack(const char * in, const char * out) {
@@ -59,6 +61,7 @@ void vb_unpack(const char * in, const char * out) {
   v.init();
   o = fopen(out, "wb");
   if (!o) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", out);
+  blr_output(out);
 
   while (t.get_u("link.more", 2)) {
     ogg_page q;
@@ -112,4 +115,5 @@ void vb_unpack(const char * in, const char * out) {
 
   t.close();
   if (fclose(o)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", out);
+  blr_output_kept();
 }

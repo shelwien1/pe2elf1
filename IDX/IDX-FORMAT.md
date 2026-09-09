@@ -171,13 +171,36 @@ prefix plus underscore.
 For each `Index` a row count is emitted:
 
 ```c
-static const int D0_Cont_Volume = 1* D0_m0.Size* D0_m1.Size* ... * 2;
+static const long long D0_Cont_Volume =
+  tc_vmul(tc_vmul(tc_vmul(1, D0_m0.Size), D0_m1.Size), ... );
 ```
 
 In the shipping build every factor is a literal, so `_Volume` is a constant
 expression and can size an array or be a template argument. In the tuning build
 it is a product of member reads — usable as a size at runtime, and *not* as a
 constant expression. §8 is about the consequences.
+
+**The type is `long long`, and the product goes through a saturating multiply
+the host program must supply:**
+
+```c
+constexpr long long TC_VOLMAX = (long long) 1 << 60;
+constexpr long long tc_vmul(long long a, long long b) {
+  return (a <= 0 || b <= 0 || a > TC_VOLMAX / b) ? TC_VOLMAX : a * b;
+}
+```
+
+A Volume is a product of factor sizes, and whatever sizes a table multiplies it
+again — by the node count, and for an APM by the curve width. Two dozen factors
+is not many when each is a `mapping` an optimizer can widen a bit at a time, and
+in `int` that product wraps. The wrap that lands *positive* is the dangerous
+one: a bounds check downstream is then satisfied by the wrong number, a table
+far too small is allocated, and the coder indexes off the end of it with nothing
+said. Saturating instead means the number that reaches the check is at least as
+large as what was asked for, so an index that asks for more than the machine has
+is refused by name rather than mis-sized. `_Volume` must therefore never be
+narrowed back to `int`, and anything that multiplies one should use `tc_vmul`
+too rather than a bare `*`.
 
 ---
 
@@ -468,7 +491,8 @@ pdesc( D0_m2, 1, "1" );
 pmask( D0_m3, "00000011" );
 pdesc( D0_m4, 1, "1" );
 
-static const int D0_Cont_Volume = 1* D0_m0.Size* D0_m1.Size* D0_m2.Size* D0_m3.Size* D0_m4.Size* 2;
+static const long long D0_Cont_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(
+  1, D0_m0.Size), D0_m1.Size), D0_m2.Size), D0_m3.Size), D0_m4.Size), 2);
 ```
 
 ### `sh_model-D0_p.inc`

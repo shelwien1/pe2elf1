@@ -124,10 +124,10 @@ struct cm_apm {
       bit for bit what it was.  */
   i16 * t;
   u8  * c;
-  u32 n;
+  sz n;
   int idx, bkt, q;
   u16 ident[CM_QMAX];
-  void init(i16 * tab, u8 * cnt, u32 nctx, int qq) {
+  void init(i16 * tab, u8 * cnt, sz nctx, int qq) {
     int j;
     t = tab;  c = cnt;  n = nctx;  idx = 0;  bkt = 0;
     q = qq < 3 ? 3 : qq > CM_QMAX ? CM_QMAX : qq;
@@ -177,7 +177,7 @@ struct cm_mix {
   /*  Stored as the distance from the mean the weights start at, for the same
       reason the APM stores a distance from its curve.  */
   enum { W0 = (1 << 16) / N };
-  void init(i32 * wt, u8 * cnt, u32 nctx) {
+  void init(i32 * wt, u8 * cnt, sz nctx) {
     (void) nctx;
     w = wt;  c = cnt;
     nx = 0;  row = 0;  ctxn = 0;  pr = CM_PHALF;

@@ -51,9 +51,16 @@ sub measure {
   my $t = 0;
   for my $f (@files) {
     unlink $tmp;
-    system( "$exe c \"$f\" $tmp >/dev/null 2>&1" );
+    my $rc = system( "$exe c \"$f\" $tmp >/dev/null 2>&1" );
     my $s = -s $tmp;
-    return 0x7FFFFFFF if !defined($s) || $s < 64;   # crashed / refused
+    # The exit status decides, not the size.  A run that dies partway through
+    # has already flushed part of its output, and a part of an 800 kB stream
+    # is 64 kB -- which, measured by size alone, is the best result the search
+    # has ever seen, so it walks towards whatever killed it and stays there.
+    # tsvcomp now removes its own half-written output, but a signal it cannot
+    # catch (the OOM killer) still leaves one, and this is the check that does
+    # not depend on the program getting the chance to tidy up.
+    return 0x7FFFFFFF if $rc != 0 || !defined($s) || $s < 64;
     $t += $s;
   }
   return $t;
