@@ -1,0 +1,14 @@
+#  What the Makefile and ./mk.sh leave behind.  MOD/ is not here: it is a
+#  build input, generated but checked in, so that `make` works without perl.
+tsvcomp
+balrogg
+.flags
+.flags.tmp
+*.o
+
+#  IDX/opt.pl's output, and the copies ./mk.sh release makes of the source it
+#  folds.
+export.!!!
+opttimes.!!!
+IDX/tsvcomp-const.idx
+IDX/tsvcomp-const.inc
