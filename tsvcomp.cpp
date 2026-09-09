@@ -935,11 +935,26 @@ static int tc_tagid(const char * tag) {
   return id;
 }
 
+/*  BALROGG-MODEL.md sec.7: what this tag held last time is used twice over.
+    As a context it is quantised, which throws away exactly the low bits that
+    say how much it moved; as a prediction it is not, so what the cascade sees
+    is a difference that is usually small and often zero.  balrogg carries an
+    `order` per field in mdl_cfg for the same reason and most of its 44 fields
+    are order-1.
+
+    Only the header packets.  The same difference on the page and packet
+    fields costs 4653 bytes over the corpus where this saves 154: those are
+    mostly flags and lengths that do not drift, and a difference turns a value
+    the model had learned into one it has to learn again.  Deciding per field
+    which of the two to use -- balrogg's table, or a score kept on both sides
+    -- was tried and is worse than either fixed choice, because a context row
+    that sees both regimes has learned neither.  */
 static i64 tc_hdrval(int id, i64 x) {
   tcx v;
+  i64 pr = tc_tlast[id];
   tc_make_hdr(id, tc_qlog(tc_tlast[id]), tc_qlog(tc_tlast2[id]),
               tc_qlog(tc_runpos), (int) (tc_tlast[id] & 255), v);
-  x = fam_hdr.codes(v, x, (u32) id);
+  x = fam_hdr.codes(v, tc_enc ? x - pr : 0, (u32) id) + pr;
   tc_tlast2[id] = tc_tlast[id];  tc_tlast[id] = x;
   return x;
 }

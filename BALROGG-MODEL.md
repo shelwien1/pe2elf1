@@ -347,18 +347,107 @@ For orientation, since the picture is not one-sided:
   passes left).  balrogg's arena axes are comparatively plain; its power comes
   from the indirect model and the mixer, not from the axes.
 
+## What these are worth here — measured
+
+Four of them were built against this tree and measured on its corpus.  The
+results are consistent enough to be worth stating before the ranking below,
+because they change it.
+
+| mechanism | compression | decode cost |
+|---|---|---|
+| §1 indirect model (bit history + state map) | −0.013% | +5–18%, or +100% on a 64 MB table |
+| §3 match model | **worse** | — |
+| §2 hashed fifth counter | −0.02% | +8–32% |
+| §4 profile, scalar parameters only | −0.01% | none |
+| §4 profile, context widths | −0.05% | none, but two geometries |
+
+**§1, the indirect model.** Built as described: a bit history of 210 states
+reached by a bounded, discounted (n0, n1) rule, one byte per hashed context,
+a state map learned per (state, node), two more mixer inputs.  Three things
+were worth learning.  Seeding the state map from each state's counts is not
+optional — unseeded it *lost* 24 bytes on 00000005 where seeded it gained 10.
+Coverage was never the problem: on 00000007 only 1.6% of lookups landed on a
+fresh state and the mean state held 15 observations.  And the whole of the
+first measured cost — decode time doubling — was cache misses on a 64 MB
+table; the same model on 512 kB cost 5–18% and gained the same.  What it
+could not do was beat counters A–D, which on this data already predict these
+bits better than a shared-state estimate can.
+
+**§3, the match model.** balrogg's, ported: 2^18 ring, 2^16 table, minimum
+match 10, the prediction entering as two mixer inputs signed by the expected
+bit.  Run offline over tsvcomp's own digit stream first, it looked
+compelling — on 00000007 a match is live for 69% of digits and names the next
+one exactly 70% of the time.  In the coder its expected bit was right 77.3% of
+3.8 M decisions.  It still made every file bigger.  The reason is the same one
+as §1: 77% is *worse than tsvcomp already is* on those bits, so a
+strongly-signed input at that accuracy pulls the mix down, and no amount of
+weighting recovers what the adaptation costs.
+
+  One finding from it is worth keeping whatever happens to the model.  A
+  match's accuracy alternates sharply with the parity of its length — 92% at
+  even lengths against 65–80% at odd ones — because an interleaved stereo
+  residue puts the two channels on alternate slots, so an even offset lines a
+  channel up with itself and an odd one crosses them.  Any per-length table
+  over this data wants the parity, not just the length.  balrogg keeps the
+  channel parity in its mixer selector for what is probably the same reason.
+
+**§2, a hashed fifth counter.** The one that worked, as far as it went: a
+fifth `cm_cnt` on a 1.15-billion-context index hashed into a fixed table,
+mixed alongside A–D.  It improved *every* file — 8 to 227 bytes — because the
+mixer leans on it where the data supports a wide context and ignores it where
+it does not, which is what counters A–D already do at four narrower widths.
+A 4 MB table kept 95% of the gain of a 256 MB one.  It was still 0.02% for
+8–32% of decode time, and this tree is at 1.5–1.8x of Rev F before it, so it
+was not kept.
+
+**§4, per-file parameters.** Splitting the tuned-on-07 set in two says where
+its gain lives: its scalar parameters alone are worth −550 bytes on 00000007
+against the −3000 of the whole set, so five sixths of it is in the context
+widths.  Widening just the four axes that set opened up — `ax`, `ps`, `p0s`,
+`t1s`, the signed neighbourhood ones — reproduces the split exactly: −244 on
+00000007, +64 to +175 on the small files.  Wide contexts are a large-file
+effect, and per-file selection is the mechanism that lets a corpus have both.
+
+### What this says about the two models
+
+tsvcomp already beats balrogg by 1.56% on this corpus, and these measurements
+say why that is hard to extend rather than easy: its direct counters, its two
+APMs and its codebook prior between them predict a residue digit better than
+either a shared bit-history state or a 77%-accurate match can, so mechanisms
+that add a *differently shaped* estimate of the same thing have little to
+give.  balrogg's arena model is coarse by comparison, which is exactly why the
+indirect model and the match carry so much of its weight.  Borrowing a
+mechanism across the gap does not borrow its value with it.
+
+What survives the comparison is the class of mechanism that adds *information
+the model does not have* rather than another estimate of what it does: the
+per-file profile (§4), which is information about the file, and the wider
+context (§2), which is resolution the counters cannot afford.  Both were the
+smallest and dullest items on the original list.
+
+---
+
 ## Where the leverage is
 
-Ordered by expected return against effort, for this tree:
+Re-ordered by what the measurements above found, rather than by what the
+mechanisms are worth in balrogg:
 
-1. **Bit histories and a state map** (§1) — addresses sparse wide contexts,
-   which is where tsvcomp's measured gains already come from.
-2. **Per-file transmitted parameters** (§4) — the spread between profiles is
-   measured and large, and the selector is free.
-3. **A match model** (§3) — orthogonal to everything tsvcomp has, and the
-   only mechanism here that finds structure at an unknown period.
-4. **Hashed contexts** (§2) — mostly a way to make 1 and 3 affordable, and to
-   lift the `int` ceiling on a Volume.
-5. **An explicit predictor on header fields** (§7) — small in absolute terms
-   (headers are ~2% of output) but cheap to do.
-6. **The effort ladder** (§5) — buys back decode time rather than bytes.
+1. **Per-file transmitted parameters, on context widths** (§4) — the only
+   thing measured that is worth 0.05% *and* free at decode time.  It needs two
+   folded index builders and one byte in the header; the tables are sized for
+   the wider geometry and the narrower builder simply addresses a prefix of
+   them, so there is one table set, not two.
+2. **An explicit predictor on header fields** (§7) — untried here.  Small in
+   absolute terms (headers and page fields are ~0.4% of the corpus, more of a
+   short file) but it costs nothing per bit and coding `v - p1` instead of
+   `v` under a quantised `p1` is a strictly better use of the same
+   information.
+3. **A hashed fifth counter** (§2) — 0.02% for 8–32% of decode.  Worth
+   revisiting if decode time is ever bought back elsewhere; the patch is
+   small and the 4 MB table is what to use.
+4. **The effort ladder** (§5) — buys decode time rather than bytes, which is
+   the currency 3 is short of.
+5. **The indirect model** (§1) and **the match model** (§3) — measured, and
+   not worth their cost against this model.  Both patches are recorded in the
+   session that measured them; neither is worth rebuilding without first
+   changing what the direct counters do.
