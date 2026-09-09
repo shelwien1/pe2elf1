@@ -1,5 +1,5 @@
 
-static const byte TC_hdr_a_tag[64+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64 };
+static const byte TC_hdr_a_tag[64+1]={ 0,1,2,3,4,4,5,6,7,8,9,10,11,12,13,14,14,15,16,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61 };
 
 
 static const byte TC_hdr_c_tag[64+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64 };
@@ -19,7 +19,7 @@ static const byte TC_hdr_t_tag[64+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,
 
 
 static const int TC_hdr_rA = (16+0) * (1);
-static const int TC_hdr_rB = (32+0) * (1);
+static const int TC_hdr_rB = (0+0) * (1);
 static const int TC_hdr_rC = (63+0) * (1);
 static const int TC_hdr_rD = (63+0) * (1);
 static const int TC_hdr_rT = (16+0) * (1);
@@ -36,12 +36,12 @@ static const int TC_hdr_mwD = (0+0) * (1);
 static const int TC_hdr_mwT = (0+0) * (1);
 static const int TC_hdr_mwG = (0+0) * (1);
 static const int TC_hdr_bw = (12+0) * (1);
-static const int TC_hdr_qs = (30+3) * (1);
-static const int TC_hdr_qf = (30+3) * (1);
+static const int TC_hdr_qs = (2+3) * (1);
+static const int TC_hdr_qf = (2+3) * (1);
 static const int TC_hdr_mb = (0+0) * (1);
 
 
-static const long long TC_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 65), 5), 8), 3); // 7800
+static const long long TC_hdr_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 62), 5), 8), 3); // 7440
 static const long long TC_hdr_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), (1<<5)); // 96
 static const long long TC_hdr_c_Volume = tc_vmul(1, 65); // 65
 static const long long TC_hdr_d_Volume = tc_vmul(1, 65); // 65

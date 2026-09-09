@@ -26,7 +26,7 @@ void tc_make_hdr( int tag, int p1, int p2, int pos, int p1r, tcx & X ) {
   (void) tag;  (void) p1;  (void) p2;  (void) pos;  (void) p1r;
 
   a = 0;
-  a = a*65 + TC_hdr_a_tag[__min(64,__max(0,tag-(1-1)))];
+  a = a*62 + TC_hdr_a_tag[__min(64,__max(0,tag-(1-1)))];
   a = a*5 + ((p1>0+(1-1))+(p1>10+(1-1))+(p1>12+(1-1))+(p1>13+(1-1)));
   a = a*8 + ((p2>0+(1-1))+(p2>1+(1-1))+(p2>2+(1-1))+(p2>3+(1-1))+(p2>4+(1-1))+(p2>5+(1-1))+(p2>6+(1-1)));
   a = a*3 + ((pos>1+(1-1))+(pos>2+(1-1)));

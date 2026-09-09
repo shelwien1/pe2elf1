@@ -24,7 +24,7 @@ Const 0
 #  makes cb.len and cmt.byte an order-1 byte model.
 
 Index a
- a_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+ a_tag: tag, 1!1111011111111110110111111111111111111111111111111111111111111111
 ! a_p1:   p1,    1!100000000010110
 ! a_p2:   p2,    1!1111111
 ! a_pos:  pos,   1!011
@@ -54,27 +54,27 @@ Index t
  t_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
 ! t_p1r:  p1r,   &01101111
 
-!Number rA, 1, 0!00010000
-!Number rB, 1, 0!00100000
-!Number rC, 1, 0!00111111
-!Number rD, 1, 0!00111111
-!Number rT, 1, 0!00010000
-!Number rG, 1, 0!00010000
-!Number rS1, 1, 0!00001
-!Number rS2, 1, 0!00001
-!Number lr, 1, 0!11111
-!Number lrm, 1, 0!11111
-!Number mbm, 1, 0!00000000
-!Number mwA, 1, 0!00000000
-!Number mwB, 1, 0!00000000
-!Number mwC, 1, 0!00000000
-!Number mwD, 1, 0!00000000
-!Number mwT, 1, 0!00000000
-!Number mwG, 1, 0!00000000
-!Number bw, 1, 0!01100
-!Number qs, 1, 3!0011110
-!Number qf, 1, 3!0011110
-!Number mb, 1, 0!00000000
+Number rA, 1, 0!00010000
+Number rB, 1, 0!00000000
+Number rC, 1, 0!00111111
+Number rD, 1, 0!00111111
+Number rT, 1, 0!00010000
+Number rG, 1, 0!00010000
+Number rS1, 1, 0!00001
+Number rS2, 1, 0!00001
+Number lr, 1, 0!11111
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000000
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!01100
+Number qs, 1, 3!0000010
+Number qf, 1, 3!0000010
+Number mb, 1, 0!00000000
 
 
 Index n
