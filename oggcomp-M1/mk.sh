@@ -134,8 +134,7 @@ generate() {
     #  `set -e` cannot see any of that, so the post-condition is checked here.
     for o in _h _p; do
       if [ ! -s "IDX/${s}${o}.inc" ]; then
-        rm -f "IDX/${s}_h.inc" "IDX/${s}_p.inc"
-        [ "$2" = 1 ] && rm -f "IDX/$s.idx" "IDX/$s.inc"
+        #  The stubs and the -const copies go on the way out, in cleanup().
         echo "mk.sh: IDX/idx2inc.pl wrote no ${s}${o}.inc -- is IDX/$s.inc there?" >&2
         echo "mk.sh: MOD/ now holds part of one build and part of another;" >&2
         echo "       fix that and run this again, which regenerates all six." >&2
