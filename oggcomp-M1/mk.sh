@@ -53,7 +53,26 @@
 set -e
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+callerpwd=$PWD
 cd "$here"
+
+#  IDX/ is a source directory and the generator writes into it: the -const
+#  copies and the _h/_p output live there for as long as generate() runs.
+#  Anything that ends the script in the middle -- a failed compile, a Ctrl-C
+#  -- leaves them behind looking like files someone checked in, so they are
+#  swept on every exit.  The traps for the signals exit, which the bare
+#  `trap ... EXIT INT TERM` they replace did not: that one deleted the
+#  scratch directory and let the script carry on using it.
+tmp=
+cleanup() {
+  rm -f "$here"/IDX/tsvcomp-*-const.idx "$here"/IDX/tsvcomp-*-const.inc \
+        "$here"/IDX/tsvcomp-*_h.inc "$here"/IDX/tsvcomp-*_p.inc
+  [ -n "$tmp" ] && rm -rf "$tmp"
+  return 0
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 CXX=${CXX:-c++}
 CXXFLAGS=${CXXFLAGS:--O2}
@@ -129,8 +148,14 @@ case "${1:-tuning}" in
 
   release)
     generate_and_build 0 1 oggcomp
-    if grep -q '!MAP!' MOD/tsvcomp-*_h.inc; then
-      echo "mk.sh: release build still carries !MAP! markers" >&2
+    #  Look at the binary.  Grepping MOD/*_h.inc for "!MAP!" -- which is what
+    #  this used to do -- can never find anything: the marker is not in the
+    #  generated header, it is in the pdesc_live macro in sh_mapping.inc that
+    #  the generated header expands.  So the guard passed on a MOD/ that was
+    #  entirely unfolded, and `mk.sh release` would ship a binary with live
+    #  knobs in it while printing that every parameter had been folded.
+    if grep -aq '!MAP!' oggcomp; then
+      echo "mk.sh: the release build still carries !MAP! markers" >&2
       exit 1
     fi
     echo "mk.sh: release build -- every parameter folded"
@@ -138,16 +163,24 @@ case "${1:-tuning}" in
 
   check)
     #  Both builds, over whatever the list names, compared byte for byte.
-    tmp=$(mktemp -d "${TMPDIR:-/tmp}/mk-check.XXXXXX")
-    trap 'rm -rf "$tmp"' EXIT INT TERM
+    #  The list is named from the caller's directory, so it has to be
+    #  resolved before the cd above -- which has already happened, hence the
+    #  saved OLDPWD.  Paths inside the list stay relative to the tree, which
+    #  is what an opt.lst checked in beside opt.pl wants.
     lst=${2:-}
+    case "$lst" in
+      ''|/*) ;;
+      *) [ -f "$lst" ] || [ ! -f "$callerpwd/$lst" ] || lst="$callerpwd/$lst";;
+    esac
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/mk-check.XXXXXX")
     if [ -z "$lst" ]; then
       #  No list given: the bundled corpus, so the contract can be checked in
       #  a fresh clone with nothing else to hand.  testfiles/gen.sh says what
       #  is in it and why.  A real tuning corpus belongs in opt.lst; see
       #  IDX/opt.pl on what it should cover.
       lst="$tmp/list"
-      ls testfiles/*.ogg > "$lst" 2>/dev/null || true
+      : > "$lst"
+      for g in testfiles/*.ogg; do [ -f "$g" ] && echo "$g" >> "$lst"; done
       [ -s "$lst" ] || {
         echo "mk.sh check: no testfiles/*.ogg -- ./testfiles/gen.sh makes them," >&2
         echo "             or name a file holding one .ogg per line" >&2
@@ -156,26 +189,55 @@ case "${1:-tuning}" in
     [ -f "$lst" ] || { echo "mk.sh check: no $lst -- one .ogg per line" >&2; exit 2; }
     generate_and_build 1 0 "$tmp/tune"
     generate_and_build 0 1 "$tmp/rel"
+    #  Normalise the list once rather than per line: strip the CR a list
+    #  authored on Windows carries -- this tree ships gc.bat and t.bat from
+    #  exactly such a sibling -- trim the surrounding blanks, and drop
+    #  comments and empty lines.  opt.pl accepts all of those shapes, and
+    #  mk.sh should read the same opt.lst that it does.
+    sed 's/\r$//; s/^[[:space:]]*//; s/[[:space:]]*$//; /^#/d; /^$/d' \
+        "$lst" > "$tmp/clean"
+
     bad=0
+    seen=0
     while IFS= read -r f; do
-      case "$f" in ''|\#*) continue;; esac
+      seen=$((seen + 1))
       "$tmp/tune" c "$f" "$tmp/a.oc"
       "$tmp/rel"  c "$f" "$tmp/b.oc"
       if cmp -s "$tmp/a.oc" "$tmp/b.oc"; then
-        printf '  %-40s %10s  identical\n' "$(basename "$f")" "$(wc -c < "$tmp/a.oc")"
+        #  And read one of them back with the other build.  Equal encodes
+        #  say nothing about the decoders, and a parameter that folds to
+        #  something different would be just as wrong on the way out.
+        if "$tmp/rel" d "$tmp/a.oc" "$tmp/back.ogg" >/dev/null 2>&1 &&
+           cmp -s "$f" "$tmp/back.ogg"; then
+          printf '  %-40s %10s  identical\n' "$(basename "$f")" "$(wc -c < "$tmp/a.oc")"
+        else
+          printf '  %-40s DOES NOT READ BACK\n' "$(basename "$f")"
+          bad=1
+        fi
       else
         printf '  %-40s DIFFERS\n' "$(basename "$f")"
         bad=1
       fi
-    done < "$lst"
+    done < "$tmp/clean"
+    #  An empty corpus is not agreement.  A glob that matched nothing or an
+    #  opt.lst that moved would otherwise print the same line as a clean run.
+    [ "$seen" -gt 0 ] || {
+      echo "mk.sh check: $lst named no files -- nothing was compared" >&2; exit 2; }
     #  Leave MOD/ in the shipping shape, which is what it is checked in as.
     #  Both binaries stay in $tmp: ./oggcomp is not this command's to replace,
     #  and replacing it with the shipping build is the quiet way to end a
     #  tuning session -- that build carries no !MAP! markers, so IDX/opt.pl
     #  finds nothing to patch and every measurement comes back the same.
     regenerate_mod
-    [ "$bad" = 0 ] && echo "mk.sh: tuning and shipping builds agree" \
-                   || { echo "mk.sh: THE TWO BUILDS DISAGREE" >&2; exit 1; }
+    #  Not `A && B || C`: a failed echo -- a closed pipe, a full disk -- would
+    #  then take the C branch and report the opposite of what was measured.
+    if [ "$bad" = 0 ]; then
+      [ "$seen" = 1 ] && many="1 file" || many="$seen files"
+      echo "mk.sh: tuning and shipping builds agree over $many"
+    else
+      echo "mk.sh: THE TWO BUILDS DISAGREE" >&2
+      exit 1
+    fi
     ;;
 
   mod)
@@ -197,7 +259,6 @@ case "${1:-tuning}" in
     [ -f "$pgo_in" ] || { echo "usage: ./mk.sh pgo file.ogg" >&2; exit 2; }
     pgo_in=$(cd -- "$(dirname -- "$pgo_in")" && pwd)/$(basename -- "$pgo_in")
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/mk-pgo.XXXXXX")
-    trap 'rm -rf "$tmp"' EXIT INT TERM
     generate 0 1
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-generate -c -o oggcomp.o "$here/oggcomp.cpp" \
         && $CXX -fprofile-generate -o gen oggcomp.o -lm ) || exit 1
