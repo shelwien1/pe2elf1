@@ -1,7 +1,7 @@
 # The tsvcomp model: design, bugs and room to improve
 
-This describes the model as it stands: 11,355,711 bytes over the 17-file
-corpus in 505 MB of declared tables.  Where it started, and what section 7
+This describes the model as it stands: 11,347,066 bytes over the 17-file
+corpus in 1020 MB of declared tables.  Where it started, and what section 7
 is a list of, was 11,372,019 bytes in 928 MB.  It is the
 companion to two other documents: `BALROGG-MODEL.md` says what balrogg's
 model does that this one does not, and what each of those was measured to be
@@ -62,7 +62,7 @@ the contexts are built from and which parts of the cascade they use.
 | aux | page and packet fields | `code` / `codes` | 16 x 13 counters | none | 29 | 0.1 |
 | hdr | header records | `codes` | 128 counters, by tag | none | 29 | 12.4 |
 
-Total 505 MiB of address space, of which the corpus touches a small
+Total 1020 MiB of address space, of which the corpus touches a small
 fraction: the tables are mapped, not allocated, and only the rows a stream
 reaches are ever faulted in.
 
@@ -373,7 +373,7 @@ Each family's `.idx` declares its factors; `IDX/idx2inc.pl` turns them into
 product of the factor sizes via saturating `tc_vmul`) and `_p.inc` (the
 index builder).  The tables of a family are one struct mapped with
 `MAP_NORESERVE` (`tc_map`), so what is declared is address space and what
-is paid is the pages a stream touches: 505 MiB declared and a small part of
+is paid is the pages a stream touches: 1020 MiB declared and a small part of
 that resident on any corpus file -- a 38.9 GB tuned set once ran in 304 MB.
 `TC_MEMCAP` (64 GB) bounds the declaration; `tc_vfits`/`tc_ifits` check
 each component's index against the width it can actually address, so an
@@ -565,6 +565,30 @@ model's fine counter is worse with it (+117) -- it already carries the band,
 the column and the class, which on this corpus say much of what the channel
 would.  For coupled stereo the channel is which half of the pair a value is,
 a magnitude or an angle, and those differ most in their signs.
+
+**I14. Merge a parameter set tuned on one file, one index at a time.**  An
+export from an older tree codes 00000007 at 774,514 bytes against this one's
+779,467, and imported whole it is 11,819 bytes worse over the corpus and asks
+for 6189 MB of tables: it was tuned on that one file and every other file
+pays for it.  Imported per family and then per index, keeping only what makes
+the corpus smaller, it is worth 8645 bytes and 3450 of them are on 00000007.
+
+The two families that generalise whole are the floor and the class model,
+which is the same finding as I13 from the other side -- those files had never
+been searched here, so almost anything a search found elsewhere beats them.
+Of the rest, four indices carry: the digit model's coarse counter and
+mantissa plane, the sign model's coarse counter and its first APM.  The digit
+model's fine counter is 2776 bytes worse and asks for 3 GB, which is what
+tuning on a single file looks like from the inside.
+
+The coarse counter is the one that costs: the export trades the partition and
+the column down and the neighbourhood mean up, from one bucket to ten, and
+that is 351 MB for 965 bytes.  Taking the same axis into this tree's own
+coarse counter, which keeps the wider partition, costs 2.4 GB for 243 bytes
+more -- so the export's trade is the efficient one and it is the trade, not
+the axis, that is worth having.  At the model's own price of 10000 bytes per
+gigabyte none of that last part pays; it is here because the standing budget
+for this model is a gigabyte and it fits inside one.
 
 **I13. Look in the indices nobody had looked in.**  Not on the original list,
 and the largest thing left.  Every factor line of tsvcomp-flr.idx and

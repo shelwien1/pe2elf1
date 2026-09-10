@@ -27,53 +27,53 @@ Const 0
 
 Index a
   a_rno:  rno,   1!1
-  a_band: band,  1!011010101110000
-  a_prev: prev,  1!0101011
-  a_t1:   t1,    1!0001111
+  a_band: band,  1!001111111100000
+  a_prev: prev,  1!0000000
+  a_t1:   t1,    1!1001111
   a_blk:  blk,   1!1
   a_tn:   tn,    1!000
   a_prev2: prev2, 1!000
-  a_pq:   pq,    1!00000000000000000000000000000000
+  a_pq:   pq,    1!00000000000000000000000110110000
 
 Index b
   b_rno:  rno,   1!0
-  b_band: band,  1!100001111110000
-  b_prev: prev,  1!111010100000000
+  b_band: band,  1!100101111100000
+  b_prev: prev,  1!000111010010010
   b_t1:   t1,    1!111
   b_blk:  blk,   1!1
   b_tn:   tn,    1!000
-  b_prev2: prev2, 1!000
-  b_pq:   pq,    1!00000000000000000000000000000000
+  b_prev2: prev2, 1!001
+  b_pq:   pq,    1!01100000000000000010110000000000
 
 Index c
   c_band: band,  1!000
-  c_prev: prev,  1!111
+  c_prev: prev,  1!100
   c_t1:   t1,    1!111
-  c_tn:   tn,    1!111
+  c_tn:   tn,    1!100
   c_prev2: prev2, 1!000
-  c_pq:   pq,    1!00000000000000000000000000000000
+  c_pq:   pq,    1!00000000000000010000100000000000
 
 Index d
-  d_band: band,  1!111
+  d_band: band,  1!011
   d_prev: prev,  1!111
   d_t1:   t1,    1!000
   d_tn:   tn,    1!000
   d_prev2: prev2, 1!111
-  d_pq:   pq,    1!00000000000000000000000000000000
+  d_pq:   pq,    1!00000101000001000000001000000001
 
 Index s
-  s_band: band, 1!111111111111
+  s_band: band, 1!111
   s_prev: prev,  1!000
-  s_t1: t1, 1!111
-  s_tn: tn, 1!111
-  s_prev2: prev2, 1!000
+  s_t1: t1, 1!000
+  s_tn: tn, 1!010
+  s_prev2: prev2, 1!110
   s_pq:   pq,    1!00000000000000000000000000000000
 
 Index f
-  f_band: band, 1!111111111111
+  f_band: band, 1!000
   f_prev: prev,  1!000
-  f_t1: t1, 1!111
-  f_tn: tn, 1!111
+  f_t1: t1, 1!000
+  f_tn: tn, 1!000
   f_prev2: prev2, 1!000
   f_pq:   pq,    1!00000000000000000000000000000000
 
@@ -87,40 +87,40 @@ Index m
 
 Index t
   t_band: band,  1!101
-  t_prev: prev,  1!001
+  t_prev: prev,  1!100
   t_t1:   t1,    1!101
-  t_tn:   tn,    1!000
-  t_prev2: prev2, 1!000
-  t_pq:   pq,    1!00000000000000000000000000000000
+  t_tn:   tn,    1!101
+  t_prev2: prev2, 1!101
+  t_pq:   pq,    1!00000110000000000001000000100000
 
-Number rA, 1, 0!01010000
+Number rA, 1, 0!00011101
 Number rB, 1, 0!00101011
-Number rC, 1, 0!00111111
-Number rD, 1, 0!00111111
-Number rT, 1, 0!01010000
+Number rC, 1, 0!00100010
+Number rD, 1, 0!00000101
+Number rT, 1, 0!00100000
 Number rS1, 1, 0!00101
 Number rS2, 1, 0!00101
-Number lr, 1, 0!11000
-Number lrm, 1, 0!11000
-Number mbm, 1, 0!00000000
+Number lr, 1, 0!10010
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!11000000
 Number mwA, 1, 0!00000000
 Number mwB, 1, 0!00000000
-Number mwC, 1, 0!00000000
-Number mwD, 1, 0!00000000
-Number mwT, 1, 0!00000000
-Number bw, 1, 0!01100
-Number qs, 1, 3!0011110
+Number mwC, 1, 0!00100000
+Number mwD, 1, 0!00100100
+Number mwT, 1, 0!00000011
+Number bw, 1, 0!10000
+Number qs, 1, 3!0001111
 Number qf, 1, 3!0111110
-Number mb, 1, 0!00000000
+Number mb, 1, 0!00100000
 
 
 Index n
-  n_band: band,  1!101
-  n_prev: prev,  1!001
-  n_t1:   t1,    1!101
+  n_band: band,  1!111
+  n_prev: prev,  1!000
+  n_t1:   t1,    1!110
   n_tn:   tn,    1!000
   n_prev2: prev2, 1!000
-  n_pq:   pq,    1!00000000000000000000000000000000
+  n_pq:   pq,    1!00001000000000000000011010000000
 
 Index g
 #  No factors: fam_cls codes a class through `code`, which never reaches a

@@ -1,48 +1,47 @@
 
+static const byte TC_cls_a_band[15+1]={ 0,0,0,1,2,3,4,5,6,7,8,8,8,8,8,8 };
 
 
 
 
-static const byte TC_cls_f_band[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 
 
 
-static const byte TC_cls_s_band[12+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12 };
 
 
 
-static const int TC_cls_rA = (80+0) * (1);
+static const int TC_cls_rA = (29+0) * (1);
 static const int TC_cls_rB = (43+0) * (1);
-static const int TC_cls_rC = (63+0) * (1);
-static const int TC_cls_rD = (63+0) * (1);
-static const int TC_cls_rT = (80+0) * (1);
+static const int TC_cls_rC = (34+0) * (1);
+static const int TC_cls_rD = (5+0) * (1);
+static const int TC_cls_rT = (32+0) * (1);
 static const int TC_cls_rS1 = (5+0) * (1);
 static const int TC_cls_rS2 = (5+0) * (1);
-static const int TC_cls_lr = (24+0) * (1);
-static const int TC_cls_lrm = (24+0) * (1);
-static const int TC_cls_mbm = (0+0) * (1);
+static const int TC_cls_lr = (18+0) * (1);
+static const int TC_cls_lrm = (31+0) * (1);
+static const int TC_cls_mbm = (192+0) * (1);
 static const int TC_cls_mwA = (0+0) * (1);
 static const int TC_cls_mwB = (0+0) * (1);
-static const int TC_cls_mwC = (0+0) * (1);
-static const int TC_cls_mwD = (0+0) * (1);
-static const int TC_cls_mwT = (0+0) * (1);
-static const int TC_cls_bw = (12+0) * (1);
-static const int TC_cls_qs = (30+3) * (1);
+static const int TC_cls_mwC = (32+0) * (1);
+static const int TC_cls_mwD = (36+0) * (1);
+static const int TC_cls_mwT = (3+0) * (1);
+static const int TC_cls_bw = (16+0) * (1);
+static const int TC_cls_qs = (15+3) * (1);
 static const int TC_cls_qf = (62+3) * (1);
-static const int TC_cls_mb = (0+0) * (1);
+static const int TC_cls_mb = (32+0) * (1);
 
 
-static const long long TC_cls_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 8), 5), 5), 2), 1), 1), 1); // 800
-static const long long TC_cls_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 6), 4), 2), 1), 1), 1); // 384
-static const long long TC_cls_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 4), 4), 4), 1), 1); // 64
-static const long long TC_cls_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 1), 1), 4), 1); // 64
-static const long long TC_cls_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 13), 1), 4), 4), 1), 1); // 208
+static const long long TC_cls_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 1), 6), 2), 1), 1), 5); // 1080
+static const long long TC_cls_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 8), 7), 4), 2), 1), 2), 6); // 5376
+static const long long TC_cls_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 4), 2), 1), 3); // 48
+static const long long TC_cls_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 4), 1), 1), 4), 6); // 288
+static const long long TC_cls_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 1), 1), 1), 1); // 1
 static const long long TC_cls_g_Volume = 1; // 1
 static const long long TC_cls_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 2), 1), 1), 1); // 12
-static const long long TC_cls_n_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3), 1), 1), 1); // 18
-static const long long TC_cls_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 13), 1), 4), 4), 1), 1); // 208
-static const long long TC_cls_t_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3), 1), 1), 1); // 18
+static const long long TC_cls_n_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 3), 1), 1), 5); // 60
+static const long long TC_cls_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 1), 2), 3), 1); // 24
+static const long long TC_cls_t_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3), 3), 3), 5); // 810
 
 struct TC_cls_T { 
 #undef USE_NEW

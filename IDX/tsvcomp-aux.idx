@@ -51,24 +51,24 @@ Index m
 Index t
  t_fld: fld, 1!1111111111111
 
-Number rA, 1, 0!00010110
+Number rA, 1, 0!11100111
 Number rB, 1, 0!00000000
-Number rC, 1, 0!00111111
-Number rD, 1, 0!00111111
+Number rC, 1, 0!00000000
+Number rD, 1, 0!00000010
 Number rT, 1, 0!00010110
-Number rG, 1, 0!00010110
-Number rS1, 1, 0!00110
-Number rS2, 1, 0!00110
+Number rG, 1, 0!10111000
+Number rS1, 1, 0!10000
+Number rS2, 1, 0!01110
 Number lr, 1, 0!11111
 Number lrm, 1, 0!11111
 Number mbm, 1, 0!00000000
 Number mwA, 1, 0!00000000
-Number mwB, 1, 0!00000000
-Number mwC, 1, 0!00000000
+Number mwB, 1, 0!00010000
+Number mwC, 1, 0!10101000
 Number mwD, 1, 0!00000000
-Number mwT, 1, 0!00000000
+Number mwT, 1, 0!00000010
 Number mwG, 1, 0!00000000
-Number bw, 1, 0!00101
+Number bw, 1, 0!00110
 Number qs, 1, 3!0011110
 Number qf, 1, 3!0011110
 Number mb, 1, 0!00000000
