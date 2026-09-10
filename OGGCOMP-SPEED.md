@@ -26,14 +26,15 @@ callgrind, with cache and branch simulation, on `oggcomp c` of 00000005.ogg
 |---|---|
 | instructions | 1,410 M |
 | coded bits (calls of the coder's step) | 876,725 |
-| values coded (`tc_fam::code`) | 306,544 |
-| residue digits (`oc_digit`) | 188,288 |
+| residue digits (`oc_digit`), each a value through the cascade | 306,544 |
+| floor and class values, likewise | 7,504 and 6,504 |
+| user time, native | 0.18 s |
 | L1 data misses | 2.82 M |
 | last-level misses | 41,510 |
 | conditional branches | 92 M |
 | mispredicted | 4.01 M |
 
-So about 1,600 instructions per coded bit, 3.2 L1 misses per bit, 4.6
+So about 1,600 instructions per coded bit, 3.2 L1 misses per bit, 4.3
 mispredicts per hundred branches.  By where the instructions are spent
 (self cost, inlined code attributed to the file it was written in):
 
@@ -42,33 +43,35 @@ mispredicts per hundred branches.  By where the instructions are spent
 | cm.inc: counters, APMs, mixer (in `tc_fam::code`) | 34.9% | 63.2% | 29.6% |
 | MOD/tsvcomp-dig_p.inc: the digit index builder | 13.7% | 0.1% | -- |
 | oc_model.inc: `oc_digit`, the context gathering | 12.1% | 2.6% | 17.1% |
-| cm.inc: the sign counter and mantissa, in `oc_digit` | 9.7% | 20.1% | 4.5% |
+| cm.inc: the sign bit's whole step (the sgn family), inlined in `oc_digit` | 9.7% | 20.1% | 4.5% |
 | MOD/tsvcomp-sgn_p.inc: the sign index builder | 7.4% | 0.1% | -- |
 | oc_model.inc: `tc_fam::code` itself, the cascade | 6.0% | 0.2% | 7.8% |
 | tc_prior.inc: the codebook prior, per bit and per digit | 7.2% | 4.8% | 28.6% |
 | rc.inc: the coder | 4.2% | 0 | 3.0% |
 | io.inc: the walk (`rs_part`, the codebooks) | 1.7% | 2.8% | 4.6% |
 
-Three things stand out.
+Four things stand out.
 
-**The tables are the misses.**  Two thirds of the L1 misses are in the six
-lines that first touch a value's rows: the counter's `t ? p >> 4 : half`
-(729 K), the APM's count byte `c[i]` (380 K), the APM's two table entries
-(473 K), the mixer's weights (142 K) -- and the two 8 kB curve tables,
-stretch (332 K) and squash (175 K), which are small enough to live in L1 and
-do not, because ten random lines a value keep pushing them out.  On this
+**The tables are the misses.**  Four in five L1 misses are in seven lines
+of cm.inc.  Five of them first touch a value's rows: the counter's `t ? p
+>> 4 : half` (729 K), the APM's count byte `c[i]` (380 K), the APM's two
+table entries (473 K), the mixer's weights (142 K).  The other two are the
+8 kB curve tables, stretch (332 K) and squash (175 K), which are small
+enough to live in L1 and do not, because ten random lines a value keep
+pushing them out.  On this
 file the working set fits the simulated last level (41 K misses in 2.8 M),
 so the misses cost L2 and L3 latency; on 00000008 the tables reach further
 and the same misses go to memory, which is why section 5's huge-page result
 is a decode gain on the big file and nothing on the small one.
 
 **The index builders are a fifth of the instructions.**  `tc_make_dig` is
-631 instructions per call and `tc_make_sgn` 455, all straight-line compares
-and adds -- ninety thresholds each applied as `(x > k)` and summed -- plus
-`oc_digit`'s own 900 per digit gathering the variables: twelve `tc_qlog`
-calls that loop, three integer divisions (`%`) for positions that step by
-one, an eight-term weighted mean in 64 bits.  Together they cost more than
-the counters and mixers do.
+631 instructions per digit and `tc_make_sgn` 455 per sign (228,224 of the
+digits have one), all straight-line compares and adds -- ninety thresholds
+each applied as `(x > k)` and summed -- plus `oc_digit`'s own 560 per digit
+gathering the variables: twenty `tc_qlog` calls that loop, four integer
+divisions (`%`) for positions that step by one, an eight-term weighted mean
+in 64 bits.  Together they cost three quarters of what the counters, APMs
+and mixers do.
 
 **A third of the mispredicts are avoidable.**  The lines:
 
@@ -77,23 +80,28 @@ the counters and mixers do.
 | `if (t < lim) t++;` -- counter saturation, four per bit | 491,754 | 12.3% |
 | `if (k < lim) c[i] = k + 1;` -- APM count, four per bit | 352,483 | 8.8% |
 | `if (x < 4) return x;` and `while (x >= 4)` -- `tc_qlog` | 568,453 | 14.2% |
-| the prior's loops (`tcp_sign` over `nsym`, `tcp_len` over lengths) and `usable()` | ~700,000 | 17% |
+| the prior: `tcp_sign`'s loop over the book, `tcp_len`'s over the lengths, `step()`'s tests, `usable()` | 1,147,119 | 28.6% |
 | `if (bit(1, ...)) return 1;` etc. -- the cascade on the value | 313,069 | 7.8% |
 | the codebook tree walk, `if (nx < 0) return` | 155,396 | 3.9% |
 | the mixer's clamp of the dot product | 98,180 | 2.4% |
 | the coder's renorm loop, `for (; n; n--)` | 108,413 | 2.7% |
 
-The cascade's branches are the data -- which value it is -- and cannot go;
-the saturations, the quantiser and the clamps are branches on nothing and
-can.  At 15-20 cycles a mispredict and 4 M of them in a run of 2.8 G cycles,
-they are about 2.5% of the time; the ones that can go are half of that.
+The cascade's branches are the data -- which value it is -- and cannot go.
+The saturations, the quantiser, the clamps and the renorm loop are branches
+on nothing and can (40% of the mispredicts), and the prior's are branches
+on the codebook, which a table settles (another 29%).  At 15 to 20 cycles a
+mispredict and 4 M of them in half a billion cycles, mispredicts are an
+eighth of the run, and two thirds of that can go -- which is what section
+6 then measures for the first group.
 
-**And the instructions per bit are not the cycles per bit.**  The run is
-about 2.8 G cycles for 1.4 G instructions: half an instruction a cycle, on a
-core that retires four.  The rest is waiting -- on the table lines, on the
-dependency chain that runs through every step (counter -> stretch -> mixer
--> squash -> APM -> coder -> update), on the mispredicts.  Cutting
-instructions helps; overlapping the waits helps more.
+**And the instructions are most of the cycles.**  The run's user time is
+0.18 s -- half a billion cycles at 2.8 GHz -- for 1.4 G instructions:
+nearly three instructions a cycle, on a core that retires four.  So on
+this file the model is not waiting; it is executing, and the misses (3 a
+bit, to L2 and L3) and the mispredicts are the quarter or so that it is
+not.  On the large files the misses reach memory and the balance shifts
+some -- section 5.1's huge-page row and section 6's prefetch row are that
+shift, 5% and 3% -- but the instruction count is the first thing to cut.
 
 ---
 
@@ -115,7 +123,7 @@ data's whim, and has a form the compiler turns into a `cmov` or an add:
 - **`tc_qlog`**: `if (x < 4) return x; while (x >= 4) { x >>= 1; n++; }` is
   a loop whose trip count is the magnitude's bit length.  It is
   `bitlength(x) - 2` shifts, so `n = 62 - clzll(x | 1)`, the result
-  `2 + 2n + ((x >> n) & 1)`, and `x < 4 ? x : that` selects.  Twelve calls
+  `2 + 2n + ((x >> n) & 1)`, and `x < 4 ? x : that` selects.  Twenty calls
   per digit, six of them through `tc_sq`.
 - **The coder's renorm**: `for (; n; n--)` with n = 0 nine times in ten.
   `if (UNLIKELY(range < sTOP))` around the shift, as the psrc decoder does,
@@ -184,8 +192,9 @@ today:
   compiler must assume the counters, the weights, the APM entries, the
   family's rates and bounds, the mixer's own `x[]` and `nx` -- all of them
   -- may have changed, and reload them.  Every one is an L1 hit, so it is
-  instructions rather than stalls, but it is the one place `restrict` has a
-  real job here.
+  instructions rather than stalls -- which, on a run that is instruction
+  bound, is the right thing to be saving -- and it is the one place
+  `restrict` has a real job here.
 
 ### 3.2  The types, and where they go
 
@@ -208,11 +217,14 @@ and in each hot method, the row taken into one of these before the work:
 - `tc_fam::bit`: the four counter references as `cm_cnt & __restrict`.
 
 Section 6's `e3` is exactly that.  The alternative that needs no `restrict`
-at all: give the count arrays a type that is not `char`.  A `struct cnt8 {
-u8 v; }` has the same size and alignment, so the tables and the stream are
-unchanged, and a store through it aliases only other `cnt8` -- type-based
-analysis does the rest, everywhere, without a local declaration in every
-method.  That is the cleaner fix and the one to ship.
+at all: give the count arrays a type that is not `char`.  A `u16` count
+has the alias set of `u16` and nothing else, at the price of doubling two
+small arrays (the tables' shape is generated, so it is a generator change,
+and the stream does not move).  A `struct cnt8 { u8 v; }` keeps the size,
+and whether gcc's access-path analysis lets a `char` member inside a struct
+out of the `char` rule is a thing to check on the generated code before
+relying on it.  Either way the fix is in the type, once, rather than in a
+local in every method.
 
 What `restrict` cannot do is remove the loads that are really needed: a
 counter row is read for `P()` and read again for `upd()` because the coder
@@ -248,8 +260,9 @@ digit ahead -- compute `tcx` for digit n+1, prefetch its ten rows, then
 code digit n -- and every row is in cache by the time it is wanted.  The
 same for the sign: its rows depend on the magnitude, which the encoder
 has.  This is software pipelining of the model over the walk, and it
-overlaps a whole digit's worth of work (some 2,500 instructions) with the
-fetch, which covers a memory miss.  It costs a second copy of the index
+overlaps a whole digit's worth of context work (some 1,500 instructions:
+the two builders and the gathering) with the fetch, which covers a memory
+miss.  It costs a second copy of the index
 state and a restructured `oc_digit`, and applies to the encoder only.
 
 ### 4.3  The decoder: guess
@@ -302,17 +315,18 @@ data.  None of it is the 7 to 11% the source changes below get.
 `mmap(MAP_NORESERVE)`, touched sparsely, and a 4 kB page walk is a TLB miss
 on nearly every row a big file reaches.  `madvise(MADV_HUGEPAGE)` on the
 mappings (the kernel here has transparent huge pages in `madvise` mode)
-takes 5% off the user time of every run on 00000008 -- but the first
+takes 4 to 6% off the user time of every run on 00000008 -- but the first
 process to ask pays the kernel for compacting memory into 2 MB pages:
 2.2 s of system time on the small file, 3 s on the large one, and the
-decode that runs right after gets the freed pages for nothing and shows the
-gain.  On a machine with the pages preallocated (`vm.nr_hugepages`, or
+decode that runs right after shows the gain without the cost, presumably
+because the pages the encoder freed are still whole.  On a machine with the pages preallocated (`vm.nr_hugepages`, or
 `hugetlbfs`) the gain would come without the cost; as transparent huge
 pages on this kernel it is a loss on wall time and stays off.  The 5% is
-also the measure of how much of the run is address translation, which the
-prefetch of section 4 cannot hide (a prefetch that misses the TLB is
-dropped on this core), and which argues for section 5.3's fewer lines per
-value as much as anything does.
+also the measure of how much of the run is address translation.  A
+software prefetch walks the page tables as a load does, so it hides the
+walk only if it is issued early enough for both, which is the case for
+section 4.2's digit-ahead form and not for section 4.1's; and fewer lines
+per value (5.3) is fewer walks as well as fewer misses.
 
 ### 5.2  The prior, tabulated
 
@@ -328,7 +342,7 @@ indexed by magnitude, with a fallback to the loop past its end, replaces
 the walk.  `tcp_man`, the mantissa's, is the one that has to be walked --
 the prefix is not a prefix of the entry -- and it runs only for values of
 3 and up.  Stream-identical if the stored quotient is the same quotient;
-about 7% of instructions and a quarter of the mispredicts.
+about 7% of instructions and over a quarter (28.6%) of the mispredicts.
 
 ### 5.3  Fewer lines per value
 
@@ -338,9 +352,10 @@ array of its own.  Interleaving the count with the row it counts -- `struct
 mixer context -- makes the count the same line as the row and takes three
 lines off every value.  The values stored are the same values, so the
 stream does not change, but the tables' shape is generated (MOD/, from
-idx2inc.pl) and the generator has to learn the shape.  With the rows
-padded to line size the four counters' first line would hold every node a
-small value reaches, which they do already at 4 bytes a node.
+idx2inc.pl) and the generator has to learn the shape.  The counter rows
+are 29 nodes of 4 bytes, 116 bytes, so a row is not line-aligned and the
+three head nodes' 12 bytes straddle a line boundary in one row of six;
+padding a row to two lines would end that, at 10% more table.
 
 ### 5.4  The index builders
 
@@ -348,7 +363,8 @@ A fifth of the instructions, and a shape the generator chooses.  Three
 directions:
 
 - **Table lookups for the threshold chains.**  `(x > 1) + (x > 4) + (x > 5)
-  + (x > 6)` is seven instructions; `T[x]` with `x` clamped is two, and the
+  + (x > 6)` is a dozen instructions, a compare and a set per threshold and
+  the adds; `T[x]` with `x` clamped is three, and the
   generator already emits that form for some variables (the `TC_dig_b_band`
   style).  Emitting it for every chain of three or more compares is a
   generator change with no format change, and the tables are a few hundred
@@ -368,7 +384,7 @@ directions:
 
 ### 5.5  `oc_digit`'s own arithmetic
 
-Beside `tc_qlog`: the three `%` by `dim` and `ilv` are positions that
+Beside `tc_qlog`: the four `%` by `dim` and `ilv` are positions that
 advance by one and wrap, and two counters in `P` replace them (section 6,
 `e4`).  The weighted mean `ex` is eight 64-bit multiplies for one
 quantised number; with the weights bounded as the .idx bounds them it fits
@@ -429,14 +445,15 @@ unchanged source.  Minimum of three runs on 00000007 and of two on
 | e1: branchless saturations and clamps (2.1) | 1.75 (-4.7%) | 1.70 (-4.4%) | | |
 | e2: + `tc_qlog` by bit length (2.1) | 1.70 (-7.4%) | 1.68 (-5.3%) | | |
 | e3: + `restrict` locals on the count arrays and rows (3.2) | 1.70 (-7.5%) | 1.64 (-7.6%) | | |
-| e4: + the three `%` per digit as two counters (5.5) | 1.67 (-8.7%) | 1.64 (-7.6%) | 8.61 (-8.2%) | 8.53 (-7.1%) |
+| e4: + the four `%` per digit as two counters (5.5) | 1.67 (-8.7%) | 1.64 (-7.6%) | 8.61 (-8.2%) | 8.53 (-7.1%) |
 | e5: + ten prefetches at `select()` (4.1) | 1.67 (-8.9%) | 1.66 (-6.5%) | 8.34 (-11.1%) | 8.40 (-8.5%) |
 
 Reading down the column: the two branch changes are 5 to 7%, which is
-about what section 1 priced the avoidable mispredicts at; `restrict` is
+what section 1 prices the mispredicts they remove at; `restrict` is
 within noise on the small file's encode and 2% on its decode; the counters
-for the divisions are 1%; and the prefetch is nothing on the small file,
-whose rows are in L2 anyway, and 3% on the large one, where they are not.
+for the divisions are about 1%; and the prefetch is nothing on the small
+file, whose rows are in L2 anyway, and 2 to 3% on the large one, where
+they are not.
 Eleven percent on 00000008's encode, for some forty lines, all of it
 stream-identical.  What is not in the table is the encoder one digit ahead
 (4.2), which is where the prefetch would stop being 3%.
