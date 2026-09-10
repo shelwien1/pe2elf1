@@ -1,0 +1,335 @@
+#  tsvcomp's dig model: its context indices and its tunable parameters.
+#
+#  One module per family -- IDX/IDX-FORMAT.md is the specification, and sec.7
+#  is why there are six of these rather than one file.  Every name here is
+#  relative to the family: the prefix below puts `dig_` back, so the index `a`
+#  is TC_dig_a and the threshold `a_band` is TC_dig_a_band, which is what
+#  IDX/opt.pl finds in the executable and what an export.!!! is keyed by.
+#
+#  ../mk.sh regenerates MOD/tsvcomp-dig_h.inc and MOD/tsvcomp-dig_p.inc from
+#  this file and tsvcomp-dig.inc; ./mk.sh check proves the tuning and shipping
+#  builds of all six code identically.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.
+
+Prefix TC_dig
+Debug 1
+Const 0
+#  ---------------------------------------------------------------------------
+#  Residue digits: 92% of the records in a stream, so this is the program.
+#
+#  Variables, from tsvcomp.cpp:
+#    rno   which residue          pass  which cascade pass
+#    band  partition, log-ish     col   position inside the partition
+#    q1 q2 the two digits before it, magnitude, log-ish
+#    t1    the same slot one packet ago, log-ish
+#    cls   the class of this partition -- the choice of codebook
+#    bkq   that codebook's `off`, log-ish: the half-width of its value range
+#    zrun  zeros so far in this partition        blk  short or long block
+#    pq    what the codebook makes of it: the log-odds, in 32 steps, that
+#          this digit is zero, from the entry weights of the prefix the
+#          vector's earlier places have already spelled (tc_prior.inc)
+#    ps    what the passes before this one put at the slot, signed
+#    chn   the slot's channel: its place in the interleave for a type-2
+#          residue, and the channel the vector is for one coded per channel.
+#          Two buckets where it has any at all: it carried five, of which a
+#          mono or stereo stream reaches two, and the three that no file here
+#          can reach still multiplied every table they were in by 2.5.  A
+#          multichannel corpus would want them back, and this is the file
+#          that decides that
+#    x1    the coupled channel at this very place, one packet ago -- an
+#          interleaved residue only; `t1` already carries this channel's own
+#          past, so what a neighbour is worth is what it does not repeat
+#    crun cm  how long the class has held, and whether it held from last packet
+#
+#  `cls` is the biggest single factor and the most surprising one: the class is
+#  the choice of ladder and the ladder decides what a digit can be, so knowing
+#  it beats knowing where in the spectrum the digit sits.  Four buckets of it
+#  cost 4.65%.  `bkq` is the same thought in a form that would generalise to
+#  the next file, and it measures 1.01% worse than the class number it was
+#  meant to replace: two classes with the same range are still not the same
+#  choice.  `col` is at zero because TSVTRANS.md measured it at +0.27% alone
+#  and worse in combination, and `band` is at three buckets because the fourth
+#  onwards are worth 0.05% between them once `cls` is in -- the partition had
+#  been standing in for the class.
+#
+#  `zrun` is the cautionary tale.  It sat at pattern zero because it measures
+#  at nothing on a 350 kbit/s mono residue, which is what this was tuned on;
+#  on a 96 kbit/s stereo one, where two digits in three are zero, widening it
+#  is worth 3% of the file.  These patterns are a joint answer over a corpus
+#  that has both, and a pattern of zeroes means "not on this corpus", not
+#  "never".
+
+Index a
+ a_rno:  rno,   1!0
+ a_pass: pass,  1!1111111
+ a_band: band, 1!111111111111111
+ a_col: col, 1!0100111
+ a_q1:   q1,    1!00000
+ a_q2:   q2,    1!0000
+ a_t1:   t1,    1!000
+ a_bkq: bkq, 1!0010
+ a_cls:  cls,   1!010100111000000
+ a_zrun: zrun,  1!0000
+ a_blk:  blk,   1!1
+ a_vpos: vpos,  1!0
+ a_q1s:  q1s,  -6!0000000000000
+ a_q2s:  q2s,  -6!0000000000000
+ a_t1s:  t1s,  -6!0000000000000
+ a_t2:   t2,   1!000
+ a_n1:   n1,   1!000
+ a_w1:   w1,   1!000
+ a_p0:   p0,   1!000
+ a_p0s: p0s, -6!0100000000000
+ a_pn:   pn,   1!000
+ a_ax: ax, 1!000000100000
+ a_pq: pq, 1!00000000100000000000000010000000
+ a_ps:   ps,   -6!0000000000000
+ a_chn: chn, 1!0000000
+ a_crun: crun,  1!000000000
+ a_cm:   cm,    1!0
+ a_x1: x1, 1!000
+ a_x1s: x1s, -6!0000000000000
+
+Index b
+ b_rno:  rno,   1!0
+ b_pass: pass, 1!0100010
+ b_band: band, 1!110001101100011
+ b_col: col, 1!0000000
+ b_q1: q1, 1!10101
+ b_q2: q2, 1!0000
+ b_t1:   t1,    1!000
+ b_bkq:  bkq,   1!0001
+ b_cls: cls, 1!010
+ b_zrun: zrun, 1!101
+ b_blk:  blk,   1!1
+ b_vpos: vpos, 1!0
+ b_q1s:  q1s,  -6!0000000000000
+ b_q2s:  q2s,  -6!0000000000000
+ b_t1s:  t1s,  -6!0000000000000
+ b_t2:   t2,   1!000
+ b_n1:   n1,   1!000
+ b_w1:   w1,   1!000
+ b_p0: p0, 1!111
+ b_p0s:  p0s,  -6!0010000100000
+ b_pn:   pn,   1!000
+ b_ax:   ax,   1!110101111011
+ b_pq:   pq,    1!00010001000100010001000100010001
+ b_ps:   ps,   -6!0000000000000
+ b_chn: chn, 1!1000000
+ b_crun: crun,  1!000000000
+ b_cm:   cm,    1!0
+ b_x1: x1, 1!000
+ b_x1s: x1s, -6!0000000000000
+
+Index c
+ c_pass: pass, 1!10
+ c_vpos: vpos,  1!0
+ c_band: band, 1!01010
+ c_t1s:  t1s,  -6!0000000000000
+ c_t2:   t2,   1!000
+ c_n1:   n1,   1!000
+ c_w1:   w1,   1!000
+ c_ax: ax, 1!111000000100
+ c_q1s: q1s, -6!0100000000000
+ c_q2s: q2s, -6!0000000000000
+ c_cls:  cls,   1!000
+ c_p0s: p0s, -6!0000001000000
+ c_pq: pq, 1!00000000100000000000000010000000
+ c_ps: ps, -6!0001000001000
+ c_chn: chn, 1!0000000
+ c_crun: crun,  1!000000000
+ c_cm:   cm,    1!0
+ c_x1: x1, 1!000
+ c_x1s: x1s, -6!0000000000000
+
+Index d
+ d_pass: pass, 1!00
+ d_vpos: vpos, 1!1
+ d_band: band,  1!00000
+ d_t1s:  t1s,  -6!0000000000000
+ d_t2:   t2,   1!000
+ d_n1:   n1,   1!000
+ d_w1:   w1,   1!000
+ d_ax: ax, 1!010101010101
+ d_q1s: q1s, -6!1010110110101
+ d_q2s: q2s, -6!0000000000000
+ d_cls: cls, 1!000
+ d_p0s: p0s, -6!0010111110000
+ d_pq: pq, 1!00000000100000000000000010000000
+ d_ps: ps, -6!0010001000100
+ d_chn: chn, 1!1000000
+ d_crun: crun,  1!000000000
+ d_cm:   cm,    1!0
+ d_x1: x1, 1!000
+ d_x1s: x1s, -6!0001111111000
+
+Index s
+ s_pass: pass, 1!10
+ s_band: band, 1!100
+ s_q1: q1, 1!000
+ s_t1: t1, 1!011
+ s_bkq: bkq, 1!101
+ s_cls:  cls,   1!000
+ s_vpos: vpos,  1!0
+ s_q1s: q1s, -6!0000000000000
+ s_q2s: q2s, -6!0000000000000
+ s_t1s: t1s, -6!1000000000000
+ s_t2:   t2,   1!000
+ s_n1:   n1,   1!000
+ s_w1: w1, 1!000
+ s_p0: p0, 1!101
+ s_p0s: p0s, -6!0100000000000
+ s_pn: pn, 1!000
+ s_ax: ax, 1!100010101111
+ s_pq: pq, 1!00000000000000000000000000000000
+ s_ps: ps, -6!0010000000000
+ s_chn: chn, 1!1000000
+ s_crun: crun,  1!000000000
+ s_cm: cm, 1!1
+ s_x1: x1, 1!000
+ s_x1s: x1s, -6!0000000000000
+
+Index f
+ f_pass: pass, 1!11
+ f_vpos: vpos, 1!0
+ f_cls: cls, 1!101111111
+ f_q1s: q1s, -6!0000100010010
+ f_p0s: p0s, -6!0000000000000
+ f_t1s: t1s, -6!0000000000000
+ f_ax: ax, 1!000101010101
+ f_band: band, 1!10101
+ f_pq: pq, 1!00000000000000000000000000000000
+ f_ps:   ps,   -6!0000000000000
+ f_chn: chn, 1!1000000
+ f_crun: crun,  1!000000000
+ f_cm:   cm,    1!0
+ f_x1: x1, 1!000
+ f_x1s: x1s, -6!0000000000000
+
+Index m
+ m_pass: pass, 1!010
+ m_band: band,  1!000
+ m_q1: q1, 1!000
+ m_t1:   t1,    1!0
+ m_bkq:  bkq,   1!001
+ m_cls: cls, 1!101011101010101
+ m_vpos: vpos,  1!1111111
+ m_q1s:  q1s,  -6!0000000000000
+ m_q2s:  q2s,  -6!0000000000000
+ m_t1s:  t1s,  -6!0000000000000
+ m_t2:   t2,   1!000
+ m_n1:   n1,   1!000
+ m_w1:   w1,   1!000
+ m_p0: p0, 1!100
+ m_p0s:  p0s,  -6!0000000000000
+ m_pn: pn, 1!101
+ m_ax:   ax,   1!000000000000
+ m_pq: pq, 1!01000000110000111111010010010100
+ m_ps:   ps,   -6!0000000000000
+ m_chn: chn, 1!1010101
+ m_crun: crun,  1!000000000
+ m_cm:   cm,    1!0
+ m_x1: x1, 1!000
+ m_x1s: x1s, -6!0000000000000
+
+#  The mantissa of a digit that escaped the ladder: its own plane, on its own
+#  index and its own tables, as mp3c's Smant is a submodel of its own.
+
+Index t
+ t_pass: pass,  1!111
+ t_band: band,  1!101
+ t_q1:   q1,    1!00000
+ t_t1:   t1,    1!000
+ t_bkq:  bkq,   1!000
+ t_cls: cls, 1!010110111101110
+ t_vpos: vpos,  1!0
+ t_q1s:  q1s,  -6!0111001101101
+ t_q2s:  q2s,  -6!0000000000000
+ t_t1s:  t1s,  -6!0000000000000
+ t_t2:   t2,   1!000
+ t_n1:   n1,   1!000
+ t_w1:   w1,   1!000
+ t_p0:   p0,   1!100
+ t_p0s:  p0s,  -6!0000000000000
+ t_pn:   pn,   1!000
+ t_ax:   ax,   1!000000000000
+ t_pq:   pq,    1!00000000000000000001000100000000
+ t_ps:   ps,   -6!0000000000000
+ t_chn: chn, 1!1010101
+ t_crun: crun,  1!000000000
+ t_cm:   cm,    1!0
+ t_x1: x1, 1!000
+ t_x1s: x1s, -6!0000000000000
+
+#  mp3c's exA: av (running mean) and the seven neighbours, weighted, scaled by
+#  avC/4096 and log-quantised into `ax`.  avD/256 is the running mean's decay.
+#  avN1 is wider than three bits because the sweep wanted 9: what it names is
+#  a same-channel neighbour now, and that is worth more than the half-crossed
+#  one it named before.
+Number avD,  1, 0!11101111
+Number avA,  1, 0!111
+Number avT1, 1, 0!010
+Number avT2, 1, 0!001
+Number avN1, 1, 0!01001
+Number avW1, 1, 0!011
+Number avQ1, 1, 0!101
+Number avQ2, 1, 0!011
+#  The coupled channel at this place, a packet ago -- only an interleaved
+#  residue has one.  See tc_part.
+Number avX1, 1, 0!101
+Number avC, 1, 0!0110101111
+
+Number rA, 1, 0!11111111
+Number rB, 1, 0!11111110
+Number rC, 1, 0!00010000
+Number rD, 1, 0!11100011
+Number rT, 1, 0!11111111
+Number rS1, 1, 0!00111
+Number rS2, 1, 0!00111
+Number lr, 1, 0!01011
+Number lrm, 1, 0!100000
+Number mbm, 1, 0!01000100
+Number mwA, 1, 0!00000010
+Number mwB, 1, 0!00000010
+Number mwC, 1, 0!00000010
+Number mwD, 1, 0!00000010
+Number mwT, 1, 0!00000010
+Number bw, 1, 0!01011
+Number qs, 1, 3!0011110
+Number qf, 1, 3!0111110
+Number mb, 1, 0!01000100
+
+
+Index n
+ n_pass: pass,  1!111
+ n_band: band,  1!000
+ n_q1:   q1,    1!00000
+ n_t1:   t1,    1!000
+ n_bkq:  bkq,   1!000
+ n_cls: cls, 1!010100101001010
+ n_vpos: vpos,  1!0
+ n_q1s:  q1s,  -6!0000000000000
+ n_q2s:  q2s,  -6!0000000000000
+ n_t1s:  t1s,  -6!0000000000000
+ n_t2:   t2,   1!000
+ n_n1:   n1,   1!000
+ n_w1:   w1,   1!000
+ n_p0:   p0,   1!100
+ n_p0s:  p0s,  -6!0000000000000
+ n_pn:   pn,   1!000
+ n_ax:   ax,   1!000000000000
+ n_pq:   pq,    1!00000000000000000000000000000000
+ n_ps:   ps,   -6!0000000000000
+ n_chn: chn, 1!1000000
+ n_crun: crun,  1!000000000
+ n_cm:   cm,    1!0
+ n_x1: x1, 1!000
+ n_x1s: x1s, -6!0000000000000
+
+Index g
+#  No factors: fam_dig is wired with G = nullptr and tsvcomp-dig.inc declares no
+#  TC_dig_G.  A digit's sign is fam_sgn's whole job, so there is no sign
+#  counter here to give a context to.

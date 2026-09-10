@@ -1,0 +1,9 @@
+#  Build outputs.  MOD/ is NOT here: it is a build input that ships
+#  generated, so that `make`-less machines and machines without perl can
+#  still compile.  ./mk.sh rewrites it; see the comment at the top of it.
+oggcomp
+*.o
+*.oc
+*.gcda
+*.gcno
+*.restored

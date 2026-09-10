@@ -1,0 +1,102 @@
+#  tsvcomp's hdr model: its context indices and its tunable parameters.
+#
+#  One module per family -- IDX/IDX-FORMAT.md is the specification, and sec.7
+#  is why there are six of these rather than one file.  Every name here is
+#  relative to the family: the prefix below puts `hdr_` back, so the index `a`
+#  is TC_hdr_a and the threshold `a_band` is TC_hdr_a_band, which is what
+#  IDX/opt.pl finds in the executable and what an export.!!! is keyed by.
+#
+#  ../mk.sh regenerates MOD/tsvcomp-hdr_h.inc and MOD/tsvcomp-hdr_p.inc from
+#  this file and tsvcomp-hdr.inc; ./mk.sh check proves the tuning and shipping
+#  builds of all six code identically.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.
+
+Prefix TC_hdr
+Debug 1
+Const 0
+#  ---------------------------------------------------------------------------
+#  The three header packets, coded record by record.  The tag is a dense factor
+#  because the alphabet is small and every entry in it is a different kind of
+#  number; p1r is the previous value under the same tag, whole, which is what
+#  makes cb.len and cmt.byte an order-1 byte model.
+#
+#  p1r is a mask and not a threshold list because what it carries is a byte's
+#  identity, not its size: the low bits of the last value are what say which
+#  value this one is likely to be, and quantising by magnitude throws exactly
+#  those away.  Measured, the widest threshold list is worse than the mask it
+#  replaces in every index here.  A threshold list is the better form for a
+#  small dense number, which is what most of the other axes are; this is the
+#  one variable in the model that is a byte rather than a quantity.
+#
+#  The sign counter's context, `Index g`, was empty -- one row per tag.  The
+#  values are coded as differences from the previous value under the tag, and
+#  the sign of a difference is most of what the previous value predicts: p1r
+#  whole, its magnitude, and whether the tag is repeating cut the header stage
+#  by 5.3%.
+
+Index a
+ a_tag: tag, 1!1111011111111110110111111111111111111111111111111111111111111111
+! a_p1:   p1,    1!100000000010110
+! a_p2:   p2,    1!1111111
+! a_pos:  pos,   1!011
+  a_p1r: p1r, &00001111
+
+Index b
+! b_p1:   p1,    1!101
+! b_pos:  pos,   1!0
+! b_p1r:  p1r,   &01011110
+
+Index c
+ c_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+
+Index d
+ d_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+
+Index s
+ s_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+
+Index f
+ f_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+
+Index m
+ m_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+
+Index t
+ t_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+! t_p1r:  p1r,   &01101111
+
+Number rA, 1, 0!00010000
+Number rB, 1, 0!00000000
+Number rC, 1, 0!00111111
+Number rD, 1, 0!00111111
+Number rT, 1, 0!00010000
+Number rG, 1, 0!00010000
+Number rS1, 1, 0!00001
+Number rS2, 1, 0!00001
+Number lr, 1, 0!11111
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000000
+Number mwT, 1, 0!00000000
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!01100
+Number qs, 1, 3!0000010
+Number qf, 1, 3!0000010
+Number mb, 1, 0!00000000
+
+
+Index n
+ n_tag: tag, 1!1111111111111111111111111111111111111111111111111111111111111111
+! n_p1r:  p1r,   &01101111
+
+Index g
+  g_p1:   p1,    1!000000000000000
+  g_p2: p2, 1!1111111
+  g_pos: pos, 1!100
+  g_p1r: p1r, &11111111

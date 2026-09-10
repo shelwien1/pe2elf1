@@ -1,0 +1,166 @@
+#  tsvcomp's sgn model: its context indices and its tunable parameters.
+#
+#  One module per family -- IDX/IDX-FORMAT.md is the specification, and sec.7
+#  is why there are six of these rather than one file.  Every name here is
+#  relative to the family: the prefix below puts `sgn_` back, so the index `a`
+#  is TC_sgn_a and the threshold `a_band` is TC_sgn_a_band, which is what
+#  IDX/opt.pl finds in the executable and what an export.!!! is keyed by.
+#
+#  ../mk.sh regenerates MOD/tsvcomp-sgn_h.inc and MOD/tsvcomp-sgn_p.inc from
+#  this file and tsvcomp-sgn.inc; ./mk.sh check proves the tuning and shipping
+#  builds of all six code identically.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.
+
+Prefix TC_sgn
+Debug 1
+Const 0
+#  ---------------------------------------------------------------------------
+#  The sign of a residue digit: 28% of the digit bits, and nearly random.  What
+#  little predicts it is the sign of the earlier pass's digit at the same slot
+#  (the refinement leans against the coarse rounding), the sign of the coupled
+#  channel and of the digit before, and the magnitude just coded.
+
+Index a
+ a_pass: pass, 1!11
+ a_vpos: vpos, 1!0000000
+ a_cls: cls, 1!100101101
+ a_p0s: p0s, -3!0111111
+ a_q1s: q1s, -3!0000000
+ a_mg: mg, 1!010101010
+ a_t1s:  t1s,  -3!0000000
+ a_q2s:  q2s,  -3!0000000
+ a_band: band, 1!00001
+ a_pq: pq, 1!00001000000010000000100000001000
+ a_sq:   sq,    1!00010001000100010001000100010001
+ a_ps: ps, -6!1010110110101
+ a_chn: chn, 1!1000000
+ a_crun: crun,  1!000000000
+ a_cm:   cm,    1!0
+ a_x1: x1, 1!000
+ a_x1s: x1s, -6!0001111111000
+
+Index b
+ b_pass: pass,  1!11
+ b_vpos: vpos,  1!1
+ b_cls: cls, 1!000000000000000
+ b_p0s: p0s, -3!1111111
+ b_q1s: q1s, -3!1010101
+ b_mg:   mg,    1!000
+ b_t1s: t1s, -3!0011010
+ b_q2s: q2s, -3!0100011
+ b_band: band, 1!10011
+ b_pq: pq, 1!01000001010001001000000000000000
+ b_sq: sq, 1!00100010000101000011001101000010
+ b_ps:   ps,   -6!0000000000000
+ b_chn:  chn,   1!0000000
+ b_crun: crun,  1!000000000
+ b_cm:   cm,    1!0
+ b_x1: x1, 1!000
+ b_x1s: x1s, -6!0000111110000
+
+Index c
+ c_pass: pass,  1!01
+ c_vpos: vpos,  1!0
+ c_p0s:  p0s,  -3!1000001
+ c_q1s:  q1s,  -3!0000100
+ c_t1s:  t1s,  -3!0000000
+ c_q2s:  q2s,  -3!0000100
+ c_mg:   mg,    1!000
+ c_pq:   pq,    1!00000000000000000000000000000000
+ c_sq:   sq,    1!00000000000000000000000000000000
+ c_ps:   ps,   -6!0000000000000
+ c_chn:  chn,   1!0000000
+ c_crun: crun,  1!000000000
+ c_cm:   cm,    1!0
+ c_x1: x1, 1!000
+ c_x1s: x1s, -6!0000000000000
+
+Index d
+ d_pass: pass,  1!00
+ d_vpos: vpos,  1!0
+ d_p0s: p0s, -3!0001100
+ d_q1s:  q1s,  -3!0001000
+ d_t1s:  t1s,  -3!0000000
+ d_q2s:  q2s,  -3!0001000
+ d_mg:   mg,    1!000
+ d_pq:   pq,    1!00000000000000000000000000000000
+ d_sq: sq, 1!00000000100000000000000010000000
+ d_ps: ps, -6!0010001000100
+ d_chn: chn, 1!1000000
+ d_crun: crun,  1!000000000
+ d_cm:   cm,    1!0
+ d_x1: x1, 1!000
+ d_x1s: x1s, -6!0000000000000
+
+Index s
+ s_pass: pass, 1!01
+ s_vpos: vpos,  1!0
+ s_p0s: p0s, -3!0101010
+ s_mg:   mg,    1!000
+ s_pq: pq, 1!00001000000010000000100000001000
+ s_sq: sq, 1!00000000100000000000000010000000
+ s_ps: ps, -6!0000110000100
+ s_chn: chn, 1!1010101
+ s_crun: crun, 1!000001000
+ s_cm:   cm,    1!0
+ s_x1: x1, 1!000
+ s_x1s: x1s, -6!0000000000000
+
+Index f
+ f_pass: pass,  1!11
+ f_vpos: vpos,  1!1
+ f_p0s: p0s, -3!1110111
+ f_mg: mg, 1!101
+ f_pq: pq, 1!00000000000000001000000000000000
+ f_sq: sq, 1!00100010001000100010001000100010
+ f_ps: ps, -6!0000001000000
+ f_chn: chn, 1!1000000
+ f_crun: crun, 1!000010000
+ f_cm: cm, 1!1
+ f_x1: x1, 1!000
+ f_x1s: x1s, -6!0000000000000
+
+Index m
+ m_pass: pass,  1!11
+ m_vpos: vpos, 1!0000000
+ m_p0s: p0s, -3!0000000
+ m_mg: mg, 1!010
+ m_pq: pq, 1!00000000100000000000000010000000
+ m_sq: sq, 1!00000000100000000000000010000000
+ m_ps: ps, -6!0000000000000
+ m_chn: chn, 1!1000000
+ m_crun: crun,  1!000000000
+ m_cm:   cm,    1!0
+ m_x1: x1, 1!000
+ m_x1s: x1s, -6!1111111111111
+
+Index t
+#  No factors: fam_sgn only ever calls bit(), never code(), so it never reaches
+#  bitm() and its mantissa counter is never read.  A sign is one bit.
+
+Number rA, 1, 0!11111110
+Number rB, 1, 0!11111111
+Number rC, 1, 0!00001010
+Number rD, 1, 0!00001011
+Number rS1, 1, 0!00111
+Number rS2, 1, 0!00111
+Number lr, 1, 0!10010
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000000
+Number bw, 1, 0!01100
+Number qs, 1, 3!0101110
+Number qf, 1, 3!0111110
+Number mb, 1, 0!00010000
+
+
+Index n
+#  No factors: the mantissa mixer fam_sgn never enters, as above.
+
+Index g
+#  No factors: fam_sgn is wired with G = nullptr for the same reason, one step
+#  further along -- a sign has no sign.

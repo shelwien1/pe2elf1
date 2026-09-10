@@ -1,0 +1,82 @@
+#  tsvcomp's aux model: its context indices and its tunable parameters.
+#
+#  One module per family -- IDX/IDX-FORMAT.md is the specification, and sec.7
+#  is why there are six of these rather than one file.  Every name here is
+#  relative to the family: the prefix below puts `aux_` back, so the index `a`
+#  is TC_aux_a and the threshold `a_band` is TC_aux_a_band, which is what
+#  IDX/opt.pl finds in the executable and what an export.!!! is keyed by.
+#
+#  ../mk.sh regenerates MOD/tsvcomp-aux_h.inc and MOD/tsvcomp-aux_p.inc from
+#  this file and tsvcomp-aux.inc; ./mk.sh check proves the tuning and shipping
+#  builds of all six code identically.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.
+
+Prefix TC_aux
+Debug 1
+Const 0
+#  ---------------------------------------------------------------------------
+#  Everything the page and packet headers hold, one field id apart.  Each field
+#  is a few thousand records at most, so what these want is separation, not
+#  resolution: `fld` is a dense factor and the rest is the field's own recent
+#  history.
+
+Index a
+ a_fld: fld, 1!1100111000000
+! a_p1:   p1,    1!100000001000111
+! a_p2:   p2,    1!1000001
+
+Index b
+ b_fld: fld, 1!0110110010000
+! b_p1:   p1,    1!000
+! b_p2:   p2,    1!000
+
+Index c
+ c_fld: fld, 1!0111111111110
+
+Index d
+ d_fld: fld, 1!0000010010010
+
+Index s
+ s_fld: fld, 1!1111111111111
+
+Index f
+ f_fld: fld, 1!1111111111111
+
+Index m
+ m_fld: fld, 1!1111111111111
+
+Index t
+ t_fld: fld, 1!1111111111111
+
+Number rA, 1, 0!11100111
+Number rB, 1, 0!00000000
+Number rC, 1, 0!00000000
+Number rD, 1, 0!00000010
+Number rT, 1, 0!00010110
+Number rG, 1, 0!10111000
+Number rS1, 1, 0!10000
+Number rS2, 1, 0!01110
+Number lr, 1, 0!11111
+Number lrm, 1, 0!11111
+Number mbm, 1, 0!00000000
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00010000
+Number mwC, 1, 0!10101000
+Number mwD, 1, 0!00000000
+Number mwT, 1, 0!00000010
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!00110
+Number qs, 1, 3!0011110
+Number qf, 1, 3!0011110
+Number mb, 1, 0!00000000
+
+
+Index n
+ n_fld: fld, 1!1111111111111
+
+Index g
+ g_p1:   p1,    1!000001000000110
+ g_p2: p2, 1!1111111111111

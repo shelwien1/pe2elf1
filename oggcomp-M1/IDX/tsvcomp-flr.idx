@@ -1,0 +1,223 @@
+#  tsvcomp's flr model: its context indices and its tunable parameters.
+#
+#  One module per family -- IDX/IDX-FORMAT.md is the specification, and sec.7
+#  is why there are six of these rather than one file.  Every name here is
+#  relative to the family: the prefix below puts `flr_` back, so the index `a`
+#  is TC_flr_a and the threshold `a_band` is TC_flr_a_band, which is what
+#  IDX/opt.pl finds in the executable and what an export.!!! is keyed by.
+#
+#  ../mk.sh regenerates MOD/tsvcomp-flr_h.inc and MOD/tsvcomp-flr_p.inc from
+#  this file and tsvcomp-flr.inc; ./mk.sh check proves the tuning and shipping
+#  builds of all six code identically.
+#
+#  A factor whose pattern is all zeroes contributes one bucket and costs
+#  nothing, which is how a variable that was tried and did not pay stays
+#  visible -- and how the optimizer is given somewhere to go.
+
+Prefix TC_flr
+Debug 1
+Const 0
+#  ---------------------------------------------------------------------------
+#  Floor posts.  The column is the whole story here -- post 0 and post 1 are
+#  coded raw and land at the ends of the row, everything between them is a
+#  folded residual against the line between the post's two bracketing
+#  neighbours, at a frequency the column names -- so it gets 48 buckets where
+#  the digit model gives its own position none.
+#
+#  The posts are coded in list order, not the ascending-X order the records
+#  are in, because that is the order the prediction is available in:
+#
+#    prd   render_point between the bracketing neighbours   room  hl  the
+#          room either side of it, and which side is wider
+#    lov hiv  what those two neighbours' own residuals were
+#    fy    the curve this post carried one packet ago
+#    ep    what floor1 would have coded for that curve against this packet's
+#          prediction -- the residual if the envelope had not moved, which is
+#          the second factor after the column
+#    p1    this post's residual one packet ago, which ep largely replaces
+#    pri   what the subclass books and the classword make of the value
+#
+#  Every line in this file used to be frozen, so IDX/opt.pl had never moved
+#  any of it, and counter D and the second APM were empty -- one row each, a
+#  global correction for the whole of a stream.  `ep` and `prd` in D and `ep`
+#  and `hl` in the APM are worth 738 bytes of floor over four files.  Unfrozen
+#  now; what froze it is not recorded and the space is plainly not exhausted.
+
+Index a
+  a_fno:  fno,   1!1
+  a_col:  col,   1!111111111011111101101110111111100000000000000000
+  a_p1:   p1,    1!0000000
+  a_fy:   fy,    1!100
+  a_raw:  raw,   1!0
+  a_blk:  blk,   1!0
+  a_o1:   o1,    1!0000000
+  a_prd:   prd,    1!1000001
+  a_od:   od,   -4!000000000
+  a_chn:  chn,   1!0
+  a_room: room,  1!00000000
+  a_hl:   hl,    1!11
+  a_lov:  lov,   1!00000000
+  a_hiv:  hiv,   1!00000000
+  a_pri:  pri,   1!00100010000000000100100000000000
+  a_ep:   ep,    1!00000000000
+
+Index b
+  b_fno:  fno,   1!0
+  b_col:  col,   1!0000001
+  b_p1:   p1,    1!11100001110000
+  b_fy:   fy,    1!0010100
+  b_raw:  raw,   1!0
+  b_blk:  blk,   1!1
+  b_o1:   o1,    1!0000000
+  b_prd:   prd,    1!0101000
+  b_od:   od,   -4!000000100
+  b_chn:  chn,   1!0
+  b_room: room,  1!00000000
+  b_hl:   hl,    1!00
+  b_lov:  lov,   1!10100000
+  b_hiv:  hiv,   1!00000000
+  b_pri:  pri,   1!10001000000000000000100000000001
+  b_ep:   ep,    1!11111111111
+
+Index c
+  c_col:  col,   1!1111111
+  c_p1:   p1,    1!000
+  c_fy:   fy,    1!000
+  c_o1:   o1,    1!0100000
+  c_prd:   prd,    1!0000000
+  c_od:   od,   -4!000010000
+  c_chn:  chn,   1!1
+  c_room: room,  1!00000000
+  c_hl:   hl,    1!00
+  c_lov:  lov,   1!00000000
+  c_hiv:  hiv,   1!10000001
+  c_pri:  pri,   1!00000010001000001010000001000000
+  c_ep:   ep,    1!11111111111
+
+Index d
+  d_col:  col,   1!0000000
+  d_p1:   p1,    1!000
+  d_fy:   fy,    1!000
+  d_o1:   o1,    1!0000000
+  d_prd: prd, 1!0000000
+  d_od:   od,   -4!000000000
+  d_chn:  chn,   1!0
+  d_room: room,  1!00000000
+  d_hl:   hl,    1!00
+  d_lov:  lov,   1!00000000
+  d_hiv:  hiv,   1!00000000
+  d_pri:  pri,   1!00000010000000100000000100011000
+  d_ep: ep, 1!10001110000
+
+Index s
+  s_col:  col,   1!1000111
+  s_p1:   p1,    1!000
+  s_fy:   fy,    1!101
+  s_o1:   o1,    1!0000000
+  s_prd:   prd,    1!0000000
+  s_od:   od,   -4!000000000
+  s_chn:  chn,   1!0
+  s_room: room,  1!00000000
+  s_hl:   hl,    1!01
+  s_lov:  lov,   1!10100000
+  s_hiv:  hiv,   1!00000001
+  s_pri:  pri,   1!00000000000100111100000000000000
+  s_ep:   ep,    1!00011101100
+
+Index f
+  f_col:  col,   1!0011100
+  f_p1:   p1,    1!000
+  f_fy:   fy,    1!000
+  f_o1:   o1,    1!0000000
+  f_prd:   prd,    1!0000000
+  f_od:   od,   -4!000000000
+  f_chn:  chn,   1!0
+  f_room: room,  1!00000000
+  f_hl: hl, 1!00
+  f_lov:  lov,   1!10110010
+  f_hiv:  hiv,   1!10011001
+  f_pri:  pri,   1!00000101000000011001001000001001
+  f_ep: ep, 1!00110010010
+
+Index m
+  m_col:  col,   1!111111111111111
+  m_p1:   p1,    1!001
+  m_fy:   fy,    1!000
+  m_o1:   o1,    1!0000000
+  m_prd:   prd,    1!0000000
+  m_od:   od,   -4!000000000
+  m_chn:  chn,   1!0
+  m_room: room,  1!00000000
+  m_hl:   hl,    1!00
+  m_lov:  lov,   1!00000000
+  m_hiv:  hiv,   1!00000000
+  m_pri:  pri,   1!00000011000100010000001000011001
+  m_ep:   ep,    1!00000001000
+
+Index t
+  t_col:  col,   1!111111111111111111111111011111010000000000000010
+  t_p1:   p1,    1!000
+  t_fy:   fy,    1!001
+  t_o1:   o1,    1!0000000
+  t_prd:   prd,    1!0000001
+  t_od:   od,   -4!000000000
+  t_chn:  chn,   1!0
+  t_room: room,  1!00000000
+  t_hl:   hl,    1!00
+  t_lov:  lov,   1!00000000
+  t_hiv:  hiv,   1!00000001
+  t_pri:  pri,   1!00000001000000000100001001010100
+  t_ep:   ep,    1!00000000000
+
+Number rA, 1, 0!00001111
+Number rB, 1, 0!01001011
+Number rC, 1, 0!10111110
+Number rD, 1, 0!00111111
+Number rT, 1, 0!00001111
+Number rG, 1, 0!00000100
+Number rS1, 1, 0!00110
+Number rS2, 1, 0!00100
+Number lr, 1, 0!10110
+Number lrm, 1, 0!11100
+Number mbm, 1, 0!01000001
+Number mwA, 1, 0!00000000
+Number mwB, 1, 0!00000000
+Number mwC, 1, 0!00000000
+Number mwD, 1, 0!00000000
+Number mwT, 1, 0!00000010
+Number mwG, 1, 0!00000000
+Number bw, 1, 0!01100
+Number qs, 1, 3!0011001
+Number qf, 1, 3!0010001
+Number mb, 1, 0!00001111
+
+
+Index n
+  n_col:  col,   1!000000000000000000000000001111000000000000000000
+  n_p1:   p1,    1!111
+  n_fy:   fy,    1!000
+  n_o1:   o1,    1!0000000
+  n_prd:   prd,    1!0000000
+  n_od:   od,   -4!000000000
+  n_chn:  chn,   1!0
+  n_room: room,  1!00000000
+  n_hl:   hl,    1!00
+  n_lov:  lov,   1!00000000
+  n_hiv:  hiv,   1!00000000
+  n_pri:  pri,   1!00000000000000000000000000000000
+  n_ep:   ep,    1!01111011011
+
+Index g
+  g_col:  col,   1!000000000000000000000000000000000000000000000000
+  g_p1:   p1,    1!000
+  g_fy:   fy,    1!000
+  g_o1:   o1,    1!0000000
+  g_prd:   prd,    1!0000000
+  g_od:   od,   -4!000000000
+  g_chn:  chn,   1!0
+  g_room: room,  1!00000000
+  g_hl:   hl,    1!00
+  g_lov:  lov,   1!00000000
+  g_hiv:  hiv,   1!00000000
+  g_pri:  pri,   1!00000000000000000000000000000000
+  g_ep:   ep,    1!00000000000
