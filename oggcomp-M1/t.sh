@@ -250,7 +250,9 @@ echo
 #  "this input is not something I can code back exactly", 2 is "you typed it
 #  wrong", 3 is "the filesystem said no" -- and a run that ends in any of
 #  them must not leave an output file, because a half-written .oc that looks
-#  like a whole one is how a backup turns out to be nothing.
+#  like a whole one is how a backup turns out to be nothing.  The removal is
+#  unconditional, so a refused run over a file that already existed destroys
+#  it -- which is why every output path below is under $tmp.
 bad_refusal=0; nrefusal=0
 
 #  Several of the tests below want a good .oc to damage, and take it from

@@ -66,6 +66,14 @@ is the two binaries against each other.
 costs about ten times the resident memory and is worth measuring before
 believing.  A lone `-` is stdin or stdout.
 
+Two sharp edges worth knowing before scripting it.  **A run that fails
+deletes the file its output path names** -- so that a half-written `.oc`
+is never left looking like a whole one -- and it does that whether or not
+it wrote anything, so a refused run over an existing file destroys it.
+Point outputs at scratch paths.  And there is no `--`: anything beginning
+with `-` and longer than one character is read as options, so a file whose
+name starts with a dash has to be written `./-name.ogg`.
+
 Exit status is 0 for success, 1 for an input it will not code, 2 for a
 command line it cannot parse, 3 for something the filesystem said.
 

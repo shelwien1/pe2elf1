@@ -101,8 +101,12 @@ REQ=-fwrapv
 #  then refuses to jump into -- so porting means giving coro3b.inc a branch,
 #  not passing a flag.  Set OGGCOMP_ANY_ARCH=1 to try anyway.
 arch=$(uname -m)
-case "$arch" in
-  x86_64 | amd64 | i[3456]86) ;;
+case "${1:-tuning}:$arch" in
+  #  `mod` runs perl and nothing else, so the architecture it runs on does
+  #  not come into it -- and putting MOD/ back the way it ships is exactly
+  #  what someone on a machine that cannot build would want to do.
+  mod:*) ;;
+  *:x86_64 | *:amd64 | *:i[3456]86) ;;
   *)
     [ "${OGGCOMP_ANY_ARCH:-0}" = 1 ] || {
       echo "mk.sh: this is x86-64 only -- Lib3/coro3b.inc has no branch for $arch" >&2
@@ -185,8 +189,15 @@ case "${1:-tuning}" in
     #  the generated header expands.  So the guard passed on a MOD/ that was
     #  entirely unfolded, and `mk.sh release` would ship a binary with live
     #  knobs in it while printing that every parameter had been folded.
-    if grep -aq '!MAP!' oggcomp; then
+    #  grep answers 0 for found, 1 for not found and 2 or more for "I could
+    #  not look" -- an unreadable or missing binary among them.  A bare `if
+    #  grep` reads that last case as "not found", i.e. as the good news.
+    grep -aq '!MAP!' oggcomp; g=$?
+    if [ $g = 0 ]; then
       echo "mk.sh: the release build still carries !MAP! markers" >&2
+      exit 1
+    elif [ $g != 1 ]; then
+      echo "mk.sh: could not read ./oggcomp to check it for !MAP! markers" >&2
       exit 1
     fi
     echo "mk.sh: release build -- every parameter folded"
@@ -201,7 +212,10 @@ case "${1:-tuning}" in
     lst=${2:-}
     case "$lst" in
       ''|/*) ;;
-      *) [ -f "$lst" ] || [ ! -f "$callerpwd/$lst" ] || lst="$callerpwd/$lst";;
+      #  The caller's directory wins.  Testing the tree first would let a
+      #  list of the same name sitting in the tree shadow the one that was
+      #  meant, silently, and the header above promises the opposite.
+      *) [ ! -f "$callerpwd/$lst" ] || lst="$callerpwd/$lst";;
     esac
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/mk-check.XXXXXX")
     if [ -z "$lst" ]; then
@@ -211,7 +225,12 @@ case "${1:-tuning}" in
       #  IDX/opt.pl on what it should cover.
       lst="$tmp/list"
       : > "$lst"
-      for g in testfiles/*.ogg; do [ -f "$g" ] && echo "$g" >> "$lst"; done
+      #  printf, not echo: dash's echo expands backslash escapes, so a
+      #  corpus file with a backslash in its name would go into the list
+      #  as some other name and the run would die trying to open it.
+      for g in testfiles/*.ogg; do
+        [ -f "$g" ] && printf '%s\n' "$g" >> "$lst"
+      done
       [ -s "$lst" ] || {
         echo "mk.sh check: no testfiles/*.ogg -- ./testfiles/gen.sh makes them," >&2
         echo "             or name a file holding one .ogg per line" >&2
@@ -232,9 +251,24 @@ case "${1:-tuning}" in
     seen=0
     while IFS= read -r f; do
       seen=$((seen + 1))
-      "$tmp/tune" c "$f" "$tmp/a.oc"
-      "$tmp/rel"  c "$f" "$tmp/b.oc"
-      if cmp -s "$tmp/a.oc" "$tmp/b.oc"; then
+      #  A file neither build will code is a row, not the end of the run.
+      #  `set -e` would otherwise stop here with the compressor's message
+      #  and nothing from mk.sh, and every file after it would go
+      #  uncompared while the exit status said only "1" -- and this tree
+      #  ships testfiles/refused/, so a list holding one is a thing that
+      #  will happen.  Both builds have to refuse it, and for the two to
+      #  agree they must refuse it alike.
+      ta=0; "$tmp/tune" c "$f" "$tmp/a.oc" || ta=$?
+      tb=0; "$tmp/rel"  c "$f" "$tmp/b.oc" || tb=$?
+      if [ "$ta" != 0 ] || [ "$tb" != 0 ]; then
+        if [ "$ta" = "$tb" ]; then
+          printf '  %-40s %10s  refused alike\n' "$(basename "$f")" "exit $ta"
+        else
+          printf '  %-40s REFUSED BY ONE BUILD ONLY (%s vs %s)\n' \
+                 "$(basename "$f")" "$ta" "$tb"
+          bad=1
+        fi
+      elif cmp -s "$tmp/a.oc" "$tmp/b.oc"; then
         #  And read one of them back with the other build.  Equal encodes
         #  say nothing about the decoders, and a parameter that folds to
         #  something different would be just as wrong on the way out.
@@ -294,6 +328,16 @@ case "${1:-tuning}" in
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-generate -c -o oggcomp.o "$here/oggcomp.cpp" \
         && $CXX -fprofile-generate -o gen oggcomp.o -lm ) || exit 1
     "$tmp/gen" c "$pgo_in" "$tmp/p.oc" && "$tmp/gen" d "$tmp/p.oc" "$tmp/p.ogg" || exit 1
+    #  The training run decodes as well as encodes, so that the profile
+    #  covers both halves; while it is there, check that what came back is
+    #  what went in.  Free, and it is the only round trip this branch makes.
+    cmp -s "$pgo_in" "$tmp/p.ogg" ||
+      { echo "mk.sh pgo: the instrumented build did not give the file back" >&2; exit 1; }
+    #  gcc treats a missing .gcda as a warning, so without this the profiled
+    #  compile would quietly be an ordinary one and the line below would say
+    #  it was laid out from a profile that was never read.
+    [ -s "$tmp/oggcomp.gcda" ] ||
+      { echo "mk.sh pgo: no profile was written -- $tmp/oggcomp.gcda is not there" >&2; exit 1; }
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-use -fprofile-correction -c -o oggcomp.o "$here/oggcomp.cpp" \
         && $CXX -o "$here/oggcomp" oggcomp.o -lm ) || exit 1
     ./oggcomp c "$pgo_in" "$tmp/q.oc"
