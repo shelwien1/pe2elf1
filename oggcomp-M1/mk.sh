@@ -3,7 +3,7 @@
 #
 #      ./mk.sh              tuning build   -- Debug 1, Const 0
 #      ./mk.sh release      shipping build -- every parameter folded
-#      ./mk.sh check        build both and prove they code identically
+#      ./mk.sh check [lst]  build both and prove they code identically
 #      ./mk.sh mod          regenerate MOD/ in the shipping form, build nothing
 #      ./mk.sh pgo f.ogg    shipping build, laid out from a profile of f.ogg
 #
@@ -38,7 +38,12 @@
 #  `./mk.sh check` is the test that they have not: whatever the parameters are,
 #  both builds must produce byte-identical streams.  That is the format's
 #  stated contract and the only check that catches a parameter which folds to
-#  something different from what it evaluated to.
+#  something different from what it evaluated to.  It reads one of the two
+#  streams back with the other build as well, since a parameter that folds
+#  wrong is as wrong on the way out as it was on the way in, and equal
+#  encodes say nothing about that.  With no list it uses testfiles/; a list
+#  is one .ogg per line, blanks and #comments skipped, named relative to
+#  where you are and holding paths relative to the tree.
 #
 #  MOD/ is a build input, not a build artefact.  It ships generated -- in the
 #  shipping form, so `make` works without perl -- and this script rewrites it.

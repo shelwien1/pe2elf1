@@ -101,7 +101,14 @@ fi
 src=$1
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/oggcomp-t.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT INT TERM
+
+#  The signal traps exit.  `trap ... EXIT INT TERM` -- one handler for all
+#  three -- deletes the scratch directory on Ctrl-C and then lets the script
+#  carry on writing into a directory that is no longer there, which for a
+#  test script means a run that was interrupted can still print PASS.
+trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp"; exit 130' INT
+trap 'rm -rf "$tmp"; exit 143' TERM
 
 #  Wall time of one run, in seconds, left in $tmp/secs; the command's own
 #  exit status comes back as ours.  perl already has to be installed -- it is
