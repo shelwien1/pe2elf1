@@ -108,8 +108,8 @@ structure.
 
 **(c) One walk, typed calls into the model.**  `io.inc`'s `residue()` has
 `rno`, the pass, the vector, the partition, the class and the book at the
-point where it reads a digit; that is exactly what `tc_part` spends 40 lines
-rebuilding from history.  So the digit is handed to the model *there*, with
+point where it reads a digit; that is what tsvcomp keeps a second copy of
+the loop to know, and hands to `tc_part` in twelve arguments.  So the digit is handed to the model *there*, with
 those arguments, and the model's own walk is deleted.  The record stream
 survives only as balrogg's inspection format, produced by a sink that writes
 records instead of coding them.
@@ -120,8 +120,9 @@ the model gets its context from the parser instead of reconstructing it.
 
 ### The sink
 
-`io`, `link_walk` and `codec` hold a `tsv & t` today.  They will hold a
-`sink_t & t`, where `sink_t` is a typedef made before `io.inc` is included:
+`io` holds a `tsv &` today, `link_walk::page` takes one as an argument, and
+`vb_pack` / `vb_unpack` each own one.  All three will name `sink_t` instead,
+a typedef made before `io.inc` is included:
 
 ```c
 typedef oc_tsv   sink_t;    /*  main.cpp: balrogg, writes records  */
@@ -129,8 +130,9 @@ typedef oc_model sink_t;    /*  oggcomp.cpp: codes them  */
 ```
 
 A typedef rather than a template, because the two sinks never meet in one
-binary and `io.inc` stays readable.  The sink is a set of **typed methods**,
-one per kind of value, each taking what the walk knows at that site.  Every
+binary and `io.inc` stays readable.  The sink is a set of **typed methods**
+-- fifteen, of which ten carry a value -- each taking what the walk knows at
+that site.  Every
 method has the same shape as `io::val` has today: in mode c it is given the
 value and codes it; in mode d it decodes and returns it.
 
@@ -146,13 +148,13 @@ has.  `oc_model` implements each with the corresponding piece of tsvcomp.
 | `link_begin()` | after `v.link()` | the per-link resets at the top of `tc_walk`'s loop | -- |
 | `page(ogg_page &, bos, cont)` | `link_walk::page` (c), `vb_unpack` (d) | `tc_page`: type against `bos<<1|cont`, granule/serial/sequence/lengths as residuals | `bos`, `cont` from `codec`; the page counter is the sink's own |
 | `spill(n)` | `link_walk::page` / `vb_unpack` | `tc_aux(F_SPILL)` | -- |
-| `hdr(tag, x, hi)` | `io::fld`, `val`, `sval`, `flt` on the header path; `io::comment` | `tc_hdrval` via `tc_tagid`: the difference from the last value under the tag | the tag string (interned by pointer, as `tsv::shorten` does) |
+| `hdr(tag, x, hi)` | `io::fld`, `val`, `flt` on the header path; `io::comment` | `tc_hdrval` via `tc_tagid`: the difference from the last value under the tag | the tag string, interned by content with the last pointer cached, as `tsv::shorten` does |
 | `setup_done(vb_ctx &)` | `io::hdr(2)` after `setup()` | `tc_setup_done`, `tcp_build`, the floor neighbour tables from `vd_floor::read` | the whole `vb_setup` |
 | `mode(md, nmd)`, `wprev(w)`, `wnext(w)` | `io::audio` | `tc_audio` | previous mode / window from the sink's own state |
 | `floor(k, fno, f, y[], used)` | `io::payload`, once per channel | the per-channel block of `tc_payload`: `flr.used`, then every post, coded in list order | channel, floor number, the floor, the whole post array |
 | `residue_begin(rno, r, nz[], nch, n)` | `io::residue` on entry | `tc_residue`'s entry: `cidx` from `nz`, the per-residue history clears | the channels and which are non-zero |
-| `cls(rno, ch, slot)` | `io::residue`, the `res.class` site | `tc_classify` plus the run/match bookkeeping and the classbook prior cursor | which channel, which partition |
-| `part_begin(rno, pass, ch, pc, r, bk, bn, cls)` | `io::rs_part` on entry | `tc_part`'s prologue: history rows, the neighbour stride, the book's prior | everything `tc_part` takes today, from the loop that has it |
+| `cls(rno, ch, pc, k)` | `io::residue`, the `res.class` site | `tc_classify` plus the run/match bookkeeping and the classbook prior cursor | which channel, which partition, which place in the classword -- the cursor restarts at place 0 |
+| `part_begin(rno, pass, ch, pc, r, bk, bn, cls)` | `io::residue`, just before each `rs_part` -- `rs_part` itself has only the residue and the book | `tc_part`'s prologue: history rows, the neighbour stride, the book's prior | everything `tc_part` takes today, from the loop that has it |
 | `vec_begin()` | `io::rs_sym` on entry | the prior cursor restart at `vpos == 0` | -- |
 | `digit(d)` | `io::rs_sym`, the `res.digit` site | `tc_part`'s per-digit body: build `tc_dv`, code magnitude and sign, step the prior, update the histories | the sink counts the slot and `vpos` itself |
 
@@ -188,7 +190,7 @@ where they need context anyway.
 | `tc_fam`, `tc_dv`, `tcx`, the histories, `tc_models`, `tc_map`, `tc_tables`, `TC_MEMCOST`, `-v` accounting, `TC_WIRE` | unchanged |
 | `vd_setup.inc` | gone |
 | `lift.inc`, `floor_db.inc`, `imdct.inc` | gone from this build; they were included for `MD_MAXBLK` and `fx()`, which `vd_setup` used and the model does not |
-| `tsv.inc` | not included by oggcomp at all |
+| `tsv.inc` | not included by oggcomp; `TSV_TAGMAX`, which sizes `tc_tagbuf`, moves to the sink |
 
 `cm.inc`, `sh_v2f.inc`, `sh_mapping.inc`, `tc_prior.inc`, `MOD/`, `IDX/`,
 `idx2inc.pl`, `opt.pl`, `import.pl` are untouched.  They are the model and
@@ -260,7 +262,7 @@ page emitted, and the next begun.  What is held at any moment:
 |---|---|---|
 | the input window | 32 MB (`IN_WIN`) | balrogg, unchanged |
 | one page, one page image | 65 KB each (`PAGE_MAX`) | unchanged |
-| one packet gathered across pages | 16.7 MB (`JB_MAX`) | unchanged |
+| one packet gathered across pages | 16.6 MB (`JB_MAX`) | unchanged |
 | the link's setup and codebook arena | 96 MB (`VB_ARENA`) | unchanged |
 | the model's histories | per residue span, `TC_HISTMAX` | tsvcomp, unchanged |
 | the model's tables | address space, mapped; touched pages only | unchanged |
@@ -277,7 +279,7 @@ stays:
   looks ahead through the window to find where the packet ends
   (`source::join_len`) and copies it whole into `jb`.  Coding could in
   principle start on the first fragment, but `io` reads bits, a codeword
-  may straddle the fragment boundary, and the bound is 16.7 MB; the
+  may straddle the fragment boundary, and the bound is 16.6 MB; the
   lookahead is bounded by the window and already exists.
 - **A channel's floor posts are coded after the whole channel is parsed.**
   The model codes posts in list order, not the ascending-X order the
@@ -373,7 +375,7 @@ visible to the optimizer.
 against the table in section 1.  Expected: encode within a few percent of
 `tsvcomp c` alone, decode likewise; resident memory no more than balrogg's
 static buffers (213 MB declared: a 32 MB input window, a 96 MB codebook
-arena, 68 MB of classification slots, a 16 MB gathered-packet buffer, of
+arena, 68 MB of classification slots, a 16.6 MB gathered-packet buffer, of
 which a stream touches what it needs) plus the model's touched pages.  Then the
 first thing worth doing with the merged tool that the split one could
 not: nothing in this plan, and that is deliberate (section 9).
@@ -410,6 +412,13 @@ reads the bits.
   (`srt`); the model codes in list order.  The `floor` method takes the
   whole array, so the order inside is the model's business and the
   records `oc_tsv` writes keep balrogg's order.
+- **Digits per partition.**  For residue types 1 and 2, `io::rs_part`
+  codes whole vectors -- `ceil(psz / dim) * dim` digits -- where
+  `tc_part` codes exactly `psz`.  libvorbis reads whole vectors too, so
+  balrogg is right, and a stream whose partition size is not a multiple
+  of a book's dimension desynchronises tsvcomp today, one record after
+  the partition ends.  No corpus file has such a book.  The sink counts
+  digits per vector, as `io` does.
 - **The page counter and `seq`.**  `tc_walk` counts pages per link for
   the expected sequence number; `vb_pack` does not.  The sink counts.
 - **Multi-link streams.**  `vb_ctx::link` drops the setup; the sink's
@@ -452,10 +461,9 @@ reads the bits.
 - **Change the model or the format**, beyond the container's magic.  The
   acceptance test is bit-exactness against `tsvcomp`, and that test is
   only worth having if nothing else moves at the same time.  The things
-  the merged tool makes possible -- coding a digit with the bit position
-  of its codeword, or the floor curve at its frequency, both of which
-  `io` has and the record stream never carried -- come after step 7, one
-  at a time, measured.
+  the merged tool makes possible -- coding a digit knowing the length of
+  the codeword it came from, which `io` has and the record stream never
+  carried -- come after step 7, one at a time, measured.
 - **Thread.**  The walk is sequential and the coder is sequential; there
   is nothing to overlap that the operating system's read-ahead does not
   already.
@@ -501,7 +509,9 @@ merge exists to hand over.
 | `pg_prev`, `pg_prevtype`, `pg_prevser`, `tc_prevW`, `tc_prevmode`, `tc_used`, the page counter | link | `link_begin` |
 | priors (`tcp_book`, `tcp_cls`, `tcp_flr`), histories (`dg_*`, `cl_*`, `fl_*`), `oc_floor` | link | `setup_done` |
 | `dg_pp`, `dg_ps`, `dg_pn`, `dg_q1`, `dg_q2`, `dg_zr` | residue call | `residue_begin` |
-| `cl_run`, `cl_same`, `cl_last` | residue call / channel | `cls` |
+| `cl_last`, `cl_last2` | link | `setup_done` |
+| `cl_run` | file | never -- kept so for bit-exactness; a candidate for `link_begin` after step 7 |
+| `cl_same`, `cl_run_buf` | residue call | `cls` |
 | the prior cursors | vector / classword / floor partition | `vec_begin`, `cls`, `floor` |
 | `tc_stage`, `tc_bits`, `tc_syms` | file | never; `-v` only |
 
