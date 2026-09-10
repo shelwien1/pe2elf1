@@ -43,8 +43,10 @@ constexpr sz OC_TAGMAX = 31;
 //  oc_raw.inc, oc_floor.inc and oc_residue.inc, one layer each; the parser
 //  (io_t) and the stream walker call them through this interface, and
 //  null_sink below answers the same calls with nothing.
-struct oc_model {
-  tc_fam fam_dig, fam_sgn, fam_flr, fam_cls, fam_aux, fam_hdr;
+template <int f_DEC> struct oc_model {
+  static constexpr int ENC = (f_DEC == 0);
+  static Rangecoder<f_DEC, OC_CARRYLESS> rc;
+  tc_fam<f_DEC> fam_dig, fam_sgn, fam_flr, fam_cls, fam_aux, fam_hdr;
   i64 tc_last[F_N], tc_last2[F_N];
   vb_ctx *vb;
   //  frame: the last mode and window flags, the last page's fields
@@ -104,8 +106,8 @@ struct oc_model {
   void vec_begin() { fam_dig.pc.start(P.pt); }
   i64 digit(i64 dg);
 };
-typedef oc_model sink_t;
-void oc_model::init() {
+template <int f_DEC> Rangecoder<f_DEC, OC_CARRYLESS> oc_model<f_DEC>::rc;
+template <int f_DEC> void oc_model<f_DEC>::init() {
   cm_tables();
   tabs.init();
   TC_WIRE(fam_dig, dig, (cm_cnt *)nullptr, 0, TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
@@ -116,7 +118,7 @@ void oc_model::init() {
   TC_WIRE_ALL(fam_hdr, hdr, tabs.hdr->TC_hdr_G, TC_SGN_HDR);
   raw_init();
 }
-i64 oc_model::auxc(int fld, i32 c, i64 x, int sgn) {
+template <int f_DEC> i64 oc_model<f_DEC>::auxc(int fld, i32 c, i64 x, int sgn) {
   tcx v;
   i64 r;
   tc_make_aux(fld, c, tc_qlog(tc_last[fld]), v);
@@ -125,8 +127,8 @@ i64 oc_model::auxc(int fld, i32 c, i64 x, int sgn) {
   tc_last[fld] = r;
   return r;
 }
-i64 oc_model::aux(int fld, i64 x) { return auxc(fld, tc_qlog(tc_last2[fld]), x, 0); }
-void oc_model::setup_done(vb_ctx &vv) {
+template <int f_DEC> i64 oc_model<f_DEC>::aux(int fld, i64 x) { return auxc(fld, tc_qlog(tc_last2[fld]), x, 0); }
+template <int f_DEC> void oc_model<f_DEC>::setup_done(vb_ctx &vv) {
   const vb_setup *s;
   vb = &vv;
   s = vb->cur;
@@ -170,6 +172,7 @@ void oc_model::setup_done(vb_ctx &vv) {
     oc_fl[i].build(s->fl[i]);
 }
 struct null_sink {
+  static constexpr int ENC = 1;
   u32 spill(u32 n) { return n; }
   u32 hdr(const char *, u32 x, u64) { return x; }
   void setup_done(vb_ctx &) {}

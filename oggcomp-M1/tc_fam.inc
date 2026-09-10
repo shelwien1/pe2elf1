@@ -1,14 +1,20 @@
-static INLINE int tc_bit(int p, int bit) {
+//  The direction is a template parameter, f_DEC as in Rangecoder: 0
+//  codes, 1 decodes.  One bit through the one coder there is,
+//  oc_model<f_DEC>::rc --
+//  a static member reached by type, so a family needs no pointer to the
+//  model it belongs to.  The model is defined after the families it
+//  holds; the name is dependent, so it is looked up when this is
+//  instantiated, by which time it is there.
+template <int f_DEC> struct oc_model;
+template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
   uint b = (uint)bit;
-  if(tc_verbose && tc_enc)
+  if(!f_DEC && tc_verbose)
     tc_bits[tc_stage] -= log2(bit ? 1.0 - p / (double)CM_PONE : p / (double)CM_PONE);
-  if(tc_enc)
-    rce.rc_Process((uint)(p << 3), b);
-  else
-    rcd.rc_Process((uint)(p << 3), b);
+  oc_model<f_DEC>::rc.rc_Process((uint)(p << 3), b);
   return (int)b;
 }
-struct tc_fam {
+template <int f_DEC> struct tc_fam {
+  static constexpr int ENC = (f_DEC == 0);
   cm_cnt *A, *B, *C, *D, *G, *T;
   i16 *S, *S2;
   i32 *W;
@@ -122,7 +128,7 @@ struct tc_fam {
       int pm = mx.mix(bm + (u32)node);
       int pf = ap2.pp(pm, bf + (u32)node);
       pf = (bw * pm + (16 - bw) * pf + 8) >> 4;
-      b = tc_bit(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
+      b = tc_bit<f_DEC>(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
     }
     mx.upd(b, lr, mb);
     ap.upd(b, rS1);
@@ -140,7 +146,7 @@ struct tc_fam {
   INLINE int bitm(int node, int b) {
     cm_cnt t = T[bt + node];
     if(prp < 0) {
-      b = tc_bit(t.P(), b);
+      b = tc_bit<f_DEC>(t.P(), b);
       t.upd(b, rT, mwT);
       T[bt + node] = t;
       return b;
@@ -150,7 +156,7 @@ struct tc_fam {
     mxm.set(2, 256);
     {
       int pm = mxm.mix(bn + (u32)node);
-      b = tc_bit(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
+      b = tc_bit<f_DEC>(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
     }
     mxm.upd(b, lrm, mbm);
     t.upd(b, rT, mwT);
@@ -161,25 +167,25 @@ struct tc_fam {
     int k, p, nb = 0;
     u64 u;
     select(v);
-    if(UNLIKELY(tc_enc && x < 0))
+    if(UNLIKELY(ENC && x < 0))
       FATAL("negative magnitude");
     prp = pc.head(0);
-    if(bit(0, tc_enc && x == 0)) {
+    if(bit(0, ENC && x == 0)) {
       prp = -1;
       return 0;
     }
     prp = pc.head(1);
-    if(bit(1, tc_enc && x == 1)) {
+    if(bit(1, ENC && x == 1)) {
       prp = -1;
       return 1;
     }
     prp = pc.head(2);
-    if(bit(2, tc_enc && x == 2)) {
+    if(bit(2, ENC && x == 2)) {
       prp = -1;
       return 2;
     }
-    u = tc_enc ? (u64)(x - 3) + 1 : 1;
-    if(tc_enc) {
+    u = ENC ? (u64)(x - 3) + 1 : 1;
+    if(ENC) {
       u64 t = u;
       while(t) {
         nb++;
@@ -188,35 +194,35 @@ struct tc_fam {
     }
     for(k = 0;; k++) {
       prp = pc.len(k);
-      if(bit(tc_node_len(k), tc_enc && nb == k + 1)) {
+      if(bit(tc_node_len(k), ENC && nb == k + 1)) {
         nb = k + 1;
         break;
       }
       if(UNLIKELY(k + 2 > TC_NBMAX))
-        FATAL("%s: a value of 2^%d or more", tc_enc ? "this stream holds" : "coded stream", TC_NBMAX);
+        FATAL("%s: a value of 2^%d or more", ENC ? "this stream holds" : "coded stream", TC_NBMAX);
     }
     {
       u64 pref = 1;
       for(p = 0; p < nb - 1; p++) {
         int mb;
         prp = pc.man(nb, p, pref);
-        mb = bitm(tc_node_man(nb, p), tc_enc && ((u >> (nb - 2 - p)) & 1) != 0);
+        mb = bitm(tc_node_man(nb, p), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
         pref = pref * 2 + (u64)mb;
       }
       prp = -1;
-      if(!tc_enc)
+      if(!ENC)
         u = pref;
     }
     return (i64)(u - 1) + 3;
   }
   i64 codes(const tcx &v, i64 x, u32 sc) {
-    i64 m = code(v, tc_enc ? (x < 0 ? -x : x) : 0);
+    i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0);
     int s;
     if(!m)
       return 0;
     if(G) {
       cm_cnt g = G[bg * (u32)ng + sc];
-      s = tc_bit(g.P(), tc_enc && x < 0);
+      s = tc_bit<f_DEC>(g.P(), ENC && x < 0);
       g.upd(s, rG, mwG);
       G[bg * (u32)ng + sc] = g;
     } else {

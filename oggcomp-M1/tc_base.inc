@@ -1,10 +1,7 @@
 constexpr i32 RS_DIGIT_MAX = 0x7FFFFF;
-static int tc_enc;
 #ifndef OC_CARRYLESS
 #define OC_CARRYLESS 0
 #endif
-static Rangecoder<0, OC_CARRYLESS> rce;
-static Rangecoder<1, OC_CARRYLESS> rcd;
 constexpr int TC_MIXN = 7;
 constexpr int TC_NODE = 29;
 constexpr int TC_MNODE = 169;

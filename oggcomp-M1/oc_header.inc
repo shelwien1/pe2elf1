@@ -1,4 +1,4 @@
-int oc_model::tagid(const char *tag) {
+template <int f_DEC> int oc_model<f_DEC>::tagid(const char *tag) {
   u32 i;
   int id = -1;
   for(i = 0; i < tc_ntag; i++)
@@ -17,20 +17,20 @@ int oc_model::tagid(const char *tag) {
   tc_lasttag = id;
   return id;
 }
-i64 oc_model::hdrval(int id, i64 x) {
+template <int f_DEC> i64 oc_model<f_DEC>::hdrval(int id, i64 x) {
   tcx v;
   i64 pr = tc_tlast[id];
   tc_make_hdr(id, tc_qlog(tc_tlast[id]), tc_qlog(tc_tlast2[id]), tc_qlog(tc_runpos), (int)(tc_tlast[id] & 255), v);
-  x = fam_hdr.codes(v, tc_enc ? x - pr : 0, (u32)id) + pr;
+  x = fam_hdr.codes(v, ENC ? x - pr : 0, (u32)id) + pr;
   tc_tlast2[id] = tc_tlast[id];
   tc_tlast[id] = x;
   return x;
 }
-u32 oc_model::hdr(const char *tag, u32 x, u64 hi) {
+template <int f_DEC> u32 oc_model<f_DEC>::hdr(const char *tag, u32 x, u64 hi) {
   i64 v;
   tc_stage = STG_HDR;
-  v = hdrval(tagid(tag), tc_enc ? (i64)x : 0);
-  if(!tc_enc)
+  v = hdrval(tagid(tag), ENC ? (i64)x : 0);
+  if(!ENC)
     FATAL_UNLESS(v >= 0 && (u64)v < hi, "coded stream: %s = %" PRId64 " is out of range", tag, v);
   return (u32)v;
 }

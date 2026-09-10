@@ -44,38 +44,117 @@ template <class RC> struct rc_pin_io {
 #include "ogg_stream.inc"
 constexpr char OC_MAGIC[] = "oggc\x1a";
 constexpr int OC_VER = 3;
-struct oc_coro : Coroutine {
-  oc_model t;
+//  The coroutine, one per direction: f_DEC is what Rangecoder calls it, 0
+//  to code and 1 to decode.  Each direction's walk is a member function
+//  chosen by overload on the direction's tag, and a member function of a
+//  class template is compiled only where it is called, so the decoder's
+//  binary path holds no dry run and the encoder's no page writer.
+template <int N> struct oc_dir {};
+template <int f_DEC> struct oc_coro : Coroutine {
+  oc_model<f_DEC> t;
   const char *in;
-  void do_process() {
-    if(tc_enc) {
-      source src;
-      src.open(in, &pin[0]);
-      rce.co = this;
-      rce.rc_Init();
-      {
-        og_packer<oc_model> pk(t, src);
-        pk.pack();
-      }
-      rce.rc_Quit();
-      if(rce.carry_lost())
-        FATAL_CODE(OGC_EXIT_INTERNAL,
-                   "%s: the carryless coder lost a carry; "
-                   "this is a measuring build, ship one with OC_CARRYLESS=0",
-                   in);
-      src.close();
-    } else {
-      rcd.co = this;
-      rcd.rc_Init();
-      {
-        og_unpacker<oc_model> up(t, &pin[1]);
-        up.unpack(in);
-      }
+  void go(oc_dir<0>) {
+    source src;
+    src.open(in, &pin[0]);
+    t.rc.co = this;
+    t.rc.rc_Init();
+    {
+      og_packer<oc_model<f_DEC>> pk(t, src);
+      pk.pack();
     }
+    t.rc.rc_Quit();
+    if(t.rc.carry_lost())
+      FATAL_CODE(OGC_EXIT_INTERNAL,
+                 "%s: the carryless coder lost a carry; "
+                 "this is a measuring build, ship one with OC_CARRYLESS=0",
+                 in);
+    src.close();
+  }
+  void go(oc_dir<1>) {
+    t.rc.co = this;
+    t.rc.rc_Init();
+    og_unpacker<oc_model<f_DEC>> up(t, &pin[1]);
+    up.unpack(in);
+  }
+  void do_process() {
+    go(oc_dir<f_DEC>());
     yield(this, 0);
   }
 };
-static CoroFileProc<oc_coro> oc_run;
+//  One run, in the direction f_DEC: the tables and the model, the files, the
+//  coroutine over them, the report.
+template <int f_DEC> static int run(const char *in, const char *out) {
+  static CoroFileProc<oc_coro<f_DEC>> co;
+  filehandle f, g;
+  co.t.init();
+  if(!f.open(in))
+    FATAL_CODE(OGC_EXIT_IO, "cannot open %s", in);
+  if(!f_DEC) {
+    u8 h[2];
+    if(!g.make(out))
+      FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
+    ogc_partial.set(out, &g);
+    h[0] = (u8)OC_VER;
+    h[1] = 0;
+    if(g.writ((void *)OC_MAGIC, sizeof OC_MAGIC - 1) != sizeof OC_MAGIC - 1 || g.writ(h, 2) != 2)
+      FATAL_CODE(OGC_EXIT_IO, "write error on %s", out);
+  } else {
+    char m[sizeof OC_MAGIC - 1];
+    u8 h[2];
+    FATAL_UNLESS(f.read(m, sizeof m) == sizeof m && !memcmp(m, OC_MAGIC, sizeof m), "%s: not an oggcomp stream -- `oggcomp c` makes one", in);
+    FATAL_UNLESS(f.read(h, 2) == 2, "%s: the stream ends in its header", in);
+    FATAL_UNLESS(h[0] == OC_VER, "%s: made by oggcomp version %u, this is version %u", in, h[0], OC_VER);
+    if(!g.make(out))
+      FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
+    ogc_partial.set(out, &g);
+  }
+  oc_in = in;
+  co.in = in;
+  co.processfile(f, g);
+  if(f.error())
+    FATAL_CODE(OGC_EXIT_IO, "read error on %s", in);
+  f.close();
+#ifdef TC_MEMCOST
+  if(!f_DEC) {
+    u64 rent = tabs.bytes() / ((u64)1 << 30) * TC_MEMCOST + tabs.bytes() % ((u64)1 << 30) * TC_MEMCOST / ((u64)1 << 30);
+    u64 n = rent;
+    u8 pad[4096];
+    memset(pad, 0xFF, sizeof pad);
+    while(n) {
+      u32 k = n < sizeof pad ? (u32)n : (u32)sizeof pad;
+      g.writ(pad, k);
+      n -= k;
+    }
+    if(tc_verbose)
+      fprintf(stderr, "%s: %" PRIu64 " MB of tables, %" PRIu64 " bytes of rent\n", ogc_prog, tabs.bytes() >> 20, rent);
+  }
+#endif
+  {
+    int bad = g.error();
+    if(g.close())
+      bad = 1;
+    if(bad)
+      FATAL_CODE(OGC_EXIT_IO, "write error on %s", out);
+  }
+  ogc_partial.kept();
+  if(tc_verbose) {
+    int i;
+    double tot = 0;
+    for(i = 0; i < STG_N; i++)
+      tot += tc_bits[i];
+    fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n", ogc_prog, tot / 8, (u64)(tabs.bytes() >> 20));
+    if(!f_DEC)
+      for(i = 0; i < STG_N; i++) {
+        fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", TC_STAGE[i], tc_bits[i] / 8, tot > 0 ? 100.0 * tc_bits[i] / tot : 0.0);
+        if(tc_syms[i])
+          fprintf(stderr, "  %" PRIu64 " values, %.3f bits each", tc_syms[i], tc_bits[i] / (double)tc_syms[i]);
+        fputc('\n', stderr);
+      }
+  }
+  hist.reset();
+  tcp.reset();
+  return OGC_EXIT_OK;
+}
 int main(int argc, char **argv) {
   int a = 1;
   const char *mode;
@@ -102,79 +181,7 @@ int main(int argc, char **argv) {
     goto usage;
   ogc_set_prog(argv[0]);
   ogc_paths_distinct(argv + a, 2);
-  tc_enc = mode[0] == 'c';
-  oc_run.t.init();
-  {
-    const char *in = argv[a], *out = argv[a + 1];
-    filehandle f, g;
-    if(!f.open(in))
-      FATAL_CODE(OGC_EXIT_IO, "cannot open %s", in);
-    if(tc_enc) {
-      u8 h[2];
-      if(!g.make(out))
-        FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
-      ogc_partial.set(out, &g);
-      h[0] = (u8)OC_VER;
-      h[1] = 0;
-      if(g.writ((void *)OC_MAGIC, sizeof OC_MAGIC - 1) != sizeof OC_MAGIC - 1 || g.writ(h, 2) != 2)
-        FATAL_CODE(OGC_EXIT_IO, "write error on %s", out);
-    } else {
-      char m[sizeof OC_MAGIC - 1];
-      u8 h[2];
-      FATAL_UNLESS(f.read(m, sizeof m) == sizeof m && !memcmp(m, OC_MAGIC, sizeof m), "%s: not an oggcomp stream -- `oggcomp c` makes one", in);
-      FATAL_UNLESS(f.read(h, 2) == 2, "%s: the stream ends in its header", in);
-      FATAL_UNLESS(h[0] == OC_VER, "%s: made by oggcomp version %u, this is version %u", in, h[0], OC_VER);
-      if(!g.make(out))
-        FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
-      ogc_partial.set(out, &g);
-    }
-    oc_in = in;
-    oc_run.in = in;
-    oc_run.processfile(f, g);
-    if(f.error())
-      FATAL_CODE(OGC_EXIT_IO, "read error on %s", in);
-    f.close();
-#ifdef TC_MEMCOST
-    if(tc_enc) {
-      u64 rent = tabs.bytes() / ((u64)1 << 30) * TC_MEMCOST + tabs.bytes() % ((u64)1 << 30) * TC_MEMCOST / ((u64)1 << 30);
-      u64 n = rent;
-      u8 pad[4096];
-      memset(pad, 0xFF, sizeof pad);
-      while(n) {
-        u32 k = n < sizeof pad ? (u32)n : (u32)sizeof pad;
-        g.writ(pad, k);
-        n -= k;
-      }
-      if(tc_verbose)
-        fprintf(stderr, "%s: %" PRIu64 " MB of tables, %" PRIu64 " bytes of rent\n", ogc_prog, tabs.bytes() >> 20, rent);
-    }
-#endif
-    {
-      int bad = g.error();
-      if(g.close())
-        bad = 1;
-      if(bad)
-        FATAL_CODE(OGC_EXIT_IO, "write error on %s", out);
-    }
-    ogc_partial.kept();
-  }
-  if(tc_verbose) {
-    int i;
-    double tot = 0;
-    for(i = 0; i < STG_N; i++)
-      tot += tc_bits[i];
-    fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n", ogc_prog, tot / 8, (u64)(tabs.bytes() >> 20));
-    if(tc_enc)
-      for(i = 0; i < STG_N; i++) {
-        fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", TC_STAGE[i], tc_bits[i] / 8, tot > 0 ? 100.0 * tc_bits[i] / tot : 0.0);
-        if(tc_syms[i])
-          fprintf(stderr, "  %" PRIu64 " values, %.3f bits each", tc_syms[i], tc_bits[i] / (double)tc_syms[i]);
-        fputc('\n', stderr);
-      }
-  }
-  hist.reset();
-  tcp.reset();
-  return OGC_EXIT_OK;
+  return mode[0] == 'c' ? run<0>(argv[a], argv[a + 1]) : run<1>(argv[a], argv[a + 1]);
 usage:
   fprintf(stderr, "Lossless compressor of Ogg Vorbis files.\n"
                   "usage: oggcomp c [options] input.ogg output.oc\n"

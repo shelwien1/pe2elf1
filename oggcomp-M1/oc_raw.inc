@@ -20,8 +20,8 @@ static i32 raw_w[256 * 3];
 static u8 raw_wc[256];
 static cm_mix<3> raw_mx;
 static u32 raw_prev;
-void oc_model::raw_init() { raw_mx.init(raw_w, raw_wc, 256); }
-u32 oc_model::raw(u32 b) {
+template <int f_DEC> void oc_model<f_DEC>::raw_init() { raw_mx.init(raw_w, raw_wc, 256); }
+template <int f_DEC> u32 oc_model<f_DEC>::raw(u32 b) {
   cm_cnt *row = raw_o1[raw_prev];
   u32 node = 1;
   int i;
@@ -32,7 +32,7 @@ u32 oc_model::raw(u32 b) {
     raw_mx.set(0, cm_stretch(c0.P()));
     raw_mx.set(1, c1.t ? cm_stretch(c1.P()) : 0);
     raw_mx.set(2, 256);
-    bit = tc_bit(raw_mx.mix(node), (int)(tc_enc && ((b >> i) & 1)));
+    bit = tc_bit<f_DEC>(raw_mx.mix(node), (int)(ENC && ((b >> i) & 1)));
     raw_mx.upd(bit, RAW_LR, 0);
     c0.upd(bit, RAW_RATE0, 0);
     c1.upd(bit, RAW_RATE1, 0);

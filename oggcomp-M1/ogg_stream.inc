@@ -236,7 +236,7 @@ template <class M> struct og_packer {
         pk = jb;
         pl = tot;
       }
-      io_t<S> z(v, sink, 1, (u8 *)pk, pl);
+      io_t<S> z(v, sink, (u8 *)pk, pl);
       if(pk[0] & 1) {
         VB_UNLESS(*w < 3, "a stream has over three header packets");
         z.hdr(*w);
@@ -454,7 +454,7 @@ template <class M> struct og_unpacker {
             if(j == q.np - 1 && q.tail) {
               sz ex = t.spill(0);
               sz tot = pl + ex;
-              io z(v, t, 0, jb, tot);
+              io_t<M> z(v, t, jb, tot);
               jn = tot;
               if(g.w < 3) {
                 z.hdr(g.w);
@@ -468,7 +468,7 @@ template <class M> struct og_unpacker {
               continue;
             }
             {
-              io z(v, t, 0, body + at, pl);
+              io_t<M> z(v, t, body + at, pl);
               if(g.w < 3) {
                 z.hdr(g.w);
                 g.w++;

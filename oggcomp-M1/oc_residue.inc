@@ -6,7 +6,7 @@ static INLINE u32 tc_gcd(u32 a, u32 b) {
   }
   return a;
 }
-void oc_model::part_begin(u32 rno, u32 pss, u32 jv, u32 pc, const vb_res *r, const vb_book *bk, u32 bn, u32 cls) {
+template <int f_DEC> void oc_model<f_DEC>::part_begin(u32 rno, u32 pss, u32 jv, u32 pc, const vb_res *r, const vb_book *bk, u32 bn, u32 cls) {
   u32 j = R.cidx[jv];
   sz sl = (sz)jv * R.w + pc;
   sz span = hist.dg_span[rno];
@@ -43,7 +43,7 @@ void oc_model::part_begin(u32 rno, u32 pss, u32 jv, u32 pc, const vb_res *r, con
   tc_stage = STG_DIGIT;
   fam_dig.pc.off();
 }
-i64 oc_model::digit(i64 dg) {
+template <int f_DEC> i64 oc_model<f_DEC>::digit(i64 dg) {
   u32 i = P.i++;
   sz slot = (sz)P.pc * P.psz + i;
   int ok = P.hist && slot < P.span;
@@ -93,10 +93,10 @@ i64 oc_model::digit(i64 dg) {
     d.ax = tc_qlog((ex * TC_dig_avC) >> 12);
   }
   tc_make_dig(d, v);
-  if(!tc_enc)
+  if(!ENC)
     dg = 0;
   {
-    i64 mg = fam_dig.code(v, tc_enc ? (dg < 0 ? -dg : dg) : 0);
+    i64 mg = fam_dig.code(v, ENC ? (dg < 0 ? -dg : dg) : 0);
     if(mg) {
       tcx w;
       int sn;
@@ -106,7 +106,7 @@ i64 oc_model::digit(i64 dg) {
       tc_make_sgn(d, w);
       fam_sgn.select(w);
       fam_sgn.prp = spr;
-      sn = fam_sgn.bit(0, tc_enc && dg < 0);
+      sn = fam_sgn.bit(0, ENC && dg < 0);
       fam_sgn.prp = -1;
       dg = sn ? -mg : mg;
     } else
@@ -140,7 +140,7 @@ i64 oc_model::digit(i64 dg) {
     tc_syms[STG_DIGIT]++;
   return dg;
 }
-u32 oc_model::classify(u32 rno, u32 j, u32 slot, u32 cin) {
+template <int f_DEC> u32 oc_model<f_DEC>::classify(u32 rno, u32 j, u32 slot, u32 cin) {
   tcx v;
   u8 *ch = hist.cl_np[rno] ? hist.cl_hist[rno] + ((sz)hist.tc_blk * hist.tc_nchan + j) * hist.cl_np[rno] : nullptr;
   i32 t1 = (ch && slot < hist.cl_np[rno]) ? ch[slot] : 0;
@@ -148,7 +148,7 @@ u32 oc_model::classify(u32 rno, u32 j, u32 slot, u32 cin) {
   i64 c;
   tc_stage = STG_CLASS;
   tc_make_cls((int)rno, tc_qlog(slot), hist.cl_last[rno][j], t1, (int)hist.tc_blk, tn, hist.cl_last2[rno][j], fam_cls.pc.axis(), v);
-  c = tc_enc ? (i64)cin : 0;
+  c = ENC ? (i64)cin : 0;
   c = fam_cls.code(v, c);
   FATAL_UNLESS(c >= 0 && c < 16, "coded stream: residue class %" PRId64, c);
   cl_run[rno] = (c == hist.cl_last[rno][j]) ? cl_run[rno] + 1 : 0;
@@ -160,7 +160,7 @@ u32 oc_model::classify(u32 rno, u32 j, u32 slot, u32 cin) {
     tc_syms[STG_CLASS]++;
   return (u32)c;
 }
-void oc_model::residue_begin(u32 rno, const vb_res *r, const u8 *nz, u32 nch, u32 n) {
+template <int f_DEC> void oc_model<f_DEC>::residue_begin(u32 rno, const vb_res *r, const u8 *nz, u32 nch, u32 n) {
   const vb_book *cb = vb->cur->bk + r->cbook;
   u32 end, i, k, nc = 0;
   for(i = 0; i < nch; i++)
@@ -192,7 +192,7 @@ void oc_model::residue_begin(u32 rno, const vb_res *r, const u8 *nz, u32 nch, u3
     memset(hist.dg_pn[rno], 0, (sz)hist.tc_nchan * hist.dg_span[rno]);
   }
 }
-u32 oc_model::cls(u32 rno, u32 jv, u32 pc, u32 k, u32 cin) {
+template <int f_DEC> u32 oc_model<f_DEC>::cls(u32 rno, u32 jv, u32 pc, u32 k, u32 cin) {
   u32 j = R.cidx[jv];
   sz sl = (sz)jv * R.w + pc + k;
   u8 *ch = hist.cl_np[rno] ? hist.cl_hist[rno] + ((sz)hist.tc_blk * hist.tc_nchan + j) * hist.cl_np[rno] : nullptr;

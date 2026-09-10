@@ -23,13 +23,13 @@ constexpr u32 QUANT[4] = {256, 128, 86, 64};
 //  model (io) and against null_sink, which is how the encoder finds out
 //  whether a page parses before it has spent a bit on it.
 template <class S> struct io_t {
-  int enc;
+  static constexpr int enc = S::ENC;
   S &t;
   vb_ctx &v;
   u8 *b;
   sz len, pos;
-  io_t(vb_ctx &vv, S &tt, int e, u8 *pkt, sz n) : enc(e), t(tt), v(vv), b(pkt), len(n), pos(0) {
-    if(!e)
+  io_t(vb_ctx &vv, S &tt, u8 *pkt, sz n) : t(tt), v(vv), b(pkt), len(n), pos(0) {
+    if(!enc)
       memset(pkt, 0, n);
   }
   //  The bits after the last field.  A packet is whole bytes, so there are
@@ -470,4 +470,3 @@ template <class S> struct io_t {
     tail();
   }
 };
-typedef io_t<oc_model> io;
