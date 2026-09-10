@@ -616,6 +616,39 @@ aborts at the first yield with the two numbers.  Static storage for the
 driver, whose two 64 KB buffers and the stack copy would otherwise sit in
 main's frame under the 256 KB pad the coroutine puts below its caller.
 
+### Two things a different compiler found
+
+A build with clang 23 targeting Windows (MSVC mode, LTO, -O3) hung on
+every input, while gcc and clang on Linux were fine.  Its disassembly
+showed `yield`, `coro_call0` and `call_do_process0` inlined into their
+callers -- seven setjmp sites where there should be two -- because
+clang in MSVC mode does not define `__GNUC__`, and common.inc's hint
+macros fell through to their empty forms, `NOINLINE` among them.  Those
+three functions exist to own frames of their own: `yield` measures the
+bottom of the live stack from one of its locals, and once it lives inside
+a large frame the locals below that point are neither saved nor restored.
+common.inc now names clang beside gcc.
+
+The coroutine was hardened alongside.  `yield` reads the frame's stack
+pointer rather than guessing it from a local's address less a margin, so
+the saved region is exact whatever the compiler did with the frame -- a
+clang 23 Windows build at -O3 with the hint macros emptied on purpose,
+the failing shape, runs on that alone.  And clang's inline-assembly
+setjmp had one hazard fixed: it jumped back into `yield` with every
+register declared clobbered except the one holding the buffer pointer,
+which a later register allocation could have relied on; the pointer is
+now taken from memory inside the asm and that register is a clobber too.
+Putting clang on gcc's `__builtin_setjmp` instead was tried and is worse:
+the same Windows build crashed on the first resume, the builtin keeping a
+value in a register across the return.  It stays as an opt-in
+(`CORO_BUILTIN_SETJMP`), which runs on Linux.
+
+All of it was checked under wine, with mingw and clang 23 builds of the
+old and the fixed tree: the old tree with the hints emptied hangs as the
+user's binary does; every fixed configuration -- gcc and clang 23, -O2
+and -O3 -Ofast, LTO, hints on or emptied -- codes the same stream and
+round-trips.
+
 ### Checks
 
 - `oggcomp c` is byte-identical to the previous build on all 17 corpus

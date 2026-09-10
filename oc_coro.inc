@@ -19,7 +19,7 @@ typedef u32 uint;
 typedef u64 qword;
 
 #ifndef ALIGN
-#if defined(__GNUC__)
+#if defined(__GNUC__) || defined(__clang__)
 #define ALIGN(n) __attribute__((aligned(n)))
 #else
 #define ALIGN(n) __declspec(align(n))

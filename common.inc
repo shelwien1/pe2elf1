@@ -12,8 +12,11 @@ typedef uint32_t u32;  typedef int32_t i32;
 typedef uint64_t u64;  typedef int64_t i64;
 typedef size_t   sz;
 
-/*  Hot-path hints.  */
-#if defined(__GNUC__) && !defined(BLR_NO_ATTRS)
+/*  Hot-path hints.  clang is named beside gcc because clang targeting MSVC
+    does not define __GNUC__ and takes every GNU form all the same: a build
+    that fell through to the empty definitions below inlined Lib3's
+    coroutine functions, which must keep frames of their own, and hung.  */
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(BLR_NO_ATTRS)
 #define INLINE      inline __attribute__((__always_inline__))
 /*  IDX's mapping objects are built once, at static-init time, from a pattern
     string the optimizer patches in the binary; inlining those constructors
@@ -38,7 +41,7 @@ typedef size_t   sz;
 
 /*  Bit width with ilog(0) = 0.  */
 static INLINE u32 blr_ilog(u32 v) {
-#if defined(__GNUC__) && !defined(BLR_NO_ATTRS)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(BLR_NO_ATTRS)
   return v ? 32 - (u32) __builtin_clz(v) : 0;
 #else
   u32 n = 0;
