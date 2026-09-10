@@ -18,7 +18,14 @@ static void tc_ifits(const char *what, sz vol, sz mult) {
                "under 2147483648",
                what, (u64)vol, (u64)mult);
 }
-enum { F_MORE, F_PGTYPE, F_GRAN, F_SERIAL, F_SEQ, F_NPKT, F_PLEN, F_TAIL, F_SPILL, F_MODE, F_WPREV, F_WNEXT, F_USED, F_N };
+//  F_RAWLEN and after are the v3 fields: a run of bytes that are not a page,
+//  whether a group has another page, whether a page's payload is coded as
+//  bytes, whether its CRC is not the one its content gives, and whether a
+//  packet has bits after its last field.  IDX/tsvcomp-aux.idx's fld
+//  patterns are one position per field; a field past their end is clamped
+//  onto the last position and shares its context, so they are widened with
+//  the enum.
+enum { F_MORE, F_PGTYPE, F_GRAN, F_SERIAL, F_SEQ, F_NPKT, F_PLEN, F_TAIL, F_SPILL, F_MODE, F_WPREV, F_WNEXT, F_USED, F_RAWLEN, F_PGMORE, F_PGRAW, F_CRCBAD, F_PADNZ, F_N };
 constexpr int TC_MAXTAG = 128;
 constexpr int TC_SGN_AUX = F_N;
 constexpr int TC_SGN_HDR = TC_MAXTAG;
@@ -53,8 +60,8 @@ struct tcx {
 #include "MOD/tsvcomp-flr_p.inc"
 #include "MOD/tsvcomp-hdr_p.inc"
 #include "MOD/tsvcomp-sgn_p.inc"
-enum { STG_HDR, STG_PAGE, STG_AUD, STG_FLOOR, STG_CLASS, STG_DIGIT, STG_N };
-static const char *const TC_STAGE[STG_N] = {"headers", "pages", "packets", "floor", "class", "digits"};
+enum { STG_HDR, STG_PAGE, STG_AUD, STG_FLOOR, STG_CLASS, STG_DIGIT, STG_RAW, STG_N };
+static const char *const TC_STAGE[STG_N] = {"headers", "pages", "packets", "floor", "class", "digits", "raw"};
 static double tc_bits[STG_N];
 static u64 tc_syms[STG_N];
 static int tc_stage, tc_verbose;

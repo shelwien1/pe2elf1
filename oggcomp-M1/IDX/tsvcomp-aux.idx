@@ -24,32 +24,32 @@ Const 0
 #  history.
 
 Index a
- a_fld: fld, 1!1100111000000
+ a_fld: fld, 1!110011100000011111
 ! a_p1:   p1,    1!100000001000111
 ! a_p2:   p2,    1!1000001
 
 Index b
- b_fld: fld, 1!0110110010000
+ b_fld: fld, 1!011011001000010000
 ! b_p1:   p1,    1!000
 ! b_p2:   p2,    1!000
 
 Index c
- c_fld: fld, 1!0111111111110
+ c_fld: fld, 1!011111111111010000
 
 Index d
- d_fld: fld, 1!0000010010010
+ d_fld: fld, 1!000001001001010000
 
 Index s
- s_fld: fld, 1!1111111111111
+ s_fld: fld, 1!111111111111111111
 
 Index f
- f_fld: fld, 1!1111111111111
+ f_fld: fld, 1!111111111111111111
 
 Index m
- m_fld: fld, 1!1111111111111
+ m_fld: fld, 1!111111111111111111
 
 Index t
- t_fld: fld, 1!1111111111111
+ t_fld: fld, 1!111111111111111111
 
 Number rA, 1, 0!11100111
 Number rB, 1, 0!00000000
@@ -75,7 +75,7 @@ Number mb, 1, 0!00000000
 
 
 Index n
- n_fld: fld, 1!1111111111111
+ n_fld: fld, 1!111111111111111111
 
 Index g
  g_p1:   p1,    1!000001000000110

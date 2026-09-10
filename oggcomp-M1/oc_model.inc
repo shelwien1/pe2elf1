@@ -75,6 +75,7 @@ static void tc_models(void) {
   TC_WIRE(fam_cls, cls, (cm_cnt *)nullptr, 0, TC_cls_rT, TC_cls_mwT, 0, 0, TC_cls_lrm, TC_cls_mbm);
   TC_WIRE_ALL(fam_aux, aux, tcm_aux->TC_aux_G, TC_SGN_AUX);
   TC_WIRE_ALL(fam_hdr, hdr, tcm_hdr->TC_hdr_G, TC_SGN_HDR);
+  oc_raw_init();
 }
 static void tc_nomem(void) {
   FATAL_CODE(OGC_EXIT_IO, "out of memory -- IDX/tsvcomp-*.idx asks for more "
@@ -83,7 +84,14 @@ static void tc_nomem(void) {
 struct oc_model {
   u32 link(u32 more) { return oc_link(more); }
   void link_begin() { oc_link_begin(); }
-  void page(ogg_page &p, int cont) { oc_page(p, cont); }
+  void page(ogg_page &p, int cont, int bos) { oc_page(p, cont, bos); }
+  u32 rawlen(u32 n) { return oc_rawlen(n); }
+  u32 raw(u32 b) { return oc_raw(b); }
+  u32 more(u32 m, int eos) { return oc_more(m, eos); }
+  u32 pgraw(u32 r, int lastraw) { return oc_pgraw(r, lastraw); }
+  u32 crcbad(u32 c) { return oc_crcbad(c); }
+  u32 padnz(u32 z) { return oc_padnz(z); }
+  u32 check(u32 c) { return oc_check(c); }
   u32 spill(u32 n) { return oc_spill(n); }
   u32 hdr(const char *tag, u32 x, u64 hi) { return oc_hdr(tag, x, hi); }
   void setup_done(vb_ctx &v) {
@@ -101,3 +109,23 @@ struct oc_model {
   i64 digit(i64 d) { return oc_digit(d); }
 };
 typedef oc_model sink_t;
+//  The sink a dry parse runs against: every answer is the question, nothing
+//  is coded and nothing is remembered, so the parser's verdict on a page --
+//  reached or refused -- is all that comes out.  It has what io_t and the
+//  walker call and no more; the model's own methods stay on oc_model.
+struct null_sink {
+  u32 spill(u32 n) { return n; }
+  u32 hdr(const char *, u32 x, u64) { return x; }
+  void setup_done(vb_ctx &) {}
+  u32 mode(u32 md, u32) { return md; }
+  u32 wprev(u32 w) { return w; }
+  u32 wnext(u32 w) { return w; }
+  void floor(u32, u32, vb_floor *, u32 *, int &) {}
+  void residue_begin(u32, vb_res *, const u8 *, u32, u32) {}
+  u32 cls(u32, u32, u32, u32, u32 c) { return c; }
+  void part_begin(u32, u32, u32, u32, vb_res *, vb_book *, u32, u32) {}
+  void vec_begin() {}
+  i64 digit(i64 d) { return d; }
+  u32 padnz(u32 z) { return z; }
+  u32 raw(u32 b) { return b; }
+};

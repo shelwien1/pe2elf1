@@ -5,9 +5,24 @@
 #include "oc_fatal.inc"
 #include "ogg_page.inc"
 #include "vb_setup.inc"
+//  Past the end of the input the pin hands back -1, which as a byte is
+//  the 0xFF the encoder's flush left off; a few of those are the tail of
+//  every stream.  Many more is a stream cut short, and the decoder would
+//  otherwise go on turning them into output for as long as they came --
+//  a cut in the middle of a run of bytes has no parser check to stop it.
+static const char *oc_in;
+static u32 rc_over;
+constexpr u32 RC_OVER_MAX = 48;
 template <class RC> struct rc_pin_io {
   Coroutine *co;
-  byte get() { return (byte)co->pin[0].get(); }
+  byte get() {
+    uint c = co->pin[0].get();
+    if(UNLIKELY(c == uint(-1))) {
+      FATAL_UNLESS(++rc_over <= RC_OVER_MAX, "%s: cut short -- the stream ends before its last symbol", oc_in);
+      return 0xFF;
+    }
+    return (byte)c;
+  }
   void put(byte c) { co->pin[1].put(c); }
 };
 #define RC_IO_BASE rc_pin_io
@@ -21,13 +36,14 @@ template <class RC> struct rc_pin_io {
 #include "oc_hist.inc"
 #include "oc_floor.inc"
 #include "oc_header.inc"
+#include "oc_raw.inc"
 #include "oc_residue.inc"
 #include "oc_frame.inc"
 #include "oc_model.inc"
 #include "vb_packet.inc"
 #include "ogg_stream.inc"
 constexpr char OC_MAGIC[] = "oggc\x1a";
-constexpr int OC_VER = 2;
+constexpr int OC_VER = 3;
 struct oc_coro : Coroutine {
   oc_model t;
   const char *in;
@@ -124,7 +140,7 @@ int main(int argc, char **argv) {
       u8 h[2];
       if(!g.make(out))
         FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
-      ogc_output(out);
+      ogc_output(out, &g);
       h[0] = (u8)OC_VER;
       h[1] = 0;
       if(g.writ((void *)OC_MAGIC, sizeof OC_MAGIC - 1) != sizeof OC_MAGIC - 1 || g.writ(h, 2) != 2)
@@ -137,8 +153,9 @@ int main(int argc, char **argv) {
       FATAL_UNLESS(h[0] == OC_VER, "%s: made by oggcomp version %u, this is version %u", in, h[0], OC_VER);
       if(!g.make(out))
         FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
-      ogc_output(out);
+      ogc_output(out, &g);
     }
+    oc_in = in;
     oc_run.in = in;
     oc_run.processfile(f, g);
     if(f.error())
