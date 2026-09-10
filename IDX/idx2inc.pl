@@ -263,7 +263,7 @@ $hdr .= "$xdesc\n";
 
 $body = "";
 
-$t_dat = $t_sta = $t_ptr = $t_con = $t_des = "";
+$t_dat = $t_sta = $t_ptr = $t_con = "";
 $t_siz = "";   # per-table byte counts, summed into ${prefix}_Size
 
 $f_init=0;
@@ -331,7 +331,6 @@ TEXT
       #$t_con .= "printf( \"sizeof($t ${v}[%i]) = %i\\n\", ${sz}, sizeof( ${t}[${sz}] ) );\n";
     }
 
-    $t_des .= "  tc_unmap( $v, (unsigned long long)sizeof(${t}) * tbl_n(${sz}) );\n";
     next;
   }
   if( /^(\s*)MakeIndex\s+([^\s]+)/ ) {
@@ -368,13 +367,11 @@ for (sort keys %volume) {
 } print O1 "\n";
 
 chomp $t_con;
-chomp $t_des;
 chomp $init_code;
 $init_code =~ s/(^|\n)/$1  /g;
 $t_sta =~ s/(^|\n)/$1  /g;
 $t_ptr =~ s/(^|\n)/$1  /g;
 $t_con =~ s/(^|\n)/$1  /g;
-$t_des =~ s/(^|\n)/$1  /g;
 
 if( $UseNew==1 ) {
 print O1 <<TEXT;
@@ -388,9 +385,6 @@ $t_ptr
     ${prefix}_Size = 0;
 $t_con
 $init_code
-  }
-  void ${prefix}_Quit( void ) {
-$t_des
   }
 };
 TEXT
@@ -407,8 +401,6 @@ $t_sta
   void ${prefix}_Init( void ) {
 $init_code
   }
-  void ${prefix}_Quit( void ) {
-  }
 };
 TEXT
 }
@@ -416,5 +408,4 @@ TEXT
 close O1;
 
 #open O2, ">$fileT"; 
-#print O2 "$t_ptr\n$t_con}\n$t_des}\n"; 
 #close O2;

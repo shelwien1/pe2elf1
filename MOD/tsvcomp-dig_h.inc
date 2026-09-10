@@ -120,6 +120,4 @@ struct TC_dig_T {
   void TC_dig_Init( void ) {
   
   }
-  void TC_dig_Quit( void ) {
-  }
 };

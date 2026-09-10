@@ -279,18 +279,6 @@ static void * tc_map(sz n) {
   return p;
 }
 
-/*  INLINE for the same reason tbl_n has it: the shipping build's tables are
-    members of one object, so nothing there unmaps a table and exactly one of
-    the two builds would draw -Wunused-function.  */
-static INLINE void tc_unmap(void * p, sz n) {
-  if (!p) return;
-#ifdef _WIN32
-  (void) n;  VirtualFree(p, 0, MEM_RELEASE);
-#else
-  munmap(p, n);
-#endif
-}
-
 #include "tc_prior.inc"    /*  the codebook's own model of its entries  */
 /*  One prior table per codebook (the digits of a residue vector) and one per
     residue (the classes of a classword).  A link's setup replaces both.  */

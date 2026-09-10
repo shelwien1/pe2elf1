@@ -109,6 +109,4 @@ struct TC_flr_T {
   void TC_flr_Init( void ) {
   
   }
-  void TC_flr_Quit( void ) {
-  }
 };

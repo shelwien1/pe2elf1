@@ -109,20 +109,9 @@ struct Coroutine {
   }
 
 //---------------------
+  // what CoroFileProc drives through; the coroutine's own reads and writes
+  // go to the pins directly
 
-  void chkinp( void ) { pin[0].chkinp(); }
-  void chkout( uint d=0 ) { pin[1].chkout(d); }
-  uint get( void ) { return pin[0].get(); }
-  void put( uint c ) { pin[1].put(c); }
-
-  byte get0( void ) { return pin[0].get0(); }
-  void put0( uint c ) { pin[1].put0(c); }
-
-  uint getinplen() { return pin[0].getinplen(); } //-V110
-  uint getoutlen() { return pin[1].getoutlen(); } //-V110
-  uint getinpleft() { return pin[0].getinpleft(); } //-V524 //-V110
-  uint getoutleft() { return pin[1].getoutleft(); } //-V524 //-V110
-  uint getinpsize() { return pin[0].getinpsize(); } //-V110
   uint getoutsize() { return pin[1].getoutsize(); } //-V110
 
   void addinp( byte* inp,uint inplen ) { pin[0].addinp(inp,inplen); }

@@ -96,6 +96,4 @@ struct TC_aux_T {
   void TC_aux_Init( void ) {
   
   }
-  void TC_aux_Quit( void ) {
-  }
 };

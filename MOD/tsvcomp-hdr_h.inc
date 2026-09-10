@@ -95,6 +95,4 @@ struct TC_hdr_T {
   void TC_hdr_Init( void ) {
   
   }
-  void TC_hdr_Quit( void ) {
-  }
 };

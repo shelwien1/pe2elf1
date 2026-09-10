@@ -99,6 +99,4 @@ struct TC_sgn_T {
   void TC_sgn_Init( void ) {
   
   }
-  void TC_sgn_Quit( void ) {
-  }
 };

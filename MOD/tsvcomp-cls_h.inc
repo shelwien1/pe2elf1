@@ -95,6 +95,4 @@ struct TC_cls_T {
   void TC_cls_Init( void ) {
   
   }
-  void TC_cls_Quit( void ) {
-  }
 };

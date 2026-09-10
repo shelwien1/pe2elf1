@@ -23,12 +23,7 @@ struct coro3_pin: coro3_pin_0 {
     return f_EOF | W.f_quit;                        \
   }                                                 
 
-  void chkinp( void ) { if_e0( ptr>=end ) yield_r(); }
-
   void chkout( uint d=0 ) { if_e0( ptr>=end-d ) yield_r(); }
-
-  byte get0( void ) { return *ptr++; }
-  void put0( uint c ) { *ptr++ = c; }
 
   uint get( void ) { 
     m0:
