@@ -8,7 +8,13 @@ plan is to move each of those into a `.inc` of its own, included from
 `oggcomp.cpp` in the order the single translation unit needs, and to drop
 what nothing references -- while producing **exactly the same program**.
 
-Line numbers below are those of `oggcomp.cpp` at commit `413b568`.
+**Done.**  Step 1, the deletions, is commit `3ad267d`; step 2, the move,
+is `91fd0e8`.  Both were verified as section 7 says -- every corpus file
+codes byte-identically under both builds against binaries built before
+either change, and the reassembled source of the move is line-for-line
+the file it came from.  What follows is the plan as it was carried out;
+its line numbers are those of `oggcomp.cpp` at commit `413b568`, before
+step 1.
 
 ## 1. Ground rules
 
