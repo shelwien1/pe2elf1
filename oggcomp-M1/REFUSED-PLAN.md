@@ -1,56 +1,58 @@
-# Accepting what testfiles/refused/ holds
+# Accepting every input
 
 Seven files sit in `testfiles/refused/`, one per way a file can be an Ogg
-that oggcomp will not code.  This is the plan for coding them -- starting
-with the ID3 tag, as asked, because it is the commonest of the seven in
-the world and the one whose mechanism the others then reuse.
+that oggcomp will not code.  This is the plan for coding them -- and for
+coding anything else, because the requirement behind it is stronger than
+the seven: **`oggcomp c` takes any file and gives it back byte for byte.**
+A tool that refuses is a tool the caller has to wrap in a fallback, which
+makes it not a tool.  So the plan's first format change makes refusal
+impossible on the encode side, and everything after it is about how well
+the foreign parts compress.
 
-The principle does not change.  oggcomp is lossless, so the only question
-it may ask of a file is whether every byte can be given back.  Today it
-answers no to anything that is not a clean run of Vorbis pages; the
-finding of this plan is that with one general mechanism -- bytes the
-parser cannot place are coded as bytes -- the answer is yes to every one
-of the seven, and the work divides into *accepting* a file (cheap, and
-what refused/ is about) and *compressing* what was accepted (a model per
-kind of foreign content, later, and only where it pays).
+The mechanism is one thing: bytes the parser cannot place are coded as
+bytes.  Around it, three decisions -- what a "link" is when the file does
+not say, how the encoder knows a page will not parse before it has spent
+any bits on it, and where the fallback bytes go in the model.  ID3 tags,
+as asked, are the first thing the mechanism meets, and the test files are
+built around them.
 
 ## 1. What each file is, and what stops it
 
-| file | bytes | what it is | refused by | needs |
+| file | bytes | what it is | refused by | after phase 1 |
 |---|---|---|---|---|
-| `minbitrate-pad.ogg` | 17687 | Vorbis; `oggenc -m 128` on silence, so libvorbis pads the audio packets with zero bits | `vb_packet.inc:448` "1482 unparsed audio bits" | nothing but a relaxed check -- **step 0** |
-| `id3-prefix.ogg` | 2805 | a 42-byte ID3v2.4 tag, then a normal stream | `ogg_stream.inc:142` "no Ogg page at 0" | raw runs -- **phase 1** |
-| `trailing-junk.ogg` | 2779 | a normal stream, then 16 bytes of not-Ogg | `ogg_stream.inc:142` "no Ogg page at 2763" | raw runs -- **phase 1** |
-| `no-eos.ogg` | 2763 | a normal stream whose last page lacks the end-of-stream flag | `ogg_stream.inc:161` "no end-of-stream page" | an explicit link end -- **phase 2** |
-| `badcrc.ogg` | 2763 | a normal stream with one byte flipped in the last page | `ogg_stream.inc:143` "bad CRC" | a CRC override -- **phase 2** |
-| `opus.ogg` | 47 | one Ogg page carrying an OpusHead | `vb_packet.inc:220` "Ogg Opus is not supported" | raw pages -- **phase 3** |
-| `skeleton.ogg` | 2991 | Vorbis with an Ogg Skeleton stream multiplexed beside it (`oggenc -k`) | `vb_packet.inc:435` "audio before setup" | a second stream in a link -- **phase 4** |
+| `minbitrate-pad.ogg` | 17687 | Vorbis; `oggenc -m 128` on silence, so libvorbis pads the audio packets with zero bits | `vb_packet.inc:448` "1482 unparsed audio bits" | compressed as Vorbis -- and by **step 0** already, with no format change |
+| `id3-prefix.ogg` | 2805 | a 42-byte ID3v2.4 tag, then a normal stream | `ogg_stream.inc:142` "no Ogg page at 0" | tag as a raw run, stream as Vorbis |
+| `trailing-junk.ogg` | 2779 | a normal stream, then 16 bytes of not-Ogg | `ogg_stream.inc:142` "no Ogg page at 2763" | stream as Vorbis, 16 bytes raw |
+| `no-eos.ogg` | 2763 | a normal stream whose last page lacks the end-of-stream flag | `ogg_stream.inc:161` "no end-of-stream page" | compressed as Vorbis; the link just ends |
+| `badcrc.ogg` | 2763 | a normal stream with one byte flipped in the last page | `ogg_stream.inc:143` "bad CRC" | that page raw, the rest Vorbis; **phase 2** compresses it too |
+| `opus.ogg` | 47 | one Ogg page carrying an OpusHead | `vb_packet.inc:220` "Ogg Opus is not supported" | page header modelled, payload raw |
+| `skeleton.ogg` | 2991 | Vorbis with an Ogg Skeleton stream multiplexed beside it (`oggenc -k`) | `vb_packet.inc:435` "audio before setup" | Skeleton pages raw, Vorbis pages Vorbis; **phase 2** keeps Vorbis packets that span a Skeleton page compressed |
 
-Plus two cases `t.sh` makes for itself: an input cut off mid-page, and
-an empty file.  Section 5 says what becomes of each.
+And the inputs `t.sh` makes for itself -- an empty file, a file cut off
+mid-page, a `.oc` fed to `c` -- all of which round-trip after phase 1.
 
-## 2. Policy
+## 2. The contract
 
-- **A file with no valid page in it is still refused** -- "not an Ogg
-  bitstream", as now.  A raw fallback could code anything; that would
-  make oggcomp a bad general-purpose compressor and would silence the one
-  refusal a user is glad of.  Valid means: parses, and the CRC matches.
-- **Anything else is accepted.**  Bytes before the first page, between
-  pages and after the last are coded as bytes.  A page whose CRC is wrong
-  keeps its stored CRC.  A stream the link ends without closing is ended
-  by the file's end.  A page whose payload the Vorbis layer cannot read is
-  coded as bytes behind a modelled page header.
-- **Accepting is not compressing.**  Every phase below makes a file
-  round-trip; the gain on the foreign part is whatever an order-1 byte
-  model gives, which for a 42-byte ID3 tag is nothing worth measuring and
-  for a JPEG in an APIC frame is nothing at all.  Models for ID3 text
-  frames, Skeleton and Opus are section 6, and separate.
+- **`oggcomp c` never refuses.**  Any byte sequence in, the same
+  sequence out of `oggcomp d`.  Exit 1 stops being a possible outcome of
+  `c`; what remains is 2 (the command line) and 3 (the filesystem).
+  `oggcomp d` still refuses what is not an oggcomp stream, which is the
+  archive side and is right.
+- **What varies is only how much it compresses.**  Vorbis pages compress
+  as today.  Everything else -- a tag, a Skeleton page, an Opus payload, a
+  page with a bad CRC, a file that is not Ogg at all -- goes through a
+  byte model.  On content with structure that is a modest gain; on random
+  bytes it is a little over 8 bits a byte, so a file with nothing Ogg in
+  it comes out marginally larger than it went in.  If "never larger"
+  ever matters, a stored chunk (bytes coded at a flat 1/256) is one more
+  aux flag; it is not in this plan because the adaptive model converges
+  to within a fraction of a percent of that on its own.
 - **The format bumps once.**  `OC_VER` goes to 3 in phase 1, and the v3
   grammar (section 3) carries every hook the later phases use, coded as
-  its default value until the phase that needs it arrives.  A stream
-  written in phase 1 decodes unchanged after phase 4.  The hooks cost a
-  few binary symbols per page whose value is almost always the same, i.e.
-  a few hundredths of a bit each once the counters have seen a few pages.
+  its default until the phase that needs it arrives.  A stream written in
+  phase 1 decodes unchanged after phase 3.  The hooks cost a few binary
+  symbols per page whose value is almost always the same -- a few
+  hundredths of a bit each once the counters have seen a few pages.
 - **The stream is the test**, as in REFACTOR.md, with one difference:
   existing corpus files must *decode* to themselves and must not grow by
   more than the hooks account for; their `.oc` will not be byte-identical
@@ -60,52 +62,59 @@ an empty file.  Section 5 says what becomes of each.
 
 Today (v2):
 
-    stream   := link(1) body ... link(0)
-    body     := link_begin page page ... page[eos]
+    stream := link(1) body ... link(0)
+    body   := link_begin page page ... page[eos]
 
-Every page is a Vorbis page of one logical stream, the link ends at the
-page whose type has bit 2 set, and the stream ends when `link` says 0.
+Every page is a Vorbis page of one logical stream; the link ends at the
+page whose type has the end-of-stream bit; the stream ends when `link`
+says 0; anything else is a refusal.
 
 v3:
 
-    stream   := { rawrun link(1) body } rawrun link(0)
-    rawrun   := { F_RAWLEN>0 byte... } F_RAWLEN=0
-    body     := link_begin { F_PGMORE=1 rawrun page } F_PGMORE=0
-    page     := (the fields oc_page codes today) F_CRCBAD [crc32] F_PGRAW
-                packets, or if F_PGRAW: payload bytes
+    stream := { rawrun link(1) body } rawrun link(0)
+    rawrun := { F_RAWLEN>0 byte... } F_RAWLEN=0
+    body   := link_begin { F_PGMORE=1 rawrun page } F_PGMORE=0
+    page   := (the fields oc_page codes today)  F_PGRAW  [F_CRCBAD crc32]
+              then: packets as today, or if F_PGRAW the payload as bytes
 
-- **`rawrun`** is a run of bytes the parser could not place: a sequence
-  of chunks of at most `MAXPAY` (65025) bytes each, ended by a zero
-  length.  Chunked, so that neither side needs more than one page-sized
-  buffer for a tag of any size.  A run sits in exactly one place: before
-  the `link` it precedes if the next thing is a new stream or the end of
-  the file, otherwise before the page it precedes inside the link.
-- **`F_PGMORE`**, coded before each page, says whether the link has
-  another page.  Today the decoder infers that from the end-of-stream bit
-  of the previous page; making it explicit is what lets a link end at the
-  end of the file with no such bit (phase 2).  Its context is that bit,
-  so it costs nothing where the bit is honest.
-- **`F_CRCBAD`**, coded after the page header fields, says the stored CRC
-  is not the one `ogg_page::emit` would compute; if set, the stored
-  32-bit value follows (phase 2).
-- **`F_PGRAW`** says the page's payload is coded as bytes, not as Vorbis
-  packets (phase 3).  The header fields before it are modelled either way.
+- **A link is structural, not semantic.**  A beginning-of-stream page
+  starts one; it runs to the next beginning-of-stream page or the end of
+  the file.  The end-of-stream bit is coded as part of the page type and
+  decides nothing.  That is what makes a link that never says it ended,
+  a file cut off anywhere, and a multiplexed file all fit the same
+  grammar: `skeleton.ogg` is two links, the second holding the Vorbis
+  stream with Skeleton pages interleaved among its own.
+- **`rawrun`** is bytes the parser could not place: a sequence of chunks
+  of at most `MAXPAY` (65025) bytes, ended by a zero length.  Chunked, so
+  neither side needs a buffer larger than a page for a tag of any size.
+  A run sits in exactly one place: before the `link` it precedes when the
+  next thing is a beginning-of-stream page or the end of the file, else
+  before the page it precedes inside the link.  A file with no page in it
+  is one `rawrun` and `link(0)`; an empty file is `F_RAWLEN=0 link(0)`.
+- **`F_PGMORE`**, before each page, says the link has another.  Its
+  context is the previous page's end-of-stream bit, so where the bit is
+  honest it costs nothing.
+- **`F_PGRAW`** says the page's payload is coded as bytes.  The header
+  fields before it are modelled either way -- they are Ogg, not Vorbis,
+  and `oc_page` does not care what the packets hold.
+- **`F_CRCBAD`** says the stored CRC is not the one `ogg_page::emit`
+  would compute; if set, the stored value follows.  Coded 0 in phase 1
+  (a page with a bad CRC is not a page to phase 1's scan; it is part of a
+  run) and used in phase 2.
 - The final `link(0)` is preceded by a `rawrun` for whatever follows the
   last page.
 
-The link-level `rawrun` is coded *before* the encoder knows whether a link
-follows, which is why it sits before `link` and not after: the encoder
-scans forward to the next valid page first, codes the gap, and only then
-sees whether that page is a beginning-of-stream page.
+The link-level `rawrun` sits *before* `link` rather than after it because
+the encoder cannot know a link is starting until it has found the next
+valid page, which is after the gap.  It scans, codes the gap, then looks.
 
-Where the symbols live: `F_RAWLEN`, `F_PGMORE`, `F_CRCBAD` and `F_PGRAW`
+Where the symbols live: `F_RAWLEN`, `F_PGMORE`, `F_PGRAW` and `F_CRCBAD`
 are new fields of the `aux` family, coded through `tc_aux` like `F_MORE`
 and `F_TAIL`.  Raw bytes go through the `hdr` family as a new tag,
 `raw.byte`, exactly as comment-header bytes go through `cmt.byte` today
-(`vb_packet.inc`, `io::comment`): the model sees the previous byte under
-the tag and its run position, which is an order-1 model with a position
-context, and is the phase-1 answer.  The CRC, when it has to be stored,
-is four `pg.crc` bytes the same way.
+(`io::comment`): the model sees the previous byte under the tag and the
+run position, an order-1 model with a position context.  The stored CRC,
+when there is one, is four `pg.crc` bytes the same way.
 
 ## 4. Phases
 
@@ -141,218 +150,237 @@ This is the one change in the plan with no format bump and no dependency
 on the rest.  It can land first, on its own commit, with the file moved
 from `refused/` to the corpus.
 
-### Phase 1 -- ID3, and any other bytes that are not a page
+### Phase 1 -- everything round-trips
 
-Covers `id3-prefix.ogg`, `trailing-junk.ogg`, an ID3v1 trailer, a tag on
-each stream of a chained file.  This is the phase that changes the format
-and defines all of v3; the rest only use what it defines.
+This is the phase that changes the format and defines all of v3, and
+the phase after which `oggcomp c` cannot exit 1.  It has three parts:
+the run (junk between pages), the structure (links delimited by
+beginning-of-stream pages), and the raw page (a page the Vorbis layer
+would refuse).  The third is most of the work.
 
-1. **`tc_tables.inc`** -- extend the `F_*` enum: `F_RAWLEN, F_PGMORE,
-   F_CRCBAD, F_PGRAW` before `F_N`.  `TC_SGN_AUX` is `F_N`, so the aux
+**Symbols and model.**
+
+1. `tc_tables.inc` -- extend the `F_*` enum: `F_RAWLEN, F_PGMORE,
+   F_PGRAW, F_CRCBAD` before `F_N`.  `TC_SGN_AUX` is `F_N`, so the aux
    sign table grows by itself (`MOD/tsvcomp-aux_h.inc:77` sizes it by
    it).  Add `STG_RAW` to the stage enum and `"raw"` to `TC_STAGE`, so
-   `-v` reports the bytes spent on foreign content on their own line.
-2. **`IDX/tsvcomp-aux.idx`** -- the nine `*_fld` patterns are 13 wide,
-   one position per field.  A field numbered 13 or more is clamped onto
+   `-v` shows what the foreign bytes cost on a line of their own.
+2. `IDX/tsvcomp-aux.idx` -- the nine `*_fld` patterns are 13 wide, one
+   position per field.  A field numbered 13 or more is clamped onto
    position 13 (`MOD/tsvcomp-aux_p.inc:29`: `__min(13, ...)`; the tuning
    form's `mapping::map` clamps the same way), so without this step the
-   four new fields would share `F_USED`'s context bucket in every index:
-   correct, but blind.  Widen each pattern to 17 and put a `1` at the new
-   positions in the indices where the field should have its own row (at
-   least `a` and `s`; the tuner can move the rest).  Then `./mk.sh`.
-   MOD/ is regenerated, not edited.
-3. **`oc_frame.inc`** -- four small coders beside `oc_link`:
-   `oc_rawlen(n)` (`tc_aux(F_RAWLEN, ...)`, range 0..MAXPAY),
-   `oc_rawbyte(b)` (`oc_hdr("raw.byte", b, 256)` under `STG_RAW`),
-   `oc_more(m, eos)` (`tc_auxc(F_PGMORE, eos, ...)`), and `oc_pgflags`
-   coding `F_CRCBAD` and `F_PGRAW` -- both always 0 in this phase, and
-   the decoder refuses a 1 with a "coded stream:" message until the
-   phase that implements it.  `oc_link_begin` resets nothing new.
-4. **`oc_model.inc`** -- the facade forwards them: `rawlen`, `rawbyte`,
-   `more`, `pgflags`.
-5. **`ogg_stream.inc`**, the encoder (`vb_pack`).  Today the loop is:
-   want, parse at the window start, refuse if that fails.  New:
+   new fields share `F_USED`'s context in every index: correct, but
+   blind.  Widen each pattern to 17 with a `1` at the new positions in
+   the indices where the field should have its own row (at least `a`
+   and `s`; the tuner can move the rest).  Then `./mk.sh`.  `MOD/` is
+   regenerated, never edited.
+3. `oc_frame.inc` -- beside `oc_link`: `oc_rawlen(n)` (`tc_aux(F_RAWLEN,
+   ...)`, 0..MAXPAY), `oc_rawbyte(b)` (`oc_hdr("raw.byte", b, 256)`
+   under `STG_RAW`), `oc_more(m, eos)` (`tc_auxc(F_PGMORE, eos, ...)`),
+   `oc_pgraw(r)` and `oc_crcbad(c)`.  The decoder refuses a
+   `F_CRCBAD=1` with a "coded stream:" message until phase 2 -- it can
+   only come from a hand-made stream.
+4. `oc_model.inc` -- the facade forwards `rawlen`, `rawbyte`, `more`,
+   `pgraw`, `crcbad`.  And a second implementation of the same
+   interface, `null_sink`, whose every method returns its input and
+   touches nothing -- this is what the dry parse below runs against.
 
-       find_page(): from the window start, the offset of the first
-         "OggS" at which ogg_page::parse succeeds AND crc_ok holds,
-         or avail() if there is none in the window
-       gap = that offset
-       while gap: code min(gap, MAXPAY) bytes as one raw chunk; skip;
-                  want(); re-run find_page()     -- a tag bigger than
-                                                     the window is fine
-       code F_RAWLEN=0
-       if at EOF: link(0); done
-       parse the page (it is known to be valid)
-       if no link is open: it must be a BOS page -> link(1), link_begin
-       else: F_PGMORE=1
-       code the page as today, then F_CRCBAD=0, F_PGRAW=0
-       after the page: if its EOS bit is set, F_PGMORE=0 at the top
-         of the next iteration and the link closes
+**The encoder, `vb_pack` in `ogg_stream.inc`.**  Today: want, parse at
+the window start, refuse if that fails.  New:
 
-   `find_page` is a scan for the four capture bytes plus the two checks
-   that already exist; a false "OggS" inside a tag -- an embedded image
-   can contain anything -- fails one of them and the scan moves on.  The
-   window (`IN_WIN`, 32 MB, refilled below `IN_LOW`) is what bounds the
-   scan; a page is always shorter than the refill margin, so a page that
-   starts inside the window fits in it, as today.
-6. **`ogg_stream.inc`**, the decoder (`vb_unpack`), mirrors it:
+    find_page(): from the window start, the offset of the first "OggS"
+      at which ogg_page::parse succeeds AND crc_ok holds -- or avail()
+      if there is none in the window
+    gap = that offset
+    while gap: code min(gap, MAXPAY) bytes as a raw chunk; skip; want();
+               find_page() again           -- a tag bigger than the
+                                              window is just more chunks
+    code F_RAWLEN=0
+    at EOF: link(0); done
+    parse the page; it is known to be valid
+    if no link is open, or the page is a beginning-of-stream page:
+      close the open link (F_PGMORE=0) if any; link(1); link_begin()
+    else F_PGMORE=1
+    oc_page as today
+    raw = !page_fits(p)                  -- see below
+    F_PGRAW=raw
+    if raw: payload bytes via rawbyte, cont=0, header count unchanged,
+            tc_prevW/tc_prevmode reset as oc_link_begin does
+    else:   packets as today
 
-       for(;;) {
-         rawrun: while((n = t.rawlen())) { n bytes via t.rawbyte(); emit }
-         if(!t.link(0)) break
-         t.link_begin()
-         while(t.more()) { rawrun; t.page(q, cont); flags; packets; emit }
-       }
+`find_page` is a scan for the four capture bytes plus the two checks
+that exist today.  A false "OggS" inside a tag -- an embedded image can
+contain anything -- fails one of them and the scan moves on.  The window
+(`IN_WIN`, 32 MB, refilled below `IN_LOW`) bounds the scan; a page is
+always shorter than the refill margin, so a page that starts inside the
+window fits in it, as today.
 
-   Raw bytes are emitted through the existing `page_writer` in chunks;
-   `body` (MAXPAY bytes) is the buffer.
-7. **`oggcomp.cpp`** -- `OC_VER = 3`.  A v2 stream is refused with the
-   existing "made by oggcomp version 2" message; nothing promised
-   otherwise.
-8. **`testfiles/gen.sh`** -- `id3-prefix.ogg` and `trailing-junk.ogg`
-   leave `refused/` for the corpus (as `id3-prefix-8k.ogg`,
-   `trailing-junk-8k.ogg`), and four files join them, all written by the
-   python already there, none needing a new tool:
-   `id3-text-8k.ogg` (an ID3v2.3 tag with TIT2, TPE1, TALB and a COMM
-   frame, a few hundred bytes -- the case the byte model can do something
-   with), `id3-apic-8k.ogg` (an APIC frame holding a small PNG -- the
-   case it cannot), `id3v1-trailer-8k.ogg` (the 128-byte "TAG" block
-   after the last page), and `chained-id3.ogg` (two streams, each behind
-   its own tag: junk between links).
-9. **Docs** -- `testfiles/README.md` moves the two rows and adds four;
-   `README.md`'s "Running it" says what is accepted now.
+**`page_fits`, the dry run.**  The encoder has to know that a page's
+packets will parse *before* it codes them, because once `io` has coded a
+packet through the real model there is no taking it back -- the model
+state is a gigabyte and cannot be checkpointed.  So every page is parsed
+twice: once against `null_sink` to learn whether it parses, once against
+the real model to code it.  The parser is deterministic and its verdict
+depends only on the bytes and the current setup header, not on model
+state, so the two runs agree.
 
-What this phase does not do: a page with a bad CRC is *skipped over* by
-`find_page` and its bytes coded raw, which round-trips but loses that
-page's compression, and if the page carried a continued packet the next
-page's continuation has no head and is refused as today.  Phase 2 takes
-both.
+- `struct io` becomes `template <class S> struct io_t`, with
+  `typedef io_t<oc_model> io`.  Its methods already call the sink only
+  through `t.`; nothing else changes.
+- Its 48 refusal sites, the 4 in `link_walk::page` and the 5 in
+  `source::join_len`/`join_pkt` route through one function that in a
+  live parse calls `FATAL` as now and in a dry parse unwinds to
+  `page_fits`.  `setjmp`/`longjmp` will do: `io` has no destructors, and
+  nothing in `io` or `source` yields (checked -- the only path to the
+  coroutine is through the real sink, which the dry run never reaches).
+  C++ exceptions would also do, and nothing in the build forbids them,
+  but the tree does not use them and `Lib3/` is `setjmp` already.
+- A dry parse of a *setup* header writes the parsed codebooks somewhere.
+  Give it a scratch `vb_setup` (331 KB, static) and restore `vb_used`
+  afterwards; the real parse then does the work again on the real one.
+  Once per link, so it does not matter.
+- Cost: every packet is parsed twice.  Parsing is a small part of
+  encoding -- the model is what the time goes on -- so the budget is
+  5%, measured on `music-stereo-q5.ogg` before this lands.  If it is
+  more, the dry parse can skip pages that are obviously fine (a page
+  with no continuation, in a link whose setup has parsed, whose packets
+  all start with an audio byte) and dry-run only the doubtful ones.
 
-### Phase 2 -- links that end without saying so, and pages that lie about their CRC
+`page_fits` also covers what `vb_pack` refuses today outside `io`: a
+continued packet whose continuation is missing or cut off, a fourth
+header packet, a page after the link's setup that is not audio.  All of
+those make the page raw and the file goes on.  A raw page that carried
+the head of a continued packet leaves `cont` clear, so the next page's
+continuation arrives as a first packet that does not parse, and that
+page goes raw too -- the fallback is self-consistent without either side
+tracking why.
 
-Covers `no-eos.ogg`, `badcrc.ogg`, and `t.sh`'s cut-off input.
+**The decoder, `vb_unpack`.**  Mirrors it:
 
-- **`F_PGMORE=0` without an EOS bit.**  The encoder's one-page lookahead
-  (`find_page` after the current page) already decides `more`; the change
-  is that a link may now end because the next valid page is a BOS page or
-  because the file ends, not only because the EOS bit said so.
-  `vb_pack:161`'s refusal goes.  The decoder needs nothing: it already
-  ends the link on `more=0`.  The interaction with continued packets: a
-  link ending inside a continued packet (`lw.cont` set) is still refused
-  -- the bytes are all there, but the packet's head has been coded as
-  Vorbis and its tail never arrives, so the head would have to be
-  re-coded raw; that is phase 3's raw page applied retroactively, and not
-  worth it for a file that is cut off mid-packet.  So: a cut-off input
-  whose last page is whole is accepted; one cut inside a page is accepted
-  (the fragment is a trailing raw run); one cut between the pages of a
-  continued packet is refused.
-- **`F_CRCBAD=1`.**  `find_page` accepts a page that parses but whose CRC
-  fails *if* it is followed by the next valid page where its length says
-  (or by the end of the file) -- that is, when it is a page with a wrong
-  checksum rather than junk that happens to start with "OggS".  The
-  encoder codes the page normally, sets the flag, and stores the four
-  CRC bytes; the decoder writes them over what `emit` computed.  Cost:
-  one near-certain symbol per page.
+    for(;;) {
+      rawrun: while((n = t.rawlen())) { n bytes via t.rawbyte(); emit }
+      if(!t.link(0)) break
+      t.link_begin()
+      while(t.more()) {
+        rawrun; t.page(q, cont); raw = t.pgraw()
+        if raw: payload bytes via t.rawbyte() into body; cont = 0
+        else:   packets as today
+        emit the page
+      }
+    }
 
-### Phase 3 -- pages that are not Vorbis
+The decoder never decides anything; it follows the flags.  Raw bytes go
+out through the existing `page_writer` in chunks, with `body` (MAXPAY
+bytes) as the buffer.
 
-Covers `opus.ogg`, and any single-stream file of another codec: FLAC in
-Ogg, Speex, Theora-only.  Also nonzero padding in a Vorbis packet, and
-any Vorbis packet the parser rejects for a reason that is not a
-structural fault of the file (an unsupported floor type, a residue book
-without a lookup table -- the "unreachable from oggenc" list in
-`testfiles/README.md`).
+**The rest.**
 
-- A link whose first packet is not a Vorbis identification header is a
-  **raw link**: every page of it has `F_PGRAW=1`, header fields modelled
-  by `oc_page` as now (they are not codec-specific), payload bytes coded
-  under `raw.byte`.  `io::ident`'s Opus refusal goes; `link_walk` learns
-  to not hand packets to `io` for such a link.
-- A Vorbis link in which one packet cannot be parsed makes that packet's
-  **page** raw and the rest of the link continues as Vorbis -- possible
-  because the Vorbis state that matters across packets is the setup
-  header, which a raw audio page does not change.  A raw page inside a
-  Vorbis link still updates `tc_prevW`/`tc_prevmode` to unknown; simplest
-  is to reset them as `oc_link_begin` does.
-- The encoder needs to know *before* coding a page's packets that one of
-  them will be refused.  Today `io` reports by `FATAL`.  The change is a
-  dry parse: run the packet through `io` against a `sink` that records
-  nothing, and on failure code the page raw.  That doubles the parse cost
-  on every packet; alternatively give `io` a soft-fail mode.  Either is a
-  contained change to `vb_packet.inc` and `link_walk::page`.
+5. `oggcomp.cpp` -- `OC_VER = 3`.  A v2 stream is refused by `d` with
+   the existing "made by oggcomp version 2" message.
+6. `testfiles/gen.sh` -- everything in `refused/` moves to the corpus,
+   under names that say what each is (`id3-prefix-8k.ogg`,
+   `trailing-junk-8k.ogg`, `no-eos-8k.ogg`, `badcrc-8k.ogg`, `opus.ogg`,
+   `skeleton-8k.ogg`), and `refused/` stops being made.  Seven files
+   join, all written by the python already there: `id3-text-8k.ogg` (an
+   ID3v2.3 tag with TIT2, TPE1, TALB and a COMM frame -- text the byte
+   model can do something with), `id3-apic-8k.ogg` (an APIC frame
+   holding a small PNG -- bytes it cannot), `id3v1-trailer-8k.ogg` (the
+   128-byte "TAG" block after the last page), `chained-id3.ogg` (two
+   streams each behind its own tag: junk between links), `empty.ogg`
+   (zero bytes), `random.bin` (4 kB from the seeded generator: not Ogg
+   at all), and `page-in-random.bin` (one valid page inside random
+   bytes: the scan must find it and must not take a false "OggS" for a
+   page).
+7. `t.sh` -- its three home-made inputs (empty, cut off, a `.oc` fed to
+   `c`) move from the refusal section to a round-trip check; the
+   refusal section keeps the `.oc`-side and command-line cases, which
+   are the ones that remain.  A new section feeds `c` every file in the
+   tree that is not an `.ogg` -- the scripts, the READMEs, the `.oc`
+   files it has just made -- and requires exit 0 and a byte-exact round
+   trip from each.  That section is the contract of section 2 as a
+   test.
+8. `README.md` -- "Running it": exit 1 is now only `d`'s; and a sentence
+   saying what happens to a file that is not Ogg.  `testfiles/README.md`
+   loses its `refused/` section and gains the rows.
 
-### Phase 4 -- more than one logical stream in a link
+**What phase 1 stores raw that could be compressed** -- not refusals,
+costs: a page with a bad CRC (it is in a run, not a page); the Vorbis
+packets on either side of a Skeleton page in a multiplexed file when a
+packet spans the two (both pages go raw); non-Vorbis payloads, always.
+Phase 2 takes the first two.
 
-Covers `skeleton.ogg`, and with it the ordinary `.ogv` (Theora video
-with a Vorbis track) and any Skeleton-wrapped file.
+### Phase 2 -- compress what phase 1 stored raw
 
-- A link becomes a *group* of logical streams keyed by serial number.  At
-  most one of them is Vorbis (the model state -- `vb_su`, the histories,
-  `oc_v` -- is one instance); the others are raw streams, their pages
-  `F_PGRAW=1`.  A second Vorbis stream in the same group is refused with
-  a new message; supporting two would mean instancing the whole model.
-- `link_walk` keeps `cont`/`spill` per serial, and `oc_page`'s serial
-  context (`F_SERIAL`, delta from the previous page's serial) will see
-  the serials alternate; give it the previous page's serial *and* the
-  one before as context, so an A-B-A-B pattern costs nothing after the
-  first few.
-- The group ends when every stream in it has ended (EOS bit, or the
-  file's end via `F_PGMORE`).
+- **`F_CRCBAD=1`.**  `find_page` accepts a page that parses but whose
+  CRC fails *when* the next valid page starts where its length says it
+  should (or the file ends there) -- a page with a wrong checksum, as
+  opposed to junk that happens to begin with "OggS".  The encoder codes
+  it as a page, sets the flag and stores the four CRC bytes; the decoder
+  writes them over what `emit` computed.  `badcrc.ogg` compresses.
+- **Continuation across foreign pages.**  `link_walk` keeps `cont` and
+  `spill` per serial number rather than per link, and `source::join_len`
+  follows the continuation to the next page *of the same serial* rather
+  than the next page.  A Vorbis packet that spans a Skeleton page is then
+  joined as it would be without the Skeleton page, and neither page goes
+  raw.  `oc_page`'s serial context (`F_SERIAL`, coded as a delta from the
+  previous page's serial) sees serials alternate; give it the serial two
+  pages back as well, and an A-B-A-B pattern costs nothing after the
+  first few.  `skeleton.ogg`, and with it the ordinary `.ogv`, then
+  compresses everything Vorbis in it.
+- At most one Vorbis stream per link.  The model -- `vb_su`, the
+  histories, `oc_v` -- is one instance; a second Vorbis stream in the
+  same link goes raw, page by page, through the fallback.  Instancing the
+  model for two is a different project.
 
-### After that
+### Phase 3 -- models for what is foreign
 
-`skeleton.ogg` and `opus.ogg` will round-trip with their payloads
-uncompressed; the whole of `refused/` will be empty; and what remains is
-modelling: ID3 text frames (a dictionary of frame ids and an order-2
-model over the text), Skeleton (a handful of fixed-layout packets),
-Opus (a real project, out of scope here).  Each is a family of its own
-in `IDX/` and a stage in `-v`, and each is judged the same way: bytes
-saved on a corpus that has enough of it to matter.
+Each of these is a family of its own in `IDX/`, a stage in `-v`, and is
+judged the same way: bytes saved on a corpus that has enough of it to
+matter.  None changes the format: a `rawrun` or a raw page is still what
+it is, and the model behind `raw.byte` is what gets smarter.
+
+- **ID3.**  A tag is a 10-byte header, frames of (id, size, flags,
+  payload), padding.  The frame ids are a small dictionary; text frames
+  are text; APIC is an image and stays at 8 bits a byte.  An order-2
+  model over text with the frame id as context is the whole of it.
+- **Skeleton.**  Three fixed-layout packet kinds (fishead, fisbone, the
+  index).  Fields, coded like Vorbis header fields through `hdr` tags.
+- **Opus.**  A real project, out of scope; the page headers are already
+  modelled and that is what phase 1 gives it.
 
 ## 5. Tests, per phase
 
-`t.sh` has two kinds of refusal test: files in `testfiles/refused/`, all
-expected to exit 1, and eleven cases it builds for itself.  As files are
-accepted they leave `refused/` for the corpus, where `t.sh` round-trips
-them, checks they code deterministically, and `mk.sh check` proves both
-builds agree on them.  `gen.sh` writes them where they now belong, under
-a name that says what they are.
+| case | today | step 0 | phase 1 | phase 2 |
+|---|---|---|---|---|
+| `minbitrate-pad.ogg` | refused | **corpus** | | |
+| the other six in `refused/` | refused | | **corpus** | |
+| `t.sh`: empty input, cut-off input, a `.oc` fed to `c` | exit 1 | | **round-trip** | |
+| `t.sh`: "anything round-trips" over the tree's non-`.ogg` files | -- | | **new** | |
+| `t.sh`: `.oc`-side and command-line refusals | exit 1/2/3 | unchanged throughout | | |
+| `badcrc-8k.ogg`, `skeleton-8k.ogg` size | -- | | stored | **smaller** |
 
-| case | today | step 0 | phase 1 | phase 2 | phase 3 | phase 4 |
-|---|---|---|---|---|---|---|
-| `minbitrate-pad.ogg` | refused | **corpus** | | | | |
-| `id3-prefix.ogg`, `trailing-junk.ogg` | refused | | **corpus** | | | |
-| `no-eos.ogg`, `badcrc.ogg` | refused | | refused | **corpus** | | |
-| `opus.ogg` | refused | | | | **corpus** | |
-| `skeleton.ogg` | refused | | | | | **corpus** |
-| `t.sh`: cut-off input | exit 1 | | exit 1 ("no end-of-stream") | **round-trips** | | |
-| `t.sh`: empty input | exit 1 | unchanged throughout: no valid page | | | | |
-| `t.sh`: a `.oc` fed to `c` | exit 1 | unchanged throughout: no valid page | | | | |
-
-Two new negative cases belong in `refused/` once phase 1 lands, because
-they are the refusals that survive it and nothing else exercises them: a
-file cut between the two pages of a continued packet (from
-`bigcomment-8k.ogg`, phase 2's stated limit), and a file of random bytes
-with one valid page embedded in the middle -- which is *accepted*, and is
-there to prove the scan does not take a false "OggS" for a page.  (That
-one goes in the corpus, not `refused/`.)
-
-`t.sh` itself changes in one place: the comment at line 319 and the
-expectation for the cut-off case at phase 2.  The loop over `refused/`
-needs no change; it tests whatever is there.
+`t.sh`'s loop over `refused/` tests whatever is in the directory and
+needs no change; once `gen.sh` stops making the directory the loop finds
+nothing, and the comment above it (line 319) is rewritten to say what
+the section now covers.
 
 ## 6. What to expect
 
-| file | today | after |
+| input | today | after phase 1 |
 |---|---|---|
-| `minbitrate-pad.ogg` | refused | 1605 bytes (measured) |
+| `minbitrate-pad.ogg` | refused | 1605 bytes (measured, step 0) |
 | `id3-prefix.ogg` | refused | about `tiny-8k-q0`'s 1354 plus some tens of bytes for a 42-byte tag that is mostly zeros |
 | `trailing-junk.ogg` | refused | 1354 plus about 16 |
-| `id3-text-8k.ogg` (new) | -- | the tag's text at perhaps 5-6 bits a byte under `raw.byte`; a dedicated model later would halve that |
+| `no-eos.ogg` | refused | about 1354 |
+| `badcrc.ogg` | refused | about 1354 less that page's share, plus that page's 2640 bytes raw; phase 2 brings it to about 1354 |
+| `opus.ogg` | refused | a modelled header and 19 payload bytes |
+| `skeleton.ogg` | refused | Vorbis pages as today, Skeleton pages raw, and the two pages around any spanning packet raw; phase 2 fixes that |
+| `id3-text-8k.ogg` (new) | -- | the tag's text at perhaps 5-6 bits a byte under `raw.byte`; phase 3 halves it |
 | `id3-apic-8k.ogg` (new) | -- | the PNG at 8 bits a byte, as it should be |
-| `opus.ogg` | refused | header modelled, 19 payload bytes raw |
-| `skeleton.ogg` | refused | Vorbis part as today, Skeleton pages raw |
-| every existing corpus file | | larger by the v3 hooks: three symbols a page, one a link.  Budget: under 0.1% on `music-stereo-q5.ogg`, and section 7 measures it |
+| `empty.ogg` (new) | -- | the 7-byte header and the coder's flush: under 20 bytes |
+| `random.bin` (new) | -- | 4096 bytes in, about 4130 out |
+| every existing corpus file | | larger by the v3 hooks: three symbols a page, one a link.  Budget: under 0.1% on `music-stereo-q5.ogg`; section 7 measures it |
+| encode time | | the dry parse: budget 5%, measured |
 
 ## 7. Verification, each phase
 
@@ -360,6 +388,7 @@ Before the phase, from the unchanged source:
 
     ./mk.sh && cp oggcomp /tmp/ref
     for f in testfiles/*.ogg; do /tmp/ref c "$f" "/tmp/ref-$(basename "$f").oc"; done
+    time /tmp/ref c testfiles/music-stereo-q5.ogg /tmp/ref-time.oc
 
 After it:
 
@@ -371,12 +400,17 @@ After it:
 
     #  phase 1 on: the stream changes (v3); the size may not, by more than the hooks
     for f in testfiles/*.ogg; do ./oggcomp c "$f" /tmp/n.oc
-      printf '%-28s %8d -> %8d  %+.3f%%\n' "$(basename "$f")" \
-        "$(wc -c < "/tmp/ref-$(basename "$f").oc")" "$(wc -c < /tmp/n.oc)" \
-        "$(awk -v a="$(wc -c < "/tmp/ref-$(basename "$f").oc")" -v b="$(wc -c < /tmp/n.oc)" 'BEGIN{print 100*(b-a)/a}')"; done
+      a=$(wc -c < "/tmp/ref-$(basename "$f").oc"); b=$(wc -c < /tmp/n.oc)
+      printf '%-28s %8d -> %8d  %+.3f%%\n' "$(basename "$f")" "$a" "$b" "$(awk -v a=$a -v b=$b 'BEGIN{print 100*(b-a)/a}')"
+    done
+    time ./oggcomp c testfiles/music-stereo-q5.ogg /tmp/n.oc      # against /tmp/ref-time
 
-    #  and the files the phase was for
-    for f in <the files that moved>; do ./oggcomp c "$f" /tmp/n.oc && ./oggcomp d /tmp/n.oc /tmp/n.ogg && cmp "$f" /tmp/n.ogg && echo "ok $f $(wc -c < /tmp/n.oc)"; done
+    #  phase 1 on: the contract -- nothing is refused, everything comes back
+    for f in testfiles/* testfiles/refused/* *.inc *.sh *.md /tmp/n.oc; do
+      [ -f "$f" ] || continue
+      ./oggcomp c "$f" /tmp/x.oc && ./oggcomp d /tmp/x.oc /tmp/x.out && cmp -s "$f" /tmp/x.out \
+        || echo "NOT ROUND-TRIPPED: $f"
+    done
 
     #  both compilers, both MOD/ forms, both Windows backends, as REFACTOR.md section 7
 
