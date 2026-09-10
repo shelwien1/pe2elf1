@@ -22,7 +22,7 @@
     The streaming is Lib3's: the walk runs as a coroutine (Lib3/coro3b.inc)
     with the input on one pin and the output on the other, and
     CoroFileProc (Lib3/coro_fhp2.inc) drives it over the two files, 64 KB
-    at a time.  oc_coro.inc is the glue; the coroutine itself is below.
+    at a time.  The coroutine itself is below.
     OGGCOMP-PLAN.md section 11 is that port and what it measured.  */
 
 #include <math.h>
@@ -53,7 +53,36 @@
 #include "vb_setup.inc"    /*  the four lists a link's audio runs on  */
 #include "vb_ctx.inc"      /*  what survives from one packet to the next  */
 
-#include "oc_coro.inc"     /*  Lib3: the coroutine, its file API, the coder's pins  */
+/*  Lib3, the framework this streams through: coro3b.inc's Coroutine, a
+    stackful coroutine on setjmp/longjmp with an input pin and an output
+    pin, and coro_fhp2.inc's CoroFileProc, which drives one over a pair of
+    files -- 64 KB read into the input pin whenever the coroutine has
+    emptied it, 64 KB written out whenever it has filled the output pin.
+    The files are as supplied, but for coro3b.inc, where the coroutine's
+    stack size can be set from outside, yield refuses a call chain deeper
+    than it can save and measures the stack from its own frame pointer,
+    and the clang setjmp clobbers the register it takes its buffer in.
+    The names Lib3 spells its own way are in common.inc.  */
+#define FILE_API_STD 1     /*  the stdio file API on every platform: main looks
+                               at ferror() through it, and the raw Win32 one
+                               Lib3 would otherwise pick has nothing to look at  */
+#include "Lib3/file_api.inc"
+#include "Lib3/coro3b.inc"
+/*  CoroFileProc counts the input bytes it has handed over here, for a
+    progress meter psrc has and this program does not.  */
+static qword g_prog_in;
+#include "Lib3/coro_fhp2.inc"
+
+/*  The range coder's bytes -- rc.inc's RC_IO_BASE -- on the coroutine's
+    pins: got from the input pin, put on the output pin.  Lib3's get()
+    returns uint(-1) once the driver has said the input is done; as a byte
+    that is 0xFF, forever, which is what the coder's flush counts on.  */
+template <class RC>
+struct rc_pin_io {
+  Coroutine * co;
+  byte get() { return (byte) co->pin[0].get(); }
+  void put(byte c) { co->pin[1].put(c); }
+};
 #define RC_IO_BASE rc_pin_io
 #include "rc.inc"          /*  the range coder  */
 #include "cm.inc"          /*  counter, APM, mixer  */

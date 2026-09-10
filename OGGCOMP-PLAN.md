@@ -581,13 +581,15 @@ who calls the walk and where its bytes come from and go to.
   if defined, and `yield` refuses a call chain deeper than its stack copy
   can hold, where before it would have copied it short and resumed it
   corrupt.  Everything else is byte for byte the archive's.
-- **`oc_coro.inc`** is the glue.  Lib3 spells its types and hints as its own
-  `common.inc` does; this tree has one of its own, so the names Lib3 uses
-  are defined there over ours.  It also defines `rc_pins`, the coder's byte
-  I/O on the coroutine's pins: `get()` from the input pin, masked to a byte
-  so the end of the input reads as 0xFF (Lib3 returns `uint(-1)` there;
-  `rc_buf` returned 0xFF, and the coder's final `inpbit`s rely on it), and
-  `put()` on the output pin.
+- **`common.inc`** carries the names Lib3 spells its own way -- the types,
+  `ALIGN`, the expect forms, `__assume`, `DIM`, `X64` -- defined over
+  ours, so that Lib3's own common.inc is not included beside this tree's.
+  (They began in a glue header of their own, `oc_coro.inc`, since folded
+  into common.inc and oggcomp.cpp.)  oggcomp.cpp includes the framework
+  and defines the coder's byte I/O on the coroutine's pins: `get()` from
+  the input pin, masked to a byte so the end of the input reads as 0xFF
+  (Lib3 returns `uint(-1)` there; `rc_buf` returned 0xFF, and the coder's
+  final `inpbit`s relied on it), and `put()` on the output pin.
 - **`sh_v2f.inc`**: `Rangecoder` is now `Rangecoder_t<IO>`, over `rc_buf`
   by default or whatever `RC_IO` names before the include.  The coder does
   not know which.

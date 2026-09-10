@@ -366,7 +366,6 @@ static void tcp_build(void) {
     reads MOD/tsvcomp_h.inc is below it.  Merging the two halves is the
     obvious-looking simplification that cannot work.  */
 
-typedef u16 word;                         /*  idx2inc.pl's wider bucket table  */
 #ifndef __min
   #define __min(a, b) ((a) < (b) ? (a) : (b))
   #define __max(a, b) ((a) > (b) ? (a) : (b))

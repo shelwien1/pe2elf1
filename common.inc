@@ -6,11 +6,37 @@
     name; each of those says so.  */
 #include <inttypes.h>
 
-typedef uint8_t  u8;   typedef int8_t  i8;
+typedef uint8_t  u8;
 typedef uint16_t u16;  typedef int16_t i16;
 typedef uint32_t u32;  typedef int32_t i32;
 typedef uint64_t u64;  typedef int64_t i64;
 typedef size_t   sz;
+
+/*  The same widths as Lib3 and the range coder spell them, and as
+    idx2inc.pl's wider bucket tables do (`word`).  Lib3 has a common.inc of
+    its own; rather than include both, the names it uses are defined here
+    over ours: the types, `ALIGN`, the expect forms, `__assume`, `DIM` and
+    `X64`.  */
+typedef u8  byte;
+typedef u16 word;
+typedef u32 uint;
+typedef u64 qword;
+#ifndef ALIGN
+#if defined(__GNUC__) || defined(__clang__)
+#define ALIGN(n) __attribute__((aligned(n)))
+#else
+#define ALIGN(n) __declspec(align(n))
+#endif
+#endif
+#define if_e0(x) if (__builtin_expect((x), 0))
+#define if_e1(x) if (__builtin_expect((x), 1))
+#ifndef _MSC_VER
+#define __assume(x) do { if (!(x)) __builtin_unreachable(); } while (0)
+#endif
+template <class T, int N> constexpr uint DIM(T (&)[N]) { return N; }
+#if defined(__x86_64) || defined(_M_X64)
+#define X64
+#endif
 
 /*  Hot-path hints.  clang is named beside gcc because clang targeting MSVC
     does not define __GNUC__ and takes every GNU form all the same: a build
@@ -77,9 +103,6 @@ void blr_fatal_unless(int cond, const char * fmt, ...) BLR_PRINTF(2, 3);
 template <class T> constexpr const T & blr_min(const T & a, const T & b) {
   return a < b ? a : b;
 }
-template <class T> constexpr const T & blr_max(const T & a, const T & b) {
-  return a > b ? a : b;
-}
 
 /*  Every buffer in this program is a fixed-size table sized from the format's
     own limits, so there is no allocator and nothing to run out of but the
@@ -88,8 +111,8 @@ template <class T> constexpr const T & blr_max(const T & a, const T & b) {
 
 static void message(const char * fmt, va_list ap) BLR_PRINTF(1, 0);
 
-/*  Set from argv[0] at entry.  Both programs share this file, so a fixed
-    "balrogg: " labelled tsv2wav's diagnostics with the wrong program.  */
+/*  Set from argv[0] at entry.  Both tools share this file, so a fixed
+    "balrogg: " labelled oggcomp's diagnostics with the wrong program.  */
 static const char * blr_prog = "balrogg";
 
 static void blr_set_prog(const char * argv0) {

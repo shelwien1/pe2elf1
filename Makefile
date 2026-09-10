@@ -7,7 +7,8 @@ CXX       = c++
 CXXFLAGS ?= -O2
 WARN     ?= -Wall -Wextra
 LIBS      = -lm
-#  Not optional: lift.inc's integer butterflies rely on wrapping arithmetic.
+#  Not optional: the model relies on wrapping arithmetic where a mixer
+#  update overflows (cm.inc), and the stream must not depend on the compiler.
 REQ       = -fwrapv
 
 #  The walk, shared by both; balrogg puts a record-stream sink under it and
@@ -17,7 +18,7 @@ WALK_INC = common.inc ogg_page.inc vb_info.inc vb_book.inc \
           oc_sink.inc io.inc source.inc link_walk.inc codec.inc
 BLR_INC = $(WALK_INC) tsv.inc oc_tsv.inc
 #  Lib3's coroutine and file API, which oggcomp streams through.
-CORO_INC = oc_coro.inc Lib3/coro3b.inc Lib3/coro3_pin.inc Lib3/coro3_pin_0.inc \
+CORO_INC = Lib3/coro3b.inc Lib3/coro3_pin.inc Lib3/coro3_pin_0.inc \
           Lib3/coro3_setjmp_x64.h Lib3/coro3_setjmp_x64d.h Lib3/coro3_setjmp_x32.h \
           Lib3/coro_fhp2.inc Lib3/file_api.inc Lib3/file_api_std.inc
 CMP_INC = $(WALK_INC) $(CORO_INC) rc.inc cm.inc sh_mapping.inc tc_prior.inc oc_model.inc \
