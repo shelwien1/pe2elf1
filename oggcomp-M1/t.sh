@@ -134,7 +134,7 @@ timed() {
   ' "$tmp/secs" "$@"
 }
 
-n=0; ok=0; same=0; nsame=0
+n=0; ok=0; same=0; nsame=0; counted=0
 tot_in=0; tot_out=0; tot_enc=0; tot_dec=0
 fail=0
 
@@ -187,6 +187,7 @@ for f in "$@"; do
     #  Only files that came back count towards the totals, so the ratio on
     #  the last row is a ratio of the same set of files on both sides of it.
     out=$(wc -c < "$oc")
+    counted=$((counted + 1))
     tot_in=$((tot_in + in))
     tot_out=$((tot_out + out))
     tot_enc=$(awk -v a="$tot_enc" -v b="$enc" 'BEGIN{printf "%.3f", a+b}')
@@ -206,7 +207,7 @@ for f in "$@"; do
 done
 
 printf '  %s\n' '--------------------------------------------------------------------------------'
-[ "$ok" = 1 ] && label="1 file" || label="$ok files"
+[ "$counted" = 1 ] && label="1 file" || label="$counted files"
 awk -v l="$label" -v i="$tot_in" -v o="$tot_out" -v e="$tot_enc" -v d="$tot_dec" 'BEGIN{
   printf("  %-26s %9d %10d %6.2f%% %7.2fs %7.2fs %7.2f\n",
          l, i, o, (i > 0 ? 100.0*o/i : 0), e, d, (e > 0 ? i/e/1048576.0 : 0)) }'
