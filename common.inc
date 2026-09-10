@@ -111,9 +111,9 @@ template <class T> constexpr const T & blr_min(const T & a, const T & b) {
 
 static void message(const char * fmt, va_list ap) BLR_PRINTF(1, 0);
 
-/*  Set from argv[0] at entry.  Both tools share this file, so a fixed
-    "balrogg: " labelled oggcomp's diagnostics with the wrong program.  */
-static const char * blr_prog = "balrogg";
+/*  Set from argv[0] at entry, so the diagnostics carry the name the
+    program was run as.  */
+static const char * blr_prog = "oggcomp";
 
 static void blr_set_prog(const char * argv0) {
   const char * s;
@@ -165,9 +165,9 @@ void blr_fatal_unless(int cond, const char * fmt, ...) {
   die(BLR_EXIT_REFUSED);
 }
 
-/*  Both tools create their outputs with "wb", which truncates before the input
-    has been read, so naming one file twice destroyed it and still exited 0.
-    Every path either tool is given names a distinct file in every legitimate
+/*  The output is created with "wb", which truncates before the input has
+    been read, so naming one file twice destroyed it and still exited 0.
+    Every path the tool is given names a distinct file in every legitimate
     invocation, so requiring exactly that is the whole check.  It compares the
     paths as written, which catches the repeated argument that actually
     happens; it does not see one file reached by two different spellings.  */

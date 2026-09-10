@@ -8,9 +8,10 @@
 constexpr sz IN_LOW = (sz) 20 << 20;
 constexpr sz IN_WIN = (sz) 32 << 20;
 
-/*  Where the bytes come from when not a file: a pull, handing back what it
-    put at dst, up to n bytes, and 0 once there is no more.  oggcomp's
-    coroutine feeds the window from its input pin this way.  */
+/*  Where the bytes come from: a pull, handing back what it put at dst, up
+    to n bytes, and 0 once there is no more.  The coroutine feeds the window
+    from its input pin this way, and a pull's errors are its caller's to
+    see.  */
 typedef sz (*source_pull)(void * ctx, u8 * dst, sz n);
 
 /*  A forward-only window over the input.  */
@@ -18,7 +19,6 @@ typedef sz (*source_pull)(void * ctx, u8 * dst, sz n);
 static u8 in_win[IN_WIN];     /*  the input window  */
 
 struct source {
-  FILE * f;                   /*  one or the other  */
   source_pull pull;
   void * pctx;
   const char * path;          /*  the input's name, for messages  */
@@ -26,33 +26,13 @@ struct source {
   sz origin;                  /*  file offset of the window's first byte  */
   int eof;
 
-  void open(const char * pth) {
-    f = fopen(pth, "rb");
-    if (!f) FATAL_CODE(BLR_EXIT_IO, "cannot open %s", pth);
-    pull = nullptr;  pctx = nullptr;
-    start(pth);
-  }
-
   void open(const char * pth, source_pull p, void * ctx) {
-    f = nullptr;  pull = p;  pctx = ctx;
-    start(pth);
-  }
-
-  void start(const char * pth) {
+    pull = p;  pctx = ctx;
     path = pth;  at = have = origin = 0;  eof = 0;
     want();
   }
 
-  /*  A pull's errors are its caller's to see; a file's are seen here.  */
-  void close() {
-    if (f) {
-      int bad = ferror(f);
-      if (fclose(f)) bad = 1;
-      if (bad) FATAL_CODE(BLR_EXIT_IO, "read error on %s", path);
-      f = nullptr;
-    }
-    pull = nullptr;
-  }
+  void close() { pull = nullptr; }
 
   /*  Make a page and everything its joins can reach available at the cursor.  */
 
@@ -64,12 +44,10 @@ struct source {
       origin += at;  have -= at;  at = 0;
     }
     while (have < IN_WIN) {
-      got = f ? fread(in_win + have, 1, IN_WIN - have, f)
-              : pull(pctx, in_win + have, IN_WIN - have);
+      got = pull(pctx, in_win + have, IN_WIN - have);
       if (!got) { eof = 1;  break; }
       have += got;
     }
-    if (f && ferror(f)) FATAL_CODE(BLR_EXIT_IO, "read error on %s", path);
   }
 
   void skip(sz n) { at += n; }

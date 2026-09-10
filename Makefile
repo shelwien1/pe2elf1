@@ -1,4 +1,4 @@
-#  make            balrogg and oggcomp
+#  make            oggcomp
 #  make clean
 #
 #  MOD/ ships generated (shipping/Const form) from the six IDX/tsvcomp-*.idx
@@ -11,12 +11,10 @@ LIBS      = -lm
 #  update overflows (cm.inc), and the stream must not depend on the compiler.
 REQ       = -fwrapv
 
-#  The walk, shared by both; balrogg puts a record-stream sink under it and
-#  oggcomp the model.
+#  The walk, and the model under it.
 WALK_INC = common.inc ogg_page.inc vb_info.inc vb_book.inc \
           vb_floor.inc vb_res.inc vb_map.inc vb_setup.inc vb_ctx.inc \
           oc_sink.inc io.inc source.inc link_walk.inc codec.inc
-BLR_INC = $(WALK_INC) tsv.inc oc_tsv.inc
 #  Lib3's coroutine and file API, which oggcomp streams through.
 CORO_INC = Lib3/coro3b.inc Lib3/coro3_pin.inc Lib3/coro3_pin_0.inc \
           Lib3/coro3_setjmp_x64.h Lib3/coro3_setjmp_x64d.h Lib3/coro3_setjmp_x32.h \
@@ -29,7 +27,7 @@ CMP_INC = $(WALK_INC) $(CORO_INC) rc.inc cm.inc sh_mapping.inc tc_prior.inc oc_m
           MOD/tsvcomp-aux_h.inc MOD/tsvcomp-aux_p.inc \
           MOD/tsvcomp-hdr_h.inc MOD/tsvcomp-hdr_p.inc
 
-all: balrogg oggcomp
+all: oggcomp
 
 .flags: FORCE
 	@echo '$(CXX)|$(CXXFLAGS)|$(WARN)|$(REQ)|$(LIBS)' > $@.tmp
@@ -37,13 +35,10 @@ all: balrogg oggcomp
 	@rm -f $@.tmp
 FORCE:
 
-balrogg: main.cpp $(BLR_INC) .flags
-	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ main.cpp
-
 oggcomp: oggcomp.cpp $(CMP_INC) .flags
 	$(CXX) $(CXXFLAGS) $(WARN) $(REQ) -o $@ oggcomp.cpp $(LIBS)
 
 clean:
-	rm -f balrogg oggcomp .flags .flags.tmp
+	rm -f oggcomp .flags .flags.tmp
 
 .PHONY: all clean FORCE
