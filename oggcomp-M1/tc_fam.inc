@@ -163,17 +163,17 @@ struct tc_fam {
     select(v);
     if(UNLIKELY(tc_enc && x < 0))
       FATAL("negative magnitude");
-    prp = tcp_head(pc, 0);
+    prp = pc.head(0);
     if(bit(0, tc_enc && x == 0)) {
       prp = -1;
       return 0;
     }
-    prp = tcp_head(pc, 1);
+    prp = pc.head(1);
     if(bit(1, tc_enc && x == 1)) {
       prp = -1;
       return 1;
     }
-    prp = tcp_head(pc, 2);
+    prp = pc.head(2);
     if(bit(2, tc_enc && x == 2)) {
       prp = -1;
       return 2;
@@ -187,7 +187,7 @@ struct tc_fam {
       }
     }
     for(k = 0;; k++) {
-      prp = tcp_len(pc, k);
+      prp = pc.len(k);
       if(bit(tc_node_len(k), tc_enc && nb == k + 1)) {
         nb = k + 1;
         break;
@@ -199,7 +199,7 @@ struct tc_fam {
       u64 pref = 1;
       for(p = 0; p < nb - 1; p++) {
         int mb;
-        prp = tcp_man(pc, nb, p, pref);
+        prp = pc.man(nb, p, pref);
         mb = bitm(tc_node_man(nb, p), tc_enc && ((u >> (nb - 2 - p)) & 1) != 0);
         pref = pref * 2 + (u64)mb;
       }
@@ -225,15 +225,3 @@ struct tc_fam {
     return s ? -m : m;
   }
 };
-static tc_fam fam_dig, fam_sgn, fam_flr, fam_cls, fam_aux, fam_hdr;
-static i64 tc_last[F_N], tc_last2[F_N];
-static i64 tc_auxc(int fld, i32 c, i64 x, int sgn) {
-  tcx v;
-  i64 r;
-  tc_make_aux(fld, c, tc_qlog(tc_last[fld]), v);
-  r = sgn ? fam_aux.codes(v, x, (u32)fld) : fam_aux.code(v, x);
-  tc_last2[fld] = tc_last[fld];
-  tc_last[fld] = r;
-  return r;
-}
-static i64 tc_aux(int fld, i64 x) { return tc_auxc(fld, tc_qlog(tc_last2[fld]), x, 0); }

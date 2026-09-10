@@ -5,7 +5,6 @@ static int tc_enc;
 #endif
 static Rangecoder<0, OC_CARRYLESS> rce;
 static Rangecoder<1, OC_CARRYLESS> rcd;
-static vb_ctx *oc_v;
 constexpr int TC_MIXN = 7;
 constexpr int TC_NODE = 29;
 constexpr int TC_MNODE = 169;

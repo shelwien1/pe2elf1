@@ -20,8 +20,8 @@ static i32 raw_w[256 * 3];
 static u8 raw_wc[256];
 static cm_mix<3> raw_mx;
 static u32 raw_prev;
-static void oc_raw_init(void) { raw_mx.init(raw_w, raw_wc, 256); }
-static u32 oc_raw(u32 b) {
+void oc_model::raw_init() { raw_mx.init(raw_w, raw_wc, 256); }
+u32 oc_model::raw(u32 b) {
   cm_cnt *row = raw_o1[raw_prev];
   u32 node = 1;
   int i;

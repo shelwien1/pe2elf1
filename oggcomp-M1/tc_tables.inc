@@ -42,12 +42,6 @@ constexpr int TC_hdr_ND = TC_NODE, TC_hdr_MND = TC_MNODE;
 #include "MOD/tsvcomp-flr_h.inc"
 #include "MOD/tsvcomp-hdr_h.inc"
 #include "MOD/tsvcomp-sgn_h.inc"
-static TC_dig_T *tcm_dig;
-static TC_sgn_T *tcm_sgn;
-static TC_flr_T *tcm_flr;
-static TC_cls_T *tcm_cls;
-static TC_aux_T *tcm_aux;
-static TC_hdr_T *tcm_hdr;
 //  Where the one object of each table type lives.  In the shipping build a
 //  TC_*_T is its arrays, sizeof is the whole table, and under 256 MB it is
 //  a static object -- BSS, demand-zero, no call to make -- while the digit
@@ -67,6 +61,38 @@ template <class T> struct tc_home<T, false> {
   static T *get() { return (T *)tc_map(sizeof(T)); }
 };
 template <class T> T tc_home<T, true>::obj;
+#ifndef TC_MEMCAP
+#define TC_MEMCAP ((u64)64 << 30)
+#endif
+#if !USE_NEW
+static_assert(TC_dig_T::TC_dig_Size + TC_sgn_T::TC_sgn_Size + TC_flr_T::TC_flr_Size + TC_cls_T::TC_cls_Size + TC_aux_T::TC_aux_Size + TC_hdr_T::TC_hdr_Size <= TC_MEMCAP, "IDX/tsvcomp-*.idx ask for more model tables than TC_MEMCAP allows");
+#endif
+//  The six families' tables: one object each, wherever tc_home put it.
+struct oc_tables {
+  TC_dig_T *dig;
+  TC_sgn_T *sgn;
+  TC_flr_T *flr;
+  TC_cls_T *cls;
+  TC_aux_T *aux;
+  TC_hdr_T *hdr;
+  u64 bytes() const { return (u64)dig->TC_dig_Size + (u64)sgn->TC_sgn_Size + (u64)flr->TC_flr_Size + (u64)cls->TC_cls_Size + (u64)aux->TC_aux_Size + (u64)hdr->TC_hdr_Size; }
+  void init() {
+#define TC_MAP(F) (F = tc_home<TC_##F##_T>::get(), F->TC_##F##_Init())
+    TC_MAP(dig);
+    TC_MAP(sgn);
+    TC_MAP(flr);
+    TC_MAP(cls);
+    TC_MAP(aux);
+    TC_MAP(hdr);
+#undef TC_MAP
+    FATAL_UNLESS(bytes() <= TC_MEMCAP,
+                 "IDX/tsvcomp-*.idx asks for %" PRIu64 " MB of model tables, past "
+                 "the %" PRIu64 " MB this build allows -- narrow a context, or "
+                 "rebuild with a larger TC_MEMCAP",
+                 (u64)(bytes() >> 20), (u64)(TC_MEMCAP >> 20));
+  }
+};
+static oc_tables tabs;
 struct tc_dv {
   int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1, p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm, x1, x1s;
 };

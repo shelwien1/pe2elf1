@@ -48,26 +48,31 @@ static void message(const char *fmt, va_list ap) {
 //  the failure usually comes from inside the coroutine, with main() still
 //  holding the file open, and Windows will not remove a file anyone has
 //  open -- the remove would fail silently and the half-written file stay.
-static const char *ogc_partial;
-static filehandle *ogc_partial_fh;
-static void ogc_output(const char *path, filehandle *fh) {
-  ogc_partial = path;
-  ogc_partial_fh = fh;
-}
-static void ogc_output_kept(void) {
-  ogc_partial = nullptr;
-  ogc_partial_fh = nullptr;
-}
-static NORETURN void die(int code) {
-  if(ogc_partial) {
-    const char *p = ogc_partial;
-    filehandle *fh = ogc_partial_fh;
-    ogc_partial = nullptr;
-    ogc_partial_fh = nullptr;
-    if(fh)
-      fh->close();
+struct ogc_partial_t {
+  const char *path;
+  filehandle *fh;
+  void set(const char *p, filehandle *f) {
+    path = p;
+    fh = f;
+  }
+  void kept() {
+    path = nullptr;
+    fh = nullptr;
+  }
+  void drop() {
+    const char *p = path;
+    filehandle *f = fh;
+    if(!p)
+      return;
+    kept();
+    if(f)
+      f->close();
     remove(p);
   }
+};
+static ogc_partial_t ogc_partial;
+static NORETURN void die(int code) {
+  ogc_partial.drop();
   exit(code);
 }
 NORETURN void ogc_fatal(const char *fmt, ...) {

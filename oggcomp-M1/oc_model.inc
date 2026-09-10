@@ -1,9 +1,139 @@
-static void tc_setup_done(void) {
-  const vb_setup *s = oc_v->cur;
+//  What the floor model keeps per floor: the post order the setup implies,
+//  and for every post the two neighbours the spec's renderer predicts from.
+struct oc_floor {
+  u8 pcl[VB_MAXPOST], ppos[VB_MAXPOST];
+  u8 rnk[VB_MAXPOST];
+  u8 lo[VB_MAXPOST], hi[VB_MAXPOST];
+  void build(const vb_floor &fl);
+};
+//  The residue in hand: how many vectors, how many partitions, which
+//  channel each vector is.
+struct oc_rgeom {
+  u32 vch, np, pv, w, ilv;
+  u8 cidx[VB_MAXCH];
+};
+//  The partition in hand: where in the history its digits go and what the
+//  digit model looks at.
+struct oc_part {
+  sz span;
+  i16 *hist, *hist2;
+  u32 *avg;
+  i16 *pp, *ps;
+  u8 *pn;
+  i32 *q1, *q2, *zr;
+  u32 str;
+  const vb_book *bk;
+  const tc_ptab *pt;
+  u32 rno, pss, j, pc, psz, cls, dim, ilv, i;
+  u32 vmod, smod;
+  i32 bkq, clrun;
+  int clmatch;
+};
+constexpr sz OC_TAGMAX = 31;
+#ifdef TC_MEMCOST
+#if TC_MEMCOST + 0 <= 1
+#undef TC_MEMCOST
+#define TC_MEMCOST 10000
+#endif
+#endif
+#define TC_WIRE(f, F, g, ng, rt, mwt, rg, mwg, lrmt, mbmt) (f).wire(tabs.F->TC_##F##_A, TC_##F##_a_Volume, tabs.F->TC_##F##_B, TC_##F##_b_Volume, tabs.F->TC_##F##_C, TC_##F##_c_Volume, tabs.F->TC_##F##_D, TC_##F##_d_Volume, tabs.F->TC_##F##_MT, TC_##F##_t_Volume, tabs.F->TC_##F##_S, tabs.F->TC_##F##_SC, TC_##F##_s_Volume, tabs.F->TC_##F##_F, tabs.F->TC_##F##_FC, TC_##F##_f_Volume, tabs.F->TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume, tabs.F->TC_##F##_WM, TC_##F##_n_Volume, tabs.F->TC_##F##_WC, tabs.F->TC_##F##_WMC, TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD, (rt), (rg), TC_##F##_mwA, TC_##F##_mwB, TC_##F##_mwC, TC_##F##_mwD, (mwt), (mwg), TC_##F##_rS1, TC_##F##_rS2, TC_##F##_lr, TC_##F##_mb, (lrmt), (mbmt), TC_##F##_bw, TC_##F##_qs, TC_##F##_qf, TC_##F##_ND, TC_##F##_MND)
+#define TC_WIRE_ALL(f, F, g, ng) TC_WIRE(f, F, g, ng, TC_##F##_rT, TC_##F##_mwT, TC_##F##_rG, TC_##F##_mwG, TC_##F##_lrm, TC_##F##_mbm)
+//  The model: the six families and everything the coders remember between
+//  symbols.  The methods are defined in oc_frame.inc, oc_header.inc,
+//  oc_raw.inc, oc_floor.inc and oc_residue.inc, one layer each; the parser
+//  (io_t) and the stream walker call them through this interface, and
+//  null_sink below answers the same calls with nothing.
+struct oc_model {
+  tc_fam fam_dig, fam_sgn, fam_flr, fam_cls, fam_aux, fam_hdr;
+  i64 tc_last[F_N], tc_last2[F_N];
+  vb_ctx *vb;
+  //  frame: the last mode and window flags, the last page's fields
+  u32 tc_prevW, tc_prevmode, oc_nextW, oc_wp;
+  i64 pg_prev;
+  u32 pg_prevtype, pg_prevser, oc_seq;
+  //  header: the tag table, and what each tag was last
+  char tc_tagbuf[TC_MAXTAG * (OC_TAGMAX + 1)];
+  const char *tc_tag[TC_MAXTAG];
+  u32 tc_ntag;
+  int tc_lasttag = -1;
+  i64 tc_tlast[TC_MAXTAG], tc_tlast2[TC_MAXTAG];
+  i64 tc_runpos;
+  //  floor
+  oc_floor oc_fl[VB_MAXFLOOR];
+  u8 tc_used[VB_MAXCH];
+  u8 oc_fno[VB_MAXCH];
+  i16 fl_cur[VB_MAXPOST];
+  i16 fl_fy[VB_MAXPOST];
+  //  residue
+  i32 cl_run[VB_MAXRES];
+  oc_rgeom R;
+  oc_part P;
+  void init();
+  void setup_done(vb_ctx &vv);
+  //  aux fields, through fam_aux with the field's own history as context
+  i64 auxc(int fld, i32 c, i64 x, int sgn);
+  i64 aux(int fld, i64 x);
+  //  oc_frame.inc
+  u32 mode(u32 md, u32 nmd);
+  u32 wprev(u32 w);
+  u32 wnext(u32 w);
+  void page(ogg_page &p, int cont, int bos);
+  u32 link(u32 more);
+  void link_begin();
+  u32 rawlen(u32 n);
+  u32 more(u32 m, int eos);
+  u32 pgraw(u32 r, int lastraw);
+  u32 crcbad(u32 c);
+  u32 check(u32 c);
+  u32 padnz(u32 z);
+  u32 spill(u32 n);
+  //  oc_header.inc
+  int tagid(const char *tag);
+  i64 hdrval(int id, i64 x);
+  u32 hdr(const char *tag, u32 x, u64 hi);
+  //  oc_raw.inc
+  void raw_init();
+  u32 raw(u32 b);
+  //  oc_floor.inc
+  void floor(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used);
+  //  oc_residue.inc
+  void residue_begin(u32 rno, const vb_res *r, const u8 *nz, u32 nch, u32 n);
+  u32 classify(u32 rno, u32 j, u32 slot, u32 cin);
+  u32 cls(u32 rno, u32 jv, u32 pc, u32 k, u32 cin);
+  void part_begin(u32 rno, u32 pss, u32 jv, u32 pc, const vb_res *r, const vb_book *bk, u32 bn, u32 cls);
+  void vec_begin() { fam_dig.pc.start(P.pt); }
+  i64 digit(i64 dg);
+};
+typedef oc_model sink_t;
+void oc_model::init() {
+  cm_tables();
+  tabs.init();
+  TC_WIRE(fam_dig, dig, (cm_cnt *)nullptr, 0, TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
+  TC_WIRE(fam_sgn, sgn, (cm_cnt *)nullptr, 0, 0, 0, 0, 0, 0, 0);
+  TC_WIRE_ALL(fam_flr, flr, tabs.flr->TC_flr_G, TC_SGN_FLR);
+  TC_WIRE(fam_cls, cls, (cm_cnt *)nullptr, 0, TC_cls_rT, TC_cls_mwT, 0, 0, TC_cls_lrm, TC_cls_mbm);
+  TC_WIRE_ALL(fam_aux, aux, tabs.aux->TC_aux_G, TC_SGN_AUX);
+  TC_WIRE_ALL(fam_hdr, hdr, tabs.hdr->TC_hdr_G, TC_SGN_HDR);
+  raw_init();
+}
+i64 oc_model::auxc(int fld, i32 c, i64 x, int sgn) {
+  tcx v;
+  i64 r;
+  tc_make_aux(fld, c, tc_qlog(tc_last[fld]), v);
+  r = sgn ? fam_aux.codes(v, x, (u32)fld) : fam_aux.code(v, x);
+  tc_last2[fld] = tc_last[fld];
+  tc_last[fld] = r;
+  return r;
+}
+i64 oc_model::aux(int fld, i64 x) { return auxc(fld, tc_qlog(tc_last2[fld]), x, 0); }
+void oc_model::setup_done(vb_ctx &vv) {
+  const vb_setup *s;
+  vb = &vv;
+  s = vb->cur;
   u32 i;
   hist.reset();
-  tcp.build(*oc_v->cur);
-  hist.tc_nchan = oc_v->i.ch;
+  tcp.build(*vb->cur);
+  hist.tc_nchan = vb->i.ch;
   for(i = 0; i < s->nrs; i++) {
     const vb_res *r = s->rs + i;
     sz span = r->end > r->beg ? r->end - r->beg : 0;
@@ -37,78 +167,8 @@ static void tc_setup_done(void) {
   for(i = 0; i < 2 * hist.tc_nchan; i++)
     hist.fl_who[i] = -1;
   for(i = 0; i < s->nfl; i++)
-    oc_floor_tables(s->fl + i, oc_fl + i);
+    oc_fl[i].build(s->fl[i]);
 }
-#ifdef TC_MEMCOST
-#if TC_MEMCOST + 0 <= 1
-#undef TC_MEMCOST
-#define TC_MEMCOST 10000
-#endif
-#endif
-#define TC_WIRE(f, F, g, ng, rt, mwt, rg, mwg, lrmt, mbmt) (f).wire(tcm_##F->TC_##F##_A, TC_##F##_a_Volume, tcm_##F->TC_##F##_B, TC_##F##_b_Volume, tcm_##F->TC_##F##_C, TC_##F##_c_Volume, tcm_##F->TC_##F##_D, TC_##F##_d_Volume, tcm_##F->TC_##F##_MT, TC_##F##_t_Volume, tcm_##F->TC_##F##_S, tcm_##F->TC_##F##_SC, TC_##F##_s_Volume, tcm_##F->TC_##F##_F, tcm_##F->TC_##F##_FC, TC_##F##_f_Volume, tcm_##F->TC_##F##_W, TC_##F##_m_Volume, (g), (ng), TC_##F##_g_Volume, tcm_##F->TC_##F##_WM, TC_##F##_n_Volume, tcm_##F->TC_##F##_WC, tcm_##F->TC_##F##_WMC, TC_##F##_rA, TC_##F##_rB, TC_##F##_rC, TC_##F##_rD, (rt), (rg), TC_##F##_mwA, TC_##F##_mwB, TC_##F##_mwC, TC_##F##_mwD, (mwt), (mwg), TC_##F##_rS1, TC_##F##_rS2, TC_##F##_lr, TC_##F##_mb, (lrmt), (mbmt), TC_##F##_bw, TC_##F##_qs, TC_##F##_qf, TC_##F##_ND, TC_##F##_MND)
-#define TC_WIRE_ALL(f, F, g, ng) TC_WIRE(f, F, g, ng, TC_##F##_rT, TC_##F##_mwT, TC_##F##_rG, TC_##F##_mwG, TC_##F##_lrm, TC_##F##_mbm)
-#ifndef TC_MEMCAP
-#define TC_MEMCAP ((u64)64 << 30)
-#endif
-static INLINE u64 tc_tables(void) { return (u64)tcm_dig->TC_dig_Size + (u64)tcm_sgn->TC_sgn_Size + (u64)tcm_flr->TC_flr_Size + (u64)tcm_cls->TC_cls_Size + (u64)tcm_aux->TC_aux_Size + (u64)tcm_hdr->TC_hdr_Size; }
-#if !USE_NEW
-static_assert(TC_dig_T::TC_dig_Size + TC_sgn_T::TC_sgn_Size + TC_flr_T::TC_flr_Size + TC_cls_T::TC_cls_Size + TC_aux_T::TC_aux_Size + TC_hdr_T::TC_hdr_Size <= TC_MEMCAP, "IDX/tsvcomp-*.idx ask for more model tables than TC_MEMCAP allows");
-#endif
-static void tc_models(void) {
-  cm_tables();
-#define TC_MAP(F) (tcm_##F = tc_home<TC_##F##_T>::get(), tcm_##F->TC_##F##_Init())
-  TC_MAP(dig);
-  TC_MAP(sgn);
-  TC_MAP(flr);
-  TC_MAP(cls);
-  TC_MAP(aux);
-  TC_MAP(hdr);
-#undef TC_MAP
-  FATAL_UNLESS(tc_tables() <= TC_MEMCAP,
-               "IDX/tsvcomp-*.idx asks for %" PRIu64 " MB of model tables, past "
-               "the %" PRIu64 " MB this build allows -- narrow a context, or "
-               "rebuild with a larger TC_MEMCAP",
-               (u64)(tc_tables() >> 20), (u64)(TC_MEMCAP >> 20));
-  TC_WIRE(fam_dig, dig, (cm_cnt *)nullptr, 0, TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
-  TC_WIRE(fam_sgn, sgn, (cm_cnt *)nullptr, 0, 0, 0, 0, 0, 0, 0);
-  TC_WIRE_ALL(fam_flr, flr, tcm_flr->TC_flr_G, TC_SGN_FLR);
-  TC_WIRE(fam_cls, cls, (cm_cnt *)nullptr, 0, TC_cls_rT, TC_cls_mwT, 0, 0, TC_cls_lrm, TC_cls_mbm);
-  TC_WIRE_ALL(fam_aux, aux, tcm_aux->TC_aux_G, TC_SGN_AUX);
-  TC_WIRE_ALL(fam_hdr, hdr, tcm_hdr->TC_hdr_G, TC_SGN_HDR);
-  oc_raw_init();
-}
-struct oc_model {
-  u32 link(u32 more) { return oc_link(more); }
-  void link_begin() { oc_link_begin(); }
-  void page(ogg_page &p, int cont, int bos) { oc_page(p, cont, bos); }
-  u32 rawlen(u32 n) { return oc_rawlen(n); }
-  u32 raw(u32 b) { return oc_raw(b); }
-  u32 more(u32 m, int eos) { return oc_more(m, eos); }
-  u32 pgraw(u32 r, int lastraw) { return oc_pgraw(r, lastraw); }
-  u32 crcbad(u32 c) { return oc_crcbad(c); }
-  u32 padnz(u32 z) { return oc_padnz(z); }
-  u32 check(u32 c) { return oc_check(c); }
-  u32 spill(u32 n) { return oc_spill(n); }
-  u32 hdr(const char *tag, u32 x, u64 hi) { return oc_hdr(tag, x, hi); }
-  void setup_done(vb_ctx &v) {
-    oc_v = &v;
-    tc_setup_done();
-  }
-  u32 mode(u32 md, u32 nmd) { return oc_mode(md, nmd); }
-  u32 wprev(u32 w) { return oc_wprev(w); }
-  u32 wnext(u32 w) { return oc_wnext(w); }
-  void floor(u32 k, u32 fno, vb_floor *f, u32 *y, int &used) { oc_flr(k, fno, f, y, used); }
-  void residue_begin(u32 rno, vb_res *r, const u8 *nz, u32 nch, u32 n) { oc_residue_begin(rno, r, nz, nch, n); }
-  u32 cls(u32 rno, u32 j, u32 pc, u32 k, u32 c) { return oc_cls(rno, j, pc, k, c); }
-  void part_begin(u32 rno, u32 pass, u32 j, u32 pc, vb_res *r, vb_book *bk, u32 bn, u32 c) { oc_part_begin(rno, pass, j, pc, r, bk, bn, c); }
-  void vec_begin() { fam_dig.pc.start(P.pt); }
-  i64 digit(i64 d) { return oc_digit(d); }
-};
-typedef oc_model sink_t;
-//  The sink a dry parse runs against: every answer is the question, nothing
-//  is coded and nothing is remembered, so the parser's verdict on a page --
-//  reached or refused -- is all that comes out.  It has what io_t and the
-//  walker call and no more; the model's own methods stay on oc_model.
 struct null_sink {
   u32 spill(u32 n) { return n; }
   u32 hdr(const char *, u32 x, u64) { return x; }

@@ -34,12 +34,12 @@ template <class RC> struct rc_pin_io {
 #include "tc_tables.inc"
 #include "tc_fam.inc"
 #include "oc_hist.inc"
-#include "oc_floor.inc"
+#include "oc_model.inc"
+#include "oc_frame.inc"
 #include "oc_header.inc"
 #include "oc_raw.inc"
+#include "oc_floor.inc"
 #include "oc_residue.inc"
-#include "oc_frame.inc"
-#include "oc_model.inc"
 #include "vb_packet.inc"
 #include "ogg_stream.inc"
 constexpr char OC_MAGIC[] = "oggc\x1a";
@@ -47,45 +47,16 @@ constexpr int OC_VER = 3;
 struct oc_coro : Coroutine {
   oc_model t;
   const char *in;
-  static sz pull(void *ctx, u8 *dst, sz n) {
-    coro3_pin &p = ((oc_coro *)ctx)->pin[0];
-    for(;;) {
-      sz have = (sz)(p.end - p.ptr);
-      if(have) {
-        if(have > n)
-          have = n;
-        memcpy(dst, p.ptr, have);
-        p.ptr += have;
-        return have;
-      }
-      if(p.f_quit())
-        return 0;
-      p.yield_r();
-    }
-  }
-  static void push(void *ctx, const u8 *s, sz n) {
-    coro3_pin &p = ((oc_coro *)ctx)->pin[1];
-    while(n) {
-      sz room = (sz)(p.end - p.ptr);
-      if(!room) {
-        p.yield_r();
-        continue;
-      }
-      if(room > n)
-        room = n;
-      memcpy(p.ptr, s, room);
-      p.ptr += room;
-      s += room;
-      n -= room;
-    }
-  }
   void do_process() {
     if(tc_enc) {
       source src;
-      src.open(in, pull, this);
+      src.open(in, &pin[0]);
       rce.co = this;
       rce.rc_Init();
-      vb_pack(t, src);
+      {
+        og_packer<oc_model> pk(t, src);
+        pk.pack();
+      }
       rce.rc_Quit();
       if(rce.carry_lost())
         FATAL_CODE(OGC_EXIT_INTERNAL,
@@ -96,7 +67,10 @@ struct oc_coro : Coroutine {
     } else {
       rcd.co = this;
       rcd.rc_Init();
-      vb_unpack(t, in, push, this);
+      {
+        og_unpacker<oc_model> up(t, &pin[1]);
+        up.unpack(in);
+      }
     }
     yield(this, 0);
   }
@@ -129,7 +103,7 @@ int main(int argc, char **argv) {
   ogc_set_prog(argv[0]);
   ogc_paths_distinct(argv + a, 2);
   tc_enc = mode[0] == 'c';
-  tc_models();
+  oc_run.t.init();
   {
     const char *in = argv[a], *out = argv[a + 1];
     filehandle f, g;
@@ -139,7 +113,7 @@ int main(int argc, char **argv) {
       u8 h[2];
       if(!g.make(out))
         FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
-      ogc_output(out, &g);
+      ogc_partial.set(out, &g);
       h[0] = (u8)OC_VER;
       h[1] = 0;
       if(g.writ((void *)OC_MAGIC, sizeof OC_MAGIC - 1) != sizeof OC_MAGIC - 1 || g.writ(h, 2) != 2)
@@ -152,7 +126,7 @@ int main(int argc, char **argv) {
       FATAL_UNLESS(h[0] == OC_VER, "%s: made by oggcomp version %u, this is version %u", in, h[0], OC_VER);
       if(!g.make(out))
         FATAL_CODE(OGC_EXIT_IO, "cannot create %s", out);
-      ogc_output(out, &g);
+      ogc_partial.set(out, &g);
     }
     oc_in = in;
     oc_run.in = in;
@@ -162,7 +136,7 @@ int main(int argc, char **argv) {
     f.close();
 #ifdef TC_MEMCOST
     if(tc_enc) {
-      u64 rent = tc_tables() / ((u64)1 << 30) * TC_MEMCOST + tc_tables() % ((u64)1 << 30) * TC_MEMCOST / ((u64)1 << 30);
+      u64 rent = tabs.bytes() / ((u64)1 << 30) * TC_MEMCOST + tabs.bytes() % ((u64)1 << 30) * TC_MEMCOST / ((u64)1 << 30);
       u64 n = rent;
       u8 pad[4096];
       memset(pad, 0xFF, sizeof pad);
@@ -172,7 +146,7 @@ int main(int argc, char **argv) {
         n -= k;
       }
       if(tc_verbose)
-        fprintf(stderr, "%s: %" PRIu64 " MB of tables, %" PRIu64 " bytes of rent\n", ogc_prog, tc_tables() >> 20, rent);
+        fprintf(stderr, "%s: %" PRIu64 " MB of tables, %" PRIu64 " bytes of rent\n", ogc_prog, tabs.bytes() >> 20, rent);
     }
 #endif
     {
@@ -182,14 +156,14 @@ int main(int argc, char **argv) {
       if(bad)
         FATAL_CODE(OGC_EXIT_IO, "write error on %s", out);
     }
-    ogc_output_kept();
+    ogc_partial.kept();
   }
   if(tc_verbose) {
     int i;
     double tot = 0;
     for(i = 0; i < STG_N; i++)
       tot += tc_bits[i];
-    fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n", ogc_prog, tot / 8, (u64)(tc_tables() >> 20));
+    fprintf(stderr, "%s: %.0f bytes of model, %" PRIu64 " MB of tables\n", ogc_prog, tot / 8, (u64)(tabs.bytes() >> 20));
     if(tc_enc)
       for(i = 0; i < STG_N; i++) {
         fprintf(stderr, "  %-8s %12.0f bytes  %5.2f%%", TC_STAGE[i], tc_bits[i] / 8, tot > 0 ? 100.0 * tc_bits[i] / tot : 0.0);

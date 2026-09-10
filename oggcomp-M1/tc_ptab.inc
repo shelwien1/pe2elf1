@@ -338,6 +338,11 @@ struct tc_ptab {
     return 1;
   }
 };
+static INLINE int tcp_bucket(int p) {
+  if(p < 0)
+    return 0;
+  return tc_clamp((cm_stretch(p) + CM_STMAX) >> 7, 0, 31) + 1;
+}
 struct tc_pcur {
   const tc_ptab *t;
   u32 idx;
@@ -371,67 +376,63 @@ struct tc_pcur {
     lev++;
     on = lev < t->nlev;
   }
+
+  INLINE int head(int m) const {
+    if(!live() || m < 0 || m > 2)
+      return -1;
+    return t->ph[(sz)node() * 3 + m];
+  }
+  INLINE int len(int k) const {
+    if(!live() || k + 1 >= TCP_NBMAX)
+      return -1;
+    return t->pl[(sz)node() * TCP_NBMAX + k];
+  }
+  INLINE int sign(i64 mag) const {
+    const u32 *p;
+    u32 nd, wn = 0, wp = 0;
+    u32 j;
+    if(!live() || mag <= 0)
+      return -1;
+    nd = node();
+    if(t->psg)
+      return mag < (i64)t->nmag ? t->psg[(sz)nd * t->nmag + (sz)mag] : -1;
+    p = t->pw + (sz)nd * t->nsym;
+    for(j = 0; j < t->nsym; j++) {
+      i32 v = t->val[j];
+      if(v == (i32)mag)
+        wp += p[j];
+      else if(v == -(i32)mag)
+        wn += p[j];
+    }
+    return tcp_p(wp, wn);
+  }
+  INLINE int man(int nb, int p, u64 pref) const {
+    const u32 *w;
+    u32 nd, w0 = 0, w1 = 0, j;
+    if(!usable() || nb < 2 || p > nb - 2 || t->nsym > TCP_MANMAX)
+      return -1;
+    nd = node();
+    w = t->pw + (sz)nd * t->nsym;
+    for(j = 0; j < t->nsym; j++) {
+      i32 v = t->val[j];
+      i32 a = v < 0 ? -v : v;
+      u32 u;
+      if(a < 3)
+        continue;
+      if(tc_ptab::nbits(a) != nb)
+        continue;
+      u = (u32)a - 2;
+      if((u >> (nb - 1 - p)) != pref)
+        continue;
+      if((u >> (nb - 2 - p)) & 1)
+        w1 += w[j];
+      else
+        w0 += w[j];
+    }
+    return tcp_p(w0, w1);
+  }
+  INLINE int axis() const { return tcp_bucket(head(0)); }
 };
-static INLINE int tcp_head(const tc_pcur &c, int m) {
-  if(!c.live() || m < 0 || m > 2)
-    return -1;
-  return c.t->ph[(sz)c.node() * 3 + m];
-}
-static INLINE int tcp_len(const tc_pcur &c, int k) {
-  if(!c.live() || k + 1 >= TCP_NBMAX)
-    return -1;
-  return c.t->pl[(sz)c.node() * TCP_NBMAX + k];
-}
-static INLINE int tcp_sign(const tc_pcur &c, i64 mag) {
-  const u32 *p;
-  u32 nd, wn = 0, wp = 0;
-  u32 j;
-  if(!c.live() || mag <= 0)
-    return -1;
-  nd = c.node();
-  if(c.t->psg)
-    return mag < (i64)c.t->nmag ? c.t->psg[(sz)nd * c.t->nmag + (sz)mag] : -1;
-  p = c.t->pw + (sz)nd * c.t->nsym;
-  for(j = 0; j < c.t->nsym; j++) {
-    i32 v = c.t->val[j];
-    if(v == (i32)mag)
-      wp += p[j];
-    else if(v == -(i32)mag)
-      wn += p[j];
-  }
-  return tcp_p(wp, wn);
-}
-static INLINE int tcp_man(const tc_pcur &c, int nb, int p, u64 pref) {
-  const u32 *w;
-  u32 nd, w0 = 0, w1 = 0, j;
-  if(!c.usable() || nb < 2 || p > nb - 2 || c.t->nsym > TCP_MANMAX)
-    return -1;
-  nd = c.node();
-  w = c.t->pw + (sz)nd * c.t->nsym;
-  for(j = 0; j < c.t->nsym; j++) {
-    i32 v = c.t->val[j];
-    i32 a = v < 0 ? -v : v;
-    u32 u;
-    if(a < 3)
-      continue;
-    if(tc_ptab::nbits(a) != nb)
-      continue;
-    u = (u32)a - 2;
-    if((u >> (nb - 1 - p)) != pref)
-      continue;
-    if((u >> (nb - 2 - p)) & 1)
-      w1 += w[j];
-    else
-      w0 += w[j];
-  }
-  return tcp_p(w0, w1);
-}
-static INLINE int tcp_bucket(int p) {
-  if(p < 0)
-    return 0;
-  return tc_clamp((cm_stretch(p) + CM_STMAX) >> 7, 0, 31) + 1;
-}
-static INLINE int tcp_axis(const tc_pcur &c) { return tcp_bucket(tcp_head(c, 0)); }
 //  Every codebook-derived table of the current setup: one per residue book,
 //  one per residue's classification book, one per floor class.
 struct tc_ptabs {

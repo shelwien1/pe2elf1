@@ -1,10 +1,6 @@
-struct oc_floor {
-  u8 pcl[VB_MAXPOST], ppos[VB_MAXPOST];
-  u8 rnk[VB_MAXPOST];
-  u8 lo[VB_MAXPOST], hi[VB_MAXPOST];
-};
-static oc_floor oc_fl[VB_MAXFLOOR];
-static void oc_floor_tables(const vb_floor *f, oc_floor *d) {
+void oc_floor::build(const vb_floor &fl) {
+  const vb_floor *f = &fl;
+  oc_floor *d = this;
   u32 i, j, k, posts = 2;
   memset(d, 0, sizeof *d);
   for(i = 0; i < f->parts; i++)
@@ -67,11 +63,7 @@ static i32 vd_unfold(i32 val, i32 pred, i32 quant) {
     y = pred + (val >> 1);
   return y < 0 ? 0 : y > quant - 1 ? quant - 1 : y;
 }
-static u8 tc_used[VB_MAXCH];
-static u8 oc_fno[VB_MAXCH];
-static i16 fl_cur[VB_MAXPOST];
-static i16 fl_fy[VB_MAXPOST];
-static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
+void oc_model::floor(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
   const oc_floor *fd = oc_fl + fno;
   sz row = (sz)hist.tc_blk * hist.tc_nchan + k;
   i16 *hp = hist.fl_hist + row * VB_MAXPOST;
@@ -82,7 +74,7 @@ static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
   i32 quant = (i32)f->quant;
   oc_fno[k] = (u8)fno;
   tc_stage = STG_AUD;
-  u = (u32)tc_auxc(F_USED, tc_used[k], tc_enc ? (i64)used : 0, 0);
+  u = (u32)auxc(F_USED, tc_used[k], tc_enc ? (i64)used : 0, 0);
   FATAL_UNLESS(u < 2, "coded stream: flr.used is %u", u);
   tc_used[k] = (u8)u;
   used = (int)u;
@@ -120,7 +112,7 @@ static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
       if(ep < 0)
         ep = 0;
     }
-    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)hist.tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), tcp_axis(fam_flr.pc), tc_qlog(ep), v);
+    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)hist.tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), fam_flr.pc.axis(), tc_qlog(ep), v);
     yy = tc_enc ? fl_cur[p] : 0;
     yy = fam_flr.codes(v, yy, 0);
     FATAL_UNLESS(yy >= 0 && yy < 32768, "coded stream: floor post %" PRId64, yy);

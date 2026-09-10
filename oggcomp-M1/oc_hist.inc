@@ -28,6 +28,8 @@ struct oc_hist {
   i32 *fl_who;
   u32 tc_blk;
   u32 tc_nchan;
+  u8 cl_same[1u << 20];
+  u8 cl_run_buf[1u << 20];
   sz used;
   int nextra;
   void *extra[TC_HISTEXTRA];
