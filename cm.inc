@@ -164,10 +164,14 @@ struct cm_apm {
     v += ((g - v) * cm_arec[k]) >> 16;
     tt[i] = (i16) (v - (int) ident[b]);
   }
-  INLINE void upd(int bit, int rate) {
-    int g = bit ? 0 : CM_PONE;
+  /*  The count a bucket's rate settles at, from the .idx's rate: made once,
+      in wire(), and handed to upd() as it is.  */
+  static int limit(int rate) {
     int lim = rate >= 8 ? CM_AMAX : (1 << rate) - 2;
-    if (lim < 1) lim = 1;
+    return lim < 1 ? 1 : lim;
+  }
+  INLINE void upd(int bit, int lim) {
+    int g = bit ? 0 : CM_PONE;
     upd1(idx, bkt, g, lim);
     upd1(idx + 1, bkt + 1, g, lim);
   }
@@ -176,28 +180,36 @@ struct cm_apm {
 /*  The logistic mixer: inputs are stretched probabilities, the output is
     their weighted sum squashed back, and the weights move along the gradient
     of the coding error.  One weight set per mixer context.  */
+/*  gcc -O2 leaves a seven-trip loop rolled; asked, it unrolls it.  */
+#if defined(__clang__)
+#define CM_UNROLL _Pragma("unroll")
+#elif defined(__GNUC__)
+#define CM_UNROLL _Pragma("GCC unroll 8")
+#else
+#define CM_UNROLL
+#endif
+
 template <int N>
 struct cm_mix {
   i32 * __restrict w;                     /*  16.16, one row of N per context  */
   u8 * __restrict c;                      /*  how often a row has been asked  */
   int x[N], pr, row, ctxn;
-  int nx;
   /*  Stored as the distance from the mean the weights start at, for the same
       reason the APM stores a distance from its curve.  */
   enum { W0 = (1 << 16) / N };
   void init(i32 * wt, u8 * cnt, sz nctx) {
     (void) nctx;
     w = wt;  c = cnt;
-    nx = 0;  row = 0;  ctxn = 0;  pr = CM_PHALF;
+    row = 0;  ctxn = 0;  pr = CM_PHALF;
   }
-  INLINE void add(int st) { x[nx++] = st; }
-  /*  Every caller adds all N inputs before it mixes, so the loops run to N
-      rather than to nx: a bound the compiler can see is a loop it can
-      unroll, and this one is seven deep on every bit.  */
+  /*  Input k, by number: a counter of how many were added was a load and
+      a store per input, and every caller sets all N before it mixes.  */
+  INLINE void set(int k, int st) { x[k] = st; }
   INLINE int mix(u32 ctx) {
     i64 s = 0;
     int i;
     ctxn = (int) ctx;  row = (int) ctx * N;
+    CM_UNROLL
     for (i = 0; i < N; i++) s += (i64) (w[row + i] + W0) * x[i];
     pr = cm_squash((int) (s >> 16));
     pr = pr < 1 ? 1 : pr > CM_PONE - 1 ? CM_PONE - 1 : pr;
@@ -227,8 +239,8 @@ struct cm_mix {
         the step just lands with the wrong sign.  At the rates this ships with
         the case is reached so rarely that the corpus moves by 5 bytes, but
         the rates are a search space and the search visits the corners.  */
+    CM_UNROLL
     for (i = 0; i < N; i++)
       ww[i] += (i32) (((i64) x[i] * err) >> 16);
-    nx = 0;
   }
 };

@@ -563,7 +563,7 @@ struct tc_fam {
       one wants it and the quieter one never gets an answer.  */
   int rA, rB, rC, rD, rT, rG;             /*  one rate per counter  */
   int mwA, mwB, mwC, mwD, mwT, mwG;       /*  one bound per counter  */
-  int rS1, rS2;                           /*  one rate per APM  */
+  int rS1, rS2;                           /*  one limit per APM, from its rate  */
   int lr, mb, lrm, mbm;                   /*  one rate and boost per mixer  */
   int bw;
   int ng;                                 /*  the sign counter's field span  */
@@ -628,8 +628,8 @@ struct tc_fam {
     mwD = tc_clamp(mwd * 64, 0, CM_CONE / 4);
     mwT = tc_clamp(mwtt * 64, 0, CM_CONE / 4);
     mwG = tc_clamp(mwg * 64, 0, CM_CONE / 4);
-    rS1 = tc_clamp(rs1, 1, 15);
-    rS2 = tc_clamp(rs2, 1, 15);
+    rS1 = cm_apm::limit(tc_clamp(rs1, 1, 15));
+    rS2 = cm_apm::limit(tc_clamp(rs2, 1, 15));
     lr = tc_clamp(lrate, 1, 64);
     mb = tc_clamp(mbt, 0, 255);
     lrm = tc_clamp(lrm2, 1, 64);
@@ -677,18 +677,18 @@ struct tc_fam {
     int pa = a.P();
     int p1 = ap.pp(pa, bs + (u32) node);
     if (p1 > CM_PONE - 1) p1 = CM_PONE - 1;
-    mx.add(cm_stretch(p1));
-    mx.add(cm_stretch(c.P()));
-    mx.add(cm_stretch(e.P()));
-    mx.add(cm_stretch(f.P()));
-    mx.add(cm_stretch(pa));
+    mx.set(0, cm_stretch(p1));
+    mx.set(1, cm_stretch(c.P()));
+    mx.set(2, cm_stretch(e.P()));
+    mx.set(3, cm_stretch(f.P()));
+    mx.set(4, cm_stretch(pa));
     /*  What the codebook says about this decision.  A family with no prior,
         or a decision the prior cannot speak to, contributes a zero, which is
         what a stretched even chance is: the input is there and says nothing,
         and the mixer's weight for it stays where the rest of the corpus put
         it rather than being trained on a different set of inputs.  */
-    mx.add(prp >= 0 ? cm_stretch(prp) : 0);
-    mx.add(256);
+    mx.set(5, prp >= 0 ? cm_stretch(prp) : 0);
+    mx.set(6, 256);
     { int pm = mx.mix(bm + (u32) node);
       int pf = ap2.pp(pm, bf + (u32) node);
       /*  How much of the answer the second APM is allowed to be.  It was a
@@ -715,9 +715,9 @@ struct tc_fam {
       t.upd(b, rT, mwT);  T[bt + node] = t;
       return b;
     }
-    mxm.add(cm_stretch(t.P()));
-    mxm.add(cm_stretch(prp));
-    mxm.add(256);
+    mxm.set(0, cm_stretch(t.P()));
+    mxm.set(1, cm_stretch(prp));
+    mxm.set(2, 256);
     { int pm = mxm.mix(bn + (u32) node);
       b = tc_bit(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b); }
     mxm.upd(b, lrm, mbm);

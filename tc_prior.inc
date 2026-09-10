@@ -387,7 +387,9 @@ struct tc_pcur {
       asks whether any entry reaches the node, which the tabulated answers
       have folded in (an unreached node answers -1) and the mantissa's walk
       has not.  */
-  INLINE int live() const { return on && t && lev < t->nlev; }
+  /*  `on` alone: start() sets it only with a table in hand, and step()
+      clears it at the last level, so the other two tests were implied.  */
+  INLINE int live() const { return on; }
   INLINE int usable() const { return live() && t->tot[node()]; }
 
   /*  Advance past a place whose symbol was `s`.  Both forms of the next
