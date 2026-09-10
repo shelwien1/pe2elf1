@@ -33,6 +33,13 @@ struct filehandle0 {
     return fclose(f);
   }
 
+  //  Has this handle seen a read or write error?  The caller wants the
+  //  question, not the mechanism: the WinAPI backend has no FILE* to hand
+  //  to ferror() and answers it from a flag its own read/writ keep.
+  int error( void ) {
+    return ferror(f);
+  }
+
   qword size( void ) { 
     qword p = tell();
     seek( 0, SEEK_END );

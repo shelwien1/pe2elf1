@@ -84,6 +84,25 @@ rounds every sparse touch up to a 2 MB page and costs about ten times the
 resident memory.  The coroutine wants ~288 kB of stack, so a `ulimit -s`
 under that, or a caller thread with a small stack, is a segfault.
 
+## On Windows
+
+`gc.bat` is the Windows build; it drives clang with hard-coded toolchain
+paths and is not what these scripts replace.  What matters for a Linux
+reader is that `Lib3/file_api.inc` chooses between two implementations of
+the same `filehandle` struct -- stdio, and CreateFile/ReadFile -- and only
+the stdio one is ever compiled here.  `-DFILE_API_WIN` selects the other.
+
+Code written against one and compiled against the other is a bug that no
+Linux build can see, so `Lib3/file_api_test.cpp` asserts the two agree; its
+header comment says how to run it both ways.  Building for Windows at all
+takes nothing exotic:
+
+    x86_64-w64-mingw32-g++ -O2 -fwrapv -static -o oggcomp.exe oggcomp.cpp
+    x86_64-w64-mingw32-g++ -O2 -fwrapv -static -DFILE_API_WIN -o oggcomp.exe oggcomp.cpp
+
+Both were built and run under wine over the whole corpus, and both produce
+the same compressed stream as the Linux build, byte for byte.
+
 ## What is here
 
 | | |
@@ -91,6 +110,6 @@ under that, or a caller thread with a small stack, is a segfault.
 | `oggcomp.cpp` | all of it: the Ogg and Vorbis parsers, the model, the coder |
 | `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |
 | `MOD/` | what `idx2inc.pl` generated, checked in |
-| `Lib3/` | coroutines and the file layer |
+| `Lib3/` | coroutines and the file layer.  `file_api.inc` picks stdio or the WinAPI; `file_api_test.cpp` is the test that the two are one interface |
 | `testfiles/` | the corpus, and `gen.sh`, which builds it |
 | `gc.bat`, `t.bat` | the Windows equivalents of `mk.sh` and `t.sh` |

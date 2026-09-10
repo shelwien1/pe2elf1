@@ -87,8 +87,13 @@ static INLINE u32 ogc_ilog(u32 v) {
 #ifdef _WIN32
 #define DEV_NULL "nul"
 #include <windows.h>
-//#define ferror(x) GetLastError()
+//  stdio unless asked otherwise.  -DFILE_API_WIN takes Lib3/file_api_win.inc
+//  instead, which is CreateFile/ReadFile/WriteFile and no FILE* anywhere --
+//  so nothing here may reach into filehandle::f.  Read and write errors are
+//  asked for as f.error(), which both backends answer.
+#ifndef FILE_API_WIN
 #define FILE_API_STD 1
+#endif
 #else
 #define FILE_API_STD 1
 #define DEV_NULL "/dev/null"
@@ -3119,21 +3124,26 @@ int main(int argc, char **argv) {
     }
     oc_run.in = in;
     oc_run.processfile(f, g);
-    if(ferror(f.f))
+    if(f.error())
       FATAL_CODE(OGC_EXIT_IO, "read error on %s", in);
     f.close();
 #ifdef TC_MEMCOST
     if(tc_enc) {
-      u64 n = tc_tables() / ((u64)1 << 30) * TC_MEMCOST + tc_tables() % ((u64)1 << 30) * TC_MEMCOST / ((u64)1 << 30);
-      u64 i;
-      for(i = 0; i < n; i++)
-        fputc(0xFF, g.f);
+      u64 rent = tc_tables() / ((u64)1 << 30) * TC_MEMCOST + tc_tables() % ((u64)1 << 30) * TC_MEMCOST / ((u64)1 << 30);
+      u64 n = rent;
+      u8 pad[4096];
+      memset(pad, 0xFF, sizeof pad);
+      while(n) {
+        u32 k = n < sizeof pad ? (u32)n : (u32)sizeof pad;
+        g.writ(pad, k);
+        n -= k;
+      }
       if(tc_verbose)
-        fprintf(stderr, "%s: %" PRIu64 " MB of tables, %" PRIu64 " bytes of rent\n", ogc_prog, tc_tables() >> 20, n);
+        fprintf(stderr, "%s: %" PRIu64 " MB of tables, %" PRIu64 " bytes of rent\n", ogc_prog, tc_tables() >> 20, rent);
     }
 #endif
     {
-      int bad = ferror(g.f);
+      int bad = g.error();
       if(g.close())
         bad = 1;
       if(bad)
