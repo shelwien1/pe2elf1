@@ -22,10 +22,16 @@ Line numbers below are those of `oggcomp.cpp` at commit `413b568`.
   included in order and rely on what came before, which is how `Lib3/`,
   `sh_mapping.inc` and `MOD/` already work.  `#pragma once` and include
   guards are not needed and would be misleading.
-- **A move is a move.**  Step 1 relocates text without editing it, and is
-  checked by reassembling the includes in order and diffing against the
-  original.  Deletions are a separate step so that each can be verified on
-  its own.
+- **Deletions first, then the move, and the move is a move.**  Both
+  compilers' unused-macro reports, and clang's unused-function report, look
+  only at the main source file -- a macro or a static function that sits
+  in an included file is never reported (section 5 shows this).  So the
+  dead code has to go while it is still in `oggcomp.cpp`, where the
+  compiler can vouch for each removal; a split first would hide the
+  evidence.  The move then relocates text without editing it, and is
+  checked by reassembling the includes and comparing the sorted lines of
+  the result with the sorted lines of the file it came from: they must be
+  identical.
 - **`Lib3/`, `IDX/`, `MOD/` and `sh_mapping.inc` are not touched.**  The
   first three by instruction; the last is IDX's runtime, carried verbatim
   from the psrc tree with a header saying so.  Section 5 lists what is
@@ -85,7 +91,7 @@ them would also do; what matters is that the order below is the order in
 | | `sh_mapping.inc` | | `NOINLINE` | `mapping`, `masking`, `pdesc`… |
 | 7 | `tc_base.inc` | 55 | `Rangecoder`, `vb_ctx`, `FATAL_CODE`, `mman.h`/`windows.h` | `rce`/`rcd`, `tc_enc`, `oc_v`, `TC_NODE`…, `tc_qlog`/`tc_abs`/`tc_clamp`/`tc_sq`, `tc_alloc`, `tc_map` |
 | 8 | `tc_ptab.inc` | 503 | `cm_stretch`, `CM_PONE`/`CM_STMAX`, `tc_clamp`, `vb_setup`, `oc_v` | `tc_ptab`, `tc_pcur`, `tcp_*`, `tcp_build`/`tcp_free` |
-| 9 | `tc_tables.inc` | 60 | `cm_cnt`, `mapping`, `tc_vmul`, `tbl_n`, `tc_map`, `TC_*_ND`, `TC_MIXN`, `TC_SGN_*`, `tcx`, `tc_dv`, `TC_NODE`/`TC_MNODE`, `__min`/`__max` -- **all of it consumed by the generated `MOD/` code it includes** | `TC_*_T`, `tcm_*`, `tc_make_*`, `F_*`, `STG_*`, `tc_stage`/`tc_verbose`/`tc_bits`/`tc_syms` |
+| 9 | `tc_tables.inc` | 60 | `cm_cnt`, `mapping`, `tc_vmul`, `tbl_n`, `tc_map`, `TC_*_ND`, `TC_MIXN`, `TC_SGN_*`, `tcx`, `tc_dv`, `TC_NODE`/`TC_MNODE`, `__min`/`__max` -- **all of it consumed by the generated `MOD/` code it includes** | `TC_*_T`, `tcm_*`, `tc_make_*`, `tc_vmul`, `tbl_n`, `tc_vfits`/`tc_ifits`, `F_*`, `STG_*`, `tc_stage`/`tc_verbose`/`tc_bits`/`tc_syms` |
 | 10 | `tc_fam.inc` | 239 | everything in 6–9 | `tc_fam`, `fam_*`, `tc_bit`, `tc_auxc`/`tc_aux` |
 | 11 | `oc_hist.inc` | 47 | `VB_MAXRES`, `VB_MAXCH` | `dg_*`, `cl_*`, `fl_hist`/`fl_yhist`/`fl_who`, `tc_blk`, `tc_nchan`, `tc_hist_free` |
 | 12 | `oc_floor.inc` | 142 | `fam_flr`, `tcp_flr`, `tc_auxc`, `fl_*`, `tc_blk`, `tc_nchan`, `tc_sq`, `tc_make_flr` | `oc_fl`, `oc_floor_tables`, `oc_flr`, `tc_used` |
@@ -98,7 +104,8 @@ them would also do; what matters is that the order below is the order in
 | | `oggcomp.cpp` | 199 | | `oc_coro`, `main` |
 
 After the split `oggcomp.cpp` reads as the include list above, the six-line
-range-coder adapter between 4 and 5, and lines 3012–3181 unchanged.
+range-coder adapter between 4 and 5, and the tail from `OC_MAGIC` on
+(lines 3012–3181 today) unchanged.
 
 Two files are asymmetric and worth naming as such.  `tc_tables.inc` is the
 seam to the generated code: its job is to put every identifier `MOD/`
@@ -155,7 +162,7 @@ Remove:
 | what | where | evidence |
 |---|---|---|
 | `u32 ogg_crc(…)`, `ogg_crc_page`, `ogg_crc_ok`, `ogg_crc_set` | 197–200 | four prototypes, never defined, never called; the working versions are the static members of `ogg_page` |
-| `#define DEV_NULL` | 88, 99 | defined on both branches of the `_WIN32` block, referenced nowhere; both compilers report it |
+| `#define DEV_NULL` | 88, 99 | defined on both branches of the `_WIN32` block, referenced nowhere.  Each compiler reports the branch it compiles: line 99 under g++ and clang on Linux, line 88 under mingw |
 | `SCALE` in `enum { SCALElog = 15, SCALE = 1 << SCALElog }` | 484 | only `SCALElog` is read |
 
 Simplify (behaviour-preserving):
@@ -188,6 +195,21 @@ Looks dead, is not -- do **not** remove:
 | the padding loop in `main` | live under `-DTC_MEMCOST` |
 | `oc_coro::do_process`, `oc_coro::push` | no call by name -- `do_process` is the coroutine entry `Lib3/coro3b.inc` invokes, `push` is passed to `vb_unpack` as a function pointer |
 | `source::close` | called from `do_process` |
+| `FILE_API_STD` (line 98) | clang reports it as an unused macro on Linux.  It is read by `Lib3/file_api.inc` as `defined(_WIN32) && !defined(FILE_API_STD)`, and with `_WIN32` false the `&&` short-circuits before `defined(FILE_API_STD)` is evaluated, which clang counts as never consulted.  A false positive; g++ does not report it |
+
+Two things about the tools, both of which shape the procedure in
+section 7.  First, `-Wunused-macros` in g++ and clang, and
+`-Wunused-function` in clang, examine only macros and functions defined
+in the **main** file; the same definition in an included file is never
+reported.  (Checked: a `#define` in a one-line `.inc` draws no warning
+from either compiler; the same line in the `.cpp` does.)  After the split
+every macro and every static helper lives in an `.inc`, so the warning
+count drops to zero *for that reason* -- it is not evidence that anything
+was fixed, and it is why the audit above was done, and any future one must
+be done, on the single file.  Second, "unused" depends on which `MOD/`
+the compiler sees: the reference counts above were taken over both forms,
+and the compiler reports were taken under both forms and all three build
+flags.
 
 There is no `#if 0`, no block comment, no commented-out code and no
 `TODO` in the file.
@@ -224,69 +246,115 @@ forms of the current source and keep the binaries and their output:
       /tmp/ref-$b c "$f" "/tmp/ref-$b-$(basename "$f").oc"; done; done
     ./mk.sh mod
 
-**Step 1 -- the move, as one commit.**  Cut at the markers in section 2
-(appendix A is the script that did it for the dry run: it finds each
-boundary by its first line, so it does not depend on line numbers).  Then
-prove it was a move: concatenate the `.inc` files in include order back
-into one file and diff it against the original.  The only differences must
-be the relocated blocks (`tc_setup_done`, `tc_sq`, `oc_flr` and its four
-statics, `oc_hdr`, `ogc_prog`) and the new `#include` lines.
+**Step 1 -- the deletions, as one commit, on the unsplit file.**  Section
+5's "remove" table and the one simplification: eight lines.  Appendix A
+has them as a script.  Verify (below), and read the warnings against this
+baseline -- what is left is what section 4 item 3 and section 5 say is
+live and will stay:
 
-**Step 2 -- the deletions, as a second commit.**  Section 5's "remove"
-table and the one simplification.  Each removal is a compile with
-`-Wunused-macros` away from being checked.
+| | g++ | clang++ |
+|---|---|---|
+| shipping `MOD/` | nothing | `FILE_API_STD` (the false positive), `tbl_n` (unreferenced in this form), `f_cat` in `sh_mapping.inc` |
+| tuning `MOD/` | `__min`, `__max` (unreferenced in this form) | the same three macros, `f_cat` |
 
-**After each step, all of this, and it must all come back clean:**
+Before this step the list is longer by `DEV_NULL` and the tautological
+compare; after it, nothing else may appear.
+
+**Step 2 -- the move, as a second commit.**  Cut at the markers in
+section 2; appendix B is the script that did it for the dry run, locating
+each boundary by its first line rather than by number.  Verify (below).
+Then prove it was a move: expand the new `#include` lines back into one
+file, sort its non-blank lines, sort the non-blank lines of the step-1
+file, and diff -- the two must be identical.  (A plain diff shows a moved
+block as removed here and added there, and which side gets which is up to
+the tool; the sorted comparison is order-blind, which is the point.)  The
+warning tables above go quiet after this step for the reason given at the
+end of section 5, so their silence here is not a check of anything.
+
+**Verification, after each step:**
 
     ./t.sh && ./mk.sh check
+
+    #  the one that matters: the same bytes out as before the change
     for b in tuning release; do
-      ./mk.sh $( [ $b = release ] && echo release )
+      [ $b = release ] && ./mk.sh release || ./mk.sh
       for f in testfiles/*.ogg; do ./oggcomp c "$f" /tmp/new.oc
         cmp -s /tmp/new.oc "/tmp/ref-$b-$(basename "$f").oc" || echo "DIFFERS: $b $f"; done
     done
-    ./mk.sh mod
-    for form in "" mod; do                       # both MOD/ forms
-      for fl in "" -DTC_MEMCOST -DOC_CARRYLESS=1; do
-        g++   -O1 -fwrapv -Wall -Wextra -Wunused-macros $fl -fsyntax-only oggcomp.cpp
-        clang++ -O1 -fwrapv -Wall -Wextra -Wunused-macros $fl -fsyntax-only oggcomp.cpp
-      done; ./mk.sh $form >/dev/null
+
+    #  warnings, both compilers, both MOD/ forms, all three flag sets
+    W='-O1 -fwrapv -Wall -Wextra -Wunused-macros -fsyntax-only'
+    for form in mod tuning; do
+      [ $form = mod ] && ./mk.sh mod || ./mk.sh
+      for cc in g++ clang++; do for fl in "" -DTC_MEMCOST -DOC_CARRYLESS=1; do
+        $cc $W $fl oggcomp.cpp; done; done
     done
+    ./mk.sh mod
+
+    #  both Windows file backends still build
     x86_64-w64-mingw32-g++ -O1 -fwrapv -static                -o /tmp/a.exe oggcomp.cpp
     x86_64-w64-mingw32-g++ -O1 -fwrapv -static -DFILE_API_WIN -o /tmp/b.exe oggcomp.cpp
 
-The `cmp` loop is the one that matters: it is the difference between "the
-new program agrees with itself" and "the new program is the old program".
-The warning runs must show nothing new; the two that exist today are
-clang's `tbl_n` unused (shipping form only, see section 4) and the
-tautological compare that step 2 removes.
+The `cmp` loop is the difference between "the new program agrees with
+itself" and "the new program is the old program".
 
 ## 8. Dry run
 
-The split above was performed mechanically on a scratch copy (appendix A)
-and put through section 7 in full:
+Both steps were performed mechanically on a scratch copy, in the order
+above, and put through the whole of section 7 after each.
 
-- g++: 0 warnings, both `MOD/` forms, with and without `-DTC_MEMCOST` and
-  `-DOC_CARRYLESS=1`.  clang++: the same two pre-existing warnings as
-  before the split, no others.
-- mingw: both file backends build.
-- `./t.sh`: 16/16 round-tripped, 16/16 deterministic, 18/18 refusals.
-- `./mk.sh check`: tuning and shipping agree over 16 files.
-- **16/16 `.oc` byte-identical to the unsplit binary**, tuning build.
-- **16/16 `.oc` byte-identical to the unsplit binary**, shipping build.
-- Reassembled diff: only the relocated blocks and the deletions.
+After step 1 (the deletions, unsplit):
 
-The one correction the dry run forced is item 4 of section 4: `tc_sq` had
-to move to `tc_base.inc`.  The first cut left it with the residue code and
-`oc_flr` failed to compile -- which is the argument for doing the move
-mechanically and reading the compiler, rather than reading the source and
-trusting it.
+- 16/16 `.oc` byte-identical to the reference, tuning build; 16/16,
+  shipping build.  `./t.sh` and `./mk.sh check` pass.
+- Warnings: exactly the step-1 table.  `DEV_NULL` and the tautological
+  compare are gone; nothing new.
 
-## Appendix A -- the slicer used for the dry run
+After step 2 (the move):
 
-Run from the tree root.  It rewrites `oggcomp.cpp` in place and writes the
-eighteen `.inc` files beside it; run it on a copy.  Each cut is located by
-the first line of the region, so it survives edits above it but not a
-renamed marker -- if a marker is missing it stops and says which.
+- 16/16 and 16/16 again; `./t.sh` and `./mk.sh check` pass; both mingw
+  backends build.
+- Sorted non-blank lines of the reassembled source: **identical** to the
+  step-1 file.  The move added, removed and changed nothing.
+- g++: no warnings, either form, any flags.  clang: only the
+  `Lib3/`/`sh_mapping.inc` warnings that predate all of this.  Both for
+  the reason in section 5: the checks no longer see the `.inc` files, so
+  `tbl_n` and the three macros stop being reported without having changed.
+
+The first attempt at the move failed to compile: `tc_sq` had been left
+with the residue code and `oc_flr` could not see it.  That is section 4
+item 4, and it is the argument for doing the move mechanically and
+reading the compiler rather than reading the source and trusting it.
+
+## Appendix A -- the deletions
+
+Run from the tree root on the unsplit `oggcomp.cpp`.  Each edit is
+located by content and the script stops if a line it expects is not
+there.
+
+```python
+import re
+L = open('oggcomp.cpp').read().split('\n')
+def find(pat):
+    for i, l in enumerate(L):
+        if re.search(pat, l): return i
+    raise SystemExit('not found: ' + pat)
+dead = {find(r'^u32 ogg_crc\('), find(r'^u32 ogg_crc_page'),
+        find(r'^int ogg_crc_ok'),  find(r'^void ogg_crc_set')}
+dead |= {i for i, l in enumerate(L) if l.startswith('#define DEV_NULL')}
+L[find(r'^enum \{ SCALElog = 15, SCALE = 1 << SCALElog \};')] = 'enum { SCALElog = 15 };'
+i = find(r'tc_make_flr\(\(int\)fno, \(int\)\(fd->rnk\[p\] < VB_MAXPOST')
+L[i] = L[i].replace('(int)(fd->rnk[p] < VB_MAXPOST ? fd->rnk[p] : VB_MAXPOST - 1)', '(int)fd->rnk[p]')
+open('oggcomp.cpp', 'w').write('\n'.join(l for i, l in enumerate(L) if i not in dead))
+```
+
+## Appendix B -- the move
+
+Run from the tree root, after appendix A.  It rewrites `oggcomp.cpp` in
+place and writes the eighteen `.inc` files beside it; run it on a copy.
+Each cut is located by the first line of the region, so it survives edits
+above it but not a renamed marker -- if a marker is missing it stops and
+says which.  It moves text and nothing else.
 
 ```python
 import re
@@ -328,15 +396,7 @@ b['inlow']   = find(r'^constexpr sz IN_LOW')
 b['magic']   = find(r'^constexpr char OC_MAGIC')
 b['end']     = len(L)
 
-# step 2, the deletions -- drop these lines for a pure step-1 move
-dead = set()
-for i in range(b['ogg'], b['vb']):
-    if re.match(r'^(u32|int|void) ogg_crc', L[i]): dead.add(i)
-for i in range(0, b['lib3']):
-    if re.match(r'^#define DEV_NULL', L[i]): dead.add(i)
-L[find(r'^enum \{ SCALElog = 15, SCALE = 1 << SCALElog \};')] = 'enum { SCALElog = 15 };'
-
-def rng(a, z): return [L[i] for i in range(a, z) if i not in dead]
+def rng(a, z): return L[a:z]
 files = [
  ('oc_platform.inc', rng(b['sysinc'], b['lib3'])),
  ('oc_fatal.inc',    [L[b['prog']]] + rng(b['exit'], b['ogg'])),
