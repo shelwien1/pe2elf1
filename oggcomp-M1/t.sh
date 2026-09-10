@@ -120,11 +120,17 @@ timed() {
   perl -MTime::HiRes=time -e '
     my $out = shift @ARGV;
     my $t0 = time;
-    my $rc = system(@ARGV);
+    #  system with the explicit indirect object never reaches a shell, not
+    #  even when the list has come down to one element.
+    my $rc = system { $ARGV[0] } @ARGV;
     open my $fh, ">", $out or die "$out: $!";
     printf {$fh} "%.3f\n", time() - $t0;
     close $fh;
-    exit $rc == -1 ? 127 : ($rc & 127) ? 128 + ($rc & 127) : $rc >> 8;
+    #  Parenthesised, all of it: `exit` is a named unary operator, so
+    #  `exit $rc == -1 ? ...` is `(exit $rc) == -1 ? ...` -- it exits with
+    #  $rc, which for a child that exited 5 is 5<<8, which exit truncates
+    #  to 0.  Every failing run then looked like a successful one.
+    exit(($rc == -1) ? 127 : ($rc & 127) ? 128 + ($rc & 127) : ($rc >> 8));
   ' "$tmp/secs" "$@"
 }
 
@@ -154,10 +160,11 @@ for f in "$@"; do
         note='RESTORED FILE DIFFERS'; fail=1
       fi
     else
-      dec=0; note="decode failed (exit $?)"; fail=1
+      #  $? first: the assignment beside it would be what it reported.
+      rc=$?; dec=0; note="decode failed (exit $rc)"; fail=1
     fi
   else
-    enc=0; dec=0; note="encode failed (exit $?)"; fail=1
+    rc=$?; enc=0; dec=0; note="encode failed (exit $rc)"; fail=1
   fi
 
   #  The same input twice has to give the same .oc.  If it does not, the
@@ -174,11 +181,13 @@ for f in "$@"; do
   fi
 
   in=$(wc -c < "$f")
-  tot_in=$((tot_in + in))
   if [ -n "$note" ]; then
     printf '  %-26s %9d  %s\n' "$base" "$in" "$note"
   else
+    #  Only files that came back count towards the totals, so the ratio on
+    #  the last row is a ratio of the same set of files on both sides of it.
     out=$(wc -c < "$oc")
+    tot_in=$((tot_in + in))
     tot_out=$((tot_out + out))
     tot_enc=$(awk -v a="$tot_enc" -v b="$enc" 'BEGIN{printf "%.3f", a+b}')
     tot_dec=$(awk -v a="$tot_dec" -v b="$dec" 'BEGIN{printf "%.3f", a+b}')
@@ -197,7 +206,7 @@ for f in "$@"; do
 done
 
 printf '  %s\n' '--------------------------------------------------------------------------------'
-[ "$n" = 1 ] && label="1 file" || label="$n files"
+[ "$ok" = 1 ] && label="1 file" || label="$ok files"
 awk -v l="$label" -v i="$tot_in" -v o="$tot_out" -v e="$tot_enc" -v d="$tot_dec" 'BEGIN{
   printf("  %-26s %9d %10d %6.2f%% %7.2fs %7.2fs %7.2f\n",
          l, i, o, (i > 0 ? 100.0*o/i : 0), e, d, (e > 0 ? i/e/1048576.0 : 0)) }'
