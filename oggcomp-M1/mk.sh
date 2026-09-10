@@ -77,7 +77,34 @@ trap 'cleanup; exit 143' TERM
 CXX=${CXX:-c++}
 CXXFLAGS=${CXXFLAGS:--O2}
 WARN=${WARN:--Wall -Wextra}
+
+#  -fwrapv for sh_mapping.inc's `value <<= 1` on a negative int, which a
+#  tuning build really does execute.  It is defined behaviour from C++20 on,
+#  so pinning -std=c++20 would fix it at the language level instead; no -std
+#  is passed here because every g++ from 11 on defaults to gnu++17 or later
+#  and the code needs nothing newer.  -lm is redundant on glibc 2.34 and
+#  after, and required before it.  -O3, -march=native and -flto were all
+#  measured and are noise: the program is bound by a gigabyte of model
+#  tables, not by code.
 REQ=-fwrapv
+
+#  Lib3/coro3b.inc picks between an x86-64 and an i386 setjmp written in
+#  inline assembly, and there is no third branch: on aarch64 the i386 one is
+#  what gets included, and the build stops with an assembler error out of a
+#  header nobody was reading.  Say so here instead.  The CORO_NOASM fallback
+#  in that file is not a way out on glibc -- it restores a stack that longjmp
+#  then refuses to jump into -- so porting means giving coro3b.inc a branch,
+#  not passing a flag.  Set OGGCOMP_ANY_ARCH=1 to try anyway.
+arch=$(uname -m)
+case "$arch" in
+  x86_64 | amd64 | i[3456]86) ;;
+  *)
+    [ "${OGGCOMP_ANY_ARCH:-0}" = 1 ] || {
+      echo "mk.sh: this is x86-64 only -- Lib3/coro3b.inc has no branch for $arch" >&2
+      echo "       (OGGCOMP_ANY_ARCH=1 ./mk.sh to try it regardless)" >&2
+      exit 2; }
+    ;;
+esac
 
 #  One IDX module per family -- IDX-FORMAT.md sec.13.
 FAMS="dig sgn flr cls aux hdr"

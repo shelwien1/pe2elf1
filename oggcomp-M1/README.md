@@ -12,9 +12,17 @@ file it cannot promise that for it refuses rather than coding.
 
 ## Building
 
-Needs a C++ compiler and perl.  `c++` and `-O2` are the defaults; override
-with `CXX` and `CXXFLAGS`.  There is one translation unit and no library
-beyond libm, so there is no makefile and nothing to configure.
+Needs a C++ compiler and perl, on x86-64.  `c++` and `-O2` are the
+defaults; override with `CXX` and `CXXFLAGS`.  There is one translation
+unit and no library beyond libm, so there is no makefile and nothing to
+configure.  g++ and clang++ both work and produce the same stream.
+
+x86-64 is not a preference: `Lib3/coro3b.inc` switches between an x86-64
+and an i386 setjmp written in inline assembly and has no third branch, so
+on aarch64 the i386 one is what gets compiled.  `./mk.sh` says so and
+stops rather than letting the assembler say it.  `-O3`, `-march=native`
+and `-flto` were measured and are noise -- the program is bound by a
+gigabyte of model tables, not by code.
 
 | command | what it builds |
 |---|---|
@@ -59,9 +67,14 @@ costs about ten times the resident memory and is worth measuring before
 believing.  A lone `-` is stdin or stdout.
 
 Exit status is 0 for success, 1 for an input it will not code, 2 for a
-command line it cannot parse, 3 for something the filesystem said.  The
-model tables reserve about 1.3 GB of address space -- almost none of it
-resident, but a `ulimit -v` below that turns every run into exit 3.
+command line it cannot parse, 3 for something the filesystem said.
+
+The model tables reserve about 1.3 GB of address space and touch very
+little of it -- some 50 MB resident on a megabyte of input -- but a
+`ulimit -v` below the reservation turns every run into exit 3, and `-H`
+rounds every sparse touch up to a 2 MB page and costs about ten times the
+resident memory.  The coroutine wants ~288 kB of stack, so a `ulimit -s`
+under that, or a caller thread with a small stack, is a segfault.
 
 ## What is here
 
