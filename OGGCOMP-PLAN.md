@@ -559,3 +559,104 @@ What deviated from the plan as written, all small:
   value it ever carried.
 - The floor's derived tables live in `oc_floor`, computed in `setup_done`;
   the sink method that codes a floor is `oc_flr` to keep the name free.
+
+---
+
+## 11. The coroutine port
+
+Asked for after section 10: oggcomp streamed through Lib3's `Coroutine`
+and `CoroFileProc`, as a speed optimization.  This section is what was
+done and what it measured.
+
+### What runs where
+
+The walk is unchanged and so are the model and the coder; what changed is
+who calls the walk and where its bytes come from and go to.
+
+- **`Lib3/`** is the framework as supplied: `coro3b.inc` (the coroutine, a
+  stackful one on `setjmp`/`longjmp`, with `coro3_pin.inc` and the setjmp
+  headers it picks by compiler), `coro_fhp2.inc` (`CoroFileProc`, the file
+  driver), and the stdio file API (`file_api.inc`, `file_api_std.inc`).
+  Two changes in `coro3b.inc`: the coroutine's stack size is `CORO_STKPAD`
+  if defined, and `yield` refuses a call chain deeper than its stack copy
+  can hold, where before it would have copied it short and resumed it
+  corrupt.  Everything else is byte for byte the archive's.
+- **`oc_coro.inc`** is the glue.  Lib3 spells its types and hints as its own
+  `common.inc` does; this tree has one of its own, so the names Lib3 uses
+  are defined there over ours.  It also defines `rc_pins`, the coder's byte
+  I/O on the coroutine's pins: `get()` from the input pin, masked to a byte
+  so the end of the input reads as 0xFF (Lib3 returns `uint(-1)` there;
+  `rc_buf` returned 0xFF, and the coder's final `inpbit`s rely on it), and
+  `put()` on the output pin.
+- **`sh_v2f.inc`**: `Rangecoder` is now `Rangecoder_t<IO>`, over `rc_buf`
+  by default or whatever `RC_IO` names before the include.  The coder does
+  not know which.
+- **`oggcomp.cpp`**: `oc_coro : Coroutine`, whose `do_process` is the walk.
+  Encoding, `source` is opened on a pull function that copies out of the
+  input pin and yields (`r = 1`) when it is empty, and the coder puts on the
+  output pin, yielding (`r = 2`) when it is full.  Decoding, the coder gets
+  from the input pin and `vb_unpack` hands each rebuilt page to a writer
+  that copies it onto the output pin.  `CoroFileProc<oc_coro>` drives:
+  64 KB read whenever the coroutine wants input, 64 KB written whenever it
+  has filled the output, until `do_process` yields 0.  The container header
+  is main's, through Lib3's `filehandle`, before `processfile` and (the
+  `TC_MEMCOST` rent) after it; `ferror` on both files is main's too, since
+  the driver takes a short read as the end of the input.
+- **`source.inc`** takes a pull function as the alternative to a `FILE`;
+  **`codec.inc`**'s `vb_pack` takes an open `source` and `vb_unpack` a page
+  writer instead of a `FILE`; `main.cpp` (balrogg) opens its own source and
+  writes its pages to a file through the same two hooks.
+
+The coroutine's stack: the walk's deepest chain to a yield -- `vb_pack`,
+`link_walk::page`, `io::audio`, `residue`, `rs_part`, the model, the coder,
+`put` -- uses under 4 KB of the 64 KB Lib3 sets aside (3,881 bytes at the
+peak, measured with an instrumented `yield`); the big buffers were static
+already.  The guard was tried by building with `CORO_STKPAD=2048`, which
+aborts at the first yield with the two numbers.  Static storage for the
+driver, whose two 64 KB buffers and the stack copy would otherwise sit in
+main's frame under the 256 KB pad the coroutine puts below its caller.
+
+### Checks
+
+- `oggcomp c` is byte-identical to the previous build on all 17 corpus
+  files (compared against that binary directly, not the sizes), and
+  `oggcomp d` round-trips every one; so does a two-link stream.
+- balrogg still writes byte-identical TSV on all 17 and round-trips them.
+- Clean under UndefinedBehaviorSanitizer in both directions.  Clean under
+  AddressSanitizer with `replace_intrin=0`: without it ASan stops the
+  `memcpy` in `yield`, which copies the frames below its own out to the
+  stack save, as a stack-buffer underflow -- which it is, deliberately.
+- `./mk.sh check opt.lst`: the tuning and shipping builds agree.
+- The error paths are as before: a missing input, a foreign or truncated
+  stream and a future version are refused with the output removed.
+
+### What it measured
+
+Wall time, same box, the previous build and this one run alternately,
+minimum of three; the three runs spread about 0.3 s on 00000008, so the
+numbers are comparable within this table and not with section 10's, taken
+on another day.
+
+| file | `c` before | `c` after | `d` before | `d` after |
+|---|---|---|---|---|
+| 00000008 | 10.55 s | 10.58 s | 10.31 s | 10.14 s |
+| 00000007 | 2.01 s | 2.07 s | 1.95 s | 1.94 s |
+
+No measurable difference.  There was none to be had here: the time is the
+model's, per bit, and the I/O on both sides was already 64 KB-buffered
+stdio -- the coroutine trades stdio's per-byte buffer check for the pin's,
+one compare either way, plus a copy of the coroutine's few KB of stack per
+64 KB moved.
+
+Also tried, since it is the other half of the psrc idiom: the direction as
+a compile-time constant (`tc_enc` and the coder's `f_DEC` folded, one
+binary per direction), which lets the compiler drop the direction tests
+from the model's per-bit path.  Identical output; 00000008 `c` 9.95 s
+before, 10.13 s after, `d` 9.77 s before, 9.99 s after.  Not adopted: no
+gain, and a model duplicated per direction would duplicate the `!MAP!`
+descriptors opt.pl patches, which are one per parameter by design.
+
+So the port stands as structure -- the walk is a coroutine over two pins,
+which is what makes it a drop-in for anything else built on Lib3 -- and
+not as a speedup.  Any speed is in `oc_model.inc` and `cm.inc`, in what is
+done per bit, and a profile of those is where the next step would begin.
