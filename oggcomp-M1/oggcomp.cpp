@@ -85,7 +85,6 @@ static INLINE u32 ogc_ilog(u32 v) {
 }
 
 #ifdef _WIN32
-#define DEV_NULL "nul"
 #include <windows.h>
 //  stdio unless asked otherwise.  -DFILE_API_WIN takes Lib3/file_api_win.inc
 //  instead, which is CreateFile/ReadFile/WriteFile and no FILE* anywhere --
@@ -96,7 +95,6 @@ static INLINE u32 ogc_ilog(u32 v) {
 #endif
 #else
 #define FILE_API_STD 1
-#define DEV_NULL "/dev/null"
 #include <sys/mman.h>
 #endif
 
@@ -194,10 +192,6 @@ static void ogc_paths_distinct(char **v, int n) {
 }
 constexpr int OGG_HDRMIN = 27;
 constexpr int OGG_MAXSEG = 255;
-u32 ogg_crc(const u8 *d, sz n);
-u32 ogg_crc_page(const u8 *p, sz n);
-int ogg_crc_ok(const u8 *p, sz n);
-void ogg_crc_set(u8 *p, sz n);
 constexpr sz MAXPAY = (sz)OGG_MAXSEG * OGG_MAXSEG;
 constexpr sz PAGE_MAX = OGG_HDRMIN + OGG_MAXSEG + MAXPAY;
 static u32 CRC[256];
@@ -481,7 +475,7 @@ template <class RC> struct rc_pin_io {
 #ifndef RC_IO_BASE
 #error "rc.inc: name the byte I/O as RC_IO_BASE before including it"
 #endif
-enum { SCALElog = 15, SCALE = 1 << SCALElog };
+enum { SCALElog = 15 };
 #ifndef RC_LOWBYTES
 #define RC_LOWBYTES 8
 #endif
@@ -2140,7 +2134,7 @@ static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
       if(ep < 0)
         ep = 0;
     }
-    tc_make_flr((int)fno, (int)(fd->rnk[p] < VB_MAXPOST ? fd->rnk[p] : VB_MAXPOST - 1), tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), tcp_axis(fam_flr.pc), tc_qlog(ep), v);
+    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), tcp_axis(fam_flr.pc), tc_qlog(ep), v);
     yy = tc_enc ? fl_cur[p] : 0;
     yy = fam_flr.codes(v, yy, 0);
     FATAL_UNLESS(yy >= 0 && yy < 32768, "coded stream: floor post %" PRId64, yy);
