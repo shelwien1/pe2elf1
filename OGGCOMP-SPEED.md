@@ -58,11 +58,15 @@ of cm.inc.  Five of them first touch a value's rows: the counter's `t ? p
 table entries (473 K), the mixer's weights (142 K).  The other two are the
 8 kB curve tables, stretch (332 K) and squash (175 K), which are small
 enough to live in L1 and do not, because ten random lines a value keep
-pushing them out.  On this
-file the working set fits the simulated last level (41 K misses in 2.8 M),
-so the misses cost L2 and L3 latency; on 00000008 the tables reach further
-and the same misses go to memory, which is why section 5's huge-page result
-is a decode gain on the big file and nothing on the small one.
+pushing them out.  The misses stop at L2 and L3: the simulated last level
+(33 MB, the machine's) misses 41 K times in 2.8 M on this file, and 95 K
+times in 219 M on 00000008 -- the rows a file actually revisits fit it,
+even on the largest.  What does not fit on the large file is the TLB: at
+4 kB a page its 1,536 entries reach 6 MB, and 00000008 touches some 70 MB
+of table, so most row touches there carry a page walk on top of the L2 or
+L3 latency.  That walk is what the huge pages of section 5.1 remove (5% on
+the big file, nothing on the small one) and what a prefetch issued early
+enough hides (section 6: 2 to 3% on the big file, nothing on the small).
 
 **The index builders are a fifth of the instructions.**  `tc_make_dig` is
 631 instructions per digit and `tc_make_sgn` 455 per sign (228,224 of the
@@ -96,12 +100,32 @@ eighth of the run, and two thirds of that can go -- which is what section
 
 **And the instructions are most of the cycles.**  The run's user time is
 0.18 s -- half a billion cycles at 2.8 GHz -- for 1.4 G instructions:
-nearly three instructions a cycle, on a core that retires four.  So on
-this file the model is not waiting; it is executing, and the misses (3 a
-bit, to L2 and L3) and the mispredicts are the quarter or so that it is
-not.  On the large files the misses reach memory and the balance shifts
-some -- section 5.1's huge-page row and section 6's prefetch row are that
-shift, 5% and 3% -- but the instruction count is the first thing to cut.
+nearly three instructions a cycle, on a core that retires four.  So the
+model is not waiting; it is executing, and the misses (3 a bit, to L2 and
+L3) and the mispredicts are the quarter or so that it is not.  The large
+file says the same: `oggcomp c` on 00000008 is 78.7 G instructions in
+9.3 s of user time, three a cycle again, with the page walks above as the
+one cost the small file does not have.  The instruction count is the first
+thing to cut, on every file.
+
+The same run on 00000008, for the record -- 17,733,088 digits, 5,127,301
+bytes out:
+
+| | count | per output bit |
+|---|---|---|
+| instructions | 78.7 G | 1,900 |
+| L1 data misses | 219 M | 5.3 |
+| last-level misses | 95,317 | -- |
+| conditional branches | 5.27 G | 129 |
+| mispredicted | 185.5 M | 4.5 |
+| user time | 9.28 s | |
+
+The components' shares are the small file's within a few points -- cm.inc
+43.6% of instructions and 86.6% of L1 misses, the index builders 21.6%,
+`oc_digit`'s gathering 13.2%, the prior 7.8%, the coder 4.0%, the walk
+2.2% -- except the mispredicts, where the prior's share rises to 38% and
+the model core's falls to 16%: a bigger file has more codebook to walk
+per digit and better-trained counters to saturate.
 
 ---
 
@@ -247,8 +271,9 @@ follow find the lines on their way.  What the prefetch overlaps is whatever
 runs between `select()` and the first touch: `tcp_head`, the prior for
 node 0 (a 64-bit division, forty cycles), and the head of `bit()`.  That is
 not a memory latency (a hundred nanoseconds, 280 cycles) but it is most of
-an L2 or L3 one, which on the small files is what the misses are.  Section
-6's `e5` is this, alone; it is worth measuring together with what follows.
+an L2 or L3 one, which is what the misses are on every file here, and part
+of a page walk, which is what the large files add.  Section 6's `e5` is
+this, alone; it is worth measuring together with what follows.
 
 ### 4.2  Earlier: the encoder knows the future
 
@@ -261,8 +286,8 @@ code digit n -- and every row is in cache by the time it is wanted.  The
 same for the sign: its rows depend on the magnitude, which the encoder
 has.  This is software pipelining of the model over the walk, and it
 overlaps a whole digit's worth of context work (some 1,500 instructions:
-the two builders and the gathering) with the fetch, which covers a memory
-miss.  It costs a second copy of the index
+the two builders and the gathering) with the fetch, which covers a page
+walk and an L3 miss with room to spare.  It costs a second copy of the index
 state and a restructured `oc_digit`, and applies to the encoder only.
 
 ### 4.3  The decoder: guess
@@ -453,7 +478,7 @@ what section 1 prices the mispredicts they remove at; `restrict` is
 within noise on the small file's encode and 2% on its decode; the counters
 for the divisions are about 1%; and the prefetch is nothing on the small
 file, whose rows are in L2 anyway, and 2 to 3% on the large one, where
-they are not.
+they are in L3 behind a page walk.
 Eleven percent on 00000008's encode, for some forty lines, all of it
 stream-identical.  What is not in the table is the encoder one digit ahead
 (4.2), which is where the prefetch would stop being 3%.
@@ -471,8 +496,8 @@ By expected gain per unit of work, all stream-identical unless marked:
    instructions and a quarter of the mispredicts.
 4. The count arrays typed (3.2) and the rows read once (3.2): small, in
    `cm.inc`.
-5. The encoder one digit ahead (4.2): the prefetch that covers a memory
-   miss rather than an L2 one; encoder-only.
+5. The encoder one digit ahead (4.2): the prefetch that covers the page
+   walk and the L3 latency rather than only the L2's; encoder-only.
 6. The index builders as tables (5.4): a generator change, a fifth of the
    instructions.
 7. The mixer in AVX2 (5.6): two loops.
