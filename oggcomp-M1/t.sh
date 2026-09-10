@@ -100,6 +100,29 @@ if [ $# = 0 ]; then
 fi
 src=$1
 
+#  Two process limits turn every row of the table below into the same
+#  failure.  Measured on this tree: the model tables put VmPeak at 1273 MB
+#  -- reserved, barely any of it resident -- so a `ulimit -v` under about
+#  that makes every run exit 3, and the coroutine's stack pad needs 288 kB,
+#  under which the failure is a bare SIGSEGV with nothing on stderr at all.
+#  A warning here beats a column of "encode failed (exit 139)" with no
+#  hint of why.  A warning, not a refusal: a build with smaller tables is a
+#  thing someone may be measuring.
+lim=$(ulimit -v 2>/dev/null) || lim=unlimited
+case $lim in
+  ''|unlimited) ;;
+  *[!0-9]*) ;;
+  *) [ "$lim" -ge 1300000 ] || echo "t.sh: ulimit -v is $lim kB and the model" \
+       "tables reserve 1273 MB of address space -- every run will exit 3" >&2;;
+esac
+lim=$(ulimit -s 2>/dev/null) || lim=unlimited
+case $lim in
+  ''|unlimited) ;;
+  *[!0-9]*) ;;
+  *) [ "$lim" -ge 288 ] || echo "t.sh: ulimit -s is $lim kB and oggcomp wants 288 --" \
+       "every run will be killed by SIGSEGV, silently" >&2;;
+esac
+
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/oggcomp-t.XXXXXX")
 
 #  The signal traps exit.  `trap ... EXIT INT TERM` -- one handler for all
@@ -142,6 +165,10 @@ printf 'oggcomp: %s\n\n' "$("$bin" 2>&1 | sed -n 1p)"
 printf '  %-26s %9s %10s %7s %8s %8s %7s\n' file original compressed ratio enc dec MB/s
 printf '  %s\n' '--------------------------------------------------------------------------------'
 
+#  One file at a time.  Not for memory -- the tables are reserved, not
+#  resident, and the whole corpus peaks at some 35 MB of RSS -- but because
+#  the enc, dec and MB/s columns are wall-clock, and numbers taken under
+#  contention are worse than no numbers.  Serial, the corpus takes 5s.
 for f in "$@"; do
   [ -f "$f" ] || { printf '  %-26s %s\n' "$(basename "$f")" 'not there'; fail=1; continue; }
   n=$((n + 1))
