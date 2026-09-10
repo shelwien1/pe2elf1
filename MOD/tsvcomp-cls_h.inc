@@ -1,14 +1,28 @@
 
 static const byte TC_cls_a_band[15+1]={ 0,0,0,1,2,3,4,5,6,7,8,8,8,8,8,8 };
+static const byte TC_cls_a_t1[7+1]={ 0,1,1,1,2,3,4,5 };
+static const byte TC_cls_a_pq[32+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,3,4,4,4,4,4 };
+
+static const byte TC_cls_b_band[15+1]={ 0,1,1,1,2,2,3,4,5,6,7,7,7,7,7,7 };
+static const byte TC_cls_b_prev[15+1]={ 0,0,0,0,1,2,3,3,4,4,4,5,5,5,6,6 };
+static const byte TC_cls_b_t1[3+1]={ 0,1,2,3 };
+static const byte TC_cls_b_pq[32+1]={ 0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,4,5,5,5,5,5,5,5,5,5,5,5 };
+
+static const byte TC_cls_c_t1[3+1]={ 0,1,2,3 };
+
+static const byte TC_cls_d_prev[3+1]={ 0,1,2,3 };
+static const byte TC_cls_d_prev2[3+1]={ 0,1,2,3 };
+static const byte TC_cls_d_pq[32+1]={ 0,0,0,0,0,0,1,1,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,5 };
 
 
 
 
+static const byte TC_cls_n_band[3+1]={ 0,1,2,3 };
+static const byte TC_cls_n_pq[32+1]={ 0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,3,4,4,4,4,4,4,4,4 };
 
+static const byte TC_cls_s_band[3+1]={ 0,1,2,3 };
 
-
-
-
+static const byte TC_cls_t_pq[32+1]={ 0,0,0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,4,4,4,4,4,4 };
 
 
 static const int TC_cls_rA = (29+0) * (1);

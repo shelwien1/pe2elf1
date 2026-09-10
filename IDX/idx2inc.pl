@@ -205,7 +205,14 @@ while( <I1> ) {
         push @{$vfactors{$index}}, "$ccount";
       $porder{$index} .= "*(1+$ccount";
       $lmap = length($map);
-      if( $ccount > 8 ) {
+      # A table for four buckets or more, a compare chain below that.  The
+      # chain is a compare and a set per threshold plus the adds, the table a
+      # clamp and a load whatever the count -- at four buckets they cost the
+      # same and past it the chain only grows.  It was a table above eight,
+      # and those chains were a fifth of the coder's instructions
+      # (OGGCOMP-SPEED.md section 5.4).  The tuning build maps through
+      # pmap[] regardless, so both builds bucket the same way.
+      if( $ccount > 3 ) {
         $code{$index} .= "\n$index = $index*$ccount + ${prefix}_${tag}[__min($lmap,__max(0,$var-($base-1)))];";
         $j = 0; 
         $q = sprintf( "static const %s ${prefix}_${tag}[$lmap+1]={ ", (($ccount<256)?"byte":"word") );

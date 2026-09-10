@@ -1,17 +1,35 @@
 
+static const byte TC_sgn_a_cls[9+1]={ 0,1,1,1,2,2,3,4,4,5 };
+static const byte TC_sgn_a_p0s[7+1]={ 0,0,1,2,3,4,5,6 };
+static const byte TC_sgn_a_mg[9+1]={ 0,0,1,1,2,2,3,3,4,4 };
+static const byte TC_sgn_a_pq[32+1]={ 0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4 };
 static const byte TC_sgn_a_sq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
 static const byte TC_sgn_a_ps[13+1]={ 0,1,1,2,2,3,4,4,5,6,6,7,7,8 };
+static const byte TC_sgn_a_x1s[13+1]={ 0,0,0,0,1,2,3,4,5,6,7,7,7,7 };
 
+static const byte TC_sgn_b_p0s[7+1]={ 0,1,2,3,4,5,6,7 };
+static const byte TC_sgn_b_q1s[7+1]={ 0,1,1,2,2,3,3,4 };
+static const byte TC_sgn_b_t1s[7+1]={ 0,0,0,1,2,2,3,3 };
+static const byte TC_sgn_b_q2s[7+1]={ 0,0,1,1,1,1,2,3 };
+static const byte TC_sgn_b_band[5+1]={ 0,1,1,1,2,3 };
+static const byte TC_sgn_b_pq[32+1]={ 0,0,1,1,1,1,1,1,2,2,3,3,3,3,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
 static const byte TC_sgn_b_sq[32+1]={ 0,0,0,1,1,1,1,2,2,2,2,2,3,3,4,4,4,4,4,5,6,6,6,7,8,8,9,9,9,9,9,10,10 };
+static const byte TC_sgn_b_x1s[13+1]={ 0,0,0,0,0,1,2,3,4,5,5,5,5,5 };
 
 
+static const byte TC_sgn_d_ps[13+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3 };
 
+static const byte TC_sgn_f_p0s[7+1]={ 0,1,2,3,3,4,5,6 };
 static const byte TC_sgn_f_sq[32+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8 };
 
 
 static const byte TC_sgn_m_x1s[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 
+static const byte TC_sgn_s_p0s[7+1]={ 0,0,1,1,2,2,3,3 };
+static const byte TC_sgn_s_pq[32+1]={ 0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4 };
+static const byte TC_sgn_s_ps[13+1]={ 0,0,0,0,0,1,2,2,2,2,2,3,3,3 };
+static const byte TC_sgn_s_chn[7+1]={ 0,1,1,2,2,3,3,4 };
 
 
 

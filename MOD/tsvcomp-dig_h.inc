@@ -1,23 +1,43 @@
 
+static const byte TC_dig_a_pass[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte TC_dig_a_band[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+static const byte TC_dig_a_col[7+1]={ 0,0,1,1,1,2,3,4 };
+static const byte TC_dig_a_cls[15+1]={ 0,0,1,1,2,2,2,3,4,5,5,5,5,5,5,5 };
 
 static const byte TC_dig_b_band[15+1]={ 0,1,2,2,2,2,3,4,4,5,6,6,6,6,7,8 };
+static const byte TC_dig_b_q1[5+1]={ 0,1,1,2,2,3 };
+static const byte TC_dig_b_p0[3+1]={ 0,1,2,3 };
 static const byte TC_dig_b_ax[12+1]={ 0,1,2,2,3,3,4,5,6,7,7,8,9 };
 static const byte TC_dig_b_pq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
 
+static const byte TC_dig_c_ax[12+1]={ 0,1,2,3,3,3,3,3,3,3,4,4,4 };
 
+static const byte TC_dig_d_ax[12+1]={ 0,0,1,1,2,2,3,3,4,4,5,5,6 };
 static const byte TC_dig_d_q1s[13+1]={ 0,1,1,2,2,3,4,4,5,6,6,7,7,8 };
+static const byte TC_dig_d_p0s[13+1]={ 0,0,0,1,1,2,3,4,5,6,6,6,6,6 };
+static const byte TC_dig_d_ps[13+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3 };
+static const byte TC_dig_d_x1s[13+1]={ 0,0,0,0,1,2,3,4,5,6,7,7,7,7 };
 
 static const byte TC_dig_f_cls[9+1]={ 0,1,1,2,3,4,5,6,7,8 };
+static const byte TC_dig_f_q1s[13+1]={ 0,0,0,0,0,1,1,1,1,2,2,2,3,3 };
+static const byte TC_dig_f_ax[12+1]={ 0,0,0,0,1,1,2,2,3,3,4,4,5 };
+static const byte TC_dig_f_band[5+1]={ 0,1,1,2,2,3 };
 
 
 static const byte TC_dig_m_cls[15+1]={ 0,1,1,2,2,3,4,5,5,6,6,7,7,8,8,9 };
+static const byte TC_dig_m_vpos[7+1]={ 0,1,2,3,4,5,6,7 };
 static const byte TC_dig_m_pq[32+1]={ 0,0,1,1,1,1,1,1,1,2,3,3,3,3,3,4,5,6,7,8,9,9,10,10,10,11,11,11,12,12,13,13,13 };
+static const byte TC_dig_m_chn[7+1]={ 0,1,1,2,2,3,3,4 };
 
+static const byte TC_dig_n_pass[3+1]={ 0,1,2,3 };
+static const byte TC_dig_n_cls[15+1]={ 0,0,1,1,2,2,2,3,3,4,4,4,5,5,6,6 };
 
+static const byte TC_dig_s_ax[12+1]={ 0,1,1,1,1,2,2,3,3,4,5,6,7 };
 
+static const byte TC_dig_t_pass[3+1]={ 0,1,2,3 };
 static const byte TC_dig_t_cls[15+1]={ 0,0,1,1,2,3,3,4,5,6,7,7,8,9,10,10 };
 static const byte TC_dig_t_q1s[13+1]={ 0,0,1,2,3,3,3,4,5,5,6,7,7,8 };
+static const byte TC_dig_t_chn[7+1]={ 0,1,1,2,2,3,3,4 };
 
 
 static const int TC_dig_avD = (239+0) * (1);

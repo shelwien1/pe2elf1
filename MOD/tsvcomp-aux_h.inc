@@ -1,11 +1,16 @@
 
+static const byte TC_aux_a_fld[13+1]={ 0,1,2,2,2,3,4,5,5,5,5,5,5,5 };
+static const byte TC_aux_a_p1[15+1]={ 0,1,1,1,1,1,1,1,1,2,2,2,2,3,4,5 };
 
+static const byte TC_aux_b_fld[13+1]={ 0,0,1,2,2,3,4,4,4,5,5,5,5,5 };
 
 static const byte TC_aux_c_fld[13+1]={ 0,0,1,2,3,4,5,6,7,8,9,10,11,11 };
 
+static const byte TC_aux_d_fld[13+1]={ 0,0,0,0,0,0,1,1,1,2,2,2,3,3 };
 
 static const byte TC_aux_f_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
+static const byte TC_aux_g_p1[15+1]={ 0,0,0,0,0,0,1,1,1,1,1,1,1,2,3,3 };
 static const byte TC_aux_g_p2[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
 
 static const byte TC_aux_m_fld[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
