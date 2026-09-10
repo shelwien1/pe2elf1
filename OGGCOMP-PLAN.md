@@ -373,8 +373,8 @@ visible to the optimizer.
 against the table in section 1.  Expected: encode within a few percent of
 `tsvcomp c` alone, decode likewise; resident memory no more than balrogg's
 static buffers (213 MB declared: a 32 MB input window, a 96 MB codebook
-arena, 68 MB of classification slots, a 16 MB gathered-packet buffer,
-of which a stream touches what it needs) plus the model's touched pages.  Then the
+arena, 68 MB of classification slots, a 16 MB gathered-packet buffer, of
+which a stream touches what it needs) plus the model's touched pages.  Then the
 first thing worth doing with the merged tool that the split one could
 not: nothing in this plan, and that is deliberate (section 9).
 
