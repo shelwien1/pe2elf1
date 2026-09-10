@@ -5,6 +5,7 @@
 #      ./mk.sh release      shipping build -- every parameter folded
 #      ./mk.sh check        build both and prove they code identically
 #      ./mk.sh mod          regenerate MOD/ in the shipping form, build nothing
+#      ./mk.sh pgo f.ogg    shipping build, laid out from a profile of f.ogg
 #
 #  Only the first two write ./oggcomp.  A shipping binary has no !MAP! markers
 #  in it, so an optimizer driving one finds no knobs and reports that nothing
@@ -149,8 +150,34 @@ case "${1:-tuning}" in
     echo "mk.sh: MOD/ regenerated in the shipping form; no binary built"
     ;;
 
+  pgo)
+    #  The shipping build, laid out from a profile: the given .ogg is coded
+    #  both ways by an instrumented build first.  It was worth 1.5 to 3%
+    #  before OGGCOMP-SPEED.md section 8's changes took out the branches it
+    #  was laying out, and measures as noise after them; it is here to be
+    #  measured again when the code changes.  The stream is the same stream
+    #  -- checked, on the file it trained on.  Both compiles go through an
+    #  object of one name in one directory, which is how gcc finds the
+    #  .gcda it wrote.
+    #  Not `f`: generate() loops over the families in a variable of that name.
+    pgo_in=${2:-}
+    [ -f "$pgo_in" ] || { echo "usage: ./mk.sh pgo file.ogg" >&2; exit 2; }
+    pgo_in=$(cd -- "$(dirname -- "$pgo_in")" && pwd)/$(basename -- "$pgo_in")
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/mk-pgo.XXXXXX")
+    trap 'rm -rf "$tmp"' EXIT INT TERM
+    generate 0 1
+    ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-generate -c -o oggcomp.o "$here/oggcomp.cpp" \
+        && $CXX -fprofile-generate -o gen oggcomp.o -lm ) || exit 1
+    "$tmp/gen" c "$pgo_in" "$tmp/p.oc" && "$tmp/gen" d "$tmp/p.oc" "$tmp/p.ogg" || exit 1
+    ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-use -fprofile-correction -c -o oggcomp.o "$here/oggcomp.cpp" \
+        && $CXX -o "$here/oggcomp" oggcomp.o -lm ) || exit 1
+    ./oggcomp c "$pgo_in" "$tmp/q.oc"
+    cmp -s "$tmp/p.oc" "$tmp/q.oc" || { echo "mk.sh pgo: THE PROFILED BUILD CODES DIFFERENTLY" >&2; exit 1; }
+    echo "mk.sh: shipping build, laid out from a profile of $(basename -- "$pgo_in") -- every parameter folded"
+    ;;
+
   *)
-    echo "usage: ./mk.sh [tuning|release|check [file-list]|mod]" >&2
+    echo "usage: ./mk.sh [tuning|release|check [file-list]|pgo file.ogg|mod]" >&2
     exit 2
     ;;
 esac
