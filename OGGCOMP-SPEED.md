@@ -526,12 +526,23 @@ the tree; the stream has not changed by a byte.
 | counter rows read once and written once, mixer loops to N (3.2, 5.6) | -1.8% | -1.3% | +1.0% | +1.8% |
 | the index builders' threshold lists as tables from four buckets (5.4) | -5.9% | -10.9% | -5.0% | -3.9% |
 | `-H`, the tables on huge pages, as an option (5.1) | | | -2.7% user, +3.6 s system | |
-| **all of it, against the tree section 1 profiled** | 1.92 -> 1.49 s (-23%) | 1.83 -> 1.52 s (-17%) | 9.67 -> 7.50 s (-22%) | 9.54 -> 7.92 s (-17%) |
+| the mixer's loops unrolled and fed by number, the APM's limit made once, the prior's flag alone | -7.3% | -11.7% | -5.3% | -9.6% |
+| the cascade's two per-value checks inline instead of calls | -4.7% | +1.4% | -0.5% | +1.3% |
+| **all of it, against the tree section 1 profiled** | 1.89 -> 1.44 s (-24%) | 1.86 -> 1.37 s (-26%) | 9.74 -> 7.13 s (-27%) | 9.15 -> 7.20 s (-21%) |
 
-The third row is noise either way and stays for what it is, a tidier
-`bit()`.  The index tables are the surprise: one number in the generator
-(`$ccount > 8` became `$ccount > 3`), and the tuning and shipping builds
-still agree, because the tuning build always went through a table.
+The third and the last rows are noise either way and stay for what they
+are, a tidier `bit()` and half a million fewer calls per file.  The index
+tables are the surprise: one number in the generator (`$ccount > 8` became
+`$ccount > 3`), and the tuning and shipping builds still agree, because the
+tuning build always went through a table.  The unrolling is the lesson: a
+fresh profile after the first five steps put the mixer's two seven-trip
+loops at 11% of instructions, about a hundred each, because gcc -O2 does
+not unroll a loop it is not asked to.
+
+Every step was checked by encoding all seventeen files and comparing
+against the stream the coder port produced; the check itself once
+reported a difference that was two runs writing one scratch file, which
+is worth knowing when the verification is a shell script.
 
 ### Tried and not kept
 
@@ -559,10 +570,15 @@ Each of these was built, checked identical, and timed the same way.
   section 1 profiled, and within noise after the steps above, whose
   branches were what it had been laying out.  The mode stays as the way to
   measure it again.
+- **Rows with their counts** (5.3): the APM entry and its count as one
+  4-byte pair, the mixer's count as the eighth i32 of its 32-byte row,
+  through the six templates and the generator, which also settles the
+  count arrays' typing (3.2).  Within 1% in both directions on both
+  files, for 58 MB more table address space (1020 to 1078 MB).  The
+  counts were L2 hits, and an L2 hit fewer per bit is not a measurable
+  thing here.  Where the tables spill to memory it would be; on this box
+  they do not.
 
 ### Not done
 
-- **Rows with their counts** (5.3) and **the count arrays typed** (3.2):
-  both generator changes to the tables' shape, each worth a few percent
-  at most on the numbers above, where the counts are L2 hits.
 - Anything that changes the stream.
