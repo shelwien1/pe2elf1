@@ -252,6 +252,14 @@ static void * tc_alloc(sz n) {
     pagefile whatever one does -- so there a wide model is bounded by the
     pagefile, and VirtualAlloc failing is reported like any other refusal
     rather than left to become a fault.  */
+/*  -H: ask for the tables on huge pages.  A 4 kB page walk is a TLB miss
+    on most rows a large file reaches (OGGCOMP-SPEED.md section 5.1), and
+    2 MB pages take 5% off its user time -- when the kernel has them to
+    give.  When it has to compact memory to make them, the first process
+    to ask pays seconds of system time, which is why this is an option and
+    not the default.  Linux only; elsewhere it is accepted and does nothing.  */
+static int tc_huge;
+
 static void * tc_map(sz n) {
   void * p;
 #ifdef _WIN32
@@ -260,6 +268,9 @@ static void * tc_map(sz n) {
   p = mmap(nullptr, n, PROT_READ | PROT_WRITE,
            MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   if (p == MAP_FAILED) p = nullptr;
+#ifdef MADV_HUGEPAGE
+  if (p && tc_huge) madvise(p, n, MADV_HUGEPAGE);
+#endif
 #endif
   if (!p) FATAL_CODE(BLR_EXIT_IO,
                      "cannot map %" PRIu64 " MB for a model table -- "

@@ -154,6 +154,7 @@ int main(int argc, char ** argv) {
     for (; *o; o++)
       switch (*o) {
         case 'v': tc_verbose = 1;  break;
+        case 'H': tc_huge = 1;  break;
         default: goto usage;
       }
   }
@@ -240,6 +241,8 @@ usage:
     "and compiled in through MOD/.\n"
     "\n"
     "  -v  say where the bits went, by stage\n"
+    "  -H  model tables on huge pages (Linux; faster on big files where the\n"
+    "      kernel has 2 MB pages ready, slower where it has to make them)\n"
     "\n"
     "The contexts and the rates are part of the format -- a stream is\n"
     "decodable by a build with the same MOD/, and by no other.  ./mk.sh\n"
