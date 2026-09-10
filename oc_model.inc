@@ -308,14 +308,14 @@ static void tcp_build(void) {
     if (b->look != 1 || !b->ent || !b->len || !b->mult || !b->nv) continue;
     if (b->nv > TCP_SYMMAX) continue;
     for (j = 0; j < b->nv; j++) v[j] = (i32) b->mult[j] - (i32) b->off;
-    tcp_book[i].build(b->len, b->ent, b->nv, b->dim, 0, v);
+    tcp_book[i].build(b->len, b->ent, b->nv, b->dim, 0, v, 1);
   }
   for (i = 0; i < s->nrs; i++) {
     const vb_res * r = s->rs + i;
     const vb_book * cb = s->bk + r->cbook;
     if (!cb->ent || !cb->len || r->ncl > TCP_SYMMAX) continue;
     for (j = 0; j < r->ncl; j++) v[j] = (i32) j;
-    tcp_cls[i].build(cb->len, cb->ent, r->ncl, cb->dim, 1, v);
+    tcp_cls[i].build(cb->len, cb->ent, r->ncl, cb->dim, 1, v, 0);
   }
   /*  A floor partition: which subclass book coded a post is implied by the
       post's own value, so the classword and the subclass books together give

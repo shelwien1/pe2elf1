@@ -57,6 +57,15 @@ static INLINE u64 tcp_pow(u32 b, u32 e) {
   return v;
 }
 
+/*  A weight pair as a 12-bit probability that the bit is zero.  */
+static INLINE int tcp_p(u32 w0, u32 w1) {
+  u64 s = (u64) w0 + w1;
+  int p;
+  if (!s) return -1;
+  p = (int) (((u64) w0 * CM_PONE + s / 2) / s);
+  return p < 1 ? 1 : p > CM_PONE - 1 ? CM_PONE - 1 : p;
+}
+
 /*  `nlev` places of an `nsym`-ary alphabet.  A residue book spells its entry
     least significant place first (io.inc's rs_sym divides by nv as it goes);
     a classbook spells it most significant first (the classword loop
@@ -84,11 +93,23 @@ struct tc_ptab {
   u32 * slen;                             /*  [nnode][TCP_NBMAX] by bit length  */
   i32 * val;                              /*  what each symbol stands for  */
   u32 * brm;                              /*  and which branch it takes  */
+  /*  The cascade's questions answered per node in advance, so that a bit
+      costs the coder one load where it cost a walk over the sums above and
+      a 64-bit division (OGGCOMP-SPEED.md section 5.2).  Each entry is what
+      tcp_p made of exactly the sums the coder used to take at that bit, so
+      the answers are the same to the bit; the sums themselves are kept to
+      make these and for the mantissa, which cannot be tabulated.  */
+  i16 * ph;                               /*  [nnode][3] is it 0, is it 1, is it 2  */
+  i16 * pl;                               /*  [nnode][TCP_NBMAX] is the length k + 1  */
+  i16 * psg;                              /*  [nnode][nmag] the sign of |v| = m; or null  */
+  u32 nmag;
 
   void drop() {
     free(pw);  free(tot);  free(s012);  free(slen);  free(val);  free(brm);
+    free(ph);  free(pl);  free(psg);
     pw = nullptr;  tot = nullptr;  s012 = nullptr;  slen = nullptr;
-    val = nullptr;  brm = nullptr;  ok = 0;
+    val = nullptr;  brm = nullptr;  ph = nullptr;  pl = nullptr;  psg = nullptr;
+    nmag = 0;  ok = 0;
   }
 
   /*  Where the cascade puts a magnitude of 3 or more: `code` sends
@@ -115,7 +136,8 @@ struct tc_ptab {
     /*  As many levels as fit, rather than all of them or none.  */
     for (k = 0; k < ndim; k++) {
       if (lim > TCP_NODEMAX || nnode + lim > TCP_NODEMAX) break;
-      if (tcp_mem + (sz) (nnode + lim) * (nsym * 2 + 4 + TCP_NBMAX) * 4 > TCP_MEMMAX) break;
+      if (tcp_mem + (sz) (nnode + lim) * ((nsym * 2 + 4 + TCP_NBMAX) * 4 + (3 + TCP_NBMAX) * 2)
+          > TCP_MEMMAX) break;
       sz_[k] = (u32) lim;
       of[k] = nnode;
       nnode += (u32) lim;
@@ -132,9 +154,11 @@ struct tc_ptab {
     slen = (u32 *) calloc((sz) nnode * TCP_NBMAX, sizeof(u32));
     val  = (i32 *) calloc(nsym, sizeof(i32));
     brm  = (u32 *) calloc(nsym, sizeof(u32));
-    if (!acc || !pw || !tot || !s012 || !slen || !val || !brm)
+    ph   = (i16 *) calloc((sz) nnode * 3, sizeof(i16));
+    pl   = (i16 *) calloc((sz) nnode * TCP_NBMAX, sizeof(i16));
+    if (!acc || !pw || !tot || !s012 || !slen || !val || !brm || !ph || !pl)
       { free(acc);  drop();  return nullptr; }
-    tcp_mem += (sz) nnode * (nsym * 2 + 4 + TCP_NBMAX) * 4;
+    tcp_mem += (sz) nnode * ((nsym * 2 + 4 + TCP_NBMAX) * 4 + (3 + TCP_NBMAX) * 2);
     return acc;
   }
 
@@ -142,7 +166,7 @@ struct tc_ptab {
       for.  A child that any entry can reach keeps at least one unit: a
       symbol the book does admit must not come back as impossible, however
       rare it is.  */
-  void finish(u64 * acc) {
+  void finish(u64 * acc, int want_sign) {
     u32 i;
     for (i = 0; i < nnode; i++) {
       u64 * a = acc + (sz) i * nsym;
@@ -166,6 +190,55 @@ struct tc_ptab {
         }
       }
     }
+    /*  The answers.  Over every node, the unreached ones included: their
+        sums are zero and tcp_p makes -1 of that, which is what the coder
+        got for them when it tested `tot` first.  */
+    for (i = 0; i < nnode; i++) {
+      const u32 * s = s012 + (sz) i * 3;
+      const u32 * sl = slen + (sz) i * TCP_NBMAX;
+      u32 w0 = tot[i], j;
+      int m, k;
+      for (m = 0; m < 3; m++) {             /*  what is left above m, against m  */
+        w0 -= s[m];
+        ph[(sz) i * 3 + m] = (i16) tcp_p(w0, s[m]);
+      }
+      for (k = 0; k + 1 < TCP_NBMAX; k++) {
+        u32 w = 0;
+        for (j = (u32) k + 2; j < TCP_NBMAX; j++) w += sl[j];
+        pl[(sz) i * TCP_NBMAX + k] = (i16) tcp_p(w, sl[k + 1]);
+      }
+      pl[(sz) i * TCP_NBMAX + TCP_NBMAX - 1] = -1;
+    }
+    /*  The sign, for a book whose values are few and small -- a residue
+        grid.  A class or a floor is never asked its sign, and a book that
+        does not fit here is asked the long way, in tcp_sign.  */
+    nmag = 0;
+    if (want_sign && nsym <= TCP_MANMAX) {
+      i32 mx = 0, m;
+      u32 j;
+      for (j = 0; j < nsym; j++) {
+        i32 a = val[j] < 0 ? -val[j] : val[j];
+        if (a > mx) mx = a;
+      }
+      if (mx < 256 && tcp_mem + (sz) nnode * ((sz) mx + 1) * 2 <= TCP_MEMMAX)
+        psg = (i16 *) calloc((sz) nnode * ((sz) mx + 1), sizeof(i16));
+      if (psg) {
+        nmag = (u32) mx + 1;
+        tcp_mem += (sz) nnode * nmag * 2;
+        for (i = 0; i < nnode; i++) {
+          const u32 * p = pw + (sz) i * nsym;
+          psg[(sz) i * nmag] = -1;          /*  a magnitude of 0 has no sign  */
+          for (m = 1; m <= mx; m++) {
+            u32 wp = 0, wn = 0;
+            for (j = 0; j < nsym; j++) {
+              if (val[j] == m) wp += p[j];
+              else if (val[j] == -m) wn += p[j];
+            }
+            psg[(sz) i * nmag + (u32) m] = (i16) tcp_p(wp, wn);
+          }
+        }
+      }
+    }
     free(acc);
     ok = 1;
   }
@@ -173,7 +246,7 @@ struct tc_ptab {
   /*  A residue vector or a classword: the symbols are the places of one
       entry and the branching is the alphabet.  */
   int build(const u8 * len, u32 ent, u32 nsym_, u32 nlev_, int be_,
-            const i32 * value) {
+            const i32 * value, int want_sign) {
     u64 * acc;
     u32 k, i, e, cap;
     u64 lim;
@@ -205,7 +278,7 @@ struct tc_ptab {
         acc[(sz) (of[k] + nd) * nsym + s] += w;
       }
     }
-    finish(acc);
+    finish(acc, want_sign);
     return 1;
   }
 
@@ -288,7 +361,7 @@ struct tc_ptab {
       free(cwt);
     }
     free(bw);
-    finish(acc);
+    finish(acc, 0);
     return 1;
   }
 };
@@ -310,67 +383,52 @@ struct tc_pcur {
   }
   /*  Ready for the value at place `lev`; `on` says whether there is one.  */
   INLINE u32 node() const { return t->of[lev] + idx; }
-  INLINE int usable() const { return on && t && lev < t->nlev && t->tot[node()]; }
+  /*  `live` is the table's questions being answerable at all; `usable` also
+      asks whether any entry reaches the node, which the tabulated answers
+      have folded in (an unreached node answers -1) and the mantissa's walk
+      has not.  */
+  INLINE int live() const { return on && t && lev < t->nlev; }
+  INLINE int usable() const { return live() && t->tot[node()]; }
 
-  /*  Advance past a place whose symbol was `s`.  */
+  /*  Advance past a place whose symbol was `s`.  Both forms of the next
+      node are made and one is kept: `be` is fixed per book, and a branch on
+      it mispredicted every time the walk changed books.  */
   INLINE void step(int s) {
-    u32 b;
+    u32 b, big, little;
     if (!on || !t) return;
     if (s < 0 || (u32) s >= t->nsym || lev + 1 > t->nlev) { on = 0;  return; }
     b = t->brm[s];
-    if (t->be) idx = idx * t->nbr + b;
-    else       idx = idx + b * t->sz_[lev];
+    big = idx * t->nbr + b;
+    little = idx + b * t->sz_[lev];
+    idx = t->be ? big : little;
     lev++;
-    if (lev >= t->nlev) on = 0;             /*  the vector ends here  */
+    on = lev < t->nlev;                     /*  the vector ends at nlev  */
   }
 };
-
-/*  A weight pair as a 12-bit probability that the bit is zero.  */
-static INLINE int tcp_p(u32 w0, u32 w1) {
-  u64 s = (u64) w0 + w1;
-  int p;
-  if (!s) return -1;
-  p = (int) (((u64) w0 * CM_PONE + s / 2) / s);
-  return p < 1 ? 1 : p > CM_PONE - 1 ? CM_PONE - 1 : p;
-}
 
 /*  The four shapes of decision the cascade makes, each as the weight on
     either side of it.  `m` is the step: node 0 asks "is it zero", node 1 "is
     it one", node 2 "is it two".  */
 static INLINE int tcp_head(const tc_pcur & c, int m) {
-  const u32 * s;
-  u32 nd;
-  u32 w1, w0;
-  int j;
-  if (!c.usable() || m < 0 || m > 2) return -1;
-  nd = c.node();
-  s = c.t->s012 + (sz) nd * 3;
-  w1 = s[m];
-  w0 = c.t->tot[nd];
-  for (j = 0; j <= m; j++) w0 -= s[j];      /*  what is left above m  */
-  return tcp_p(w0, w1);
+  if (!c.live() || m < 0 || m > 2) return -1;
+  return c.t->ph[(sz) c.node() * 3 + m];
 }
 /*  The unary length step: is the bit length exactly k + 1, given it is at
     least that.  */
 static INLINE int tcp_len(const tc_pcur & c, int k) {
-  const u32 * s;
-  u32 nd, w1 = 0, w0 = 0;
-  int j;
-  if (!c.usable() || k + 1 >= TCP_NBMAX) return -1;
-  nd = c.node();
-  s = c.t->slen + (sz) nd * TCP_NBMAX;
-  w1 = s[k + 1];
-  for (j = k + 2; j < TCP_NBMAX; j++) w0 += s[j];
-  return tcp_p(w0, w1);
+  if (!c.live() || k + 1 >= TCP_NBMAX) return -1;
+  return c.t->pl[(sz) c.node() * TCP_NBMAX + k];
 }
-/*  The sign, once the magnitude is settled.  The alphabet is small and this
-    is asked once per nonzero digit, so it is a loop rather than a table.  */
+/*  The sign, once the magnitude is settled: from the table where the book
+    has one, and by the walk it always was where it has not.  */
 static INLINE int tcp_sign(const tc_pcur & c, i64 mag) {
   const u32 * p;
   u32 nd, wn = 0, wp = 0;
   u32 j;
-  if (!c.usable() || mag <= 0) return -1;
+  if (!c.live() || mag <= 0) return -1;
   nd = c.node();
+  if (c.t->psg)
+    return mag < (i64) c.t->nmag ? c.t->psg[(sz) nd * c.t->nmag + (sz) mag] : -1;
   p = c.t->pw + (sz) nd * c.t->nsym;
   for (j = 0; j < c.t->nsym; j++) {
     i32 v = c.t->val[j];
