@@ -56,7 +56,8 @@ enc() {
 need=0
 for n in sine-stereo-q5 noise-stereo-q3 mono-22k-q4 silence-stereo-q4 \
          tiny-8k-q0 sweep-mono-qm1 chirp-stereo-q10 multi6-48k-q4 \
-         music-stereo-q5 music-managed-b96 bigcomment-8k chained; do
+         music-stereo-q5 music-managed-b96 bigcomment-8k chained \
+         uncoupled-stereo-q4 silence-8k-long-qm1 zerolen-8k-q0 tags-many-8k; do
   [ -f "$n.ogg" ] || need=1
 done
 [ -d refused ] || need=1
@@ -151,15 +152,44 @@ def music(i, c, sr):
     return v * (0.4 + 0.6 * env) + 1200 * env * r.uniform(-1, 1) + 300 * r.uniform(-1, 1)
 write('music-stereo.wav', 2, SR, SR * 8, music)
 
-#  A comment value of 72 kB.  An Ogg page holds at most 255 segments of 255
-#  bytes, so a packet above 65025 bytes CANNOT fit in one page: the encoder
-#  has to split it and set the continuation flag on the page that carries
-#  the rest.  Nothing else in this corpus reaches that path, and real files
-#  take it all the time -- an embedded cover image is a base64 comment of
-#  exactly this shape, which is what this pretends to be.  Random bytes, so
-#  the parser cannot be right by accident on a run of one value.
-blob = base64.b64encode(bytes(r.randrange(256) for _ in range(54000))).decode()
-open('bigcomment.txt', 'w').write('METADATA_BLOCK_PICTURE=' + blob)
+#  Stereo tones to encode with coupling turned off.  libvorbis couples only
+#  2- and 6-channel streams, and an uncoupled pair is the one shape that
+#  gives residue type 1 with more than one vector -- a different branch from
+#  every other stereo file here, and one no quality setting reaches.
+write('tone2.wav', 2, SR, SR,
+      lambda i, c, sr: 11000 * math.sin(2 * math.pi * (300 + 90 * c) * i / sr))
+
+#  Ninety seconds of 8 kHz silence at -q -1.  Each packet is one byte, so
+#  the encoder fills pages to their 255-segment ceiling: 255 packets ending
+#  in one page, which is as many as an Ogg page can hold and which nothing
+#  else in this corpus comes near.  It costs 8 kB.
+write('sil8k.wav', 1, 8000, 8000 * 90, lambda i, c, sr: 0)
+
+#  No samples at all.  oggenc still writes the three headers and one audio
+#  packet, which is the smallest legal Vorbis stream there is.
+write('zero8k.wav', 1, 8000, 0, lambda i, c, sr: 0)
+
+#  A second of 44100 stereo silence, to be encoded with a minimum bitrate
+#  it cannot possibly fill.  libvorbis then pads the audio packets with zero
+#  bits, and a padded packet is one oggcomp refuses -- it cannot put the
+#  padding back byte for byte.  Encoded into refused/, not here.
+write('sil44.wav', 2, SR, SR, lambda i, c, sr: 0)
+
+#  Two comment values of 66 kB each.  An Ogg page holds at most 255 segments
+#  of 255 bytes, so a packet above 65025 bytes CANNOT fit in one page and the
+#  encoder splits it, setting the continuation flag on the pages that carry
+#  the rest.  Above 130050 it needs three, and the middle one is both a
+#  continuation and itself continued -- a page shape two pages never make,
+#  and the reason this is 133 kB rather than the 72 kB that would do for a
+#  simple split.  Those pages also carry granulepos -1, which is the only
+#  place in the corpus the granulepos coder sees one.  Real files take this
+#  path constantly: an embedded cover image is a base64 comment of exactly
+#  this shape, which is what these pretend to be.  Random bytes, so the
+#  parser cannot be right by accident on a run of one value.  Two values
+#  rather than one because a single argument cannot exceed 128 kB.
+for k in range(2):
+    blob = base64.b64encode(bytes(r.randrange(256) for _ in range(50000))).decode()
+    open('bigcomment%d.txt' % k, 'w').write('METADATA_BLOCK_PICTURE%d=%s' % (k, blob))
 PY
 fi
 
@@ -178,10 +208,34 @@ want music-stereo-q5    && enc music-stereo-q5    1009 -q 5    music-stereo.wav
 #  above, a different distribution of packet lengths.
 want music-managed-b96  && enc music-managed-b96  1010 -b 96 --managed music-stereo.wav
 
-#  The oversized comment goes on the smallest audio, so the file is mostly
+#  The oversized comments go on the smallest audio, so the file is mostly
 #  the header packet whose page-splitting it is here to exercise.
 want bigcomment-8k      && enc bigcomment-8k      1011 -q 0 \
-                               -c "$(cat bigcomment.txt)" tiny-8k.wav
+                               -c "$(cat bigcomment0.txt)" \
+                               -c "$(cat bigcomment1.txt)" tiny-8k.wav
+
+#  Coupling off: the uncoupled multi-vector residue path.  oggenc says on
+#  stderr that it is setting the option; that line is not an error, and
+#  silencing stderr here would silence the ones that are.
+want uncoupled-stereo-q4 && enc uncoupled-stereo-q4 1012 -q 4 \
+                               --advanced-encode-option disable_coupling=1 tone2.wav
+
+#  Pages filled to the 255-packet ceiling.
+want silence-8k-long-qm1 && enc silence-8k-long-qm1 1013 -q -1 sil8k.wav
+
+#  The smallest legal Vorbis stream: three headers and one audio packet.
+want zerolen-8k-q0      && enc zerolen-8k-q0      1014 -q 0 zero8k.wav
+
+#  Every byte of the comment header goes through the model one at a time, so
+#  what is in the tags matters as much as how big they are.  This is the
+#  ordinary case the two big-comment files are not: a dozen short tags, a
+#  date, a track number, non-ASCII, and one value with spaces in it.
+want tags-many-8k && enc tags-many-8k 1015 -q 0 \
+      -t "T\303\256tle \303\274nicode" -a "Artist \303\221ame" -l "\303\201lbum" \
+      -G Genre -d 2024-06-12 -N 7 \
+      -c "REPLAYGAIN_TRACK_GAIN=-3.21 dB" -c "A=1" -c "B=2" -c "C=3" \
+      -c "DESCRIPTION=a longer value, with spaces and punctuation in it" \
+      tiny-8k.wav
 
 #  Two logical bitstreams in one file, which is what a `cat` of two .oggs is
 #  and what a stream ripped from an internet radio looks like: the second
@@ -276,11 +330,27 @@ open('refused/opus.ogg', 'wb').write(repage(
     + struct.pack('<I', 0x0badface) + struct.pack('<I', 0)
     + struct.pack('<I', 0) + bytes([1, len(head)]) + head))
 REFUSED
+  #  Two that oggenc itself produces, which is what makes them worth having:
+  #  they are not damaged files, they are files a working encoder writes and
+  #  this compressor still cannot promise to give back.
+  #
+  #  -k multiplexes an Ogg Skeleton bitstream in beside the Vorbis one.  Every
+  #  other refusal here is a broken container; this one is a sound container
+  #  holding something besides one Vorbis stream, which is the distinction
+  #  between multiplexed (refused) and chained (supported, and in the corpus).
+  oggenc -Q -k --serial 1041 -q 0 -o refused/skeleton.ogg tiny-8k.wav
+
+  #  A minimum bitrate the audio cannot fill: libvorbis pads the audio
+  #  packets out with zero bits, and a packet with bits in it that the
+  #  vorbis spec does not account for is one oggcomp will not code, because
+  #  it cannot put them back.  Real files from real encoders look like this.
+  oggenc -Q -m 128 --serial 1042 -o refused/minbitrate-pad.ogg sil44.wav
+
   for r in refused/*.ogg; do echo "  $r  $(wc -c < "$r") bytes"; done
 else
   echo "  refused/  (kept)"
 fi
 
-rm -f ./*.wav bigcomment.txt
+rm -f ./*.wav ./bigcomment*.txt
 echo "gen.sh: $(ls -1 ./*.ogg | wc -l) files, $(cat ./*.ogg | wc -c) bytes," \
      "$(ls -1 refused/*.ogg | wc -l) more to be refused"

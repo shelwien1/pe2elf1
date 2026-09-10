@@ -49,8 +49,8 @@ stale `MOD/` compiles fine and codes differently.
 file with its original, checks that coding the same input twice gives the
 same `.oc`, and checks the exit status for every way of being told no --
 including that a refused run leaves no half-written output behind.
-`testfiles/README.md` says what is in the corpus and why; `-h` lists the
-options.
+`testfiles/README.md` says what is in the corpus and why, and what it does
+not reach; `-h` lists the options.
 
     ./t.sh && ./mk.sh check
 
