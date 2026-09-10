@@ -37,26 +37,44 @@ set -e
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$here"
 
+usage() {
+  cat <<'END'
+usage: ./t.sh [options] [file.ogg ...]
+
+  -x PATH  test PATH instead of ./oggcomp
+  -B       rebuild with ./mk.sh first
+  -k       keep each .oc and restored .ogg beside its input
+  -1       one encode per file: skip the determinism check
+  -n       skip the refusal tests
+  -v       pass -v to oggcomp, so it says where the bits went
+  -h       this
+
+With no files named, the corpus in testfiles/ is used.
+END
+}
+
 bin=./oggcomp
 build=0
 keep=0
 twice=1
 refusals=1
 vflag=
-files=
 
-while [ $# -gt 0 ]; do
+#  Options out, file operands left in "$@" -- rotated to the end one at a
+#  time rather than collected into a string, so that a path with a space in
+#  it survives being a test file.
+argc=$#
+while [ $argc -gt 0 ]; do
   case $1 in
-    -x) bin=${2:?-x wants a path}; shift 2;;
-    -B) build=1; shift;;
-    -k) keep=1; shift;;
-    -1) twice=0; shift;;
-    -n) refusals=0; shift;;
-    -v) vflag=-v; shift;;
-    -h|--help)
-      sed -n '2,9p' "$0" | sed 's/^#  \{0,1\}//'; exit 0;;
-    -*) echo "t.sh: no such option: $1" >&2; exit 2;;
-    *)  files="$files $1"; shift;;
+    -x) bin=${2:?t.sh: -x wants a path}; shift 2; argc=$((argc - 2));;
+    -B) build=1; shift; argc=$((argc - 1));;
+    -k) keep=1; shift; argc=$((argc - 1));;
+    -1) twice=0; shift; argc=$((argc - 1));;
+    -n) refusals=0; shift; argc=$((argc - 1));;
+    -v) vflag=-v; shift; argc=$((argc - 1));;
+    -h|--help) usage; exit 0;;
+    -*) echo "t.sh: no such option: $1" >&2; usage >&2; exit 2;;
+    *)  a=$1; shift; set -- "$@" "$a"; argc=$((argc - 1));;
   esac
 done
 
@@ -71,12 +89,16 @@ if [ $build = 1 ] || { [ "$bin" = ./oggcomp ] && [ ! -x ./oggcomp ]; }; then
 fi
 [ -x "$bin" ] || { echo "t.sh: $bin is not there -- ./mk.sh builds it" >&2; exit 2; }
 
-if [ -z "$files" ]; then
-  files=$(ls testfiles/*.ogg 2>/dev/null || true)
-  [ -n "$files" ] || {
-    echo "t.sh: no testfiles/*.ogg -- ./testfiles/gen.sh makes them, or name files on the command line" >&2
+#  No files named: the bundled corpus.  The glob is left unexpanded when it
+#  matches nothing, which is what the -f test below is looking at.
+if [ $# = 0 ]; then
+  set -- testfiles/*.ogg
+  [ -f "$1" ] || {
+    echo "t.sh: no testfiles/*.ogg -- ./testfiles/gen.sh makes them," >&2
+    echo "      or name the files to test on the command line" >&2
     exit 2; }
 fi
+src=$1
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/oggcomp-t.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT INT TERM
@@ -107,7 +129,7 @@ printf 'oggcomp: %s\n\n' "$("$bin" 2>&1 | sed -n 1p)"
 printf '  %-26s %9s %10s %7s %8s %8s %7s\n' file original compressed ratio enc dec MB/s
 printf '  %s\n' '--------------------------------------------------------------------------------'
 
-for f in $files; do
+for f in "$@"; do
   [ -f "$f" ] || { printf '  %-26s %s\n' "$(basename "$f")" 'not there'; fail=1; continue; }
   n=$((n + 1))
   base=$(basename "$f")
@@ -180,9 +202,16 @@ echo
 #  them must not leave an output file, because a half-written .oc that looks
 #  like a whole one is how a backup turns out to be nothing.
 bad_refusal=0; nrefusal=0
+
+#  Several of the tests below want a good .oc to damage, and take it from
+#  the first file under test.  If even that will not code then the round
+#  trips above have already failed and there is nothing here left to learn.
+if [ $refusals = 1 ] && ! "$bin" c "$src" "$tmp/good.oc" >/dev/null 2>&1; then
+  echo "t.sh: refusal tests skipped -- $src does not code" >&2
+  refusals=0
+fi
+
 if [ $refusals = 1 ]; then
-  src=$(echo "$files" | tr ' ' '\n' | sed -n 1p)
-  "$bin" c "$src" "$tmp/good.oc" >/dev/null 2>&1
   : > "$tmp/empty.ogg"
   head -c 400 "$src" > "$tmp/cut.ogg"
   head -c 200 "$tmp/good.oc" > "$tmp/cut.oc"
@@ -246,17 +275,18 @@ fi
 #  A lone `-` is a path meaning stdin on the way in and stdout on the way
 #  out, which is not a thing one can tell from the usage text, and the only
 #  part of the interface with no file behind it.
-printf '  %s\n' 'stdin and stdout'
-src=${src:-$(echo "$files" | tr ' ' '\n' | sed -n 1p)}
-if "$bin" c - "$tmp/pipe.oc" < "$src" 2>/dev/null &&
-   "$bin" d "$tmp/pipe.oc" - > "$tmp/pipe.ogg" 2>/dev/null &&
-   cmp -s "$src" "$tmp/pipe.ogg"; then
-  printf '  %-26s %s\n' 'c - out.oc < in.ogg' 'round-tripped through the pipe'
-else
-  printf '  %-26s %s\n' 'c - out.oc < in.ogg' 'FAILED'
-  fail=1
+if [ -f "$src" ]; then
+  printf '  %s\n' 'stdin and stdout'
+  if "$bin" c - "$tmp/pipe.oc" < "$src" 2>/dev/null &&
+     "$bin" d "$tmp/pipe.oc" - > "$tmp/pipe.ogg" 2>/dev/null &&
+     cmp -s "$src" "$tmp/pipe.ogg"; then
+    printf '  %-26s %s\n' 'c - out.oc < in.ogg' 'round-tripped through the pipe'
+  else
+    printf '  %-26s %s\n' 'c - out.oc < in.ogg' 'FAILED'
+    fail=1
+  fi
+  echo
 fi
-echo
 
 printf 't.sh: %d/%d round-tripped byte for byte' "$ok" "$n"
 [ $twice = 1 ] && printf ', %d/%d coded identically twice' "$same" "$nsame"

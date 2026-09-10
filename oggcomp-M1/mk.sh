@@ -44,6 +44,11 @@
 #  shipping form, so `make` works without perl -- and this script rewrites it.
 #  A stale MOD/ compiles fine and codes differently, so run ./mk.sh after
 #  editing any IDX/tsvcomp-<family>.idx or its .inc.
+#
+#  Which also means a tuning build leaves MOD/ holding the tuning form and
+#  `git status` showing twelve modified files.  That is not damage and there
+#  is nothing to revert: `./mk.sh mod` writes the shipping form back, and so
+#  does `./mk.sh check`, which is why it is the last thing that command does.
 
 set -e
 
