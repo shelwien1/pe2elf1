@@ -143,8 +143,8 @@ scratch copy: `minbitrate-pad.ogg` round-trips byte for byte, 17687 →
 1605 bytes (it is silence; the padding costs nothing because the decoder
 regenerates it from the packet length), and `music-managed-b96.ogg`
 codes to the same 84550 bytes as before -- no accepted file's stream
-changes, because no new symbol is coded.  Nonzero padding stays refused
-until phase 3's raw page catches it.
+changes, because no new symbol is coded.  Nonzero padding -- which no
+encoder writes -- is not this step's; phase 1's raw page takes it.
 
 This is the one change in the plan with no format bump and no dependency
 on the rest.  It can land first, on its own commit, with the file moved
