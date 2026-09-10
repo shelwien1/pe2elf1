@@ -738,7 +738,9 @@ struct tc_fam {
     int k, p, nb = 0;
     u64 u;
     select(v);
-    if (tc_enc) FATAL_UNLESS(x >= 0, "negative magnitude");
+    /*  Tested inline: FATAL_UNLESS is a call, and this runs once per value
+        and once per length bit.  Only the failure calls.  */
+    if (UNLIKELY(tc_enc && x < 0)) FATAL("negative magnitude");
     prp = tcp_head(pc, 0);
     if (bit(0, tc_enc && x == 0)) { prp = -1;  return 0; }
     prp = tcp_head(pc, 1);
@@ -750,8 +752,9 @@ struct tc_fam {
     for (k = 0; ; k++) {
       prp = tcp_len(pc, k);
       if (bit(tc_node_len(k), tc_enc && nb == k + 1)) { nb = k + 1;  break; }
-      FATAL_UNLESS(k + 2 <= TC_NBMAX, "%s: a value of 2^%d or more",
-                   tc_enc ? "this stream holds" : "coded stream", TC_NBMAX);
+      if (UNLIKELY(k + 2 > TC_NBMAX))
+        FATAL("%s: a value of 2^%d or more",
+              tc_enc ? "this stream holds" : "coded stream", TC_NBMAX);
     }
     { u64 pref = 1;                         /*  what both sides have of `u`  */
       for (p = 0; p < nb - 1; p++) {
