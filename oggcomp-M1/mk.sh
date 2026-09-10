@@ -192,7 +192,9 @@ case "${1:-tuning}" in
     #  grep answers 0 for found, 1 for not found and 2 or more for "I could
     #  not look" -- an unreadable or missing binary among them.  A bare `if
     #  grep` reads that last case as "not found", i.e. as the good news.
-    grep -aq '!MAP!' oggcomp; g=$?
+    #  `grep ...; g=$?` would not do: under set -e the shell stops at a
+    #  grep that exits 1, which is the case this is here to call good.
+    g=0; grep -aq '!MAP!' oggcomp || g=$?
     if [ $g = 0 ]; then
       echo "mk.sh: the release build still carries !MAP! markers" >&2
       exit 1
