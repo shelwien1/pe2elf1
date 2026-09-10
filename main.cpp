@@ -18,6 +18,9 @@
 #include "vb_map.inc"
 #include "vb_setup.inc"    /*  the four lists a link's audio runs on  */
 #include "vb_ctx.inc"      /*  what survives from one packet to the next  */
+#include "oc_sink.inc"     /*  what the walk hands each value to  */
+#include "oc_tsv.inc"      /*  ... here, the record stream  */
+typedef oc_tsv sink_t;
 #include "io.inc"          /*  one packet, taken apart or rebuilt  */
 
 #include "source.inc"      /*  the forward window over the input  */
@@ -34,7 +37,22 @@ int main(int argc, char ** argv) {
   }
   blr_set_prog(argv[0]);
   blr_paths_distinct(argv + 2, 2);
-  if (argv[1][0] == 'c') vb_pack(argv[2], argv[3]);
-  else vb_unpack(argv[2], argv[3]);
+  { oc_tsv t;
+    if (argv[1][0] == 'c') {
+      t.create(argv[3]);
+      blr_output(argv[3]);
+      vb_pack(t, argv[2]);
+      t.close();
+    } else {
+      FILE * o;
+      t.open(argv[2]);
+      o = fopen(argv[3], "wb");
+      if (!o) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", argv[3]);
+      blr_output(argv[3]);
+      vb_unpack(t, argv[2], o, argv[3]);
+      t.close();
+      if (fclose(o)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", argv[3]);
+    }
+    blr_output_kept(); }
   return BLR_EXIT_OK;
 }

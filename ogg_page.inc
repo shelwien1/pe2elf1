@@ -117,35 +117,6 @@ struct ogg_page {
     nseg = (int) n;
   }
 
-  /*  Header fields as TSV records.  */
-
-  void put(tsv & t) const {
-    int i;
-    t.put("page.type", type);
-    t.put("page.granlo", glo);
-    t.put("page.granhi", ghi);
-    t.put("page.serial", serial);
-    t.put("page.seq", seq);
-    t.put("page.npkt", np);
-    Fi(np, t.put("page.plen", plen[i]));
-    if (np && !(plen[np - 1] % OGG_MAXSEG)) t.put("page.tail", tail);
-  }
-
-  void get(tsv & t) {
-    int i;
-    type = (u8) t.get_u("page.type", 0x100);
-    glo = t.get_u("page.granlo", (u64) 0x100000000);
-    ghi = t.get_u("page.granhi", (u64) 0x100000000);
-    serial = t.get_u("page.serial", (u64) 0x100000000);
-    seq = t.get_u("page.seq", (u64) 0x100000000);
-    np = (int) t.get_u("page.npkt", OGG_MAXSEG + 1);
-    Fi(np, plen[i] = t.get_u("page.plen",
-                             (u64) OGG_MAXSEG * OGG_MAXSEG + 1));
-    tail = 0;
-    if (np && !(plen[np - 1] % OGG_MAXSEG)) tail = (int) t.get_u("page.tail", 2);
-    pack();
-  }
-
   /*  Compute a page CRC while treating its stored CRC as zero.  */
   static u32 crc_page(const u8 * p, sz n) {
     static const u8 z4[4] = { 0, 0, 0, 0 };

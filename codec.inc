@@ -6,18 +6,18 @@
 static u8 pgbuf[PAGE_MAX];    /*  one rebuilt page, on the way out  */
 static u8 body[MAXPAY];       /*  its payload, while the packets fill it  */
 
-void vb_pack(const char * in, const char * out) {
+/*  Both take the sink open and leave it open: what it writes to, or reads
+    from, is the caller's.  `in` names the input, for messages as much as for
+    reading.  */
+void vb_pack(sink_t & t, const char * in) {
   source src;
   vb_ctx v;
-  tsv t;
   link_walk lw;
   ogg_page p;
   sz got, npage = 0;
   int eos = 1;
 
   src.open(in);
-  t.create(out);
-  blr_output(out);
   v.init();
   lw.start();
 
@@ -32,7 +32,7 @@ void vb_pack(const char * in, const char * out) {
                  in, (u64) src.offset());
     /*  BOS starts a link only after EOS.  */
     if ((p.type & 2) && eos) {
-      t.put("link.more", 1);  v.link();  lw.start();  eos = 0;
+      t.link(1);  v.link();  lw.start();  t.link_begin();  eos = 0;
     }
     FATAL_UNLESS(!eos, "%s: page %" PRIu64 " %s", in, (u64) npage,
                  npage ? "follows end of stream" : "precedes any bitstream");
@@ -46,33 +46,25 @@ void vb_pack(const char * in, const char * out) {
   }
   FATAL_UNLESS(npage > 0, "%s: not an Ogg bitstream", in);
   FATAL_UNLESS(eos, "%s: final bitstream has no end-of-stream page", in);
-  t.put("link.more", 0);
-
-  t.close();  src.close();
-  blr_output_kept();
+  t.link(0);
+  src.close();
 }
 
-void vb_unpack(const char * in, const char * out) {
+void vb_unpack(sink_t & t, const char * in, FILE * o, const char * out) {
   vb_ctx v;
-  tsv t;
-  FILE * o;
 
-  t.open(in);
   v.init();
-  o = fopen(out, "wb");
-  if (!o) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", out);
-  blr_output(out);
 
-  while (t.get_u("link.more", 2)) {
+  while (t.link(0)) {
     ogg_page q;
     sz jn = 0, spill = 0;
     int w = 0, done = 0, cont = 0;
 
-    v.link();
+    v.link();  t.link_begin();
     while (!done) {
       sz at = 0, pgl;
       int j;
-      q.get(t);
+      t.page(q, cont);
       FATAL_UNLESS(q.blen <= MAXPAY, "%s: a page claims %" PRIu64 " payload bytes", in,
                    (u64) q.blen);
       Fj(q.np,
@@ -92,8 +84,7 @@ void vb_unpack(const char * in, const char * out) {
         }
         FATAL_UNLESS(pl > 0, "%s: a page claims an empty packet", in);
         if (j == q.np - 1 && q.tail) {
-          sz ex = (sz) t.get_u("page.spill",
-                               (u64) MAXPAY * OGG_MAXSEG + 1);
+          sz ex = t.spill(0);
           sz tot = pl + ex;
           io z(v, t, 0, jb, tot);
           jn = tot;
@@ -113,7 +104,5 @@ void vb_unpack(const char * in, const char * out) {
                  (u64) spill);
   }
 
-  t.close();
-  if (fclose(o)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", out);
-  blr_output_kept();
+  (void) out;
 }

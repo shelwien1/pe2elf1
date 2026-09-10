@@ -12,13 +12,13 @@ struct link_walk {
 
   void start() { w = 0;  cont = 0;  spill = 0; }
 
-  void page(vb_ctx & v, tsv & t, source & s, const ogg_page & p,
+  void page(vb_ctx & v, sink_t & t, source & s, ogg_page & p,
                        sz got) {
     const u8 * pbody = s.cur() + OGG_HDRMIN + p.nseg;
     u64 where = (u64) s.offset();
     sz at = 0;
     int j;
-    p.put(t);
+    t.page(p, cont);
     Fj(p.np,
       const u8 * pk = pbody + at;
       sz pl = p.plen[j];
@@ -41,7 +41,7 @@ struct link_walk {
       if (j == p.np - 1 && p.tail) {
         sz tot = s.join_len(got, p, pl);
         s.join_pkt(got, pbody + off, pl, tot, jb);
-        t.put("page.spill", (i64) (tot - pl));
+        t.spill((u32) (tot - pl));
         spill = tot - pl;  cont = 1;  pk = jb;  pl = tot;
       }
       io z(v, t, 1, (u8 *) pk, pl);

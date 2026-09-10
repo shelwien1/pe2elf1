@@ -2,9 +2,6 @@
 constexpr u32 VB_MAXBLK = 8192;   /*  largest block size  */
 constexpr u32 VB_MAXDIM = 0xFFFF; /*  the codebook dimension field  */
 
-/*  The largest residue digit either direction will carry.  */
-constexpr i32 RS_DIGIT_MAX = 0x7FFFFF;
-
 /*  Floor posts, one row of VB_MAXPOST per channel.  */
 constexpr sz VB_YSMAX = (sz) VB_MAXCH * VB_MAXPOST;
 
@@ -35,13 +32,13 @@ constexpr u32 QUANT[4] = { 256, 128, 86, 64 };
 
 struct io {
   int enc;
-  tsv & t;
+  sink_t & t;
   vb_ctx & v;
   u8 * b;
   sz len, pos;                /*  the packet, and a cursor in BITS  */
 
   /*  Rebuilding sets bits with |=, so a packet being written starts clear.  */
-  io(vb_ctx & vv, tsv & tt, int e, u8 * pkt, sz n)
+  io(vb_ctx & vv, sink_t & tt, int e, u8 * pkt, sz n)
     : enc(e), t(tt), v(vv), b(pkt), len(n), pos(0) {
     if (!e) memset(pkt, 0, n);
   }
@@ -81,38 +78,38 @@ struct io {
 
   /*  A value that is not a plain packet field: derived, composite, or from
       the audio payload.  Both directions enforce the same bound, so a stream
-      is rejected on the same inputs whichever way it is walked.  */
+      is rejected on the same inputs whichever way it is walked.  Header
+      packets only: the audio path's values each have a method of their own
+      on the sink, since what they mean depends on where the walk is.  */
   INLINE u32 val(const char * tag, u32 x, u64 hi) {
-    if (!enc) return t.get_u(tag, hi);
+    if (!enc) return t.hdr(tag, 0, hi);
     FATAL_IF_HOT((u64) x >= hi)("vorbis: %s is out of range", tag);
-    t.put(tag, x);
-    return x;
+    return t.hdr(tag, x, hi);
   }
 
-  /*  ... and a signed one.  */
-  INLINE i32 sval(const char * tag, i32 x, i32 lim) {
+  /*  ... and the one signed value, a residue digit.  */
+  INLINE i32 digit(i32 x, i32 lim) {
     i64 r;
     if (enc) {
-      FATAL_IF_HOT(x < -lim || x > lim)("vorbis: %s is out of range", tag);
-      t.put(tag, x);
-      return x;
+      FATAL_IF_HOT(x < -lim || x > lim)("vorbis: res.digit is out of range");
+      return (i32) t.digit(x);
     }
-    r = t.get(tag);
-    FATAL_UNLESS(r >= -lim && r <= lim, "vorbis: %s is out of range", tag);
+    r = t.digit(0);
+    FATAL_UNLESS(r >= -lim && r <= lim, "vorbis: res.digit is out of range");
     return (i32) r;
   }
 
   /*  An `n`-bit packet field whose value must fit `w` bits.  */
   u32 fld(const char * tag, int n, int w) {
     u32 x;
+    u64 hi = w >= 32 ? (u64) 0x100000000 : (u64) 1 << w;
     if (enc) {
       x = bget(n);
       FATAL_UNLESS(w >= 32 || !(x >> w), "vorbis: %s value %" PRIu64 " exceeds %d bits",
                    tag, (u64) x, w);
-      t.put(tag, x);
-      return x;
+      return t.hdr(tag, x, hi);
     }
-    x = t.get_u(tag, w >= 32 ? (u64) 0x100000000 : (u64) 1 << w);
+    x = t.hdr(tag, 0, hi);
     bput(n, x);
     return x;
   }
@@ -375,9 +372,7 @@ struct io {
   /*  The comment header is opaque; carry it a byte at a time.  */
   void comment() {
     sz i;
-    Fi(len,
-      if (enc) t.put("cmt.byte", b[i]);
-      else b[i] = (u8) t.get_u("cmt.byte", 256));
+    Fi(len, b[i] = (u8) t.hdr("cmt.byte", b[i], 256));
     pos = len * 8;
   }
 
@@ -398,7 +393,7 @@ struct io {
     switch (which) {
       case 0: ident();  break;
       case 1: comment();  break;
-      default: setup();  break;
+      default: setup();  t.setup_done(v);  break;
     }
     /*  Only zero padding may remain after the parsed header.  */
     FATAL_UNLESS(len * 8 - pos < 8, "vorbis: %" PRIu64 " unparsed packet bits",
@@ -474,13 +469,14 @@ struct io {
     u32 k, e = 0, np = 1, sym = 0;
     i32 d;
     if (enc) { e = bk_get(bk);  sym = e; }
+    t.vec_begin();
     Fk(bk->dim,
       if (enc) {
         d = (i32) bk->mult[sym % bk->nv] - (i32) bk->off;  sym /= bk->nv;
-        sval("res.digit", d, RS_DIGIT_MAX);
+        digit(d, RS_DIGIT_MAX);
       } else {
         u32 p;
-        d = sval("res.digit", 0, RS_DIGIT_MAX);
+        d = digit(0, RS_DIGIT_MAX);
         FATAL_IF_HOT(!(d + (i32) bk->off >= 0 && d + (i32) bk->off < (i32) bk->base))
           ("vorbis: residue digit %" PRId64 " outside codebook grid", (i64) d);
         p = bk->inv[(u32) (d + (i32) bk->off)];
@@ -530,6 +526,7 @@ struct io {
                  "vorbis: residue needs %" PRIu64 " classification slots, limit %" PRIu64,
                  (u64) ((sz) vch * w), (u64) VB_CSMAX);
     cl = vb_cs;
+    t.residue_begin(rno, r, nz, nch, n);
     for (pass = 0; pass < 8; pass++) {
       pc = 0;
       while (pc < np) {
@@ -542,8 +539,8 @@ struct io {
               /*  Refuse unused digits that would change the rebuilt codeword.  */
               FATAL_UNLESS(!cw, "vorbis: residue classword exceeds its partitions");
             }
-            Fk(pv, cl[j * w + pc + k] = val("res.class",
-                                            enc ? cl[j * w + pc + k] : 0, 16));
+            Fk(pv, cl[j * w + pc + k] = t.cls(rno, j, pc, k,
+                                              enc ? cl[j * w + pc + k] : 0));
             if (!enc) {
               cw = 0;
               Fk(pv, cw = cw * r->ncl + cl[j * w + pc + k]);
@@ -557,7 +554,10 @@ struct io {
               ("vorbis: residue class %" PRIu64 ", limit %" PRIu64,
                (u64) cl[j * w + pc], (u64) r->ncl);
             bn = r->book[cl[j * w + pc]][pass];
-            if (bn >= 0) rs_part(r, s->bk + bn));
+            if (bn >= 0) {
+              t.part_begin(rno, pass, j, pc, r, s->bk + bn, (u32) bn, cl[j * w + pc]);
+              rs_part(r, s->bk + bn);
+            });
           pc++);
       }
     }
@@ -582,11 +582,8 @@ struct io {
       u32 * yc = y + k * VB_MAXPOST;
       int u = 0;
       if (enc) u = fl_get(f, yc);
-      u = (int) val("flr.used", (u32) u, 2);
+      t.floor(k, fno, f, yc, u);
       nz[k] = (u8) u;
-      if (u)
-        Fi(f->posts, u32 p = f->srt[i];
-                     yc[p] = val("flr.y", enc ? yc[p] : 0, (u64) 0x100000000));
       if (!enc) fl_put(f, yc, u));
     Fi(mp->nstep, if (nz[mp->mag[i]] || nz[mp->ang[i]])
                     nz[mp->mag[i]] = nz[mp->ang[i]] = 1);
@@ -607,13 +604,12 @@ struct io {
     else bput(1, 0);
 
     md = enc ? bget(d) : 0;
-    md = val("aud.mode", md, v.cur->nmd);
+    md = t.mode(md, v.cur->nmd);
     if (!enc) bput(d, md);
 
     if (v.cur->blockflag[md])
       Fi(2,
-        w = (int) val(i ? "aud.wnext" : "aud.wprev",
-                      enc ? bget(1) : 0, 2);
+        w = (int) (i ? t.wnext(enc ? bget(1) : 0) : t.wprev(enc ? bget(1) : 0));
         if (!enc) bput(1, (u32) w));
     payload(md);
     /*  Only byte-alignment padding may remain.  */
