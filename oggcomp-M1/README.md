@@ -115,7 +115,7 @@ an input of 167685, silently not the file it was given.
 
 | | |
 |---|---|
-| `oggcomp.cpp` | all of it: the Ogg and Vorbis parsers, the model, the coder |
+| `oggcomp.cpp` | the include list, the range coder's byte I/O and `main()`.  The program is the `.inc` files beside it, one per layer, in the order they are included: `ogg_*` the container, `vb_*` Vorbis, `rc.inc` and `cm.inc` the range coder and the mixing primitives, `tc_*` the model machinery, `oc_*` the six models and their assembly.  `REFACTOR.md` says what is in each |
 | `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |
 | `MOD/` | what `idx2inc.pl` generated, checked in |
 | `Lib3/` | coroutines and the file layer.  `file_api.inc` picks stdio or the WinAPI; `file_api_test.cpp` is the test that the two are one interface |
