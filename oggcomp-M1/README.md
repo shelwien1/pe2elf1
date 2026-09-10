@@ -3,8 +3,11 @@
 A lossless recompressor for Ogg Vorbis.  `oggcomp c` turns a `.ogg` into a
 smaller `.oc`, `oggcomp d` turns it back, and the file that comes back is
 the file that went in, byte for byte -- not an equivalent stream, the same
-stream, page boundaries, CRCs, serial numbers, padding bits and all.  A
-file it cannot promise that for it refuses rather than coding.
+stream, page boundaries, CRCs, serial numbers, padding bits and all.  It
+takes any file: what the Vorbis parser can place is modelled, and the rest
+-- a tag in front of the first page, junk after the last, a Skeleton stream
+beside the audio, a page with a bad CRC, a file that is not Ogg at all --
+is coded as bytes.  `oggcomp c` does not refuse input.
 
     ./mk.sh          build ./oggcomp
     ./t.sh           round-trip the test corpus and check it came back
@@ -47,10 +50,12 @@ stale `MOD/` compiles fine and codes differently.
 
 `./t.sh` round-trips every file in `testfiles/`, compares each restored
 file with its original, checks that coding the same input twice gives the
-same `.oc`, and checks the exit status for every way of being told no --
-including that a refused run leaves no half-written output behind.
-`testfiles/README.md` says what is in the corpus and why, and what it does
-not reach; `-h` lists the options.
+same `.oc`, feeds `c` things that are not Vorbis at all -- an empty file, a
+stream cut off mid-page, a `.oc`, the scripts, the binary -- and requires
+each back byte for byte, and checks the exit status for every way of being
+told no -- including that a refused run leaves no half-written output
+behind.  `testfiles/README.md` says what is in the corpus and why, and what
+it does not reach; `-h` lists the options.
 
     ./t.sh && ./mk.sh check
 
@@ -74,8 +79,12 @@ Point outputs at scratch paths.  And there is no `--`: anything beginning
 with `-` and longer than one character is read as options, so a file whose
 name starts with a dash has to be written `./-name.ogg`.
 
-Exit status is 0 for success, 1 for an input it will not code, 2 for a
-command line it cannot parse, 3 for something the filesystem said.
+Exit status is 0 for success, 1 for a `.oc` that `d` cannot read -- not
+oggcomp's, another version's, cut short, or damaged: every `.oc` ends in a
+CRC of the file it holds, and what does not check is not kept -- 2 for a
+command line it cannot parse, 3 for something the filesystem said.  `c`
+does not exit 1: whatever the input is, it is coded, and what is not
+Vorbis in it costs about eight bits a byte.
 
 The model tables reserve about 1.3 GB of address space and touch very
 little of it -- some 50 MB resident on a megabyte of input -- but a

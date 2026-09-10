@@ -1,5 +1,49 @@
 # Accepting every input
 
+> **Status.**  Phase 1 is in the tree, and the three things phase 2
+> listed first came with it: the v3 stream is what section 3 describes,
+> `oggcomp c` cannot exit 1, and every file that was in `refused/` is in
+> the corpus and round-trips.  Where the code differs from the plan below:
+>
+> - A page with a bad CRC is not stored raw.  The page is parsed as it
+>   stands and the four CRC bytes it carries are coded after the header
+>   (`F_CRCBAD`, then four `raw` symbols); the decoder writes them over
+>   what `emit` computed.  `badcrc-8k.ogg` codes to 1362 bytes, 5 more
+>   than the undamaged file.
+> - Padding is coded per packet, not refused and not assumed zero: after
+>   the last field the packet's remaining bits are checked, a flag says
+>   whether any is set (`F_PADNZ`), and if so the tail bytes are coded
+>   raw.  Zero padding, which is what libvorbis writes, costs the flag.
+> - A Vorbis packet that spans a page of another stream is joined across
+>   it: the continuation search follows the packet's own serial and steps
+>   over the rest.  `skeleton-8k.ogg` codes every Vorbis page as Vorbis.
+> - The dry parse unwinds with a C++ exception (`vb_dry_refusal`), not
+>   `setjmp`: `Lib3/coro3b.inc` defines its own `jmp_buf` and blocks
+>   `<setjmp.h>`, and nothing in the build forbids exceptions.
+> - Raw bytes have their own small model, `oc_raw.inc` -- order-0 and
+>   order-1 counters mixed by a weight set the bit tree picks -- rather
+>   than a tag on the `hdr` family.  Random bytes grow by 0.15% at 1 MB
+>   (1.8% at 4 kB, which is the learning cost); text codes at 5-6 bits
+>   a byte.  It is what phase 3 would replace.
+> - Groups are as section 3 says, and the parse-before-commit is per page:
+>   the first page of a group that parses as Vorbis claims the group's
+>   Vorbis serial; every later page of that serial is parsed dry and goes
+>   raw only if the parser refuses it.
+> - The stream ends with Ogg's CRC-32 of the whole input, 32 flat bits,
+>   and the decoder refuses to keep what does not check; and it refuses a
+>   stream it has read more than 48 bytes past the end of.  Neither was
+>   in the plan.  Both are needed once bytes are coded: the Vorbis
+>   parser's checks caught a `.oc` cut short or damaged, and a run of
+>   bytes has no such checks -- a `.oc` of a non-Ogg file cut in half
+>   decoded to something, silently, with exit 0.
+>
+> Measured on this tree: the corpus files that were already Vorbis grow by
+> 6 to 11 bytes each -- four of them the CRC, the rest the link and page
+> flags -- 0.024% over the sixteen; `music-stereo-q5.ogg` 144299 to
+> 144310, and its encode time is unchanged.  `./t.sh` and `./mk.sh check`
+> pass over the 30 files.  Phase 3 -- models for the foreign bytes -- is
+> what remains.
+
 Seven files sit in `testfiles/refused/`, one per way a file can be an Ogg
 that oggcomp will not code.  This is the plan for coding them -- and for
 coding anything else, because the requirement behind it is stronger than
