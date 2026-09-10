@@ -191,11 +191,14 @@ struct cm_mix {
     nx = 0;  row = 0;  ctxn = 0;  pr = CM_PHALF;
   }
   INLINE void add(int st) { x[nx++] = st; }
+  /*  Every caller adds all N inputs before it mixes, so the loops run to N
+      rather than to nx: a bound the compiler can see is a loop it can
+      unroll, and this one is seven deep on every bit.  */
   INLINE int mix(u32 ctx) {
     i64 s = 0;
     int i;
     ctxn = (int) ctx;  row = (int) ctx * N;
-    for (i = 0; i < nx; i++) s += (i64) (w[row + i] + W0) * x[i];
+    for (i = 0; i < N; i++) s += (i64) (w[row + i] + W0) * x[i];
     pr = cm_squash((int) (s >> 16));
     pr = pr < 1 ? 1 : pr > CM_PONE - 1 ? CM_PONE - 1 : pr;
     return pr;
@@ -224,7 +227,7 @@ struct cm_mix {
         the step just lands with the wrong sign.  At the rates this ships with
         the case is reached so rarely that the corpus moves by 5 bytes, but
         the rates are a search space and the search visits the corners.  */
-    for (i = 0; i < nx; i++)
+    for (i = 0; i < N; i++)
       ww[i] += (i32) (((i64) x[i] * err) >> 16);
     nx = 0;
   }

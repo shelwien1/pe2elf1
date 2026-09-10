@@ -655,18 +655,22 @@ struct tc_fam {
       it and the three others, mix them under one learned weight set, code,
       then update everything.  */
   INLINE int bit(int node, int b) {
-    /*  restrict, for the same reason cm.inc's count arrays carry it.  */
-    cm_cnt & __restrict a = A[ba + node];
-    cm_cnt & __restrict c = B[bb + node];
-    cm_cnt & __restrict e = C[bc + node];
-    cm_cnt & __restrict f = D[bd + node];
-    int p1 = ap.pp(a.P(), bs + (u32) node);
+    /*  Each counter is read once, as a copy, and written back once at the
+        end.  Through a reference the row was loaded for P() and again for
+        upd(), with the coder's call between the two to make the compiler
+        doubt what it still held.  */
+    cm_cnt a = A[ba + node];
+    cm_cnt c = B[bb + node];
+    cm_cnt e = C[bc + node];
+    cm_cnt f = D[bd + node];
+    int pa = a.P();
+    int p1 = ap.pp(pa, bs + (u32) node);
     if (p1 > CM_PONE - 1) p1 = CM_PONE - 1;
     mx.add(cm_stretch(p1));
     mx.add(cm_stretch(c.P()));
     mx.add(cm_stretch(e.P()));
     mx.add(cm_stretch(f.P()));
-    mx.add(cm_stretch(a.P()));
+    mx.add(cm_stretch(pa));
     /*  What the codebook says about this decision.  A family with no prior,
         or a decision the prior cannot speak to, contributes a zero, which is
         what a stretched even chance is: the input is there and says nothing,
@@ -683,10 +687,10 @@ struct tc_fam {
     mx.upd(b, lr, mb);
     ap.upd(b, rS1);
     ap2.upd(b, rS2);
-    a.upd(b, rA, mwA);
-    c.upd(b, rB, mwB);
-    e.upd(b, rC, mwC);
-    f.upd(b, rD, mwD);
+    a.upd(b, rA, mwA);  A[ba + node] = a;
+    c.upd(b, rB, mwB);  B[bb + node] = c;
+    e.upd(b, rC, mwC);  C[bc + node] = e;
+    f.upd(b, rD, mwD);  D[bd + node] = f;
     return b;
   }
 
@@ -694,10 +698,10 @@ struct tc_fam {
       has been coded is close to uniform, and a stage that cannot pay for
       itself should not be run four million times.  */
   INLINE int bitm(int node, int b) {
-    cm_cnt & t = T[bt + node];
+    cm_cnt t = T[bt + node];                /*  a copy, as in bit()  */
     if (prp < 0) {                          /*  nothing to weigh it against  */
       b = tc_bit(t.P(), b);
-      t.upd(b, rT, mwT);
+      t.upd(b, rT, mwT);  T[bt + node] = t;
       return b;
     }
     mxm.add(cm_stretch(t.P()));
@@ -706,7 +710,7 @@ struct tc_fam {
     { int pm = mxm.mix(bn + (u32) node);
       b = tc_bit(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b); }
     mxm.upd(b, lrm, mbm);
-    t.upd(b, rT, mwT);
+    t.upd(b, rT, mwT);  T[bt + node] = t;
     return b;
   }
 
@@ -760,9 +764,9 @@ struct tc_fam {
     int s;
     if (!m) return 0;
     if (G) {
-      cm_cnt & g = G[bg * (u32) ng + sc];
+      cm_cnt g = G[bg * (u32) ng + sc];
       s = tc_bit(g.P(), tc_enc && x < 0);
-      g.upd(s, rG, mwG);
+      g.upd(s, rG, mwG);  G[bg * (u32) ng + sc] = g;
     } else {
       /*  Unreachable: every family that codes a sign is wired with one, and
           the two that are not (dig, sgn) never call this.  The tables have no
