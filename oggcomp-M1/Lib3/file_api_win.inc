@@ -16,21 +16,45 @@ struct filehandle0 {
   //  the last write rather than the failed one.
   uint err;
 
+  //  Set when f came from GetStdHandle rather than CreateFile.  A standard
+  //  handle is on loan from whoever started the process: closing it would
+  //  take stdout away from everything that runs after, and from the CRT's
+  //  own atexit flush, so close() lets it be.
+  uint borrowed;
+
   operator int( void ) {
     return ((byte*)f)-((byte*)0);
   }
 
+  //  "-" is a name the stdio backend already reads as a standard stream, so
+  //  this one has to as well or `oggcomp c - out.oc` writes a FILE called
+  //  "-" on one build of the same program and pipes on the other.  Two
+  //  overloads rather than strcmp, because open() and make() are templates
+  //  that a wchar_t name instantiates just as readily.
+  static int is_dash( const char* s )    { return s && s[0]=='-'  && s[1]==0; }
+  static int is_dash( const wchar_t* s ) { return s && s[0]==L'-' && s[1]==0; }
+
+  //  GetStdHandle gives INVALID_HANDLE_VALUE for an error and NULL where
+  //  the process simply has no such handle -- a GUI subsystem build, or a
+  //  service.  Both become the 0 that file_open returns for a failed open,
+  //  so that a caller has one thing to test.
+  HANDLE std_handle( uint which ) {
+    HANDLE h = GetStdHandle( which );
+    borrowed = 1;
+    return h!=INVALID_HANDLE_VALUE ? h : 0;
+  }
+
   template< typename CHAR >
   uint open( const CHAR* name ) {
-    err = 0;
-    f = file_open( name ); 
+    err = 0; borrowed = 0;
+    f = is_dash(name) ? std_handle(STD_INPUT_HANDLE) : file_open( name );
     return ((byte*)f)-((byte*)0);
   }
 
   template< typename CHAR >
   uint make( const CHAR* name ) {
-    err = 0;
-    f = file_make( name );
+    err = 0; borrowed = 0;
+    f = is_dash(name) ? std_handle(STD_OUTPUT_HANDLE) : file_make( name );
     return ((byte*)f)-((byte*)0);
   }
 
@@ -44,6 +68,7 @@ struct filehandle0 {
   //  `if( h.close() ) failed();` -- which is how oggcomp.cpp reads it -- saw
   //  every successful close as a write error on this path.
   int close( void ) {
+    if( borrowed ) { f = 0; return 0; }
     return file_close(f) ? 0 : 1;
   }
 
@@ -109,9 +134,9 @@ struct filehandle0 {
 };
 
 struct filehandle : filehandle0 {
-  filehandle() { f=0; err=0; }
+  filehandle() { f=0; err=0; borrowed=0; }
 
-  filehandle( int ) { f=0; err=0; }
+  filehandle( int ) { f=0; err=0; borrowed=0; }
 
   template< typename CHAR >
   filehandle( const CHAR* name, uint f_wr=0 ) {

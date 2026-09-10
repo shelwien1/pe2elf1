@@ -101,7 +101,15 @@ takes nothing exotic:
     x86_64-w64-mingw32-g++ -O2 -fwrapv -static -DFILE_API_WIN -o oggcomp.exe oggcomp.cpp
 
 Both were built and run under wine over the whole corpus, and both produce
-the same compressed stream as the Linux build, byte for byte.
+the same compressed stream as the Linux build, byte for byte, including
+when either end is a pipe.
+
+`-` means a standard stream on both, which took a fix on each side: the
+WinAPI backend had no notion of it and would have made a file called `-`,
+and the stdio one handed over stdin and stdout in Windows' text mode,
+where every `0x0A` written becomes `0x0D 0x0A`.  That second one did not
+fail -- `oggcomp d in.oc - > out.ogg` exited 0 and wrote 168196 bytes for
+an input of 167685, silently not the file it was given.
 
 ## What is here
 

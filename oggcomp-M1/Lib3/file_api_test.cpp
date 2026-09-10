@@ -81,6 +81,18 @@ int main(void) {
     g.close();
   }
 
+  {  //  "-" is a standard stream on both backends, and close() must leave it
+     //  standing: it belongs to whoever started the process, and taking
+     //  stdout away would silence everything that runs after -- including
+     //  the CRT's own flush on the way out.  Done last because opening a
+     //  standard stream puts it into binary mode, after which the lines
+     //  below end in LF rather than the CRLF a Windows run has been using.
+    filehandle g;
+    check("make(\"-\") gives a usable handle", g.make("-") != 0, 1);
+    check("close() of a borrowed stream returns 0", g.close(), 0);
+    check("stdout is still there afterwards", fflush(stdout) == 0, 1);
+  }
+
   remove(a);
   remove(b);
   printf("%s\n", fails ? "file_api_test: FAILURES" : "file_api_test: all ok");
