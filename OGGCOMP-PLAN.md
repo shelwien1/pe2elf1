@@ -109,8 +109,9 @@ structure.
 **(c) One walk, typed calls into the model.**  `io.inc`'s `residue()` has
 `rno`, the pass, the vector, the partition, the class and the book at the
 point where it reads a digit; that is what tsvcomp keeps a second copy of
-the loop to know, and hands to `tc_part` in twelve arguments.  So the digit is handed to the model *there*, with
-those arguments, and the model's own walk is deleted.  The record stream
+the loop to know, and hands to `tc_part` in twelve arguments.  So the
+digit is handed to the model *there*, with those arguments, and the
+model's own walk is deleted.  The record stream
 survives only as balrogg's inspection format, produced by a sink that writes
 records instead of coding them.
 
@@ -355,9 +356,10 @@ diffing the `OC_TRACE` of `oggcomp c` against `balrogg c`'s TSV (they are
 the same sequence with the same tags) for the first value that differs,
 or, if the values agree, the first context that does -- which the trace
 can also carry.  Expect the first run to disagree at one of: the page
-counter, `cidx` for a residue coded per channel, `vpos` after a partition
-that is not a multiple of the book dimension, or the tag-id order in the
-header model.  Each is a one-line fix and the trace names it.
+counter, `cidx` for a residue coded per channel, the digit count of a
+partition whose size is not a multiple of the book dimension (section
+7), or the tag-id order in the header model.  Each is a one-line fix and
+the trace names it.
 
 **Step 5 -- round trip.**  `oggcomp d` reproduces every corpus `.ogg`
 byte for byte.  `./mk.sh check` builds tuning and release forms of
