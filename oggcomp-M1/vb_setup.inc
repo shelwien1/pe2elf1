@@ -4,15 +4,23 @@ struct vb_info {
 };
 constexpr u32 VB_MAXBOOK = 256;
 constexpr sz VB_ARENA = (sz)96 << 20;
-alignas(8) static u8 vb_arena[VB_ARENA];
-static sz vb_used;
-template <class T> static T *vb_alloc(sz n) {
-  sz want = (n * sizeof(T) + 7) & ~(sz)7;
-  u8 *p = vb_arena + vb_used;
-  VB_UNLESS(want <= VB_ARENA - vb_used, "vorbis: the setup needs more than the %" PRIu64 " MiB codebook arena", (u64)(VB_ARENA >> 20));
-  vb_used += want;
-  return (T *)p;
-}
+//  Where the parsed codebooks go: a bump pointer over a static block, given
+//  back whole at every link.  `used` is saved and restored around a dry
+//  parse, which is how a setup header parsed to see whether it parses is
+//  forgotten again.
+struct vb_arena {
+  alignas(8) u8 mem[VB_ARENA];
+  sz used;
+  template <class T> T *take(sz n) {
+    sz want = (n * sizeof(T) + 7) & ~(sz)7;
+    u8 *p = mem + used;
+    VB_UNLESS(want <= VB_ARENA - used, "vorbis: the setup needs more than the %" PRIu64 " MiB codebook arena", (u64)(VB_ARENA >> 20));
+    used += want;
+    return (T *)p;
+  }
+  void reset() { used = 0; }
+};
+static vb_arena vb_ar;
 struct vb_book {
   u32 dim, ent;
   u8 look;
@@ -45,7 +53,7 @@ struct vb_book {
     i32 t;
     Fi(ent, if(len[i]) u++);
     cap = u + 2;
-    nd = vb_alloc<i32>(2 * cap);
+    nd = vb_ar.take<i32>(2 * cap);
     memset(nd, 0, 2 * cap * sizeof *nd);
     Fi(
         ent, if(!len[i]) continue; idx = 0; for(k = len[i]; k > 1; k--) {
@@ -66,7 +74,7 @@ struct vb_book {
     Fi(nv, if(mult[i] > mx) mx = mult[i]);
     base = mx + 1;
     off = base >> 1;
-    inv = vb_alloc<u32>(base);
+    inv = vb_ar.take<u32>(base);
     Fi(base, inv[i] = (u32)-1);
     Fi(nv, VB_UNLESS(inv[mult[i]] == (u32)-1, "vorbis: duplicate codebook multiplicand %" PRIu64, (u64)mult[i]); inv[mult[i]] = i);
     np = 1;
@@ -153,10 +161,10 @@ struct vb_ctx {
   void init() {
     memset(&i, 0, sizeof i);
     cur = nullptr;
-    vb_used = 0;
+    vb_ar.reset();
   }
   void link() {
     cur = nullptr;
-    vb_used = 0;
+    vb_ar.reset();
   }
 };

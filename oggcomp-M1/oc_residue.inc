@@ -31,9 +31,9 @@ static struct {
 static void oc_part_begin(u32 rno, u32 pss, u32 jv, u32 pc, const vb_res *r, const vb_book *bk, u32 bn, u32 cls) {
   u32 j = R.cidx[jv];
   sz sl = (sz)jv * R.w + pc;
-  sz span = dg_span[rno];
-  sz hb = ((sz)(tc_blk * 8 + pss) * tc_nchan + j) * span;
-  sz base = (sz)((rno * 8 + pss) * tc_nchan + j);
+  sz span = hist.dg_span[rno];
+  sz hb = ((sz)(hist.tc_blk * 8 + pss) * hist.tc_nchan + j) * span;
+  sz base = (sz)((rno * 8 + pss) * hist.tc_nchan + j);
   u32 dim = bk->dim, ilv = R.ilv;
   P.rno = rno;
   P.pss = pss;
@@ -50,18 +50,18 @@ static void oc_part_begin(u32 rno, u32 pss, u32 jv, u32 pc, const vb_res *r, con
   P.clrun = sl < sizeof cl_run_buf ? cl_run_buf[sl] : 0;
   P.clmatch = sl < sizeof cl_same ? cl_same[sl] : 0;
   P.span = span;
-  P.hist = span ? dg_hist[rno] + hb : nullptr;
-  P.hist2 = span ? dg_hist2[rno] + hb : nullptr;
-  P.avg = span ? dg_avg[rno] + hb : nullptr;
-  P.pp = span ? dg_pp[rno] + (sz)j * span : nullptr;
-  P.ps = span ? dg_ps[rno] + (sz)j * span : nullptr;
-  P.pn = span ? dg_pn[rno] + (sz)j * span : nullptr;
-  P.q1 = dg_q1 + base;
-  P.q2 = dg_q2 + base;
-  P.zr = dg_zr + base;
+  P.hist = span ? hist.dg_hist[rno] + hb : nullptr;
+  P.hist2 = span ? hist.dg_hist2[rno] + hb : nullptr;
+  P.avg = span ? hist.dg_avg[rno] + hb : nullptr;
+  P.pp = span ? hist.dg_pp[rno] + (sz)j * span : nullptr;
+  P.ps = span ? hist.dg_ps[rno] + (sz)j * span : nullptr;
+  P.pn = span ? hist.dg_pn[rno] + (sz)j * span : nullptr;
+  P.q1 = hist.dg_q1 + base;
+  P.q2 = hist.dg_q2 + base;
+  P.zr = hist.dg_zr + base;
   P.str = ilv && dim ? dim / tc_gcd(dim, ilv) * ilv : dim;
   P.bk = bk;
-  P.pt = tcp_book[bn].ok ? &tcp_book[bn] : nullptr;
+  P.pt = tcp.book[bn].ok ? &tcp.book[bn] : nullptr;
   tc_stage = STG_DIGIT;
   fam_dig.pc.off();
 }
@@ -106,7 +106,7 @@ static i64 oc_digit(i64 dg) {
   d.cm = P.clmatch;
   d.cls = (int)P.cls;
   d.zrun = tc_qlog(*P.zr);
-  d.blk = (int)tc_blk;
+  d.blk = (int)hist.tc_blk;
   d.bkq = P.bkq;
   d.pq = tcp_axis(fam_dig.pc);
   d.sq = 0;
@@ -164,20 +164,20 @@ static i64 oc_digit(i64 dg) {
 }
 static u32 tc_classify(u32 rno, u32 j, u32 slot, u32 cin) {
   tcx v;
-  u8 *hist = cl_np[rno] ? cl_hist[rno] + ((sz)tc_blk * tc_nchan + j) * cl_np[rno] : nullptr;
-  i32 t1 = (hist && slot < cl_np[rno]) ? hist[slot] : 0;
-  i32 tn = (hist && slot + 1 < cl_np[rno]) ? hist[slot + 1] : 0;
+  u8 *ch = hist.cl_np[rno] ? hist.cl_hist[rno] + ((sz)hist.tc_blk * hist.tc_nchan + j) * hist.cl_np[rno] : nullptr;
+  i32 t1 = (ch && slot < hist.cl_np[rno]) ? ch[slot] : 0;
+  i32 tn = (ch && slot + 1 < hist.cl_np[rno]) ? ch[slot + 1] : 0;
   i64 c;
   tc_stage = STG_CLASS;
-  tc_make_cls((int)rno, tc_qlog(slot), cl_last[rno][j], t1, (int)tc_blk, tn, cl_last2[rno][j], tcp_axis(fam_cls.pc), v);
+  tc_make_cls((int)rno, tc_qlog(slot), hist.cl_last[rno][j], t1, (int)hist.tc_blk, tn, hist.cl_last2[rno][j], tcp_axis(fam_cls.pc), v);
   c = tc_enc ? (i64)cin : 0;
   c = fam_cls.code(v, c);
   FATAL_UNLESS(c >= 0 && c < 16, "coded stream: residue class %" PRId64, c);
-  cl_run[rno] = (c == cl_last[rno][j]) ? cl_run[rno] + 1 : 0;
-  if(hist && slot < cl_np[rno])
-    hist[slot] = (u8)c;
-  cl_last2[rno][j] = cl_last[rno][j];
-  cl_last[rno][j] = (i32)c;
+  cl_run[rno] = (c == hist.cl_last[rno][j]) ? cl_run[rno] + 1 : 0;
+  if(ch && slot < hist.cl_np[rno])
+    ch[slot] = (u8)c;
+  hist.cl_last2[rno][j] = hist.cl_last[rno][j];
+  hist.cl_last[rno][j] = (i32)c;
   if(tc_verbose)
     tc_syms[STG_CLASS]++;
   return (u32)c;
@@ -205,24 +205,24 @@ static void oc_residue_begin(u32 rno, const vb_res *r, const u8 *nz, u32 nch, u3
   R.pv = cb->dim;
   R.w = R.np + R.pv;
   FATAL_UNLESS((sz)R.vch * R.w <= sizeof cl_run_buf, "residue needs %" PRIu64 " classification slots, limit %" PRIu64, (u64)((sz)R.vch * R.w), (u64)sizeof cl_run_buf);
-  memset(dg_q1 + (sz)rno * 8 * tc_nchan, 0, (sz)8 * tc_nchan * sizeof(i32));
-  memset(dg_q2 + (sz)rno * 8 * tc_nchan, 0, (sz)8 * tc_nchan * sizeof(i32));
-  memset(dg_zr + (sz)rno * 8 * tc_nchan, 0, (sz)8 * tc_nchan * sizeof(i32));
-  if(dg_span[rno]) {
-    memset(dg_pp[rno], 0, (sz)tc_nchan * dg_span[rno] * sizeof(i16));
-    memset(dg_ps[rno], 0, (sz)tc_nchan * dg_span[rno] * sizeof(i16));
-    memset(dg_pn[rno], 0, (sz)tc_nchan * dg_span[rno]);
+  memset(hist.dg_q1 + (sz)rno * 8 * hist.tc_nchan, 0, (sz)8 * hist.tc_nchan * sizeof(i32));
+  memset(hist.dg_q2 + (sz)rno * 8 * hist.tc_nchan, 0, (sz)8 * hist.tc_nchan * sizeof(i32));
+  memset(hist.dg_zr + (sz)rno * 8 * hist.tc_nchan, 0, (sz)8 * hist.tc_nchan * sizeof(i32));
+  if(hist.dg_span[rno]) {
+    memset(hist.dg_pp[rno], 0, (sz)hist.tc_nchan * hist.dg_span[rno] * sizeof(i16));
+    memset(hist.dg_ps[rno], 0, (sz)hist.tc_nchan * hist.dg_span[rno] * sizeof(i16));
+    memset(hist.dg_pn[rno], 0, (sz)hist.tc_nchan * hist.dg_span[rno]);
   }
 }
 static u32 oc_cls(u32 rno, u32 jv, u32 pc, u32 k, u32 cin) {
   u32 j = R.cidx[jv];
   sz sl = (sz)jv * R.w + pc + k;
-  u8 *ch = cl_np[rno] ? cl_hist[rno] + ((sz)tc_blk * tc_nchan + j) * cl_np[rno] : nullptr;
-  i32 was = (ch && pc + k < cl_np[rno]) ? ch[pc + k] : -1;
+  u8 *ch = hist.cl_np[rno] ? hist.cl_hist[rno] + ((sz)hist.tc_blk * hist.tc_nchan + j) * hist.cl_np[rno] : nullptr;
+  i32 was = (ch && pc + k < hist.cl_np[rno]) ? ch[pc + k] : -1;
   i32 run = cl_run[rno];
   u32 c;
   if(k == 0)
-    fam_cls.pc.start(tcp_cls[rno].ok ? &tcp_cls[rno] : nullptr);
+    fam_cls.pc.start(tcp.cls[rno].ok ? &tcp.cls[rno] : nullptr);
   c = tc_classify(rno, j, pc + k, cin);
   if(sl < sizeof cl_run_buf) {
     cl_run_buf[sl] = (u8)(run > 255 ? 255 : run);

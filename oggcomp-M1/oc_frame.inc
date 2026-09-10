@@ -6,9 +6,9 @@ static u32 oc_mode(u32 md, u32 nmd) {
   md = (u32)tc_auxc(F_MODE, (i32)tc_prevmode, tc_enc ? (i64)md : 0, 0);
   FATAL_UNLESS(md < nmd, "coded stream: audio names mode %" PRIu64, (u64)md);
   tc_prevmode = md;
-  tc_blk = oc_v->cur->blockflag[md];
-  oc_nextW = tc_blk;
-  if(!tc_blk)
+  hist.tc_blk = oc_v->cur->blockflag[md];
+  oc_nextW = hist.tc_blk;
+  if(!hist.tc_blk)
     tc_prevW = 0;
   return md;
 }

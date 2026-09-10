@@ -129,7 +129,6 @@ int main(int argc, char **argv) {
   ogc_set_prog(argv[0]);
   ogc_paths_distinct(argv + a, 2);
   tc_enc = mode[0] == 'c';
-  std::set_new_handler(tc_nomem);
   tc_models();
   {
     const char *in = argv[a], *out = argv[a + 1];
@@ -199,8 +198,8 @@ int main(int argc, char **argv) {
         fputc('\n', stderr);
       }
   }
-  tc_hist_free();
-  tcp_free();
+  hist.reset();
+  tcp.reset();
   return OGC_EXIT_OK;
 usage:
   fprintf(stderr, "Lossless compressor of Ogg Vorbis files.\n"

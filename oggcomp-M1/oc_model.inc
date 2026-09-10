@@ -1,41 +1,41 @@
 static void tc_setup_done(void) {
   const vb_setup *s = oc_v->cur;
   u32 i;
-  tc_hist_free();
-  tcp_build();
-  tc_nchan = oc_v->i.ch;
+  hist.reset();
+  tcp.build(*oc_v->cur);
+  hist.tc_nchan = oc_v->i.ch;
   for(i = 0; i < s->nrs; i++) {
     const vb_res *r = s->rs + i;
     sz span = r->end > r->beg ? r->end - r->beg : 0;
     sz need;
     if(span > TC_SPANMAX)
       span = 0;
-    need = (sz)2 * 8 * tc_nchan * span;
+    need = (sz)2 * 8 * hist.tc_nchan * span;
     if(need > TC_HISTMAX)
       span = 0;
-    dg_span[i] = span;
+    hist.dg_span[i] = span;
     if(span) {
-      dg_hist[i] = (i16 *)tc_alloc((sz)2 * 8 * tc_nchan * span * sizeof(i16));
-      dg_hist2[i] = (i16 *)tc_alloc((sz)2 * 8 * tc_nchan * span * sizeof(i16));
-      dg_avg[i] = (u32 *)tc_alloc((sz)2 * 8 * tc_nchan * span * sizeof(u32));
-      dg_pp[i] = (i16 *)tc_alloc((sz)tc_nchan * span * sizeof(i16));
-      dg_ps[i] = (i16 *)tc_alloc((sz)tc_nchan * span * sizeof(i16));
-      dg_pn[i] = (u8 *)tc_alloc((sz)tc_nchan * span);
+      hist.dg_hist[i] = (i16 *)hist.take((sz)2 * 8 * hist.tc_nchan * span * sizeof(i16));
+      hist.dg_hist2[i] = (i16 *)hist.take((sz)2 * 8 * hist.tc_nchan * span * sizeof(i16));
+      hist.dg_avg[i] = (u32 *)hist.take((sz)2 * 8 * hist.tc_nchan * span * sizeof(u32));
+      hist.dg_pp[i] = (i16 *)hist.take((sz)hist.tc_nchan * span * sizeof(i16));
+      hist.dg_ps[i] = (i16 *)hist.take((sz)hist.tc_nchan * span * sizeof(i16));
+      hist.dg_pn[i] = (u8 *)hist.take((sz)hist.tc_nchan * span);
     }
-    cl_np[i] = span ? span / r->psz + 2 : 0;
-    if(cl_np[i])
-      cl_hist[i] = (u8 *)tc_alloc((sz)2 * tc_nchan * cl_np[i]);
-    memset(cl_last[i], 0, sizeof cl_last[i]);
-    memset(cl_last2[i], 0, sizeof cl_last2[i]);
+    hist.cl_np[i] = span ? span / r->psz + 2 : 0;
+    if(hist.cl_np[i])
+      hist.cl_hist[i] = (u8 *)hist.take((sz)2 * hist.tc_nchan * hist.cl_np[i]);
+    memset(hist.cl_last[i], 0, sizeof hist.cl_last[i]);
+    memset(hist.cl_last2[i], 0, sizeof hist.cl_last2[i]);
   }
-  dg_q1 = (i32 *)tc_alloc((sz)s->nrs * 8 * tc_nchan * sizeof(i32));
-  dg_q2 = (i32 *)tc_alloc((sz)s->nrs * 8 * tc_nchan * sizeof(i32));
-  dg_zr = (i32 *)tc_alloc((sz)s->nrs * 8 * tc_nchan * sizeof(i32));
-  fl_hist = (i16 *)tc_alloc((sz)2 * tc_nchan * VB_MAXPOST * sizeof(i16));
-  fl_yhist = (i16 *)tc_alloc((sz)2 * tc_nchan * VB_MAXPOST * sizeof(i16));
-  fl_who = (i32 *)tc_alloc((sz)2 * tc_nchan * sizeof(i32));
-  for(i = 0; i < 2 * tc_nchan; i++)
-    fl_who[i] = -1;
+  hist.dg_q1 = (i32 *)hist.take((sz)s->nrs * 8 * hist.tc_nchan * sizeof(i32));
+  hist.dg_q2 = (i32 *)hist.take((sz)s->nrs * 8 * hist.tc_nchan * sizeof(i32));
+  hist.dg_zr = (i32 *)hist.take((sz)s->nrs * 8 * hist.tc_nchan * sizeof(i32));
+  hist.fl_hist = (i16 *)hist.take((sz)2 * hist.tc_nchan * VB_MAXPOST * sizeof(i16));
+  hist.fl_yhist = (i16 *)hist.take((sz)2 * hist.tc_nchan * VB_MAXPOST * sizeof(i16));
+  hist.fl_who = (i32 *)hist.take((sz)2 * hist.tc_nchan * sizeof(i32));
+  for(i = 0; i < 2 * hist.tc_nchan; i++)
+    hist.fl_who[i] = -1;
   for(i = 0; i < s->nfl; i++)
     oc_floor_tables(s->fl + i, oc_fl + i);
 }
@@ -56,7 +56,7 @@ static_assert(TC_dig_T::TC_dig_Size + TC_sgn_T::TC_sgn_Size + TC_flr_T::TC_flr_S
 #endif
 static void tc_models(void) {
   cm_tables();
-#define TC_MAP(F) (tcm_##F = (TC_##F##_T *)tc_map(sizeof(TC_##F##_T)), tcm_##F->TC_##F##_Init())
+#define TC_MAP(F) (tcm_##F = tc_home<TC_##F##_T>::get(), tcm_##F->TC_##F##_Init())
   TC_MAP(dig);
   TC_MAP(sgn);
   TC_MAP(flr);
@@ -76,10 +76,6 @@ static void tc_models(void) {
   TC_WIRE_ALL(fam_aux, aux, tcm_aux->TC_aux_G, TC_SGN_AUX);
   TC_WIRE_ALL(fam_hdr, hdr, tcm_hdr->TC_hdr_G, TC_SGN_HDR);
   oc_raw_init();
-}
-static void tc_nomem(void) {
-  FATAL_CODE(OGC_EXIT_IO, "out of memory -- IDX/tsvcomp-*.idx asks for more "
-                          "than this machine has");
 }
 struct oc_model {
   u32 link(u32 more) { return oc_link(more); }

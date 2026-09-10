@@ -4,7 +4,39 @@ constexpr u32 TCP_NODEMAX = 1u << 16;
 constexpr u32 TCP_SCALE = 1u << 20;
 constexpr u32 TCP_MEMMAX = 64u << 20;
 constexpr u32 TCP_MANMAX = 64;
-static sz tcp_mem;
+//  Where the tables come from.  layout() budgets them: it charges `charged`
+//  by a per-node formula and stops adding levels when the charge would pass
+//  TCP_MEMMAX, and that decision shapes the tables and so the stream, so the
+//  formula is untouched and `charged` is still what it counts.  The bytes
+//  themselves are a bump pointer over a static block: the formula charges
+//  at least as much as a table takes for every table with two nodes or
+//  more, a one-node table can run a kilobyte past it, and there are at most
+//  1344 tables, which is what the 4 MB over the budget is for.  The three
+//  scratch buffers are the builders' temporaries -- acc is bounded by the
+//  same budget, since the formula charges 8 bytes per node and symbol and
+//  acc holds one u64 per node and symbol; bw and cwt by the floor's eight
+//  subclasses and TCP_NODEMAX.  All of it is given back whole at reset().
+constexpr sz TCP_ARENA = (sz)TCP_MEMMAX + ((sz)4 << 20);
+struct tcp_arena {
+  sz charged;
+  sz used;
+  alignas(8) u8 mem[TCP_ARENA];
+  u64 acc[TCP_MEMMAX / 8];
+  u64 bw[8 * TCP_SYMMAX];
+  u64 cwt[(sz)TCP_NODEMAX * 8];
+  void *take(sz n) {
+    sz want = (n + 7) & ~(sz)7;
+    void *p = mem + used;
+    FATAL_UNLESS(want <= TCP_ARENA - used, "internal: the codebook tables outgrew their budget");
+    used += want;
+    memset(p, 0, want);
+    return p;
+  }
+  void reset() {
+    charged = 0;
+    used = 0;
+  }
+};
 static INLINE u64 tcp_pow(u32 b, u32 e) {
   u64 v = 1;
   u32 i;
@@ -39,15 +71,6 @@ struct tc_ptab {
   i16 *psg;
   u32 nmag;
   void drop() {
-    free(pw);
-    free(tot);
-    free(s012);
-    free(slen);
-    free(val);
-    free(brm);
-    free(ph);
-    free(pl);
-    free(psg);
     pw = nullptr;
     tot = nullptr;
     s012 = nullptr;
@@ -69,7 +92,7 @@ struct tc_ptab {
     }
     return n;
   }
-  u64 *layout(u32 nsym_, u32 nbr_, u32 nlev_, int be_) {
+  u64 *layout(tcp_arena &ar, u32 nsym_, u32 nbr_, u32 nlev_, int be_) {
     u64 *acc;
     u64 lim = 1;
     u32 k;
@@ -84,7 +107,7 @@ struct tc_ptab {
     for(k = 0; k < ndim; k++) {
       if(lim > TCP_NODEMAX || nnode + lim > TCP_NODEMAX)
         break;
-      if(tcp_mem + (sz)(nnode + lim) * ((nsym * 2 + 4 + TCP_NBMAX) * 4 + (3 + TCP_NBMAX) * 2) > TCP_MEMMAX)
+      if(ar.charged + (sz)(nnode + lim) * ((nsym * 2 + 4 + TCP_NBMAX) * 4 + (3 + TCP_NBMAX) * 2) > TCP_MEMMAX)
         break;
       sz_[k] = (u32)lim;
       of[k] = nnode;
@@ -99,24 +122,20 @@ struct tc_ptab {
     if(!nlev)
       return nullptr;
     of[nlev] = nnode;
-    acc = (u64 *)calloc((sz)nnode * nsym, sizeof(u64));
-    pw = (u32 *)calloc((sz)nnode * nsym, sizeof(u32));
-    tot = (u32 *)calloc(nnode, sizeof(u32));
-    s012 = (u32 *)calloc((sz)nnode * 3, sizeof(u32));
-    slen = (u32 *)calloc((sz)nnode * TCP_NBMAX, sizeof(u32));
-    val = (i32 *)calloc(nsym, sizeof(i32));
-    brm = (u32 *)calloc(nsym, sizeof(u32));
-    ph = (i16 *)calloc((sz)nnode * 3, sizeof(i16));
-    pl = (i16 *)calloc((sz)nnode * TCP_NBMAX, sizeof(i16));
-    if(!acc || !pw || !tot || !s012 || !slen || !val || !brm || !ph || !pl) {
-      free(acc);
-      drop();
-      return nullptr;
-    }
-    tcp_mem += (sz)nnode * ((nsym * 2 + 4 + TCP_NBMAX) * 4 + (3 + TCP_NBMAX) * 2);
+    acc = ar.acc;
+    memset(acc, 0, (sz)nnode * nsym * sizeof(u64));
+    pw = (u32 *)ar.take((sz)nnode * nsym * sizeof(u32));
+    tot = (u32 *)ar.take(nnode * sizeof(u32));
+    s012 = (u32 *)ar.take((sz)nnode * 3 * sizeof(u32));
+    slen = (u32 *)ar.take((sz)nnode * TCP_NBMAX * sizeof(u32));
+    val = (i32 *)ar.take(nsym * sizeof(i32));
+    brm = (u32 *)ar.take(nsym * sizeof(u32));
+    ph = (i16 *)ar.take((sz)nnode * 3 * sizeof(i16));
+    pl = (i16 *)ar.take((sz)nnode * TCP_NBMAX * sizeof(i16));
+    ar.charged += (sz)nnode * ((nsym * 2 + 4 + TCP_NBMAX) * 4 + (3 + TCP_NBMAX) * 2);
     return acc;
   }
-  void finish(u64 *acc, int want_sign) {
+  void finish(tcp_arena &ar, u64 *acc, int want_sign) {
     u32 i;
     for(i = 0; i < nnode; i++) {
       u64 *a = acc + (sz)i * nsym;
@@ -172,11 +191,11 @@ struct tc_ptab {
         if(a > mx)
           mx = a;
       }
-      if(mx < 256 && tcp_mem + (sz)nnode * ((sz)mx + 1) * 2 <= TCP_MEMMAX)
-        psg = (i16 *)calloc((sz)nnode * ((sz)mx + 1), sizeof(i16));
+      if(mx < 256 && ar.charged + (sz)nnode * ((sz)mx + 1) * 2 <= TCP_MEMMAX)
+        psg = (i16 *)ar.take((sz)nnode * ((sz)mx + 1) * sizeof(i16));
       if(psg) {
         nmag = (u32)mx + 1;
-        tcp_mem += (sz)nnode * nmag * 2;
+        ar.charged += (sz)nnode * nmag * 2;
         for(i = 0; i < nnode; i++) {
           const u32 *p = pw + (sz)i * nsym;
           psg[(sz)i * nmag] = -1;
@@ -193,16 +212,15 @@ struct tc_ptab {
         }
       }
     }
-    free(acc);
     ok = 1;
   }
-  int build(const u8 *len, u32 ent, u32 nsym_, u32 nlev_, int be_, const i32 *value, int want_sign) {
+  int build(tcp_arena &ar, const u8 *len, u32 ent, u32 nsym_, u32 nlev_, int be_, const i32 *value, int want_sign) {
     u64 *acc;
     u32 k, i, e, cap;
     u64 lim;
     if(!len)
       return 0;
-    acc = layout(nsym_, nsym_, nlev_, be_);
+    acc = layout(ar, nsym_, nsym_, nlev_, be_);
     if(!acc)
       return 0;
     for(i = 0; i < nsym; i++) {
@@ -229,25 +247,21 @@ struct tc_ptab {
         acc[(sz)(of[k] + nd) * nsym + s] += w;
       }
     }
-    finish(acc, want_sign);
+    finish(ar, acc, want_sign);
     return 1;
   }
-  int build_floor(const u8 *clen, u32 cent, u32 cs, u32 cd, const u8 *const *blen, const u32 *bent, u32 maxy) {
+  int build_floor(tcp_arena &ar, const u8 *clen, u32 cent, u32 cs, u32 cd, const u8 *const *blen, const u32 *bent, u32 maxy) {
     u64 *acc;
     u32 nbr_ = 1u << cs, k, i, e, y, cap;
     u64 lim;
     u64 *bw;
     if(!maxy || maxy > TCP_SYMMAX || cs > 3)
       return 0;
-    acc = layout(maxy, nbr_, cd, 0);
+    acc = layout(ar, maxy, nbr_, cd, 0);
     if(!acc)
       return 0;
-    bw = (u64 *)calloc((sz)nbr_ * maxy, sizeof(u64));
-    if(!bw) {
-      free(acc);
-      drop();
-      return 0;
-    }
+    bw = ar.bw;
+    memset(bw, 0, (sz)nbr_ * maxy * sizeof(u64));
     for(y = 0; y < maxy; y++) {
       u32 sel = nbr_;
       for(i = 0; i < nbr_; i++) {
@@ -282,13 +296,8 @@ struct tc_ptab {
       }
     }
     {
-      u64 *cwt = (u64 *)calloc((sz)nnode * nbr_, sizeof(u64));
-      if(!cwt) {
-        free(bw);
-        free(acc);
-        drop();
-        return 0;
-      }
+      u64 *cwt = ar.cwt;
+      memset(cwt, 0, (sz)nnode * nbr_ * sizeof(u64));
       if(!clen || !cs) {
         for(i = 0; i < nnode; i++)
           cwt[(sz)i * nbr_] = TCP_SCALE;
@@ -324,10 +333,8 @@ struct tc_ptab {
       for(i = 0; i < nnode; i++)
         for(y = 0; y < maxy; y++)
           acc[(sz)i * maxy + y] = cwt[(sz)i * nbr_ + brm[y]] * bw[(sz)brm[y] * maxy + y];
-      free(cwt);
     }
-    free(bw);
-    finish(acc, 0);
+    finish(ar, acc, 0);
     return 1;
   }
 };
@@ -425,25 +432,32 @@ static INLINE int tcp_bucket(int p) {
   return tc_clamp((cm_stretch(p) + CM_STMAX) >> 7, 0, 31) + 1;
 }
 static INLINE int tcp_axis(const tc_pcur &c) { return tcp_bucket(tcp_head(c, 0)); }
-static tc_ptab tcp_book[VB_MAXBOOK];
-static tc_ptab tcp_cls[VB_MAXRES];
-static tc_ptab tcp_flr[VB_MAXFLOOR][VB_MAXCLASS];
-static void tcp_free(void) {
-  u32 i, j;
-  for(i = 0; i < VB_MAXBOOK; i++)
-    tcp_book[i].drop();
-  for(i = 0; i < VB_MAXRES; i++)
-    tcp_cls[i].drop();
-  for(i = 0; i < VB_MAXFLOOR; i++)
-    for(j = 0; j < VB_MAXCLASS; j++)
-      tcp_flr[i][j].drop();
-  tcp_mem = 0;
-}
-static void tcp_build(void) {
+//  Every codebook-derived table of the current setup: one per residue book,
+//  one per residue's classification book, one per floor class.
+struct tc_ptabs {
+  tc_ptab book[VB_MAXBOOK];
+  tc_ptab cls[VB_MAXRES];
+  tc_ptab flr[VB_MAXFLOOR][VB_MAXCLASS];
+  tcp_arena ar;
+  void reset() {
+    u32 i, j;
+    for(i = 0; i < VB_MAXBOOK; i++)
+      book[i].drop();
+    for(i = 0; i < VB_MAXRES; i++)
+      cls[i].drop();
+    for(i = 0; i < VB_MAXFLOOR; i++)
+      for(j = 0; j < VB_MAXCLASS; j++)
+        flr[i][j].drop();
+    ar.reset();
+  }
+  void build(const vb_setup &su);
+};
+static tc_ptabs tcp;
+void tc_ptabs::build(const vb_setup &su) {
   i32 v[TCP_SYMMAX];
   u32 i, j;
-  const vb_setup *s = oc_v->cur;
-  tcp_free();
+  const vb_setup *s = &su;
+  reset();
   for(i = 0; i < s->nbk; i++) {
     const vb_book *b = s->bk + i;
     if(b->look != 1 || !b->ent || !b->len || !b->mult || !b->nv)
@@ -452,7 +466,7 @@ static void tcp_build(void) {
       continue;
     for(j = 0; j < b->nv; j++)
       v[j] = (i32)b->mult[j] - (i32)b->off;
-    tcp_book[i].build(b->len, b->ent, b->nv, b->dim, 0, v, 1);
+    book[i].build(ar, b->len, b->ent, b->nv, b->dim, 0, v, 1);
   }
   for(i = 0; i < s->nrs; i++) {
     const vb_res *r = s->rs + i;
@@ -461,7 +475,7 @@ static void tcp_build(void) {
       continue;
     for(j = 0; j < r->ncl; j++)
       v[j] = (i32)j;
-    tcp_cls[i].build(cb->len, cb->ent, r->ncl, cb->dim, 1, v, 0);
+    cls[i].build(ar, cb->len, cb->ent, r->ncl, cb->dim, 1, v, 0);
   }
   for(i = 0; i < s->nfl; i++) {
     const vb_floor *f = s->fl + i;
@@ -496,7 +510,7 @@ static void tcp_build(void) {
         cl = s->bk[f->cbook[c]].len;
         cent = s->bk[f->cbook[c]].ent;
       }
-      tcp_flr[i][c].build_floor(cl, cent, f->csub[c], f->cdim[c], bl, be, maxy);
+      flr[i][c].build_floor(ar, cl, cent, f->csub[c], f->cdim[c], bl, be, maxy);
     }
   }
 }

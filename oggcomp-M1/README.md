@@ -86,9 +86,10 @@ command line it cannot parse, 3 for something the filesystem said.  `c`
 does not exit 1: whatever the input is, it is coded, and what is not
 Vorbis in it costs about eight bits a byte.
 
-The model tables reserve about 1.3 GB of address space and touch very
-little of it -- some 50 MB resident on a megabyte of input -- but a
-`ulimit -v` below the reservation turns every run into exit 3, and `-H`
+The model tables and the static pools behind them reserve about 1.5 GB
+of address space and touch very little of it -- some 50 MB resident on a
+megabyte of input -- but a `ulimit -v` below the reservation turns every
+run into exit 3, and `-H`
 rounds every sparse touch up to a 2 MB page and costs about ten times the
 resident memory.  The coroutine wants ~288 kB of stack, so a `ulimit -s`
 under that, or a caller thread with a small stack, is a segfault.

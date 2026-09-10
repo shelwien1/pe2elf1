@@ -182,7 +182,7 @@ template <class S> static void walk_page(vb_ctx &v, S &t, source &s, const ogg_p
 static int page_fits(vb_ctx &v, source &s, const ogg_page &p, sz got, const og_group &g) {
   null_sink ns;
   vb_ctx vsave = v;
-  sz usave = vb_used;
+  sz usave = vb_ar.used;
   int cont = g.cont, w = g.w;
   sz spill = g.spill;
   int ok = 0;
@@ -195,7 +195,7 @@ static int page_fits(vb_ctx &v, source &s, const ogg_page &p, sz got, const og_g
   }
   vb_dry = 0;
   v = vsave;
-  vb_used = usave;
+  vb_ar.used = usave;
   return ok;
 }
 

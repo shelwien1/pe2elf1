@@ -48,6 +48,25 @@ static TC_flr_T *tcm_flr;
 static TC_cls_T *tcm_cls;
 static TC_aux_T *tcm_aux;
 static TC_hdr_T *tcm_hdr;
+//  Where the one object of each table type lives.  In the shipping build a
+//  TC_*_T is its arrays, sizeof is the whole table, and under 256 MB it is
+//  a static object -- BSS, demand-zero, no call to make -- while the digit
+//  family's 893 MB stays mapped, sparse and huge-page-able as before.  In
+//  the tuning build the struct is pointers and _Init() maps each array at
+//  a size the live mapping objects decide, so every struct is static there
+//  and the arrays are mapped, which is what that build is for.  A static
+//  member of a class template exists only where it is used, so no 893 MB
+//  object is ever declared.
+constexpr sz TC_STATIC_MAX = (sz)256 << 20;
+template <class T, bool S = (sizeof(T) <= TC_STATIC_MAX)> struct tc_home;
+template <class T> struct tc_home<T, true> {
+  static T obj;
+  static T *get() { return &obj; }
+};
+template <class T> struct tc_home<T, false> {
+  static T *get() { return (T *)tc_map(sizeof(T)); }
+};
+template <class T> T tc_home<T, true>::obj;
 struct tc_dv {
   int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1, p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm, x1, x1s;
 };

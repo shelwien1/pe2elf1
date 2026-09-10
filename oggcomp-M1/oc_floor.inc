@@ -73,11 +73,11 @@ static i16 fl_cur[VB_MAXPOST];
 static i16 fl_fy[VB_MAXPOST];
 static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
   const oc_floor *fd = oc_fl + fno;
-  sz row = (sz)tc_blk * tc_nchan + k;
-  i16 *hp = fl_hist + row * VB_MAXPOST;
-  i16 *hy = fl_yhist + row * VB_MAXPOST;
-  int mine = fl_who[row] == (i32)fno;
-  int hasn = k && tc_used[k - 1] && fl_who[row - 1] == (i32)oc_fno[k - 1];
+  sz row = (sz)hist.tc_blk * hist.tc_nchan + k;
+  i16 *hp = hist.fl_hist + row * VB_MAXPOST;
+  i16 *hy = hist.fl_yhist + row * VB_MAXPOST;
+  int mine = hist.fl_who[row] == (i32)fno;
+  int hasn = k && tc_used[k - 1] && hist.fl_who[row - 1] == (i32)oc_fno[k - 1];
   u32 u, p;
   i32 quant = (i32)f->quant;
   oc_fno[k] = (u8)fno;
@@ -104,7 +104,7 @@ static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
       i32 hiroom, lowroom;
       u32 c = fd->pcl[p];
       if(!fd->ppos[p])
-        fam_flr.pc.start(tcp_flr[fno][c].ok ? &tcp_flr[fno][c] : nullptr);
+        fam_flr.pc.start(tcp.flr[fno][c].ok ? &tcp.flr[fno][c] : nullptr);
       pred = vd_render((i32)f->x[l], (i32)f->x[h], fl_fy[l], fl_fy[h], (i32)f->x[p]);
       if(pred < 0)
         pred = 0;
@@ -120,7 +120,7 @@ static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
       if(ep < 0)
         ep = 0;
     }
-    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), tcp_axis(fam_flr.pc), tc_qlog(ep), v);
+    tc_make_flr((int)fno, (int)fd->rnk[p], tc_qlog(mine ? hp[p] : 0), tc_qlog(mine ? hy[p] : 0), p < 2, (int)hist.tc_blk, tc_qlog(o1), tc_qlog(pred), tc_sq(od), (int)k, tc_qlog(room), hl, tc_qlog(lov), tc_qlog(hiv), tcp_axis(fam_flr.pc), tc_qlog(ep), v);
     yy = tc_enc ? fl_cur[p] : 0;
     yy = fam_flr.codes(v, yy, 0);
     FATAL_UNLESS(yy >= 0 && yy < 32768, "coded stream: floor post %" PRId64, yy);
@@ -138,5 +138,5 @@ static void oc_flr(u32 k, u32 fno, const vb_floor *f, u32 *y, int &used) {
     hp[p] = fl_cur[p];
     hy[p] = fl_fy[p];
   }
-  fl_who[row] = (i32)fno;
+  hist.fl_who[row] = (i32)fno;
 }

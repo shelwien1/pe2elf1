@@ -20,14 +20,6 @@ static INLINE i32 tc_qlog(i64 x) {
 }
 static INLINE i32 tc_abs(i32 v) { return v < 0 ? -v : v; }
 static INLINE int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
-static sz tc_mem;
-static void *tc_alloc(sz n) {
-  void *p = calloc(n ? n : 1, 1);
-  if(!p)
-    FATAL_CODE(OGC_EXIT_IO, "out of memory for %" PRIu64 " bytes", (u64)n);
-  tc_mem += n;
-  return p;
-}
 static int tc_huge;
 static void *tc_map(sz n) {
   void *p;
