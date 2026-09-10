@@ -33,6 +33,38 @@ files, and three things about it are worth changing while it is fresh:
 All three while producing **exactly the same program**: every `.oc` byte
 for byte what the current binary writes, in both builds.
 
+**Done.**  Step 1 is commit `d4a13f3`, step 2 is `1b1954a`, step 3 is
+`12b2a39`.  Each was verified as section 6 says: 33 inputs -- the 30
+corpus files, 1 MB of random bytes, the binary itself and a stream cut
+mid-page -- code byte-identically under both builds against reference
+binaries built from `172832f`, and the clang++ build and both Windows
+backends under wine give the same bytes.  `./t.sh` and `./mk.sh check`
+pass.  What differs from the plan below, and what was measured:
+
+- The parameter is called `f_DEC` everywhere, as `rc.inc` calls it;
+  the plan's `D` collides with `tc_fam`'s counter table of that name.
+- Each direction's walk is a member function of `oc_coro<f_DEC>` chosen
+  by overload on a tag (`oc_dir<0>`, `oc_dir<1>`) rather than an `if
+  constexpr`; a member function of a class template is compiled only
+  where it is called, which is the same effect without asking for C++17.
+- `tc_bit` stays a free function template, not a method: it has no
+  struct argument, and `tc_fam<f_DEC>` reaches the coder through
+  `oc_model<f_DEC>::rc` by type.  `tc_bits`, `tc_syms`, `tc_stage` and
+  `tc_verbose` stay at file scope for the same reason -- `tc_bit` charges
+  them without a pointer to anything -- rather than becoming the model's
+  `stats` as section 4.7 said.
+- The model's context pointer is `vb`, not `v`: every coder has a local
+  `tcx v`.  The single objects are `hist`, `tcp`, `tabs` and `vb_ar`.
+- Memory: peak resident memory on `music-stereo-q5.ogg` is 37 MB before
+  and after; the address-space reservation grows from 1246 to 1507 MB
+  (BSS from 215 to 606 MB in the shipping build, the mapped digit table
+  the rest), which `t.sh` and the README now say.
+- Time, `music-stereo-q5.ogg`, encode: the shipping build is unchanged
+  at 0.25 s; the tuning build goes from 0.44 s to 0.26 s, all of it in
+  step 3, so with the direction folded the measuring build codes as
+  fast as the shipping one.  Decode is unchanged in both.  The shipping
+  build's text shrinks from 242 to 176 KB with both directions in it.
+
 ## 1. Ground rules
 
 - **The stream is the test**, as in `REFACTOR.md`.  Reference binaries
