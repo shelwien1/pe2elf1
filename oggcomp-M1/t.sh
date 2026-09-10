@@ -157,7 +157,7 @@ timed() {
   ' "$tmp/secs" "$@"
 }
 
-n=0; ok=0; same=0; nsame=0; counted=0
+n=0; ok=0; same=0; nsame=0; counted=0; srcok=0
 tot_in=0; tot_out=0; tot_enc=0; tot_dec=0
 fail=0
 
@@ -207,6 +207,11 @@ for f in "$@"; do
     fi
   fi
 
+  #  Whether the file the two tests after the table work from came back.
+  #  If it did not, neither of them has anything to say that this row has
+  #  not said already.
+  [ "$f" = "$src" ] && [ -z "$note" ] && srcok=1
+
   in=$(wc -c < "$f")
   if [ -n "$note" ]; then
     printf '  %-26s %9d  %s\n' "$base" "$in" "$note"
@@ -224,7 +229,8 @@ for f in "$@"; do
     #  quietly write the row to a file called "0" instead of to the terminal.
     awk -v f="$base" -v i="$in" -v o="$out" -v e="$enc" -v d="$dec" 'BEGIN{
       printf("  %-26s %9d %10d %6.2f%% %7.2fs %7.2fs %7.2f\n",
-             f, i, o, 100.0*o/i, e, d, (e > 0 ? i/e/1048576.0 : 0)) }'
+             f, i, o, (i > 0 ? 100.0*o/i : 0), e, d,
+             (e > 0 ? i/e/1048576.0 : 0)) }'
   fi
 
   if [ $keep = 1 ]; then
@@ -250,15 +256,23 @@ bad_refusal=0; nrefusal=0
 #  Several of the tests below want a good .oc to damage, and take it from
 #  the first file under test.  If even that will not code then the round
 #  trips above have already failed and there is nothing here left to learn.
-if [ $refusals = 1 ] && ! "$bin" c "$src" "$tmp/good.oc" >/dev/null 2>&1; then
+if [ $refusals = 1 ] && { [ $srcok = 0 ] ||
+     ! "$bin" c "$src" "$tmp/good.oc" >/dev/null 2>&1; }; then
   echo "t.sh: refusal tests skipped -- $src does not code" >&2
   refusals=0
 fi
 
 if [ $refusals = 1 ]; then
   : > "$tmp/empty.ogg"
-  head -c 400 "$src" > "$tmp/cut.ogg"
-  head -c 200 "$tmp/good.oc" > "$tmp/cut.oc"
+
+  #  Half the file, up to 400 bytes.  A fixed count would be the whole file
+  #  for a small enough input, and a whole file is not a truncated one: the
+  #  test would then be asking oggcomp to refuse something valid.  No real
+  #  .ogg is under 400 bytes -- the three headers alone are some kilobytes
+  #  -- but the corpus is whatever was named on the command line.
+  half() { h=$(( $(wc -c < "$1") / 2 )); [ "$h" -le "$2" ] || h=$2; echo "$h"; }
+  head -c "$(half "$src" 400)"          "$src"          > "$tmp/cut.ogg"
+  head -c "$(half "$tmp/good.oc" 200)"  "$tmp/good.oc"  > "$tmp/cut.oc"
   cp "$tmp/good.oc" "$tmp/ver.oc"
   printf '\177' | dd of="$tmp/ver.oc" bs=1 seek=5 count=1 conv=notrunc >/dev/null 2>&1
 
@@ -319,7 +333,7 @@ fi
 #  A lone `-` is a path meaning stdin on the way in and stdout on the way
 #  out, which is not a thing one can tell from the usage text, and the only
 #  part of the interface with no file behind it.
-if [ -f "$src" ]; then
+if [ $srcok = 1 ]; then
   printf '  %s\n' 'stdin and stdout'
   if "$bin" c - "$tmp/pipe.oc" < "$src" 2>/dev/null &&
      "$bin" d "$tmp/pipe.oc" - > "$tmp/pipe.ogg" 2>/dev/null &&
