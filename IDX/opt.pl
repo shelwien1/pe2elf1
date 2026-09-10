@@ -1,4 +1,4 @@
-# opt.pl -- parameter optimizer for tsvcomp.
+# opt.pl -- parameter optimizer for oggcomp.
 #
 # Flips the bits of the "!MAP!" pattern strings the tuning build embeds in the
 # executable, keeping whatever shrinks the corpus.  It does not parse or rebuild
@@ -9,16 +9,15 @@
 #
 #   perl IDX/opt.pl [corpus-file-list] [exe]
 #
-# corpus-file-list: text file, one balrogg .tsv path per line (default:
+# corpus-file-list: text file, one .ogg path per line (default:
 # opt.lst, and if that is missing, the single file $deffile below).  Optimizing
 # on one file overfits it, and the corpus has to reach every model the
 # parameters cover: a libvorbis stream and an ffmpeg one at least, since the
 # ffmpeg encoder uses more residues and more cascade passes, and a short file
 # as well as a long one, since the header model is most of a short file and
-# almost none of a long one.  ./t-comp.sh's inputs make a good list -- take the
-# .tsv files it leaves behind under KEEP=1.
+# almost none of a long one.
 #
-# exe: which binary to patch (default ./tsvcomp).  Point it at a copy while
+# exe: which binary to patch (default ./oggcomp).  Point it at a copy while
 # tuning; opt.pl rewrites the file it is given.
 #
 # Memory is invisible to this script -- it minimizes the size of a file and a
@@ -37,12 +36,12 @@
 # then ./mk.sh to continue tuning, or ./mk.sh check to prove the shipping build
 # still agrees and ship it.
 #
-# One caution particular to this tree: tsvcomp's parameters are part of its
+# One caution particular to this tree: oggcomp's parameters are part of its
 # format.  A stream coded by a patched binary decodes only under that same
 # patched binary, so throw away anything mid-hill-climb writes.
 
-$exe     = $ARGV[1] || "./tsvcomp";
-$deffile = "00.tsv";
+$exe     = $ARGV[1] || "./oggcomp";
+$deffile = "00.ogg";
 $tmp     = "$exe.opt_tmp";
 $rndfrac = 0.75;   # bit is flipped in the initial random kick when rand>this
 
@@ -67,7 +66,7 @@ sub measure {
     # has already flushed part of its output, and a part of an 800 kB stream
     # is 64 kB -- which, measured by size alone, is the best result the search
     # has ever seen, so it walks towards whatever killed it and stays there.
-    # tsvcomp now removes its own half-written output, but a signal it cannot
+    # oggcomp removes its own half-written output, but a signal it cannot
     # catch (the OOM killer) still leaves one, and this is the check that does
     # not depend on the program getting the chance to tidy up.
     return 0x7FFFFFFF if $rc != 0 || !defined($s) || $s < 64;

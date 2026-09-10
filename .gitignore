@@ -1,6 +1,5 @@
 #  What the Makefile and ./mk.sh leave behind.  MOD/ is not here: it is a
 #  build input, generated but checked in, so that `make` works without perl.
-tsvcomp
 balrogg
 .flags
 .flags.tmp

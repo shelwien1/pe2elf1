@@ -10,7 +10,7 @@ contexts are declared in.  Neither is repeated here beyond what is needed to
 read the code.
 
 Functions are named rather than line-numbered; everything is in
-`tsvcomp.cpp` unless a file is given.  Sizes are what the shipping build
+`oc_model.inc` unless a file is given.  Sizes are what the shipping build
 maps; "resident" means what the kernel actually faults in for a file.
 
 Sections 7 and 8 are the working list.  Each entry says what was done and
@@ -22,15 +22,17 @@ should know it has been had.
 
 ## 1. What is coded
 
-tsvcomp does not see Ogg.  `balrogg` (in this tree, only the transform half
-of upstream balrogg) takes a Vorbis stream apart into a record stream, and
-`tsvcomp c` walks that record stream in the same order the Vorbis decoder
-would, asking each value from the input and handing it to a model.  `tsvcomp
-d` runs the identical walk with the roles reversed: each value is answered by
-the model and written out.  The walk is in `tc_walk` and the functions it
-calls (`tc_page`, `tc_header`, `tc_audio`, `tc_payload`, `tc_residue`,
-`tc_part`), and because the shape of what comes next depends on values
-already coded, the two directions cannot drift.
+The walk is balrogg's.  `io.inc` takes each Vorbis packet apart bit by bit
+(`link_walk.inc` and `codec.inc` walk the pages), and at every point where a
+value is read it hands that value to a sink, with the context the walk has
+there: the residue, the pass, the channel, the partition, the class, the
+book.  Under `balrogg` the sink writes records (`oc_tsv.inc`); under
+`oggcomp` it is the model (`oc_model.inc`), and this document is about that
+sink.  `oggcomp d` runs the identical walk with the roles reversed: each
+value is decoded by the model and written into the packet's bits.  Because
+the shape of what comes next depends on values already coded, the two
+directions cannot drift.  OGGCOMP-PLAN.md is how the model came to be a sink
+rather than a second walk over a record stream, and what that was worth.
 
 Where the bits go, on a 350 kbit/s mono file and a 96 kbit/s stereo one:
 

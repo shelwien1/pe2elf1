@@ -31,10 +31,10 @@ build() {
     mv -f "$tmp/IDX/tsvcomp-${f}_h.inc" "MOD/tsvcomp-${f}_h.inc" || return 1
     mv -f "$tmp/IDX/tsvcomp-${f}_p.inc" "MOD/tsvcomp-${f}_p.inc" || return 1
   done
-  c++ ${CXXFLAGS:--O2} -fwrapv -o "$2" tsvcomp.cpp -lm
+  c++ ${CXXFLAGS:--O2} -fwrapv -o "$2" oggcomp.cpp -lm
 }
 
-[ -n "$1" ] || { echo "usage: ./t-guard.sh some.tsv" >&2; exit 2; }
+[ -n "$1" ] || { echo "usage: ./t-guard.sh some.ogg" >&2; exit 2; }
 in=$1
 
 #  A control: the shipped parameters code the file and leave it behind.
@@ -64,7 +64,7 @@ done
 wrc=0;  wait "$wp" || wrc=$?
 if [ "$wrc" != 0 ]; then
   say "a wide index codes the file" "FAILED (exit $wrc)"; fail=1
-elif ! "$tmp/wide" d "$tmp/c.tc" "$tmp/c.tsv" >/dev/null 2>&1 || ! cmp -s "$in" "$tmp/c.tsv"; then
+elif ! "$tmp/wide" d "$tmp/c.tc" "$tmp/c.ogg" >/dev/null 2>&1 || ! cmp -s "$in" "$tmp/c.ogg"; then
   say "a wide index codes the file" "FAILED (the stream does not decode)"; fail=1
 elif [ "$rss" -gt 1048576 ]; then
   say "a wide index costs no memory" "FAILED ($((rss/1024)) MB resident)"; fail=1
@@ -91,7 +91,7 @@ else
 fi
 #  Leave MOD/ as it is checked in -- the shipping form, not the tuning form the
 #  builds above were made in.  Not `./mk.sh release`, which would also replace
-#  ./tsvcomp with a binary carrying no !MAP! markers, and so silently end
+#  ./oggcomp with a binary carrying no !MAP! markers, and so silently end
 #  whatever tuning run was using it.
 ./mk.sh mod >/dev/null
 

@@ -27,3 +27,8 @@ over the corpus.
 Decoding H takes 0.95x the time G did on 05.ogg and 03.ogg, 1.04x on 07.ogg,
 1.01x on 09.ogg and 0.97x on 08.ogg -- unchanged, within the noise, in a
 third of the address space.
+
+tsvcompH is also what oggcomp produces: `oggcomp c` on the .ogg codes byte
+for byte what `tsvcomp c` coded from `balrogg c`'s record stream, minus the
+container's 7-byte header, which is the same length in both.  The sizes
+above are oggcomp's.

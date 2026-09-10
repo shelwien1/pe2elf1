@@ -520,3 +520,42 @@ merge exists to hand over.
 Whatever `tc_walk` resets today at the top of its link loop is what
 `link_begin` resets; the list above is read off it and is checked by the
 two-link concatenation in section 7.
+
+---
+
+## 10. Outcome
+
+Done, in the order above, with the check at each step holding.
+
+- **Step 2.**  balrogg on the sink writes byte-identical TSV on all 17
+  corpus files, and its decode round-trips them.
+- **Step 4.**  `oggcomp c` was bit-exact with `tsvcomp c` on the first
+  file it was run on, and on all 17; the `OC_TRACE` facility was never
+  needed and was not built.  `oggcomp d` reproduces every `.ogg`.  A
+  two-link stream made by concatenating two files is bit-exact and
+  round-trips, which checks section 7's per-link reset list.  The `-v`
+  stage accounting agrees with tsvcomp's to the byte.
+- **Step 5.**  Clean under AddressSanitizer and UndefinedBehaviorSanitizer
+  in both directions.
+- **Step 7.**  Wall time and peak resident memory, same box as section 1,
+  in the table below: the model's own time, as expected, with the 13 and
+  47 MB record streams gone from between the tools.
+
+| file | balrogg c + tsvcomp c | oggcomp c | tsvcomp d + balrogg d | oggcomp d |
+|---|---|---|---|---|
+| 00000007 | 0.17 + 1.45 s, 26 MB | 1.57 s, 27 MB | 1.63 + 0.17 s, 27 MB | 1.73 s, 26 MB |
+| 00000008 | 0.54 + 9.07 s, 63 MB | 8.53 s, 69 MB | 8.22 + 0.49 s, 64 MB | 8.54 s, 64 MB |
+
+What deviated from the plan as written, all small:
+
+- `page` takes `(p, cont)` and derives `bos` from its own page counter,
+  which is what `tc_page` did from `tc_walk`'s.
+- `ogg_page::put` and `get`, the page fields as records, moved out of
+  `ogg_page.inc` into `oc_tsv.inc`; `RS_DIGIT_MAX` moved from `io.inc` to
+  `oc_sink.inc`, where both sinks can see it.
+- `tcp_build` guards a book by `ent` where `vd_setup` guarded by whether it
+  had allocated a length list, which is the same condition.
+- `io::sval` became `io::digit`, since a residue digit was the only signed
+  value it ever carried.
+- The floor's derived tables live in `oc_floor`, computed in `setup_done`;
+  the sink method that codes a floor is `oc_flr` to keep the name free.

@@ -1,14 +1,14 @@
 #!/bin/sh
-#  Regenerate MOD/ from IDX/ and build tsvcomp.
+#  Regenerate MOD/ from IDX/ and build oggcomp.
 #
 #      ./mk.sh              tuning build   -- Debug 1, Const 0
 #      ./mk.sh release      shipping build -- every parameter folded
 #      ./mk.sh check        build both and prove they code identically
 #      ./mk.sh mod          regenerate MOD/ in the shipping form, build nothing
 #
-#  Only the first two write ./tsvcomp.  A shipping binary has no !MAP! markers
+#  Only the first two write ./oggcomp.  A shipping binary has no !MAP! markers
 #  in it, so an optimizer driving one finds no knobs and reports that nothing
-#  it tries changes anything -- which is why `check` leaves ./tsvcomp alone.
+#  it tries changes anything -- which is why `check` leaves ./oggcomp alone.
 #
 #  IDX-FORMAT.md sec.1: Debug and Const are orthogonal flags, not two modes.
 #  `Const 0` leaves each threshold a live `mapping` object; `Debug 1` makes its
@@ -16,7 +16,7 @@
 #  executable for.  So the tuning build is the one an optimizer can drive:
 #
 #      ./mk.sh
-#      perl IDX/opt.pl opt.lst ./tsvcomp        # hill-climbs the binary itself
+#      perl IDX/opt.pl opt.lst ./oggcomp        # hill-climbs the binary itself
 #      cd IDX && for f in tsvcomp-*.idx; do \
 #        perl import.pl $f ../export.\!\!\! > t && mv t $f; done
 #      ./mk.sh check                            # then ship what it found
@@ -79,27 +79,27 @@ generate() {
 #  $1 = UseNew, $2 = fold, $3 = output binary
 generate_and_build() {
   generate "$1" "$2"
-  $CXX $CXXFLAGS $WARN $REQ -o "$3" tsvcomp.cpp -lm
+  $CXX $CXXFLAGS $WARN $REQ -o "$3" oggcomp.cpp -lm
 }
 
 #  Regenerate MOD/ in the shipping form and build nothing.  What a script wants
 #  when it has finished borrowing MOD/ and has to put it back the way it ships:
-#  building would also replace ./tsvcomp, and ./tsvcomp may be the tuning build
+#  building would also replace ./oggcomp, and ./oggcomp may be the tuning build
 #  someone is in the middle of optimizing.
 regenerate_mod() { generate 0 1; }
 
 case "${1:-tuning}" in
   tuning)
-    generate_and_build 1 0 tsvcomp
+    generate_and_build 1 0 oggcomp
     #  The marker is put there by the pdesc macro, so it is the binary that
     #  has to be looked at -- which is also what opt.pl looks at.
-    n=$(grep -ac '!MAP!' tsvcomp || true)
-    b=$(perl -ne 'BEGIN{$/=undef} $n+=length($3) while /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs; END{print $n+0}' tsvcomp)
-    echo "mk.sh: tuning build -- $b tunable bits in $(perl -ne 'BEGIN{$/=undef} $n++ while /!MAP!/g; END{print $n+0}' tsvcomp) patterns, visible to IDX/opt.pl"
+    n=$(grep -ac '!MAP!' oggcomp || true)
+    b=$(perl -ne 'BEGIN{$/=undef} $n+=length($3) while /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs; END{print $n+0}' oggcomp)
+    echo "mk.sh: tuning build -- $b tunable bits in $(perl -ne 'BEGIN{$/=undef} $n++ while /!MAP!/g; END{print $n+0}' oggcomp) patterns, visible to IDX/opt.pl"
     ;;
 
   release)
-    generate_and_build 0 1 tsvcomp
+    generate_and_build 0 1 oggcomp
     if grep -q '!MAP!' MOD/tsvcomp-*_h.inc; then
       echo "mk.sh: release build still carries !MAP! markers" >&2
       exit 1
@@ -113,31 +113,29 @@ case "${1:-tuning}" in
     trap 'rm -rf "$tmp"' EXIT INT TERM
     lst=${2:-}
     if [ -z "$lst" ]; then
-      #  No list given: make one from the bundled .ogg, so the contract can be
-      #  checked in a fresh clone with nothing else to hand.  A real tuning
-      #  corpus belongs in opt.lst; see IDX/opt.pl on what it should cover.
-      [ -x ./balrogg ] || make balrogg
-      ./balrogg c 00.ogg "$tmp/00.tsv"
+      #  No list given: the bundled .ogg, so the contract can be checked in a
+      #  fresh clone with nothing else to hand.  A real tuning corpus belongs
+      #  in opt.lst; see IDX/opt.pl on what it should cover.
       lst="$tmp/list"
-      echo "$tmp/00.tsv" > "$lst"
+      echo "00.ogg" > "$lst"
     fi
-    [ -f "$lst" ] || { echo "mk.sh check: no $lst -- one .tsv per line" >&2; exit 2; }
+    [ -f "$lst" ] || { echo "mk.sh check: no $lst -- one .ogg per line" >&2; exit 2; }
     generate_and_build 1 0 "$tmp/tune"
     generate_and_build 0 1 "$tmp/rel"
     bad=0
     while IFS= read -r f; do
       case "$f" in ''|\#*) continue;; esac
-      "$tmp/tune" c "$f" "$tmp/a.tc"
-      "$tmp/rel"  c "$f" "$tmp/b.tc"
-      if cmp -s "$tmp/a.tc" "$tmp/b.tc"; then
-        printf '  %-40s %10s  identical\n' "$(basename "$f")" "$(wc -c < "$tmp/a.tc")"
+      "$tmp/tune" c "$f" "$tmp/a.oc"
+      "$tmp/rel"  c "$f" "$tmp/b.oc"
+      if cmp -s "$tmp/a.oc" "$tmp/b.oc"; then
+        printf '  %-40s %10s  identical\n' "$(basename "$f")" "$(wc -c < "$tmp/a.oc")"
       else
         printf '  %-40s DIFFERS\n' "$(basename "$f")"
         bad=1
       fi
     done < "$lst"
     #  Leave MOD/ in the shipping shape, which is what it is checked in as.
-    #  Both binaries stay in $tmp: ./tsvcomp is not this command's to replace,
+    #  Both binaries stay in $tmp: ./oggcomp is not this command's to replace,
     #  and replacing it with the shipping build is the quiet way to end a
     #  tuning session -- that build carries no !MAP! markers, so IDX/opt.pl
     #  finds nothing to patch and every measurement comes back the same.
