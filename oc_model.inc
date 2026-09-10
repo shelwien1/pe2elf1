@@ -157,7 +157,18 @@
 
 /*  Set by the main program: 1 = c, 0 = d.  */
 static int tc_enc;
-static Rangecoder rc;
+/*  The coder, one per direction: rc.inc has the direction as a template
+    parameter, so the choice is one branch at tc_bit rather than tests
+    inside every step.  Only the one for the direction in hand is started.
+    OC_CARRYLESS=1 builds the carryless twin, which loses a carry once in
+    2^33 steps and cannot recover here (there is no block to code again),
+    so the encoder refuses the stream when that happens; it is for
+    measuring, not shipping.  */
+#ifndef OC_CARRYLESS
+#define OC_CARRYLESS 0
+#endif
+static Rangecoder<0, OC_CARRYLESS> rce;
+static Rangecoder<1, OC_CARRYLESS> rcd;
 /*  The link's setup, once its header has been read (setup_done).  */
 static vb_ctx * oc_v;
 /*  ------------------------------------------------------------------
@@ -503,7 +514,8 @@ static INLINE int tc_bit(int p, int bit) {
   if (tc_verbose && tc_enc)
     tc_bits[tc_stage] -= log2(bit ? 1.0 - p / (double) CM_PONE
                                   : p / (double) CM_PONE);
-  b = rc.rc_BProcess((uint) (p << 3), b);
+  if (tc_enc) rce.rc_Process((uint) (p << 3), b);
+  else        rcd.rc_Process((uint) (p << 3), b);
   return (int) b;
 }
 

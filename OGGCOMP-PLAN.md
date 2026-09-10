@@ -660,3 +660,88 @@ So the port stands as structure -- the walk is a coroutine over two pins,
 which is what makes it a drop-in for anything else built on Lib3 -- and
 not as a speedup.  Any speed is in `oc_model.inc` and `cm.inc`, in what is
 done per bit, and a profile of those is where the next step would begin.
+
+---
+
+## 12. The coder
+
+Asked for after section 11: the coder replaced by a cleaned version of the
+psrc tree's `rc.inc`, sh_v2f.inc being too slow for a model this cheap
+per bit.  It was: per coded bit, sh_v2f.inc's encoder found the two ends
+of the sub-interval by a 64-bit multiply-and-divide each, its decoder did
+a third to find the symbol, and both renormalised one bit at a time, a
+loop with a branch per bit of output.  rc.inc's coder finds the
+sub-interval with one multiply (`(range >> 15) * freq`), renormalises by
+whole bytes -- none on most steps, one or two otherwise, counted from two
+compares -- and defers the addition to `low` to the next renorm.
+
+### What rc.inc is
+
+The scalar coder of sh_v1xN_s.cpp as the psrc tree carries it, less what
+served that tree's vector kernel and block structure:
+
+- **Kept**: the direction as a template parameter (`Rangecoder<f_DEC>`),
+  the CRTP byte I/O (`RC_IO_BASE`, which the includer names -- here
+  `rc_pin_io`, on the coroutine's pins), the wide `low` (`RC_LOWBYTES`,
+  4..8, default 8), both carry modes as a second template parameter
+  (`CARRYLESS`, default 0: the carrying twin, with Cache and the held-back
+  0xFF run; 1: the carryless twin that only flags an escaped carry), the
+  deferred `rpre`, the counted renorm, the minimal flush by one bit scan
+  over `low ^ high`, and the carrying flush's trim of trailing 0xFF bytes
+  (`RC_FF_TRIM`), which the reader taking 0xFF past the end allows.
+- **Cleaned out**: `RC_VECOUT` and everything under it (the staged store,
+  the folded `rpre`, the shift-count shapes, the kernel fingerprint), the
+  lane arrays, the header coder's aligned flush, the multi-symbol entry
+  points nothing here calls, and the double inclusion under two class
+  names that the carry-mode template parameter replaces.
+- **Added**: `emit()`, which drops the zero prefix.  With `low` wider than
+  `code`, the first `LOWBYTES - 4` bytes out of the delay line are zeros
+  nothing has reached yet; psrc's block writer started each payload past
+  them, and a stream coder has to drop them as they go by.  One predictable
+  branch per emitted byte, on a path taken about once per eight coded bits.
+
+The model holds one coder per direction, `rce` and `rcd`, and `tc_bit`
+branches on `tc_enc` between them -- one predictable branch per bit,
+against the three direction tests sh_v2f.inc made inside each step.  The
+container's version is 2; a version 1 stream is refused with both
+numbers.  `OC_CARRYLESS=1` builds the carryless twin for measuring: it
+loses a carry once in 2^33 steps, and with no block to code again the
+encoder refuses the stream when that happens rather than write one that
+does not decode.
+
+### Checks
+
+- Every corpus file round-trips, and so does a two-link stream; the tuning
+  and shipping builds agree (`./mk.sh check opt.lst`).
+- The knobs all code the same stream: `RC_LOWBYTES` 4, 5 and 8 and the
+  carryless twin each produced byte-identical output on the files tried,
+  and the carryless twin lost no carry on any of the seventeen.
+- Clean under UndefinedBehaviorSanitizer, and under AddressSanitizer with
+  `replace_intrin=0` as section 11 explains.
+- A version 1 stream is refused by version; a truncated stream is refused
+  by the walk with the output removed.
+
+### What it costs and what it buys
+
+The truncation in `range >> 15` gives up at most 2^15 of a range that is
+at least 2^24, and in practice far less:
+
+| file | version 1 | version 2 | difference |
+|---|---|---|---|
+| 00000008 | 5,127,183 | 5,127,301 | +118 |
+| 00000009 | 2,537,452 | 2,537,508 | +56 |
+| 00000007 | 776,017 | 776,039 | +22 |
+| all seventeen | 11,346,678 | 11,346,927 | +249, 0.002% |
+
+log.txt has every file, as the `oggcomp2` column.  Wall time, same box,
+the two builds run alternately, minimum of three:
+
+| file | `c` version 1 | `c` version 2 | `d` version 1 | `d` version 2 |
+|---|---|---|---|---|
+| 00000008 | 10.68 s | 9.77 s | 10.02 s | 9.41 s |
+| 00000007 | 2.06 s | 1.84 s | 1.93 s | 1.85 s |
+
+Six to eleven percent, in both directions and on both files, which is the
+coder's share of a step that is mostly the model's.  Section 11's
+conclusion stands for the rest: what is left is in `oc_model.inc` and
+`cm.inc`, per bit.

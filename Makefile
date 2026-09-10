@@ -20,7 +20,7 @@ BLR_INC = $(WALK_INC) tsv.inc oc_tsv.inc
 CORO_INC = oc_coro.inc Lib3/coro3b.inc Lib3/coro3_pin.inc Lib3/coro3_pin_0.inc \
           Lib3/coro3_setjmp_x64.h Lib3/coro3_setjmp_x64d.h Lib3/coro3_setjmp_x32.h \
           Lib3/coro_fhp2.inc Lib3/file_api.inc Lib3/file_api_std.inc
-CMP_INC = $(WALK_INC) $(CORO_INC) sh_v2f.inc cm.inc sh_mapping.inc tc_prior.inc oc_model.inc \
+CMP_INC = $(WALK_INC) $(CORO_INC) rc.inc cm.inc sh_mapping.inc tc_prior.inc oc_model.inc \
           MOD/tsvcomp-dig_h.inc MOD/tsvcomp-dig_p.inc \
           MOD/tsvcomp-sgn_h.inc MOD/tsvcomp-sgn_p.inc \
           MOD/tsvcomp-flr_h.inc MOD/tsvcomp-flr_p.inc \

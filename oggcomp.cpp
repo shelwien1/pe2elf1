@@ -54,8 +54,8 @@
 #include "vb_ctx.inc"      /*  what survives from one packet to the next  */
 
 #include "oc_coro.inc"     /*  Lib3: the coroutine, its file API, the coder's pins  */
-#define RC_IO rc_pins
-#include "sh_v2f.inc"      /*  the range coder  */
+#define RC_IO_BASE rc_pin_io
+#include "rc.inc"          /*  the range coder  */
 #include "cm.inc"          /*  counter, APM, mixer  */
 #include "sh_mapping.inc"  /*  IDX runtime: mapping, masking, pdesc  */
 
@@ -70,11 +70,11 @@ typedef oc_model sink_t;
 
 /*  The container: a magic, a version, a spare byte, and the coder's bytes.
     The parameters compiled in through MOD/ are part of the format -- a
-    stream decodes under a build with the same MOD/, and no other.  */
+    stream decodes under a build with the same MOD/, and no other.  Version
+    2 is rc.inc's coder; version 1 was sh_v2f.inc's, over the same model.  */
 constexpr char OC_MAGIC[] = "oggc\x1a";
-constexpr int  OC_VER = 1;
+constexpr int  OC_VER = 2;
 
-static rc_pins rcio;       /*  the coder's bytes go through the coroutine  */
 
 /*  The coroutine.  Its body is the walk -- vb_pack or vb_unpack, whichever
     direction -- with the coder and the input window reading and writing the
@@ -119,16 +119,18 @@ struct oc_coro : Coroutine {
   }
 
   void do_process() {
-    rcio.co = this;
     if (tc_enc) {
       source src;
       src.open(in, pull, this);
-      rc.StartEncode(&rcio);
+      rce.co = this;  rce.rc_Init();
       vb_pack(t, src);
-      rc.FinishEncode();
+      rce.rc_Quit();
+      if (rce.carry_lost())
+        FATAL_CODE(BLR_EXIT_INTERNAL, "%s: the carryless coder lost a carry; "
+                   "this is a measuring build, ship one with OC_CARRYLESS=0", in);
       src.close();
     } else {
-      rc.StartDecode(&rcio);
+      rcd.co = this;  rcd.rc_Init();
       vb_unpack(t, in, push, this);
     }
     yield(this, 0);          /*  done: the driver writes what is left and stops  */

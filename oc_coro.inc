@@ -12,7 +12,7 @@
     Lib3 spells its types and its hints as its own common.inc does; this
     tree has a common.inc of its own, so the names Lib3 uses are defined
     here over ours rather than including both.  The typedefs repeat
-    sh_v2f.inc's and oc_model.inc's word for word, which C++ allows.  */
+    oc_model.inc's word for word, which C++ allows.  */
 typedef u8  byte;
 typedef u16 word;
 typedef u32 uint;
@@ -46,11 +46,12 @@ template <class T, int N> constexpr uint DIM(T (&)[N]) { return N; }
 static qword g_prog_in;
 #include "Lib3/coro_fhp2.inc"
 
-/*  The range coder's bytes: got from the input pin, put on the output pin.
-    Lib3's get() returns uint(-1) once the driver has said the input is
-    done; as a byte that is 0xFF, which is what rc_buf handed out past its
-    end, so the coder's rc_Init and its final inpbits see what they did.  */
-struct rc_pins {
+/*  The range coder's bytes -- rc.inc's RC_IO_BASE -- on the coroutine's
+    pins: got from the input pin, put on the output pin.  Lib3's get()
+    returns uint(-1) once the driver has said the input is done; as a byte
+    that is 0xFF, forever, which is what the coder's flush counts on.  */
+template <class RC>
+struct rc_pin_io {
   Coroutine * co;
   byte get() { return (byte) co->pin[0].get(); }
   void put(byte c) { co->pin[1].put(c); }
