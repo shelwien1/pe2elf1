@@ -10,7 +10,15 @@
 #if ((defined __GNUC__) || (defined __INTEL_COMPILER) || (defined __clang__)) && (!defined CORO_NOASM)
   #define _INC_SETJMP
   #ifdef X64
-    #if __clang__
+    // gcc on its builtins, clang on the inline assembly of
+    // coro3_setjmp_x64d.h.  Not the other way for clang: its
+    // __builtin_setjmp keeps values in registers across the return that
+    // longjmp makes, and a clang 23 build for Windows at -O3 crashed on
+    // the first resume that way, where the asm variant -- every register
+    // declared clobbered, the buffer pointer taken from memory -- ran.
+    // CORO_BUILTIN_SETJMP puts clang on the builtins for comparison;
+    // it runs on Linux.
+    #if defined(__clang__) && !defined(CORO_BUILTIN_SETJMP)
        #include "coro3_setjmp_x64d.h"
     #else
        #include "coro3_setjmp_x64.h"
@@ -126,7 +134,18 @@ struct Coroutine {
 NOINLINE
 static void yield( void* p, int value ) { 
   Coroutine& q = *(Coroutine*)p;
-  char curtmp; q.stkptrL=(char*)((size_t)(&curtmp)-16); // below the caller's frame; cast keeps gcc from calling it an out-of-bounds subscript
+  // The bottom of the live stack is this frame's stack pointer: everything
+  // from it upward -- this frame, the frames that called it -- has to be
+  // saved to be resumed.  Read it rather than guessed from a local's address
+  // less a margin, which was a guess about where the compiler put the local
+  // in the frame, and one a different compiler need not honour.
+  char* sp;
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(_M_X64))
+  __asm__ volatile( "movq %%rsp, %0" : "=r"(sp) );
+#else
+  char curtmp; sp = (char*)((size_t)(&curtmp)-16);
+#endif
+  q.stkptrL = sp;
   if( setjmp(q.PointB)==0 ) { 
     q.state=value; 
     // the coroutine's frames are copied out whole; a deeper call chain than

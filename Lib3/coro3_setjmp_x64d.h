@@ -6,16 +6,22 @@ struct my_jmpbuf {
 #undef ASM
 #define ASM __asm__ volatile
 
+// The buffer pointer is taken from memory into rbx inside the asm, so that
+// rbx too is a clobber: my_jmp lands on the label below with every register
+// as the jumper left it, and the code after the asm must reload everything
+// from memory rather than keep anything -- the buffer pointer included -- in
+// a register across it.
 __attribute__((returns_twice, used))
 INLINE static int my_setjmp( my_jmpbuf* regs ) {
   int r;
   ASM ("\
+   movq %1, %%rbx;        \
    leaq 0f(%%rip), %%rax; \
-   movq %%rax, 0(%1);     \
-   movq %%rsp, 8(%1);     \
+   movq %%rax, 0(%%rbx);  \
+   movq %%rsp, 8(%%rbx);  \
    xorl %%eax, %%eax;     \
 0:;                        \
-  " : "=a"(r) : "b"(regs) : "%rcx","%rdx","%rsi","%rdi","%rbp","%r8","%r9","%r10","%r11","%r12","%r13","%r14","%r15",
+  " : "=a"(r) : "m"(regs) : "%rbx","%rcx","%rdx","%rsi","%rdi","%rbp","%r8","%r9","%r10","%r11","%r12","%r13","%r14","%r15",
 #ifdef __AVX2__
 "ymm0","ymm1","ymm2","ymm3","ymm4","ymm5","ymm6","ymm7","ymm8","ymm9","ymm10","ymm11","ymm12","ymm13","ymm14","ymm15","memory"
 #else
