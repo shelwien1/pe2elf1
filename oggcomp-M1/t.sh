@@ -7,7 +7,7 @@
 #      ./t.sh -B                  rebuild with ./mk.sh first
 #      ./t.sh -k                  keep the .oc and the restored .ogg
 #      ./t.sh -1                  one encode per file, no determinism check
-#      ./t.sh -n                  skip the refusal tests
+#      ./t.sh -n                  skip the tests after the table
 #      ./t.sh -v                  pass -v to oggcomp, so it says where the bits went
 #
 #  What is being tested is a LOSSLESS compressor, so there is one thing that
@@ -25,12 +25,15 @@
 #
 #      ./t.sh && ./mk.sh check
 #
-#  The refusal tests at the end matter as much as the round trips.  A
-#  compressor that cannot reproduce its input exactly has to say so and stop
-#  -- silently writing a stream that decodes to something else is the one
-#  unforgivable failure -- so the exit status for every kind of bad input is
-#  part of the interface, and this checks it, including that a refused run
-#  leaves no half-written output behind to be mistaken for a good one.
+#  The two sections after the table matter as much as the round trips.
+#  `oggcomp c` takes any file -- an Ogg with a tag in front, a stream cut
+#  off halfway, a file that is not Ogg at all -- and gives it back byte for
+#  byte, so the first section feeds it things that are not Vorbis and
+#  requires exactly that.  What it can still refuse is a `.oc` it did not
+#  write and a command line it cannot read, and the exit status for each of
+#  those is part of the interface, so the second section checks it,
+#  including that a refused run leaves no half-written output behind to be
+#  mistaken for a good one.
 
 set -e
 
@@ -45,7 +48,7 @@ usage: ./t.sh [options] [file.ogg ...]
   -B       rebuild with ./mk.sh first
   -k       keep each .oc and restored .ogg beside its input
   -1       one encode per file: skip the determinism check
-  -n       skip the refusal tests
+  -n       skip the tests after the table: anything round-trips, refusals
   -v       pass -v to oggcomp, so it says where the bits went
   -h       this
 
@@ -89,11 +92,14 @@ if [ $build = 1 ] || { [ "$bin" = ./oggcomp ] && [ ! -x ./oggcomp ]; }; then
 fi
 [ -x "$bin" ] || { echo "t.sh: $bin is not there -- ./mk.sh builds it" >&2; exit 2; }
 
-#  No files named: the bundled corpus.  The glob is left unexpanded when it
-#  matches nothing, which is what the -f test below is looking at.
+#  No files named: the bundled corpus, the .bin files included -- they are
+#  the inputs that are not Ogg at all.  A glob that matches nothing is left
+#  unexpanded, which the -f test drops.
 if [ $# = 0 ]; then
-  set -- testfiles/*.ogg
-  [ -f "$1" ] || {
+  for g in testfiles/*.ogg testfiles/*.bin; do
+    [ -f "$g" ] && set -- "$@" "$g"
+  done
+  [ $# -gt 0 ] || {
     echo "t.sh: no testfiles/*.ogg -- ./testfiles/gen.sh makes them," >&2
     echo "      or name the files to test on the command line" >&2
     exit 2; }
@@ -246,30 +252,39 @@ awk -v l="$label" -v i="$tot_in" -v o="$tot_out" -v e="$tot_enc" -v d="$tot_dec"
          l, i, o, (i > 0 ? 100.0*o/i : 0), e, d, (e > 0 ? i/e/1048576.0 : 0)) }'
 echo
 
-#  Every way of being told no.  The exit status is the interface here: 1 is
-#  "this input is not something I can code back exactly", 2 is "you typed it
-#  wrong", 3 is "the filesystem said no" -- and a run that ends in any of
+#  Anything round-trips.  The encoder does not refuse input: what is not
+#  Vorbis in it is coded as bytes, so an empty file, a stream cut off in
+#  the middle of a page, a .oc fed back to `c`, the scripts in this tree
+#  and the compressor's own binary all have to come back byte for byte,
+#  with exit 0 on both sides.  The size is printed because it is worth a
+#  glance -- a cut-off stream is mostly Vorbis still and should code like
+#  it -- but the test is the round trip.
+bad_any=0; nany=0
+
+#  Then every way of being told no.  The exit status is the interface here:
+#  1 is "this .oc is not one I wrote, or not all of one", 2 is "you typed
+#  it wrong", 3 is "the filesystem said no" -- and a run that ends in any of
 #  them must not leave an output file, because a half-written .oc that looks
 #  like a whole one is how a backup turns out to be nothing.  The removal is
 #  unconditional, so a refused run over a file that already existed destroys
 #  it -- which is why every output path below is under $tmp.
 bad_refusal=0; nrefusal=0
 
-#  Several of the tests below want a good .oc to damage, and take it from
-#  the first file under test.  If even that will not code then the round
-#  trips above have already failed and there is nothing here left to learn.
+#  Both sections want a good .oc to damage, and take it from the first file
+#  under test.  If even that will not code then the round trips above have
+#  already failed and there is nothing here left to learn.
 if [ $refusals = 1 ] && { [ $srcok = 0 ] ||
      ! "$bin" c "$src" "$tmp/good.oc" >/dev/null 2>&1; }; then
-  echo "t.sh: refusal tests skipped -- $src does not code" >&2
+  echo "t.sh: tests after the table skipped -- $src does not code" >&2
   refusals=0
 fi
 
 if [ $refusals = 1 ]; then
   : > "$tmp/empty.ogg"
 
-  #  Half the file, up to 400 bytes.  A fixed count would be the whole file
-  #  for a small enough input, and a whole file is not a truncated one: the
-  #  test would then be asking oggcomp to refuse something valid.  No real
+  #  Half the file, up to 400 bytes: a page cut off in the middle, which is
+  #  what a stopped download is.  A fixed count would be the whole file for
+  #  a small enough input, and a whole file is not a cut-off one.  No real
   #  .ogg is under 400 bytes -- the three headers alone are some kilobytes
   #  -- but the corpus is whatever was named on the command line.
   half() { h=$(( $(wc -c < "$1") / 2 )); [ "$h" -le "$2" ] || h=$2; echo "$h"; }
@@ -277,6 +292,43 @@ if [ $refusals = 1 ]; then
   head -c "$(half "$tmp/good.oc" 200)"  "$tmp/good.oc"  > "$tmp/cut.oc"
   cp "$tmp/good.oc" "$tmp/ver.oc"
   printf '\177' | dd of="$tmp/ver.oc" bs=1 seek=5 count=1 conv=notrunc >/dev/null 2>&1
+  #  One byte turned, three quarters of the way in: past the headers, so
+  #  it is the model's checks and the CRC at the end that have to notice.
+  cp "$tmp/good.oc" "$tmp/flip.oc"
+  printf '\001' | dd of="$tmp/flip.oc" bs=1 seek="$(( $(wc -c < "$tmp/good.oc") * 3 / 4 ))" \
+                      count=1 conv=notrunc >/dev/null 2>&1
+  #  A .oc of bytes, not Vorbis, cut in half.  The Vorbis parser's checks
+  #  are not there to catch this one: the decoder would turn the missing
+  #  half into output for as long as it was let, so it is the cap on
+  #  reading past the end that has to stop it, and the CRC that has to
+  #  refuse what it made.
+  "$bin" c ./t.sh "$tmp/raw.oc" >/dev/null 2>&1
+  head -c "$(half "$tmp/raw.oc" 100000)" "$tmp/raw.oc" > "$tmp/rawcut.oc"
+
+  anything() {  # $1 what, $2 the file: code it, decode it, compare
+    what=$1; f=$2
+    nany=$((nany + 1))
+    rm -f "$tmp/any.oc" "$tmp/any.out"
+    if "$bin" c "$f" "$tmp/any.oc" >"$tmp/msg" 2>&1 &&
+       "$bin" d "$tmp/any.oc" "$tmp/any.out" >>"$tmp/msg" 2>&1 &&
+       cmp -s "$f" "$tmp/any.out"; then
+      printf '  %-26s %9d -> %8d\n' "$what" "$(wc -c < "$f")" "$(wc -c < "$tmp/any.oc")"
+    else
+      printf '  %-26s %9d    DID NOT ROUND-TRIP  %s\n' "$what" "$(wc -c < "$f")" \
+             "$(sed -n 1p "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-40)"
+      bad_any=$((bad_any + 1))
+    fi
+  }
+
+  printf '  %s\n' 'anything round-trips'
+  anything 'empty input'        "$tmp/empty.ogg"
+  anything 'ogg cut off'        "$tmp/cut.ogg"
+  anything 'a .oc given to c'   "$tmp/good.oc"
+  anything 'a cut-off .oc to c' "$tmp/cut.oc"
+  anything 'this script'        ./t.sh
+  anything 'the build script'   ./mk.sh
+  anything 'the compressor'     "$bin"
+  echo
 
   refuse() {  # $1 what, $2 wanted exit status, rest: arguments to the binary
     what=$1; want=$2; shift 2
@@ -298,37 +350,23 @@ if [ $refusals = 1 ]; then
       #  message before showing it.
       printf '  %-26s exit %d  %s\n' "$what" "$got" \
              "$(sed -n 1p "$tmp/msg" |
-                sed "s|$tmp/||g; s|testfiles/refused/||g; s|^[^ ]*: ||" |
+                sed "s|$tmp/||g; s|^[^ ]*: ||" |
                 cut -c1-48)"
     fi
   }
 
   printf '  %s\n' 'refusals'
-  refuse 'empty input'        1 c "$tmp/empty.ogg" "$tmp/no.out"
-  refuse 'truncated ogg'      1 c "$tmp/cut.ogg"   "$tmp/no.out"
-  refuse 'not an ogg at all'  1 c "$tmp/good.oc"   "$tmp/no.out"
-  refuse 'ogg given to d'     1 d "$src"           "$tmp/no.out"
-  refuse 'truncated .oc'      1 d "$tmp/cut.oc"    "$tmp/no.out"
-  refuse 'wrong version byte' 1 d "$tmp/ver.oc"    "$tmp/no.out"
-  refuse 'input not there'    3 c "$tmp/nothing"   "$tmp/no.out"
-  refuse 'output over input'  2 c "$src"           "$src"
-  refuse 'no arguments'       2
-  refuse 'unknown mode'       2 z "$src"           "$tmp/no.out"
-  refuse 'unknown option'     2 c -Z "$src"        "$tmp/no.out"
-
-  #  testfiles/refused/ holds one file per way of being an Ogg that cannot
-  #  be given back byte for byte -- a bad page CRC, a stream with no
-  #  end-of-stream page, an ID3 tag in front of the first page, junk after
-  #  the last one, and an Ogg that is Opus rather than Vorbis.  Each must
-  #  still be refused.  A build that starts ACCEPTING one of these is the
-  #  failure this whole directory exists to catch: it would be writing a
-  #  stream whose decode is not the file it was given.
-  if [ -d testfiles/refused ]; then
-    for r in testfiles/refused/*; do
-      [ -f "$r" ] || continue
-      refuse "$(basename "$r")" 1 c "$r" "$tmp/no.out"
-    done
-  fi
+  refuse 'ogg given to d'      1 d "$src"           "$tmp/no.out"
+  refuse 'empty .oc'           1 d "$tmp/empty.ogg" "$tmp/no.out"
+  refuse 'truncated .oc'       1 d "$tmp/cut.oc"    "$tmp/no.out"
+  refuse 'truncated .oc of bytes' 1 d "$tmp/rawcut.oc" "$tmp/no.out"
+  refuse 'a byte turned in a .oc' 1 d "$tmp/flip.oc" "$tmp/no.out"
+  refuse 'wrong version byte'  1 d "$tmp/ver.oc"    "$tmp/no.out"
+  refuse 'input not there'     3 c "$tmp/nothing"   "$tmp/no.out"
+  refuse 'output over input'   2 c "$src"           "$src"
+  refuse 'no arguments'        2
+  refuse 'unknown mode'        2 z "$src"           "$tmp/no.out"
+  refuse 'unknown option'      2 c -Z "$src"        "$tmp/no.out"
   echo
 fi
 
@@ -352,10 +390,10 @@ printf 't.sh: %d/%d round-tripped byte for byte' "$ok" "$n"
 [ $twice = 1 ] && printf ', %d/%d coded identically twice' "$same" "$nsame"
 echo
 [ $refusals = 1 ] &&
-  printf 't.sh: %d/%d refusals gave the exit status they should\n' \
-         "$((nrefusal - bad_refusal))" "$nrefusal"
+  printf 't.sh: %d/%d other inputs round-tripped, %d/%d refusals gave the exit status they should\n' \
+         "$((nany - bad_any))" "$nany" "$((nrefusal - bad_refusal))" "$nrefusal"
 
-if [ $fail = 0 ] && [ $bad_refusal = 0 ] && [ $n -gt 0 ]; then
+if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $n -gt 0 ]; then
   echo "t.sh: PASS"
 else
   echo "t.sh: FAIL" >&2

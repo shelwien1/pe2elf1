@@ -1,6 +1,7 @@
 #!/bin/sh
-#  Regenerate testfiles/*.ogg -- the corpus ./t.sh round-trips and ./mk.sh
-#  check codes under both builds.
+#  Regenerate testfiles/* -- the corpus ./t.sh round-trips and ./mk.sh
+#  check codes under both builds: Vorbis streams from oggenc, and the files
+#  derived from them that are not quite Vorbis, or not Ogg at all.
 #
 #      ./testfiles/gen.sh          encode whatever is missing
 #      ./testfiles/gen.sh -f       encode all of it again
@@ -57,10 +58,10 @@ need=0
 for n in sine-stereo-q5 noise-stereo-q3 mono-22k-q4 silence-stereo-q4 \
          tiny-8k-q0 sweep-mono-qm1 chirp-stereo-q10 multi6-48k-q4 \
          music-stereo-q5 music-managed-b96 bigcomment-8k chained \
-         uncoupled-stereo-q4 silence-8k-long-qm1 zerolen-8k-q0 tags-many-8k; do
+         uncoupled-stereo-q4 silence-8k-long-qm1 zerolen-8k-q0 tags-many-8k \
+         skeleton-8k minbitrate-pad; do
   [ -f "$n.ogg" ] || need=1
 done
-[ -d refused ] || need=1
 
 if [ $force = 1 ] || [ $need = 1 ]; then
 #  One WAV per stream, all of it synthesized -- no sample of anyone's music is
@@ -171,8 +172,8 @@ write('zero8k.wav', 1, 8000, 0, lambda i, c, sr: 0)
 
 #  A second of 44100 stereo silence, to be encoded with a minimum bitrate
 #  it cannot possibly fill.  libvorbis then pads the audio packets with zero
-#  bits, and a padded packet is one oggcomp refuses -- it cannot put the
-#  padding back byte for byte.  Encoded into refused/, not here.
+#  bits -- bits the Vorbis spec does not account for, which the packet
+#  coder has to notice and put back.
 write('sil44.wav', 2, SR, SR, lambda i, c, sr: 0)
 
 #  Two comment values of 66 kB each.  An Ogg page holds at most 255 segments
@@ -248,23 +249,44 @@ if want chained; then
   echo "  chained.ogg  $(wc -c < chained.ogg) bytes  (mono-22k-q4 + tiny-8k-q0)"
 fi
 
-#  testfiles/refused/ -- inputs oggcomp must decline, one per way of being
-#  wrong.  Half of what a lossless compressor promises is that it will not
-#  pretend: a file it cannot give back exactly has to be refused, loudly and
-#  with nothing written, rather than coded into a stream that decodes to
-#  something else.  t.sh checks that each of these still exits 1.
+#  Two more from oggenc that are not plain Vorbis-in-Ogg, which is what
+#  makes them worth having: they are not damaged files, they are files a
+#  working encoder writes, and each one once made oggcomp refuse.
 #
-#  They are derived from tiny-8k-q0.ogg, so they are small and so a diff
-#  against them means something.  Anything with a rewritten page needs its
-#  CRC recomputed, or the file would be refused for the CRC and the case it
-#  was built for would never be reached -- which is the mistake worth being
-#  careful about here.
-if [ $force = 1 ] || [ ! -d refused ]; then
-  mkdir -p refused
-  python3 - <<'REFUSED'
-import struct
+#  -k multiplexes an Ogg Skeleton bitstream in beside the Vorbis one: a sound
+#  container holding something besides one Vorbis stream.  The Skeleton
+#  pages are coded as bytes, the Vorbis pages as Vorbis, and a Vorbis packet
+#  that spans a Skeleton page is joined across it.
+want skeleton-8k        && enc skeleton-8k        1041 -q 0 -k tiny-8k.wav
+
+#  A minimum bitrate the audio cannot fill: libvorbis pads the audio packets
+#  out with zero bits.  Real files from real encoders look like this.
+want minbitrate-pad     && enc minbitrate-pad     1042 -m 128  sil44.wav
+
+#  Derived files -- the ways a file can be an Ogg that is not one Vorbis
+#  stream from start to end, or not an Ogg at all, one apiece.  Every one
+#  of these was once refused; now each has to come back byte for byte, and
+#  the interesting number is how much of it still codes as Vorbis.  They
+#  are built from tiny-8k-q0.ogg, so they are small and so a diff against
+#  them means something, and all of them from one seeded generator, so
+#  they are the same bytes on any machine.  Anything with a rewritten page
+#  needs its CRC recomputed, or the file would test the CRC path and not
+#  the case it was built for -- which is the mistake worth being careful
+#  about here.
+derived='badcrc-8k.ogg no-eos-8k.ogg id3-prefix-8k.ogg trailing-junk-8k.ogg
+         opus.ogg id3-text-8k.ogg id3-apic-8k.ogg id3v1-trailer-8k.ogg
+         chained-id3.ogg empty.ogg random.bin page-in-random.bin'
+need=0
+for n in $derived; do
+  [ -f "$n" ] || need=1
+done
+if [ $force = 1 ] || [ $need = 1 ]; then
+  python3 - <<'DERIVED'
+import random, struct, zlib
 
 src = open('tiny-8k-q0.ogg', 'rb').read()
+other = open('mono-22k-q4.ogg', 'rb').read()
+r = random.Random(20240613)
 
 def crc32_ogg(data):
     #  Ogg's CRC-32: polynomial 0x04c11db7, no reflection, no initial or
@@ -272,10 +294,10 @@ def crc32_ogg(data):
     #  library computes it.
     poly, tbl = 0x04c11db7, []
     for i in range(256):
-        r = i << 24
+        c = i << 24
         for _ in range(8):
-            r = ((r << 1) ^ poly) & 0xffffffff if r & 0x80000000 else (r << 1) & 0xffffffff
-        tbl.append(r)
+            c = ((c << 1) ^ poly) & 0xffffffff if c & 0x80000000 else (c << 1) & 0xffffffff
+        tbl.append(c)
     c = 0
     for b in data:
         c = ((c << 8) & 0xffffffff) ^ tbl[((c >> 24) & 0xff) ^ b]
@@ -295,62 +317,118 @@ def repage(page):
     p[22:26] = struct.pack('<I', crc32_ogg(bytes(p)))
     return bytes(p)
 
+def id3v2(frames):
+    #  An ID3v2.3 tag: ten-byte header with a syncsafe size, then frames of
+    #  id, big-endian size, two flag bytes, body.  No padding, no footer.
+    body = b''.join(fid + struct.pack('>I', len(data)) + b'\0\0' + data
+                    for fid, data in frames)
+    n = len(body)
+    return (b'ID3\x03\x00\x00' + bytes([(n >> 21) & 127, (n >> 14) & 127,
+                                        (n >> 7) & 127, n & 127]) + body)
+
+def text(s):  # a text frame body: encoding 0 is ISO-8859-1
+    return b'\x00' + s.encode('latin-1')
+
+first = list(pages(src))[0]
 last = list(pages(src))[-1]
 
 #  One flipped byte in the last page's payload, with the stored CRC left as
-#  it was: "the page at N has a bad CRC".
+#  it was.  The page is coded as it stands and the CRC it carries with it.
 d = bytearray(src); d[last[1] - 1] ^= 0xff
-open('refused/badcrc.ogg', 'wb').write(bytes(d))
+open('badcrc-8k.ogg', 'wb').write(bytes(d))
 
 #  The end-of-stream flag cleared on the last page, and the page re-CRCed so
-#  that it is the missing flag that gets noticed: "final bitstream has no
-#  end-of-stream page".  A stream that merely stops is a truncated download,
-#  and coding one would silently invent an ending for it.
+#  that it is the missing flag that is being tested.  A stream that merely
+#  stops is a truncated download, and it has to come back as it is.
 d = bytearray(src)
 p = bytearray(src[last[0]:last[1]]); p[5] &= 0xfb
 d[last[0]:last[1]] = repage(bytes(p))
-open('refused/no-eos.ogg', 'wb').write(bytes(d))
+open('no-eos-8k.ogg', 'wb').write(bytes(d))
 
-#  An ID3v2 tag in front of the first page.  Players skip it; something that
-#  has to give the file back byte for byte cannot: "no Ogg page at 0".
-open('refused/id3-prefix.ogg', 'wb').write(
+#  A bare ID3v2.4 tag in front of the first page -- 42 bytes, nearly all of
+#  them zero -- which is the smallest thing a tagger leaves.
+open('id3-prefix-8k.ogg', 'wb').write(
     b'ID3\x04\x00\x00\x00\x00\x00\x20' + b'\0' * 32 + src)
 
 #  Junk after the end-of-stream page -- the shape of a file concatenated
-#  with something that is not Ogg: "no Ogg page at <size of the real file>".
-open('refused/trailing-junk.ogg', 'wb').write(src + b'RIFFjunkjunkjunk')
+#  with something that is not Ogg.
+open('trailing-junk-8k.ogg', 'wb').write(src + b'RIFFjunkjunkjunk')
 
 #  Ogg Opus: a well-formed Ogg page whose first packet is an OpusHead.  The
-#  container is fine and the codec is not, which is a different refusal from
-#  every one above and the one a user is most likely to meet.
+#  container is fine and the codec is not: the page header is modelled and
+#  the payload is bytes.
 head = (b'OpusHead' + bytes([1, 2]) + struct.pack('<H', 312)
         + struct.pack('<I', 48000) + struct.pack('<h', 0) + bytes([0]))
-open('refused/opus.ogg', 'wb').write(repage(
+open('opus.ogg', 'wb').write(repage(
     b'OggS' + bytes([0, 0x02]) + struct.pack('<q', 0)
     + struct.pack('<I', 0x0badface) + struct.pack('<I', 0)
     + struct.pack('<I', 0) + bytes([1, len(head)]) + head))
-REFUSED
-  #  Two that oggenc itself produces, which is what makes them worth having:
-  #  they are not damaged files, they are files a working encoder writes and
-  #  this compressor still cannot promise to give back.
-  #
-  #  -k multiplexes an Ogg Skeleton bitstream in beside the Vorbis one.  Every
-  #  other refusal here is a broken container; this one is a sound container
-  #  holding something besides one Vorbis stream, which is the distinction
-  #  between multiplexed (refused) and chained (supported, and in the corpus).
-  oggenc -Q -k --serial 1041 -q 0 -o refused/skeleton.ogg tiny-8k.wav
 
-  #  A minimum bitrate the audio cannot fill: libvorbis pads the audio
-  #  packets out with zero bits, and a packet with bits in it that the
-  #  vorbis spec does not account for is one oggcomp will not code, because
-  #  it cannot put them back.  Real files from real encoders look like this.
-  oggenc -Q -m 128 --serial 1042 -o refused/minbitrate-pad.ogg sil44.wav
+#  An ID3v2.3 tag with text in it -- title, artist, album, a comment --
+#  which is what a tagger really leaves, and bytes the byte model can do
+#  something with.
+tag = id3v2([(b'TIT2', text('A Short Tone at Four Hundred Hertz')),
+             (b'TPE1', text('The Synthesizer')),
+             (b'TALB', text('Test Signals, Volume One')),
+             (b'TRCK', text('7/12')),
+             (b'TYER', text('2024')),
+             (b'COMM', b'\x00eng' + b'\x00'
+                       + b'Nine hundred samples of sine wave, encoded at '
+                         b'quality zero, with this comment in front of them.')])
+open('id3-text-8k.ogg', 'wb').write(tag + src)
 
-  for r in refused/*.ogg; do echo "  $r  $(wc -c < "$r") bytes"; done
+#  The same with an APIC frame: a 16 by 16 PNG of random pixels, stored
+#  rather than deflated (level 0, so the bytes do not depend on the zlib
+#  version) -- bytes the byte model can do nothing with, and the shape of
+#  the cover art every tagged file carries.
+def chunk(kind, data):
+    return (struct.pack('>I', len(data)) + kind + data
+            + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff))
+rows = b''.join(b'\x00' + bytes(r.randrange(256) for _ in range(16 * 3))
+                for _ in range(16))
+png = (b'\x89PNG\r\n\x1a\n'
+       + chunk(b'IHDR', struct.pack('>IIBBBBB', 16, 16, 8, 2, 0, 0, 0))
+       + chunk(b'IDAT', zlib.compress(rows, 0))
+       + chunk(b'IEND', b''))
+tag = id3v2([(b'TIT2', text('With a Picture')),
+             (b'APIC', b'\x00image/png\x00\x03\x00' + png)])
+open('id3-apic-8k.ogg', 'wb').write(tag + src)
+
+#  An ID3v1 tag: the 128-byte "TAG" block after the last page, which is
+#  what an older tagger leaves and what the older players look for.
+def field(s, n):
+    return s.encode('latin-1')[:n].ljust(n, b'\0')
+open('id3v1-trailer-8k.ogg', 'wb').write(
+    src + b'TAG' + field('A Short Tone', 30) + field('The Synthesizer', 30)
+    + field('Test Signals', 30) + field('2024', 4) + field('sine, 400 Hz', 30)
+    + bytes([12]))
+
+#  Two streams, each behind its own tag: what a cat of two tagged files is.
+#  The second tag sits between the streams, so it is junk between links,
+#  not junk in front of the file.
+open('chained-id3.ogg', 'wb').write(
+    id3v2([(b'TIT2', text('First')), (b'TPE1', text('Mono at 22050'))]) + other
+    + id3v2([(b'TIT2', text('Second')), (b'TPE1', text('Tiny at 8000'))]) + src)
+
+#  Nothing at all.
+open('empty.ogg', 'wb').write(b'')
+
+#  Not Ogg at all: 4 kB from the seeded generator.  Everything about it is
+#  the byte model's, and the number to watch is how little it grows.
+open('random.bin', 'wb').write(bytes(r.randrange(256) for _ in range(4096)))
+
+#  One valid page -- the first of tiny-8k-q0.ogg, headers and all -- inside
+#  random bytes, with a false "OggS" in front of it.  The scan has to find
+#  the page and has to not take the four letters for one.
+open('page-in-random.bin', 'wb').write(
+    bytes(r.randrange(256) for _ in range(1000)) + b'OggS\x01'
+    + bytes(r.randrange(256) for _ in range(1000)) + src[first[0]:first[1]]
+    + bytes(r.randrange(256) for _ in range(2000)))
+DERIVED
+  for n in $derived; do echo "  $n  $(wc -c < "$n") bytes"; done
 else
-  echo "  refused/  (kept)"
+  for n in $derived; do echo "  $n  (kept)"; done
 fi
 
 rm -f ./*.wav ./bigcomment*.txt
-echo "gen.sh: $(ls -1 ./*.ogg | wc -l) files, $(cat ./*.ogg | wc -c) bytes," \
-     "$(ls -1 refused/*.ogg | wc -l) more to be refused"
+echo "gen.sh: $(ls -1 ./*.ogg ./*.bin | wc -l) files, $(cat ./*.ogg ./*.bin | wc -c) bytes"

@@ -42,7 +42,7 @@
 #  streams back with the other build as well, since a parameter that folds
 #  wrong is as wrong on the way out as it was on the way in, and equal
 #  encodes say nothing about that.  With no list it uses testfiles/; a list
-#  is one .ogg per line, blanks and #comments skipped, named relative to
+#  is one file per line, blanks and #comments skipped, named relative to
 #  where you are and holding paths relative to the tree.
 #
 #  MOD/ is a build input, not a build artefact.  It ships generated -- in the
@@ -230,15 +230,15 @@ case "${1:-tuning}" in
       #  printf, not echo: dash's echo expands backslash escapes, so a
       #  corpus file with a backslash in its name would go into the list
       #  as some other name and the run would die trying to open it.
-      for g in testfiles/*.ogg; do
+      for g in testfiles/*.ogg testfiles/*.bin; do
         [ -f "$g" ] && printf '%s\n' "$g" >> "$lst"
       done
       [ -s "$lst" ] || {
         echo "mk.sh check: no testfiles/*.ogg -- ./testfiles/gen.sh makes them," >&2
-        echo "             or name a file holding one .ogg per line" >&2
+        echo "             or name a file holding one input per line" >&2
         exit 2; }
     fi
-    [ -f "$lst" ] || { echo "mk.sh check: no $lst -- one .ogg per line" >&2; exit 2; }
+    [ -f "$lst" ] || { echo "mk.sh check: no $lst -- one input per line" >&2; exit 2; }
     generate_and_build 1 0 "$tmp/tune"
     generate_and_build 0 1 "$tmp/rel"
     #  Normalise the list once rather than per line: strip the CR a list
@@ -256,10 +256,10 @@ case "${1:-tuning}" in
       #  A file neither build will code is a row, not the end of the run.
       #  `set -e` would otherwise stop here with the compressor's message
       #  and nothing from mk.sh, and every file after it would go
-      #  uncompared while the exit status said only "1" -- and this tree
-      #  ships testfiles/refused/, so a list holding one is a thing that
-      #  will happen.  Both builds have to refuse it, and for the two to
-      #  agree they must refuse it alike.
+      #  uncompared while the exit status said only "1".  The encoder takes
+      #  any bytes, so this is a file that is not there or cannot be read
+      #  -- but a list is whatever someone wrote, and both builds have to
+      #  fail on it alike.
       ta=0; "$tmp/tune" c "$f" "$tmp/a.oc" || ta=$?
       tb=0; "$tmp/rel"  c "$f" "$tmp/b.oc" || tb=$?
       if [ "$ta" != 0 ] || [ "$tb" != 0 ]; then
