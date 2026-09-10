@@ -50,9 +50,12 @@ static void cm_tables(void) {
     } }
 }
 
+/*  Clamped into the index rather than tested at either end: a test there
+    is a branch on the data, taken a few times a bit, and it mispredicted
+    about as often as the data changed its mind.  OGGCOMP-SPEED.md section
+    2 counts these; the same goes for every saturation below.  */
 static INLINE int cm_squash(int x) {
-  if (x <= -CM_STMAX) return cm_sq[0];
-  if (x >= CM_STMAX) return cm_sq[2 * CM_STMAX];
+  x = x < -CM_STMAX ? -CM_STMAX : x > CM_STMAX ? CM_STMAX : x;
   return cm_sq[x + CM_STMAX];
 }
 static INLINE int cm_stretch(int p) { return cm_st[p]; }
@@ -92,7 +95,7 @@ struct cm_cnt {
   INLINE void upd(int bit, int lim, int mw) {
     int target = bit ? mw : CM_CONE - 1 - mw;
     int cur = t ? (int) p : CM_CONE / 2;
-    if (t < lim) t++;
+    t = (u16) (t + (t < lim));            /*  saturate, without a branch  */
     p = (u16) (cur + (((target - cur) * cm_rec[t]) >> CM_CBITS));
   }
 };
@@ -122,8 +125,12 @@ struct cm_apm {
       per row to spend.  mp3c tunes the same number per SSE and every one of
       its twelve lands between 5 and 8.  At q = 33 the arithmetic below is
       bit for bit what it was.  */
-  i16 * t;
-  u8  * c;
+  /*  `restrict`, here and on the locals below: a count is a byte, and a
+      store through a byte may alias anything, so without the promise every
+      value the step holds -- the entries, the weights, the family's rates
+      -- has to be loaded again after each count is written.  */
+  i16 * __restrict t;
+  u8  * __restrict c;
   sz n;
   int idx, bkt, q;
   u16 ident[CM_QMAX];
@@ -150,11 +157,12 @@ struct cm_apm {
           + ((int) ident[bkt + 1] + t[idx + 1]) * w) >> 7;
   }
   INLINE void upd1(int i, int b, int g, int lim) {
-    int k = c[i];
-    int v = (int) ident[b] + t[i];
-    if (k < lim) c[i] = (u8) (k + 1);
+    u8 * __restrict cc = c;  i16 * __restrict tt = t;
+    int k = cc[i];
+    int v = (int) ident[b] + tt[i];
+    cc[i] = (u8) (k + (k < lim));
     v += ((g - v) * cm_arec[k]) >> 16;
-    t[i] = (i16) (v - (int) ident[b]);
+    tt[i] = (i16) (v - (int) ident[b]);
   }
   INLINE void upd(int bit, int rate) {
     int g = bit ? 0 : CM_PONE;
@@ -170,8 +178,8 @@ struct cm_apm {
     of the coding error.  One weight set per mixer context.  */
 template <int N>
 struct cm_mix {
-  i32 * w;                                /*  16.16, one row of N per context  */
-  u8 * c;                                 /*  how often a row has been asked  */
+  i32 * __restrict w;                     /*  16.16, one row of N per context  */
+  u8 * __restrict c;                      /*  how often a row has been asked  */
   int x[N], pr, row, ctxn;
   int nx;
   /*  Stored as the distance from the mean the weights start at, for the same
@@ -188,12 +196,8 @@ struct cm_mix {
     int i;
     ctxn = (int) ctx;  row = (int) ctx * N;
     for (i = 0; i < nx; i++) s += (i64) (w[row + i] + W0) * x[i];
-    { int d = (int) (s >> 16);
-      if (d < -CM_STMAX) d = -CM_STMAX;
-      if (d > CM_STMAX) d = CM_STMAX;
-      pr = cm_squash(d); }
-    if (pr < 1) pr = 1;
-    if (pr > CM_PONE - 1) pr = CM_PONE - 1;
+    pr = cm_squash((int) (s >> 16));
+    pr = pr < 1 ? 1 : pr > CM_PONE - 1 ? CM_PONE - 1 : pr;
     return pr;
   }
   /*  A weight set starts at the mean of its inputs and has to be taught which
@@ -204,9 +208,11 @@ struct cm_mix {
       it is the fixed rate it has always been.  */
   INLINE void upd(int bit, int lr, int mb) {
     int err, i, n;
+    i32 * __restrict ww = w + row;
     if (mb) {
-      n = c[ctxn];
-      if (n < CM_AMAX) c[ctxn] = (u8) (n + 1);
+      u8 * __restrict cc = c;
+      n = cc[ctxn];
+      cc[ctxn] = (u8) (n + (n < CM_AMAX));
       lr += (int) (((i64) mb * lr * cm_mrec[n]) >> 16);
     }
     err = ((bit ? 0 : CM_PONE) - pr) * lr;
@@ -219,7 +225,7 @@ struct cm_mix {
         the case is reached so rarely that the corpus moves by 5 bytes, but
         the rates are a search space and the search visits the corners.  */
     for (i = 0; i < nx; i++)
-      w[row + i] += (i32) (((i64) x[i] * err) >> 16);
+      ww[i] += (i32) (((i64) x[i] * err) >> 16);
     nx = 0;
   }
 };

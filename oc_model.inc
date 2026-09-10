@@ -211,12 +211,14 @@ static INLINE int tc_node_man(int nb, int p) {
     1014.  It is mp3c's `caMDCTj` idea with the thresholds fixed rather than
     swept, because the sweep is what an optimizer is for and there is none
     here yet.  */
+/*  It was a loop, one shift per octave, and its exit was a branch on the
+    data twenty times a digit; the bit length says how many shifts there
+    would have been.  */
 static INLINE i32 tc_qlog(i64 x) {
-  i32 n = 0;
-  if (x < 0) x = -x;
-  if (x < 4) return (i32) x;
-  while (x >= 4) { x >>= 1;  n++; }
-  return 2 + n * 2 + (i32) (x - 2);
+  u64 u = (u64) (x < 0 ? -x : x);
+  int n = 62 - __builtin_clzll(u | 1);     /*  shifts to bring u under 4  */
+  i32 q = 2 + n * 2 + (i32) ((u >> n) & 1);
+  return u < 4 ? (i32) u : q;
 }
 
 static INLINE i32 tc_abs(i32 v) { return v < 0 ? -v : v; }
@@ -636,16 +638,28 @@ struct tc_fam {
     bt = (u32) x.t * nm;
     bn = (u32) x.n * nm;
     bg = (u32) x.g;
+    /*  Every row the value will touch is addressed now, before its first
+        bit and before the prior's arithmetic for that bit, so the lines are
+        on their way while that runs.  OGGCOMP-SPEED.md section 4.  */
+    __builtin_prefetch(A + ba);  __builtin_prefetch(B + bb);
+    __builtin_prefetch(C + bc);  __builtin_prefetch(D + bd);
+    __builtin_prefetch(ap.t + (sz) bs * (u32) ap.q);
+    __builtin_prefetch(ap.c + (sz) bs * (u32) ap.q);
+    __builtin_prefetch(mx.w + (sz) bm * TC_MIXN);
+    __builtin_prefetch(mx.c + bm);
+    __builtin_prefetch(ap2.t + (sz) bf * (u32) ap2.q);
+    __builtin_prefetch(ap2.c + (sz) bf * (u32) ap2.q);
   }
 
   /*  mp3c's six lines, widened: refine counter A through the APM, stretch
       it and the three others, mix them under one learned weight set, code,
       then update everything.  */
   INLINE int bit(int node, int b) {
-    cm_cnt & a = A[ba + node];
-    cm_cnt & c = B[bb + node];
-    cm_cnt & e = C[bc + node];
-    cm_cnt & f = D[bd + node];
+    /*  restrict, for the same reason cm.inc's count arrays carry it.  */
+    cm_cnt & __restrict a = A[ba + node];
+    cm_cnt & __restrict c = B[bb + node];
+    cm_cnt & __restrict e = C[bc + node];
+    cm_cnt & __restrict f = D[bd + node];
     int p1 = ap.pp(a.P(), bs + (u32) node);
     if (p1 > CM_PONE - 1) p1 = CM_PONE - 1;
     mx.add(cm_stretch(p1));
@@ -1066,6 +1080,7 @@ static struct {
   const vb_book * bk;
   const tc_ptab * pt;
   u32 rno, pss, j, pc, psz, cls, dim, ilv, i;
+  u32 vmod, smod;                         /*  i mod dim, slot mod ilv  */
   i32 bkq, clrun;
   int clmatch;
 } P;
@@ -1080,6 +1095,7 @@ static void oc_part_begin(u32 rno, u32 pss, u32 jv, u32 pc, const vb_res * r,
   u32 dim = bk->dim, ilv = R.ilv;
   P.rno = rno;  P.pss = pss;  P.j = j;  P.pc = pc;  P.psz = r->psz;
   P.cls = cls;  P.dim = dim;  P.ilv = ilv;  P.i = 0;
+  P.vmod = 0;  P.smod = ilv ? (u32) (((sz) pc * r->psz) % ilv) : 0;
   P.bkq = tc_qlog(bk->off);
   P.clrun = sl < sizeof cl_run_buf ? cl_run_buf[sl] : 0;
   P.clmatch = sl < sizeof cl_same ? cl_same[sl] : 0;
@@ -1125,14 +1141,14 @@ static i64 oc_digit(i64 dg) {
       neighbour repeats it, where the coupled channel does not.  In a
       residue coded per channel there is nothing beside the slot and this
       is zero.  */
-  sz xs = P.ilv > 1 ? slot - slot % P.ilv + (slot + P.ilv - 1) % P.ilv : 0;
+  sz xs = P.ilv > 1 ? slot - P.smod + (P.smod ? P.smod - 1 : P.ilv - 1) : 0;
   i32 x1 = ok && P.ilv > 1 && xs < P.span ? P.hist[xs] : 0;
   i32 av = ok ? P.avg[slot] : 0;
   i32 p0 = ok ? P.pp[slot] : 0;
   i32 psum = ok ? P.ps[slot] : 0;
   i32 pnn = ok ? P.pn[slot] : 0;
   d.rno = (int) P.rno;  d.pass = (int) P.pss;  d.band = tc_qlog(P.pc);
-  d.col = tc_qlog(i);  d.vpos = (int) (P.dim ? i % P.dim : 0);
+  d.col = tc_qlog(i);  d.vpos = (int) P.vmod;
   d.q1 = tc_qlog(*P.q1);  d.q2 = tc_qlog(*P.q2);
   d.q1s = tc_sq(*P.q1);  d.q2s = tc_sq(*P.q2);
   d.t1 = tc_qlog(t1);  d.t1s = tc_sq(t1);
@@ -1149,7 +1165,7 @@ static i64 oc_digit(i64 dg) {
       interleaved -- the number this submap interleaves, which is not always
       the number the stream has; anything else is the channel the vector is,
       which for a residue coded per channel is the whole answer.  */
-  d.chn = (int) (P.ilv ? ((sz) P.pc * P.psz + i) % P.ilv : P.j);
+  d.chn = (int) (P.ilv ? P.smod : P.j);
   d.crun = tc_qlog(P.clrun);  d.cm = P.clmatch;
   d.cls = (int) P.cls;  d.zrun = tc_qlog(*P.zr);  d.blk = (int) tc_blk;
   d.bkq = P.bkq;
@@ -1212,6 +1228,9 @@ static i64 oc_digit(i64 dg) {
   }
   *P.q2 = *P.q1;  *P.q1 = (i32) dg;
   *P.zr = dg ? 0 : *P.zr + 1;
+  /*  The two positions step on; each was a division per digit before.  */
+  if (P.dim && ++P.vmod == P.dim) P.vmod = 0;
+  if (P.ilv && ++P.smod == P.ilv) P.smod = 0;
   if (tc_verbose) tc_syms[STG_DIGIT]++;
   return dg;
 }
