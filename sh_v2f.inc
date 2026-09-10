@@ -79,14 +79,19 @@ struct rc_buf {
   }
 };
 
-struct Rangecoder {
+/*  The coder against whatever supplies its bytes: rc_buf above, or, named
+    as RC_IO before this file is included, anything with the same get() and
+    put().  oggcomp points it at a coroutine's pins that way, and the coder
+    itself does not know.  */
+template <class IO>
+struct Rangecoder_t {
   uint f_DEC; // 0=encode, 1=decode;
-  rc_buf * buf;
+  IO * buf;
   byte get() { return buf->get(); }
   void put( byte c ) { buf->put(c); }
-  void StartEncode( rc_buf *B ) { buf=B; f_DEC=0; rc_Init(); }
+  void StartEncode( IO *B ) { buf=B; f_DEC=0; rc_Init(); }
   void FinishEncode( void ) { rc_Quit(); }
-  void StartDecode( rc_buf *B ) { buf=B; f_DEC=1; rc_Init(); }
+  void StartDecode( IO *B ) { buf=B; f_DEC=1; rc_Init(); }
 
   static const uint NUM   = 32;
   static const uint sTOP  = 0x80000000U;
@@ -212,3 +217,8 @@ struct Rangecoder {
   }
 
 };
+
+#ifndef RC_IO
+#define RC_IO rc_buf
+#endif
+typedef Rangecoder_t<RC_IO> Rangecoder;

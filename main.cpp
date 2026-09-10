@@ -27,6 +27,14 @@ typedef oc_tsv sink_t;
 #include "link_walk.inc"   /*  packets across the pages of one link  */
 #include "codec.inc"       /*  whole-file entry points  */
 
+/*  balrogg's rebuilt pages go straight to the output file.  */
+struct page_file { FILE * f;  const char * path; };
+static void page_to_file(void * ctx, const u8 * p, sz n) {
+  page_file & o = *(page_file *) ctx;
+  if (fwrite(p, 1, n, o.f) != n)
+    FATAL_CODE(BLR_EXIT_IO, "write error on %s", o.path);
+}
+
 int main(int argc, char ** argv) {
   if (argc != 4 || argv[1][0] == 0 || argv[1][1] != 0 ||
       (argv[1][0] != 'c' && argv[1][0] != 'd')) {
@@ -39,19 +47,22 @@ int main(int argc, char ** argv) {
   blr_paths_distinct(argv + 2, 2);
   { oc_tsv t;
     if (argv[1][0] == 'c') {
+      source src;
       t.create(argv[3]);
       blr_output(argv[3]);
-      vb_pack(t, argv[2]);
+      src.open(argv[2]);
+      vb_pack(t, src);
+      src.close();
       t.close();
     } else {
-      FILE * o;
+      page_file o;
       t.open(argv[2]);
-      o = fopen(argv[3], "wb");
-      if (!o) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", argv[3]);
+      o.f = fopen(argv[3], "wb");  o.path = argv[3];
+      if (!o.f) FATAL_CODE(BLR_EXIT_IO, "cannot create %s", argv[3]);
       blr_output(argv[3]);
-      vb_unpack(t, argv[2], o, argv[3]);
+      vb_unpack(t, argv[2], page_to_file, &o);
       t.close();
-      if (fclose(o)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", argv[3]);
+      if (fclose(o.f)) FATAL_CODE(BLR_EXIT_IO, "write error on %s", argv[3]);
     }
     blr_output_kept(); }
   return BLR_EXIT_OK;

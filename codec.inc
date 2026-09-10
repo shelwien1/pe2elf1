@@ -6,18 +6,19 @@
 static u8 pgbuf[PAGE_MAX];    /*  one rebuilt page, on the way out  */
 static u8 body[MAXPAY];       /*  its payload, while the packets fill it  */
 
-/*  Both take the sink open and leave it open: what it writes to, or reads
-    from, is the caller's.  `in` names the input, for messages as much as for
-    reading.  */
-void vb_pack(sink_t & t, const char * in) {
-  source src;
+/*  Where vb_unpack's rebuilt pages go: one call per page.  */
+typedef void (*page_writer)(void * ctx, const u8 * page, sz len);
+
+/*  Both take the sink open and leave it open, and so the source and the
+    page writer: what they write to, or read from, is the caller's.  */
+void vb_pack(sink_t & t, source & src) {
+  const char * in = src.path;
   vb_ctx v;
   link_walk lw;
   ogg_page p;
   sz got, npage = 0;
   int eos = 1;
 
-  src.open(in);
   v.init();
   lw.start();
 
@@ -47,10 +48,9 @@ void vb_pack(sink_t & t, const char * in) {
   FATAL_UNLESS(npage > 0, "%s: not an Ogg bitstream", in);
   FATAL_UNLESS(eos, "%s: final bitstream has no end-of-stream page", in);
   t.link(0);
-  src.close();
 }
 
-void vb_unpack(sink_t & t, const char * in, FILE * o, const char * out) {
+void vb_unpack(sink_t & t, const char * in, page_writer emit, void * ectx) {
   vb_ctx v;
 
   v.init();
@@ -96,13 +96,10 @@ void vb_unpack(sink_t & t, const char * in, FILE * o, const char * out) {
         if (w < 3) { z.hdr(w);  w++; } else z.audio();
         at += pl);
       pgl = q.emit(pgbuf, body);
-      if (fwrite(pgbuf, 1, pgl, o) != pgl)
-        FATAL_CODE(BLR_EXIT_IO, "write error on %s", out);
+      emit(ectx, pgbuf, pgl);
       if (q.type & 4) done = 1;
     }
     FATAL_UNLESS(!cont, "%s: a continued packet is %" PRIu64 " bytes short", in,
                  (u64) spill);
   }
-
-  (void) out;
 }

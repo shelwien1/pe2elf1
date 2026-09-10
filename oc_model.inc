@@ -158,7 +158,6 @@
 /*  Set by the main program: 1 = c, 0 = d.  */
 static int tc_enc;
 static Rangecoder rc;
-static rc_buf rcb;
 /*  The link's setup, once its header has been read (setup_done).  */
 static vb_ctx * oc_v;
 /*  ------------------------------------------------------------------
