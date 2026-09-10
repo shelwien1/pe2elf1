@@ -508,3 +508,61 @@ By expected gain per unit of work, all stream-identical unless marked:
 
 The stream-changing ones -- a 16-bit mixer, a smaller stretch table -- are
 model work, tuned and measured for size first, and are not on this list.
+
+---
+
+## 8. What was done
+
+Section 7's list, worked through in order, each step built `-O2`, checked
+byte-identical on all seventeen corpus files with round trips, and timed
+against the build before it (minimum of two alternating runs, real
+seconds, on the same box as everything above).  Every step below is in
+the tree; the stream has not changed by a byte.
+
+| step | 00000007 `c` | `d` | 00000008 `c` | `d` |
+|---|---|---|---|---|
+| section 6's five changes, into the tree | -9.9% | -6.1% | -9.9% | -8.9% |
+| the prior tabulated (5.2), and its cursor's step made branchless | -4.5% | -7.9% | -4.7% | -2.3% |
+| counter rows read once and written once, mixer loops to N (3.2, 5.6) | -1.8% | -1.3% | +1.0% | +1.8% |
+| the index builders' threshold lists as tables from four buckets (5.4) | -5.9% | -10.9% | -5.0% | -3.9% |
+| `-H`, the tables on huge pages, as an option (5.1) | | | -2.7% user, +3.6 s system | |
+| **all of it, against the tree section 1 profiled** | 1.92 -> 1.49 s (-23%) | 1.83 -> 1.52 s (-17%) | 9.67 -> 7.50 s (-22%) | 9.54 -> 7.92 s (-17%) |
+
+The third row is noise either way and stays for what it is, a tidier
+`bit()`.  The index tables are the surprise: one number in the generator
+(`$ccount > 8` became `$ccount > 3`), and the tuning and shipping builds
+still agree, because the tuning build always went through a table.
+
+### Tried and not kept
+
+Each of these was built, checked identical, and timed the same way.
+
+- **The mixer in AVX2** (5.6): two `vpmuldq` for the seven products, the
+  update as a logical shift and a blend, masked loads and stores for the
+  row.  00000007: `c` +1.2%, `d` +5.8%; 00000008: `c` -1.4%, `d` -1.0%.
+  Noise at best.  The masked row access and the horizontal add cost what
+  the vector multiply saves on a seven-wide dot product that the unrolled
+  scalar code already does in a dozen instructions.  Building the tree
+  `-mavx2` without the intrinsics is noise as well.
+- **The encoder one digit ahead** (4.2), and the decoder guessing a zero:
+  the next digit's contexts gathered from what this digit will leave
+  behind (the encoder has it; the decoder guessed and kept the gathering
+  when the digit was in fact zero), its rows prefetched, then this digit
+  coded.  Checked exact by a build that gathered both ways and compared.
+  00000007: `c` +6.7%, `d` +15.8%; 00000008: `c` +0.2%, `d` +10.7%.  The
+  decoder's guess is wrong two times in three and each wrong guess is a
+  gathering thrown away; and the encoder gains nothing because, as section
+  1 found, the rows are L2 and L3 hits that `select()`'s prefetch already
+  covers.  Section 4.2 was written for misses to memory, and there are
+  none here.
+- **PGO** (5.1), now in `./mk.sh pgo file.ogg`: 1.5 to 3% on the tree
+  section 1 profiled, and within noise after the steps above, whose
+  branches were what it had been laying out.  The mode stays as the way to
+  measure it again.
+
+### Not done
+
+- **Rows with their counts** (5.3) and **the count arrays typed** (3.2):
+  both generator changes to the tables' shape, each worth a few percent
+  at most on the numbers above, where the counts are L2 hits.
+- Anything that changes the stream.
