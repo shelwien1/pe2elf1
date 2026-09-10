@@ -113,10 +113,18 @@ case "${1:-tuning}" in
   tuning)
     generate_and_build 1 0 oggcomp
     #  The marker is put there by the pdesc macro, so it is the binary that
-    #  has to be looked at -- which is also what opt.pl looks at.
-    n=$(grep -ac '!MAP!' oggcomp || true)
-    b=$(perl -ne 'BEGIN{$/=undef} $n+=length($3) while /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs; END{print $n+0}' oggcomp)
-    echo "mk.sh: tuning build -- $b tunable bits in $(perl -ne 'BEGIN{$/=undef} $n++ while /!MAP!/g; END{print $n+0}' oggcomp) patterns, visible to IDX/opt.pl"
+    #  has to be looked at -- which is also what opt.pl looks at.  A live
+    #  descriptor reads !MAP!<name>!<offset>\0<pattern>\0 (sh_mapping.inc),
+    #  and the pattern is one character per bit opt.pl may flip, so the sum
+    #  of their lengths is the size of the search space this build exposes.
+    #  Zero of either means the markers did not survive the build and an
+    #  optimizer would report that nothing it tries changes anything.
+    perl -e 'undef $/; $_ = <>;
+             while( /!MAP!(.*?)!(.*?)\x00(.*?)\x00/gs ) { $n++; $b += length $3 }
+             printf "mk.sh: tuning build -- %d tunable bits in %d patterns, "
+                  . "visible to IDX/opt.pl\n", $b, $n;
+             exit($n ? 0 : 1)' oggcomp ||
+      { echo "mk.sh: the tuning build carries no !MAP! markers" >&2; exit 1; }
     ;;
 
   release)
