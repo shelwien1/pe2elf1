@@ -48,75 +48,92 @@ be measured with before the budgets are fixed.
 
 ## 2. The prototype
 
-In a scratch copy of `tc_fam.inc`: a row is the index hashed to the top
-`HBITS` of a Fibonacci multiply, the index itself kept beside the table
-as the row's tag, and a row whose tag is another context's is zeroed --
-which is every table's initial state, since `tc_map` and BSS hand out
-zeros and `_Init()` writes nothing -- and taken over.
+In a scratch copy of `tc_fam.inc`: for every index whose Volume exceeds
+the row count, the row is the index hashed to the top `HBITS` of a
+Fibonacci multiply, and that is all -- no tag, no check, no takeover.
+Contexts that land on the same row share it, and the counters adapt to
+whichever is coding.
 
-    static u32 tc_tags[6][8][HROWS];
-    static INLINE u32 tc_hrow(u32 idx, int bits, u32 *tags, void *t1, sz r1, void *t2, sz r2) {
-      u32 row = (idx * 0x9E3779B1u) >> (32 - bits);
-      if(tags[row] != idx + 1) {
-        tags[row] = idx + 1;
-        memset((u8 *)t1 + (sz)row * r1, 0, r1);
-        if(t2)
-          memset((u8 *)t2 + (sz)row * r2, 0, r2);
-      }
-      return row;
-    }
-    //  in select(), for each index whose Volume exceeds HROWS:
-    ba = (sz)(hA ? tc_hrow((u32)x.a, hA, tgA, A, (sz)nd * sizeof(cm_cnt), nullptr, 0) : (u32)x.a) * nd;
-    bs = (u32)(hS ? tc_hrow((u32)x.s, hS, tgS, ap.t, (sz)nd * ap.q * sizeof(i16), ap.c, (sz)nd * ap.q) : (u32)x.s) * nd;
+    static INLINE u32 tc_hrow(u32 idx, int bits) { return (idx * 0x9E3779B1u) >> (32 - bits); }
+    //  in select(), for each index whose Volume exceeds the row count:
+    ba = (sz)(hA ? tc_hrow((u32)x.a, hA) : (u32)x.a) * nd;
+    bs = (u32)(hS ? tc_hrow((u32)x.s, hS) : (u32)x.s) * nd;
     //  ... and B, D, F, M, T, N the same way; C and G are small and stay direct.
     //  in wire(): hA = va > HROWS ? HBITS : 0; and so on.
 
-The tables themselves were left as declared, so the prototype measures
-what hashing costs the model and the clock, not what it saves in address
-space: the rows it uses are the first `HROWS` of each table.  The tag is
-the whole index, so a collision is always seen; a real tag can be 16
-bits of it (section 4).  Encoder and decoder run the same code, so the
-stream stays decodable, and every input round-trips.
+A first version tagged each row with its index and zeroed a row on a
+mismatch, so that no context ever saw another's statistics.  It was
+measured too, and sharing beats it: the tag costs a load and a compare
+per table per select, the takeover throws away statistics that were
+usually still useful, and the numbers below say the counters recover
+from a shared row faster than from an empty one.
+
+The tables were left as declared, so the prototype measures what
+hashing costs the model and the clock, not what it saves in address
+space: the rows it uses are the first `HROWS` of each table.  Encoder
+and decoder run the same code, so the stream stays decodable, and every
+input round-trips.
 
 ## 3. What it costs
 
 Bytes over the direct-table build, same profile, 34 inputs (the corpus,
 1 MB of random bytes, the binary, the 512 KB cut-off stream, and
-`big.ogg`):
+`big.ogg`, seven corpus files chained):
 
-| rows per hashed table | output, all 34 (3176474 bytes) | `music-stereo-q5` (144365) | `chirp-stereo-q10` (116249) | `big.ogg` (960192) | rows taken over on `big.ogg` |
+| rows per hashed table | shared, all 34 (3176474 bytes) | `music-stereo-q5` (144365) | `chirp-stereo-q10` (116249) | `big.ogg` (960192) | tagged and reset, all 34 |
 |---|---|---|---|---|---|
-| 2^14 | +1451 (+0.046%) | +159 | +284 | +652 | 402555 of 33.2M selects |
-| 2^16 | +461 (+0.015%) | +39 | +82 | +224 | 185118 of 27.5M |
-| 2^18 | +128 (+0.004%) | +10 | +31 | +61 | 117837 of 25.8M |
+| 2^14 | +1124 (+0.035%) | +82 | +93 | +717 | +1451 |
+| 2^16 | +398 (+0.013%) | +18 | +36 | +253 | +461 |
+| 2^18 | +129 (+0.004%) | +9 | +16 | +79 | +128 |
 
 Files that use few rows -- everything under 10 KB, the non-Ogg inputs --
 do not move at all.  `chirp-stereo-q10.ogg`, `-q 10` with the widest
-books, is the most sensitive.
+books, is the most sensitive.  Sharing wins on every single file; the
+tagged version is a little better only on `big.ogg`, where seven
+streams' contexts turn over in the same rows and a reset now and then
+helps -- 29 bytes in a megabyte.
 
-Time and memory, encode, release build:
-
-| | direct | 2^16 rows | 2^18 rows |
-|---|---|---|---|
-| `music-stereo-q5.ogg` | 0.34 s | 0.36 s | 0.39 s |
-| `chirp-stereo-q10.ogg` | 0.32 s | 0.31 s | 0.36 s |
-| `big.ogg` | 1.66 s | 1.69 s | 1.86 s |
-| peak RSS, `big.ogg` | 182 MB | 203 MB | 272 MB |
-
-At 2^16 the hashing is free: eight multiplies and eight tag loads per
-select against a select that already prefetches ten lines.  At 2^18 the
-hashed region of the wide-row tables outgrows what the direct layout
-happened to touch and the misses come back.  Resident memory goes up,
-not down, because hashing spreads rows over the whole hashed region
-where the direct layout clustered them; what goes down is the
-reservation, which the prototype does not change and section 4 does.
+Time, encode, release build, `music-stereo-q5.ogg`: 0.34 s direct,
+0.35 s shared at 2^16, 0.39 s at 2^18; `big.ogg` 1.66, 1.70 and 1.85 s.
+At 2^16 the hashing is free -- a multiply per table per select against a
+select that already prefetches ten lines.  At 2^18 the hashed region of
+the wide-row tables outgrows what the direct layout happened to touch
+and the misses come back.  Resident memory goes up, not down (182 MB to
+203 MB on `big.ogg` at 2^16), because hashing spreads rows over the
+whole hashed region where the direct layout clustered them; what goes
+down is the reservation, which the prototype does not change and
+section 4 does.
 
 ## 4. The design
 
-**Rows per table, not one cap.**  The row is 4 bytes in `sgn` and 4611
-in `dig.f`; a uniform 2^16 rows puts `dig.f` at 288 MB and `sgn.a` at
-256 KB.  Size each hashed table to its own budget: the rows `big.ogg`
-touched, times four for headroom, rounded up to a power of two --
+**Rows per table, declared in the `.idx`.**  The row is 4 bytes in `sgn`
+and 4611 in `dig.f`; a uniform 2^16 rows puts `dig.f` at 288 MB and
+`sgn.a` at 256 KB, so each hashed table gets its own row count, and the
+count is a parameter of the family like its rates are: a `Number` per
+table in `IDX/tsvcomp-*.idx`, the log2 of the rows --
+
+    Number hA, 1, 0!10001          # dig: 2^17 rows of A
+    Number hS, 1, 0!01111          # 2^15 rows of S
+
+-- which the generator already turns into `TC_dig_hA`: a folded constant
+in the shipping build and a live `mapping` value in the tuning build,
+which is exactly the two forms the table sizes need.  A table's array is
+then declared by
+
+    Table( cm_cnt, %M%A, tc_rows(%M%a_Volume, %M%hA) * %M%ND );
+
+in `IDX/tsvcomp-*.inc`, with `constexpr sz tc_rows(long long vol, int h)
+{ return vol <= (1LL << h) ? vol : (sz)1 << h; }` in `tc_tables.inc`: a
+table whose Volume fits is direct, as now, and one that does not is
+hashed into 2^h rows.  In the shipping build the expression is a
+constant and the member array is that size; in the tuning build
+`_Init()` maps that many bytes.  Nothing in `idx2inc.pl` changes.  Whether
+`opt.pl` may move the counts is a `Debug` decision per line: left live,
+it will grow them, since a bigger table is never worse by the objective
+alone, so either freeze them (`! Number ...`) or price them (below).
+
+Starting counts, from the rows `big.ogg` touched, times four for
+headroom, rounded up to a power of two --
 
 | table | rows | size | table | rows | size |
 |---|---|---|---|---|---|
@@ -134,67 +151,45 @@ price at zero.  With hashed tables the row width is what the budget
 should be charged for, and 2^15 rows of `dig.f` is a number to tune, not
 to take from this table.
 
-**The tag.**  Sixteen bits of the index that the hash did not use --
-`idx >> bits`, folded once if the index is wider than `bits` + 16 -- in
-a `u16` array beside each table, 128 KB for 2^16 rows; the prototype's
-full-index `u32` costs twice that and detects nothing a 16-bit tag
-misses in practice (a false match is a 1-in-65536 chance per takeover).
-Zero must mean "never used", so store `tag | 1` or use `idx + 1`.
-
-**Takeover.**  Direct-mapped, always replace, as the prototype does: at
-2^16 rows and 25M selects one select in 150 took a row over on
-`big.ogg`, and most of those were first touches.  A two-way bucket that
-keeps the row with the higher `cm_cnt::t` (the observation count the
-counters already carry) would halve the loss again for one more compare;
-worth measuring once the first version is in, not before.
-
-**Where.**  `tc_fam<f_DEC>::wire` gets the row count of each table from
-its caller and derives `hbits`; `select()` is the prototype's; the tag
-arrays are members of `oc_tables` beside the table they belong to, sized
-statically, since every count is a compile-time constant.  The hash and
-the tag are direction-independent, so the tuning and shipping builds
-still agree and `./mk.sh check` still proves it.
-
-**Declaring the tables.**  A table's array is declared by `Table( type,
-%M%A, %M%a_Volume * %M%ND )` in `IDX/tsvcomp-*.inc`, and in the shipping
-build that expression is the member's size.  For the hashed tables the
-size becomes `TC_ROWS_a * %M%ND`, a constant per table in
-`tc_tables.inc` -- one edit per hashed table in the six templates, which
-is the one thing here that touches `IDX/`.  Without it the prototype's
-approach works, and costs nothing on Linux, where `tc_map` reserves and
-does not commit; on Windows `VirtualAlloc` with `MEM_COMMIT` charges the
-5 GB against the pagefile at start, which is the case that needs the
-declaration to shrink.  `tc_home` then puts every family in BSS and
-`tc_map` has nothing left to do.
+**Where.**  `tc_fam<f_DEC>::wire` takes each table's `h` with its
+Volume and keeps `hA = va > (1u << h) ? h : 0`; `select()` is the
+prototype's.  With `h` a constant in the shipping build the test folds
+and a direct table costs what it does today.  The hash is
+direction-independent, so the tuning and shipping builds still agree and
+`./mk.sh check` still proves it.  `tc_home` then puts every family in
+BSS and `tc_map` has nothing left to do; on Windows, where `VirtualAlloc`
+with `MEM_COMMIT` charges the whole reservation at start, the 5 GB
+commit goes with it.
 
 **The tuning framework.**  Once a wide context costs nothing, `opt.pl`
 will widen them; that is the point.  Two consequences: the `TC_MEMCOST`
 rent (`oggcomp.cpp`, `run<f_DEC>`) charges by `tabs.bytes()`, which is
-then a few hundred megabytes whatever the patterns say, so the rent
-should go, or charge the row counts; and the optimizer's objective gains
-a little noise from takeovers, which the budgets above keep under one
-part in five thousand.
+then whatever the row counts say whatever the patterns say, so it either
+goes or becomes the price of the row counts if those are left live; and
+the optimizer's objective gains a little noise from shared rows, under
+one part in five thousand at the counts above.
 
-**The stream.**  Hashed rows collide where direct rows did not, so the
-model is not the current one and a `.oc` written before does not decode
-after -- which is also true of the profile that just landed, and of every
-profile before it.  The CRC at the end of the stream turns that into
-exit 1 rather than wrong output.  A better guard, independent of this
-work, is four bytes of a hash over the model's parameters in the `.oc`
-header, so `d` can say which build wrote the file.
+**The stream.**  Hashed rows are shared where direct rows were not, so
+the model is not the current one and a `.oc` written before does not
+decode after -- which is also true of the profile that just landed, and
+of every profile before it.  The CRC at the end of the stream turns that
+into exit 1 rather than wrong output.  A better guard, independent of
+this work, is four bytes of a hash over the model's parameters in the
+`.oc` header, so `d` can say which build wrote the file.
 
 ## 5. What to do
 
-1. `tc_fam.inc`: the prototype's `select()` and `wire()`, with 16-bit
-   tags and per-table row counts.  `tc_tables.inc`: the `TC_ROWS_*`
-   constants and the tag arrays in `oc_tables`.  Verify as the
-   refactoring was: `./t.sh`, `./mk.sh check`, the 34-input size table
-   against the direct build, encode time within noise.
-2. The six `IDX/tsvcomp-*.inc` templates: the twelve `Table()` sizes,
-   regenerate `MOD/`, confirm `tabs.bytes()` says about 320 MB and
+1. `tc_tables.inc`: `tc_rows()`.  `tc_fam.inc`: `wire()` takes the
+   counts, `select()` hashes.  `oc_model::init()`: pass `TC_x_h*` through
+   `TC_WIRE`.
+2. The six `.idx` files: a `Number h*` per hashed table at the counts
+   above, frozen; the six `.inc` templates: the twelve `Table()` sizes.
+   Regenerate `MOD/`, confirm `tabs.bytes()` says about 320 MB and
    `VmPeak` about 900 MB.
-3. Measure `08.ogg`: rows touched per table, and the size cost at the
-   budgets above; adjust the budgets to it, since it is what the profile
-   was tuned on and the largest stream to hand.
-4. Then, separately: the two-way bucket, and `q` re-tuned with the row's
-   price in the objective.
+3. Verify as the refactoring was: `./t.sh`, `./mk.sh check`, the 34-input
+   size table against the direct build (expect about +400 bytes on
+   3.2 MB), encode time within noise.
+4. Measure `08.ogg`: rows touched per table, and the size cost at the
+   counts above; adjust them to it, since it is what the profile was
+   tuned on and the largest stream to hand.  Then `q` re-tuned with the
+   row's price in the objective.
