@@ -76,13 +76,13 @@ He fell silent, his expression complicated, and his friend laughed lightly and s
 
 "I'm kidding. Too much manga, that's all. Right, guess I'd better get to club..."
 
-"Huh, is today a manga club day?"
+"Huh, is today a manga club day?" Daiki asked.
 
 "Nope, but I've got something to take care of. Meeting about my next piece."
 
 "You've got an idea?"
 
-"Who knows... Maybe I'll try an other-world story for once. Summoned to another world, becomes a hero, kills the Demon Lord, that sort of thing. Swinging a cool holy sword around."
+"Who knows," his friend said. "Maybe I'll try an other-world story for once. Summoned to another world, becomes a hero, kills the Demon Lord, that sort of thing. Swinging a cool holy sword around."
 
 "...Ha ha. Then I'll head home too. See you."
 
@@ -90,7 +90,7 @@ That said, he shoved the report card with «Daiki Kurosu» written on it into hi
 
 Out in the corridor, the girl from before fell quietly into step beside him, close enough to be leaning in.
 
-"How were your midterm results?"
+"How were your midterm results?" the girl asked.
 
 "Mm, well... finally about average, I'd say."
 
@@ -98,7 +98,7 @@ Out in the corridor, the girl from before fell quietly into step beside him, clo
 
 "Uh. Thanks, I guess."
 
-"...Aren't you going to ask how Nagi did?"
+"...Aren't you going to ask how I did?"
 
 The girl peered up at him. Daiki thought a moment before answering.
 
@@ -152,7 +152,7 @@ Daiki shook his head lightly and said,
 
 "It's not like I'm going after her. She can't stand me; I'm not about to go out of my way to get close. I just want to detour somewhere, clear my head, and get the midterm review out of the way while I'm at it."
 
-"In that case—"
+"In that case—" Nagi started.
 
 "And I thought I'd stop at a bookshop too. So — that sort of thing."
 
@@ -571,7 +571,7 @@ In this situation, he had protected her, a total stranger.
 
 That debt had to be repaid.
 
-"Much obliged... though it feels like a weird thing to be saying."
+"Much obliged," Daiki said. "...Though it feels like a weird thing to be saying."
 
 "Well, I'm the one who broke your arm... I said I was sorry."
 
@@ -599,7 +599,7 @@ But it was fine.
 
 Because for now, for this moment alone, the girl had decided to trust him.
 
-"It has a core. Around the crown of its head, probably."
+"It has a core," Daiki said. "Around the crown of its head, probably."
 
 "A core..."
 
@@ -649,7 +649,7 @@ The girl cleared her throat with pointed deliberateness, then slowly approached 
 
 Standing in front of him, she extended a hand toward him. And at the same time she said:
 
-"Let's start over. I'm Narumi. —Narumi Oki. A magus of no importance. And you're, um... Daiki, was it?"
+"Let's start over. The name's Narumi. —Oki Narumi. A magus of no importance. And you're, um... Daiki, was it?"
 
 "Mm, yeah. Daiki Kurosu."
 
@@ -683,7 +683,7 @@ Crimson eyes fixed straight through him. Pressed by them, Daiki spoke.
 
 "..."
 
-"No, um... er. Narumi-san?"
+"No, um... er. Narumi-san?" Daiki tried.
 
 "Oki is fine, Daiki. Hm?"
 
@@ -711,7 +711,7 @@ So she could make an expression like that too, Daiki found himself vaguely impre
 
 —But, unfortunately.
 
-Just as, for instance, **Narumi Oki was in fact a magus**,
+Just as, for instance, **Oki Narumi was in fact a magus**,
 
 **what Daiki Kurosu said was fact**, **and he had once truly been the hero who saved another world**.
 
@@ -840,7 +840,7 @@ In that sense, Daiki's mental age worked out to something like twenty.
 
 Rich in combat experience in another world, called nothing less than a hero — and now a perfectly ordinary high-school student.
 
-"...Well, after what I saw earlier, I don't take you for an amateur either."
+"...Well, after what I saw earlier, I don't take you for an amateur either," Oki said.
 
 "Unfortunately my physical ability dropped off a cliff. Over there I had more — how to put it — manga-grade strength. I wasn't a mage, but I could manage an imitation of it. There's a thing called the holy sword's blessing, and anyway, I was stronger than a normal human."
 
@@ -856,7 +856,7 @@ Daiki wondered, but before he could say anything Oki shook her head.
 
 "N-no, well, honestly I nearly thought the same thing... but it cuts both ways, I figured."
 
-"...You're a magus, apparently. Honestly, from where I stand that's the stranger part. This is Earth."
+"...You're a magus, apparently," Daiki said. "Honestly, from where I stand that's the stranger part. This is Earth."
 
 "It's a bit much when you say it like it'd be acceptable in another world."
 
@@ -874,7 +874,7 @@ Give him a break.
 
 Naturally, that was purely Daiki's perspective; from Oki's side it looked different.
 
-"There are tons of magi. Far more of us than people who've been to another world, at any rate."
+"There are tons of magi," Oki said. "Far more of us than people who've been to another world, at any rate."
 
 "I-is that so...? Tons? There are tons?"
 
@@ -884,7 +884,7 @@ Naturally, that was purely Daiki's perspective; from Oki's side it looked differ
 
 "Says the man from another world."
 
-"I'm not from another world, all right? And what, even magi don't know other worlds exist?"
+"I'm not from another world, all right?" Daiki said. "And what, even magi don't know other worlds exist?"
 
 "Mmm... at least it's never been publicly proven. Other worlds are a different matter from parallel-world theory. That one, at least, is supposed to have been proven magically."
 
@@ -910,7 +910,7 @@ Apparently Oki had a habit of clearing her throat theatrically when she wanted t
 
 Daiki thought so, but didn't put it into words.
 
-"Normally an ordinary person absolutely doesn't get dragged in like this. There was a barrier over that place, too. Which is exactly why I assumed that anyone standing inside it — you — was involved."
+"Normally an ordinary person absolutely doesn't get dragged in like this," Oki said. "There was a barrier over that place, too. Which is exactly why I assumed that anyone standing inside it — you — was involved."
 
 "A barrier, huh... they had those in the other world too."
 
@@ -924,7 +924,7 @@ Oki's expression twitched slightly.
 
 Daiki himself thought: what anime's setting is this, exactly.
 
-"But that means barriers on this side are different?"
+"But that means barriers on this side are different?" Daiki asked.
 
 "Mmm... if what you're imagining is the shield or barrier sort from games, then it's different from what I meant. A barrier in magecraft over here is, simply put, mostly a thing that obstructs intrusion into the inside. 'One who is a magus shall remain unidentified' — that sort of principle."
 
@@ -940,7 +940,7 @@ The reason he had gone there.
 
 A place he ought to have avoided unconsciously — Daiki had, on the contrary, been unconsciously drawn to it.
 
-"I suddenly started feeling sick, somehow. And then, yeah... it felt like I had to get rid of whatever was making me feel sick. After that it was unconscious; before I knew it I was heading there."
+"I suddenly started feeling sick, somehow," Daiki said. "And then, yeah... it felt like I had to get rid of whatever was making me feel sick. After that it was unconscious; before I knew it I was heading there."
 
 "......I see."
 
@@ -1031,7 +1031,7 @@ The approachable friendliness of a moment before had withdrawn into shadow; from
 
 "I don't think it's a bad offer."
 
-Narumi Oki said it with crimson eyes. Even her manner of speech had shifted slightly.
+Oki Narumi said it with crimson eyes. Even her manner of speech had shifted slightly.
 
 Daiki had seen her eyes go black for just an instant, and that was probably their original shade. They had been few in number, but people who possessed that kind of **special eye** — the sort termed a «Mystic Eye» — had existed in the other world Daiki was sent to as well.
 
@@ -1073,7 +1073,7 @@ As Daiki panicked, thinking he might have put her off, Oki went on:
 
 "Wh-what. Say something! Why are you looking straight at me...?"
 
-"......No, I'm just glad you're pleased."
+"......No, I'm just glad you're pleased," Daiki said.
 
 "I am not pleased, thank you. I was merely a little happy. Thank you very much!"
 
@@ -1123,7 +1123,7 @@ So Oki said. Come to think of it, she had mentioned being here on a job.
 
 "Magi have their own communities, you know. I said there were tons of us earlier, but compared with people who aren't magi, the numbers might as well be zero. Modern magi mostly hold down jobs on the surface, so you can think of it as a mutual-aid organisation among magi for surviving this harsh capitalist society of ours. —Neighbourhood association also acceptable."
 
-"That's so mundane it kills the romance..."
+"That's so mundane it kills the romance..." Daiki said.
 
 "Magi are ordinary Japanese citizens as well. We have a duty to pay taxes."
 
@@ -1161,7 +1161,7 @@ But at the thought, Oki said easily:
 
 "...'Cost-performance'..."
 
-"That's the caster's own blood. He's using his own blood as a medium to work some magecraft or other."
+"That's the caster's own blood," Oki said. "He's using his own blood as a medium to work some magecraft or other."
 
 "His own? But it didn't look like one person's worth of blood—"
 
@@ -1191,7 +1191,7 @@ Daiki nodded slightly — but then shook his head.
 
 "...I did say that."
 
-"You might be under a misapprehension because I showed up afterward, but this culprit is abnormally good at concealing himself. I think he has a talent for it. In fact, he was long gone by the time we were there, wasn't he? As things stand I'm always a step behind. But you got there faster than I did."
+"You might be under a misapprehension because I showed up afterward," Oki said, "but this culprit is abnormally good at concealing himself. I think he has a talent for it. In fact, he was long gone by the time we were there, wasn't he? As things stand I'm always a step behind. But you got there faster than I did."
 
 "By chance... I'd have thought."
 
@@ -1225,7 +1225,7 @@ All he understood was that it differed fundamentally from the technical principl
 
 But even so, he grasped that Oki's words carried a heavy meaning.
 
-"I still don't know the logic of it. I don't even know what that circle was for. But there's no doubt the circle reacted to you. In fact, a monster from another world appeared in that place. To put it more precisely — **something that on this Earth has a connection to no one but you**."
+"I still don't know the logic of it," Oki said. "I don't even know what that circle was for. But there's no doubt the circle reacted to you. In fact, a monster from another world appeared in that place. To put it more precisely — **something that on this Earth has a connection to no one but you**."
 
 "..."
 
@@ -1235,7 +1235,7 @@ But even so, he grasped that Oki's words carried a heavy meaning.
 
 "I said the cost-performance was bad earlier, but inverted, that also means: **if the reward matches the killing, a magus won't shrink from murder**. So that's the contract."
 
-Narumi Oki was looking straight into Daiki Kurosu's eyes.
+Oki Narumi was looking straight into Daiki Kurosu's eyes.
 
 Her black eyes wavered with unease, wet at the edges.
 
@@ -1390,13 +1390,13 @@ At moments like these — when she put on her face as a magus — Oki became odd
 
 The usual casual air receded, and there was, indeed, a mystique fitting for a magus.
 
-"A magus cannot be bound by the laws of men."
+"A magus cannot be bound by the laws of men," she said.
 
 "...,"
 
 "Well, strictly speaking, in daily life we're bound like everyone else."
 
-"That was cooler before you said that. Even if I was thinking the same thing."
+"That was cooler before you said that," Daiki said. "Even if I was thinking the same thing."
 
 "...Ahem. Anyway. The only thing that binds a magus is the law that magi lay down for themselves."
 
@@ -1472,7 +1472,7 @@ Beneath a thin smile, the corner of her mouth twisting, the red-eyed magus spoke
 
 "Got it. Understood."
 
-"—Thou, Daiki Kurosu. You shall, insofar as your own safety can be secured, cooperate with and lend your strength to the duties of I, Narumi Oki. And Narumi Oki shall, within that same limit, guarantee the safety of Daiki Kurosu, at the price of her own life if need be. —Okay?"
+"—Thou, Daiki Kurosu. You shall, insofar as your own safety can be secured, cooperate with and lend your strength to the duties of I, Oki Narumi. And Oki Narumi shall, within that same limit, guarantee the safety of Daiki Kurosu, at the price of her own life if need be. —Okay?"
 
 "Okay."
 
@@ -1659,13 +1659,13 @@ In Daiki's experience there had been battles against enemies who armed themselve
 
 Indeed, such things sometimes worked to greater effect than pure combat ability.
 
-"I'm starting to get anxious."
+"I'm starting to get anxious," Daiki said.
 
 "You're fine for now. I've got a certain amount of information on the enemy, but he's got nothing on us. Being chased by an opponent whose identity you don't know is pretty rough."
 
 "Well, I follow that logic."
 
-"And he doesn't seem to be a combat-oriented magus, either. Although a combat-oriented magus is rare to begin with. In the modern age, combat ability is basically garbage."
+"And he doesn't seem to be a combat-oriented magus, either," Oki went on. "Although a combat-oriented magus is rare to begin with. In the modern age, combat ability is basically garbage."
 
 "...Garbage..."
 
@@ -1701,7 +1701,7 @@ Oki murmured it idly. Daiki shrugged lightly.
 
 "I don't really know what a quiet sword means... is it a swordsman thing?"
 
-"Hm? Ah, right. Actually, the sword I carried had a will of its own. It talked."
+"Hm? Ah, right," Daiki said. "Actually, the sword I carried had a will of its own. It talked."
 
 "—A talking sword?!"
 
@@ -1709,7 +1709,7 @@ Oki murmured it idly. Daiki shrugged lightly.
 
 "No, you can't go from reminiscing about an old friend to 'stuck in something.'"
 
-"It does feel rather like an old friend. It was a fairly sharp sort... in form."
+"It does feel rather like an old friend," Daiki said. "It was a fairly sharp sort... in form."
 
 "In form..."
 
@@ -1763,7 +1763,7 @@ And Daiki was startled to see a familiar figure standing in front of it.
 
 Saying his sister's name, Daiki rubbed the back of his neck awkwardly.
 
-"Yes, it's Nagi. —And who might that be?"
+"Yes, I'm Nagi. —And who might that be?"
 
 Nagi approached the two of them briskly, with a graceful smile.
 
@@ -1803,7 +1803,7 @@ Oki thought. The eyes looking at her were blatantly suspicious.
 
 And right in front of that magus—
 
-"Come on, inside. And don't tell me you were waiting in front of the house."
+"Come on, inside," Daiki said. "And don't tell me you were waiting in front of the house."
 
 "Of course not. I was simply enjoying the night air a little."
 
@@ -1813,7 +1813,7 @@ And right in front of that magus—
 
 "Why are you sulking..."
 
-"I will sulk. I went to the trouble of making dinner to celebrate your midterms and waiting for you. It's gone completely cold, though!"
+"I will sulk," Nagi said. "I went to the trouble of making dinner to celebrate your midterms and waiting for you. It's gone completely cold, though!"
 
 "Sorry. Then I'll warm it up and eat it."
 
@@ -1843,7 +1843,7 @@ And, respectfully, she welcomed her family in.
 
 And then.
 
-Having watched Daiki go inside with his sister, Narumi Oki finally let out a breath.
+Having watched Daiki go inside with his sister, Oki Narumi finally let out a breath.
 
 —**It went well.**
 
@@ -2092,7 +2092,7 @@ The same black uniform as yesterday. A visitor's pass hung from her chest, point
 
 "Yep. Come on, let's go. Up, up."
 
-There, as though it were nothing at all, stood Narumi Oki.
+There, as though it were nothing at all, stood Oki Narumi.
 
 Every gaze in the classroom, and in the corridor beyond it, stabbed blatantly into Daiki.
 
@@ -2205,7 +2205,7 @@ But without any particular air of gravity, Oki answered easily.
 
 "...Obviously, huh..."
 
-"Well, I suppose we could have met somewhere. At the gate, say. But, you know, we forgot to exchange contact details yesterday. So I figured while I was at it I'd check out the inside too."
+"Well, I suppose we could have met somewhere," Oki went on. "At the gate, say. But, you know, we forgot to exchange contact details yesterday. So I figured while I was at it I'd check out the inside too."
 
 "While you were at it..."
 
@@ -2247,7 +2247,7 @@ But at Daiki's mildly impressed remark, Oki stuck out her tongue playfully with 
 
 "As if. There's no way I'd be doing extracurriculars conscientiously. I don't have that kind of time."
 
-"Then in what sense did they 'let you right in'... That's a flat-out lie."
+"Then in what sense did they 'let you right in'...?" Daiki said. "That's a flat-out lie."
 
 "Now, now. They say a lie is a free-for-all, don't they?"
 
@@ -2391,7 +2391,7 @@ And in fact Daiki rotated the forearm of his broken arm around and around, as if
 
 He then went so far as to punch the injured spot — midway between elbow and wrist — with his right hand, casually.
 
-"—What are you doing?!"
+"—What are you doing?!" Oki yelped.
 
 "Ah. No, I mean, hitting it does hurt normally, doesn't it."
 
@@ -2477,7 +2477,7 @@ At Daiki nodding, Oki drove in a nail.
 
 "...As long as you know. If it comes to it, you run, all right? I mean it."
 
-"Did I suddenly lose all your confidence...? It's fine, I'll follow instructions. An incompetent ally is worse than an enemy. My job is to stay out of your way. Right?"
+"Did I suddenly lose all your confidence...?" Daiki said. "It's fine, I'll follow instructions. An incompetent ally is worse than an enemy. My job is to stay out of your way. Right?"
 
 "You understand that part perfectly well, and yet... You're out of joint somehow, Daiki."
 
@@ -2521,7 +2521,7 @@ Unfortunately, when it came to turning a friendless — which is to say entirely
 
 it was a phrase with what could fairly be called excessive firepower.
 
-"Ah, ah, a— d-d, da, dada, daaa—?!"
+"Ah, ah, a— d-d, da, dada, daaa—?!" Oki spluttered.
 
 "Sorry, sorry, Oki. That's on me. Red, you're red. Your face. Or not your face — your eyes. The Mystic Eye."
 
@@ -2533,7 +2533,7 @@ it was a phrase with what could fairly be called excessive firepower.
 
 "...Er."
 
-"That's not it, right, obviously... it's not like you'd mean it with someone like me... Right. Yeah."
+"That's not it, right, obviously..." Oki said, half to herself. "It's not like you'd mean it with someone like me... Right. Yeah."
 
 "Oki."
 
@@ -2572,7 +2572,7 @@ Oki slips into polite speech sometimes, Daiki thought irrelevantly, and answered
 
 "'Gentleman of'... Unfortunately, I've never had a single girlfriend in my life."
 
-"Not even in the other world?"
+"Not even in the other world?" Oki pressed.
 
 "Not even in the other world."
 
@@ -2618,7 +2618,7 @@ That had been a period thoroughly ill-suited to him.
 
 "The problem was being surrounded by the noble daughters, young ladies of good family. That was hard going. Sitting around some confection I couldn't taste, in a beautiful garden, with 'Lord Hero, oh, Lord Hero' on all sides, and every time it was talk of romance, or outright advances... and every time I'd deflect it with a smile."
 
-"Eep."
+"Eep," said Oki.
 
 "Basically I was performing 'the supremely gentlemanly, upstanding hero' for all I was worth. That's what it amounts to. Providing sheltered daughters with a safe bit of playing with fire. A Hero's work."
 
@@ -2971,7 +2971,7 @@ For a moment he was tempted to take advantage of her consideration.
 
 But he thought better of it; that wouldn't be fair. He was the one who'd caused the trouble.
 
-"That pair who sat next to us. One of them is someone I know."
+"That pair who sat next to us," Daiki said. "One of them is someone I know."
 
 "The one who spoke to you... didn't seem like it."
 
@@ -3017,7 +3017,7 @@ Daiki murmured it, and to Oki he looked terribly lonely.
 
 "Who knows. Maybe she did. I've considered the possibility."
 
-"Th-there's no way—"
+"Th-there's no way—" Oki began.
 
 "She's always been clever, with sharp instincts. Even if she couldn't imagine another world, it might be that she noticed I was somehow different from before."
 
@@ -3142,7 +3142,7 @@ At those words Oki understood as well.
 
 —He really did notice it before I did...
 
-Inwardly, Narumi Oki set her magus's mind to work.
+Inwardly, Oki Narumi set her magus's mind to work.
 
 The time was now a little past six in the evening. Far too early to be called night; the shopping district was still crowded with people.
 
@@ -3322,7 +3322,7 @@ He could serve as bait on a hook, or as material for negotiation.
 
 And if it came to it, as a hostage.
 
-Methods for making use of the asset that was Daiki, means of exploiting him to the fullest — Narumi Oki the magus had envisaged them all.
+Methods for making use of the asset that was Daiki, means of exploiting him to the fullest — Oki Narumi the magus had envisaged them all.
 
 Turn a contract over and it means little more than: **do whatever you like with him, so long as he doesn't die**.
 
@@ -3352,7 +3352,7 @@ She was the idiot. She had simply not wanted Daiki to see through to the shadowe
 
 —Unbecoming conduct for a magus.
 
-That wouldn't do. Narumi Oki reminded herself that she was, above all, a magus.
+That wouldn't do. Oki Narumi reminded herself that she was, above all, a magus.
 
 "Follow me. Stay alert — you're good at that sort of thing, aren't you."
 
@@ -3807,7 +3807,7 @@ Even asked that, Daiki thought.
 
 "..."
 
-"Though would Narumi Oki cart someone around for that? Clearly you're not a magus. She doesn't look the type to take an apprentice, and I don't sense magical energy... You're not «Gakkai»-affiliated, are you?"
+"Though would Oki Narumi cart someone around for that? Clearly you're not a magus. She doesn't look the type to take an apprentice, and I don't sense magical energy... You're not «Gakkai»-affiliated, are you?"
 
 "...Sorry, I don't even know what I'm being asked."
 
@@ -3835,7 +3835,7 @@ All he had was the memory of having once gone to another world.
 
 "...I told you, don't call Oki a—"
 
-"**Narumi Oki is a witch.**"
+"**Oki Narumi is a witch.**"
 
 At Daiki trying again to stop her using the word, Urei said it this time with force.
 
@@ -3845,7 +3845,7 @@ He hadn't expected to be argued with in return there.
 
 Urei put a hand to the back of her neck, let out a small sigh, and turned her gaze back on Daiki.
 
-"Narumi Oki is a witch, whatever she herself says. This is a simple fact."
+"Oki Narumi is a witch, whatever she herself says. This is a simple fact."
 
 "A simple... fact?"
 
@@ -3853,7 +3853,7 @@ Urei put a hand to the back of her neck, let out a small sigh, and turned her ga
 
 "...,"
 
-"Playing the busybody isn't my style, and I've no obligation here. But if you really are just an ordinary civilian who got marked — you shouldn't have gone near Narumi Oki."
+"Playing the busybody isn't my style, and I've no obligation here. But if you really are just an ordinary civilian who got marked — you shouldn't have gone near Oki Narumi."
 
 "...What do you mean?"
 
@@ -3935,7 +3935,7 @@ Let him have at least that much.
 
 "Thanks for the warning. But I'm going to wait for Oki here."
 
-He surely knew nothing about Narumi Oki. Theirs was a relationship one day old.
+He surely knew nothing about Oki Narumi. Theirs was a relationship one day old.
 
 Urei, standing before him, probably knew far more about Oki than he did.
 
@@ -3961,7 +3961,7 @@ But exactly as she said, the notion that this made Urei Aiko a kind person was e
 
 Because she was a magus.
 
-"Narumi Oki isn't coming back. She'll certainly be killed up ahead — no, she's already dead."
+"Oki Narumi isn't coming back. She'll certainly be killed up ahead — no, she's already dead."
 
 "...What did you say?"
 
@@ -3969,13 +3969,13 @@ Daiki's eyes went wide.
 
 To him, Urei spoke as though relating plain fact.
 
-"Narumi Oki is strong, certainly. She's called a witch for a reason. But in a fight between magi there's no such thing as 'absolutely.' —Which is exactly why Narumi Oki will certainly be killed."
+"Oki Narumi is strong, certainly. She's called a witch for a reason. But in a fight between magi there's no such thing as 'absolutely.' —Which is exactly why Oki Narumi will certainly be killed."
 
 The words sounded contradictory. But he could feel their weight.
 
 At the very least, Urei was stating the facts as she understood them.
 
-"What's up ahead is a stage set for killing a witch. A special stage prepared for that purpose. The moment she stepped onto it, Narumi Oki was already in checkmate. She won't come back alive."
+"What's up ahead is a stage set for killing a witch. A special stage prepared for that purpose. The moment she stepped onto it, Oki Narumi was already in checkmate. She won't come back alive."
 
 "...So there *was* a trap."
 
@@ -4406,7 +4406,7 @@ Believing that beyond it, Oki was waiting.
 
 　　　　　※
 
-—Narumi Oki, who had entered the precinct alone, couldn't help grimacing at the air beyond.
+—Oki Narumi, who had entered the precinct alone, couldn't help grimacing at the air beyond.
 
 The density of magical energy was harsh. Clearly not a natural state — but was this something achievable by human design?
 
@@ -4434,7 +4434,7 @@ He'd presumably warped the space, shifting the people who had been at the shrine
 
 This place was the precinct, and at the same time it was not the precinct.
 
-"...Narumi Oki."
+"...Oki Narumi."
 
 Sure enough, the long-haired man answered. The same face as in the photograph.
 
@@ -4474,7 +4474,7 @@ At Oki's advisement, Watarai returned a reply so belated and off-key that Oki fe
 
 "————......"
 
-"Don't you? Is it not so? This is fate. Ah — I knew that there was something obtainable only in this city. I know it. And yet I could not find it. It will not guide me, no matter what. Will not? No, that's wrong, that cannot be! And so I encountered you like this. Isn't that so? What of you. Are you different, Narumi Oki?"
+"Don't you? Is it not so? This is fate. Ah — I knew that there was something obtainable only in this city. I know it. And yet I could not find it. It will not guide me, no matter what. Will not? No, that's wrong, that cannot be! And so I encountered you like this. Isn't that so? What of you. Are you different, Oki Narumi?"
 
 "...What...?"
 
@@ -4506,7 +4506,7 @@ The vast vortex of magical energy had swollen until it carried actual physical p
 
 But Watarai answered without a trace of being overawed.
 
-"That. That's it — Narumi Oki."
+"That. That's it — Oki Narumi."
 
 "—What are you trying to say?"
 
@@ -4540,11 +4540,11 @@ It was overwhelming magecraft. Whatever it swallowed would be carved apart withi
 
 It was, so to speak, an order issued by a superior being.
 
-The girlish Narumi Oki that Daiki had seen was not there.
+The girlish Oki Narumi that Daiki had seen was not there.
 
 What stood here now was — a witch.
 
-Yes. This was no longer Narumi Oki; it was Narumi Oki, and it was not.
+Yes. This was no longer Oki Narumi; it was Oki Narumi, and it was not.
 
 The words had been the hammer falling.
 
@@ -4572,7 +4572,7 @@ Magically, at least, that is how they are interpreted, and so throughout history
 
 But Oki is a little different from that, too.
 
-Narumi Oki is the only one in the world of magecraft who **was human when she was born**.
+Oki Narumi is the only one in the world of magecraft who **was human when she was born**.
 
 Which is why she loathes it.
 
@@ -4582,7 +4582,7 @@ It was the same now.
 
 Martyring herself to the role of a curse, killing the one who exposed it as though she were a system.
 
-That was the case known as Narumi Oki.
+That was the case known as Oki Narumi.
 
 1-12 "The Former Hero, and the Magus" — 4
 -------------------
@@ -4599,7 +4599,7 @@ They had no mass, no thickness; they were not physical matter. While possessing 
 
 Oki called it «Pure Black» (*the black*).
 
-—Holding the law of «Severance», that was Narumi Oki's capability as a magus.
+—Holding the law of «Severance», that was Oki Narumi's capability as a magus.
 
 Yes, a **capability**.
 
@@ -4675,7 +4675,7 @@ To the bewildered Oki, Watarai went on speaking his own words.
 
 "————"
 
-"Therefore let me ask again, Narumi Oki. Do you not want a world that acknowledges your training?"
+"Therefore let me ask again, Oki Narumi. Do you not want a world that acknowledges your training?"
 
 "...What are you talking about...?"
 
@@ -5272,7 +5272,7 @@ But he had not the slightest doubt that whatever he lacked, she would fill in.
 
 That the promise they'd exchanged would be kept without fail, as a matter of course.
 
-—In that case, was what Narumi Oki should be doing right now watching his back from here?
+—In that case, was what Oki Narumi should be doing right now watching his back from here?
 
 No. Of course not.
 
@@ -5511,13 +5511,13 @@ It was all merely an experiment for taking himself to a world that was not here�
 
 Kūya Watarai thought of the witch.
 
-When he began looking into this city, he had arrived at information on the witch named Narumi Oki almost at once.
+When he began looking into this city, he had arrived at information on the witch named Oki Narumi almost at once.
 
 She was by no means famous in the public sense — no magus is, in the modern age — but it takes one to know one. Following the connections his father had held, one could obtain information on magi.
 
 So he had learned.
 
-About Narumi Oki, the only manufactured witch in the world.
+About Oki Narumi, the only manufactured witch in the world.
 
 She had been an ordinary human.
 
@@ -5537,7 +5537,7 @@ But that ending did not exist for a witch.
 
 It is hell. Not one thing about it is her responsibility, and yet she cannot even possess the future as a magus that had been left, however slightly, even to him.
 
-There is no place for Narumi Oki in this world.
+There is no place for Oki Narumi in this world.
 
 And yet, seeing her still trying to live as a magus in spite of it, he had felt a slight sympathy and a strong respect.
 
@@ -5788,11 +5788,11 @@ And to Watarai, who had understood the situation from its result, a quiet voice 
 1-15 "The Former Hero, and the Magus" — 7
 -------------------
 
-"Narumi... Oki...!"
+"Oki... Narumi...!"
 
 When had she— no, obviously, it must have been while his attention was on that young man.
 
-Before he knew it the witch — Narumi Oki — had reached the bridge, right in front of Watarai.
+Before he knew it the witch — Oki Narumi — had reached the bridge, right in front of Watarai.
 
 Black threads now ran upward from that wounded body.
 
@@ -5808,7 +5808,7 @@ He could leave the objective unfulfilled.
 
 —And yet.
 
-"Why. Why, Narumi Oki?!"
+"Why. Why, Oki Narumi?!"
 
 He couldn't help but ask.
 
@@ -5918,7 +5918,7 @@ Crimson eyes had him.
 
 "—Surely not."
 
-Watarai had already seen Narumi Oki's capability as a witch any number of times.
+Watarai had already seen Oki Narumi's capability as a witch any number of times.
 
 The fearsome black of «Severance».
 
@@ -5936,7 +5936,7 @@ Because Watarai had certainly seen it.
 
 Back then, magecraft activated in time with that young man's movements — a power like mind-reading.
 
-If that were the magical aptitude Narumi Oki had originally possessed—
+If that were the magical aptitude Oki Narumi had originally possessed—
 
 "It was the reverse... from the start!"
 
@@ -5944,7 +5944,7 @@ Oki didn't answer.
 
 But he was right. At the last, Watarai drew the correct answer by intuition.
 
-The magical characteristic Narumi Oki was born with was «Connection» — a property that could fairly be called the exact opposite of the «Severance» implanted in her later: creating links, binding ties, making empathy possible.
+The magical characteristic Oki Narumi was born with was «Connection» — a property that could fairly be called the exact opposite of the «Severance» implanted in her later: creating links, binding ties, making empathy possible.
 
 The crimson Mystic Eye she possessed is called precisely the Eye of «Connection»; merely holding a target in view creates a tie with it.
 
@@ -6287,7 +6287,7 @@ That was the moment the door of his room was opened, and at the sudden noise Dai
 
 At the figure suddenly rushing into the room, Daiki flinched and went rigid.
 
-Paying that no mind, the girl who appeared — Narumi Oki — threw herself at Daiki on the futon with a relieved expression.
+Paying that no mind, the girl who appeared — Oki Narumi — threw herself at Daiki on the futon with a relieved expression.
 
 "Thank goodness, you're all right...!"
 
@@ -7510,13 +7510,13 @@ Well. A perfectly natural question, Daiki thought.
 
 Oki, on the other hand, had not imagined by one millimetre that she might be asked such a thing.
 
-Being unable to predict even this was the middle-schooler known as Narumi Oki, the dud.
+Being unable to predict even this was the middle-schooler known as Oki Narumi, the dud.
 
 "Whuh?! Um, no, tha—! Huh, ah— n-n-no, uh, um...?!"
 
 Even if she hadn't predicted it, all she had to do was deny it promptly.
 
-And being unable to manage even that was also the magus known as Narumi Oki, the dud.
+And being unable to manage even that was also the magus known as Oki Narumi, the dud.
 
 The dud's face had gone thoroughly scarlet and she was in a state of confusion.
 
@@ -7586,7 +7586,7 @@ He had no knowledge of the other world's common sense, and his strength made him
 
 The memory surfaced and made him nostalgic, but in any case, let's reuse the method from those days.
 
-"Ahem. By the way, I mentioned it in passing earlier, but properly: this is my friend, Narumi Oki-san. And Oki, this is my sister, Nagi Kurosu — you did see each other once in front of the house, right?"
+"Ahem. By the way, I mentioned it in passing earlier, but properly: this is my friend, Oki Narumi-san. And Oki, this is my sister, Nagi Kurosu — you did see each other once in front of the house, right?"
 
 The two looked at Daiki simultaneously.
 
@@ -7946,7 +7946,7 @@ But before she knew it, she had said it.
 
 Surely it was an insignificant sentimentality. A useless, cheap sort of empathy.
 
-In that case it was better not to say it. Narumi Oki's circumstances were not something to be casually conveyed to an ordinary person with no connection to any of it. She knew that.
+In that case it was better not to say it. Oki Narumi's circumstances were not something to be casually conveyed to an ordinary person with no connection to any of it. She knew that.
 
 **That was absolutely not a magus's way of thinking.**
 
@@ -8166,7 +8166,7 @@ He'd only been thinking that he mustn't be here, and had failed to notice the ex
 
 But at the very least, she alone — the one who knew he'd been to another world — knew the Daiki that was himself.
 
-In this world too, Narumi Oki alone knew this Daiki Kurosu.
+In this world too, Oki Narumi alone knew this Daiki Kurosu.
 
 That was certainly not something he could ignore.
 
@@ -8209,7 +8209,7 @@ Because the paper bore these words:
 
 A little before Daiki Kurosu found the note.
 
-In fact, it was Narumi Oki who noticed first that things had moved.
+In fact, it was Oki Narumi who noticed first that things had moved.
 
 "—!"
 
@@ -9857,9 +9857,9 @@ In her hand she dragged a huge object Watarai recognised — which is to say,
 
 That was genuinely outside his calculations.
 
-That Narumi Oki was so close to completion.
+That Oki Narumi was so close to completion.
 
-Even if, as the young man said, it wasn't a Demon Lord — no, even granting it was an existence that had lost its sovereignty — even so, at Narumi Oki's current degree of completion she shouldn't have stood a chance.
+Even if, as the young man said, it wasn't a Demon Lord — no, even granting it was an existence that had lost its sovereignty — even so, at Oki Narumi's current degree of completion she shouldn't have stood a chance.
 
 That, in itself, was fascinating, to be sure.
 
@@ -12147,7 +12147,7 @@ It is an important concept for both magecraft and aberrant powers, but the way t
 
 Every piece of magecraft and every aberrant power is affected by it to a greater or lesser degree and has its essence changed by it. For magi it also determines what the root of the soul is oriented toward, hence its weight.
 
-For example, the «Connection» characteristic Narumi Oki is born with is the expression of her worldview — *I want to be connected to others, to know what is inside them* — while Urei Aiko's aberrant power of «Degeneration» is an outer-realm law that debases others, dyed by her worldview that *everything degrades and loses its value / falls to zero*.
+For example, the «Connection» characteristic Oki Narumi is born with is the expression of her worldview — *I want to be connected to others, to know what is inside them* — while Urei Aiko's aberrant power of «Degeneration» is an outer-realm law that debases others, dyed by her worldview that *everything degrades and loses its value / falls to zero*.
 
 ■ Witch
 
@@ -12314,7 +12314,7 @@ That I must not remember anything beyond this point—
 
 "...Gh."
 
-That day, Narumi Oki woke badly.
+That day, Oki Narumi woke badly.
 
 Terrible night sweats. A sweat as though she'd been sitting still in front of a heat source, her nightclothes clinging damply to her skin.
 
@@ -12527,7 +12527,7 @@ If there was anything that ought to be called a change, it was one thing only—
 
 —a single girl who tilted her head in response to Daiki's muttering.
 
-Narumi Oki.
+Oki Narumi.
 
 A middle-school girl whose true identity is a magus lurking in the modern day and an artificial witch.
 
@@ -13430,7 +13430,7 @@ Without realising it, Oki began to ask his meaning.
 
 What stopped her was Adalbert himself.
 
-"An unnecessary connection (*tie*), Narumi Oki. There is no need to take my circumstances into account."
+"An unnecessary connection (*tie*), Oki Narumi. There is no need to take my circumstances into account."
 
 "...Gh."
 
@@ -14510,7 +14510,7 @@ The face of a girl who rejoiced and regretted at once, who had accepted being cu
 
 "Right, that's about it for defences."
 
-Hearing Narumi Oki say it, Daiki Kurosu of course couldn't tell any difference.
+Hearing Oki Narumi say it, Daiki Kurosu of course couldn't tell any difference.
 
 "Ah... good work."
 
@@ -14640,13 +14640,13 @@ Or rather, precisely because in the other world he was a Hero granted an externa
 
 Oki, meanwhile, has no sympathy. And that is **not** because Kūya Watarai is already dead.
 
-Narumi Oki — a witch — has no such function.
+Oki Narumi — a witch — has no such function.
 
 Through «Connection», her innate magical characteristic, Oki knows Kūya Watarai better than Daiki does.
 
 That's what it means to connect with the red Mystic Eye. It wouldn't be strange for her consciousness to be pulled along into sympathy.
 
-But where the girl Narumi Oki is concerned, there was no such worry.
+But where the girl Oki Narumi is concerned, there was no such worry.
 
 The heart of a girl who holds a Pure Black curse in her soul is stained by nothing it connects to—
 
@@ -14887,7 +14887,7 @@ At Daiki's question, Urei made a sour mouth.
 
 "I don't have a good sense of your level... how impossible are we talking?"
 
-"Close to outright impossible. If you wanted to precisely destroy only the barrier, I doubt even Narumi Oki or Kazuya Watarai could. Calling in several specialists from the Ritsukai and spending a long time might barely do it — that sort of level. Which is exactly why I doubt it exists."
+"Close to outright impossible. If you wanted to precisely destroy only the barrier, I doubt even Oki Narumi or Kazuya Watarai could. Calling in several specialists from the Ritsukai and spending a long time might barely do it — that sort of level. Which is exactly why I doubt it exists."
 
 "Mm... no, wait. Then how do you know it *isn't* there?"
 
@@ -14911,7 +14911,7 @@ At the very least, that possibility rises to the surface.
 
 No. If anything, perhaps it's better to act on that as a premise.
 
-At the least, «the Exile League» had plainly made the magus girl Narumi Oki their objective.
+At the least, «the Exile League» had plainly made the magus girl Oki Narumi their objective.
 
 Things seem to be getting troublesome in various ways.
 
