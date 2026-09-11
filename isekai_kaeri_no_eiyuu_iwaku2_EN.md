@@ -12252,3 +12252,252 @@ A café near the east exit of Ōmiya Station, Saitama City, Saitama Prefecture. 
 A hidden gem where you can enjoy good food and superb coffee.
 
 It doesn't stand out much, but it has many regulars and does reasonably well. Hiring part-timers.
+
+2-00 "Fragment / Flashback"
+-------------------
+
+—I am looking at fire.
+
+Wavering, it is a faint heat-shimmer of memory. Deep within a darkness like an abyss, where nothing shows and nothing can be seen, a single flame was visible, swaying.
+
+That flame was the beginning.
+
+—Heat stings the skin.
+
+The fire gradually gained strength. Surely it was the beginning of a scorching heat that would burn everything away. Any ember, carefully nurtured, becomes a supreme blaze.
+
+Because fire is a thing that burns everything.
+
+—I hear voices.
+
+Voices I can't tell the owners of. I don't remember where they came from. But I knew that they sounded nostalgic and familiar.
+
+The voices of girls, innocent and knowing no defilement.
+
+—I sense a smell.
+
+The smell of people burning. The owners of the voices I'd heard a moment ago are being burned by the flames. The unsullied girls are now nothing but mechanisms that leave behind a curse.
+
+Their sins burned, they sink into resentment.
+
+—There was the taste of iron.
+
+I was eating something. Sipping blood, devouring life, sustaining life. All life devours life.
+
+Humans above all are the worst creatures, lacking productivity, devouring far more than they create.
+
+—Ah...
+
+Nothing. I can't remember a single thing. It wasn't I who was burned, and yet all of my memory turned to ash somewhere beyond the incineration; now I can sense only its traces.
+
+I remember only a few things. Which means my five senses perform their functions only to that degree.
+
+I believed without a doubt that I was doing what had to be done.
+
+I can't remember anything.
+
+The thought that I ought to remember, and the thought that I must not.
+
+I don't even know which of the two is genuine, but since the root of my memory has been burned and nothing remains in that scorched earth, it's the same either way.
+
+It can't be recovered regardless.
+
+And so.
+
+The flame seared into my eyes, the warmth I felt on my skin, the voices calling me their friend forever, the stench of the flesh of those voices' owners burning, the taste of iron I licked from my tongue — I know nothing of where any of it came from.
+
+My soul refuses to remember.
+
+That I must not remember anything beyond this point—
+
+　　　　　※
+
+"...Gh."
+
+That day, Narumi Oki woke badly.
+
+Terrible night sweats. A sweat as though she'd been sitting still in front of a heat source, her nightclothes clinging damply to her skin.
+
+She doesn't dream much, but when she does it tends to be a nightmare.
+
+She wanted a shower immediately, but before that Oki began her daily routine.
+
+"————"
+
+Forcibly excluding (*shutting out*) every stimulus from the outside world from her awareness, she sank her mind into her own interior.
+
+What she finds there is a «Door». Around her chest — corresponding to roughly where the heart is, though of course an organ that doesn't actually exist, a fictional gate.
+
+She pushed it slowly open.
+
+With the door opened, magical energy arises from beyond it.
+
+The image is fire.
+
+Heat swells; flames rush out.
+
+The nearest sense of it is perhaps that of opening a door and causing a backdraught.
+
+The flame that is magical energy flowed into her and filled her whole body at once.
+
+Opening the door with her mind, she circulates the magical energy arising from her soul throughout her flesh.
+
+The light of magical energy — a red glow — ran for an instant like a flash, from chest to limbs, from centre to extremities.
+
+It looked as though her blood vessels had been rendered in vivid red lines of light.
+
+The basics of magecraft. Draw out magical energy, operate it fully, and fill your own interior with it.
+
+It's the repetition training Oki performs every morning without fail. By now she can do it almost unconsciously, but even so her control isn't perfect.
+
+In daily life that wasn't a problem.
+
+"...Still not enough."
+
+It's a matter of imagery. You could rephrase it as aptitude.
+
+Oki's magical energy has momentum and strength, and correspondingly it's difficult to control. That's a matter of margin of error, and conversely it's a problem if you can control it but the output is weak, so it cuts both ways; but if you can have both, that's obviously better.
+
+By rights it isn't something to be concerned about, but the present Oki couldn't let it go.
+
+"...Still not enough, is it."
+
+Oki had met Kazuya Watarai — a magus called first-rate.
+
+He was a first-generation magus with no inherited bloodline, but at the very least there was no question he had completely made his aptitude his own.
+
+That was unquestionably his talent as a magus, and by comparison Oki had to admit she was thoroughly inferior.
+
+She might have won in a fight.
+
+But that was premised on witch-arts, and above all it isn't a magus's true purpose at all.
+
+What ought to be competed over isn't strength but excellence, and in that she'd lost.
+
+In fact Oki wasn't making much use of her magical aptitude, «Connection».
+
+No. It would be better to say she hadn't cultivated it much.
+
+She'd only polished it to prevent degradation. The raw material that was herself wasn't finished as a work.
+
+It couldn't be helped.
+
+If you hurry and mistake the direction, the material itself breaks down.
+
+Fourteen is far too early an age to settle definitively on one's completed form as a magus.
+
+Even a poor work, once complete, is complete.
+
+Reaching that point too fast means it's too late.
+
+If you're aiming for a masterpiece you should take more time to judge, she'd been told by those around her.
+
+But. Is that genuinely all right?
+
+Oki was aware of that impatience.
+
+After all, anyone who intends to fight Oki must prepare countermeasures against witch-arts. Since everyone thinks that way, Oki ought to be considering what she can do on top of that.
+
+It was then that the phone she'd left at her bedside rang.
+
+She'd woken before her alarm, so for an instant she mistook it for that.
+
+But it was apparently an incoming call.
+
+Picking it up, Oki took the call on the bed.
+
+"Hello. —Ah, yes. Thanks for last time, it was helpful."
+
+A room in a luxury apartment block near Ōmiya Station, rented cheaply through connections.
+
+In a place that hardly fits the image of a magus's dwelling, Oki's voice rang out as she spoke with someone.
+
+"I see. So Waya-san is coming back soon. Yes, understood. Right, I should show my face at least once. You have passed on a full report, haven't you? Huh, you haven't?"
+
+Setting the phone down and switching to speaker, Oki first took off her nightclothes.
+
+Down to her underwear, she loosened up her body, making effective use of the morning while answering the voice on the line.
+
+*"Yeah, well, you know. I've been busy with all sorts. My sister won't leave her room."*
+
+"...I've never actually seen your sister, Yukimaru-san."
+
+*"You're doubting her existence?! I told you, she's a shut-in. A rare character. I have to look in on her occasionally. Shichisan can't be trusted... honestly, what a pain."*
+
+"I wouldn't know..."
+
+*"Huh, you haven't met? Ahh, well, you don't need to meet a geezer like that. Anyway, you're safe, Oki-chan, so it's all fine for now, isn't it? Good work out there."*
+
+"...Waya-san aside, things would have been a bit easier if you'd been here, Yukimaru-san. You're back on this side now, aren't you?"
+
+*"Yeah, well, I'm dropping in on Reiko-nee, so I'm not in Ōmiya yet. Hey, I was working too, on Waya-san's orders. I went all the way out to a place called Nagaremiya."*
+
+"Where's that?"
+
+*"Nah, if you don't know it, it doesn't matter. Just an errand."*
+
+"You're dodging again..."
+
+*"It's not a lie that it was work! And don't try to drag me into a shootout. I'm no use. Leave the rough stuff to you and Honoka-san. I'm sacrificing university credits over here. —Ah, more to the point."*
+
+It was a fairly friendly conversation.
+
+Or would have been, if its content hadn't belonged to people on the underside of society who can't be too public about it.
+
+*"That boy... Daiki Kurosu-kun, was it?"*
+
+"...Yes."
+
+At that name coming up, Oki didn't know what expression to make.
+
+Daiki Kurosu — an **otherworld returnee** without parallel in the world.
+
+Acting or not, since she held part of this city's administrator authority, responsibility meant she couldn't fail to report his existence.
+
+If she'd had her way, she wouldn't have wanted to drag him into the world of magi—
+
+*"Honoka-san says she wants to meet him. Set it up."*
+
+"...Really?"
+
+*"Why would I lie? And obviously she would, honestly."*
+
+Quite so. Oki was the one who dragged him in, and whatever she said, it was too late now.
+
+She wasn't in a position to make excuses.
+
+Being unable to settle her stance at this stage was the worse thing.
+
+*"She said she'd be back at the shop around midday today. Sooner's better, no?"*
+
+"...Understood. I'll talk to Daiki."
+
+Reluctantly, but unable to do anything but agree, Oki answered.
+
+Whatever she made of that reaction, the woman's voice across the line dropped its tone a little.
+
+*"Frankly, I want a look at him myself. Daiki Kurosu-kun."*
+
+"Wh-why would you—"
+
+*"Looks like I won't be able to for a while, though. Honoka-san seems to have landed in a bit of trouble just now. That'll probably come up too."*
+
+"Huh... is that so?"
+
+*"I don't know the details, just a feeling. —But still, you're curious, aren't you? Our Oki-chan finally showing signs of a man in her life. As your big sister I'm dying to know."*
+
+"Wh— who's my big sister?! And it isn't like—"
+
+*"Now, now. Anyway, that's how it is, so I'll leave it with you. See you."*
+
+"Hang o—"
+
+The call was cut before she could stop it.
+
+Oki glared hard at the phone she'd set down, to no effect whatsoever.
+
+"Oh, for—!"
+
+Half in irritation, Oki flung the underwear she'd taken off.
+
+Then, stark naked, she gave up on various things, picked up her clothes and headed for the bathroom.
