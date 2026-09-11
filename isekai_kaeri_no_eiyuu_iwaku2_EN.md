@@ -6606,3 +6606,364 @@ let her gaze slide over the speechless Daiki, and as though it were nothing at a
 "Strictly speaking, it isn't I who possess it."
 
 readily acknowledged that what Oki had said was essentially fact.
+
+1-17 "The Former Hero, and This World" — 2
+-------------------
+
+"Huh. Um... what does that mean?"
+
+Daiki asked, eyes rolling.
+
+Magi were quite enough on their own, but possessing scientific technology from the future was a different field entirely.
+
+When had Earth become a demon-land he knew nothing about?
+
+Or had there been a world he didn't know from the very start?
+
+"Here."
+
+But Tsunashino didn't answer his question.
+
+Instead she handed him the same object that had been pressed to his left arm — a palm-sized, cylindrical something, which was about as far as description would go.
+
+*A large rubber stamp* might be closest.
+
+"...What is this?"
+
+That question, at least, Tsunashino answered.
+
+"It's for dissolving the medical nanomachines just injected into your body. Do not get the idea of leaving them in so that future injuries will heal themselves. I take no responsibility whatsoever."
+
+"...Is it bad to leave them in?"
+
+"One could also say it's bad merely to put them in."
+
+Don't say that *after* putting them in.
+
+Daiki's face went visibly pale. —What is this, it's scarier than magecraft.
+
+"Please understand it as: even future technology is by no means omnipotent. This batch is still a weak type, but using it on a hairline fracture of the arm is excessive. Extravagant, one might say."
+
+"Um, is this really all right?"
+
+"A single use presents no problem. It is a treatment device to begin with; rest easy on that point."
+
+"...Then fine, I suppose..."
+
+"That said, I don't recommend overusing it. So long as I receive payment, and so long as there is stock, I'll supply it, but... you wouldn't want to become a modified human either, would you?"
+
+"What did you actually put in me?!"
+
+"It's fine. —Within about ten times in a lifetime."
+
+—Hold on, is this person deliberately phrasing things to stoke my anxiety?
+
+Daiki couldn't help narrowing his eyes.
+
+He didn't think she was enjoying it; she was simply driving in a nail.
+
+Daiki looked unusually uneasy. And the one enjoying that sight was, after all, not Tsunashino.
+
+"Ahahah! That's a rare look."
+
+"...Don't laugh, Oki..."
+
+Watching Daiki flounder anxiously, Oki covered her mouth in amusement.
+
+When the slightly sulky Daiki pushed out his lips, Oki bit back her leaking laughter.
+
+"Sorry, sorry. You're so calm even in a fight, Daiki, so I feel like it's the first time I've seen you this flustered. No, if anything I'm a bit relieved."
+
+"...I was pretty flustered when you suddenly took my lips, too."
+
+This was Daiki's counterattack, but surprisingly it didn't land on Oki.
+
+"What, are you bothered about it? You're unexpectedly innocent, Daiki."
+
+"..."
+
+"Well, having it taken without permission by someone like me, I understand being angry. But I'm a magus. If it's necessary I won't hesitate. Magecraft actually contains a fair number of sexual elements, you know?"
+
+He was told such things as if she were teasing him instead.
+
+Normally she'd have been embarrassed.
+
+Apparently, as long as the great premise of *for the sake of magecraft* held, Oki stopped feeling most hurdles. Which was presumably why she was so composed.
+
+Losing his opening for a counterattack, Daiki fell silent.
+
+What broke it open was a surprise attack from an unexpected direction.
+
+"Oh? Is he not your lover?"
+
+At Tsunashino's words, delivered with a perfectly straight face,
+
+"Bwah—?!"
+
+Oki went scarlet in a second.
+
+—Why does *that* land?
+
+Daiki wondered, but chose not to say it.
+
+"You are a young maiden, and I'm not your parent. I've no intention whatsoever of commenting merely because you're a middle-schooler."
+
+Tsunashino continued flatly, and Oki mumbled something, glancing repeatedly at Daiki.
+
+"Fweh, iah, it's not like thaaat, nya-nyaa..."
+
+"Though as one involved, nominally, in medicine, allow me to say: —do use contraception properly."
+
+"Th— gh— l-like I said, I-I would never do such a thing...!!"
+
+"Huh, you wouldn't use contraception?"
+
+"N-not that one! That's not it! That sort of thing, I'm not doing *yet*!"
+
+"Yet?"
+
+"It's a figure of speech!!"
+
+"—Kh."
+
+Tsunashino turned her face away, her shoulders shaking.
+
+Her expression wasn't visible, but — well. Daiki couldn't help a wry smile.
+
+He'd thought her a stiff person, but that had plainly been teasing Oki.
+
+Which meant he'd probably been teased earlier as well — so he was led to think.
+
+Tsunashino turned her face back immediately.
+
+Her expression was the same straight one as before.
+
+"I'll continue the explanation."
+
+"Hold on! We're not done talking— why am I being ignored?!"
+
+Oki was in an entertaining state, but since leaving her be was cuter, Daiki said to Tsunashino:
+
+"...You were laughing just now, weren't you. Are you two close?"
+
+"I've no idea what you mean."
+
+Tsunashino didn't waver in the slightest.
+
+"I couldn't say. Now, the explanation isn't difficult. You understand the usage? Remove the cap and press the far face to your arm, as before. I'll collect the device after use, so don't dispose of it on your own."
+
+"Ah — yes, understood."
+
+"Let's see... by noon should be fine, I think. Use it whenever you get the sense that it's healed. —So long as you don't forget."
+
+"I absolutely will not forget."
+
+Far too frightening. Even if she was teasing, it was sufficient as a threat.
+
+Tsunashino nodded lightly, then took a clear file from her bag and handed Daiki a sheet of paper from inside it.
+
+"Is this... ah, a non-disclosure agreement or something?"
+
+Daiki asked as he turned it over, and Tsunashino answered with the same unruffled expression.
+
+"No, it's a questionnaire. If you fill in things like how it felt to use, I'll refer to it going forward."
+
+"That's so ordinary..."
+
+"As for a contract, one is already functioning on Narumi-san, so there's no problem. If you don't want to cause her trouble, I recommend obeying quietly. The questionnaire is voluntary, but I'll give a discount for your cooperation."
+
+"Ah, right. I'll fill it in, then."
+
+"—Very good. Then I'll take my leave. Frankly, I'm sleepy."
+
+Being frank right at the end, Tsunashino briskly gathered her things and stood.
+
+She was a person of swift action. Fundamentally she did nothing wasteful.
+
+Thanks to his long life in the other world Daiki had something similar about him, but Tsunashino was plainly beyond that.
+
+Oki showed no particular surprise. She'd been pouting a moment ago, but apparently had no intention of stopping her from leaving.
+
+Well, when told she was sleepy, there wasn't much to say.
+
+Without a farewell, Tsunashino made to leave in a hurry; Daiki followed her to the entrance.
+
+"—There's no need to see me off. Please keep still and rest."
+
+Tsunashino said it. She'd come by car anyway, so he certainly couldn't walk her anywhere.
+
+"Er, thank you very much. For helping."
+
+"I'm being paid, so it's fine."
+
+Tsunashino said it briskly.
+
+"I would rather not get dragged into incidents involving dangerous people like magi. Please feel neither gratitude nor grudge."
+
+"...Then at least let me be free to say thank you."
+
+When Daiki said it, Tsunashino's eyes widened slightly, for just an instant, as if with interest.
+
+But immediately afterward her expression returned to its usual iron mask, and she nodded slightly.
+
+"Then I'll accept it as words."
+
+"...Thanks."
+
+"Yes. —Daiki Kurosu-san."
+
+Tsunashino suddenly said his name.
+
+She hadn't intended to do any such thing at first. Somehow Daiki intuited that.
+
+That she was bending that intention in order to direct words at him.
+
+"Please watch over Narumi-san, if you can."
+
+And indeed, Tsunashino said such a thing.
+
+Daiki's eyes wavered a little.
+
+He smiled thinly, and then:
+
+"Yes. I intend to."
+
+"...Quite the boy. I don't dislike that sort of face. —Take care, young man."
+
+Leaving only that, she returned to her usual expression and departed.
+
+Only at the very end showing a faintly smiling face.
+
+It felt somehow adult, and Daiki was made to feel a slight flutter. With a small wry smile, he closed the door and went back to the room.
+
+To Oki, who turned her gaze on him, Daiki said:
+
+"She was a good person."
+
+"Who knows. I wouldn't recommend judging people by surface attitude alone."
+
+Oki said it in a way that subtly echoed Tsunashino's manner of speech.
+
+Perhaps noticing that herself, she started and shook her head.
+
+"...Well, she is a «Gakkai» person. She keeps a neutral stance, but Tsunashino-san doesn't stick her nose into disputes between magi. Though you might be a different matter, Daiki."
+
+"I heard that earlier too — what is this Gakkai, in the end?"
+
+"**The world of science.**"
+
+Oki said.
+
+"And also the organisation that oversees it — the boss of it, so to speak."
+
+"...Meaning?"
+
+"One of the three into which this world is broadly divided. The three worlds, they're called. Three worlds. Well, it's a bit odd to say to someone who actually went to another world, but that's a way of thinking that exists."
+
+It was a story he'd never heard.
+
+To Daiki, who didn't quite follow, Oki continued.
+
+"The world of science — which is to say, basically the normal world. You could call it the surface world or the world of ordinary people. The point is, the great majority of the world that has nothing to do with magi and outliers like that. That's the first one."
+
+Oki raised one finger as she spoke.
+
+Which presumably referred to nearly the whole of Earth's civilised society.
+
+"Dividing it into three is a matter of convenience. In practice you can take it that almost all of this world is that world of science. By population share it's ninety-nine per cent — ninety-nine hundredths is the Gakkai, the world of the system called society. Well, you may as well take it as pointing at nearly all of Earth... all of human civilisation."
+
+"I see... incidentally, what are the other two?"
+
+"One is «the Makai» — that is, **the world of magecraft**. About nought point nine per cent of the world. The world of us magi, and the largest institution within it, Europe's «Majutsu Ritsukai», is its representative — hence the abbreviation «Makai». Precepts — that is, rules — govern that world of magi. I'm inside it too."
+
+"Does that mean you're a member of this Majutsu Ritsukai?"
+
+"It doesn't. The same goes for the Gakkai: the point is that the name of a dominant major organisation is being used as a symbol; it's not that everyone belongs to the organisation. Being a magus doesn't mean everyone is in the organisational «Makai», the same way an ordinary person isn't necessarily a person of the «Gakkai». When we mean the organisation, in Japan we say «the Ritsukai» or «the Sōkai» to distinguish."
+
+"Ah... well, I sort of follow."
+
+The world of science, the «Gakkai» — ruled by the «Gakujutsu Sōkai», or «the Sōkai».
+
+The world of magecraft, the «Makai» — ruled by the «Majutsu Ritsukai», or «the Ritsukai».
+
+That understanding was presumably fine, Daiki accepted roughly.
+
+"So there's one more big organisation, then."
+
+At that, however, Oki shook her head.
+
+"No. The last one isn't an organisation. This is strictly a way of dividing the world."
+
+"Mm...?"
+
+"**The world of aberrant power.** The great sea of another dimension that refuses understanding."
+
+"Aberrant power..."
+
+"That one's called the «Igen Taikai». Abbreviated, «the Ikai». A foreign sea hopelessly ruled by nothing and no one. That concept — in other words, the world of the Empowered. It's an expression that lumps together those who fall outside understanding under the name of the concept said to be their point of origin. Looking at Earth's population, it's under nought point nought nine per cent. It isn't an organisation or a group; it's just to say that such people exist too."
+
+"...I don't really follow, but..."
+
+"That's all right, isn't it? It's an expression used almost only in Japan, and if you ask whether it's accurate, I think it's a fairly delicate line. People of the Ikai are about as real as a tsuchinoko. I've never met one either. Well, Japan does have seven bloodlines that pass aberrant power through blood, so there's that — but never mind; what you should remember are the organisations, the «Gakujutsu Sōkai» and the «Majutsu Ritsukai»."
+
+Saying so, Oki turned to face Daiki and composed a serious expression.
+
+Daiki wasn't confident he was keeping up, but he thought he'd better listen.
+
+"There aren't many «Majutsu Ritsukai» people in Japan, so that's fine for now. I'll just say that if a magus identifies themselves that way, better not to get involved. As for the «Gakkai», there are plenty of ordinary humans like the Tsunashino-san you just met, but the organisation is enormous. Publicly known organisations sometimes trace back to it, and the story changes completely from department to department, so it's difficult. I don't know the whole picture either — but you've tasted it in your own body, haven't you?"
+
+"...The future scientific technology, you mean."
+
+"Right. Trace it back to its origin and there's a researcher who runs the «Gakkai»... apparently called «Dr. Mirai», a fairly on-the-nose title. That person is supposedly one of the Empowered."
+
+"Isn't that a different world's business..."
+
+"Which is why that area is sloppy. Anyway, this Dr. Mirai has an aberrant power that probably no one else in history has possessed — «Ultra-Long-Range Precognition». Whether it's true, I don't know."
+
+"**Ultra-long-range**... **precognition**?"
+
+"Exactly what it says. Hundreds, thousands, tens of thousands of years — or more — of far-future history, which he can observe with those «eyes». The Gakkai's future technology is, so to speak, a reverse import."
+
+"This has turned into a ridiculously grand story..."
+
+At the outrageous scale of it, Daiki was almost moved.
+
+Oki, for her part, shrugged and scoffed.
+
+"Well, I don't know if it's true or not. I think it's ridiculous too."
+
+"Eh..."
+
+"Obviously. Even if he exists, there's no way an ultra-important figure like that would appear in public, and there's no way to verify it. But the fact remains that the Gakkai has technology beyond human knowledge."
+
+"..."
+
+"The problem is that his ultra-long-range future observation catches, alongside future technology, the extinction of humanity. And that in many cases the cause is said to be magi or the Empowered."
+
+It was a scale of story that induced vertigo.
+
+All this business of another world — his own title was starting to seem rather cheap.
+
+"Ha. Well, in reality there's probably self-destruction through scientific technology too, but there's the arrogance of thinking they control it. In any case, that's why the Makai and the Gakkai are on bad terms."
+
+"...Right."
+
+"So the conclusion is: don't go near Gakkai affiliates either — that's the story."
+
+"That's the same as before..."
+
+More to the point, there was no chance of him going near them on his own.
+
+At Daiki's narrowed eyes, Oki spoke seriously.
+
+"Let me tell you, you're extremely dangerous, Daiki. Obviously — you heard what I said, the three worlds. You're an ultra-valuable asset falling into none of them, the remaining under-nought-point-nought-one per cent, aren't you? Or rather, probably — no, unquestionably — a case with only one instance in the world."
+
+"...Me...?"
+
+"You're more easily targeted than you think. That's how dangerous the unknown parts of this world are — start being properly aware of that, right now."
+
+Oki's words came down to exactly that.
+
+—Presumably the world's only person to have experienced another world.
+
+That Daiki was indifferent to that value was not a situation she could overlook.
