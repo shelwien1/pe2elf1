@@ -7936,3 +7936,270 @@ She didn't know the reason.
 But before she knew it, she had said it.
 
 "Listen to my story for a bit."
+
+1-21 "The Former Hero, and This World" — 6
+-------------------
+
+"...Your story?"
+
+"Yes. A bit of an old tale. Somehow I thought... it might be all right to tell you, Daiki."
+
+Surely it was an insignificant sentimentality. A useless, cheap sort of empathy.
+
+In that case it was better not to say it. Narumi Oki's circumstances were not something to be casually conveyed to an ordinary person with no connection to any of it. She knew that.
+
+**That was absolutely not a magus's way of thinking.**
+
+For Oki it was a kind of forbidden thing (*taboo*), an essential precept (*rule*) for keeping herself herself.
+
+That she was about to break it without even knowing why — Oki couldn't hide her self-mockery.
+
+—Even so.
+
+"I'm... **a witch**, you see."
+
+Oki put it into words. She decided to.
+
+Daiki narrowed his eyes slightly.
+
+"...That's—"
+
+"Yes. I got angry at you before for calling me that. But you might not have been listening — Watarai, for instance, called me that, and magi call me that."
+
+If that courier Urei Aiko had called Oki a witch, Daiki had heard it too.
+
+The difference in usage between «witch» and «magus» was still unclear to Daiki.
+
+But at least it was certain that Oki didn't take kindly to it.
+
+"For magi, «witch» is a derogatory term. You saw it, I think — the magecraft I use, which I just loosely call «Pure Black» (*the black*) — that's **magecraft that isn't recognised as magecraft**."
+
+"You mean it isn't magecraft...?"
+
+"No. Magic refers to fantasy, to things that don't exist in this world. Inverted, the moment something is a technique that genuinely exists in this world, it's all magecraft without exception. But at the same time magecraft is a technique. Something you become able to use by studying and training. In my case, though, «Pure Black» alone requires no ritual or preparation at all. Just willing it is enough. —Because the spell formula is carved into my soul. So a cheat like that gets called «witchcraft», scorned and set apart as not a technique (*magecraft*) but a fantasy (*magic*)."
+
+"...Like jealousy, then."
+
+"That too, well... might not be entirely absent. But it's not the essence."
+
+If one thinks *it's useful, so that's fine*, then there's no need to study magecraft at all.
+
+There exist any number of more convenient technologies in the modern world. It isn't efficient.
+
+If one still intends to be a magus, then what one wields must, after all, be magecraft.
+
+"And here's the main point. A witch is fundamentally a congenital condition. For some reason, from the moment of birth, one piece of magecraft is carved into the soul. Properly speaking, it's a condition that can't be reproduced after the fact. An incurable disease — a witch lives from the moment of her birth obliged to be a witch."
+
+"A disease..."
+
+"It's a curse, so to speak. A condition brought on by being cursed not by a person but by the world. But once, an experiment was carried out to try to carve it into a human after the fact. —I'm the success case. And the only one in the world. Yes... so in that sense I might be a little like you."
+
+One, the world's only person to have experienced another world.
+
+The other, the world's only acquired witch.
+
+In that sense the two of them might indeed be in similar positions.
+
+In the sense that nowhere in the world was there another person in the same position.
+
+"I was originally a magus, mind. Because I had magical energy. But, well... I was chosen as an experimental subject. It was very nearly impossible — no, it should have been outright impossible. By some strange working, by a coincidence like miracle stacked on miracle, only I survived."
+
+"..."
+
+"The only success case (*Finished Product*), and an acquired witch case (*Artificial Witch Case*). That's me. Case number (*Case Number*) 013 (*Thirteen*). And of all people, in **an experiment led by my own father**, my entire future as a magus was closed off."
+
+"Your... father?"
+
+"Well, I think it was fortunate, though. Perhaps it goes without saying, but the twelve before me all died. There was no reproducibility, and the experiment was frozen as a result. So there were no victims from the fourteenth onward. ...I alone was rescued from that place."
+
+Daiki could only catch his breath.
+
+He didn't feel he could even imagine the feelings of someone made an experimental subject by her own father in an affair from which there was almost no way to survive.
+
+Merely surviving, Oki had indeed been fortunate.
+
+"There was no road for me but to live as a magus. But as long as I'm a witch, there's no possibility whatsoever of my being evaluated as a magus. A lot happened, and now I live here."
+
+What was he supposed to say? He couldn't find words anywhere.
+
+He felt it wasn't his place to grieve or be angry. Offering cheap comfort now, to an Oki who spoke as though she'd made her peace, seemed wrong too.
+
+But nothing else presented itself either.
+
+"That's all. ...I just somehow wanted you to know, Daiki."
+
+And for Oki it was the same.
+
+There's no meaning in comparing which of them was the more unfortunate.
+
+If anything could be done, it was probably to laugh it off by saying that both of them are happy now.
+
+Even now that it was over, Oki didn't know why she'd told this story.
+
+That she had told it might bring Daiki the minus of having learned something awkward, but Oki couldn't really imagine it carrying a plus.
+
+Even so.
+
+Even if it wasn't the magus-like way of being she clung to, Oki had decided to say it.
+
+—Because I'm living in this city, laughing, with no relation to the past.
+
+"I see."
+
+That was all Daiki murmured.
+
+Whether it got through, she didn't know. She didn't know, but that was fine.
+
+Oki laughed.
+
+"Yes, that's how it is."
+
+Daiki laughed too.
+
+"We've both got our share of hardships."
+
+"Haven't we. Well, it doesn't really matter. I'm me."
+
+"..."
+
+"What about you, Daiki?"
+
+"Mm. ...Well, right. I'm me."
+
+Letting out a small breath, Daiki shrugged and smiled slightly.
+
+At that face.
+
+At the young man's slack, unguarded smile — perhaps the first time she'd seen it—
+
+—the girl was, just a little, captivated.
+
+"Hey, Oki. There's one thing I thought I'd say."
+
+"...Huh? Ah, yes. What is it?"
+
+Because she'd gone vacant, presumably.
+
+Against the words that followed, her defences didn't come up in time at all.
+
+"I like you, Oki."
+
+"————, huh?"
+
+Unable to absorb the meaning of what she'd been told, the girl froze, eyes round.
+
+Propping his elbow, the young man smiled wryly, and then, a little teasingly:
+
+"Don't be so embarrassed. Just accept words like that honestly. Otherwise I'll be the one who's embarrassed for saying it."
+
+"Ah... huh? Ah, no, that's so casual..."
+
+"Well, I thought it was better to tell you. I'm not here because you dragged me into this. I've properly decided, by my own will, to help you."
+
+"...Daiki..."
+
+"That I wanted to say. Sorry, but I've decided to keep tagging along on your work. I've got a purpose of my own now. And for that I need your cooperation. Well, I'll do my best not to be a burden, but bear with me to some extent. After all, you'd be fine without me, but I'd die on the spot without you."
+
+"Wh-what is that."
+
+Oki burst out laughing.
+
+She'd thought he was saying something outrageous out of nowhere, and then it went even further.
+
+"Look, I have to say that much. Basically I'm unreliable. I can't claim I won't cause trouble, can I? If anything I'll cause a lot of it."
+
+"Listen to you. If you hadn't saved me yesterday I might have died."
+
+"Did that happen?"
+
+"Idiot. ...Thank you."
+
+Even Oki understood why Daiki had come out with such a thing.
+
+She was the one who'd dragged Daiki — who had survived those brutal days in another world and only just regained an ordinary life — back out to a place bordering on mortal danger. At least, that was how Oki saw it.
+
+He was telling her not to let it bother her.
+
+That he was helping because he liked her, that she needn't mind because he had a purpose of his own — that was surely what Daiki was conveying.
+
+Her chest grew a little warm.
+
+—I see.
+
+And so Oki finally realised it too.
+
+What she'd wanted to say.
+
+Why she'd told Daiki about her past — and so.
+
+"I've got something I want to say to you too, Daiki."
+
+Oki said it.
+
+To Daiki, who waited silently for the rest, Oki smiled.
+
+"—If possible, I'd like to be with you for a while too."
+
+"Huh..."
+
+"Of course I can't force it. If you say you want to go to another world, and a method is found... I couldn't stop that."
+
+But surely, at least as much as Daiki liked her—
+
+she could like Daiki too.
+
+"But look, I don't have many friends, you know? And I'd rather not part so soon from the first friend I've made. ...Mm, well, just saying, sort of."
+
+That she grew embarrassed partway through and ended up mumbling at the end was part of her charm.
+
+And Daiki, hearing it, had his eyes go round at words he'd never expected.
+
+"...You say embarrassing things sometimes, Oki."
+
+"Why would you say that?!"
+
+At the sight of the girl flustered and flapping, the former hero let a smile slip.
+
+In fact, it was something he hadn't considered.
+
+He'd only been thinking that he mustn't be here, and had failed to notice the existence of someone who wanted him to be in this place.
+
+But at the very least, she alone — the one who knew he'd been to another world — knew the Daiki that was himself.
+
+In this world too, Narumi Oki alone knew this Daiki Kurosu.
+
+That was certainly not something he could ignore.
+
+"Oki. —Thank you."
+
+To the boy who said it with a smile, the artificial witch smiled thinly.
+
+"I've no idea what you mean."
+
+she answered quietly.
+
+　　　　　※
+
+When evening came, Daiki decided to head home.
+
+He couldn't stay away from home two days running. Daiki's station was that of a high-school student.
+
+"Mm, well, I've put a defensive barrier on your house, so I think you'll be all right to an extent. There's no telling how the enemy will move, but I'll look into that on my end."
+
+So she said.
+
+So the idea was to get home quickly, before the sun set and the danger increased.
+
+He didn't want to worry Nagi any further either. Since coming back from the other world, being at home hadn't been especially restful, but for the first time he found himself wanting to get back early.
+
+Arriving home promptly, Daiki stood in front of the entrance.
+
+—A piece of paper stuck to the door handle leapt into his sight.
+
+Taking it idly in hand, Daiki's eyes went wide at the words written on it.
+
+The hand that should have been taking out his key clenched, and Daiki turned on his heel and broke into a run.
+
+Because the paper bore these words:
+
+*We have taken Nagi Kurosu. If you want her returned safely, come alone to the place specified.*
