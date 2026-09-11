@@ -6243,3 +6243,366 @@ Yes. However much his fighting seemed beyond an ordinary civilian, he was still 
 "Right, you can come out now, —**Watarai-san**."
 
 —he so easily trusts a magus he knows nothing about.
+
+1-16 "The Former Hero, and This World" — 1
+-------------------
+
+The instant he woke, Daiki Kurosu groaned in pain.
+
+"Ogh—?!"
+
+It was because he'd overworked his body last night. A strange listlessness ran through him.
+
+But more than that — he'd clearly pushed things too far — his left arm hurt ferociously.
+
+Looking at it, he was almost impressed he'd managed to sleep at all; unlike yesterday, the arm was swollen. Daiki smiled wryly and accepted, fairly honestly, that this was the natural price.
+
+No, considering he'd got out with his life, it was a cheap purchase. It wasn't as though he'd never use it again.
+
+Though hurt this badly, he could hardly keep saying things like *it's awkward to go to a hospital*.
+
+"...I'll have to ask them to cover the treatment, won't I..."
+
+It pained him to put a burden on his parents.
+
+Not that an amount like that would affect anything.
+
+After all, subjectively he'd been away from home for years.
+
+However much that passage of time had been rendered null, for Daiki at least it genuinely felt like a long absence.
+
+...No. If that were really all it was — **if they really were his parents** — he might not have had to be so delicate about it.
+
+Causing trouble for family is a matter of course. —And yet.
+
+"Ahh... it's hard to say, isn't it. Asking for money when I'm not sure we're actually related... no, I'm at high school and they're paying my living costs, so I know it's a bit late for that..."
+
+Daiki pressed his temples.
+
+That was the moment the door of his room was opened, and at the sudden noise Daiki's eyes went wide.
+
+"—Daiki?!"
+
+"Whoaa, you startled me!"
+
+At the figure suddenly rushing into the room, Daiki flinched and went rigid.
+
+Paying that no mind, the girl who appeared — Narumi Oki — threw herself at Daiki on the futon with a relieved expression.
+
+"Thank goodness, you're all right...!"
+
+"Whoa... there!"
+
+Startled, Daiki nonetheless caught the small girl gently as she flew into his chest.
+
+It rather resonated through his whole body, but Daiki wasn't uncouth enough to say so.
+
+He'd apparently worried her a great deal.
+
+The same was true in reverse, but as far as he could see Oki looked well.
+
+"Honestly, nothing but worry from you! Nobody said anything about you diving into a place like that!"
+
+"No, well... you're right, sorry for worrying you. I'm fine on my end."
+
+"You're not fine! Your arm is hugely swollen!"
+
+"Ow ow ow ow ow. Yes, it's swollen. If it's swollen why are you hitting it."
+
+Oki kept up a feeble smacking, *pat pat pat pat*.
+
+She wanted to be angry at him for doing something reckless, but there was no question she'd been saved.
+
+Not knowing how to express feelings like that, all Oki was left with was patting him.
+
+"Never mind that — are *you* all right?"
+
+Daiki changed the subject and asked her.
+
+Oki settled down too, and nodded as she said,
+
+"Ah, yes. Completely. Tsunashino-san examined me, so I'm perfectly fine."
+
+"...You don't look like there's cause for concern, but honestly, injuries like that being sorted overnight is frightening in itself."
+
+Daiki said his honest thought.
+
+Just as he'd said, Oki looked to be entirely back to normal. There was hardly any sign of last night's injuries or the poison.
+
+If so, that was abnormal, and finding it frightening instead was only natural.
+
+"Well, it's not as if I'm fully healed."
+
+Oki shrugged.
+
+"That's exactly why I called her in. Huh — wait, why haven't *you* had treatment...?"
+
+"..."
+
+Instead of answering, Daiki recalled how last night had ended.
+
+　　　　　※
+
+Carrying the limp Oki on his back, Daiki had gone back down the approach, and at the end of it met a woman waiting with a car parked.
+
+Just as Urei had said, help had indeed been waiting there.
+
+"—Are you Daiki Kurosu?"
+
+The woman put her head out of the driver's seat of the stopped car and spoke.
+
+A woman of indeterminate age with longish brown hair worn loose. Beautiful, but with unusually sharp eyes.
+
+"Ah, yes. Um, are you—"
+
+"—Narumi-san in the back. You take the passenger seat. We're leaving immediately."
+
+Without waiting for any question, she moved things briskly along.
+
+Daiki was taken aback instead. At Daiki, frozen for just an instant, came a piercing voice.
+
+"Quickly!"
+
+"—Understood!"
+
+Once decided, Daiki's actions were swift.
+
+As told, he laid Oki on the back seat and sat in the passenger seat himself. The woman in the driver's seat immediately pulled away and, eyes forward, addressed him.
+
+"The situation."
+
+He decided she was asking about Oki, and answered.
+
+"...She was struck by a thick tentacle and slammed into the ground. That tentacle had a poison that acts on magical energy, and Oki's been eroded by it."
+
+"Quick answers, good. —There's a bag under the seat. Take the collar out of it and fit it on Narumi-san."
+
+"A collar?! Ah, no, understood."
+
+Rummaging through the bag at his feet, he found a huge quantity of things he didn't understand — syringes, drugs and so on.
+
+From among them Daiki took the black collar as instructed, leaned back over the seat and fitted it to the neck of the prone Oki.
+
+When he faced forward again, the woman in the driver's seat explained concisely.
+
+"It's a collar that forcibly suppresses magical energy in the body. She'd normally do that much herself, but with her consciousness thin I'm taking precautions. Whether it stops the poison's spread is a gamble."
+
+"...I see."
+
+She seemed a rather frightening person, but she would at least explain.
+
+He'd had the feeling she'd go silent if it wasn't necessary, but that apparently wasn't the case.
+
+In that case, Daiki asked what had been on his mind.
+
+"Um... who are you?"
+
+"Kurumi Tsunashino. I've no intention of stating a title; the name alone should suffice."
+
+"Ah, right..."
+
+"Incidentally, I'm not a physician either. I have no licence, at least, so be advised."
+
+The stranger said such things as though they were entirely matter-of-fact.
+
+And yet, for some reason — somehow she looked a little tired, to Daiki.
+
+　　　　　※
+
+The car Tsunashino drove arrived at the safe house they'd visited the previous night, the luxury apartment block.
+
+Tsunashino went straight into treating Oki, and Daiki had ended up staying the night there.
+
+"...In the end, who is this Tsunashino-san? Isn't she one of your fellow magi?"
+
+He tilted his head as he asked.
+
+At the question Oki made a deeply troubled face.
+
+"Mmm... that's hard to explain. She's not a comrade of mine, and she's definitely not someone in the same position. Well, her skills are reliable, so — a treating physician I called in, I suppose."
+
+"I heard she isn't a doctor..."
+
+"That's, right. If anything, calling her a scientist would be closer, I think."
+
+"...Huh...?"
+
+Oki's answer didn't get to the point, but it wasn't that she was hiding something; it genuinely was hard to explain.
+
+For now, Daiki registered that she was unquestionably not a simple opponent.
+
+"More importantly, you should get treated too."
+
+Oki said.
+
+"Why haven't you? Getting *you* treated was the whole reason I contacted Tsunashino-san in the first place."
+
+"...Well, you were more badly hurt."
+
+That was true, and since arriving here Tsunashino had immediately set about treating Oki.
+
+There'd been no opportunity for Daiki to have his own injuries treated, and in any case he'd fallen asleep right afterward.
+
+He'd thought recovering that way was ultimately best.
+
+—He hadn't imagined Tsunashino would heal injuries this easily.
+
+"Besides, even if you say get treated..."
+
+As he muttered it, a voice came.
+
+"—I wasn't given treatment fees for two."
+
+Through the sliding door Oki had flung open a moment ago, the Kurumi Tsunashino in question appeared.
+
+She stated it as though it were obvious, then narrowed her eyes at the sight of the two of them.
+
+"Were you that sort of relationship? I'll take my leave if I'm in the way."
+
+"Whuh?! Ah, n-no, that's not— what are you saying?!"
+
+After all, Oki was in a posture that was nearly an embrace of Daiki on the futon.
+
+She could well imagine how that looked from the outside. Her face went scarlet and she hurriedly separated.
+
+"I wasn't aware I'd said anything strange enough to be scolded for — anyway."
+
+Tsunashino, for her part, was matter-of-fact.
+
+As though she had no interest, she changed the subject and asked them:
+
+"Do you need treatment? If it isn't a serious injury I recommend an ordinary hospital. Insurance doesn't apply, so frankly it's expensive."
+
+Some sort of back-alley-doctor arrangement, presumably, Daiki guessed loosely.
+
+At any rate, an ordinary high-school student like him wasn't going to be able to pay high medical fees.
+
+"I'm fine, reall— owww?!"
+
+Oki lightly smacked the arm of Daiki as he began to decline.
+
+"Why are you refusing?!"
+
+"No, because I don't have that kind of money—"
+
+"I'll handle that somehow! Just let Tsunashino-san look at you already!"
+
+Given an order, he had no choice.
+
+And if it meant his family needn't find out he was injured, it was convenient.
+
+Maybe he should look for a part-time job — thinking that, Daiki stood.
+
+"This way, then."
+
+Saying it, Tsunashino withdrew immediately into the living room.
+
+A brisk sort of person, he thought.
+
+With that impression, Daiki followed after her. Oki walked along behind him.
+
+"Sit, please. I'll examine you first."
+
+Guided as instructed, Daiki sat on the sofa in the middle of the room.
+
+The same place where he'd made the contract with Oki the night before last.
+
+As he half-remembered it, Tsunashino touched his arm.
+
+"A fracture. I see no other major injuries; any magical impairment?"
+
+"Huh? Ah, no. I'm not a magus, so there shouldn't be anything like that."
+
+"...I see. I'm afraid I don't understand magecraft. Well, if it's purely physical damage this will be quick. Hold out an arm. Either side is fine."
+
+"Right..."
+
+Wouldn't one normally hold out the injured one?
+
+Thinking so, Daiki held out his left arm, and for some reason Tsunashino narrowed her eyes at him.
+
+"...Hold still, then."
+
+The instant she said it, she brought down something metallic she'd been holding in her right hand — like a stamp — and pressed it against Daiki's left hand.
+
+"Ow, ouch?!"
+
+There was almost no pain from the device itself, but it resonated through the bone and Daiki cried out.
+
+Watching this with a face that said it was only to be expected, Tsunashino said a single line:
+
+"You should have held out the right arm."
+
+"I'd have appreciated being told that first..."
+
+"I did tell you."
+
+"No, that's true, but..."
+
+Something about it didn't sit right.
+
+At the sullen Daiki, Tsunashino released his hand and said one word.
+
+"Done."
+
+"Huh. Wait, that's it? Immobilisation or—"
+
+"I can apply some if you want, but you'll just be taking it off this afternoon."
+
+"Sorry?"
+
+At the outrageous statement, Daiki's eyes widened.
+
+But Tsunashino's expression still barely moved.
+
+"If it's merely damage, it will heal shortly. Though do not forget there is a price for that. You say you're not a magus, but this isn't magecraft either. Don't mistake it for omnipotence."
+
+"...What did you do?"
+
+"**I injected medical nanomachines into your body.**"
+
+"————"
+
+Since what she was saying was far too baffling, Daiki found himself staring at her.
+
+Tsunashino, thus stared at, didn't move her expression in the slightest.
+
+"That's embarrassing."
+
+"You're not embarrassed at all..."
+
+He somehow felt Urei's speech patterns had rubbed off on him.
+
+Not understanding, Daiki shifted his gaze to Oki.
+
+She shook her shoulders with a wry smile.
+
+"—Tsunashino-san is with the «Gakkai»."
+
+Come to think of it, he felt he'd heard that word somewhere recently. That said,
+
+"No, hold on, I don't follow. She's with an academic society, and that means what?"
+
+"The word's probably different from the one you're imagining. What I said is short for «Gakujutsu Sōkai» — the Grand Academic Assembly."
+
+"Gakujutsu Sōkai...?"
+
+At the unfamiliar term Daiki tilted his head.
+
+Oki laughed a little, raised a finger, and continued:
+
+"There's an organisation by that name, but in this case it's quicker to take it as referring to one of the three worlds. Right — putting only the essentials very, very simply, what it means is—"
+
+Oki's gaze turned toward Tsunashino.
+
+Drawn along by it, Daiki shifted his gaze as well, and the words that reached his ears were:
+
+"Tsunashino-san possesses **scientific technology from far, far in the future of the present day**."
+
+And Kurumi Tsunashino — who, depending on how one heard it, was a far stranger existence than any magus —
+
+let her gaze slide over the speechless Daiki, and as though it were nothing at all:
+
+"Strictly speaking, it isn't I who possess it."
+
+readily acknowledged that what Oki had said was essentially fact.
