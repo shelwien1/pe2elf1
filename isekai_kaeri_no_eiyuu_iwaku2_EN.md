@@ -13372,3 +13372,234 @@ Daiki doesn't doubt it. If she said it, he can act on it as fact.
 "Yes. —Go!"
 
 Immediately after, the two broke into a run in different directions.
+
+2-04 "All's right with the world" — 4
+-------------------
+
+Adalbert didn't follow Daiki with so much as his gaze as he left the spot at once.
+
+At that, Oki narrowed her eyes slightly.
+
+As though he'd caught her meaning from that alone, the man smiled.
+
+"I do not commit the folly of taking my eyes off a witch."
+
+—Witch.
+
+Did he say it knowing that the word was a forbidden trigger (*key phrase*) for Oki?
+
+Unable to suppress it, Oki's Mystic Eye stained deep crimson.
+
+"Do not call me a wi—"
+
+"And what if you are called it?"
+
+But at Oki's swelling magical energy, Adalbert showed no sign of fear.
+
+No — if anything he narrowed his eyes as though a faint pity were seeping through.
+
+"Whatever else, it is a fact that you were created as a witch. It is nothing to be angry about."
+
+"What are you...?"
+
+Oki couldn't help her confusion.
+
+If it were provocation she'd simply return it, but his tone wasn't that either, which was baffling.
+
+Adalbert had the air of merely relating facts fluently.
+
+"It is meaningless prattle. Either way, both of us are no more than pieces put on a stage whether we liked it or not."
+
+"—That's—"
+
+"I feel pity for you. I hold a grudge against Arataka Narumi, but you are a victim as well, are you not."
+
+Arataka Narumi. The name of the very man who turned Oki into a witch — her own father.
+
+That it came up wasn't a surprise.
+
+Given that he'd come from outside and knew for a fact that Oki is a witch, the sources of information are limited. That he's involved was surely a premise.
+
+If there was a problem, it was that Adalbert himself spoke as though he held a grudge against Arataka.
+
+In which case there should be no reason for him to cooperate with Arataka.
+
+"You—"
+
+Without realising it, Oki began to ask his meaning.
+
+What stopped her was Adalbert himself.
+
+"An unnecessary connection (*tie*), Narumi Oki. There is no need to take my circumstances into account."
+
+"...Gh."
+
+"I said I hold no grudge against you; you need only hold a grudge against me. Is that wrong?"
+
+Nothing about it is wrong. Exactly so.
+
+That she was being taught it by an enemy, of all people, was terrible softness.
+
+Naturally, part of the reason was that Oki is fundamentally a magus whose characteristic is «Connection», but even so one doesn't go around empathising with the circumstances of an opponent one is fighting.
+
+Adalbert pointed that out, and took a stance as though embodying it.
+
+"Now then — I am a country man, after all. I am poorly versed in practitioners' etiquette, so I ask you to forgive the discourtesy. Not that this is an apology for my ignorance—"
+
+In that instant. Before she knew it, the man was directly in front of Oki.
+
+"—but at the least, let me send you off in a single blow."
+
+A fist was loosed at Oki.
+
+　　　　　※
+
+Down an alley emptied of everyone, Daiki Kurosu was running at full speed.
+
+That speed was strictly within the range of common sense.
+
+Maintaining something close to top speed for a long stretch in a firefight is praiseworthy for an amateur, but of course the enemy wouldn't relax for such an assessment, and Daiki isn't an amateur in the first place.
+
+Eventually stopping, Daiki turned his eyes to a certain building.
+
+A people-repelling barrier covering the area.
+
+Daiki had seen similar things in the other world, but this was the first at this level of naturalness, activated with no warning whatsoever.
+
+To begin with, people-repelling means diverting awareness; merely activating it shouldn't erase people who had been there.
+
+Oki had told Daiki that *if you distract them even slightly, it can be undone*.
+
+That was presumably a guess based on the formula's level being high, and it not being a barrier whose deployment could be readily maintained.
+
+But of course Daiki had also considered the possibility that a slight distraction wouldn't undo it.
+
+"I'm using it, Oki. If nobody's here anyway, going loud should be fine."
+
+—Probably.
+
+Not letting that inner thought show on his face, Daiki quietly touched his left arm with his right hand.
+
+The thing wound around it like a bandage — Daiki pulled his right hand as if peeling it away from the wrist.
+
+The black shadow came free of his left arm with the motion and took the form of a sword.
+
+It was the greatsword that the «Demon Lord» accompanying Kazuya Watarai had carried.
+
+Daiki had been carrying it around using Oki's «Pure Black» as a sheath.
+
+Normally it's wound around his arm in the form of black cloth, and removing it lets him draw a greatsword. His left arm is, so to speak, a scabbard made of Pure Black.
+
+The drawback is that once drawn, Daiki can't restore it himself, but the advantage of Daiki being armed outweighs that.
+
+Of course, *armed* here doesn't merely mean holding a greatsword.
+
+"Well, five floors is about the limit."
+
+Saying it, Daiki kicked and gouged the paved surface of the street.
+
+No — precisely, he leapt.
+
+It was only that the body-enhancing magical energy Oki had inscribed on the greatsword worked, giving him force enough to crack the ground slightly.
+
+And Daiki **ran vertically up the outside wall of the building and caught the fifth-floor window**.
+
+An impossible ability for a human, but the Daiki of his Hero days would have made it in a single jump without running up. Considering that, one could call it a downgrade.
+
+At any rate, Daiki, having caught the fifth-floor window while holding the greatsword, smashed the window with the sword's pommel in his right hand, twisted his body and dived inside.
+
+"You have got to be—?!"
+
+He heard that voice beyond the sound of shattering glass.
+
+For just an instant, Daiki looked down from the window at the street. There was no change.
+
+Which meant the barrier hadn't been undone.
+
+Confirming that out of the corner of his eye, Daiki looked around the room.
+
+It was a more tidily arranged interior than expected.
+
+It suggested some sort of office, but there were no traces of use. Properly, desks lined up in a row would be the natural thing.
+
+—And indeed, the enemy was braced in the centre of the room.
+
+"Damn it, how do they know I'm here?!"
+
+A girl's voice, sounding almost like a whine.
+
+The barrier's caster, presumably. Either way she was surely Adalbert's companion.
+
+A flashily coloured jacket and shorts — a surprisingly sunny style. On her head she wore a cap with a badge on it, pulled low, so her expression couldn't be read.
+
+Not letting his guard down, Daiki pointed the sword and said quietly,
+
+"Intuition."
+
+"Intuition, he says!"
+
+Of course, she doesn't know about Daiki's constitution, which reacts hypersensitively to traces of magical energy.
+
+Even combining being inside the barrier with his weak sensor for plain magical energy, identifying a rough position isn't difficult — he only has to head **in the direction that makes him feel worse**.
+
+"For form's sake: would you undo the barrier? Otherwise I'll have to test whether killing you undoes it."
+
+Naturally this statement was a bluff too.
+
+Beyond not wanting to kill her, there was no guarantee he'd win on ability. Against a magus, closing distance first is essential, which is why Daiki climbed the wall for a surprise attack; but there was no guarantee he held a definite advantage in this situation.
+
+And in fact the barrier showed no sign of being undone.
+
+But the threat he'd merely voiced turned out to have unexpectedly strong effect.
+
+"Argh, this is why I said making me hold this place was ridiculous!"
+
+Words fainter of heart than one would expect from Adalbert's companion reached Daiki's ears.
+
+But what caught his attention most was at her feet — a single short blade driven into the floor of the room.
+
+Even Daiki could tell it was some kind of magical item.
+
+If so, the highest probability was that it was the source creating this barrier.
+
+So — would pulling it out undo it?
+
+"Ugh. If I'm killed I'll come back to haunt Adalbert-san...!"
+
+—Not me, then...?
+
+Daiki couldn't help thinking it, but at any rate the other party had no intention of backing down.
+
+So he went to reset his greatsword stance — and immediately before that,
+
+the girl in front of him swept her cap up and turned her face toward him.
+
+"————————"
+
+Reason and instinct devoured each other, and Daiki's movement froze.
+
+He'd meant to look away at once. Because he'd been wary of a Mystic Eye like Oki's.
+
+But he couldn't move.
+
+Daiki looked head-on into the girl's eyes — at her face.
+
+That said, it wasn't restraint by a Mystic Eye that kept him from moving.
+
+She possessed no such thing and exerted no influence on Daiki.
+
+Directly, at least.
+
+Daiki froze because **he recognised that face**.
+
+And because it was a face he could never meet in this world — **a face he should never have been able to see again**.
+
+Without realising it, Daiki put it into words.
+
+—The great benefactor who, in another world, had led out a Daiki who could go nowhere.
+
+"...**Lil**...?"
+
+A mage girl who, on nothing but a sense of justice, rescued an unknown young man imprisoned in another world, his brain altered, reduced to a wreck — and who betrayed her country to protect him.
+
+The same face as a companion from the Hero Daiki's journey was there.
