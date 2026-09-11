@@ -13603,3 +13603,266 @@ Without realising it, Daiki put it into words.
 A mage girl who, on nothing but a sense of justice, rescued an unknown young man imprisoned in another world, his brain altered, reduced to a wreck — and who betrayed her country to protect him.
 
 The same face as a companion from the Hero Daiki's journey was there.
+
+2-05 "All's right with the world" — 5
+-------------------
+
+A sharp spear-hand thrust loosed at her.
+
+Had it landed it would unquestionably have pierced her heart; but Oki knocked it aside with her right arm clad in «Pure Black».
+
+Realising his attack hadn't worked, Adalbert moved fast, retreating backward almost as though time were rewinding — no, as though he had already retreated.
+
+There is no concept of *process* in that action. That, at least, was how it looked to Oki.
+
+Not simple physical ability or technique; presumably something owing to some mystery.
+
+His movement had only a start point and an end point, with no middle. Like a section of video cut out in editing, if one had to compare.
+
+"Honestly, I am surprised. Magi are generally fragile once closed with."
+
+Adalbert said it without showing any particular surprise.
+
+"Self-defence at this level is a girl's basic accomplishment."
+
+*I said the same thing to Daiki, didn't I*, Oki recalled from the recent past.
+
+That said, it was of course dissembling.
+
+It was an attack that could have killed the Oki of only a few days ago.
+
+This is a weakness common to Oki — or rather to many magi.
+
+A kind of arrogance born of possessing the cheat called «magecraft», which lets one stand almost unilaterally superior against a human with no resistance to magical energy.
+
+To kill a magus, crush them with a pre-emptive rush before they can activate magecraft.
+
+That's the theory in anti-magus scenarios. However powerful and abnormal the mystery, since it's the practitioner themselves who activates it, seizing the initiative is possible.
+
+In the extreme case, an ordinary person could stab an unwary magus with a knife.
+
+Inverted, that means magi make some degree of preparation too — but Adalbert's rush was at a level that half-hearted wariness couldn't respond to.
+
+Certainly not with mere self-defence.
+
+What overturned this was a new technique using «Pure Black».
+
+In that decisive battle, Oki had seen Kazuya Watarai's puppet-show magecraft. Self-puppetisation, which enables magecraft-driven hand-to-hand combat by manipulating one's own limbs.
+
+Oki had reproduced that with «Pure Black».
+
+"Those thin things extending from your limbs are... threads? Quite the string-worked doll (*marionette*)."
+
+"————"
+
+Oki didn't return an answer, but Adalbert's observation was on the mark.
+
+To begin with, it was as visible as he said.
+
+Oki had developed a method of using the Mystic Eye on «Pure Black» itself to apply «Connection». Made into threads and tied to her limbs, it forces her body into motion beyond nerve reflex.
+
+Oki's «Pure Black» was an art holding more possibility than she'd considered.
+
+Being able to hand it to Daiki as a greatsword's scabbard was one of the newly developed applications.
+
+"That is your contradiction."
+
+To Oki, who returned no answer, Adalbert nonetheless piled on.
+
+Yes. His words were on the mark.
+
+Perhaps at a higher level than Oki herself was aware of.
+
+"While you show signs of shunning being a witch, you have no hesitation in using witch-arts. If anything, witch-arts form the core of your tactics. On the other hand, you barely use ordinary magecraft."
+
+"...Using whatever you can use is what being a magus means, isn't it."
+
+"Ah, your statement is correct. That witch-art is genuinely powerful. Its versatility is high and its strength itself lets no half-hearted magical energy through. Truly a trump card. So you need only use it openly."
+
+"...What is it you want to say?"
+
+It was baffling. The man in front of her didn't look the type to make unnecessary conversation mid-combat.
+
+That was obvious from his going for a pre-emptive rush.
+
+Since he didn't seem the sort of character who enjoys speech-like idle talk the way Kazuya Watarai did, the words he spoke must have a clear intent. She ought to think so.
+
+No. Indeed, given that even Kazuya Watarai's true magical aptitude was oriented toward mental interference, it wasn't unconditionally idle talk. That man was a practitioner who built gaps in the space called the mind by speaking.
+
+There's normally no such thing as meaningless words spoken by a magus.
+
+But that didn't mean stopping her ears was necessarily the correct answer.
+
+Speaking words is itself information. Even saying nothing becomes information; how much more so the vast quantity contained in the act of speaking.
+
+If she could draw out even a fragment of it, there was meaning. There ought to be.
+
+—Which is why the problem was:
+
+"The point is that you do not in truth shun the fact that you can handle witch-arts."
+
+that the meaning wouldn't necessarily work in her favour.
+
+Oki's brows drew together slightly.
+
+The judgement *I must not listen* didn't kick in.
+
+"...So what? That's true, isn't it. Even if I didn't become a witch by choice, using what I can use is simply rational."
+
+"No. You are merely trying to make yourself believe that. That is the contradiction, string-worked doll (*marionette*)."
+
+"What are you—"
+
+"Even if it is a fact that you did not become a witch by choice, and a fact that using what you can use is rational — **that does not constitute a reason for you to avoid using ordinary magecraft**."
+
+It isn't that she uses witch-arts a great deal;
+
+it's that there is, in truth, other magecraft she doesn't want to use.
+
+That was what Adalbert was saying.
+
+"You are simply **unconsciously avoiding the magecraft that burned many of your kin to death**."
+
+Oki loosed «Pure Black» immediately afterward.
+
+Relying on witch-arts there wasn't a mistake.
+
+Rationally considered, it's an unquestionable truth that it's her most powerful means of attack and a sure attack with no risk of failure.
+
+But as a result, that action ended up affirming Adalbert's words.
+
+"————Raaah!"
+
+With a roaring cry, Adalbert swept his arm.
+
+Grey flame, as though commanded by that motion, blocked Oki's Pure Black.
+
+—**The Pure Black burned away.**
+
+At that impossible phenomenon Oki's eyes went wide in astonishment. That Pure Black, whose property makes it all but invincible against magical energy, could lose — more than that, she couldn't understand what it meant for a mass of magical energy to *burn*.
+
+Still less was it possible, as a phenomenon, for it to carbonise into powdery ash and fall to the ground. A magical-energy body, when destroyed, merely dissolves into the air and vanishes.
+
+No. That said, things transcending such reasoning occurring was itself within Oki's expectations.
+
+After all, he is fundamentally a person of that position.
+
+"Let me introduce myself again. I am Adalbert Wiesner, chief of «the Exile League»."
+
+—The Exile League.
+
+The name of a group of naturally born singular-ability holders who, on account of their abnormal natures, received sentences of banishment even from the foreign sea that is itself a gathering of those who fall outside.
+
+Naturally born Empowered who appear in the world from time to time.
+
+A mutual-aid association of those among them who were banished for being harmful merely by existing.
+
+"The reason for my banishment is «Conflagration». As you see, I possess an ability related to flame."
+
+An aberrant power is, so to speak, an outer-realm law.
+
+If magecraft rewrites the rules, the terror of an aberrant power is that it brings in a different set of rules entirely — meaning that reason simply doesn't apply to them.
+
+In that sense one might say they resemble witch-arts more than magecraft.
+
+But the problem wasn't the fact that he is one of the Empowered.
+
+"Hm, I confirmed it indirectly to be sure, and I am relieved that it is as I was told. Though you too have presumably understood by now why I was assigned to you."
+
+"...You—"
+
+"Let me convey it once more, **witch of embers who fears flame**. —For certain reasons, you will be killed here."
+
+It was the single point that his ability related to flame.
+
+　　　　　※
+
+—Daiki Kurosu once departed for another world not this one.
+
+With no warning whatsoever.
+
+He went to sleep and woke in another world, so the confusion Daiki felt at the time is hard to put into words. Normally he'd surely have panicked.
+
+The reasons he didn't were broadly two.
+
+One is simply that immediately after going to the other world, **there was no room for it**.
+
+Quite literally.
+
+The other world's side deliberately summoned Daiki into their world in order to find the bearer of the strongest weapon, which no one had been able to handle — the holy sword. In that sense Daiki is a world-scale abduction victim.
+
+Summoned by a certain nation of the other world, Daiki was thrown into the midst of a plan to entrust him with the holy sword as its bearer; and naturally they weren't going to blindly assume that this «Hero» would never rebel.
+
+So as a natural safety measure, that country forced magical brainwashing upon Daiki.
+
+—To state the conclusion, that brainwashing formula ended in failure.
+
+Why it failed Daiki still doesn't know. Whether part of the holy sword's blessing was already working before he held it, or someone's intervention, or simply a mistake by the practitioner.
+
+Either way, the art's failure meant that **Daiki's brain was destroyed**.
+
+Or his mind.
+
+Losing his ego to severe magical-energy contamination, he became a wreck who merely muttered deliriously and was alive and nothing more — that was the start of Daiki Kurosu's other-world story.
+
+Fortunately or not, almost no memory of that period remains with Daiki. Naturally so, since he'd lost both recognition and judgement.
+
+If anything, remembering part of it is a miracle.
+
+—So Daiki knows.
+
+That there was a girl who rescued him from that state.
+
+That there was a girl who betrayed her own country and fled with Daiki.
+
+Yes. That is the second reason.
+
+Even if it was atonement arising from the guilt of **being the very person who summoned Daiki**.
+
+Even if she was merely following her own sense of justice.
+
+The one who saved the Daiki of that time was unquestionably that mage girl.
+
+Her name: Lil Riaheart.
+
+A genius who would later be appointed head of the Kingdom's court mages, and counted among the heroes of the salvation as a member of the Hero's journey — for Daiki Kurosu, the girl who supported his heart to the very end.
+
+　　　　　※
+
+Recovering from his paralysis, Daiki cursed his own carelessness from the bottom of his heart.
+
+She — the girl he'd parted from immediately after killing the Demon Lord — couldn't possibly be on this Earth.
+
+Baring an enormous opening to a different person who merely resembled her in appearance was an irretrievable failure.
+
+And yet the girl didn't exploit that lapse.
+
+What Daiki saw once he'd immediately regained his composure was that she too was struck dumb.
+
+"—Th—"
+
+The girl moved her mouth slightly, as if her throat had jammed.
+
+Daiki braced himself, but the words that followed threw him into confusion again.
+
+"**You know this face?!**"
+
+Not expecting to be asked such a thing, Daiki's eyes went wide.
+
+He does know it. But with what intent would she ask such a question?
+
+Unusually for Daiki, who is fundamentally quick to judge, he couldn't decide how to act.
+
+However coolly she was watching that, the girl was if anything the more agitated as she shouted at him.
+
+"T-tell me! Look, I won't do anything! I surrender!! Please, what is this?!"
+
+"You... what are you—"
+
+"Because — because!!"
+
+The girl cried out in anguish.
+
+Words critical even for Daiki.
+
+"—**I never had this face to begin with!!**"
