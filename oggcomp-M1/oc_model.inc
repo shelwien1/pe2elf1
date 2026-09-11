@@ -44,8 +44,65 @@ static INLINE void oc_raw_zero(void);
 //  oc_raw.inc, oc_floor.inc and oc_residue.inc, one layer each; the parser
 //  (io_t) and the stream walker call them through this interface, and
 //  null_sink below answers the same calls with nothing.
+//  Header packets seen before -- comment and setup -- kept whole, so that
+//  one seen again costs a symbol: which one.  Every encoder writes the
+//  same codebooks for the same settings, so the links of a chained file,
+//  and with oggdet -S the streams of a container, mostly share one setup
+//  header -- a kilobyte, coded again each time it is not shared -- and the
+//  comment header of an untagged file is the vendor string, shared the
+//  same way.  Model state: cleared with the rest of it, kept across solid
+//  segments.  Full, it stops taking; a header it does not hold is coded
+//  as before.
+constexpr u32 OC_HCMAX = 64;
+constexpr sz OC_HCMEM = (sz)4 << 20;
+struct oc_hcache {
+  u32 n;
+  sz used;
+  u64 hash[OC_HCMAX];
+  sz off[OC_HCMAX], len[OC_HCMAX];
+  u8 mem[OC_HCMEM];
+  static u64 h64(const u8 *b, sz n) {
+    u64 h = 1469598103934665603ull;
+    sz i;
+    for(i = 0; i < n; i++) {
+      h ^= b[i];
+      h *= 1099511628211ull;
+    }
+    return h;
+  }
+  //  One more than the index of the entry holding these bytes; 0 for none.
+  u32 find(const u8 *b, sz n) const {
+    u64 h = h64(b, n);
+    u32 i;
+    for(i = 0; i < this->n; i++)
+      if(hash[i] == h && len[i] == n && !memcmp(mem + off[i], b, n))
+        return i + 1;
+    return 0;
+  }
+  void add(const u8 *b, sz n) {
+    if(this->n >= OC_HCMAX || n > OC_HCMEM - used || find(b, n))
+      return;
+    memcpy(mem + used, b, n);
+    hash[this->n] = h64(b, n);
+    off[this->n] = used;
+    len[this->n] = n;
+    used += n;
+    this->n++;
+  }
+  //  Entry i, which the coded stream says holds n bytes: refused if not.
+  const u8 *get(u32 i, sz n) const {
+    FATAL_UNLESS(i < this->n && len[i] == n, "coded stream: header %u of %" PRIu64 " bytes was not seen before", i, (u64)n);
+    return mem + off[i];
+  }
+  void clear() {
+    n = 0;
+    used = 0;
+  }
+};
+static oc_hcache oc_hc;
 template <int f_DEC> struct oc_model {
   static constexpr int ENC = (f_DEC == 0);
+  static constexpr int DRY = 0;
   static Rangecoder<f_DEC, OC_CARRYLESS> rc;
   tc_fam<f_DEC> fam_dig, fam_sgn, fam_flr, fam_cls, fam_aux, fam_hdr;
   i64 tc_last[F_N], tc_last2[F_N];
@@ -134,6 +191,7 @@ template <int f_DEC> void oc_model<f_DEC>::reset() {
   tcp.reset();
   vb_ar.reset();
   oc_raw_zero();
+  oc_hc.clear();
   *this = oc_model();
   wire_all();
 }
@@ -192,6 +250,7 @@ template <int f_DEC> void oc_model<f_DEC>::setup_done(vb_ctx &vv) {
 }
 struct null_sink {
   static constexpr int ENC = 1;
+  static constexpr int DRY = 1;
   u32 spill(u32 n) { return n; }
   u32 hdr(const char *, u32 x, u64) { return x; }
   void setup_done(vb_ctx &) {}

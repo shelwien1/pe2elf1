@@ -268,7 +268,7 @@ template <class S> struct io_t {
     Fi(len, b[i] = (u8)t.hdr("cmt.byte", b[i], 256));
     pos = len * 8;
   }
-  void setup() {
+  void setup_fields() {
     vb_setup *s;
     cst(8, 5);
     cst(8, 'v');
@@ -287,20 +287,49 @@ template <class S> struct io_t {
     mappings(v.i.ch);
     s->check();
   }
+  //  The comment and setup headers: one seen before -- in an earlier link,
+  //  or with oggdet -S an earlier stream -- costs a symbol saying which,
+  //  and a setup is then parsed again with nothing listening, since its
+  //  fields are wanted and its bits are not.  Returns 1 then, with the
+  //  packet whole; 0 when it is to be coded.
+  int seen(int which) {
+    u32 same = enc ? oc_hc.find(b, len) : 0;
+    same = val(which == 1 ? "cmt.same" : "setup.same", same, OC_HCMAX + 1);
+    if(!same)
+      return 0;
+    if(!enc)
+      memcpy(b, oc_hc.get(same - 1, len), len);
+    if(which == 2) {
+      null_sink ns;
+      io_t<null_sink> z(v, ns, b, len);
+      z.setup_fields();
+    }
+    pos = len * 8;
+    return 1;
+  }
   void hdr(int which) {
     switch(which) {
     case 0:
       ident();
       break;
     case 1:
+      if(seen(1))
+        return;
       comment();
       break;
     default:
-      setup();
+      if(seen(2)) {
+        t.setup_done(v);
+        return;
+      }
+      setup_fields();
       t.setup_done(v);
       break;
     }
     tail();
+    //  Whole now on both sides, and this is the real pass, not a dry one.
+    if(which && !S::DRY)
+      oc_hc.add(b, len);
   }
   int fl_get(vb_floor *f, u32 *y) {
     vb_setup *s = v.cur;

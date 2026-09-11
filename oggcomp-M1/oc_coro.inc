@@ -1,5 +1,5 @@
 constexpr char OC_MAGIC[] = "oggc\x1a";
-constexpr int OC_VER = 3;
+constexpr int OC_VER = 4;
 //  The coroutine, one per direction: f_DEC is what Rangecoder calls it, 0
 //  to code and 1 to decode.  Each direction's walk is a member function
 //  chosen by overload on the direction's tag, and a member function of a

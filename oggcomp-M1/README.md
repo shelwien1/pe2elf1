@@ -89,6 +89,15 @@ Point outputs at scratch paths.  And there is no `--`: anything beginning
 with `-` and longer than one character is read as options, so a file whose
 name starts with a dash has to be written `./-name.ogg`.
 
+A comment or setup header seen before in the run costs one symbol
+instead of being coded again.  Every encoder writes the same codebooks
+for the same settings, so the links of a chained file, and with
+`oggdet -S` the streams of a container, mostly share one setup header --
+a kilobyte or more, coded each time it is not shared -- and the comment
+header of an untagged file is the vendor string, shared the same way.
+The same file twice, chained, codes its headers for a few bytes more than
+once; `./t.sh` checks that.
+
 Exit status is 0 for success, 1 for a `.oc` that `d` cannot read -- not
 oggcomp's, another version's, cut short, or damaged: every `.oc` ends in a
 CRC of the file it holds, and what does not check is not kept -- 2 for a
@@ -138,8 +147,11 @@ nothing else.
 
 `-S` is solid: `-c` with the model kept from one segment to the next, so
 each is coded with what the ones before it taught the model, the bytes
-between streams included -- worth having on a container of many streams
-from one encoder, and the per-segment reset goes with it.  The price is
+between streams included, and a stream whose headers an earlier one had
+pays a symbol for them -- worth having on a container of many streams
+from one encoder, where that is most of them, and the per-segment reset
+goes with it.  Three hundred copies of a 2.7 kB stream code to 9.6 kB
+solid, against 306 kB before the headers were shared and 403 kB fresh.  The price is
 that the file decodes only front to back, and only by `oggdet d`; cut
 out, `oggcomp d` reads the first segment and refuses the rest.  Nothing
 is deduplicated under `-S` but the images: a second copy of a stream,

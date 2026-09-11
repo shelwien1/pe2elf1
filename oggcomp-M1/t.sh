@@ -333,6 +333,21 @@ if [ $refusals = 1 ]; then
   anything 'this script'        ./t.sh
   anything 'the build script'   ./mk.sh
   anything 'the compressor'     "$bin"
+  #  A header seen before costs one symbol, not the kilobyte the setup
+  #  cost the first time: the same file twice, chained, has to code its
+  #  headers for little more than once.  `-v` says what they cost.
+  cat "$src" "$src" > "$tmp/twice.ogg"
+  anything 'the same file twice'  "$tmp/twice.ogg"
+  h1=$("$bin" c -v "$src" "$tmp/h1.oc" 2>&1 | awk '/^  headers/ {print $2}')
+  h2=$("$bin" c -v "$tmp/twice.ogg" "$tmp/h2.oc" 2>&1 | awk '/^  headers/ {print $2}')
+  if [ -z "$h1" ] || [ -z "$h2" ]; then
+    printf '  %-26s %s\n' 'headers seen twice' "not checked: $src has no Vorbis headers"
+  elif [ "$h2" -lt $(( h1 * 5 / 4 + 64 )) ]; then
+    printf '  %-26s %s\n' 'headers seen twice' "$h1 bytes once, $h2 for both"
+  else
+    printf '  %-26s %s\n' 'headers seen twice' "FAILED  $h1 bytes once, $h2 for both"
+    bad_any=$((bad_any + 1))
+  fi
   echo
 
   refuse() {  # $1 what, $2 wanted exit status, rest: arguments to the binary
