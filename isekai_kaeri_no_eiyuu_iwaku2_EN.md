@@ -14504,3 +14504,252 @@ And what he saw then — Lil Riaheart's expression, smiling with a face close to
 The face of a girl who rejoiced and regretted at once, who had accepted being cut down in revenge.
 
 —That beauty, like something breaking, the young man is certain he will never forget until he dies.
+
+2-08 "The Exile League" — 1
+-------------------
+
+"Right, that's about it for defences."
+
+Hearing Narumi Oki say it, Daiki Kurosu of course couldn't tell any difference.
+
+"Ah... good work."
+
+"Mm. That's fine, but isn't that a rather ambiguous face?"
+
+His failure to understand having presumably shown on his face, Oki pointed it out.
+
+—The two were now in a room in a certain apartment block.
+
+Assigned by Itsuki Yukimaru, this was to become Daiki's secret base.
+
+It was where they'd been heading originally. They'd simply been attacked on the way.
+
+Having returned to the original objective, the situation now was that Oki was laying defensive magecraft over the room.
+
+"No, I understand it's necessary. I just don't have a sense of it."
+
+"Really? I'd have thought you'd at least pick up the atmosphere."
+
+Perhaps it would have been different if he had magical energy of his own, but even back in the other world Daiki's magical energy had come solely from the holy sword.
+
+He fundamentally has no aptitude for magic or magecraft.
+
+For instance, as when he fought the «Mage-Eater» monster in the shrine precinct the other day, there are scenes where having no magical energy works in his favour, but those are rare cases.
+
+Being able to detect things is obviously better, but for Daiki, with no magical energy of his own, that is fundamentally difficult.
+
+"You noticed the barrier's presence before, didn't you?"
+
+"Well, more that it made me feel ill."
+
+To Oki, who said it recalling the earlier occasion, Daiki made a bitter face. He continued,
+
+"Maybe I can tell when something is harmful."
+
+"...Maybe. And besides that, I think you probably notice *traces with a connection to another world* too."
+
+"Hm?"
+
+"Look, back then. You noticed the circle in the back alley and the shrine's presence before I did. I think that's what it comes down to. You could detect them because they're things you have a connection with."
+
+"Ah..."
+
+"Come to think of it, we let it slide, but calmly considered that's a mystery too. How was it when you were in the other world?"
+
+At Oki's question, Daiki thought a moment before answering.
+
+"...Thinking about it, it's ambiguous. Over there, humans *without* magical energy were the rarer sort, if anything. So in that sense I couldn't tell at a glance whether someone was a mage."
+
+"Hearing it again, the other world is terrifying... all of humanity with magical energy."
+
+"I don't know. A skew is frightening in its own way... but never mind. I had the holy sword's blessing, so I could detect the Demon Lord's kin. The holy sword conveying the enemies to be defeated, that sort of thing."
+
+"Huh... the Demon Lord's kin. For example?"
+
+"Being asked for an example is difficult. Well, monsters, for one."
+
+"I see, that's it. There were monsters in the back alley and the precinct, so you could sense them."
+
+Oki nodded as though satisfied, but Daiki had a doubt.
+
+"I wonder... I don't have the holy sword anymore. I don't really feel it."
+
+"It's an after-effect, or rather the residual scent of its influence. Touch something and you're stained by it — that's an iron rule, practically a truth. Your body was probably dragged along by it."
+
+"Hmm..."
+
+Put like that he was inclined to accept it.
+
+But Daiki thought: it isn't necessarily the case that he went to the other world in the flesh as he was.
+
+After all, when he came back his body had grown younger.
+
+Then again, that raises the question of what his body in the other world (*over there*) was, so no answer emerges.
+
+Above all, if this is a parallel world different from where he came from — a different Earth — then his current body may not be his own to begin with; it may belong to a Daiki Kurosu who isn't him.
+
+Or rather, that's what Daiki thinks.
+
+In that case, was he in a state of travelling between worlds as a soul alone, so to speak?
+
+And would one inherit the abilities the holy sword possessed that way?
+
+"Hey, Oki. Is there magecraft that peels the mind or soul off the body?"
+
+"...Daiki, do you even know what a mind or a soul is, asking that?"
+
+"Since you prefaced it that way, presumably I don't — and now I know that."
+
+"Ahaha... well, it can't be helped. You've no magecraft knowledge."
+
+"So, the answer to the question?"
+
+"Mmm... it's difficult. It isn't very mainstream. At least, if I tried to do it I couldn't think of a method offhand. But by definition I can declare it isn't impossible."
+
+"By definition?"
+
+"Because magecraft's ultimate goal is «omnipotence» in the first place. If armchair theory is acceptable, there's nothing that can't be done. Premised on a god-class genius with infinite resources, mind."
+
+"Ah... so realistically impossible."
+
+"I wouldn't say that either... In the end, magecraft depends heavily on aptitude. There's every chance someone somewhere specialises in that sort of magecraft. That's why I said it's difficult. In fact, you saw it yourself, didn't you? A man with no great talent who built a road to another world."
+
+"...Kūya Watarai."
+
+He'd been an enemy, but recalling a man who died in front of him clouded his expression a little.
+
+Daiki is fairly sympathetic toward Kūya Watarai.
+
+And he's aware that part of the reason rests on the premise that **he's already dead**.
+
+The dead can do nothing. —In either sense.
+
+Neither what the dead can do, nor what can be done to the dead. Neither exists.
+
+Mourning is about the most one can manage, and precisely because of that there's room for the superfluous sentiment of sympathy.
+
+Still, he felt he could grasp the feeling.
+
+Precisely because, in the world called Earth, he is one of the have-nots.
+
+Or rather, precisely because in the other world he was a Hero granted an external talent called a holy sword — Daiki had his own thoughts.
+
+"...Thinking about it now, he's someone I'd have liked to talk to a bit more."
+
+"Really? It doesn't seem like there'd be much to gain. It didn't look like a formula anyone else could reproduce."
+
+Oki, meanwhile, has no sympathy. And that is **not** because Kūya Watarai is already dead.
+
+Narumi Oki — a witch — has no such function.
+
+Through «Connection», her innate magical characteristic, Oki knows Kūya Watarai better than Daiki does.
+
+That's what it means to connect with the red Mystic Eye. It wouldn't be strange for her consciousness to be pulled along into sympathy.
+
+But where the girl Narumi Oki is concerned, there was no such worry.
+
+The heart of a girl who holds a Pure Black curse in her soul is stained by nothing it connects to—
+
+"Well, certainly, Kūya Watarai was about the only one with a chance of sending you to another world again. In that sense he may have had a rarer talent than his father."
+
+That said, that too was an achievement premised on Daiki being in this city, and by rights it was training that wouldn't have borne fruit in a lifetime.
+
+Coincidence or not, a result is a result. Getting Daiki's blood into the formula at all could be called the product of obsession.
+
+"Me going back to the other world alone doesn't settle it, though."
+
+"...Even so, returning everything to the *original Daiki*, who may not even have existed, is impossible with any magecraft, I think. I'd rather you gave up and lived normally..."
+
+Predicting where Daiki's line of thought was landing, Oki narrowed her eyes.
+
+That he's taking far too much on himself is Oki's honest feeling.
+
+That this **might** be a parallel world, that he **might** have stolen the place of a different Daiki Kurosu who was originally here — to abandon his own place for something that uncertain.
+
+It might not be so, and even if it were, there might be nothing to be done.
+
+Looking at that possibility instead is the normal thing, Oki at least thinks.
+
+—Or else.
+
+Does Daiki in truth have lingering attachment to the other world, not here—?
+
+"...Right. I'll be off."
+
+Cutting her thoughts short, Oki said it.
+
+She didn't want to think any further than that.
+
+"You're going home?"
+
+To Daiki's question she shrugged in reply.
+
+"Home, or rather... countermeasures for the future, information gathering. I want to check various things with Yukimaru-san, and if we're anticipating a second attack we can't stay purely on the defensive."
+
+"Well, that's true..."
+
+"...And it's odd, honestly. Getting through the city's barrier this easily, what's going on. Maybe the authority delegation (*rental*) really was a stretch... Ah, what will you do, Daiki?"
+
+"Hm? Mm... if nothing comes up I'll just go home."
+
+"I see. Well, right... I feel it'd be safer for you to stay here, but I'll leave that to you. Let's operate separately for a while. I'll contact you if there's any development."
+
+"Yeah, understood."
+
+That was all Daiki answered.
+
+Oki nodded, said "See you, then," and left the room first.
+
+Daiki has the key, so as long as he can make an excuse to his family he could certainly stay in this room.
+
+—But in fact Daiki had an objective.
+
+He didn't think he'd told a lie.
+
+He'd said he'd go home if nothing came up, and that doesn't contradict not going home because something had. It's simply that Daiki deliberately withheld information from Oki at that moment.
+
+Naturally — that was the girl he'd met in that building.
+
+Daiki hadn't told Oki what happened then.
+
+After thinking it over, he'd decided to conceal it.
+
+Why?
+
+It wasn't that he didn't want to tell Oki.
+
+He'd genuinely intended to tell her normally, but for certain reasons he'd revised his thinking and decided it was better avoided.
+
+Or rather, the necessity had arisen.
+
+A while after Oki left, Daiki left the room and took out his phone.
+
+Walking along the road, he called a number he'd learned earlier.
+
+After several rings—
+
+"Hello. —Do you have a moment?"
+
+*"Oh, this is unexpected. To think I'd get a call from you."*
+
+"Right... honestly, I didn't think I'd be making one either."
+
+*"What, and after I gave you my card. No? In that case, so you—"*
+
+And.
+
+On the other end of the line, the courier woman said, with genuine delight:
+
+*"—you've been missing your lewd onee-san and got all worked up?"*
+
+Daiki answered.
+
+"Say one more crude joke and I'm hanging up."
+
+*"...You sound like you really would, so I'll restrain myself. Well?"*
+
+Without, of course, showing any particular sign of being affected—
+
+Urei Aiko asked Daiki:
+
+*"Am I to take this as a commission?"*
