@@ -8753,3 +8753,366 @@ There was no means of evasion.
 A crunching sound rang out.
 
 The girl watched red blood drip from her mouth to the ground.
+
+1-24 "Thus Spoke Unto the Former Hero" — 3
+-------------------
+
+Out of breath, Daiki Kurosu arrived at the designated multi-storey car park.
+
+Daiki didn't particularly wonder why such a place had been designated. Anywhere would presumably have done.
+
+For a magus, a barrier could take care of anything.
+
+A night-time car park empty of people resembles an inorganic iron cage.
+
+Thinking that, he stepped inside.
+
+Staying alert to his surroundings, he made his way up the levels. It was an odd sensation. Presumably he had dived into some sort of unfathomable space — intuition told him so.
+
+And so Daiki reached the floor one below the top.
+
+He hadn't contacted Oki. Because he'd been instructed not to tell her.
+
+She could apparently detect traces of magecraft to some extent, but hoping she'd notice this situation and appear seemed a thin hope.
+
+"—Welcome, Daiki Kurosu-kun."
+
+A voice came, suddenly.
+
+That said, he'd registered the figure before the voice came, so he wasn't surprised.
+
+An unfamiliar man.
+
+A man of strange atmosphere, who looked both elderly and young.
+
+"Are you the one who took Nagi?"
+
+"Hmm. Affirming that question will presumably settle things faster. Though the one who actually abducted your sister is not I, and she is not here. I merely gave instructions."
+
+"...So you've got accomplices. And that means you're talking about Urei, right?"
+
+"Ha. Come to think of it, you met her. Yes, she has a hard-to-come-by ability, whatever else. I relied on it a little. Well, rest easy: the only enemy of yours here is me. And rest easy again: your sister is already arranged to be released. So long as you came here, everything else is of no consequence."
+
+"And I'm supposed to trust that?"
+
+"If I wanted to hold her before you as a hostage, I'd have invited her to this place. I am, as you see, a gentleman. I have no need of extraneous impurities in conversation with a guest I've taken pains to invite. Nor is it entertaining to have superfluous humans intruding on this finest of settings. The number of invitations is kept to a minimum, as a rule."
+
+Whether to read that as composure was doubtful. If it came to it, he could simply say he'd changed his mind about releasing the hostage after all. Nothing was guaranteed.
+
+But at the very least, Daiki judged, the man's business was with him and no one else.
+
+"...And you are?"
+
+So he narrowed his eyes and asked the magus.
+
+The man in the swallow-tailed coat smiled thinly and gave his name as though proud of it.
+
+"A magus of no importance by the name of Kazuya Watarai. My son was in your care recently, I gather."
+
+"You're not going to tell me this is revenge for your son. Neither I nor Oki killed him."
+
+"—Because I killed him."
+
+Watarai said it as a matter of course.
+
+To Daiki, who didn't react, he offered something like an odd excuse.
+
+"Yes. Well, it couldn't be helped. He was a poorly made son, but killing a son of my own blood pained me too. Only, he'd come to know a great many things he must not know. By the original plan, once the reconnaissance-in-force was done I'd have been happy to release him, but there was an unexpected harvest — and above all, he lost to you."
+
+"..."
+
+"Losing to a witch can't be helped. But consider: a magus who nominally presides over mystery, defeated by an ordinary person like you — would you not think that living on after that is a disgrace?"
+
+"Spare me the speeches."
+
+Daiki said it bluntly.
+
+"I don't care about that. Don't tell me you called me out here to listen to small talk? If Nagi isn't here, shall I go home?"
+
+Talkativeness is evidence of composure, but at the same time it indicates a personality that likes to play.
+
+That doesn't necessarily become an opening, though. The man in front of him was presumably that type.
+
+He showed composure because he was certain it wouldn't be broken.
+
+"If there's no hostage, then I've got no reason to be here."
+
+"Bold, aren't you? As expected — a human who has experienced another world has nerve."
+
+"..."
+
+At Daiki, who shut his mouth at those words, Watarai showed a satisfied smile.
+
+"Have you finally become willing to converse with me? Just so — an uncouth device like a hostage is unfitting for this occasion. This is a meeting to be commemorated! The only person in this world to have experienced another world — that is you, Daiki Kurosu. If this is not to be called a miracle, what is?"
+
+"...You—"
+
+"Yes, it's nothing complicated. I simply wish to hear about another world! What sort of place was it? What kind of humans were there, what mysteries, what tragedies were favoured?! The only living witness to it in this world is you! Nothing could be more fascinating."
+
+Watarai spoke volubly and in high spirits.
+
+Daiki narrowed his eyes. That alone was his objective?
+
+—**That's a lie.**
+
+If he thought that would fool him, he was underestimating someone who'd been to another world.
+
+"Hearing my stories can't be your main objective."
+
+At Daiki's observation, Watarai's eyes narrowed.
+
+But Daiki continued regardless.
+
+"Because until you came to this city, you shouldn't have known about me. I've never told anyone I went to another world. The first person I told was Oki, and that was after you — after Kūya Watarai, at least — came to this city. You didn't come to this city because you knew I existed. You learned it yesterday."
+
+"...And is that a problem? Your story has value enough to warrant discarding other objectives—"
+
+"You said it yourself a moment ago. **I'm an ordinary person.** When I imagine my story being used for wicked ends, it's frightening enough that it's hard to talk. If you want to hear it, you'll have to tell me the reason too."
+
+"—**I like you.**"
+
+Kazuya Watarai smiled coldly, a grin spreading.
+
+"Being liked by you does nothing for me. Sorry, but the moment you took my sister hostage, my opinion of you went past zero into the negative. Try doing a bit more to get on my good side."
+
+"Ha... my, my. You have far more nerve than Oki-kun. From your attitude I feel no fear of me whatsoever. Is it ignorance rather than bravado?"
+
+"...Well, being told 'magus' doesn't mean much to me. I don't know what you can do. I don't find it very frightening. According to Oki, most magi aren't particularly strong."
+
+"From Oki-kun's perspective, most magi pose no threat. A witch's strength is of a different order. I'd rather not contemplate contending with her head-on myself. That said — «Puppet Show (Maya)/Down to the Ground (Burlesque)»."
+
+Watarai snapped his fingers.
+
+In that instant, Daiki's whole body was slammed into the floor.
+
+"Gh— gah?!"
+
+"Even so, throttling a non-magus human like you is no trouble at all, you see."
+
+The sensation of invisible threads tied to his limbs being yanked hard downward. Daiki's whole body was struck hard against the hard concrete floor.
+
+Grimacing at the pain, Daiki still looked up at Watarai; and Watarai, not hiding an expression of interest, put a hand to his chin and let a murmur slip.
+
+"It isn't that he fails to understand the threat. Nor is it desperate defiance. Interesting, but more than that, incomprehensible. Fascinating... **I cannot read your thoughts.** This is a rare sensation."
+
+"..."
+
+"Ah, forgive me. It was a small confirmation. You may stand now."
+
+Watarai said it perfectly ordinarily, as though it were nothing at all.
+
+And in fact, to him, it presumably **was** nothing.
+
+With what intent the Daiki in front of him was choosing his words — he'd done it merely to investigate that. There was no meaning beyond it.
+
+Inverted, that meant he hadn't so much as considered how the other party would feel about it.
+
+Just as Watarai said, Daiki's body was free again immediately afterward.
+
+That he seriously claimed he had no intention of threatening and merely wanted to talk meant their values differed fundamentally.
+
+"My apologies. Er, what was it. Ah yes, my objective, was it?"
+
+He returned to the main subject as though it were nothing.
+
+As he'd been told, Daiki was free at once and stood; but rather than the fact of having been floored, it was the mentality that genuinely failed to understand what it meant that he found frightening.
+
+Was this the sort of creature a magus was?
+
+"Mm, but I've already spoken of that. Repeating the same story twice is tiresome. So this time let me speak instead of why I came to this city."
+
+Watarai continued flatly. After a short pause, Daiki asked back,
+
+"...The reason?"
+
+"Yes. Which is to say — one day, in fact, **a Demon Lord came to visit me**."
+
+"—What did you say?"
+
+At words so devoid of reality, Daiki's eyes went wide despite himself.
+
+At that reaction, as though he'd got exactly what he wanted, Watarai's eyes shone with excitement.
+
+"Yes, astonishing, isn't it! In practice it was no more than a phantasm, what should be called a spirit-body, but a visitor from another world nonetheless. Communication was extremely difficult, but I managed to read that in another world he had been an existence to be called a Demon Lord. I'm rather skilled at that sort of thing, you see. The existence of another world was certainly demonstrated by a visitor!"
+
+"...That's absurd."
+
+"Whether he came from the same place as your world I don't know. Might you perhaps recognise him? I'd very much like you to meet him and confirm, but I must ask you to wait a little. Before long he'll finish his work and come down from above—"
+
+Watarai's eyes turned slightly toward the ceiling.
+
+Daiki followed the gaze, but more than that, there was something off about what he'd just said.
+
+"Work...?"
+
+"Ah. It should be about finished. She can hardly be a match for him, after all."
+
+"—Oki—!"
+
+Daiki ground his teeth. It was surely so.
+
+Far from her coming to save him, she had arrived at this place before him.
+
+And — she was presumably locked in combat with **something**.
+
+"It is a Demon Lord, after all. However great a witch she is, if you set against her one capable of winning, killing her is possible. With her in existence, **the sovereignty might choose her instead**, you see — my apologies to Arataka-kun, but I intend to take that authority for myself."
+
+—The subject had changed.
+
+At this rate there was no time for worthless chatter.
+
+Daiki fixed his eyes forward as though glaring.
+
+"Oh? Are you not willing to talk after all? Surely you won't tell me you're going to go and save Oki-kun? Such a thing is impossible for you."
+
+There was no way he could beat a Demon Lord, and before that he couldn't even reach the Watarai in front of him.
+
+Going any higher would be suicide. Such a waste would be far too hard to clean up after.
+
+Watarai preferred he not choose so pointless an option.
+
+"Surely it's fine if a witch dies."
+
+So he spoke.
+
+"It has nothing to do with you. Never mind that; tell me your memories of another world. Did a holder of the «Demon Lord» authority exist in your world? How far had magecraft advanced? Even an ordinary person can put the wonders he saw into words, surely? If you tell me, I intend to reward you accordingly."
+
+That fortune, that irreplaceable and precious memory.
+
+Drawing it out in words was the highest priority.
+
+Naturally, he didn't expect a young man who wasn't even a magus to be able to speak of anything worthwhile.
+
+Watarai regarded the other-world knowledge that could be extracted from Daiki as something that might serve as a hint at best.
+
+The words he spoke would certainly have value, but that was strictly a bonus.
+
+The true prize was the man himself — the specimen that was Daiki Kurosu.
+
+After all, he was presumably the only specimen in this world **to have experienced another world**.
+
+A precious article that ought to be killed and carefully preserved at the earliest opportunity. It held immeasurable value.
+
+This whole business was merely killing time until the witch died.
+
+To begin with, unlike his son, another world itself was not fundamentally his objective.
+
+"...Well, right."
+
+And indeed, Daiki Kurosu began quietly to weave words.
+
+Had he become willing to talk? Then the effort had been worth it.
+
+He was a foolish ordinary person who'd come trotting into a death trap merely on being told his sister had been taken — but if he'd be useful, that was fine.
+
+To Watarai, his chest swelling with expectation, Daiki Kurosu quietly spoke of another world.
+
+"Honestly, it wasn't that different from Earth."
+
+"...What did you say?"
+
+His eyes bulged.
+
+"That cannot be. Don't say foolish things. That much is evident even from the nature of a Demon Lord. To share laws in common with Earth and yet differ fundamentally — that is what another world is. Was it not so?"
+
+"There were Demon Lords and monsters and spirits and magic, sure."
+
+"Then—"
+
+"—**But that stuff isn't a big deal, is it.**"
+
+The world's only experiencer of another world, it seemed,
+
+did not understand the value of his own experience.
+
+"Absurd... even for one who is no student of magecraft, folly to that degree is beyond salvage."
+
+But to Watarai's words, Daiki answered with apparent ease.
+
+"No, I mean, obviously. It's another world. Of course it's got that much. I don't know."
+
+"—What...?"
+
+"But in the end it doesn't change the fact that humans lived there. No different from this world at all. What was in the other world was humans. Humans doing their best, living desperately."
+
+"Nobody is talking about that...!"
+
+Kazuya Watarai regarded none of that as mattering at all.
+
+Their values differed. What Daiki Kurosu valued and what Kazuya Watarai valued were entirely different.
+
+"If you can't understand that—"
+
+Yes. For Daiki, the value of another world was nothing of that sort.
+
+There had been fighting. To protect the people living there, he had risen as a Hero.
+
+That was the decisive difference.
+
+Neither a carefree guest nor an irresponsible observer, he had been inside that world — and had taken up a sword as a hero.
+
+The value of that experience, of those memories, was not something to be trampled by a man like this.
+
+And so.
+
+"—There's no point saying anything to you. **You stupid bastard.**"
+
+The instant the words were out, Daiki kicked off the floor.
+
+Forward — straight at Watarai.
+
+Watarai nearly clicked his tongue.
+
+There was no way an emotion-driven charge like that would work on a magus.
+
+Having watched the battle at the precinct, he'd had expectations of a young man who could think about matters coolly for an ordinary person, and he was disappointed.
+
+He didn't want to act yet.
+
+If he was going to kill him, he wanted to preserve the components as cleanly as possible.
+
+With no choice, Watarai went to neutralise him as before—
+
+—and suddenly noticed.
+
+"—«Puppet Show (Maya)»," — nominally.
+
+Nominally, would a human who had defeated the magus Kūya charge in on emotion in a place like this? Might there not be some plan even in this rush?
+
+No. No — more fundamentally.
+
+More fundamentally, why was it that he couldn't read whether the man had a plan or not?
+
+That thought was, indeed, the wariness of a seasoned magus.
+
+Since ancient times, magi had never walked a history of the strong. Always lurking, always persecuted by the great majority who knew no mystery — a small number of the weak.
+
+But Watarai instantly discarded the weak's instinct, judging that reciting the incantation was faster.
+
+"«Down to the Ground (Burlesque)»"
+
+—And yet, even had he not discarded it, the result would have been the same.
+
+It was already far too late.
+
+The magecraft did not activate.
+
+The art, which should have been completed, ended in a misfire, unable to designate Daiki as its target.
+
+"Wha, t—"
+
+Surprise lasted an instant. It turned immediately into understanding.
+
+Because Watarai too had, on any number of occasions, **borrowed the help of that aberrant power**.
+
+"Gh... Aiko...!"
+
+Just who was lending him strength?
+
+By the time he understood that, it was too late for evasion or defence.
+
+The reactions of a magus with no enhancement applied were far too slow for him.
+
+—In the next moment.
+
+The fist of a former hero punched through a magus's face.
