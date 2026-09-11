@@ -10196,3 +10196,254 @@ Trying, in his fading consciousness, to convey at least a single word of feeling
 And with that as his last words,
 
 Daiki Kurosu let his consciousness go into slumber.
+
+1-27 "Interlude / Black and White"
+-------------------
+
+"Hm— haha. Hahahaha... well, I was handled roughly indeed."
+
+Night in the town of Ōmiya.
+
+In a corner of it, a man murmured.
+
+His name: Kazuya Watarai.
+
+A transcendent being belonging to the arcane, he was nonetheless moving sluggishly now, fleeing into a back alley empty of people.
+
+He had been struck away by a greatsword, fallen from the multi-storey car park and slammed into the ground.
+
+Considering that, perhaps he was fortunate merely to be conscious.
+
+"Dear me, that was something... hm, I should have limited myself to mere observation... Well, well. I let my greed run a little far. To get carried away — oh, how very like me."
+
+Even with no one to hear, Kazuya Watarai was always voluble.
+
+Because his words were, in the end, directed only at himself.
+
+"Still, heh... to think an other-world Hero existed on Earth. A Hero — a *Hero*, of all things! He didn't seem to hold any singular ability, but ah, even so, that strength... a lesson that one should pay attention to mentality, perhaps. Well, it is my specialty."
+
+Diverting magical energy into healing his wounds, Watarai piled up his analysis of the information he'd gained.
+
+**And no one around him noticed his existence.**
+
+Of course there were no people where he was, but even when he'd fallen from the car park and been gravely wounded, not a single eye had turned toward him.
+
+That was his magical characteristic.
+
+Just as his son Kūya Watarai had been a magus with an aptitude for summoning magecraft — in other words, «the shortened connection of space» — the father too possessed a magical aptitude relating to space.
+
+However: what he manipulated was not physical space but mental space.
+
+A magical characteristic of discerning, or exploiting, the gaps in human awareness and manipulating others' perceptions.
+
+Body manipulation and the like were for him a mere accessory ability, nothing like his essence. If anything, the barrier magecraft that had enclosed the area was closer to his true field as a magus.
+
+An architect of mental structure who grasps human consciousness as space. Hence the epithet «Urakara».
+
+With that ability, escape was easy.
+
+Fundamentally, there had been no reason he had to finish off the witch and the hero on the spot — that was where his composure came from.
+
+"Ha, ha... Arataka-kun's long-laid plan takes priority after all, I suppose. Well, taking the sovereignty from the witch would have been best, but no matter, let's take the long view. The time of the mind is infinite... and besides, if that witch should awaken as a holder of sovereignty — that too, in its way—"
+
+—would be interesting.
+
+Those young people, dancing to the tune of an empty ornament (*interior*) of the mental space called trust, did not understand that fact.
+
+What Watarai had told him back then had, curiously, struck at the essence.
+
+Because — **those two will certainly break apart.**
+
+Naturally.
+
+Far from being incompatible, it could be said their fate was to become enemies.
+
+One, **the one who was once able to be a hero**.
+
+The other, **the one who may in time become a Demon Lord**.
+
+"Ah... and that too, I find myself wavering and wanting to see. My bad habit, I suppose."
+
+That he seriously aspired to the utterly deranged objective of obtaining sovereignty — of becoming an existence capable of destroying the world — was troublesome enough; but perhaps more than that,
+
+the broken mentality that could discard even such a life-staked objective on a momentary whim was presumably the factor that made him a transcendent magus.
+
+But.
+
+And precisely because of that.
+
+—Precisely because of that, he had to learn.
+
+"Ah, here you are. Honestly, you shouldn't make people search — how tiresome."
+
+Precisely because he belonged to the arcane.
+
+He had to learn the fact that, compared with himself, a deeper arcane would trample him.
+
+"......What."
+
+Watarai's eyes went wide with surprise.
+
+Because that voice was clearly directed at him.
+
+At him, who by rights should have been exercising his native talent and been perceived by no one.
+
+"Huh? Ah... you're noisy, I know. My apologies for making you go along with my convenience. Yes, yes, I'll make it up to you. So don't be so testy. It gets tiresome. And in any case, it was you who told me to be considerate of him. Please be quiet; I won't be responsible if you feel sick again."
+
+The figure who had presumably addressed Watarai was, immediately after, speaking toward empty air.
+
+No — that's wrong.
+
+Watarai could tell.
+
+She was certainly speaking, entirely alone, with someone.
+
+As though **another person lived inside her heart**—
+
+"Now then, I'm sorry to have taken your time. There won't be any more, so, yes. Please relax. —If possible, I have the mercy of wanting to do this in one stroke."
+
+"...Surely not."
+
+At that presence, Watarai couldn't help but widen his eyes.
+
+Standing there was a perfectly ordinary high-school girl of the sort found anywhere. In appearance, at least.
+
+But it was different.
+
+Clearly — with excessive clarity — **that thing** was something else.
+
+A maddening pressure of magical energy simply from existing there. And the despair of understanding that this was suppressed to the utmost — that a power already incomparable to Watarai's was being held back to its limit.
+
+Watarai belatedly, finally understood what Daiki Kurosu had said.
+
+—*There's no way you wouldn't understand that this is here*—
+
+"**A sovereignty**, **holder**...? Absurd — you're telling me one already exists...!"
+
+"...Haah. It's rare for someone to call me that. I've no particular interest in such authority. Normally people express me with a more commonly used name."
+
+Ah, of course they would. Exactly so.
+
+There was no way a magus wouldn't know of that anomaly.
+
+Yes.
+
+Indeed, certainly, that was the king of monsters — far too fitting a thing to be called a Demon Lord in this world.
+
+"...This is the first time I've seen the real article. I see, this town was already a demon city! The reason this place is so unstable is because a king already existed here—! No, no! What that implies is obvious! Sovereignty, then — the throne was not limited to one! That must be it! I'm correct, am I not? Well, —True Ancestor!!"
+
+"Haah. Well, you seem to have got excited all on your own, which is rather awkward. For now, let's finish what needs doing."
+
+*Kh* — the girl waved one extended hand lightly.
+
+That was all. He hadn't been touched, and had no awareness of having been attacked.
+
+Even so — on that palm was **a pulsing red mass**.
+
+"......Ah."
+
+Watarai lowered his gaze and put a hand to his own chest.
+
+There was no wound. But at the same time, the beat he should have felt there didn't exist either.
+
+"—Khah."
+
+With a gurgle, red leaked from the corner of his mouth.
+
+Watarai finally realised that this body was already dead.
+
+"My apologies. I want to live quietly, and people like you are a nuisance. Well, that this town is warped is my fault, as you said. Which is exactly why... yes? Oh, honestly, this is why I told you to stay asleep. Just don't look, will you."
+
+Partway through, the girl was no longer addressing Watarai.
+
+But that was cruel. That was far too great a waste.
+
+In a place like this, he had finally met a king of monsters. He didn't want to waste that miracle, however slightly.
+
+"Ah, ah...! Please don't behave so unkindly, O king. I am moved by the miracle of this encounter! Ah, at least let me ask one question at the end—"
+
+"—Ugh, how frightening. This is why I dislike magi. Calling others monsters while being indifferent to their own abnormality — what shamelessness is that? Frankly, it's tiresome."
+
+Immediately after the words — with a wet crunch, the heart was crushed.
+
+And at the same moment, Kazuya Watarai expired.
+
+He vomited blood and collapsed to the ground.
+
+The girl let out a small breath, then shook her head as if it were a chore.
+
+Immediately after, the red wetting her hand vanished, as though absorbed into her skin.
+
+"Phew. It lacks elegance as a meal, but I have a promise, so I'll bear it. More importantly."
+
+The girl turned her gaze toward the depths of the alley.
+
+Then she said:
+
+"You may come out. You don't seem to be trying to hide, but that presence can't be hidden from me alone. You know that, don't you? **I'm not Yuika right now**, so don't trouble yourself."
+
+"...Well, I am surprised, actually."
+
+The one who emerged from the depths of the alley was — a girl with white hair and golden eyes.
+
+Nagi Kurosu. The girl who was supposed to be Daiki's sister now wore an impression like a thorn, far removed from her usual graceful, composed air.
+
+"—Yuika Asatsuma."
+
+Nagi spoke the name of the girl in front of her.
+
+The name of the girl who had been Daiki's childhood friend.
+
+"A vampire, of all things. No wonder I found you disagreeable."
+
+"Haah. Does the concept of the *oni* exist in your world too? Well, it doesn't matter, but strictly I'm a **possessed body**. I believe I've built a good relationship with Yuika, and precisely because of that, being called by that name is inappropriate. I'd appreciate a correction."
+
+"Then should I call you a monster? Sorry, but looking at you makes me want to kill you, so I'd rather you didn't speak to me so familiarly. That's a matter of function, so there's nothing I can do about it."
+
+"Haah... and on my side, having you — and him, who's under your influence — nearby means Yuika's condition collapses from the holiness, which doesn't change either. It's my fault, and yet I'm the one who's fine, which is rather inexcusable. —By the way, you two don't seem to be on very good terms."
+
+"————"
+
+Sharply, Nagi's — no, **the one inside Nagi's** — gaze sharpened.
+
+Receiving that pressure, **the one inside Yuika** kept a cool face.
+
+"A real younger sister brought all the way out of a parallel world... I can't help admiring a mind that synchronises that existence wholesale and cohabits it with a straight face. It's not for me to say, but I must call it a rather inhuman notion. What would he think if he knew—"
+
+"—**Master would never dislike me.**"
+
+At the words delivered heavily, the vampire shrugged lightly.
+
+"Is that so. No, it doesn't matter. It's Yuika who's the childhood friend; it has nothing to do with me. Though thanks to your synchronisation, Yuika can no longer speak with him either."
+
+"...Even so, Master — Daiki is my master. I don't care about that. And I've come to a proper arrangement with Nagi, too. Neither of us had any other option anyway. This child is happy to have met the brother she was never supposed to meet."
+
+"Don't you mean you're exploiting her by taking advantage of that feeling? No, I've no particular desire to blame you. It doesn't matter to me. —But you intend to take him back to his original world, don't you? And his sister shouldn't be able to go with him."
+
+"...How do you—"
+
+"Know? Well, I've lived a long time. If this state counts as living, that is. It's an interesting plan, I'll grant. By making him believe this world is a parallel world — that there's no place for him here — you make him yearn for another world. You obtain his agreement to return to the old world once more. —**When in truth this place is rightly his home.**"
+
+"Shut up. Be quiet."
+
+"I'll do that. I'm tired of talking."
+
+The vampire spoke flatly. In fact she really did seem somewhat weary of it.
+
+The black one shook her head, then turned her gaze to the white girl.
+
+"So? You came here — does that mean you'll fulfil your role as a **holy sword**?"
+
+"...Not really. I came to watch because you were moving. Of course I'd be wary."
+
+"Then I've no further business. I have to get Yuika back in a good mood, so I'll take my leave early. Goodbye, then."
+
+Having said her piece, she — the king of the arcane world on Earth — walked away from the place.
+
+The girl who saw her off — the spirit of a holy sword from another world — also vanished quietly into the darkness of the night.
+
+One, **a girl coexisting with a king of the arcane**;
+
+the other, **a girl ruled by a holy sword**.
+
+Without anyone knowing, they lived within this town.
