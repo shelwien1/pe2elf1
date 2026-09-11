@@ -12069,3 +12069,186 @@ I want to touch his hand and grip it tight, so we're never parted again—
 For that, I am still travelling.
 
 In a world where the Demon Lord no longer exists — in the world he saved.
+
+TIPS · 01
+-------------------
+
+■ Saitama City
+
+The main setting of the story. The prefectural capital located in the south-east of Saitama Prefecture, and a government-designated city.
+
+Estimated population just over 1.31 million (as of 2021; ninth-largest city in Japan).
+
+Area 217.43 km².
+
+More or less everything is there, but there's nothing that exists only there — a town with that sort of air.
+
+Though, well, there are things that exist only in places like that. Inversely? Something like that.
+
+■ Ōmiya
+
+Vaguely the upper part of Saitama City. The former Ōmiya City.
+
+In this case it mostly refers to the area around JR Ōmiya Station.
+
+Home to «the Bean Tree», «Toto-chan» and so on.
+
+On the east side of the station is «the Taieibashi».
+
+■ Magus
+
+In a rough definition: *one born with magical energy who has learned the means of handling it*.
+
+Magical energy is, roughly, the energy of the mind, and using it to *rewrite world-law to suit oneself* is called magecraft.
+
+For example, the magecraft of *producing fire* is the act of rewriting the world-law in the state *there is no fire in this place* into the state *there is fire*; the world is often compared to a single book in which laws are written, and the magical energy that rewrites its text to ink.
+
+Rewriting, with magical energy, the text written in the body of the world — but since the original text is stronger (something like heavier pen pressure), the rewrite is always temporary. The moment the ink that is magical energy runs out, the magecraft thins and inevitably disappears. It doesn't last.
+
+The image is something like *somehow overwriting, in one's own logic (worldview), script that nobody can read*. Expressed as *drawing a picture with letters* or *writing a sentence with pictures*, it requires both theory (*theory*) and sense (*sense*).
+
+An individual arbitrarily rewriting world-law is weak compared with the world's correcting force, which tries to remain in its correct state. The idea that compensates for this is the *spell formula*: using a kind of occult shared fantasy, an archetype of the universal imagery humanity holds.
+
+Roughly again: it means supplementing occult *common sense* — such as *drive a nail into a straw doll containing the target's hair and you can curse them*, or *untie a knotted cord and wind rises* — with ritual, incantation and so on.
+
+Because the worldview of humanity as a whole is applied rather than that of an individual, one can use more powerful magecraft.
+
+Even barring that, it becomes autosuggestion; holding within oneself the causation of *do this* → *this happens* is the first step in learning magecraft.
+
+Modern magi sometimes express it as «format settings».
+
+Incidentally, when running magical energy through the body to handle magecraft, lines of magical light run across the surface of the skin in random shapes.
+
+There are roughly ten ranks according to the practitioner's ability. Properly these are determined only upon certification by the «Majutsu Ritsukai», but even for magi not belonging to the Ritsukai it's sometimes used as an indicator of ability — *about this level*, and so on.
+
+The topmost of these is «magic-user (*Ipsissimus*)».
+
+■ The Empowered
+
+Those who change the world by means other than magecraft. If magecraft is a rewrite according to an individual worldview, an aberrant power is closer to a copy-and-paste of another world's worldview.
+
+The Empowered connect to a worldview not of this world, expressed as «the Ikai», and paste the laws of that outer realm directly onto Earth.
+
+This too is fundamentally non-permanent; and unlike magecraft it only pastes what it is connected to as-is — meaning no versatility, only one trick — but in exchange it generally exceeds magecraft in strength. "Strength" here does not mean *the ability is powerful* but *the degree of alteration imposed on the world is strong*.
+
+Magi loathe it as having no logic, but in reality it is an outer-realm law and does have logic.
+
+For that reason some express the Empowered directly as Otherworld Connectors.
+
+However, since it is carried out through an individual, that outer-realm law is filtered and dyed by the wielder's soul, and the ability is influenced by the wielder's own nature. It is *an outer-realm law, interpreted through an individual worldview and then exercised*.
+
+The degree of connection is expressed as Ikai depth; the deeper it goes, the more it tends to affect even the personality. At great depth even the body is affected, and side effects such as abnormally heightened physical ability and sensory organs readily occur.
+
+■ Worldview
+
+How one sees the world. Values. Shared fantasy. The standpoint from which one recognises the world one belongs to.
+
+It is an important concept for both magecraft and aberrant powers, but the way the word is used differs vaguely from case to case, which is a nuisance.
+
+Every piece of magecraft and every aberrant power is affected by it to a greater or lesser degree and has its essence changed by it. For magi it also determines what the root of the soul is oriented toward, hence its weight.
+
+For example, the «Connection» characteristic Narumi Oki is born with is the expression of her worldview — *I want to be connected to others, to know what is inside them* — while Urei Aiko's aberrant power of «Degeneration» is an outer-realm law that debases others, dyed by her worldview that *everything degrades and loses its value / falls to zero*.
+
+■ Witch
+
+One with magecraft carved into the soul from birth. One who wields magecraft as an ability.
+
+So-called **genuine** witches are rare. And nearly all of them are already dead. The few survivors are counted as Singular Points.
+
+Historically almost all have been female; there is no record of a male being born with a formula. Hence «witch».
+
+Though, true or not, there is also an unrecorded urban legend that **a man who contracted witchhood once existed**.
+
+■ Singular Point
+
+One who could bring humanity to its next possibility. Or, one who could destroy humanity.
+
+An anomaly arisen from within humanity. One sealed by the number of the beast (666).
+
+A holder of the right of the rights-holder. A rights rights-holder, one might say.
+
+In the present day there are apparently eighteen. Whether there are eighteen people or merely eighteen slots is unclear.
+
+Everyone identified as a Singular Point is placed by the Gakkai on a **bounty with no sum set**.
+
+The meaning is obvious, but that right has never once been exercised. Probably it never will be.
+
+People of the back side of the back side of the back side, whom ordinary people have no way of knowing about. **People.**
+
+Mostly a collection of monsters with joke-level abilities living as they please. Beings who can hold both the right that, if it falls the good way, brings enormous benefit to humanity, and the right that, if the bad number comes up, could wipe humanity out.
+
+They're troublesome but we can't very well kill them and anyway we couldn't but if we could we'd feel safer if they died though it also seems like a waste no but still let's play it safe and honestly couldn't they just die already... that's roughly how they're regarded. They don't die.
+
+The ones who find Singular Points are said to be three beasts — the White Crow, the Grey Cat and the Black Hound. These three are, apparently, the last spirits and fantasy-lives confirmed in the modern age.
+
+There's a rumour that when research into artificially producing Singular Points was once carried out, attention fell on witch-ification because extant witches are Singular Points, and the artificial witch project was drawn up.
+
+■ Dr. Mirai
+
+The peak of the Gakkai, who peers into a blank future. Second-ranked Singular Point. The White Criticality.
+
+An Empowered of Ultra-Long-Range Precognition.
+
+Said to have been born around the 8th century (one wonders what's human about that, but he is strictly human) — an absurd old man who looks young.
+
+Among the occasionally-existing future-prediction/observation aberrant powers, his boasts an impossible range, and apparently the crux of it is less the **distance** of the futures he can see than their **number**.
+
+The very person who brought **science that modern science cannot explain** into the present day. The only window.
+
+Occasionally there are apparently even things where you'd think, "surely even future science couldn't explain that."
+
+Being the top of the Gakkai — in effect **the Gakkai itself** — he exceptionally avoids being made a bounty head among Singular Points... but since it's funny he's put a bounty on his own head.
+
+The Gakkai's position is: "if by any chance he were killed everything would end so please don't, but there's no way to defy him and he won't die anyway, so leave him be."
+
+He gets on with the Crow, is disliked by the Cat, and bolts the instant he sees the Hound.
+
+Incidentally he apparently likes video games (so what).
+
+■ The Star Sword Finistia
+
+Holy sword. The right of star-salvation.
+
+A sword said to have been forged by the hands of spirits in the other world to which Daiki Kurosu was transferred.
+
+Passing into the hands of one with the qualification, it brings its owner immense benefit.
+
+Also attached to it, as a pseudo-personality governing its functions, is a spirit produced by spirits — the spirit-wrought spirit Daiki called Tia.
+
+*Finistia* is a word of the other world (an old language; at least in the era Daiki was transferred to there are no native speakers) meaning «that which cuts off the storm». *Finis* has the nuance of *to defeat/break/overcome/end*, and *Tia* of *storm / calamity / disaster / a threat human power can do nothing about*. (Hence the name Tia is close to calling her "Disaster," which isn't actually a nice meaning. If taken as "Little Storm," well.)
+
+In short it means, fairly literally, *the thing that kills the Demon Lord*. And indeed it's a divine-class armament for killing the Demon Lord, but in fact — the rest omitted.
+
+■ Vampire
+
+Within the category of the blood-drinking species (those that display singular abilities among blood-drinking life-forms), it refers mainly to the humanoid ones — those whose appearance is essentially indistinguishable from humanity's. Being a vampire doesn't mean they all arise the same way.
+
+Among them, a «True Ancestor» refers to one who is first-generation as a blood-drinker, congenital or acquired — in other words, *one who did not become a blood-drinker through another vampire's influence*.
+
+One who was a vampire from birth, or who transformed themselves into a vampire through magecraft or the like, is a True Ancestor.
+
+As traits they generally possess *high immortality*, *the ability to plunder life-force through blood-drinking* and *superhuman physical ability*. In some cases they're also equipped with some singular ability.
+
+Vampires as a rule do not increase through reproduction. The act itself is possible, but they can't bear children, or if they can the child isn't a vampire.
+
+Instead they increase their bloodline by other means (chiefly blood-drinking).
+
+Those who became vampires through other vampires in that way are the general sort of vampire. They carry weaknesses such as sunlight and running water.
+
+This is because the vampirisation of a human by a vampire inevitably produces a degradation of information/quality.
+
+Conversely, True Ancestors generally don't have such weaknesses. By definition a True Ancestor is always first-generation, so there is no degradation.
+
+The vampirisation of a human often has as its condition *having every last drop of blood drunk*, and in most cases the person simply dies. Even survivors often lose their reason and become monsters, so vampires very rarely increase in number. In the past they were also confused with werewolves.
+
+True Ancestors range widely, and among them there apparently exists a «Sovereign Class» — the True Ancestor of True Ancestors, a fully pure-blooded aristocracy — the rest omitted.
+
+There were once many magi who sought immortality by becoming vampires (aiming at True Ancestry, or having their blood drunk if they lacked the ability), but in the modern day some call vampires *a failed example of human evolution* or *a dead-end species* — apparently, but again, omitted.
+
+■ Café «Nodokaya»
+
+A café near the east exit of Ōmiya Station, Saitama City, Saitama Prefecture. Smoking permitted.
+
+A hidden gem where you can enjoy good food and superb coffee.
+
+It doesn't stand out much, but it has many regulars and does reasonably well. Hiring part-timers.
