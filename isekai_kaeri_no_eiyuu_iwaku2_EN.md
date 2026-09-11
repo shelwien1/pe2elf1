@@ -8203,3 +8203,312 @@ The hand that should have been taking out his key clenched, and Daiki turned on 
 Because the paper bore these words:
 
 *We have taken Nagi Kurosu. If you want her returned safely, come alone to the place specified.*
+
+1-22 "Thus Spoke Unto the Former Hero" — 1
+-------------------
+
+A little before Daiki Kurosu found the note.
+
+In fact, it was Narumi Oki who noticed first that things had moved.
+
+"—!"
+
+Having seen Daiki off, Oki was walking through the city when she raised her head at an alarm bell that suddenly rang inside her skull.
+
+An alarm bell — and that was no metaphor. The delegated administrator authority — the city's response to an external enemy — had abruptly triggered.
+
+"Why so suddenly... no!"
+
+That there was no longer any need to hide meant that action was about to be taken. In which case there was no leisure to think it over. Oki immediately ran for the direction she'd perceived.
+
+Crossing the overline bridge called the «Taieibashi», which spans the many lines running to the station, she went toward the west exit. There were numerous multi-storey car parks nearby, and in one of them lay a dense trace of magical energy.
+
+Once this close, Oki could feel the place clearly.
+
+Just past seven in the evening. An hour when there were still plenty of people about as a matter of course.
+
+To start something at this timing was audacity of the highest order.
+
+Looking up at the huge car park, Oki considered.
+
+—Should she contact Daiki?
+
+He was a fighting force. His physical ability, on reflexes and instinct alone, was enough to go toe to toe with a magically enhanced Oki. In terms of combat experience alone he was presumably far above her.
+
+But in the end, Oki didn't contact Daiki at that moment.
+
+Not because she didn't trust him. Simply because he wouldn't make it in time.
+
+For Daiki, who had gone home, to come back to the city centre would take thirty minutes at the earliest. She couldn't possibly wait.
+
+Kurumi Tsunashino — the outsourced medical staff, so to speak — had a means of magical contact, so she'd presumably already noticed the situation. Oki decided to leave contacting Daiki to her.
+
+Oki stepped into the car park, which had turned into a demon realm.
+
+And that was no metaphor either. This was by no means an abandoned building or a disused ruin; it was a shopping district at the centre of the ninth most populous city in Japan.
+
+This car park was in current use, and in fact, while there were no people on the lower levels, a number of cars were parked there. —However.
+
+On its top floor, a barrier of magecraft had now been raised.
+
+"A people-repelling barrier... isn't it. The barrier doesn't seem to have functions beyond that."
+
+Looking up from one floor below, Oki attempted a calm analysis.
+
+Reading the function of a completed barrier from outside — in other words, the composition of its formula — is extremely difficult.
+
+Properly, the only method is to read the style of magecraft the opponent uses — Western, or connected to *onmyōdō*, say — and infer from knowledge.
+
+But Oki exceptionally possessed one cheat.
+
+The Mystic Eye of «Connection» dwelling in both her eyes.
+
+By «connecting» with the magecraft itself in front of her and empathising with it, she could read its meaning. It was Oki's talent as a magus, not as a witch.
+
+Forming a deep bond carried risk. Empathising too much with the caster — that is, with another person — could be the trigger for a mental collapse, and even barring that, the possibility that the magecraft itself was fitted with a mechanism to prevent interference from others couldn't be denied.
+
+The result of a careful «Connection»: this barrier was probably powerful but purely a people-repeller — so Oki concluded. Which meant charging in presented no problem.
+
+Unlike that shrine, securing a line of retreat wasn't difficult in a multi-storey car park.
+
+In the worst case, a magus could jump and flee. That carried a chance of being seen by someone, though.
+
+Oki, as acting administrator, stepped into the barrier.
+
+Sure enough, on the top floor almost no cars were parked.
+
+Naturally there was no trace of people either. It had the air of a top floor that had been forgotten by every human being.
+
+Presumably the barrier had been raised in advance so that the car park had been made to seem one level lower — not only to users but even to the owner. That the number of parked cars was small meant that new ones **weren't coming in** but that some **were going out**.
+
+—Selective obstruction of perception.
+
+If you had the purpose of retrieving your car you could notice this place, but nobody could notice any wrongness beyond that.
+
+At the very least, it was a feat Oki couldn't imitate. It let her glimpse the caster's ability.
+
+According to Daiki, a magus called Urei Aiko had been assisting Watarai — so was this barrier her work as well?
+
+She did seem to be a magus with an aptitude for perceptual interference.
+
+"..."
+
+The answer came at once.
+
+At the back of the car park, near the centre, she found a single figure.
+
+"Hm? Oho, here already? An unexpectedly early arrival... hmm?"
+
+The figure turned toward her and narrowed its eyes.
+
+A man. Not this Aiko, apparently.
+
+He wore an affected swallow-tailed coat and looked somehow out of place.
+
+His face, at least, was young.
+
+Perhaps in his thirties. A gentlemanly, slender Japanese man, characterised by an expression like a colourless smile pasted on. Though there was white mixed into his hair.
+
+"Well, a surprise. Your arriving first is not in the plan — this is troubling."
+
+"...You are—"
+
+As Oki began to speak, the gentleman raised a palm as if to say *wait*.
+
+Oki stayed wary, but there was no sign of magecraft moving. He spoke as though singing.
+
+"Oh, I'd rather you didn't come too close. I'm hardly ignorant of how terrible the formula carved into your soul is. If it came to violence face to face, I'd be flat on the floor in an instant."
+
+The theatrical manner was presumably simply his natural register. One sees it occasionally in magi of advanced years.
+
+He presumably had no intention of provocation, and at the same time his composure was genuine. That was the reading.
+
+"...Have I ever shown it to you?"
+
+Oki asked, deliberately affecting a register of her own.
+
+Naturally she asked knowing perfectly well that he'd been watching the fight in the shrine precinct.
+
+But to Oki's blatant question, he returned an unexpected answer.
+
+"I knew of it long before I saw it again. You, unfortunately, don't appear to remember me."
+
+"...What?"
+
+"Well, it can't be helped. Even in those days, the occasions when we met face to face were few enough to count. Most of the time I was merely watching you one-sidedly. And through an uncouth medium at that."
+
+"————"
+
+The colour left Oki's expression in an instant.
+
+A transparent expression — but with a crimson in her eyes that was far too aggressive.
+
+"A fine face. That's the only success case for you. A truly witch-like face, is it not?"
+
+"You—"
+
+"Arataka-kun will be pleased as well. A message from him. —'I'll come to collect you soon,' apparently."
+
+In that instant, black danced around Oki.
+
+A jet-black gale deeper than darkness itself: the shadow of severance that obeyed her.
+
+A vortex of destructive magical energy sufficient to massacre ten run-of-the-mill magi over — and yet the man facing it didn't so much as change colour; if anything, his tone conveyed something like disappointment.
+
+"One shouldn't be moved by emotion, Oki-kun. That isn't a magus's posture."
+
+"What did you say..."
+
+"That said, I've no wish to be unkind. I think of you as a daughter, after all. I'll answer what you want to hear. Yes — you wanted to ask me this: *Are you an acquaintance of my father's?* And the answer is yes, Oki-kun. Just so; we are friends."
+
+"...!"
+
+"Your next question is this. *Then were you an accomplice in that research — in Arataka Narumi's experiment that turned me into a witch?* you wonder. That answer is hard to call either yes or no. I certainly assisted his research, but I was never a member of the facility."
+
+At the torrent of words that seemed to dismantle the inside of her heart, she felt dizzy despite herself.
+
+From the bottom of her heart, Oki registered a fear welling up mixed with loathing. —Who is this?
+
+"—A magus of no importance called Kazuya Watarai. I have been called «Urakara», at times."
+
+"—?!"
+
+There it was again. She hadn't said it aloud, and yet the answer came back exactly on point, as though he were reading her mind.
+
+There was no trace of magecraft. Then was he one of the Empowered who read hearts—
+
+"No, I personally have no connection to the sea of another dimension. Surely a magus has no need of such a thing."
+
+"You—?!"
+
+"Does something of this order require a special skill? To my mind it's the surprise that is inexplicable. Why can you not tell apart what is plain to the eye? Human beings other than myself lead inconvenient lives."
+
+Because his words made her feel intuitively that there was no lie in them, Oki couldn't help thinking it.
+
+—A monster...?!
+
+But even that, presumably, was audible to the magus in front of her — to Kazuya Watarai.
+
+He said:
+
+"I'd rather not hear it from a monster. Hmm, though it feels surprisingly not bad. Indeed, if one could become a monster, it would be far finer than remaining human. Though you don't seem to think so."
+
+"..."
+
+"You've closed your heart. Yes, that's right. My street performance is, after all, no more than a trick with a hidden mechanism. Quick judgement, isn't it — not bad. But not terribly interesting either."
+
+"...What is your objective?"
+
+To that question, Watarai answered.
+
+Probably — no, unquestionably — he was Kūya Watarai's father.
+
+And a magus who bore an epithet at that.
+
+«Urakara», was it — his rank was presumably above his son's.
+
+Oki piled up her analysis. She no longer cared if it was being read.
+
+And sure enough, he answered.
+
+"Wicked schemes."
+
+"..."
+
+"'I know that already,' says your face. But that isn't so. You don't know. I came to this city with a clear objective. It had to be here, and what I'm doing is evil to an excessively clear degree."
+
+A breath.
+
+Leaving a pause, he said it as though it were nothing at all.
+
+"—**After all, I wish to destroy the world.**"
+
+"What are... you saying..."
+
+Those words, far too much like a joke, were something Oki simply could not comprehend.
+
+There were limits to how worthless a thing could be.
+
+*Spare a thought for the person who has to hear such a thing in reality* — she was on the verge of genuine exasperation, so thoroughly did it sound like a fantasy (*magic*).
+
+But.
+
+Kazuya Watarai was in earnest.
+
+"—**Why do you suppose the world hasn't been destroyed?**"
+
+"What...?"
+
+"It's strange, isn't it. **Do you not think that in itself is strange?** You've surely encountered the many works of fiction that fill the world. Villains who try to destroy the world exist in stories by the dozen. It's only a thought, isn't it? There must be any number of humans in the world who have held a wish of that magnitude. Surely there could be someone, like me, who moves to carry it out."
+
+She couldn't understand what he was saying.
+
+Empathy was impossible. The son wanting to visit another world had been more comprehensible.
+
+"Ah, I understand, of course. Yes — because villains like us are always in the position of having our ambitions thwarted by the righteous. Thrilling, isn't it? Stories are fine things. In the end love and justice win. I don't dislike that sort of entertainment myself. Those who work hard should be rewarded. —In a story, that is. Yes, a story. Strictly fantasy, not reality. In reality, evil defeating good is thoroughly commonplace. The winner is justice? Just so. Then a victorious evil is justice. There's no contradiction in that point. Neither good nor evil is yet justice. Victory and defeat decide it."
+
+—And so I wish to make my evil into justice.
+
+Kazuya Watarai made that statement entirely sane.
+
+"In reality evil, too, wins. But this reality has never once shown the victory of a great evil that sought to destroy the world. That is strange. Why can no one destroy the world? I thought about it. I researched it. And I obtained an answer. —**An individual, by rights, has no right to destroy the world.**"
+
+"...What are you even... talking about..."
+
+"Stalling for time. Mere kindness. You asked, so I'm answering, that's all."
+
+"..."
+
+"Hmm, I failed to interest you. How sad. It was your research — in other words, you — who gave me this hint, but never mind. It's about time I prepared to welcome my guest. I'm sorry, but now is not the moment for me to deal with you, nostalgic as you are. Dear me, you were supposed to be invited later — did Aiko blunder? Or else... no, no matter."
+
+Having said his piece, he simply took his eyes off Oki.
+
+—Oki couldn't understand his words.
+
+He looked nothing but sane, and yet everything he said was impossible to consider sane.
+
+But she couldn't simply ignore him either.
+
+If talking got nowhere, then either way force was the only option.
+
+A bad feeling prickled at the back of her mind.
+
+Still, to do what had to be done, Oki went to activate her magecraft — and immediately before she could,
+
+she was forced to deal with a heavy sword blow that came at her suddenly from the side.
+
+"Gh...!"
+
+Oki dodged reflexively and took distance.
+
+What her eyes caught was the identity of whoever had attacked her.
+
+"What... is this?"
+
+It was so far beyond the normal that she voiced the fact of her incomprehension aloud.
+
+By appearance alone it wasn't abnormal as such.
+
+It was a large knight clad in black — jet-black armour.
+
+The whole of a body that must have exceeded two metres was covered in armour like a knight's out of a fantasy, and it gave off dense magical energy.
+
+It was a thoroughly turbid, ominous magical energy that could almost be called miasma.
+
+And it held a greatsword nearly as long as its own height and of a ludicrous thickness.
+
+—Not human, apparently.
+
+"That is one who once possessed the right to destroy a world."
+
+She hadn't asked.
+
+Even so, Kazuya Watarai gave an answer to the question that had spilled from Oki's mouth.
+
+"One who wielded power to destroy the world in a certain world, and who at last fell before one who was good — my pitiable and respectable predecessor—"
+
+Oki intuited the meaning those words carried.
+
+She looked ahead. A black form from which she could feel nothing resembling a will. Its true nature was—
+
+"—Humans call that a «Demon Lord», you see."
