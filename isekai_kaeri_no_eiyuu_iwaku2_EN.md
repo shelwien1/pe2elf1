@@ -12780,3 +12780,260 @@ At Daiki's question, Itsuki said,
 "Whaaaaaaaaaaaat?!"
 
 Oki howled.
+
+2-02 "All's right with the world" — 2
+-------------------
+
+At Oki standing up hard enough to rattle her chair, the other customers turned dubious looks their way.
+
+Feeling suitably awkward, Oki flushed and smoothly re-seated herself, as if a video were being played in reverse.
+
+*Was that some ritual with magical significance?* Daiki wondered slightly, but thinking about it wasn't going to produce an answer.
+
+Was the red in her cheeks shame or anger?
+
+With an expression that could be read either way, Oki pursed her lips and glared at Itsuki.
+
+"...What are you suddenly saying?"
+
+"What? It's the obvious measure. You know my role too, Oki-chan."
+
+"Ah."
+
+Oki's mouth fell open, as though she'd realised she'd misunderstood something.
+
+Perceiving that Daiki wasn't keeping up with the situation, Itsuki turned back to him.
+
+"Here you go."
+
+"...Whoa."
+
+Daiki reflexively caught the lightly tossed object one-handed.
+
+A key. Presumably *the spare key to my room* she'd mentioned.
+
+As Daiki raised his face, Itsuki said easily,
+
+"Daiki-kun, from now on you may use that room freely."
+
+"...Er?"
+
+"Oki-chan showed you hers, didn't she? I own a lot of rooms around here. That's one of them. A hideout for you, so to speak. I picked a good one."
+
+Daiki  obtained  a hideout.
+
+Setting aside how one is supposed to take that, this was evidently what she meant.
+
+"Things you can't tell your family or acquaintances will come up, right? At times like that, having a secret base is convenient. A place where you can hide what you want hidden — a kind of barrier, sort of thing."
+
+"You can take it."
+
+Following Itsuki's explanation, Oki said it lightly. Far too lightly.
+
+"The room I use belongs to Yukimaru-san too. This person is wealthy on a level beyond anything you're imagining."
+
+"Even though Oki-chan is poor."
+
+"Nnnghhh..."
+
+Was a room something one received from other people, though?
+
+By the Earth common sense Daiki knew it wasn't, but come to think of it, back when he was a Hero he'd fairly often been given money, goods and mansions.
+
+"...Thank you very much."
+
+In conclusion, Daiki accepted the key honestly. Following other-world common sense.
+
+Itsuki laughed happily.
+
+"Mm! Big sister likes an honest boy. Makes it worth giving things to you."
+
+"...Well, that phrasing doesn't quite sit right..."
+
+"Ahaha! Daiki-kun, you've got quite a cute face, haven't you. Plain-spoken but with an edge to it. Like something you took for a wooden sword and it turns out to be a hidden blade? Might be my type."
+
+—Was that praise?
+
+Daiki wondered. Not that he'd claim a holy sword suits him.
+
+"So? Since you're here, why not help out with *my* work?"
+
+Itsuki said it suddenly and leaned against Daiki, sitting beside her.
+
+The soft sensation against his arm. Upturned eyes looking at him as though expecting something.
+
+Unfortunately, if it came to gazes, he could feel a sharper one from directly in front. He didn't need to look.
+
+"Helping Oki-chan must be hard. If you like, you're welcome to switch over to me. I'd pay generously."
+
+If it were Urei Aiko, would she switch to Itsuki here without a thought?
+
+Daiki considered it briefly.
+
+Itsuki called what she did work. Oki and Urei had said similar things before.
+
+Recognising the title of magus as a mere occupation was apparently wrong, but even so, there are magi who work to earn money.
+
+"It isn't that I want money, so. Sorry."
+
+"Is that so?"
+
+"Yes. I'm with Oki because she's the one I'm with. We promised."
+
+"—Kwah?!"
+
+A strange sound came from across the table.
+
+Looking over, Oki had spilled coffee into her saucer. *Do be careful of burns*, he thought, watching her; and Oki's mouth was twisted slightly into a smile.
+
+"...Heheheh..."
+
+Well, she seems happy, so that's fine. Daiki decided so.
+
+Turning his gaze back from that, Itsuki was doubled over holding her stomach, likewise looking delighted.
+
+"Khh... kfff, ahaha... this is great...!"
+
+"...Did I say something strange, perhaps?"
+
+At Daiki's question, Itsuki shook her head.
+
+"Ah, sorry, sorry! Not at all... ahahaha. And I'm the one who asked something odd, so don't mind it... hehehe."
+
+Having laughed her fill, Itsuki let out a breath. Then,
+
+"Sorry, all right? I was worried Oki-chan had got hooked by a strange man."
+
+"...So you were testing me?"
+
+"I wouldn't go that far... but yeah, mm. Daiki-kun looks fine."
+
+"So you've decided I'm not a strange man."
+
+"No, you were stranger than I imagined. But that makes it okay, sort of?"
+
+"..."
+
+It didn't sit right at all, but he didn't argue.
+
+Well, in her own way Oki was evidently loved by the people around her.
+
+In that case Daiki had nothing in particular to say.
+
+"Right, here you go."
+
+To the thinking Daiki, Itsuki handed something else.
+
+This time it was a folded sheet of copy paper.
+
+Opening it, an address and a map were printed on it.
+
+"That's where the room for that key is. It's near here, so have a look later."
+
+"...Thank you very much."
+
+"Mm. Have Oki-chan handle the rest of it. I'm off."
+
+"You're going already?"
+
+"I told you. I've got work too. Flying around to various provinces and so on, I'm busy."
+
+What is a magus's job that involves flying around provinces?
+
+Daiki couldn't imagine. Or perhaps it's work unrelated to magecraft entirely.
+
+Itsuki gulped down the rest of her coffee as if hurrying, then turned her gaze to Oki.
+
+"Ah, that's right, Oki-chan."
+
+"...Huh? Ah, yes... what?"
+
+To Oki, who lifted her face as though coming back to herself, Itsuki said one line.
+
+"—Do you know about «the Exile League»?"
+
+The instant those words were spoken, Daiki noticed the air of the place tighten slightly.
+
+He's sensitive to that sort of thing.
+
+He immediately grasped that for Itsuki it was a question with some meaning to it.
+
+"...Well, I've heard of it, at least."
+
+That was how Oki answered.
+
+Itsuki immediately shrugged, smiled thinly and nodded at Oki.
+
+"I see. Then that's fine."
+
+"...Isn't that the sort of thing that's an urban legend?"
+
+"I'd like it to be. There's a rumour going around that they're in this area. So I thought I'd tell you not to get involved, just in case. That's all. —See you."
+
+With that, Itsuki finally left her seat.
+
+Daiki and Oki both saw her retreating back off.
+
+He felt as though an unpleasant sort of flag had been raised. Daiki said,
+
+"You usually run into these things later, don't you."
+
+Oki answered with a distasteful face.
+
+"...Even you know about that, huh."
+
+"Well. Whenever I got told 'a vicious monster has been appearing lately,' I usually ended up having to go and exterminate it."
+
+"That's you going of your own accord... so you really did get asked to do that sort of thing."
+
+"They didn't ask."
+
+"But?"
+
+"They'd say things like, *we could hardly ask the Lord Hero, but the people are in distress, oh dear, whatever is to be done*."
+
+"That's just nastier than asking properly..."
+
+*Perhaps so*, Daiki thought.
+
+That's politics too, he'd thought, so it hadn't made him angry. There were presumably cases where it had to look like Daiki's own initiative.
+
+His companions occasionally scolded him for being too soft-hearted, but as far as he was concerned, that was part of the job too.
+
+"So, what do we do? She left."
+
+At Daiki's words, Oki nodded.
+
+"Right. Well, I think she genuinely just wanted a look at you."
+
+"...You're well liked."
+
+"Who knows. I'm just being played with."
+
+Those two aren't contradictory. Daiki smiled a little.
+
+Perhaps he was glad that the world around Oki was even slightly kind.
+
+"Shall we go and see the room?"
+
+Oki tilted her head slightly and said it.
+
+After thinking a moment, Daiki nodded at her.
+
+"Right. Since she went to the trouble of lending it, let's drop by."
+
+"Mm, okay. Then let's go when we've finished drinking."
+
+Answering lightly, Oki picked up her cup again.
+
+To her, Daiki asked what had just occurred to him.
+
+"By the way, Oki."
+
+"Hm? What is it, Daiki."
+
+"No... you seem, what, in a good mood?"
+
+"......Daiki, you idiot."
+
+Perhaps he'd imagined it.
