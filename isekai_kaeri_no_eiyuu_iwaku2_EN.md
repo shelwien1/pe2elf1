@@ -7348,3 +7348,312 @@ There was no way to answer.
 Even Oki hadn't imagined a situation like this. —And yet Daiki said:
 
 "—Where in the world am I?"
+
+1-19 "The Former Hero, and This World" — 4
+-------------------
+
+"Oh, I see. So what you're telling me is that Daiki-senpai will casually go and stay the night at the home of a girl he has known for all of two days, and a middle-schooler at that. I see."
+
+"Ugh."
+
+The scathing criticism gouged into Daiki Kurosu's chest.
+
+Because extracted in isolation like that, there was no room for rebuttal.
+
+Daiki had his own case to make, but the great majority of that case consisted of things he couldn't say.
+
+Which is to say, checkmate.
+
+One could substitute *guilty* for that.
+
+"Unbelievable. Incredible. I'm disappointed. I'd rather you didn't come near me."
+
+"No, ah, er. The, ...um."
+
+—It was rare to see Daiki so one-sidedly cornered.
+
+Oki, sitting beside him, thought so — and was not in a position to be thinking such things.
+
+Honestly, she was aware that most of it was her fault.
+
+The reason she'd come along was, of course, primarily to guard him, but secondarily to help him explain.
+
+"N-now, now. Er, Nagi-san? Um, there's no need to be so angry—"
+
+"—I've no reason to be called by name by you. Would you mind staying quiet?"
+
+"Yes, I'm sorry..."
+
+Oki shrank into her shoulders.
+
+From the side, a gaze that said *oh, you cannot be serious, she is completely useless* stabbed into her, and Oki groaned inwardly. But it couldn't be helped.
+
+Daiki's little sister is, like, scary.
+
+To begin with, when Oki couldn't manage decent communication even with her own classmates, expecting her to carry out a persuasion against an older girl — Daiki's sister or not — was asking too much.
+
+*I was an idiot to have any expectations at all* — Daiki gave Oki a score of zero inwardly.
+
+When she'd been so full of confidence at the start.
+
+*Leave it to me, I'm good at this* — what exactly had that been about?
+
+—At present Daiki and company were at «Nodokaya», the café they'd visited the previous day.
+
+By around noon, Daiki's injury had almost entirely healed. Daiki came to feel the effect of these so-called nanomachines quite strongly.
+
+To Daiki it was more surprising than the healing magic he'd seen in the other world.
+
+The other world Daiki had been in had healing magic, and a skilled healing mage could mend even life-threatening trauma at tremendous speed.
+
+It wasn't omnipotent, and poison and disease were sometimes hard to treat, but in a sense the other world had medical technology surpassing modern Earth's.
+
+Still, when you hear «magic», you tend to feel *well, I suppose it can do that sort of thing*.
+
+Being told «science» is far more surprising.
+
+Nanomachines are amazing.
+
+Afterward, as Tsunashino had instructed, he pressed the stamp to his arm a second time himself.
+
+By this, apparently, the nanomachines put into his body were broken down and eliminated.
+
+It seemed like technology that could save many lives if released publicly, but according to Oki, "it would produce more victims than that."
+
+"Tsunashino-san understands that part too. Don't leak it on your own, Daiki."
+
+"...Yeah, I'm aware."
+
+"Tsunashino-san is stationed permanently in this city, so we may be in her care again. She's someone worth staying connected to. I'd like to rely on her again this time as well. She doesn't stick her nose into our side, and conversely she doesn't let the Gakkai's circumstances reach us... Tsunashino-san is genuinely a valuable asset."
+
+"Well, she does seem like hard-to-find talent..."
+
+Earth's systems felt somehow more complicated than another world's, Daiki thought — in any case.
+
+—After that, Daiki had contacted his sister Nagi and called her out to «Nodokaya» for lunch together; that was roughly how they'd got here.
+
+That was the situation. However—
+
+"Staying out overnight without permission, without so much as a message. And when I'm called out, there's a girl with you. Not that it matters to me who Daiki-senpai does what with — or does *what* with!"
+
+"Why the emphasis— ah, sorry, it's nothing, please continue, I'm sorry."
+
+"...If you're telling me it's no concern of a mere little sister, then I've nothing to say to that!"
+
+For all she said it, Nagi was evidently deeply displeased about Daiki's unannounced night out.
+
+Poking at her ordered pasta in a sulk, she hadn't let up on the lecture since they'd sat down.
+
+"Come on, cheer up. Look, I'm paying for this, so..."
+
+"So Daiki-senpai believes that girls can be mollified by being casually bought a meal."
+
+"Um, no, that wasn't my intention in the sligh—"
+
+"Quite so! A cheap, easily managed, troublesome little sister! Yes, yes, a thousand-yen café pasta will paper it over, I'm sure. I'm certain it will. ...Nii-san, you idiot."
+
+"Really, it truly was not my intention. Truly."
+
+Daiki was flustered. Thoroughly, continuously flustered.
+
+Naturally — even if she was a sister he had no memory of, one who shouldn't have existed before he went to another world, Daiki wasn't capable of treating Nagi, who honestly looked up to him as her brother, coldly.
+
+The awareness of being her brother — no, the memory — Daiki didn't have.
+
+Frankly she was a stranger he had no recollection of.
+
+Even so, since this was **how things were**, Daiki treated her as his sister and looked out for her. Put another way, Daiki was wildly soft on his sister, and weak to her.
+
+That said—
+
+"...I'm joking, nii-san. Well, I mean it, but I'm not that angry. Whatever Daiki-senpai does and wherever, I've no right to comment."
+
+Fortunately — if that's the right word — Nagi wasn't the sort of high-handed character to exploit a brother who was soft on her and lead him around by the nose.
+
+If anything, she always deferred to her brother.
+
+She was, precisely, **the ideal little sister**.
+
+Good-natured and capable, honestly attached to her brother. She rarely made selfish demands, and though she worried a little, restricting him never crossed her mind.
+
+Of course, inverted, that was exactly why Daiki couldn't treat Nagi coldly either.
+
+"But... even so, I did want at least a message. I worry about you, Daiki-senpai. I get this feeling that you might just drift off somewhere and disappear."
+
+"No, I wouldn't..."
+
+Daiki waved a hand, but didn't notice Oki nodding *I know exactly what you mean* beside him.
+
+In fact, Daiki had a track record of vanishing into another world.
+
+It wasn't that Daiki had gone off on his own, and there was no way Nagi could know about it. As far as Daiki was concerned it was an unfair assessment.
+
+But it was a fact that he was sticking his neck into dangerous things he couldn't talk about.
+
+Considering the present situation, the possibility of being killed or captured somewhere one day and suddenly vanishing from his family's sight wasn't zero.
+
+Hard to argue with, and his words inevitably trailed off.
+
+"—More to the point."
+
+And there Nagi turned her gaze to Oki.
+
+Oki, who was fairly bad with older, beautiful girls to begin with, swallowed with a *hyow...*.
+
+She was weak to them.
+
+"Let me confirm. —Is this person Daiki-senpai's girlfriend?"
+
+"......Hweh?"
+
+Well. A perfectly natural question, Daiki thought.
+
+Oki, on the other hand, had not imagined by one millimetre that she might be asked such a thing.
+
+Being unable to predict even this was the middle-schooler known as Narumi Oki, the dud.
+
+"Whuh?! Um, no, tha—! Huh, ah— n-n-no, uh, um...?!"
+
+Even if she hadn't predicted it, all she had to do was deny it promptly.
+
+And being unable to manage even that was also the magus known as Narumi Oki, the dud.
+
+The dud's face had gone thoroughly scarlet and she was in a state of confusion.
+
+Her gaze wandering between Daiki beside her and Nagi across from her, both hands flapping, her mouth flailing — an unusable display of panic.
+
+"...?"
+
+The reaction was so innocent that even Nagi, who had asked, became unsure.
+
+—Which is it?
+
+Had she hit the mark, or was it genuinely not so? It was so blatant it became unreadable.
+
+Having no choice, she turned her eyes to Daiki, and her brother was shaking his head at her in exasperation. Far from providing cover, Daiki was now the one being covered for.
+
+What had she come along for?
+
+"...It isn't so?"
+
+"You said it yourself, Nagi. I'm not so fast a worker as to be dating a middle-schooler I only just met."
+
+To begin with, Daiki's mental age was past twenty.
+
+He hadn't even considered such a thing, so he was merely stating the obvious.
+
+Merely stating the obvious, and so, naturally, he hadn't predicted it.
+
+"................Quite. It's nothing. We're merely acquaintances."
+
+That Oki would sulk at being denied so very readily.
+
+That was entirely outside consideration.
+
+—Granted it isn't that kind of relationship, but we did come through a line of death together, so there are ways of phrasing it... something like that.
+
+That Oki would be put out for such a trivial reason was beyond Daiki's understanding.
+
+So Daiki tilted his head. Polite speech came out of Oki generally when she was angry or flustered, so what was this?
+
+Because the other party was older? — a thoroughly off-target line of thought.
+
+—The only one there who caught on, roughly, was Nagi.
+
+"Nii-san."
+
+"Huh— ah, yeah. What is it?"
+
+"Idiot."
+
+"...Eh...?"
+
+A sister (of whom he had no memory) turning an exasperated look on him, and a friend (a magus) who had suddenly gone sour.
+
+Even with the experience points of life in another world, Daiki had no idea how to handle it.
+
+No help for it. At times like this, changing the subject is best.
+
+Clumsy apologies often have the opposite effect — that much, at least, Daiki *had* learned in the other world.
+
+Chiefly from one of his companions, the mage girl who'd been with him longest.
+
+A strong-willed girl, the first human Daiki had met in the other world, and also the girl who'd stayed with him to the very end of the journey.
+
+He had no knowledge of the other world's common sense, and his strength made him prone to recklessness; she had scolded, restrained and guided him more times than he could count. It was fair to call her a benefactor.
+
+—I wonder what she's doing now. Well, I imagine she's doing fine...
+
+The memory surfaced and made him nostalgic, but in any case, let's reuse the method from those days.
+
+"Ahem. By the way, I mentioned it in passing earlier, but properly: this is my friend, Narumi Oki-san. And Oki, this is my sister, Nagi Kurosu — you did see each other once in front of the house, right?"
+
+The two looked at Daiki simultaneously.
+
+"I know that already..."
+
+"I heard as much earlier, Daiki-senpai."
+
+"Yeah. Yeah, well, that's true, but, you know. Since we're here, I'd like you to get along."
+
+Nagi had a personality that people liked and presumably had plenty of friends, but she prioritised Daiki far too much.
+
+Oki, meanwhile, fundamentally maintained non-interference and non-engagement with those around her, and had almost no close friends.
+
+That those two might become friends would be lovely — that was Daiki's honest feeling.
+
+There were circumstances he couldn't convey, but separately from that, relationships could still be built.
+
+"...You're right."
+
+That Nagi said so was presumably because she'd read her brother's intent.
+
+He couldn't help a wry smile. Which of them, exactly, was being looked after here?
+
+"It must be some kind of fate, so, er — Narumi-san. If you like, let's exchange contact details."
+
+"Fweh? Ah, um, er... is that all right?"
+
+"Huh? Y-yes. Of course I don't mind... did you not want to?"
+
+"Ah, not at all. I'm sorry, I'm not used to this sort of thing... um, what am I supposed to say. My address, was it...?"
+
+"It isn't, but..."
+
+"R-right... of course. Ah, um, then, I'll hand you my phone..."
+
+"——————"
+
+Nagi looked at Daiki with eyes that said *seriously?*
+
+Seriously.
+
+That girl is serious.
+
+Sorry. She's not used to it.
+
+—Daiki answered with his eyes.
+
+With contacts exchanged, Oki gazed at her own phone with sparkling eyes as if looking at something precious; beside her, Nagi said to Daiki:
+
+"...Nii-san, you always make friends with such unusual people."
+
+"Who else are you thinking of when you say that...?"
+
+"No one. Well, nothing specific; it's just a general impression."
+
+Saying so, Nagi drank her coffee elegantly. It suited her.
+
+From his excessively composed sister, Daiki shifted his gaze to the thoroughly uncomposed magus beside him.
+
+"Hey, hey, Daiki, Daiki."
+
+Oki wore an utterly delighted expression.
+
+She tugged at Daiki's sleeve and thrust her phone screen at him.
+
+"Contacts. We exchanged contacts... isn't that amazing? I think this is quite the achievement. Ehehe."
+
+—Good for you.
+
+Without a scrap of sarcasm, from the bottom of his heart, Daiki thought it.
