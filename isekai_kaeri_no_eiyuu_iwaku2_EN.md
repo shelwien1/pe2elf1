@@ -11303,3 +11303,534 @@ He seems to meet danger over and over, and I can't rest at all. I'll need to hur
 There is no hesitation.
 
 —Because even now, my meaning is only to aid Daiki along his road.
+
+S-02 "Thus Spoke the Girl Possessed by a Vampire"
+-------------------
+
+One day I looked at my childhood friend's face, felt sick, and **brought it back up**.
+
+Brought *what* up — please don't ask indelicate questions like that.
+
+Though if you told me that doing such a thing at the sight of someone's face is far more indelicate, I'd have nothing to say back.
+
+I was startled too.
+
+"...You're Yuika, aren't you?"
+
+That day he — Daiki Kurosu — hadn't come to our meeting place before school, so I lay in wait after classes intending to grumble at him a little and tease him.
+
+Daiki approached with a strangely meaningful look on his face when he saw me.
+
+And as he came closer, a violent revulsion and nausea welled up inside me.
+
+—I had no idea why, but it was obvious that Daiki was the cause.
+
+Which is why I said it, without meaning any harm.
+
+"S-sorry... could you not come closer? I feel... really... sick."
+
+"————————"
+
+Daiki froze, but I had no capacity to spare for his feelings.
+
+I had to get away from there or I was going to put on an outrageous display right in front of him.
+
+That, at least, I wanted to avoid as a maiden, so I ran from the school gate as though fleeing, went back into the building I'd only just left, and dived into a toilet cubicle.
+
+The rest is omitted.
+
+By the time I'd finally calmed down, I thought that the way I'd phrased it had been beyond the pale — but by then it was too late.
+
+Even if I wanted to apologise, I couldn't get close.
+
+At times like this, is having someone to consult a fortune or a misfortune?
+
+*"My, my... he appears to have taken on holiness. How surprising."*
+
+The other me existing inside me offered that observation on the matter.
+
+Well, *the other me* isn't a very accurate expression.
+
+It isn't split personality or dissociation or anything; she is quite simply a different person, not me at all.
+
+"...Holy-ness?"
+
+*"A holy property. The sort of property that religious saints possess, and for some reason it seems to have arisen in him all at once. In another era he'd have been enshrined."*
+
+"What are you—"
+
+*"How nostalgic. There used to be such humans now and then. They were mostly troublesome people, but this is the first time I've seen someone acquire it after birth. Rather surprising. Haah."*
+
+"..."
+
+I have no idea what she's talking about, basically.
+
+But since she has knowledge and memories I don't as a matter of course, it's at least obvious she isn't me.
+
+—Her true nature is, apparently, what's called a vampire.
+
+She says so herself, so probably.
+
+Except she has no physical body. When I looked it up, there's apparently a tradition that vampires can transform into mist — but she isn't mist either.
+
+Or rather, she isn't even mist, somehow.
+
+In the end, something along the lines of a ghost.
+
+She's the ghost of a vampire, and I've been possessed by her since before I can remember.
+
+Though according to her:
+
+*"No, I'm not a ghost, how rude. ...Is it rude, though? Thinking it rude might be rude to ghosts. That was a slip. At any rate, the concept of a ghost amounts to residual thought — a spirit-body, so to speak — whereas I exist as soul alone, so I'm a separate category. The ghosts would be cross with me."*
+
+No, I don't understand at all.
+
+She apparently existed from an age long before I was born (by her own account) and possessed a vast quantity of incomprehensible knowledge.
+
+And by some quirk of fate, that's now inside me.
+
+Anyway, I've been with her since before I can remember.
+
+I naturally have no memory of it, but according to her she's been with me from the very instant I was born.
+
+Thinking about it now:
+
+What exactly do you think you're doing?
+
+Since it had been that way since birth, having her with me was so completely natural to me that as a small child I never even questioned it.
+
+It wasn't that I thought everyone was like that — she'd told me it was only me — but that isn't much comfort.
+
+Though it may be easier on the heart than suddenly being possessed.
+
+*"Well, I do feel apologetic, but there's no choice involved. If I could vanish of my own accord I'd consider it, but I can't, and it isn't as though I deliberately chose Yuika either. That part is, how shall I say, automatic. Rather beyond one's control."*
+
+Anyway, that's how it is: I am Yuika Asatsuma, but she is not Yuika (*me*).
+
+It's odd to call it proof, but she apparently has a proper name (given by who knows whom), and I take my nickname for her from it: I call her «Kuu».
+
+It's a terribly long name, but she only let me hear it once, when I was still very small, so I don't remember it anymore.
+
+I've begged her several times, but Kuu sticks to *"better that you don't learn my name"* and has never once said it again.
+
+One way or another, our acquaintance is exactly as long as my life.
+
+I think of her as my closest friend, close enough to call family.
+
+Not knowing such a person's name is a lonely thing, but on that point Kuu is stubborn.
+
+Well, that's how it is.
+
+The strangeness of sharing a body with someone who isn't me since birth, I largely accept as good fortune.
+
+A friend all my own is a blessed thing, after all.
+
+*"My apologies. That vomit was my fault."*
+
+"Don't say 'vomit' to a high-school girl in her prime."
+
+*"That high-school-girl fluid was my fault."*
+
+"You've gone all the way round and landed somewhere worse."
+
+*"Yuika is such a bother..."*
+
+Kuu's attitude is always the same. Languid, actually indolent, detached from the world.
+
+On the other hand, there's a part of her that tries awfully hard to steep herself in worldly things; for a vampire she's a girl remarkably sensitive to trends.
+
+I'm not really, but thanks to her my knowledge grows, which helps with girl-talk at school. ...Which may mean I lose to her in femininity.
+
+"So, what do you mean it's your fault?"
+
+My childhood friend. Daiki Kurosu.
+
+It's not for me to say, but we've always got on very well.
+
+We weren't dating, but people around us often assumed we were.
+
+I think the fact that neither of us really cared about that was part of why we clicked. I'm a sloppy person, and his sloppiness was comfortable.
+
+And then one day he suddenly ruins my health just by being looked at — what kind of trap is that?
+
+I'm fairly heavy-going myself, but honestly, this isn't comparable to that.
+
+*"Well, look, I'm a vampire, aren't I."*
+
+"Huh? Yes, and?"
+
+*"Vampires are beings of the arcane. Bad things. Ah, in the attribute sense. I'm not a bad vampire. I'm not a bad vampire, but a vampire is a bad thing."*
+
+"Sorry?"
+
+*"It's a rule, a law, a setting... that sort of understanding is fine. Since we're bad things, we're affected by the opposite — good things, meaning the holiness he now possesses. That's the cause of Yuika feeling ill. It's my influence."*
+
+"B-but I'm not a vampire."
+
+*"You aren't, but since we're connected, Yuika's attribute has also become arcane. Oh? Should we be celebrating, rather? Yuika, you've debuted as a woman of dark allure."*
+
+"I became a woman of dark allure without knowing it..."
+
+That's not the point. No, no, this is no time to get giddy over a phrase like that.
+
+*"In short, Daiki-kun is like garlic."*
+
+"There's no way I can tell him that."
+
+Feeling ill at the sight of his face, throwing up, and then on top of that, "you're garlic."
+
+Far too awful. Sorry, Daiki...
+
+"Wasn't there a slightly better way to put it? Holy water, maybe."
+
+*"That's what Yuika just brought up—"*
+
+"I'll hit you."
+
+*"Yourself? If it's only that, I thought garlic would do."*
+
+Kuu said it with a perfectly straight face.
+
+This person is definitely teasing me.
+
+"And anyway, Kuu eats garlic perfectly happily. If anything she loves it. I'm in the camp that wishes she'd be bad with it. The smell and all."
+
+*"Being delicious is the problem. And Yuika eats it quite happily on days off."*
+
+"Being delicious is the problem. And I'm careful with my aftercare."
+
+*"...Well, shall we express it as a cross, then."*
+
+A cross, Kuu said. I roughly understood what she was driving at.
+
+In short, Daiki had come to possess the holy attribute that vampires are weak to.
+
+And conversely, I have a vampire attribute through Kuu's influence.
+
+"Ah, so does that mean Kuu is bad with Daiki too?"
+
+But she answered in the negative.
+
+*"No. I'm a True Ancestor, if you'll believe it... ah, meaning a super-amazing sort of vampire. I don't have those weaknesses. So if I borrow Yuika's body, in that sense it can be avoided."*
+
+Sometimes I lend Kuu my body.
+
+Normally Kuu is asleep somewhere. She doesn't suddenly speak up inside my head, and unless I call her and address her, I'm no different from an ordinary person.
+
+Though even during that time, Kuu apparently shares what I see and hear.
+
+If she chooses to feel it, she can share sensations thoroughly — down to the taste of food and the temperature of what I touch.
+
+Still, even so, she must sometimes want to move on her own.
+
+Not very often, but occasionally I swap positions with Kuu and entrust the right to use my body to her.
+
+Which is to say we have that much of a relationship of trust.
+
+At those times, consciously I see things as usual and have the sense of touch, but I can't move my own body — that sort of state. Similar to dreaming.
+
+"Something about that doesn't sit right..."
+
+*"I do feel apologetic... but while you lean arcane, it isn't as though Yuika has become a vampire. It's presumably a level ordinary humans can't endure."*
+
+"...This is a problem. Why did it come to this in the first place? Did Daiki perform a miracle or something?"
+
+*"That's causation backwards. One doesn't become a saint by performing miracles; one can perform miracles because one is a saint."*
+
+"Ah... well, I suppose so."
+
+*"Though I don't think he's that sort of person, particularly. Just a feeling."*
+
+"Hmm... Can nothing be done about this?"
+
+I asked with a grimace.
+
+I'd done something terrible to Daiki.
+
+But that sensation isn't at the level of *endure it if you try hard*. It's a revulsion like having your stomach wrung directly by an invisible rope.
+
+Losing one of my few male friends like this is... honestly, something I'd hate.
+
+*"Let's see..."*
+
+Kuu thought for a moment.
+
+*"As countermeasures I can think of, first: how about enduring it through sheer willpower?"*
+
+"I was hoping for knowledge rather than that sort of spiritualism..."
+
+*"Immediately would be impossible, but I think you could gradually acclimatise with training. The difficulty is high, though, and training yourself mentally to it would be — putting it mildly — hell."*
+
+"Ugh... what else?"
+
+*"Somehow get him to suppress the holiness, or erase it."*
+
+"Huh, can he?"
+
+*"Well, I've never heard of it, but then this whole situation isn't in my knowledge to begin with. ...That said, he himself doesn't seem aware of it, so it's a thin hope."*
+
+The endure-it plan was beginning to acquire a certain realism.
+
+That's a little — no, quite — depressing.
+
+Still, there isn't an option of leaving things as they are.
+
+At my grimace, Kuu said,
+
+*"Simply, if the method of my disappearing were available, I think the influence could be erased too."*
+
+At those words I had to grimace even harder.
+
+Pouting despite myself, I said,
+
+"Don't casually present me with a choice between two friends."
+
+*"Is that so. That's a nice thing to say."*
+
+"You don't sound very pleased about it..."
+
+*"I'm poor at emotional expression. It isn't that I have no emotions. —Well, either way, methods of destroying me don't seem to exist in this world, so it's impossible anyway."*
+
+"Then don't bring it up in the first place."
+
+Kuu is rather a world-renouncing sort. For all her excitement about worldly trends, much of what she says suggests no attachment to living at all.
+
+Having known her so long, that leaves me uneasy.
+
+Well, vampires are immortal by convention, and being undying, perhaps the will to live is thinner in them than in humans.
+
+...Once I start thinking about that, questions overflow — why is she a ghost if she's immortal, and is that state alive or dead?
+
+In the end, I decided not to worry about details.
+
+*"...Well, there is one last resort."*
+
+At that point Kuu said it, sounding somehow reluctant.
+
+I tilted my head blankly and asked,
+
+"Oh? You'd thought of a method? You certainly left it till late."
+
+*"Honestly it's a measure I can hardly recommend. Enough that I'd rather not have mentioned it."*
+
+"Wh-what do you mean...?"
+
+Kuu, who is fundamentally cooperative with me, taking this attitude.
+
+I had a bad feeling about it.
+
+At my narrowed eyes, she nonetheless said, in her unchanged tone,
+
+*"—The method is for Yuika to learn magecraft and defend herself."*
+
+"M-magecwaft...? Me?"
+
+At the unexpected words my tongue wouldn't work properly.
+
+Kuu let a hint of affirmation show.
+
+*"Yes, magecwaft. Using magecwaft to construct a defence against holiness so you're unaffected even when close. In short, Yuika becomes a magecwafter."*
+
+"Aah, I want to smack you—"
+
+Mocking me. Unforgivable, you swine.
+
+...Not a swine, though.
+
+"No, no. I can't use magecraft like you, Kuu. I'm human."
+
+Certainly Kuu has several abilities beyond human knowledge.
+
+I don't understand the details, but that sort of thing must be special to Kuu.
+
+At my doubt, though, Kuu returned a denial.
+
+*"No. This is presumably different from what you're imagining."*
+
+"...Meaning?"
+
+*"The «magecraft» I mean here doesn't refer to vampiric special abilities; it means magecraft in the sense of something humans wield as a technique."*
+
+"I don't... really follow."
+
+*"It means magecraft genuinely exists. As do the humans who wield it, called magi."*
+
+"I-it does?!"
+
+Even I was startled.
+
+Kuu had never told me anything like that before.
+
+"So magic-users really exist... ah, well, vampires exist too, so."
+
+*"'Magic-user' shifts the nuance again, but never mind. To return to the point, if you wanted to, Yuika could become a magus. Being connected to me, you possess magical energy. You have at least the aptitude."*
+
+"O-oh. This is turning into a fantasy story."
+
+My eyes went round, but Kuu's response to that was heavy.
+
+*"No, it's a story about reality. I'd have preferred fantasy."*
+
+"Kuu...?"
+
+*"I told you I don't recommend it. Knowing magecraft makes you more easily drawn toward it. Recognition possesses gravity. There are magi in this town too. But I can't recommend getting entangled with them. Put simply, it means «there is danger»."*
+
+"R-right. If it got out that I could use magecraft it would be quite something..."
+
+*"If anything my concern is the reverse. Let's see — to use a comparison, a magus is a thug."*
+
+"A thug."
+
+*"And to become a magus is to get the tattoo that marks a thug. And the ones who come and hassle you over that tattoo aren't ordinary people, but fellow magi (*thugs*)."*
+
+"I see..."
+
+*"Well, I'm with you, and if it's only learning enough to protect yourself, honestly I'd say there isn't much danger. In a sense there are dangers precisely because I'm with you, too. And above all, becoming a magus means that your values — the whole fifteen years of life Yuika has built so far — will decisively bend and transform in a new direction."*
+
+Kuu was presumably saying this isn't something to reach for lightly.
+
+I understood that. I didn't want to treat her concern for me as nothing.
+
+"All right. I'll think about it properly."
+
+*"Yes. If Yuika ultimately wishes it, I'll instruct you."*
+
+"...Hm? But I just thought of something. If you can use magecraft, doesn't that mean it'd be fine if you cast it on me? Without my having to learn it."
+
+*"Speaking of whether it's possible, it is. But that policy is even less advisable than your learning magecraft. Or rather, bluntly, I don't want to do it."*
+
+What did that mean?
+
+At my tilted head, Kuu said,
+
+*"First, the magecraft I use differs from a human's. The effect is too large. Though that's a minor problem, comparatively. Second — and this is the greatest problem — being subject to my magecraft means accepting that much more influence from me, a vampire."*
+
+"...Er."
+
+*"It puts the cart before the horse, Yuika. Your objective is to block the influence of the holiness Daiki Kurosu emits, and the root cause of your being affected by it is me. Increasing the influence you take from me would be counterproductive. It would serve as a stopgap, but in the long run it would worsen things."*
+
+"I see. I think I sort of understand."
+
+I have, through Kuu's influence, become a woman of dark allure (*oh, come on*).
+
+And taking Kuu's magecraft on top of that would only polish that darkness.
+
+A sinful woman. ...Kuu, not me.
+
+*"Well, for a while it would be best to safely avoid getting close to him."*
+
+Kuu said.
+
+Really I want to go and apologise right away, but I suppose there's no other way.
+
+"I suppose there's nothing for it..."
+
+I lamented, but Kuu seemed to be thinking about something else.
+
+*"Even without the health issue, I'd want to watch. His having suddenly sprouted holiness is an abnormal situation in itself. For the sake of your safety too, I'd like to keep distance and observe how it progresses."*
+
+"Does that mean... Daiki is in danger?"
+
+*"I wouldn't say that. If anything it's the result of something already concluded."*
+
+"...Meaning it's after something happened to Daiki."
+
+*"Put simply."*
+
+"I see. Well, if he's safe I'm relieved. But Kuu, if Daiki looks like he's in danger, would you help him? You can use my body."
+
+When I asked my friend inside my heart, Kuu let out a breath.
+
+*"Haah... I've no obligation to him whatsoever, you know. Well, as Yuika's future spouse candidate, I'm not unwilling to be accommodating."*
+
+"'Spouse.' Are you teasing me again? We're not even dating."
+
+*"For that, you spend a great deal of time together. Haunting the room of a man you aren't dating as a matter of course strikes me as the more unwholesome thing."*
+
+"I've been called unwholesome by a vampire... I only go over to read books occasionally."
+
+*"The frequency isn't high, admittedly."*
+
+"He's easy to be around, Daiki. No need for unnecessary conversation, our tastes match, no need to be careful. And he's a childhood friend."
+
+*"...Do you like him, perhaps?"*
+
+"Well, I don't dislike him. But I don't really understand romantic feelings."
+
+*"Is that so."*
+
+Whether she was satisfied or not, that's what Kuu said.
+
+Honestly, I wasn't putting on a brave face or hiding embarrassment. That's genuinely how I feel.
+
+I might have ended up choosing to date him eventually, but at least right now I'm not thinking about it.
+
+That's probably the same for Daiki.
+
+Or rather, by now it's well past being a question of that.
+
+"It's lonely, but I'll put up with it for a while. ...What do I do if he's come to hate me in the meantime?"
+
+*"So you'd hate that."*
+
+"Obviously I'd hate being hated. Well, I think it'll be fine."
+
+*"Would it? You did say something rather awful just now."*
+
+"Mm, that's true. But at the time even speaking was hard. I'll apologise to Daiki someday, and if I apologise Daiki will forgive me."
+
+*"You're surprisingly confident, Yuika..."*
+
+"Huh, but in the reverse situation I'd forgive him. ...Is that strange?"
+
+*"......No."*
+
+Something about the pause in her reply was odd, but pressing it would be endless, so I let it go.
+
+Whether to study magecraft I put on hold for now.
+
+For a while I'd give up on the time I spend with Daiki.
+
+I came out of the toilet cubicle and decided to go home.
+
+—And that was the next day.
+
+"There's suddenly a little sister sprouting in the Kurosu household!"
+
+At some point the number of people living in the Kurosu house had increased by one. What was that?
+
+"And the influence has got stronger... this is definitely that fake sister's fault."
+
+*"...He seems to be accepting her, though."*
+
+"That's the problem! That, that feeling — Daiki definitely knows she isn't his sister, right? He knows and yet he's living with her, with a woman he doesn't know. ...What is that."
+
+*"...Yuika?"*
+
+"It's... irritating, somehow."
+
+To my own mild surprise, I felt as if a friend had been taken from me, and I didn't like it.
+
+But my symptoms didn't improve at all; if anything they got worse.
+
+Far from talking to Daiki, even getting close is difficult. As long as he isn't right in front of me, I'm mostly fine.
+
+Kuu said this to me:
+
+*"This is a guess. But something governed by logic different from this world's is attached to her."*
+
+"Different from this world..."
+
+*"It's intuition. But he too has a slightly different air from before, doesn't he?"*
+
+"Well... that's true. I do feel a bit of distance somehow. I'd assumed it was because of the awful thing I said, but... that's not it, is it?"
+
+*"Probably not."*
+
+"Mrgh... it's become hard to approach him. He seems busy, too... how to put it, it's as though he's forgotten things he used to be able to do..."
+
+A touch of jealousy, and more than that guilt, and consideration, and wariness.
+
+Swaying between all those various feelings, I ended up at a distance from Daiki both physically and mentally.
+
+—And before I knew it, a whole year had passed without my speaking to him.
