@@ -10946,3 +10946,360 @@ He wanted that, honestly.
 A story in which a former hero back from another world and a small witch living in the modern day become friends—
 
 End of Chapter One.
+
+S-01 "Thus Spoke the Holy Sword Come from Another World"
+-------------------
+
+I am a sword. The strongest sword, which cuts the arcane, cuts kings, and rends every enemy of my master.
+
+A holy sword answering the planet's request, guided by a god, and forged by the hands of spirits.
+
+From my beginning I waited a long, long time for the one who would become my master.
+
+I waited, waited, waited endlessly.
+
+I went on waiting through very nearly uncountable revolutions of the stars.
+
+There were, in that time, several who became provisional masters.
+
+Each time, I was drawn from the stone pedestal that was my place of sleep by the hand of a capable human warrior, and wielded to become that person's strength.
+
+But none of them was my true master.
+
+However long I waited, my master never appeared.
+
+A pseudo-personality produced as the holy sword's control personality, to discern a master and become his strength — constructed by the hands of spirits, a spirit-wrought spirit, so to speak. That is what I am.
+
+So although my main body is certainly a sword, strictly speaking I myself am not the sword.
+
+Though since the sword and I are fundamentally inseparable, it amounts to much the same thing.
+
+For a long age I went on sleeping.
+
+At some point I even forgot that I was waiting for a master.
+
+I had sunk into an indolent despair, thinking that such an existence probably wasn't anywhere in this world at all.
+
+—To state the conclusion: that supposition was by no means wrong.
+
+Yes. My master genuinely was not in **this world**.
+
+Because the master who pulled me out of that long resignation was a young man who appeared from **another world**, different from here.
+
+At last we had met.
+
+At last I had been able to encounter him.
+
+That joy is not something I could possibly express in words.
+
+Across an age of stars, I had finally found the meaning of my own birth.
+
+In the instant I was drawn — no, immediately after he came to this world, I had already noticed his existence.
+
+The functions within me were screaming that one worthy of being entrusted with them had appeared.
+
+In fact, compared to the wielders before him, he was overwhelmingly weak.
+
+He alone could draw out all of my functions — previous bearers had managed only the faintest fragment — and yet even so he was overwhelmingly weak.
+
+After all, far from having wielded a sword, he'd never once even held one. At first I was startled, wondering whether the world he lived in was so safe that one could get by without carrying a sword.
+
+But it didn't matter.
+
+Supporting him was my role, and being able to do so was my happiness.
+
+Because little by little, I could draw out my true worth and support him as he grew stronger.
+
+And on the other hand, he taught me a great many things as well.
+
+He told me all sorts of things.
+
+How it felt to be suddenly thrown into another world where he couldn't even understand the language.
+
+What he thought of the companions who lent their strength to him, who had nothing to rely on.
+
+The happiness of learning that he wasn't alone.
+
+The regret he held toward those to whom he couldn't extend a hand.
+
+The terror of facing a monster for the first time.
+
+That at some point he had stopped feeling anything about hands stained with blood that could never be washed off—
+
+He was a boy who found meaning in putting all of it into words.
+
+Because we were connected by the sword's contract, our thoughts got through to each other without being spoken.
+
+Of course, outside combat, I cut the link when it wasn't needed — but even so, it sometimes connected unexpectedly.
+
+So I knew.
+
+I, who touched his heart directly, surely know him better than anyone.
+
+That he really wanted to run away.
+
+That he cursed fate, asking why he had to go through such a thing.
+
+His resentment at being exposed to terrible betrayals while being praised as the Hero of the holy sword.
+
+His confusion at being unable to declare those in a different position from himself to be simply evil.
+
+And that, even so, he resolved to protect with his own strength the hope he found in the eyes of the people living in that world.
+
+Yes. I learned from him.
+
+He scooped me up out of the long slumber, out of the ennui in which I'd been frozen.
+
+Intending to help him, I had, without knowing it, been the one saved.
+
+"—It's thanks to you, Tia."
+
+He said it. The sword's name was the **Star Sword** Finistia.
+
+"Thanks to you, even someone like me can fight. So — thank you, Tia."
+
+In an old language no one uses anymore, I was named «That Which Cuts Off the Storm» (*Finistia*) — the symbol of star-salvation that halts calamity — and he called me Tia. He thanked me.
+
+Nonsense. He was the one who gave me the meaning of living, the value of existence.
+
+When I answered so, he shrugged lightly and laughed.
+
+"Was I? Being told that is embarrassing. But Tia, at first you only ever spoke flatly, like some kind of machine. Now you've got a lot more feeling in you. So I thought I'd better thank you while I can. We're partners, right?"
+
+I didn't quite understand what *like a machine* meant.
+
+Even so, though I have no body, being called a partner made me happy.
+
+Yes — it made me happy.
+
+Whether I truly have emotions like a human's, I don't know.
+
+Even if I recognise it that way, it may have been nothing more than the expression of a function — an imitation performed by a pseudo-personality.
+
+But that was fine.
+
+All of me exists for his sake.
+
+If it's for his sake, anything is fine.
+
+And so.
+
+**And so I came to wish for something.**
+
+Forgetting my role, an impudent and unfitting desire. I, who am in the end only a fragment of a sword's functions, had mistakenly come to hold one.
+
+Without imagining for a moment that it would be betrayed.
+
+Because my role was to have the holy sword's compatible one save the world.
+
+To have him strike down the Demon Lord — that far, and no further.
+
+Once that was done, the contract between him and me would likewise be fulfilled.
+
+But I hadn't considered it.
+
+I had assumed that even in a world at peace after the Demon Lord's defeat, I could be with him.
+
+—Even though that was no longer my role at all.
+
+And indeed he struck down the Demon Lord and completely carried out that right.
+
+He used it all up.
+
+At that moment, he had become an existence unnecessary to the world — to the planet.
+
+He who should have become a hero was regarded, for the world that followed, as of no value at all — worse, as an obstruction.
+
+At the very least, this planet handed down that judgement.
+
+What is unnecessary is eliminated.
+
+The authority-holder of world-salvation, necessary in a world where a Demon Lord was unwanted, is an unnecessary heretic in a world without a Demon Lord.
+
+And the planet's will never permits one who might erode it.
+
+Summoned one-sidedly with no choice, and fighting even so for a planet that wasn't even his home, the Hero received banishment as the reward for his achievement.
+
+What has been used up and is no longer needed is returned to its original place. As though it were obvious.
+
+It was far too cruel — the basest of betrayals.
+
+That's wrong.
+
+That sort of thing is a lie.
+
+Such a thing should never be permitted.
+
+Because he had decided to go on living in that world.
+
+I knew that. There were companions who intended to share that future with him.
+
+So the moment I realised it, I spent every authority granted to me and pulled desperately, refusing to let go of my link with him.
+
+The master who called me partner — I couldn't betray him.
+
+But.
+
+However far I went, I was a tool incorporated into the planet's will and reflecting it.
+
+I cannot defy the decision of the planet, my origin. That function was not given to me.
+
+I could not keep him in that world. All I could do was somehow follow along.
+
+As a result I leapt with him into his world, but that is an act equivalent to rebellion against the planet.
+
+My functions were restricted, and above all, in his world I could not even maintain my own existence. Left as I was, I would vanish.
+
+For me, nearly robbed of my master, to secure my existence, I needed a body (*vessel*) to serve as a vehicle adapted to this world.
+
+And one close in existence to him, with compatibility with me.
+
+But no such thing existed.
+
+It didn't. It didn't, and yet I couldn't give up either.
+
+Any world would do. Anyone would do.
+
+Somewhere there must surely be someone who can grant my wish.
+
+There had to be.
+
+Otherwise I couldn't even say goodbye to him—
+
+Spending all my remaining functions, I traced my link with him and searched for a vehicle that would accept me.
+
+—And I found exactly one who held a possibility.
+
+Yes: a **possibility**.
+
+Expressed in this world's language, an existence of hypothesis (*if*).
+
+A sword function that carves open a horizon of possibility that amounts to nothing, a virtual personality with no body — me — and the thread of the link I'd formed with him.
+
+With all of those aligned, it was a miracle I could only just reach.
+
+Nagi Kurosu.
+
+The real younger sister of my master Daiki Kurosu — who, however, **cannot exist in this world**. A virtual family member.
+
+The crystallisation of an *if*: what would have happened had she been given life in this world and grown up as his sister.
+
+The king of the blood-drinking species described Nagi as having been brought from a parallel world, but strictly that is wrong.
+
+I have no function for interfering with parallel possibilities, so such a thing is impossible to begin with.
+
+Because she is a soul produced not from a parallel possibility (*an if that could have been*) but, so to speak, from a present impossibility (*an if that cannot be*).
+
+Nagi Kurosu was unable to be born.
+
+A life that absolutely cannot be — and precisely for that reason it was carved into the world's memory as something impossible.
+
+Or perhaps a faint echo of the soul of the Nagi who died before birth remained — either way, just as it is impossible for me to exist in this world, the personality called Nagi is strictly a virtual experiment (*simulation*) of an impossible possibility: nothing more than a pseudo-reconstruction of a personality answering **what would have happened had a human called Nagi Kurosu been born in this world**.
+
+By combining that with the energy that is me, I made it hold together as a single soul.
+
+In some possibility, Nagi Kurosu may exist.
+
+But that Nagi Kurosu is not necessarily the same existence as the one who is here.
+
+She is **a soul that came into being the instant I descended into this world**, **under the hypothesis** that she is a sister who has grown up alongside Daiki.
+
+She said that if she could spend time with her family, with her brother, anything was fine.
+
+Why she fixates on her brother among her family — on Daiki rather than her father or mother — I don't know either. She may be under my influence, but she is a miraculous existence to begin with.
+
+Just as I cannot exist in this world without her, Nagi likewise cannot exist without me; so there was no objection to exchanging a contract, and there had been no choice from the start.
+
+And so an impossible human with a time limit came to have been there from the beginning, along with me.
+
+A fictional, virtual soul permitted only the span until I take Daiki home.
+
+But. Even so, my master is Daiki.
+
+Producing a human one knows will die is something every living thing does.
+
+I don't choose the option.
+
+I couldn't choose, and even if I could have, nothing would change.
+
+If it's necessary, I would do the same thing any number of times. Because I know that Daiki has already chosen my world.
+
+Everything I can do toward that, I will do.
+
+Nagi says.
+
+That it's all right even so.
+
+"Even if it's brief, this time is a reward I should never have had. If I can spend it with nii-san, with Daiki-senpai, I don't mind."
+
+"...'Senpai,' though."
+
+"Apparently it's common sense to call someone born earlier that. And calling him nii-san is lovely, but then I can't call him by name, can I. It's a little embarrassing, too. Even if we're supposed to have lived together, I don't have the felt sense of it."
+
+"Is that the only reason?"
+
+"...When I disappear one day, nii-san might remember me, mightn't he? In that case I don't want to leave a deep wound. If a sister vanished, he'd surely grieve..."
+
+She is aware that she is an impossible thing.
+
+Even with the knowledge called common sense drawn out of the world, even with virtual memories of a past having been generated in those around her, she does not possess the felt experience of having lived until now.
+
+She is very much like me.
+
+The existence called Nagi has emotions that are themselves virtual.
+
+Because her existence originates under the hypothesis that **the sister who couldn't be born must surely feel sad**.
+
+Even though in truth no such subject exists.
+
+—And yet I resolved to use her.
+
+All to take Daiki back. If I can take him and return to the old world, everything else is trivial.
+
+That was the only thing I could do.
+
+Above all: this world is considerably **strange** compared with what I heard from Daiki.
+
+I cannot force the present Daiki to come back with me. Daiki has to hold a strong will of his own to return over there.
+
+My existence connects directly to Nagi's true nature. I couldn't tell Daiki. It would be a problem if his will to return wavered because of it.
+
+So I decided to devise a plan.
+
+At the stage where the *if* called Nagi was accepted into the world's interior, this world was rewritten to presuppose a human called Nagi Kurosu from the start. But that alteration did not take effect on Daiki, who has a link with me.
+
+—So I decided to turn that to my advantage.
+
+I thought to use the concept of parallel worlds, which I'd just learned about.
+
+The idea itself seems common in this world, so Daiki surely knows it too.
+
+It would be a problem if, having come home, he decided this place would do.
+
+No. If Daiki genuinely wished it I wouldn't mind, but at the very least Daiki would never choose this side without settling what he left behind in that world.
+
+In that case.
+
+I devised a steering, through Nagi's existence, to make him think that this world is not Daiki's home.
+
+Knowing that, he will eventually choose to leave this world. I knew better than anyone that this is his character. He has no other way.
+
+The one thing I didn't anticipate was that the concept of magecraft existed in this world.
+
+It seems quite different from my world, and Daiki himself had said there was none here; I hadn't considered that he simply didn't know.
+
+As a result, Daiki was dragged into an incident, as a matter of course.
+
+In my present state, separated from Nagi in body, I can be almost no help to Daiki. Raising his natural healing slightly is about the limit.
+
+And when Nagi ended up being abducted once by a magus of this world, I wondered what to do — but for some reason she was left without even a guard, so no problem arose.
+
+This place is dangerous.
+
+Daiki was born into an outrageous world where even his childhood friend is a monster.
+
+He seems to meet danger over and over, and I can't rest at all. I'll need to hurry as much as possible.
+
+There is no hesitation.
+
+—Because even now, my meaning is only to aid Daiki along his road.
