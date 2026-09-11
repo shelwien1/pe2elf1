@@ -1,33 +1,35 @@
 
-static const byte TC_sgn_a_cls[9+1]={ 0,1,1,1,2,2,3,4,4,5 };
-static const byte TC_sgn_a_p0s[7+1]={ 0,0,1,2,3,4,5,6 };
-static const byte TC_sgn_a_mg[9+1]={ 0,0,1,1,2,2,3,3,4,4 };
-static const byte TC_sgn_a_pq[32+1]={ 0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4 };
+static const byte TC_sgn_a_cls[9+1]={ 0,0,1,1,1,1,2,3,4,4 };
+static const byte TC_sgn_a_p0s[7+1]={ 0,1,1,1,2,2,2,3 };
+static const byte TC_sgn_a_mg[9+1]={ 0,0,1,2,3,3,4,4,5,5 };
+static const byte TC_sgn_a_pq[32+1]={ 0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,3,4,4,4,4,4,4,4,4,4,4,4 };
 static const byte TC_sgn_a_sq[32+1]={ 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8 };
-static const byte TC_sgn_a_ps[13+1]={ 0,1,1,2,2,3,4,4,5,6,6,7,7,8 };
-static const byte TC_sgn_a_x1s[13+1]={ 0,0,0,0,1,2,3,4,5,6,7,7,7,7 };
+static const byte TC_sgn_a_ps[13+1]={ 0,0,0,0,0,1,2,2,3,4,4,5,5,5 };
+static const byte TC_sgn_a_x1s[13+1]={ 0,1,1,1,2,2,3,3,3,4,5,5,6,7 };
 
-static const byte TC_sgn_b_p0s[7+1]={ 0,1,2,3,4,5,6,7 };
-static const byte TC_sgn_b_q1s[7+1]={ 0,1,1,2,2,3,3,4 };
-static const byte TC_sgn_b_t1s[7+1]={ 0,0,0,1,2,2,3,3 };
-static const byte TC_sgn_b_q2s[7+1]={ 0,0,1,1,1,1,2,3 };
-static const byte TC_sgn_b_band[5+1]={ 0,1,1,1,2,3 };
-static const byte TC_sgn_b_pq[32+1]={ 0,0,1,1,1,1,1,1,2,2,3,3,3,3,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5 };
+static const byte TC_sgn_b_cls[15+1]={ 0,0,0,1,2,2,3,4,4,5,5,6,6,6,6,7 };
+static const byte TC_sgn_b_p0s[7+1]={ 0,0,0,1,2,3,4,4 };
+static const byte TC_sgn_b_t1s[7+1]={ 0,0,0,1,2,3,4,4 };
 static const byte TC_sgn_b_sq[32+1]={ 0,0,0,1,1,1,1,2,2,2,2,2,3,3,4,4,4,4,4,5,6,6,6,7,8,8,9,9,9,9,9,10,10 };
+static const byte TC_sgn_b_chn[7+1]={ 0,1,1,2,3,3,4,4 };
 static const byte TC_sgn_b_x1s[13+1]={ 0,0,0,0,0,1,2,3,4,5,5,5,5,5 };
 
+static const byte TC_sgn_c_sq[32+1]={ 0,0,0,0,0,0,1,2,2,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
 
+static const byte TC_sgn_d_p0s[7+1]={ 0,0,0,1,1,2,2,3 };
 static const byte TC_sgn_d_ps[13+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3 };
 
 static const byte TC_sgn_f_p0s[7+1]={ 0,1,2,3,3,4,5,6 };
-static const byte TC_sgn_f_sq[32+1]={ 0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8 };
+static const byte TC_sgn_f_pq[32+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,3,4,5,6,7,8,9,10,10,10,10,10,10,10,10,10,10,10 };
+static const byte TC_sgn_f_sq[32+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,3,3,3,3,3,3,4,4,4,4,5,5,5,6,6,6 };
 
 
-static const byte TC_sgn_m_x1s[13+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13 };
+static const byte TC_sgn_m_pq[32+1]={ 0,0,0,0,0,0,0,0,0,0,0,0,1,2,2,3,4,5,6,6,6,7,7,7,7,7,7,7,7,7,7,7,7 };
+static const byte TC_sgn_m_sq[32+1]={ 0,0,0,0,0,1,2,2,2,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,5,6,6,7,7,7,7,7 };
+static const byte TC_sgn_m_x1s[13+1]={ 0,1,1,1,1,2,3,4,5,6,6,7,7,8 };
 
 
-static const byte TC_sgn_s_p0s[7+1]={ 0,0,1,1,2,2,3,3 };
-static const byte TC_sgn_s_pq[32+1]={ 0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4 };
+static const byte TC_sgn_s_p0s[7+1]={ 0,0,0,0,1,2,3,4 };
 static const byte TC_sgn_s_ps[13+1]={ 0,0,0,0,0,1,2,2,2,2,2,3,3,3 };
 static const byte TC_sgn_s_chn[7+1]={ 0,1,1,2,2,3,3,4 };
 
@@ -36,7 +38,7 @@ static const byte TC_sgn_s_chn[7+1]={ 0,1,1,2,2,3,3,4 };
 static const int TC_sgn_rA = (254+0) * (1);
 static const int TC_sgn_rB = (255+0) * (1);
 static const int TC_sgn_rC = (10+0) * (1);
-static const int TC_sgn_rD = (11+0) * (1);
+static const int TC_sgn_rD = (13+0) * (1);
 static const int TC_sgn_rS1 = (7+0) * (1);
 static const int TC_sgn_rS2 = (7+0) * (1);
 static const int TC_sgn_lr = (18+0) * (1);
@@ -50,15 +52,15 @@ static const int TC_sgn_qf = (62+3) * (1);
 static const int TC_sgn_mb = (16+0) * (1);
 
 
-static const long long TC_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 6), 7), 1), 5), 1), 1), 2), 5), 9), 9), 2), 1), 1), 1), 8); // 8164800
-static const long long TC_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 1), 8), 5), 1), 4), 4), 4), 6), 11), 1), 1), 1), 1), 1), 6); // 6082560
-static const long long TC_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 3), 2), 1), 2), 1), 1), 1), 1), 1), 1), 1), 1), 1); // 24
-static const long long TC_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 3), 2), 1), 2), 1), 1), 3), 4), 2), 1), 1), 1), 1); // 288
-static const long long TC_sgn_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 7), 3), 2), 9), 2), 2), 2), 2), 1), 1); // 36288
+static const long long TC_sgn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 5), 4), 1), 6), 1), 1), 3), 5), 9), 6), 2), 1), 1), 1), 8); // 6220800
+static const long long TC_sgn_b_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 8), 5), 1), 2), 5), 3), 3), 2), 11), 1), 5), 1), 1), 1), 6); // 14256000
+static const long long TC_sgn_c_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 3), 1), 1), 1), 1), 1), 5), 1), 2), 1), 1), 1), 1); // 120
+static const long long TC_sgn_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 1), 4), 1), 1), 2), 1), 1), 2), 4), 2), 3), 1), 1), 1); // 384
+static const long long TC_sgn_f_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 7), 3), 11), 7), 3), 2), 2), 2), 1), 1); // 232848
 static const long long TC_sgn_g_Volume = 1; // 1
-static const long long TC_sgn_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 1), 2), 3), 3), 1), 2), 1), 1), 1), 14); // 1512
+static const long long TC_sgn_m_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3), 2), 8), 8), 1), 2), 1), 1), 1), 9); // 41472
 static const long long TC_sgn_n_Volume = 1; // 1
-static const long long TC_sgn_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 4), 1), 5), 3), 4), 5), 2), 1), 1), 1); // 4800
+static const long long TC_sgn_s_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 5), 1), 3), 2), 4), 5), 2), 1), 1), 1); // 2400
 static const long long TC_sgn_t_Volume = 1; // 1
 
 struct TC_sgn_T { 

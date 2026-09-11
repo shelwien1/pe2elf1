@@ -26,18 +26,18 @@ void tc_make_hdr( int tag, int p1, int p2, int pos, int p1r, tcx & X ) {
   (void) tag;  (void) p1;  (void) p2;  (void) pos;  (void) p1r;
 
   a = 0;
-  a = a*62 + TC_hdr_a_tag[__min(64,__max(0,tag-(1-1)))];
+  a = a*17 + TC_hdr_a_tag[__min(64,__max(0,tag-(1-1)))];
   a = a*5 + TC_hdr_a_p1[__min(15,__max(0,p1-(1-1)))];
   a = a*8 + TC_hdr_a_p2[__min(7,__max(0,p2-(1-1)))];
   a = a*3 + ((pos>1+(1-1))+(pos>2+(1-1)));
-  a = (a<<4) + (((p1r)&15)); // 00001111
+  a = (a<<4) + (((((p1r)>>4)&1)<<3) + ((p1r)&7)); // 00010111
 
   b = 0;
   b = b*3 + ((p1>0+(1-1))+(p1>2+(1-1)));
   b = (b<<5) + (((((p1r)>>6)&1)<<4) + (((p1r)>>1)&15)); // 01011110
 
   c = 0;
-  c = c*65 + TC_hdr_c_tag[__min(64,__max(0,tag-(1-1)))];
+  c = c*29 + TC_hdr_c_tag[__min(64,__max(0,tag-(1-1)))];
 
   d = 0;
   d = d*65 + TC_hdr_d_tag[__min(64,__max(0,tag-(1-1)))];
@@ -46,13 +46,13 @@ void tc_make_hdr( int tag, int p1, int p2, int pos, int p1r, tcx & X ) {
   s = s*65 + TC_hdr_s_tag[__min(64,__max(0,tag-(1-1)))];
 
   f = 0;
-  f = f*65 + TC_hdr_f_tag[__min(64,__max(0,tag-(1-1)))];
+  f = f*8 + TC_hdr_f_tag[__min(64,__max(0,tag-(1-1)))];
 
   m = 0;
-  m = m*65 + TC_hdr_m_tag[__min(64,__max(0,tag-(1-1)))];
+  m = m*6 + TC_hdr_m_tag[__min(64,__max(0,tag-(1-1)))];
 
   t = 0;
-  t = t*65 + TC_hdr_t_tag[__min(64,__max(0,tag-(1-1)))];
+  t = t*6 + TC_hdr_t_tag[__min(64,__max(0,tag-(1-1)))];
   t = (t<<6) + (((((p1r)>>5)&3)<<4) + ((p1r)&15)); // 01101111
 
   n = 0;
@@ -60,9 +60,9 @@ void tc_make_hdr( int tag, int p1, int p2, int pos, int p1r, tcx & X ) {
   n = (n<<6) + (((((p1r)>>5)&3)<<4) + ((p1r)&15)); // 01101111
 
   g = 0;
-  g = g*8 + TC_hdr_g_p2[__min(7,__max(0,p2-(1-1)))];
-  g = g*2 + ((pos>0+(1-1)));
-  g = (g<<8) + (((p1r)&255)); // 11111111
+  g = g*5 + TC_hdr_g_p2[__min(7,__max(0,p2-(1-1)))];
+  g = g*3 + ((pos>0+(1-1))+(pos>1+(1-1)));
+  g = (g<<7) + ((((p1r)>>1)&127)); // 11111110
   X.a = a;  X.b = b;  X.c = c;  X.d = d;  X.s = s;  X.f = f;  X.m = m;  X.t = t;
   X.n = n;  X.g = g;
 }

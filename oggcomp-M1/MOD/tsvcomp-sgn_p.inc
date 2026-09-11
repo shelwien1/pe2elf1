@@ -38,71 +38,77 @@ void tc_make_sgn( const tc_dv & D, tcx & X ) {
   (void) x1;   (void) x1s;
 
   a = 0;
-  a = a*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
-  a = a*6 + TC_sgn_a_cls[__min(9,__max(0,cls-(1-1)))];
-  a = a*7 + TC_sgn_a_p0s[__min(7,__max(0,p0s-(-3-1)))];
-  a = a*5 + TC_sgn_a_mg[__min(9,__max(0,mg-(1-1)))];
-  a = a*2 + ((band>4+(1-1)));
+  a = a*2 + ((pass>0+(1-1)));
+  a = a*2 + ((vpos>0+(1-1)));
+  a = a*5 + TC_sgn_a_cls[__min(9,__max(0,cls-(1-1)))];
+  a = a*4 + TC_sgn_a_p0s[__min(7,__max(0,p0s-(-3-1)))];
+  a = a*6 + TC_sgn_a_mg[__min(9,__max(0,mg-(1-1)))];
+  a = a*3 + ((band>0+(1-1))+(band>4+(1-1)));
   a = a*5 + TC_sgn_a_pq[__min(32,__max(0,pq-(1-1)))];
   a = a*9 + TC_sgn_a_sq[__min(32,__max(0,sq-(1-1)))];
-  a = a*9 + TC_sgn_a_ps[__min(13,__max(0,ps-(-6-1)))];
+  a = a*6 + TC_sgn_a_ps[__min(13,__max(0,ps-(-6-1)))];
   a = a*2 + ((chn>0+(1-1)));
   a = a*8 + TC_sgn_a_x1s[__min(13,__max(0,x1s-(-6-1)))];
 
   b = 0;
   b = b*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
   b = b*2 + ((vpos>0+(1-1)));
-  b = b*8 + TC_sgn_b_p0s[__min(7,__max(0,p0s-(-3-1)))];
-  b = b*5 + TC_sgn_b_q1s[__min(7,__max(0,q1s-(-3-1)))];
-  b = b*4 + TC_sgn_b_t1s[__min(7,__max(0,t1s-(-3-1)))];
-  b = b*4 + TC_sgn_b_q2s[__min(7,__max(0,q2s-(-3-1)))];
-  b = b*4 + TC_sgn_b_band[__min(5,__max(0,band-(1-1)))];
-  b = b*6 + TC_sgn_b_pq[__min(32,__max(0,pq-(1-1)))];
+  b = b*8 + TC_sgn_b_cls[__min(15,__max(0,cls-(1-1)))];
+  b = b*5 + TC_sgn_b_p0s[__min(7,__max(0,p0s-(-3-1)))];
+  b = b*2 + ((mg>2+(1-1)));
+  b = b*5 + TC_sgn_b_t1s[__min(7,__max(0,t1s-(-3-1)))];
+  b = b*3 + ((q2s>3+(-3-1))+(q2s>4+(-3-1)));
+  b = b*3 + ((band>2+(1-1))+(band>3+(1-1)));
+  b = b*2 + ((pq>10+(1-1)));
   b = b*11 + TC_sgn_b_sq[__min(32,__max(0,sq-(1-1)))];
+  b = b*5 + TC_sgn_b_chn[__min(7,__max(0,chn-(1-1)))];
   b = b*6 + TC_sgn_b_x1s[__min(13,__max(0,x1s-(-6-1)))];
 
   c = 0;
-  c = c*2 + ((pass>1+(1-1)));
-  c = c*3 + ((p0s>0+(-3-1))+(p0s>6+(-3-1)));
-  c = c*2 + ((q1s>4+(-3-1)));
-  c = c*2 + ((q2s>4+(-3-1)));
+  c = c*2 + ((pass>0+(1-1)));
+  c = c*2 + ((vpos>0+(1-1)));
+  c = c*3 + ((p0s>5+(-3-1))+(p0s>6+(-3-1)));
+  c = c*5 + TC_sgn_c_sq[__min(32,__max(0,sq-(1-1)))];
+  c = c*2 + ((chn>0+(1-1)));
 
   d = 0;
-  d = d*3 + ((p0s>3+(-3-1))+(p0s>4+(-3-1)));
-  d = d*2 + ((q1s>3+(-3-1)));
+  d = d*4 + TC_sgn_d_p0s[__min(7,__max(0,p0s-(-3-1)))];
   d = d*2 + ((q2s>3+(-3-1)));
-  d = d*3 + ((sq>8+(1-1))+(sq>24+(1-1)));
+  d = d*2 + ((sq>5+(1-1)));
   d = d*4 + TC_sgn_d_ps[__min(13,__max(0,ps-(-6-1)))];
   d = d*2 + ((chn>0+(1-1)));
+  d = d*3 + ((crun>5+(1-1))+(crun>7+(1-1)));
 
   s = 0;
   s = s*2 + ((pass>1+(1-1)));
-  s = s*4 + TC_sgn_s_p0s[__min(7,__max(0,p0s-(-3-1)))];
-  s = s*5 + TC_sgn_s_pq[__min(32,__max(0,pq-(1-1)))];
-  s = s*3 + ((sq>8+(1-1))+(sq>24+(1-1)));
+  s = s*5 + TC_sgn_s_p0s[__min(7,__max(0,p0s-(-3-1)))];
+  s = s*3 + ((pq>21+(1-1))+(pq>28+(1-1)));
+  s = s*2 + ((sq>11+(1-1)));
   s = s*4 + TC_sgn_s_ps[__min(13,__max(0,ps-(-6-1)))];
   s = s*5 + TC_sgn_s_chn[__min(7,__max(0,chn-(1-1)))];
-  s = s*2 + ((crun>5+(1-1)));
+  s = s*2 + ((crun>4+(1-1)));
 
   f = 0;
   f = f*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
   f = f*2 + ((vpos>0+(1-1)));
   f = f*7 + TC_sgn_f_p0s[__min(7,__max(0,p0s-(-3-1)))];
-  f = f*3 + ((mg>0+(1-1))+(mg>2+(1-1)));
-  f = f*2 + ((pq>16+(1-1)));
-  f = f*9 + TC_sgn_f_sq[__min(32,__max(0,sq-(1-1)))];
-  f = f*2 + ((ps>6+(-6-1)));
+  f = f*3 + ((mg>1+(1-1))+(mg>2+(1-1)));
+  f = f*11 + TC_sgn_f_pq[__min(32,__max(0,pq-(1-1)))];
+  f = f*7 + TC_sgn_f_sq[__min(32,__max(0,sq-(1-1)))];
+  f = f*3 + ((ps>6+(-6-1))+(ps>10+(-6-1)));
   f = f*2 + ((chn>0+(1-1)));
-  f = f*2 + ((crun>4+(1-1)));
+  f = f*2 + ((crun>3+(1-1)));
   f = f*2 + ((cm>0+(1-1)));
 
   m = 0;
   m = m*3 + ((pass>0+(1-1))+(pass>1+(1-1)));
+  m = m*2 + ((vpos>0+(1-1)));
+  m = m*3 + ((p0s>0+(-3-1))+(p0s>5+(-3-1)));
   m = m*2 + ((mg>1+(1-1)));
-  m = m*3 + ((pq>8+(1-1))+(pq>24+(1-1)));
-  m = m*3 + ((sq>8+(1-1))+(sq>24+(1-1)));
+  m = m*8 + TC_sgn_m_pq[__min(32,__max(0,pq-(1-1)))];
+  m = m*8 + TC_sgn_m_sq[__min(32,__max(0,sq-(1-1)))];
   m = m*2 + ((chn>0+(1-1)));
-  m = m*14 + TC_sgn_m_x1s[__min(13,__max(0,x1s-(-6-1)))];
+  m = m*9 + TC_sgn_m_x1s[__min(13,__max(0,x1s-(-6-1)))];
 
   t = 0;
 

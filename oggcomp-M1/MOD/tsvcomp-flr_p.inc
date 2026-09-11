@@ -33,62 +33,69 @@ void tc_make_flr( int fno, int col, int p1, int fy, int raw, int blk,
   a = a*2 + ((fno>0+(1-1)));
   a = a*28 + TC_flr_a_col[__min(48,__max(0,col-(1-1)))];
   a = a*2 + ((fy>0+(1-1)));
-  a = a*3 + ((prd>0+(1-1))+(prd>6+(1-1)));
+  a = a*2 + ((prd>3+(1-1)));
   a = a*3 + ((hl>0+(1-1))+(hl>1+(1-1)));
-  a = a*5 + TC_flr_a_pri[__min(32,__max(0,pri-(1-1)))];
+  a = a*10 + TC_flr_a_pri[__min(32,__max(0,pri-(1-1)))];
 
   b = 0;
-  b = b*2 + ((col>6+(1-1)));
+  b = b*6 + TC_flr_b_col[__min(7,__max(0,col-(1-1)))];
   b = b*7 + TC_flr_b_p1[__min(14,__max(0,p1-(1-1)))];
-  b = b*3 + ((fy>2+(1-1))+(fy>4+(1-1)));
   b = b*2 + ((blk>0+(1-1)));
-  b = b*3 + ((prd>1+(1-1))+(prd>3+(1-1)));
-  b = b*2 + ((od>6+(-4-1)));
+  b = b*2 + ((prd>2+(1-1)));
+  b = b*4 + TC_flr_b_od[__min(9,__max(0,od-(-4-1)))];
+  b = b*2 + ((chn>0+(1-1)));
   b = b*3 + ((lov>0+(1-1))+(lov>2+(1-1)));
-  b = b*5 + TC_flr_b_pri[__min(32,__max(0,pri-(1-1)))];
+  b = b*2 + ((hiv>0+(1-1)));
+  b = b*3 + ((pri>0+(1-1))+(pri>31+(1-1)));
   b = b*12 + TC_flr_b_ep[__min(11,__max(0,ep-(1-1)))];
 
   c = 0;
-  c = c*8 + TC_flr_c_col[__min(7,__max(0,col-(1-1)))];
-  c = c*2 + ((o1>1+(1-1)));
-  c = c*2 + ((od>4+(-4-1)));
+  c = c*2 + ((col>4+(1-1)));
+  c = c*5 + TC_flr_c_o1[__min(7,__max(0,o1-(1-1)))];
+  c = c*4 + TC_flr_c_od[__min(9,__max(0,od-(-4-1)))];
   c = c*2 + ((chn>0+(1-1)));
-  c = c*3 + ((hiv>0+(1-1))+(hiv>7+(1-1)));
-  c = c*6 + TC_flr_c_pri[__min(32,__max(0,pri-(1-1)))];
-  c = c*12 + TC_flr_c_ep[__min(11,__max(0,ep-(1-1)))];
+  c = c*2 + ((hiv>0+(1-1)));
+  c = c*3 + ((pri>6+(1-1))+(pri>19+(1-1)));
+  c = c*8 + TC_flr_c_ep[__min(11,__max(0,ep-(1-1)))];
 
   d = 0;
+  d = d*2 + ((o1>5+(1-1)));
+  d = d*3 + ((od>0+(-4-1))+(od>8+(-4-1)));
   d = d*6 + TC_flr_d_pri[__min(32,__max(0,pri-(1-1)))];
   d = d*5 + TC_flr_d_ep[__min(11,__max(0,ep-(1-1)))];
 
   s = 0;
   s = s*5 + TC_flr_s_col[__min(7,__max(0,col-(1-1)))];
+  s = s*2 + ((p1>2+(1-1)));
   s = s*3 + ((fy>0+(1-1))+(fy>2+(1-1)));
   s = s*2 + ((hl>1+(1-1)));
-  s = s*3 + ((lov>0+(1-1))+(lov>2+(1-1)));
+  s = s*4 + TC_flr_s_lov[__min(8,__max(0,lov-(1-1)))];
   s = s*2 + ((hiv>7+(1-1)));
-  s = s*6 + TC_flr_s_pri[__min(32,__max(0,pri-(1-1)))];
-  s = s*6 + TC_flr_s_ep[__min(11,__max(0,ep-(1-1)))];
+  s = s*13 + TC_flr_s_pri[__min(32,__max(0,pri-(1-1)))];
+  s = s*3 + ((ep>5+(1-1))+(ep>7+(1-1)));
 
   f = 0;
   f = f*4 + TC_flr_f_col[__min(7,__max(0,col-(1-1)))];
-  f = f*5 + TC_flr_f_lov[__min(8,__max(0,lov-(1-1)))];
-  f = f*5 + TC_flr_f_hiv[__min(8,__max(0,hiv-(1-1)))];
+  f = f*3 + ((fy>0+(1-1))+(fy>2+(1-1)));
+  f = f*2 + ((o1>6+(1-1)));
+  f = f*3 + ((prd>3+(1-1))+(prd>4+(1-1)));
+  f = f*3 + ((od>0+(-4-1))+(od>8+(-4-1)));
+  f = f*3 + ((lov>0+(1-1))+(lov>7+(1-1)));
+  f = f*3 + ((hiv>0+(1-1))+(hiv>7+(1-1)));
   f = f*9 + TC_flr_f_pri[__min(32,__max(0,pri-(1-1)))];
   f = f*5 + TC_flr_f_ep[__min(11,__max(0,ep-(1-1)))];
 
   m = 0;
-  m = m*16 + TC_flr_m_col[__min(15,__max(0,col-(1-1)))];
-  m = m*2 + ((p1>2+(1-1)));
-  m = m*9 + TC_flr_m_pri[__min(32,__max(0,pri-(1-1)))];
-  m = m*2 + ((ep>7+(1-1)));
+  m = m*10 + TC_flr_m_col[__min(15,__max(0,col-(1-1)))];
+  m = m*2 + ((lov>0+(1-1)));
+  m = m*2 + ((hiv>0+(1-1)));
+  m = m*6 + TC_flr_m_pri[__min(32,__max(0,pri-(1-1)))];
+  m = m*2 + ((ep>10+(1-1)));
 
   t = 0;
-  t = t*32 + TC_flr_t_col[__min(48,__max(0,col-(1-1)))];
-  t = t*2 + ((fy>2+(1-1)));
-  t = t*2 + ((prd>6+(1-1)));
-  t = t*2 + ((hiv>7+(1-1)));
-  t = t*7 + TC_flr_t_pri[__min(32,__max(0,pri-(1-1)))];
+  t = t*20 + TC_flr_t_col[__min(48,__max(0,col-(1-1)))];
+  t = t*4 + TC_flr_t_pri[__min(32,__max(0,pri-(1-1)))];
+  t = t*3 + ((ep>8+(1-1))+(ep>10+(1-1)));
 
   n = 0;
   n = n*5 + TC_flr_n_col[__min(48,__max(0,col-(1-1)))];
