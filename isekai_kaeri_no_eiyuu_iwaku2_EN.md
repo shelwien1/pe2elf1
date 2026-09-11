@@ -10447,3 +10447,502 @@ One, **a girl coexisting with a king of the arcane**;
 the other, **a girl ruled by a holy sword**.
 
 Without anyone knowing, they lived within this town.
+
+1-28 "Epilogue / or, the Prologue of a Story Beginning"
+-------------------
+
+A full recovery took roughly one whole day.
+
+More accurately, one should say he had healed enough in a day to be able to move.
+
+"...I'm in for a scolding."
+
+Daiki let the murmur drop.
+
+When he woke, he was in an unfamiliar room, with Oki sitting beside him.
+
+Asked how he felt, Daiki sat up on the bed and checked his own condition.
+
+There was a slight wrongness like the aftermath of muscle ache, but he felt nothing worse than that.
+
+When he said so, Oki smiled in relief and left the room, saying she'd bring Tsunashino.
+
+He looked around the room he'd been left in. A narrow room, closer to a bedroom than a hospital.
+
+It didn't seem to be the safe house of Oki's he'd seen once; perhaps there was another like it elsewhere.
+
+There were no windows. His phone was at the bedside, plugged into a charger, but checking the time was a little frightening.
+
+—What do I do. I haven't contacted home at all.
+
+Daiki held his head.
+
+Giving up, he flopped back onto the bed and thought about what to do.
+
+"School. What do I do about school..."
+
+"Nahaha! There you go with another worry worthy of an ordinary high-schooler. Hard to believe you're the same person who was moving like a lunatic. Well, you should count yourself lucky to have healed."
+
+Had ambushing people become a habit of hers?
+
+Slightly exasperated, Daiki spoke while still lying down.
+
+"...How long have you been there, Urei?"
+
+"Who knows? Maybe I only just arrived. Well, think of it as a get-well visit. —Ah, shall I peel you an apple?"
+
+"You just want to do it, don't you..."
+
+At Daiki's grumbled retort, Urei laughed a delighted "hee hee."
+
+And then, changing her tone, she said:
+
+"Your sister is fine. Not that I've actually confirmed it."
+
+"...So that's your report."
+
+"Urei onee-san is conscientious about work. Well, all I did was put her to sleep a little with magecraft and erase her presence with my ability. No guard, nothing; she just goes home when she wakes up. I put a suggestion on her too, so she shouldn't remember anything about yesterday. Rest easy."
+
+"You're the one I find most frightening..."
+
+"Nahaha. I'd rather not hear that from you, either."
+
+Urei laughed airily, but Daiki had fairly well meant it.
+
+Urei Aiko, who commanded aberrant power on top of magecraft, seemed inferior in direct combat strength to Oki and other magi, but conversely she excelled at indirect methods. The troublesome type to make an enemy of.
+
+Oki, who used both magecraft and witch-arts, was presumably similar in that respect. Come to think of it, he felt he'd hardly ever seen Oki use ordinary magecraft—
+
+Thinking such things, Daiki asked,
+
+"'Yesterday' means today is the day after I collapsed. ...So it's still Sunday."
+
+"It's evening already, though. Good thing you'll be able to make it to school tomorrow."
+
+"Ah... well, true enough. If that recoil has healed, I should count it as luck..."
+
+"...That really is luck, actually."
+
+At the words that slipped out, Daiki found himself staring at Urei.
+
+What had her *that* referred to?
+
+Noticing his gaze, Urei smiled wryly and covered it.
+
+"Being stared at with such passionate eyes makes onee-san blush."
+
+"..."
+
+"Well, you needn't worry about home. That Tsunashino person seems to have handled the contact nicely. Just play along with the story, I'd say — ah."
+
+Just as she said that, the door opened again and Oki came back with Tsunashino.
+
+Seeing Urei, Oki narrowed her eyes irritably for some reason and made a shooing gesture as she spoke.
+
+"Right, you've confirmed Daiki's awake, so out you get. Out of this city."
+
+"Not even *out of the room* — how harsh!"
+
+"Quiet. Being overlooked at all should be plenty. Honestly, when I think you're gone you're over here... this is why the Ikai lot are a nuisance. Reason doesn't work on them at all..."
+
+"Ehh, from that nuance it sounds like an attack on my character."
+
+"Be quiet."
+
+Oki and Urei were evidently not very compatible.
+
+—Well, the fairly earnest Oki and the plainly slapdash Urei were never going to get on.
+
+Daiki accepted it roughly.
+
+Toward him, Urei said with a shake of her shoulders,
+
+"Nahaha. Right, in that case I'll be off. This job ends here. —If you need a courier again, the contact details are on the card."
+
+At Urei changing her tone for that last line, Oki was indignant.
+
+"Don't casually solicit business from Daiki!"
+
+"...A woman who restrains a man too much gets tired of quickly, you know?"
+
+"Go home!!"
+
+"Eek, scary. Right then, Daiki. That's how it is."
+
+At those words, Daiki hesitated a little, but nodded.
+
+"Mm. ...Well, a lot happened, but you helped. Let me say it: thank you."
+
+Whether Urei had been a complete ally was doubtful; if anything she'd been largely an enemy.
+
+Even so, if it was over then it was fine; Daiki bowed his head as he said it.
+
+At the young man, the courier girl laughed.
+
+"You really do throw me off. ...But I like an honest boy too."
+
+"Wha—"
+
+At Urei's words, it was Oki who made a strange face in surprise.
+
+Urei Aiko shrugged lightly and waved a hand as she said:
+
+"Well then. If fate allows, somewhere, sometime."
+
+Daiki silently saw her leave the room.
+
+Oki, glaring repeatedly in the direction she'd gone, looked thoroughly displeased.
+
+"Maybe I should scatter salt... I can't even tell if she's actually gone."
+
+"Why are you so prickly, Oki?"
+
+They had been enemies, but her attitude didn't seem to be about that.
+
+At Daiki's puzzled question, Oki flushed and stammered.
+
+"Wh-why... you ask! That's, because, ...I mean, um... you, ...er."
+
+"...Hm?"
+
+"I-it's nothing! Never mind that — Tsunashino-san, if you would!!"
+
+Oki was busy with something.
+
+It was a mystery, but if she didn't want to say, he needn't ask; Daiki decided to let it go.
+
+Tsunashino, however, having watched this, looked at Daiki with an expression of mild exasperation.
+
+"...Tsunashino-san?"
+
+At Daiki tilting his head, Tsunashino said,
+
+"No. By the way, changing the subject — would you like a future condom?"
+
+"What is this person saying?! And do those exist?!"
+
+"Of course not, are you an idiot. Now hurry up and take off your shirt. I'm examining you. Expose everything from nipples to navel, please."
+
+"What is going on here."
+
+"Your lower half is fine."
+
+"I wasn't going to show it."
+
+She was flat enough to be hard to read, but he somehow felt his treatment had got worse than before.
+
+Daiki threw a glance at Oki. He wanted to ask what this was about, but—
+
+"—, ——, ————!!"
+
+Oki-chan (*fourteen years old*) was flustered and useless.
+
+When she wasn't holding herself taut as a magus, her resistance to crude jokes was zero.
+
+—Never mind, then.
+
+Throwing various things aside, Daiki took off his shirt and bared his upper body.
+
+Come to think of it, he'd been changed out of his uniform into plain clothes.
+
+Once the top was off, Tsunashino looked for a while, then touched his body a few times, casually.
+
+"Ah, yes, well, you're probably fine."
+
+"She's so slapdash, this person..."
+
+"If you want medicine rather than treatment, go to a hospital and consult a physician."
+
+That might be sound reasoning.
+
+It was easy to forget, but Tsunashino was not in fact a doctor.
+
+"Er. It was you who treated me, right?"
+
+Daiki said, recalling his last memory.
+
+A forced enhancement (*boost*) of bodily performance by Oki's magical energy, ignoring his limits. Fundamentally different from the careful enhancement magecraft a magus applies to themselves, it gave no thought to control or output limits from the start.
+
+Its recoil had come down on Daiki squarely.
+
+"Yes. Even for someone who, having had his left arm healed, immediately proceeds to shred every muscle fibre in his body and damage his internal organs, I will provide treatment as long as I receive payment."
+
+"..."
+
+At Daiki, who fell silent despite himself, Tsunashino didn't change her expression.
+
+"A small lecture. It's a service included in the fee, so don't mind it. It simply means that I'm making money. I can splash out on dinner tonight."
+
+"...E-enjoy... yourself?"
+
+"Thank you. That part you needn't say."
+
+"Ah, right."
+
+More than being healed, Daiki felt that in terms of sheer personality he was never going to win against her.
+
+Or perhaps Tsunashino was simply too invincible.
+
+In any case it was a fact that he'd been saved by this so-called future technology again.
+
+For injuries that severe to be healed this far in a day was beyond normality.
+
+"Unlike last time, I finished everything while you were asleep, so there's no problem with you going straight home."
+
+"Ah, the nanomachine business?"
+
+"...But to be safe, let me say that overusing rapid treatment like this will do interesting things to your lifespan. It runs *smack* against the natural order, after all."
+
+"S-smack."
+
+"Smack. *Hard* is also acceptable."
+
+"Either is fine with me..."
+
+"Then let's split the difference and call it *reluctantly*. It runs reluctantly against it."
+
+"...What did you split between what?"
+
+"Nature and civilisation, I suppose."
+
+"..."
+
+Whether it was a joke or sincere was completely unreadable.
+
+"As a rule I don't refuse treatment requests. Decide by your own judgement, Kurosu-san. This time was different, as you'd have died if left alone, but I do think you shouldn't nearly die so often."
+
+"I know that..."
+
+"Oh, my apologies. I thought you didn't."
+
+"..."
+
+It wasn't as if he nearly died by preference, but talking back to an adult was hard.
+
+Tsunashino glanced at Oki and smiled thinly. Oki narrowed her eyes at something.
+
+"It's sarcasm. I've known Narumi-san longer than you. When someone begs me, half in tears, *save Daiki*—"
+
+"H-hang on, Tsunashino-san?! I wasn't in tears at all—"
+
+"—I'm only human; I can't refuse. I answered, 'Late-night rates are thirty per cent extra.'"
+
+"'Only human' — surely there was a better way to phrase that..."
+
+"I-I only, um, it's just that I was the one who set the enhancement on him...!"
+
+Daiki retorting, and Oki flapping about making excuses.
+
+Faced with both, Tsunashino maintained her usual manner.
+
+"I said about ten times is fine, but that's strictly a guideline. It depends on the degree of damage. Healing the whole body like this consumes considerably more than the left arm alone."
+
+"...Then you're not making money on it."
+
+He understood she was being considerate, but pointing it out wouldn't get her to admit it.
+
+So to Daiki, who indicated his understanding indirectly, Tsunashino showed a faintly smiling expression.
+
+"I'm a kind person. —Especially toward those I've marked as cash cows."
+
+"That's somehow not what I expected..."
+
+—She's absolutely sure I'll be back.
+
+Daiki's cheek twitched. He'd rather believe he'd never use it again.
+
+"Well, the check-up is done, so I'll get to another job. Call out when you leave."
+
+Having thoroughly amused herself, Tsunashino left the room as if satisfied.
+
+Which left only Daiki and Oki inside.
+
+"...Is this place, by any chance—"
+
+At Daiki starting to ask, Oki nodded.
+
+"Ah, yes. Tsunashino-san's home... or office, or something. A place like that."
+
+"I see..."
+
+"Yes. Ah, um... and, about that."
+
+Oki sat down on a small chair beside the bed Daiki was using.
+
+Then she looked away, seemingly finding it hard to say. Daiki laughed a little.
+
+"It isn't your fault, Oki."
+
+"...No, but, I didn't quite expect... such severe recoil."
+
+"It's what saved me, so it's a problem if you fret about it. ...You're rather clumsy, aren't you."
+
+Saying so, Daiki swung his legs off the bed and reseated himself on the edge.
+
+To Oki, sitting diagonally in front of him, Daiki lightly held out his right hand.
+
+"Let me thank you. I'm alive like this thanks to you. Thank you, properly."
+
+"......Mm."
+
+Embarrassed, but with her chest out all the same, the girl answered the hand Daiki held out.
+
+—Holding hands is warm.
+
+Which was, for her, a brand-new discovery.
+
+It surely wasn't only feeling the temperature of skin. There was a sensation of being connected to something larger and gentler.
+
+For a witch of empathy who nominally possessed the Mystic Eye of «Connection», it was thoroughly embarrassing.
+
+Even so, she felt she had connected with something she had never known — something she had avoided even taking an interest in — and it left her feeling oddly ticklish.
+
+"And thank you for saving me, Daiki. I'll have to do something for you in return."
+
+"Mm... no, I feel like I'm already making you pay treatment fees and so on."
+
+"That's a given. This is separate. Well, I'll think of something. ...What should it be."
+
+"You don't have to go to any trouble."
+
+That wasn't an option. But once she actually tried to think, nothing came to mind.
+
+Money was quickest, and probably the most helpful, but she also felt that showing sincerity that way was somehow wrong.
+
+What should she do in that case?
+
+—Thinking that far, the joke Tsunashino had made earlier surfaced in her head.
+
+"Uh... ah. Huh, wait... Tsunashino-san, in *that* sense—?!"
+
+"...Oki?"
+
+Naturally Daiki had no idea what Oki was remembering.
+
+So her misunderstanding couldn't be known unless she said it. Fortunately or not.
+
+"Ah, ...auah."
+
+Drawn by the voice, she lifted her face, and Daiki's face was right in front of her.
+
+—Huh, why is Daiki so close? Because we're holding hands, maybe. Right. Of course.
+
+Her thoughts froze. She didn't know why, but looking at Daiki's face head-on made her face grow hot.
+
+Looked at closely, he seemed to have rather bold features. Was it because of his other-world experience? There was strength in his gaze. And it was aimed straight at her.
+
+Come to think of it, right before collapsing, Daiki had said something outrageous to her—
+
+"Why have you frozen, Oki?"
+
+"Hweiah."
+
+Spoken to, her shoulders jumped.
+
+That's right. She had to say it.
+
+It's fine, there's no problem. This is a thank-you.
+
+"Um — er, about before you collapsed..."
+
+"Mm, ah. What about it?"
+
+"Aaaaaaah, um, um... no, look, you said something, didn't you..."
+
+Daiki, evidently not following, tilted his head as he looked at her.
+
+Which put him close. Please don't face me straight on. Also, how long am I supposed to keep holding hands? Should I let go? I don't understand anything.
+
+"No, look, so... with me. That you wanted to be together, or something... um."
+
+"Ah, I did say that."
+
+"Waah, don't say it so casually, is that how it works, waah!"
+
+At Daiki's thoroughly ordinary manner, Oki was in a state of confusion.
+
+But Daiki was likewise bewildered by Oki's manner.
+
+"Wh-what, did I say something strange? Something that hard to bring up..."
+
+"Not that, the, so, um, so — I meant, what did that mean?"
+
+"Mean?"
+
+"A-alw, always... t-t-t-together, or something, um... did you not so declare...?"
+
+"—I meant it literally."
+
+"Guh—"
+
+Oki froze; Daiki said it as a matter of course.
+
+"Oki, you don't seem to have many people around you. And that felt like a waste, somehow."
+
+"...Huh?"
+
+"Well, the point is you're a loner. But from now on I'll be your friend, so let's hang out and so on. Setting roles aside, just normally."
+
+"...............That's all?"
+
+"That's all? Ah, well, that's the only meaning I had in saying it, I suppose. ...Oki?"
+
+"————————————————————————————heh."
+
+Oki.
+
+Laughed.
+
+"Is that so is that how it was no it's quite all right I hadn't misunderstood anything at all I'm clever after all I'm a magus so naturally I understood perfectly there's no problem Daiki you idiot."
+
+"...Why are you angry?"
+
+"I'm not angry. Idiot. I hate you, Daiki."
+
+"You are angry..."
+
+"Never mind, let go of my hand already, idiot. I can't bring myself to let go from my side because it'd be a waste, idiot. How long do you intend to keep touching a girl, idiot. And you call yourself a man, idiot. Idiot."
+
+"All right, all right... I'm sorry."
+
+"I-it's not as if I said it was bad. Occasionally, a little, I've no complaints myself. Th-that, that much I can handle perfectly well!"
+
+"...So you were happy about the handshake?"
+
+"Wh— gah— huuuuuh?! Quite so, and what of it?!"
+
+"No, I'm happy too."
+
+"Why do you keep saying things like that?!"
+
+"Eh..."
+
+He didn't really understand why she'd got into a mood. But a smile slipped out of him.
+
+Pouting in a sulk, going scarlet with embarrassment, looking at him and smiling with a complicated expression — Oki, doing all that, looked like a girl her own age.
+
+That was as it should be, Daiki thought.
+
+Magus or witch, it wasn't as though she'd suddenly been thrown into another world.
+
+She was a girl living an ordinary life on this Earth.
+
+In that case this version of her surely suited her better.
+
+Enough that he could think, without affectation, that if he could protect her he wanted to — from the heart.
+
+Yes. Daiki Kurosu is a high-school student who is neither Hero nor hero anymore.
+
+Oki, meanwhile, is a magus and a witch, and probably cannot live cut off from that.
+
+—And precisely because of that.
+
+There is meaning in an unremarkable person like him being beside her.
+
+He wanted that, honestly.
+
+—So this, surely, is only that kind of story.
+
+A story in which a former hero back from another world and a small witch living in the modern day become friends—
+
+End of Chapter One.
