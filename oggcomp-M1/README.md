@@ -11,8 +11,9 @@ is coded as bytes.  `oggcomp c` does not refuse input.
 
 Beside it is `oggdet`, the carver: it finds every Ogg stream in a file that
 holds other things too -- an archive, a disk image, a download that stopped
--- writes each out, or with `-c` writes the `.oc` that `oggcomp c` would,
-and puts the original back byte for byte from what it wrote.
+-- writes each out, or with `-c` writes one file holding each stream as
+the `.oc` that `oggcomp c` would make of it and the rest coded too, and
+puts the original back byte for byte from what it wrote.
 
     ./mk.sh          build ./oggcomp and ./oggdet
     ./t.sh           round-trip the test corpus and check it came back
@@ -62,8 +63,8 @@ each back byte for byte, and checks the exit status for every way of being
 told no -- including that a refused run leaves no half-written output
 behind.  Then it carves a container of streams and other bytes with
 `oggdet`, with and without `-c`, requires the container back, and requires
-the segment of `.oc` the carver wrote for a stream to be the file
-`oggcomp c` writes for that stream alone.  `testfiles/README.md` says what is in the corpus
+the segment `-c` wrote for a stream to be the file `oggcomp c` writes for
+that stream alone.  `testfiles/README.md` says what is in the corpus
 and why, and what it does not reach; `-h` lists the options.
 
     ./t.sh && ./mk.sh check
@@ -106,8 +107,9 @@ under that, or a caller thread with a small stack, is a segfault.
 ### oggdet
 
     oggdet c [options] input prefix      carve: prefix%08X.ogg, prefix%08X.jpg, prefix.meta
-    oggdet c -c input prefix             carve: prefix.oc, prefix%08X.jpg, prefix.meta
-    oggdet d [options] prefix output     restore
+    oggdet c -c [options] input file     carve, compressed, into the one file
+    oggdet d [options] prefix restored   restore from the prefix's files
+    oggdet d [options] file restored     restore from the one file
 
 `oggdet c` scans any file for Ogg pages -- a candidate counts only when
 its CRC verifies, so the payload of a page is never taken for one --
@@ -120,32 +122,38 @@ that come out byte-identical are written once.  `oggdet d` reads the
 a CRC of the whole of it.  `-t` looks and writes nothing, `-v` reports
 each stream, `-h` the rest of the options.
 
-`-c` compresses: every stream is coded by oggcomp into the one file
-`prefix.oc`, one segment per distinct stream, in place of the `.ogg`
-files.  A segment is the file `oggcomp c` would have written for that
-stream -- the same model, run in the same process and reset between
-streams -- so cut out of `prefix.oc` (eight bytes of magic, then a varint
-length in front of each segment) it is `oggcomp d`'s to read; the file as
-a whole is not, and `oggcomp d` says so.  The reset costs a few
-milliseconds per stream, which shows on a container of thousands of tiny
-ones and on nothing else.
+`-c` compresses, and puts all of it into the one file named: each stream
+coded by oggcomp into a segment that is the file `oggcomp c` would have
+written for it -- the same model, run in the same process and reset
+between segments -- each cover image as it is, and the bytes between the
+streams coded too, with the layout, in chunks between the segments.  The
+file starts with eight bytes of magic and one of flags; each segment is a
+varint of its length times four plus its kind (0 metainfo, 1 stream, 2
+image) and the bytes.  Cut out, a stream's segment is `oggcomp d`'s to
+read; the file as a whole is not, and `oggcomp d` says so.  `-m FILE`
+keeps the metainfo out of the file, plain, and `oggdet d` then has to be
+given it with `-m` as well.  The reset costs a few milliseconds per
+segment, which shows on a container of thousands of tiny streams and on
+nothing else.
 
-`-S` is solid: `-c` with the model kept from one stream to the next, so
-each stream is coded with what the ones before it taught the model --
-worth having on a container of many streams from one encoder, and the
-per-stream reset goes with it.  The price is that a solid segment decodes
-only after the ones before it, in order, and only by `oggdet d`; cut out,
-`oggcomp d` reads the first and refuses the rest.  Duplicates are coded
-again under `-S`: the carver calls two streams one when the segment it
-coded for the second is byte for byte one already in the file, which
-solid segments of one stream are not, and the second copy costs less
-than the first but not nothing -- a container of many copies of a few
-streams is `-c`'s case.
+`-S` is solid: `-c` with the model kept from one segment to the next, so
+each is coded with what the ones before it taught the model, the bytes
+between streams included -- worth having on a container of many streams
+from one encoder, and the per-segment reset goes with it.  The price is
+that the file decodes only front to back, and only by `oggdet d`; cut
+out, `oggcomp d` reads the first segment and refuses the rest.  Nothing
+is deduplicated under `-S` but the images: a second copy of a stream,
+coded with the model as the first left it, is not the first's segment, so
+it is coded again -- for less than the first, the model having seen it,
+but not for nothing -- and a container of many copies of a few streams is
+`-c`'s case.
+
 The carver is the compressor plus a front end, so everything above about
 memory, the stack, `-`, and outputs deleted on failure holds for it too;
-its exit status is 1 for input it cannot restore from -- a `.meta` that is
-not one or is cut short, a stream file missing or damaged -- 2 and 3 as
-for `oggcomp`.
+`-c` to `-` works, and then nothing is deduplicated, since nothing can be
+read back from a pipe.  Its exit status is 1 for input it cannot restore
+from -- a `.meta` or a file that is not one or is cut short, a segment or
+stream file missing or damaged -- 2 and 3 as for `oggcomp`.
 
 ## On Windows
 

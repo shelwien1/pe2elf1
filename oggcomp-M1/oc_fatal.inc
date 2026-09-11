@@ -49,25 +49,36 @@ static void message(const char *fmt, va_list ap) {
 //  holding the file open, and Windows will not remove a file anyone has
 //  open -- the remove would fail silently and the half-written file stay.
 struct ogc_partial_t {
-  const char *path;
-  filehandle *fh;
+  const char *path, *path2;
+  filehandle *fh, *fh2;
   void set(const char *p, filehandle *f) {
     path = p;
     fh = f;
   }
+  //  A second output of the same run -- oggdet writes two -- dropped with
+  //  the first.
+  void also(const char *p, filehandle *f) {
+    path2 = p;
+    fh2 = f;
+  }
   void kept() {
-    path = nullptr;
-    fh = nullptr;
+    path = path2 = nullptr;
+    fh = fh2 = nullptr;
   }
   void drop() {
-    const char *p = path;
-    filehandle *f = fh;
-    if(!p)
+    const char *p = path, *p2 = path2;
+    filehandle *f = fh, *f2 = fh2;
+    if(!p && !p2)
       return;
     kept();
     if(f)
       f->close();
-    remove(p);
+    if(p)
+      remove(p);
+    if(f2)
+      f2->close();
+    if(p2)
+      remove(p2);
   }
 };
 static ogc_partial_t ogc_partial;
