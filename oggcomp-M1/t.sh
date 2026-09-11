@@ -459,6 +459,28 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
     printf '  %-26s %s\n' "its .oc is oggcomp's" "not checked: $src is not one whole stream"
   fi
 
+  #  -S: the model kept from one stream to the next.  The container still
+  #  comes back; the second copy of the first file costs less than it did
+  #  fresh, since the model has seen it; and its .oc is not the
+  #  compressor's -- it decodes only after the one before it.
+  dok=0
+  if "$det" c -S -A -s 0 -D "$dd/box" "$dd/s" >"$tmp/msg" 2>&1 &&
+     "$det" d "$dd/s" "$dd/s.back" >/dev/null 2>&1 &&
+     cmp -s "$dd/box" "$dd/s.back"; then dok=1; fi
+  detcheck 'carve -S and restore' $dok "$(detsaid)"
+  if [ -f "$dd/s00000001.oc" ] && [ -f "$dd/c00000001.oc" ]; then
+    fresh=$(wc -c < "$dd/c00000001.oc"); solid=$(wc -c < "$dd/s00000001.oc")
+    dok=0; [ "$solid" -lt "$fresh" ] && dok=1
+    detcheck 'the 2nd copy costs less' $dok "$fresh bytes fresh, $solid solid"
+    rm -f "$tmp/no.out"
+    set +e
+    "$bin" d "$dd/s00000001.oc" "$tmp/no.out" >"$tmp/msg" 2>&1
+    got=$?
+    set -e
+    dok=0; [ "$got" = 1 ] && [ ! -e "$tmp/no.out" ] && dok=1
+    detcheck "and is not oggcomp's" $dok "oggcomp d exits $got  $(detsaid | cut -c1-30)"
+  fi
+
   #  Art on, at the default floor: the picture comes out of the stream
   #  into a file of its own, the stream is rewritten without it, and the
   #  original still has to come back -- compressed, since -c is the case

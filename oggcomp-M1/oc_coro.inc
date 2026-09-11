@@ -37,13 +37,14 @@ template <int f_DEC> struct oc_coro : Coroutine {
     yield(this, 0);
   }
 };
-//  The state a new process would start a run with, for a frontend that
-//  runs several: the model reset (oc_model::reset), the parser's scratch
-//  and setup back to zero, the over-read count cleared, the coroutine
-//  initialised and told its input's name.  After it, feeding this
-//  coroutine a file gives the .oc that `oggcomp c` would.
-template <int f_DEC> static void oc_fresh(oc_coro<f_DEC> &co, const char *in) {
-  co.t.reset();
+//  The next stream of a solid run -- oggdet -S -- gets what a chain link
+//  inside one file gets: the model as the streams before it left it, the
+//  tables, the families, the last values; and everything a stream owns
+//  started over -- the parser's scratch and setup, the pointer to them,
+//  the over-read count, the coroutine -- with the coder restarted for the
+//  new file.  Such a .oc decodes only after the ones before it, in order.
+template <int f_DEC> static void oc_next(oc_coro<f_DEC> &co, const char *in) {
+  co.t.vb = nullptr;
   tc_zero(&vb_su, sizeof vb_su, 0);
   tc_zero(vb_ys, sizeof vb_ys, 0);
   tc_zero(vb_cs, sizeof vb_cs, 0);
@@ -55,4 +56,12 @@ template <int f_DEC> static void oc_fresh(oc_coro<f_DEC> &co, const char *in) {
   oc_in = in;
   co.in = in;
   co.coro_init();
+}
+//  The state a new process would start a run with, for a frontend that
+//  runs several: the model reset (oc_model::reset) and then the rest as
+//  above.  After it, feeding this coroutine a file gives the .oc that
+//  `oggcomp c` would.
+template <int f_DEC> static void oc_fresh(oc_coro<f_DEC> &co, const char *in) {
+  co.t.reset();
+  oc_next(co, in);
 }

@@ -5,7 +5,8 @@
       oggdet d [options] <prefix> <output>    restore
 
     Carving writes every detected physical Ogg bitstream to <prefix>%08X.ogg
-    -- or, with -c, coded by oggcomp to <prefix>%08X.oc -- and all remaining
+    -- or, with -c, coded by oggcomp to <prefix>%08X.oc; with -S, coded
+    solid, each with the model as the streams before it left it -- and all remaining
     bytes, plus the layout, to <prefix>.meta.  Restoring reads the metainfo
     and the numbered stream files and reproduces <input> exactly.
 
@@ -388,7 +389,9 @@ static void out_put(od_out * o, const void * data, size_t n) {
 
     Stream flags: 1 stored with CRLF collapsed, re-expand LF on restore;
     2 a duplicate of an earlier stream, whose number follows; 4 the cover
-    art was taken out, the record follows; 8 the file is an oggcomp .oc.
+    art was taken out, the record follows; 8 the file is an oggcomp .oc;
+    16 the .oc is solid: coded with the model as the .oc files before it in
+    this metainfo left it, so it decodes only after them, in their order.
 
     Streams are numbered in order of appearance, so a stream record carries
     only its length, which the restorer checks against the file on disk.
@@ -442,7 +445,8 @@ typedef struct {
   int art;                    /*  cover art comes out by default; -A leaves it  */
   int nodedup;                /*  -D: write duplicate files anyway  */
   int dry;                    /*  -t: detect and report, write nothing  */
-  int comp;                   /*  -c: streams coded by oggcomp  */
+  int comp;                   /*  -c: streams coded by oggcomp; 2 with -S,
+                                  the model kept from one stream to the next  */
 } opts;
 
 static void usage(FILE * f) {
@@ -457,6 +461,9 @@ static void usage(FILE * f) {
     "options\n"
     "  -c        compress: each stream coded by oggcomp, <prefix>%%08X.oc\n"
     "            in place of .ogg; the same file `oggcomp c` would write\n"
+    "  -S        solid: -c with the model kept from one stream to the next,\n"
+    "            so each is coded with what the ones before taught it; the\n"
+    "            .oc files then decode only in order, and only by oggdet d\n"
     "  -v        report each detected stream on stderr\n"
     "  -w        report why each rejected \"OggS\" candidate was rejected\n"
     "  -j        join: one file per contiguous run, do not split chains\n"
@@ -645,12 +652,15 @@ static int files_equal(const char * a, const char * b) {
     with its stack pad and its model, driven from here.  The tables are
     mapped once, on the first stream that needs them, and reset before every
     stream, so that each .oc is what a fresh `oggcomp c` writes and a fresh
-    `oggcomp d` reads.  This coroutine drives them from a bounded depth of
-    its own stack, which the pad between frontend and coroutine allows.  */
+    `oggcomp d` reads -- or, solid (-S), reset before the first only, so
+    that each stream is coded with what the ones before it taught the model
+    and its .oc decodes only after theirs.  This coroutine drives them from
+    a bounded depth of its own stack, which the pad between frontend and
+    coroutine allows.  */
 
 static oc_coro<0> od_enc;
 static oc_coro<1> od_dec;
-static int od_model_ready;
+static int od_model_ready, od_enc_used, od_dec_used;
 
 static void od_model(void) {
   if (od_model_ready) return;
@@ -687,7 +697,9 @@ static void os_open(osink * s, const char * path, int comp) {
     if (s->f.writ(h, sizeof OC_MAGIC + 1) != sizeof OC_MAGIC + 1) die("write error on %s", path);
     s->written = sizeof OC_MAGIC + 1;
     od_model();
-    oc_fresh(od_enc, path);
+    if (comp == 2 && od_enc_used) oc_next(od_enc, path);
+    else oc_fresh(od_enc, path);
+    od_enc_used = 1;
     od_enc.addout(s->obuf, sizeof s->obuf);
   }
 }
@@ -726,8 +738,9 @@ static void os_close(osink * s) {
   s->on = 0;
 }
 
-/*  A .oc back to the bytes it holds.  */
-static void oc_decode(const u8 * oc, size_t n, const char * path, bbuf * out) {
+/*  A .oc back to the bytes it holds: from a fresh model, or, solid, from
+    the model as the .oc before it left it.  */
+static void oc_decode(const u8 * oc, size_t n, const char * path, bbuf * out, int solid) {
   static u8 obuf[1 << 16];
   if (n < sizeof OC_MAGIC + 1 || memcmp(oc, OC_MAGIC, sizeof OC_MAGIC - 1))
     die("%s is not an oggcomp stream", path);
@@ -735,7 +748,9 @@ static void oc_decode(const u8 * oc, size_t n, const char * path, bbuf * out) {
     die("%s: made by oggcomp version %u, this is version %u", path,
         oc[sizeof OC_MAGIC - 1], OC_VER);
   od_model();
-  oc_fresh(od_dec, path);
+  if (solid && od_dec_used) oc_next(od_dec, path);
+  else oc_fresh(od_dec, path);
+  od_dec_used = 1;
   od_dec.addinp((byte *) oc + sizeof OC_MAGIC + 1, (uint) (n - sizeof OC_MAGIC - 1));
   od_dec.addout(obuf, sizeof obuf);
   for (;;) {
@@ -1159,7 +1174,7 @@ static int carve(od_coro * co) {
     }
 
     if (mf) {
-      u8 flags = (u8) ((c.text ? 1 : 0) | (dup >= 0 ? 2 : 0) | (as.have ? 4 : 0) | (o->comp ? 8 : 0));
+      u8 flags = (u8) ((c.text ? 1 : 0) | (dup >= 0 ? 2 : 0) | (as.have ? 4 : 0) | (o->comp ? 8 : 0) | (o->comp == 2 ? 16 : 0));
       bbuf rec;
       put_varint(mf, REC_TAG(run_len, REC_STREAM));
       out_put(mf, &flags, 1);
@@ -1217,8 +1232,8 @@ static int carve(od_coro * co) {
   fprintf(stderr, ", %llu of %llu bytes carved",
           (unsigned long long) (s.total - g.total), (unsigned long long) s.total);
   if (o->comp && !o->dry && ogbytes)
-    fprintf(stderr, ", %llu bytes of streams coded to %llu (%.2f%%)",
-            (unsigned long long) ogbytes, (unsigned long long) ocbytes,
+    fprintf(stderr, ", %llu bytes of streams coded%s to %llu (%.2f%%)",
+            (unsigned long long) ogbytes, o->comp == 2 ? " solid" : "", (unsigned long long) ocbytes,
             100.0 * (double) ocbytes / (double) ogbytes);
   fputc('\n', stderr);
 
@@ -1337,6 +1352,8 @@ static int restore(od_coro * co) {
 
     flags = src_byte(&mf);
     if (flags < 0) die("%s: truncated stream record", mpath);
+    if ((flags & ~31) || ((flags & 16) && !(flags & 8)))
+      die("%s: stream flags %02X are not ones this version knows", mpath, flags);
     {
       u32 file = idx;
       bbuf stored, rebuilt;
@@ -1354,7 +1371,7 @@ static int restore(od_coro * co) {
         bbuf coded;
         slurp_(path, &coded);
         bb_init(&stored);
-        oc_decode(coded.b, coded.n, path, &stored);
+        oc_decode(coded.b, coded.n, path, &stored, (flags & 16) != 0);
         bb_free(&coded);
       } else slurp_(path, &stored);
       if (stored.n != len)
@@ -1383,7 +1400,7 @@ static int restore(od_coro * co) {
       if (o->verbose)
         fprintf(stderr, "[%08X] %llu bytes%s%s%s%s\n", file,
                 (unsigned long long) rebuilt.n,
-                (flags & 8) ? " (decoded)" : "",
+                (flags & 8) ? (flags & 16) ? " (decoded, solid)" : " (decoded)" : "",
                 (flags & 4) ? " (art put back)" : "",
                 (flags & 1) ? " (LF re-expanded)" : "",
                 (flags & 2) ? " (shared)" : "");
@@ -1447,7 +1464,8 @@ int main(int argc, char ** argv) {
         case 'x': o.notext = 1;  break;
         case 'A': o.art = 0;  break;
         case 'D': o.nodedup = 1;  break;
-        case 'c': o.comp = 1;  break;
+        case 'c': if (!o.comp) o.comp = 1;  break;
+        case 'S': o.comp = 2;  break;
         case 'h': usage(stdout);  return 0;
         case 's':
           if (++i >= argc) { usage(stderr);  return 2; }
