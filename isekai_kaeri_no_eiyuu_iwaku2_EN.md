@@ -5018,3 +5018,372 @@ turned slightly, showing her a thin smile.
 "...Ah, uh—"
 
 As though there was no possibility he wouldn't, his manner said it as a matter of course.
+
+1-13 "The Former Hero, and the Magus" — 5
+-------------------
+
+Why, she didn't know; but the thing that nearly spilled out of her, Oki kept hidden in her heart, for reasons she also didn't know.
+
+Somehow it felt like something she mustn't show too easily.
+
+And besides — this was no time for that.
+
+"R-run, Daiki!"
+
+Watarai presumably hadn't yet realised that Daiki was the key.
+
+Because he hadn't seen that scene.
+
+He had only noticed, through his magecraft, that the door had connected. If he had known about Daiki, things would not have turned out this way.
+
+"You're right, let's run. This situation isn't good."
+
+And Daiki said it with a calm so complete it was infuriating, even here.
+
+Was that the nerve of someone back from another world?
+
+"Can you stand, Oki? You got knocked flying pretty hard."
+
+"Y-you saw that?!"
+
+"I saw it, the instant I came past the torii. It gave me quite a scare."
+
+For all his words there was no sign of him being scared, but that was simply that Daiki didn't show it outwardly.
+
+In reality he understood perfectly well how bad the situation was.
+
+After all, the one who was supposed to be the fighting force was Oki, the magus. Since Daiki who'd come to save her was the weaker, the situation had not improved.
+
+"Well, if you can talk then I'm sorry, but push yourself a bit more."
+
+So Daiki said.
+
+—I've taught it fear. It won't come in carelessly for a while, but...
+
+Keeping his distance, Daiki judged the monster writhing with its curling tentacles by his old knowledge.
+
+—A clever specimen. That might make it worse.
+
+"Anyway, let's get out of here quickly. Sorry, but I can't deflect that thing's attacks over and over."
+
+But Oki shook her head. That wasn't possible.
+
+"W-we can't run!"
+
+"...Out of duty? This isn't a situation where you can say that sort of—"
+
+"No — this precinct is already inside Watarai's barrier! Once you're in you can't get out easily!"
+
+That he hadn't anticipated, and Daiki grimaced accordingly.
+
+"...Seriously? Even though getting in was easy..."
+
+"It's easy to get in *because* it's not easy to get out! That's what I told you!"
+
+"But doesn't that mean I can't escape either?"
+
+"...Yes, but even so!!"
+
+Which meant Oki was desperate enough to want to tell him to run regardless.
+
+That said, at this rate Daiki had no choice but to change his approach.
+
+Ideally he'd have linked up with an unharmed Oki. Failing that, the next best was withdrawing with Oki in tow.
+
+Now that both were impossible, the options he could choose were extremely limited.
+
+"No help for it. ...Shall we do this?"
+
+If he had no choice but to choose, hesitation was a waste.
+
+Daiki's judgement was fast and rational, and that was exactly what made it hard for Oki to accept.
+
+"'Sh-shall we do this,' nothing—"
+
+"It's not the time for that either. Well, let's split the work. The one on the bridge is the mastermind, right? You handle him. I'll definitely make you a road to get there — **trust me**."
+
+Daiki said it lightly, as a matter of course.
+
+He had always faced obstacles standing in his way head-on, every time.
+
+That experience — even without power — had never disappeared.
+
+"So stand, Oki! I need you. **Figure it out.**"
+
+With that, Daiki ran forward.
+
+There was no time to stop him. Wary of his approach, presumably, the monster lashed a tentacle like a whip.
+
+"Gh, Daiki?!"
+
+Oki realised at once. It was because she was here, sprawled and unable to stand.
+
+That was why Daiki had made it target him instead of Oki. Making the monster believe that he was the greater threat.
+
+"Gh— raaah!"
+
+Daiki knocked the undulating tentacle down with his left arm. The further it stretched, the easier the tip was to bat aside.
+
+But the only weapon Daiki had was Oki's «Pure Black» covering his broken left arm. He was fighting with that single weapon in place of a gauntlet.
+
+"Why...?"
+
+What Oki wondered at that moment was that what she'd applied to him wasn't being destroyed.
+
+Daiki was knocking a colossal tentacle, swung like a whip, into the ground using only the «Pure Black» guard. Despite the contact, there was no sign of erosion.
+
+It was body work that could fairly be called acrobatics.
+
+"...Kh!"
+
+But a huge mass, merely slammed into the ground, produced consequences.
+
+Kicked-up gravel flew at Daiki. Pebbles like that were enough damage for him. An instant's opening was created, and not letting it slip, two more tentacles ran at Daiki.
+
+"Ugh, guooah...!!"
+
+He couldn't intercept; Daiki took them on his left arm.
+
+This time the armour of «Pure Black» finally suffered the poison's erosion. A *crack* rang out like brittle glass shattering, and the remainder of the impact, not fully killed, hit Daiki's bare body.
+
+—An unpleasant sound resonated from his shoulder, Daiki registered.
+
+"Gh, aah... gyaaaaaah...!"
+
+A scream. His left shoulder had come out of joint. With the armour that boasted overwhelming shock absorption gone, the unabsorbed impact had reached Daiki's body.
+
+In degree of pain it was worse even than being punched by Oki. There were limits to what could be papered over with willpower.
+
+Daiki's body, its movement sealed by pain, was struck through by the remaining tentacle.
+
+"D— Daiki!!"
+
+The body of a mere high-school student, one that never departed from the frame of common sense, was blown backward.
+
+The small distance he'd closed at the risk of his life was undone in a single blow.
+
+Beaten back to Oki's position again, Daiki nevertheless broke his fall and, rolling, got to his feet.
+
+"Phew—. Kind of it to put my shoulder back in... there we go."
+
+"................!!"
+
+She was speechless. It could only be called insane.
+
+Just now, did Daiki — did he really understand what he had done?
+
+The instant he understood he couldn't fully dodge, Daiki had deliberately let the blow land on his dislocated shoulder to force the joint back in. Because he'd been prepared to take it, presumably, the blow's force hadn't reached a fatal level.
+
+Body-handling technique beyond a high-schooler, close to what he'd shown when he first met Oki.
+
+—Such a thing was, as a human being, broken.
+
+His physical ability didn't exceed the range of **a high-schooler who had trained hard**.
+
+Which meant that if his movement deviated even slightly, it would not be strange for his life to end in that instant.
+
+What was abnormal about Daiki Kurosu was not that he could accurately draw out the maximum of the abilities he possessed.
+
+—It was that he could do so *in this situation*. That was the most insane part.
+
+Perfect control of bodily function was abnormal too, but what was strangest of all was the abnormal calm that made it possible — no, a mental strength like this could no longer be filed under a word like *calm*.
+
+Oki had noticed it.
+
+**Daiki Kurosu lacks the instinct for self-preservation.**
+
+The instinct or reflex to *protect oneself*, which any creature has — which even the misshapen life in front of them had — could only be described as not functioning in him.
+
+Otherwise that acrobatic exchange couldn't have been pulled off. Being calm and having no fear are different stories.
+
+Presumably, in the same situation, Daiki would **succeed at the same act a hundred times out of a hundred**.
+
+Such a thing was already broken.
+
+Whether he broke himself, or was broken, she didn't know.
+
+But for the first time Oki felt fear at the situations he must have experienced in another world. It was beyond even a magus's imagining.
+
+—What kind of hell does an ordinary high-school student have to be cast into to end up like this?
+
+"A-are you... all right?"
+
+What came out of her mouth was, therefore, that feeble question.
+
+Oki hated herself for being able to say nothing but that in this situation.
+
+"Hm? Ah... the poison doesn't work. That's a «Mage-Eater», a monster from the world I was in."
+
+She hadn't asked in that sense at all, but now that he said it, indeed.
+
+Despite taking that tentacle head-on, Daiki showed no sign of being poisoned.
+
+"I think it had another, proper species name, but I never learned it. Anyway, its poison acts on magical energy. If you have no magical energy, you can't be eroded."
+
+"I... see. So that's why..."
+
+"By the way, Oki. I'd like you to make that black armour again."
+
+Daiki asked it facing forward.
+
+There was not the faintest sign in him of his spirit breaking.
+
+"There was an argument for taking hits bare since I've got no magical energy, but even without the poison, as I am now I can't withstand the force of the attacks themselves. In that respect, that stuff is good. I don't know why, but it takes the force down to almost zero."
+
+"I can do it, but — if the poison works on magical energy, then it'll—"
+
+"It takes two or three seconds for the poison to flow in through the tentacle. —So I just have to touch it for one second."
+
+That was absurd. How else was one supposed to describe it?
+
+"Nothing but... absurdities out of you."
+
+Because it was true, wasn't it. In that exchange Oki had been of no use whatsoever.
+
+She'd only been able to groan in pain and watch. —And despite that.
+
+"No, honestly, having to push absurdities through is rough. But, sad to say, I'm surprisingly used to that sort of thing."
+
+"...You're still going to fight?"
+
+"I showed you something pathetic, but I'm fine now. I've got a rough grasp of my current limits. Next time I'll make you a road through for certain. After that, well... figure it out."
+
+—This was it.
+
+Daiki was executing exactly what he'd said.
+
+**Trust me**, he'd said.
+
+Asking a magus to trust him, a powerless, ordinary high-school student.
+
+And he had also told Oki to **figure it out**.
+
+Since saying it, Daiki hadn't looked back at Oki once; he was devoting himself to his own role.
+
+The reason was obvious.
+
+He believed that Oki would definitely figure something out.
+
+He was believing in her.
+
+He wasn't going to be one-sidedly protected.
+
+But he had not the slightest doubt that whatever he lacked, she would fill in.
+
+That the promise they'd exchanged would be kept without fail, as a matter of course.
+
+—In that case, was what Narumi Oki should be doing right now watching his back from here?
+
+No. Of course not.
+
+Struck or eroded, stand as many times as it takes and look forward—
+
+"—«Palisade» (*shigarami*)—"
+
+With the words, several black bands drove into the ground and became a wall protecting Daiki and Oki.
+
+And she continued:
+
+"—«Needle»—"
+
+Daiki couldn't see it, but spikes covered the surface of the wall Oki had made.
+
+It would amount to little more than a deterrent, but if the poison could only be delivered through a strike, it would buy time.
+
+"Will this do... Daiki?"
+
+Saying it, Oki forced her body upright.
+
+Her whole body hurt absurdly.
+
+She wanted to anaesthetise it with magical energy, but doing so might spread the poison further. So she couldn't try that, at least for now.
+
+But it didn't matter. What was that much to her?
+
+It was far easier on the heart than lying prone.
+
+—Black, thin threads extended from various parts of Oki's body.
+
+Like a marionette's strings, if one had to compare.
+
+As a last resort for forcing a body that wouldn't obey into motion, Oki had made «Pure Black» into threads and tied them to herself.
+
+It was the same as Daiki the Hero being able to move his body freely.
+
+For a girl who was a witch, there was magecraft she could move more freely than her own body.
+
+Of course, she'd never tested such a thing. It was a spur-of-the-moment idea with no rehearsal.
+
+Even so — if it was necessary, then she would simply do it.
+
+"...Are you all right?"
+
+At Daiki turning his eyes slightly toward her, Oki smiled as though it were obvious.
+
+"Do I look all right?"
+
+"I see. Splendid."
+
+"Never mind that — I'd like you to look this way for a second."
+
+Forcing her body to move, Oki walked over beside Daiki.
+
+Only then did Daiki shift his gaze from the front to Oki beside him — and in that instant,
+
+"It's an emergency, so I'll hear your complaints later."
+
+"Hey, what? What are you talking ab—"
+
+"—Mm."
+
+Oki reached for Daiki's face, pulled him in and forcibly took his lips.
+
+"Mm?!"
+
+Daiki hurriedly tried to escape.
+
+But Oki, forceful for once, with a needlessly manly vigour:
+
+"Hey, stop struggling. Put up with it for a moment, you're a man, aren't you — *mmh*."
+
+"Mm, pwah— mmmmh?!"
+
+A tongue was forced in, and at the sensation of his mouth being played with, something ran up Daiki's spine.
+
+Mucous-membrane contact of the most thorough kind imaginable.
+
+Unable even to resist, Daiki had his mouth violated, and was finally released after a good ten seconds.
+
+"Okay, that's perfect. —For the record, this is your fault, Daiki."
+
+Saying that, for some reason, Oki licked her lips.
+
+It felt oddly seductive, and Daiki hurriedly shook his head to sweep out the inside of it.
+
+"...I don't see how that follows, but it was necessary, was it?"
+
+"Obviously. ...Sorry for taking it without permission."
+
+"It's fine. Not if it's you."
+
+"What is that supposed to mean that changes the whole conversation I should like to hear about that in detail later."
+
+"What is that."
+
+"Shut up. ...Daiki."
+
+"What."
+
+"—**I trusted you.**"
+
+Daiki smiled thinly at the words.
+
+—That was enough; it got through.
+
+"Let's go, Oki."
+
+"Whenever you like, Daiki."
+
+The two lined up, faced forward, and fixed the line of death ahead as their destination.
+
+—The Hero who'd had it taken away, and the witch who'd had it given: this was their first battle.
