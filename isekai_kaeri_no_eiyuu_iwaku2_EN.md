@@ -14753,3 +14753,430 @@ Without, of course, showing any particular sign of being affected—
 Urei Aiko asked Daiki:
 
 *"Am I to take this as a commission?"*
+
+2-09 "The Exile League" — 2
+-------------------
+
+Several hours later. Just past seven in the evening; the place, near Saitama-Shintoshin Station.
+
+Daiki Kurosu had come alone to a spot packed with crowds.
+
+Perhaps there was an event at the Super Arena nearby; the flow of people was heavier than usual, and announcements repeated at the station.
+
+Thanks to that, getting a seat at a café had taken a little effort — though hardly a great hardship.
+
+"It's a date!"
+
+"No, it isn't."
+
+"This man really is cold!"
+
+The courier woman sitting opposite — Urei Aiko — said it with a thoroughly delighted expression.
+
+It was obvious she was teasing, and by now Urei must surely understand that it doesn't land on Daiki.
+
+Why she keeps it up without tiring or learning is a mystery.
+
+Daiki was starting to feel almost apologetic for being unable to produce an entertaining reaction.
+
+"..."
+
+Would the Daiki Kurosu from before he crossed to another world have managed a wittier response?
+
+In mental age alone Daiki is past twenty, but he doesn't feel he has matured by that many years. By his own self-recognition he's seventeen, the same as his body.
+
+His experiences in the other world didn't develop his emotional range. If anything his heart was worn down, leaving only the sense that something large about him has changed.
+
+He doesn't know what kind of change, but it's irreversible.
+
+That it isn't called growth is the only thing Daiki knows about it.
+
+"...Still. You really do just walk in normally, don't you. Shintoshin is inside the range too, probably."
+
+"Hm? What are we talking about?"
+
+Urei, who had been stirring her iced coffee with a straw, tilted her head at Daiki's words.
+
+Lifting his gaze from a blend he hadn't yet touched, Daiki continued,
+
+"There's supposed to be a barrier over this city. It detects intruders or something."
+
+Well, having watched examples of it being slipped past with ease, its reliability looked low.
+
+"Is that something to say after calling me out?"
+
+"Fair point. But precisely because I called you, it'd be a problem if Oki found you."
+
+"Suspected of an affair?"
+
+"What I suspect is your sanity. That's not it. Oki is this area's administrator, isn't she?"
+
+Daiki had been told that outside magi entering the territory isn't welcomed.
+
+"Well, I don't get found out."
+
+"I know that."
+
+"So you can play with fire to your heart's content. Yes — with me!"
+
+"That I don't know about."
+
+"Daiki's cold treatment is becoming a habit for me..."
+
+The power the courier Urei Aiko holds: an aberrant power that slips past magical detection — «Degeneration».
+
+At the very least, the story went that the Watarai father and son had entered this city through Urei's guidance.
+
+"But, right. That reminds me of something related."
+
+"Mm... what?"
+
+"Ahh... no, thinking about it I've no obligation to tell you this. Well, it slipped out, so never mind. Call it a service — listen gratefully."
+
+"That sounds ominous... what is it?"
+
+"—This city's barrier is probably broken. The intruder detection isn't functioning."
+
+"..."
+
+For a *service*, that felt like a fairly serious thing to be told.
+
+To Daiki, who fell silent, Urei continued,
+
+"To begin with, at a scale as vast as an entire city, and in a place with this much human traffic, a barrier that detects only magi with harmful intent — if you ask me, its very existence is doubtful."
+
+"Is it...?"
+
+"Obviously. Exercising magecraft at that scale is absurd in itself, and even supposing you had such a formula, where would you source the magical energy to maintain it?"
+
+"Huh... no, asking me is no use..."
+
+"I'm not asking you as such. In short, great magecraft at that scale isn't a human feat to begin with. And at the very least it isn't taking effect at present."
+
+"..."
+
+Then Oki being unable to detect those «Exile League» people is only natural — Daiki considered it, but no answer emerged from that information.
+
+There are several possibilities.
+
+Excluding the possibility that *Urei is lying*, the immediate options would be these three.
+
+One: Oki deceived Daiki.
+
+Two: Oki spoke believing it true, but it differed from fact.
+
+Three: the barrier was destroyed and lost its function without even Oki knowing.
+
+The first can be excluded.
+
+The same goes for Urei, but for Oki too, there is by any reckoning no benefit whatsoever in telling Daiki such a lie. It's so meaningless that it wouldn't matter if it were a lie.
+
+If Daiki at least had magical energy it would serve as some deterrent, but a barrier he can neither detect nor be targeted by is, frankly, the same to Daiki whether it exists or not.
+
+Well, at a stretch it might carry the meaning of *keeping Daiki from guiding in outside magi*.
+
+But there's little point in laying that line of prevention against a Daiki who had no magus acquaintances in the first place.
+
+And for that matter he's now guiding one in quite normally after hearing it. It can be excluded.
+
+"This barrier — is it something that can be destroyed if you set out to?"
+
+At Daiki's question, Urei made a sour mouth.
+
+"Weeell, at my level it's out of the question even standing on my head. A barrier whose operating principle you don't even know is untouchable. Honestly, I can't even distinguish whether it's there. I'd only been acting on the premise because I'd been told there was one."
+
+"I don't have a good sense of your level... how impossible are we talking?"
+
+"Close to outright impossible. If you wanted to precisely destroy only the barrier, I doubt even Narumi Oki or Kazuya Watarai could. Calling in several specialists from the Ritsukai and spending a long time might barely do it — that sort of level. Which is exactly why I doubt it exists."
+
+"Mm... no, wait. Then how do you know it *isn't* there?"
+
+"Because I tested it normally, with my own body. That's all."
+
+"...Tested it?"
+
+"Huh, obviously. In this world, if you're going to live freelance, information is your lifeline."
+
+"..."
+
+Belatedly, Daiki reconsidered that borrowing the power of a woman called Urei Aiko is a double-edged sword.
+
+Let your guard down at her good-natured manner and you'd be betrayed and have your legs swept out easily enough.
+
+Still.
+
+If that barrier never existed in the first place, it means someone around Oki deliberately deceived her.
+
+At the very least, that possibility rises to the surface.
+
+No. If anything, perhaps it's better to act on that as a premise.
+
+At the least, «the Exile League» had plainly made the magus girl Narumi Oki their objective.
+
+Things seem to be getting troublesome in various ways.
+
+Daiki became newly aware of it, but he's simply far too ignorant of magi's circumstances.
+
+At least on the information side, it's difficult for Daiki alone to help Oki.
+
+—Which is exactly why.
+
+Making contact with Urei like this, without even telling Oki, is a meaningful act.
+
+"No... that's an excuse, isn't it."
+
+Having thought it, Daiki shook his head.
+
+That's reasoning after the fact. This time, Daiki's reason for calling Urei was his own circumstances.
+
+At Daiki's quietly self-admonishing words, Urei, across from him, tilted her head.
+
+"Dai-chan?"
+
+"No, it's nothi—... hold on, what's with that name."
+
+"It's a nickname."
+
+"Stop it."
+
+"Ehh, then nothing for it, I'll settle for Darling."
+
+"Stop that too."
+
+"Uu... called out to be used as she pleases and treated harshly — onee-san is sad..."
+
+He began to feel he'd chosen the wrong person, but with no connections besides Urei there was nothing for it.
+
+He shook his head. Responding to each of Urei's absurdities is a waste of time.
+
+"Let's get to the main point. What I want to commission from you is, well... mediation, you could say."
+
+"Mediation...? Doesn't feel like a job to bring to a courier."
+
+So Urei said, but her mouth was faintly smiling.
+
+At the least her interest was caught. Otherwise she presumably wouldn't have come at all.
+
+"There's someone I want to meet, but going alone is dangerous. So this is insurance. To put it in your terms, I want you to carry me safely to the meeting and carry me safely home again."
+
+"That's word games... in effect you mean a bodyguard."
+
+"No, if possible I want you to set up the meeting itself."
+
+"That isn't even grazing *carrying* anymore!"
+
+"No good?"
+
+"Well, that depends on the fee. I'm an accommodating woman. But I'm not so soft as to be conveniently used for free over and over, you know?"
+
+"That's fair... but you came knowing I have no money."
+
+"Because I thought it was an invitation to a date."
+
+*Liar*, he thought plainly, though he certainly had no grounds to deny it.
+
+"I'm fairly sure I called you saying I had a commission..."
+
+"I assumed you were hiding your embarrassment."
+
+"You've got an answer for everything..."
+
+"On a date there's no fee. In fact I'd be happy to treat you. Coffee money or hotel money alike."
+
+"I'm not taking that kind of rest stop."
+
+"For Darling, the body is free of charge."
+
+"What *are* you, honestly?"
+
+"Ah, but being had for free is only the first time! Play goes as far as one night. From the second time on I take it as serious!"
+
+"I'm done with this person..."
+
+"But work is separate. I can't afford to be taken lightly. Unless I'm paid, I can't take your side, Daiki."
+
+"..."
+
+"If you were the one taking it, I'd consider it."
+
+"Why do you say the things that absolutely don't need saying?"
+
+"Huh, because your reactions are funny... your body's honest, Daiki!"
+
+That last one felt like an unguarded reply, and Daiki rather wanted to sink into a depression.
+
+That said, he had, as before, given some thought to payment.
+
+Daiki understood perfectly well that Urei isn't the type to be moved by sentiment.
+
+"Well, as you know I have no money. The payment this time is information again."
+
+"I figured you'd go that way. Do you still have a card up your sleeve?"
+
+Urei already knows Daiki's true nature — the fact that he experienced another world.
+
+And having been told there's no barrier, threatening to set Oki on her is blocked too.
+
+So from Urei's position, checking whether Daiki still has anything to pay with is natural.
+
+So Daiki answered.
+
+"—No, I don't know."
+
+"Sorry...?"
+
+"What kind of secret is there, I won't know until I've met them. So this time it might turn out to be worth nothing at all to you."
+
+"...You're saying the person you're meeting holds some kind of secret?"
+
+"I wonder... *the person I'm meeting is some kind of secret* feels closer. So what I can offer is the condition that **you may sit in** on that conversation."
+
+"Huh... quite the bold move again."
+
+"Yes. This time I wouldn't be surprised to be refused — I do think that, a little."
+
+"Ha ha, listen to him. —Onee-san doesn't dislike that kind of cheek so much."
+
+That Urei called it *cheek* confirmed for Daiki that his reading hadn't been far off.
+
+In which case the meaning of meeting her here was about half fulfilled.
+
+—In short, this is a question of how Urei Aiko evaluates «Daiki Kurosu».
+
+That she's directing no small interest at him is certain.
+
+That she gave her contact details to a Daiki Kurosu who is strictly an ordinary person, and answered a summons like this, makes that clear.
+
+Daiki understands perfectly well that the reason isn't fondness for his personality.
+
+Naturally the greatest reason is presumably that Daiki Kurosu experienced another world.
+
+And at the same time, a large question for Daiki lay hidden in that very part.
+
+—I did experience another world, but **so what**?
+
+So Daiki wonders.
+
+He can't believe Urei would take a special interest in such a background. It has nothing to do with Urei's life, and no exploitable value.
+
+But she's invested to a degree that can't be settled as mere curiosity.
+
+Conversely, apart from his having experienced another world, there's no reason for Urei to take an interest in Daiki.
+
+Then there's only one answer.
+
+—Urei Aiko has a reason, as yet unspoken, for directing interest at one who experienced another world.
+
+Come to think of it, her reaction when he talked her round before the fight with Kazuya Watarai had been odd too.
+
+What it is, he has no way of knowing; but Urei has some reason to be concerned with Daiki.
+
+"It depends on who you're meeting and what you'll talk about. Without that being disclosed—"
+
+And in fact Urei said it. A natural demand, certainly.
+
+But it means she'll accept Daiki's proposal depending on conditions. Daiki's suspicion turned to certainty too.
+
+After all, Daiki has already told Urei that he's going to meet someone and talk about something secret.
+
+The moment Urei knew that, the situation changed.
+
+This appears to be no information at all, and yet it is nothing of the kind.
+
+Urei in particular, knowing that, could choose any number of ways to eavesdrop. With her ability, listening in while hidden would be nothing.
+
+Summarised, Daiki's words are merely the proposal *in that case you may as well attend from the start*, plus the reminder *because otherwise I might die*.
+
+One might rephrase it as blackmail that takes his own person, information and all, hostage.
+
+Since Daiki is doing no more than saying: if you want to know anyway, protecting me from the start is smoother.
+
+So Daiki was reasonably prepared for refusal.
+
+"The person I'm meeting is... well, how to put it, something like an old acquaintance."
+
+So this is a fairly dangerous bridge for Daiki to cross too.
+
+Since it's a negotiation, he can't lie. But he can phrase it so as to induce a misunderstanding.
+
+"...Old?"
+
+"Yeah. I saw a face I thought I'd never see again. I want to talk, but apparently there's something going on between them and Oki. I don't know the details, but we've already been hostile once."
+
+"I see; hence going alone."
+
+"Yes. ...Well?"
+
+A short pause. Then Urei's expression relaxed and she said,
+
+"...Understood. If that's the case, I don't mind taking it on."
+
+"Good, that helps."
+
+"Ahaha. Call it in deference to your nerve, I suppose. Certainly it seems better in various ways to have you alive. Let me be conveniently used, then."
+
+"..."
+
+She'd seen the crux of the negotiation and gone along with it anyway, it seemed.
+
+That said, this time the objective was less getting Urei to accept the commission than confirming whether Urei would accept it at all.
+
+In that case the result was good.
+
+Though depending on the case, it might have been luckier if Urei hadn't taken an interest.
+
+"So? When, where and with whom are you meeting?"
+
+To Urei, moving things along, Daiki answered easily.
+
+"Who knows?"
+
+"Ehh..."
+
+"I don't even have a means of contacting them; if anything I want to leave that to you as well. I said so, didn't I?"
+
+"No, I didn't think you meant at that level! How much are you leaving to me?!"
+
+"I figured you could manage somehow."
+
+"...I don't know why, but isn't your evaluation of me oddly high, Daiki?"
+
+"I told you before — I rate you highly."
+
+"My body, you mean."
+
+"That's not what I said."
+
+"Nahaha, well, never mind."
+
+He rather felt it did matter, but he lacked the energy to push a cheerful Urei any further.
+
+Daiki let out a small breath. Watching him with narrowed eyes, Urei said,
+
+"Still, realistically. I can't very well search for someone whose identity I don't even know."
+
+"Well, they're certainly nearby. And I know their affiliation."
+
+"Affiliation? Huh... so they belong to some organisation."
+
+"Yeah. Apparently it's called the Exile League."
+
+"—What was that?"
+
+At Urei's unexpectedly large reaction of surprise, Daiki was taken aback.
+
+"Ah... what, is it so dangerous you'd rather not get involved after all?"
+
+"...Well, they are a dangerous lot. No, that's not it. Daiki, are you saying you've come to blows with the Exile League? And recently, around here?"
+
+"Recently — today, in fact... is something wrong?"
+
+"..."
+
+"Urei?"
+
+Daiki asked the narrow-eyed Urei. And after a while,
+
+she shook her head slightly and told him, slowly:
+
+"The Exile League, I've heard, **was wiped out** some time ago."
