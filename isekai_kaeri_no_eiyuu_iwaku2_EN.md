@@ -7657,3 +7657,282 @@ She tugged at Daiki's sleeve and thrust her phone screen at him.
 —Good for you.
 
 Without a scrap of sarcasm, from the bottom of his heart, Daiki thought it.
+
+1-20 "The Former Hero, and This World" — 5
+-------------------
+
+After the meal, they parted from Nagi there.
+
+Daiki had thought he might as well spend the day somewhere with Nagi, but Nagi herself firmly declined his offer.
+
+Once the meal was over, she left the shop saying she'd go on home.
+
+"I don't know the circumstances, but it means you'll be with Narumi-san for a while, yes? Then don't mind me; please give that its proper priority."
+
+Nagi said it.
+
+*There's no telling which of us is older*, Daiki found himself thinking.
+
+"...Is that all right?"
+
+"Whether it's all right isn't for me to decide, I think. If senpai believes it's right, then his sister simply believes it. But do at least send word properly, all right?"
+
+"Yeah, you're right... sorry, I'll come home properly today."
+
+"...Understood. I'll smooth it over with Mother and Father."
+
+Faced with a sister who was far too understanding, Daiki felt a little — no, quite a lot — apologetic.
+
+He'd told her nothing but *I can't say why, but circumstances mean I'll be acting with Oki for a while, so please don't worry* — and even Daiki thought it was far too suspicious.
+
+That she'd swallowed it meant that much trust.
+
+At the same time, he knew he was worrying her.
+
+By his impressions since returning from the other world, Nagi was a girl who looked up to her brother a great deal and cared about him.
+
+She must have had no small number of thoughts about it.
+
+"...What do you think?"
+
+—Thinking that a brother who **had Oki observe** such a devoted sister was a bad brother, Daiki asked.
+
+In the shop after Nagi had gone, Oki, sipping her after-meal coffee, answered with an ambiguous expression.
+
+"There's nothing much to say, is the feeling. Honestly, she was just normal."
+
+"...Normal, huh."
+
+"Yes. As far as I could see, I couldn't find anything unusual. Her body is at an ordinary person's level, and she has no magical energy. Well, I didn't go so far as to use the Mystic Eye, and I can't identify Ikai or Gakkai people on sight, but... those are hard to credit as possibilities anyway. If she were a natural-born Empowered I couldn't say, but at least there's no sense of that."
+
+"'Sense of that' being—"
+
+"A rough feeling, that's all. People from the back side of things have a certain characteristic whiff about them."
+
+"I feel like I understand... but is it reliable?"
+
+Recalling the odd people of Earth he'd met so far, Daiki tilted his head.
+
+There had certainly been a lot of unusual people, but he wasn't confident he could pick them out standing next to ordinary ones.
+
+Oki shrugged lightly and shook her head at the question.
+
+"Nah, it's strictly intuition. There are people who are good at hiding it, and conversely someone who seems suspicious isn't necessarily. Simply, as my observation, she was an ordinary person. That's all."
+
+"Well... then that's presumably what she is."
+
+Speaking purely of probability, over ninety-nine per cent of Earth's people were apparently ordinary.
+
+This merely eliminated a possibility. He'd expected as much.
+
+"—The strange one is me, isn't it."
+
+"..."
+
+At Daiki, who'd said it simply as a conclusion, Oki turned a difficult expression.
+
+He hadn't put any negative intent into the words, and noticing they'd been taken that way, Daiki shook his head.
+
+"I've been thinking it all along. —**Is this Earth really the world I was born in?** I've been unable to feel sure about it this whole year... no, the reverse. I came to doubt it."
+
+Saying it, Daiki sipped his coffee.
+
+A taste he remembered — one he hadn't been able to enjoy in the other world. This was Earth.
+
+But **whether it was the same Earth Daiki had originally lived on was unknown**.
+
+The biggest reason was, needless to say, his sister — the existence of Nagi Kurosu.
+
+In Daiki's world, Nagi hadn't existed.
+
+But in this world, she did.
+
+"At first I was confused. But I soon realised that I was the only one who was confused."
+
+"...I imagine so."
+
+Oki nodded.
+
+"There were two patterns. One is the case where a sister who shouldn't exist suddenly appeared for you. The case where *she* is the foreign body — but."
+
+"Nagi is a perfectly ordinary human. There's no way she could do such a thing... and no reason to."
+
+A complete stranger pretending to be Daiki's sister. Or else believing herself to be.
+
+At that point the motive and the cause are a mystery, and as for the method, it can only seem impossible.
+
+"In that case you'd need a rewriting of perception on the scale of an entire world. In practice it would only need to cover the range of people who know her... well, same thing. I can't believe a human could use magecraft like that."
+
+"On top of which, Nagi isn't even a magus."
+
+"Then case two—"
+
+—**The foreign body, as far as this world is concerned, is Daiki Kurosu.**
+
+Oki didn't put it into words that far, but Daiki at least was already all but certain.
+
+"And Yuika became distant. In this world we probably weren't close to begin with."
+
+In this world, Yuika Asatsuma had not been Daiki Kurosu's childhood friend.
+
+If it was simply that, then there was nothing strange about it at all.
+
+"**A parallel world** — a so-called **parallel world**."
+
+A world of possibility.
+
+As Oki had touched on in conversation with Daiki before, its existence had already been demonstrated in the magical field. Even ordinary people knew the concept, at least.
+
+And Daiki had come to think that he might have returned to one such parallel world.
+
+"I meant to come back from another world, and I came to yet another other world."
+
+Daiki had been using the word *another world* to mean *a world entirely different from Earth*.
+
+So the moment he came back to Earth, he had believed it to be home (*furusato*).
+
+He hadn't even considered it.
+
+That *an Earth, but a different Earth from the one Daiki was born on* would also be another world — asking someone to arrive at that notion was too much.
+
+"Well, even so... I doubted it and believed it at the same time. That'd be a bit cruel, wouldn't it — you'd want to whine about it a little, right? So I tried not to think about it. And in fact, apart from that, nothing at all is different from the Earth I was on."
+
+Even after being presented, first thing, with the near-decisive evidence of a sister who shouldn't exist.
+
+*You're overthinking it, maybe it's some kind of mistake, what's wrong with having a sister* — for someone who'd nominally saved another world as a hero, he had deceived himself with excessively feeble assumptions.
+
+Or affirmed to himself that even if it were true, there was nothing to be done. But.
+
+"—**Then I met you.**"
+
+"..."
+
+"I met a magus. And not only you: I've now come to know three more magi, and met someone with future scientific technology. There are the Empowered too, aren't there?"
+
+"...Was it me who made you certain? That this world isn't your world."
+
+Because on the Earth before he was sent to another world, Daiki had never once seen a supernatural existence like magecraft or aberrant power. He had learned of them for the first time after coming back from another world.
+
+By rights, that in itself wasn't strange.
+
+Magi lurk in hiding.
+
+Even those who aren't magi — fundamentally, those with some kind of abnormality don't come out into the open. That's exactly why they're called people of the back side, and they identify themselves that way.
+
+But — there was also the possibility that in Daiki's world such people genuinely hadn't existed.
+
+In that case, her own existence had surely tormented him — Oki bit her lip and gazed at Daiki.
+
+But Daiki's eyes widened slightly, and then he laughed a little.
+
+"Mm... ah, no, it's not your fault, is it? There's every chance magi and so on existed in my world too. And in any case, I'd more or less become certain over this past year. I tried to deceive myself, but I'm not dexterous enough to pull it off."
+
+The experience he'd gained in another world wasn't thin enough for him to go on blindly believing convenient possibilities.
+
+That wasn't the point.
+
+What existences like Oki the magus, or the Empowered, or holders of future scientific technology had thrust at Daiki was, precisely, **possibility**.
+
+"...If it's impossible, it can't be helped. You just have to face it head-on. I'd been thinking I'd live in this world. But if there might be a possibility — then the story changes."
+
+"Dai... ki...?"
+
+"**It means that if I searched in earnest, I might find a means of crossing to another world.** And if that possibility has been laid in front of me... then shouldn't I be doing that?"
+
+In fact, Kūya Watarai at least had succeeded in connecting a route to another world.
+
+It was still only summoning monsters from another world, and by no means a technology by which a human could safely cross.
+
+Even so, it was a fragment of the possibility that the magecraft might be developed further.
+
+"Daiki... does that mean you think **you should disappear from this world**...?"
+
+Oki asked.
+
+She didn't know why her voice trembled of its own accord.
+
+Oki couldn't notice that somewhere in her heart there was a self who hated the idea. So she could say nothing, and could only listen to Daiki's next words.
+
+"...For instance, my parents aren't my parents. I'm not those people's son, and so of course I'm not Nagi's real brother either. Because I'm a human from a different world."
+
+For an instant, Oki didn't understand what Daiki's roundabout words were driving at.
+
+But she realised immediately.
+
+Come to think of it, there had been signs.
+
+Daiki took an oddly deferential attitude toward his family. Enough to hide a broken arm and avoid even going to a hospital. —He hadn't wanted them spending money on him.
+
+**Because they weren't his real family.**
+
+"No, wait, Daiki... surely you don't have to worry about it that much."
+
+"Don't I?"
+
+"Even if this is a parallel world to you, they're still the same people, the same humans, aren't they? For you they're the family you finally got back to, aren't they? Granted, you don't know the sister, but..."
+
+"...You're right."
+
+To Oki's insistence, Daiki answered with a smile.
+
+"That's exactly it, Oki. Just so. For me, nothing's different from before. And they think so too — **which is the problem**."
+
+"Th-the problem?"
+
+"It means nobody thinks it's strange that I'm here. ...You see, don't you?"
+
+"—!"
+
+Oki caught her breath.
+
+Exactly. If Daiki was the foreign body and nobody had noticed—
+
+"—**Then the Daiki Kurosu who should have been in this world from the start has vanished somewhere.**"
+
+Daiki didn't know which it was.
+
+Had he been swapped and vanished into another world? Or pushed out into a different parallel world? Or had this world's Daiki been annihilated by the arrival of the Daiki that was himself? —**He didn't know.**
+
+What he did know was only the fact that he had stolen the place of this world's Daiki (*himself*).
+
+"That's... not on, I think. Surely."
+
+Daiki murmured it in a dry voice.
+
+Naturally, it wasn't Daiki's responsibility, and above all it was all far too late.
+
+There was surely no method in this world for returning stolen time, and there was no guarantee that the original Daiki Kurosu would come back if Daiki disappeared.
+
+**Nothing could be done about it.**
+
+"Nothing can be done... I know that. I know, but even so, there might still be some possibility of doing something, right? That's... something I can't ignore."
+
+"...What are you going to do, Daiki?"
+
+Oki asked it.
+
+The girl wanted to hear his will.
+
+The young man answered.
+
+"Who knows... I don't know. I said all that, but it's not as if I can disappear right now. And Watarai, who seemed to have a hint... I've lost the chance to talk to him. For a while I think I've no choice but to go on borrowing this place (*myself*) as it is. Maybe it'll just stay this way."
+
+After a short silence—
+
+"Then what if you found a way to go to another world?"
+
+"...What would I do. Parallel worlds seem infinite, so rather than searching for my original Earth, going back to the other world I'm used to might be better. I'd originally intended to live over there. I never thought I'd be able to come back. Well, strictly speaking I haven't come back."
+
+"..."
+
+"In a hurry, but taking it easy, I suppose. So let me keep helping you for a while. I might find some hint."
+
+"...Hey, Daiki."
+
+Hearing his words, the magus girl—
+
+She didn't know the reason.
+
+But before she knew it, she had said it.
+
+"Listen to my story for a bit."
