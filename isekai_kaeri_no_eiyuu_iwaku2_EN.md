@@ -13866,3 +13866,402 @@ The girl cried out in anguish.
 Words critical even for Daiki.
 
 "—**I never had this face to begin with!!**"
+
+2-06 "All's right with the world" — 6
+-------------------
+
+"What on earth... are you talking about?"
+
+In the end, Daiki answered the girl's voice.
+
+He couldn't think it was some kind of trap — no, even if it were, it wasn't a situation he could ignore.
+
+Of course he understood the situation.
+
+Oki should still be fighting the man who called himself Adalbert.
+
+Daiki trusts her ability, but as he sees it, the essence of combat between magi is *an exchange of first-encounter kills*.
+
+Not a simple measuring of strength against strength, but a contest over who lands the fatal blow first.
+
+That differs considerably in essence from the battles Daiki experienced in the other world.
+
+The fighting Daiki knows was literally a competition of strength.
+
+Because bodies and magic grow beyond common sense the more you train them. Stats rise as in a game, and the fangs of the weak stop working.
+
+In extreme terms, the Daiki of his other-world days, holding the holy sword, would have been fine taking a direct hit from an ordinary handgun or bomb.
+
+It's hard for the weak to possess means of overturning a difference in force against the strong.
+
+But on Earth it's different. Naturally enough in a sense, training barely raises your HP or defence.
+
+Since only attack power is high, the premise of combat is that both sides can hold a one-hit kill.
+
+However strong you are, the slightest lapse of attention connects directly to defeat — to death. There's no such thing as a guarantee in this world's fighting.
+
+Though perhaps it's the other way that was strange.
+
+"I don't understand what you're trying to say. If you want to talk, undo the barrier first."
+
+Which is exactly why dealing with this situation comes first.
+
+If the people-repelling is undone, Adalbert can no longer lay a hand on Oki. The state of having many people around can, by itself, be a considerable defence.
+
+So it was a natural thing for Daiki to say, but the girl twisted her expression as if hesitating.
+
+"Uh... th-that's..."
+
+"Then there's nothing to talk about, is there. You came to kill us."
+
+"—Huh?! I-I don't know anything about that!"
+
+At Daiki's words, the girl's mouth fell open in surprise.
+
+...By now none of it made sense.
+
+Were Adalbert's words a bluff, and there was no intention to kill?
+
+Or was this girl simply not sharing intentions with Adalbert?
+
+Far too baffling.
+
+"Sorry, but we're the ones being attacked one-sidedly out of nowhere. Being given only demands is a problem."
+
+"Huh... no, that's..."
+
+"Undo the barrier. Can't you? Or are you saying it as a threat?"
+
+"Th... that, I can't do."
+
+"————"
+
+Since she was Adalbert's companion, did that mean falling in line with his objective?
+
+It was regrettable for Daiki too, but he had no intention of holding any objective above Oki's safety.
+
+As he gave up and turned his thoughts to fighting, the girl shook her head furiously.
+
+"Ah, no, that's not it! This isn't the kind of barrier you undo in the first place!"
+
+"What...?"
+
+"It isn't a people-repelling barrier! This is a separate space to begin with, and you two have merely wandered inside! There's no 'undoing' it; you have to leave."
+
+"................"
+
+Daiki has almost no knowledge of Earth's magecraft.
+
+And as for the magic of the other world, being a swordsman he hadn't known the details either.
+
+By that understanding—
+
+"...So it's like being lost in a maze? The only way out is to reach the goal?"
+
+"Th-that sort of thing. ...Are you not a magus...?"
+
+"You attacked me without even knowing who I am?"
+
+"A-attacked, you say. I was told Adalbert-san had business, and I'm only deploying «Sakuragi» to help with it... I wasn't told what he'd be doing."
+
+As she spoke, the girl swiftly pulled the short blade out of the floor.
+
+To Daiki, who watched warily, she said,
+
+"I'm sorry. In any case, that unlocks «Sakuragi». If you move a little away you should get out naturally. —Um! Never mind that, I have something to ask you!!"
+
+"...What?"
+
+"I-it's about my face. Do you know this face?!"
+
+"..."
+
+Honestly, it was a question he was at a loss to answer.
+
+*Do you know my face* normally means *do you know me*.
+
+And in that sense he can only answer no.
+
+She differs from the girl Daiki knows. Their faces are identical, certainly, but her personality is entirely different, and above all the world she lives in is different.
+
+It's certain that the girl before him isn't Lil Riaheart.
+
+But of course she isn't asking in that sense.
+
+"...I knew someone with a very similar face."
+
+So Daiki judged that this was what he ought to answer, and said it.
+
+And at those words the girl seized on him with something close to desperation.
+
+"Wh-where?! Who, and where?!"
+
+"...Sorry, I don't have time to answer. Take what I just said as thanks for telling me how to get out."
+
+"But—"
+
+"Someone close to me is being attacked by Adalbert. At this very moment. Sorry, but I'm going back."
+
+"—...!"
+
+Told that, she presumably couldn't argue.
+
+The girl looked down, bit her lip and stopped her words.
+
+Daiki turned back toward the window he'd come through.
+
+But in the end he shook his head once, then turned back toward the girl again.
+
+"Daiki Kurosu."
+
+"Huh...?"
+
+"My name. What's yours?"
+
+Daiki was extremely concerned about the girl's background too.
+
+So this was simply a measure for not losing an information source. He made that excuse to himself.
+
+"I-I'm Ruri. Ruri Chigiri. I think."
+
+—*I think.*
+
+That mysterious lack of confidence was concerning, but there was no leisure to ask further.
+
+"Chigiri... Ruri. Understood."
+
+"U-um?"
+
+"If you want to talk, come and see me normally once this is over. Then I can respond."
+
+"...Is that all right?"
+
+He didn't answer that question. He was aware he'd already said everything he ought to.
+
+So Daiki went back to the window and threw himself outside. A five-storey drop was no problem while holding the greatsword.
+
+He kicked off the road surface and headed back the way he'd come.
+
+—The *meanings* the present Daiki holds are, broadly viewed, only two.
+
+One is, of course, being of help to Oki. Daiki has found his meaning for living in this world in one girl, Oki.
+
+So the top priority is to act for her sake.
+
+And yet the other is:
+
+moving from this world, where he shouldn't really be, to a different world.
+
+He couldn't let an information source for that escape.
+
+Because this may, after all, not be the world in which the Daiki Kurosu that is himself was born.
+
+　　　　　※
+
+*Witch of embers who fears flame*—
+
+That was how Adalbert had expressed Oki.
+
+To avoid misunderstanding, let it be said in advance that Oki does not feel an inhuman terror of fire.
+
+At least, it isn't trauma that freezes her merely at the sight of it.
+
+In fact, in the decisive battle with Kazuya Watarai and the «Demon Lord» he brought, she used fire magecraft.
+
+—That is the problem.
+
+Oki certainly didn't want to use that flame magecraft by preference. In sheer destructive performance alone it surpasses Pure Black; it is the atoning ember-fire that purifies sin, taught to her by her father, Arataka Narumi.
+
+Though it's the magecraft she is best at, using it brings on a headache of unknown cause every time, and she almost never uses it. Not that combat magecraft is something one uses frequently in the first place.
+
+Why is that?
+
+When she uses it, somehow she feels that **she will remember what must not be remembered**.
+
+So Oki relied often on witch-arts in combat.
+
+And in fact, combat premised on fighting magi can basically be covered by that.
+
+"...Impressive, I should say."
+
+Adalbert let the words slip quietly.
+
+Yes; in truth there's little difference even when the opponent is one of the Empowered.
+
+The fundamental principle of the Pure Black Oki commands is «Severance». By origin, a power that allows nothing to approach.
+
+And now it was being blocked by the grey flame Adalbert commands.
+
+"————"
+
+Without speaking, Oki held her guard with no openings.
+
+In fact the Pure Black had only been burned that first time; since then Adalbert had been almost entirely on the defensive.
+
+That the Pure Black wavers is a mental problem of Oki's, and that was exactly what he was aiming at.
+
+Oki is a magus too.
+
+Once she could regain her composure, she arrived at that reasoning immediately.
+
+And of course at more than that.
+
+"That grey flame can't burn me, can it."
+
+She feels almost no heat from it. Oki pointed that out.
+
+Adalbert, for his part, had factored in that it would be seen through immediately.
+
+"Indeed. My flame is a flame that cannot burn the things fire can burn."
+
+"Isn't calling that fire a little presumptuous?"
+
+"Having fire explained to me by a witch leaves me no ground to stand on. Still, it has its conveniences — like this."
+
+"—!"
+
+In an instant, Adalbert's figure vanished.
+
+No. With a naturalness that created that illusion, he abruptly appeared behind Oki.
+
+A hand-blade strike aimed at the base of her skull; Oki dodged by leaping forward.
+
+A reflex forced by threads of Pure Black.
+
+Twisting in the air as if rolling forward, Oki planted her right hand on the ground and took an inverted stance.
+
+"«Thorn» (*ibara*)."
+
+From that position she fired a Pure Black thorn from her left hand like a bullet.
+
+Adalbert chose to evade it not with flame but with body movement.
+
+This time the process of his evasion was visible.
+
+Oki turned deftly back to face Adalbert, but she had to grind her teeth at how troublesome an opponent this was.
+
+Simply put, her attacks were being dodged lightly by physical ability alone.
+
+"...As you'd expect from an aberrant power worth banishing."
+
+"Oh? Have you fought the Empowered before?"
+
+"No, hardly ever. There aren't many of the Empowered at this level to begin with."
+
+"So you could see that much of my ability."
+
+"Yes. It doesn't look like simple spatial teleportation, at least."
+
+"I see... having even that seen through is troublesome."
+
+Every aberrant power the Empowered hold is abnormal and ignores reason, but even within that absurdity there is a logic attached to the thing itself. Using flame for a spatial-teleportation ability makes no interpretive sense.
+
+If it's an aberrant power that wields flame, it's natural to regard it as an ability to *burn*, *combust* or *reduce to ash* something.
+
+But normally, burning something doesn't teleport your position.
+
+Aberrant powers manifested in a visible form like this are extremely rare.
+
+The Empowered are rare to begin with, but even so, most don't take a visualised form such as producing fire or water — Oki had at least that much knowledge.
+
+For example (though Oki hadn't seen it), the aberrant power of «Degeneration» held by Urei Aiko, a Double Cross who is both magus and Empowered, is itself invisible in operation.
+
+That's the majority.
+
+But in this country there are **bloodlines that inherit aberrant powers through blood**, and she'd heard that one of them was a group of Empowered related to fire.
+
+"...I thought fire aberrant powers were «Hotarumori»'s exclusive preserve."
+
+"In Japan, yes. Unfortunately I myself have no connection whatsoever to that mercenary bloodline."
+
+And Adalbert denied any relationship with them.
+
+That was useful information for Oki.
+
+Since they're «the Exile League» in the first place she thought it would be fine, but she'd rather avoid involvement with the seven aberrant-power families in the country.
+
+They are a collection of supernatural beings for whom the principle is *hear the name and run*.
+
+«Hotarumori» in particular is rumoured to contain a demon-god capable of destroying an entire city single-handed.
+
+"—Hm."
+
+And there, breaking the deadlock, Adalbert suddenly raised his face and spoke.
+
+Turning to the narrow-eyed Oki, he smoothly dropped his combat stance.
+
+"Time's up. It seems «Sakuragi» has been undone."
+
+"..."
+
+—*Sakuragi*, whatever that was, was presumably Daiki's doing.
+
+"Let us call this a sufficient result for a reconnaissance-in-force, this time."
+
+"...You're running? I seem to recall a grand declaration about killing me here."
+
+"I was never so conceited as to think a witch could be killed in one attempt."
+
+Adalbert let Oki's provocation slide lightly.
+
+Honestly, Oki didn't want to let him go. His declaration hadn't been withdrawn.
+
+But if he committed entirely to escape with that ability, she didn't feel she could catch him.
+
+In this sort of thing the attacking side is fundamentally at an overwhelming advantage. Oki, on the repelling side, was saddled with disadvantage from the start.
+
+—And.
+
+"Never mind; I drove in my wedge."
+
+Adalbert said it.
+
+To the narrow-eyed Oki, he spoke in a tone that remained quiet throughout.
+
+"**You would do well to remember what you have forgotten.**"
+
+"What are you—"
+
+"Merely groundwork. Groundwork that has meaning in being laid. I've no intention of dying for nothing. Then it is not bad to hope for confusion, that is all."
+
+And the instant he'd said that much, Adalbert's figure had vanished from her sight.
+
+There was no trace of him around. Despite her never having looked away.
+
+"..."
+
+Honestly, if she were caught off guard by that ability, she didn't feel she could cope.
+
+Inverted, that connects to the question of **why, having that ability, he didn't choose assassination**.
+
+Yes — that was the part she couldn't grasp.
+
+"...How to put it. Is killing me really his objective...?"
+
+By now even that point had become doubtful to Oki.
+
+If he was setting a trap and waiting, there'd be any number of better ways to lure her out. As a surprise attack it was far too half-hearted.
+
+Oki simply couldn't grasp Adalbert's objective.
+
+She thought about it for a while, but nothing resembling an answer came.
+
+The one certain thing was that this attack would surely be repeated.
+
+—In the end, what she has to do next is think about how to respond.
+
+Either way, that doesn't change.
+
+"Oki!"
+
+And there a voice came from across the street.
+
+A figure running toward her. Daiki was running at a speed that was a bit too fast.
+
+"...You're far too dependable the moment you're holding a sword, Daiki..."
+
+Oki couldn't help a wry smile.
+
+Without much awareness of how, merely seeing that figure had relieved her from the heart.
+
+—That was the beginning of this affair.
