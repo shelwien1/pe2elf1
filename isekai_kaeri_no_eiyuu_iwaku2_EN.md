@@ -8512,3 +8512,244 @@ Oki intuited the meaning those words carried.
 She looked ahead. A black form from which she could feel nothing resembling a will. Its true nature was—
 
 "—Humans call that a «Demon Lord», you see."
+
+1-23 "Thus Spoke Unto the Former Hero" — 2
+-------------------
+
+A Demon Lord—
+
+It was a word one heard practically only in fantasy fiction, but Oki was in no position to laugh it off. The armour before her gave off a presence worthy of it.
+
+There were other remarks worth minding, though.
+
+—*A certain world...?*
+
+That was a statement premised on a world other than this one. Which is to say, another world.
+
+The technique for summoning monsters from another world had certainly already been found by Kūya Watarai. But that was the fruit of his talent — his magical aptitude, long years of research, and training.
+
+Even for his father, she couldn't believe it was easily imitated.
+
+That a parent and child specialise in similar fields of magecraft — that's plausible.
+
+But that individual talent, the direction magical aptitude points in, would be completely identical was hard to credit.
+
+Then why?
+
+"Indeed."
+
+To Oki's unspoken question, Watarai spoke.
+
+Her mind had apparently been read again.
+
+"I cannot open a door to another world as Kūya could. Not yet, at least. Ah, in that sense he certainly left me a great achievement at the end. He was an unworthy son, but my word... I never thought he'd reach it. I find myself wanting to praise him for the first time."
+
+"..."
+
+It was an absurd thing to say. He had unquestionably killed his son by his own hand.
+
+But Oki didn't have the leisure to dwell on it. She could only listen.
+
+The black armour showed no sign of moving after that first strike.
+
+Presumably Watarai was holding it back.
+
+As though he would answer every question of hers, he spoke the answers before she asked.
+
+"He came to this world of his own accord. That said, whether he is truly *he* I don't know myself; but thanks to that, the research advanced enormously. Indeed, without his existence I could never have put this plan into practice."
+
+"...This came to this world... on its own?"
+
+"Surprised? Yes — thanks to him, the existence of another world was proved. Had been proved. My unworthy son didn't know it, but he fulfilled his role all the same — ah, truly the finest achievement."
+
+She'd thought he meant that Kūya Watarai had devised magecraft connecting to another world.
+
+But immediately afterward Oki understood. No, that isn't it.
+
+Because if that had been what he needed, there's no way he'd have killed his son so easily.
+
+Then the «achievement» Kazuya Watarai spoke of was, of course—
+
+"Gh..."
+
+At Oki grinding her teeth, Watarai cast a glance that indicated time was up.
+
+Then, as though commanding the armour, he said:
+
+"I'm going to attend to my honoured guest. —I leave the rest to you."
+
+An instant later the black armour began to move again.
+
+An automatic response with nothing resembling will about it, like switching on a machine.
+
+But that «Demon Lord» clearly regarded Oki as an enemy, and she had no choice but to give everything to dealing with it.
+
+Oki couldn't stop Watarai as he left for the floor below.
+
+"Gh, w— wait!"
+
+"————"
+
+Oki tried to stop him, but the black armour wouldn't let her.
+
+The greatsword swung. Its movement carried no sense of weight, though it wasn't so fast as to be invisible.
+
+Oki reflexively deployed «Pure Black» to defend — and then remembered.
+
+—Come to think of it, it hadn't worked on that tentacled monster—
+
+A hard *clang* rang out.
+
+The shield of «Pure Black» had stopped the sword. Even so, to be safe, Oki took distance from the black armour blocking her path.
+
+She hadn't been able to stop Watarai, but if she could win easily, she could beat this thing and follow.
+
+And — if the «Demon Lord» in front of her was not an opponent she could easily beat, then—
+
+"————"
+
+The armour spoke no words.
+
+It merely glanced at the «Pure Black» that had stopped its sword, and—
+
+"...?!"
+
+its greatsword took on something like a black haze.
+
+Magical energy that made her skin crawl, as if a darkness that blocked light had manifested in the form of mist. Wrapped in it, the armour swung the greatsword down at the shield again.
+
+The result: in front of Oki, the «Pure Black» shield was cut in two.
+
+A sound like glass shattering. *Good thing I played it safe*, Oki thought, smiling as a cold sweat ran down her.
+
+"Honestly... every single one of them breaks it so easily... no."
+
+A blow of brute force. By rights that shouldn't work on Oki's «Pure Black».
+
+But precisely because Oki manipulated the shadow of «Severance», she understood that the black haze before her was essentially a power of the same lineage as her «Pure Black».
+
+Because it's a defence that can't be broken by force.
+
+For that to break it, that black haze must have a meaning — a concept loaded into it.
+
+"...«Arm» (*kaina*)."
+
+A murmur. A magus's word carrying incantatory meaning disciplines the self and completes the spell.
+
+Oki's right arm was covered over and over by black shadow. What formed was a gigantic Pure Black arm twice the size of the girl's body.
+
+Weightless as it was, Oki swung it at the Demon Lord with everything she had.
+
+The Demon Lord took it head-on.
+
+Interception with a swing of the greatsword. The haze it wore and Oki's shadow collided and interfered head to head.
+
+An exchange one could call a clash of black armours.
+
+Victory in that moment went to the Demon Lord's arm strength. The greatsword swung through, and Oki's giant arm was knocked straight back.
+
+But that too was something Oki had anticipated.
+
+The real move came next.
+
+Hidden behind the giant arm, the witch had prepared her next attack.
+
+"—«Thorn» (*ibara*)—!"
+
+Into the defenceless torso of the armour, its greatsword swung fully through, thorn after thorn stretched up from the floor.
+
+They completely ignored the armour's defence, pierced the body and pinned the Demon Lord in place.
+
+From the fissures the thorns had pierced, a little black haze flowed out.
+
+—Hollow. There was nothing inside the armour that could be called a body.
+
+Or perhaps the black haze itself was, in a manner of speaking, the Demon Lord's body.
+
+The leaking black haze covered Oki's thorns and shattered them.
+
+The armour regained its freedom.
+
+Which meant that even without wrapping it on the greatsword, the haze alone was enough to break through Oki's «Pure Black».
+
+"A power of «Destruction», so to speak...? I wouldn't know."
+
+Which was indeed, perhaps, a fittingly Demon-Lord-like capability.
+
+A black haze that destroys everything it touches.
+
+In that case this was a collision of concepts, a contest over whose law swallows the other's. A thoroughly magus-like match, one could say.
+
+Then she should have a chance of winning, Oki thought.
+
+But at the same time it was a bad situation — how was she supposed to deal damage?
+
+*Just break the armour* surely wasn't going to be that simple. If that haze itself was the body, she couldn't think of a way to damage it.
+
+Conversely, with the Demon Lord's ridiculous offensive power, even one hit getting through would inflict a fatal wound on Oki.
+
+"...Troublesome."
+
+Against Earth's human magi, Oki possessed a capability close to invincible.
+
+But that superiority evidently wasn't a logic that held in another world. Other-world existences generally possessed capabilities that could fairly be called anti-magus specialisation.
+
+A poison that eats magical energy and erodes magecraft, for one.
+
+A black haze that destroys everything it touches, for another.
+
+The matchup was far too poor for a magus.
+
+—In which case, she had to settle it in a short engagement.
+
+"«Denounce (Inquisiton)»—"
+
+With a bitter expression, Oki wove an incantation to establish magecraft.
+
+It wasn't a hand she liked to use, but of course Oki had magecraft she wielded as a magus.
+
+On a field of battle, she didn't have the luxury of prioritising preferences.
+
+"—«With a boundless wish (the witch with a sin), bring the hammer down on that impurity (Burn the memories)»"
+
+An instant later, hellfire blasted up beneath the Demon Lord's feet.
+
+It was the magecraft she'd been taught by her father and was best at.
+
+A purifying ember-flame that cleanses impurity.
+
+—*Listen, Oki. Your role is to kill wicked witches*—
+
+—*Yes. I understand, Father. I'll do it for you*—
+
+"—!"
+
+An instant later, black haze came at Oki in a straight line out of the hellfire.
+
+"Wha—"
+
+The formless haze could apparently extend its range. She leapt sideways to dodge, but the enemy didn't miss the opening.
+
+—Out of the hellfire, it hurled the greatsword at Oki.
+
+By stopping short she avoided a direct hit, but her line of advance was blocked.
+
+The haze, and the thrown greatsword.
+
+With those two it had bound Oki's movement.
+
+Naturally, that was an act to ensure the real attack landed. The Demon Lord had full judgement.
+
+With a crunch—
+
+hard enough to crack the car park floor, the Demon Lord kicked off the ground and closed on Oki.
+
+There was no means of evasion.
+
+—A steel fist clad in destruction pierced the witch's flank precisely.
+
+"Gh, gah—"
+
+A crunching sound rang out.
+
+The girl watched red blood drip from her mouth to the ground.
