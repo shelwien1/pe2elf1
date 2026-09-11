@@ -12501,3 +12501,282 @@ Oki glared hard at the phone she'd set down, to no effect whatsoever.
 Half in irritation, Oki flung the underwear she'd taken off.
 
 Then, stark naked, she gave up on various things, picked up her clothes and headed for the bathroom.
+
+2-01 "All's right with the world" — 1
+-------------------
+
+*All's right with the world* — that is perhaps what one ought to say here.
+
+The world of Daiki Kurosu, second-year high-school student, had undergone no great change, even having got tangled up with magi and the Empowered and so on.
+
+A peaceful, uneventful life had come back easily enough.
+
+"Haven't your nights out been rather excessive lately?"
+
+"..."
+
+Some mild complaints were lodged by his sister Nagi Kurosu, but that was all.
+
+For a high-school student, one's grades going up or down might well be the far greater incident.
+
+If there was anything that ought to be called a change, it was one thing only—
+
+"Honestly, even after being flung into another world, I came back to ordinary life like this..."
+
+"—Did you say something, Daiki?"
+
+—a single girl who tilted her head in response to Daiki's muttering.
+
+Narumi Oki.
+
+A middle-school girl whose true identity is a magus lurking in the modern day and an artificial witch.
+
+If one speaks of the greatest change, perhaps it was meeting her.
+
+"No, it's nothing. More to the point, what's this errand?"
+
+Daiki shook his head lightly and asked.
+
+The start of the week. Following the message that had arrived on his phone, Daiki had met up with Oki after school.
+
+Apparently there was someone she very much wanted him to meet, but he hadn't heard the details.
+
+"...Well, you'll see when we get there."
+
+Oki answered Daiki's question in a small voice.
+
+Somehow evasive. Daiki felt he was being fobbed off, but it was true that if the destination was decided, he'd find out by going.
+
+*I see*, he said, leaving it at that.
+
+At that reply, though, it seemed to be Oki who felt awkward.
+
+"Ah, sorry. It's just a bit hard to bring up."
+
+Oki scratched her cheek and smiled wryly. Daiki frowned.
+
+"Saying that makes me uneasy. Anyone you know is unlikely to be normal to start with."
+
+"...What's that supposed to mean?"
+
+"If it were a normal acquaintance there'd be no point introducing them to me. I naturally assume it's someone in the business."
+
+By *in the business* he of course meant someone connected to Oki's other face — her side as a magus.
+
+"Fair enough."
+
+Oki nodded lightly, then:
+
+"Right. Er, I think I mentioned it before, but this city's administrator has come back, so I thought we should get you introduced."
+
+"Introduced."
+
+"I do think it'd be better if you could avoid getting involved. But if you're going to keep sticking your neck into the world of magi, I thought it'd be better to meet sooner rather than later."
+
+"I see... well, that's probably true."
+
+"And also, simply, Waya-s... that person says they want to meet you. Sorry."
+
+"No, I don't mind."
+
+Even as he answered Oki, Daiki was tilting his head.
+
+Since they were going to meet a magus, he'd assumed they'd head out to the suburbs where there were no people, but Oki's feet were heading steadily toward the shopping district.
+
+Where on earth did they live?
+
+The magi Daiki knew, excluding Oki, numbered three. All of them had come from outside, so he couldn't picture how they lived day to day.
+
+He merely assumed that a middle-schooler like Oki wasn't the standard.
+
+—A modern magus hiding beneath the surface of society.
+
+Guessing at that true identity, with slight expectation, Daiki arrived where Oki led him — and it was:
+
+"...A café. And this one, of all places."
+
+The café Daiki had introduced Oki to only a short while ago — «Nodokaya».
+
+Led to a place more ordinary than he'd imagined, Daiki couldn't help a wry smile.
+
+Come to think of it, Oki had seemed a bit odd back then — he remembered it now, belatedly, and his shoulders shook.
+
+Apparently she'd known about it before being told.
+
+"Well, of course. Thinking about it, it's a meeting place..."
+
+At Daiki's murmur, Oki, about to enter the shop, turned back.
+
+"Ah, no, no. The person we're meeting is this shop's owner (*master*)."
+
+"...We're going to meet a magus, right?"
+
+"Yes."
+
+"And we're meeting a café owner?"
+
+"What are you on about."
+
+Oki said it as though it were obvious.
+
+"Being a café proprietor is an occupation. Being a magus is a way of life. It isn't an occupation. I don't see any contradiction."
+
+"I suppose..."
+
+At least in the other world Daiki had been in, *mage* had denoted an ordinary occupation.
+
+Maybe that's just how it is. There are worlds one doesn't know spread out right beside daily life.
+
+After all, one can be sent to another world merely by sleeping in one's own room.
+
+"But in that case... if it's this shop's master, I've probably met them normally."
+
+"Maybe. Then you might know the face."
+
+"No... I've never looked consciously. And I was in the other world a long time."
+
+He couldn't be expected to remember.
+
+He remembered struggling, on first coming back to Earth, with the work of recalling acquaintances' faces.
+
+There are surely people he can't recall at all.
+
+"—Welcome."
+
+Entering the shop, the member of staff who greeted them said it quietly.
+
+Oki smiled with a familiar air and answered her.
+
+"Hello, Ichinose-san. Could you call the owner for me?"
+
+But the woman addressed as Ichinose, who looked about university age, shook her head.
+
+"I'm sorry. Waya is currently out."
+
+"...Huh? Wait, um... huuuh?"
+
+Oki's eyes went round in confusion. Being unexpectedly weak to the unexpected made her very much a middle-school girl.
+
+Thinking about it, did this mean they'd been stood up? Daiki narrowed his eyes.
+
+And at that moment,
+
+a woman appeared from the back of the shop and, on seeing Oki, broke into a grin.
+
+"Ah, yo, yo, Oki-chan. Over here, over here."
+
+"...Yukimaru-san?"
+
+The one who appeared was a woman in flashy clothes.
+
+Her hair dyed light, she had a thoroughly sunny air about her. She too looked about university age.
+
+"Yeah, sorry. Lots happened, and Honoka-san went out again."
+
+"Went—"
+
+"Let's sit down and talk. Ah, Kyō-chan, sorry, three blends, please."
+
+The woman — the one called Yukimaru — moved things briskly along, made her request of the staff member and walked off toward the back of the shop.
+
+"This way, this way."
+
+Daiki peered at Oki's face questioningly.
+
+Oki's mouth was twitching, overwhelmed, but eventually she shook her head quietly.
+
+"...Let's go, Daiki."
+
+"Ah... all right."
+
+"Ahaha. You're quick on the uptake at times like this..."
+
+Daiki followed behind Oki, who advanced while letting drop that mysterious observation, laughing lightly.
+
+"Come on, you two, sit here."
+
+Yukimaru led them and showed them to one of the four-seat tables.
+
+At Oki's glance, Daiki sat first.
+
+Then Yukimaru, as a matter of course, sat in the chair beside Daiki.
+
+*Huh, that's the seating arrangement, is it*, Daiki thought, surprised but saying nothing.
+
+Oki, for some reason, looked shocked and flapped about looking between the two of them for a while, before finally settling into the seat opposite Yukimaru as if resigned.
+
+"Hnfufu."
+
+Yukimaru laughed, entertained. She'd been in high spirits the whole time.
+
+"Well, we finally meet. So you're the famous Daiki Kurosu-kun!"
+
+So Yukimaru said. She'd presumably heard about him from Oki or someone.
+
+Daiki nodded.
+
+"Er, yes. I'm Daiki Kurosu."
+
+"Ahaha, what's that. You're funny. Ah, has Oki-chan told you about me?"
+
+"—I haven't."
+
+That was Oki's answer. Her tone was oddly stiff.
+
+Undeterred, Yukimaru said "I see," and told Daiki with a laugh,
+
+"I'm Itsuki. Itsuki Yukimaru — nice to meet you, Daiki-kun!"
+
+"Right... Itsuki-san, then."
+
+"That's it, Itsuki-san, Itsuki-san! And, well, I'd say I'm in the same line of work as Oki-chan."
+
+—The same line of work.
+
+Which is to say, a magus like Oki?
+
+Daiki turned his eyes to Oki. She nodded once, then looked at Itsuki and said,
+
+"Never mind that — what do you mean Waya-san isn't here?"
+
+"Mm, exactly what it sounds like, I suppose. Seems the trouble they got caught up in is dragging on longer than expected, so they're off doing various things with the Ritsukai to clear it up."
+
+"Huh... is that so?"
+
+"Yep. It's enough for Honoka-san to be going out, so it looks like something big is going on across the water. So I got asked to pass on the message. And I wanted to meet Daiki-kun too!"
+
+Apparently the person they were supposed to meet — Honoka Waya, it seemed — had become unavailable, and Itsuki had appeared instead.
+
+He didn't know the circumstances, but magi presumably had their own affairs. Daiki accepted it at that.
+
+To Daiki, who sat blankly holding the coffee that had been brought, Itsuki turned a beaming smile.
+
+"Ahh. Still, I really did want to meet you."
+
+"Did you?"
+
+"H-hang on, Yukimaru-san..."
+
+Daiki tilted his head; Oki looked somehow put out.
+
+Watching both of them with genuine amusement, Itsuki continued,
+
+"Well, when you're *the* Oki-chan's favourite."
+
+"Yukimaru-san!"
+
+"You don't have to get so angry. Well, I just wanted to say hello. More importantly, Daiki-kun, there's something I want to give you."
+
+So saying, Itsuki took a key out of her pocket and handed it to Daiki.
+
+Daiki accepted it without resisting, but had no idea what he'd been handed.
+
+"Er... what is this?"
+
+At Daiki's question, Itsuki said,
+
+"Hm? —The spare key to my room."
+
+"Whaaaaaaaaaaaat?!"
+
+Oki howled.
