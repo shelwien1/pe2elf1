@@ -12928,7 +12928,7 @@ This time it was a folded sheet of copy paper.
 
 Opening it, an address and a map were printed on it.
 
-"That's where the room for that key is. It's near here, so have a look later."
+"That's where the room for that key is," Itsuki said. "It's near here, so have a look later."
 
 "...Thank you very much."
 
@@ -13121,7 +13121,7 @@ After thinking a little, Daiki answered.
 
 "You make it sound like such a big deal."
 
-"It *is* a big deal, actually. I mean, a world."
+"It *is* a big deal, actually," Oki said. "I mean, a world."
 
 "That's true, but... that's only because I was given the power to do it."
 
@@ -13279,7 +13279,7 @@ Though that was about himself.
 
 For Oki, resistance ought to be perfectly possible.
 
-"...Why target us? Have we earned someone's grudge somewhere?"
+"...Why target us?" Daiki asked. "Have we earned someone's grudge somewhere?"
 
 "This is our first meeting. I have no feelings about you whatsoever."
 
@@ -13361,7 +13361,7 @@ While Daiki grasped the situation, Oki assembled a policy from her own knowledge
 
 Daiki doesn't doubt it. If she said it, he can act on it as fact.
 
-"Leave this to me; you go find the other one and make them undo this. Probably, if you distract them even slightly, it can be undone. And if you can't... then, at that point—"
+"Leave this to me," Oki said. "You go find the other one and make them undo this. Probably, if you distract them even slightly, it can be undone. And if you can't... then, at that point—"
 
 "I'll handle it on my end."
 
@@ -13926,7 +13926,7 @@ Or was this girl simply not sharing intentions with Adalbert?
 
 Far too baffling.
 
-"Sorry, but we're the ones being attacked one-sidedly out of nowhere. Being given only demands is a problem."
+"Sorry, but we're the ones being attacked one-sidedly out of nowhere," Daiki said. "Being given only demands is a problem."
 
 "Huh... no, that's..."
 
@@ -14142,7 +14142,7 @@ Oki turned deftly back to face Adalbert, but she had to grind her teeth at how t
 
 Simply put, her attacks were being dodged lightly by physical ability alone.
 
-"...As you'd expect from an aberrant power worth banishing."
+"...As you'd expect from an aberrant power worth banishing," Oki said.
 
 "Oh? Have you fought the Empowered before?"
 
@@ -14604,7 +14604,7 @@ And would one inherit the abilities the holy sword possessed that way?
 
 "So, the answer to the question?"
 
-"Mmm... it's difficult. It isn't very mainstream. At least, if I tried to do it I couldn't think of a method offhand. But by definition I can declare it isn't impossible."
+"Mmm... it's difficult," Oki said. "It isn't very mainstream. At least, if I tried to do it I couldn't think of a method offhand. But by definition I can declare it isn't impossible."
 
 "By definition?"
 
@@ -14813,7 +14813,7 @@ Well, having watched examples of it being slipped past with ease, its reliabilit
 
 Daiki had been told that outside magi entering the territory isn't welcomed.
 
-"Well, I don't get found out."
+"Well, I don't get found out," Urei said.
 
 "I know that."
 
@@ -14827,7 +14827,7 @@ The power the courier Urei Aiko holds: an aberrant power that slips past magical
 
 At the very least, the story went that the Watarai father and son had entered this city through Urei's guidance.
 
-"But, right. That reminds me of something related."
+"But, right. That reminds me of something related," Urei said.
 
 "Mm... what?"
 
@@ -14957,7 +14957,7 @@ So Urei said, but her mouth was faintly smiling.
 
 At the least her interest was caught. Otherwise she presumably wouldn't have come at all.
 
-"There's someone I want to meet, but going alone is dangerous. So this is insurance. To put it in your terms, I want you to carry me safely to the meeting and carry me safely home again."
+"There's someone I want to meet, but going alone is dangerous," Daiki said. "So this is insurance. To put it in your terms, I want you to carry me safely to the meeting and carry me safely home again."
 
 "That's word games... in effect you mean a bodyguard."
 
@@ -14975,7 +14975,7 @@ At the least her interest was caught. Otherwise she presumably wouldn't have com
 
 *Liar*, he thought plainly, though he certainly had no grounds to deny it.
 
-"I'm fairly sure I called you saying I had a commission..."
+"I'm fairly sure I called you saying I had a commission..." Daiki said.
 
 "I assumed you were hiding your embarrassment."
 
@@ -14989,7 +14989,7 @@ At the least her interest was caught. Otherwise she presumably wouldn't have com
 
 "What *are* you, honestly?"
 
-"Ah, but being had for free is only the first time! Play goes as far as one night. From the second time on I take it as serious!"
+"Ah, but being had for free is only the first time!" Urei said. "Play goes as far as one night. From the second time on I take it as serious!"
 
 "I'm done with this person..."
 
@@ -14997,7 +14997,7 @@ At the least her interest was caught. Otherwise she presumably wouldn't have com
 
 "..."
 
-"If you were the one taking it, I'd consider it."
+"If you were the one taking it, I'd consider it," Urei added.
 
 "Why do you say the things that absolutely don't need saying?"
 
