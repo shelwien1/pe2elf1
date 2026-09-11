@@ -17,7 +17,7 @@
 //      wine t.exe                                                # WinAPI
 //
 //  and on Windows, cl or clang++ with -DFILE_API_WIN for the second.  The
-//  two runs must print the same ten lines.
+//  two runs must print the same lines.
 
 #include <stdint.h>
 #include <stdio.h>
@@ -78,6 +78,20 @@ int main(void) {
     g.seek(0);
     g.read(buf, sizeof buf);
     check("error() after reading a write-only handle", g.error() != 0, 1);
+    g.close();
+  }
+  {  //  What went out through one handle has to be readable through another
+     //  once flush() has run: the carver compares a new segment with one it
+     //  wrote earlier through the handle it is still writing with.
+    filehandle g, r;
+    byte back[16];
+    g.make(b);
+    g.writ(buf, 16);
+    check("flush() returns 0 on success", g.flush(), 0);
+    r.open(b);
+    check("a second handle reads what was flushed", (int)r.read(back, sizeof back), 16);
+    check("and it is the same bytes", memcmp(back, buf, 16), 0);
+    r.close();
     g.close();
   }
 

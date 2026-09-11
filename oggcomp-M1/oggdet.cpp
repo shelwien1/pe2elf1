@@ -5,10 +5,11 @@
       oggdet d [options] <prefix> <output>    restore
 
     Carving writes every detected physical Ogg bitstream to <prefix>%08X.ogg
-    -- or, with -c, coded by oggcomp to <prefix>%08X.oc; with -S, coded
-    solid, each with the model as the streams before it left it -- and all remaining
-    bytes, plus the layout, to <prefix>.meta.  Restoring reads the metainfo
-    and the numbered stream files and reproduces <input> exactly.
+    -- or, with -c, coded by oggcomp into the one file <prefix>.oc, a
+    segment per distinct stream; with -S, coded solid, each with the model
+    as the streams before it left it -- and all remaining bytes, plus the
+    layout, to <prefix>.meta.  Restoring reads the metainfo and the stream
+    files, or the segments, and reproduces <input> exactly.
 
     Detection is CRC-driven: a candidate is accepted only when its page CRC
     verifies, which is 2^-32 per position, so the payload of a page can never
@@ -375,7 +376,7 @@ static void out_put(od_out * o, const void * data, size_t n) {
 
 /*  Layout:
 
-      "OGGDETv5"                       8 bytes
+      "OGGDETv6"                       8 bytes
       record*                          varint (len << 1) | kind
                                          kind 0 = gap, len raw bytes follow
                                          kind 1 = stream: flags byte, then
@@ -389,15 +390,19 @@ static void out_put(od_out * o, const void * data, size_t n) {
 
     Stream flags: 1 stored with CRLF collapsed, re-expand LF on restore;
     2 a duplicate of an earlier stream, whose number follows; 4 the cover
-    art was taken out, the record follows; 8 the file is an oggcomp .oc;
-    16 the .oc is solid: coded with the model as the .oc files before it in
-    this metainfo left it, so it decodes only after them, in their order.
+    art was taken out, the record follows; 8 the stream is coded, the next
+    segment of <prefix>.oc (see "the compressor" below); 16 the segment is
+    solid: coded with the model as the segments before it left it, so it
+    decodes only after them, in their order.
 
     Streams are numbered in order of appearance, so a stream record carries
-    only its length, which the restorer checks against the file on disk.
-    A v4 metainfo is the same without flag 8, and is read as well.  */
+    only its length, which the restorer checks against what it reads back.
+    A v4 metainfo is the same without flags 8 and 16, and is read as well;
+    so is a v5, up to a coded stream: that was one .oc per stream, and is
+    named and refused.  */
 
-#define META_MAGIC "OGGDETv5"
+#define META_MAGIC "OGGDETv6"
+#define META_MAGIC_V5 "OGGDETv5"
 #define META_MAGIC_V4 "OGGDETv4"
 
 /*  One encoder for both record kinds, so a change to the tag width cannot be
@@ -459,11 +464,12 @@ static void usage(FILE * f) {
     "  byte plus the layout.  Byte-identical files are written once.\n"
     "\n"
     "options\n"
-    "  -c        compress: each stream coded by oggcomp, <prefix>%%08X.oc\n"
-    "            in place of .ogg; the same file `oggcomp c` would write\n"
+    "  -c        compress: every stream coded by oggcomp into <prefix>.oc,\n"
+    "            one segment per distinct stream, each what `oggcomp c`\n"
+    "            writes for it, in place of the .ogg files\n"
     "  -S        solid: -c with the model kept from one stream to the next,\n"
     "            so each is coded with what the ones before taught it; the\n"
-    "            .oc files then decode only in order, and only by oggdet d\n"
+    "            segments then decode only in order, and only by oggdet d\n"
     "  -v        report each detected stream on stderr\n"
     "  -w        report why each rejected \"OggS\" candidate was rejected\n"
     "  -j        join: one file per contiguous run, do not split chains\n"
@@ -651,12 +657,22 @@ static int files_equal(const char * a, const char * b) {
 /*  oggcomp, inside this program: its encoder and decoder coroutines, each
     with its stack pad and its model, driven from here.  The tables are
     mapped once, on the first stream that needs them, and reset before every
-    stream, so that each .oc is what a fresh `oggcomp c` writes and a fresh
-    `oggcomp d` reads -- or, solid (-S), reset before the first only, so
-    that each stream is coded with what the ones before it taught the model
-    and its .oc decodes only after theirs.  This coroutine drives them from
-    a bounded depth of its own stack, which the pad between frontend and
-    coroutine allows.  */
+    stream, so that each stream's segment is what a fresh `oggcomp c` writes
+    and a fresh `oggcomp d` reads -- or, solid (-S), reset before the first
+    only, so that each stream is coded with what the ones before it taught
+    the model and its segment decodes only after theirs.  This coroutine
+    drives them from a bounded depth of its own stack, which the pad between
+    frontend and coroutine allows.
+
+    Every coded stream goes into the one file <prefix>.oc:
+
+      "OGGDETOC"                       8 bytes
+      segment*                         varint length, then that many bytes:
+                                       what `oggcomp c` writes for the stream
+
+    one segment per distinct stream, in the order the metainfo first names
+    them.  The restorer walks the segments by the lengths in front of them
+    and finds one named again by the place it noted the first time.  */
 
 static oc_coro<0> od_enc;
 static oc_coro<1> od_dec;
@@ -668,40 +684,142 @@ static void od_model(void) {
   od_model_ready = 1;
 }
 
+#define OC_FILE_MAGIC "OGGDETOC"
+
+/*  The file API counts in 32 bits; a segment need not.  */
+static void fh_write(filehandle * f, const void * p, u64 n, const char * path) {
+  const u8 * b = (const u8 *) p;
+  while (n) {
+    uint k = n > (1u << 24) ? (1u << 24) : (uint) n;
+    if (f->writ((void *) b, k) != k) die("write error on %s", path);
+    b += k;  n -= k;
+  }
+}
+static void fh_read(filehandle * f, void * p, u64 n, const char * path) {
+  u8 * b = (u8 *) p;
+  while (n) {
+    uint k = n > (1u << 24) ? (1u << 24) : (uint) n;
+    if (f->sread(b, k) != k) die("%s is cut short", path);
+    b += k;  n -= k;
+  }
+}
+static u64 fh_varint(filehandle * f, const char * path, u64 * nbytes) {
+  u64 v = 0;
+  int sh = 0;
+  *nbytes = 0;
+  for (;;) {
+    u8 c;
+    if (f->read(&c, 1) != 1) die("%s is cut short", path);
+    ++*nbytes;
+    if (sh > 63) die("%s: corrupt segment length", path);
+    v |= (u64) (c & 0x7F) << sh;
+    if (!(c & 0x80)) break;
+    sh += 7;
+  }
+  return v;
+}
+
+/*  The .oc on the way out: opened at the first stream that is coded, one
+    segment appended per distinct stream, and read back through a second
+    handle when the deduplicator has to compare a new segment with one
+    already in it.  */
+typedef struct {
+  int on, rd_on;
+  filehandle f, rd;
+  char path[4096];
+  u64 size;                   /*  bytes written so far  */
+} ocfile;
+static ocfile ocw;
+
+static void ocw_open(const char * path) {
+  if (ocw.on) return;
+  snprintf(ocw.path, sizeof ocw.path, "%s", path);
+  if (!ocw.f.make(ocw.path)) die("cannot create %s", ocw.path);
+  fh_write(&ocw.f, OC_FILE_MAGIC, 8, ocw.path);
+  ocw.size = 8;
+  ocw.on = 1;
+}
+/*  Append a segment: its length, then the bytes.  Returns where the bytes went.  */
+static u64 ocw_append(const bbuf * seg) {
+  bbuf h;
+  u64 off;
+  bb_init(&h);
+  bb_var(&h, seg->n);
+  fh_write(&ocw.f, h.b, h.n, ocw.path);
+  off = ocw.size + h.n;
+  fh_write(&ocw.f, seg->b, seg->n, ocw.path);
+  ocw.size = off + seg->n;
+  bb_free(&h);
+  return off;
+}
+/*  Is the segment already at `off` in the file the same bytes as `seg`?
+    The write handle is flushed first, so that the second one sees all of
+    what went out through it.  */
+static int ocw_same(const bbuf * seg, u64 off, u64 len) {
+  static u8 tmp[1 << 16];
+  size_t at = 0;
+  if (len != seg->n) return 0;
+  if (ocw.f.flush()) die("write error on %s", ocw.path);
+  if (!ocw.rd_on) {
+    if (!ocw.rd.open(ocw.path)) die("cannot open %s to read it back", ocw.path);
+    ocw.rd_on = 1;
+  }
+  ocw.rd.seek(off);
+  while (at < seg->n) {
+    size_t k = seg->n - at;
+    if (k > sizeof tmp) k = sizeof tmp;
+    if (ocw.rd.sread(tmp, (uint) k) != k) die("read error on %s", ocw.path);
+    if (memcmp(tmp, seg->b + at, k)) return 0;
+    at += k;
+  }
+  return 1;
+}
+static void ocw_close(void) {
+  if (!ocw.on) return;
+  if (ocw.rd_on) { ocw.rd.close();  ocw.rd_on = 0; }
+  if (ocw.f.error() || ocw.f.close()) die("write error on %s", ocw.path);
+  ocw.on = 0;
+}
+
 /*  Where an accepted run's bytes go: the .ogg file as they are, or through
-    the encoder into the .oc file.  */
+    the encoder into `seg`, the stream's segment of the .oc -- held until
+    the run ends and the deduplicator has seen it, since a segment that is
+    already in the file is not appended again.  */
 typedef struct {
   int on, comp;
   filehandle f;
   const char * path;
   u64 written;
+  bbuf seg;
   u8 obuf[1 << 16];
 } osink;
 
 static void os_flush(osink * s) {
   uint n = od_enc.getoutsize();
-  if (n && s->f.writ(od_enc.outbeg, n) != n) die("write error on %s", s->path);
+  bb_put(&s->seg, od_enc.outbeg, n);
   s->written += n;
   od_enc.addout(s->obuf, sizeof s->obuf);
 }
 
 static void os_open(osink * s, const char * path, int comp) {
   s->path = path;  s->comp = comp;  s->written = 0;
-  if (!s->f.make(path)) die("cannot create %s", path);
-  s->on = 1;
   if (comp) {
     u8 h[8];
+    ocw_open(path);
+    if (!s->seg.b) bb_init(&s->seg);
+    s->seg.n = 0;
     memcpy(h, OC_MAGIC, sizeof OC_MAGIC - 1);
     h[sizeof OC_MAGIC - 1] = (u8) OC_VER;
     h[sizeof OC_MAGIC] = 0;
-    if (s->f.writ(h, sizeof OC_MAGIC + 1) != sizeof OC_MAGIC + 1) die("write error on %s", path);
+    bb_put(&s->seg, h, sizeof OC_MAGIC + 1);
     s->written = sizeof OC_MAGIC + 1;
     od_model();
-    if (comp == 2 && od_enc_used) oc_next(od_enc, path);
-    else oc_fresh(od_enc, path);
+    if (comp == 2 && od_enc_used) oc_next(od_enc, ocw.path);
+    else oc_fresh(od_enc, ocw.path);
     od_enc_used = 1;
     od_enc.addout(s->obuf, sizeof s->obuf);
-  }
+  } else if (!s->f.make(path)) die("cannot create %s", path);
+  s->on = 1;
 }
 
 static void os_put(osink * s, const u8 * p, size_t k) {
@@ -720,8 +838,8 @@ static void os_put(osink * s, const u8 * p, size_t k) {
   }
 }
 
-/*  End the file: for the encoder, the end of its input, then everything it
-    still has to say.  */
+/*  End the stream: for the encoder, the end of its input, then everything
+    it still has to say; the segment is then whole in `seg`.  */
 static void os_close(osink * s) {
   if (!s->on) return;
   if (s->comp) {
@@ -733,19 +851,19 @@ static void os_close(osink * s) {
       if (r == 0) { os_flush(s);  break; }
       die("internal: the encoder asked for more of %s", s->path);
     }
-  }
-  if (s->f.error() || s->f.close()) die("write error on %s", s->path);
+  } else if (s->f.error() || s->f.close()) die("write error on %s", s->path);
   s->on = 0;
 }
+static osink of;
 
-/*  A .oc back to the bytes it holds: from a fresh model, or, solid, from
-    the model as the .oc before it left it.  */
+/*  A segment back to the bytes it holds: from a fresh model, or, solid,
+    from the model as the segment before it left it.  */
 static void oc_decode(const u8 * oc, size_t n, const char * path, bbuf * out, int solid) {
   static u8 obuf[1 << 16];
   if (n < sizeof OC_MAGIC + 1 || memcmp(oc, OC_MAGIC, sizeof OC_MAGIC - 1))
-    die("%s is not an oggcomp stream", path);
+    die("%s: the segment is not an oggcomp stream", path);
   if (oc[sizeof OC_MAGIC - 1] != OC_VER)
-    die("%s: made by oggcomp version %u, this is version %u", path,
+    die("%s: a segment made by oggcomp version %u, this is version %u", path,
         oc[sizeof OC_MAGIC - 1], OC_VER);
   od_model();
   if (solid && od_dec_used) oc_next(od_dec, path);
@@ -768,7 +886,7 @@ static void oc_decode(const u8 * oc, size_t n, const char * path, bbuf * out, in
     files are compared byte for byte before one is called a duplicate, so a
     collision costs a comparison and never costs correctness.  */
 
-typedef struct { u64 hash, len; u32 idx; int used; } dent;
+typedef struct { u64 hash, len, off, clen; u32 idx; int used; } dent;
 typedef struct { dent * e; size_t cap, n; const char * prefix; } dtab;
 
 static void dt_init(dtab * t, const char * prefix) {
@@ -790,31 +908,42 @@ static void dt_grow(dtab * t) {
   t->cap *= 2;
   t->e = (dent *) xcalloc_(t->cap, sizeof *t->e);
   for (i = 0; i < oc; i++) {
+    size_t j;
     if (!old[i].used) continue;
-    { size_t j = (size_t) (old[i].hash & (t->cap - 1));
-      while (t->e[j].used) j = (j + 1) & (t->cap - 1);
-      t->e[j] = old[i]; }
+    j = (size_t) (old[i].hash & (t->cap - 1));
+    while (t->e[j].used) j = (j + 1) & (t->cap - 1);
+    t->e[j] = old[i];
   }
   free(old);
 }
 
-/*  `path` is the file just written.  Returns the index of an identical file
-    already on disk, or -1 after recording this one under `idx`.  */
+/*  Is what was just produced -- the file at `path`, or the segment `seg`
+    of the .oc -- the same bytes as one already kept?  Returns the index of
+    that one, or -1 after recording this one under `idx`; `*slot` then says
+    where, so that the caller can note the segment's place once it is in
+    the file.  A hash hit is only a hint: nothing is called a duplicate
+    without a comparison, so a collision costs a read and never a stream.  */
 static long dt_lookup(dtab * t, const char * path, const char * ext,
-                      u64 hash, u64 len, u32 idx) {
+                      u64 hash, u64 len, u32 idx, const bbuf * seg, size_t * slot) {
   size_t j;
   char other[4096];
   if (t->n * 2 >= t->cap) dt_grow(t);
   j = (size_t) (hash & (t->cap - 1));
   while (t->e[j].used) {
     if (t->e[j].hash == hash && t->e[j].len == len) {
-      snprintf(other, sizeof other, "%s%08X.%s", t->prefix, t->e[j].idx, ext);
-      if (files_equal(path, other)) return (long) t->e[j].idx;
+      if (seg) {
+        if (ocw_same(seg, t->e[j].off, t->e[j].clen)) return (long) t->e[j].idx;
+      } else {
+        snprintf(other, sizeof other, "%s%08X.%s", t->prefix, t->e[j].idx, ext);
+        if (files_equal(path, other)) return (long) t->e[j].idx;
+      }
     }
     j = (j + 1) & (t->cap - 1);
   }
   t->e[j].used = 1;  t->e[j].hash = hash;  t->e[j].len = len;  t->e[j].idx = idx;
+  t->e[j].off = t->e[j].clen = 0;
   t->n++;
+  if (slot) *slot = j;
   return -1;
 }
 
@@ -908,7 +1037,6 @@ static u64 take_run(src * s, const opts * o, gapb * g,
                     int * npages, int * saw_eos, int * accepted) {
   u64 len = 0, rawlen = 0, hash = FNV0;
   int npg = 0, seen_data = 0, eos = 0, acc = 0;
-  static osink of;
   u8 * hold = NULL;
   size_t held = 0, holdcap = 0;
   /*  The raw bytes behind `hold`.  A run that turns out to be too small goes
@@ -923,7 +1051,8 @@ static u64 take_run(src * s, const opts * o, gapb * g,
   #define PROMOTE() do {                                                      \
       gap_flush(g);                                                           \
       if (!o->dry) {                                                          \
-        snprintf(path, sizeof path, "%s%08X.%s", prefix, idx, o->comp ? "oc" : "ogg"); \
+        if (o->comp) snprintf(path, sizeof path, "%s.oc", prefix);            \
+        else snprintf(path, sizeof path, "%s%08X.ogg", prefix, idx);          \
         os_open(&of, path, o->comp);                                          \
       }                                                                       \
       if (held) os_put(&of, hold, held);                                      \
@@ -1055,8 +1184,7 @@ static int carve(od_coro * co) {
   gapb g;
   astage as;
   dtab dstream, dimage;
-  static char path[4096], other[4096];
-  const char * ext = o->comp ? "oc" : "ogg";
+  static char path[4096];
   u32 idx = 0, iidx = 0;
   u64 nstream = 0, nimg = 0, dupstream = 0, dupimage = 0, ocbytes = 0, ogbytes = 0;
   int rc = 0;
@@ -1141,7 +1269,7 @@ static int carve(od_coro * co) {
         if (!o->dry) spew_(path, q->img.b, q->img.n);
         d = o->nodedup || o->dry ? -1
           : dt_lookup(&dimage, path, q->ext,
-                      fnv(FNV0, q->img.b, q->img.n), q->img.n, iidx);
+                      fnv(FNV0, q->img.b, q->img.n), q->img.n, iidx, NULL, NULL);
         nimg++;
         if (d >= 0) {
           remove(path);
@@ -1160,15 +1288,24 @@ static int carve(od_coro * co) {
       }
     }
 
-    /*  Then the stream file itself.  */
-    snprintf(path, sizeof path, "%s%08X.%s", prefix, idx, ext);
-    if (!o->dry && !o->nodedup)
-      dup = dt_lookup(&dstream, path, ext, hash, run_len, idx);
-    if (dup >= 0) {
-      remove(path);
-      dupstream++;
-      snprintf(other, sizeof other, "%s%08X.%s", prefix, (unsigned) dup, ext);
+    /*  Then the stream itself: its file, or its segment of the .oc, which
+        is appended only when no segment already there is the same.  */
+    if (o->comp) {
+      size_t slot = 0;
+      if (!o->dry && !o->nodedup)
+        dup = dt_lookup(&dstream, NULL, NULL, hash, run_len, idx, &of.seg, &slot);
+      if (dup < 0 && !o->dry) {
+        u64 off = ocw_append(&of.seg);
+        if (!o->nodedup) { dstream.e[slot].off = off;  dstream.e[slot].clen = of.seg.n; }
+      }
     } else {
+      snprintf(path, sizeof path, "%s%08X.ogg", prefix, idx);
+      if (!o->dry && !o->nodedup)
+        dup = dt_lookup(&dstream, path, "ogg", hash, run_len, idx, NULL, NULL);
+      if (dup >= 0) remove(path);
+    }
+    if (dup >= 0) dupstream++;
+    else {
       ogbytes += run_len;
       ocbytes += run_file;
     }
@@ -1222,8 +1359,10 @@ static int carve(od_coro * co) {
 
   fprintf(stderr, "%s: %llu stream%s", co->in, (unsigned long long) nstream,
           nstream == 1 ? "" : "s");
-  if (dupstream)
-    fprintf(stderr, " in %u file%s", idx, idx == 1 ? "" : "s");
+  if (dupstream) {
+    if (o->comp) fprintf(stderr, ", %u distinct", idx);
+    else fprintf(stderr, " in %u file%s", idx, idx == 1 ? "" : "s");
+  }
   if (nimg) {
     fprintf(stderr, ", %llu image%s", (unsigned long long) nimg,
             nimg == 1 ? "" : "s");
@@ -1237,6 +1376,7 @@ static int carve(od_coro * co) {
             100.0 * (double) ocbytes / (double) ogbytes);
   fputc('\n', stderr);
 
+  ocw_close();
   as_free(&as);  dt_free(&dstream);  dt_free(&dimage);
   free(g.b);
   return rc;
@@ -1322,10 +1462,20 @@ static int restore(od_coro * co) {
   u64 nstream = 0, want_len, v;
   size_t bufcap = 1u << 20;
   imgctx ic;
+  /*  The .oc, once the metainfo names a coded stream: where every segment
+      passed so far begins and how long it is, for the ones named again.  */
+  filehandle ocr;
+  int ocr_on = 0;
+  u64 ocnext = 0, * segoff = NULL, * seglen = NULL;
+  size_t segcap = 0;
+  static char ocpath[4096];
+  int v5;
 
   ic.prefix = prefix;
   src_open(&mf, &co->pin[0]);
-  if (!src_take(&mf, magic, 8) || (memcmp(magic, META_MAGIC, 8) && memcmp(magic, META_MAGIC_V4, 8)))
+  if (!src_take(&mf, magic, 8)) die("%s is not an oggdet metainfo file", mpath);
+  v5 = !memcmp(magic, META_MAGIC_V5, 8);
+  if (!v5 && memcmp(magic, META_MAGIC, 8) && memcmp(magic, META_MAGIC_V4, 8))
     die("%s is not an oggdet metainfo file", mpath);
 
   out.o.out = &co->pin[1];
@@ -1354,6 +1504,9 @@ static int restore(od_coro * co) {
     if (flags < 0) die("%s: truncated stream record", mpath);
     if ((flags & ~31) || ((flags & 16) && !(flags & 8)))
       die("%s: stream flags %02X are not ones this version knows", mpath, flags);
+    /*  A v5 stream file is a .oc of its own, which nothing here reads.  */
+    if (v5 && (flags & 8))
+      die("%s was written by an oggdet that kept one .oc per stream; this one reads one .oc", mpath);
     {
       u32 file = idx;
       bbuf stored, rebuilt;
@@ -1366,16 +1519,54 @@ static int restore(od_coro * co) {
                           (unsigned long long) nstream, (unsigned long long) v);
         file = (u32) v;
       }
-      snprintf(path, sizeof path, "%s%08X.%s", prefix, file, (flags & 8) ? "oc" : "ogg");
       if (flags & 8) {
         bbuf coded;
-        slurp_(path, &coded);
+        u64 soff, slen;
+        if (!ocr_on) {
+          u8 m[8];
+          snprintf(ocpath, sizeof ocpath, "%s.oc", prefix);
+          if (!ocr.open(ocpath)) die("cannot open %s", ocpath);
+          fh_read(&ocr, m, 8, ocpath);
+          if (memcmp(m, OC_FILE_MAGIC, 8)) die("%s is not an oggdet .oc file", ocpath);
+          ocnext = 8;  ocr_on = 1;
+        }
+        if (flags & 2) {
+          if (file >= segcap || !seglen[file])
+            die("%s: stream %llu shares stream %u, which is not a segment of %s", mpath,
+                (unsigned long long) nstream, file, ocpath);
+          soff = segoff[file];  slen = seglen[file];
+        } else {
+          u64 k;
+          ocr.seek(ocnext);
+          slen = fh_varint(&ocr, ocpath, &k);
+          soff = ocnext + k;
+          if (slen > ((u64) 1 << 40)) die("%s: a segment of %llu bytes", ocpath, (unsigned long long) slen);
+          if (file >= segcap) {
+            size_t was = segcap;
+            segcap = segcap ? segcap * 2 : 256;
+            while (file >= segcap) segcap *= 2;
+            segoff = (u64 *) xrealloc(segoff, segcap * sizeof *segoff);
+            seglen = (u64 *) xrealloc(seglen, segcap * sizeof *seglen);
+            memset(seglen + was, 0, (segcap - was) * sizeof *seglen);
+          }
+          segoff[file] = soff;  seglen[file] = slen;
+          ocnext = soff + slen;
+        }
+        ocr.seek(soff);
+        bb_init(&coded);
+        if (coded.cap < slen) { coded.cap = (size_t) slen;  coded.b = (u8 *) xrealloc(coded.b, coded.cap); }
+        fh_read(&ocr, coded.b, slen, ocpath);
+        coded.n = (size_t) slen;
         bb_init(&stored);
-        oc_decode(coded.b, coded.n, path, &stored, (flags & 16) != 0);
+        oc_decode(coded.b, coded.n, ocpath, &stored, (flags & 16) != 0);
         bb_free(&coded);
-      } else slurp_(path, &stored);
+      } else {
+        snprintf(path, sizeof path, "%s%08X.ogg", prefix, file);
+        slurp_(path, &stored);
+      }
       if (stored.n != len)
-        die("%s is %llu bytes, the metainfo says %llu", path,
+        die("%s: stream %llu is %llu bytes, the metainfo says %llu",
+            (flags & 8) ? ocpath : path, (unsigned long long) nstream,
             (unsigned long long) stored.n, (unsigned long long) len);
 
       if (flags & 4) {
@@ -1415,6 +1606,11 @@ static int restore(od_coro * co) {
   want_crc = rd32(tail);
   { int i;  want_len = 0;  for (i = 7; i >= 0; i--) want_len = (want_len << 8) | tail[4 + i]; }
   free(buf);
+  if (ocr_on) {
+    if (ocr.error()) die("read error on %s", ocpath);
+    ocr.close();
+  }
+  free(segoff);  free(seglen);
 
   if (out.total != want_len)
     die("restored %llu bytes, the metainfo says %llu",
@@ -1422,9 +1618,10 @@ static int restore(od_coro * co) {
   if (out.crc != want_crc)
     die("restored CRC %08X, the metainfo says %08X", out.crc, want_crc);
 
-  fprintf(stderr, "%s: %llu stream%s from %u file%s, %llu bytes, CRC %08X ok\n",
+  fprintf(stderr, "%s: %llu stream%s from %u %s, %llu bytes, CRC %08X ok\n",
           co->outname, (unsigned long long) nstream, nstream == 1 ? "" : "s",
-          idx, idx == 1 ? "" : "s", (unsigned long long) out.total, out.crc);
+          idx, ocr_on ? (idx == 1 ? "segment" : "segments") : (idx == 1 ? "file" : "files"),
+          (unsigned long long) out.total, out.crc);
   return 0;
 }
 
@@ -1508,20 +1705,26 @@ int main(int argc, char ** argv) {
   if (mode[0] == 'c') {
     od_run.in = pos[0];
     od_run.outname = mpath;
-    if (!f.open(pos[0])) FATAL_CODE(OGC_EXIT_IO, "cannot open %s", pos[0]);
     have_out = !o.dry;
-    if (have_out && !g.make(mpath)) FATAL_CODE(OGC_EXIT_IO, "cannot create %s", mpath);
   } else {
     if (o.dry) die("-t is meaningless when restoring");
     od_run.in = mpath;
     od_run.outname = pos[1];
-    if (!f.open(mpath)) FATAL_CODE(OGC_EXIT_IO, "cannot open %s", mpath);
     have_out = 1;
-    if (!g.make(pos[1])) FATAL_CODE(OGC_EXIT_IO, "cannot create %s", pos[1]);
   }
   if (have_out) {
-    const char * pp[2] = { od_run.in, od_run.outname };
-    ogc_paths_distinct(pp, 2);
+    /*  Nothing written may be named as something read -- the container and
+        the .oc in carving, the .oc and the output in restoring -- and the
+        question is asked before anything is opened for writing, since
+        opening is what would destroy it.  */
+    static char ocpath[4096];
+    const char * pp[3] = { od_run.in, od_run.outname, ocpath };
+    snprintf(ocpath, sizeof ocpath, "%s.oc", od_run.prefix);
+    ogc_paths_distinct(pp, (mode[0] == 'd' || o.comp) ? 3 : 2);
+  }
+  if (!f.open(od_run.in)) FATAL_CODE(OGC_EXIT_IO, "cannot open %s", od_run.in);
+  if (have_out) {
+    if (!g.make(od_run.outname)) FATAL_CODE(OGC_EXIT_IO, "cannot create %s", od_run.outname);
     ogc_partial.set(od_run.outname, &g);
   }
 

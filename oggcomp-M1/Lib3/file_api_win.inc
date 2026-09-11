@@ -62,6 +62,13 @@ struct filehandle0 {
     return err != 0;
   }
 
+  //  Nothing is buffered on this side: writ() is WriteFile, and another
+  //  handle on the file sees what it wrote.  Here so that the two backends
+  //  are one interface; zero, like the stdio one when it succeeds.
+  int flush( void ) {
+    return 0;
+  }
+
   //  Zero on success, like the stdio backend's fclose() and unlike the
   //  CloseHandle() underneath, which returns nonzero on success.  The two
   //  backends are one interface or they are nothing: a caller written as

@@ -67,6 +67,12 @@ struct filehandle0 {
     return ferror(f);
   }
 
+  //  Hand what is buffered to the OS, so that another handle on the same
+  //  file sees it.  Zero on success, like close().
+  int flush( void ) {
+    return fflush(f);
+  }
+
   qword size( void ) { 
     qword p = tell();
     seek( 0, SEEK_END );

@@ -36,8 +36,8 @@
 #  mistaken for a good one.
 #  The third section is oggdet, the carver built beside the compressor: a
 #  container of streams and other bytes has to come back whole, with and
-#  without -c, and the .oc it writes for a stream has to be the one the
-#  compressor writes for that stream alone.
+#  without -c, and the segment of .oc it writes for a stream has to be the
+#  file the compressor writes for that stream alone.
 
 set -e
 
@@ -395,10 +395,11 @@ fi
 #  finds every Ogg stream in a file that may hold anything else too -- an
 #  archive, a disk image, a download that stopped -- writes each one out,
 #  and keeps the bytes between them and the layout in a .meta, from which
-#  `oggdet d` puts the file back.  With -c each stream is written as the
-#  .oc `oggcomp c` would make of it: the same model, in the same process,
-#  reset between streams.  So the container has to come back byte for
-#  byte, with and without -c, and the .oc of a stream inside it has to be
+#  `oggdet d` puts the file back.  With -c every stream goes into the one
+#  file prefix.oc, a segment each, and a segment is the .oc `oggcomp c`
+#  would make of the stream: the same model, in the same process, reset
+#  between streams.  So the container has to come back byte for byte,
+#  with and without -c, and the segment for a stream inside it has to be
 #  the .oc of that stream on its own -- which is also what makes it the
 #  compressor's to decode.  The container built here holds the first file
 #  under test twice, once with every LF turned into CR LF -- a stream that
@@ -424,6 +425,21 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
   }
   #  The carver's last line on stderr is its summary, minus the path.
   detsaid() { sed -n '$p' "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-56; }
+  #  One segment cut out of a .oc, to stdout: eight bytes of magic, then a
+  #  varint length in front of each.  perl, which the build needs anyway.
+  ocseg() {  # $1 the .oc, $2 which segment, counted from 0
+    perl -e 'binmode STDIN; binmode STDOUT; local $/; my $d = <STDIN>;
+             exit 1 unless substr($d, 0, 8) eq "OGGDETOC";
+             my $p = 8;
+             for (my $i = 0; $p < length $d; $i++) {
+               my ($n, $s, $b) = (0, 0, 0);
+               do { $b = ord substr($d, $p++, 1); $n |= ($b & 127) << $s; $s += 7 }
+                 while ($b & 128);
+               if ($i == $ARGV[0]) { print substr($d, $p, $n); exit 0 }
+               $p += $n;
+             }
+             exit 1' "$2" < "$1"
+  }
 
   printf '  %s\n' 'oggdet'
   #  Plain, with cover art left in place and no size floor: the first
@@ -435,10 +451,9 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
      cmp -s "$dd/box" "$dd/p.back"; then dok=1; fi
   detcheck 'carve and restore' $dok "$(detsaid)"
 
-  #  -D: the copies are written too, so the second and third stream the
-  #  carver codes are the first file again -- once as it is, once with its
-  #  LFs put back -- and a model reset between streams shows as their .oc
-  #  being the first one's.
+  #  -D: the copies are coded too, so the second and third segment are
+  #  the first file again -- once as it is, once with its LFs put back --
+  #  and a model reset between streams shows as their being the first.
   dok=0
   if "$det" c -c -A -s 0 -D "$dd/box" "$dd/c" >"$tmp/msg" 2>&1 &&
      "$det" d "$dd/c" "$dd/c.back" >/dev/null 2>&1 &&
@@ -447,34 +462,34 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
 
   if [ -f "$dd/p00000000.ogg" ] && cmp -s "$dd/p00000000.ogg" "$src"; then
     dok=0
-    if [ -f "$dd/c00000000.oc" ] && cmp -s "$dd/c00000000.oc" "$tmp/good.oc" &&
-       "$bin" d "$dd/c00000000.oc" "$dd/c0.ogg" >/dev/null 2>&1 &&
+    if ocseg "$dd/c.oc" 0 > "$dd/c0.oc" && cmp -s "$dd/c0.oc" "$tmp/good.oc" &&
+       "$bin" d "$dd/c0.oc" "$dd/c0.ogg" >/dev/null 2>&1 &&
        cmp -s "$dd/c0.ogg" "$src"; then dok=1; fi
-    detcheck "its .oc is oggcomp's" $dok "$(wc -c < "$tmp/good.oc") bytes either way, and oggcomp d reads it"
+    detcheck "segment 0 is oggcomp's" $dok "$(wc -c < "$tmp/good.oc") bytes either way, and oggcomp d reads it"
     dok=0
-    if [ -f "$dd/c00000002.oc" ] && cmp -s "$dd/c00000001.oc" "$tmp/good.oc" &&
-       cmp -s "$dd/c00000002.oc" "$tmp/good.oc"; then dok=1; fi
-    detcheck "so are the 2nd and 3rd" $dok "coded after a reset, and after a CRLF repair"
+    if ocseg "$dd/c.oc" 1 > "$dd/c1.oc" && ocseg "$dd/c.oc" 2 > "$dd/c2.oc" &&
+       cmp -s "$dd/c1.oc" "$tmp/good.oc" && cmp -s "$dd/c2.oc" "$tmp/good.oc"; then dok=1; fi
+    detcheck "so are 1 and 2" $dok "coded after a reset, and after a CRLF repair"
   else
-    printf '  %-26s %s\n' "its .oc is oggcomp's" "not checked: $src is not one whole stream"
+    printf '  %-26s %s\n' "segment 0 is oggcomp's" "not checked: $src is not one whole stream"
   fi
 
   #  -S: the model kept from one stream to the next.  The container still
   #  comes back; the second copy of the first file costs less than it did
-  #  fresh, since the model has seen it; and its .oc is not the
+  #  fresh, since the model has seen it; and its segment is not the
   #  compressor's -- it decodes only after the one before it.
   dok=0
   if "$det" c -S -A -s 0 -D "$dd/box" "$dd/s" >"$tmp/msg" 2>&1 &&
      "$det" d "$dd/s" "$dd/s.back" >/dev/null 2>&1 &&
      cmp -s "$dd/box" "$dd/s.back"; then dok=1; fi
   detcheck 'carve -S and restore' $dok "$(detsaid)"
-  if [ -f "$dd/s00000001.oc" ] && [ -f "$dd/c00000001.oc" ]; then
-    fresh=$(wc -c < "$dd/c00000001.oc"); solid=$(wc -c < "$dd/s00000001.oc")
+  if [ -s "$dd/c1.oc" ] && ocseg "$dd/s.oc" 1 > "$dd/s1.oc"; then
+    fresh=$(wc -c < "$dd/c1.oc"); solid=$(wc -c < "$dd/s1.oc")
     dok=0; [ "$solid" -lt "$fresh" ] && dok=1
     detcheck 'the 2nd copy costs less' $dok "$fresh bytes fresh, $solid solid"
     rm -f "$tmp/no.out"
     set +e
-    "$bin" d "$dd/s00000001.oc" "$tmp/no.out" >"$tmp/msg" 2>&1
+    "$bin" d "$dd/s1.oc" "$tmp/no.out" >"$tmp/msg" 2>&1
     got=$?
     set -e
     dok=0; [ "$got" = 1 ] && [ ! -e "$tmp/no.out" ] && dok=1
@@ -503,7 +518,8 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
   detcheck '-t writes nothing' $dok "$(detsaid)"
 
   #  And the refusals, with the output file gone afterwards: a .meta that
-  #  is not one, a .meta cut short, and a stream file with a byte turned.
+  #  is not one, a .meta cut short, a .oc that is not one, one cut short,
+  #  one with a byte turned, and an output named over an input.
   detrefuse() {  # $1 what, rest: arguments to oggdet; wants exit 1 and no no.out
     what=$1; shift
     rm -f "$tmp/no.out"
@@ -517,15 +533,26 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
   }
   cp "$src" "$dd/bad.meta"
   head -c 300 "$dd/c.meta" > "$dd/cut.meta"
-  mkdir -p "$dd/flip"; cp "$dd"/c.meta "$dd"/c0*.oc "$dd/flip/" 2>/dev/null || :
-  for q in "$dd/flip"/c0*.oc; do
-    [ -f "$q" ] || continue
-    printf '\001' | dd of="$q" bs=1 seek="$(( $(wc -c < "$q") * 3 / 4 ))" count=1 conv=notrunc >/dev/null 2>&1
-    break
-  done
+  mkdir -p "$dd/notoc" "$dd/short" "$dd/flip"
+  cp "$dd/c.meta" "$dd/notoc/"; cp "$src" "$dd/notoc/c.oc"
+  cp "$dd/c.meta" "$dd/short/"; head -c "$(( $(wc -c < "$dd/c.oc") / 2 ))" "$dd/c.oc" > "$dd/short/c.oc"
+  cp "$dd/c.meta" "$dd/c.oc" "$dd/flip/"
+  printf '\001' | dd of="$dd/flip/c.oc" bs=1 seek="$(( $(wc -c < "$dd/c.oc") * 3 / 4 ))" \
+                      count=1 conv=notrunc >/dev/null 2>&1
   detrefuse 'a .meta that is not one' d "$dd/bad"
   detrefuse 'a .meta cut short'       d "$dd/cut"
-  detrefuse 'a byte turned in a .oc'  d "$dd/flip/c"
+  detrefuse 'a .oc that is not one'   d "$dd/notoc/c"
+  detrefuse 'the .oc cut short'       d "$dd/short/c"
+  detrefuse 'a byte turned in the .oc' d "$dd/flip/c"
+  #  Named over its own .oc: refused, and the .oc still there afterwards.
+  ndet=$((ndet + 1))
+  set +e
+  "$det" d "$dd/c" "$dd/c.oc" >"$tmp/msg" 2>&1
+  got=$?
+  set -e
+  if [ "$got" = 2 ] && [ -s "$dd/c.oc" ]; then detcheck 'output named over the .oc' 1 "exit 2  $(detsaid)"
+  else detcheck 'output named over the .oc' 0 "exit $got, .oc $(wc -c < "$dd/c.oc") bytes"; fi
+  ndet=$((ndet - 1))
   echo
 fi
 
