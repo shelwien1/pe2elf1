@@ -2,6 +2,7 @@
 #  generated, so that `make`-less machines and machines without perl can
 #  still compile.  ./mk.sh rewrites it; see the comment at the top of it.
 oggcomp
+oggdet
 *.o
 *.oc
 *.gcda

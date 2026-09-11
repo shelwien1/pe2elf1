@@ -34,6 +34,10 @@
 #  those is part of the interface, so the second section checks it,
 #  including that a refused run leaves no half-written output behind to be
 #  mistaken for a good one.
+#  The third section is oggdet, the carver built beside the compressor: a
+#  container of streams and other bytes has to come back whole, with and
+#  without -c, and the .oc it writes for a stream has to be the one the
+#  compressor writes for that stream alone.
 
 set -e
 
@@ -48,7 +52,7 @@ usage: ./t.sh [options] [file.ogg ...]
   -B       rebuild with ./mk.sh first
   -k       keep each .oc and restored .ogg beside its input
   -1       one encode per file: skip the determinism check
-  -n       skip the tests after the table: anything round-trips, refusals
+  -n       skip the tests after the table: anything round-trips, refusals, oggdet
   -v       pass -v to oggcomp, so it says where the bits went
   -h       this
 
@@ -387,14 +391,133 @@ if [ $srcok = 1 ]; then
   echo
 fi
 
+#  oggdet, the carver, is the compressor's other front end.  `oggdet c`
+#  finds every Ogg stream in a file that may hold anything else too -- an
+#  archive, a disk image, a download that stopped -- writes each one out,
+#  and keeps the bytes between them and the layout in a .meta, from which
+#  `oggdet d` puts the file back.  With -c each stream is written as the
+#  .oc `oggcomp c` would make of it: the same model, in the same process,
+#  reset between streams.  So the container has to come back byte for
+#  byte, with and without -c, and the .oc of a stream inside it has to be
+#  the .oc of that stream on its own -- which is also what makes it the
+#  compressor's to decode.  The container built here holds the first file
+#  under test twice, once with every LF turned into CR LF -- a stream that
+#  went through a text-mode transfer, whose LFs the carver puts back --
+#  the corpus file with a cover image in it when the corpus is there, and
+#  this tree's scripts as the bytes between them.
+bad_det=0; ndet=0
+det=$(dirname -- "$bin")/oggdet
+if [ $refusals = 1 ] && [ $srcok = 1 ] && [ ! -x "$det" ]; then
+  echo "t.sh: oggdet tests skipped -- $det is not there (./mk.sh builds it beside oggcomp)" >&2
+elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
+  dd=$tmp/det; mkdir -p "$dd"
+  art=testfiles/art-8k.ogg; [ -f "$art" ] || art=
+  perl -pe 's/\n/\r\n/g' < "$src" > "$dd/crlf.ogg"
+  { head -c 3000 ./mk.sh; cat "$src"; head -c 700 ./t.sh; cat "$src"
+    head -c 100 ./mk.sh; cat "$dd/crlf.ogg"; head -c 2000 ./t.sh
+    [ -z "$art" ] || cat "$art"; head -c 500 ./mk.sh; } > "$dd/box"
+
+  detcheck() {  # $1 what, $2 1 if it passed, $3 what to say about it
+    ndet=$((ndet + 1))
+    if [ "$2" = 1 ]; then printf '  %-26s %s\n' "$1" "$3"
+    else printf '  %-26s FAILED  %s\n' "$1" "$3"; bad_det=$((bad_det + 1)); fi
+  }
+  #  The carver's last line on stderr is its summary, minus the path.
+  detsaid() { sed -n '$p' "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-56; }
+
+  printf '  %s\n' 'oggdet'
+  #  Plain, with cover art left in place and no size floor: the first
+  #  stream it writes is then the first file under test, whole, if that
+  #  file is one stream and nothing else -- which the next check needs.
+  dok=0
+  if "$det" c -A -s 0 "$dd/box" "$dd/p" >"$tmp/msg" 2>&1 &&
+     "$det" d "$dd/p" "$dd/p.back" >/dev/null 2>&1 &&
+     cmp -s "$dd/box" "$dd/p.back"; then dok=1; fi
+  detcheck 'carve and restore' $dok "$(detsaid)"
+
+  #  -D: the copies are written too, so the second and third stream the
+  #  carver codes are the first file again -- once as it is, once with its
+  #  LFs put back -- and a model reset between streams shows as their .oc
+  #  being the first one's.
+  dok=0
+  if "$det" c -c -A -s 0 -D "$dd/box" "$dd/c" >"$tmp/msg" 2>&1 &&
+     "$det" d "$dd/c" "$dd/c.back" >/dev/null 2>&1 &&
+     cmp -s "$dd/box" "$dd/c.back"; then dok=1; fi
+  detcheck 'carve -c and restore' $dok "$(detsaid)"
+
+  if [ -f "$dd/p00000000.ogg" ] && cmp -s "$dd/p00000000.ogg" "$src"; then
+    dok=0
+    if [ -f "$dd/c00000000.oc" ] && cmp -s "$dd/c00000000.oc" "$tmp/good.oc" &&
+       "$bin" d "$dd/c00000000.oc" "$dd/c0.ogg" >/dev/null 2>&1 &&
+       cmp -s "$dd/c0.ogg" "$src"; then dok=1; fi
+    detcheck "its .oc is oggcomp's" $dok "$(wc -c < "$tmp/good.oc") bytes either way, and oggcomp d reads it"
+    dok=0
+    if [ -f "$dd/c00000002.oc" ] && cmp -s "$dd/c00000001.oc" "$tmp/good.oc" &&
+       cmp -s "$dd/c00000002.oc" "$tmp/good.oc"; then dok=1; fi
+    detcheck "so are the 2nd and 3rd" $dok "coded after a reset, and after a CRLF repair"
+  else
+    printf '  %-26s %s\n' "its .oc is oggcomp's" "not checked: $src is not one whole stream"
+  fi
+
+  #  Art on, at the default floor: the picture comes out of the stream
+  #  into a file of its own, the stream is rewritten without it, and the
+  #  original still has to come back -- compressed, since -c is the case
+  #  where the rewritten stream is what the model sees.
+  dok=0
+  if "$det" c -c "$dd/box" "$dd/a" >"$tmp/msg" 2>&1 &&
+     "$det" d "$dd/a" "$dd/a.back" >/dev/null 2>&1 &&
+     cmp -s "$dd/box" "$dd/a.back"; then dok=1; fi
+  detcheck 'carve -c, art taken out' $dok "$(detsaid)"
+  if [ -n "$art" ]; then
+    img=; for q in "$dd"/a*.png; do [ -f "$q" ] && img=$q; done
+    if [ -n "$img" ]; then detcheck 'the cover image' 1 "$(wc -c < "$img") bytes, ${img##*/}"
+    else detcheck 'the cover image' 0 'no .png was written'; fi
+  fi
+
+  #  -t looks and writes nothing, not even the .meta.
+  dok=1
+  "$det" c -t "$dd/box" "$dd/t" >"$tmp/msg" 2>&1 || dok=0
+  for q in "$dd"/t*; do [ -e "$q" ] && dok=0; done
+  detcheck '-t writes nothing' $dok "$(detsaid)"
+
+  #  And the refusals, with the output file gone afterwards: a .meta that
+  #  is not one, a .meta cut short, and a stream file with a byte turned.
+  detrefuse() {  # $1 what, rest: arguments to oggdet; wants exit 1 and no no.out
+    what=$1; shift
+    rm -f "$tmp/no.out"
+    set +e
+    "$det" "$@" "$tmp/no.out" >"$tmp/msg" 2>&1
+    got=$?
+    set -e
+    if [ "$got" = 1 ] && [ ! -e "$tmp/no.out" ]; then detcheck "$what" 1 "exit 1  $(detsaid)"
+    elif [ -e "$tmp/no.out" ]; then detcheck "$what" 0 "exit $got, but left an output file behind"
+    else detcheck "$what" 0 "exit $got, wanted 1"; fi
+  }
+  cp "$src" "$dd/bad.meta"
+  head -c 300 "$dd/c.meta" > "$dd/cut.meta"
+  mkdir -p "$dd/flip"; cp "$dd"/c.meta "$dd"/c0*.oc "$dd/flip/" 2>/dev/null || :
+  for q in "$dd/flip"/c0*.oc; do
+    [ -f "$q" ] || continue
+    printf '\001' | dd of="$q" bs=1 seek="$(( $(wc -c < "$q") * 3 / 4 ))" count=1 conv=notrunc >/dev/null 2>&1
+    break
+  done
+  detrefuse 'a .meta that is not one' d "$dd/bad"
+  detrefuse 'a .meta cut short'       d "$dd/cut"
+  detrefuse 'a byte turned in a .oc'  d "$dd/flip/c"
+  echo
+fi
+
+
 printf 't.sh: %d/%d round-tripped byte for byte' "$ok" "$n"
 [ $twice = 1 ] && printf ', %d/%d coded identically twice' "$same" "$nsame"
 echo
 [ $refusals = 1 ] &&
   printf 't.sh: %d/%d other inputs round-tripped, %d/%d refusals gave the exit status they should\n' \
          "$((nany - bad_any))" "$nany" "$((nrefusal - bad_refusal))" "$nrefusal"
+[ $ndet -gt 0 ] &&
+  printf 't.sh: %d/%d oggdet checks passed\n' "$((ndet - bad_det))" "$ndet"
 
-if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $n -gt 0 ]; then
+if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $bad_det = 0 ] && [ $n -gt 0 ]; then
   echo "t.sh: PASS"
 else
   echo "t.sh: FAIL" >&2

@@ -9,7 +9,12 @@ takes any file: what the Vorbis parser can place is modelled, and the rest
 beside the audio, a page with a bad CRC, a file that is not Ogg at all --
 is coded as bytes.  `oggcomp c` does not refuse input.
 
-    ./mk.sh          build ./oggcomp
+Beside it is `oggdet`, the carver: it finds every Ogg stream in a file that
+holds other things too -- an archive, a disk image, a download that stopped
+-- writes each out, or with `-c` writes the `.oc` that `oggcomp c` would,
+and puts the original back byte for byte from what it wrote.
+
+    ./mk.sh          build ./oggcomp and ./oggdet
     ./t.sh           round-trip the test corpus and check it came back
     ./mk.sh check    prove the tuning and shipping builds code identically
 
@@ -31,6 +36,7 @@ gigabyte of model tables, not by code.
 |---|---|
 | `./mk.sh` | the **tuning** build: every model parameter is a live object carrying a `!MAP!` marker, which is what `IDX/opt.pl` hill-climbs |
 | `./mk.sh release` | the **shipping** build: every parameter folded to a literal, no indirection, no markers |
+| | both write `./oggdet` too, from the same `MOD/`: the carver includes the compressor, so a change to the model is a change to both |
 | `./mk.sh check [list]` | both, over one `.ogg` per line of *list* (default: `testfiles/`), compared byte for byte |
 | `./mk.sh mod` | regenerate `MOD/` in the shipping form, build nothing |
 | `./mk.sh pgo f.ogg` | the shipping build, laid out from a profile of *f.ogg* |
@@ -54,8 +60,11 @@ same `.oc`, feeds `c` things that are not Vorbis at all -- an empty file, a
 stream cut off mid-page, a `.oc`, the scripts, the binary -- and requires
 each back byte for byte, and checks the exit status for every way of being
 told no -- including that a refused run leaves no half-written output
-behind.  `testfiles/README.md` says what is in the corpus and why, and what
-it does not reach; `-h` lists the options.
+behind.  Then it carves a container of streams and other bytes with
+`oggdet`, with and without `-c`, requires the container back, and requires
+the `.oc` the carver wrote for a stream to be the one `oggcomp c` writes
+for that stream alone.  `testfiles/README.md` says what is in the corpus
+and why, and what it does not reach; `-h` lists the options.
 
     ./t.sh && ./mk.sh check
 
@@ -94,6 +103,33 @@ rounds every sparse touch up to a 2 MB page and costs about ten times the
 resident memory.  The coroutine wants ~288 kB of stack, so a `ulimit -s`
 under that, or a caller thread with a small stack, is a segfault.
 
+### oggdet
+
+    oggdet c [options] input prefix      carve: prefix%08X.ogg, prefix%08X.jpg, prefix.meta
+    oggdet d [options] prefix output     restore
+
+`oggdet c` scans any file for Ogg pages -- a candidate counts only when
+its CRC verifies, so the payload of a page is never taken for one --
+writes each run of them to a numbered file, each cover image found in a
+comment header to a file of its own, and everything else, with the
+layout, to `prefix.meta`.  Streams that went through a text-mode transfer
+(every LF turned into CR LF) are recognised and written repaired; files
+that come out byte-identical are written once.  `oggdet d` reads the
+`.meta` and the files and gives the input back byte for byte, checked by
+a CRC of the whole of it.  `-t` looks and writes nothing, `-v` reports
+each stream, `-h` the rest of the options.
+
+`-c` compresses: each stream is written as `prefix%08X.oc` instead of
+`.ogg`, and it is the file `oggcomp c` would have written for that stream
+-- the same model, run in the same process and reset between streams, so
+`oggcomp d` reads it.  The reset costs a few milliseconds per stream,
+which shows on a container of thousands of tiny ones and on nothing else.
+The carver is the compressor plus a front end, so everything above about
+memory, the stack, `-`, and outputs deleted on failure holds for it too;
+its exit status is 1 for input it cannot restore from -- a `.meta` that is
+not one or is cut short, a stream file missing or damaged -- 2 and 3 as
+for `oggcomp`.
+
 ## On Windows
 
 `gc.bat` is the Windows build; it drives clang with hard-coded toolchain
@@ -110,6 +146,7 @@ takes nothing exotic:
     x86_64-w64-mingw32-g++ -O2 -fwrapv -static -o oggcomp.exe oggcomp.cpp
     x86_64-w64-mingw32-g++ -O2 -fwrapv -static -DFILE_API_WIN -o oggcomp.exe oggcomp.cpp
 
+The same two lines with `oggdet.cpp` and `oggdet.exe` build the carver.
 Both were built and run under wine over the whole corpus, and both produce
 the same compressed stream as the Linux build, byte for byte, including
 when either end is a pipe.
@@ -125,7 +162,8 @@ an input of 167685, silently not the file it was given.
 
 | | |
 |---|---|
-| `oggcomp.cpp` | the include list, the range coder's byte I/O and `main()`.  The program is the `.inc` files beside it, one per layer, in the order they are included: `ogg_*` the container, `vb_*` Vorbis, `rc.inc` and `cm.inc` the range coder and the mixing primitives, `tc_*` the model machinery, `oc_*` the six models and their assembly.  `REFACTOR.md` says what is in each |
+| `oggcomp.cpp` | the include list and `main()`.  The program is the `.inc` files beside it, one per layer, in the order they are included: `ogg_*` the container, `vb_*` Vorbis, `oc_rcio.inc`, `rc.inc` and `cm.inc` the coder's byte I/O, the range coder and the mixing primitives, `tc_*` the model machinery, `oc_*` the six models and their assembly, and `oc_coro.inc` the coroutine that is the compressor -- what `oggdet` includes.  `REFACTOR.md` and `REFACTOR2.md` say what is in each |
+| `oggdet.cpp`, `oggart.inc` | the carver, and the cover-art extraction it uses.  `oggdet.cpp` includes the compressor's `.inc` files up to `oc_coro.inc` and drives that coroutine from inside its own |
 | `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |
 | `MOD/` | what `idx2inc.pl` generated, checked in |
 | `Lib3/` | coroutines and the file layer.  `file_api.inc` picks stdio or the WinAPI; `file_api_test.cpp` is the test that the two are one interface |

@@ -85,6 +85,8 @@ rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts%
 
 %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% %defs% -static -D_USE_MATH_DEFINES oggcomp.cpp -o oggcomp.exe 
 
+%gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% %defs% -static -D_USE_MATH_DEFINES oggdet.cpp -o oggdet.exe 
+
 del link.exe
 
 del *.o

@@ -59,7 +59,7 @@ for n in sine-stereo-q5 noise-stereo-q3 mono-22k-q4 silence-stereo-q4 \
          tiny-8k-q0 sweep-mono-qm1 chirp-stereo-q10 multi6-48k-q4 \
          music-stereo-q5 music-managed-b96 bigcomment-8k chained \
          uncoupled-stereo-q4 silence-8k-long-qm1 zerolen-8k-q0 tags-many-8k \
-         skeleton-8k minbitrate-pad; do
+         skeleton-8k minbitrate-pad art-8k; do
   [ -f "$n.ogg" ] || need=1
 done
 
@@ -70,7 +70,7 @@ if [ $force = 1 ] || [ $need = 1 ]; then
 #  too: it has to be 64 kB to be worth having (see below) and a shell is the
 #  wrong place to build 64 kB of anything.
 python3 - <<'PY'
-import base64, math, random, struct, wave
+import base64, math, random, struct, wave, zlib
 
 SR = 44100
 
@@ -191,6 +191,30 @@ write('sil44.wav', 2, SR, SR, lambda i, c, sr: 0)
 for k in range(2):
     blob = base64.b64encode(bytes(r.randrange(256) for _ in range(50000))).decode()
     open('bigcomment%d.txt' % k, 'w').write('METADATA_BLOCK_PICTURE%d=%s' % (k, blob))
+
+#  A cover image the way a tagger stores one: a METADATA_BLOCK_PICTURE
+#  comment holding a FLAC PICTURE block -- type, MIME, description, the
+#  dimensions, the image -- as base64.  The image is a 24 by 24 PNG of
+#  random pixels, stored rather than deflated so the bytes do not depend
+#  on the zlib version, and just over the kilobyte below which oggdet
+#  leaves a picture in the stream.  For the compressor it is a comment
+#  header of the shape real files have; for oggdet it is the file its
+#  art extraction is tested on.  Its own generator, so that adding it
+#  changed no file above.
+def chunk(kind, data):
+    return (struct.pack('>I', len(data)) + kind + data
+            + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff))
+ra = random.Random(20240614)
+rows = b''.join(b'\x00' + bytes(ra.randrange(256) for _ in range(24 * 3))
+                for _ in range(24))
+png = (b'\x89PNG\r\n\x1a\n'
+       + chunk(b'IHDR', struct.pack('>IIBBBBB', 24, 24, 8, 2, 0, 0, 0))
+       + chunk(b'IDAT', zlib.compress(rows, 0))
+       + chunk(b'IEND', b''))
+mime, desc = b'image/png', b'front cover'
+pic = (struct.pack('>II', 3, len(mime)) + mime + struct.pack('>I', len(desc)) + desc
+       + struct.pack('>IIIII', 24, 24, 24, 0, len(png)) + png)
+open('art.txt', 'w').write('METADATA_BLOCK_PICTURE=' + base64.b64encode(pic).decode())
 PY
 fi
 
@@ -237,6 +261,11 @@ want tags-many-8k && enc tags-many-8k 1015 -q 0 \
       -c "REPLAYGAIN_TRACK_GAIN=-3.21 dB" -c "A=1" -c "B=2" -c "C=3" \
       -c "DESCRIPTION=a longer value, with spaces and punctuation in it" \
       tiny-8k.wav
+
+#  Cover art, as a tagger embeds it: one METADATA_BLOCK_PICTURE comment of
+#  2.5 kB of base64, on the smallest audio.  oggdet takes the picture out
+#  of the comment header and has to put it back to the byte.
+want art-8k && enc art-8k 1016 -q 0 -c "$(cat art.txt)" tiny-8k.wav
 
 #  Two logical bitstreams in one file, which is what a `cat` of two .oggs is
 #  and what a stream ripped from an internet radio looks like: the second
@@ -430,5 +459,5 @@ else
   for n in $derived; do echo "  $n  (kept)"; done
 fi
 
-rm -f ./*.wav ./bigcomment*.txt
+rm -f ./*.wav ./bigcomment*.txt ./art.txt
 echo "gen.sh: $(ls -1 ./*.ogg ./*.bin | wc -l) files, $(cat ./*.ogg ./*.bin | wc -c) bytes"

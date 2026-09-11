@@ -36,6 +36,7 @@ the compressor with no encoder installed, which is the point.
 | `silence-8k-long-qm1.ogg` | pages filled to the 255-packet ceiling, which is as many as an Ogg page can hold |
 | `zerolen-8k-q0.ogg` | no samples: three headers and one audio packet, the smallest legal Vorbis stream |
 | `tags-many-8k.ogg` | a dozen short tags, a date, a track number, non-ASCII, a value with spaces -- the ordinary metadata case the big-comment file is not |
+| `art-8k.ogg` | a cover image in a METADATA_BLOCK_PICTURE comment, as a tagger embeds one: a FLAC PICTURE block around a 1.8 kB PNG, base64 -- also the file oggdet takes the art out of |
 | `chained.ogg` | two logical bitstreams in one file, with different serials, rates and channel counts |
 
 ## Not one Vorbis stream from start to end

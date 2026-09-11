@@ -1,5 +1,5 @@
 #!/bin/sh
-#  Regenerate MOD/ from IDX/ and build oggcomp.
+#  Regenerate MOD/ from IDX/ and build oggcomp, and oggdet beside it.
 #
 #      ./mk.sh              tuning build   -- Debug 1, Const 0
 #      ./mk.sh release      shipping build -- every parameter folded
@@ -7,9 +7,10 @@
 #      ./mk.sh mod          regenerate MOD/ in the shipping form, build nothing
 #      ./mk.sh pgo f.ogg    shipping build, laid out from a profile of f.ogg
 #
-#  Only the first two write ./oggcomp.  A shipping binary has no !MAP! markers
-#  in it, so an optimizer driving one finds no knobs and reports that nothing
-#  it tries changes anything -- which is why `check` leaves ./oggcomp alone.
+#  Only the first two (and pgo) write ./oggcomp and ./oggdet.  A shipping
+#  binary has no !MAP! markers in it, so an optimizer driving one finds no
+#  knobs and reports that nothing it tries changes anything -- which is why
+#  `check` leaves ./oggcomp alone.
 #
 #  IDX-FORMAT.md sec.1: Debug and Const are orthogonal flags, not two modes.
 #  `Const 0` leaves each threshold a live `mapping` object; `Debug 1` makes its
@@ -157,6 +158,14 @@ generate_and_build() {
   $CXX $CXXFLAGS $WARN $REQ -o "$3" oggcomp.cpp -lm
 }
 
+#  oggdet, the stream carver, includes the compressor -- oc_coro.inc and
+#  every layer under it -- so that `oggdet c -c` writes the .oc that
+#  `oggcomp c` would.  It is built from the same MOD/, in whatever form the
+#  target just generated, and a change to the model is a change to both.
+build_det() {
+  $CXX $CXXFLAGS $WARN $REQ -o oggdet oggdet.cpp -lm
+}
+
 #  Regenerate MOD/ in the shipping form and build nothing.  What a script wants
 #  when it has finished borrowing MOD/ and has to put it back the way it ships:
 #  building would also replace ./oggcomp, and ./oggcomp may be the tuning build
@@ -166,6 +175,7 @@ regenerate_mod() { generate 0 1; }
 case "${1:-tuning}" in
   tuning)
     generate_and_build 1 0 oggcomp
+    build_det
     #  The marker is put there by the pdesc macro, so it is the binary that
     #  has to be looked at -- which is also what opt.pl looks at.  A live
     #  descriptor reads !MAP!<name>!<offset>\0<pattern>\0 (sh_mapping.inc),
@@ -183,6 +193,7 @@ case "${1:-tuning}" in
 
   release)
     generate_and_build 0 1 oggcomp
+    build_det
     #  Look at the binary.  Grepping MOD/*_h.inc for "!MAP!" -- which is what
     #  this used to do -- can never find anything: the marker is not in the
     #  generated header, it is in the pdesc_live macro in sh_mapping.inc that
@@ -342,6 +353,7 @@ case "${1:-tuning}" in
       { echo "mk.sh pgo: no profile was written -- $tmp/oggcomp.gcda is not there" >&2; exit 1; }
     ( cd "$tmp" && $CXX $CXXFLAGS $WARN $REQ -fprofile-use -fprofile-correction -c -o oggcomp.o "$here/oggcomp.cpp" \
         && $CXX -o "$here/oggcomp" oggcomp.o -lm ) || exit 1
+    build_det
     ./oggcomp c "$pgo_in" "$tmp/q.oc"
     cmp -s "$tmp/p.oc" "$tmp/q.oc" || { echo "mk.sh pgo: THE PROFILED BUILD CODES DIFFERENTLY" >&2; exit 1; }
     echo "mk.sh: shipping build, laid out from a profile of $(basename -- "$pgo_in") -- every parameter folded"
