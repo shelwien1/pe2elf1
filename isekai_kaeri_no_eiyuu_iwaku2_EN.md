@@ -6967,3 +6967,384 @@ Oki's words came down to exactly that.
 —Presumably the world's only person to have experienced another world.
 
 That Daiki was indifferent to that value was not a situation she could overlook.
+
+1-18 "The Former Hero, and This World" — 3
+-------------------
+
+"You understand it isn't as simple as 'I'll be fine because I won't tell anyone I've been to another world,' don't you? For a start, you've already told me, as a matter of fact."
+
+"No, well... put that way, yes."
+
+"That it was safe in that instance was a matter of luck. If the first person you'd told hadn't been me, there's no telling where you'd be now — and as yesterday showed, problems happen even if you don't tell anyone."
+
+"Gh— that's right, that... Watarai person."
+
+"—Was dead. No, 'was killed' is more accurate."
+
+"...!"
+
+At the words, delivered so lightly, Daiki caught his breath.
+
+It wasn't that death lacked reality for him. Whatever was true on Earth, in the other world it was a phenomenon he'd grown used to seeing.
+
+Last night, Daiki had understood at a glance that something decisive had been lost from the existence that was Kūya Watarai in front of him. He had unquestionably died that night.
+
+That Daiki still caught his breath was because, in a place called Earth, he was not used to it — and because a middle-school girl had said it so very lightly.
+
+For Daiki, «Earth» — this world — had always been the symbol of ordinary life.
+
+The place he wished to return to someday, in the middle of a battle he'd been thrown into with no warning and no consent.
+
+The unremarkable but precious daily life he'd succeeded in winning back.
+
+And now — no, for several days already — it was being destroyed at a terrifying rate.
+
+"Considering the timing, whether or not they were present — the odds are high that someone was watching yesterday's fight. Or rather, it's reasonable to think that someone was the mastermind."
+
+Oki spoke flatly, stacking up conjectures.
+
+Without any sentiment for a human being who'd lost his life the night before; she looked only at facts.
+
+—He understood the reasoning. His own life had been in danger; anyone would say that sympathising with an enemy was the odd position. It wasn't that Daiki didn't follow that logic.
+
+But.
+
+He still thought it wasn't something an ordinary middle-schooler could compartmentalise so easily.
+
+"No wonder something felt off the whole time. Kūya Watarai was probably being manipulated."
+
+"...Was he."
+
+Daiki said, swallowing the other words he should have said.
+
+Probably it wasn't a matter of anything being right or wrong.
+
+"Yes. You'd know, since you were connected. My original magical aptitude lies in «Connection». So I could read it, roughly... Watarai's objective was, strictly, for himself to go to another world. He was a magus who had only ever wished for that."
+
+"..."
+
+Daiki couldn't sympathise with that feeling.
+
+He had never once wished to go to another world. At the very least, he certainly hadn't gone by his own wish. That much was certain.
+
+"But in that case, he should have had no reason to pick a fight with me — with this city. That discrepancy can't be ignored. I think someone steered the direction of his thinking."
+
+"Steered... you mean he was brainwashed with magecraft, or something like that?"
+
+"That would have been easier."
+
+Oki shook her head.
+
+"If traces of magecraft remained, there'd have been a chance of tracing them — difficult, but possible. But that's not what this is. I couldn't sense anything of the kind, at least. Watarai's thinking was steered **without recourse to magecraft**."
+
+"..."
+
+"Whoever's behind this is thorough. Come to think of it, it was strange from the start. Watarai kept slipping past our detection the whole time. He had a method for it. And yet, only that first time when he entered the city, Watarai got caught by the detection... he was made to be noticed deliberately. Watarai was chum in the water..."
+
+"Ah — that's right."
+
+Daiki remembered there was something he hadn't mentioned and told her.
+
+—He hadn't said a single word to her about the woman he'd met that night.
+
+"I met the magus who guided Kūya Watarai into this city."
+
+"Right! From what his abilities looked like, it does make sense that there was a collabor— *heyyy*?"
+
+All at once.
+
+Oki's hand came down in a chop on the crown of Daiki's head.
+
+"Hey, hey, hey, hey, hey."
+
+"Ow ow ow ow ow."
+
+"What. Huh, what? I feel like you just said something distinctly unignorable?"
+
+Oki slapped at Daiki repeatedly.
+
+It didn't hurt as much as she made out, but he blocked the attacks all the same — and there, Daiki suddenly noticed.
+
+The pain in his body really was starting to ease.
+
+The effect of Tsunashino's nanomachines, presumably.
+
+"Why is that. Why is it that you know such a thing, Daiki. Why, pray tell."
+
+"...I'm getting a pretty good sense of when the polite speech starts leaking out of you..."
+
+"Th-that doesn't matter right now!"
+
+"Ah. No, last night, after we parted, someone claiming to be a magus came to where I was—"
+
+"—You mean you had another engagement *before* going into the barrier?!"
+
+Daiki's eyes widened at her shock, but he didn't think it was such a big deal.
+
+In practical terms, Urei presumably hadn't been cooperating with Watarai out of personal ideology or design.
+
+At the very least, Daiki took it that her word *job* hadn't been a lie.
+
+"Well, she let me through in the end. She did call herself a magus, but she felt the same as Tsunashino-san — probably just commissioned to assist Watarai. Not the mastermind—"
+
+"No, tell me things like that sooner!"
+
+Oki fumed. But Daiki hadn't exactly been hiding it.
+
+"I'm telling you about as fast as possible. There hasn't been an opening until now."
+
+"That... may be so, but."
+
+They'd gone straight into a fight when he joined her, and the moment it was over Oki had collapsed.
+
+After that came the treatment, and only now had they reached the stage of being able to talk calmly; there was nothing strange about it.
+
+Oki understood that too, presumably. Dissatisfied as she looked, she accepted it.
+
+"Mh, ngh. Well, I was unconscious, true. —So, what was her name?"
+
+"Urei Aiko. She introduced herself as a courier... ah, come to think of it, I got a business card."
+
+Daiki produced Urei's card, which he'd left stuffed in his pocket.
+
+Oki looked at it for just a moment, then shook her head slightly.
+
+"...Not a name I know. I'd like to look into it, though."
+
+"Ah, but — the thought just struck me, couldn't it be a false name?"
+
+At Daiki's question, Oki shrugged.
+
+"It's possible. She's working, isn't she? Then it functions as a professional name, and in that case there'll be information that comes up. ...So there was a person in that place, huh..."
+
+"I was surprised too — I couldn't sense any presence at all until she showed herself."
+
+"You can sense presences?"
+
+"Mm... roughly, I suppose."
+
+"That also strikes me as odd. But well, that means we can take it that the reason he was slipping past the city's detection lies with her. In which case she must know about the mastermind too..."
+
+"Ah, that follows."
+
+*I hadn't thought about that*, Daiki reflected.
+
+Urei had, in her own way, kept the important things hidden.
+
+"Should I call her and ask?"
+
+"She wouldn't come, obviously. And even in the unlikely event she did, she wouldn't answer, so there's no point."
+
+Was that how it worked?
+
+If so, when was he supposed to hand over Urei's payment? As Daiki puzzled over it, Oki said,
+
+"What kind of magus was she?"
+
+"...Who knows. I did learn she's good at hiding her presence. Ah, and she used magecraft to stop me moving. Something that made it feel like the soles of my feet were glued to the ground."
+
+"That happened?"
+
+"Well, everything but the soles still moved, so I managed. That's the frightening part about magecraft, isn't it. You can't read when it'll activate, so it's hard to respond."
+
+Oki's «Pure Black» was the very archetype.
+
+The mystery of something that activates on thought alone left one thoroughly at its mercy.
+
+At Daiki's shoulders shaking with the memory, Oki shook her head.
+
+"That's not true. Magecraft always requires preparation to activate."
+
+Surprised by that, Daiki asked back.
+
+"Huh? But yesterday—"
+
+"My arts are the exception. Normally, magecraft always requires preparation. It might be an incantation, a ritual, the construction of a circle or a temple, or even a sacrifice — the shape differs, but there's a precursor."
+
+"Is that so..."
+
+"If you're telling me she's a witch, that's a different story. But you probably just missed it."
+
+From the way she talked, it seemed hard to imagine Urei was a witch.
+
+In which case, had he missed the precursor as Oki said? It was true that Daiki lacked the knowledge, so he couldn't declare otherwise.
+
+That was perhaps something to keep in mind going forward.
+
+"...Anyway. This business isn't over. It hasn't been solved."
+
+Oki said. Then she looked at Daiki squarely.
+
+"And you're no longer an outsider. Even factoring in that Watarai was a scapegoat, it's reasonable to think you were marked because your ability is useful to their objective. —You understand what that means."
+
+After thinking a little, Daiki answered.
+
+"If there's a mastermind behind Watarai, then that person knows I came back from another world. And they'll come after me — the odds of that aren't low, you're saying?"
+
+"Yes."
+
+Oki nodded and went on.
+
+"Of course, I think the main target is me. Which is unfathomable in its own way, but magi who want me aren't rare. If you ignore the disparity in power."
+
+"...So you're popular with magi."
+
+"Depends how you look at it. I am a flower on a high peak, you know. —Anyway, the odds are high that this mastermind was watching last night's fight by some means. Which connects to the possibility that your background, which even Watarai couldn't grasp, has been discerned."
+
+"So they might want knowledge about the other world... if they'd just ask me honestly, I wouldn't mind telling them."
+
+"If merely asking satisfied them, that road might have existed. What's more of a problem is the reverse: right now we have no information whatsoever about this «mastermind». That's the nuisance."
+
+Oki brooded with a difficult expression.
+
+In fact the only one caught by the city's watch net was Kūya Watarai. There was no further information.
+
+"Having to be reactive is a problem. We can't use the advantage of being on home ground."
+
+"Ah... being lain in wait for like yesterday certainly is troublesome."
+
+"Being lain in wait for inside a barrier puts the situation in their favour. It's a pain."
+
+"...Can't you guess at the enemy? Coming to this city and going out of their way to pick a fight with you means, say, they might hold a grudge against you, doesn't it?"
+
+Daiki asked, but Oki denied it with a difficult face.
+
+"Not necessarily. My background can be learned by looking into it, and they may not be acting out of a grudge. —Also, I've earned quite a few grudges anyway."
+
+"Have you... what on earth have you been doing all this time?"
+
+"What does it matter I live a pure and upright life thank you."
+
+"She dodged it..."
+
+—If she didn't want to say, he wouldn't force it, but Oki led a dangerous life.
+
+Whether to be exasperated or not, he wasn't sure. While he wavered, Daiki thought about it too.
+
+"A mastermind hiding while manipulating Watarai, huh... maybe it's someone related to Watarai. His father, say. Look, he said second generation, didn't he? Which would mean his father was a magus too—"
+
+"—————— **His father**?"
+
+At Daiki's words, which barely qualified as conjecture, Oki's eyes went wide.
+
+Daiki narrowed his eyes and checked with her.
+
+"...Off the mark again?"
+
+"No. That... might be a bullseye this time. I can't confirm it, but the odds are high. Wow, right, why didn't it occur to me... That's entirely plausible."
+
+"Seriously."
+
+Daiki had almost no information about Kūya Watarai.
+
+So he'd merely voiced a thought, but this time it seemed to have paid off.
+
+"Yes — brainwashing without magecraft... He was steering one human being. The odds aren't low that it was a relationship involving a considerable amount of time spent together. And in fact, from what I saw, Watarai was very strongly coloured by his father's influence. If anything, he's the prime suspect..."
+
+That was when it happened.
+
+The phone in Daiki's trouser pocket buzzed.
+
+Taking it out and looking, he found the display name «Nagi Kurosu». Daiki grimaced.
+
+"Right, I've done it. I stayed out overnight without a word..."
+
+"—What is it?"
+
+"Ah, no. A message from my sister. She's probably angry that I didn't come home..."
+
+At Daiki's troubled expression, Oki let out a small wry smile.
+
+He was a man back from another world who had shown ability to match it. That the same man showed worries so thoroughly typical of a high-school student felt, oddly, rather rare.
+
+"Ah. Then shall we eat lunch out?"
+
+So Oki offered that suggestion.
+
+To Daiki, who tilted his head, Oki spoke as though it were a fine plan.
+
+"Look, it's Saturday. Why not buy her lunch and get back in her good books?"
+
+"...You make it sound easy."
+
+"It's fine. I'll defend you properly on the staying-out business. Ah, leave it to me. Of course I won't say anything unnecessary. I'm good at that sort of thing."
+
+Oki puffed out her chest with a *hmph*. She apparently intended to smooth things over neatly.
+
+—Is she really good at it?
+
+Daiki had his doubts, but didn't go so far as to point it out.
+
+Maybe that was fine as it was.
+
+"Well, let's do that, then..."
+
+At Daiki's quiet murmur, Oki turned a soft smile on him.
+
+"Still, you really are close as siblings. I thought so when I saw you the other day."
+
+"...Are we? If it looks that way, that's good, I suppose. Ah... it is a good thing. It should be."
+
+Daiki murmured it quietly, with something almost like self-mockery showing.
+
+Oki narrowed her eyes. That attitude was oddly unlike him.
+
+"...Is something wrong? You're being strange. If something's bothering you, say it."
+
+So Oki said.
+
+Daiki looked a little surprised, then immediately smiled a little.
+
+"...That's a bit embarrassing. Maybe I can't keep secrets from you anymore."
+
+"Ah, no, it wasn't that convenient a spell— er, um."
+
+She presumably meant the empathy she'd worked through magecraft last night.
+
+In truth, it wasn't an art that let her read what someone was thinking that conveniently.
+
+But saying so would, conversely, amount to telling him that Oki had already become able to read Daiki's expressions.
+
+That was more embarrassing for Oki.
+
+"—Ahem."
+
+"Huh. Did you just dodge something?"
+
+"Anyway! If something's up, say it. We're partners, aren't we."
+
+At Oki delivering that embarrassing line without any awareness of it, Daiki nodded.
+
+And murmured this, as though it were leaking out of him.
+
+"...Everyone says it. You've always been such close siblings. What a lovely family... to me."
+
+"..."
+
+"My parents say it too. Nagi has been glued to her big brother since she was little. Ah, if they say so, then it must be so. They're my real parents. They should be. Then it should be correct — **even if I have no recollection of it**."
+
+"No recollection...? Wait, Daiki... that's—"
+
+"I'm the only one who doesn't know. I alone don't know the little sister called Nagi Kurosu. —No, that's wrong; I do know her, really. The sound *Nagi*. If it's the name that **was supposed to belong to the little sister who was miscarried and never born** — I remember hearing that from my parents too. Before I went to another world."
+
+Oki couldn't properly grasp those words.
+
+Her mind couldn't turn fast enough. She only sensed that Daiki was saying something very important.
+
+Which is why, inevitably, the next words could only astonish her.
+
+Daiki told her:
+
+"—In the world (*me*) before I came back from the other world, there was no little sister called Nagi Kurosu."
+
+"Th-that's..."
+
+"I hadn't intended to say it, really. There's no room for it, and I thought I'd consider whether to consult you at least once this mess was over. But you see, Oki — as a magus, what do you make of it?"
+
+She couldn't answer.
+
+There was no way to answer.
+
+Even Oki hadn't imagined a situation like this. —And yet Daiki said:
+
+"—Where in the world am I?"
