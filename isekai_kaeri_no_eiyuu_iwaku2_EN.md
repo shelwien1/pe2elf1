@@ -3252,7 +3252,7 @@ So Daiki said, though honestly he had understood essentially none of what Oki me
 
 The sense was: I probably wouldn't understand it even if you explained, but I get that odd things happen.
 
-"Well, inverted, if you can control it completely you don't get dragged, and then you can unilaterally exploit the strong power of a place like a shrine... but I think that's a cheap payoff for the risk."
+"Well, inverted, if you can control it completely you don't get dragged," Oki said, "and then you can unilaterally exploit the strong power of a place like a shrine... but I think that's a cheap payoff for the risk."
 
 "I don't really follow, but... er, Watarai, was it? It doesn't suit his aims?"
 
@@ -3262,7 +3262,7 @@ The sense was: I probably wouldn't understand it even if you explained, but I ge
 
 "He could practise at the shrine, couldn't he."
 
-"Maybe he thought he'd be interfered with if he went straight to the shrine."
+"Maybe he thought he'd be interfered with if he went straight to the shrine," Daiki tried.
 
 "Then he should have come here after practising at home. That's far too seat-of-the-pants."
 
@@ -3354,7 +3354,7 @@ She was the idiot. She had simply not wanted Daiki to see through to the shadowe
 
 That wouldn't do. Oki Narumi reminded herself that she was, above all, a magus.
 
-"Follow me. Stay alert — you're good at that sort of thing, aren't you."
+"Follow me," Oki said. "Stay alert — you're good at that sort of thing, aren't you."
 
 "Mm, yeah... leave it to me. I've fought monsters in darkness where I couldn't see a thing."
 
@@ -3362,7 +3362,7 @@ That wouldn't do. Oki Narumi reminded herself that she was, above all, a magus.
 
 "Ah, well. At first I got by on instinct, but a lot of them were nasty. The type that kills its presence perfectly was especially rough."
 
-"How did you defeat something like that...?"
+"How did you defeat something like that...?" Oki asked.
 
 "...I don't want to say, because you'd definitely be put off."
 
@@ -3402,7 +3402,7 @@ Where the earlier sensation had been like being pulled by something, this one re
 
 Knowing the cause, presumably, Oki said it.
 
-"This... feeling? It's different from before..."
+"This... feeling?" Daiki managed. "It's different from before..."
 
 "This is the trace of magical energy. It's quite dense here... different barriers mixed together, making a bad job of it. Magical energy is harmful to human beings, so getting close affects your condition."
 
@@ -3422,7 +3422,7 @@ Oki said it while gazing toward the depths of the shrine.
 
 Daiki honestly felt revulsion at so much as looking that way. Magi were apparently unaffected.
 
-"This place is safe in a sense, anyway. Nobody's going to come in, for one thing."
+"This place is safe in a sense, anyway," Oki said. "Nobody's going to come in, for one thing."
 
 "That may be... true... ah, but I'm getting used to it a bit."
 
@@ -3584,7 +3584,7 @@ At Daiki's deadly serious words, the woman promptly doubled over laughing.
 
 He was being laughed at with enormous amusement, and yet — why was it? It didn't feel unpleasant.
 
-"Y-you're saying that seriously, in this situation? Ahaha! Kid, you're a seriously good guy, aren't you! What is that, too funny... ahahaha!"
+"Y-you're saying that seriously, in this situation?" Urei got out. "Ahaha! Kid, you're a seriously good guy, aren't you! What is that, too funny... ahahaha!"
 
 "...Is it that funny?"
 
@@ -3691,7 +3691,7 @@ Slightly taken aback, Daiki answered.
 
 "...By age I'm seventeen."
 
-"Ehh, no thanks. I'd like you to be younger there. Different school year, so what's the harm."
+"Ehh, no thanks," Urei said. "I'd like you to be younger there. Different school year, so what's the harm."
 
 "What are we even talking about..."
 
@@ -3871,7 +3871,7 @@ Those were words he hadn't anticipated.
 
 Daiki narrowed his eyes. At the very least, Urei seemed to be concerned for him.
 
-"I've no obligation whatsoever. But well, you seem like a good sort. And if my conscience runs to stopping that sort of person from being eaten by a witch... well, mine wouldn't fetch a single yen as merchandise. Which is exactly why I'll spend it carelessly right here."
+"I've no obligation whatsoever," Urei said. "But well, you seem like a good sort. And if my conscience runs to stopping that sort of person from being eaten by a witch... well, mine wouldn't fetch a single yen as merchandise. Which is exactly why I'll spend it carelessly right here."
 
 "...You're worried about me?"
 
@@ -4468,7 +4468,7 @@ At the very least, he did not seem like a magus of much ability.
 
 At Oki's advisement, Watarai returned a reply so belated and off-key that Oki felt strangely about it. It was fair to say she'd been knocked off her opening stride.
 
-"Obviously I did. What are you saying at this—"
+"Obviously I did," Oki said. "What are you saying at this—"
 
 "Do you not also yearn for a world other than this one?"
 
@@ -4731,7 +4731,7 @@ Another world — an other world.
 
 If there was someone genuinely chasing a fable more absurd than even the word *magic*—
 
-"You... you don't mean—"
+"You... you don't mean—" Oki said.
 
 "I have no attachment to a world like this. Then I shall find for myself the world I require."
 
@@ -5360,7 +5360,7 @@ Saying that, for some reason, Oki licked her lips.
 
 It felt oddly seductive, and Daiki hurriedly shook his head to sweep out the inside of it.
 
-"...I don't see how that follows, but it was necessary, was it?"
+"...I don't see how that follows," Daiki said, "but it was necessary, was it?"
 
 "Obviously. ...Sorry for taking it without permission."
 
@@ -5820,7 +5820,7 @@ Watarai's words reached Oki's ears.
 
 But she felt no meaning in such a question.
 
-"I don't... understand the question. My job is... to stop unlawful arts in this city. You're the one who trespassed; why would you think you wouldn't be obstructed...?"
+"I don't... understand the question," Oki said. "My job is... to stop unlawful arts in this city. You're the one who trespassed; why would you think you wouldn't be obstructed...?"
 
 "You too — you must be sick of this world!"
 
@@ -6642,7 +6642,7 @@ Don't say that *after* putting them in.
 
 Daiki's face went visibly pale. —What is this, it's scarier than magecraft.
 
-"Please understand it as: even future technology is by no means omnipotent. This batch is still a weak type, but using it on a hairline fracture of the arm is excessive. Extravagant, one might say."
+"Please understand it as: even future technology is by no means omnipotent," Tsunashino said. "This batch is still a weak type, but using it on a hairline fracture of the arm is excessive. Extravagant, one might say."
 
 "Um, is this really all right?"
 
@@ -6716,11 +6716,11 @@ Tsunashino continued flatly, and Oki mumbled something, glancing repeatedly at D
 
 "Th— gh— l-like I said, I-I would never do such a thing...!!"
 
-"Huh, you wouldn't use contraception?"
+"Huh, you wouldn't use contraception?" Daiki asked.
 
 "N-not that one! That's not it! That sort of thing, I'm not doing *yet*!"
 
-"Yet?"
+"Yet?" said Tsunashino.
 
 "It's a figure of speech!!"
 
@@ -6870,7 +6870,7 @@ Oki raised one finger as she spoke.
 
 Which presumably referred to nearly the whole of Earth's civilised society.
 
-"Dividing it into three is a matter of convenience. In practice you can take it that almost all of this world is that world of science. By population share it's ninety-nine per cent — ninety-nine hundredths is the Gakkai, the world of the system called society. Well, you may as well take it as pointing at nearly all of Earth... all of human civilisation."
+"Dividing it into three is a matter of convenience," Oki said. "In practice you can take it that almost all of this world is that world of science. By population share it's ninety-nine per cent — ninety-nine hundredths is the Gakkai, the world of the system called society. Well, you may as well take it as pointing at nearly all of Earth... all of human civilisation."
 
 "I see... incidentally, what are the other two?"
 
@@ -6910,7 +6910,7 @@ Saying so, Oki turned to face Daiki and composed a serious expression.
 
 Daiki wasn't confident he was keeping up, but he thought he'd better listen.
 
-"There aren't many «Majutsu Ritsukai» people in Japan, so that's fine for now. I'll just say that if a magus identifies themselves that way, better not to get involved. As for the «Gakkai», there are plenty of ordinary humans like the Tsunashino-san you just met, but the organisation is enormous. Publicly known organisations sometimes trace back to it, and the story changes completely from department to department, so it's difficult. I don't know the whole picture either — but you've tasted it in your own body, haven't you?"
+"There aren't many «Majutsu Ritsukai» people in Japan, so that's fine for now," Oki said. "I'll just say that if a magus identifies themselves that way, better not to get involved. As for the «Gakkai», there are plenty of ordinary humans like the Tsunashino-san you just met, but the organisation is enormous. Publicly known organisations sometimes trace back to it, and the story changes completely from department to department, so it's difficult. I don't know the whole picture either — but you've tasted it in your own body, haven't you?"
 
 "...The future scientific technology, you mean."
 
@@ -6971,7 +6971,7 @@ That Daiki was indifferent to that value was not a situation she could overlook.
 1-18 "The Former Hero, and This World" — 3
 -------------------
 
-"You understand it isn't as simple as 'I'll be fine because I won't tell anyone I've been to another world,' don't you? For a start, you've already told me, as a matter of fact."
+"You understand it isn't as simple as 'I'll be fine because I won't tell anyone I've been to another world,' don't you?" Oki said. "For a start, you've already told me, as a matter of fact."
 
 "No, well... put that way, yes."
 
@@ -7069,7 +7069,7 @@ The pain in his body really was starting to ease.
 
 The effect of Tsunashino's nanomachines, presumably.
 
-"Why is that. Why is it that you know such a thing, Daiki. Why, pray tell."
+"Why is that," Oki demanded. "Why is it that you know such a thing, Daiki. Why, pray tell."
 
 "...I'm getting a pretty good sense of when the polite speech starts leaking out of you..."
 
@@ -7444,7 +7444,7 @@ For all she said it, Nagi was evidently deeply displeased about Daiki's unannoun
 
 Poking at her ordered pasta in a sulk, she hadn't let up on the lecture since they'd sat down.
 
-"Come on, cheer up. Look, I'm paying for this, so..."
+"Come on, cheer up," Daiki said. "Look, I'm paying for this, so..."
 
 "So Daiki-senpai believes that girls can be mollified by being casually bought a meal."
 
@@ -7610,7 +7610,7 @@ That Nagi said so was presumably because she'd read her brother's intent.
 
 He couldn't help a wry smile. Which of them, exactly, was being looked after here?
 
-"It must be some kind of fate, so, er — Narumi-san. If you like, let's exchange contact details."
+"It must be some kind of fate, so, er — Narumi-san," Nagi said. "If you like, let's exchange contact details."
 
 "Fweh? Ah, um, er... is that all right?"
 
@@ -7919,7 +7919,7 @@ The young man answered.
 
 After a short silence—
 
-"Then what if you found a way to go to another world?"
+"Then what if you found a way to go to another world?" Oki asked.
 
 "...What would I do. Parallel worlds seem infinite, so rather than searching for my original Earth, going back to the other world I'm used to might be better. I'd originally intended to live over there. I never thought I'd be able to come back. Well, strictly speaking I haven't come back."
 
@@ -7972,7 +7972,7 @@ The difference in usage between «witch» and «magus» was still unclear to Dai
 
 But at least it was certain that Oki didn't take kindly to it.
 
-"For magi, «witch» is a derogatory term. You saw it, I think — the magecraft I use, which I just loosely call «Pure Black» (*the black*) — that's **magecraft that isn't recognised as magecraft**."
+"For magi, «witch» is a derogatory term," Oki said. "You saw it, I think — the magecraft I use, which I just loosely call «Pure Black» (*the black*) — that's **magecraft that isn't recognised as magecraft**."
 
 "You mean it isn't magecraft...?"
 
@@ -8002,7 +8002,7 @@ In that sense the two of them might indeed be in similar positions.
 
 In the sense that nowhere in the world was there another person in the same position.
 
-"I was originally a magus, mind. Because I had magical energy. But, well... I was chosen as an experimental subject. It was very nearly impossible — no, it should have been outright impossible. By some strange working, by a coincidence like miracle stacked on miracle, only I survived."
+"I was originally a magus, mind," Oki said. "Because I had magical energy. But, well... I was chosen as an experimental subject. It was very nearly impossible — no, it should have been outright impossible. By some strange working, by a coincidence like miracle stacked on miracle, only I survived."
 
 "..."
 
@@ -8785,7 +8785,7 @@ An unfamiliar man.
 
 A man of strange atmosphere, who looked both elderly and young.
 
-"Are you the one who took Nagi?"
+"Are you the one who took Nagi?" Daiki asked.
 
 "Hmm. Affirming that question will presumably settle things faster. Though the one who actually abducted your sister is not I, and she is not here. I merely gave instructions."
 
@@ -10394,7 +10394,7 @@ Nagi spoke the name of the girl in front of her.
 
 The name of the girl who had been Daiki's childhood friend.
 
-"A vampire, of all things. No wonder I found you disagreeable."
+"A vampire, of all things," Nagi said. "No wonder I found you disagreeable."
 
 "Haah. Does the concept of the *oni* exist in your world too? Well, it doesn't matter, but strictly I'm a **possessed body**. I believe I've built a good relationship with Yuika, and precisely because of that, being called by that name is inappropriate. I'd appreciate a correction."
 
@@ -10416,7 +10416,7 @@ At the words delivered heavily, the vampire shrugged lightly.
 
 "Is that so. No, it doesn't matter. It's Yuika who's the childhood friend; it has nothing to do with me. Though thanks to your synchronisation, Yuika can no longer speak with him either."
 
-"...Even so, Master — Daiki is my master. I don't care about that. And I've come to a proper arrangement with Nagi, too. Neither of us had any other option anyway. This child is happy to have met the brother she was never supposed to meet."
+"...Even so, Master — Daiki is my master," Nagi said. "I don't care about that. And I've come to a proper arrangement with Nagi, too. Neither of us had any other option anyway. This child is happy to have met the brother she was never supposed to meet."
 
 "Don't you mean you're exploiting her by taking advantage of that feeling? No, I've no particular desire to blame you. It doesn't matter to me. —But you intend to take him back to his original world, don't you? And his sister shouldn't be able to go with him."
 
@@ -10687,7 +10687,7 @@ In any case it was a fact that he'd been saved by this so-called future technolo
 
 For injuries that severe to be healed this far in a day was beyond normality.
 
-"Unlike last time, I finished everything while you were asleep, so there's no problem with you going straight home."
+"Unlike last time, I finished everything while you were asleep," Tsunashino said, "so there's no problem with you going straight home."
 
 "Ah, the nanomachine business?"
 
@@ -10727,9 +10727,9 @@ Tsunashino glanced at Oki and smiled thinly. Oki narrowed her eyes at something.
 
 "—I'm only human; I can't refuse. I answered, 'Late-night rates are thirty per cent extra.'"
 
-"'Only human' — surely there was a better way to phrase that..."
+"'Only human' — surely there was a better way to phrase that..." Daiki muttered.
 
-"I-I only, um, it's just that I was the one who set the enhancement on him...!"
+"I-I only, um, it's just that I was the one who set the enhancement on him...!" Oki protested.
 
 Daiki retorting, and Oki flapping about making excuses.
 
@@ -10877,7 +10877,7 @@ But Daiki was likewise bewildered by Oki's manner.
 
 Oki froze; Daiki said it as a matter of course.
 
-"Oki, you don't seem to have many people around you. And that felt like a waste, somehow."
+"Oki, you don't seem to have many people around you," Daiki said. "And that felt like a waste, somehow."
 
 "...Huh?"
 
@@ -10901,7 +10901,7 @@ Laughed.
 
 "You are angry..."
 
-"Never mind, let go of my hand already, idiot. I can't bring myself to let go from my side because it'd be a waste, idiot. How long do you intend to keep touching a girl, idiot. And you call yourself a man, idiot. Idiot."
+"Never mind, let go of my hand already, idiot," Oki said. "I can't bring myself to let go from my side because it'd be a waste, idiot. How long do you intend to keep touching a girl, idiot. And you call yourself a man, idiot. Idiot."
 
 "All right, all right... I'm sorry."
 
@@ -11230,9 +11230,9 @@ Nagi says.
 
 That it's all right even so.
 
-"Even if it's brief, this time is a reward I should never have had. If I can spend it with nii-san, with Daiki-senpai, I don't mind."
+"Even if it's brief, this time is a reward I should never have had," Nagi says. "If I can spend it with nii-san, with Daiki-senpai, I don't mind."
 
-"...'Senpai,' though."
+"...'Senpai,' though," I said.
 
 "Apparently it's common sense to call someone born earlier that. And calling him nii-san is lovely, but then I can't call him by name, can I. It's a little embarrassing, too. Even if we're supposed to have lived together, I don't have the felt sense of it."
 
