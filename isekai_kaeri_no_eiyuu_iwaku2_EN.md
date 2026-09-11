@@ -5784,3 +5784,462 @@ The art the young man gripped in his palm and drove into the monster's body beca
 And to Watarai, who had understood the situation from its result, a quiet voice was delivered.
 
 "—It's over, Kūya Watarai."
+
+1-15 "The Former Hero, and the Magus" — 7
+-------------------
+
+"Narumi... Oki...!"
+
+When had she— no, obviously, it must have been while his attention was on that young man.
+
+Before he knew it the witch — Narumi Oki — had reached the bridge, right in front of Watarai.
+
+Black threads now ran upward from that wounded body.
+
+By making herself her own puppet, she had risen on a body in tatters and come here.
+
+The defeat of his summoned creature was not, in itself, a problem.
+
+He could simply call the next one. If that killed the witch, excellent; and even if he couldn't kill her tonight, there would be any number of chances later, and he had no particular reason to fixate on the witch.
+
+She would make the finest offering, but she was not strictly essential.
+
+He could leave the objective unfulfilled.
+
+—And yet.
+
+"Why. Why, Narumi Oki?!"
+
+He couldn't help but ask.
+
+　　　　　※
+
+"Why do you obstruct me?! Why — would you throw away a world that is not this one?!"
+
+Watarai's words reached Oki's ears.
+
+But she felt no meaning in such a question.
+
+"I don't... understand the question. My job is... to stop unlawful arts in this city. You're the one who trespassed; why would you think you wouldn't be obstructed...?"
+
+"You too — you must be sick of this world!"
+
+"..."
+
+"This world will not acknowledge you. Then do you not want to go to a world that will? Don't tell me the thought has never crossed your mind, witch. You, **because of your own father**—"
+
+"—**Don't talk about that.**"
+
+Oki drove the nail in quietly.
+
+It wasn't as fierce a reaction as when she'd been called a witch earlier. And yet the pressure he felt was far greater than then, and Watarai quietly shook his head.
+
+"With that much resentment, why..."
+
+"True. —It's not that I don't understand what you're saying."
+
+"...Then!"
+
+"But that has nothing to do with you. Nor is it something to be said by someone who tried to kill me. And besides — **whose wish is it, exactly?**"
+
+"......What did you say?"
+
+At that question, which should have been of no consequence, Watarai nevertheless faltered for an instant.
+
+He shook his head and gave the obvious answer again.
+
+"Obviously it is mine, as a magus—"
+
+"—Right. It's your wish."
+
+Oki assented, and then:
+
+"And yet all this time you've been going on about the degeneration of magi and what a witch is... You knead far too many unnecessary arguments. —Honestly."
+
+"What...?"
+
+"**You simply broke against the world and are looking for somewhere to escape to, aren't you?**"
+
+"———————"
+
+A scathing criticism — but Oki had no desire to deny that intention as such.
+
+That was Watarai's own business. It had nothing whatever to do with Oki.
+
+"It makes no difference to me. Resent this world, hate your own circumstances, as you please; and if that produced results, then the achievement is yours regardless of motive. It is all entirely your freedom. —Yes, but."
+
+The girl's eyes were crimson.
+
+Her manner of speech was completely unlike a moment ago.
+
+—What is this?
+
+No — in the first place, *who* is this standing in front of him—
+
+To the bewildered Watarai, Oki said:
+
+"But in that case, just say so with your chest out. Who is it you're deferring to?"
+
+"What are you—"
+
+"**I am not you**, **and you are not me**, **and my father is not your father.**"
+
+He didn't understand what was being said to him.
+
+Nor could he bring himself to want to understand.
+
+He simply wanted, above all, to have no further conversation with the thing in front of him.
+
+A witch who grips the heart, of all things.
+
+"Enough. —Then I shall move to the next measure."
+
+Yes; in the end all that had happened was that one other-world monster had been defeated.
+
+Watarai could summon as many as he liked. In time he would reach another world himself. Once that happened, nothing about a star called Earth would matter at all—
+
+In which case.
+
+He need only crush the thing in front of him.
+
+Recalling that obvious logic, Watarai prepared his next spell — but.
+
+"...? What is this?"
+
+Oki didn't answer. She only looked straight ahead.
+
+"Why. **Why can't I activate my magecraft?** Why — why can't I, move—"
+
+Oki didn't answer. She only looked straight at Watarai.
+
+Crimson eyes had him.
+
+**The Mystic Eye — had him.**
+
+"—Surely not."
+
+Watarai had already seen Narumi Oki's capability as a witch any number of times.
+
+The fearsome black of «Severance».
+
+A witch's capability, requiring no magical ritual whatsoever.
+
+But, come to think of it—
+
+—he knew nothing at all of Oki's *original*, inborn character as a magus.
+
+"...Gh, wha—"
+
+No. No, that's wrong too.
+
+Because Watarai had certainly seen it.
+
+Back then, magecraft activated in time with that young man's movements — a power like mind-reading.
+
+If that were the magical aptitude Narumi Oki had originally possessed—
+
+"It was the reverse... from the start!"
+
+Oki didn't answer.
+
+But he was right. At the last, Watarai drew the correct answer by intuition.
+
+The magical characteristic Narumi Oki was born with was «Connection» — a property that could fairly be called the exact opposite of the «Severance» implanted in her later: creating links, binding ties, making empathy possible.
+
+The crimson Mystic Eye she possessed is called precisely the Eye of «Connection»; merely holding a target in view creates a tie with it.
+
+That she could be delegated this city's administrator authority, that she could steer people into contracts — all of it had that characteristic as its reason.
+
+Merely seeing with the eye forges a connection, and with a stronger rite, such as an exchange of bodily fluids, it even becomes possible to read the interior of a heart directly.
+
+—But. In that case, that man just now—
+
+"...Ow, ow, ow. I overdid it. This sort of thing shows up the next day..."
+
+As though he were in the middle of some perfectly unremarkable ordinary day, the young man came walking over with a grimace.
+
+Watarai could not help twisting his face in loathing.
+
+That such a man had turned up at all.
+
+"So, Oki — what's the situation?"
+
+"He can't move anymore. We've won. —**The rest is yours.**"
+
+"...I see. Mm, understood. —**Thank you.**"
+
+Saying it, the young man — Daiki Kurosu — came to stand in front of Watarai.
+
+It was a joke. Watarai ground his back teeth: this situation was far too much of a joke.
+
+—If he were defeated by the witch, if he were killed by her, he could have accepted that.
+
+But. But this was different.
+
+There was no way this could be acceptable as the end of a magus.
+
+To be looked at by some nameless ordinary civilian — there was no way that could be an ending he could accept—
+
+—An ordinary civilian?
+
+Don't be absurd. Even that he couldn't accept now.
+
+"You — what *are* you?!"
+
+And so Watarai howled. Yes, he couldn't help but ask.
+
+Because if, in the battle just now, Oki had been reading Daiki's mind — no, if *Daiki* had been conveying his mind to Oki and building the flow of it—
+
+then the story was entirely different.
+
+And in fact, during his fight, Oki had used the cover to approach Watarai and take measures to seal his movement.
+
+Which, inverted, means that during that time she had no leisure to match Daiki's actions.
+
+Oki had not been adapting to Daiki.
+
+Daiki had been giving instructions so that Oki *could* adapt.
+
+The armour on my hand breaks here, so put it out again.
+
+I'll handle the tentacle in front of me, so stop the others.
+
+I'll finish it, so prepare the attack that requires—
+
+There was no way a high-school student capable of that could be called an ordinary civilian.
+
+"Well, look. ...To tell you the truth, I was pretty torn about what to do."
+
+But in response to Watarai's question, what he came out with was that.
+
+At the gaze asking what he meant, Daiki Kurosu continued with an ambiguous expression.
+
+"You're Oki's enemy. I am helping Oki, but, well, that's all it is. Which means you aren't especially my enemy. And fighting someone who isn't my enemy... isn't really my strong suit."
+
+"...What are you saying."
+
+"It's about me. I don't know anything about your circumstances. But — even so, you tried to kill Oki. That alone settled it for me. Oki's enemy is, from now on — fine as my enemy."
+
+"What, what are you... so, you are..."
+
+"Just a high-school student, back from another world."
+
+"————"
+
+The meaning of those words.
+
+Watarai could not grasp it at all.
+
+"Which is why I have something I personally want to ask you as well. Sorry, but we won. So, two against one, my apologies, but — I'm going to have you taste defeat."
+
+Saying it, Daiki clenched his right fist.
+
+Naturally, Watarai could not understand what Daiki was saying.
+
+That he was the forerunner sent into the world Watarai yearned for, a man who had been called a hero there — there was no way he could know it.
+
+And so.
+
+Watarai naturally let his gaze slide past the approaching Daiki to the witch standing there.
+
+"————"
+
+And saw, on that face, a far too natural, tender smile.
+
+—An instant before he swung his fist through, Daiki certainly saw it with his own eyes.
+
+On the face of the man who ought to have been defeated — a far too natural smile.
+
+Blood laid a red bridge across the precinct.
+
+　　　　　※
+
+Kūya Watarai had always, from long ago, wished to go to another world.
+
+That had been his wish since he was small.
+
+Somewhere that was not here. Go there and surely he could obtain a today that was not this today.
+
+—That alone would have been enough.
+
+Where had it gone wrong?
+
+He wonders.
+
+At the very least, that witch has someone in this world she can turn a smile toward, without relying on another world.
+
+If that was the difference between them — well, he could only accept it.
+
+Such a thing he certainly had never possessed, not one.
+
+But.
+
+Even so — even if he had possessed it, his longing surely would not have vanished.
+
+He hated this world. That was true.
+
+So he wanted to run away. That was correct too.
+
+He hadn't wanted to become a magus — if he hadn't, some other road might have existed.
+
+Even so.
+
+Even so, «another world» is the primal landscape he saw in his dreams.
+
+He had wanted to go. Sights he had never seen, creatures impossible on Earth — surely such things existed there beyond counting.
+
+In his childhood days, he had certainly dreamt of that primal landscape.
+
+But.
+
+Then why is he in a place like this, fighting a witch of all things—
+
+—*thud*,
+
+Kūya Watarai registered his heart jumping.
+
+No, wrong. It hadn't jumped.
+
+—This is — my heart, crushed... no, throughout my body... blood, my body—?
+
+Was his being a magus who used blood a piece of luck for him, or a misfortune?
+
+Before the blood welling up from his organs spilled from his throat, he understood.
+
+—I'm dying.
+
+Was the absence of pain a mercy?
+
+There was not even time enough to feel it: it was a blood curse by magecraft, carved far too thoroughly into him. Kūya Watarai's life was already spent.
+
+But — at the last he certainly saw it.
+
+By rights, what he should see before him was a hateful, mere high-school student.
+
+That, and nothing more.
+
+But it was different.
+
+Kūya Watarai certainly saw it.
+
+Even if it was a worthless hallucination, at the brink of death it was more than sufficient.
+
+Clear sky, blooming flowers, dancing fairies — an endlessly, transparently beautiful landscape of another realm.
+
+A smile rose on the magus's face.
+
+The final sight he had sought with his whole life was, yes, certainly the same as the one he had seen that day—
+
+—*See, father, I was right after all.*
+
+*That world I always yearned for, the one you said my talent would never reach — at the very end, my hand certainly, reached, it*—
+
+And so.
+
+The magus Kūya Watarai expired.
+
+　　　　　※
+
+"Wh-what the—?!"
+
+Daiki's eyes went wide in surprise.
+
+What had happened?
+
+Watarai had suddenly vomited blood and collapsed.
+
+Daiki hadn't done anything — it had come before that. He stopped the fist he'd been about to throw and caught Watarai's falling body.
+
+Daiki looked back at Oki. What on earth had happened?
+
+"Oki, this is— Oki?!"
+
+Turning, he found her too crouched on the ground on one knee, her face twisted in agony.
+
+The «Pure Black» threads that had been supporting her body until a moment ago had disappeared.
+
+"Oki, hey— damn, sorry, I'm putting you down!"
+
+Grinding his teeth, Daiki offered a word of apology and laid Watarai's body down at the edge.
+
+Because for Oki, still breathing in ragged gasps, he might yet be in time.
+
+"Oki! Hey, what's wrong, what did he do to you?!"
+
+"No, Daiki... nothing was... done to me."
+
+"...Gh, I see—"
+
+She had simply reached her limit, that was all.
+
+Her small body had been blown several metres and slammed into the ground, and on top of that a poison that eats magical energy had been poured into her. He'd made her push herself far too hard.
+
+"Oki, hey— ...damn it!"
+
+Her consciousness was fading.
+
+He had to get her to a hospital or somewhere — was that even right?
+
+He didn't know. Would an ordinary hospital even be able to treat a magus's condition? An ordinary wound was one thing, but there was no way to know where a poison of magical energy had taken effect.
+
+"The way you came. —Just head straight back. Don't trouble yourself about the rest."
+
+At the voice that came out of nowhere, Daiki snapped his head up.
+
+As expected, he couldn't catch a trace of her presence at all.
+
+Thinking of her as an enemy was chilling — but right now.
+
+"—Is that all right, Urei?"
+
+Watching from somewhere, presumably; Daiki asked the courier who had appeared — Urei Aiko.
+
+Urei, for her part, nodded lightly with the same mocking smile as before.
+
+"The price you're going to pay me looks like it'll fetch a fair sum, so. That advice just now is your change. Aftercare for the delivery."
+
+"...Then I'll take it."
+
+"Go straight and there's someone at the end of the approach. That person's an acquaintance of Oki-chan there, so leaving her to them should be fine, probably. She called them just in case, to get you away."
+
+Daiki nodded and hoisted Oki onto his back.
+
+Before setting off he turned to Urei and threw her one last look.
+
+"...I can leave it to you?"
+
+"Yes. A magus leaving claw marks of an incident on ordinary society is an industry no-no. It's part of the job."
+
+"Then... give him a decent burial."
+
+"—I can't promise that, but the sentiment is received."
+
+"That's enough. —Thank you."
+
+With that, the courier saw off the young man who disappeared carrying Oki on his back.
+
+Quite the stamina, honestly.
+
+As if he himself had got off lightly.
+
+—She had watched the battle.
+
+He certainly hadn't displayed any peculiar ability that bent physical law, but even so that body technique and nerve were not inferior to the so-called professionals of the underside that Urei knew.
+
+That was presumably some kind of physical limiter being off.
+
+It would be within the range of what a human body can do, but drawing out its limit values inevitably came with recoil.
+
+Since he had no cheat to compensate, the body he was overworking was screaming.
+
+—Truly interesting.
+
+That said, whether to stick her nose in was another matter. Ignoring the warning of an intuition telling her *this is where it gets dangerous* was not how one survived in this industry.
+
+After a while, then, Urei spoke.
+
+Yes. However much his fighting seemed beyond an ordinary civilian, he was still an amateur. Because—
+
+"Right, you can come out now, —**Watarai-san**."
+
+—he so easily trusts a magus he knows nothing about.
