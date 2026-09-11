@@ -9557,3 +9557,642 @@ A knee slammed into his face from the side, and Daiki's body flew.
 His teeth didn't break, but the inside of his mouth split, and violent pain ran through his cheekbone.
 
 Across the car park concrete, Daiki rolled wretchedly, like a discarded tyre.
+
+1-26 "Thus Spoke Unto the Former Hero" — 5
+-------------------
+
+"Gah, gh... khah"
+
+"Come now, what's become of the spirit you had a moment ago? If a little seriousness from me is enough to blunt your fight, it leaves an adult who plays along with children's games with nowhere to stand."
+
+"Gh, agh... shut... up..."
+
+Groaning in pain, Daiki still got up. At the back of his mind he assessed the situation.
+
+The man's physical ability had improved beyond all comparison with a moment ago. It already surpassed Daiki's own. Enough to recall the warriors of another world.
+
+Watarai crooked his palm at Daiki, indicating *come*.
+
+"Gh— raah!"
+
+Kicking off the ground again, Daiki went for Watarai.
+
+That he had deliberately chosen hand-to-hand was presumably because it was an effective countermeasure against Urei's aberrant power. If Urei herself were fighting it'd be another matter, but an aberrant power that lowers functions is entirely unsuited to support.
+
+If she could designate Watarai as a target she could have degraded his striking power or his mobility, but Daiki had heard from Urei that she couldn't.
+
+Daiki's right fist swung through toward Watarai.
+
+Naturally a straight punch from the front wasn't going to land.
+
+Watarai dodged it lightly — he'd known he would.
+
+What he waited for, half-turned, was Watarai's counterattack. Daiki's aim was to suppress it and break his stance with a counter of his own. But.
+
+"Naive."
+
+"Gh...?!"
+
+With body work that created the illusion of teleportation, Watarai stamped on the top of his left foot.
+
+Exploiting the instant he groaned in pain, Watarai's right arm came in. Daiki reflexively turned his left arm into a guard, but the blow, of unbelievable force, punched through his defence, guard and all.
+
+"Gah, ah— raaah!"
+
+His left arm broken again in this short span, Daiki nonetheless endured through willpower and swung his right leg.
+
+"Oops."
+
+But Watarai dodged it easily, merely drawing back slightly.
+
+At Daiki, trying to press him, Watarai's left hand extended toward his eyes — the extended index and middle fingers were surely aiming to blind him.
+
+An attack targeting a vital point.
+
+*Taking that would be bad* — the reaction came to Daiki. He used his free hand to knock the attack aside as though shielding his face. And immediately after,
+
+"—Gh, guh...?!"
+
+He was struck in the abdomen, and air leaked out of his belly.
+
+The left-hand eye-gouge had been a feint; the now wide-open abdomen had been run through by the freed right hand.
+
+His breathing was forcibly stopped. Which meant a further opening.
+
+Daiki could no longer block the arm reaching for his throat.
+
+He was seized by the neck in a throat-grip.
+
+And then Daiki's body was hoisted into the air on the strength of one arm alone. He reflexively grabbed at the arm holding his throat with both hands, but the crushing force grew steadily stronger.
+
+"Hmm, this is about it, I suppose. For an ordinary person with no training whatsoever, I think you did well. Congratulations. How marvellous you are. If my hands were free I'd applaud."
+
+"Kah————, ah... hah"
+
+Draw the attention upward, then drive the real blow into the space it leaves. A rational, basic combat tactic.
+
+The reason Daiki was being one-sidedly overwhelmed by it was one thing — the disparity in physical ability.
+
+From the sharpness of his movement to muscular strength to reaction speed, his body's performance (*spec*) was overwhelmingly inferior.
+
+It had presumably been boosted by magecraft. But it didn't seem to be only that.
+
+His very body handling had suddenly become refined.
+
+Watarai, who didn't look at all like a man who'd studied martial arts, had changed as though he'd suddenly accumulated long years of training.
+
+"That... too, is magecraft...?"
+
+"...You talk a great deal in this situation. No, no, it's splendid. And you're correct."
+
+If it came to talking, Watarai was hardly one to speak.
+
+Loading that intent into a glare wouldn't convey it, though.
+
+"Yes, this is magecraft. I don't know how much confidence you have in your own abilities, but training of that order is something that can be filled in this easily. Turning oneself into a puppet isn't my speciality, but you've thoroughly grasped the difference in power, haven't you?"
+
+That was presumably the fact of it.
+
+That was the unbridgeable gulf between a magus and a human with no magical energy.
+
+Fundamentally, Daiki Kurosu possessed no power with which to fight.
+
+However much power he wielded in another world, this was Earth, and Daiki was nothing but a high-school student.
+
+To push one's will through requires power.
+
+Not only violence. Intelligence, wealth, authority, or some other power.
+
+Take any one of them, and Daiki simply had none.
+
+"If you've grasped it, then give up. You seem awfully concerned about what's above, but there's no way you can make it in time now. Were you close enough to Oki-kun to be in such a hurry to follow after her?"
+
+"Gh... ah"
+
+"Surely not? Yes, I rate you rather more highly than that. You aren't a foolish enough human to empathise with a witch and throw away your future. Am I wrong? I'm not wrong. She is a human whose aptitude as an enemy of mankind has been honed from the start. There's no possibility of her being compatible with a human like you. I'd wager on it. In time you will certainly break with her. Break decisively. That is how it works. That is how it works, this creature called a witch. Yes, it isn't that you're at fault. That thing is a witch, and you are human. Different things cannot mix. It's as simple as that."
+
+Fluently, Watarai spoke alone of what he simply wanted to say.
+
+That was not dialogue. The only party he ever spoke with was himself.
+
+"...Shut up."
+
+Which was why — because he understood that — Daiki forced his voice out.
+
+Breathing was agony. He drew in all the air he could. The only thing supporting his weight was his own arms hooked on the hand gripping his throat.
+
+—**Which was exactly why Daiki let both hands go.**
+
+"What—"
+
+The cry of surprise was Watarai's.
+
+Naturally. Letting go meant his body would fall by gravity.
+
+The same as hanging himself.
+
+Just for an instant.
+
+At the moment the only thing supporting his body was the arm strangling him, Daiki clenched both hands and, sandwiching from above and below, struck Watarai's restraining arm with everything he had.
+
+"Gh...!"
+
+Weight was added downward, and Daiki's body reached the ground.
+
+Immediately after, Daiki swung a leg up roughly and kicked Watarai as he flinched at the pain in his arm.
+
+"Gh— raaah!!"
+
+"Ngh...?!"
+
+The distance between them opened slightly.
+
+Daiki pressed a hand to his mouth, coughing uncontrollably, but he had been released.
+
+"Khah, *cough*! *Hack*— gah, damn it! Don't look down on us!"
+
+He glared hard at the man in front of him.
+
+But even at this stage, Watarai couldn't understand the meaning.
+
+"Why hasn't he broken...?"
+
+What should have been broken was his heart. That was why he'd deliberately fought him on bodily performance alone.
+
+He should understand the gap in power more than sufficiently. He should know that doing this won't even buy time.
+
+So why does he glare at me?
+
+To Watarai, puzzling over that question, Daiki said:
+
+"Shut up, don't look down on her. —That's what I said."
+
+"...Even if you tell me not to look down on you, doing this sort of thing will only—"
+
+"—Not me. **Don't look down on Oki** — every single one of you!"
+
+Daiki's eyes were still alive.
+
+Why?
+
+He understood it painfully well himself.
+
+His power didn't reach the man in front of him. Even with this much held back, the gap in power was such that he couldn't do a thing.
+
+He'd understood that from the start, and so it couldn't become despair.
+
+Because Daiki wasn't fighting alone.
+
+Naturally, that didn't mean Urei. She had lent a hand, but she'd flee the moment the odds turned. That was fine; it was their mutual contract.
+
+There was no problem at all.
+
+Because Daiki believed in Oki.
+
+"She said it to me first. That night, to someone she'd only just met. **That she'd protect me at the price of her life** — she declared it like it was obvious."
+
+Oki had said that Daiki didn't understand what it meant to form a contract with a witch.
+
+But that was wrong. Daiki had understood its weight more than sufficiently from the start.
+
+"I remember her eyes at that moment perfectly. She meant it."
+
+He'd seen the colour of those eyes. This wasn't about a Mystic Eye glowing red.
+
+He'd seen the colour of resolve reflected in them.
+
+It was a gaze every bit as strong as those of the people in another world who, amid a humanity on the verge of destruction, had resolved to fight.
+
+That colour, Daiki Kurosu would never mistake.
+
+—**Which is why he'd decided to fight.**
+
+It wasn't that he didn't want to die. Nor that he wanted to go home. Not because he'd been handed a holy sword, nor because it was his role, nor because he wanted to be strong.
+
+None of those were lies, but the life he'd led hadn't been cheap enough to keep fighting on motivations like that.
+
+It was simply that he'd empathised with the colour of resolve — insignificant, unremarkable, something surely anyone could bring into their eyes — and yet beautiful enough to hold him spellbound.
+
+"So I believed in Oki. I don't know what you think you know about her, but she isn't someone who'd lose to the likes of you — I believe that."
+
+"..."
+
+The meaning of those words.
+
+Watarai could not, of course, comprehend a fragment of it.
+
+Did it mean that to break his heart he should have thrown Oki's corpse at him?
+
+Only such a thoroughly misdirected thought occurred to him.
+
+Because to him, trust was something staked on oneself, never something wagered on another.
+
+So he couldn't understand at all.
+
+The state of mind of someone who, at this stage, believes in Oki from the bottom of his heart and smiles—
+
+Kazuya Watarai had no way of reading it.
+
+"And what Demon Lord? There's a Demon Lord upstairs? Don't be stupid."
+
+"...What...?"
+
+As for the words Daiki piled on after that, they were barely recognisable as language.
+
+Was it not that he hadn't broken, but that being cornered had driven him mad? Watarai even worried about that, and Daiki spoke, breathing deeply.
+
+"**There's no Demon Lord here.**"
+
+"Escapism? I'm afraid that in fact—"
+
+"You're the one who can't see. No — I'm saying it *because* you can't see. Obviously. A genuine Demon Lord isn't some cheap thing like that. Something you can be this close to and feel nothing from can't possibly be a Demon Lord. A Demon Lord is **an end you can do nothing about**."
+
+"...Why would you know such a—"
+
+"I'd know. Because there's no way I wouldn't."
+
+After all, he'd felt none of that earlier sickness on the way here.
+
+Now he understood.
+
+That had been the sensation of picking up **the lingering scent of a Demon Lord** from a monster, through the connection to another world. Which was why he'd felt that agitation to go there and destroy it.
+
+That's what the presence of a Demon Lord is.
+
+It has nothing to do with having lost his power. Even against an ordinary person who knows nothing, a Demon Lord has a maddening presence that makes you understand it's over the moment you see it.
+
+—There is none of that here.
+
+So.
+
+"I'll guarantee it. A human who killed a Demon Lord once will declare it."
+
+"...Wait. What are you—"
+
+Yes. He — Kazuya Watarai — had never known.
+
+Because he'd thought the young man in front of him was merely a human who'd been to another world.
+
+Indeed. There was no way to imagine it.
+
+That of all people, that young man had, in another world, been the Hero who bore a holy sword and slew the Demon Lord — who would think such a pulp-novel reality could genuinely exist?
+
+To a magus who knew nothing, the hero who had once saved a world declared:
+
+"I don't know what you saw, but that isn't a Demon Lord. This world has no need of such a thing. And Oki isn't going to lose to an enemy of that order. There's no way she'd lose — right?!"
+
+"—**Obviously not.**"
+
+A voice answered, along with the dry clank of metal.
+
+Watarai spun round as if struck. And there he saw it.
+
+—With crimson eyes, dripping blood, the witch walking calmly toward them.
+
+With every step she took there came a sound like metal scraping.
+
+In her hand she dragged a huge object Watarai recognised — which is to say,
+
+"You actually defeated it... that thing?!"
+
+That was genuinely outside his calculations.
+
+That Narumi Oki was so close to completion.
+
+Even if, as the young man said, it wasn't a Demon Lord — no, even granting it was an existence that had lost its sovereignty — even so, at Narumi Oki's current degree of completion she shouldn't have stood a chance.
+
+That, in itself, was fascinating, to be sure.
+
+Watarai's eyes went wide with delight.
+
+But.
+
+The witch didn't so much as throw a glance at the magus.
+
+"Good. Looks like I made it in time."
+
+Saying it, Oki all but slumped down where she stood.
+
+She was covered in wounds here and there, soaked with blood.
+
+But there were no injuries that could be called fatal.
+
+"Hey. You're a mess, Oki. Looks like you were fighting someone pretty strong."
+
+"Ah... well, mm. That's right. Honestly, I thought I was going to die about five times. Ugh, and I'd wrapped «Pure Black» round my stomach just in case, and it nearly broke me through it — unbelievable."
+
+"But you won, right?"
+
+"Who knows. I closed in recklessly and sealed it, that's all. Because the thing wouldn't die — so, here."
+
+Having said that much, Oki finally turned her eyes toward Watarai.
+
+At him, frowning, she threw what she'd been holding in her right hand.
+
+"Returning this. —I don't want it."
+
+"This... is—"
+
+The thing that came to rest at his feet without even bouncing was a jet-black sphere the size of a ping-pong ball.
+
+Watarai, having recognised it as a sphere created from Oki's «Pure Black», understood a moment later.
+
+"Gh... realising you couldn't kill it, you sealed it!"
+
+"Nothing else for it. There's no way to kill something whose body is made of haze. So I threw myself at it, stripped off the armour, and shut it inside the black of «Severance» — ow, ow..."
+
+It wasn't as simple an act as the words made it sound. To take on a formless haze carrying the concept of destruction, and to seal it at maximum speed, she must have taken a dangerous gamble.
+
+But once complete, it was a perfect seal.
+
+This lump of «Severance» could no longer be destroyed by anything. After all, what was inside it was itself the crystallised concept of destruction. By volume alone, it was completely nullified.
+
+"Daiki!"
+
+Ignoring the astonished Watarai, Oki said,
+
+"So that's my limit. I can't walk anymore."
+
+"Then it can't be helped."
+
+Daiki laughed lightly.
+
+"Leave the rest to me and watch from there."
+
+Watarai was bewildered.
+
+Because nothing had been resolved yet.
+
+Daiki was no fighting force, and Oki wasn't at full strength either. He hadn't felt he'd lose easily even two against one, and at worst escape would be possible.
+
+But for the two of them not to come at him together in this situation—
+
+"I see. —Then here, use this."
+
+Oki wiped the blood running down her temple with a finger and inscribed a pattern on the greatsword in her hand.
+
+Then she passed that huge blade to Daiki using «Pure Black».
+
+"You were a holy-sword user, weren't you? Then you can use that too."
+
+"It's completely different... no, this is—"
+
+Taking the greatsword in hand, Daiki's eyes widened slightly in surprise.
+
+Seeing it, Oki raised the corner of her mouth a little.
+
+"I'm lending you my remaining magical energy. It'll probably be awful for you afterward, but bear with it, all right?"
+
+"...I see. Yes, with this I can probably manage. Thanks, Oki."
+
+As though feeling no weight at all, Daiki swung the greatsword lightly, twice.
+
+Watarai understood.
+
+Oki had inscribed a body-enhancement formula on the greatsword and handed it to him.
+
+A simple thing — but a violently excessive boost to bodily function performed with a witch's magical energy.
+
+But.
+
+—How foolish.
+
+He could only pronounce it so. Physical ability isn't something you simply raise.
+
+Even ignoring the feedback that comes afterward from forcing the body, an ordinary person cannot possibly handle a suddenly enhanced physique to its full extent.
+
+A body that moves beyond one's will, absurdly, is a dangerous drug that can leave you struggling merely to walk properly.
+
+To mistake such a thing for a trump card is genuinely foolish.
+
+Knowing that, Watarai still fixed his eyes forward without letting his guard down.
+
+However composed his manner, he made no openings. He'd seen more than enough magi die from being exploited by inferiors; Watarai understood the way of the lion. —And therefore.
+
+It was by no means that an opening had been exploited, nor that carelessness had been taken advantage of.
+
+Simply, even at full alert, he hadn't seen it.
+
+Before he knew it, Watarai had been sent flying.
+
+He slammed into a steel pillar, an impact running through his whole body strong enough to nearly sever his consciousness.
+
+That he reflexively suppressed the pain and kept his consciousness intact was a magus's doing, but his comprehension didn't come close to catching up.
+
+Watarai couldn't even grasp what had been done to him — and immediately after,
+
+Daiki's fist was closing on his face.
+
+"—————!!"
+
+Opening his formula to full, he forced his body to evade sideways.
+
+It was Watarai's magecraft of tying invisible threads to himself and forcing movement beyond his limits as a marionette. It was why a man who had never studied martial arts could toy with Daiki.
+
+Curiously, it resembled the new use of «Pure Black» that Oki had clumsily devised during the fight at the precinct — and what mattered most here was the fact that **Oki had clearly seen it**.
+
+Watarai no longer had the leisure to observe such things.
+
+Astonished at being forced to use his superior formula entirely for evasion, he was struck by a further astonishment: Daiki's gaze was tracking the fleeing Watarai perfectly.
+
+His movement was being read completely.
+
+"...There's still a gap... harder to move than I thought."
+
+Further absurd words struck his ears.
+
+Don't be ridiculous.
+
+With physical ability spiking that far, and without support like Watarai's, that he could move properly at all was beyond normality. Impossible.
+
+—What is this man?
+
+There was absolutely no way this was his first time moving like this. If anything he moved more naturally now than before, as though the manner of movement were familiar.
+
+As though **he had originally possessed physical ability of this order**, Daiki Kurosu was using his body as a matter of course.
+
+No.
+
+—If he genuinely *had* possessed it once—
+
+"Well, anyway, yeah. I'm used to it now."
+
+"Ha, listen to him... are you a monster?!"
+
+The man in front of him absolutely had to be killed here or there was no telling how things would turn.
+
+At this point Watarai switched his thinking entirely to disposing of Daiki. A high-school student thoroughly at home with physical ability transcending human limits — he couldn't deal with an absurd freak like that.
+
+"—«Puppet Show (Maya)/Down to the Ground (Burlesque)»!"
+
+He activated the body-binding magecraft that had misfired earlier.
+
+Whether Urei Aiko was still somewhere or had long since fled was unknown.
+
+But either way, she could no longer match the current movement. In which case he should be able to bind him.
+
+And in fact, the magecraft activated.
+
+And Daiki — **faster than the activated magecraft could bind him** — **cut the invisible threads**.
+
+Twisting his body and swinging the sword, he severed the **invisible** threads stretching up from the floor with the greatsword, relying on his memory of having taken it once.
+
+The tiny lag between magecraft occurring and actually arriving.
+
+Body handling of such conviction that it said *that's all I need*. A technique too artistic to be called mere acrobatics—
+
+"If it comes at the same spot, it won't work twice."
+
+"Ha— you really do keep me entertained!"
+
+Low to the ground, kicking off, Daiki ran. The speed of a beast.
+
+He couldn't fix an aim.
+
+A wasted shot would only make an opening, but there were limits to running away as well.
+
+Then in that instant, just for a moment, Daiki grimaced and slowed.
+
+The earlier wounds presumably telling — and Watarai didn't let the opening slip.
+
+The moment he went to activate magecraft again—
+
+—Daiki vanished.
+
+"Wha—"
+
+There was no hope of an incantation being in time.
+
+With the first syllable, the voice came from behind Watarai.
+
+"Too slow."
+
+No — **he was simply too fast**.
+
+Watarai felt it keenly.
+
+Unbelievably, Daiki hadn't been going all out at all.
+
+He'd held back his speed and made his top speed appear to be an illusion. Which meant he'd made Watarai judge that magecraft could be relied on.
+
+The opening had been deliberate too.
+
+Feigning agony at the pain, in reality he'd lowered his posture to leap — because Daiki had **jumped, kicked off the ceiling and taken Watarai's back**.
+
+This was past the dimension of *high physical ability makes things work*.
+
+—Watching from a distance, Oki understood.
+
+That was a **hero**.
+
+**The power of one who attained the pinnacle in a single world.**
+
+Yes: Oki's help was only inscribing a body-enhancement formula and magical energy into a greatsword. Everything else was the expression of Daiki's own abilities.
+
+Even with the same enhancement, movement like that — as though the brake in his brain had come off — could never be imitated. One wouldn't even feel like trying.
+
+She respected him, genuinely, from the bottom of her heart.
+
+This was unquestionably a power Daiki had gained through effort.
+
+That such a man had been believing in her all this while made the girl smile.
+
+And almost at the same moment,
+
+"—It's over!"
+
+Having taken Watarai's back, Daiki took the greatsword in both hands and set it at his hip.
+
+Evasion and defence were both far past being in time.
+
+Watarai, realising his own defeat, felt not regret but delight at facing the proof of his own theory.
+
+Thus—
+
+Every world runs an automatic system to protect itself and avoid annihilation. But on the other hand, there also exist worlds whose continuation brings crisis — worlds that ought to perish.
+
+To prevent breakdown, only an existence that has obtained the right to destroy the world — the «Demon Lord Authority» — can exercise the authority to annihilate a world. Without it, destroying a world is held to be impossible.
+
+A right is a rank of existence. To obtain it is to grow into a soul one stage above the planet's ruling species — that is, above the primates.
+
+But on the other hand, in the case where one who has obtained sovereignty appears in a world that ought not to perish, a countermeasure against it is likewise required by the world.
+
+It exists always and only as the pair to the Demon Lord Authority — the «right of world-salvation», so to speak.
+
+For instance.
+
+If, transformed into that, there existed one who had taken up a «holy sword».
+
+Then he is a hero chosen by the world.
+
+The good that pairs with evil.
+
+That such a thing genuinely exists means, conversely, that the authority to destroy this world exists as well.
+
+—Rejoice, Arataka-kun. Your daughter — will surely be able to become humanity's enemy.
+
+A single stroke of the greatsword punched through Watarai.
+
+The full-swung mass of iron sent his body, consciousness and all, flying into the distance.
+
+Watarai flew right out of the multi-storey car park, falling outside the barrier.
+
+At the same time, Daiki set down the sword and let out a breath.
+
+—The magecraft ran out.
+
+The formula that had boosted his body with vast magical energy ended its effect, and the recoil of that immense power fed back into Daiki all at once.
+
+"Gh, buh... gah, hah..."
+
+Blood spilled from the back of his throat.
+
+All over his body, things seemed to be in a state he'd rather not imagine.
+
+A natural recoil, a natural price.
+
+Having wielded that much physical ability in a body of flesh, the cost had to be paid. All the more since Daiki had already been battered.
+
+Unable even to remain standing, Daiki pitched forward — and an instant before he fell,
+
+a small witch caught the hero to keep him off the ground.
+
+"Whoa, ...oof. He's bigger than I thought..."
+
+"...Oki..."
+
+"Don't talk. This is no time for it, you'll die. —Sleep until Tsunashino-san gets here, Daiki. ...Well done. Far from protecting you, I ended up being protected."
+
+"...Gh"
+
+He could feel his consciousness fading rapidly.
+
+Whether it was his limit, or whether Oki had done something — his head wouldn't work.
+
+But small words reached his ears.
+
+"...Thank you, truly. I was happy that you believed in me."
+
+Those were surely words of heartfelt gratitude from a girl who'd had no choice but to be alone all this time.
+
+Then he had to answer, he thought.
+
+That she didn't have to carry it alone; that he'd been saved by her long ago; that this was — merely paying a little of that back, bit by bit.
+
+Because if he hadn't met her that night,
+
+Daiki would unquestionably be dead.
+
+That debt couldn't possibly be repaid with this much.
+
+"O, ki..."
+
+—And so.
+
+Trying, in his fading consciousness, to convey at least a single word of feelings that would be endless if put into words, Daiki shaped his last words.
+
+"...I'll be... with you... always..."
+
+And with that as his last words,
+
+Daiki Kurosu let his consciousness go into slumber.
