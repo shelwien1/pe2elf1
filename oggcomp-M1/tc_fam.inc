@@ -13,8 +13,15 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
   oc_model<f_DEC>::rc.rc_Process((uint)(p << 3), b);
   return (int)b;
 }
+//  A hashed table's row for a context: the index multiplied out, taken
+//  from the top.  No tag and no check -- contexts that land on the same
+//  row share it, and the counters follow whichever is coding.  Measured
+//  against tagging the row and zeroing it on a mismatch, sharing costs
+//  less at every size (HASHTABLES.md section 3).
+static INLINE u32 tc_hrow(u32 idx, int bits) { return (idx * 0x9E3779B1u) >> (32 - bits); }
 template <int f_DEC> struct tc_fam {
   static constexpr int ENC = (f_DEC == 0);
+  int hA, hB, hD, hS, hF, hM, hT, hN;
   cm_cnt *A, *B, *C, *D, *G, *T;
   i16 *S, *S2;
   i32 *W;
@@ -32,7 +39,7 @@ template <int f_DEC> struct tc_fam {
   int bw;
   int ng;
   int nd, nm;
-  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, int ra, int rb, int rc_, int rd, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp) {
+  void wire(cm_cnt *a, sz va, cm_cnt *b, sz vb, cm_cnt *c, sz vc, cm_cnt *d, sz vd, cm_cnt *t, sz vt, i16 *s, u8 *sc, sz vs, i16 *s2, u8 *sc2, sz vf, i32 *w, sz vm, cm_cnt *g, sz vg, sz vgi, i32 *wm, sz vn, u8 *wc, u8 *wmc, int ra, int rb, int rc_, int rd, int rt, int rg, int mwa, int mwb, int mwc, int mwd, int mwtt, int mwg, int rs1, int rs2, int lrate, int mbt, int lrm2, int mbm2, int bwt, int qqs, int qqf, int ndp, int nmp, int ha, int hb, int hd, int hs, int hf, int hm, int ht, int hn) {
     A = a;
     B = b;
     C = c;
@@ -45,25 +52,36 @@ template <int f_DEC> struct tc_fam {
     ng = (int)vg;
     nd = ndp;
     nm = nmp;
-    tc_vfits("counter A", va, nd);
-    tc_vfits("counter B", vb, nd);
-    tc_vfits("counter C", vc, nd);
-    tc_vfits("counter D", vd, nd);
-    tc_vfits("counter T", vt, nm);
-    if(G)
-      tc_vfits("counter G", vg, vgi);
-    tc_ifits("APM 1", vs, (sz)nd * qqs);
-    tc_ifits("APM 2", vf, (sz)nd * qqf);
-    tc_ifits("mixer", vm, (sz)nd * TC_MIXN);
-    tc_ifits("mantissa mixer", vn, (sz)nm * 3);
-    (void)sc;
-    (void)sc2;
-    (void)wc;
-    (void)wmc;
-    ap.init(S, sc, vs * nd, qqs);
-    ap2.init(S2, sc2, vf * nd, qqf);
-    mx.init(W, wc, vm * nd);
-    mxm.init(wm, wmc, vn * nm);
+    //  Hashed where the Volume outgrows 2^h rows, direct otherwise; the
+    //  rows are what the arrays were declared with (tc_rows).
+    hA = va > ((sz)1 << tc_hbits(ha)) ? tc_hbits(ha) : 0;
+    hB = vb > ((sz)1 << tc_hbits(hb)) ? tc_hbits(hb) : 0;
+    hD = vd > ((sz)1 << tc_hbits(hd)) ? tc_hbits(hd) : 0;
+    hS = vs > ((sz)1 << tc_hbits(hs)) ? tc_hbits(hs) : 0;
+    hF = vf > ((sz)1 << tc_hbits(hf)) ? tc_hbits(hf) : 0;
+    hM = vm > ((sz)1 << tc_hbits(hm)) ? tc_hbits(hm) : 0;
+    hT = vt > ((sz)1 << tc_hbits(ht)) ? tc_hbits(ht) : 0;
+    hN = vn > ((sz)1 << tc_hbits(hn)) ? tc_hbits(hn) : 0;
+    {
+      sz ka = tc_rows((long long)va, ha), kb = tc_rows((long long)vb, hb), kd = tc_rows((long long)vd, hd);
+      sz ks = tc_rows((long long)vs, hs), kf = tc_rows((long long)vf, hf), km = tc_rows((long long)vm, hm);
+      sz kt = tc_rows((long long)vt, ht), kn = tc_rows((long long)vn, hn);
+      tc_vfits("counter A", ka, nd);
+      tc_vfits("counter B", kb, nd);
+      tc_vfits("counter C", vc, nd);
+      tc_vfits("counter D", kd, nd);
+      tc_vfits("counter T", kt, nm);
+      if(G)
+        tc_vfits("counter G", vg, vgi);
+      tc_ifits("APM 1", ks, (sz)nd * qqs);
+      tc_ifits("APM 2", kf, (sz)nd * qqf);
+      tc_ifits("mixer", km, (sz)nd * TC_MIXN);
+      tc_ifits("mantissa mixer", kn, (sz)nm * 3);
+      ap.init(S, sc, ks * nd, qqs);
+      ap2.init(S2, sc2, kf * nd, qqf);
+      mx.init(W, wc, km * nd);
+      mxm.init(wm, wmc, kn * nm);
+    }
     rA = tc_clamp(ra, 1, CM_TMAX);
     rB = tc_clamp(rb, 1, CM_TMAX);
     rC = tc_clamp(rc_, 1, CM_TMAX);
@@ -87,15 +105,15 @@ template <int f_DEC> struct tc_fam {
     prp = -1;
   }
   INLINE void select(const tcx &x) {
-    ba = (sz)x.a * nd;
-    bb = (sz)x.b * nd;
+    ba = (sz)(hA ? tc_hrow((u32)x.a, hA) : (u32)x.a) * nd;
+    bb = (sz)(hB ? tc_hrow((u32)x.b, hB) : (u32)x.b) * nd;
     bc = (sz)x.c * nd;
-    bd = (sz)x.d * nd;
-    bs = (u32)x.s * nd;
-    bf = (u32)x.f * nd;
-    bm = (u32)x.m * nd;
-    bt = (u32)x.t * nm;
-    bn = (u32)x.n * nm;
+    bd = (sz)(hD ? tc_hrow((u32)x.d, hD) : (u32)x.d) * nd;
+    bs = (hS ? tc_hrow((u32)x.s, hS) : (u32)x.s) * nd;
+    bf = (hF ? tc_hrow((u32)x.f, hF) : (u32)x.f) * nd;
+    bm = (hM ? tc_hrow((u32)x.m, hM) : (u32)x.m) * nd;
+    bt = (hT ? tc_hrow((u32)x.t, hT) : (u32)x.t) * nm;
+    bn = (hN ? tc_hrow((u32)x.n, hN) : (u32)x.n) * nm;
     bg = (u32)x.g;
     __builtin_prefetch(A + ba);
     __builtin_prefetch(B + bb);

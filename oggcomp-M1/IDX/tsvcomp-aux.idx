@@ -80,3 +80,16 @@ Index n
 Index g
  g_p1:   p1,    1!000000000000111
  g_p2: p2, 1!0000000010011
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows
+#  is direct, one that does not is hashed into 2^h rows and contexts share
+#  them (HASHTABLES.md).  31 is "never hashed".  Frozen: left live these
+#  only grow, since a bigger table is never worse by the objective alone.
+! Number hA, 1, 0!11111
+! Number hB, 1, 0!11111
+! Number hD, 1, 0!11111
+! Number hS, 1, 0!11111
+! Number hF, 1, 0!11111
+! Number hM, 1, 0!11111
+! Number hT, 1, 0!11111
+! Number hN, 1, 0!11111

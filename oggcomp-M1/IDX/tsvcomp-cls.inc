@@ -31,16 +31,16 @@ void tc_make_cls( int rno, int band, int prev, int t1, int blk, int tn, int prev
   X.n = n;  X.g = g;
 }
 
-Table( cm_cnt, %M%A, %M%a_Volume * %M%ND );
-Table( cm_cnt, %M%B, %M%b_Volume * %M%ND );
+Table( cm_cnt, %M%A, tc_rows(%M%a_Volume, %M%hA) * %M%ND );
+Table( cm_cnt, %M%B, tc_rows(%M%b_Volume, %M%hB) * %M%ND );
 Table( cm_cnt, %M%C, %M%c_Volume * %M%ND );
-Table( cm_cnt, %M%D, %M%d_Volume * %M%ND );
-Table( cm_cnt, %M%MT, %M%t_Volume * %M%MND );
-Table( i16,    %M%S, %M%s_Volume * %M%ND * %M%qs );
-Table( u8,     %M%SC, %M%s_Volume * %M%ND * %M%qs );
-Table( i16,    %M%F, %M%f_Volume * %M%ND * %M%qf );
-Table( u8,     %M%FC, %M%f_Volume * %M%ND * %M%qf );
-Table( i32,    %M%W, %M%m_Volume * %M%ND * TC_MIXN );
-Table( u8,     %M%WC, %M%m_Volume * %M%ND );
-Table( i32,    %M%WM, %M%n_Volume * %M%MND * 3 );
-Table( u8,     %M%WMC, %M%n_Volume * %M%MND );
+Table( cm_cnt, %M%D, tc_rows(%M%d_Volume, %M%hD) * %M%ND );
+Table( cm_cnt, %M%MT, tc_rows(%M%t_Volume, %M%hT) * %M%MND );
+Table( i16,    %M%S, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );
+Table( u8,     %M%SC, tc_rows(%M%s_Volume, %M%hS) * %M%ND * %M%qs );
+Table( i16,    %M%F, tc_rows(%M%f_Volume, %M%hF) * %M%ND * %M%qf );
+Table( u8,     %M%FC, tc_rows(%M%f_Volume, %M%hF) * %M%ND * %M%qf );
+Table( i32,    %M%W, tc_rows(%M%m_Volume, %M%hM) * %M%ND * TC_MIXN );
+Table( u8,     %M%WC, tc_rows(%M%m_Volume, %M%hM) * %M%ND );
+Table( i32,    %M%WM, tc_rows(%M%n_Volume, %M%hN) * %M%MND * 3 );
+Table( u8,     %M%WMC, tc_rows(%M%n_Volume, %M%hN) * %M%MND );

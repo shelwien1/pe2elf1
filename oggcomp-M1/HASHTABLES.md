@@ -11,6 +11,33 @@ the model within 0.02% of its output and the tables at a few hundred
 megabytes.  This is the measurement, the prototype it was made with, and
 the design for doing it properly.
 
+**Done.**  Section 4 as written, with the counts of its table, frozen in
+the `.idx` sources; `tc_rows()` and `tc_hbits()` in `tc_tables.inc`,
+`tc_hrow()` and the hashed `select()` in `tc_fam.inc`, the counts
+through `TC_WIRE`, the twelve `Table()` sizes in the templates,
+`idx2inc.pl` untouched.  Measured against the direct tables of the same
+profile:
+
+| | direct | hashed |
+|---|---|---|
+| model tables | 5148 MB | 366 MB |
+| address space reserved (`VmPeak`) | 5635 MB | 858 MB |
+| BSS of the shipping binary | 833 MB | 546 MB |
+| peak resident, `music-stereo-q5.ogg` | 70 MB | 84 MB |
+| peak resident, `big.ogg` | 182 MB | 157 MB |
+| output, 34 inputs (3176474 bytes) | | +312 (+0.010%) |
+| `music-stereo-q5.ogg` (144365) | | +14 |
+| `chirp-stereo-q10.ogg` (116249) | | +36 |
+| `big.ogg` (960192) | | +208 |
+
+Everything under 10 KB and every non-Ogg input codes to the same size.
+Encode and decode time are within the noise of the direct build.
+`./t.sh` and `./mk.sh check` pass; clang++ and both Windows backends
+write the same bytes.  The digit family is still 300 MB, over
+`tc_home`'s 256 MB, so it alone is mapped; the rest is BSS.  What is
+left is section 5's step 4: the counts against `08.ogg`, and `q` with
+the row's price in it.
+
 ## 1. What a table is, and how much of it is used
 
 Every family's table is rows of one context each: the counter tables

@@ -36,6 +36,16 @@ constexpr int TC_flr_ND = TC_NODE, TC_flr_MND = TC_MNODE;
 constexpr int TC_cls_ND = TC_NODE, TC_cls_MND = TC_MNODE;
 constexpr int TC_aux_ND = TC_NODE, TC_aux_MND = TC_MNODE;
 constexpr int TC_hdr_ND = TC_NODE, TC_hdr_MND = TC_MNODE;
+//  How many rows a table has.  A context index runs over its Volume, the
+//  mixed-radix product the IDX patterns define, and a table whose Volume
+//  fits in 2^h rows is indexed by it directly, as every table was.  One
+//  that does not is hashed into 2^h rows (tc_hrow, tc_fam.inc) and
+//  contexts share what they land on.  h is the family's `Number h*` in
+//  its .idx -- a constant in the shipping build, so the generated array is
+//  declared at this size, and a load-time value in the tuning build, so
+//  _Init() maps this much.
+constexpr int tc_hbits(int h) { return h < 1 ? 1 : h > 31 ? 31 : h; }
+constexpr sz tc_rows(long long vol, int h) { return vol <= (1LL << tc_hbits(h)) ? (sz)vol : (sz)1 << tc_hbits(h); }
 #include "MOD/tsvcomp-aux_h.inc"
 #include "MOD/tsvcomp-cls_h.inc"
 #include "MOD/tsvcomp-dig_h.inc"

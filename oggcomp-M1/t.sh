@@ -108,7 +108,7 @@ src=$1
 
 #  Two process limits turn every row of the table below into the same
 #  failure.  Measured on this tree: the model tables and the static pools
-#  put VmPeak at 5636 MB -- reserved, barely any of it resident -- so a
+#  put VmPeak at 858 MB -- reserved, barely any of it resident -- so a
 #  `ulimit -v` under about that makes every run exit 3, and the coroutine's
 #  stack pad needs 288 kB,
 #  under which the failure is a bare SIGSEGV with nothing on stderr at all.
@@ -119,8 +119,8 @@ lim=$(ulimit -v 2>/dev/null) || lim=unlimited
 case $lim in
   ''|unlimited) ;;
   *[!0-9]*) ;;
-  *) [ "$lim" -ge 5700000 ] || echo "t.sh: ulimit -v is $lim kB and the model" \
-       "tables reserve 5636 MB of address space -- every run will exit 3" >&2;;
+  *) [ "$lim" -ge 900000 ] || echo "t.sh: ulimit -v is $lim kB and the model" \
+       "tables reserve 858 MB of address space -- every run will exit 3" >&2;;
 esac
 lim=$(ulimit -s 2>/dev/null) || lim=unlimited
 case $lim in

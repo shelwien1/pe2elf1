@@ -125,3 +125,16 @@ Index n
 Index g
 #  No factors: fam_cls codes a class through `code`, which never reaches a
 #  sign, so there is no sign counter here to give a context to.
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows
+#  is direct, one that does not is hashed into 2^h rows and contexts share
+#  them (HASHTABLES.md).  31 is "never hashed".  Frozen: left live these
+#  only grow, since a bigger table is never worse by the objective alone.
+! Number hA, 1, 0!11111
+! Number hB, 1, 0!11111
+! Number hD, 1, 0!11111
+! Number hS, 1, 0!11111
+! Number hF, 1, 0!11111
+! Number hM, 1, 0!11111
+! Number hT, 1, 0!11111
+! Number hN, 1, 0!11111

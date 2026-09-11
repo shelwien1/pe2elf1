@@ -164,3 +164,16 @@ Index n
 Index g
 #  No factors: fam_sgn is wired with G = nullptr for the same reason, one step
 #  further along -- a sign has no sign.
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows
+#  is direct, one that does not is hashed into 2^h rows and contexts share
+#  them (HASHTABLES.md).  31 is "never hashed".  Frozen: left live these
+#  only grow, since a bigger table is never worse by the objective alone.
+! Number hA, 1, 0!01111   # A
+! Number hB, 1, 0!10000   # B
+! Number hD, 1, 0!11111
+! Number hS, 1, 0!11111
+! Number hF, 1, 0!01110   # F and FC
+! Number hM, 1, 0!11111
+! Number hT, 1, 0!11111
+! Number hN, 1, 0!11111
