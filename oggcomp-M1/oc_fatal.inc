@@ -133,7 +133,7 @@ void vb_refuse_unless(int cond, const char *fmt, ...) {
   va_end(ap);
   die(OGC_EXIT_REFUSED);
 }
-static void ogc_paths_distinct(char **v, int n) {
+static void ogc_paths_distinct(const char *const *v, int n) {
   int i, j;
   for(i = 0; i < n; i++)
     for(j = i + 1; j < n; j++)

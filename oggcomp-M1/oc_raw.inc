@@ -20,6 +20,13 @@ static i32 raw_w[256 * 3];
 static u8 raw_wc[256];
 static cm_mix<3> raw_mx;
 static u32 raw_prev;
+static INLINE void oc_raw_zero(void) {
+  memset(raw_o0, 0, sizeof raw_o0);
+  memset(raw_o1, 0, sizeof raw_o1);
+  memset(raw_w, 0, sizeof raw_w);
+  memset(raw_wc, 0, sizeof raw_wc);
+  raw_prev = 0;
+}
 template <int f_DEC> void oc_model<f_DEC>::raw_init() { raw_mx.init(raw_w, raw_wc, 256); }
 template <int f_DEC> u32 oc_model<f_DEC>::raw(u32 b) {
   cm_cnt *row = raw_o1[raw_prev];

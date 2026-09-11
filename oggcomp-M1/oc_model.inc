@@ -30,6 +30,7 @@ struct oc_part {
   int clmatch;
 };
 constexpr sz OC_TAGMAX = 31;
+static INLINE void oc_raw_zero(void);
 #ifdef TC_MEMCOST
 #if TC_MEMCOST + 0 <= 1
 #undef TC_MEMCOST
@@ -71,6 +72,8 @@ template <int f_DEC> struct oc_model {
   oc_rgeom R;
   oc_part P;
   void init();
+  void wire_all();
+  void reset();
   void setup_done(vb_ctx &vv);
   //  aux fields, through fam_aux with the field's own history as context
   i64 auxc(int fld, i32 c, i64 x, int sgn);
@@ -110,6 +113,9 @@ template <int f_DEC> Rangecoder<f_DEC, OC_CARRYLESS> oc_model<f_DEC>::rc;
 template <int f_DEC> void oc_model<f_DEC>::init() {
   cm_tables();
   tabs.init();
+  wire_all();
+}
+template <int f_DEC> void oc_model<f_DEC>::wire_all() {
   TC_WIRE(fam_dig, dig, (cm_cnt *)nullptr, 0, TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
   TC_WIRE(fam_sgn, sgn, (cm_cnt *)nullptr, 0, 0, 0, 0, 0, 0, 0);
   TC_WIRE_ALL(fam_flr, flr, tabs.flr->TC_flr_G, TC_SGN_FLR);
@@ -117,6 +123,19 @@ template <int f_DEC> void oc_model<f_DEC>::init() {
   TC_WIRE_ALL(fam_aux, aux, tabs.aux->TC_aux_G, TC_SGN_AUX);
   TC_WIRE_ALL(fam_hdr, hdr, tabs.hdr->TC_hdr_G, TC_SGN_HDR);
   raw_init();
+}
+//  The model as a fresh process has it, after init(): every table zero,
+//  every pool empty, every remembered value forgotten, the families wired
+//  again.  For a frontend that codes one stream after another and wants
+//  each .oc to be what `oggcomp c` would have written for it.
+template <int f_DEC> void oc_model<f_DEC>::reset() {
+  tabs.reset();
+  hist.clear();
+  tcp.reset();
+  vb_ar.reset();
+  oc_raw_zero();
+  *this = oc_model();
+  wire_all();
 }
 template <int f_DEC> i64 oc_model<f_DEC>::auxc(int fld, i32 c, i64 x, int sgn) {
   tcx v;

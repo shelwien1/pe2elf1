@@ -66,9 +66,11 @@ template <class T, bool S = (sizeof(T) <= TC_STATIC_MAX)> struct tc_home;
 template <class T> struct tc_home<T, true> {
   static T obj;
   static T *get() { return &obj; }
+  static void zero() { tc_zero(&obj, sizeof(T), 0); }
 };
 template <class T> struct tc_home<T, false> {
   static T *get() { return (T *)tc_map(sizeof(T)); }
+  static void zero() {}
 };
 template <class T> T tc_home<T, true>::obj;
 #ifndef TC_MEMCAP
@@ -100,6 +102,23 @@ struct oc_tables {
                  "the %" PRIu64 " MB this build allows -- narrow a context, or "
                  "rebuild with a larger TC_MEMCAP",
                  (u64)(bytes() >> 20), (u64)(TC_MEMCAP >> 20));
+  }
+  //  Every table back to zero, which is its initial state: what was mapped
+  //  through the mappings, what is a static object through its home.  In
+  //  the tuning build the objects are pointers into the mappings and are
+  //  left alone.
+  void reset() {
+    int i;
+    for(i = 0; i < tc_nmaps; i++)
+      tc_zero(tc_maps[i].p, tc_maps[i].n, 1);
+#if !USE_NEW
+    tc_home<TC_dig_T>::zero();
+    tc_home<TC_sgn_T>::zero();
+    tc_home<TC_flr_T>::zero();
+    tc_home<TC_cls_T>::zero();
+    tc_home<TC_aux_T>::zero();
+    tc_home<TC_hdr_T>::zero();
+#endif
   }
 };
 static oc_tables tabs;

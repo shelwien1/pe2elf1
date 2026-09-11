@@ -5,27 +5,7 @@
 #include "oc_fatal.inc"
 #include "ogg_page.inc"
 #include "vb_setup.inc"
-//  Past the end of the input the pin hands back -1, which as a byte is
-//  the 0xFF the encoder's flush left off; a few of those are the tail of
-//  every stream.  Many more is a stream cut short, and the decoder would
-//  otherwise go on turning them into output for as long as they came --
-//  a cut in the middle of a run of bytes has no parser check to stop it.
-static const char *oc_in;
-static u32 rc_over;
-constexpr u32 RC_OVER_MAX = 48;
-template <class RC> struct rc_pin_io {
-  Coroutine *co;
-  byte get() {
-    uint c = co->pin[0].get();
-    if(UNLIKELY(c == uint(-1))) {
-      FATAL_UNLESS(++rc_over <= RC_OVER_MAX, "%s: cut short -- the stream ends before its last symbol", oc_in);
-      return 0xFF;
-    }
-    return (byte)c;
-  }
-  void put(byte c) { co->pin[1].put(c); }
-};
-#define RC_IO_BASE rc_pin_io
+#include "oc_rcio.inc"
 #include "rc.inc"
 #include "cm.inc"
 #include "sh_mapping.inc"
@@ -42,45 +22,7 @@ template <class RC> struct rc_pin_io {
 #include "oc_residue.inc"
 #include "vb_packet.inc"
 #include "ogg_stream.inc"
-constexpr char OC_MAGIC[] = "oggc\x1a";
-constexpr int OC_VER = 3;
-//  The coroutine, one per direction: f_DEC is what Rangecoder calls it, 0
-//  to code and 1 to decode.  Each direction's walk is a member function
-//  chosen by overload on the direction's tag, and a member function of a
-//  class template is compiled only where it is called, so the decoder's
-//  binary path holds no dry run and the encoder's no page writer.
-template <int N> struct oc_dir {};
-template <int f_DEC> struct oc_coro : Coroutine {
-  oc_model<f_DEC> t;
-  const char *in;
-  void go(oc_dir<0>) {
-    source src;
-    src.open(in, &pin[0]);
-    t.rc.co = this;
-    t.rc.rc_Init();
-    {
-      og_packer<oc_model<f_DEC>> pk(t, src);
-      pk.pack();
-    }
-    t.rc.rc_Quit();
-    if(t.rc.carry_lost())
-      FATAL_CODE(OGC_EXIT_INTERNAL,
-                 "%s: the carryless coder lost a carry; "
-                 "this is a measuring build, ship one with OC_CARRYLESS=0",
-                 in);
-    src.close();
-  }
-  void go(oc_dir<1>) {
-    t.rc.co = this;
-    t.rc.rc_Init();
-    og_unpacker<oc_model<f_DEC>> up(t, &pin[1]);
-    up.unpack(in);
-  }
-  void do_process() {
-    go(oc_dir<f_DEC>());
-    yield(this, 0);
-  }
-};
+#include "oc_coro.inc"
 //  One run, in the direction f_DEC: the tables and the model, the files, the
 //  coroutine over them, the report.
 template <int f_DEC> static int run(const char *in, const char *out) {

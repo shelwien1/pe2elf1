@@ -70,5 +70,12 @@ struct oc_hist {
       free(extra[--nextra]);
     used = 0;
   }
+  //  As a fresh process has it: reset(), and the fields reset() leaves --
+  //  the last classes, the scratch, the channel count -- zeroed too.  Not
+  //  what a new link gets, which keeps those; what a new stream gets.
+  void clear() {
+    reset();
+    memset(this, 0, offsetof(oc_hist, pool));
+  }
 };
 static oc_hist hist;
