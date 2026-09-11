@@ -9116,3 +9116,444 @@ The reactions of a magus with no enhancement applied were far too slow for him.
 —In the next moment.
 
 The fist of a former hero punched through a magus's face.
+
+1-25 "Thus Spoke Unto the Former Hero" — 4
+-------------------
+
+Time rewinds a little.
+
+Having seen the note at home, Daiki broke into a run at once, heading straight back along the road to the station.
+
+—And a voice called out to him.
+
+"Wait, wait, that's fast, too fast! How are you so decisive, kid!"
+
+As ever, he couldn't sense the faintest trace of her presence.
+
+Even so, Daiki wasn't surprised.
+
+Perhaps he'd had some kind of premonition.
+
+"...Urei."
+
+"So you still won't call me onee-san. Well, the given name isn't bad either."
+
+The same unpindownable, breezy manner as the other day.
+
+That he couldn't find it unpleasant — that he felt something like goodwill instead — was presumably her personal virtue.
+
+"I didn't expect you to come to me."
+
+Daiki said. Urei shrugged.
+
+"That's because you leave girls to their own devices, isn't it? I gave you my contact details, you know. If you don't keep in touch you'll lose the fish you've hooked."
+
+"You came on your own, though."
+
+"True enough. Because I still haven't received the payment I was promised."
+
+That was, of course, the commission fee for her turning a blind eye in the other night's affair.
+
+—The information that Daiki was someone with memories of another world.
+
+What was slightly unexpected was that Urei didn't yet know that information.
+
+That night he'd blurted out the fact of being an other-world experiencer.
+
+At Daiki's narrowed eyes, Urei laughed a little.
+
+"An other-world experiencer — that's it, right?"
+
+"...If you already know, I'd say the payment counts as made. You were watching, weren't you. That you'd be watching was part of the arrangement."
+
+"No, no. I merely overheard. I don't know what happened inside that barrier until the battle ended; I didn't make that one. This is information I obtained myself afterward. Deferring payment was your own mistake, wasn't it? You'll have to pay more than that."
+
+"That wouldn't normally fly..."
+
+At Urei's extortionate line, Daiki turned an exasperated face on her.
+
+Even so, Urei continued with the same smile.
+
+"Wouldn't it? Then — I don't mind trading it for information about little sister."
+
+"..."
+
+At the words delivered so lightly, Daiki's expression didn't change.
+
+Because it wasn't something he hadn't been able to predict.
+
+To turn it into certainty, Daiki asked.
+
+"—You're the one who took Nagi."
+
+"That's right. Oh, but strictly speaking I'd like you to think of it as **transport work**."
+
+Urei affirmed it lightly, without a hint of guilt.
+
+That she herself was the one who'd carried out the abduction.
+
+"Your house has Oki-chan's watch net over it, so it's dangerous; but if little sister is outside, that's irrelevant. I actually knew about your meeting at the café too, you know?"
+
+*Never a moment's lapse* — perhaps this was what that meant. Her direct combat ability didn't seem high, but Urei's capability was far more troublesome than that.
+
+Daiki shook his head slightly. —He still couldn't bring himself to be angry.
+
+"Nagi is unharmed, I take it."
+
+He asked quietly.
+
+"How I behave depends on that answer."
+
+"Ooh, being a big brother. I really do want you as a little brother. —Ah, don't glare like that. She's fine. Otherwise I wouldn't be making contact here, would I. I don't lay hands on civilians."
+
+"Says the one who kidnapped her..."
+
+"I'm crossing a few dangerous bridges myself. I'd rather you didn't treat me so coldly."
+
+Indeed, getting information about the hostage (*Nagi*) before contacting the mastermind was significant.
+
+If anything, Urei's motives in telling him were the greater concern.
+
+"...Don't tell me you've betrayed him?"
+
+"Hardly. I don't recall ever being on his side openly. I was never an ally to begin with, and I'm carrying out the job I took to the letter. No need for concern!"
+
+"I'm not concerned."
+
+"Being told that so flatly is sad... Well, I've been told that once you move, the rest doesn't matter. This matter falls outside the scope of the contract."
+
+At Urei's shrewdness, Daiki asked,
+
+"Does it? If there's no hostage, I no longer need to go."
+
+"—You'll go. Just like this, without fail."
+
+Urei declared that such a feint wouldn't work.
+
+Daiki caught his breath. He hadn't imagined being told that.
+
+"Because then it just repeats. She might be taken again, and used properly as a hostage next time. You at least can't rule that out. So you have no choice but to go."
+
+"...You're right."
+
+"But in that case you'll die."
+
+Urei said it as though it were entirely obvious.
+
+Daiki was silent. He had, after all, factored in that possibility from the start.
+
+"This client seems awfully taken with you. I understand the feeling, though the reason seems different — never mind that; you have no chance of winning against a magus."
+
+"..."
+
+"Ah, I know. Is it because of your other-world experience? You have judgement that could never pass for an ordinary civilian's, and high physical ability. Even I got outplayed once. But that sort of thing doesn't work at all on a genuine magus. It's meaningless. Understand?"
+
+Urei raised an index finger as she spoke.
+
+Perhaps it was, in her way, a warning.
+
+"As a magus I'm thoroughly third-rate. The Kūya Watarai you met is roughly second-rate. What's up ahead is a first-rate monster. —Incidentally, Oki-chan is an exceptional monster. And that you alone can't possibly match a magus is a proven fact."
+
+"...I don't intend to deny it."
+
+"I imagine not. So, the first-rate magus up ahead has prepared something sufficient to kill Oki-chan, who's the exception above that. Naturally, since he's opposing her. If you fight an opponent you can't match head-on, preparing a corresponding plan is only natural. Going in with no plan is unthinkable."
+
+*That's what you're about to do*, Urei was presumably telling him.
+
+But it couldn't be helped. Daiki was going because he'd been threatened, which already put him a step behind.
+
+With no idea who the opponent was, the situation wasn't merely unfavourable but close to checkmate.
+
+Urei surely understood that too.
+
+That she had made contact with Daiki nevertheless meant—
+
+"...You're saying you'll be my plan?"
+
+"I'd like to say that depends on negotiation."
+
+Urei shrugged lightly and laughed.
+
+Meaning: don't expect that much.
+
+"If anything, I came to collect payment before you died. I'd hate to work for free. If you die there's no information or anything else."
+
+Daiki's decision was swift.
+
+"Then, Urei, let me hire you again."
+
+"...Oh-ho?"
+
+Urei laughed, amused.
+
+Whether out of some expectation, or otherwise.
+
+She said:
+
+"Can you pay? The fee for hiring me a second time? If you can, I'm willing to consider it as business. But by my assessment, you have nothing to offer."
+
+"..."
+
+"If you have nothing, the conversation's over. I take my payment and go to the next job. Or else—"
+
+"—I do. Something I can pay with."
+
+Daiki cut across her words.
+
+He felt as though he were being tested somehow. She judged he could pay nothing, and yet Urei was making contact like this.
+
+This was a chance being held out to him.
+
+So Daiki said:
+
+"**I'll let you off.**"
+
+"—Huh...?"
+
+At Daiki's presumptuous remark — presumptuous hardly covered it — Urei's eyes went round.
+
+What on earth was he saying? It genuinely took her time to understand.
+
+"No, no, what are you talking about. Surely you're not saying *help me and I'll overlook you kidnapping little sister*? If so that's a disappointment of the highest—"
+
+"That's not it. The one letting you off isn't me. It's Oki."
+
+"————"
+
+At a remark she hadn't even considered, Urei lost her words.
+
+"Oki's job is to drive magi who've entered this city out. That includes you, Urei. And Oki's strength is top-class even among magi — you could never beat her."
+
+"...That's—"
+
+"So I'll talk to Oki and persuade her to overlook you. If you don't like that, I'll make sure you can never enter this city again. —Which means you couldn't meet me either, right?"
+
+If that happened, the payment for the previous job would effectively lose its meaning too.
+
+That was the sense of the deal.
+
+—Honestly, he had no confidence. Whether Urei would find value there was a gamble.
+
+And with her ability, hiding in this city under her own power was presumably an option too.
+
+Daiki narrowed his eyes slightly.
+
+Looking at his face, Urei let out a burst of laughter.
+
+"Pff, kh— ahahahahaha! So that's your angle! I see, that certainly would be a nuisance! Genuinely entertaining — splendid enough that I want to tell you you've passed!"
+
+"...Not enough?"
+
+"Entertaining, but a touch short. That deal only has meaning if both you and the witch survive this night. As things stand, both of you die, don't you? Right — if I'm to concede, I'd at least like a guarantee. Something sufficient for it."
+
+"...A guarantee?"
+
+"If I side with you, I need you to win. If you can make me believe that with me on your side you'll win, then I'm willing to take the job."
+
+For a while, Daiki kept his mouth shut.
+
+And then he remembered.
+
+Come to think of it, he still hadn't paid Urei for the previous matter.
+
+So Daiki composed a confident smile and told her:
+
+"Then there's no problem. I'm used to situations like this. After all, I have experience serving as a Hero in another world. Believe it or not, I once killed a Demon Lord and saved the world."
+
+"......A Hero?"
+
+"It means I don't lose to enemies weaker than a Demon Lord. —Grant it to me on my record as a hero."
+
+He honestly hadn't expected Urei to believe such a thing.
+
+Surely she'd laugh it off. Daiki had been thinking about how to make her believe him, and was startled to find her showing an unexpectedly serious, straight face.
+
+Urei Aiko was looking at Daiki as if witnessing an impossible miracle.
+
+"...**So that's it**...? That's why in this city... but such a coincidence..."
+
+"Urei? ...What's wrong?"
+
+"...No, it's nothing. I see... kh, ahahaha! We might genuinely get to see a great upset here!"
+
+"...What are you—"
+
+"All right. I accept your commission, Daiki."
+
+He hadn't expected a line like *because I'm a Hero* to actually work.
+
+Slightly taken aback, Daiki nonetheless decided to settle the arrangements before she could change her mind.
+
+Either way, if they were moving, sooner was better.
+
+"By the way, Urei. I'd like to make a plan — what can you do?"
+
+"Right... seeing is better than hearing a hundred times. As a test, I'd like you to punch me in the face."
+
+"Ah, — huh?"
+
+He'd asked about her ability to make a plan, and the reply left him floundering.
+
+But Urei, unbothered, offered her own cheek.
+
+"Go on. You may hit me like you mean to kill me."
+
+"...I don't want to..."
+
+"How tiresome. Then I'll punch, and I'd like you to take it on the face, Daiki."
+
+"That's fine, then..."
+
+"Isn't *that's fine* actually scarier... well, never mind."
+
+An instant later, the fist of an Urei who'd casually decided to punch buried itself in Daiki's face.
+
+But — **there was no pain**.
+
+No. **Not merely no pain: there was no impact whatsoever.**
+
+It simply touched his cheek and stopped. The force was dead.
+
+The sensation resembled taking a blow with Oki's «Pure Black».
+
+Though that repels what it touches, whereas this stopped on contact with the skin.
+
+"...What was that?"
+
+At Daiki's question, Urei returned a thin smile.
+
+"Just now, **I dropped the function of striking power from the existence that is me.**"
+
+"...What... did you say?"
+
+"As I said before, as a magus I'm a washout. I can't use decent magecraft, and I could never contend with a skilled magus. —**But my capability is another matter.**"
+
+—**A capability.**
+
+Come to think of it, Oki had mentioned it.
+
+That in this world, separately from magi, there existed beings who manifested peculiar capabilities.
+
+"Urei, you—"
+
+"I'm a magus and one of the Empowered at the same time. I call it the aberrant power of «Degeneration». An aberrant power (*power*) with no logic to it that **degrades a target and renders one of its functions unusable** — well, like making a television that won't show a picture, or a refrigerator that won't chill."
+
+"...What is that."
+
+So Daiki being unable to walk in the earlier fight had been the effect not of magecraft but of an aberrant power.
+
+She had **degraded the function of movement** possessed by the existence that was Daiki.
+
+"Th-then... you'd been erasing your presence this whole time because—"
+
+"**Because I erased the function of having presence from myself.** Doing that means you also stop being a valid target for magecraft, so I can walk straight through this city's barrier. Rather convenient, isn't it?"
+
+"......What is that..."
+
+It was absurd.
+
+Not at a level to be dismissed with a word like *convenient*.
+
+Of course, Urei presumably hadn't revealed the whole of her capability here. If she could degrade any function at all, she could easily stop a human's breathing or heartbeat.
+
+He wanted to believe it didn't go that far — but a capability that leaps over all reasoning and kills one function on will alone was, by itself, far too frightening.
+
+—Thank goodness Urei isn't an enemy.
+
+Only with her as an ally did Daiki feel that good fortune.
+
+"...Why did you decide to help me?"
+
+At Daiki's sudden question, Urei shook her shoulders lightly.
+
+"Well, it'd be a problem for me too if the world were destroyed. Obviously."
+
+"Huh...?"
+
+"So I side with whoever can save the world. —Well, that's my business. Let's go."
+
+　　　　　※
+
+At any rate, that was how Daiki had come to be here.
+
+The rest of the arrangement was simple.
+
+Daiki would watch for an opening and charge Watarai — that was all.
+
+With Daiki saying the word «idiot» as the signal, the hidden Urei would exercise her aberrant power on him. In that state Daiki would cease to be a valid target for his opponent's magecraft.
+
+Punched away, Watarai flew back hard, skidded across the concrete, and stopped when his back struck a parked car.
+
+He couldn't show an opening. Daiki ran forward further — but,
+
+"—«Light upon the stage (let it be so)»—"
+
+"Gh...!"
+
+That action was easily stopped by Watarai, his back still against the car.
+
+With his incantation, flames rose and blocked Daiki's path.
+
+—That too was simple.
+
+What Urei's aberrant power let him avoid was **being made the target of magecraft** — never **the activation of magecraft itself**.
+
+An attack loosed at random, without aiming, could still reach Daiki.
+
+—His response is far too fast, honestly...!
+
+In that respect, perhaps one should say he was a wily magus after all. Daiki understood what Urei's "first-rate" had meant.
+
+The difference in power was, fundamentally, far too great.
+
+"Dear me, what a dangerous thing to do. I should indeed have considered it. No — I did consider it... I'd judged that Aiko-kun's aberrant power was the type that couldn't be activated without touching the target, but was I wrong? Hmm, the Empowered really are dangerous!"
+
+Saying such things, Watarai slowly got to his feet.
+
+He'd been struck in the flesh, so magus or not he must have taken damage.
+
+But not enough to stop him moving — this was bad. It was a situation that needed settling in an instant.
+
+Watarai's response had been far too quick.
+
+"Ah, my apologies. When it comes to a magus's attacks, fire is indispensable, but I'm not accomplished enough to display it while boasting. I'd rather not be compared with the «witch-hunter's fire» that Oki-kun wields, so do forgive me on that count. But tell me, is it that you have confidence in operating your body? It was splendid nerve, I grant."
+
+"...You really do talk a lot."
+
+"Communication through language is one of the greatest pieces of wisdom humanity has produced. Why? Because its incompleteness — its inability ever to be perfect — is magnificent! You understand, don't you? That it is imperfect is paradoxical proof that there remains room for progress. I pay my respects to the march of humanity. Which is exactly why I loathe aberrant powers (*things*) that distort it."
+
+Watarai's composure hadn't crumbled in the slightest.
+
+And that judgement wasn't wrong. Daiki remained the one at a disadvantage.
+
+"—Perhaps some education is in order."
+
+"..."
+
+"As an adult myself, I've not forgotten my duty to guide young people onto the correct path. Come, let me step into your arena. —«Puppet Show (Maya)/Ascend to Heaven (Dialogue)»"
+
+In an instant — Watarai **burst**.
+
+At a speed startling enough to create that illusion, before Daiki knew it he was right in front of him.
+
+"—Wha—"
+
+"I'm not fond of barbaric acts. —Even so, dialogue is essential."
+
+Right before Daiki's widening eyes.
+
+Watarai sank his weight slightly and drove out his left elbow.
+
+Daiki was made to feel the creak of ribs and the sensation of air leaking from his lungs. In his body.
+
+The force of the blow folded his body into a V.
+
+Satisfied with Daiki's posture, head bowed, Watarai nonetheless didn't slacken his hand — or rather, his foot.
+
+"There."
+
+A knee slammed into his face from the side, and Daiki's body flew.
+
+His teeth didn't break, but the inside of his mouth split, and violent pain ran through his cheekbone.
+
+Across the car park concrete, Daiki rolled wretchedly, like a discarded tyre.
