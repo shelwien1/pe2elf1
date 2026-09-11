@@ -11834,3 +11834,238 @@ A touch of jealousy, and more than that guilt, and consideration, and wariness.
 Swaying between all those various feelings, I ended up at a distance from Daiki both physically and mentally.
 
 —And before I knew it, a whole year had passed without my speaking to him.
+
+S-03 "Untitled / Record 1"
+-------------------
+
+When I heard the request — a monster had appeared, please exterminate it — honestly, I felt like clicking my tongue.
+
+Why does trouble come flying in wherever I go?
+
+That said, I can't refuse.
+
+I'm a court mage of the Kingdom, and these days I hold the title of head of them. I've no complaints about the innocent citizens who brought the request.
+
+I simply wanted to take it out on a monster that turned up while I was this busy.
+
+It was a village in some province.
+
+That journey took us all over the world, but I'd never once stopped here. And despite that they knew who I was — being too famous is its own problem.
+
+...Though, in the end, it'd be more inconvenient if they didn't say anything.
+
+So it's fine. In fact you could say this sort of thing is my job.
+
+A court mage — the name implies that where one ought to be is the court.
+
+So for me to be passing through here was, from the villagers' point of view, presumably an undreamed-of miracle.
+
+And in fact, normally it would be out of the question. This sort of problem goes first to the provincial knight order.
+
+Given the state of things, though, hands are short.
+
+**Roughly a year since the Demon Lord's defeat.**
+
+The world, which ought to have become peaceful, still had countless problems left. The various monsters freed from the Demon Lord's influence were one of them.
+
+By rights, monsters don't attack anything but humans. That was common sense.
+
+But that expression isn't accurate.
+
+Strictly, the correct causation is presumably that monsters by rights attack things other than humans as well. Targeting only humanity under the Demon Lord's influence was the abnormality.
+
+They aren't strong. Low-ranking ones can be handled by a few ordinary people surrounding them.
+
+But the monsters that escaped the Demon Lord's wedge and turned feral gained nuisance value in place of strength.
+
+They attack crops and livestock that are already in short supply, and have a bad effect on the natural environment.
+
+The Kingdom's view is that it's because the inexhaustible magical energy they'd obtained through the Demon Lord's influence is gone, forcing them to resupply themselves.
+
+Hunting down those remnants was an urgent task for the world as a whole.
+
+"We'll pay you."
+
+The village's representative, gaunt and thin, bowed his head to me.
+
+I answered.
+
+The answer that the head of the court mages — no, **a companion of the hero of the holy sword** — ought to give.
+
+"No, that isn't necessary. Please raise your head. You've endured well all this time. My gratitude and respect for that spirit. And please forgive my lateness, and allow me to make up for it."
+
+At the heroic words that flowed smoothly out of my mouth, I couldn't help a self-mocking smile.
+
+It isn't a lie, but it's hard to call it my honest feeling either. Being worked this hard even after the Demon Lord was killed is the worst.
+
+When I don't have that kind of time—
+
+"Lady Mage!" "Lady Hero...!" "Thank you!"
+
+At the excessive gratitude being offered on all sides, I hid a wry smile and hurried off to work.
+
+Because a thing like this ought to be finished as quickly as possible.
+
+Yes. The reason I go on with these travelling days, ignoring even the Kingdom's requests — even in times like these, I have authority enough to do that, and the Kingdom has a debt that forces it to comply — is only one thing.
+
+That is: searching for the Hero.
+
+Daiki Kurosu. A name with an odd ring to it, but naturally so.
+
+He is a foreigner who came from a world different from this one... or rather, whom I summoned.
+
+I travelled with him for a long time.
+
+Because Daiki was the Hero. The holy sword's compatible one, who hadn't appeared for ages. A saviour-hero with the qualification of Hero.
+
+Finding him was the mission assigned to me, still a low-ranking court mage at the time.
+
+Honestly I didn't think I could do it, and even now I've no idea how I managed, but even so — as though it were fate — my summoning succeeded.
+
+Yes; that of all the several plans for finding the compatible one, the summoning rite considered least likely to work — which is exactly why it was a rookie's job — was the one that struck success was a development even I hadn't predicted.
+
+And in fact, for some reason he appeared on the bed where I was sleeping naked, which goes well beyond astonishment. I actually thought a sex offender had infiltrated the court.
+
+Well, thinking about it calmly, the one who got it wrong was presumably me, who'd constructed the art, but at the time my head didn't work that far. Regret, regret. —At any rate.
+
+I set out on a journey with him and became a hero who, at last, succeeded in the objective of slaying the Demon Lord.
+
+My gratitude isn't something that can be turned into words.
+
+To summon someone one-sidedly and load him with the fate of a world he had nothing to do with — there's hardly a more villainous story.
+
+And even so, he fought for us — for the world.
+
+He saved the world.
+
+So as the natural reward, I'd decided to spend the rest of my life on him.
+
+Because I'm the one who summoned him.
+
+It was the Kingdom's order, but if I had failed he would never have come.
+
+So the responsibility lies with me.
+
+That has to be settled.
+
+I can no longer send him back to his own world.
+
+So at the very least I wanted to use my time for him in a world at peace. Whatever it took, I wanted to give him back the happy days I had stolen from him.
+
+—And yet.
+
+Immediately after killing the Demon Lord, he abruptly vanished.
+
+"..."
+
+I don't know where he went.
+
+Whether he returned to his own world, or is still in this world — or whether he was sent flying to a completely different world again.
+
+The one settled thing is that whichever it was, I have no right to give up on him.
+
+By whatever means, I'll find him again, and this time I'll tell him.
+
+All the words I couldn't say.
+
+Every feeling I couldn't convey.
+
+Everything that can't be put into words, I'll put into words and hand to him.
+
+I have to. From that day, the road of the journey that had existed to kill the Demon Lord switched to one for finding him.
+
+There's no problem.
+
+In this world I'm the only mage who ever succeeded in finding him.
+
+There's no logic by which something done once can't be done twice.
+
+Even if it takes my whole life, I'll find him again. That's already decided. There's no other option for me.
+
+Which is exactly why I wanted to finish an utterly unrelated monster extermination as fast as possible.
+
+Leaving the village, I headed straight for the cave where the monster had been spotted.
+
+—But.
+
+"There's nothing here at all!"
+
+Inside the shallow cave it supposedly used as a nest, there was no sign whatsoever of the monster in question.
+
+Thoroughly annoying.
+
+It's already a troublesome type of monster, and for it not even to be there is genuinely inconvenient. I don't have time to spend on the likes of you.
+
+But.
+
+"There's not even a trace of it moving, which is odd... The residual scent of magical energy cuts off around the cave alone. It moved around this area, but there's no trace of it heading anywhere... honestly, why?"
+
+Rather outside my expectations.
+
+If it had changed nests and moved, I should be able to trace it.
+
+But the result my investigation gave me was: **it hasn't moved from here**.
+
+The monster should be in this place, and yet there's no sign of it anywhere.
+
+It made no sense.
+
+"What is this? Don't tell me it simply vanished on this spot? There's no way—"
+
+At my own words I caught myself.
+
+Sudden annihilation.
+
+—No: sudden transference.
+
+Because that phenomenon is one I certainly remember.
+
+I hurriedly examined the surroundings in more detail. So as not to overlook the slightest thing.
+
+And then.
+
+"...Yes, no mistake. It's faint, but there's the trace of a formula. But I can't read it. The logic is fundamentally different somehow. Incomprehensible. No, no, but this... could it be?!"
+
+The monster that should have been here — a «Mage-Eater».
+
+Its form is gone. As though **it has left this world**.
+
+"Sent... flying? Could it be, to another world...? No, no, wrong, it's the reverse. It was summoned *from* another world. —In which case!"
+
+If I can follow this trace and decipher the formula, I might be able to create the magic.
+
+Back then, Daiki also vanished abruptly.
+
+I was too busy searching everywhere around, but if Daiki was likewise re-summoned to another world—
+
+"I might be able to find him... I might be able to meet Daiki once more...!"
+
+Thank goodness it was inside a cave with no one watching.
+
+Being seen with wet eyes would be a disqualification for a hero.
+
+I shook my head, faced forward and stood.
+
+Because the word *give up* was never in my dictionary to begin with. Though that's a set phrase from his world, something I heard from him.
+
+"Wait for me, Daiki. I'll definitely find you. This time I'll never let you go again...!"
+
+I decided to put the faint traces inside the cave on record.
+
+It's obsession.
+
+Yes — whatever I say, whatever reasoning I attach — the hottest, strongest feeling inside me is my own ego.
+
+I want to see him again.
+
+I want to see that smile again.
+
+I want to hear that blunt, kind voice again.
+
+Those eyes — straight for all his weakness, unwavering even once he grew strong — I want to see them with my own eyes just one more time.
+
+I want to touch his hand and grip it tight, so we're never parted again—
+
+For that, I am still travelling.
+
+In a world where the Demon Lord no longer exists — in the world he saved.
