@@ -13037,3 +13037,338 @@ To her, Daiki asked what had just occurred to him.
 "......Daiki, you idiot."
 
 Perhaps he'd imagined it.
+
+2-03 "All's right with the world" — 3
+-------------------
+
+Leaving the shop, Daiki and Oki set off together for the room on the memo Itsuki had given him.
+
+They walked the main street in front of the station, following the map.
+
+It wasn't far from the room Oki had been using, but it appeared to be a different building. Did she own any number of such freely usable rooms?
+
+Perhaps it was wiser not to pry too far into the true nature of the person called Itsuki Yukimaru.
+
+"Still, a hideout... a secret base."
+
+Daiki murmured quietly.
+
+It was a word that plucked fairly hard at a boy's heartstrings.
+
+"I'm getting a bit excited, actually. I'm looking forward to it."
+
+"Oh? That's a little unexpected. Even you say things like that."
+
+At Daiki, whose eyes shone as he looked at the key in his hand, Oki returned a thin smile.
+
+"I don't see why 'even me.' I feel like I used to build them myself when I was small."
+
+Daiki had been a primary and middle schooler too, after all.
+
+Back then he'd played at that sort of thing with his childhood friend Yuika Asatsuma and the others, he thought.
+
+"But look, you were nominally a Hero, weren't you? I thought that sort of thing wouldn't excite you at this stage, but not so?"
+
+"Ah, well, when I was in the other world (*over there*) it was journey after journey. There wasn't really any staying in one place. Having a home is a good thing, I think."
+
+"Hmm... is that so."
+
+"Yes."
+
+Being able to secure food, clothing and shelter properly is happiness.
+
+That alone is being blessed. That, at least, was Daiki's recognition.
+
+Even in that harsh other world, Daiki had been blessed with a great deal. He's very lucky.
+
+"I can't quite picture what you were like as a child."
+
+Oki said it suddenly to Daiki, who had been recalling the old journey.
+
+"Can't you? ...That's a rather ambiguous observation."
+
+"Ah, sorry. Not in a bad way. It's just that for me you were strange from the moment we met... at least you weren't normal, right?"
+
+"Hard to nod along to, though given my history it's awkward to deny."
+
+He'd never seen anyone else who'd experienced another world.
+
+If that's what she calls strange, Daiki couldn't say otherwise.
+
+"But you had a period of living over here normally too. In fact, in terms of periods, until quite recently you were an ordinary person."
+
+"Well, true... though the time I spent over there was long, so the impression is that it was quite a while ago."
+
+In that sense, retuning himself so he could adapt from a long life in another world back to Earth's social life had taken considerable effort.
+
+One could say it isn't finished yet — mainly the grades.
+
+Better than having the other-world time counted and being treated as a missing person on Earth, though.
+
+"That's the part I can't picture. What was the old you like?"
+
+Oki said it in the manner of a simple observation.
+
+After thinking a little, Daiki answered.
+
+"Nothing much to say — I think I was perfectly ordinary."
+
+"I wonder. I'm a bit doubtful about that."
+
+"Why..."
+
+"Someone who gets suddenly thrown into another world, saves it and comes back isn't ordinary."
+
+"You make it sound like such a big deal."
+
+"It *is* a big deal, actually. I mean, a world."
+
+"That's true, but... that's only because I was given the power to do it."
+
+"The holy sword thing?"
+
+"Right. Anyone holding that is a Hero, that's all. It isn't that I'm impressive."
+
+"..."
+
+Without any air of self-deprecation, Daiki spoke as though it were the natural conclusion.
+
+Looking up at him, Oki narrowed her eyes slightly. She wondered whether that was really so.
+
+Because in fact it's presumably true that only Daiki could handle it.
+
+"...A holy sword, huh."
+
+And a hero — how about it?
+
+Was it really coincidence that an existence called that had appeared before Oki?
+
+She didn't know. And thinking pointlessly about what one doesn't know isn't a magus's choice either.
+
+So Oki dropped the thought, turned back to Daiki and returned to small talk.
+
+"Well, either way, maybe it was for the best."
+
+"Hm? What was for the best?"
+
+Daiki tilted his head.
+
+Hadn't it got through? Well, perhaps it's better that it didn't.
+
+So she didn't answer. Saying *nothing*, Oki faced forward again.
+
+"My own business. More to the point, let's hurry. If we're too late it'll inconvenience your family."
+
+"...That's true. Lately I've been damaging my family's impression of me rather badly."
+
+At Daiki making a fairly seriously bitter face, a smile slipped out of her.
+
+Talking with Daiki is fun. That's why she'd said it was for the best.
+
+Because if Daiki hadn't gone to another world — if he hadn't been the sort of person to be chosen for it — Oki might never have met him.
+
+Since they'd been able to meet like this, that was for the best, Oki thinks.
+
+As though believing that, at least, is absolutely not a mistake.
+
+Of course she couldn't put such a line into words, so she brushed it off lightly and walked on.
+
+Confirming by footsteps and presence, amid the jumbled noise, that Daiki was following behind, she turned a corner—
+
+—and immediately after, sound vanished from the town of Ōmiya.
+
+"Huh...?"
+
+Which of them murmured it?
+
+The only fact Oki could grasp at that moment was that the people around them had suddenly disappeared.
+
+**People had vanished from the world.**
+
+She couldn't comprehend it. Even she, who embodies the mystery called magecraft, couldn't comprehend it.
+
+**Which means that phenomenon has no logic to it.**
+
+Oki reflexively excited her magical energy and went into a combat posture.
+
+"...What's going on?"
+
+Daiki, standing right beside her, asked.
+
+Oki had no answer. But that he was beside her was startlingly reassuring.
+
+"I don't know. But stay on guard."
+
+"Well... this situation isn't normal, is it..."
+
+In a sense, being told that much was welcome.
+
+That such a notion occurred to him at all showed how sadly used to desperate situations Daiki was.
+
+But from Daiki's perspective, it was obvious that he is fundamentally useless in violent matters.
+
+Without Oki's cooperation, Daiki Kurosu is nothing but a high-school student — that's the great premise.
+
+Which is exactly why he can't afford to lose his composure, all but his only weapon.
+
+Being able only to think doesn't mean he's excused from thinking; if anything it means he has to think more than anyone.
+
+That said, Daiki has no knowledge of magecraft — of Earth's mysteries.
+
+So he ought to think about the situation.
+
+That people had vanished from their surroundings meant, inverted, that only Daiki and Oki had been left. Naturally there was no room to doubt it was an artificial phenomenon.
+
+In that case—
+
+"—If you have business with us, say so!"
+
+"Daiki?!"
+
+Daiki raised his voice without hesitation.
+
+If a voice answered, there was the possibility of an opponent who could be negotiated with. If not, he could judge without hesitation that they were hostile — so there was no loss in the act.
+
+Or else there was the possibility of grasping the position of an opponent he couldn't yet see.
+
+Daiki waited a few seconds for a reaction.
+
+And sure enough, a voice rang out as though answering his question.
+
+"Admirably quick to the point. Therefore I shall answer your question — naturally, I have business with you."
+
+A man's voice.
+
+Looking, at the end of the road emptied of people, a man was standing.
+
+As abruptly as though he'd been there from the start, yet with an unmistakable, definite presence.
+
+Wavering, like a wraith.
+
+"My name is Adalbert Wiesner. Leader of «the Exile League»."
+
+The man — Adalbert — disclosed his name and affiliation readily.
+
+But nobody would take that as proof of friendliness. And in fact he continued:
+
+"For certain reasons, I have come to kill you. In response to your spirit in attempting to talk, I promise to finish you without suffering if you do not resist."
+
+The first thing learned by attempting to talk was the fact that there would be no talking.
+
+"...Is there a need to answer that?"
+
+"There was meaning in asking, I judge."
+
+"I see. Your Japanese is good, but you're impossible to talk to."
+
+"I have been in this country a long time."
+
+Adalbert said it without changing expression. That a proper reply came back felt strange.
+
+He was a man like a withered great tree. As his name suggested he had foreign blood, but there was nothing odd about his Japanese.
+
+Grey hair with white mixed in, and a body that was slender yet trained like rock, gave him a wily presence.
+
+At a single glance one could sense his physical strength.
+
+Unlike magi such as Oki, who display strength wildly divorced from their appearance. Daiki could perceive it the instant he saw him.
+
+—Fighting head-on, there would be no chance of winning.
+
+Though that was about himself.
+
+For Oki, resistance ought to be perfectly possible.
+
+"...Why target us? Have we earned someone's grudge somewhere?"
+
+"This is our first meeting. I have no feelings about you whatsoever."
+
+"Then—"
+
+"Is there meaning in answering?"
+
+"...There was meaning in asking."
+
+Trading the same words back and forth, Daiki had grasped several things.
+
+If he himself wasn't after them, then it was presumably a commission from someone, or an obligation, or that sort of reason. There was also the possibility that they'd become an obstacle to some other objective, but Adalbert's manner of answering hinted at the former.
+
+Reading that as gentlemanly would be too charitable.
+
+In short, there would be no mercy.
+
+"...What do we do, Oki?"
+
+Daiki asked the Oki beside him quietly. Fight, or flight?
+
+If it came to a fight, Daiki would, to put it mildly, be a hindrance. Becoming momentarily combat-capable through Oki's magecraft was possible, but that came at the cost of sustained fighting ability.
+
+The magecraft's recoil damages Daiki's own body.
+
+Recovery requires Kurumi Tsunashino, and as long as the enemy kept targeting them, meeting up with her wasn't guaranteed.
+
+After all, they'd erased every human being from a block of Ōmiya, a place that could fairly be called a major city.
+
+There was no guarantee in the first place that escape from this place was possible.
+
+"...There's nothing to decide, is there."
+
+Receiving Daiki's question, Oki answered quietly.
+
+Her eyes were already stained deep crimson — the Mystic Eye's expression.
+
+"It's two against one. There's no reason to lose to this. —And above all."
+
+"...Oki."
+
+"He said he'd kill you too. I can't forgive that statement in front of me."
+
+Oki brimmed with anger.
+
+Killing intent directed forward. The eyes of a magus who finds no value in the life of the enemy before her.
+
+No — the eyes of a witch.
+
+"Let's do it, Daiki."
+
+In that instant, black rejection spilled from Oki's palm.
+
+The witch-art crowned «Pure Black» (*the black*).
+
+The witch's capability, which denies everything it touches.
+
+It swirled as if expressing the witch's anger, displaying a power that could not be resisted.
+
+"...Daiki, can I leave one thing to you?"
+
+With the vortex dividing the two of them from the enemy, Oki spoke quietly.
+
+Daiki answered without hesitation. —Oki is calm. Then he trusts everything.
+
+"Say it."
+
+"—**The enemy isn't alone.**"
+
+"..."
+
+"He said it himself, didn't he — that he's **the Exile League**."
+
+"He did. A phrase I heard earlier too. What of it?"
+
+"There's no time to explain in detail. But one thing I know: people of «the Exile League» always act in pairs (*two-man cells*). The one in front of us and the Empowered who isolated us are probably different."
+
+While Daiki grasped the situation, Oki assembled a policy from her own knowledge.
+
+Daiki doesn't doubt it. If she said it, he can act on it as fact.
+
+"Leave this to me; you go find the other one and make them undo this. Probably, if you distract them even slightly, it can be undone. And if you can't... then, at that point—"
+
+"I'll handle it on my end."
+
+"Sorry."
+
+"It goes both ways. That man is yours."
+
+"Yes. —Go!"
+
+Immediately after, the two broke into a run in different directions.
