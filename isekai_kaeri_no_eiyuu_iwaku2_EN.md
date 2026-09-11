@@ -5387,3 +5387,400 @@ Daiki smiled thinly at the words.
 The two lined up, faced forward, and fixed the line of death ahead as their destination.
 
 —The Hero who'd had it taken away, and the witch who'd had it given: this was their first battle.
+
+1-14 "The Former Hero, and the Magus" — 6
+-------------------
+
+For Kūya Watarai, the fact that he was a «magus» had never been anything but a shackle.
+
+Yes, a shackle. Manacles that impeded freedom of action, fetters that restricted his range of movement.
+
+There was no pleasure in being a transcendent being, no curiosity about knowing the unknowable; it was simply an obstruction.
+
+Being a magus erased no impossibility for him.
+
+There were only the impossibilities created by having been born a magus.
+
+If one could only be a magus by sacrificing what a person born into the modern age should naturally have been able to have, then Kūya Watarai did not wish he had been born with such a talent.
+
+—*You have no talent.*
+
+He had been told so since he was small. By his father, his master in the magical arts.
+
+An absurd thing to say, he thought.
+
+Because it was the reverse. He *had* talent.
+
+If he had genuinely possessed no magical talent at all, he could have avoided choosing the path of a magus from the start.
+
+But he had been unlucky enough to be born with magical energy.
+
+An amount that might as well be nothing in the world of magecraft, and yet — enough talent to qualify as a magus.
+
+So there was nothing to be done.
+
+All the freedoms and choices that would have existed had he only been unable to become a magus were tossed into the rubbish bin the moment he *could* become one.
+
+A rubbish talent had turned everything else into rubbish.
+
+That was natural. And because it was natural, he accepted it.
+
+It was not resignation, nor detachment, nor compromise.
+
+—*I don't actually want to be in a place like this*—
+
+Such feelings, killed while he was young and never allowed to surface, smouldered in his chest.
+
+And Kūya Watarai became a magus.
+
+A magus without talent.
+
+Grasping a thread toward «Omnipotence», the true objective, was out of the question; his possessions were rudimentary arts and an inborn aptitude for summoning.
+
+But such things were of no use whatsoever in daily life.
+
+For something obtained by crushing every possibility other than being a magus, it was an outcome with far too little salvation in it.
+
+And yet.
+
+And yet he was a magus.
+
+Even though being a magus was nothing but a shackle, he went on serving that shackle.
+
+Because it was natural. Even now he harboured no doubts about it.
+
+He continued serving the honing of magecraft in earnest. He had never once wavered in that. Truly.
+
+He had pursued that result simply because it was necessary for the path of the arts.
+
+—A road to another world.
+
+Somewhere that was not **here**.
+
+A magus can never use «impossible» as an excuse.
+
+A magus is one who makes a fable — whose very existence is uncertain — real through theory. Even if it is so distant that a whole life spent on it will not reach the end, even if the road is a dead end with no terminus from the start, the will to search and walk it is a magus's true purpose.
+
+Someone thought: **it might exist**.
+
+Then until it can be declared not to exist, one investigates the means.
+
+He had simply done exactly that.
+
+—It was a road that should never have reached its end.
+
+His research should, like that of so many magi throughout history, have been a fancy that bore no fruit though he stake his entire life on it.
+
+But.
+
+"In that city. —Perhaps I might find it there."
+
+He visited this city, and last night — he stumbled upon the answer of a lifetime.
+
+He was moved.
+
+Weeping, sobs breaking out of him and tears dirtying his face, the magus rejoiced that he had been rewarded.
+
+—Another world exists.
+
+Somewhere that is not here is by no means a fable.
+
+His research had finally proved it.
+
+At that fact, his whole body shook.
+
+Because he could go to the end he had been aiming for.
+
+For the first time in his life, Kūya Watarai was able to be grateful for his own existence.
+
+"————"
+
+And now, before his eyes, the crystallisation of his pursuit faced off against a witch.
+
+Tremendous power.
+
+Complete control was still unfinished, but the «thing capable of killing a witch» that he had called from another world with a certain directionality imposed on it had power that could fairly be called supreme in combat against magi.
+
+But it didn't matter.
+
+Kūya Watarai had not a shred of interest in power within this world.
+
+It was all merely an experiment for taking himself to a world that was not here—
+
+—If anything troubled him, it was one thing.
+
+Kūya Watarai thought of the witch.
+
+When he began looking into this city, he had arrived at information on the witch named Narumi Oki almost at once.
+
+She was by no means famous in the public sense — no magus is, in the modern age — but it takes one to know one. Following the connections his father had held, one could obtain information on magi.
+
+So he had learned.
+
+About Narumi Oki, the only manufactured witch in the world.
+
+She had been an ordinary human.
+
+A magus she may have been, but still a human.
+
+And the one who had turned her into a witch, something other than human, was her own father.
+
+Learning that fact, he had taken an interest in the witch as well.
+
+A witch is never evaluated.
+
+Even someone like him possessed, in the summoning for which he had aptitude, power surpassing other magi, and that could be evaluated by other magi as an achievement of a kind.
+
+But that ending did not exist for a witch.
+
+—What must that feel like? Watarai wondered.
+
+It is hell. Not one thing about it is her responsibility, and yet she cannot even possess the future as a magus that had been left, however slightly, even to him.
+
+There is no place for Narumi Oki in this world.
+
+And yet, seeing her still trying to live as a magus in spite of it, he had felt a slight sympathy and a strong respect.
+
+Perhaps it was a sentimentality unbecoming of a magus, but—
+
+If he could, he had wanted to ask her.
+
+*Are you content with that?*
+
+—*If there were a way to go somewhere that is not here, would you seek it too?*—
+
+"A dull question, as it turned out..."
+
+Meeting her in person made it clear. She was not the sort of character Watarai had imagined.
+
+Perhaps he had been dragged along too far by the word *witch*. He'd thought it might be otherwise, but it no longer mattered.
+
+If she was a witch, then let her life at least serve as fuel for the next stage.
+
+And in front of Watarai, two human beings stood against the outer-realm monster he had called.
+
+"...What on earth is that man?"
+
+He couldn't sense the slightest magical energy. There was no sign of him using magecraft, nor could he detect the peculiarity possessed by the sort called the Empowered. Which meant he was merely an ordinary civilian.
+
+His body handling was certainly striking, but conversely that was all. Watarai felt no threat.
+
+Then that was fine. He had no interest in such a thing whatsoever.
+
+There was no need to go out of his way to kill him, but no reason to keep alive someone who had flung himself in either.
+
+Still less was there room for sympathy for the folly of coming at him rather than fleeing.
+
+So the problem was, after all, the witch standing beside him.
+
+"—Feeble."
+
+Watarai pronounced it. The sight was unbearable.
+
+Not because she had nearly been defeated. He had summoned something adequate to that, and even if he lost, that in itself was of no particular consequence.
+
+Calling the next one would suffice. The witch could no longer stop Watarai.
+
+What was contemptible was that the light had come back to the witch's eyes.
+
+And that the reason for it was the appearance of an insignificant ordinary civilian — that, and nothing else.
+
+It was a sweetness that made his skin crawl.
+
+For one who was nominally a witch to be swayed by a worthless brat like some maiden her own age was, as a magus, far too painful to watch.
+
+If she despaired and lost, fine.
+
+If she turned it around and won, that would be admirable for a witch.
+
+But to entrust that motivation not to Watarai, her enemy, but to a child who had come diving in, was far too dull.
+
+Enough to make him now find it distasteful that he had almost felt any sympathy for such a person.
+
+"————Kill. The brat first."
+
+Then let her despair as much as she likes and die.
+
+If that is her wish, he would grant it.
+
+As a magus's mercy, Watarai issued the command.
+
+—He had not given it the slightest consideration.
+
+That the insignificant ordinary brat who had come diving in was the one person in this world who knew the end Watarai was pursuing—
+
+The young man ran with stubborn directness and dived head-on at the other-world monster.
+
+—Has the situation driven him mad?
+
+For an instant even Watarai suspected it, so foolish an act it was.
+
+He had certainly shown excellent body handling, but it did not exceed the frame of an ordinary civilian. Never mind a peculiar ability, he couldn't manage even the simplest physical enhancement.
+
+He might block one or two tentacles, but once he closed in and the numbers increased, he couldn't cope.
+
+And in fact, the young man's movement stopped merely from striking back the first tentacle. Even with «armour» whose repulsion exceeded his arm strength, slipping through every writhing tentacle was impossible.
+
+The second tentacle headed for him just as he was.
+
+The young man received it by catching it with his left hand, and brought his right hand straight down on the tentacle.
+
+"————————!"
+
+There was a shriek. The monster let out what sounded like a cry of agony.
+
+It was, to be sure, a surprising degree of adaptability.
+
+The black of «Severance», which ignores the relationship of forces entirely. Even with that support, severing a tentacle was quite beyond an ordinary civilian — but.
+
+Foolish.
+
+With that method, while he was in contact the armour — the «Pure Black» — would be eroded by the tentacle's poison.
+
+The thickness-less black armour shattered easily, and the young man was left defenceless.
+
+And there came the third, bearing down. He could not cope with this.
+
+Even if his defence was in time, without the armour he couldn't kill the force, so that would be—
+
+In the next instant, he blocked the third tentacle aimed at his head head-on, crossing both arms.
+
+"What?!"
+
+Surprise escaped Watarai's mouth as a sound.
+
+The young man opened the arms crossed in front of his head, flinging the tentacle away.
+
+—He saw black fragments scatter, like glass shattering.
+
+"Black armour?! Impossible, at that timing—"
+
+Before the astonished Watarai's eyes, «Pure Black» was reloaded onto both arms in less time than a blink.
+
+Again — this time enclosing him — three tentacles surrounded the young man from above and both sides.
+
+He did not look to the sides. Going straight ahead was itself the objective; he ran forward and slid beneath the tentacle extending toward him from the front.
+
+Then, still on his back, he swung his right arm through with the momentum of rising and severed the tentacle.
+
+But in the meantime the left and right tentacles were closing in on him. Against an attack from both sides, could he possibly respond in time? Watarai's eyes widened, and in that instant he certainly saw—
+
+—the young man smile thinly.
+
+Jet-black walls appeared in the space on either side of him. Oki's magecraft.
+
+They were fragile shields, eroded and shattered by the poison in a blink. But they certainly killed the momentum, granting the running young man a slight but certain reprieve.
+
+He leapt left before the left shield collapsed, and the moment that shield was destroyed he brought his right arm swinging down.
+
+The hand-blade became, by the law of «Severance», an edge that cut anything, and cleaved the tentacle in two.
+
+In that gap, the right tentacle that had destroyed the shield was aiming at the young man's back.
+
+He understood that too.
+
+Planting his hands forward with the momentum of his landing, the young man, in that posture, thrust out his left foot — a bare foot wearing nothing — toward the tentacle behind him.
+
+In that instant, black armour protected his left foot.
+
+The armoured foot became a hammer that repelled everything, striking the tentacle and blowing it away.
+
+Without sparing it a glance, the young man righted himself again and ran, closing on the monster ahead—
+
+"Impossible... this cannot be."
+
+Watarai's astonishment was only natural.
+
+Because it was impossible.
+
+However much the witch's art might be a law beyond reason, activatable without ritual or incantation, the time lag for the witch **to decide to activate it** was absolutely unavoidable.
+
+And indeed, because of that interval, hadn't the witch earlier failed to block the tentacles with that same art and been sent flying to no purpose?
+
+But the run of support just now had come at timings that should absolutely have been impossible.
+
+In the final exchange, the art had covered the young man's foot *after* he began extending it.
+
+Such a thing, unless one could foresee the future — or **read the young man's mind** — was absolutely—
+
+"...!"
+
+The running young man gained speed and at last arrived directly in front of the monster.
+
+A tentacle swung down from overhead he blocked merely by raising a hand lightly.
+
+The armour cracked, but the force of the blow died too. And the armour could be reloaded immediately.
+
+—His movements were becoming refined.
+
+In the course of this exchange alone, the young man had raised his performance to its maximum.
+
+"I see... at this distance."
+
+Belatedly, Watarai finally understood the beast's characteristics.
+
+Those tentacles, each far too thick, were an advantage, but they carried a weakness at the same time.
+
+It could only increase their number at close range, and at close range the space was too cramped for numbers to be an advantage.
+
+Once you got past the most dangerous mid-range, the tentacles were no longer a threat.
+
+Perhaps that was why it had evolved into a poisonous creature. That was unclear, but either way, he had understood it.
+
+No — this was as if he had known it from the very beginning—
+
+"...But,"
+
+Suppose he arrived. What then?
+
+He should have no means of attack capable of killing the monster in front of him.
+
+In which case arriving was meaningless.
+
+Or else—
+
+was he saying that he did have one?
+
+The monster had stopped moving its tentacles. As though it had realised it had no such opening.
+
+And there the young man, for the first time, took something like a proper stance.
+
+"Hah—aaah!"
+
+He drove his black-stained right fist straight into the monster.
+
+The fist caught the inner body concealed by the mass of tentacles and buried itself into the huge frame.
+
+The black armour clothing his right arm shattered with a crack.
+
+The body evidently had poison as well.
+
+Even so — the young man said, quietly:
+
+"It's over. —Oki!"
+
+"—«Sword» (*tsurugi*)—"
+
+An instant later, black pierced the monster's head — if its apex could be called that.
+
+Watarai didn't understand the logic. Only that some decisive organ had presumably been pierced. The huge body dissolved as if becoming vapour, hazed over dreamlike, and vanished.
+
+After the monster had disappeared, only the young man's thrust-out fist remained. And in that hand, gripped tight, was a thin black rod, several times his own height in length.
+
+"I see... so that's it."
+
+Without the black armour, the monster's body couldn't be pierced.
+
+But piercing it meant being erased by the poison.
+
+Yet the poison did not erode his bare arm, which had no magical energy — and inside the fist he drove in, he had been **gripping the witch's art**.
+
+The witch's attacks, which couldn't produce decisive force from the outside, presented no problem if delivered from the inside in a single blow, with no time for erosion.
+
+That was what it came down to.
+
+The art the young man gripped in his palm and drove into the monster's body became a sword and stabbed the monster to death.
+
+And to Watarai, who had understood the situation from its result, a quiet voice was delivered.
+
+"—It's over, Kūya Watarai."
