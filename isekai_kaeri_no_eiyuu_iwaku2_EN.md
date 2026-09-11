@@ -14265,3 +14265,242 @@ Oki couldn't help a wry smile.
 Without much awareness of how, merely seeing that figure had relieved her from the heart.
 
 —That was the beginning of this affair.
+
+2-07 "Fragment / Registration"
+-------------------
+
+That Daiki Kurosu's first development in the other world amounted to a so-called «lucky lechery» incident — whether it should genuinely be called fortune (*lucky*) is a matter on which opinions differ.
+
+If someone says that being flung into another world at all is bad luck (*unlucky*), it's hard to deny.
+
+At any rate—
+
+—when he woke, the place was, for Daiki, one that ought to be called another world.
+
+"...?"
+
+Rubbing sleep from his eyes as his consciousness surfaced, the first thing Daiki thought was *huh? My duvet's gone somewhere* — a thoroughly everyday, trivial matter.
+
+Naturally, merely waking up doesn't lead one immediately to the realisation that one is in another world.
+
+So the Daiki of that time, with his thoughts not yet turning, couldn't tell that the feel of the bedding was different from usual, and there was a lag before he noticed it wasn't his own room.
+
+The first wrongness Daiki felt was *spaciousness*.
+
+The room was dark. But something like starlight was coming in from a distant window, so his vision wasn't entirely zero.
+
+*It's kind of big* was strictly a sensation.
+
+It wasn't that he logically grasped that the distance and direction to the window were all wrong compared with the bed in his own room.
+
+Nothing resembling thought was functioning; Daiki merely sat up vaguely and looked around.
+
+The bed also seemed wider than usual — at this stage he began to be slightly aware of the wrongness.
+
+He explored around by touch. That too was almost unconscious action.
+
+And immediately after, Daiki noticed that his hand had touched something warm and soft.
+
+"Mm...?"
+
+Squirming, Daiki dropped his gaze to what his hand had touched.
+
+To repeat: the room was dark.
+
+It was night, and the other world had no electric light source.
+
+Well — that said.
+
+It wasn't so dark that he couldn't see the stark-naked girl sleeping right beside him.
+
+"————————"
+
+Daiki's thinking ability, which had been slowly starting to turn over, stalled again before the engine could catch.
+
+A cerebral engine failure; one could say the circuits of reason shorted completely.
+
+He couldn't process the torrent of information: *a girl I've never seen is sleeping stark naked, face-up, in the same bed, and my right hand is thoroughly in contact with her left breast.*
+
+Daiki couldn't move for a good ten seconds.
+
+Which is to say his hand remained on her chest for a good ten seconds.
+
+"......, ...?!"
+
+At last the cooling process in his brain finished and thought gradually returned.
+
+But it also brought considerable panic with it.
+
+Daiki had no idea what was happening, but some calculation screamed at him not to wake the sleeping girl.
+
+Daiki slowly tried to remove his hand without being noticed.
+
+Perhaps the genuinely correct choice would have been to wake the sleeping girl, explain the circumstances properly and ask for understanding.
+
+Naturally, that was impossible, this being another world.
+
+Either way, by Daiki's act of quietly lifting his hand from her chest—
+
+"Gh— ah."
+
+—a faint breath escaped the girl's lips.
+
+There had been no reaction at all until then.
+
+Perhaps he'd touched somewhere excessively sensitive — a notion he probably needn't have had crossed Daiki's mind.
+
+He was an adolescent.
+
+Daiki hurriedly pulled his arm back.
+
+It was nearly a reflex. Perhaps he thought that at all costs he should get away a second sooner.
+
+But that was, literally, the wrong move.
+
+He saw the well-shaped twin hills of moderate size (footnote: the opinion of Daiki Kurosu, aged fifteen) wobble (footnote: the vocabulary of Daiki Kurosu, aged fifteen).
+
+Of course, this was only because he'd used what scraps of reason he had to avoid looking at her lower half, with the result that his gaze concentrated on her upper half, and he was by no means *staring* (footnote: the defence of Daiki Kurosu, aged fifteen) — but be that as it may.
+
+"————"
+
+The girl, understandably, woke up.
+
+Of course she did.
+
+Her eyes snapped fully open, and her gaze collided head-on with Daiki's beside her.
+
+"Ah,"
+
+"Er,"
+
+Caught off guard, the girl let a small sound slip.
+
+Daiki, who had woken in an unknown place, and she, who had woken in her own room to see an unknown man — which of them was more startled, nobody can say.
+
+What can be said is that unlike Daiki, who was half asleep and needed time to understand the situation, the girl's reaction was extremely swift.
+
+Beautiful golden hair, arresting even in the dark, flowed across Daiki's vision.
+
+That was all he could follow with his eyes.
+
+Fundamentally, Daiki — an ordinary person who had only just arrived in another world — and an other-world mage with the concept of combat inside her daily life differed entirely in bodily performance and in mentality.
+
+Daiki was pinned in an instant.
+
+On the bed. Straddled and held down, Daiki looked into the girl's blue eyes.
+
+—She's a really cute girl.
+
+Even at this stage he was still thinking something that leisurely.
+
+Even so, in a room that had gained light — for some reason a white glow floated in the right hand of the girl pinning Daiki with her left arm — nothing held the eye like the girl's presence.
+
+"————————"
+
+The girl said something.
+
+It was a language he'd never heard, and it occurred to him that the girl in front of him didn't look Japanese either; and all he could tell was that it plainly carried anger.
+
+"—! ————!!"
+
+"S-sorry! No, it's not like I sneaked in, um, I don't know what's happening either!"
+
+Even so, Daiki had nothing but Japanese to speak in.
+
+If the girl at least understood Japanese, there was still hope.
+
+The only thing he'd understood of her words so far was that "er" — but even so, Daiki hadn't gone as far as thinking he was abroad.
+
+He assumed he was in Japan, the same as when he'd gone to sleep.
+
+Naturally, in reality it wasn't merely overseas; it wasn't even Earth.
+
+"...? ————......?!"
+
+At a language so utterly unknown, the girl likewise drew her brows together.
+
+But she, at least, realised immediately afterward.
+
+The possibility that the young man before her was a visitor from another world.
+
+"————"
+
+The meaning of the words the girl murmured again was likewise beyond Daiki.
+
+But he felt the force of the arm pinning him weaken slightly.
+
+"Um... er."
+
+Still, what to do?
+
+In this situation, nothing came to mind as to what to do next. Daiki didn't even know why he was in an unfamiliar room.
+
+Still less could they understand each other.
+
+Daiki could only be carried along by the deadlocked time.
+
+"...Could you get off, and, um... put some clothes on? No, it doesn't seem to be getting through."
+
+As at least a matter of courtesy, he tried proposing that.
+
+The girl, apparently still not understanding the words, narrowed her eyes.
+
+Still straddled, Daiki kept his gaze fixed on her face and indicated her exposed chest with a hand.
+
+In Daiki's field of view, the girl's gaze dropped.
+
+Her face went red instantly.
+
+The arm pinning him came away in a flash, and she hugged her shoulders as though hiding her chest.
+
+—Daiki's consciousness was, at this point, cut off once.
+
+What happened goes without saying.
+
+At any rate, when he next came to, Daiki was in a dim cell, with the girl from before standing outside as though guarding it (clothed, of course).
+
+With his thoughts turning this time, Daiki looked at the situation and panicked fairly seriously: *huh... have I been arrested as a sex offender?*
+
+After all, he had no language in which to explain.
+
+Trying somehow to attempt communication, Daiki spoke to the girl.
+
+From her side too (perhaps the moment of their meeting had been declared not to have happened) various words and gestural attempts at contact were made, but unfortunately almost no understanding was achieved.
+
+In the end, Daiki spent the first night of his life in a cell.
+
+From a slightly wider perspective one could also say Daiki spent his first night in a royal castle, though of course Daiki himself didn't know it.
+
+Even so, that the first person he met in the other world was that girl was surely the greatest possible good fortune for him.
+
+In that sense, was Daiki lucky?
+
+Or was it merely fate?
+
+The girl who was then still among the lowest-ranked court mages — Lil Riaheart.
+
+The summoning magic she experimented with while thinking *there's no way this will work!*
+
+Magic to call a «compatible one for the holy sword» across worlds, which by some miracle or coincidence succeeded.
+
+And Daiki Kurosu met the girl he would come to love.
+
+That said, objectively speaking, the good fortune barely extends this far.
+
+Immediately afterward, Daiki had magic cast on his brain by a court mage other than Lil.
+
+That failed, and Daiki's mind was contaminated — reducing him to a state very nearly that of a wreck.
+
+And so.
+
+The next scene Daiki remembers skips ahead a little in time.
+
+Obtaining the holy sword, purifying with its power all the contamination laid on him, and recovering the ego called Daiki Kurosu — his first battle as a Hero.
+
+And what he saw then — Lil Riaheart's expression, smiling with a face close to tears.
+
+"Congratulations. Now you've got your freedom back. Sorry it took a little while."
+
+The face of a girl who rejoiced and regretted at once, who had accepted being cut down in revenge.
+
+—That beauty, like something breaking, the young man is certain he will never forget until he dies.
