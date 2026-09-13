@@ -1,0 +1,629 @@
+
+Prefix M
+Debug 1
+
+Const 1
+
+Number  mW0,   1,0!011110110001010
+
+Rate1   f0wr,   16!00000001000000
+Number  f0mw,  1,1!00000000110111
+Number  f0P0,  1,1!100110101000000
+
+Rate1   f1wr,   16!00000101000000
+Number  f1mw,  1,1!00000000000011
+Number  f1P0,  1,1!100010000001010
+
+Const 1
+
+Rate1   n0wr,   16!00000001101000
+Number  n0mw,  1,1!00011100011101
+
+Number  sxP0,  1,1!110010100000001
+Rate1   sxwr,   16!11011000100000
+Number  sxmw,  1,1!10000010000010
+
+Number  smP0,  1,1!111011101001000
+Rate1   smwr,   16!10011000000000
+Number  smmw,  1,1!00000000000000
+
+Const 1
+
+Rate1   rf0wr,   16!01000111000000
+Number  rf0mw,  1,1!00000000100110
+Number  rf0P0,  1,1!011111111110101
+
+Rate1   rf1wr,   16!01101100011000
+Number  rf1mw,  1,1!00000100100010
+Number  rf1P0,  1,1!111111110000000
+
+Const 1
+
+Rate1   rffwr,   16!00000101011001
+Number  rffmw,  1,1!00000101110001
+Number  rffP0,  1,1!010000000001000
+
+Const 1
+
+Number  rf1th,   1,0!0001010
+Number  rf1ff1,  1,0!01100010
+
+Const 1
+
+Number qmaq_000, 1,0!000000
+Number qmaq_001, 1,0!000000
+Number qmaq_002, 1,0!000001
+Number qmaq_003, 1,0!000010
+Number qmaq_004, 1,0!000010
+Number qmaq_005, 1,0!000011
+Number qmaq_006, 1,0!000011
+Number qmaq_007, 1,0!000011
+
+Number qmaq_008, 1,0!000011
+Number qmaq_009, 1,0!000011
+Number qmaq_00A, 1,0!000011
+Number qmaq_00B, 1,0!000011
+Number qmaq_00C, 1,0!000100
+Number qmaq_00D, 1,0!000100
+Number qmaq_00E, 1,0!000100
+Number qmaq_00F, 1,0!000100
+
+Number qmaq_010, 1,0!000100
+Number qmaq_011, 1,0!000100
+Number qmaq_012, 1,0!000100
+Number qmaq_013, 1,0!000100
+Number qmaq_014, 1,0!000101
+Number qmaq_015, 1,0!000101
+Number qmaq_016, 1,0!000101
+Number qmaq_017, 1,0!000101
+
+Number qmaq_018, 1,0!000101
+Number qmaq_019, 1,0!000101
+Number qmaq_01A, 1,0!000101
+Number qmaq_01B, 1,0!000101
+Number qmaq_01C, 1,0!000101
+Number qmaq_01D, 1,0!000101
+Number qmaq_01E, 1,0!001000
+Number qmaq_01F, 1,0!001000
+
+Number qmaq_020, 1,0!001000
+Number qmaq_021, 1,0!001000
+Number qmaq_022, 1,0!001000
+Number qmaq_023, 1,0!001000
+Number qmaq_024, 1,0!001000
+Number qmaq_025, 1,0!001000
+Number qmaq_026, 1,0!001000
+Number qmaq_027, 1,0!001000
+
+Number qmaq_028, 1,0!001011
+Number qmaq_029, 1,0!001011
+Number qmaq_02A, 1,0!001011
+Number qmaq_02B, 1,0!001011
+Number qmaq_02C, 1,0!001011
+Number qmaq_02D, 1,0!001011
+Number qmaq_02E, 1,0!001011
+Number qmaq_02F, 1,0!001011
+
+Number qmaq_030, 1,0!001011
+Number qmaq_031, 1,0!001100
+Number qmaq_032, 1,0!001100
+Number qmaq_033, 1,0!001100
+Number qmaq_034, 1,0!001100
+Number qmaq_035, 1,0!001100
+Number qmaq_036, 1,0!001100
+Number qmaq_037, 1,0!001100
+
+Number qmaq_038, 1,0!001011
+Number qmaq_039, 1,0!001100
+Number qmaq_03A, 1,0!001100
+Number qmaq_03B, 1,0!001100
+Number qmaq_03C, 1,0!001100
+Number qmaq_03D, 1,0!001100
+Number qmaq_03E, 1,0!001100
+Number qmaq_03F, 1,0!001100
+
+Number qmaq_040, 1,0!001110
+Number qmaq_041, 1,0!001100
+Number qmaq_042, 1,0!001100
+Number qmaq_043, 1,0!001110
+Number qmaq_044, 1,0!001110
+Number qmaq_045, 1,0!001100
+Number qmaq_046, 1,0!001100
+Number qmaq_047, 1,0!001110
+
+Number qmaq_048, 1,0!001110
+Number qmaq_049, 1,0!001110
+Number qmaq_04A, 1,0!001110
+Number qmaq_04B, 1,0!001110
+Number qmaq_04C, 1,0!001110
+Number qmaq_04D, 1,0!001110
+Number qmaq_04E, 1,0!001110
+Number qmaq_04F, 1,0!001110
+
+Number qmaq_050, 1,0!001110
+Number qmaq_051, 1,0!001110
+Number qmaq_052, 1,0!010000
+Number qmaq_053, 1,0!010000
+Number qmaq_054, 1,0!001110
+Number qmaq_055, 1,0!010000
+Number qmaq_056, 1,0!001110
+Number qmaq_057, 1,0!001110
+
+Number qmaq_058, 1,0!001110
+Number qmaq_059, 1,0!010000
+Number qmaq_05A, 1,0!010000
+Number qmaq_05B, 1,0!010000
+Number qmaq_05C, 1,0!001110
+Number qmaq_05D, 1,0!001110
+Number qmaq_05E, 1,0!010000
+Number qmaq_05F, 1,0!010000
+
+Number qmaq_060, 1,0!010000
+Number qmaq_061, 1,0!010000
+Number qmaq_062, 1,0!010010
+Number qmaq_063, 1,0!010000
+Number qmaq_064, 1,0!010000
+Number qmaq_065, 1,0!010000
+Number qmaq_066, 1,0!010000
+Number qmaq_067, 1,0!010010
+
+Number qmaq_068, 1,0!010010
+Number qmaq_069, 1,0!010010
+Number qmaq_06A, 1,0!010010
+Number qmaq_06B, 1,0!010010
+Number qmaq_06C, 1,0!010010
+Number qmaq_06D, 1,0!010010
+Number qmaq_06E, 1,0!010000
+Number qmaq_06F, 1,0!010010
+
+Number qmaq_070, 1,0!010010
+Number qmaq_071, 1,0!010010
+Number qmaq_072, 1,0!010010
+Number qmaq_073, 1,0!010010
+Number qmaq_074, 1,0!010010
+Number qmaq_075, 1,0!010010
+Number qmaq_076, 1,0!010010
+Number qmaq_077, 1,0!010010
+
+Number qmaq_078, 1,0!010010
+Number qmaq_079, 1,0!010010
+Number qmaq_07A, 1,0!010010
+Number qmaq_07B, 1,0!010011
+Number qmaq_07C, 1,0!010010
+Number qmaq_07D, 1,0!010011
+Number qmaq_07E, 1,0!010011
+Number qmaq_07F, 1,0!010011
+
+Number qmaq_080, 1,0!010011
+Number qmaq_081, 1,0!010011
+Number qmaq_082, 1,0!010011
+Number qmaq_083, 1,0!010011
+Number qmaq_084, 1,0!010011
+Number qmaq_085, 1,0!010011
+Number qmaq_086, 1,0!010011
+Number qmaq_087, 1,0!010011
+
+Number qmaq_088, 1,0!010011
+Number qmaq_089, 1,0!010011
+Number qmaq_08A, 1,0!010101
+Number qmaq_08B, 1,0!010011
+Number qmaq_08C, 1,0!010011
+Number qmaq_08D, 1,0!010011
+Number qmaq_08E, 1,0!010101
+Number qmaq_08F, 1,0!010101
+
+Number qmaq_090, 1,0!010101
+Number qmaq_091, 1,0!010101
+Number qmaq_092, 1,0!010101
+Number qmaq_093, 1,0!010101
+Number qmaq_094, 1,0!010101
+Number qmaq_095, 1,0!010101
+Number qmaq_096, 1,0!010101
+Number qmaq_097, 1,0!010101
+
+Number qmaq_098, 1,0!010101
+Number qmaq_099, 1,0!010101
+Number qmaq_09A, 1,0!010101
+Number qmaq_09B, 1,0!010101
+Number qmaq_09C, 1,0!010101
+Number qmaq_09D, 1,0!010101
+Number qmaq_09E, 1,0!010111
+Number qmaq_09F, 1,0!010101
+
+Number qmaq_0A0, 1,0!010111
+Number qmaq_0A1, 1,0!010111
+Number qmaq_0A2, 1,0!010101
+Number qmaq_0A3, 1,0!010111
+Number qmaq_0A4, 1,0!010111
+Number qmaq_0A5, 1,0!010111
+Number qmaq_0A6, 1,0!010111
+Number qmaq_0A7, 1,0!010111
+
+Number qmaq_0A8, 1,0!010111
+Number qmaq_0A9, 1,0!010111
+Number qmaq_0AA, 1,0!010111
+Number qmaq_0AB, 1,0!010111
+Number qmaq_0AC, 1,0!010111
+Number qmaq_0AD, 1,0!010111
+Number qmaq_0AE, 1,0!010111
+Number qmaq_0AF, 1,0!010111
+
+Number qmaq_0B0, 1,0!010111
+Number qmaq_0B1, 1,0!010111
+Number qmaq_0B2, 1,0!010111
+Number qmaq_0B3, 1,0!010111
+Number qmaq_0B4, 1,0!010111
+Number qmaq_0B5, 1,0!010111
+Number qmaq_0B6, 1,0!010111
+Number qmaq_0B7, 1,0!010111
+
+Number qmaq_0B8, 1,0!010111
+Number qmaq_0B9, 1,0!010111
+Number qmaq_0BA, 1,0!011010
+Number qmaq_0BB, 1,0!011010
+Number qmaq_0BC, 1,0!010111
+Number qmaq_0BD, 1,0!011010
+Number qmaq_0BE, 1,0!011010
+Number qmaq_0BF, 1,0!010111
+
+Number qmaq_0C0, 1,0!011010
+Number qmaq_0C1, 1,0!011010
+Number qmaq_0C2, 1,0!011010
+Number qmaq_0C3, 1,0!011010
+Number qmaq_0C4, 1,0!011010
+Number qmaq_0C5, 1,0!011010
+Number qmaq_0C6, 1,0!011010
+Number qmaq_0C7, 1,0!011010
+
+Number qmaq_0C8, 1,0!011010
+Number qmaq_0C9, 1,0!011010
+Number qmaq_0CA, 1,0!011010
+Number qmaq_0CB, 1,0!011010
+Number qmaq_0CC, 1,0!011010
+Number qmaq_0CD, 1,0!011010
+Number qmaq_0CE, 1,0!011010
+Number qmaq_0CF, 1,0!011010
+
+Number qmaq_0D0, 1,0!011010
+Number qmaq_0D1, 1,0!011010
+Number qmaq_0D2, 1,0!011010
+Number qmaq_0D3, 1,0!011010
+Number qmaq_0D4, 1,0!011010
+Number qmaq_0D5, 1,0!011100
+Number qmaq_0D6, 1,0!011010
+Number qmaq_0D7, 1,0!011100
+
+Number qmaq_0D8, 1,0!011010
+Number qmaq_0D9, 1,0!011010
+Number qmaq_0DA, 1,0!011010
+Number qmaq_0DB, 1,0!011010
+Number qmaq_0DC, 1,0!011100
+Number qmaq_0DD, 1,0!011100
+Number qmaq_0DE, 1,0!011100
+Number qmaq_0DF, 1,0!011100
+
+Number qmaq_0E0, 1,0!011100
+Number qmaq_0E1, 1,0!011100
+Number qmaq_0E2, 1,0!011100
+Number qmaq_0E3, 1,0!011100
+Number qmaq_0E4, 1,0!011100
+Number qmaq_0E5, 1,0!011100
+Number qmaq_0E6, 1,0!011100
+Number qmaq_0E7, 1,0!011100
+
+Number qmaq_0E8, 1,0!011100
+Number qmaq_0E9, 1,0!011100
+Number qmaq_0EA, 1,0!011100
+Number qmaq_0EB, 1,0!011100
+Number qmaq_0EC, 1,0!011110
+Number qmaq_0ED, 1,0!011110
+Number qmaq_0EE, 1,0!011110
+Number qmaq_0EF, 1,0!011100
+
+Number qmaq_0F0, 1,0!011110
+Number qmaq_0F1, 1,0!011100
+Number qmaq_0F2, 1,0!011110
+Number qmaq_0F3, 1,0!011110
+Number qmaq_0F4, 1,0!011110
+Number qmaq_0F5, 1,0!011110
+Number qmaq_0F6, 1,0!011110
+Number qmaq_0F7, 1,0!011110
+
+Number qmaq_0F8, 1,0!011110
+Number qmaq_0F9, 1,0!011110
+Number qmaq_0FA, 1,0!011110
+Number qmaq_0FB, 1,0!011110
+Number qmaq_0FC, 1,0!011110
+Number qmaq_0FD, 1,0!011110
+Number qmaq_0FE, 1,0!011110
+Number qmaq_0FF, 1,0!011110
+
+Number qmaq_100, 1,0!011110
+Number qmaq_101, 1,0!011110
+Number qmaq_102, 1,0!011111
+Number qmaq_103, 1,0!011110
+Number qmaq_104, 1,0!011111
+Number qmaq_105, 1,0!011110
+Number qmaq_106, 1,0!011110
+Number qmaq_107, 1,0!011110
+
+Number qmaq_108, 1,0!011111
+Number qmaq_109, 1,0!011111
+Number qmaq_10A, 1,0!011111
+Number qmaq_10B, 1,0!011111
+Number qmaq_10C, 1,0!011111
+Number qmaq_10D, 1,0!011111
+Number qmaq_10E, 1,0!011111
+Number qmaq_10F, 1,0!011111
+
+Number qmaq_110, 1,0!011111
+Number qmaq_111, 1,0!011111
+Number qmaq_112, 1,0!011111
+Number qmaq_113, 1,0!011111
+Number qmaq_114, 1,0!011111
+Number qmaq_115, 1,0!011111
+Number qmaq_116, 1,0!011111
+Number qmaq_117, 1,0!011111
+
+Number qmaq_118, 1,0!011111
+Number qmaq_119, 1,0!100001
+Number qmaq_11A, 1,0!100001
+Number qmaq_11B, 1,0!100001
+Number qmaq_11C, 1,0!100001
+Number qmaq_11D, 1,0!011111
+Number qmaq_11E, 1,0!100001
+Number qmaq_11F, 1,0!011111
+
+Number qmaq_120, 1,0!100001
+Number qmaq_121, 1,0!100001
+Number qmaq_122, 1,0!100001
+Number qmaq_123, 1,0!100001
+Number qmaq_124, 1,0!100001
+Number qmaq_125, 1,0!100001
+Number qmaq_126, 1,0!100001
+Number qmaq_127, 1,0!100001
+
+Number qmaq_128, 1,0!100001
+Number qmaq_129, 1,0!100001
+Number qmaq_12A, 1,0!100001
+Number qmaq_12B, 1,0!100001
+Number qmaq_12C, 1,0!100001
+Number qmaq_12D, 1,0!100001
+Number qmaq_12E, 1,0!100001
+Number qmaq_12F, 1,0!100001
+
+Number qmaq_130, 1,0!100001
+Number qmaq_131, 1,0!100010
+Number qmaq_132, 1,0!100010
+Number qmaq_133, 1,0!100010
+Number qmaq_134, 1,0!100010
+Number qmaq_135, 1,0!100010
+Number qmaq_136, 1,0!100010
+Number qmaq_137, 1,0!100010
+
+Number qmaq_138, 1,0!100010
+Number qmaq_139, 1,0!100010
+Number qmaq_13A, 1,0!100010
+Number qmaq_13B, 1,0!100010
+Number qmaq_13C, 1,0!100010
+Number qmaq_13D, 1,0!100010
+Number qmaq_13E, 1,0!100010
+Number qmaq_13F, 1,0!100010
+
+Number qmaq_140, 1,0!100010
+Number qmaq_141, 1,0!100010
+Number qmaq_142, 1,0!100010
+Number qmaq_143, 1,0!100010
+Number qmaq_144, 1,0!100011
+Number qmaq_145, 1,0!100010
+Number qmaq_146, 1,0!100011
+Number qmaq_147, 1,0!100011
+
+Number qmaq_148, 1,0!100011
+Number qmaq_149, 1,0!100011
+Number qmaq_14A, 1,0!100011
+Number qmaq_14B, 1,0!100011
+Number qmaq_14C, 1,0!100011
+Number qmaq_14D, 1,0!100011
+Number qmaq_14E, 1,0!100011
+Number qmaq_14F, 1,0!100011
+
+Number qmaq_150, 1,0!100011
+Number qmaq_151, 1,0!100011
+Number qmaq_152, 1,0!100011
+Number qmaq_153, 1,0!100011
+Number qmaq_154, 1,0!100011
+Number qmaq_155, 1,0!100011
+Number qmaq_156, 1,0!100011
+Number qmaq_157, 1,0!100100
+
+Number qmaq_158, 1,0!100011
+Number qmaq_159, 1,0!100011
+Number qmaq_15A, 1,0!100100
+Number qmaq_15B, 1,0!100100
+Number qmaq_15C, 1,0!100100
+Number qmaq_15D, 1,0!100100
+Number qmaq_15E, 1,0!100100
+Number qmaq_15F, 1,0!100100
+
+Number qmaq_160, 1,0!100100
+Number qmaq_161, 1,0!100100
+Number qmaq_162, 1,0!100100
+Number qmaq_163, 1,0!100100
+Number qmaq_164, 1,0!100100
+Number qmaq_165, 1,0!100100
+Number qmaq_166, 1,0!100100
+Number qmaq_167, 1,0!100100
+
+Number qmaq_168, 1,0!100100
+Number qmaq_169, 1,0!100100
+Number qmaq_16A, 1,0!100101
+Number qmaq_16B, 1,0!100101
+Number qmaq_16C, 1,0!100101
+Number qmaq_16D, 1,0!100101
+Number qmaq_16E, 1,0!100101
+Number qmaq_16F, 1,0!100101
+
+Number qmaq_170, 1,0!100101
+Number qmaq_171, 1,0!100101
+Number qmaq_172, 1,0!100101
+Number qmaq_173, 1,0!100101
+Number qmaq_174, 1,0!100101
+Number qmaq_175, 1,0!101000
+Number qmaq_176, 1,0!101000
+Number qmaq_177, 1,0!100101
+
+Number qmaq_178, 1,0!101000
+Number qmaq_179, 1,0!101000
+Number qmaq_17A, 1,0!101000
+Number qmaq_17B, 1,0!101000
+Number qmaq_17C, 1,0!101000
+Number qmaq_17D, 1,0!101000
+Number qmaq_17E, 1,0!101000
+Number qmaq_17F, 1,0!101000
+
+Number qmaq_180, 1,0!101000
+Number qmaq_181, 1,0!101000
+Number qmaq_182, 1,0!101000
+Number qmaq_183, 1,0!101000
+Number qmaq_184, 1,0!101000
+Number qmaq_185, 1,0!101000
+Number qmaq_186, 1,0!101000
+Number qmaq_187, 1,0!101000
+
+Number qmaq_188, 1,0!101000
+Number qmaq_189, 1,0!101000
+Number qmaq_18A, 1,0!101000
+Number qmaq_18B, 1,0!101000
+Number qmaq_18C, 1,0!101000
+Number qmaq_18D, 1,0!101000
+Number qmaq_18E, 1,0!101000
+Number qmaq_18F, 1,0!101100
+
+Number qmaq_190, 1,0!101000
+Number qmaq_191, 1,0!101101
+Number qmaq_192, 1,0!101101
+Number qmaq_193, 1,0!101100
+Number qmaq_194, 1,0!101100
+Number qmaq_195, 1,0!101100
+Number qmaq_196, 1,0!101100
+Number qmaq_197, 1,0!101101
+
+Number qmaq_198, 1,0!101100
+Number qmaq_199, 1,0!101101
+Number qmaq_19A, 1,0!101101
+Number qmaq_19B, 1,0!101101
+Number qmaq_19C, 1,0!101101
+Number qmaq_19D, 1,0!101100
+Number qmaq_19E, 1,0!101101
+Number qmaq_19F, 1,0!101101
+
+Number qmaq_1A0, 1,0!101100
+Number qmaq_1A1, 1,0!101101
+Number qmaq_1A2, 1,0!101101
+Number qmaq_1A3, 1,0!110000
+Number qmaq_1A4, 1,0!101101
+Number qmaq_1A5, 1,0!110000
+Number qmaq_1A6, 1,0!101101
+Number qmaq_1A7, 1,0!110000
+
+Number qmaq_1A8, 1,0!110000
+Number qmaq_1A9, 1,0!101101
+Number qmaq_1AA, 1,0!101101
+Number qmaq_1AB, 1,0!101101
+Number qmaq_1AC, 1,0!110000
+Number qmaq_1AD, 1,0!110000
+Number qmaq_1AE, 1,0!110000
+Number qmaq_1AF, 1,0!110000
+
+Number qmaq_1B0, 1,0!110001
+Number qmaq_1B1, 1,0!110001
+Number qmaq_1B2, 1,0!110001
+Number qmaq_1B3, 1,0!110001
+Number qmaq_1B4, 1,0!110001
+Number qmaq_1B5, 1,0!110001
+Number qmaq_1B6, 1,0!110001
+Number qmaq_1B7, 1,0!110010
+
+Number qmaq_1B8, 1,0!110010
+Number qmaq_1B9, 1,0!110010
+Number qmaq_1BA, 1,0!110010
+Number qmaq_1BB, 1,0!110010
+Number qmaq_1BC, 1,0!110100
+Number qmaq_1BD, 1,0!110010
+Number qmaq_1BE, 1,0!110100
+Number qmaq_1BF, 1,0!110100
+
+Number qmaq_1C0, 1,0!110010
+Number qmaq_1C1, 1,0!110100
+Number qmaq_1C2, 1,0!110100
+Number qmaq_1C3, 1,0!110011
+Number qmaq_1C4, 1,0!110011
+Number qmaq_1C5, 1,0!110100
+Number qmaq_1C6, 1,0!110011
+Number qmaq_1C7, 1,0!110011
+
+Number qmaq_1C8, 1,0!110011
+Number qmaq_1C9, 1,0!110100
+Number qmaq_1CA, 1,0!110101
+Number qmaq_1CB, 1,0!110101
+Number qmaq_1CC, 1,0!110011
+Number qmaq_1CD, 1,0!110101
+Number qmaq_1CE, 1,0!110101
+Number qmaq_1CF, 1,0!110110
+
+Number qmaq_1D0, 1,0!110101
+Number qmaq_1D1, 1,0!110011
+Number qmaq_1D2, 1,0!110101
+Number qmaq_1D3, 1,0!110110
+Number qmaq_1D4, 1,0!110110
+Number qmaq_1D5, 1,0!110110
+Number qmaq_1D6, 1,0!110110
+Number qmaq_1D7, 1,0!110111
+
+Number qmaq_1D8, 1,0!110111
+Number qmaq_1D9, 1,0!110101
+Number qmaq_1DA, 1,0!110110
+Number qmaq_1DB, 1,0!110110
+Number qmaq_1DC, 1,0!110111
+Number qmaq_1DD, 1,0!110111
+Number qmaq_1DE, 1,0!110111
+Number qmaq_1DF, 1,0!110111
+
+Number qmaq_1E0, 1,0!110111
+Number qmaq_1E1, 1,0!111000
+Number qmaq_1E2, 1,0!111000
+Number qmaq_1E3, 1,0!111000
+Number qmaq_1E4, 1,0!111000
+Number qmaq_1E5, 1,0!111000
+Number qmaq_1E6, 1,0!111000
+Number qmaq_1E7, 1,0!111001
+
+Number qmaq_1E8, 1,0!111000
+Number qmaq_1E9, 1,0!111001
+Number qmaq_1EA, 1,0!111010
+Number qmaq_1EB, 1,0!111001
+Number qmaq_1EC, 1,0!111001
+Number qmaq_1ED, 1,0!111010
+Number qmaq_1EE, 1,0!111001
+Number qmaq_1EF, 1,0!111011
+
+Number qmaq_1F0, 1,0!111010
+Number qmaq_1F1, 1,0!111010
+Number qmaq_1F2, 1,0!111001
+Number qmaq_1F3, 1,0!111010
+Number qmaq_1F4, 1,0!111010
+Number qmaq_1F5, 1,0!111010
+Number qmaq_1F6, 1,0!111011
+Number qmaq_1F7, 1,0!111011
+
+Number qmaq_1F8, 1,0!111011
+Number qmaq_1F9, 1,0!111011
+Number qmaq_1FA, 1,0!111011
+Number qmaq_1FB, 1,0!111011
+Number qmaq_1FC, 1,0!111011
+Number qmaq_1FD, 1,0!111011
+Number qmaq_1FE, 1,0!111011
+Number qmaq_1FF, 1,0!111011
+
+Number qmaq_200, 1,0!111011

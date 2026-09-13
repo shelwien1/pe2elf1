@@ -1,0 +1,5 @@
+oggcomp-Q4/oggcomp
+oggcomp-Q4/oggdet
+oggcomp-Q4/oggcomp[0-9].so
+*.o
+*.oc

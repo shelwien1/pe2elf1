@@ -1,0 +1,139 @@
+#!/usr/bin/perl
+# rc_soa.pl -- turn the cpp-resolved scalar coder (rc_kernel0.c, out of
+# rc.inc) into the lane-array form the macro chain wants: [RCNUM] on the
+# field declarations, [rcidx] on every mention, `uint rcidx` threaded through
+# the method signatures and call sites -- sh_v1xN_macro.inc's shape, produced
+# instead of hand-written.
+#
+#   perl rc_soa.pl rc_kernel0.c        ->  rc_kernel1.c
+#
+# Rules, in place of markup in rc.inc:
+#   - a non-void function is dropped: a macro cannot return a value, and the
+#     RC_VECOUT bodies inline what they need
+#   - a duplicate void name gets a _2/_3 suffix (the multi-symbol rc_Process)
+#   - get()/put(x) become the prelude's get1(rcidx)/put1(rcidx,x)
+#   - the struct/template wrapper and the RC_IO typedef/using lines vanish
+use strict; use warnings;
+
+my $inp = shift @ARGV or die "rc_soa.pl <input.c>\n";
+my $out = $inp;
+$out =~ s/0(\.\w+)$/1$1/ or $out = "$inp.soa";
+open my $F, '<', $inp or die "$inp: $!";
+my @L = <$F>; close $F;
+
+my (@fields, @decl, @body, %fname, %seen, %fold, %fold_pending);
+
+# pass 1: collect + strip
+my $depth = 0;      # brace depth inside a function
+my $skip  = 0;      # inside a dropped (non-void) function
+my $i = 0;
+while( $i < @L ) {
+  my $l = $L[$i];
+
+  # wrapper lines out; INLINE markers too, a macro cannot be inlined harder
+  if( $l =~ /^\s*template\s*</ or $l =~ /^\s*struct\s+\w+/ or
+      $l =~ /^\s*typedef\s+RC_IO/ or $l =~ /^\s*using\s+t_IO::/ or
+      $l =~ /^\s*(NO)?INLINE\s*$/ or
+      $l =~ /^\s*};\s*$/ ) { $i++; next; }
+
+  # a one-line function body (carry_lost's shape): value-returning, drop
+  if( !$depth && !$skip &&
+      $l =~ /^\s*\w[\w:]*\s+(\w+)\(\s*[^)]*\)\s*(const\s*)?\{.*\}\s*$/ ) {
+    push @body, "/* dropped: one-line $1() */\n"; $i++; next;
+  }
+
+  if( !$depth && !$skip ) {
+    # `enum { X_SOA_FOLD = N };` says field X gets N slots instead of RCNUM and
+    # every mention is indexed rcidx%N. A field the includer only reduces over
+    # all lanes does not need one slot per lane. Comments do not survive the
+    # preprocessor, which is why this is an enum.
+    if( $l =~ /^\s*enum\s*\{\s*(\w+)_SOA_FOLD\s*=\s*([^}]+?)\s*\}\s*;/ ) {
+      $fold_pending{$1} = $2; $i++; next;
+    }
+
+    # a field declaration: plain integral members, before/between functions
+    if( $l =~ /^\s*(uint|qword|word|byte|rangetype)\s+(\w+(?:\s*,\s*\w+)*)\s*;(.*)$/ ) {
+      my ($t,$names,$rest) = ($1,$2,$3);
+      # A field the includer only ever reduces over all lanes does not need one
+      # slot per lane. `//SOA_FOLD N` gives it N, and every mention is indexed
+      # rcidx%N -- see RC_FF_LANES in rc_config.inc.
+      my @ns = split /\s*,\s*/, $names;
+      for my $n (@ns) { push @fields, $n; $fold{$n} = $fold_pending{$n} // 'RCNUM'; }
+      push @decl, join('', map { "RC_KALIGN $t $_\[$fold{$_}];\n" } @ns);
+      $i++; next;
+    }
+    # statics pass through as declarations
+    if( $l =~ /^\s*static\s+const/ ) { push @decl, $l; $i++; next; }
+
+    # a function definition, single-line signature
+    if( $l =~ /^\s*(\w[\w:]*)\s+(\w+)\(\s*([^)]*?)\s*\)\s*(const\s*)?\{\s*$/ ) {
+      my ($ret,$name,$args) = ($1,$2,$3);
+      if( $ret ne 'void' ) {           # value-returning: drop whole body
+        $skip = 1; $depth = 1; $i++;
+        push @body, "/* dropped: $ret $name($args) -- a macro cannot return a value */\n";
+        next;
+      }
+      my $use = $name;
+      if( $seen{$name}++ ) { $use = $name."_".$seen{$name}; }   # suffix dupes
+      $fname{$name} = 1;
+      $args =~ s/^void$//;
+      my $sig = $args eq '' ? "uint rcidx" : "uint rcidx, $args";
+      push @body, "void $use( $sig ) {\n";
+      $depth = 1; $i++; next;
+    }
+  }
+
+  if( $skip ) {
+    $depth += () = $l =~ /{/g;  $depth -= () = $l =~ /}/g;
+    if( $depth<=0 ) { $skip=0; $depth=0; }
+    $i++; next;
+  }
+  if( $depth ) {
+    my $d = $depth;
+    $depth += () = $l =~ /{/g;  $depth -= () = $l =~ /}/g;
+    if( $depth<=0 && $l =~ /^\s*}\s*$/ ) { push @body, "}\n"; $depth=0; $i++; next; }
+    push @body, $l; $i++; next;
+  }
+
+  # anything else at top level (blank lines, stray comments) -- keep with decls
+  push @decl, $l if $l =~ /\S/;
+  $i++;
+}
+
+# pass 2: rewrite bodies
+my $fieldpat = join '|', map { quotemeta } @fields;
+for my $l (@body) {
+  next if $l =~ m{^/\* dropped};
+  next if $l =~ /^void \w+\( uint rcidx/;      # signatures stay as emitted
+  # calls of our own void functions get rcidx threaded through
+  for my $fn (keys %fname) {
+    $l =~ s/\b\Q$fn\E\(\s*\)/$fn(rcidx)/g;
+    $l =~ s/\b\Q$fn\E\(\s*(?!rcidx\b)/$fn( rcidx, /g;
+  }
+  # the RC_IO byte cursor becomes the prelude's flat one
+  $l =~ s/\bget\(\s*\)/get1(rcidx)/g;
+  $l =~ s/\bput\(\s*/put1( rcidx, /g;
+  # field mentions
+  $l =~ s/\b($fieldpat)\b(?!\s*[\[\w])/$1 . '[' . ($fold{$1} eq 'RCNUM' ? 'rcidx' : "RC_FOLD(rcidx,$fold{$1})") . ']'/ge if @fields;
+  # tmpptr is the prelude's per-lane cursor
+  $l =~ s/\btmpptr\b(?!\s*\[)/tmpptr[rcidx]/g;
+}
+
+open my $O, '>', $out or die "$out: $!";
+print $O <<"HDR";
+// generated by rc_soa.pl from $inp -- do not edit.
+// Include inside do_process: the declarations become locals there, which is
+// what lets the compiler prove nothing aliases them. The includer provides
+// f_DEC, sets tmpbase and tmpptr[], then drives the rc_* macros.
+// Which way the cursors run is the coder's business, not this file's -- the
+// range coder writes and reads its substreams backwards (sh_v1xN's
+// arrangement) while rANS writes forwards and reads backwards. See rc_io.inc.
+RC_KALIGN uint tmpptr[RCNUM];
+byte* __restrict tmpbase;
+// A SOA_FOLD field has N slots for RCNUM lanes; at N>=RCNUM the fold is the\n// identity and disappears at compile time rather than relying on the compiler\n// to fold a modulo by a power of two.\n#define RC_FOLD( i, n ) ( (n)>=RCNUM ? (i) : (i)%(n) )\n#define get1( k ) (tmpbase[tmpptr[k]--])
+#define put1( k, x ) (void)(tmpbase[tmpptr[k]--] = byte(x))
+
+HDR
+print $O @decl, "\n", @body;
+close $O;
+print "rc_soa.pl: ", scalar(@fields), " fields, ", scalar(keys %seen), " functions -> $out\n";

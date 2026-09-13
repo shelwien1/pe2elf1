@@ -1,0 +1,93 @@
+
+// MIDBUFSIZE: size of the buffer between the two stages.  Defaulted to the
+// original 1<<16 so existing users are unaffected; psrc needs ~9.4 MB there
+// because rle_class rewrites its input block in place and uses the tail as
+// bitsort scratch.
+template < class Model1, class Model2, int MIDBUFSIZE = 1<<16 > 
+struct CoroutinePair : Coroutine {
+
+  ALIGN(4096) Model1 M1;
+  ALIGN(4096) Model2 M2;
+
+  enum { midbufsize = MIDBUFSIZE };
+  ALIGN(4096) byte midbuf[midbufsize+16];
+
+  void init( void ) {
+//printf( "%I64X: coropair init\n", this );
+    coro_init();
+    M1.coro_init();
+    M2.coro_init();
+  }
+
+  void do_process( void ) {
+    uint r1,r2=0,l;
+    uint err = 0; // set to 3 if a child stage signals an error (zstd, etc.)
+    static byte* sEOF = (byte*)"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF";
+
+//printf( "%I64X: inpptr=%I64X outptr=%I64X il=%i ol=%i \n", this, inpptr,outptr, getinplen(), getoutleft() ); fflush(stdout);
+
+    M1.coro_init();
+    M2.coro_init();
+
+    M1.addout( midbuf, midbufsize );
+    M2.addout( (byte*)outptr, getoutleft() );
+    r2 = M2.coro_call(&M2); // should be at r1
+    if (r2 == 3) err = 3;
+
+//printf( "outptr=%I64X M2.outptr=%I64X\n", outptr, M2.outptr );
+
+    while( !err ) {
+      r1 = M1.coro_call(&M1);
+      if (r1 == 3) { err = 3; break; }
+//printf( "!r1=%i f_quit=%i l=%i!\n", r1, M1.f_quit, M1.getoutsize() );
+
+      if( r1==1 ) {
+
+        //inpptr=inpend;
+        chkinp(); // yield(this,1);
+        l = getinpleft();
+        if( l==0 ) { M1.f_quit=1; M1.addinp( sEOF, 0 ); } else
+        M1.addinp( (byte*)inpptr, l );
+        inpptr+=l;
+
+      } else if( (r1==2) || (r1==0) ) {
+
+        if( r1==0 ) inpptr=M1.inpptr;
+
+        l = M1.getoutsize(); //M1.outptr-M1.outbeg;
+
+        Retry:
+        if( l==0 ) { M2.f_quit=1; M2.addinp( sEOF, 0 ); } else
+        M2.addinp( (byte*)M1.outbeg, l );
+
+        while(1) {
+//printf( "{\n" ); fflush(stdout);
+          r2 = M2.coro_call(&M2);
+          if (r2 == 3) { err = 3; break; }
+//printf( "}r2=%i f_quit=%i l=%i!\n", r2, M2.f_quit, M2.getoutsize() );
+
+          if( r2==2 ) {
+            outend = outptr = M2.outptr; chkout(); //yield(this,2);
+            M2.addout( (byte*)outptr, getoutleft() );
+            continue;
+          }
+          if( (r2==1) && (r1==0) ) { l=0; goto Retry; }
+          break;
+        }
+        if (err) break;
+
+        if( (r1==0) || (r2==0) ) break;
+
+        M1.addout( midbuf, midbufsize );
+      }
+    }
+
+    if (err) {
+      yield(this, 3);
+    } else {
+      outbeg = M2.outbeg; outend = outptr = M2.outptr;
+      yield(this,0);
+    }
+  }
+
+};
