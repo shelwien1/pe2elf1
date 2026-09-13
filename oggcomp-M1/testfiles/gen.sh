@@ -305,7 +305,7 @@ want minbitrate-pad     && enc minbitrate-pad     1042 -m 128  sil44.wav
 derived='badcrc-8k.ogg no-eos-8k.ogg id3-prefix-8k.ogg trailing-junk-8k.ogg
          opus.ogg id3-text-8k.ogg id3-apic-8k.ogg id3v1-trailer-8k.ogg
          chained-id3.ogg empty.ogg random.bin page-in-random.bin
-         onebook-8k.ogg allbooks-8k.ogg'
+         onebook-8k.ogg allbooks-8k.ogg granule-jump-8k.ogg'
 need=0
 for n in $derived; do
   [ -f "$n" ] || need=1
@@ -506,6 +506,17 @@ for name, which in (('onebook-8k.ogg', offs[:1]), ('allbooks-8k.ogg', offs)):
     for o in which: p[off + (o >> 3)] ^= 1 << (o & 7)
     d = bytearray(src); d[second[0]:second[1]] = repage(bytes(p))
     open(name, 'wb').write(bytes(d))
+
+#  A granule position of 2^63 on the second audio page, re-CRCed: a
+#  difference from the page before of 2^63 in magnitude, which the value
+#  coder could not carry until it took 64-bit magnitudes.  The container
+#  gives the field no meaning, so this is a valid Ogg file, and it has
+#  to come back like any other.
+pg = list(pages(src))
+i = 2 if len(pg) > 3 else len(pg) - 1
+p = bytearray(src[pg[i][0]:pg[i][1]]); p[6:14] = struct.pack('<Q', 1 << 63)
+d = bytearray(src); d[pg[i][0]:pg[i][1]] = repage(bytes(p))
+open('granule-jump-8k.ogg', 'wb').write(bytes(d))
 
 #  Nothing at all.
 open('empty.ogg', 'wb').write(b'')

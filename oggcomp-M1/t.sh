@@ -100,6 +100,8 @@ fi
 if [ $build = 1 ]; then
   echo "t.sh: building oggcomp1.so with ./mk.sh dll 1"
   ./mk.sh dll 1
+  echo "t.sh: building oc_api_test with ./mk.sh apitest"
+  ./mk.sh apitest
   echo
 fi
 [ -x "$bin" ] || { echo "t.sh: $bin is not there -- ./mk.sh builds it" >&2; exit 2; }
@@ -626,6 +628,14 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
        "$det" d "$tmp/det/l1" "$tmp/det/l1.back" >/dev/null 2>&1 &&
        cmp -s "$tmp/det/box" "$tmp/det/l1.back"; then lok=1; fi
     libcheck 'oggdet -c -1 and back' $lok "$(sed -n '$p' "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-44)"
+  fi
+  #  The API from a program (oc_api_test.cpp): the call sequences oggcomp
+  #  and oggdet never make -- both directions on one instance, solid,
+  #  and a Loop with nowhere to write -- which a library exists for.
+  if [ -x ./oc_api_test ]; then
+    lok=0
+    if ./oc_api_test "$src" >"$tmp/msg" 2>&1; then lok=1; fi
+    libcheck 'the API from a program' $lok "$(grep -c '^ok' "$tmp/msg") of $(grep -c '^ok\|^FAILED' "$tmp/msg") checks$(grep '^FAILED' "$tmp/msg" | head -1 | sed 's/^FAILED */: /' | cut -c1-30)"
   fi
   echo
 fi

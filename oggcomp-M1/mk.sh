@@ -7,6 +7,7 @@
 #      ./mk.sh mod [IDXDIR] regenerate MOD/ in the shipping form, build nothing
 #      ./mk.sh pgo f.ogg    shipping build, laid out from a profile of f.ogg
 #      ./mk.sh dll N [IDXDIR]  oggcompN.so: the model in IDXDIR (default IDX)
+#      ./mk.sh apitest         oc_api_test, the API driven from a program
 #                           as a library, which `oggcomp -N` and `oggdet -N`
 #                           load from beside themselves (oc_api.h)
 #
@@ -355,6 +356,15 @@ case "${1:-tuning}" in
     echo "mk.sh: oggcomp$n.so -- the model in ${3:-IDX} as a library, every parameter folded"
     ;;
 
+  apitest)
+    #  The API driven from a program: oc_api_test.cpp over the library's
+    #  translation unit, model 0 at static addresses, in the shipping form.
+    #  ./t.sh runs it when it is there, and ./t.sh -B builds it here.
+    generate 0 1
+    $CXX $CXXFLAGS $WARN $REQ -o oc_api_test oc_api_test.cpp -lm
+    echo "mk.sh: oc_api_test -- run it on a corpus file"
+    ;;
+
   pgo)
     #  The shipping build, laid out from a profile: the given .ogg is coded
     #  both ways by an instrumented build first.  It was worth 1.5 to 3%
@@ -392,7 +402,7 @@ case "${1:-tuning}" in
     ;;
 
   *)
-    echo "usage: ./mk.sh [tuning|release|check [file-list]|pgo file.ogg|mod [IDXDIR]|dll N [IDXDIR]]" >&2
+    echo "usage: ./mk.sh [tuning|release|check [file-list]|pgo file.ogg|mod [IDXDIR]|dll N [IDXDIR]|apitest]" >&2
     exit 2
     ;;
 esac

@@ -65,8 +65,12 @@ told no -- including that a refused run leaves no half-written output
 behind.  Then it carves a container of streams and other bytes with
 `oggdet`, with and without `-c`, requires the container back, and requires
 the segment `-c` wrote for a stream to be the file `oggcomp c` writes for
-that stream alone.  `testfiles/README.md` says what is in the corpus
-and why, and what it does not reach; `-h` lists the options.
+that stream alone.  When `./mk.sh apitest` has built `oc_api_test`, it
+also drives the API from a program the way neither `oggcomp` nor
+`oggdet` does -- both directions on one instance, solid, and a `Loop`
+with nowhere to write -- which is what a library gets from callers it
+never met.  `testfiles/README.md` says what is in the corpus and why,
+and what it does not reach; `-h` lists the options.
 
     ./t.sh && ./mk.sh check
 
@@ -275,7 +279,7 @@ an input of 167685, silently not the file it was given.
 |---|---|
 | `oggcomp.cpp` | the include list and `main()`.  The program is the `.inc` files beside it, one per layer, in the order they are included: `ogg_*` the container, `vb_*` Vorbis, `oc_rcio.inc`, `rc.inc` and `cm.inc` the coder's byte I/O, the range coder and the mixing primitives, `tc_*` the model machinery, `oc_*` the six models and their assembly, and `oc_coro.inc` the coroutine that is the compressor -- what `oggdet` includes.  `REFACTOR.md` and `REFACTOR2.md` say what is in each |
 | `oggdet.cpp`, `oggart.inc` | the carver, and the cover-art extraction it uses.  `oggdet.cpp` includes the compressor's `.inc` files up to `oc_coro.inc` and drives the model through `oc_api.h` from inside its own coroutine |
-| `oc_api.h`, `oc_api.inc`, `oc_load.inc`, `oggcomp_dll.cpp` | the model as a library: the C interface, its implementation over the coroutine, the table of pointers the programs drive either model through, and the translation unit `./mk.sh dll N` builds into `oggcompN.so` |
+| `oc_api.h`, `oc_api.inc`, `oc_load.inc`, `oggcomp_dll.cpp`, `oc_api_test.cpp` | the model as a library: the C interface, its implementation over the coroutine, the table of pointers the programs drive either model through, and the translation unit `./mk.sh dll N` builds into `oggcompN.so`; and the test that drives the API from a program, built by `./mk.sh apitest` |
 | `vb_dict.inc`, `vbooks_gen.inc` | the codebook table: libvorbis's static books, packed the way libvorbis packs them and matched against the setup packet bit for bit, so a setup that is one of the table's rows costs a row number and a flag per book; and the generated table itself, which is not edited by hand |
 | `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |
 | `MOD/` | what `idx2inc.pl` generated, checked in |

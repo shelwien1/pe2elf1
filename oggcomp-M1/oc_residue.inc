@@ -96,7 +96,7 @@ template <int f_DEC> i64 oc_model<f_DEC>::digit(i64 dg) {
   if(!ENC)
     dg = 0;
   {
-    i64 mg = fam_dig.code(v, ENC ? (dg < 0 ? -dg : dg) : 0);
+    i64 mg = (i64)fam_dig.code(v, ENC ? (u64)(dg < 0 ? -dg : dg) : 0);
     if(mg) {
       tcx w;
       int sn;
@@ -149,7 +149,7 @@ template <int f_DEC> u32 oc_model<f_DEC>::classify(u32 rno, u32 j, u32 slot, u32
   tc_stage = STG_CLASS;
   tc_make_cls((int)rno, tc_qlog(slot), hist.cl_last[rno][j], t1, (int)hist.tc_blk, tn, hist.cl_last2[rno][j], fam_cls.pc.axis(), v);
   c = ENC ? (i64)cin : 0;
-  c = fam_cls.code(v, c);
+  c = (i64)fam_cls.code(v, (u64)c);
   FATAL_UNLESS(c >= 0 && c < 16, "coded stream: residue class %" PRId64, c);
   cl_run[rno] = (c == hist.cl_last[rno][j]) ? cl_run[rno] + 1 : 0;
   if(ch && slot < hist.cl_np[rno])

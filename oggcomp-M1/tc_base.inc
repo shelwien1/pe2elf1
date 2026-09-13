@@ -5,14 +5,24 @@ constexpr i32 RS_DIGIT_MAX = 0x7FFFFF;
 constexpr int TC_MIXN = 7;
 constexpr int TC_NODE = 29;
 constexpr int TC_MNODE = 169;
-constexpr int TC_NBMAX = 62;
+//  The widest magnitude the value coder carries: 2^64 - 1, which is any
+//  64-bit field, and in particular the difference of two granule positions,
+//  a 64-bit field the container gives no meaning to.  The node tables reach:
+//  tc_node_len(63) is 28 of TC_NODE, tc_node_man(64, 63) is 168 of TC_MNODE.
+constexpr int TC_NBMAX = 64;
 static INLINE int tc_node_len(int k) { return 3 + (k < 25 ? k : 25); }
 static INLINE int tc_node_man(int nb, int p) { return (nb > 12 ? 12 : nb) * 13 + (p > 12 ? 12 : p); }
+//  The magnitude is taken in unsigned arithmetic, so the most negative
+//  value has one; and the small values leave before `n` is computed, since
+//  for 0 and 1 it would be -1 and the shift by it, though discarded, is
+//  undefined.
 static INLINE i32 tc_qlog(i64 x) {
-  u64 u = (u64)(x < 0 ? -x : x);
-  int n = 62 - __builtin_clzll(u | 1);
-  i32 q = 2 + n * 2 + (i32)((u >> n) & 1);
-  return u < 4 ? (i32)u : q;
+  u64 u = x < 0 ? ~(u64)x + 1 : (u64)x;
+  int n;
+  if(u < 4)
+    return (i32)u;
+  n = 62 - __builtin_clzll(u);
+  return 2 + n * 2 + (i32)((u >> n) & 1);
 }
 static INLINE i32 tc_abs(i32 v) { return v < 0 ? -v : v; }
 static INLINE int tc_clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }

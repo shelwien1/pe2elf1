@@ -38,8 +38,12 @@ template <int f_DEC> void oc_model<f_DEC>::page(ogg_page &p, int cont, int bos) 
     }
     pg_prevtype = p.type;
   }
+  //  The granule position is 64 bits the container gives no meaning to, so
+  //  the difference from the last page's is taken modulo 2^64 and read as
+  //  signed: any pair of values is a difference of magnitude at most 2^63,
+  //  which the value coder carries.
   g = ENC ? (i64)(((u64)p.ghi << 32) | p.glo) : 0;
-  g = auxc(F_GRAN, tc_qlog(tc_last2[F_GRAN]), ENC ? g - pg_prev : 0, 1) + pg_prev;
+  g = (i64)((u64)auxc(F_GRAN, tc_qlog(tc_last2[F_GRAN]), ENC ? (i64)((u64)g - (u64)pg_prev) : 0, 1) + (u64)pg_prev);
   pg_prev = g;
   if(!ENC) {
     p.glo = (u32)((u64)g & 0xFFFFFFFFu);

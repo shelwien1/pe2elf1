@@ -5,8 +5,12 @@
 //  where it is the library.
 #include "oc_api.h"
 struct oc_api_unwind {};
+//  `used` is per direction: what a solid Init keeps is the direction's
+//  model as its last stream left it, and a direction that has not been
+//  Init'd in this instance has nothing to keep -- its families are not
+//  even wired -- whatever the other direction has done.
 struct oc_inst {
-  int busy, dir, flags, err, in_coro, used;
+  int busy, dir, flags, err, in_coro, used[2];
   char msg[1024];
   char name[512];
   Coroutine *co;
@@ -45,7 +49,7 @@ OC_API void *OC_CALL oggcomp_Alloc(void) {
     return nullptr;
   oc_the.busy = 1;
   oc_the.err = 0;
-  oc_the.used = 0;
+  oc_the.used[0] = oc_the.used[1] = 0;
   oc_the.in_coro = 0;
   oc_the.co = nullptr;
   oc_the.msg[0] = 0;
@@ -68,7 +72,7 @@ OC_API int OC_CALL oggcomp_Init(void *pp, int dir, int flags, const char *name) 
   snprintf(p->name, sizeof p->name, "%s", name && *name ? name : "the stream");
   tc_verbose = (flags & OC_F_VERBOSE) != 0;
   tc_huge = (flags & OC_F_HUGE) != 0;
-  keep = (flags & OC_F_SOLID) != 0 && p->used;
+  keep = (flags & OC_F_SOLID) != 0 && p->used[p->dir];
   oc_api_enter(p);
   try {
     if(!oc_api_ready) {
@@ -88,7 +92,7 @@ OC_API int OC_CALL oggcomp_Init(void *pp, int dir, int flags, const char *name) 
         oc_fresh(p->dec, p->name);
       p->co = &p->dec;
     }
-    p->used = 1;
+    p->used[p->dir] = 1;
   } catch(oc_api_unwind &) {
     oc_api_leave();
     p->co = nullptr;
@@ -101,6 +105,11 @@ OC_API int OC_CALL oggcomp_Loop(void *pp) {
   oc_inst *p = (oc_inst *)pp;
   uint r;
   if(p != &oc_the || !p->co)
+    return 8;
+  //  Nowhere for the output to go.  The coroutine's pin writes a byte and
+  //  then asks whether it has run out, which is right for a buffer and a
+  //  null dereference for no buffer, so the check has to be here.
+  if(!p->co->pin[1].beg)
     return 8;
   if(p->err)
     return p->err;

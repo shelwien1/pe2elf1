@@ -65,6 +65,7 @@ about eight bits each, and everything else as Vorbis.
 | `minbitrate-pad.ogg` | `oggenc -m 128` on silence: libvorbis pads the audio packets with zero bits | nothing: the padding is coded per packet, and zero padding costs a flag |
 | `empty.ogg` | zero bytes | nothing |
 | `random.bin` | 4 kB from the seeded generator: not Ogg at all | all of it, and the number to watch is how little it grows |
+| `granule-jump-8k.ogg` | the second audio page's granule position set to 2^63 and the page re-CRCed: a jump of 2^63 from the page before, which the value coder refused before it carried 64-bit magnitudes | nothing: the field means nothing to the container and is coded like any other |
 | `page-in-random.bin` | one valid page, the first of `tiny-8k-q0.ogg`, inside random bytes, with a false "OggS" in front of it | the random bytes; the page is found, parsed and modelled, and the four letters are not taken for one |
 
 `skeleton-8k.ogg` and `minbitrate-pad.ogg` are not damaged files.  They are

@@ -233,7 +233,7 @@ template <int f_DEC> i64 oc_model<f_DEC>::auxc(int fld, i32 c, i64 x, int sgn) {
   tcx v;
   i64 r;
   tc_make_aux(fld, c, tc_qlog(tc_last[fld]), v);
-  r = sgn ? fam_aux.codes(v, x, (u32)fld) : fam_aux.code(v, x);
+  r = sgn ? fam_aux.codes(v, x, (u32)fld) : (i64)fam_aux.code(v, (u64)x);
   tc_last2[fld] = tc_last[fld];
   tc_last[fld] = r;
   return r;

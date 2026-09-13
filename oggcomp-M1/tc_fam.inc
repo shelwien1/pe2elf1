@@ -181,12 +181,12 @@ template <int f_DEC> struct tc_fam {
     T[bt + node] = t;
     return b;
   }
-  i64 code(const tcx &v, i64 x) {
+  //  A magnitude, up to 2^64 - 1: three head decisions for 0, 1 and 2,
+  //  then the bit length of what is left and its mantissa.
+  u64 code(const tcx &v, u64 x) {
     int k, p, nb = 0;
     u64 u;
     select(v);
-    if(UNLIKELY(ENC && x < 0))
-      FATAL("negative magnitude");
     prp = pc.head(0);
     if(bit(0, ENC && x == 0)) {
       prp = -1;
@@ -231,10 +231,13 @@ template <int f_DEC> struct tc_fam {
       if(!ENC)
         u = pref;
     }
-    return (i64)(u - 1) + 3;
+    return u - 1 + 3;
   }
+  //  A signed value: its magnitude, then a sign.  The magnitude of the most
+  //  negative value is 2^63, which is why it is unsigned, and the negation
+  //  is done in unsigned arithmetic for the same value's sake.
   i64 codes(const tcx &v, i64 x, u32 sc) {
-    i64 m = code(v, ENC ? (x < 0 ? -x : x) : 0);
+    u64 m = code(v, ENC ? (x < 0 ? ~(u64)x + 1 : (u64)x) : 0);
     int s;
     if(!m)
       return 0;
@@ -246,6 +249,6 @@ template <int f_DEC> struct tc_fam {
     } else {
       FATAL_CODE(OGC_EXIT_IO, "a family with no sign counter coded a sign");
     }
-    return s ? -m : m;
+    return (i64)(s ? ~m + 1 : m);
   }
 };
