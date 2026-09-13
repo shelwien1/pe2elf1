@@ -159,5 +159,13 @@ OC_API void OC_CALL oggcomp_Report(void *pp) {
         fprintf(stderr, "  %" PRIu64 " values, %.3f bits each", tc_syms[i], tc_bits[i] / (double)tc_syms[i]);
       fputc('\n', stderr);
     }
+#if OC_PSRC
+  //  The lines above are what the model's probabilities say the file should
+  //  have cost.  The coder no longer codes at those probabilities -- it
+  //  quantizes them into classes and codes the classes -- so this is what it
+  //  wrote instead, and the difference is PSRC's, not any stage's.
+  if(!p->dir)
+    fprintf(stderr, "  %-8s %12.0f bytes  %+5.2f%% on the model\n", "coder", ps_coded / 8, tot > 0 ? 100.0 * (ps_coded - tot) / tot : 0.0);
+#endif
 }
 }

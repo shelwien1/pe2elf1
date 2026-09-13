@@ -225,6 +225,11 @@ template <int f_DEC> void oc_model<f_DEC>::reset() {
   vb_ar.reset();
   oc_raw_zero();
   oc_hc.clear();
+#if OC_PSRC
+  //  The coder's own counters are model state and go with the rest of it:
+  //  kept across the streams of a solid run, cleared here.
+  oc_psrc<f_DEC>::inst.reset();
+#endif
   *this = oc_model();
   wire_all();
   tags_init();

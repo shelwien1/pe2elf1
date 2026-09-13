@@ -10,8 +10,15 @@ template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
   uint b = (uint)bit;
   if(!f_DEC && tc_verbose)
     tc_bits[tc_stage] -= log2(bit ? 1.0 - p / (double)CM_PONE : p / (double)CM_PONE);
+#if OC_PSRC
+  //  Not the rangecoder any more: the probability picks a class and the bit
+  //  goes into that class's chunk, and the rangecoder sees the chunks a
+  //  block at a time.  oc_psrc.inc.
+  return (int)oc_psrc<f_DEC>::inst.bit((uint)p, b);
+#else
   oc_model<f_DEC>::rc.rc_Process((uint)(p << 3), b);
   return (int)b;
+#endif
 }
 //  A hashed table's row for a context: the index multiplied out, taken
 //  from the top.  No tag and no check -- contexts that land on the same

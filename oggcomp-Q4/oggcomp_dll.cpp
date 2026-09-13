@@ -26,6 +26,7 @@
 #include "tc_base.inc"
 #include "tc_ptab.inc"
 #include "tc_tables.inc"
+#include "oc_psrc.inc"
 #include "tc_fam.inc"
 #include "oc_hist.inc"
 #include "oc_model.inc"

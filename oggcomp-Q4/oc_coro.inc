@@ -1,5 +1,8 @@
 constexpr char OC_MAGIC[] = "oggc\x1a";
-constexpr int OC_VER = 5;
+//  The coded stream: 5 is the plain rangecoder, 6 is PSRC (oc_psrc.inc).
+//  The two are different formats, and a `d' run reads this back and refuses
+//  what the build it is cannot decode.
+constexpr int OC_VER = OC_PSRC ? 6 : 5;
 //  The coroutine, one per direction: f_DEC is what Rangecoder calls it, 0
 //  to code and 1 to decode.  Each direction's walk is a member function
 //  chosen by overload on the direction's tag, and a member function of a
@@ -14,10 +17,19 @@ template <int f_DEC> struct oc_coro : Coroutine {
     src.open(in, &pin[0]);
     t.rc.co = this;
     t.rc.rc_Init();
+#if OC_PSRC
+    oc_psrc<f_DEC>::inst.begin();
+#endif
     {
       og_packer<oc_model<f_DEC>> pk(t, src);
       pk.pack();
     }
+#if OC_PSRC
+    //  The block the stream ended in the middle of.  Nothing else has been
+    //  written since the last full one, so this is where most of a short
+    //  file's output comes from.
+    oc_psrc<f_DEC>::inst.flush();
+#endif
     t.rc.rc_Quit();
     if(t.rc.carry_lost())
       FATAL_CODE(OGC_EXIT_INTERNAL,
@@ -29,6 +41,9 @@ template <int f_DEC> struct oc_coro : Coroutine {
   void go(oc_dir<1>) {
     t.rc.co = this;
     t.rc.rc_Init();
+#if OC_PSRC
+    oc_psrc<f_DEC>::inst.begin();
+#endif
     og_unpacker<oc_model<f_DEC>> up(t, &pin[1]);
     up.unpack(in);
   }

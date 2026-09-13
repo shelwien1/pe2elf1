@@ -26,6 +26,17 @@
 #        perl import.pl $f ../export.\!\!\! > t && mv t $f; done
 #      ./mk.sh check                            # then ship what it found
 #
+#  The coder is PSRC -- the model's bits are quantized into probability
+#  classes, sorted, run-length coded, and only those bytes reach the range
+#  coder.  PSRC.md says what that is and what it measures.  Its parameters
+#  are build-time, so a stream is readable only by a build with the same
+#  ones, and the plain per-bit range coder is still there:
+#
+#      CXXFLAGS='-O2 -DOC_PSRC=0' ./mk.sh release   # the coder before PSRC
+#      CXXFLAGS='-O2 -DOC_PSRC_STATS' ./mk.sh       # where the coder's bits go
+#
+#  The two write different formats and the stream version byte says which.
+#
 #  Widening a context is free to a search whose objective is the size of one
 #  file, which is how one arrives at a 38 GB model to save 3 kB.  Build the
 #  tuning binary with a price on memory instead of a threshold on it:
