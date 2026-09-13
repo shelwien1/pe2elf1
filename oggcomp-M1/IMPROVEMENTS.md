@@ -7,6 +7,10 @@ one core of a Xeon at a measured 3.2 GHz; `music-stereo-q5.ogg` is the
 file quoted when one file is, `big.ogg` is seven corpus files chained
 (1,106,690 bytes).  The coder-specific questions -- several coders,
 interleaving -- are in `SUBSTREAMS.md` and only summarised here.
+Section 7 is the update at commit fda24ce: the codebook table, which
+took the headers out of the small files, and three things measured
+since -- OptiVorbis, a set of 1,257 short clips, and run-length coding
+of the zeros -- with the plan in section 6 revised to match.
 
 ## 1. Where it stands
 
@@ -21,6 +25,11 @@ interleaving -- are in `SUBSTREAMS.md` and only summarised here.
 | sine-stereo-q5.ogg | 14,541 | 5,684 | 39.1% |
 | multi6-48k-q4.ogg | 13,855 | 6,803 | 49.1% |
 | tiny-8k-q0.ogg | 2,763 | 1,346 | 48.7% |
+
+Update at fda24ce: 31 files, 711,883 in, 507,823 out (71.3%), the
+difference being the codebook table of section 7.1 -- `tiny-8k-q0.ogg`
+is 200 bytes, `multi6-48k-q4.ogg` 3,324, the music file 143,012, and
+the three headers are 0.13% of it rather than 1.1%.
 
 On real music the ratio is 83 to 89%, and the whole of that is the
 residue: `-v` on the music file puts 93.9% of the output in residue
@@ -226,6 +235,13 @@ cheap: `tcp_bucket(prp)` is one lookup.
   pass when the digit changes above force one anyway, not a project.
 - **A neural mixer or an LSTM.**  Ten to a hundred times the instruction
   count for the kind of gain a second mixer gets at seven multiplies.
+- **Run-length coding of the zeros.**  Measured in 7.4: the zero
+  decision is 37 to 59% of the digit bytes, so it is the right place to
+  look, but the runs are near-geometric and what structure they have --
+  the place in the vector, the codebook's prior -- the per-digit decision
+  sees at every digit and a run symbol sees once.  Every run-length
+  estimate is 10 to 20% worse than a per-digit one with the same
+  information, and the model beats both.
 
 Taken together, 4.1 to 4.6 are a plausible 2 to 4% on music and more on
 multichannel and tonal files, against a ratio that is 86% today; a
@@ -279,11 +295,11 @@ them, both model changes:
 - **A zero-run value.**  When `zrun` passes a threshold, code the length
   of the run of zeros as one value in a small family of its own instead
   of one head decision per zero; the digit model resumes at the first
-  nonzero.  On the managed file two digits in three are zero and most of
-  those are in runs.  Expected: 15 to 30% fewer decisions on low-bitrate
-  and stereo files, none on `-q 10`; the ratio can go either way by a
-  fraction of a percent, since the run's contexts are coarser than the
-  digits' but its symbol is one.
+  nonzero.  *Measured since, in 7.4, and out:* the runs have a mean of
+  three, so a run symbol of two or three binary nodes replaces three or
+  four decisions and saves little time, and the ratio does not go either
+  way by a fraction of a percent -- the run form is 10 to 20% worse on
+  the zero pattern, which is 37 to 59% of the digit bytes.
 - **A short pipeline when the rich counter is sure.**  When counter `A`
   is at its limit and beyond 1/1024, skip the second APM and the mixer
   update.  Both sides see the same counter, so this is deterministic,
@@ -333,9 +349,168 @@ project turns into a model project.
    floor-normalised history (4.2), the counter pair (4.3), the second
    mixer (4.4), the sign contexts (4.5), the prior in the APM (4.6).
    Each is a version; a version bump is cheap and a wrong stream is not.
-4. The zero-run value (5.4) last, once the digit model has settled,
-   since it changes what a digit's contexts see.
+4. Not the zero-run value: 7.4 measured it out.  In its place, the
+   three things the clip set showed (7.3), each small and each its own
+   version: the packet lengths derived from the decoded packet instead
+   of coded in the page header, the `-S` archive framed once instead of
+   per stream, and the metainfo records batched.
+5. A trained prior for the small files (7.3): the tables started from a
+   training run instead of from zero, so that a 5 kB stream coded alone
+   gets what solid mode gives it.  A model change and a version, and the
+   one item here that helps `oggdet -c` more than `-S`.
 
 Before any of the ratio work the corpus wants two more files: a long
 uncoupled stereo one and a long 5.1 one, so that 4.1 is tuned on
 something it will meet again.
+
+## 7. Since e744b32
+
+### 7.1 The codebook table
+
+Done, at fda24ce.  libvorbis carries its codebooks as static tables and
+writes one of a few hundred fixed sets into every stream, and tsvcomp,
+this program's ancestor, had generated the table of them --
+`vbooks_gen.inc`, 1,346 books in 350 rows from 35 encoders: every
+released libvorbis, the aoTuV betas, ffmpeg's own encoder.  `vb_dict.inc`
+packs a table book the way `vorbis_staticbook_pack` does and compares it
+with the setup packet bit for bit; the encoder codes which distinct row
+the packet's first books are the bits of, then one flag per book, and a
+miss is the fields as before.  Nothing is parsed to decide, and a book
+from the table is parsed from the packet with nothing listening once the
+decoder has written it there, so it is the `vb_book` the stream's bits
+would have been.
+
+Every book of every corpus file is in the table.  The three headers of
+a corpus file went from 1.1 to 1.6 kB to 100 to 250 bytes:
+
+| file | before | after |
+|---|---|---|
+| tiny-8k-q0.ogg | 1,346 | 200 |
+| mono-22k-q4.ogg | 2,669 | 1,192 |
+| multi6-48k-q4.ogg | 6,803 | 3,324 |
+| music-stereo-q5.ogg | 144,389 | 143,012 |
+| corpus, 31 files | 546,567 (76.8%) | 507,823 (71.3%) |
+
+Two things came with it.  The header tags now take their ids from a
+fixed list (`oc_tagorder` in `oc_model.inc`) rather than from first use:
+the tag factors are threshold lists over the id, tuned, and the
+first-use order was the stream's -- a floor whose subclass books came
+before its master book moved every tag after it -- and with most books
+no longer coded it would have moved all of them.  And three corpus
+files: a setup one book short of a row, one with only its floor books
+in a row, and one rewritten by OptiVorbis with no row in it.
+
+### 7.2 OptiVorbis
+
+`OPTIVORBIS.md`.  A sample-lossless optimizer that recomputes the
+Huffman codes from the actual symbol counts and drops the unused
+entries.  Its rewrite is worth 0.08% to the digits stage here -- the
+model codes the symbol, not the codeword -- and its one win over oggcomp,
+the smallest files, was the setup header, which 7.1 took.  What
+transfers from it: a fuzz harness over `oc_api.h`, and tolerance of an
+audio packet that ends inside a field, which the specification allows
+and libvorbis's bitrate manager writes under a hard maximum; oggcomp
+codes such a page as bytes today.
+
+### 7.3 A set of 1,257 short clips
+
+Mono 44.1 kHz, 4.9 to 10 kB each, all from one libvorbis with one
+identification, comment and setup packet between them, serial 1 in
+every file, three or four pages, 11 to 118 audio packets.  Headers are
+41% of the bytes and the audio is unique: 48,624 distinct of 49,314
+packets, and 47 packets share their first eight bytes with a packet in
+another file.  A container of exactly the kind `oggdet` is for, and
+what it showed is where the per-stream bytes go when the stream is
+tiny.
+
+| on the concatenation | bytes | of input |
+|---|---|---|
+| xz -9e | 6,045,992 | 60.5% |
+| oggdet -c | 5,901,788 | 59.0% |
+| oggdet -S | 5,470,874 | 54.7% |
+| oggdet -S -j | 5,443,523 | 54.4% |
+| oggcomp, as one chained file | 5,443,469 | 54.4% |
+
+xz gets its 60% by removing the repeated headers; the audio alone is
+5.92 MB.  Solid, the stage table is headers 163 bytes for all 1,257
+setups, pages 41,870, floor 424 kB at 3.36 bits a post, class 166 kB,
+digits 4.81 MB at 1.43 bits a digit.  Three findings:
+
+- **The model starts cold.**  `-c` is 431 kB behind `-S`: 197 kB of
+  setup coded per stream, and 240 kB -- 4% of the output -- for a model
+  that begins every 5 kB stream at zero and has not settled after 38
+  packets.  On its own audio `-c` gets 96%, `-S` 92%.  This is what the
+  trained prior in the plan is for.
+- **`-S` loses nothing between streams; its framing costs 27 kB.**
+  Each stream segment carries the 7-byte oggcomp header, a 4-byte CRC
+  and the coder's last byte, 12 bytes, the same 12 an empty input codes
+  to; the metainfo is 4,384 bytes of records in 1,258 chunks, one per
+  stream record by design, coded to 8,446 because each chunk pays a CRC
+  and a flush for 3.5 bytes of content; the segment varints are 4,523.
+  `-j` removes all of it and gives up per-stream addressing.  In solid
+  mode one header and one CRC per archive would do, and the records can
+  be batched if the chunks are coded by a small model of their own
+  rather than the shared one, which must be decoded in file order.
+- **The pages stage is the packet lengths.**  33 bytes a file, and the
+  lacing values are 5.83 bits of entropy each over 195 distinct lengths,
+  36 kB of the 41.9 kB.  The decoder knows a packet's length once it has
+  decoded its fields and the tail flag, so coding the payload before the
+  lacing and deriving the lacing from it leaves one value per page for
+  the boundary.  0.66% here, 0.3% on music, and the granule positions,
+  which follow from the block sizes but for the last page, are the rest.
+
+### 7.4 Run-length coding of the zeros
+
+The question was whether to code a run of zero digits as one length,
+with zero excluded from the digit that ends it.  Instrumented: the cost
+of the first binary node of every digit, the one that says zero or not.
+
+| file | digits | zero | bits per digit on that node | memoryless | of the digits stage |
+|---|---|---|---|---|---|
+| music-stereo-q5 | 695,824 | 46.9% | 0.574 | 0.997 | 37% |
+| music-managed-b96 | 561,760 | 66.5% | 0.533 | 0.920 | 49% |
+| noise-stereo-q3 | 143,648 | 56.6% | 0.516 | 0.987 | 40% |
+| the clip set | 26,907,520 | 60.7% | 0.840 | 0.962 | 59% |
+
+So the zero pattern is the cost centre of the residue, and on the clips
+the model takes 13% off a coin flip for it.  Against that, crude
+adaptive estimates over the logged digit stream, per-digit contexts and
+run lengths given the same information (bits per digit):
+
+| context | music q5 | managed | clips |
+|---|---|---|---|
+| last 8 digits zero or not | 0.733 | 0.718 | 0.889 |
+| codebook prior, last 8, class | 0.618 | 0.568 | 0.853 |
+| run length, order 0 | 0.893 | 0.955 | 0.950 |
+| run length given previous run, class, pass, offset | 0.746 | 0.683 | 0.884 |
+| run length given previous run, class, pass, prior at start | 0.699 | 0.673 | 0.912 |
+| the model | 0.574 | 0.533 | 0.840 |
+
+Run lengths lose 10 to 20% to per-digit contexts on every file, and the
+model beats both.  The runs are near-geometric -- on the clips 237k of
+one, 116k of two, 65k of three, halving each step -- and what structure
+they have is at the place in the vector (odd lengths dominate on the
+managed file, a zero vector of dimension two ending a run at an even
+boundary) and in the codebook's prior for the next digit, which the
+per-digit decision sees at every digit and a run symbol sees once.
+Excluding zero from the digit after a run saves the decision the run
+symbol has already paid for.
+
+The cheap form tried for real: `zrun`, the zero-run context the digit
+model already has at one threshold, widened, and `vpos`, the place in
+the vector, enabled, in a release build each:
+
+| build | corpus, 34 files | clips | music q5 | managed |
+|---|---|---|---|---|
+| current | 501,355 | 5,443,469 | 143,012 | 83,291 |
+| zrun widened | 501,369 | 5,437,912 | 143,027 | 83,299 |
+| vpos enabled | 501,406 | 5,445,580 | 143,060 | 83,215 |
+| both | 501,426 | 5,440,170 | 143,079 | 83,226 |
+
+A tenth of a percent on the clips and noise elsewhere: the codebook
+prior is already doing what those axes would.  Building the run form
+would mean the encoder reading a partition's codewords ahead, since
+`rs_sym` codes each codeword's digits before reading the next, for a
+result the estimates put below the model.  The section 5.4 speed case
+for it fails on the same numbers: a mean run of three is three or four
+decisions replaced by a symbol of two or three nodes.
