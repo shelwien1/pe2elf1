@@ -23,11 +23,14 @@
 //  is all the two have to agree on.
 //
 //  Two things fall out of it.  The rangecoder is no longer called once per
-//  model bit but once per run byte and a few times per block, which on this
-//  corpus is about a third as often.  And the coder no longer codes at the
-//  probability the model named: it codes at the probability its class turns
-//  out to have, learned by the run model, which is a secondary estimate
-//  over the model's own output and measures very slightly better than it.
+//  model bit but once per run byte and a few times per block -- measured,
+//  about 0.8 calls per model bit on this corpus, not the large factor the
+//  scheme suggests, because this model's output is not lopsided enough for
+//  the runs to be long (PSRC.md section 8).  And the coder no longer codes
+//  at the probability the model named: it codes at the probability its class
+//  turns out to have, learned by the run model, which is a secondary
+//  estimate over the model's own output and measures very slightly better
+//  than it.
 //
 //  The class is the quantized probability with the more likely symbol
 //  folded onto one side: magnitude |p - 1/2| in PS_MAGN steps, and a
@@ -127,10 +130,17 @@ static_assert(PS_TMPOFF >= PS_RLEMAX, "the run bytes would reach the word buffer
 #define PS_LIM_HDR 255
 #endif
 //  How much evidence the run model's priors are worth, in observations.
-//  0 turns them off and starts every counter at one in two.
+//  0 turns them off and starts every counter at one in two.  Read it against
+//  the limits above: a counter's rate is 1/(t+2) and t stops at its limit, so
+//  a prior of 128 against a limit of 255 is half the counter's whole
+//  adaptation budget spent on what the class already says it is.  That is
+//  deliberate -- the prior is not a guess, it is the definition of the class
+//  -- but the two move together and re-tuning one without the other is how
+//  this goes wrong.
 #ifndef PS_PRIOR
 #define PS_PRIOR 128
 #endif
+static_assert(PS_PRIOR >= 0 && PS_PRIOR <= CM_TMAX, "the prior is a cm_cnt state count and indexes cm_rec");
 //  How a run byte is coded.  A run is geometric in the class's own rare-bit
 //  probability, so its length is one parameter and almost nothing else: a
 //  run of "is it longer than this" decisions, one counter each, is what an
@@ -346,6 +356,7 @@ template <int f_DEC> struct oc_psrc {
   cm_cnt cmax[PS_LEVELS], cmin[PS_LEVELS];
   u8 *buf;
   u8 *bend;
+  int primed;            //  the run counters hold their priors, not zeroes
   u32 qn;                //  encode: pool bytes written
   u32 left;              //  decode: bits of this block not yet served
   u8 *ptr[PS_NCLS];      //  decode: where each class's next bit is
@@ -527,17 +538,24 @@ template <int f_DEC> struct oc_psrc {
     memset((void *)this, 0, sizeof *this);
     buf = b;
     bend = e;
-    if(ps_qready)
-      prime();
+    ps_tables();
+    prime();
+    primed = 1;
   }
   //  A stream starts: no block in hand, and the buffer mapped if this is
   //  the first one.  The map is demand-zero and nothing outside the block
   //  in hand is ever touched, so a short file pays for a few pages of it.
   void begin(void) {
-    int fresh = !ps_qready;
     ps_tables();
-    if(fresh)
+    //  Kept on this object rather than read off the shared table flag: the
+    //  second direction to run in a process finds the tables already built,
+    //  and a stream that came in as solid was never reset, so neither is
+    //  evidence that THIS object has its priors.  Priming zeroed counters is
+    //  what is wanted; priming over a solid run's learned ones is not.
+    if(!primed) {
       prime();
+      primed = 1;
+    }
     if(!buf) {
       buf = (u8 *)tc_map(ENC ? PS_ENCCAP : PS_DECCAP);
       bend = buf + (ENC ? PS_TMPOFF : PS_EXPCAP);

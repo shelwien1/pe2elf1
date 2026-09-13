@@ -244,6 +244,37 @@ precondition for running it on another thread, or splitting the classes
 across several coders.  Neither is done here, and Amdahl caps what either
 could return at the coder's ~10% share.
 
+## 8a. Two things the change costs that are not bits or seconds
+
+**It hides a divergent model.** Under the plain coder, an encoder and a
+decoder that compute even slightly different probabilities for the same bit
+desynchronize at once and loudly.  Under PSRC the decoder only uses the
+probability to pick a class, so any disagreement that lands in the same class
+is absorbed -- the right bit comes back and both models go on in step.
+Measured, with a decoder that nudges `p` by one wherever that stays inside
+its class: **PSRC round-trips 32 of 32, the plain coder 0 of 32.**  The
+masking is total, not partial.
+
+That is a nicer failure mode for benign cross-platform float wobble in
+`cm_squash` and a much worse one for a real model bug, because it converts a
+loud, localized, first-file failure into a rare one somewhere in the middle
+of a large file.  `mk.sh check` is the test that would have caught it, and
+its power to do so is now a class wide.  A build with `-DOC_PSRC=0` is the
+strict check; run one when the model changes.
+
+**Refusals say less.** A truncated `.oc` used to fail at the field the
+truncation hit -- `flr.csub = -40 is out of range`, `packet ends inside a
+codeword`.  Now the whole rest of the block is decoded out of the `0xFF`
+bytes past EOF first, so what comes back is the generic `cut short -- the
+stream ends before its last symbol`.  Safety is unchanged and every
+truncation is still refused; the diagnosis is coarser by up to a block.
+
+One thing it does *not* cost: `t.sh`'s existing oggdet checks already prove
+the coder's reset is complete.  `oggdet c -c` codes each segment after an
+`oc_model::reset()` in one process, and `t.sh` compares segments 1 and 2
+byte-for-byte with what a fresh `oggcomp c` process writes.  A counter the
+reset forgot would make them differ.
+
 ## 9. Where this differs from PSRC-006
 
 - the quantizer is derived, not the tuned `qmaq` table (section 5);
@@ -257,7 +288,16 @@ could return at the coder's ~10% share.
 - the block length is coded, because it is not known in advance (section 4);
 - the count coder drops PSRC's degenerate second flag when a subtree's
   ceiling is 1, and takes the recursion depth as context;
-- every decode-side write is bounded, because a `.oc` may be damaged.
+- every decode-side write is bounded, because a `.oc` may be damaged;
+- the chunks are coded in ascending class order and stay that way.  PSRC
+  alternates the direction each block so that one shared counter set carries
+  from the last chunk of a block to the first of the next; with a counter set
+  per magnitude there is nothing to carry.  (`rle_dcod()` in PSRC-006's
+  `model_rle_get.inc` writes `f_dir ^= 0` where `rle_code()` writes
+  `f_dir ^= 1`, so its `dc` command reverses the chunk order of every block
+  after the first -- `cr`/`cc`/`dc`/`dr` disagree on any input over one
+  block, and `dr` then walks off the end.  `c` and `d` are unaffected.  This
+  port inherits none of it.)
 
 ## 10. Knobs
 
