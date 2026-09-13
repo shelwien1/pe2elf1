@@ -3,6 +3,8 @@
 #  still compile.  ./mk.sh rewrites it; see the comment at the top of it.
 oggcomp
 oggdet
+oggcomp[0-9].so
+oggcomp[0-9].dll
 *.o
 *.oc
 *.gcda

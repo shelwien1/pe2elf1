@@ -4,8 +4,11 @@
 #      ./mk.sh              tuning build   -- Debug 1, Const 0
 #      ./mk.sh release      shipping build -- every parameter folded
 #      ./mk.sh check [lst]  build both and prove they code identically
-#      ./mk.sh mod          regenerate MOD/ in the shipping form, build nothing
+#      ./mk.sh mod [IDXDIR] regenerate MOD/ in the shipping form, build nothing
 #      ./mk.sh pgo f.ogg    shipping build, laid out from a profile of f.ogg
+#      ./mk.sh dll N [IDXDIR]  oggcompN.so: the model in IDXDIR (default IDX)
+#                           as a library, which `oggcomp -N` and `oggdet -N`
+#                           load from beside themselves (oc_api.h)
 #
 #  Only the first two (and pgo) write ./oggcomp and ./oggdet.  A shipping
 #  binary has no !MAP! markers in it, so an optimizer driving one finds no
@@ -70,9 +73,12 @@ cd "$here"
 #  `trap ... EXIT INT TERM` they replace did not: that one deleted the
 #  scratch directory and let the script carry on using it.
 tmp=
+IDXD=IDX
 cleanup() {
-  rm -f "$here"/IDX/tsvcomp-*-const.idx "$here"/IDX/tsvcomp-*-const.inc \
-        "$here"/IDX/tsvcomp-*_h.inc "$here"/IDX/tsvcomp-*_p.inc
+  for d in IDX "$IDXD"; do
+    rm -f "$here/$d"/tsvcomp-*-const.idx "$here/$d"/tsvcomp-*-const.inc \
+          "$here/$d"/tsvcomp-*_h.inc "$here/$d"/tsvcomp-*_p.inc
+  done
   [ -n "$tmp" ] && rm -rf "$tmp"
   return 0
 }
@@ -106,7 +112,7 @@ case "${1:-tuning}:$arch" in
   #  `mod` runs perl and nothing else, so the architecture it runs on does
   #  not come into it -- and putting MOD/ back the way it ships is exactly
   #  what someone on a machine that cannot build would want to do.
-  mod:*) ;;
+  mod:* | dll:*) ;;
   *:x86_64 | *:amd64 | *:i[3456]86) ;;
   *)
     [ "${OGGCOMP_ANY_ARCH:-0}" = 1 ] || {
@@ -122,33 +128,37 @@ FAMS="dig sgn flr cls aux hdr"
 #  Regenerate MOD/ from all six.  $1 = UseNew (1 pointers, 0 fixed arrays),
 #  $2 = 1 to fold every parameter to a literal, which is IDX-FORMAT.md sec.1's
 #  one substitution applied to each module in turn so they cannot drift.
+#  The declarations come from $IDXD -- IDX, or another model's directory for
+#  `dll` and `mod` -- and the generator from IDX always.
 generate() {
   mkdir -p MOD
   for f in $FAMS; do
     s="tsvcomp-$f"
+    [ -f "$IDXD/tsvcomp-$f.idx" ] ||
+      { echo "mk.sh: $IDXD/tsvcomp-$f.idx is not there -- not a model directory" >&2; exit 1; }
     if [ "$2" = 1 ]; then
-      sed 's/^Const 0/Const 1/' "IDX/tsvcomp-$f.idx" > "IDX/tsvcomp-$f-const.idx"
-      cp -f "IDX/tsvcomp-$f.inc" "IDX/tsvcomp-$f-const.inc"
+      sed 's/^Const 0/Const 1/' "$IDXD/tsvcomp-$f.idx" > "$IDXD/tsvcomp-$f-const.idx"
+      cp -f "$IDXD/tsvcomp-$f.inc" "$IDXD/tsvcomp-$f-const.inc"
       s="tsvcomp-$f-const"
     fi
-    ( cd IDX && IDX_NOCONST=0 perl idx2inc.pl "$s.idx" "$1" >/dev/null )
+    ( cd "$IDXD" && IDX_NOCONST=0 perl "$here/IDX/idx2inc.pl" "$s.idx" "$1" >/dev/null )
     #  idx2inc.pl opens both its inputs without checking, has no `use strict`
     #  and no die anywhere in it, and exits 0 whatever happens: a misspelled
     #  family or a template that is not beside its .idx produces an empty _p
     #  and a stub _h, a clean compile, and a compressor with no model in it.
     #  `set -e` cannot see any of that, so the post-condition is checked here.
     for o in _h _p; do
-      if [ ! -s "IDX/${s}${o}.inc" ]; then
+      if [ ! -s "$IDXD/${s}${o}.inc" ]; then
         #  The stubs and the -const copies go on the way out, in cleanup().
-        echo "mk.sh: IDX/idx2inc.pl wrote no ${s}${o}.inc -- is IDX/$s.inc there?" >&2
+        echo "mk.sh: IDX/idx2inc.pl wrote no ${s}${o}.inc -- is $IDXD/$s.inc there?" >&2
         echo "mk.sh: MOD/ now holds part of one build and part of another;" >&2
         echo "       fix that and run this again, which regenerates all six." >&2
         exit 1
       fi
     done
-    mv -f "IDX/${s}_h.inc" "MOD/tsvcomp-${f}_h.inc"
-    mv -f "IDX/${s}_p.inc" "MOD/tsvcomp-${f}_p.inc"
-    if [ "$2" = 1 ]; then rm -f "IDX/$s.idx" "IDX/$s.inc"; fi
+    mv -f "$IDXD/${s}_h.inc" "MOD/tsvcomp-${f}_h.inc"
+    mv -f "$IDXD/${s}_p.inc" "MOD/tsvcomp-${f}_p.inc"
+    if [ "$2" = 1 ]; then rm -f "$IDXD/$s.idx" "$IDXD/$s.inc"; fi
   done
 }
 
@@ -319,8 +329,30 @@ case "${1:-tuning}" in
     ;;
 
   mod)
-    regenerate_mod
-    echo "mk.sh: MOD/ regenerated in the shipping form; no binary built"
+    IDXD=${2:-IDX}
+    generate 0 1
+    if [ "$IDXD" = IDX ]; then echo "mk.sh: MOD/ regenerated in the shipping form; no binary built"
+    else echo "mk.sh: MOD/ now holds the model in $IDXD, in the shipping form; no binary built"
+         echo "       (./mk.sh mod puts the tree's own back)"; fi
+    ;;
+
+  dll)
+    #  One model as a library: MOD/ from the directory named, the shipping
+    #  form, compiled once with the API exported (oc_api.h, oggcomp_dll.cpp),
+    #  and MOD/ put back to the tree's own model afterwards so that the next
+    #  build of the programs is what it was.  The library is the same
+    #  translation unit the programs carry for model 0, so a library built
+    #  from IDX itself codes as -0 does, which is what ./t.sh checks.
+    n=${2:-}
+    case "$n" in [1-9]) ;; *) echo "usage: ./mk.sh dll N [IDXDIR]   N in 1..9" >&2; exit 2;; esac
+    IDXD=${3:-IDX}
+    [ -d "$IDXD" ] || { echo "mk.sh: $IDXD is not a directory" >&2; exit 2; }
+    generate 0 1
+    $CXX $CXXFLAGS $WARN $REQ -shared -fPIC -fvisibility=hidden -DOC_BUILD_DLL \
+         -o "oggcomp$n.so" oggcomp_dll.cpp -lm
+    IDXD=IDX
+    generate 0 1
+    echo "mk.sh: oggcomp$n.so -- the model in ${3:-IDX} as a library, every parameter folded"
     ;;
 
   pgo)
@@ -360,7 +392,7 @@ case "${1:-tuning}" in
     ;;
 
   *)
-    echo "usage: ./mk.sh [tuning|release|check [file-list]|pgo file.ogg|mod]" >&2
+    echo "usage: ./mk.sh [tuning|release|check [file-list]|pgo file.ogg|mod [IDXDIR]|dll N [IDXDIR]]" >&2
     exit 2
     ;;
 esac

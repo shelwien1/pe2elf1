@@ -48,8 +48,10 @@
 #include "vb_packet.inc"
 #include "ogg_stream.inc"
 #include "oc_coro.inc"
+#include "oc_api.inc"
+#include "oc_load.inc"
 
-#define OGGDET_VERSION "oggdet 1.5"
+#define OGGDET_VERSION "oggdet 1.6"
 
 /*  ------------------------------------------------------------------ misc  */
 
@@ -466,6 +468,8 @@ typedef struct {
   int dry;                    /*  -t: detect and report, write nothing  */
   int comp;                   /*  -c: streams coded by oggcomp; 2 with -S,
                                   the model kept from one stream to the next  */
+  int model;                  /*  -N: which model, 0 this program's own  */
+  int have_model;
 } opts;
 
 static void usage(FILE * f) {
@@ -498,6 +502,8 @@ static void usage(FILE * f) {
     "  -D        do not deduplicate: write byte-identical files more than once\n"
     "  -o LIST   extract only runs whose every logical stream is in LIST,\n"
     "            e.g. -o vorbis,opus; others are left in the metainfo\n"
+    "  -N        model N for -c: 0 this program's own, 1..9 oggcompN.dll (.so)\n"
+    "            beside it; the file names it, and d takes it from there\n"
     "  -m FILE   the metainfo as a file of its own: where it goes without -c\n"
     "            (default <prefix>.meta), and with -c what stays out of <output>\n"
     "  -t        detect and report only, write no files\n"
@@ -683,9 +689,11 @@ static int files_equal(const char * a, const char * b) {
 
     With -c everything carved goes into one file, <output>:
 
-      "OGGDETc1"                       8 bytes
+      "OGGDETc2"                       8 bytes
       flags                            1 byte: 1 the metainfo is inside,
                                                2 the segments are solid
+      model                            1 byte: which model coded it, 0 the
+                                               program's own, N oggcompN
       segment*                         varint (len << 2) | kind, then len bytes
                                          kind 0  a chunk of the metainfo,
                                                  coded by oggcomp
@@ -700,19 +708,26 @@ static int files_equal(const char * a, const char * b) {
     names it.  Streams and images are numbered by their order in the file
     and a record names one by number only; a duplicate names an earlier one,
     which the restorer seeks back to.  With -m the metainfo is a plain file
-    beside this one and there are no chunks.  */
+    beside this one and there are no chunks.  A file that begins "OGGDETc1"
+    is the same without the model byte, model 0, and is read as well.  */
 
-static oc_coro<0> od_enc;
-static oc_coro<1> od_dec;
-static int od_model_ready, od_enc_used, od_dec_used;
+/*  The model, through oc_api.h's table: this program's own for -0, a
+    library's for -1 to -9, loaded in main.  One instance, opened when the
+    first stream needs it; Init per stream, fresh or solid.  */
+static oc_api od_api;
+static void * od_inst;
 
-static void od_model(void) {
-  if (od_model_ready) return;
-  od_enc.t.init();
-  od_model_ready = 1;
+static void od_open(void) {
+  if (od_inst) return;
+  od_inst = od_api.Alloc();
+  if (!od_inst) die("model %d is in use", od_api.model);
+}
+static NORETURN void od_fail(int r) {
+  FATAL_CODE(r >= 5 && r <= 8 ? r - 4 : OGC_EXIT_REFUSED, "%s", od_api.Error(od_inst));
 }
 
-#define AR_MAGIC "OGGDETc1"
+#define AR_MAGIC "OGGDETc2"
+#define AR_MAGIC_C1 "OGGDETc1"
 #define AR_INSIDE 1
 #define AR_SOLID 2
 #define SEG_META 0
@@ -751,14 +766,14 @@ typedef struct {
 static arfile arw;
 
 static void arw_open(const char * path, u8 flags) {
-  u8 h[9];
+  u8 h[10];
   snprintf(arw.path, sizeof arw.path, "%s", path);
   arw.pipe = !strcmp(arw.path, "-");
   if (!arw.f.make(arw.path)) die("cannot create %s", arw.path);
   if (!arw.pipe) ogc_partial.also(arw.path, &arw.f);
-  memcpy(h, AR_MAGIC, 8);  h[8] = flags;
-  fh_write(&arw.f, h, 9, arw.path);
-  arw.size = 9;
+  memcpy(h, AR_MAGIC, 8);  h[8] = flags;  h[9] = (u8) od_api.model;
+  fh_write(&arw.f, h, 10, arw.path);
+  arw.size = 10;
   arw.on = 1;
 }
 /*  Append a segment: its header, then the bytes.  Returns where the bytes went.  */
@@ -817,10 +832,10 @@ typedef struct {
 } osink;
 
 static void os_flush(osink * s) {
-  uint n = od_enc.getoutsize();
-  bb_put(&s->seg, od_enc.outbeg, n);
-  s->written += n;
-  od_enc.addout(s->obuf, sizeof s->obuf);
+  int n = od_api.getoutlen(od_inst);
+  if (n > 0) bb_put(&s->seg, s->obuf, (size_t) n);
+  s->written += (u64) (n > 0 ? n : 0);
+  od_api.addout(od_inst, s->obuf, (int) sizeof s->obuf);
 }
 
 /*  Open: a stream file, or the encoder into `seg`.  `hdr` puts oggcomp's
@@ -834,16 +849,19 @@ static void os_open(osink * s, const char * path, int comp, int hdr) {
     if (hdr) {
       u8 h[8];
       memcpy(h, OC_MAGIC, sizeof OC_MAGIC - 1);
-      h[sizeof OC_MAGIC - 1] = (u8) OC_VER;
-      h[sizeof OC_MAGIC] = 0;
+      h[sizeof OC_MAGIC - 1] = (u8) od_api.StreamVersion();
+      h[sizeof OC_MAGIC] = (u8) od_api.model;
       bb_put(&s->seg, h, sizeof OC_MAGIC + 1);
       s->written = sizeof OC_MAGIC + 1;
     }
-    od_model();
-    if (comp == 2 && od_enc_used) oc_next(od_enc, path);
-    else oc_fresh(od_enc, path);
-    od_enc_used = 1;
-    od_enc.addout(s->obuf, sizeof s->obuf);
+    od_open();
+    {
+      /*  OC_F_SOLID keeps the model only once there is one to keep: the
+          first segment starts fresh either way.  */
+      int r = od_api.Init(od_inst, OC_ENCODE, comp == 2 ? OC_F_SOLID : 0, path);
+      if (r) od_fail(r);
+    }
+    od_api.addout(od_inst, s->obuf, (int) sizeof s->obuf);
   } else if (!s->f.make(path)) die("cannot create %s", path);
   s->on = 1;
 }
@@ -855,12 +873,14 @@ static void os_put(osink * s, const u8 * p, size_t k) {
     s->written += k;
     return;
   }
-  od_enc.addinp((byte *) p, (uint) k);
+  if (!k) return;                     /*  0 would say the input is over  */
+  od_api.addinp(od_inst, (void *) p, (int) k);
   for (;;) {
-    uint r = od_enc.coro_call(&od_enc);
-    if (r == 2) { os_flush(s);  continue; }
-    if (r == 1) break;
-    die("internal: the encoder stopped inside %s", s->path);
+    int r = od_api.Loop(od_inst);
+    if (r == OC_NEED_OUTPUT) { os_flush(s);  continue; }
+    if (r == OC_NEED_INPUT) break;
+    if (r == OC_DONE) die("internal: the encoder stopped inside %s", s->path);
+    od_fail(r);
   }
 }
 
@@ -869,13 +889,13 @@ static void os_put(osink * s, const u8 * p, size_t k) {
 static void os_close(osink * s) {
   if (!s->on) return;
   if (s->comp) {
-    od_enc.f_quit = 1;
-    od_enc.addinp(s->obuf, 0);
+    od_api.addinp(od_inst, s->obuf, 0);
     for (;;) {
-      uint r = od_enc.coro_call(&od_enc);
-      if (r == 2) { os_flush(s);  continue; }
-      if (r == 0) { os_flush(s);  break; }
-      die("internal: the encoder asked for more of %s", s->path);
+      int r = od_api.Loop(od_inst);
+      if (r == OC_NEED_OUTPUT) { os_flush(s);  continue; }
+      if (r == OC_DONE) { os_flush(s);  break; }
+      if (r == OC_NEED_INPUT) die("internal: the encoder asked for more of %s", s->path);
+      od_fail(r);
     }
   } else if (s->f.error() || s->f.close()) die("write error on %s", s->path);
   s->on = 0;
@@ -904,23 +924,28 @@ static void oc_decode(const u8 * oc, size_t n, const char * path, bbuf * out, in
   if (hdr) {
     if (n < sizeof OC_MAGIC + 1 || memcmp(oc, OC_MAGIC, sizeof OC_MAGIC - 1))
       die("%s: the segment is not an oggcomp stream", path);
-    if (oc[sizeof OC_MAGIC - 1] != OC_VER)
-      die("%s: a segment made by oggcomp version %u, this is version %u", path,
-          oc[sizeof OC_MAGIC - 1], OC_VER);
+    if (oc[sizeof OC_MAGIC - 1] != od_api.StreamVersion())
+      die("%s: a segment made by oggcomp version %u, model %d writes version %d", path,
+          oc[sizeof OC_MAGIC - 1], od_api.model, od_api.StreamVersion());
+    if (oc[sizeof OC_MAGIC] != od_api.model)
+      die("%s: a segment coded with model %u, and this is model %d", path,
+          oc[sizeof OC_MAGIC], od_api.model);
     skip = sizeof OC_MAGIC + 1;
   }
-  od_model();
-  if (solid && od_dec_used) oc_next(od_dec, path);
-  else oc_fresh(od_dec, path);
-  od_dec_used = 1;
-  od_dec.addinp((byte *) oc + skip, (uint) (n - skip));
-  od_dec.addout(obuf, sizeof obuf);
+  od_open();
+  {
+    int r = od_api.Init(od_inst, OC_DECODE, solid ? OC_F_SOLID : 0, path);
+    if (r) od_fail(r);
+  }
+  if (n - skip > (size_t) 0x7FFFFFFF) die("%s: a segment of %llu bytes", path, (unsigned long long) n);
+  if (n - skip) od_api.addinp(od_inst, (void *) (oc + skip), (int) (n - skip));
+  od_api.addout(od_inst, obuf, (int) sizeof obuf);
   for (;;) {
-    uint r = od_dec.coro_call(&od_dec);
-    if (r == 2) { bb_put(out, obuf, od_dec.getoutsize());  od_dec.addout(obuf, sizeof obuf);  continue; }
-    if (r == 1) { od_dec.f_quit = 1;  od_dec.addinp(obuf, 0);  continue; }
-    if (r == 0) { bb_put(out, obuf, od_dec.getoutsize());  break; }
-    die("internal: the decoder stopped inside %s", path);
+    int r = od_api.Loop(od_inst);
+    if (r == OC_NEED_OUTPUT) { bb_put(out, obuf, (size_t) od_api.getoutlen(od_inst));  od_api.addout(od_inst, obuf, (int) sizeof obuf);  continue; }
+    if (r == OC_NEED_INPUT) { od_api.addinp(od_inst, obuf, 0);  continue; }
+    if (r == OC_DONE) { bb_put(out, obuf, (size_t) od_api.getoutlen(od_inst));  break; }
+    od_fail(r);
   }
 }
 
@@ -1529,26 +1554,35 @@ typedef struct {
   size_t mp;
 } ardec;
 
-/*  Is this a file -c wrote?  A name that is not a file, a prefix, is not.  */
-static int ard_probe(const char * path) {
+/*  Is this a file -c wrote?  A name that is not a file, a prefix, is not.
+    Returns 0 for no, else 1 with the model that coded it in *model.  */
+static int ard_probe(const char * path, int * model) {
   filehandle f;
-  u8 m[8];
-  int r;
+  u8 m[10];
+  int r = 0;
+  uint n;
   if (!strcmp(path, "-") || !f.open(path)) return 0;
-  r = f.sread(m, 8) == 8 && !memcmp(m, AR_MAGIC, 8);
+  n = f.sread(m, 10);
+  if (n >= 9 && !memcmp(m, AR_MAGIC_C1, 8)) { r = 1;  *model = 0; }
+  if (n >= 10 && !memcmp(m, AR_MAGIC, 8)) { r = 1;  *model = m[9]; }
   f.close();
   return r;
 }
 static void ard_open(ardec * a, const char * path) {
-  u8 h[9];
+  u8 h[10];
+  int c1;
   snprintf(a->path, sizeof a->path, "%s", path);
   if (!a->f.open(a->path)) die("cannot open %s", a->path);
   fh_read(&a->f, h, 9, a->path);
-  if (memcmp(h, AR_MAGIC, 8)) die("%s is not a file oggdet -c wrote", a->path);
+  c1 = !memcmp(h, AR_MAGIC_C1, 8);
+  if (!c1 && memcmp(h, AR_MAGIC, 8)) die("%s is not a file oggdet -c wrote", a->path);
+  if (!c1) fh_read(&a->f, h + 9, 1, a->path);
   if (h[8] & ~(AR_INSIDE | AR_SOLID))
     die("%s: flags %02X are not ones this version knows", a->path, h[8]);
+  if (!c1 && h[9] != od_api.model)
+    die("%s was coded with model %u, and this is model %d", a->path, h[9], od_api.model);
   a->inside = (h[8] & AR_INSIDE) != 0;  a->solid = (h[8] & AR_SOLID) != 0;
-  a->pos = 9;
+  a->pos = c1 ? 9 : 10;
   a->st = a->im = NULL;  a->stn = a->stcap = a->imn = a->imcap = 0;
   a->held = 0;  a->held_idx = 0;
   bb_init(&a->stream);  bb_init(&a->coded);  bb_init(&a->mq);  a->mp = 0;
@@ -1872,6 +1906,9 @@ int main(int argc, char ** argv) {
         case 'D': o.nodedup = 1;  break;
         case 'c': if (!o.comp) o.comp = 1;  break;
         case 'S': o.comp = 2;  break;
+        case '0': case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8': case '9':
+          o.model = a[1] - '0';  o.have_model = 1;  break;
         case 'h': usage(stdout);  return 0;
         case 's':
           if (++i >= argc) { usage(stderr);  return 2; }
@@ -1909,6 +1946,7 @@ int main(int argc, char ** argv) {
   od_run.rc = 0;
   od_run.archive = NULL;
   od_run.inside = 0;
+  od_api.model = o.model;
   if (mode[0] == 'c') {
     /*  Carving: the container in; out, the prefix's files with the
         metainfo beside them, or with -c the one file the second argument
@@ -1931,7 +1969,11 @@ int main(int argc, char ** argv) {
     if (o.dry) die("-t is meaningless when restoring");
     od_run.prefix = pos[0];
     od_run.outname = pos[1];
-    if (ard_probe(pos[0])) {
+    if (ard_probe(pos[0], &i)) {
+      /*  The file names its model; -N given must agree.  */
+      if (o.have_model && o.model != i)
+        die("%s was coded with model %d, and -%d asks for another", pos[0], i, o.model);
+      o.model = i;
       od_run.archive = pos[0];
       od_run.inside = !o.meta;    /*  restore() holds it against the file's own word  */
       od_run.in = o.meta ? o.meta : pos[0];
@@ -1962,6 +2004,10 @@ int main(int argc, char ** argv) {
     }
     ogc_paths_distinct(pp, n);
   }
+  /*  The model, when the run codes or decodes: loaded now, so that a
+      library that is not there is refused before any output exists.  */
+  if ((mode[0] == 'c' && o.comp && !o.dry) || od_run.archive) oc_api_load(&od_api, o.model);
+  else oc_api_own(&od_api);
   if (pinin && !f.open(od_run.in)) FATAL_CODE(OGC_EXIT_IO, "cannot open %s", od_run.in);
   if (pinout) {
     if (!g.make(od_run.outname)) FATAL_CODE(OGC_EXIT_IO, "cannot create %s", od_run.outname);

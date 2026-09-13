@@ -20,7 +20,11 @@ typedef u16 word;
 typedef u32 uint;
 typedef u64 qword;
 
+#if defined(__GNUC__) || defined(__clang__)
+static qword g_prog_in __attribute__((__unused__));
+#else
 static qword g_prog_in;
+#endif
 
 #undef __min
 #undef __max

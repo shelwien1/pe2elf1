@@ -39,8 +39,9 @@ gigabyte of model tables, not by code.
 | `./mk.sh release` | the **shipping** build: every parameter folded to a literal, no indirection, no markers |
 | | both write `./oggdet` too, from the same `MOD/`: the carver includes the compressor, so a change to the model is a change to both |
 | `./mk.sh check [list]` | both, over one `.ogg` per line of *list* (default: `testfiles/`), compared byte for byte |
-| `./mk.sh mod` | regenerate `MOD/` in the shipping form, build nothing |
+| `./mk.sh mod [dir]` | regenerate `MOD/` in the shipping form, build nothing; from another model's directory when one is named |
 | `./mk.sh pgo f.ogg` | the shipping build, laid out from a profile of *f.ogg* |
+| `./mk.sh dll N [dir]` | `oggcompN.so`: the model in *dir* (default `IDX/`) as a library, which `-N` loads -- see *The model as a library* |
 
 Both builds must produce the same stream.  That is the format's contract
 and `./mk.sh check` is the test of it; see `IDX/IDX-FORMAT.md` §1 for why
@@ -79,7 +80,9 @@ is the two binaries against each other.
 
 `-v` says where the bits went, by stage.  `-H` asks for huge pages, which
 costs about ten times the resident memory and is worth measuring before
-believing.  A lone `-` is stdin or stdout.
+believing.  `-N`, a digit, picks the model: `-0` the one linked into the
+program, `-1` to `-9` a library beside it (below).  A lone `-` is stdin or
+stdout.
 
 Two sharp edges worth knowing before scripting it.  **A run that fails
 deletes the file its output path names** -- so that a half-written `.oc`
@@ -167,6 +170,54 @@ read back from a pipe.  Its exit status is 1 for input it cannot restore
 from -- a `.meta` or a file that is not one or is cut short, a segment or
 stream file missing or damaged -- 2 and 3 as for `oggcomp`.
 
+## The model as a library
+
+The compressor is one translation unit and one model, and a second model
+-- another `IDX/`, another tuning -- was until now a second program.  It
+is now a library: `oc_api.h` is a C interface over the coroutine, one
+instance per library, the shape of `raw2hif_dll.h`,
+
+    p = oggcomp_Alloc();
+    oggcomp_Init(p, OC_ENCODE, flags, "in.ogg");     or OC_DECODE
+    oggcomp_addout(p, obuf, sizeof obuf);
+    for(;;) {
+      r = oggcomp_Loop(p);
+      if(r == OC_NEED_INPUT) oggcomp_addinp(p, ibuf, got);   got == 0 ends the input
+      else if(r == OC_NEED_OUTPUT || r == OC_DONE) { write obuf, oggcomp_getoutlen(p); ... }
+      else { oggcomp_Error(p); ... }                          4 and up
+    }
+    oggcomp_Free(p);
+
+and the same functions come two ways.  Linked into `oggcomp` and
+`oggdet`, they are model 0, `-0`, the default.  Exported by
+`oggcompN.so` -- `oggcompN.dll` on Windows -- they are model N, and `-N`
+loads that file from beside the program (or from the library path) and
+drives it through the same table of pointers (`oc_load.inc`) that holds
+the static addresses for model 0.  A stream names its model in its
+header, the byte after the version, so `oggcomp d` and `oggdet d` find
+the library on their own; a `-N` given there must agree.
+
+    ./mk.sh dll 2 ../other-model/IDX      # oggcomp2.so from that model
+    oggcomp c -2 in.ogg out.oc            # coded by it
+    oggcomp d out.oc back.ogg             # loads oggcomp2.so by the header
+    oggdet c -S -2 image.bin out          # every segment through it
+
+The library is the shipping form of whatever `IDX/` it was built from,
+`oggcomp_dll.cpp` compiled with `-shared` and the API exported, its own
+366 MB of tables, its own coroutine stacks, and one instance: the model is
+static, so `oggcomp_Alloc()` hands out the instance once and `0` while it
+is out, and two models loaded at once are two libraries and twice the
+tables.  What goes through it is the coded stream without its seven-byte
+file header, which the caller writes and checks with
+`oggcomp_StreamVersion()` and the model's number.  `OC_F_SOLID` on `Init`
+keeps the model from the run before on that instance, which is `-S`; a
+run's errors come back as `Loop` results of 4 and up with the message in
+`oggcomp_Error()`, never as an exit.  `./t.sh` builds nothing, but with
+`oggcomp1.so` beside the binary (`./mk.sh dll 1`, or `./t.sh -B`) it
+checks that `-1` writes what `-0` writes but for the model byte, that `d`
+finds the library from the header and refuses `-0`, and that a library
+that is not there is a refusal with nothing written.
+
 ## On Windows
 
 `gc.bat` is the Windows build; it drives clang with hard-coded toolchain
@@ -182,8 +233,15 @@ takes nothing exotic:
 
     x86_64-w64-mingw32-g++ -O2 -fwrapv -static -o oggcomp.exe oggcomp.cpp
     x86_64-w64-mingw32-g++ -O2 -fwrapv -static -DFILE_API_WIN -o oggcomp.exe oggcomp.cpp
+    x86_64-w64-mingw32-g++ -O2 -fwrapv -static -shared -DOC_BUILD_DLL -o oggcomp1.dll oggcomp_dll.cpp
 
-The same two lines with `oggdet.cpp` and `oggdet.exe` build the carver.
+The same two lines with `oggdet.cpp` and `oggdet.exe` build the carver;
+the third is a model as a library, from whatever `MOD/` holds (`./mk.sh
+mod dir` puts another model's there).  `OC_CALL` is `__stdcall` on
+Windows, as in `raw2hif_dll.h`, which on x86-64 decorates nothing; a
+32-bit build wants `-Wl,--kill-at` so that `GetProcAddress` finds the
+plain names.  Both programs, with both file backends, load
+`oggcomp1.dll` under wine and write the bytes the Linux build writes.
 Both were built and run under wine over the whole corpus, and both produce
 the same compressed stream as the Linux build, byte for byte, including
 when either end is a pipe.
@@ -200,7 +258,8 @@ an input of 167685, silently not the file it was given.
 | | |
 |---|---|
 | `oggcomp.cpp` | the include list and `main()`.  The program is the `.inc` files beside it, one per layer, in the order they are included: `ogg_*` the container, `vb_*` Vorbis, `oc_rcio.inc`, `rc.inc` and `cm.inc` the coder's byte I/O, the range coder and the mixing primitives, `tc_*` the model machinery, `oc_*` the six models and their assembly, and `oc_coro.inc` the coroutine that is the compressor -- what `oggdet` includes.  `REFACTOR.md` and `REFACTOR2.md` say what is in each |
-| `oggdet.cpp`, `oggart.inc` | the carver, and the cover-art extraction it uses.  `oggdet.cpp` includes the compressor's `.inc` files up to `oc_coro.inc` and drives that coroutine from inside its own |
+| `oggdet.cpp`, `oggart.inc` | the carver, and the cover-art extraction it uses.  `oggdet.cpp` includes the compressor's `.inc` files up to `oc_coro.inc` and drives the model through `oc_api.h` from inside its own coroutine |
+| `oc_api.h`, `oc_api.inc`, `oc_load.inc`, `oggcomp_dll.cpp` | the model as a library: the C interface, its implementation over the coroutine, the table of pointers the programs drive either model through, and the translation unit `./mk.sh dll N` builds into `oggcompN.so` |
 | `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |
 | `MOD/` | what `idx2inc.pl` generated, checked in |
 | `Lib3/` | coroutines and the file layer.  `file_api.inc` picks stdio or the WinAPI; `file_api_test.cpp` is the test that the two are one interface |

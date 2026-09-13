@@ -4,7 +4,7 @@
 #      ./t.sh                     the bundled corpus, ./oggcomp
 #      ./t.sh a.ogg b/*.ogg       those files instead
 #      ./t.sh -x build/oggcomp    a binary that is not ./oggcomp
-#      ./t.sh -B                  rebuild with ./mk.sh first
+#      ./t.sh -B                  rebuild with ./mk.sh first, oggcomp1.so too
 #      ./t.sh -k                  keep the .oc and the restored .ogg
 #      ./t.sh -1                  one encode per file, no determinism check
 #      ./t.sh -n                  skip the tests after the table
@@ -37,7 +37,10 @@
 #  The third section is oggdet, the carver built beside the compressor: a
 #  container of streams and other bytes has to come back whole, with and
 #  without -c, and the segment -c writes for a stream has to be the file
-#  the compressor writes for that stream alone.
+#  the compressor writes for that stream alone.  The fourth is the model
+#  as a library: oggcomp1.so, built from the tree's own IDX by `./mk.sh
+#  dll 1`, loaded by -1, has to code what -0 codes, byte for byte but for
+#  the model's number in the header.
 
 set -e
 
@@ -49,7 +52,7 @@ usage() {
 usage: ./t.sh [options] [file.ogg ...]
 
   -x PATH  test PATH instead of ./oggcomp
-  -B       rebuild with ./mk.sh first
+  -B       rebuild with ./mk.sh first, and oggcomp1.so with ./mk.sh dll 1
   -k       keep each .oc and restored .ogg beside its input
   -1       one encode per file: skip the determinism check
   -n       skip the tests after the table: anything round-trips, refusals, oggdet
@@ -92,6 +95,11 @@ done
 if [ $build = 1 ] || { [ "$bin" = ./oggcomp ] && [ ! -x ./oggcomp ]; }; then
   echo "t.sh: building $bin with ./mk.sh"
   ./mk.sh
+  echo
+fi
+if [ $build = 1 ]; then
+  echo "t.sh: building oggcomp1.so with ./mk.sh dll 1"
+  ./mk.sh dll 1
   echo
 fi
 [ -x "$bin" ] || { echo "t.sh: $bin is not there -- ./mk.sh builds it" >&2; exit 2; }
@@ -441,13 +449,13 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
   #  The carver's last line on stderr is its summary, minus the path.
   detsaid() { sed -n '$p' "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-56; }
   #  One stream's segment cut out of the file -c wrote, to stdout: eight
-  #  bytes of magic and one of flags, then segments, each a varint of
-  #  length times four plus kind -- 0 metainfo, 1 stream, 2 image -- and
-  #  the bytes.  perl, which the build needs anyway.
+  #  bytes of magic, one of flags and one naming the model, then segments,
+  #  each a varint of length times four plus kind -- 0 metainfo, 1 stream,
+  #  2 image -- and the bytes.  perl, which the build needs anyway.
   arseg() {  # $1 the file, $2 which stream, counted from 0
     perl -e 'binmode STDIN; binmode STDOUT; local $/; my $d = <STDIN>;
-             exit 1 unless substr($d, 0, 8) eq "OGGDETc1";
-             my ($p, $i) = (9, 0);
+             exit 1 unless substr($d, 0, 8) eq "OGGDETc2";
+             my ($p, $i) = (10, 0);
              while ($p < length $d) {
                my ($v, $s, $b) = (0, 0, 0);
                do { $b = ord substr($d, $p++, 1); $v |= ($b & 127) << $s; $s += 7 }
@@ -568,6 +576,60 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
   echo
 fi
 
+#  The model as a library.  oc_api.h's functions come linked into the
+#  program as model 0 and exported by oggcompN.so as model N, and the
+#  programs drive either through the same table of pointers (oc_load.inc),
+#  so -1 with a library built from the tree's own IDX has to write what -0
+#  writes, but for the header byte that names the model; the stream names
+#  it, so `d` finds the library on its own and refuses -0; and a library
+#  that is not there is a refusal with nothing written.  The library is
+#  the shipping form of the model, so on a tuning ./oggcomp this is also
+#  the two forms against each other, which `./mk.sh check` does at length.
+bad_lib=0; nlib=0
+lib=$(dirname -- "$bin")/oggcomp1.so
+if [ $refusals = 1 ] && [ $srcok = 1 ] && [ ! -f "$lib" ]; then
+  echo "t.sh: library tests skipped -- $lib is not there (./mk.sh dll 1 builds it)" >&2
+elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
+  libcheck() {  # $1 what, $2 1 if it passed, $3 what to say
+    nlib=$((nlib + 1))
+    if [ "$2" = 1 ]; then printf '  %-26s %s\n' "$1" "$3"
+    else printf '  %-26s FAILED  %s\n' "$1" "$3"; bad_lib=$((bad_lib + 1)); fi
+  }
+  printf '  %s\n' 'the model as a library'
+  lok=0
+  if "$bin" c -1 "$src" "$tmp/lib1.oc" >"$tmp/msg" 2>&1 &&
+     tail -c +8 "$tmp/good.oc" > "$tmp/lib0.body" && tail -c +8 "$tmp/lib1.oc" > "$tmp/lib1.body" &&
+     cmp -s "$tmp/lib0.body" "$tmp/lib1.body" &&
+     [ "$(head -c 7 "$tmp/lib1.oc" | tail -c 1 | od -An -tu1 | tr -d ' ')" = 1 ]; then lok=1; fi
+  libcheck 'c -1 codes as c -0' $lok "$(wc -c < "$tmp/lib1.oc") bytes, the model byte 1"
+  lok=0
+  if "$bin" d "$tmp/lib1.oc" "$tmp/lib1.ogg" >"$tmp/msg" 2>&1 && cmp -s "$src" "$tmp/lib1.ogg"; then lok=1; fi
+  libcheck 'd finds the model itself' $lok "from the header, no option given"
+  for q in 'd -0 on a model-1 stream:1:d -0 LIB1:' 'a library not there:3:c -9 SRC:'; do
+    what=${q%%:*}; rest=${q#*:}; want=${rest%%:*}; args=${rest#*:}; args=${args%:}
+    rm -f "$tmp/no.out"
+    set +e
+    case "$args" in
+      *LIB1*) "$bin" ${args%LIB1} "$tmp/lib1.oc" "$tmp/no.out" >"$tmp/msg" 2>&1;;
+      *)      "$bin" ${args%SRC} "$src" "$tmp/no.out" >"$tmp/msg" 2>&1;;
+    esac
+    got=$?
+    set -e
+    if [ "$got" = "$want" ] && [ ! -e "$tmp/no.out" ]; then libcheck "$what" 1 "exit $got  $(sed -n 1p "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-44)"
+    elif [ -e "$tmp/no.out" ]; then libcheck "$what" 0 "exit $got, but left an output file behind"
+    else libcheck "$what" 0 "exit $got, wanted $want"; fi
+  done
+  det=$(dirname -- "$bin")/oggdet
+  if [ -x "$det" ] && [ -f "$tmp/det/box" ]; then
+    lok=0
+    if "$det" c -c -1 -A -s 0 -D "$tmp/det/box" "$tmp/det/l1" >"$tmp/msg" 2>&1 &&
+       "$det" d "$tmp/det/l1" "$tmp/det/l1.back" >/dev/null 2>&1 &&
+       cmp -s "$tmp/det/box" "$tmp/det/l1.back"; then lok=1; fi
+    libcheck 'oggdet -c -1 and back' $lok "$(sed -n '$p' "$tmp/msg" | sed "s|$tmp/||g; s|^[^ ]*: ||" | cut -c1-44)"
+  fi
+  echo
+fi
+
 printf 't.sh: %d/%d round-tripped byte for byte' "$ok" "$n"
 [ $twice = 1 ] && printf ', %d/%d coded identically twice' "$same" "$nsame"
 echo
@@ -576,8 +638,10 @@ echo
          "$((nany - bad_any))" "$nany" "$((nrefusal - bad_refusal))" "$nrefusal"
 [ $ndet -gt 0 ] &&
   printf 't.sh: %d/%d oggdet checks passed\n' "$((ndet - bad_det))" "$ndet"
+[ $nlib -gt 0 ] &&
+  printf 't.sh: %d/%d library checks passed\n' "$((nlib - bad_lib))" "$nlib"
 
-if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $bad_det = 0 ] && [ $n -gt 0 ]; then
+if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $bad_det = 0 ] && [ $bad_lib = 0 ] && [ $n -gt 0 ]; then
   echo "t.sh: PASS"
 else
   echo "t.sh: FAIL" >&2

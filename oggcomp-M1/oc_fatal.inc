@@ -27,7 +27,7 @@ void ogc_fatal_unless(int cond, const char *fmt, ...) OGC_PRINTF(2, 3);
   }
 template <class T> constexpr const T &ogc_min(const T &a, const T &b) { return a < b ? a : b; }
 static void message(const char *fmt, va_list ap) OGC_PRINTF(1, 0);
-static void ogc_set_prog(const char *argv0) {
+static inline void ogc_set_prog(const char *argv0) {
   const char *s;
   if(!argv0 || !*argv0)
     return;
@@ -37,7 +37,19 @@ static void ogc_set_prog(const char *argv0) {
   if(*argv0)
     ogc_prog = argv0;
 }
+//  Under the library API (oc_api.inc) a message is kept for the caller to
+//  read back rather than printed, and a fatal error returns through the
+//  API instead of ending the process: the two hooks below, set for the
+//  length of an API call and clear otherwise, so that a program's own
+//  FATAL -- a file it cannot open -- still exits as it always did.
+static char *ogc_msg_dst;
+static sz ogc_msg_cap;
+static void (*ogc_die_hook)(int code);
 static void message(const char *fmt, va_list ap) {
+  if(ogc_msg_dst) {
+    vsnprintf(ogc_msg_dst, ogc_msg_cap, fmt, ap);
+    return;
+  }
   fputs(ogc_prog, stderr);
   fputs(": ", stderr);
   vfprintf(stderr, fmt, ap);
@@ -83,6 +95,8 @@ struct ogc_partial_t {
 };
 static ogc_partial_t ogc_partial;
 static NORETURN void die(int code) {
+  if(ogc_die_hook)
+    ogc_die_hook(code);
   ogc_partial.drop();
   exit(code);
 }
@@ -144,7 +158,7 @@ void vb_refuse_unless(int cond, const char *fmt, ...) {
   va_end(ap);
   die(OGC_EXIT_REFUSED);
 }
-static void ogc_paths_distinct(const char *const *v, int n) {
+static inline void ogc_paths_distinct(const char *const *v, int n) {
   int i, j;
   for(i = 0; i < n; i++)
     for(j = i + 1; j < n; j++)

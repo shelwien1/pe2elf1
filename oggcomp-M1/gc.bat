@@ -87,6 +87,9 @@ rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts%
 
 %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% %defs% -static -D_USE_MATH_DEFINES oggdet.cpp -o oggdet.exe 
 
+rem a model as a library -- oggcompN.dll for `oggcomp -N`, from whatever MOD\ holds:
+rem %gcc% -s -std=c++23 -Ofast -O3 -fpermissive -Wno-format %arch% %incs% %opts% %defs% -static -shared -DOC_BUILD_DLL -D_USE_MATH_DEFINES oggcomp_dll.cpp -o oggcomp1.dll 
+
 del link.exe
 
 del *.o
