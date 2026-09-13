@@ -18,6 +18,7 @@
 #include "oc_fatal.inc"
 #include "ogg_page.inc"
 #include "vb_setup.inc"
+#include "vb_dict.inc"
 #include "oc_rcio.inc"
 #include "rc.inc"
 #include "cm.inc"

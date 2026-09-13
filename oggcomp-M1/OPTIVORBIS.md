@@ -132,6 +132,13 @@ them.  But it can know them, which is section 3.1.
 
 ### 3.1 The codebooks are libvorbis's, and there are few of them
 
+*Done since: tsvcomp, this program's ancestor, had already generated the
+table (`vbooks_gen.inc`, 1,346 books in 350 rows from 35 encoders), and
+`vb_dict.inc` now matches a setup's books against it bit for bit.  Every
+book of every corpus file is in it.  The corpus went from 76.8% to 71.3%,
+`tiny-8k-q0` from 1,346 bytes to 200 against OptiVorbis's 1,078, music
+from 144,389 to 143,012.  The estimate below was written before that.*
+
 libvorbis does not train codebooks per file.  Its encoder carries a fixed
 set of static books (`lib/books/`) and a fixed setup for each of its
 modes -- a sample-rate band, coupled or uncoupled or 5.1, a quality

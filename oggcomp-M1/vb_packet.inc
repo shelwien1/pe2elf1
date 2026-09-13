@@ -4,20 +4,6 @@ constexpr sz VB_YSMAX = (sz)VB_MAXCH * VB_MAXPOST;
 constexpr sz VB_CSMAX = (sz)VB_MAXCH * (VB_MAXBLK / 2 + VB_MAXDIM);
 static u32 vb_ys[VB_YSMAX];
 static u32 vb_cs[VB_CSMAX];
-static u32 lk1(u32 entries, u32 dim) {
-  u32 v = 0, i, p;
-  for(;;) {
-    p = 1;
-    Fi(
-        dim, if(p > entries / (v + 1)) {
-          p = entries + 1;
-          break;
-        } p *= v + 1);
-    if(p > entries)
-      return v;
-    v++;
-  }
-}
 constexpr u32 QUANT[4] = {256, 128, 86, 64};
 //  The sink is a type parameter so that the same parser runs against the
 //  model (io) and against null_sink, which is how the encoder finds out
@@ -165,15 +151,77 @@ template <class S> struct io_t {
     used = (int)fld("cb.used", 1, 1);
     Fi(ent, if(i) used = (int)fld("cb.used", 1, 1); if(used) k->len[i] = (u8)(fld("cb.len", 5, 5) + 1));
   }
+  //  One book, field by field: what a book that is not in the table costs,
+  //  and what a book from the table is parsed with, against null_sink.
+  void book(vb_book *k, u32 j) {
+    u32 lk, vb, i;
+    cst(24, 0x564342);
+    k->dim = fld("cb.dim", 16, 16);
+    k->ent = fld("cb.entries", 24, 24);
+    VB_UNLESS(k->dim > 0, "vorbis: codebook %" PRIu64 " has dimension 0", (u64)j);
+    VB_UNLESS(k->ent <= ((u32)1 << 20), "vorbis: codebook %" PRIu64 " has %" PRIu64 " entries", (u64)j, (u64)k->ent);
+    VB_UNLESS(ogc_ilog(k->dim) + ogc_ilog(k->ent) <= 24, "vorbis: codebook %" PRIu64 " size %" PRIu64 " x %" PRIu64 " is unsupported", (u64)j, (u64)k->dim, (u64)k->ent);
+    k->len = vb_ar.take<u8>(k->ent);
+    memset(k->len, 0, k->ent);
+    k->code = vb_ar.take<u32>(k->ent);
+    lengths(k);
+    k->words();
+    k->tree();
+    lk = fld("cb.lookup", 4, 2);
+    k->look = (u8)lk;
+    if(!lk)
+      return;
+    VB_UNLESS(lk == 1, "vorbis: unsupported codebook lookup type %" PRIu64, (u64)lk);
+    flt("cb.min.sign", "cb.min.exp", "cb.min.mant");
+    flt("cb.dlt.sign", "cb.dlt.exp", "cb.dlt.mant");
+    vb = fld("cb.valbits", 4, 4) + 1;
+    fld("cb.sequence", 1, 1);
+    k->nv = lk1(k->ent, k->dim);
+    k->mult = vb_ar.take<u32>(k->nv ? k->nv : 1);
+    Fi(k->nv, k->mult[i] = fld("cb.mult", (int)vb, (int)vb));
+    VB_UNLESS(k->nv > 0, "vorbis: codebook %" PRIu64 " has an empty lookup table", (u64)j);
+    k->grid();
+  }
+  //  The books: a row of the table when the packet's first books are one
+  //  (vb_dict.inc), then per book whether it is the row's next, and the
+  //  fields of every book that is not.  A book the table supplies is
+  //  parsed from the packet with nothing listening, once the decoder has
+  //  written it there, so it is what the same bits from the stream would
+  //  be.  Only a live encoder looks the row up: a dry run, and a cached
+  //  setup parsed again, take every book the long way and learn the same.
   void codebooks() {
     vb_setup *s = v.cur;
-    u32 nb, j, lk, vb, i;
+    u32 nb, j, set;
+    const vg_set *g = nullptr;
     vb_book *k;
     nb = fld("cb.count", 8, 8) + 1;
     VB_UNLESS(nb <= VB_MAXBOOK, "vorbis: %" PRIu64 " codebooks", (u64)nb);
     s->nbk = nb;
-    Fj(nb, k = s->bk + j; cst(24, 0x564342); k->dim = fld("cb.dim", 16, 16); k->ent = fld("cb.entries", 24, 24); VB_UNLESS(k->dim > 0, "vorbis: codebook %" PRIu64 " has dimension 0", (u64)j); VB_UNLESS(k->ent <= ((u32)1 << 20), "vorbis: codebook %" PRIu64 " has %" PRIu64 " entries", (u64)j, (u64)k->ent); VB_UNLESS(ogc_ilog(k->dim) + ogc_ilog(k->ent) <= 24, "vorbis: codebook %" PRIu64 " size %" PRIu64 " x %" PRIu64 " is unsupported", (u64)j, (u64)k->dim, (u64)k->ent); k->len = vb_ar.take<u8>(k->ent); memset(k->len, 0, k->ent); k->code = vb_ar.take<u32>(k->ent); lengths(k); k->words(); k->tree(); lk = fld("cb.lookup", 4, 2); k->look = (u8)lk; if(!lk) continue; VB_UNLESS(lk == 1, "vorbis: unsupported codebook lookup type %" PRIu64, (u64)lk); flt("cb.min.sign", "cb.min.exp", "cb.min.mant"); flt("cb.dlt.sign", "cb.dlt.exp", "cb.dlt.mant"); vb = fld("cb.valbits", 4, 4) + 1; fld("cb.sequence", 1, 1); k->nv = lk1(k->ent, k->dim); k->mult = vb_ar.take<u32>(k->nv ? k->nv : 1);
-       Fi(k->nv, k->mult[i] = fld("cb.mult", (int)vb, (int)vb)); VB_UNLESS(k->nv > 0, "vorbis: codebook %" PRIu64 " has an empty lookup table", (u64)j); k->grid());
+    set = val("cb.set", (enc && !S::DRY) ? vg_find(b, len, pos, nb) : 0, vg_d.count() + 1);
+    if(set)
+      g = vg_d.get(set - 1);
+    for(j = 0; j < nb; j++) {
+      k = s->bk + j;
+      if(g && j < (u32)g->n) {
+        sz n = vg_pack(vg_d.book(g, j), vg_buf), start = pos, i;
+        int w;
+        if(val("cb.same", enc ? (u32)vg_match(b, len, pos, vg_buf, n) : 0, 2)) {
+          null_sink ns;
+          io_t<null_sink> z(v, ns, b, len);
+          if(!enc)
+            for(i = 0; i < n; i += (sz)w) {
+              w = (int)(n - i < 32 ? n - i : 32);
+              bput(w, vg_get(vg_buf, i, w));
+            }
+          z.pos = start;
+          z.book(k, j);
+          FATAL_UNLESS(z.pos == start + n, "codebook table: book %u of row %u parsed to %" PRIu64 " bits, packed to %" PRIu64, j, set - 1, (u64)(z.pos - start), (u64)n);
+          pos = z.pos;
+          continue;
+        }
+      }
+      book(k, j);
+    }
   }
   void floors() {
     vb_setup *s = v.cur;

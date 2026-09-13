@@ -101,6 +101,22 @@ header of an untagged file is the vendor string, shared the same way.
 The same file twice, chained, codes its headers for a few bytes more than
 once; `./t.sh` checks that.
 
+The codebooks themselves are mostly not coded at all.  libvorbis carries
+its books as static tables and every stream it writes holds one of a few
+hundred fixed sets of them, so `vbooks_gen.inc` -- the sets of every
+released libvorbis, the aoTuV betas and ffmpeg's own encoder, 1,346
+books in 350 rows, a table this program's ancestor tsvcomp generated --
+is built in, and a setup whose books are a row of it costs the row's
+number and a flag per book.  The match is on bits: a table book is
+packed the way libvorbis packs it and compared with the packet, so a
+book that differs by one bit, or is packed another way, is a miss and
+is coded field by field as before, and a setup no row fits is coded as
+every setup was.  The three headers of a corpus file, 1.1 to 1.6 kB
+before, are 100 to 250 bytes with it; the corpus as a whole went from
+76.8% to 71.3%, and `tiny-8k-q0.ogg` from 1,346 bytes to 200.
+`vb_dict.inc` is the mechanism, and `./t.sh` checks a setup that is a
+row, one a book short of a row, and one with no row in it.
+
 Exit status is 0 for success, 1 for a `.oc` that `d` cannot read -- not
 oggcomp's, another version's, cut short, or damaged: every `.oc` ends in a
 CRC of the file it holds, and what does not check is not kept -- 2 for a
@@ -260,6 +276,7 @@ an input of 167685, silently not the file it was given.
 | `oggcomp.cpp` | the include list and `main()`.  The program is the `.inc` files beside it, one per layer, in the order they are included: `ogg_*` the container, `vb_*` Vorbis, `oc_rcio.inc`, `rc.inc` and `cm.inc` the coder's byte I/O, the range coder and the mixing primitives, `tc_*` the model machinery, `oc_*` the six models and their assembly, and `oc_coro.inc` the coroutine that is the compressor -- what `oggdet` includes.  `REFACTOR.md` and `REFACTOR2.md` say what is in each |
 | `oggdet.cpp`, `oggart.inc` | the carver, and the cover-art extraction it uses.  `oggdet.cpp` includes the compressor's `.inc` files up to `oc_coro.inc` and drives the model through `oc_api.h` from inside its own coroutine |
 | `oc_api.h`, `oc_api.inc`, `oc_load.inc`, `oggcomp_dll.cpp` | the model as a library: the C interface, its implementation over the coroutine, the table of pointers the programs drive either model through, and the translation unit `./mk.sh dll N` builds into `oggcompN.so` |
+| `vb_dict.inc`, `vbooks_gen.inc` | the codebook table: libvorbis's static books, packed the way libvorbis packs them and matched against the setup packet bit for bit, so a setup that is one of the table's rows costs a row number and a flag per book; and the generated table itself, which is not edited by hand |
 | `IDX/` | the parameter and context declarations, and `idx2inc.pl`, which turns them into C++.  `IDX-FORMAT.md` is the format; `opt.pl` is the optimizer that drives a tuning build |
 | `MOD/` | what `idx2inc.pl` generated, checked in |
 | `Lib3/` | coroutines and the file layer.  `file_api.inc` picks stdio or the WinAPI; `file_api_test.cpp` is the test that the two are one interface |

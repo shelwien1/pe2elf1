@@ -630,6 +630,36 @@ elif [ $refusals = 1 ] && [ $srcok = 1 ]; then
   echo
 fi
 
+#  The codebook table (vb_dict.inc).  A libvorbis setup's books are one
+#  row of it and cost a flag apiece, so the three headers of tiny-8k-q0
+#  come to under 150 bytes where they were 1,244; a setup one book short
+#  of a row (onebook-8k.ogg, that book's lowest mantissa bit turned) costs
+#  that book's fields and no more; a setup with no row in it at all
+#  (rebooked-8k.ogg, its books rewritten by another tool) is coded field
+#  by field, as every setup was before the table, and still comes back --
+#  the corpus loop above checked that.
+bad_tab=0; ntab=0
+if [ $refusals = 1 ] && [ -f testfiles/tiny-8k-q0.ogg ] && [ -f testfiles/onebook-8k.ogg ] && [ -f testfiles/rebooked-8k.ogg ]; then
+  tabcheck() {  # $1 what, $2 1 if it passed, $3 what to say
+    ntab=$((ntab + 1))
+    if [ "$2" = 1 ]; then printf '  %-26s %s\n' "$1" "$3"
+    else printf '  %-26s FAILED  %s\n' "$1" "$3"; bad_tab=$((bad_tab + 1)); fi
+  }
+  hdrbytes() {  # the headers line of `c -v`, in bytes; -1 if the run failed
+    if "$bin" c -v "$1" "$tmp/tab.oc" >"$tmp/msg" 2>&1; then awk '$1 == "headers" { print $2; f = 1 } END { if(!f) print -1 }' "$tmp/msg"
+    else echo -1; fi
+  }
+  printf '  %s\n' 'the codebook table'
+  h0=$(hdrbytes testfiles/tiny-8k-q0.ogg); h1=$(hdrbytes testfiles/onebook-8k.ogg); h2=$(hdrbytes testfiles/rebooked-8k.ogg)
+  tok=0; [ "$h0" -ge 0 ] && [ "$h0" -lt 150 ] && tok=1
+  tabcheck 'a setup that is a row' $tok "tiny-8k-q0: $h0 bytes of headers, 1244 before the table"
+  tok=0; [ "$h1" -gt "$h0" ] && [ "$h1" -lt $((h0 + 200)) ] && tok=1
+  tabcheck 'one book short of a row' $tok "onebook-8k: $h1 bytes, $((h1 - h0)) for the book coded in full"
+  tok=0; [ "$h2" -gt "$h1" ] && [ "$h2" -lt 1244 ] && tok=1
+  tabcheck 'no row at all' $tok "rebooked-8k: $h2 bytes, every book coded in full"
+  echo
+fi
+
 printf 't.sh: %d/%d round-tripped byte for byte' "$ok" "$n"
 [ $twice = 1 ] && printf ', %d/%d coded identically twice' "$same" "$nsame"
 echo
@@ -640,8 +670,10 @@ echo
   printf 't.sh: %d/%d oggdet checks passed\n' "$((ndet - bad_det))" "$ndet"
 [ $nlib -gt 0 ] &&
   printf 't.sh: %d/%d library checks passed\n' "$((nlib - bad_lib))" "$nlib"
+[ $ntab -gt 0 ] &&
+  printf 't.sh: %d/%d codebook table checks passed\n' "$((ntab - bad_tab))" "$ntab"
 
-if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $bad_det = 0 ] && [ $bad_lib = 0 ] && [ $n -gt 0 ]; then
+if [ $fail = 0 ] && [ $bad_any = 0 ] && [ $bad_refusal = 0 ] && [ $bad_det = 0 ] && [ $bad_lib = 0 ] && [ $bad_tab = 0 ] && [ $n -gt 0 ]; then
   echo "t.sh: PASS"
 else
   echo "t.sh: FAIL" >&2

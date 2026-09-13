@@ -304,7 +304,8 @@ want minbitrate-pad     && enc minbitrate-pad     1042 -m 128  sil44.wav
 #  about here.
 derived='badcrc-8k.ogg no-eos-8k.ogg id3-prefix-8k.ogg trailing-junk-8k.ogg
          opus.ogg id3-text-8k.ogg id3-apic-8k.ogg id3v1-trailer-8k.ogg
-         chained-id3.ogg empty.ogg random.bin page-in-random.bin'
+         chained-id3.ogg empty.ogg random.bin page-in-random.bin
+         onebook-8k.ogg allbooks-8k.ogg'
 need=0
 for n in $derived; do
   [ -f "$n" ] || need=1
@@ -438,6 +439,73 @@ open('id3v1-trailer-8k.ogg', 'wb').write(
 open('chained-id3.ogg', 'wb').write(
     id3v2([(b'TIT2', text('First')), (b'TPE1', text('Mono at 22050'))]) + other
     + id3v2([(b'TIT2', text('Second')), (b'TPE1', text('Tiny at 8000'))]) + src)
+
+#  The codebooks of a libvorbis setup are in the compressor's table
+#  (vb_dict.inc) and cost a flag apiece; these are the same setup with
+#  books that are not.  A book's minimum value is a float the decoder
+#  scales its lattice by, and its lowest mantissa bit changes nothing a
+#  parser checks and everything the table compares -- so one such bit
+#  turned in the first lookup book is a setup one book short of a row
+#  (onebook-8k.ogg), and turned in every lookup book it is a row with
+#  only its floor books left in it (allbooks-8k.ogg).  Finding the bits
+#  means walking the books, since everything before a lookup is of
+#  variable length.
+def ilog(v):
+    n = 0
+    while v > 0: n += 1; v >>= 1
+    return n
+def lookup1(entries, dim):
+    v = 0
+    while True:
+        p = 1; over = False
+        for _ in range(dim):
+            if p > entries // (v + 1): over = True; break
+            p *= v + 1
+        if over or p > entries: return v
+        v += 1
+class Bits:
+    def __init__(s, b): s.b = b; s.p = 0
+    def r(s, n):
+        v = 0
+        for i in range(n):
+            v |= ((s.b[s.p >> 3] >> (s.p & 7)) & 1) << i; s.p += 1
+        return v
+def qmin_bits(pkt):
+    #  the bit offset of the minimum-value field of every lookup book
+    b = Bits(pkt); assert b.r(8) == 5
+    b.r(48); offs = []
+    for _ in range(b.r(8) + 1):
+        assert b.r(24) == 0x564342
+        dim = b.r(16); ent = b.r(24)
+        if b.r(1):
+            got = 0
+            while got < ent: got += b.r(ilog(ent - got))
+        else:
+            sparse = b.r(1)
+            for _ in range(ent):
+                if not sparse or b.r(1): b.r(5)
+        lk = b.r(4)
+        if lk:
+            offs.append(b.p); b.r(64); vb = b.r(4) + 1; b.r(1)
+            for _ in range(lookup1(ent, dim) if lk == 1 else ent * dim): b.r(vb)
+    return offs
+def packets_of(page):
+    #  (offset, length) of each packet that ends in this page, from the lacing
+    nseg = page[26]; at = 27 + nseg; out = []; start = at
+    for l in page[27:27 + nseg]:
+        at += l
+        if l < 255: out.append((start, at - start)); start = at
+    return out
+second = list(pages(src))[1]
+page = bytearray(src[second[0]:second[1]])
+off, n = packets_of(page)[1]
+assert page[off] == 5, 'the setup packet is not the second in page 1'
+offs = qmin_bits(bytes(page[off:off + n]))
+for name, which in (('onebook-8k.ogg', offs[:1]), ('allbooks-8k.ogg', offs)):
+    p = bytearray(page)
+    for o in which: p[off + (o >> 3)] ^= 1 << (o & 7)
+    d = bytearray(src); d[second[0]:second[1]] = repage(bytes(p))
+    open(name, 'wb').write(bytes(d))
 
 #  Nothing at all.
 open('empty.ogg', 'wb').write(b'')

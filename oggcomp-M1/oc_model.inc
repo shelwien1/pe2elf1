@@ -100,6 +100,30 @@ struct oc_hcache {
   }
 };
 static oc_hcache oc_hc;
+//  The header tags, in the order they get their ids.  tagid() hands ids
+//  out in order of first use, and the header family's tag factors are
+//  threshold lists over the id -- tuned, so an id is a meaning.  Left to
+//  first use the order was the stream's: a floor whose subclass books
+//  came before its master book, a mapping with coupling, a first book
+//  in the ordered form, each moved every tag after it.  Now the order is
+//  this list -- the one a stereo libvorbis file gave -- with the tags such
+//  a file never uses after it, and the two the codebook table added after
+//  those.  A tag not listed still gets the next id when it is met.
+static const char *const oc_tagorder[] = {
+    "id.channels", "id.rate", "id.brmax", "id.brnom", "id.brmin", "id.blocksize", "id.framing",
+    "cmt.same", "cmt.byte", "setup.same",
+    "cb.count", "cb.dim", "cb.entries", "cb.ordered", "cb.sparse", "cb.len", "cb.lookup", "cb.used",
+    "cb.min.sign", "cb.min.exp", "cb.min.mant", "cb.dlt.sign", "cb.dlt.exp", "cb.dlt.mant",
+    "cb.valbits", "cb.sequence", "cb.mult",
+    "flr.ntime", "flr.count", "flr.type", "flr.parts", "flr.pclass", "flr.cdim", "flr.csub",
+    "flr.sbook", "flr.cbook", "flr.mult", "flr.rangebits", "flr.x",
+    "res.count", "res.type", "res.begin", "res.end", "res.partsize", "res.nclass", "res.classbook",
+    "res.cascade", "res.book",
+    "map.count", "map.submaps", "map.steps", "map.mag", "map.ang", "map.smtime", "map.smfloor", "map.smres",
+    "mode.count", "mode.blockflag", "mode.mapping",
+    "cb.ordlen", "cb.ordrun", "map.mux",
+    "cb.set", "cb.same",
+};
 template <int f_DEC> struct oc_model {
   static constexpr int ENC = (f_DEC == 0);
   static constexpr int DRY = 0;
@@ -131,6 +155,7 @@ template <int f_DEC> struct oc_model {
   void init();
   void wire_all();
   void reset();
+  void tags_init();
   void setup_done(vb_ctx &vv);
   //  aux fields, through fam_aux with the field's own history as context
   i64 auxc(int fld, i32 c, i64 x, int sgn);
@@ -171,6 +196,14 @@ template <int f_DEC> void oc_model<f_DEC>::init() {
   cm_tables();
   tabs.init();
   wire_all();
+  tags_init();
+}
+template <int f_DEC> void oc_model<f_DEC>::tags_init() {
+  sz i;
+  for(i = 0; i < sizeof oc_tagorder / sizeof *oc_tagorder; i++)
+    tagid(oc_tagorder[i]);
+  tc_lasttag = -1;
+  tc_runpos = 0;
 }
 template <int f_DEC> void oc_model<f_DEC>::wire_all() {
   TC_WIRE(fam_dig, dig, (cm_cnt *)nullptr, 0, TC_dig_rT, TC_dig_mwT, 0, 0, TC_dig_lrm, TC_dig_mbm);
@@ -194,6 +227,7 @@ template <int f_DEC> void oc_model<f_DEC>::reset() {
   oc_hc.clear();
   *this = oc_model();
   wire_all();
+  tags_init();
 }
 template <int f_DEC> i64 oc_model<f_DEC>::auxc(int fld, i32 c, i64 x, int sgn) {
   tcx v;

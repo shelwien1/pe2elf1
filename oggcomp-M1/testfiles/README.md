@@ -8,7 +8,8 @@ same and has to give back byte for byte.
 Every file here is synthesized -- `./testfiles/gen.sh` writes the audio with
 python and encodes it with `oggenc`, and derives the rest from those with a
 seeded generator -- so nothing in it is anyone's music and all of it can be
-rebuilt.  The encodes fix `--serial`, which oggenc otherwise picks at random,
+rebuilt (all but `rebooked-8k.ogg`, which another tool made from one of
+these and which the generator keeps as it is).  The encodes fix `--serial`, which oggenc otherwise picks at random,
 so rebuilding gives back the same bytes and `git diff` over this directory
 means something.  The files are checked in anyway: a fresh clone can test
 the compressor with no encoder installed, which is the point.
@@ -35,6 +36,9 @@ the compressor with no encoder installed, which is the point.
 | `uncoupled-stereo-q4.ogg` | stereo with coupling turned off: residue type 1 with more than one vector, which no quality setting reaches |
 | `silence-8k-long-qm1.ogg` | pages filled to the 255-packet ceiling, which is as many as an Ogg page can hold |
 | `zerolen-8k-q0.ogg` | no samples: three headers and one audio packet, the smallest legal Vorbis stream |
+| `onebook-8k.ogg` | `tiny-8k-q0.ogg` with the lowest mantissa bit of the first lookup book's minimum value turned, and the page re-CRCed: a setup one book short of a row of the codebook table, so that book is coded field by field and the rest are flags |
+| `allbooks-8k.ogg` | the same bit turned in every lookup book: a row with only its floor books left in it |
+| `rebooked-8k.ogg` | `tiny-8k-q0.ogg` rewritten by OptiVorbis 0.3.2: every codebook re-derived from what the audio uses, so no row of the table fits and the setup is coded as every setup was before the table.  The one file here `gen.sh` cannot rebuild, and keeps |
 | `tags-many-8k.ogg` | a dozen short tags, a date, a track number, non-ASCII, a value with spaces -- the ordinary metadata case the big-comment file is not |
 | `art-8k.ogg` | a cover image in a METADATA_BLOCK_PICTURE comment, as a tagger embeds one: a FLAC PICTURE block around a 1.8 kB PNG, base64 -- also the file oggdet takes the art out of |
 | `chained.ogg` | two logical bitstreams in one file, with different serials, rates and channel counts |
