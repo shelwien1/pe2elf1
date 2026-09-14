@@ -169,15 +169,15 @@ Index t
   t_pri:  pri,   1!00000010000000000010100000000000
   t_ep:   ep,    1!00000000101
 
-Number rA, 1, 0!00001001
-Number rB, 1, 0!11101011
+Number rA, 1, 0!00100110
+Number rB, 1, 0!10001011
 Number rC, 1, 0!11011010
 Number rD, 1, 0!00011010
 Number rT, 1, 0!00001111
 Number rG, 1, 0!00000100
 Number rS1, 1, 0!00110
 Number rS2, 1, 0!00100
-Number lr, 1, 0!10110
+Number lr, 1, 0!11110
 Number lrm, 1, 0!11100
 Number mbm, 1, 0!01000001
 Number mwA, 1, 0!00100001
@@ -186,7 +186,7 @@ Number mwC, 1, 0!00000000
 Number mwD, 1, 0!00000000
 Number mwT, 1, 0!00000011
 Number mwG, 1, 0!00000000
-Number bw, 1, 0!01100
+Number bw, 1, 0!01011
 Number qs, 1, 3!0010100
 Number qf, 1, 3!0010001
 Number mb, 1, 0!00001111

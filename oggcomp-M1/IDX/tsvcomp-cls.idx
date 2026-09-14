@@ -93,14 +93,14 @@ Index t
   t_prev2: prev2, 1!000
   t_pq:   pq,    1!00000000000001100000000000000000
 
-Number rA, 1, 0!01101010
-Number rB, 1, 0!00011110
+Number rA, 1, 0!11110010
+Number rB, 1, 0!11111100
 Number rC, 1, 0!00100010
 Number rD, 1, 0!00000100
 Number rT, 1, 0!00000000
 Number rS1, 1, 0!00100
 Number rS2, 1, 0!00101
-Number lr, 1, 0!10000
+Number lr, 1, 0!10110
 Number lrm, 1, 0!11111
 Number mbm, 1, 0!11111100
 Number mwA, 1, 0!00000000
@@ -108,7 +108,7 @@ Number mwB, 1, 0!00000000
 Number mwC, 1, 0!00100000
 Number mwD, 1, 0!10010110
 Number mwT, 1, 0!00100011
-Number bw, 1, 0!10000
+Number bw, 1, 0!01100
 Number qs, 1, 3!0001001
 Number qf, 1, 3!0111110
 Number mb, 1, 0!00100010

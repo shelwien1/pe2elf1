@@ -34,15 +34,15 @@ static const byte TC_flr_t_col[48+1]={ 0,0,0,0,1,2,2,2,2,2,3,4,5,6,6,7,8,9,10,11
 static const byte TC_flr_t_pri[32+1]={ 0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,2,2,3,3,3,3,3,3,3,3,3,3,3,3 };
 
 
-static const int TC_flr_rA = (9+0) * (1);
-static const int TC_flr_rB = (235+0) * (1);
+static const int TC_flr_rA = (38+0) * (1);
+static const int TC_flr_rB = (139+0) * (1);
 static const int TC_flr_rC = (218+0) * (1);
 static const int TC_flr_rD = (26+0) * (1);
 static const int TC_flr_rT = (15+0) * (1);
 static const int TC_flr_rG = (4+0) * (1);
 static const int TC_flr_rS1 = (6+0) * (1);
 static const int TC_flr_rS2 = (4+0) * (1);
-static const int TC_flr_lr = (22+0) * (1);
+static const int TC_flr_lr = (30+0) * (1);
 static const int TC_flr_lrm = (28+0) * (1);
 static const int TC_flr_mbm = (65+0) * (1);
 static const int TC_flr_mwA = (33+0) * (1);
@@ -51,7 +51,7 @@ static const int TC_flr_mwC = (0+0) * (1);
 static const int TC_flr_mwD = (0+0) * (1);
 static const int TC_flr_mwT = (3+0) * (1);
 static const int TC_flr_mwG = (0+0) * (1);
-static const int TC_flr_bw = (12+0) * (1);
+static const int TC_flr_bw = (11+0) * (1);
 static const int TC_flr_qs = (20+3) * (1);
 static const int TC_flr_qf = (17+3) * (1);
 static const int TC_flr_mb = (15+0) * (1);

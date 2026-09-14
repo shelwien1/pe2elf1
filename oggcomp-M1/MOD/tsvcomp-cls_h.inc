@@ -23,14 +23,14 @@ static const byte TC_cls_s_pq[32+1]={ 0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,2,3,
 
 
 
-static const int TC_cls_rA = (106+0) * (1);
-static const int TC_cls_rB = (30+0) * (1);
+static const int TC_cls_rA = (242+0) * (1);
+static const int TC_cls_rB = (252+0) * (1);
 static const int TC_cls_rC = (34+0) * (1);
 static const int TC_cls_rD = (4+0) * (1);
 static const int TC_cls_rT = (0+0) * (1);
 static const int TC_cls_rS1 = (4+0) * (1);
 static const int TC_cls_rS2 = (5+0) * (1);
-static const int TC_cls_lr = (16+0) * (1);
+static const int TC_cls_lr = (22+0) * (1);
 static const int TC_cls_lrm = (31+0) * (1);
 static const int TC_cls_mbm = (252+0) * (1);
 static const int TC_cls_mwA = (0+0) * (1);
@@ -38,7 +38,7 @@ static const int TC_cls_mwB = (0+0) * (1);
 static const int TC_cls_mwC = (32+0) * (1);
 static const int TC_cls_mwD = (150+0) * (1);
 static const int TC_cls_mwT = (35+0) * (1);
-static const int TC_cls_bw = (16+0) * (1);
+static const int TC_cls_bw = (12+0) * (1);
 static const int TC_cls_qs = (9+3) * (1);
 static const int TC_cls_qf = (62+3) * (1);
 static const int TC_cls_mb = (34+0) * (1);

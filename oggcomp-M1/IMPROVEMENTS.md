@@ -383,12 +383,13 @@ that nobody builds them twice.
 | | corpus, 35 files | music-stereo-q5 | music-managed-b96 | chirp-stereo-q10 | tiny-8k-q0 | the clip set |
 |---|---|---|---|---|---|---|
 | before | 509,835 | 143,012 | 83,291 | 114,682 | 200 | 5,443,469 |
-| after | 509,072 | 142,730 | 83,150 | 114,572 | 197 | 5,430,527 |
-| | -0.150% | -0.197% | -0.169% | -0.096% | -1.5% | -0.238% |
+| the four changes | 509,072 | 142,730 | 83,150 | 114,572 | 197 | 5,430,527 |
+| and retuned | 508,834 | 142,688 | 83,056 | 114,553 | 197 | 5,429,818 |
+| | -0.196% | -0.227% | -0.282% | -0.112% | -1.5% | -0.251% |
 
-Decode is 1.02x slower on the music file and 1.06x on the clip set,
-encode 1.06x.  On the music file the digits stage went from 1.558 bits a
-digit to 1.555, the class stage from 1.263 to 1.255 and the floor from
+Decode is unchanged on the music file and 1.05x slower on the clip set;
+encode is 1.10x.  On the music file the digits stage went from 1.558 bits
+a digit to 1.555, the class stage from 1.263 to 1.255 and the floor from
 1.251 to 1.249, so the gain is spread over all three rather than sitting
 in one of them.
 
@@ -461,13 +462,22 @@ that collapsed, while music, managed and chirp did not move at all.
 
 ### 8.3 The tuner
 
-`IDX/opt.pl` was run twice.  A focused pass over the three new quota
+`IDX/opt.pl` was run three times.  A focused pass over the three new quota
 patterns moved an eight-file objective by 0.01% and narrowed two of the
-three patterns I had set by hand, which is the version in the tree.  A
-broad pass over the counter, mixer and map rates of all six families --
-which the seeded counters and the new map should have changed -- reached
-34 of 84 keys and 0.018% before it was stopped for a quiet machine to
-measure speed on; it is worth finishing.  Both runs wanted the key filter
+three patterns set by hand.  A broad pass over the rates was abandoned
+when it turned out to be tuning the model before the prior skips went in.
+The third ran to completion over the digit family's counter, mixer and map
+rates and the floor and class families' -- 125 keys, a nine-file objective
+including a slice of the clip set -- and moved it 0.039%, which is a third
+of everything the four model changes won and more than any single one of
+them.  It is in the tree: the counter rates, their targets, the mixer
+rates and the second map's blend all moved, and the mantissa counter's
+target moved off zero, which is the seeded counters and the new map asking
+for different arithmetic than the model was tuned for.  Nothing structural
+changed, and `./mk.sh check` agrees over 35 files afterwards.
+
+The lesson for the next person is that a model change is not finished
+until the tuner has seen it.  Both runs wanted the key filter
 this tree's `opt.pl` does not have, which is why the first attempt matched
 nothing: the keys carry a trailing underscore (`TC_dig_rA_`).
 
