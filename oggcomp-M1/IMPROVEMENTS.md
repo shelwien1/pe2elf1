@@ -233,6 +233,10 @@ cheap: `tcp_bucket(prp)` is one lookup.
   the floor is already at 1.25 bits a post; the ideas in `tsvcomp-flr.idx`
   (`ep`, `prd` in counter `D`) were the ones with room.  Worth a tuning
   pass when the digit changes above force one anyway, not a project.
+  *Corrected in `IDEAS.md`: on every small or tonal file the floor is 12
+  to 36% of the output, and 7.8% of the clip set at 3.36 bits a post, so
+  it is not worth little there; the floor ideas are in `IDEAS.md` 3.1
+  and 3.2.*
 - **A neural mixer or an LSTM.**  Ten to a hundred times the instruction
   count for the kind of gain a second mixer gets at seven multiplies.
 - **Run-length coding of the zeros.**  Measured in 7.4: the zero
@@ -362,6 +366,12 @@ project turns into a model project.
 Before any of the ratio work the corpus wants two more files: a long
 uncoupled stereo one and a long 5.1 one, so that 4.1 is tuned on
 something it will meet again.
+
+`IDEAS.md` supersedes the ordering above where the two differ: it merges
+five brainstorms held after this document was written, ranks twenty
+ideas, and puts first the one instrument -- a wider per-digit log and a
+per-node byte accounting -- that decides most of them before anything
+is built.
 
 ## 7. Since e744b32
 
