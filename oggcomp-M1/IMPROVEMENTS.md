@@ -373,6 +373,109 @@ ideas, and puts first the one instrument -- a wider per-digit log and a
 per-node byte accounting -- that decides most of them before anything
 is built.
 
+## 8. Tested, at d579c50
+
+Twenty ideas were ranked in `IDEAS.md`; eleven were built and measured
+against the corpus, the 1,257-clip set and the clock.  Four paid and are
+in the tree (stream version 6); seven did not and are recorded here so
+that nobody builds them twice.
+
+| | corpus, 35 files | music-stereo-q5 | music-managed-b96 | chirp-stereo-q10 | tiny-8k-q0 | the clip set |
+|---|---|---|---|---|---|---|
+| before | 509,835 | 143,012 | 83,291 | 114,682 | 200 | 5,443,469 |
+| after | 509,072 | 142,730 | 83,150 | 114,572 | 197 | 5,430,527 |
+| | -0.150% | -0.197% | -0.169% | -0.096% | -1.5% | -0.238% |
+
+Decode is 1.02x slower on the music file and 1.06x on the clip set,
+encode 1.06x.  On the music file the digits stage went from 1.558 bits a
+digit to 1.555, the class stage from 1.263 to 1.255 and the floor from
+1.251 to 1.249, so the gain is spread over all three rather than sitting
+in one of them.
+
+### 8.1 What paid
+
+**Decisions the codebook has already made are not coded** (`IDEAS.md`
+rank 15).  `tcp_p` clamped a zero weight to one part in four thousand,
+so a symbol no codeword of the book can reach still cost a bit and, worse,
+still updated the counters that genuinely uncertain decisions share.  Two
+sentinel values say "certain" instead, and `code()` leaves the head,
+length, mantissa and sign decisions the prior has settled out of the
+stream entirely.  The largest of the four: -0.05% on music and -0.16% on
+the clip set.  The encoder asserts, on every such decision, that the value
+agrees with the prior; 500 mutated corpus files and `./t.sh` never fired it.
+
+**Cold counters start from something** (rank 3).  `cm_cnt::P()` returned
+one half on a first visit and `upd()` moved away from one half.  A counter
+now answers with a seed the caller supplies -- the codebook prior for the
+node being coded, or the coarse direct table's answer -- and moves away
+from that.  -0.031% of the corpus, and it is what takes `tiny-8k-q0` from
+200 bytes to 198.
+
+**The classifier's quota is a digit context** (rank 2).  libvorbis picks a
+partition's class as the first whose `classmetric1` bounds the partition's
+largest magnitude and whose `classmetric2` bounds the sum of them
+(`res0.c`, `_01class` and `_2class`), so the class -- coded before the
+digits, and the model's strongest single context -- is a statement about
+numbers the model can accumulate as it goes.  Three of them, the running
+maximum, the running sum and the slots left, at patterns `IDX/opt.pl`
+placed: -0.042% of the corpus, -0.107% of music, -0.113% of the clip set.
+
+**The mantissa plane gets a map** (rank 9).  `bitm()` was one counter and
+a three-input mixer against `bit()`'s four counters, two maps and seven
+inputs, and it carries most of the bits on the files whose digits are
+largest.  An adaptive probability map keyed by the node alone -- 169 of
+them, warm within a few hundred decisions -- is -0.015% of the corpus and
+-0.04% of `chirp-stereo-q10`.
+
+### 8.2 What did not, and the pattern in it
+
+Seven were built and measured worse than the tree they were added to.  The
+figure is the corpus total against the same tree without the change.
+
+| idea | rank | result |
+|---|---|---|
+| the floor curve as a digit context: level, and departure from the partition's mean | 1 | +125, and +20 on top of the winners |
+| the floor's motion since the last packet, as a correction to `t1` | 13 | +455 wide, +66 narrow |
+| the noise-normalisation grid: position in a 16-bin block and the unit magnitudes spent in it | 2 | +888 |
+| where the neighbouring partitions' classes stand against this one | 4 | +335 |
+| a mixer lane saying whether the prior is alive | 3 | part of +883 |
+| the second map's blend learned instead of tuned | 3 | part of +883 |
+| the sign path given a coarse partner, a mixer and a map | -- | +4,515 |
+
+The pattern is consistent and is the useful finding.  **Every attempt to
+add context *width* lost; every fix that added *capacity* or removed
+*waste* won.**  A new axis multiplies the index volume of the family it
+joins, and the digit family's tables are already visited about ninety
+times per row over a whole music file (`HASHTABLES.md` §3 says they are not
+short of rows, which is a different thing from being full of counts).  The
+estimates in `IDEAS.md` were ten to twenty times optimistic for the
+context ideas and roughly right in sign for the machinery ones.
+
+Two caveats on the negatives.  The floor ideas were tested with patterns
+set by hand and confirmed narrower by a short `opt.pl` run on three of
+them; a full tuning pass over a corpus that contained the clip set might
+place them better, and the clip set alone did improve under three of the
+four floor variants.  And the sign result is not a verdict on sign
+modelling: it was the header family, where the sign context is the tag id,
+that collapsed, while music, managed and chirp did not move at all.
+
+### 8.3 The tuner
+
+`IDX/opt.pl` was run twice.  A focused pass over the three new quota
+patterns moved an eight-file objective by 0.01% and narrowed two of the
+three patterns I had set by hand, which is the version in the tree.  A
+broad pass over the counter, mixer and map rates of all six families --
+which the seeded counters and the new map should have changed -- reached
+34 of 84 keys and 0.018% before it was stopped for a quiet machine to
+measure speed on; it is worth finishing.  Both runs wanted the key filter
+this tree's `opt.pl` does not have, which is why the first attempt matched
+nothing: the keys carry a trailing underscore (`TC_dig_rA_`).
+
+`IDEAS.md` rank 17 -- re-aim the optimizer -- is unbuilt and is still the
+item that gates every number above.  Its own argument was borne out here:
+the patterns tuned on eight files without the clip set made the clip set
+worse by 0.04% while making the corpus better.
+
 ## 7. Since e744b32
 
 ### 7.1 The codebook table

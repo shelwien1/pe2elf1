@@ -28,13 +28,14 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
       t2 = D.t2, n1 = D.n1, w1 = D.w1, p0 = D.p0, p0s = D.p0s, pn = D.pn,
       cls = D.cls, zrun = D.zrun, blk = D.blk, bkq = D.bkq, ax = D.ax,
       pq = D.pq, ps = D.ps, chn = D.chn, crun = D.crun, cm = D.cm,
-      x1 = D.x1, x1s = D.x1s;
+      x1 = D.x1, x1s = D.x1s, pmx = D.pmx, psm = D.psm, prm = D.prm;
   (void) rno;  (void) pass;  (void) band;  (void) col;  (void) vpos;
   (void) q1;   (void) q2;    (void) q1s;   (void) q2s;  (void) t1;
   (void) t1s;  (void) t2;    (void) n1;    (void) w1;   (void) p0;
   (void) p0s;  (void) pn;    (void) cls;   (void) zrun; (void) blk;
   (void) bkq;  (void) ax;    (void) pq;   (void) ps;   (void) chn;
   (void) crun; (void) cm;   (void) x1;    (void) x1s;
+  (void) pmx;  (void) psm;  (void) prm;
 
   a = 0;
   a = a*8 + TC_dig_a_pass[__min(7,__max(0,pass-(1-1)))];
@@ -52,6 +53,9 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   a = a*3 + ((chn>0+(1-1))+(chn>5+(1-1)));
   a = a*2 + ((cm>0+(1-1)));
   a = a*2 + ((x1>1+(1-1)));
+  a = a*3 + ((pmx>0+(1-1))+(pmx>1+(1-1)));
+  a = a*3 + ((psm>0+(1-1))+(psm>3+(1-1)));
+  a = a*2 + ((prm>0+(1-1)));
 
   b = 0;
   b = b*3 + ((pass>0+(1-1))+(pass>4+(1-1)));
@@ -67,6 +71,7 @@ void tc_make_dig( const tc_dv & D, tcx & X ) {
   b = b*6 + TC_dig_b_ax[__min(12,__max(0,ax-(1-1)))];
   b = b*6 + TC_dig_b_pq[__min(32,__max(0,pq-(1-1)))];
   b = b*2 + ((chn>0+(1-1)));
+  b = b*3 + ((pmx>0+(1-1))+(pmx>1+(1-1)));
 
   c = 0;
   c = c*2 + ((pass>0+(1-1)));

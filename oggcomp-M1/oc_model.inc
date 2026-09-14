@@ -28,6 +28,13 @@ struct oc_part {
   u32 vmod, smod;
   i32 bkq, clrun;
   int clmatch;
+  //  What libvorbis's classifier looked at when it chose this partition's
+  //  class: res0.c's _01class takes the first class whose classmetric1
+  //  bounds the largest magnitude in the partition and whose classmetric2
+  //  bounds the sum of them, _2class the two channels' maxima.  The class
+  //  is coded before the digits, so the model is handed the bound and
+  //  then throws it away; these are what it would need to keep.
+  i32 pmax[8], psum;
 };
 constexpr sz OC_TAGMAX = 31;
 static INLINE void oc_raw_zero(void);

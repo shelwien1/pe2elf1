@@ -123,7 +123,7 @@ struct oc_tables {
 };
 static oc_tables tabs;
 struct tc_dv {
-  int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1, p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm, x1, x1s;
+  int rno, pass, band, col, vpos, q1, q2, q1s, q2s, t1, t1s, t2, n1, w1, p0, p0s, pn, cls, zrun, blk, bkq, ax, mg, pq, sq, ps, chn, crun, cm, x1, x1s, pmx, psm, prm;
 };
 struct tcx {
   int a, b, c, d, s, f, m, t, n, g;

@@ -47,11 +47,24 @@ static INLINE u64 tcp_pow(u32 b, u32 e) {
   }
   return v;
 }
+//  A weight of zero on one side is not a small probability, it is an
+//  impossibility: no codeword of this book has that prefix, so the symbol
+//  cannot occur and both sides know it from the setup header alone.
+//  Clamping it to one part in four thousand cost a coded bit and, worse,
+//  let a decision with only one answer update the counters that genuinely
+//  uncertain decisions share.  These two values say "certain" instead,
+//  and code() leaves the decision out of the stream.
+constexpr int TCP_SURE0 = CM_PONE; //  the bit is 0: the value is not this one
+constexpr int TCP_SURE1 = 0;       //  the bit is 1: the value is this one
 static INLINE int tcp_p(u32 w0, u32 w1) {
   u64 s = (u64)w0 + w1;
   int p;
   if(!s)
     return -1;
+  if(!w1)
+    return TCP_SURE0;
+  if(!w0)
+    return TCP_SURE1;
   p = (int)(((u64)w0 * CM_PONE + s / 2) / s);
   return p < 1 ? 1 : p > CM_PONE - 1 ? CM_PONE - 1 : p;
 }

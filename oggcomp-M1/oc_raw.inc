@@ -36,13 +36,14 @@ template <int f_DEC> u32 oc_model<f_DEC>::raw(u32 b) {
   for(i = 7; i >= 0; i--) {
     cm_cnt c0 = raw_o0[node], c1 = row[node];
     int bit;
-    raw_mx.set(0, cm_stretch(c0.P()));
-    raw_mx.set(1, c1.t ? cm_stretch(c1.P()) : 0);
+    int p0 = c0.P(CM_PHALF);
+    raw_mx.set(0, cm_stretch(p0));
+    raw_mx.set(1, cm_stretch(c1.P(p0)));
     raw_mx.set(2, 256);
     bit = tc_bit<f_DEC>(raw_mx.mix(node), (int)(ENC && ((b >> i) & 1)));
     raw_mx.upd(bit, RAW_LR, 0);
-    c0.upd(bit, RAW_RATE0, 0);
-    c1.upd(bit, RAW_RATE1, 0);
+    c0.upd(bit, RAW_RATE0, 0, CM_PHALF);
+    c1.upd(bit, RAW_RATE1, 0, p0);
     raw_o0[node] = c0;
     row[node] = c1;
     node = node * 2 + (u32)bit;

@@ -22,6 +22,8 @@ template <int f_DEC> void oc_model<f_DEC>::part_begin(u32 rno, u32 pss, u32 jv, 
   P.dim = dim;
   P.ilv = ilv;
   P.i = 0;
+  memset(P.pmax, 0, sizeof P.pmax);
+  P.psum = 0;
   P.vmod = 0;
   P.smod = ilv ? (u32)(((sz)pc * r->psz) % ilv) : 0;
   P.bkq = tc_qlog(bk->off);
@@ -80,6 +82,9 @@ template <int f_DEC> i64 oc_model<f_DEC>::digit(i64 dg) {
   d.x1s = tc_sq(x1);
   d.ps = tc_sq(psum);
   d.chn = (int)(P.ilv ? P.smod : P.j);
+  d.pmx = tc_qlog(P.pmax[P.ilv ? (P.smod & 7) : 0]);
+  d.psm = tc_qlog(P.psum);
+  d.prm = tc_qlog((i32)(P.psz > i ? P.psz - i : 0));
   d.crun = tc_qlog(P.clrun);
   d.cm = P.clmatch;
   d.cls = (int)P.cls;
@@ -101,13 +106,19 @@ template <int f_DEC> i64 oc_model<f_DEC>::digit(i64 dg) {
       tcx w;
       int sn;
       int spr = fam_dig.pc.sign(mg);
-      d.mg = tc_qlog(mg);
-      d.sq = tcp_bucket(spr);
-      tc_make_sgn(d, w);
-      fam_sgn.select(w);
-      fam_sgn.prp = spr;
-      sn = fam_sgn.bit(0, ENC && dg < 0);
-      fam_sgn.prp = -1;
+      //  A sign the codebook has already settled -- every entry of this
+      //  magnitude with this prefix has one sign -- is not coded either.
+      sn = tcp_sure(spr);
+      if(sn < 0) {
+        d.mg = tc_qlog(mg);
+        d.sq = tcp_bucket(spr);
+        tc_make_sgn(d, w);
+        fam_sgn.select(w);
+        fam_sgn.prp = spr;
+        sn = fam_sgn.bit(0, ENC && dg < 0);
+        fam_sgn.prp = -1;
+      } else
+        FATAL_UNLESS(!ENC || (dg < 0) == (sn != 0), "the codebook prior calls a digit's sign impossible");
       dg = sn ? -mg : mg;
     } else
       dg = 0;
@@ -128,6 +139,13 @@ template <int f_DEC> i64 oc_model<f_DEC>::digit(i64 dg) {
       i32 t = psum + c;
       P.ps[slot] = (i16)(t < -32768 ? -32768 : t > 32767 ? 32767 : t);
     }
+  }
+  {
+    i32 ad = (i32)(dg < 0 ? -dg : dg);
+    i32 *pm = P.pmax + (P.ilv ? (P.smod & 7) : 0);
+    if(ad > *pm)
+      *pm = ad;
+    P.psum += ad;
   }
   *P.q2 = *P.q1;
   *P.q1 = (i32)dg;

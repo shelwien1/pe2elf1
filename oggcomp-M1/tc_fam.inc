@@ -6,6 +6,9 @@
 //  holds; the name is dependent, so it is looked up when this is
 //  instantiated, by which time it is there.
 template <int f_DEC> struct oc_model;
+//  -1 when the prior is a probability and the decision has to be coded;
+//  otherwise the answer the prior is certain of.
+static INLINE int tcp_sure(int p) { return p == TCP_SURE1 ? 1 : p == TCP_SURE0 ? 0 : -1; }
 template <int f_DEC> static INLINE int tc_bit(int p, int bit) {
   uint b = (uint)bit;
   if(!f_DEC && tc_verbose)
@@ -26,6 +29,17 @@ template <int f_DEC> struct tc_fam {
   i16 *S, *S2;
   i32 *W;
   cm_apm ap, ap2;
+  //  The mantissa plane's own adaptive probability map, keyed by the node
+  //  alone.  bitm() was one counter and a three-input mixer against
+  //  bit()'s four counters, two maps and seven inputs -- the weakest
+  //  machinery in the model, carrying most of the bits on the files whose
+  //  digits are largest (chirp-stereo-q10 codes 3.14 bits a digit, nearly
+  //  all of it length and mantissa).  The node is the whole context: 169
+  //  of them separates the planes and warms up in a few hundred decisions,
+  //  which is what a plane visited once per large digit needs.
+  cm_apm apm;
+  i16 apm_t[TC_MNODE * CM_QMAX];
+  u8 apm_c[TC_MNODE * CM_QMAX];
   cm_mix<TC_MIXN> mx;
   cm_mix<3> mxm;
   tc_pcur pc;
@@ -81,6 +95,7 @@ template <int f_DEC> struct tc_fam {
       ap2.init(S2, sc2, kf * nd, qqf);
       mx.init(W, wc, km * nd);
       mxm.init(wm, wmc, kn * nm);
+      apm.init(apm_t, apm_c, (sz)nm, qqf);
     }
     rA = tc_clamp(ra, 1, CM_TMAX);
     rB = tc_clamp(rb, 1, CM_TMAX);
@@ -131,14 +146,16 @@ template <int f_DEC> struct tc_fam {
     cm_cnt c = B[bb + node];
     cm_cnt e = C[bc + node];
     cm_cnt f = D[bd + node];
-    int pa = a.P();
+    int sd = prp >= 0 ? prp : CM_PHALF;
+    int pe = e.P(CM_PHALF);
+    int pa = a.P(sd);
     int p1 = ap.pp(pa, bs + (u32)node);
     if(p1 > CM_PONE - 1)
       p1 = CM_PONE - 1;
     mx.set(0, cm_stretch(p1));
-    mx.set(1, cm_stretch(c.P()));
-    mx.set(2, cm_stretch(e.P()));
-    mx.set(3, cm_stretch(f.P()));
+    mx.set(1, cm_stretch(c.P(pe)));
+    mx.set(2, cm_stretch(pe));
+    mx.set(3, cm_stretch(f.P(pe)));
     mx.set(4, cm_stretch(pa));
     mx.set(5, prp >= 0 ? cm_stretch(prp) : 0);
     mx.set(6, 256);
@@ -151,33 +168,36 @@ template <int f_DEC> struct tc_fam {
     mx.upd(b, lr, mb);
     ap.upd(b, rS1);
     ap2.upd(b, rS2);
-    a.upd(b, rA, mwA);
+    a.upd(b, rA, mwA, sd);
     A[ba + node] = a;
-    c.upd(b, rB, mwB);
+    c.upd(b, rB, mwB, pe);
     B[bb + node] = c;
-    e.upd(b, rC, mwC);
+    e.upd(b, rC, mwC, CM_PHALF);
     C[bc + node] = e;
-    f.upd(b, rD, mwD);
+    f.upd(b, rD, mwD, pe);
     D[bd + node] = f;
     return b;
   }
   INLINE int bitm(int node, int b) {
     cm_cnt t = T[bt + node];
     if(prp < 0) {
-      b = tc_bit<f_DEC>(t.P(), b);
-      t.upd(b, rT, mwT);
+      b = tc_bit<f_DEC>(t.P(CM_PHALF), b);
+      t.upd(b, rT, mwT, CM_PHALF);
       T[bt + node] = t;
       return b;
     }
-    mxm.set(0, cm_stretch(t.P()));
+    mxm.set(0, cm_stretch(t.P(prp)));
     mxm.set(1, cm_stretch(prp));
     mxm.set(2, 256);
     {
       int pm = mxm.mix(bn + (u32)node);
-      b = tc_bit<f_DEC>(pm < 1 ? 1 : pm > CM_PONE - 1 ? CM_PONE - 1 : pm, b);
+      int pf = apm.pp(pm, (u32)node);
+      pf = (bw * pm + (16 - bw) * pf + 8) >> 4;
+      b = tc_bit<f_DEC>(pf < 1 ? 1 : pf > CM_PONE - 1 ? CM_PONE - 1 : pf, b);
     }
+    apm.upd(b, rS2);
     mxm.upd(b, lrm, mbm);
-    t.upd(b, rT, mwT);
+    t.upd(b, rT, mwT, prp);
     T[bt + node] = t;
     return b;
   }
@@ -187,20 +207,24 @@ template <int f_DEC> struct tc_fam {
     int k, p, nb = 0;
     u64 u;
     select(v);
-    prp = pc.head(0);
-    if(bit(0, ENC && x == 0)) {
-      prp = -1;
-      return 0;
-    }
-    prp = pc.head(1);
-    if(bit(1, ENC && x == 1)) {
-      prp = -1;
-      return 1;
-    }
-    prp = pc.head(2);
-    if(bit(2, ENC && x == 2)) {
-      prp = -1;
-      return 2;
+    //  A head decision the prior has already made is not coded.  `sure`
+    //  answers 1 when the prior says the value is this one, 0 when it says
+    //  it is not, and -1 when it is a decision after all.
+    {
+      int m;
+      for(m = 0; m < 3; m++) {
+        int r;
+        prp = pc.head(m);
+        r = tcp_sure(prp);
+        if(r < 0)
+          r = bit(m, ENC && x == (u64)m);
+        else
+          FATAL_UNLESS(!ENC || (x == (u64)m) == (r != 0), "the codebook prior calls value %llu impossible", (unsigned long long)x);
+        if(r) {
+          prp = -1;
+          return (u64)m;
+        }
+      }
     }
     u = ENC ? (u64)(x - 3) + 1 : 1;
     if(ENC) {
@@ -211,8 +235,14 @@ template <int f_DEC> struct tc_fam {
       }
     }
     for(k = 0;; k++) {
+      int r;
       prp = pc.len(k);
-      if(bit(tc_node_len(k), ENC && nb == k + 1)) {
+      r = tcp_sure(prp);
+      if(r < 0)
+        r = bit(tc_node_len(k), ENC && nb == k + 1);
+      else
+        FATAL_UNLESS(!ENC || (nb == k + 1) == (r != 0), "the codebook prior calls a length of %d impossible", k + 1);
+      if(r) {
         nb = k + 1;
         break;
       }
@@ -224,7 +254,11 @@ template <int f_DEC> struct tc_fam {
       for(p = 0; p < nb - 1; p++) {
         int mb;
         prp = pc.man(nb, p, pref);
-        mb = bitm(tc_node_man(nb, p), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
+        mb = tcp_sure(prp);
+        if(mb < 0)
+          mb = bitm(tc_node_man(nb, p), ENC && ((u >> (nb - 2 - p)) & 1) != 0);
+        else
+          FATAL_UNLESS(!ENC || (((u >> (nb - 2 - p)) & 1) != 0) == (mb != 0), "the codebook prior calls a mantissa bit impossible");
         pref = pref * 2 + (u64)mb;
       }
       prp = -1;
@@ -243,8 +277,8 @@ template <int f_DEC> struct tc_fam {
       return 0;
     if(G) {
       cm_cnt g = G[bg * (u32)ng + sc];
-      s = tc_bit<f_DEC>(g.P(), ENC && x < 0);
-      g.upd(s, rG, mwG);
+      s = tc_bit<f_DEC>(g.P(CM_PHALF), ENC && x < 0);
+      g.upd(s, rG, mwG, CM_PHALF);
       G[bg * (u32)ng + sc] = g;
     } else {
       FATAL_CODE(OGC_EXIT_IO, "a family with no sign counter coded a sign");

@@ -92,6 +92,9 @@ Index a
  a_cm:   cm,    1!1
  a_x1: x1, 1!010
  a_x1s: x1s, -6!0000000000000
+ a_pmx: pmx, 1!1100
+ a_psm: psm, 1!1001
+ a_prm: prm, 1!100
 
 Index b
  b_rno:  rno,   1!0
@@ -123,6 +126,9 @@ Index b
  b_cm:   cm,    1!0
  b_x1: x1, 1!000
  b_x1s: x1s, -6!0000000000000
+ b_pmx: pmx, 1!1100
+ b_psm: psm, 1!000
+ b_prm: prm, 1!000
 
 Index c
  c_pass: pass, 1!10

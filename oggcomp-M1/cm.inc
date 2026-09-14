@@ -45,13 +45,17 @@ static INLINE int cm_squash(int x) {
 static INLINE int cm_stretch(int p) { return cm_st[p]; }
 struct cm_cnt {
   u16 p, t;
-  INLINE int P() const {
-    int v = t ? p >> (CM_CBITS - CM_PBITS) : CM_PHALF;
+  //  A cold counter answers with the seed it is given rather than with a
+  //  coin flip, and its first update moves away from that seed.  What the
+  //  seed is, is the caller's: the codebook prior for the node being
+  //  coded, or a coarser counter's answer.
+  INLINE int P(int seed) const {
+    int v = t ? p >> (CM_CBITS - CM_PBITS) : seed;
     return v < 1 ? 1 : v > CM_PONE - 1 ? CM_PONE - 1 : v;
   }
-  INLINE void upd(int bit, int lim, int mw) {
+  INLINE void upd(int bit, int lim, int mw, int seed) {
     int target = bit ? mw : CM_CONE - 1 - mw;
-    int cur = t ? (int)p : CM_CONE / 2;
+    int cur = t ? (int)p : seed << (CM_CBITS - CM_PBITS);
     t = (u16)(t + (t < lim));
     p = (u16)(cur + (((target - cur) * cm_rec[t]) >> CM_CBITS));
   }

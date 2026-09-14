@@ -77,6 +77,12 @@ Ranked by expected gain times confidence, divided by cost; the agent
 numbering is `report.idea`.  Gains are of the output, on music unless
 said.
 
+**Eleven of these were built and measured at d579c50; four are now in the
+tree and seven are dead.  `IMPROVEMENTS.md` section 8 has the numbers, and
+the short of it is that every context-width idea lost and every
+capacity-or-waste idea won.  The verdict column below is what was expected
+before that, left as written.**
+
 | rank | idea | from | stage | estimate | cost | verdict |
 |---|---|---|---|---|---|---|
 | 1 | the floor bus: floor-derived contexts for digits and classes | 1.2, 5.8, 1.7 | digits, class | 0.5–2% music, 1–3% clips and small | small | build first; it is the prerequisite for a third of the list |
