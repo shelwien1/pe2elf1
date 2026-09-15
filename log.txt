@@ -1,0 +1,264 @@
+0.087s: fpaq0mw c ..\book1 1
+0.086s: fpaq0mw d 1 2
+447681
+
+// EOF flag -> filesize
+0.078s: fpaq0mw c ..\book1 1
+0.082s: fpaq0mw d 1 2
+447151
+
+// carryless -> sh_v1m
+0.083s: fpaq0mw c ..\book1 1
+0.122s: fpaq0mw d 1 2
+447071
+
+// GetFreq -> rc_Bound
+0.084s: fpaq0mw c ..\book1 1
+0.091s: fpaq0mw d 1 2
+447071
+
+// clen calc
+0.100s: fpaq0mw c ..\book1 1
+0.098s: fpaq0mw d 1 2
+447071
+
+18.527s: fpaq0mw c ..\book1 1
+22.155s: fpaq0mw c ..\book1 1
+24.224s: fpaq0mw c ..\book1 1
+
+26.976s: fpaq0mw c ..\book1 1
+29.831s: fpaq0mw d 1 2
+447350
+
+27.481s: fpaq0mw c ..\book1 1
+29.319s: fpaq0mw d 1 2
+447352
+
+53.984s: fpaq0mw c ..\book1 1
+58.237s: fpaq0mw d 1 2
+447351
+
+// tsx.inc
+24.018s: fpaq0mw c ..\book1 1
+24.107s: fpaq0mw d 1 2
+447351
+
+// tsx1.inc
+23.453s: fpaq0mw c ..\book1 1
+56.484s: fpaq0mw d 1 2
+447351
+
+33.047s: fpaq0mw c ..\book1 1
+32.849s: fpaq0mw d 1 2
+447351
+
+61.733s: fpaq0mw c ..\book1 1
+18.712s: fpaq0mw d 1 2
+447351
+
+18.480s: fpaq0mw c ..\book1 1
+18.703s: fpaq0mw d 1 2
+447351
+
+75.358s: fpaq0mw c ..\book1 1
+74.261s: fpaq0mw d 1 2
+447351
+
+73.899s: fpaq0mw c ..\book1 1
+74.394s: fpaq0mw d 1 2
+447351
+
+74.108s: fpaq0mw c ..\book1 1
+73.607s: fpaq0mw d 1 2
+447351
+
+73.589s: fpaq0mw c ..\book1 1
+73.470s: fpaq0mw d 1 2
+447351
+
+// 014-nesting
+18.373s: fpaq0mw c ..\book1 1
+18.478s: fpaq0mw d 1 2
+447351
+
+// clen 4.12 (was 4.4)
+19.008s: fpaq0mw c ..\book1 1
+18.426s: fpaq0mw d 1 2
+447361
+
+// clen 4.16
+18.641s: fpaq0mw c ..\book1 1
+18.674s: fpaq0mw d 1 2
+447361
+
+// SCALE = 1<<16 (was 15)
+18.856s: fpaq0mw c ..\book1 1
+18.781s: fpaq0mw d 1 2
+446945
+
+// SCALE = 1<<17
+18.873s: fpaq0mw c ..\book1 1
+19.066s: fpaq0mw d 1 2
+447042
+
+// SCALE = 1<<18
+18.860s: fpaq0mw c ..\book1 1
+18.870s: fpaq0mw d 1 2
+447094
+
+// 016, drop LOG/unlog
+18.780s: fpaq0mw c ..\book1 1
+18.286s: fpaq0mw d 1 2
+447083
+
+// /SCALE -> >>SCALElog
+18.114s: fpaq0mw c ..\book1 1
+18.600s: fpaq0mw d 1 2
+447083
+
+// probability reuse on last bit
+13.680s: fpaq0mw c ..\book1 1
+13.984s: fpaq0mw d 1 2
+447083
+
+// 017: template recursion
+13.385s: fpaq0mw c ..\book1 1
+13.641s: fpaq0mw d 1 2
+447083
+
+// INLINE template
+13.013s: fpaq0mw c ..\book1 1
+13.045s: fpaq0mw d 1 2
+447083
+
+// arch=skylake
+12.941s: fpaq0mw c ..\book1 1
+12.979s: fpaq0mw d 1 2
+447083
+
+// icx /Qxhaswell
+12.435s: fpaq0mw c ..\book1 1
+12.468s: fpaq0mw d 1 2
+447083
+
+// icl /QxHOST
+13.618s: fpaq0mw c ..\book1 1
+13.614s: fpaq0mw d 1 2
+447083
+
+// icx
+12.425s: fpaq0mw c ..\book1 1
+12.459s: fpaq0mw d 1 2
+447083
+
+// bit0: encode_sim -> E.predictor.P();
+8.565s: fpaq0mw c ..\book1 1
+8.608s: fpaq0mw d 1 2
+447083
+
+// qword clen / shift once per 4 bits
+8.644s: fpaq0mw c ..\book1 1
+8.668s: fpaq0mw d 1 2
+446952
+
+// LOG-scale clen
+8.849s: fpaq0mw c ..\book1 1
+8.889s: fpaq0mw d 1 2
+446945
+
+// 021 icx build
+8.834s: fpaq0mw c ..\book1 1
+8.824s: fpaq0mw d 1 2
+446945
+
+// 021 gcc build
+9.158s: fpaq0mw c ..\book1 1
+9.121s: fpaq0mw d 1 2
+446945
+
+// 021 icx, template params bit and ctx
+8.776s: fpaq0mw c ..\book1 1
+8.801s: fpaq0mw d 1 2
+446945
+
+8.763s: fpaq0mw c ..\book1 1
+8.798s: fpaq0mw d 1 2
+446945
+
+// 022: return p from encode_sim
+7.519s: fpaq0mw c ..\book1 1
+7.550s: fpaq0mw d 1 2
+446945
+
+// 022: gcc
+7.702s: fpaq0mw c ..\book1 1
+7.617s: fpaq0mw d 1 2
+446945
+
+// drop pushf
+3.246s: fpaq0mw c ..\book1 1
+3.284s: fpaq0mw d 1 2
+446945
+
+3.266s: fpaq0mw c ..\book1 1
+3.292s: fpaq0mw d 1 2
+446945
+
+// zero out freqs for \x80..\xFF
+3.208s: fpaq0mw c ..\book1 1
+3.232s: fpaq0mw d 1 2
+446672
+
+// just bytewise coding, w/o clen calc
+0.081s: fpaq0mw c ..\book1 1
+0.100s: fpaq0mw d 1 2
+768775
+
+3.253s: fpaq0mw c ..\book1 1
+3.293s: fpaq0mw d 1 2
+446945
+
+// 023: drop low-p paths
+3.348s: fpaq0mw c ..\book1 1
+3.373s: fpaq0mw d 1 2
+446945
+
+3.344s: fpaq0mw c ..\book1 1
+3.371s: fpaq0mw d 1 2
+446945
+
+// clen[cty]>0x20000*(8-K)
+3.343s: fpaq0mw c ..\book1 1
+3.365s: fpaq0mw d 1 2
+446945
+
+// clen[cty]>0x40000*(8-K)
+1.950s: fpaq0mw c ..\book1 1
+1.973s: fpaq0mw d 1 2
+446945
+
+// clen[cty]>0x80000*(8-K)
+1.956s: fpaq0mw c ..\book1 1
+1.973s: fpaq0mw d 1 2
+446945
+
+// clen[cty]>0xC0000*(8-K)
+0.216s: fpaq0mw c ..\book1 1
+0.239s: fpaq0mw d 1 2
+768775
+
+// clen[cty]>0x90000*(8-K)
+1.766s: fpaq0mw c ..\book1 1
+1.789s: fpaq0mw d 1 2
+446962
+
+// clen[cty]>0xA0000*(8-K)
+1.228s: fpaq0mw c ..\book1 1
+1.259s: fpaq0mw d 1 2
+463225
+
+// 024
+1.760s: fpaq0mw c ..\book1 1
+1.789s: fpaq0mw d 1 2
+446962
+

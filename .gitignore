@@ -1,0 +1,14 @@
+# build outputs
+coder.s
+coder1.s
+fpaq0mw
+fpaq0mw.exe
+timetest
+timetest.exe
+*.o
+*.obj
+*.bc
+# test files (test.sh / test.bat)
+1
+2
+book1
