@@ -124,8 +124,9 @@ int main(int argc, char** argv) {
 #endif
 
     // The walk must have journaled and rolled back something, or it was not the
-    // instrumented copy of the model step that ran (see track.pl's weak-symbol
-    // check) and every speculative branch has been leaking into the real model.
+    // instrumented copy of the model step that ran (see track.pl's check that
+    // this translation unit exports nothing but its one entry point) and every
+    // speculative branch has been leaking into the real model.
     // That failure is invisible in a round trip - both sides corrupt the model
     // identically - and shows up only as bad compression, so check it here.
     if( (i==0) && (trk_undone==0) ) {

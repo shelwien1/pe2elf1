@@ -88,8 +88,9 @@ recorded for iteration `024` on Windows, and `tangelo_w` gives 197 483.
 GCC and Clang on Linux and MinGW-w64 GCC produce byte-identical compressed
 output.
 
-The speed/size knob is `PRUNE_LOG` (§4.3): build with `-DPRUNE_LOG=0x90000` to
-trade about 0.3 % of `tangelo_w`'s compression for 25 % of its time.
+The speed/size knob is `PRUNE_LOG` (§4.3): building with `-DPRUNE_LOG=0x90000`
+trades 0.3 % of `tangelo_w`'s compression for 27 % of its time (20 804 bytes in
+7.5 s against 20 739 in 10.2 s, on `book1`'s first 64 KB).
 
 `-DTRACK_VERIFY=n` builds a self-checking binary, which is what to reach for
 when porting a new model. It proves the two halves of the contract that a round

@@ -46,10 +46,12 @@ typedef unsigned long long qword;
 // How deep the speculative walk goes before it gives up on a prefix (track.inc).
 // Tangelo's predictions are far sharper than fpaq0mw's, so the default 0x90000
 // (3 bits per bit) cuts into the distribution that matters; 0x80000 (4 bits per
-// bit) is within a few bytes of the unpruned walk. Measured on book1's first
-// 64 KB - unpruned 20734 at 15.1s, 0x80000 20739 at 10.9s, 0x90000 20804 at
-// 8.1s, 0xA0000 21307 at 5.6s.
-#define PRUNE_LOG 0x80000
+// bit) is within five bytes of the unpruned walk. Measured on book1's first
+// 64 KB - unpruned 20734 at 14.3s, 0x80000 20739 at 10.2s, 0x90000 20804 at
+// 7.5s, 0xA0000 21307 at 5.2s, 0xB0000 25160 at 3.7s.
+#ifndef PRUNE_LOG            // ... but -DPRUNE_LOG on the command line wins
+ #define PRUNE_LOG 0x80000
+#endif
 
 #include "tangelo/tangelo.inc"
 

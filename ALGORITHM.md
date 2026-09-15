@@ -728,11 +728,11 @@ the same model with its own binary arithmetic coder, coding bit by bit.
 | | `book1` size | enc | 64 KB size | enc |
 | --- | ---: | ---: | ---: | ---: |
 | Tangelo, bitwise (reference) | 197 022 | 5.0 s | 20 706 | 0.68 s |
-| tangelo_w, no pruning | | | 20 734 | 15.1 s |
-| tangelo_w, `PRUNE_LOG=0x80000` (default) | 197 483 | 100.7 s | 20 739 | 10.9 s |
-| tangelo_w, `PRUNE_LOG=0x90000` | | | 20 804 | 8.1 s |
-| tangelo_w, `PRUNE_LOG=0xA0000` | | | 21 307 | 5.6 s |
-| tangelo_w, `PRUNE_LOG=0xB0000` | | | 25 160 | 3.6 s |
+| tangelo_w, no pruning | | | 20 734 | 14.3 s |
+| tangelo_w, `PRUNE_LOG=0x80000` (default) | 197 483 | 97.2 s | 20 739 | 10.2 s |
+| tangelo_w, `PRUNE_LOG=0x90000` | | | 20 804 | 7.5 s |
+| tangelo_w, `PRUNE_LOG=0xA0000` | | | 21 307 | 5.2 s |
+| tangelo_w, `PRUNE_LOG=0xB0000` | | | 25 160 | 3.7 s |
 
 Two things are worth reading off that table. First, the bytewise reformulation
 does not pay for itself in size: even with the walk unpruned, coding the byte in

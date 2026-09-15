@@ -286,3 +286,18 @@
 100.679s: tangelo_w c ../book1 1
 103.283s: tangelo_w d 1 2
 197483
+
+// ---- width-exact UNDO (was one 32-bit read-modify-write per cell) ----
+// PRUNE_LOG sweep re-measured, book1's first 64 KB (size, enc, dec):
+//   no pruning         20734  14.26  14.13
+//   0x80000 (default)  20739  10.18   9.94
+//   0x90000            20804   7.48   7.46
+//   0xA0000            21307   5.23   5.29
+//   0xB0000            25160   3.67   3.65
+2.501s: fpaq0mw c ../book1 1
+2.549s: fpaq0mw d 1 2
+446962
+
+97.169s: tangelo_w c ../book1 1
+96.514s: tangelo_w d 1 2
+197483
