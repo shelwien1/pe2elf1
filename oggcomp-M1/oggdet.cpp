@@ -1761,7 +1761,14 @@ static int restore(od_coro * co) {
   if (!v5 && memcmp(magic, META_MAGIC, 8) && memcmp(magic, META_MAGIC_V4, 8))
     die("%s is not an oggdet metainfo file", mpath);
 
-  out.o.out = &co->pin[1];
+  //  Every field, not just the pin: out_put branches on `chunk` -- it is
+  //  the metainfo chunk the carver gathers into, and there is none here --
+  //  so leaving it unset sends the restored file to whatever the stack had
+  //  at that address.  A compiler that happens to leave a zero there hides
+  //  it; clang at -O3 does not, and the first byte of output goes to a wild
+  //  pointer.
+  out.o.out = &co->pin[1];  out.o.chunk = NULL;  out.o.comp = 0;
+  out.o.raw = out.o.coded = 0;
   out.crc = 0;  out.total = 0;
   buf = (u8 *) xmalloc(bufcap);
 
