@@ -520,20 +520,27 @@ Neither half of the journal's contract is testable by round-tripping: encoder an
 decoder run the same code, so they corrupt the model identically and still agree.
 `-DTRACK_VERIFY=n` therefore builds a binary that checks both directly.
 
-**The journal restores everything.** For the first `n` input bytes, every byte of
-model state is copied aside, the walk runs, and the state is compared byte for
-byte. The ranges compared are the whole `Coder` object plus anything a program
-lists in `TRACK_VERIFY_RANGES` - for tangelo_w that is `y`, `bpos` and the random
-generator. A single write escaping the instrumentation shows up as a named offset
-at the byte where it happened.
+**The journal restores everything.** Every byte of model state is copied aside,
+the walk runs, and the state is compared byte for byte. The ranges compared are
+the whole `Coder` object plus anything a program lists in `TRACK_VERIFY_RANGES` -
+for tangelo_w that is `y`, `bpos` and the random generator. A single write
+escaping the instrumentation shows up as a named offset at the byte where it
+happened. This is the escape detector, and it is the expensive one: the whole
+model, read twice, per checked byte. It runs for the first `n` input bytes, and
+with `-DTRACK_VERIFY_EVERY=k` for every `k`-th byte after that - worth using,
+because a model's later paths are not its first (nothing is evicted from a cold
+hash table, and only 70 of tangelo_w's 146 instrumented writes are even on the
+walk's path; the rest belong to the byte-boundary work the walk never enters).
 
 **The simulation reproduces the real step.** After coding each byte, the eight
 real per-bit predictions are turned back into code lengths and summed; the total
 must equal the walk's `clen[0x100+c]` for that symbol exactly, for every byte of
-the file (unless the symbol's prefix was pruned). That catches the subtler
-failure where the journal restores memory correctly but the simulated and real
-paths do not correspond - a global that exists twice, say, or a model whose step
-is not a pure function of its state and the bit.
+the file (unless the symbol's prefix was pruned). This is a correspondence check
+between the simulated step and the real one, not a second escape detector: it
+catches whatever makes the two disagree - a global that exists twice, the two
+translation units disagreeing about a layout - and it catches an escaped write
+only when that write happens to change one of the eight predictions it compares.
+It is cheap enough to leave on for the whole file, and that is the point of it.
 
 Both programs pass, on all three toolchains - GCC 13, Clang 18 and MinGW-w64
 (run under wine). `fpaq0mw` is checked over all of `book1`; `tangelo_w` with all
@@ -612,8 +619,9 @@ plus about 67 stack writes that are skipped.
 Why assembly-level instrumentation rather than a compiler option: it needs no
 support from the compiler, it applies to already optimised code (the writes that
 survive optimisation are exactly the ones that matter), and it leaves the model
-source almost untouched - the Tangelo port needed five edits to the model itself,
-all of them listed at the top of `tangelo/tangelo.inc`.
+source almost untouched - the complete list of edits the Tangelo port needed is
+at the top of `tangelo/tangelo.inc`, and six of its seventeen files are byte for
+byte the original.
 
 ## 7. The range coder
 
@@ -723,7 +731,9 @@ the comment lines are the author's.
 
 Measured here, on `book1` and on its first 64 KB, with GCC 13 `-O3
 -march=native` on a 2.8 GHz Xeon. The reference row is `legacy/tangelo_orig.cpp`,
-the same model with its own binary arithmetic coder, coding bit by bit.
+the same model with its own binary arithmetic coder, coding bit by bit (it needs
+the two portability fixes listed in `tangelo/tangelo.inc` to compile with GCC or
+Clang).
 
 | | `book1` size | enc | 64 KB size | enc |
 | --- | ---: | ---: | ---: | ---: |

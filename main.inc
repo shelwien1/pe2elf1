@@ -27,20 +27,41 @@ uint flen( FILE* f ) {
 Coder E;
 
 #ifdef TRACK_VERIFY
-// Self-check, built with -DTRACK_VERIFY=<n>: for the first n input bytes,
-// snapshot every byte of model state, run the speculative walk, and compare.
-// If a single write escaped the journal, UNDO() leaves the model changed and
-// this says exactly where. It also checks the other half of the contract - that
-// the simulation predicts what the model really goes on to do - by adding up
-// the eight real per-bit code lengths and requiring the sum to equal the walk's
-// entry for that byte. Both failures are otherwise silent: they cost
-// compression without ever breaking a round trip.
+// Self-check, built with -DTRACK_VERIFY=<n>. Two different checks, and it is
+// worth being clear about which one catches what, because neither failure
+// breaks a round trip - they only cost compression.
+//
+//   The snapshot. For the checked bytes, every byte of model state is copied
+//   aside, the walk runs, and the state is compared. This is the escape
+//   detector: if any write dodged the journal, UNDO() leaves the model changed
+//   and this names the offset. It is thorough and expensive - the whole model,
+//   twice, per checked byte - so it is checked for the first n input bytes and,
+//   with -DTRACK_VERIFY_EVERY=<k>, every k-th byte after that. Sampling matters:
+//   a model's later paths differ from its first (nothing is evicted from a cold
+//   hash table), so a prefix-only run leaves them untested.
+//
+//   The prediction. For EVERY byte, the eight real per-bit code lengths are
+//   summed and required to equal the walk's entry for that symbol. This is a
+//   correspondence check between the simulated step and the real one, not an
+//   escape detector: it catches whatever makes the two disagree - a global that
+//   exists twice, the two translation units disagreeing on a layout - and it
+//   catches an escaped write only when that write happens to change one of the
+//   eight predictions the check compares. Cheap enough to leave on for the
+//   whole file.
 //
 // A program lists any model state living outside the Coder object in
 // TRACK_VERIFY_RANGES (each entry ", {name, address, size}").
 #ifndef TRACK_VERIFY_RANGES
  #define TRACK_VERIFY_RANGES
 #endif
+#ifndef TRACK_VERIFY_EVERY
+ #define TRACK_VERIFY_EVERY 0
+#endif
+
+// Which input bytes get the (expensive) state snapshot.
+static int verify_this( uint i ) {
+  return (i<TRACK_VERIFY) || (TRACK_VERIFY_EVERY && ((i%TRACK_VERIFY_EVERY)==0));
+}
 
 struct VRange { const char* name; byte* p; uint n; };
 VRange vrange[] = { {"Coder",(byte*)&E,sizeof(Coder)} TRACK_VERIFY_RANGES };
@@ -114,13 +135,13 @@ int main(int argc, char** argv) {
     }
 
 #ifdef TRACK_VERIFY
-    if( i<TRACK_VERIFY ) verify_save();
+    if( verify_this(i) ) verify_save();
 #endif
 
     test_encode( E, clen );
 
 #ifdef TRACK_VERIFY
-    if( i<TRACK_VERIFY ) verify_check(i);
+    if( verify_this(i) ) verify_check(i);
 #endif
 
     // The walk must have journaled and rolled back something, or it was not the

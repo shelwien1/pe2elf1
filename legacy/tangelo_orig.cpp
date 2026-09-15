@@ -310,10 +310,6 @@ struct Mixer1 {
 // Mixer - combines models using neural networkss
 template< int n, int m, int s = 1, int w = 0 >
 struct Mixer: Mixer1<n,m,s,w> {
-  typedef Mixer1<n,m,s,w> Base;
-  using Base::N; using Base::nx; using Base::tx; using Base::wx;
-  using Base::cxt; using Base::pr; using Base::ncxt;
-
   Mixer1<s,1,1> mp;
 
   void Init() {
@@ -394,9 +390,9 @@ struct StateMap {
 };
 //--- #include "CM_small.inc"
 
-template< int SZ >
+template< int m >
 struct SmallStationaryContextMap {
-  static const uint t_size = SZ/2;
+  static const uint t_size = m/2;
   word t[t_size];
   int cxt;
   word* cp;

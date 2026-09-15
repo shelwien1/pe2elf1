@@ -104,8 +104,8 @@ The speed/size knob is `PRUNE_LOG` (§4.3): building with `-DPRUNE_LOG=0x90000`
 trades 0.3 % of `tangelo_w`'s compression for 27 % of its time (20 804 bytes in
 7.5 s against 20 739 in 10.2 s, on `book1`'s first 64 KB).
 
-`-DTRACK_VERIFY=n` builds a self-checking binary, which is what to reach for
-when porting a new model. It proves the two halves of the contract that a round
+`-DTRACK_VERIFY=n` (optionally with `-DTRACK_VERIFY_EVERY=k`) builds a
+self-checking binary, which is what to reach for when porting a new model. It proves the two halves of the contract that a round
 trip cannot: that the journal restores **everything** (for the first `n` input
 bytes it snapshots every byte of model state, runs the walk, and compares), and
 that the simulated step reproduces the real one (for every byte, the walk's
@@ -148,22 +148,15 @@ at full size nothing is evicted in a short run.
 * `fpaq0mw.cpp`: `__max`/`__min` fallbacks for C libraries that do not define
   them (they are MSVC/MinGW CRT macros).
 
-**The Tangelo model** (`legacy/tangelo_orig.cpp` is the untouched original)
-needed five, each commented where it was made and listed at the top of
-`tangelo/tangelo.inc`:
-
-* `common.inc`: the mutable globals are declared, not defined, so that the
-  instrumented and the real copy of the step share one set (§5.4); and the
-  `<ctype.h>` calls became open-coded C-locale tests, which removes a call the
-  journal could not see and makes the output locale-independent.
-* `CM.inc`: the `memset()` in the ContextMap's eviction path is spelled out as a
-  loop, for the same reason.
-* `CM.inc`, `CM_main.inc`, `coder_tangelo.inc`: `INLINE` on `ContextMap::mix`,
-  `Model::predictNext` and `Coder::encode_sim`, so the instrumented translation
-  unit defines no weak symbol the linker could discard.
-* `mixer.inc`: `using Base::` declarations for the dependent base members, which
-  GCC and Clang require and MSVC does not.
-* `CM_small.inc`: a template parameter renamed so it stops shadowing `m`.
+**The Tangelo model** (`legacy/tangelo_orig.cpp` is the original, unchanged
+except for line endings) needed the edits listed at the top of
+`tangelo/tangelo.inc`, which is a mechanical diff rather than a recollection:
+the shared globals declared instead of defined (§5.4); `memset()` and the
+`<ctype.h>` calls spelled out, since the journal cannot see a library call's
+writes, which also makes the output locale-independent; `INLINE` on the five
+functions a compiler might leave out of line, so the instrumented translation
+unit exports nothing the linker could substitute; and two portability fixes the
+original needs merely to compile with GCC or Clang.
 
 The model's arithmetic is untouched; so are the walk, the journal and the coder.
 

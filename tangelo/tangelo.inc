@@ -2,13 +2,31 @@
 // its own "#include" markers named. legacy/tangelo_orig.cpp is the single-file
 // original this came from.
 //
-// The only changes from that original are the ones the two-translation-unit,
-// journaled build needs; each is commented at the point it was made:
-//   common.inc      mutable globals declared, not defined; locale-free ctype
-//   hash.inc/stsq   free functions made static so both TUs can hold a copy
-//   CM.inc          memset() spelled out so its stores can be journaled
-//   mixer.inc       "using Base::" for the dependent base members (GCC/Clang)
-//   CM_small.inc    template parameter renamed so it stops shadowing "m"
+// The only changes from that original are the ones this build needs. Each is
+// commented where it was made; the complete list, taken from a mechanical diff
+// against legacy/tangelo_orig.cpp:
+//
+//   common.inc      the program's own preamble (includes, typedefs, flen, the
+//                   INLINE macros) moved to ../tangelo_w.cpp; the probability
+//                   scale named; MEM made overridable; y and bpos declared
+//                   rather than defined; min/max made static; the <ctype.h>
+//                   calls replaced by open-coded C-locale tests
+//   random, ilog,   rnd, ilog, pt and stretch declared rather than defined, so
+//   idiv, stsq      that both copies of the model step share one of each
+//   hash, stsq      hash() and squash() made static, being pure
+//   CM.inc          the memset() in the eviction path spelled out, so that its
+//                   writes reach the journal
+//   CM_main.inc     the byte classifier calls those C-locale tests
+//   CM, CM_match,   INLINE on E::get, ContextMap::mix, MatchModel::matchModel,
+//   CM_main, mixer  Mixer::p and Model::predictNext. Load-bearing rather than an
+//                   optimisation - see ALGORITHM.md section 5.4
+//   mixer.inc       "using Base::" for the dependent base members, which GCC and
+//                   Clang require and MSVC does not
+//   CM_small.inc    a template parameter renamed so it stops shadowing "m"
+//
+// window.inc, table_fsm.inc, mixer_train.inc, mixer1.inc, APM.inc and
+// counter.inc are byte for byte the original. The last two entries are what the
+// original needs merely to compile with GCC or Clang.
 //
 // The model predicts one bit at a time: Model::predictNext() folds the bit just
 // coded (the global y) into the state and returns P(next bit = 1) as a 12-bit
