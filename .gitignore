@@ -1,6 +1,4 @@
 # build outputs
-coder.s
-coder1.s
 fpaq0mw
 fpaq0mw.exe
 timetest
@@ -9,6 +7,7 @@ timetest.exe
 *.obj
 *.bc
 # test files (test.sh / test.bat)
+.timetest.log
 1
 2
 book1

@@ -27,7 +27,12 @@ CXXFLAGS="${CXXFLAGS:--O3 -ffast-math -fomit-frame-pointer -fno-rtti -fno-except
 #     mixer's tail-zeroing loop); track.pl refuses such calls outright.
 SIMFLAGS="${SIMFLAGS:--mno-red-zone -fno-builtin}"
 LDFLAGS="${LDFLAGS:-}"
+# A native MinGW/MSYS2 compiler appends .exe whether or not -o says so, so the
+# pre-build cleanup has to know the real output name.
 EXT="${EXT:-}"
+if [ -z "$EXT" ]; then
+  case "$($CXX -dumpmachine 2>/dev/null)" in *mingw*|*cygwin*) EXT=.exe;; esac
+fi
 
 progs="${*:-fpaq0mw tangelo_w}"
 
@@ -35,15 +40,16 @@ for p in $progs; do
   exe="$p$EXT"
   rm -f "coder-$p.s" "coder1-$p.s" "$exe"
 
-  echo "[$p 1/3] $CXX -S -masm=intel -DSIM_FUNC $p.cpp -o coder-$p.s"
+  echo "[$p 1/3] $CXX $CXXFLAGS $SIMFLAGS -S -masm=intel -DSIM_FUNC $p.cpp -o coder-$p.s"
   $CXX $CXXFLAGS $SIMFLAGS -S -masm=intel -DSIM_FUNC "$p.cpp" -o "coder-$p.s"
 
   echo "[$p 2/3] perl track.pl coder-$p.s coder1-$p.s"
   perl track.pl "coder-$p.s" "coder1-$p.s"
 
-  echo "[$p 3/3] $CXX $p.cpp coder1-$p.s -o $exe"
+  echo "[$p 3/3] $CXX $CXXFLAGS $p.cpp coder1-$p.s $LDFLAGS -o $exe"
   $CXX $CXXFLAGS "$p.cpp" "coder1-$p.s" $LDFLAGS -o "$exe"
 done
 
-# timing helper used by test.sh (optional)
-$CXX -O2 timetest.cpp $LDFLAGS -o "timetest$EXT" 2>/dev/null || echo "note: timetest not built"
+# timing helper used by test.sh. Its diagnostics are not swallowed: if it fails
+# to build, test.sh will not run, and the reason should be visible here.
+$CXX -O2 timetest.cpp $LDFLAGS -o "timetest$EXT" || echo "note: timetest did not build - test.sh will not run" >&2

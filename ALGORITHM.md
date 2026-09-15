@@ -581,7 +581,7 @@ track: the speculative walk entered mid-byte at input byte 0 -
 Per program (`fpaq0mw`, `tangelo_w`):
 
 ```
-<prog>.cpp  --(CXX -S -masm=intel -mno-red-zone -DSIM_FUNC)-->  coder-<prog>.s
+<prog>.cpp  --(CXX -S -masm=intel -mno-red-zone -fno-builtin -DSIM_FUNC)-->  coder-<prog>.s
 coder-<prog>.s  --(perl track.pl)---------------------------->  coder1-<prog>.s
 <prog>.cpp + coder1-<prog>.s  --(CXX)------------------------>  <prog>[.exe]
 ```
@@ -787,10 +787,16 @@ because only the current root-to-leaf path is ever live.
   landing on the very variables the check reads (`nest_trkptr` follows `trk`
   immediately in bss). Measured peak use is 2 527 cells.
 * **Both copies of the model must match**: the instrumented `encode_sim` and the
-  inlined one are compiled separately, so they must be built with the same
-  compiler and the same flags (the build scripts enforce this by using one
-  `CXX`/`CXXFLAGS` for both steps; only `-mno-red-zone` differs, which changes no
-  arithmetic).
+  inlined one are compiled separately, so they must agree on the layout of every
+  object - the instrumented step reaches the model's fields through hard-coded
+  offsets off a `void*`, and a disagreement produces no diagnostic at all. The
+  build scripts use one `CXX`/`CXXFLAGS` for both steps; the instrumented one
+  additionally gets `-mno-red-zone -fno-builtin`. Both are codegen-only and
+  cannot move a field, but "codegen-only" is not "inert": `-fno-builtin` rewrites
+  Clang's instrumented step wholesale (3 862 diff lines, two `memset` calls gone),
+  which is the point of it. Anything that *could* affect layout - `-fpack-struct`,
+  `-malign-double`, an `-march` that changes a vector type's alignment - has to go
+  in `CXXFLAGS`, where both steps get it.
 * **The `unlog` table is built with floating-point `pow()`.** Encoder and decoder
   of the same binary always agree, but a different libm could in principle round
   one table entry differently, which would make streams incompatible between

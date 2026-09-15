@@ -46,19 +46,25 @@ CXX=x86_64-w64-mingw32-g++ EXT=.exe LDFLAGS="-static -s" ./build.sh
 
 Each program is built in the same three steps as the original `g.bat`:
 
-1. `CXX -S -masm=intel -mno-red-zone -DSIM_FUNC <prog>.cpp -o coder-<prog>.s` -
-   the model step (`encode_sim`) as Intel-syntax assembly;
+1. `CXX $CXXFLAGS -mno-red-zone -fno-builtin -S -masm=intel -DSIM_FUNC <prog>.cpp
+   -o coder-<prog>.s` - the model step (`encode_sim`) as Intel-syntax assembly.
+   The two extra flags are why it works: the journaling call inserted in step 2
+   writes just below `rsp`, and `-fno-builtin` stops the compiler turning a loop
+   into a library call whose writes the journal could never see;
 2. `perl track.pl coder-<prog>.s coder1-<prog>.s` - insert a journaling call in
    front of every memory write (the ABI, `rcx` vs `rdi`, is detected from the
    assembly);
 3. `CXX <prog>.cpp coder1-<prog>.s -o <prog>` - the program plus the
    instrumented step.
 
-`track.pl` fails the build if the assembly contains a memory write it cannot
-journal, a call whose target is not in the same file (a library call's writes
-never reach the journal), a weak (COMDAT) symbol that would let the linker
-discard the instrumentation, a static initialiser, or use of the red zone. Run `perl track.pl -v` to see
-every write it instruments or skips; its header comment documents the options.
+`track.pl` fails the build rather than guess, if the assembly contains a memory
+write it cannot journal, a call whose target is not in the same file (a library
+call's writes never reach the journal), an exported symbol besides the one entry
+point (the linker would be free to discard the instrumented copy), a static
+initialiser, or use of the red zone. Run
+`perl track.pl -v coder-tangelo_w.s /dev/null` after a build to see every write
+it instruments or skips; its header comment documents the options and every
+refusal.
 
 ## Usage
 
@@ -82,6 +88,12 @@ file with `timetest` and append the timings and the compressed size to
 ./test.sh tangelo_w ../book1
 perl log.pl                      # tabulate log.txt into log1.txt
 ```
+
+Nothing is written to `log.txt` unless the round trip verified. `book1` is not
+in the repository: it is the Calgary corpus file, 768 771 bytes, from
+`https://corpus.canterbury.ac.nz/resources/calgary.tar.gz` (md5
+`0a0fdbaf0589c9713bde9120cbb20199`). The scripts default to `../book1`, where
+the author's log keeps it.
 
 Expected for `book1`: `fpaq0mw` gives 446 962 bytes, the number the author
 recorded for iteration `024` on Windows, and `tangelo_w` gives 197 483.

@@ -3,8 +3,7 @@
 # track.pl - insert memory-write journaling calls into compiler-generated
 #            x86-64 assembly (GNU as, Intel syntax).
 #
-# Usage:  perl track.pl [options] [input.s [output.s]]
-#         defaults: input=coder.s output=coder1.s
+# Usage:  perl track.pl [options] <input.s> <output.s>
 #
 # Options:
 #   --abi=win64|sysv   calling convention of the target. Default: auto-detected
@@ -98,8 +97,10 @@ for (@ARGV) {
   elsif (/^-/)                   { die "track.pl: unknown option $_\n" }
   else                           { push @files, $_ }
 }
-my $in  = $files[0] // 'coder.s';
-my $out = $files[1] // 'coder1.s';
+# No defaults: the build names its files per program (coder-<prog>.s), and the
+# old coder.s / coder1.s from legacy/g.bat are never produced now.
+@files==2 or die "usage: track.pl [options] <input.s> <output.s>\n";
+my ($in, $out) = @files;
 
 open(my $I, '<', $in)  or die "track.pl: cannot read $in: $!\n";
 my @a = <$I>;
