@@ -21,9 +21,10 @@ if "%CXX%"=="" set CXX=g++
 if "%CXXFLAGS%"=="" set CXXFLAGS=-O3 -ffast-math -fomit-frame-pointer -fno-rtti -fno-exceptions -fno-stack-protector -march=native
 if "%LDFLAGS%"=="" set LDFLAGS=-static -s
 
-rem Win64 has no red zone, so step 1 needs nothing extra there; keeping the flag
-rem makes the two build scripts produce the same code.
-if "%SIMFLAGS%"=="" set SIMFLAGS=-mno-red-zone
+rem Step 1 only, both codegen-only. Win64 has no red zone, but keeping the flag
+rem makes the two build scripts produce the same code; -fno-builtin stops the
+rem compiler synthesising a memset call, whose writes the journal cannot see.
+if "%SIMFLAGS%"=="" set SIMFLAGS=-mno-red-zone -fno-builtin
 
 set progs=%*
 if "%progs%"=="" set progs=fpaq0mw tangelo_w

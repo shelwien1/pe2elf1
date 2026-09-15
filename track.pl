@@ -42,6 +42,12 @@
 # memory-writing instruction the script does not recognise is an error, because
 # a store the journal does not see cannot be undone.
 #
+# CALLS: a call out of this translation unit is refused. The whole file is
+# instrumented, so a callee compiled alongside is journaled too - but a library
+# function is not, and its writes would escape silently. Compilers synthesise
+# such calls from ordinary loops (clang turns the mixer's tail-zeroing loop into
+# memset), which is why the instrumented compile also gets -fno-builtin.
+#
 # RED ZONE: the inserted "push ARG" writes at [rsp-8], so the 128-byte SysV red
 # zone below rsp must not be in use. Compile the instrumented translation unit
 # with -mno-red-zone; the script checks for negative rsp displacements and stops
@@ -91,6 +97,22 @@ if (@weak) {
         . "  The normal build defines the same symbol and the linker keeps only one copy, so the\n"
         . "  instrumented body can be discarded, leaving the speculative walk unjournaled.\n"
         . "  Mark those functions INLINE (always_inline) so they fold into encode_sim().\n";
+  die $m unless $lax;
+  print STDERR "track.pl: WARNING: $m";
+}
+
+# Everything this file defines: a call to anything else leaves the instrumented
+# code, and whatever it writes never reaches the journal.
+my %defined;
+for (@a) { $defined{$1} = 1 if /^([A-Za-z_.\$][\w.\$@]*):/ }
+
+# A static initialiser here would journal its writes before main() ever runs,
+# and nothing would ever roll them back.
+if (grep { /^\s*\.section\s+\.init_array/ || /^_GLOBAL__sub_I/ } @a) {
+  my $m = "track.pl: $in contains a static initialiser (.init_array / _GLOBAL__sub_I).\n"
+        . "  Its constructors would be instrumented too, filling the journal at start-up with\n"
+        . "  entries nothing ever undoes. Define objects with constructors in the main\n"
+        . "  translation unit only, inside the #ifndef SIM_FUNC guard.\n";
   die $m unless $lax;
   print STDERR "track.pl: WARNING: $m";
 }
@@ -164,6 +186,15 @@ for my $line (@a) {
     if ($mn =~ $implicit_write
         || ($mn =~ /^movs[bwdq]$/ && $ops eq '')) {
       report_unhandled($line);
+      last;
+    }
+    if ($mn eq 'call' || $mn eq 'jmp') {           # jmp: a tail call
+      my ($tgt) = ($ops =~ /^([\w.\$@]+)\s*$/);
+      if (!defined $tgt) {                         # indirect: through a register or memory
+        report_call($line, "indirect") if $mn eq 'call';
+      } elsif ($tgt !~ /^\.L/ && !$defined{$tgt}) {
+        report_call($line, "leaves this translation unit");
+      }
       last;
     }
     last if $mn =~ $readonly;                      # memory operand only read
@@ -254,6 +285,12 @@ sub reg_width {
   return 2  if $r =~ /^(?:[a-z]x|[sd]i|[sb]p|r\d+w)$/i;
   return 1  if $r =~ /^(?:[a-z][lh]|[sd]il|[sb]pl|r\d+b)$/i;
   return undef;
+}
+
+sub report_call {
+  my ($line, $why) = @_;
+  $unhandled++;
+  print STDERR "track.pl: call $why, so its memory writes cannot be journaled: $line\n";
 }
 
 sub report_unhandled {

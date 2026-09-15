@@ -1,3 +1,6 @@
+// Note: main.inc later declares the global "Coder E", which hides this class
+// name at namespace scope from that point on. Nothing needs it by name after
+// ContextMap below, so the two coexist; keep it that way.
 struct E {
   word chk[7];
   byte last;

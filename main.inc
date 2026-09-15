@@ -26,6 +26,51 @@ uint flen( FILE* f ) {
 
 Coder E;
 
+#ifdef TRACK_VERIFY
+// Self-check, built with -DTRACK_VERIFY=<n>: for the first n input bytes,
+// snapshot every byte of model state, run the speculative walk, and compare.
+// If a single write escaped the journal, UNDO() leaves the model changed and
+// this says exactly where. It also checks the other half of the contract - that
+// the simulation predicts what the model really goes on to do - by adding up
+// the eight real per-bit code lengths and requiring the sum to equal the walk's
+// entry for that byte. Both failures are otherwise silent: they cost
+// compression without ever breaking a round trip.
+//
+// A program lists any model state living outside the Coder object in
+// TRACK_VERIFY_RANGES (each entry ", {name, address, size}").
+#ifndef TRACK_VERIFY_RANGES
+ #define TRACK_VERIFY_RANGES
+#endif
+
+struct VRange { const char* name; byte* p; uint n; };
+VRange vrange[] = { {"Coder",(byte*)&E,sizeof(Coder)} TRACK_VERIFY_RANGES };
+enum{ N_VRange = sizeof(vrange)/sizeof(vrange[0]) };
+byte* vsnap = 0;
+
+void verify_save( void ) {
+  if( vsnap==0 ) {
+    uint total=0; for( uint k=0; k<N_VRange; k++ ) total += vrange[k].n;
+    vsnap = (byte*)malloc(total);
+    if( vsnap==0 ) fprintf(stderr,"track: verify buffer\n"), exit(7);
+  }
+  byte* q = vsnap;
+  for( uint k=0; k<N_VRange; k++ ) memcpy( q, vrange[k].p, vrange[k].n ), q+=vrange[k].n;
+}
+
+void verify_check( uint i ) {
+  byte* q = vsnap;
+  for( uint k=0; k<N_VRange; k++ ) {
+    for( uint b=0; b<vrange[k].n; b++ ) if( q[b]!=vrange[k].p[b] ) {
+      fprintf( stderr, "track: UNDO() did not restore %s+%u at input byte %u: %02X -> %02X\n"
+                       "  a memory write in the model step is escaping the journal\n",
+               vrange[k].name, b, i, q[b], vrange[k].p[b] );
+      exit(7);
+    }
+    q += vrange[k].n;
+  }
+}
+#endif
+
 int main(int argc, char** argv) {
 
   if( argc!=4 || (argv[1][0]!='c' && argv[1][0]!='d') ) {
@@ -55,7 +100,16 @@ int main(int argc, char** argv) {
   for( i=0; i<f_len; i++ ) {
 
     uint clen[0x200];
+
+#ifdef TRACK_VERIFY
+    if( i<TRACK_VERIFY ) verify_save();
+#endif
+
     test_encode( E, clen );
+
+#ifdef TRACK_VERIFY
+    if( i<TRACK_VERIFY ) verify_check(i);
+#endif
 
     // The walk must have journaled and rolled back something, or it was not the
     // instrumented copy of the model step that ran (see track.pl's weak-symbol
@@ -92,7 +146,26 @@ int main(int argc, char** argv) {
     E.rc.rc_Process(low,freq[c],total);
 
     // actually update the model with the symbol that was coded
+#ifdef TRACK_VERIFY
+    uint sum = 0;
+    for( int j=7; j>=0; --j ) {
+      uint bit = (c>>j)&1;
+      uint pp  = E.encode_sim( bit );
+      sum += bit ? LOG2(pp) : LOG2(SCALE-pp);
+    }
+    // The walk claimed this byte would cost clen[0x100+c]; the model just said
+    // what it really costs. They must agree exactly, unless the byte's prefix
+    // was pruned (its leaf is still the 0xFFFFF the array was filled with).
+    if( (clen[0x100+c]!=0xFFFFF) && (sum!=clen[0x100+c]) ) {
+      fprintf( stderr, "track: at input byte %u the walk predicted %u for symbol %u "
+                       "but the model then produced %u\n"
+                       "  the simulated step is not reproducing the real one\n",
+               i, clen[0x100+c], c, sum );
+      exit(7);
+    }
+#else
     for( int j=7; j>=0; --j ) E.encode_sim( (c>>j)&1 );
+#endif
 
   } // for i
 

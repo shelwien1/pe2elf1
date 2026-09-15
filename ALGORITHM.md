@@ -98,6 +98,7 @@ Shared machinery:
 | `main.inc` | The driver: per-byte walk, frequency table, one coding step, real update. Model-agnostic; both programs include it. |
 | `track.inc` | The journal (`trk`, `NEST`, `UNDO`), the `track1` … `track64` journaling stubs (assembly), the pruned tree walk `TEST_ENCODE` / `test_encode()`, the `unlog` table. |
 | `track.pl` | Build step: inserts the journaling calls into the compiler-generated assembly. |
+| `-DTRACK_VERIFY=n` | Not a file: the self-check build described in §5.5. |
 | `log2lut.inc` | `log2LUT`: integer log2 table in 16.16 fixed point. |
 | `sh_v1m.inc` | `Rangecoder`: 32-bit-low / 64-bit-range range coder with explicit carry handling. |
 | `build.sh`, `build.bat` | The three-step build on Linux / Windows, for each program. |
@@ -410,14 +411,28 @@ that reason, and `track.pl` stops if it sees a negative `rsp` displacement anywa
 This is not theoretical either: GCC put a spilled accumulator at `-8[rsp]` in the
 Tangelo step.
 
-**Calls out of the step are the remaining hazard.** Anything the step calls that
+**Calls out of the step** were the remaining hazard. Anything the step calls that
 was compiled into the same translation unit is instrumented too, because
-`track.pl` processes the whole file. A call to a *library* function is not:
-`memset()` inside the ContextMap's bucket eviction was rewritten as an explicit
-loop for exactly this reason, and the `<ctype.h>` calls in the byte classifier
-were replaced with open-coded tests - which also makes the compressed output
-independent of the process locale. After those two changes the instrumented
-Tangelo step contains no calls at all.
+`track.pl` processes the whole file. A call to a *library* function is not, and
+its writes would escape in silence. Three things reach for one:
+
+* `memset()` in the ContextMap's bucket eviction, and the `<ctype.h>` calls in
+  the byte classifier - both rewritten in the model source, the latter also
+  making the output independent of the process locale;
+* the compiler, which turns ordinary loops into library calls: Clang compiles the
+  mixer's tail-zeroing `while (nx & 7) tx[nx++] = 0;` into `call memset@PLT`.
+  The instrumented compile therefore gets `-fno-builtin`.
+
+`track.pl` refuses any call whose target this file does not define (and any
+indirect call), so the question is settled at build time rather than by
+inspection. With `-fno-builtin` the instrumented Tangelo step contains no calls
+at all under GCC, Clang and MinGW alike.
+
+The same argument applies to **static initialisers**: a constructor in the
+instrumented translation unit would be journaled too, filling the journal before
+`main()` with entries nothing ever undoes. That is why the model's tables are
+defined only in the main translation unit, and why `track.pl` refuses an input
+containing an `.init_array` entry.
 
 ### 5.3 The journaling stubs
 
@@ -466,12 +481,39 @@ inline - and it turned `book1`'s first 64 KB into 130 088 bytes instead of
 
 Three things now prevent it:
 
-1. `Model::predictNext()`, `ContextMap::mix()` and `Coder::encode_sim()` are
-   marked `INLINE` (`always_inline`), so the instrumented translation unit
-   defines exactly one symbol: `encode_sim`.
+1. The functions a compiler might leave out of line - `Model::predictNext()`,
+   `ContextMap::mix()`, `MatchModel::matchModel()`, `E::get()`, `Mixer::p()` and
+   `Coder::encode_sim()` - are marked `INLINE` (`always_inline`), so the
+   instrumented translation unit defines exactly one symbol: `encode_sim`. GCC
+   needed three of those and Clang a different three.
 2. `track.pl` refuses any input that defines a weak symbol, and says why.
 3. `main.inc` checks, after the first byte, that the walk journaled and rolled
    back something, and stops if it did not.
+
+### 5.5 Proving it, rather than hoping
+
+Neither half of the journal's contract is testable by round-tripping: encoder and
+decoder run the same code, so they corrupt the model identically and still agree.
+`-DTRACK_VERIFY=n` therefore builds a binary that checks both directly.
+
+**The journal restores everything.** For the first `n` input bytes, every byte of
+model state is copied aside, the walk runs, and the state is compared byte for
+byte. The ranges compared are the whole `Coder` object plus anything a program
+lists in `TRACK_VERIFY_RANGES` - for tangelo_w that is `y`, `bpos` and the random
+generator. A single write escaping the instrumentation shows up as a named offset
+at the byte where it happened.
+
+**The simulation reproduces the real step.** After coding each byte, the eight
+real per-bit predictions are turned back into code lengths and summed; the total
+must equal the walk's `clen[0x100+c]` for that symbol exactly, for every byte of
+the file (unless the symbol's prefix was pruned). That catches the subtler
+failure where the journal restores memory correctly but the simulated and real
+paths do not correspond - a global that exists twice, say, or a model whose step
+is not a pure function of its state and the bit.
+
+Both programs pass: `fpaq0mw` over all of `book1`, and `tangelo_w` with all
+360.8 MB of its model state compared byte for byte, and its predictions checked
+over every byte.
 
 ## 6. The build pipeline: instrumenting the compiler's output
 
@@ -652,16 +694,22 @@ and roughly 20 model steps per byte after pruning, for a model that already took
   towards ordinary writes, or new stubs plus script support for the instruction
   forms involved.
 * **Calls out of the model step are invisible** unless the callee is compiled in
-  the same `SIM_FUNC` translation unit (then it is instrumented too). Library
-  calls such as `memset`/`memcpy` are not, which is why the Tangelo port removed
-  the two it had. There is no automatic check for this; read `track.pl -v` output
-  and the `call` instructions in `coder-<prog>.s` when porting a new model.
+  the same `SIM_FUNC` translation unit (then it is instrumented too). `track.pl`
+  now refuses any call it cannot see the target of, so this fails the build
+  rather than corrupting the model - but a new model may need source changes, or
+  more `-fno-…` flags, to stop the compiler reaching for a library routine.
 * **Weak symbols are a silent trap**, and the reason for the three guards in
   §5.4. Any future model whose step is too large to inline will hit it.
 * **Stack writes are skipped** on the assumption that the model keeps no state in
   the step's own frame. With frame-pointer-based code (`[rbp-…]`) the script
   cannot tell stack from heap and would journal them; build with
   `-fomit-frame-pointer` as the scripts do.
+* **`UNDO()` restores through a 4-byte read-modify-write**, so rolling back a
+  1- or 2-byte cell reads and writes up to 3 bytes past the object that was
+  written. That is harmless when the model lives in a global (the bytes it
+  touches belong to the same object or its padding, and the backward walk has
+  already restored them), but a model placed at the very end of a tight heap
+  allocation would need 4 bytes of slack.
 * **Journal capacity** is 2^20 cells and 512 nesting levels. `NEST()` checks both
   once per step and exits rather than overrunning, but there is no per-write
   check: a single model step writing more than 64 K cells would still overrun.

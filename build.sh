@@ -18,10 +18,14 @@ cd "$(dirname "$0")"
 
 CXX="${CXX:-g++}"
 CXXFLAGS="${CXXFLAGS:--O3 -ffast-math -fomit-frame-pointer -fno-rtti -fno-exceptions -fno-stack-protector -march=native}"
-# Step 1 only. track.pl puts a "push" in front of every store, which writes just
-# below rsp, so the 128-byte SysV red zone must not be in use there. It costs the
-# instrumented step a real stack frame and changes nothing else.
-SIMFLAGS="${SIMFLAGS:--mno-red-zone}"
+# Step 1 only, and both are codegen-only: they must not change the layout of any
+# object, since the two compiles have to agree on it.
+#   -mno-red-zone: track.pl puts a "push" in front of every store, which writes
+#     just below rsp, so the 128-byte SysV red zone must not be in use there.
+#   -fno-builtin: stops the compiler turning a loop into a memset/memcpy call.
+#     A library call's writes never reach the journal (clang does this to the
+#     mixer's tail-zeroing loop); track.pl refuses such calls outright.
+SIMFLAGS="${SIMFLAGS:--mno-red-zone -fno-builtin}"
 LDFLAGS="${LDFLAGS:-}"
 EXT="${EXT:-}"
 

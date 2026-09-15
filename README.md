@@ -55,8 +55,9 @@ Each program is built in the same three steps as the original `g.bat`:
    instrumented step.
 
 `track.pl` fails the build if the assembly contains a memory write it cannot
-journal, if a weak (COMDAT) symbol would let the linker discard the
-instrumentation, or if the red zone is in use. Run `perl track.pl -v` to see
+journal, a call whose target is not in the same file (a library call's writes
+never reach the journal), a weak (COMDAT) symbol that would let the linker
+discard the instrumentation, a static initialiser, or use of the red zone. Run `perl track.pl -v` to see
 every write it instruments or skips; its header comment documents the options.
 
 ## Usage
@@ -89,6 +90,23 @@ output.
 
 The speed/size knob is `PRUNE_LOG` (§4.3): build with `-DPRUNE_LOG=0x90000` to
 trade about 0.3 % of `tangelo_w`'s compression for 25 % of its time.
+
+`-DTRACK_VERIFY=n` builds a self-checking binary, which is what to reach for
+when porting a new model. It proves the two halves of the contract that a round
+trip cannot: that the journal restores **everything** (for the first `n` input
+bytes it snapshots every byte of model state, runs the walk, and compares), and
+that the simulated step reproduces the real one (for every byte, the walk's
+predicted code length for the symbol actually coded must equal the sum of the
+eight real per-bit code lengths). Both failures are otherwise silent - they cost
+compression without ever breaking a round trip.
+
+```sh
+CXXFLAGS="-O3 -march=native -DTRACK_VERIFY=48" ./build.sh tangelo_w
+./tangelo_w c book1 /tmp/out      # says nothing and exits 0 if the port is sound
+```
+
+Both programs pass: `fpaq0mw` over all of `book1`, and `tangelo_w` with all
+360.8 MB of its model state compared byte for byte.
 
 ## Layout
 
@@ -137,6 +155,7 @@ The model's arithmetic is untouched; so are the walk, the journal and the coder.
 
 **The build machinery** gained: `track.pl` handling vector stores up to 64 bytes
 and read-modify-write instructions, skipping stack writes from any instruction,
-and refusing red-zone use or weak symbols; `track8/16/32/64` stubs; a
-`PRUNE_LOG` knob; a journal-capacity check in `NEST()`; and a runtime check that
-the walk really is journaling.
+and refusing out-of-file calls, weak symbols, static initialisers or red-zone
+use; `track8/16/32/64` stubs; `-mno-red-zone -fno-builtin` on the instrumented
+compile; a `PRUNE_LOG` knob; a journal-capacity check in `NEST()`; a runtime
+check that the walk really is journaling; and the `-DTRACK_VERIFY` self-check.

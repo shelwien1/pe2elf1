@@ -74,4 +74,10 @@ Stretch stretch;
 
 #endif
 
+// Model state that does not live inside the Coder object, for -DTRACK_VERIFY.
+#define TRACK_VERIFY_RANGES \
+  , {"y",   (byte*)&y,    sizeof(y)   } \
+  , {"bpos",(byte*)&bpos, sizeof(bpos)} \
+  , {"rnd", (byte*)&rnd,  sizeof(rnd) }
+
 #include "main.inc"
