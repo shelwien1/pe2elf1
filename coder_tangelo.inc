@@ -40,6 +40,12 @@ struct Coder {
 
   uint P( void ) { return p; }
 
+  // The walk assumes it starts at a byte boundary: its seven speculative steps
+  // then take c0 from 1 to at most 255 and bpos from 0 to 7, which is exactly
+  // what keeps the c0>=256 and bpos==0 branches of predictNext() out of the
+  // speculative region. main.inc checks this before every walk.
+  bool at_byte_boundary( void ) { return (bpos==0) && (M.c0==1); }
+
   // INLINE so that the -DSIM_FUNC translation unit defines exactly one symbol,
   // the extern "C" encode_sim below. Anything left out of line there is a weak
   // COMDAT symbol that the linker may resolve to the normal build's copy,
@@ -49,9 +55,14 @@ struct Coder {
     uint p0 = p;
     y = bit;
     int pr = M.predictNext();
-    // The coder needs 0 < p < SCALE: it takes both LOG2(p) and LOG2(SCALE-p),
-    // and a zero-width interval cannot be coded. Clamping the pending value
-    // rather than the model's own pr0 leaves the APM feedback untouched.
+    // The upper clamp is load-bearing: the walk takes LOG2(SCALE-p) in unsigned
+    // arithmetic, so a p above SCALE-1 would wrap to an index of about four
+    // billion into a 32769-entry table. The lower one is belt and braces -
+    // LOG2(0) reads as LOG2(1), so p==0 would be treated as 1/SCALE rather than
+    // as impossible - and today neither bound is reached, since the APM
+    // combination in predictNext() lands in [0, SCALE-1] by construction.
+    // Clamping the pending value and not the model's own pr0 leaves the APM
+    // feedback path untouched.
     p = (pr<1) ? 1 : ( (pr>SCALE-1) ? SCALE-1 : uint(pr) );
     return p0;
   }

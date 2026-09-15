@@ -101,6 +101,18 @@ int main(int argc, char** argv) {
 
     uint clen[0x200];
 
+    // The walk explores seven levels and reads the eighth off P(), so it only
+    // means anything from a byte boundary; entering mid-byte would silently
+    // produce a distribution for the wrong bits. Nothing else here would
+    // notice: the walk and the real update would stay consistently mis-aligned,
+    // so the round trip, the journal check and both halves of -DTRACK_VERIFY
+    // all still pass, and only the compression suffers. Hence a direct check.
+    if( !E.at_byte_boundary() ) {
+      fprintf( stderr, "track: the speculative walk entered mid-byte at input byte %u -\n"
+                       "  the byte distribution it produces is meaningless.\n", i );
+      exit(8);
+    }
+
 #ifdef TRACK_VERIFY
     if( i<TRACK_VERIFY ) verify_save();
 #endif

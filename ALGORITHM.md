@@ -560,6 +560,22 @@ Which is also the answer to "how would you know?": that write is one of tens of
 thousands per byte, it corrupts the model by a single mixer weight, and without
 this check its only symptom would have been a slightly larger output file.
 
+**What it does not cover.** The prediction half catches anything that makes the
+simulated step diverge from the real one - a write escaping the journal, a global
+that exists twice, the two translation units disagreeing about the layout of
+`Coder` - because in each case the walk predicts one thing and the model then
+does another. It cannot catch a fault that moves both in step. Entering the walk
+somewhere other than a byte boundary is the example: the walk would explore bits
+1..7 of the byte instead of 0..6, the real update would consume the same eight
+bits from the same state, their code lengths would agree exactly, and the output
+would simply be 4.6 % larger. So `main.inc` asserts that invariant directly,
+before every walk, in the normal build:
+
+```
+track: the speculative walk entered mid-byte at input byte 0 -
+  the byte distribution it produces is meaningless.
+```
+
 ## 6. The build pipeline: instrumenting the compiler's output
 
 Per program (`fpaq0mw`, `tangelo_w`):

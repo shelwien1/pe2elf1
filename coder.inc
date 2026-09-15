@@ -48,6 +48,10 @@ struct Coder {
   // and then advances the model past that bit.
   uint P( void ) { return predictor.P(); }
 
+  // See coder_tangelo.inc: the walk is only meaningful from a byte boundary,
+  // which for this model is the context reset to 1 after the eighth bit.
+  bool at_byte_boundary( void ) { return predictor.cxt==1; }
+
   uint encode_sim( int y ) {
     uint p = predictor.P();
     predictor.update(y);
