@@ -513,7 +513,20 @@ is not a pure function of its state and the bit.
 
 Both programs pass: `fpaq0mw` over all of `book1`, and `tangelo_w` with all
 360.8 MB of its model state compared byte for byte, and its predictions checked
-over every byte.
+over every byte, under GCC and Clang alike.
+
+The check is not vacuous. Deleting a single one of the 146 `call trackN`
+sequences from the instrumented assembly by hand - one 4-byte write in the mixer
+- and rebuilding gives, on the very first input byte:
+
+```
+track: UNDO() did not restore Coder+378369996 at input byte 0: 00 -> 88
+  a memory write in the model step is escaping the journal
+```
+
+Which is also the answer to "how would you know?": that write is one of tens of
+thousands per byte, it corrupts the model by a single mixer weight, and without
+this check its only symptom would have been a slightly larger output file.
 
 ## 6. The build pipeline: instrumenting the compiler's output
 
@@ -682,9 +695,18 @@ that was right for fpaq0mw is not right here: at `0x90000` Tangelo loses 0.34 %,
 where fpaq0mw lost 0.004 %, because a sharp model puts real probability mass on
 prefixes that a 3-bit-per-bit cut-off throws away.
 
-The cost is the point of the exercise: about 150 journaled writes per model step,
-and roughly 20 model steps per byte after pruning, for a model that already took
-5 s to run 8 steps per byte.
+The cost is the point of the exercise. Measured over 64 KB, `tangelo_w` rolls
+back 2.47 billion journal cells on text and 6.20 billion on random data (which
+prunes almost not at all) - around 38 000 cells per input byte, or 600 KB of
+journal traffic for every byte of output. What it never runs short of is
+capacity: peak live journal use is 2 527 cells of the 1 048 576 available, 0.24 %,
+because only the current root-to-leaf path is ever live.
+
+| | text (64 KB of book1) | random (64 KB) |
+| --- | ---: | ---: |
+| cells rolled back | 2 469 607 148 | 6 195 434 587 |
+| peak live cells | 2 527 | 2 383 |
+| of `N_Cells` | 0.24 % | 0.23 % |
 
 ## 11. Limitations and caveats
 
