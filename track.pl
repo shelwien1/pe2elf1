@@ -29,12 +29,18 @@
 #       pop  ARG
 #
 # so that trackN() can record the address and the old contents before they are
-# overwritten (see track.inc: NEST()/UNDO() later restore them). An AVX-512
-# write mask on the destination is dropped from the lea: journaling the whole
-# width is still correct, since restoring bytes the store never wrote is a no-op.
+# overwritten (see track.inc: NEST()/UNDO() later restore them).
 # Read-modify-write instructions are journaled the same way and for the same
 # reason - UNDO() only needs the destination's contents from before the
 # instruction ran, not a description of what it did to them.
+#
+# Refused, rather than journaled, are the forms where "lea <mem>" and a fixed
+# width do not describe what the instruction writes: scatters and string
+# operations (many addresses), BTS/BTR/BTC with a register bit offset (the write
+# lands outside the operand), instructions that write an implicit address, and
+# stores under an AVX-512 write mask - for those the RESTORE would be harmless
+# but the SAVE is not, since reading the masked-off lanes can fault exactly
+# where the store would not.
 #
 # Stores relative to rsp are NOT instrumented, whatever the instruction: they
 # are the function's own stack frame, which is dead by the time UNDO() runs (and
@@ -125,7 +131,8 @@ my %width = ( byte => 1, word => 2, dword => 4, qword => 8,
 # Instructions that overwrite their whole memory destination and read nothing
 # of it, so saving the destination's width beforehand captures everything.
 my $store = qr/^(?:
-    mov | movabs | movbe | movnti |
+    mov | movabs | movbe | movnti | set[a-z]{1,3} |
+    vpmov(?:s|us)?(?:qb|qw|qd|db|dw|wb) |
     v?mov[au]p[sd] |
     v?movdqa(?:32|64)? | v?movdqu(?:8|16|32|64)? |
     v?movnt(?:dqa|dq|ps|pd|i) |
@@ -156,7 +163,9 @@ my $readonly = qr/^(?:
   )$/xi;
 
 # implicit-memory writers (no explicit memory operand in the text)
-my $implicit_write = qr/^(?:rep[ez]?|repn[ez]|stos[bwdq]?|ins[bwd]?|xsave\w*|fxsave\w*|fn?save|fn?stenv|xlat|xlatb)$/i;
+my $implicit_write = qr/^(?:rep[ez]?|repn[ez]|stos[bwdq]?|ins[bwd]?|
+    v?maskmov(?:dqu|q)|movdir64b|enqcmds?|
+    xsave\w*|fxsave\w*|fn?save|fn?stenv|xlat|xlatb)$/xi;
 
 # --- main pass ---------------------------------------------------------------
 
@@ -216,6 +225,24 @@ for my $line (@a) {
       last;
     }
 
+    # BTS/BTR/BTC address a BIT. With a register bit offset the write lands at
+    # <mem> + (reg DIV operand-size-in-bits) * operand-size-in-bytes, which
+    # "lea <mem>" does not reproduce - the journal would save a location the
+    # instruction never touches and miss the one it does. An immediate offset is
+    # taken modulo the operand size, so that form stays inside the operand.
+    if ($mn =~ /^bt[src]$/ && $ops !~ /,\s*(?:0[xX][0-9a-fA-F]+|\d+)\s*$/) {
+      report_unhandled($line);
+      last;
+    }
+
+    # A write mask suppresses lanes, and a suppressed lane is allowed to address
+    # unmapped memory without faulting. trackN would read the whole width and
+    # fault where the store does not, so this cannot be journaled by widening.
+    if ($dst =~ /\{\s*%?k[0-7]\s*\}/i) {
+      report_unhandled($line);
+      last;
+    }
+
     if ($mn =~ $store || $mn =~ $rmw) {
       my ($sz, $mem);
       if ($dst =~ /^(byte|word|dword|qword|xmmword|ymmword|zmmword)\s+ptr\s+(.+)$/i) {
@@ -223,7 +250,7 @@ for my $line (@a) {
       } else {
         $mem = $dst;               # width implied by the source register
       }
-      $mem =~ s/\{[^}]*\}//g;      # drop an AVX-512 write mask / rounding mode
+      $mem =~ s/\{[^}]*\}//g;      # a rounding-mode suffix is not part of the address
       $mem =~ s/\s+$//;
 
       my $n = $sz ? $width{$sz} : undef;

@@ -384,12 +384,10 @@ every write it makes to memory that is not its own stack frame:
 
 * **Plain stores** - `mov SIZE PTR <mem>, <src>`, for SIZE from `byte` to
   `qword`.
-* **Vector stores** - `movdqa`/`movdqu`/`movaps`/`movq`/`vextract…` with a memory
-  destination, up to `zmmword`. The Tangelo build produces 16-byte stores from
-  the SSE mixer update in `tangelo/mixer_train.inc` and 32-byte ones from loops
-  the auto-vectorizer widened. A store under an AVX-512 write mask is journaled
-  at its full width, which is still correct: saving and restoring bytes the store
-  never wrote is a no-op.
+* **Vector stores** - `movdqa`/`movdqu`/`movaps`/`movq`/`vextract…`/`vpmovwb`
+  and friends with a memory destination, up to `zmmword`. The Tangelo build
+  produces 16-byte stores from the SSE mixer update in `tangelo/mixer_train.inc`
+  and 32-byte ones from loops the auto-vectorizer widened.
 * **Read-modify-writes** - `add`/`inc`/`and`/`xadd`/… with a memory destination.
   These are exactly as journalable as a plain store, because `UNDO()` only needs
   the destination's contents from before the instruction ran, not a description
@@ -401,9 +399,22 @@ every write it makes to memory that is not its own stack frame:
   so restoring it would be actively harmful.
 * **Nothing else.** Any other memory-writing instruction fails the build. A write
   the journal does not see cannot be undone, and the resulting failure is silent
-  (§11), so the default is to refuse rather than to guess. Scatter stores and
-  `rep stos` are named explicitly: one instruction, many addresses, and no `lea`
-  that reproduces them.
+  (§11), so the default is to refuse rather than to guess. Four families are
+  named explicitly, because each looks journalable and is not:
+  - scatters and `rep stos`: one instruction, many addresses, no `lea` that
+    reproduces them;
+  - `maskmovdqu` and `movdir64b`: the address is implicit, so there is no memory
+    operand in the text to `lea` at all - and without this they would be *skipped
+    in silence* rather than refused, which is the one outcome the script exists
+    to prevent;
+  - `bts`/`btr`/`btc` with a register bit offset: these address a bit, and the
+    write lands at `<mem> + (reg DIV opsize_bits) * opsize_bytes`, outside the
+    operand `lea` would capture. With an immediate offset the bit index is taken
+    modulo the operand size, so that form is journaled normally;
+  - stores under an AVX-512 write mask: the *restore* would be a harmless no-op
+    for the masked-off lanes, but the *save* is not. A suppressed lane may
+    address unmapped memory without faulting, so reading the full width to
+    journal it faults exactly where the store would not.
 
 The instrumentation writes `push ARG` at `[rsp-8]`, so the 128-byte **red zone**
 below `rsp` must not be in use. The instrumented compile gets `-mno-red-zone` for

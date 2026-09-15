@@ -1,3 +1,10 @@
+// The SSE and the scalar path below are bit-identical for this model's value
+// ranges: the same pairs are summed, _mm_madd_epi16 cannot overflow int32 at
+// |t| <= 2048 and |w| <= 32767, _mm_srai_epi32(.,8) matches the scalar >>8,
+// _mm_adds_epi16's saturation and the scalar clamp have the same bounds, and
+// only the summation order differs. So the two builds of the model may take
+// different paths here without the simulation drifting from the real step.
+
 #if !defined(__GNUC__)
 #if (2 == _M_IX86_FP)
 # define __SSE2__

@@ -121,9 +121,9 @@ void UNDO( void ) {
 // Wider stores journal ceil(N/4) consecutive 4-byte cells, since Cell::val is
 // 32 bits. This covers the qword stores the compiler makes of two adjacent
 // model words, the 16-byte stores of the SSE mixer in tangelo/mixer_train.inc,
-// and anything the auto-vectorizer widens to 32 or 64 bytes. A masked vector
-// store writes only some of its lanes; journaling the whole width is still
-// correct, because saving and restoring bytes the store leaves alone is a no-op.
+// and anything the auto-vectorizer widens to 32 or 64 bytes. (A store under an
+// AVX-512 write mask cannot use these: reading the masked-off lanes to save them
+// can fault exactly where the store would not, so track.pl refuses it instead.)
 #define TRK_CELL(k) \
   "  lea  rdx, [" TRK_ARG "+" #k "*4]\n" \
   "  mov  qword ptr [rax+" #k "*16], rdx\n" \

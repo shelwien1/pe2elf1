@@ -13,7 +13,13 @@ enum {
   hSCALE   = SCALE/2
 };
 
-#define MEM (0x10000 << 7)
+// Model memory: the ContextMap gets MEM*32 bytes, the match model MEM ints and
+// MEM*8 bytes of history. Overridable so a small build can be made, which is
+// how the hash table's eviction path gets exercised under -DTRACK_VERIFY:
+// at the full size nothing is ever evicted in a short run.
+#ifndef MEM
+ #define MEM (0x10000 << 7)
+#endif
 
 extern int y;     // the bit just coded; Model::predictNext() folds it into the state
 extern int bpos;  // bit position inside the current byte, 0..7
