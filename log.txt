@@ -294,10 +294,13 @@
 //   0x90000            20804   7.48   7.46
 //   0xA0000            21307   5.23   5.29
 //   0xB0000            25160   3.67   3.65
+
+// fpaq0mw, width-exact UNDO
 2.501s: fpaq0mw c ../book1 1
 2.549s: fpaq0mw d 1 2
 446962
 
+// tangelo_w, width-exact UNDO
 97.169s: tangelo_w c ../book1 1
 96.514s: tangelo_w d 1 2
 197483

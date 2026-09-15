@@ -56,5 +56,5 @@
  446962  2.528  2.535 // ---- ported to linux/windows; gcc 13.3 -O3 -march=native, 2.8GHz Xeon ----
  197022  4.975  4.921 // tangelo bitwise reference: legacy/tangelo_orig.cpp
  197483 100.679 103.283 // tangelo_w, PRUNE_LOG=0x80000
- 446962  2.501  2.549 //   0xB0000            25160   3.67   3.65
- 197483 97.169 96.514 
+ 446962  2.501  2.549 // fpaq0mw, width-exact UNDO
+ 197483 97.169 96.514 // tangelo_w, width-exact UNDO
