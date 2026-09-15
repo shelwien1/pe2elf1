@@ -138,7 +138,11 @@ int main(int argc, char** argv) {
     } else {
 
       code = E.rc.rc_GetFreq(total);
-      for( c=0,low=0; low+freq[c]<=code; c++ ) low+=freq[c];
+      // c<255 only bounds the scan: for a well-formed stream rc_GetFreq()
+      // returns a value below total, so the scan always stops on its own. A
+      // corrupt stream can hand it anything, and without the bound the scan
+      // walks off the end of freq[].
+      for( c=0,low=0; (c<255) && (low+freq[c]<=code); c++ ) low+=freq[c];
       putc( byte(c), out );
 
     }
