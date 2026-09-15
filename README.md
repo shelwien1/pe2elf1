@@ -105,8 +105,9 @@ CXXFLAGS="-O3 -march=native -DTRACK_VERIFY=48" ./build.sh tangelo_w
 ./tangelo_w c book1 /tmp/out      # says nothing and exits 0 if the port is sound
 ```
 
-Both programs pass: `fpaq0mw` over all of `book1`, and `tangelo_w` with all
-360.8 MB of its model state compared byte for byte.
+Both programs pass on GCC, Clang and MinGW-w64 alike. `-DMEM=<bytes>` shrinks
+the Tangelo model, which is how its hash-table eviction path gets exercised:
+at full size nothing is evicted in a short run.
 
 ## Layout
 

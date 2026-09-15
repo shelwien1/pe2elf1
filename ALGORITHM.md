@@ -522,9 +522,17 @@ failure where the journal restores memory correctly but the simulated and real
 paths do not correspond - a global that exists twice, say, or a model whose step
 is not a pure function of its state and the bit.
 
-Both programs pass: `fpaq0mw` over all of `book1`, and `tangelo_w` with all
+Both programs pass, on all three toolchains - GCC 13, Clang 18 and MinGW-w64
+(run under wine). `fpaq0mw` is checked over all of `book1`; `tangelo_w` with all
 360.8 MB of its model state compared byte for byte, and its predictions checked
-over every byte, under GCC and Clang alike.
+over every byte of `book1`.
+
+One path needs help to be reached: at 4 194 304 buckets the ContextMap never
+evicts anything in a short run, so the eviction branch of `E::get` - the one that
+overwrites a bucket's checksum and clears seven bytes of bit history - would go
+untested. Building with `-DMEM=16384` shrinks the table 512-fold; with eviction
+running constantly and the state compared after every one of 65 536 input bytes,
+the journal still restores every byte.
 
 The check is not vacuous. Deleting a single one of the 146 `call trackN`
 sequences from the instrumented assembly by hand - one 4-byte write in the mixer
