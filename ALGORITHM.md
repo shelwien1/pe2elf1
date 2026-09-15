@@ -411,6 +411,11 @@ every write it makes to memory that is not its own stack frame:
     write lands at `<mem> + (reg DIV opsize_bits) * opsize_bytes`, outside the
     operand `lea` would capture. With an immediate offset the bit index is taken
     modulo the operand size, so that form is journaled normally;
+  - a destination carrying a segment prefix, since `lea` computes the effective
+    address and ignores the segment, and `xchg`/`xadd`/`cmpxchg` with the memory
+    operand second, which the memory-destination parse does not cover;
+  - an indirect `call` *or* `jmp` - a tail call is a call, and a jump table is
+    told apart by its `.L` target;
   - stores under an AVX-512 write mask: the *restore* would be a harmless no-op
     for the masked-off lanes, but the *save* is not. A suppressed lane may
     address unmapped memory without faulting, so reading the full width to
@@ -497,7 +502,12 @@ Three things now prevent it:
    `Coder::encode_sim()` - are marked `INLINE` (`always_inline`), so the
    instrumented translation unit defines exactly one symbol: `encode_sim`. GCC
    needed three of those and Clang a different three.
-2. `track.pl` refuses any input that defines a weak symbol, and says why.
+2. `track.pl` refuses an input that exports anything besides that one entry
+   point. The test is on the symbol set rather than on a directive, because the
+   two ABIs spell the same C++ COMDAT differently: `.weak` on ELF, but `.globl`
+   inside a `.linkonce` section on COFF - so a guard written against the ELF
+   spelling would have left the entire Windows build unprotected. (MinGW's
+   `.refptr.*` address thunks are exempt; they are COMDAT by design.)
 3. `main.inc` checks, after the first byte, that the walk journaled and rolled
    back something, and stops if it did not.
 
@@ -742,9 +752,14 @@ because only the current root-to-leaf path is ever live.
 * **Weak symbols are a silent trap**, and the reason for the three guards in
   §5.4. Any future model whose step is too large to inline will hit it.
 * **Stack writes are skipped** on the assumption that the model keeps no state in
-  the step's own frame. With frame-pointer-based code (`[rbp-…]`) the script
-  cannot tell stack from heap and would journal them; build with
-  `-fomit-frame-pointer` as the scripts do.
+  the step's own frame, and they are recognised by `rsp` appearing among the
+  address expression's registers. Where `rbp` is also a frame pointer an
+  `rbp`-based write is ambiguous - frame slot or model pointer - so `track.pl`
+  refuses that combination rather than guess. It is not hypothetical in either
+  direction: GCC sets `rbp` up here purely to realign the stack while still
+  addressing every local off `rsp`, and MinGW has no frame pointer and uses
+  `rbp` as the base for ContextMap writes. Build with `-fomit-frame-pointer`, as
+  the scripts do.
 * **`UNDO()` restores through a 4-byte read-modify-write**, so rolling back a
   1- or 2-byte cell reads and writes up to 3 bytes past the object that was
   written. That is harmless when the model lives in a global (the bytes it

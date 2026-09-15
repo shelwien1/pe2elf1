@@ -10,22 +10,23 @@
 #   --abi=win64|sysv   calling convention of the target. Default: auto-detected
 #                      from the input (COFF .seh_proc/.def directives => win64,
 #                      ELF ".type sym, @function" => sysv).
+#   --entry=NAME       the one function this translation unit may export.
+#                      Default: encode_sim.
 #   --flags            also wrap each call in pushfq/popfq. Not needed with the
 #                      assembly track stubs from track.inc (they preserve EFLAGS);
 #                      only for a stub implementation that may clobber flags.
-#   --lax              warn instead of failing on memory-writing instructions
-#                      this script does not know how to instrument.
-#   -v                 list every instrumented / skipped store.
+#   --lax              warn instead of failing on anything it refuses.
+#   -v                 list every instrumented / skipped write.
 #
 # For every instruction that writes a fixed-width block of memory - a plain
 #   mov  SIZE PTR <mem>, <src>
-# a vector store (movdqa/movdqu/movaps/movq/vextract..., SIZE = byte through
-# zmmword), or a read-modify-write (add/inc/and/xadd/... with a memory
-# destination) - the script inserts, in front of it:
+# a vector store (movdqa/movdqu/movaps/movq/vpmovwb/vextract..., SIZE = byte
+# through zmmword), a setcc, or a read-modify-write (add/inc/and/xadd/... with a
+# memory destination) - the script inserts, in front of it:
 #
 #       push ARG                ; ARG = rcx (win64) / rdi (sysv)
 #       lea  ARG, <mem>
-#       call trackN             ; N = 1/2/4/8/16/32/64 = store width in bytes
+#       call trackN             ; N = 1/2/4/8/16/32/64 = write width in bytes
 #       pop  ARG
 #
 # so that trackN() can record the address and the old contents before they are
@@ -34,25 +35,48 @@
 # reason - UNDO() only needs the destination's contents from before the
 # instruction ran, not a description of what it did to them.
 #
-# Refused, rather than journaled, are the forms where "lea <mem>" and a fixed
-# width do not describe what the instruction writes: scatters and string
-# operations (many addresses), BTS/BTR/BTC with a register bit offset (the write
-# lands outside the operand), instructions that write an implicit address, and
-# stores under an AVX-512 write mask - for those the RESTORE would be harmless
-# but the SAVE is not, since reading the masked-off lanes can fault exactly
-# where the store would not.
-#
-# Stores relative to rsp are NOT instrumented, whatever the instruction: they
+# Writes relative to rsp are NOT instrumented, whatever the instruction: they
 # are the function's own stack frame, which is dead by the time UNDO() runs (and
-# UNDO()'s own frame would then live at the same addresses). Any OTHER
-# memory-writing instruction the script does not recognise is an error, because
-# a store the journal does not see cannot be undone.
+# UNDO()'s own frame would then live at the same addresses).
 #
-# CALLS: a call out of this translation unit is refused. The whole file is
-# instrumented, so a callee compiled alongside is journaled too - but a library
-# function is not, and its writes would escape silently. Compilers synthesise
-# such calls from ordinary loops (clang turns the mixer's tail-zeroing loop into
-# memset), which is why the instrumented compile also gets -fno-builtin.
+# EVERYTHING ELSE IS REFUSED. A write the journal does not see cannot be undone,
+# and the resulting corruption is silent - encoder and decoder make the same
+# mistake, so the round trip still passes and only the compression suffers. So
+# the script stops rather than guess. Refused, specifically:
+#   - scatters and string operations: one instruction, many addresses;
+#   - maskmovdqu / movdir64b: the address is implicit, with no operand to lea;
+#   - bts/btr/btc with a register bit offset: the write lands at
+#     <mem> + (reg DIV opsize_bits)*opsize_bytes, outside the operand;
+#   - a destination under an AVX-512 write mask: the restore would be a harmless
+#     no-op for the masked-off lanes, but the save is not - reading them can
+#     fault exactly where the store would not;
+#   - a destination with a segment prefix: lea ignores the segment, so the
+#     journal would record an unrelated address;
+#   - xchg/xadd/cmpxchg with the memory operand second, which the
+#     memory-destination parse below does not cover;
+#   - a call or jmp whose target this file does not define: the callee's writes
+#     never reach the journal. Compilers synthesise such calls from ordinary
+#     loops (clang turns a tail-zeroing loop into memset), which is why the
+#     instrumented compile also gets -fno-builtin.
+#
+# It also refuses three whole-file conditions:
+#   - ANY exported symbol other than the entry point. The normal build defines
+#     the same symbols from the same source, the linker keeps one copy of each,
+#     and if it keeps the uninstrumented one the walk runs unjournaled. On ELF
+#     these are .weak; on COFF they are .globl in a .linkonce section, which is
+#     why the test is on the symbol set and not on the directive spelling.
+#     (MinGW's .refptr.* address thunks are exempt: they are COMDAT by design
+#     and merging them is what should happen.)
+#   - a static initialiser, whose constructors would be journaled before main()
+#     with nothing to ever roll them back;
+#   - an rbp-based destination in a file that establishes a frame pointer. The
+#     stack skip identifies the dying frame by rsp; where rbp is a frame pointer
+#     too, an rbp-based write may be a frame slot (which must not be journaled)
+#     or a model pointer (which must be), and nothing in the text distinguishes
+#     them. Both conditions are needed for the ambiguity: GCC here sets up rbp
+#     to realign the stack but still addresses every local off rsp, while MinGW
+#     has no frame pointer and uses rbp as the base for ContextMap writes. Only
+#     a -fno-omit-frame-pointer build has both, and it is refused.
 #
 # RED ZONE: the inserted "push ARG" writes at [rsp-8], so the 128-byte SysV red
 # zone below rsp must not be in use. Compile the instrumented translation unit
@@ -63,9 +87,11 @@ use strict;
 use warnings;
 
 my ($abi, $flags, $lax, $verbose) = ('', 0, 0, 0);
+my $entry = 'encode_sim';
 my @files;
 for (@ARGV) {
   if    (/^--abi=(win64|sysv)$/) { $abi = $1 }
+  elsif (/^--entry=(\S+)$/)      { $entry = $1 }
   elsif ($_ eq '--flags')        { $flags = 1 }
   elsif ($_ eq '--lax')          { $lax = 1 }
   elsif ($_ eq '-v')             { $verbose = 1 }
@@ -80,7 +106,7 @@ my @a = <$I>;
 close $I;
 s/\r?\n\z// for @a;
 
-# --- sanity check / ABI detection ------------------------------------------
+# --- whole-file checks ------------------------------------------------------
 
 grep { /^\s*\.intel_syntax\s+noprefix/ } @a
   or die "track.pl: $in is not Intel-syntax assembly (compile with -masm=intel)\n";
@@ -92,36 +118,35 @@ if (!$abi) {
 }
 my $ARG = $abi eq 'win64' ? 'rcx' : 'rdi';
 
-# A weak (COMDAT) definition here is a trap: the normal build defines the same
-# symbol from the same source, the linker keeps exactly one of the two, and if it
-# keeps the normal one the instrumentation is silently dropped - the walk then
-# runs unjournaled and corrupts the model instead of simulating it. Nothing later
-# fails loudly, the output just compresses badly. So refuse the input.
-my @weak = map { /^\s*\.weak\s+(\S+)/ ? $1 : () } @a;
-if (@weak) {
-  my $m = "track.pl: $in defines " . scalar(@weak) . " weak (COMDAT) symbol(s), e.g. $weak[0]\n"
-        . "  The normal build defines the same symbol and the linker keeps only one copy, so the\n"
-        . "  instrumented body can be discarded, leaving the speculative walk unjournaled.\n"
-        . "  Mark those functions INLINE (always_inline) so they fold into encode_sim().\n";
-  die $m unless $lax;
-  print STDERR "track.pl: WARNING: $m";
-}
-
-# Everything this file defines: a call to anything else leaves the instrumented
-# code, and whatever it writes never reaches the journal.
+# Every symbol this file defines. A call to anything else leaves the
+# instrumented code, and whatever it writes never reaches the journal.
 my %defined;
-for (@a) { $defined{$1} = 1 if /^([A-Za-z_.\$][\w.\$@]*):/ }
+for (@a) { $defined{$1} = 1 if /^([A-Za-z_.\$][\w.\$]*):/ }
 
-# A static initialiser here would journal its writes before main() ever runs,
-# and nothing would ever roll them back.
-if (grep { /^\s*\.section\s+\.init_array/ || /^_GLOBAL__sub_I/ } @a) {
-  my $m = "track.pl: $in contains a static initialiser (.init_array / _GLOBAL__sub_I).\n"
-        . "  Its constructors would be instrumented too, filling the journal at start-up with\n"
-        . "  entries nothing ever undoes. Define objects with constructors in the main\n"
-        . "  translation unit only, inside the #ifndef SIM_FUNC guard.\n";
-  die $m unless $lax;
-  print STDERR "track.pl: WARNING: $m";
+my @exported = map { /^\s*\.(?:glob(?:a)?l|weak)\s+(\S+)/ ? $1 : () } @a;
+my @extra = grep { $_ ne $entry && !/^\.refptr\./ && $defined{$_} } @exported;
+if (@extra) {
+  refuse("$in exports " . scalar(@extra) . " symbol(s) besides $entry, e.g. $extra[0]\n"
+       . "  The normal build defines the same symbol from the same source and the linker keeps\n"
+       . "  only one copy, so the instrumented body can be discarded, leaving the speculative\n"
+       . "  walk unjournaled. Mark those functions INLINE (always_inline) so they fold into\n"
+       . "  $entry(), leaving this translation unit with one entry point.\n");
 }
+
+if (grep { /^\s*\.section\s+\.(?:init_array|ctors)\b/ || /^\s*\.section\s+\.CRT\$XC/ || /^_GLOBAL__sub_I/ } @a) {
+  refuse("$in contains a static initialiser (.init_array / .ctors / _GLOBAL__sub_I).\n"
+       . "  Its constructors would be instrumented too, filling the journal at start-up with\n"
+       . "  entries nothing ever undoes. Define objects with constructors in the main\n"
+       . "  translation unit only, inside the #ifndef SIM_FUNC guard.\n");
+}
+
+# Does this file establish a frame pointer? On its own that is harmless - GCC
+# does it here purely to realign the stack, and still addresses every local off
+# rsp. It only matters in combination with an rbp-based destination, which the
+# main pass refuses.
+my $frame_ptr = grep { /^\s*mov\s+rbp\s*,\s*rsp\b/i
+                    || /cfi_def_cfa_register\s+(?:6|%?rbp)/
+                    || /\.seh_setframe\s+rbp/ } @a;
 
 # --- instruction classification --------------------------------------------
 
@@ -153,7 +178,7 @@ my $rmw = qr/^(?:
 
 # mnemonics whose first (or only) operand may be memory but is only read
 my $readonly = qr/^(?:
-    cmp|test|bt|push|jmp|call|nop|
+    cmp|test|bt|push|nop|
     mul|imul|div|idiv|
     prefetch\w*|clflush\w*|
     fld\w*|fild|fcom\w*|ficom\w*|fucom\w*|fadd|fsub\w*|fmul|fdiv\w*|fiadd|fisub\w*|fimul|fidiv\w*|
@@ -162,7 +187,7 @@ my $readonly = qr/^(?:
     invlpg|verr|verw|lgdt|lidt|lldt|ltr|lmsw
   )$/xi;
 
-# implicit-memory writers (no explicit memory operand in the text)
+# writers with no memory operand in the text to point a lea at
 my $implicit_write = qr/^(?:rep[ez]?|repn[ez]|stos[bwdq]?|ins[bwd]?|
     v?maskmov(?:dqu|q)|movdir64b|enqcmds?|
     xsave\w*|fxsave\w*|fn?save|fn?stenv|xlat|xlatb)$/xi;
@@ -176,9 +201,9 @@ my @o;
 for my $line (@a) {
   my $code = $line;
   $code =~ s/\s*#.*$//;                           # strip comments
+  $code =~ s/^\s*[.\w\$]+:\s*//;                  # a label may share the line
   next_line: {
-    last if $code =~ /^\s*$/;                     # empty
-    last if $code =~ /^\s*[.\w$@]+:/ && $code !~ /^\s*\w+\s+\w+\s+ptr/i;   # label
+    last if $code =~ /^\s*$/;                     # empty, or label only
     last if $code =~ /^\s*\./;                    # directive
     $code =~ /^\s*(\S+)\s*(.*?)\s*$/ or last;
     my ($mn, $ops) = (lc $1, $2);
@@ -192,36 +217,67 @@ for my $line (@a) {
       $dst //= '';
     }
 
-    if ($mn =~ $implicit_write
-        || ($mn =~ /^movs[bwdq]$/ && $ops eq '')) {
-      report_unhandled($line);
-      last;
-    }
-    if ($mn eq 'call' || $mn eq 'jmp') {           # jmp: a tail call
-      my ($tgt) = ($ops =~ /^([\w.\$@]+)\s*$/);
-      if (!defined $tgt) {                         # indirect: through a register or memory
-        report_call($line, "indirect") if $mn eq 'call';
+    if ($mn eq 'call' || $mn eq 'jmp') {
+      my ($tgt) = ($ops =~ /^([\w.\$]+)\s*$/);
+      if (!defined $tgt) {
+        # An indirect branch. A switch jump table goes through a local .L symbol
+        # and writes nothing; anything else is a call we cannot see inside.
+        report_call($line, "indirect") unless $ops =~ /\.L/;
       } elsif ($tgt !~ /^\.L/ && !$defined{$tgt}) {
         report_call($line, "leaves this translation unit");
       }
       last;
     }
+
+    if ($mn =~ $implicit_write
+        || ($mn =~ /^movs[bwdq]$/ && $ops eq '')) {
+      report_unhandled($line);          # writes a range no lea can express
+      last;
+    }
+    if ($mn =~ /^v?p?scatter|^vp?scatter/i) {
+      report_unhandled($line);          # one instruction, many addresses
+      last;
+    }
     last if $mn =~ $readonly;                      # memory operand only read
+
+    # lea drops a segment prefix, so the journal would record a different
+    # address than the instruction writes to. (Also catches a moffs
+    # destination, "movabs ds:<imm64>, al".)
+    if ($dst =~ /\b[cdefgs]s\s*:/i) {
+      report_unhandled($line);
+      last;
+    }
+
+    # These write whichever operand is memory; only the memory-first order is
+    # parsed below, so refuse the other rather than miss the write.
+    if ($mn =~ /^(?:xchg|xadd|cmpxchg(?:8b|16b)?)$/ && $dst !~ /\[/ && $ops =~ /\[/) {
+      report_unhandled($line);
+      last;
+    }
+
     last unless $dst =~ /\[/;                      # destination is not memory
 
-    # The function's own frame: dead once the speculative step returns.
-    if ($dst =~ /\brsp\b/) {
+    # The function's own frame: dead once the speculative step returns. Tested
+    # on the registers inside the address expression rather than on the printed
+    # text, so a symbol whose name contains "rsp" is not taken for a frame slot.
+    my ($inside) = ($dst =~ /\[([^\]]*)\]/);
+    my @regs = defined $inside ? ($inside =~ /\b([re][a-z0-9]{1,3})\b/g) : ();
+    if ($frame_ptr && grep { $_ eq 'rbp' } @regs) {
+      $unhandled++;
+      print STDERR "track.pl: rbp-based write in a frame-pointer build - it could be a frame\n"
+                 . "  slot (must not be journaled) or a model pointer (must be), and the two are\n"
+                 . "  indistinguishable here. Compile with -fomit-frame-pointer: $line\n"
+        if $unhandled < 4;
+      last;
+    }
+
+    if (grep { $_ eq 'rsp' } @regs) {
       if ($dst =~ /^[^\[]*-\s*\d/ || $dst =~ /\[[^\]]*-\s*\d+\s*\]/) {
         $redzone++;
         print STDERR "track.pl: red-zone access below rsp: $line\n" if $redzone < 4;
       }
       $skipped++;
-      print STDERR "  skip stack store : $line\n" if $verbose;
-      last;
-    }
-
-    if ($mn =~ /^v?p?scatter|^vp?scatter/i) {
-      report_unhandled($line);          # one instruction, many addresses: no lea
+      print STDERR "  skip stack write : $line\n" if $verbose;
       last;
     }
 
@@ -284,18 +340,16 @@ close $O;
 
 my $total = 0; $total += $_ for values %count;
 my @by_size = map { "$count{$_}x${_}B" } sort { $a <=> $b } keys %count;
-printf STDERR "track.pl: %s -> %s [%s]: %d stores instrumented (%s), %d stack stores skipped\n",
+printf STDERR "track.pl: %s -> %s [%s]: %d writes instrumented (%s), %d stack writes skipped\n",
   $in, $out, $abi, $total, (@by_size ? join(", ", @by_size) : "none"), $skipped;
 
 if ($redzone) {
-  my $m = "track.pl: $redzone access(es) below rsp - the red zone is in use, and the\n"
-        . "  inserted \"push\" would corrupt it. Compile this translation unit with -mno-red-zone.\n";
-  die $m unless $lax;
-  print STDERR "track.pl: WARNING: $m";
+  refuse("$redzone access(es) below rsp - the red zone is in use, and the inserted\n"
+       . "  \"push\" would corrupt it. Compile this translation unit with -mno-red-zone.\n");
 }
 
 if ($unhandled) {
-  die "track.pl: $unhandled memory-writing instruction(s) not instrumented (see above)\n" unless $lax;
+  die "track.pl: $unhandled memory write(s) not instrumented (see above)\n" unless $lax;
   print STDERR "track.pl: WARNING: $unhandled memory write(s) left unjournaled (--lax)\n";
 }
 
@@ -324,4 +378,10 @@ sub report_unhandled {
   my ($line) = @_;
   $unhandled++;
   print STDERR "track.pl: unhandled memory write: $line\n";
+}
+
+sub refuse {
+  my ($msg) = @_;
+  die "track.pl: $msg" unless $lax;
+  print STDERR "track.pl: WARNING: $msg";
 }
